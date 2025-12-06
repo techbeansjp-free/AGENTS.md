@@ -10,7 +10,7 @@
 
 ### この規約で「絶対に守ること」3 つ
 
-1. **すべての対応は `.workflow/{YYYYMMDD_issue_name}/00_要求定義.md` から始める**（既存プロジェクト導入時は `.workflow/00_システム理解.md` から）
+1. **すべての対応は `.workflow/{YYYYMMDD_HHMMSS_issue_name}/00_要求定義.md` から始める**（既存プロジェクト導入時は `.workflow/00_システム理解.md` から）
 2. **フェーズを飛ばさない（00*システム理解（既存プロジェクト時のみ）→ 00 → 01 → 02 → 03 → 実装 → 04_review → 05*最終確認（外部設定が必要な場合のみ））**
 3. **ドキュメントと実装を常に同期させる（変更したら必ず該当 md を更新）**
 
@@ -48,9 +48,10 @@ flowchart TD
 
 ### ディレクトリ命名ルール
 
-- `.workflow/20251115_nextjs移行/`
-  - プレフィックスは **開始日 `YYYYMMDD_`**
+- `.workflow/20251115_143022_nextjs移行/`
+  - プレフィックスは **開始日時 `YYYYMMDD_HHMMSS_`**（日時プレフィックス必須）
   - issue 名は日本語 OK（ローマ字混在も可）
+  - **注意**: 日時は issue/タスク開始日時（要求定義書作成日時）を使用する。ファイル作成時にシステムの現在日時を取得して使用する
 
 ### 原則（エンジニアが常に意識するのはこれだけ）
 
@@ -93,7 +94,7 @@ flowchart TD
 ### 外部連携
 
 - **Github MCP 連携**: 使用するかどうかは、プロジェクトやチームの方針、または明示的な指示に従う。指示がない場合は、ローカルファイル管理を基本とする。
-- **Issue 管理**: ローカルファイル（`.workflow/{YYYYMMDD_issue_name}/90_issues.md`）で管理。各 issue（またはタスク）は個別のディレクトリで要求定義から開始すること。詳細は[ワークフローとフェーズ進行](#ワークフローとフェーズ進行)の「Issue 作成」フェーズを参照
+- **Issue 管理**: ローカルファイル（`.workflow/{YYYYMMDD_HHMMSS_issue_name}/90_issues.md`）で管理。各 issue（またはタスク）は個別のディレクトリで要求定義から開始すること。詳細は[ワークフローとフェーズ進行](#ワークフローとフェーズ進行)の「Issue 作成」フェーズを参照
 - **認証**: Github MCP 認証の使用は、プロジェクトやチームの方針、または明示的な指示に従う。
 
 ### ファイル操作ポリシー
@@ -113,16 +114,22 @@ flowchart TD
 
 ### Issue/タスク名の命名規則
 
-**Issue またはタスク名は日本語を使用する**。ディレクトリ名として使用する場合は、**日付プレフィックス（YYYYMMDD\_）を付与**し、必要に応じてローマ字や英語に変換する。
+**Issue またはタスク名は日本語を使用する**。ディレクトリ名として使用する場合は、**日時プレフィックス（YYYYMMDD_HHMMSS\_）を付与**し、必要に応じてローマ字や英語に変換する。
 
-**日付プレフィックスの形式**: `YYYYMMDD_`（例: `20251115_`）
+**日時プレフィックスの形式**: `YYYYMMDD_HHMMSS_`（例: `20251115_143022_`）
 
 **例**:
 
 - Issue/タスク名: `Next.js移行`
-- ディレクトリ名: `20251115_nextjs移行` または `20251115_nextjs-migration`
+- ディレクトリ名: `20251115_143022_nextjs移行` または `20251115_143022_nextjs-migration`
 
-**注意**: 日付は issue/タスク開始日（要求定義書作成日）を使用する。
+**注意**: 
+- 日時は issue/タスク開始日時（要求定義書作成日時）を使用する
+- **必須事項**: 日時は**ディレクトリ作成時にシステムの現在日時を取得して使用する**（ディレクトリ作成時に`date +"%Y%m%d_%H%M%S"`コマンド等で現在日時を取得し、その日時をディレクトリ名に使用する。ディレクトリ作成後にディレクトリ名を変更する必要はない）
+- **禁止事項**: 
+  - `YYYYMMDD_`形式（日付のみ）のディレクトリ名は**絶対に使用しない**
+  - 日時プレフィックスなしのディレクトリ名は**絶対に使用しない**
+  - 推測や記憶に基づく日時の記載は**禁止**
 
 **プロジェクトと Issue/タスクの関係**:
 
@@ -132,11 +139,11 @@ flowchart TD
 
 #### ディレクトリ命名規則まとめ
 
-| 対象                  | 例                                                               | 備考                                     |
-| --------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
-| issue/タスク直下      | `.workflow/20251115_nextjs移行/`                                 | 先頭に開始日の `YYYYMMDD_` を付与        |
-| 親 issue 内の子 issue | `.workflow/20251115_nextjs移行/90_issues/api-endpoint/`          | 日付プレフィックスは任意（必要なら付与） |
-| memo                  | `.workflow/20251115_nextjs移行/memo/20251123_081010_調査結果.md` | `YYYYMMDD_HHMMSS_タイトル.md`            |
+| 対象                  | 例                                                                      | 備考                                                 |
+| --------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| issue/タスク直下      | `.workflow/20251115_143022_nextjs移行/`                                 | 先頭に開始日時の `YYYYMMDD_HHMMSS_` を付与（日時プレフィックス必須） |
+| 親 issue 内の子 issue | `.workflow/20251115_143022_nextjs移行/90_issues/01_api-endpoint/`       | **優先度順に連番（2 桁）を付与**（例: `01_`, `02_`） |
+| memo                  | `.workflow/20251115_143022_nextjs移行/memo/20251123_081010_調査結果.md` | `YYYYMMDD_HHMMSS_タイトル.md`                        |
 
 ### フェーズ定義
 
@@ -178,11 +185,11 @@ flowchart TD
 
 #### 1. 要求定義（requirements_definition）
 
-**必須ファイル**: `.workflow/{YYYYMMDD_issue_name}/00_要求定義.md`
+**必須ファイル**: `.workflow/{YYYYMMDD_HHMMSS_issue_name}/00_要求定義.md`
 
 **実施内容**:
 
-- issue/タスクごとのディレクトリを作成（`.workflow/{YYYYMMDD_issue_name}/`）。ディレクトリ名には日付プレフィックス（`YYYYMMDD_`）を付与する。
+- issue/タスクごとのディレクトリを作成（`.workflow/{YYYYMMDD_HHMMSS_issue_name}/`）。ディレクトリ名には日時プレフィックス（`YYYYMMDD_HHMMSS_`）を付与する。日時はディレクトリ作成時にシステムの現在日時を取得して使用する。
 - **既存システムの参照**: 既存プロジェクトの場合は、`00_システム理解.md`を参照し、既存システムの制約やアーキテクチャを考慮する
 - ユーザー・ステークホルダーからの要求を整理
 - 何を実現するかを明確化（目的・背景・期待される効果）
@@ -199,7 +206,7 @@ flowchart TD
 
 #### 2. 要件定義（requirements）
 
-**必須ファイル**: `.workflow/{YYYYMMDD_issue_name}/01_要件定義.md`
+**必須ファイル**: `.workflow/{YYYYMMDD_HHMMSS_issue_name}/01_要件定義.md`
 
 **実施内容**:
 
@@ -219,7 +226,7 @@ flowchart TD
 
 #### 3. 設計（design）
 
-**必須ファイル**: `.workflow/{YYYYMMDD_issue_name}/02_設計.md`
+**必須ファイル**: `.workflow/{YYYYMMDD_HHMMSS_issue_name}/02_設計.md`
 
 **実施内容**:
 
@@ -239,7 +246,7 @@ flowchart TD
 
 #### 4. 実装計画（implementation_plan）
 
-**必須ファイル**: `.workflow/{YYYYMMDD_issue_name}/03_実装計画.md`
+**必須ファイル**: `.workflow/{YYYYMMDD_HHMMSS_issue_name}/03_実装計画.md`
 
 **実施内容**:
 
@@ -260,7 +267,7 @@ flowchart TD
 
 **注意**: このフェーズは、大きな issue/タスクを複数の小さな issue/タスクに分割する場合のみ実施する。issue/タスク自体が 1 つの単位として完結する場合は、このフェーズをスキップしてフェーズ 5（実装）に進む。
 
-**必須ファイル**（issue/タスクを分割する場合）: `.workflow/{YYYYMMDD_issue_name}/90_issues.md`
+**必須ファイル**（issue/タスクを分割する場合）: `.workflow/{YYYYMMDD_HHMMSS_issue_name}/90_issues.md`
 
 **Issue とタスクの関係**:
 
@@ -273,7 +280,9 @@ flowchart TD
 
 - `03_実装計画.md`読込後に開始
 - 実装計画を基に、実装可能な単位で issue（またはタスク）を分割
-- 各 issue は個別のディレクトリ（`.workflow/{YYYYMMDD_issue_name}/90_issues/{nested_issue_name}/` または `.workflow/{YYYYMMDD_issue_name}/90_tasks/{task_name}/`）を作成
+- 各 issue は個別のディレクトリ（`.workflow/{YYYYMMDD_HHMMSS_issue_name}/90_issues/{連番}_{nested_issue_name}/` または `.workflow/{YYYYMMDD_HHMMSS_issue_name}/90_tasks/{連番}_{task_name}/`）を作成
+  - **連番の付け方**: 優先度順（高 → 中 → 低）に連番（2 桁）を付与する（例: `01_SSHポートの制限`、`02_Stateロック・暗号化の設定`）
+  - 同じ優先度内では、`90_issues.md`の記載順に連番を付与する
 - **各 issue は要求定義から開始**: 各 issue ディレクトリに`00_要求定義.md`を作成し、その issue 固有の要求を定義
 
 **必須記載項目**（`90_issues.md`）:
@@ -284,7 +293,7 @@ flowchart TD
 **各 issue ディレクトリの構成**:
 
 ```
-.workflow/{YYYYMMDD_issue_name}/90_issues/{nested_issue_name}/
+.workflow/{YYYYMMDD_HHMMSS_issue_name}/90_issues/{連番}_{nested_issue_name}/
 ├── 00_要求定義.md       # 親 issue と同じテンプレートを使用
 ├── 01_要件定義.md       # 親 issue と同じテンプレートを使用
 ├── 02_設計.md           # 親 issue と同じテンプレートを使用
@@ -432,7 +441,7 @@ flowchart TD
 
 **前提条件**: 実装フェーズが完了し、すべてのテストが通過していること
 
-**必須ファイル**: `.workflow/{YYYYMMDD_issue_name}/04_review.md`（issue/タスク全体）または `.workflow/{YYYYMMDD_issue_name}/90_issues/{nested_issue_name}/04_review.md`（ネストされた issue/タスク）
+**必須ファイル**: `.workflow/{YYYYMMDD_HHMMSS_issue_name}/04_review.md`（issue/タスク全体）または `.workflow/{YYYYMMDD_HHMMSS_issue_name}/90_issues/{nested_issue_name}/04_review.md`（ネストされた issue/タスク）
 
 **実施内容**:
 
@@ -477,7 +486,7 @@ flowchart TD
 
 **前提条件**: 実装フェーズとレビューフェーズが完了し、すべてのテストが通過していること
 
-**必須ファイル**（コード対応不可項目がある場合）: `.workflow/{YYYYMMDD_issue_name}/05_最終確認チェックリスト.md`
+**必須ファイル**（コード対応不可項目がある場合）: `.workflow/{YYYYMMDD_HHMMSS_issue_name}/05_最終確認チェックリスト.md`
 
 **実施内容**:
 
@@ -1075,7 +1084,7 @@ light.ensureOn();
     - **目的**: ファイル名のソートで作成順序がわかるようにする
   - **ディレクトリ構造**:
     ```
-    .workflow/{YYYYMMDD_issue_name}/
+    .workflow/{YYYYMMDD_HHMMSS_issue_name}/
     ├── 00_要求定義.md
     ├── 01_要件定義.md
     ├── 02_設計.md
@@ -1122,7 +1131,7 @@ light.ensureOn();
 ├── （ソースコード）
 └── .workflow/             # ワークフローファイル
     ├── 00_システム理解.md  # システム理解（既存プロジェクト導入時のみ）
-    └── {YYYYMMDD_issue_name}/  # issue/タスクディレクトリ（日付プレフィックス付き）
+    └── {YYYYMMDD_HHMMSS_issue_name}/  # issue/タスクディレクトリ（日時プレフィックス付き）
         ├── 00_要求定義.md        # 要求定義（必ず最初に作成）
         ├── 01_要件定義.md        # 要件定義
         ├── 02_設計.md            # 設計
@@ -1154,7 +1163,7 @@ light.ensureOn();
 
 - `00_システム理解.md`は、既存プロジェクトに途中から導入する場合や、他ベンダーが作成したシステムを改修・機能追加する場合のみ作成する。新規プロジェクトの場合は不要。
 - `05_最終確認チェックリスト.md`は、コードでは対応できない外部設定（GTM、GA4、AWS Amplify 等）が必要な場合のみ作成する。すべてのプロジェクトで必要とは限らない。
-- issue/タスクディレクトリ名は日付プレフィックス（`YYYYMMDD_`）を付与する（例: `20251115_nextjs移行`）
+- issue/タスクディレクトリ名は日時プレフィックス（`YYYYMMDD_HHMMSS_`）を付与する（例: `20251115_143022_nextjs移行`）。日時はディレクトリ作成時にシステムの現在日時を取得して使用する。
 - issue/タスク自体が 1 つの単位として完結する場合は、`90_issues.md` と `90_issues/`（または `90_tasks/`）ディレクトリは不要。issue/タスクを複数の小さな issue/タスクに分割する場合のみ使用する。
 - issue やタスクは、必要に応じてさらに細かい issue やタスクに分割することができる。大きな issue の中に `90_issues.md` と `90_issues/` ディレクトリを作成し、ネストされた issue やタスクを管理することができる。
 
@@ -1511,4 +1520,4 @@ light.ensureOn();
 
 ---
 
-**最終更新**: 2025 年 12 月 3 日
+**最終更新**: 2025 年 12 月 6 日（issue/タスクのディレクトリ名を日時プレフィックス形式に変更）
