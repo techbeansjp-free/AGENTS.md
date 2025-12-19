@@ -31,7 +31,7 @@ flowchart TD
   FC{"外部設定必要?"}
   FC2["05_最終確認"]
   DONE["issue/タスク完了"]
-  
+
   START -->|"Yes"| SU
   START -->|"No"| R0
   SU --> R0
@@ -397,7 +397,7 @@ flowchart TD
     Q["実装<br/>指摘対応"]
     R["ドキュメント更新<br/>対応内容の反映"]
     S["issue/タスク完了"]
-    
+
     A --> B
     B --> C
     C -->|"いいえ"| D
@@ -1089,7 +1089,7 @@ light.ensureOn();
   - **実装計画書**: タスク分解、スケジュール、テスト計画を記載
 - **参照元明示**: 出典がない場合は理由を注記
 - **Mermaid 図を積極活用**: フローチャート、シーケンス図等を適切に使用する
-  - **Mermaid 図作成時は [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) を必ず参照する**: Mermaid 図を生成・提案する際は、ノードIDの命名規則（英数字とアンダースコアのみ）、ラベルの引用符ルール（ダブルクォート必須）、エッジラベルの引用符ルール、改行の扱い（`<br/>` タグ使用）、特殊文字の扱いを厳守する
+  - **Mermaid 図作成時は [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) を必ず参照する**: Mermaid 図を生成・提案する際は、ノード ID の命名規則（英数字とアンダースコアのみ）、ラベルの引用符ルール（ダブルクォート必須）、エッジラベルの引用符ルール、改行の扱い（`<br/>` タグ使用）、特殊文字の扱いを厳守する
   - **システムアーキテクチャ**: `flowchart` や `graph` を使用
   - **データフロー・処理フロー**: `sequenceDiagram` や `flowchart` を使用
   - **データモデル**: `erDiagram` を使用
@@ -1566,7 +1566,8 @@ light.ensureOn();
 - [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) - LLM エージェント運用ルール
 - [`AGENTS_REVIEW_RULE.md`](./AGENTS_REVIEW_RULE.md) - レビュー時の徹底的な品質調査ルール
 - [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) - テスト作成ガイドライン
-- [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) - Mermaid図作成規約
+- [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) - Mermaid 図作成規約
+- [`AGENTS_STORYBOOK_RULES.md`](./AGENTS_STORYBOOK_RULES.md) - Storybook / デザインシステム運用規約
 
 ### 一般的な参考資料
 
@@ -1581,4 +1582,4 @@ light.ensureOn();
 
 ---
 
-**最終更新**: 2025年12月19日（Mermaid図作成規約への参照を追加）
+**最終更新**: 2025 年 12 月 20 日（Storybook ルール（`AGENTS_STORYBOOK_RULES.md`）への参照を追加）
