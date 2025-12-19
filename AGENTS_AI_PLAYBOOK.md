@@ -79,6 +79,8 @@
 
 13. **Mermaid 図作成時は `AGENTS_MERMAID_RULES.md` を必ず参照する**。Mermaid 図を生成・提案する際は、[`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) のルールに従う。特にノード ID の命名規則（英数字とアンダースコアのみ）、ラベルの引用符ルール（ダブルクォート必須）、エッジラベルの引用符ルール、改行の扱い（`<br/>` タグ使用）、特殊文字の扱いを厳守する。
 
+14. **Storybook 生成時は `AGENTS_STORYBOOK_RULES.md` を必ず参照する**。Storybook ストーリーやデザインシステムドキュメントを生成・提案する際は、[`AGENTS_STORYBOOK_RULES.md`](./AGENTS_STORYBOOK_RULES.md) のルールに従う。特に Storybook 論理構造の遵守、デザイントークンの管理ルール、コンポーネントの記述順、配置判断フローを厳守する。
+
 ---
 
 ## ワークフロー制御ルール
@@ -513,4 +515,4 @@ flowchart TD
 
 ---
 
-**最終更新**: 2025 年 12 月 19 日（Mermaid 図作成規約への参照を追加）
+**最終更新**: 2025 年 12 月 20 日（Storybook ルール（`AGENTS_STORYBOOK_RULES.md`）への参照を追加）
