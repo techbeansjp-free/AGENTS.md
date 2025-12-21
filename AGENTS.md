@@ -1568,6 +1568,7 @@ light.ensureOn();
 - [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) - テスト作成ガイドライン
 - [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) - Mermaid 図作成規約
 - [`AGENTS_STORYBOOK_RULES.md`](./AGENTS_STORYBOOK_RULES.md) - Storybook / デザインシステム運用規約
+- [`AGENTS_GITHUB_PR_REVIEW_FETCH.md`](./AGENTS_GITHUB_PR_REVIEW_FETCH.md) - GitHub PR 指摘取得ルール
 
 ### 一般的な参考資料
 
@@ -1582,4 +1583,4 @@ light.ensureOn();
 
 ---
 
-**最終更新**: 2025 年 12 月 20 日（Storybook ルール（`AGENTS_STORYBOOK_RULES.md`）への参照を追加）
+**最終更新**: 2025 年 12 月 22 日（GitHub PR 指摘取得ルール（`AGENTS_GITHUB_PR_REVIEW_FETCH.md`）への参照を追加）

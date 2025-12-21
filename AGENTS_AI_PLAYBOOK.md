@@ -81,6 +81,8 @@
 
 14. **Storybook 生成時は `AGENTS_STORYBOOK_RULES.md` を必ず参照する**。Storybook ストーリーやデザインシステムドキュメントを生成・提案する際は、[`AGENTS_STORYBOOK_RULES.md`](./AGENTS_STORYBOOK_RULES.md) のルールに従う。特に Storybook 論理構造の遵守、デザイントークンの管理ルール、コンポーネントの記述順、配置判断フローを厳守する。
 
+15. **GitHub PR 指摘取得時は処理手順書を参照する**。GitHub から PR の指摘（CodeRabbit などのレビューツールによる指摘を含む）を取得する場合は、[`AGENTS_GITHUB_PR_REVIEW_FETCH.md`](./AGENTS_GITHUB_PR_REVIEW_FETCH.md) のルールに従う。特にリポジトリ情報の取得、PR 番号の特定、GitHub API 認証、コメントとレビューの取得、フィルタリング、JSON 形式での保存を厳守する。
+
 ---
 
 ## ワークフロー制御ルール
@@ -515,4 +517,4 @@ flowchart TD
 
 ---
 
-**最終更新**: 2025 年 12 月 20 日（Storybook ルール（`AGENTS_STORYBOOK_RULES.md`）への参照を追加）
+**最終更新**: 2025 年 12 月 22 日（GitHub PR 指摘取得ルール（`AGENTS_GITHUB_PR_REVIEW_FETCH.md`）への参照を追加）
