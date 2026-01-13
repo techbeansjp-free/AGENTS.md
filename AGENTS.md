@@ -1680,6 +1680,7 @@ light.ensureOn();
 ### AGENTS 規約ドキュメント
 
 - [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) - LLM エージェント運用ルール
+- [`AGENTS_CODING_RULES.md`](./AGENTS_CODING_RULES.md) - コーディングルール（型安全性、テスト容易性、コード品質）
 - [`AGENTS_REVIEW_RULE.md`](./AGENTS_REVIEW_RULE.md) - レビュー時の徹底的な品質調査ルール
 - [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) - テスト作成ガイドライン
 - [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) - Mermaid 図作成規約
@@ -1699,4 +1700,4 @@ light.ensureOn();
 
 ---
 
-**最終更新**: 2025 年 12 月 22 日（GitHub PR 指摘取得ルール（`AGENTS_GITHUB_PR_REVIEW_FETCH.md`）への参照を追加）
+**最終更新**: 2026 年 1 月 13 日（コーディング規約（`AGENTS_CODING_RULES.md`）への参照を追加）
