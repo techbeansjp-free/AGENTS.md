@@ -76,6 +76,81 @@ Storybook は以下の論理構造で管理します。**階層名・階層順�
 - 階層順（01 → 06 の順序）
 - public / admin の対称構造
 
+### サイドバー表示順（連番で表示する）
+
+サイドバーは**連番順（01 → 02 → 03 → …）**で表示する。Storybook のデフォルトではタイトル文字列のソートになるため、`01_` と `02_` などが連番順にならない場合がある。そのため **`.storybook/main.ts` の `stories` 配列で読み込み順を明示**し、階層の「初出順」でサイドバーが並ぶようにする。
+
+- **新規ストーリー追加時**: 該当階層（01*～ 06*）のブロック内の**末尾**にパスを追加すること。
+- **例**: 02*最小 UI 部品に `Radio.stories.tsx` を追加した場合、`main.ts` の「02*最小 UI 部品」ブロックの末尾に `'../src/components/react/ui/Radio/Radio.stories.tsx'` を追加する。
+
+### プレビューでのテーマ（light/dark）
+
+プレビュー iframe の light/dark 切り替えは **`@storybook/addon-themes`** で行う。ツールバーの「Themes」で「dark」を選ぶと、プレビュー側の `document.documentElement` に `class="dark"` が付与され、Tailwind の `darkMode: 'class'` と `global.css` の `.dark` が有効になる。**詳細は本ドキュメントの「[ダークモード適用方法](#ダークモード適用方法)」を参照。**
+
+---
+
+## ダークモード適用方法
+
+> 本セクションは、**Tailwind CSS の `darkMode: 'class'` とデザイントークン（CSS 変数）を用いたプロジェクト**で、Storybook のプレビュー iframe にダークモードを正しく適用するための手順です。他プロジェクトでも流用可能な汎用的な手順として記載する。
+
+### 概要
+
+- **目的**: プレビュー領域で light/dark を切り替えたときに、`html` に `class="dark"` が付与され、Tailwind の `dark:` と `global.css` の `.dark` 用スタイルが効くようにする。
+- **注意**: Storybook の管理 UI（サイドバー・ツールバー）の「dark」は**管理 UI 自身**のテーマであり、プレビュー iframe 内のダークモードとは別。プレビュー側のダークモードには **addon-themes の「Themes」ドロップダウン** を使う。
+
+### 必要なパッケージ
+
+- `@storybook/addon-themes`（Storybook のバージョンに合わせて同一メジャーでインストール）
+
+### main.ts
+
+- `addons` に `'@storybook/addon-themes'` を追加する。
+
+### preview.tsx（または preview.ts）
+
+1. **withThemeByClassName**  
+   `@storybook/addon-themes` の `withThemeByClassName` をデコレータとして追加する。  
+   - `themes`: `{ light: '', dark: 'dark' }` のように、light のときはクラスなし、dark のときは `dark` クラスを付与する設定にする。  
+   - `defaultTheme`: `'light'` など。
+
+2. **プレビュー背景をトークン準拠にする**  
+   ストーリーをラップする要素に `className="bg-surface-page"` などを付け、プレビュー全体の背景がデザイントークンのページ背景になるようにする。  
+   あわせて **global.css** の `@layer base` 内で `html, body { background-color: rgb(var(--color-surface-page)); }` のようにトークン参照をしておくと、プレビュー iframe 全体の背景が light/dark で切り替わる。
+
+3. **（任意）管理 UI のテーマをプレビューに同期する**  
+   ツールバーの「Themes」だけでなく、管理 UI 自体をダークにしたときもプレビューをダークにしたい場合は、カスタムデコレータ（例: `ThemeSync`）で `window.parent.document` の `html`/`body` のクラスや `data-theme` を監視し、プレビューの `document.documentElement.classList.add('dark')` / `remove('dark')` を呼ぶ。
+
+4. **parameters**  
+   - `parameters.themes` で addon-themes 用の `themes`（light/dark のクラス対応）と `defaultTheme` を定義する。  
+   - 背景色の切り替えを addon-themes に任せる場合、`parameters.backgrounds.disable: true` で backgrounds アドオンを無効にしてもよい（任意）。
+
+### global.css
+
+- `@layer base` 内で `html, body { background-color: rgb(var(--color-surface-page)); }` のように、ページ背景用トークンを指定する。  
+- `.dark` 用の CSS 変数やスタイルを定義し、`html.dark` のときにダーク用のトークンが適用されるようにする。
+
+### Tailwind
+
+- `tailwind.config` の `darkMode: 'class'` を指定する。  
+- プレビューで `html` に `class="dark"` が付くことで、`dark:` プレフィックスが有効になる。
+
+### ツールバーで特定項目だけ非表示にする（任意）
+
+- **Preview background ボタンのみ非表示**: addon-essentials 等で「Preview background」がツールバーに出るが、背景切り替えは addon-themes で行うため不要な場合、**.storybook/manager-head.html** を追加し、管理 UI の `<head>` に以下を注入する。  
+  ```html
+  <style>
+    button[aria-label="Preview background"] {
+      display: none !important;
+    }
+  </style>
+  ```  
+  これでツールバーの他項目（Outline, Theme 等）はそのまま表示し、Preview background ボタンだけ非表示にできる。
+
+### 注意
+
+- 管理 UI の「dark」とプレビュー内の「dark」は別設定。プレビューでダークを確認するには、ツールバーの **「Themes」で dark を選択**すること。
+- `@storybook/addon-essentials` は Storybook 10 等では別パッケージになっていない場合がある。その場合は addon-themes と addon-docs 等を個別に指定し、ツールバーは必要に応じて manager-head.html で調整する。
+
 ---
 
 ## 各階層の役割
@@ -694,4 +769,4 @@ URI に紐づく完成形か？
 
 ---
 
-**最終更新**: 2025 年 12 月 20 日（Storybook / デザインシステム運用規約の初版作成）
+**最終更新**: 2026 年 1 月 31 日（ダークモード適用方法・サイドバー表示順・プレビューテーマのセクションを追加）
