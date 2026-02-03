@@ -784,6 +784,16 @@ PR 指摘を issue 直下で管理するときに、各プロジェクトの `.w
 
 **必須ファイル**: `00_README.md`（PR メタ情報・目的）、`01_指摘一覧.md`（指摘の一覧）、`02_対応方針.md`（採用/見送り/要検討と理由）。
 
+#### `github/` テンプレート（GitHub Copilot 用・ディレクトリ・汎用版）
+
+**テンプレートディレクトリ**: [`.workflow/templates/github/`](.workflow/templates/github/)（`copilot-instructions.md` と `instructions/` 配下の `language.instructions.md`・`review.instructions.md`）
+
+**注意**: このテンプレートは**汎用版**であり、任意のプロジェクトで GitHub Copilot のリポジトリ指示（custom instructions）を初めて導入する場合に使用する。詳細は [`AGENTS_GITHUB_COPILOT.md`](./AGENTS_GITHUB_COPILOT.md) を参照。
+
+採用先リポジトリの**リポジトリルートの `.github/`** にテンプレートをコピーして利用する（`templates/github/` の内容を `.github/` に展開する。既存の `.github/` がある場合は `copilot-instructions.md` と `instructions/` を追加・上書きする）。応答言語（〇〇語）やレビュー時のルールはプロジェクトに合わせて編集する。
+
+**必須ファイル**: `copilot-instructions.md`（リポジトリ全体の指示・Chat・Issue 作成で参照）、`instructions/language.instructions.md`（応答言語・code review・coding agent で参照）。`instructions/review.instructions.md` はプロジェクトのレビュー方針に合わせて編集する。
+
 ---
 
 ## 実装原則
@@ -1696,6 +1706,7 @@ light.ensureOn();
 - [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) - Mermaid 図作成規約
 - [`AGENTS_STORYBOOK_RULES.md`](./AGENTS_STORYBOOK_RULES.md) - Storybook / デザインシステム運用規約
 - [`AGENTS_GITHUB_PR_REVIEW_FETCH.md`](./AGENTS_GITHUB_PR_REVIEW_FETCH.md) - GitHub PR 指摘取得ルール
+- [`AGENTS_GITHUB_COPILOT.md`](./AGENTS_GITHUB_COPILOT.md) - GitHub Copilot 対応（汎用版・リポジトリ指示の構成・フォーマット・運用）
 
 ### 一般的な参考資料
 
@@ -1710,4 +1721,4 @@ light.ensureOn();
 
 ---
 
-**最終更新**: 2026 年 1 月 13 日（コーディング規約（`AGENTS_CODING_RULES.md`）への参照を追加）
+**最終更新**: 2026 年 2 月 3 日（GitHub Copilot 対応（`AGENTS_GITHUB_COPILOT.md`）への参照を追加）
