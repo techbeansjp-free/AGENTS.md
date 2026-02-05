@@ -13,8 +13,9 @@
 3. **GitHub API 認証**: GitHub CLI（`gh`）を使用するか、`GITHUB_TOKEN` 環境変数を設定する
 4. **コメントとレビューの取得**: GitHub API を使用して PR コメントとレビューを取得する
 5. **レビューツールのコメントのフィルタリング**: 使用するツールに応じて抽出する（CodeRabbit: `user.login == "coderabbitai[bot]"`、Copilot: `copilot-pull-request-reviewer` 等）
-6. **JSON 形式での保存**: 取得したコメントとレビューを JSON 形式で保存する
-7. **指摘対応ディレクトリ**: issue 直下に `指摘対応/` を作成する場合は、[指摘対応のテンプレート](#指摘対応ディレクトリのテンプレート)をコピーし、指摘一覧・対応方針を記載する
+6. **Nitpick 取得漏れ防止（必須）**: レビューコメントに加えて**レビュー本体（reviews の body）**も取得し、CodeRabbit が body に記載する「🧹 Nitpick comments」等をパースして指摘一覧に含める（[詳細](#55-coderabbit-の-nitpick-取得漏れ防止必須対応策)）
+7. **JSON 形式での保存**: 取得したコメントとレビューを JSON 形式で保存する
+8. **指摘対応ディレクトリ**: issue 直下に `指摘対応/` を作成する場合は、[指摘対応のテンプレート](#指摘対応ディレクトリのテンプレート)をコピーし、指摘一覧・対応方針を記載する
 
 ---
 
@@ -180,6 +181,36 @@ cp pr_comments.json coderabbit_comments.json
 
 **問題点**: CodeRabbit のコメントのみを抽出するため、フィルタリングが必要
 
+### 5.5 CodeRabbit の Nitpick 取得漏れ防止（必須対応策）
+
+#### 背景・原因
+
+- **レビューコメント API**（`pulls/{number}/comments`）が返すのは**インラインの行紐づきコメント**のみである。
+- CodeRabbit は **Major など**を「該当行へのインラインコメント」として投稿するため、レビューコメント API で取得できる。
+- **Nitpick**（および一部の Minor）は、**レビュー本体（Review body）**のテキスト内に「🧹 Nitpick comments (1)」のように**一覧で記載**している。レビュー本体は **Pull Request Reviews API**（`pulls/{number}/reviews`）の各レビューの `body` に含まれる。
+- そのため、**レビューコメントのみを取得していると Nitpick が指摘一覧から漏れる**。
+
+#### 対応策（AI は必ず遵守すること）
+
+1. **取得対象を 2 種類にする**
+
+   - **レビューコメント**（`pulls/{number}/comments`）: インライン指摘（Major 等）を取得する。
+   - **レビュー**（`pulls/{number}/reviews`）: 各レビューの `body` を取得する。CodeRabbit の `body` には「🧹 Nitpick comments (N)」「🔵 Minor comments (N)」等のセクションと、ファイル名・行番号・指摘本文が含まれる場合がある。
+
+2. **レビュー body のパース**
+
+   - `user.login == "coderabbitai[bot]"` のレビューについて、`body` をテキストとして検索する。
+   - 「Nitpick comments」「Minor comments」等の見出しの直後にある、ファイルパス・行番号・指摘文の一覧を抽出し、指摘として指摘一覧（01*指摘一覧 や 00*指摘事項分析結果 等）に含める。
+
+3. **GitHub CLI を使用する場合**
+   - レビューコメント: `gh api repos/{owner}/{repo}/pulls/{number}/comments`
+   - **レビュー本体**: `gh api repos/{owner}/{repo}/pulls/{number}/reviews` を**必ず**実行し、各要素の `body` を確認する。
+
+#### 禁止事項
+
+- ❌ レビューコメントのみを取得し、レビュー（reviews）を取得しない。
+- ❌ 指摘一覧に Nitpick が含まれているか確認せずに「指摘は以上」とすること。
+
 ### 6. JSON 形式での保存
 
 #### 基本方針
@@ -232,7 +263,8 @@ flowchart TD
     STEP2["2. PR番号の特定<br/>99_PR.mdまたはGitHub CLI"]
     STEP3["3. GitHub API認証の確認<br/>gh authまたはGITHUB_TOKEN"]
     STEP4["4. PRコメントの取得<br/>GitHub API"]
-    STEP5["5. PRレビューの取得<br/>GitHub API"]
+    STEP5["5. PRレビューの取得<br/>GitHub API（必須: Nitpick は body に記載）"]
+    STEP5B["5b. レビュー body のパース<br/>Nitpick / Minor を指摘一覧に追加"]
     STEP6["6. CodeRabbitコメントのフィルタリング<br/>jqでuser.login == \"coderabbitai[bot]\"を抽出"]
     STEP7["7. JSON形式での保存<br/>コメント・レビュー・メタデータを含む"]
     END["処理完了"]
@@ -242,7 +274,8 @@ flowchart TD
     STEP2 --> STEP3
     STEP3 --> STEP4
     STEP4 --> STEP5
-    STEP5 --> STEP6
+    STEP5 --> STEP5B
+    STEP5B --> STEP6
     STEP6 --> STEP7
     STEP7 --> END
 ```
@@ -337,12 +370,15 @@ AI は GitHub PR 指摘を取得するとき、**必ず次を守る**：
 - **ページネーションに対応**: 複数ページがある場合はすべて取得する
 - **エラーハンドリング**: API エラーを適切に処理する
 - **レート制限の確認**: GitHub API のレート制限に注意する
+- **Nitpick 取得漏れ防止（必須）**: 指摘を漏れなく取得するため、**レビューコメント**（`pulls/{number}/comments`）に加えて**レビュー**（`pulls/{number}/reviews`）も取得すること。CodeRabbit は Nitpick をレビュー本体（各レビューの `body`）に「🧹 Nitpick comments (N)」等として記載するため、`body` をパースし、Nitpick・Minor 等を指摘一覧に含めること。レビューのみ取得して body を参照しないと Nitpick が漏れる。
 
 **禁止事項**:
 
 - ページネーションを考慮しない
 - エラーハンドリングをしない
 - レート制限を無視する
+- **レビューコメントのみ取得し、レビュー（reviews）を取得しない**
+- **レビュー body に Nitpick 等が含まれる可能性を確認せずに指摘一覧を確定しない**
 
 ### 5. レビューツールコメントのフィルタリングルール
 
@@ -404,6 +440,8 @@ GitHub PR 指摘を取得する前に、以下を確認：
 - [ ] **PR 番号**: PR 番号を PR メッセージファイルや GitHub CLI から取得しているか、または明示的に指定しているか？（推測していないか？）
 - [ ] **GitHub API 認証**: GitHub CLI が認証されているか、または `GITHUB_TOKEN` 環境変数が設定されているか？
 - [ ] **コメントとレビューの取得**: GitHub API を使用して PR コメントとレビューを取得しているか？
+- [ ] **レビュー本体（reviews）の取得**: レビューコメントに加えて `pulls/{number}/reviews` も実行し、Nitpick 取得漏れを防いでいるか？
+- [ ] **Nitpick のパース**: CodeRabbit のレビュー `body` に「🧹 Nitpick comments」等が含まれる場合、それをパースして指摘一覧に含めているか？
 - [ ] **ページネーション**: 複数ページがある場合、すべてのコメントとレビューを取得しているか？
 - [ ] **フィルタリング**: 使用するレビューツールのコメントを抽出しているか？（CodeRabbit: `coderabbitai[bot]`、Copilot: `copilot-pull-request-reviewer` 等）
 - [ ] **JSON 形式**: 有効な JSON 形式で保存しているか？
@@ -463,6 +501,19 @@ GitHub PR 指摘を取得する前に、以下を確認：
 
 **対処法**: 認証済みリクエストを使用するか、しばらく待ってから再実行する
 
+### エラー 5: 指摘漏れ（Nitpick が指摘一覧に含まれていない）
+
+**原因**: レビューコメント（インラインコメント）のみを取得しており、レビュー本体（reviews の `body`）を取得・パースしていない。CodeRabbit は Nitpick をレビュー送信時の「レビュー本文」に「🧹 Nitpick comments (1)」のように記載するため、`pulls/{number}/comments` だけでは取得できない。
+
+**対処法**:
+
+1. **レビュー本体を取得する**: `gh api repos/{owner}/{repo}/pulls/{number}/reviews`（CLI）を実行する。
+2. **CodeRabbit のレビューを特定する**: `user.login == "coderabbitai[bot]"` のレビューの `body` を参照する。
+3. **body をパースする**: 「Nitpick comments」「Minor comments」等の見出しの直後の、ファイルパス・行番号・指摘文を抽出し、指摘一覧（01*指摘一覧 や 00*指摘事項分析結果 等）に追加する。
+4. 手元に PR のレビューサマリー（GitHub の画面やメールの「Nitpick comments (1)」一覧）がある場合は、その内容を手動で指摘一覧に追記してもよい。
+
+**遵守**: 上記は [5.5 CodeRabbit の Nitpick 取得漏れ防止（必須対応策）](#55-coderabbit-の-nitpick-取得漏れ防止必須対応策) に従い、今後は**取得時に reviews も取得し body をパースすること**で未然に防ぐ。
+
 ---
 
 ## 参考資料
@@ -495,10 +546,11 @@ GitHub PR 指摘を取得する前に、以下を確認：
   2. 処理手順書（`00_処理手順書.md`）を参照する（API 取得の詳細）
   3. リポジトリ情報は `git remote` から取得する
   4. PR 番号は PR メッセージファイルから取得する
-  5. CodeRabbit / Copilot など、使用するレビューツールに応じてコメントを抽出する
-  6. メタデータを含めて JSON 形式で保存する
-  7. それでも悩んだら `.workflow/{issue}/memo/` にメモを残してから検討
+  5. **レビューコメントとレビュー（reviews）の両方**を取得する（Nitpick 漏れ防止のため必須）。レビュー `body` をパースし、「Nitpick comments」等を指摘一覧に含める
+  6. CodeRabbit / Copilot など、使用するレビューツールに応じてコメントを抽出する
+  7. メタデータを含めて JSON 形式で保存する
+  8. それでも悩んだら `.workflow/{issue}/memo/` にメモを残してから検討
 
 ---
 
-**最終更新**: 2026 年 2 月 2 日（指摘対応ディレクトリのテンプレート化を追加、Copilot 対応を明記。汎用版）
+**最終更新**: 2026 年 2 月 5 日（CodeRabbit Nitpick 取得漏れ防止のため、レビュー本体（reviews の body）の取得・パースを必須対応策として追記。汎用版）
