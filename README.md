@@ -186,6 +186,20 @@ LLM エージェントがこの規約に従って動作する場合は、**[`AGE
 4. 各 md には「前のステップ」「次のステップ」セクションを含める
 5. 各ステップで、対応した md の全文ドラフトまたは差分パッチを出力
 
+### デフォルト動作モード（SILENT MODE）
+
+**重要**: エージェントは **常に SILENT MODE で起動する**。これにより、token 使用量を **1/5〜1/10** に削減できます。
+
+- **SILENT MODE = 通常運転**（デフォルト）
+- **通常モード = デバッグ／説明モード**（例外）
+
+**SILENT MODE の特徴**:
+- 会話への出力は**最大15行**まで
+- 出力の先頭に `🧠 Mode: SILENT MODE` を**必ず**付与する
+- 詳細は必ずリポジトリ内のファイルに書く（`.workflow/`、`docs/run/`、`memo/` など）
+
+詳細は [`AGENTS_SILENT_MODE_GUIDE.md`](./AGENTS_SILENT_MODE_GUIDE.md) を参照してください。
+
 ---
 
 ## 📝 用語定義
@@ -200,8 +214,29 @@ LLM エージェントがこの規約に従って動作する場合は、**[`AGE
 
 ## 🔗 参考資料
 
+### 主要規約ドキュメント
+
 - [`AGENTS.md`](./AGENTS.md) - 開発規約の完全版
 - [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) - LLM エージェント向け実行ルール
+
+### SILENT MODE 関連ドキュメント
+
+- [`AGENTS_SILENT_MODE_GUIDE.md`](./AGENTS_SILENT_MODE_GUIDE.md) - SILENT MODE 運用ガイド（省トークン運用）
+- [`AGENTS_INITIALIZATION_PROMPT.md`](./AGENTS_INITIALIZATION_PROMPT.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
+- [`AGENTS_ISSUE_EXECUTION_TEMPLATE.md`](./AGENTS_ISSUE_EXECUTION_TEMPLATE.md) - Issue 実行テンプレート（1行指示パターン）
+
+### その他の規約ドキュメント
+
+- [`AGENTS_CODING_RULES.md`](./AGENTS_CODING_RULES.md) - コーディングルール
+- [`AGENTS_REVIEW_RULE.md`](./AGENTS_REVIEW_RULE.md) - レビュー時の徹底的な品質調査ルール
+- [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) - テスト作成ガイドライン
+- [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) - Mermaid 図作成規約
+- [`AGENTS_STORYBOOK_RULES.md`](./AGENTS_STORYBOOK_RULES.md) - Storybook / デザインシステム運用規約
+- [`AGENTS_GITHUB_PR_REVIEW_FETCH.md`](./AGENTS_GITHUB_PR_REVIEW_FETCH.md) - GitHub PR 指摘取得ルール
+- [`AGENTS_GITHUB_COPILOT.md`](./AGENTS_GITHUB_COPILOT.md) - GitHub Copilot 対応
+
+### ディレクトリ
+
 - [`.workflow/templates/`](./.workflow/templates/) - テンプレートファイル
 - [`.review/`](./.review/) - レビューディレクトリ（AGENTS 規約とテンプレート全体のレビュー）
 
@@ -209,4 +244,4 @@ LLM エージェントがこの規約に従って動作する場合は、**[`AGE
 
 ## 📅 最終更新
 
-2025 年 11 月 23 日
+2026 年 2 月 9 日（SILENT MODEをデフォルト動作モードに変更、最短初期化プロンプト追加、Issue実行テンプレート追加、レビュー時自動昇格条件明確化、会話出力上限を15行に統一）
