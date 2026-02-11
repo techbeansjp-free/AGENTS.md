@@ -16,10 +16,16 @@
   - 実装原則とコーディング規約
   - システム構成とアーキテクチャ詳細
 
-- **[`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md)** - LLM エージェント向け実行ルール
+- **`.agents/`** - 実行ルール・ガイドラインを格納するディレクトリ。汎用テンプレートとしてそのまま使う。
+- **`.agents/unique-rule/`** - プロジェクト固有ルールを置くディレクトリ。ここに置いたルールは `.agents/` より**優先**される。詳細は [`.agents/unique-rule/README.md`](./.agents/unique-rule/README.md) を参照。
+- **[`実行ルール.md`](./.agents/実行ルール.md)** - LLM エージェント向け実行ルール
   - 機械的に守るべきハード制約
   - フェーズ別チェックリスト
   - ドキュメント更新ルール
+
+- **[`CLAUDE.md`](./CLAUDE.md)** - CLAUDE.md の**汎用テンプレート**
+  - 各プロジェクトのリポジトリルートにコピーし、プロジェクト概要・ビルドコマンド・重要な規約等を追記して利用する
+  - 「agentsに従って」＝ SILENT MODE の定義を含む（応答最大15行・先頭に `🧠 Mode: SILENT MODE`）
 
 ### テンプレートファイル
 
@@ -119,11 +125,12 @@ flowchart TD
 
 ---
 
-## ✅ 絶対に守ること（3 つ）
+## ✅ 絶対に守ること（4 つ）
 
-1. **すべての対応は `.workflow/{YYYYMMDD_issue_name}/00_要求定義.md` から始める**（既存プロジェクト導入時は `.workflow/00_システム理解.md` から）
-2. **フェーズを飛ばさない（00_システム理解（既存プロジェクト時のみ）→ 00 → 01 → 02 → 03 → 実装 → 04_review → 05_最終確認（外部設定が必要な場合のみ））**
-3. **ドキュメントと実装を常に同期させる（変更したら必ず該当 md を更新）**
+1. **「agentsに従う」＝応答は常に SILENT MODE**（会話への出力は**最大15行**、先頭に `🧠 Mode: SILENT MODE` を付与。詳細は `.workflow/` や `memo/` に書く。ユーザーが「詳細を」「全文を」と明示した場合を除く）
+2. **すべての対応は `.workflow/{YYYYMMDD_HHMMSS_issue_name}/00_要求定義.md` から始める**（既存プロジェクト導入時は `.workflow/00_システム理解.md` から）
+3. **フェーズを飛ばさない（00_システム理解（既存プロジェクト時のみ）→ 00 → 01 → 02 → 03 → 実装 → 04_review → 05_最終確認（外部設定が必要な場合のみ））**
+4. **ドキュメントと実装を常に同期させる（変更したら必ず該当 md を更新）**
 
 ---
 
@@ -170,7 +177,7 @@ flowchart TD
 
 ## 🤖 LLM エージェント向け
 
-LLM エージェントがこの規約に従って動作する場合は、**[`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md)** を参照してください。
+LLM エージェントがこの規約に従って動作する場合は、**[`実行ルール.md`](./.agents/実行ルール.md)** を参照してください。
 
 ### エージェントの役割
 
@@ -198,7 +205,7 @@ LLM エージェントがこの規約に従って動作する場合は、**[`AGE
 - 出力の先頭に `🧠 Mode: SILENT MODE` を**必ず**付与する
 - 詳細は必ずリポジトリ内のファイルに書く（`.workflow/`、`docs/run/`、`memo/` など）
 
-詳細は [`AGENTS_SILENT_MODE_GUIDE.md`](./AGENTS_SILENT_MODE_GUIDE.md) を参照してください。
+詳細は [`サイレントモードガイド.md`](./.agents/サイレントモードガイド.md) を参照してください。
 
 ---
 
@@ -217,23 +224,24 @@ LLM エージェントがこの規約に従って動作する場合は、**[`AGE
 ### 主要規約ドキュメント
 
 - [`AGENTS.md`](./AGENTS.md) - 開発規約の完全版
-- [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) - LLM エージェント向け実行ルール
+- [`実行ルール.md`](./.agents/実行ルール.md) - LLM エージェント向け実行ルール
 
 ### SILENT MODE 関連ドキュメント
 
-- [`AGENTS_SILENT_MODE_GUIDE.md`](./AGENTS_SILENT_MODE_GUIDE.md) - SILENT MODE 運用ガイド（省トークン運用）
-- [`AGENTS_INITIALIZATION_PROMPT.md`](./AGENTS_INITIALIZATION_PROMPT.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
-- [`AGENTS_ISSUE_EXECUTION_TEMPLATE.md`](./AGENTS_ISSUE_EXECUTION_TEMPLATE.md) - Issue 実行テンプレート（1行指示パターン）
+- [`サイレントモードガイド.md`](./.agents/サイレントモードガイド.md) - SILENT MODE 運用ガイド（省トークン運用）
+- [`初期化プロンプト.md`](./.agents/初期化プロンプト.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
+- [`Issue実行テンプレート.md`](./.agents/Issue実行テンプレート.md) - Issue 実行テンプレート（1行指示パターン）
 
 ### その他の規約ドキュメント
 
-- [`AGENTS_CODING_RULES.md`](./AGENTS_CODING_RULES.md) - コーディングルール
-- [`AGENTS_REVIEW_RULE.md`](./AGENTS_REVIEW_RULE.md) - レビュー時の徹底的な品質調査ルール
-- [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) - テスト作成ガイドライン
-- [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) - Mermaid 図作成規約
-- [`AGENTS_STORYBOOK_RULES.md`](./AGENTS_STORYBOOK_RULES.md) - Storybook / デザインシステム運用規約
-- [`AGENTS_GITHUB_PR_REVIEW_FETCH.md`](./AGENTS_GITHUB_PR_REVIEW_FETCH.md) - GitHub PR 指摘取得ルール
-- [`AGENTS_GITHUB_COPILOT.md`](./AGENTS_GITHUB_COPILOT.md) - GitHub Copilot 対応
+- [`コーディングルール.md`](./.agents/コーディングルール.md) - コーディングルール
+- [`ドキュメントルール.md`](./.agents/ドキュメントルール.md) - システム仕様書（docs/）作成・更新ルール
+- [`レビュールール.md`](./.agents/レビュールール.md) - レビュー時の徹底的な品質調査ルール
+- [`テストガイドライン.md`](./.agents/テストガイドライン.md) - テスト作成ガイドライン
+- [`Mermaid図ルール.md`](./.agents/Mermaid図ルール.md) - Mermaid 図作成規約
+- [`Storybookルール.md`](./.agents/Storybookルール.md) - Storybook / デザインシステム運用規約
+- [`GitHub_PR指摘取得.md`](./.agents/GitHub_PR指摘取得.md) - GitHub PR 指摘取得ルール
+- [`GitHub_Copilot対応.md`](./.agents/GitHub_Copilot対応.md) - GitHub Copilot 対応
 
 ### ディレクトリ
 

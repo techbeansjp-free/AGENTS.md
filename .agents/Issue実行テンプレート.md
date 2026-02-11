@@ -1,4 +1,4 @@
-# AGENTS_ISSUE_EXECUTION_TEMPLATE - Issue 実行テンプレート
+# Issue実行テンプレート - Issue 実行テンプレート
 
 > このファイルは、SILENT MODE 前提の Issue 実行テンプレートです。  
 > 1行指示で Agent を起動し、自律的に連続作業を進めます。
@@ -208,9 +208,9 @@ TASK-20260209-001 を実行
 
 ## 参考資料
 
-- [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) - デフォルト動作モードの詳細
-- [`AGENTS_SILENT_MODE_GUIDE.md`](./AGENTS_SILENT_MODE_GUIDE.md) - SILENT MODE 運用ガイド
-- [`AGENTS_INITIALIZATION_PROMPT.md`](./AGENTS_INITIALIZATION_PROMPT.md) - 最短初期化プロンプト
+- [`実行ルール.md`](./実行ルール.md) - デフォルト動作モードの詳細
+- [`サイレントモードガイド.md`](./サイレントモードガイド.md) - SILENT MODE 運用ガイド
+- [`初期化プロンプト.md`](./初期化プロンプト.md) - 最短初期化プロンプト
 
 ---
 
