@@ -35,6 +35,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 開発ワークフロー規約
 
+`AGENTS.md` および `.agents/` 配下のルールはすべて **AI に伝えるためのもの**である。
+
 **重要**: すべての対応は `.workflow/{YYYYMMDD_HHMMSS_issue名}/` 配下のドキュメントから始める。
 
 必須フェーズ（飛ばし禁止）:
@@ -55,7 +57,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 重要な規約（各リポジトリで追記）
 
 - **会話出力（最優先）**: **常に SILENT MODE**。会話への出力は**最大15行**まで。詳細は `.workflow/` や `memo/` に書く。先頭に `🧠 Mode: SILENT MODE` を付与。詳細は `.agents/サイレントモードガイド.md` 参照。
-- **プロジェクト固有の規約**: 命名規則・型安全性・テスト配置・デザイン基盤等は **`.agents/unique-rule/`** 配下にファイルで追加する（`.agents/` より優先）。CLAUDE.md には概要のみ列挙してよい。
+- **プロジェクト固有の規約**: 命名規則・型安全性・テスト配置・デザイン基盤等は **`.agents-project/`** 配下にファイルで追加する（`.agents/` より優先）。CLAUDE.md には概要のみ列挙してよい。
 
 ## その他（任意）
 

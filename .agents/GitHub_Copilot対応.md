@@ -1,9 +1,6 @@
-# GitHub_Copilot対応 - GitHub Copilot 対応（汎用版）
+# GitHub_Copilot対応 - GitHub Copilot 対応
 
-> このドキュメントは**汎用版**であり、**任意のプロジェクト**で GitHub Copilot のリポジトリ指示（custom instructions）の構成・フォーマット・運用を定義します。  
-> ワークフロー全体の規約は [`AGENTS.md`](../AGENTS.md)、  
-> LLM 向けの全体ルールは [`実行ルール.md`](./実行ルール.md) を参照してください。  
-> **採用先リポジトリ**では、`.github/` 配下に `copilot-instructions.md` および必要に応じて `instructions/` を配置し、本ドキュメントのフォーマットに従ってください。
+> 汎用版。Copilot リポジトリ指示の構成・フォーマットを定義。AGENTS/実行ルールは各々参照。**採用先では** `.github/` に `copilot-instructions.md` と `instructions/*.instructions.md` を配置し、本フォーマットに従う。
 
 ---
 
@@ -35,7 +32,7 @@
 
 - **Repository-wide**: `.github/copilot-instructions.md` に「コードレビュー、チャット、Issue 作成・更新、コメントは常に**〇〇語**で」など、プロジェクトで希望する言語を記載する。
 - **Path-specific**: `.github/instructions/` 内のファイルに同様の文言を記載する（code review・coding agent 用）。Chat・Issue 作成では読まれないため、言語統一のためには repository-wide が必須。
-- **個人設定**: 採用先でそれでも希望言語にならない場合は、GitHub の Copilot Chat → プロフィール → Personal instructions で言語を指定する方法を案内できる。
+- **個人設定**: 希望言語にならない場合は GitHub Copilot Chat → プロフィール → Personal instructions で指定（人間が実施）。
 
 ---
 
@@ -93,10 +90,9 @@ applyTo: "**/*.ts,**/*.tsx,**/*.md"
 
 ---
 
-## AI エージェント向けの参照
+## AI 向け参照
 
-- **AGENTS.md を主に読む LLM 向け**: 本ドキュメント（`GitHub_Copilot対応.md`）は、**採用先リポジトリ**で GitHub Copilot の指示を追加・変更する作業を行うときに参照する。`.github/copilot-instructions.md` や `.github/instructions/*` を編集する前に本ドキュメントのフォーマットと「どの機能がどの指示を読むか」を確認すること。
-- **汎用版の位置づけ**: 本ファイルは規約のテンプレートであり、実際の指示ファイルは**採用先リポジトリ**の `.github/` に配置する。採用先ごとに `.github/instructions/README.md` 等でファイル役割をまとめておくことを推奨する。
+`.github/copilot-instructions.md` や `.github/instructions/*` を編集するときは、本ドキュメントのクイックリファレンス・フォーマット・「どの機能がどの指示を読むか」を確認する。実際のファイルは採用先の `.github/` に配置する。
 
 ---
 

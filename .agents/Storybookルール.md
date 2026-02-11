@@ -32,6 +32,8 @@
    - `*.stories.tsx` 形式で対象コンポーネントと同じディレクトリに配置
    - `tags: ['autodocs']` を追加して自動ドキュメント生成を有効にする
 
+**AI向け 自律時の判断**: 階層・トークン・コンポーネント記述で迷った場合は、上記クイックリファレンス5項目（論理構造固定・01_デザイン基盤が正・役割→状態→構造→見た目・記述順・ストーリー必須）に従う。該当セクションを参照する。
+
 ---
 
 ## 対象と前提
@@ -769,18 +771,6 @@ URI に紐づく完成形か？
 - [Storybook 公式ドキュメント](https://storybook.js.org/)
 - [Storybook MDX ドキュメント](https://storybook.js.org/docs/writing-docs/mdx)
 - [Storybook Controls ドキュメント](https://storybook.js.org/docs/essentials/controls)
-
----
-
-## 最後に（人間向け）
-
-- この `Storybookルール.md` は、**Storybook によるデザインシステム管理に特化した規約**です。
-- 迷ったときは：
-  1. まず判断フローに従う
-  2. トークン定義は `01_デザイン基盤` のみ
-  3. コンポーネントは役割と状態を語る
-  4. 見た目の根拠は必ずトークンに遡る
-  5. それでも悩んだら `.workflow/{issue}/memo/` にメモを残してから検討
 
 ---
 

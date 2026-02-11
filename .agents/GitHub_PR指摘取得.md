@@ -17,6 +17,8 @@
 7. **JSON 形式での保存**: 取得したコメントとレビューを JSON 形式で保存する
 8. **指摘対応ディレクトリ（テンプレート必須）**: issue 直下に `指摘対応/` を作成するときは**必ず** [指摘対応用テンプレート](#指摘対応ディレクトリのテンプレート)（`.workflow/templates/指摘対応/` の `00_README.md`・`01_指摘一覧.md`・`02_対応方針.md`）をコピーして使用し、指摘一覧・対応方針を記載する
 
+**AI向け 自律時の判断**: 取得手順や保存形式で迷った場合は、上記クイックリファレンス8項目（特にレビューコメント＋レビュー body の両方取得・Nitpick 漏れ防止・JSON 保存・指摘対応はテンプレート必須）に従う。該当セクションを参照する。
+
 ---
 
 ## 対象と前提
@@ -544,21 +546,6 @@ GitHub PR 指摘を取得する前に、以下を確認：
 - [List reviews for a pull request](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request)
 - [GitHub CLI 公式ドキュメント](https://cli.github.com/)
 - [jq 公式ドキュメント](https://stedolan.github.io/jq/)
-
----
-
-## 最後に（人間向け）
-
-- この `GitHub_PR指摘取得.md` は、**GitHub から PR の指摘を取得する処理に特化した規約**です。
-- 迷ったときは：
-  1. 指摘対応をまとめるときは `.workflow/templates/指摘対応/` をコピーして利用する
-  2. 処理手順書（`00_処理手順書.md`）を参照する（API 取得の詳細）
-  3. リポジトリ情報は `git remote` から取得する
-  4. PR 番号は PR メッセージファイルから取得する
-  5. **レビューコメントとレビュー（reviews）の両方**を取得する（Nitpick 漏れ防止のため必須）。レビュー `body` をパースし、「Nitpick comments」等を指摘一覧に含める
-  6. CodeRabbit / Copilot など、使用するレビューツールに応じてコメントを抽出する
-  7. メタデータを含めて JSON 形式で保存する
-  8. それでも悩んだら `.workflow/{issue}/memo/` にメモを残してから検討
 
 ---
 
