@@ -5,6 +5,8 @@
 > ワークフロー全体の規約は [`AGENTS.md`](../AGENTS.md)、  
 > LLM 向けの全体ルールは [`実行ルール.md`](./実行ルール.md) を参照してください。
 
+**AI向け 自律時の判断**: 図の書き方で迷った場合は、直下のクイックリファレンス5項目（ラベルはダブルクォート、ノードIDは英数字とアンダースコアのみ、特殊文字は引用符、エッジラベルも引用符、改行は `<br/>`）に従う。該当図タイプのセクションを参照する。
+
 ---
 
 ## クイックリファレンス（絶対に守ること）
@@ -70,15 +72,7 @@ flowchart TD
   API_LAYER --> SERVICE_LAYER
 ```
 
-#### 間違った例
-
-```mermaid
-flowchart TD
-  開始 --> API層
-  API層 --> サービス層
-```
-
-**問題点**: ノードIDに日本語を使用しているため、エラーが発生する可能性がある
+**禁止**: ノードIDに日本語・特殊文字を使用する。
 
 ### 2. 引用符の使い方
 
@@ -101,19 +95,7 @@ flowchart TD
   C --> D
 ```
 
-#### 間違った例
-
-```mermaid
-flowchart TD
-  A[開始]
-  B[API 層]
-  C[サービス層]
-  
-  A --> B
-  B --> C
-```
-
-**問題点**: 日本語を含むラベルが引用符で囲まれていないため、エラーが発生する可能性がある
+**禁止**: 日本語・特殊文字を含むラベルを引用符なしで記述する。
 
 ### 3. 特殊文字の扱い
 
@@ -143,17 +125,7 @@ flowchart TD
   INFRA_LAYER --> DB
 ```
 
-#### 間違った例
-
-```mermaid
-flowchart TD
-  API_LAYER[API 層（FastAPI ルーター）]
-  SERVICE_LAYER[サービス層（ユースケースサービス）]
-  
-  API_LAYER --> SERVICE_LAYER
-```
-
-**問題点**: 括弧を含むラベルが引用符で囲まれていないため、エラーが発生する可能性がある
+**禁止**: 特殊文字を含むラベルを引用符で囲まない。
 
 ### 4. エッジラベルの扱い
 
@@ -175,22 +147,7 @@ flowchart TD
   SU --> R0
 ```
 
-#### 間違った例
-
-```mermaid
-flowchart TD
-  START{既存プロジェクト?}
-  SU[00_システム理解]
-  R0[00_要求定義]
-  
-  START -->|Yes| SU
-  START -->|No| R0
-  SU --> R0
-```
-
-**問題点**: 
-- ノードIDに日本語や特殊文字（`?`）を含んでいる
-- エッジラベルが引用符で囲まれていない
+**禁止**: ノードIDに日本語・`?` 等の特殊文字を含める。エッジラベルを引用符で囲まない。
 
 ### 5. 改行の扱い
 
@@ -211,19 +168,7 @@ flowchart TD
   SERVICE_LAYER --> DOMAIN_LAYER
 ```
 
-#### 間違った例
-
-```mermaid
-flowchart TD
-  API_LAYER["API 層
-  （FastAPI ルーター）"]
-  SERVICE_LAYER["サービス層
-  （ユースケースサービス）"]
-  
-  API_LAYER --> SERVICE_LAYER
-```
-
-**問題点**: 改行を直接使用しているため、エラーが発生する可能性がある
+**禁止**: ラベル内で改行を直接使う。必ず `<br/>` を使用する。
 
 ---
 
@@ -686,18 +631,6 @@ erDiagram
 - [Mermaid Sequence Diagram 構文](https://mermaid.js.org/syntax/sequenceDiagram.html)
 - [Mermaid Class Diagram 構文](https://mermaid.js.org/syntax/classDiagram.html)
 - [Mermaid ER Diagram 構文](https://mermaid.js.org/syntax/entityRelationshipDiagram.html)
-
----
-
-## 最後に（人間向け）
-
-- この `Mermaid図ルール.md` は、**Mermaid 図を作成する際のエラーを防ぐための規約**です。
-- 迷ったときは：
-  1. ノードIDは英数字とアンダースコアのみ
-  2. すべてのラベルをダブルクォートで囲む
-  3. エッジラベルも引用符で囲む
-  4. 改行は `<br/>` タグを使用
-  5. それでもエラーが出る場合は、`.workflow/{issue}/memo/` にメモを残してから検討
 
 ---
 

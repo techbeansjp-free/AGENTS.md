@@ -17,7 +17,7 @@
   - システム構成とアーキテクチャ詳細
 
 - **`.agents/`** - 実行ルール・ガイドラインを格納するディレクトリ。汎用テンプレートとしてそのまま使う。
-- **`.agents/unique-rule/`** - プロジェクト固有ルールを置くディレクトリ。ここに置いたルールは `.agents/` より**優先**される。詳細は [`.agents/unique-rule/README.md`](./.agents/unique-rule/README.md) を参照。
+- **`.agents-project/`** - プロジェクト固有ルールを置くディレクトリ。ここに置いたルールは `.agents/` より**優先**される。詳細は [`.agents-project/README.md`](./.agents-project/README.md) を参照。
 - **[`実行ルール.md`](./.agents/実行ルール.md)** - LLM エージェント向け実行ルール
   - 機械的に守るべきハード制約
   - フェーズ別チェックリスト
