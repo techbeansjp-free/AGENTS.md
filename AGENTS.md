@@ -815,6 +815,7 @@ flowchart TD
 - [`Storybookルール.md`](./.agents/Storybookルール.md) - Storybook / デザインシステム運用規約
 - [`GitHub_PR指摘取得.md`](./.agents/GitHub_PR指摘取得.md) - GitHub PR 指摘取得ルール
 - [`GitHub_Copilot対応.md`](./.agents/GitHub_Copilot対応.md) - GitHub Copilot 対応（汎用版・リポジトリ指示の構成・フォーマット・運用）
+- [`CLAUDE_サブエージェントとMCPおよびエージェントチーム.md`](./.agents/CLAUDE_サブエージェントとMCPおよびエージェントチーム.md) - サブエージェント・MCP・エージェントチームの推奨設定とスコープ方針（グローバル＝MCP・サブエージェント、エージェントチームは方法のみ）
 
 ### 一般的な参考資料
 

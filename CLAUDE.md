@@ -52,6 +52,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `.agents/Issue実行テンプレート.md` - Issue 実行テンプレート（1行指示パターン）
 - `.agents/コーディングルール.md` - コーディングルール
 - `.agents/レビュールール.md` - レビューフェーズ規約（レビュー時は必ず参照）
+- `.agents/CLAUDE_サブエージェントとMCPおよびエージェントチーム.md` - サブエージェント・MCP・エージェントチームの推奨設定とスコープ方針
 - その他、`.agents/` 配下の規約ファイル（実行ルール.md、コーディングルール.md 等）
 
 ## 重要な規約（各リポジトリで追記）
