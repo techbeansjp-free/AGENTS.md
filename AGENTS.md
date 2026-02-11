@@ -2,17 +2,18 @@
 
 > アジャイル＋ BDD 駆動の段階進行とファイル運用を強制する開発規約
 
-> **LLM エージェント向け**: このドキュメントは人間向けの完全版です。LLM エージェントが機械的に守るべき実行ルールは [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) を参照してください。**レビューフェーズ時は、[`AGENTS_REVIEW_RULE.md`](./AGENTS_REVIEW_RULE.md) を必ず参照してください。**
+> **LLM エージェント向け**: このドキュメントは人間向けの完全版です。LLM エージェントが機械的に守るべき実行ルールは [`実行ルール.md`](./.agents/実行ルール.md) を参照してください。**レビューフェーズ時は、[`レビュールール.md`](./.agents/レビュールール.md) を必ず参照してください。**
 
 ---
 
 ## クイックリファレンス
 
-### この規約で「絶対に守ること」3 つ
+### この規約で「絶対に守ること」4 つ
 
-1. **すべての対応は `.workflow/{YYYYMMDD_HHMMSS_issue_name}/00_要求定義.md` から始める**（既存プロジェクト導入時は `.workflow/00_システム理解.md` から）
-2. **フェーズを飛ばさない（00*システム理解（既存プロジェクト時のみ）→ 00 → 01 → 02 → 03 → 実装 → 04_review → 05*最終確認（外部設定が必要な場合のみ））**
-3. **ドキュメントと実装を常に同期させる（変更したら必ず該当 md を更新）**
+1. **「agentsに従う」＝応答は常に SILENT MODE**（会話への出力は**最大15行**、先頭に `🧠 Mode: SILENT MODE` を付与。詳細は `.workflow/` や `memo/` に書く。ユーザーが「詳細を」「全文を」と明示した場合を除く）
+2. **すべての対応は `.workflow/{YYYYMMDD_HHMMSS_issue_name}/00_要求定義.md` から始める**（既存プロジェクト導入時は `.workflow/00_システム理解.md` から）
+3. **フェーズを飛ばさない（00*システム理解（既存プロジェクト時のみ）→ 00 → 01 → 02 → 03 → 実装 → 04_review → 05*最終確認（外部設定が必要な場合のみ））**
+4. **ドキュメントと実装を常に同期させる（変更したら必ず該当 md を更新）**
 
 ### ワークフロー チートシート
 
@@ -264,7 +265,7 @@ flowchart TD
   - 各機能・コンポーネントごとのテストレベル方針
   - クリティカルな機能（課金、締め処理、削除系等）のテスト方針
   - バリデーション系のテスト方針（網羅的にテスト、サービス層で共通化）
-  - 詳細は [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) を参照
+  - 詳細は [`テストガイドライン.md`](./.agents/テストガイドライン.md) を参照
 - **ドキュメント更新**: 設計の変更や追加があった場合は、`02_設計.md`を即座に更新する（[実装原則](#実装原則)の「ドキュメント原則」を参照）
 
 **意識すべき原則**（詳細は [実装原則](#実装原則) を参照）:
@@ -287,7 +288,7 @@ flowchart TD
   - **結合/API テスト**: コンポーネント間の契約チェック、代表的なフロー
   - **E2E/受け入れテスト**: BDD の Feature/Scenario をそのままテストに（重要機能に集中）
   - **バリデーション系**: 網羅的なテスト観点（すべてのルール、境界値、エラーメッセージ）
-  - 詳細は [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) を参照
+  - 詳細は [`テストガイドライン.md`](./.agents/テストガイドライン.md) を参照
 - 実装前にテストコード雛形を用意
 - タスク分解と優先順位付け
 - テストの優先順位（クリティカルな機能は厚くテスト）
@@ -704,7 +705,7 @@ flowchart TD
 
 #### `00_システム理解.md` テンプレート
 
-**テンプレートファイル**: [`.workflow/templates/00_システム理解.md`](.workflow/templates/00_システム理解.md)（実際のプロジェクトでは `.cursor_workflow/templates/00_システム理解.md` または `.workflow/templates/00_システム理解.md`）
+**テンプレートファイル**: [`.workflow/templates/00_システム理解.md`](./.workflow/templates/00_システム理解.md)（実際のプロジェクトでは `.cursor_workflow/templates/00_システム理解.md` または `.workflow/templates/00_システム理解.md`）
 
 **注意**: このテンプレートは、既存プロジェクトに途中から導入する場合や、他ベンダーが作成したシステムを改修・機能追加する場合のみ使用する。新規プロジェクトの場合は、このファイルは不要。
 
@@ -714,7 +715,7 @@ flowchart TD
 
 #### `00_要求定義.md` テンプレート
 
-**テンプレートファイル**: [`.workflow/templates/00_要求定義.md`](.workflow/templates/00_要求定義.md)（実際のプロジェクトでは `.cursor_workflow/templates/00_要求定義.md` または `.workflow/templates/00_要求定義.md`）
+**テンプレートファイル**: [`.workflow/templates/00_要求定義.md`](./.workflow/templates/00_要求定義.md)（実際のプロジェクトでは `.cursor_workflow/templates/00_要求定義.md` または `.workflow/templates/00_要求定義.md`）
 
 issue/タスクの要求定義に使用。
 
@@ -727,7 +728,7 @@ issue/タスクの要求定義に使用。
 
 #### `01_要件定義.md` テンプレート
 
-**テンプレートファイル**: [`.workflow/templates/01_要件定義.md`](.workflow/templates/01_要件定義.md)（実際のプロジェクトでは `.cursor_workflow/templates/01_要件定義.md` または `.workflow/templates/01_要件定義.md`）
+**テンプレートファイル**: [`.workflow/templates/01_要件定義.md`](./.workflow/templates/01_要件定義.md)（実際のプロジェクトでは `.cursor_workflow/templates/01_要件定義.md` または `.workflow/templates/01_要件定義.md`）
 
 issue/タスクの要件定義に使用。
 
@@ -735,7 +736,7 @@ issue/タスクの要件定義に使用。
 
 #### `02_設計.md` テンプレート
 
-**テンプレートファイル**: [`.workflow/templates/02_設計.md`](.workflow/templates/02_設計.md)（実際のプロジェクトでは `.cursor_workflow/templates/02_設計.md` または `.workflow/templates/02_設計.md`）
+**テンプレートファイル**: [`.workflow/templates/02_設計.md`](./.workflow/templates/02_設計.md)（実際のプロジェクトでは `.cursor_workflow/templates/02_設計.md` または `.workflow/templates/02_設計.md`）
 
 issue/タスクの設計に使用。
 
@@ -743,7 +744,7 @@ issue/タスクの設計に使用。
 
 #### `03_実装計画.md` テンプレート
 
-**テンプレートファイル**: [`.workflow/templates/03_実装計画.md`](.workflow/templates/03_実装計画.md)（実際のプロジェクトでは `.cursor_workflow/templates/03_実装計画.md` または `.workflow/templates/03_実装計画.md`）
+**テンプレートファイル**: [`.workflow/templates/03_実装計画.md`](./.workflow/templates/03_実装計画.md)（実際のプロジェクトでは `.cursor_workflow/templates/03_実装計画.md` または `.workflow/templates/03_実装計画.md`）
 
 issue/タスクの実装計画に使用。
 
@@ -751,7 +752,7 @@ issue/タスクの実装計画に使用。
 
 #### `90_issues.md` テンプレート
 
-**テンプレートファイル**: [`.workflow/templates/90_issues.md`](.workflow/templates/90_issues.md)（実際のプロジェクトでは `.cursor_workflow/templates/90_issues.md` または `.workflow/templates/90_issues.md`）
+**テンプレートファイル**: [`.workflow/templates/90_issues.md`](./.workflow/templates/90_issues.md)（実際のプロジェクトでは `.cursor_workflow/templates/90_issues.md` または `.workflow/templates/90_issues.md`）
 
 **注意**: このテンプレートは、大きな issue/タスクを複数の小さな issue（またはタスク）に分割する場合のみ使用する。issue/タスク自体が 1 つの単位として完結する場合は、このファイルは不要。issue とタスクの関係については、[ワークフローとフェーズ進行](#ワークフローとフェーズ進行)の「Issue 作成」フェーズを参照。
 
@@ -759,7 +760,7 @@ issue/タスクの実装計画に使用。
 
 #### `04_review.md` テンプレート
 
-**テンプレートファイル**: [`.workflow/templates/04_review.md`](.workflow/templates/04_review.md)（実際のプロジェクトでは `.cursor_workflow/templates/04_review.md` または `.workflow/templates/04_review.md`）
+**テンプレートファイル**: [`.workflow/templates/04_review.md`](./.workflow/templates/04_review.md)（実際のプロジェクトでは `.cursor_workflow/templates/04_review.md` または `.workflow/templates/04_review.md`）
 
 issue/タスクのレビューに使用。
 
@@ -767,7 +768,7 @@ issue/タスクのレビューに使用。
 
 #### `05_最終確認チェックリスト.md` テンプレート
 
-**テンプレートファイル**: [`.workflow/templates/05_最終確認チェックリスト.md`](.workflow/templates/05_最終確認チェックリスト.md)（実際のプロジェクトでは `.cursor_workflow/templates/05_最終確認チェックリスト.md` または `.workflow/templates/05_最終確認チェックリスト.md`）
+**テンプレートファイル**: [`.workflow/templates/05_最終確認チェックリスト.md`](./.workflow/templates/05_最終確認チェックリスト.md)（実際のプロジェクトでは `.cursor_workflow/templates/05_最終確認チェックリスト.md` または `.workflow/templates/05_最終確認チェックリスト.md`）
 
 **注意**: このテンプレートは、コードでは対応できない外部設定（GTM 管理画面、GA4 管理画面、AWS Amplify コンソール、その他の外部サービス設定）が必要な場合のみ使用する。すべてのプロジェクトで必要とは限らない。
 
@@ -777,21 +778,17 @@ issue/タスクのレビューに使用。
 
 #### `指摘対応/` テンプレート（ディレクトリ・汎用版）
 
-**テンプレートディレクトリ**: [`.workflow/templates/指摘対応/`](.workflow/templates/指摘対応/)（`00_README.md`、`01_指摘一覧.md`、`02_対応方針.md` の 3 ファイル）
+**テンプレートディレクトリ**: [`.workflow/templates/指摘対応/`](./.workflow/templates/指摘対応/)（`00_README.md`、`01_指摘一覧.md`、`02_対応方針.md` の 3 ファイル）
 
-**注意**: このテンプレートは**汎用版**であり、任意のプロジェクトで GitHub PR のレビュー指摘（CodeRabbit / Copilot 等）を一覧化し、対応方針（採用/見送り/要検討）を記録する場合に使用する。詳細は [`AGENTS_GITHUB_PR_REVIEW_FETCH.md`](./AGENTS_GITHUB_PR_REVIEW_FETCH.md) の「指摘対応ディレクトリのテンプレート」を参照。
-
-PR 指摘を issue 直下で管理するときに、各プロジェクトの `.workflow/{YYYYMMDD_HHMMSS_issue_name}/指摘対応/` にテンプレートをコピーして利用する。
+**指摘対応ディレクトリ**: GitHub PR のレビュー指摘（CodeRabbit / Copilot 等）を一覧化し、対応方針（採用/見送り/要検討）を記録する場合は、issue 直下に `指摘対応/` を作成し、`.workflow/templates/指摘対応/` をコピーして利用する。詳細は [`GitHub_PR指摘取得.md`](./.agents/GitHub_PR指摘取得.md) の「指摘対応ディレクトリのテンプレート」を参照。
 
 **必須ファイル**: `00_README.md`（PR メタ情報・目的）、`01_指摘一覧.md`（指摘の一覧）、`02_対応方針.md`（採用/見送り/要検討と理由）。
 
 #### `github/` テンプレート（GitHub Copilot 用・ディレクトリ・汎用版）
 
-**テンプレートディレクトリ**: [`.workflow/templates/github/`](.workflow/templates/github/)（`copilot-instructions.md` と `instructions/` 配下の `language.instructions.md`・`review.instructions.md`）
+**テンプレートディレクトリ**: [`.workflow/templates/github/`](./.workflow/templates/github/)（`copilot-instructions.md` と `instructions/` 配下の `language.instructions.md`・`review.instructions.md`）
 
-**注意**: このテンプレートは**汎用版**であり、任意のプロジェクトで GitHub Copilot のリポジトリ指示（custom instructions）を初めて導入する場合に使用する。詳細は [`AGENTS_GITHUB_COPILOT.md`](./AGENTS_GITHUB_COPILOT.md) を参照。
-
-採用先リポジトリの**リポジトリルートの `.github/`** にテンプレートをコピーして利用する（`templates/github/` の内容を `.github/` に展開する。既存の `.github/` がある場合は `copilot-instructions.md` と `instructions/` を追加・上書きする）。応答言語（〇〇語）やレビュー時のルールはプロジェクトに合わせて編集する。
+**GitHub Copilot のリポジトリ指示**: 初めて導入する場合は、`.workflow/templates/github/` の内容を**リポジトリルートの `.github/`** にコピーして利用する（既存の `.github/` がある場合は `copilot-instructions.md` と `instructions/` を追加・上書きする）。応答言語やレビュー時のルールはプロジェクトに合わせて編集する。詳細は [`GitHub_Copilot対応.md`](./.agents/GitHub_Copilot対応.md) を参照。
 
 **必須ファイル**: `copilot-instructions.md`（リポジトリ全体の指示・Chat・Issue 作成で参照）、`instructions/language.instructions.md`（応答言語・code review・coding agent で参照）。`instructions/review.instructions.md` はプロジェクトのレビュー方針に合わせて編集する。
 
@@ -1190,7 +1187,7 @@ light.ensureOn();
   - **実装計画書**: タスク分解、スケジュール、テスト計画を記載
 - **参照元明示**: 出典がない場合は理由を注記
 - **Mermaid 図を積極活用**: フローチャート、シーケンス図等を適切に使用する
-  - **Mermaid 図作成時は [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) を必ず参照する**: Mermaid 図を生成・提案する際は、ノード ID の命名規則（英数字とアンダースコアのみ）、ラベルの引用符ルール（ダブルクォート必須）、エッジラベルの引用符ルール、改行の扱い（`<br/>` タグ使用）、特殊文字の扱いを厳守する
+  - **Mermaid 図作成時は [`Mermaid図ルール.md`](./.agents/Mermaid図ルール.md) を必ず参照する**: Mermaid 図を生成・提案する際は、ノード ID の命名規則（英数字とアンダースコアのみ）、ラベルの引用符ルール（ダブルクォート必須）、エッジラベルの引用符ルール、改行の扱い（`<br/>` タグ使用）、特殊文字の扱いを厳守する
   - **システムアーキテクチャ**: `flowchart` や `graph` を使用
   - **データフロー・処理フロー**: `sequenceDiagram` や `flowchart` を使用
   - **データモデル**: `erDiagram` を使用
@@ -1228,14 +1225,14 @@ light.ensureOn();
     - **同じディレクトリ内**: `./ファイル名.md`（例: `./01_要件定義.md`）
     - **親ディレクトリ**: `../ファイル名.md`（例: `../00_システム理解.md`）
     - **2 階層上のディレクトリ**: `../../ファイル名.md`（例: `../../AGENTS.md`）
-    - **プロジェクトルートのファイル**: 相対パスで正しく指定（例: `../../AGENTS_AI_PLAYBOOK.md`）
+    - **プロジェクトルートのファイル**: 相対パスで正しく指定（例: `../../実行ルール.md`）
     - **テンプレートファイル**: `.workflow/templates/ファイル名.md` または `../templates/ファイル名.md`（ディレクトリ構造に応じて）
   - **よくある間違いと対処法**:
     - **間違い**: `[AGENTS.md](./AGENTS.md)` と記載しているが、実際のファイルは `モリリン株式会社/AGENTS.md` にある
       - **対処法**: 実際のファイルパスを確認し、正しい相対パスを使用する
     - **間違い**: `[00_要求定義.md](00_要求定義.md)` と記載しているが、Markdown リンク形式になっていない
       - **対処法**: `[00_要求定義.md](./00_要求定義.md)` のように、`./` を付けて相対パスを明示する
-    - **間違い**: `[AGENTS_AI_PLAYBOOK.md](../AGENTS_AI_PLAYBOOK.md)` と記載しているが、実際のディレクトリ構造と一致していない
+    - **間違い**: `[実行ルール.md](../実行ルール.md)` と記載しているが、実際のディレクトリ構造と一致していない
       - **対処法**: 実際のディレクトリ構造を確認し、正しい相対パスを使用する
     - **間違い**: ファイル名の大文字小文字が一致していない（例: `agents.md` と `AGENTS.md`）
       - **対処法**: 実際のファイル名を確認し、大文字小文字を含めて正確に記載する
@@ -1280,7 +1277,7 @@ light.ensureOn();
     ```
   - **思考過程・調査ログの出力禁止**: 思考過程、調査ログ、差分説明の詳細は会話に書かない。必要なら `memo/` 配下のファイルに書く
   - **状態管理**: 仕様・前提・決定事項は `.workflow/` や `docs/` 配下のファイルに固定化し、会話には「次の1手だけ」を指示する
-  - **詳細**: [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) の「ハード制約」セクション（19番）を参照
+  - **詳細**: [`実行ルール.md`](./.agents/実行ルール.md) の「ハード制約」セクション（19番）を参照
 - **メモ**:
   - **配置場所**: メモ（調査結果、検証結果、バックログ課題案、ステークホルダー対応方針など）は、issue/タスクディレクトリ内の`memo/`ディレクトリに作成する
   - **ファイル名の命名規則**: 連番をつけないドキュメントでは、作成順序がわかるように、日付と時間をプレフィックスとして付ける
@@ -1311,7 +1308,7 @@ light.ensureOn();
 
 ### テスト原則
 
-**重要**: テスト作成・レビューについては、詳細なガイドラインを [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) に記載しています。必ず参照すること。
+**重要**: テスト作成・レビューについては、詳細なガイドラインを [`テストガイドライン.md`](./.agents/テストガイドライン.md) に記載しています。必ず参照すること。
 
 - **テストファースト**: 実装前にテストを書く
 - **BDD ベース**: Given-When-Then 形式でユースケース（Feature）とシナリオ（Scenario）を定義。ユースケースの中に複数のシナリオを含める
@@ -1376,6 +1373,17 @@ light.ensureOn();
 - issue/タスクディレクトリ名は日時プレフィックス（`YYYYMMDD_HHMMSS_`）を付与する（例: `20251115_143022_nextjs移行`）。日時はディレクトリ作成時にシステムの現在日時を取得して使用する。
 - issue/タスク自体が 1 つの単位として完結する場合は、`90_issues.md` と `90_issues/`（または `90_tasks/`）ディレクトリは不要。issue/タスクを複数の小さな issue/タスクに分割する場合のみ使用する。
 - issue やタスクは、必要に応じてさらに細かい issue やタスクに分割することができる。大きな issue の中に `90_issues.md` と `90_issues/` ディレクトリを作成し、ネストされた issue やタスクを管理することができる。
+
+### 規約ファイルの配置と優先順位
+
+実行ルール（AGENTS_*.md）は次のように配置する。
+
+- **`.agents/`** - 汎用ルール。テンプレートとしてそのまま使う（変更しない）。採用先ではコピーしたまま利用する。
+- **`.agents/unique-rule/`** - プロジェクト固有ルールを置くディレクトリ。採用先でプロジェクトごとの規約を追加する場合は、ここにファイルを作成する。
+
+**優先順位**: **`.agents/unique-rule/` 配下のルールが `.agents/` のルールより優先される。** 同名または同目的のルールがある場合は、`.agents/unique-rule/` のファイルを採用する。該当ファイルが unique-rule にない場合は、`.agents/` の標準ルールに従う。これにより、テンプレートはそのまま使いつつ、プロジェクト固有の記述だけを unique-rule で管理でき、運用が楽になる。
+
+詳細は [`.agents/unique-rule/README.md`](./.agents/unique-rule/README.md) を参照。
 
 ### 成果物ファイルの運用（オプショナル）
 
@@ -1747,17 +1755,19 @@ light.ensureOn();
 
 ### AGENTS 規約ドキュメント
 
-- [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) - LLM エージェント運用ルール
-- [`AGENTS_SILENT_MODE_GUIDE.md`](./AGENTS_SILENT_MODE_GUIDE.md) - SILENT MODE 運用ガイド（省トークン運用）
-- [`AGENTS_INITIALIZATION_PROMPT.md`](./AGENTS_INITIALIZATION_PROMPT.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
-- [`AGENTS_ISSUE_EXECUTION_TEMPLATE.md`](./AGENTS_ISSUE_EXECUTION_TEMPLATE.md) - Issue 実行テンプレート（1行指示パターン）
-- [`AGENTS_CODING_RULES.md`](./AGENTS_CODING_RULES.md) - コーディングルール（型安全性、テスト容易性、コード品質）
-- [`AGENTS_REVIEW_RULE.md`](./AGENTS_REVIEW_RULE.md) - レビュー時の徹底的な品質調査ルール
-- [`AGENTS_TEST_GUIDELINES.md`](./AGENTS_TEST_GUIDELINES.md) - テスト作成ガイドライン
-- [`AGENTS_MERMAID_RULES.md`](./AGENTS_MERMAID_RULES.md) - Mermaid 図作成規約
-- [`AGENTS_STORYBOOK_RULES.md`](./AGENTS_STORYBOOK_RULES.md) - Storybook / デザインシステム運用規約
-- [`AGENTS_GITHUB_PR_REVIEW_FETCH.md`](./AGENTS_GITHUB_PR_REVIEW_FETCH.md) - GitHub PR 指摘取得ルール
-- [`AGENTS_GITHUB_COPILOT.md`](./AGENTS_GITHUB_COPILOT.md) - GitHub Copilot 対応（汎用版・リポジトリ指示の構成・フォーマット・運用）
+- [`.agents/unique-rule/README.md`](./.agents/unique-rule/README.md) - プロジェクト固有ルールの配置場所。**unique-rule 配下のルールは .agents/ より優先される。**
+- [`実行ルール.md`](./.agents/実行ルール.md) - LLM エージェント運用ルール
+- [`サイレントモードガイド.md`](./.agents/サイレントモードガイド.md) - SILENT MODE 運用ガイド（省トークン運用）
+- [`初期化プロンプト.md`](./.agents/初期化プロンプト.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
+- [`Issue実行テンプレート.md`](./.agents/Issue実行テンプレート.md) - Issue 実行テンプレート（1行指示パターン）
+- [`コーディングルール.md`](./.agents/コーディングルール.md) - コーディングルール（型安全性、テスト容易性、コード品質）
+- [`ドキュメントルール.md`](./.agents/ドキュメントルール.md) - システム仕様書（docs/）作成・更新ルール
+- [`レビュールール.md`](./.agents/レビュールール.md) - レビュー時の徹底的な品質調査ルール
+- [`テストガイドライン.md`](./.agents/テストガイドライン.md) - テスト作成ガイドライン
+- [`Mermaid図ルール.md`](./.agents/Mermaid図ルール.md) - Mermaid 図作成規約
+- [`Storybookルール.md`](./.agents/Storybookルール.md) - Storybook / デザインシステム運用規約
+- [`GitHub_PR指摘取得.md`](./.agents/GitHub_PR指摘取得.md) - GitHub PR 指摘取得ルール
+- [`GitHub_Copilot対応.md`](./.agents/GitHub_Copilot対応.md) - GitHub Copilot 対応（汎用版・リポジトリ指示の構成・フォーマット・運用）
 
 ### 一般的な参考資料
 

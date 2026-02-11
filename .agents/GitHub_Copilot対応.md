@@ -1,8 +1,8 @@
-# AGENTS_GITHUB_COPILOT - GitHub Copilot 対応（汎用版）
+# GitHub_Copilot対応 - GitHub Copilot 対応（汎用版）
 
 > このドキュメントは**汎用版**であり、**任意のプロジェクト**で GitHub Copilot のリポジトリ指示（custom instructions）の構成・フォーマット・運用を定義します。  
-> ワークフロー全体の規約は [`AGENTS.md`](./AGENTS.md)、  
-> LLM 向けの全体ルールは [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) を参照してください。  
+> ワークフロー全体の規約は [`AGENTS.md`](../AGENTS.md)、  
+> LLM 向けの全体ルールは [`実行ルール.md`](./実行ルール.md) を参照してください。  
 > **採用先リポジトリ**では、`.github/` 配下に `copilot-instructions.md` および必要に応じて `instructions/` を配置し、本ドキュメントのフォーマットに従ってください。
 
 ---
@@ -95,7 +95,7 @@ applyTo: "**/*.ts,**/*.tsx,**/*.md"
 
 ## AI エージェント向けの参照
 
-- **AGENTS.md を主に読む LLM 向け**: 本ドキュメント（`AGENTS_GITHUB_COPILOT.md`）は、**採用先リポジトリ**で GitHub Copilot の指示を追加・変更する作業を行うときに参照する。`.github/copilot-instructions.md` や `.github/instructions/*` を編集する前に本ドキュメントのフォーマットと「どの機能がどの指示を読むか」を確認すること。
+- **AGENTS.md を主に読む LLM 向け**: 本ドキュメント（`GitHub_Copilot対応.md`）は、**採用先リポジトリ**で GitHub Copilot の指示を追加・変更する作業を行うときに参照する。`.github/copilot-instructions.md` や `.github/instructions/*` を編集する前に本ドキュメントのフォーマットと「どの機能がどの指示を読むか」を確認すること。
 - **汎用版の位置づけ**: 本ファイルは規約のテンプレートであり、実際の指示ファイルは**採用先リポジトリ**の `.github/` に配置する。採用先ごとに `.github/instructions/README.md` 等でファイル役割をまとめておくことを推奨する。
 
 ---

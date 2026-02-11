@@ -1,9 +1,9 @@
-# AGENTS_STORYBOOK_RULES - Storybook / デザインシステム運用規約
+# Storybookルール - Storybook / デザインシステム運用規約
 
 > このドキュメントは、**Storybook によるデザインシステム管理のための共通規約**と、  
 > **LLM エージェントが絶対に守るべき具体的な実行ルール**を定義します。  
-> ワークフロー全体の規約は [`AGENTS.md`](./AGENTS.md)、  
-> LLM 向けの全体ルールは [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) を参照してください。
+> ワークフロー全体の規約は [`AGENTS.md`](../AGENTS.md)、  
+> LLM 向けの全体ルールは [`実行ルール.md`](./実行ルール.md) を参照してください。
 
 ---
 
@@ -532,13 +532,13 @@ UI Stack の各要素と Storybook の配置場所の対応関係：
 
 > ここから下は、**AI が Storybook を生成するときに絶対に守るチェックリスト**です。
 
-> `AGENTS_AI_PLAYBOOK.md` のルールに **追加される Storybook 専用縛り** として扱います。
+> `実行ルール.md` のルールに **追加される Storybook 専用縛り** として扱います。
 
 ### 共通前提
 
-- すべての Storybook 対応は、`AGENTS_AI_PLAYBOOK.md` のワークフロー
+- すべての Storybook 対応は、`実行ルール.md` のワークフロー
   （`.workflow/{YYYYMMDD_HHMMSS_issue_name}/` 配下の `00_要求定義.md` → `01_要件定義.md` → …）に従う。
-- この `AGENTS_STORYBOOK_RULES.md` は **参照しながら作業することが前提**。
+- この `Storybookルール.md` は **参照しながら作業することが前提**。
   Storybook を生成するときは、まずここに合致するかを確認する。
 
 ### 1. Storybook 論理構造の遵守
@@ -648,7 +648,7 @@ AI は Storybook 生成時にドキュメントを生成するとき、**必ず�
   - ディレクトリ構造を確認せずに参照パスを記載する
   - ファイルが存在しないのに参照パスを記載する
 - **必須事項**: 参照パスを記載する前に、必ず実際のファイルパスを確認する
-- **詳細**: 参照パス確認の詳細なルールは [`AGENTS.md`](./AGENTS.md) の「ドキュメント原則」セクションを参照
+- **詳細**: 参照パス確認の詳細なルールは [`AGENTS.md`](../AGENTS.md) の「ドキュメント原則」セクションを参照
 
 ---
 
@@ -761,8 +761,8 @@ URI に紐づく完成形か？
 
 ### プロジェクトドキュメント
 
-- [`AGENTS_AI_PLAYBOOK.md`](./AGENTS_AI_PLAYBOOK.md) - LLM エージェント運用ルール
-- [`AGENTS.md`](./AGENTS.md) - 開発規約の全体像
+- [`実行ルール.md`](./実行ルール.md) - LLM エージェント運用ルール
+- [`AGENTS.md`](../AGENTS.md) - 開発規約の全体像
 
 ### 外部参考資料
 
@@ -774,7 +774,7 @@ URI に紐づく完成形か？
 
 ## 最後に（人間向け）
 
-- この `AGENTS_STORYBOOK_RULES.md` は、**Storybook によるデザインシステム管理に特化した規約**です。
+- この `Storybookルール.md` は、**Storybook によるデザインシステム管理に特化した規約**です。
 - 迷ったときは：
   1. まず判断フローに従う
   2. トークン定義は `01_デザイン基盤` のみ
