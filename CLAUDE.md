@@ -41,7 +41,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 必須フェーズ（飛ばし禁止）:
 
-1. `00_要求定義.md` → 2. `01_要件定義.md` → 3. `02_設計.md` → 4. `03_実装計画.md` → 5. 実装 → 6. `04_review.md`
+1. `00_要求定義.md` → 2. `01_要件定義.md` → 3. `02_設計.md` → 4. `03_実装計画.md` → 5. **4.5 ドキュメント徹底レビュー**（必須）→ 6. 実装 → 7. `04_review.md`
+
+**抜かさない運用**: 各フェーズは「固定ゲート」とし、提出物が揃うまで完了扱いにしない。完了の定義（DoD）は証跡ベースで固定。詳細は `.agents/サブエージェント抜かし防止.md` を参照。
 
 関連規約ファイル:
 
@@ -53,6 +55,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `.agents/コーディングルール.md` - コーディングルール
 - `.agents/レビュールール.md` - レビューフェーズ規約（レビュー時は必ず参照）
 - `.agents/CLAUDE_サブエージェントとMCPおよびエージェントチーム.md` - サブエージェント・MCP・エージェントチームの推奨設定とスコープ方針
+- `.agents/サブエージェント抜かし防止.md` - 工程の固定ゲート・提出物義務化・DoD（抜かさない運用）
 - その他、`.agents/` 配下の規約ファイル（実行ルール.md、コーディングルール.md 等）
 
 ## 重要な規約（各リポジトリで追記）
