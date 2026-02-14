@@ -10,29 +10,25 @@
 ## クイックリファレンス（絶対に守ること）
 
 1. **Storybook は「論理構造」で管理する**
-
    - 階層名・階層順・public/admin の対称構造は変更禁止
    - デザイントークンとコンポーネントを混ぜない
 
 2. **デザイントークンは「01\_デザイン基盤」が唯一の正**
-
    - トークン定義は `01_デザイン基盤（MDX）` のみに記載
    - コンポーネント側ではトークンを「参照するだけ」（定義しない）
 
 3. **UI は「役割 → 状態 → 構造 → 見た目」の順で定義する**
-
    - 見た目の話は最後
    - 見た目の根拠は必ずトークンに遡れる
 
 4. **コンポーネントの記述順を守る**
-
    - 概要 → 役割 → 状態一覧 → 振る舞い → 構造 → 使用トークン → アクセシビリティ → 使用上の注意
 
 5. **すべてのコンポーネントに Storybook ストーリーを作成する**
    - `*.stories.tsx` 形式で対象コンポーネントと同じディレクトリに配置
    - `tags: ['autodocs']` を追加して自動ドキュメント生成を有効にする
 
-**AI向け 自律時の判断**: 階層・トークン・コンポーネント記述で迷った場合は、上記クイックリファレンス5項目（論理構造固定・01_デザイン基盤が正・役割→状態→構造→見た目・記述順・ストーリー必須）に従う。該当セクションを参照する。
+**AI向け 自律時の判断**: 階層・トークン・コンポーネント記述で迷った場合は、上記クイックリファレンス5項目（論理構造固定・01\_デザイン基盤が正・役割→状態→構造→見た目・記述順・ストーリー必須）に従う。該当セクションを参照する。
 
 ---
 
@@ -89,10 +85,10 @@ Storybook は以下の論理構造で管理します。**階層名・階層順�
    - 新規ストーリー追加時に **main.ts の変更は不要**。`*.stories.*` を置けば自動検出される。
 
 2. **`.storybook/preview.tsx` の `parameters.options.storySort`**
-   - **セクション順**: **Docs**（title/id に `docs` / `documentation` / `ドキュメント` を含む）→ **イントロダクション**（0）→ **01_～06_**（1～6）の順にソートする。
+   - **セクション順**: **Docs**（title/id に `docs` / `documentation` / `ドキュメント` を含む）→ **イントロダクション**（0）→ **01*～06***（1～6）の順にソートする。
    - **同一コンポーネント内**: **Docs**（autodocs のドキュメント）→ **Default** → その他ストーリーの順にする。id の `kind--story-name` 形式で story 部分が `docs` / `default` のものを優先する。
-   - 各ストーリーの **meta.title** から「NN_」（01_, 02_, …）を抽出し、**01 → 02 → 03 → … の順**で並べる。
-   - 各プロジェクトで **title を「&lt;ルート名&gt;/&lt;階層番号&gt;_&lt;階層名&gt;/&lt;コンポーネント名&gt;」** の形式で付与すること（例: `フロント（public）/02_最小UI部品/Button`）。これでサイドバーが連番順になる。
+   - 各ストーリーの **meta.title** から「NN*」（01*, 02\_, …）を抽出し、**01 → 02 → 03 → … の順**で並べる。
+   - 各プロジェクトで **title を「&lt;ルート名&gt;/&lt;階層番号&gt;\_&lt;階層名&gt;/&lt;コンポーネント名&gt;」** の形式で付与すること（例: `フロント（public）/02_最小UI部品/Button`）。これでサイドバーが連番順になる。
 
 3. **storySort を書くときの注意（Storybook 7 以降）**
    - Storybook は storySort を**別スコープで eval**するため、**コールバック内にロジックを全て書く**。外部のヘルパー関数（例: `getSectionOrder`）は参照できない（`is not defined` になる）。
@@ -126,8 +122,8 @@ Storybook は以下の論理構造で管理します。**階層名・階層順�
 ### preview.tsx（または preview.ts）
 
 1. **withThemeByClassName**  
-   `@storybook/addon-themes` の `withThemeByClassName` をデコレータとして追加する。  
-   - `themes`: `{ light: '', dark: 'dark' }` のように、light のときはクラスなし、dark のときは `dark` クラスを付与する設定にする。  
+   `@storybook/addon-themes` の `withThemeByClassName` をデコレータとして追加する。
+   - `themes`: `{ light: '', dark: 'dark' }` のように、light のときはクラスなし、dark のときは `dark` クラスを付与する設定にする。
    - `defaultTheme`: `'light'` など。
 
 2. **プレビュー背景をトークン準拠にする**  
@@ -137,30 +133,30 @@ Storybook は以下の論理構造で管理します。**階層名・階層順�
 3. **（任意）管理 UI のテーマをプレビューに同期する**  
    ツールバーの「Themes」だけでなく、管理 UI 自体をダークにしたときもプレビューをダークにしたい場合は、カスタムデコレータ（例: `ThemeSync`）で `window.parent.document` の `html`/`body` のクラスや `data-theme` を監視し、プレビューの `document.documentElement.classList.add('dark')` / `remove('dark')` を呼ぶ。
 
-4. **parameters**  
-   - `parameters.themes` で addon-themes 用の `themes`（light/dark のクラス対応）と `defaultTheme` を定義する。  
+4. **parameters**
+   - `parameters.themes` で addon-themes 用の `themes`（light/dark のクラス対応）と `defaultTheme` を定義する。
    - 背景色の切り替えを addon-themes に任せる場合、`parameters.backgrounds.disable: true` で backgrounds アドオンを無効にしてもよい（任意）。
 
 ### global.css
 
-- `@layer base` 内で `html, body { background-color: rgb(var(--color-surface-page)); }` のように、ページ背景用トークンを指定する。  
+- `@layer base` 内で `html, body { background-color: rgb(var(--color-surface-page)); }` のように、ページ背景用トークンを指定する。
 - `.dark` 用の CSS 変数やスタイルを定義し、`html.dark` のときにダーク用のトークンが適用されるようにする。
 
 ### Tailwind
 
-- `tailwind.config` の `darkMode: 'class'` を指定する。  
+- `tailwind.config` の `darkMode: 'class'` を指定する。
 - プレビューで `html` に `class="dark"` が付くことで、`dark:` プレフィックスが有効になる。
 
 ### ツールバーで特定項目だけ非表示にする（任意）
 
-- **Preview background ボタンのみ非表示**: addon-essentials 等で「Preview background」がツールバーに出るが、背景切り替えは addon-themes で行うため不要な場合、**.storybook/manager-head.html** を追加し、管理 UI の `<head>` に以下を注入する。  
+- **Preview background ボタンのみ非表示**: addon-essentials 等で「Preview background」がツールバーに出るが、背景切り替えは addon-themes で行うため不要な場合、**.storybook/manager-head.html** を追加し、管理 UI の `<head>` に以下を注入する。
   ```html
   <style>
     button[aria-label="Preview background"] {
       display: none !important;
     }
   </style>
-  ```  
+  ```
   これでツールバーの他項目（Outline, Theme 等）はそのまま表示し、Preview background ボタンだけ非表示にできる。
 
 ### 注意
@@ -373,36 +369,29 @@ Storybook は以下の論理構造で管理します。**階層名・階層順�
 コンポーネントの Storybook ストーリーは、以下の順序で記述する：
 
 1. **概要**
-
    - コンポーネントの目的と役割を簡潔に説明
 
 2. **役割（何を伝える UI か）**
-
    - ユーザーに何を伝える UI なのか
    - どのような場面で使用するか
 
 3. **状態一覧（意味ベース）**
-
    - コンポーネントが持つ状態を意味ベースで列挙
    - 例: `default`、`hover`、`active`、`disabled`、`loading`、`error`
 
 4. **振る舞い（状態遷移）**
-
    - 状態間の遷移ルール
    - インタラクション（クリック、ホバー等）
 
 5. **構造（要素の構成）**
-
    - コンポーネントの内部構造
    - 子要素の役割
 
 6. **使用トークン（参照のみ）**
-
    - 使用している semantic トークン名を列挙
    - 状態ごとのトークン切り替え理由
 
 7. **アクセシビリティ**
-
    - `aria-*` 属性の使用
    - キーボード操作の対応
    - スクリーンリーダー対応
@@ -413,10 +402,17 @@ Storybook は以下の論理構造で管理します。**階層名・階層順�
 
 👉 **見た目の話（色コード、px 値等）は最後。見た目の根拠は必ずトークンに遡れる。**
 
+### ストーリー・argTypes の用途説明（推奨）
+
+上記記述順で `description.component` を書いたうえで、次を追加すると Docs／Controls で用途が分かりやすくなる（参照: `apps/web/src/components/02-ui/public/public-button/PublicButton.stories.tsx`）。
+
+- **各ストーリー**: `parameters.docs.description.story` に、そのストーリーが「何のための例か」を一行で書く。
+- **主要 props**: `argTypes.*.description` に、「いつ使うか」「指定時と未指定時の違い」を一行で書く。
+
 ### テンプレート例
 
 ```typescript
-// Button.stories.tsx
+// Button.stories.tsx（記述順に沿った component 説明 ＋ 各 Story の用途説明・argTypes）
 import type { Meta, StoryObj } from "@storybook/react";
 import { Button } from "./Button";
 
@@ -425,6 +421,7 @@ const meta: Meta<typeof Button> = {
   component: Button,
   tags: ["autodocs"],
   parameters: {
+    layout: "centered",
     docs: {
       description: {
         component: `
@@ -468,31 +465,40 @@ const meta: Meta<typeof Button> = {
       },
     },
   },
+  argTypes: {
+    variant: {
+      control: "select",
+      options: ["primary", "secondary", "outline"],
+      description: "primary=最優先CTA / secondary=サブ / outline=枠のみ",
+    },
+    children: { control: "text" },
+  },
+  args: { children: "Button", variant: "primary" },
 };
 
 export default meta;
 type Story = StoryObj<typeof Button>;
 
 export const Default: Story = {
-  args: {
-    children: "Button",
-    variant: "primary",
+  args: { children: "Button", variant: "primary" },
+  parameters: {
+    docs: { description: { story: "通常状態。主な操作に使用。" } },
   },
 };
 
 export const Disabled: Story = {
-  args: {
-    children: "Button",
-    variant: "primary",
-    disabled: true,
+  args: { children: "Button", variant: "primary", disabled: true },
+  parameters: {
+    docs: { description: { story: "無効状態。クリック不可。" } },
   },
 };
 
 export const Loading: Story = {
-  args: {
-    children: "Button",
-    variant: "primary",
-    loading: true,
+  args: { children: "Button", variant: "primary", loading: true },
+  parameters: {
+    docs: {
+      description: { story: "読み込み中。クリック不可かつスピナー表示。" },
+    },
   },
 };
 ```
@@ -624,8 +630,10 @@ AI は Storybook ストーリーを生成するとき、**必ず次を守る**�
 - **必須項目**:
   - `tags: ['autodocs']` を追加して自動ドキュメント生成を有効にする
   - `Meta` と `StoryObj` を使用して、適切なストーリーを定義する
+  - **記述順に沿った `parameters.docs.description.component`**（概要→役割→状態一覧→…→使用上の注意）を記載する
   - コンポーネントの主要なバリアントや状態を Storybook で確認可能にする
-- **対象コンポーネント**: すべてのコンポーネント（`01-web-components/`、`02-providers/`、`03-features/`、`04-domains/`、`05-shared/`、`06-ui/` 配下など、プロジェクトの構成に応じて）
+- **推奨（用途が分かりやすくなる）**: 各 Story に `parameters.docs.description.story`、主要 props に `argTypes.*.description` を付ける。参照: `apps/web/src/components/02-ui/public/public-button/PublicButton.stories.tsx`
+- **対象コンポーネント**: すべてのコンポーネント（プロジェクトの構成に応じた配下）
 
 **禁止事項**:
 
@@ -674,8 +682,9 @@ Storybook を生成する前に、以下を確認：
 - [ ] **配置判断**: コンポーネントの配置判断フローに従っているか？
 - [ ] **Storybook ストーリー**: すべてのコンポーネントに Storybook ストーリーを作成しているか？
 - [ ] **配置場所**: Storybook ファイルは対象コンポーネントと同じディレクトリに `*.stories.tsx` 形式で配置しているか？
-- [ ] **必須項目**: `tags: ['autodocs']` を追加し、`Meta` と `StoryObj` を使用しているか？
+- [ ] **必須項目**: `tags: ['autodocs']` を追加し、`Meta` と `StoryObj` を使用し、記述順に沿った `description.component` を記載しているか？
 - [ ] **参照パス**: 生成するドキュメント内のすべての参照パスが正しいか？（Markdown リンク形式、相対パス、ファイル名、ディレクトリ構造を確認）
+- [ ] **推奨**: 各 Story の `description.story` と主要 props の `argTypes.*.description` を付けているか？（PublicButton.stories.tsx 参照）
 
 ### チェックリストの使い方
 
@@ -774,4 +783,4 @@ URI に紐づく完成形か？
 
 ---
 
-**最終更新**: 2026 年 2 月 2 日（サイドバー順序設定を storySort + glob に修正・汎用版として記載）
+**最終更新**: 2026 年 2 月 15 日（元の記述順テンプレートを正とし、ストーリー・argTypes の用途説明を推奨として追加。PublicButton.stories.tsx 参照）
