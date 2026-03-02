@@ -47,7 +47,7 @@ detect_scope() {
     elif [[ "$path" == ${PREPUSH_BACKEND_DIR}/* ]]; then
       need_code=1; need_backend=1
     elif [[ "$path" == "${PREPUSH_FRONTEND_DIR}/package.json" ]]; then
-      need_code=1; need_full=1
+      need_code=1; need_frontend=1; need_full=1
     elif [[ "$path" == ${PREPUSH_FRONTEND_DIR}/* ]]; then
       need_code=1; need_frontend=1
     elif [[ "$path" == docs/* ]] || [[ "$path" == *.md ]] || [[ "$path" == *.txt ]] || [[ "$path" == *.adoc ]] \
@@ -250,8 +250,8 @@ if [[ -n "${ROOT:-}" ]]; then
   } >> "$log_file" 2>/dev/null || true
 fi
 
-# docs_only 以外のときは make の有無を確認
-if [[ "$scope" != "docs_only" ]]; then
+# docs_only / infra_only のときは make 不要（検証スキップのため）
+if [[ "$scope" != "docs_only" && "$scope" != "infra_only" ]]; then
   if ! command -v make &>/dev/null; then
     echo "make が見つかりません。git push は make が使える環境（ターミナル等）から実行してください。" >&2
     exit 1

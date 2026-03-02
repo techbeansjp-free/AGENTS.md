@@ -71,7 +71,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: セキュリティ監査（pnpm audit）
         id: security-audit
