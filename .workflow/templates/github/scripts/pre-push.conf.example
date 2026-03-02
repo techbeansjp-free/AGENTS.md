@@ -1,0 +1,22 @@
+# pre-push 設定例（AGENTS-spec テンプレート）
+# コピー先: 採用先リポジトリの scripts/pre-push.conf または .pre-push.conf
+# 必要な項目だけ上書きすればよい。未設定の項目はスクリプト内の既定値が使われる。
+#
+# 例: packages/backend と packages/frontend 構成の場合
+# PREPUSH_BACKEND_DIR=packages/backend
+# PREPUSH_FRONTEND_DIR=packages/frontend
+#
+# 例: Make ターゲット名が異なる場合
+# PREPUSH_MAKE_FULL=ci
+# PREPUSH_MAKE_BACKEND=ci-backend
+# PREPUSH_MAKE_FRONTEND=ci-frontend
+#
+# 例: タイムアウトを 600 秒に変更
+# PREPUSH_TIMEOUT_SEC=600
+
+# PREPUSH_BACKEND_DIR=backend
+# PREPUSH_FRONTEND_DIR=frontend
+# PREPUSH_MAKE_FULL=test
+# PREPUSH_MAKE_BACKEND=test-backend
+# PREPUSH_MAKE_FRONTEND=test-frontend
+# PREPUSH_TIMEOUT_SEC=900
