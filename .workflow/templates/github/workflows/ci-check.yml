@@ -5,7 +5,8 @@
 #   - on.push / on.pull_request の branches（例: main, feature/**）
 #   - detect ジョブの paths-filter: frontend / backend のパス（例: frontend/**, backend/**）
 #   - frontend-check: node-version-file, cache-dependency-path, working-directory, pnpm version, Make ターゲット
-#   - backend-check: python-version-file, working-directory, Make ターゲット
+#     ※ pnpm は setup-node より先に Install pnpm（pnpm/action-setup）を実行すること。逆だと cache: 'pnpm' で pnpm 未導入エラーになる。
+#   - backend-check: python-version-file, working-directory, Make ターゲット。テストで必須の環境変数（Pydantic Settings 等）がある場合は job の env に設定する。
 #   - 監査ステップ: AUDIT_LABEL（例: フロントエンド, バックエンド）, AUDIT_JSON_PATH, AUDIT_FORMAT
 #   - 監査スクリプト: .github/scripts/audit-table.ts を同テンプレートの scripts/ からコピーしておくこと
 #
@@ -50,17 +51,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version-file: 'frontend/.node-version'
           cache: 'pnpm'
           cache-dependency-path: 'frontend/pnpm-lock.yaml'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Install dependencies
         working-directory: frontend
@@ -95,6 +96,11 @@ jobs:
     needs: detect
     if: needs.detect.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    # テスト実行時に必須の環境変数がある場合（Pydantic Settings 等）は env を追加する。例:
+    # env:
+    #   MINIO_SECRET_KEY: ci-dummy-value
+    #   SECRET_KEY: ci-dummy-value
+    #   INTERNAL_API_KEY: ci-dummy-value
     steps:
       - uses: actions/checkout@v4
 
