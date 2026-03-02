@@ -37,7 +37,7 @@
 
 - `workflows/ci-check.yml` は変更パスに応じて frontend / backend を分岐し、format-check・lint・typecheck・テストに加え、セキュリティ監査（pnpm audit / pip-audit）の結果を Step Summary に出す。
 - 監査結果の表示には `scripts/audit-table.ts` を使用する。CI 内では `npx tsx .github/scripts/audit-table.ts` で実行し、`AUDIT_LABEL`・`AUDIT_JSON_PATH`・`AUDIT_FORMAT`（`pip`|`pnpm`）を設定する。フロントのみ・バックのみの構成でも、該当ジョブ内で同じスクリプトを呼べばよい。
-- **採用時の注意**: (1) フロントでは **pnpm を setup-node より先**にセットアップすること（`pnpm/action-setup` → `actions/setup-node` の順）。逆順だと `cache: 'pnpm'` 実行時に pnpm 未導入で失敗する。(2) バックエンドのテストで必須の環境変数（Pydantic Settings 等）がある場合は、`backend-check` ジョブに `env` を追加して CI 用のダミー値を設定すること。
+- **採用時の注意**: (1) フロントでは **pnpm を setup-node より先**にセットアップすること（`pnpm/action-setup` → `actions/setup-node` の順）。逆順だと `cache: 'pnpm'` 実行時に pnpm 未導入で失敗する。(2) バックエンドのテストで必須の環境変数（Pydantic Settings 等）がある場合は、`backend-check` ジョブに `env` を追加して CI 用のダミー値を設定すること。(3) バックエンドで再現ビルドしたい場合は `backend` で `uv lock` を実行し `uv.lock` をコミットすること。CI は `uv.lock` があれば `uv lock --check` と `uv sync --locked` を使用する。
 
 ## 参照
 
