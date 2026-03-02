@@ -29,7 +29,7 @@
 
 ## pre-push フック
 
-- プッシュ対象の変更パスに応じてスコープ（docs_only / backend_only / frontend_only / full）を判定し、`make test`・`make test-backend`・`make test-frontend` のいずれかを実行する。失敗時は push を中止。
+- プッシュ対象の変更パスに応じてスコープ（docs_only / infra_only / backend_only / frontend_only / full）を判定し、`make test`・`make test-backend`・`make test-frontend` のいずれかを実行する。docs_only・infra_only のときはコード検証をスキップする。失敗時は push を中止。
 - 環境変数または `scripts/pre-push.conf`（`.pre-push.conf`）で、バックエンド/フロントエンドのパス接頭辞（`PREPUSH_BACKEND_DIR`・`PREPUSH_FRONTEND_DIR`）と Make ターゲット（`PREPUSH_MAKE_FULL`・`PREPUSH_MAKE_BACKEND`・`PREPUSH_MAKE_FRONTEND`）を上書きできる。`packages/backend` のような構成にも対応可能。
 - タイムアウトは `PREPUSH_TIMEOUT_SEC`（既定 900 秒）。テスト用に `PREPUSH_TEST_PATHS` でファイルを指定するとスコープのみ表示して終了する。
 

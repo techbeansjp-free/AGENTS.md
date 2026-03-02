@@ -40,8 +40,11 @@ detect_scope() {
   [[ -z "$changed" ]] && { echo "full"; return; }
   while IFS= read -r path; do
     [[ -z "$path" ]] && continue
+    # Makefile はどこにあっても CI/ビルド設定扱い（backend/Makefile 等もアプリコードとみなさない）
+    if [[ "$path" == "Makefile" || "$path" == */Makefile ]]; then
+      need_code=1; need_full=1
     # frontend/ backend/ は拡張子に関わらず常にコード扱い（画像等がサブディレクトリにある場合も含む）
-    if [[ "$path" == ${PREPUSH_BACKEND_DIR}/* ]]; then
+    elif [[ "$path" == ${PREPUSH_BACKEND_DIR}/* ]]; then
       need_code=1; need_backend=1
     elif [[ "$path" == "${PREPUSH_FRONTEND_DIR}/package.json" ]]; then
       need_code=1; need_full=1
@@ -67,6 +70,7 @@ detect_scope() {
     fi
   done <<< "$changed"
   if (( need_docs )) && (( ! need_code )); then echo "docs_only"
+  elif (( need_full )) && (( ! need_backend )) && (( ! need_frontend )); then echo "infra_only"
   elif (( need_full )) || (( need_backend && need_frontend )); then echo "full"
   elif (( need_backend )); then echo "backend_only"
   elif (( need_frontend )); then echo "frontend_only"
@@ -257,6 +261,10 @@ fi
 case "$scope" in
   docs_only)
     echo "pre-push: ドキュメント等のみの変更のため、コード検証をスキップします。" >&2
+    exit 0
+    ;;
+  infra_only)
+    echo "pre-push: CI・Makefile 等のみの変更のため、コード検証をスキップします。" >&2
     exit 0
     ;;
   backend_only) make_target="$PREPUSH_MAKE_BACKEND" ;;
