@@ -668,7 +668,7 @@ flowchart TD
 | `99_PR.md` | PR メッセージ | **参照パスは外部のみ**（完了後 issue 移動のため） |
 | `05_最終確認チェックリスト.md` | 外部設定確認 | コード対応不可項目がある場合のみ |
 | `指摘対応/` | PR 指摘一覧 | [GitHub_PR指摘取得.md](./.agents/GitHub_PR指摘取得.md) 参照 |
-| `github/` | Copilot 用 | [GitHub_Copilot対応.md](./.agents/GitHub_Copilot対応.md) 参照 |
+| `github/` | Copilot・CodeRabbit 用 | [GitHub_Copilot対応.md](./.agents/GitHub_Copilot対応.md)・[GitHub_CodeRabbit対応.md](./.agents/GitHub_CodeRabbit対応.md) 参照 |
 
 ---
 
@@ -816,6 +816,7 @@ flowchart TD
 - [`Storybookルール.md`](./.agents/Storybookルール.md) - Storybook / デザインシステム運用規約
 - [`GitHub_PR指摘取得.md`](./.agents/GitHub_PR指摘取得.md) - GitHub PR 指摘取得ルール
 - [`GitHub_Copilot対応.md`](./.agents/GitHub_Copilot対応.md) - GitHub Copilot 対応（汎用版・リポジトリ指示の構成・フォーマット・運用）
+- [`GitHub_CodeRabbit対応.md`](./.agents/GitHub_CodeRabbit対応.md) - CodeRabbit レビュー対象外設定（.workflow / .agents / .agents-project）・応答言語（日本語）・テンプレート配置
 - [`CLAUDE_サブエージェントとMCPおよびエージェントチーム.md`](./.agents/CLAUDE_サブエージェントとMCPおよびエージェントチーム.md) - サブエージェント・MCP・エージェントチームの推奨設定とスコープ方針（グローバル＝MCP・サブエージェント、エージェントチームは方法のみ）
 
 ### 一般的な参考資料
