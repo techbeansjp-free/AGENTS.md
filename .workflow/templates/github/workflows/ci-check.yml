@@ -79,7 +79,7 @@ jobs:
         working-directory: frontend
         run: |
           pnpm audit --json > audit-report.json 2>/dev/null || true
-          npx tsx ../.github/scripts/audit-table.ts
+          npx tsx@4.20.3 ../.github/scripts/audit-table.ts
         env:
           AUDIT_LABEL: フロントエンド
           AUDIT_JSON_PATH: audit-report.json
@@ -120,7 +120,13 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: uv sync
+        run: |
+          if [ -f uv.lock ]; then
+            uv lock --check
+            uv sync --locked
+          else
+            uv sync
+          fi
 
       - name: Set up Node（監査サマリ用）
         uses: actions/setup-node@v4
@@ -133,7 +139,7 @@ jobs:
         working-directory: backend
         run: |
           uv run pip-audit --format json --output audit-report.json 2>/dev/null || true
-          npx tsx ../.github/scripts/audit-table.ts
+          npx tsx@4.20.3 ../.github/scripts/audit-table.ts
         env:
           PIP_AUDIT_NO_PROGRESS: "1"
           AUDIT_LABEL: バックエンド
