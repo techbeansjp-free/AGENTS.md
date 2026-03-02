@@ -233,6 +233,19 @@ changed_files="$(sort -u < "$tmp_files" | sed '/^$/d')"
 # 変更一覧が空の場合は安全側で full（新規 push で empty_tree 取得失敗等）
 scope="$(detect_scope "$changed_files")"
 
+# ログ出力設定（scripts/logs/pre-push.log に結果を追記）
+log_dir="${ROOT}/scripts/logs"
+log_file="${log_dir}/pre-push.log"
+if [[ -n "${ROOT:-}" ]]; then
+  mkdir -p "$log_dir" 2>/dev/null || true
+  {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] scope=${scope}"
+    echo "changed_files:"
+    printf '%s\n' "$changed_files"
+    echo
+  } >> "$log_file" 2>/dev/null || true
+fi
+
 # docs_only 以外のときは make の有無を確認
 if [[ "$scope" != "docs_only" ]]; then
   if ! command -v make &>/dev/null; then
@@ -261,6 +274,12 @@ run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target"
 ret=$?
 set -e
 if [[ $ret -ne 0 ]]; then
+  if [[ -n "${ROOT:-}" ]]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=FAIL code=${ret}" >> "$log_file" 2>/dev/null || true
+  fi
   echo "pre-push フックが失敗しました（終了コード ${ret}）。" >&2
   exit $ret
+fi
+if [[ -n "${ROOT:-}" ]]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=OK" >> "$log_file" 2>/dev/null || true
 fi
