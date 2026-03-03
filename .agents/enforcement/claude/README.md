@@ -7,14 +7,11 @@
 
 ---
 
-## 適用方法（どこに置けば有効か）
+## 適用方法（プロジェクト内完結）
 
-1. **実設定ファイル**: 本ディレクトリの [pretooluse_write_guard.json](./pretooluse_write_guard.json) を、Claude Code の **PreToolUse フックが読み込むパス**に登録する。
-2. **配置先の例**（採用先の Claude Code ドキュメントで要確認）:
-   - `~/.claude/hooks/pretooluse_write_guard.json`
-   - または プロジェクトルートの `.claude/hooks/pretooluse_write_guard.json`
-3. Claude Code のドキュメントに従い、Write/Edit の path を検査する設定として登録する。
-4. **動作確認**: 書記サブに「logs 以外に書け」と指示し、**拒否される**ことを 1 回確認する（スモークテスト ケース C）。
+1. **採用先プロジェクト**では、本ディレクトリの [pretooluse_write_guard.json](./pretooluse_write_guard.json) を **プロジェクトルートの** `.claude/hooks/pretooluse_write_guard.json` にコピーする。ユーザーホーム（`~/.claude/hooks/`）へはコピーしない。
+2. Claude Code の **PreToolUse フック**で、**そのプロジェクトの** `.claude/hooks/pretooluse_write_guard.json` を指定する。
+3. **動作確認**: 書記サブに「logs 以外に書け」と指示し、**拒否される**ことを 1 回確認する（スモークテスト ケース C）。
 
 ---
 

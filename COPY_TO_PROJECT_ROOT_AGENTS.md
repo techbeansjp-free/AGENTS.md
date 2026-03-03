@@ -12,6 +12,8 @@
 - Cursor は **役割別サブ定義 + CI 監査**で実質的に拒否
 - ログ形式は **契約（CONTRACT）で固定**し、監査可能にする
 
+**プロジェクト内完結**: Claude Code / Cursor の設定は **採用先プロジェクトのルート直下**（`.claude/`・`.cursor/`）にのみ配置する。ユーザーホーム（`~/.claude` 等）へコピーしない。
+
 ---
 
 ## コピー対象一覧（プロジェクトルートに配置）
@@ -84,16 +86,15 @@
 
 ---
 
-## Claude Code の有効化（物理強制）
+## Claude Code の有効化（物理強制・プロジェクト内完結）
 
 Claude Code は **PreToolUse** により、logs/ 以外の Write/Edit を物理的に拒否します。
 
 ### 手順
 
-1. プロジェクト内の以下ファイルを確認
-   - `.agents/enforcement/claude/pretooluse_write_guard.json`
-   - `.agents/enforcement/claude/README.md`
-2. Claude Code 側の設定で、PreToolUse フックとして `pretooluse_write_guard.json` を登録する
+1. **プロジェクトルート**に `.claude/hooks/` を作成し、`.agents/enforcement/claude/pretooluse_write_guard.json` を **`.claude/hooks/pretooluse_write_guard.json`** としてコピーする。
+2. Claude Code の PreToolUse フックで、**そのプロジェクトの** `.claude/hooks/pretooluse_write_guard.json` を指定する（絶対パスまたはプロジェクトルートからの相対パス）。
+3. ユーザーホーム（`~/.claude/hooks/`）へはコピーしない。すべてプロジェクト内に置く。
 
 重要: この登録が完了すると、logs/ 以外への書き込みは「人が間違えて指示しても」拒否されます。
 
@@ -109,15 +110,9 @@ Cursor は物理フックが弱い環境があるため、以下で強制しま�
 
 ### 手順
 
-1. `.agents/enforcement/cursor/README.md` を確認
-2. Cursor のサブエージェント定義として、以下を参照・コピー（環境に合わせて配置）
-   - `.agents/enforcement/cursor/agents/workflow-implementer.md`
-   - `.agents/enforcement/cursor/agents/workflow-reviewer.md`
-   - `.agents/enforcement/cursor/agents/workflow-tester.md`
-   - `.agents/enforcement/cursor/agents/workflow-auditor.md`
-   - `.agents/enforcement/cursor/agents/workflow-scribe.md`
-
-重要: 書記以外は「絶対に書かない」を定義内に明記し、運用上も徹底します。
+1. **プロジェクトルート**に `.cursor/agents/` を作成し、`.agents/enforcement/cursor/agents/` 内の **workflow-*.md** をそのままコピーする（implementer, reviewer, tester, auditor, scribe）。
+2. Cursor のサブエージェント定義で、**そのプロジェクトの** `.cursor/agents/` を参照する。リポジトリ外（ユーザーホーム等）へはコピーしない。
+3. `.agents/enforcement/cursor/README.md` を参照し、書記以外は「絶対に書かない」を定義内に明記する。
 
 ---
 
