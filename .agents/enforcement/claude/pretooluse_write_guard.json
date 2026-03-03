@@ -1,0 +1,14 @@
+{
+  "Write": {
+    "allow": [".workflow/**/logs/**"],
+    "deny": ["**"]
+  },
+  "Edit": {
+    "allow": [],
+    "deny": ["**"]
+  },
+  "Bash": {
+    "allow": [],
+    "deny": ["**"]
+  }
+}
