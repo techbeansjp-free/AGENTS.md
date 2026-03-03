@@ -33,48 +33,56 @@ for f in "scripts/pre-push.conf" ".pre-push.conf"; do
   [[ -f "$f" ]] && { set +e; . "./$f" 2>/dev/null; set -e; break; }
 done
 
-# スコープ判定を1箇所に集約（テストモード・本体で同じロジック）
+# スコープ判定: 1ファイル1スコープに分類してからマージ（考慮漏れ防止・保守性のため明示的パス一覧化）
+# 分類順は「上から最初にマッチしたもの」が採用される。
+classify_one() {
+  local path="$1"
+  [[ -z "$path" ]] && { echo "full"; return; }
+  # 1. docs_only: ドキュメント・図・画像（テスト不要）
+  if [[ "$path" == docs/* ]] || [[ "$path" == *.md ]] || [[ "$path" == *.txt ]] || [[ "$path" == *.adoc ]] \
+    || [[ "$path" == README* ]] || [[ "$path" == *.png ]] || [[ "$path" == *.jpg ]] || [[ "$path" == *.jpeg ]] \
+    || [[ "$path" == *.svg ]] || [[ "$path" == *.drawio ]] || [[ "$path" == *.plantuml ]]; then
+    echo "docs_only"; return
+  fi
+  # 2. infra_only: CI・ビルド・設定（単体なら検証スキップ、backend/frontend と混在時はコード変更側を優先）
+  if [[ "$path" == "Makefile" || "$path" == */Makefile ]] \
+    || [[ "$path" == scripts/* ]] || [[ "$path" == .github/* ]] || [[ "$path" == .agents/* ]] \
+    || [[ "$path" == .claude/* ]] || [[ "$path" == .cursor/* ]] || [[ "$path" == .workflow/* ]] \
+    || [[ "$path" == .gitignore ]] || [[ "$path" == "package.json" ]] || [[ "$path" == "pnpm-lock.yaml" ]] \
+    || [[ "$path" == ".env.example" ]] || [[ "$path" == ".node-version" ]] || [[ "$path" == ".python-version" ]] \
+    || [[ "$path" =~ ^docker-compose.*\.yml$ ]] || [[ "$path" == openapi*.yaml ]] || [[ "$path" == schema/* ]] \
+    || [[ "$path" == proto/* ]] || [[ "$path" == shared/* ]] || [[ "$path" == tooling/* ]] \
+    || [[ "$path" == "pyproject.toml" ]] || [[ "$path" == "poetry.lock" ]] || [[ "$path" == "tsconfig.json" ]] \
+    || [[ "$path" == vitest.config.* ]] || [[ "$path" == .eslintrc* ]] || [[ "$path" == .prettierrc* ]] \
+    || [[ "$path" == "${PREPUSH_FRONTEND_DIR}/package.json" ]]; then
+    echo "infra_only"; return
+  fi
+  # 3. backend_only / 4. frontend_only
+  if [[ "$path" == ${PREPUSH_BACKEND_DIR}/* ]]; then echo "backend_only"; return; fi
+  if [[ "$path" == ${PREPUSH_FRONTEND_DIR}/* ]]; then echo "frontend_only"; return; fi
+  # 5. 上記以外（LICENSE, Dockerfile 等）は安全側で full
+  echo "full"
+}
+
+# 複数パスをマージして最終スコープを決定（テストモード・本体で同じロジック）
 detect_scope() {
-  local changed="$1"
-  local need_backend=0 need_frontend=0 need_full=0 need_docs=0 need_code=0 path
+  local changed="$1" path scope
+  local scopes=""
   [[ -z "$changed" ]] && { echo "full"; return; }
   while IFS= read -r path; do
     [[ -z "$path" ]] && continue
-    # Makefile はどこにあっても CI/ビルド設定扱い（backend/Makefile 等もアプリコードとみなさない）
-    if [[ "$path" == "Makefile" || "$path" == */Makefile ]]; then
-      need_code=1; need_full=1
-    # frontend/ backend/ は拡張子に関わらず常にコード扱い（画像等がサブディレクトリにある場合も含む）
-    elif [[ "$path" == ${PREPUSH_BACKEND_DIR}/* ]]; then
-      need_code=1; need_backend=1
-    elif [[ "$path" == "${PREPUSH_FRONTEND_DIR}/package.json" ]]; then
-      need_code=1; need_frontend=1; need_full=1
-    elif [[ "$path" == ${PREPUSH_FRONTEND_DIR}/* ]]; then
-      need_code=1; need_frontend=1
-    elif [[ "$path" == docs/* ]] || [[ "$path" == *.md ]] || [[ "$path" == *.txt ]] || [[ "$path" == *.adoc ]] \
-      || [[ "$path" == README* ]] || [[ "$path" == *.png ]] || [[ "$path" == *.jpg ]] || [[ "$path" == *.jpeg ]] || [[ "$path" == *.svg ]] \
-      || [[ "$path" == *.drawio ]] || [[ "$path" == *.plantuml ]]; then
-      need_docs=1
-    else
-      need_code=1
-      if [[ "$path" == "Makefile" ]] || [[ "$path" == scripts/* ]] || [[ "$path" == .github/* ]] \
-        || [[ "$path" == .agents/* ]] || [[ "$path" == .claude/* ]] || [[ "$path" == .cursor/* ]] || [[ "$path" == .workflow/* ]] \
-        || [[ "$path" == .gitignore ]] || [[ "$path" == "package.json" ]] || [[ "$path" == "pnpm-lock.yaml" ]] \
-        || [[ "$path" == ".env.example" ]] \
-        || [[ "$path" == ".node-version" ]] || [[ "$path" == ".python-version" ]] \
-        || [[ "$path" =~ ^docker-compose.*\.yml$ ]] \
-        || [[ "$path" == openapi*.yaml ]] || [[ "$path" == schema/* ]] || [[ "$path" == proto/* ]] \
-        || [[ "$path" == shared/* ]] || [[ "$path" == tooling/* ]] || [[ "$path" == "pyproject.toml" ]] \
-        || [[ "$path" == "poetry.lock" ]] || [[ "$path" == "tsconfig.json" ]] || [[ "$path" == vitest.config.* ]] \
-        || [[ "$path" == .eslintrc* ]] || [[ "$path" == .prettierrc* ]]; then
-        need_full=1
-      fi
-    fi
+    scope="$(classify_one "$path")"
+    # 重複を除いて列挙（空白区切り）
+    [[ " ${scopes} " != *" ${scope} "* ]] && scopes="${scopes} ${scope}"
   done <<< "$changed"
-  if (( need_docs )) && (( ! need_code )); then echo "docs_only"
-  elif (( need_full )) && (( ! need_backend )) && (( ! need_frontend )); then echo "infra_only"
-  elif (( need_full )) || (( need_backend && need_frontend )); then echo "full"
-  elif (( need_backend )); then echo "backend_only"
-  elif (( need_frontend )); then echo "frontend_only"
+  scopes="${scopes# }"
+  # マージルール（優先順）: full 含む → full / backend+frontend 両方 → full / それ以外はコード変更側を優先（infra+backend → backend_only）
+  if [[ " ${scopes} " == *" full "* ]]; then echo "full"
+  elif [[ " ${scopes} " == *" backend_only "* ]] && [[ " ${scopes} " == *" frontend_only "* ]]; then echo "full"
+  elif [[ " ${scopes} " == *" backend_only "* ]]; then echo "backend_only"
+  elif [[ " ${scopes} " == *" frontend_only "* ]]; then echo "frontend_only"
+  elif [[ " ${scopes} " == *" infra_only "* ]]; then echo "infra_only"
+  elif [[ " ${scopes} " == *" docs_only "* ]]; then echo "docs_only"
   else echo "full"; fi
 }
 
