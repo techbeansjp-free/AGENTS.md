@@ -57,7 +57,7 @@ detect_scope() {
     else
       need_code=1
       if [[ "$path" == "Makefile" ]] || [[ "$path" == scripts/* ]] || [[ "$path" == .github/* ]] \
-        || [[ "$path" == .agents/* ]] || [[ "$path" == .workflow/* ]] \
+        || [[ "$path" == .agents/* ]] || [[ "$path" == .claude/* ]] || [[ "$path" == .cursor/* ]] || [[ "$path" == .workflow/* ]] \
         || [[ "$path" == .gitignore ]] || [[ "$path" == "package.json" ]] || [[ "$path" == "pnpm-lock.yaml" ]] \
         || [[ "$path" == ".env.example" ]] \
         || [[ "$path" == ".node-version" ]] || [[ "$path" == ".python-version" ]] \
