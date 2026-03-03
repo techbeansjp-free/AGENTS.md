@@ -167,8 +167,8 @@ flowchart TD
 
 - **常に更新**: ドキュメントと実装は同期させる。テンプレート（`.workflow/templates/`）との整合性、参照パス確認、前のステップ/次のステップセクション、メモは `memo/YYYYMMDD_HHMMSS_*.md` 形式を守る。
 - **Mermaid**: 作成時は [`.agents/Mermaid図ルール.md`](./.agents/Mermaid図ルール.md) を参照。
-- **会話出力**: SILENT MODE（最大15行・先頭に `🧠 Mode: SILENT MODE`）、長文は `.workflow/` や `memo/` に書く。詳細は [`.agents/実行ルール.md`](./.agents/rules/実行ルール.md) のハード制約を参照。
-- **詳細（参照パス・前のステップ/次のステップ・日付・チェックリスト等）**: [`.agents/ドキュメントルール.md`](./.agents/rules/ドキュメントルール.md) および [`.agents/実行ルール.md`](./.agents/rules/実行ルール.md) を参照。
+- **会話出力**: SILENT MODE（最大15行・先頭に `🧠 Mode: SILENT MODE`）、長文は `.workflow/` や `memo/` に書く。詳細は [`.agents/rules/実行ルール.md`](./.agents/rules/実行ルール.md) のハード制約を参照。
+- **詳細（参照パス・前のステップ/次のステップ・日付・チェックリスト等）**: [`.agents/rules/ドキュメントルール.md`](./.agents/rules/ドキュメントルール.md) および [`.agents/rules/実行ルール.md`](./.agents/rules/実行ルール.md) を参照。
 
 ### 実行ポリシー
 
@@ -265,9 +265,9 @@ flowchart TD
 
 ## 補足参照（AI は必要時のみ）
 
-- **開発環境・テスト・コマンド・トラブルシューティング**: 各リポジトリの README および [`.agents/テストガイドライン.md`](./.agents/rules/テストガイドライン.md) を参照。
+- **開発環境・テスト・コマンド・トラブルシューティング**: 各リポジトリの README および [`.agents/rules/テストガイドライン.md`](./.agents/rules/テストガイドライン.md) を参照。
 - **アーキテクチャ**: 各 issue の `02_設計.md` を参照。
-- **コーディング規約**: [`.agents/コーディングルール.md`](./.agents/rules/コーディングルール.md) を参照。
+- **コーディング規約**: [`.agents/rules/コーディングルール.md`](./.agents/rules/コーディングルール.md) を参照。
 
 ---
 
