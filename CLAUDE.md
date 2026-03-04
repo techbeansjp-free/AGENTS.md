@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **「agentsに従って」「AGENTS に従って」等の指示は、以下を含む**：
 
+- **サブエージェント運用（MVP）**: 最初に `.agents/boot/CORE.md` と `.agents/boot/LOAD_POLICY.md` を読む。フェーズごとに workers に Task/Constraints/OutputSpec で委譲する。**各サブ実行後に書記へログを委譲する（トレーサビリティ必須）**。詳細は AGENTS.md の「サブエージェント運用（MVP）」を参照。
 - AGENTS 規約（ワークフロー・フェーズ・ドキュメント同期等）に従うこと
 - **応答形式は常に SILENT MODE とすること**（ユーザーが「詳細を説明して」「全文を見せて」等と明示した場合を除く）
   - 会話への出力は**最大15行**
@@ -43,24 +44,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. `00_要求定義.md` → 2. `01_要件定義.md` → 3. `02_設計.md` → 4. `03_実装計画.md` → 5. **4.5 ドキュメント徹底レビュー**（必須）→ 6. 実装 → 7. `04_review.md`
 
-**抜かさない運用**: 各フェーズは「固定ゲート」とし、提出物が揃うまで完了扱いにしない。完了の定義（DoD）は証跡ベースで固定。詳細は `.agents/サブエージェント抜かし防止.md` を参照。
+**抜かさない運用**: 各フェーズは「固定ゲート」とし、提出物が揃うまで完了扱いにしない。完了の定義（DoD）は証跡ベースで固定。詳細は `.agents/rules/サブエージェント抜かし防止.md` を参照。
 
 関連規約ファイル:
 
-- `AGENTS.md` - 開発規約（完全版）
-- `.agents/実行ルール.md` - LLMエージェント向け実行ルール
-- `.agents/サイレントモードガイド.md` - サイレントモード（会話出力制限・省トークン運用、デフォルト動作）
-- `.agents/初期化プロンプト.md` - 最短初期化プロンプト（Cursor / Claude Code用）
-- `.agents/Issue実行テンプレート.md` - Issue 実行テンプレート（1行指示パターン）
-- `.agents/コーディングルール.md` - コーディングルール
-- `.agents/レビュールール.md` - レビューフェーズ規約（レビュー時は必ず参照）
-- `.agents/CLAUDE_サブエージェントとMCPおよびエージェントチーム.md` - サブエージェント・MCP・エージェントチームの推奨設定とスコープ方針
-- `.agents/サブエージェント抜かし防止.md` - 工程の固定ゲート・提出物義務化・DoD（抜かさない運用）
-- その他、`.agents/` 配下の規約ファイル（実行ルール.md、コーディングルール.md 等）
+- `AGENTS.md` - 開発規約（完全版）。冒頭に「サブエージェント運用（MVP）」を記載
+- `.agents/boot/CORE.md` - 絶対制約・入口（サブエージェント運用時は最初に読む）
+- `.agents/boot/LOAD_POLICY.md` - いつ何を読むか・フェーズ→worker
+- `.agents/rules/実行ルール.md` - LLMエージェント向け実行ルール
+- `.agents/scribe/書記役とログ委譲.md` - ログは書記のみ・トレーサビリティ必須
+- `.agents/workers/README.md` - 6 人格の IN/OUT
+- `.agents/ledger/README.md` - ログ保存（workflow.db）
+- `.agents/guide/サイレントモードガイド.md` - サイレントモード（会話出力制限・省トークン運用、デフォルト動作）
+- `.agents/prompts/初期化プロンプト.md` - 最短初期化プロンプト（Cursor / Claude Code用）
+- `.agents/prompts/Issue実行テンプレート.md` - Issue 実行テンプレート（1行指示パターン）
+- `.agents/rules/コーディングルール.md` - コーディングルール
+- `.agents/rules/レビュールール.md` - レビューフェーズ規約（レビュー時は必ず参照）
+- `.agents/platform/CLAUDE_サブエージェントとMCPおよびエージェントチーム.md` - サブエージェント・MCP・エージェントチームの推奨設定とスコープ方針
+- `.agents/rules/サブエージェント抜かし防止.md` - 工程の固定ゲート・提出物義務化・DoD（抜かさない運用）
+- その他、`.agents/rules/` 等の規約ファイル（構成は `.agents/README.md` 参照）
 
 ## 重要な規約（各リポジトリで追記）
 
-- **会話出力（最優先）**: **常に SILENT MODE**。会話への出力は**最大15行**まで。詳細は `.workflow/` や `memo/` に書く。先頭に `🧠 Mode: SILENT MODE` を付与。詳細は `.agents/サイレントモードガイド.md` 参照。
+- **会話出力（最優先）**: **常に SILENT MODE**。会話への出力は**最大15行**まで。詳細は `.workflow/` や `memo/` に書く。先頭に `🧠 Mode: SILENT MODE` を付与。詳細は `.agents/guide/サイレントモードガイド.md` 参照。
 - **プロジェクト固有の規約**: 命名規則・型安全性・テスト配置・デザイン基盤等は **`.agents-project/`** 配下にファイルで追加する（`.agents/` より優先）。CLAUDE.md には概要のみ列挙してよい。
 
 ## その他（任意）

@@ -1,0 +1,14 @@
+{
+  "Write": {
+    "allow": ["workflow.db"],
+    "deny": ["**"]
+  },
+  "Edit": {
+    "allow": [],
+    "deny": ["**"]
+  },
+  "Bash": {
+    "allow": ["sqlite3"],
+    "deny": ["**"]
+  }
+}

@@ -1,0 +1,84 @@
+# ワークフローログ：SQLite スキーマ（最小）とログ必須項目
+
+> **AI 向け**: MVP で採用した **方式 C（SQLite）** のスキーマと、書記が記録する**ログ必須項目**の定義。書記役は [書記役とログ委譲](../scribe/書記役とログ委譲.md) のとおり唯一の書者とする。**トレーサビリティ（誰が何をしたか）は最初から必須**。メインは各サブ実行後に書記へログ項目を委譲する。
+
+---
+
+## 1. 前提
+
+- **workflow.db** はプロジェクトルートまたは `.workflow/` 直下に配置。**必ず .gitignore に追加**し、Git 管理外とする。
+- **SQLite の外部キー制約**: SQLite はデフォルトで `PRAGMA foreign_keys` が OFF のため、`execution_logs` の `REFERENCES issues(issue_id)` を有効にするには**接続ごとに** `PRAGMA foreign_keys = ON;` を実行すること。DB 接続直後（またはクライアントの接続オプション）で設定し、スキーマ初期化・マイグレーションスクリプトにも同 pragma を含めることを推奨する。
+- **受け入れ条件**: 「workflow.db を .gitignore に追加する」ことを **書記サブ導入タスク** または **初回セットアップ（SQLite 利用開始）タスク** の受け入れ条件に明示し、漏れを防ぐ。詳細は [workers/README](../workers/README.md) を参照。
+- 書記のみが INSERT。他は書記にログ項目を渡すだけ。書き込みはキュー＋単一書者で直列化する。
+
+---
+
+## 2. SQLite スキーマ（最小 DDL）
+
+```sql
+-- issue 一覧（全 issue に UUID を振る）
+CREATE TABLE IF NOT EXISTS issues (
+  issue_id   TEXT PRIMARY KEY,  -- UUID
+  name       TEXT NOT NULL,
+  workflow_path TEXT,           -- .workflow/YYYYMMDD_HHMMSS_名前/ 等
+  created_at TEXT NOT NULL,     -- ISO8601
+  status     TEXT DEFAULT 'open'
+);
+
+-- 実行ログ（書記のみが INSERT）
+CREATE TABLE IF NOT EXISTS execution_logs (
+  log_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  issue_id     TEXT NOT NULL REFERENCES issues(issue_id),
+  timestamp    TEXT NOT NULL,   -- ISO8601
+  agent_id     TEXT NOT NULL,   -- 人格識別子（要件/BDDリード, 実装者, 書記 等）
+  action_type  TEXT NOT NULL,   -- 実装 / レビュー / 監査 / 壁打ち / ログ記録 等
+  target_artifact TEXT,        -- 対象成果物（ファイルパス等）
+  input_ref    TEXT,            -- 入力参照
+  output_ref   TEXT,            -- 出力参照
+  summary      TEXT,            -- 人間が読む用の短い説明
+  error_flag   INTEGER DEFAULT 0,        -- 0=正常, 1=エラー
+  human_required INTEGER DEFAULT 0,     -- 0=不要, 1=人間介入要（MVP ではフラグのみ、通知は将来拡張）
+  created_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_logs_issue ON execution_logs(issue_id);
+CREATE INDEX IF NOT EXISTS idx_logs_agent ON execution_logs(agent_id);
+CREATE INDEX IF NOT EXISTS idx_logs_ts ON execution_logs(timestamp);
+```
+
+---
+
+## 3. ログ必須項目（書記が受け取るペイロード）
+
+他サブまたはメインから書記に渡す **1 件分のログ項目** の最小セット。
+
+| 項目 | 必須 | 説明 |
+|------|------|------|
+| issue_id | 必須 | 対象 issue の UUID。 |
+| timestamp | 必須 | 実行時刻（ISO8601 推奨）。 |
+| created_at | 必須 | 記録日時（ISO8601）。execution_logs.created_at にそのまま格納。 |
+| agent_id | 必須 | 実行した人格（要件/BDDリード, 実装者, テスト者, 監査者, 総合レビューリード, 書記 等）。 |
+| action_type | 必須 | 実装 / レビュー / 監査 / 壁打ち / ログ記録 等。 |
+| target_artifact | 任意 | 対象成果物（例: 02_設計.md, src/foo.ts）。 |
+| input_ref | 任意 | 入力として参照した成果物・パス。 |
+| output_ref | 任意 | 出力として生成・更新した成果物・パス。 |
+| summary | 任意 | 人間が読む用の 1〜2 文。 |
+| error_flag | 任意 | 0=正常, 1=エラー。失敗時は 1。 |
+| human_required | 任意 | 0=不要, 1=人間介入要。MVP ではリトライ 2 回目失敗時に 1 を立て、通知は将来拡張。 |
+
+書記は上記を受け取り、`execution_logs` に 1 行 INSERT する。
+
+---
+
+## 4. エラー時（MVP）
+
+- サブが失敗 → 同一入力で **1 回だけリトライ**。
+- 2 回目も失敗 → **そのフェーズを停止**。書記がログに 1 件書き、`error_flag=1`, `human_required=1` を設定。メインは次フェーズに進まない。
+- **人間への通知は MVP では行わない**。ログに `human_required=1` が立っていることを、手動確認または将来の「通知拡張」で扱う。
+
+---
+
+## 5. 参照
+
+- 書記役ルール: [書記役とログ委譲](../scribe/書記役とログ委譲.md)
+- MVP 確定: 常時ロード廃止 issue の「意思決定用 2d. MVP 確定案」を参照。
