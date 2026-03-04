@@ -6,7 +6,8 @@
 
 name: workflow-scribe
 description: Execution log writer only. Required fields issue_id, agent_id, action_type, timestamp, created_at, target_artifact, summary (CONTRACT). Optional input_ref, output_ref. timestamp/created_at are set by the scribe at record time if not provided. Do not use for code, docs, or review. Use proactively for logging after any subagent or main phase completes.
-model: fast
+model: inherit
+# Cursor では "fast" が無効なモデル名のため inherit を使用。Claude Code 等で fast が有効な環境では model: fast に変更可。
 
 ---
 
