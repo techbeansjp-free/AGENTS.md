@@ -1,6 +1,6 @@
 {
   "Write": {
-    "allow": [".workflow/**/logs/**"],
+    "allow": ["workflow.db", "./workflow.db", ".workflow/workflow.db"],
     "deny": ["**"]
   },
   "Edit": {

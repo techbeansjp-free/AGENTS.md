@@ -14,7 +14,7 @@
 
 ## 2. 書記
 
-- **MUST**: 書き込みは **workflow.db**（SQLite）および（採用時のみ）**.workflow/**/logs/** 配下のファイル** に限る。
+- **MUST**: 書き込みは **workflow.db**（SQLite）**のみ**に限る。**.workflow/**/logs/** への書き込みは禁止**（廃止・使用禁止）。
 - **MUST NOT**: 上記以外のパス（ソースコード、02_設計.md 等）への書き込みをしてはならない。
 - ログ項目はメインから受け取ったペイロードのみを記録する。
 
@@ -28,8 +28,8 @@
 
 ## 4. 実装（Cursor / Claude Code）
 
-- Cursor を使う場合: **preToolUse** フックで、書記以外の Write が `**/logs/` を指しているときは拒否する。書記の Write が `**/logs/` および `workflow.db` 以外を指しているときは拒否する。
-- Claude Code を使う場合: 書記サブに PreToolUse で「書き込み先が .workflow/*/logs/ 以外なら拒否」をかける。他サブに「書き込み先が **/logs/ なら拒否」をかける（任意）。
+- Cursor を使う場合: **preToolUse** フックで、書記以外の Write が `workflow.db` を指しているときは拒否する。書記の Write が `workflow.db` 以外を指しているときは拒否する。`.workflow/**/logs/` への書き込みは禁止。
+- Claude Code を使う場合: 書記サブに PreToolUse で「書き込み先が workflow.db 以外なら拒否」をかける。他サブに「書き込み先が workflow.db なら拒否」をかける（任意）。
 
 詳細は各環境の Hooks ドキュメントを参照。
 

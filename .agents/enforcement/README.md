@@ -6,7 +6,7 @@
 
 ## 方針
 
-- **Claude Code**: PreToolUse 等のフックで、Write を `**/logs/` 以外に許可しない（書記は logs のみ）。→ [claude/pretooluse_write_guard.md](./claude/pretooluse_write_guard.md)
+- **Claude Code**: PreToolUse 等のフックで、書記は workflow.db のみ Write 可能、それ以外は Write を許可しない。→ [claude/pretooluse_write_guard.md](./claude/pretooluse_write_guard.md)
 - **Cursor**: 入口一本化（delegate_to_sub のみ）＋役割別サブ定義＋書記以外は readonly 寄せ。→ [cursor/README.md](./cursor/README.md)
 
 ---
