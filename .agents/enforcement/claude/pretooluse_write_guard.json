@@ -8,7 +8,7 @@
     "deny": ["**"]
   },
   "Bash": {
-    "allow": [],
+    "allow": ["sqlite3"],
     "deny": ["**"]
   }
 }

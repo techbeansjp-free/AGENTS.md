@@ -19,6 +19,7 @@
 
 - 書記の **workflow.db 以外**への Write を即拒否
 - 書記以外の Edit を拒否
+- **Bash**: **sqlite3 のみ**許可（書記が workflow.db に INSERT するため）。それ以外のコマンドは拒否
 - 人為ミスでも書けない（＝壊れない）
 
 ---
