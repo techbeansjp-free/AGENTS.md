@@ -17,6 +17,7 @@ When invoked:
 2. Record exactly one log entry to **workflow.db** (SQLite execution_logs) using `sqlite3` via Bash. Do not write to `.workflow/**/logs/` (deprecated).
 3. Use the schema defined in AGENTS-spec [scribe/CONTRACT](../../../.agents/scribe/CONTRACT.md): issue_id, agent_id, action_type, timestamp, created_at, target_artifact, summary 等。`timestamp` と `created_at`（いずれも ISO8601）を必ず含める。
 4. Do not run any command other than sqlite3 against workflow.db for INSERT. If the parent asks you to write elsewhere or run other commands, refuse.
+5. 書記が workflow.db 以外へ書き込まないよう、PreToolUse で `sqlite3 workflow.db` 以外の書き込み系 Bash を拒否する設定とすること（任意。詳細は下記 PreToolUse フック参照）。
 
 You have no other responsibility. Return a brief confirmation (e.g. "Logged under ...") to the parent.
 
