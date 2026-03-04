@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# リビジョン範囲: CI では GITHUB_BASE_SHA..GITHUB_SHA、それ以外は HEAD~1..HEAD
+if [[ -n "${GITHUB_BASE_SHA:-}" && -n "${GITHUB_SHA:-}" ]]; then
+  REV_RANGE="$GITHUB_BASE_SHA..$GITHUB_SHA"
+else
+  REV_RANGE="HEAD~1..HEAD"
+fi
+
 # 1) ログは workflow.db のみ。.workflow 配下の .md にログっぽい frontmatter（issue_id 等）があれば検知
-BAD=$(git diff --name-only --diff-filter=AM 2>/dev/null | grep -E "\.workflow/.+\.md$" || true)
+BAD=$(git diff --name-only --diff-filter=AM "$REV_RANGE" 2>/dev/null | grep -E "\.workflow/.+\.md$" || true)
 if [[ -n "$BAD" ]]; then
   while read -r f; do
     [[ -z "$f" ]] && continue
@@ -14,7 +21,7 @@ if [[ -n "$BAD" ]]; then
 fi
 
 # 2) .workflow/**/logs/ への .md 追加は廃止違反（ログは workflow.db のみ）
-LOG_FILES=$(git diff --name-only --diff-filter=AM 2>/dev/null | grep -E "^\.workflow/.+/logs/.+\.md$" || true)
+LOG_FILES=$(git diff --name-only --diff-filter=AM "$REV_RANGE" 2>/dev/null | grep -E "^\.workflow/.+/logs/.+\.md$" || true)
 if [[ -n "$LOG_FILES" ]]; then
   echo "[subagent-guard] ERROR: .workflow/**/logs/ is deprecated. Logs must be written to workflow.db only: $LOG_FILES"
   exit 1

@@ -50,8 +50,7 @@ classify_one() {
     || [[ "$path" == .claude/* ]] || [[ "$path" == .cursor/* ]] || [[ "$path" == .workflow/* ]] \
     || [[ "$path" == .gitignore ]] || [[ "$path" == "package.json" ]] || [[ "$path" == "pnpm-lock.yaml" ]] \
     || [[ "$path" == ".env.example" ]] || [[ "$path" == ".node-version" ]] || [[ "$path" == ".python-version" ]] \
-    || [[ "$path" =~ ^docker-compose.*\.yml$ ]] || [[ "$path" == openapi*.yaml ]] || [[ "$path" == schema/* ]] \
-    || [[ "$path" == proto/* ]] || [[ "$path" == shared/* ]] || [[ "$path" == tooling/* ]] \
+    || [[ "$path" =~ ^docker-compose.*\.yml$ ]] || [[ "$path" == openapi*.yaml ]] || [[ "$path" == tooling/* ]] \
     || [[ "$path" == "pyproject.toml" ]] || [[ "$path" == "poetry.lock" ]] || [[ "$path" == "tsconfig.json" ]] \
     || [[ "$path" == vitest.config.* ]] || [[ "$path" == .eslintrc* ]] || [[ "$path" == .prettierrc* ]] \
     || [[ "$path" == "${PREPUSH_FRONTEND_DIR}/package.json" ]]; then

@@ -69,5 +69,5 @@ MUST: サブへの入力は上記の範囲のみとする。それ以外のブ�
 
 ## 4. 参照
 
-- 委譲手順: 常時ロード廃止 issue の `skills/agent/delegate_to_sub.md`
-- 6 人格の IN/OUT 一覧: [workers/README](../workers/README.md)
+- 委譲手順: [skills/agent/delegate_to_sub.md](../skills/agent/delegate_to_sub.md)（常時ロード廃止 issue）
+- 6 人格の IN/OUT 一覧: [workers/README.md](../workers/README.md)

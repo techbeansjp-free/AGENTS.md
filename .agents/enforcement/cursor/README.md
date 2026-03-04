@@ -22,4 +22,4 @@ Cursor は物理フックが弱い場合があるため、以下で強制する�
 
 - [delegate_to_sub](../../skills/agent/delegate_to_sub.md)
 - [scribe/CONTRACT](../../scribe/CONTRACT.md)
-- [サブエージェント抜かし防止 4.5](../rules/サブエージェント抜かし防止.md)
+- [サブエージェント抜かし防止 4.5](../../rules/サブエージェント抜かし防止.md)
