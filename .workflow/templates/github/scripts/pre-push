@@ -38,6 +38,12 @@ done
 classify_one() {
   local path="$1"
   [[ -z "$path" ]] && { echo "full"; return; }
+  # 契約・依存変更は安全側で full（テストスキップしない）
+  if [[ "$path" == openapi*.yaml ]] || [[ "$path" == "package.json" ]] \
+    || [[ "$path" == "pnpm-lock.yaml" ]] || [[ "$path" == "pyproject.toml" ]] \
+    || [[ "$path" == "poetry.lock" ]] || [[ "$path" == "${PREPUSH_FRONTEND_DIR}/package.json" ]]; then
+    echo "full"; return
+  fi
   # 1. docs_only: ドキュメント・図・画像（テスト不要）
   if [[ "$path" == docs/* ]] || [[ "$path" == *.md ]] || [[ "$path" == *.txt ]] || [[ "$path" == *.adoc ]] \
     || [[ "$path" == README* ]] || [[ "$path" == *.png ]] || [[ "$path" == *.jpg ]] || [[ "$path" == *.jpeg ]] \
@@ -48,12 +54,11 @@ classify_one() {
   if [[ "$path" == "Makefile" || "$path" == */Makefile ]] \
     || [[ "$path" == scripts/* ]] || [[ "$path" == .github/* ]] || [[ "$path" == .agents/* ]] \
     || [[ "$path" == .claude/* ]] || [[ "$path" == .cursor/* ]] || [[ "$path" == .workflow/* ]] \
-    || [[ "$path" == .gitignore ]] || [[ "$path" == "package.json" ]] || [[ "$path" == "pnpm-lock.yaml" ]] \
+    || [[ "$path" == .gitignore ]] \
     || [[ "$path" == ".env.example" ]] || [[ "$path" == ".node-version" ]] || [[ "$path" == ".python-version" ]] \
-    || [[ "$path" =~ ^docker-compose.*\.yml$ ]] || [[ "$path" == openapi*.yaml ]] || [[ "$path" == tooling/* ]] \
-    || [[ "$path" == "pyproject.toml" ]] || [[ "$path" == "poetry.lock" ]] || [[ "$path" == "tsconfig.json" ]] \
-    || [[ "$path" == vitest.config.* ]] || [[ "$path" == .eslintrc* ]] || [[ "$path" == .prettierrc* ]] \
-    || [[ "$path" == "${PREPUSH_FRONTEND_DIR}/package.json" ]]; then
+    || [[ "$path" =~ ^docker-compose.*\.yml$ ]] || [[ "$path" == tooling/* ]] \
+    || [[ "$path" == "tsconfig.json" ]] \
+    || [[ "$path" == vitest.config.* ]] || [[ "$path" == .eslintrc* ]] || [[ "$path" == .prettierrc* ]]; then
     echo "infra_only"; return
   fi
   # 3. backend_only / 4. frontend_only

@@ -23,7 +23,7 @@
 - **サブエージェント**は例外なく、**親（メイン）が渡した Task Contract（作業契約）が最優先**。サブのコンテキスト内では契約の制約が rules より優先する。
 - **MEMORY は「参照」であって「規則」ではない**。規則は `rules/` および CORE / AGENTS にのみ置く。memory に書いた内容で振る舞いを強制しない。
 
-ルール同士の衝突の解釈は [CORE 4.5 衝突時の優先順位](./CORE.md) に従う。
+**ソース間の優先順位**は本節で定義する（上記の番号の小さい方が勝つ）。**出力方針**（監査・証跡の詳細優先 vs 会話の簡潔優先）の衝突は [CORE 4.5 衝突時の優先順位](./CORE.md) を参照する。
 
 ---
 
@@ -51,7 +51,7 @@
 ## 3. 委譲時に使う Skill（1 回 1 つ）
 
 - **サブにタスクを投げるとき** → [skills/agent/delegate_to_sub.md](../skills/agent/delegate_to_sub.md) を**唯一の入口**として読み、Task / Constraints / OutputSpec を組み立ててから委譲する。**直接サブを呼ばない。**
-- **最小読込保証**: サブに渡すコンテキストは [boot/SUBAGENT_PACK.md](./SUBAGENT_PACK.md) の**注入順序**で組み立てる（SUBAGENT_MINIMUM → TOOLS → 役割定義 → Task payload）。含めないとサブ側でルールが強制されず破綻する。
+- **最小読込保証**: サブに渡すコンテキストは [boot/SUBAGENT_PACK.md](./SUBAGENT_PACK.md) の**注入順序**で組み立てる。順序は **1→2→3→4→5→6** の通り: SUBAGENT_MINIMUM → TOOLS → EXECUTION_CONTRACT → rules 最小限 → 役割定義 1 つ → 固定 JSON ペイロード。含めないとサブ側でルールが強制されず破綻する。
 
 ---
 
@@ -73,7 +73,7 @@
 
 ## 5. サブに渡すコンテキスト
 
-- **必ず含める**: [SUBAGENT_PACK.md](./SUBAGENT_PACK.md) の順序で連結（SUBAGENT_MINIMUM → TOOLS → 役割 1 つ → 作業契約）。サブのコンテキストを毎回同じ形にする。
+- **必ず含める**: [SUBAGENT_PACK.md](./SUBAGENT_PACK.md) の順序で連結（SUBAGENT_MINIMUM → TOOLS → EXECUTION_CONTRACT → rules 最小限 → 役割 1 つ → 固定 JSON ペイロード）。サブのコンテキストを毎回同じ形にする。
 - **ホワイトリスト方式**: 「渡さない」だけにせず、**「このロールにはこれだけ渡す」** を [workers/README のホワイトリスト](../workers/README.md) で固定する。
 - サブに渡すコンテキストは、EXECUTION_CONTRACT と delegate_to_sub で定めた範囲および上記ホワイトリストを超えない。
 
