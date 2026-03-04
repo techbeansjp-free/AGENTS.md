@@ -113,6 +113,7 @@ Cursor は物理フックが弱い環境があるため、以下で強制しま�
 1. **プロジェクトルート**に `.cursor/agents/` を作成し、`.agents/enforcement/cursor/agents/` 内の **workflow-*.md** をそのままコピーする（implementer, reviewer, tester, auditor, scribe）。
 2. Cursor のサブエージェント定義で、**そのプロジェクトの** `.cursor/agents/` を参照する。リポジトリ外（ユーザーホーム等）へはコピーしない。
 3. `.agents/enforcement/cursor/README.md` を参照し、書記以外は「絶対に書かない」を定義内に明記する。
+4. **書記（workflow-scribe）**: Cursor では `model: fast` が無効なため、enforcement の書記定義は `model: inherit` になっている。コピー後も変更しないこと。詳細は [workers/06_書記.md](.agents/workers/06_書記.md) の「Cursor での model 指定」を参照。
 
 ---
 
