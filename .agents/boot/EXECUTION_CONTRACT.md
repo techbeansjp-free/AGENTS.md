@@ -59,6 +59,22 @@ MUST: サブへの入力は上記の範囲のみとする。それ以外のブ�
 
 サブは「成果物」を主に返す。判断理由・リスク・次アクションは、メインの統合に役立つ場合だけ任意で付ける。
 
+### 2.1 phase と execution_logs.action_type の対応（メイン・書記の一貫性）
+
+成果物の `phase` と、書記へ渡すログの `action_type`（execution_logs に格納）は、次の規則で対応させる。メインは書記にログ項目を渡すとき、この対応で `action_type` を決める。
+
+| phase（frontmatter 等） | action_type（execution_logs） | 備考 |
+|-------------------------|-------------------------------|------|
+| 01 | plan | 要件・BDD 計画 |
+| 02 | execute | 設計・実装 |
+| 03 | execute または plan | 実装計画 |
+| 03_review | review | 03 の監査 |
+| 4.5 | review | ドキュメント徹底レビュー |
+| 04 / 04_review | review | 総合レビュー・監査 |
+| その他 | フェーズ名をそのまま（例: 00_要求定義） | 一意に識別できる値 |
+
+**正規ルール**: 上記にない phase は、`01`→plan、`02`→execute、`03`→execute、`*_review`→review とし、それ以外は phase をそのまま action_type に使う。execution_logs の action_type はこの規則に従い、書記とメインで一致させる。
+
 ---
 
 ## 3. 不明点の扱い
