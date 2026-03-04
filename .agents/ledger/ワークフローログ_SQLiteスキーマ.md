@@ -7,6 +7,7 @@
 ## 1. 前提
 
 - **workflow.db** はプロジェクトルートまたは `.workflow/` 直下に配置。**必ず .gitignore に追加**し、Git 管理外とする。
+- **SQLite の外部キー制約**: SQLite はデフォルトで `PRAGMA foreign_keys` が OFF のため、`execution_logs` の `REFERENCES issues(issue_id)` を有効にするには**接続ごとに** `PRAGMA foreign_keys = ON;` を実行すること。DB 接続直後（またはクライアントの接続オプション）で設定し、スキーマ初期化・マイグレーションスクリプトにも同 pragma を含めることを推奨する。
 - **受け入れ条件**: 「workflow.db を .gitignore に追加する」ことを **書記サブ導入タスク** または **初回セットアップ（SQLite 利用開始）タスク** の受け入れ条件に明示し、漏れを防ぐ。詳細は [workers/README](../workers/README.md) を参照。
 - 書記のみが INSERT。他は書記にログ項目を渡すだけ。書き込みはキュー＋単一書者で直列化する。
 
@@ -55,6 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_logs_ts ON execution_logs(timestamp);
 |------|------|------|
 | issue_id | 必須 | 対象 issue の UUID。 |
 | timestamp | 必須 | 実行時刻（ISO8601 推奨）。 |
+| created_at | 必須 | 記録日時（ISO8601）。execution_logs.created_at にそのまま格納。 |
 | agent_id | 必須 | 実行した人格（要件/BDDリード, 実装者, テスト者, 監査者, 総合レビューリード, 書記 等）。 |
 | action_type | 必須 | 実装 / レビュー / 監査 / 壁打ち / ログ記録 等。 |
 | target_artifact | 任意 | 対象成果物（例: 02_設計.md, src/foo.ts）。 |

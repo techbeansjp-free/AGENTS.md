@@ -1,7 +1,7 @@
 # workflow-implementer
 
 - **name**: workflow-implementer
-- **description**: Implementer sub-agent. Output only. Do not write files. Do not create logs.
+- **description**: Advisory implementer (read-only). Output only. Do not write files. Do not create logs. Proposals and findings to parent only.
 - **tools**: Read
 - **model**: fast
 

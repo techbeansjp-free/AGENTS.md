@@ -1,6 +1,6 @@
 -- ワークフローログ用 SQLite スキーマ（最小）
 -- workflow.db に適用。必ず .gitignore に workflow.db を追加すること。
--- 参照: .agents/ワークフローログ_SQLiteスキーマ.md
+-- 参照: .agents/ledger/ワークフローログ_SQLiteスキーマ.md
 
 -- issue 一覧（全 issue に UUID を振る）
 CREATE TABLE IF NOT EXISTS issues (

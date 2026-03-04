@@ -1,11 +1,11 @@
-# workflow-scribe
-
-- **name**: workflow-scribe
-- **description**: Scribe sub-agent. Write exactly one log entry to workflow.db only. Do not write to .workflow/**/logs/ (deprecated).
-- **tools**: Read, Write
-- **model**: fast
-
 ---
+name: workflow-scribe
+description: Scribe sub-agent. Write exactly one log entry to workflow.db only. Do not write to .workflow/**/logs/ (deprecated).
+tools: Read, Write
+model: fast
+---
+
+# workflow-scribe
 
 You are the workflow scribe.
 

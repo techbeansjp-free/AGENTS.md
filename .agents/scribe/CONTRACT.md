@@ -17,15 +17,16 @@
 ```yaml
 issue_id: "<task_id>"
 agent_id: "implementer | reviewer | tester | auditor | scribe"
-action_type: "plan | execute | review"（推奨: フェーズ名を含める。例: 01_要件定義, 02_設計, 03_実装計画, 04_review）
+action_type: "plan | execute | review"  # 推奨: フェーズ名を含める。例: 01_要件定義, 02_設計, 03_実装計画, 04_review
 timestamp: "ISO8601"
-target_artifact: "<path or logical name>"（監査用トレーサビリティのため推奨。主な成果物のパスまたは論理名）
+created_at: "ISO8601"  # 記録日時（execution_logs.created_at 必須）
+target_artifact: "<path or logical name>"  # 監査用トレーサビリティのため推奨。主な成果物のパスまたは論理名
 input_ref: "<optional>"
 output_ref: "<optional>"
 summary: "<3 lines max>"
 ```
 
-必須キー: **issue_id**, **agent_id**, **action_type**, **timestamp**, **target_artifact**, **summary**。CI で検証する。
+必須キー: **issue_id**, **agent_id**, **action_type**, **timestamp**, **created_at**, **target_artifact**, **summary**。CI で検証する。
 
 ---
 

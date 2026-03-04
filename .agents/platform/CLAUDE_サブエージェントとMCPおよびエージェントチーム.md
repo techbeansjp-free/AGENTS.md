@@ -45,7 +45,7 @@
   - **ユーザー全体** = `~/.claude/agents/` に配置すると、全プロジェクトで利用可能（グローバル相当）。
   - **プロジェクトのみ** = プロジェクトルートの `.claude/agents/`。
 - **組み込み**: Explore（Haiku・読み取り専用）、Plan（継承・読み取り専用）、general-purpose（継承・全ツール）。カスタムは YAML frontmatter + Markdown。`model: haiku` でコスト削減可能。
-- **Cursor 利用時**: Cursor もカスタムサブエージェントを `.cursor/agents/` または `.claude/agents/` で利用可能。公式: [Cursor - Subagents](https://cursor.com/docs/context/subagents)。ログ記録は**書記役に一任**する。→ [書記役とログ委譲](./書記役とログ委譲.md)
+- **Cursor 利用時**: Cursor もカスタムサブエージェントを `.cursor/agents/` または `.claude/agents/` で利用可能。公式: [Cursor - Subagents](https://cursor.com/docs/context/subagents)。ログ記録は**書記役に一任**する。→ [書記役とログ委譲](../scribe/書記役とログ委譲.md)
 
 **参考**: [カスタムサブエージェントの作成](https://code.claude.com/docs/ja/sub-agents)
 
