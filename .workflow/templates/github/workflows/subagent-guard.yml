@@ -1,0 +1,30 @@
+# テンプレート: サブエージェント強制ガード
+# 採用先では .github/workflows/subagent-guard.yml にコピーするか、既存 CI に step を統合する。
+#
+# 検知内容:
+#   - .workflow 配下の .md にログっぽい frontmatter（issue_id 等）が含まれる（ログは workflow.db のみ。.workflow/**/logs/ は廃止）
+#   - .workflow/**/logs/ に .md が追加される（廃止違反。ログは workflow.db のみ）
+
+name: subagent-guard
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run subagent guard
+        run: |
+          chmod +x .workflow/templates/github/scripts/subagent-guard.sh 2>/dev/null || true
+          if [[ -f .workflow/templates/github/scripts/subagent-guard.sh ]]; then
+            .workflow/templates/github/scripts/subagent-guard.sh
+          elif [[ -f .github/scripts/subagent-guard.sh ]]; then
+            chmod +x .github/scripts/subagent-guard.sh
+            .github/scripts/subagent-guard.sh
+          else
+            echo "[subagent-guard] skip: script not found"
+          fi

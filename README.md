@@ -6,6 +6,41 @@
 
 ---
 
+## 🚀 プロジェクトにコピペするだけではじめ方（推奨）
+
+**AGENTS-spec をプロジェクトにコピーするだけで、サブエージェント化が正しく機能するようにする手順。**
+
+1. **AGENTS-spec フォルダをプロジェクトにコピーする**  
+   プロジェクトルート直下に `AGENTS-spec/` フォルダができる状態にする。
+
+2. **プロジェクトルートに AGENTS.md を 1 つ置く**  
+   `AGENTS-spec/COPY_TO_PROJECT_ROOT_AGENTS.md` をプロジェクトルートに **`AGENTS.md`** としてコピーする（リネームしてよい）。
+
+3. **.workflow/ をプロジェクトルートに用意する**  
+   issue を開始するときに、`AGENTS-spec/.workflow/templates/` 内のテンプレートを参照して、プロジェクトルートの `.workflow/{YYYYMMDD_HHMMSS_issue_name}/` を作成し、その中に `00_要求定義.md` 等を配置する。初回用に `AGENTS-spec/.workflow/templates/` をプロジェクトの `.workflow/templates/` にコピーして使ってもよい。
+
+4. **workflow.db を使う場合**  
+   プロジェクトルートの `.gitignore` に `workflow.db` を追加する（[.agents/ledger/README.md](./.agents/ledger/README.md) 参照）。
+
+以上で、メインは `AGENTS-spec/.agents/boot/CORE.md` と `LOAD_POLICY.md` を読み、`.workflow/` はプロジェクトルートの `.workflow/` を参照してサブエージェント運用が動作する。
+
+### コピペ後の動作確認（最短テスト）
+
+貼り付けた直後、次を確認すればほぼ問題ない。
+
+1. **プロジェクトルート直下に `AGENTS.md` がある**（中身は `COPY_TO_PROJECT_ROOT_AGENTS.md` 由来であること）
+2. **`AGENTS-spec/.agents/boot/CORE.md` と `LOAD_POLICY.md` が起点として読まれる設計**になっている（ルートの AGENTS.md から参照されていること）
+3. **`.workflow/` をプロジェクトルートに作って issue を切れる**（テンプレは `AGENTS-spec/.workflow/templates/` を参照できること）
+4. （任意）workflow.db を使うなら `.gitignore` に `workflow.db` を追加済みであること
+
+### 注意（コピペ運用で壊れやすい点）
+
+- **ルートのファイル名・場所**: 入口は **プロジェクトルート直下の `AGENTS.md` が 1 つ** である想定。無い／別名／別階層だと、想定した入口にならない。
+- **`.agents-project/` と `.agents/` の優先関係**: `.agents-project/` を置く場合、**プロジェクト固有ルールだけ**を置く。spec 本体のルールを上書きしない。ここが優先されるため、中身を spec で上書きすると事故る。
+- **MCP（ツール接続）**: spec は「使うツールの仕様」まで書くが、**Cursor / Claude Code 側の MCP 接続は spec だけでは自動にならない**。必要なら各環境で接続設定を行う。
+
+---
+
 ## 📚 ドキュメント構成
 
 ### 主要ドキュメント
@@ -18,7 +53,7 @@
 
 - **`.agents/`** - 実行ルール・ガイドラインを格納するディレクトリ。汎用テンプレートとしてそのまま使う。
 - **`.agents-project/`** - プロジェクト固有ルールを置くディレクトリ。ここに置いたルールは `.agents/` より**優先**される。詳細は [`.agents-project/README.md`](./.agents-project/README.md) を参照。
-- **[`実行ルール.md`](./.agents/実行ルール.md)** - LLM エージェント向け実行ルール
+- **[`実行ルール.md`](./.agents/rules/実行ルール.md)** - LLM エージェント向け実行ルール
   - 機械的に守るべきハード制約
   - フェーズ別チェックリスト
   - ドキュメント更新ルール
@@ -177,7 +212,7 @@ flowchart TD
 
 ## 🤖 LLM エージェント向け
 
-LLM エージェントがこの規約に従って動作する場合は、**[`実行ルール.md`](./.agents/実行ルール.md)** を参照してください。
+LLM エージェントがこの規約に従って動作する場合は、**[`実行ルール.md`](./.agents/rules/実行ルール.md)** を参照してください。
 
 ### エージェントの役割
 
@@ -205,7 +240,7 @@ LLM エージェントがこの規約に従って動作する場合は、**[`実
 - 出力の先頭に `🧠 Mode: SILENT MODE` を**必ず**付与する
 - 詳細は必ずリポジトリ内のファイルに書く（`.workflow/`、`docs/run/`、`memo/` など）
 
-詳細は [`サイレントモードガイド.md`](./.agents/サイレントモードガイド.md) を参照してください。
+詳細は [`サイレントモードガイド.md`](./.agents/guide/サイレントモードガイド.md) を参照してください。
 
 ---
 
@@ -224,24 +259,24 @@ LLM エージェントがこの規約に従って動作する場合は、**[`実
 ### 主要規約ドキュメント
 
 - [`AGENTS.md`](./AGENTS.md) - 開発規約の完全版
-- [`実行ルール.md`](./.agents/実行ルール.md) - LLM エージェント向け実行ルール
+- [`実行ルール.md`](./.agents/rules/実行ルール.md) - LLM エージェント向け実行ルール
 
 ### SILENT MODE 関連ドキュメント
 
-- [`サイレントモードガイド.md`](./.agents/サイレントモードガイド.md) - SILENT MODE 運用ガイド（省トークン運用）
-- [`初期化プロンプト.md`](./.agents/初期化プロンプト.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
-- [`Issue実行テンプレート.md`](./.agents/Issue実行テンプレート.md) - Issue 実行テンプレート（1行指示パターン）
+- [`サイレントモードガイド.md`](./.agents/guide/サイレントモードガイド.md) - SILENT MODE 運用ガイド（省トークン運用）
+- [`初期化プロンプト.md`](./.agents/prompts/初期化プロンプト.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
+- [`Issue実行テンプレート.md`](./.agents/prompts/Issue実行テンプレート.md) - Issue 実行テンプレート（1行指示パターン）
 
 ### その他の規約ドキュメント
 
-- [`コーディングルール.md`](./.agents/コーディングルール.md) - コーディングルール
-- [`ドキュメントルール.md`](./.agents/ドキュメントルール.md) - システム仕様書（docs/）作成・更新ルール
-- [`レビュールール.md`](./.agents/レビュールール.md) - レビュー時の徹底的な品質調査ルール
-- [`テストガイドライン.md`](./.agents/テストガイドライン.md) - テスト作成ガイドライン
-- [`Mermaid図ルール.md`](./.agents/Mermaid図ルール.md) - Mermaid 図作成規約
-- [`Storybookルール.md`](./.agents/Storybookルール.md) - Storybook / デザインシステム運用規約
-- [`GitHub_PR指摘取得.md`](./.agents/GitHub_PR指摘取得.md) - GitHub PR 指摘取得ルール
-- [`GitHub_Copilot対応.md`](./.agents/GitHub_Copilot対応.md) - GitHub Copilot 対応
+- [`コーディングルール.md`](./.agents/rules/コーディングルール.md) - コーディングルール
+- [`ドキュメントルール.md`](./.agents/rules/ドキュメントルール.md) - システム仕様書（docs/）作成・更新ルール
+- [`レビュールール.md`](./.agents/rules/レビュールール.md) - レビュー時の徹底的な品質調査ルール
+- [`テストガイドライン.md`](./.agents/rules/テストガイドライン.md) - テスト作成ガイドライン
+- [`Mermaid図ルール.md`](./.agents/rules/Mermaid図ルール.md) - Mermaid 図作成規約
+- [`Storybookルール.md`](./.agents/rules/Storybookルール.md) - Storybook / デザインシステム運用規約
+- [`GitHub_PR指摘取得.md`](./.agents/rules/GitHub_PR指摘取得.md) - GitHub PR 指摘取得ルール
+- [`GitHub_Copilot対応.md`](./.agents/rules/GitHub_Copilot対応.md) - GitHub Copilot 対応
 
 ### ディレクトリ
 
