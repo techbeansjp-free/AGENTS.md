@@ -2,8 +2,8 @@
 
 **目的**
 
-- 書記以外の書き込みを物理的に拒否する
-- **logs/ 以外**への Write を拒否する
+- 書記以外の workflow.db への書き込みを物理的に拒否する
+- 書記の **workflow.db 以外**への Write を拒否する（`.workflow/**/logs/` は廃止・使用禁止）
 
 ---
 
@@ -11,13 +11,13 @@
 
 1. **採用先プロジェクト**では、本ディレクトリの [pretooluse_write_guard.json](./pretooluse_write_guard.json) を **プロジェクトルートの** `.claude/hooks/pretooluse_write_guard.json` にコピーする。ユーザーホーム（`~/.claude/hooks/`）へはコピーしない。
 2. Claude Code の **PreToolUse フック**で、**そのプロジェクトの** `.claude/hooks/pretooluse_write_guard.json` を指定する。
-3. **動作確認**: 書記サブに「logs 以外に書け」と指示し、**拒否される**ことを 1 回確認する（スモークテスト ケース C）。
+3. **動作確認**: 書記サブに「workflow.db 以外に書け」と指示し、**拒否される**ことを 1 回確認する（スモークテスト ケース C）。
 
 ---
 
 ## 効果
 
-- **logs/ 以外**への Write を即拒否
+- 書記の **workflow.db 以外**への Write を即拒否
 - 書記以外の Edit を拒否
 - 人為ミスでも書けない（＝壊れない）
 

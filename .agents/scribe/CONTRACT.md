@@ -6,26 +6,20 @@
 
 ## ログ保存先（固定）
 
-- `.workflow/**/logs/`
+- **workflow.db（SQLite）のみ**。`.workflow/**/logs/` は廃止・使用禁止。
 
 ---
 
-## ログファイル名（固定）
-
-- `YYYYMMDD_HHMMSS_{agent_id}_{action_type}.md`
-
----
-
-## フロントマター（固定）
+## フロントマター（固定・SQLite の execution_logs に対応）
 
 書記が書くログの先頭には、次の YAML を必ず含める。
 
 ```yaml
 issue_id: "<task_id>"
 agent_id: "implementer | reviewer | tester | auditor | scribe"
-action_type: "plan | execute | review"
+action_type: "plan | execute | review"（推奨: フェーズ名を含める。例: 01_要件定義, 02_設計, 03_実装計画, 04_review）
 timestamp: "ISO8601"
-target_artifact: "<path or logical name>"
+target_artifact: "<path or logical name>"（監査用トレーサビリティのため推奨。主な成果物のパスまたは論理名）
 input_ref: "<optional>"
 output_ref: "<optional>"
 summary: "<3 lines max>"

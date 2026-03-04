@@ -39,11 +39,11 @@
 - フェーズ進行・提出物・DoD の詳細 → [サブエージェント抜かし防止.md](../rules/サブエージェント抜かし防止.md)
 - 委譲の入出力仕様 → [boot/EXECUTION_CONTRACT.md](./EXECUTION_CONTRACT.md)
 - 記憶の 2 層・サニタイズ（memory/raw と memory/curated）→ [boot/MEMORY_POLICY.md](./MEMORY_POLICY.md)
-- 誰が何を書けるか（書記以外の logs/・DB 書込禁止）→ [capabilities/POLICY.md](../capabilities/POLICY.md)
+- 誰が何を書けるか（書記以外の workflow.db 書込禁止。書記の保存先は workflow.db のみ。logs/ は廃止）→ [capabilities/POLICY.md](../capabilities/POLICY.md)
 - ログの記録ルール・書記への委譲 → [書記役とログ委譲.md](../scribe/書記役とログ委譲.md)
 - ログ保存先・スキーマ → [ワークフローログ_SQLiteスキーマ.md](../ledger/ワークフローログ_SQLiteスキーマ.md)、[ledger/README.md](../ledger/README.md)
 - レビュー時 → [レビュールール.md](../rules/レビュールール.md)
-- **監査時** → 当該 issue の **00_要求定義（ゴール）** を必ず Task/Constraints に含めるか参照する。[監査者用工程フロー.md](../rules/監査者用工程フロー.md) と [監査者用チェックリスト.md](../rules/監査者用チェックリスト.md) を読み、証跡ベースで検証する。メインは監査を主役とし、各フェーズ完了時に上記を参照して検証する。
+- **監査時** → 当該 issue の **00_要求定義（ゴール）** を必ず Task/Constraints に含めるか参照する。[監査者用工程フロー.md](../rules/監査者用工程フロー.md) と [監査者用チェックリスト.md](../rules/監査者用チェックリスト.md) を読み、証跡ベースで検証する。**監査は監査者サブに委譲し、メインはその結果に基づき完了判定を行う。** 各フェーズ完了時に上記を参照して監査者に委譲する。**03_実装計画.md の作成は実装者・テスト者に委譲し、完了後に監査者に 03 の監査を委譲する。**
 - その他ルール（実行・コーディング・ドキュメント・テスト等）→ 必要になったら [AGENTS.md](../../AGENTS.md) の参考資料から該当ファイルを参照
 
 ---

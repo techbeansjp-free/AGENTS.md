@@ -7,7 +7,7 @@
 ## 目的
 
 - サブエージェント呼び出しを **入口一本化（delegate_to_sub 経由）** で強制する
-- 書記のみログを書き、**logs/ 以外への書き込みを禁止**する
+- 書記のみログを書き、**workflow.db のみに記録**する（`.workflow/**/logs/` は廃止・使用禁止）。書記以外の workflow.db への書き込みを禁止する
 - Claude Code は **PreToolUse により物理的に拒否**
 - Cursor は **役割別サブ定義 + CI 監査**で実質的に拒否
 - ログ形式は **契約（CONTRACT）で固定**し、監査可能にする
@@ -81,14 +81,14 @@
 ### ログ
 
 - ログを書けるのは **書記（scribe）だけ**
-- ログ保存先は **`.workflow/**/logs/` のみ**
+- ログ保存先は **workflow.db（SQLite）のみ**（`.workflow/**/logs/` は廃止・使用禁止）
 - ログ形式は `.agents/scribe/CONTRACT.md` に必ず従う
 
 ---
 
 ## Claude Code の有効化（物理強制・プロジェクト内完結）
 
-Claude Code は **PreToolUse** により、logs/ 以外の Write/Edit を物理的に拒否します。
+Claude Code は **PreToolUse** により、書記は workflow.db のみ Write 可能とし、それ以外の Write/Edit を物理的に拒否します。
 
 ### 手順
 
@@ -96,7 +96,7 @@ Claude Code は **PreToolUse** により、logs/ 以外の Write/Edit を物理�
 2. Claude Code の PreToolUse フックで、**そのプロジェクトの** `.claude/hooks/pretooluse_write_guard.json` を指定する（絶対パスまたはプロジェクトルートからの相対パス）。
 3. ユーザーホーム（`~/.claude/hooks/`）へはコピーしない。すべてプロジェクト内に置く。
 
-重要: この登録が完了すると、logs/ 以外への書き込みは「人が間違えて指示しても」拒否されます。
+重要: この登録が完了すると、書記以外の workflow.db への書き込みおよび書記の workflow.db 以外への書き込みは「人が間違えて指示しても」拒否されます。
 
 ---
 
@@ -105,7 +105,7 @@ Claude Code は **PreToolUse** により、logs/ 以外の Write/Edit を物理�
 Cursor は物理フックが弱い環境があるため、以下で強制します。
 
 - 書記以外のサブは **Read-only（可能な範囲で）**
-- 書記のみ logs/ に Write 可能
+- 書記のみ workflow.db に Write 可能（logs/ は廃止・使用禁止）
 - CI が「不正ログ」「ログ形式違反」を検出したら落とす
 
 ### 手順
@@ -120,8 +120,8 @@ Cursor は物理フックが弱い環境があるため、以下で強制しま�
 
 CI で以下を監査し、違反があれば PR/Push を失敗させます。
 
-- logs/ 以外に「ログっぽい frontmatter（issue_id 等）」が存在する
-- logs/ 配下のログが CONTRACT 必須キーを満たさない
+- workflow.db 以外に「ログっぽい frontmatter（issue_id 等）」が存在する（logs/ は廃止）
+- workflow.db の execution_logs が CONTRACT 必須キーを満たさない
 
 ### 手順
 
@@ -141,7 +141,7 @@ CI で以下を監査し、違反があれば PR/Push を失敗させます。
 ### テストB（書記）
 
 - scribe を呼ぶ
-- `.workflow/**/logs/` に **1ファイルだけ**書く
+- **workflow.db** に **1件だけ**記録する（`.workflow/**/logs/` は廃止・使用禁止）
 - CONTRACT の必須キーが揃っている
 
 ### テストC（意地悪）
@@ -164,7 +164,7 @@ CI で以下を監査し、違反があれば PR/Push を失敗させます。
 
 - `SUBAGENT_PACK` の注入順序
 - `delegate_to_sub` の入口一本化
-- logs/ 以外への書き込み許可
+- workflow.db 以外への書記の書き込み許可（誤検知時）
 - `SCRIBE CONTRACT` の必須キー削除
 - CI 監査の撤去（最低限の監査は維持）
 

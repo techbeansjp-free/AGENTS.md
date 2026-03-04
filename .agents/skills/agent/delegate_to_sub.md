@@ -86,7 +86,7 @@ role が scribe 以外のとき、必ず scribe に次を渡す。
 }
 ```
 
-書記は [scribe/CONTRACT](../../scribe/CONTRACT.md) に従い `.workflow/**/logs/` に 1 件のみ書く。
+書記は [scribe/CONTRACT](../../scribe/CONTRACT.md) に従い **workflow.db にのみ** 1 件記録する。`.workflow/**/logs/` は廃止・使用禁止。
 
 ---
 
