@@ -284,7 +284,7 @@ flowchart TD
 
 ## 🤖 LLM エージェント向け
 
-LLM エージェントがこの規約に従って動作する場合は、**[`実行ルール.md`](./.agents/rules/実行ルール.md)** を参照してください。
+LLM エージェントがこの規約に従って動作する場合は、**[`.agents/RULES.md`](./.agents/RULES.md)** を参照してください。
 
 ### エージェントの役割
 
@@ -331,7 +331,7 @@ LLM エージェントがこの規約に従って動作する場合は、**[`実
 ### 主要規約ドキュメント
 
 - [`AGENTS.md`](./AGENTS.md) - 開発規約の完全版
-- [`実行ルール.md`](./.agents/rules/実行ルール.md) - LLM エージェント向け実行ルール
+- [`.agents/RULES.md`](./.agents/RULES.md) - LLM エージェント向け実行ルール
 
 ### SILENT MODE 関連ドキュメント
 
@@ -341,14 +341,7 @@ LLM エージェントがこの規約に従って動作する場合は、**[`実
 
 ### その他の規約ドキュメント
 
-- [`コーディングルール.md`](./.agents/rules/コーディングルール.md) - コーディングルール
-- [`ドキュメントルール.md`](./.agents/rules/ドキュメントルール.md) - システム仕様書（docs/）作成・更新ルール
-- [`レビュールール.md`](./.agents/rules/レビュールール.md) - レビュー時の徹底的な品質調査ルール
-- [`テストガイドライン.md`](./.agents/rules/テストガイドライン.md) - テスト作成ガイドライン
-- [`Mermaid図ルール.md`](./.agents/rules/Mermaid図ルール.md) - Mermaid 図作成規約
-- [`Storybookルール.md`](./.agents/rules/Storybookルール.md) - Storybook / デザインシステム運用規約
-- [`GitHub_PR指摘取得.md`](./.agents/rules/GitHub_PR指摘取得.md) - GitHub PR 指摘取得ルール
-- [`GitHub_Copilot対応.md`](./.agents/rules/GitHub_Copilot対応.md) - GitHub Copilot 対応
+- [`.agents/RULES.md`](./.agents/RULES.md) - 実行・ドキュメント・テスト・レビュー等のチェックリストと判断観点（コーディング・レビュー・テストガイドライン・Mermaid/Storybook/GitHub 等を含む）
 
 ### ディレクトリ
 

@@ -28,7 +28,7 @@
 - **証跡で判断する**: 「やった」ではなく、ファイル・実行結果・手順で示す。自己申告で完了にしない。
 - **フェーズを飛ばさない**: 順序と提出物を固定ゲートにする。何が揃えば次に進んでよいかを固定し、手段は推論に委ねる。
 - **委譲の一意性**: 委譲は delegate_to_sub のみ。サブには Goal と制約だけを渡し、人格・記憶は渡さない。
-- **トレーサビリティ**: 誰が何をしたかを書記にだけ記録する。**ログは workflow.db（SQLite）への保存を強制**。書記のみが workflow.db に書く。サブ運用時は書記を必ず使用する。
+- **トレーサビリティ**: トレーサビリティを重視する。具体ルールは CORE §3 を参照。
 - **ドキュメントと実装の同期**: 変更したら該当 md を更新する。
 
 ---
@@ -59,14 +59,13 @@
 
 ## 5. アーキテクチャ（規約の構造）
 
-```
-AGENTS.md（入口）
-    ↓ 最初に読む
-CORE.md ＋ LOAD_POLICY.md
-    ↓ 委譲時
-EXECUTION_CONTRACT（Task/Constraints/OutputSpec）＋ delegate_to_sub
-    ↓
-workers（要件BDDリード・実装者・テスト者・監査者・総合レビューリード・書記）
+```mermaid
+flowchart TD
+  A[AGENTS.md（入口）] --> B[CORE.md ＋ LOAD_POLICY.md]
+  B --> C[EXECUTION_CONTRACT（Task/Constraints/OutputSpec）＋ delegate_to_sub]
+  C --> D[workers（要件BDDリード・実装者・テスト者・監査者・総合レビューリード・書記）]
+  A --> |最初に読む| B
+  B --> |委譲時| C
 ```
 
 - **絶対制約**: CORE のみ。AGENTS は CORE 参照に誘導。

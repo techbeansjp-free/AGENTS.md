@@ -1,6 +1,9 @@
 -- ワークフローログ用 SQLite スキーマ（最小）
 -- workflow.db に適用。必ず .gitignore に workflow.db を追加すること。
 -- 参照: .agents/ledger/ワークフローログ_SQLiteスキーマ.md
+--
+-- 既存 DB 移行時: NOT NULL 制約を追加する場合は、既存行に NULL があると ALTER が失敗する。
+-- 手順: (1) カラムを NULL 許容で追加 (2) 既存行をバックフィル (3) NOT NULL を付与。
 
 -- issue 一覧（全 issue に UUID を振る）
 CREATE TABLE IF NOT EXISTS issues (

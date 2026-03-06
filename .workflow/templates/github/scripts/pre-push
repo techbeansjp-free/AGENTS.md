@@ -268,10 +268,10 @@ changed_files="$(sort -u < "$tmp_files" | sed '/^$/d')"
 # 変更一覧が空の場合は安全側で full（新規 push で empty_tree 取得失敗等）
 scope="$(detect_scope "$changed_files")"
 # 切り分け用: scope 算出直後に 1 行だけ必ず追記（ここまで到達していればログに scope が残る）
-( printf '[%s] scope=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$scope" >> "${log_dir}/pre-push.log" ) 2>/dev/null || true
+( printf '[%s] scope=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$scope" >> "$PREPUSH_LOG_FILE" ) 2>/dev/null || true
 
 # ログ出力設定（scripts/logs/pre-push.log に結果を追記）。make の出力は pre-push-make-*.log に保存し失敗時に末尾を表示する。
-log_file="${log_dir}/pre-push.log"
+log_file="$PREPUSH_LOG_FILE"
 make_log="${log_dir}/pre-push-make-$(date '+%Y%m%d-%H%M%S').log"
 if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
   # pre-push.log ローテーション: 最大行数を超えていれば古い行を捨てる
@@ -282,7 +282,7 @@ if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
   # while read は入力が空だと EOF で終了コード 1 を返すため、set -e でスクリプトが落ちないよう || true する
   _keep="${PREPUSH_MAKE_LOG_KEEP:-30}"
   (cd "$log_dir" && for f in pre-push-make-*.log; do [[ -f "$f" ]] && echo "$f"; done) 2>/dev/null | \
-    sort -t- -k4,5n -r 2>/dev/null | tail -n +$(( _keep + 1 )) | while read -r _f; do
+    sort -r 2>/dev/null | tail -n +$(( _keep + 1 )) | while read -r _f; do
       [[ -n "$_f" ]] && rm -f "${log_dir}/${_f}" 2>/dev/null || true
     done || true
   if ! ( {
@@ -290,7 +290,7 @@ if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
     echo "changed_files:"
     printf '%s\n' "$changed_files"
     echo
-  } >> "$log_file" ); then
+  } >> "$PREPUSH_LOG_FILE" ); then
     echo "pre-push: ログ追記に失敗しました: $log_file" >&2
   fi
 fi

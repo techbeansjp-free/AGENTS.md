@@ -129,7 +129,7 @@
 
 ## 実施時の注意
 
-- 各 issue は `.workflow/{YYYYMMDD_HHMMSS_issue_name}/00_要求定義.md` から開始し、01 → 02 → 03 → 実装 → 04_review を守る。
+- 各 issue は `.workflow/{YYYYMMDD_HHMMSS_issue_name}/00_要求定義.md` から開始し、01 → 02 → 03 → 文書レビュー（必須）→ 実装 → 04_review を守る。
 - 本ロードマップは「設計は承認済み」を前提としており、boot / platforms / workers の構造や CORE の絶対制約を変える必要はない。
 - 優先順位 1〜5 を先に実施すると、OSS としての完成度が上がりやすい。6〜9 は仕上げ・改善として必要に応じて実施する。
 
