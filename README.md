@@ -26,7 +26,7 @@ LLM エージェント（AI）と人間が協働するための**ワークフロ
 2. **プロジェクトルートに AGENTS.md を 1 つ置く**  
    `AGENTS-spec/COPY_TO_PROJECT_ROOT_AGENTS.md` の内容をコピーし、プロジェクトルートに **`AGENTS.md`** として保存する。
 3. **AI に「agents に従って、この issue の 00_要求定義から進めて」と指示する**  
-   AI は AGENTS.md → CORE → LOAD_POLICY を読んでから動く。issue 用フォルダは手動で `.workflow/20260306_my_issue/` のように作り、中に `00_要求定義.md` を 1 つ置けばよい（中身は [.workflow/templates/00_要求定義.md](./.workflow/templates/00_要求定義.md) をコピーして編集）。
+   AI は AGENTS.md → CORE → LOAD_POLICY を読んでから動く。issue 用フォルダは手動で `.workflow/20260306_120000_my_issue/` のように作り（JST の `YYYYMMDD_HHMMSS_` プレフィックス必須）、中に `00_要求定義.md` を 1 つ置けばよい（中身は [.workflow/templates/00_要求定義.md](./.workflow/templates/00_要求定義.md) をコピーして編集）。
 
 以上で **Minimal** 相当の「規約に従う AI」が動く。テンプレート一式や workers・ログを使う場合は下記 Standard/Advanced または [examples/](./examples/) を参照。
 
@@ -126,8 +126,7 @@ LLM エージェント（AI）と人間が協働するための**ワークフロ
 
 - **`.agents/`** - 実行ルール・ガイドラインを格納するディレクトリ。汎用テンプレートとしてそのまま使う。
 - **`.agents-project/`** - プロジェクト固有ルールを置くディレクトリ。ここに置いたルールは `.agents/` より**優先**される。詳細は [`.agents-project/README.md`](./.agents-project/README.md) を参照。
-- **[`.agents/RULES.md`](./.agents/RULES.md)** - 実行・ドキュメント・テスト・レビュー（統合）
-  - 機械的に守るべきハード制約・フェーズ・SILENT MODE
+- **[`.agents/RULES.md`](./.agents/RULES.md)** - 判断観点の要約・横断ルールの案内（絶対制約は [boot/CORE.md](./.agents/boot/CORE.md)、フェーズ定義は [WORKFLOW.md](./.agents/WORKFLOW.md)）
   - ドキュメント・レビュー・テストの要点（詳細は .agents/RULES.md 等で足りる。必要時は .review/ を参照。）
 
 - **[`CLAUDE.md`](./CLAUDE.md)** - CLAUDE.md の**汎用テンプレート**
@@ -167,10 +166,10 @@ AGENTS 規約とテンプレート全体のレビュー結果は [`.review/`](./
 1. **ディレクトリを作成**
 
    ```
-   .workflow/{YYYYMMDD_issue_name}/
+   .workflow/{YYYYMMDD_HHMMSS_issue_name}/
    ```
 
-   例: `.workflow/20251115_nextjs移行/`
+   例: `.workflow/20251115_143000_nextjs移行/`（JST の日時プレフィックス必須）
 
 2. **システム理解から開始**（既存プロジェクト導入時のみ）
 
@@ -261,7 +260,7 @@ flowchart TD
 ```
 .workflow/
 ├── 00_システム理解.md        # システム理解（既存プロジェクト導入時のみ）
-└── {YYYYMMDD_issue_name}/  # issue/タスクディレクトリ（日付プレフィックス付き）
+└── {YYYYMMDD_HHMMSS_issue_name}/  # issue/タスクディレクトリ（日時プレフィックス付き、JST）
     ├── 00_要求定義.md        # 要求定義（必ず最初に作成）
     ├── 01_要件定義.md        # 要件定義
     ├── 02_設計.md            # 設計
@@ -284,7 +283,7 @@ flowchart TD
 
 ## 🤖 LLM エージェント向け
 
-LLM エージェントがこの規約に従って動作する場合は、**[`.agents/RULES.md`](./.agents/RULES.md)** を参照してください。
+LLM エージェントがこの規約に従って動作する場合は、**[`.agents/boot/CORE.md`](./.agents/boot/CORE.md)** と **[`.agents/boot/LOAD_POLICY.md`](./.agents/boot/LOAD_POLICY.md)** を最初に読み、その後 **[`.agents/RULES.md`](./.agents/RULES.md)** で判断観点と横断ルールを確認してください。
 
 ### エージェントの役割
 
@@ -330,8 +329,10 @@ LLM エージェントがこの規約に従って動作する場合は、**[`.ag
 
 ### 主要規約ドキュメント
 
+- [`.agents/boot/CORE.md`](./.agents/boot/CORE.md) - 絶対制約（AI が最初に読むべき共通仕様）
+- [`.agents/boot/LOAD_POLICY.md`](./.agents/boot/LOAD_POLICY.md) - 読込順序とサブエージェント注入ルール
 - [`AGENTS.md`](./AGENTS.md) - 開発規約の完全版
-- [`.agents/RULES.md`](./.agents/RULES.md) - LLM エージェント向け実行ルール
+- [`.agents/RULES.md`](./.agents/RULES.md) - 判断観点と横断ルールの案内（CORE/LOAD_POLICY を読んだ後に参照）
 
 ### SILENT MODE 関連ドキュメント
 
