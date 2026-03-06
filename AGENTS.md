@@ -34,7 +34,7 @@
 | 委譲の形（Task/Constraints/OutputSpec） | [.agents/boot/EXECUTION_CONTRACT.md](.agents/boot/EXECUTION_CONTRACT.md)、[delegate_to_sub](.agents/skills/agent/delegate_to_sub.md) |
 | **ワークフロー・フェーズ・必須成果物・DoD・監査観点** | [.agents/WORKFLOW.md](.agents/WORKFLOW.md) |
 | **思想・概念・哲学・観点・アーキテクチャ** | [.agents/CONCEPTS.md](.agents/CONCEPTS.md) |
-| 実行・ドキュメント・テスト・レビュー（要約） | [.agents/RULES.md](.agents/RULES.md)。詳細は `_archive/rules/`（必要時のみ） |
+| 実行・ドキュメント・テスト・レビュー（要約） | [.agents/RULES.md](.agents/RULES.md)。詳細は RULES.md / WORKFLOW.md で足りる。必要時は .review/ を参照。 |
 | 実行基盤ごとの差分（Cursor/Claude Code/OpenAI/Gemini） | [.agents/platforms/README.md](.agents/platforms/README.md) および該当 platform ファイル |
 
 守るべきものは**ワークフロー・思想・概念・アーキテクチャ・哲学・フォーマット・成果物**。これらは CORE / WORKFLOW / CONCEPTS に集約している。
@@ -172,7 +172,7 @@ flowchart TD
 - **変更マップ・ワークフロー・思想**: [WORKFLOW](.agents/WORKFLOW.md)、[CONCEPTS](.agents/CONCEPTS.md)（まずここで「どこを変えるか」を把握）
 - **入口・絶対制約・読込順**: [CORE](.agents/boot/CORE.md)、[LOAD_POLICY](.agents/boot/LOAD_POLICY.md)、[EXECUTION_CONTRACT](.agents/boot/EXECUTION_CONTRACT.md)
 - **委譲・書記・ledger**: [delegate_to_sub](.agents/skills/agent/delegate_to_sub.md)、[書記役とログ委譲](.agents/scribe/書記役とログ委譲.md)、[ledger/README](.agents/ledger/README.md)、[workers/README](.agents/workers/README.md)
-- **実行・ドキュメント・レビュー・テスト・その他**: [RULES](.agents/RULES.md)、[WORKFLOW](.agents/WORKFLOW.md)、[CONCEPTS](.agents/CONCEPTS.md)。詳細は `_archive/rules/`（必要時のみ）。
+- **実行・ドキュメント・レビュー・テスト・その他**: [RULES](.agents/RULES.md)、[WORKFLOW](.agents/WORKFLOW.md)、[CONCEPTS](.agents/CONCEPTS.md)。詳細は RULES.md / WORKFLOW.md で足りる。必要時は .review/ を参照。
 
 ---
 

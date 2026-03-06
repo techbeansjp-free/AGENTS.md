@@ -108,11 +108,10 @@ stateDiagram-v2
 │       └── delegate_to_sub.md   # Task/Constraints/OutputSpec の組み立て
 ├── WORKFLOW.md                  # ワークフロー・成果物・監査（統合）
 ├── CONCEPTS.md                  # 思想・概念・哲学・観点（統合）
-├── RULES.md                     # 実行・ドキュメント・テスト・レビュー（統合。旧 rules/ は _archive/rules/）
+├── RULES.md                     # 実行・ドキュメント・テスト・レビュー（統合）。必要時は .review/ を参照
 ├── scribe/                      # 書記・ログ委譲（トレーサビリティ）
 │   ├── 書記役とログ委譲.md
 │   └── CONTRACT.md              # 書記が受け取るログのスキーマ（親→書記で固定）
-├── _archive/                    # 過去版・詳細（必要時のみ）rules, enforcement, prompts, guide, platform, reference 等
 └── human/                       # 人間向け（AI は参照しない）
     ├── 人間向け_開発規約.md
     └── 人間向け_実装原則.md
