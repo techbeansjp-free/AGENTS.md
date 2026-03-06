@@ -2,8 +2,8 @@
 -- workflow.db に適用。必ず .gitignore に workflow.db を追加すること。
 -- 参照: .agents/ledger/ワークフローログ_SQLiteスキーマ.md
 --
--- 既存 DB 移行時: NOT NULL 制約を追加する場合は、既存行に NULL があると ALTER が失敗する。
--- 手順: (1) カラムを NULL 許容で追加 (2) 既存行をバックフィル (3) NOT NULL を付与。
+-- 既存 DB 移行時: SQLite は ALTER COLUMN で NOT NULL 追加ができない。手順: (1) 新テーブルを CREATE TABLE AS または希望スキーマで作成
+-- (2) 既存データをコピー／バックフィル (3) 旧テーブルを RENAME して退避 (4) 新テーブルを execution_logs に RENAME (5) 旧テーブルを DROP。
 
 -- issue 一覧（全 issue に UUID を振る）
 CREATE TABLE IF NOT EXISTS issues (
@@ -21,10 +21,10 @@ CREATE TABLE IF NOT EXISTS execution_logs (
   timestamp    TEXT NOT NULL,
   agent_id     TEXT NOT NULL,
   action_type  TEXT NOT NULL,
-  target_artifact TEXT NOT NULL,  -- CONTRACT §2 必須。空禁止。
+  target_artifact TEXT NOT NULL CHECK (length(trim(target_artifact)) > 0),  -- CONTRACT §2 必須。空禁止。
   input_ref    TEXT,
   output_ref   TEXT,
-  summary      TEXT NOT NULL,     -- CONTRACT §2 必須。空禁止。
+  summary      TEXT NOT NULL CHECK (length(trim(summary)) > 0),     -- CONTRACT §2 必須。空禁止。
   error_flag   INTEGER DEFAULT 0,
   human_required INTEGER DEFAULT 0,
   created_at   TEXT NOT NULL
