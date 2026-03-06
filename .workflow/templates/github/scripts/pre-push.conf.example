@@ -13,6 +13,10 @@
 #
 # 例: タイムアウトを 600 秒に変更
 # PREPUSH_TIMEOUT_SEC=600
+#
+# 例: ログローテーション（pre-push.log の最大行数、pre-push-make-*.log の最大保持件数）
+# PREPUSH_LOG_MAX_LINES=5000
+# PREPUSH_MAKE_LOG_KEEP=30
 
 # PREPUSH_BACKEND_DIR=backend
 # PREPUSH_FRONTEND_DIR=frontend
@@ -20,3 +24,5 @@
 # PREPUSH_MAKE_BACKEND=test-backend
 # PREPUSH_MAKE_FRONTEND=test-frontend
 # PREPUSH_TIMEOUT_SEC=900
+# PREPUSH_LOG_MAX_LINES=5000
+# PREPUSH_MAKE_LOG_KEEP=30
