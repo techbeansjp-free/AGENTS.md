@@ -13,7 +13,6 @@
 ```markdown
 ---
 description: AGENTS 規約に従うとき、必ず実行前契約を守る。未読のまま作業開始禁止。
-globs: 
 alwaysApply: true
 ---
 

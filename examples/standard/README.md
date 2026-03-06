@@ -6,6 +6,8 @@
 
 ## コピペ手順（そのまま実行可能）
 
+既存プロジェクトの場合は先に `.workflow/00_システム理解.md` を作成し、システム概要を記載してから 00_要求定義 に進む。
+
 プロジェクトルートで次を実行してください。`AGENTS-spec` はこのリポジトリのルートのパスに置き換えてください。
 
 ```bash
@@ -20,7 +22,7 @@ mkdir -p .workflow
 cp -r AGENTS-spec/.workflow/templates .workflow/
 
 # 4. 新規 issue を 1 本作る例
-ISSUE_DIR=".workflow/$(date +%Y%m%d_%H%M%S)_my_issue"
+ISSUE_DIR=".workflow/$(TZ=Asia/Tokyo date +%Y%m%d_%H%M%S)_my_issue"
 mkdir -p "$ISSUE_DIR"
 cp .workflow/templates/00_要求定義.md "$ISSUE_DIR/"
 cp .workflow/templates/01_要件定義.md "$ISSUE_DIR/"

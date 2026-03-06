@@ -16,12 +16,12 @@ cp AGENTS-spec/COPY_TO_PROJECT_ROOT_AGENTS.md ./AGENTS.md
 cp -r AGENTS-spec/.agents ./
 
 # 3. （任意）issue 用フォルダを 1 つ作る
-mkdir -p .workflow/20260306_my_first_issue
+mkdir -p .workflow/20260306_120000_my_first_issue
 # 00_要求定義.md は AGENTS-spec/.workflow/templates/00_要求定義.md をコピーして編集
-cp AGENTS-spec/.workflow/templates/00_要求定義.md .workflow/20260306_my_first_issue/
+cp AGENTS-spec/.workflow/templates/00_要求定義.md .workflow/20260306_120000_my_first_issue/
 ```
 
-4. **AI に「agents に従って、.workflow/20260306_my_first_issue の 00_要求定義から進めて」と指示する。**
+4. **AI に「agents に従って、.workflow/20260306_120000_my_first_issue の 00_要求定義から進めて」と指示する。**
 
 以上で Minimal 構成で動きます。AI は AGENTS.md → CORE → LOAD_POLICY を読んでから作業します。
 

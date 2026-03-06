@@ -14,10 +14,7 @@
 
 ## 必須ルール
 
-- **最初に読む順序**: boot の実行前契約どおり（CORE → LOAD_POLICY → WORKFLOW → CONCEPTS）。Claude Code ではプロジェクトルートの AGENTS.md や .agents へのパスを明示するとよい。
-- **委譲の表現**: サブエージェントや別エージェント呼び出し時も、Task/Constraints/OutputSpec を共通契約の形式で渡す。長文の背景は載せない。
-- **ログ記録**: 書記サブに委譲。workflow.db への記録は書記のみ。CONTRACT §5 の暫定記録形式を守る。
-- **出力制約**: SILENT MODE・ファイル名 YYYYMMDD_HHMMSS_ プレフィックス・成果物の frontmatter は CORE のまま。
+共通仕様は boot（CORE / LOAD_POLICY / EXECUTION_CONTRACT）に従う。Claude Code では AGENTS.md および .agents へのパスを明示するとよい。
 
 ## 注意点
 
