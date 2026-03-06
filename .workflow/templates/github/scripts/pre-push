@@ -323,10 +323,11 @@ esac
 
 echo "pre-push: スコープ ${scope} → make ${make_target} を実行します。" >&2
 set +e
-run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target"
+run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target" >"$make_log" 2>&1
 ret=$?
 set -e
 if [[ $ret -ne 0 ]]; then
+  [[ -f "$make_log" ]] && tail -n 200 "$make_log" >&2
   if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
     ( echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=FAIL code=${ret}" >> "$log_file" ) || echo "pre-push: ログ追記に失敗: $log_file" >&2
   fi
