@@ -44,7 +44,7 @@
 - [ ] CORE / LOAD_POLICY / WORKFLOW / CONCEPTS の 4 ファイルを読了した（読了＝本ターンまたは直前ターンでコンテキストに含まれ参照可能な状態）。
 - [ ] 着手時、応答冒頭に 1 行以内の確認文を記載した（例: CORE/LOAD_POLICY/WORKFLOW/CONCEPTS に従い、…）。初回セッション・規約改訂後は省略を推奨しない。
 - [ ] SILENT MODE 時は先頭に `🧠 Mode: SILENT MODE`、会話は最大 15 行とした。
-- [ ] 対応は `.workflow/{YYYYMMDD_HHMMSS_issue名}/00_要求定義.md` から開始する。フェーズを飛ばさない。
+- [ ] 対応は `.workflow/{YYYYMMDD_HHMMSS_issue名}/00_要求定義.md` から開始する。既存プロジェクト導入時は `.workflow/00_システム理解.md` から開始し、完了後に 00_要求定義 に進む。フェーズを飛ばさない。
 
 ---
 

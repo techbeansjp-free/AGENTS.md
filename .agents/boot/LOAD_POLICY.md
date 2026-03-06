@@ -52,7 +52,7 @@
 | **ログ記録時**（書記へ委譲する前） | [書記役とログ委譲.md](../scribe/書記役とログ委譲.md)、[CONTRACT.md](../scribe/CONTRACT.md)、[ワークフローログ_SQLiteスキーマ.md](../ledger/ワークフローログ_SQLiteスキーマ.md) |
 | **誰が何を書けるか・ログ保存先** | [capabilities/POLICY.md](../capabilities/POLICY.md)、[ledger/README.md](../ledger/README.md) |
 | **記憶の参照・サニタイズ** | [MEMORY_POLICY.md](./MEMORY_POLICY.md) |
-| **監査時** | 当該 issue の 00_要求定義（ゴール）。[WORKFLOW.md](../WORKFLOW.md) の監査観点。監査は監査者サブに委譲し、メインはその結果に基づき完了判定を行う。03_実装計画の作成は実装者・テスト者に委譲し、完了後に監査者に 03 の監査を委譲する。 |
+| **監査時** | 当該 issue の 00_要求定義（ゴール）。[WORKFLOW.md](../WORKFLOW.md) の監査観点。監査は監査者サブに委譲し、メインはその結果に基づき完了判定を行う。02_設計は実装者に、03_実装計画の作成は実装者・テスト者に委譲し、完了後に監査者に 02・03 の監査を委譲する。実装フェーズの成果物も監査者に委譲する。 |
 | **レビュー時** | [RULES.md](../RULES.md)（レビュー節） |
 | **テスト作成時**（単体・結合・E2E を書くとき） | [テストコード_BDD形式.md](../テストコード_BDD形式.md)（Given/When/Then インライン必須）、[RULES.md](../RULES.md) 実装チェックリスト |
 | **実行基盤に応じて platform 差分を参照するとき** | [platforms/README.md](../platforms/README.md)、該当する [platforms/cursor.md](../platforms/cursor.md) または [claude_code.md](../platforms/claude_code.md) または [openai.md](../platforms/openai.md) または [gemini.md](../platforms/gemini.md) |
@@ -77,8 +77,9 @@
 |----------|------------------|------|
 | 00 要求定義・システム理解（既存時のみ） | 要件BDDリード | [workers/01_要件BDDリード.md](../workers/01_要件BDDリード.md) |
 | 01 要件定義・BDD | 要件BDDリード | [workers/01_要件BDDリード.md](../workers/01_要件BDDリード.md) |
-| 02 設計・実装・テスト | 実装者・テスト者（タスクに応じて） | [workers/03_実装者.md](../workers/03_実装者.md)、[workers/04_テスト者.md](../workers/04_テスト者.md) |
-| 03 実装計画・監査 | 監査者 | [workers/05_監査者.md](../workers/05_監査者.md) |
+| 02 設計 | 実装者（02_設計.md の作成）。完了後に監査者に 02 の監査を委譲 | [workers/03_実装者.md](../workers/03_実装者.md)、[workers/05_監査者.md](../workers/05_監査者.md) |
+| 03 実装計画 | 実装者・テスト者（03_実装計画.md の作成）。完了後に監査者に 03 の監査を委譲 | [workers/03_実装者.md](../workers/03_実装者.md)、[workers/04_テスト者.md](../workers/04_テスト者.md)、[workers/05_監査者.md](../workers/05_監査者.md) |
+| 実装・テスト | 実装者・テスト者（コード・テストの実作業）。完了後に監査者に実装成果物の監査を委譲 | [workers/03_実装者.md](../workers/03_実装者.md)、[workers/04_テスト者.md](../workers/04_テスト者.md)、[workers/05_監査者.md](../workers/05_監査者.md) |
 | 壁打ち・04 総合レビュー | 総合レビューリード | [workers/02_総合レビューリード.md](../workers/02_総合レビューリード.md) |
 | **ログ記録（毎回）** | **書記** | [workers/06_書記.md](../workers/06_書記.md)、[書記役とログ委譲.md](../scribe/書記役とログ委譲.md) |
 
