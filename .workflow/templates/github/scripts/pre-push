@@ -11,6 +11,9 @@
 #   PREPUSH_MAKE_FULL     - 全体テストの Make ターゲット（既定: test）
 #   PREPUSH_MAKE_BACKEND  - バックエンドのみの Make ターゲット（既定: test-backend）
 #   PREPUSH_MAKE_FRONTEND - フロントエンドのみの Make ターゲット（既定: test-frontend）
+# ログローテーション（設定ファイルまたは環境変数で上書き可能）
+#   PREPUSH_LOG_MAX_LINES   - pre-push.log の最大保持行数（超過時は古い行を削除）。既定: 5000
+#   PREPUSH_MAKE_LOG_KEEP   - 保持する pre-push-make-*.log の最大件数（採用先で make 出力をファイル保存する場合）。既定: 30
 # 設定ファイル（あれば上記を上書き）: scripts/pre-push.conf または .pre-push.conf（リポジトリルート）
 
 set -o pipefail
@@ -29,6 +32,8 @@ PREPUSH_FRONTEND_DIR="${PREPUSH_FRONTEND_DIR:-frontend}"
 PREPUSH_MAKE_FULL="${PREPUSH_MAKE_FULL:-test}"
 PREPUSH_MAKE_BACKEND="${PREPUSH_MAKE_BACKEND:-test-backend}"
 PREPUSH_MAKE_FRONTEND="${PREPUSH_MAKE_FRONTEND:-test-frontend}"
+PREPUSH_LOG_MAX_LINES="${PREPUSH_LOG_MAX_LINES:-5000}"
+PREPUSH_MAKE_LOG_KEEP="${PREPUSH_MAKE_LOG_KEEP:-30}"
 for f in "scripts/pre-push.conf" ".pre-push.conf"; do
   [[ -f "$f" ]] && { set +e; . "./$f" 2>/dev/null; set -e; break; }
 done
@@ -255,6 +260,10 @@ log_dir="${ROOT}/scripts/logs"
 log_file="${log_dir}/pre-push.log"
 if [[ -n "${ROOT:-}" ]]; then
   mkdir -p "$log_dir" 2>/dev/null || true
+  # pre-push.log ローテーション: 最大行数を超えていれば古い行を捨てる
+  if [[ -f "$log_file" ]] && [[ "$(wc -l < "$log_file" 2>/dev/null)" -gt "${PREPUSH_LOG_MAX_LINES:-5000}" ]]; then
+    tail -n "${PREPUSH_LOG_MAX_LINES:-5000}" "$log_file" > "${log_file}.rotated" 2>/dev/null && mv "${log_file}.rotated" "$log_file" 2>/dev/null || true
+  fi
   {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] scope=${scope}"
     echo "changed_files:"
