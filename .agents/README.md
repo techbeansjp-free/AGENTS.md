@@ -132,14 +132,14 @@ AI に規約を確実に守らせたい場合、[CURSOR_RULE_AGENTS_BOOT.md](./C
 1. **AGENTS-spec フォルダをプロジェクトルートにコピーする**（中に `.agents/` と `.workflow/templates/` が含まれた状態）。
 2. **`AGENTS-spec/COPY_TO_PROJECT_ROOT_AGENTS.md` をプロジェクトルートに `AGENTS.md` としてコピーする。**
 3. プロジェクトルートの `.workflow/` に issue 用ディレクトリを作成する。テンプレートは `AGENTS-spec/.workflow/templates/` を参照する。
-4. **workflow.db を使う場合**: プロジェクトの `.gitignore` に `workflow.db` を追加する。
+4. **workflow.db を使う場合**: workflow.db は `.workflow/` 直下に配置する。**AGENTS-spec には `.workflow/.gitignore`（`workflow.db`）が最初から含まれており**、`.workflow/` をコピーすれば無視される。ルートの `.gitignore` に `.workflow/workflow.db` を追加してもよい。
 
 **方法 B（中身をルートに展開）**: 規約の中身だけをプロジェクトルートに展開する。
 
 1. **AGENTS-spec の `.agents/` をそのままプロジェクトルートの `.agents/` にコピーする。**
 2. **ルートに `AGENTS.md` と `CLAUDE.md` を置く**（AGENTS-spec のものをコピーまたは参照）。
 3. **`.agents-project/`** を用意する場合、プロジェクト固有ルールのみ置く。`.agents-project/` は `.agents/` より優先される（AGENTS.md の規約どおり）。
-4. **workflow.db を使う場合**: プロジェクトの `.gitignore` に `workflow.db` を追加する（[ledger/README.md](./ledger/README.md)、[workers/README.md](./workers/README.md) 参照）。
+4. **workflow.db を使う場合**: workflow.db は `.workflow/` 直下に配置する。**AGENTS-spec には `.workflow/.gitignore`（`workflow.db`）が最初から含まれており**、`.workflow/` をコピーすれば無視される。ルートの `.gitignore` に `.workflow/workflow.db` を追加してもよい（[ledger/README.md](./ledger/README.md)、[workers/README.md](./workers/README.md) 参照）。
 5. **テンプレート**: `.workflow/templates/` は AGENTS-spec の `.workflow/templates/` をコピーして使用する。
 
 ---

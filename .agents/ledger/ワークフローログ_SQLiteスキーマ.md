@@ -6,9 +6,9 @@
 
 ## 1. 前提
 
-- **workflow.db** はプロジェクトルートまたは `.workflow/` 直下に配置。**必ず .gitignore に追加**し、Git 管理外とする。
+- **workflow.db** は **`.workflow/` 直下**に配置する（パス: `.workflow/workflow.db`）。**AGENTS-spec には `.workflow/.gitignore`（`workflow.db`）が最初から含まれており**、`.workflow/` をコピーすれば無視される。ルートの .gitignore に `.workflow/workflow.db` を追加してもよい。Git 管理外とする。
 - **SQLite の外部キー制約**: SQLite はデフォルトで `PRAGMA foreign_keys` が OFF のため、`execution_logs` の `REFERENCES issues(issue_id)` を有効にするには**接続ごとに** `PRAGMA foreign_keys = ON;` を実行すること。DB 接続直後（またはクライアントの接続オプション）で設定し、スキーマ初期化・マイグレーションスクリプトにも同 pragma を含めることを推奨する。
-- **受け入れ条件**: 「workflow.db を .gitignore に追加する」ことを **書記サブ導入タスク** または **初回セットアップ（SQLite 利用開始）タスク** の受け入れ条件に明示し、漏れを防ぐ。詳細は [workers/README](../workers/README.md) を参照。
+- **受け入れ条件**: 「workflow.db を Git 管理外にすること」（`.workflow/.gitignore` をコピーしているか、ルート .gitignore に `.workflow/workflow.db` を追加する）を **書記サブ導入タスク** または **初回セットアップ（SQLite 利用開始）タスク** の受け入れ条件に明示し、漏れを防ぐ。詳細は [workers/README](../workers/README.md) を参照。
 - 書記のみが INSERT。他は書記にログ項目を渡すだけ。書き込みはキュー＋単一書者で直列化する。
 
 ---

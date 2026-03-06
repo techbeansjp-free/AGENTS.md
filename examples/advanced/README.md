@@ -12,8 +12,8 @@ Standard の手順を実行したうえで、次を追加してください。
 # Standard の 1〜3 が完了している前提
 
 # 5. scribe / ledger は .agents に含まれる（cp -r AGENTS-spec/.agents で済んでいる）
-# 6. workflow.db を使う場合: .gitignore に追加
-echo "workflow.db" >> .gitignore
+# 6. workflow.db を使う場合: .workflow/ 直下に配置。AGENTS-spec の .workflow/.gitignore（workflow.db）をコピーしていれば無視される。ルートで無視したい場合は:
+# echo ".workflow/workflow.db" >> .gitignore
 
 # 7. （任意）.review をコピーする場合（規約全体のレビュー履歴用）
 cp -r AGENTS-spec/.review ./
@@ -22,7 +22,7 @@ cp -r AGENTS-spec/.review ./
 # AGENTS-spec/.workflow/templates/github/ を参照してプロジェクトに合わせて配置
 ```
 
-**workflow.db**: 初回は空でよい。書記サブがログを記録するときに [ledger/schema.sql](../../.agents/ledger/schema.sql) で DB を作成する。SQLite を使わない場合は [CONTRACT §5](../../.agents/scribe/CONTRACT.md) の暫定記録（memo）で代替可能。
+**workflow.db**: `.workflow/` 直下に配置する（`.workflow/workflow.db`）。初回は空でよい。書記サブがログを記録するときに [ledger/schema.sql](../../.agents/ledger/schema.sql) で DB を作成する。SQLite を使わない場合は [CONTRACT §5](../../.agents/scribe/CONTRACT.md) の暫定記録（memo）で代替可能。
 
 ---
 
