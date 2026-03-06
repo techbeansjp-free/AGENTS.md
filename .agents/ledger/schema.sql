@@ -18,10 +18,10 @@ CREATE TABLE IF NOT EXISTS execution_logs (
   timestamp    TEXT NOT NULL,
   agent_id     TEXT NOT NULL,
   action_type  TEXT NOT NULL,
-  target_artifact TEXT,
+  target_artifact TEXT NOT NULL,  -- CONTRACT §2 必須。空禁止。
   input_ref    TEXT,
   output_ref   TEXT,
-  summary      TEXT,
+  summary      TEXT NOT NULL,     -- CONTRACT §2 必須。空禁止。
   error_flag   INTEGER DEFAULT 0,
   human_required INTEGER DEFAULT 0,
   created_at   TEXT NOT NULL

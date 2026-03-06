@@ -1,8 +1,81 @@
-# AGENTS - アジャイル＋ BDD 駆動開発規約
+# AGENTS-spec — AI エージェント開発基盤
 
-> アジャイル＋ BDD 駆動の段階進行とファイル運用を強制する開発規約
+LLM エージェント（AI）と人間が協働するための**ワークフロー規約・テンプレート・実行基盤差分**をまとめた開発基盤です。アジャイル＋BDD 駆動の段階進行とファイル運用を強制し、Cursor / Claude Code / OpenAI / Gemini を跨いで同じ規約で動かせるようにしています。
 
-このリポジトリには、LLM エージェント（AI）と人間が協働して開発を進めるためのワークフロー規約とテンプレートが含まれています。
+---
+
+## これは何か
+
+- **AI エージェント向けの規約とテンプレートのセット**。プロジェクトにコピーして、AI に「agents に従って」と指示すると、ワークフロー（00_要求定義 → 01_要件定義 → 02_設計 → 03_実装計画 → 実装 → 04_review）に沿って動く。
+- **実行基盤ごとの差分**は [.agents/platforms/](./.agents/platforms/README.md) に分離しているため、共通仕様を 1 つに保ったまま Cursor / Claude Code / OpenAI / Gemini で使える。
+- **単なるプロンプト集ではなく**、boot（絶対制約・読込順）・workers（ロール）・scribe/ledger（ログ）・.workflow/templates まで揃った**開発フレームワーク**。
+
+---
+
+## 何を解決するか
+
+- **「AI に何を守らせるか」がバラける** → CORE と LOAD_POLICY で絶対制約と読む順序を固定。
+- **LLM やツールが違うとルールが分裂する** → platforms/ に実行基盤ごとの差分だけを書く Adapter 構成。
+- **issue 単位の証跡が残らない** → .workflow テンプレートと 00〜04 の成果物で証跡を残す。Advanced では workflow.db でログ一元化。
+
+---
+
+## 3 分で試す（最小導入手順）
+
+1. **このリポジトリをクローンまたはダウンロード**し、プロジェクトルートに `AGENTS-spec/` がある状態にする。
+2. **プロジェクトルートに AGENTS.md を 1 つ置く**  
+   `AGENTS-spec/COPY_TO_PROJECT_ROOT_AGENTS.md` の内容をコピーし、プロジェクトルートに **`AGENTS.md`** として保存する。
+3. **AI に「agents に従って、この issue の 00_要求定義から進めて」と指示する**  
+   AI は AGENTS.md → CORE → LOAD_POLICY を読んでから動く。issue 用フォルダは手動で `.workflow/20260306_my_issue/` のように作り、中に `00_要求定義.md` を 1 つ置けばよい（中身は [.workflow/templates/00_要求定義.md](./.workflow/templates/00_要求定義.md) をコピーして編集）。
+
+以上で **Minimal** 相当の「規約に従う AI」が動く。テンプレート一式や workers・ログを使う場合は下記 Standard/Advanced または [examples/](./examples/) を参照。
+
+---
+
+## minimal / standard / advanced の違い
+
+| レベル | 含まれるもの | 想定 |
+|--------|--------------|------|
+| **Minimal** | AGENTS.md、.agents/boot/、.agents/platforms/、delegate_to_sub・workers/README | 最小。AI が規約を読んで委譲の形だけ使う。 |
+| **Standard** | 上記 ＋ workers/、.workflow/templates/、skills/ | 通常の開発フロー。00〜04 とテンプレートで issue を進める。 |
+| **Advanced** | 上記 ＋ scribe/、ledger/（workflow.db）、.review/、GitHub/CI テンプレート | ログ一元化・監査・CI まで。 |
+
+実物の構成例: [examples/minimal/](./examples/minimal/)、[examples/standard/](./examples/standard/)、[examples/advanced/](./examples/advanced/)。
+
+---
+
+## 対応プラットフォーム
+
+| 実行基盤 | 対応 | 差分仕様 |
+|----------|------|----------|
+| **Cursor** | ○ | [.agents/platforms/cursor.md](./.agents/platforms/cursor.md) |
+| **Claude Code** | ○ | [.agents/platforms/claude_code.md](./.agents/platforms/claude_code.md) |
+| **OpenAI** | ○ | [.agents/platforms/openai.md](./.agents/platforms/openai.md) |
+| **Gemini** | ○ | [.agents/platforms/gemini.md](./.agents/platforms/gemini.md) |
+
+共通仕様は [.agents/boot/](./.agents/boot/) に 1 つのみ。各 platform ファイルには**差分だけ**を記載。
+
+---
+
+## 詳細はどこを読むか
+
+| 目的 | 読む順序 |
+|------|----------|
+| **初めて使う人** | 本 README → [AGENTS.md](./AGENTS.md) → 利用する実行基盤の [.agents/platforms/](./.agents/platforms/README.md) 該当ファイル |
+| **内部構造を理解したい人** | 本 README → [.agents/README.md](./.agents/README.md) → [.agents/boot/](./.agents/boot/) |
+| **コピペで導入したい人** | [examples/](./examples/) の該当レベル → 本 README の「プロジェクトにコピペするだけではじめ方」 |
+
+**各入口ファイルの責務（何を定義し、何を定義しないか）**:
+
+| ファイル | 責務 | 定義しないもの |
+|----------|------|----------------|
+| AGENTS.md | プロジェクトルートの最上位入口 | 内部構造の詳細（.agents/README へ） |
+| CLAUDE.md | Claude Code 利用者向け入口・セットアップ | 実行時の差分仕様（platforms/claude_code.md へ） |
+| .agents/README.md | .agents/ 内部構造の案内 | ルート入口（AGENTS.md へ） |
+| .agents/platforms/*.md | 実行基盤ごとの差分仕様のみ | 共通仕様の再記述（boot へ） |
+| .agents/boot/CORE.md | 絶対制約 | 判断観点の細則（RULES へ） |
+| .agents/RULES.md | 判断観点の要約・横断ルールの案内 | 絶対制約（CORE へ） |
+| .agents/capabilities/POLICY.md | 機能有効化・適用条件 | 絶対制約・ワークフロー（CORE/WORKFLOW へ） |
 
 ---
 
@@ -53,10 +126,9 @@
 
 - **`.agents/`** - 実行ルール・ガイドラインを格納するディレクトリ。汎用テンプレートとしてそのまま使う。
 - **`.agents-project/`** - プロジェクト固有ルールを置くディレクトリ。ここに置いたルールは `.agents/` より**優先**される。詳細は [`.agents-project/README.md`](./.agents-project/README.md) を参照。
-- **[`実行ルール.md`](./.agents/rules/実行ルール.md)** - LLM エージェント向け実行ルール
-  - 機械的に守るべきハード制約
-  - フェーズ別チェックリスト
-  - ドキュメント更新ルール
+- **[`.agents/RULES.md`](./.agents/RULES.md)** - 実行・ドキュメント・テスト・レビュー（統合）
+  - 機械的に守るべきハード制約・フェーズ・SILENT MODE
+  - ドキュメント・レビュー・テストの要点（詳細は `_archive/rules/`）
 
 - **[`CLAUDE.md`](./CLAUDE.md)** - CLAUDE.md の**汎用テンプレート**
   - 各プロジェクトのリポジトリルートにコピーし、プロジェクト概要・ビルドコマンド・重要な規約等を追記して利用する
@@ -77,7 +149,7 @@
 
 ### レビューディレクトリ
 
-AGENTS 規約とテンプレート全体のレビュー結果は [`.review/`](./.review/) ディレクトリで時系列管理します。
+AGENTS 規約とテンプレート全体のレビュー結果は [`_archive/.review/`](./_archive/.review/) で時系列管理（必要時のみ参照）。
 
 > **注意**: `.review/`ディレクトリのレビューは、各 issue/タスクのレビュー（`04_review.md`）とは異なります。
 >

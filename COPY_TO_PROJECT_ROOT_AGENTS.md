@@ -36,8 +36,7 @@
 ```
 .agents/
   boot/
-    SUBAGENT_MINIMUM.md
-    SUBAGENT_PACK.md
+    SUBAGENT.md
     TOOLS.md
     EXECUTION_CONTRACT.md
   skills/
@@ -163,7 +162,7 @@ CI で以下を監査し、違反があれば PR/Push を失敗させます。
 
 ### 変更してはいけない（壊れない条件）
 
-- `SUBAGENT_PACK` の注入順序
+- `SUBAGENT` の注入順序
 - `delegate_to_sub` の入口一本化
 - workflow.db 以外への書記の書き込み許可（誤検知時）
 - `SCRIBE CONTRACT` の必須キー削除
