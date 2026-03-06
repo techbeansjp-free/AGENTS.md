@@ -65,7 +65,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `.agents/WORKFLOW.md` - 工程の固定ゲート・提出物義務化・DoD（抜かさない運用）
 - `.agents/CONCEPTS.md` - 思想・観点・哲学
 - `.agents/RULES.md` - 実行・ドキュメント・テスト・レビュー（SILENT MODE・レビュー時は RULES のレビュー節を参照）
-- その他、`.agents/` 配下（構成は `.agents/README.md` 参照）。詳細は `_archive/`（必要時のみ）
+- その他、`.agents/` 配下（構成は `.agents/README.md` 参照）。詳細は .agents/ 配下の該当ファイルで足りる。必要時は .review/ を参照。
 
 ## 重要な規約（各リポジトリで追記）
 
