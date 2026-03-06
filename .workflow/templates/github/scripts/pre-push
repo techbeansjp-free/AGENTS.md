@@ -114,8 +114,8 @@ fi
 # stdin から local_ref local_sha remote_ref remote_sha を読む（複数行・新規 push 時は remote_sha が 0...）
 # 変更ファイルは一時ファイルに集約し、最後に sort -u（echo -e は環境差があるため使わない）
 : "${PREPUSH_TIMEOUT_SEC:=900}"
-# mktemp が IDE 環境等で失敗することがあるため、log_dir にフォールバック（ログが残らない原因の切り分け）
-tmp_files="$(mktemp 2>/dev/null)" || tmp_files="${log_dir}/pre-push.tmp.$$"
+# mktemp が IDE 環境等で失敗することがあるため、システム一時ディレクトリにフォールバック（log_dir はログ用のため push をブロックしない）
+tmp_files="$(mktemp 2>/dev/null)" || tmp_files="${TMPDIR:-/tmp}/pre-push.tmp.$$"
 if [[ ! -e "$tmp_files" ]]; then
   : > "$tmp_files" 2>/dev/null || { echo "pre-push: 一時ファイルを作成できません: $tmp_files" >&2; exit 1; }
 fi
@@ -270,9 +270,12 @@ scope="$(detect_scope "$changed_files")"
 # 切り分け用: scope 算出直後に 1 行だけ必ず追記（ここまで到達していればログに scope が残る）
 ( printf '[%s] scope=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$scope" >> "$PREPUSH_LOG_FILE" ) 2>/dev/null || true
 
-# ログ出力設定（scripts/logs/pre-push.log に結果を追記）。make の出力は pre-push-make-*.log に保存し失敗時に末尾を表示する。
+# ログ出力設定（scripts/logs/pre-push.log に結果を追記）。make の出力は pre-push-make-*.log に保存し失敗時に末尾を表示する。ログはベストエフォートのため、log_dir が使えない場合は make はログなしで実行する。
 log_file="$PREPUSH_LOG_FILE"
-make_log="${log_dir}/pre-push-make-$(date '+%Y%m%d-%H%M%S').log"
+make_log=""
+if [[ -d "$log_dir" && -w "$log_dir" ]]; then
+  make_log="${log_dir}/pre-push-make-$(date '+%Y%m%d-%H%M%S').log"
+fi
 if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
   # pre-push.log ローテーション: 最大行数を超えていれば古い行を捨てる
   if [[ -f "$log_file" ]] && [[ "$(wc -l < "$log_file" 2>/dev/null)" -gt "${PREPUSH_LOG_MAX_LINES:-5000}" ]]; then
@@ -323,11 +326,15 @@ esac
 
 echo "pre-push: スコープ ${scope} → make ${make_target} を実行します。" >&2
 set +e
-run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target" >"$make_log" 2>&1
+if [[ -n "$make_log" ]]; then
+  run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target" >"$make_log" 2>&1
+else
+  run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target"
+fi
 ret=$?
 set -e
 if [[ $ret -ne 0 ]]; then
-  [[ -f "$make_log" ]] && tail -n 200 "$make_log" >&2
+  [[ -n "$make_log" && -f "$make_log" ]] && tail -n 200 "$make_log" >&2
   if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
     ( echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=FAIL code=${ret}" >> "$log_file" ) || echo "pre-push: ログ追記に失敗: $log_file" >&2
   fi
