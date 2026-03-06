@@ -26,6 +26,15 @@ export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin:${PA
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
 cd "$ROOT" || exit 1
 
+# 起動時必ずログを試行（失敗時は stderr に出力。ログが残らない問題の切り分け用）
+log_dir="${ROOT}/scripts/logs"
+PREPUSH_LOG_FILE="${log_dir}/pre-push.log"
+if ! mkdir -p "$log_dir" 2>/dev/null; then
+  echo "pre-push: ログディレクトリを作成できません: $log_dir" >&2
+elif ! ( printf '[%s] pre-push started PWD=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$ROOT" >> "$PREPUSH_LOG_FILE" ) 2>/dev/null; then
+  echo "pre-push: ログファイルに書き込めません: $PREPUSH_LOG_FILE" >&2
+fi
+
 # 既定値（設定ファイルで上書き可能）
 PREPUSH_BACKEND_DIR="${PREPUSH_BACKEND_DIR:-backend}"
 PREPUSH_FRONTEND_DIR="${PREPUSH_FRONTEND_DIR:-frontend}"
@@ -105,7 +114,11 @@ fi
 # stdin から local_ref local_sha remote_ref remote_sha を読む（複数行・新規 push 時は remote_sha が 0...）
 # 変更ファイルは一時ファイルに集約し、最後に sort -u（echo -e は環境差があるため使わない）
 : "${PREPUSH_TIMEOUT_SEC:=900}"
-tmp_files="$(mktemp)" || exit 1
+# mktemp が IDE 環境等で失敗することがあるため、log_dir にフォールバック（ログが残らない原因の切り分け）
+tmp_files="$(mktemp 2>/dev/null)" || tmp_files="${log_dir}/pre-push.tmp.$$"
+if [[ ! -e "$tmp_files" ]]; then
+  : > "$tmp_files" 2>/dev/null || { echo "pre-push: 一時ファイルを作成できません: $tmp_files" >&2; exit 1; }
+fi
 empty_tree="$(git hash-object -t tree /dev/null 2>/dev/null)" || empty_tree=""
 running_mode=""   # "pgid" or "pid"（cleanup では片方だけ kill）
 running_pgid=""
@@ -254,22 +267,24 @@ fi
 changed_files="$(sort -u < "$tmp_files" | sed '/^$/d')"
 # 変更一覧が空の場合は安全側で full（新規 push で empty_tree 取得失敗等）
 scope="$(detect_scope "$changed_files")"
+# 切り分け用: scope 算出直後に 1 行だけ必ず追記（ここまで到達していればログに scope が残る）
+( printf '[%s] scope=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$scope" >> "${log_dir}/pre-push.log" ) 2>/dev/null || true
 
-# ログ出力設定（scripts/logs/pre-push.log に結果を追記）
-log_dir="${ROOT}/scripts/logs"
+# ログ出力設定（scripts/logs/pre-push.log に結果を追記）。書き込み失敗時は stderr に通知する。
 log_file="${log_dir}/pre-push.log"
-if [[ -n "${ROOT:-}" ]]; then
-  mkdir -p "$log_dir" 2>/dev/null || true
+if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
   # pre-push.log ローテーション: 最大行数を超えていれば古い行を捨てる
   if [[ -f "$log_file" ]] && [[ "$(wc -l < "$log_file" 2>/dev/null)" -gt "${PREPUSH_LOG_MAX_LINES:-5000}" ]]; then
     tail -n "${PREPUSH_LOG_MAX_LINES:-5000}" "$log_file" > "${log_file}.rotated" 2>/dev/null && mv "${log_file}.rotated" "$log_file" 2>/dev/null || true
   fi
-  {
+  if ! ( {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] scope=${scope}"
     echo "changed_files:"
     printf '%s\n' "$changed_files"
     echo
-  } >> "$log_file" 2>/dev/null || true
+  } >> "$log_file" ); then
+    echo "pre-push: ログ追記に失敗しました: $log_file" >&2
+  fi
 fi
 
 # docs_only / infra_only のときは make 不要（検証スキップのため）
@@ -304,12 +319,13 @@ run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target"
 ret=$?
 set -e
 if [[ $ret -ne 0 ]]; then
-  if [[ -n "${ROOT:-}" ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=FAIL code=${ret}" >> "$log_file" 2>/dev/null || true
+  if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
+    ( echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=FAIL code=${ret}" >> "$log_file" ) || echo "pre-push: ログ追記に失敗: $log_file" >&2
   fi
   echo "pre-push フックが失敗しました（終了コード ${ret}）。" >&2
+  [[ -d "$log_dir" ]] && echo "pre-push ログ: ${log_file}" >&2
   exit $ret
 fi
-if [[ -n "${ROOT:-}" ]]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=OK" >> "$log_file" 2>/dev/null || true
+if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
+  ( echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=OK" >> "$log_file" ) || echo "pre-push: ログ追記に失敗: $log_file" >&2
 fi

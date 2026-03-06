@@ -1,6 +1,7 @@
 # .agents ディレクトリ構成
 
 > プロジェクトに **AGENTS-spec をコピーしたらすぐ使える** ように、役割別にサブディレクトリで整理している。
+> **責務**: **.agents/README.md = .agents/ 配下の内部構造ガイド**。プロジェクトルート入口・人間と AI の導線は [AGENTS.md](../AGENTS.md) を参照。**定義しない**: 絶対制約・読込順（boot）、実行基盤差分（platforms）、判断観点の細則（RULES）。
 
 ---
 
@@ -77,7 +78,7 @@ stateDiagram-v2
 | 07 レビュー                  | 04_review.md                            | 総合レビューリード・監査者    |
 | 08 最終確認                  | 05\_最終確認チェックリスト.md           | 外部設定が必要な場合のみ      |
 
-詳細は [ワークフローとフェーズ定義](rules/ワークフローとフェーズ定義.md) を参照。
+詳細は [WORKFLOW](WORKFLOW.md) を参照。
 
 ---
 
@@ -92,8 +93,7 @@ stateDiagram-v2
 │   ├── TOOLS.md                 # 使えるツール要約
 │   ├── EXECUTION_CONTRACT.md    # 委譲の入出力（Task/Constraints/OutputSpec）
 │   ├── MEMORY_POLICY.md         # 記憶 2 層（raw/curated）・サニタイズ
-│   ├── SUBAGENT_MINIMUM.md      # サブ最小読込保証（サブのコンテキストに必ず含める）
-│   └── SUBAGENT_PACK.md         # サブに渡す固定パック（注入順序）
+│   └── SUBAGENT.md              # サブに渡す最小ルール・注入順序（1ファイル統合）
 ├── workers/                     # 6 人格の定義（IN/OUT）
 │   ├── README.md                # 一覧・フェーズ→worker 概要
 │   └── 01_要件BDDリード.md 〜 06_書記.md
@@ -106,41 +106,23 @@ stateDiagram-v2
 ├── skills/                      # 委譲・ドキュメント等のスキル
 │   └── agent/
 │       └── delegate_to_sub.md   # Task/Constraints/OutputSpec の組み立て
-├── rules/                       # 条件付き参照ルール（必要時のみ読む）
-│   ├── 実行ルール.md            # ハード制約・フェーズ・SILENT MODE
-│   ├── サブエージェント抜かし防止.md
-│   ├── レビュールール.md
-│   ├── コーディングルール.md
-│   ├── ドキュメントルール.md
-│   ├── テストガイドライン.md
-│   ├── Mermaid図ルール.md
-│   ├── Storybookルール.md
-│   ├── GitHub_Copilot対応.md
-│   ├── GitHub_CodeRabbit対応.md
-│   └── GitHub_PR指摘取得.md
+├── WORKFLOW.md                  # ワークフロー・成果物・監査（統合）
+├── CONCEPTS.md                  # 思想・概念・哲学・観点（統合）
+├── RULES.md                     # 実行・ドキュメント・テスト・レビュー（統合。旧 rules/ は _archive/rules/）
 ├── scribe/                      # 書記・ログ委譲（トレーサビリティ）
 │   ├── 書記役とログ委譲.md
 │   └── CONTRACT.md              # 書記が受け取るログのスキーマ（親→書記で固定）
-├── enforcement/                 # ルールが破れない仕組み（Claude/Cursor 別）
-│   ├── README.md
-│   ├── claude/                  # PreToolUse Write ガード仕様
-│   │   └── pretooluse_write_guard.md
-│   └── cursor/                  # 入口一本化・役割制約
-│       └── README.md
-├── prompts/                     # 初期化・Issue 実行用プロンプト
-│   ├── 初期化プロンプト.md
-│   └── Issue実行テンプレート.md
-├── guide/                       # 運用ガイド
-│   └── サイレントモードガイド.md
-├── platform/                    # Claude / Cursor 向け設定
-│   └── CLAUDE_サブエージェントとMCPおよびエージェントチーム.md
-├── reference/                   # 設計メモ・図解（参照用）
-│   ├── README.md
-│   └── DESIGN_NOTES.md          # 落とし穴・記憶・メイン/サブ境界の図
+├── _archive/                    # 過去版・詳細（必要時のみ）rules, enforcement, prompts, guide, platform, reference 等
 └── human/                       # 人間向け（AI は参照しない）
     ├── 人間向け_開発規約.md
     └── 人間向け_実装原則.md
 ```
+
+---
+
+## 強制力を高める（Cursor 利用時）
+
+AI に規約を確実に守らせたい場合、[CURSOR_RULE_AGENTS_BOOT.md](./CURSOR_RULE_AGENTS_BOOT.md) に記載のルール本文をプロジェクトの **`.cursor/rules/`** にコピーする。Cursor が常にそのルールをコンテキストに含めるため、4 ファイル（CORE / LOAD_POLICY / WORKFLOW / CONCEPTS）未読のまま作業を始めることを防ぎやすくなる。
 
 ---
 
@@ -165,9 +147,9 @@ stateDiagram-v2
 
 ## 参照の起点
 
-- **メインの入口**: [boot/CORE.md](./boot/CORE.md) と [boot/LOAD_POLICY.md](./boot/LOAD_POLICY.md) を最初に読む。
+- **メインの入口**: 実行前契約に従い、[CORE.md](./boot/CORE.md) → [LOAD_POLICY.md](./boot/LOAD_POLICY.md) → [WORKFLOW.md](./WORKFLOW.md) → [CONCEPTS.md](./CONCEPTS.md) の 4 つを必ず読了してから作業する。**強制力アップ**: [CURSOR_RULE_AGENTS_BOOT.md](./CURSOR_RULE_AGENTS_BOOT.md) を `.cursor/rules/` にコピーすると未読で作業開始することを防ぎやすい。
 - **委譲**: [boot/EXECUTION_CONTRACT.md](./boot/EXECUTION_CONTRACT.md)、[skills/agent/delegate_to_sub.md](./skills/agent/delegate_to_sub.md)、[workers/README.md](./workers/README.md)。
 - **トレーサビリティ**: [scribe/書記役とログ委譲.md](./scribe/書記役とログ委譲.md)、[ledger/README.md](./ledger/README.md)。
-- **ハード制約・フェーズ**: [rules/実行ルール.md](./rules/実行ルール.md)。
+- **ハード制約・フェーズ**: [RULES.md](./RULES.md)、[WORKFLOW.md](./WORKFLOW.md)。
 
 すべての参照パスは **この構成を前提とした相対パス** で記載している。コピー後はパス変更不要。

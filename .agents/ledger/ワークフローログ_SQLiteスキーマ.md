@@ -32,10 +32,10 @@ CREATE TABLE IF NOT EXISTS execution_logs (
   timestamp    TEXT NOT NULL,   -- ISO8601
   agent_id     TEXT NOT NULL,   -- 人格識別子（要件/BDDリード, 実装者, 書記 等）
   action_type  TEXT NOT NULL,   -- 実装 / レビュー / 監査 / 壁打ち / ログ記録 等
-  target_artifact TEXT,        -- 対象成果物（ファイルパス等）
-  input_ref    TEXT,            -- 入力参照
-  output_ref   TEXT,            -- 出力参照
-  summary      TEXT,            -- 人間が読む用の短い説明
+  target_artifact TEXT NOT NULL, -- 対象成果物（CONTRACT §2 必須・空禁止）
+  input_ref    TEXT,             -- 入力参照
+  output_ref   TEXT,             -- 出力参照
+  summary      TEXT NOT NULL,    -- 人間が読む用の要約（CONTRACT §2 必須・空禁止）
   error_flag   INTEGER DEFAULT 0,        -- 0=正常, 1=エラー
   human_required INTEGER DEFAULT 0,     -- 0=不要, 1=人間介入要（MVP ではフラグのみ、通知は将来拡張）
   created_at   TEXT NOT NULL
@@ -50,23 +50,20 @@ CREATE INDEX IF NOT EXISTS idx_logs_ts ON execution_logs(timestamp);
 
 ## 3. ログ必須項目（書記が受け取るペイロード）
 
-他サブまたはメインから書記に渡す **1 件分のログ項目** の最小セット。
+**正本は [scribe/CONTRACT](../scribe/CONTRACT.md) §2 のみ。** メインは CONTRACT §2 の JSON 形式で書記に渡す。本節はスキーマとの対応を示すのみ。必須・任意の区別は CONTRACT に従う。
 
-| 項目 | 必須 | 説明 |
-|------|------|------|
-| issue_id | 必須 | 対象 issue の UUID。 |
-| timestamp | 必須 | 実行時刻（ISO8601 推奨）。 |
-| created_at | 必須 | 記録日時（ISO8601）。execution_logs.created_at にそのまま格納。 |
-| agent_id | 必須 | 実行した人格（要件/BDDリード, 実装者, テスト者, 監査者, 総合レビューリード, 書記 等）。 |
-| action_type | 必須 | 実装 / レビュー / 監査 / 壁打ち / ログ記録 等。 |
-| target_artifact | 任意 | 対象成果物（例: 02_設計.md, src/foo.ts）。 |
-| input_ref | 任意 | 入力として参照した成果物・パス。 |
-| output_ref | 任意 | 出力として生成・更新した成果物・パス。 |
-| summary | 任意 | 人間が読む用の 1〜2 文。 |
-| error_flag | 任意 | 0=正常, 1=エラー。失敗時は 1。 |
-| human_required | 任意 | 0=不要, 1=人間介入要。MVP ではリトライ 2 回目失敗時に 1 を立て、通知は将来拡張。 |
+| 項目 | CONTRACT | 説明 |
+|------|----------|------|
+| issue_id | 必須 | 対象 issue の識別子。 |
+| timestamp | 必須 | 実行時刻（ISO8601）。 |
+| created_at | 必須 | 記録日時（ISO8601）。書記が補完可。 |
+| agent_id | 必須 | 実行した人格。 |
+| action_type | 必須 | CONTRACT §4・EXECUTION_CONTRACT §2.1 に従う。plan / execute / review またはフェーズ名。 |
+| target_artifact | 必須 | 主な対象成果物。空禁止。 |
+| summary | 必須 | 要約（3 行以内）。空禁止。 |
+| input_ref, output_ref, error_flag, human_required | 任意 | 同上。 |
 
-書記は上記を受け取り、`execution_logs` に 1 行 INSERT する。
+書記は CONTRACT §2 のペイロードを受け取り、`execution_logs` に 1 行 INSERT する。**ログの書き方にブレを出さないため、CONTRACT 以外の形式で渡してはならない。**
 
 ---
 
