@@ -270,13 +270,21 @@ scope="$(detect_scope "$changed_files")"
 # 切り分け用: scope 算出直後に 1 行だけ必ず追記（ここまで到達していればログに scope が残る）
 ( printf '[%s] scope=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$scope" >> "${log_dir}/pre-push.log" ) 2>/dev/null || true
 
-# ログ出力設定（scripts/logs/pre-push.log に結果を追記）。書き込み失敗時は stderr に通知する。
+# ログ出力設定（scripts/logs/pre-push.log に結果を追記）。make の出力は pre-push-make-*.log に保存し失敗時に末尾を表示する。
 log_file="${log_dir}/pre-push.log"
+make_log="${log_dir}/pre-push-make-$(date '+%Y%m%d-%H%M%S').log"
 if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
   # pre-push.log ローテーション: 最大行数を超えていれば古い行を捨てる
   if [[ -f "$log_file" ]] && [[ "$(wc -l < "$log_file" 2>/dev/null)" -gt "${PREPUSH_LOG_MAX_LINES:-5000}" ]]; then
     tail -n "${PREPUSH_LOG_MAX_LINES:-5000}" "$log_file" > "${log_file}.rotated" 2>/dev/null && mv "${log_file}.rotated" "$log_file" 2>/dev/null || true
   fi
+  # 古い pre-push-make-*.log を削除（新しい方から KEEP 件だけ残す。Linux/macOS 両対応）
+  # while read は入力が空だと EOF で終了コード 1 を返すため、set -e でスクリプトが落ちないよう || true する
+  _keep="${PREPUSH_MAKE_LOG_KEEP:-30}"
+  (cd "$log_dir" && for f in pre-push-make-*.log; do [[ -f "$f" ]] && echo "$f"; done) 2>/dev/null | \
+    sort -t- -k4,5n -r 2>/dev/null | tail -n +$(( _keep + 1 )) | while read -r _f; do
+      [[ -n "$_f" ]] && rm -f "${log_dir}/${_f}" 2>/dev/null || true
+    done || true
   if ! ( {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] scope=${scope}"
     echo "changed_files:"
