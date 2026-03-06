@@ -281,7 +281,7 @@ if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
   # 古い pre-push-make-*.log を削除（新しい方から KEEP 件だけ残す。Linux/macOS 両対応）
   # while read は入力が空だと EOF で終了コード 1 を返すため、set -e でスクリプトが落ちないよう || true する
   _keep="${PREPUSH_MAKE_LOG_KEEP:-30}"
-  (cd "$log_dir" && for f in pre-push-make-*.log; do [[ -f "$f" ]] && echo "$f"; done) 2>/dev/null | \
+  (cd "$log_dir" && shopt -s nullglob && for f in pre-push-make-*.log; do echo "$f"; done) 2>/dev/null | \
     sort -r 2>/dev/null | tail -n +$(( _keep + 1 )) | while read -r _f; do
       [[ -n "$_f" ]] && rm -f "${log_dir}/${_f}" 2>/dev/null || true
     done || true
