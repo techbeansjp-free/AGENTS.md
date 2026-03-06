@@ -39,7 +39,7 @@ Cursor / Claude Code / OpenAI / Gemini など、実行基盤が異なっても�
 
 共通規約（CORE/RULES）では「書記が workflow.db に記録したことが確認できること」のみを要求する。具体的な確認手段は実行基盤・環境により異なる。
 
-- **SQLite に直接アクセスできる環境**（例: Cursor、Claude Code でプロジェクトルートの workflow.db を参照できる場合）: 可能であれば当該 issue_id の直近記録を確認する例として、`sqlite3 workflow.db "SELECT * FROM execution_logs WHERE issue_id='<issue_id>' ORDER BY created_at DESC LIMIT 1"` を実行できる。書記の確認メッセージを以て足りる運用でもよい。
+- **SQLite に直接アクセスできる環境**（例: Cursor、Claude Code で `.workflow/workflow.db` を参照できる場合）: 可能であれば当該 issue_id の直近記録を確認する例として、`sqlite3 .workflow/workflow.db "SELECT * FROM execution_logs WHERE issue_id='<issue_id>' ORDER BY created_at DESC LIMIT 1"` を実行できる。書記の確認メッセージを以て足りる運用でもよい。
 - **DB に直接アクセスしない環境**（例: 一部の OpenAI / Gemini 利用形態）: 書記サブの応答（記録済みの確認メッセージ）を以て「確認できた」とみなす。
 
 ---

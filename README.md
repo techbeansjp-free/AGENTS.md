@@ -93,7 +93,7 @@ LLM エージェント（AI）と人間が協働するための**ワークフロ
    issue を開始するときに、`AGENTS-spec/.workflow/templates/` 内のテンプレートを参照して、プロジェクトルートの `.workflow/{YYYYMMDD_HHMMSS_issue_name}/` を作成し、その中に `00_要求定義.md` 等を配置する。初回用に `AGENTS-spec/.workflow/templates/` をプロジェクトの `.workflow/templates/` にコピーして使ってもよい。
 
 4. **workflow.db を使う場合**  
-   プロジェクトルートの `.gitignore` に `workflow.db` を追加する（[.agents/ledger/README.md](./.agents/ledger/README.md) 参照）。
+   workflow.db は `.workflow/` 直下に配置する。**AGENTS-spec には `.workflow/.gitignore`（`workflow.db`）が最初から含まれており**、`.workflow/` をコピーすれば無視される。ルートの `.gitignore` に `.workflow/workflow.db` を追加してもよい（[.agents/ledger/README.md](./.agents/ledger/README.md) 参照）。
 
 以上で、メインは `AGENTS-spec/.agents/boot/CORE.md` と `LOAD_POLICY.md` を読み、`.workflow/` はプロジェクトルートの `.workflow/` を参照してサブエージェント運用が動作する。
 
@@ -104,7 +104,7 @@ LLM エージェント（AI）と人間が協働するための**ワークフロ
 1. **プロジェクトルート直下に `AGENTS.md` がある**（中身は `COPY_TO_PROJECT_ROOT_AGENTS.md` 由来であること）
 2. **`AGENTS-spec/.agents/boot/CORE.md` と `LOAD_POLICY.md` が起点として読まれる設計**になっている（ルートの AGENTS.md から参照されていること）
 3. **`.workflow/` をプロジェクトルートに作って issue を切れる**（テンプレは `AGENTS-spec/.workflow/templates/` を参照できること）
-4. （任意）workflow.db を使うなら `.gitignore` に `workflow.db` を追加済みであること
+4. （任意）workflow.db を使うなら `.workflow/` 直下に配置し、workflow.db が Git 管理外であること（`.workflow/.gitignore` をコピーしているか、ルート .gitignore に `.workflow/workflow.db` を追加）
 
 ### 注意（コピペ運用で壊れやすい点）
 
