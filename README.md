@@ -311,7 +311,7 @@ LLM エージェントがこの規約に従って動作する場合は、**[`.ag
 - 出力の先頭に `🧠 Mode: SILENT MODE` を**必ず**付与する
 - 詳細は必ずリポジトリ内のファイルに書く（`.workflow/`、`docs/run/`、`memo/` など）
 
-詳細は [`サイレントモードガイド.md`](./.agents/guide/サイレントモードガイド.md) を参照してください。
+詳細は [`.agents/RULES.md`](./.agents/RULES.md) および本 README の「絶対に守ること」を参照してください。
 
 ---
 
@@ -334,11 +334,9 @@ LLM エージェントがこの規約に従って動作する場合は、**[`.ag
 - [`AGENTS.md`](./AGENTS.md) - 開発規約の完全版
 - [`.agents/RULES.md`](./.agents/RULES.md) - 判断観点と横断ルールの案内（CORE/LOAD_POLICY を読んだ後に参照）
 
-### SILENT MODE 関連ドキュメント
+### SILENT MODE・実行時の参照
 
-- [`サイレントモードガイド.md`](./.agents/guide/サイレントモードガイド.md) - SILENT MODE 運用ガイド（省トークン運用）
-- [`初期化プロンプト.md`](./.agents/prompts/初期化プロンプト.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
-- [`Issue実行テンプレート.md`](./.agents/prompts/Issue実行テンプレート.md) - Issue 実行テンプレート（1行指示パターン）
+- [`.agents/RULES.md`](./.agents/RULES.md) - 実行・確認義務・SILENT MODE の要点。チェックリストと判断観点。
 
 ### その他の規約ドキュメント
 
@@ -353,4 +351,4 @@ LLM エージェントがこの規約に従って動作する場合は、**[`.ag
 
 ## 📅 最終更新
 
-2026 年 3 月 7 日（AGENTS-spec 簡素化・責務固定、実行基盤差分の platforms 分離、OSS 向け入口整備、PR#2 指摘対応）
+2026 年 3 月 7 日（AGENTS-spec 簡素化・責務固定、実行基盤差分の platforms 分離、OSS 向け入口整備、PR#2 指摘対応。内容更新は PR マージまで継続）
