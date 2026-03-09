@@ -32,10 +32,10 @@ CREATE TABLE IF NOT EXISTS execution_logs (
   timestamp    TEXT NOT NULL,   -- ISO8601
   agent_id     TEXT NOT NULL,   -- 人格識別子（要件/BDDリード, 実装者, 書記 等）
   action_type  TEXT NOT NULL,   -- 実装 / レビュー / 監査 / 壁打ち / ログ記録 等
-  target_artifact TEXT NOT NULL, -- 対象成果物（CONTRACT §2 必須・空禁止）
+  target_artifact TEXT NOT NULL CHECK (length(trim(target_artifact)) > 0), -- 対象成果物（CONTRACT §2 必須・空禁止）
   input_ref    TEXT,             -- 入力参照
   output_ref   TEXT,             -- 出力参照
-  summary      TEXT NOT NULL,    -- 人間が読む用の要約（CONTRACT §2 必須・空禁止）
+  summary      TEXT NOT NULL CHECK (length(trim(summary)) > 0),    -- 人間が読む用の要約（CONTRACT §2 必須・空禁止）
   error_flag   INTEGER DEFAULT 0,        -- 0=正常, 1=エラー
   human_required INTEGER DEFAULT 0,     -- 0=不要, 1=人間介入要（MVP ではフラグのみ、通知は将来拡張）
   created_at   TEXT NOT NULL
@@ -67,7 +67,20 @@ CREATE INDEX IF NOT EXISTS idx_logs_ts ON execution_logs(timestamp);
 
 ---
 
-## 4. エラー時（MVP）
+## 4. マイグレーション（既存 DB に CHECK を追加する場合）
+
+SQLite では既存テーブルに `CHECK` 制約を後から追加する `ALTER TABLE` ができない。既存の workflow.db に `target_artifact` / `summary` の空文字禁止を適用する場合は、次の手順を SQLite 上で行う。
+
+1. 新テーブル `execution_logs_new` を上記 §2 の DDL と同様の定義（CHECK 含む）で作成する。
+2. `PRAGMA foreign_keys = OFF;` のうえで、既存 `execution_logs` から `execution_logs_new` へデータをコピーする（空文字・空白のみの行は CONTRACT 違反のため修正するか除外する）。
+3. 既存テーブルを `DROP` し、`execution_logs_new` を `ALTER TABLE ... RENAME TO execution_logs` する。
+4. インデックスを再作成する。`PRAGMA foreign_keys = ON;` を再設定する。
+
+新規に workflow.db を作る場合は、§2 の DDL をそのまま実行すればよい。
+
+---
+
+## 5. エラー時（MVP）
 
 - サブが失敗 → 同一入力で **1 回だけリトライ**。
 - 2 回目も失敗 → **そのフェーズを停止**。書記がログに 1 件書き、`error_flag=1`, `human_required=1` を設定。メインは次フェーズに進まない。
@@ -75,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_logs_ts ON execution_logs(timestamp);
 
 ---
 
-## 5. 参照
+## 6. 参照
 
 - 書記役ルール: [書記役とログ委譲](../scribe/書記役とログ委譲.md)
 - MVP 確定: 常時ロード廃止 issue の「意思決定用 2d. MVP 確定案」を参照。

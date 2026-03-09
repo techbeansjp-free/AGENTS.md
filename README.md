@@ -36,7 +36,7 @@ LLM エージェント（AI）と人間が協働するための**ワークフロ
 
 | レベル | 含まれるもの | 想定 |
 |--------|--------------|------|
-| **Minimal** | AGENTS.md、.agents/boot/、.agents/platforms/、delegate_to_sub・workers/README | 最小。AI が規約を読んで委譲の形だけ使う。 |
+| **Minimal** | AGENTS.md、.agents/boot/、.agents/platforms/、delegate_to_sub・[workers/README](./.agents/workers/README.md)（役割一覧のみ参照可） | 最小。AI が規約を読んで委譲の形だけ使う。workers の詳細定義は Standard で利用。 |
 | **Standard** | 上記 ＋ workers/、.workflow/templates/、skills/ | 通常の開発フロー。00〜04 とテンプレートで issue を進める。 |
 | **Advanced** | 上記 ＋ scribe/、ledger/（workflow.db）、.review/、GitHub/CI テンプレート | ログ一元化・監査・CI まで。 |
 

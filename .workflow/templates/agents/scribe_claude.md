@@ -26,6 +26,16 @@ You have no other responsibility. Return a brief confirmation (e.g. "Logged unde
 
 ---
 
+## 前のステップ（Previous step）
+
+親エージェント（メイン）が、CONTRACT §2 の形式でログ 1 件分のペイロード（issue_id, agent_id, action_type, target_artifact, summary 等）を組み立て、書記サブを呼び出す。
+
+## 次のステップ（Next step）
+
+書記は workflow.db に 1 件 INSERT したあと、親エージェントへ短い確認メッセージ（例: "Logged under issue_id=...") を返す。親は次フェーズ判定・次の委譲に進む。
+
+---
+
 ## PreToolUse フック
 
 ガード JSON の **Bash.allow** に **sqlite3** を指定し、書記が workflow.db にのみ INSERT できるようにする。厳格化する場合は、許可するコマンドを `sqlite3 ./.workflow/workflow.db`（または絶対パス）に限定する実装とする。Claude Code の [PreToolUse](https://code.claude.com/docs/ja/sub-agents#define-hooks-for-subagents) を参照。
