@@ -5,6 +5,9 @@
 # テンプレート: AGENTS-spec .workflow/templates/github/scripts/pre-push
 # 採用先では リポジトリルートの scripts/pre-push にコピーし、必要なら scripts/pre-push.conf でカスタマイズする。
 #
+# 注意: 本スクリプトが書き出す scripts/logs/ のログは**ローカル検証・デバッグ用**であり、
+#       ワークフロー契約（CONTRACT / workflow.db）のログとは別物である。トレーサビリティの正本は workflow.db のみ。
+#
 # 汎用版。次の環境変数または設定ファイルでカスタマイズ可能。
 #   PREPUSH_BACKEND_DIR   - バックエンドのパス接頭辞（既定: backend）
 #   PREPUSH_FRONTEND_DIR  - フロントエンドのパス接頭辞（既定: frontend）
