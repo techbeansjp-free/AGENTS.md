@@ -74,6 +74,8 @@ LLM エージェント（AI）と人間が協働するための**ワークフロ
 | .agents/README.md | .agents/ 内部構造の案内 | ルート入口（AGENTS.md へ） |
 | .agents/platforms/*.md | 実行基盤ごとの差分仕様のみ | 共通仕様の再記述（boot へ） |
 | .agents/boot/CORE.md | 絶対制約 | 判断観点の細則（RULES へ） |
+| .agents/boot/LOAD_POLICY.md | 読込順序・最小ロード集合・委譲前提 | フェーズ定義や判断観点の詳細（WORKFLOW/RULES へ） |
+| .agents/WORKFLOW.md | フェーズ順・DoD・進行ルール | 絶対制約や読込順序（CORE/LOAD_POLICY へ） |
 | .agents/RULES.md | 判断観点の要約・横断ルールの案内 | 絶対制約（CORE へ） |
 | .agents/capabilities/POLICY.md | 機能有効化・適用条件 | 絶対制約・ワークフロー（CORE/WORKFLOW へ） |
 
