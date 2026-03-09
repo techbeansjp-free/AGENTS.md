@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_logs_ts ON execution_logs(timestamp);
 | timestamp | 必須 | 実行時刻（ISO8601）。 |
 | created_at | 必須 | 記録日時（ISO8601）。書記が補完可。 |
 | agent_id | 必須 | 実行した人格。 |
-| action_type | 必須 | CONTRACT §4・EXECUTION_CONTRACT §2.1 に従う。plan / execute / review またはフェーズ名。 |
+| action_type | 必須 | CONTRACT §2 および [EXECUTION_CONTRACT §2.1](../boot/EXECUTION_CONTRACT.md) に従う。plan / execute / review またはフェーズ名。 |
 | target_artifact | 必須 | 主な対象成果物。空禁止。 |
 | summary | 必須 | 要約（3 行以内）。空禁止。 |
 | input_ref, output_ref, error_flag, human_required | 任意 | 同上。 |
@@ -69,12 +69,14 @@ CREATE INDEX IF NOT EXISTS idx_logs_ts ON execution_logs(timestamp);
 
 ## 4. マイグレーション（既存 DB に CHECK を追加する場合）
 
-SQLite では既存テーブルに `CHECK` 制約を後から追加する `ALTER TABLE` ができない。既存の workflow.db に `target_artifact` / `summary` の空文字禁止を適用する場合は、次の手順を SQLite 上で行う。
+SQLite では既存テーブルに `CHECK` 制約を後から追加する `ALTER TABLE` ができない。既存の workflow.db に `target_artifact` / `summary` の空文字禁止を適用する場合は、`PRAGMA foreign_keys = OFF;` を設定したうえで**トランザクション内**で次の手順を SQLite 上で行う。
 
+0. `BEGIN IMMEDIATE;` を実行する。
 1. 新テーブル `execution_logs_new` を上記 §2 の DDL と同様の定義（CHECK 含む）で作成する。
-2. `PRAGMA foreign_keys = OFF;` のうえで、既存 `execution_logs` から `execution_logs_new` へデータをコピーする（空文字・空白のみの行は CONTRACT 違反のため修正するか除外する）。
+2. 既存 `execution_logs` から `execution_logs_new` へデータをコピーする（空文字・空白のみの行は CONTRACT 違反のため修正するか除外する）。
 3. 既存テーブルを `DROP` し、`execution_logs_new` を `ALTER TABLE ... RENAME TO execution_logs` する。
-4. インデックスを再作成する。`PRAGMA foreign_keys = ON;` を再設定する。
+4. インデックスを再作成する。
+5. `COMMIT;` を実行し、その後 `PRAGMA foreign_keys = ON;` を再設定する。途中で失敗した場合は `ROLLBACK;` してから再試行する。
 
 新規に workflow.db を作る場合は、§2 の DDL をそのまま実行すればよい。
 
