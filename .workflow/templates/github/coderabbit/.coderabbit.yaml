@@ -15,7 +15,7 @@ reviews:
     - "!docs/00_review/**"
     - "!AGENTS.md"
     - "!CLAUDE.md"
-    - "!COPY_TO_PROJECT_ROOT_AGENTS.md"
+    - "!COPY_TO_PROJECT_ROOT.md"
     - "!output_*.py"
   # 日本語でレビューコメントするよう明示（language の補足）
   path_instructions:

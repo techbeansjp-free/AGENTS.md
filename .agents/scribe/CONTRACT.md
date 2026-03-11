@@ -1,112 +1,88 @@
-# SCRIBE CONTRACT - 書記契約（ログ保存の唯一の正本）
+# 書記 I/O 契約（一枚）
 
-書記は「**ログのみ**」を書く。ログは **1 回の呼び出しで 1 件のみ**。
-
-**ログの書き方・ペイロード形式は本 CONTRACT にのみ従う。** 他ファイルは本 CONTRACT を参照し、別の形式（省略形・別名・任意項目の必須化）で定義してはならない。
-
-**ログとそれ以外の memo の区別**: ログとして扱う記録は、workflow.db に記録されたもの、または本 §5 形式の memo のみとする。それ以外の memo（作業メモ等）はトレーサビリティの証跡には用いない。
+**書記（scribe）の入出力・保存先・呼び出し条件を一意に定める。** 実装は skills/logging/write-workflow-log が従う。
 
 ---
 
-## 1. ログ保存先（固定）
+## 誰が呼べるか
 
-- **workflow.db（SQLite）のみ**。`.workflow/**/logs/` は廃止・使用禁止。
-- 書記未使用時の暫定記録は §5 のフォーマットにのみ従う。
+| 呼び出し元 | 条件 |
+|------------|------|
+| **orchestrator（親）** | 検証・クローズや phase 完了時に**必ず**書記へ委譲する。書記未実行のまま次 Task に進んではならない。enforcement で拒否する。 |
+| **単体 capability として** | LOAD_POLICY の「単体 capability」に従い、write-workflow-log を呼ぶ場合のみ。 |
 
 ---
 
-## 2. メイン→書記に渡すペイロード（固定・この形式のみ）
+## 何を受け取るか（入力）
 
-メインが書記サブにログ 1 件を委譲するとき、**次の JSON 形式のみ**を使用する。キー名・必須の有無を変えてはならない。
-
-```json
-{
-  "issue_id": "<対象 issue の UUID または task_id>",
-  "timestamp": "<ISO8601。実行時刻。JST 推奨>",
-  "created_at": "<ISO8601。記録日時。書記が省略時は記録時点で補完可>",
-  "agent_id": "<実行した人格。要件BDDリード|実装者|テスト者|監査者|総合レビューリード|書記>",
-  "action_type": "<EXECUTION_CONTRACT §2.1 の表に従う。plan|execute|review または 00_要求定義 等>",
-  "target_artifact": "<主な対象成果物のパスまたは論理名。空文字禁止>",
-  "summary": "<3 行以内の要約。空文字禁止>",
-  "input_ref": "<任意。入力参照>",
-  "output_ref": "<任意。出力参照>",
-  "error_flag": 0,
-  "human_required": 0
-}
-```
-
-| キー | 必須 | 説明 |
+| 項目 | 必須 | 説明 |
 |------|------|------|
-| issue_id | 必須 | 対象 issue の識別子。 |
-| timestamp | 必須 | 実行時刻（ISO8601）。 |
-| created_at | 必須 | 記録日時（ISO8601）。書記が記録時に補完してよい。 |
-| agent_id | 必須 | 実行した人格。 |
-| action_type | 必須 | [EXECUTION_CONTRACT §2.1](../boot/EXECUTION_CONTRACT.md) の phase→action_type 表に従う。`plan` / `execute` / `review` またはフェーズ名（`00_要求定義` / `01_要件定義` 等）。 |
-| target_artifact | 必須 | 主な対象成果物。パスまたは論理名。空は禁止。 |
-| summary | 必須 | 人間が読む用の要約。3 行以内。空は禁止。 |
-| input_ref, output_ref, error_flag, human_required | 任意 | スキーマの列と同様。 |
-
-**正規ルール**: 上記以外のキーを追加したり、必須を省略したり、キー名を変更したりしてはならない。書記は本形式を受け取り、`execution_logs` に 1 行 INSERT する。
+| command | ○ | 実行した command 名（例: requirement-discovery, design-feature, implement-feature, verify-and-close） |
+| issue_path | △ | 対象 issue のパス（.workflow/YYYYMMDD_HHMMSS_* 形式のフォルダ名を必須とする）。不明時は空でも可。 |
+| summary | ○ | 実施内容の要約（1 文以上）。 |
+| changed_files | △（implement-feature は必須） | 変更ファイル一覧（改行区切りまたは JSON）。implement-feature 時は必須。 |
+| dod_met | ○ | DoD 達成 0 または 1。 |
+| memo ファイルパス（memo 運用時） | △ | memo_ref に登録する memo の相対パス。過渡的・例外・**非推奨**運用時のみ。本則は workflow.db。 |
 
 ---
 
-## 3. 書記が workflow.db に書くときの対応
+## 何を出力するか（出力）
 
-書記は §2 のペイロードを受け取り、[ワークフローログ_SQLiteスキーマ](../ledger/ワークフローログ_SQLiteスキーマ.md) の `execution_logs` に 1 行 INSERT する。ペイロードのキーとスキーマの列は次の対応とする。
-
-- issue_id → issue_id
-- timestamp → timestamp
-- created_at → created_at（未渡しの場合は書記が記録時点の ISO8601 を設定）
-- agent_id → agent_id
-- action_type → action_type
-- target_artifact → target_artifact
-- input_ref → input_ref
-- output_ref → output_ref
-- summary → summary
-- error_flag → error_flag（未渡しは 0）
-- human_required → human_required（未渡しは 0）
+- **workflow.db 採用時**: workflow_log テーブルに 1 行を INSERT。必須キーを満たす。記録は .agents/scripts/write-workflow-log.sh 経由で行うこと。
+- **memo 運用時**: .workflow/{issue}/memo/ に YYYYMMDD_HHMMSS_ プレフィックスの .md を 1 件以上作成し、CONTRACT 準拠の内容を記載。**{issue} は YYYYMMDD_HHMMSS_ をプレフィックスとするフォルダ名（必須）。** 必要に応じて memo_ref に登録。**memo のみの運用は非推奨（移行モード）であり、将来の仕様で廃止予定とする。** 採用可能なプロジェクトは workflow.db を必ず用いること。
 
 ---
 
-## 4. action_type の値（EXECUTION_CONTRACT に従う）
+## 必須キー一覧
 
-`action_type` は [EXECUTION_CONTRACT §2.1](../boot/EXECUTION_CONTRACT.md) の「phase と execution_logs.action_type の対応」に従う。`plan` / `execute` / `review` のいずれか、またはフェーズ名（`00_要求定義` / `01_要件定義` / `02_設計` / `03_実装計画` / `04_review` 等）をそのまま使う。メインと書記で同じ規則を用い、ブレを出さない。
+**workflow_log テーブル**（[ledger/schema.md](../ledger/schema.md) 準拠）:
+
+| キー | 型 | 必須 | 説明 |
+|------|-----|------|------|
+| ts_utc | TEXT | ○ | ISO8601 時刻。 |
+| command | TEXT | ○ | 上記「何を受け取るか」の command。 |
+| issue_path | TEXT | △ | 対象 issue パス。 |
+| summary | TEXT | ○ | 実施内容の要約。 |
+| changed_files | TEXT | △ | 変更ファイル一覧。 |
+| dod_met | INTEGER | ○ | 0 または 1。 |
+| created_at | TEXT | ○ | デフォルトで datetime('now')。 |
+
+**推奨スキーマ（チェーン型証跡）**（[ledger/schema.md](../ledger/schema.md) の推奨スキーマ完成版）では、さらに以下を記録する。write-workflow-log.sh は環境変数で受け取る。
+
+| キー | 型 | 必須 | 説明 |
+|------|-----|------|------|
+| entry_id | TEXT | ○（新スキーマ） | 1 レコードを一意に識別。未指定時はラッパーが UUID を生成。 |
+| parent_entry_id | TEXT | △（verify-and-close は必須） | 親ログの entry_id。順序監査で使用。 |
+| actor_role | TEXT | ○（新スキーマ） | 実行主体。本則は `scribe`。 |
+| delegated_by_role | TEXT | ○（新スキーマ） | 委譲元。原則 `orchestrator`。 |
+| review_path | TEXT | △（verify-and-close は必須） | 例: .workflow/{issue}/04_review.md。 |
+| changed_files_json | TEXT | △（implement-feature は必須） | 変更ファイル一覧の JSON 配列文字列。 |
+
+**必須キー不足時**: 記録を失敗とみなし、親にエラーを返す。完了とみなさない。
+
+**memo ファイル**（workflow.db を採用しない場合）:
+
+| 項目 | 必須 | 説明 |
+|------|------|------|
+| ファイル名 | ○ | YYYYMMDD_HHMMSS_ プレフィックス（日本標準時・実行環境の現在時刻取得。推測禁止）。**プレフィックスの日時部分を手入力・固定値・推測で指定してはならない。必ず実行時に `date` 等で取得する。** |
+| 内容 | ○ | 実施内容・変更・完了判定が分かる形式。ledger/schema の workflow_log と同等の情報を含む。 |
 
 ---
 
-## 5. 暫定記録（書記未使用時）のフォーマット（固定）
+## どこに保存するか
 
-書記サブを使わない場合、メインは **次の形式のみ** で memo に記録する。他の書き方（表のみ・箇条書きのみ・キー省略）は禁止する。
+**本則**: 書記の記録先は **workflow.db を採用することが本則（第一の選択）** とする。**通常運用では workflow.db のみを用い、memo 出力は workflow.db を採用しないプロジェクトの移行期・例外時のみ許容する。** 証跡の正本は workflow.db（[ledger/README.md](../ledger/README.md)・[ledger/schema.md](../ledger/schema.md) 準拠）に集約する。**新規プロジェクトでは memo のみ運用の採用を禁止する。** 既存の memo のみ運用は移行期のみ許容し、**将来のメジャーバージョンで memo 出力経路を削除する予定**である。
 
-- **ファイル**: `.workflow/{issue}/memo/YYYYMMDD_HHMMSS_実行ログ.md`（日時はシステム取得・JST。プレフィックス必須）。**同一 issue では、既存の `YYYYMMDD_HHMMSS_実行ログ.md` が存在する場合はそのファイルに追記する。新規作成は同一 issue で初回のみとする。**
-- **1 件ごと**: §2 の必須キー（issue_id, timestamp, created_at, agent_id, action_type, target_artifact, summary）を **YAML ブロック** で 1 件ずつ書く。
-- **区切り**: エントリとエントリの間は `---` のみの行で区切る。
-- **順序**: 新しい件をファイル末尾に追記する。
-
-例（1 件目と 2 件目）:
-
-```yaml
-issue_id: "20260306_120000_my_issue"
-timestamp: "2026-03-06T12:00:00+09:00"
-created_at: "2026-03-06T12:05:00+09:00"
-agent_id: "要件BDDリード"
-action_type: "plan"
-target_artifact: "01_要件定義.md"
-summary: "01 要件定義を完了。BDD Feature 3 本追加。"
----
-issue_id: "20260306_120000_my_issue"
-timestamp: "2026-03-06T12:10:00+09:00"
-created_at: "2026-03-06T12:11:00+09:00"
-agent_id: "実装者"
-action_type: "execute"
-target_artifact: "02_設計.md"
-summary: "02 設計を完了。影響範囲とテスト戦略を記載。"
-```
+| 運用 | 保存先 | 備考 |
+|------|--------|------|
+| **workflow.db 採用（本則）** | プロジェクトで定めた 1 パス（推奨: .workflow/workflow.db）。[ledger/README.md](../ledger/README.md) の配置に従う。 | 証跡の正本。採用可能なプロジェクトは必ずこちらを用いる。 |
+| **memo のみ（過渡的・例外）** | .workflow/{issue}/memo/ に YYYYMMDD_HHMMSS_*.md。**{issue} は YYYYMMDD_HHMMSS_ をプレフィックスとするフォルダ名（必須）。** 例: .workflow/20260310_090428_issue-title/memo/20260310_132042_実施結果.md | workflow.db を採用しない場合の過渡的・例外運用。**memo はログの別経路ではなく、workflow.db を採用しない場合の一時的・移行用の思考メモである。** 第一の選択肢ではない。**非推奨。移行モード。将来廃止予定。** |
 
 ---
 
-## 6. 参照
+## 参照
 
-- 委譲入口: [delegate_to_sub](../skills/agent/delegate_to_sub.md)（§2 のペイロード形式で渡す）
-- スキーマ: [ワークフローログ_SQLiteスキーマ](../ledger/ワークフローログ_SQLiteスキーマ.md)
-- 誰が何を書けるか: [capabilities/POLICY](../capabilities/POLICY.md)
+- [scribe/README.md](README.md) — 誰がどこに書くか
+- [ledger/schema.md](../ledger/schema.md) — workflow.db スキーマ
+- [ledger/README.md](../ledger/README.md) — 配置・役割境界
+- [agents/scribe.md](../agents/scribe.md) — 書記の責務
