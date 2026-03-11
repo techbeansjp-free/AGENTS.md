@@ -1,7 +1,7 @@
 ---
 
 このドキュメントは、ER図とテーブル定義を定義します。  
-システム仕様書作成ルールは [`AGENTS_DOCS_RULES.md`](../../../AGENTS_DOCS_RULES.md) を参照してください。  
+システム仕様書作成ルールは [`.agents/DOCS_RULES.md`](../../../../.agents/DOCS_RULES.md) を参照してください。  
 Mermaid 図作成時は [`AGENTS_MERMAID_RULES.md`](../../../AGENTS_MERMAID_RULES.md) を必ず参照してください。
 
 ---

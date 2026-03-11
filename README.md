@@ -1,290 +1,80 @@
-# AGENTS - アジャイル＋ BDD 駆動開発規約
+# AGENTS-spec — AI 実行契約・ワークフロー仕様
 
-> アジャイル＋ BDD 駆動の段階進行とファイル運用を強制する開発規約
+LLM エージェント（AI）と人間が協働するための**実行契約・能力（skills）中心のワークフロー**を定義する仕様パッケージ。プロジェクトにコピーして、AI に「.agents に従って」と指示すると、フェーズ（要求→要件→設計→実装計画→実装→レビュー）に沿って動く。
 
-このリポジトリには、LLM エージェント（AI）と人間が協働して開発を進めるためのワークフロー規約とテンプレートが含まれています。
-
----
-
-## 🚀 プロジェクトにコピペするだけではじめ方（推奨）
-
-**AGENTS-spec をプロジェクトにコピーするだけで、サブエージェント化が正しく機能するようにする手順。**
-
-1. **AGENTS-spec フォルダをプロジェクトにコピーする**  
-   プロジェクトルート直下に `AGENTS-spec/` フォルダができる状態にする。
-
-2. **プロジェクトルートに AGENTS.md を 1 つ置く**  
-   `AGENTS-spec/COPY_TO_PROJECT_ROOT_AGENTS.md` をプロジェクトルートに **`AGENTS.md`** としてコピーする（リネームしてよい）。
-
-3. **.workflow/ をプロジェクトルートに用意する**  
-   issue を開始するときに、`AGENTS-spec/.workflow/templates/` 内のテンプレートを参照して、プロジェクトルートの `.workflow/{YYYYMMDD_HHMMSS_issue_name}/` を作成し、その中に `00_要求定義.md` 等を配置する。初回用に `AGENTS-spec/.workflow/templates/` をプロジェクトの `.workflow/templates/` にコピーして使ってもよい。
-
-4. **workflow.db を使う場合**  
-   プロジェクトルートの `.gitignore` に `workflow.db` を追加する（[.agents/ledger/README.md](./.agents/ledger/README.md) 参照）。
-
-以上で、メインは `AGENTS-spec/.agents/boot/CORE.md` と `LOAD_POLICY.md` を読み、`.workflow/` はプロジェクトルートの `.workflow/` を参照してサブエージェント運用が動作する。
-
-### コピペ後の動作確認（最短テスト）
-
-貼り付けた直後、次を確認すればほぼ問題ない。
-
-1. **プロジェクトルート直下に `AGENTS.md` がある**（中身は `COPY_TO_PROJECT_ROOT_AGENTS.md` 由来であること）
-2. **`AGENTS-spec/.agents/boot/CORE.md` と `LOAD_POLICY.md` が起点として読まれる設計**になっている（ルートの AGENTS.md から参照されていること）
-3. **`.workflow/` をプロジェクトルートに作って issue を切れる**（テンプレは `AGENTS-spec/.workflow/templates/` を参照できること）
-4. （任意）workflow.db を使うなら `.gitignore` に `workflow.db` を追加済みであること
-
-### 注意（コピペ運用で壊れやすい点）
-
-- **ルートのファイル名・場所**: 入口は **プロジェクトルート直下の `AGENTS.md` が 1 つ** である想定。無い／別名／別階層だと、想定した入口にならない。
-- **`.agents-project/` と `.agents/` の優先関係**: `.agents-project/` を置く場合、**プロジェクト固有ルールだけ**を置く。spec 本体のルールを上書きしない。ここが優先されるため、中身を spec で上書きすると事故る。
-- **MCP（ツール接続）**: spec は「使うツールの仕様」まで書くが、**Cursor / Claude Code 側の MCP 接続は spec だけでは自動にならない**。必要なら各環境で接続設定を行う。
+**メタレイヤー**: 本仕様で定義する orchestrator / worker 等は「プロジェクト内で動くエージェント」の振る舞いである。これら仕様ファイルを編集するアシスタント（Cursor 等）は別レイヤー。**基盤の自己肥大化防止**（Feature First・文書追加前の統合検討・一時文書の寿命・責務境界・監視指標）も [META_LAYER.md](META_LAYER.md) で定義する。
 
 ---
 
-## 📚 ドキュメント構成
+## 何がどこに置かれるか
 
-### 主要ドキュメント
-
-- **[`AGENTS.md`](./AGENTS.md)** - 開発規約の完全版（人間向け）
-
-  - ワークフローとフェーズ進行の詳細
-  - 実装原則とコーディング規約
-  - システム構成とアーキテクチャ詳細
-
-- **`.agents/`** - 実行ルール・ガイドラインを格納するディレクトリ。汎用テンプレートとしてそのまま使う。
-- **`.agents-project/`** - プロジェクト固有ルールを置くディレクトリ。ここに置いたルールは `.agents/` より**優先**される。詳細は [`.agents-project/README.md`](./.agents-project/README.md) を参照。
-- **[`実行ルール.md`](./.agents/rules/実行ルール.md)** - LLM エージェント向け実行ルール
-  - 機械的に守るべきハード制約
-  - フェーズ別チェックリスト
-  - ドキュメント更新ルール
-
-- **[`CLAUDE.md`](./CLAUDE.md)** - CLAUDE.md の**汎用テンプレート**
-  - 各プロジェクトのリポジトリルートにコピーし、プロジェクト概要・ビルドコマンド・重要な規約等を追記して利用する
-  - 「agentsに従って」＝ SILENT MODE の定義を含む（応答最大15行・先頭に `🧠 Mode: SILENT MODE`）
-
-### テンプレートファイル
-
-テンプレートファイルは [`.workflow/templates/`](./.workflow/templates/) ディレクトリに配置されています。
-
-- **`00_システム理解.md`** - システム理解書テンプレート（既存プロジェクト導入時のみ使用）
-- **`00_要求定義.md`** - 要求定義書テンプレート
-- **`01_要件定義.md`** - 要件定義書テンプレート
-- **`02_設計.md`** - 設計書テンプレート
-- **`03_実装計画.md`** - 実装計画書テンプレート
-- **`04_review.md`** - レビュー書テンプレート
-- **`05_最終確認チェックリスト.md`** - 最終確認チェックリストテンプレート（コード対応不可項目がある場合のみ使用）
-- **`90_issues.md`** - Issue 一覧テンプレート（issue 分割時のみ使用）
-
-### レビューディレクトリ
-
-AGENTS 規約とテンプレート全体のレビュー結果は [`.review/`](./.review/) ディレクトリで時系列管理します。
-
-> **注意**: `.review/`ディレクトリのレビューは、各 issue/タスクのレビュー（`04_review.md`）とは異なります。
->
-> - **`.review/`**: AGENTS 規約とテンプレート全体のレビュー
-> - **`04_review.md`**: 各 issue/タスクの実装完了後のレビュー
-
-詳細は [`.review/README.md`](./.review/README.md) を参照してください。
+- **プロジェクトルートに置くもの（その他・今まで通り）**: `AGENTS.md`, `CLAUDE.md`。入口として 1 ファイルずつ。AI はここから .agents を参照する。
+- **.agents-project/**（プロジェクト固有・**最優先**）: プロジェクトごとの固有ルールを置く。**.agents-project が .agents より優先**される。同名・同目的のルールは .agents-project を採用。setup では作成しない。プロジェクト側で必要に応じて用意する。
+- **.agents ディレクトリ配下に置くもの**: 実行契約・能力・ワークフロー・強制の正本。**正本は本パッケージの `AGENTS-spec/.agents/` にあり、セットアップでプロジェクトの `.agents/` にコピーする。**
 
 ---
 
-## 🚀 クイックスタート
+## .agents 配下の構成（正本: AGENTS-spec/.agents/）
 
-### 新しい issue/タスクを開始する場合
+| 配置 | 内容 |
+|------|------|
+| **CONCEPTS.md** | 思想・判断の問い |
+| **GETTING_STARTED.md** | 使い方（メイン・サブの役割、1 issue の回し方） |
+| **README.md** | 構成と索引（何を知りたいときに何を読むか） |
+| **RULES.md** | 実行・ドキュメント・テスト要約 |
+| **boot/** | CORE.md（絶対制約）、LOAD_POLICY.md（いつ何を読むか） |
+| **workflow/** | PHASES.md（フェーズ・DoD）、TEMPLATES.md（phase と templates のみ） |
+| **commands/** | requirement-discovery, design-feature, implement-feature, verify-and-close（skill chain 定義） |
+| **skills/** | agent/, requirements/, architecture/, implementation/, testing/, review/, logging（各 capability） |
+| **agents/** | オーケストレーション（メインは指示に徹し、実作業はサブに委譲） |
+| **enforcement/** | claude/, cursor/, ci/（フック・ルール・監査の正本） |
+| **scribe/** | ログは誰が書くか・どこに書くか |
+| **ledger/** | workflow.db の配置・スキーマ（schema.md） |
+| **platforms/** | Cursor / Claude Code / Gemini の差分・スキル配備方針（README.md, SKILLS.md） |
+| **human/** | 人間向け案内 |
+| **spec/** | 設計原則・設計判断の優先順位・AI開発ルール等。要求・設計 command の前に参照する。 |
 
-1. **ディレクトリを作成**
+中心は **skill（能力）** と **command（skill chain）**。phase は gate、agents はオーケストレーションのみ。
 
+**テンプレート（00〜04 等）**: .agents 配下には置かない。**AGENTS-spec/.workflow/templates/** にあり、setup でプロジェクトの **.workflow/templates/** にコピーする。プロジェクトは .workflow/templates を参照する。
+
+---
+
+## セットアップ（プロジェクトへ導入するとき）
+
+1. **AGENTS-spec をプロジェクトに置く**  
+   プロジェクトルート直下に `AGENTS-spec/` がある状態にする（clone またはコピー）。
+
+2. **セットアップ脚本を実行する**  
+   ```bash
+   bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh
    ```
-   .workflow/{YYYYMMDD_issue_name}/
-   ```
+   これで以下が行われる:
+   - `AGENTS-spec/AGENTS.md` と `AGENTS-spec/CLAUDE.md` がプロジェクトルートにコピーされる
+   - `AGENTS-spec/.agents/` がプロジェクトの `.agents/` にコピーされる
+   - `.workflow/templates` が無い場合は **AGENTS-spec/.workflow/templates** からコピーされる
+   - `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
 
-   例: `.workflow/20251115_nextjs移行/`
-
-2. **システム理解から開始**（既存プロジェクト導入時のみ）
-
-   - 既存プロジェクトに途中から導入する場合や、他ベンダーが作成したシステムを改修・機能追加する場合は、まず `.workflow/templates/00_システム理解.md` をコピーして `.workflow/00_システム理解.md` を作成
-   - システム全体の理解をまとめる
-
-3. **要求定義から開始**
-
-   - `.workflow/templates/00_要求定義.md` をコピー
-   - プレースホルダーを実際の値に置き換え
-   - 要求を明確化
-   - 既存プロジェクトの場合は、`00_システム理解.md` を参照
-
-4. **フェーズを順次進行**
-   ```
-   00_システム理解（既存プロジェクト時のみ）→ 00_要求定義 → 01_要件定義 → 02_設計 → 03_実装計画 → 実装 → 04_review → 05_最終確認（外部設定が必要な場合のみ）
-   ```
-
-### テンプレートの使用方法
-
-1. 対応するテンプレートファイルをコピー
-2. プレースホルダー（`{プロジェクト名}`、`{YYYY年MM月DD日}`など）を実際の値に置き換え
-3. 各フェーズの必須項目を記入
-4. 実装の進行に合わせて常に更新
+3. **動作確認**  
+   プロジェクトルートに `AGENTS.md` と `.agents/` が存在することを確認する。詳細は [COPY_TO_PROJECT_ROOT.md](COPY_TO_PROJECT_ROOT.md) のスモークテストを参照。
 
 ---
 
-## 📋 ワークフロー概要
+## 入口と参照
 
-```mermaid
-flowchart TD
-  START{既存プロジェクト?} -->|Yes| SU[00_システム理解]
-  START -->|No| R0[00_要求定義]
-  SU --> R0
-  R0 --> R1[01_要件定義]
-  R1 --> R2[02_設計]
-  R2 --> R3[03_実装計画]
-  R3 --> R4{大きい?}
-  R4 -->|Yes| R5[90_issues で分割]
-  R4 -->|No| E[実装]
-  R5 --> E
-  E --> RV[04_review]
-  RV --> FC{外部設定必要?}
-  FC -->|Yes| FC2[05_最終確認]
-  FC -->|No| DONE[issue/タスク完了]
-  FC2 --> DONE
-```
-
-### フェーズ説明
-
-0. **00\_システム理解** - 既存システムの全体像（既存プロジェクト導入時のみ）
-1. **00\_要求定義** - 何のための issue/タスクか（背景・目的・制約）
-2. **01\_要件定義** - ユーザーストーリー＋受け入れ基準＋ BDD Feature/Scenario
-3. **02\_設計** - アーキテクチャ / DB / API / インターフェース設計
-4. **03\_実装計画** - タスク分解・優先度・テスト方針
-5. **実装** - BDD ベースの単体テストを先に実装（テストファースト）
-6. **04_review** - レビュー結果・指摘・対応履歴
-7. **05\_最終確認** - 外部設定の確認（コード対応不可項目がある場合のみ）
+| 目的 | 読むファイル |
+|------|--------------|
+| プロジェクトの入口 | ルートの AGENTS.md → .agents/README.md |
+| 絶対制約・読了義務 | .agents/boot/CORE.md |
+| いつ何を読むか | .agents/boot/LOAD_POLICY.md |
+| フェーズ・成果物・DoD | .agents/workflow/PHASES.md |
+| command を実行するとき | .agents/skills/agent/run_command.md と .agents/commands/{name}.md |
+| コピー対象・セットアップ詳細 | [COPY_TO_PROJECT_ROOT.md](COPY_TO_PROJECT_ROOT.md) |
+| 基盤の肥大化防止・文書追加ルール | [META_LAYER.md](META_LAYER.md) |
 
 ---
 
-## ✅ 絶対に守ること（4 つ）
+## その他（今まで通り）
 
-1. **「agentsに従う」＝応答は常に SILENT MODE**（会話への出力は**最大15行**、先頭に `🧠 Mode: SILENT MODE` を付与。詳細は `.workflow/` や `memo/` に書く。ユーザーが「詳細を」「全文を」と明示した場合を除く）
-2. **すべての対応は `.workflow/{YYYYMMDD_HHMMSS_issue_name}/00_要求定義.md` から始める**（既存プロジェクト導入時は `.workflow/00_システム理解.md` から）
-3. **フェーズを飛ばさない（00_システム理解（既存プロジェクト時のみ）→ 00 → 01 → 02 → 03 → 実装 → 04_review → 05_最終確認（外部設定が必要な場合のみ））**
-4. **ドキュメントと実装を常に同期させる（変更したら必ず該当 md を更新）**
-
----
-
-## 🎯 基本原則
-
-### 常に意識すべき原則
-
-- **KISS**: できるだけシンプルに
-- **YAGNI**: 今いらないものは作らない
-
-### 必要に応じて適用する原則
-
-- DRY / SOLID / GRASP / Law of Demeter / CoC / PoLA / TDAE / クリーンアーキテクチャ
-
-詳細は [`AGENTS.md`](./AGENTS.md) の「実装原則」セクションを参照してください。
-
----
-
-## 📁 ディレクトリ構造
-
-```
-.workflow/
-├── 00_システム理解.md        # システム理解（既存プロジェクト導入時のみ）
-└── {YYYYMMDD_issue_name}/  # issue/タスクディレクトリ（日付プレフィックス付き）
-    ├── 00_要求定義.md        # 要求定義（必ず最初に作成）
-    ├── 01_要件定義.md        # 要件定義
-    ├── 02_設計.md            # 設計
-    ├── 03_実装計画.md        # 実装計画
-    ├── 04_review.md          # レビュー（実装完了後）
-    ├── 05_最終確認チェックリスト.md  # 最終確認チェックリスト（コード対応不可項目がある場合のみ）
-    ├── 90_issues.md          # issue一覧（大きなissue/タスクを分割する場合のみ）
-    ├── memo/                 # メモ（調査結果、検証結果など）
-    │   └── YYYYMMDD_HHMMSS_ファイル名.md
-    └── 90_issues/            # 各issueのディレクトリ（issue/タスクを分割する場合のみ）
-        └── {nested_issue_name}/
-            ├── 00_要求定義.md
-            ├── 01_要件定義.md
-            ├── 02_設計.md
-            ├── 03_実装計画.md
-            └── 04_review.md
-```
-
----
-
-## 🤖 LLM エージェント向け
-
-LLM エージェントがこの規約に従って動作する場合は、**[`実行ルール.md`](./.agents/rules/実行ルール.md)** を参照してください。
-
-### エージェントの役割
-
-- 各 issue/タスクに対して、`.workflow/` 配下のドキュメントを使いながら
-- システム理解（既存プロジェクト時のみ）→ 要求定義 → 要件定義 → 設計 → 実装計画 → （必要なら issue 分割）→ 実装 → レビュー → 最終確認（外部設定が必要な場合のみ）
-- を**飛ばさずに進めるナビゲーター兼ドラフト作成者**
-
-### エージェントが守るべきこと
-
-1. すべての対応は `00_要求定義.md` から開始（既存プロジェクト導入時は `00_システム理解.md` から）
-2. フェーズを飛ばさない（システム理解と最終確認チェックリストを含む）
-3. ドキュメントと実装の不整合を見つけたら、ドキュメント側の更新案を出す
-4. 各 md には「前のステップ」「次のステップ」セクションを含める
-5. 各ステップで、対応した md の全文ドラフトまたは差分パッチを出力
-
-### デフォルト動作モード（SILENT MODE）
-
-**重要**: エージェントは **常に SILENT MODE で起動する**。これにより、token 使用量を **1/5〜1/10** に削減できます。
-
-- **SILENT MODE = 通常運転**（デフォルト）
-- **通常モード = デバッグ／説明モード**（例外）
-
-**SILENT MODE の特徴**:
-- 会話への出力は**最大15行**まで
-- 出力の先頭に `🧠 Mode: SILENT MODE` を**必ず**付与する
-- 詳細は必ずリポジトリ内のファイルに書く（`.workflow/`、`docs/run/`、`memo/` など）
-
-詳細は [`サイレントモードガイド.md`](./.agents/guide/サイレントモードガイド.md) を参照してください。
-
----
-
-## 📝 用語定義
-
-- **issue**: チケットや Pull Request と 1:1 で対応することを想定した「大きめの単位」
-- **タスク**: issue を分解した実作業単位。`03_実装計画.md`内で洗い出す個別の作業項目
-- **プロジェクト**: 複数の issue/タスクをまとめる概念（オプション）
-
-**注意**: issue とタスクは必要に応じて置き換え可能です。規模や管理方法に応じて、適切な粒度で使い分けてください。
-
----
-
-## 🔗 参考資料
-
-### 主要規約ドキュメント
-
-- [`AGENTS.md`](./AGENTS.md) - 開発規約の完全版
-- [`実行ルール.md`](./.agents/rules/実行ルール.md) - LLM エージェント向け実行ルール
-
-### SILENT MODE 関連ドキュメント
-
-- [`サイレントモードガイド.md`](./.agents/guide/サイレントモードガイド.md) - SILENT MODE 運用ガイド（省トークン運用）
-- [`初期化プロンプト.md`](./.agents/prompts/初期化プロンプト.md) - 最短初期化プロンプト（Cursor / Claude Code 用）
-- [`Issue実行テンプレート.md`](./.agents/prompts/Issue実行テンプレート.md) - Issue 実行テンプレート（1行指示パターン）
-
-### その他の規約ドキュメント
-
-- [`コーディングルール.md`](./.agents/rules/コーディングルール.md) - コーディングルール
-- [`ドキュメントルール.md`](./.agents/rules/ドキュメントルール.md) - システム仕様書（docs/）作成・更新ルール
-- [`レビュールール.md`](./.agents/rules/レビュールール.md) - レビュー時の徹底的な品質調査ルール
-- [`テストガイドライン.md`](./.agents/rules/テストガイドライン.md) - テスト作成ガイドライン
-- [`Mermaid図ルール.md`](./.agents/rules/Mermaid図ルール.md) - Mermaid 図作成規約
-- [`Storybookルール.md`](./.agents/rules/Storybookルール.md) - Storybook / デザインシステム運用規約
-- [`GitHub_PR指摘取得.md`](./.agents/rules/GitHub_PR指摘取得.md) - GitHub PR 指摘取得ルール
-- [`GitHub_Copilot対応.md`](./.agents/rules/GitHub_Copilot対応.md) - GitHub Copilot 対応
-
-### ディレクトリ
-
-- [`.workflow/templates/`](./.workflow/templates/) - テンプレートファイル
-- [`.review/`](./.review/) - レビューディレクトリ（AGENTS 規約とテンプレート全体のレビュー）
-
----
-
-## 📅 最終更新
-
-2026 年 2 月 9 日（SILENT MODEをデフォルト動作モードに変更、最短初期化プロンプト追加、Issue実行テンプレート追加、レビュー時自動昇格条件明確化、会話出力上限を15行に統一）
+- テンプレート一式・.workflow の運用は従来どおり。**spec（設計原則等）は .agents/spec/ に含まれ、要求・設計の前に参照する。**issue 用フォルダは `.workflow/{YYYYMMDD_HHMMSS_issue_name}/` に作成し、証跡（memo）のファイル名は `YYYYMMDD_HHMMSS_` プレフィックスを付ける。
+- 本 README は AGENTS-spec パッケージの概要と .agents 配下の構成・セットアップ手順を説明する。実行契約の詳細は .agents 配下（とくに .agents/README.md, boot/CORE.md, GETTING_STARTED.md）を参照すること。

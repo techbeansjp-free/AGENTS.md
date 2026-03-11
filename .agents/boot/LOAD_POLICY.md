@@ -1,84 +1,30 @@
-# LOAD_POLICY - いつ何を読むか・どの Skill / どの worker を使うか
+# LOAD_POLICY.md — いつ何を読むか
 
-> **AI 向け**: 常時ロード廃止。**必要なときだけ**読む・呼ぶ。全部読まない。
+**「最初に何を読むか」「トリガー→読むファイル」の正本は本ファイルのみ。** GETTING_STARTED は要約、platforms はスキル形式・配備の差分のみ。重複を避けるため、トリガー追加時は本表のみ更新する。
 
----
-
-## 0. 読み込み順＝優先順位（上書きルール）
-
-**優先順位は以下の表で固定する。** 同じテーマで複数ソースが衝突したときは、**番号の小さい（強い）方が勝つ**。
-
-明示的な優先順位（強い順）:
-
-1. **AGENTS**（共通ルール・規約入口）
-2. **CORE**（絶対制約）
-3. **TOOLS**（利用可能ツール）
-4. **ROLE**（その人格の定義・worker）
-5. **USER**（ユーザー情報）
-6. **MEMORY**（過去の記憶）
-
-**衝突時のルール**:
-
-- 同一テーマで複数ソースが競合したときは、上記の順で**番号の小さい（強い）方が勝つ**。
-- **サブエージェント**は例外なく、**親（メイン）が渡した Task Contract（作業契約）が最優先**。サブのコンテキスト内では契約の制約が rules より優先する。
-- **MEMORY は「参照」であって「規則」ではない**。規則は `rules/` および CORE / AGENTS にのみ置く。memory に書いた内容で振る舞いを強制しない。
-
-**ソース間の優先順位**は本節で定義する（上記の番号の小さい方が勝つ）。**出力方針**（監査・証跡の詳細優先 vs 会話の簡潔優先）の衝突は [CORE 4.5 衝突時の優先順位](./CORE.md) を参照する。
+トリガーごとに読むファイルを表で示す。**command = skill chain**。capability は skills/{domain}/{name}/ の 1 単位。
 
 ---
 
-## 1. メインが最初に読むもの（常時）
+## トリガー → 読むファイル
 
-- [CORE.md](./CORE.md) … 絶対制約
-- 本ファイル（LOAD_POLICY.md）… 以降の読み方・委譲先のルール
-
----
-
-## 2. 条件に応じて読むもの
-
-- フェーズ進行・提出物・DoD の詳細 → [サブエージェント抜かし防止.md](../rules/サブエージェント抜かし防止.md)
-- 委譲の入出力仕様 → [boot/EXECUTION_CONTRACT.md](./EXECUTION_CONTRACT.md)
-- 記憶の 2 層・サニタイズ（memory/raw と memory/curated）→ [boot/MEMORY_POLICY.md](./MEMORY_POLICY.md)
-- 誰が何を書けるか（書記以外の workflow.db 書込禁止。書記の保存先は workflow.db のみ。logs/ は廃止）→ [capabilities/POLICY.md](../capabilities/POLICY.md)
-- ログの記録ルール・書記への委譲 → [書記役とログ委譲.md](../scribe/書記役とログ委譲.md)
-- ログ保存先・スキーマ → [ワークフローログ_SQLiteスキーマ.md](../ledger/ワークフローログ_SQLiteスキーマ.md)、[ledger/README.md](../ledger/README.md)
-- レビュー時 → [レビュールール.md](../rules/レビュールール.md)
-- **監査時** → 当該 issue の **00_要求定義（ゴール）** を必ず Task/Constraints に含めるか参照する。[監査者用工程フロー.md](../rules/監査者用工程フロー.md) と [監査者用チェックリスト.md](../rules/監査者用チェックリスト.md) を読み、証跡ベースで検証する。**監査は監査者サブに委譲し、メインはその結果に基づき完了判定を行う。** 各フェーズ完了時に上記を参照して監査者に委譲する。**03_実装計画.md の作成は実装者・テスト者に委譲し、完了後に監査者に 03 の監査を委譲する。**
-- その他ルール（実行・コーディング・ドキュメント・テスト等）→ 必要になったら [AGENTS.md](../../AGENTS.md) の参考資料から該当ファイルを参照
-
----
-
-## 3. 委譲時に使う Skill（1 回 1 つ）
-
-- **サブにタスクを投げるとき** → [skills/agent/delegate_to_sub.md](../skills/agent/delegate_to_sub.md) を**唯一の入口**として読み、Task / Constraints / OutputSpec を組み立ててから委譲する。**直接サブを呼ばない。**
-- **最小読込保証**: サブに渡すコンテキストは [boot/SUBAGENT_PACK.md](./SUBAGENT_PACK.md) の**注入順序**で組み立てる。順序は **1→2→3→4→5→6** の通り: SUBAGENT_MINIMUM → TOOLS → EXECUTION_CONTRACT → rules 最小限 → 役割定義 1 つ → 固定 JSON ペイロード。含めないとサブ側でルールが強制されず破綻する。
+| トリガー | 読むファイル / 動作 |
+|----------|---------------------|
+| **ユーザーから作業依頼を受けた**（生成・修正・作成・調査・レビュー・issue 化等。単なる質問でない依頼） | **必ず orchestrator として動く。** agents/orchestrator.md → workflow/PHASES.md → skills/agent/run_command.md → 該当 commands/{name}.md。phase 判定 → command 選択 → 委譲。 |
+| 起動・契約確認 | boot/CORE.md → 本ファイル（LOAD_POLICY）→ workflow/PHASES.md |
+| 思想・判断の問い | CONCEPTS.md |
+| **システム開発の基本・設計原則・設計判断の優先順位** | **spec/**（00_spec概要、01_設計原則、02_ディレクトリ構造方針、06_設計判断の優先順位。要求・設計 command の前に参照する） |
+| 実行・ドキュメント・テスト・レビュー要約 | RULES.md |
+| **command を実行するとき** | **skills/agent/run_command.md** → **commands/{command}.md**（例: requirement-discovery, implement-feature） |
+| 要求発見 command | commands/requirement-discovery.md → 記載された skill chain を順に読む |
+| 設計 command | commands/design-feature.md → 記載された skill chain を順に読む |
+| 実装 command | commands/implement-feature.md → 記載された skill chain を順に読む |
+| 検証・クローズ command | commands/verify-and-close.md → 記載された skill chain を順に読む |
+| 単体 capability を使うとき | 該当 skills/{domain}/{capability}/（例: skills/requirements/write-bdd/） |
+| フェーズ→どの command を起動するか | workflow/PHASES.md と commands/ 一覧。オーケストは agents/README.md |
+| システム仕様書（docs/）の更新・レビュー時 | RULES.md（システム仕様書）→ DOCS_RULES.md。issue は立てず docs/00_review/ に記載する。 |
 
 ---
 
-## 4. フェーズ → worker（誰に委譲するか）
-
-**delegate_to_sub の固定 JSON では role が 5 値**（implementer | reviewer | tester | auditor | scribe）のみ。workers の 6 人格とは次の対応で統一する: 要件BDDリード・総合レビューリード → `reviewer`。実装者 → `implementer`。テスト者 → `tester`。監査者 → `auditor`。書記 → `scribe`。詳細は [delegate_to_sub の「role と workers 6 人格の対応」](../skills/agent/delegate_to_sub.md) を参照。
-
-| フェーズ | 委譲先（worker） | 参照 |
-|----------|------------------|------|
-| 01 要件定義・BDD | 要件BDDリード | [workers/01_要件BDDリード.md](../workers/01_要件BDDリード.md) |
-| 02 設計・実装・テスト | 実装者・テスト者（タスクに応じて） | [workers/03_実装者.md](../workers/03_実装者.md)、[workers/04_テスト者.md](../workers/04_テスト者.md) |
-| 03 実装計画・監査 | 監査者 | [workers/05_監査者.md](../workers/05_監査者.md) |
-| 壁打ち・04 総合レビュー | 総合レビューリード | [workers/02_総合レビューリード.md](../workers/02_総合レビューリード.md) |
-| **ログ記録（毎回）** | **書記** | [workers/06_書記.md](../workers/06_書記.md)、[書記役とログ委譲.md](../scribe/書記役とログ委譲.md) |
-
-各サブ実行後は必ず書記にログ項目を委譲し、トレーサビリティを確保する。
-
----
-
-## 5. サブに渡すコンテキスト
-
-- **必ず含める**: [SUBAGENT_PACK.md](./SUBAGENT_PACK.md) の順序で連結（SUBAGENT_MINIMUM → TOOLS → EXECUTION_CONTRACT → rules 最小限 → 役割 1 つ → 固定 JSON ペイロード）。サブのコンテキストを毎回同じ形にする。
-- **ホワイトリスト方式**: 「渡さない」だけにせず、**「このロールにはこれだけ渡す」** を [workers/README のホワイトリスト](../workers/README.md) で固定する。
-- サブに渡すコンテキストは、EXECUTION_CONTRACT と delegate_to_sub で定めた範囲および上記ホワイトリストを超えない。
-
----
-
-## 6. 禁止
-
-- **全部読むな。** 上記「条件に応じて読む」は、その条件が成立したときだけ読む。
+command 実行時は run_command.md を読んだうえで、該当 commands/{name}.md に記載された skill chain を**順に**読んで実行すること。
+単体で capability だけ使う場合は、LOAD_POLICY の「単体 capability」に従い該当 skills/{domain}/{capability}/ を読むこと。

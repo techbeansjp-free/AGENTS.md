@@ -5,6 +5,9 @@
 # テンプレート: AGENTS-spec .workflow/templates/github/scripts/pre-push
 # 採用先では リポジトリルートの scripts/pre-push にコピーし、必要なら scripts/pre-push.conf でカスタマイズする。
 #
+# 注意: 本スクリプトが書き出す scripts/logs/ のログは**ローカル検証・デバッグ用**であり、
+#       ワークフロー契約（CONTRACT / workflow.db）のログとは別物である。トレーサビリティの正本は workflow.db のみ。
+#
 # 汎用版。次の環境変数または設定ファイルでカスタマイズ可能。
 #   PREPUSH_BACKEND_DIR   - バックエンドのパス接頭辞（既定: backend）
 #   PREPUSH_FRONTEND_DIR  - フロントエンドのパス接頭辞（既定: frontend）
@@ -25,6 +28,15 @@ export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin:${PA
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
 cd "$ROOT" || exit 1
+
+# 起動時必ずログを試行（失敗時は stderr に出力。ログが残らない問題の切り分け用）
+log_dir="${ROOT}/scripts/logs"
+PREPUSH_LOG_FILE="${log_dir}/pre-push.log"
+if ! mkdir -p "$log_dir" 2>/dev/null; then
+  echo "pre-push: ログディレクトリを作成できません: $log_dir" >&2
+elif ! ( printf '[%s] pre-push started PWD=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$ROOT" >> "$PREPUSH_LOG_FILE" ) 2>/dev/null; then
+  echo "pre-push: ログファイルに書き込めません: $PREPUSH_LOG_FILE" >&2
+fi
 
 # 既定値（設定ファイルで上書き可能）
 PREPUSH_BACKEND_DIR="${PREPUSH_BACKEND_DIR:-backend}"
@@ -105,7 +117,11 @@ fi
 # stdin から local_ref local_sha remote_ref remote_sha を読む（複数行・新規 push 時は remote_sha が 0...）
 # 変更ファイルは一時ファイルに集約し、最後に sort -u（echo -e は環境差があるため使わない）
 : "${PREPUSH_TIMEOUT_SEC:=900}"
-tmp_files="$(mktemp)" || exit 1
+# mktemp が IDE 環境等で失敗することがあるため、システム一時ディレクトリにフォールバック（log_dir はログ用のため push をブロックしない）
+tmp_files="$(mktemp 2>/dev/null)" || tmp_files="${TMPDIR:-/tmp}/pre-push.tmp.$$"
+if [[ ! -e "$tmp_files" ]]; then
+  : > "$tmp_files" 2>/dev/null || { echo "pre-push: 一時ファイルを作成できません: $tmp_files" >&2; exit 1; }
+fi
 empty_tree="$(git hash-object -t tree /dev/null 2>/dev/null)" || empty_tree=""
 running_mode=""   # "pgid" or "pid"（cleanup では片方だけ kill）
 running_pgid=""
@@ -254,22 +270,35 @@ fi
 changed_files="$(sort -u < "$tmp_files" | sed '/^$/d')"
 # 変更一覧が空の場合は安全側で full（新規 push で empty_tree 取得失敗等）
 scope="$(detect_scope "$changed_files")"
+# 切り分け用: scope 算出直後に 1 行だけ必ず追記（ここまで到達していればログに scope が残る）
+( printf '[%s] scope=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$scope" >> "$PREPUSH_LOG_FILE" ) 2>/dev/null || true
 
-# ログ出力設定（scripts/logs/pre-push.log に結果を追記）
-log_dir="${ROOT}/scripts/logs"
-log_file="${log_dir}/pre-push.log"
-if [[ -n "${ROOT:-}" ]]; then
-  mkdir -p "$log_dir" 2>/dev/null || true
+# ログ出力設定（scripts/logs/pre-push.log に結果を追記）。make の出力は pre-push-make-*.log に保存し失敗時に末尾を表示する。ログはベストエフォートのため、log_dir が使えない場合は make はログなしで実行する。
+log_file="$PREPUSH_LOG_FILE"
+make_log=""
+if [[ -d "$log_dir" && -w "$log_dir" ]]; then
+  make_log="${log_dir}/pre-push-make-$(date '+%Y%m%d-%H%M%S').log"
+fi
+if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
   # pre-push.log ローテーション: 最大行数を超えていれば古い行を捨てる
   if [[ -f "$log_file" ]] && [[ "$(wc -l < "$log_file" 2>/dev/null)" -gt "${PREPUSH_LOG_MAX_LINES:-5000}" ]]; then
     tail -n "${PREPUSH_LOG_MAX_LINES:-5000}" "$log_file" > "${log_file}.rotated" 2>/dev/null && mv "${log_file}.rotated" "$log_file" 2>/dev/null || true
   fi
-  {
+  # 古い pre-push-make-*.log を削除（新しい方から KEEP 件だけ残す。Linux/macOS 両対応）
+  # while read は入力が空だと EOF で終了コード 1 を返すため、set -e でスクリプトが落ちないよう || true する
+  _keep="${PREPUSH_MAKE_LOG_KEEP:-30}"
+  (cd "$log_dir" && shopt -s nullglob && for f in pre-push-make-*.log; do echo "$f"; done) 2>/dev/null | \
+    sort -r 2>/dev/null | tail -n +$(( _keep + 1 )) | while read -r _f; do
+      [[ -n "$_f" ]] && rm -f "${log_dir}/${_f}" 2>/dev/null || true
+    done || true
+  if ! ( {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] scope=${scope}"
     echo "changed_files:"
     printf '%s\n' "$changed_files"
     echo
-  } >> "$log_file" 2>/dev/null || true
+  } >> "$PREPUSH_LOG_FILE" ); then
+    echo "pre-push: ログ追記に失敗しました: $log_file" >&2
+  fi
 fi
 
 # docs_only / infra_only のときは make 不要（検証スキップのため）
@@ -300,16 +329,22 @@ esac
 
 echo "pre-push: スコープ ${scope} → make ${make_target} を実行します。" >&2
 set +e
-run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target"
+if [[ -n "$make_log" ]]; then
+  run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target" >"$make_log" 2>&1
+else
+  run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target"
+fi
 ret=$?
 set -e
 if [[ $ret -ne 0 ]]; then
-  if [[ -n "${ROOT:-}" ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=FAIL code=${ret}" >> "$log_file" 2>/dev/null || true
+  [[ -n "$make_log" && -f "$make_log" ]] && tail -n 200 "$make_log" >&2
+  if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
+    ( echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=FAIL code=${ret}" >> "$log_file" ) || echo "pre-push: ログ追記に失敗: $log_file" >&2
   fi
   echo "pre-push フックが失敗しました（終了コード ${ret}）。" >&2
+  [[ -d "$log_dir" ]] && echo "pre-push ログ: ${log_file}" >&2
   exit $ret
 fi
-if [[ -n "${ROOT:-}" ]]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=OK" >> "$log_file" 2>/dev/null || true
+if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
+  ( echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=OK" >> "$log_file" ) || echo "pre-push: ログ追記に失敗: $log_file" >&2
 fi
