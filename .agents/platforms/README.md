@@ -1,63 +1,36 @@
-# プラットフォーム適応層（platforms）
+# platforms — Cursor / Claude Code / Gemini の差分
 
-> **責務**: **platforms/*.md = 実行基盤ごとの差分仕様のみ**。共通仕様は [boot](../boot/) に 1 つのみ。**定義しない**: CORE・LOAD_POLICY・EXECUTION_CONTRACT 等の共通仕様の再記述（boot で定義）。
-
----
-
-## 目的
-
-Cursor / Claude Code / OpenAI / Gemini など、実行基盤が異なっても同じ規約で動かすために、**モデル差・ツール差・呼び出し差**を各 platform 用アダプタに閉じる。共通ルールの再記述は行わない。
+各プラットフォームの**入口・設定**の差分と、**スキル形式・配置**の差分をまとめる。**workflow/ は phase と templates のみ**とし、プラットフォーム差分は本 platforms/ に集約する。**「いつ何を読むか」の正本は boot/LOAD_POLICY.md。** 本 platforms はスキル形式・配備・ツール別設定のみを記載する。
 
 ---
 
-## 比較表（概要）
+## スキル形式・配備方針
 
-| プラットフォーム | 強いところ | 弱い／注意するところ |
-|------------------|------------|------------------------|
-| **Cursor** | 実ファイル編集・プロジェクト文脈・エージェント/ルールの統合 | 暗黙文脈の膨らみ・コンテキスト境界の管理 |
-| **Claude Code** | サブエージェント・ツール制御・Bash/Read 前提との相性 | ツール使用の癖・環境依存の差 |
-| **OpenAI** | 会話主体・構造化の柔軟さ | 「何を最初に読むか」のガードが重要・環境依存差が大きい |
-| **Gemini** | 長文理解 | 指示の固定力・出力安定性・参照境界の明示が重要 |
+スキルの正本とプラットフォーム別コピー方針は [platforms/SKILLS.md](SKILLS.md) に記載する。正本は .agents/skills/{domain}/{capability}/、setup で各ツールの skills パスにコピーする。配備先の名前衝突対策（プレフィックス `{domain}__{capability}`）は採用済み。[DESIGN_SYNC_SKILLS_NAMING.md](DESIGN_SYNC_SKILLS_NAMING.md) に設計経緯を記載。
 
 ---
 
-## Worker ごとの推奨実行基盤（目安）
+## 入口・設定の差分
 
-| Worker（役割） | 向きやすい実行基盤 |
-|----------------|--------------------|
-| 要件BDDリード | OpenAI / Claude |
-| 実装者 | Cursor / Claude Code |
-| 監査者 | OpenAI / Gemini / Claude |
-| 書記 | Claude Code |
-| 総合レビューリード | OpenAI / Gemini / Claude |
-
-運用設計時に「どの worker をどこで動かすか」の参考にすること。必須ではない。
+| プラットフォーム | 設定の配置 | 備考 |
+|------------------|------------|------|
+| **Claude Code** | .claude/ を setup で生成。enforcement/claude/ 正本から展開。 | PreToolUse/PostToolUse 等は enforcement/claude/ に正本を置く。 |
+| **Cursor** | .cursor/ を setup で生成。enforcement/cursor/ 正本から展開。 | 規約要約・「必ず CORE/LOAD_POLICY を読む」をルールに置く。 |
+| **Gemini** | プロジェクト単位の設定が公式で定義されていれば同様に生成。未定義の場合はドキュメント参照＋手動。 | |
 
 ---
 
-## ログ記録の確認（実行基盤による差分）
+## スキル形式の差分
 
-共通規約（CORE/RULES）では「書記が workflow.db に記録したことが確認できること」のみを要求する。具体的な確認手段は実行基盤・環境により異なる。
+- **Claude Code**: [Agent Skills](https://agentskills.io/) 準拠。`.claude/skills/<name>/SKILL.md`。YAML frontmatter（name, description）＋ markdown 本文。`/skill-name` で起動可能。
+- **Cursor**: 同じ SKILL.md を `.cursor/skills/` にコピーして利用。形式は Agent Skills に合わせる。
+- **Gemini CLI**: `.gemini/skills/` に skill フォルダをコピー。形式は共通。
 
-- **SQLite に直接アクセスできる環境**（例: Cursor、Claude Code で `.workflow/workflow.db` を参照できる場合）: 可能であれば当該 issue_id の直近記録を確認する例として、`sqlite3 .workflow/workflow.db "SELECT * FROM execution_logs WHERE issue_id='<issue_id>' ORDER BY created_at DESC LIMIT 1"` を実行できる。書記の確認メッセージを以て足りる運用でもよい。
-- **DB に直接アクセスしない環境**（例: 一部の OpenAI / Gemini 利用形態）: 書記サブの応答（記録済みの確認メッセージ）を以て「確認できた」とみなす。
-
----
-
-## 既知の制約・推奨用途
-
-- **Cursor**: 実装・編集・プロジェクト内の一貫したルール適用に向く。長文の規約を最初に全部読ませる設計と相性が良い。
-- **Claude Code**: 委譲・ツール連携・書記的なログ記録に向く。サブエージェント表現と相性が良い。
-- **OpenAI**: 要件整理・レビュー・壁打ちに向く。最初に読むファイルを厳しく限定すると安定しやすい。
-- **Gemini**: 長文の要件・監査・ドキュメント照合に向く。出力形式・参照範囲を明示すると安心。
+フォーマットは **SKILL.md（Agent Skills 形式）で統一**する。配置パスだけがツールごとに異なる。詳細は [platforms/SKILLS.md](SKILLS.md) を参照。
 
 ---
 
-## 各 platform ファイル
+## 運用
 
-- [cursor.md](./cursor.md) — Cursor 用差分
-- [claude_code.md](./claude_code.md) — Claude Code 用差分
-- [openai.md](./openai.md) — OpenAI 用差分
-- [gemini.md](./gemini.md) — Gemini 用差分
-
-共通仕様は [boot/](../boot/) を参照すること。ここには**差分のみ**を書く。
+- 詳細は COPY_TO_PROJECT_ROOT および setup 脚本を参照する。
+- スキルを追加・変更したら、正本（.agents/skills/ 配下の SKILL.md）を更新し、setup または sync を再実行して各プラットフォームに反映する。
