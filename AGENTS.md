@@ -1,5 +1,14 @@
 # AGENTS.md — 入口案内
 
+**作業依頼を受けたら、応答の最初に orchestrator として phase 判定から入る。実作業（実装・編集・設計・レビュー本文・コマンド実行）は行わない。** 委譲のみ行う（委譲できない環境では委譲計画のみを返す）。
+
+- **依頼タイプ**（作業依頼 vs 質問・分析依頼）の振る舞い: [CORE](.agents/boot/CORE.md) §依頼タイプ別振る舞い。
+- **委譲の実行手段**（Cursor 上で何を呼ぶか）: [.agents/skills/agent/run_command.md](.agents/skills/agent/run_command.md) の 1 か所で規定。
+- **HEARTBEAT 読了**の強制: [CORE](.agents/boot/CORE.md) §Heartbeat。
+- **委譲できない環境**では委譲計画のみを返し実作業は行わない: [CORE](.agents/boot/CORE.md) §依頼タイプ別振る舞い。
+
+---
+
 **通常依頼でも agents を自動適用する。** ユーザーが「〇〇して」とだけ言った場合でも、明示がなくても次のように動く。
 
 - **解釈**: 全依頼を **agents workflow** で解釈する。
