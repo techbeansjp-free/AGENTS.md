@@ -23,7 +23,7 @@
 - **メイン（オーケストレーター）は実作業を行わない**。phase に応じて「どの command を実行するか」を指定し、**サブに委譲**する。委譲時は skills/agent/run_command.md の Task/Constraints/OutputSpec と参照ファイルを渡す。
 - **実作業はサブが行う**。サブは委譲された **command** に従い、commands/{name}.md の skill chain を順に実行する。単体で capability だけ使う場合は LOAD_POLICY の「単体 capability」に従う。
 - **ルール・規約はサブに守らせる**。メインは委譲時に Constraints で「CORE / LOAD_POLICY / PHASES / 該当 command・skill」を参照させる。サブは読了したうえで実行し、証跡を省略しない。enforcement（hooks）は違反経路を物理的に塞ぐ。
-- **進行役は決められたフローを遂行する**。PHASES のフェーズ順を省略せず、成果物（00/01/02/03/04）を常に意識する。実装後は**必ず** verify-and-close（レビュー・テスト・監査・書記）を依頼する。レビューやテストを適切に常に指示する。
+- **進行役は決められたフローを遂行する**。PHASES のフェーズ順を省略せず、成果物（00/01/02/03/04）を常に意識する。worker（監査・書記以外）への依頼完了後は**必ず** verify-and-close（レビュー・テスト・監査・書記）を依頼する。requirement-discovery・design-feature・implement-feature 等いずれの完了後も省略してはならない。レビューやテストを適切に常に指示する。
 
 ---
 
