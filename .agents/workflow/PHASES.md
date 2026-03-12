@@ -28,9 +28,9 @@
 
 - 各フェーズの成果物が**テンプレート**の必須セクションを満たしていること。
 - **各工程で監査・書記に依頼する**。レビュー・クローズ前に必ず verify-and-close（監査・書記）を経ること。
-- 証跡（memo・ログ）が YYYYMMDD_HHMMSS_ プレフィックス等の規約に従っていること。**memo プレフィックスは専用経路のみで取得すること**: **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** の実行、または **.agents/scripts/memo-prefix.sh** の実行で得た値を使用する。**手入力・固定値・推測は禁止。** ログは一定のルールで必ず記録すること。
+- 証跡（memo・ログ）のプレフィックスは **YYYYMMDD_HHMMSS_** とし、**実行環境の現在時刻（JST）を取得して付与すること**。**memo プレフィックスは専用経路のみで取得すること**: **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** の実行、または **.agents/scripts/memo-prefix.sh** の実行で得た値を使用する。**issue フォルダ名のプレフィックス**も同様に**実行環境の現在時刻（JST）を取得**して付与すること。**TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** の実行、または **.agents/scripts/memo-prefix.sh** の実行で得た値を使用する。**推測・固定・未来日時の使用は禁止**（手入力・固定値・推測・未来日時を使わない）。ログは一定のルールで必ず記録すること。
 - command 実行は commands/{name}.md の skill chain に従っていること。
-- **監査で検証する項目**: ディレクトリ構成・ファイルの作成場所・命名規則（spec/03）・**プレフィックス**（memo の YYYYMMDD_HHMMSS_ は実行環境現在時刻 JST 取得。推測禁止）・フォーマット（TEMPLATES）・spec 準拠（設計原則・UNIX 哲学等）。テストコードは Given / When / Then をインラインコメントで記載していること（.agents/TEST_BDD_FORMAT.md）。
+- **監査で検証する項目**: ディレクトリ構成・ファイルの作成場所・命名規則（spec/03）・**プレフィックス**（memo および issue フォルダ名の YYYYMMDD_HHMMSS_ は実行環境現在時刻 JST 取得。推測・固定・未来禁止）・フォーマット（TEMPLATES）・spec 準拠（設計原則・UNIX 哲学等）。テストコードは Given / When / Then をインラインコメントで記載していること（.agents/TEST_BDD_FORMAT.md）。
 
 ---
 
