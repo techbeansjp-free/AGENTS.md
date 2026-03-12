@@ -23,6 +23,8 @@
 - **context**: 00/01/02/03/04 のパス。委譲時に指定された参照ファイル。
 - **参照**: .agents/REVIEW_RULE.md、PHASES の監査観点。
 
+**レビュー成果物の参照先**: レビュー成果物（00/01/02/03 に対するドキュメントレビューの結果）は **issue フォルダ直下の 04_review** を参照する。本 command は 04_review を作成・更新し、その内容を検証・クローズの根拠とする。**memo はレビュー成果物の配置先として参照しない。**
+
 ---
 
 ## PROCESS（Skill chain・この順で実行）
@@ -42,10 +44,11 @@
 
 ## 入出力の受け渡し
 
+- **レビュー成果物は issue 直下の 04_review を参照・更新する。** 検証・クローズ時に参照するレビュー成果物の配置先は 04_review のみとする（memo は参照しない）。
 - generate-scenarios の OUT（シナリオ・観点一覧）→ map-coverage の IN。
 - map-coverage の OUT（カバレッジ表・未達一覧）→ 04_review に反映。review-code / review-architecture でも参照する。
 - review-code と review-architecture の OUT を 04_review にまとめる。
-- 最後に write-workflow-log で実施内容・変更ファイル・完了判定を記録する。本則は workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス必須。
+- 最後に write-workflow-log で実施内容・変更ファイル・完了判定を記録する。本則は workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス必須（専用経路で取得）。
 
 ---
 

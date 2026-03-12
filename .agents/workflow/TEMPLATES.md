@@ -7,7 +7,8 @@
 ## テンプレートの正本
 
 - **00/01/02/03/04**: プロジェクトの **.workflow/templates/** に 00_要求定義.md, 01_要件定義.md, 02_設計.md, 03_実装計画.md, 04_review.md を置く。存在しない場合は、setup が **AGENTS-spec/.workflow/templates/**（本パッケージの .workflow）からコピーする。それも無い場合は親 issue の同種ファイルを形式の参照とする。
-- **memo（証跡）**: **配置は .workflow/{issue}/memo/** とする。**{issue} は YYYYMMDD_HHMMSS_ をプレフィックスとする issue フォルダ名（必須）。** 例: 20260310_090428_AGENTS-spec完全作り直し。ファイル名も YYYYMMDD_HHMMSS_ プレフィックス必須。中身は CONTRACT 準拠（実施内容・変更・完了判定が分かる形）。**プレフィックスの YYYYMMDD_HHMMSS_ は、必ず実行時のシステム時計（例: `TZ=Asia/Tokyo date +%Y%m%d_%H%M%S`）から取得し、手入力・推測・固定値で決めてはならない。**
+- **レビュー成果物の配置**: ドキュメントレビュー（00/01/02/03 に対するレビュー）の成果物は **issue フォルダ直下に 04_review を直接作成**する。**memo にレビューを書かない**。memo はレビュー以外のメモ・証跡用とする。
+- **memo（証跡）**: **配置は .workflow/{issue}/memo/** とする。**{issue} は YYYYMMDD_HHMMSS_ をプレフィックスとする issue フォルダ名（必須）。** 例: 20260310_090428_AGENTS-spec完全作り直し。ファイル名も YYYYMMDD_HHMMSS_ プレフィックス必須。中身は CONTRACT 準拠（実施内容・変更・完了判定が分かる形）。**memo プレフィックス（YYYYMMDD_HHMMSS_）の専用経路**: プレフィックスは **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** を実行して得た値、または **.agents/scripts/memo-prefix.sh** を実行して得た値（必要に応じて末尾に `_` を付与）のみを使用する。**手入力・固定値・AI の推測でプレフィックスを生成してはならない。** 専用経路以外ではプレフィックスを生成しない。
 
 ---
 
