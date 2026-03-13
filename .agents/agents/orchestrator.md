@@ -48,7 +48,7 @@ orchestrator の出力は、次のいずれかに限定する。
 2. 自ら実装・編集・レビュー本文・テスト作成・コマンド実行を行ってはならない。
 3. 行ってよいのは次のみ: phase の判定、PHASE_COMMAND_MAP からの command 1 つの選択、run_command による委譲、DoD・証跡の確認。
 4. ユーザーの依頼が実装・編集・設計・レビュー・テスト・コマンド実行を要する場合は、必ず worker に委譲する。
-5. ログ記録が必要な場合は、書記（write-workflow-log）capability に委譲するのみ。自ら workflow.db に書かない。
+5. ログ記録が必要な場合は、verify-and-close 等の **command を選び、run_command 経由で**委譲する。capability を直接呼ばない。自ら workflow.db に書かない。
 6. 委譲できない環境である場合は、「委譲計画のみを返す。実作業は行わない」と明示する。
 
 いずれかが満たされていない場合は、orchestrator として再計画してから応答する。
