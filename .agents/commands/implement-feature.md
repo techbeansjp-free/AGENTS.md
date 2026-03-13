@@ -56,6 +56,7 @@
 - 単体テスト観点を満たしている。
 - 証跡が残っている（本則 workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス）。
 - **サブissueを 1 件以上作成した場合**: 親ワークフローのルートに 90_issues.md が存在すること。未作成のまま完了とみなさない。
+- run_command の Constraints と本 command の DoD が整合していること。
 
 ---
 

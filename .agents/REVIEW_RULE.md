@@ -1,6 +1,6 @@
 # REVIEW_RULE — レビュー実施時の必須参照と観点
 
-.agents/RULES.md がレビュー手順の正本である。本ファイルは補助資料。詳細は RULES.md を参照。
+**This file is a supplementary guide; the definitive rules live in [.agents/RULES.md](RULES.md).** 正本は RULES.md であり、本ファイルは補助資料。重複を避けるため、ルールの解釈・運用は RULES.md を単一の参照先とすること。
 
 04_review を実施するときの**必須参照**と**監査観点**をまとめる。レビュー深度は **quick / standard / full** のいずれか。変更規模（小修正→quick、中規模→standard、新規・大規模→full）に応じて [RULES.md §実行モード](RULES.md) で選択すること。
 
@@ -8,9 +8,11 @@
 
 ## レビュー成果物の配置（必須）
 
-- **04_review は実装フェーズ完了後のレビューフェーズ**（verify-and-close 実行時）でのみ作成・更新する。実装前に 04_review を作成してはならない。
-- **ドキュメントレビュー**の成果物は **issue フォルダ直下に 04_review.md を直接作成**する。
-- **memo にレビューを書かない**。「memo にレビューを書く」という指示・振る舞いは禁止する。memo はレビュー以外のメモ・証跡用とする。
+以下は RULES.md および PHASES.md に基づく補足であり、権威は正本（RULES.md）に属する。
+
+- **04_review は実装フェーズ完了後のレビューフェーズ**（verify-and-close 実行時）でのみ作成・更新する。実装前に 04_review を作成してはならない。（PHASES §レビュー成果物の配置ルールに基づく）
+- **ドキュメントレビュー**の成果物は **issue フォルダ直下に 04_review.md を直接作成**する。（同上）
+- **memo にレビューを書かない**。「memo にレビューを書く」という指示・振る舞いは禁止する。memo はレビュー以外のメモ・証跡用とする。（同上）
 
 ---
 

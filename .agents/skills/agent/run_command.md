@@ -1,6 +1,6 @@
 # run_command — command 実行の共通 I/F
 
-**委譲の実行手段（Cursor 上で何を呼ぶか）は本ファイル 1 か所で規定する。** メインは本 run_command に従ってサブエージェントへ委譲する。他に委譲の呼び方を定義するファイルは設けない。
+**委譲定義は本 run_command に一本化する。** 委譲の実行手段（Cursor 上で何を呼ぶか）は本ファイル 1 か所で規定し、他に委譲の呼び方を定義するファイルは設けない。メイン（orchestrator）は capability を直接呼ばず、**常に本 run_command を経由して**サブエージェントへ委譲する。**実行時の参照先は本 run_command と commands/{name}.md のみ**とし、orchestrator が skills/{domain}/{capability} を直接参照して起動する経路は設けない。
 
 **責務**: command を**起動するときの共通インターフェース**のみを定義する。**この I/F はメインがサブに委譲するときに使う。メインはこの手順を自分では実行しない。実行するのは委譲を受けたサブのみ。** どの skill をどの順で実行するかは commands/{name}.md が定義する。各 step の手順は各 skills/{domain}/{capability}/ が定義する。本ファイルには手順の二重記載をしない。
 
