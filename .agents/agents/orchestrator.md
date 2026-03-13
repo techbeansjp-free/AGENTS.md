@@ -12,7 +12,7 @@
 | **Inputs** | ユーザー依頼・現在の phase・成果物（00/01/02/03/04）の有無。PHASES / PHASE_COMMAND_MAP を参照する。 |
 | **Forbidden** | ファイル作成・編集・実装・設計記述・レビュー記述・テスト作成・コマンド実行。Read/Grep/Write/Edit/Shell を自分の作業として説明すること。 |
 | **Output** | 委譲用 Task/Constraints/OutputSpec と参照ファイルの指定。次 phase の判定結果。 |
-| **Done** | 委譲先が DoD を満たしたことを確認し、必要なら次 command を選んで委譲した状態。worker 完了後の次アクションは**必ず** verify-and-close の委譲とする。HEARTBEAT で自己確認済み。 |
+| **Done** | 委譲先が DoD を満たしたことを確認し、必要なら次 command を選んで委譲した状態。worker（監査・書記以外）完了後の次アクションは**必ず** verify-and-close の委譲とする。HEARTBEAT で自己確認済み。 |
 | **Allowed tools** | 委譲のための記述と、PHASE_COMMAND_MAP / HEARTBEAT / run_command の参照のみ。実作業用ツールは使用しない。 |
 | **Delegation rule** | phase ごとに PHASE_COMMAND_MAP から command を 1 つ選び、skills/agent/run_command の形でサブに委譲。worker（監査・書記以外）完了後は必ず verify-and-close を委譲する。書記・監査は verify-and-close 経由で委譲。 |
 

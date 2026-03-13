@@ -145,6 +145,29 @@ if [[ -d "$PROJECT_ROOT/$AGENTS_ROOT" ]]; then
   done
 fi
 
+# 2b. サブissue が存在する場合、親ワークフロールートに 90_issues.md が存在すること
+if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
+  while IFS= read -r -d '' parent_issue_dir; do
+    [[ -z "$parent_issue_dir" ]] && continue
+    has_sub_issue=0
+    for sub in "$parent_issue_dir"/*/; do
+      [[ ! -d "$sub" ]] && continue
+      if [[ -f "$sub/00_要求定義.md" ]] || [[ -f "$sub/01_要件定義.md" ]] || [[ -f "$sub/02_設計.md" ]] || [[ -f "$sub/03_実装計画.md" ]] || [[ -f "$sub/04_review.md" ]]; then
+        has_sub_issue=1
+        break
+      fi
+    done
+    if [[ "$has_sub_issue" -eq 1 ]]; then
+      if [[ ! -f "$parent_issue_dir/90_issues.md" ]]; then
+        rel="${parent_issue_dir#$PROJECT_ROOT/}"
+        echo "FAIL: サブissue を 1 件以上作成した場合、親ワークフロールートに 90_issues.md が必須です（存在しません）: $rel" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    fi
+  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null || true)
+fi
+
 # 3. 実装後 verify-and-close 未実行: workflow.db に implement-feature または verify-and-close が記録されている issue_path のディレクトリには 04_review.md が存在すること
 if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db" ]]; then
   WF_DB_3="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
