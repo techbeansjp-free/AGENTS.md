@@ -68,6 +68,7 @@
 - **着手前に**、00_要求定義.md および 01_要件定義.md の**テンプレートファイル**（.workflow/templates/ またはプロジェクトに無い場合は AGENTS-spec/.workflow/templates/）を**開いて確認**すること。成果物はテンプレートの**見出し・セクション番号・必須セクション**を欠かさずに作成すること。
 - **着手前に .agents/spec/ を参照する**。spec 概要・設計原則・設計判断の優先順位（spec/00_spec概要.md, spec/01_設計原則.md, spec/06_設計判断の優先順位.md）を踏まえて要求・制約を整理する。
 - 既存の 00/01 がある場合は上書きせず、該当 issue の 00/01 を更新する。テンプレートは .workflow/templates または親 issue を参照する。
+- 00/01 を更新する際、frontmatter に既に document_id が存在する場合はその値を変更・上書きしてはならない。document_id は 00/01 を新規作成するときまたは初回付与時にのみ設定する。
 - **00_要求定義.md を新規作成する場合**、issue_id（UUID）を 1 回発行し、00 の frontmatter に `issue_id: "<UUID>"` を記載すること。既存 00 を更新する場合は issue_id を変更しないこと。issue フォルダの識別は 00 の frontmatter の issue_id を正とする。
 - run_command の Constraints（順序・memo プレフィックス）を守ること。
 - **完了後に書記（write-workflow-log）に依頼して記録させること。**

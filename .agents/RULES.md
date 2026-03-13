@@ -21,7 +21,7 @@
 ---
 
 - **実行**: CORE / LOAD_POLICY / PHASES 読了後に開始。command 実行時は commands/{name}.md の skill chain に従う。メインは実作業をせず、サブに委譲してルールを守らせる（CORE §メインとサブの役割）。
-- **ドキュメント**: 1 ファイル 1 責務。正本は 1 か所。参照は 1 行に限定。**全ドキュメント（00/01/02/03/04/05/90、memo、.workflow/templates/docs/ 配下・指摘対応配下・00_システム理解から作成するドキュメント）に document_id（UUID）を必須とする。任意とすることを禁止する。** **ドキュメントはテンプレートを活用する**。各成果物（00/01/02/03/04）は所定のフォーマット・テンプレートを使う。どの command・どの capability がどのテンプレートを使うかは [workflow/TEMPLATES.md](workflow/TEMPLATES.md) に明示する。監査でテンプレート遵守を確認する。
+- **ドキュメント**: 1 ファイル 1 責務。正本は 1 か所。参照は 1 行に限定。**全ドキュメント（00/01/02/03/04/05/90、memo、.workflow/templates/docs/ 配下・指摘対応配下・00_システム理解から作成するドキュメント）に document_id（UUID）を必須とする。任意とすることを禁止する。** **ドキュメントはテンプレートを活用する**。各成果物（00/01/02/03/04）は所定のフォーマット・テンプレートを使う。どの command・どの capability がどのテンプレートを使うかは [workflow/TEMPLATES.md](workflow/TEMPLATES.md) に明示する。監査でテンプレート遵守を確認する。**document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。既存の document_id を後から書き換える運用を禁止する。**
 - **監査・書記**: 各工程の完了後、クローズ前に**必ず** verify-and-close（監査・書記）を経る。監査は PHASES の監査観点（ディレクトリ構成・命名・プレフィックス・フォーマット・spec 準拠・テスト BDD インライン等）で検証する。
 - **命名**: 新規 command または capability を追加するときは、**command 名と capability 名の対応・命名方針**を一度確認する。
 - **契約**: 新規 command / skill は [IO_CONTRACT.md](IO_CONTRACT.md) の共通セクション（command: INPUT/PROCESS/OUTPUT/DONE、skill: Purpose/Inputs/Process/Outputs/Done/Forbidden）に従う。契約付きフィルタとして pipe 可能・検証可能にする。概念名が近い（例: commands/design-feature.md と skills/architecture/design-feature/）と混乱しうる。CONCEPTS.md §既知の注意点 2 を参照。

@@ -25,7 +25,7 @@
 | summary | ○ | 実施内容の要約（1 文以上）。 |
 | changed_files | △（implement-feature は必須） | 変更ファイル一覧（改行区切りまたは JSON）。implement-feature 時は必須。 |
 | dod_met | ○ | DoD 達成 0 または 1。 |
-| document_id | ○ | 対応する成果ドキュメント（00/01/02/03/04/05/90/memo 等）の UUID。全ての成果ドキュメントには document_id を必ず設定すること。任意とすることは禁止。write-workflow-log は環境変数 DOCUMENT_ID で受け取る。 |
+| document_id | ○ | 対応する成果ドキュメント（00/01/02/03/04/05/90/memo 等）の UUID。全ての成果ドキュメントには document_id を必ず設定すること。任意とすることは禁止。document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。write-workflow-log は環境変数 DOCUMENT_ID で受け取る。 |
 | memo ファイルパス（memo 運用時） | △ | memo_ref に登録する memo の相対パス。過渡的・例外・**非推奨**運用時のみ。本則は workflow.db。 |
 
 ---
@@ -63,7 +63,7 @@
 | issue_id | TEXT | △（推奨） | issue を一意に識別する UUID。00 の frontmatter の issue_id と一致。環境変数 ISSUE_ID。 |
 | review_id | TEXT | △（verify-and-close で推奨） | レビュー成果物（04 の document_id 等）の UUID。環境変数 REVIEW_ID。 |
 | changed_files_json | TEXT | △（implement-feature は必須） | 変更ファイル一覧の JSON 配列文字列。 |
-| document_id | TEXT | ○ | 対応する成果ドキュメントの UUID。全ての成果ドキュメントには document_id を必ず設定すること。任意とすることは禁止。環境変数 DOCUMENT_ID で渡す。 |
+| document_id | TEXT | ○ | 対応する成果ドキュメントの UUID。全ての成果ドキュメントには document_id を必ず設定すること。任意とすることは禁止。document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。環境変数 DOCUMENT_ID で渡す。 |
 
 **必須キー不足時**: 記録を失敗とみなし、親にエラーを返す。完了とみなさない。
 
