@@ -32,5 +32,5 @@
 
 ## 運用
 
-- 詳細は COPY_TO_PROJECT_ROOT および setup 脚本を参照する。
+- 詳細は [SETUP.md](../SETUP.md) および setup 脚本を参照する。
 - スキルを追加・変更したら、正本（.agents/skills/ 配下の SKILL.md）を更新し、setup または sync を再実行して各プラットフォームに反映する。

@@ -21,7 +21,9 @@
 
 - **issue**: .workflow/{issue}/ のパス。04_review の更新対象。
 - **context**: 00/01/02/03/04 のパス。委譲時に指定された参照ファイル。
-- **参照**: .agents/REVIEW_RULE.md、PHASES の監査観点。
+- **参照**: .agents/REVIEW_RULE.md、.agents/workflow/PHASES.md の監査観点。監査時には PHASES の監査観点（ユースケースに基づく全シナリオのテストコード化の網羅・フォーマットの正しさ）に従い、証跡として「01 の BDD とテスト仕様の対応」「必須フォーマットの充足」を確認すること。
+
+**レビュー成果物の参照先**: レビュー成果物は、**本 command（verify-and-close）をレビューフェーズで実行するときに** issue フォルダ直下の 04_review に作成・更新する。（00/01/02/03 に対するドキュメントレビューの結果および実装成果物の確認を含む。）本 command は 04_review を作成・更新し、その内容を検証・クローズの根拠とする。**memo はレビュー成果物の配置先として参照しない。**
 
 ---
 
@@ -42,10 +44,11 @@
 
 ## 入出力の受け渡し
 
+- **レビュー成果物は issue 直下の 04_review を参照・更新する。** 検証・クローズ時に参照するレビュー成果物の配置先は 04_review のみとする（memo は参照しない）。
 - generate-scenarios の OUT（シナリオ・観点一覧）→ map-coverage の IN。
 - map-coverage の OUT（カバレッジ表・未達一覧）→ 04_review に反映。review-code / review-architecture でも参照する。
 - review-code と review-architecture の OUT を 04_review にまとめる。
-- 最後に write-workflow-log で実施内容・変更ファイル・完了判定を記録する。本則は workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス必須。
+- 最後に write-workflow-log で実施内容・変更ファイル・完了判定を記録する。本則は workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス必須（専用経路で取得）。
 
 ---
 
@@ -60,12 +63,15 @@
 
 - 04_review に実装内容・受け入れ基準の確認が記載されている。
 - 証跡が規約に従って記録されている（workflow.db 本則。memo 運用時はプレフィックス・書記の形式）。
-- PHASES の監査観点を満たしている。
+- PHASES の監査観点を満たしている（全シナリオのテストコード化の網羅・フォーマットの正しさを含む）。REVIEW_RULE のチェックリストで検証可能であること。
+- サブissueを 1 件以上作成した場合、親ワークフロールートに 90_issues.md が存在すること。
+- run_command の Constraints と本 command の DoD が整合していること。
 
 ---
 
 ## 実行時の注意
 
+- **実装成果物にテストが含まれる場合は、04_review を作成・更新する前にテストを再実行し、実行結果（成功/失敗・ログ参照先）を 04_review に記載すること。** テスト未実行のまま監査完了とみなしてはならない。
 - **実装 phase の成果物（コード・02/03 に基づく変更）が存在する場合、クローズまたは次 Task への遷移の前に必ず本 command（verify-and-close）を委譲すること。** 実装のみでレビューを飛ばす経路は禁止。enforcement で 04_review 未更新のままの close 相当の遷移を拒否する。
 - 04_review のテンプレート（.workflow/templates または親 04）に従う。基準ごと・シナリオごとに「検証方法・結果」を書く。
 - write-workflow-log を省略しない。CORE の証跡省略禁止を守る。

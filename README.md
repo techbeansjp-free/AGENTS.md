@@ -2,7 +2,7 @@
 
 LLM エージェント（AI）と人間が協働するための**実行契約・能力（skills）中心のワークフロー**を定義する仕様パッケージ。プロジェクトにコピーして、AI に「.agents に従って」と指示すると、フェーズ（要求→要件→設計→実装計画→実装→レビュー）に沿って動く。
 
-**メタレイヤー**: 本仕様で定義する orchestrator / worker 等は「プロジェクト内で動くエージェント」の振る舞いである。これら仕様ファイルを編集するアシスタント（Cursor 等）は別レイヤー。**基盤の自己肥大化防止**（Feature First・文書追加前の統合検討・一時文書の寿命・責務境界・監視指標）も [META_LAYER.md](META_LAYER.md) で定義する。
+**メタレイヤー**: 本仕様で定義する orchestrator / worker 等は「プロジェクト内で動くエージェント」の振る舞いである。これら仕様ファイルを編集するアシスタント（Cursor 等）は別レイヤー。**基盤の自己肥大化防止**（Feature First・文書追加前の統合検討・一時文書の寿命・責務境界・監視指標）も [.agents/META_LAYER.md](.agents/META_LAYER.md) で定義する。
 
 ---
 
@@ -18,6 +18,8 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 | 配置 | 内容 |
 |------|------|
+| **SETUP.md** | コピー対象・セットアップ・スモークテスト |
+| **META_LAYER.md** | 基盤の肥大化防止・文書追加前の統合検討 |
 | **CONCEPTS.md** | 思想・判断の問い |
 | **GETTING_STARTED.md** | 使い方（メイン・サブの役割、1 issue の回し方） |
 | **README.md** | 構成と索引（何を知りたいときに何を読むか） |
@@ -56,7 +58,7 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
    - `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
 
 3. **動作確認**  
-   プロジェクトルートに `AGENTS.md` と `.agents/` が存在することを確認する。詳細は [COPY_TO_PROJECT_ROOT.md](COPY_TO_PROJECT_ROOT.md) のスモークテストを参照。
+   プロジェクトルートに `AGENTS.md` と `.agents/` が存在することを確認する。詳細は [.agents/SETUP.md](.agents/SETUP.md) のスモークテストを参照。
 
 ---
 
@@ -69,8 +71,8 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 | いつ何を読むか | .agents/boot/LOAD_POLICY.md |
 | フェーズ・成果物・DoD | .agents/workflow/PHASES.md |
 | command を実行するとき | .agents/skills/agent/run_command.md と .agents/commands/{name}.md |
-| コピー対象・セットアップ詳細 | [COPY_TO_PROJECT_ROOT.md](COPY_TO_PROJECT_ROOT.md) |
-| 基盤の肥大化防止・文書追加ルール | [META_LAYER.md](META_LAYER.md) |
+| コピー対象・セットアップ詳細 | [.agents/SETUP.md](.agents/SETUP.md) |
+| 基盤の肥大化防止・文書追加ルール | [.agents/META_LAYER.md](.agents/META_LAYER.md) |
 
 ---
 

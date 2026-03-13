@@ -1,5 +1,7 @@
 # run_command — command 実行の共通 I/F
 
+**委譲定義は本 run_command に一本化する。** 委譲の実行手段（Cursor 上で何を呼ぶか）は本ファイル 1 か所で規定し、他に委譲の呼び方を定義するファイルは設けない。メイン（orchestrator）は capability を直接呼ばず、**常に本 run_command を経由して**サブエージェントへ委譲する。**実行時の参照先は本 run_command と commands/{name}.md のみ**とし、orchestrator が skills/{domain}/{capability} を直接参照して起動する経路は設けない。
+
 **責務**: command を**起動するときの共通インターフェース**のみを定義する。**この I/F はメインがサブに委譲するときに使う。メインはこの手順を自分では実行しない。実行するのは委譲を受けたサブのみ。** どの skill をどの順で実行するかは commands/{name}.md が定義する。各 step の手順は各 skills/{domain}/{capability}/ が定義する。本ファイルには手順の二重記載をしない。
 
 ---
@@ -39,8 +41,14 @@ command 実行を委譲するときに渡すブロック。内容の詳細は各
 
 ### Constraints
 
-- **守るルール**: CORE / LOAD_POLICY / PHASES。該当 command ファイルに記載された**順序**を守ること。飛ばさない。
-- **memo 作成時**: **.workflow/{issue}/memo/** に作成すること。ファイル名に **YYYYMMDD_HHMMSS_**（日本標準時、実行環境の現在時刻を取得）をプレフィックスとして付与すること。
+- **守るルール**: CORE / LOAD_POLICY / PHASES / RULES / IO_CONTRACT。該当 command ファイルに記載された**順序**を守ること。飛ばさない。All output must conform to .agents/IO_CONTRACT.md and .agents/RULES.md
+- **.agents-project**: プロジェクトルートの **.agents-project/** が存在する場合は、command 実行**前**に読了・参照すること。
+- **worker 完了後**: 監査・書記以外の worker command（requirement-discovery, design-feature, implement-feature 等）の完了後、オーケストレータは**必ず** verify-and-close を指示すること。省略して次フェーズへ進めてはならない。
+- **レビュー成果物**: **レビューフェーズ**（実装完了後に verify-and-close を委譲するとき）で作成するレビュー成果物は、**issue 直下に 04_review を直接作成**すること。**04_review は実装前に作成してはならない。** **memo にレビューを書かない**。
+- **04_review 作成・更新時**: 実装成果物にテストが含まれる場合は、verify-and-close の実行時に**テストを再実行**し、結果を 04_review に記載すること。テスト未実行のまま監査完了とみなしてはならない。
+- **memo 作成時**: **.workflow/{issue}/memo/** に作成すること。ファイル名に **YYYYMMDD_HHMMSS_**（日本標準時）をプレフィックスとして付与すること。プレフィックスは **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S の実行、または .agents/scripts/memo-prefix.sh の実行**で得た値に限定する。取得は memo ファイル作成のたびに実行すること（キャッシュ・事前計算に依存しない）。**推測・固定・未来日時の使用は禁止**する（手入力・AI の推測・ハードコード・未来日時を使わない）。
+- **issue フォルダ作成時**: **.workflow/** に issue 用ディレクトリを作成するとき、ディレクトリ名のプレフィックスは **YYYYMMDD_HHMMSS_**（日本標準時）とする。プレフィックスは **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S の実行、または .agents/scripts/memo-prefix.sh の実行**で得た値に限定する。取得は issue フォルダ作成のたびに実行すること（キャッシュ・事前計算に依存しない）。**推測・固定・未来日時の使用は禁止**する（手入力・AI の推測・ハードコード・未来日時を使わない）。
+- **サブissue作成時**: サブissueを 1 件以上作成した場合は、**親ワークフロー（.workflow/{親issue}/）のルートに 90_issues.md を必ず作成すること**。未作成のまま当該フローを完了とみなさない。
 - **禁止**: command ファイルを読まずに skill だけ実行しないこと。chain の順序を変えたり飛ばしたりしないこと。
 
 ### OutputSpec

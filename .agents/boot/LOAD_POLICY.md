@@ -15,7 +15,7 @@
 | 思想・判断の問い | CONCEPTS.md |
 | **システム開発の基本・設計原則・設計判断の優先順位** | **spec/**（00_spec概要、01_設計原則、02_ディレクトリ構造方針、06_設計判断の優先順位。要求・設計 command の前に参照する） |
 | 実行・ドキュメント・テスト・レビュー要約 | RULES.md |
-| **command を実行するとき** | **skills/agent/run_command.md** → **commands/{command}.md**（例: requirement-discovery, implement-feature） |
+| **command を実行するとき** | プロジェクトルートの **.agents-project/** を読む（存在する場合）。**skills/agent/run_command.md** → **commands/{command}.md**（例: requirement-discovery, implement-feature） |
 | 要求発見 command | commands/requirement-discovery.md → 記載された skill chain を順に読む |
 | 設計 command | commands/design-feature.md → 記載された skill chain を順に読む |
 | 実装 command | commands/implement-feature.md → 記載された skill chain を順に読む |
