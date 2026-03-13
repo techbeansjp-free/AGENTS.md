@@ -42,6 +42,7 @@ command 実行を委譲するときに渡すブロック。内容の詳細は各
 ### Constraints
 
 - **守るルール**: CORE / LOAD_POLICY / PHASES。該当 command ファイルに記載された**順序**を守ること。飛ばさない。
+- **.agents-project**: プロジェクトルートの **.agents-project/** が存在する場合は、command 実行**前**に読了・参照すること。
 - **worker 完了後**: 監査・書記以外の worker command（requirement-discovery, design-feature, implement-feature 等）の完了後、オーケストレータは**必ず** verify-and-close を指示すること。省略して次フェーズへ進めてはならない。
 - **レビュー成果物**: **レビューフェーズ**（実装完了後に verify-and-close を委譲するとき）で作成するレビュー成果物は、**issue 直下に 04_review を直接作成**すること。**04_review は実装前に作成してはならない。** **memo にレビューを書かない**。
 - **04_review 作成・更新時**: 実装成果物にテストが含まれる場合は、verify-and-close の実行時に**テストを再実行**し、結果を 04_review に記載すること。テスト未実行のまま監査完了とみなしてはならない。
