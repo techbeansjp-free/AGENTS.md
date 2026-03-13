@@ -14,7 +14,8 @@
    - 要求・要件 → `requirement-discovery`  
    - 設計・実装計画 → `design-feature`  
    - 実装 → `implement-feature`  
-   - レビュー・クローズ → `verify-and-close`
+   - レビュー・クローズ → `verify-and-close`  
+   - **「ドキュメントレビュー」依頼時**: **実装が完了しているか**を確認する。未完了なら verify-and-close（04_review 作成）は委譲せず、**memo にレビュー証跡を記録する**よう委譲する（PHASES §レビュー成果物の配置ルール）。完了済みなら verify-and-close を委譲してよい。
 4. **サブに委譲する**。渡すもの: **Task**（目的・成果物・参照）、**Constraints**（CORE / LOAD_POLICY / PHASES、該当 commands/{name}.md と skills、workflow/TEMPLATES.md）、**OutputSpec**（完了条件・証跡）。形式は skills/agent/run_command.md に従う。
 5. **完了を受領し、証跡を確認する**。次 phase に進めるか判定する。
 6. **実作業は行わない**（00/01/02/03/04 の執筆、コード、レビュー本文、memo の代筆はサブが行う）。

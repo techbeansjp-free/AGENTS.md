@@ -1,5 +1,5 @@
 ---
-# document_id: 必須。作成時または major 更新時に UUID を付与すること。
+# document_id: 必須。作成時または major 更新時に UUID を付与すること。既存の場合は変更しない。
 document_id: { uuid }
 
 このドキュメントは、システムの仕様を定義する納品物です。  

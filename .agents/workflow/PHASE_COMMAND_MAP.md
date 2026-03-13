@@ -17,6 +17,8 @@
 | 実装 | implement-feature | 実装およびテストコード作成。既存 03_実装計画.md に従う |
 | レビュー | verify-and-close | 04_review.md の作成・更新とクローズ判定 |
 
+**04_review の作成条件**: 04_review は**実装フェーズ完了後**のレビューフェーズでのみ作成する。実装完了前に「ドキュメントレビュー」を依頼された場合は、verify-and-close を起動せず、**.workflow/{issue}/memo/** に証跡を記録する委譲とする（PHASES §レビュー成果物の配置ルール）。
+
 **証跡の原則**: レビュー phase の証跡は本則として workflow.db に記録する。memo は過渡的・例外運用のみ（scribe/CONTRACT 参照）。
 
 ---
