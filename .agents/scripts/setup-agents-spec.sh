@@ -2,7 +2,7 @@
 # setup-agents-spec.sh — 初回セットアップ
 # 本 .agents/ をプロジェクトの .agents/ にコピーし、AGENTS.md / CLAUDE.md をルートに配置する。
 # .claude/・.cursor/ の生成とスキル同期・テンプレートコピーを行う。
-# 配置: AGENTS-spec/.agents/scripts/。参照: COPY_TO_PROJECT_ROOT.md
+# 配置: AGENTS-spec/.agents/scripts/。参照: SETUP.md
 
 set -e
 
@@ -134,4 +134,4 @@ SQL
 
 init_workflow_db
 
-echo "Setup done. Check AGENTS-spec/COPY_TO_PROJECT_ROOT.md for smoke test."
+echo "Setup done. Check .agents/SETUP.md for smoke test."

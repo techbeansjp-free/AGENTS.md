@@ -182,5 +182,5 @@ feature delivery > framework purity
 
 ### 参照
 
-- [.agents/boot/CORE.md](.agents/boot/CORE.md) — 実行レイヤーでの絶対制約
-- [.agents/agents/README.md](.agents/agents/README.md) — 役割定義（orchestrator / worker / auditor / scribe）
+- [boot/CORE.md](boot/CORE.md) — 実行レイヤーでの絶対制約
+- [agents/README.md](agents/README.md) — 役割定義（orchestrator / worker / auditor / scribe）

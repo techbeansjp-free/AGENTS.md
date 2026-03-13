@@ -71,6 +71,8 @@
 | 構成・索引 | .agents/README.md |
 | 失敗条件・差し戻し先 | .agents/enforcement/README.md |
 | プロジェクト固有ルール（最優先） | プロジェクトルートの .agents-project/ |
+| コピー対象・セットアップ詳細 | .agents/SETUP.md |
+| 基盤の肥大化防止・文書追加ルール | .agents/META_LAYER.md |
 
 ---
 

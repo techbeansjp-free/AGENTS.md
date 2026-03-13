@@ -136,7 +136,7 @@ exit 0
 
 ## 3 点に対する改善ロードマップと修正方針
 
-- **第 1 優先**: README / DESIGN / IMPLEMENTATION_REVIEW の表現を完全に揃える。最上位 README にも「現状は案内＋CI、hook reject は未達」を明記する（enforcement/README.md §現状の強制レベルで実施）。
+- **第 1 優先**: README / DESIGN / IMPLEMENTATION_REVIEW の表現を完全に揃える。最上位 README にも「現状は案内＋CI、hook reject は未達」を明記する（enforcement/README.md の「矯正するもの（物理強制の例）」に従い実施）。
 - **第 2 優先**: sqlite3 直接実行をやめ、**専用ラッパー 1 本**経由に一本化する。
   - ラッパー要件: 書き込み先は .workflow/workflow.db 固定、workflow_log テーブルのみ、INSERT のみ、必須カラム未指定なら失敗、1 回の呼び出しで 1 レコードのみ、UPDATE/DELETE/任意 SQL 禁止。hook で「誰が sqlite3 を叩いたか」を当てにしない。
 - **第 3 優先**: audit を「存在チェック」から「経路・証跡チェック」に強化する。
