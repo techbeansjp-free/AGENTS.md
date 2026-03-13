@@ -1,4 +1,4 @@
-# REVIEW_RULE — レビュー実施時の必須参照と観点
+# REVIEW_RULE — レビュー実施時の参照と観点（補助）
 
 **This file is a supplementary guide; the definitive rules live in [.agents/RULES.md](RULES.md).** 正本は RULES.md であり、本ファイルは補助資料。重複を避けるため、ルールの解釈・運用は RULES.md を単一の参照先とすること。
 
@@ -18,6 +18,8 @@
 
 ## 参照先一覧
 
+レビュー手順の正本は [.agents/RULES.md](RULES.md)。以下は参照の索引である。
+
 | 参照先 | 内容 |
 |--------|------|
 | .agents/boot/CORE.md | 読了義務・証跡省略禁止・ログは書記のみ・メインは直接実作業しない |
@@ -35,7 +37,7 @@
 
 ## 監査で検証する項目（PHASES §監査観点）
 
-監査時には [workflow/PHASES.md](workflow/PHASES.md) の監査観点を満たすこと。以下は検証可能なチェックリストである。
+レビュー手順の正本は [.agents/RULES.md](RULES.md)。監査時には [workflow/PHASES.md](workflow/PHASES.md) の監査観点を満たすこと。以下は RULES.md / PHASES に基づく検証用チェックリストである。
 
 ### テストコード化の網羅
 
@@ -57,6 +59,8 @@
 ---
 
 ## レビュー実施時の必須行動
+
+手順の正本は [.agents/RULES.md](RULES.md)。以下は補足である。
 
 - **04_review の作成・更新時は、該当 issue の実装成果物にテストが含まれる場合、テストを再実行し、結果（成功/失敗・ログ参照先）を 04_review に記載すること。** テストを実行していない状態で監査完了とみなしてはならない。
 - 関連するテストやコードだけでなく、**プロジェクト全体のすべてのテストやコードを徹底的に調査する**こと。
