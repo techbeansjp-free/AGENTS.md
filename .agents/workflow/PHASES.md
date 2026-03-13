@@ -35,6 +35,7 @@
 - command 実行は commands/{name}.md の skill chain に従っていること。
 - **サブissueを 1 件以上作成した場合**: 親ワークフローのルートに **90_issues.md が存在すること**。未作成のまま当該フローを完了とみなさない。run_command の Constraints および該当 command の DoD と整合して検証する。
 - **監査で検証する項目**（上記のほか）: テストコードは Given / When / Then をインラインコメントで記載していること（.agents/TEST_BDD_FORMAT.md）。詳細は .agents/REVIEW_RULE.md を参照する。
+- **実装成果物にテストが含まれる場合、レビュー（04_review 作成・更新）時点でテストを再実行し、その結果を 04_review に記載すること。** テスト未実行のまま監査完了とみなさない。
 
 ---
 
