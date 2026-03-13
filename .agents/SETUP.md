@@ -2,7 +2,22 @@
 
 プロジェクトへ AGENTS-spec を導入するときのコピー対象・必須ファイル・初回セットアップで生成するもの・フックの正本を 1 ファイルにまとめる。記載パスと実体が一致する。
 
+以下を最初に実行する。
+
+## セットアップの実行方法
+
+セットアップ脚本は **.agents 配下** に配置する（AGENTS-spec/.agents/scripts/）。
+
+```bash
+# プロジェクトルートで実行。AGENTS-spec がプロジェクト直下にある場合。
+bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh
+```
+
+プロジェクトルートを第 1 引数で渡す実装でもよい。
+
 ---
+
+以下は補足・参照用である。
 
 ## コピー対象（AGENTS-spec からプロジェクトルートへ）
 
@@ -42,13 +57,36 @@
 
 ---
 
+## スキル・agents の正本と配備先
+
+メンテナが正本の場所と配備先の関係を一箇所で確認できるよう、対応を下表に示す。
+
+| 正本（.agents 配下） | 配備先 |
+|----------------------|--------|
+| .agents/skills/ | .claude/skills/ 、 .cursor/skills/ （setup の sync_skills で同期） |
+| .agents/agents/（README 等） | 配備先なし（参照用。agents テンプレートは .workflow/templates/agents/ を参照） |
+| .workflow/templates/agents/（scribe テンプレート） | 手動で .claude/agents/ および .cursor/agents/ にコピー（後述） |
+
+---
+
 ## 初回セットアップで生成するもの
 
 - **.claude/hooks/**: .agents/enforcement/claude/ の PreToolUse.sh, PostToolUse.sh を配置。
 - **.cursor/**: .agents/enforcement/cursor/ の agents-core.mdc 等を配置。
 - **.claude/skills/**, **.cursor/skills/**: .agents/skills/ 配下の各 capability をコピー（SKILL.md 含む）。
 - **.workflow/templates/**: プロジェクトに存在しない場合、**AGENTS-spec/.workflow/templates/** からコピーする。
+- **.workflow/workflow.db**: 存在しない場合のみ、setup の init_workflow_db で作成する（証跡用。配布物には含めない）。
 - フックの正本は .agents/enforcement/ にあり、setup が各ツール向けに配備する。
+- **scribe（agents テンプレート）**: 初回セットアップでは **.claude/agents/ および .cursor/agents/ には配置しない**。手動コピーを前提とする（理由は後述「scribe の利用手順」）。
+
+---
+
+## scribe（agents テンプレート）の利用手順
+
+**結論: 手動コピーとする。** setup 脚本では .claude/agents および .cursor/agents へ scribe を配置しない。
+
+- **手順**: scribe テンプレート（scribe_claude.md, scribe_cursor.md）の正本は **.workflow/templates/agents/**（AGENTS-spec からコピーした .workflow の場合はプロジェクトの .workflow/templates/agents/）にあり、利用する場合は **手動で .claude/agents/ および .cursor/agents/ にコピーすること**。
+- **理由**: 利用者による選択的コピーを想定し、既存の .claude/agents や .cursor/agents を setup で上書きしないため。必要なプロジェクト・環境にのみ配置できる。
 
 ---
 
@@ -63,19 +101,6 @@
 | **.claude/skills/, .cursor/skills/** | 再同期対象 | sync_skills で .agents/skills/ からコピー。正本を編集したら setup または sync を再実行して反映。 |
 | **.agents-project/** | 作成しない | setup は作成しない。プロジェクト側で用意する。**人間が編集してよい**。.agents より優先される。 |
 | **workflow.db** | 初回生成のみ | setup の init_workflow_db で無い場合のみ作成。既存 DB は上書きしない。 |
-
----
-
-## セットアップの実行方法
-
-セットアップ脚本は **.agents 配下** に配置する（AGENTS-spec/.agents/scripts/）。
-
-```bash
-# プロジェクトルートで実行。AGENTS-spec がプロジェクト直下にある場合。
-bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh
-```
-
-プロジェクトルートを第 1 引数で渡す実装でもよい。
 
 ---
 

@@ -1,3 +1,8 @@
+---
+# document_id: 必須。作成時または major 更新時に UUID を付与すること。
+document_id: { uuid }
+---
+
 # Issue 一覧: {プロジェクト名}
 
 **プロジェクト名**: {プロジェクト名}  
