@@ -1,4 +1,4 @@
-# COPY_TO_PROJECT_ROOT — コピー対象・初回セットアップ
+# SETUP — コピー対象・初回セットアップ
 
 プロジェクトへ AGENTS-spec を導入するときのコピー対象・必須ファイル・初回セットアップで生成するもの・フックの正本を 1 ファイルにまとめる。記載パスと実体が一致する。
 
@@ -118,7 +118,7 @@ bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh
 
 **配布に含めない**: 保守用・実装レビュー用の文書は **.agents 外**（例: **docs/maintainer/**）に置き、プロジェクトへはコピーしない。setup は .agents/ 等のコピー対象のみを配備する。**workflow.db の実体および workflow.db-wal / workflow.db-shm はテンプレート・OSS 配布に絶対に含めない**。証跡 DB は setup（.agents/scripts/setup-agents-spec.sh の init_workflow_db）で生成する。
 
-- **COPY_TO_PROJECT_ROOT_AGENTS.md** — 廃止済み。正本は本ファイル（COPY_TO_PROJECT_ROOT.md）のみ。コピー対象・セットアップは本ファイルと setup 脚本に一元化する。
+- **COPY_TO_PROJECT_ROOT_AGENTS.md** — 廃止済み。正本は本ファイル（SETUP.md）のみ。コピー対象・セットアップは本ファイルと setup 脚本に一元化する。
 - **spec/** — AGENTS-spec 直下からは削除済み。正本は **.agents/spec/** に移動し、要求・設計 command の前に参照する。
 - **.review/** — 規約全体のレビュー履歴。パッケージ配布には不要なため削除済み。
 - **v2/・v3/** — 削除済み。正本は AGENTS-spec 直下と .agents に統一している。

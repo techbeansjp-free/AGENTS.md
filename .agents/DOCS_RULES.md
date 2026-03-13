@@ -42,5 +42,5 @@
 | .agents/RULES.md | 実行契約・証跡のルール |
 | .agents/boot/CORE.md | 読了義務・証跡省略禁止 |
 | .agents/commands/verify-and-close.md | 検証・クローズ command |
-| .workflow/templates/04_review.md | 04_review（§9 システム仕様書の更新） |
+| .workflow/templates/04_review.md | 04_review（§11 システム仕様書の更新） |
 | .workflow/templates/docs/00_review/YYYYMMDD_HHMMSS_review.md | レビュー結果テンプレート |

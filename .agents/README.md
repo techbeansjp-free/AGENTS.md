@@ -77,4 +77,6 @@ flowchart TD
 | プラットフォーム入口・設定の差分 | platforms/README.md |
 | 人間向け案内 | human/README.md |
 | **プロジェクト固有・最優先** | **プロジェクトルートの .agents-project/**（本 .agents より優先。詳細は CORE §ルールの優先順位） |
+| セットアップ・スモークテスト | SETUP.md |
+| 基盤の肥大化防止・メタレイヤー | META_LAYER.md |
 | セットアップ脚本 | scripts/setup-agents-spec.sh（本 .agents をプロジェクトに配備） |
