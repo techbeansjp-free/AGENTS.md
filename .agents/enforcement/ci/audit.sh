@@ -23,6 +23,7 @@
 #   (17) verify-and-close の親は implement-feature または design-feature（新スキーマ時）
 #   (18) 04_review.md 変更時に verify-and-close ログ存在（Git 時）
 #   (19) 成果物変更時に implement/design/verify ログ存在（Git 時）
+#   (20) document_id 紐付け: frontmatter に document_id がある成果ドキュメントについて、workflow_log にその document_id が 1 件以上存在すること
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -450,6 +451,33 @@ check_verify_has_parent
 check_verify_parent_command
 check_review_file_has_verify_log
 check_artifact_change_has_implement_log
+
+# 20. document_id 紐付け: .workflow 配下の 00/01/02/03/04 の frontmatter から document_id を抽出し、workflow_log にその document_id が 1 件以上存在するか検証。無ければ FAIL。frontmatter に document_id が無いファイルは対象外。
+check_document_id_linked() {
+  if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
+  if ! audit_has_column "document_id"; then return 0; fi
+  [[ ! -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]] && return 0
+  echo "[audit] checking document_id linkage (#20)" >&2
+  while IFS= read -r -d '' f; do
+    [[ "$f" == *"/templates/"* ]] && continue
+    # frontmatter の document_id を抽出（--- で囲まれた YAML ブロック内の document_id: "..." または document_id: ...）
+    doc_id=""
+    if [[ -f "$f" ]]; then
+      doc_id="$(awk '/^---$/{n++} n==1 && /document_id:/{sub(/^.*document_id:\s*["]?/,""); sub(/["]?\s*$/,""); if(length>0) print; exit}' "$f" 2>/dev/null)"
+      # 空でない UUID 形式のみ（簡易: ハイフン含む長い文字列）
+      if [[ -z "$doc_id" || ! "$doc_id" =~ [a-fA-F0-9-]{30,} ]]; then continue; fi
+    fi
+    doc_id_esc="${doc_id//\'/\'\'}"
+    count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE document_id = '$doc_id_esc';" 2>/dev/null || echo "0")"
+    if [[ "${count:-0}" -eq 0 ]]; then
+      echo "[audit] ERROR: document has document_id but no workflow_log entry (#20): $f (document_id=$doc_id)" >&2
+      echo "$ROLLBACK_MSG" >&2
+      EXIT_CODE=1
+    fi
+  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -mindepth 1 -maxdepth 3 -type f \( -name "00_*.md" -o -name "01_*.md" -o -name "02_*.md" -o -name "03_*.md" -o -name "04_*.md" \) -print0 2>/dev/null)
+}
+
+check_document_id_linked
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."

@@ -1,11 +1,13 @@
 # AGENTS.md — 入口案内
 
-**作業依頼を受けたら、応答の最初に orchestrator として phase 判定から入る。実作業（実装・編集・設計・レビュー本文・コマンド実行）は行わない。** 委譲のみ行う（委譲できない環境では委譲計画のみを返す）。
+**メインエージェントは進行役（orchestrator）としてのみ動作し、実作業（実装・編集・設計・レビュー本文・コマンド実行）はサブエージェントに委譲する。** 作業依頼を受けたら phase 判定 → command 選択 → 委譲のみ行う（委譲できない環境では委譲計画のみを返す）。成果物が 01_要件定義.md / 02_設計.md / 03_実装計画.md 等のドキュメントである command を実行する場合は、メインは実作業（ドキュメント本文の執筆・編集）を行わず、サブに委譲する。
 
 - **依頼タイプ**（作業依頼 vs 質問・分析依頼）の振る舞い: [CORE](.agents/boot/CORE.md) §依頼タイプ別振る舞い。
+- **委譲フロー**のパターン（説明＋計画までメイン／計画も含めてサブ）: [CORE](.agents/boot/CORE.md) §委譲フローのパターン。
 - **委譲の実行手段**（Cursor 上で何を呼ぶか）: [.agents/skills/agent/run_command.md](.agents/skills/agent/run_command.md) の 1 か所で規定。
-- **HEARTBEAT 読了**の強制: [CORE](.agents/boot/CORE.md) §Heartbeat。
 - **委譲できない環境**では委譲計画のみを返し実作業は行わない: [CORE](.agents/boot/CORE.md) §依頼タイプ別振る舞い。
+- **フォールバック方針**（必要に応じてメインが実作業することを許容）: [CORE](.agents/boot/CORE.md) §フォールバック方針。
+- **HEARTBEAT 読了**の強制: [CORE](.agents/boot/CORE.md) §Heartbeat。
 
 ---
 

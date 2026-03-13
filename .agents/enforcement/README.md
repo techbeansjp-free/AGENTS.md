@@ -63,7 +63,7 @@ flowchart TD
 
 **成果物パス（PROTECTED_PATHS）**: 成果物パス（docs/, src/, app/, components/ 等）は [enforcement/PROTECTED_PATHS.txt](PROTECTED_PATHS.txt) で定義する。PreToolUse で orchestrator がこれらのパスに Write/Edit することを拒否する場合は、その設定を読む形に拡張できる。現状は orchestrator の全 Write/Edit を拒否しているため、パス別設定は未使用。
 
-**audit.sh が実施する必須チェック**: (1) 必須ファイル存在 (2) 04_review 未更新（verify-and-close 未実行） (3) テスト観点未記載 (4) docs 更新要否未記載 (5) memo プレフィックス・timestamp 乖離 (6) PR 内部参照禁止 (7) 重要パス内の TODO/FIXME 残存 (8) workflow.db 品質監査 (9) 成果物と証跡の対応 (10) workflow.db の WAL/SHM sidecar が Git 追跡されていないこと (11) workflow.db 整合性チェック (12)–(19) 証跡の因果・順序監査（新スキーマ時: actor_role=scribe, delegated_by=orchestrator, implement に changed_files_json, verify に review_path/parent、成果物変更とログの対応）。
+**audit.sh が実施する必須チェック**: (1) 必須ファイル存在 (2) 04_review 未更新（verify-and-close 未実行） (3) テスト観点未記載 (4) docs 更新要否未記載 (5) memo プレフィックス・timestamp 乖離 (6) PR 内部参照禁止 (7) 重要パス内の TODO/FIXME 残存 (8) workflow.db 品質監査 (9) 成果物と証跡の対応 (10) workflow.db の WAL/SHM sidecar が Git 追跡されていないこと (11) workflow.db 整合性チェック (12)–(19) 証跡の因果・順序監査（新スキーマ時: actor_role=scribe, delegated_by=orchestrator, implement に changed_files_json, verify に review_path/parent、成果物変更とログの対応）。(21) 新スキーマ時は workflow_log の issue_id・review_id の記録を推奨（監査で警告とするかは任意）。
 
 ---
 
@@ -160,6 +160,8 @@ SQLite WAL モードでは
 | 17 | **verify-and-close の親が implement/design でない** | 親ログが implement-feature または design-feature でない。 | 順序を守り直して記録 |
 | 18 | **04 変更に verify ログなし** | 04_review.md が変更されたのに verify-and-close ログが無い。 | verify-and-close を実行して書記に記録させる |
 | 19 | **成果物変更にログなし** | .workflow/docs 配下の成果物が変更されたのに該当 command のログが無い。 | 該当 command を実行して書記に記録させる |
+| 20 | **document に document_id があるのに workflow_log にその document_id が無い** | 成果ドキュメント（00/01/02/03/04）の frontmatter に document_id が付与されているのに、workflow_log にその document_id の行が 1 件も存在しない。証跡と成果物の紐付け不整合。 | 該当 document の document_id を書記に渡して verify-and-close 等を再実行し、write-workflow-log でログを記録する。 |
+| 21 | **新スキーマで workflow_log に issue_id / review_id が推奨されるが記録されていない**（推奨・監査は任意） | workflow_log に issue_id カラムが存在する新スキーマの DB において、implement-feature や verify-and-close のログに issue_id または review_id が NULL のままである。ID 参照による証跡の整合性のため推奨。 | 該当 command を再実行する際に ISSUE_ID（00 の frontmatter から取得）・REVIEW_ID（04 の document_id）を渡して書記に記録する。 |
 
 ### 差し戻し先の固定
 
@@ -186,6 +188,8 @@ SQLite WAL モードでは
 | #17 verify の親が implement/design でない | （順序の是正） | 順序を守り直して記録。 |
 | #18 04 変更に verify ログなし | （証跡の補完） | verify-and-close を実行して書記に記録させる。 |
 | #19 成果物変更にログなし | （証跡の補完） | 該当 command（implement-feature 等）を実行して書記に記録させる。 |
+| #20 document_id のログなし | （証跡の補完） | 該当 document の document_id を書記に渡し、verify-and-close 等を再実行して write-workflow-log で記録する。 |
+| #21 issue_id/review_id 未記録（推奨） | （記録内容の補完） | 該当 command を再実行し、ISSUE_ID・REVIEW_ID を渡して書記に記録する。 |
 
 - **03_実装計画.md** — 必須ファイル未参照・テスト観点未記載など、計画・仕様の欠損が原因のとき。
 - **該当 issue ドキュメント** — 当該 issue の .workflow/{issue}/ 内の 02_設計・03_実装計画や、issue 本文で補完すべきとき。
@@ -194,5 +198,6 @@ SQLite WAL モードでは
 - **workflow.db sidecar の追跡解除** — #10 のとき。.workflow/.gitignore に workflow.db, workflow.db-wal, workflow.db-shm を追加し、必要なら `git rm --cached` で追跡から外す。
 - **workflow.db の再生成・修復** — #11 のとき。scribe は write-workflow-log.sh のみ使用する。
 - **証跡の因果・順序の是正** — #12–#19 のとき。write-workflow-log.sh に ACTOR_ROLE=scribe, DELEGATED_BY_ROLE=orchestrator, PARENT_ENTRY_ID, REVIEW_PATH, CHANGED_FILES_JSON を正しく渡し、command の実行順序と成果物の対応を満たす。
+- **issue_id/review_id の記録** — #21 のとき。ISSUE_ID（00 の frontmatter）、REVIEW_ID（04 の document_id）を渡して write-workflow-log で記録する。
 
 修正後、再度 04_review（verify-and-close）に進む。CI や subagent-guard は上記判定ルールで reject し、差し戻し先を明示する。

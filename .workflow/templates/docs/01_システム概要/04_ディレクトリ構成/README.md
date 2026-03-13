@@ -1,3 +1,8 @@
+---
+# document_id: 必須。作成時または major 更新時に UUID を付与すること。
+document_id: { uuid }
+---
+
 # 4. ディレクトリ構成
 
 本システムのフロントエンド・バックエンドのソースツリーと、各ディレクトリの役割を定義する。**パスはリポジトリルートからの絶対パスで、フロントエンドは `frontend/`、バックエンドは `backend/` をルートとして記載する。** 以下は汎用テンプレートであり、具体パス・ディレクトリ名はプロジェクトに合わせて記載すること。
@@ -10,15 +15,15 @@
 
 ### ディレクトリ一覧（frontend/ ルート）
 
-| パス | 役割 |
-|------|------|
-| `frontend/src` | アプリケーションソースのルート |
-| `frontend/src/app` | ルーティング・レイアウト・BFF 用 Route（該当する場合）。業務ロジックは features 等に配置 |
-| `frontend/src/features` | 機能単位の UI・ロジック。機能ごとにサブディレクトリを切る |
+| パス                      | 役割                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `frontend/src`            | アプリケーションソースのルート                                                           |
+| `frontend/src/app`        | ルーティング・レイアウト・BFF 用 Route（該当する場合）。業務ロジックは features 等に配置 |
+| `frontend/src/features`   | 機能単位の UI・ロジック。機能ごとにサブディレクトリを切る                                |
 | `frontend/src/components` | 共通 UI のみ（レイアウト・プロバイダ・汎用部品）。機能別コンポーネントは features に配置 |
-| `frontend/src/lib` | API クライアント・認証ユーティリティ等 |
-| `frontend/src/shared` | 定数・文言・型などアプリ共通の共有リソース |
-| （その他） | プロジェクトに合わせて記載 |
+| `frontend/src/lib`        | API クライアント・認証ユーティリティ等                                                   |
+| `frontend/src/shared`     | 定数・文言・型などアプリ共通の共有リソース                                               |
+| （その他）                | プロジェクトに合わせて記載                                                               |
 
 ※ 生成物（`node_modules`、`.next`、`coverage` 等）は一覧から省略する。
 
@@ -44,18 +49,18 @@ frontend/
 
 ### ディレクトリ一覧（backend/ ルート）
 
-| パス | 役割 |
-|------|------|
-| `backend/app` | アプリケーションのルート |
-| `backend/app/api` | API ルーター。バージョン別（例: v1）で request 受付 → usecase 呼び出し → response 返却の薄層 |
-| `backend/app/core` | 設定・ログ・DB 接続・エラー報告等の共通基盤 |
-| `backend/app/db` | セッション取得・モデル定義 |
-| `backend/app/modules` | ドメイン単位の業務ロジック。commands / queries 等で整理する例 |
-| `backend/app/repositories` | 永続化の窓口（CRUD の集約） |
-| `backend/app/schemas` | リクエスト・レスポンスのスキーマ定義 |
-| `backend/app/services` | ビジネスロジック（modules から利用するサービス層） |
-| `backend/tests` | テストのルート。API テスト・統合テスト・単体テスト・fixtures を配置 |
-| （その他） | プロジェクトに合わせて記載（マイグレーション、タスク、ミドルウェア等） |
+| パス                       | 役割                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `backend/app`              | アプリケーションのルート                                                                     |
+| `backend/app/api`          | API ルーター。バージョン別（例: v1）で request 受付 → usecase 呼び出し → response 返却の薄層 |
+| `backend/app/core`         | 設定・ログ・DB 接続・エラー報告等の共通基盤                                                  |
+| `backend/app/db`           | セッション取得・モデル定義                                                                   |
+| `backend/app/modules`      | ドメイン単位の業務ロジック。commands / queries 等で整理する例                                |
+| `backend/app/repositories` | 永続化の窓口（CRUD の集約）                                                                  |
+| `backend/app/schemas`      | リクエスト・レスポンスのスキーマ定義                                                         |
+| `backend/app/services`     | ビジネスロジック（modules から利用するサービス層）                                           |
+| `backend/tests`            | テストのルート。API テスト・統合テスト・単体テスト・fixtures を配置                          |
+| （その他）                 | プロジェクトに合わせて記載（マイグレーション、タスク、ミドルウェア等）                       |
 
 ※ 生成物・仮想環境（`.venv`、`__pycache__`、`coverage` 等）は一覧から省略する。
 

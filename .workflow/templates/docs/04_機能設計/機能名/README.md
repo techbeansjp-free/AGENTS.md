@@ -1,4 +1,7 @@
 ---
+# document_id: 必須。作成時または major 更新時に UUID を付与すること。
+document_id: { uuid }
+
 このドキュメントは、{機能名}機能の設計を定義します。
 
 **注意**: このテンプレートディレクトリ（`機能名/`）をコピーして、`{機能名}/` として使用してください。
@@ -71,12 +74,14 @@ sequenceDiagram
 #### リクエスト
 
 **ヘッダー**:
+
 ```
 Content-Type: application/json
 Authorization: Bearer {token}
 ```
 
 **ボディ**:
+
 ```json
 {
   "field1": "value1",
@@ -87,6 +92,7 @@ Authorization: Bearer {token}
 #### レスポンス
 
 **成功時（200 OK）**:
+
 ```json
 {
   "success": true,
@@ -98,6 +104,7 @@ Authorization: Bearer {token}
 ```
 
 **エラー時（400 Bad Request）**:
+
 ```json
 {
   "success": false,

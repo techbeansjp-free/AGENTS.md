@@ -1,3 +1,8 @@
+---
+# document_id: 必須。作成時または major 更新時に UUID を付与すること。
+document_id: { uuid }
+---
+
 # 指摘対応: PR #{PR_NUMBER} {REVIEW_SOURCE}
 
 **PR**: [#{PR_NUMBER} {PR_TITLE}]({PR_URL})  

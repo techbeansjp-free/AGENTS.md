@@ -1,4 +1,6 @@
 ---
+# document_id: 必須。作成時または major 更新時に UUID を付与すること。
+document_id: { uuid }
 
 このドキュメントは、ER図とテーブル定義を定義します。  
 システム仕様書作成ルールは [`.agents/DOCS_RULES.md`](../../../../.agents/DOCS_RULES.md) を参照してください。  
