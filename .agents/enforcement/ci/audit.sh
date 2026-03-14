@@ -24,6 +24,7 @@
 #   (18) 04_review.md 変更時に verify-and-close ログ存在（Git 時）
 #   (19) 成果物変更時に implement/design/verify ログ存在（Git 時）
 #   (20) document_id 紐付け: frontmatter に document_id がある成果ドキュメントについて、workflow_log にその document_id が 1 件以上存在すること
+#   (20+) document_id 不変: 同一 document_path に過去記録された document_id と現在の frontmatter が異なる場合は FAIL（RULES.md §document_id 不変）
 #   (25) メインが実作業を直接行った（成果物変更に委譲・証跡の対応がない）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
@@ -495,6 +496,7 @@ for line in sys.stdin:
 }
 
 # 20. document_id 紐付け: .workflow 配下の 00/01/02/03/04 の frontmatter から document_id を抽出し、workflow_log にその document_id が 1 件以上存在するか検証。無ければ FAIL。frontmatter に document_id が無いファイルは対象外。
+# 20+. document_id 不変: 同一 document_path に過去記録された document_id と現在の frontmatter の値が異なる場合は FAIL（RULES.md §document_id 不変）。
 check_document_id_linked() {
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
   if ! audit_has_column "document_id"; then return 0; fi
@@ -514,6 +516,18 @@ check_document_id_linked() {
       echo "[audit] ERROR: document has document_id but no workflow_log entry (#20): $f (document_id=$doc_id)" >&2
       echo "$ROLLBACK_MSG" >&2
       EXIT_CODE=1
+    fi
+    # document_id 不変: 同一パスに既に別の document_id が記録されていれば FAIL
+    if audit_has_column "document_path"; then
+      f_rel="${f#${PROJECT_ROOT}/}"
+      f_rel="${f_rel#./}"
+      f_rel_esc="${f_rel//\'/\'\'}"
+      prev_id="$(sqlite3 "$WF_DB" "SELECT document_id FROM workflow_log WHERE document_path = '$f_rel_esc' AND document_id IS NOT NULL ORDER BY ts_utc ASC LIMIT 1;" 2>/dev/null || true)"
+      if [[ -n "$prev_id" && "$prev_id" != "$doc_id" ]]; then
+        echo "[audit] ERROR: document_id was mutated (#20+): $f (stored=$prev_id, current=$doc_id)" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
     fi
   done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -mindepth 1 -maxdepth 3 -type f \( -name "00_*.md" -o -name "01_*.md" -o -name "02_*.md" -o -name "03_*.md" -o -name "04_*.md" \) -print0 2>/dev/null)
 }

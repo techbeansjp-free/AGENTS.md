@@ -9,10 +9,19 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENTS_SOURCE="$(cd "$SCRIPT_DIR/.." && pwd)"
 PACKAGE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-PROJECT_ROOT="${1:-$(cd "$PACKAGE_ROOT/.." && pwd)}"
+# 第1引数があればそれをプロジェクトルートに。なければ:
+# - PACKAGE_ROOT が AGENTS-spec のときはその親をプロジェクトルートとする（AGENTS-spec 配下で実行した場合）
+# - それ以外（.agents がプロジェクト直下にある場合）は PACKAGE_ROOT をプロジェクトルートとする
+if [[ -n "${1:-}" ]]; then
+  PROJECT_ROOT="$(cd "$1" && pwd)"
+elif [[ "$(basename "$PACKAGE_ROOT")" == "AGENTS-spec" ]]; then
+  PROJECT_ROOT="$(cd "$PACKAGE_ROOT/.." && pwd)"
+else
+  PROJECT_ROOT="$PACKAGE_ROOT"
+fi
 
 if [[ ! -d "$AGENTS_SOURCE" ]]; then
-  echo "エラー: .agents が見つかりません: $AGENTS_SOURCE。プロジェクトルートで実行してください: bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh" >&2
+  echo "エラー: .agents が見つかりません: $AGENTS_SOURCE。プロジェクトルートで実行してください: bash .agents/scripts/setup-agents-spec.sh または bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh" >&2
   exit 1
 fi
 
@@ -22,17 +31,25 @@ echo "Agents ソース:       $AGENTS_SOURCE"
 
 for f in AGENTS.md CLAUDE.md; do
   if [[ -f "$PACKAGE_ROOT/$f" ]]; then
-    cp "$PACKAGE_ROOT/$f" "$PROJECT_ROOT/$f"
-    echo "$f をプロジェクトルートにコピーしました。"
+    if [[ "$(cd "$PACKAGE_ROOT" && pwd)/$f" != "$(cd "$PROJECT_ROOT" && pwd)/$f" ]]; then
+      cp "$PACKAGE_ROOT/$f" "$PROJECT_ROOT/$f"
+      echo "$f をプロジェクトルートにコピーしました。"
+    else
+      echo "$f は既にプロジェクトルートにあります。"
+    fi
   fi
 done
 
-if [[ -d "$PROJECT_ROOT/.agents" ]]; then
-  rm -rf "$PROJECT_ROOT/.agents"
-  echo "既存の .agents を削除しました。"
+if [[ "$(cd "$AGENTS_SOURCE" && pwd)" != "$(cd "$PROJECT_ROOT/.agents" 2>/dev/null && pwd)" ]]; then
+  if [[ -d "$PROJECT_ROOT/.agents" ]]; then
+    rm -rf "$PROJECT_ROOT/.agents"
+    echo "既存の .agents を削除しました。"
+  fi
+  cp -R "$AGENTS_SOURCE" "$PROJECT_ROOT/.agents"
+  echo ".agents をプロジェクトルートにコピーしました。"
+else
+  echo ".agents は既にプロジェクトルートにあります。コピーをスキップし、hooks・スキル・DB のみ更新します。"
 fi
-cp -R "$AGENTS_SOURCE" "$PROJECT_ROOT/.agents"
-echo "AGENTS-spec/.agents を .agents にコピーしました。"
 
 # .agents-project はプロジェクト固有のため、なければコピー・既存なら上書きしない
 if [[ ! -d "$PROJECT_ROOT/.agents-project" ]] && [[ -d "$PACKAGE_ROOT/.agents-project" ]]; then
@@ -40,14 +57,18 @@ if [[ ! -d "$PROJECT_ROOT/.agents-project" ]] && [[ -d "$PACKAGE_ROOT/.agents-pr
   echo "AGENTS-spec/.agents-project をプロジェクトにコピーしました（初回のみ）。"
 fi
 
-# .workflow/templates は常に AGENTS-spec の内容で最新化する
+# .workflow/templates は常に AGENTS-spec の内容で最新化する（ソースと同一パスの場合はスキップ）
 WF_TEMPLATES="$PROJECT_ROOT/.workflow/templates"
 WF_SOURCE="$PACKAGE_ROOT/.workflow/templates"
 if [[ -d "$WF_SOURCE" ]]; then
-  rm -rf "$WF_TEMPLATES"
-  mkdir -p "$PROJECT_ROOT/.workflow"
-  cp -R "$WF_SOURCE" "$PROJECT_ROOT/.workflow/"
-  echo "AGENTS-spec/.workflow/templates を .workflow/templates にコピーしました（常に最新化）。"
+  if [[ "$(cd "$WF_SOURCE" 2>/dev/null && pwd)" != "$(cd "$WF_TEMPLATES" 2>/dev/null && pwd)" ]]; then
+    rm -rf "$WF_TEMPLATES"
+    mkdir -p "$PROJECT_ROOT/.workflow"
+    cp -R "$WF_SOURCE" "$PROJECT_ROOT/.workflow/"
+    echo ".workflow/templates をコピーしました（常に最新化）。"
+  else
+    echo ".workflow/templates は既にプロジェクトにあります。スキップします。"
+  fi
 fi
 
 # スキルをプラットフォーム別パスに同期する（.claude/skills, .cursor/skills）
@@ -126,6 +147,7 @@ CREATE TABLE IF NOT EXISTS workflow_log (
   review_id TEXT NULL,
   issue_path TEXT NULL,
   review_path TEXT NULL,
+  document_path TEXT NULL,
   changed_files_json TEXT NULL,
   summary TEXT NOT NULL,
   dod_met INTEGER NOT NULL CHECK (dod_met IN (0, 1)),
@@ -148,6 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_
 CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);
 SQL
 }
 
