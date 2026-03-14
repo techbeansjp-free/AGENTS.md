@@ -4,7 +4,8 @@
 #   AGENT_ROLE=scribe .agents/scripts/write-workflow-log.sh command summary dod_met ts_utc [issue_path] [changed_files]
 #   ENTRY_ID= PARENT_ENTRY_ID= ACTOR_ROLE=scribe DELEGATED_BY_ROLE=orchestrator 等を任意で指定。
 # 位置引数: command summary dod_met ts_utc [issue_path] [changed_files]
-# 環境変数: ENTRY_ID, PARENT_ENTRY_ID, DOCUMENT_ID, ACTOR_ROLE, DELEGATED_BY_ROLE, REVIEW_PATH, REVIEW_ID, ISSUE_ID, CHANGED_FILES_JSON, PREV_HASH
+# 環境変数: ENTRY_ID, PARENT_ENTRY_ID, DOCUMENT_ID, DOCUMENT_PATH, ACTOR_ROLE, DELEGATED_BY_ROLE, REVIEW_PATH, REVIEW_ID, ISSUE_ID, CHANGED_FILES_JSON, PREV_HASH
+# DOCUMENT_PATH: 成果ドキュメントのパス（プロジェクトルート相対、例: .workflow/xxx/04_review.md）。指定時は document_id 不変チェックに使用（同一パスで既に別の document_id が記録されていれば INSERT を拒否）。
 # DB パスは固定（.workflow/workflow.db）。引数で別 DB を渡せない。
 # 新スキーマ（entry_id 等）の DB では因果チェーン・actor を記録。旧スキーマでは従来どおり INSERT。
 
@@ -132,6 +133,7 @@ DELEGATED_BY_ROLE="${DELEGATED_BY_ROLE:-orchestrator}"
 REVIEW_PATH="${REVIEW_PATH:-}"
 PARENT_ENTRY_ID="${PARENT_ENTRY_ID:-}"
 DOCUMENT_ID="${DOCUMENT_ID:-}"
+DOCUMENT_PATH="${DOCUMENT_PATH:-}"
 ISSUE_ID="${ISSUE_ID:-}"
 REVIEW_ID="${REVIEW_ID:-}"
 PREV_HASH="${PREV_HASH:-}"
@@ -266,6 +268,9 @@ if [[ -n "$HAS_NEW_SCHEMA" ]]; then
   if ! printf '%s' "$CURRENT_COLS" | grep -qx 'review_id'; then
     sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN review_id TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);" || { echo "ERROR: review_id マイグレーションに失敗しました。" >&2; exit 1; }
   fi
+  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'document_path'; then
+    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN document_path TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);" 2>/dev/null || sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN document_path TEXT NULL;" || { echo "ERROR: document_path マイグレーションに失敗しました。" >&2; exit 1; }
+  fi
   # CHECK に review-docs または create-pr-review-issue が無い場合はテーブル再作成でマイグレーション
   if [[ "$COMMAND" == "review-docs" || "$COMMAND" == "create-pr-review-issue" ]]; then
     CREATED_SQL="$(sqlite3 "$WF_DB" "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_log';")"
@@ -287,6 +292,7 @@ CREATE TABLE IF NOT EXISTS workflow_log_new (
   review_id TEXT NULL,
   issue_path TEXT NULL,
   review_path TEXT NULL,
+  document_path TEXT NULL,
   changed_files_json TEXT NULL,
   summary TEXT NOT NULL,
   dod_met INTEGER NOT NULL CHECK (dod_met IN (0, 1)),
@@ -303,7 +309,7 @@ CREATE TABLE IF NOT EXISTS workflow_log_new (
   CHECK (delegated_by_role = 'orchestrator'),
   CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
 );
-INSERT INTO workflow_log_new SELECT entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, changed_files_json, summary, dod_met, prev_hash, entry_hash FROM workflow_log;
+INSERT INTO workflow_log_new SELECT entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash FROM workflow_log;
 DROP TABLE workflow_log;
 ALTER TABLE workflow_log_new RENAME TO workflow_log;
 CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
@@ -312,6 +318,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_
 CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);
 MIGRATE
       [[ $? -eq 0 ]] || { echo "ERROR: CHECK マイグレーションに失敗しました（review-docs / create-pr-review-issue）。" >&2; exit 1; }
     fi
@@ -333,12 +340,21 @@ if [[ -n "$HAS_NEW_SCHEMA" ]]; then
   E_RID="$(escape_sql "$REVIEW_ID")"
   E_IP="$(escape_sql "$ISSUE_PATH")"
   E_RP="$(escape_sql "$REVIEW_PATH")"
+  E_DP="$(escape_sql "$DOCUMENT_PATH")"
   E_CF="$(escape_sql "$CHANGED_FILES_JSON")"
   E_SUM="$(escape_sql "$SUMMARY")"
   E_PH="$(escape_sql "$PREV_HASH")"
   ENTRY_HASH="$(gen_entry_hash "$ENTRY_ID" "$PARENT_ENTRY_ID" "$DOCUMENT_ID" "$TS_UTC" "$ACTOR_ROLE" "$DELEGATED_BY_ROLE" "$COMMAND" "$ISSUE_ID" "$REVIEW_ID" "$ISSUE_PATH" "$REVIEW_PATH" "$CHANGED_FILES_JSON" "$SUMMARY" "$DOD_MET")"
   E_EH="$(escape_sql "$ENTRY_HASH")"
-  INSERT_SQL="INSERT INTO workflow_log (entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, changed_files_json, summary, dod_met, prev_hash, entry_hash) VALUES ('$E_EID', NULLIF('$E_PID',''), NULLIF('$E_DOCID',''), '$E_TS', '$E_CA', '$E_AR', '$E_DR', '$E_CMD', NULLIF('$E_IID',''), NULLIF('$E_RID',''), NULLIF('$E_IP',''), NULLIF('$E_RP',''), '$E_CF', '$E_SUM', $DOD_MET, NULLIF('$E_PH',''), '$E_EH');"
+  # document_id 不変: 同一 document_path に既に別の document_id が記録されていれば拒否（RULES.md §document_id 不変）
+  if [[ -n "$DOCUMENT_ID" && -n "$DOCUMENT_PATH" ]]; then
+    existing_id="$(sqlite3 "$WF_DB" "SELECT document_id FROM workflow_log WHERE document_path = '$E_DP' AND document_id IS NOT NULL ORDER BY ts_utc ASC LIMIT 1;" 2>/dev/null || true)"
+    if [[ -n "$existing_id" && "$existing_id" != "$DOCUMENT_ID" ]]; then
+      echo "ERROR: document_id の変更は禁止されています（同一 document_path に既に別の document_id が記録済み）。stored=$existing_id, given=$DOCUMENT_ID" >&2
+      exit 1
+    fi
+  fi
+  INSERT_SQL="INSERT INTO workflow_log (entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash) VALUES ('$E_EID', NULLIF('$E_PID',''), NULLIF('$E_DOCID',''), '$E_TS', '$E_CA', '$E_AR', '$E_DR', '$E_CMD', NULLIF('$E_IID',''), NULLIF('$E_RID',''), NULLIF('$E_IP',''), NULLIF('$E_RP',''), NULLIF('$E_DP',''), '$E_CF', '$E_SUM', $DOD_MET, NULLIF('$E_PH',''), '$E_EH');"
   wfl_attempt=1
   while true; do
     if sqlite3 "$WF_DB" "$INSERT_SQL" 2>"${WFL_ERRFILE:-/dev/null}"; then

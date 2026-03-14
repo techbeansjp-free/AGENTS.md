@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS workflow_log (
   review_id TEXT NULL,
   issue_path TEXT NULL,
   review_path TEXT NULL,
+  document_path TEXT NULL,
   changed_files_json TEXT NULL,
 
   summary TEXT NOT NULL,
@@ -81,6 +82,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_
 CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path) WHERE document_path IS NOT NULL;
 ```
 
 - **issue_id**: issue を一意に識別する UUID。00_要求定義.md の frontmatter の issue_id と一致する。NULL 許容（移行用）。
@@ -90,7 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id)
 
 書記（write-workflow-log）が PRAGMA table_info の結果と比較する際の期待カラム名（順序は問わない）:
 
-entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, changed_files_json, summary, dod_met, prev_hash, entry_hash
+entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash
 
 - **entry_id**: 1 レコードを一意に識別。UUID 推奨。
 - **parent_entry_id**: 親ログの entry_id。requirement-discovery → design-feature → implement-feature → verify-and-close の流れを追う。
@@ -98,7 +100,8 @@ entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegate
 - **delegated_by_role**: 誰の委譲で実行したか。DB 制約で `orchestrator` のみ許可（原則を強制）。
 - **review_path**: verify-and-close 時に必須。例: `.workflow/20260310_xxx/04_review.md`。
 - **changed_files_json**: 変更ファイル一覧の JSON 配列文字列。implement-feature で必須。
-- **document_id**: 対応する成果ドキュメント（00/01/02/03/04）の UUID。frontmatter の document_id と一致させる。NULL 許容（既存行・未対応運用との互換）。
+- **document_id**: 対応する成果ドキュメント（00/01/02/03/04）の UUID。frontmatter の document_id と一致させる。NULL 許容（既存行・未対応運用との互換）。**不変**: 同一 document_path に対して既に記録された document_id は変更・上書き禁止（RULES.md §document_id 不変）。audit.sh および write-workflow-log.sh で検証する。
+- **document_path**: 成果ドキュメントのパス（プロジェクトルート相対、例: `.workflow/xxx/00_要求定義.md`）。document_id 不変チェック用。NULL 許容（記録時に指定した場合のみ設定）。
 - **prev_hash / entry_hash**: 改ざん検知用。entry_hash = hash(entry_id|parent_entry_id|ts_utc|...)。
 
 ### command ごとの必須カラム規約（ラッパー・audit で保証）
