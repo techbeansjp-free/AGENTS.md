@@ -205,6 +205,29 @@ if [[ -n "$WFL_ERRFILE" && -f "$WFL_ERRFILE" ]]; then
   trap 'rm -f "$WFL_ERRFILE"' EXIT
 fi
 
+# INSERT をリトライ付きで実行するヘルパー（SQLITE_BUSY 時は最大 MAX_RETRIES 回まで待機）
+insert_with_retries() {
+  local db="$1" sql="$2" errfile="${3:-}"
+  local attempt=1
+  while true; do
+    if sqlite3 "$db" "$sql" 2>"${errfile:-/dev/null}"; then
+      return 0
+    fi
+    if [[ $attempt -ge $MAX_RETRIES ]]; then
+      [[ -n "$errfile" && -f "$errfile" ]] && cat "$errfile" >&2
+      echo "ERROR: workflow_log への INSERT に失敗しました（リトライ上限: ${MAX_RETRIES} 回）。" >&2
+      return 1
+    fi
+    if [[ -n "$errfile" && -f "$errfile" ]] && ! grep -qi "locked\|busy" "$errfile"; then
+      cat "$errfile" >&2
+      echo "ERROR: workflow_log への INSERT に失敗しました。" >&2
+      return 1
+    fi
+    sleep "$RETRY_SLEEP_SEC"
+    attempt=$((attempt+1))
+  done
+}
+
 # DB が無ければ新スキーマで作成
 if [[ ! -f "$WF_DB" ]]; then
   WF_DIR="$(dirname "$WF_DB")"
@@ -279,7 +302,9 @@ if [[ -n "$HAS_NEW_SCHEMA" ]]; then
     if [[ "$COMMAND" == "create-pr-review-issue" && -n "$CREATED_SQL" && "$CREATED_SQL" != *"create-pr-review-issue"* ]]; then NEED_MIGRATE=1; fi
     if [[ -n "$NEED_MIGRATE" ]]; then
       sqlite3 "$WF_DB" <<'MIGRATE'
-CREATE TABLE IF NOT EXISTS workflow_log_new (
+BEGIN IMMEDIATE;
+DROP TABLE IF EXISTS workflow_log_new;
+CREATE TABLE workflow_log_new (
   entry_id TEXT PRIMARY KEY,
   parent_entry_id TEXT NULL,
   document_id TEXT NULL,
@@ -319,6 +344,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document
 CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);
+COMMIT;
 MIGRATE
       [[ $? -eq 0 ]] || { echo "ERROR: CHECK マイグレーションに失敗しました（review-docs / create-pr-review-issue）。" >&2; exit 1; }
     fi
@@ -355,24 +381,7 @@ if [[ -n "$HAS_NEW_SCHEMA" ]]; then
     fi
   fi
   INSERT_SQL="INSERT INTO workflow_log (entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash) VALUES ('$E_EID', NULLIF('$E_PID',''), NULLIF('$E_DOCID',''), '$E_TS', '$E_CA', '$E_AR', '$E_DR', '$E_CMD', NULLIF('$E_IID',''), NULLIF('$E_RID',''), NULLIF('$E_IP',''), NULLIF('$E_RP',''), NULLIF('$E_DP',''), '$E_CF', '$E_SUM', $DOD_MET, NULLIF('$E_PH',''), '$E_EH');"
-  wfl_attempt=1
-  while true; do
-    if sqlite3 "$WF_DB" "$INSERT_SQL" 2>"${WFL_ERRFILE:-/dev/null}"; then
-      break
-    fi
-    if [[ $wfl_attempt -ge $MAX_RETRIES ]]; then
-      [[ -n "${WFL_ERRFILE:-}" && -f "${WFL_ERRFILE:-}" ]] && cat "$WFL_ERRFILE" >&2
-      echo "ERROR: workflow_log への INSERT に失敗しました（リトライ上限: ${MAX_RETRIES} 回）。" >&2
-      exit 1
-    fi
-    if [[ -n "${WFL_ERRFILE:-}" && -f "${WFL_ERRFILE:-}" ]] && ! grep -qi "locked\|busy" "$WFL_ERRFILE"; then
-      cat "$WFL_ERRFILE" >&2
-      echo "ERROR: workflow_log への INSERT に失敗しました。" >&2
-      exit 1
-    fi
-    sleep "$RETRY_SLEEP_SEC"
-    wfl_attempt=$((wfl_attempt+1))
-  done
+  insert_with_retries "$WF_DB" "$INSERT_SQL" "${WFL_ERRFILE:-}" || exit 1
 else
   E_TS="$(escape_sql "$TS_UTC")"
   E_CMD="$(escape_sql "$COMMAND")"
@@ -380,23 +389,6 @@ else
   E_SUM="$(escape_sql "$SUMMARY")"
   E_CF="$(escape_sql "$CHANGED_FILES_RAW")"
   INSERT_SQL="INSERT OR IGNORE INTO workflow_log (ts_utc, command, issue_path, summary, changed_files, dod_met) VALUES ('$E_TS', '$E_CMD', '$E_IP', '$E_SUM', '$E_CF', $DOD_MET);"
-  wfl_attempt=1
-  while true; do
-    if sqlite3 "$WF_DB" "$INSERT_SQL" 2>"${WFL_ERRFILE:-/dev/null}"; then
-      break
-    fi
-    if [[ $wfl_attempt -ge $MAX_RETRIES ]]; then
-      [[ -n "${WFL_ERRFILE:-}" && -f "${WFL_ERRFILE:-}" ]] && cat "$WFL_ERRFILE" >&2
-      echo "ERROR: workflow_log への INSERT に失敗しました（リトライ上限: ${MAX_RETRIES} 回）。" >&2
-      exit 1
-    fi
-    if [[ -n "${WFL_ERRFILE:-}" && -f "${WFL_ERRFILE:-}" ]] && ! grep -qi "locked\|busy" "$WFL_ERRFILE"; then
-      cat "$WFL_ERRFILE" >&2
-      echo "ERROR: workflow_log への INSERT に失敗しました。" >&2
-      exit 1
-    fi
-    sleep "$RETRY_SLEEP_SEC"
-    wfl_attempt=$((wfl_attempt+1))
-  done
+  insert_with_retries "$WF_DB" "$INSERT_SQL" "${WFL_ERRFILE:-}" || exit 1
 fi
 exit 0
