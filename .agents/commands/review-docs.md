@@ -23,7 +23,7 @@
 
 2. **レビュー＋修正ループ（self-progress）**
    - 次のステップを **指摘がなくなるまで繰り返す**:
-     1. 対象ドキュメント群（targets）を読み、AGENTS-spec/.agents/REVIEW_RULE.md および PHASES.md の監査観点に従ってレビューを行う。
+     1. 対象ドキュメント群（targets）を読み、.agents/RULES.md および PHASES.md の監査観点に従ってレビューを行う。
      2. 指摘一覧（場所・内容・優先度など）と、対応方針（修正／却下／別 issue など）を整理する。
      3. 必要に応じて、設計・実装計画などの修正 command（例: design-feature, implement-feature の関連タスク）へ委譲し、ドキュメントを更新するか、人間の修正指示をガイドする。
      4. `.workflow/{issue}/memo/` に対して、run_command.md §memo 作成時 の Constraints に従い:

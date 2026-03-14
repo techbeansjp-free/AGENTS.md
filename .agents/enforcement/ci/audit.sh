@@ -24,6 +24,7 @@
 #   (18) 04_review.md 変更時に verify-and-close ログ存在（Git 時）
 #   (19) 成果物変更時に implement/design/verify ログ存在（Git 時）
 #   (20) document_id 紐付け: frontmatter に document_id がある成果ドキュメントについて、workflow_log にその document_id が 1 件以上存在すること
+#   (25) メインが実作業を直接行った（成果物変更に委譲・証跡の対応がない）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -452,20 +453,60 @@ check_verify_parent_command
 check_review_file_has_verify_log
 check_artifact_change_has_implement_log
 
+# 25. メインが実作業を直接行った（#25）: 成果物変更があるのに委譲・証跡の対応がない場合は FAIL
+check_25_main_did_real_work() {
+  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
+  if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
+  changed="$(git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -E '(^|/)\.workflow/.*\.md$|(^|/)docs/.*\.md$|(^|/)src/|(^|/)app/' || true)"
+  if [[ -z "$changed" ]]; then return 0; fi
+  count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue');" 2>/dev/null || echo "0")"
+  if [[ "${count:-0}" -eq 0 ]]; then
+    echo "[audit] ERROR: artifact changes present but no delegation/evidence in workflow_log (#25: main may have done real work)" >&2
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+}
+check_25_main_did_real_work
+
+# frontmatter から document_id を取得（yq → Python → awk の順で試す）
+get_document_id_from_file() {
+  local f="$1"
+  local doc_id=""
+  if command -v yq &>/dev/null; then
+    doc_id="$(awk '/^---$/{n++} n==1{print} n>1{exit}' "$f" 2>/dev/null | yq -r '.document_id // empty' 2>/dev/null)"
+  fi
+  if [[ -z "$doc_id" ]] && command -v python3 &>/dev/null; then
+    doc_id="$(awk '/^---$/{n++} n==1{print} n>1{exit}' "$f" 2>/dev/null | python3 -c "
+import sys
+for line in sys.stdin:
+    line = line.rstrip()
+    if line.startswith('document_id:'):
+        v = line.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if v:
+            print(v)
+        break
+" 2>/dev/null)"
+  fi
+  if [[ -z "$doc_id" ]]; then
+    doc_id="$(awk '/^---$/{n++} n==1 && /document_id:/{sub(/^.*document_id:\s*[\"\047]?/,\"\"); sub(/[\"\047]?\s*$/,\"\"); if(length>0) print; exit}' "$f" 2>/dev/null)"
+  fi
+  printf '%s\n' "$doc_id"
+}
+
 # 20. document_id 紐付け: .workflow 配下の 00/01/02/03/04 の frontmatter から document_id を抽出し、workflow_log にその document_id が 1 件以上存在するか検証。無ければ FAIL。frontmatter に document_id が無いファイルは対象外。
 check_document_id_linked() {
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
   if ! audit_has_column "document_id"; then return 0; fi
   [[ ! -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]] && return 0
   echo "[audit] checking document_id linkage (#20)" >&2
+  local uuid_regex='^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$'
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
-    # frontmatter の document_id を抽出（--- で囲まれた YAML ブロック内の document_id: "..." または document_id: ...）
     doc_id=""
     if [[ -f "$f" ]]; then
-      doc_id="$(awk '/^---$/{n++} n==1 && /document_id:/{sub(/^.*document_id:\s*["]?/,""); sub(/["]?\s*$/,""); if(length>0) print; exit}' "$f" 2>/dev/null)"
-      # 空でない UUID 形式のみ（簡易: ハイフン含む長い文字列）
-      if [[ -z "$doc_id" || ! "$doc_id" =~ [a-fA-F0-9-]{30,} ]]; then continue; fi
+      doc_id="$(get_document_id_from_file "$f")"
+      if [[ -z "$doc_id" || ! "$doc_id" =~ $uuid_regex ]]; then continue; fi
     fi
     doc_id_esc="${doc_id//\'/\'\'}"
     count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE document_id = '$doc_id_esc';" 2>/dev/null || echo "0")"
