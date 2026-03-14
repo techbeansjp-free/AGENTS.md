@@ -58,7 +58,8 @@ if [[ -n "${ISSUE_DIR_HINT:-}" ]]; then
     echo "ERROR_INVALID_HINT: issue_dir_hint に '/' または '..' を含むことはできません: ${ISSUE_DIR_HINT}" >&2
     exit 1
   fi
-  if [[ ! "$ISSUE_DIR_HINT" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+  # 隠し名前（先頭ドット）は許可しない。
+  if [[ ! "$ISSUE_DIR_HINT" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     echo "ERROR_INVALID_HINT: issue_dir_hint は英数字・ハイフン・アンダースコアのみ使用できます: ${ISSUE_DIR_HINT}" >&2
     exit 1
   fi

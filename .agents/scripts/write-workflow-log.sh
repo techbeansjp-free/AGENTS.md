@@ -23,7 +23,7 @@ escape_sql() {
   printf '%s' "$1" | sed "s/'/''/g"
 }
 
-# UUID 生成（uuidgen / python3 / フォールバック）
+# UUID 生成（uuidgen / python3 / フォールバック）。フォールバックも RFC4122 形式（8-4-4-4-12 の 16 進）で audit.sh の uuid_regex に合わせる。
 gen_entry_id() {
   if command -v uuidgen &>/dev/null; then
     uuidgen
@@ -32,7 +32,29 @@ gen_entry_id() {
   if command -v python3 &>/dev/null; then
     python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null && return
   fi
-  printf '%s-%s-%s-%s-%s' "$(date +%s)" "${RANDOM:-0}" "${RANDOM:-0}" "${RANDOM:-0}" "${RANDOM:-0}"
+  # フォールバック: RFC4122 形式を出力
+  if [[ -r /dev/urandom ]]; then
+    local hex
+    hex=$(head -c 16 /dev/urandom | od -A n -t x1 | tr -d ' \n')
+    if [[ -n "$hex" && ${#hex} -ge 32 ]]; then
+      printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
+      return
+    fi
+  fi
+  if command -v openssl &>/dev/null; then
+    local hex
+    hex=$(openssl rand -hex 16 2>/dev/null)
+    if [[ -n "$hex" && ${#hex} -eq 32 ]]; then
+      printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
+      return
+    fi
+  fi
+  # 最後のフォールバック: RANDOM で 16 進 32 文字を組み立て（8-4-4-4-12 に整形）
+  local i hex=""
+  for ((i=0; i<16; i++)); do
+    hex="${hex}$(printf '%02x' $((RANDOM % 256)))"
+  done
+  printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
 }
 
 # 新スキーマ用: entry_hash = sha256(entry_id|...|issue_id|review_id|...)。ledger/schema.md と同期する。
@@ -91,6 +113,19 @@ if ! printf '%s' "$COMMAND" | grep -qE "^($ALLOWED_COMMANDS)$"; then
   exit 1
 fi
 
+# UUID 形式検証（8-4-4-4-12）。空の場合は検証スキップ（DOCUMENT_ID は後で必須チェック）
+UUID_REGEX='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+validate_uuid_if_set() {
+  local var_name="$1"
+  local var_value="$2"
+  if [[ -z "${var_value//[[:space:]]/}" ]]; then return 0; fi
+  if [[ ! "$var_value" =~ $UUID_REGEX ]]; then
+    echo "ERROR: ${var_name} が UUID 形式（8-4-4-4-12）ではありません: ${var_value}" >&2
+    exit 1
+  fi
+  return 0
+}
+
 # 環境変数で上書き（新スキーマ用）
 ACTOR_ROLE="${ACTOR_ROLE:-scribe}"
 DELEGATED_BY_ROLE="${DELEGATED_BY_ROLE:-orchestrator}"
@@ -100,6 +135,17 @@ DOCUMENT_ID="${DOCUMENT_ID:-}"
 ISSUE_ID="${ISSUE_ID:-}"
 REVIEW_ID="${REVIEW_ID:-}"
 PREV_HASH="${PREV_HASH:-}"
+
+# (A) DOCUMENT_ID / ISSUE_ID / REVIEW_ID の UUID 形式検証（指定時のみ。不正なら exit 1）
+validate_uuid_if_set "DOCUMENT_ID" "$DOCUMENT_ID"
+validate_uuid_if_set "ISSUE_ID" "$ISSUE_ID"
+validate_uuid_if_set "REVIEW_ID" "$REVIEW_ID"
+
+# (C) DOCUMENT_ID が空の場合は記録失敗・exit 1
+if [[ -z "${DOCUMENT_ID:-}" || "${DOCUMENT_ID:-}" =~ ^[[:space:]]*$ ]]; then
+  echo "ERROR: DOCUMENT_ID は必須です。空のため記録を拒否します。" >&2
+  exit 1
+fi
 if [[ -n "${CHANGED_FILES_JSON:-}" ]]; then
   CHANGED_FILES_JSON="$CHANGED_FILES_JSON"
 else

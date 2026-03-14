@@ -1,13 +1,12 @@
 ---
 # document_id: 必須。作成時または major 更新時に UUID を付与すること。既存の場合は変更しない。
-document_id: { uuid }
+document_id: "{uuid}"
+---
 
 このドキュメントは、{機能名}機能の設計を定義します。
 
 **注意**: このテンプレートディレクトリ（`機能名/`）をコピーして、`{機能名}/` として使用してください。
 例: `ログイン/`, `ユーザー登録/`, `注文処理/` など
-
----
 
 # {機能名}機能
 
@@ -75,7 +74,7 @@ sequenceDiagram
 
 **ヘッダー**:
 
-```
+```http
 Content-Type: application/json
 Authorization: Bearer {token}
 ```

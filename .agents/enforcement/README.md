@@ -74,7 +74,7 @@ flowchart TD
 
 **成果物パス（PROTECTED_PATHS）**: 成果物パス（docs/, src/, app/, components/ 等）は [enforcement/PROTECTED_PATHS.txt](PROTECTED_PATHS.txt) で定義する。PreToolUse で orchestrator がこれらのパスに Write/Edit することを拒否する場合は、その設定を読む形に拡張できる。現状は orchestrator の全 Write/Edit を拒否しているため、パス別設定は未使用。
 
-**audit.sh が実施する必須チェック**: (1) 必須ファイル存在 (2) 04_review 未更新（verify-and-close 未実行） (3) テスト観点未記載 (4) docs 更新要否未記載 (5) memo プレフィックス・timestamp 乖離 (6) PR 内部参照禁止 (7) 重要パス内の TODO/FIXME 残存 (8) workflow.db 品質監査 (9) 成果物と証跡の対応 (10) workflow.db の WAL/SHM sidecar が Git 追跡されていないこと (11) workflow.db 整合性チェック (12)–(19) 証跡の因果・順序監査（新スキーマ時: actor_role=scribe, delegated_by=orchestrator, implement に changed_files_json, verify に review_path/parent、成果物変更とログの対応）。(20) document_id 紐付け（frontmatter に document_id がある成果ドキュメントは workflow_log にその document_id が 1 件以上存在すること）。(21) 新スキーマ時は workflow_log の issue_id・review_id の記録を推奨（監査で警告とするかは任意）。**(25) メインが実作業を直接行った（サブ委譲の省略）［絶対強制］** — 成果物変更に委譲・証跡の対応がない等、#25 に該当する場合は **必ず FAIL** とする。
+**audit.sh が実施する必須チェック**: (1) 必須ファイル存在 (2) 04_review 未更新（verify-and-close 未実行） (3) テスト観点未記載 (4) docs 更新要否未記載 (5) memo プレフィックス・timestamp 乖離 (6) PR 内部参照禁止 (7) 重要パス内の TODO/FIXME 残存 (8) workflow.db 品質監査 (9) 成果物と証跡の対応 (10) workflow.db の WAL/SHM sidecar が Git 追跡されていないこと (11) workflow.db 整合性チェック (12)–(19) 証跡の因果・順序監査（新スキーマ時: actor_role=scribe, delegated_by=orchestrator, implement に changed_files_json, verify に review_path/parent、成果物変更とログの対応）。(20) document_id 紐付け（frontmatter に document_id がある成果ドキュメントは workflow_log にその document_id が 1 件以上存在すること）。(21) 新スキーマ時は workflow_log の issue_id・review_id の記録を推奨（監査で警告とするかは任意）。**(25) メインが実作業を直接行った（サブ委譲の省略）［絶対強制］** — 成果物変更に委譲・証跡の対応がない等、#25 に該当する場合は **必ず FAIL** とする。#22–#24（自立進行ルール違反・高リスク操作の事前確認省略）は audit.sh では実装しない。これらは subagent-guard または runtime（PreToolUse 等）で検出する。
 
 ---
 
@@ -135,8 +135,8 @@ SQLite WAL モードでは
 - 証跡未実行の検出。証跡は**本則 workflow.db**、memo は過渡的・例外のみ。**ログは書記のみ**が書き込む。workflow.db 以外へのログ書き込み・書記以外の workflow.db 書き込みは禁止（CORE）。
 - **timestamp 付き memo ファイルの作成経路の固定**: `.workflow/{issue}/memo/` 以下の `YYYYMMDD_HHMMSS_*.md` は、write-workflow-log capability または `.agents/scripts/new-workflow-memo.sh` 等、**システム時計からプレフィックスを生成する専用スクリプト経由でのみ**作成する。メインが自由入力でプレフィックス付きファイル名を指定して Write/Edit する経路は hooks / CI で検知・拒否する。
 - CI で CONTRACT 違反・証跡欠落を検出したら reject する（audit.sh 等）。
-- **自立進行ルール違反の検出**: AGENTS-spec/AGENTS.md §自立進行ルール で定義された通常の作業依頼に対して、メインが run_command を用いた自律的な委譲を行わず、毎回ユーザーに「サブを起動してよいか」「この方針で進めてよいか」等の許可確認を前提としている場合や、「サブへの指示文案だけを返して実作業 command を実行しない」場合を違反として検出し、差し戻し対象とする（高リスク操作を除く）。
-- **高リスク操作の事前確認省略**: RULES / CORE / 本 enforcement で定義された高リスク操作（大量削除・外部サービスへの書き込み等）に該当する command・capability を、メインが事前のユーザー明示確認なしに実行した場合は違反とみなし、CI/audit で検出して reject する。高リスク操作のみ、事前のユーザー明示確認が必須である。
+- **自立進行ルール違反の検出**: AGENTS-spec/AGENTS.md §自立進行ルール で定義された通常の作業依頼に対して、メインが run_command を用いた自律的な委譲を行わず、毎回ユーザーに「サブを起動してよいか」「この方針で進めてよいか」等の許可確認を前提としている場合や、「サブへの指示文案だけを返して実作業 command を実行しない」場合を違反として検出し、差し戻し対象とする（高リスク操作を除く）。#22・#23 は **subagent-guard または runtime で検出**する（audit.sh では検出しない）。
+- **高リスク操作の事前確認省略**: RULES / CORE / 本 enforcement で定義された高リスク操作（大量削除・外部サービスへの書き込み等）に該当する command・capability を、メインが事前のユーザー明示確認なしに実行した場合は違反とみなし、**subagent-guard または runtime で検出**して reject する（audit.sh では検出しない）。高リスク操作のみ、事前のユーザー明示確認が必須である。
 
 **ローカルで push 前に audit を実行するには**、pre-push フックで audit.sh を呼ぶことを推奨する。採用先では `git push` 前に `enforcement/ci/audit.sh`（またはプロジェクトルートからの相対パス）を実行し、失敗時は push を中止する。例: `.git/hooks/pre-push` から `./.agents/enforcement/ci/audit.sh .` を実行する。ci/ に pre-push.example を同梱しているので、採用先で pre-push にコピーして利用できる。
 

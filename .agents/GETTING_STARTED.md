@@ -28,7 +28,7 @@
 ## サブ（command を実行する側）がやること
 
 1. **run_command.md と、指定された commands/{name}.md を読む**。LOAD_POLICY に従う。
-2. **成果物を書く前に、該当するテンプレートファイル（TEMPLATES.md の表に従う）を開き、見出し・必須セクションを確認してから執筆する。**
+2. **成果物を書く前に、該当するテンプレートファイル（TEMPLATES.md の表に従う）を開き、見出し・セクション番号・必須項目を確認してから執筆する。**
 3. **command に書かれた skill chain を、記載順に実行する**。各 capability の SKILL.md または README.md の「手順」「制約」「成果物の形式」に従う。
 4. **前の capability の OUT を次の IN に渡す**（テキスト・ファイルパス・要約）。成果物は workflow/TEMPLATES.md のテンプレートに合わせる。
 5. **証跡を残す**。memo を書く場合はファイル名に **YYYYMMDD_HHMMSS_**（JST）を付ける。write-workflow-log を省略しない。
