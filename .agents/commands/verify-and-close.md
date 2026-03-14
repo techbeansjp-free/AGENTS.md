@@ -54,13 +54,14 @@
 
 ## OUTPUT
 
-- 04_review.md（実装内容の確認・受け入れ基準の確認・設計の確認・レビュー結果）
+- **04_review.md**（実装内容の確認・受け入れ基準の確認・設計の確認・レビュー結果）— **必ず issue 直下にファイルとして作成する（絶対強制）。** 本 command を実行したら、issue 直下に 04_review.md が存在しなければならない。memo にレビューを書いて 04 を省略することは**禁止**とする。
 - 証跡（本則 workflow.db、memo は過渡的・例外時のみ。CONTRACT 準拠）
 
 ---
 
 ## DONE（DoD）
 
+- **issue 直下に 04_review.md ファイルが存在すること（必須・絶対強制）。** 存在しない場合は未完了とする。作成しないで verify-and-close を完了とみなしてはならない。
 - 04_review に実装内容・受け入れ基準の確認が記載されている。
 - 証跡が規約に従って記録されている（workflow.db 本則。memo 運用時はプレフィックス・書記の形式）。
 - PHASES の監査観点を満たしている（全シナリオのテストコード化の網羅・フォーマットの正しさを含む）。REVIEW_RULE のチェックリストで検証可能であること。
@@ -71,6 +72,8 @@
 
 ## 実行時の注意
 
+- **04_review 作成と書記は一組**: 本 command（verify-and-close）を実行した場合、**04_review.md の作成・更新と step 5（write-workflow-log）の実行を必ずセットで行うこと**。04_review.md のみ作成・更新し、write-workflow-log（書記）を実行せずに完了とみなすことは**禁止**であり、その場合は本 command は**未完了**と扱う。workflow.db に verify-and-close の書記ログが存在しない 04_review 更新は、enforcement 失敗条件 #5・#9 に該当し CI/audit で FAIL とする。
+- **04_review.md の作成は省略禁止（絶対強制）。** 本 command（verify-and-close）を実行したら、**必ず** issue 直下に 04_review.md を**作成**する。memo のみでレビュー証跡を残し 04 を省略することは**禁止**。enforcement 失敗条件 #3 で検出し reject する。
 - **実装成果物にテストが含まれる場合は、04_review を作成・更新する前にテストを再実行し、実行結果（成功/失敗・ログ参照先）を 04_review に記載すること。** テスト未実行のまま監査完了とみなしてはならない。
 - **実装 phase の成果物（コード・02/03 に基づく変更）が存在する場合、クローズまたは次 Task への遷移の前に必ず本 command（verify-and-close）を委譲すること。** 実装のみでレビューを飛ばす経路は禁止。enforcement で 04_review 未更新のままの close 相当の遷移を拒否する。
 - 04_review のテンプレート（.workflow/templates または親 04）に従う。基準ごと・シナリオごとに「検証方法・結果」を書く。

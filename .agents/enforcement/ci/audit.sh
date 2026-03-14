@@ -249,7 +249,7 @@ WF_DB="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
 if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$WF_DB" ]]; then
   if sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then
     # 許可されていない command 名
-    bad_cmd=$(sqlite3 "$WF_DB" "SELECT command FROM workflow_log WHERE command NOT IN ('requirement-discovery','design-feature','implement-feature','verify-and-close') LIMIT 1;" 2>/dev/null || true)
+    bad_cmd=$(sqlite3 "$WF_DB" "SELECT command FROM workflow_log WHERE command NOT IN ('requirement-discovery','design-feature','implement-feature','verify-and-close','review-docs','create-pr-review-issue') LIMIT 1;" 2>/dev/null || true)
     if [[ -n "$bad_cmd" ]]; then
       echo "FAIL: 許可されていない command 名が workflow_log に含まれています: $bad_cmd" >&2
       echo "$ROLLBACK_MSG" >&2
@@ -435,7 +435,7 @@ check_artifact_change_has_implement_log() {
   if ! git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -qE '(^|/)\.workflow/.*\.md$|(^|/)docs/.*\.md$'; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
   local count
-  count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close');" 2>/dev/null || echo "0")"
+  count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue');" 2>/dev/null || echo "0")"
   if [[ "${count:-0}" -eq 0 ]]; then
     echo "[audit] ERROR: artifacts changed but no workflow log found" >&2
     echo "$ROLLBACK_MSG" >&2

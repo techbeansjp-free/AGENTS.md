@@ -26,6 +26,7 @@
 - **命名**: 新規 command または capability を追加するときは、**command 名と capability 名の対応・命名方針**を一度確認する。
 - **契約**: 新規 command / skill は [IO_CONTRACT.md](IO_CONTRACT.md) の共通セクション（command: INPUT/PROCESS/OUTPUT/DONE、skill: Purpose/Inputs/Process/Outputs/Done/Forbidden）に従う。契約付きフィルタとして pipe 可能・検証可能にする。概念名が近い（例: commands/design-feature.md と skills/architecture/design-feature/）と混乱しうる。CONCEPTS.md §既知の注意点 2 を参照。
 - **テスト**: BDD シナリオに沿った単体テストを実装計画に含める。テストファーストを推奨する。**テストコードでは、実行コードの直前に Given / When / Then をインラインコメントで必ず記載する**（.agents/TEST_BDD_FORMAT.md）。監査で確認する。
+- **高リスク操作**: 外部サービス・インフラへの書き込み、リポジトリやファイル群の大量削除・履歴改変など、**不可逆または広範囲な影響を持つ操作**を「高リスク操作」と定義する。これらを含む command / capability を実行する場合、メインエージェントは実行前にユーザーの**明示的な確認**を必須とする。一方で、通常の issue / ドキュメント作成・要件定義・設計・実装計画・実装・レビューといった日常的な作業依頼については、高リスクに該当しない限りメインエージェントは**ユーザーへの逐一の許可確認を行わず、自立的に phase 判定 → command 選択 → run_command によるサブ委譲 → 結果報告までを実行する**。**作業の規模・手間の大小にかかわらず、実作業は例外なく必ずサブに委譲し、メインが自ら Write/Edit/Shell で成果物を直接作成・編集することは絶対禁止**（CORE §メインがやってはいけないこと、enforcement §絶対強制・失敗条件 #25）。例外は認めない。
 
 ### テスト戦略必須要件
 

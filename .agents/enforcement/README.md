@@ -6,6 +6,17 @@ hooks で矯正するもの／しないものの正本をここに置く。setup
 
 ---
 
+## 絶対強制（サブ委譲）
+
+**メイン（orchestrator）の直接実作業は例外なく禁止とする（絶対強制）。** いかなる理由・規模・内容であっても、メインが Write/Edit/Shell 等で成果物を直接作成・編集・実行することは許容しない。
+
+- **Runtime**: プラットフォームが `AGENT_ROLE=orchestrator`（または同等）を渡す場合、PreToolUse は **orchestrator による Write/Edit/StrReplace/Shell/Delete 等を必ず exit 1 で拒否する**。拒否時に「必ずサブに委譲すること」を案内する。
+- **CI**: audit.sh は **失敗条件 #25（メインが実作業を直接行った）を必須チェックに含め**、該当する証跡・整合性違反を検出したら **必ず FAIL** とする。
+- **例外**: 認めない。委譲手段がプラットフォームで利用できない場合は「委譲計画のみ返し実作業は行わない」（CORE §依頼タイプ別振る舞い）。軽作業・小規模・「1 ファイルだけ」等を理由にメインが実作業することは禁止である。
+- **verify-and-close 実行時は 04_review.md を必ず作成する（絶対強制）**: verify-and-close を実行したら、**必ず** issue 直下に 04_review.md ファイルを作成する。memo にレビューを書いて 04 を省略することは禁止。省略した場合は失敗条件 #3 で **必ず FAIL** とする。commands/verify-and-close.md の OUTPUT・DoD および run_command の Constraints に従う。
+
+---
+
 ## 強制の 4 層と現状
 
 | 層 | 担い手 | 役割 | 現状 |
@@ -63,7 +74,7 @@ flowchart TD
 
 **成果物パス（PROTECTED_PATHS）**: 成果物パス（docs/, src/, app/, components/ 等）は [enforcement/PROTECTED_PATHS.txt](PROTECTED_PATHS.txt) で定義する。PreToolUse で orchestrator がこれらのパスに Write/Edit することを拒否する場合は、その設定を読む形に拡張できる。現状は orchestrator の全 Write/Edit を拒否しているため、パス別設定は未使用。
 
-**audit.sh が実施する必須チェック**: (1) 必須ファイル存在 (2) 04_review 未更新（verify-and-close 未実行） (3) テスト観点未記載 (4) docs 更新要否未記載 (5) memo プレフィックス・timestamp 乖離 (6) PR 内部参照禁止 (7) 重要パス内の TODO/FIXME 残存 (8) workflow.db 品質監査 (9) 成果物と証跡の対応 (10) workflow.db の WAL/SHM sidecar が Git 追跡されていないこと (11) workflow.db 整合性チェック (12)–(19) 証跡の因果・順序監査（新スキーマ時: actor_role=scribe, delegated_by=orchestrator, implement に changed_files_json, verify に review_path/parent、成果物変更とログの対応）。(21) 新スキーマ時は workflow_log の issue_id・review_id の記録を推奨（監査で警告とするかは任意）。
+**audit.sh が実施する必須チェック**: (1) 必須ファイル存在 (2) 04_review 未更新（verify-and-close 未実行） (3) テスト観点未記載 (4) docs 更新要否未記載 (5) memo プレフィックス・timestamp 乖離 (6) PR 内部参照禁止 (7) 重要パス内の TODO/FIXME 残存 (8) workflow.db 品質監査 (9) 成果物と証跡の対応 (10) workflow.db の WAL/SHM sidecar が Git 追跡されていないこと (11) workflow.db 整合性チェック (12)–(19) 証跡の因果・順序監査（新スキーマ時: actor_role=scribe, delegated_by=orchestrator, implement に changed_files_json, verify に review_path/parent、成果物変更とログの対応）。(21) 新スキーマ時は workflow_log の issue_id・review_id の記録を推奨（監査で警告とするかは任意）。**(25) メインが実作業を直接行った（サブ委譲の省略）［絶対強制］** — 成果物変更に委譲・証跡の対応がない等、#25 に該当する場合は **必ず FAIL** とする。
 
 ---
 
@@ -110,18 +121,22 @@ SQLite WAL モードでは
 
 ## 矯正するもの（物理強制の例）
 
+**「04 作成のみで書記未実行」の防止**: 04_review.md が issue 直下に存在するにもかかわらず、workflow.db に対応する verify-and-close の書記ログ（write-workflow-log 経由）が存在しない場合は、失敗条件 #9「04_review と証跡の不整合」として **必ず FAIL** とする。これは、メインが「レビュー作成」を verify-and-close の実行としてではなく、「04_review を作成せよ」という成果物のみの委譲として解釈した結果、skill chain の最終 step（write-workflow-log）が実行されないケースを想定したものである。再発防止のため、run_command §Constraints で「レビュー作成依頼は verify-and-close を command として委譲し、skill chain を最後まで（書記含む）実行させること」を**必須**とし、04_review のみ作成して書記を省略する運用を禁止する。
+
 **現状の実装について**: PreToolUse.sh と PostToolUse.sh は、**デフォルトでは案内メッセージの出力のみで exit 0 で終了する**（違反をその場では止めない）。一方、プラットフォームがツール名・対象パス・コマンド・ロール等のメタデータをフックに渡す環境で実行される場合は、**違反時に exit 1 を返して実行をブロックする**。メタデータの有無とフック契約の詳細は、本 README の「強制の 4 層と現状」§Layer2・「Runtime reject が効く条件」（上記 Line 14 / 23 付近）および [DESIGN.md](DESIGN.md) を参照すること。メタデータが渡されない環境ではその場で違反を止められないため、**CI（audit.sh）で事後検知する構成**とする。必要なメタデータ／フック契約の詳細は **DESIGN.md** および本節に記載されている。上記を参照すること。
 
 **試験運用では「hooks で止める」を前提にしないこと。** ルール違反をその場で止める仕組みではなく、**後から検知する仕組み**である。本当に守らせる中心は **audit / pre-push / CI** とする。強制を高めるには、**フックだけで止めない**・**呼び出し経路を細くする**・**ロール識別を task 契約で外部化する**・**CI で最終確定する** の 4 本柱で組む（DESIGN.md の思想と整合）。
 
-- **メインの直接実作業を塞ぐ**: 実作業は **command 経由・ROLE: 付き Task の委譲** のみ許可する。orchestrator が自分で設計・実装・レビュー本文を書く経路は拒否する（hooks で検知可能な範囲で）。
-- **PreToolUse（または Cursor 用 agents-core.mdc）の責務**: メインセッションによる **00/01/02/03/04 やコードへの直接 Write/Edit** はブロックする、または拒否条件に該当することを仕様として持つ。実装は hooks（.cursor の agents-core.mdc 等）で「メインは 00/01/02/03/04 およびソースコードを直接編集・作成してはならない」と記載し、ブロックできない環境では CI/audit で事後検知（例: 03 があるのに 04 がない場合は verify-and-close 未実行として reject）する。
+- **メインの直接実作業を塞ぐ（絶対強制）**: 実作業は **command 経由・ROLE: 付き Task の委譲** のみ許可する。orchestrator が自分で設計・実装・レビュー本文を書く経路は**例外なく拒否**する（hooks で検知可能な範囲で必ず exit 1）。**「必ずサブに委譲する」** を絶対強制し、規模・内容にかかわらずメインが Write/Edit/Shell で成果物を直接作成・編集した場合は違反とする（失敗条件 #25）。CI では **必ず** 検出して FAIL とする。
+- **PreToolUse（または Cursor 用 agents-core.mdc）の責務**: メイン（orchestrator）セッションによる **00/01/02/03/04 やコードへの直接 Write/Edit/Shell** は **絶対にブロックする**。プラットフォームが AGENT_ROLE（または同等）を渡す場合、orchestrator の Write/Edit/StrReplace/Shell/Delete は **必ず exit 1 で拒否**する。agents-core.mdc では「メインは 00/01/02/03/04 およびソースコードを**例外なく**直接編集・作成してはならない」と記載する。ブロックできない環境では CI/audit で **必ず** 事後検知し reject する。
 - **物理強制の限界**: メインの直接 Write/Edit/Shell は PreToolUse またはプラットフォーム権限でブロックする。ブロックできない環境では CI（audit.sh）で 03→04 等の事後検知で reject する。**PreToolUse でメインの Write/Edit/Shell をブロックできない環境では、CI（audit.sh）で 03 存在かつ 04 欠如等の事後検知で reject する。書記以外の sqlite3 実行禁止は、プラットフォームの権限設定または CI で確認する。** **orchestrator の理想形は Read のみとし、ファイル更新は worker 経由のみとする。** プラットフォームで権限差を付けられる場合は orchestrator に Write/Edit/Shell を許可しない。**orchestrator が 00/01/02/03/04 やコードを直接変更した場合は、証跡（implement-feature / design-feature / verify-and-close のログ）との対応で検知する。** platform が編集者ロールを渡す場合は、orchestrator による成果物直接編集を audit で FAIL にできる。
 - フェーズゲート・command 実行前の読了（run_command と command ファイル）。
 - **scribe 未実行の次 Task 拒否**: 検証・クローズ command で write-workflow-log を経ずに次に進むことを防ぐ（hooks / CI で証跡の有無を確認）。
 - 証跡未実行の検出。証跡は**本則 workflow.db**、memo は過渡的・例外のみ。**ログは書記のみ**が書き込む。workflow.db 以外へのログ書き込み・書記以外の workflow.db 書き込みは禁止（CORE）。
 - **timestamp 付き memo ファイルの作成経路の固定**: `.workflow/{issue}/memo/` 以下の `YYYYMMDD_HHMMSS_*.md` は、write-workflow-log capability または `.agents/scripts/new-workflow-memo.sh` 等、**システム時計からプレフィックスを生成する専用スクリプト経由でのみ**作成する。メインが自由入力でプレフィックス付きファイル名を指定して Write/Edit する経路は hooks / CI で検知・拒否する。
 - CI で CONTRACT 違反・証跡欠落を検出したら reject する（audit.sh 等）。
+- **自立進行ルール違反の検出**: AGENTS-spec/AGENTS.md §自立進行ルール で定義された通常の作業依頼に対して、メインが run_command を用いた自律的な委譲を行わず、毎回ユーザーに「サブを起動してよいか」「この方針で進めてよいか」等の許可確認を前提としている場合や、「サブへの指示文案だけを返して実作業 command を実行しない」場合を違反として検出し、差し戻し対象とする（高リスク操作を除く）。
+- **高リスク操作の事前確認省略**: RULES / CORE / 本 enforcement で定義された高リスク操作（大量削除・外部サービスへの書き込み等）に該当する command・capability を、メインが事前のユーザー明示確認なしに実行した場合は違反とみなし、CI/audit で検出して reject する。高リスク操作のみ、事前のユーザー明示確認が必須である。
 
 **ローカルで push 前に audit を実行するには**、pre-push フックで audit.sh を呼ぶことを推奨する。採用先では `git push` 前に `enforcement/ci/audit.sh`（またはプロジェクトルートからの相対パス）を実行し、失敗時は push を中止する。例: `.git/hooks/pre-push` から `./.agents/enforcement/ci/audit.sh .` を実行する。ci/ に pre-push.example を同梱しているので、採用先で pre-push にコピーして利用できる。
 
@@ -143,7 +158,7 @@ SQLite WAL モードでは
 |---|----------|------|------------|
 | 1 | **必須参照ファイル未読** | LOAD_POLICY や command/skill で定めた必須読了ファイルを参照していない。証跡・実行経路の前提が満たされない。 | 03_実装計画 または 該当 issue |
 | 2 | **02/03 のテスト観点不足** | 02_設計 §6 または 03_実装計画のタスク別テスト観点（BDD/単体テスト仕様）が記載されていない。RULES・PHASES の DoD に反する。 | 03_実装計画 または 該当 issue |
-| 3 | **04_review 未更新** | 実装・レビュー完了とみなすべきタイミングで 04_review.md が未作成または未更新。verify-and-close の成果物が欠けている。 | 該当 issue（04 を作成・更新） |
+| 3 | **04_review 未更新［絶対強制］** | 実装・レビュー完了とみなすべきタイミングで 04_review.md が未作成または未更新。**verify-and-close を実行したが 04_review.md を issue 直下に作成しなかった場合も本項に該当**。memo のみでレビュー証跡を残し 04 を省略した場合も FAIL。 | 該当 issue で verify-and-close を再実行し、**必ず** 04_review.md を作成・更新する。 |
 | 4 | **docs 更新要否未記載** | 実装・設計変更に伴うシステム仕様書（docs/）の更新要否が判定・記載されていない。04_review §11 および DOCS_RULES で求められる記載が欠落している。 | 04_review に追記 または 03/該当 issue |
 | 5 | **ログ記録未実施** | 検証・クローズ command で write-workflow-log（書記）を経ずに次に進んでいる。書記以外の workflow.db 書き込みまたはログ省略。CORE 違反。 | verify-and-close を再実行（書記委譲を含む） |
 | 6 | **PR テンプレ違反（内部参照禁止）** | PR メッセージにリポジトリ内（.workflow/ や docs/ 等）へのリンクを記載している。.workflow/templates/99_PR.md の「絶対ルール」違反。 | PR 本文を修正（内部リンク削除） |
@@ -162,6 +177,10 @@ SQLite WAL モードでは
 | 19 | **成果物変更にログなし** | .workflow/docs 配下の成果物が変更されたのに該当 command のログが無い。 | 該当 command を実行して書記に記録させる |
 | 20 | **document に document_id があるのに workflow_log にその document_id が無い** | 成果ドキュメント（00/01/02/03/04）の frontmatter に document_id が付与されているのに、workflow_log にその document_id の行が 1 件も存在しない。証跡と成果物の紐付け不整合。 | 該当 document の document_id を書記に渡して verify-and-close 等を再実行し、write-workflow-log でログを記録する。 |
 | 21 | **新スキーマで workflow_log に issue_id / review_id が推奨されるが記録されていない**（推奨・監査は任意） | workflow_log に issue_id カラムが存在する新スキーマの DB において、implement-feature や verify-and-close のログに issue_id または review_id が NULL のままである。ID 参照による証跡の整合性のため推奨。 | 該当 command を再実行する際に ISSUE_ID（00 の frontmatter から取得）・REVIEW_ID（04 の document_id）を渡して書記に記録する。 |
+| 22 | **自立進行ルール違反（通常依頼での過度な許可確認）** | issue 作成・要件定義・設計・実装計画・実装・レビュー等の通常の作業依頼に対して、メインが run_command を用いた自律的な委譲を行わず、「サブを起動してよいか」「この方針で進めてよいか」等を毎回ユーザーに確認してからでないと command を実行しない。AGENTS-spec/AGENTS.md §自立進行ルール 違反。 | 該当 issue の 03_実装計画 または AGENTS/RULES 等に差し戻し、自立進行ルールに沿うよう実行方針を修正する。 |
+| 23 | **自立進行ルール違反（通常依頼で指示文案だけを返す）** | 自立進行ルールが有効な通常の作業依頼に対して、「サブへの指示文案だけを返して実作業 command を実行しない」挙動をとっている（説明モードが明示されていないにもかかわらず）。特にドキュメントレビュー依頼については、PHASES.md §レビュー成果物の配置ルール に記載の「memo への記録＋指摘がなくなるまでの反復＋書記委譲」を省略し、レビュー本文だけを返している場合を含む。**書記委譲を「推奨」「検討してください」とだけ記載してユーザーに委ねて終了し、実際には書記に依頼していない場合も本号に該当する。** ドキュメントレビュー「完了」の定義は run_command §実装前のドキュメントレビュー および PHASES §レビュー成果物の配置ルール に従い、memo＋修正反復＋書記委譲のすべてを実施するまで完了とみなしてはならない。 | 該当 issue の 03_実装計画 または AGENTS/RULES 等に差し戻し、実作業 command を実行する委譲フローに修正する。ドキュメントレビュー依頼については、PHASES.md のドキュメントレビュー運用に従い、少なくとも 1 回以上の memo 作成と書記委譲を含むフローに修正する。 |
+| 24 | **高リスク操作に対する事前確認省略** | RULES / CORE / enforcement で定義された高リスク操作（大量削除・外部サービスへの書き込み等）に該当する command・capability を、事前のユーザー明示確認なしに実行している。 | 該当 issue および AGENTS/RULES/enforcement の該当セクションに差し戻し、高リスク操作前にユーザー確認を必須とする運用・実装に修正する。 |
+| 25 | **メインが実作業を直接行った（サブ委譲の省略）［絶対強制］** | 作業依頼に対し、メインが phase 判定 → command 選択 → サブ委譲を行わず、自ら Write/Edit/Shell 等でファイル作成・編集・コマンド実行を行った。AGENTS.md・CORE §メインがやってはいけないこと 違反。**例外なく**規模・内容を問わず違反とする。audit で **必須** チェックする。 | 該当 issue の 03_実装計画 または CORE/AGENTS を再確認し、以降は**必ず** run_command 等でサブに委譲してから実作業を行うよう差し戻す。 |
 
 ### 差し戻し先の固定
 
@@ -190,6 +209,7 @@ SQLite WAL モードでは
 | #19 成果物変更にログなし | （証跡の補完） | 該当 command（implement-feature 等）を実行して書記に記録させる。 |
 | #20 document_id のログなし | （証跡の補完） | 該当 document の document_id を書記に渡し、verify-and-close 等を再実行して write-workflow-log で記録する。 |
 | #21 issue_id/review_id 未記録（推奨） | （記録内容の補完） | 該当 command を再実行し、ISSUE_ID・REVIEW_ID を渡して書記に記録する。 |
+| #25 メインが実作業を直接行った | CORE/AGENTS を再確認。該当作業をサブに委譲し直す。 | phase 判定 → command 選択 → run_command でサブへ委譲。メインは実作業を行わない。 |
 
 - **03_実装計画.md** — 必須ファイル未参照・テスト観点未記載など、計画・仕様の欠損が原因のとき。
 - **該当 issue ドキュメント** — 当該 issue の .workflow/{issue}/ 内の 02_設計・03_実装計画や、issue 本文で補完すべきとき。
@@ -199,5 +219,6 @@ SQLite WAL モードでは
 - **workflow.db の再生成・修復** — #11 のとき。scribe は write-workflow-log.sh のみ使用する。
 - **証跡の因果・順序の是正** — #12–#19 のとき。write-workflow-log.sh に ACTOR_ROLE=scribe, DELEGATED_BY_ROLE=orchestrator, PARENT_ENTRY_ID, REVIEW_PATH, CHANGED_FILES_JSON を正しく渡し、command の実行順序と成果物の対応を満たす。
 - **issue_id/review_id の記録** — #21 のとき。ISSUE_ID（00 の frontmatter）、REVIEW_ID（04 の document_id）を渡して write-workflow-log で記録する。
+- **メイン実作業禁止の是正** — #25 のとき。該当タスクを run_command によりサブに委譲し直し、メインは phase 判定・command 選択・委譲・結果確認のみ行うように CORE/AGENTS を再読して差し戻す。
 
 修正後、再度 04_review（verify-and-close）に進む。CI や subagent-guard は上記判定ルールで reject し、差し戻し先を明示する。
