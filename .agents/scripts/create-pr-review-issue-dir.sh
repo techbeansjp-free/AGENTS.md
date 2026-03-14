@@ -24,17 +24,27 @@ if [[ $# -lt 3 ]]; then
   usage
 fi
 
-# WORKSPACE_ROOT を絶対パスに正規化
-_raw_root="$1"
-if command -v realpath &>/dev/null; then
-  WORKSPACE_ROOT="$(realpath "$_raw_root")"
-elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
-  WORKSPACE_ROOT="$(readlink -f "$_raw_root")"
-else
-  WORKSPACE_ROOT="$(cd "$_raw_root" && pwd)"
+# 絶対パスに解決するヘルパー（realpath / readlink -f / cd+pwd の順で試す）
+resolve_abs_path() {
+  local p="${1:?}"
+  if command -v realpath &>/dev/null; then
+    realpath "$p"
+  elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
+    readlink -f "$p"
+  else
+    (cd "$p" && pwd)
+  fi
+}
+
+WORKSPACE_ROOT="$(resolve_abs_path "$1")"
+PARENT_ISSUE_ID="$2"
+
+# PARENT_ISSUE_ID サニタイズ: '/' または '..' または英数字・ハイフン・アンダースコア以外は拒否
+if [[ "$PARENT_ISSUE_ID" == *'/'* || "$PARENT_ISSUE_ID" == *'..'* || ! "$PARENT_ISSUE_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+  echo "ERROR_INVALID_PARENT_ISSUE_ID: parent_issue_id は英数字・ハイフン・アンダースコアのみ指定できます: ${PARENT_ISSUE_ID}" >&2
+  exit 1
 fi
 
-PARENT_ISSUE_ID="$2"
 # issue_dir_hint が空でない 3 番目引数なら「既存指定」、なければ 3 番目が pr_url
 if [[ $# -eq 3 ]]; then
   ISSUE_DIR_HINT=""
@@ -44,13 +54,22 @@ else
   PR_URL="${4:-}"
 fi
 
-BASE_DIR="${WORKSPACE_ROOT}/.workflow/${PARENT_ISSUE_ID}/90_issues"
-if [[ ! -d "${WORKSPACE_ROOT}/.workflow/${PARENT_ISSUE_ID}" ]]; then
+PARENT_DIR="${WORKSPACE_ROOT}/.workflow/${PARENT_ISSUE_ID}"
+BASE_DIR="${PARENT_DIR}/90_issues"
+parent_resolved="$(resolve_abs_path "$PARENT_DIR" 2>/dev/null)" || true
+# 親ディレクトリが WORKSPACE_ROOT 配下であることを厳密に判定（trailing slash で /base と /base2 を区別）
+workspace_prefix="${WORKSPACE_ROOT%/}/"
+if [[ -z "$parent_resolved" || "${parent_resolved%/}/" != "${workspace_prefix}"* ]]; then
+  echo "ERROR_PARENT_NOT_FOUND: 親 issue ディレクトリが見つかりません、またはワークスペース配外です: .workflow/${PARENT_ISSUE_ID}" >&2
+  exit 1
+fi
+if [[ ! -d "$parent_resolved" ]]; then
   echo "ERROR_PARENT_NOT_FOUND: 親 issue ディレクトリが見つかりません: .workflow/${PARENT_ISSUE_ID}" >&2
   exit 1
 fi
 
 mkdir -p "$BASE_DIR"
+base_resolved="$(resolve_abs_path "$BASE_DIR")"
 
 if [[ -n "${ISSUE_DIR_HINT:-}" ]]; then
   # ISSUE_DIR_HINT サニタイズ: '/' または '..' を含む場合はエラー
@@ -68,16 +87,9 @@ if [[ -n "${ISSUE_DIR_HINT:-}" ]]; then
     echo "ERROR_DIR_NOT_FOUND: 指定されたディレクトリが見つかりません: 90_issues/${ISSUE_DIR_HINT}" >&2
     exit 1
   fi
-  # 絶対パスに解決し BASE_DIR 配下であることを確認
-  if command -v realpath &>/dev/null; then
-    resolved="$(realpath "$TARGET_DIR")"
-  elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
-    resolved="$(readlink -f "$TARGET_DIR")"
-  else
-    resolved="$(cd "$TARGET_DIR" && pwd)"
-  fi
-  base_resolved="$(cd "$BASE_DIR" && pwd)"
-  if [[ "$resolved" != "$base_resolved"* ]]; then
+  resolved="$(resolve_abs_path "$TARGET_DIR")"
+  base_prefix="${base_resolved%/}/"
+  if [[ "${resolved%/}/" != "$base_prefix"* ]]; then
     echo "ERROR_INVALID_HINT: 解決後のパスが 90_issues 配下ではありません: ${resolved}" >&2
     exit 1
   fi
@@ -106,11 +118,4 @@ fi
 DIR_NAME="${PREFIX}_PR${PR_NUM}_PR指摘対応"
 TARGET_DIR="${BASE_DIR}/${DIR_NAME}"
 mkdir -p "$TARGET_DIR"
-# 出力は絶対パスで統一
-if command -v realpath &>/dev/null; then
-  echo "$(realpath "$TARGET_DIR")"
-elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
-  echo "$(readlink -f "$TARGET_DIR")"
-else
-  echo "$(cd "$TARGET_DIR" && pwd)"
-fi
+echo "$(resolve_abs_path "$TARGET_DIR")"
