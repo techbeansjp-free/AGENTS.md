@@ -71,6 +71,7 @@ flowchart TD
 | オーケストレーション・誰がいつ command を回すか | agents/README.md |
 | 強制の方針・hooks の配置・強制の4層 | enforcement/README.md、enforcement/DESIGN.md |
 | 成果物のテンプレート・どの command/capability が使うか | workflow/TEMPLATES.md |
+| PR 指摘対応 issue 自動作成（create-pr-review-issue） | commands/create-pr-review-issue.md、workers/create-pr-review-issue/、workflow/PHASES.md §issue_creation |
 | スキルのプラットフォーム別形式・配置（Claude/Cursor/Gemini） | platforms/SKILLS.md |
 | ログ・書記 | scribe/README.md |
 | workflow.db 配置・スキーマ | ledger/README.md, ledger/schema.md |

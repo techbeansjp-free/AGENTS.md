@@ -69,7 +69,9 @@ CREATE TABLE IF NOT EXISTS workflow_log (
     'requirement-discovery',
     'design-feature',
     'implement-feature',
-    'verify-and-close'
+    'verify-and-close',
+    'review-docs',
+    'create-pr-review-issue'
   ))
 );
 

@@ -17,7 +17,7 @@ if [[ "${AGENT_ROLE:-}" != "scribe" ]]; then
 fi
 
 # 許可 command 一覧（INSERT 専用のため、このリスト外は拒否）
-ALLOWED_COMMANDS="requirement-discovery|design-feature|implement-feature|verify-and-close"
+ALLOWED_COMMANDS="requirement-discovery|design-feature|implement-feature|verify-and-close|review-docs|create-pr-review-issue"
 
 escape_sql() {
   printf '%s' "$1" | sed "s/'/''/g"
@@ -87,7 +87,7 @@ CHANGED_FILES_RAW="${6:-}"
 
 # command 許可リストチェック
 if ! printf '%s' "$COMMAND" | grep -qE "^($ALLOWED_COMMANDS)$"; then
-  echo "ERROR: 許可されていない command です。許可: requirement-discovery, design-feature, implement-feature, verify-and-close" >&2
+  echo "ERROR: 許可されていない command です。許可: requirement-discovery, design-feature, implement-feature, verify-and-close, review-docs, create-pr-review-issue" >&2
   exit 1
 fi
 
@@ -189,7 +189,7 @@ CREATE TABLE IF NOT EXISTS workflow_log (
   CHECK (length(summary) > 5),
   CHECK (actor_role = 'scribe'),
   CHECK (delegated_by_role = 'orchestrator'),
-  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close'))
+  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);
@@ -219,6 +219,56 @@ if [[ -n "$HAS_NEW_SCHEMA" ]]; then
   fi
   if ! printf '%s' "$CURRENT_COLS" | grep -qx 'review_id'; then
     sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN review_id TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);" || { echo "ERROR: review_id マイグレーションに失敗しました。" >&2; exit 1; }
+  fi
+  # CHECK に review-docs または create-pr-review-issue が無い場合はテーブル再作成でマイグレーション
+  if [[ "$COMMAND" == "review-docs" || "$COMMAND" == "create-pr-review-issue" ]]; then
+    CREATED_SQL="$(sqlite3 "$WF_DB" "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_log';")"
+    NEED_MIGRATE=""
+    if [[ "$COMMAND" == "review-docs" && -n "$CREATED_SQL" && "$CREATED_SQL" != *"review-docs"* ]]; then NEED_MIGRATE=1; fi
+    if [[ "$COMMAND" == "create-pr-review-issue" && -n "$CREATED_SQL" && "$CREATED_SQL" != *"create-pr-review-issue"* ]]; then NEED_MIGRATE=1; fi
+    if [[ -n "$NEED_MIGRATE" ]]; then
+      sqlite3 "$WF_DB" <<'MIGRATE'
+CREATE TABLE IF NOT EXISTS workflow_log_new (
+  entry_id TEXT PRIMARY KEY,
+  parent_entry_id TEXT NULL,
+  document_id TEXT NULL,
+  ts_utc TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  actor_role TEXT NOT NULL,
+  delegated_by_role TEXT NOT NULL,
+  command TEXT NOT NULL,
+  issue_id TEXT NULL,
+  review_id TEXT NULL,
+  issue_path TEXT NULL,
+  review_path TEXT NULL,
+  changed_files_json TEXT NULL,
+  summary TEXT NOT NULL,
+  dod_met INTEGER NOT NULL CHECK (dod_met IN (0, 1)),
+  prev_hash TEXT NULL,
+  entry_hash TEXT NOT NULL,
+  CHECK (length(entry_id) > 0),
+  CHECK (length(ts_utc) > 0),
+  CHECK (length(created_at) > 0),
+  CHECK (length(actor_role) > 0),
+  CHECK (length(delegated_by_role) > 0),
+  CHECK (length(command) > 0),
+  CHECK (length(summary) > 5),
+  CHECK (actor_role = 'scribe'),
+  CHECK (delegated_by_role = 'orchestrator'),
+  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
+);
+INSERT INTO workflow_log_new SELECT entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, changed_files_json, summary, dod_met, prev_hash, entry_hash FROM workflow_log;
+DROP TABLE workflow_log;
+ALTER TABLE workflow_log_new RENAME TO workflow_log;
+CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
+MIGRATE
+      [[ $? -eq 0 ]] || { echo "ERROR: CHECK マイグレーションに失敗しました（review-docs / create-pr-review-issue）。" >&2; exit 1; }
+    fi
   fi
 fi
 

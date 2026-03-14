@@ -2,7 +2,7 @@
 
 **通常依頼でも agents を自動適用する。** ユーザーが「〇〇して」とだけ言った場合でも、明示がなくても次のように動く。解釈は agents workflow、進行役は常に orchestrator。必要に応じて sub-agent / skills / commands を自動選択する。出力は IO_CONTRACT および RULES に従う。入口の固定は AGENTS.md 冒頭を参照。
 
-本規約は skill-first。メインは指示に徹し、実作業はサブが command（skill chain）を実行する。**トリガーごとの「何を読むか」の正本は boot/LOAD_POLICY.md。** 本ファイルは手順の要約のみ。
+本規約は skill-first。メインは指示に徹し、**実作業は規模・内容にかかわらず例外なく必ずサブに委譲する（絶対強制）。** サブが command（skill chain）を実行する。メインが自らファイル編集・作成・コマンド実行を行うことは**絶対禁止**（CORE §メインがやってはいけないこと。enforcement §絶対強制）。**トリガーごとの「何を読むか」の正本は boot/LOAD_POLICY.md。** 本ファイルは手順の要約のみ。
 
 ---
 
@@ -16,9 +16,12 @@
    - 実装 → `implement-feature`  
    - レビュー・クローズ → `verify-and-close`  
    - **「ドキュメントレビュー」依頼時**: **実装が完了しているか**を確認する。未完了なら verify-and-close（04_review 作成）は委譲せず、**memo にレビュー証跡を記録する**よう委譲する（PHASES §レビュー成果物の配置ルール）。完了済みなら verify-and-close を委譲してよい。
-4. **サブに委譲する**。渡すもの: **Task**（目的・成果物・参照）、**Constraints**（CORE / LOAD_POLICY / PHASES、該当 commands/{name}.md と skills、workflow/TEMPLATES.md）、**OutputSpec**（完了条件・証跡）。形式は skills/agent/run_command.md に従う。
+4. **サブに委譲する**。渡すもの: **Task**（目的・成果物・参照）、**Constraints**（CORE / LOAD_POLICY / PHASES、該当 commands/{name}.md と skills、workflow/TEMPLATES.md）、**OutputSpec**（完了条件・証跡）。形式は skills/agent/run_command.md に従う。  
+   - 通常の作業依頼（issue 作成・要件定義・設計・実装計画・実装・レビューなど）に対しては、**ユーザーに「サブを呼んでよいか」「この方針で進めてよいか」等の許可を逐一求めず**、phase 判定 → command 選択 → run_command による委譲までを**自立的に行う**。  
+   - ユーザーから「プロンプト案だけ教えて」「手順だけ教えて」等、**説明モード** が明示された場合のみ、委譲ではなく**説明のみ**に切り替えてよい。  
+   - 破壊的・高リスクな操作（大量削除・外部サービスへの書き込み等）、および RULES / CORE / enforcement で定義された**高リスク操作**に該当する command / capability を実行する場合は例外とし、そのときのみ事前にユーザーの**明示的な確認**を行う。
 5. **完了を受領し、証跡を確認する**。次 phase に進めるか判定する。
-6. **実作業は行わない**（00/01/02/03/04 の執筆、コード、レビュー本文、memo の代筆はサブが行う）。
+6. **実作業は例外なく行わない（絶対強制）**（00/01/02/03/04 の執筆、コード、レビュー本文、memo の代筆は**必ずサブが行う**。軽い修正・1 ファイルだけの変更も**いかなる場合も**委譲する）。
 
 ---
 
@@ -39,6 +42,17 @@
 2. サブ: commands/requirement-discovery.md を読み、extract-goals → identify-assumptions → define-constraints → write-bdd の順に実行。00_要求定義.md と 01_要件定義.md を出す。証跡を memo に書く。
 3. メイン: 完了受領。phase = 設計に進む → サブに「design-feature を実行」と委譲。
 4. 同様に design-feature → implement-feature → verify-and-close まで回す。最後に 04_review.md と証跡が揃う。
+
+**「この issue を最初から最後まで実行」** で、親 issue に PR 指摘対応 issue の起票が含まれる場合は、03_実装計画の後に **issue_creation.create_pr_review_issue**（command: create-pr-review-issue）を実行し、`.workflow/{親}/90_issues/{プレフィックス}PR指摘対応/00_要求定義.md` を生成してから実装フェーズに進む。詳細は [workflow/PHASES.md](workflow/PHASES.md) §issue_creation サブフェーズ および [commands/create-pr-review-issue.md](commands/create-pr-review-issue.md) を参照。
+
+---
+
+## PR 指摘対応 issue 自動作成フロー（使い方）
+
+- **ユーザー指示例**: 「この PR の指摘対応のための issue を作成して」「`https://github.com/owner/repo/pull/4` の指摘対応 issue を作って」
+- **メインの動き**: phase が issue_creation（サブフェーズ create_pr_review_issue）と判断したら、**create-pr-review-issue** を run_command でサブに委譲する。
+- **サブの動き**: [commands/create-pr-review-issue.md](commands/create-pr-review-issue.md) に従い、[workers/create-pr-review-issue/](workers/create-pr-review-issue/README.md) の手順（ディレクトリ決定 → 指摘抽出 → 対応方針案生成 → 00_要求定義.md 生成）を実行する。入力は pr_url / review_comments_raw / issue_dir_hint（任意）/ parent_issue_id。
+- **成果物**: `.workflow/{親 issue}/90_issues/{ディレクトリ名}/00_要求定義.md`（指摘一覧・各指摘の対応方針案を埋めた状態）。ディレクトリ未指定時は scripts/create-pr-review-issue-dir.sh で新規作成、既存指定時はそのディレクトリを再利用する。
 
 ---
 

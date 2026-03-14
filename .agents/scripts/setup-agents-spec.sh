@@ -12,43 +12,52 @@ PACKAGE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROJECT_ROOT="${1:-$(cd "$PACKAGE_ROOT/.." && pwd)}"
 
 if [[ ! -d "$AGENTS_SOURCE" ]]; then
-  echo "Error: .agents not found at $AGENTS_SOURCE. Run from project root: bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh" >&2
+  echo "エラー: .agents が見つかりません: $AGENTS_SOURCE。プロジェクトルートで実行してください: bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh" >&2
   exit 1
 fi
 
-echo "Project root:  $PROJECT_ROOT"
-echo "Package root:  $PACKAGE_ROOT"
-echo "Agents source: $AGENTS_SOURCE"
+echo "プロジェクトルート:  $PROJECT_ROOT"
+echo "パッケージルート:    $PACKAGE_ROOT"
+echo "Agents ソース:       $AGENTS_SOURCE"
 
 for f in AGENTS.md CLAUDE.md; do
   if [[ -f "$PACKAGE_ROOT/$f" ]]; then
     cp "$PACKAGE_ROOT/$f" "$PROJECT_ROOT/$f"
-    echo "Copied $f to project root."
+    echo "$f をプロジェクトルートにコピーしました。"
   fi
 done
 
 if [[ -d "$PROJECT_ROOT/.agents" ]]; then
-  echo "Warning: .agents already exists. Skipping copy. Remove or backup it to overwrite with new .agents." >&2
-else
-  cp -R "$AGENTS_SOURCE" "$PROJECT_ROOT/.agents"
-  echo "Copied AGENTS-spec/.agents to .agents."
+  rm -rf "$PROJECT_ROOT/.agents"
+  echo "既存の .agents を削除しました。"
+fi
+cp -R "$AGENTS_SOURCE" "$PROJECT_ROOT/.agents"
+echo "AGENTS-spec/.agents を .agents にコピーしました。"
+
+# .agents-project はプロジェクト固有のため、なければコピー・既存なら上書きしない
+if [[ ! -d "$PROJECT_ROOT/.agents-project" ]] && [[ -d "$PACKAGE_ROOT/.agents-project" ]]; then
+  cp -R "$PACKAGE_ROOT/.agents-project" "$PROJECT_ROOT/.agents-project"
+  echo "AGENTS-spec/.agents-project をプロジェクトにコピーしました（初回のみ）。"
 fi
 
-# プロジェクトの .workflow/templates が無い場合、AGENTS-spec/.workflow/templates からコピーする
+# .workflow/templates は常に AGENTS-spec の内容で最新化する
 WF_TEMPLATES="$PROJECT_ROOT/.workflow/templates"
 WF_SOURCE="$PACKAGE_ROOT/.workflow/templates"
-if [[ ! -d "$WF_TEMPLATES" ]] && [[ -d "$WF_SOURCE" ]]; then
+if [[ -d "$WF_SOURCE" ]]; then
+  rm -rf "$WF_TEMPLATES"
   mkdir -p "$PROJECT_ROOT/.workflow"
   cp -R "$WF_SOURCE" "$PROJECT_ROOT/.workflow/"
-  echo "Copied templates from AGENTS-spec/.workflow/templates to .workflow/templates."
+  echo "AGENTS-spec/.workflow/templates を .workflow/templates にコピーしました（常に最新化）。"
 fi
 
 # スキルをプラットフォーム別パスに同期する（.claude/skills, .cursor/skills）
 # 配備先は {domain}__{capability} で一意にし、異なる domain の同名 capability の衝突を防ぐ。参照: platforms/DESIGN_SYNC_SKILLS_NAMING.md
+# 常に最新にするため、同期前に既存のスキル配備先を削除する。
 sync_skills() {
   local dest_root="$1"
   local agents_skills="${2:-$PROJECT_ROOT/.agents/skills}"
   [[ ! -d "$agents_skills" ]] && return 0
+  rm -rf "$dest_root"
   mkdir -p "$dest_root"
   for domain_dir in "$agents_skills"/*/; do
     [[ -d "$domain_dir" ]] || continue
@@ -66,29 +75,33 @@ sync_skills() {
     done
   done
 }
-if [[ -d "$PROJECT_ROOT/.agents" ]]; then
-  sync_skills "$PROJECT_ROOT/.claude/skills" "$PROJECT_ROOT/.agents/skills"
-  sync_skills "$PROJECT_ROOT/.cursor/skills" "$PROJECT_ROOT/.agents/skills"
-  echo "Synced skills to .claude/skills and .cursor/skills."
-fi
 
 CLAUDE_DIR="$PROJECT_ROOT/.claude"
 mkdir -p "$CLAUDE_DIR"
 if [[ -d "$PROJECT_ROOT/.agents/enforcement/claude" ]]; then
+  rm -rf "$CLAUDE_DIR/hooks"
   mkdir -p "$CLAUDE_DIR/hooks"
   cp -R "$PROJECT_ROOT/.agents/enforcement/claude/"* "$CLAUDE_DIR/hooks/" 2>/dev/null || true
-  echo "Created .claude/ from enforcement/claude."
+  echo "enforcement/claude から .claude/ を最新化しました。"
 else
-  echo "Note: enforcement/claude not found; .claude/ created empty."
+  echo "注: enforcement/claude が見つかりません。.claude/ を空で作成しました。"
 fi
 
 CURSOR_DIR="$PROJECT_ROOT/.cursor"
-mkdir -p "$CURSOR_DIR"
 if [[ -d "$PROJECT_ROOT/.agents/enforcement/cursor" ]]; then
+  rm -rf "$CURSOR_DIR"
+  mkdir -p "$CURSOR_DIR"
   cp -R "$PROJECT_ROOT/.agents/enforcement/cursor/"* "$CURSOR_DIR/" 2>/dev/null || true
-  echo "Created .cursor/ from enforcement/cursor."
+  echo "enforcement/cursor から .cursor/ を最新化しました。"
 else
-  echo "Note: enforcement/cursor not found; .cursor/ created empty."
+  mkdir -p "$CURSOR_DIR"
+  echo "注: enforcement/cursor が見つかりません。.cursor/ を空で作成しました。"
+fi
+
+if [[ -d "$PROJECT_ROOT/.agents" ]]; then
+  sync_skills "$PROJECT_ROOT/.claude/skills" "$PROJECT_ROOT/.agents/skills"
+  sync_skills "$PROJECT_ROOT/.cursor/skills" "$PROJECT_ROOT/.agents/skills"
+  echo "スキルを .claude/skills と .cursor/skills に同期しました。"
 fi
 
 # 証跡 DB を setup 時に生成（実体は Git 管理対象外。配布物に含めない）
@@ -97,7 +110,7 @@ init_workflow_db() {
   if [[ -f "$db" ]]; then
     return 0
   fi
-  echo "[setup] creating workflow database"
+  echo "[setup] ワークフロー用 DB を作成しています"
   mkdir -p "$(dirname "$db")"
   sqlite3 "$db" <<'SQL'
 CREATE TABLE IF NOT EXISTS workflow_log (
@@ -134,4 +147,4 @@ SQL
 
 init_workflow_db
 
-echo "Setup done. Check .agents/SETUP.md for smoke test."
+echo "セットアップ完了。スモークテストは .agents/SETUP.md を参照してください。"

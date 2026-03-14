@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# PreToolUse.sh — ツール実行前に契約違反を reject するフック
+# PreToolUse.sh — ツール実行前に契約違反を reject するフック（絶対強制）
 # 配置: .claude/hooks/（setup が enforcement/claude/ からコピー）
 #
 # 責務:
 #   - プラットフォームがツール名・対象パス・コマンド・ロールを渡す場合、該当違反で exit 1 する（runtime enforcement）。
-#   - 渡されない場合は案内のみ exit 0（CI で事後検知）。
+#   - **絶対強制**: orchestrator（ROLE=orchestrator）の Write/Edit/StrReplace/Shell/Delete 等は例外なく必ず exit 1 で拒否する。
+#   - 渡されない場合は案内のみ exit 0（CI で事後検知）。絶対強制のため、プラットフォームはメインセッションに AGENT_ROLE=orchestrator を渡すことを推奨。
 # 環境変数（プラットフォーム依存）: CLAUDE_TOOL_NAME / CLAUDE_FILE_PATH / CLAUDE_COMMAND / AGENT_ROLE
 #   または TOOL_NAME / FILE_PATH / COMMAND / AGENT_ROLE。未設定時は reject せず案内のみ。
 # Fail-safe: set +e でフック自体の失敗が全ツール停止にならないようにする。
@@ -24,7 +25,7 @@ fi
 # 案内（常に表示）
 if [[ -f "$AGENTS_ROOT/boot/CORE.md" ]]; then
   echo "[PreToolUse] Ensure you have read: $AGENTS_ROOT/boot/CORE.md, $AGENTS_ROOT/boot/LOAD_POLICY.md, $AGENTS_ROOT/workflow/PHASES.md before starting workflow or running a command." >&2
-  echo "[PreToolUse] Main (orchestrator) must NOT do real work: do not directly edit 00/01/02/03/04 or code. Delegate via Task/Constraints/OutputSpec to sub only." >&2
+  echo "[PreToolUse] Main (orchestrator) must NOT do real work (absolute): do not directly edit 00/01/02/03/04 or code. Always delegate via Task/Constraints/OutputSpec to sub. No exceptions." >&2
   echo "[PreToolUse] Evidence: workflow.db via write-workflow-log.sh only. Do NOT run sqlite3 directly. 書記は write-workflow-log.sh のみ実行可。sqlite3 直接は全ロールで reject。Memo timestamps must come from system clock (new-workflow-memo.sh or write-workflow-log)." >&2
 fi
 
@@ -50,7 +51,7 @@ if [[ -n "$TOOL" ]]; then
         exit 1
         ;;
       Edit|Write|Delete|StrReplace|Shell|TodoWrite|EditNotebook|call_mcp_tool|GenerateImage)
-        echo "[enforcement] ERROR: orchestrator cannot modify files or run write/edit/shell (read and delegate only)" >&2
+        echo "[enforcement] ERROR: orchestrator must never modify files or run write/edit/shell (absolute). Delegate to sub only. No exceptions." >&2
         exit 1
         ;;
       *)

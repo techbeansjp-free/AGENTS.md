@@ -6,3 +6,13 @@
 - 実行契約の正本は [.agents/boot/CORE.md](.agents/boot/CORE.md)。読込順は [.agents/boot/LOAD_POLICY.md](.agents/boot/LOAD_POLICY.md) に委譲。
 - 作業は **command**（skill chain）で実行する。command 実行時は run_command と commands/{name}.md を読むこと。
 - プロジェクト概要・詳細は .agents/README.md および boot / workflow / commands / skills を参照すること。
+
+---
+
+## issue 作成タスク受領時の標準フロー
+
+サブエージェントが issue 作成タスク（例: issue_create 相当）を受領した場合の標準挙動。
+
+- **作成先**: `.workflow/<timestamp>_<title>/` 配下に Issue 用ディレクトリを用意する。`<timestamp>` は実行環境の現在時刻（JST）を取得して付与（例: `TZ=Asia/Tokyo date +%Y%m%d_%H%M%S`）。`<title>` は issue 名に相当する短い識別子。
+- **作成・更新するファイル**: `00_要求定義.md`（必須）、`01_要件定義.md`（必要に応じて）、`02_設計.md`、`03_実装計画.md`。`90_issues.md` は複数サブ issue を束ねるワークフローに限り使用。
+- **Orchestrator への返却フォーマット**: 作成完了後、**タイトル**・**概要**（1〜2 文）・**保存場所**（`.workflow/<timestamp>_<title>/` のパス）を返す。詳細はルートの [CLAUDE.md](../CLAUDE.md) §issue 作成タスク受領時の標準フロー を参照。
