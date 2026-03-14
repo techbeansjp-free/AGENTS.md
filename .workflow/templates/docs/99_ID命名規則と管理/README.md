@@ -1,9 +1,9 @@
 ---
 # document_id: 必須。作成時または major 更新時に UUID を付与すること。
-document_id: { uuid }
+document_id: "{uuid}"
+---
 
 このドキュメントは、システムドキュメントで使用するIDの命名規則と一元管理を定義します。
----
 
 # ID命名規則と管理
 

@@ -116,11 +116,14 @@ init_workflow_db() {
 CREATE TABLE IF NOT EXISTS workflow_log (
   entry_id TEXT PRIMARY KEY,
   parent_entry_id TEXT NULL,
+  document_id TEXT NULL,
   ts_utc TEXT NOT NULL,
   created_at TEXT NOT NULL,
   actor_role TEXT NOT NULL,
   delegated_by_role TEXT NOT NULL,
   command TEXT NOT NULL,
+  issue_id TEXT NULL,
+  review_id TEXT NULL,
   issue_path TEXT NULL,
   review_path TEXT NULL,
   changed_files_json TEXT NULL,
@@ -142,6 +145,9 @@ CREATE TABLE IF NOT EXISTS workflow_log (
 CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
 SQL
 }
 

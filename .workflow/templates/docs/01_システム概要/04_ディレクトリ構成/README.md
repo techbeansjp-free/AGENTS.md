@@ -1,6 +1,6 @@
 ---
 # document_id: 必須。作成時または major 更新時に UUID を付与すること。既存の場合は変更しない。
-document_id: { uuid }
+document_id: "{uuid}"
 ---
 
 # 4. ディレクトリ構成
@@ -105,4 +105,4 @@ backend/
 
 ---
 
-**最終更新**: YYYY 年 MM 月 DD 日
+**最終更新**: YYYY 年 MM 月 DD 日（ドキュメント更新時は必ず本日付を反映すること。）

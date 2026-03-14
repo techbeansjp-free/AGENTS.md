@@ -1,12 +1,11 @@
 ---
 # document_id: 必須。作成時または major 更新時に UUID を付与すること。既存の場合は変更しない。
-document_id: { uuid }
+document_id: "{uuid}"
+---
 
 このドキュメントは、画面の動きと、各画面の項目を定義します。  
 システム仕様書作成ルールは [`.agents/DOCS_RULES.md`](../../../../.agents/DOCS_RULES.md) を参照してください。  
 Mermaid 図作成時は [`AGENTS_MERMAID_RULES.md`](../../../AGENTS_MERMAID_RULES.md) を必ず参照してください。
-
----
 
 # 2. 画面設計
 
