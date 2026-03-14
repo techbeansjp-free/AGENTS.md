@@ -24,7 +24,16 @@ if [[ $# -lt 3 ]]; then
   usage
 fi
 
-WORKSPACE_ROOT="$1"
+# WORKSPACE_ROOT を絶対パスに正規化
+_raw_root="$1"
+if command -v realpath &>/dev/null; then
+  WORKSPACE_ROOT="$(realpath "$_raw_root")"
+elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
+  WORKSPACE_ROOT="$(readlink -f "$_raw_root")"
+else
+  WORKSPACE_ROOT="$(cd "$_raw_root" && pwd)"
+fi
+
 PARENT_ISSUE_ID="$2"
 # issue_dir_hint が空でない 3 番目引数なら「既存指定」、なければ 3 番目が pr_url
 if [[ $# -eq 3 ]]; then
@@ -44,13 +53,34 @@ fi
 mkdir -p "$BASE_DIR"
 
 if [[ -n "${ISSUE_DIR_HINT:-}" ]]; then
-  # 既存ディレクトリ指定
+  # ISSUE_DIR_HINT サニタイズ: '/' または '..' を含む場合はエラー
+  if [[ "$ISSUE_DIR_HINT" == *'..'* ]] || [[ "$ISSUE_DIR_HINT" == *'/'* ]]; then
+    echo "ERROR_INVALID_HINT: issue_dir_hint に '/' または '..' を含むことはできません: ${ISSUE_DIR_HINT}" >&2
+    exit 1
+  fi
+  if [[ ! "$ISSUE_DIR_HINT" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+    echo "ERROR_INVALID_HINT: issue_dir_hint は英数字・ハイフン・アンダースコアのみ使用できます: ${ISSUE_DIR_HINT}" >&2
+    exit 1
+  fi
   TARGET_DIR="${BASE_DIR}/${ISSUE_DIR_HINT}"
   if [[ ! -d "$TARGET_DIR" ]]; then
     echo "ERROR_DIR_NOT_FOUND: 指定されたディレクトリが見つかりません: 90_issues/${ISSUE_DIR_HINT}" >&2
     exit 1
   fi
-  echo "$TARGET_DIR"
+  # 絶対パスに解決し BASE_DIR 配下であることを確認
+  if command -v realpath &>/dev/null; then
+    resolved="$(realpath "$TARGET_DIR")"
+  elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
+    resolved="$(readlink -f "$TARGET_DIR")"
+  else
+    resolved="$(cd "$TARGET_DIR" && pwd)"
+  fi
+  base_resolved="$(cd "$BASE_DIR" && pwd)"
+  if [[ "$resolved" != "$base_resolved"* ]]; then
+    echo "ERROR_INVALID_HINT: 解決後のパスが 90_issues 配下ではありません: ${resolved}" >&2
+    exit 1
+  fi
+  echo "$resolved"
   exit 0
 fi
 
@@ -75,4 +105,11 @@ fi
 DIR_NAME="${PREFIX}_PR${PR_NUM}_PR指摘対応"
 TARGET_DIR="${BASE_DIR}/${DIR_NAME}"
 mkdir -p "$TARGET_DIR"
-echo "$TARGET_DIR"
+# 出力は絶対パスで統一
+if command -v realpath &>/dev/null; then
+  echo "$(realpath "$TARGET_DIR")"
+elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
+  echo "$(readlink -f "$TARGET_DIR")"
+else
+  echo "$(cd "$TARGET_DIR" && pwd)"
+fi

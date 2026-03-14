@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS workflow_log (
   CHECK (length(summary) > 5),
   CHECK (actor_role = 'scribe'),
   CHECK (delegated_by_role = 'orchestrator'),
-  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close'))
+  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);

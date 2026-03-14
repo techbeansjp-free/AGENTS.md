@@ -109,6 +109,8 @@ entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegate
 | design-feature | 上記 + issue_path |
 | implement-feature | issue_path, changed_files_json（空配列でなく実体） |
 | verify-and-close | issue_path, review_path, parent_entry_id（親は implement-feature または design-feature） |
+| review-docs | issue_path, summary, dod_met（対象 00/01/02/03 の document_id は任意） |
+| create-pr-review-issue | issue_path（90_issues 配下）, summary, dod_met |
 
 ### 既存 DB のマイグレーション
 

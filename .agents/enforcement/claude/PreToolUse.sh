@@ -80,11 +80,24 @@ if [[ -n "$CMD" && "$TOOL" == "Bash" ]]; then
       exit 1
       ;;
   esac
-  # write-workflow-log.sh は単独実行のみ: 先頭空白のあと (./)? 任意パス write-workflow-log.sh とその引数のみ
-  # 現状はコマンド文字列に write-workflow-log.sh が含まれるかで許可。堅牢化する場合は絶対パス・正規化パスのみ許可する実装を検討する。
-  if [[ ! "$CMD" =~ ^[[:space:]]*(\./)?[^[:space:]]*write-workflow-log\.sh([[:space:]].*)?$ ]]; then
-    echo "[enforcement] ERROR: only direct write-workflow-log.sh execution is allowed" >&2
-    exit 1
+  # write-workflow-log.sh は単独実行のみ: 第1トークンを絶対パスに解決し basename が write-workflow-log.sh であることを確認
+  first_token="$(echo "$CMD" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]].*//')"
+  resolved=""
+  if [[ -n "$first_token" ]] && [[ -e "$first_token" ]]; then
+    if command -v realpath &>/dev/null; then
+      resolved="$(realpath "$first_token" 2>/dev/null)"
+    elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
+      resolved="$(readlink -f "$first_token" 2>/dev/null)"
+    else
+      resolved="$(cd "$(dirname "$first_token")" && pwd)/$(basename "$first_token")"
+    fi
+  fi
+  base_name="$(basename "$first_token")"
+  if [[ "$base_name" != "write-workflow-log.sh" ]]; then
+    if [[ -z "$resolved" ]] || [[ "$(basename "$resolved")" != "write-workflow-log.sh" ]]; then
+      echo "[enforcement] ERROR: only direct write-workflow-log.sh execution is allowed" >&2
+      exit 1
+    fi
   fi
 fi
 

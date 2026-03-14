@@ -28,7 +28,7 @@
 
 1. **create-pr-review-issue-worker** — ディレクトリ決定・作成、指摘抽出・対応方針案生成、00_要求定義.md 生成  
    `workers/create-pr-review-issue/`（または scripts/ に配置した実装を呼ぶ）
-2. **対応方針の監査** — 00_要求定義.md（指摘一覧・各指摘の対応方針案）を対象に、監査・レビューに依頼する。問題があれば 00 を修正して差し戻し、指摘がなくなるまで繰り返す。証跡は `.workflow/{当該 issue}/memo/` に YYYYMMDD_HHMMSS_ プレフィックスの memo で記録する（PHASES §レビュー成果物の配置ルール・run_command §実装前のドキュメントレビューに準拠）。既存の review-docs やドキュメントレビュー運用（memo ＋ 修正反復）に合わせる。
+2. **対応方針の監査** — 00_要求定義.md（指摘一覧・各指摘の対応方針案）を対象に、**commands/review-docs または skills/review を参照して**監査・レビューに依頼する。問題があれば 00 を修正して差し戻し、指摘がなくなるまで繰り返す。証跡は `.workflow/{当該 issue}/memo/` に YYYYMMDD_HHMMSS_ プレフィックスの memo で記録する（PHASES §レビュー成果物の配置ルール・run_command §実装前のドキュメントレビューに準拠）。既存の review-docs やドキュメントレビュー運用（memo ＋ 修正反復）に合わせる。
 3. **write-workflow-log** — 書記に依頼し、本 command の実施内容・作成した issue ディレクトリ・00_要求定義.md を workflow.db に記録する。`skills/logging/write-workflow-log/` を参照。
 
 委譲方針: メインエージェントは本 command を run_command 経由でサブに委譲する。サブは上記 1→2→3 の順で実行する。worker 完了後に監査（2）を経て指摘がなくなるまで修正反復し、最後に書記（3）で証跡を記録する。
