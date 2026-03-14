@@ -6,9 +6,9 @@
 
 ## 手順
 
-1. 入力（実施内容・変更ファイル一覧・完了判定。必要なら決定事項）を読む。
-2. **記録先は workflow.db（SQLite）のみ**。**.agents/scripts/write-workflow-log.sh を必ず使用する**。sqlite3 直接実行禁止。ledger/README.md の配置に従う。
-3. 記録する内容：実施日時・実施者（または役割）・実施内容の要約・変更ファイル・完了条件の充足有無。
+1. 入力（実施内容・変更ファイル一覧・完了判定・必要に応じて document_id。必要なら決定事項）を読む。
+2. **記録先は workflow.db（SQLite）のみ**。**.agents/scripts/write-workflow-log.sh を必ず使用する**。sqlite3 直接実行禁止。ledger/README.md の配置に従う。成果ドキュメント（00/01/02/03/04）に対応するログを書く場合は環境変数 **DOCUMENT_ID**（UUID）を渡すこと（任意。推奨）。
+3. 記録する内容：実施日時・実施者（または役割）・実施内容の要約・変更ファイル・完了条件の充足有無・対応する document_id（任意）。
 4. scribe/README.md・ledger/README.md の形式に従う。
 
 ---

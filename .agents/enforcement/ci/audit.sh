@@ -23,6 +23,9 @@
 #   (17) verify-and-close の親は implement-feature または design-feature（新スキーマ時）
 #   (18) 04_review.md 変更時に verify-and-close ログ存在（Git 時）
 #   (19) 成果物変更時に implement/design/verify ログ存在（Git 時）
+#   (20) document_id 紐付け: frontmatter に document_id がある成果ドキュメントについて、workflow_log にその document_id が 1 件以上存在すること
+#   (20+) document_id 不変: 同一 document_path に過去記録された document_id と現在の frontmatter が異なる場合は FAIL（RULES.md §document_id 不変）
+#   (25) メインが実作業を直接行った（成果物変更に委譲・証跡の対応がない）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -248,7 +251,7 @@ WF_DB="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
 if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$WF_DB" ]]; then
   if sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then
     # 許可されていない command 名
-    bad_cmd=$(sqlite3 "$WF_DB" "SELECT command FROM workflow_log WHERE command NOT IN ('requirement-discovery','design-feature','implement-feature','verify-and-close') LIMIT 1;" 2>/dev/null || true)
+    bad_cmd=$(sqlite3 "$WF_DB" "SELECT command FROM workflow_log WHERE command NOT IN ('requirement-discovery','design-feature','implement-feature','verify-and-close','review-docs','create-pr-review-issue') LIMIT 1;" 2>/dev/null || true)
     if [[ -n "$bad_cmd" ]]; then
       echo "FAIL: 許可されていない command 名が workflow_log に含まれています: $bad_cmd" >&2
       echo "$ROLLBACK_MSG" >&2
@@ -434,7 +437,7 @@ check_artifact_change_has_implement_log() {
   if ! git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -qE '(^|/)\.workflow/.*\.md$|(^|/)docs/.*\.md$'; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
   local count
-  count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close');" 2>/dev/null || echo "0")"
+  count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue');" 2>/dev/null || echo "0")"
   if [[ "${count:-0}" -eq 0 ]]; then
     echo "[audit] ERROR: artifacts changed but no workflow log found" >&2
     echo "$ROLLBACK_MSG" >&2
@@ -450,6 +453,86 @@ check_verify_has_parent
 check_verify_parent_command
 check_review_file_has_verify_log
 check_artifact_change_has_implement_log
+
+# 25. メインが実作業を直接行った（#25）: 成果物変更があるのに委譲・証跡の対応がない場合は FAIL
+check_25_main_did_real_work() {
+  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
+  if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
+  changed="$(git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -E '(^|/)\.workflow/.*\.md$|(^|/)docs/.*\.md$|(^|/)src/|(^|/)app/' || true)"
+  if [[ -z "$changed" ]]; then return 0; fi
+  count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue');" 2>/dev/null || echo "0")"
+  if [[ "${count:-0}" -eq 0 ]]; then
+    echo "[audit] ERROR: artifact changes present but no delegation/evidence in workflow_log (#25: main may have done real work)" >&2
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+}
+check_25_main_did_real_work
+
+# frontmatter から document_id を取得（yq → Python → awk の順で試す）
+get_document_id_from_file() {
+  local f="$1"
+  local doc_id=""
+  if command -v yq &>/dev/null; then
+    doc_id="$(awk '/^---$/{n++} n==1{print} n>1{exit}' "$f" 2>/dev/null | yq -r '.document_id // empty' 2>/dev/null)"
+  fi
+  if [[ -z "$doc_id" ]] && command -v python3 &>/dev/null; then
+    doc_id="$(awk '/^---$/{n++} n==1{print} n>1{exit}' "$f" 2>/dev/null | python3 -c "
+import sys
+for line in sys.stdin:
+    line = line.rstrip()
+    if line.startswith('document_id:'):
+        v = line.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if v:
+            print(v)
+        break
+" 2>/dev/null)"
+  fi
+  if [[ -z "$doc_id" ]]; then
+    doc_id="$(awk '/^---$/{n++} n==1 && /document_id:/{sub(/^.*document_id:\s*[\"\047]?/,\"\"); sub(/[\"\047]?\s*$/,\"\"); if(length>0) print; exit}' "$f" 2>/dev/null)"
+  fi
+  printf '%s\n' "$doc_id"
+}
+
+# 20. document_id 紐付け: .workflow 配下の 00/01/02/03/04 の frontmatter から document_id を抽出し、workflow_log にその document_id が 1 件以上存在するか検証。無ければ FAIL。frontmatter に document_id が無いファイルは対象外。
+# 20+. document_id 不変: 同一 document_path に過去記録された document_id と現在の frontmatter の値が異なる場合は FAIL（RULES.md §document_id 不変）。
+check_document_id_linked() {
+  if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
+  if ! audit_has_column "document_id"; then return 0; fi
+  [[ ! -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]] && return 0
+  echo "[audit] checking document_id linkage (#20)" >&2
+  local uuid_regex='^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$'
+  while IFS= read -r -d '' f; do
+    [[ "$f" == *"/templates/"* ]] && continue
+    doc_id=""
+    if [[ -f "$f" ]]; then
+      doc_id="$(get_document_id_from_file "$f")"
+      if [[ -z "$doc_id" || ! "$doc_id" =~ $uuid_regex ]]; then continue; fi
+    fi
+    doc_id_esc="${doc_id//\'/\'\'}"
+    count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE document_id = '$doc_id_esc';" 2>/dev/null || echo "0")"
+    if [[ "${count:-0}" -eq 0 ]]; then
+      echo "[audit] ERROR: document has document_id but no workflow_log entry (#20): $f (document_id=$doc_id)" >&2
+      echo "$ROLLBACK_MSG" >&2
+      EXIT_CODE=1
+    fi
+    # document_id 不変: 同一パスに既に別の document_id が記録されていれば FAIL
+    if audit_has_column "document_path"; then
+      f_rel="${f#${PROJECT_ROOT}/}"
+      f_rel="${f_rel#./}"
+      f_rel_esc="${f_rel//\'/\'\'}"
+      prev_id="$(sqlite3 "$WF_DB" "SELECT document_id FROM workflow_log WHERE document_path = '$f_rel_esc' AND document_id IS NOT NULL ORDER BY ts_utc ASC LIMIT 1;" 2>/dev/null || true)"
+      if [[ -n "$prev_id" && "$prev_id" != "$doc_id" ]]; then
+        echo "[audit] ERROR: document_id was mutated (#20+): $f (stored=$prev_id, current=$doc_id)" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    fi
+  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -mindepth 1 -maxdepth 3 -type f \( -name "00_*.md" -o -name "01_*.md" -o -name "02_*.md" -o -name "03_*.md" -o -name "04_*.md" \) -print0 2>/dev/null)
+}
+
+check_document_id_linked
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."

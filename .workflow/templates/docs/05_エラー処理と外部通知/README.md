@@ -1,3 +1,8 @@
+---
+# document_id: 必須。作成時または major 更新時に UUID（8-4-4-4-12 形式）を付与すること。既存の場合は変更しない。
+document_id: "00000000-0000-0000-0000-000000000000"
+---
+
 # 5. エラー処理と外部通知
 
 本ドキュメントは、共通エラー処理・報告の一箇所化・二重防止・外部通知（Rollbar / Slack 等）の設計方針を定義する。実装箇所名はプロジェクトに合わせて記載すること。
@@ -30,17 +35,17 @@
 
 ### HTTP ステータスと error.code の対応（例）
 
-| HTTP ステータス | error.code（例） |
-|-----------------|------------------|
-| 400 | VALIDATION_ERROR |
-| 401 | AUTHENTICATION_ERROR |
-| 403 | AUTHORIZATION_ERROR |
-| 404 | NOT_FOUND |
-| 409 | CONFLICT |
-| 422 | UNPROCESSABLE_ENTITY |
-| 429 | RATE_LIMIT_EXCEEDED |
-| 503 | SERVICE_UNAVAILABLE |
-| 500 以上 | INTERNAL_SERVER_ERROR |
+| HTTP ステータス | error.code（例）      |
+| --------------- | --------------------- |
+| 400             | VALIDATION_ERROR      |
+| 401             | AUTHENTICATION_ERROR  |
+| 403             | AUTHORIZATION_ERROR   |
+| 404             | NOT_FOUND             |
+| 409             | CONFLICT              |
+| 422             | UNPROCESSABLE_ENTITY  |
+| 429             | RATE_LIMIT_EXCEEDED   |
+| 503             | SERVICE_UNAVAILABLE   |
+| 500 以上        | INTERNAL_SERVER_ERROR |
 
 プロジェクトに合わせてコード名・マッピングを定義すること。
 

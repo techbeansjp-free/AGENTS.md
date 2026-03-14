@@ -10,7 +10,7 @@ description: "実施内容・変更ファイル・完了判定を規約に従っ
 ## 手順
 
 1. 入力（実施内容・変更ファイル一覧・完了判定。必要なら決定事項）を読む。
-2. **記録先は workflow.db（SQLite）のみ**。workflow.db への 1 行の記録は、**必ず .agents/scripts/write-workflow-log.sh** を呼び出すこと。**sqlite3 を直接実行してはならない。** ラッパー内で DB 作成・PRAGMA・INSERT を行う。**証跡の因果関係（順序監査）** を満たすため、環境変数 **PARENT_ENTRY_ID**（親ログの entry_id）、**REVIEW_PATH**（verify-and-close 時は 04_review.md のパス）、**CHANGED_FILES_JSON**（implement-feature 時は**必須**。変更ファイルの JSON 配列。CONTRACT・ledger/schema 準拠）を渡すこと。ACTOR_ROLE=scribe, DELEGATED_BY_ROLE=orchestrator はラッパーがデフォルトで設定する。
+2. **記録先は workflow.db（SQLite）のみ**。workflow.db への 1 行の記録は、**必ず .agents/scripts/write-workflow-log.sh** を呼び出すこと。**sqlite3 を直接実行してはならない。** ラッパー内で DB 作成・PRAGMA・INSERT を行う。**証跡の因果関係（順序監査）** を満たすため、環境変数 **PARENT_ENTRY_ID**（親ログの entry_id）、**REVIEW_PATH**（verify-and-close 時は 04_review.md のパス）、**CHANGED_FILES_JSON**（implement-feature 時は**必須**。変更ファイルの JSON 配列。CONTRACT・ledger/schema 準拠）を渡すこと。成果ドキュメント（00/01/02/03/04）に対応するログでは **DOCUMENT_ID**（UUID。任意・推奨）を渡すこと。ACTOR_ROLE=scribe, DELEGATED_BY_ROLE=orchestrator はラッパーがデフォルトで設定する。
 3. 記録する内容：実施日時・実施者（または役割）・実施内容の要約・変更ファイル・完了条件の充足有無。
 4. scribe/README.md・ledger/README.md の形式に従う。
 

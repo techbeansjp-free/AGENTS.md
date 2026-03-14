@@ -19,6 +19,8 @@
 - **WAL モード**: 書記（write-workflow-log）が workflow.db に接続したら、**最初に** `PRAGMA journal_mode=WAL;` と `PRAGMA synchronous=NORMAL;` を実行すること。並列書き込み時の lock 競合を軽減する。
 - **busy_timeout**: 可能な環境では `PRAGMA busy_timeout=5000;`（5 秒）を設定すること。
 - 上記 PRAGMA は **DB 作成時および書き込み前**に実行する。運用の「書き込み前」から本セクションを参照すること。
+- **排他（flock）**: write-workflow-log.sh は、INSERT 実行前に専用ロックファイル（`.workflow/workflow.db.lock`。workflow.db と同じディレクトリに `workflow.db.lock` を置く）に対して `flock` で排他ロックを取得する。`flock` コマンドが利用可能な環境でのみ取得し、取得中は他プロセスは同ロックで待機する。利用不可の環境ではリトライのみで対応する。
+- **SQLITE_BUSY リトライ**: sqlite3 の INSERT が "database is locked" / "SQLITE_BUSY" で失敗した場合、**最大 5 回**まで **100 ms** 間隔でリトライする。5 回を超えると終了コード 1 で終了し、標準エラーにメッセージを出す。
 
 ---
 
@@ -34,6 +36,7 @@
 CREATE TABLE IF NOT EXISTS workflow_log (
   entry_id TEXT PRIMARY KEY,
   parent_entry_id TEXT NULL,
+  document_id TEXT NULL,
   ts_utc TEXT NOT NULL,
   created_at TEXT NOT NULL,
 
@@ -41,8 +44,11 @@ CREATE TABLE IF NOT EXISTS workflow_log (
   delegated_by_role TEXT NOT NULL,
 
   command TEXT NOT NULL,
+  issue_id TEXT NULL,
+  review_id TEXT NULL,
   issue_path TEXT NULL,
   review_path TEXT NULL,
+  document_path TEXT NULL,
   changed_files_json TEXT NULL,
 
   summary TEXT NOT NULL,
@@ -64,14 +70,29 @@ CREATE TABLE IF NOT EXISTS workflow_log (
     'requirement-discovery',
     'design-feature',
     'implement-feature',
-    'verify-and-close'
+    'verify-and-close',
+    'review-docs',
+    'create-pr-review-issue'
   ))
 );
 
 CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path) WHERE document_path IS NOT NULL;
 ```
+
+- **issue_id**: issue を一意に識別する UUID。00_要求定義.md の frontmatter の issue_id と一致する。NULL 許容（移行用）。
+- **review_id**: レビュー成果物（例: 04 の document_id）を一意に識別する UUID。NULL 許容（移行用）。
+
+### 期待スキーマのカラム一覧（書記のスキーマ比較用）
+
+書記（write-workflow-log）が PRAGMA table_info の結果と比較する際の期待カラム名（順序は問わない）:
+
+entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash
 
 - **entry_id**: 1 レコードを一意に識別。UUID 推奨。
 - **parent_entry_id**: 親ログの entry_id。requirement-discovery → design-feature → implement-feature → verify-and-close の流れを追う。
@@ -79,6 +100,8 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_
 - **delegated_by_role**: 誰の委譲で実行したか。DB 制約で `orchestrator` のみ許可（原則を強制）。
 - **review_path**: verify-and-close 時に必須。例: `.workflow/20260310_xxx/04_review.md`。
 - **changed_files_json**: 変更ファイル一覧の JSON 配列文字列。implement-feature で必須。
+- **document_id**: 対応する成果ドキュメント（00/01/02/03/04）の UUID。frontmatter の document_id と一致させる。NULL 許容（既存行・未対応運用との互換）。**不変**: 同一 document_path に対して既に記録された document_id は変更・上書き禁止（RULES.md §document_id 不変）。audit.sh および write-workflow-log.sh で検証する。
+- **document_path**: 成果ドキュメントのパス（プロジェクトルート相対、例: `.workflow/xxx/00_要求定義.md`）。document_id 不変チェック用。NULL 許容（記録時に指定した場合のみ設定）。
 - **prev_hash / entry_hash**: 改ざん検知用。entry_hash = hash(entry_id|parent_entry_id|ts_utc|...)。
 
 ### command ごとの必須カラム規約（ラッパー・audit で保証）
@@ -88,7 +111,34 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_
 | requirement-discovery | entry_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_path, summary, dod_met, entry_hash |
 | design-feature | 上記 + issue_path |
 | implement-feature | issue_path, changed_files_json（空配列でなく実体） |
-| verify-and-close | issue_path, review_path, parent_entry_id（親は implement-feature または design-feature） |
+| verify-and-close | issue_path, review_path, parent_entry_id（親は implement-feature または design-feature）。review_id は任意（review_path と併用可）。 |
+| review-docs | issue_path, summary, dod_met（対象 00/01/02/03 の document_id は任意） |
+| create-pr-review-issue | issue_path（90_issues 配下）, summary, dod_met |
+
+### 既存 DB のマイグレーション
+
+既存の workflow_log に対して、不足しているカラムを追加する。**実行順序を守ること**。新規作成時は上記推奨スキーマの CREATE TABLE を使う。
+
+1. **document_id の追加**（document_id が無い場合のみ）
+
+```sql
+ALTER TABLE workflow_log ADD COLUMN document_id TEXT NULL;
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
+```
+
+2. **issue_id の追加**（issue_id が無い場合のみ）
+
+```sql
+ALTER TABLE workflow_log ADD COLUMN issue_id TEXT NULL;
+CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
+```
+
+3. **review_id の追加**（review_id が無い場合のみ）
+
+```sql
+ALTER TABLE workflow_log ADD COLUMN review_id TEXT NULL;
+CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
+```
 
 ### 旧スキーマ（移行前の参照用）
 

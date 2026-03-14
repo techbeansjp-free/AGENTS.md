@@ -9,6 +9,7 @@
 | 呼び出し元 | 条件 |
 |------------|------|
 | **orchestrator（親）** | 検証・クローズや phase 完了時に**必ず**書記へ委譲する。書記未実行のまま次 Task に進んではならない。enforcement で拒否する。 |
+| **サブエージェント** | command 実行の完了時など、成果が生じた時点で**必ず**書記に依頼して記録させる。省略は禁止。強制的に実施する。 |
 | **単体 capability として** | LOAD_POLICY の「単体 capability」に従い、write-workflow-log を呼ぶ場合のみ。 |
 
 ---
@@ -19,9 +20,12 @@
 |------|------|------|
 | command | ○ | 実行した command 名（例: requirement-discovery, design-feature, implement-feature, verify-and-close） |
 | issue_path | △ | 対象 issue のパス（.workflow/YYYYMMDD_HHMMSS_* 形式のフォルダ名を必須とする）。不明時は空でも可。 |
+| issue_id | △（推奨） | issue を一意に識別する UUID。00_要求定義.md の frontmatter の issue_id と一致させる。新スキーマではログに推奨。環境変数 ISSUE_ID で渡す。 |
+| review_id | △（verify-and-close で推奨） | レビュー成果物（例: 04 の document_id）を一意に識別する UUID。環境変数 REVIEW_ID で渡す。 |
 | summary | ○ | 実施内容の要約（1 文以上）。 |
 | changed_files | △（implement-feature は必須） | 変更ファイル一覧（改行区切りまたは JSON）。implement-feature 時は必須。 |
 | dod_met | ○ | DoD 達成 0 または 1。 |
+| document_id | ○ | 対応する成果ドキュメント（00/01/02/03/04/05/90/memo 等）の UUID。全ての成果ドキュメントには document_id を必ず設定すること。任意とすることは禁止。document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。write-workflow-log は環境変数 DOCUMENT_ID で受け取る。 |
 | memo ファイルパス（memo 運用時） | △ | memo_ref に登録する memo の相対パス。過渡的・例外・**非推奨**運用時のみ。本則は workflow.db。 |
 
 ---
@@ -56,7 +60,10 @@
 | actor_role | TEXT | ○（新スキーマ） | 実行主体。本則は `scribe`。 |
 | delegated_by_role | TEXT | ○（新スキーマ） | 委譲元。原則 `orchestrator`。 |
 | review_path | TEXT | △（verify-and-close は必須） | 例: .workflow/{issue}/04_review.md。 |
+| issue_id | TEXT | △（推奨） | issue を一意に識別する UUID。00 の frontmatter の issue_id と一致。環境変数 ISSUE_ID。 |
+| review_id | TEXT | △（verify-and-close で推奨） | レビュー成果物（04 の document_id 等）の UUID。環境変数 REVIEW_ID。 |
 | changed_files_json | TEXT | △（implement-feature は必須） | 変更ファイル一覧の JSON 配列文字列。 |
+| document_id | TEXT | ○ | 対応する成果ドキュメントの UUID。全ての成果ドキュメントには document_id を必ず設定すること。任意とすることは禁止。document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。環境変数 DOCUMENT_ID で渡す。 |
 
 **必須キー不足時**: 記録を失敗とみなし、親にエラーを返す。完了とみなさない。
 

@@ -1,10 +1,11 @@
 ---
+# document_id: 必須。作成時または major 更新時に UUID（8-4-4-4-12 形式）を付与すること。既存の場合は変更しない。
+document_id: "00000000-0000-0000-0000-000000000000"
+---
 
 このドキュメントは、ER図とテーブル定義を定義します。  
 システム仕様書作成ルールは [`.agents/DOCS_RULES.md`](../../../../.agents/DOCS_RULES.md) を参照してください。  
 Mermaid 図作成時は [`AGENTS_MERMAID_RULES.md`](../../../AGENTS_MERMAID_RULES.md) を必ず参照してください。
-
----
 
 # 3. データ設計
 

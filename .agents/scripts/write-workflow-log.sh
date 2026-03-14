@@ -4,7 +4,8 @@
 #   AGENT_ROLE=scribe .agents/scripts/write-workflow-log.sh command summary dod_met ts_utc [issue_path] [changed_files]
 #   ENTRY_ID= PARENT_ENTRY_ID= ACTOR_ROLE=scribe DELEGATED_BY_ROLE=orchestrator 等を任意で指定。
 # 位置引数: command summary dod_met ts_utc [issue_path] [changed_files]
-# 環境変数: ENTRY_ID, PARENT_ENTRY_ID, ACTOR_ROLE, DELEGATED_BY_ROLE, REVIEW_PATH, CHANGED_FILES_JSON, PREV_HASH
+# 環境変数: ENTRY_ID, PARENT_ENTRY_ID, DOCUMENT_ID, DOCUMENT_PATH, ACTOR_ROLE, DELEGATED_BY_ROLE, REVIEW_PATH, REVIEW_ID, ISSUE_ID, CHANGED_FILES_JSON, PREV_HASH
+# DOCUMENT_PATH: 成果ドキュメントのパス（プロジェクトルート相対、例: .workflow/xxx/04_review.md）。指定時は document_id 不変チェックに使用（同一パスで既に別の document_id が記録されていれば INSERT を拒否）。
 # DB パスは固定（.workflow/workflow.db）。引数で別 DB を渡せない。
 # 新スキーマ（entry_id 等）の DB では因果チェーン・actor を記録。旧スキーマでは従来どおり INSERT。
 
@@ -17,13 +18,13 @@ if [[ "${AGENT_ROLE:-}" != "scribe" ]]; then
 fi
 
 # 許可 command 一覧（INSERT 専用のため、このリスト外は拒否）
-ALLOWED_COMMANDS="requirement-discovery|design-feature|implement-feature|verify-and-close"
+ALLOWED_COMMANDS="requirement-discovery|design-feature|implement-feature|verify-and-close|review-docs|create-pr-review-issue"
 
 escape_sql() {
   printf '%s' "$1" | sed "s/'/''/g"
 }
 
-# UUID 生成（uuidgen / python3 / フォールバック）
+# UUID 生成（uuidgen / python3 / フォールバック）。フォールバックも RFC4122 形式（8-4-4-4-12 の 16 進）で audit.sh の uuid_regex に合わせる。
 gen_entry_id() {
   if command -v uuidgen &>/dev/null; then
     uuidgen
@@ -32,13 +33,35 @@ gen_entry_id() {
   if command -v python3 &>/dev/null; then
     python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null && return
   fi
-  printf '%s-%s-%s-%s-%s' "$(date +%s)" "${RANDOM:-0}" "${RANDOM:-0}" "${RANDOM:-0}" "${RANDOM:-0}"
+  # フォールバック: RFC4122 形式を出力
+  if [[ -r /dev/urandom ]]; then
+    local hex
+    hex=$(head -c 16 /dev/urandom | od -A n -t x1 | tr -d ' \n')
+    if [[ -n "$hex" && ${#hex} -ge 32 ]]; then
+      printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
+      return
+    fi
+  fi
+  if command -v openssl &>/dev/null; then
+    local hex
+    hex=$(openssl rand -hex 16 2>/dev/null)
+    if [[ -n "$hex" && ${#hex} -eq 32 ]]; then
+      printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
+      return
+    fi
+  fi
+  # 最後のフォールバック: RANDOM で 16 進 32 文字を組み立て（8-4-4-4-12 に整形）
+  local i hex=""
+  for ((i=0; i<16; i++)); do
+    hex="${hex}$(printf '%02x' $((RANDOM % 256)))"
+  done
+  printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
 }
 
-# 新スキーマ用: entry_hash = sha256(entry_id|parent_entry_id|ts_utc|actor_role|delegated_by_role|command|issue_path|review_path|changed_files_json|summary|dod_met)
+# 新スキーマ用: entry_hash = sha256(entry_id|...|issue_id|review_id|...)。ledger/schema.md と同期する。
 gen_entry_hash() {
-  local eid="$1" pid="$2" ts="$3" ar="$4" dr="$5" cmd="$6" ip="$7" rp="$8" cf="$9" sum="${10}" dod="${11}"
-  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s' "$eid" "$pid" "$ts" "$ar" "$dr" "$cmd" "$ip" "$rp" "$cf" "$sum" "$dod" | sha256sum | awk '{print $1}'
+  local eid="$1" pid="$2" docid="$3" ts="$4" ar="$5" dr="$6" cmd="$7" iid="$8" rid="$9" ip="${10}" rp="${11}" cf="${12}" sum="${13}" dod="${14}"
+  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s' "$eid" "$pid" "$docid" "$ts" "$ar" "$dr" "$cmd" "$iid" "$rid" "$ip" "$rp" "$cf" "$sum" "$dod" | sha256sum | awk '{print $1}'
 }
 
 # changed_files 文字列を JSON 配列に（カンマ・改行区切り対応）
@@ -87,16 +110,44 @@ CHANGED_FILES_RAW="${6:-}"
 
 # command 許可リストチェック
 if ! printf '%s' "$COMMAND" | grep -qE "^($ALLOWED_COMMANDS)$"; then
-  echo "ERROR: 許可されていない command です。許可: requirement-discovery, design-feature, implement-feature, verify-and-close" >&2
+  echo "ERROR: 許可されていない command です。許可: requirement-discovery, design-feature, implement-feature, verify-and-close, review-docs, create-pr-review-issue" >&2
   exit 1
 fi
+
+# UUID 形式検証（8-4-4-4-12）。空の場合は検証スキップ（DOCUMENT_ID は後で必須チェック）
+UUID_REGEX='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+validate_uuid_if_set() {
+  local var_name="$1"
+  local var_value="$2"
+  if [[ -z "${var_value//[[:space:]]/}" ]]; then return 0; fi
+  if [[ ! "$var_value" =~ $UUID_REGEX ]]; then
+    echo "ERROR: ${var_name} が UUID 形式（8-4-4-4-12）ではありません: ${var_value}" >&2
+    exit 1
+  fi
+  return 0
+}
 
 # 環境変数で上書き（新スキーマ用）
 ACTOR_ROLE="${ACTOR_ROLE:-scribe}"
 DELEGATED_BY_ROLE="${DELEGATED_BY_ROLE:-orchestrator}"
 REVIEW_PATH="${REVIEW_PATH:-}"
 PARENT_ENTRY_ID="${PARENT_ENTRY_ID:-}"
+DOCUMENT_ID="${DOCUMENT_ID:-}"
+DOCUMENT_PATH="${DOCUMENT_PATH:-}"
+ISSUE_ID="${ISSUE_ID:-}"
+REVIEW_ID="${REVIEW_ID:-}"
 PREV_HASH="${PREV_HASH:-}"
+
+# (A) DOCUMENT_ID / ISSUE_ID / REVIEW_ID の UUID 形式検証（指定時のみ。不正なら exit 1）
+validate_uuid_if_set "DOCUMENT_ID" "$DOCUMENT_ID"
+validate_uuid_if_set "ISSUE_ID" "$ISSUE_ID"
+validate_uuid_if_set "REVIEW_ID" "$REVIEW_ID"
+
+# (C) DOCUMENT_ID が空の場合は記録失敗・exit 1
+if [[ -z "${DOCUMENT_ID:-}" || "${DOCUMENT_ID:-}" =~ ^[[:space:]]*$ ]]; then
+  echo "ERROR: DOCUMENT_ID は必須です。空のため記録を拒否します。" >&2
+  exit 1
+fi
 if [[ -n "${CHANGED_FILES_JSON:-}" ]]; then
   CHANGED_FILES_JSON="$CHANGED_FILES_JSON"
 else
@@ -127,8 +178,10 @@ case "$COMMAND" in
     ;;
   verify-and-close)
     if [[ -z "${REVIEW_PATH:-}" || "${REVIEW_PATH:-}" =~ ^[[:space:]]*$ ]]; then
-      echo "ERROR: verify-and-close では REVIEW_PATH が必須です。" >&2
-      exit 1
+      if [[ -z "${REVIEW_ID:-}" || "${REVIEW_ID:-}" =~ ^[[:space:]]*$ ]]; then
+        echo "ERROR: verify-and-close では REVIEW_PATH または REVIEW_ID が必須です。" >&2
+        exit 1
+      fi
     fi
     if [[ -z "${PARENT_ENTRY_ID:-}" || "${PARENT_ENTRY_ID:-}" =~ ^[[:space:]]*$ ]]; then
       echo "ERROR: verify-and-close では PARENT_ENTRY_ID が必須です。" >&2
@@ -136,6 +189,44 @@ case "$COMMAND" in
     fi
     ;;
 esac
+
+# 同時書き込み対策: 専用ロックファイルで flock 排他取得（利用可能な場合）。INSERT は SQLITE_BUSY 時リトライ（最大 5 回・100 ms）。
+LOCK_FILE="${WF_DB}.lock"
+MAX_RETRIES=5
+RETRY_SLEEP_SEC=0.1
+mkdir -p "$(dirname "$WF_DB")"
+if command -v flock &>/dev/null; then
+  exec 200>>"$LOCK_FILE"
+  flock -x 200
+fi
+WFL_ERRFILE=""
+WFL_ERRFILE=$(mktemp 2>/dev/null) || true
+if [[ -n "$WFL_ERRFILE" && -f "$WFL_ERRFILE" ]]; then
+  trap 'rm -f "$WFL_ERRFILE"' EXIT
+fi
+
+# INSERT をリトライ付きで実行するヘルパー（SQLITE_BUSY 時は最大 MAX_RETRIES 回まで待機）
+insert_with_retries() {
+  local db="$1" sql="$2" errfile="${3:-}"
+  local attempt=1
+  while true; do
+    if sqlite3 "$db" "$sql" 2>"${errfile:-/dev/null}"; then
+      return 0
+    fi
+    if [[ $attempt -ge $MAX_RETRIES ]]; then
+      [[ -n "$errfile" && -f "$errfile" ]] && cat "$errfile" >&2
+      echo "ERROR: workflow_log への INSERT に失敗しました（リトライ上限: ${MAX_RETRIES} 回）。" >&2
+      return 1
+    fi
+    if [[ -n "$errfile" && -f "$errfile" ]] && ! grep -qi "locked\|busy" "$errfile"; then
+      cat "$errfile" >&2
+      echo "ERROR: workflow_log への INSERT に失敗しました。" >&2
+      return 1
+    fi
+    sleep "$RETRY_SLEEP_SEC"
+    attempt=$((attempt+1))
+  done
+}
 
 # DB が無ければ新スキーマで作成
 if [[ ! -f "$WF_DB" ]]; then
@@ -145,11 +236,14 @@ if [[ ! -f "$WF_DB" ]]; then
 CREATE TABLE IF NOT EXISTS workflow_log (
   entry_id TEXT PRIMARY KEY,
   parent_entry_id TEXT NULL,
+  document_id TEXT NULL,
   ts_utc TEXT NOT NULL,
   created_at TEXT NOT NULL,
   actor_role TEXT NOT NULL,
   delegated_by_role TEXT NOT NULL,
   command TEXT NOT NULL,
+  issue_id TEXT NULL,
+  review_id TEXT NULL,
   issue_path TEXT NULL,
   review_path TEXT NULL,
   changed_files_json TEXT NULL,
@@ -166,11 +260,14 @@ CREATE TABLE IF NOT EXISTS workflow_log (
   CHECK (length(summary) > 5),
   CHECK (actor_role = 'scribe'),
   CHECK (delegated_by_role = 'orchestrator'),
-  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close'))
+  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
 SCHEMA
 fi
 
@@ -182,36 +279,116 @@ if sqlite3 -separator $'\t' "$WF_DB" "PRAGMA table_info(workflow_log);" 2>/dev/n
   HAS_NEW_SCHEMA=1
 fi
 
+# スキーマ検知・マイグレーション（ledger/schema.md の定義順。不足カラムがあれば ADD COLUMN を実行）
+if [[ -n "$HAS_NEW_SCHEMA" ]]; then
+  CURRENT_COLS="$(sqlite3 -separator $'\t' "$WF_DB" "PRAGMA table_info(workflow_log);" 2>/dev/null | awk -F '\t' '{print $2}')"
+  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'document_id'; then
+    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN document_id TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);" || { echo "ERROR: document_id マイグレーションに失敗しました。" >&2; exit 1; }
+  fi
+  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'issue_id'; then
+    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN issue_id TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);" || { echo "ERROR: issue_id マイグレーションに失敗しました。" >&2; exit 1; }
+  fi
+  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'review_id'; then
+    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN review_id TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);" || { echo "ERROR: review_id マイグレーションに失敗しました。" >&2; exit 1; }
+  fi
+  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'document_path'; then
+    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN document_path TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);" 2>/dev/null || sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN document_path TEXT NULL;" || { echo "ERROR: document_path マイグレーションに失敗しました。" >&2; exit 1; }
+  fi
+  # CHECK に review-docs または create-pr-review-issue が無い場合はテーブル再作成でマイグレーション
+  if [[ "$COMMAND" == "review-docs" || "$COMMAND" == "create-pr-review-issue" ]]; then
+    CREATED_SQL="$(sqlite3 "$WF_DB" "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_log';")"
+    NEED_MIGRATE=""
+    if [[ "$COMMAND" == "review-docs" && -n "$CREATED_SQL" && "$CREATED_SQL" != *"review-docs"* ]]; then NEED_MIGRATE=1; fi
+    if [[ "$COMMAND" == "create-pr-review-issue" && -n "$CREATED_SQL" && "$CREATED_SQL" != *"create-pr-review-issue"* ]]; then NEED_MIGRATE=1; fi
+    if [[ -n "$NEED_MIGRATE" ]]; then
+      sqlite3 "$WF_DB" <<'MIGRATE'
+BEGIN IMMEDIATE;
+DROP TABLE IF EXISTS workflow_log_new;
+CREATE TABLE workflow_log_new (
+  entry_id TEXT PRIMARY KEY,
+  parent_entry_id TEXT NULL,
+  document_id TEXT NULL,
+  ts_utc TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  actor_role TEXT NOT NULL,
+  delegated_by_role TEXT NOT NULL,
+  command TEXT NOT NULL,
+  issue_id TEXT NULL,
+  review_id TEXT NULL,
+  issue_path TEXT NULL,
+  review_path TEXT NULL,
+  document_path TEXT NULL,
+  changed_files_json TEXT NULL,
+  summary TEXT NOT NULL,
+  dod_met INTEGER NOT NULL CHECK (dod_met IN (0, 1)),
+  prev_hash TEXT NULL,
+  entry_hash TEXT NOT NULL,
+  CHECK (length(entry_id) > 0),
+  CHECK (length(ts_utc) > 0),
+  CHECK (length(created_at) > 0),
+  CHECK (length(actor_role) > 0),
+  CHECK (length(delegated_by_role) > 0),
+  CHECK (length(command) > 0),
+  CHECK (length(summary) > 5),
+  CHECK (actor_role = 'scribe'),
+  CHECK (delegated_by_role = 'orchestrator'),
+  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
+);
+INSERT INTO workflow_log_new SELECT entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash FROM workflow_log;
+DROP TABLE workflow_log;
+ALTER TABLE workflow_log_new RENAME TO workflow_log;
+CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);
+COMMIT;
+MIGRATE
+      [[ $? -eq 0 ]] || { echo "ERROR: CHECK マイグレーションに失敗しました（review-docs / create-pr-review-issue）。" >&2; exit 1; }
+    fi
+  fi
+fi
+
 if [[ -n "$HAS_NEW_SCHEMA" ]]; then
   ENTRY_ID="${ENTRY_ID:-$(gen_entry_id)}"
   CREATED_AT="${CREATED_AT:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
-  ENTRY_HASH="$(gen_entry_hash "$ENTRY_ID" "$PARENT_ENTRY_ID" "$TS_UTC" "$ACTOR_ROLE" "$DELEGATED_BY_ROLE" "$COMMAND" "$ISSUE_PATH" "$REVIEW_PATH" "$CHANGED_FILES_JSON" "$SUMMARY" "$DOD_MET")"
   E_EID="$(escape_sql "$ENTRY_ID")"
   E_PID="$(escape_sql "$PARENT_ENTRY_ID")"
+  E_DOCID="$(escape_sql "$DOCUMENT_ID")"
   E_TS="$(escape_sql "$TS_UTC")"
   E_CA="$(escape_sql "$CREATED_AT")"
   E_AR="$(escape_sql "$ACTOR_ROLE")"
   E_DR="$(escape_sql "$DELEGATED_BY_ROLE")"
   E_CMD="$(escape_sql "$COMMAND")"
+  E_IID="$(escape_sql "$ISSUE_ID")"
+  E_RID="$(escape_sql "$REVIEW_ID")"
   E_IP="$(escape_sql "$ISSUE_PATH")"
   E_RP="$(escape_sql "$REVIEW_PATH")"
+  E_DP="$(escape_sql "$DOCUMENT_PATH")"
   E_CF="$(escape_sql "$CHANGED_FILES_JSON")"
   E_SUM="$(escape_sql "$SUMMARY")"
   E_PH="$(escape_sql "$PREV_HASH")"
+  ENTRY_HASH="$(gen_entry_hash "$ENTRY_ID" "$PARENT_ENTRY_ID" "$DOCUMENT_ID" "$TS_UTC" "$ACTOR_ROLE" "$DELEGATED_BY_ROLE" "$COMMAND" "$ISSUE_ID" "$REVIEW_ID" "$ISSUE_PATH" "$REVIEW_PATH" "$CHANGED_FILES_JSON" "$SUMMARY" "$DOD_MET")"
   E_EH="$(escape_sql "$ENTRY_HASH")"
-  sqlite3 "$WF_DB" "INSERT INTO workflow_log (entry_id, parent_entry_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_path, review_path, changed_files_json, summary, dod_met, prev_hash, entry_hash) VALUES ('$E_EID', NULLIF('$E_PID',''), '$E_TS', '$E_CA', '$E_AR', '$E_DR', '$E_CMD', NULLIF('$E_IP',''), NULLIF('$E_RP',''), '$E_CF', '$E_SUM', $DOD_MET, NULLIF('$E_PH',''), '$E_EH');" || {
-    echo "ERROR: workflow_log への INSERT に失敗しました。" >&2
-    exit 1
-  }
+  # document_id 不変: 同一 document_path に既に別の document_id が記録されていれば拒否（RULES.md §document_id 不変）
+  if [[ -n "$DOCUMENT_ID" && -n "$DOCUMENT_PATH" ]]; then
+    existing_id="$(sqlite3 "$WF_DB" "SELECT document_id FROM workflow_log WHERE document_path = '$E_DP' AND document_id IS NOT NULL ORDER BY ts_utc ASC LIMIT 1;" 2>/dev/null || true)"
+    if [[ -n "$existing_id" && "$existing_id" != "$DOCUMENT_ID" ]]; then
+      echo "ERROR: document_id の変更は禁止されています（同一 document_path に既に別の document_id が記録済み）。stored=$existing_id, given=$DOCUMENT_ID" >&2
+      exit 1
+    fi
+  fi
+  INSERT_SQL="INSERT INTO workflow_log (entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash) VALUES ('$E_EID', NULLIF('$E_PID',''), NULLIF('$E_DOCID',''), '$E_TS', '$E_CA', '$E_AR', '$E_DR', '$E_CMD', NULLIF('$E_IID',''), NULLIF('$E_RID',''), NULLIF('$E_IP',''), NULLIF('$E_RP',''), NULLIF('$E_DP',''), '$E_CF', '$E_SUM', $DOD_MET, NULLIF('$E_PH',''), '$E_EH');"
+  insert_with_retries "$WF_DB" "$INSERT_SQL" "${WFL_ERRFILE:-}" || exit 1
 else
   E_TS="$(escape_sql "$TS_UTC")"
   E_CMD="$(escape_sql "$COMMAND")"
   E_IP="$(escape_sql "$ISSUE_PATH")"
   E_SUM="$(escape_sql "$SUMMARY")"
   E_CF="$(escape_sql "$CHANGED_FILES_RAW")"
-  sqlite3 "$WF_DB" "INSERT OR IGNORE INTO workflow_log (ts_utc, command, issue_path, summary, changed_files, dod_met) VALUES ('$E_TS', '$E_CMD', '$E_IP', '$E_SUM', '$E_CF', $DOD_MET);" || {
-    echo "ERROR: workflow_log への INSERT に失敗しました。" >&2
-    exit 1
-  }
+  INSERT_SQL="INSERT OR IGNORE INTO workflow_log (ts_utc, command, issue_path, summary, changed_files, dod_met) VALUES ('$E_TS', '$E_CMD', '$E_IP', '$E_SUM', '$E_CF', $DOD_MET);"
+  insert_with_retries "$WF_DB" "$INSERT_SQL" "${WFL_ERRFILE:-}" || exit 1
 fi
 exit 0

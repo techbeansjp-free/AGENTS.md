@@ -62,6 +62,7 @@
 ## 実行時の注意
 
 - **実装完了後は必ず verify-and-close を委譲すること。** 実装 phase の成果物がある場合、クローズ前に verify-and-close を経ずに次に進んではならない（enforcement で拒否する）。
+- **完了後に書記（write-workflow-log）に依頼して記録させること。**
 - **証跡・書記に渡す項目**: implement-feature 完了時は書記（write-workflow-log）に **CHANGED_FILES_JSON**（変更ファイルの JSON 配列）を渡すことが**必須**。enforcement の audit で検証する。
 - Task/Constraints/OutputSpec で委譲されている場合は、指定された参照ファイル（00/01/02/03）を読んだうえで実装する。
 - テストファーストを推奨。03 のテスト観点を先に満たす実装をする。
