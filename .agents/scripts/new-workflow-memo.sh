@@ -5,8 +5,8 @@
 # - 呼び出し元が日時文字列を渡すことを**禁止**し、AI がプレフィックスを推測・手入力する経路を物理的に塞ぐ。
 #
 # 使い方:
-#   ./AGENTS-spec/.agents/scripts/new-workflow-memo.sh ISSUE_DIR "タイトル" > /dev/null
-#   例: ./AGENTS-spec/.agents/scripts/new-workflow-memo.sh ".workflow/20260310_185827_AGENTS-spec-enforcement" "検証メモ"
+#   .agents/scripts/new-workflow-memo.sh ISSUE_DIR "タイトル" > /dev/null  （パッケージルートからの相対）
+#   例: .agents/scripts/new-workflow-memo.sh ".workflow/20260310_185827_agents-package-enforcement" "検証メモ"
 #
 # 振る舞い:
 # - TZ=Asia/Tokyo で `date +%Y%m%d_%H%M%S` を呼び出し、YYYYMMDD_HHMMSS_ を生成する。
@@ -27,7 +27,7 @@ fi
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 ISSUE_DIR [TITLE]" >&2
-  echo "ISSUE_DIR example: .workflow/20260310_185827_AGENTS-spec-enforcement" >&2
+  echo "ISSUE_DIR example: .workflow/20260310_185827_agents-package-enforcement" >&2
   exit 1
 fi
 

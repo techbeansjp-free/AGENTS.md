@@ -86,7 +86,7 @@ workflow.db は **証跡ログの本則ストレージ**である。
 
 - workflow.db は Git 管理対象に含めない
 - workflow.db-wal / workflow.db-shm も Git 管理対象外
-- DB は setup 時に生成する（.agents/scripts/setup-agents-spec.sh の init_workflow_db）
+- DB は setup 時に生成する（.agents/scripts/setup.sh の init_workflow_db）
 - DB への書き込みは **scribe agent のみ**（.agents/scripts/write-workflow-log.sh を必ず使用。sqlite3 直接実行禁止）
 - SQL 操作は INSERT のみ許可
 
@@ -135,7 +135,7 @@ SQLite WAL モードでは
 - 証跡未実行の検出。証跡は**本則 workflow.db**、memo は過渡的・例外のみ。**ログは書記のみ**が書き込む。workflow.db 以外へのログ書き込み・書記以外の workflow.db 書き込みは禁止（CORE）。
 - **timestamp 付き memo ファイルの作成経路の固定**: `.workflow/{issue}/memo/` 以下の `YYYYMMDD_HHMMSS_*.md` は、write-workflow-log capability または `.agents/scripts/new-workflow-memo.sh` 等、**システム時計からプレフィックスを生成する専用スクリプト経由でのみ**作成する。メインが自由入力でプレフィックス付きファイル名を指定して Write/Edit する経路は hooks / CI で検知・拒否する。
 - CI で CONTRACT 違反・証跡欠落を検出したら reject する（audit.sh 等）。
-- **自立進行ルール違反の検出**: AGENTS-spec/AGENTS.md §自立進行ルール で定義された通常の作業依頼に対して、メインが run_command を用いた自律的な委譲を行わず、毎回ユーザーに「サブを起動してよいか」「この方針で進めてよいか」等の許可確認を前提としている場合や、「サブへの指示文案だけを返して実作業 command を実行しない」場合を違反として検出し、差し戻し対象とする（高リスク操作を除く）。#22・#23 は **subagent-guard または runtime で検出**する（audit.sh では検出しない）。
+- **自立進行ルール違反の検出**: パッケージルートの `AGENTS.md` §自立進行ルール で定義された通常の作業依頼に対して、メインが run_command を用いた自律的な委譲を行わず、毎回ユーザーに「サブを起動してよいか」「この方針で進めてよいか」等の許可確認を前提としている場合や、「サブへの指示文案だけを返して実作業 command を実行しない」場合を違反として検出し、差し戻し対象とする（高リスク操作を除く）。#22・#23 は **subagent-guard または runtime で検出**する（audit.sh では検出しない）。
 - **高リスク操作の事前確認省略**: RULES / CORE / 本 enforcement で定義された高リスク操作（大量削除・外部サービスへの書き込み等）に該当する command・capability を、メインが事前のユーザー明示確認なしに実行した場合は違反とみなし、**subagent-guard または runtime で検出**して reject する（audit.sh では検出しない）。高リスク操作のみ、事前のユーザー明示確認が必須である。
 
 **ローカルで push 前に audit を実行するには**、pre-push フックで audit.sh を呼ぶことを推奨する。採用先では `git push` 前に `enforcement/ci/audit.sh`（またはプロジェクトルートからの相対パス）を実行し、失敗時は push を中止する。例: `.git/hooks/pre-push` から `./.agents/enforcement/ci/audit.sh .` を実行する。ci/ に pre-push.example を同梱しているので、採用先で pre-push にコピーして利用できる。
@@ -177,7 +177,7 @@ SQLite WAL モードでは
 | 19 | **成果物変更にログなし** | .workflow/docs 配下の成果物が変更されたのに該当 command のログが無い。 | 該当 command を実行して書記に記録させる |
 | 20 | **document に document_id があるのに workflow_log にその document_id が無い** | 成果ドキュメント（00/01/02/03/04）の frontmatter に document_id が付与されているのに、workflow_log にその document_id の行が 1 件も存在しない。証跡と成果物の紐付け不整合。 | 該当 document の document_id を書記に渡して verify-and-close 等を再実行し、write-workflow-log でログを記録する。 |
 | 21 | **新スキーマで workflow_log に issue_id / review_id が推奨されるが記録されていない**（推奨・監査は任意） | workflow_log に issue_id カラムが存在する新スキーマの DB において、implement-feature や verify-and-close のログに issue_id または review_id が NULL のままである。ID 参照による証跡の整合性のため推奨。 | 該当 command を再実行する際に ISSUE_ID（00 の frontmatter から取得）・REVIEW_ID（04 の document_id）を渡して書記に記録する。 |
-| 22 | **自立進行ルール違反（通常依頼での過度な許可確認）** | issue 作成・要件定義・設計・実装計画・実装・レビュー等の通常の作業依頼に対して、メインが run_command を用いた自律的な委譲を行わず、「サブを起動してよいか」「この方針で進めてよいか」等を毎回ユーザーに確認してからでないと command を実行しない。AGENTS-spec/AGENTS.md §自立進行ルール 違反。 | 該当 issue の 03_実装計画 または AGENTS/RULES 等に差し戻し、自立進行ルールに沿うよう実行方針を修正する。 |
+| 22 | **自立進行ルール違反（通常依頼での過度な許可確認）** | issue 作成・要件定義・設計・実装計画・実装・レビュー等の通常の作業依頼に対して、メインが run_command を用いた自律的な委譲を行わず、「サブを起動してよいか」「この方針で進めてよいか」等を毎回ユーザーに確認してからでないと command を実行しない。`AGENTS.md` §自立進行ルール 違反。 | 該当 issue の 03_実装計画 または AGENTS/RULES 等に差し戻し、自立進行ルールに沿うよう実行方針を修正する。 |
 | 23 | **自立進行ルール違反（通常依頼で指示文案だけを返す）** | 自立進行ルールが有効な通常の作業依頼に対して、「サブへの指示文案だけを返して実作業 command を実行しない」挙動をとっている（説明モードが明示されていないにもかかわらず）。特にドキュメントレビュー依頼については、PHASES.md §レビュー成果物の配置ルール に記載の「memo への記録＋指摘がなくなるまでの反復＋書記委譲」を省略し、レビュー本文だけを返している場合を含む。**書記委譲を「推奨」「検討してください」とだけ記載してユーザーに委ねて終了し、実際には書記に依頼していない場合も本号に該当する。** ドキュメントレビュー「完了」の定義は run_command §実装前のドキュメントレビュー および PHASES §レビュー成果物の配置ルール に従い、memo＋修正反復＋書記委譲のすべてを実施するまで完了とみなしてはならない。 | 該当 issue の 03_実装計画 または AGENTS/RULES 等に差し戻し、実作業 command を実行する委譲フローに修正する。ドキュメントレビュー依頼については、PHASES.md のドキュメントレビュー運用に従い、少なくとも 1 回以上の memo 作成と書記委譲を含むフローに修正する。 |
 | 24 | **高リスク操作に対する事前確認省略** | RULES / CORE / enforcement で定義された高リスク操作（大量削除・外部サービスへの書き込み等）に該当する command・capability を、事前のユーザー明示確認なしに実行している。 | 該当 issue および AGENTS/RULES/enforcement の該当セクションに差し戻し、高リスク操作前にユーザー確認を必須とする運用・実装に修正する。 |
 | 25 | **メインが実作業を直接行った（サブ委譲の省略）［絶対強制］** | 作業依頼に対し、メインが phase 判定 → command 選択 → サブ委譲を行わず、自ら Write/Edit/Shell 等でファイル作成・編集・コマンド実行を行った。AGENTS.md・CORE §メインがやってはいけないこと 違反。**例外なく**規模・内容を問わず違反とする。audit で **必須** チェックする。 | 該当 issue の 03_実装計画 または CORE/AGENTS を再確認し、以降は**必ず** run_command 等でサブに委譲してから実作業を行うよう差し戻す。 |

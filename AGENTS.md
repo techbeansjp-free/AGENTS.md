@@ -112,6 +112,7 @@
 | いつ何を読むか・command/capability トリガー | .agents/boot/LOAD_POLICY.md |
 | フェーズ・成果物・DoD | .agents/workflow/PHASES.md |
 | 実行モード（full/standard/quick） | .agents/RULES.md |
+| カバレッジ 100% 目標と例外運用（台帳・言語別マーカ） | .agents/COVERAGE_AND_EXCEPTIONS.md |
 | command 実行の形・skill chain | .agents/skills/agent/run_command.md と .agents/commands/ |
 | 構成・索引 | .agents/README.md |
 | 失敗条件・差し戻し先 | .agents/enforcement/README.md |

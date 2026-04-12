@@ -1,4 +1,4 @@
-# AGENTS-spec — AI 実行契約・ワークフロー仕様
+# agents-package — AI 実行契約・ワークフロー仕様
 
 LLM エージェント（AI）と人間が協働するための**実行契約・能力（skills）中心のワークフロー**を定義する仕様パッケージ。プロジェクトにコピーして、AI に「.agents に従って」と指示すると、フェーズ（要求→要件→設計→実装計画→実装→レビュー）に沿って動く。
 
@@ -10,11 +10,11 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 - **プロジェクトルートに置くもの（その他・今まで通り）**: `AGENTS.md`, `CLAUDE.md`。入口として 1 ファイルずつ。AI はここから .agents を参照する。
 - **.agents-project/**（プロジェクト固有・**最優先**）: プロジェクトごとの固有ルールを置く。**.agents-project が .agents より優先**される。同名・同目的のルールは .agents-project を採用。setup では作成しない。プロジェクト側で必要に応じて用意する。
-- **.agents ディレクトリ配下に置くもの**: 実行契約・能力・ワークフロー・強制の正本。**正本は本パッケージの `AGENTS-spec/.agents/` にあり、セットアップでプロジェクトの `.agents/` にコピーする。**
+- **.agents ディレクトリ配下に置くもの**: 実行契約・能力・ワークフロー・強制の正本。**正本は本パッケージの `.agents/` にあり、セットアップでプロジェクトの `.agents/` にコピーする。**
 
 ---
 
-## .agents 配下の構成（正本: AGENTS-spec/.agents/）
+## .agents 配下の構成（正本: パッケージの `.agents/`）
 
 | 配置 | 内容 |
 |------|------|
@@ -38,23 +38,25 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 中心は **skill（能力）** と **command（skill chain）**。phase は gate、agents はオーケストレーションのみ。
 
-**テンプレート（00〜04 等）**: .agents 配下には置かない。**AGENTS-spec/.workflow/templates/** にあり、setup でプロジェクトの **.workflow/templates/** にコピーする。プロジェクトは .workflow/templates を参照する。
+**テンプレート（00〜04 等）**: .agents 配下には置かない。**`.workflow/templates/`** にあり、setup でプロジェクトの **.workflow/templates/** にコピーする。プロジェクトは .workflow/templates を参照する。
 
 ---
 
 ## セットアップ（プロジェクトへ導入するとき）
 
-1. **AGENTS-spec をプロジェクトに置く**  
-   プロジェクトルート直下に `AGENTS-spec/` がある状態にする（clone またはコピー）。
+1. **本パッケージをプロジェクトに置く**  
+   プロジェクトルート直下に本リポジトリを置く（clone またはコピー。ディレクトリ名は慣例として `agents-package` とすることが多い）。
 
-2. **セットアップ脚本を実行する**  
+2. **セットアップ脚本を実行する**（**パッケージのルート**で実行する）  
    ```bash
-   bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh
+   cd agents-package   # 配置したディレクトリ名に合わせる
+   bash .agents/scripts/setup.sh
    ```
+   プロジェクトルートに留まったまま実行する場合は `bash <配置ディレクトリ名>/.agents/scripts/setup.sh` とする。
    これで以下が行われる:
-   - `AGENTS-spec/AGENTS.md` と `AGENTS-spec/CLAUDE.md` がプロジェクトルートにコピーされる
-   - `AGENTS-spec/.agents/` がプロジェクトの `.agents/` にコピーされる
-   - `.workflow/templates` が無い場合は **AGENTS-spec/.workflow/templates** からコピーされる
+   - パッケージルートの `AGENTS.md` と `CLAUDE.md` がプロジェクトルートにコピーされる
+   - パッケージの `.agents/` がプロジェクトの `.agents/` にコピーされる
+   - `.workflow/templates` が無い場合は **`.workflow/templates/`**（パッケージ内）からコピーされる
    - `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
 
 3. **動作確認**  
@@ -79,4 +81,4 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 ## その他（今まで通り）
 
 - テンプレート一式・.workflow の運用は従来どおり。**spec（設計原則等）は .agents/spec/ に含まれ、要求・設計の前に参照する。**issue 用フォルダは `.workflow/{YYYYMMDD_HHMMSS_issue_name}/` に作成し、証跡（memo）のファイル名は `YYYYMMDD_HHMMSS_` プレフィックスを付ける。
-- 本 README は AGENTS-spec パッケージの概要と .agents 配下の構成・セットアップ手順を説明する。実行契約の詳細は .agents 配下（とくに .agents/README.md, boot/CORE.md, GETTING_STARTED.md）を参照すること。
+- 本 README は本パッケージの概要と .agents 配下の構成・セットアップ手順を説明する。実行契約の詳細は .agents 配下（とくに .agents/README.md, boot/CORE.md, GETTING_STARTED.md）を参照すること。

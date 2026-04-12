@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# setup-agents-spec.sh — 初回セットアップ
+# setup.sh — 初回セットアップ
 # 本 .agents/ をプロジェクトの .agents/ にコピーし、AGENTS.md / CLAUDE.md をルートに配置する。
 # .claude/・.cursor/ の生成とスキル同期・テンプレートコピーを行う。
-# 配置: AGENTS-spec/.agents/scripts/。参照: SETUP.md
+# 配置: .agents/scripts/（パッケージルート基準）。参照: SETUP.md
 
 set -e
 
@@ -10,18 +10,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENTS_SOURCE="$(cd "$SCRIPT_DIR/.." && pwd)"
 PACKAGE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # 第1引数があればそれをプロジェクトルートに。なければ:
-# - PACKAGE_ROOT が AGENTS-spec のときはその親をプロジェクトルートとする（AGENTS-spec 配下で実行した場合）
-# - それ以外（.agents がプロジェクト直下にある場合）は PACKAGE_ROOT をプロジェクトルートとする
+# - PACKAGE_ROOT が Git リポジトリ内のサブディレクトリなら、その Git のトップレベルをプロジェクトルートとする
+# - それ以外は PACKAGE_ROOT をプロジェクトルートとする
 if [[ -n "${1:-}" ]]; then
   PROJECT_ROOT="$(cd "$1" && pwd)"
-elif [[ "$(basename "$PACKAGE_ROOT")" == "AGENTS-spec" ]]; then
-  PROJECT_ROOT="$(cd "$PACKAGE_ROOT/.." && pwd)"
 else
-  PROJECT_ROOT="$PACKAGE_ROOT"
+  PACKAGE_ROOT_N="$(cd "$PACKAGE_ROOT" && pwd)"
+  GIT_TOP="$(cd "$PACKAGE_ROOT_N" && git rev-parse --show-toplevel 2>/dev/null)" || GIT_TOP=""
+  if [[ -n "$GIT_TOP" ]]; then
+    GIT_TOP="$(cd "$GIT_TOP" && pwd)"
+    if [[ "$PACKAGE_ROOT_N" != "$GIT_TOP" && "$PACKAGE_ROOT_N" == "$GIT_TOP"/* ]]; then
+      PROJECT_ROOT="$GIT_TOP"
+    else
+      PROJECT_ROOT="$PACKAGE_ROOT_N"
+    fi
+  else
+    PROJECT_ROOT="$PACKAGE_ROOT_N"
+  fi
 fi
 
 if [[ ! -d "$AGENTS_SOURCE" ]]; then
-  echo "エラー: .agents が見つかりません: $AGENTS_SOURCE。プロジェクトルートで実行してください: bash .agents/scripts/setup-agents-spec.sh または bash AGENTS-spec/.agents/scripts/setup-agents-spec.sh" >&2
+  echo "エラー: .agents が見つかりません: $AGENTS_SOURCE。パッケージのルートで実行してください: bash .agents/scripts/setup.sh（採用先プロジェクトルートにいる場合は bash <本パッケージのディレクトリ名>/.agents/scripts/setup.sh）" >&2
   exit 1
 fi
 
@@ -54,10 +63,10 @@ fi
 # .agents-project はプロジェクト固有のため、なければコピー・既存なら上書きしない
 if [[ ! -d "$PROJECT_ROOT/.agents-project" ]] && [[ -d "$PACKAGE_ROOT/.agents-project" ]]; then
   cp -R "$PACKAGE_ROOT/.agents-project" "$PROJECT_ROOT/.agents-project"
-  echo "AGENTS-spec/.agents-project をプロジェクトにコピーしました（初回のみ）。"
+  echo ".agents-project/ をプロジェクトにコピーしました（初回のみ）。"
 fi
 
-# .workflow/templates は常に AGENTS-spec の内容で最新化する（ソースと同一パスの場合はスキップ）
+# .workflow/templates は常にパッケージの .workflow/templates の内容で最新化する（ソースと同一パスの場合はスキップ）
 WF_TEMPLATES="$PROJECT_ROOT/.workflow/templates"
 WF_SOURCE="$PACKAGE_ROOT/.workflow/templates"
 if [[ -d "$WF_SOURCE" ]]; then

@@ -2,7 +2,7 @@
 
 **誰**: **証跡・ログを書く**役。**書記はログ記録の唯一の記録者**とする。**証跡（監査対象の実行ログ）は workflow.db のみ。memo は証跡の代替ではなく、workflow.db を採用しない場合の一時的な思考メモ・移行用であり、通常運用では使用しない。**
 
-- **ログ記録は書記のみ**。他サブエージェントはログを書かない。書記のみが記録する。**本則は workflow.db（SQLite）**。memo は workflow.db を採用しない場合の過渡的・例外時のみ（CONTRACT 準拠）。workflow.db が無ければ作成する（ledger/schema.md）。**DB の初回作成は setup（.agents/scripts/setup-agents-spec.sh）または write-workflow-log.sh の初回実行時に行う。どちらが行うかはプロジェクトの setup 手順に従う。**
+- **ログ記録は書記のみ**。他サブエージェントはログを書かない。書記のみが記録する。**本則は workflow.db（SQLite）**。memo は workflow.db を採用しない場合の過渡的・例外時のみ（CONTRACT 準拠）。workflow.db が無ければ作成する（ledger/schema.md）。**DB の初回作成は setup（.agents/scripts/setup.sh）または write-workflow-log.sh の初回実行時に行う。どちらが行うかはプロジェクトの setup 手順に従う。**
 - **親（orchestrator）は必ず書記へ委譲する**。検証・クローズや phase 完了時、書記を経ずに次に進んではならない。書記未実行の次 Task は enforcement で拒否する。
 - **必須キー不足時は失敗**。記録エントリは CONTRACT の必須キーを満たす。欠けている場合は失敗とみなし、完了とみなさない。
 

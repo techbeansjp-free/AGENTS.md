@@ -1,4 +1,4 @@
-# テンプレート: AGENTS-spec .workflow/templates/github/workflows/ci-check.yml
+# テンプレート: .workflow/templates/github/workflows/ci-check.yml（パッケージルート基準）
 # 採用先では .github/workflows/ci-check.yml にコピーし、以下をプロジェクトに合わせて変更する。
 #
 # カスタマイズ箇所:

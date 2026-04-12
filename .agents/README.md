@@ -4,6 +4,8 @@
 
 **優先順位**: プロジェクト固有のルールは **.agents-project/** に置く。**.agents-project が .agents より最優先**される。同名・同目的のルールは .agents-project を採用し、無い場合は本 .agents に従う（CORE §ルールの優先順位）。
 
+**テンプレート正本を開発しているリポジトリでは**: 汎用版に載せる新規規約・正本ドキュメントは **本 `.agents/`（および配下）に追加する**。`.agents-project/` は「採用先がコピー後に上書きする層」の説明用であり、**配布テンプレートの仕様を `.agents-project/` だけに置いて完了としない**（ルート `AGENTS.md` / `CLAUDE.md` と同旨）。
+
 中心は skill（能力）。phase は gate、command は skill を束ねる実行単位、agents はオーケストレーションのみ。
 
 - **使い方**: [GETTING_STARTED.md](GETTING_STARTED.md) でメイン・サブの役割と 1 issue の回し方を確認する。
@@ -68,6 +70,7 @@ flowchart TD
 | システム開発の基本・設計原則・設計判断の優先順位 | spec/（要求・設計の前に参照） |
 | 実行・ドキュメント・テスト要約 | RULES.md |
 | テストコードの BDD 形式（ユースケース・シナリオ・Given/When/Then/And） | TEST_BDD_FORMAT.md |
+| カバレッジ 100% 目標と例外運用（台帳・言語別マーカ） | COVERAGE_AND_EXCEPTIONS.md |
 | オーケストレーション・誰がいつ command を回すか | agents/README.md |
 | 強制の方針・hooks の配置・強制の4層 | enforcement/README.md、enforcement/DESIGN.md |
 | 成果物のテンプレート・どの command/capability が使うか | workflow/TEMPLATES.md |
@@ -80,4 +83,4 @@ flowchart TD
 | **プロジェクト固有・最優先** | **プロジェクトルートの .agents-project/**（本 .agents より優先。詳細は CORE §ルールの優先順位） |
 | セットアップ・スモークテスト | SETUP.md |
 | 基盤の肥大化防止・メタレイヤー | META_LAYER.md |
-| セットアップ脚本 | scripts/setup-agents-spec.sh（本 .agents をプロジェクトに配備） |
+| セットアップ脚本 | scripts/setup.sh（本 .agents をプロジェクトに配備） |

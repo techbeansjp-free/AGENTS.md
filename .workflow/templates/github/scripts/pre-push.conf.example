@@ -1,4 +1,4 @@
-# pre-push 設定例（AGENTS-spec テンプレート）
+# pre-push 設定例（本パッケージ .workflow テンプレート）
 # コピー先: 採用先リポジトリの scripts/pre-push.conf または .pre-push.conf
 # 必要な項目だけ上書きすればよい。未設定の項目はスクリプト内の既定値が使われる。
 #

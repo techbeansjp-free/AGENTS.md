@@ -49,7 +49,7 @@ CORE から思想を委譲する先。UNIX 哲学に基づく開発を前提と�
 
 ## 既知の注意点・対応済み
 
-1. **sync_skills の名前衝突** → **対応済み**。配備先を `{domain}__{capability}` にしている（scripts/setup-agents-spec.sh）。設計の経緯は platforms/DESIGN_SYNC_SKILLS_NAMING.md。
+1. **sync_skills の名前衝突** → **対応済み**。配備先を `{domain}__{capability}` にしている（scripts/setup.sh）。設計の経緯は platforms/DESIGN_SYNC_SKILLS_NAMING.md。
 2. **command 名と capability 名の衝突余地**: 新規 command または capability 追加時は、RULES.md の「命名」に従い「command 名と capability 名の対応・命名方針」を一度確認する。概念名が近い（例: commands/design-feature.md と skills/architecture/design-feature/）と混乱しうるため。
 3. **「何を読むか」の重複リスク** → **対応済み**。正本は boot/LOAD_POLICY.md のみ。GETTING_STARTED は要約・platforms はスキル形式・配備のみ。トリガー追加時は LOAD_POLICY のみ更新（各ファイル冒頭で正本を明記済み）。
 

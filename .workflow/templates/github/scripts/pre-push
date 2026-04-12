@@ -2,7 +2,7 @@
 # pre-push: プッシュ対象の変更ファイルに応じて検証（make test / test-frontend / test-backend）を実行する。
 # 失敗時は push を中止する。設置: make setup-hooks
 #
-# テンプレート: AGENTS-spec .workflow/templates/github/scripts/pre-push
+# テンプレート: .workflow/templates/github/scripts/pre-push（パッケージルート基準）
 # 採用先では リポジトリルートの scripts/pre-push にコピーし、必要なら scripts/pre-push.conf でカスタマイズする。
 #
 # 注意: 本スクリプトが書き出す scripts/logs/ のログは**ローカル検証・デバッグ用**であり、

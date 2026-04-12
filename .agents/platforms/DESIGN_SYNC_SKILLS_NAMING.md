@@ -1,6 +1,6 @@
 # DESIGN_SYNC_SKILLS_NAMING.md — sync_skills 配備先の名前衝突対策
 
-**目的**: `.agents/skills/{domain}/{capability}/` をプラットフォームの `skills/` にコピーするとき、**異なる domain で同名 capability** が存在すると配備先で上書きされる問題の対策。**案B（プレフィックス `{domain}__{capability}`）を採用済み。** setup-agents-spec.sh の sync_skills で配備先を `skills/{domain}__{capability}/` にしている。
+**目的**: `.agents/skills/{domain}/{capability}/` をプラットフォームの `skills/` にコピーするとき、**異なる domain で同名 capability** が存在すると配備先で上書きされる問題の対策。**案B（プレフィックス `{domain}__{capability}`）を採用済み。** setup.sh の sync_skills で配備先を `skills/{domain}__{capability}/` にしている。
 
 ---
 
@@ -10,7 +10,7 @@
 
 - **正本**: `.agents/skills/{domain}/{capability}/`（例: `skills/requirements/write-bdd/`, `skills/testing/write-bdd/`）
 - **配備先**: フラット。例: `.claude/skills/write-bdd/`, `.cursor/skills/write-bdd/`
-- **実装**: `setup-agents-spec.sh` の `sync_skills()` が `cap_name=$(basename "$cap_dir")` のみを使い、`domain` を捨てている。
+- **実装**: `setup.sh` の `sync_skills()` が `cap_name=$(basename "$cap_dir")` のみを使い、`domain` を捨てている。
 
 結果として、`skills/requirements/write-bdd/` と `skills/testing/write-bdd/` が両方あると、**後から走った方が前者を上書き**する。
 
@@ -79,9 +79,9 @@
 
 | 方針 | 状態 |
 |------|------|
-| **案B（プレフィックス `{domain}__{capability}`）** | **採用済み**。scripts/setup-agents-spec.sh の sync_skills で配備先を `{domain}__{capability}` にしている。正本参照（commands, run_command, LOAD_POLICY）は変更不要。 |
+| **案B（プレフィックス `{domain}__{capability}`）** | **採用済み**。scripts/setup.sh の sync_skills で配備先を `{domain}__{capability}` にしている。正本参照（commands, run_command, LOAD_POLICY）は変更不要。 |
 
-案B を採用する場合の **実装の要点**（`setup-agents-spec.sh` の `sync_skills()`）:
+案B を採用する場合の **実装の要点**（`setup.sh` の `sync_skills()`）:
 
 - `domain_dir` を走らせるときに `domain=$(basename "$domain_dir")` を取得。
 - 配備先ディレクトリ名を `cap_name` ではなく `"${domain}__${cap_name}"` にする。
@@ -103,8 +103,8 @@
 ## 5. まとめ
 
 - **問題**: 配備先をフラットにしていると、異なる domain の同名 capability が上書きされる。
-- **対応**: 案B を採用済み。配備先を `{domain}__{capability}` にしている（setup-agents-spec.sh の sync_skills）。正本参照は変更不要。
+- **対応**: 案B を採用済み。配備先を `{domain}__{capability}` にしている（setup.sh の sync_skills）。正本参照は変更不要。
 - **案C（サブディレクトリ）** はツールのネスト対応状況を見てから検討。
 - **案D（配備しない）** はツールが .agents を直接参照する仕様になってから検討。
 
-参照: CONCEPTS.md §既知の将来課題、platforms/SKILLS.md、scripts/setup-agents-spec.sh（sync_skills）。
+参照: CONCEPTS.md §既知の将来課題、platforms/SKILLS.md、scripts/setup.sh（sync_skills）。

@@ -3,7 +3,7 @@
  * バックエンド（pip-audit）・フロントエンド（pnpm audit）のどちらも
  * 同じテーブル形式（| 深刻度 | パッケージ | 概要 |）で表示する。
  *
- * テンプレート: AGENTS-spec .workflow/templates/github/scripts/audit-table.ts
+ * テンプレート: .workflow/templates/github/scripts/audit-table.ts（パッケージルート基準）
  * 採用先では .github/scripts/audit-table.ts にコピーして利用する。
  *
  * 環境変数:

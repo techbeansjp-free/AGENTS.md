@@ -6,7 +6,7 @@
 # - 手入力・固定値・AI の推測によるプレフィックス生成を排除する。
 #
 # 使い方:
-#   prefix=$(./AGENTS-spec/.agents/scripts/memo-prefix.sh)
+#   prefix=$(.agents/scripts/memo-prefix.sh)   # パッケージルートを cwd とする場合
 #   例: .workflow/{issue}/memo/${prefix}証跡.md
 #
 # 出力: YYYYMMDD_HHMMSS 形式の 1 行（末尾に _ は付けない。呼び出し側で付与可）。

@@ -16,7 +16,7 @@
 | **システム開発の基本・設計原則・設計判断の優先順位** | **spec/**（00_spec概要、01_設計原則、02_ディレクトリ構造方針、06_設計判断の優先順位。要求・設計 command の前に参照する） |
 | 実行・ドキュメント・テスト・レビュー要約 | RULES.md |
 | **command を実行するとき** | プロジェクトルートの **.agents-project/** を読む（存在する場合）。**skills/agent/run_command.md** → **commands/{command}.md**（例: requirement-discovery, implement-feature） |
-| 要求発見 command | **commands/requirement-discovery.md** に加え、**workflow/TEMPLATES.md** および **成果物 00/01 に対応するテンプレートファイル**（.workflow/templates/00_要求定義.md, .workflow/templates/01_要件定義.md。プロジェクトに .workflow/templates が無い場合は **AGENTS-spec/.workflow/templates/** の同ファイル）を**読む**。続けて記載された skill chain を順に読む。 |
+| 要求発見 command | **commands/requirement-discovery.md** に加え、**workflow/TEMPLATES.md** および **成果物 00/01 に対応するテンプレートファイル**（.workflow/templates/00_要求定義.md, .workflow/templates/01_要件定義.md。プロジェクトに .workflow/templates が無い場合はパッケージの **`.workflow/templates/`** の同ファイル）を**読む**。続けて記載された skill chain を順に読む。 |
 | 設計 command | commands/design-feature.md → 記載された skill chain を順に読む |
 | 実装 command | commands/implement-feature.md → 記載された skill chain を順に読む |
 | 検証・クローズ command | commands/verify-and-close.md → 記載された skill chain を順に読む |

@@ -171,12 +171,12 @@ feature delivery > framework purity
 
 ## 仕様の対象と編集者の分離（二つのレイヤー）
 
-本 AGENTS-spec で定義している **orchestrator / worker / auditor / scribe** は、**このリポジトリ（.agents）を読んでプロジェクト内で動く「実行レイヤー」** の振る舞い仕様である。これらを編集する作業は **メタレイヤー** である。
+本パッケージで定義している **orchestrator / worker / auditor / scribe** は、**このリポジトリ（.agents）を読んでプロジェクト内で動く「実行レイヤー」** の振る舞い仕様である。これらを編集する作業は **メタレイヤー** である。
 
 | レイヤー | 誰か | 何をするか |
 |----------|------|-------------|
 | **実行レイヤー** | プロジェクトに導入された .agents を読む AI（メイン＝orchestrator、サブ＝worker 等） | ユーザー依頼に応じ、phase 判定 → command 選択 → run_command で委譲 → 証跡確認。実作業は worker が command 経由で行う。 |
-| **メタレイヤー（仕様編集）** | Cursor / Claude Code 等のエディタ上でこの AGENTS-spec そのものを編集するアシスタント | 仕様ファイル（CORE.md、commands/、enforcement/ 等）の追加・変更・リファクタ。プロジェクトの「運用されるエージェント」ではない。 |
+| **メタレイヤー（仕様編集）** | Cursor / Claude Code 等のエディタ上で本パッケージ（仕様リポジトリ）そのものを編集するアシスタント | 仕様ファイル（CORE.md、commands/、enforcement/ 等）の追加・変更・リファクタ。プロジェクトの「運用されるエージェント」ではない。 |
 
 この分離を明示することで、「仕様を直すために誰かがファイルを編集する」ことと、「運用で orchestrator が実作業をしてはいけない」ことを混同しない。
 

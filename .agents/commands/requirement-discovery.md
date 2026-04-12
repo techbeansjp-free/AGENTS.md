@@ -22,7 +22,7 @@
 - **issue**: .workflow/{issue}/ のパス。00/01 の更新対象。
 - **context**: 親 00、03、REBUILD_PLAN 等の参照（存在する場合）。
 - **spec**: .agents/spec/（設計原則・設計判断の優先順位）。着手前に参照する。
-- **テンプレート**: .workflow/templates/00_要求定義.md, .workflow/templates/01_要件定義.md（未存在時は AGENTS-spec/.workflow/templates/ を参照）。
+- **テンプレート**: .workflow/templates/00_要求定義.md, .workflow/templates/01_要件定義.md（未存在時はパッケージの `.workflow/templates/` を参照）。
 
 ---
 
@@ -65,7 +65,7 @@
 
 ## 実行時の注意
 
-- **着手前に**、00_要求定義.md および 01_要件定義.md の**テンプレートファイル**（.workflow/templates/ またはプロジェクトに無い場合は AGENTS-spec/.workflow/templates/）を**開いて確認**すること。成果物はテンプレートの**見出し・セクション番号・必須セクション**を欠かさずに作成すること。
+- **着手前に**、00_要求定義.md および 01_要件定義.md の**テンプレートファイル**（.workflow/templates/ またはプロジェクトに無い場合はパッケージの `.workflow/templates/`）を**開いて確認**すること。成果物はテンプレートの**見出し・セクション番号・必須セクション**を欠かさずに作成すること。
 - **着手前に .agents/spec/ を参照する**。spec 概要・設計原則・設計判断の優先順位（spec/00_spec概要.md, spec/01_設計原則.md, spec/06_設計判断の優先順位.md）を踏まえて要求・制約を整理する。
 - 既存の 00/01 がある場合は上書きせず、該当 issue の 00/01 を更新する。テンプレートは .workflow/templates または親 issue を参照する。
 - 00/01 を更新する際、frontmatter に既に document_id が存在する場合はその値を変更・上書きしてはならない。document_id は 00/01 を新規作成するときまたは初回付与時にのみ設定する。
