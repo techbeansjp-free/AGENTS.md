@@ -67,7 +67,7 @@ flowchart TD
 | command / skill の共通入出力契約（filter 化） | IO_CONTRACT.md |
 | システム開発の基本・設計原則・設計判断の優先順位 | spec/（要求・設計の前に参照） |
 | 実行・ドキュメント・テスト要約 | RULES.md |
-| テストコードの BDD 形式・Given/When/Then インライン | TEST_BDD_FORMAT.md |
+| テストコードの BDD 形式（ユースケース・シナリオ・Given/When/Then/And） | TEST_BDD_FORMAT.md |
 | オーケストレーション・誰がいつ command を回すか | agents/README.md |
 | 強制の方針・hooks の配置・強制の4層 | enforcement/README.md、enforcement/DESIGN.md |
 | 成果物のテンプレート・どの command/capability が使うか | workflow/TEMPLATES.md |

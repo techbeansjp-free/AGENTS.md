@@ -74,7 +74,7 @@
 - 証跡（memo・ログ）のプレフィックスは **YYYYMMDD_HHMMSS_** とし、**実行環境の現在時刻（JST）を取得して付与すること**。**memo プレフィックスは専用経路のみで取得すること**: **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** の実行、または **.agents/scripts/memo-prefix.sh** の実行で得た値を使用する。**issue フォルダ名のプレフィックス**も同様に**実行環境の現在時刻（JST）を取得**して付与すること。**TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** の実行、または **.agents/scripts/memo-prefix.sh** の実行で得た値を使用する。**推測・固定・未来日時の使用は禁止**（手入力・固定値・推測・未来日時を使わない）。**プレフィックスは、memo/issue を作成するたびに、memo-prefix.sh または TZ=Asia/Tokyo date を実行して得た値のみを使用すること。** 実行せずにプレフィックスを決めること、およびコンテキストの日付・推測でファイル名・フォルダ名を組み立てることは違反とする。ログは一定のルールで必ず記録すること。
 - command 実行は commands/{name}.md の skill chain に従っていること。
 - **サブissueを 1 件以上作成した場合**: 親ワークフローのルートに **90_issues.md が存在すること**。未作成のまま当該フローを完了とみなさない。run_command の Constraints および該当 command の DoD と整合して検証する。
-- **監査で検証する項目**（上記のほか）: テストコードは Given / When / Then をインラインコメントで記載していること（.agents/TEST_BDD_FORMAT.md）。詳細は .agents/REVIEW_RULE.md を参照する。
+- **監査で検証する項目**（上記のほか）: テストコードは `ユースケース:`・`シナリオ:`（doc コメント等）および Given / When / Then（必要に応じて And）をインラインコメントで記載していること（.agents/TEST_BDD_FORMAT.md）。詳細は .agents/REVIEW_RULE.md を参照する。
 - **実装成果物にテストが含まれる場合、レビュー（04_review 作成・更新）時点でテストを再実行し、その結果を 04_review に記載すること。** テスト未実行のまま監査完了とみなさない。
 
 ---

@@ -23,7 +23,7 @@
 - **フェーズ DoD の確認**: 各 phase の成果物が必須セクションを満たしているか、workflow/PHASES.md と workflow/TEMPLATES.md に照らして確認する。
 - **証跡の確認**: memo の YYYYMMDD_HHMMSS_ プレフィックス（**実行環境の現在時刻 JST を取得して付与したもの**。推測・固定日時は違反）、書記の形式（scribe/README.md、ledger）に従っているか確認する。
 - **command 実行の確認**: commands/{name}.md の skill chain の順序が守られているか、run_command の Constraints が守られているか確認する。
-- **監査で検証する項目**（verify-and-close の skill chain で確認）: **ディレクトリ構成**（spec/02_ディレクトリ構造方針）、**ファイルの作成場所**、**命名規則**（spec/03_命名規則）、**プレフィックス**（memo の YYYYMMDD_HHMMSS_ は**実行環境現在時刻 JST 取得**。推測・固定日時禁止）、**フォーマット**（TEMPLATES.md・成果物の必須セクション）、**spec 準拠**（設計原則・UNIX 哲学等 spec/01, 02, 06）。**テストコード**では Given / When / Then のインラインコメントが付いているか（.agents/TEST_BDD_FORMAT.md）。
+- **監査で検証する項目**（verify-and-close の skill chain で確認）: **ディレクトリ構成**（spec/02_ディレクトリ構造方針）、**ファイルの作成場所**、**命名規則**（spec/03_命名規則）、**プレフィックス**（memo の YYYYMMDD_HHMMSS_ は**実行環境現在時刻 JST 取得**。推測・固定日時禁止）、**フォーマット**（TEMPLATES.md・成果物の必須セクション）、**spec 準拠**（設計原則・UNIX 哲学等 spec/01, 02, 06）。**テストコード**では `ユースケース:`・`シナリオ:` および Given / When / Then（必要時 And）が付いているか（.agents/TEST_BDD_FORMAT.md）。
 
 ## 実行の場
 

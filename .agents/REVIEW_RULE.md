@@ -31,7 +31,7 @@
 | .agents/IO_CONTRACT.md | command / skill の入出力契約（INPUT/PROCESS/OUTPUT/DONE、Purpose/Inputs/Process/Outputs/Done/Forbidden） |
 | .agents/agents/auditor.md | 監査の責務・検証項目 |
 | .agents/skills/review/ | review-code（実装・規約・テスト BDD インライン・ディレクトリ・命名・spec 準拠）、review-architecture（設計・境界） |
-| .agents/TEST_BDD_FORMAT.md | テストコードの Given / When / Then インラインコメント必須 |
+| .agents/TEST_BDD_FORMAT.md | テストコードの `ユースケース:`・`シナリオ:`（doc 等）および Given / When / Then（必要時 And）インラインコメント必須 |
 | .agents/spec/ | 設計原則・ディレクトリ構造・命名規則・設計判断の優先順位（監査で spec 準拠を確認する） |
 
 ---
@@ -51,7 +51,7 @@
 - **document_id は作成時または初回付与時にのみ設定されていることを確認し、既に存在する document_id が後から変更・上書きされていないことをレビューで検証する。**
 - 各フェーズの成果物がテンプレートの必須セクションを満たしていること。
 - **ディレクトリ構成・ファイルの作成場所・命名規則（spec/03）・プレフィックス（memo の YYYYMMDD_HHMMSS_ は実行環境現在時刻 JST 取得であること）・用語・参照リンク・BDD 形式・spec 準拠（設計原則・UNIX 哲学等）**に適合していること。
-- **テストコードに Given / When / Then のインラインコメントが付いていること**（.agents/TEST_BDD_FORMAT.md）。
+- **テストコードに `ユースケース:`・`シナリオ:` および Given / When / Then（必要時 And）のインラインコメントが付いていること**（.agents/TEST_BDD_FORMAT.md）。
 
 ### その他（証跡・手順）
 
