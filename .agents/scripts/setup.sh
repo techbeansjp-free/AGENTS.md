@@ -77,29 +77,20 @@ if [[ -d "$WF_SOURCE" ]]; then
 fi
 
 # スキルをプラットフォーム別パスに同期する（.claude/skills, .cursor/skills）
-# 配備先は {domain}__{capability} で一意にし、異なる domain の同名 capability の衝突を防ぐ。参照: platforms/DESIGN_SYNC_SKILLS_NAMING.md
-# 常に最新にするため、同期前に既存のスキル配備先を削除する。
+# 配備ロジック（{domain}__{capability} 命名の単一正本）は共有ライブラリに集約。
+# build-adapters.sh も同じ lib を source する。配備ロジックを二重定義しないこと。
+# 参照: platforms/DESIGN_SYNC_SKILLS_NAMING.md, scripts/lib/deploy-skills.sh
+# shellcheck source=lib/deploy-skills.sh
+. "$SCRIPT_DIR/lib/deploy-skills.sh"
+
+# sync_skills <dest_root> [<src_skills>]
+#   共有ライブラリの deploy_skills_impl に委譲する。常に最新にするため同期前に配備先を削除する。
 sync_skills() {
   local dest_root="$1"
   local agents_skills="${2:-$PROJECT_ROOT/.agents/skills}"
   [[ ! -d "$agents_skills" ]] && return 0
   rm -rf "$dest_root"
-  mkdir -p "$dest_root"
-  for domain_dir in "$agents_skills"/*/; do
-    [[ -d "$domain_dir" ]] || continue
-    domain=$(basename "$domain_dir")
-    [[ -z "$domain" ]] && continue
-    for cap_dir in "$domain_dir"*/; do
-      [[ -d "$cap_dir" ]] || continue
-      cap_name=$(basename "$cap_dir")
-      [[ -z "$cap_name" ]] && continue
-      if [[ -f "$cap_dir/SKILL.md" ]] || [[ -f "$cap_dir/README.md" ]]; then
-        deploy_name="${domain}__${cap_name}"
-        mkdir -p "$dest_root/$deploy_name"
-        cp -R "$cap_dir"/* "$dest_root/$deploy_name/" 2>/dev/null || true
-      fi
-    done
-  done
+  deploy_skills_impl "$agents_skills" "$dest_root" >/dev/null
 }
 
 CLAUDE_DIR="$PROJECT_ROOT/.claude"

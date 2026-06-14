@@ -369,6 +369,146 @@ document_id: "e5be3fa7-9765-4953-8274-fa39c61128bf"
 
 ---
 
+# 【追記バッチ C】課題4 命名二重定義の共有ライブラリ化
+
+> **本節は verify-and-close の 3 回目の実行（バッチ C）の成果物。** skill chain（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従い、バッチ B の §B-7 課題4（命名規約 `{domain}__{capability}` の二重定義）を解消する implement-feature 成果物をレビューする。
+>
+> **レビュー深度**: **standard**（中規模・限定スコープ。配備ロジックの共有ライブラリ抽出＋2 スクリプトのラッパ化）。
+> **evidence_source 凡例**: 本書冒頭（§1.2 直下）の凡例と同一。
+
+---
+
+## C-1. レビュー対象
+
+- **実装範囲**: 直前の implement-feature（chain: implement-change）の成果物。バッチ B 課題4 の解消。
+  - **(課題4 解消)** `{domain}__{capability}` のスキル配備ロジックを共有ライブラリ `lib/deploy-skills.sh`（関数 `deploy_skills_impl <src> <out>` の単一正本）へ統合。build-adapters.sh と setup.sh が同 lib を source し、それぞれ薄いラッパ（`deploy_skills` / `sync_skills`）に降格。命名・ドメイン直下 SKILL.md 配備の算出を 1 箇所に集約。
+- **変更/新規ファイル（CHANGED_FILES_JSON）**:
+  - `.agents/scripts/lib/deploy-skills.sh`（新規・配備関数の単一正本）
+  - `.agents/scripts/build-adapters.sh`（lib を source、`deploy_skills` を薄いラッパ化、`bundle_agents_src` の除外に新 lib／`lib/` を追加）
+  - `.agents/scripts/setup.sh`（lib を source、`sync_skills` を `deploy_skills_impl` 委譲の薄いラッパ化）
+- **参照 memo**: issue `memo/` 配下（実装者作成分）。
+- **レビュー担当者**: worker（auditor/scribe ロール、orchestrator 委譲）。
+
+---
+
+## C-2. 実装内容の確認（review-code）
+
+### C-2.1 共有ライブラリ `lib/deploy-skills.sh`（命名規約の単一正本）
+
+- **責務集約**: `deploy_skills_impl <src_skills_dir> <out_skills_dir>` が、(1) ドメイン直下 `{domain}/SKILL.md` を `{domain}/` に配備、(2) capability `{domain}/{capability}/SKILL.md` を `{domain}__{capability}/` に配備、の双方を担う。配備件数を標準出力で返し、メッセージ整形は呼び出し側に委譲する設計（単一責任）（`existing_code`）。
+- **命名規約の一本化**: `${domain}__${cap}` の算出はこの 1 関数のみに存在。冒頭コメントで「他で再実装しないこと」「参照: platforms/DESIGN_SYNC_SKILLS_NAMING.md, platforms/SKILLS.md」を明示（`existing_code`）。
+- **配布物への非同梱を自己言及**: 冒頭コメントに「保守/導入専用スクリプトでありアダプタには同梱しない（build-adapters.sh の bundle_agents_src 除外対象）」と明記。実装（後述 C-2.2 の除外）と整合（`existing_code`）。
+
+### C-2.2 build-adapters.sh（薄いラッパ化＋除外追加）
+
+- `. "$SCRIPT_DIR/lib/deploy-skills.sh"` を source し、`deploy_skills()` は `deploy_skills_impl "$AGENTS/skills" "$out_skills"` へ委譲する薄いラッパに降格。重複ロジックは消滅（`existing_code`）。
+- `bundle_agents_src()` の除外に新 lib を追加：`rm -f .../build-adapters.sh` に加え `rm -rf "$out/.agents/scripts/lib"` を実行。**配布物（.adapters）に保守専用 lib をリークさせない**点を実測で確認（C-3 T_lib）（`test_output`）。
+
+### C-2.3 setup.sh（薄いラッパ化）
+
+- `. "$SCRIPT_DIR/lib/deploy-skills.sh"` を source し、`sync_skills()` は「`rm -rf "$dest_root"` の後 `deploy_skills_impl "$agents_skills" "$dest_root" >/dev/null`」へ委譲。HEAD 版に在ったインラインの `${domain}__${cap_name}` 算出ループは削除され、**命名算出の重複が解消**（`existing_code`）。
+- **非対称の解消**: HEAD 版 `sync_skills` は capability サブディレクトリのみを走査し、ドメイン直下 SKILL.md（`agent`）を配備しなかった（→14 件）。新 lib 委譲により build と同じ規則になり、ドメイン直下 `agent` も配備され **15 件**で build 出力と一致（C-3 T_setup）（`test_output`）。
+
+### C-2.4 規約・フォーマット遵守
+
+- 04_review は **issue 直下**（`docs/maintainer/workflow/.../`、`.workflow/` 不使用）へ追記。`.agents-project/自己拡張ワークフロー.md` の上書きルール準拠（`external_spec`）。
+- 本バッチもテストコード（テストファイル）の新規追加なし。検証は bash スクリプト・CLI・`diff -r`・`git status` の振る舞い検証で行う。TEST_BDD_FORMAT のインラインコメント必須要件は「テストコードが存在する場合」に適用され、本バッチに該当テストコードは無い（クリーン clone 系 BDD のテストコード化はバッチ A 課題2／バッチ B 課題6 として継続）。
+
+---
+
+## C-3. テスト結果の確認（テスト再実行）
+
+- **実行日**: 2026-06-14 / **実行環境**: bash 5.2.x・git・sqlite3・python3。**既存 `.workflow/workflow.db` への影響**: 無し（検証は隔離した一時 PROJECT_ROOT と一時ディレクトリのみ。本リポの `.claude`/`.cursor` は非破壊）。
+- **総合**: 成功 6 / 失敗 0。
+
+| # | 検証項目 | 検証方法（コマンド） | 結果 | evidence_source |
+| - | ---- | ---- | ---- | ---- |
+| T_n | bash 構文（全 8 本） | `bash -n` を `.agents/scripts/*.sh`（7 本）＋`.agents/scripts/lib/*.sh`（1 本） | **OK**（全 8 本 exit 0）：build-adapters / build-plugin-claude / create-pr-review-issue-dir / memo-prefix / new-workflow-memo / setup / write-workflow-log / lib/deploy-skills | test_output |
+| T_A | (A) build diff-zero | HEAD 版 build-adapters.sh を実体パスに一時復元して `.adapters/{claude,cursor}` を生成 → 新版出力と `diff -r` | **OK**。唯一の差分は HEAD 側に同梱される `.agents/scripts/lib`（HEAD は新 lib を除外対象として知らないため bundle 同梱）。当該 lib を除いた**本体は完全 diff-zero**。新版は意図どおり lib を除外 | test_output |
+| T_lib | 配布物への lib リーク無し | 新版 build 後 `.adapters/claude/.agents/scripts/` を確認 | **OK**。`lib/`・`setup.sh`・`build-adapters.sh` いずれも非同梱。残存は create-pr-review-issue-dir / memo-prefix / new-workflow-memo / write-workflow-log のみ | test_output |
+| T_setup | (B) setup 自己再インストール | 隔離 PROJECT_ROOT に `setup.sh "$PROJ"` 実行 → `.claude/skills`・`.cursor/skills` 件数・命名・build との集合一致 | **OK**。両者 **15 件**（`{domain}__{capability}` 14＋ドメイン直下 `agent` 1）。`diff` で build 出力 `.adapters/claude/skills` と**集合完全一致**。HEAD 版 setup は 14 件で、差分は `agent` の追加のみ（配備落ちゼロ） | test_output |
+| T_drop | 配備落ちゼロ（README-only 不在） | 全 capability サブディレクトリの SKILL.md 有無を走査 | **OK**。SKILL.md 欠如の capability 0 件。`SKILL.md OR README.md`→`SKILL.md only` への厳格化で落ちる capability は存在しない（ドメイン直下 README は capability ではなく索引のため非配備対象） | test_output |
+| T_D | (D) `.adapters` 未追跡・ignore | `git ls-files .adapters`・`git check-ignore .adapters/`・`.gitignore` 確認 | **OK**。`git ls-files .adapters` 空（0 件）、`.adapters/` は ignore 済み（`.gitignore:21 /.adapters/`） | test_output |
+
+> 検証用の一時 PROJECT_ROOT・一時復元した HEAD スクリプト・`.adapters/{claude,cursor}` は検証後に削除し、`.agents/scripts/build-adapters.sh`・`setup.sh` は元の作業ツリー内容へ復元済み（`diff -q` で同一確認）。最終作業ツリーは `M build-adapters.sh`・`M setup.sh`・`?? lib/` の 3 点のみ。
+
+---
+
+## C-4. コードレビュー観点
+
+| 観点 | 確認内容 | 結果 | コメント |
+| ---- | ---- | ---- | ---- |
+| 命名単一定義 | `{domain}__{capability}` の算出が 1 箇所か | **OK** | `lib/deploy-skills.sh` の `deploy_skills_impl` のみ。build/setup は委譲ラッパ。課題4（バッチ B の △）解消 |
+| 二重管理解消 | setup.sh のインライン命名ループが除去されたか | OK | HEAD の `${domain}__${cap_name}` ループを削除し lib 委譲へ |
+| リグレッション無し | build 出力本体が不変か | OK | 本体 diff-zero（差分は意図的な lib 除外のみ） |
+| 配布物リーク無し | lib が `.adapters` に同梱されないか | OK | `bundle_agents_src` で `lib/` 除外。T_lib で実測 |
+| 配備落ち無し | 厳格化で skill が消えないか | OK | 全 capability に SKILL.md 在り。T_drop |
+| 非対称解消 | setup と build の配備規則が一致したか | OK | 共に 15 件・集合一致。`agent` ドメイン直下が両経路で配備 |
+| クリーン clone 破綻無し | 追跡差分がスクリプトのみか | OK | `M build-adapters.sh`・`M setup.sh`・`?? lib/` のみ。生成物混入なし |
+
+---
+
+## C-5. 受け入れ基準の確認（generate-scenarios → map-coverage）
+
+| 受け入れ基準（出典） | 寄与する実装 | 検証方法 | 結果 |
+| ---- | ---- | ---- | ---- |
+| 「命名規約の単一正本化」（バッチ B 課題4・本バッチ要求） | lib/deploy-skills.sh | 算出は `deploy_skills_impl` の 1 箇所。build/setup は委譲（existing_code）＋T_setup の集合一致 | **○** |
+| シナリオ2-3/6-1: 同一正本から claude/setup を同期、`domain__capability` で衝突しない（01） | deploy_skills_impl | T_A（build 本体不変）＋T_setup（setup＝build 集合一致・15 件一意） | **○** |
+| シナリオ1-2/7-4: 生成物が正本から決定的に再生成され正本とズレない（01） | build ラッパ | T_A（本体 diff-zero）＋T_D（追跡差分なし） | **○** |
+| BR-6 相当（正本単一・複製箇所は完全一致）の配備版（01） | lib 集約 | 配備ロジック実体は lib のみ。build/setup は同一関数を共有 | **○** |
+| 配布物リーク防止（本バッチ要求・02 §6.2） | bundle_agents_src 除外 | T_lib（lib 非同梱）＋T_D（`.adapters` 未追跡・ignore） | **○** |
+| 配備落ちゼロ（本バッチ要求） | SKILL.md-only 厳格化 | T_drop（README-only capability 不在）＋T_setup（14→15 で減少なし） | **○** |
+
+### 未達・要対応（map-coverage）
+
+- **本バッチのスコープ内に未達はなし**。命名規約の単一正本化・配布物リーク防止・配備落ちゼロ・非対称解消はすべて ○。バッチ B §B-7 の課題4（△）は本バッチで**解消**（命名算出が単一定義へ）。
+- **スコープ外（別フェーズ/別 issue）**: gemini/copilot/codex の adapter（バッチ B 課題5）、クリーン clone 系テストコード化（バッチ A 課題2／バッチ B 課題6）、npm 土台・marketplace・enforcement 有効化（03 フェーズ1〜5）は本バッチ対象外として継続。
+
+---
+
+## C-6. 設計・境界の確認（review-architecture）
+
+- **設計原則の準拠**: 単一責務（配備＝`deploy_skills_impl` 1 関数／呼び出し側＝メッセージ整形・配備先決定）に分離。`{domain}__{capability}` 算出を 1 箇所へ集約し DRY を達成。UNIX 哲学（小さな共有関数の合成）に整合（`external_spec`：platforms/DESIGN_SYNC_SKILLS_NAMING.md, SKILLS.md）。
+- **境界・依存**: build-adapters.sh・setup.sh → `lib/deploy-skills.sh` → 正本 `.agents/skills/` の一方向依存。循環なし。lib は純粋な配備関数で外部レジストリ・未整備ツール非依存。
+- **配布物の境界**: lib は保守/導入専用として `.adapters` から除外（`bundle_agents_src`）。正本側（`.agents/scripts/lib/`）に置き、生成物 `.adapters/` には派生スキルのみ。境界が明瞭。
+- **後方互換**: build-adapters.sh の出力本体・setup.sh のラッパ I/F（`sync_skills <dest_root> [<src>]`）は不変。build-plugin-claude.sh ラッパ経由の既存呼び出しも壊さない（出力本体 diff-zero）。
+- **新たな破綻の有無**: build 本体 diff-zero・setup 集合一致・lib 非同梱・`.adapters` 未追跡を T_A/T_setup/T_lib/T_D で確認。正本ズレ・二重管理・クリーン clone 破綻・配布物リークを**新たに生まない**（`test_output`）。
+- **指摘・推奨**: なし（standard 深度で承認可能）。
+
+### C-6.1 重要判断の根拠（evidence_source）
+
+| 判断内容 | evidence_source | 備考 |
+| ---- | ---- | ---- |
+| 命名 `{domain}__{capability}` が単一定義に集約された | existing_code + test_output | lib の 1 関数のみが算出。build/setup は委譲。T_setup で集合一致 |
+| build 出力本体が不変（リグレッション無し） | test_output | T_A：HEAD 版と `diff -r`、唯一差分は意図的な lib 除外。本体完全一致 |
+| 配布物（.adapters）に lib がリークしない | test_output | T_lib：`bundle_agents_src` で `lib/` 除外、実測で非同梱 |
+| setup の配備が 14→15 で配備落ちゼロ・非対称解消 | test_output | T_setup（15 件・build と集合一致）＋T_drop（README-only 不在） |
+| `.adapters` 未追跡・ignore（クリーン clone 破綻無し） | test_output | T_D：`git ls-files .adapters` 空・`check-ignore` 真 |
+
+- **inference_only のみに依存する重要判断は無い**（全て test_output / existing_code / external_spec で裏取り）。
+
+---
+
+## C-7. 課題と改善点（残課題）
+
+- **課題4: 解消**（本バッチで完了）。命名 `{domain}__{capability}` の配備ロジックが `lib/deploy-skills.sh` の単一正本に集約され、build/setup の二重定義が解消された。
+- **課題5（gemini/copilot/codex 未対応）**: 継続（バッチ B から）。`SUPPORTED_TOOLS` 追加＋`adapter_<tool>()` で拡張可能な構造は維持。
+- **課題6（クリーン clone 系テストコード未整備）**: 継続（バッチ A 課題2／バッチ B 課題6）。self-enforce step4 が build diff-zero を CI で担保するが、`git archive` 方式のクリーン clone テストスクリプトは未コミット。
+- **改善提案（軽微・任意）**: self-enforce.yml の build 差分ゼロ step に、新 lib が `.adapters` に同梱されていないこと（`! git ls-files .adapters | grep -q lib` 相当）の明示的アサーションを追加すると、将来の `bundle_agents_src` 除外漏れを CI で早期検出できる。本バッチ範囲外の任意提案。
+
+---
+
+## C-8. レビュー結果（バッチ C）
+
+- **実装品質**: 良好（命名算出を共有 lib の単一正本へ集約し課題4 を解消。build 本体 diff-zero、setup 非対称解消、配布物リーク・配備落ち・クリーン clone 破綻を新たに生まない）。
+- **テスト品質**: 良好（T_n/T_A/T_lib/T_setup/T_drop/T_D を再実行、全て想定どおり。既存 `.workflow/workflow.db` および本リポ `.claude`/`.cursor` 非破壊）。
+- **ドキュメント品質**: 良好（lib 冒頭コメントで命名正本の所在・非同梱方針を明示）。
+- **総合評価**: **承認可（本バッチ範囲・ブロッカーなし）**。バッチ B の課題4（△）を解消。残課題は課題5・課題6 のみ（いずれも非ブロッカー・後続継続）。
+- **承認者**: worker（auditor、orchestrator 委譲） / **承認日**: 2026-06-14
+- **DoD**: 04_review 追記済み・テスト再実行（A〜D＋構文＋配備落ち）記載済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由）。
+
+---
+
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md)・[`01_要件定義.md`](./01_要件定義.md)・[`02_設計.md`](./02_設計.md)・[`03_実装計画.md`](./03_実装計画.md)
@@ -376,7 +516,7 @@ document_id: "e5be3fa7-9765-4953-8274-fa39c61128bf"
 - [`memo/20260614_155343_フェーズ2生成器一般化_build-adapters.md`](./memo/20260614_155343_フェーズ2生成器一般化_build-adapters.md)
 - [`memo/20260614_155553_self-enforce_CIトリガ是正.md`](./memo/20260614_155553_self-enforce_CIトリガ是正.md)
 - `.agents/ledger/schema.sql`・`.agents/ledger/schema.md`・`.github/workflows/self-enforce.yml`
-- `.agents/scripts/build-adapters.sh`・`.agents/scripts/build-plugin-claude.sh`・`.agents/scripts/setup.sh`・`.agents/scripts/write-workflow-log.sh`・`.agents/enforcement/ci/audit.sh`
+- `.agents/scripts/build-adapters.sh`・`.agents/scripts/build-plugin-claude.sh`・`.agents/scripts/setup.sh`・`.agents/scripts/lib/deploy-skills.sh`・`.agents/scripts/write-workflow-log.sh`・`.agents/enforcement/ci/audit.sh`
 - `.agents/platforms/SKILLS.md`・`.agents/platforms/DESIGN_SYNC_SKILLS_NAMING.md`
 
 ---

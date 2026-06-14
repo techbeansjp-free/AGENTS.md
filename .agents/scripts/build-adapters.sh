@@ -21,41 +21,21 @@ SUPPORTED_TOOLS="claude cursor"
 
 [[ -d "$AGENTS" ]] || { echo "エラー: .agents が見つかりません: $AGENTS" >&2; exit 1; }
 
+# スキル配備ロジックの共有ライブラリ（命名規約 {domain}__{capability} の単一正本）。
+# setup.sh も同じ lib を source する。配備ロジックを二重定義しないこと。
+# shellcheck source=lib/deploy-skills.sh
+. "$SCRIPT_DIR/lib/deploy-skills.sh"
+
 # ----------------------------------------------------------------------------
 # 共通配備関数（出力ルートを引数化）。各ツールの adapter_<tool>() から呼ぶ。
 # ----------------------------------------------------------------------------
 
-# deploy_skills <out_skills_dir>
-#   .agents/skills/{domain}/{capability}/ を {domain}__{capability}/ で配備する。
-#   ドメイン直下に SKILL.md があるケース（例: agent/）は {domain} で配備する。
-#   命名規約 {domain}__{capability} の単一定義はここに集約する（参照: DESIGN_SYNC_SKILLS_NAMING.md）。
+# build_deploy_skills <out_skills_dir>
+#   共有ライブラリの deploy_skills（{domain}__{capability} 単一定義）に委譲する薄いラッパ。
 deploy_skills() {
   local out_skills="$1"
-  local n_skill=0
-  mkdir -p "$out_skills"
-  for domain_dir in "$AGENTS"/skills/*/; do
-    [[ -d "$domain_dir" ]] || continue
-    local domain
-    domain=$(basename "$domain_dir")
-    # ドメイン直下に SKILL.md があるケース（例: agent/）
-    if [[ -f "$domain_dir/SKILL.md" ]]; then
-      mkdir -p "$out_skills/$domain"
-      cp "$domain_dir/SKILL.md" "$out_skills/$domain/SKILL.md"
-      [[ -f "$domain_dir/README.md" ]] && cp "$domain_dir/README.md" "$out_skills/$domain/README.md"
-      n_skill=$((n_skill+1))
-    fi
-    # capability 配下の SKILL.md
-    local cap_dir cap dest
-    for cap_dir in "$domain_dir"*/; do
-      [[ -d "$cap_dir" ]] || continue
-      cap=$(basename "$cap_dir")
-      [[ -f "$cap_dir/SKILL.md" ]] || continue
-      dest="$out_skills/${domain}__${cap}"
-      mkdir -p "$dest"
-      cp -R "$cap_dir"/* "$dest"/ 2>/dev/null || true
-      n_skill=$((n_skill+1))
-    done
-  done
+  local n_skill
+  n_skill=$(deploy_skills_impl "$AGENTS/skills" "$out_skills")
   echo "[build] skills を $n_skill 件配備しました。"
 }
 
@@ -103,6 +83,7 @@ bundle_agents_src() {
   rm -f "$out/.agents/scripts/setup.sh" \
         "$out/.agents/scripts/build-plugin-claude.sh" \
         "$out/.agents/scripts/build-adapters.sh"
+  rm -rf "$out/.agents/scripts/lib"
   echo "[build] .agents を同梱しました（保守/導入専用スクリプトは除外）。"
 }
 
