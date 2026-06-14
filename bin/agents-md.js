@@ -7,12 +7,13 @@
 // サブコマンド:
 //   init             setup.sh を実行して採用先へ配備する
 //   upgrade          init と同等（当面）。既存配備の再同期を意図する
+//   uninstall        setup/init が配備した成果物のみを除去する（ユーザー資産は既定で保持）
 //   doctor           配備に必要な前提ファイル・依存の存在確認
 //   version          package.json の version を表示
 //   help / (既定)    使い方を表示
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,19 +39,28 @@ function printHelp() {
   npx @techbeansjp-free/agents-md <command>
 
 コマンド:
-  init [dir]      採用先プロジェクト（既定: カレントディレクトリ）へ .agents/ 等を配備する
-  upgrade [dir]   既存配備を再同期する（当面 init と同等）
-  doctor          配備に必要な前提（setup.sh・bash・sqlite3 等）の有無を確認する
-  version         パッケージのバージョンを表示する
-  help            このヘルプを表示する
+  init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agents/ 等を配備する
+  upgrade [dir]         既存配備を再同期する（当面 init と同等）
+  uninstall [dir]       init/setup が配備した成果物のみを除去する（ユーザー資産は既定で保持）
+  doctor                配備に必要な前提（setup.sh・bash・sqlite3 等）の有無を確認する
+  version               パッケージのバージョンを表示する
+  help                  このヘルプを表示する
+
+uninstall のオプション:
+  --yes, -y            対話確認をスキップして実行する（既定は dry-run 表示のみ）
+  --purge              workflow.db 等の証跡も含めて削除する（既定は保持）
 
 例:
   cd my-project && npx @techbeansjp-free/agents-md init
-  npx @techbeansjp-free/agents-md@0.1.0 init   # 版をピン留め
+  npx @techbeansjp-free/agents-md@0.1.0 init       # 版をピン留め
+  npx @techbeansjp-free/agents-md uninstall        # 削除対象を表示（dry-run）
+  npx @techbeansjp-free/agents-md uninstall --yes  # 実際に除去する
 
 注意:
   init は内部で ${".agents/scripts/setup.sh"} を実行します。
-  setup.sh は workflow.db 初期化に sqlite3 バイナリを必要とします（doctor で確認可能）。`);
+  setup.sh は workflow.db 初期化に sqlite3 バイナリを必要とします（doctor で確認可能）。
+  uninstall は既定で .agents-project/・.workflow の issue・workflow.db を保持します
+  （--purge で workflow.db も削除）。引数なしの場合は dry-run（表示のみ）です。`);
 }
 
 // setup.sh を projectRoot 引数つきで実行する。
@@ -119,8 +129,121 @@ function runDoctor() {
     console.log("        ヒント: sqlite3 を導入してください（例: apt-get install sqlite3）。");
   }
 
+  // install 状態の判定（uninstall の安全策と同じ「配備の痕跡」で判定する）。
+  const installed =
+    existsSync(join(projectRoot, ".agents")) || existsSync(join(projectRoot, "AGENTS.md"));
+  console.log(
+    installed
+      ? "\ndoctor: 配備状態 = 配備済み（uninstall で除去可能）。"
+      : "\ndoctor: 配備状態 = 未配備（init で配備してください）。"
+  );
+
   console.log(ok ? "\ndoctor: 必須項目はすべて満たしています。" : "\ndoctor: 不足項目があります（上記 [NG] を参照）。");
   return ok ? 0 : 1;
+}
+
+// ----------------------------------------------------------------------------
+// uninstall: setup/init が配備した成果物のみを除去する。
+//
+// 配備物の正本は setup.sh の配備ロジック。本 CLI はそれと一致する「配備物マニフェスト」を
+// 1 か所に持つ。ユーザー資産（.agents-project/・.workflow の issue・workflow.db）は既定で保持し、
+// 誤削除しない安全側設計とする。--purge で workflow.db 等も含め全削除する。
+// ----------------------------------------------------------------------------
+
+// 既定で除去する配備物（setup.sh が配備する成果物のみ）。相対パスで列挙する。
+// 注: .workflow は丸ごと消さない（issue・workflow.db はユーザー資産）。templates のみ除去する。
+const DEPLOYED_ARTIFACTS = [
+  ".agents", // パッケージ正本のコピー（setup がコピー配備）
+  "AGENTS.md", // ルート契約（setup がコピー）
+  "CLAUDE.md", // ルート契約（setup がコピー）
+  ".claude", // enforcement フック・skills（100% 生成物）
+  ".cursor", // ルール・skills（100% 生成物）
+  ".workflow/templates", // テンプレート（setup がコピー。.workflow 自体は残す）
+];
+
+// --purge 時のみ追加で除去する証跡（ユーザー資産）。
+const PURGE_ARTIFACTS = [
+  ".workflow/workflow.db",
+  ".workflow/workflow.db-wal",
+  ".workflow/workflow.db-shm",
+];
+
+// uninstall: deployed artifacts を除去する。
+// 戻り値: 終了コード（0=成功, 1=安全側中止/失敗）。
+function runUninstall(projectRoot, opts) {
+  const { yes, purge } = opts;
+
+  // 安全策(1): 採用先が「自分が配備した」痕跡を持つか確認する。
+  // 配備の中核（.agents/ または AGENTS.md）が無いのに他の保護物を消すのは想定外なので中止する。
+  const looksInstalled =
+    existsSync(join(projectRoot, ".agents")) || existsSync(join(projectRoot, "AGENTS.md"));
+  if (!looksInstalled) {
+    console.error(
+      `エラー: ${projectRoot} に配備の痕跡（.agents/ または AGENTS.md）が見つかりません。\n` +
+        `        誤削除を防ぐため uninstall を中止します（このディレクトリは未配備の可能性）。`
+    );
+    return 1;
+  }
+
+  // 削除対象を列挙する（存在するものだけ）。
+  const targets = [...DEPLOYED_ARTIFACTS];
+  if (purge) targets.push(...PURGE_ARTIFACTS);
+
+  const present = targets
+    .map((rel) => ({ rel, abs: join(projectRoot, rel) }))
+    .filter((t) => existsSync(t.abs));
+  const absent = targets.filter((rel) => !existsSync(join(projectRoot, rel)));
+
+  console.log(`uninstall: 採用先=${projectRoot}`);
+  console.log(`        モード=${purge ? "purge（証跡も削除）" : "既定（ユーザー資産は保持）"}`);
+  console.log("\n削除対象（配備物のみ）:");
+  if (present.length === 0) {
+    console.log("  （削除対象なし。既に除去済みの可能性があります。）");
+  } else {
+    present.forEach((t) => {
+      const kind = statSync(t.abs).isDirectory() ? "dir " : "file";
+      console.log(`  [${kind}] ${t.rel}`);
+    });
+  }
+  if (absent.length > 0) {
+    console.log("\n存在せずスキップ:");
+    absent.forEach((rel) => console.log(`  (skip) ${rel}`));
+  }
+
+  console.log("\n保持するユーザー資産（削除しません）:");
+  console.log("  .agents-project/        （プロジェクト固有ルール）");
+  console.log("  .workflow/<issue>/      （templates 以外の issue 成果物）");
+  if (!purge) console.log("  .workflow/workflow.db*  （証跡 DB。--purge 指定時のみ削除）");
+
+  if (!yes) {
+    console.log(
+      "\n[dry-run] これは表示のみです。実際に除去するには --yes を付けて再実行してください:\n" +
+        `  npx @techbeansjp-free/agents-md uninstall${purge ? " --purge" : ""} --yes`
+    );
+    return 0;
+  }
+
+  if (present.length === 0) {
+    console.log("\nuninstall: 除去対象がありませんでした。");
+    return 0;
+  }
+
+  let failed = false;
+  for (const t of present) {
+    try {
+      rmSync(t.abs, { recursive: true, force: true });
+      console.log(`削除しました: ${t.rel}`);
+    } catch (e) {
+      failed = true;
+      console.error(`エラー: ${t.rel} の削除に失敗しました: ${e.message}`);
+    }
+  }
+  console.log(
+    failed
+      ? "\nuninstall: 一部の削除に失敗しました（上記参照）。"
+      : "\nuninstall: 配備物の除去が完了しました（ユーザー資産は保持）。"
+  );
+  return failed ? 1 : 0;
 }
 
 function main(argv) {
@@ -132,6 +255,18 @@ function main(argv) {
       // 引数が絶対パスならそのまま、相対なら cwd 起点。setup.sh 側で cd して解決される。
       const projectRoot = argv[3] && argv[3].startsWith("/") ? argv[3] : dir;
       return runSetup(projectRoot);
+    }
+    case "uninstall": {
+      // フラグ（--yes/-y, --purge）と任意の dir 引数を順不同で受け取る。
+      const rest = argv.slice(3);
+      const yes = rest.includes("--yes") || rest.includes("-y");
+      const purge = rest.includes("--purge");
+      const dirArg = rest.find((a) => !a.startsWith("-"));
+      let projectRoot = process.cwd();
+      if (dirArg) {
+        projectRoot = dirArg.startsWith("/") ? dirArg : join(process.cwd(), dirArg);
+      }
+      return runUninstall(projectRoot, { yes, purge });
     }
     case "doctor":
       return runDoctor();

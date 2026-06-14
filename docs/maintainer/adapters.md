@@ -30,7 +30,9 @@
 ### ビルド
 
 ```bash
-bash .agents/scripts/build-plugin-claude.sh
+bash .agents/scripts/build-adapters.sh claude        # Claude のみ
+bash .agents/scripts/build-adapters.sh claude cursor # claude + cursor
+# 互換ラッパ: bash .agents/scripts/build-plugin-claude.sh（= build-adapters.sh claude）
 ```
 
 ### ローカルでの試用
@@ -40,7 +42,7 @@ claude --plugin-dir .adapters/claude
 # セッション内で変更を反映: /reload-plugins
 ```
 
-### 配布（マーケットプレイス）
+### 配布（マーケットプレイス）— リリースフロー（案A）
 
 ```bash
 # 利用側
@@ -48,7 +50,36 @@ claude --plugin-dir .adapters/claude
 /plugin install agents-package@agents-md
 ```
 
-> マーケットプレイス配布では `.adapters/claude/` の生成物を**コミットしておく必要がある**（インストール時にこのサブディレクトリが取得される）。リリース前に必ず `build-plugin-claude.sh` を再実行して最新化する。
+marketplace 配布ではプラグイン生成物 `.adapters/claude/` がインストール時に取得される。本リポは
+**正本リポ（`main`）に生成物 `.adapters/` を一切コミットしない**方針（`/.adapters/` は常に gitignore）を採るため、
+生成物は **リリース時に CI が専用ブランチへ commit する**（案A）。手動でローカルから push しない。
+
+**フロー（[.github/workflows/release.yml](../../.github/workflows/release.yml)）**
+
+1. 保守者が `package.json` / `plugin.json` の version を揃える（`bash .agents/scripts/sync-version.sh --write`）。
+2. version と一致するタグ（例 `v0.1.0`）を push する。
+3. `release.yml` がタグ push を検知し、次を実行する:
+   - **version 同期検証**: タグ `vX.Y.Z` ＝ `package.json.version` ＝ `plugin.json.version`（不一致なら fail）。
+   - **生成**: `build-adapters.sh claude cursor` で正本 `.agents/` から `.adapters/` を生成。
+   - **再生成 diff ゼロ**: もう一度生成しても同一（決定性）であることを検証。
+   - **公開**: 生成物 `.adapters/claude`（＋cursor）と `marketplace.json` を専用ブランチ **`release/marketplace`** へ commit/push。
+
+**marketplace.json の `source` 解決**
+
+`.claude-plugin/marketplace.json` の `source: "./.adapters/claude"` は、リリースブランチ `release/marketplace` 上で
+解決される（このブランチには `.adapters/claude` が追跡コミットされている）。`main` には生成物が無いため、
+marketplace 登録時は当該リリースブランチ/タグ時点のツリーを指す運用とする。
+
+**暫定既定（03_実装計画 §0／§9 未決#2 で確定）**
+
+| 項目 | 暫定既定 |
+|------|----------|
+| トリガ | タグ push `v*`（例 `v0.1.0`） |
+| リリースブランチ | `release/marketplace` |
+| version 正本 | `package.json`（`plugin.json` は従属。`sync-version.sh` で同期） |
+
+> npm publish は scope/レジストリ未確定（03 §9 未決#1）のため release.yml には含めない。
+> 配線する場合も `NPM_TOKEN` secret 必須＋手動承認ゲートで、未確定時は発火しない形にすること。
 
 ## cursor/ ・ gemini/（将来）
 

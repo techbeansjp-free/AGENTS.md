@@ -1,0 +1,123 @@
+# release.yml — marketplace リリースフロー（案A）
+#
+# 方針（02_設計 §5.1 / 03_実装計画 §2.5・§9 未決#2）:
+#   - 正本リポ（main）には生成物 .adapters/ を一切置かない（/.adapters/ は gitignore のまま）。
+#   - リリースは「タグ push」をトリガに CI が正本 .agents/ から build-adapters.sh で生成し、
+#     生成物 .adapters/claude（必要に応じ cursor）を **専用リリースブランチ** へ commit する（案A）。
+#   - marketplace.json の source: "./.adapters/claude" は、このリリースブランチ上で解決される。
+#
+# 暫定既定（03_実装計画 §9 未決#2 に対する本バッチの確定。living doc に反映済み）:
+#   - トリガ:           タグ push `v*`（例: v0.1.0）。
+#   - リリースブランチ: `release/marketplace`（生成物の置き場。常に最新リリース内容で上書き同期）。
+#   - 版同期:           push されたタグ（vX.Y.Z）と package.json.version / plugin.json.version が一致すること。
+#
+# 重要:
+#   - 実際の push はこの CI 上でのみ起こる（ローカルからは push しない）。
+#   - npm publish は scope/レジストリ未確定（03 §9 未決#1）のため本ワークフローには含めない。
+#     公開を配線する場合も NPM_TOKEN secret 必須＋手動承認ゲートで、未確定時は発火しない形にすること。
+
+name: release
+
+# 生成物をリリースブランチへ push する必要があるため write を要求する。
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_BRANCH: release/marketplace
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          # 本プロジェクトの実行系は現行 LTS の node22 を対象とする。
+          # setup-node@v4 は node20 ランタイムで動作する現行メジャー（node16 非推奨警告を出さない）。
+          node-version: "22"
+
+      - name: Install sqlite3
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sqlite3
+
+      # 1) version 同期検証: タグ・package.json・plugin.json の version が一致すること
+      - name: Verify version sync (tag == package.json == plugin.json)
+        run: |
+          set -e
+          tag="${GITHUB_REF_NAME#v}"
+          # package.json / plugin.json 間の一致は単一正本スクリプトで検証
+          bash .agents/scripts/sync-version.sh --check
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "ERROR: タグ($tag) と package.json($pkg) の version が一致しません" >&2
+            exit 1
+          fi
+          echo "OK: tag=$tag, package.json=$pkg で一致"
+
+      # 2) 正本 .agents/ から Claude（＋cursor）アダプタを生成
+      - name: Build adapters (claude, cursor)
+        run: |
+          set -e
+          bash .agents/scripts/build-adapters.sh claude cursor
+
+      # 3) 再生成 diff ゼロ検証: もう一度 build しても生成物が変わらない（決定性）
+      - name: Re-build determinism check (diff-zero)
+        run: |
+          set -e
+          rm -rf /tmp/adapters_first
+          cp -R .adapters /tmp/adapters_first
+          bash .agents/scripts/build-adapters.sh claude cursor
+          diff -r /tmp/adapters_first/claude .adapters/claude
+          diff -r /tmp/adapters_first/cursor .adapters/cursor
+          echo "OK: 再生成で生成物の差分なし（決定性）"
+
+      # 4) 生成物をリリースブランチへ commit/push（案A）。main には生成物を置かない。
+      #    リリースブランチは「生成物 + marketplace.json」のみを持つ orphan 系の運用とし、
+      #    毎回そのタグ時点の生成物で内容を作り直す（履歴は taglog として残す）。
+      - name: Publish adapters to release branch
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 生成物を退避（checkout でツリーが入れ替わっても残るよう作業ツリー外へ）
+          work="$(mktemp -d)"
+          cp -R .adapters "$work/.adapters"
+          cp .claude-plugin/marketplace.json "$work/marketplace.json"
+
+          # リリースブランチを用意（無ければ orphan で作る）
+          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$RELEASE_BRANCH"
+            git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+            git rm -rf --quiet .adapters 2>/dev/null || true
+          else
+            git checkout --orphan "$RELEASE_BRANCH"
+            git rm -rf --quiet . 2>/dev/null || true
+          fi
+
+          # 生成物と marketplace.json を配置（source: "./.adapters/claude" はここで解決される）
+          rm -rf .adapters .claude-plugin
+          mkdir -p .claude-plugin
+          cp -R "$work/.adapters" .adapters
+          cp "$work/marketplace.json" .claude-plugin/marketplace.json
+
+          # .adapters を確実に追跡対象にする（リリースブランチでは生成物を追跡する）
+          git add -f .adapters .claude-plugin/marketplace.json
+
+          if git diff --cached --quiet; then
+            echo "変更なし（同一生成物）。commit をスキップします。"
+          else
+            git commit -m "release: ${GITHUB_REF_NAME} adapters (generated from .agents/)"
+          fi
+          git push origin "$RELEASE_BRANCH"
+          echo "OK: $RELEASE_BRANCH へ生成物を公開しました（marketplace source 解決先）。"

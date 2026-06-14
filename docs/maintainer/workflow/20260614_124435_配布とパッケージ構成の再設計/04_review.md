@@ -665,3 +665,194 @@ document_id: "e5be3fa7-9765-4953-8274-fa39c61128bf"
 - **総合評価**: **承認可（本バッチ範囲・ブロッカーなし）**。フェーズ1 npm 土台の仕上げ（配布物リーク防止の検証固定化・README 導入手順整備）の DoD を充足。正本ズレ・配布物汚染を新たに生まない。残課題は課題6・課題7（いずれも非ブロッカー・後続継続）。
 - **承認者**: worker（auditor、orchestrator 委譲） / **承認日**: 2026-06-14
 - **DoD**: 04_review 追記済み・テスト再実行（T1〜T8）記載済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・バッチ C の entry `c0fc50f8-…` に prev_hash チェーン連結）。
+
+---
+
+# 【追記バッチ E】配布とプラグイン化（フェーズ4 marketplace リリースフロー・LICENSE・安全な uninstall・Node 是正・install/uninstall E2E）
+
+> **本節は verify-and-close の 5 回目の実行（バッチ E）の成果物。** skill chain（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従い、03 §2.5 フェーズ4（marketplace リリースフロー・案A）＋ユーザー追加要件（**つけ外し（uninstall）・カプセル化・Node 是正・install/uninstall E2E テスト**）をレビューする。
+>
+> **レビュー深度**: **full**（新規ファイル4＝LICENSE・sync-version.sh・release.yml・e2e-install-uninstall.sh、変更ファイル多数＝build-adapters.sh・self-enforce.yml・bin/agents-md.js・package.json・README.md・SETUP.md・adapters.md・03。配布物のつけ外し／カプセル化／リリースフローという利用者面の中核機能のため full）。
+> **evidence_source 凡例**: `test_output`（本バッチで再実行したコマンドの出力）／`existing_code`（対象ファイルの該当行）／`external_spec`（00/01/03・package.json files・公式仕様等の契約）／`inference_only`（推論のみ。重要判断では不可）。
+
+---
+
+## E-1. レビュー対象
+
+- **実装範囲**: 直前の implement-feature の成果物。03 §2.5 フェーズ4＋ユーザー追加要件。
+  - **(フェーズ4 marketplace リリース・案A)** `release.yml` 新設（タグ `v*` → version 同期検証 → `build-adapters.sh claude cursor` → 再生成 diff ゼロ → 生成物＋`marketplace.json` を `release/marketplace` ブランチへ commit/push）。publish step は未配線（scope/レジストリ未確定）。
+  - **(version 同期)** `sync-version.sh`（`--check`/`--write`。正本＝`package.json`、`plugin.json` 従属）新設。`self-enforce.yml` に `--check` ゲートを配線。
+  - **(LICENSE)** リポルートに `LICENSE`（MIT・著作権者 `techbeansjp-free`）追加。`package.json` も `license: MIT`。
+  - **(安全な uninstall)** `bin/agents-md.js` に `uninstall` 追加（既定 dry-run、`--yes` で実行、`--purge` で workflow.db 含む、配備痕跡無しなら中止）。`doctor` に配備状態判定を追加。
+  - **(Node 是正)** `package.json` engines.node `>=18`→`>=20`。両 workflow に `setup-node@v4 node22` を配線。
+  - **(install/uninstall E2E)** `.agents/scripts/test/e2e-install-uninstall.sh` 新設（隔離 `mktemp -d`＋`git archive` で install/uninstall/冪等/カプセル化/リークを BDD で検証）。`self-enforce.yml` に E2E step を配線。`build-adapters.sh` の bundle 除外に `sync-version.sh`・`verify-npm-pack.sh`・`scripts/test` を追加。
+- **変更/新規ファイル（CHANGED_FILES_JSON）**: `LICENSE`・`.agents/scripts/sync-version.sh`・`.github/workflows/release.yml`・`.agents/scripts/test/e2e-install-uninstall.sh`（新規）／`.agents/scripts/build-adapters.sh`・`.github/workflows/self-enforce.yml`・`bin/agents-md.js`・`package.json`・`README.md`・`.agents/SETUP.md`・`docs/maintainer/adapters.md`・`03_実装計画.md`（変更）。
+- **レビュー対象外（触れない）**: 未追跡ディレクトリ `docs/maintainer/workflow/20260614_162712_コア取り込み候補調査/` は本バッチと無関係。
+- **レビュー担当者**: worker（auditor/scribe ロール、orchestrator 委譲）。
+
+---
+
+## E-2. 実装内容の確認（review-code）
+
+### E-2.1 `bin/agents-md.js`（安全な uninstall ＋ doctor 配備状態判定）
+
+- **配備物マニフェストの単一定義**: `DEPLOYED_ARTIFACTS = [.agents, AGENTS.md, CLAUDE.md, .claude, .cursor, .workflow/templates]`。これは `setup.sh` の実配備対象（`cp .agents`/`AGENTS.md`/`CLAUDE.md`、`.claude`・`.cursor` 生成、`.workflow/templates` コピー）と**完全一致**することを `setup.sh:41-120` と突合して確認（`existing_code`）。`.workflow` 自体は丸ごと消さず templates のみ除去する設計で、issue・workflow.db を誤削除しない（`existing_code`）。
+- **安全策（中核）**: `runUninstall` 冒頭で `.agents/` または `AGENTS.md` の存在（配備痕跡）を確認し、無ければ `exit 1` で中止。誤って未配備 dir のユーザー資産を消さない（`existing_code`＋E-3 S4 で実証）。
+- **既定 dry-run**: `--yes` を付けない限り削除対象を表示するのみで `rmSync` を呼ばない（`existing_code`＋S2/S5 で実 install→uninstall を確認）。
+- **`--purge`**: `PURGE_ARTIFACTS = [.workflow/workflow.db(-wal/-shm)]` を追加除去。`.agents-project/` は purge でも対象外（保持）（`existing_code`＋E-3 S3）。
+- **doctor 配備状態**: 同じ「配備痕跡」基準（`.agents` or `AGENTS.md`）で「配備済み/未配備」を表示（`existing_code`）。判定基準が uninstall の安全策と一貫（単一の install 判定）。
+
+### E-2.2 `sync-version.sh`（version 同期の単一正本）
+
+- **正本＝package.json**: `--check` は `package.json` と `.agents/platforms/claude/plugin.json` の version を比較し一致で 0・不一致で 1。`--write` は package.json の version を plugin.json に注入（`existing_code`）。03 §0「正本＝package.json、plugin.json 従属」と一致（`external_spec`）。
+- **決定性との両立**: build は plugin.json を「そのままコピー」するため、注入を sync-version 側に置くことで「同一入力→同一出力」が保たれ、diff-zero 検証と両立する（冒頭コメントで明示）（`existing_code`）。node 不在 exit 2・ファイル不在 exit 2 の明示的失敗（`existing_code`）。
+
+### E-2.3 `release.yml`（marketplace リリース・案A）
+
+- **トリガ**: `on.push.tags: ["v*"]`。`permissions: contents: write`（リリースブランチへ push するため必要最小）（`existing_code`）。
+- **version 同期検証**: `tag(vX.Y.Z の v 除去)` == `package.json.version` ＋ `sync-version.sh --check`（pkg==plugin）。三者一致しなければ fail（`existing_code`）。03 §2.5.3 単体「両 version 不一致なら CI fail」に対応（`external_spec`）。
+- **build＋再生成 diff ゼロ**: `build-adapters.sh claude cursor` → `/tmp` に退避し再 build → `diff -r` で決定性検証（`existing_code`）。シナリオ7-4（正本ズレ検出）に対応。
+- **公開（案A）**: 生成物 `.adapters` と `marketplace.json` を一時退避し、`release/marketplace` を fetch/orphan で用意して生成物のみ commit/push。`main` には生成物を置かない（`/.adapters/` は gitignore のまま）（`existing_code`）。03 §0／§9 未決#2 の暫定既定どおり。
+- **publish 未配線**: コメントで「npm publish は scope/レジストリ未確定のため含めない。配線時も NPM_TOKEN secret＋手動承認ゲート」と明示（`existing_code`）。03 §9 未決#1 と整合（外部送信を行わない設計＝本レビューの制約とも一致）。
+
+### E-2.4 `LICENSE`／`package.json`（Node 是正含む）
+
+- `LICENSE` は標準 MIT 全文・`Copyright (c) 2026 techbeansjp-free`（`existing_code`）。`package.json.license: "MIT"` と一致（`external_spec`）。法人正式名は 03 §9 未決#6 として残（ユーザー確認事項）。
+- `engines.node: ">=20"`（旧 `>=18` から是正）。両 workflow が `setup-node@v4` で node22 を明示し engines と整合（`existing_code`＋E-3 Y2）。
+
+### E-2.5 `build-adapters.sh`（bundle 除外調整・決定性維持）
+
+- `bundle_agents_src` の除外に `sync-version.sh`・`verify-npm-pack.sh` を追加し、`scripts/lib` に加え `scripts/test` も `rm -rf`（`existing_code`、diff で確認）。保守/導入/テスト専用スクリプトを配布物（.adapters）にリークさせない。決定性は E-3 D1（3 連続 build 同一）で維持を実証。
+
+### E-2.6 `self-enforce.yml`（E2E 配線・Node・diff-zero の claude/cursor 化）
+
+- `setup-node@v4 node22` を追加。diff-zero step を `build-plugin-claude.sh` → `build-adapters.sh claude cursor` に是正。step5 に `sync-version.sh --check`、step6 に E2E、step7 を audit（非ブロッキング）に再番号（`existing_code`、diff で確認）。
+
+### E-2.7 テストコード化の網羅・TEST_BDD_FORMAT 監査（PHASES 監査観点）
+
+- 本バッチは**実行可能な E2E テストファイルを新規追加**（`e2e-install-uninstall.sh`）。**TEST_BDD_FORMAT 監査**: ファイル冒頭に `# ユースケース:`（ファイル全体の利用者目線）を持ち、7 つの `test_*` 関数それぞれに `# シナリオ:` と本文の `# Given:`/`# When:`/`# Then:`、複数段には `# And (Then):`/`# And (When):` を付与（`test_output`：`ユースケース` 1・`シナリオ:` 8・`Given:` 8・`When` 8・`Then` 7・`And (…)` 9。test 関数 7）。**インラインコメント必須要件を充足**（`existing_code`＋`test_output`）。01 のユースケース（配布/導入・つけ外し・冪等・カプセル化・リーク）と 03 のフェーズ4/追加要件を実行コードでシナリオ化しており、PHASES「テストコード化の網羅」を満たす。簡易アサーション群（`assert_exists`/`assert_absent`/`assert_cmd_ok`/`assert_cmd_fail`）で pass/fail を集計し、1 件でも fail なら `exit 1`。
+
+---
+
+## E-3. テスト結果の確認（テスト再実行・非破壊）
+
+- **実行日**: 2026-06-14 / **実行環境**: node v20.19.5・npm 10.x・bash 5.2.x・git・tar・sqlite3 3.45.x・python3+pyyaml。
+- **非破壊性**: E2E は隔離 `mktemp -d`＋`git archive HEAD | tar -x` で実行。**実行後に本リポの追跡差分は本バッチ対象ファイルのみ**で、`.agents`/`.claude`/`.cursor`/`.workflow/workflow.db` への churn なし・`git ls-files .adapters` 空を確認（`test_output`）。
+- **総合**: E2E **36 アサーション全 pass**（FAIL=0）。補助検証（sync-version・diff-zero・YAML・カプセル化・bash -n・node --check）すべて pass。
+
+### E-3.1 E2E（`e2e-install-uninstall.sh`）シナリオ別結果
+
+| ID | シナリオ | 受け入れ基準（01/00） | 結果（pass 数） | evidence_source |
+|----|----------|------------------------|------------------|------------------|
+| S1 | install で自己完結配備・maintainer 物が漏れない | シナリオ2-1/2-3・SC-3 | **PASS（10/10）**: `.agents/boot/CORE.md`・AGENTS.md・CLAUDE.md・`.claude/hooks/PreToolUse.sh`・`.cursor`・`.workflow/templates` 配備、`.agents-project`/`docs/maintainer` 不在、`skills/*__*` 形式、`workflow.db` 生成 | test_output |
+| S2 | uninstall が配備物のみ除去・ユーザー資産保持 | シナリオ3-1・BR-4 | **PASS（9/9）**: 配備物6種除去、`.agents-project/rule.md`・issue・`workflow.db` 保持 | test_output |
+| S3 | `--purge` で workflow.db も除去 | 7-3・BR-4 | **PASS（3/3）**: `.agents`・`workflow.db` 除去、`.agents-project` 保持 | test_output |
+| S4 | 未配備 dir への uninstall は安全側中止 | 7-3（無断喪失防止） | **PASS（2/2）**: exit≠0 で中止、ユーザー資産無傷 | test_output |
+| S5 | 冪等性（二重 install／uninstall 後再 install） | 7-3・BR-4 | **PASS（3/3）**: 二重 install 健全、再 install で復元 | test_output |
+| S6 | プラグインのカプセル化（`.adapters/claude` 自己完結） | シナリオ4-1・BR-1 | **PASS（8/8）**: plugin.json/hooks.json 妥当 JSON、`.agents` 同梱、`${CLAUDE_PLUGIN_ROOT}` 参照、ビルド時絶対パス漏れ無し、`/home /Users /tmp/` 漏れ無し | test_output |
+| S7 | npm 配布物リーク無し（verify-npm-pack 再利用） | シナリオ5-1・SC-3 | **PASS（1/1）**: 合格（リーク無し・必須物あり） | test_output |
+
+### E-3.2 補助検証
+
+| # | 検証項目 | 方法 | 結果 | evidence_source |
+|---|----------|------|------|------------------|
+| V1 | sync-version 正例 | `sync-version.sh --check`（pkg==plugin==0.1.0） | **OK（exit 0）** | test_output |
+| V2 | sync-version 負例＋原状復帰 | plugin.json を 9.9.9 に一時変更→`--check`→復帰 | **検出 OK（exit 1）**、復帰後 `git diff --quiet` でクリーン | test_output |
+| D1 | build diff-zero（決定性） | `build-adapters.sh claude cursor` を 3 連続 build → `diff -r` | **OK**: a1=a2=a3 完全一致（claude/cursor）。`verify-npm-pack.sh`・`scripts/test` は意図どおり非同梱 | test_output |
+| D2 | 正本クリーンさ | `git ls-files .adapters`／`git status --porcelain --untracked-files=no` | **OK**: `.adapters` 追跡 0 件、build 由来の追跡差分なし、`.adapters/` は ignore 済み | test_output |
+| Y1 | YAML 妥当性 | `yaml.safe_load(self-enforce.yml, release.yml)` | **OK**: 両者パース成功。`on` キーは `pull_request`/`push`（self-enforce）・`push`（release）として正しく解釈 | test_output |
+| Y2 | action メジャー・node 是正 | `uses:` と `node-version` 抽出 | **OK**: 両 workflow とも `actions/checkout@v4`・`actions/setup-node@v4`（現行メジャー＝node20 ランタイム・node16 非推奨警告なし）、`node-version: 22` | test_output |
+| C1 | カプセル化独立確認 | 別途 `build-adapters.sh claude` → plugin.json/hooks.json JSON.parse・`${CLAUDE_PLUGIN_ROOT}` grep・絶対パス走査 | **OK**: 両 JSON 妥当、`CLAUDE_PLUGIN_ROOT` 2 箇所（PreToolUse/PostToolUse）、`/home /Users /tmp/` およびリポ絶対パス漏れ無し | test_output |
+| B1 | 構文・静的検査 | `bash -n`（scripts 9＋lib 1＋test 1）・`node --check bin`・JSON.parse（package/plugin/marketplace） | **OK**: 全 exit 0 | test_output |
+
+> E2E・diff-zero・カプセル化の一時生成物（`mktemp -d`・`.adapters`）は検証後に削除。`.adapters/` は gitignore 対象で追跡されない。本リポの `.workflow/workflow.db` は SELECT のみで非破壊。
+
+---
+
+## E-4. コードレビュー観点
+
+| 観点 | 確認内容 | 判定 | 根拠 |
+|------|----------|------|------|
+| 配備物マニフェスト整合 | uninstall 対象が setup.sh の実配備と一致 | **OK** | `DEPLOYED_ARTIFACTS` ↔ setup.sh:41-120 突合（`existing_code`） |
+| つけ外しの安全性 | 既定 dry-run・痕跡無しで中止・purge 範囲限定 | **OK** | S2/S3/S4/S5（`test_output`）＋分岐（`existing_code`） |
+| ユーザー資産保護 | `.agents-project`・issue・workflow.db を既定保持 | **OK** | S2/S3（保持を実証） |
+| カプセル化 | `${CLAUDE_PLUGIN_ROOT}` 相対・絶対パス漏れ無し | **OK** | S6・C1（`test_output`） |
+| version 同期 | 正本=package.json・正例/負例・決定性両立 | **OK** | V1/V2・D1（`test_output`） |
+| 決定性 | build 3 連続同一・配布物リーク無し | **OK** | D1/D2（`test_output`） |
+| リリース安全性 | publish 未配線・push は CI 上のみ・最小権限 | **OK** | release.yml（`existing_code`） |
+| CI 健全性 | YAML 妥当・action 現行・node22 | **OK** | Y1/Y2（`test_output`） |
+| BDD 形式 | ユースケース/シナリオ/GWT インライン | **OK** | E-2.7（`test_output`） |
+| 配布物リーク | test/sync-version/verify-npm-pack を除外 | **OK** | build-adapters diff・D1（`existing_code`＋`test_output`） |
+
+- **inference_only 依存の重要判断**: なし。承認に関わる判断はすべて `test_output`／`existing_code`／`external_spec` で裏取り済み。
+
+---
+
+## E-5. 受け入れ基準の確認（generate-scenarios → map-coverage）
+
+| 基準（出典） | 寄与する実装 | 検証方法・結果 | 判定 |
+|--------------|--------------|----------------|------|
+| シナリオ2-1: Claude 構成へ install、`.agents-project`/`docs/maintainer` を漏らさない（01・SC-3） | uninstall マニフェスト／setup／E2E | S1（10/10） | **○** |
+| シナリオ2-3/6-1: claude/cursor が同一正本から `domain__capability` で配備 | deploy-skills／build-adapters | S1（`skills/*__*`）・D1（cursor 生成） | **○** |
+| シナリオ3-1/7-3・BR-4: 人間編集領域保持・無断喪失防止（つけ外し） | runUninstall 安全策・既定保持 | S2/S3/S4/S5 | **○** |
+| シナリオ4-1: marketplace 土台が解決・build 土台欠落なし（SC-1） | release.yml 案A・plugin.json 正本コピー | S6（カプセル自己完結）・release.yml version 同期＋diff-zero（`existing_code`） | **○（CI 配線・ローカル相当 S6/D1 pass）** |
+| シナリオ7-4: 生成物の正本ズレ検出（決定性） | build-adapters・release diff-zero・self-enforce | D1/D2＋release.yml 再生成 diff（`existing_code`） | **○** |
+| シナリオ5-1・SC-3: 配布物にリポ固有物が混入しない | verify-npm-pack 再利用（E2E S7）・bundle 除外 | S7・D2 | **○** |
+| SC-2（版のピン留め/アップグレード/ロールバック手順）: 版同期＋タグ運用 | sync-version・release.yml・package.json semver | V1/V2＋release.yml タグ→ブランチ運用（`existing_code`） | **○（手順存在・version 同期実証）** |
+| 03 §2.5.3 単体: 両 version 不一致なら CI fail | sync-version `--check`／release version 検証 | V2（負例 exit 1）・self-enforce step5 配線 | **○** |
+| BR-1: 生成物は正本から決定的に再生成・手編集禁止 | build-adapters・GENERATED.md | D1（3 連続同一）・カプセル GENERATED.md | **○** |
+| LICENSE/MIT 確定（03 §0・§9 未決#6） | LICENSE・package.json | 全文 MIT・license 一致（`existing_code`） | **○（著作権者正式名のみ要確認）** |
+| Node 是正（engines.node >=20・CI node22） | package.json・両 workflow | Y2（node22）・engines 一致（`existing_code`） | **○** |
+
+### 未達・要対応（map-coverage）
+
+- **本バッチのスコープ内に機能的未達はなし**。つけ外し・カプセル化・version 同期・リリースフロー（案A 配線）・Node 是正・E2E はすべて ○。
+- **CI 上でのみ確認可能な項目**（ローカルでは相当検証で代替）: release.yml の実 push（`release/marketplace` ブランチ生成・実 marketplace install スモーク）は**外部送信を伴うため本レビューでは実行せず**、ローカルで build/version 同期/diff-zero までを相当検証（S6/D1/V1/V2）。03 §2.5.3 E2E「実 marketplace install はリリースブランチ運用確定後」と整合（想定どおり）。
+- **スコープ外（別フェーズ/別 issue・継続）**: npm 実 publish（課題7・scope/レジストリ未確定）、gemini/copilot/codex adapter（課題5）、enforcement 有効化（03 フェーズ5）、`git archive` を超えた追加クリーン clone テスト（課題6 は本 E2E で大幅に解消）。
+
+---
+
+## E-6. 設計・境界の確認（review-architecture）
+
+- **設計原則の準拠**: 単一責務の徹底——version 同期＝`sync-version.sh`、つけ外し＝`runUninstall`（マニフェスト1か所）、E2E＝`e2e-install-uninstall.sh`（CI とローカルの単一正本）、リリース＝`release.yml`。検証ロジックを CI とローカルで二重化しない方針が一貫（`external_spec`：03・各ファイル冒頭コメント）。UNIX 哲学（小さな単機能スクリプトの合成）に整合。
+- **境界・依存**: `bin/agents-md.js` → `setup.sh`（配備）／自前マニフェスト（除去）の一方向。`sync-version.sh`・`build-adapters.sh` → 正本 `.agents/`／`package.json`／`plugin.json`。`release.yml` → 同梱スクリプトのみ（外部未整備ツール非依存）。循環なし。
+- **配布物の境界（カプセル化）**: アダプタ（`.adapters/claude`）は `${CLAUDE_PLUGIN_ROOT}` 相対で同梱 `.agents` を参照し、ビルド環境の絶対パスに非依存＝**移送可能な自己完結カプセル**。保守/導入/テスト専用スクリプト（setup/build-adapters/sync-version/verify-npm-pack/lib/test）は `bundle_agents_src` で除外し配布物にリークしない。境界が明瞭（`test_output`：S6/C1/D1）。
+- **正本ズレを生まない**: version 正本＝`package.json`、plugin.json は従属（sync-version で同期・build はコピーのみ）で決定性と両立。配備物マニフェストは setup.sh の実配備と一致。新たな二重管理を生まない（`existing_code`＋`test_output`）。
+- **新たな破綻の有無**: build 3 連続同一・`.adapters` 未追跡・E2E 隔離実行で本リポ非破壊を確認。クリーン clone 破綻・リーク・正本汚染を**新たに生まない**（`test_output`）。
+- **指摘（軽微・任意・非ブロッカー）**:
+  - **release.yml の orphan/上書き運用**: `release/marketplace` を毎回作り直す案A は、初回 orphan 後の継続運用で履歴が肥大化しうる。運用上は問題ないが、将来 `git rm` 後の force-add の挙動を実 CI で 1 度スモークしておくと安心（外部 push を伴うため本レビュー範囲外）。`inference_only` 寄りの将来懸念であり承認判断には影響しない。
+  - **uninstall マニフェストと setup.sh の同期**: 今日時点で一致（突合確認済み）だが、将来 setup の配備対象が増えた際にマニフェスト追従が必要。両者を同一ソースから導出する案は後続の任意改善。
+
+### E-6.1 重要判断の根拠（evidence_source）
+
+| 判断内容 | evidence_source | 備考 |
+|----------|------------------|------|
+| install/uninstall・冪等・カプセル化・リークの 36 アサーションが全 pass | test_output | E2E をローカル再実行（隔離・非破壊） |
+| uninstall がユーザー資産を保持し未配備 dir で中止する | test_output + existing_code | S2/S3/S4＋runUninstall 安全策 |
+| プラグインが `${CLAUDE_PLUGIN_ROOT}` 相対で自己完結・絶対パス漏れ無し | test_output | S6＋独立確認 C1（別 build で再走査） |
+| version 同期が正例/負例で機能し決定性と両立 | test_output + existing_code | V1/V2＋D1（3 連続 build 同一） |
+| 両 workflow が YAML 妥当・action 現行・node22 | test_output | Y1/Y2（safe_load・uses・node-version） |
+| release.yml が publish 未配線・push は CI 上のみ | existing_code | 外部送信を行わない設計（本レビュー制約と整合） |
+
+- **inference_only のみに依存する重要判断は無い**（承認に関わる判断はすべて test_output / existing_code / external_spec で裏取り。軽微な将来懸念のみ inference_only として明示し承認判断から除外）。
+
+---
+
+## E-7. 課題と改善点（残課題）
+
+- **課題6（クリーン clone 系テストコード）: 大幅解消**。本バッチで `e2e-install-uninstall.sh`（`git archive HEAD`＋`mktemp -d` でクリーン clone を再現し install/uninstall/冪等/カプセル化/リークを検証）を新設し CI に配線。バッチ A 課題2／バッチ B 課題6／バッチ C・D で継続していた「クリーン clone 系テスト未整備」は実体化。
+- **課題7（npm 実 publish 未実施）**: 継続。scope/レジストリ未確定（03 §9 未決#1）。release.yml は publish を意図的に未配線（手動承認ゲート前提）。非ブロッカー。
+- **課題8（marketplace 実 install スモーク）**: `release/marketplace` ブランチ運用の実 CI 実行は外部 push を伴うため未実施。ローカルで build/version 同期/diff-zero まで相当検証済み。運用承認後にユーザー側で実施（03 §9 未決#2 運用承認待ちと整合）。非ブロッカー。
+- **課題9（LICENSE 著作権者・npm scope の正式名）**: `techbeansjp-free` は暫定。法人正式名・npm scope はユーザー確認事項（03 §9 未決#1・#6）。非ブロッカー。
+- **課題5（gemini/copilot/codex 未対応）**: 継続（バッチ B 由来）。`SUPPORTED_TOOLS` 拡張で対応可能。
+
+---
+
+## E-8. レビュー結果（バッチ E）
+
+- **実装品質**: 良好（つけ外しを安全側設計＝既定 dry-run・痕跡無し中止・ユーザー資産保持で実装。プラグインを `${CLAUDE_PLUGIN_ROOT}` 相対の自己完結カプセルとして生成し絶対パス漏れ無し。version 同期を単一正本化し決定性と両立。リリースフロー案A を配線（publish は安全に未配線）。Node を是正。正本ズレ・配布物汚染・クリーン clone 破綻を新たに生まない）。
+- **テスト品質**: 良好（E2E 36 アサーションを隔離・非破壊で再実行し全 pass。sync-version 正例/負例・diff-zero・YAML・カプセル化・bash -n・node --check を再実行。E2E は TEST_BDD_FORMAT のユースケース/シナリオ/GWT インラインを充足）。
+- **ドキュメント品質**: 良好（README・SETUP に uninstall 手順とつけ外し表、adapters.md に marketplace 案A 運用、03 §0/§9 を living doc 更新。参照先が実在）。
+- **総合評価**: **承認可（本バッチ範囲・ブロッカーなし）**。03 §2.5 フェーズ4＋ユーザー追加要件（つけ外し・カプセル化・Node 是正・install/uninstall E2E）の DoD を充足。残課題（課題5・課題7・課題8・課題9）はいずれも非ブロッカー・後続継続またはユーザー確認事項。
+- **承認者**: worker（auditor、orchestrator 委譲） / **承認日**: 2026-06-14
+- **DoD**: 04_review 追記済み・テスト再実行（E2E 36／補助検証）記載済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・直前 entry にチェーン連結）。

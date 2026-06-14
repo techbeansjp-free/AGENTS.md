@@ -5,7 +5,7 @@
   "type": "module",
   "bin": { "agents-md": "bin/agents-md.js" },
   "files": [".agents/", "AGENTS.md", "CLAUDE.md", ".workflow/templates/", "bin/", "README.md"],
-  "engines": { "node": ">=18" },
+  "engines": { "node": ">=20" },
   "scripts": { "build:claude": "bash .agents/scripts/build-plugin-claude.sh" },
   "keywords": ["agents", "ai", "workflow", "claude-code", "cursor", "skills", "agents-md"],
   "license": "MIT",

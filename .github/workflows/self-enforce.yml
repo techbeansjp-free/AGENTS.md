@@ -7,7 +7,9 @@
 #   2. DB スキーマ正本ズレ検証（sqlite3 で schema.sql が流せ、workflow_log が作られること）
 #   3. 生成物の差分ゼロ検証（build 実行後、追跡ファイルに差分が出ないこと。生成物は .gitignore 済み）
 #   4. npm 配布物リーク検査（npm pack --dry-run。リポ固有物が tarball に漏れず必須物が含まれる）
-#   5. enforcement/ci/audit.sh の呼び出し（このリポの issue は docs/maintainer/workflow 配下のため、
+#   5. version 同期検証（package.json.version == .agents/platforms/claude/plugin.json.version）
+#   6. install/uninstall・カプセル化 E2E（隔離 dir で実 install→検証→uninstall→再 install を確認）
+#   7. enforcement/ci/audit.sh の呼び出し（このリポの issue は docs/maintainer/workflow 配下のため、
 #      audit.sh はそのまま通らない。continue-on-error 相当で「呼ぶが失敗させない」運用）
 #
 # トリガ: PR（必ず検証）と、merge 先ブランチ（main, develop）への push。
@@ -30,6 +32,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # node/npm を使う step（verify-npm-pack.sh / sync-version.sh / E2E）のため現行 LTS を明示する。
+      # setup-node@v4 は node20 ランタイムで動く現行メジャー action（node16 非推奨警告を出さない）。
+      # 本プロジェクトの実行系は node22 を対象とする（package.json engines.node >=20）。
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Install sqlite3
         run: |
@@ -67,7 +77,7 @@ jobs:
       - name: Generated-output diff-zero check
         run: |
           set -e
-          bash .agents/scripts/build-plugin-claude.sh
+          bash .agents/scripts/build-adapters.sh claude cursor
           # 生成物（.adapters/ 等）は .gitignore 済み。追跡ファイルに変化が無いことを確認する。
           changed="$(git status --porcelain --untracked-files=no)"
           if [ -n "$changed" ]; then
@@ -91,7 +101,22 @@ jobs:
           set -e
           bash .agents/scripts/verify-npm-pack.sh
 
-      # 5) enforcement audit（このリポでは適用範囲外のため失敗させない）
+      # 5) version 同期検証（package.json と plugin.json の version 一致。正本=package.json）
+      #    検証ロジックは .agents/scripts/sync-version.sh に集約（CI とローカルで二重化しない）。
+      - name: Version sync check (sync-version.sh --check)
+        run: |
+          set -e
+          bash .agents/scripts/sync-version.sh --check
+
+      # 6) install/uninstall・カプセル化 E2E（実際に使うユースケース/シナリオで配備・除去を検証）
+      #    隔離した一時ディレクトリ（mktemp -d ＋ git archive HEAD）で実行し、開発リポを破壊しない。
+      #    検証ロジックは .agents/scripts/test/e2e-install-uninstall.sh に集約（CI とローカルで二重化しない）。
+      - name: Install/uninstall & encapsulation E2E
+        run: |
+          set -e
+          bash .agents/scripts/test/e2e-install-uninstall.sh
+
+      # 7) enforcement audit（このリポでは適用範囲外のため失敗させない）
       #    本リポの issue は docs/maintainer/workflow 配下で、audit.sh は .workflow を前提とするため
       #    そのままでは通らない。呼び出すが結果で CI を赤くしない（continue-on-error）。
       - name: Enforcement audit (non-blocking)

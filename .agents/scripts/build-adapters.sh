@@ -82,8 +82,10 @@ bundle_agents_src() {
   cp -R "$AGENTS" "$out/.agents"
   rm -f "$out/.agents/scripts/setup.sh" \
         "$out/.agents/scripts/build-plugin-claude.sh" \
-        "$out/.agents/scripts/build-adapters.sh"
-  rm -rf "$out/.agents/scripts/lib"
+        "$out/.agents/scripts/build-adapters.sh" \
+        "$out/.agents/scripts/sync-version.sh" \
+        "$out/.agents/scripts/verify-npm-pack.sh"
+  rm -rf "$out/.agents/scripts/lib" "$out/.agents/scripts/test"
   echo "[build] .agents を同梱しました（保守/導入専用スクリプトは除外）。"
 }
 

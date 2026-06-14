@@ -104,6 +104,30 @@ bash .agents/scripts/setup.sh
 
 ---
 
+## アンインストール（つけ外し）
+
+プラグイン（配備一式）は簡単につけ外しできる。除去は CLI の `uninstall` サブコマンドで行う（正本は `bin/agents-md.js` の `runUninstall`）。setup/init が配備した成果物のみを除去し、人間が編集する資産は既定で保持する。
+
+```bash
+# 採用先プロジェクトのルートで実行
+npx @techbeansjp-free/agents-md uninstall            # dry-run（削除対象の表示のみ。何も消さない）
+npx @techbeansjp-free/agents-md uninstall --yes      # 実際に配備物を除去する
+npx @techbeansjp-free/agents-md uninstall --purge --yes  # workflow.db 等の証跡も含め完全除去
+```
+
+| 対象 | 既定 `uninstall` | 説明 |
+|------|------------------|------|
+| **.agents/・AGENTS.md・CLAUDE.md** | 除去 | setup/init がコピー配備した正本（配備物）。 |
+| **.claude/・.cursor/** | 除去 | enforcement フック・skills（100% 生成物）。 |
+| **.workflow/templates/** | 除去 | setup がコピーしたテンプレート（`.workflow/` 自体は残す）。 |
+| **.agents-project/** | 保持 | プロジェクト固有ルール（人間が編集する資産）。誤削除しない。 |
+| **.workflow/<issue>/**（templates 以外） | 保持 | issue 成果物（消費者ランタイム）。 |
+| **workflow.db** | 保持（`--purge` 時のみ除去） | 証跡 DB。既定では残す。 |
+
+**安全策**: 採用先に配備の痕跡（`.agents/` または `AGENTS.md`）が無い場合、誤削除を防ぐため uninstall を中止する。存在しない対象はスキップし、`--yes` を付けない限り削除は行わず対象の一覧表示（dry-run）に留める。`uninstall` の挙動は E2E テスト `.agents/scripts/test/e2e-install-uninstall.sh`（install→uninstall→冪等→カプセル化→リーク）で再現確認される。
+
+---
+
 ## スモークテスト（セットアップ後）
 
 本セクションは簡易確認。**正式な導入完了確認は「導入完了チェックリスト」を参照**すること。

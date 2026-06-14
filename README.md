@@ -70,6 +70,7 @@ npx @techbeansjp-free/agents-md init
 |----------|------|
 | `init [dir]` | 採用先（既定: カレントディレクトリ）へ `.agents/` 等を配備する |
 | `upgrade [dir]` | 既存配備を再同期する（当面 `init` と同等。新版取り込みに使う） |
+| `uninstall [dir]` | `init`/`setup` が配備した成果物のみを除去する（ユーザー資産は既定で保持） |
 | `doctor` | 配備に必要な前提（`setup.sh`・`bash`・`sqlite3` 等）の有無を確認する |
 | `version` | パッケージのバージョンを表示する |
 | `help` | 使い方を表示する |
@@ -86,6 +87,27 @@ npx @techbeansjp-free/agents-md@latest upgrade
 # 配備前提（bash・sqlite3 等）の健全性を確認
 npx @techbeansjp-free/agents-md doctor
 ```
+
+**アンインストール（つけ外し）**:
+
+プラグインは簡単につけ外しできる。`uninstall` は **`init`/`setup` が配備した成果物のみ**を除去し、人間が編集する資産（`.agents-project/`・`.workflow` の issue・`workflow.db`）は**既定で保持**する。引数なしは dry-run（削除対象の表示のみ）。
+
+```bash
+# 採用先プロジェクトのルートで実行。まず削除対象を表示（dry-run。何も消さない）
+npx @techbeansjp-free/agents-md uninstall
+
+# 実際に配備物を除去する（.agents/ AGENTS.md CLAUDE.md .claude/ .cursor/ .workflow/templates/）
+npx @techbeansjp-free/agents-md uninstall --yes
+
+# workflow.db 等の証跡も含めて完全除去する
+npx @techbeansjp-free/agents-md uninstall --purge --yes
+```
+
+| 区分 | 既定の `uninstall` | `--purge` 付き |
+|------|-------------------|----------------|
+| 除去する配備物 | `.agents/`・`AGENTS.md`・`CLAUDE.md`・`.claude/`・`.cursor/`・`.workflow/templates/` | 同左 |
+| 保持するユーザー資産 | `.agents-project/`・`.workflow/<issue>`・`.workflow/workflow.db*` | `.agents-project/`・`.workflow/<issue>`（`workflow.db` は削除） |
+| 安全策 | `.agents/` も `AGENTS.md` も無い（未配備の）ディレクトリでは誤削除を防ぐため中止する。存在しない対象はスキップ。`--yes` 無しは表示のみ。 | 同左 |
 
 > 補足: `init`／`upgrade` は workflow.db の初期化に `sqlite3` バイナリを必要とする（`doctor` で確認できる）。`AGENTS.md`・`CLAUDE.md`・`.agents-project/` 等の人間編集領域は無断上書きされない（詳細は [.agents/SETUP.md](.agents/SETUP.md)）。
 
