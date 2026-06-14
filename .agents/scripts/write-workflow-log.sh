@@ -11,6 +11,36 @@
 
 set -euo pipefail
 
+# DB パス解決（read 経路でも使うため早期に定義。INSERT 経路と同一の固定パス）
+PROJECT_ROOT="${PROJECT_ROOT:-.}"
+WORKFLOW_DIR="${WORKFLOW_DIR:-.workflow}"
+WF_DB="${PROJECT_ROOT}/${WORKFLOW_DIR}/workflow.db"
+
+# head 決定関数（共有 Query）: 現 head（最新 entry）の entry_hash を固定 read クエリで返す。
+# head 決定キー = 暗黙 rowid（INSERT 順に単調増加）。DB 未存在・workflow_log 不在・旧スキーマ
+# （entry_id 無し）・0 件のときは空文字列を返し、異常終了しない（read 専用・副作用なし）。
+resolve_head_hash() {
+  [[ -f "$WF_DB" ]] || return 0
+  command -v sqlite3 &>/dev/null || return 0
+  # 新スキーマ（entry_id・entry_hash カラム）でなければ head 無しとして空を返す
+  if ! sqlite3 -separator $'\t' "$WF_DB" "PRAGMA table_info(workflow_log);" 2>/dev/null \
+      | awk -F '\t' '{print $2}' | grep -qx 'entry_id'; then
+    return 0
+  fi
+  sqlite3 "$WF_DB" "SELECT entry_hash FROM workflow_log ORDER BY rowid DESC LIMIT 1;" 2>/dev/null || true
+}
+
+# --print-head: read 専用サブコマンド（書記以外も実行可・状態非変更）。
+# AGENT_ROLE ガードより前に評価する（02 §3.2.4）。固定 read クエリのみ・任意 SQL 不可。
+if [[ "${1:-}" == "--print-head" ]]; then
+  if [[ $# -gt 1 ]]; then
+    echo "Usage: $0 --print-head" >&2
+    exit 1
+  fi
+  resolve_head_hash
+  exit 0
+fi
+
 # 書記のみ実行可能
 if [[ "${AGENT_ROLE:-}" != "scribe" ]]; then
   echo "ERROR: AGENT_ROLE が scribe である必要があります。このスクリプトは書記（scribe）のみが実行できます。" >&2
@@ -91,10 +121,7 @@ if ! command -v sqlite3 &>/dev/null; then
   exit 1
 fi
 
-# DB パス固定（引数・環境変数で上書きしない）
-PROJECT_ROOT="${PROJECT_ROOT:-.}"
-WORKFLOW_DIR="${WORKFLOW_DIR:-.workflow}"
-WF_DB="${PROJECT_ROOT}/${WORKFLOW_DIR}/workflow.db"
+# DB パス固定（引数・環境変数で上書きしない）。WF_DB はスクリプト冒頭で定義済み。
 
 # スキーマ正本（ledger/schema.sql）の解決。本スクリプトは .agents/scripts/ 配下にある。
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -337,6 +364,11 @@ if [[ -n "$HAS_NEW_SCHEMA" ]]; then
   E_DP="$(escape_sql "$DOCUMENT_PATH")"
   E_CF="$(escape_sql "$CHANGED_FILES_JSON")"
   E_SUM="$(escape_sql "$SUMMARY")"
+  # prev_hash 自動連結: 明示 PREV_HASH 未指定時のみ、flock 取得後・INSERT 直前に現 head を取得して
+  # 連結する（明示指定時は上書きしない＝後方互換）。head 不在（空 DB 初回）は空のまま→NULLIF で NULL。
+  if [[ -z "${PREV_HASH//[[:space:]]/}" ]]; then
+    PREV_HASH="$(resolve_head_hash)"
+  fi
   E_PH="$(escape_sql "$PREV_HASH")"
   ENTRY_HASH="$(gen_entry_hash "$ENTRY_ID" "$PARENT_ENTRY_ID" "$DOCUMENT_ID" "$TS_UTC" "$ACTOR_ROLE" "$DELEGATED_BY_ROLE" "$COMMAND" "$ISSUE_ID" "$REVIEW_ID" "$ISSUE_PATH" "$REVIEW_PATH" "$CHANGED_FILES_JSON" "$SUMMARY" "$DOD_MET")"
   E_EH="$(escape_sql "$ENTRY_HASH")"
