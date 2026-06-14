@@ -9,7 +9,7 @@ document_id: "f3c9b1a2-7e64-4d05-9b18-2a6c0e4f7d31"
 **最終更新**: 2026 年 06 月 15 日
 
 > **重要**: 本ドキュメントは生きているドキュメントとして扱い、実装内容と常に同期させる。
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
 > **レビュー深度**: standard（中）。変更規模は文書整合（README/DESIGN/SETUP）＋ audit.sh の走査リスト化・自己テスト追加。
 
 ---
@@ -272,9 +272,9 @@ pie title テスト網羅（本 issue 範囲）
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
-- [.agents/enforcement/README.md](../../../../.agents/enforcement/README.md) / [DESIGN.md](../../../../.agents/enforcement/DESIGN.md) / [ci/audit.sh](../../../../.agents/enforcement/ci/audit.sh) / [claude/PreToolUse.sh](../../../../.agents/enforcement/claude/PreToolUse.sh)
-- [.workflow/templates/github/scripts/subagent-guard.sh](../../../../.workflow/templates/github/scripts/subagent-guard.sh)
-- [.agents/scripts/test/test-audit.sh](../../../../.agents/scripts/test/test-audit.sh) / [test-pretooluse-hook.sh](../../../../.agents/scripts/test/test-pretooluse-hook.sh)
+- [.agents/enforcement/README.md](../../../../../.agents/enforcement/README.md) / [DESIGN.md](../../../../../.agents/enforcement/DESIGN.md) / [ci/audit.sh](../../../../../.agents/enforcement/ci/audit.sh) / [claude/PreToolUse.sh](../../../../../.agents/enforcement/claude/PreToolUse.sh)
+- [.workflow/templates/github/scripts/subagent-guard.sh](../../../../../.workflow/templates/github/scripts/subagent-guard.sh)
+- [.agents/scripts/test/test-audit.sh](../../../../../.agents/scripts/test/test-audit.sh) / [test-pretooluse-hook.sh](../../../../../.agents/scripts/test/test-pretooluse-hook.sh)
 
 ---
 

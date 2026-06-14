@@ -6,11 +6,11 @@ document_id: "b7f4c1a9-6e23-4d18-9a05-2f8c7b1e4d60"
 
 **プロジェクト名**: 既存 close 配下の健全化
 **作成日**: 2026 年 06 月 15 日
-**最終更新**: 2026 年 06 月 15 日
+**最終更新**: 2026 年 06 月 15 日（追補: 指摘1 #17 close ガードの basename 限定漏れを是正・クローズ）
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。
 >
-> **必須**: 本レビューは [`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md) を参照。**レビュー深度: standard**（既存スクリプト 1 ファイル内へのガード追加＋証跡内リンクの機械的補正。判定ロジックの新規追加ではなくスコープ調整が中心）。
+> **必須**: 本レビューは [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) を参照。**レビュー深度: standard**（既存スクリプト 1 ファイル内へのガード追加＋証跡内リンクの機械的補正。判定ロジックの新規追加ではなくスコープ調整が中心）。
 
 ---
 
@@ -48,9 +48,9 @@ document_id: "b7f4c1a9-6e23-4d18-9a05-2f8c7b1e4d60"
 
 #### タスク 2: audit.sh の close スコープ修正
 
-- **実装内容**: `audit.sh` の #2b（:209 付近）・#7（:300 付近）・#3（:240 付近）・#9（:353 付近）・#20（:608 付近）の各ループ本体に `[[ "$path" == *"/close/"* ]] && continue`（#2b はコンテナ末尾 `/close` も対象）を追加。#17（`check_verify_parent_command` :478–504）は close 配下に実在する issue 名集合を `find` で作り、offending 行の basename が当該集合に属する場合に除外。各ガードに `#29`（audit.sh:747 の `*/close/*` 除外）を踏襲する旨のコメントを付与。
+- **実装内容**: `audit.sh` の #2b（:209 付近）・#7（:300 付近）・#3（:240 付近）・#9（:353 付近）・#20（:608 付近）の各ループ本体に `[[ "$path" == *"/close/"* ]] && continue`（#2b はコンテナ末尾 `/close` も対象）を追加。#17（`check_verify_parent_command`）は close 配下に実在する issue 名集合を `find` で作り、offending 行の issue_path を除外。各ガードに `#29`（audit.sh:747 の `*/close/*` 除外）を踏襲する旨のコメントを付与。
 - **変更ファイル**: `.agents/enforcement/ci/audit.sh`。
-- **確認事項**: close 不在の汎用消費者ではガードが no-op（後方互換）。DB は読み取りのみ。**確認結果: OK（ただし #17 に basename 限定のガード漏れあり。§4.2 指摘1）**。
+- **確認事項**: close 不在の汎用消費者ではガードが no-op（後方互換）。DB は読み取りのみ。**確認結果: OK（指摘1〔#17 basename 限定漏れ〕は §15 追補で是正済み。現行 #17 は (1)パスに `/close/` を含むか (2)issue_path のいずれかのパスコンポーネントが close 在籍 issue 名に一致するか、で除外する正規化に改めた）**。
 
 ---
 
@@ -126,10 +126,10 @@ pie title 受け入れ基準カバレッジ
 
 - **重要度**: 中（設計の SC-2 評価文脈〔DB 非同梱 HEAD アーカイブ〕では顕在化せず受け入れ基準は充足。DB 同梱の実運用 audit では close 由来 ERROR が残る）
 - **指摘内容**: `check_verify_parent_command`（audit.sh:493–498）は offending 行の `issue_path` を `basename` で close 在籍 issue 名集合と照合する。しかし workflow.db には `issue_path` が `docs/maintainer/workflow/<issue>/04_review.md`（ディレクトリではなくファイル）で記録された行があり、その basename は `04_review.md` となって close 集合に一致せず、close 在籍 issue の行であるにもかかわらずカウントされ #17 ERROR を発火する。実測で `配布とパッケージ構成の再設計/04_review.md` の 1 行が該当。
-- **対応状況**: 未対応（本レビューで検出）。
-- **対応方法（推奨）**: basename 比較の前に末尾の `/0[0-4]_*.md` 等のファイル名を剥がして issue ディレクトリ名へ正規化する、または `issue_path` のいずれかのパスコンポーネントが close 在籍 issue 名集合に属するかを判定する。設計 02 §3.2.5 の「issue 名（basename）一致」前提が、ファイル粒度で記録された issue_path を見落としていたことに起因する。**証跡不変原則・DB 読み取り専用は維持したまま bash 側の判定強化のみで是正可能**。
+- **対応状況**: **対応済み（§15 追補で是正）**。basename 限定の照合を廃し、`issue_path` のいずれかのパスコンポーネントが close 在籍 issue 名集合に属するか（または `/close/` を含むか）で除外する正規化に改めた。設計 02 §3.2.5 の「issue 名（basename）一致」前提を、ファイル粒度で記録された issue_path も救済するパスコンポーネント一致へ拡張した。**証跡不変原則・DB 読み取り専用は維持**。
+- **対応方法（実施）**: §15 追補参照。`.agents/enforcement/ci/audit.sh` の `check_verify_parent_command` を修正。
 
-> **判定**: 指摘1 は本 issue の受け入れ基準（設計が定めた SC-2 評価文脈）を**阻害しない**ため close をブロックしないが、DB 同梱の実 audit で close 完了 issue が依然 in-progress 扱いされる残課題であり、追補 issue として是正することを推奨する。
+> **判定（更新）**: 指摘1 は §15 追補で**クローズ**。DB 同梱の実 audit でも close 完了 issue 由来の #17 ERROR は発火しないことを実測確認（OLD audit.sh では同一 DB で #17 発火 → 修正版では非発火）。close 外の正当な #17 は維持される（過剰除外なし）ことも回帰テストで確認。
 
 #### 指摘 2: なし（その他の close ガード #2b/#3/#7/#9/#20 は実測で close 由来 FAIL/ERROR を発火せず正しく機能）
 
@@ -223,9 +223,9 @@ pie title 受け入れ基準カバレッジ
 
 ### 10.1 発見された課題
 
-- **課題 1**: #17 close ガードの basename 限定漏れ（指摘1）。
+- **課題 1（解決済み）**: #17 close ガードの basename 限定漏れ（指摘1）。
   - **影響範囲**: DB 同梱の実 audit 実行時、close 完了 issue の verify-and-close 行（issue_path がファイル粒度で記録）が in-progress 扱いされ #17 ERROR を残す。
-  - **対応方法**: bash 側で issue_path を issue ディレクトリ名へ正規化、またはパスコンポーネント一致で close 判定（証跡不変・DB 読み取り専用を維持）。追補 issue を推奨。
+  - **対応状況**: **§15 追補で是正済み**。bash 側でパスコンポーネント一致による close 判定へ正規化（証跡不変・DB 読み取り専用を維持）。
 
 ### 10.2 改善提案
 
@@ -253,7 +253,7 @@ pie title 受け入れ基準カバレッジ
 - **実装品質**: 良好（最小変更・前例踏襲・冪等。指摘1 を残課題として記録）。
 - **テスト品質**: 良好（回帰 54 件全 PASS・SC-1〜SC-4 を tmp 隔離で実測・本番 DB 非破壊を実測）。
 - **ドキュメント品質**: 良好（00〜03 と実装が整合）。
-- **総合評価**: **合格（条件付き）**。本 issue の受け入れ基準 SC-1〜SC-4 はすべて充足。指摘1 は受け入れ基準を阻害しないが、DB 同梱の実 audit における close 完了 issue の #17 残課題として追補是正を推奨する。
+- **総合評価**: **合格**。本 issue の受け入れ基準 SC-1〜SC-4 はすべて充足。指摘1（#17 basename 限定漏れ）は §15 追補で是正・クローズし、DB 同梱の実 audit でも close 完了 issue 由来の #17 ERROR が発火しないことを実測確認した。残課題なし（在進行 issue の #20 等は設計 §2.1.2 が明示する本 issue 範囲外の既存問題）。
 
 ### 12.2 承認状況
 
@@ -274,9 +274,9 @@ pie title 受け入れ基準カバレッジ
 
 ### 13.2 その他の参考資料
 
-- [.agents/enforcement/ci/audit.sh](../../../../.agents/enforcement/ci/audit.sh)（#2b/#3/#7/#9/#17/#20/#29 判定）
-- [.agents/workflow/PHASES.md](../../../../.agents/workflow/PHASES.md)（証跡不変原則）
-- [.agents-project/自己拡張ワークフロー.md](../../../../.agents-project/自己拡張ワークフロー.md)（close 移動時の相対リンク補正・tmp 隔離）
+- [.agents/enforcement/ci/audit.sh](../../../../../.agents/enforcement/ci/audit.sh)（#2b/#3/#7/#9/#17/#20/#29 判定）
+- [.agents/workflow/PHASES.md](../../../../../.agents/workflow/PHASES.md)（証跡不変原則）
+- [.agents-project/自己拡張ワークフロー.md](../../../../../.agents-project/自己拡張ワークフロー.md)（close 移動時の相対リンク補正・tmp 隔離）
 
 ---
 
@@ -288,6 +288,36 @@ pie title 受け入れ基準カバレッジ
 
 ---
 
-## 15. 次のステップ
+## 15. 追補（指摘1 #17 close ガード basename 限定漏れの是正）
 
-このレビュー書の承認後、issue 完了（close）へ進む。指摘1 は追補 issue として起票を推奨。
+**実施日**: 2026-06-15　**担当**: implement-feature 追補 + verify-and-close サブエージェント
+
+### 15.1 実施内容（修正）
+
+- **対象**: `.agents/enforcement/ci/audit.sh` の `check_verify_parent_command`（#17）。
+- **修正前**: offending 行の `issue_path` を `basename` で close 在籍 issue 名集合と照合（ディレクトリ粒度・末尾スラッシュ無しは救済できるが、ファイル粒度 `.../<issue>/04_review.md` は basename が `04_review.md` となり救済できない）。
+- **修正後**: basename 照合を廃し、次の正規化で除外する（#2b/#3/#7/#9/#20 の `*/close/*` 文字列照合ガードと一貫）。
+  1. `issue_path` が `/close/` を含む、または末尾が `/close` なら除外（close 配下記録）。
+  2. `issue_path` の**いずれかのパスコンポーネント**が close 在籍 issue 名集合（`find docs/maintainer/workflow/close -mindepth 1 -maxdepth 1 -type d` の basename）に一致すれば除外（close 移動前パスをディレクトリ／ファイルいずれの粒度で記録した行も救済）。
+- **DB は読み取りのみ・schema/行は不変**。close 在籍 issue 名はタイムスタンプ付きで一意のため、close 外の進行中 issue を誤って除外しない（過剰除外なし）。
+
+### 15.2 再検証結果（tmp 隔離）
+
+| 検証 | 方法 | 結果 |
+| ---- | ---- | ---- |
+| 回帰スイート | `test-audit.sh` / `test-write-workflow-log-prevhash.sh` / `test-pretooluse-hook.sh` をリポルートから内部 tmp 隔離で実行 | **全 PASS**（8 + 16 + 32 = 56・FAIL 0）。`test-audit.sh` に本ケースの回帰アサーション 2 件を追加（ファイル粒度 close issue_path の非発火・close 外の正当 #17 維持） |
+| DB 込み 実 audit | commit 相当スナップショット（`git stash create` ＋未追跡 docs 新規ファイル）＋ `workflow.db` 読み取りコピーを tmp に同梱し `bash audit.sh .` | **#17 ERROR は close 完了 issue 起因では非発火**。修正前（HEAD）audit.sh は同一 DB・同一ツリーで `配布とパッケージ構成の再設計/04_review.md` 行により #17 ERROR を発火 → 修正版では非発火を実測確認 |
+| 過剰除外なし | 回帰テスト 4b（close 在籍名に一致しない in-progress issue の orphan verify-and-close 行） | **#17 ERROR を維持**（close 外の正当な違反は握り潰さない） |
+| 本番 DB 非破壊 | 検証前後の行数・mtime | **不変**（49 行・mtime 不変） |
+
+> DB 込み audit の残 FAIL/ERROR（#7 TODO/FIXME・#20 document_id）はいずれも **close 外の進行中（未ログ）issue 起因**で、設計 02 §2.1.2・§6.2 が明示する本 issue の範囲外。close ガードでは解消しない既存問題であり、#17 是正とは独立。
+
+### 15.3 指摘1 のクローズ
+
+指摘1（#17 close ガードの basename 限定漏れ）は本追補で**クローズ**。受け入れ基準（SC-1〜SC-4）は引き続き充足し、DB 同梱の実 audit における close 完了 issue の #17 残課題も解消した。
+
+---
+
+## 16. 次のステップ
+
+このレビュー書の承認後、issue 完了（close）へ進む。指摘1 は §15 追補で是正・クローズ済み。

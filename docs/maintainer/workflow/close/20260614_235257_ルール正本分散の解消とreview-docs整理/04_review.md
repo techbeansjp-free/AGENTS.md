@@ -8,8 +8,8 @@ document_id: "175a91d9-58c2-48e8-bbc3-52ed3d45f860"
 **作成日**: 2026 年 06 月 15 日
 **最終更新**: 2026 年 06 月 15 日
 
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../.agents/CONCEPTS.md#用語規約) を参照。
-> **必須**: 本レビューは [`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md) に従う。レビュー深度は **standard**（仕様ドキュメントの重複削除＋相互参照化。実行コード無し）。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **必須**: 本レビューは [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) に従う。レビュー深度は **standard**（仕様ドキュメントの重複削除＋相互参照化。実行コード無し）。
 
 ---
 
@@ -129,7 +129,7 @@ document_id: "175a91d9-58c2-48e8-bbc3-52ed3d45f860"
 
 ### 9.1 設計の確認
 
-- **設計原則の準拠**: 「単一責務 + 参照集約（Single Source of Truth）」（02 §2.2）に準拠。完了定義（レビュー運用ルール）は RULES 層の責務を持つ PHASES.md に置き、SKILLS 層の run_command.md には本文を置かない方針が実装に反映されている。[META_LAYER §責務境界](../../../../.agents/META_LAYER.md) の「skill に rule を書く」禁止に整合。
+- **設計原則の準拠**: 「単一責務 + 参照集約（Single Source of Truth）」（02 §2.2）に準拠。完了定義（レビュー運用ルール）は RULES 層の責務を持つ PHASES.md に置き、SKILLS 層の run_command.md には本文を置かない方針が実装に反映されている。[META_LAYER §責務境界](../../../../../.agents/META_LAYER.md) の「skill に rule を書く」禁止に整合。
 - **命名規則・構成**: 既存ファイルの本文削除＋相互参照のみ。新規 .md 追加なし（SC-5）。
 
 ### 9.2 境界・依存の確認
@@ -198,10 +198,10 @@ document_id: "175a91d9-58c2-48e8-bbc3-52ed3d45f860"
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
-- [.agents/workflow/PHASES.md](../../../../.agents/workflow/PHASES.md) / [.agents/skills/agent/run_command.md](../../../../.agents/skills/agent/run_command.md)（M1）
-- [AGENTS.md](../../../../AGENTS.md) / [.agents/GETTING_STARTED.md](../../../../.agents/GETTING_STARTED.md)（M3）
-- [.agents/workflow/PHASE_COMMAND_MAP.md](../../../../.agents/workflow/PHASE_COMMAND_MAP.md) / [.agents/commands/review-docs.md](../../../../.agents/commands/review-docs.md) / [.agents/commands/create-pr-review-issue.md](../../../../.agents/commands/create-pr-review-issue.md)（M4）
-- [.agents/enforcement/ci/audit.sh](../../../../.agents/enforcement/ci/audit.sh)
+- [.agents/workflow/PHASES.md](../../../../../.agents/workflow/PHASES.md) / [.agents/skills/agent/run_command.md](../../../../../.agents/skills/agent/run_command.md)（M1）
+- [AGENTS.md](../../../../../AGENTS.md) / [.agents/GETTING_STARTED.md](../../../../../.agents/GETTING_STARTED.md)（M3）
+- [.agents/workflow/PHASE_COMMAND_MAP.md](../../../../../.agents/workflow/PHASE_COMMAND_MAP.md) / [.agents/commands/review-docs.md](../../../../../.agents/commands/review-docs.md) / [.agents/commands/create-pr-review-issue.md](../../../../../.agents/commands/create-pr-review-issue.md)（M4）
+- [.agents/enforcement/ci/audit.sh](../../../../../.agents/enforcement/ci/audit.sh)
 
 ---
 

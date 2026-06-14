@@ -10,9 +10,9 @@ document_id: "b7e4f2a1-9c63-4d50-a82f-1e6b0d4c7f93"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。
 >
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
 >
-> **必須**: レビュー実施時は [`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md) を参照。本レビュー深度は **standard**（記述・ルール是正・close 配下 19 ファイルのリンク補正という中規模変更のため）。
+> **必須**: レビュー実施時は [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) を参照。本レビュー深度は **standard**（記述・ルール是正・close 配下 19 ファイルのリンク補正という中規模変更のため）。
 
 ---
 
@@ -296,9 +296,9 @@ review-architecture の結果。
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
-- [.agents-project/自己拡張ワークフロー.md](../../../../.agents-project/自己拡張ワークフロー.md)
-- [.agents/enforcement/ci/audit.sh](../../../../.agents/enforcement/ci/audit.sh)（#28/#29。参照のみ・不変）
-- [.agents/REVIEW_RULE.md](../../../../.agents/REVIEW_RULE.md)
+- [.agents-project/自己拡張ワークフロー.md](../../../../../.agents-project/自己拡張ワークフロー.md)
+- [.agents/enforcement/ci/audit.sh](../../../../../.agents/enforcement/ci/audit.sh)（#28/#29。参照のみ・不変）
+- [.agents/REVIEW_RULE.md](../../../../../.agents/REVIEW_RULE.md)
 
 ---
 
