@@ -6,7 +6,7 @@
   "bin": { "agents-md": "bin/agents-md.js" },
   "files": [".agents/", "AGENTS.md", "CLAUDE.md", ".workflow/templates/", "bin/", "README.md"],
   "engines": { "node": ">=20" },
-  "scripts": { "build:claude": "bash .agents/scripts/build-plugin-claude.sh" },
+  "scripts": { "build:claude": "bash .agents/scripts/build-plugin-claude.sh", "test": "bash .agents/scripts/test/run-all.sh" },
   "keywords": ["agents", "ai", "workflow", "claude-code", "cursor", "skills", "agents-md"],
   "license": "MIT",
   "author": { "name": "TechBeans Inc.", "url": "https://github.com/techbeansjp-free" },

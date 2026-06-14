@@ -140,15 +140,15 @@ Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コ�
 
 #### リリース手順（メンテナ向け）
 
-publish と marketplace 公開は **`vX.Y.Z` タグの push** で CI（[.github/workflows/release.yml](.github/workflows/release.yml)）が自動実行する。
+> **詳細手順の正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)。** 前提確認 → version 同期 → pack 同梱物検査 → `npm publish --dry-run` →（ユーザー承認後）タグ push による CI publish の各ステップ（実行コマンドと期待結果つき）はそちらを参照する。本節は要約のみとし詳細を重複させない。
+
+要約: publish と marketplace 公開は **`vX.Y.Z` タグの push** で CI（[.github/workflows/release.yml](.github/workflows/release.yml)）が自動実行する。
 
 1. `package.json` と `plugin.json` の version を揃える（`bash .agents/scripts/sync-version.sh --write`）。
-2. version と一致するタグを push する（例: `git tag v0.1.0 && git push origin v0.1.0`）。
-3. CI が次を行う:
-   - **検証 → npm publish**: version 同期検証（タグ＝package.json＝plugin.json）と配布物リーク検査（`verify-npm-pack.sh`）を実行し、`@techbeansjp-free/agents-md` を public publish する。
-   - **marketplace 公開**: 正本 `.agents/` から生成物を build し、`release/marketplace` ブランチへ commit する。
+2. 公開前検証（`verify-npm-pack.sh` の pack 同梱物検査・`npm publish --dry-run`）を通す。
+3. version と一致するタグを push する（例: `git tag v0.1.0 && git push origin v0.1.0`）。CI が version 同期検証・リーク検査・public publish と marketplace 公開（`release/marketplace`）を行う。
 
-> **要 secret**: npm publish は `NPM_TOKEN` secret が必要。未設定の場合 publish step は skip される（marketplace 公開は影響を受けない）。実 publish を発火させるには、リポジトリの Secrets に `NPM_TOKEN`（npmjs の Automation トークン）を設定してから `v*` タグを push する。
+> **要 secret**: npm publish は `NPM_TOKEN` secret が必要。未設定の場合 publish step は skip される（marketplace 公開は影響を受けない）。実 publish を発火させるには、リポジトリの Secrets に `NPM_TOKEN`（npmjs の Automation トークン）を設定してから `v*` タグを push する。実 publish はユーザー承認前提（詳細は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)）。
 
 ### 3. ローカル配備（リポを直接置く場合）
 
@@ -161,6 +161,15 @@ bash .agents/scripts/setup.sh /path/to/my-project   # 引数省略時はカレ�
 ### 動作確認
 
 プロジェクトルートに `AGENTS.md` と `.agents/` が存在することを確認する。詳細は [.agents/SETUP.md](.agents/SETUP.md) のスモークテストを参照。
+
+本リポジトリ（パッケージ正本／自己拡張）でテストを回す場合は、一括 runner で 1 コマンド実行できる。
+
+```bash
+npm test                                  # = bash .agents/scripts/test/run-all.sh
+bash .agents/scripts/test/run-all.sh      # npm を使わない場合
+```
+
+全テストを順に実行し、末尾サマリ（`合計=N PASS=p FAIL=f SKIP=s`）と終了コード（全成功で 0・1 件以上 FAIL で非 0）を返す。個別実行・前提依存マトリクス（bash/git/node/tar/sqlite3）・SKIP 規約は [.agents/SETUP.md](.agents/SETUP.md) §テスト実行 を参照。
 
 ---
 

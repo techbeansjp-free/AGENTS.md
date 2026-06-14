@@ -46,6 +46,13 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq sqlite3
 
+      # kcov（bash カバレッジ計測器）を導入する。ubuntu-latest で apt 導入可。
+      # 計測ロジックは .agents/scripts/test/coverage-check.sh に集約（CI とローカルで二重化しない）。
+      # 正本: docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md, 03_実装計画.md
+      - name: Install kcov
+        run: |
+          sudo apt-get install -y -qq kcov
+
       # 1) シェルスクリプト構文チェック
       - name: Shell syntax check (bash -n)
         run: |
@@ -111,10 +118,26 @@ jobs:
       # 6) install/uninstall・カプセル化 E2E（実際に使うユースケース/シナリオで配備・除去を検証）
       #    隔離した一時ディレクトリ（mktemp -d ＋ git archive HEAD）で実行し、開発リポを破壊しない。
       #    検証ロジックは .agents/scripts/test/e2e-install-uninstall.sh に集約（CI とローカルで二重化しない）。
+      #
+      #    ロジック二重化回避（方針 A・最小変更）: ローカルの一括 runner（.agents/scripts/test/run-all.sh）も
+      #    本 E2E スクリプトを「呼ぶだけ」で、テスト本体は e2e-install-uninstall.sh の単一正本に集約する。
+      #    CI と runner は同一テスト本体を別実装で持たない（CI は bash <script> を呼ぶだけ）。
+      #    CI に run-all.sh を呼ぶ step は追加しない（追加すると本 E2E step と二重実行になるため／02_設計 §3.3）。
+      #    schema/pack/version/audit の各 step はテストスクリプトと別系統の検証であり runner には取り込まない。
       - name: Install/uninstall & encapsulation E2E
         run: |
           set -e
           bash .agents/scripts/test/e2e-install-uninstall.sh
+
+      # 6.5) カバレッジ計測・閾値矯正（kcov ラップ＋fail-under 判定）
+      #    テスト一括 runner（run-all.sh）を kcov でラップ計測し、cobertura を後処理して
+      #    fail-under（既定 100）未達なら fail させる。計測ロジックは coverage-check.sh に集約
+      #    （CI とローカルで二重化しない）。出力（.coverage/）は .gitignore 済みで step #3/#4 を破らない。
+      #    除外は kcov --exclude-path（A）＋ .agents-project/COVERAGE_EXCEPTIONS.md（B）の二重化。
+      - name: Coverage check (coverage-check.sh)
+        run: |
+          set -e
+          bash .agents/scripts/test/coverage-check.sh
 
       # 7) enforcement audit（このリポでは適用範囲外のため失敗させない）
       #    本リポの issue は docs/maintainer/workflow 配下で、audit.sh は .workflow を前提とするため

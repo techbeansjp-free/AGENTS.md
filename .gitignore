@@ -19,5 +19,11 @@
 # marketplace 配布はリリース時に CI が build → 専用ブランチ/タグへ commit（案A、main は生成物ゼロ）。
 # 正本: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/02_設計.md, 03_実装計画.md
 /.adapters/
+# カバレッジ計測の生成物（kcov 出力先。cobertura XML / HTML レポート・中間生成物）。
+# coverage-check.sh が COV_OUT（既定 .coverage/）に出力する。配布物・追跡対象ではない
+# （self-enforce.yml #3 差分ゼロ検証・#4 npm pack リーク検査を破らないため無視する）。
+# 正本: docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md, 03_実装計画.md
+/.coverage/
+
 # memoは基本的にGit管理外。必要に応じて個別に追跡する（例: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/01_背景と目的.md）。
 **/memo/*

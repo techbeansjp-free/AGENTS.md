@@ -182,6 +182,53 @@ npx @techbeansjp-free/agents-md uninstall --purge --yes  # workflow.db 等の証
 
 ---
 
+## テスト実行（ローカルで全テストを 1 コマンド）
+
+本リポジトリ（パッケージ正本／自己拡張）には `.agents/scripts/test/` 配下に複数のテストスクリプトがあり、**一括 runner で 1 コマンド実行**できる。検証ロジックは各テストスクリプトに集約（single source of truth）し、runner は呼ぶだけのラッパに徹する（CI とローカルで二重化しない）。
+
+### 一括実行
+
+```bash
+npm test                                  # = bash .agents/scripts/test/run-all.sh
+bash .agents/scripts/test/run-all.sh      # npm を使わない場合
+```
+
+- 全テストを順に実行し、末尾に `合計=N PASS=p FAIL=f SKIP=s` のサマリを出力する。
+- **終了コード契約**: すべて PASS/SKIP（FAIL=0）なら `exit 0`、1 件以上 FAIL なら `exit 1`（`npm test` の終了コードに伝播する）。
+- **SKIP は失敗扱いにしない**。必須依存が欠けたテストは実行せず `[SKIP] <name>: 必須依存 <tool> なし` と案内して継続する（runner はクラッシュしない）。
+
+### 個別実行
+
+runner 導入後も各テストを従来どおり直接実行できる（呼び出し方・終了コードは不変）。
+
+```bash
+bash .agents/scripts/test/test-audit.sh
+bash .agents/scripts/test/test-pretooluse-hook.sh
+bash .agents/scripts/test/test-write-workflow-log-prevhash.sh
+bash .agents/scripts/test/e2e-install-uninstall.sh
+bash .agents/scripts/test/test-run-all.sh          # runner 自体のテスト
+```
+
+### 前提依存マトリクス
+
+実行系の前提は **bash**。テストにより `git` / `node` / `tar` / `sqlite3` を追加で要する。**任意依存が無い環境**でも runner はクラッシュせず、当該テストを SKIP として案内し残りを実行する。
+
+| テスト | 必須依存（runner が事前確認） | 任意依存（スクリプト内で SKIP） |
+|--------|--------------------------------|----------------------------------|
+| `test-run-all.sh` | bash | - |
+| `test-audit.sh` | bash | sqlite3 / git（無くても SKIP→PASS） |
+| `test-pretooluse-hook.sh` | bash・git・tar | jq（無い系統も検証） |
+| `test-write-workflow-log-prevhash.sh` | bash・sqlite3 | - |
+| `e2e-install-uninstall.sh` | bash・git・node・tar | sqlite3（あれば DB 検証も実施） |
+
+> 依存の正本は各スクリプト冒頭の「前提」記載。終了コード規約（個別テスト: 0=PASS / 2=SKIP＝必須依存欠如 / その他=FAIL）と runner の I/F の正本は `docs/maintainer/workflow/20260615_054806_テスト実行基盤の整備/02_設計.md` §5。
+
+### tmp 隔離（破壊禁止）
+
+各テストは `mktemp -d`（＋ `git archive HEAD`）でクリーン環境を再現して実行し、開発リポの `.agents/` `.claude/` `.cursor/` `.workflow/` `workflow.db` を変更・破壊しない。runner 自身も開発リポへ書き込まない（隔離は各スクリプトの責務）。
+
+---
+
 ## スモークテスト（セットアップ後）
 
 本セクションは簡易確認。**正式な導入完了確認は「導入完了チェックリスト」を参照**すること。

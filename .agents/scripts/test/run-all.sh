@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# run-all.sh — テスト一括 runner（既存テストスクリプトを順に呼ぶ薄いラッパ）。
+#
+# ユースケース（このスクリプト全体）:
+#   本リポジトリの開発者（自己拡張・ドッグフーディングを行う保守者）が、ローカルで全テストを
+#   1 コマンドで実行し結果を集約して確認できるようにする。各テストの検証ロジックは再実装せず
+#   （single source of truth＝各テストスクリプト）、本 runner は「列挙・必須依存の事前確認・
+#   逐次呼び出し・終了コード集約・サマリ出力・全体終了コード決定」のみを担う。
+#
+# 方針（破壊禁止・非破壊契約）:
+#   - runner は開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を読み書き・変更しない。
+#     tmp 隔離・破壊的操作の安全性は各テストスクリプトの責務（02 §2.1.2）。
+#   - 個別テスト呼び出しは if/|| でラップし、非 0 でも runner が即終了しない（set -e 由来の中断を避ける）。
+#
+# 使い方:
+#   bash .agents/scripts/test/run-all.sh        # リポジトリルートで実行
+#   npm test                                    # 同上（package.json scripts.test に配線）
+#   個別実行は従来どおり: bash .agents/scripts/test/<name>.sh
+#
+# 前提（依存マトリクス。正本は各スクリプト冒頭「前提」）:
+#   | テスト                              | runner が事前確認する必須依存 |
+#   | test-run-all.sh                     | bash のみ（runner 自体の単体/結合テスト・stub は tmp 隔離） |
+#   | test-coverage-check.sh              | bash のみ（coverage-check.sh の判定/SKIP は擬似 cobertura で tmp 隔離。kcov ラップ結合は kcov 無で SKIP） |
+#   | test-audit.sh                       | bash のみ（sqlite3/git はスクリプト内で任意 SKIP→PASS） |
+#   | test-pretooluse-hook.sh             | bash・git・tar（jq はスクリプト内で任意系統検証） |
+#   | test-write-workflow-log-prevhash.sh | bash・sqlite3 |
+#   | e2e-install-uninstall.sh            | bash・git・node・tar（sqlite3 はスクリプト内で任意 SKIP） |
+#
+# I/F（02_設計 §5 の正本に従う・後続のカバレッジ issue が相乗りする）:
+#   - 終了コード契約: 全テストが PASS/SKIP で FAIL=0 のとき exit 0、1 件以上 FAIL なら exit 1。
+#   - 個別テストの終了コード解釈: 0→PASS / 2→SKIP（必須依存欠如の既存規約）/ その他→FAIL。
+#   - SKIP は失敗扱いにしない（終了コードに影響しない）。
+#   - テスト一覧の正本は本ファイルの TESTS 配列 1 箇所（追加・削除はここのみ変更）。
+#   - テスト容易性: 環境変数 RUN_ALL_TESTS_OVERRIDE に "name|path|deps;..." を渡すと一覧を差し替えられる
+#     （runner 自体のテスト＝test-run-all.sh が stub を tmp 隔離で並べて検証するための入口）。
+# 参照:
+#   docs/maintainer/workflow/20260615_054806_テスト実行基盤の整備/02_設計.md（§5 runner I/F）, 03_実装計画.md（T1）
+#   .agents/TEST_BDD_FORMAT.md
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ---- テスト一覧の正本（順序付き）------------------------------------------------
+# 各要素は "テスト名|スクリプトパス|必須依存(空白区切り)"。
+# スクリプトパスが絶対でなければ SCRIPT_DIR 基準とみなす。実行順は固定。
+default_tests() {
+  cat <<'EOF'
+test-run-all|test-run-all.sh|bash
+test-coverage-check|test-coverage-check.sh|bash
+test-audit|test-audit.sh|bash
+test-pretooluse-hook|test-pretooluse-hook.sh|bash git tar
+test-write-workflow-log-prevhash|test-write-workflow-log-prevhash.sh|bash sqlite3
+e2e-install-uninstall|e2e-install-uninstall.sh|bash git node tar
+EOF
+}
+
+# テスト一覧を行ベースで取得する。RUN_ALL_TESTS_OVERRIDE があれば ';' 区切りを改行に展開して使う
+# （runner 自体のテストが stub 一覧を注入するための入口。本番運用では未設定）。
+load_tests() {
+  if [[ -n "${RUN_ALL_TESTS_OVERRIDE:-}" ]]; then
+    printf '%s\n' "${RUN_ALL_TESTS_OVERRIDE//;/$'\n'}"
+  else
+    default_tests
+  fi
+}
+
+# ---- 集約状態 -----------------------------------------------------------------
+TOTAL=0
+PASS=0
+FAIL=0
+SKIP=0
+FAILED_NAMES=()
+
+# 必須依存がすべて存在するか確認する。欠けている最初のツール名を返す（存在すれば空）。
+missing_dep() {
+  local deps="$1" dep
+  for dep in $deps; do
+    command -v "$dep" >/dev/null 2>&1 || { printf '%s' "$dep"; return 0; }
+  done
+  return 0
+}
+
+# ---- メインループ -------------------------------------------------------------
+echo "== テスト一括実行 (run-all.sh) =="
+while IFS='|' read -r name path deps; do
+  # 空行・コメント行はスキップ
+  [[ -z "${name// }" ]] && continue
+  case "$name" in \#*) continue ;; esac
+
+  TOTAL=$((TOTAL+1))
+
+  # スクリプトパスの正規化（相対なら SCRIPT_DIR 基準）
+  local_script="$path"
+  case "$path" in /*) : ;; *) local_script="$SCRIPT_DIR/$path" ;; esac
+
+  # 必須依存の事前確認（不足時は実行せず SKIP・継続）
+  miss=""
+  for d in $deps; do
+    if ! command -v "$d" >/dev/null 2>&1; then miss="$d"; break; fi
+  done
+  if [[ -n "$miss" ]]; then
+    echo "[SKIP] $name: 必須依存 $miss なし"
+    SKIP=$((SKIP+1))
+    continue
+  fi
+
+  if [[ ! -f "$local_script" ]]; then
+    echo "[FAIL] $name: スクリプトが見つからない ($local_script)"
+    FAIL=$((FAIL+1))
+    FAILED_NAMES+=("$name")
+    continue
+  fi
+
+  echo "---- [RUN] $name ($path) ----"
+  code=0
+  bash "$local_script" || code=$?
+  case "$code" in
+    0)
+      echo "[PASS] $name"
+      PASS=$((PASS+1))
+      ;;
+    2)
+      echo "[SKIP] $name: 必須依存欠如 (exit 2)"
+      SKIP=$((SKIP+1))
+      ;;
+    *)
+      echo "[FAIL] $name (exit $code)"
+      FAIL=$((FAIL+1))
+      FAILED_NAMES+=("$name")
+      ;;
+  esac
+done < <(load_tests)
+
+# ---- サマリと全体終了コード ---------------------------------------------------
+echo "================================"
+echo "合計=$TOTAL PASS=$PASS FAIL=$FAIL SKIP=$SKIP"
+if (( FAIL > 0 )); then
+  echo "失敗: ${FAILED_NAMES[*]}"
+  exit 1
+fi
+exit 0
