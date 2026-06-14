@@ -10,9 +10,9 @@ document_id: "a085e1da-863f-4903-b0aa-f8330f9731a1"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座に更新する。
 >
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
 >
-> **必須**: レビュー実施時は [`.agents/REVIEW_RULE.md`](../../../.agents/REVIEW_RULE.md) を参照した。**レビュー深度: standard**（既存スクリプト 1 ファイル内の最小変更・改ざん検知価値に直結のため）。
+> **必須**: レビュー実施時は [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) を参照した。**レビュー深度: standard**（既存スクリプト 1 ファイル内の最小変更・改ざん検知価値に直結のため）。
 
 ---
 

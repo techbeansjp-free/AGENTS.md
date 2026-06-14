@@ -10,9 +10,9 @@ document_id: "4e2afb87-d61c-43c8-88d2-1b0873ff8e5a"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。
 >
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
 >
-> **必須**: レビュー実施時は [`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md) を参照。本レビューの深度は **standard**（中規模・ドキュメント正本への追記）。
+> **必須**: レビュー実施時は [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) を参照。本レビューの深度は **standard**（中規模・ドキュメント正本への追記）。
 
 ---
 
@@ -202,10 +202,10 @@ inference_only 単独依存の重要判断は無い（すべて existing_code �
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md)
-- [.agents/boot/CORE.md](../../../../.agents/boot/CORE.md)
-- [.agents/workflow/PHASES.md](../../../../.agents/workflow/PHASES.md)
-- [.agents-project/自己拡張ワークフロー.md](../../../../.agents-project/自己拡張ワークフロー.md)
-- [.agents/RULES.md](../../../../.agents/RULES.md)
+- [.agents/boot/CORE.md](../../../../../.agents/boot/CORE.md)
+- [.agents/workflow/PHASES.md](../../../../../.agents/workflow/PHASES.md)
+- [.agents-project/自己拡張ワークフロー.md](../../../../../.agents-project/自己拡張ワークフロー.md)
+- [.agents/RULES.md](../../../../../.agents/RULES.md)
 
 ---
 

@@ -11,7 +11,7 @@ document_id: "e5be3fa7-9765-4953-8274-fa39c61128bf"
 
 > **重要**: 本レビューは command **verify-and-close** の成果物。skill chain（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従う。
 >
-> **必須参照**: [`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md)、[`.agents/workflow/PHASES.md`](../../../../.agents/workflow/PHASES.md)。
+> **必須参照**: [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md)、[`.agents/workflow/PHASES.md`](../../../../../.agents/workflow/PHASES.md)。
 > **レビュー深度**: **standard**（中規模・限定スコープの是正 2 件。新規 SQL 正本ファイルとフレームワーク CI 1 本）。
 >
 > **evidence_source 凡例**: `test_output`（本レビューで再実行した結果）/ `existing_code`（実ファイル確認）/ `external_spec`（仕様文書）/ `inference_only`（推測）。**inference_only のみに依存する重要判断は承認しない。**
