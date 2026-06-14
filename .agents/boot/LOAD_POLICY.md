@@ -23,6 +23,9 @@
 | 単体 capability を使うとき | 該当 skills/{domain}/{capability}/（例: skills/requirements/write-bdd/） |
 | フェーズ→どの command を起動するか | workflow/PHASES.md と commands/ 一覧。オーケストは agents/README.md |
 | システム仕様書（docs/）の更新・レビュー時 | RULES.md（システム仕様書）→ DOCS_RULES.md。issue は立てず docs/00_review/ に記載する。 |
+| **実装・コメント記述時** | CODE_COMMENT_RULES.md |
+| **レビュー実施時** | REVIEW_DUAL_LENS.md |
+| **サブ委譲のモデル選定時** | MODEL_SELECTION.md |
 
 ---
 

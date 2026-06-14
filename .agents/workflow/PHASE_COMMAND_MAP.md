@@ -22,6 +22,8 @@
 
 **証跡の原則**: レビュー phase の証跡は本則として workflow.db に記録する。memo は過渡的・例外運用のみ（scribe/CONTRACT 参照）。
 
+**補助手順（auxiliary）— [review-docs](../commands/review-docs.md) は本表に載せない**: [review-docs](../commands/review-docs.md)（実装前ドキュメントレビュー）は特定 phase に対応しない横断的な**補助手順**であり、phase→command の選択対象ではない。`create-pr-review-issue` の内部 step（対応方針の監査）や、ユーザーの「ドキュメントレビューして」依頼から呼ばれる。よって本表に行を持たない。後述の「**本表にない command の起動は禁止**」は **phase からの選択経路に関する禁止**（phase 判定後に表外 command を勝手に選ぶな）であり、**補助手順の呼び出し（別 command の step・ドキュメントレビュー依頼からの起動）はこの禁止の対象外**とする。これにより「review-docs が実在するが起動経路が無い／禁止対象」という矛盾を解消する。整合の本体は PHASES §レビュー成果物の配置ルール と一致させる。
+
 ---
 
 ## Rule
@@ -34,7 +36,7 @@
 
 禁止事項:
 
-- **本表が phase → command の唯一の経路である。本表にない command の起動は禁止。**
+- **本表が phase → command の唯一の経路である。本表にない command の起動は禁止。**（この禁止は phase からの選択経路に関するもの。上記「補助手順（auxiliary）」で明記したとおり、review-docs 等の補助手順の呼び出しは対象外。）
 - 本表にない command を自由に作ってはいけない。
 - 本表と異なる command を「便利そうだから」という理由で選んではいけない。
 - PHASES.md と矛盾する対応を作ってはいけない（矛盾がある場合は PHASES.md / 本ファイルを更新して解消する）。

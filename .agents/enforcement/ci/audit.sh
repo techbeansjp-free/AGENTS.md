@@ -26,6 +26,10 @@
 #   (20) document_id 紐付け: frontmatter に document_id がある成果ドキュメントについて、workflow_log にその document_id が 1 件以上存在すること
 #   (20+) document_id 不変: 同一 document_path に過去記録された document_id と現在の frontmatter が異なる場合は FAIL（RULES.md §document_id 不変）
 #   (25) メインが実作業を直接行った（成果物変更に委譲・証跡の対応がない）
+#   (26) コメント外部参照禁止違反（CODE_COMMENT_RULES §2 の grep 検出）
+#   (27) 04_review 両リスト欠落（REVIEW_DUAL_LENS: 敵対的観点 ＋ must-preserve）
+#   (28) issue ドキュメントが gitignore 配下のパスに存在（誤配置）
+#   (29) 実装前 04（DB 採用時・issue_path スコープで implement/verify ログ 0 件かつ 04 存在）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -43,6 +47,10 @@
 #  11. workflow.db が存在する場合、PRAGMA integrity_check が ok であること。
 #  12–17. 新スキーマ時: actor_role=scribe, delegated_by 必須 orchestrator, implement に changed_files_json, verify に review_path/parent 且つ親が implement/design。
 #  18–19. Git 時: 04 変更なら verify ログ、成果物変更なら implement/design/verify のいずれかログが存在すること。
+#  26. コメント/docstring に外部参照（章節番号・PR/issue/タスク番号・仕様ドキュメント名）があれば FAIL。コード参照は誤検出しない。
+#  27. 04_review に「敵対的観点」リストと「must-preserve（不変条件）」リストの両方が無ければ FAIL（片欠落も FAIL）。
+#  28. issue ドキュメント(00〜04)が git 追跡対象外（gitignore 配下）のパスに存在したら FAIL。非 git ツリーは SKIP、exit 0 のみ FAIL。
+#  29. workflow.db 採用時のみ・issue_path スコープで implement/verify ログ 0 件かつ 04_review.md 存在なら FAIL（#3 の逆方向・非交差）。
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
@@ -55,6 +63,52 @@ WORKFLOW_DIR="${WORKFLOW_DIR:-.workflow}"
 AGENTS_ROOT="${AGENTS_ROOT:-.agents}"
 EXIT_CODE=0
 ROLLBACK_MSG="ROLLBACK: Fix in 03_実装計画.md or the issue doc under .workflow/{issue}/ then re-run verify-and-close. See .agents/enforcement/README.md §失敗条件と差し戻し."
+
+# 補助関数: 走査対象の workflow ディレクトリ「リスト」を解決して 1 行 1 ディレクトリ（PROJECT_ROOT 相対）で出力する。
+#
+# WORKFLOW_DIRS 解釈の確定仕様（N1 レビュー L-3）:
+#   - 環境変数 WORKFLOW_DIRS（コロン区切り）が**設定されている**場合は、その値を**そのまま採用（置換）**する。
+#     既定リスト（WORKFLOW_DIR・docs/maintainer/workflow）とは union しない。明示指定が最優先で、消費者が
+#     走査基点を完全に固定できる。WORKFLOW_DIRS が設定されていれば WORKFLOW_DIR の値は無視される。
+#   - WORKFLOW_DIRS が**未設定**の場合の既定リストは次の順で構成する（union ではなく既定の組み立て）:
+#       (1) WORKFLOW_DIR（既定 .workflow）を必ず含む。
+#       (2) docs/maintainer/workflow が PROJECT_ROOT 配下に**実在する場合のみ**追加する（.agents-project 上書きの
+#           実 issue 配置を #28/#29 が走査できるようにするため。★N-1）。実在しなければ追加しない＝汎用消費者では
+#           .workflow のみ＝従来と完全に同一挙動（後方互換）。
+#   - いずれの経路でも、PROJECT_ROOT 配下に**実在しない**ディレクトリはリストから除外し、**重複は 1 回**に正規化する
+#     （同一 issue を二重判定しない）。
+# 出力は PROJECT_ROOT からの相対パス（各 section が "$PROJECT_ROOT/$d" として使える形）。
+resolve_workflow_dirs() {
+  local raw_list=()
+  if [[ -n "${WORKFLOW_DIRS:-}" ]]; then
+    # コロン区切りを分解（置換セマンティクス）
+    local IFS=':'
+    read -r -a raw_list <<< "$WORKFLOW_DIRS"
+  else
+    raw_list=("$WORKFLOW_DIR")
+    if [[ -d "$PROJECT_ROOT/docs/maintainer/workflow" ]]; then
+      raw_list+=("docs/maintainer/workflow")
+    fi
+  fi
+  # 実在のみ・重複排除（出現順を保つ）
+  local seen=""
+  local d
+  for d in "${raw_list[@]}"; do
+    [[ -z "$d" ]] && continue
+    [[ ! -d "$PROJECT_ROOT/$d" ]] && continue
+    case ":$seen:" in
+      *":$d:"*) continue ;;
+    esac
+    seen="$seen:$d"
+    printf '%s\n' "$d"
+  done
+}
+
+# 解決済みの走査ディレクトリリスト（PROJECT_ROOT 相対）。各 section はこれをループ基点に使う。
+WORKFLOW_SCAN_DIRS=()
+while IFS= read -r _wf_dir; do
+  [[ -n "$_wf_dir" ]] && WORKFLOW_SCAN_DIRS+=("$_wf_dir")
+done < <(resolve_workflow_dirs)
 
 # 補助関数: タイムスタンプ文字列（YYYYMMDD_HHMMSS）を epoch 秒に変換できる場合のみ返す
 ts_to_epoch() {
@@ -91,7 +145,8 @@ file_mtime_epoch() {
 echo "=== Audit: contract and evidence (enforcement/README §失敗条件と差し戻し) ==="
 
 # 1. 証跡 memo のファイル名プレフィックス（YYYYMMDD_HHMMSS_）および実時間との整合性検証
-if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
+if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     base=$(basename "$f")
     parent=$(dirname "$f")
@@ -132,9 +187,10 @@ if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
         fi
       fi
     fi
-  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -name "*.md" -type f -print0 2>/dev/null || true)
+  done < <(find "$PROJECT_ROOT/$_wfd" -name "*.md" -type f -print0 2>/dev/null || true)
+  done
 else
-  echo "SKIP: $WORKFLOW_DIR not found." >&2
+  echo "SKIP: no workflow scan directory found (checked: ${WORKFLOW_DIR}${WORKFLOW_DIRS:+, $WORKFLOW_DIRS})." >&2
 fi
 
 # 2. .agents 必須ファイルの存在
@@ -149,9 +205,12 @@ if [[ -d "$PROJECT_ROOT/$AGENTS_ROOT" ]]; then
 fi
 
 # 2b. サブissue が存在する場合、親ワークフロールートに 90_issues.md が存在すること
-if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
+if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' parent_issue_dir; do
     [[ -z "$parent_issue_dir" ]] && continue
+    # 完了 issue コンテナ（close 自体）および close 配下は in-progress 前提の 90_issues 要求の対象外（#29 と同型・audit.sh:747 の前例）。
+    [[ "$parent_issue_dir" == *"/close" || "$parent_issue_dir" == *"/close/"* ]] && continue
     has_sub_issue=0
     for sub in "$parent_issue_dir"/*/; do
       [[ ! -d "$sub" ]] && continue
@@ -168,7 +227,8 @@ if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
         EXIT_CODE=1
       fi
     fi
-  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null || true)
+  done < <(find "$PROJECT_ROOT/$_wfd" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null || true)
+  done
 fi
 
 # 3. 実装後 verify-and-close 未実行: workflow.db に implement-feature または verify-and-close が記録されている issue_path のディレクトリには 04_review.md が存在すること
@@ -177,6 +237,8 @@ if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$PROJECT_ROOT/$WORKFLOW_DIR/work
   if sqlite3 "$WF_DB_3" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then
     while IFS= read -r -d '' issue_path; do
       [[ -z "$issue_path" ]] && continue
+      # 完了 issue（close 配下）は in-progress 前提の 04_review 要求の対象外（#29 と同型・audit.sh:747 の前例）。
+      [[ "$issue_path" == *"/close/"* ]] && continue
       issue_dir="$PROJECT_ROOT/$issue_path"
       [[ ! -d "$issue_dir" ]] && continue
       if [[ ! -f "$issue_dir/04_review.md" ]]; then
@@ -189,7 +251,8 @@ if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$PROJECT_ROOT/$WORKFLOW_DIR/work
 fi
 
 # 4. テスト観点未記載: 03_実装計画.md に固定セクション「## テスト観点」「## 単体テスト」「## BDD」のいずれかが存在し、該当セクションに空でない行が1行以上あること（見出しのみは FAIL）
-if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
+if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
     if ! grep -qE '^## (テスト観点|単体テスト|BDD)$' "$f" 2>/dev/null; then
@@ -201,11 +264,13 @@ if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
       echo "$ROLLBACK_MSG" >&2
       EXIT_CODE=1
     fi
-  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -name "03_実装計画.md" -type f -print0 2>/dev/null || true)
+  done < <(find "$PROJECT_ROOT/$_wfd" -name "03_実装計画.md" -type f -print0 2>/dev/null || true)
+  done
 fi
 
 # 5. docs 更新要否未記載: 04_review.md に固定セクション「## docs 更新」および「- 要否:」「- 対象:」「- 理由:」のキーがあること（templates は除外）
-if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
+if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
     if grep -qE '^## docs 更新$' "$f" 2>/dev/null && grep -qE '^- 要否:' "$f" 2>/dev/null; then
@@ -215,7 +280,8 @@ if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
       echo "$ROLLBACK_MSG" >&2
       EXIT_CODE=1
     fi
-  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -name "04_review.md" -type f -print0 2>/dev/null || true)
+  done < <(find "$PROJECT_ROOT/$_wfd" -name "04_review.md" -type f -print0 2>/dev/null || true)
+  done
 fi
 
 # 6. 内部参照禁止: PR 本文が渡された場合に .workflow/ や docs/ へのリンクを検出（CI で PR_BODY を渡す想定）
@@ -228,10 +294,13 @@ if [[ -n "${PR_BODY:-}" ]]; then
 fi
 
 # 7. 重要パスに TODO または FIXME が残っていないか（*.md に限定、誤検知を抑える）
-if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
+if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
   todo_found=""
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
+    # 完了 issue（close 配下）の証跡本文中の TODO/FIXME という「語の言及」は in-progress 前提の積み残し検出の対象外（#29 と同型・audit.sh:747 の前例）。
+    [[ "$f" == *"/close/"* ]] && continue
     if grep -qE 'TODO|FIXME' "$f" 2>/dev/null; then
       if [[ -z "$todo_found" ]]; then
         echo "FAIL: 重要パスに TODO/FIXME が残存 (resolve or move out of .workflow):" >&2
@@ -239,7 +308,8 @@ if [[ -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]]; then
       fi
       echo "  $f" >&2
     fi
-  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -name "*.md" -type f -print0 2>/dev/null || true)
+  done < <(find "$PROJECT_ROOT/$_wfd" -name "*.md" -type f -print0 2>/dev/null || true)
+  done
   if [[ -n "$todo_found" ]]; then
     echo "$ROLLBACK_MSG" >&2
     EXIT_CODE=1
@@ -280,6 +350,8 @@ if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$WF_DB" ]]; then
     any_verify=$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command = 'verify-and-close' LIMIT 1;" 2>/dev/null || true)
     while IFS= read -r -d '' f; do
       [[ "$f" == *"/templates/"* ]] && continue
+      # 完了 issue（close 配下）の 04_review は in-progress 前提の証跡対応要求の対象外（防御的・#29 と同型・audit.sh:747 の前例）。
+      [[ "$f" == *"/close/"* ]] && continue
       issue_dir="$(dirname "$f")"
       issue_path_rel="${issue_dir#$PROJECT_ROOT/}"
       issue_path_esc="${issue_path_rel//\'/\'\'}"
@@ -406,8 +478,24 @@ check_verify_has_parent() {
 check_verify_parent_command() {
   if ! audit_has_column "parent_entry_id"; then return 0; fi
   echo "[audit] checking verify-and-close parent command" >&2
-  local invalid_count
-  invalid_count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log v LEFT JOIN workflow_log p ON v.parent_entry_id = p.entry_id WHERE v.command = 'verify-and-close' AND (p.entry_id IS NULL OR p.command NOT IN ('implement-feature', 'design-feature'));" 2>/dev/null || echo "0")"
+  # 完了 issue（close 配下）の verify-and-close 行は in-progress 前提の親検査の対象外（#29 と同型・audit.sh:747 の前例）。
+  # 記録時の issue_path は close 移動前パス（close を含まない）でありうるため、現在 close 配下に実在する
+  # issue 名（basename）集合を作り、offending 行のうち basename が当該集合に属するものを除外する（DB は読み取りのみ）。
+  declare -A _close_issue_names=()
+  local _cd="$PROJECT_ROOT/docs/maintainer/workflow/close"
+  if [[ -d "$_cd" ]]; then
+    while IFS= read -r -d '' _cdir; do
+      _close_issue_names["$(basename "$_cdir")"]=1
+    done < <(find "$_cd" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null || true)
+  fi
+  # offending 行の issue_path を列挙し、close 在籍 issue 名に一致しないものだけを数える。
+  local invalid_count=0 _ip _base
+  while IFS= read -r _ip; do
+    [[ -z "$_ip" ]] && continue
+    _base="$(basename "$_ip")"
+    [[ -n "${_close_issue_names[$_base]:-}" ]] && continue
+    invalid_count=$((invalid_count + 1))
+  done < <(sqlite3 "$WF_DB" "SELECT coalesce(v.issue_path,'') FROM workflow_log v LEFT JOIN workflow_log p ON v.parent_entry_id = p.entry_id WHERE v.command = 'verify-and-close' AND (p.entry_id IS NULL OR p.command NOT IN ('implement-feature', 'design-feature'));" 2>/dev/null || true)
   if [[ "${invalid_count:-0}" -gt 0 ]]; then
     echo "[audit] ERROR: verify-and-close parent must be implement-feature or design-feature" >&2
     echo "$ROLLBACK_MSG" >&2
@@ -500,11 +588,15 @@ for line in sys.stdin:
 check_document_id_linked() {
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
   if ! audit_has_column "document_id"; then return 0; fi
-  [[ ! -d "$PROJECT_ROOT/$WORKFLOW_DIR" ]] && return 0
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   echo "[audit] checking document_id linkage (#20)" >&2
   local uuid_regex='^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$'
+  local _wfd
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
+    # 完了 issue（close 配下）成果物の document_id 紐付け要求は in-progress 前提のため対象外（#29 と同型・audit.sh:747 の前例）。
+    [[ "$f" == *"/close/"* ]] && continue
     doc_id=""
     if [[ -f "$f" ]]; then
       doc_id="$(get_document_id_from_file "$f")"
@@ -529,10 +621,178 @@ check_document_id_linked() {
         EXIT_CODE=1
       fi
     fi
-  done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -mindepth 1 -maxdepth 3 -type f \( -name "00_*.md" -o -name "01_*.md" -o -name "02_*.md" -o -name "03_*.md" -o -name "04_*.md" \) -print0 2>/dev/null)
+  done < <(find "$PROJECT_ROOT/$_wfd" -mindepth 1 -maxdepth 3 -type f \( -name "00_*.md" -o -name "01_*.md" -o -name "02_*.md" -o -name "03_*.md" -o -name "04_*.md" \) -print0 2>/dev/null)
+  done
 }
 
 check_document_id_linked
+
+# 26. コメント/docstring 外部参照禁止違反（CODE_COMMENT_RULES §2）。
+#   プロジェクトのソースコード（既定 src/ app/ components/。CODE_COMMENT_SRC_DIRS で上書き可・コロン区切り）の
+#   コメント/docstring 行に限定して、章節番号・PR/issue/タスク番号・仕様ドキュメント名を grep 検出する。
+#   - 走査対象はソースコードのみ。.agents/（フレームワーク基盤スクリプトは正当に仕様名/章節を参照する）と
+#     ドキュメント（WORKFLOW_SCAN_DIRS・docs 等。仕様名/章節参照が正当）は対象外＝誤検出させない。
+#   - import/require/include 等の行は除外（ファイルパスは §3 で許可）。obj.method() 等のコード参照は
+#     パターンがキーワード前置を要求するため FAIL させない。
+#   ソースディレクトリが 1 つも実在しない（本リポのような文書/フレームワーク専用パッケージ）場合は何も検出しない。
+check_code_comment_external_ref() {
+  echo "[audit] checking code comment external refs (#26)" >&2
+  local src_dirs=()
+  if [[ -n "${CODE_COMMENT_SRC_DIRS:-}" ]]; then
+    local IFS=':'
+    read -r -a src_dirs <<< "$CODE_COMMENT_SRC_DIRS"
+  else
+    src_dirs=("src" "app" "components")
+  fi
+  local found=""
+  # コメント行内の外部参照パターン（誤検出回避のためキーワード前置を要求）。
+  #   - 章節番号: §3.2 / 第4節 / セクション 5 / section 2.1（全角数字も許容）
+  #   - PR/issue/タスク番号: PR #123 / Issue #42 / チケット 100 / タスク #7 / 裸 #NN（2桁以上）
+  #   - 仕様ドキュメント名: XXX.md / XXX.adoc
+  # 全角数字は [0-9０-９] のような範囲指定だと一部 locale で "Invalid collation character" に
+  # なるため、全角数字は列挙（０-９の各バイト列を | で並べる）で表し、grep は LC_ALL=C（バイト一致）で実行する。
+  local fw='[0-9]|０|１|２|３|４|５|６|７|８|９'
+  local pat_section="(§(${fw})|第(${fw})+[節章条]|(セクション|[Ss]ection)[[:space:]]*[0-9])"
+  local pat_ticket='((PR|Issue|ISSUE|issue|チケット|task|タスク)[[:space:]]*#?[0-9]|#[0-9][0-9]+)'
+  local pat_docname='[A-Za-z0-9_]+\.(md|adoc)'
+  local d f
+  for d in "${src_dirs[@]}"; do
+    [[ -z "$d" ]] && continue
+    [[ ! -d "$PROJECT_ROOT/$d" ]] && continue
+    while IFS= read -r -d '' f; do
+      # 行番号付きで「コメント行」のみ抽出（行頭の // # ;; -- 、または行中の /* * """）。
+      # import/require/include/from/using で始まる行は除外（ファイルパスは §3 で許可）。
+      local hits
+      hits="$(awk '
+        {
+          line=$0
+          cmt=""
+          if (match(line, /(\/\/|#|;;|--)/)) {
+            tline=line; sub(/^[[:space:]]+/, "", tline)
+            if (tline ~ /^(import|from|require|include|#include|using)/) next
+            cmt=substr(line, RSTART)
+          } else if (line ~ /\/\*|^[[:space:]]*\*|"""/) {
+            cmt=line
+          } else next
+          print NR "\t" cmt
+        }
+      ' "$f" 2>/dev/null)"
+      [[ -z "$hits" ]] && continue
+      local line_no cmt_text
+      while IFS=$'\t' read -r line_no cmt_text; do
+        [[ -z "$line_no" ]] && continue
+        if printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_section" 2>/dev/null \
+          || printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_ticket" 2>/dev/null \
+          || printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_docname" 2>/dev/null; then
+          if [[ -z "$found" ]]; then
+            echo "FAIL: コメント外部参照禁止違反 (CODE_COMMENT_RULES):" >&2
+            found=1
+          fi
+          echo "  ${f#$PROJECT_ROOT/}:$line_no" >&2
+        fi
+      done <<< "$hits"
+    done < <(find "$PROJECT_ROOT/$d" -type f \( -name "*.sh" -o -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.go" -o -name "*.rb" -o -name "*.rs" -o -name "*.java" \) -print0 2>/dev/null || true)
+  done
+  if [[ -n "$found" ]]; then
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+}
+
+# 27. 04_review 両リスト構造チェック（REVIEW_DUAL_LENS §3）。
+#   04_review.md に「敵対的観点」リストと「must-preserve（不変条件）」リストの両方が記載されていること。
+#   片方でも欠落していれば FAIL（両方揃えば PASS）。
+#   検査対象は Git 差分範囲（AUDIT_GIT_RANGE / 既定 HEAD~1..HEAD）で**変更された** 04_review.md のみ
+#   （既存 check_review_file_has_verify_log と同方式）。既存の過去レビューを一律に再判定して誤 FAIL させない。
+#   非 git ツリーは SKIP。templates は除外。
+check_review_dual_lists() {
+  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
+  echo "[audit] checking 04_review dual lists (#27)" >&2
+  local changed rel f
+  changed="$(git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -E '(^|/)04_review\.md$' || true)"
+  [[ -z "$changed" ]] && return 0
+  while IFS= read -r rel; do
+    [[ -z "$rel" ]] && continue
+    [[ "$rel" == *"/templates/"* ]] && continue
+    f="$PROJECT_ROOT/$rel"
+    [[ ! -f "$f" ]] && continue
+    local has_adv has_keep
+    has_adv=""; has_keep=""
+    grep -qE '敵対的観点' "$f" 2>/dev/null && has_adv=1
+    grep -qE 'must-preserve|不変条件' "$f" 2>/dev/null && has_keep=1
+    if [[ -z "$has_adv" || -z "$has_keep" ]]; then
+      echo "FAIL: REVIEW_DUAL 両リスト欠落 (04_review must contain 敵対的観点 and must-preserve): $rel" >&2
+      echo "$ROLLBACK_MSG" >&2
+      EXIT_CODE=1
+    fi
+  done <<< "$changed"
+}
+
+# 28. gitignore 配下の issue ドキュメント検知（誤配置）。
+#   issue ドキュメント(00〜04)が git 追跡対象外（gitignore 配下）のパスに存在したら FAIL。
+#   ★H-1': .git 不在/非 git ツリーは冒頭 SKIP。git check-ignore の exit 0 のみ FAIL
+#   （exit 1=非 ignore、exit 128=非 git/エラー は FAIL にしない）。templates は二重除外。
+#   走査は WORKFLOW_SCAN_DIRS（docs/... は追跡対象なので check-ignore 偽 → pass）。
+check_issue_doc_in_gitignored_path() {
+  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
+  echo "[audit] checking issue docs in gitignored paths (#28)" >&2
+  local _wfd f rel
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *"/templates/"* ]] && continue
+      rel="${f#$PROJECT_ROOT/}"
+      # exit 0（= gitignore 配下）のみ FAIL。条件式中で評価するため set -e 下でも非ゼロは致命化しない。
+      if (cd "$PROJECT_ROOT" && git check-ignore -q "$rel"); then
+        echo "FAIL: issue ドキュメントが git 追跡対象外（gitignore 配下）のパスに存在します（誤配置）: $rel" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    done < <(find "$PROJECT_ROOT/$_wfd" -type f \( -name "00_*.md" -o -name "01_*.md" -o -name "02_*.md" -o -name "03_*.md" -o -name "04_*.md" \) -print0 2>/dev/null || true)
+  done
+}
+
+# 29. 実装前 04 検知（実装前に 04_review.md だけが作られている）。
+#   workflow.db 採用時のみ・issue_path スコープ前方一致で「implement/verify ログが 1 件も無いのに
+#   04_review.md が存在＝実装前 04」を検知。既存 #3（04 欠落）の逆方向で非交差（04 の有無が排他）。
+#   ★H-2'/M-1': 完全一致でなく前方一致（= dir OR = dir/ OR LIKE dir/%）で「ログが 1 件でも拾えれば pass」の
+#   安全側に倒す（偽陰性＝見逃しを許容し、誤 FAIL を絶対に出さない）。DB 不採用は冒頭 SKIP。
+check_review_before_implement() {
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
+  echo "[audit] checking review-before-implement (#29)" >&2
+  local _wfd f issue_dir dir dir_esc base base_esc hit
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *"/templates/"* ]] && continue
+      # 完了 issue（close 配下）は実装前 04 検知の対象外（完了済みであり、close 移動でディレクトリ名が
+      # 変わるため記録時の issue_path と現在パスが一致しない。安全側: 誤 FAIL を出さない）。
+      [[ "$f" == *"/close/"* ]] && continue
+      issue_dir="$(dirname "$f")"
+      dir="${issue_dir#$PROJECT_ROOT/}"
+      dir_esc="${dir//\'/\'\'}"
+      base="$(basename "$issue_dir")"
+      base_esc="${base//\'/\'\'}"
+      # 前方一致で「当該 issue に紐づく任意のログ 1 件以上」を判定（安全側: ログがあれば pass）。
+      # ディレクトリ相対パスの前方一致に加え、basename（issue ディレクトリ名）末尾一致でも救済し、
+      # 走査基点とログ記録時の基点差（例: close 移動・別 clone）でも誤 FAIL を出さない。
+      hit="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command IN ('implement-feature','verify-and-close') AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') LIMIT 1;" 2>/dev/null || true)"
+      if [[ -z "$hit" ]]; then
+        echo "FAIL: 実装前に 04_review.md が作成されています（implement/verify ログ 0 件）: $dir" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    done < <(find "$PROJECT_ROOT/$_wfd" -name "04_review.md" -type f -print0 2>/dev/null || true)
+  done
+}
+
+check_code_comment_external_ref
+check_review_dual_lists
+check_issue_doc_in_gitignored_path
+check_review_before_implement
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."

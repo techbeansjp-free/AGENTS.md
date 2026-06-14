@@ -26,10 +26,12 @@ description: "実装内容・規約遵守・テスト観点を確認し、04_rev
 ## Outputs
 
 - 04_review の「実装内容の確認」に追記する内容。表または箇条書き。指摘があれば「指摘」「推奨対応」を分けて書く。review-architecture と合わせて 04 を完成させる。
+- **二観点の両リストを必須出力**（[REVIEW_DUAL_LENS.md](../../../REVIEW_DUAL_LENS.md)）: 04_review に「敵対的観点リスト」と「must-preserve リスト」を**両方**出力する。両リスト未記載は未完了。
 
 ## Done
 
 - 04_review の「実装内容の確認」に、確認結果（確認済みまたは指摘一覧）が記載されていること。指摘がある場合は推奨対応が分かる形で書かれていること。
+- 04_review に「敵対的観点リスト」「must-preserve リスト」の**両方**が記載されていること（REVIEW_DUAL_LENS.md §3。いずれか欠落は未完了）。
 
 ## Forbidden（制約・禁止）
 

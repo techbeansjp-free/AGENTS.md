@@ -80,3 +80,17 @@
 - **skill chain を最後まで実行すること。** step 5（write-workflow-log）を省略しない。workflow.db 採用時は write-workflow-log.sh を実行すること（run_command の Constraints 参照）。CORE の証跡省略禁止を守る。
 - **システム仕様書（docs/）の更新**: 必要に応じて加筆修正するが、**そのために issue を立てる必要はない**。レビュー用ディレクトリ `docs/00_review/` にレビュー結果を記載する。.agents/RULES.md（システム仕様書）および .agents/DOCS_RULES.md を参照。
 - **重要判断・レビュー結論には根拠の種別（evidence_source）を記載し、inference_only のみに依存する重要判断は承認不可または要人間確認とする。** .agents の「外部根拠の必須化」（CONCEPTS.md §外部根拠の必須化）を参照。
+
+---
+
+## クローズアウト（欠落工程の補完）
+
+クローズ前に、実装完了で起動する不変クローズアウトの**欠落工程**が満たされているかを確認する。既存の重複工程（verify 必須・指摘 0 反復・04_review・90_issues）は**ここに再記述せず**、既存正本（[REVIEW_RULE.md](../REVIEW_RULE.md) / [run_command.md §Constraints](../skills/agent/run_command.md) / [RULES.md](../RULES.md)）へリンクで委譲する（CORE.md:137）。工程の抽象形の正本は [implement-feature.md §クローズアウト（欠落工程の補完）](implement-feature.md#クローズアウト欠落工程の補完) に置く。
+
+確認する欠落工程（抽象形・詳細は上記正本）:
+
+- **commit ステップ**: 1 サブ issue = 1 論理コミット／既定ブランチなら feature ブランチ／**push はユーザー明示時のみ**（[RULES.md](../RULES.md) §高リスク操作）。
+- **別セッション引継ぎ**: 引継ぎ記録＋再開プロンプトを残したか。
+- **clear 境界**: 1 feature = 1 コンテキスト（safe-clear invariant）を保ったか。
+- **fresh サブ分割**: 却下済み指摘＋理由を継承し収束を保証したか。
+- **verify-実経路検証**: verify(ii) として実経路で動くことを検証し、[REVIEW_DUAL_LENS.md §3 証跡要求](../REVIEW_DUAL_LENS.md#3-証跡要求) の両リストと整合させたか。

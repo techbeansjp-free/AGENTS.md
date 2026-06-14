@@ -209,7 +209,7 @@ npx @techbeansjp-free/agents-md uninstall --purge --yes  # workflow.db 等の証
 | 3 | **commands が呼べるか** | .agents/commands/ に requirement-discovery, design-feature, implement-feature, verify-and-close が存在する。.agents/skills/agent/run_command.md が読めること。 |
 | 4 | **enforcement が有効か** | .claude/hooks/ に PreToolUse.sh, PostToolUse.sh が存在する（Claude 利用時）。.cursor/ に agents-core.mdc が存在する（Cursor 利用時）。.agents/enforcement/ci/audit.sh が存在する。 |
 | 5 | **workflow.db へ書記ログが 1 件入るか** | .workflow/workflow.db が存在する（無ければ ledger/schema.md に従い作成）。verify-and-close または write-workflow-log を 1 回実行し、execution_logs に 1 件以上記録されることを確認する。書記は唯一の記録者（scribe/README.md）。 |
-| 6 | **pre-push / CI が最低限動くか** | 採用する場合、.github/workflows/ に subagent-guard または audit を呼ぶワークフローを配置する。pre-push フックを採用する場合は scripts/pre-push が実行可能であること。 |
+| 6 | **pre-push / CI が最低限動くか** | 採用する場合、.github/workflows/ に subagent-guard（実体: `.workflow/templates/github/scripts/subagent-guard.sh`）または audit（`.agents/enforcement/ci/audit.sh`）を呼ぶワークフローを配置する。pre-push フックを採用する場合は scripts/pre-push が実行可能であること。subagent-guard が検査するのは内部参照禁止（#6 相当）・ログ frontmatter 禁止・`logs/` 廃止の 3 点のみ（判定ルールの正本は `.agents/enforcement/README.md` §失敗条件と差し戻し）。 |
 
 **失敗系テストの推奨**: 導入後、わざと違反ケース（例: 03_実装計画.md のみ存在し 04_review.md を書かない、memo のプレフィックスを誤った形式にする）を作り、audit.sh が FAIL すること・pre-push が push を止めること・CI が reject することを確認すること。存在確認と実効性は別のため、失敗系テストで実効性を確認する。
 

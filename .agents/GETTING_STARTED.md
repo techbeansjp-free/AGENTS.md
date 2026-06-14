@@ -1,6 +1,6 @@
 # GETTING_STARTED — 使い方（1 ページ）
 
-**通常依頼でも agents を自動適用する。** ユーザーが「〇〇して」とだけ言った場合でも、明示がなくても次のように動く。解釈は agents workflow、進行役は常に orchestrator。必要に応じて sub-agent / skills / commands を自動選択する。出力は IO_CONTRACT および RULES に従う。入口の固定は AGENTS.md 冒頭を参照。
+**通常依頼でも agents を自動適用する**（解釈＝agents workflow／進行役＝orchestrator／sub-agent・skills・commands を自動選択／出力は IO_CONTRACT・RULES に従う）。**本段落の正本は [AGENTS.md](../AGENTS.md) 冒頭**であり、自動適用方針・自立進行ルールの定義はそちらを参照する（本ファイルには再記述しない）。
 
 本規約は skill-first。メインは指示に徹し、**実作業は規模・内容にかかわらず例外なく必ずサブに委譲する（絶対強制）。** サブが command（skill chain）を実行する。メインが自らファイル編集・作成・コマンド実行を行うことは**絶対禁止**（CORE §メインがやってはいけないこと。enforcement §絶対強制）。**トリガーごとの「何を読むか」の正本は boot/LOAD_POLICY.md。** 本ファイルは手順の要約のみ。
 

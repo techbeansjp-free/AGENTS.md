@@ -14,6 +14,7 @@
 
 2. **phase は何か**
    - 現在の依頼・作業が PHASES.md のどのフェーズに該当するかを明確にしたか。
+   - **issue の作成場所を確認したか** — 単一/サブ issue を作る場合、`.agents-project/` に作成場所の上書き定義があれば**それを最優先で参照**したか。本リポの正は `docs/maintainer/workflow/...`（`.workflow/` 配下に作っていないか）。
 
 3. **Phase → Command が正しいか**
    - PHASE_COMMAND_MAP.md を参照して、現在の phase に対して正しい command を選んだか。
@@ -26,6 +27,7 @@
 5. **verify-and-close を飛ばしていないか**
    - 実装後・変更後に verify-and-close（レビュー・テスト・監査・書記）を必ず依頼しているか。
    - 書記・ログ記録を省略していないか。
+   - **実装完了後か** — 実装前の段階であれば 04_review.md は作らず memo にレビュー証跡を残す。04_review.md は実装完了後の verify-and-close でのみ作成する（PHASES §レビュー成果物の配置ルール・run_command §実装前のドキュメントレビュー）。
 
 6. **Write / Edit / Shell を使おうとしていないか**
    - 使おうとしている場合は、委譲パケットを出力し、自らは使わない。
