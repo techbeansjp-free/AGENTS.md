@@ -98,6 +98,44 @@ T3_OUT="$(bash "$AUDIT" "$T3_TREE" 2>&1)"; T3_RC=$?
 if [[ $T3_RC -ne 0 ]]; then ok "必須ファイル欠落で exit != 0（判定不変）"; else ng "必須ファイル欠落でも exit 0 になった: $T3_OUT"; fi
 if grep -q "Missing required file" <<< "$T3_OUT"; then ok "必須ファイル未参照の FAIL メッセージを出す"; else ng "必須ファイル未参照メッセージが無い: $T3_OUT"; fi
 
+# シナリオ4: #17 close ガードが issue_path のファイル粒度記録でも close 完了 issue を除外する
+# Given: close 配下に実在する issue ディレクトリ <C> と、workflow.db に「親が implement/design でない
+#        verify-and-close 行」が 2 件（issue_path がディレクトリ粒度 .../<C>/ と ファイル粒度 .../<C>/04_review.md）
+# When:  audit.sh <tmp> を実行する（DB 同梱・close 配下のため #17 は対象外であるべき）
+# Then:  #17 ERROR（verify-and-close parent must be ...）を発火しない（basename 限定漏れの回帰防止）
+if command -v sqlite3 >/dev/null 2>&1; then
+  T4_TREE="$(make_min_tree)"
+  C="20260101_000000_closed_issue"
+  mkdir -p "$T4_TREE/docs/maintainer/workflow/close/$C"
+  : > "$T4_TREE/docs/maintainer/workflow/close/$C/04_review.md"
+  T4_DB="$T4_TREE/.workflow/workflow.db"
+  sqlite3 "$T4_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  # 親 (orphan) verify-and-close 行: issue_path はディレクトリ粒度（close 前パス）。basename 一致で除外される従来ケース。
+  sqlite3 "$T4_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'verify-and-close', 'docs/maintainer/workflow/$C/');" 2>/dev/null
+  # 親 (orphan) verify-and-close 行: issue_path はファイル粒度（close 前パス）。basename='04_review.md' で従来は誤発火していたケース。
+  sqlite3 "$T4_DB" "INSERT INTO workflow_log VALUES ('e2', NULL, 'verify-and-close', 'docs/maintainer/workflow/$C/04_review.md');" 2>/dev/null
+  T4_OUT="$(bash "$AUDIT" "$T4_TREE" 2>&1)"
+  if ! grep -q "verify-and-close parent must be" <<< "$T4_OUT"; then
+    ok "#17 close ガードがファイル粒度 issue_path でも close 完了 issue を除外（誤 #17 ERROR 無し）"
+  else
+    ng "#17 close 完了 issue でも ERROR 発火（basename 限定漏れ回帰）: $T4_OUT"
+  fi
+
+  # シナリオ4b: close 外の正当な #17 は維持される（過剰除外していないことの確認）
+  # Given: close 在籍 issue 名に一致しない in-progress issue の orphan verify-and-close 行
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #17 ERROR を発火する（close ガードが close 外の正当な違反まで握り潰さない）
+  sqlite3 "$T4_DB" "INSERT INTO workflow_log VALUES ('e3', NULL, 'verify-and-close', 'docs/maintainer/workflow/20260202_000000_inprogress/04_review.md');" 2>/dev/null
+  T4B_OUT="$(bash "$AUDIT" "$T4_TREE" 2>&1)"
+  if grep -q "verify-and-close parent must be" <<< "$T4B_OUT"; then
+    ok "#17 は close 外の正当な親違反を維持（過剰除外なし）"
+  else
+    ng "#17 が close 外の正当な違反まで除外している（過剰除外）: $T4B_OUT"
+  fi
+else
+  echo "  [SKIP] #17 close ガード回帰（sqlite3 不在）"
+fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then

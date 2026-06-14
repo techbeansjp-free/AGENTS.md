@@ -480,7 +480,11 @@ check_verify_parent_command() {
   echo "[audit] checking verify-and-close parent command" >&2
   # 完了 issue（close 配下）の verify-and-close 行は in-progress 前提の親検査の対象外（#29 と同型・audit.sh:747 の前例）。
   # 記録時の issue_path は close 移動前パス（close を含まない）でありうるため、現在 close 配下に実在する
-  # issue 名（basename）集合を作り、offending 行のうち basename が当該集合に属するものを除外する（DB は読み取りのみ）。
+  # issue 名（ディレクトリ名）集合を作り、offending 行を除外する（DB は読み取りのみ）。
+  # ★basename 限定だと issue_path がファイル粒度（例 .../<issue>/04_review.md）で記録された行を救えず
+  #   close 完了 issue でも誤発火しうる。よって (1)パスに /close/ を含むか、または
+  #   (2)issue_path のいずれかのパスコンポーネントが close 在籍 issue 名に一致するか、で除外する
+  #   （#2b/#3/#7/#9/#20 の */close/* 文字列照合ガードと一貫）。
   declare -A _close_issue_names=()
   local _cd="$PROJECT_ROOT/docs/maintainer/workflow/close"
   if [[ -d "$_cd" ]]; then
@@ -488,12 +492,21 @@ check_verify_parent_command() {
       _close_issue_names["$(basename "$_cdir")"]=1
     done < <(find "$_cd" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null || true)
   fi
-  # offending 行の issue_path を列挙し、close 在籍 issue 名に一致しないものだけを数える。
-  local invalid_count=0 _ip _base
+  # offending 行の issue_path を列挙し、close 相当（/close/ を含む or close 在籍 issue 名を含む）でないものだけを数える。
+  local invalid_count=0 _ip _c _matched
+  local -a _comps
   while IFS= read -r _ip; do
     [[ -z "$_ip" ]] && continue
-    _base="$(basename "$_ip")"
-    [[ -n "${_close_issue_names[$_base]:-}" ]] && continue
+    # 既に close 配下パスで記録された行は除外。
+    [[ "$_ip" == *"/close/"* || "$_ip" == */close ]] && continue
+    # close 移動前パスでファイル粒度・ディレクトリ粒度いずれの記録でも、
+    # issue_path のパスコンポーネントが close 在籍 issue 名に一致すれば除外する。
+    _matched=0
+    IFS='/' read -ra _comps <<< "${_ip%/}"
+    for _c in "${_comps[@]}"; do
+      [[ -n "${_close_issue_names[$_c]:-}" ]] && { _matched=1; break; }
+    done
+    [[ "$_matched" -eq 1 ]] && continue
     invalid_count=$((invalid_count + 1))
   done < <(sqlite3 "$WF_DB" "SELECT coalesce(v.issue_path,'') FROM workflow_log v LEFT JOIN workflow_log p ON v.parent_entry_id = p.entry_id WHERE v.command = 'verify-and-close' AND (p.entry_id IS NULL OR p.command NOT IN ('implement-feature', 'design-feature'));" 2>/dev/null || true)
   if [[ "${invalid_count:-0}" -gt 0 ]]; then
