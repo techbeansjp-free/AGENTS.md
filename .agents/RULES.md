@@ -39,3 +39,7 @@
 - **バリデーション**: 全バリデーションルール・境界値・エラーメッセージをテスト。
 - **証跡**: memo は **.workflow/{issue}/memo/** に作成する。**{issue} は YYYYMMDD_HHMMSS_ をプレフィックスとする issue フォルダ名（必須）。** ファイル名も YYYYMMDD_HHMMSS_ プレフィックス必須。**ログは書記のみ**が記録する（CORE）。**ログは一定のルールで必ず記録する**。**ログは SQLite（workflow.db）を用いる**。workflow.db が無ければ ledger/schema.md に従い作成する。書記は scribe/README.md に従う。**日時は実行環境の現在時刻を取得して付与すること。AI は時間の概念が曖昧になりがちなため、未来・過去の日時を推測で使わない。ファイル名の日時部分（YYYYMMDD_HHMMSS_）を手入力・固定値・推測で指定してはならず、必ず `date` 等で実行時に取得する。** memo および issue フォルダのプレフィックスは、**必ず作成前に** memo-prefix.sh または TZ=Asia/Tokyo date +%Y%m%d_%H%M%S を**実行**して取得すること。コンテキストの日付・推測・固定値でファイル名・フォルダ名を組み立ててはならない。
 - **システム仕様書（docs/）**: 作成・更新は**基本的に issue を立てない**。システム仕様書直下の**レビュー用ディレクトリ**（`docs/00_review/`）にレビュー結果（YYYYMMDD_HHMMSS_review.md）を記載する。詳細は [DOCS_RULES.md](DOCS_RULES.md) を参照。04_review §11 と verify-and-close で守る。
+
+### テスト隔離
+
+- **テスト/検証は一時ディレクトリ（`mktemp -d`）で隔離して行う**。install / uninstall / setup / build などの破壊的になりうる検証を、**いきなり本番ファイルや作業リポジトリへ実行しない**。隔離環境で対象を再現（例: `git archive HEAD | tar -x`）し、検証後に一時環境を片付ける。目的は破壊的影響の回避と、既存生成物との混同防止。本リポ（自己拡張）固有の運用は [.agents-project/自己拡張ワークフロー.md](../.agents-project/自己拡張ワークフロー.md) §テストの tmp 隔離 を参照（重複させず相互参照）。
