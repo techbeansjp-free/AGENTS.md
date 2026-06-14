@@ -986,3 +986,108 @@ R1〜R3 のインラインコメントを `.agents/TEST_BDD_FORMAT.md` に照ら
 - **総合評価**: **承認可（本バッチ範囲・ブロッカーなし）**。ユーザー指摘「再インストールで project 固有ルールが消えないか」への是正は、R1（再インストール）・R2（upgrade）・R3（uninstall）で実測検証され、`.agents-project/`・`.cursor`/`.claude` のユーザー作成物・`.workflow/<issue>`・`workflow.db` が破壊されないことを確認。残課題（軽微1〜3）はいずれも非ブロッカー。
 - **承認者**: worker（auditor、orchestrator 委譲） / **承認日**: 2026-06-14
 - **DoD**: 04_review 追記済み・E2E（S1〜S7＋R1〜R3＝59/0）再実行と保持の実測を記載済み・build-adapters diff-zero／静的検査／リーク確認済み・独立回帰確認済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・実 DB 現 head にチェーン連結）。
+
+---
+
+# 【追記バッチ G】.claude/.cursor の skills・hooks ユーザー自作物保全（所有エントリのみ管理・R4-R5 E2E）
+
+> **本バッチの位置づけ**: command **verify-and-close**（skill chain: generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）。直前 implement-feature の未コミット成果（ユーザー指摘「`.claude` のユーザー資産保全は？」への是正）を対象とする。**レビュー深度: standard**（中規模・限定スコープ。skills/hooks の選択的同期と uninstall の対称除去）。
+>
+> **evidence_source 凡例**: `test_output`（本レビューで再実行）/ `existing_code`（実ファイル確認）/ `external_spec`（仕様・ドキュメント）/ `inference_only`（推測。重要判断は不採用）。
+
+## G-1. レビュー対象（変更ファイル）
+
+| ファイル | 変更概要 | evidence |
+|----------|----------|----------|
+| `.agents/scripts/lib/deploy-skills.sh` | `list_owned_skill_names`（所有 skill 名の単一導出＝`deploy_skills_impl` と同走査規則）・`sync_skills_selective`（dest を丸ごと rm せず所有エントリのみ削除→再配備）を追加 | existing_code |
+| `.agents/scripts/setup.sh` | `sync_skills` を `sync_skills_selective` へ委譲（選択的同期）。`.claude/hooks` の `rm -rf` 全削除を廃止し `copy_owned_files`（所有フックのみ上書き）へ | existing_code |
+| `bin/agents-md.js` | uninstall を所有 skill/hook エントリのみ除去へ。`ownedSkillNames`/`deployedOwnedHookFiles`/`deployedOwnedSkillEntries` を追加。`DEPLOYED_ARTIFACTS` から `.claude/skills`・`.claude/hooks`・`.cursor/skills` のディレクトリ一括除去を撤去。後始末を子→親の空判定へ | existing_code |
+| `.agents/SETUP.md`・`README.md` | 保持/上書き契約を「配備分（既知エントリ）のみ更新・ユーザー自作物は保持/共存可」へ更新。表ヘッダ誤記を `.cursor/agents-core.mdc` に統一（バッチ F 軽微1 を解消） | existing_code |
+| `.agents/scripts/test/e2e-install-uninstall.sh` | R4（再インストール保持）・R5（uninstall 保持）を追加 | existing_code |
+
+## G-2. 受け入れ基準の確認（generate-scenarios → map-coverage）
+
+| 基準 | 検証方法 | 結果 |
+|------|----------|------|
+| setup（再 init/upgrade）が `.claude/skills`・`.cursor/skills` のユーザー自作スキルを破壊しない | R4 E2E + 独立回帰 | **通過**（`my-user-skill/SKILL.md` 保持・中身改変なし） |
+| setup が `.claude/hooks` のユーザー独自フックを破壊しない | R4 E2E + 独立回帰 | **通過**（`my-user-hook.sh` 保持・中身改変なし） |
+| setup がパッケージ配備分（所有 skill・所有フック）を最新化する | R4 E2E（STALE→正本／agent・`__cap` 再生成） | **通過** |
+| uninstall がユーザー自作スキル/フックを保持する | R5 E2E + 独立回帰 | **通過** |
+| uninstall がパッケージ所有 skill/hook のみ除去する | R5 E2E（`agent`・`PreToolUse.sh`・`__cap` 除去） | **通過** |
+| 自作物が残る限り `.claude/skills`・`.claude/hooks` ディレクトリは保持される | R5 E2E（空でないので片付かない） | **通過** |
+| 所有集合が単一定義（bash＝Node＝実配備） | G-4 突合 | **通過** |
+
+未達・要対応: **なし**（全基準が test_output で通過）。必須成果物（00/01/02/03）の必須セクション欠落も本バッチ範囲では検出なし。
+
+## G-3. E2E 再実行サマリ（test_output・隔離 dir・非破壊）
+
+`bash .agents/scripts/test/e2e-install-uninstall.sh`（作業ツリー版＝レビュー対象）を実行。**結果: `PASS=77 FAIL=0`／「全シナリオ pass」**。各シナリオは `mktemp -d` の隔離 dir で `git archive HEAD` / CLI init により独立実行される。
+
+- **S1-S7**（install→uninstall→冪等→カプセル化→build-adapters カプセル→npm pack リーク）: 全 pass。
+- **R1-R3**（バッチ F の回帰: 再インストール／upgrade／uninstall でのユーザー資産保持）: 全 pass。
+- **R4**（再インストールで自作スキル/フック保持＋配備分最新化）: 9 アサーション pass。実測:
+  - `.claude/skills/my-user-skill/SKILL.md`＝`user skill (claude)`、`.cursor/skills/my-user-skill/SKILL.md`＝`user skill (cursor)`、`.claude/hooks/my-user-hook.sh` 末尾＝`echo my-user-hook` が保持（中身改変なし）。
+  - パッケージ skill（ドメイン直下 `agent`・`{domain}__{capability}`・`.cursor` 側）が再生成。改変した `PreToolUse.sh`（STALE）が正本で最新化。
+- **R5**（uninstall で自作スキル/フック保持＋所有分のみ除去）: 9 アサーション pass。実測:
+  - 自作 `my-user-skill`（claude/cursor）・`my-user-hook.sh` が保持。
+  - 所有 skill（`agent`・`.cursor agent`・`{domain}__{capability}`）と所有フック `PreToolUse.sh` が除去。
+  - 自作物が残るため `.claude/skills`・`.claude/hooks` ディレクトリ自体は保持（空でないため片付かない）。
+
+**本リポ非破壊の実測**: E2E・build・独立回帰の全実行前後で `find .agents .claude .cursor .workflow -type f | sort | xargs sha256sum | sha256sum` が**同一**（`2f3912f0…b2a65a`）。`git status --porcelain` も前後で**同一（7 行＝対象 6 変更＋本 issue ディレクトリ）**。本開発リポの `.agents/.claude/.cursor/.workflow/workflow.db` を一切破壊しないことを確認（test_output）。
+
+## G-4. 所有集合の単一定義の検証（drift リスク評価）
+
+所有 skill 名の導出が **3 経路で同一集合**であることを実測（test_output）。
+
+- bash `list_owned_skill_names .agents/skills`（sort）= **15 件**。
+- Node `ownedSkillNames()`（`bin/agents-md.js` の走査規則をミラー実行・sort）= **15 件**。
+- 実配備 `deploy_skills_impl .agents/skills <tmp>` のトップレベルエントリ（sort）= **15 件**。
+- `diff` 結果: **三者完全一致**（`agent`・`architecture__*`×3・`implementation__*`×2・`logging__write-workflow-log`・`requirements__*`×4・`review__*`×2・`testing__*`×2）。
+
+**所有集合の根拠の単一性**:
+- skills の所有名導出は `lib/deploy-skills.sh`（`deploy_skills_impl` と `list_owned_skill_names` が**同一ファイル内・同一走査規則**＝ドメイン直下 `SKILL.md` あり→`{domain}`、capability 配下 `SKILL.md` あり→`{domain}__{capability}`）。配備と所有列挙が同一規則で導出されるため、配備＝削除の対称性が保たれる（existing_code）。
+- hooks の所有名は `enforcement/claude` のトップレベル通常ファイル（`.gitkeep` 除外）から導出。setup の `copy_owned_files` と uninstall の `deployedOwnedHookFiles`（`ownedFilesFrom`）が同じ規則を使用（existing_code）。
+- **drift リスク評価**: Node 側 `ownedSkillNames` は bash 関数の**別実装（ミラー）**であり、規則を変えると両方を直す必要がある（実装者コメントにも明記）。現時点では両者の出力が完全一致するため drift は**現存しない**。ただし**潜在 drift リスク（軽微・非ブロッカー）**として残る。CI で両経路の突合（本 G-4 と同等のコマンド）を回す自動回帰があれば回帰検知が強固になる。**推奨対応**: 任意（将来 CI に bash↔Node 所有集合一致テストを追加）。本バッチの承認可否には影響しない。
+
+## G-5. 静的検査・diff-zero・リーク（test_output）
+
+- `bash -n` … `setup.sh`／`lib/deploy-skills.sh`／`e2e-install-uninstall.sh`：いずれも OK。
+- `node --check bin/agents-md.js`：OK。
+- `bash .agents/scripts/build-adapters.sh claude`：exit 0。**2 回連続実行で生成物 sha256 集約一致＝diff-zero**（`d00f8b28…`）。
+- `bash .agents/scripts/build-adapters.sh cursor`：exit 0。**2 回連続で一致＝diff-zero**（`cc17111e…`）。
+- `git ls-files .adapters`：**空**（生成物がリポに漏れていない）。
+
+## G-6. 独立回帰確認（隔離 dir で 1 ケース・自己再現）
+
+隔離 dir に `git archive HEAD` 展開＋作業ツリーの 6 変更ファイルを上書きし、**パッケージ自身の `setup.sh`/CLI** を直接実行して再現（test_output）。
+
+- **setup 再実行（再 init/upgrade 相当）**: ユーザー設置の `.claude/skills/my-user-skill`（`MINE-claude`）・`.cursor/skills/my-user-skill`（`MINE-cursor`）・`.claude/hooks/my-user-hook.sh`（末尾 `echo MINEHOOK`）が全て保持（中身改変なし）。削除した `.claude/skills/agent` が再生成、STALE 化した `PreToolUse.sh` が正本で最新化、`{domain}__{capability}` skill も再生成。
+- **uninstall --yes**: 自作スキル（claude/cursor）・自作フックが保持。所有 skill（`agent`）・所有フック（`PreToolUse.sh`）が除去。自作物が残るため `.claude/skills` ディレクトリは保持。
+- **inference_only 単独依存の重要判断なし**: 保持/除去/最新化の判断はすべて test_output／existing_code で裏取り。
+
+## G-7. TEST_BDD_FORMAT 監査（R4/R5）
+
+`.agents/TEST_BDD_FORMAT.md` に照らし R4/R5 のインラインコメントを確認（existing_code）。
+
+- **ユースケース**: R4/R5 とも関数直前のブロックコメントに `# ユースケース:` を記載（利用者目線で「何のためのテスト群か」を 3 文以内で説明）。**充足**。
+- **シナリオ**: 各テスト関数本体冒頭に `# シナリオ:` コメントを記載（検証する状況・条件を記述）。**充足**。
+- **Given/When/Then**: 各ブロック直上に `# Given:`／`# When:`／`# Then:` を 1 つずつ配置。複数前提・複数検証は `# And (Given):`／`# And (Then):` を使用（R4 のパッケージ改変前提・最新化検証群で確認）。**充足**。
+- **指摘**: bash の関数テストという制約上、`ユースケース:`/`シナリオ:` は doc コメント機構ではなくブロックコメントで表現されているが、TEST_BDD_FORMAT §0 が言語に合わせた doc コメントを許容しており、本リポの既存 S1-S7・R1-R3 と同一スタイルで一貫。**逸脱なし（軽微指摘なし）**。
+
+## G-8. 設計・境界の確認（review-architecture）
+
+- **責務分離**: 所有集合の命名/列挙ロジックを `lib/deploy-skills.sh` に集約（`deploy_skills_impl`＝配備、`list_owned_skill_names`＝列挙、`sync_skills_selective`＝選択的同期）。setup.sh と bin/agents-md.js はこの正本に委譲・ミラーする。**単一責任・疎結合に適合**（existing_code）。
+- **依存方向**: setup.sh → `lib/deploy-skills.sh`（source）の一方向。`bin/agents-md.js` は Node 実装のため source できず**ミラー実装**だが、コメントで「規則変更時は双方整合」を明記し、G-4 で一致を実測。循環・不要結合なし。
+- **配備＝除去の対称性**: setup が配備する所有エントリと uninstall が除去する所有エントリが同一規則で導出され、ユーザー自作物（所有集合外）は両経路で保持される。02 設計（ユーザー資産非破壊・正本単一化）と一致。
+- **00/01 要求の充足**: ユーザー指摘「`.claude` のユーザー資産保全」に対し、skills（claude/cursor）・hooks（claude）の自作物保全を実装・実測。抜け漏れなし。
+- **指摘**: なし（通過）。
+
+## G-9. レビュー結果（バッチ G）
+
+- **実装品質**: 良好。`.claude/skills`・`.cursor/skills` の `rm -rf` 全削除と `.claude/hooks` の `rm -rf` 全削除を廃止し、所有エントリ/所有フックのみを選択的に更新・除去する設計へ是正。所有集合の導出を `lib/deploy-skills.sh` の 1 ファイルに集約し、配備と列挙を同一走査規則で導く（drift を構造的に抑制）。uninstall は子→親の空判定で安全側に片付ける。
+- **テスト品質**: 良好。R4/R5 を新設し E2E `PASS=77 FAIL=0` を隔離・非破壊で再実行。保持（claude/cursor skills・claude hooks）と所有分の最新化/除去を実測。R4/R5 は TEST_BDD_FORMAT のユースケース/シナリオ/GWT を充足。本リポ own dirs の非破壊を sha256＋git status で実証。
+- **ドキュメント品質**: 良好。SETUP.md・README の保持/上書き契約表を「配備分（既知エントリ）のみ更新・ユーザー自作物は保持/共存可」へ刷新し、バッチ F で残課題だった表ヘッダ誤記（軽微1: `.cursor/rules/agents-core.mdc` → `.cursor/agents-core.mdc`）を解消。
+- **総合評価**: **承認可（本バッチ範囲・ブロッカーなし）**。ユーザー指摘「`.claude` のユーザー資産保全は？」への是正は、R4（再インストール/upgrade）・R5（uninstall）で実測検証され、`.claude/skills/my-user-skill/`・`.claude/hooks/my-user-hook.sh`・`.cursor/skills/my-user-skill/` が保持され、パッケージ skill/hook は最新化/除去されることを確認。所有集合の単一定義（bash＝Node＝実配備）も突合済み。
+- **残課題（軽微・非ブロッカー）**: Node `ownedSkillNames` は bash 関数のミラー実装であり潜在 drift リスクが残る（G-4）。現時点では完全一致。将来 CI に bash↔Node 所有集合一致テストを追加すると堅牢化（任意）。
+- **承認者**: worker（auditor/scribe、orchestrator 委譲） / **承認日**: 2026-06-14
+- **DoD**: 04_review 追記済み・E2E（S1〜S7＋R1〜R5＝77/0）再実行と保持の実測を記載済み・所有集合単一定義の三経路突合済み・build-adapters claude/cursor diff-zero／静的検査／`.adapters` 非リーク確認済み・独立回帰確認済み・本リポ非破壊（sha256＋git status 同一）確認済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・実 DB 現 head にチェーン連結）。

@@ -90,13 +90,13 @@ npx @techbeansjp-free/agents-md doctor
 
 **アンインストール（つけ外し）**:
 
-プラグインは簡単につけ外しできる。`init`/`upgrade`/`uninstall` は **パッケージ配備物のみ**を管理し、ユーザー資産（`.agents-project/`・`.cursor`/`.claude` のユーザー作成物・`.workflow/<issue>`・`workflow.db`）は**破壊しない**。`uninstall` は配備物のみを除去し、人間が編集する資産は**既定で保持**する。引数なしは dry-run（削除対象の表示のみ）。
+プラグインは簡単につけ外しできる。`init`/`upgrade`/`uninstall` は **パッケージ配備物（既知エントリ）のみ**を管理し、ユーザー資産（`.agents-project/`・`.cursor`/`.claude` のユーザー作成物・`.claude/skills` や `.cursor/skills` の**自作スキル**・`.claude/hooks` の**独自フック**・`.workflow/<issue>`・`workflow.db`）は**破壊しない**。`uninstall` は配備物のみを除去し、人間が編集する資産は**既定で保持**する。引数なしは dry-run（削除対象の表示のみ）。
 
 ```bash
 # 採用先プロジェクトのルートで実行。まず削除対象を表示（dry-run。何も消さない）
 npx @techbeansjp-free/agents-md uninstall
 
-# 実際に配備物のみを除去する（.cursor/.claude は丸ごと消さず配備分のみ）
+# 実際に配備物のみを除去する（.cursor/.claude は丸ごと消さず配備分のみ。自作スキル/独自フックは保持）
 npx @techbeansjp-free/agents-md uninstall --yes
 
 # workflow.db 等の証跡も含めて完全除去する
@@ -105,9 +105,9 @@ npx @techbeansjp-free/agents-md uninstall --purge --yes
 
 | 区分 | 既定の `uninstall` | `--purge` 付き |
 |------|-------------------|----------------|
-| 除去する配備物 | `.agents/`・`AGENTS.md`・`CLAUDE.md`・`.claude/hooks`・`.claude/skills`・`.cursor/skills`・`.cursor/agents-core.mdc` 等の配備分・`.workflow/templates/` | 同左 |
-| 保持するユーザー資産 | `.agents-project/`・`.cursor` のユーザー作成物・`.claude` のユーザー設定・`.workflow/<issue>`・`.workflow/workflow.db*` | 左に同じ（`workflow.db` は削除） |
-| 安全策 | `.agents/` も `AGENTS.md` も無い（未配備の）ディレクトリでは誤削除を防ぐため中止する。`.cursor`/`.claude` は丸ごと消さず配備分のみ除去。`--yes` 無しは表示のみ。 | 同左 |
+| 除去する配備物 | `.agents/`・`AGENTS.md`・`CLAUDE.md`・`.cursor/agents-core.mdc`・`.claude/hooks` の所有フック・`.claude/skills` と `.cursor/skills` の所有 skill エントリ・`.workflow/templates/` | 同左 |
+| 保持するユーザー資産 | `.agents-project/`・`.cursor` のユーザー作成物・`.claude` のユーザー設定・**自作スキル**（`.claude/skills`・`.cursor/skills`）・**独自フック**（`.claude/hooks`）・`.workflow/<issue>`・`.workflow/workflow.db*` | 左に同じ（`workflow.db` は削除） |
+| 安全策 | `.agents/` も `AGENTS.md` も無い（未配備の）ディレクトリでは誤削除を防ぐため中止する。`.cursor`/`.claude` は丸ごと消さず**配備分（既知エントリ）のみ**除去（自作スキル/独自フックは保持）。`--yes` 無しは表示のみ。 | 同左 |
 
 > 補足: `init`／`upgrade` は workflow.db の初期化に `sqlite3` バイナリを必要とする（`doctor` で確認できる）。**project 固有ルールは `.agents-project/` に置くこと**を推奨する（再インストール・upgrade・uninstall で保持される）。`.cursor`/`.claude` に置いたユーザー作成物も保持される。`AGENTS.md`・`CLAUDE.md`・`.agents-project/` 等の人間編集領域は無断破壊されない（保持・上書き契約の正本は [.agents/SETUP.md](.agents/SETUP.md)）。
 

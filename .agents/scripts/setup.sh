@@ -84,16 +84,16 @@ fi
 . "$SCRIPT_DIR/lib/deploy-skills.sh"
 
 # sync_skills <dest_root> [<src_skills>]
-#   共有ライブラリの deploy_skills_impl に委譲する。常に最新にするため同期前に配備先を削除する。
-#   注意: <dest_root>（.claude/skills・.cursor/skills）は **パッケージ生成 skills 専用ディレクトリ**として扱う。
-#         このディレクトリへの手置きは禁止（毎回 rm -rf して再生成する）。ユーザー資産は置かないこと。
-#         （SETUP.md「保持・上書き契約」参照）
+#   共有ライブラリの sync_skills_selective に委譲する。**dest を丸ごと rm -rf しない**。
+#   パッケージ所有エントリ（{domain}__{capability}・ドメイン直下 {domain}）のみを削除→再配備し、
+#   所有集合に含まれないディレクトリ（＝ユーザー自作スキル）は保持する。
+#   命名/所有集合の単一定義は lib/deploy-skills.sh（list_owned_skill_names）に集約。
+#   （SETUP.md「保持・上書き契約」参照）
 sync_skills() {
   local dest_root="$1"
   local agents_skills="${2:-$PROJECT_ROOT/.agents/skills}"
   [[ ! -d "$agents_skills" ]] && return 0
-  rm -rf "$dest_root"
-  deploy_skills_impl "$agents_skills" "$dest_root" >/dev/null
+  sync_skills_selective "$agents_skills" "$dest_root"
 }
 
 # copy_owned_files <src_dir> <dest_dir>
@@ -119,11 +119,12 @@ copy_owned_files() {
 CLAUDE_DIR="$PROJECT_ROOT/.claude"
 mkdir -p "$CLAUDE_DIR"
 if [[ -d "$PROJECT_ROOT/.agents/enforcement/claude" ]]; then
-  # hooks/ はパッケージ生成物専用ディレクトリ。毎回作り直す（ユーザーは手置きしない前提。SETUP.md 参照）。
-  rm -rf "$CLAUDE_DIR/hooks"
+  # hooks/ は丸ごと rm -rf せず、enforcement/claude 由来のパッケージ所有フックファイルのみを
+  # 上書き配備する。ユーザーが .claude/hooks/ に置いた独自ファイルは保持する。
+  # 所有フックファイル名は enforcement/claude の内容から導出（copy_owned_files の規則＝単一正本）。
   mkdir -p "$CLAUDE_DIR/hooks"
   copy_owned_files "$PROJECT_ROOT/.agents/enforcement/claude" "$CLAUDE_DIR/hooks"
-  echo "enforcement/claude から .claude/hooks を最新化しました（ユーザー設定は保持）。"
+  echo "enforcement/claude から .claude/hooks のパッケージ所有分を最新化しました（ユーザー独自フックは保持）。"
 else
   echo "注: enforcement/claude が見つかりません。.claude/ を空で作成しました。"
 fi

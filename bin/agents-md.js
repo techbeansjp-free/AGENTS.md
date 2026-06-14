@@ -153,16 +153,16 @@ function runDoctor() {
 // 既定で除去する配備物（setup.sh が配備する成果物のみ）。相対パスで列挙する。
 // 注1: .workflow は丸ごと消さない（issue・workflow.db はユーザー資産）。templates のみ除去する。
 // 注2: .cursor/・.claude/ は **丸ごと消さない**。setup が配備したパッケージ所有分
-//      （.cursor/skills・.cursor/<owned files>・.claude/hooks・.claude/skills 等）のみを除去し、
-//      ユーザー作成物（.cursor/rules/*.mdc・.claude/settings.json 等）が同居していれば保持する。
-//      パッケージ所有ファイル名は enforcement 正本から動的に導出する（setup.sh と単一整合）。
+//      （.cursor/<owned files>・.claude/hooks の所有フック・.claude/skills と .cursor/skills の所有 skill）
+//      のみを除去し、ユーザー作成物（.cursor/rules/*.mdc・.claude/settings.json・.claude/hooks の独自フック・
+//      .claude/skills や .cursor/skills のユーザー自作スキル等）が同居していれば保持する。
+//      パッケージ所有ファイル/skill 名は正本（enforcement・skills）から動的に導出する（setup.sh と単一整合）。
+// 注3: .claude/hooks・.claude/skills・.cursor/skills は**ディレクトリごと消さず**、所有エントリのみ除去する
+//      （下記 deployedOwnedHookFiles / deployedOwnedSkillEntries で導出）。
 const DEPLOYED_ARTIFACTS = [
   ".agents", // パッケージ正本のコピー（setup がコピー配備）
   "AGENTS.md", // ルート契約（setup がコピー）
   "CLAUDE.md", // ルート契約（setup がコピー）
-  ".claude/hooks", // enforcement フック（パッケージ生成物専用ディレクトリ）
-  ".claude/skills", // 同期 skills（パッケージ生成物専用ディレクトリ）
-  ".cursor/skills", // 同期 skills（パッケージ生成物専用ディレクトリ）
   ".workflow/templates", // テンプレート（setup がコピー。.workflow 自体は残す）
 ];
 
@@ -178,11 +178,53 @@ function ownedFilesFrom(srcDir, destRel) {
 
 // .cursor/ 直下のパッケージ所有ファイル（agents-core.mdc・README.md 等）の配備物相対パス。
 // setup.sh は enforcement/cursor/* を .cursor/ 直下へコピーする（copy_owned_files）。同じ規則で導出する。
-// （.claude 側は hooks/・skills/ という専用ディレクトリ配下に配備するため、ディレクトリごと
-//   DEPLOYED_ARTIFACTS で除去でき、直下の個別ファイル導出は不要。）
 function deployedOwnedFiles() {
   const enforcement = join(PACKAGE_ROOT, ".agents", "enforcement");
   return ownedFilesFrom(join(enforcement, "cursor"), ".cursor");
+}
+
+// .claude/hooks 配下のパッケージ所有フックファイルの配備物相対パス。
+// setup.sh は enforcement/claude/* のトップレベル通常ファイル（.gitkeep 除外）を .claude/hooks へコピーする
+// （copy_owned_files）。同じ規則で導出し、ユーザー独自フックを残してパッケージ所有分のみ除去する。
+function deployedOwnedHookFiles() {
+  const enforcement = join(PACKAGE_ROOT, ".agents", "enforcement");
+  return ownedFilesFrom(join(enforcement, "claude"), join(".claude", "hooks"));
+}
+
+// パッケージが配備した所有 skill エントリ名（{domain}__{capability}・ドメイン直下 {domain}）を
+// 正本 .agents/skills/ から導出する。命名規約の正本は lib/deploy-skills.sh（list_owned_skill_names）。
+// 本関数はその走査規則を Node 側でミラーし（同一規則）、setup.sh と同じ所有集合を得る。
+// drift を避けるため、命名規則を変えるときは lib/deploy-skills.sh と本関数の双方を整合させること。
+function ownedSkillNames() {
+  const skillsRoot = join(PACKAGE_ROOT, ".agents", "skills");
+  if (!existsSync(skillsRoot)) return [];
+  const names = [];
+  for (const domainEnt of readdirSync(skillsRoot, { withFileTypes: true })) {
+    if (!domainEnt.isDirectory()) continue;
+    const domain = domainEnt.name;
+    const domainDir = join(skillsRoot, domain);
+    // ドメイン直下に SKILL.md があるケース（例: agent/）は {domain} を所有名とする。
+    if (existsSync(join(domainDir, "SKILL.md"))) names.push(domain);
+    // capability 配下に SKILL.md を持つものは {domain}__{capability} を所有名とする。
+    for (const capEnt of readdirSync(domainDir, { withFileTypes: true })) {
+      if (!capEnt.isDirectory()) continue;
+      if (existsSync(join(domainDir, capEnt.name, "SKILL.md"))) {
+        names.push(`${domain}__${capEnt.name}`);
+      }
+    }
+  }
+  return names;
+}
+
+// .claude/skills・.cursor/skills 配下のパッケージ所有 skill エントリの配備物相対パス。
+// ユーザー自作スキル（所有集合外のディレクトリ）は対象に含めない（保持される）。
+function deployedOwnedSkillEntries() {
+  const names = ownedSkillNames();
+  const rels = [];
+  for (const base of [".claude/skills", ".cursor/skills"]) {
+    for (const name of names) rels.push(join(base, name));
+  }
+  return rels;
 }
 
 // --purge 時のみ追加で除去する証跡（ユーザー資産）。
@@ -210,8 +252,17 @@ function runUninstall(projectRoot, opts) {
   }
 
   // 削除対象を列挙する（存在するものだけ）。
-  // パッケージ所有ファイル（.cursor 直下の agents-core.mdc 等）を enforcement 正本から動的に加える。
-  const targets = [...DEPLOYED_ARTIFACTS, ...deployedOwnedFiles()];
+  // パッケージ所有分を正本から動的に加える:
+  //   - .cursor 直下の所有ファイル（agents-core.mdc 等）         … deployedOwnedFiles
+  //   - .claude/hooks の所有フックファイル（PreToolUse.sh 等）   … deployedOwnedHookFiles
+  //   - .claude/skills・.cursor/skills の所有 skill エントリ      … deployedOwnedSkillEntries
+  // いずれもユーザー自作物（独自フック・自作スキル・自作 rules 等）は対象外（保持）。
+  const targets = [
+    ...DEPLOYED_ARTIFACTS,
+    ...deployedOwnedFiles(),
+    ...deployedOwnedHookFiles(),
+    ...deployedOwnedSkillEntries(),
+  ];
   if (purge) targets.push(...PURGE_ARTIFACTS);
 
   const present = targets
@@ -266,9 +317,17 @@ function runUninstall(projectRoot, opts) {
     }
   }
 
-  // 後始末: .cursor/・.claude/ がパッケージ配備物の除去後に空になった場合のみ、空ディレクトリを削除する。
-  // ユーザー作成物（.cursor/rules/*.mdc・.claude/settings.json 等）が残っている場合は削除しない（保持）。
-  for (const dirRel of [".cursor", ".claude"]) {
+  // 後始末: パッケージ配備物の除去後に**空になった**ディレクトリのみ片付ける。
+  // 子（.claude/hooks 等）→ 親（.claude 等）の順で空判定する。
+  // ユーザー作成物（独自フック・自作スキル・.cursor/rules/*.mdc・.claude/settings.json 等）が
+  // 残っている場合は空でないため削除しない（保持）。
+  for (const dirRel of [
+    ".claude/hooks",
+    ".claude/skills",
+    ".cursor/skills",
+    ".cursor",
+    ".claude",
+  ]) {
     const abs = join(projectRoot, dirRel);
     try {
       if (existsSync(abs) && statSync(abs).isDirectory() && readdirSync(abs).length === 0) {

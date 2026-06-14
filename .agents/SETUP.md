@@ -101,20 +101,20 @@ bash .agents/scripts/setup.sh
 | **.agents/** | 正本コピー | パッケージ正本。再 init で再配備し最新化する。 |
 | **AGENTS.md, CLAUDE.md** | ルート契約 | パッケージ正本をルートへコピー（最新化）。 |
 | **.workflow/templates/** | テンプレート | パッケージの `.workflow/templates/` から最新化する。 |
-| **.cursor/rules/agents-core.mdc**（enforcement/cursor の所有ファイル） | エディタルール | setup がパッケージ所有ファイルのみを上書き。**.cursor/ を丸ごと削除しない。** |
-| **.cursor/skills/** | 生成 skills | **パッケージ生成物専用ディレクトリ**。毎回 rm -rf して再生成する。**手置き禁止**（ユーザー資産を置かないこと）。 |
-| **.claude/hooks/** | enforcement | **パッケージ生成物専用ディレクトリ**。毎回 rm -rf して再生成する。**手置き禁止**。 |
-| **.claude/skills/** | 生成 skills | **パッケージ生成物専用ディレクトリ**。毎回 rm -rf して再生成する。**手置き禁止**。 |
+| **.cursor/agents-core.mdc**（enforcement/cursor の所有ファイル） | エディタルール | setup がパッケージ所有ファイルのみを上書き。**.cursor/ を丸ごと削除しない。** |
+| **.cursor/skills/**（パッケージ配備分 {domain}__{capability}・ドメイン直下 {domain}） | 生成 skills | **パッケージ配備分のみ**毎回更新（古い版を消して再コピー）。**ユーザー自作スキルは保持**（共存可）。 |
+| **.claude/hooks/**（パッケージ所有フックファイル） | enforcement | **パッケージ所有フックファイルのみ**毎回上書き。**ユーザー独自フックは保持**（共存可）。 |
+| **.claude/skills/**（パッケージ配備分 {domain}__{capability}・ドメイン直下 {domain}） | 生成 skills | **パッケージ配備分のみ**毎回更新。**ユーザー自作スキルは保持**（共存可）。 |
 
-> 注: `.cursor/skills/`・`.claude/hooks/`・`.claude/skills/` は **パッケージが排他所有する専用ディレクトリ**である（このディレクトリは setup が毎回再生成するため、ユーザーがファイルを手置きしてはならない）。カスタムは `.agents/enforcement/`・`.agents/skills/` の正本を編集して反映する。
+> 注: `.cursor/skills/`・`.claude/skills/`・`.claude/hooks/` は **パッケージ配備分（既知エントリ）のみ**を毎回更新する。Claude Code では `.claude/skills/` はユーザーが自作スキルを置く一般的な場所であり、`.claude/hooks/` にも独自フックを置けるため、**ユーザー自作スキル/フックは保持され、パッケージ配備分と共存できる**。パッケージ skill のカスタムは `.agents/skills/` 正本を、フックは `.agents/enforcement/` 正本を編集して反映する。所有エントリの導出は単一定義（skills は `lib/deploy-skills.sh` の `list_owned_skill_names`、フックは `enforcement/claude` のトップレベルファイル）。
 
 ### ユーザー資産（保持・破壊しない）
 
 | 対象 | 説明 |
 |------|------|
 | **.agents-project/** | project 固有ルール。setup は touch しない。**project 固有ルールは必ずここに置くこと**（推奨）。.agents より優先される。 |
-| **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc`・独自ファイル） | setup は `.cursor/` を丸ごと削除せず、パッケージ所有ファイルのみ更新するため**保持**される。 |
-| **.claude/ のユーザー設定**（既存の settings.json 等） | setup は `.claude/hooks`・`.claude/skills` のみ更新し、ユーザー設定は touch しない（保持）。 |
+| **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc`・独自ファイル・`.cursor/skills/` の自作スキル） | setup は `.cursor/` を丸ごと削除せず、パッケージ所有ファイル・所有 skill エントリのみ更新するため**保持**される。 |
+| **.claude/ のユーザー設定・自作物**（`settings.json`・`.claude/skills/` の自作スキル・`.claude/hooks/` の独自フック） | setup は `.claude/hooks`・`.claude/skills` の**パッケージ配備分のみ**更新し、ユーザー設定・自作スキル・独自フックは touch しない（保持）。 |
 | **.workflow/<issue>/** | issue 成果物（消費者ランタイム）。保持。 |
 | **workflow.db** | 証跡 DB。初回のみ生成、既存は上書きしない（保持）。 |
 
@@ -145,16 +145,16 @@ npx @techbeansjp-free/agents-md uninstall --purge --yes  # workflow.db 等の証
 | 対象 | 既定 `uninstall` | 説明 |
 |------|------------------|------|
 | **.agents/・AGENTS.md・CLAUDE.md** | 除去 | setup/init がコピー配備した正本（配備物）。 |
-| **.claude/hooks/・.claude/skills/・.cursor/skills/** | 除去 | パッケージ生成物専用ディレクトリ（100% 生成物）。 |
+| **.claude/hooks の所有フック・.claude/skills と .cursor/skills の所有 skill エントリ** | 除去 | パッケージ配備分（既知エントリ）のみ。ディレクトリごとは消さない。 |
 | **.cursor/ のパッケージ所有ファイル**（agents-core.mdc 等） | 除去 | enforcement 正本由来の配備ファイルのみ。 |
 | **.workflow/templates/** | 除去 | setup がコピーしたテンプレート（`.workflow/` 自体は残す）。 |
-| **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc` 等） | 保持 | `.cursor/` を丸ごと消さず、配備分のみ除去する。 |
-| **.claude/ のユーザー設定**（settings.json 等） | 保持 | `.claude/` を丸ごと消さず、配備分のみ除去する。 |
+| **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc`・`.cursor/skills/` の自作スキル等） | 保持 | `.cursor/` を丸ごと消さず、配備分のみ除去する。 |
+| **.claude/ のユーザー設定・自作物**（settings.json・自作スキル・独自フック等） | 保持 | `.claude/` を丸ごと消さず、配備分のみ除去する。 |
 | **.agents-project/** | 保持 | プロジェクト固有ルール（人間が編集する資産）。誤削除しない。 |
 | **.workflow/<issue>/**（templates 以外） | 保持 | issue 成果物（消費者ランタイム）。 |
 | **workflow.db** | 保持（`--purge` 時のみ除去） | 証跡 DB。既定では残す。 |
 
-> uninstall は `.cursor/`・`.claude/` を**丸ごと削除しない**。パッケージが配備した既知のファイル・専用ディレクトリ（`agents-core.mdc`・`skills/`・`hooks/` 等）のみを除去し、ユーザー作成物が同居していれば残す。除去後に `.cursor/`・`.claude/` が空になった場合のみ、空ディレクトリを片付ける。
+> uninstall は `.cursor/`・`.claude/` を**丸ごと削除しない**。パッケージが配備した**既知エントリ**（`.cursor/agents-core.mdc`・`.claude/hooks` の所有フックファイル・`.claude/skills` と `.cursor/skills` の所有 skill エントリ {domain}__{capability}・{domain}）のみを除去し、ユーザー作成物（自作スキル・独自フック・自作 rules 等）が同居していれば残す。除去後に `.claude/hooks`・`.claude/skills`・`.cursor/skills`・`.cursor/`・`.claude/` が空になった場合のみ、空ディレクトリを片付ける。所有エントリ集合は setup.sh と単一整合（skills は `lib/deploy-skills.sh` の `list_owned_skill_names`、フックは `enforcement/claude` のトップレベルファイル、cursor 直下は `enforcement/cursor` のトップレベルファイル）。
 
 **安全策**: 採用先に配備の痕跡（`.agents/` または `AGENTS.md`）が無い場合、誤削除を防ぐため uninstall を中止する。存在しない対象はスキップし、`--yes` を付けない限り削除は行わず対象の一覧表示（dry-run）に留める。`uninstall` の挙動は E2E テスト `.agents/scripts/test/e2e-install-uninstall.sh`（install→uninstall→冪等→カプセル化→リーク→**R1 再インストール保持・R2 upgrade 保持・R3 uninstall 保持**）で再現確認される。
 

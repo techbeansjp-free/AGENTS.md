@@ -427,6 +427,112 @@ test_uninstall_preserves_cohabiting_user_assets() {
   rm -rf "$src" "$dest"
 }
 
+# =============================================================================
+# シナリオ R4: skills/hooks 自作物の再インストール保持
+# =============================================================================
+# ユースケース:
+#   Claude Code では .claude/skills/ はユーザーが自作スキルを置く一般的な場所であり、.claude/hooks/ に
+#   独自フックを置くこともある。.cursor/skills/ も同様。利用者がこれらに自作物を置いた状態で再インストール
+#   （再 init = setup.sh / upgrade 相当）しても、自作スキル/フックが破壊されず保持され、かつパッケージ配備分
+#   （{domain}__{capability}・ドメイン直下 {domain}・所有フック）は最新化される。
+test_reinstall_preserves_user_skills_and_hooks() {
+  echo "[e2e] シナリオR4: 再インストールで自作スキル/フックが保持されパッケージ配備分は最新化される"
+  # シナリオ: install 済み dir に .claude/skills/my-user-skill/SKILL.md・.claude/hooks/my-user-hook.sh・
+  #           .cursor/skills/my-user-skill/SKILL.md を作成し、パッケージ配備分を改変してから再 init すると、
+  #           自作物が全て保持され、かつパッケージ skill（agent・{domain}__{capability}）と所有フックは最新化される。
+
+  # Given: install 済み dir にユーザーが自作スキル/フックを作成する
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  mkdir -p "$dest/.claude/skills/my-user-skill" "$dest/.cursor/skills/my-user-skill"
+  echo "user skill (claude)" > "$dest/.claude/skills/my-user-skill/SKILL.md"
+  echo "user skill (cursor)" > "$dest/.cursor/skills/my-user-skill/SKILL.md"
+  echo "#!/usr/bin/env bash"  > "$dest/.claude/hooks/my-user-hook.sh"
+  echo "echo my-user-hook"   >> "$dest/.claude/hooks/my-user-hook.sh"
+  # And (Given): パッケージ配備分を改変し、再 init で最新化されることを検出できるようにする
+  echo "STALE" > "$dest/.claude/hooks/PreToolUse.sh"
+  rm -rf "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+
+  # When: 再度 init（= setup.sh / upgrade 相当）を実行する
+  node "$CLI" init "$dest" >/dev/null 2>&1
+
+  # Then: ユーザー自作スキル/フックが全て保持される（破壊されない）
+  assert_exists "$dest/.claude/skills/my-user-skill/SKILL.md" "R4: .claude の自作スキルが保持される"
+  assert_exists "$dest/.cursor/skills/my-user-skill/SKILL.md" "R4: .cursor の自作スキルが保持される"
+  assert_exists "$dest/.claude/hooks/my-user-hook.sh"         "R4: .claude の独自フックが保持される"
+  assert_eq "$(cat "$dest/.claude/skills/my-user-skill/SKILL.md")" "user skill (claude)" "R4: 自作スキルの中身が改変されない"
+  assert_eq "$(cat "$dest/.claude/hooks/my-user-hook.sh" | tail -n1)" "echo my-user-hook" "R4: 独自フックの中身が改変されない"
+
+  # And (Then): パッケージ配備分は最新化される（所有 skill 再生成・所有フックが正本に戻る）
+  assert_exists "$dest/.claude/skills/agent/SKILL.md"        "R4: パッケージ skill（ドメイン直下 agent）が再生成される"
+  if compgen -G "$dest/.claude/skills/*__*" >/dev/null; then
+    ok "R4: パッケージ skill（{domain}__{capability}）が再生成される"
+  else
+    ng "R4: パッケージ skill（{domain}__{capability}）が再生成されるべき"
+  fi
+  if compgen -G "$dest/.cursor/skills/*__*" >/dev/null; then
+    ok "R4: .cursor の パッケージ skill が再生成される"
+  else
+    ng "R4: .cursor の パッケージ skill が再生成されるべき"
+  fi
+  if [[ "$(cat "$dest/.claude/hooks/PreToolUse.sh")" != "STALE" ]]; then
+    ok "R4: 所有フック PreToolUse.sh がパッケージ正本で最新化される"
+  else
+    ng "R4: 所有フック PreToolUse.sh はパッケージ正本で最新化されるべき（STALE のまま残ってはならない）"
+  fi
+
+  rm -rf "$src" "$dest"
+}
+
+# =============================================================================
+# シナリオ R5: uninstall 時の自作スキル/フック保持
+# =============================================================================
+# ユースケース:
+#   利用者が .claude/skills・.cursor/skills に自作スキル、.claude/hooks に独自フックを同居させた状態で
+#   uninstall（既定）しても、パッケージ所有分（所有 skill エントリ・所有フック）のみが除去され、
+#   自作スキル/フックは保持される。除去後に空になった skills/hooks のみ片付ける。
+test_uninstall_preserves_user_skills_and_hooks() {
+  echo "[e2e] シナリオR5: uninstall が自作スキル/フックを保持しパッケージ所有分のみ除去する"
+  # シナリオ: .claude/skills/my-user-skill・.cursor/skills/my-user-skill・.claude/hooks/my-user-hook.sh がある
+  #           install 済み dir で uninstall --yes すると、パッケージ所有 skill/フックのみ除去され、自作物は保持される。
+
+  # Given: install 済み dir に自作スキル/フックが同居している
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  mkdir -p "$dest/.claude/skills/my-user-skill" "$dest/.cursor/skills/my-user-skill"
+  echo "user skill (claude)" > "$dest/.claude/skills/my-user-skill/SKILL.md"
+  echo "user skill (cursor)" > "$dest/.cursor/skills/my-user-skill/SKILL.md"
+  echo "echo my-user-hook"    > "$dest/.claude/hooks/my-user-hook.sh"
+
+  # When: 既定 uninstall を実行する
+  node "$CLI" uninstall "$dest" --yes >/dev/null 2>&1
+
+  # Then: ユーザー自作スキル/フックが保持される
+  assert_exists "$dest/.claude/skills/my-user-skill/SKILL.md" "R5: .claude の自作スキルが uninstall で保持される"
+  assert_exists "$dest/.cursor/skills/my-user-skill/SKILL.md" "R5: .cursor の自作スキルが uninstall で保持される"
+  assert_exists "$dest/.claude/hooks/my-user-hook.sh"         "R5: .claude の独自フックが uninstall で保持される"
+
+  # And (Then): パッケージ所有分（所有 skill エントリ・所有フック）のみが除去される
+  assert_absent "$dest/.claude/skills/agent"        "R5: パッケージ所有 skill（agent）は除去される"
+  assert_absent "$dest/.cursor/skills/agent"        "R5: パッケージ所有 skill（.cursor agent）は除去される"
+  assert_absent "$dest/.claude/hooks/PreToolUse.sh" "R5: パッケージ所有フック PreToolUse.sh は除去される"
+  if compgen -G "$dest/.claude/skills/*__*" >/dev/null; then
+    ng "R5: パッケージ所有 skill（{domain}__{capability}）は除去されるべき"
+  else
+    ok "R5: パッケージ所有 skill（{domain}__{capability}）が除去される"
+  fi
+
+  # And (Then): 自作物が残るため skills/hooks ディレクトリ自体は保持される（空でないので片付かない）
+  assert_exists "$dest/.claude/skills"  "R5: 自作スキルが残るため .claude/skills は保持される"
+  assert_exists "$dest/.claude/hooks"   "R5: 独自フックが残るため .claude/hooks は保持される"
+
+  rm -rf "$src" "$dest"
+}
+
 # --- 実行 ---------------------------------------------------------------------
 [[ -f "$CLI" ]] || { echo "エラー: CLI が見つかりません: $CLI" >&2; exit 2; }
 
@@ -440,6 +546,8 @@ test_no_dist_leak
 test_reinstall_preserves_user_assets
 test_upgrade_preserves_user_assets
 test_uninstall_preserves_cohabiting_user_assets
+test_reinstall_preserves_user_skills_and_hooks
+test_uninstall_preserves_user_skills_and_hooks
 
 echo ""
 echo "[e2e] 結果: PASS=$PASS FAIL=$FAIL"

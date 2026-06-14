@@ -57,3 +57,55 @@ deploy_skills_impl() {
 
   echo "$n_skill"
 }
+
+# list_owned_skill_names <src_skills_dir>
+#   正本 skills ルートから、パッケージが配備先に作る **所有 skill エントリ名** の集合を
+#   1 行 1 名で標準出力へ列挙する（命名規約 {domain}__{capability}・ドメイン直下 {domain} の単一定義）。
+#   deploy_skills_impl と**同じ走査規則**で名前を算出する（drift 防止のため命名はこの 1 ファイルに集約）。
+#   用途: setup.sh の選択的同期（所有分のみ削除→再配備）と uninstall の対称除去で共有する。
+list_owned_skill_names() {
+  local src_skills="$1"
+  [[ -d "$src_skills" ]] || return 0
+
+  local domain_dir domain cap_dir cap
+  for domain_dir in "$src_skills"/*/; do
+    [[ -d "$domain_dir" ]] || continue
+    domain=$(basename "$domain_dir")
+    [[ -z "$domain" ]] && continue
+
+    # ドメイン直下に SKILL.md があるケース（例: agent/）は {domain} を所有名とする。
+    if [[ -f "$domain_dir/SKILL.md" ]]; then
+      echo "$domain"
+    fi
+
+    # capability 配下の SKILL.md を持つものは {domain}__{capability} を所有名とする。
+    for cap_dir in "$domain_dir"*/; do
+      [[ -d "$cap_dir" ]] || continue
+      cap=$(basename "$cap_dir")
+      [[ -z "$cap" ]] && continue
+      [[ -f "$cap_dir/SKILL.md" ]] || continue
+      echo "${domain}__${cap}"
+    done
+  done
+}
+
+# sync_skills_selective <src_skills_dir> <dest_root>
+#   <dest_root>（.claude/skills・.cursor/skills）を**丸ごと rm -rf せず**、パッケージ所有エントリ名
+#   （list_owned_skill_names）のみを削除→再配備する。所有集合に含まれないディレクトリ
+#   （＝ユーザー自作スキル）は保持する。命名/所有集合の単一定義は本ファイルに集約。
+sync_skills_selective() {
+  local src_skills="$1"
+  local dest_root="$2"
+  [[ -d "$src_skills" ]] || return 0
+  mkdir -p "$dest_root"
+
+  # 所有エントリのみ削除（ユーザー自作スキルは触らない）。
+  local name
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    rm -rf "${dest_root:?}/$name"
+  done < <(list_owned_skill_names "$src_skills")
+
+  # 所有エントリを再配備（最新化）。
+  deploy_skills_impl "$src_skills" "$dest_root" >/dev/null
+}
