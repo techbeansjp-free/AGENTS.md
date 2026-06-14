@@ -533,6 +533,146 @@ test_uninstall_preserves_user_skills_and_hooks() {
   rm -rf "$src" "$dest"
 }
 
+# =============================================================================
+# シナリオ R6: enforcement opt-in — 既定 off／enforce on で配線・off で解除（ユーザー値保持）
+# =============================================================================
+# ユースケース:
+#   利用者がドッグフーディング時にだけ enforcement フックを opt-in できる。既定 install では
+#   .claude/settings.json に enforcement を書き込まず（off）、`enforce on` で正本テンプレートから
+#   妥当な settings.json を生成/マージし（既存ユーザー値は破壊しない）、`enforce off` で配線のみ外す。
+#   `status` が on/off を正しく表示し、hooks の command は実在する .claude/hooks/PreToolUse.sh 等を指す。
+test_enforcement_optin() {
+  echo "[e2e] シナリオR6: enforcement opt-in（既定 off／on 配線・off 解除・ユーザー値保持）"
+  # シナリオ: 既定 install では settings.json に enforcement が書かれず、enforce on で妥当 JSON が生成され
+  #           hooks が実在 hook を指し、AGENT_ROLE=orchestrator が設定される。既存ユーザー settings があれば
+  #           マージで破壊せず .bak を退避し、enforce off で配線のみ外れてユーザー値が残る。status が on/off を表示する。
+
+  # Given: クリーン clone を隔離 dir へ install する
+  local src dest settings
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  settings="$dest/.claude/settings.json"
+
+  # Then: 既定 install では enforcement が書かれない（off）
+  assert_absent "$settings"                                 "R6: 既定 install では settings.json に enforcement を書かない（off）"
+
+  # And (When): enforce status は off を表示する
+  if node "$CLI" enforce status "$dest" 2>&1 | grep -q "off"; then
+    ok "R6: status が off を表示する（配線前）"
+  else
+    ng "R6: status は off を表示すべき（配線前）"
+  fi
+
+  # When: enforce on で opt-in する
+  node "$CLI" enforce on "$dest" >/dev/null 2>&1
+
+  # Then: settings.json が妥当 JSON である（無効 JSON での Claude 起動エラーを防ぐ）
+  assert_cmd_ok node -e "JSON.parse(require('fs').readFileSync('$settings','utf8'))"
+
+  # And (Then): hooks の command が実在する .claude/hooks/PreToolUse.sh を指し、AGENT_ROLE=orchestrator が設定される
+  assert_exists "$dest/.claude/hooks/PreToolUse.sh"         "R6: 配線先 PreToolUse.sh が実在する"
+  assert_exists "$dest/.claude/hooks/PostToolUse.sh"        "R6: 配線先 PostToolUse.sh が実在する"
+  if node -e '
+      const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+      const pre=(s.hooks&&s.hooks.PreToolUse||[]).find(e=>e.__agentsMdEnforce);
+      const cmd=pre&&pre.hooks&&pre.hooks[0]&&pre.hooks[0].command||"";
+      process.exit((cmd.includes("PreToolUse.sh") && s.env && s.env.AGENT_ROLE==="orchestrator")?0:1);
+    ' "$settings"; then
+    ok "R6: hooks が PreToolUse.sh を指し AGENT_ROLE=orchestrator が設定される"
+  else
+    ng "R6: hooks が実在 hook を指し AGENT_ROLE=orchestrator を設定すべき"
+  fi
+
+  # And (When): enforce status は on を表示する
+  if node "$CLI" enforce status "$dest" 2>&1 | grep -q "on"; then
+    ok "R6: status が on を表示する（配線後）"
+  else
+    ng "R6: status は on を表示すべき（配線後）"
+  fi
+
+  # And (When): enforce off で配線を外す
+  node "$CLI" enforce off "$dest" >/dev/null 2>&1
+
+  # And (Then): enforcement 配線が外れ、status が off に戻る
+  if node "$CLI" enforce status "$dest" 2>&1 | grep -q "off"; then
+    ok "R6: enforce off で配線が外れ status が off に戻る"
+  else
+    ng "R6: enforce off 後は status が off に戻るべき"
+  fi
+
+  rm -rf "$src" "$dest"
+}
+
+# =============================================================================
+# シナリオ R7: enforcement opt-in がユーザー settings.json を破壊しない（マージ・退避）
+# =============================================================================
+# ユースケース:
+#   利用者が既に .claude/settings.json に独自の env・hooks・permissions を持っている状態で
+#   enforce on しても、それらが破壊されずマージされ、上書き前に .bak へ退避される。enforce off で
+#   enforcement 由来の配線（managed env キー・managed hook エントリ）のみが外れ、ユーザー値は残る。
+test_enforcement_preserves_user_settings() {
+  echo "[e2e] シナリオR7: enforce on/off がユーザー settings.json を破壊しない"
+  # シナリオ: ユーザー env(MY_USER_VAR)・ユーザー hook・permissions を持つ settings.json に enforce on すると、
+  #           ユーザー値が保持され .bak が退避され、enforce off で enforcement 配線のみ外れユーザー値が残る。
+
+  # Given: install 済み dir にユーザー独自の settings.json を用意する
+  local src dest settings
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  settings="$dest/.claude/settings.json"
+  mkdir -p "$dest/.claude"
+  cat > "$settings" <<'JSON'
+{
+  "env": { "MY_USER_VAR": "keepme" },
+  "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [ { "type": "command", "command": "echo user-hook" } ] } ] },
+  "permissions": { "allow": ["Read"] }
+}
+JSON
+
+  # When: enforce on でマージする
+  node "$CLI" enforce on "$dest" >/dev/null 2>&1
+
+  # Then: 既存 settings の退避 .bak が作成される
+  assert_exists "$settings.bak"                            "R7: enforce on で settings.json.bak が退避される"
+
+  # And (Then): ユーザー値が保持されつつ enforcement が追加される
+  if node -e '
+      const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+      const userVar=s.env&&s.env.MY_USER_VAR==="keepme";
+      const role=s.env&&s.env.AGENT_ROLE==="orchestrator";
+      const perm=s.permissions&&Array.isArray(s.permissions.allow)&&s.permissions.allow[0]==="Read";
+      const userHook=(s.hooks.PreToolUse||[]).some(e=>!e.__agentsMdEnforce&&e.hooks[0].command==="echo user-hook");
+      const managed=(s.hooks.PreToolUse||[]).some(e=>e.__agentsMdEnforce===true);
+      process.exit((userVar&&role&&perm&&userHook&&managed)?0:1);
+    ' "$settings"; then
+    ok "R7: ユーザー env/hook/permissions を保持しつつ enforcement を追加する"
+  else
+    ng "R7: ユーザー値を破壊せず enforcement を追加すべき"
+  fi
+
+  # And (When): enforce off で配線のみ外す
+  node "$CLI" enforce off "$dest" >/dev/null 2>&1
+
+  # And (Then): enforcement 配線のみ外れ、ユーザー値は残る
+  if node -e '
+      const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+      const userVar=s.env&&s.env.MY_USER_VAR==="keepme";
+      const noRole=!(s.env&&s.env.AGENT_ROLE);
+      const perm=s.permissions&&s.permissions.allow[0]==="Read";
+      const pre=s.hooks&&s.hooks.PreToolUse||[];
+      const userHookKept=pre.length===1&&pre[0].hooks[0].command==="echo user-hook";
+      process.exit((userVar&&noRole&&perm&&userHookKept)?0:1);
+    ' "$settings"; then
+    ok "R7: enforce off で enforcement 配線のみ外れユーザー値が残る"
+  else
+    ng "R7: enforce off は enforcement 配線のみ外しユーザー値を残すべき"
+  fi
+
+  rm -rf "$src" "$dest"
+}
+
 # --- 実行 ---------------------------------------------------------------------
 [[ -f "$CLI" ]] || { echo "エラー: CLI が見つかりません: $CLI" >&2; exit 2; }
 
@@ -548,6 +688,8 @@ test_upgrade_preserves_user_assets
 test_uninstall_preserves_cohabiting_user_assets
 test_reinstall_preserves_user_skills_and_hooks
 test_uninstall_preserves_user_skills_and_hooks
+test_enforcement_optin
+test_enforcement_preserves_user_settings
 
 echo ""
 echo "[e2e] 結果: PASS=$PASS FAIL=$FAIL"

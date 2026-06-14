@@ -9,11 +9,19 @@
 //   upgrade          init と同等（当面）。既存配備の再同期を意図する
 //   uninstall        setup/init が配備した成果物のみを除去する（ユーザー資産は既定で保持）
 //   doctor           配備に必要な前提ファイル・依存の存在確認
+//   enforce on|off|status  enforcement フックを .claude/settings.json に着脱（既定 off / opt-in）
 //   version          package.json の version を表示
 //   help / (既定)    使い方を表示
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +29,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // パッケージ root は bin/ の 1 つ上。
 const PACKAGE_ROOT = join(__dirname, "..");
 const SETUP_PATH = join(PACKAGE_ROOT, ".agents", "scripts", "setup.sh");
+// enforcement 用 settings.json の正本テンプレート（既定 off。opt-in で配線する）。
+const ENFORCE_TEMPLATE_PATH = join(
+  PACKAGE_ROOT,
+  ".agents",
+  "platforms",
+  "claude",
+  "settings.enforce.json"
+);
 
 function readVersion() {
   try {
@@ -43,12 +59,20 @@ function printHelp() {
   upgrade [dir]         既存配備を再同期する（当面 init と同等）
   uninstall [dir]       init/setup が配備した成果物のみを除去する（ユーザー資産は既定で保持）
   doctor                配備に必要な前提（setup.sh・bash・sqlite3 等）の有無を確認する
+  enforce <on|off|status> [dir]
+                        enforcement フック（PreToolUse/PostToolUse）を .claude/settings.json に着脱する。
+                        既定は off（init では配線しない）。on で opt-in、off で解除、status で現状表示。
   version               パッケージのバージョンを表示する
   help                  このヘルプを表示する
 
 uninstall のオプション:
   --yes, -y            対話確認をスキップして実行する（既定は dry-run 表示のみ）
   --purge              workflow.db 等の証跡も含めて削除する（既定は保持）
+
+enforce のオプション:
+  enforce on           settings.json に enforcement 配線を追加する（既存ユーザー値はマージ・保持。退避 .bak を作成）
+  enforce off          enforcement 配線のみを外す（ユーザーの他設定は保持）
+  enforce status       現在 on/off と hook スクリプト実在性を表示する
 
 例:
   cd my-project && npx @techbeansjp-free/agents-md init
@@ -60,7 +84,9 @@ uninstall のオプション:
   init は内部で ${".agents/scripts/setup.sh"} を実行します。
   setup.sh は workflow.db 初期化に sqlite3 バイナリを必要とします（doctor で確認可能）。
   uninstall は既定で .agents-project/・.workflow の issue・workflow.db を保持します
-  （--purge で workflow.db も削除）。引数なしの場合は dry-run（表示のみ）です。`);
+  （--purge で workflow.db も削除）。引数なしの場合は dry-run（表示のみ）です。
+  enforcement は既定 off。ドッグフーディング時に enforce on で opt-in（セッション挙動が変わるため任意）。
+  enforce off で解除します。enforce は .claude/settings.json のユーザー値を破壊せず配線のみ着脱します。`);
 }
 
 // setup.sh を projectRoot 引数つきで実行する。
@@ -109,11 +135,31 @@ function runDoctor() {
 
   // 採用先側に配備済みかの確認（init 後の健全性）
   check("AGENTS.md（採用先ルート契約）", existsSync(join(projectRoot, "AGENTS.md")), "未配備の場合は init を実行してください。");
+  const preHookPath = join(projectRoot, ".claude", "hooks", "PreToolUse.sh");
+  const postHookPath = join(projectRoot, ".claude", "hooks", "PostToolUse.sh");
   check(
     ".claude/hooks/PreToolUse.sh（enforcement フック）",
-    existsSync(join(projectRoot, ".claude", "hooks", "PreToolUse.sh")),
+    existsSync(preHookPath),
     "Claude enforcement が未配備の場合は init を実行してください。"
   );
+
+  // enforcement の on/off 判定（opt-in 機構。既定 off）。
+  // settings.json に本パッケージ由来の hook 配線があるかで判定する。hook スクリプト実在性も併せて表示する。
+  const settingsPath = join(projectRoot, ".claude", "settings.json");
+  const settings = readSettings(settingsPath);
+  if (settings === null) {
+    console.log("[WARN] .claude/settings.json が妥当な JSON ではありません（enforce 前に修正してください）。");
+  } else {
+    const on = enforceIsOn(settings);
+    console.log(
+      `[INFO] enforcement 配線 = ${on ? "on" : "off（既定）"}` +
+        `${on ? "" : "。ドッグフーディング時に `agents-md enforce on` で opt-in できます。"}`
+    );
+    if (on && !(existsSync(preHookPath) && existsSync(postHookPath))) {
+      console.log("[NG]  enforcement は on ですが hook スクリプトが未配備です。init を実行してください。");
+      ok = false;
+    }
+  }
 
   // 依存バイナリ
   const bashOk = spawnSync("bash", ["-c", "true"]).status === 0;
@@ -347,6 +393,201 @@ function runUninstall(projectRoot, opts) {
   return failed ? 1 : 0;
 }
 
+// ----------------------------------------------------------------------------
+// enforce: enforcement フックを .claude/settings.json に着脱する（既定 off / opt-in）。
+//
+// 方針（ライブセッション保護・ユーザー値非破壊）:
+//   - 既定では init/setup は settings.json に enforcement を書き込まない（off）。
+//   - `enforce on`  … 正本テンプレート（.agents/platforms/claude/settings.enforce.json）から
+//                     hooks.PreToolUse/PostToolUse・env(AGENT_ROLE 等)を **既存 settings.json にマージ**する。
+//                     注入したエントリには見えない目印を持たせず、env は managed キー集合で識別する。
+//                     既存 settings.json があれば書き換え前に .bak へ退避する。
+//   - `enforce off` … enforcement 由来の配線（managed env キー・本パッケージが注入した hook エントリ）
+//                     のみを取り除く。ユーザーが書いた他の env/hooks/設定は保持する。
+//   - `enforce status` … 現在の on/off と hook スクリプトの実在性を表示する。
+//
+// 注入の識別:
+//   - 注入する各 hook エントリに `"__agentsMdEnforce": true` を付与し、off で除去する目印にする。
+//   - 注入する env キーは ENFORCE_MANAGED_ENV_KEYS で固定（テンプレートの env から導出）。
+// ----------------------------------------------------------------------------
+
+// テンプレートを読み込む（壊れていれば null）。
+function readEnforceTemplate() {
+  try {
+    return JSON.parse(readFileSync(ENFORCE_TEMPLATE_PATH, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+// settings.json を読み込む（無ければ {}、壊れていれば null を返す）。
+function readSettings(settingsPath) {
+  if (!existsSync(settingsPath)) return {};
+  try {
+    return JSON.parse(readFileSync(settingsPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+// hook 配列（PreToolUse 等）内で、本パッケージが注入したエントリかを判定する。
+function isManagedHookEntry(entry) {
+  return entry && typeof entry === "object" && entry.__agentsMdEnforce === true;
+}
+
+// enforce 状態の判定: settings.json に managed hook エントリが 1 つでもあれば on。
+function enforceIsOn(settings) {
+  const hooks = settings && settings.hooks;
+  if (!hooks || typeof hooks !== "object") return false;
+  for (const event of ["PreToolUse", "PostToolUse"]) {
+    const arr = hooks[event];
+    if (Array.isArray(arr) && arr.some(isManagedHookEntry)) return true;
+  }
+  return false;
+}
+
+// テンプレートの env キー集合（managed env キー）。off で除去対象にする。
+function templateEnvKeys(template) {
+  return template && template.env ? Object.keys(template.env) : [];
+}
+
+// enforce on: テンプレートを既存 settings にマージする（ユーザー値は保持・退避 .bak を作成）。
+function enforceOn(projectRoot, settingsPath, settings, template) {
+  const next = { ...settings };
+
+  // env: テンプレートの managed キーを設定する。既存ユーザー env は保持し、managed キーのみ上書きする。
+  next.env = { ...(settings.env || {}) };
+  for (const [k, v] of Object.entries(template.env || {})) {
+    next.env[k] = v;
+  }
+
+  // hooks: 既存 hooks を保持しつつ、各イベントに managed エントリを（重複なく）追加する。
+  next.hooks = { ...(settings.hooks || {}) };
+  for (const event of ["PreToolUse", "PostToolUse"]) {
+    const tmplEntries = (template.hooks && template.hooks[event]) || [];
+    // 既存配列から過去の managed エントリを除去してから注入（再 on の冪等性）。
+    const existing = Array.isArray(next.hooks[event])
+      ? next.hooks[event].filter((e) => !isManagedHookEntry(e))
+      : [];
+    const injected = tmplEntries.map((e) => ({ ...e, __agentsMdEnforce: true }));
+    next.hooks[event] = [...existing, ...injected];
+  }
+
+  // 退避: 既存 settings.json があれば .bak に退避する（上書き前の安全策）。
+  if (existsSync(settingsPath)) {
+    const bak = settingsPath + ".bak";
+    try {
+      writeFileSync(bak, readFileSync(settingsPath, "utf8"));
+      console.log(`enforce: 既存 settings.json を退避しました: ${bak}`);
+    } catch (e) {
+      console.error(`警告: settings.json の退避に失敗しました: ${e.message}`);
+    }
+  }
+
+  writeFileSync(settingsPath, JSON.stringify(next, null, 2) + "\n");
+  console.log(`enforce: on にしました（${settingsPath} に enforcement 配線をマージ）。`);
+  console.log("        AGENT_ROLE=orchestrator・PreToolUse/PostToolUse を配線しました。");
+  console.log("        注意: ライブセッションに反映するには Claude Code の再起動が必要です。");
+
+  // hook スクリプト実在性の警告（配備前なら案内）。
+  warnIfHookScriptsMissing(projectRoot);
+  return 0;
+}
+
+// enforce off: managed env キーと managed hook エントリのみを除去する（ユーザー値は保持）。
+function enforceOff(projectRoot, settingsPath, settings, template) {
+  if (!existsSync(settingsPath)) {
+    console.log(`enforce: ${settingsPath} がありません。既に off です。`);
+    return 0;
+  }
+  const next = { ...settings };
+
+  // env: managed キーのみ削除。残りが空になれば env 自体を消す。
+  if (next.env && typeof next.env === "object") {
+    next.env = { ...next.env };
+    for (const k of templateEnvKeys(template)) delete next.env[k];
+    if (Object.keys(next.env).length === 0) delete next.env;
+  }
+
+  // hooks: 各イベントから managed エントリのみ除去。空配列になれば当該イベントキーを消す。
+  if (next.hooks && typeof next.hooks === "object") {
+    next.hooks = { ...next.hooks };
+    for (const event of ["PreToolUse", "PostToolUse"]) {
+      if (Array.isArray(next.hooks[event])) {
+        const kept = next.hooks[event].filter((e) => !isManagedHookEntry(e));
+        if (kept.length === 0) delete next.hooks[event];
+        else next.hooks[event] = kept;
+      }
+    }
+    if (Object.keys(next.hooks).length === 0) delete next.hooks;
+  }
+
+  writeFileSync(settingsPath, JSON.stringify(next, null, 2) + "\n");
+  console.log(`enforce: off にしました（${settingsPath} から enforcement 配線を除去。ユーザー値は保持）。`);
+  console.log("        注意: ライブセッションに反映するには Claude Code の再起動が必要です。");
+  return 0;
+}
+
+// hook スクリプトが配備済みかを確認し、未配備なら警告する。
+function warnIfHookScriptsMissing(projectRoot) {
+  for (const name of ["PreToolUse.sh", "PostToolUse.sh"]) {
+    const p = join(projectRoot, ".claude", "hooks", name);
+    if (!existsSync(p)) {
+      console.log(
+        `警告: ${join(".claude", "hooks", name)} が見つかりません。init を実行して hook を配備してください。`
+      );
+    }
+  }
+}
+
+// enforce status: 現在 on/off と hook スクリプト実在性を表示する。
+function enforceStatus(projectRoot, settingsPath, settings) {
+  const on = enforceIsOn(settings);
+  console.log(`enforce: 採用先=${projectRoot}`);
+  console.log(`        settings.json=${existsSync(settingsPath) ? settingsPath : "（未作成）"}`);
+  console.log(`        enforcement = ${on ? "on（配線あり）" : "off（配線なし）"}`);
+  const pre = join(projectRoot, ".claude", "hooks", "PreToolUse.sh");
+  const post = join(projectRoot, ".claude", "hooks", "PostToolUse.sh");
+  console.log(`        PreToolUse.sh  = ${existsSync(pre) ? "実在" : "不在（init で配備）"}`);
+  console.log(`        PostToolUse.sh = ${existsSync(post) ? "実在" : "不在（init で配備）"}`);
+  if (on && (!existsSync(pre) || !existsSync(post))) {
+    console.log("        注意: 配線は on ですが hook スクリプトが未配備です。init を実行してください。");
+  }
+  return 0;
+}
+
+// runEnforce: enforce サブコマンドのディスパッチ。
+function runEnforce(projectRoot, action) {
+  const settingsPath = join(projectRoot, ".claude", "settings.json");
+  const settings = readSettings(settingsPath);
+  if (settings === null) {
+    console.error(
+      `エラー: ${settingsPath} が妥当な JSON ではありません。\n` +
+        `        手で修正するか退避してから再実行してください（破壊を避けるため中止します）。`
+    );
+    return 1;
+  }
+
+  if (action === "status") {
+    return enforceStatus(projectRoot, settingsPath, settings);
+  }
+
+  const template = readEnforceTemplate();
+  if (template === null) {
+    console.error(
+      `エラー: enforcement テンプレートが読めません: ${ENFORCE_TEMPLATE_PATH}\n` +
+        `        パッケージが壊れている可能性があります。再インストールしてください。`
+    );
+    return 1;
+  }
+
+  if (action === "on") return enforceOn(projectRoot, settingsPath, settings, template);
+  if (action === "off") return enforceOff(projectRoot, settingsPath, settings, template);
+
+  console.error(`エラー: enforce の引数は on|off|status のいずれかです: '${action ?? "(なし)"}'`);
+  return 1;
+}
+
 function main(argv) {
   const cmd = argv[2] ?? "help";
   switch (cmd) {
@@ -368,6 +609,17 @@ function main(argv) {
         projectRoot = dirArg.startsWith("/") ? dirArg : join(process.cwd(), dirArg);
       }
       return runUninstall(projectRoot, { yes, purge });
+    }
+    case "enforce": {
+      // enforce <on|off|status> [dir]。dir 省略時は cwd。
+      const rest = argv.slice(3);
+      const action = rest.find((a) => !a.startsWith("-")) ?? "status";
+      const dirArg = rest.filter((a) => !a.startsWith("-"))[1];
+      let projectRoot = process.cwd();
+      if (dirArg) {
+        projectRoot = dirArg.startsWith("/") ? dirArg : join(process.cwd(), dirArg);
+      }
+      return runEnforce(projectRoot, action);
     }
     case "doctor":
       return runDoctor();

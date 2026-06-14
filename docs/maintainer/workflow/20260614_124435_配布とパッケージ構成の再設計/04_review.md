@@ -1091,3 +1091,115 @@ R1〜R3 のインラインコメントを `.agents/TEST_BDD_FORMAT.md` に照ら
 - **残課題（軽微・非ブロッカー）**: Node `ownedSkillNames` は bash 関数のミラー実装であり潜在 drift リスクが残る（G-4）。現時点では完全一致。将来 CI に bash↔Node 所有集合一致テストを追加すると堅牢化（任意）。
 - **承認者**: worker（auditor/scribe、orchestrator 委譲） / **承認日**: 2026-06-14
 - **DoD**: 04_review 追記済み・E2E（S1〜S7＋R1〜R5＝77/0）再実行と保持の実測を記載済み・所有集合単一定義の三経路突合済み・build-adapters claude/cursor diff-zero／静的検査／`.adapters` 非リーク確認済み・独立回帰確認済み・本リポ非破壊（sha256＋git status 同一）確認済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・実 DB 現 head にチェーン連結）。
+
+---
+
+# 【追記バッチ H】フェーズ5 enforcement の opt-in 配線（既定off・enforce on/off/status・PreToolUse 実効性の限界）
+
+> **本バッチの位置づけ**: command **verify-and-close**（skill chain: generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）。直前 implement-feature の未コミット成果（フェーズ5 enforcement を **opt-in／既定 off** で配線。03_実装計画 §2.6）を対象とする。**レビュー深度: standard**（中規模・限定スコープ。settings.json への着脱機構・テンプレート・E2E 追加）。
+>
+> **evidence_source 凡例**: `test_output`（本レビューで再実行）/ `existing_code`（実ファイル確認）/ `external_spec`（公式仕様）/ `inference_only`（推測。重要判断は不採用）。
+
+## H-1. レビュー対象（変更/新規ファイル）
+
+| ファイル | 変更概要 | evidence |
+|----------|----------|----------|
+| `.agents/platforms/claude/settings.enforce.json` | **新規・正本テンプレート**。`hooks.PreToolUse`/`PostToolUse` を `${CLAUDE_PROJECT_DIR}/.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` へ結線。`env.AGENT_ROLE=orchestrator`・`env.AGENTS_ROOT=${CLAUDE_PROJECT_DIR}/.agents` を設定。hook の `matcher: "*"` | existing_code |
+| `bin/agents-md.js` | `enforce on\|off\|status` を追加。managed hook エントリを `__agentsMdEnforce: true` 目印で着脱、managed env キーはテンプレートの `env` キー集合（`AGENT_ROLE`・`AGENTS_ROOT`）で識別。`on` は既存 settings に**マージ**し上書き前に `.bak` 退避、無効 JSON は破壊回避で中止。`doctor` に enforcement on/off 判定を追加。再 on の冪等性（既存 managed を除去してから注入） | existing_code |
+| `.agents/scripts/test/e2e-install-uninstall.sh` | R6（opt-in: 既定 off・on 配線・off 解除・status 表示）・R7（ユーザー settings 非破壊: マージ・`.bak` 退避・off で配線のみ除去）を追加 | existing_code |
+| `.agents/SETUP.md`・`README.md` | enforcement 既定 off／`enforce on/off/status` opt-in を明記。保持・上書き契約表に settings.json の着脱行を追加 | existing_code |
+
+## H-2. 受け入れ基準の確認（generate-scenarios → map-coverage）
+
+| 基準 | 検証方法 | 結果 |
+|------|----------|------|
+| 既定 install では settings.json に enforcement を書かない（off） | R6 E2E + 独立回帰 | **通過**（`assert_absent settings`・`status` が off 表示） |
+| `enforce on` で妥当 JSON を生成（`node JSON.parse`） | R6 E2E + 独立回帰 | **通過**（parse OK） |
+| hook の command が実在 `.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` を指す | R6 E2E + 独立回帰 | **通過**（init 後にテンプレートの `${CLAUDE_PROJECT_DIR}/.claude/hooks/*.sh` が実在ファイルに解決） |
+| `enforce on` で `AGENT_ROLE=orchestrator` が設定される | R6 E2E | **通過** |
+| ユーザー settings を破壊せずマージし `.bak` 退避 | R7 E2E + 独立回帰 | **通過**（`MY_USER_VAR`・ユーザー hook・`permissions` 保持、`.bak` 生成） |
+| `enforce off` で enforcement 配線のみ除去・ユーザー値保持 | R7 E2E | **通過**（managed env/hook のみ除去、ユーザー値残存） |
+| `status`・`doctor` が on/off と hook 実在性を表示 | R6 E2E + 独立回帰 | **通過** |
+| 無効 JSON で破壊回避（中止） | existing_code（`readSettings`→null で中止） | **通過**（コードパス確認） |
+| build-adapters diff-zero・静的検査・`.adapters` 非リーク | H-5 | **通過** |
+| **PreToolUse の tool 別 reject が実機で発火するか** | H-6（existing_code + external_spec） | **未達（残課題・本バッチ範囲外）**。下記 H-6 参照 |
+
+未達: **H-6 の PreToolUse 実効性の限界のみ**（実装者が事前に指摘済み・本バッチ範囲外）。00/01/02/03 の必須セクション欠落は本バッチ範囲で検出なし。
+
+## H-3. E2E 再実行サマリ（test_output・隔離 dir・非破壊）
+
+検証は**未コミットの作業ツリー変更を含むスナップショット**（`mktemp -d` に rsync で working tree を複製→`git init`+1 commit。`git archive HEAD` がスナップショットの新規 `settings.enforce.json`・改修 `bin/agents-md.js` を含むようにするため）で実行した。新規ファイルは untracked のため、開発リポの `git archive HEAD` には含まれず E2E が新コードを通らない点に留意し、上記方式で**新コードを実際に通す**形にした（evidence_source=test_output）。
+
+`bash .agents/scripts/test/e2e-install-uninstall.sh` 実行。**結果: `PASS=88 FAIL=0`／「全シナリオ pass」**。各シナリオは隔離 dir で独立実行。
+
+- **S1-S7・R1-R5**（既存の install/uninstall/冪等/カプセル化/ユーザー資産保全）: 全 pass（回帰なし）。
+- **R6**（enforcement opt-in）: 8 アサーション pass。実測:
+  - 既定 `init` 後、`.claude/settings.json` は**不在**（enforcement を書かない＝off）。
+  - `enforce status`（配線前）が **off** を表示。
+  - `enforce on` 後、`settings.json` が **`node JSON.parse` 妥当**。`hooks.PreToolUse[].__agentsMdEnforce` の command が `PreToolUse.sh` を含み、`env.AGENT_ROLE==="orchestrator"`。配線先 `PreToolUse.sh`/`PostToolUse.sh` が**実在**。
+  - `enforce status`（配線後）が **on** を表示。`enforce off` 後、status が **off** に戻る。
+- **R7**（ユーザー settings 非破壊）: 3 アサーション pass。実測:
+  - ユーザー `env.MY_USER_VAR=keepme`・ユーザー hook（`echo user-hook`）・`permissions.allow=[Read]` を持つ settings に `enforce on` → `settings.json.bak` が**退避**。
+  - ユーザー値（env/hook/permissions）を**保持**しつつ managed env（`AGENT_ROLE`）と managed hook（`__agentsMdEnforce`）を追加。
+  - `enforce off` → managed env/hook のみ除去、ユーザー値（`MY_USER_VAR`・user-hook・permissions）が**残存**。
+
+**追加の独立確認（隔離 dir・test_output）**: `init`→`enforce on` を実行し、生成 settings.json を実測。`status`（on 前 off／on 後）と `doctor` が `[INFO] enforcement 配線 = on` を表示。テンプレートの `${CLAUDE_PROJECT_DIR}/.claude/hooks/*.sh` が init 配備後の実ファイル（`PreToolUse.sh`/`PostToolUse.sh`）に解決することを確認。
+
+## H-4. settings テンプレート JSON 妥当性・hook 実在パス（test_output / existing_code）
+
+- `node JSON.parse(.agents/platforms/claude/settings.enforce.json)` … **parse OK**。
+- `hooks.PreToolUse[0].hooks[0].command` が `.claude/hooks/PreToolUse.sh` を含む … **true**。`PostToolUse` 同様 … **true**。
+- `env.AGENT_ROLE` = `orchestrator`、`env.AGENTS_ROOT` = `${CLAUDE_PROJECT_DIR}/.agents` … **確認**。
+- 配備物正本 `.agents/enforcement/claude/PreToolUse.sh`・`PostToolUse.sh` が**実在**（setup が `.claude/hooks/` へ配備する正本）。
+
+## H-5. 静的検査・diff-zero・リーク（test_output）
+
+- `bash -n .agents/scripts/test/e2e-install-uninstall.sh` … **OK**。
+- `node --check bin/agents-md.js` … **OK**。
+- `bash .agents/scripts/build-adapters.sh claude` … exit 0。**2 回連続で生成物 sha256 集約一致＝diff-zero**（`e50cea3a…`）。
+- `bash .agents/scripts/build-adapters.sh cursor` … exit 0。**2 回連続で一致＝diff-zero**（`e70fbafd…`）。
+- `git ls-files .adapters` … **空**（生成物がリポに漏れていない）。
+- **開発リポ非変更の実測**: 検証前後で `find .agents .claude .cursor -type f | sort | xargs sha256sum | sha256sum` が**同一**（`92e729ee…9c7c4fd59`）。`git status --porcelain` も **6 行（対象 5 変更＋本 issue ディレクトリ）で `.claude/` 変更なし**。検証は全て `mktemp -d` 隔離 dir／スナップショットで行い、**開発リポの `.claude/`（ライブセッション）を一切変更していない**（安全制約遵守）。
+
+## H-6. PreToolUse.sh 実効性の限界（残課題・本バッチ範囲外）
+
+**結論: 本バッチで配線される `AGENT_ROLE=orchestrator`（env）は実機で効くが、`PreToolUse.sh` の「ツール別 reject」分岐は実 Claude Code では発火しない可能性が高い。** 実装者が事前指摘した残課題を、independent に existing_code＋external_spec で確認した（inference_only 単独依存にしない）。
+
+- **入力取得方法（existing_code）**: `.agents/enforcement/claude/PreToolUse.sh` はツール情報を**環境変数のみ**から取得する。
+  - L14-17: `TOOL="${CLAUDE_TOOL_NAME:-${TOOL_NAME:-}}"`、`PATH_TARGET`・`CMD` も `CLAUDE_FILE_PATH`/`FILE_PATH`・`CLAUDE_COMMAND`/`COMMAND` の env からのみ取得。**stdin を一切読まない**（`read`/`jq`/`cat /dev/stdin` 等なし）。
+  - 全 reject 分岐は `[[ -n "$TOOL" ]]`（L33）／`[[ -n "$CMD" ]]`（L67, L104）で gate されている。
+- **配線が渡す env（existing_code）**: `settings.enforce.json` の hook command は `AGENTS_ROOT` と `AGENT_ROLE` のみを export し、`CLAUDE_TOOL_NAME`/`TOOL_NAME`/`FILE_PATH`/`COMMAND` を**渡さない**。
+- **実 Claude Code の契約（external_spec: code.claude.com/docs/en/hooks）**: PreToolUse フックは `tool_name`/`tool_input` を **stdin の JSON** で受け取る。**`CLAUDE_TOOL_NAME`/`TOOL_NAME` という環境変数は存在しない**（`CLAUDE_PROJECT_DIR` は実在する env）。さらに**ブロック用の終了コードは `2`**（本スクリプトの reject は `exit 1`）。
+- **帰結**: 実機では `TOOL`/`CMD` が空のまま → L33-110 の orchestrator allowlist・Bash 制限・sqlite3 直接禁止・`.workflow` 直接編集禁止の各 reject が**発火しない**。実際に動くのは L26-30 の**常時案内（CORE/LOAD_POLICY/PHASES 読了・委譲・書記の注意喚起）**と、env に入る `AGENT_ROLE=orchestrator` という**変数の設定のみ**。仮に将来 stdin 対応しても、現状は `exit 1` のため Claude のブロック（`exit 2`）として解釈されない二次的ギャップもある。
+- **本バッチ範囲との関係**: 本バッチのスコープは「**配線（settings.json への着脱機構）＋ `AGENT_ROLE` の供給**」であり、PreToolUse.sh の入力取得方法の是正（env→stdin）・ブロック exit code の是正（1→2）は**範囲外**。実装者の自己申告と一致する。
+- **後続提案（非ブロッカー）**:
+  1. `PreToolUse.sh`/`PostToolUse.sh` を **stdin JSON 読取**（`jq -r '.tool_name'`/`.tool_input` 等）へ改修し、reject を `exit 2`、`jq` 非依存フォールバックを用意するサブ issue を起票。
+  2. R6 に「reject 発火」レベルの検証（stdin JSON を流して exit code を確認する hook 単体テスト）を追加。
+  3. SETUP.md/README に「現状の enforcement は **AGENT_ROLE 供給＋案内**が主で、ツール別 runtime reject は未発火（CI/audit が事後検知の主役）」という**実効範囲の注記**を加える（過信防止）。
+
+## H-7. TEST_BDD_FORMAT 監査（R6/R7）
+
+`.agents/TEST_BDD_FORMAT.md` に照らし R6/R7 のインラインコメントを確認（existing_code）。
+
+- **ユースケース**: R6（`test_enforcement_optin`）・R7（`test_enforcement_preserves_user_settings`）とも関数直前のブロックコメントに `# ユースケース:` を記載（利用者目線で「何のためのテスト群か」を 3 文以内で説明）。**充足**。
+- **シナリオ**: 各テスト関数本体冒頭に `# シナリオ:` コメントを記載（検証する状況・条件を記述）。**充足**。
+- **Given/When/Then**: 各ブロック直上に `# Given:`／`# When:`／`# Then:` を 1 つずつ配置。複数操作・複数検証は `# And (When):`／`# And (Then):` を使用（R6 の status→on→off 連鎖、R7 のマージ後検証→off 後検証で確認）。**充足**。
+- **指摘**: bash の関数テストという制約上 `ユースケース:`/`シナリオ:` はブロックコメントで表現されるが、TEST_BDD_FORMAT §0 が言語に合わせた doc コメントを許容し、既存 S1-S7・R1-R5 と同一スタイルで一貫。**逸脱なし**。
+
+## H-8. 設計・境界の確認（review-architecture）
+
+- **正本単一化**: enforcement の settings 配線は**正本テンプレート 1 ファイル**（`.agents/platforms/claude/settings.enforce.json`）に集約。`bin/agents-md.js` はそこから env キー集合（managed env）と hook エントリを導出して着脱する。配線内容の二重定義がない（existing_code）。
+- **着脱の識別と冪等性**: managed hook は `__agentsMdEnforce: true` 目印、managed env はテンプレート env キー集合で識別。`enforce on` は再実行時に既存 managed を除去してから注入し**冪等**。`off` は managed のみ除去しユーザー値（env/hooks/permissions）を保持。**疎結合・非破壊に適合**。
+- **安全側設計**: 無効 JSON は `readSettings`→null で**中止**（破壊回避）。`on` は上書き前に `.bak` 退避。`init`/`setup` は settings.json を touch しない（off 既定）。02 設計（ユーザー資産非破壊・opt-in）と一致。
+- **責務の越境なし**: setup（配備）と enforce（settings 着脱）が分離。`doctor` は判定のみで着脱しない。循環・不要結合なし。
+- **指摘**: 設計上のブロッカーなし。ただし **H-6 の実効性の限界**は「設計意図（runtime reject）と実機挙動（未発火）の乖離」であり、設計ドキュメント／SETUP に実効範囲の注記を追加する余地がある（非ブロッカー・後続）。
+
+## H-9. レビュー結果（バッチ H）
+
+- **実装品質**: 良好。settings.json への着脱を正本テンプレート＋目印（`__agentsMdEnforce`）＋managed env キー集合で実装し、マージ・`.bak` 退避・無効 JSON 中止・再 on 冪等・off でのユーザー値保持を満たす。`doctor`/`status` に on/off 判定を統合。
+- **テスト品質**: 良好。R6/R7 を新設し E2E `PASS=88 FAIL=0` を隔離・非破壊で再実行。既定 off・妥当 JSON・hook 実在パス・`AGENT_ROLE` 設定・ユーザー値非破壊・`.bak` 退避・off での配線のみ除去を実測。TEST_BDD_FORMAT 充足。**未コミット新規ファイルを E2E が実際に通る**ようスナップショット方式で検証した点も記録。
+- **ドキュメント品質**: 良好。SETUP.md・README に enforcement 既定 off／`enforce on/off/status` opt-in・保持/上書き契約（settings.json 行）を明記。
+- **総合評価**: **承認可（本バッチ範囲＝「opt-in 配線＋AGENT_ROLE 供給」・ブロッカーなし）**。Task の検証条件「既定 off・有効化で妥当 settings.json・hook が実在パス・ユーザー値非破壊・ライブセッション非変更」は**全て test_output で充足**。
+- **残課題（重要・非ブロッカー・本バッチ範囲外）**: **H-6 PreToolUse 実効性の限界**。`PreToolUse.sh` が env のみ読取・配線が tool 情報 env を渡さず・実 Claude Code は stdin JSON 渡し（`CLAUDE_TOOL_NAME` env は不在）かつブロック exit code は `2` のため、**ツール別 runtime reject は実機で未発火の可能性が高い**（existing_code＋external_spec で確認）。実機で効くのは `AGENT_ROLE` 供給と常時案内のみ。後続で (1) hook の stdin 化＋`exit 2` 改修、(2) reject 発火の hook 単体テスト追加、(3) 実効範囲の注記、をサブ issue 化することを提案。
+- **承認者**: worker（auditor/scribe、orchestrator 委譲） / **承認日**: 2026-06-14
+- **DoD**: 04_review 追記済み・E2E（S1〜S7＋R1〜R7＝88/0）再実行を新コードを通す形で記載済み・settings テンプレート JSON 妥当性／hook 実在パス確認済み・build-adapters claude/cursor diff-zero／静的検査／`.adapters` 非リーク確認済み・開発リポ `.claude/` 非変更（sha256＋git status 同一）確認済み・PreToolUse 実効性の限界を existing_code＋external_spec で独立確認し残課題として明記済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・実 DB 現 head にチェーン連結）。

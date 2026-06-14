@@ -90,6 +90,28 @@ bash .agents/scripts/setup.sh
 
 ---
 
+## enforcement の opt-in（既定 off）
+
+**結論: enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` への配線は既定 off。ドッグフーディング時に明示的に opt-in する。** 常時 on にはしない（自己拡張・通常開発のノイズ回避。03_実装計画 §2.6）。配線はセッション挙動を変えるため、利用者が任意のタイミングで着脱できる。
+
+| コマンド | 役割 |
+|----------|------|
+| `agents-md enforce on [dir]` | 正本テンプレート（`.agents/platforms/claude/settings.enforce.json`）から `.claude/settings.json` に enforcement 配線（`hooks.PreToolUse`/`PostToolUse`・`env.AGENT_ROLE=orchestrator` 等）をマージする。既存 settings.json があれば**ユーザー値を破壊せず**マージし、上書き前に `settings.json.bak` へ退避する。 |
+| `agents-md enforce off [dir]` | enforcement 由来の配線（パッケージが注入した hook エントリ・managed env キー）のみを外す。ユーザーの他設定（env・hooks・permissions 等）は保持する。 |
+| `agents-md enforce status [dir]` | 現在の on/off と hook スクリプト（`.claude/hooks/PreToolUse.sh`・`PostToolUse.sh`）の実在性を表示する。 |
+
+- **正本テンプレート**: `.agents/platforms/claude/settings.enforce.json`。`hooks.PreToolUse`/`PostToolUse` を setup 配備物 `.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` へ `${CLAUDE_PROJECT_DIR}` 相対で結線し、`env.AGENT_ROLE=orchestrator`・`env.AGENTS_ROOT` を設定する。各 hook エントリには `__agentsMdEnforce: true` の目印を付与し、`enforce off` で正確に除去する。
+- **既定 install では書き込まない**: `init`/`setup` は `.claude/settings.json` に enforcement を**書かない**（off）。`doctor` は enforcement 配線の on/off と hook スクリプト実在性を表示する。
+- **安全策**: `.claude/settings.json` が無効 JSON の場合、`enforce` は破壊を避けるため中止する（Claude 起動時エラーを事前に防ぐ）。
+
+### settings.json の保持・上書き契約
+
+| 対象 | init/upgrade | enforce on | enforce off | uninstall |
+|------|--------------|-----------|-------------|-----------|
+| **.claude/settings.json**（ユーザー値） | touch しない（保持） | **ユーザー値は保持**し enforcement 配線のみ追加（マージ・`.bak` 退避） | enforcement 配線のみ除去（ユーザー値は保持） | touch しない（ユーザー設定として保持） |
+
+---
+
 ## init / upgrade / uninstall の保持・上書き契約（正本）
 
 **結論: install/upgrade/uninstall は「パッケージ配備物」のみを管理し、ユーザー資産は破壊しない。** 再インストール・upgrade でユーザーが個人的に作成した project 固有ルールや自作エディタルールが消えることはない。判断に迷う場合は安全側（保持）に倒す。
@@ -114,7 +136,7 @@ bash .agents/scripts/setup.sh
 |------|------|
 | **.agents-project/** | project 固有ルール。setup は touch しない。**project 固有ルールは必ずここに置くこと**（推奨）。.agents より優先される。 |
 | **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc`・独自ファイル・`.cursor/skills/` の自作スキル） | setup は `.cursor/` を丸ごと削除せず、パッケージ所有ファイル・所有 skill エントリのみ更新するため**保持**される。 |
-| **.claude/ のユーザー設定・自作物**（`settings.json`・`.claude/skills/` の自作スキル・`.claude/hooks/` の独自フック） | setup は `.claude/hooks`・`.claude/skills` の**パッケージ配備分のみ**更新し、ユーザー設定・自作スキル・独自フックは touch しない（保持）。 |
+| **.claude/ のユーザー設定・自作物**（`settings.json`・`.claude/skills/` の自作スキル・`.claude/hooks/` の独自フック） | setup は `.claude/hooks`・`.claude/skills` の**パッケージ配備分のみ**更新し、ユーザー設定・自作スキル・独自フックは touch しない（保持）。`settings.json` の enforcement 配線は `enforce on`/`off` でのみ着脱し、ユーザー値は破壊しない（§enforcement の opt-in）。 |
 | **.workflow/<issue>/** | issue 成果物（消費者ランタイム）。保持。 |
 | **workflow.db** | 証跡 DB。初回のみ生成、既存は上書きしない（保持）。 |
 

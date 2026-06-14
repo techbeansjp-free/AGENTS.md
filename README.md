@@ -71,7 +71,8 @@ npx @techbeansjp-free/agents-md init
 | `init [dir]` | 採用先（既定: カレントディレクトリ）へ `.agents/` 等を配備する |
 | `upgrade [dir]` | 既存配備を再同期する（当面 `init` と同等。新版取り込みに使う） |
 | `uninstall [dir]` | `init`/`setup` が配備した成果物のみを除去する（ユーザー資産は既定で保持） |
-| `doctor` | 配備に必要な前提（`setup.sh`・`bash`・`sqlite3` 等）の有無を確認する |
+| `doctor` | 配備に必要な前提（`setup.sh`・`bash`・`sqlite3` 等）の有無を確認する。enforcement 配線の on/off も表示する |
+| `enforce <on\|off\|status> [dir]` | enforcement フックを `.claude/settings.json` に着脱する（**既定 off / opt-in**） |
 | `version` | パッケージのバージョンを表示する |
 | `help` | 使い方を表示する |
 
@@ -110,6 +111,21 @@ npx @techbeansjp-free/agents-md uninstall --purge --yes
 | 安全策 | `.agents/` も `AGENTS.md` も無い（未配備の）ディレクトリでは誤削除を防ぐため中止する。`.cursor`/`.claude` は丸ごと消さず**配備分（既知エントリ）のみ**除去（自作スキル/独自フックは保持）。`--yes` 無しは表示のみ。 | 同左 |
 
 > 補足: `init`／`upgrade` は workflow.db の初期化に `sqlite3` バイナリを必要とする（`doctor` で確認できる）。**project 固有ルールは `.agents-project/` に置くこと**を推奨する（再インストール・upgrade・uninstall で保持される）。`.cursor`/`.claude` に置いたユーザー作成物も保持される。`AGENTS.md`・`CLAUDE.md`・`.agents-project/` 等の人間編集領域は無断破壊されない（保持・上書き契約の正本は [.agents/SETUP.md](.agents/SETUP.md)）。
+
+**enforcement の opt-in（既定 off）**:
+
+enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` への配線は**既定 off**。配線するとセッション挙動が変わる（orchestrator の Write/Edit/Bash 等が拒否される）ため、**ドッグフーディング時に任意で opt-in** する。常時 on にはしない。
+
+```bash
+# 採用先プロジェクトのルートで実行
+npx @techbeansjp-free/agents-md enforce status   # 現在の on/off と hook 実在性を表示
+npx @techbeansjp-free/agents-md enforce on       # opt-in（settings.json に配線をマージ。既存値は保持・.bak 退避）
+npx @techbeansjp-free/agents-md enforce off      # 解除（enforcement 配線のみ外す。ユーザー値は保持）
+```
+
+- `enforce on` は正本テンプレート（`.agents/platforms/claude/settings.enforce.json`）から `hooks.PreToolUse`/`PostToolUse`（`.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` を指す）と `env.AGENT_ROLE=orchestrator` を配線する。既存の `settings.json` があれば**ユーザー値を破壊せず**マージし、上書き前に `settings.json.bak` へ退避する。
+- `enforce off` は enforcement 由来の配線のみを外し、ユーザーの env・hooks・permissions 等は保持する。
+- 設定変更を**ライブの Claude セッションに反映するには再起動が必要**。無効 JSON の場合 `enforce` は破壊を避けて中止する。
 
 ### 2. Claude marketplace 経由（副導線）
 
