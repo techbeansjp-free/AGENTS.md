@@ -9,7 +9,7 @@
 #   4. enforcement/ci/audit.sh の呼び出し（このリポの issue は docs/maintainer/workflow 配下のため、
 #      audit.sh はそのまま通らない。continue-on-error 相当で「呼ぶが失敗させない」運用）
 #
-# トリガ: PR と feature/** への push。
+# トリガ: PR（必ず検証）と、merge 先ブランチ（main, develop）への push。
 # 正本: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/03_実装計画.md（フェーズ5/軽微3）
 
 name: self-enforce
@@ -21,7 +21,8 @@ on:
   pull_request:
   push:
     branches:
-      - "feature/**"
+      - main
+      - develop
 
 jobs:
   self-enforce:
