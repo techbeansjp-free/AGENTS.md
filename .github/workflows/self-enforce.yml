@@ -6,7 +6,8 @@
 #   1. シェルスクリプト構文チェック（bash -n .agents/scripts/*.sh）
 #   2. DB スキーマ正本ズレ検証（sqlite3 で schema.sql が流せ、workflow_log が作られること）
 #   3. 生成物の差分ゼロ検証（build 実行後、追跡ファイルに差分が出ないこと。生成物は .gitignore 済み）
-#   4. enforcement/ci/audit.sh の呼び出し（このリポの issue は docs/maintainer/workflow 配下のため、
+#   4. npm 配布物リーク検査（npm pack --dry-run。リポ固有物が tarball に漏れず必須物が含まれる）
+#   5. enforcement/ci/audit.sh の呼び出し（このリポの issue は docs/maintainer/workflow 配下のため、
 #      audit.sh はそのまま通らない。continue-on-error 相当で「呼ぶが失敗させない」運用）
 #
 # トリガ: PR（必ず検証）と、merge 先ブランチ（main, develop）への push。
@@ -83,7 +84,14 @@ jobs:
           fi
           echo "OK: .adapters は未追跡"
 
-      # 4) enforcement audit（このリポでは適用範囲外のため失敗させない）
+      # 4) npm 配布物リーク検査（npm pack --dry-run の単一正本スクリプトを呼ぶ）
+      #    検証ロジックは .agents/scripts/verify-npm-pack.sh に集約。CI とローカルで二重化しない。
+      - name: npm pack leak check (verify-npm-pack.sh)
+        run: |
+          set -e
+          bash .agents/scripts/verify-npm-pack.sh
+
+      # 5) enforcement audit（このリポでは適用範囲外のため失敗させない）
       #    本リポの issue は docs/maintainer/workflow 配下で、audit.sh は .workflow を前提とするため
       #    そのままでは通らない。呼び出すが結果で CI を赤くしない（continue-on-error）。
       - name: Enforcement audit (non-blocking)

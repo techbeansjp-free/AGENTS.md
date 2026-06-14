@@ -529,3 +529,139 @@ document_id: "e5be3fa7-9765-4953-8274-fa39c61128bf"
 
 - 本バッチ範囲はクローズ可。issue 全体は 03 フェーズ1〜5 を後続タスクで継続。
 - 証跡: write-workflow-log.sh により workflow.db へ verify-and-close を記録（step 5）。
+
+---
+
+# 【追記バッチ D】フェーズ1 npm 土台の仕上げ（pack 検証固定化・README 導入手順）
+
+> **本節は verify-and-close の 4 回目の実行（バッチ D）の成果物。** skill chain（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従い、03 §2.2 タスク2 のうち **(3) `npm pack --dry-run` 検証の固定化**と **(4) README 導入手順の整備**（フェーズ1 npm 土台の仕上げ）をレビューする。
+>
+> **レビュー深度**: **standard**（限定スコープ。新規スクリプト1・CI step 追加1・README 改稿1。配布物リーク防止の検証固定化と導入導線の文書化）。
+> **evidence_source 凡例**: `test_output`（本バッチで再実行したコマンドの出力）／`existing_code`（対象ファイルの該当行）／`external_spec`（00/01/03・package.json files 等の契約）／`inference_only`（推論のみ。重要判断では不可）。
+
+---
+
+## D-1. レビュー対象
+
+- **実装範囲**: 直前の implement-feature の成果物（フェーズ1 npm 土台の仕上げ）。03 §2.2.2 (3)(4)。
+  - **(3 固定化)** `npm pack --dry-run --json` のリーク／必須物検査を**単一正本スクリプト**化し、CI とローカルで二重化しない。
+  - **(4 README)** npm 主導線（`npx @techbeansjp-free/agents-md init`・サブコマンド・版ピン留め）と Claude marketplace 副導線を README に整備。
+- **変更/新規ファイル（CHANGED_FILES_JSON）**:
+  - `.agents/scripts/verify-npm-pack.sh`（新規・実行権限 `-rwxr-xr-x`）— pack リーク検査の単一正本。
+  - `.github/workflows/self-enforce.yml`（変更）— 「npm pack leak check」step を audit step の前に追加（スクリプト呼出のみ）。
+  - `README.md`（変更）— npm 主導線・サブコマンド表・版ピン留め＋marketplace 副導線。
+- **レビュー担当者**: worker（auditor/scribe ロール、orchestrator 委譲）。
+
+---
+
+## D-2. 実装内容の確認（review-code）
+
+### D-2.1 `verify-npm-pack.sh`（pack リーク検査の単一正本）
+
+- **検証ロジックの一本化**: 冒頭コメントで「検証ロジックはこのスクリプト1か所のみに置き、CI とローカル双方がこれを呼ぶ。二重化しない」と明示（`existing_code`）。CI（self-enforce.yml step6）は `bash .agents/scripts/verify-npm-pack.sh` を呼ぶだけで、判定ロジックを持たない（`existing_code`）。要求の「リーク／汚染防止ガードを自動検証」（00 §2.2・SC-3）に整合（`external_spec`）。
+- **禁止パターン**（リポ固有物）: `.agents-project/`・`docs/maintainer/`・`workflow.db`（`-shm`/`-wal` 含む `[-.]` 後続）・`.adapters/`・`.workflow/`（`templates/` 以外）を正規表現でパスごとに判定し、1 件でも該当すれば `failed=true`（`existing_code`）。01 シナリオ5-1 の受け入れ基準「公開対象から `.agents-project/`・`docs/maintainer/`・`workflow.db`・`.workflow/`（templates 除く）が除外される」に対応（`external_spec`）。
+- **必須パターン**（正本配布物）: `.agents/`・`AGENTS.md`・`CLAUDE.md`・`bin/agents-md.js`・`README.md`・`package.json`・`.workflow/templates/` の存在を assert。`package.json` の `files` フィールド（`[".agents/","AGENTS.md","CLAUDE.md",".workflow/templates/","bin/","README.md"]`）と整合（`existing_code`・`external_spec`）。
+- **終了コード規約**: 違反時 `exit 1`、npm/node 不在時 `exit 2`（スキップせず明示的に失敗）、合格時 `exit 0`。`set -euo pipefail` 採用。判定は node に委譲（パスごとの厳密判定が bash の grep より容易、という設計判断をコメントで明示）（`existing_code`）。01 §「整合検証・リーク検査は終了コードで成否を返し CI から判定できる」に整合（`external_spec`）。
+- **`pack_json` の取得**: `npm pack --dry-run --json 2>/dev/null` で stdout のみを node に渡し、進捗ノイズ（stderr）を排除。`--dry-run` のため tarball を生成しない（副作用なし）（`existing_code`）。
+
+### D-2.2 `self-enforce.yml`（CI への組込み）
+
+- **step 追加位置**: 「npm pack leak check (verify-npm-pack.sh)」を **step6**（diff-zero check の後・enforcement audit の前）に追加。スクリプトを呼ぶだけで CI 側にロジック重複なし（`existing_code`・`test_output` D-3 T5）。
+- **冒頭コメント整合**: ファイル先頭の検証内容コメントに「4. npm 配布物リーク検査（npm pack --dry-run）」が追記され、step 実体と一致（`existing_code`）。
+- **非ブロッカー audit との順序**: leak check は blocking（`set -e`）、後続の audit は `continue-on-error: true`。リーク検査が実質的な配布物ガードとして機能する配置（`existing_code`）。
+
+### D-2.3 `README.md`（導入手順）
+
+- **主導線（npm）**: §「導入」に `cd my-project && npx @techbeansjp-free/agents-md init` を主導線として明記。サブコマンド表（`init`/`upgrade`/`doctor`/`version`/`help`）が `bin/agents-md.js` の `main()` switch・`printHelp()` と**齟齬なく一致**（`existing_code` 照合: README 表 ↔ bin 実装）。
+- **版のピン留め**: `@0.1.0`・`@latest upgrade`・`doctor` のコマンド例を記載。`package.json` の `version: 0.1.0` と一致（`external_spec`）。`node bin/agents-md.js version` の出力 `0.1.0` とも一致（`test_output` D-3 T6）。
+- **副導線（marketplace）**: `/plugin marketplace add` ＋ `/plugin install agents-package` を副導線として併記。参照する `build-adapters.sh`・`docs/maintainer/adapters.md`・`marketplace.json`・`setup.sh` がいずれも実在（`test_output` D-3 T7）。`marketplace.json` の `source: "./.adapters/claude"` と「生成物は正本から生成」の説明が整合（`existing_code`）。
+- **scope 名の注記**: README は npm スコープ名が暫定・未確定である旨を明記し、03 のリスク（スコープ未確定で publish 不可、dry-run までで受け入れ）と整合（`external_spec`）。
+
+### D-2.4 テストコード化の網羅（PHASES 監査観点）
+
+- 本バッチは**テストコード（テストファイル）の新規追加なし**。検証は bash スクリプト・`npm pack --dry-run` の振る舞い検証・YAML パース・README↔bin の静的照合で行う。TEST_BDD_FORMAT のインラインコメント必須要件は「テストコードが存在する場合」に適用され、本バッチに該当テストコードは無い。
+- 01 シナリオ5-1・03 §2.2.4 の BDD（`npm pack --dry-run` でリポ固有物が含まれないこと）は、**`verify-npm-pack.sh` 自体が実行可能な検証スクリプトとしてシナリオをコード化**しており、CI（self-enforce step6）で恒常実行される。03 §2.2.4 のテストコード例（`grep -qiE 'agents-project|docs/maintainer|workflow\.db|\.adapters/'`）と同等以上の判定をスクリプトが担う（`existing_code`）。`node bin/agents-md.js version`／`help`／不明コマンドの単体ケース（03 §2.2.3）は D-3 T6 で再実行・確認。クリーン clone 系（`git archive` 方式）のテストスクリプト未コミットはバッチ A 課題2／バッチ B 課題6 として継続（本バッチ範囲外）。
+
+---
+
+## D-3. テスト結果の確認（テスト再実行）
+
+実行環境: node v20.19.5 / npm 10.8.2（03 が想定する npm 10.x / node v20.x に合致。`test_output`）。リポジトリルートで再実行。
+
+| ID | 検証内容 | コマンド | 結果 | evidence_source |
+|----|----------|----------|------|------------------|
+| T1 | 構文チェック | `bash -n .agents/scripts/verify-npm-pack.sh` | **OK**（exit 0） | `test_output` |
+| T2 | pack 検査・正例 | `bash .agents/scripts/verify-npm-pack.sh` | **OK**: 配布158件・リーク0件・必須物すべて存在・**exit 0** | `test_output` |
+| T3 | pack 検査・負例 | `.agents/sub/.agents-project/leak.md` を注入→検査→削除 | **検出 OK**: `LEAK: .agents/sub/.agents-project/leak.md` を報告し **exit 1**。検査後にファイル削除・`git status` クリーン復帰を確認 | `test_output` |
+| T4 | dry-run 直接確認（01 シナリオ5-1） | `npm pack --dry-run --json` のファイル一覧を node で抽出し grep | **OK**: `agents-project\|docs/maintainer\|workflow.db\|.adapters/` 0 件、`.workflow/` は `templates/` のみ、必須物（.agents/・AGENTS.md・CLAUDE.md・bin・README・package.json・templates）すべて存在 | `test_output` |
+| T5 | self-enforce.yml YAML 妥当性 | `python3` `yaml.safe_load` | **OK**: パース成功・**steps 7 件**・leak check（step6）が audit（step7）の**前**に配置 | `test_output` |
+| T6 | bin 単体（03 §2.2.3） | `node bin/agents-md.js version`/`help`/`bogus` | **OK**: version=`0.1.0`(exit0)・help(exit0)・不明(exit1) | `test_output` |
+| T7 | README 副導線の参照先実在 | `build-adapters.sh`・`docs/maintainer/adapters.md`・`marketplace.json`・`setup.sh` の存在確認 | **OK**: すべて実在（導線が破綻しない） | `test_output` |
+| T8 | README↔bin/package.json 整合 | scope 名・サブコマンド表の静的照合 | **OK**: scope=`@techbeansjp-free/agents-md` 一致、サブコマンド `init/upgrade/doctor/version/help` が bin の switch と一致 | `existing_code` |
+
+- **テスト後のリポ状態**: `git status --porcelain` は本バッチ 3 ファイル（` M .github/workflows/self-enforce.yml`・` M README.md`・`?? .agents/scripts/verify-npm-pack.sh`）のみ。T3 の注入物は削除済みで残骸なし（`test_output`）。
+- **実行権限**: `verify-npm-pack.sh` は `-rwxr-xr-x`（実行権限あり）（`test_output`）。
+
+---
+
+## D-4. コードレビュー観点
+
+| 観点 | 確認内容 | 判定 | 根拠 |
+|------|----------|------|------|
+| 検証ロジック単一化 | pack 検査が 1 か所か | **OK** | `verify-npm-pack.sh` のみ。CI は呼出のみ（`existing_code`） |
+| 配布物リーク防止 | 禁止パターンを assert・負例で検出 | **OK** | T2（正例 exit0）・T3（負例 exit1 検出）（`test_output`） |
+| 必須物の充足 | 正本配布物を assert | **OK** | T2・T4（必須物すべて存在）（`test_output`） |
+| 終了コード規約 | 違反 exit1・npm/node 不在 exit2 | **OK** | スクリプト分岐（`existing_code`） |
+| CI 組込み | leak step が audit 前・blocking | **OK** | T5（step6<step7・set -e）（`test_output`） |
+| README↔実装整合 | サブコマンド・scope・版が bin/package.json と一致 | **OK** | T6・T8（`test_output`・`existing_code`） |
+| 導線の非破綻 | README 参照先が実在 | **OK** | T7（`test_output`） |
+| 規約・命名・配置 | `.agents/scripts/` 配下・`set -euo pipefail`・コメントで正本性明示 | **OK** | `existing_code` |
+
+- **inference_only 依存の重要判断**: なし。承認に関わる判断はすべて `test_output` または `existing_code`／`external_spec` で裏取り済み。
+
+---
+
+## D-5. 受け入れ基準の確認（generate-scenarios → map-coverage）
+
+本バッチはフェーズ1 npm 土台の仕上げ（限定スコープ）。本バッチが直接寄与する基準に絞ってカバレッジを示す。
+
+| 基準（出典） | 実装 | 検証方法・結果 | 判定 |
+|--------------|------|----------------|------|
+| 配布物リーク防止「公開対象から `.agents-project/`・`docs/maintainer/`・`workflow.db`・`.workflow/`(templates除く) が除外」（01 シナリオ5-1・00 SC-3） | `verify-npm-pack.sh` 禁止パターン | T2・T4（リーク0件）・T3（負例検出） | **○** |
+| 配布物に必須の正本物が含まれる（01 シナリオ5-1） | `verify-npm-pack.sh` 必須パターン | T2・T4（必須物すべて存在） | **○** |
+| 「整合検証・リーク検査は終了コードで成否を返し CI から判定できる」（01 §非機能） | exit code 規約＋self-enforce step6 | T1/T2/T3（exit 0/1）・T5（CI step blocking） | **○** |
+| 版のピン留め・アップグレード手順が存在し実証できる（00 SC-2） | README §導入（`@0.1.0`/`upgrade`/`doctor`）＋bin | T6（version=0.1.0）・T8（README↔bin 一致） | **○** |
+| npm 主導線が文書化され bin と齟齬がない（03 §2.2.2(4)） | README サブコマンド表・主導線 | T8（scope・サブコマンド一致）・T7（副導線参照先実在） | **○** |
+
+### カバレッジ評価
+
+- **本バッチのスコープ内に未達はなし**。寄与基準（リーク防止固定化・必須物充足・終了コード規約・版ピン留め文書化・README↔bin 整合）はすべて ○。
+- **スコープ外（別フェーズ／別 issue）**: 00 SC-1（マーケットプレイス土台のクリーン clone 実証）・SC-4・SC-5、01 のユースケース1〜4/6/7、実 publish（スコープ/レジストリ確定後）、クリーン clone 系テストコード化（バッチ A 課題2／バッチ B 課題6）は本バッチ対象外として継続。
+
+---
+
+## D-6. 設計・境界の確認（review-architecture）
+
+- **責務分離**: 「検証ロジック（`verify-npm-pack.sh`）」「呼出オーケストレーション（self-enforce.yml step6）」「人間向け導線（README）」が分離され、ロジックの二重化がない。CI とローカルが同一スクリプトを呼ぶ単一正本構造（00 §2.2 リーク／汚染防止ガードの要件に整合）（`existing_code`・`external_spec`）。
+- **正本ズレを生まないこと**: 配布対象の定義は `package.json` の `files` フィールドが正本で、`verify-npm-pack.sh` の必須パターンはそれを検査する（重複定義ではなく検証）。README のサブコマンドは `bin/agents-md.js` を正とし、README は説明に徹する（実装が正本）（`existing_code`）。
+- **新たな破綻・汚染の有無**: テスト再実行後も追跡ファイルへの差分は本バッチ 3 ファイルのみ。T3 注入物は削除済み。`verify-npm-pack.sh` は `.agents/scripts/` 配下のため、それ自身が配布物（`.agents/`）に含まれる正本物として妥当（リーク対象ではない）（`test_output`・`existing_code`）。本バッチは正本ズレ・配布物汚染を**新たに生まない**。
+- **指摘（軽微・任意・非ブロッカー）**: `verify-npm-pack.sh` の必須パターンと `package.json` の `files` は概念的に対応するが別定義のため、将来 `files` を変更しても必須パターンが追従しない可能性がある（今日時点では一致・drift なし、`test_output` で確認済み）。将来 `files` を変更した際に必須パターンも見直す運用、または `files` から必須リストを導出する案を後続で検討可能。本バッチ範囲外の任意提案（`existing_code`）。
+
+---
+
+## D-7. 課題と改善点（残課題）
+
+- **課題7（実 publish 未実施）**: スコープ/レジストリ未確定のため `npm publish` は未実施。本フェーズは `--dry-run` までで受け入れ（03 §2.2.3 E2E と整合・想定どおり）。スコープ確定後に publish を別タスク化。非ブロッカー。
+- **課題6（クリーン clone 系テストコード未整備）**: 継続（バッチ A 課題2／バッチ B 課題6）。`git archive` 方式のクリーン clone テストスクリプトは未コミット。self-enforce が build diff-zero＋pack leak を CI で担保する範囲は拡充された。
+- **改善提案（軽微・任意）**: D-6 の必須パターン↔`files` の drift 予防（`files` からの導出）。非ブロッカー。
+
+---
+
+## D-8. レビュー結果（バッチ D）
+
+- **実装品質**: 良好（pack リーク検査を単一正本スクリプト化し CI とローカルの二重化を排除。禁止／必須パターンを正例・負例の双方で検証。終了コード規約で CI 判定可能）。
+- **テスト品質**: 良好（T1〜T8 を再実行、すべて想定どおり。負例でリーク検出を実証、テスト後にリポをクリーンに復帰）。
+- **ドキュメント品質**: 良好（README 主導線・副導線・サブコマンド・版ピン留めが `bin/agents-md.js`・`package.json` と齟齬なく一致。参照先がすべて実在）。
+- **総合評価**: **承認可（本バッチ範囲・ブロッカーなし）**。フェーズ1 npm 土台の仕上げ（配布物リーク防止の検証固定化・README 導入手順整備）の DoD を充足。正本ズレ・配布物汚染を新たに生まない。残課題は課題6・課題7（いずれも非ブロッカー・後続継続）。
+- **承認者**: worker（auditor、orchestrator 委譲） / **承認日**: 2026-06-14
+- **DoD**: 04_review 追記済み・テスト再実行（T1〜T8）記載済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・バッチ C の entry `c0fc50f8-…` に prev_hash チェーン連結）。

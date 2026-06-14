@@ -42,25 +42,75 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 ---
 
-## セットアップ（プロジェクトへ導入するとき）
+## 導入（プロジェクトへ配備するとき）
 
-1. **本パッケージをプロジェクトに置く**  
-   プロジェクトルート直下に本リポジトリを置く（clone またはコピー。ディレクトリ名は慣例として `agents-package` とすることが多い）。
+導線は **npm（主導線）** と **Claude marketplace（副導線）** の 2 つ。基本は npm 経由を推奨する。
 
-2. **セットアップ脚本を実行する**（**パッケージのルート**で実行する）  
-   ```bash
-   cd agents-package   # 配置したディレクトリ名に合わせる
-   bash .agents/scripts/setup.sh
-   ```
-   プロジェクトルートに留まったまま実行する場合は `bash <配置ディレクトリ名>/.agents/scripts/setup.sh` とする。
-   これで以下が行われる:
-   - パッケージルートの `AGENTS.md` と `CLAUDE.md` がプロジェクトルートにコピーされる
-   - パッケージの `.agents/` がプロジェクトの `.agents/` にコピーされる
-   - `.workflow/templates` が無い場合は **`.workflow/templates/`**（パッケージ内）からコピーされる
-   - `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
+> 注: npm スコープ名 `@techbeansjp-free/agents-md` は暫定であり、公開レジストリ／スコープは未確定（確定後に変更される可能性がある）。
 
-3. **動作確認**  
-   プロジェクトルートに `AGENTS.md` と `.agents/` が存在することを確認する。詳細は [.agents/SETUP.md](.agents/SETUP.md) のスモークテストを参照。
+### 1. npm 経由（主導線・推奨）
+
+採用先プロジェクトのルートで次を実行する。`init` が内部で `.agents/scripts/setup.sh` を呼び、配備一式を行う。
+
+```bash
+cd my-project
+npx @techbeansjp-free/agents-md init
+```
+
+これで以下が行われる:
+
+- パッケージの `AGENTS.md` と `CLAUDE.md` がプロジェクトルートにコピーされる
+- パッケージの `.agents/` がプロジェクトの `.agents/` にコピーされる
+- `.workflow/templates` が無い場合は **`.workflow/templates/`**（パッケージ内）からコピーされる
+- `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
+
+**サブコマンド**:
+
+| コマンド | 役割 |
+|----------|------|
+| `init [dir]` | 採用先（既定: カレントディレクトリ）へ `.agents/` 等を配備する |
+| `upgrade [dir]` | 既存配備を再同期する（当面 `init` と同等。新版取り込みに使う） |
+| `doctor` | 配備に必要な前提（`setup.sh`・`bash`・`sqlite3` 等）の有無を確認する |
+| `version` | パッケージのバージョンを表示する |
+| `help` | 使い方を表示する |
+
+**版のピン留め・アップグレード**:
+
+```bash
+# 特定版をピン留めして導入（@x.y.z で固定。再現的に同一内容を取り込める）
+npx @techbeansjp-free/agents-md@0.1.0 init
+
+# 既存配備を新版へ再同期（アップグレード）
+npx @techbeansjp-free/agents-md@latest upgrade
+
+# 配備前提（bash・sqlite3 等）の健全性を確認
+npx @techbeansjp-free/agents-md doctor
+```
+
+> 補足: `init`／`upgrade` は workflow.db の初期化に `sqlite3` バイナリを必要とする（`doctor` で確認できる）。`AGENTS.md`・`CLAUDE.md`・`.agents-project/` 等の人間編集領域は無断上書きされない（詳細は [.agents/SETUP.md](.agents/SETUP.md)）。
+
+### 2. Claude marketplace 経由（副導線）
+
+Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コマンド）から導入する経路。本リポの [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) を marketplace として登録し、プラグイン `agents-package`（正本 `.agents/` から生成される Claude アダプタ）を追加する。
+
+```text
+/plugin marketplace add techbeansjp-free/AGENTS.md
+/plugin install agents-package
+```
+
+> marketplace のプラグイン生成物（`.adapters/claude`）は正本 `.agents/` から `build-adapters.sh` で生成される。詳細は [docs/maintainer/adapters.md](docs/maintainer/adapters.md) を参照。
+
+### 3. ローカル配備（リポを直接置く場合）
+
+npm を使わずパッケージを直接置く場合は、パッケージルートで `setup.sh` を実行する。
+
+```bash
+bash .agents/scripts/setup.sh /path/to/my-project   # 引数省略時はカレントを採用先とする
+```
+
+### 動作確認
+
+プロジェクトルートに `AGENTS.md` と `.agents/` が存在することを確認する。詳細は [.agents/SETUP.md](.agents/SETUP.md) のスモークテストを参照。
 
 ---
 
