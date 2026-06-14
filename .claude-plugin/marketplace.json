@@ -1,0 +1,16 @@
+{
+  "name": "agents-md",
+  "owner": {
+    "name": "techbeansjp-free"
+  },
+  "metadata": {
+    "description": "AI 実行契約・能力(skills)中心のワークフロー仕様パッケージ。正本は .agents/。各ツール向けは .adapters/ に生成する。"
+  },
+  "plugins": [
+    {
+      "name": "agents-package",
+      "source": "./.adapters/claude",
+      "description": "AI 実行契約・ワークフロー仕様の Claude Code アダプタ。正本 .agents/ から build-plugin-claude.sh で生成。"
+    }
+  ]
+}

@@ -1,2 +1,21 @@
 # macOS
 .DS_Store
+
+# === ランタイム/生成物（パッケージ正本ではない。setup・実行・build で生成される） ===
+# 消費者ランタイム名前空間。正本として追跡するのは templates/ のみ。
+# 自己拡張（ドッグフーディング）の自己 issue はここではなく docs/maintainer/workflow/ に作る
+# （.agents-project/自己拡張ワークフロー.md 参照）。
+/.workflow/*
+!/.workflow/.gitignore
+!/.workflow/templates/
+# 証跡DB（.agents/SETUP.md: 配布物に絶対含めない）。-wal/-shm/.lock/journal も拾う
+.workflow/workflow.db*
+# 各ツール向けフック/スキルの生成物（setup.sh が自己インストール時に生成）
+/.claude/
+/.cursor/
+# 生成物アダプタ（100% 生成物）。手書き土台は正本側に分離済み:
+#   - .agents/platforms/claude/plugin.json（build がコピー生成）
+#   - docs/maintainer/adapters.md（旧 .adapters/README.md）
+# marketplace 配布はリリース時に CI が build → 専用ブランチ/タグへ commit（案A、main は生成物ゼロ）。
+# 正本: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/02_設計.md, 03_実装計画.md
+/.adapters/

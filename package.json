@@ -1,0 +1,15 @@
+{
+  "name": "@techbeansjp-free/agents-md",
+  "version": "0.1.0",
+  "description": "AI 実行契約・能力(skills)中心のワークフロー仕様パッケージ。正本は .agents/。Claude Code / Cursor / Gemini / Copilot / Codex 向けに配備する。",
+  "type": "module",
+  "bin": { "agents-md": "bin/agents-md.js" },
+  "files": [".agents/", "AGENTS.md", "CLAUDE.md", ".workflow/templates/", "bin/", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": { "build:claude": "bash .agents/scripts/build-plugin-claude.sh" },
+  "keywords": ["agents", "ai", "workflow", "claude-code", "cursor", "skills", "agents-md"],
+  "license": "MIT",
+  "homepage": "https://github.com/techbeansjp-free/AGENTS.md",
+  "repository": { "type": "git", "url": "https://github.com/techbeansjp-free/AGENTS.md.git" },
+  "publishConfig": { "access": "public" }
+}

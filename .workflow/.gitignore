@@ -1,4 +1,2 @@
-# workflow evidence database
-workflow.db
-workflow.db-wal
-workflow.db-shm
+# workflow evidence database（-wal/-shm/.lock/journal も拾う）
+workflow.db*

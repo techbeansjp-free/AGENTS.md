@@ -60,11 +60,7 @@ else
   echo ".agents は既にプロジェクトルートにあります。コピーをスキップし、hooks・スキル・DB のみ更新します。"
 fi
 
-# .agents-project はプロジェクト固有のため、なければコピー・既存なら上書きしない
-if [[ ! -d "$PROJECT_ROOT/.agents-project" ]] && [[ -d "$PACKAGE_ROOT/.agents-project" ]]; then
-  cp -R "$PACKAGE_ROOT/.agents-project" "$PROJECT_ROOT/.agents-project"
-  echo ".agents-project/ をプロジェクトにコピーしました（初回のみ）。"
-fi
+# .agents-project は setup では作成しない（SETUP.md 準拠）。プロジェクト側で用意する
 
 # .workflow/templates は常にパッケージの .workflow/templates の内容で最新化する（ソースと同一パスの場合はスキップ）
 WF_TEMPLATES="$PROJECT_ROOT/.workflow/templates"
@@ -142,45 +138,8 @@ init_workflow_db() {
   fi
   echo "[setup] ワークフロー用 DB を作成しています"
   mkdir -p "$(dirname "$db")"
-  sqlite3 "$db" <<'SQL'
-CREATE TABLE IF NOT EXISTS workflow_log (
-  entry_id TEXT PRIMARY KEY,
-  parent_entry_id TEXT NULL,
-  document_id TEXT NULL,
-  ts_utc TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  actor_role TEXT NOT NULL,
-  delegated_by_role TEXT NOT NULL,
-  command TEXT NOT NULL,
-  issue_id TEXT NULL,
-  review_id TEXT NULL,
-  issue_path TEXT NULL,
-  review_path TEXT NULL,
-  document_path TEXT NULL,
-  changed_files_json TEXT NULL,
-  summary TEXT NOT NULL,
-  dod_met INTEGER NOT NULL CHECK (dod_met IN (0, 1)),
-  prev_hash TEXT NULL,
-  entry_hash TEXT NOT NULL,
-  CHECK (length(entry_id) > 0),
-  CHECK (length(ts_utc) > 0),
-  CHECK (length(created_at) > 0),
-  CHECK (length(actor_role) > 0),
-  CHECK (length(delegated_by_role) > 0),
-  CHECK (length(command) > 0),
-  CHECK (length(summary) > 5),
-  CHECK (actor_role = 'scribe'),
-  CHECK (delegated_by_role = 'orchestrator'),
-  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
-);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_id);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);
-SQL
+  # スキーマの正本は ledger/schema.sql（単一正本）。ここでは流すだけ。
+  sqlite3 "$db" < "$AGENTS_SOURCE/ledger/schema.sql"
 }
 
 init_workflow_db

@@ -96,6 +96,10 @@ PROJECT_ROOT="${PROJECT_ROOT:-.}"
 WORKFLOW_DIR="${WORKFLOW_DIR:-.workflow}"
 WF_DB="${PROJECT_ROOT}/${WORKFLOW_DIR}/workflow.db"
 
+# スキーマ正本（ledger/schema.sql）の解決。本スクリプトは .agents/scripts/ 配下にある。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENTS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 if [[ $# -lt 4 ]]; then
   echo "Usage: AGENT_ROLE=scribe $0 command summary dod_met ts_utc [issue_path] [changed_files]" >&2
   exit 1
@@ -228,47 +232,11 @@ insert_with_retries() {
   done
 }
 
-# DB が無ければ新スキーマで作成
+# DB が無ければ新スキーマで作成（スキーマの正本は ledger/schema.sql。document_path を含む）
 if [[ ! -f "$WF_DB" ]]; then
   WF_DIR="$(dirname "$WF_DB")"
   mkdir -p "$WF_DIR"
-  sqlite3 "$WF_DB" <<'SCHEMA'
-CREATE TABLE IF NOT EXISTS workflow_log (
-  entry_id TEXT PRIMARY KEY,
-  parent_entry_id TEXT NULL,
-  document_id TEXT NULL,
-  ts_utc TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  actor_role TEXT NOT NULL,
-  delegated_by_role TEXT NOT NULL,
-  command TEXT NOT NULL,
-  issue_id TEXT NULL,
-  review_id TEXT NULL,
-  issue_path TEXT NULL,
-  review_path TEXT NULL,
-  changed_files_json TEXT NULL,
-  summary TEXT NOT NULL,
-  dod_met INTEGER NOT NULL CHECK (dod_met IN (0, 1)),
-  prev_hash TEXT NULL,
-  entry_hash TEXT NOT NULL,
-  CHECK (length(entry_id) > 0),
-  CHECK (length(ts_utc) > 0),
-  CHECK (length(created_at) > 0),
-  CHECK (length(actor_role) > 0),
-  CHECK (length(delegated_by_role) > 0),
-  CHECK (length(command) > 0),
-  CHECK (length(summary) > 5),
-  CHECK (actor_role = 'scribe'),
-  CHECK (delegated_by_role = 'orchestrator'),
-  CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
-);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_command ON workflow_log(command);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_parent ON workflow_log(parent_entry_id);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
-SCHEMA
+  sqlite3 "$WF_DB" < "$AGENTS_ROOT/ledger/schema.sql"
 fi
 
 sqlite3 "$WF_DB" "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;" >/dev/null

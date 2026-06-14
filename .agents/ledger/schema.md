@@ -30,6 +30,8 @@
 
 **本スキーマの正本**: ログを書くのは書記のみとするため **actor_role は `scribe` のみ**、委譲元は **delegated_by_role は `orchestrator` のみ** を DB 制約で強制する。**changed_files_json は implement-feature で必須**とする。テンプレート・監査・運用方針と完全に一致させる。
 
+**SQL の正本は schema.sql**（[schema.sql](schema.sql)）。CREATE TABLE workflow_log と索引定義の実体は schema.sql に一本化されており、setup.sh / write-workflow-log.sh は新規 DB 作成時に schema.sql を流す。本ファイルの以下の SQL は解説用の参照であり、相違が生じた場合は schema.sql を正とする。
+
 **新規作成時は次の SQL を使う。** ログを単発イベントではなく「チェーンされた実行証跡」として扱い、`parent_entry_id` で因果関係を追える。`actor_role` / `delegated_by_role` で実行主体と委譲元を記録し、`entry_hash` で改ざん検知の土台を用意する。既存 DB がある場合は ledger/README のマイグレーション方針に従う。
 
 ```sql
