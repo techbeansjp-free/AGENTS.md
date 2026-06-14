@@ -46,7 +46,7 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 導線は **npm（主導線）** と **Claude marketplace（副導線）** の 2 つ。基本は npm 経由を推奨する。
 
-> 注: npm スコープ名 `@techbeansjp-free/agents-md` は暫定であり、公開レジストリ／スコープは未確定（確定後に変更される可能性がある）。
+> npm パッケージ名は `@techbeansjp-free/agents-md`（public / npmjs.com）。
 
 ### 1. npm 経由（主導線・推奨）
 
@@ -137,6 +137,18 @@ Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コ�
 ```
 
 > marketplace のプラグイン生成物（`.adapters/claude`）は正本 `.agents/` から `build-adapters.sh` で生成される。詳細は [docs/maintainer/adapters.md](docs/maintainer/adapters.md) を参照。
+
+#### リリース手順（メンテナ向け）
+
+publish と marketplace 公開は **`vX.Y.Z` タグの push** で CI（[.github/workflows/release.yml](.github/workflows/release.yml)）が自動実行する。
+
+1. `package.json` と `plugin.json` の version を揃える（`bash .agents/scripts/sync-version.sh --write`）。
+2. version と一致するタグを push する（例: `git tag v0.1.0 && git push origin v0.1.0`）。
+3. CI が次を行う:
+   - **検証 → npm publish**: version 同期検証（タグ＝package.json＝plugin.json）と配布物リーク検査（`verify-npm-pack.sh`）を実行し、`@techbeansjp-free/agents-md` を public publish する。
+   - **marketplace 公開**: 正本 `.agents/` から生成物を build し、`release/marketplace` ブランチへ commit する。
+
+> **要 secret**: npm publish は `NPM_TOKEN` secret が必要。未設定の場合 publish step は skip される（marketplace 公開は影響を受けない）。実 publish を発火させるには、リポジトリの Secrets に `NPM_TOKEN`（npmjs の Automation トークン）を設定してから `v*` タグを push する。
 
 ### 3. ローカル配備（リポを直接置く場合）
 

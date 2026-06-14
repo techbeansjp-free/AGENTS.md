@@ -58,11 +58,17 @@ marketplace 配布ではプラグイン生成物 `.adapters/claude/` がイン�
 
 1. 保守者が `package.json` / `plugin.json` の version を揃える（`bash .agents/scripts/sync-version.sh --write`）。
 2. version と一致するタグ（例 `v0.1.0`）を push する。
-3. `release.yml` がタグ push を検知し、次を実行する:
-   - **version 同期検証**: タグ `vX.Y.Z` ＝ `package.json.version` ＝ `plugin.json.version`（不一致なら fail）。
-   - **生成**: `build-adapters.sh claude cursor` で正本 `.agents/` から `.adapters/` を生成。
-   - **再生成 diff ゼロ**: もう一度生成しても同一（決定性）であることを検証。
-   - **公開**: 生成物 `.adapters/claude`（＋cursor）と `marketplace.json` を専用ブランチ **`release/marketplace`** へ commit/push。
+3. `release.yml` がタグ push を検知し、2 系統を実行する:
+   - **(A) npm publish ジョブ（`npm-publish`）**:
+     - **version 同期検証**: タグ `vX.Y.Z` ＝ `package.json.version` ＝ `plugin.json.version`（不一致なら fail）。
+     - **配布物リーク検査**: `verify-npm-pack.sh`（tarball にリポ固有物が漏れず必須物がある）。
+     - **NPM_TOKEN ゲート**: secret `NPM_TOKEN` が未設定なら publish を skip（未設定では発火しない）。
+     - **publish**: `npm publish --access public`（scoped public、`publishConfig.access=public`）。認証は `NODE_AUTH_TOKEN=${{ secrets.NPM_TOKEN }}`。
+   - **(B) marketplace ジョブ（`release`）**:
+     - **version 同期検証**: 上と同じ一致検証。
+     - **生成**: `build-adapters.sh claude cursor` で正本 `.agents/` から `.adapters/` を生成。
+     - **再生成 diff ゼロ**: もう一度生成しても同一（決定性）であることを検証。
+     - **公開**: 生成物 `.adapters/claude`（＋cursor）と `marketplace.json` を専用ブランチ **`release/marketplace`** へ commit/push。
 
 **marketplace.json の `source` 解決**
 
@@ -70,16 +76,18 @@ marketplace 配布ではプラグイン生成物 `.adapters/claude/` がイン�
 解決される（このブランチには `.adapters/claude` が追跡コミットされている）。`main` には生成物が無いため、
 marketplace 登録時は当該リリースブランチ/タグ時点のツリーを指す運用とする。
 
-**暫定既定（03_実装計画 §0／§9 未決#2 で確定）**
+**確定既定（03_実装計画 §0／§9 #1・#2・#6 で確定）**
 
-| 項目 | 暫定既定 |
-|------|----------|
+| 項目 | 既定 |
+|------|------|
 | トリガ | タグ push `v*`（例 `v0.1.0`） |
+| npm パッケージ | `@techbeansjp-free/agents-md`（public / npmjs.com、`publishConfig.access=public`） |
 | リリースブランチ | `release/marketplace` |
 | version 正本 | `package.json`（`plugin.json` は従属。`sync-version.sh` で同期） |
+| LICENSE | MIT（`Copyright (c) 2026 TechBeans Inc.`） |
 
-> npm publish は scope/レジストリ未確定（03 §9 未決#1）のため release.yml には含めない。
-> 配線する場合も `NPM_TOKEN` secret 必須＋手動承認ゲートで、未確定時は発火しない形にすること。
+> npm publish は `release.yml` の `npm-publish` ジョブで配線済み。`NPM_TOKEN` secret によるゲートで保護し、
+> 未設定なら publish step を skip する（ユーザーが `NPM_TOKEN` を設定し `v*` タグを push したときのみ発火）。
 
 ## cursor/ ・ gemini/（将来）
 

@@ -1203,3 +1203,119 @@ R1〜R3 のインラインコメントを `.agents/TEST_BDD_FORMAT.md` に照ら
 - **残課題（重要・非ブロッカー・本バッチ範囲外）**: **H-6 PreToolUse 実効性の限界**。`PreToolUse.sh` が env のみ読取・配線が tool 情報 env を渡さず・実 Claude Code は stdin JSON 渡し（`CLAUDE_TOOL_NAME` env は不在）かつブロック exit code は `2` のため、**ツール別 runtime reject は実機で未発火の可能性が高い**（existing_code＋external_spec で確認）。実機で効くのは `AGENT_ROLE` 供給と常時案内のみ。後続で (1) hook の stdin 化＋`exit 2` 改修、(2) reject 発火の hook 単体テスト追加、(3) 実効範囲の注記、をサブ issue 化することを提案。
 - **承認者**: worker（auditor/scribe、orchestrator 委譲） / **承認日**: 2026-06-14
 - **DoD**: 04_review 追記済み・E2E（S1〜S7＋R1〜R7＝88/0）再実行を新コードを通す形で記載済み・settings テンプレート JSON 妥当性／hook 実在パス確認済み・build-adapters claude/cursor diff-zero／静的検査／`.adapters` 非リーク確認済み・開発リポ `.claude/` 非変更（sha256＋git status 同一）確認済み・PreToolUse 実効性の限界を existing_code＋external_spec で独立確認し残課題として明記済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・実 DB 現 head にチェーン連結）。
+
+---
+
+# 【追記バッチ I】publish/marketplace 確定とフェーズ1・4 完了（issue 総括）
+
+> **本バッチの位置づけ**: command **verify-and-close**（skill chain: generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）。直前 implement-feature の未コミット成果（ユーザー確定事項に基づく **publish 配線・LICENSE/メタデータ確定**＝フェーズ1（npm 土台）・フェーズ4（marketplace）の締め）を対象とする。**レビュー深度: standard**（中規模・限定スコープ。release.yml への npm-publish ジョブ追加・LICENSE/メタデータ確定・ドキュメント反映）。本バッチをもって **親 issue 全体の到達状況を総括**する。
+>
+> **ユーザー確定事項（前提）**: スコープ `@techbeansjp-free/agents-md`・public/npmjs.com・`publishConfig.access=public`・LICENSE 著作権者 `TechBeans Inc.`・marketplace 案A（`release/marketplace`＋タグ `v*`）。
+>
+> **evidence_source 凡例**: `test_output`（本レビューで tmp 隔離・本リポ非破壊で再実行）/ `existing_code`（実ファイル確認）/ `external_spec`（npm/GitHub Actions 公式仕様）/ `inference_only`（推測。重要判断は不採用）。**実 publish・タグ push・commit は本レビューでも未実行**（ユーザー gated。orchestrator 後続）。
+
+## I-1. レビュー対象（変更ファイル）
+
+| ファイル | 変更概要 | evidence |
+|----------|----------|----------|
+| `LICENSE` | 著作権者を `techbeansjp-free` → `TechBeans Inc.` に確定（`Copyright (c) 2026 TechBeans Inc.`） | existing_code / test_output |
+| `package.json` | `author`（`TechBeans Inc.`＋url）・`bugs` 追加。`homepage` を `#readme`、`repository.url` を `git+https://...` に整形。`name`/`license`/`publishConfig.access=public`/`version=0.1.0` は確定済みのまま | existing_code / test_output |
+| `.agents/platforms/claude/plugin.json` | `author` を `TechBeans Inc.`（＋url）に統一。build はそのままコピーのため再生成 diff-zero と両立 | existing_code / test_output |
+| `.github/workflows/release.yml` | ジョブを 2 系統化。新規 `npm-publish`（公開前検証 sync-version/verify-npm-pack → `NPM_TOKEN` ゲート → `npm publish --access public`）と既存 `release`（marketplace 案A）。ヘッダコメントを確定値へ更新 | existing_code / test_output |
+| `docs/maintainer/adapters.md` | リリースフローを (A) npm publish ／ (B) marketplace の 2 系統へ更新。「暫定既定」→「確定既定」表、npm publish「含めない」注記を「配線済み・`NPM_TOKEN` ゲート」へ差替 | existing_code |
+| `README.md` | scope 暫定注記を確定文へ。メンテナ向けリリース手順（`v*` タグ push → verify → publish → marketplace、要 `NPM_TOKEN`）を追記 | existing_code |
+| `03_実装計画.md` | §0 決定事項を確定値へ更新。§9 未決 #1（scope/registry）・#2（branch）・#6（LICENSE）をクローズ。§3.3 フェーズ1・4 完了条件・§5.2 スケジュールリスクを解消反映 | existing_code |
+
+## I-2. テスト再実行サマリ（test_output・tmp 隔離・本リポ非破壊・実 publish/push なし）
+
+すべて `mktemp -d` ＋ working tree スナップショット（実 publish/push を伴わない静的・dry-run 検証）で実施。`.github/workflows/release.yml` は**実行せず**静的に確認（タグ push 時のみ発火）。
+
+| # | 検証項目 | 方法 | 結果 |
+|---|----------|------|------|
+| A1 | release.yml YAML 妥当性 | `python3 yaml.safe_load` | **PASS**（`jobs=[npm-publish, release]`・トリガ `push.tags=[v*]`） |
+| A2 | npm-publish ジョブ構成・公開前検証の前置順序 | 静的（step 配列順） | **PASS**（順序 `version sync(3) < npm pack(4) < gate(5) < publish(6)`。公開前検証が gate/publish より前） |
+| A3 | NPM_TOKEN ガード | 静的 | **PASS**（`Check NPM_TOKEN gate` が `secrets.NPM_TOKEN` を読み未設定で `present=false`＋`::notice::` skip 案内。`npm publish` step は `if: steps.npm_gate.outputs.present == 'true'`・`NODE_AUTH_TOKEN=secrets.NPM_TOKEN`） |
+| A4 | access public | 静的 | **PASS**（`npm publish --access public`＋`publishConfig.access=public`） |
+| A5 | actions メジャー・Node | 静的 | **PASS**（`actions/checkout@v4`・`actions/setup-node@v4`・`node-version:22`・`registry-url: https://registry.npmjs.org`） |
+| B1 | `verify-npm-pack.sh` | 実行 | **PASS**（配布 164 ファイル・禁止パターン無し・必須正本物あり、exit 0） |
+| B2 | `sync-version.sh --check` | 実行 | **PASS**（package.json=plugin.json=0.1.0 一致、exit 0） |
+| B3 | `npm pack --dry-run`（LICENSE 同梱・リーク無し） | 実行（`--json`） | **PASS**（164 ファイル・`LICENSE` 含む・`.agents-project`/`docs/maintainer`/`workflow.db`/`.adapters`/`.workflow`非templates のリーク無し） |
+| C1 | LICENSE 著作権 | `grep` | **PASS**（`Copyright (c) 2026 TechBeans Inc.`） |
+| C2 | package.json 確定値 | `node require` | **PASS**（`name=@techbeansjp-free/agents-md`・`license=MIT`・`access=public`・`author.name=TechBeans Inc.`・`bugs`/`homepage#readme`/`repository git+https`） |
+| C3 | plugin.json author | `node require` | **PASS**（`author.name=TechBeans Inc.`＋url・`version=0.1.0`） |
+| D1 | `build-adapters.sh claude cursor` 決定性 | 2 回 build → `diff -r` | **PASS**（claude/cursor とも diff-zero。`.adapters` は未追跡で tracked 差分は編集正本のみ） |
+| D2 | plugin.json author 伝播 | 生成物確認 | **PASS**（`.adapters/claude` 側 plugin.json author=`TechBeans Inc.`） |
+| E1 | e2e 回帰（install/uninstall・冪等・カプセル化・資産保全・enforcement opt-in） | `e2e-install-uninstall.sh`（隔離 snapshot） | **PASS=88 FAIL=0**（回帰なし） |
+
+> **補足（external_spec）**: `repository.url` の `git+https://...` 形式・`bugs`/`homepage` は npm の package.json 標準フィールドであり妥当。LICENSE は npm が `files` 設定に関わらず常に tarball へ同梱する仕様（B3 で実測一致）。`publishConfig.access=public` ＋ `--access public` は scoped パッケージの公開 publish に必要十分（external_spec）。
+
+## I-3. フェーズ1・4 完了条件への map-coverage（03 §3.3）
+
+### フェーズ1（npm 土台）
+
+| 完了条件（§3.3） | 検証方法 | 結果 |
+|------------------|----------|------|
+| `npm pack --dry-run` にリポ固有物が無い | B3（test_output） | **充足**（リーク無し・164 ファイル） |
+| README に npx 導線 | existing_code（既存バッチ D で確認済み・本バッチで維持） | **充足** |
+| スコープ/レジストリ/LICENSE 確定（§0） | C1/C2＋existing_code | **充足**（`@techbeansjp-free/agents-md`・public/npmjs・MIT/TechBeans Inc.） |
+| package.json publish メタデータ確定（§0） | C2（test_output） | **充足**（author/bugs/homepage/repository/access） |
+| `node bin/agents-md.js version`=0.1.0 | existing_code（version 同期 B2 で 0.1.0 一致） | **充足**（package.json/plugin.json=0.1.0） |
+
+→ **フェーズ1 完了条件すべて充足**。publish step は release.yml `npm-publish` に配線され `NPM_TOKEN` ゲートで保護（実 publish はユーザー gated）。
+
+### フェーズ4（marketplace）
+
+| 完了条件（§3.3） | 検証方法 | 結果 |
+|------------------|----------|------|
+| version 一致検証 | A2＋B2（release/npm-publish 両ジョブに sync-version 配線・実 check 一致） | **充足** |
+| リリース成果物の差分ゼロ（再生成 diff-zero） | D1（test_output）＋release ジョブ静的 | **充足** |
+| main に `.adapters` 未コミット | D1（`.adapters` 未追跡・gitignore）／既存バッチ A・E で確認 | **充足** |
+| release.yml に npm publish 配線（タグ `v*`＋公開前検証＋`NPM_TOKEN` ゲート＋access public） | A1〜A5（test_output） | **充足** |
+| marketplace 案A 確定記述 | existing_code（adapters.md/README/03 §0） | **充足** |
+
+→ **フェーズ4 完了条件すべて充足**。
+
+### 未達・ユーザー gated（明示）
+
+- **実 publish（タグ `v*` push）**: 本タスク範囲外。**ユーザー gated の後続操作**。リポ Secrets に `NPM_TOKEN`（npmjs Automation トークン）設定＋version 一致タグ push で CI が verify → publish → marketplace を発火。**完了条件の「配線」は充足、「実行」は意図的に未実行**（安全設計）。
+- inference_only 単独依存の重要判断は無し（すべて test_output / existing_code / external_spec で裏取り）。
+
+## I-4. 実装内容の確認（review-code）
+
+- **02/03 準拠**: 03 §0／§2.5／§9 の確定方針（正本 main に `.adapters` 非配置・タグ push トリガ・`release/marketplace`・version 正本 package.json）に一致。release.yml は (A) publish と (B) marketplace を**別ジョブに分離**し責務が明確（existing_code）。
+- **安全側設計**: 公開前検証（version 同期・配布物リーク検査）を **publish より前**に必須配置（A2）。`NPM_TOKEN` 未設定なら publish step を skip し `::notice::` 案内（A3）＝**意図せぬ発火・未設定失敗の両方を防止**。
+- **規約・証跡**: 変更は正本ファイルと issue ドキュメント（03）に限定。生成物（`.adapters`）は未追跡を維持（D1）。memo（`20260614_211308_...`）に実装証跡あり（YYYYMMDD_HHMMSS_ プレフィックス準拠）。
+- **テスト観点**: 本バッチは CI ワークフロー・メタデータ・LICENSE の変更で新規ユニットテスト追加は不要。代わりに既存 `verify-npm-pack.sh`/`sync-version.sh`/`build-adapters.sh`/`e2e-install-uninstall.sh` が回帰ガードとして機能し、本レビューで全て再実行 PASS（I-2）。release.yml 自体は静的検証（YAML 妥当・step 順・ガード）で代替（実行は実 publish を伴うため不可）。
+- **指摘**: ブロッカーなし。`npm-publish` ジョブの `Install sqlite3` step は `sync-version.sh` が sqlite3 非依存のため厳密には不要だが、害は無く（共通セットアップ流用）非ブロッカー。**推奨対応（任意・後続）**: GitHub Environment（手動承認ゲート）併用で publish 前の人手承認を追加すると更に安全（現状は `NPM_TOKEN` ゲートで代替済み）。
+
+## I-5. 設計・境界の確認（review-architecture）
+
+- **正本/生成物/ランタイムの三層境界**: 維持。main には生成物を置かず、marketplace 生成物は `release/marketplace` ブランチ上で解決（案A）。publish は npm tarball（正本 `.agents/`＋メタデータ）から行い、両導線が単一正本派生で一貫（existing_code）。
+- **version 単一正本**: `package.json` を正本・`plugin.json` 従属とし `sync-version.sh` で同期。両ジョブが同一の version 一致検証を共有（重複だが意図的＝各ジョブ独立実行のため）。循環・不要結合なし。
+- **author の一元性**: LICENSE・package.json・plugin.json の著作権/author を `TechBeans Inc.` に統一。plugin.json は build がそのままコピーするため生成物にも伝播（D2）し、注入ロジックを build に持ち込まず決定性を維持。
+- **指摘**: 設計ブロッカーなし。02_設計 §5.1 のリリース方針と一致。
+
+## I-6. issue 総括（到達状況: 完了 / 別 issue 移管 / ユーザー gated 残）
+
+| 区分 | 項目 | 状態 | 根拠・参照 |
+|------|------|------|------------|
+| **完了フェーズ** | フェーズ0 基盤是正（三層境界・schema 単一正本・gitignore） | **完了** | バッチ A（04_review）・コミット 7e32bbc/213a61e |
+| | フェーズ1 npm 土台（pack 検証・README 導線・**publish 配線・メタデータ確定**） | **完了** | バッチ D＋**本バッチ I**（I-3） |
+| | フェーズ2 生成器一般化（build-adapters.sh・diff-zero） | **完了** | バッチ B・コミット b8c89d8 |
+| | フェーズ4 marketplace（案A・version 一致・**npm publish 配線**） | **完了** | バッチ E＋**本バッチ I**（I-3） |
+| | フェーズ5 enforcement（**opt-in／既定 off** 配線） | **完了（opt-in）** | バッチ H |
+| **別 issue 移管** | フェーズ3 multi-tool（cursor 以降の gemini/copilot/codex 段階導入＝§9 #3-#5 要確認事実） | **別 issue 移管** | `20260614_173500`（移管先） |
+| | enforcement 実効性是正（PreToolUse runtime reject の限界＝H-6） | **別 issue（close 済）** | バッチ H 残課題 → 是正 issue で close |
+| | 台帳 write-workflow-log の prev_hash 自動連結 | **別 issue（close 済）** | 本 DB のチェーン連結で運用済み |
+| **ユーザー gated 残** | 実 publish（リポ Secrets `NPM_TOKEN` 設定＋`v*` タグ push） | **未実行（意図的・gated）** | I-3／I-2 A3。配線は充足、発火はユーザー操作待ち |
+| | enforcement 実機検証（PreToolUse の reject 発火を実 Claude セッションで確認） | **gated（任意・後続強化）** | バッチ H-6・別 issue 側で扱う |
+
+## I-7. レビュー結果（バッチ I・issue 総括）
+
+- **実装品質**: 良好。publish を別ジョブに分離し、公開前検証（version 同期・配布物リーク）を前置、`NPM_TOKEN` ゲートで未設定時 skip／意図せぬ発火を防止、`--access public` で scoped public publish を明示。LICENSE・package.json・plugin.json の author を `TechBeans Inc.` に統一し三者整合。
+- **テスト品質**: 良好。release.yml は静的（YAML 妥当・step 順・ガード）で検証、scripts は実 dry-run/check で PASS、build diff-zero・e2e 88/0 を tmp 隔離・本リポ非破壊で再実行（実 publish/push なし）。inference_only 単独依存の重要判断なし。
+- **ドキュメント品質**: 良好。adapters.md・README・03 を確定値へ更新し、§9 未決 #1/#2/#6 をクローズ、§3.3／§5.2 に解消を反映。
+- **総合評価**: **承認可（フェーズ1・4 完了条件を全充足・ブロッカーなし）**。
+- **親 issue close 可否の結論（私見）**: **close 可（条件付き）**。完了フェーズ（0,1,2,4,5opt-in）はすべて DoD 充足・本バッチで総括済み。フェーズ3 multi-tool は別 issue（`20260614_173500`）へ正式移管済みのため、本親 issue のスコープ外として整理できる。残る「実 publish のタグ push」と「enforcement 実機検証」は**設計上ユーザー gated の後続操作**であり、配線・手順は本 issue で完成しているため**本 issue の完了を妨げない**。よって、フェーズ3 を別 issue 管理とする前提で **親 issue は close 可能**（`docs/maintainer/workflow/close/` への移動は orchestrator が後続コミットと併せて判断）。実 publish の発火そのものを本 issue の完了条件に含める運用であれば、その 1 点のみ gated 残として保留する。
+- **承認者**: worker（auditor/scribe、orchestrator 委譲） / **承認日**: 2026-06-14
+- **DoD**: 04_review にバッチ I（フェーズ1・4 完了＋issue 総括）追記済み・release.yml 静的構成／verify-npm-pack／sync-version／LICENSE・package.json・plugin.json／build diff-zero／e2e 88-0 を test_output で再実行・記載済み（tmp 隔離・本リポ非破壊・実 publish/push なし）・フェーズ1・4 完了条件 map-coverage 充足判定済み・実 publish 未実行をユーザー gated として明記・issue 総括（完了/移管/gated 残）を表で明記・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・自動連結 CHAIN OK）。

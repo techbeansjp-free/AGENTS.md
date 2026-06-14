@@ -1,20 +1,23 @@
-# release.yml — marketplace リリースフロー（案A）
+# release.yml — リリースフロー（npm publish ＋ marketplace 案A）
 #
-# 方針（02_設計 §5.1 / 03_実装計画 §2.5・§9 未決#2）:
+# 方針（02_設計 §5.1 / 03_実装計画 §0・§2.5）:
 #   - 正本リポ（main）には生成物 .adapters/ を一切置かない（/.adapters/ は gitignore のまま）。
-#   - リリースは「タグ push」をトリガに CI が正本 .agents/ から build-adapters.sh で生成し、
-#     生成物 .adapters/claude（必要に応じ cursor）を **専用リリースブランチ** へ commit する（案A）。
+#   - リリースは「タグ push」をトリガに、次の 2 系統を実行する:
+#       (A) npm publish  : 公開前検証（version 同期・配布物リーク検査）→ scoped public publish。
+#       (B) marketplace  : CI が正本 .agents/ から build-adapters.sh で生成し、
+#                          生成物 .adapters/claude（＋cursor）を専用リリースブランチへ commit する（案A）。
 #   - marketplace.json の source: "./.adapters/claude" は、このリリースブランチ上で解決される。
 #
-# 暫定既定（03_実装計画 §9 未決#2 に対する本バッチの確定。living doc に反映済み）:
+# 確定既定（03_実装計画 §0／§9 #1・#2・#6 で確定）:
 #   - トリガ:           タグ push `v*`（例: v0.1.0）。
+#   - npm パッケージ:   @techbeansjp-free/agents-md（public / npmjs.com、publishConfig.access=public）。
 #   - リリースブランチ: `release/marketplace`（生成物の置き場。常に最新リリース内容で上書き同期）。
 #   - 版同期:           push されたタグ（vX.Y.Z）と package.json.version / plugin.json.version が一致すること。
 #
 # 重要:
-#   - 実際の push はこの CI 上でのみ起こる（ローカルからは push しない）。
-#   - npm publish は scope/レジストリ未確定（03 §9 未決#1）のため本ワークフローには含めない。
-#     公開を配線する場合も NPM_TOKEN secret 必須＋手動承認ゲートで、未確定時は発火しない形にすること。
+#   - 実際の push / publish はこの CI 上でのみ起こる（ローカルからは push/publish しない）。
+#   - npm publish は NPM_TOKEN secret によるゲートで保護する。未設定なら publish step は skip し、
+#     ユーザーが NPM_TOKEN を設定して v* タグを push したときにのみ発火する。
 
 name: release
 
@@ -28,6 +31,74 @@ on:
       - "v*"
 
 jobs:
+  # =====================================================================
+  # (A) npm publish — 公開前検証 → NPM_TOKEN ゲート → scoped public publish
+  # =====================================================================
+  npm-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (with npm registry)
+        uses: actions/setup-node@v4
+        with:
+          # 本プロジェクトの実行系は現行 LTS の node22 を対象とする。
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install sqlite3
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sqlite3
+
+      # 公開前検証 1) version 同期: タグ・package.json・plugin.json の version が一致すること
+      - name: Verify version sync (tag == package.json == plugin.json)
+        run: |
+          set -e
+          tag="${GITHUB_REF_NAME#v}"
+          bash .agents/scripts/sync-version.sh --check
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "ERROR: タグ($tag) と package.json($pkg) の version が一致しません" >&2
+            exit 1
+          fi
+          echo "OK: tag=$tag, package.json=$pkg で一致"
+
+      # 公開前検証 2) 配布物リーク検査: tarball にリポ固有物が漏れず必須物が含まれること
+      - name: Verify npm pack (leak / required files)
+        run: |
+          set -e
+          bash .agents/scripts/verify-npm-pack.sh
+
+      # トークンゲート: NPM_TOKEN secret が未設定なら publish せず skip して案内する。
+      # （未設定のまま publish を試みて失敗する／意図せず発火するのを防ぐ）
+      - name: Check NPM_TOKEN gate
+        id: npm_gate
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NPM_TOKEN:-}" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NPM_TOKEN secret が未設定のため npm publish を skip します。リポジトリの Secrets に NPM_TOKEN を設定して v* タグを push すると publish されます。"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "NPM_TOKEN を検出しました。publish を実行します。"
+          fi
+
+      # publish 本体: トークンが存在するときのみ実行する。
+      # publishConfig.access=public のため scoped でも公開 publish 可能。明示に --access public も付与。
+      - name: npm publish (public)
+        if: steps.npm_gate.outputs.present == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -e
+          npm publish --access public
+
+  # =====================================================================
+  # (B) marketplace リリース（案A）— 生成物を release/marketplace へ commit
+  # =====================================================================
   release:
     runs-on: ubuntu-latest
     env:

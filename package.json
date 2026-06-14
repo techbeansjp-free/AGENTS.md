@@ -9,7 +9,9 @@
   "scripts": { "build:claude": "bash .agents/scripts/build-plugin-claude.sh" },
   "keywords": ["agents", "ai", "workflow", "claude-code", "cursor", "skills", "agents-md"],
   "license": "MIT",
-  "homepage": "https://github.com/techbeansjp-free/AGENTS.md",
-  "repository": { "type": "git", "url": "https://github.com/techbeansjp-free/AGENTS.md.git" },
+  "author": { "name": "TechBeans Inc.", "url": "https://github.com/techbeansjp-free" },
+  "homepage": "https://github.com/techbeansjp-free/AGENTS.md#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/techbeansjp-free/AGENTS.md.git" },
+  "bugs": { "url": "https://github.com/techbeansjp-free/AGENTS.md/issues" },
   "publishConfig": { "access": "public" }
 }
