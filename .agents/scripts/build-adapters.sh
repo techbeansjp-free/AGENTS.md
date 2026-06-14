@@ -136,6 +136,8 @@ adapter_claude() {
 
   # 5) hooks: enforcement/claude のフックを同梱 .agents 基準で呼ぶ。
   #    フックは AGENTS_ROOT で正本パスを差し替え可能（参照: enforcement/claude/PreToolUse.sh）。
+  #    AGENT_ROLE は既定 orchestrator（後方互換: 未指定でも R1/R3/R6 は効く。指定で R2 orchestrator allowlist も発火）。
+  #    setup 経路（settings.enforce.json）と同一の挙動にそろえる。
   cat > "$out/hooks/hooks.json" <<'JSON'
 {
   "hooks": {
@@ -145,7 +147,7 @@ adapter_claude() {
         "hooks": [
           {
             "type": "command",
-            "command": "AGENTS_ROOT=\"${CLAUDE_PLUGIN_ROOT}/.agents\" bash \"${CLAUDE_PLUGIN_ROOT}/.agents/enforcement/claude/PreToolUse.sh\""
+            "command": "AGENTS_ROOT=\"${CLAUDE_PLUGIN_ROOT}/.agents\" AGENT_ROLE=\"${AGENT_ROLE:-orchestrator}\" bash \"${CLAUDE_PLUGIN_ROOT}/.agents/enforcement/claude/PreToolUse.sh\""
           }
         ]
       }
