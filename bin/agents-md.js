@@ -13,7 +13,7 @@
 //   help / (既定)    使い方を表示
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -151,15 +151,39 @@ function runDoctor() {
 // ----------------------------------------------------------------------------
 
 // 既定で除去する配備物（setup.sh が配備する成果物のみ）。相対パスで列挙する。
-// 注: .workflow は丸ごと消さない（issue・workflow.db はユーザー資産）。templates のみ除去する。
+// 注1: .workflow は丸ごと消さない（issue・workflow.db はユーザー資産）。templates のみ除去する。
+// 注2: .cursor/・.claude/ は **丸ごと消さない**。setup が配備したパッケージ所有分
+//      （.cursor/skills・.cursor/<owned files>・.claude/hooks・.claude/skills 等）のみを除去し、
+//      ユーザー作成物（.cursor/rules/*.mdc・.claude/settings.json 等）が同居していれば保持する。
+//      パッケージ所有ファイル名は enforcement 正本から動的に導出する（setup.sh と単一整合）。
 const DEPLOYED_ARTIFACTS = [
   ".agents", // パッケージ正本のコピー（setup がコピー配備）
   "AGENTS.md", // ルート契約（setup がコピー）
   "CLAUDE.md", // ルート契約（setup がコピー）
-  ".claude", // enforcement フック・skills（100% 生成物）
-  ".cursor", // ルール・skills（100% 生成物）
+  ".claude/hooks", // enforcement フック（パッケージ生成物専用ディレクトリ）
+  ".claude/skills", // 同期 skills（パッケージ生成物専用ディレクトリ）
+  ".cursor/skills", // 同期 skills（パッケージ生成物専用ディレクトリ）
   ".workflow/templates", // テンプレート（setup がコピー。.workflow 自体は残す）
 ];
+
+// setup.sh が .cursor/・.claude/ 直下へコピーするパッケージ所有ファイルを enforcement 正本から導出する。
+// setup.sh の copy_owned_files と同じ規則（トップレベルの通常ファイル、.gitkeep を除外）で算出する。
+// これにより uninstall は「パッケージが配備した既知のファイル」だけを除去し、ユーザー作成物を残せる。
+function ownedFilesFrom(srcDir, destRel) {
+  if (!existsSync(srcDir)) return [];
+  return readdirSync(srcDir, { withFileTypes: true })
+    .filter((d) => d.isFile() && d.name !== ".gitkeep")
+    .map((d) => join(destRel, d.name));
+}
+
+// .cursor/ 直下のパッケージ所有ファイル（agents-core.mdc・README.md 等）の配備物相対パス。
+// setup.sh は enforcement/cursor/* を .cursor/ 直下へコピーする（copy_owned_files）。同じ規則で導出する。
+// （.claude 側は hooks/・skills/ という専用ディレクトリ配下に配備するため、ディレクトリごと
+//   DEPLOYED_ARTIFACTS で除去でき、直下の個別ファイル導出は不要。）
+function deployedOwnedFiles() {
+  const enforcement = join(PACKAGE_ROOT, ".agents", "enforcement");
+  return ownedFilesFrom(join(enforcement, "cursor"), ".cursor");
+}
 
 // --purge 時のみ追加で除去する証跡（ユーザー資産）。
 const PURGE_ARTIFACTS = [
@@ -186,7 +210,8 @@ function runUninstall(projectRoot, opts) {
   }
 
   // 削除対象を列挙する（存在するものだけ）。
-  const targets = [...DEPLOYED_ARTIFACTS];
+  // パッケージ所有ファイル（.cursor 直下の agents-core.mdc 等）を enforcement 正本から動的に加える。
+  const targets = [...DEPLOYED_ARTIFACTS, ...deployedOwnedFiles()];
   if (purge) targets.push(...PURGE_ARTIFACTS);
 
   const present = targets
@@ -212,6 +237,8 @@ function runUninstall(projectRoot, opts) {
 
   console.log("\n保持するユーザー資産（削除しません）:");
   console.log("  .agents-project/        （プロジェクト固有ルール）");
+  console.log("  .cursor/ のユーザー作成物（自作 rules/*.mdc 等。配備分以外は保持）");
+  console.log("  .claude/ のユーザー設定 （settings.json 等。配備分以外は保持）");
   console.log("  .workflow/<issue>/      （templates 以外の issue 成果物）");
   if (!purge) console.log("  .workflow/workflow.db*  （証跡 DB。--purge 指定時のみ削除）");
 
@@ -238,6 +265,21 @@ function runUninstall(projectRoot, opts) {
       console.error(`エラー: ${t.rel} の削除に失敗しました: ${e.message}`);
     }
   }
+
+  // 後始末: .cursor/・.claude/ がパッケージ配備物の除去後に空になった場合のみ、空ディレクトリを削除する。
+  // ユーザー作成物（.cursor/rules/*.mdc・.claude/settings.json 等）が残っている場合は削除しない（保持）。
+  for (const dirRel of [".cursor", ".claude"]) {
+    const abs = join(projectRoot, dirRel);
+    try {
+      if (existsSync(abs) && statSync(abs).isDirectory() && readdirSync(abs).length === 0) {
+        rmSync(abs, { recursive: true, force: true });
+        console.log(`空ディレクトリを削除しました: ${dirRel}`);
+      }
+    } catch {
+      // 空判定・削除に失敗しても致命的でない（ユーザー資産がある等）。保持側に倒す。
+    }
+  }
+
   console.log(
     failed
       ? "\nuninstall: 一部の削除に失敗しました（上記参照）。"

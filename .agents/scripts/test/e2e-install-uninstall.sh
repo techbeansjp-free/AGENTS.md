@@ -293,6 +293,140 @@ test_no_dist_leak() {
   rm -rf "$src"
 }
 
+# =============================================================================
+# シナリオ R1: 再インストール保持 — 再 init でユーザー資産が保持され正本は最新化される
+# =============================================================================
+# ユースケース:
+#   利用者が install 済み dir に個人の project 固有ルール・自作エディタルール・issue・workflow.db を
+#   作成した状態で再インストール（再 init = setup.sh 相当）しても、それらが破壊されず保持され、
+#   かつパッケージ正本（.agents・agents-core.mdc・skills）は最新化される。
+test_reinstall_preserves_user_assets() {
+  echo "[e2e] シナリオR1: 再インストールでユーザー資産が保持され正本は最新化される"
+  # シナリオ: install 済み dir にユーザー資産（.agents-project/custom-rule.md・.cursor/rules/my-team.mdc・
+  #           .claude/settings.json・.workflow/<issue>/00.md・workflow.db）を作成し、再 init すると、
+  #           それらが全て保持され、かつパッケージ正本（.agents・agents-core.mdc・skills）は最新化される。
+
+  # Given: install 済み dir にユーザーが自作ルール・project 固有ルール・issue・設定を作成する
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  mkdir -p "$dest/.agents-project" "$dest/.cursor/rules" "$dest/.claude" \
+           "$dest/.workflow/20990101_000000_user_issue"
+  echo "custom project rule"           > "$dest/.agents-project/custom-rule.md"
+  echo "team cursor rule"              > "$dest/.cursor/rules/my-team.mdc"
+  echo '{"userValue":true}'            > "$dest/.claude/settings.json"
+  echo "user issue body"              > "$dest/.workflow/20990101_000000_user_issue/00.md"
+  [[ $HAS_SQLITE -eq 0 ]] && : > "$dest/.workflow/workflow.db"
+  # And (Given): パッケージ所有物を改変し、再 init で最新化されることを検出できるようにする
+  echo "STALE" > "$dest/.cursor/agents-core.mdc"
+  rm -rf "$dest/.cursor/skills" "$dest/.agents/boot/CORE.md"
+
+  # When: 再度 init（= setup.sh / upgrade 相当）を実行する
+  node "$CLI" init "$dest" >/dev/null 2>&1
+
+  # Then: ユーザー資産が全て保持される（破壊されない）
+  assert_exists "$dest/.agents-project/custom-rule.md"                       "R1: .agents-project の自作ルールが保持される"
+  assert_exists "$dest/.cursor/rules/my-team.mdc"                            "R1: .cursor の自作ルールが保持される"
+  assert_exists "$dest/.claude/settings.json"                               "R1: .claude のユーザー設定が保持される"
+  assert_exists "$dest/.workflow/20990101_000000_user_issue/00.md"          "R1: ユーザー issue が保持される"
+  assert_exists "$dest/.workflow/workflow.db"                               "R1: workflow.db が保持される"
+  assert_eq "$(cat "$dest/.claude/settings.json")" '{"userValue":true}'     "R1: ユーザー設定の中身が改変されない"
+  assert_eq "$(cat "$dest/.cursor/rules/my-team.mdc")" "team cursor rule"   "R1: 自作ルールの中身が改変されない"
+
+  # And (Then): パッケージ正本は最新化される（agents-core.mdc は正本に戻り、.agents・skills は復元）
+  assert_exists "$dest/.agents/boot/CORE.md"                                "R1: .agents 正本が再配備で復元される"
+  if compgen -G "$dest/.cursor/skills/*__*" >/dev/null; then
+    ok "R1: .cursor/skills がパッケージ正本から再生成される"
+  else
+    ng "R1: .cursor/skills がパッケージ正本から再生成されるべき"
+  fi
+  if [[ "$(cat "$dest/.cursor/agents-core.mdc")" != "STALE" ]]; then
+    ok "R1: agents-core.mdc がパッケージ正本で最新化される"
+  else
+    ng "R1: agents-core.mdc はパッケージ正本で最新化されるべき（STALE のまま残ってはならない）"
+  fi
+
+  rm -rf "$src" "$dest"
+}
+
+# =============================================================================
+# シナリオ R2: upgrade 保持 — agents-md upgrade でもユーザー資産が保持される
+# =============================================================================
+# ユースケース:
+#   利用者が install 済み dir で upgrade サブコマンドを実行しても、R1 と同様に
+#   個人資産（project 固有ルール・自作エディタルール・ユーザー設定・issue・workflow.db）が保持される。
+test_upgrade_preserves_user_assets() {
+  echo "[e2e] シナリオR2: upgrade でもユーザー資産が保持される"
+  # シナリオ: install 済み dir にユーザー資産を作成し、agents-md upgrade を実行すると、
+  #           それらが保持され、かつパッケージ正本は最新化される。
+
+  # Given: install 済み dir にユーザー資産を作成する
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  mkdir -p "$dest/.agents-project" "$dest/.cursor/rules" "$dest/.claude"
+  echo "custom project rule" > "$dest/.agents-project/custom-rule.md"
+  echo "team cursor rule"    > "$dest/.cursor/rules/my-team.mdc"
+  echo '{"userValue":true}'  > "$dest/.claude/settings.json"
+
+  # When: upgrade サブコマンドを実行する
+  node "$CLI" upgrade "$dest" >/dev/null 2>&1
+
+  # Then: ユーザー資産が保持される
+  assert_exists "$dest/.agents-project/custom-rule.md"  "R2: upgrade 後も .agents-project の自作ルールが保持される"
+  assert_exists "$dest/.cursor/rules/my-team.mdc"       "R2: upgrade 後も .cursor の自作ルールが保持される"
+  assert_exists "$dest/.claude/settings.json"           "R2: upgrade 後も .claude のユーザー設定が保持される"
+
+  # And (Then): パッケージ正本は最新化される
+  assert_exists "$dest/.agents/boot/CORE.md"            "R2: upgrade で .agents 正本が最新化される"
+  assert_exists "$dest/.cursor/agents-core.mdc"         "R2: upgrade で agents-core.mdc が配備される"
+
+  rm -rf "$src" "$dest"
+}
+
+# =============================================================================
+# シナリオ R3: uninstall 保持 — 既定 uninstall でユーザー作成物・project 固有ルールが残る
+# =============================================================================
+# ユースケース:
+#   利用者が .cursor/.claude にユーザー作成物を同居させた状態で uninstall（既定）しても、
+#   パッケージ配備分のみが除去され、ユーザー作成物（.cursor/rules/my-team.mdc 等）と
+#   .agents-project/ は保持される。
+test_uninstall_preserves_cohabiting_user_assets() {
+  echo "[e2e] シナリオR3: uninstall がユーザー作成物と project 固有ルールを保持する"
+  # シナリオ: .cursor/rules/my-team.mdc・.claude/settings.json・.agents-project/ がある install 済み dir で
+  #           uninstall --yes すると、パッケージ配備分（agents-core.mdc・skills・hooks・.agents 等）のみ除去され、
+  #           ユーザー作成物と .agents-project は保持される。
+
+  # Given: install 済み dir にユーザー作成物が同居している
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  mkdir -p "$dest/.agents-project" "$dest/.cursor/rules" "$dest/.claude"
+  echo "custom project rule" > "$dest/.agents-project/custom-rule.md"
+  echo "team cursor rule"    > "$dest/.cursor/rules/my-team.mdc"
+  echo '{"userValue":true}'  > "$dest/.claude/settings.json"
+
+  # When: 既定 uninstall を実行する
+  node "$CLI" uninstall "$dest" --yes >/dev/null 2>&1
+
+  # Then: ユーザー作成物・project 固有ルールが保持される
+  assert_exists "$dest/.cursor/rules/my-team.mdc"      "R3: .cursor の自作ルールが uninstall で保持される"
+  assert_exists "$dest/.claude/settings.json"          "R3: .claude のユーザー設定が uninstall で保持される"
+  assert_exists "$dest/.agents-project/custom-rule.md" "R3: .agents-project が uninstall で保持される"
+
+  # And (Then): パッケージ配備分のみが除去される（.cursor/.claude は丸ごと消えない）
+  assert_absent "$dest/.cursor/agents-core.mdc"        "R3: パッケージ所有の agents-core.mdc は除去される"
+  assert_absent "$dest/.cursor/skills"                 "R3: パッケージ生成 .cursor/skills は除去される"
+  assert_absent "$dest/.claude/hooks"                  "R3: パッケージ生成 .claude/hooks は除去される"
+  assert_absent "$dest/.claude/skills"                 "R3: パッケージ生成 .claude/skills は除去される"
+  assert_absent "$dest/.agents"                        "R3: .agents 正本は除去される"
+
+  rm -rf "$src" "$dest"
+}
+
 # --- 実行 ---------------------------------------------------------------------
 [[ -f "$CLI" ]] || { echo "エラー: CLI が見つかりません: $CLI" >&2; exit 2; }
 
@@ -303,6 +437,9 @@ test_uninstall_safety_abort
 test_idempotency
 test_plugin_encapsulation
 test_no_dist_leak
+test_reinstall_preserves_user_assets
+test_upgrade_preserves_user_assets
+test_uninstall_preserves_cohabiting_user_assets
 
 echo ""
 echo "[e2e] 結果: PASS=$PASS FAIL=$FAIL"

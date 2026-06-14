@@ -90,17 +90,44 @@ bash .agents/scripts/setup.sh
 
 ---
 
-## セットアップの上書きルール
+## init / upgrade / uninstall の保持・上書き契約（正本）
 
-| 対象 | 上書き | 説明 |
-|------|--------|------|
-| **AGENTS.md, CLAUDE.md** | 初回のみ、既存が無い場合 | setup がプロジェクトルートにコピー。既に存在する場合は上書きしない（手動で差し替え可）。 |
-| **.agents/** | 初回のみ | 既に .agents がある場合はコピーをスキップ（警告表示）。上書きしたい場合は手動で削除または退避してから setup を再実行。 |
-| **.workflow/templates/** | 初回のみ、未存在時 | ディレクトリが無い場合のみパッケージの `.workflow/templates/` からコピー。既存は上書きしない。 |
-| **.claude/hooks/, .cursor/** | 再同期対象 | setup のたびに enforcement 正本からコピーする。**人間が編集した内容は上書きされる**。カスタムは .agents/enforcement/ の正本を編集するか、別名で配置する。 |
-| **.claude/skills/, .cursor/skills/** | 再同期対象 | sync_skills で .agents/skills/ からコピー。正本を編集したら setup または sync を再実行して反映。 |
-| **.agents-project/** | 作成しない | setup は作成しない。プロジェクト側で用意する。**人間が編集してよい**。.agents より優先される。 |
-| **workflow.db** | 初回生成のみ | setup の init_workflow_db で無い場合のみ作成。既存 DB は上書きしない。 |
+**結論: install/upgrade/uninstall は「パッケージ配備物」のみを管理し、ユーザー資産は破壊しない。** 再インストール・upgrade でユーザーが個人的に作成した project 固有ルールや自作エディタルールが消えることはない。判断に迷う場合は安全側（保持）に倒す。
+
+### パッケージ管理（init/upgrade のたびに上書き・最新化される）
+
+| 対象 | 種別 | 説明 |
+|------|------|------|
+| **.agents/** | 正本コピー | パッケージ正本。再 init で再配備し最新化する。 |
+| **AGENTS.md, CLAUDE.md** | ルート契約 | パッケージ正本をルートへコピー（最新化）。 |
+| **.workflow/templates/** | テンプレート | パッケージの `.workflow/templates/` から最新化する。 |
+| **.cursor/rules/agents-core.mdc**（enforcement/cursor の所有ファイル） | エディタルール | setup がパッケージ所有ファイルのみを上書き。**.cursor/ を丸ごと削除しない。** |
+| **.cursor/skills/** | 生成 skills | **パッケージ生成物専用ディレクトリ**。毎回 rm -rf して再生成する。**手置き禁止**（ユーザー資産を置かないこと）。 |
+| **.claude/hooks/** | enforcement | **パッケージ生成物専用ディレクトリ**。毎回 rm -rf して再生成する。**手置き禁止**。 |
+| **.claude/skills/** | 生成 skills | **パッケージ生成物専用ディレクトリ**。毎回 rm -rf して再生成する。**手置き禁止**。 |
+
+> 注: `.cursor/skills/`・`.claude/hooks/`・`.claude/skills/` は **パッケージが排他所有する専用ディレクトリ**である（このディレクトリは setup が毎回再生成するため、ユーザーがファイルを手置きしてはならない）。カスタムは `.agents/enforcement/`・`.agents/skills/` の正本を編集して反映する。
+
+### ユーザー資産（保持・破壊しない）
+
+| 対象 | 説明 |
+|------|------|
+| **.agents-project/** | project 固有ルール。setup は touch しない。**project 固有ルールは必ずここに置くこと**（推奨）。.agents より優先される。 |
+| **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc`・独自ファイル） | setup は `.cursor/` を丸ごと削除せず、パッケージ所有ファイルのみ更新するため**保持**される。 |
+| **.claude/ のユーザー設定**（既存の settings.json 等） | setup は `.claude/hooks`・`.claude/skills` のみ更新し、ユーザー設定は touch しない（保持）。 |
+| **.workflow/<issue>/** | issue 成果物（消費者ランタイム）。保持。 |
+| **workflow.db** | 証跡 DB。初回のみ生成、既存は上書きしない（保持）。 |
+
+**保証**: 上記の保持は E2E テスト `.agents/scripts/test/e2e-install-uninstall.sh` のシナリオ R1（再インストール保持）・R2（upgrade 保持）・R3（uninstall 保持）で再現確認される。
+
+### 初回コピー時の挙動補足
+
+| 対象 | 初回挙動 |
+|------|----------|
+| **AGENTS.md, CLAUDE.md** | 既存が無い場合にコピー。ソースと採用先が同一パスのときはスキップ。 |
+| **.agents/** | 既存 .agents がソースと別パスなら削除して再コピー（最新化）。 |
+| **.workflow/templates/** | 未存在時にパッケージから最新化。 |
+| **workflow.db** | setup の init_workflow_db で無い場合のみ作成。既存 DB は上書きしない。 |
 
 ---
 
@@ -118,13 +145,18 @@ npx @techbeansjp-free/agents-md uninstall --purge --yes  # workflow.db 等の証
 | 対象 | 既定 `uninstall` | 説明 |
 |------|------------------|------|
 | **.agents/・AGENTS.md・CLAUDE.md** | 除去 | setup/init がコピー配備した正本（配備物）。 |
-| **.claude/・.cursor/** | 除去 | enforcement フック・skills（100% 生成物）。 |
+| **.claude/hooks/・.claude/skills/・.cursor/skills/** | 除去 | パッケージ生成物専用ディレクトリ（100% 生成物）。 |
+| **.cursor/ のパッケージ所有ファイル**（agents-core.mdc 等） | 除去 | enforcement 正本由来の配備ファイルのみ。 |
 | **.workflow/templates/** | 除去 | setup がコピーしたテンプレート（`.workflow/` 自体は残す）。 |
+| **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc` 等） | 保持 | `.cursor/` を丸ごと消さず、配備分のみ除去する。 |
+| **.claude/ のユーザー設定**（settings.json 等） | 保持 | `.claude/` を丸ごと消さず、配備分のみ除去する。 |
 | **.agents-project/** | 保持 | プロジェクト固有ルール（人間が編集する資産）。誤削除しない。 |
 | **.workflow/<issue>/**（templates 以外） | 保持 | issue 成果物（消費者ランタイム）。 |
 | **workflow.db** | 保持（`--purge` 時のみ除去） | 証跡 DB。既定では残す。 |
 
-**安全策**: 採用先に配備の痕跡（`.agents/` または `AGENTS.md`）が無い場合、誤削除を防ぐため uninstall を中止する。存在しない対象はスキップし、`--yes` を付けない限り削除は行わず対象の一覧表示（dry-run）に留める。`uninstall` の挙動は E2E テスト `.agents/scripts/test/e2e-install-uninstall.sh`（install→uninstall→冪等→カプセル化→リーク）で再現確認される。
+> uninstall は `.cursor/`・`.claude/` を**丸ごと削除しない**。パッケージが配備した既知のファイル・専用ディレクトリ（`agents-core.mdc`・`skills/`・`hooks/` 等）のみを除去し、ユーザー作成物が同居していれば残す。除去後に `.cursor/`・`.claude/` が空になった場合のみ、空ディレクトリを片付ける。
+
+**安全策**: 採用先に配備の痕跡（`.agents/` または `AGENTS.md`）が無い場合、誤削除を防ぐため uninstall を中止する。存在しない対象はスキップし、`--yes` を付けない限り削除は行わず対象の一覧表示（dry-run）に留める。`uninstall` の挙動は E2E テスト `.agents/scripts/test/e2e-install-uninstall.sh`（install→uninstall→冪等→カプセル化→リーク→**R1 再インストール保持・R2 upgrade 保持・R3 uninstall 保持**）で再現確認される。
 
 ---
 

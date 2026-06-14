@@ -856,3 +856,133 @@ document_id: "e5be3fa7-9765-4953-8274-fa39c61128bf"
 - **総合評価**: **承認可（本バッチ範囲・ブロッカーなし）**。03 §2.5 フェーズ4＋ユーザー追加要件（つけ外し・カプセル化・Node 是正・install/uninstall E2E）の DoD を充足。残課題（課題5・課題7・課題8・課題9）はいずれも非ブロッカー・後続継続またはユーザー確認事項。
 - **承認者**: worker（auditor、orchestrator 委譲） / **承認日**: 2026-06-14
 - **DoD**: 04_review 追記済み・テスト再実行（E2E 36／補助検証）記載済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・直前 entry にチェーン連結）。
+
+---
+
+# 【追記バッチ F】再インストール時のユーザー資産保全（.cursor 全削除廃止・uninstall 精緻化・R1-R3 E2E）
+
+> **本節は verify-and-close の 6 回目の実行（バッチ F）の成果物。** skill chain（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従い、ユーザー指摘「再インストールで project 固有ルールが消えないか」への是正実装をレビューする。
+>
+> **レビュー深度**: **full**（つけ外し・再インストール・upgrade という利用者面の中核機能で、ユーザー資産の破壊はデータ損失に直結するため full。変更5ファイル＝setup.sh・bin/agents-md.js・e2e-install-uninstall.sh・SETUP.md・README.md）。
+> **evidence_source 凡例**: `test_output`（本バッチで再実行したコマンドの出力）／`existing_code`（対象ファイルの該当行）／`external_spec`（00/01/03 の契約・受け入れ基準）／`inference_only`（推論のみ。重要判断では不可）。
+
+---
+
+## F-1. レビュー対象
+
+- **実装範囲**: 直前の implement-feature の成果物。ユーザー指摘「再インストール（再 init / upgrade）で `.agents-project/` や自作エディタルールが消えないか」への是正。
+  - **(setup.sh)** `.cursor/` の `rm -rf` 全削除を廃止し、新規 `copy_owned_files()` でパッケージ所有ファイル（トップレベル通常ファイル・`.gitkeep` 除外）のみ上書き。`.claude/` は `hooks`/`skills` のみ再生成しユーザー設定（`settings.json` 等）を touch せず。`.agents-project/` は非 touch（従来どおり）。
+  - **(bin/agents-md.js)** uninstall を `.cursor`/`.claude` 丸ごと除去から、配備物限定へ精緻化。`DEPLOYED_ARTIFACTS` を `.claude/hooks`・`.claude/skills`・`.cursor/skills` の専用ディレクトリに分解し、`.cursor` 直下のパッケージ所有ファイルは `deployedOwnedFiles()`（enforcement 正本から動的導出）で加える。除去後に `.cursor`/`.claude` が空になった場合のみ親ディレクトリを片付ける。
+  - **(e2e-install-uninstall.sh)** R1（再インストール保持）・R2（upgrade 保持）・R3（uninstall 保持）の3シナリオ（計23アサーション）を追加。
+  - **(SETUP.md / README.md)** init/upgrade/uninstall の保持・上書き契約表を再設計。project 固有ルールは `.agents-project/` 推奨を明記。
+- **変更ファイル（CHANGED_FILES_JSON）**: `.agents/scripts/setup.sh`・`bin/agents-md.js`・`.agents/scripts/test/e2e-install-uninstall.sh`・`.agents/SETUP.md`・`README.md`・`04_review.md`。
+- **レビュー対象外（触れない）**: 未追跡ディレクトリ `docs/maintainer/workflow/20260614_162712_コア取り込み候補調査/` は本バッチと無関係。
+- **レビュー担当者**: worker（auditor/scribe ロール、orchestrator 委譲）。
+
+---
+
+## F-2. 受け入れ基準の確認（generate-scenarios → map-coverage）
+
+01_要件定義の受け入れ基準（保持・破壊しない系）と本実装・テストの対応。検証方法・結果をセットで記載する。
+
+| 受け入れ基準（01 / BR） | カバーする実装 | カバーするテスト/検証 | 検証方法・結果 | evidence_source |
+|--------------------------|----------------|------------------------|------------------|------------------|
+| 01 L51/L218/L222・BR-4: アップグレード後、人間編集領域（`.agents-project/` 等）が保持される | setup.sh: `.agents-project/` 非 touch／bin: upgrade=init 同等 | R2（upgrade 保持） | E2E 再実行で R2 全5アサーション pass。`.agents-project/custom-rule.md`・`.cursor/rules/my-team.mdc`・`.claude/settings.json` が upgrade 後も保持 | test_output |
+| 01 L62: 既存の `.cursor`/`.claude` を不用意に破壊しない | setup.sh: `copy_owned_files`（`rm -rf` 廃止）・`.claude` は hooks/skills のみ | R1（再インストール保持） | E2E 再実行で R1 全10アサーション pass。ユーザー資産5種が保持され、正本（.agents・agents-core.mdc・skills）は最新化。独立再現 F-5 でも確認 | test_output |
+| 01 L370/BR-2/BR-4: 非対象（人間編集領域）が無断上書き・無断除去されない | bin: `deployedOwnedFiles()`＋専用ディレクトリ限定除去・空時のみ親片付け | R3（uninstall 保持） | E2E 再実行で R3 全8アサーション pass。`.cursor/rules/my-team.mdc`・`.claude/settings.json`・`.agents-project/` が uninstall 後も保持、配備分のみ除去 | test_output |
+| 既存回帰（S2/S3/S4）: uninstall が配備物のみ除去・未配備 dir で中止・purge は workflow.db のみ追加除去 | bin: 安全策・PURGE_ARTIFACTS（不変） | S2〜S4 | E2E 再実行で S2〜S4 全 pass（リグレッションなし） | test_output |
+| 本リポの `.agents/.claude/.cursor/.workflow/workflow.db` を破壊しない（隔離 dir 実行） | E2E は `mktemp -d`＋`git archive HEAD` で隔離実行 | 全シナリオ | E2E 前後で本リポ own dirs の sha256 集約ハッシュ不変・`git status --porcelain` 不変（6行で同一） | test_output |
+
+- **未達・欠落**: なし（保持系の受け入れ基準は R1〜R3＋S2〜S4 で網羅）。
+- **必須成果物の充足**: 04_review 直下に本節を追記（PHASES DoD）。01 BDD シナリオ（US つけ外し・アップグレード保持）とテスト（R1〜R3）の対応が取れている。
+
+---
+
+## F-3. 実装内容の確認（review-code）
+
+### F-3.1 `.agents/scripts/setup.sh`（`.cursor` 全削除の廃止）
+
+- **`copy_owned_files()` 新設**: `src_dir` 配下のトップレベル通常ファイルのみ（`.gitkeep` 除外、サブディレクトリは対象外）を `dest_dir` へ `cp` で上書き。ディレクトリ全体を `rm -rf` しないため `.cursor/rules/*.mdc` 等のユーザー作成物が保持される（`existing_code` setup.sh:99-113）。
+- **`.cursor/` 処理**: 旧 `rm -rf "$CURSOR_DIR"` を廃止し、`mkdir -p`＋`copy_owned_files enforcement/cursor .cursor`。`.cursor/skills` は別途 `sync_skills`（専用ディレクトリのため毎回再生成）（`existing_code` setup.sh:131-146）。
+- **`.claude/` 処理**: `hooks/` のみ `rm -rf`＋再生成（パッケージ生成物専用ディレクトリ）、`skills` も `sync_skills`。`.claude/settings.json` 等のユーザー設定は touch しない（`existing_code` setup.sh:116-129）。独立再現 F-5 で `settings.json` の中身不変を実測。
+- **`.agents-project/` 非 touch**: setup.sh は `.agents-project/` を一切操作しない（従来どおり保持）（`existing_code`）。
+- **指摘**: なし（規約遵守・責務逸脱なし）。
+
+### F-3.2 `bin/agents-md.js`（uninstall の精緻化）
+
+- **`DEPLOYED_ARTIFACTS` 分解**: `.claude`/`.cursor` 丸ごとから `.claude/hooks`・`.claude/skills`・`.cursor/skills` の専用ディレクトリに変更。`.workflow/templates`・`.agents`・`AGENTS.md`・`CLAUDE.md` は不変（`existing_code` bin:155-165）。
+- **`deployedOwnedFiles()` の単一整合**: `.cursor` 直下のパッケージ所有ファイル（`agents-core.mdc`・`README.md`）を `enforcement/cursor` から `readdirSync`＋`.gitkeep` 除外で動的導出。setup.sh の `copy_owned_files` と**同一規則**で、配備物マニフェストの二重管理を避けている（`existing_code` bin:167-187。F-5 で導出結果が `[.cursor/README.md, .cursor/agents-core.mdc]` であることを実測）。
+- **空時のみ親片付け**: 除去後に `.cursor`/`.claude` が `readdirSync(...).length === 0` の場合のみ `rmSync`。ユーザー作成物が残っていれば親を削除しない（保持側に倒す。`catch` も保持側に倒す設計）（`existing_code` bin:268-281）。
+- **保持アナウンス**: uninstall 出力に「`.cursor`/`.claude` のユーザー作成物・設定は保持」を追加。利用者に保持範囲が伝わる（`existing_code` bin:239-241）。
+- **指摘（軽微・非ブロッカー）**: F-6 に後述（`.cursor/README.md` 除去の対称性、deployed setup.sh の版差）。
+
+### F-3.3 テストコードの BDD 形式監査（TEST_BDD_FORMAT）
+
+R1〜R3 のインラインコメントを `.agents/TEST_BDD_FORMAT.md` に照らして監査（`existing_code` e2e:296-431）。
+
+- **ユースケース**: 各テスト関数の直前に `# ユースケース:` ブロックコメントで利用者目線の目的を記載（R1=再インストール保持、R2=upgrade 保持、R3=uninstall 同居保持）。**充足**。
+- **シナリオ**: 各テスト本体冒頭に `# シナリオ:` で検証状況を記載。**充足**。
+- **Given / When / Then**: 各ブロック直上に1つずつコメント。複数段は `# And (Given):`（R1 の正本改変前提）・`# And (Then):`（正本最新化の検証）で正しく区別。**充足**。
+- **結論**: R1〜R3 は TEST_BDD_FORMAT のユースケース/シナリオ/GWT インライン3層を満たす。欠落・ブロックずれなし。
+
+---
+
+## F-4. 設計・境界の確認（review-architecture）
+
+- **責務分離**: 「パッケージ所有ファイルの導出」を setup.sh（`copy_owned_files`）と bin（`deployedOwnedFiles`/`ownedFilesFrom`）が**同一規則**（enforcement 正本・トップレベル通常ファイル・`.gitkeep` 除外）で行い、配備＝除去の対称性を正本1か所（enforcement/cursor）に集約。境界が明確で、配備物マニフェストの二重定義を生まない（CONCEPTS 単一責任に適合）。
+- **依存方向**: bin → enforcement 正本（読み取りのみ・一方向）。循環なし。`PACKAGE_ROOT/.agents/enforcement` を参照し、setup.sh の参照元と一致（`existing_code`）。
+- **安全側設計**: 「判断に迷えば保持」を一貫して採用（空時のみ親削除・`catch` で保持・専用ディレクトリのみ全削除）。データ損失リスクを構造的に下げている。
+- **専用ディレクトリ契約**: `.cursor/skills`・`.claude/hooks`・`.claude/skills` を「パッケージ排他所有・手置き禁止」とし、SETUP.md に明文化。再生成（rm -rf）対象とユーザー資産の境界が文書と実装で一致（BR-4 の「文書と実装の一致」を満たす）。
+- **指摘**: なし（設計・境界は妥当）。軽微なドキュメント不整合は F-6。
+
+---
+
+## F-5. テスト再実行と独立確認（evidence_source 付き）
+
+すべて**隔離 dir・非破壊**で本バッチ中に再実行（evidence_source=test_output）。
+
+### F-5.1 E2E 全シナリオ（S1〜S7＋R1〜R3）
+
+- コマンド: `bash .agents/scripts/test/e2e-install-uninstall.sh`（`sqlite3=あり`）。
+- 結果: **`PASS=59 FAIL=0`／全シナリオ pass**。内訳=S1(10)・S2(9)・S3(3)・S4(2)・S5(3)・S6(8)・S7(1)=回帰36、R1(10)・R2(5)・R3(8)=新規23。実装者の自己報告（59/0）と一致。
+- **保持の実測**（R1/R2/R3 の主要アサーション、test_output より）:
+  - R1: `.agents-project/custom-rule.md`・`.cursor/rules/my-team.mdc`・`.claude/settings.json`・`.workflow/<issue>/00.md`・`workflow.db` が再 init 後も保持。中身改変なし（`settings.json`＝`{"userValue":true}`／`my-team.mdc`＝`team cursor rule`）。かつ `.agents/boot/CORE.md` 復元・`.cursor/skills` 再生成・`agents-core.mdc` が STALE→正本に最新化。
+  - R2: `.agents-project`・`.cursor/rules`・`.claude/settings.json` が upgrade 後も保持。正本（`.agents`・`agents-core.mdc`）最新化。
+  - R3: `.cursor/rules/my-team.mdc`・`.claude/settings.json`・`.agents-project/custom-rule.md` が uninstall 後も保持。パッケージ配備分（`agents-core.mdc`・`.cursor/skills`・`.claude/hooks`・`.claude/skills`・`.agents`）のみ除去。
+
+### F-5.2 本リポ非破壊の実測
+
+- E2E 前後で `find .agents .claude .cursor .workflow -type f | sort | xargs sha256sum | sha256sum` が**同一**（`2d6108…d7a`）。`git status --porcelain` も前後で**同一（6行）**。E2E は `mktemp -d`＋`git archive HEAD` で隔離実行され、本開発リポの `.agents/.claude/.cursor/.workflow/workflow.db` を一切破壊しない。
+
+### F-5.3 build-adapters diff-zero・静的検査・リーク
+
+- `bash .agents/scripts/build-adapters.sh claude` / `cursor`：exit 0。**2回連続実行で生成物 sha256 集約ハッシュ一致＝diff-zero（idempotent）**。
+- `bash -n .agents/scripts/setup.sh`・`bash -n .agents/scripts/test/e2e-install-uninstall.sh`・`node --check bin/agents-md.js`：いずれも OK。
+- `git ls-files .adapters`：**空**（生成物がリポに漏れていない）。build 実行後も `git status` 不変（`.adapters` は gitignore）。
+
+### F-5.4 独立回帰確認（隔離 dir で 1 ケース再現）
+
+- **setup.sh が `.cursor` を丸ごと消さないこと**: 隔離 dir で**作業ツリーの setup.sh**（レビュー対象）を直接実行。再 init 後、ユーザー設置の `.cursor/rules/my-team.mdc`（中身 `MYTEAM`）・`.claude/settings.json`（`USERSETTINGS`）が保持され、`agents-core.mdc` は STALE→正本に最新化。出力メッセージが新版（「`.cursor/` のパッケージ所有分を最新化しました（ユーザー自作ルールは保持）」）であることも確認（test_output）。
+- **uninstall がユーザー作成物を残すこと**: 同 dir で `agents-md uninstall --yes` 後、`.cursor/rules/my-team.mdc`・`.claude/settings.json` が残り、`agents-core.mdc`・`.cursor/README.md` は除去（F-6 の対称性確認）。
+- **inference_only 単独依存の重要判断なし**: 承認に関わる判断はすべて test_output／existing_code／external_spec で裏取り。
+
+---
+
+## F-6. 課題と改善点（残課題・軽微）
+
+いずれも**非ブロッカー**。本バッチの承認可否には影響しない。
+
+- **【軽微1・ドキュメント不整合】SETUP.md の deploy パス表記**: SETUP.md L104 の表ヘッダが `.cursor/rules/agents-core.mdc` と記載されているが、実際の配備先は `.cursor/agents-core.mdc`（`.cursor` 直下）。同ファイルの他箇所（L75/L149/L157/L173/L188）はすべて正しく `.cursor/agents-core.mdc` と記載。L104 のみの孤立した表記ゆれ（`existing_code`）。**推奨対応**: L104 を `.cursor/agents-core.mdc` に修正（後続の軽微修正で可）。
+- **【軽微2・対称性の確認事項】`.cursor/README.md` の除去**: `deployedOwnedFiles()` は `.cursor/README.md` もパッケージ所有として除去対象に含む（enforcement/cursor に `README.md` が存在するため）。これは setup が同名を上書き配備するのと対称で設計上は正しいが、利用者が `.cursor/README.md` を自作していた場合は uninstall で除去される。`README.md` という一般名のためごく低リスク。**推奨対応**: 不要（配備＝除去の対称性として妥当）。必要なら将来 enforcement/cursor の README をユーザー衝突しにくい名前にする選択肢を残す。
+- **【軽微3・運用上の注意・観測事項】deployed setup.sh の版差**: 利用者が**採用先にコピー済みの** `.agents/scripts/setup.sh`（過去版）を直接再実行した場合、その版の挙動（旧版なら `.cursor` 全削除）が走る。`agents-md upgrade`/`init` はパッケージ自身の setup.sh を使うため本是正の恩恵を受けるが、deployed copy の直接実行は版に依存する。これは upgrade モデルに内在する一般的性質で本実装の欠陥ではない（`inference_only`／運用注意）。**推奨対応**: 不要（CLI 経由の upgrade を推奨導線とする README/SETUP の記述と整合）。
+
+---
+
+## F-7. レビュー結果（バッチ F）
+
+- **実装品質**: 良好（`.cursor` の `rm -rf` 全削除を廃止し `copy_owned_files` でパッケージ所有分のみ更新。`.claude` はユーザー設定非 touch。uninstall を enforcement 正本からの動的導出＋専用ディレクトリ限定に精緻化し、空時のみ親を片付ける安全側設計。配備＝除去の対称性を正本1か所に集約し二重管理を生まない）。
+- **テスト品質**: 良好（R1〜R3 を新設し E2E `PASS=59 FAIL=0` を隔離・非破壊で再実行。保持5種＋正本最新化を実測。本リポ own dirs の非破壊を sha256＋git status で実証。R1〜R3 は TEST_BDD_FORMAT のユースケース/シナリオ/GWT を充足）。
+- **ドキュメント品質**: 良好（SETUP.md・README に保持・上書き契約表を再設計し project 固有ルールは `.agents-project/` 推奨を明記。軽微1 の L104 表記ゆれのみ残）。
+- **総合評価**: **承認可（本バッチ範囲・ブロッカーなし）**。ユーザー指摘「再インストールで project 固有ルールが消えないか」への是正は、R1（再インストール）・R2（upgrade）・R3（uninstall）で実測検証され、`.agents-project/`・`.cursor`/`.claude` のユーザー作成物・`.workflow/<issue>`・`workflow.db` が破壊されないことを確認。残課題（軽微1〜3）はいずれも非ブロッカー。
+- **承認者**: worker（auditor、orchestrator 委譲） / **承認日**: 2026-06-14
+- **DoD**: 04_review 追記済み・E2E（S1〜S7＋R1〜R3＝59/0）再実行と保持の実測を記載済み・build-adapters diff-zero／静的検査／リーク確認済み・独立回帰確認済み・write-workflow-log（step 5）で workflow.db に verify-and-close を記録（書記経由・実 DB 現 head にチェーン連結）。

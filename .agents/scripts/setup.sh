@@ -85,6 +85,9 @@ fi
 
 # sync_skills <dest_root> [<src_skills>]
 #   共有ライブラリの deploy_skills_impl に委譲する。常に最新にするため同期前に配備先を削除する。
+#   注意: <dest_root>（.claude/skills・.cursor/skills）は **パッケージ生成 skills 専用ディレクトリ**として扱う。
+#         このディレクトリへの手置きは禁止（毎回 rm -rf して再生成する）。ユーザー資産は置かないこと。
+#         （SETUP.md「保持・上書き契約」参照）
 sync_skills() {
   local dest_root="$1"
   local agents_skills="${2:-$PROJECT_ROOT/.agents/skills}"
@@ -93,25 +96,46 @@ sync_skills() {
   deploy_skills_impl "$agents_skills" "$dest_root" >/dev/null
 }
 
+# copy_owned_files <src_dir> <dest_dir>
+#   <src_dir> 配下のパッケージ所有ファイル（トップレベルの通常ファイル）だけを <dest_dir> へ上書きコピーする。
+#   ディレクトリ全体を rm -rf しないため、<dest_dir> 配下のユーザー作成物（他の rules/*.mdc 等）は保持される。
+#   .gitkeep は配備不要のため除外する。サブディレクトリ（例: skills）は別途 sync_skills が扱う。
+copy_owned_files() {
+  local src_dir="$1"
+  local dest_dir="$2"
+  [[ -d "$src_dir" ]] || return 0
+  mkdir -p "$dest_dir"
+  local f base
+  for f in "$src_dir"/*; do
+    [[ -f "$f" ]] || continue
+    base="$(basename "$f")"
+    [[ "$base" == ".gitkeep" ]] && continue
+    cp "$f" "$dest_dir/$base"
+  done
+}
+
+# .claude/ はパッケージ所有分（hooks・skills）のみ更新する。
+# ユーザー設定（.claude/settings.json 等）や他のユーザー作成物は touch しない（保持）。
 CLAUDE_DIR="$PROJECT_ROOT/.claude"
 mkdir -p "$CLAUDE_DIR"
 if [[ -d "$PROJECT_ROOT/.agents/enforcement/claude" ]]; then
+  # hooks/ はパッケージ生成物専用ディレクトリ。毎回作り直す（ユーザーは手置きしない前提。SETUP.md 参照）。
   rm -rf "$CLAUDE_DIR/hooks"
   mkdir -p "$CLAUDE_DIR/hooks"
-  cp -R "$PROJECT_ROOT/.agents/enforcement/claude/"* "$CLAUDE_DIR/hooks/" 2>/dev/null || true
-  echo "enforcement/claude から .claude/ を最新化しました。"
+  copy_owned_files "$PROJECT_ROOT/.agents/enforcement/claude" "$CLAUDE_DIR/hooks"
+  echo "enforcement/claude から .claude/hooks を最新化しました（ユーザー設定は保持）。"
 else
   echo "注: enforcement/claude が見つかりません。.claude/ を空で作成しました。"
 fi
 
+# .cursor/ は丸ごと削除しない。パッケージ所有ファイル（agents-core.mdc 等）と skills のみ更新する。
+# ユーザーが .cursor/ 配下に置いた自作ルール（rules/*.mdc 等）・独自ファイルは保持する。
 CURSOR_DIR="$PROJECT_ROOT/.cursor"
+mkdir -p "$CURSOR_DIR"
 if [[ -d "$PROJECT_ROOT/.agents/enforcement/cursor" ]]; then
-  rm -rf "$CURSOR_DIR"
-  mkdir -p "$CURSOR_DIR"
-  cp -R "$PROJECT_ROOT/.agents/enforcement/cursor/"* "$CURSOR_DIR/" 2>/dev/null || true
-  echo "enforcement/cursor から .cursor/ を最新化しました。"
+  copy_owned_files "$PROJECT_ROOT/.agents/enforcement/cursor" "$CURSOR_DIR"
+  echo "enforcement/cursor から .cursor/ のパッケージ所有分を最新化しました（ユーザー自作ルールは保持）。"
 else
-  mkdir -p "$CURSOR_DIR"
   echo "注: enforcement/cursor が見つかりません。.cursor/ を空で作成しました。"
 fi
 
