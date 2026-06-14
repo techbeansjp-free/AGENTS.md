@@ -1,6 +1,8 @@
 -- workflow.db スキーマの正本（SQL）
--- 本ファイルが CREATE TABLE workflow_log と索引定義の単一正本。
--- 仕様の記述・解説は ledger/schema.md を参照。新規 DB 作成時は本 SQL を流す。
+-- 本ファイルが workflow.db の全実在テーブル（現状 workflow_log の 1 つ）と索引定義の単一正本。
+-- 新規 DB 作成時は setup.sh:init_workflow_db / write-workflow-log.sh が本 SQL をそのまま流す。
+-- 実在テーブルを増やす場合は必ず本ファイルに CREATE TABLE を追加する（schema.md 側には書かない）。
+-- 仕様の記述・解説・移行手順は ledger/schema.md を参照（schema.md の SQL は解説/例示で実体ではない）。
 
 CREATE TABLE IF NOT EXISTS workflow_log (
   entry_id TEXT PRIMARY KEY,

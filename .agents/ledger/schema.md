@@ -24,15 +24,25 @@
 
 ---
 
+## 実在テーブルと正本の所在（最初に読むこと）
+
+- **workflow.db に実際に作られるテーブルは `workflow_log` の 1 つだけ**である。新規 DB 作成時、setup.sh（`init_workflow_db`）と write-workflow-log.sh はいずれも `ledger/schema.sql` を流すだけで、`schema.sql` が定義する実在テーブルは `workflow_log`（＋索引 7 件）のみ。
+- **SQL の単一正本は [schema.sql](schema.sql)**。`workflow_log` の `CREATE TABLE` と索引定義の実体は schema.sql にのみ置く。**本ファイル（schema.md）内の SQL ブロックは実体ではなく解説・例示・移行手順であり、新規 DB 作成時には流されない。** 実在テーブルの定義を二重に持たないため、相違が生じた場合は常に schema.sql を正とする。
+- 本ファイル以降に現れる SQL の区分:
+  - 「推奨スキーマ完成版」の `workflow_log` … **schema.sql の写し（解説用）**。編集対象は schema.sql のみ。
+  - 「旧スキーマ（移行前の参照用）」… **過去 DB の説明であり新規作成では使わない**（実在テーブルではない）。
+  - 「証跡（memo）の参照」`memo_ref` … **将来案の例示。どのスクリプトも作成しない**（実在テーブルではない）。
+  - 「既存 DB のマイグレーション」`ALTER TABLE` 群 … 既存 DB を schema.sql 相当へ寄せるための手順（実体は write-workflow-log.sh のマイグレーション分岐）。
+
 ## 想定テーブル（SQLite の例）
 
-### 推奨スキーマ完成版（チェーン型証跡・順序監査対応）
+### 推奨スキーマ完成版（チェーン型証跡・順序監査対応）— schema.sql の解説用写し
 
 **本スキーマの正本**: ログを書くのは書記のみとするため **actor_role は `scribe` のみ**、委譲元は **delegated_by_role は `orchestrator` のみ** を DB 制約で強制する。**changed_files_json は implement-feature で必須**とする。テンプレート・監査・運用方針と完全に一致させる。
 
 **SQL の正本は schema.sql**（[schema.sql](schema.sql)）。CREATE TABLE workflow_log と索引定義の実体は schema.sql に一本化されており、setup.sh / write-workflow-log.sh は新規 DB 作成時に schema.sql を流す。本ファイルの以下の SQL は解説用の参照であり、相違が生じた場合は schema.sql を正とする。
 
-**新規作成時は次の SQL を使う。** ログを単発イベントではなく「チェーンされた実行証跡」として扱い、`parent_entry_id` で因果関係を追える。`actor_role` / `delegated_by_role` で実行主体と委譲元を記録し、`entry_hash` で改ざん検知の土台を用意する。既存 DB がある場合は ledger/README のマイグレーション方針に従う。
+**新規作成時に実際に流すのは [schema.sql](schema.sql) であり、以下の SQL ブロックはその内容を解説するための写しである（編集対象は schema.sql のみ。ここを書き換えても DB には反映されない）。** ログを単発イベントではなく「チェーンされた実行証跡」として扱い、`parent_entry_id` で因果関係を追える。`actor_role` / `delegated_by_role` で実行主体と委譲元を記録し、`entry_hash` で改ざん検知の土台を用意する。既存 DB がある場合は ledger/README のマイグレーション方針に従う。
 
 ```sql
 CREATE TABLE IF NOT EXISTS workflow_log (
@@ -142,9 +152,9 @@ ALTER TABLE workflow_log ADD COLUMN review_id TEXT NULL;
 CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
 ```
 
-### 旧スキーマ（移行前の参照用）
+### 旧スキーマ（移行前の参照用）— 実在テーブルではない（説明のみ）
 
-既存 DB が次のテーブルを持っている場合は、推奨スキーマへのマイグレーションを検討する。新規作成では上記推奨スキーマのみを使う。
+既存 DB が次のテーブルを持っている場合は、推奨スキーマへのマイグレーションを検討する。**新規作成では schema.sql の `workflow_log` のみを使う。次の SQL は過去 DB の説明であり、新規作成時には流さない。**
 
 ```sql
 -- 旧: 1 実行 = 1 行。UNIQUE(command, ts_utc)
@@ -161,7 +171,9 @@ CREATE TABLE IF NOT EXISTS workflow_log (
 );
 ```
 
-### 証跡（memo）の参照
+### 証跡（memo）の参照 — 実在テーブルではない（将来案の例示）
+
+次の `memo_ref` は memo を DB から参照したくなった場合の将来案の例示にすぎず、**現状どのスクリプトも作成しない**。実在テーブルに含めない。採用する場合は schema.sql に追記してから（schema.sql を唯一の正本として）使うこと。
 
 ```sql
 CREATE TABLE IF NOT EXISTS memo_ref (

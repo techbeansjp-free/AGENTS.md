@@ -1,0 +1,96 @@
+# self-enforce.yml — フレームワーク自身の CI（自己強制 Layer4）
+#
+# このリポジトリは「パッケージの正本」かつ「自己拡張する消費者」を兼ねる。
+# 本 CI は正本リポを守る最小の自己強制であり、確実に green になる構成のみで成り立たせる
+# （実在しないツールに依存して赤くしない）。検証内容:
+#   1. シェルスクリプト構文チェック（bash -n .agents/scripts/*.sh）
+#   2. DB スキーマ正本ズレ検証（sqlite3 で schema.sql が流せ、workflow_log が作られること）
+#   3. 生成物の差分ゼロ検証（build 実行後、追跡ファイルに差分が出ないこと。生成物は .gitignore 済み）
+#   4. enforcement/ci/audit.sh の呼び出し（このリポの issue は docs/maintainer/workflow 配下のため、
+#      audit.sh はそのまま通らない。continue-on-error 相当で「呼ぶが失敗させない」運用）
+#
+# トリガ: PR と feature/** への push。
+# 正本: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/03_実装計画.md（フェーズ5/軽微3）
+
+name: self-enforce
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "feature/**"
+
+jobs:
+  self-enforce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sqlite3
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sqlite3
+
+      # 1) シェルスクリプト構文チェック
+      - name: Shell syntax check (bash -n)
+        run: |
+          set -e
+          fail=0
+          for f in .agents/scripts/*.sh; do
+            if bash -n "$f"; then
+              echo "OK: $f"
+            else
+              echo "SYNTAX ERROR: $f"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+      # 2) DB スキーマ正本ズレ検証（schema.sql が流せ、workflow_log が作られる）
+      - name: Schema source-of-truth check (schema.sql)
+        run: |
+          set -e
+          tmp="$(mktemp -d)"
+          sqlite3 "$tmp/t.db" < .agents/ledger/schema.sql
+          tables="$(sqlite3 "$tmp/t.db" "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")"
+          echo "created tables: $tables"
+          # 実在テーブルは workflow_log のみ（schema.sql が単一正本）
+          echo "$tables" | grep -qx 'workflow_log' || { echo "ERROR: workflow_log が作られていない"; exit 1; }
+          rm -rf "$tmp"
+
+      # 3) 生成物の差分ゼロ検証（build 実行後、追跡ファイルに差分が出ない）
+      - name: Generated-output diff-zero check
+        run: |
+          set -e
+          bash .agents/scripts/build-plugin-claude.sh
+          # 生成物（.adapters/ 等）は .gitignore 済み。追跡ファイルに変化が無いことを確認する。
+          changed="$(git status --porcelain --untracked-files=no)"
+          if [ -n "$changed" ]; then
+            echo "ERROR: build により追跡ファイルに差分が発生しました:"
+            echo "$changed"
+            git --no-pager diff
+            exit 1
+          fi
+          echo "OK: 追跡ファイルに差分なし（生成物は無視済み）"
+          # 正本リポのクリーンさ: .adapters 生成物が誤って追跡されていないこと
+          if [ -n "$(git ls-files .adapters)" ]; then
+            echo "ERROR: .adapters 配下が Git 追跡されています（生成物は追跡しない）"
+            exit 1
+          fi
+          echo "OK: .adapters は未追跡"
+
+      # 4) enforcement audit（このリポでは適用範囲外のため失敗させない）
+      #    本リポの issue は docs/maintainer/workflow 配下で、audit.sh は .workflow を前提とするため
+      #    そのままでは通らない。呼び出すが結果で CI を赤くしない（continue-on-error）。
+      - name: Enforcement audit (non-blocking)
+        continue-on-error: true
+        run: |
+          if [ -f .agents/enforcement/ci/audit.sh ]; then
+            chmod +x .agents/enforcement/ci/audit.sh || true
+            bash .agents/enforcement/ci/audit.sh . || echo "[audit] non-blocking: 失敗を許容（適用範囲外）"
+          else
+            echo "[audit] skip: audit.sh が見つかりません"
+          fi
