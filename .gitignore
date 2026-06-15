@@ -14,6 +14,9 @@ node_modules/
 !/.workflow/templates/
 # 証跡DB（.agents/SETUP.md: 配布物に絶対含めない）。-wal/-shm/.lock/journal も拾う
 .workflow/workflow.db*
+# リポルート直下に誤生成される stray な証跡DB（テスト/誤 cwd 由来の副産物）。
+# 正規の証跡DBは .workflow/workflow.db のみ。ルート直下 workflow.db は追跡しない。
+/workflow.db*
 # 各ツール向けフック/スキルの生成物（setup.sh が自己インストール時に生成）
 /.claude/
 /.cursor/
