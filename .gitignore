@@ -1,6 +1,10 @@
 # macOS
 .DS_Store
 
+# Node 依存（ビルド専用 devDependency の展開先。配布物・追跡対象ではない）。
+# typescript/@types/node は package-lock.json から `npm ci` で再現する（lockfile は追跡）。
+node_modules/
+
 # === ランタイム/生成物（パッケージ正本ではない。setup・実行・build で生成される） ===
 # 消費者ランタイム名前空間。正本として追跡するのは templates/ のみ。
 # 自己拡張（ドッグフーディング）の自己 issue はここではなく docs/maintainer/workflow/ に作る

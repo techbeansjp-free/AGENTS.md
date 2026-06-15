@@ -80,6 +80,24 @@ jobs:
           echo "$tables" | grep -qx 'workflow_log' || { echo "ERROR: workflow_log が作られていない"; exit 1; }
           rm -rf "$tmp"
 
+      # 2.5) CLI TypeScript: 依存導入 → typecheck → build → bin 差分ゼロ
+      #    src/agents-md.ts（strict）が正本。tsc 再ビルドでコミット済み bin/agents-md.js と差分が
+      #    出ないことを検証し、ソースと配布物（追跡物 bin）の同期を機械的に保証する（SC-2/SC-3/SC-6）。
+      #    #3（build-adapters 差分ゼロ）より前に CLI ビルド差分を確定させ、両者の責務を分離する。
+      #    正本: docs/maintainer/workflow/20260615_092309_CLIのTypeScript化/02_設計.md §3.2.3, 03_実装計画.md（T4）
+      - name: CLI typecheck & build diff-zero (tsc)
+        run: |
+          set -e
+          npm ci                         # devDependencies(typescript,@types/node) を導入（lockfile 前提）
+          npm run typecheck              # 型エラーがあれば非0で fail（SC-2/SC-3）
+          npm run build                  # src -> bin を再生成
+          # 追跡物 bin に差分が出ない＝ソースとコミット済み bin が同期している（SC-6・CI#3 整合）
+          if ! git diff --exit-code -- bin/agents-md.js; then
+            echo "ERROR: bin/agents-md.js が src と同期していません。npm run build してコミットしてください。"
+            exit 1
+          fi
+          echo "OK: bin/agents-md.js は src と差分ゼロ"
+
       # 3) 生成物の差分ゼロ検証（build 実行後、追跡ファイルに差分が出ない）
       - name: Generated-output diff-zero check
         run: |

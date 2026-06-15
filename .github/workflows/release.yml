@@ -65,6 +65,20 @@ jobs:
           fi
           echo "OK: tag=$tag, package.json=$pkg で一致"
 
+      # 公開前ビルド: prepack を廃止したため publish 直前に明示ビルドし、
+      #   追跡 bin（bin/agents-md.js）が src と同期している（差分ゼロ）ことを確認する。
+      #   未ビルド配布防止は「追跡 bin の差分ゼロ + この CI build」に委ねる（prepack の代替）。
+      - name: Build CLI bin & verify diff-zero (replaces prepack)
+        run: |
+          set -e
+          npm ci
+          npm run build
+          if ! git diff --exit-code bin/agents-md.js; then
+            echo "ERROR: bin/agents-md.js が src と同期していません。npm run build してコミットしてください。" >&2
+            exit 1
+          fi
+          echo "OK: 追跡 bin が src と同期（差分ゼロ）"
+
       # 公開前検証 2) 配布物リーク検査: tarball にリポ固有物が漏れず必須物が含まれること
       - name: Verify npm pack (leak / required files)
         run: |

@@ -42,7 +42,10 @@ echo "[verify-npm-pack] npm pack --dry-run でファイル一覧を取得しま�
 
 # `npm pack --dry-run --json` は配布対象ファイル一覧を JSON で stdout に出す。
 # 進捗等のノイズは stderr に出るため stdout のみを node に渡す。
-pack_json="$(npm pack --dry-run --json 2>/dev/null)"
+# `--ignore-scripts`: pack 検査は「ファイル一覧の取得」だけが目的であり、lifecycle script
+#   （prepack 等）のビルド副作用を起こさない。これにより node_modules 無しのクリーン clone
+#   （E2E の git archive ツリー）でも tsc 等に依存せず exit 127 にならない（多重防御）。
+pack_json="$(npm pack --dry-run --json --ignore-scripts 2>/dev/null)"
 
 # node で JSON を解析し、禁止／必須パターンを判定する（bash の grep よりパスごとの厳密判定が容易）。
 PACK_JSON="$pack_json" node <<'NODE'
@@ -69,12 +72,19 @@ if (files.length === 0) {
 // - workflow.db（*-shm/-wal 含む）: 証跡 DB
 // - .adapters/              : 各ツール向け生成物（100% 生成物）
 // - .workflow/ 配下の issue : templates 以外の消費者ランタイム生成物
+// - src/ / tsconfig.json / *.map / package-lock.json: TS 化の開発専用物（防御的・二重防御）
+//   files allowlist で既に除外されるが、誤って files に加わった場合の保険として禁止する
+//   （正本: docs/maintainer/workflow/20260615_092309_CLIのTypeScript化/02_設計.md §9.4）
 const forbidden = files.filter((p) => {
   if (/(^|\/)\.agents-project(\/|$)/.test(p)) return true;
   if (/(^|\/)docs\/maintainer(\/|$)/.test(p)) return true;
   if (/(^|\/)workflow\.db($|[-.])/.test(p)) return true;
   if (/(^|\/)\.adapters(\/|$)/.test(p)) return true;
   if (/^\.workflow\//.test(p) && !/^\.workflow\/templates\//.test(p)) return true;
+  if (/^src\//.test(p)) return true;
+  if (p === "tsconfig.json") return true;
+  if (p === "package-lock.json") return true;
+  if (/\.map$/.test(p)) return true;
   return false;
 });
 

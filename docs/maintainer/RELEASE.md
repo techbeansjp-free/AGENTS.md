@@ -45,6 +45,22 @@ bash .agents/scripts/sync-version.sh --write   # package.json の version を pl
 
 ---
 
+## 1.5. publish 前ビルド（生成 bin の最新性担保）
+
+配布 `bin/agents-md.js` は `src/agents-md.ts` から `tsc` で生成し、**git 追跡物としてコミット済み**である。`prepack` を廃止したため（pack の lifecycle script 副作用が node_modules 無しのクリーン clone を壊すのを避ける）、publish 直前に**明示ビルドして追跡 bin が src と同期している（差分ゼロ）こと**を確認する。
+
+```bash
+npm ci                                   # devDependencies(typescript,@types/node) を導入
+npm run build                            # src -> bin を再生成
+git diff --exit-code bin/agents-md.js    # 差分ゼロ（追跡 bin が src と同期）を確認
+```
+
+**期待結果**: `git diff --exit-code` が exit 0（差分ゼロ）。差分が出た場合は `bin/agents-md.js` が未コミットの src 変更と同期していないので、ビルド結果をコミットしてから publish する。
+
+> CI（[`.github/workflows/release.yml`](../../.github/workflows/release.yml)）の npm publish ジョブも publish 前に `npm ci && npm run build`（→ 差分ゼロ検証）を実行する。`self-enforce.yml` の step #2.5 でも同じ差分ゼロを検証しており、`prepack` 廃止後の未ビルド配布防止はこの「追跡 bin の差分ゼロ＋CI build」に委ねる。
+
+---
+
 ## 2. pack 同梱物検査（リーク / 必須物）
 
 配布 tarball にリポ固有物（`.agents-project/`・`docs/maintainer/`・`workflow.db`・`.adapters/`・`.workflow/` issue）が混入せず、必須の正本配布物がすべて含まれることを機械判定する。ロジックの正本は [`.agents/scripts/verify-npm-pack.sh`](../../.agents/scripts/verify-npm-pack.sh)（CI とローカルの単一正本。ロジックを二重化しない）。
@@ -108,7 +124,7 @@ rm -rf "$tmp"                                       # 後始末（必須）
    ```
 
 4. **CI が実行する内容**（[`release.yml`](../../.github/workflows/release.yml)）:
-   - **npm publish ジョブ**: version 三者一致検証（タグ＝package.json＝plugin.json）→ `verify-npm-pack.sh`（リーク/必須物検査）→ `NPM_TOKEN` ゲート → `npm publish --access public`。`NPM_TOKEN` 未設定なら publish を skip。
+   - **npm publish ジョブ**: version 三者一致検証（タグ＝package.json＝plugin.json）→ `npm ci && npm run build`（→ 追跡 bin 差分ゼロ検証。`prepack` 廃止の代替）→ `verify-npm-pack.sh`（リーク/必須物検査）→ `NPM_TOKEN` ゲート → `npm publish --access public`。`NPM_TOKEN` 未設定なら publish を skip。
    - **marketplace ジョブ**: 正本 `.agents/` から `build-adapters.sh` で生成物を build し、決定性（再生成 diff ゼロ）を検証して `release/marketplace` ブランチへ commit/push する。
 
 > push（タグ push を含む）は高リスク操作であり、ユーザーが明示したときのみ行う。
