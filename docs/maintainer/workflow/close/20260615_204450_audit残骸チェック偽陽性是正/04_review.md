@@ -8,9 +8,9 @@ document_id: "3c779b0e-e413-47a2-8760-ee672e63b06f"
 **作成日**: 2026 年 06 月 16 日
 **最終更新**: 2026 年 06 月 16 日
 
-> **重要**: 本レビューは verify-and-close（実装完了後レビュー）の成果物。深度は **standard**（[RULES.md §実行モード](../../../../.agents/RULES.md)）。二観点（[REVIEW_DUAL_LENS.md](../../../../.agents/REVIEW_DUAL_LENS.md)）＝敵対的観点＋must-preserve を必須記載する。
+> **重要**: 本レビューは verify-and-close（実装完了後レビュー）の成果物。深度は **standard**（[RULES.md §実行モード](../../../../../.agents/RULES.md)）。二観点（[REVIEW_DUAL_LENS.md](../../../../../.agents/REVIEW_DUAL_LENS.md)）＝敵対的観点＋must-preserve を必須記載する。
 >
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
 
 ---
 
@@ -287,9 +287,9 @@ CLI スクリプトの自己テスト（外部 API なし）。該当なし。
 
 ### 13.2 その他の参考資料
 
-- [`.agents/enforcement/ci/audit.sh`](../../../../.agents/enforcement/ci/audit.sh) - 是正対象（#7 は 296-334 行）
-- [`test/test-audit.sh`](../../../../test/test-audit.sh) - 回帰テスト
-- [`.agents/REVIEW_DUAL_LENS.md`](../../../../.agents/REVIEW_DUAL_LENS.md) - 二観点レビュー
+- [`.agents/enforcement/ci/audit.sh`](../../../../../.agents/enforcement/ci/audit.sh) - 是正対象（#7 は 296-334 行）
+- [`test/test-audit.sh`](../../../../../test/test-audit.sh) - 回帰テスト
+- [`.agents/REVIEW_DUAL_LENS.md`](../../../../../.agents/REVIEW_DUAL_LENS.md) - 二観点レビュー
 
 ---
 
