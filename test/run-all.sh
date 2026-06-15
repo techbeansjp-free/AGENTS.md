@@ -24,6 +24,7 @@
 #   | test-audit.sh                       | bash のみ（sqlite3/git はスクリプト内で任意 SKIP→PASS） |
 #   | test-pretooluse-hook.sh             | bash・git・tar（jq はスクリプト内で任意系統検証） |
 #   | test-write-workflow-log-prevhash.sh | bash・sqlite3 |
+#   | test-write-workflow-log-multidoc.sh | bash・sqlite3 |
 #   | e2e-install-uninstall.sh            | bash・git・node・tar（sqlite3 はスクリプト内で任意 SKIP） |
 #
 # I/F（02_設計 §5 の正本に従う・後続のカバレッジ issue が相乗りする）:
@@ -51,6 +52,7 @@ test-coverage-check|test-coverage-check.sh|bash
 test-audit|test-audit.sh|bash
 test-pretooluse-hook|test-pretooluse-hook.sh|bash git tar
 test-write-workflow-log-prevhash|test-write-workflow-log-prevhash.sh|bash sqlite3
+test-write-workflow-log-multidoc|test-write-workflow-log-multidoc.sh|bash sqlite3
 e2e-install-uninstall|e2e-install-uninstall.sh|bash git node tar
 EOF
 }

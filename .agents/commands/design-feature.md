@@ -67,4 +67,4 @@
 - 01_要件定義を読んだうえで設計する。02 の責務は 01 の要求と整合させる。
 - run_command の順序を守ること。
 - 02/03 を更新する際、frontmatter に既に document_id が存在する場合はその値を変更・上書きしてはならない。document_id は 02/03 を新規作成するときまたは初回付与時にのみ設定する。
-- **完了後に書記（write-workflow-log）に依頼して記録させること。**
+- **完了後に書記（write-workflow-log）に依頼して記録させること。** 本 command は 02 と 03 の**複数成果物**を生成・更新しうるため、**生成・更新した全成果物それぞれ**（02_設計.md・03_実装計画.md など）について、各成果物の **DOCUMENT_ID**（frontmatter の UUID）と **DOCUMENT_PATH**（プロジェクトルート相対パス）を渡して書記に **1 回ずつ**記録させること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。

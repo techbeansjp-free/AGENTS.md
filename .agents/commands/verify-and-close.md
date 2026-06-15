@@ -48,7 +48,7 @@
 - generate-scenarios の OUT（シナリオ・観点一覧）→ map-coverage の IN。
 - map-coverage の OUT（カバレッジ表・未達一覧）→ 04_review に反映。review-code / review-architecture でも参照する。
 - review-code と review-architecture の OUT を 04_review にまとめる。
-- 最後に write-workflow-log で実施内容・変更ファイル・完了判定を記録する。本則は workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス必須（専用経路で取得）。
+- 最後に write-workflow-log で実施内容・変更ファイル・完了判定を記録する。本則は workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス必須（専用経路で取得）。本 command が 04_review.md に加えて**複数の成果ドキュメント**（frontmatter に document_id を持つ 00/01/02/03/04 等）を作成・更新した場合は、**生成・更新した全成果物それぞれ**について各成果物の **DOCUMENT_ID** と **DOCUMENT_PATH**（ルート相対）を渡して書記に **1 回ずつ**記録させること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
 
 ---
 

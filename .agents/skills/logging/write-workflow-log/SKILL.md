@@ -10,7 +10,9 @@ description: "実施内容・変更ファイル・完了判定を規約に従っ
 ## 手順
 
 1. 入力（実施内容・変更ファイル一覧・完了判定。必要なら決定事項）を読む。
-2. **記録先は workflow.db（SQLite）のみ**。workflow.db への 1 行の記録は、**必ず .agents/scripts/write-workflow-log.sh** を呼び出すこと。**sqlite3 を直接実行してはならない。** ラッパー内で DB 作成・PRAGMA・INSERT を行う。**証跡の因果関係（順序監査）** を満たすため、環境変数 **PARENT_ENTRY_ID**（親ログの entry_id）、**REVIEW_PATH**（verify-and-close 時は 04_review.md のパス）、**CHANGED_FILES_JSON**（implement-feature 時は**必須**。変更ファイルの JSON 配列。CONTRACT・ledger/schema 準拠）を渡すこと。成果ドキュメント（00/01/02/03/04）に対応するログでは **DOCUMENT_ID**（UUID。任意・推奨）を渡すこと。ACTOR_ROLE=scribe, DELEGATED_BY_ROLE=orchestrator はラッパーがデフォルトで設定する。
+2. **記録先は workflow.db（SQLite）のみ**。workflow.db への 1 行の記録は、**必ず .agents/scripts/write-workflow-log.sh** を呼び出すこと。**sqlite3 を直接実行してはならない。** ラッパー内で DB 作成・PRAGMA・INSERT を行う。**証跡の因果関係（順序監査）** を満たすため、環境変数 **PARENT_ENTRY_ID**（親ログの entry_id）、**REVIEW_PATH**（verify-and-close 時は 04_review.md のパス）、**CHANGED_FILES_JSON**（implement-feature 時は**必須**。変更ファイルの JSON 配列。CONTRACT・ledger/schema 準拠）を渡すこと。成果ドキュメント（00/01/02/03/04）に対応するログでは **DOCUMENT_ID**（UUID。任意・推奨）と **DOCUMENT_PATH**（成果物のプロジェクトルート相対パス。例 `.workflow/<issue>/00_要求定義.md`。`./`・絶対パスにしない）を渡すこと。ACTOR_ROLE=scribe, DELEGATED_BY_ROLE=orchestrator はラッパーがデフォルトで設定する。
+   - **複数成果物は全件・成果物ごとに 1 回ずつ記録する（取りこぼし禁止）**: **1 つの command が複数の成果ドキュメント（例: requirement-discovery の 00 と 01、design-feature の 02 と 03）を生成・更新した場合、書記はそれらを「まとめて 1 回」ではなく、生成・更新した全成果物のそれぞれについて DOCUMENT_ID（各成果物の UUID）・DOCUMENT_PATH（各成果物のルート相対パス）を渡して `write-workflow-log.sh` を 1 回ずつ呼ぶ**こと（成果物が n 件なら n 回呼ぶ）。PREV_HASH は指定しない（各回が直前 head の entry_hash に自動連結される）。1 件でも記録漏れがあると audit#20（document_id 紐付け）で FAIL する。**「1 command につき書記 1 回」という単数解釈をしてはならない。**
+   - **DOCUMENT_PATH はランタイム共通でルート相対に統一**: 消費者ランタイム（`.workflow/<issue>/...`）でも自己拡張ランタイム（`docs/maintainer/workflow/<issue>/...`）でも、配置パスをそのままプロジェクトルート相対で渡す。配置プレフィックスに依存する分岐は設けない（audit#20/#20+ の document_path 突合と整合させるため）。
 3. 記録する内容：実施日時・実施者（または役割）・実施内容の要約・変更ファイル・完了条件の充足有無。
 4. scribe/README.md・ledger/README.md の形式に従う。
 

@@ -7,7 +7,8 @@
 ## 手順
 
 1. 入力（実施内容・変更ファイル一覧・完了判定・必要に応じて document_id。必要なら決定事項）を読む。
-2. **記録先は workflow.db（SQLite）のみ**。**.agents/scripts/write-workflow-log.sh を必ず使用する**。sqlite3 直接実行禁止。ledger/README.md の配置に従う。成果ドキュメント（00/01/02/03/04）に対応するログを書く場合は環境変数 **DOCUMENT_ID**（UUID）を渡すこと（任意。推奨）。
+2. **記録先は workflow.db（SQLite）のみ**。**.agents/scripts/write-workflow-log.sh を必ず使用する**。sqlite3 直接実行禁止。ledger/README.md の配置に従う。成果ドキュメント（00/01/02/03/04）に対応するログを書く場合は環境変数 **DOCUMENT_ID**（UUID）と **DOCUMENT_PATH**（成果物のプロジェクトルート相対パス）を渡すこと（任意。推奨）。
+   - **複数成果物は全件・成果物ごとに 1 回ずつ記録する（取りこぼし禁止）**: 1 つの command が複数の成果ドキュメント（例: 00 と 01、02 と 03）を生成・更新した場合、書記は**生成・更新した全成果物のそれぞれについて** DOCUMENT_ID・DOCUMENT_PATH を渡して `write-workflow-log.sh` を **1 回ずつ**（n 件なら n 回）呼ぶ。PREV_HASH は指定せず自動連結に委ねる。1 件でも漏れると audit#20 で FAIL する。**「1 command につき書記 1 回」という単数解釈をしてはならない。** DOCUMENT_PATH は両ランタイム共通でルート相対に統一する（`.workflow/...` でも `docs/maintainer/workflow/...` でもそのまま相対表記）。
 3. 記録する内容：実施日時・実施者（または役割）・実施内容の要約・変更ファイル・完了条件の充足有無・対応する document_id（任意）。
 4. scribe/README.md・ledger/README.md の形式に従う。
 
