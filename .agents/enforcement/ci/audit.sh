@@ -301,7 +301,24 @@ if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
     [[ "$f" == *"/templates/"* ]] && continue
     # 完了 issue（close 配下）の証跡本文中の TODO/FIXME という「語の言及」は in-progress 前提の積み残し検出の対象外（#29 と同型・audit.sh:747 の前例）。
     [[ "$f" == *"/close/"* ]] && continue
-    if grep -qE 'TODO|FIXME' "$f" 2>/dev/null; then
+    # 実マーカと散文の言及・例示を構文で判別する（偽陽性除去・偽陰性ゼロ最優先）。
+    #   (a) awk: フェンスドコードブロック（行頭の ``` / ~~~・情報文字列付き許容）内の行を除去。
+    #       フェンス内行はその場で捨てずバッファし、閉じフェンスで破棄する。EOF 時に未閉なら
+    #       バッファ行を救済出力して、未閉フェンス以降の実マーカ見逃し（偽陰性）を防ぐ。
+    #   (b) sed: インラインコードスパン（バッククォート対）を除去し、例示マーカを落とす。
+    #   (c) grep: マーカ語の直後にコロン（半角/全角）または開きカッコが続く実マーカ構文のみ検知。
+    #       LC_ALL=C で全角コロンのロケール依存照合を避ける（ASCII コロン検知は不変・安全側）。
+    if awk '
+        /^[[:space:]]*(```|~~~)/ {
+          if (infence) { infence=0; delete buf; n=0 }
+          else         { infence=1; n=0 }
+          next
+        }
+        { if (infence) buf[++n]=$0; else print }
+        END { if (infence) for (i=1;i<=n;i++) print buf[i] }
+      ' "$f" 2>/dev/null \
+         | sed -E 's/`[^`]*`//g' 2>/dev/null \
+         | LC_ALL=C grep -qE '(TODO|FIXME)[[:space:]]*[:：(]'; then
       if [[ -z "$todo_found" ]]; then
         echo "FAIL: 重要パスに TODO/FIXME が残存 (resolve or move out of .workflow):" >&2
         todo_found=1

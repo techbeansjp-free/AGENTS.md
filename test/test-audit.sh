@@ -136,6 +136,133 @@ else
   echo "  [SKIP] #17 close ガード回帰（sqlite3 不在）"
 fi
 
+# =============================================================================
+# #7 残骸・マーカ系チェックの偽陽性是正（回帰テスト）
+#   tmp 隔離（mktemp -d）で実行し、本リポ本番ファイルは読み取りのみ（make_min_tree が tmp を作る）。
+#   #7 は WORKFLOW_SCAN_DIRS 配下の *.md を走査し、フェンス除去→インラインコード除去→
+#   実マーカ構文アンカー（(TODO|FIXME)[[:space:]]*[:：(]）で判定する。
+#   実マーカは FAIL（偽陰性ゼロ）、散文の言及・例示は PASS（偽陽性除去）であること。
+# =============================================================================
+
+# シナリオ: 言及のみの散文は PASS（SC1）
+# Given: .workflow 配下 .md に「TODO/FIXME 残骸チェック」「残骸タグ（TODO 等）0件」のみ（実マーカ構文なし）
+# When:  audit.sh <tmp> を実行する
+# Then:  終了コード 0 で「重要パスに TODO/FIXME が残存」を出力しない
+SC1_TREE="$(make_min_tree)"
+mkdir -p "$SC1_TREE/.workflow/20260101_000000_x"
+printf '本 issue では「TODO/FIXME 残骸チェック」の偽陽性を是正する。\nレビュー証跡: 残骸タグ（TODO 等）0件を確認した。\n' \
+  > "$SC1_TREE/.workflow/20260101_000000_x/00_要求定義.md"
+SC1_OUT="$(bash "$AUDIT" "$SC1_TREE" 2>&1)"; SC1_RC=$?
+if [[ $SC1_RC -eq 0 ]] && ! grep -q '重要パスに TODO/FIXME が残存' <<< "$SC1_OUT"; then
+  ok "C-SC1 言及のみの散文は PASS"
+else
+  ng "C-SC1 言及のみで FAIL した（rc=$SC1_RC）: $SC1_OUT"
+fi
+
+# シナリオ: 実マーカは従来どおり FAIL（SC2・偽陰性ゼロ）— 散文/箇条書きの各形態
+# Given: コードブロック外・バッククォート外の散文として実マーカが書かれた .md（各形態を別ツリーで）
+# When:  audit.sh <tmp> を実行する
+# Then:  #7 が「重要パスに TODO/FIXME が残存」で FAIL する
+sc2_case() {
+  # $1=ラベル $2=ファイル内容 $3=期待（fail|pass）
+  local label="$1" content="$2" expect="$3" tree out
+  tree="$(make_min_tree)"
+  mkdir -p "$tree/.workflow/20260101_000000_m"
+  printf '%b' "$content" > "$tree/.workflow/20260101_000000_m/00_要求定義.md"
+  out="$(bash "$AUDIT" "$tree" 2>&1)"
+  if grep -q '重要パスに TODO/FIXME が残存' <<< "$out"; then
+    if [[ "$expect" == fail ]]; then ok "$label"; else ng "$label（FAIL すべきでないのに FAIL）: $out"; fi
+  else
+    if [[ "$expect" == pass ]]; then ok "$label"; else ng "$label（FAIL すべきが PASS=偽陰性）: $out"; fi
+  fi
+}
+sc2_case "C-SC2a 実マーカ // TODO: x は FAIL"        '// TODO: fix this later\n'      fail
+sc2_case "C-SC2b 実マーカ <!-- FIXME: y --> は FAIL" '<!-- FIXME: fix this later -->\n' fail
+sc2_case "C-SC2c 実マーカ 箇条書き - TODO: z は FAIL" '- TODO: 残対応\n'                 fail
+sc2_case "C-SC2d 実マーカ TODO(owner): w は FAIL"     'TODO(alice): refactor\n'         fail
+# 全角コロン形: 環境（ロケール）で揺れうるが LC_ALL=C 採用で安定（02 §5・バリデーション観点）。
+sc2_case "C-SC2e 実マーカ 全角 TODO：v は FAIL"       'TODO：全角コロンの未処理\n'       fail
+
+# シナリオ: バッククォート例示は PASS（SC4a・00/01 自己言及型）
+# Given: .md に `TODO:` `FIXME:` がバッククォート例示として日本語散文中に含まれる（実マーカ構文なし）
+# When:  audit.sh <tmp> を実行する
+# Then:  #7 は FAIL しない（インラインコードスパン除去段で例示が落ちる）
+SC4A_TREE="$(make_min_tree)"
+mkdir -p "$SC4A_TREE/.workflow/20260101_000000_a"
+printf 'マーカ語の直後に `TODO:` や `FIXME:` が続く形を実マーカとみなす。\nこれは例示であり実際の積み残しではない。\n' \
+  > "$SC4A_TREE/.workflow/20260101_000000_a/01_要件定義.md"
+SC4A_OUT="$(bash "$AUDIT" "$SC4A_TREE" 2>&1)"; SC4A_RC=$?
+if [[ $SC4A_RC -eq 0 ]] && ! grep -q '重要パスに TODO/FIXME が残存' <<< "$SC4A_OUT"; then
+  ok "C-SC4a バッククォート例示は PASS"
+else
+  ng "C-SC4a バッククォート例示で FAIL した（rc=$SC4A_RC）: $SC4A_OUT"
+fi
+
+# シナリオ: フェンスドコードブロック内の例示は PASS（SC4b・02/03 自己言及型）
+# Given: .md に gherkin/bash のフェンスドコードブロックがあり、その中に例示マーカ // TODO: fix・TODO(owner): が含まれる
+#        And コードブロック外の散文には実マーカ構文が無い
+# When:  audit.sh <tmp> を実行する
+# Then:  #7 は FAIL しない（フェンス除去段で例示が落ちる）
+SC4B_TREE="$(make_min_tree)"
+mkdir -p "$SC4B_TREE/.workflow/20260101_000000_b"
+cat > "$SC4B_TREE/.workflow/20260101_000000_b/02_設計.md" <<'EOF'
+本書では実マーカと例示を判別する。以下はテストコード例（コードブロック内＝例示）。
+
+```bash
+# Given: 実マーカを含む tmp ツリー
+printf '// TODO: fix\n' > "$f"
+TODO(alice): refactor
+```
+
+~~~gherkin
+Scenario: 実マーカは FAIL する
+  Given "// TODO: fix" が含まれる
+~~~
+
+コードブロック外の散文には実マーカ構文を書かないこと。
+EOF
+SC4B_OUT="$(bash "$AUDIT" "$SC4B_TREE" 2>&1)"; SC4B_RC=$?
+if [[ $SC4B_RC -eq 0 ]] && ! grep -q '重要パスに TODO/FIXME が残存' <<< "$SC4B_OUT"; then
+  ok "C-SC4b フェンスドコードブロック内の例示は PASS"
+else
+  ng "C-SC4b フェンス内例示で FAIL した（rc=$SC4B_RC）: $SC4B_OUT"
+fi
+
+# シナリオ: 既存ガード重畳（templates / close 除外不変）
+# Given: templates 配下 または /close/ 配下の .md に実マーカ // TODO: x が含まれる
+# When:  audit.sh <tmp> を実行する
+# Then:  #7 は当該パスを検知しない（既存除外ガードを撤去・変更していない）
+GUARD_TREE="$(make_min_tree)"
+mkdir -p "$GUARD_TREE/.workflow/templates" "$GUARD_TREE/docs/maintainer/workflow/close/20260101_000000_c"
+printf '// TODO: in templates\n' > "$GUARD_TREE/.workflow/templates/00_要求定義.md"
+printf '// TODO: in close\n'     > "$GUARD_TREE/docs/maintainer/workflow/close/20260101_000000_c/00_要求定義.md"
+GUARD_OUT="$(bash "$AUDIT" "$GUARD_TREE" 2>&1)"; GUARD_RC=$?
+if [[ $GUARD_RC -eq 0 ]] && ! grep -q '重要パスに TODO/FIXME が残存' <<< "$GUARD_OUT"; then
+  ok "C-guard templates/close 配下の実マーカは除外（既存ガード不変）"
+else
+  ng "C-guard templates/close 除外が効いていない（rc=$GUARD_RC）: $GUARD_OUT"
+fi
+
+# シナリオ: 未閉フェンス直後の実マーカは FAIL（SC2・偽陰性ゼロ／フォールバック保険）
+# Given: .md にフェンス行が奇数個（未閉フェンス）あり、最後の開きフェンス以降の散文に実マーカ // TODO: が含まれる
+# When:  audit.sh <tmp> を実行する
+# Then:  #7 が FAIL する（EOF 時に未閉ならバッファ行を救済出力＝抑制されない）
+EDGE_TREE="$(make_min_tree)"
+mkdir -p "$EDGE_TREE/.workflow/20260101_000000_e"
+cat > "$EDGE_TREE/.workflow/20260101_000000_e/03_実装計画.md" <<'EOF'
+ここで未閉フェンスを開く（閉じない）。
+
+```bash
+echo "このブロックは閉じられていない"
+// TODO: after unclosed fence
+EOF
+EDGE_OUT="$(bash "$AUDIT" "$EDGE_TREE" 2>&1)"
+if grep -q '重要パスに TODO/FIXME が残存' <<< "$EDGE_OUT"; then
+  ok "C-edge 未閉フェンス直後の実マーカは FAIL（フォールバック保険）"
+else
+  ng "C-edge 未閉フェンス以降の実マーカを見逃した（偽陰性）: $EDGE_OUT"
+fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then
