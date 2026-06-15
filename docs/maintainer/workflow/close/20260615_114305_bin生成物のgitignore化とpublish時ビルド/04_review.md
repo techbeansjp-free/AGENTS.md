@@ -11,8 +11,8 @@ issue_id: "5081f55e-a70e-4037-91e8-f0524b0686e0"
 
 > **重要**: 本 04 は **independent verification worker** が tmp 隔離で独立実測した結果である。実装サブの自己申告数値は一切引用していない。すべて本ワーカーが `mktemp -d` 隔離で再実行して得た値である。
 >
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../.agents/CONCEPTS.md#用語規約) を参照。
-> **レビュー深度**: full（CI/配布構成変更・全経路整合の影響が広いため）。[`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md) 準拠。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **レビュー深度**: full（CI/配布構成変更・全経路整合の影響が広いため）。[`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) 準拠。
 
 ---
 
@@ -254,7 +254,7 @@ issue_id: "5081f55e-a70e-4037-91e8-f0524b0686e0"
 - [`01_要件定義.md`](./01_要件定義.md) - 要件定義（BDD シナリオ）
 - [`02_設計.md`](./02_設計.md) - 設計（A〜D の決定・§9.4 変更一覧）
 - [`03_実装計画.md`](./03_実装計画.md) - 実装計画（T1〜T6）
-- [.agents/REVIEW_RULE.md](../../../../.agents/REVIEW_RULE.md)、[.agents-project/自己拡張ワークフロー.md](../../../../.agents-project/自己拡張ワークフロー.md)（tmp 隔離・名前空間）
+- [.agents/REVIEW_RULE.md](../../../../../.agents/REVIEW_RULE.md)、[.agents-project/自己拡張ワークフロー.md](../../../../../.agents-project/自己拡張ワークフロー.md)（tmp 隔離・名前空間）
 
 ---
 
