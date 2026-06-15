@@ -73,6 +73,10 @@
 
 implement-feature 完了の検知で起動する不変クローズアウトの**欠落工程**の抽象形正本は [CLOSEOUT.md](../CLOSEOUT.md) に置く（commit ステップ／別セッション引継ぎ／clear 境界／fresh サブ分割／verify-実経路検証）。本ファイルには再記述せず、リンクで委譲する（CORE.md §境界）。具体値（ブランチ名・CI コマンド・トレーラ等）は `.agents-project/` に委ねる。
 
+クローズ/起票時のフォローアップを取りこぼさない（no-drop）原則の正本は [CLOSEOUT.md §取りこぼし0と既出確認（no-drop / dedup）](../CLOSEOUT.md#取りこぼし0と既出確認no-drop--dedup) に置く。本ファイル OUTPUT/DONE の 90_issues 出力要件は no-drop の具体的帰結の一例であり、定義は再記述せずリンクで委譲する。
+
 ## issue 起票時のコンテキスト効率（ISSUE_CREATION）
 
 大規模一括起票時のコンテキスト肥大を防ぐ汎用原理の正本は [CONTEXT_EFFICIENCY.md](../CONTEXT_EFFICIENCY.md) に置く。本ファイルには再記述せず、リンクで委譲する（CORE.md §境界）。
+
+起票前の既出確認（dedup スキャン）の正本は [CLOSEOUT.md §取りこぼし0と既出確認（no-drop / dedup）](../CLOSEOUT.md#取りこぼし0と既出確認no-drop--dedup) に置く。本ファイルには定義を再記述せず、リンクで委譲する。
