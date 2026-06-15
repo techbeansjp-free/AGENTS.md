@@ -13,9 +13,9 @@
 #   - 個別テスト呼び出しは if/|| でラップし、非 0 でも runner が即終了しない（set -e 由来の中断を避ける）。
 #
 # 使い方:
-#   bash .agents/scripts/test/run-all.sh        # リポジトリルートで実行
+#   bash test/run-all.sh        # リポジトリルートで実行
 #   npm test                                    # 同上（package.json scripts.test に配線）
-#   個別実行は従来どおり: bash .agents/scripts/test/<name>.sh
+#   個別実行は従来どおり: bash test/<name>.sh
 #
 # 前提（依存マトリクス。正本は各スクリプト冒頭「前提」）:
 #   | テスト                              | runner が事前確認する必須依存 |

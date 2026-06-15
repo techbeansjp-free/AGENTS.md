@@ -14,7 +14,7 @@
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
 # 使い方:
-#   bash .agents/scripts/test/test-pretooluse-hook.sh   # リポジトリルートで実行
+#   bash test/test-pretooluse-hook.sh   # リポジトリルートで実行
 #
 # 前提: bash・git・tar。jq は任意（無い系統も検証する）。
 # 参照:
@@ -24,7 +24,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"   # .agents/scripts/test -> repo root
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
 
 command -v git >/dev/null 2>&1 || { echo "エラー: git が必要です" >&2; exit 2; }
 command -v tar >/dev/null 2>&1 || { echo "エラー: tar が必要です" >&2; exit 2; }

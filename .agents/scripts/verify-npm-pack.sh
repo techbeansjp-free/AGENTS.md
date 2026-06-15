@@ -72,10 +72,13 @@ if (files.length === 0) {
 // - workflow.db（*-shm/-wal 含む）: 証跡 DB
 // - .adapters/              : 各ツール向け生成物（100% 生成物）
 // - .workflow/ 配下の issue : templates 以外の消費者ランタイム生成物
+// - test/                   : 保守者自己テスト（非配布）。files allowlist 外だが多重防御で明示検知する
+//   （正本: docs/maintainer/workflow/20260615_105835_自己テスト基盤をtestへ移設/02_設計.md §3.2）
 // - src/ / tsconfig.json / *.map / package-lock.json: TS 化の開発専用物（防御的・二重防御）
 //   files allowlist で既に除外されるが、誤って files に加わった場合の保険として禁止する
 //   （正本: docs/maintainer/workflow/20260615_092309_CLIのTypeScript化/02_設計.md §9.4）
 const forbidden = files.filter((p) => {
+  if (/^test\//.test(p)) return true;   // 保守者自己テスト（非配布。allowlist 外だが多重防御で明示検知）
   if (/(^|\/)\.agents-project(\/|$)/.test(p)) return true;
   if (/(^|\/)docs\/maintainer(\/|$)/.test(p)) return true;
   if (/(^|\/)workflow\.db($|[-.])/.test(p)) return true;
@@ -109,7 +112,7 @@ if (forbidden.length > 0) {
   console.error("\n[NG] 禁止パターン（リポ固有物）が配布物に含まれています:");
   forbidden.forEach((p) => console.error("       LEAK: " + p));
 } else {
-  console.log("[OK] 禁止パターン（.agents-project / docs/maintainer / workflow.db / .adapters / .workflow issue）は含まれていません。");
+  console.log("[OK] 禁止パターン（.agents-project / docs/maintainer / workflow.db / .adapters / .workflow issue / test/）は含まれていません。");
 }
 
 if (missing.length > 0) {

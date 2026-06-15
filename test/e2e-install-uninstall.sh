@@ -12,7 +12,7 @@
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
 # 使い方:
-#   bash .agents/scripts/test/e2e-install-uninstall.sh   # リポジトリルート（git ツリー内）で実行
+#   bash test/e2e-install-uninstall.sh   # リポジトリルート（git ツリー内）で実行
 #
 # 前提: bash・git・node・tar。sqlite3 があれば workflow.db 検証も行う（無ければ DB 検証はスキップ）。
 # 参照:
@@ -23,7 +23,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"   # .agents/scripts/test -> repo root
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
 CLI="$REPO_ROOT/bin/agents-md.js"
 
 PASS=0

@@ -85,7 +85,7 @@ bundle_agents_src() {
         "$out/.agents/scripts/build-adapters.sh" \
         "$out/.agents/scripts/sync-version.sh" \
         "$out/.agents/scripts/verify-npm-pack.sh"
-  rm -rf "$out/.agents/scripts/lib" "$out/.agents/scripts/test"
+  rm -rf "$out/.agents/scripts/lib"
   echo "[build] .agents を同梱しました（保守/導入専用スクリプトは除外）。"
 }
 

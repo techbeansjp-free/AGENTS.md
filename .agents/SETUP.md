@@ -140,7 +140,7 @@ bash .agents/scripts/setup.sh
 | **.workflow/<issue>/** | issue 成果物（消費者ランタイム）。保持。 |
 | **workflow.db** | 証跡 DB。初回のみ生成、既存は上書きしない（保持）。 |
 
-**保証**: 上記の保持は E2E テスト `.agents/scripts/test/e2e-install-uninstall.sh` のシナリオ R1（再インストール保持）・R2（upgrade 保持）・R3（uninstall 保持）で再現確認される。
+**保証**: 上記の保持は E2E テスト `test/e2e-install-uninstall.sh` のシナリオ R1（再インストール保持）・R2（upgrade 保持）・R3（uninstall 保持）で再現確認される。
 
 ### 初回コピー時の挙動補足
 
@@ -178,19 +178,19 @@ npx @techbeansjp-free/agents-md uninstall --purge --yes  # workflow.db 等の証
 
 > uninstall は `.cursor/`・`.claude/` を**丸ごと削除しない**。パッケージが配備した**既知エントリ**（`.cursor/agents-core.mdc`・`.claude/hooks` の所有フックファイル・`.claude/skills` と `.cursor/skills` の所有 skill エントリ {domain}__{capability}・{domain}）のみを除去し、ユーザー作成物（自作スキル・独自フック・自作 rules 等）が同居していれば残す。除去後に `.claude/hooks`・`.claude/skills`・`.cursor/skills`・`.cursor/`・`.claude/` が空になった場合のみ、空ディレクトリを片付ける。所有エントリ集合は setup.sh と単一整合（skills は `lib/deploy-skills.sh` の `list_owned_skill_names`、フックは `enforcement/claude` のトップレベルファイル、cursor 直下は `enforcement/cursor` のトップレベルファイル）。
 
-**安全策**: 採用先に配備の痕跡（`.agents/` または `AGENTS.md`）が無い場合、誤削除を防ぐため uninstall を中止する。存在しない対象はスキップし、`--yes` を付けない限り削除は行わず対象の一覧表示（dry-run）に留める。`uninstall` の挙動は E2E テスト `.agents/scripts/test/e2e-install-uninstall.sh`（install→uninstall→冪等→カプセル化→リーク→**R1 再インストール保持・R2 upgrade 保持・R3 uninstall 保持**）で再現確認される。
+**安全策**: 採用先に配備の痕跡（`.agents/` または `AGENTS.md`）が無い場合、誤削除を防ぐため uninstall を中止する。存在しない対象はスキップし、`--yes` を付けない限り削除は行わず対象の一覧表示（dry-run）に留める。`uninstall` の挙動は E2E テスト `test/e2e-install-uninstall.sh`（install→uninstall→冪等→カプセル化→リーク→**R1 再インストール保持・R2 upgrade 保持・R3 uninstall 保持**）で再現確認される。
 
 ---
 
 ## テスト実行（ローカルで全テストを 1 コマンド）
 
-本リポジトリ（パッケージ正本／自己拡張）には `.agents/scripts/test/` 配下に複数のテストスクリプトがあり、**一括 runner で 1 コマンド実行**できる。検証ロジックは各テストスクリプトに集約（single source of truth）し、runner は呼ぶだけのラッパに徹する（CI とローカルで二重化しない）。
+本リポジトリ（パッケージ正本／自己拡張）には `test/` 配下に複数のテストスクリプトがあり、**一括 runner で 1 コマンド実行**できる。検証ロジックは各テストスクリプトに集約（single source of truth）し、runner は呼ぶだけのラッパに徹する（CI とローカルで二重化しない）。
 
 ### 一括実行
 
 ```bash
-npm test                                  # = bash .agents/scripts/test/run-all.sh
-bash .agents/scripts/test/run-all.sh      # npm を使わない場合
+npm test                                  # = bash test/run-all.sh
+bash test/run-all.sh                      # npm を使わない場合
 ```
 
 - 全テストを順に実行し、末尾に `合計=N PASS=p FAIL=f SKIP=s` のサマリを出力する。
@@ -202,11 +202,11 @@ bash .agents/scripts/test/run-all.sh      # npm を使わない場合
 runner 導入後も各テストを従来どおり直接実行できる（呼び出し方・終了コードは不変）。
 
 ```bash
-bash .agents/scripts/test/test-audit.sh
-bash .agents/scripts/test/test-pretooluse-hook.sh
-bash .agents/scripts/test/test-write-workflow-log-prevhash.sh
-bash .agents/scripts/test/e2e-install-uninstall.sh
-bash .agents/scripts/test/test-run-all.sh          # runner 自体のテスト
+bash test/test-audit.sh
+bash test/test-pretooluse-hook.sh
+bash test/test-write-workflow-log-prevhash.sh
+bash test/e2e-install-uninstall.sh
+bash test/test-run-all.sh          # runner 自体のテスト
 ```
 
 ### 前提依存マトリクス

@@ -165,8 +165,8 @@ bash .agents/scripts/setup.sh /path/to/my-project   # 引数省略時はカレ�
 本リポジトリ（パッケージ正本／自己拡張）でテストを回す場合は、一括 runner で 1 コマンド実行できる。
 
 ```bash
-npm test                                  # = bash .agents/scripts/test/run-all.sh
-bash .agents/scripts/test/run-all.sh      # npm を使わない場合
+npm test                                  # = bash test/run-all.sh
+bash test/run-all.sh                      # npm を使わない場合
 ```
 
 全テストを順に実行し、末尾サマリ（`合計=N PASS=p FAIL=f SKIP=s`）と終了コード（全成功で 0・1 件以上 FAIL で非 0）を返す。個別実行・前提依存マトリクス（bash/git/node/tar/sqlite3）・SKIP 規約は [.agents/SETUP.md](.agents/SETUP.md) §テスト実行 を参照。

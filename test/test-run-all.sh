@@ -15,7 +15,7 @@
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
 # 使い方:
-#   bash .agents/scripts/test/test-run-all.sh   # リポジトリルートで実行
+#   bash test/test-run-all.sh   # リポジトリルートで実行
 #
 # 前提: bash。
 # 参照:
@@ -25,7 +25,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"   # .agents/scripts/test -> repo root
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
 RUNNER="$SCRIPT_DIR/run-all.sh"
 
 [[ -f "$RUNNER" ]] || { echo "エラー: run-all.sh が見つからない: $RUNNER" >&2; exit 2; }

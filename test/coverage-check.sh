@@ -16,8 +16,8 @@
 #   - 閾値は緩めない（段階導入は分母を絞って fail-under=100 を維持。不足はテスト追加 or 台帳除外）。
 #
 # 使い方:
-#   bash .agents/scripts/test/coverage-check.sh              # リポジトリルートで実行（kcov ラップ＋判定）
-#   bash .agents/scripts/test/coverage-check.sh --judge-only # cobertura 解析・判定のみ（kcov を起動しない）
+#   bash test/coverage-check.sh              # リポジトリルートで実行（kcov ラップ＋判定）
+#   bash test/coverage-check.sh --judge-only # cobertura 解析・判定のみ（kcov を起動しない）
 #                                                            # ※ $COV_OUT/cobertura.xml を入力に使う（テスト用）
 #
 # 前提（依存マトリクス）:
@@ -38,12 +38,12 @@
 #   docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md（§5 I/F）, 03_実装計画.md（T1〜T5）
 #   .agents/COVERAGE_AND_EXCEPTIONS.md（§1 方針・§3 台帳必須列）
 #   .agents-project/COVERAGE_EXCEPTIONS.md（除外の二重化 B）
-#   .agents/scripts/test/run-all.sh（被ラップ対象・前提 issue）
+#   test/run-all.sh（被ラップ対象・前提 issue）
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"   # .agents/scripts/test -> repo root
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
 
 # ============================================================================
 # 正本変数（計測対象・除外・閾値・出力先を 1 か所に集約。CI・ローカルで二重化しない）
@@ -52,9 +52,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"   # .agents/scripts/test -> repo
 # 計測対象（分母）= 実行ロジックを持つ bash 本体。
 INCLUDE_PATHS="${INCLUDE_PATHS:-.agents/scripts}"
 
-# 除外（分母から外す）= テスト自身 ＋ 台帳一致分（.agents-project/COVERAGE_EXCEPTIONS.md の「適用手段」列と一致）。
+# 除外（分母から外す）= 台帳一致分（.agents-project/COVERAGE_EXCEPTIONS.md の「適用手段」列と一致）。
 #   ',' 区切り。各値は kcov の --exclude-path に渡る。台帳（B）と必ず一致させること。
-EXCLUDE_PATHS="${EXCLUDE_PATHS:-.agents/scripts/test,.agents/scripts/lib/deploy-skills.sh}"
+#   ※ 自己テスト一式（test/）は INCLUDE_PATHS（.agents/scripts）の配下ではない＝分母外のため除外指定は不要。
+EXCLUDE_PATHS="${EXCLUDE_PATHS:-.agents/scripts/lib/deploy-skills.sh}"
 
 # fail-under 閾値（最終目標 100。閾値は恒久的に下げない＝COVERAGE_AND_EXCEPTIONS.md §1）。
 FAIL_UNDER="${FAIL_UNDER:-100}"
@@ -63,7 +64,7 @@ FAIL_UNDER="${FAIL_UNDER:-100}"
 COV_OUT="${COV_OUT:-.coverage}"
 
 # 被ラップ対象 runner（前提 issue の成果物。本 issue は変更しない）。
-RUNNER="${RUNNER:-$REPO_ROOT/.agents/scripts/test/run-all.sh}"
+RUNNER="${RUNNER:-$REPO_ROOT/test/run-all.sh}"
 
 # ============================================================================
 # ユーティリティ
