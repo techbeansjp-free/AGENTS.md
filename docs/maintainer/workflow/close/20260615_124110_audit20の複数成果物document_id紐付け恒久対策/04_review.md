@@ -11,9 +11,9 @@ document_id: "54cb5c9a-0eff-49b9-bd23-16b16e4f3447"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。
 >
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
 >
-> **必須**: 本レビューは [`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md) に従い実施。レビュー深度は **standard**（規約・スキル文言追記＋新規回帰テスト＋スクリプト無改造の小〜中規模変更）。
+> **必須**: 本レビューは [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) に従い実施。レビュー深度は **standard**（規約・スキル文言追記＋新規回帰テスト＋スクリプト無改造の小〜中規模変更）。
 > 本レビューは **独立検証ワーカー**が tmp 隔離で**独立実測**したもので、実装サブの自己申告数値は引用していない。
 
 ---
@@ -260,7 +260,7 @@ git diff --stat -- .agents/scripts/write-workflow-log.sh .agents/ledger/schema.s
 
 ### 12.3 REVIEW_DUAL_LENS（#27・両リスト必須）
 
-[REVIEW_DUAL_LENS.md §3 証跡要求](../../../../.agents/REVIEW_DUAL_LENS.md#3-証跡要求) に従い、敵対的観点と must-preserve の両リストを記載する。
+[REVIEW_DUAL_LENS.md §3 証跡要求](../../../../../.agents/REVIEW_DUAL_LENS.md#3-証跡要求) に従い、敵対的観点と must-preserve の両リストを記載する。
 
 #### A. 敵対的観点（壊れ得る所を能動的に探した結果）
 
@@ -293,13 +293,13 @@ git diff --stat -- .agents/scripts/write-workflow-log.sh .agents/ledger/schema.s
 
 ### 13.2 その他の参考資料
 
-- [.agents/scripts/write-workflow-log.sh](../../../../.agents/scripts/write-workflow-log.sh) - 書記スクリプト（無改造対象）
-- [.agents/skills/logging/write-workflow-log/SKILL.md](../../../../.agents/skills/logging/write-workflow-log/SKILL.md) / [README.md](../../../../.agents/skills/logging/write-workflow-log/README.md)
-- [.agents/enforcement/ci/audit.sh](../../../../.agents/enforcement/ci/audit.sh) - #20/#20+/#26 実装
-- [.agents/ledger/schema.sql](../../../../.agents/ledger/schema.sql) - DB スキーマ正本
-- [test/test-write-workflow-log-multidoc.sh](../../../../test/test-write-workflow-log-multidoc.sh) - 新規回帰テスト
-- [test/test-write-workflow-log-prevhash.sh](../../../../test/test-write-workflow-log-prevhash.sh) - 既存回帰テスト（緑維持対象）
-- [.agents/REVIEW_RULE.md](../../../../.agents/REVIEW_RULE.md) / [.agents/REVIEW_DUAL_LENS.md](../../../../.agents/REVIEW_DUAL_LENS.md)
+- [.agents/scripts/write-workflow-log.sh](../../../../../.agents/scripts/write-workflow-log.sh) - 書記スクリプト（無改造対象）
+- [.agents/skills/logging/write-workflow-log/SKILL.md](../../../../../.agents/skills/logging/write-workflow-log/SKILL.md) / [README.md](../../../../../.agents/skills/logging/write-workflow-log/README.md)
+- [.agents/enforcement/ci/audit.sh](../../../../../.agents/enforcement/ci/audit.sh) - #20/#20+/#26 実装
+- [.agents/ledger/schema.sql](../../../../../.agents/ledger/schema.sql) - DB スキーマ正本
+- [test/test-write-workflow-log-multidoc.sh](../../../../../test/test-write-workflow-log-multidoc.sh) - 新規回帰テスト
+- [test/test-write-workflow-log-prevhash.sh](../../../../../test/test-write-workflow-log-prevhash.sh) - 既存回帰テスト（緑維持対象）
+- [.agents/REVIEW_RULE.md](../../../../../.agents/REVIEW_RULE.md) / [.agents/REVIEW_DUAL_LENS.md](../../../../../.agents/REVIEW_DUAL_LENS.md)
 
 ---
 
