@@ -42,6 +42,7 @@ document_id: "c8b4e2a7-1f63-49d5-8e0a-3b9c7d260f54"
 
 - [REVIEW_RULE.md](REVIEW_RULE.md)（レビュー骨格。本ファイルは直交追加）
 - [CLOSEOUT.md §verify-実経路検証](CLOSEOUT.md#verify-実経路検証)（CLOSEOUT の verify(ii) 実経路検証）
+- [CLOSEOUT.md §verify 報告様式（分離記載・誤導防止）](CLOSEOUT.md#verify-報告様式分離記載誤導防止)（verify 証跡の (i)/(ii) 分離記載・緑≠実経路の射程の見極めは §3 の両リストと整合させる）
 - [MODEL_SELECTION.md §5 参照](MODEL_SELECTION.md#5-参照)（レビューの実効性とモデル階層）
 
 ---
