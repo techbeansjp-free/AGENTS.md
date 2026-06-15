@@ -45,19 +45,18 @@ bash .agents/scripts/sync-version.sh --write   # package.json の version を pl
 
 ---
 
-## 1.5. publish 前ビルド（生成 bin の最新性担保）
+## 1.5. publish 前ビルド（生成 bin の同梱）
 
-配布 `bin/agents-md.js` は `src/agents-md.ts` から `tsc` で生成し、**git 追跡物としてコミット済み**である。`prepack` を廃止したため（pack の lifecycle script 副作用が node_modules 無しのクリーン clone を壊すのを避ける）、publish 直前に**明示ビルドして追跡 bin が src と同期している（差分ゼロ）こと**を確認する。
+配布 `bin/agents-md.js` は `src/agents-md.ts` から `tsc` で生成する **非追跡（`.gitignore`）の生成物**である（正本として追跡するのは `src/agents-md.ts` のみ）。`prepack` を再導入しない（pack の lifecycle script 副作用が node_modules 無しのクリーン clone を壊す地雷を避ける）。`npm publish`/`npm pack` は**作業ツリー**をパックするため、publish 直前に `npm ci && npm run build` で作業ツリーへ bin を生成すれば、非追跡でも tarball に最新の生成 bin が同梱される（使用前 build 方式）。
 
 ```bash
 npm ci                                   # devDependencies(typescript,@types/node) を導入
-npm run build                            # src -> bin を再生成
-git diff --exit-code bin/agents-md.js    # 差分ゼロ（追跡 bin が src と同期）を確認
+npm run build                            # src -> bin を生成（作業ツリーに bin を用意。shebang/実行権限付与）
 ```
 
-**期待結果**: `git diff --exit-code` が exit 0（差分ゼロ）。差分が出た場合は `bin/agents-md.js` が未コミットの src 変更と同期していないので、ビルド結果をコミットしてから publish する。
+**期待結果**: `npm run build` が exit 0 で `bin/agents-md.js`（`#!/usr/bin/env node`・実行権限付き）を生成する。bin は非追跡のため `git diff` / `git status` には現れない（src を変更しても未ビルド bin がコミットされる事故が原理的に起きない）。同梱の最終確認は §2 の `verify-npm-pack.sh`（必須物 `bin/agents-md.js` あり・src/map/lock/tsconfig 漏れ無し）で行う。
 
-> CI（[`.github/workflows/release.yml`](../../.github/workflows/release.yml)）の npm publish ジョブも publish 前に `npm ci && npm run build`（→ 差分ゼロ検証）を実行する。`self-enforce.yml` の step #2.5 でも同じ差分ゼロを検証しており、`prepack` 廃止後の未ビルド配布防止はこの「追跡 bin の差分ゼロ＋CI build」に委ねる。
+> CI（[`.github/workflows/release.yml`](../../.github/workflows/release.yml)）の npm publish ジョブも publish 前に `npm ci && npm run build` を実行し、生成 bin を含めて配布する。`self-enforce.yml` の step「CLI typecheck & build」も同様に build 前置で REPO_ROOT/bin を後続 step（pack・E2E）へ供給する。bin 非追跡化により未ビルド配布の防止は「使用前 build＋`verify-npm-pack.sh` の必須物検査」で担保し、旧方式の「追跡 bin の差分ゼロ検証」は廃止した。
 
 ---
 
@@ -124,7 +123,7 @@ rm -rf "$tmp"                                       # 後始末（必須）
    ```
 
 4. **CI が実行する内容**（[`release.yml`](../../.github/workflows/release.yml)）:
-   - **npm publish ジョブ**: version 三者一致検証（タグ＝package.json＝plugin.json）→ `npm ci && npm run build`（→ 追跡 bin 差分ゼロ検証。`prepack` 廃止の代替）→ `verify-npm-pack.sh`（リーク/必須物検査）→ `NPM_TOKEN` ゲート → `npm publish --access public`。`NPM_TOKEN` 未設定なら publish を skip。
+   - **npm publish ジョブ**: version 三者一致検証（タグ＝package.json＝plugin.json）→ `npm ci && npm run build`（非追跡 bin を作業ツリーに生成。`prepack` の代替＝使用前 build）→ `verify-npm-pack.sh`（リーク/必須物検査。必須物 `bin/agents-md.js` を確認）→ `NPM_TOKEN` ゲート → `npm publish --access public`。`NPM_TOKEN` 未設定なら publish を skip。
    - **marketplace ジョブ**: 正本 `.agents/` から `build-adapters.sh` で生成物を build し、決定性（再生成 diff ゼロ）を検証して `release/marketplace` ブランチへ commit/push する。
 
 > push（タグ push を含む）は高リスク操作であり、ユーザーが明示したときのみ行う。

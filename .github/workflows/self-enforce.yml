@@ -80,23 +80,20 @@ jobs:
           echo "$tables" | grep -qx 'workflow_log' || { echo "ERROR: workflow_log が作られていない"; exit 1; }
           rm -rf "$tmp"
 
-      # 2.5) CLI TypeScript: 依存導入 → typecheck → build → bin 差分ゼロ
-      #    src/agents-md.ts（strict）が正本。tsc 再ビルドでコミット済み bin/agents-md.js と差分が
-      #    出ないことを検証し、ソースと配布物（追跡物 bin）の同期を機械的に保証する（SC-2/SC-3/SC-6）。
-      #    #3（build-adapters 差分ゼロ）より前に CLI ビルド差分を確定させ、両者の責務を分離する。
-      #    正本: docs/maintainer/workflow/20260615_092309_CLIのTypeScript化/02_設計.md §3.2.3, 03_実装計画.md（T4）
-      - name: CLI typecheck & build diff-zero (tsc)
+      # 2.5) CLI TypeScript: 依存導入 → typecheck → build（REPO_ROOT/bin を生成）
+      #    src/agents-md.ts（strict）が正本。bin/agents-md.js は非追跡（.gitignore）の生成物であり、
+      #    本 step で `npm ci && npm run build` し REPO_ROOT に bin を生成する。これにより後続 step
+      #    （#3 生成物差分ゼロ・#4 pack・#6 E2E）が REPO_ROOT/bin を前提にできる（順序保証）。
+      #    typecheck は src 正本の型健全性検証として存続する。bin は非追跡のため「追跡 bin の差分ゼロ」
+      #    検証は不要（無意味化）になり削除した（使用前 build 方式へ転換）。
+      #    正本: docs/maintainer/workflow/20260615_114305_bin生成物のgitignore化とpublish時ビルド/02_設計.md §3.3, 03_実装計画.md（T2）
+      - name: CLI typecheck & build (tsc)
         run: |
           set -e
           npm ci                         # devDependencies(typescript,@types/node) を導入（lockfile 前提）
-          npm run typecheck              # 型エラーがあれば非0で fail（SC-2/SC-3）
-          npm run build                  # src -> bin を再生成
-          # 追跡物 bin に差分が出ない＝ソースとコミット済み bin が同期している（SC-6・CI#3 整合）
-          if ! git diff --exit-code -- bin/agents-md.js; then
-            echo "ERROR: bin/agents-md.js が src と同期していません。npm run build してコミットしてください。"
-            exit 1
-          fi
-          echo "OK: bin/agents-md.js は src と差分ゼロ"
+          npm run typecheck              # 型エラーがあれば非0で fail（src 正本の型健全性）
+          npm run build                  # src -> bin を生成（REPO_ROOT/bin を後続 step へ供給）
+          echo "OK: typecheck 通過・REPO_ROOT/bin を生成（非追跡の生成物）"
 
       # 3) 生成物の差分ゼロ検証（build 実行後、追跡ファイルに差分が出ない）
       - name: Generated-output diff-zero check

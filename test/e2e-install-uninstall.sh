@@ -283,6 +283,14 @@ test_no_dist_leak() {
   src="$(mktemp -d)"
   make_clean_tree "$src"
 
+  # And (Given): クリーンツリー（git archive HEAD）には非追跡の bin が含まれないため、
+  #   verify-npm-pack.sh の required:bin を満たすよう $src で使用前 build する（tmp 隔離内）。
+  #   正本: docs/maintainer/workflow/20260615_114305_bin生成物のgitignore化とpublish時ビルド/02_設計.md §3.2.2/§6.3
+  ( cd "$src" && npm ci >/dev/null 2>&1 && npm run build >/dev/null 2>&1 ) || {
+    echo "  [SKIP] $src での npm ci/build に失敗したため配布物リーク検査をスキップ"
+    rm -rf "$src"; return 0
+  }
+
   # When/Then: 既存の単一正本スクリプトでリーク無しを検証する（成功=リーク無し）
   if ( cd "$src" && bash .agents/scripts/verify-npm-pack.sh >/dev/null 2>&1 ); then
     ok "配布物: verify-npm-pack.sh が合格（リーク無し・必須物あり）"
@@ -674,7 +682,22 @@ JSON
 }
 
 # --- 実行 ---------------------------------------------------------------------
-[[ -f "$CLI" ]] || { echo "エラー: CLI が見つかりません: $CLI" >&2; exit 2; }
+# bin 不在ガード（堅牢化）: bin/agents-md.js は非追跡（.gitignore）の生成物であり、
+#   各経路（CI step / run-all.sh 前置）が build を前置する前提だが、E2E 単体実行や前置漏れに
+#   備えて自己回復する。REPO_ROOT/bin が無ければ node_modules があるときのみ `npm run build` を
+#   試み、生成できなければ分かりやすいエラーで停止する（exit 2＝必須依存欠如＝run-all.sh では SKIP）。
+#   REPO_ROOT での build は bin が非追跡のため本リポの追跡物・.gitignore・bin の追跡状態を変えない。
+if [[ ! -f "$CLI" ]]; then
+  echo "[e2e] CLI 不在: $CLI を build で用意します（bin は非追跡の生成物）" >&2
+  if command -v npm >/dev/null 2>&1 && [[ -d "$REPO_ROOT/node_modules" ]]; then
+    ( cd "$REPO_ROOT" && npm run build >/dev/null 2>&1 ) || true
+  fi
+fi
+[[ -f "$CLI" ]] || {
+  echo "エラー: CLI が見つかりません: $CLI" >&2
+  echo "       bin/agents-md.js は非追跡の生成物です。先に REPO_ROOT で 'npm ci && npm run build' を実行してください。" >&2
+  exit 2
+}
 
 test_install_self_contained
 test_uninstall_keeps_user_assets

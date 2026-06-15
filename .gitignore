@@ -29,5 +29,12 @@ node_modules/
 # 正本: docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md, 03_実装計画.md
 /.coverage/
 
+# CLI 生成物（src/agents-md.ts の tsc 生成物。パッケージ正本ではない）。
+# bin は派生物として追跡しない（src/agents-md.ts のみ正本として追跡）。
+# publish/E2E/CI は使用直前に `npm ci && npm run build` で bin を生成する
+# （tarball は publish 直前 build で作業ツリーから同梱。prepack は再導入しない）。
+# 正本: docs/maintainer/workflow/20260615_114305_bin生成物のgitignore化とpublish時ビルド/02_設計.md, 03_実装計画.md
+/bin/agents-md.js
+
 # memoは基本的にGit管理外。必要に応じて個別に追跡する（例: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/01_背景と目的.md）。
 **/memo/*

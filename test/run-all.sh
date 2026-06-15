@@ -112,6 +112,20 @@ while IFS='|' read -r name path deps; do
     continue
   fi
 
+  # E2E build 前置: e2e-install-uninstall.sh は $REPO_ROOT/bin/agents-md.js を起動するが、
+  #   bin は非追跡（.gitignore）の生成物のため、E2E を呼ぶ前に REPO_ROOT で bin を用意する。
+  #   bin が無い & npm/node_modules があるときのみ build（冪等・最小オーバーヘッド）。build は
+  #   bin が非追跡のため REPO_ROOT の追跡物・.gitignore を変えない（破壊禁止契約を保つ）。
+  #   正本: docs/maintainer/workflow/20260615_114305_bin生成物のgitignore化とpublish時ビルド/02_設計.md §3.2/§9.4
+  if [[ "$name" == "e2e-install-uninstall" ]]; then
+    repo_root="$(cd "$SCRIPT_DIR/.." && pwd)"
+    if [[ ! -f "$repo_root/bin/agents-md.js" ]] \
+       && command -v npm >/dev/null 2>&1 && [[ -d "$repo_root/node_modules" ]]; then
+      echo "[build] e2e 前置: REPO_ROOT で npm run build（非追跡 bin を生成）"
+      ( cd "$repo_root" && npm run build >/dev/null 2>&1 ) || echo "[build] 前置 build 失敗（E2E 側ガードに委譲）"
+    fi
+  fi
+
   echo "---- [RUN] $name ($path) ----"
   code=0
   bash "$local_script" || code=$?
