@@ -11,9 +11,9 @@ document_id: "6bee1ce8-8d61-4fda-80ff-25d35d69189e"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。ドキュメントは「生きているドキュメント」として扱い、実装内容と常に同期させます。
 >
-> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../.agents/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agents/CONCEPTS.md §用語規約](../../../../../.agents/CONCEPTS.md#用語規約) を参照。
 >
-> **必須**: レビュー実施時は [`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md) を参照。レビュー深度は本件の変更規模（ドキュメント文言の小規模是正・実行コード無し）に応じ **standard** を採用。二観点（[.agents/REVIEW_DUAL_LENS.md](../../../../.agents/REVIEW_DUAL_LENS.md)）の敵対的観点リスト・must-preserve リストを §9.4 に併記する。
+> **必須**: レビュー実施時は [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) を参照。レビュー深度は本件の変更規模（ドキュメント文言の小規模是正・実行コード無し）に応じ **standard** を採用。二観点（[.agents/REVIEW_DUAL_LENS.md](../../../../../.agents/REVIEW_DUAL_LENS.md)）の敵対的観点リスト・must-preserve リストを §9.4 に併記する。
 
 ---
 
@@ -227,7 +227,7 @@ pie title 受け入れ契約カバレッジ（C1〜C6・手動検証）
 
 ### 9.1 設計の確認
 
-- **設計原則の準拠**: 単一情報源（Single Source of Truth）パターンに準拠（02 §2.2）。「memo の追跡可否」の決定権を `.gitignore` の `**/memo/*` 1 か所に固定し、`.agents-project/` のドキュメントは参照・説明に徹する単一責務を保持（02 §1.2）。[06_設計判断の優先順位](../../../../.agents/spec/06_設計判断の優先順位.md)「docs と実装の不整合を放置してはならない」に整合。
+- **設計原則の準拠**: 単一情報源（Single Source of Truth）パターンに準拠（02 §2.2）。「memo の追跡可否」の決定権を `.gitignore` の `**/memo/*` 1 か所に固定し、`.agents-project/` のドキュメントは参照・説明に徹する単一責務を保持（02 §1.2）。[06_設計判断の優先順位](../../../../../.agents/spec/06_設計判断の優先順位.md)「docs と実装の不整合を放置してはならない」に整合。
 - **ディレクトリ構成**: 変更なし（既存名前空間 `docs/maintainer/` / `.workflow/` の役割分担を維持）。
 - **命名規則**: 該当なし（新規ファイル・識別子を導入しない）。
 
@@ -332,7 +332,7 @@ pie title 受け入れ契約カバレッジ（C1〜C6・手動検証）
   3. 00 §6 の全成功基準（memo＝非追跡の明記・workflow.db 本則証跡の明文化・(a) 却下記録・memo 非追跡の検証・`.workflow/` 無視維持）を満たす。
   4. 重要判断はすべて test_output / existing_code / human_decision / external_spec で裏付け（inference_only 依存なし）。
 - **残課題**: なし（実装 memo のツール痕跡は非追跡 memo のため実害なし・close を妨げない）。
-- **補足（移動は別途）**: close/ ディレクトリへの物理移動（`mv`）は本ステップでは行わない。実際の移動はメイン（orchestrator）が別途判断する。移動時は [.agents-project/自己拡張ワークフロー.md §close 移動時の相対リンク補正](../../../../.agents-project/自己拡張ワークフロー.md) に従い、`](../../../../` → `](../../../../../` の補正と未解決リンク 0 件検証を行うこと（本 04 を含む全成果物が対象）。
+- **補足（移動は別途）**: close/ ディレクトリへの物理移動（`mv`）は本ステップでは行わない。実際の移動はメイン（orchestrator）が別途判断する。移動時は [.agents-project/自己拡張ワークフロー.md §close 移動時の相対リンク補正](../../../../../.agents-project/自己拡張ワークフロー.md) に従い、`](../../../../` → `](../../../../../` の補正と未解決リンク 0 件検証を行うこと（本 04 を含む全成果物が対象）。
 
 ---
 
@@ -347,9 +347,9 @@ pie title 受け入れ契約カバレッジ（C1〜C6・手動検証）
 
 ### 13.2 その他の参考資料
 
-- [`.agents-project/自己拡張ワークフロー.md`](../../../../.agents-project/自己拡張ワークフロー.md) - 是正対象（§memo・§issue 作成場所・§理由表）
-- ルート [`.gitignore`](../../../../.gitignore) - 42〜44 行（コメント 42〜43 行・ルール行 `**/memo/*` 44 行）
-- [.agents/REVIEW_DUAL_LENS.md](../../../../.agents/REVIEW_DUAL_LENS.md) - 二観点レビュー
+- [`.agents-project/自己拡張ワークフロー.md`](../../../../../.agents-project/自己拡張ワークフロー.md) - 是正対象（§memo・§issue 作成場所・§理由表）
+- ルート [`.gitignore`](../../../../../.gitignore) - 42〜44 行（コメント 42〜43 行・ルール行 `**/memo/*` 44 行）
+- [.agents/REVIEW_DUAL_LENS.md](../../../../../.agents/REVIEW_DUAL_LENS.md) - 二観点レビュー
 - 実装 memo: `memo/20260616_031333_受け入れ確認ログ.md`、review-docs memo: `memo/20260616_032016_review-docs.md`（いずれも非追跡）
 
 ---
