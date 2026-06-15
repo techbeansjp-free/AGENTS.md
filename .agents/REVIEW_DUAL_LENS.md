@@ -44,6 +44,17 @@ document_id: "c8b4e2a7-1f63-49d5-8e0a-3b9c7d260f54"
 - [CLOSEOUT.md §verify-実経路検証](CLOSEOUT.md#verify-実経路検証)（CLOSEOUT の verify(ii) 実経路検証）
 - [CLOSEOUT.md §verify 報告様式（分離記載・誤導防止）](CLOSEOUT.md#verify-報告様式分離記載誤導防止)（verify 証跡の (i)/(ii) 分離記載・緑≠実経路の射程の見極めは §3 の両リストと整合させる）
 - [MODEL_SELECTION.md §5 参照](MODEL_SELECTION.md#5-参照)（レビューの実効性とモデル階層）
+- [CLOSEOUT.md §fresh サブ分割](CLOSEOUT.md#fresh-サブ分割)（fresh reviewer／fresh サブ構成での must-preserve 継承物としての扱い。§6 のラウンド継承と対をなす）
+
+---
+
+## 6 反復ループへの must-preserve 継承（退行検知）
+
+レビューを**指摘 0 まで反復**する各ラウンド（深さは §4）へ、§2.2/§3 で同定した **must-preserve リスト（不変条件）を継承**する。ループと must-preserve を結合し、ラウンドをまたいだ退行を検知できるようにする。
+
+- **各ラウンドへの継承**: 前ラウンドで同定した must-preserve リストを次ラウンドへ持ち越す。新たに同定した不変条件はリストに加えて継承する。
+- **退行検知**: 各ラウンドで、その回の修正が継承した不変条件を壊していないか（退行）を確認する。判断が不確実な場合は §2.1（敵対的観点）に従い「問題なし」ではなく**要修正に倒す**。
+- **fresh 構成での継承**: fresh reviewer／fresh サブ構成（文脈リセット）をまたぐ場合の継承物としての扱いは [CLOSEOUT.md §fresh サブ分割](CLOSEOUT.md#fresh-サブ分割) へ委譲する（本節では「ラウンド継承」という抽象原則のみを置き、fresh 構成の継承物の列挙は重複させない）。must-preserve リストの定義・産物は §2.2/§3 の正本に従う（本節で再定義しない）。
 
 ---
 
