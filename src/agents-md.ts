@@ -8,7 +8,9 @@
 //   init             setup.sh を実行して採用先へ配備する
 //   upgrade          init と同等（当面）。既存配備の再同期を意図する
 //   uninstall        setup/init が配備した成果物のみを除去する（ユーザー資産は既定で保持）
-//   doctor           配備に必要な前提ファイル・依存の存在確認
+//   doctor           配備に必要な前提ファイル・依存の存在確認 ＋ 証跡健全性診断（hash チェーン・integrity）
+//   audit [dir]      .agents/enforcement/ci/audit.sh の薄ラッパー（終了コード透過）
+//   export [dir]     workflow.db を NDJSON で書き出す（export-ndjson.sh の薄ラッパー・read-only）
 //   enforce on|off|status  enforcement フックを .claude/settings.json に着脱（既定 off / opt-in）
 //   version          package.json の version を表示
 //   help / (既定)    使い方を表示
@@ -29,6 +31,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // パッケージ root は bin/ の 1 つ上。
 const PACKAGE_ROOT = join(__dirname, "..");
 const SETUP_PATH = join(PACKAGE_ROOT, ".agents", "scripts", "setup.sh");
+// audit.sh（CI 監査の正本）と export-ndjson.sh（NDJSON 出力の正本）。CLI は薄ラッパーに徹する。
+const AUDIT_PATH = join(PACKAGE_ROOT, ".agents", "enforcement", "ci", "audit.sh");
+const EXPORT_NDJSON_PATH = join(PACKAGE_ROOT, ".agents", "scripts", "export-ndjson.sh");
+// entry_hash 計算の共有正本（gen_entry_hash）。doctor の hash チェーン検証はこれを source して使う（再実装禁止）。
+const GEN_ENTRY_HASH_PATH = join(
+  PACKAGE_ROOT,
+  ".agents",
+  "scripts",
+  "gen-entry-hash.sh"
+);
 // enforcement 用 settings.json の正本テンプレート（既定 off。opt-in で配線する）。
 const ENFORCE_TEMPLATE_PATH = join(
   PACKAGE_ROOT,
@@ -96,13 +108,16 @@ function printHelp(): void {
   console.log(`${name} v${readVersion()} — AI 実行契約・ワークフロー仕様パッケージの配備 CLI
 
 使い方:
-  npx @techbeansjp-free/agents-md <command>
+  npx agent-skill-chain <command>
 
 コマンド:
   init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agents/ 等を配備する
   upgrade [dir]         既存配備を再同期する（当面 init と同等）
   uninstall [dir]       init/setup が配備した成果物のみを除去する（ユーザー資産は既定で保持）
-  doctor                配備に必要な前提（setup.sh・bash・sqlite3 等）の有無を確認する
+  doctor                配備に必要な前提（setup.sh・bash・sqlite3 等）の有無 ＋ 証跡健全性
+                        （workflow.db の hash チェーン・integrity_check・配線差分）を確認する
+  audit [dir]           .agents/enforcement/ci/audit.sh を実行する（CI 監査の薄ラッパー・終了コード透過）
+  export [dir]          workflow.db を NDJSON（1 行 1 JSON）で標準出力へ書き出す（read-only）
   enforce <on|off|status> [dir]
                         enforcement フック（PreToolUse/PostToolUse）を .claude/settings.json に着脱する。
                         既定は off（init では配線しない）。on で opt-in、off で解除、status で現状表示。
@@ -119,10 +134,10 @@ enforce のオプション:
   enforce status       現在 on/off と hook スクリプト実在性を表示する
 
 例:
-  cd my-project && npx @techbeansjp-free/agents-md init
-  npx @techbeansjp-free/agents-md@0.1.0 init       # 版をピン留め
-  npx @techbeansjp-free/agents-md uninstall        # 削除対象を表示（dry-run）
-  npx @techbeansjp-free/agents-md uninstall --yes  # 実際に除去する
+  cd my-project && npx agent-skill-chain init
+  npx agent-skill-chain@0.1.0 init       # 版をピン留め
+  npx agent-skill-chain uninstall        # 削除対象を表示（dry-run）
+  npx agent-skill-chain uninstall --yes  # 実際に除去する
 
 注意:
   init は内部で ${".agents/scripts/setup.sh"} を実行します。
@@ -156,6 +171,201 @@ function runSetup(projectRoot: string): number {
     return 1;
   }
   return result.status ?? 0;
+}
+
+// audit: .agents/enforcement/ci/audit.sh の薄ラッパー。判定ロジックは再実装せず spawnSync で呼ぶ。
+//   引数 dir（既定 cwd）を audit.sh の PROJECT_ROOT へ渡し、env（AUDIT_GIT_RANGE/WORKFLOW_DIRS/PR_BODY 等）は
+//   プロセス env として透過する。終了コードは audit.sh のものをそのまま返す（pass-through）。
+function runAudit(dir: string): number {
+  if (!existsSync(AUDIT_PATH)) {
+    console.error(
+      `エラー: audit.sh が見つかりません: ${AUDIT_PATH}\n` +
+        `        パッケージが壊れている可能性があります。再インストールしてください。`
+    );
+    return 1;
+  }
+  const result = spawnSync("bash", [AUDIT_PATH, dir], { stdio: "inherit" });
+  if (result.error) {
+    const err = result.error as NodeJS.ErrnoException;
+    console.error(
+      err.code === "ENOENT"
+        ? `エラー: bash が見つかりません。audit.sh の実行には bash が必要です。`
+        : `エラー: audit.sh の起動に失敗しました: ${err.message}`
+    );
+    return 1;
+  }
+  // audit.sh の終了コードを透過（0=pass / 非 0=FAIL）。signal 終了は 1 に丸める。
+  return result.status ?? 1;
+}
+
+// export: workflow.db を NDJSON で書き出す薄ラッパー（export-ndjson.sh を呼ぶ）。read-only。
+//   標準出力に NDJSON をそのまま流す（stdio: inherit）。終了コードは export-ndjson.sh を透過。
+function runExport(dir: string): number {
+  if (!existsSync(EXPORT_NDJSON_PATH)) {
+    console.error(
+      `エラー: export-ndjson.sh が見つかりません: ${EXPORT_NDJSON_PATH}\n` +
+        `        パッケージが壊れている可能性があります。再インストールしてください。`
+    );
+    return 1;
+  }
+  const result = spawnSync("bash", [EXPORT_NDJSON_PATH, dir], { stdio: "inherit" });
+  if (result.error) {
+    const err = result.error as NodeJS.ErrnoException;
+    console.error(
+      err.code === "ENOENT"
+        ? `エラー: bash が見つかりません。export には bash が必要です。`
+        : `エラー: export-ndjson.sh の起動に失敗しました: ${err.message}`
+    );
+    return 1;
+  }
+  return result.status ?? 1;
+}
+
+// 証跡健全性診断（doctor 拡張）の結果。read-only。
+interface LedgerHealth {
+  // 診断を実行したか（DB 不在・sqlite3 不在で skip した場合 false）。
+  ran: boolean;
+  // 検査メッセージ（[OK]/[NG]/[WARN]/[SKIP] 行）。
+  lines: string[];
+  // 1 つでも [NG] があれば false。
+  ok: boolean;
+}
+
+// workflow.db の証跡健全性を read-only で診断する:
+//   (b) hash チェーン検証 — 各行の entry_hash を gen_entry_hash 共有関数で再計算し DB の値と照合し、
+//       かつ rowid 連続行で prev_hash が直前の entry_hash と一致することを確認する。
+//   (c) PRAGMA integrity_check が ok であること。
+//   hash 再計算は gen-entry-hash.sh を source する bash ワンショットで行い、TS 側で式を再実装しない（N-D）。
+//   payload は sqlite3 側で json/連結を避け、各フィールドを NUL 区切りで取り出して bash 配列へ渡す方式は
+//   summary の改行・タブで壊れるため、sqlite3 の "||" 連結で 14 フィールドの payload 文字列を 1 列で作り、
+//   その payload を sha256 した値と stored entry_hash を比較する（gen_entry_hash と同一式・同一区切り）。
+function checkLedgerHealth(projectRoot: string): LedgerHealth {
+  const lines: string[] = [];
+  const dbPath = join(projectRoot, ".workflow", "workflow.db");
+  if (!existsSync(dbPath)) {
+    lines.push("[SKIP] workflow.db が無いため証跡健全性診断をスキップします。");
+    return { ran: false, lines, ok: true };
+  }
+  const sqliteProbe = spawnSync("sqlite3", ["-version"]);
+  if (sqliteProbe.error || sqliteProbe.status !== 0) {
+    lines.push("[SKIP] sqlite3 が無いため証跡健全性診断をスキップします。");
+    return { ran: false, lines, ok: true };
+  }
+
+  let ok = true;
+
+  // (c) integrity_check（read-only）。
+  const integrity = spawnSync("sqlite3", [dbPath, "PRAGMA integrity_check;"], {
+    encoding: "utf8",
+  });
+  if (integrity.status === 0 && /(^|\s)ok(\s|$)/.test(integrity.stdout.trim())) {
+    lines.push("[OK]  workflow.db integrity_check = ok");
+  } else {
+    lines.push("[NG]  workflow.db integrity_check が ok ではありません（DB 破損の可能性）。");
+    ok = false;
+  }
+
+  // 新スキーマ（entry_hash カラム）でなければ hash チェーン検証は対象外。
+  const cols = spawnSync(
+    "sqlite3",
+    [dbPath, "SELECT 1 FROM pragma_table_info('workflow_log') WHERE name='entry_hash';"],
+    { encoding: "utf8" }
+  );
+  if (!cols.stdout.includes("1")) {
+    lines.push("[SKIP] 旧スキーマ（entry_hash 無し）のため hash チェーン検証をスキップします。");
+    return { ran: true, lines, ok };
+  }
+
+  // (b) hash チェーン検証。gen-entry-hash.sh を source し、各行を gen_entry_hash で再計算して照合する。
+  //   各フィールドは RS/FS 制御文字区切りで sqlite3 から取り出し、summary 等に改行/タブ/| が含まれても
+  //   壊れないようにする。式の再実装はしない（gen_entry_hash を呼ぶ・N-D）。
+  const verifyScript = buildHashChainScript(dbPath);
+  const verify = spawnSync("bash", ["-c", verifyScript], { encoding: "utf8" });
+  const out = (verify.stdout || "").trim();
+  const m = /MISMATCH=(\d+) CHAINBREAK=(\d+) ROWS=(\d+)/.exec(out);
+  if (verify.status !== 0 || !m) {
+    lines.push(`[NG]  hash チェーン検証の実行に失敗しました（${out || verify.stderr || "no output"}）。`);
+    ok = false;
+  } else {
+    const mismatch = Number(m[1]);
+    const chainBreak = Number(m[2]);
+    const rows = Number(m[3]);
+    if (mismatch === 0 && chainBreak === 0) {
+      lines.push(`[OK]  workflow.db hash チェーン検証 = 整合（${rows} 行・entry_hash/prev_hash 連結 OK）`);
+    } else {
+      lines.push(
+        `[NG]  workflow.db hash チェーン不整合: entry_hash 不一致=${mismatch} 件, prev_hash 連結断絶=${chainBreak} 件（改ざんの痕跡）。`
+      );
+      ok = false;
+    }
+  }
+
+  return { ran: true, lines, ok };
+}
+
+// hash チェーン検証用の bash スクリプトを生成する。gen-entry-hash.sh を source して各行を
+//   gen_entry_hash で再計算し、stored entry_hash・prev_hash 連結を照合する（式の再実装をしない・N-D）。
+//   各フィールドは sqlite3 の readfile を使わず、行を NUL 区切りで安全に取り出して読み込む。
+function buildHashChainScript(dbPath: string): string {
+  // 各カラムを RS=\x1e（レコード区切り）・FS=\x1f（フィールド区切り）で 1 ストリームに出力し、
+  // bash で読み出す。summary 等に改行/タブ/| が含まれても壊れない区切りを使う。
+  //
+  // 連結検証の方針（誤検知防止）:
+  //   - entry_hash 再計算照合が主たる改ざん検知（gen_entry_hash 共有関数で再計算 → stored と比較）。
+  //   - prev_hash 連結は「非空 prev_hash が DB 内のいずれかの行の entry_hash を指していること」を要求する
+  //     （dangling = 指す先が存在しない＝行削除/改ざんの痕跡）。直前 rowid の entry_hash と厳密一致までは
+  //     要求しない。書込時 prev_hash は INSERT 時点の head を指すが、セッション間 interleave で head が
+  //     直前 rowid と一致しない正当ケースがあり、厳密一致だと健全 DB を誤検知するため。
+  return `
+set -euo pipefail
+. ${shellQuote(GEN_ENTRY_HASH_PATH)}
+db=${shellQuote(dbPath)}
+mismatch=0
+chain_break=0
+rows=0
+# 既知 entry_hash 集合（連結先の存在確認用）。一意な entry_hash を改行区切りで読み込み連想配列化する。
+declare -A known
+while IFS= read -r h; do
+  [ -n "$h" ] && known["$h"]=1
+done < <(sqlite3 "$db" "SELECT entry_hash FROM workflow_log WHERE entry_hash IS NOT NULL AND entry_hash<>'';" 2>/dev/null)
+# RS=0x1e でレコード, FS=0x1f でフィールドを区切って取り出す（任意の本文を安全に通す）。
+while IFS=$'\\x1f' read -r -d $'\\x1e' eid pid docid ts ar dr cmd iid rid ip rp cf sum dod stored prevh; do
+  # sqlite3 は行ごとに改行を付すため、レコード区切り \\x1e の直後（= 次レコードの先頭フィールド）に
+  # 改行が混入する。先頭フィールド eid の先行改行を除去してから判定する。
+  eid="\${eid#$'\\n'}"
+  [ -z "\${eid:-}" ] && continue
+  rows=$((rows+1))
+  calc="$(gen_entry_hash "$eid" "$pid" "$docid" "$ts" "$ar" "$dr" "$cmd" "$iid" "$rid" "$ip" "$rp" "$cf" "$sum" "$dod")"
+  [ "$calc" != "$stored" ] && mismatch=$((mismatch+1))
+  # prev_hash 連結検証: 非空 prev_hash が既知 entry_hash 集合に存在しなければ連結断絶（dangling）。
+  if [ -n "$prevh" ] && [ -z "\${known[$prevh]:-}" ]; then chain_break=$((chain_break+1)); fi
+done < <(sqlite3 "$db" "
+  SELECT
+    coalesce(entry_id,'') || char(31) ||
+    coalesce(parent_entry_id,'') || char(31) ||
+    coalesce(document_id,'') || char(31) ||
+    coalesce(ts_utc,'') || char(31) ||
+    coalesce(actor_role,'') || char(31) ||
+    coalesce(delegated_by_role,'') || char(31) ||
+    coalesce(command,'') || char(31) ||
+    coalesce(issue_id,'') || char(31) ||
+    coalesce(review_id,'') || char(31) ||
+    coalesce(issue_path,'') || char(31) ||
+    coalesce(review_path,'') || char(31) ||
+    coalesce(changed_files_json,'') || char(31) ||
+    coalesce(summary,'') || char(31) ||
+    dod_met || char(31) ||
+    coalesce(entry_hash,'') || char(31) ||
+    coalesce(prev_hash,'') || char(30)
+  FROM workflow_log ORDER BY rowid;
+" 2>/dev/null)
+echo "MISMATCH=$mismatch CHAINBREAK=$chain_break ROWS=$rows"
+`;
+}
+
+// シェル単一引用符で安全に囲む（パスに空白・特殊文字があっても安全）。
+function shellQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
 // doctor: 配備に必要な前提を確認する。終了コードで成否を返す。
@@ -220,6 +430,25 @@ function runDoctor(): number {
     console.log("        ヒント: sqlite3 を導入してください（例: apt-get install sqlite3）。");
   }
 
+  // enforcement 配線差分（drift）の検知: settings.json の managed hook エントリの command が、
+  //   正本テンプレート（settings.enforce.json）の command と一致するかを確認する（read-only）。
+  //   on の場合のみ。差分があれば再 enforce on を促す（[WARN]）。
+  if (settings !== null && enforceIsOn(settings)) {
+    const drift = detectEnforceDrift(settings);
+    if (drift.length === 0) {
+      console.log("[OK]  enforcement 配線 = 正本テンプレートと一致");
+    } else {
+      for (const d of drift) console.log(`[WARN] enforcement 配線差分: ${d}`);
+      console.log("        ヒント: `agents-md enforce on` で配線を再同期できます。");
+    }
+  }
+
+  // 証跡健全性診断（hash チェーン・integrity）。read-only。
+  console.log("\n証跡健全性（workflow.db・read-only）:");
+  const health = checkLedgerHealth(projectRoot);
+  for (const l of health.lines) console.log(`        ${l}`);
+  if (!health.ok) ok = false;
+
   // install 状態の判定（uninstall の安全策と同じ「配備の痕跡」で判定する）。
   const installed =
     existsSync(join(projectRoot, ".agents")) || existsSync(join(projectRoot, "AGENTS.md"));
@@ -231,6 +460,53 @@ function runDoctor(): number {
 
   console.log(ok ? "\ndoctor: 必須項目はすべて満たしています。" : "\ndoctor: 不足項目があります（上記 [NG] を参照）。");
   return ok ? 0 : 1;
+}
+
+// enforcement 配線差分の検知（read-only）。設定中の managed hook エントリの command が
+//   正本テンプレートの command と一致しなければ差分行を返す。テンプレートが読めなければ空（判定不能は WARN しない）。
+function detectEnforceDrift(settings: Settings): string[] {
+  const template = readEnforceTemplate();
+  if (template === null) return [];
+  const drift: string[] = [];
+  const hooks = settings.hooks;
+  if (!hooks || typeof hooks !== "object") return drift;
+  for (const event of HOOK_EVENTS) {
+    const tmplEntries = templateHookEntries(template, event);
+    const tmplCmds = tmplEntries
+      .map((e) => extractHookCommand(e))
+      .filter((c): c is string => c !== null);
+    const arr = (hooks as Record<string, unknown>)[event];
+    if (!Array.isArray(arr)) {
+      if (tmplCmds.length > 0) drift.push(`${event}: 配線が存在しません（テンプレートにはあり）。`);
+      continue;
+    }
+    const managed = arr.filter(isManagedHookEntry);
+    const managedCmds = managed
+      .map((e) => extractHookCommand(e))
+      .filter((c): c is string => c !== null);
+    for (const tc of tmplCmds) {
+      if (!managedCmds.includes(tc)) {
+        drift.push(`${event}: 正本の hook コマンドが設定に見当たりません（再 enforce on を推奨）。`);
+        break;
+      }
+    }
+  }
+  return drift;
+}
+
+// hook エントリから実コマンド文字列を取り出す（settings の hook は { hooks: [{ command }] } のネスト構造）。
+function extractHookCommand(entry: unknown): string | null {
+  if (!isJsonObject(entry)) return null;
+  const inner = (entry as JsonObject).hooks;
+  if (Array.isArray(inner)) {
+    for (const h of inner) {
+      if (isJsonObject(h) && typeof h.command === "string") return h.command;
+    }
+  }
+  if (typeof (entry as JsonObject).command === "string") {
+    return (entry as JsonObject).command as string;
+  }
+  return null;
 }
 
 // ----------------------------------------------------------------------------
@@ -387,7 +663,7 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
   if (!yes) {
     console.log(
       "\n[dry-run] これは表示のみです。実際に除去するには --yes を付けて再実行してください:\n" +
-        `  npx @techbeansjp-free/agents-md uninstall${purge ? " --purge" : ""} --yes`
+        `  npx agent-skill-chain uninstall${purge ? " --purge" : ""} --yes`
     );
     return 0;
   }
@@ -694,6 +970,20 @@ function main(argv: string[]): number {
     }
     case "doctor":
       return runDoctor();
+    case "audit": {
+      // audit [dir]。dir 省略時は cwd。audit.sh の終了コードを透過。
+      const dirArg = argv.slice(3).find((a) => !a.startsWith("-"));
+      let dir = process.cwd();
+      if (dirArg) dir = dirArg.startsWith("/") ? dirArg : join(process.cwd(), dirArg);
+      return runAudit(dir);
+    }
+    case "export": {
+      // export [dir]。dir 省略時は cwd。NDJSON を標準出力へ。
+      const dirArg = argv.slice(3).find((a) => !a.startsWith("-"));
+      let dir = process.cwd();
+      if (dirArg) dir = dirArg.startsWith("/") ? dirArg : join(process.cwd(), dirArg);
+      return runExport(dir);
+    }
     case "version":
     case "--version":
     case "-v":

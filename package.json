@@ -1,7 +1,7 @@
 {
-  "name": "@techbeansjp-free/agents-md",
+  "name": "agent-skill-chain",
   "version": "0.1.0",
-  "description": "AI 実行契約・能力(skills)中心のワークフロー仕様パッケージ。正本は .agents/。Claude Code / Cursor / Gemini / Copilot / Codex 向けに配備する。",
+  "description": ".agents を正本に各 AI ツール（Claude Code / Cursor / Gemini / Copilot / Codex）へ段階的に配備するワークフロー仕様パッケージ。強制力はツールごとに異なり（Claude Code は runtime hook で強制、他はルール配布/方針適用）、最終保証は CI audit が担う。",
   "type": "module",
   "bin": { "agents-md": "bin/agents-md.js" },
   "files": [".agents/", "AGENTS.md", "CLAUDE.md", ".workflow/templates/", "bin/", "README.md"],

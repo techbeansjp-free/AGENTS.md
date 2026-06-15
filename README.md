@@ -2,6 +2,8 @@
 
 LLM エージェント（AI）と人間が協働するための**実行契約・能力（skills）中心のワークフロー**を定義する仕様パッケージ。プロジェクトにコピーして、AI に「.agents に従って」と指示すると、フェーズ（要求→要件→設計→実装計画→実装→レビュー）に沿って動く。
 
+**配備と強制力の考え方**: `.agents/` を**単一の正本**とし、各 AI ツール（Claude Code / Cursor / Gemini / Copilot / Codex）へ**段階的に配備**する（全ツールが同一機能で対応するわけではない）。**強制力はツールごとに異なる**（Claude Code は runtime hook で物理強制、Cursor はルール配布・一部誘導、Gemini / Copilot / Codex は方針適用予定）。**最終保証は CI audit**（全ツール共通の最後の砦）が担う。ツール別の強制力区分の正本は [.agents/enforcement/README.md §ツール別強制力マトリクス](.agents/enforcement/README.md#ツール別強制力マトリクス) を参照。
+
 **メタレイヤー**: 本仕様で定義する orchestrator / worker 等は「プロジェクト内で動くエージェント」の振る舞いである。これら仕様ファイルを編集するアシスタント（Cursor 等）は別レイヤー。**基盤の自己肥大化防止**（Feature First・文書追加前の統合検討・一時文書の寿命・責務境界・監視指標）も [.agents/META_LAYER.md](.agents/META_LAYER.md) で定義する。
 
 ---
@@ -46,7 +48,7 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 導線は **npm（主導線）** と **Claude marketplace（副導線）** の 2 つ。基本は npm 経由を推奨する。
 
-> npm パッケージ名は `@techbeansjp-free/agents-md`（public / npmjs.com）。
+> npm パッケージ名は `agent-skill-chain`（unscoped public / npmjs.com）。CLI コマンド名は `agents-md`（パッケージ名と独立）。
 
 ### 1. npm 経由（主導線・推奨）
 
@@ -54,7 +56,7 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 ```bash
 cd my-project
-npx @techbeansjp-free/agents-md init
+npx agent-skill-chain init
 ```
 
 これで以下が行われる:
@@ -80,13 +82,13 @@ npx @techbeansjp-free/agents-md init
 
 ```bash
 # 特定版をピン留めして導入（@x.y.z で固定。再現的に同一内容を取り込める）
-npx @techbeansjp-free/agents-md@0.1.0 init
+npx agent-skill-chain@0.1.0 init
 
 # 既存配備を新版へ再同期（アップグレード）
-npx @techbeansjp-free/agents-md@latest upgrade
+npx agent-skill-chain@latest upgrade
 
 # 配備前提（bash・sqlite3 等）の健全性を確認
-npx @techbeansjp-free/agents-md doctor
+npx agent-skill-chain doctor
 ```
 
 **アンインストール（つけ外し）**:
@@ -95,13 +97,13 @@ npx @techbeansjp-free/agents-md doctor
 
 ```bash
 # 採用先プロジェクトのルートで実行。まず削除対象を表示（dry-run。何も消さない）
-npx @techbeansjp-free/agents-md uninstall
+npx agent-skill-chain uninstall
 
 # 実際に配備物のみを除去する（.cursor/.claude は丸ごと消さず配備分のみ。自作スキル/独自フックは保持）
-npx @techbeansjp-free/agents-md uninstall --yes
+npx agent-skill-chain uninstall --yes
 
 # workflow.db 等の証跡も含めて完全除去する
-npx @techbeansjp-free/agents-md uninstall --purge --yes
+npx agent-skill-chain uninstall --purge --yes
 ```
 
 | 区分 | 既定の `uninstall` | `--purge` 付き |
@@ -118,9 +120,9 @@ enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` へ
 
 ```bash
 # 採用先プロジェクトのルートで実行
-npx @techbeansjp-free/agents-md enforce status   # 現在の on/off と hook 実在性を表示
-npx @techbeansjp-free/agents-md enforce on       # opt-in（settings.json に配線をマージ。既存値は保持・.bak 退避）
-npx @techbeansjp-free/agents-md enforce off      # 解除（enforcement 配線のみ外す。ユーザー値は保持）
+npx agent-skill-chain enforce status   # 現在の on/off と hook 実在性を表示
+npx agent-skill-chain enforce on       # opt-in（settings.json に配線をマージ。既存値は保持・.bak 退避）
+npx agent-skill-chain enforce off      # 解除（enforcement 配線のみ外す。ユーザー値は保持）
 ```
 
 - `enforce on` は正本テンプレート（`.agents/platforms/claude/settings.enforce.json`）から `hooks.PreToolUse`/`PostToolUse`（`.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` を指す）と `env.AGENT_ROLE=orchestrator` を配線する。既存の `settings.json` があれば**ユーザー値を破壊せず**マージし、上書き前に `settings.json.bak` へ退避する。

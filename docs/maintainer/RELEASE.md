@@ -1,6 +1,6 @@
 # RELEASE / publish 手順（メンテナ向け・正本）
 
-本ドキュメントは `@techbeansjp-free/agents-md` の **npm publish / marketplace 公開手順の詳細正本**である。README §リリース手順は入口リンクと要約のみを持ち、詳細はここに一本化する（重複させない）。
+本ドキュメントは `agent-skill-chain`（unscoped public・CLI コマンド名は `agents-md`）の **npm publish / marketplace 公開手順の詳細正本**である。README §リリース手順は入口リンクと要約のみを持ち、詳細はここに一本化する（重複させない）。
 
 > **重要（実 publish はユーザー承認前提）**
 >
@@ -27,6 +27,17 @@ node -v  # >=20
 ```
 
 不足時は検証・publish を成立させられない。スキップせず前提不足として明示的に止めること。
+
+---
+
+## 0.1. パッケージ名と将来の組織移管（unscoped）
+
+本パッケージは **unscoped public** 名 `agent-skill-chain` で公開する（過去に検討した scoped 名は廃止）。CLI コマンド名 `agents-md` はパッケージ名と独立であり据え置く（後方互換のため改名しない）。
+
+- **初回公開前の確認**: 初回 publish の直前に `npm view agent-skill-chain version` を実行し、**404（未公開）であること**を確認する。既に同名が存在する場合は別名を検討する（unscoped 名はグローバル一意のため）。
+- **将来の組織移管（名前は不変）**: 個人/組織アカウント間で公開済みパッケージを移す場合は、**npm の所有権移管（npm owner / npm access）で行い、パッケージ名は変更しない**。unscoped 名はアカウントに紐付かず**名前を保ったまま owner（メンテナ/Team）を付け替えられる**ため、移管時に利用者の `npx agent-skill-chain` 参照は壊れない。
+  - 手順の骨子: ①移管先アカウント/Org を用意 → ②`npm owner add <new-owner> agent-skill-chain`（または Org への `npm access grant`）で権限付与 → ③旧 owner を外す（`npm owner rm <old-owner> agent-skill-chain`）。**名前そのものの改名（unpublish→republish）はしない**（バージョン履歴・dist-tag・依存解決の継続性のため）。
+  - 移管は高リスク操作であり、ユーザーの明示承認後にのみ実施する（実 publish と同様）。
 
 ---
 

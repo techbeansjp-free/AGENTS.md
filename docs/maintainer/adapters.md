@@ -81,7 +81,7 @@ marketplace 登録時は当該リリースブランチ/タグ時点のツリー�
 | 項目 | 既定 |
 |------|------|
 | トリガ | タグ push `v*`（例 `v0.1.0`） |
-| npm パッケージ | `@techbeansjp-free/agents-md`（public / npmjs.com、`publishConfig.access=public`） |
+| npm パッケージ | `agent-skill-chain`（unscoped public / npmjs.com、`publishConfig.access=public`。CLI コマンド名は `agents-md`） |
 | リリースブランチ | `release/marketplace` |
 | version 正本 | `package.json`（`plugin.json` は従属。`sync-version.sh` で同期） |
 | LICENSE | MIT（`Copyright (c) 2026 TechBeans Inc.`） |

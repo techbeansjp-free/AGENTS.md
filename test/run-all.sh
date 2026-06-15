@@ -25,6 +25,10 @@
 #   | test-pretooluse-hook.sh             | bash・git・tar（jq はスクリプト内で任意系統検証） |
 #   | test-write-workflow-log-prevhash.sh | bash・sqlite3 |
 #   | test-write-workflow-log-multidoc.sh | bash・sqlite3 |
+#   | test-c4-bypass-resistance.sh        | bash・git・tar（C-4 パス正規化・AGENT_ROLE 出所制御の回帰・tmp 隔離） |
+#   | test-cli-audit-doctor.sh            | bash・git・tar・node・sqlite3（C-5 audit 透過・doctor hash/integrity・tmp 隔離） |
+#   | test-export-ndjson.sh               | bash・git・tar・node・sqlite3・python3（C-7 NDJSON export 検証・tmp 隔離） |
+#   | e2e-claude-hook.sh                  | bash・git・tar・node・python3（C-3 settings 配線経由 hook E2E・tmp 隔離） |
 #   | e2e-install-uninstall.sh            | bash・git・node・tar（sqlite3 はスクリプト内で任意 SKIP） |
 #
 # I/F（02_設計 §5 の正本に従う・後続のカバレッジ issue が相乗りする）:
@@ -53,6 +57,10 @@ test-audit|test-audit.sh|bash
 test-pretooluse-hook|test-pretooluse-hook.sh|bash git tar
 test-write-workflow-log-prevhash|test-write-workflow-log-prevhash.sh|bash sqlite3
 test-write-workflow-log-multidoc|test-write-workflow-log-multidoc.sh|bash sqlite3
+test-c4-bypass-resistance|test-c4-bypass-resistance.sh|bash git tar
+test-cli-audit-doctor|test-cli-audit-doctor.sh|bash git tar node sqlite3
+test-export-ndjson|test-export-ndjson.sh|bash git tar node sqlite3 python3
+e2e-claude-hook|e2e-claude-hook.sh|bash git tar node python3
 e2e-install-uninstall|e2e-install-uninstall.sh|bash git node tar
 EOF
 }
@@ -119,14 +127,18 @@ while IFS='|' read -r name path deps; do
   #   bin が無い & npm/node_modules があるときのみ build（冪等・最小オーバーヘッド）。build は
   #   bin が非追跡のため REPO_ROOT の追跡物・.gitignore を変えない（破壊禁止契約を保つ）。
   #   正本: docs/maintainer/workflow/20260615_114305_bin生成物のgitignore化とpublish時ビルド/02_設計.md §3.2/§9.4
-  if [[ "$name" == "e2e-install-uninstall" ]]; then
-    repo_root="$(cd "$SCRIPT_DIR/.." && pwd)"
-    if [[ ! -f "$repo_root/bin/agents-md.js" ]] \
-       && command -v npm >/dev/null 2>&1 && [[ -d "$repo_root/node_modules" ]]; then
-      echo "[build] e2e 前置: REPO_ROOT で npm run build（非追跡 bin を生成）"
-      ( cd "$repo_root" && npm run build >/dev/null 2>&1 ) || echo "[build] 前置 build 失敗（E2E 側ガードに委譲）"
-    fi
-  fi
+  # bin（非追跡生成物）を必要とするテスト群は、呼ぶ前に REPO_ROOT で bin を用意する（冪等・最小）。
+  #   C-5/C-7/C-3 の CLI/E2E テストおよび e2e-install-uninstall は bin/agents-md.js を起動するため。
+  case "$name" in
+    e2e-install-uninstall|test-cli-audit-doctor|test-export-ndjson|e2e-claude-hook)
+      repo_root="$(cd "$SCRIPT_DIR/.." && pwd)"
+      if [[ ! -f "$repo_root/bin/agents-md.js" ]] \
+         && command -v npm >/dev/null 2>&1 && [[ -d "$repo_root/node_modules" ]]; then
+        echo "[build] $name 前置: REPO_ROOT で npm run build（非追跡 bin を生成）"
+        ( cd "$repo_root" && npm run build >/dev/null 2>&1 ) || echo "[build] 前置 build 失敗（テスト側ガードに委譲）"
+      fi
+      ;;
+  esac
 
   echo "---- [RUN] $name ($path) ----"
   code=0

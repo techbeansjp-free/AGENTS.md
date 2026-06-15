@@ -1,49 +1,55 @@
-# release.yml — リリースフロー（npm publish ＋ marketplace 案A）
+# release.yml — main マージ自動リリース（案C）＋ marketplace 生成物公開
 #
-# 方針（02_設計 §5.1 / 03_実装計画 §0・§2.5）:
+# 方針（npm 公開整備 issue 02_設計 §3.2 / 03_実装計画 §2.2）:
+#   - トリガは「main への push」。手動タグ運用は廃止し、main マージを契機に自動でリリースする。
+#   - version は bump 後の package.json:version を単一の真実源とする（semver patch +1）。
+#   - 日時タグ vYYYYMMDD.HHMMSS は「リリースの目印」であり semver とは独立（タグ==package.json の不変条件は撤去）。
 #   - 正本リポ（main）には生成物 .adapters/ を一切置かない（/.adapters/ は gitignore のまま）。
-#   - リリースは「タグ push」をトリガに、次の 2 系統を実行する:
-#       (A) npm publish  : 公開前検証（version 同期・配布物リーク検査）→ scoped public publish。
-#       (B) marketplace  : CI が正本 .agents/ から build-adapters.sh で生成し、
-#                          生成物 .adapters/claude（＋cursor）を専用リリースブランチへ commit する（案A）。
-#   - marketplace.json の source: "./.adapters/claude" は、このリリースブランチ上で解決される。
+#   - npm publish は NPM_TOKEN ゲートで保護し、未設定なら skip（ジョブ失敗にしない）。既存 version は冪等に skip。
 #
-# 確定既定（03_実装計画 §0／§9 #1・#2・#6 で確定）:
-#   - トリガ:           タグ push `v*`（例: v0.1.0）。
-#   - npm パッケージ:   @techbeansjp-free/agents-md（public / npmjs.com、publishConfig.access=public）。
-#   - リリースブランチ: `release/marketplace`（生成物の置き場。常に最新リリース内容で上書き同期）。
-#   - 版同期:           push されたタグ（vX.Y.Z）と package.json.version / plugin.json.version が一致すること。
-#
-# 重要:
-#   - 実際の push / publish はこの CI 上でのみ起こる（ローカルからは push/publish しない）。
-#   - npm publish は NPM_TOKEN secret によるゲートで保護する。未設定なら publish step は skip し、
-#     ユーザーが NPM_TOKEN を設定して v* タグを push したときにのみ発火する。
+# 無限ループ防止（02_設計 §3.2.2・§9.2）:
+#   - 主防御: bump 結果の書き戻し push は GitHub Actions 既定 GITHUB_TOKEN を用いる。
+#     既定 GITHUB_TOKEN による push は on:push workflow を再トリガしない（GitHub 仕様）。
+#     PAT / deploy key は使わない（使うと再発火しうる）。
+#   - 補助防御（belt-and-suspenders）: コミットメッセージに [skip ci]、concurrency 直列化、
+#     actor != github-actions[bot] のガード。
 
 name: release
 
-# 生成物をリリースブランチへ push する必要があるため write を要求する。
+# bump 書き戻し push・生成物の release ブランチ push・GitHub Release 作成のため write を要求する。
 permissions:
   contents: write
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+
+# release ジョブ群を直列化し、同秒衝突・並行 bump の競合確率を下げる。
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   # =====================================================================
-  # (A) npm publish — 公開前検証 → NPM_TOKEN ゲート → scoped public publish
+  # (A) version bump + 日時タグ + GitHub Release + npm publish（案C）
   # =====================================================================
-  npm-publish:
+  release-npm:
     runs-on: ubuntu-latest
+    # bot 自身の書き戻し push では発火しない（補助防御）。
+    if: github.actor != 'github-actions[bot]'
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.datetag.outputs.tag }}
     steps:
-      - name: Checkout
+      - name: Checkout (full history + tags)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node (with npm registry)
         uses: actions/setup-node@v4
         with:
-          # 本プロジェクトの実行系は現行 LTS の node22 を対象とする。
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
@@ -52,38 +58,107 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq sqlite3
 
-      # 公開前検証 1) version 同期: タグ・package.json・plugin.json の version が一致すること
-      - name: Verify version sync (tag == package.json == plugin.json)
+      # bump 起点を最新 main に取り直す（並行マージで同一 patch を二度採番するのを緩和）。
+      - name: Sync latest main (rebase)
         run: |
           set -e
-          tag="${GITHUB_REF_NAME#v}"
-          bash .agents/scripts/sync-version.sh --check
-          pkg="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "ERROR: タグ($tag) と package.json($pkg) の version が一致しません" >&2
-            exit 1
-          fi
-          echo "OK: tag=$tag, package.json=$pkg で一致"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git pull --rebase origin main
 
-      # 公開前ビルド: bin/agents-md.js は非追跡（.gitignore）の生成物であり、prepack を再導入しない
-      #   （pack の lifecycle script 副作用が node_modules 無しのクリーン clone を壊す地雷を避ける）。
-      #   publish 直前に `npm ci && npm run build` で作業ツリーに bin を生成し、後段の pack 検査
-      #   （必須物 bin あり）と npm publish（作業ツリーを pack）で配布物へ同梱する（使用前 build 方式）。
+      # version bump（patch +1）。git tag は npm に作らせず、後段で日時タグを別途作る。
+      - name: Bump version (patch, no git tag)
+        id: bump
+        run: |
+          set -e
+          npm version patch --no-git-tag-version
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "OK: package.json version を $version へ bump しました（semver patch +1）。"
+
+      # package.json ↔ plugin.json の整合（tag 非依存）。bump 後の version を plugin.json へ反映して検証する。
+      - name: Sync plugin.json version & verify
+        run: |
+          set -e
+          bash .agents/scripts/sync-version.sh --write
+          bash .agents/scripts/sync-version.sh --check
+
+      # 公開前ビルド: 非追跡の bin を作業ツリーへ生成（prepack 代替＝使用前 build 方式）。
       - name: Build CLI bin (replaces prepack)
         run: |
           set -e
           npm ci
           npm run build
-          echo "OK: src -> bin を生成（非追跡の生成物を作業ツリーに用意）"
+          echo "OK: src -> bin を生成しました（非追跡の生成物を作業ツリーに用意）。"
 
-      # 公開前検証 2) 配布物リーク検査: tarball にリポ固有物が漏れず必須物が含まれること
+      # 配布物リーク検査: 改名後 name でも tarball にリポ固有物が漏れず必須物があること（SC-3 と兼ねる）。
       - name: Verify npm pack (leak / required files)
         run: |
           set -e
           bash .agents/scripts/verify-npm-pack.sh
 
+      # bump 結果を main へ書き戻す。既定 GITHUB_TOKEN による push は on:push を再トリガしない（主防御）。
+      # コミットメッセージの [skip ci] と non-fast-forward 時の rebase 再試行は補助防御。
+      - name: Commit & push version bump to main
+        run: |
+          set -e
+          version="${{ steps.bump.outputs.version }}"
+          if git diff --quiet -- package.json package-lock.json .agents/platforms/claude/plugin.json; then
+            echo "変更なし。bump 書き戻しをスキップします。"
+          else
+            git add package.json package-lock.json .agents/platforms/claude/plugin.json
+            git commit -m "chore(release): v${version} [skip ci]"
+            # 書き戻し push が non-fast-forward で reject されたら rebase の上で 1 回再試行する（N-B）。
+            if ! git push origin HEAD:main; then
+              git pull --rebase origin main
+              git push origin HEAD:main
+            fi
+          fi
+
+      # JST 日時タグ vYYYYMMDD.HHMMSS を決定する（ランナー TZ 既定 UTC に依存しない）。
+      # 既存タグと衝突する場合は秒 +1 → サフィックス -2 → -3 の最大 3 段で再試行し、尽きたら失敗させる（N-C）。
+      - name: Decide datetime tag (collision retry, max 3)
+        id: datetag
+        run: |
+          set -e
+          git fetch --tags --quiet
+          base="$(TZ=Asia/Tokyo date +v%Y%m%d.%H%M%S)"
+          candidates=("$base")
+          # 秒 +1 候補
+          plus1="v$(TZ=Asia/Tokyo date -d '+1 second' +%Y%m%d.%H%M%S)"
+          candidates+=("$plus1" "${base}-2" "${base}-3")
+          tag=""
+          for c in "${candidates[@]}"; do
+            if git rev-parse -q --verify "refs/tags/$c" >/dev/null; then
+              echo "タグ $c は既存。次候補へ。"
+              continue
+            fi
+            tag="$c"
+            break
+          done
+          if [ -z "$tag" ]; then
+            echo "ERROR: 日時タグ候補（最大 3 段リトライ）がすべて衝突しました。打ち切ります。" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "OK: 日時タグ $tag を採用します。"
+
+      # GitHub Release 作成（自動生成ノート）。既存判定で二重作成を避ける（冪等）。
+      - name: Create GitHub Release (generate notes)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          tag="${{ steps.datetag.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag は既存。作成をスキップします（冪等）。"
+          else
+            gh release create "$tag" --target "$(git rev-parse HEAD)" --title "$tag" --generate-notes
+            echo "OK: GitHub Release $tag を作成しました（自動ノート）。"
+          fi
+
       # トークンゲート: NPM_TOKEN secret が未設定なら publish せず skip して案内する。
-      # （未設定のまま publish を試みて失敗する／意図せず発火するのを防ぐ）
       - name: Check NPM_TOKEN gate
         id: npm_gate
         env:
@@ -91,27 +166,36 @@ jobs:
         run: |
           if [ -z "${NPM_TOKEN:-}" ]; then
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::NPM_TOKEN secret が未設定のため npm publish を skip します。リポジトリの Secrets に NPM_TOKEN を設定して v* タグを push すると publish されます。"
+            echo "::notice::NPM_TOKEN secret が未設定のため npm publish を skip します。Secrets に NPM_TOKEN を設定して main へ push すると publish されます。"
           else
             echo "present=true" >> "$GITHUB_OUTPUT"
             echo "NPM_TOKEN を検出しました。publish を実行します。"
           fi
 
-      # publish 本体: トークンが存在するときのみ実行する。
-      # publishConfig.access=public のため scoped でも公開 publish 可能。明示に --access public も付与。
-      - name: npm publish (public)
+      # publish 本体（冪等）: 当該 version が既に npm に存在すれば skip（再実行で二重 publish しない）。
+      # unscoped public（agent-skill-chain）でも --access public を明示する。
+      - name: npm publish (public, idempotent)
         if: steps.npm_gate.outputs.present == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -e
-          npm publish --access public
+          name="$(node -p "require('./package.json').name")"
+          version="${{ steps.bump.outputs.version }}"
+          if npm view "${name}@${version}" version >/dev/null 2>&1; then
+            echo "${name}@${version} は既に publish 済み。skip します（冪等）。"
+          else
+            npm publish --access public
+            echo "OK: ${name}@${version} を publish しました。"
+          fi
 
   # =====================================================================
   # (B) marketplace リリース（案A）— 生成物を release/marketplace へ commit
   # =====================================================================
-  release:
+  release-marketplace:
     runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    needs: release-npm
     env:
       RELEASE_BRANCH: release/marketplace
     steps:
@@ -123,8 +207,6 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          # 本プロジェクトの実行系は現行 LTS の node22 を対象とする。
-          # setup-node@v4 は node20 ランタイムで動作する現行メジャー（node16 非推奨警告を出さない）。
           node-version: "22"
 
       - name: Install sqlite3
@@ -132,27 +214,31 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq sqlite3
 
-      # 1) version 同期検証: タグ・package.json・plugin.json の version が一致すること
-      - name: Verify version sync (tag == package.json == plugin.json)
+      # bump 書き戻し後の main を取り直し、最新 version 基準で生成する（並行 bump 後の整合）。
+      - name: Sync latest main (rebase)
         run: |
           set -e
-          tag="${GITHUB_REF_NAME#v}"
-          # package.json / plugin.json 間の一致は単一正本スクリプトで検証
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --rebase origin main
+
+      # package.json ↔ plugin.json の整合（tag 非依存）。tag 起点比較は撤去済み。
+      - name: Verify version sync (package.json == plugin.json)
+        run: |
+          set -e
           bash .agents/scripts/sync-version.sh --check
           pkg="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "ERROR: タグ($tag) と package.json($pkg) の version が一致しません" >&2
-            exit 1
-          fi
-          echo "OK: tag=$tag, package.json=$pkg で一致"
+          echo "OK: package.json=$pkg（plugin.json と一致）。"
 
-      # 2) 正本 .agents/ から Claude（＋cursor）アダプタを生成
+      # 正本 .agents/ から Claude（＋cursor）アダプタを生成する。
       - name: Build adapters (claude, cursor)
         run: |
           set -e
           bash .agents/scripts/build-adapters.sh claude cursor
 
-      # 3) 再生成 diff ゼロ検証: もう一度 build しても生成物が変わらない（決定性）
+      # 再生成 diff ゼロ検証: もう一度 build しても生成物が変わらない（決定性）。
       - name: Re-build determinism check (diff-zero)
         run: |
           set -e
@@ -161,14 +247,14 @@ jobs:
           bash .agents/scripts/build-adapters.sh claude cursor
           diff -r /tmp/adapters_first/claude .adapters/claude
           diff -r /tmp/adapters_first/cursor .adapters/cursor
-          echo "OK: 再生成で生成物の差分なし（決定性）"
+          echo "OK: 再生成で生成物の差分なし（決定性）。"
 
-      # 4) 生成物をリリースブランチへ commit/push（案A）。main には生成物を置かない。
-      #    リリースブランチは「生成物 + marketplace.json」のみを持つ orphan 系の運用とし、
-      #    毎回そのタグ時点の生成物で内容を作り直す（履歴は taglog として残す）。
+      # 生成物をリリースブランチへ commit/push（案A）。main には生成物を置かない。
+      # commit メッセージは bump 後 version を参照する（main push では GITHUB_REF_NAME=main のため使わない）。
       - name: Publish adapters to release branch
         run: |
           set -e
+          version="${{ needs.release-npm.outputs.version }}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -199,7 +285,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "変更なし（同一生成物）。commit をスキップします。"
           else
-            git commit -m "release: ${GITHUB_REF_NAME} adapters (generated from .agents/)"
+            git commit -m "release: v${version} adapters (generated from .agents/) [skip ci]"
           fi
           git push origin "$RELEASE_BRANCH"
           echo "OK: $RELEASE_BRANCH へ生成物を公開しました（marketplace source 解決先）。"

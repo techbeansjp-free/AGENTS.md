@@ -159,9 +159,9 @@ bash .agents/scripts/setup.sh
 
 ```bash
 # 採用先プロジェクトのルートで実行
-npx @techbeansjp-free/agents-md uninstall            # dry-run（削除対象の表示のみ。何も消さない）
-npx @techbeansjp-free/agents-md uninstall --yes      # 実際に配備物を除去する
-npx @techbeansjp-free/agents-md uninstall --purge --yes  # workflow.db 等の証跡も含め完全除去
+npx agent-skill-chain uninstall            # dry-run（削除対象の表示のみ。何も消さない）
+npx agent-skill-chain uninstall --yes      # 実際に配備物を除去する
+npx agent-skill-chain uninstall --purge --yes  # workflow.db 等の証跡も含め完全除去
 ```
 
 | 対象 | 既定 `uninstall` | 説明 |

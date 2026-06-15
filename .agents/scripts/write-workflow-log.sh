@@ -88,11 +88,8 @@ gen_entry_id() {
   printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
 }
 
-# 新スキーマ用: entry_hash = sha256(entry_id|...|issue_id|review_id|...)。ledger/schema.md と同期する。
-gen_entry_hash() {
-  local eid="$1" pid="$2" docid="$3" ts="$4" ar="$5" dr="$6" cmd="$7" iid="$8" rid="$9" ip="${10}" rp="${11}" cf="${12}" sum="${13}" dod="${14}"
-  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s' "$eid" "$pid" "$docid" "$ts" "$ar" "$dr" "$cmd" "$iid" "$rid" "$ip" "$rp" "$cf" "$sum" "$dod" | sha256sum | awk '{print $1}'
-}
+# 新スキーマ用: entry_hash の計算は gen-entry-hash.sh の共有関数 gen_entry_hash を source して使う
+# （再実装禁止・式の二重定義禁止。ledger/schema.md と同期する単一正本）。source は SCRIPT_DIR 確定後に行う。
 
 # changed_files 文字列を JSON 配列に（カンマ・改行区切り対応）
 to_json_array() {
@@ -126,6 +123,10 @@ fi
 # スキーマ正本（ledger/schema.sql）の解決。本スクリプトは .agents/scripts/ 配下にある。
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENTS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# entry_hash 計算の共有正本を source（gen_entry_hash を定義。再実装禁止・N-D）。
+# shellcheck source=gen-entry-hash.sh
+. "$SCRIPT_DIR/gen-entry-hash.sh"
 
 if [[ $# -lt 4 ]]; then
   echo "Usage: AGENT_ROLE=scribe $0 command summary dod_met ts_utc [issue_path] [changed_files]" >&2

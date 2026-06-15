@@ -80,7 +80,23 @@ parse_input() {
     RAW="$(cat 2>/dev/null)"
   fi
 
+  # ROLE 確定（C-4b: AGENT_ROLE の出所制御）。
+  #   scribe を主張する呼び出しは、設定（settings.enforce.json）経由で配線された正規 nonce
+  #   （AGENTS_SCRIBE_NONCE）と、検証用に hook へ渡される期待 nonce（AGENTS_EXPECTED_SCRIBE_NONCE）が
+  #   一致する場合のみ scribe として扱う。手動 export した AGENT_ROLE=scribe は nonce を知らないため
+  #   不一致となり unknown へ降格する（= write-workflow-log.sh 実行を block）。
+  #   nonce 配線が無い環境（消費者が未配線・後方互換）では、従来どおり AGENT_ROLE をそのまま採用する
+  #   （主防御の nonce は opt-in。配線時のみ scribe 偽装を遮断する）。
   ROLE="${AGENT_ROLE:-${CLAUDE_AGENT_ROLE:-unknown}}"
+  if [[ "$ROLE" == "scribe" ]]; then
+    # 期待 nonce が hook へ配線されている場合のみ出所検証を行う（未配線なら検証スキップ＝後方互換）。
+    if [[ -n "${AGENTS_EXPECTED_SCRIBE_NONCE:-}" ]]; then
+      if [[ "${AGENTS_SCRIBE_NONCE:-}" != "${AGENTS_EXPECTED_SCRIBE_NONCE}" ]]; then
+        # nonce 不一致の scribe 主張は出所不明として降格（手動 export 偽装の遮断）。
+        ROLE="unknown"
+      fi
+    fi
+  fi
 
   # JSON 様判定: 先頭が { で tool_name を含む（軽量判定）。
   if [[ -n "$RAW" && "$RAW" == \{* && "$RAW" == *tool_name* ]]; then
@@ -164,23 +180,29 @@ if [[ "$TOOL" == "Bash" ]]; then
         block "compound shell command forbidden"
         ;;
     esac
-    # R5. write-workflow-log.sh は単独実行のみ: 第1トークンを絶対パスに解決し basename が write-workflow-log.sh であることを確認
-    first_token="$(echo "$CMD" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]].*//')"
-    resolved=""
-    if [[ -n "$first_token" ]] && [[ -e "$first_token" ]]; then
+    # R5. write-workflow-log.sh は単独実行のみ（C-4a: 正規化済み絶対パス比較で回避ベクタを塞ぐ）。
+    #   ①第 1 トークンを取り出し、②realpath（無ければ readlink -f、無ければ cd+pwd）で正規化済み絶対パスへ解決、
+    #   ③その実体パスが「許可正本パス＝実行 cwd 起点の配備先 .agents/scripts/write-workflow-log.sh を
+    #     realpath 解決した値」と一致することを要求する。固定文字列はハードコードしない（消費者配備先で誤 block
+    #     しないため・N-E）。相対パス（./...）は realpath 正規化で同一判定へ収れんし、symlink で別実体を
+    #     指す同名スクリプトは実体 realpath 不一致で block、bash -c "..." は第 1 トークンが bash になり不一致で block。
+    norm_path() {
+      local p="$1"
+      [[ -z "$p" ]] && return 0
       if command -v realpath &>/dev/null; then
-        resolved="$(realpath "$first_token" 2>/dev/null)"
+        realpath "$p" 2>/dev/null
       elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
-        resolved="$(readlink -f "$first_token" 2>/dev/null)"
-      else
-        resolved="$(cd "$(dirname "$first_token")" && pwd)/$(basename "$first_token")"
+        readlink -f "$p" 2>/dev/null
+      elif [[ -e "$p" ]]; then
+        ( cd "$(dirname "$p")" 2>/dev/null && printf '%s/%s' "$(pwd)" "$(basename "$p")" )
       fi
-    fi
-    base_name="$(basename "$first_token")"
-    if [[ "$base_name" != "write-workflow-log.sh" ]]; then
-      if [[ -z "$resolved" ]] || [[ "$(basename "$resolved")" != "write-workflow-log.sh" ]]; then
-        block "only direct write-workflow-log.sh execution is allowed"
-      fi
+    }
+    first_token="$(echo "$CMD" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]].*//')"
+    resolved="$(norm_path "$first_token")"
+    # 許可正本パス: 実行 cwd 起点の配備先を realpath 解決（実行時算出・固定文字列禁止）。
+    canonical_wwl="$(norm_path "${AGENTS_ROOT}/scripts/write-workflow-log.sh")"
+    if [[ -z "$resolved" ]] || [[ -z "$canonical_wwl" ]] || [[ "$resolved" != "$canonical_wwl" ]]; then
+      block "only the canonical write-workflow-log.sh (realpath of \$AGENTS_ROOT/scripts/write-workflow-log.sh) may be run directly"
     fi
   fi
 fi

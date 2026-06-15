@@ -54,10 +54,46 @@ flowchart TD
   E --> F
 ```
 
-### write-workflow-log.sh の堅牢化（任意）
+## ツール別強制力マトリクス
 
-- **理想**: 許可する実行は **正規化した絶対パス**（例: プロジェクトルートからの `.agents/scripts/write-workflow-log.sh` の絶対パス）のみに限定すると、`./write-workflow-log.sh` などの偽物実行を防げる。
-- **現状**: コマンド文字列に `write-workflow-log.sh` が含まれるかで判定している。通常運用では十分であるが、厳密化する場合は絶対パス比較・シンボリックリンク解消を検討する。
+**正本はここ（enforcement/README）1 か所**。README.md からは参照のみ（重複させない）。上の「強制の 4 層」が**層**の観点であるのに対し、本節は**ツール別**にどの強制力区分かを示す。`.agents/` を単一の正本とし各 AI ツールへ段階的に配備するが、**強制力はツールごとに異なり、最終保証は CI audit が担う**。
+
+強制力を 3 区分で分類する。
+
+- **runtime 強制あり**: ツール実行前に物理的に違反を止められる（exit 2 等）。
+- **CI のみ**: ツール側では止められず、CI（audit.sh）の事後検知・reject が唯一の強制点。
+- **advisory のみ**: ルール配布・方針適用で「逸脱しにくくする」が、その場で物理ブロックはしない（最終保証は CI）。
+
+| ツール | 強制力区分 | 手段 | 備考 |
+|--------|-----------|------|------|
+| **Claude Code** | runtime 強制あり | PreToolUse hook で exit 2 物理ブロック | ロール・ツール名・対象パス・コマンドが hook に渡る場合に有効（渡らない場合は案内のみ exit 0 → CI 補完）。 |
+| **Cursor** | advisory のみ | `agents-core.mdc` によるルール配布・一部誘導 | ルールで orchestrator の許可ツールを誘導するが物理ブロックではない。 |
+| **Gemini** | advisory のみ | 方針・プロンプト適用（予定） | 配備手段は今後整備。 |
+| **Copilot** | advisory のみ | リポジトリルール適用（予定） | 配備手段は今後整備。 |
+| **Codex** | advisory のみ | `AGENTS.md` 適用（予定） | 配備手段は今後整備。 |
+| **CI（全ツール共通）** | CI のみ（最後の砦） | `audit.sh` による事後検知・push/merge 前 reject | **最終保証はここ**。ツール側の区分によらず、全ツール共通の最終強制層。 |
+
+- **「最終保証は CI audit」**: runtime 強制が効かない／advisory に留まるツールでも、CI audit が証跡・順序・整合性を検証し違反を reject するため、**最後の砦として全ツール共通に効く**。
+- 既存の 4 層表（Layer1〜4）とは観点が異なる（層 vs ツール）。重複させず相互参照する（本節＝ツール別の正本、4 層表＝層別の正本）。
+
+---
+
+### write-workflow-log.sh バイパス耐性（C-4・二防御分離）
+
+書記経路（`write-workflow-log.sh` の単独実行）への偽装を、**パス正規化**と **AGENT_ROLE 出所制御**の 2 つの別防御で塞ぐ。
+
+#### C-4a パス正規化（PreToolUse の R5 判定）
+
+- **判定方式**: コマンド第 1 トークンを `realpath`（無ければ `readlink -f`、無ければ `cd+pwd`）で**正規化済み絶対パス**へ解決し、**許可正本パス＝実行 cwd 起点の配備先 `${AGENTS_ROOT}/scripts/write-workflow-log.sh` を realpath 解決した値**と一致することを要求する。
+- **許可正本パスは固定文字列にしない**（実行時 realpath 解決値）。消費者環境では `write-workflow-log.sh` は `init` 後に消費者リポの `.agents/scripts/` 配下へ配備されるため、開発リポの絶対パス固定では消費者の正当経路を誤 block してしまう。よって実行時算出値と比較する。
+- これにより、相対パス（`./...`）は正規化で同一判定へ収れんし allow、**symlink で別実体を指す同名**は実体 realpath 不一致で block、`bash -c "..."` は第 1 トークンが `bash` になり不一致で block する。R4（複合シェル禁止）・R6（sqlite3 直接禁止）の既存挙動・順序は維持する。
+
+#### C-4b AGENT_ROLE 偽装耐性（env 出所制御・主防御は runtime hook）
+
+- **主防御は runtime hook（PreToolUse）の env 出所制御**である。`AGENT_ROLE=scribe` を主張する呼び出しは、setup/enforce が配線した settings の env 経由で渡る**セッション固有 nonce**（`AGENTS_SCRIBE_NONCE`）が、hook へ配線された期待値（`AGENTS_EXPECTED_SCRIBE_NONCE`）と一致する場合に**のみ** scribe として扱う。nonce 不一致の scribe 主張は `unknown` へ降格し `write-workflow-log.sh` 実行を block する（nonce 未配線環境では後方互換として従来挙動）。
+- **AGENT_ROLE をシェルで手動 `export` して scribe を騙ることは契約違反**である。手動 export した値は nonce を持たないため scribe にはなれない。
+- **CI audit の限界（既知の残存リスク・正直記述）**: `audit.sh` は AGENT_ROLE 偽装 INSERT を**完全には検知できない**。`workflow_log` の行には「誰が AGENT_ROLE を設定したか」の出所情報が無く、`schema.sql` の `CHECK (actor_role='scribe')` / `CHECK (delegated_by_role='orchestrator')` により**全行が必ず `scribe`/`orchestrator` で記録される**ため、偽装者が `AGENT_ROLE=scribe` で INSERT した行も `actor_role='scribe'` となり、audit #12（`actor_role != 'scribe'`）・#13（`delegated_by_role NOT IN('orchestrator')`）は PASS（非検知）になる。「#12/#13/#25 が env 偽装を事後検知する」という主張は現状の audit.sh では成立しない。
+- **CI の位置づけ（補強）**: env 偽装の事後検知の主経路は、上記の runtime hook 出所制御（主防御）と、`agents-md export` で NDJSON を外部（Git append-only・コミット署名）へ保全して突合する**外部証跡補強**である。`agents-md doctor` の hash チェーン検証（`gen_entry_hash` 共有関数で再計算・`prev_hash` の dangling 検出）と `PRAGMA integrity_check` は、逐次改ざん・行削除の**痕跡**を `[NG]` として示すが、DB 丸ごと差し替えには不完全であり、外部証跡で補う（過剰設計化させない `[WARN]`/`[NG]` の痕跡提示に留める）。
 
 ---
 
