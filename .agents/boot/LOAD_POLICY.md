@@ -26,6 +26,8 @@
 | **実装・コメント記述時** | CODE_COMMENT_RULES.md |
 | **レビュー実施時** | REVIEW_DUAL_LENS.md |
 | **サブ委譲のモデル選定時** | MODEL_SELECTION.md |
+| **クローズアウト実施時**（実装完了検知後の欠落工程の補完） | CLOSEOUT.md |
+| **大規模 issue 起票時**（一括起票時のコンテキスト効率） | CONTEXT_EFFICIENCY.md |
 
 ---
 

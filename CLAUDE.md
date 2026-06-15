@@ -13,7 +13,7 @@
 
 サブエージェントが issue 作成タスク（例: issue_create 相当）を受領した場合の標準挙動。
 
-> **コンテキスト効率**: 大規模一括起票時のコンテキスト肥大防止の汎用原理は [.agents/commands/implement-feature.md §issue 起票時のコンテキスト効率（ISSUE_CREATION）](.agents/commands/implement-feature.md#issue-起票時のコンテキスト効率issue_creation) を参照（本ファイルには再記述しない）。
+> **コンテキスト効率**: 大規模一括起票時のコンテキスト肥大防止の汎用原理は [.agents/CONTEXT_EFFICIENCY.md](.agents/CONTEXT_EFFICIENCY.md) を参照（本ファイルには再記述しない）。
 
 - **作成場所の上書き最優先**: `.agents-project/`（本リポでは `.agents-project/自己拡張ワークフロー.md`）に issue 作成場所の上書き定義がある場合は、下記の汎用標準より**それを最優先で参照**する。本リポジトリの単一 issue / サブ issue の正は `docs/maintainer/workflow/...`（`.workflow/` ではない）。
 - **作成先（2パターン）**: 下記は**汎用パッケージ標準（消費者ランタイムの既定）**である。**本リポジトリでは :18 のとおり `.agents-project/自己拡張ワークフロー.md` の上書き（単一 issue＝`docs/maintainer/workflow/<timestamp>_<title>/`、サブ issue＝`docs/maintainer/workflow/{parent}/90_issues/{ディレクトリ名}/`）が最優先**であり、そちらに作成する（定義は重複させず `.agents-project/` を参照）。汎用標準では **単一 issue** は `.workflow/<timestamp>_<title>/`、**サブ issue**（PR 指摘対応等）は `.workflow/{parent}/90_issues/{ディレクトリ名}/` に作成する（例: `{parent}` = `20260314_064719_PR4指摘対応`、`{ディレクトリ名}` = `20260314_PR4_PR指摘対応`）。`<timestamp>` は実行環境の現在時刻（JST）を取得して付与（例: `TZ=Asia/Tokyo date +%Y%m%d_%H%M%S`）。`<title>` は issue 名に相当する短い識別子。

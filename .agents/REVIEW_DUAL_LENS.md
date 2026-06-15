@@ -4,7 +4,7 @@ document_id: "c8b4e2a7-1f63-49d5-8e0a-3b9c7d260f54"
 
 # REVIEW_DUAL_LENS.md — レビューの二観点（敵対的＋肯定的）
 
-**責務**: すべてのレビューに**敵対的観点**（反証・破壊）と**肯定的観点**（must-preserve=不変条件の同定）の**両立**を必須化し、両産物（両リスト）を記載しないレビューを**未完了**と定義する。正本は本ファイル 1 か所。レビュー骨格（REVIEW_RULE.md）には直交追加し既存骨格を改変しない（CORE.md:137）。
+**責務**: すべてのレビューに**敵対的観点**（反証・破壊）と**肯定的観点**（must-preserve=不変条件の同定）の**両立**を必須化し、両産物（両リスト）を記載しないレビューを**未完了**と定義する。正本は本ファイル 1 か所。レビュー骨格（REVIEW_RULE.md）には直交追加し既存骨格を改変しない（CORE.md §境界）。
 
 ---
 
@@ -41,7 +41,7 @@ document_id: "c8b4e2a7-1f63-49d5-8e0a-3b9c7d260f54"
 ## 5 参照
 
 - [REVIEW_RULE.md](REVIEW_RULE.md)（レビュー骨格。本ファイルは直交追加）
-- [commands/implement-feature.md §verify-実経路検証](commands/implement-feature.md#verify-実経路検証)（CLOSEOUT の verify(ii) 実経路検証）
+- [CLOSEOUT.md §verify-実経路検証](CLOSEOUT.md#verify-実経路検証)（CLOSEOUT の verify(ii) 実経路検証）
 - [MODEL_SELECTION.md §5 参照](MODEL_SELECTION.md#5-参照)（レビューの実効性とモデル階層）
 
 ---

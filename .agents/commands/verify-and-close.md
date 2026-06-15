@@ -85,7 +85,7 @@
 
 ## クローズアウト（欠落工程の補完）
 
-クローズ前に、実装完了で起動する不変クローズアウトの**欠落工程**が満たされているかを確認する。既存の重複工程（verify 必須・指摘 0 反復・04_review・90_issues）は**ここに再記述せず**、既存正本（[REVIEW_RULE.md](../REVIEW_RULE.md) / [run_command.md §Constraints](../skills/agent/run_command.md) / [RULES.md](../RULES.md)）へリンクで委譲する（CORE.md:137）。工程の抽象形の正本は [implement-feature.md §クローズアウト（欠落工程の補完）](implement-feature.md#クローズアウト欠落工程の補完) に置く。
+クローズ前に、実装完了で起動する不変クローズアウトの**欠落工程**が満たされているかを確認する。既存の重複工程（verify 必須・指摘 0 反復・04_review・90_issues）は**ここに再記述せず**、既存正本（[REVIEW_RULE.md](../REVIEW_RULE.md) / [run_command.md §Constraints](../skills/agent/run_command.md) / [RULES.md](../RULES.md)）へリンクで委譲する（CORE.md §境界）。工程の抽象形の正本は [CLOSEOUT.md](../CLOSEOUT.md) に置く。
 
 確認する欠落工程（抽象形・詳細は上記正本）:
 

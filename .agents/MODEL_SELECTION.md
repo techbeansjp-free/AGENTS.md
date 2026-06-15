@@ -4,7 +4,7 @@ document_id: "f2d7a163-9c45-4e82-b1a0-6e8f3c95d214"
 
 # MODEL_SELECTION.md — サブ委譲時のモデルティア選定（抽象原則）
 
-**責務**: サブ委譲時の model ティア選定の**抽象原則のみ**を規定する。具体的なティア対応表・モデル名・期限・コスト実測・降格判断は**コアに置かず** `.agents-project/` に委ねる（PF 中立性・CORE.md:137）。
+**責務**: サブ委譲時の model ティア選定の**抽象原則のみ**を規定する。具体的なティア対応表・モデル名・期限・コスト実測・降格判断は**コアに置かず** `.agents-project/` に委ねる（PF 中立性・CORE.md §ルールの優先順位）。
 
 ---
 
@@ -35,7 +35,7 @@ document_id: "f2d7a163-9c45-4e82-b1a0-6e8f3c95d214"
 ## 5 参照
 
 - [REVIEW_DUAL_LENS.md §3 証跡要求](REVIEW_DUAL_LENS.md#3-証跡要求)（レビューの実効性＝二観点の両リストが品質ゲートを支える）
-- [commands/implement-feature.md §クローズアウト（欠落工程の補完）](commands/implement-feature.md#クローズアウト欠落工程の補完)（クローズアウトのモデル階層運用）
+- [CLOSEOUT.md](CLOSEOUT.md)（クローズアウトのモデル階層運用）
 
 ---
 
