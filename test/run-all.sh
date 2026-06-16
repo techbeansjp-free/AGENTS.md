@@ -25,6 +25,7 @@
 #   | test-pretooluse-hook.sh             | bash・git・tar（jq はスクリプト内で任意系統検証） |
 #   | test-write-workflow-log-prevhash.sh | bash・sqlite3 |
 #   | test-write-workflow-log-multidoc.sh | bash・sqlite3 |
+#   | test-write-workflow-log-glob.sh     | bash・sqlite3（to_json_array の glob 展開是正・noglob 回帰・tmp 隔離） |
 #   | test-c4-bypass-resistance.sh        | bash・git・tar（C-4 パス正規化・AGENT_ROLE 出所制御の回帰・tmp 隔離） |
 #   | test-cli-audit-doctor.sh            | bash・git・tar・node・sqlite3（C-5 audit 透過・doctor hash/integrity・tmp 隔離） |
 #   | test-export-ndjson.sh               | bash・git・tar・node・sqlite3・python3（C-7 NDJSON export 検証・tmp 隔離） |
@@ -57,6 +58,7 @@ test-audit|test-audit.sh|bash
 test-pretooluse-hook|test-pretooluse-hook.sh|bash git tar
 test-write-workflow-log-prevhash|test-write-workflow-log-prevhash.sh|bash sqlite3
 test-write-workflow-log-multidoc|test-write-workflow-log-multidoc.sh|bash sqlite3
+test-write-workflow-log-glob|test-write-workflow-log-glob.sh|bash sqlite3
 test-c4-bypass-resistance|test-c4-bypass-resistance.sh|bash git tar
 test-cli-audit-doctor|test-cli-audit-doctor.sh|bash git tar node sqlite3
 test-export-ndjson|test-export-ndjson.sh|bash git tar node sqlite3 python3

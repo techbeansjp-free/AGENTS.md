@@ -17,6 +17,9 @@ node_modules/
 # リポルート直下に誤生成される stray な証跡DB（テスト/誤 cwd 由来の副産物）。
 # 正規の証跡DBは .workflow/workflow.db のみ。ルート直下 workflow.db は追跡しない。
 /workflow.db*
+# scribe nonce（C-4b 出所制御の期待 nonce・enforce on が 0600 で生成するセッション秘匿値）。
+# 配布物に含めない・git 追跡しない（生成物・秘匿値）。実 nonce は .claude/settings.json の env に配線される。
+/.agents/.scribe-nonce
 # 各ツール向けフック/スキルの生成物（setup.sh が自己インストール時に生成）
 /.claude/
 /.cursor/

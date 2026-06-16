@@ -59,7 +59,7 @@ document_id: "b96cf67e-f4b1-46e8-bb9f-831173ae0a61"
 本レビューで自分で実行した結果（自己申告を鵜呑みにしない）。
 
 - **実行日**: 2026-06-16
-- **`bash test/run-all.sh`**: 合計=**11 PASS=11 FAIL=0 SKIP=0**（EXIT 0）。内訳 既存 7（e2e-install-uninstall は 88 サブ PASS を含む）＋ 新規 4（c4-bypass-resistance / cli-audit-doctor / export-ndjson / e2e-claude-hook）。
+- **`bash test/run-all.sh`**: 合計=**12 PASS=12 FAIL=0 SKIP=0**（EXIT 0。初回実装時 11 → セキュリティ是正で `test-write-workflow-log-glob.sh` 追加し 12）。e2e-install-uninstall は 88 サブ PASS を含む。詳細な再実測は §10.4 を参照。
 - **`npm run typecheck`（tsc --noEmit）**: PASS（EXIT 0）。
 - **`npm run build`（tsc && chmod）**: PASS（EXIT 0・bin 再生成）。
 - **`.agents/scripts/verify-npm-pack.sh`**: PASS（EXIT 0・**169 files**・禁止パターン無し・必須正本あり）。
@@ -192,7 +192,12 @@ document_id: "b96cf67e-f4b1-46e8-bb9f-831173ae0a61"
 - **D-6 audit に本 issue 由来の新規 FAIL がないか** → #26 のみ FAIL だが HEAD 既存と裏取り済み（指摘 1）。本 issue 由来の新規 FAIL は無い。「04_review 未更新」は本 04 作成で解消。
 - **D-7 pack に test/docs が混入していないか** → dry-run JSON で 0 件確認。allowlist 内に限定。
 
-**敵対的結論**: must-fix は無し。検出した FAIL は全て既存（#26）または本フェーズで解消（04 未更新）であり、本 issue 実装の退行・設計逸脱・検知力低下は認められない。
+- **D-8 nonce 出所分離が偽装を本当に塞ぐか（HIGH 是正の最重要点）** → クリーン tmp 再現で、是正前に成立した「env 同値偽装」（§10.2 (b)）が **block** されることを実測。正規経路（c）は allow、enforce on/off で nonce 生成・削除を実測。塞がれている。
+- **D-9 GIT_RANGE 検証が正当 range を誤って弾かないか** → `HEAD~1..HEAD`・`main..HEAD` が WARN なしで素通りを実測。`--output=`/`;` 注入は攻撃ファイル未生成。退行なし。
+- **D-10 SHA ピンの射程はスコープ内に限定されているか** → release/self-enforce の `@v4` 残存 0。templates 配下の `@v4` はタスク named 外で意図的に未変更（過剰変更を避けた）。
+- **D-11 `.scribe-nonce` が配布物に漏れないか** → pack dry-run で 0 件・gitignore＋allowlist 二重除外を実測。漏洩なし。
+
+**敵対的結論**: must-fix は無し。検出した FAIL は全て既存（#26）または本フェーズで解消（04 未更新）であり、本 issue 実装・セキュリティ是正の退行・設計逸脱・検知力低下は認められない。セキュリティ是正は HIGH の偽装経路を実測で塞ぎ、MEDIUM/LOW も独立確認で解消。
 
 ### 9.5 must-preserve リスト（不変条件・ラウンド継承＋本レビュー追加）
 
@@ -209,9 +214,12 @@ document_id: "b96cf67e-f4b1-46e8-bb9f-831173ae0a61"
 | 正本のみ編集＋アダプタ再生成（手編集禁止） | build-adapters.sh で再生成・diff 確認 | 維持 |
 | close 不改変 | 本 issue は close 配下を変更せず | 維持 |
 | workflow_log schema 不変 | C-7 は read-only・schema.sql 準拠 | 維持 |
-| gen_entry_hash 式同一（14 フィールド） | doctor で 179 行整合実測 | 維持 |
+| gen_entry_hash 式同一（14 フィールド） | doctor で 179 行整合実測・`git diff gen-entry-hash.sh` 空 | 維持 |
+| 既存 R5 正規化比較・nonce 後方互換（ファイル/期待 nonce 無配線時は従来 allow） | tmp 再現で nonce 無配線時 allow（後方互換）を確認 | 維持 |
+| `.scribe-nonce` 非配布（gitignore＋allowlist） | pack dry-run 0 件・`git check-ignore` | 維持 |
+| release/self-enforce 以外の workflow（ci-check 等）は不変 | git diff 対象外 | 維持 |
 
-**must-preserve 結論**: 全不変条件を維持。退行なし。
+**must-preserve 結論**: 全不変条件を維持。セキュリティ是正は既存ガード（R4/R5/R6・後方互換 nonce・gen_entry_hash 式）を非破壊で拡張し、退行なし。
 
 ### アダプタ再生成の結果
 
@@ -223,12 +231,74 @@ document_id: "b96cf67e-f4b1-46e8-bb9f-831173ae0a61"
 
 ---
 
+## 10. publish 前セキュリティ是正の検証（再 verify-and-close）
+
+publish 直前に実施したセキュリティ脆弱性是正（HIGH 1・MEDIUM 2・LOW 1）の反映を受け、本レビューで**独立に再検証**した結果。是正対象は §02 §3.6.2・SC-11・enforcement/README・claude-hook-e2e.md・03 へ正直化反映済み。証跡 memo: `memo/20260616_093808_publish前セキュリティ是正.md`。
+
+### 10.1 検証サマリ（独立実測・2026-06-16）
+
+| 是正 | 内容 | 独立検証結果 |
+| ---- | ---- | ------------ |
+| **HIGH** | AGENT_ROLE nonce 出所分離（期待 nonce=ファイル `${AGENTS_ROOT}/.scribe-nonce`[0600] 優先・実 nonce=env） | **解消確認**（下記 10.2 でクリーン tmp 再現） |
+| **MEDIUM** | `audit.sh` GIT_RANGE 許可パターン検証（不正は HEAD~1..HEAD へ無害化＋WARN） | **解消確認**（`--output=`/`;` 注入で攻撃ファイル未生成・正当 range 素通り） |
+| **MEDIUM** | `release.yml`/`self-enforce.yml` の action を SHA ピン | **解消確認**（両ファイルの `uses: ...@v4` 残存 **0**） |
+| **LOW** | `write-workflow-log.sh` `to_json_array` に `set -f`（noglob） | **解消確認**（`*`/`?`/`[..]` 文字どおり記録・通常分割は後方互換） |
+
+### 10.2 HIGH 解消の独立再現（クリーン tmp 隔離・`mktemp -d`＋`git archive HEAD`）
+
+`PreToolUse.sh`（働き木の C-4b 版）を `git archive HEAD` 展開ツリーへ重ね、`{tool_name:Bash, command:<canonical write-workflow-log.sh>}` の stdin JSON を投入して再現。
+
+- **(a') 素朴 `export AGENT_ROLE=scribe`（`.scribe-nonce` ファイル存在・実 nonce 未知）** → **block（exit 2）**。ROLE が unknown へ降格し `only scribe may run Bash` で拒否。
+- **(b) env だけ掌握し `AGENTS_SCRIBE_NONCE`=`AGENTS_EXPECTED_SCRIBE_NONCE` を同値に揃える（是正前に偽装成立した経路）** → **block（exit 2）**。期待値は**ファイル出所**から読むため env 同値では一致できず、是正前の偽装が**塞がれた**ことを確認。
+- **(c) 正規（env 実 nonce == ファイル期待 nonce）** → **allow（exit 0）**。正当 scribe 経路は誤 block しない。
+
+**enforce on/off ライフサイクル**（クリーン tmp・ビルド済 bin 使用）:
+
+- `enforce on`: `.agents/.scribe-nonce` を **0600** で生成、`settings.json` env `AGENTS_SCRIBE_NONCE` に**同値リテラル**を配線（別出所・同値・MATCH 実測）、`AGENTS_EXPECTED_SCRIBE_NONCE` は settings に**不在**（false）。再 `on` で nonce が**ローテート**することも確認。
+- `enforce off`: `.scribe-nonce` を**削除**（実測 DELETED）。
+
+**HIGH の限界（正直化の確認）**: env 空間全体＋0600 ファイル読取まで掌握できる相手への完全防御ではない旨が 02 §3.6.2 item2・SC-11 表・enforcement/README・claude-hook-e2e.md に明記され、過剰主張（「nonce を知らないため scribe になれない」）が除去されていることを確認。最終保証は CI audit ＋ 外部証跡（NDJSON export/署名/append-only）。
+
+### 10.3 MEDIUM/LOW/SHA ピンの独立確認
+
+- **GIT_RANGE**: クリーン tmp で `AUDIT_GIT_RANGE='--output=/tmp/PWNED HEAD'` および `'HEAD; touch ...'` を投入 → いずれも WARN で無害化、**攻撃ファイル未生成**。正当 `HEAD~1..HEAD`・`main..HEAD` は WARN なしで素通り。
+- **glob**: `test/test-write-workflow-log-glob.sh` PASS=3（`*`/`?`/`[..]` 非展開・通常カンマ分割の後方互換）。
+- **SHA ピン**: `release.yml`（checkout 2・setup-node 2）・`self-enforce.yml`（checkout 1・setup-node 1）が `@34e11487…#v4.3.1`・`@49933ea5…#v4.4.0` でピン済み。両ファイルの `uses: ...@v4` 残存 **0 件**。`.workflow/templates/github/workflows/`（ci-check/audit/subagent-guard）の `@v4` は**本是正のスコープ外**（タスクで named されたのは release/self-enforce のみ）。
+
+### 10.4 テスト・型・pack の独立再実行（実測）
+
+- **`bash test/run-all.sh`**: 合計=**12 PASS=12 FAIL=0 SKIP=0**（既存 11＋新規 `test-write-workflow-log-glob.sh`）。
+- **`test/test-c4-bypass-resistance.sh`**: PASS=**13**（file 出所一致 allow／env 同値でもファイル不一致 block／ファイル優先 の 3 ケース追加・既存 block 非破壊）。
+- **`test/test-audit.sh`**: PASS=**21**（正当 range 非破壊／`--output=` 無害化／`;` 無害化 の 3 ケース追加）。
+- **`npm run typecheck`**: PASS（EXIT 0）。**`npm run build`**: PASS（bin 再生成）。
+- **`verify-npm-pack.sh`**: PASS（EXIT 0・**169 files**・禁止パターン 0・必須正本あり）。
+- **`npm pack --dry-run --json`**: `.scribe-nonce` **非混入**（grep 0 件）。`.scribe-nonce` は `.gitignore`（`/.agents/.scribe-nonce`）＋ files allowlist で二重除外（`git check-ignore` 確認）。
+
+### 10.5 監査（audit.sh 再実行）
+
+- `bash .agents/enforcement/ci/audit.sh` 実行 → **本 issue 由来の新規 FAIL なし**。FAIL は #26（`src/agents-md.ts` の `.md`/`.mdc` 言及コメント・行 547/574/576/611/624）のみ。
+- **#26 は HEAD 既存の偽陽性**（別 issue「audit残骸チェック偽陽性是正」で起票済み・スコープ外）。当該 FAIL 行は HEAD の同一コメント（行 546/573/575…）であり、セキュリティ是正による +1 行シフトのみ。是正コード（nonce/GIT_RANGE/glob/SHA ピン）は新規 `.md` 参照を追加していない。
+
+### 10.6 アダプタ再生成（正本変更に伴う・gitignore 対象）
+
+- `PreToolUse.sh`・`settings.enforce.json` の変更に伴い `build-adapters.sh`・`setup.sh` を正規フローで実行（手編集なし）。
+- `.adapters/{claude,cursor}/.agents/enforcement/claude/PreToolUse.sh` が正本と **MATCH**。`.adapters/{claude,cursor}/.agents/platforms/claude/settings.enforce.json` も正本と **MATCH**（`AGENTS_EXPECTED_SCRIBE_NONCE` 不在も含め一致）。
+- `setup.sh` で `.claude/hooks/PreToolUse.sh` を最新化し正本と **MATCH**。
+- `.adapters/`・`.claude/` は `git check-ignore` で**いずれも無視**＝**git 影響なし**（`git status` のトラッキング差分は正本ソース・テスト・issue ドキュメントのみ）。
+
+### 10.7 SC-1〜14 カバレッジの維持確認
+
+是正後も §8 の SC-1〜14 カバレッジは**全 OK 維持**。特に **SC-11（バイパス耐性）**は是正で強化（出所分離追加・PASS=13 へ）され、限界記述が正直化された。他 SC（name/pack/release/audit/export 等）は是正の影響を受けず不変。must-preserve（§9.5）も全維持（gen-entry-hash.sh 無変更＝14 フィールド式同一を `git diff` 空で確認）。
+
+---
+
 ## 12. レビュー結果
 
 ### 12.1 総合評価
 
 - **実装品質**: 良好（設計逸脱なし・型/ビルド/テスト全通過）。
-- **テスト品質**: 良好（11/11 PASS・SC 全カバー・回帰テスト追加）。
+- **テスト品質**: 良好（**12/12 PASS**・SC 全カバー・回帰テスト追加。c4-bypass=13・audit=21・glob=3 の独立再実測）。
+- **セキュリティ**: publish 前是正（HIGH/MEDIUM×2/LOW）を独立再現で解消確認。HIGH は是正前の env 同値偽装を実測で block・正規経路 allow・enforce on/off の nonce 生成削除を確認。限界も正直化済み。**publish go（セキュリティ的に問題なし）**。
 - **ドキュメント品質**: 良好（00〜03 と実装の整合・SC↔テスト対応表）。
 - **総合評価**: **クローズ可（合格）**。must-fix なし。
 

@@ -36,8 +36,9 @@
 
 5. AGENT_ROLE 偽装の確認（C-4b）。
 
-   - シェルで手動 `export AGENT_ROLE=scribe` しても、セッション固有 nonce（`AGENTS_SCRIBE_NONCE`）が settings 配線の期待値と一致しない限り、PreToolUse は scribe として扱わず unknown へ降格し、`write-workflow-log.sh` 実行を block する。
-   - 正規の scribe 経路（setup/enforce が配線した env と一致する nonce）でのみ書記実行が allow される。
+   - シェルで手動 `export AGENT_ROLE=scribe` しても、env の実 nonce（`AGENTS_SCRIBE_NONCE`）が**ファイル出所の期待 nonce**（`${AGENTS_ROOT}/.scribe-nonce`・`0600`・`enforce on` が生成）と一致しない限り、PreToolUse は scribe として扱わず unknown へ降格し、`write-workflow-log.sh` 実行を block する。期待値はファイルから読むため、env だけを揃えても（実 nonce と env 期待 nonce を同値にしても）ファイルを書けない限り一致できない。
+   - 正規の scribe 経路（ファイル出所の期待 nonce と一致する env 実 nonce）でのみ書記実行が allow される。
+   - **限界（正直化）**: この出所制御は素朴な手動 export を遮断するに留まり、env 空間全体＋`0600` ファイル読取まで掌握できる相手への完全防御ではない。最終保証は CI audit ＋ 外部証跡が担う。
 
 ## 既知の限界（正直記述）
 

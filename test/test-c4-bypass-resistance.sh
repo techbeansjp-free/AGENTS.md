@@ -8,6 +8,9 @@
 #     固定文字列でなく実行時 realpath 解決値である（消費者配備先で誤 block しない）。
 #   C-4b（AGENT_ROLE 偽装耐性・主防御は hook 側 env 出所制御）: 正規 nonce/settings 配線でのみ scribe を許可。
 #     手動 export した AGENT_ROLE=scribe（nonce 不一致）は unknown 降格＝write-workflow-log.sh 実行を block。
+#     出所分離（HIGH 是正）: 期待 nonce はファイル（${AGENTS_ROOT}/.scribe-nonce・0600）から、実 nonce は env から読む。
+#     env だけを掌握しても、env の実 nonce と env の期待 nonce を同値に揃えても、ファイル出所の期待値と
+#     一致しなければ block する。
 #
 # 方針（破壊禁止・tmp 隔離 必須）:
 #   - mktemp -d ＋ git archive HEAD | tar -x のクリーン clone を作り、作業ツリーの最新 hook をオーバーレイする。
@@ -133,20 +136,27 @@ c4a_bash_c_wrapper_blocked
 # =====================================================================================
 echo "== C-4b: AGENT_ROLE 偽装耐性（手動 export scribe を block・正規 nonce で allow） =="
 
+# nonce ファイル（期待 nonce の正規出所）。0600 で生成し、テスト後に消す。
+NONCE_FILE="$TMP/.agents/.scribe-nonce"
+set_nonce_file() { printf '%s\n' "$1" > "$NONCE_FILE"; chmod 600 "$NONCE_FILE"; }
+clear_nonce_file() { rm -f "$NONCE_FILE"; }
+
 c4b_manual_export_scribe_blocked() {
-  # シナリオ: 期待 nonce が配線されている環境で、nonce を知らない手動 export AGENT_ROLE=scribe は block
-  # Given: hook へ AGENTS_EXPECTED_SCRIBE_NONCE を配線（settings 配線相当）。呼び出し側は nonce を持たない。
+  # シナリオ: env 期待 nonce が配線されている環境で、nonce を知らない手動 export AGENT_ROLE=scribe は block
+  # Given: hook へ AGENTS_EXPECTED_SCRIBE_NONCE を配線（後方互換・ファイル無し）。呼び出し側は実 nonce を持たない。
+  clear_nonce_file
   local json
   json="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$WWL_ABS requirement-discovery x\"}}"
   # When: 正規 nonce なしで scribe を主張（手動 export 相当）
   run_hook "$TMP" scribe "$json" AGENTS_EXPECTED_SCRIBE_NONCE="sess-nonce-123"
   # Then: exit 2（nonce 不一致で unknown 降格 → scribe 以外の Bash は block）
-  assert_eq 2 "$RC" "C-4b: 手動 export scribe（nonce 不一致）は block"
+  assert_eq 2 "$RC" "C-4b: 手動 export scribe（env 期待 nonce・不一致）は block"
 }
 
 c4b_correct_nonce_scribe_allowed() {
-  # シナリオ: 正規 nonce（settings 配線 env と一致）でのみ scribe として allow
+  # シナリオ: 正規 nonce（settings 配線 env と一致）でのみ scribe として allow（後方互換・ファイル無し）
   # Given: 期待 nonce と一致する AGENTS_SCRIBE_NONCE を持つ正規経路
+  clear_nonce_file
   local json
   json="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$WWL_ABS requirement-discovery x\"}}"
   # When: 正規 nonce 一致で scribe として実行
@@ -157,7 +167,8 @@ c4b_correct_nonce_scribe_allowed() {
 
 c4b_no_nonce_wiring_backcompat_allowed() {
   # シナリオ: nonce 未配線（後方互換）では従来どおり AGENT_ROLE をそのまま採用し正規経路は allow
-  # Given: AGENTS_EXPECTED_SCRIBE_NONCE 未設定（消費者が未配線）
+  # Given: AGENTS_EXPECTED_SCRIBE_NONCE 未設定・ファイル無し（消費者が未配線）
+  clear_nonce_file
   local json
   json="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$WWL_ABS requirement-discovery x\"}}"
   # When: nonce 配線なしで scribe として実行
@@ -166,9 +177,54 @@ c4b_no_nonce_wiring_backcompat_allowed() {
   assert_eq 0 "$RC" "C-4b: nonce 未配線（後方互換）では正規経路 allow"
 }
 
+# ---- 出所分離（HIGH 是正）: 期待 nonce はファイル出所・実 nonce は env 出所 ----
+
+c4b_file_nonce_match_allowed() {
+  # シナリオ: ファイル出所の期待 nonce と env の実 nonce が一致すれば scribe として allow（正規経路）
+  # Given: ${AGENTS_ROOT}/.scribe-nonce にファイル nonce、env に同値の AGENTS_SCRIBE_NONCE
+  set_nonce_file "file-secret-XYZ"
+  local json
+  json="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$WWL_ABS requirement-discovery x\"}}"
+  # When: env 実 nonce がファイル期待 nonce と一致
+  run_hook "$TMP" scribe "$json" AGENTS_SCRIBE_NONCE="file-secret-XYZ"
+  # Then: exit 0（ファイル出所の期待値と env 実 nonce が一致）
+  assert_eq 0 "$RC" "C-4b: ファイル出所 nonce と env 実 nonce 一致は allow"
+  clear_nonce_file
+}
+
+c4b_env_only_attacker_blocked_when_file_present() {
+  # シナリオ（出所分離の核心）: env だけ掌握した相手が実 nonce と env 期待 nonce を同値に揃えても、
+  #   期待値はファイルから読まれるため不一致 → block。
+  # Given: ファイル nonce は攻撃者の知らない値。攻撃者は env で AGENTS_SCRIBE_NONCE / AGENTS_EXPECTED_SCRIBE_NONCE を同値に揃える。
+  set_nonce_file "file-secret-REAL"
+  local json
+  json="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$WWL_ABS requirement-discovery x\"}}"
+  # When: 攻撃者の env 同値（ファイル値とは異なる）
+  run_hook "$TMP" scribe "$json" AGENTS_SCRIBE_NONCE="attacker-guess" AGENTS_EXPECTED_SCRIBE_NONCE="attacker-guess"
+  # Then: exit 2（期待値はファイル出所のため env 同値では一致できず unknown 降格 → block）
+  assert_eq 2 "$RC" "C-4b: env 同値でもファイル出所と不一致なら block（出所分離）"
+  clear_nonce_file
+}
+
+c4b_file_takes_precedence_over_env_expected() {
+  # シナリオ: ファイルが存在する場合、env の AGENTS_EXPECTED_SCRIBE_NONCE より **ファイル**が優先される。
+  # Given: ファイル nonce ≠ env 実 nonce だが、env 期待 nonce = env 実 nonce（攻撃者が env を揃えた状態）
+  set_nonce_file "file-secret-REAL"
+  local json
+  json="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$WWL_ABS requirement-discovery x\"}}"
+  # When: env 期待=env 実=ファイルと異なる値
+  run_hook "$TMP" scribe "$json" AGENTS_SCRIBE_NONCE="env-val" AGENTS_EXPECTED_SCRIBE_NONCE="env-val"
+  # Then: exit 2（ファイル出所が優先され不一致 → block）
+  assert_eq 2 "$RC" "C-4b: ファイル出所が env 期待 nonce より優先（block）"
+  clear_nonce_file
+}
+
 c4b_manual_export_scribe_blocked
 c4b_correct_nonce_scribe_allowed
 c4b_no_nonce_wiring_backcompat_allowed
+c4b_file_nonce_match_allowed
+c4b_env_only_attacker_blocked_when_file_present
+c4b_file_takes_precedence_over_env_expected
 
 # =====================================================================================
 echo "== 既存ガード非破壊（R4 複合シェル・R6 sqlite3）が C-4 後も維持 =="

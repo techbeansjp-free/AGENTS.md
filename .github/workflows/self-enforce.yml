@@ -31,13 +31,13 @@ jobs:
   self-enforce:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       # node/npm を使う step（verify-npm-pack.sh / sync-version.sh / E2E）のため現行 LTS を明示する。
       # setup-node@v4 は node20 ランタイムで動く現行メジャー action（node16 非推奨警告を出さない）。
       # 本プロジェクトの実行系は node22 を対象とする（package.json engines.node >=20）。
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
 

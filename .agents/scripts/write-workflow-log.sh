@@ -92,16 +92,24 @@ gen_entry_id() {
 # （再実装禁止・式の二重定義禁止。ledger/schema.md と同期する単一正本）。source は SCRIPT_DIR 確定後に行う。
 
 # changed_files 文字列を JSON 配列に（カンマ・改行区切り対応）
+#   注意: 分割は unquoted 展開（${line//,/ }）で行うため、glob（* ? [...]）が有効だと changed_files に
+#   含まれる * 等がカレントディレクトリの実ファイル名へ展開されてしまう。これを防ぐため、関数内では
+#   noglob（set -f）を適用し、changed_files を文字どおり記録する（後方互換: 通常パスの分割挙動は不変）。
 to_json_array() {
   local raw="${1:-}"
   if [[ -z "$raw" || "$raw" == "[]" ]]; then
     echo "[]"
     return
   fi
+  # noglob を局所適用。呼び出し元の glob 設定は退避し関数終了時に必ず復元する。
+  local _had_noglob=0
+  case "$-" in *f*) _had_noglob=1 ;; esac
+  set -f
   local first=1
   echo -n "["
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
+    # set -f 下なので ${line//,/ } の単語分割で * ? [ がファイル名展開されない（文字どおり）。
     for part in ${line//,/ }; do
       part="${part#"${part%%[![:space:]]*}"}"
       part="${part%"${part##*[![:space:]]}"}"
@@ -111,6 +119,8 @@ to_json_array() {
     done
   done < <(printf '%s\n' "$raw" | tr ',' '\n')
   echo "]"
+  # glob 設定を復元（元々 noglob でなければ解除）。
+  [[ "$_had_noglob" -eq 0 ]] && set +f
 }
 
 if ! command -v sqlite3 &>/dev/null; then

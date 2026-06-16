@@ -90,8 +90,9 @@ flowchart TD
 
 #### C-4b AGENT_ROLE 偽装耐性（env 出所制御・主防御は runtime hook）
 
-- **主防御は runtime hook（PreToolUse）の env 出所制御**である。`AGENT_ROLE=scribe` を主張する呼び出しは、setup/enforce が配線した settings の env 経由で渡る**セッション固有 nonce**（`AGENTS_SCRIBE_NONCE`）が、hook へ配線された期待値（`AGENTS_EXPECTED_SCRIBE_NONCE`）と一致する場合に**のみ** scribe として扱う。nonce 不一致の scribe 主張は `unknown` へ降格し `write-workflow-log.sh` 実行を block する（nonce 未配線環境では後方互換として従来挙動）。
-- **AGENT_ROLE をシェルで手動 `export` して scribe を騙ることは契約違反**である。手動 export した値は nonce を持たないため scribe にはなれない。
+- **主防御は runtime hook（PreToolUse）の env 出所制御**である。`AGENT_ROLE=scribe` を主張する呼び出しは、**実 nonce**（settings の env `AGENTS_SCRIBE_NONCE`・hook 起動時に env 継承）が、**期待 nonce**と一致する場合に**のみ** scribe として扱う。**期待 nonce は実 nonce と別出所**にする: `enforce on` が生成して `${AGENTS_ROOT}/.scribe-nonce` ファイル（`0600`）へ書き、hook は期待値を**このファイルから**読む（ファイルが無い環境のみ env `AGENTS_EXPECTED_SCRIBE_NONCE` にフォールバック＝後方互換）。nonce 不一致の scribe 主張は `unknown` へ降格し `write-workflow-log.sh` 実行を block する（nonce 未配線環境では従来挙動）。
+- **AGENT_ROLE をシェルで手動 `export` して scribe を騙ることは契約違反**である。期待 nonce はファイル（`0600`）出所のため、env だけを掌握した相手が実 nonce と env 期待 nonce を同値に揃えても、ファイル値を書けない限り一致できず block される。
+- **限界（正直化・完全防御ではない）**: この出所制御は**素朴な手動 `export` を遮断**するに留まる。Claude Code の hook env は settings で配線されるため、**env 空間全体（および `0600` ファイルの読取）まで掌握できる相手への完全な防御ではない**。最終保証は CI audit ＋ 外部証跡（NDJSON export / 署名 / append-only）が担う。
 - **CI audit の限界（既知の残存リスク・正直記述）**: `audit.sh` は AGENT_ROLE 偽装 INSERT を**完全には検知できない**。`workflow_log` の行には「誰が AGENT_ROLE を設定したか」の出所情報が無く、`schema.sql` の `CHECK (actor_role='scribe')` / `CHECK (delegated_by_role='orchestrator')` により**全行が必ず `scribe`/`orchestrator` で記録される**ため、偽装者が `AGENT_ROLE=scribe` で INSERT した行も `actor_role='scribe'` となり、audit #12（`actor_role != 'scribe'`）・#13（`delegated_by_role NOT IN('orchestrator')`）は PASS（非検知）になる。「#12/#13/#25 が env 偽装を事後検知する」という主張は現状の audit.sh では成立しない。
 - **CI の位置づけ（補強）**: env 偽装の事後検知の主経路は、上記の runtime hook 出所制御（主防御）と、`agents-md export` で NDJSON を外部（Git append-only・コミット署名）へ保全して突合する**外部証跡補強**である。`agents-md doctor` の hash チェーン検証（`gen_entry_hash` 共有関数で再計算・`prev_hash` の dangling 検出）と `PRAGMA integrity_check` は、逐次改ざん・行削除の**痕跡**を `[NG]` として示すが、DB 丸ごと差し替えには不完全であり、外部証跡で補う（過剰設計化させない `[WARN]`/`[NG]` の痕跡提示に留める）。
 

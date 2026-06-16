@@ -81,17 +81,35 @@ parse_input() {
   fi
 
   # ROLE 確定（C-4b: AGENT_ROLE の出所制御）。
-  #   scribe を主張する呼び出しは、設定（settings.enforce.json）経由で配線された正規 nonce
-  #   （AGENTS_SCRIBE_NONCE）と、検証用に hook へ渡される期待 nonce（AGENTS_EXPECTED_SCRIBE_NONCE）が
-  #   一致する場合のみ scribe として扱う。手動 export した AGENT_ROLE=scribe は nonce を知らないため
-  #   不一致となり unknown へ降格する（= write-workflow-log.sh 実行を block）。
+  #   scribe を主張する呼び出しは、env 配線された実 nonce（AGENTS_SCRIBE_NONCE）が、
+  #   **期待 nonce** と一致する場合のみ scribe として扱う。手動 export した AGENT_ROLE=scribe は
+  #   実 nonce を知らないため不一致となり unknown へ降格する（= write-workflow-log.sh 実行を block）。
+  #
+  #   出所分離（HIGH 是正の核心）: 期待 nonce の出所を **実 nonce（env）と別経路**にする。
+  #     優先順: ① ${AGENTS_ROOT}/.scribe-nonce ファイル（setup/enforce が 0600 で生成）を最優先で読む。
+  #             ② ファイルが無い環境のみ AGENTS_EXPECTED_SCRIBE_NONCE（env・後方互換）を期待値に用いる。
+  #     ファイルが存在する場合、env だけを掌握した相手は AGENTS_SCRIBE_NONCE と
+  #     AGENTS_EXPECTED_SCRIBE_NONCE を同値に揃えても、期待値は **ファイル**から読むため一致できない
+  #     （ファイルは 0600 で書けない）。これにより素朴な手動 export 偽装を遮断する。
+  #   限界（正直化）: env 空間全体＋ファイル読取まで掌握された相手に対する完全防御ではない。
+  #     最終保証は CI audit ＋ 外部証跡（NDJSON export / 署名 / append-only）が担う。
   #   nonce 配線が無い環境（消費者が未配線・後方互換）では、従来どおり AGENT_ROLE をそのまま採用する
   #   （主防御の nonce は opt-in。配線時のみ scribe 偽装を遮断する）。
   ROLE="${AGENT_ROLE:-${CLAUDE_AGENT_ROLE:-unknown}}"
   if [[ "$ROLE" == "scribe" ]]; then
-    # 期待 nonce が hook へ配線されている場合のみ出所検証を行う（未配線なら検証スキップ＝後方互換）。
-    if [[ -n "${AGENTS_EXPECTED_SCRIBE_NONCE:-}" ]]; then
-      if [[ "${AGENTS_SCRIBE_NONCE:-}" != "${AGENTS_EXPECTED_SCRIBE_NONCE}" ]]; then
+    # 期待 nonce を **実 nonce と別出所**から確定する。
+    #   ① ファイル出所（最優先・env と独立）: ${AGENTS_ROOT}/.scribe-nonce を読む。
+    #   ② フォールバック（後方互換）: ファイルが無い場合のみ env の期待 nonce を用いる。
+    expected_nonce=""
+    nonce_file="${AGENTS_ROOT:-.agents}/.scribe-nonce"
+    if [[ -f "$nonce_file" ]]; then
+      # ファイル先頭行のみ採用（改行・余白を除去）。読めなければ空のまま（検証スキップ＝後方互換）。
+      expected_nonce="$(head -n1 "$nonce_file" 2>/dev/null | tr -d '[:space:]')"
+    else
+      expected_nonce="${AGENTS_EXPECTED_SCRIBE_NONCE:-}"
+    fi
+    if [[ -n "$expected_nonce" ]]; then
+      if [[ "${AGENTS_SCRIBE_NONCE:-}" != "$expected_nonce" ]]; then
         # nonce 不一致の scribe 主張は出所不明として降格（手動 export 偽装の遮断）。
         ROLE="unknown"
       fi

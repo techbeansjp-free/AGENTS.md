@@ -12,7 +12,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "AGENTS_ROOT=\"${CLAUDE_PROJECT_DIR}/.agents\" AGENT_ROLE=\"${AGENT_ROLE:-orchestrator}\" AGENTS_EXPECTED_SCRIBE_NONCE=\"${AGENTS_SCRIBE_NONCE:-}\" bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/PreToolUse.sh\""
+            "command": "AGENTS_ROOT=\"${CLAUDE_PROJECT_DIR}/.agents\" AGENT_ROLE=\"${AGENT_ROLE:-orchestrator}\" bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/PreToolUse.sh\""
           }
         ]
       }

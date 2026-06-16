@@ -16,6 +16,7 @@
 //   help / (既定)    使い方を表示
 
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   existsSync,
   readFileSync,
@@ -798,6 +799,21 @@ function enforceOn(
     next.env[k] = v;
   }
 
+  // C-4b 出所分離（HIGH 是正）: scribe 出所制御の **実 nonce** と **期待 nonce** を別出所にする。
+  //   - 実 nonce: settings.json の env(AGENTS_SCRIBE_NONCE) にリテラル値として配線する（hook 起動時に env 継承）。
+  //   - 期待 nonce: ${projectRoot}/.agents/.scribe-nonce ファイル（0600）に同値を書く。hook は期待値をこのファイルから読む。
+  //   env だけを掌握した相手は env の AGENTS_SCRIBE_NONCE を任意に変えられるが、期待値はファイルから読まれるため
+  //   一致させられない（ファイルは 0600 で書けない）。enforce のたびに新しい nonce へローテートする。
+  const scribeNonce = randomBytes(24).toString("hex");
+  next.env.AGENTS_SCRIBE_NONCE = scribeNonce;
+  const nonceFile = join(projectRoot, ".agents", ".scribe-nonce");
+  try {
+    writeFileSync(nonceFile, scribeNonce + "\n", { mode: 0o600 });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`警告: scribe nonce ファイルの書き込みに失敗しました: ${nonceFile}: ${msg}`);
+  }
+
   // hooks: 既存 hooks を保持しつつ、各イベントに managed エントリを（重複なく）追加する。
   const nextHooks: Record<string, unknown> = { ...(settings.hooks || {}) };
   for (const event of HOOK_EVENTS) {
@@ -836,11 +852,20 @@ function enforceOn(
 
 // enforce off: managed env キーと managed hook エントリのみを除去する（ユーザー値は保持）。
 function enforceOff(
-  _projectRoot: string,
+  projectRoot: string,
   settingsPath: string,
   settings: Settings,
   template: EnforceTemplate
 ): number {
+  // C-4b 出所分離: enforce off では scribe nonce ファイルも除去する（実 nonce env はテンプレ env キーとして除去される）。
+  const nonceFile = join(projectRoot, ".agents", ".scribe-nonce");
+  if (existsSync(nonceFile)) {
+    try {
+      rmSync(nonceFile);
+    } catch {
+      /* 失敗しても致命ではない（settings の除去を優先）。 */
+    }
+  }
   if (!existsSync(settingsPath)) {
     console.log(`enforce: ${settingsPath} がありません。既に off です。`);
     return 0;

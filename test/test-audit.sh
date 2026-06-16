@@ -263,6 +263,62 @@ else
   ng "C-edge 未閉フェンス以降の実マーカを見逃した（偽陰性）: $EDGE_OUT"
 fi
 
+# =====================================================================================
+# GIT_RANGE インジェクション是正（MEDIUM）: 不正 range の無害化・正当 range の非破壊
+# =====================================================================================
+echo "== GIT_RANGE 検証（git オプション注入の無害化・正当 range 非破壊） =="
+
+# git tree を作るヘルパー（最小 issue ツリー＋初期コミット 2 つ）。
+make_git_tree() {
+  local tmp
+  tmp="$(make_min_tree)"
+  ( cd "$tmp" && git init -q && git config user.email t@e.x && git config user.name t \
+      && git add -A && git commit -qm init >/dev/null \
+      && echo x > marker.txt && git add -A && git commit -qm c2 >/dev/null )
+  printf '%s\n' "$tmp"
+}
+
+if command -v git >/dev/null 2>&1; then
+  # シナリオ: 正当な GIT_RANGE（HEAD~1..HEAD）は従来どおり動き exit 0（非破壊）
+  # Given: git tree、AUDIT_GIT_RANGE=HEAD~1..HEAD（正当）
+  # When:  audit.sh を実行する
+  # Then:  exit 0（正当 range は素通り・WARN 無し）
+  GR_TREE="$(make_git_tree)"
+  GR_OUT="$(AUDIT_GIT_RANGE='HEAD~1..HEAD' bash "$AUDIT" "$GR_TREE" 2>&1)"; GR_RC=$?
+  if [[ $GR_RC -eq 0 ]] && ! grep -q 'GIT_RANGE が不正' <<< "$GR_OUT"; then
+    ok "GIT_RANGE: 正当 range は非破壊（exit 0・WARN 無し）"
+  else
+    ng "GIT_RANGE: 正当 range が壊れた（rc=$GR_RC）: $GR_OUT"
+  fi
+
+  # シナリオ: git オプション注入（--output=）を含む GIT_RANGE は無害化され、攻撃ファイルが生成されない
+  # Given: git tree、AUDIT_GIT_RANGE="HEAD --output=<file>"（注入）
+  # When:  audit.sh を実行する
+  # Then:  WARN を出して既定へ無害化し、--output 先のファイルが作られない（git に option が渡らない）
+  GR_TREE2="$(make_git_tree)"
+  PWNED="$GR_TREE2/PWNED.txt"
+  GR_OUT2="$(AUDIT_GIT_RANGE="HEAD --output=$PWNED" bash "$AUDIT" "$GR_TREE2" 2>&1)"
+  if grep -q 'GIT_RANGE が不正' <<< "$GR_OUT2" && [[ ! -f "$PWNED" ]]; then
+    ok "GIT_RANGE: --output 注入は無害化（WARN・攻撃ファイル未生成）"
+  else
+    ng "GIT_RANGE: --output 注入が無害化されない（PWNED 存在=$( [[ -f "$PWNED" ]] && echo yes || echo no )）: $GR_OUT2"
+  fi
+
+  # シナリオ: シェルメタ文字（;）を含む GIT_RANGE も無害化される（単語分割・任意引数の遮断）
+  # Given: AUDIT_GIT_RANGE="HEAD; echo INJECTED"
+  # When:  audit.sh を実行する
+  # Then:  WARN を出して既定へ無害化（注入文字列は range として扱われない）
+  GR_TREE3="$(make_git_tree)"
+  GR_OUT3="$(AUDIT_GIT_RANGE='HEAD; echo INJECTED' bash "$AUDIT" "$GR_TREE3" 2>&1)"; GR_RC3=$?
+  if grep -q 'GIT_RANGE が不正' <<< "$GR_OUT3" && [[ $GR_RC3 -ne 2 || $GR_RC3 -eq 0 ]]; then
+    ok "GIT_RANGE: メタ文字（;）注入は無害化（WARN）"
+  else
+    ng "GIT_RANGE: メタ文字注入が無害化されない: $GR_OUT3"
+  fi
+else
+  ok "GIT_RANGE: git 不在のため SKIP（環境依存）"
+fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then
