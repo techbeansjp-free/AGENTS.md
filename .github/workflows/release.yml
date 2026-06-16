@@ -1,7 +1,23 @@
-# release.yml — main マージ自動リリース（案C）＋ marketplace 生成物公開
+# release.yml — 自動リリース（案C）＋ marketplace 生成物公開【現在 dormant＝無効化中】
 #
-# 方針（npm 公開整備 issue 02_設計 §3.2 / 03_実装計画 §2.2）:
-#   - トリガは「main への push」。手動タグ運用は廃止し、main マージを契機に自動でリリースする。
+# ┌─ 現状（dormant）─────────────────────────────────────────────────────────┐
+# │ npm 公開は今後の課題として保留中であり、自動リリースは無効化（dormant）している。 │
+# │ on: から push: branches:[main] を撤去し workflow_dispatch（手動）のみとし、       │
+# │ 両 job（release-npm / release-marketplace）の if: に RELEASE_ENABLED ゲートを     │
+# │ 付与した。main マージ・タグ push のいずれでも自動発火（version bump / 日時タグ /  │
+# │ GitHub Release / npm publish / marketplace 公開）は起きない。                     │
+# │ 案C の step 本体・action の SHA ピン・無限ループ防止策・NPM_TOKEN ゲートは資産   │
+# │ として保持（削除でなく可逆な無効化）。経緯は自己拡張 issue                        │
+# │ 20260616_144601_npm公開を今後の課題化_自動リリース現状無効化 を参照。            │
+# │                                                                                  │
+# │ 再開手順（最小 2 手）:                                                            │
+# │   ① on: に push: branches:[main] を戻す（下記 on: の NOTE 参照）                  │
+# │   ② リポジトリ変数 RELEASE_ENABLED=true を設定（Repository variables）            │
+# │ （配布方法の確定・NPM_TOKEN 登録を含む詳細は docs/maintainer/RELEASE.md §5）      │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# 方針（案C・再開後に有効となる本来の動作）:
+#   - 再開後のトリガは「main への push」。手動タグ運用は廃止し、main マージを契機に自動でリリースする。
 #   - version は bump 後の package.json:version を単一の真実源とする（semver patch +1）。
 #   - 日時タグ vYYYYMMDD.HHMMSS は「リリースの目印」であり semver とは独立（タグ==package.json の不変条件は撤去）。
 #   - 正本リポ（main）には生成物 .adapters/ を一切置かない（/.adapters/ は gitignore のまま）。
@@ -21,9 +37,11 @@ permissions:
   contents: write
 
 on:
-  push:
-    branches:
-      - main
+  # NOTE(dormant): main への自動リリースは現在無効化（dormant）。
+  # 自動発火（version bump / 日時タグ / GitHub Release / npm publish）を止めるため
+  # push: branches:[main] を撤去し、手動 workflow_dispatch のみ残す。
+  # 再開時は push: branches:[main] を戻す（ファイル先頭の再開手順 参照）。
+  workflow_dispatch:
 
 # release ジョブ群を直列化し、同秒衝突・並行 bump の競合確率を下げる。
 concurrency:
@@ -37,7 +55,8 @@ jobs:
   release-npm:
     runs-on: ubuntu-latest
     # bot 自身の書き戻し push では発火しない（補助防御）。
-    if: github.actor != 'github-actions[bot]'
+    # dormant 補助防御: RELEASE_ENABLED が 'true' のときのみ実行（未設定/その他は skip）。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
     outputs:
       version: ${{ steps.bump.outputs.version }}
       tag: ${{ steps.datetag.outputs.tag }}
@@ -194,7 +213,8 @@ jobs:
   # =====================================================================
   release-marketplace:
     runs-on: ubuntu-latest
-    if: github.actor != 'github-actions[bot]'
+    # dormant 補助防御: RELEASE_ENABLED が 'true' のときのみ実行（未設定/その他は skip）。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
     needs: release-npm
     env:
       RELEASE_BRANCH: release/marketplace

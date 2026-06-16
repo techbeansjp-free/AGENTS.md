@@ -142,15 +142,18 @@ Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コ�
 
 #### リリース手順（メンテナ向け）
 
-> **詳細手順の正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)。** 前提確認 → version 同期 → pack 同梱物検査 → `npm publish --dry-run` →（ユーザー承認後）タグ push による CI publish の各ステップ（実行コマンドと期待結果つき）はそちらを参照する。本節は要約のみとし詳細を重複させない。
+> **現在 npm 公開は今後の課題として保留中であり、自動リリースは無効化（dormant）されている。** 自動リリース（[.github/workflows/release.yml](.github/workflows/release.yml)）は main マージ・タグ push のいずれでも発火せず、自動 publish/marketplace 公開は起きない。**再開手順（最小 2 手＋前提）の正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md) §5** を参照する（本節は要約のみとし詳細を重複させない）。
 
-要約: publish と marketplace 公開は **`vX.Y.Z` タグの push** で CI（[.github/workflows/release.yml](.github/workflows/release.yml)）が自動実行する。
+要約（再開後の発火方式）: 再開後は publish と marketplace 公開を **main への push（マージ）** で CI（[.github/workflows/release.yml](.github/workflows/release.yml)）が自動実行する（タグ push が発火条件ではない）。現状は dormant のため、main マージでもタグ push でも発火しない。
 
-1. `package.json` と `plugin.json` の version を揃える（`bash .agents/scripts/sync-version.sh --write`）。
-2. 公開前検証（`verify-npm-pack.sh` の pack 同梱物検査・`npm publish --dry-run`）を通す。
-3. version と一致するタグを push する（例: `git tag v0.1.0 && git push origin v0.1.0`）。CI が version 同期検証・リーク検査・public publish と marketplace 公開（`release/marketplace`）を行う。
+再開手順の概要（詳細は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md) §5）:
 
-> **要 secret**: npm publish は `NPM_TOKEN` secret が必要。未設定の場合 publish step は skip される（marketplace 公開は影響を受けない）。実 publish を発火させるには、リポジトリの Secrets に `NPM_TOKEN`（npmjs の Automation トークン）を設定してから `v*` タグを push する。実 publish はユーザー承認前提（詳細は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)）。
+1. 配布方法を確定する。
+2. （npm publish を行う場合）リポジトリの Secrets に `NPM_TOKEN`（npmjs の Automation トークン）を設定する。
+3. `release.yml` の `on:` に `push: branches:[main]` を戻す。
+4. リポジトリ変数 `RELEASE_ENABLED=true` を設定する。
+
+> **要 secret**: 再開後も npm publish は `NPM_TOKEN` secret が必要。未設定の場合 publish step は skip される（marketplace 公開は影響を受けない）。実 publish はユーザー承認前提（詳細は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)）。
 
 ### 3. ローカル配備（リポを直接置く場合）
 

@@ -4,7 +4,7 @@
 
 > **重要（実 publish はユーザー承認前提）**
 >
-> - **実 publish（`npm publish` 本実行・`v*` タグ push による CI publish 発火）は、必ずユーザーの明示承認を得てから行う。** 承認なしに publish しない。
+> - **現在 自動リリースは無効化（dormant）されており、実 publish は発火しない**（再開手順は §5）。再開後の実 publish（`npm publish` 本実行・再開後の main push 起点の CI publish 発火）は、必ずユーザーの明示承認を得てから行う。承認なしに publish しない。
 > - 実 publish には **`NPM_TOKEN`（npmjs の Automation トークン）が必須**。CI の Secrets に設定したときのみ publish step が発火する。ローカルから実 publish しない（publish は CI 上でのみ行う）。
 > - **検証フェーズ（pack / `--dry-run` / CLI 起動確認）では実 publish を行わない。** 検証はすべて read-only / dry-run であり、配布物・npm レジストリを書き換えない。
 
@@ -52,7 +52,7 @@ bash .agents/scripts/sync-version.sh --write   # package.json の version を pl
 
 **期待結果**: `--check` が `[sync-version] OK: version 一致（X.Y.Z）` を出し exit 0。
 
-> CI（[`.github/workflows/release.yml`](../../.github/workflows/release.yml)）は push されたタグ `vX.Y.Z`・`package.json`・`plugin.json` の version 三者一致を検証する。タグと version が食い違うと publish/marketplace の両ジョブが失敗する。
+> CI（[`.github/workflows/release.yml`](../../.github/workflows/release.yml)）は再開後、bump 後の `package.json`・`plugin.json` の version 一致を検証する（タグ起点の三者一致比較は撤去済み。日時タグはリリースの目印であり semver と独立）。**現在は dormant のため発火しない**（§5 参照）。
 
 ---
 
@@ -118,26 +118,29 @@ rm -rf "$tmp"                                       # 後始末（必須）
 
 ---
 
-## 5. （ユーザー承認後）実 publish — タグ push による CI publish
+## 5. 自動リリースの現状（dormant）と再開手順
 
-> **このステップはユーザーの明示承認を得てから実施する。** §1〜§4 がすべて期待どおりであることを前提とする。
+> **現在 npm 公開は今後の課題として保留中であり、自動リリースは無効化（dormant）されている。** 自動リリース（[`.github/workflows/release.yml`](../../.github/workflows/release.yml)）は `on:` から `push: branches:[main]` を撤去し手動 `workflow_dispatch` のみとし、両 job（`release-npm`/`release-marketplace`）の `if:` に `vars.RELEASE_ENABLED == 'true'` ゲートを付与している。**main マージ・タグ push のいずれでも自動 publish/marketplace 公開は発火しない。** 案C の step 本体・SHA ピン・無限ループ防止策・`NPM_TOKEN` ゲートは資産として保持しており（削除でなく可逆な無効化）、本ドキュメントが再開手順の詳細正本である（README は要約＋リンク）。
 
-実 publish と marketplace 公開はローカルからは行わず、**`vX.Y.Z` タグの push** をトリガに CI（[`.github/workflows/release.yml`](../../.github/workflows/release.yml)）が実行する。
+> **このステップはユーザーの明示承認を得てから実施する。** §1〜§4 がすべて期待どおりであることを前提とする。再開後の実 publish と marketplace 公開はローカルからは行わず、**main への push（マージ）** をトリガに CI（[`.github/workflows/release.yml`](../../.github/workflows/release.yml)）が実行する（タグ push は発火条件ではない。日時タグはリリース後に CI が作る目印）。
 
-1. **前提（事前確認）**: §1〜§4 がすべて合格していること。リポジトリ Secrets に `NPM_TOKEN`（npmjs の Automation トークン）が設定されていること。未設定だと publish step は skip される（marketplace 公開は影響を受けない）。
-2. **version 同期**: `bash .agents/scripts/sync-version.sh --write` で `package.json`/`plugin.json` を揃え、コミットする。
-3. **タグ push**: version と一致するタグを push する。
+### 5.1. 再開手順（最小 2 手＋前提）
 
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+1. **配布方法の確定**: 公開の配布方法（unscoped public 等）を確定する。
+2. **`NPM_TOKEN` 登録（npm publish を行う場合）**: リポジトリ Secrets に `NPM_TOKEN`（npmjs の Automation トークン）を設定する。未設定だと publish step は skip される（marketplace 公開は影響を受けない）。
+3. **起点の復活**: `release.yml` の `on:` に `push: branches:[main]` を戻す（dormant コメントを撤去し `workflow_dispatch` と併存させてよい）。
+4. **ゲートの開放**: リポジトリ変数 `RELEASE_ENABLED=true` を設定する（Repository variables）。未設定/その他の値では両 job が skip されたままになる。
 
-4. **CI が実行する内容**（[`release.yml`](../../.github/workflows/release.yml)）:
-   - **npm publish ジョブ**: version 三者一致検証（タグ＝package.json＝plugin.json）→ `npm ci && npm run build`（非追跡 bin を作業ツリーに生成。`prepack` の代替＝使用前 build）→ `verify-npm-pack.sh`（リーク/必須物検査。必須物 `bin/agents-md.js` を確認）→ `NPM_TOKEN` ゲート → `npm publish --access public`。`NPM_TOKEN` 未設定なら publish を skip。
-   - **marketplace ジョブ**: 正本 `.agents/` から `build-adapters.sh` で生成物を build し、決定性（再生成 diff ゼロ）を検証して `release/marketplace` ブランチへ commit/push する。
+> 手順 3・4 の**両方**を満たしたときのみ自動リリースが再開する（起点除去＋ゲートの多層防御）。片方だけでは発火しない。
 
-> push（タグ push を含む）は高リスク操作であり、ユーザーが明示したときのみ行う。
+### 5.2. 再開後に CI が実行する内容（[`release.yml`](../../.github/workflows/release.yml)）
+
+main への push（マージ）を契機に、`version` 同期検証 → `bash .agents/scripts/sync-version.sh --write` 相当の bump → 公開前検証 → 実 publish/marketplace 公開の順で進む。
+
+- **npm publish ジョブ**: bump 後 version の `package.json`/`plugin.json` 一致検証 → `npm ci && npm run build`（非追跡 bin を作業ツリーに生成。`prepack` の代替＝使用前 build）→ `verify-npm-pack.sh`（リーク/必須物検査。必須物 `bin/agents-md.js` を確認）→ `NPM_TOKEN` ゲート → `npm publish --access public`。`NPM_TOKEN` 未設定なら publish を skip。
+- **marketplace ジョブ**: 正本 `.agents/` から `build-adapters.sh` で生成物を build し、決定性（再生成 diff ゼロ）を検証して `release/marketplace` ブランチへ commit/push する。
+
+> push（main への push を含む）は高リスク操作であり、ユーザーが明示したときのみ行う。実 publish は CI の `NPM_TOKEN` 設定時に限られ、ローカルからは実 publish しない（§冒頭の安全弁）。
 
 ---
 
@@ -145,7 +148,7 @@ rm -rf "$tmp"                                       # 後始末（必須）
 
 - [`.agents/scripts/sync-version.sh`](../../.agents/scripts/sync-version.sh) — version 同期（正本）
 - [`.agents/scripts/verify-npm-pack.sh`](../../.agents/scripts/verify-npm-pack.sh) — pack 同梱物検査（CI/ローカル単一正本）
-- [`.github/workflows/release.yml`](../../.github/workflows/release.yml) — タグ push による publish/marketplace CI
+- [`.github/workflows/release.yml`](../../.github/workflows/release.yml) — main への push（マージ）起点の publish/marketplace CI（**現在 dormant＝無効化中**。再開手順は §5）
 - [`README.md`](../../README.md) §リリース手順（メンテナ向け） — 入口リンク・要約
 - [`package.json`](../../package.json)（`files`・`bin`・`publishConfig.access=public`）、[`LICENSE`](../../LICENSE)（MIT）、[`bin/agents-md.js`](../../bin/agents-md.js)
 - [`docs/maintainer/adapters.md`](./adapters.md) — アダプタ生成方式（marketplace 生成物の解説）
