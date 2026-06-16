@@ -146,7 +146,8 @@ judge_cobertura() {
 # kcov の存在を確認する。無ければ SKIP（exit 2）案内を出す。
 ensure_kcov() {
   if ! command -v kcov >/dev/null 2>&1; then
-    echo "[SKIP] kcov が見つかりません（必須依存欠如）。CI では apt-get install -y kcov で導入されます。" >&2
+    echo "[SKIP] kcov が見つかりません（必須依存欠如）。CI では best-effort で apt 導入を試みます" >&2
+    echo "       （ubuntu-latest=noble は kcov の apt 提供が無いため導入できず、計測は SKIP されます）。" >&2
     echo "       ローカル任意実行ではインストール不要・クラッシュしません（exit 2）。" >&2
     return 1
   fi
