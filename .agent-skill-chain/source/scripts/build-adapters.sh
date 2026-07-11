@@ -114,8 +114,9 @@ adapter_claude() {
   echo "[build] 正本:       $AGENTS"
   echo "[build] 出力先:     $out"
 
-  # 生成パートを掃除（.adapters/claude/ は 100% 生成物なので .claude-plugin/ も含めて再生成）
-  rm -rf "$out/skills" "$out/commands" "$out/agents" "$out/hooks" "$out/.agent-skill-chain" "$out/.claude-plugin"
+  # 生成パートを掃除（.adapters/claude/ は 100% 生成物なので出力先ディレクトリごと丸ごと再作成する。
+  # 個別パスの列挙方式は、旧パス名（統合ネスト前の .agents/ 等）の削除漏れ・残骸累積を招くため採用しない）。
+  rm -rf "$out"
   mkdir -p "$out/skills" "$out/commands" "$out/agents" "$out/hooks"
 
   # 0) plugin.json を正本からコピー生成（手書き正本: .agent-skill-chain/source/platforms/claude/plugin.json）
@@ -186,8 +187,9 @@ adapter_cursor() {
   echo "[build] 正本:       $AGENTS"
   echo "[build] 出力先:     $out"
 
-  # 生成パートを掃除（.adapters/cursor/ は 100% 生成物）
-  rm -rf "$out/.cursor" "$out/.agent-skill-chain"
+  # 生成パートを掃除（.adapters/cursor/ は 100% 生成物なので出力先ディレクトリごと丸ごと再作成する。
+  # 個別パスの列挙方式は、旧パス名（統合ネスト前の .agents/ 等）の削除漏れ・残骸累積を招くため採用しない）。
+  rm -rf "$out"
   mkdir -p "$out/.cursor/rules" "$out/.cursor/skills"
 
   # 0) ルールを正本からコピー生成（手書き正本: .agent-skill-chain/source/enforcement/cursor/agents-core.mdc）

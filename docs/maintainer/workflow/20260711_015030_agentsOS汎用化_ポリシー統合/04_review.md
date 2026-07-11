@@ -387,4 +387,20 @@ document_id: "ad96201a-9028-4ef2-b955-97f44c26a34c"
   - `writeReadmeWarning` ⇔ `write_readme_warning`: 生成 `README.md` のバイト一致（文言ドリフト検知）を確認。
 - **TS 側の最小変更**: 上記 5 関数を `export`（CLI の public interface・コマンド体系は不変）。テストから import できるよう、エントリポイント `process.exit(main(...))` を es-main 判定（argv[1] と本モジュール実体パスの realpath 一致）でガードし、**直接起動時のみ main を実行・import 時は副作用なし**とした（npm bin の symlink 経由でも直接起動を正しく判定）。5 関数と bash 側対応関数のコメントに「パリティ試験 `test/test-package-manifest-parity.sh` で同期を検証」旨を追記（`ownedSkillNames` のミラーコメントと同型）。
 - **検証結果（実測）**: `npm run typecheck` PASS・`npm run build` PASS。新テスト単体 28 アサーション全 PASS。`npm test` 全体 **3 回連続 13/13 PASS**（新テストを `run-all.sh` の TESTS 一覧・bin 前置ビルド case に登録）。
+
+## T8-指摘3是正（build-adapters.sh の旧パス残骸クリーンアップ漏れ）
+
+**是正日**: 2026-07-11 ／ **evidence_source: observed_runtime**
+
+ストーリー8 完了後の `.adapters/` 再生成作業で、`.agent-skill-chain/source/scripts/build-adapters.sh` の `adapter_claude()`・`adapter_cursor()` 内クリーンアップ（生成物再作成前の `rm -rf`）が、統合ネスト以前の旧パス `.agents/`（ドット付き・6/14〜16 頃生成）を対象に含んでいなかったため、`.adapters/claude/.agents/`・`.adapters/cursor/.agents/` が再ビルド後も残骸として残り続ける不具合を発見・是正した（`.adapters/` は `.gitignore` 対象の生成物であり、本不具合はリポジトリの追跡ファイルには影響しない）。
+
+- **是正方針**: 個別パスの列挙にホワイトリスト追加する方式ではなく、`rm -rf "$out"`（出力先ディレクトリ丸ごと再作成）方式へ変更した。理由: `.adapters/claude/`・`.adapters/cursor/` 直下は既存コメントにも明記の通り 100% 生成物であり、実測（`ls -la`）でも直下に手動管理ファイルの混在は無い（全サブディレクトリおよび `GENERATED.md` はスクリプトが再生成する）。個別列挙方式のままでは今回と同種（パス名変更・リネームへの追従漏れ）の不具合が将来も再発しうるため、ディレクトリ丸ごと再作成方式の方が構造的に望ましいと判断した。
+- **検証（実測）**:
+  - 修正前: `.adapters/claude/.agents/`・`.adapters/cursor/.agents/`（旧パス残骸、18 項目のサブディレクトリ・ファイルを含む）の存在を確認。
+  - 修正後、`build-adapters.sh`（引数なし＝claude cursor 両方）を実行 → `.adapters/claude/.agents/`・`.adapters/cursor/.agents/` は生成されない（存在しないことを確認）。
+  - 2 回連続実行し、`find .adapters -maxdepth 3` の出力が完全一致（累積・残骸再発が無いことを確認）。
+  - `grep -rlE '\.agents/|\.agents-project|\.workflow/' .adapters/` の結果、ヒットは `.adapters/{claude,cursor}/.agent-skill-chain/source/SETUP.md`（レガシー移行手順の説明文言。正当な既知の例外）のみ。
+  - `npm test` 全体 **13/13 PASS・FAIL=0・SKIP=0**（リグレッション無し）。
+  - `git status --short` は `.agent-skill-chain/source/scripts/build-adapters.sh` の変更のみ（`.adapters/` は `.gitignore` 対象のため差分に出現しない。追跡ファイルへの意図しない変更なし）。
+- **変更ファイル**: `.agent-skill-chain/source/scripts/build-adapters.sh`（`adapter_claude()`・`adapter_cursor()` のクリーンアップ処理を個別列挙から `rm -rf "$out"` へ変更）。
 - **flakiness の付記**: 3 回連続 green の前の 1 回で `test-cli-audit-doctor`・`test-write-workflow-log-glob` が単発 FAIL したが、両者はミラー系と無関係（前者は T8-課題1 と同根の実 `workflow.db` 書記シード n<3、後者も同系の DB シード）で、**ベースライン（本是正前）でも同条件で FAIL・隔離実行では各 3/3 PASS** を実測。本是正による回帰ではなく、T8-課題1 に記録済みの既存環境感受性である。
