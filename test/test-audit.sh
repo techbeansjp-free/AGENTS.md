@@ -22,6 +22,11 @@
 
 set -uo pipefail
 
+# 呼び出し元シェルの環境変数汚染からテストを隔離する（audit.sh の上書き入力のうち、
+# テストが呼び出しごとに設定しないものを unset して既定解決を保証する）。
+# 背景・根拠: 02_設計 ADR-1（AGENTS_ROOT 汚染で #1 が偽陰性化する既存不具合の是正）。
+unset AGENTS_ROOT WORKFLOW_DIR WORKFLOW_DIRS PR_BODY CODE_COMMENT_SRC_DIRS REVIEWDOCS_GATE_EFFECTIVE_FROM
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
 AUDIT="$REPO_ROOT/.agent-skill-chain/source/enforcement/ci/audit.sh"
@@ -97,6 +102,29 @@ rm -f "$T3_TREE/.agent-skill-chain/source/boot/CORE.md"
 T3_OUT="$(bash "$AUDIT" "$T3_TREE" 2>&1)"; T3_RC=$?
 if [[ $T3_RC -ne 0 ]]; then ok "必須ファイル欠落で exit != 0（判定不変）"; else ng "必須ファイル欠落でも exit 0 になった: $T3_OUT"; fi
 if grep -q "Missing required file" <<< "$T3_OUT"; then ok "必須ファイル未参照の FAIL メッセージを出す"; else ng "必須ファイル未参照メッセージが無い: $T3_OUT"; fi
+
+# シナリオ ENV-1: audit.sh #1 の「明示指定＋解決先不在」は無条件成功にせず WARN で可視化する
+# Given: AGENTS_ROOT が存在しないディレクトリを明示的に指す（必須ファイルは既定パスに存在する最小ツリー）
+# When:  audit.sh <tmp> を実行する
+# Then:  stderr に "WARN: AGENTS_ROOT が明示指定" を含み、終了コードは 0（非 FAIL・非サイレント）
+ENV1_TREE="$(make_min_tree)"
+ENV1_OUT="$(AGENTS_ROOT='/nonexistent/xyz' bash "$AUDIT" "$ENV1_TREE" 2>&1)"; ENV1_RC=$?
+if grep -q 'WARN: AGENTS_ROOT が明示指定' <<< "$ENV1_OUT"; then ok "明示 AGENTS_ROOT 不在で WARN を可視化"; else ng "明示 AGENTS_ROOT 不在で WARN が出ない: $ENV1_OUT"; fi
+if [[ $ENV1_RC -eq 0 ]]; then ok "明示 AGENTS_ROOT 不在でも終了コードは 0（非 FAIL）"; else ng "明示 AGENTS_ROOT 不在で exit != 0 になった（実際 rc=$ENV1_RC）: $ENV1_OUT"; fi
+
+# シナリオ ENV-2: audit.sh #1 の「既定値＋解決先不在」は従来どおり静かに SKIP する（非採用消費者を誤検知しない）
+# Given: AGENTS_ROOT を設定せず、.agent-skill-chain/source も存在しない最小ツリー
+# When:  audit.sh <tmp> を実行する
+# Then:  #1 由来の WARN も FAIL も出ない
+ENV2_TREE="$(mktemp -d)"
+TMP_DIRS+=("$ENV2_TREE")
+mkdir -p "$ENV2_TREE/.agent-skill-chain/runtime"
+ENV2_OUT="$(bash "$AUDIT" "$ENV2_TREE" 2>&1)"
+if ! grep -q 'WARN: AGENTS_ROOT が明示指定' <<< "$ENV2_OUT" && ! grep -q 'Missing required file' <<< "$ENV2_OUT"; then
+  ok "既定値＋解決先不在で #1 由来の WARN/FAIL が出ない（非採用消費者の SKIP 維持）"
+else
+  ng "既定値＋解決先不在で #1 由来の WARN/FAIL が出た: $ENV2_OUT"
+fi
 
 # シナリオ4: #17 close ガードが issue_path のファイル粒度記録でも close 完了 issue を除外する
 # Given: close 配下に実在する issue ディレクトリ <C> と、workflow.db に「親が implement/design でない

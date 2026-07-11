@@ -80,6 +80,9 @@ if [[ -n "$GIT_RANGE" ]] && ! [[ "$GIT_RANGE" =~ ^[A-Za-z0-9][A-Za-z0-9_./~^-]*(
   GIT_RANGE="HEAD~1..HEAD"
 fi
 WORKFLOW_DIR="${WORKFLOW_DIR:-.agent-skill-chain/runtime}"
+# AGENTS_ROOT が呼び出し元で明示的に（非空で）設定されているかを、既定値へのフォールバック前に捕捉する。
+# 未設定時のみを既定値扱いとし、既定値置換後には判別できなくなるため事前に記録しておく。
+if [[ -n "${AGENTS_ROOT:-}" ]]; then AGENTS_ROOT_EXPLICIT=1; else AGENTS_ROOT_EXPLICIT=0; fi
 AGENTS_ROOT="${AGENTS_ROOT:-.agent-skill-chain/source}"
 EXIT_CODE=0
 ROLLBACK_MSG="ROLLBACK: Fix in 03_実装計画.md or the issue doc under .agent-skill-chain/runtime/{issue}/ then re-run verify-and-close. See .agent-skill-chain/source/enforcement/README.md §失敗条件と差し戻し."
@@ -222,6 +225,8 @@ if [[ -d "$PROJECT_ROOT/$AGENTS_ROOT" ]]; then
       EXIT_CODE=1
     fi
   done
+elif [[ "$AGENTS_ROOT_EXPLICIT" == "1" ]]; then
+  echo "WARN: AGENTS_ROOT が明示指定されていますが解決先ディレクトリが存在しません（環境変数の設定ミス/汚染の可能性・必須ファイルチェックをスキップします）: $AGENTS_ROOT (resolved: $PROJECT_ROOT/$AGENTS_ROOT)" >&2
 fi
 
 # 2b. サブissue が存在する場合、親ワークフロールートに 90_issues.md が存在すること
