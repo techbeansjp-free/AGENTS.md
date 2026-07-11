@@ -280,6 +280,29 @@ insert_with_retries() {
   done
 }
 
+# 指定カラム＋インデックスを冪等に存在保証する（Check-Then-Act 競合を再確認で吸収）。
+# duplicate column name は競合とみなし成功へ収束、それ以外の真の失敗のみ return 1。
+ensure_column() {
+  local db="$1" col="$2"
+  local idx="idx_workflow_log_${col}"
+  local cols
+  cols="$(sqlite3 -separator $'\t' "$db" "PRAGMA table_info(workflow_log);" 2>/dev/null | awk -F '\t' '{print $2}')"
+  if printf '%s' "$cols" | grep -qx "$col"; then
+    return 0                                  # 既存: 現行 skip 挙動を維持
+  fi
+  if sqlite3 "$db" "ALTER TABLE workflow_log ADD COLUMN ${col} TEXT NULL; CREATE INDEX IF NOT EXISTS ${idx} ON workflow_log(${col});" 2>/dev/null; then
+    return 0
+  fi
+  # ADD COLUMN 失敗: メッセージ非依存で table_info を再確認
+  cols="$(sqlite3 -separator $'\t' "$db" "PRAGMA table_info(workflow_log);" 2>/dev/null | awk -F '\t' '{print $2}')"
+  if printf '%s' "$cols" | grep -qx "$col"; then
+    sqlite3 "$db" "CREATE INDEX IF NOT EXISTS ${idx} ON workflow_log(${col});" >/dev/null 2>&1 || true
+    return 0                                  # 競合で他プロセスが追加済み
+  fi
+  echo "ERROR: ${col} マイグレーションに失敗しました。" >&2
+  return 1                                    # 真のエラー
+}
+
 # DB が無ければ新スキーマで作成（スキーマの正本は ledger/schema.sql。document_path を含む）
 if [[ ! -f "$WF_DB" ]]; then
   WF_DIR="$(dirname "$WF_DB")"
@@ -295,21 +318,12 @@ if sqlite3 -separator $'\t' "$WF_DB" "PRAGMA table_info(workflow_log);" 2>/dev/n
   HAS_NEW_SCHEMA=1
 fi
 
-# スキーマ検知・マイグレーション（ledger/schema.md の定義順。不足カラムがあれば ADD COLUMN を実行）
+# スキーマ検知・マイグレーション（ledger/schema.md の定義順。不足カラムがあれば ensure_column で冪等に ADD COLUMN する）
 if [[ -n "$HAS_NEW_SCHEMA" ]]; then
-  CURRENT_COLS="$(sqlite3 -separator $'\t' "$WF_DB" "PRAGMA table_info(workflow_log);" 2>/dev/null | awk -F '\t' '{print $2}')"
-  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'document_id'; then
-    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN document_id TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document_id);" || { echo "ERROR: document_id マイグレーションに失敗しました。" >&2; exit 1; }
-  fi
-  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'issue_id'; then
-    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN issue_id TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);" || { echo "ERROR: issue_id マイグレーションに失敗しました。" >&2; exit 1; }
-  fi
-  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'review_id'; then
-    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN review_id TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);" || { echo "ERROR: review_id マイグレーションに失敗しました。" >&2; exit 1; }
-  fi
-  if ! printf '%s' "$CURRENT_COLS" | grep -qx 'document_path'; then
-    sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN document_path TEXT NULL; CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);" 2>/dev/null || sqlite3 "$WF_DB" "ALTER TABLE workflow_log ADD COLUMN document_path TEXT NULL;" || { echo "ERROR: document_path マイグレーションに失敗しました。" >&2; exit 1; }
-  fi
+  ensure_column "$WF_DB" document_id   || exit 1
+  ensure_column "$WF_DB" issue_id      || exit 1
+  ensure_column "$WF_DB" review_id     || exit 1
+  ensure_column "$WF_DB" document_path || exit 1
   # CHECK に review-docs または create-pr-review-issue が無い場合はテーブル再作成でマイグレーション
   if [[ "$COMMAND" == "review-docs" || "$COMMAND" == "create-pr-review-issue" ]]; then
     CREATED_SQL="$(sqlite3 "$WF_DB" "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_log';")"
