@@ -11,9 +11,9 @@ document_id: "00000000-0000-0000-0000-000000000000"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。ドキュメントは「生きているドキュメント」として扱い、実装内容と常に同期させます。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 >
-> **必須**: **レビュー実施時は、[`.agent-skill-chain/source/REVIEW_RULE.md`](../../.agent-skill-chain/source/REVIEW_RULE.md) を必ず参照してください。** レビュー深度は **quick（軽い） / standard（中） / full（重い）** のいずれか。変更規模に応じて [RULES.md §実行モード](../../.agent-skill-chain/source/RULES.md) で選ぶ。
+> **必須**: **レビュー実施時は、[`.agent-skill-chain/source/REVIEW_RULE.md`](../../../.agent-skill-chain/source/REVIEW_RULE.md) を必ず参照してください。** レビュー深度は **quick（軽い） / standard（中） / full（重い）** のいずれか。変更規模に応じて [RULES.md §実行モード](../../../.agent-skill-chain/source/RULES.md) で選ぶ。
 > **必須項目**: 「必須」と明記した欄は空欄にしないこと。結果は **OK/要修正** または **数値** で判定可能な形で記載すること。
 
 ---
@@ -34,7 +34,7 @@ document_id: "00000000-0000-0000-0000-000000000000"
 
 ## 2. 実装内容の確認
 
-**用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+**用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 
 ### 2.1 実装完了タスク（または Issue）
 

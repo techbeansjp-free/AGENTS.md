@@ -4,7 +4,7 @@ document_id: "00000000-0000-0000-0000-000000000000"
 ---
 
 このドキュメントは、システムの仕様を定義する納品物です。  
-システム仕様書作成ルールは [`.agent-skill-chain/source/DOCS_RULES.md`](../../.agent-skill-chain/source/DOCS_RULES.md) を参照してください。
+システム仕様書作成ルールは [`.agent-skill-chain/source/DOCS_RULES.md`](../../../../.agent-skill-chain/source/DOCS_RULES.md) を参照してください。
 
 # システム仕様書
 

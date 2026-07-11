@@ -4,8 +4,8 @@ document_id: "00000000-0000-0000-0000-000000000000"
 ---
 
 このドキュメントは、ER図とテーブル定義を定義します。  
-システム仕様書作成ルールは [`.agent-skill-chain/source/DOCS_RULES.md`](../../../../.agent-skill-chain/source/DOCS_RULES.md) を参照してください。  
-Mermaid 図作成時は [`AGENTS_MERMAID_RULES.md`](../../../AGENTS_MERMAID_RULES.md) を必ず参照してください。
+システム仕様書作成ルールは [`.agent-skill-chain/source/DOCS_RULES.md`](../../../../../.agent-skill-chain/source/DOCS_RULES.md) を参照してください。  
+Mermaid 図作成時は [`AGENTS_MERMAID_RULES.md`](../../AGENTS_MERMAID_RULES.md) を必ず参照してください。
 
 # 3. データ設計
 

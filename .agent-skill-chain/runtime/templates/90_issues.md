@@ -11,7 +11,7 @@ document_id: "00000000-0000-0000-0000-000000000000"
 
 > **重要**: **このドキュメントは常に更新**: issue（またはタスク）の進捗状況、ステータス、優先度などの変更があった場合は、即座にこのドキュメントを更新してください。ドキュメントは「生きているドキュメント」として扱い、実装内容と常に同期させます。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 
 ---
 
