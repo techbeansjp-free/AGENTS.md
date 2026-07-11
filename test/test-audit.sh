@@ -470,6 +470,139 @@ else
   ng "#32 DB 非採用でも FAIL した: $S32_5_OUT"
 fi
 
+# =====================================================================================
+# #31 システム仕様書レビュー証跡欠落検知（check_docs_review_evidence）の tmp 隔離回帰テスト
+#   tmp 隔離（mktemp -d）。本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db は変更しない。
+#   参照: docs/maintainer/workflow/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/
+#         20260712_004252_audit監査31番tmp隔離検証恒久テスト化/03_実装計画.md
+# =====================================================================================
+echo "== #31 システム仕様書レビュー証跡欠落検知 =="
+
+# Given: sqlite3 の有無で分岐するガード（sqlite3 不在ではケース A〜G を再現できないため SKIP）
+if command -v sqlite3 >/dev/null 2>&1; then
+  # シナリオA: 要否プレースホルダの 04 で #31 は FAIL・#5 は非FAIL（非交差、ADR-3）
+  # Given: docs/ 実在・workflow_log に implement-feature 行・04_review の要否が （要 / 不要）
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に "FAIL: システム仕様書レビュー証跡欠落" を含み、"FAIL: docs 更新要否未記載" を含まない
+  A_TREE="$(make_min_tree)"
+  A_ISS="docs/maintainer/workflow/20260101_000000_a31"
+  mkdir -p "$A_TREE/$A_ISS"
+  cat > "$A_TREE/$A_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+- 対象: （...）
+- 理由: （...）
+EOF
+  A_DB="$A_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$A_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$A_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$A_ISS');" 2>/dev/null
+  A_OUT="$(bash "$AUDIT" "$A_TREE" 2>&1)"
+  if grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$A_OUT"; then ok "#31-A 要否プレースホルダで FAIL"; else ng "#31-A FAIL せず: $A_OUT"; fi
+  if ! grep -q 'FAIL: docs 更新要否未記載' <<< "$A_OUT"; then ok "#31/#5 非交差（同一フィクスチャで #5 は非発火）"; else ng "#5 が誤発火（非交差崩れ）: $A_OUT"; fi
+
+  # シナリオB: 要=実タイムスタンプ参照では #31 は FAIL しない（誤検知なし）
+  # Given: docs/ 実在・implement ログあり・04_review の要否=要 + docs/00_review/実タイムスタンプ 参照
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  B_TREE="$(make_min_tree)"; B_ISS="docs/maintainer/workflow/20260101_000000_b31"
+  mkdir -p "$B_TREE/$B_ISS"
+  cat > "$B_TREE/$B_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: 要
+- 対象: docs/00_review/20260101_000000_review.md
+- 理由: 指摘 N→0 の反復を実施
+EOF
+  B_DB="$B_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$B_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$B_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$B_ISS');" 2>/dev/null
+  B_OUT="$(bash "$AUDIT" "$B_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$B_OUT"; then ok "#31-B 要=実TS参照で非FAIL"; else ng "#31-B 誤 FAIL: $B_OUT"; fi
+
+  # シナリオC: 不要=実質理由では #31 は FAIL しない（誤検知なし）
+  # Given: docs/ 実在・implement ログあり・04_review の要否=不要 + 理由が非プレースホルダの実質内容
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  C_TREE="$(make_min_tree)"; C_ISS="docs/maintainer/workflow/20260101_000000_c31"
+  mkdir -p "$C_TREE/$C_ISS"
+  cat > "$C_TREE/$C_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: 不要
+- 対象: なし
+- 理由: 変更が仕様に影響しないため
+EOF
+  C_DB="$C_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$C_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$C_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$C_ISS');" 2>/dev/null
+  C_OUT="$(bash "$AUDIT" "$C_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$C_OUT"; then ok "#31-C 不要=実質理由で非FAIL"; else ng "#31-C 誤 FAIL: $C_OUT"; fi
+
+  # シナリオD: docs/ 不在で #31 は SKIP（非FAIL）
+  # Given: docs/ を作らず issue を .agent-skill-chain/runtime/ 配下に配置（04 はプレースホルダ・implement ログあり）
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  D_TREE="$(make_min_tree)"; D_ISS=".agent-skill-chain/runtime/20260101_000000_d31"
+  mkdir -p "$D_TREE/$D_ISS"
+  cat > "$D_TREE/$D_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+EOF
+  D_DB="$D_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$D_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$D_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$D_ISS');" 2>/dev/null
+  D_OUT="$(bash "$AUDIT" "$D_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$D_OUT"; then ok "#31-D docs/ 不在 SKIP"; else ng "#31-D docs/ 不在でも FAIL: $D_OUT"; fi
+
+  # シナリオE: implement/verify ログ 0件で #31 は continue（非FAIL）
+  # Given: docs/ 実在・04 はプレースホルダだが workflow_log は design-feature のみ（implement/verify 0件）
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  E_TREE="$(make_min_tree)"; E_ISS="docs/maintainer/workflow/20260101_000000_e31"
+  mkdir -p "$E_TREE/$E_ISS"
+  cat > "$E_TREE/$E_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+EOF
+  E_DB="$E_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$E_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$E_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'design-feature', '$E_ISS');" 2>/dev/null
+  E_OUT="$(bash "$AUDIT" "$E_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$E_OUT"; then ok "#31-E implement/verify ログ 0件で SKIP"; else ng "#31-E ログ0件でも FAIL: $E_OUT"; fi
+
+  # シナリオF: workflow.db 不在で #31 は SKIP（非FAIL）
+  # Given: workflow.db を作らない（ケースF）
+  F_TREE="$(make_min_tree)"; F_ISS="docs/maintainer/workflow/20260101_000000_f31"
+  mkdir -p "$F_TREE/$F_ISS"
+  cat > "$F_TREE/$F_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+EOF
+  # （workflow.db は作らない）
+  # When: audit.sh を実行
+  F_OUT="$(bash "$AUDIT" "$F_TREE" 2>&1)"
+  # Then: DB 不在ガードで #31 は SKIP（非FAIL）
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$F_OUT"; then ok "#31-F DB 不在 SKIP"; else ng "#31-F DB 不在でも FAIL: $F_OUT"; fi
+
+  # シナリオG: 04 が templates/ 配下で #31 は continue（非FAIL）
+  # Given: docs/ ディレクトリと workflow_log テーブルを持つ workflow.db のみ用意し、
+  #        04_review.md を .agent-skill-chain/runtime/templates/ 配下に配置
+  #        （templates 外に #31 を発火させうる 04 は置かない・implement ログは不要）
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  G_TREE="$(make_min_tree)"
+  mkdir -p "$G_TREE/docs" "$G_TREE/.agent-skill-chain/runtime/templates"
+  cat > "$G_TREE/.agent-skill-chain/runtime/templates/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+EOF
+  G_DB="$G_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$G_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  G_OUT="$(bash "$AUDIT" "$G_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$G_OUT"; then ok "#31-G templates 配下 SKIP"; else ng "#31-G templates 配下でも FAIL: $G_OUT"; fi
+else
+  # Then: sqlite3 不在は SKIP（集計を汚さない）
+  echo "  [SKIP] #31 システム仕様書レビュー証跡欠落検知（sqlite3 不在）"
+fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then
