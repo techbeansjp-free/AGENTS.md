@@ -40,6 +40,12 @@ node_modules/
 # marketplace 配布はリリース時に CI が build → 専用ブランチ/タグへ commit（案A、main は生成物ゼロ）。
 # 正本: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/02_設計.md, 03_実装計画.md
 /.adapters/
+# apm（Agent Package Manager, microsoft/apm）配布用生成物。100% 生成物であり main には置かない。
+# 手書き正本は .agent-skill-chain/source/platforms/apm/apm.yml。build-adapters.sh apm で生成し、
+# release 時に CI（release.yml）が release/apm ブランチへ commit する。
+/apm.yml
+/.apm/
+
 # カバレッジ計測の生成物（kcov 出力先。cobertura XML / HTML レポート・中間生成物）。
 # coverage-check.sh が COV_OUT（既定 .coverage/）に出力する。配布物・追跡対象ではない
 # （self-enforce.yml #3 差分ゼロ検証・#4 npm pack リーク検査を破らないため無視する）。

@@ -46,11 +46,29 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 ## 導入（プロジェクトへ配備するとき）
 
-導線は **npm（主導線）** と **Claude marketplace（副導線）** の 2 つ。基本は npm 経由を推奨する。
+導線は **apm install（一次配布導線）**・**npx agent-skill-chain init（開発者・自己拡張向け補助導線）**・**Claude marketplace（副導線）** の 3 つ。**npm 公開は取りやめ済みであり、基本は `apm install` を推奨する。**
 
-> npm パッケージ名は `agent-skill-chain`（unscoped public / npmjs.com）。CLI コマンド名は `agents-md`（パッケージ名と独立）。
+> npm パッケージ名は `agent-skill-chain`（unscoped public / npmjs.com）。CLI コマンド名は `agents-md`（パッケージ名と独立）。`apm install` は npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得する。
 
-### 1. npm 経由（主導線・推奨）
+### 0. apm 経由（一次配布導線・推奨）
+
+[`microsoft/apm`](https://github.com/microsoft/apm)（Agent Package Manager）で配布する。`apm` CLI を導入したうえで、採用先プロジェクトのルートで次を実行する。
+
+```bash
+apm install techbeansjp-free/AGENTS.md#release/apm
+# ハーネスマーカー（.claude/ .github/ 等）が無いプロジェクトでは --target を明示する
+apm install techbeansjp-free/AGENTS.md#release/apm --target claude
+```
+
+これで以下が行われる:
+
+- `.agents/skills/{domain}-{capability}/`（例: `.agents/skills/architecture-define-boundaries/`）に、個々の能力（skill）が apm skill プリミティブとして展開される（正本側のディレクトリ名は `{domain}__{capability}` だが、apm が展開時に `__` を `-` へ暗黙に正規化する。`SKILL.md` の frontmatter `name` は正本のまま変化しない）
+- `.agents/skills/agent-skill-chain-full/reference/.agent-skill-chain/source/` 配下に、正本一式（実行契約・skills・commands・boot・workflow・spec・enforcement 等）が参照コンテキストとして展開される
+- `apm.lock.yaml` が採用先プロジェクトのルートに生成される
+
+再現性を求める場合はブランチ ref の代わりにタグ ref（`#apm-vX.Y.Z`。例: `apm install techbeansjp-free/AGENTS.md#apm-v0.1.0`）でピン留めできる。v1 スコープは skills プリミティブのみであり、agents/commands(prompts)/instructions/hooks の apm ネイティブ配備は今後の課題（詳細は [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md) を参照）。
+
+### 1. npm 経由（開発者・自己拡張向けの補助導線。npm 公開は取りやめ済み）
 
 採用先プロジェクトのルートで次を実行する。`init` が内部で `.agent-skill-chain/source/scripts/setup.sh` を呼び、配備一式を行う。
 

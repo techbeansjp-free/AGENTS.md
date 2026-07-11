@@ -3,9 +3,10 @@
 # ┌─ 現状（dormant）─────────────────────────────────────────────────────────┐
 # │ npm 公開は今後の課題として保留中であり、自動リリースは無効化（dormant）している。 │
 # │ on: から push: branches:[main] を撤去し workflow_dispatch（手動）のみとし、       │
-# │ 両 job（release-npm / release-marketplace）の if: に RELEASE_ENABLED ゲートを     │
-# │ 付与した。main マージ・タグ push のいずれでも自動発火（version bump / 日時タグ /  │
-# │ GitHub Release / npm publish / marketplace 公開）は起きない。                     │
+# │ 3 job（release-npm / release-marketplace / apm-release）の if: に RELEASE_ENABLED │
+# │ ゲートを付与した。main マージ・タグ push のいずれでも自動発火（version bump /     │
+# │ 日時タグ / GitHub Release / npm publish / marketplace 公開 / apm release/apm      │
+# │ 発行）は起きない。apm-release ジョブも他 2 job と同一の dormant ゲート配下。        │
 # │ 案C の step 本体・action の SHA ピン・無限ループ防止策・NPM_TOKEN ゲートは資産   │
 # │ として保持（削除でなく可逆な無効化）。経緯は自己拡張 issue                        │
 # │ 20260616_144601_npm公開を今後の課題化_自動リリース現状無効化 を参照。            │
@@ -309,3 +310,113 @@ jobs:
           fi
           git push origin "$RELEASE_BRANCH"
           echo "OK: $RELEASE_BRANCH へ生成物を公開しました（marketplace source 解決先）。"
+
+  # =====================================================================
+  # (C) apm release（案A）— apm.yml + .apm/ を release/apm ブランチへ commit し、
+  #     同一コミットへ apm-vX.Y.Z タグを付与する
+  # =====================================================================
+  apm-release:
+    runs-on: ubuntu-latest
+    # dormant 補助防御: RELEASE_ENABLED が 'true' のときのみ実行（未設定/その他は skip）。
+    # 他 2 job（release-npm/release-marketplace）と完全に同一のゲート条件を維持する。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
+    needs: release-marketplace
+    env:
+      RELEASE_BRANCH: release/apm
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      # bump 書き戻し・marketplace job 完了後の main を取り直し、最新 version 基準で生成する。
+      - name: Sync latest main (rebase)
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --rebase origin main
+
+      # package.json ↔ plugin.json ↔ apm.yml の整合（tag 非依存）。
+      - name: Verify version sync (package.json == plugin.json == apm.yml)
+        run: |
+          set -e
+          bash .agent-skill-chain/source/scripts/sync-version.sh --check
+          pkg="$(node -p "require('./package.json').version")"
+          echo "OK: package.json=$pkg（plugin.json/apm.yml と一致）。"
+
+      # 正本 .agent-skill-chain/source/ から apm パッケージ（apm.yml + .apm/）を生成する。
+      - name: Build apm package
+        run: bash .agent-skill-chain/source/scripts/build-adapters.sh apm
+
+      # 再生成 diff ゼロ検証: もう一度生成しても同一（決定性）であることを検証する
+      # （既存 release-marketplace の「再生成 diff ゼロ」検証パターンを踏襲）。
+      - name: Re-build determinism check (diff-zero)
+        run: |
+          set -e
+          work="$(mktemp -d)"
+          find .apm apm.yml -type f -exec sha256sum {} \; | sort > "$work/hash1.txt"
+          bash .agent-skill-chain/source/scripts/build-adapters.sh apm
+          find .apm apm.yml -type f -exec sha256sum {} \; | sort > "$work/hash2.txt"
+          diff "$work/hash1.txt" "$work/hash2.txt"
+          echo "OK: 再生成で生成物の差分なし（決定性）。"
+
+      # 生成物を release/apm ブランチへ commit/push し、同一コミットへ apm-vX.Y.Z タグを付与する
+      # （既存 release-marketplace の「退避 → ブランチ用意 → 配置 → git add -f → commit/push」を
+      #  apm.yml/.apm/ に読み替えて流用し、末尾でタグを付与する）。
+      - name: Publish to release/apm and tag
+        run: |
+          set -e
+          version="$(node -p "require('./package.json').version")"
+          tag="apm-v${version}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 生成物を退避（checkout でツリーが入れ替わっても残るよう作業ツリー外へ）
+          work="$(mktemp -d)"
+          cp -R .apm "$work/.apm"
+          cp apm.yml "$work/apm.yml"
+
+          # リリースブランチを用意（無ければ orphan で作る）
+          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$RELEASE_BRANCH"
+            git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+            git rm -rf --quiet .apm apm.yml 2>/dev/null || true
+          else
+            git checkout --orphan "$RELEASE_BRANCH"
+            git rm -rf --quiet . 2>/dev/null || true
+          fi
+
+          # 生成物を配置
+          rm -rf .apm apm.yml
+          cp -R "$work/.apm" .apm
+          cp "$work/apm.yml" apm.yml
+
+          # .apm/apm.yml を確実に追跡対象にする（リリースブランチでは生成物を追跡する）
+          git add -f .apm apm.yml
+
+          if git diff --cached --quiet; then
+            echo "変更なし（同一生成物）。commit をスキップします。"
+          else
+            git commit -m "release: apm-v${version} package (generated from .agent-skill-chain/source/) [skip ci]"
+          fi
+          git push origin "$RELEASE_BRANCH"
+
+          # 同一コミットへ apm-vX.Y.Z タグを付与する（既定 GITHUB_TOKEN によるタグ push は
+          # on:push を再トリガしない。既存の日時タグ vYYYYMMDD.HHMMSS とは接頭辞が異なり衝突しない）。
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "タグ $tag は既存。付与をスキップします（冪等）。"
+          else
+            git tag "$tag" "$(git rev-parse HEAD)"
+            git push origin "refs/tags/$tag"
+            echo "OK: タグ $tag を付与しました。"
+          fi
+
+          echo "OK: $RELEASE_BRANCH へ apm パッケージを公開しました。"

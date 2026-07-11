@@ -10,6 +10,12 @@
 
 ---
 
+## apm パッケージメタデータ
+
+`apm/apm.yml` は [.agent-skill-chain/source/platforms/claude/plugin.json](claude/plugin.json) と同型の「手書き正本」であり、`microsoft/apm`（Agent Package Manager）向けのパッケージメタデータ（`name`/`version`/`description`/`includes` 等）を宣言する。`build-adapters.sh apm` がリポジトリルート `apm.yml` へそのままコピーする。詳細は [docs/maintainer/apm-package.md](../../../docs/maintainer/apm-package.md) を参照。
+
+---
+
 ## 入口・設定の差分
 
 | プラットフォーム | 設定の配置 | 備考 |

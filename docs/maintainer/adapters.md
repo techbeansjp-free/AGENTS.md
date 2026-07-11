@@ -92,3 +92,7 @@ marketplace 登録時は当該リリースブランチ/タグ時点のツリー�
 ## cursor/ ・ gemini/（将来）
 
 同様に `.agent-skill-chain/source/` から各ツールの形式へ生成する。Cursor は `.agent-skill-chain/source/enforcement/cursor/`、配備パスは [platforms/SKILLS.md](../../.agent-skill-chain/source/platforms/SKILLS.md) を参照。
+
+## apm 経由の配布について
+
+`microsoft/apm`（Agent Package Manager）向けの生成物（`apm.yml`・`.apm/`）は本ドキュメントの対象外。生成方式・配置理由・ビルド/配布手順は [apm-package.md](./apm-package.md) を参照。

@@ -17,7 +17,7 @@ AGENTS="$REPO_ROOT/.agent-skill-chain/source"
 ADAPTERS_ROOT="$REPO_ROOT/.adapters"
 
 # 実装済みツール（adapter_<tool>() が存在するもの）。将来 gemini/copilot/codex を追加する際はここに足す。
-SUPPORTED_TOOLS="claude cursor"
+SUPPORTED_TOOLS="claude cursor apm"
 
 [[ -d "$AGENTS" ]] || { echo "エラー: .agent-skill-chain/source が見つかりません: $AGENTS" >&2; exit 1; }
 
@@ -206,6 +206,65 @@ adapter_cursor() {
   write_generated_marker "$out"
 
   echo "[build] 完了。Cursor ルール: .adapters/cursor/.cursor/rules/agents-core.mdc"
+}
+
+# adapter_apm — microsoft/apm（Agent Package Manager）向けパッケージを
+#   リポジトリルート直下の apm.yml・.apm/ に生成する（claude/cursor と対称の 100% 生成物）。
+#   出力: apm.yml（正本コピー）・.apm/skills/{domain}__{capability}/・
+#         .apm/skills/agent-skill-chain-full/{SKILL.md,reference/}（正本一式の同梱バンドル）。
+#   実装規約: .agents というリテラルパスを直書きせず、既存の AGENTS 変数（本ファイル冒頭 1 箇所の
+#   み定義）のみを参照する（story8 改称に自動追従させるため）。
+adapter_apm() {
+  local out="$REPO_ROOT"
+  local apm_root="$REPO_ROOT/.apm"
+  local apm_yml_src="$AGENTS/platforms/apm/apm.yml"
+  [[ -f "$apm_yml_src" ]] || {
+    echo "エラー: $apm_yml_src が見つかりません（手書きの正本が必要）" >&2; exit 1; }
+
+  echo "[build] 正本:       $AGENTS"
+  echo "[build] 出力先:     $out (apm.yml, .apm/)"
+
+  # 0) クリーンな再生成のため既存生成物を削除する。
+  rm -f "$out/apm.yml"
+  rm -rf "$apm_root"
+
+  # 1) apm.yml を正本からコピー生成（手書き正本: platforms/apm/apm.yml）
+  cp "$apm_yml_src" "$out/apm.yml"
+  echo "[build] apm.yml を正本からコピーしました。"
+
+  # 2) skills を apm skill プリミティブとして配備（{domain}__{capability}。既存共有関数を再利用）
+  mkdir -p "$apm_root/skills"
+  local n_skill
+  n_skill=$(deploy_skills_impl "$AGENTS/skills" "$apm_root/skills")
+
+  # 3) agent-skill-chain-full: 正本一式（$AGENTS）を 1 skill バンドルとして同梱する
+  #    （正本一式が展開できることを満たすための v1 暫定方式）。
+  local bundle="$apm_root/skills/agent-skill-chain-full"
+  mkdir -p "$bundle/reference"
+  cat > "$bundle/SKILL.md" <<'MD'
+---
+name: agent-skill-chain-full
+description: "本パッケージ(agent-skill-chain)の正本一式（AGENTS.md 相当・agents/・commands/・boot/・workflow/・spec/・enforcement/ 等）の参照コンテキスト。個別プリミティブ化前の一時的な同梱方式。Use when the orchestrator needs full access to the agent-skill-chain source tree."
+---
+
+# agent-skill-chain-full
+
+このスキルは、本パッケージ（agent-skill-chain）の正本一式を参照コンテキストとして同梱したものです。
+`reference/` 配下に、実行契約・skills・commands・boot・workflow・spec・enforcement 等の正本一式が展開されています。
+
+個々の能力（skill）は `{domain}__{capability}` 形式の別スキルとして個別配備されています。本スキルは、
+orchestrator が正本一式全体（横断参照・skill chain 定義の読み込み等）を必要とする場合に使用してください。
+MD
+
+  # 既存 bundle_agents_src を無改変で呼び出す（reference/ 配下に一式がコピーされる）。
+  bundle_agents_src "$bundle/reference"
+
+  # 4) 配備件数を報告する（既存ログ規約に合わせる）。
+  local n_bundle_files
+  n_bundle_files=$(find "$bundle/reference" -type f | wc -l | tr -d ' ')
+  echo "[build] apm: skills を $n_skill 件, agent-skill-chain-full を $n_bundle_files ファイル配備しました。"
+
+  echo "[build] 完了。試用（tmp隔離）: apm install <このworktreeの絶対パス> --target agent-skills"
 }
 
 # ----------------------------------------------------------------------------
