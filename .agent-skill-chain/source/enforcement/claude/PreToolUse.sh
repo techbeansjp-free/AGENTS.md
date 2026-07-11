@@ -157,10 +157,13 @@ if [[ -n "$TOOL" ]]; then
   fi
 
   # R2 / R2'. orchestrator: 許可ツールのみ（allowlist）。それ以外は拒否。
-  #    許可: Read, Grep, Glob, LS, list_dir, Task, mcp_task 等「読む・検索・委譲」のみ。
+  #    許可: Read, Grep, Glob, LS, list_dir, Task, Agent, mcp_task 等「読む・検索・委譲」のみ。
+  #    委譲ツールの実名はハーネスで異なる（Agent SDK 系は Task、Claude Code CLI / FleetView 系は Agent）。
+  #    両名を許可に残さないと、実機側の委譲ツールが下の *) に落ちて拒否され、orchestrator が委譲手段ごと
+  #    自己ロックアウトする（Agent 名のみの環境で実際に発生済み）。互換のため Task と Agent の両方を許可する。
   if [[ "$ROLE" == "orchestrator" ]]; then
     case "$TOOL" in
-      Read|Grep|Glob|LS|list_dir|Task|mcp_task|ReadLints|fetch_mcp_resource|list_mcp_resources)
+      Read|Grep|Glob|LS|list_dir|Task|Agent|mcp_task|ReadLints|fetch_mcp_resource|list_mcp_resources)
         : # allowed（R2'）
         ;;
       Bash)

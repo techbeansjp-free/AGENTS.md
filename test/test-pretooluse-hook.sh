@@ -158,8 +158,28 @@ uc1_orchestrator_grep_allowed() {
   # Then: 終了コードは 0（allowlist 内）
   assert_eq 0 "$RC" "UC1: orchestrator Grep は exit 0"
 }
+uc1_orchestrator_agent_allowed() {
+  # シナリオ: orchestrator の Agent（実機の委譲ツール・allowlist 内）は exit 0 で許可される（Agent 名のみの環境での自己ロックアウト再発防止）
+  # Given: AGENT_ROLE=orchestrator、委譲ツール Agent の stdin JSON
+  local json='{"tool_name":"Agent","tool_input":{"description":"delegate"}}'
+  # When: 委譲 JSON を stdin で渡す
+  run_pre "$PATH" orchestrator "$json"
+  # Then: 終了コードは 0（allowlist 内）
+  assert_eq 0 "$RC" "UC1: orchestrator Agent は exit 0"
+}
+uc1_orchestrator_task_allowed() {
+  # シナリオ: orchestrator の Task（他ハーネス互換の委譲ツール）は引き続き exit 0 で許可される（互換維持）
+  # Given: AGENT_ROLE=orchestrator、委譲ツール Task の stdin JSON
+  local json='{"tool_name":"Task","tool_input":{"description":"delegate"}}'
+  # When: 委譲 JSON を stdin で渡す
+  run_pre "$PATH" orchestrator "$json"
+  # Then: 終了コードは 0（allowlist 内・既存互換）
+  assert_eq 0 "$RC" "UC1: orchestrator Task は exit 0"
+}
 uc1_orchestrator_write_blocked
 uc1_orchestrator_grep_allowed
+uc1_orchestrator_agent_allowed
+uc1_orchestrator_task_allowed
 
 # =====================================================================================
 # UC2: jq 非依存フォールバック（jq を PATH から外す）

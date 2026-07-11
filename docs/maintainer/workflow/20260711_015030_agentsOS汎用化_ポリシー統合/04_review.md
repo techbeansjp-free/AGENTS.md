@@ -404,3 +404,40 @@ document_id: "ad96201a-9028-4ef2-b955-97f44c26a34c"
   - `git status --short` は `.agent-skill-chain/source/scripts/build-adapters.sh` の変更のみ（`.adapters/` は `.gitignore` 対象のため差分に出現しない。追跡ファイルへの意図しない変更なし）。
 - **変更ファイル**: `.agent-skill-chain/source/scripts/build-adapters.sh`（`adapter_claude()`・`adapter_cursor()` のクリーンアップ処理を個別列挙から `rm -rf "$out"` へ変更）。
 - **flakiness の付記**: 3 回連続 green の前の 1 回で `test-cli-audit-doctor`・`test-write-workflow-log-glob` が単発 FAIL したが、両者はミラー系と無関係（前者は T8-課題1 と同根の実 `workflow.db` 書記シード n<3、後者も同系の DB シード）で、**ベースライン（本是正前）でも同条件で FAIL・隔離実行では各 3/3 PASS** を実測。本是正による回帰ではなく、T8-課題1 に記録済みの既存環境感受性である。
+
+## インシデント是正（orchestrator allowlist に委譲ツール実名 `Agent` を追加）
+
+**是正日**: 2026-07-11 ／ **担当**: opus（直前に実機で発生した安全性ロジックの事故対応のため）／ **evidence_source: observed_runtime**
+
+### 経緯
+
+進行役（orchestrator）セッションが本リポジトリに対し `agents-md enforce on` を実行したところ、配線された `.claude/hooks/PreToolUse.sh` によって**進行役自身が完全にロックアウトされる事故**が発生した。進行役は Bash・Edit・Write・委譲のすべてを失い、会話テキストでユーザーに助けを求める以外に手段が無くなった。ユーザーが手動で `agents-md enforce off` を実行して復旧した。
+
+### 原因
+
+`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh` の R2 ロジック（`AGENT_ROLE=orchestrator` 向け許可ツール allowlist）が、サブエージェントへの委譲ツールを **`Task` という名前だけ**で許可していた。しかし本リポジトリが実際に動いているハーネス（Claude Code CLI／FleetView 経由）では、委譲ツールの実名は **`Agent`** であり `Task` ではない。そのため `case` 文の `*)` 分岐（未知ツールは orchestrator に不許可）に落ち、`Agent` 呼び出し自体が exit 2 で拒否され、進行役は読む・検索・委譲のすべての手段を失った。委譲ツールの実名はハーネスで異なる（Agent SDK 系は `Task`、Claude Code CLI／FleetView 系は `Agent`）にもかかわらず、片方（`Task`）しか許可していなかったことが根本原因である。
+
+### 修正内容
+
+- **`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh`**: R2 の orchestrator allowlist（`case "$TOOL" in` の許可分岐）に `Agent` を追加した（`Read|Grep|Glob|LS|list_dir|Task|Agent|mcp_task|...`）。`Task` は他ハーネス互換のため残し、両名を許可する。直前コメントに、委譲ツール実名がハーネスで異なる旨と、片方のみ許可では実機側委譲ツールが `*)` に落ち自己ロックアウトする（実機で発生済み）旨を CODE_COMMENT_RULES 準拠（外部ドキュメント名・章節番号・追跡番号を含めない簡潔な自然文）で注記した。
+- **`.claude/hooks/PostToolUse.sh` ／ `.agent-skill-chain/source/enforcement/claude/PostToolUse.sh`**: 案内主体で常に exit 0 する設計であり、ツール名依存の allowlist／reject ロジックを持たないことを確認。是正不要。
+- **他箇所の確認**: `grep` により enforcement 配下で `Task` を許可し `Agent` を欠く実効的分岐は PreToolUse.sh の R2 のみと確認（`enforcement/DESIGN.md`・`enforcement/README.md`・`enforcement/cursor/agents-core.mdc` の `Task` 言及は「ROLE: 付き Task」という委譲概念の説明文であり、ツール名を機械照合する allowlist ではないため自己ロックアウトの原因にはならない）。
+
+### 検証結果（実測）
+
+- **隔離環境（`mktemp -d`）での直接検証**（**本リポには `enforce on` を実行せず**、修正後スクリプトに実機フック形式の JSON を stdin で渡し `AGENT_ROLE=orchestrator` で実行）:
+  - `{"tool_name":"Agent",...}` → **exit 0（許可）**。自己ロックアウト再発防止を確認。
+  - `{"tool_name":"Task",...}` → **exit 0（許可）**。既存ハーネス互換の維持を確認。
+  - `{"tool_name":"Bash",...}` → **exit 2（拒否）**。セキュリティ境界の維持を確認。
+  - `{"tool_name":"Edit",...}` → **exit 2（拒否）**。同上。
+  - `{"tool_name":"Grep",...}` → **exit 0（許可）**。回帰なし。
+- **既存＋新規テスト**: `test/test-pretooluse-hook.sh` の UC1 に「orchestrator Agent は exit 0」「orchestrator Task は exit 0」の 2 シナリオを追加。同テスト **34/34 PASS・FAIL=0**（追加前 32 → 34）。
+- **`npm test` 全体**: **13/13 PASS・FAIL=0・SKIP=0**（内包する e2e は 131/131 PASS）。
+- 検証時、実行シェルの ambient 環境に `AGENT_ROLE=orchestrator` 等が混入していたため、`npm test`・テストは `env -u AGENT_ROLE -u AGENTS_SCRIBE_NONCE -u AGENTS_ROOT -u AGENTS_EXPECTED_SCRIBE_NONCE -u CLAUDE_AGENT_ROLE` でクリーン化して実行した。
+
+### 変更ファイル
+
+- `.agent-skill-chain/source/enforcement/claude/PreToolUse.sh`（R2 allowlist に `Agent` 追加＋インシデント注記コメント）
+- `test/test-pretooluse-hook.sh`（UC1 に Agent 許可・Task 許可の 2 シナリオ追加）
+
+> 配備済み `.claude/hooks/PreToolUse.sh`（`.gitignore` 対象・現在 enforcement は OFF で未配線）は本コミットの対象外。次回 `init`／`setup` 時に正本 `.agent-skill-chain/source/enforcement/claude/PreToolUse.sh` から再配備される。事故再発リスクのため本リポへの `enforce on` は実行していない。
