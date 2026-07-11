@@ -372,3 +372,19 @@ document_id: "ad96201a-9028-4ef2-b955-97f44c26a34c"
 | README/警告文の bash/TS/配備物ドリフト無し | observed_runtime | バイト一致比較（bash==deployed: true） |
 | TS ミラー関数が未使用（dead） | observed_runtime | 全リポ grep で定義元以外に参照 0 件 |
 | 設計 §2.6.9 の各決定事項と実装の一致 | existing_code | 02_設計 §2.6.9.1〜5 と実装ファイル本文の突合 |
+
+## T8-課題2是正（進行役方針(b)＝パリティ試験の新規追加）
+
+**是正日**: 2026-07-11 ／ **担当**: opus（fail-closed safety モジュールのため）／ **evidence_source: observed_runtime**
+
+進行役の判断により、T8-課題2 は方針(b)（dead な TS ミラーの削除ではなく、§2.8.3 が要求していたパリティ試験の新規追加）で是正した。二重実装（bash 版 `package-manifest.sh` ／ TS 版 `src/agents-md.ts`）は fail-closed の安全性ロジックに対する意図的な防御的設計（`ownedSkillNames`⇔`list_owned_skill_names` と同型）であり、削除ではなく同期を強制するパリティ試験を設けることでドリフトを検知可能にした。
+
+- **追加テスト**: `test/test-package-manifest-parity.sh`（TEST_BDD_FORMAT 準拠・全シナリオ `mktemp -d` 隔離・`assert_tmp_target` で /tmp 配下を強制）。5 関数のパリティを検証:
+  - `checkPackageManifest` ⇔ `check_package_manifest`: new／match／abort(マーカー不在)／abort(name 不一致)／own(自己適用) の 5 入力状態で同一判定を確認。
+  - `legacyFingerprintOk` ⇔ `legacy_fingerprint_ok`: 4 ファイル充足＋各 1 ファイル欠落（boot/setup/audit/schema）で同一 true/false を確認。
+  - `writePackageManifest` ⇔ `write_package_manifest`: 生成 `.package-manifest` のバイト一致を確認。
+  - `backupAgentSkillChain` ⇔ `backup_agent_skill_chain`: 退避先命名規則（`.agent-skill-chain-source.bak.<14桁>`・`.agent-skill-chain-runtime-templates.bak.<14桁>`）と退避内容の一致を確認。
+  - `writeReadmeWarning` ⇔ `write_readme_warning`: 生成 `README.md` のバイト一致（文言ドリフト検知）を確認。
+- **TS 側の最小変更**: 上記 5 関数を `export`（CLI の public interface・コマンド体系は不変）。テストから import できるよう、エントリポイント `process.exit(main(...))` を es-main 判定（argv[1] と本モジュール実体パスの realpath 一致）でガードし、**直接起動時のみ main を実行・import 時は副作用なし**とした（npm bin の symlink 経由でも直接起動を正しく判定）。5 関数と bash 側対応関数のコメントに「パリティ試験 `test/test-package-manifest-parity.sh` で同期を検証」旨を追記（`ownedSkillNames` のミラーコメントと同型）。
+- **検証結果（実測）**: `npm run typecheck` PASS・`npm run build` PASS。新テスト単体 28 アサーション全 PASS。`npm test` 全体 **3 回連続 13/13 PASS**（新テストを `run-all.sh` の TESTS 一覧・bin 前置ビルド case に登録）。
+- **flakiness の付記**: 3 回連続 green の前の 1 回で `test-cli-audit-doctor`・`test-write-workflow-log-glob` が単発 FAIL したが、両者はミラー系と無関係（前者は T8-課題1 と同根の実 `workflow.db` 書記シード n<3、後者も同系の DB シード）で、**ベースライン（本是正前）でも同条件で FAIL・隔離実行では各 3/3 PASS** を実測。本是正による回帰ではなく、T8-課題1 に記録済みの既存環境感受性である。

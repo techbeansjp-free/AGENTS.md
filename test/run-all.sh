@@ -27,6 +27,7 @@
 #   | test-write-workflow-log-multidoc.sh | bash・sqlite3 |
 #   | test-write-workflow-log-glob.sh     | bash・sqlite3（to_json_array の glob 展開是正・noglob 回帰・tmp 隔離） |
 #   | test-c4-bypass-resistance.sh        | bash・git・tar（C-4 パス正規化・AGENT_ROLE 出所制御の回帰・tmp 隔離） |
+#   | test-package-manifest-parity.sh     | bash・node（package-manifest.sh↔agents-md.ts ミラー同期のパリティ・tmp 隔離） |
 #   | test-cli-audit-doctor.sh            | bash・git・tar・node・sqlite3（C-5 audit 透過・doctor hash/integrity・tmp 隔離） |
 #   | test-export-ndjson.sh               | bash・git・tar・node・sqlite3・python3（C-7 NDJSON export 検証・tmp 隔離） |
 #   | e2e-claude-hook.sh                  | bash・git・tar・node・python3（C-3 settings 配線経由 hook E2E・tmp 隔離） |
@@ -60,6 +61,7 @@ test-write-workflow-log-prevhash|test-write-workflow-log-prevhash.sh|bash sqlite
 test-write-workflow-log-multidoc|test-write-workflow-log-multidoc.sh|bash sqlite3
 test-write-workflow-log-glob|test-write-workflow-log-glob.sh|bash sqlite3
 test-c4-bypass-resistance|test-c4-bypass-resistance.sh|bash git tar
+test-package-manifest-parity|test-package-manifest-parity.sh|bash node
 test-cli-audit-doctor|test-cli-audit-doctor.sh|bash git tar node sqlite3
 test-export-ndjson|test-export-ndjson.sh|bash git tar node sqlite3 python3
 e2e-claude-hook|e2e-claude-hook.sh|bash git tar node python3
@@ -132,7 +134,7 @@ while IFS='|' read -r name path deps; do
   # bin（非追跡生成物）を必要とするテスト群は、呼ぶ前に REPO_ROOT で bin を用意する（冪等・最小）。
   #   C-5/C-7/C-3 の CLI/E2E テストおよび e2e-install-uninstall は bin/agents-md.js を起動するため。
   case "$name" in
-    e2e-install-uninstall|test-cli-audit-doctor|test-export-ndjson|e2e-claude-hook)
+    e2e-install-uninstall|test-cli-audit-doctor|test-export-ndjson|e2e-claude-hook|test-package-manifest-parity)
       repo_root="$(cd "$SCRIPT_DIR/.." && pwd)"
       if [[ ! -f "$repo_root/bin/agents-md.js" ]] \
          && command -v npm >/dev/null 2>&1 && [[ -d "$repo_root/node_modules" ]]; then

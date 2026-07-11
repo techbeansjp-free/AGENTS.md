@@ -518,6 +518,11 @@ function extractHookCommand(entry: unknown): string | null {
 // .agent-skill-chain/source/scripts/lib/package-manifest.sh と**同一のものをミラーする**
 // （list_owned_skill_names / ownedSkillNames と同型の単一定義ミラー方式。drift を避けるため、
 // 判定規則・警告文を変えるときは package-manifest.sh 側も合わせて更新すること）。
+//
+// この二重実装（bash 版 = package-manifest.sh / TS 版 = 本ブロック）が同一の判定結果・同一の
+// 出力を返すことは test/test-package-manifest-parity.sh がパリティテストで検証し、ドリフトを検知する。
+// そのため下記 5 関数（checkPackageManifest / legacyFingerprintOk / writePackageManifest /
+// backupAgentSkillChain / writeReadmeWarning）はテストから import して呼べるよう export する。
 // ----------------------------------------------------------------------------
 
 // 配備マーカー（.package-manifest）の内容（name/version の 2 フィールドのみ）。
@@ -582,7 +587,9 @@ type ManifestCheckResult =
 //   packageRoot の実パス一致は「配備先がパッケージ自身」であることを確実に示すため、この一致時のみ
 //   マーカー検査を省いて続行する（他人の無関係ディレクトリは実パスが一致せず fail-closed の境界は
 //   弱まらない）。判定規則を変えるときは package-manifest.sh 側も合わせて更新すること。
-function checkPackageManifest(
+//   本関数は package-manifest.sh の check_package_manifest のミラーであり、両者が同一の判定
+//   （own/new/match/abort）を返すことを test/test-package-manifest-parity.sh が検証している。
+export function checkPackageManifest(
   projectRoot: string,
   expectedName: string,
   packageRoot?: string
@@ -614,7 +621,9 @@ function checkPackageManifest(
 }
 
 // writePackageManifest: 配備マーカーへ name/version を書き込む（新規配備・再配備のいずれでも呼ぶ）。
-function writePackageManifest(projectRoot: string, name: string, version: string): void {
+//   package-manifest.sh の write_package_manifest のミラー。生成される .package-manifest の内容が
+//   一致することを test/test-package-manifest-parity.sh が検証している。
+export function writePackageManifest(projectRoot: string, name: string, version: string): void {
   const dir = agentSkillChainRoot(projectRoot);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, ".package-manifest"), `name=${name}\nversion=${version}\n`);
@@ -637,7 +646,9 @@ function backupTimestamp(): string {
 //   命名は setup.sh の backup_agent_skill_chain と同一（単一定義のミラー）:
 //     <root>/.agent-skill-chain-source.bak.<timestamp>/
 //     <root>/.agent-skill-chain-runtime-templates.bak.<timestamp>/
-function backupAgentSkillChain(projectRoot: string): void {
+//   package-manifest.sh の backup_agent_skill_chain のミラー。退避先ディレクトリの命名規則と
+//   退避内容が一致することを test/test-package-manifest-parity.sh が検証している。
+export function backupAgentSkillChain(projectRoot: string): void {
   const dir = agentSkillChainRoot(projectRoot);
   const ts = backupTimestamp();
 
@@ -665,7 +676,9 @@ function backupAgentSkillChain(projectRoot: string): void {
 //   drift を避けるため、対象ファイルを変えるときは package-manifest.sh 側も合わせて更新すること）。
 //   実際の破壊的な移行（バックアップ→移動）は setup.sh の migrate_legacy_dirs が単一実装で担い、
 //   本 CLI の init/upgrade は runSetup 経由でそれを実行する（移行アクションを二重実装しない）。
-function legacyFingerprintOk(projectRoot: string): boolean {
+//   package-manifest.sh の legacy_fingerprint_ok のミラー。同一の旧ディレクトリ状態に対し両者が
+//   同一の true/false を返すことを test/test-package-manifest-parity.sh が検証している。
+export function legacyFingerprintOk(projectRoot: string): boolean {
   const agents = join(projectRoot, ".agents");
   return (
     existsSync(join(agents, "boot", "CORE.md")) &&
@@ -696,7 +709,9 @@ function readmeWarningText(): string {
 }
 
 // writeReadmeWarning: 統合ルート直下の警告文を最新化する（新規配備・再配備どちらでも呼ぶ）。
-function writeReadmeWarning(projectRoot: string): void {
+//   package-manifest.sh の write_readme_warning（本文は readme_warning_text）のミラー。
+//   書き込まれる README 警告文ファイルの内容が一致することを test/test-package-manifest-parity.sh が検証している。
+export function writeReadmeWarning(projectRoot: string): void {
   const dir = agentSkillChainRoot(projectRoot);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "README.md"), readmeWarningText());
@@ -1266,4 +1281,20 @@ function main(argv: string[]): number {
   }
 }
 
-process.exit(main(process.argv));
+// CLI として直接起動されたときのみ main を実行する。パリティテスト（test/test-package-manifest-parity.sh）は
+// 内部関数（checkPackageManifest / legacyFingerprintOk / writePackageManifest / backupAgentSkillChain /
+// writeReadmeWarning）を呼ぶために本モジュールを import するため、import 時は副作用（process.exit）を
+// 起こしてはならない。npm bin の symlink 経由でも直接起動を正しく判定できるよう、起動パス（argv[1]）と
+// 本モジュール実体パスを realpath 正規化して比較する（es-main 判定）。CLI のコマンド体系は不変。
+const invokedRealPath = ((): string => {
+  const p = process.argv[1];
+  if (!p) return "";
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+})();
+if (invokedRealPath && invokedRealPath === realpathSafe(fileURLToPath(import.meta.url))) {
+  process.exit(main(process.argv));
+}

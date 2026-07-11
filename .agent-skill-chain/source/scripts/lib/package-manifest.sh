@@ -8,6 +8,8 @@
 #       setup.sh はこの 1 ファイルを source する。src/agents-md.ts は同一の判定規則・
 #       警告文をミラーする（list_owned_skill_names / ownedSkillNames と同型の単一定義ミラー方式。
 #       drift を避けるため、判定規則・警告文を変えるときは agents-md.ts 側も合わせて更新すること）。
+#       この二重実装（bash 版 = 本ファイル / TS 版 = agents-md.ts）が同一の判定結果・同一出力を返す
+#       ことは test/test-package-manifest-parity.sh がパリティテストで検証し、ドリフトを検知する。
 #
 # fail-closed 方針: 衝突検知は判定できない場合に必ず処理を中止する（既存 enforcement の
 # fail-open 方針とは対称的に異なる。SETUP.md 参照）。
@@ -35,6 +37,8 @@ manifest_path() {
 #   中止してしまう。<root> と <package_root> の**実パス一致**は「配備先がパッケージ自身」で
 #   あることを確実に示すため、この一致時のみマーカー検査を省いて続行する。他人の無関係な
 #   ディレクトリは実パスが一致しないためこの分岐に入らず、fail-closed の境界は弱まらない。
+#   本関数は agents-md.ts の checkPackageManifest のミラーであり、両者が同一の判定（own/new/match/
+#   abort）を返すことを test/test-package-manifest-parity.sh が検証している。
 check_package_manifest() {
   local root="$1" expected_name="$2" package_root="${3:-}"
   local dir="$root/.agent-skill-chain"
@@ -77,6 +81,8 @@ check_package_manifest() {
 
 # write_package_manifest <root> <name> <version>
 #   配備マーカーへ name/version を書き込む（新規配備・再配備のいずれでも呼び出す）。
+#   agents-md.ts の writePackageManifest のミラー。生成される .package-manifest の内容が一致する
+#   ことを test/test-package-manifest-parity.sh が検証している。
 write_package_manifest() {
   local root="$1" name="$2" version="$3"
   local dir="$root/.agent-skill-chain"
@@ -92,6 +98,8 @@ write_package_manifest() {
 #   命名: <root>/.agent-skill-chain-source.bak.<timestamp>/ ・
 #         <root>/.agent-skill-chain-runtime-templates.bak.<timestamp>/
 #         （プロジェクトルート直下に統合ルートと同名衝突しないようハイフン連結で退避する）。
+#   agents-md.ts の backupAgentSkillChain のミラー。退避先の命名規則と退避内容が一致することを
+#   test/test-package-manifest-parity.sh が検証している。
 backup_agent_skill_chain() {
   local root="$1"
   local dir="$root/.agent-skill-chain"
@@ -121,6 +129,8 @@ backup_agent_skill_chain() {
 #   揃っていれば 0、1 つでも欠ければ 1 を返す。統合移行を安全に行える「本パッケージの旧バージョン
 #   配備」であることの確認に使う。旧ディレクトリ名リテラルは連結で組み立て、参照更新スキャンの
 #   対象にしない（下記 legacy_source。旧 source 名は連結で構成する）。
+#   agents-md.ts の legacyFingerprintOk のミラー。同一の旧ディレクトリ状態に対し両者が同一の
+#   0/1（true/false）を返すことを test/test-package-manifest-parity.sh が検証している。
 legacy_fingerprint_ok() {
   local legacy_source="$1/.agents"
   [[ -f "$legacy_source/boot/CORE.md" ]] || return 1
@@ -204,6 +214,8 @@ EOF
 
 # write_readme_warning <root>
 #   .agent-skill-chain/README.md を上記警告文で最新化する（新規配備・再配備のいずれでも呼ぶ）。
+#   agents-md.ts の writeReadmeWarning（本文は readmeWarningText）のミラー。書き込まれる
+#   README 警告文ファイルの内容が一致することを test/test-package-manifest-parity.sh が検証している。
 write_readme_warning() {
   local root="$1"
   local dir="$root/.agent-skill-chain"
