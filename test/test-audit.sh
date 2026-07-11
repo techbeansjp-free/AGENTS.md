@@ -319,6 +319,157 @@ else
   ok "GIT_RANGE: git 不在のため SKIP（環境依存）"
 fi
 
+# =====================================================================================
+# #32 実装前 review-docs 未実行検知（check_reviewdocs_before_implement）の回帰テスト
+#   tmp 隔離（mktemp -d）。本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db は変更しない。
+#   参照: docs/maintainer/workflow/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/20260711_194044_review-docs必須化/03_実装計画.md §2.3
+# =====================================================================================
+echo "== #32 実装前 review-docs 未実行検知 =="
+
+if command -v sqlite3 >/dev/null 2>&1; then
+  # シナリオ1: 正常系 pass（発効日以降・implement-feature と review-docs 両ログ）
+  # Given: 発効日以降(20260801)の issue に 03_実装計画.md と implement-feature・review-docs 両ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "実装前 review-docs 未実行" の FAIL が出ない
+  S32_1_TREE="$(make_min_tree)"
+  S32_1_ISS="docs/maintainer/workflow/20260801_000000_ok"
+  mkdir -p "$S32_1_TREE/$S32_1_ISS"
+  : > "$S32_1_TREE/$S32_1_ISS/03_実装計画.md"
+  S32_1_DB="$S32_1_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_1_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_1_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_1_ISS');" 2>/dev/null
+  sqlite3 "$S32_1_DB" "INSERT INTO workflow_log VALUES ('e2', NULL, 'review-docs', '$S32_1_ISS');" 2>/dev/null
+  S32_1_OUT="$(bash "$AUDIT" "$S32_1_TREE" 2>&1)"
+  if ! grep -q "実装前 review-docs 未実行" <<< "$S32_1_OUT"; then
+    ok "#32 正常系（impl＋review-docs 両ログ）は FAIL しない"
+  else
+    ng "#32 正常系で誤って FAIL した: $S32_1_OUT"
+  fi
+
+  # シナリオ2: 違反系 FAIL（発効日以降・implement-feature ログのみ）
+  # Given: 発効日以降の issue に implement-feature ログのみ（review-docs 無し）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "実装前 review-docs 未実行" の FAIL が出る
+  S32_2_TREE="$(make_min_tree)"
+  S32_2_ISS="docs/maintainer/workflow/20260801_000000_ng"
+  mkdir -p "$S32_2_TREE/$S32_2_ISS"
+  : > "$S32_2_TREE/$S32_2_ISS/03_実装計画.md"
+  S32_2_DB="$S32_2_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_2_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_2_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_2_ISS');" 2>/dev/null
+  S32_2_OUT="$(bash "$AUDIT" "$S32_2_TREE" 2>&1)"
+  if grep -q "実装前 review-docs 未実行" <<< "$S32_2_OUT"; then
+    ok "#32 違反系（impl のみ）で FAIL する"
+  else
+    ng "#32 違反系で FAIL しなかった（見逃し）: $S32_2_OUT"
+  fi
+
+  # シナリオ3: grandfather SKIP（発効日前）
+  # Given: 発効日前(20260101)の issue に implement-feature ログのみ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #32 の FAIL は出ない（遡及適用なし）
+  S32_3_TREE="$(make_min_tree)"
+  S32_3_ISS="docs/maintainer/workflow/20260101_000000_old"
+  mkdir -p "$S32_3_TREE/$S32_3_ISS"
+  : > "$S32_3_TREE/$S32_3_ISS/03_実装計画.md"
+  S32_3_DB="$S32_3_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_3_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_3_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_3_ISS');" 2>/dev/null
+  S32_3_OUT="$(bash "$AUDIT" "$S32_3_TREE" 2>&1)"
+  if ! grep -q "実装前 review-docs 未実行" <<< "$S32_3_OUT"; then
+    ok "#32 grandfather SKIP（発効日前 issue は FAIL しない）"
+  else
+    ng "#32 grandfather が機能せず遡及 FAIL した: $S32_3_OUT"
+  fi
+
+  # シナリオ4: close SKIP
+  # Given: close/ 配下の issue に implement-feature ログのみ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #32 の FAIL は出ない
+  S32_4_TREE="$(make_min_tree)"
+  S32_4_ISS="docs/maintainer/workflow/close/20260801_000000_closed"
+  mkdir -p "$S32_4_TREE/$S32_4_ISS"
+  : > "$S32_4_TREE/$S32_4_ISS/03_実装計画.md"
+  S32_4_DB="$S32_4_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_4_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_4_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_4_ISS');" 2>/dev/null
+  S32_4_OUT="$(bash "$AUDIT" "$S32_4_TREE" 2>&1)"
+  if ! grep -q "実装前 review-docs 未実行" <<< "$S32_4_OUT"; then
+    ok "#32 close SKIP（close 配下 issue は FAIL しない）"
+  else
+    ng "#32 close 除外が効いていない: $S32_4_OUT"
+  fi
+
+  # シナリオ6: #29 と #32 の非交差確認
+  # Given: 同一 DB に (a) 04 のみ・impl 0 件の issue（#29 対象）と (b) impl のみ・review-docs 無しの発効日以降 issue（#32 対象）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #29 は (a) で、#32 は (b) でそれぞれ個別に FAIL する（排他・非交差）
+  S32_6_TREE="$(make_min_tree)"
+  S32_6_A="docs/maintainer/workflow/20260801_000000_29case"
+  S32_6_B="docs/maintainer/workflow/20260801_000000_32case"
+  mkdir -p "$S32_6_TREE/$S32_6_A" "$S32_6_TREE/$S32_6_B"
+  : > "$S32_6_TREE/$S32_6_B/03_実装計画.md"
+  cat > "$S32_6_TREE/$S32_6_A/04_review.md" <<'EOF'
+# 04_review
+
+## 敵対的観点
+- ダミー
+
+## must-preserve（不変条件）
+- ダミー
+
+## docs 更新
+- 要否: 不要
+- 対象: なし
+- 理由: 文書のみ
+EOF
+  S32_6_DB="$S32_6_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_6_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_6_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_6_B');" 2>/dev/null
+  S32_6_OUT="$(bash "$AUDIT" "$S32_6_TREE" 2>&1)"
+  if grep -q "実装前に 04_review.md が作成されています" <<< "$S32_6_OUT" && grep -q "実装前 review-docs 未実行" <<< "$S32_6_OUT"; then
+    ok "#29/#32 非交差: 各々の対象 issue で個別に FAIL する"
+  else
+    ng "#29/#32 非交差の確認に失敗: $S32_6_OUT"
+  fi
+
+  # シナリオ7: サブ issue（深さ4）違反系 FAIL（回帰防止・maxdepth 撤廃 lock）
+  # Given: docs/maintainer/workflow/<親>/90_issues/<sub>/（scan dir から深さ4）・発効日以降の issue に
+  #        03_実装計画.md と implement-feature ログのみ（review-docs 無し）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #32 が FAIL する（-maxdepth 再導入による取りこぼし回帰を防ぐ）
+  S32_7_TREE="$(make_min_tree)"
+  S32_7_ISS="docs/maintainer/workflow/20260801_000000_parent/90_issues/20260801_000000_sub"
+  mkdir -p "$S32_7_TREE/$S32_7_ISS"
+  : > "$S32_7_TREE/$S32_7_ISS/03_実装計画.md"
+  S32_7_DB="$S32_7_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_7_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_7_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_7_ISS');" 2>/dev/null
+  S32_7_OUT="$(bash "$AUDIT" "$S32_7_TREE" 2>&1)"
+  if grep -q "実装前 review-docs 未実行" <<< "$S32_7_OUT"; then
+    ok "#32 サブ issue（深さ4）違反系で FAIL する（maxdepth 撤廃 lock）"
+  else
+    ng "#32 サブ issue（深さ4）で FAIL しなかった（取りこぼし回帰）: $S32_7_OUT"
+  fi
+else
+  echo "  [SKIP] #32 review-docs 未実行検知の回帰（sqlite3 不在）"
+fi
+
+# シナリオ5: DB 非採用 SKIP（sqlite3/DB 無し）
+# Given: workflow.db を作らない最小ツリー（impl ログも review-docs ログも存在しえない）
+# When:  audit.sh <tmp> を実行する
+# Then:  #32 の FAIL は出ない（DB 非採用は SKIP）
+S32_5_TREE="$(make_min_tree)"
+S32_5_ISS="docs/maintainer/workflow/20260801_000000_nodb"
+mkdir -p "$S32_5_TREE/$S32_5_ISS"
+: > "$S32_5_TREE/$S32_5_ISS/03_実装計画.md"
+S32_5_OUT="$(bash "$AUDIT" "$S32_5_TREE" 2>&1)"
+if ! grep -q "実装前 review-docs 未実行" <<< "$S32_5_OUT"; then
+  ok "#32 DB 非採用 SKIP（sqlite3/DB 無しで FAIL しない）"
+else
+  ng "#32 DB 非採用でも FAIL した: $S32_5_OUT"
+fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then

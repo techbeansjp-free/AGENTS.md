@@ -48,6 +48,9 @@ echo "Agents ソース:       $AGENTS_SOURCE"
 # check_package_manifest がここでエラー終了し、以降の破壊的操作は一切行われない。
 # shellcheck source=lib/package-manifest.sh
 . "$SCRIPT_DIR/lib/package-manifest.sh"
+# workflow.db 由来検知（軽量警告・非中止）の共通ロジック。init_workflow_db から呼ぶ。
+# shellcheck source=lib/workflow-db-guard.sh
+. "$SCRIPT_DIR/lib/workflow-db-guard.sh"
 
 PACKAGE_NAME="$(grep -m1 '"name"' "$PACKAGE_ROOT/package.json" | sed -E 's/.*"name": *"([^"]+)".*/\1/')"
 PACKAGE_VERSION="$(grep -m1 '"version"' "$PACKAGE_ROOT/package.json" | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
@@ -196,6 +199,7 @@ fi
 init_workflow_db() {
   local db="$PROJECT_ROOT/.agent-skill-chain/runtime/workflow.db"
   if [[ -f "$db" ]]; then
+    warn_if_foreign_workflow_db "$db"
     return 0
   fi
   echo "[setup] ワークフロー用 DB を作成しています"

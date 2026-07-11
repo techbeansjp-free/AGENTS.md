@@ -61,6 +61,7 @@
 
 ## 実行時の注意
 
+- **実装着手の前提（絶対強制）**: 実装着手の前提として、**同一 issue の [review-docs](review-docs.md)（実装前ドキュメントレビュー）が完了していること**を要する。design-feature 完了後・本 command 委譲前に review-docs が未完了の場合は、先に review-docs を委譲すること（委譲義務の正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)）。未完了のまま implement-feature ログが記録されると enforcement #32（[enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し）で FAIL する。
 - **実装完了後は必ず verify-and-close を委譲すること。** 実装 phase の成果物がある場合、クローズ前に verify-and-close を経ずに次に進んではならない（enforcement で拒否する）。
 - **完了後に書記（write-workflow-log）に依頼して記録させること。**
 - **証跡・書記に渡す項目**: implement-feature 完了時は書記（write-workflow-log）に **CHANGED_FILES_JSON**（変更ファイルの JSON 配列）を渡すことが**必須**。enforcement の audit で検証する。

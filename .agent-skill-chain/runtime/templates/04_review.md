@@ -195,11 +195,11 @@ pie title テストカバレッジ
 
 ## docs 更新
 
-（監査で必須。システム仕様書（docs/）の更新要否を判定し、以下を記載すること。）
+（監査で必須。システム仕様書（docs/）の更新要否を [`.agent-skill-chain/source/DOCS_RULES.md`](../../../.agent-skill-chain/source/DOCS_RULES.md) §継続追随ゲートに従い判定し、以下を記載すること。**要の場合は対応する `docs/00_review/` レビュー記録への参照を、不要の場合は根拠を必ず記載する**。）
 
 - 要否: （要 / 不要）
-- 対象: （更新する doc パスまたは「なし」）
-- 理由: （要の場合の理由、不要の場合は「変更が仕様に影響しないため」等）
+- 対象: （更新する doc パスまたは「なし」。要の場合は対応する `docs/00_review/YYYYMMDD_HHMMSS_review.md` への参照を必ず含める）
+- 理由: （要の場合はレビュー記録の指摘 N→0 の反復経過を要約。不要の場合は「変更が仕様に影響しないため」等、更新不要と判定した根拠を具体的に記載する）
 
 ---
 
@@ -247,8 +247,8 @@ pie title テストカバレッジ
 
 ## 11. システム仕様書の更新
 
-> **重要**: Issue 完了時（レビューフェーズ完了時）に、**必ずシステム仕様書（`docs/`）の更新が必要か確認し、必要に応じて加筆修正を行うこと**。
-> **システム仕様書の作成・更新は基本的に issue を立てない。** レビュー用ディレクトリ **`docs/00_review/`** にレビュー結果（YYYYMMDD_HHMMSS_review.md）を記載すればよい。詳細は [`.agent-skill-chain/source/DOCS_RULES.md`](../../.agent-skill-chain/source/DOCS_RULES.md) および `.agent-skill-chain/source/RULES.md`（システム仕様書）を参照。
+> **重要**: Issue 完了時（レビューフェーズ完了時）に、実装変更を伴う場合は [`.agent-skill-chain/source/DOCS_RULES.md`](../../../.agent-skill-chain/source/DOCS_RULES.md) §継続追随ゲートに従い、システム仕様書（`docs/`）との照合レビュー（指摘 0 件までの反復、または根拠付きの更新不要判定）を**必須**とする。
+> **システム仕様書の作成・更新は基本的に issue を立てない。** レビュー用ディレクトリ **`docs/00_review/`** にレビュー結果（YYYYMMDD_HHMMSS_review.md）を記載すればよい。詳細は [`.agent-skill-chain/source/DOCS_RULES.md`](../../../.agent-skill-chain/source/DOCS_RULES.md) §継続追随ゲート および `.agent-skill-chain/source/RULES.md`（システム仕様書）を参照。docs/ を採用していないプロジェクトでは本ゲートは不発動とする。
 
 ### 11.1 システム仕様書の確認結果
 

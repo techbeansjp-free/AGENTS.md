@@ -44,6 +44,12 @@ orchestrator が「実作業をしない」「run_command 経由のみ」から�
 
 上記を物理強制（hooks）や CI で実装する際は、enforcement/README.md および既存の subagent-guard（実体: `.agent-skill-chain/runtime/templates/github/scripts/subagent-guard.sh`）等と整合をとること。subagent-guard が検査するのは内部参照禁止（#6 相当）・ログ frontmatter 禁止・`logs/` 廃止の 3 点のみで、#22–#24 は実装しない。timestamp 付き memo については、hooks で `.agent-skill-chain/runtime/{issue}/memo/` への自由な Write/Edit を抑止し、CI（audit.sh）でプレフィックス形式および実時間との乖離を検査する。
 
+### worker と main の識別（`agent_id` による委譲先判定）
+
+`enforce on` 時、`settings.enforce.json` は `env.AGENT_ROLE=orchestrator` を全実行に静的配線するため、env だけでは進行役 main と委譲先 subagent worker を区別できない。両者の識別は、**ハーネスがサブエージェント実行時のみ PreToolUse の stdin JSON トップレベルへ注入する `agent_id`**（`IS_SUBAGENT = (agent_id 非空)`）で行う。`agent_id` が非空なら worker として実作業（Bash/Edit/Write）を許可し、空なら main 相当として orchestrator の直接実作業を `exit 2` で block する。**判定ロジックの実体は `PreToolUse.sh` のみに集約**し、本 DESIGN・README・`settings.enforce.json`・`src/agents-md.ts` へロール分岐を二重実装しない（本節は参照）。
+
+**偽装耐性と限界（ADR-2）**: `agent_id` は**ハーネス注入（エージェント非制御領域）であり自己申告できない**。エージェントは hook stdin のトップレベルを構築できず（制御できるのは `tool_input` の中身のみ）、`export` 可能な env 昇格 twin（`CLAUDE_AGENT_ID` 等）は意図的に設けない。ゆえに素朴な `export AGENT_ROLE=worker` では orchestrator 制限を外せない。ただし C-4b（scribe nonce）と同種の限界があり、hook 入力構築を完全に掌握できる相手への完全防御ではない。最終保証は CI audit（#25）＋外部証跡が担う。scribe（nonce 検証済み）は `agent_id` を伴っても最優先で判定され、worker allow へ落ちず R5（write-workflow-log 単独のみ）を維持する。
+
 ---
 
 ## 系統D: hooks overlay 配備の設計思想（`.agent-skill-chain/project/` 優先）

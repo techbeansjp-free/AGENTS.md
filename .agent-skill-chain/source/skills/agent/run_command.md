@@ -44,6 +44,7 @@ command 実行を委譲するときに渡すブロック。内容の詳細は各
 - **守るルール**: CORE / LOAD_POLICY / PHASES / RULES / IO_CONTRACT。該当 command ファイルに記載された**順序**を守ること。飛ばさない。All output must conform to .agent-skill-chain/source/IO_CONTRACT.md and .agent-skill-chain/source/RULES.md
 - **.agent-skill-chain/project**: プロジェクトルートの **.agent-skill-chain/project/** が存在する場合は、command 実行**前**に読了・参照すること。
 - **worker 完了後**: 監査・書記以外の worker command（requirement-discovery, design-feature, implement-feature 等）の完了後、オーケストレータは**必ず** verify-and-close を指示すること。省略して次フェーズへ進めてはならない。
+- **実装着手前の review-docs 必須ゲート（絶対強制）**: design-feature（設計・実装計画）完了後・implement-feature 委譲前に、当該 issue について [review-docs](../../commands/review-docs.md) を**必ず委譲**すること（全 issue 一律・規模比例の免除なし）。完了の定義は [PHASES.md §レビュー成果物の配置ルール](../../workflow/PHASES.md#レビュー成果物の配置ルール)（memo 作成＋指摘がなくなるまでの修正反復＋書記委譲）に従う。未実行のまま implement-feature を実行すると enforcement #32（[enforcement/README.md](../../enforcement/README.md) §失敗条件と差し戻し）で FAIL する。
 - **書記依頼の強制**: 各サブエージェントは、command の成果を記録するため、**必ず**書記（write-workflow-log）に依頼して記録させること。省略してはならない。強制的に実施する。
 - **verify-and-close を委譲する場合**: command の skill chain を**最後まで**実行すること。step 5（write-workflow-log）を**省略しない**こと。workflow.db を採用している場合は write-workflow-log.sh を**必ず**実行すること。
 - **create-pr-review-issue を委譲する場合**: command の skill chain を**最後まで**（対応方針の監査・書記 write-workflow-log を含む）実行すること。worker 完了後に監査を経て指摘がなくなるまで修正反復し、書記を省略しないこと。
@@ -69,6 +70,7 @@ command 実行を委譲するときに渡すブロック。内容の詳細は各
 - **通常の作業依頼に対する過度な許可確認の強制**: 高リスク操作に該当しない限り、issue 作成・要件定義・設計・実装計画・実装・レビュー等の通常の作業依頼に対して、本 run_command を呼ぶ前に毎回「サブを起動してよいか」「この command を実行してよいか」「この方針で進めてよいか」等をユーザーに確認する運用は行わない（パッケージルートの `AGENTS.md` §自立進行ルール と整合させる）。
 - **実作業 command を実行しない指示文案のみの返却**: ユーザーから「プロンプト案だけ教えて」「手順だけ教えて」など説明モードへの切り替えが明示されていない通常の作業依頼に対して、本 skill を「サブへの指示文案だけを返して実作業 command を実行しない」用途で使ってはならない（自立進行ルール違反）。
 - **高リスク操作の事前確認省略**: RULES / CORE / enforcement で定義された高リスク操作（大量削除・外部サービスへの書き込み等）に該当する command・capability を本 run_command から起動する場合は例外とし、そのときのみ事前にユーザーの明示的な確認を必須とする。
+- **サブによる独断起票**: サブエージェント（本 run_command で委譲されたワーカー）は、作業中に発見した派生課題・フォローアップについて issue/サブ issue を自ら起票（ディレクトリ・`00_要求定義.md` 等の新規作成）してはならない。発見事項は完了報告でメインへ提案するに留め、起票の可否判断・実行はメインの承認を経てから行う。詳細は [CLOSEOUT.md §取りこぼし0と既出確認（no-drop / dedup）](../../CLOSEOUT.md#取りこぼし0と既出確認no-drop--dedup) を参照（本項は参照のみ・再定義しない）。
 
 ### OutputSpec
 

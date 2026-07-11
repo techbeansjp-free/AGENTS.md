@@ -39,7 +39,7 @@
 - **E2E/受け入れ**: 主要シナリオを E2E で網羅。未達時は理由を記載。
 - **バリデーション**: 全バリデーションルール・境界値・エラーメッセージをテスト。
 - **証跡**: memo は **.agent-skill-chain/runtime/{issue}/memo/** に作成する。**{issue} は YYYYMMDD_HHMMSS_ をプレフィックスとする issue フォルダ名（必須）。** ファイル名も YYYYMMDD_HHMMSS_ プレフィックス必須。**ログは書記のみ**が記録する（CORE）。**ログは一定のルールで必ず記録する**。**ログは SQLite（workflow.db）を用いる**。workflow.db が無ければ ledger/schema.md に従い作成する。書記は scribe/README.md に従う。**日時は実行環境の現在時刻を取得して付与すること。AI は時間の概念が曖昧になりがちなため、未来・過去の日時を推測で使わない。ファイル名の日時部分（YYYYMMDD_HHMMSS_）を手入力・固定値・推測で指定してはならず、必ず `date` 等で実行時に取得する。** memo および issue フォルダのプレフィックスは、**必ず作成前に** memo-prefix.sh または TZ=Asia/Tokyo date +%Y%m%d_%H%M%S を**実行**して取得すること。コンテキストの日付・推測・固定値でファイル名・フォルダ名を組み立ててはならない。
-- **システム仕様書（docs/）**: 作成・更新は**基本的に issue を立てない**。システム仕様書直下の**レビュー用ディレクトリ**（`docs/00_review/`）にレビュー結果（YYYYMMDD_HHMMSS_review.md）を記載する。詳細は [DOCS_RULES.md](DOCS_RULES.md) を参照。04_review §11 と verify-and-close で守る。
+- **システム仕様書（docs/）**: 作成・更新は**基本的に issue を立てない**。システム仕様書直下の**レビュー用ディレクトリ**（`docs/00_review/`）にレビュー結果（YYYYMMDD_HHMMSS_review.md）を記載する。詳細は [DOCS_RULES.md](DOCS_RULES.md) を参照。04_review §11 と verify-and-close で守る。継続追随ゲート（実装変更を伴う issue の close 前の必須レビュー反復）は [DOCS_RULES.md §継続追随ゲート](DOCS_RULES.md)、ノイズ排除（禁止記述パターン）は [DOCS_NOISE_RULES.md](DOCS_NOISE_RULES.md) を参照（正本はいずれも各ファイル側にあり、本ファイルでは複製しない）。
 
 ### テスト隔離
 

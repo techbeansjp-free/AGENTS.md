@@ -62,7 +62,7 @@
 - **ドキュメントレビューはレビューと修正を一組とする**。指摘がなくなるまでレビュー→修正を繰り返すこと。各回の証跡は memo に記録する。**完了後は必ず書記（write-workflow-log）に依頼**すること（run_command §実装前のドキュメントレビュー）。
 - **ドキュメントレビュー「完了」の定義**: 完了とは **(1) memo 作成 (2) 指摘がなくなるまでの修正反復 (3) 書記委譲**の**すべて**を指す。**(3) を実施するまで「完了」とみなしてはならない**。書記委譲を省略してユーザーに報告のみして終了することは禁止（enforcement §失敗条件 #23）。
 - **ユーザーが「レビュー用の指示文だけ教えて」等と明示した場合を除き、ドキュメントレビュー依頼は常に本ルール（memo への記録＋指摘がなくなるまでの反復＋書記委譲）を適用すること**。レビュー本文やサマリだけを返して memo・書記を省略することを禁止する（enforcement §失敗条件 #22–#23 と整合させる）。
-- **review-docs は補助手順（auxiliary）であり phase→command 表には載せない**: 実装前ドキュメントレビューの command [review-docs](../commands/review-docs.md) は特定 phase に対応しない横断的な補助手順であり、`create-pr-review-issue` の内部 step やユーザーの「ドキュメントレビューして」依頼から呼ばれる。[PHASE_COMMAND_MAP.md §補助手順（auxiliary）](PHASE_COMMAND_MAP.md#phase--command-一覧) の注記と一致させる（同表の「本表にない command の起動は禁止」は phase からの選択経路に関する禁止であり、補助手順の呼び出しは対象外）。
+- **review-docs は補助手順（auxiliary）であり phase→command 表には載せない**: 実装前ドキュメントレビューの command [review-docs](../commands/review-docs.md) は特定 phase に対応しない横断的な補助手順であり、`create-pr-review-issue` の内部 step やユーザーの「ドキュメントレビューして」依頼から呼ばれる。[PHASE_COMMAND_MAP.md §補助手順（auxiliary）](PHASE_COMMAND_MAP.md#phase--command-一覧) の注記と一致させる（同表の「本表にない command の起動は禁止」は phase からの選択経路に関する禁止であり、補助手順の呼び出しは対象外）。**ただし review-docs は design-feature（設計・実装計画）完了と implement-feature 着手の間の必須ゲートであり（全 issue 一律・規模比例の免除なし）、「auxiliary（表に載らない）」は「任意・省略可」を意味しない。** 委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
 
 ---
 

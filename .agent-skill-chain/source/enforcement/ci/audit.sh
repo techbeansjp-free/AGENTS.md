@@ -30,6 +30,8 @@
 #   (27) 04_review 両リスト欠落（REVIEW_DUAL_LENS: 敵対的観点 ＋ must-preserve）
 #   (28) issue ドキュメントが gitignore 配下のパスに存在（誤配置）
 #   (29) 実装前 04（DB 採用時・issue_path スコープで implement/verify ログ 0 件かつ 04 存在）
+#   (31) システム仕様書レビュー証跡欠落（DB・docs/ 採用時・実装変更ログありの 04_review に要=docs/00_review参照/不要=根拠 の内容が無い場合 FAIL）
+#   (32) 実装前 review-docs 未実行検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ review-docs ログ 0 件なら FAIL。#29 と非交差。発効日 grandfather あり）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -51,6 +53,15 @@
 #  27. 04_review に「敵対的観点」リストと「must-preserve（不変条件）」リストの両方が無ければ FAIL（片欠落も FAIL）。
 #  28. issue ドキュメント(00〜04)が git 追跡対象外（gitignore 配下）のパスに存在したら FAIL。非 git ツリーは SKIP、exit 0 のみ FAIL。
 #  29. workflow.db 採用時のみ・issue_path スコープで implement/verify ログ 0 件かつ 04_review.md 存在なら FAIL（#3 の逆方向・非交差）。
+#  31. workflow.db・docs/ 採用時のみ・当該 issue に implement/verify ログがある（実装変更を伴う）04_review.md について、
+#      「## docs 更新」に要=docs/00_review の実タイムスタンプ参照 or 不要=プレースホルダでない理由 のいずれの内容も無ければ FAIL。
+#      既存 #5（記載の有無のみ検査）とは非交差（#31 は記載の内容を検査する）。
+#  32. workflow.db 採用時のみ・issue_path スコープ前方一致で、implement-feature ログが 1 件以上あるのに
+#      review-docs ログが 0 件（＝実装前レビューを飛ばした）なら FAIL。既存 #29（04 のみ・impl 0 件）とは
+#      implement ログ件数（0 件 vs 1 件以上）で排他・非交差。issue ディレクトリ名の YYYYMMDD_HHMMSS_
+#      プレフィックスが REVIEWDOCS_GATE_EFFECTIVE_FROM（既定 20260712_000000・env 上書き可）未満なら
+#      grandfather として SKIP（遡及適用しない）。存在監査のみで review-docs と implement の厳密な
+#      時刻順序は監査しない。
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
@@ -828,10 +839,120 @@ check_review_before_implement() {
   done
 }
 
+# 31. システム仕様書レビュー証跡欠落検知（check_docs_review_evidence）。
+#   workflow.db 採用・docs/ 採用・当該 issue に implement-feature/verify-and-close ログが 1 件以上ある
+#   （実装変更を伴う）04_review.md について、「## docs 更新」セクションに次のいずれの内容も
+#   確認できない場合に FAIL する。
+#     - 要否が「要」: docs/00_review/ への実タイムスタンプ形式（YYYYMMDD_HHMMSS）の参照がある。
+#     - 要否が「不要」: 理由がプレースホルダのまま（テンプレート既定文言）ではない。
+#   既存 #5（## docs 更新 と - 要否: の記載の**有無**のみ検査）とは非交差（#31 は記載の**内容**を検査する）。
+#   SKIP ガード（#29 と同型・安全側）: sqlite3/workflow_log 不在、docs/ 未採用、templates/・close/ 配下、
+#   当該 issue に implement/verify ログ 0 件（実装変更を伴わない）。
+check_docs_review_evidence() {
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  if [[ ! -d "$PROJECT_ROOT/docs" ]]; then return 0; fi
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
+  echo "[audit] checking docs review evidence (#31)" >&2
+  local _wfd f issue_dir dir dir_esc base base_esc hit block yohi reason ok
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *"/templates/"* ]] && continue
+      [[ "$f" == *"/close/"* ]] && continue
+      issue_dir="$(dirname "$f")"
+      dir="${issue_dir#$PROJECT_ROOT/}"
+      dir_esc="${dir//\'/\'\'}"
+      base="$(basename "$issue_dir")"
+      base_esc="${base//\'/\'\'}"
+      # 前方一致で「当該 issue に implement/verify ログ 1 件以上」を判定（#29 と同型・安全側）。
+      # ログが無ければ実装変更を伴わない issue とみなし SKIP（誤 FAIL を出さない）。
+      hit="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command IN ('implement-feature','verify-and-close') AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') LIMIT 1;" 2>/dev/null || true)"
+      [[ -z "$hit" ]] && continue
+
+      block="$(awk '/^## docs 更新$/{flag=1; next} /^## /{flag=0} flag' "$f" 2>/dev/null)"
+      yohi="$(printf '%s\n' "$block" | grep -m1 -E '^- 要否:' || true)"
+      reason="$(printf '%s\n' "$block" | grep -m1 -E '^- 理由:' | sed -E 's/^- 理由:[[:space:]]*//' || true)"
+
+      ok=0
+      if [[ -n "$yohi" ]] && ! printf '%s' "$yohi" | grep -qF '要 / 不要'; then
+        if printf '%s' "$yohi" | grep -q '不要'; then
+          # 不要: 理由がプレースホルダ既定文言（「（要の場合」始まり）でなく、実質的な内容があるか。
+          if [[ -n "$reason" ]] && ! printf '%s' "$reason" | grep -qE '^（要の場合'; then
+            ok=1
+          fi
+        else
+          # 要: docs/00_review への実タイムスタンプ形式の参照があるか（テンプレートの
+          #     「YYYYMMDD_HHMMSS」という文字どおりのプレースホルダでは一致しない）。
+          if printf '%s' "$block" | grep -qE 'docs/00_review/[0-9]{8}_[0-9]{6}'; then
+            ok=1
+          fi
+        fi
+      fi
+
+      if [[ "$ok" -ne 1 ]]; then
+        echo "FAIL: システム仕様書レビュー証跡欠落 (04_review §docs 更新 に 要=docs/00_review参照 or 不要=根拠 の記載が必要): $dir" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    done < <(find "$PROJECT_ROOT/$_wfd" -name "04_review.md" -type f -print0 2>/dev/null || true)
+  done
+}
+
+# 32. 実装前 review-docs 未実行検知（check_reviewdocs_before_implement）。
+#   workflow.db 採用時のみ・issue_path スコープ前方一致で「implement-feature ログが 1 件以上あるのに
+#   review-docs ログが 0 件＝実装前レビューを飛ばした」を検知する。既存 #29（04 のみ・impl 0 件）とは
+#   implement ログ件数（0 件 vs 1 件以上）で排他・非交差（02_設計 ADR-2）。
+#   ★grandfather（ADR-5）: issue ディレクトリ名の YYYYMMDD_HHMMSS_ プレフィックスが
+#   REVIEWDOCS_GATE_EFFECTIVE_FROM（既定 20260712_000000・env 上書き可）未満なら SKIP（遡及適用しない）。
+#   走査対象は 03_実装計画.md（design/plan 完了の目印。#29 の 04_review.md 走査と同型・unbounded find・
+#   maxdepth を付けない。90_issues 配下の深い階層のサブ issue を確実に含めるため）。close/templates 除外。
+#   前方一致＋basename 末尾一致の安全側（#29 と同型）。存在監査のみ（review-docs と implement の厳密な
+#   時刻順序は監査しない・ADR-3）。
+check_reviewdocs_before_implement() {
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
+  echo "[audit] checking reviewdocs-before-implement (#32)" >&2
+  local cutoff="${REVIEWDOCS_GATE_EFFECTIVE_FROM:-20260712_000000}"
+  local _wfd f issue_dir dir dir_esc base base_esc ts hit_impl hit_rd
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *"/templates/"* ]] && continue
+      # close 配下（完了 issue）は実装前レビュー未実行検知の対象外（#29 と同型・安全側）。
+      [[ "$f" == *"/close/"* ]] && continue
+      issue_dir="$(dirname "$f")"
+      dir="${issue_dir#$PROJECT_ROOT/}"
+      dir_esc="${dir//\'/\'\'}"
+      base="$(basename "$issue_dir")"
+      base_esc="${base//\'/\'\'}"
+      # grandfather（ADR-5）: issue basename の日時プレフィックスが cutoff 未満なら遡及適用しない。
+      # プレフィックス形式でない（規約外の命名の）issue はカットオフ判定できないため素通りさせる
+      # （誤 FAIL を出さない安全側。従来どおり implement/review-docs ログの有無で判定する）。
+      if [[ "$base" =~ ^([0-9]{8})_([0-9]{6})_ ]]; then
+        ts="${BASH_REMATCH[1]}_${BASH_REMATCH[2]}"
+        if [[ "$ts" < "$cutoff" ]]; then
+          continue
+        fi
+      fi
+      hit_impl="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command='implement-feature' AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') LIMIT 1;" 2>/dev/null || true)"
+      # implement-feature ログが 0 件＝未実装。#32 の対象外（#29 の対象になりうるがここでは無関係・continue）。
+      [[ -z "$hit_impl" ]] && continue
+      hit_rd="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command='review-docs' AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') LIMIT 1;" 2>/dev/null || true)"
+      if [[ -z "$hit_rd" ]]; then
+        echo "FAIL: 実装前 review-docs 未実行（implement-feature ログはあるが review-docs ログが 0 件）: $dir" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    done < <(find "$PROJECT_ROOT/$_wfd" -name "03_実装計画.md" -type f -print0 2>/dev/null || true)
+  done
+}
+
 check_code_comment_external_ref
 check_review_dual_lists
 check_issue_doc_in_gitignored_path
 check_review_before_implement
+check_docs_review_evidence
+check_reviewdocs_before_implement
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."

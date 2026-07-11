@@ -72,3 +72,4 @@
 - **00_要求定義.md を新規作成する場合**、issue_id（UUID）を 1 回発行し、00 の frontmatter に `issue_id: "<UUID>"` を記載すること。既存 00 を更新する場合は issue_id を変更しないこと。issue フォルダの識別は 00 の frontmatter の issue_id を正とする。
 - run_command の Constraints（順序・memo プレフィックス）を守ること。
 - **完了後に書記（write-workflow-log）に依頼して記録させること。** 本 command は 00 と 01 の**複数成果物**を生成・更新しうるため、**生成・更新した全成果物それぞれ**（00_要求定義.md・01_要件定義.md など）について、各成果物の **DOCUMENT_ID**（frontmatter の UUID）と **DOCUMENT_PATH**（プロジェクトルート相対パス）を渡して書記に **1 回ずつ**記録させること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
+- **重要判断については** [EVIDENCE_POLICY.md](../EVIDENCE_POLICY.md) **に従い**、執筆時点でフィジビリティ確認・一次情報調査を行い、成果物中の重要判断に **evidence_source** を付記すること（軽量 issue の軽量パスは EVIDENCE_POLICY.md 参照）。

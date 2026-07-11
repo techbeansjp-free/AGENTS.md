@@ -28,6 +28,7 @@
 | **サブ委譲のモデル選定時** | MODEL_SELECTION.md |
 | **クローズアウト実施時**（実装完了検知後の欠落工程の補完） | CLOSEOUT.md |
 | **大規模 issue 起票時**（一括起票時のコンテキスト効率） | CONTEXT_EFFICIENCY.md |
+| **上流フェーズでの根拠記録・フィジビリティ確認・ADR 記録時** | EVIDENCE_POLICY.md（重要判断・規模比例・inference_only 顕在化） |
 
 ---
 

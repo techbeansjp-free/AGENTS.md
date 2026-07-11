@@ -23,6 +23,7 @@
 **証跡の原則**: レビュー phase の証跡は本則として workflow.db に記録する。memo は過渡的・例外運用のみ（scribe/CONTRACT 参照）。
 
 **補助手順（auxiliary）— [review-docs](../commands/review-docs.md) は本表に載せない**: [review-docs](../commands/review-docs.md)（実装前ドキュメントレビュー）は特定 phase に対応しない横断的な**補助手順**であり、phase→command の選択対象ではない。`create-pr-review-issue` の内部 step（対応方針の監査）や、ユーザーの「ドキュメントレビューして」依頼から呼ばれる。よって本表に行を持たない。後述の「**本表にない command の起動は禁止**」は **phase からの選択経路に関する禁止**（phase 判定後に表外 command を勝手に選ぶな）であり、**補助手順の呼び出し（別 command の step・ドキュメントレビュー依頼からの起動）はこの禁止の対象外**とする。これにより「review-docs が実在するが起動経路が無い／禁止対象」という矛盾を解消する。整合の本体は PHASES §レビュー成果物の配置ルール と一致させる。
+**必須ゲートとしての位置づけ（表本体は変更しない）**: review-docs は**本表に行を持たないまま**、design（設計・実装計画）完了と実装着手の**間の必須ゲート**である（全 issue 一律・規模比例の免除なし）。義務の正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。「auxiliary（表に載らない）」は「省略可・任意」の意ではない。
 
 ---
 

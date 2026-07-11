@@ -26,6 +26,7 @@
 #   | test-write-workflow-log-prevhash.sh | bash・sqlite3 |
 #   | test-write-workflow-log-multidoc.sh | bash・sqlite3 |
 #   | test-write-workflow-log-glob.sh     | bash・sqlite3（to_json_array の glob 展開是正・noglob 回帰・tmp 隔離） |
+#   | test-workflow-db-guard.sh           | bash のみ（workflow.db 由来検知の軽量警告。sqlite3 不在時は関数内で沈黙 return 0 として検証・tmp 隔離） |
 #   | test-c4-bypass-resistance.sh        | bash・git・tar（C-4 パス正規化・AGENT_ROLE 出所制御の回帰・tmp 隔離） |
 #   | test-package-manifest-parity.sh     | bash・node（package-manifest.sh↔agents-md.ts ミラー同期のパリティ・tmp 隔離） |
 #   | test-cli-audit-doctor.sh            | bash・git・tar・node・sqlite3（C-5 audit 透過・doctor hash/integrity・tmp 隔離） |
@@ -60,6 +61,7 @@ test-pretooluse-hook|test-pretooluse-hook.sh|bash git tar
 test-write-workflow-log-prevhash|test-write-workflow-log-prevhash.sh|bash sqlite3
 test-write-workflow-log-multidoc|test-write-workflow-log-multidoc.sh|bash sqlite3
 test-write-workflow-log-glob|test-write-workflow-log-glob.sh|bash sqlite3
+test-workflow-db-guard|test-workflow-db-guard.sh|bash
 test-c4-bypass-resistance|test-c4-bypass-resistance.sh|bash git tar
 test-package-manifest-parity|test-package-manifest-parity.sh|bash node
 test-cli-audit-doctor|test-cli-audit-doctor.sh|bash git tar node sqlite3

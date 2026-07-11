@@ -33,8 +33,10 @@ allow() {
 
 # ---------------------------------------------------------------------------
 # json_get <key> — RAW（stdin 全量）から限定キーを 1 つ抽出する低レベル関数。
-#   対象キー: tool_name / command（= tool_input.command）/ file_path（= tool_input.file_path）。
+#   対象キー: tool_name / command（= tool_input.command）/ file_path（= tool_input.file_path）/
+#             agent_id（= トップレベル .agent_id・サブエージェント実行時のみハーネスが注入する識別信号）。
 #   jq があれば jq、無ければ sed/grep の保守的 fallback。抽出失敗は空文字（誤検知抑制）。
+#   注: agent_id は stdin JSON のトップレベルからのみ読む（env 経路は設けない＝ADR-2 非自己申告性）。
 # ---------------------------------------------------------------------------
 json_get() {
   local key="$1"
@@ -44,6 +46,7 @@ json_get() {
       tool_name) printf '%s' "$RAW" | jq -r '.tool_name // empty' 2>/dev/null ;;
       command)   printf '%s' "$RAW" | jq -r '.tool_input.command // empty' 2>/dev/null ;;
       file_path) printf '%s' "$RAW" | jq -r '.tool_input.file_path // empty' 2>/dev/null ;;
+      agent_id)  printf '%s' "$RAW" | jq -r '.agent_id // empty' 2>/dev/null ;;
     esac
     return 0
   fi
@@ -54,6 +57,7 @@ json_get() {
     tool_name) pat='"tool_name"' ;;
     command)   pat='"command"' ;;
     file_path) pat='"file_path"' ;;
+    agent_id)  pat='"agent_id"' ;;
     *) return 0 ;;
   esac
   # grep -o で `"key"\s*:\s*"...(エスケープ許容)..."` を抜き、sed で値部分だけ取り出す。
@@ -121,12 +125,23 @@ parse_input() {
     TOOL="$(json_get tool_name)"
     CMD="$(json_get command)"
     PATH_TARGET="$(json_get file_path)"
+    # AGENT_ID: サブエージェント識別。stdin JSON のトップレベル .agent_id のみを参照する。
+    AGENT_ID="$(json_get agent_id)"
   else
     # stdin 空/非 JSON → env 後方互換フォールバック。
     TOOL="${CLAUDE_TOOL_NAME:-${TOOL_NAME:-}}"
     PATH_TARGET="${CLAUDE_FILE_PATH:-${FILE_PATH:-}}"
     CMD="${CLAUDE_COMMAND:-${COMMAND:-}}"
+    # env フォールバック経路では AGENT_ID を空に固定する。
+    #   env 昇格 twin（CLAUDE_AGENT_ID 等）は意図的に設けない（ADR-2）。手動 export で
+    #   IS_SUBAGENT=1 を自己申告できる経路を作らないことで worker 昇格の非自己申告性を担保する。
+    #   stdin 空/非 JSON では IS_SUBAGENT=0（＝非 subagent・main 相当の保守側）に倒す。
+    AGENT_ID=""
   fi
+
+  # IS_SUBAGENT 確定（両経路共通）: agent_id 非空なら subagent worker（1）、空なら非 subagent（0）。
+  IS_SUBAGENT=0
+  [[ -n "$AGENT_ID" ]] && IS_SUBAGENT=1
 }
 
 parse_input
@@ -156,12 +171,15 @@ if [[ -n "$TOOL" ]]; then
     fi
   fi
 
-  # R2 / R2'. orchestrator: 許可ツールのみ（allowlist）。それ以外は拒否。
+  # R2 / R2'. orchestrator（main 限定）: 許可ツールのみ（allowlist）。それ以外は拒否。
   #    許可: Read, Grep, Glob, LS, list_dir, Task, Agent, mcp_task 等「読む・検索・委譲」のみ。
   #    委譲ツールの実名はハーネスで異なる（Agent SDK 系は Task、Claude Code CLI / FleetView 系は Agent）。
   #    両名を許可に残さないと、実機側の委譲ツールが下の *) に落ちて拒否され、orchestrator が委譲手段ごと
   #    自己ロックアウトする（Agent 名のみの環境で実際に発生済み）。互換のため Task と Agent の両方を許可する。
-  if [[ "$ROLE" == "orchestrator" ]]; then
+  #    main 限定化（IS_SUBAGENT != 1）: 委譲先サブエージェント（agent_id あり）は継承 orchestrator を
+  #    上書きして worker として実作業（Edit/Write）を許可するため、本 allowlist の対象外にする。
+  #    scribe は ROLE!=orchestrator のため本 R2 の対象外（scribe 経路は R3 以降で判定）。
+  if [[ "$ROLE" == "orchestrator" && "$IS_SUBAGENT" != "1" ]]; then
     case "$TOOL" in
       Read|Grep|Glob|LS|list_dir|Task|Agent|mcp_task|ReadLints|fetch_mcp_resource|list_mcp_resources)
         : # allowed（R2'）
@@ -180,51 +198,65 @@ if [[ -n "$TOOL" ]]; then
   fi
 fi
 
-# R3 / R4 / R5. Bash 実行: scribe のみ write-workflow-log.sh の単独実行を許可
+# R3 / R4 / R5. Bash 実行の判定（判定順が重要）。
+#   (a) scribe（nonce 検証済み）を最優先: write-workflow-log.sh 単独のみ許可（R6先行/R4/R5）。
+#       scribe が委譲サブエージェント（agent_id あり）を伴っても worker allow に落とさず、
+#       scribe 専用の R4/R5 制約を無条件に受けさせる（§8.1 の scribe 保証を無条件化）。
+#   (b) 非 scribe の subagent worker（IS_SUBAGENT=1）は Bash を allow（scribe 専用 R4/R5 に入れない。
+#       sqlite3 は下流の全ロール R6 で block される）。
+#   (c) main（orchestrator かつ IS_SUBAGENT!=1）は Bash 不可で block。
+#   (d) それ以外（非 scribe・非 subagent・非 orchestrator＝unknown/env-worker 等）は従来どおり block。
 if [[ "$TOOL" == "Bash" ]]; then
-  if [[ "$ROLE" == "orchestrator" ]]; then
-    block "orchestrator cannot run Bash"
-  fi
-  if [[ "$ROLE" != "scribe" ]]; then
-    block "only scribe may run Bash for workflow logging"
-  fi
-  # CMD が取れていない場合のみ保守的に通す（複合シェル/単独実行の確証なし）。
-  if [[ -n "$CMD" ]]; then
-    # R6（先行）. sqlite3 直接実行禁止（全 ROLE）。role 共通の明確な理由を優先表示するため
-    #            scribe の write-workflow-log.sh 単独実行制約（R5）より前に判定する。
-    if [[ "$CMD" =~ sqlite3 ]]; then
-      block "sqlite3 direct execution forbidden (use write-workflow-log.sh)"
-    fi
-    # R4. 複合シェル禁止（改行・;・&&・||・|）
-    case "$CMD" in
-      *$'\n'*|*';'*|*'&&'*|*'||'*|*'|'* )
-        block "compound shell command forbidden"
-        ;;
-    esac
-    # R5. write-workflow-log.sh は単独実行のみ（C-4a: 正規化済み絶対パス比較で回避ベクタを塞ぐ）。
-    #   ①第 1 トークンを取り出し、②realpath（無ければ readlink -f、無ければ cd+pwd）で正規化済み絶対パスへ解決、
-    #   ③その実体パスが「許可正本パス＝実行 cwd 起点の配備先 .agent-skill-chain/source/scripts/write-workflow-log.sh を
-    #     realpath 解決した値」と一致することを要求する。固定文字列はハードコードしない（消費者配備先で誤 block
-    #     しないため・N-E）。相対パス（./...）は realpath 正規化で同一判定へ収れんし、symlink で別実体を
-    #     指す同名スクリプトは実体 realpath 不一致で block、bash -c "..." は第 1 トークンが bash になり不一致で block。
-    norm_path() {
-      local p="$1"
-      [[ -z "$p" ]] && return 0
-      if command -v realpath &>/dev/null; then
-        realpath "$p" 2>/dev/null
-      elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
-        readlink -f "$p" 2>/dev/null
-      elif [[ -e "$p" ]]; then
-        ( cd "$(dirname "$p")" 2>/dev/null && printf '%s/%s' "$(pwd)" "$(basename "$p")" )
+  if [[ "$ROLE" == "scribe" ]]; then
+    # (a) scribe 最優先: 従来の R6先行/R4/R5 を適用する。
+    # CMD が取れていない場合のみ保守的に通す（複合シェル/単独実行の確証なし）。
+    if [[ -n "$CMD" ]]; then
+      # R6（先行）. sqlite3 直接実行禁止（全 ROLE）。role 共通の明確な理由を優先表示するため
+      #            scribe の write-workflow-log.sh 単独実行制約（R5）より前に判定する。
+      if [[ "$CMD" =~ sqlite3 ]]; then
+        block "sqlite3 direct execution forbidden (use write-workflow-log.sh)"
       fi
-    }
-    first_token="$(echo "$CMD" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]].*//')"
-    resolved="$(norm_path "$first_token")"
-    # 許可正本パス: 実行 cwd 起点の配備先を realpath 解決（実行時算出・固定文字列禁止）。
-    canonical_wwl="$(norm_path "${AGENTS_ROOT}/scripts/write-workflow-log.sh")"
-    if [[ -z "$resolved" ]] || [[ -z "$canonical_wwl" ]] || [[ "$resolved" != "$canonical_wwl" ]]; then
-      block "only the canonical write-workflow-log.sh (realpath of \$AGENTS_ROOT/scripts/write-workflow-log.sh) may be run directly"
+      # R4. 複合シェル禁止（改行・;・&&・||・|）
+      case "$CMD" in
+        *$'\n'*|*';'*|*'&&'*|*'||'*|*'|'* )
+          block "compound shell command forbidden"
+          ;;
+      esac
+      # R5. write-workflow-log.sh は単独実行のみ（C-4a: 正規化済み絶対パス比較で回避ベクタを塞ぐ）。
+      #   ①第 1 トークンを取り出し、②realpath（無ければ readlink -f、無ければ cd+pwd）で正規化済み絶対パスへ解決、
+      #   ③その実体パスが「許可正本パス＝実行 cwd 起点の配備先 .agent-skill-chain/source/scripts/write-workflow-log.sh を
+      #     realpath 解決した値」と一致することを要求する。固定文字列はハードコードしない（消費者配備先で誤 block
+      #     しないため・N-E）。相対パス（./...）は realpath 正規化で同一判定へ収れんし、symlink で別実体を
+      #     指す同名スクリプトは実体 realpath 不一致で block、bash -c "..." は第 1 トークンが bash になり不一致で block。
+      norm_path() {
+        local p="$1"
+        [[ -z "$p" ]] && return 0
+        if command -v realpath &>/dev/null; then
+          realpath "$p" 2>/dev/null
+        elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
+          readlink -f "$p" 2>/dev/null
+        elif [[ -e "$p" ]]; then
+          ( cd "$(dirname "$p")" 2>/dev/null && printf '%s/%s' "$(pwd)" "$(basename "$p")" )
+        fi
+      }
+      first_token="$(echo "$CMD" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]].*//')"
+      resolved="$(norm_path "$first_token")"
+      # 許可正本パス: 実行 cwd 起点の配備先を realpath 解決（実行時算出・固定文字列禁止）。
+      canonical_wwl="$(norm_path "${AGENTS_ROOT}/scripts/write-workflow-log.sh")"
+      if [[ -z "$resolved" ]] || [[ -z "$canonical_wwl" ]] || [[ "$resolved" != "$canonical_wwl" ]]; then
+        block "only the canonical write-workflow-log.sh (realpath of \$AGENTS_ROOT/scripts/write-workflow-log.sh) may be run directly"
+      fi
     fi
+  elif [[ "$IS_SUBAGENT" == "1" ]]; then
+    # (b) 非 scribe の subagent worker（agent_id あり）: Bash allow。
+    #     scribe 専用の R4/R5 制約には入れない。sqlite3 直接実行は下流の全ロール R6 で block される。
+    :
+  elif [[ "$ROLE" == "orchestrator" ]]; then
+    # (c) main（orchestrator かつ 非 subagent）: Bash 不可。
+    block "orchestrator cannot run Bash"
+  else
+    # (d) 非 scribe・非 subagent・非 orchestrator（unknown/env-worker 等）は従来どおり block。
+    block "only scribe may run Bash for workflow logging"
   fi
 fi
 

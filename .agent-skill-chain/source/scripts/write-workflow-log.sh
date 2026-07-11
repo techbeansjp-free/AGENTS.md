@@ -158,6 +158,9 @@ fi
 
 # UUID 形式検証（8-4-4-4-12）。空の場合は検証スキップ（DOCUMENT_ID は後で必須チェック）
 UUID_REGEX='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+# ts_utc は ISO8601 UTC 形式（末尾 Z 必須・任意小数秒）。受理形式の単一情報源（二重定義禁止）。
+TS_UTC_ISO8601_REGEX='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$'
 validate_uuid_if_set() {
   local var_name="$1"
   local var_value="$2"
@@ -201,6 +204,13 @@ if [[ -z "$COMMAND" || -z "$SUMMARY" || -z "$TS_UTC" ]]; then
   echo "ERROR: command, summary, ts_utc は必須です。" >&2
   exit 1
 fi
+
+# ts_utc は ISO8601 UTC 形式でなければ INSERT 前に fail-fast（DB 作成・ロック取得より前）。
+if [[ ! "$TS_UTC" =~ $TS_UTC_ISO8601_REGEX ]]; then
+  echo "ERROR: ts_utc が ISO8601 UTC 形式ではありません。期待形式: YYYY-MM-DDTHH:MM:SSZ（例: 2026-07-11T00:00:00Z）。渡された値: '${TS_UTC}'。memo/issue プレフィックス形式（YYYYMMDD_HHMMSS・JST）とは別物です。UTC 時刻は date -u +\"%Y-%m-%dT%H:%M:%SZ\" で取得してください。" >&2
+  exit 1
+fi
+
 if [[ ${#SUMMARY} -le 5 ]]; then
   echo "ERROR: summary は 6 文字以上必要です。" >&2
   exit 1

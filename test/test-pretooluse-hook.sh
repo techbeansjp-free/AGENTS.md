@@ -99,6 +99,7 @@ case "$filter" in
   *'.tool_name'*) key="tool_name" ;;
   *'.tool_input.command'*) key="command" ;;
   *'.tool_input.file_path'*) key="file_path" ;;
+  *'.agent_id'*) key="agent_id" ;;
   *) printf '\n'; exit 0 ;;
 esac
 if command -v python3 >/dev/null 2>&1; then
@@ -112,6 +113,9 @@ except Exception:
     print(""); sys.exit(0)
 if k == "tool_name":
     v = d.get("tool_name", "")
+elif k == "agent_id":
+    # agent_id はトップレベル（tool_input 配下ではない）。hook の .agent_id // empty と同一。
+    v = d.get("agent_id", "")
 else:
     v = (d.get("tool_input") or {}).get(k, "")
 print(v if v is not None else "")
@@ -401,6 +405,83 @@ uc7_posttooluse_empty_exit0() {
 }
 uc7_posttooluse_exit0
 uc7_posttooluse_empty_exit0
+
+# =====================================================================================
+# UC8: subagent worker（agent_id）昇格 — jq 経路・非 jq 経路の両系統で同一合否
+#   委譲先サブエージェント（stdin JSON に agent_id あり）は継承 orchestrator を上書きして
+#   実作業（Bash/Edit/Write）を許可される。main（agent_id なし）の直接実作業 block は非劣化で維持。
+#   R1（.workflow 直接編集）/R6（sqlite3）は subagent でも不変。scribe（nonce 検証済み）は agent_id を
+#   伴っても最優先で判定され R5 を維持し worker allow へ落ちない（§8.1・03 §2.2.2）。
+# =====================================================================================
+echo "== UC8: subagent worker（agent_id）昇格 =="
+run_uc8() {
+  local label="$1" pathval="$2"
+  # シナリオ（ケース1）: 継承 orchestrator の subagent が Write を許可される（核心是正・01 ストーリー1）
+  # Given: AGENT_ROLE=orchestrator を継承した subagent（stdin JSON に agent_id あり）、保護外パスの Write
+  local json1='{"tool_name":"Write","tool_input":{"file_path":"src/x"},"agent_id":"abc-123","agent_type":"worker"}'
+  # When: 違反にならない Write を stdin で hook に渡す
+  run_pre "$pathval" orchestrator "$json1"
+  # Then: subagent 判定で exit 0（allow）
+  assert_eq 0 "$RC" "UC8[$label]: subagent worker Write(src/x) は exit 0"
+  # ケース1補: agent_id あり × Edit(src/x) → exit 0（worker は実作業許可・03 §2.1.3）
+  # Given: agent_id 付きの保護外 Edit
+  local json1b='{"tool_name":"Edit","tool_input":{"file_path":"src/x"},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" orchestrator "$json1b"
+  # Then: exit 0（worker allow）
+  assert_eq 0 "$RC" "UC8[$label]: subagent worker Edit(src/x) は exit 0"
+
+  # シナリオ（ケース2）: agent_id 付き Bash(ls) が許可される
+  # Given: agent_id 付き Bash(ls) の JSON（継承 orchestrator）
+  local json2='{"tool_name":"Bash","tool_input":{"command":"ls"},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" orchestrator "$json2"
+  # Then: subagent worker として exit 0（jq 経路と同一合否）
+  assert_eq 0 "$RC" "UC8[$label]: subagent worker Bash(ls) は exit 0"
+
+  # シナリオ（ケース3）: agent_id 付きでも .workflow 直接編集は R1 で block（不変）
+  # Given: agent_id 付きだが保護パス .agent-skill-chain/runtime/ への Edit
+  local json3='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" orchestrator "$json3"
+  # Then: R1 は全ロール（subagent 含む）で block（exit 2）
+  assert_eq 2 "$RC" "UC8[$label]: subagent worker の .workflow Edit は exit 2（R1 不変）"
+
+  # シナリオ（ケース4）: agent_id 付きでも sqlite3 直接実行は R6 で block（不変）
+  # Given: agent_id 付きだが sqlite3 直叩き
+  local json4='{"tool_name":"Bash","tool_input":{"command":"sqlite3 db.sqlite \"SELECT 1\""},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" orchestrator "$json4"
+  # Then: R6 は全ロール（subagent 含む）で block（exit 2）
+  assert_eq 2 "$RC" "UC8[$label]: subagent worker の sqlite3 は exit 2（R6 不変）"
+
+  # シナリオ（ケース5）: agent_id なしの orchestrator（＝main 相当）直接 Write は block（story2 非劣化）
+  # Given: 同じ orchestrator だが agent_id 無し（＝main 相当）、保護外パスの Write
+  local json5='{"tool_name":"Write","tool_input":{"file_path":"src/x"}}'
+  # When: main が直接 Write を試みる
+  run_pre "$pathval" orchestrator "$json5"
+  # Then: main は従来どおり exit 2（block・story2 非劣化）
+  assert_eq 2 "$RC" "UC8[$label]: main（agent_id なし）Write は exit 2"
+
+  # シナリオ（ケース6）: scribe（nonce 検証済み）＋ agent_id の非 wwl Bash は R5 維持で block（§8.1）
+  # Given: nonce 検証環境（AGENTS_EXPECTED_SCRIBE_NONCE と AGENTS_SCRIBE_NONCE が一致）＋ agent_id あり
+  local json6='{"tool_name":"Bash","tool_input":{"command":"ls"},"agent_id":"abc-123"}'
+  # When: write-workflow-log 以外の Bash(ls) を stdin で渡す
+  run_pre "$pathval" scribe "$json6" AGENTS_EXPECTED_SCRIBE_NONCE=nonce-uc8 AGENTS_SCRIBE_NONCE=nonce-uc8
+  # Then: scribe が最優先で判定され R5 維持で exit 2（worker allow へ落ちない）
+  assert_eq 2 "$RC" "UC8[$label]: scribe+agent_id の Bash(ls) は exit 2（scribe 最優先・R5 維持）"
+  # ケース6補: 同 scribe+agent_id で write-workflow-log.sh 単独 → exit 0（scribe 経路 R5 許可・03 §2.1.3）
+  # Given: nonce 検証済み scribe＋agent_id、cwd を隔離環境に置き相対パスを解決可能にする
+  local json6b='{"tool_name":"Bash","tool_input":{"command":".agent-skill-chain/source/scripts/write-workflow-log.sh requirement-discovery x"},"agent_id":"abc-123"}'
+  : > "$ERR"
+  # When: write-workflow-log.sh の単独実行を stdin で渡す
+  ( cd "$TMP" && echo "$json6b" | env PATH="$pathval" AGENT_ROLE=scribe AGENTS_EXPECTED_SCRIBE_NONCE=nonce-uc8 AGENTS_SCRIBE_NONCE=nonce-uc8 bash "$HOOK" >/dev/null 2>"$ERR" )
+  RC=$?
+  # Then: scribe 経路の R5 で単独実行は許可され exit 0
+  assert_eq 0 "$RC" "UC8[$label]: scribe+agent_id の write-workflow-log.sh 単独は exit 0"
+}
+run_uc8 "jq" "$JQ_PATH"
+run_uc8 "nojq" "$NOJQ_PATH"
 
 # =====================================================================================
 # UC1/UC2 系: jq 経路（jq シムまたは本物 jq を PATH 前段に）— jq 有/無の両系統で同一合否
