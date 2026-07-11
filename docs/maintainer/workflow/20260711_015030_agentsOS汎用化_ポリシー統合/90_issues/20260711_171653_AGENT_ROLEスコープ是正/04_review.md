@@ -311,9 +311,10 @@ pie title UC 別テスト状況（全 PASS）
 
 ### 10.1 発見された課題（＝close 後・live enforce on 運用開始前の required 追加検証）
 
-- **課題 1（安全性・最重要）**: ハーネスが main スレッドに `agent_id` を注入しないこと（ADR-3(d) の否定）が **live 未実測**。
+- **課題 1（安全性・最重要）**: ハーネスが main スレッドに `agent_id` を注入しないこと（ADR-3(d) の否定）が **live 未実測**。→ **2026-07-12 解消済み（○）**。
   - **影響範囲**: enforce on を実 live で有効化した場合の main 直接実作業ブロック（失敗条件 #25）。
   - **対応方法（live enforce on 前ゲート・必須）**: `mktemp -d`＋`git archive HEAD` の隔離クリーンクローンで**別 Claude Code インスタンス**を起動し enforce on。①進行役→worker の live 委譲で worker の Write が実際に通る（`agent_id` 実注入）、②**同環境で進行役 main の直接 Write が block される**（main 非注入）、の 2 点を○/×で実機確認する。②が×（block されない）なら本方式（stdin `agent_id`）を不採用とし、ADR-1 選択肢3（subagent frontmatter `tools:` 許可リスト）等へ切替える。本セッションの live `.claude/settings.json` フリップは**禁止**。
+  - **実機確認結果（2026-07-12・ユーザー承認の上で別 `claude -p` インスタンスを隔離クローンに対して起動）**: ①worker allow＝○（Agent 委譲サブエージェントの Write が `exit 0` で成功・ファイル生成を ground truth で確認）、②main block＝○（別インスタンス自身の直接 Write が hook `exit 2`・`enforcement ERROR: orchestrator must never modify files or run write/edit/shell` で block・ファイル未生成を ground truth で確認）。**ADR-3(d) は否定され、fail-open 化は観測されなかった**。詳細は [`../../memo/20260712_003504_AGENT_ROLEスコープ是正_live実機確認.md`](../../memo/20260712_003504_AGENT_ROLEスコープ是正_live実機確認.md)（stream-json の hook_response 生ログ・ground truth ファイル存否を記録）。本物のリポジトリの `.claude/settings.json`（sha256 `ca3d163b…`）は検証前後で不変。
 - **課題 2（可用性・副次）**: subagent 実行時に `agent_id` が空で付与される場合（ADR-3(c)）、worker が block され続ける。
   - **影響範囲**: worker の委譲タスク完遂（可用性のみ・安全性は劣化しない）。
   - **対応方法**: 上記実機確認で検出したら `agent_type` presence 併用または frontmatter `tools:` 許可リストへフォールバック（設計済み）。
@@ -347,7 +348,7 @@ pie title UC 別テスト状況（全 PASS）
 - **実装品質**: 良好（ロール判定を単一ファイルに集約・判定順の意図をコメント化・テンプレート/TS ドリフトなし）。
 - **テスト品質**: 良好（jq/非 jq 両系統・worker allow/main block/R1/R6/scribe を網羅・50 PASS・独立再現一致）。
 - **ドキュメント品質**: 良好（ADR で残存不確実性と検証ゲートを正直に記録）。
-- **総合評価**: **close 可（条件付き）。** hook 実装・テスト・偽装耐性・R1/R6 不変・main 非劣化は full レビューと独立再現で全て確認、指摘 0 件。ただし §10.1 課題1（ハーネスが main に `agent_id` を注入しない＝ADR-3(d) の否定）は **live 未実測**であり、**`enforce on` を実 live で有効化する前に別インスタンス実機確認を必須ゲート**とする。enforcement は既定 off の opt-in であるため、本 issue の close 自体（実装・単体検証の完了）は妨げない。
+- **総合評価**: **close 可。** hook 実装・テスト・偽装耐性・R1/R6 不変・main 非劣化は full レビューと独立再現で全て確認、指摘 0 件。§10.1 課題1（ハーネスが main に `agent_id` を注入しない＝ADR-3(d) の否定）は 2026-07-12、ユーザー承認の上で実施した別インスタンス実機確認により **live 実測で解消済み**（worker allow・main block とも ground truth で確認。詳細は同 memo）。live enforce on 前ゲートは通過済みであり、追加の条件は残らない。
 
 ### 12.2 承認状況
 
@@ -380,5 +381,6 @@ pie title UC 別テスト状況（全 PASS）
 
 ## 15. 次のステップ
 
-- 本 issue は enforcement opt-in（既定 off）の runtime 是正であり、実装・単体検証は完了。close 相当。
-- **必須ゲート（申し送り）**: `enforce on` を live で有効化する前に §10.1 課題1 の別インスタンス実機確認（worker allow の agent_id 実注入 ＋ main 非注入の block 維持）を通過すること。
+- 本 issue は enforcement opt-in（既定 off）の runtime 是正であり、実装・単体検証・live 実機確認まで完了。close 済み。
+- **完了済みゲート**: `enforce on` の live 有効化前提となる §10.1 課題1 の別インスタンス実機確認（worker allow の agent_id 実注入 ＋ main 非注入の block 維持）は 2026-07-12 に通過済み（[`../../memo/20260712_003504_AGENT_ROLEスコープ是正_live実機確認.md`](../../memo/20260712_003504_AGENT_ROLEスコープ是正_live実機確認.md)）。
+- **残る副次課題（10.2 課題2）**: subagent 実行時に `agent_id` が空で付与されるケース（可用性のみ・安全性は劣化しない）は本検証では観測されなかったが、消費者環境ごとの差異は否定できないため、`enforce on` 導入時に個別確認を推奨する申し送りとして残す。
