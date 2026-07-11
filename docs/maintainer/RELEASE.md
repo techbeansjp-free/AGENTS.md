@@ -43,11 +43,11 @@ node -v  # >=20
 
 ## 1. version 同期（package.json ⇔ plugin.json）
 
-version の正本は `package.json` 1 か所。Claude プラグイン正本 [`.agents/platforms/claude/plugin.json`](../../.agents/platforms/claude/plugin.json) を一致させる。ロジックの正本は [`.agents/scripts/sync-version.sh`](../../.agents/scripts/sync-version.sh)。
+version の正本は `package.json` 1 か所。Claude プラグイン正本 [`.agent-skill-chain/source/platforms/claude/plugin.json`](../../.agent-skill-chain/source/platforms/claude/plugin.json) を一致させる。ロジックの正本は [`.agent-skill-chain/source/scripts/sync-version.sh`](../../.agent-skill-chain/source/scripts/sync-version.sh)。
 
 ```bash
-bash .agents/scripts/sync-version.sh --check   # 一致を検証（CI ゲートと同じ。不一致なら exit 1）
-bash .agents/scripts/sync-version.sh --write   # package.json の version を plugin.json へ注入して揃える
+bash .agent-skill-chain/source/scripts/sync-version.sh --check   # 一致を検証（CI ゲートと同じ。不一致なら exit 1）
+bash .agent-skill-chain/source/scripts/sync-version.sh --write   # package.json の version を plugin.json へ注入して揃える
 ```
 
 **期待結果**: `--check` が `[sync-version] OK: version 一致（X.Y.Z）` を出し exit 0。
@@ -73,10 +73,10 @@ npm run build                            # src -> bin を生成（作業ツリ�
 
 ## 2. pack 同梱物検査（リーク / 必須物）
 
-配布 tarball にリポ固有物（`.agents-project/`・`docs/maintainer/`・`workflow.db`・`.adapters/`・`.workflow/` issue）が混入せず、必須の正本配布物がすべて含まれることを機械判定する。ロジックの正本は [`.agents/scripts/verify-npm-pack.sh`](../../.agents/scripts/verify-npm-pack.sh)（CI とローカルの単一正本。ロジックを二重化しない）。
+配布 tarball にリポ固有物（`.agent-skill-chain/project/`・`docs/maintainer/`・`workflow.db`・`.adapters/`・`.agent-skill-chain/runtime/` issue）が混入せず、必須の正本配布物がすべて含まれることを機械判定する。ロジックの正本は [`.agent-skill-chain/source/scripts/verify-npm-pack.sh`](../../.agent-skill-chain/source/scripts/verify-npm-pack.sh)（CI とローカルの単一正本。ロジックを二重化しない）。
 
 ```bash
-bash .agents/scripts/verify-npm-pack.sh
+bash .agent-skill-chain/source/scripts/verify-npm-pack.sh
 ```
 
 **期待結果**: exit 0。`[OK] 禁止パターン … は含まれていません。` と `[OK] 必須の正本配布物 … はすべて含まれています。` が出る。違反時は exit 1（LEAK/MISSING を列挙）、npm/node 不在時は exit 2。
@@ -135,10 +135,10 @@ rm -rf "$tmp"                                       # 後始末（必須）
 
 ### 5.2. 再開後に CI が実行する内容（[`release.yml`](../../.github/workflows/release.yml)）
 
-main への push（マージ）を契機に、`version` 同期検証 → `bash .agents/scripts/sync-version.sh --write` 相当の bump → 公開前検証 → 実 publish/marketplace 公開の順で進む。
+main への push（マージ）を契機に、`version` 同期検証 → `bash .agent-skill-chain/source/scripts/sync-version.sh --write` 相当の bump → 公開前検証 → 実 publish/marketplace 公開の順で進む。
 
 - **npm publish ジョブ**: bump 後 version の `package.json`/`plugin.json` 一致検証 → `npm ci && npm run build`（非追跡 bin を作業ツリーに生成。`prepack` の代替＝使用前 build）→ `verify-npm-pack.sh`（リーク/必須物検査。必須物 `bin/agents-md.js` を確認）→ `NPM_TOKEN` ゲート → `npm publish --access public`。`NPM_TOKEN` 未設定なら publish を skip。
-- **marketplace ジョブ**: 正本 `.agents/` から `build-adapters.sh` で生成物を build し、決定性（再生成 diff ゼロ）を検証して `release/marketplace` ブランチへ commit/push する。
+- **marketplace ジョブ**: 正本 `.agent-skill-chain/source/` から `build-adapters.sh` で生成物を build し、決定性（再生成 diff ゼロ）を検証して `release/marketplace` ブランチへ commit/push する。
 
 > push（main への push を含む）は高リスク操作であり、ユーザーが明示したときのみ行う。実 publish は CI の `NPM_TOKEN` 設定時に限られ、ローカルからは実 publish しない（§冒頭の安全弁）。
 
@@ -146,8 +146,8 @@ main への push（マージ）を契機に、`version` 同期検証 → `bash .
 
 ## 6. 参照
 
-- [`.agents/scripts/sync-version.sh`](../../.agents/scripts/sync-version.sh) — version 同期（正本）
-- [`.agents/scripts/verify-npm-pack.sh`](../../.agents/scripts/verify-npm-pack.sh) — pack 同梱物検査（CI/ローカル単一正本）
+- [`.agent-skill-chain/source/scripts/sync-version.sh`](../../.agent-skill-chain/source/scripts/sync-version.sh) — version 同期（正本）
+- [`.agent-skill-chain/source/scripts/verify-npm-pack.sh`](../../.agent-skill-chain/source/scripts/verify-npm-pack.sh) — pack 同梱物検査（CI/ローカル単一正本）
 - [`.github/workflows/release.yml`](../../.github/workflows/release.yml) — main への push（マージ）起点の publish/marketplace CI（**現在 dormant＝無効化中**。再開手順は §5）
 - [`README.md`](../../README.md) §リリース手順（メンテナ向け） — 入口リンク・要約
 - [`package.json`](../../package.json)（`files`・`bin`・`publishConfig.access=public`）、[`LICENSE`](../../LICENSE)（MIT）、[`bin/agents-md.js`](../../bin/agents-md.js)

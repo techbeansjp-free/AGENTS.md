@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // agents-md — npm 配布用の薄い CLI ラッパ。
 // 役割: 採用先プロジェクトのルート（既定は process.cwd()）を第1引数として
-//       .agents/scripts/setup.sh に渡し、正本配備・各ツール向け生成・workflow.db 初期化を行う。
-// 正本は .agents/。本 CLI はロジックを持たず setup.sh を呼び出す薄いラッパに徹する。
+//       .agent-skill-chain/source/scripts/setup.sh に渡し、正本配備・各ツール向け生成・workflow.db 初期化を行う。
+// 正本は .agent-skill-chain/source/。本 CLI はロジックを持たず setup.sh を呼び出す薄いラッパに徹する。
 //
 // サブコマンド:
 //   init             setup.sh を実行して採用先へ配備する
 //   upgrade          init と同等（当面）。既存配備の再同期を意図する
 //   uninstall        setup/init が配備した成果物のみを除去する（ユーザー資産は既定で保持）
 //   doctor           配備に必要な前提ファイル・依存の存在確認 ＋ 証跡健全性診断（hash チェーン・integrity）
-//   audit [dir]      .agents/enforcement/ci/audit.sh の薄ラッパー（終了コード透過）
+//   audit [dir]      .agent-skill-chain/source/enforcement/ci/audit.sh の薄ラッパー（終了コード透過）
 //   export [dir]     workflow.db を NDJSON で書き出す（export-ndjson.sh の薄ラッパー・read-only）
 //   enforce on|off|status  enforcement フックを .claude/settings.json に着脱（既定 off / opt-in）
 //   version          package.json の version を表示
@@ -18,9 +18,12 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
+  cpSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -31,21 +34,17 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // パッケージ root は bin/ の 1 つ上。
 const PACKAGE_ROOT = join(__dirname, "..");
-const SETUP_PATH = join(PACKAGE_ROOT, ".agents", "scripts", "setup.sh");
+// パッケージ正本は統合ネストにより .agent-skill-chain/source/ 配下にある。
+const PACKAGE_SOURCE = join(PACKAGE_ROOT, ".agent-skill-chain", "source");
+const SETUP_PATH = join(PACKAGE_SOURCE, "scripts", "setup.sh");
 // audit.sh（CI 監査の正本）と export-ndjson.sh（NDJSON 出力の正本）。CLI は薄ラッパーに徹する。
-const AUDIT_PATH = join(PACKAGE_ROOT, ".agents", "enforcement", "ci", "audit.sh");
-const EXPORT_NDJSON_PATH = join(PACKAGE_ROOT, ".agents", "scripts", "export-ndjson.sh");
+const AUDIT_PATH = join(PACKAGE_SOURCE, "enforcement", "ci", "audit.sh");
+const EXPORT_NDJSON_PATH = join(PACKAGE_SOURCE, "scripts", "export-ndjson.sh");
 // entry_hash 計算の共有正本（gen_entry_hash）。doctor の hash チェーン検証はこれを source して使う（再実装禁止）。
-const GEN_ENTRY_HASH_PATH = join(
-  PACKAGE_ROOT,
-  ".agents",
-  "scripts",
-  "gen-entry-hash.sh"
-);
+const GEN_ENTRY_HASH_PATH = join(PACKAGE_SOURCE, "scripts", "gen-entry-hash.sh");
 // enforcement 用 settings.json の正本テンプレート（既定 off。opt-in で配線する）。
 const ENFORCE_TEMPLATE_PATH = join(
-  PACKAGE_ROOT,
-  ".agents",
+  PACKAGE_SOURCE,
   "platforms",
   "claude",
   "settings.enforce.json"
@@ -112,12 +111,12 @@ function printHelp(): void {
   npx agent-skill-chain <command>
 
 コマンド:
-  init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agents/ 等を配備する
-  upgrade [dir]         既存配備を再同期する（当面 init と同等）
+  init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agent-skill-chain/ 等を配備する
+  upgrade [dir]         既存配備を再同期する（旧 3 ディレクトリ構成は統合移行してから再同期）
   uninstall [dir]       init/setup が配備した成果物のみを除去する（ユーザー資産は既定で保持）
   doctor                配備に必要な前提（setup.sh・bash・sqlite3 等）の有無 ＋ 証跡健全性
                         （workflow.db の hash チェーン・integrity_check・配線差分）を確認する
-  audit [dir]           .agents/enforcement/ci/audit.sh を実行する（CI 監査の薄ラッパー・終了コード透過）
+  audit [dir]           .agent-skill-chain/source/enforcement/ci/audit.sh を実行する（CI 監査の薄ラッパー・終了コード透過）
   export [dir]          workflow.db を NDJSON（1 行 1 JSON）で標準出力へ書き出す（read-only）
   enforce <on|off|status> [dir]
                         enforcement フック（PreToolUse/PostToolUse）を .claude/settings.json に着脱する。
@@ -127,7 +126,7 @@ function printHelp(): void {
 
 uninstall のオプション:
   --yes, -y            対話確認をスキップして実行する（既定は dry-run 表示のみ）
-  --purge              workflow.db 等の証跡も含めて削除する（既定は保持）
+  --purge              project/・runtime/（issue 履歴・workflow.db を含む）も削除し統合ルートごと除去する（既定は保持）
 
 enforce のオプション:
   enforce on           settings.json に enforcement 配線を追加する（既存ユーザー値はマージ・保持。退避 .bak を作成）
@@ -141,10 +140,10 @@ enforce のオプション:
   npx agent-skill-chain uninstall --yes  # 実際に除去する
 
 注意:
-  init は内部で ${".agents/scripts/setup.sh"} を実行します。
+  init は内部で ${".agent-skill-chain/source/scripts/setup.sh"} を実行します。
   setup.sh は workflow.db 初期化に sqlite3 バイナリを必要とします（doctor で確認可能）。
-  uninstall は既定で .agents-project/・.workflow の issue・workflow.db を保持します
-  （--purge で workflow.db も削除）。引数なしの場合は dry-run（表示のみ）です。
+  uninstall は既定で .agent-skill-chain/project/・runtime/ の issue 履歴・workflow.db を保持します
+  （--purge で project/・runtime/ も削除）。引数なしの場合は dry-run（表示のみ）です。
   enforcement は既定 off。ドッグフーディング時に enforce on で opt-in（セッション挙動が変わるため任意）。
   enforce off で解除します。enforce は .claude/settings.json のユーザー値を破壊せず配線のみ着脱します。`);
 }
@@ -174,7 +173,7 @@ function runSetup(projectRoot: string): number {
   return result.status ?? 0;
 }
 
-// audit: .agents/enforcement/ci/audit.sh の薄ラッパー。判定ロジックは再実装せず spawnSync で呼ぶ。
+// audit: .agent-skill-chain/source/enforcement/ci/audit.sh の薄ラッパー。判定ロジックは再実装せず spawnSync で呼ぶ。
 //   引数 dir（既定 cwd）を audit.sh の PROJECT_ROOT へ渡し、env（AUDIT_GIT_RANGE/WORKFLOW_DIRS/PR_BODY 等）は
 //   プロセス env として透過する。終了コードは audit.sh のものをそのまま返す（pass-through）。
 function runAudit(dir: string): number {
@@ -242,7 +241,7 @@ interface LedgerHealth {
 //   その payload を sha256 した値と stored entry_hash を比較する（gen_entry_hash と同一式・同一区切り）。
 function checkLedgerHealth(projectRoot: string): LedgerHealth {
   const lines: string[] = [];
-  const dbPath = join(projectRoot, ".workflow", "workflow.db");
+  const dbPath = join(projectRoot, ".agent-skill-chain", "runtime", "workflow.db");
   if (!existsSync(dbPath)) {
     lines.push("[SKIP] workflow.db が無いため証跡健全性診断をスキップします。");
     return { ran: false, lines, ok: true };
@@ -386,8 +385,8 @@ function runDoctor(): number {
   console.log(`        パッケージ=${PACKAGE_ROOT}`);
 
   // パッケージ側の必須ファイル
-  check(".agents/scripts/setup.sh（配備スクリプト）", existsSync(SETUP_PATH), "パッケージを再インストールしてください。");
-  check(".agents/boot/CORE.md（実行契約の正本）", existsSync(join(PACKAGE_ROOT, ".agents", "boot", "CORE.md")));
+  check(".agent-skill-chain/source/scripts/setup.sh（配備スクリプト）", existsSync(SETUP_PATH), "パッケージを再インストールしてください。");
+  check(".agent-skill-chain/source/boot/CORE.md（実行契約の正本）", existsSync(join(PACKAGE_SOURCE, "boot", "CORE.md")));
 
   // 採用先側に配備済みかの確認（init 後の健全性）
   check("AGENTS.md（採用先ルート契約）", existsSync(join(projectRoot, "AGENTS.md")), "未配備の場合は init を実行してください。");
@@ -452,7 +451,8 @@ function runDoctor(): number {
 
   // install 状態の判定（uninstall の安全策と同じ「配備の痕跡」で判定する）。
   const installed =
-    existsSync(join(projectRoot, ".agents")) || existsSync(join(projectRoot, "AGENTS.md"));
+    existsSync(join(projectRoot, ".agent-skill-chain")) ||
+    existsSync(join(projectRoot, "AGENTS.md"));
   console.log(
     installed
       ? "\ndoctor: 配備状態 = 配備済み（uninstall で除去可能）。"
@@ -511,15 +511,207 @@ function extractHookCommand(entry: unknown): string | null {
 }
 
 // ----------------------------------------------------------------------------
+// package-manifest: 統合ルート .agent-skill-chain/ の配備マーカー確認（fail-closed 衝突検知）・
+// 再配備前バックアップ・README 警告文の生成。
+//
+// 判定規則・退避命名・警告文言は setup.sh が source する
+// .agent-skill-chain/source/scripts/lib/package-manifest.sh と**同一のものをミラーする**
+// （list_owned_skill_names / ownedSkillNames と同型の単一定義ミラー方式。drift を避けるため、
+// 判定規則・警告文を変えるときは package-manifest.sh 側も合わせて更新すること）。
+// ----------------------------------------------------------------------------
+
+// 配備マーカー（.package-manifest）の内容（name/version の 2 フィールドのみ）。
+interface PackageManifest {
+  name: string;
+  version: string;
+}
+
+// agentSkillChainRoot: <projectRoot>/.agent-skill-chain の絶対パスを返す。
+function agentSkillChainRoot(projectRoot: string): string {
+  return join(projectRoot, ".agent-skill-chain");
+}
+
+// realpathSafe: パスの実体（シンボリックリンク解決済み）を返す。存在しない・解決不能なら入力を返す。
+//   自己適用判定で projectRoot と packageRoot を実パス比較するために使う（setup.sh の `pwd -P` 相当）。
+function realpathSafe(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
+// readPackageManifest: 配備マーカーを読む（無い・壊れていれば null）。
+//   フォーマットは key=value の改行区切り（package-manifest.sh の write_package_manifest と同一）。
+function readPackageManifest(projectRoot: string): PackageManifest | null {
+  const manifestPath = join(agentSkillChainRoot(projectRoot), ".package-manifest");
+  if (!existsSync(manifestPath)) return null;
+  try {
+    const fields: Record<string, string> = {};
+    for (const line of readFileSync(manifestPath, "utf8").split("\n")) {
+      const eq = line.indexOf("=");
+      if (eq === -1) continue;
+      fields[line.slice(0, eq)] = line.slice(eq + 1);
+    }
+    if (typeof fields.name !== "string" || typeof fields.version !== "string") return null;
+    return { name: fields.name, version: fields.version };
+  } catch {
+    return null;
+  }
+}
+
+// checkPackageManifest の判定結果。setup.sh の check_package_manifest の 4 分岐に対応する。
+type ManifestCheckResult =
+  | { kind: "own" }
+  | { kind: "new" }
+  | { kind: "match"; manifest: PackageManifest }
+  | { kind: "abort"; reason: string };
+
+// checkPackageManifest: .agent-skill-chain/ の配備マーカーを検証する（fail-closed。単一定義のミラー）。
+//   - projectRoot が packageRoot と実パス一致（自己適用 PACKAGE_ROOT=PROJECT_ROOT）
+//                                                             → { kind: "own" }（マーカー検査を省いて続行）。
+//   - .agent-skill-chain/ が存在しない                       → { kind: "new" }（新規配備）。
+//   - マーカーが存在し name が expectedName と一致            → { kind: "match" }（本パッケージ由来）。
+//   - マーカー不在、または name 不一致（本パッケージ由来と確認できない）
+//                                                             → { kind: "abort" }。
+//   "abort" を受け取った呼び出し元は、破壊的操作（再配備・バックアップ上書き等）を一切行わないこと。
+//
+//   自己適用（own）の根拠は package-manifest.sh の check_package_manifest と同一:
+//   本パッケージ自身のリポジトリへ配備すると .agent-skill-chain/ はパッケージ正本そのものだが、
+//   マーカー（.package-manifest）は生成物として gitignore 対象で存在しない。projectRoot と
+//   packageRoot の実パス一致は「配備先がパッケージ自身」であることを確実に示すため、この一致時のみ
+//   マーカー検査を省いて続行する（他人の無関係ディレクトリは実パスが一致せず fail-closed の境界は
+//   弱まらない）。判定規則を変えるときは package-manifest.sh 側も合わせて更新すること。
+function checkPackageManifest(
+  projectRoot: string,
+  expectedName: string,
+  packageRoot?: string
+): ManifestCheckResult {
+  if (packageRoot !== undefined && realpathSafe(projectRoot) === realpathSafe(packageRoot)) {
+    return { kind: "own" };
+  }
+  const dir = agentSkillChainRoot(projectRoot);
+  if (!existsSync(dir)) return { kind: "new" };
+
+  const manifest = readPackageManifest(projectRoot);
+  if (manifest === null) {
+    return {
+      kind: "abort",
+      reason:
+        `${dir} は存在しますが配備マーカー（.package-manifest）が見つかりません。` +
+        `本パッケージ（${expectedName}）由来と確認できないため、破壊的操作（再配備）を中止します。`,
+    };
+  }
+  if (manifest.name !== expectedName) {
+    return {
+      kind: "abort",
+      reason:
+        `${join(dir, ".package-manifest")} の name（'${manifest.name}'）が本パッケージ` +
+        `（'${expectedName}'）と一致しません。本パッケージ由来と確認できないため、破壊的操作（再配備）を中止します。`,
+    };
+  }
+  return { kind: "match", manifest };
+}
+
+// writePackageManifest: 配備マーカーへ name/version を書き込む（新規配備・再配備のいずれでも呼ぶ）。
+function writePackageManifest(projectRoot: string, name: string, version: string): void {
+  const dir = agentSkillChainRoot(projectRoot);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ".package-manifest"), `name=${name}\nversion=${version}\n`);
+}
+
+// backupTimestamp: setup.sh の `date +%Y%m%d%H%M%S`（ローカル時刻）と同一書式のタイムスタンプ。
+function backupTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+    `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  );
+}
+
+// backupAgentSkillChain: 本パッケージ由来と確認できた場合の再配備前に、source/・runtime/templates/ を
+//   タイムスタンプ付きバックアップへ退避する（存在するものだけ。無ければ何もしない）。
+//   バックアップ自体の書き込みに失敗した場合は例外を投げる（バックアップの成立を上書きの前提条件とする。
+//   呼び出し元はこの例外を捕捉したら上書きを中止すること）。
+//   命名は setup.sh の backup_agent_skill_chain と同一（単一定義のミラー）:
+//     <root>/.agent-skill-chain-source.bak.<timestamp>/
+//     <root>/.agent-skill-chain-runtime-templates.bak.<timestamp>/
+function backupAgentSkillChain(projectRoot: string): void {
+  const dir = agentSkillChainRoot(projectRoot);
+  const ts = backupTimestamp();
+
+  const sourceDir = join(dir, "source");
+  if (existsSync(sourceDir)) {
+    cpSync(sourceDir, join(projectRoot, `.agent-skill-chain-source.bak.${ts}`), {
+      recursive: true,
+      errorOnExist: false,
+    });
+  }
+
+  const templatesDir = join(dir, "runtime", "templates");
+  if (existsSync(templatesDir)) {
+    cpSync(templatesDir, join(projectRoot, `.agent-skill-chain-runtime-templates.bak.${ts}`), {
+      recursive: true,
+      errorOnExist: false,
+    });
+  }
+}
+
+// legacyFingerprintOk: 旧レイアウト（統合ネスト前のルート直下 source 相当ディレクトリ）配下に
+//   本パッケージ配備物のフィンガープリント（構造的に安定した 4 ファイルの AND 条件）が揃っているかを
+//   判定する（統合移行可否の判断）。
+//   package-manifest.sh の legacy_fingerprint_ok と**同一の判定規則をミラーする**（単一定義のミラー方式。
+//   drift を避けるため、対象ファイルを変えるときは package-manifest.sh 側も合わせて更新すること）。
+//   実際の破壊的な移行（バックアップ→移動）は setup.sh の migrate_legacy_dirs が単一実装で担い、
+//   本 CLI の init/upgrade は runSetup 経由でそれを実行する（移行アクションを二重実装しない）。
+function legacyFingerprintOk(projectRoot: string): boolean {
+  const agents = join(projectRoot, ".agents");
+  return (
+    existsSync(join(agents, "boot", "CORE.md")) &&
+    existsSync(join(agents, "scripts", "setup.sh")) &&
+    existsSync(join(agents, "enforcement", "ci", "audit.sh")) &&
+    existsSync(join(agents, "ledger", "schema.sql"))
+  );
+}
+
+// readmeWarningText: 統合ルート直下に置く警告文の本体を返す。
+//   package-manifest.sh の readme_warning_text と**同一文言**（単一定義のミラー）。
+function readmeWarningText(): string {
+  return `# ⚠️ このフォルダを直接 rm -rf しないでください
+
+\`.agent-skill-chain/\` には、パッケージ本体（source/）だけでなく、
+このプロジェクト固有の設定（project/）と監査履歴・issue 記録（runtime/）が同居しています。
+
+- \`rm -rf .agent-skill-chain/\` を実行すると、プロジェクト固有の設定・監査履歴・
+  issue 記録がすべて失われます。これは公式なアンインストール手順ではありません。
+- 安全にアンインストールするには次のコマンドを使用してください:
+
+    npx agent-skill-chain uninstall
+
+  既定ではパッケージ所有物（source/ と再生成可能な runtime/templates/）のみを削除し、
+  project/ と runtime/ のユーザー資産（issue 記録・監査履歴）は保持します。
+  監査履歴・issue 記録も含めて完全に削除する場合は --purge --yes を指定してください。
+`;
+}
+
+// writeReadmeWarning: 統合ルート直下の警告文を最新化する（新規配備・再配備どちらでも呼ぶ）。
+function writeReadmeWarning(projectRoot: string): void {
+  const dir = agentSkillChainRoot(projectRoot);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "README.md"), readmeWarningText());
+}
+
+// ----------------------------------------------------------------------------
 // uninstall: setup/init が配備した成果物のみを除去する。
 //
 // 配備物の正本は setup.sh の配備ロジック。本 CLI はそれと一致する「配備物マニフェスト」を
-// 1 か所に持つ。ユーザー資産（.agents-project/・.workflow の issue・workflow.db）は既定で保持し、
-// 誤削除しない安全側設計とする。--purge で workflow.db 等も含め全削除する。
+// 1 か所に持つ。ユーザー資産（project/・runtime/ の issue 履歴・workflow.db）は既定で保持し、
+// 誤削除しない安全側設計とする。--purge で project/・runtime/ も含め統合ルートごと全削除する。
 // ----------------------------------------------------------------------------
 
-// 既定で除去する配備物（setup.sh が配備する成果物のみ）。相対パスで列挙する。
-// 注1: .workflow は丸ごと消さない（issue・workflow.db はユーザー資産）。templates のみ除去する。
+// 既定で除去する配備物（setup.sh が配備するパッケージ完全所有分のみ）。相対パスで列挙する。
+// 注1: runtime/ は丸ごと消さない（issue 履歴・workflow.db はユーザー資産）。templates のみ除去する。
 // 注2: .cursor/・.claude/ は **丸ごと消さない**。setup が配備したパッケージ所有分
 //      （.cursor/<owned files>・.claude/hooks の所有フック・.claude/skills と .cursor/skills の所有 skill）
 //      のみを除去し、ユーザー作成物（.cursor/rules/*.mdc・.claude/settings.json・.claude/hooks の独自フック・
@@ -528,10 +720,10 @@ function extractHookCommand(entry: unknown): string | null {
 // 注3: .claude/hooks・.claude/skills・.cursor/skills は**ディレクトリごと消さず**、所有エントリのみ除去する
 //      （下記 deployedOwnedHookFiles / deployedOwnedSkillEntries で導出）。
 const DEPLOYED_ARTIFACTS: string[] = [
-  ".agents", // パッケージ正本のコピー（setup がコピー配備）
+  ".agent-skill-chain/source", // パッケージ正本（setup がコピー配備・再配備で復元可能）
   "AGENTS.md", // ルート契約（setup がコピー）
   "CLAUDE.md", // ルート契約（setup がコピー）
-  ".workflow/templates", // テンプレート（setup がコピー。.workflow 自体は残す）
+  ".agent-skill-chain/runtime/templates", // テンプレート（setup がコピー。runtime 自体は残す）
 ];
 
 // setup.sh が .cursor/・.claude/ 直下へコピーするパッケージ所有ファイルを enforcement 正本から導出する。
@@ -544,10 +736,10 @@ function ownedFilesFrom(srcDir: string, destRel: string): string[] {
     .map((d) => join(destRel, d.name));
 }
 
-// .cursor/ 直下のパッケージ所有ファイル（agents-core.mdc・README.md 等）の配備物相対パス。
+// .cursor/ 直下のパッケージ所有ファイル（enforcement/cursor 由来のトップレベルファイル）の配備物相対パス。
 // setup.sh は enforcement/cursor/* を .cursor/ 直下へコピーする（copy_owned_files）。同じ規則で導出する。
 function deployedOwnedFiles(): string[] {
-  const enforcement = join(PACKAGE_ROOT, ".agents", "enforcement");
+  const enforcement = join(PACKAGE_SOURCE, "enforcement");
   return ownedFilesFrom(join(enforcement, "cursor"), ".cursor");
 }
 
@@ -555,25 +747,25 @@ function deployedOwnedFiles(): string[] {
 // setup.sh は enforcement/claude/* のトップレベル通常ファイル（.gitkeep 除外）を .claude/hooks へコピーする
 // （copy_owned_files）。同じ規則で導出し、ユーザー独自フックを残してパッケージ所有分のみ除去する。
 function deployedOwnedHookFiles(): string[] {
-  const enforcement = join(PACKAGE_ROOT, ".agents", "enforcement");
+  const enforcement = join(PACKAGE_SOURCE, "enforcement");
   return ownedFilesFrom(join(enforcement, "claude"), join(".claude", "hooks"));
 }
 
 // パッケージが配備した所有 skill エントリ名（{domain}__{capability}・ドメイン直下 {domain}）を
-// 正本 .agents/skills/ から導出する。命名規約の正本は lib/deploy-skills.sh（list_owned_skill_names）。
+// 正本 source/skills/ から導出する。命名規約の正本は lib/deploy-skills.sh（list_owned_skill_names）。
 // 本関数はその走査規則を Node 側でミラーし（同一規則）、setup.sh と同じ所有集合を得る。
 // drift を避けるため、命名規則を変えるときは lib/deploy-skills.sh と本関数の双方を整合させること。
 function ownedSkillNames(): string[] {
-  const skillsRoot = join(PACKAGE_ROOT, ".agents", "skills");
+  const skillsRoot = join(PACKAGE_SOURCE, "skills");
   if (!existsSync(skillsRoot)) return [];
   const names: string[] = [];
   for (const domainEnt of readdirSync(skillsRoot, { withFileTypes: true })) {
     if (!domainEnt.isDirectory()) continue;
     const domain = domainEnt.name;
     const domainDir = join(skillsRoot, domain);
-    // ドメイン直下に SKILL.md があるケース（例: agent/）は {domain} を所有名とする。
+    // ドメイン直下に skill 定義を持つケース（例: agent/）は {domain} を所有名とする。
     if (existsSync(join(domainDir, "SKILL.md"))) names.push(domain);
-    // capability 配下に SKILL.md を持つものは {domain}__{capability} を所有名とする。
+    // capability 配下に skill 定義を持つものは {domain}__{capability} を所有名とする。
     for (const capEnt of readdirSync(domainDir, { withFileTypes: true })) {
       if (!capEnt.isDirectory()) continue;
       if (existsSync(join(domainDir, capEnt.name, "SKILL.md"))) {
@@ -595,12 +787,49 @@ function deployedOwnedSkillEntries(): string[] {
   return rels;
 }
 
-// --purge 時のみ追加で除去する証跡（ユーザー資産）。
+// --purge 時のみ追加で除去するユーザー資産（統合ルート配下）。project/ とランタイム名前空間
+// （runtime/ 直下の issue 履歴・workflow.db を含む）を丸ごと除去し、統合ルートを完全に空にする。
 const PURGE_ARTIFACTS: string[] = [
-  ".workflow/workflow.db",
-  ".workflow/workflow.db-wal",
-  ".workflow/workflow.db-shm",
+  ".agent-skill-chain/project",
+  ".agent-skill-chain/runtime",
 ];
+
+// finalizeAscRoot: 配備物除去後の統合ルート（.agent-skill-chain/）の後片付け。
+//   purge 時: project/・runtime/ も除去済みのため、ルート（マーカー・README 含む）ごと削除する。
+//   既定時: project/ またはユーザー資産を含む runtime/（issue 履歴・workflow.db）が残っていれば
+//           マーカー・README ごとルートを残し、案内を表示する。残っていなければルートごと削除する。
+//   ルートを残す理由: マーカーを保つことで将来の再 init/upgrade がこのディレクトリを本パッケージ由来と
+//   正しく認識し source/ を安全に再配備できる。ユーザー資産がある間は README の警告も有効であるべき。
+function finalizeAscRoot(projectRoot: string, purge: boolean): void {
+  const ascRoot = join(projectRoot, ".agent-skill-chain");
+  if (!existsSync(ascRoot)) return;
+
+  if (purge) {
+    rmSync(ascRoot, { recursive: true, force: true });
+    console.log("削除しました: .agent-skill-chain/（完全削除）");
+    return;
+  }
+
+  const hasProject = existsSync(join(ascRoot, "project"));
+  const runtimeDir = join(ascRoot, "runtime");
+  // templates は既定で除去済み。.gitignore はパッケージ生成物のためユーザー資産に数えない。
+  const runtimeAssets = existsSync(runtimeDir)
+    ? readdirSync(runtimeDir).filter((n) => n !== ".gitignore")
+    : [];
+
+  if (hasProject || runtimeAssets.length > 0) {
+    console.log(
+      "\n.agent-skill-chain/ を残しました（ユーザー資産を含むため）:\n" +
+        "  project/ またはランタイム資産（issue 履歴・workflow.db）が保持されています。\n" +
+        "  監査履歴・issue 記録も含めて完全に削除する場合は --purge --yes を使用してください。"
+    );
+  } else {
+    rmSync(ascRoot, { recursive: true, force: true });
+    console.log(
+      "削除しました: .agent-skill-chain/（ユーザー資産が無いためマーカー・README ごと除去）"
+    );
+  }
+}
 
 // uninstall: deployed artifacts を除去する。
 // 戻り値: 終了コード（0=成功, 1=安全側中止/失敗）。
@@ -608,12 +837,14 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
   const { yes, purge } = opts;
 
   // 安全策(1): 採用先が「自分が配備した」痕跡を持つか確認する。
-  // 配備の中核（.agents/ または AGENTS.md）が無いのに他の保護物を消すのは想定外なので中止する。
+  // 配備の中核（統合ルート .agent-skill-chain/ またはルート契約ファイル）が無いのに
+  // 他の保護物を消すのは想定外なので中止する。
   const looksInstalled =
-    existsSync(join(projectRoot, ".agents")) || existsSync(join(projectRoot, "AGENTS.md"));
+    existsSync(join(projectRoot, ".agent-skill-chain")) ||
+    existsSync(join(projectRoot, "AGENTS.md"));
   if (!looksInstalled) {
     console.error(
-      `エラー: ${projectRoot} に配備の痕跡（.agents/ または AGENTS.md）が見つかりません。\n` +
+      `エラー: ${projectRoot} に配備の痕跡（.agent-skill-chain/ または AGENTS.md）が見つかりません。\n` +
         `        誤削除を防ぐため uninstall を中止します（このディレクトリは未配備の可能性）。`
     );
     return 1;
@@ -621,8 +852,8 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
 
   // 削除対象を列挙する（存在するものだけ）。
   // パッケージ所有分を正本から動的に加える:
-  //   - .cursor 直下の所有ファイル（agents-core.mdc 等）         … deployedOwnedFiles
-  //   - .claude/hooks の所有フックファイル（PreToolUse.sh 等）   … deployedOwnedHookFiles
+  //   - .cursor 直下の所有ファイル                              … deployedOwnedFiles
+  //   - .claude/hooks の所有フックファイル                      … deployedOwnedHookFiles
   //   - .claude/skills・.cursor/skills の所有 skill エントリ      … deployedOwnedSkillEntries
   // いずれもユーザー自作物（独自フック・自作スキル・自作 rules 等）は対象外（保持）。
   const targets: string[] = [
@@ -639,7 +870,7 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
   const absent = targets.filter((rel) => !existsSync(join(projectRoot, rel)));
 
   console.log(`uninstall: 採用先=${projectRoot}`);
-  console.log(`        モード=${purge ? "purge（証跡も削除）" : "既定（ユーザー資産は保持）"}`);
+  console.log(`        モード=${purge ? "purge（ユーザー資産も削除）" : "既定（ユーザー資産は保持）"}`);
   console.log("\n削除対象（配備物のみ）:");
   if (present.length === 0) {
     console.log("  （削除対象なし。既に除去済みの可能性があります。）");
@@ -655,11 +886,15 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
   }
 
   console.log("\n保持するユーザー資産（削除しません）:");
-  console.log("  .agents-project/        （プロジェクト固有ルール）");
+  if (!purge) {
+    console.log("  .agent-skill-chain/project/   （プロジェクト固有ルール）");
+    console.log("  .agent-skill-chain/runtime/<issue>/  （templates 以外の issue 成果物）");
+    console.log("  .agent-skill-chain/runtime/workflow.db*  （証跡 DB。--purge 指定時のみ削除）");
+  } else {
+    console.log("  （--purge 指定のため project/・runtime/ も削除します。）");
+  }
   console.log("  .cursor/ のユーザー作成物（自作 rules/*.mdc 等。配備分以外は保持）");
   console.log("  .claude/ のユーザー設定 （settings.json 等。配備分以外は保持）");
-  console.log("  .workflow/<issue>/      （templates 以外の issue 成果物）");
-  if (!purge) console.log("  .workflow/workflow.db*  （証跡 DB。--purge 指定時のみ削除）");
 
   if (!yes) {
     console.log(
@@ -708,10 +943,15 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
     }
   }
 
+  // 統合ルートの後片付け: ユーザー資産の残存有無で残置/除去を決める（purge は常に除去）。
+  finalizeAscRoot(projectRoot, purge);
+
   console.log(
     failed
       ? "\nuninstall: 一部の削除に失敗しました（上記参照）。"
-      : "\nuninstall: 配備物の除去が完了しました（ユーザー資産は保持）。"
+      : purge
+        ? "\nuninstall: 統合ルートを含め完全に除去しました。"
+        : "\nuninstall: 配備物の除去が完了しました（ユーザー資産は保持）。"
   );
   return failed ? 1 : 0;
 }
@@ -721,7 +961,7 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
 //
 // 方針（ライブセッション保護・ユーザー値非破壊）:
 //   - 既定では init/setup は settings.json に enforcement を書き込まない（off）。
-//   - `enforce on`  … 正本テンプレート（.agents/platforms/claude/settings.enforce.json）から
+//   - `enforce on`  … 正本テンプレート（.agent-skill-chain/source/platforms/claude/settings.enforce.json）から
 //                     hooks.PreToolUse/PostToolUse・env(AGENT_ROLE 等)を **既存 settings.json にマージ**する。
 //                     注入したエントリには見えない目印を持たせず、env は managed キー集合で識別する。
 //                     既存 settings.json があれば書き換え前に .bak へ退避する。
@@ -801,12 +1041,12 @@ function enforceOn(
 
   // C-4b 出所分離（HIGH 是正）: scribe 出所制御の **実 nonce** と **期待 nonce** を別出所にする。
   //   - 実 nonce: settings.json の env(AGENTS_SCRIBE_NONCE) にリテラル値として配線する（hook 起動時に env 継承）。
-  //   - 期待 nonce: ${projectRoot}/.agents/.scribe-nonce ファイル（0600）に同値を書く。hook は期待値をこのファイルから読む。
+  //   - 期待 nonce: ${projectRoot}/.agent-skill-chain/source/.scribe-nonce ファイル（0600）に同値を書く。hook は期待値をこのファイルから読む。
   //   env だけを掌握した相手は env の AGENTS_SCRIBE_NONCE を任意に変えられるが、期待値はファイルから読まれるため
   //   一致させられない（ファイルは 0600 で書けない）。enforce のたびに新しい nonce へローテートする。
   const scribeNonce = randomBytes(24).toString("hex");
   next.env.AGENTS_SCRIBE_NONCE = scribeNonce;
-  const nonceFile = join(projectRoot, ".agents", ".scribe-nonce");
+  const nonceFile = join(projectRoot, ".agent-skill-chain", "source", ".scribe-nonce");
   try {
     writeFileSync(nonceFile, scribeNonce + "\n", { mode: 0o600 });
   } catch (e) {
@@ -857,8 +1097,8 @@ function enforceOff(
   settings: Settings,
   template: EnforceTemplate
 ): number {
-  // C-4b 出所分離: enforce off では scribe nonce ファイルも除去する（実 nonce env はテンプレ env キーとして除去される）。
-  const nonceFile = join(projectRoot, ".agents", ".scribe-nonce");
+  // 出所分離: enforce off では scribe nonce ファイルも除去する（実 nonce env はテンプレ env キーとして除去される）。
+  const nonceFile = join(projectRoot, ".agent-skill-chain", "source", ".scribe-nonce");
   if (existsSync(nonceFile)) {
     try {
       rmSync(nonceFile);

@@ -7,11 +7,11 @@
 #   (3) 必須依存欠如時はクラッシュせず当該を SKIP 案内し残りを実行、(4) 既存 4 本の個別実行が
 #   runner 導入前と変わらず可能、であることを検証する。検証ロジックは再実装せず runner の振る舞いを確認する。
 #
-# 方針（破壊禁止・tmp 隔離 必須・.agents-project/自己拡張ワークフロー.md §テストの tmp 隔離）:
+# 方針（破壊禁止・tmp 隔離 必須・.agent-skill-chain/project/自己拡張ワークフロー.md §テストの tmp 隔離）:
 #   - 集約ロジックの検証は exit 0/1/2 を返す stub を mktemp -d 配下に並べ、RUN_ALL_TESTS_OVERRIDE で
 #     一覧を差し替えて実行する（高速・決定的）。本番 DB・開発リポを一切読み書き・変更しない。
 #   - 必須依存欠如シナリオは PATH から依存を除いた擬似環境で実行する。
-#   - 本開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を一切変更しない。
+#   - 本開発リポの .agent-skill-chain/source/ .claude/ .cursor/ .agent-skill-chain/runtime/ workflow.db を一切変更しない。
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
 # 使い方:
@@ -20,7 +20,7 @@
 # 前提: bash。
 # 参照:
 #   docs/maintainer/workflow/20260615_054806_テスト実行基盤の整備/02_設計.md（§5）, 03_実装計画.md（T3）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
@@ -126,7 +126,7 @@ test_missing_dep_skips_and_continues() {
   a="$(make_stub "$tmp" t1 0)"; b="$(make_stub "$tmp" t2 0)"; c="$(make_stub "$tmp" t3 0)"
   local ov; ov="$(mk_override "t1|$a|bash" "t2|$b|__no_such_tool__xyz__" "t3|$c|bash")"
 
-  local db="$REPO_ROOT/.workflow/workflow.db"
+  local db="$REPO_ROOT/.agent-skill-chain/runtime/workflow.db"
   local before_sum=""; [[ -f "$db" ]] && before_sum="$(cksum "$db" 2>/dev/null)"
 
   # When: runner を実行する

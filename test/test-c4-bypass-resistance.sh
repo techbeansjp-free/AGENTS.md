@@ -3,7 +3,7 @@
 #
 # ユースケース（このテストファイル全体）:
 #   C-4a（パス正規化）: write-workflow-log.sh の単独実行判定を「正規化済み絶対パス＝実行 cwd 起点の配備先
-#     .agents/scripts/write-workflow-log.sh の realpath」一致で行い、相対パス・symlink で別実体を指す同名・
+#     .agent-skill-chain/source/scripts/write-workflow-log.sh の realpath」一致で行い、相対パス・symlink で別実体を指す同名・
 #     bash -c 経由の回避を block(exit 2) する。正規の配備先絶対パス単独実行は allow(exit 0)。許可正本パスは
 #     固定文字列でなく実行時 realpath 解決値である（消費者配備先で誤 block しない）。
 #   C-4b（AGENT_ROLE 偽装耐性・主防御は hook 側 env 出所制御）: 正規 nonce/settings 配線でのみ scribe を許可。
@@ -14,7 +14,7 @@
 #
 # 方針（破壊禁止・tmp 隔離 必須）:
 #   - mktemp -d ＋ git archive HEAD | tar -x のクリーン clone を作り、作業ツリーの最新 hook をオーバーレイする。
-#   - 本開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を一切読み書き・変更しない。
+#   - 本開発リポの .agent-skill-chain/source/ .claude/ .cursor/ .agent-skill-chain/runtime/ workflow.db を一切読み書き・変更しない。
 #
 # 使い方:
 #   bash test/test-c4-bypass-resistance.sh
@@ -22,7 +22,7 @@
 # 前提: bash・git・tar。realpath（無ければ readlink -f）。
 # 参照:
 #   docs/maintainer/workflow/20260616_042911_npmスコープ無し公開_将来組織移管/02_設計.md §3.6, 03_実装計画.md（T4）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
@@ -42,19 +42,19 @@ assert_eq() { [[ "$1" == "$2" ]] && ok "${3:-一致: $1}" || ng "${3:-不一致:
 # ---- tmp 隔離環境（クリーン clone 再現）----
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-( cd "$REPO_ROOT" && git archive HEAD | tar -x -C "$TMP" )
+( cd "$REPO_ROOT" && git ls-files -z | tar --null -T - -cf - ) | tar -x -C "$TMP"
 # 作業ツリーの最新 hook と scripts をオーバーレイ（未コミットの C-4 是正を verify するため）。
-cp "$REPO_ROOT/.agents/enforcement/claude/PreToolUse.sh" "$TMP/.agents/enforcement/claude/PreToolUse.sh"
-mkdir -p "$TMP/.agents/scripts"
-cp "$REPO_ROOT/.agents/scripts/write-workflow-log.sh" "$TMP/.agents/scripts/write-workflow-log.sh"
-cp "$REPO_ROOT/.agents/scripts/gen-entry-hash.sh" "$TMP/.agents/scripts/gen-entry-hash.sh"
-chmod +x "$TMP/.agents/scripts/write-workflow-log.sh"
+cp "$REPO_ROOT/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh" "$TMP/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh"
+mkdir -p "$TMP/.agent-skill-chain/source/scripts"
+cp "$REPO_ROOT/.agent-skill-chain/source/scripts/write-workflow-log.sh" "$TMP/.agent-skill-chain/source/scripts/write-workflow-log.sh"
+cp "$REPO_ROOT/.agent-skill-chain/source/scripts/gen-entry-hash.sh" "$TMP/.agent-skill-chain/source/scripts/gen-entry-hash.sh"
+chmod +x "$TMP/.agent-skill-chain/source/scripts/write-workflow-log.sh"
 
-HOOK="$TMP/.agents/enforcement/claude/PreToolUse.sh"
+HOOK="$TMP/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh"
 [[ -f "$HOOK" ]] || { echo "エラー: 隔離環境に hook がありません" >&2; exit 2; }
 
 # 配備先正本（realpath 解決値）。
-WWL_REL=".agents/scripts/write-workflow-log.sh"
+WWL_REL=".agent-skill-chain/source/scripts/write-workflow-log.sh"
 WWL_ABS="$(cd "$TMP" && (command -v realpath >/dev/null 2>&1 && realpath "$WWL_REL" || readlink -f "$WWL_REL"))"
 
 ERR="$TMP/err.txt"
@@ -62,7 +62,7 @@ ERR="$TMP/err.txt"
 run_hook() {
   local cwd="$1" role="$2" json="$3"; shift 3
   : > "$ERR"
-  ( cd "$cwd" && echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agents" AGENT_ROLE="$role" "$@" bash "$HOOK" >/dev/null 2>"$ERR" )
+  ( cd "$cwd" && echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agent-skill-chain/source" AGENT_ROLE="$role" "$@" bash "$HOOK" >/dev/null 2>"$ERR" )
   RC=$?
 }
 
@@ -82,8 +82,8 @@ c4a_canonical_absolute_allowed() {
 
 c4a_relative_path_allowed_when_resolves_same() {
   # シナリオ: cwd 起点の相対パスは realpath 正規化で配備先と同一に収れんし allow（消費者の正当な相対実行）
-  # Given: cwd=$TMP、AGENT_ROLE=scribe、相対パス .agents/scripts/write-workflow-log.sh
-  local json='{"tool_name":"Bash","tool_input":{"command":".agents/scripts/write-workflow-log.sh requirement-discovery x"}}'
+  # Given: cwd=$TMP、AGENT_ROLE=scribe、相対パス .agent-skill-chain/source/scripts/write-workflow-log.sh
+  local json='{"tool_name":"Bash","tool_input":{"command":".agent-skill-chain/source/scripts/write-workflow-log.sh requirement-discovery x"}}'
   # When: cwd=$TMP で相対パス実行（配備先と同一実体へ解決）
   run_hook "$TMP" scribe "$json"
   # Then: exit 0（realpath で配備先正本に一致）
@@ -120,7 +120,7 @@ c4a_symlink_to_other_blocked() {
 c4a_bash_c_wrapper_blocked() {
   # シナリオ: bash -c "write-workflow-log.sh ..." 経由は第1トークンが bash になり不一致で block
   # Given: AGENT_ROLE=scribe、bash -c ラップ
-  local json='{"tool_name":"Bash","tool_input":{"command":"bash -c \".agents/scripts/write-workflow-log.sh x\""}}'
+  local json='{"tool_name":"Bash","tool_input":{"command":"bash -c \".agent-skill-chain/source/scripts/write-workflow-log.sh x\""}}'
   # When: bash -c 経由で渡す
   run_hook "$TMP" scribe "$json"
   # Then: exit 2（第1トークン bash の realpath が配備先と不一致）
@@ -137,7 +137,7 @@ c4a_bash_c_wrapper_blocked
 echo "== C-4b: AGENT_ROLE 偽装耐性（手動 export scribe を block・正規 nonce で allow） =="
 
 # nonce ファイル（期待 nonce の正規出所）。0600 で生成し、テスト後に消す。
-NONCE_FILE="$TMP/.agents/.scribe-nonce"
+NONCE_FILE="$TMP/.agent-skill-chain/source/.scribe-nonce"
 set_nonce_file() { printf '%s\n' "$1" > "$NONCE_FILE"; chmod 600 "$NONCE_FILE"; }
 clear_nonce_file() { rm -f "$NONCE_FILE"; }
 
@@ -231,7 +231,7 @@ echo "== 既存ガード非破壊（R4 複合シェル・R6 sqlite3）が C-4 �
 
 regress_compound_still_blocked() {
   # シナリオ: 複合シェル（&&）は C-4 後も exit 2（R4 維持）
-  local json='{"tool_name":"Bash","tool_input":{"command":".agents/scripts/write-workflow-log.sh x && rm -rf /"}}'
+  local json='{"tool_name":"Bash","tool_input":{"command":".agent-skill-chain/source/scripts/write-workflow-log.sh x && rm -rf /"}}'
   run_hook "$TMP" scribe "$json"
   assert_eq 2 "$RC" "回帰: R4 複合シェルは exit 2（非破壊）"
 }

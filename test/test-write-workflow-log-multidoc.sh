@@ -8,12 +8,12 @@
 #   (i) 各行の prev_hash が直前行の entry_hash に自動連結され因果チェーンが壊れない、
 #   (ii) 全 document_id について audit#20 相当（workflow_log に該当 document_id が 1 件以上）を満たす、
 #   (iii) 同一 document_path に別の document_id を後追い記録すると #20+ で拒否（exit 1）される、
-#   (iv) 両ランタイム（.workflow/<issue>/ と docs/maintainer/workflow/<issue>/）のルート相対 document_path で
+#   (iv) 両ランタイム（.agent-skill-chain/runtime/<issue>/ と docs/maintainer/workflow/<issue>/）のルート相対 document_path で
 #        いずれも #20 相当 PASS になる、ことを保証する。
 #
 # 方針（破壊禁止・tmp 隔離 必須）:
-#   - 全シナリオを mktemp -d の一時 DB／クリーン環境で実行する（.agents-project/自己拡張ワークフロー.md §テストの tmp 隔離）。
-#   - 本開発リポの .workflow/workflow.db を一切読み書き・変更しない（PROJECT_ROOT を一時ディレクトリに向ける）。
+#   - 全シナリオを mktemp -d の一時 DB／クリーン環境で実行する（.agent-skill-chain/project/自己拡張ワークフロー.md §テストの tmp 隔離）。
+#   - 本開発リポの .agent-skill-chain/runtime/workflow.db を一切読み書き・変更しない（PROJECT_ROOT を一時ディレクトリに向ける）。
 #   - schema.sql / write-workflow-log.sh は read のみ（一時 DB に流す／呼び出すのみ・無改造）。
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
@@ -23,15 +23,15 @@
 # 前提: bash・sqlite3。
 # 参照:
 #   docs/maintainer/workflow/20260615_124110_audit20の複数成果物document_id紐付け恒久対策/02_設計.md（§3.1/§3.2・SC1–SC6）, 03_実装計画.md（T1）
-#   .agents/enforcement/ci/audit.sh（#20/#20+ check_document_id_linked。COUNT≥1 / 同一 path 別 id 拒否）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/enforcement/ci/audit.sh（#20/#20+ check_document_id_linked。COUNT≥1 / 同一 path 別 id 拒否）
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
-WWL="$REPO_ROOT/.agents/scripts/write-workflow-log.sh"
-SCHEMA="$REPO_ROOT/.agents/ledger/schema.sql"
+WWL="$REPO_ROOT/.agent-skill-chain/source/scripts/write-workflow-log.sh"
+SCHEMA="$REPO_ROOT/.agent-skill-chain/source/ledger/schema.sql"
 
 PASS=0
 FAIL=0
@@ -59,7 +59,7 @@ count_doc() {
 }
 
 echo "== 本番 DB 非破壊の事前計測 =="
-BEFORE_DB="$REPO_ROOT/.workflow/workflow.db"
+BEFORE_DB="$REPO_ROOT/.agent-skill-chain/runtime/workflow.db"
 before_rows="$(sqlite3 "$BEFORE_DB" 'SELECT COUNT(*) FROM workflow_log;' 2>/dev/null || echo NA)"
 before_mtime="$(stat -c %Y "$BEFORE_DB" 2>/dev/null || echo NA)"
 
@@ -69,8 +69,8 @@ echo "== M1: 複数成果物 00+01 の prev_hash 自動連結（SC1/SC3） =="
 #           行2(01).prev_hash == 行1(00).entry_hash に連結し、中間 NULL entry が無い。
 m1_chain() {
   # Given: クリーン一時環境。00（doc_id A・path .../00）を PREV_HASH 未指定で記録
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
-  local ISS=".workflow/20260615_000000_multidoc"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
+  local ISS=".agent-skill-chain/runtime/20260615_000000_multidoc"
   record_doc "$TMP" "11111111-1111-1111-1111-111111111111" "$ISS/00_要求定義.md" "00 entry" >/dev/null
   # When: 続けて 01（doc_id B・path .../01）も PREV_HASH 未指定で記録（自動連結）
   record_doc "$TMP" "22222222-2222-2222-2222-222222222222" "$ISS/01_要件定義.md" "01 entry" >/dev/null
@@ -90,8 +90,8 @@ echo "== M2: 全 document_id が #20 相当 PASS（SC1） =="
 # シナリオ: 00 と 01 を成果物ごとに記録すると、両 document_id とも workflow_log に COUNT≥1（取りこぼし 0）。
 m2_all_linked() {
   # Given: クリーン一時環境に 00（A）と 01（B）を記録
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
-  local ISS=".workflow/20260615_000000_multidoc"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
+  local ISS=".agent-skill-chain/runtime/20260615_000000_multidoc"
   local A="33333333-3333-3333-3333-333333333333" B="44444444-4444-4444-4444-444444444444"
   record_doc "$TMP" "$A" "$ISS/00_要求定義.md" "00 entry" >/dev/null
   record_doc "$TMP" "$B" "$ISS/01_要件定義.md" "01 entry" >/dev/null
@@ -107,8 +107,8 @@ m2_all_linked
 # シナリオ: 02/03 を追加した N=4 連結でも全件 #20 PASS かつ各行 prev_hash が直前 entry_hash に連結する。
 m2_four_docs() {
   # Given: クリーン一時環境に 00/01/02/03 を成果物ごとに 1 回ずつ昇順記録
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
-  local ISS=".workflow/20260615_000000_multidoc"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
+  local ISS=".agent-skill-chain/runtime/20260615_000000_multidoc"
   local A="55555555-5555-5555-5555-555555555555" B="66666666-6666-6666-6666-666666666666"
   local C="77777777-7777-7777-7777-777777777777" D="88888888-8888-8888-8888-888888888888"
   record_doc "$TMP" "$A" "$ISS/00_要求定義.md"   "00 entry" >/dev/null
@@ -134,9 +134,9 @@ echo "== M3: #20+ 同一 path 別 id の拒否（SC4） =="
 # シナリオ: 00（path P・doc_id A）を記録後、同じ path P に別 doc_id A' を記録しようとすると exit 1 で拒否される。
 m3_immutable() {
   # Given: 00（path P・doc_id A）を記録済みの一時環境
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
-  local ISS=".workflow/20260615_000000_multidoc" P
-  P=".workflow/20260615_000000_multidoc/00_要求定義.md"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
+  local ISS=".agent-skill-chain/runtime/20260615_000000_multidoc" P
+  P=".agent-skill-chain/runtime/20260615_000000_multidoc/00_要求定義.md"
   record_doc "$TMP" "99999999-9999-9999-9999-999999999999" "$P" "00 entry" >/dev/null
   # When: 同一 path P に別 document_id を後追い記録する
   local rc before_cnt after_cnt
@@ -154,8 +154,8 @@ m3_immutable
 # シナリオ: 同一 path・同一 document_id の再記録は許容される（不変＝同値は許可・取り消しではない）。
 m3_same_id_allowed() {
   # Given: 00（path P・doc_id A）を記録済みの一時環境
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
-  local P=".workflow/20260615_000000_multidoc/00_要求定義.md"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
+  local P=".agent-skill-chain/runtime/20260615_000000_multidoc/00_要求定義.md"
   local A="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
   record_doc "$TMP" "$A" "$P" "00 entry" >/dev/null
   # When: 同一 path P・同一 doc_id A を再記録する
@@ -168,13 +168,13 @@ m3_same_id_allowed
 
 # --- M4: 両ランタイムの document_path で #20 相当 PASS（ルート相対統一）-----------
 echo "== M4: 両ランタイム共通の document_path 正規化（SC6） =="
-# シナリオ: 消費者既定（.workflow/<issue>/00）と本リポ自己拡張（docs/maintainer/workflow/<issue>/00）の
+# シナリオ: 消費者既定（.agent-skill-chain/runtime/<issue>/00）と本リポ自己拡張（docs/maintainer/workflow/<issue>/00）の
 #           いずれのルート相対 document_path でも、記録後に #20 相当（COUNT≥1）を満たす。
 m4_dual_runtime() {
   # Given: クリーン一時環境。両ランタイムの 00 をルート相対 document_path で記録
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
   local CON="cccccccc-cccc-cccc-cccc-cccccccccccc" SELF="dddddddd-dddd-dddd-dddd-dddddddddddd"
-  local CON_PATH=".workflow/20260615_000000_multidoc/00_要求定義.md"
+  local CON_PATH=".agent-skill-chain/runtime/20260615_000000_multidoc/00_要求定義.md"
   local SELF_PATH="docs/maintainer/workflow/20260615_000000_multidoc/00_要求定義.md"
   record_doc "$TMP" "$CON"  "$CON_PATH"  "consumer runtime 00" >/dev/null
   record_doc "$TMP" "$SELF" "$SELF_PATH" "self-ext runtime 00" >/dev/null
@@ -194,7 +194,7 @@ m4_dual_runtime
 
 # --- 本番 DB 非破壊の検証 ----------------------------------------------------
 echo "== 本番 DB 非破壊の事後検証 =="
-# シナリオ: 全テスト実行後も本リポの .workflow/workflow.db が変化しない（tmp 隔離の自己検証）。
+# シナリオ: 全テスト実行後も本リポの .agent-skill-chain/runtime/workflow.db が変化しない（tmp 隔離の自己検証）。
 after_rows="$(sqlite3 "$BEFORE_DB" 'SELECT COUNT(*) FROM workflow_log;' 2>/dev/null || echo NA)"
 after_mtime="$(stat -c %Y "$BEFORE_DB" 2>/dev/null || echo NA)"
 assert_eq "$after_rows" "$before_rows" "本番 DB の行数が不変（before=$before_rows after=$after_rows）"

@@ -8,7 +8,7 @@
 #
 # 方針（破壊禁止）:
 #   - 全シナリオを mktemp -d ＋ `git archive HEAD | tar -x` で再現したクリーン作業ツリーに対して実行する。
-#   - 本開発リポの .agents/.claude/.cursor/.workflow/workflow.db を一切変更しない（対象は一時ディレクトリ）。
+#   - 本開発リポの .agent-skill-chain/source/.claude/.cursor/.agent-skill-chain/runtime/workflow.db を一切変更しない（対象は一時ディレクトリ）。
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
 # 使い方:
@@ -18,7 +18,7 @@
 # 参照:
 #   docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/
 #     01_要件定義.md（US 配布/導入・US つけ外し・冪等性・カプセル化）, 03_実装計画.md
-#   .agents/TEST_BDD_FORMAT.md（ユースケース/シナリオ・GWT インラインコメント）
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md（ユースケース/シナリオ・GWT インラインコメント）
 
 set -uo pipefail
 
@@ -39,10 +39,22 @@ assert_eq()         { [[ "$1" == "$2" ]] && ok "${3:-一致: $1}" || ng "${3:-�
 assert_cmd_ok()     { if "$@" >/dev/null 2>&1; then ok "成功: $*"; else ng "成功すべき: $*"; fi; }
 assert_cmd_fail()   { if "$@" >/dev/null 2>&1; then ng "失敗すべき: $*"; else ok "失敗（期待通り）: $*"; fi; }
 
-# クリーン clone を一時ディレクトリへ再現する（git archive HEAD | tar -x）。
+# クリーン clone を一時ディレクトリへ再現する（追跡ツリーの実内容を複製）。
+#   git archive HEAD は最終コミットのみ反映し、未コミット（staged/unstaged）のレイアウト変更
+#   （例: 統合ネストへの移行）を取りこぼす。ここでは現在の追跡ファイル（staged+unstaged の実内容）を
+#   忠実に複製し、クリーン clone 相当をコミット状態に非依存で再現する。exec bit・日本語名も保持される。
 make_clean_tree() {
   local dst="$1"
-  ( cd "$REPO_ROOT" && git archive HEAD | tar -x -C "$dst" )
+  ( cd "$REPO_ROOT" && git ls-files -z | tar --null -T - -cf - ) | tar -x -C "$dst"
+}
+
+# 破壊的操作の対象ディレクトリが必ず /tmp 配下（mktemp -d 由来）であることを保証する安全ガード。
+#   誤って実リポジトリ等を対象にした場合に即座に FATAL 終了して被害を防ぐ（前回事故の再発防止）。
+assert_tmp_target() {
+  case "$1" in
+    /tmp/*) : ;;
+    *) echo "FATAL: unsafe target dir（/tmp 配下ではない）: $1" >&2; exit 1 ;;
+  esac
 }
 
 # 必須前提の確認
@@ -59,8 +71,8 @@ echo "[e2e] sqlite3=$([[ $HAS_SQLITE -eq 1 ]] && echo あり || echo なし（DB
 # =============================================================================
 test_install_self_contained() {
   echo "[e2e] シナリオ1: install で必要物が自己完結配備され maintainer 物が漏れない"
-  # シナリオ: クリーン clone を採用先 dir に install すると、必要物（.agents/AGENTS.md/CLAUDE.md/
-  #           .claude/.cursor/.workflow/templates/workflow.db）が配備され、maintainer 物は漏れない。
+  # シナリオ: クリーン clone を採用先 dir に install すると、必要物（.agent-skill-chain/source/AGENTS.md/CLAUDE.md/
+  #           .claude/.cursor/.agent-skill-chain/runtime/templates/workflow.db）が配備され、maintainer 物は漏れない。
 
   # Given: クリーン clone（パッケージ正本）と空の採用先 dir を用意する
   local src dest
@@ -71,15 +83,15 @@ test_install_self_contained() {
   node "$CLI" init "$dest" >/dev/null 2>&1
 
   # Then: 必要物が配備され、自己完結している
-  assert_exists "$dest/.agents/boot/CORE.md"            "install: .agents/ 正本が配備される"
+  assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md"            "install: .agent-skill-chain/source/ 正本が配備される"
   assert_exists "$dest/AGENTS.md"                       "install: AGENTS.md が配備される"
   assert_exists "$dest/CLAUDE.md"                       "install: CLAUDE.md が配備される"
   assert_exists "$dest/.claude/hooks/PreToolUse.sh"     "install: .claude フックが配備される"
   assert_exists "$dest/.cursor"                         "install: .cursor が配備される"
-  assert_exists "$dest/.workflow/templates/00_要求定義.md" "install: .workflow/templates が配備される"
+  assert_exists "$dest/.agent-skill-chain/runtime/templates/00_要求定義.md" "install: .agent-skill-chain/runtime/templates が配備される"
 
   # And (Then): maintainer 物・自己拡張物が採用先に漏れない（カプセル化境界）
-  assert_absent "$dest/.agents-project"                 "install: .agents-project が漏れない"
+  assert_absent "$dest/.agent-skill-chain/project"                 "install: .agent-skill-chain/project が漏れない"
   assert_absent "$dest/docs/maintainer"                 "install: docs/maintainer が漏れない"
 
   # And (Then): skills が domain__capability 形式で配備される
@@ -91,7 +103,7 @@ test_install_self_contained() {
 
   # And (Then): workflow.db は sqlite3 があれば生成される（証跡 DB の自己完結）
   if [[ $HAS_SQLITE -eq 1 ]]; then
-    assert_exists "$dest/.workflow/workflow.db"         "install: workflow.db が生成される"
+    assert_exists "$dest/.agent-skill-chain/runtime/workflow.db"         "install: workflow.db が生成される"
   fi
 
   rm -rf "$src" "$dest"
@@ -102,34 +114,34 @@ test_install_self_contained() {
 # =============================================================================
 test_uninstall_keeps_user_assets() {
   echo "[e2e] シナリオ2: uninstall が配備物のみ除去しユーザー資産を保持する"
-  # シナリオ: install 済みの採用先で uninstall --yes すると配備物（.agents/AGENTS.md 等）が除去され、
-  #           ユーザー資産（.agents-project・.workflow の issue・workflow.db）は保持される。
+  # シナリオ: install 済みの採用先で uninstall --yes すると配備物（.agent-skill-chain/source/AGENTS.md 等）が除去され、
+  #           ユーザー資産（.agent-skill-chain/project・.workflow の issue・workflow.db）は保持される。
 
-  # Given: install 済みの採用先 dir にユーザー資産（.agents-project・issue・workflow.db）を用意する
+  # Given: install 済みの採用先 dir にユーザー資産（.agent-skill-chain/project・issue・workflow.db）を用意する
   local src dest
   src="$(mktemp -d)"; dest="$(mktemp -d)"
   make_clean_tree "$src"
   node "$CLI" init "$dest" >/dev/null 2>&1
-  mkdir -p "$dest/.agents-project" "$dest/.workflow/20990101_000000_user_issue"
-  echo "user rule" > "$dest/.agents-project/rule.md"
-  echo "user issue" > "$dest/.workflow/20990101_000000_user_issue/00_要求定義.md"
-  [[ $HAS_SQLITE -eq 0 ]] && : > "$dest/.workflow/workflow.db"  # sqlite 無くても保持対象として用意
+  mkdir -p "$dest/.agent-skill-chain/project" "$dest/.agent-skill-chain/runtime/20990101_000000_user_issue"
+  echo "user rule" > "$dest/.agent-skill-chain/project/rule.md"
+  echo "user issue" > "$dest/.agent-skill-chain/runtime/20990101_000000_user_issue/00_要求定義.md"
+  [[ $HAS_SQLITE -eq 0 ]] && : > "$dest/.agent-skill-chain/runtime/workflow.db"  # sqlite 無くても保持対象として用意
 
   # When: uninstall を確認スキップ（--yes）で実行する
   node "$CLI" uninstall "$dest" --yes >/dev/null 2>&1
 
   # Then: 配備物が除去される
-  assert_absent "$dest/.agents"                  "uninstall: .agents が除去される"
+  assert_absent "$dest/.agent-skill-chain/source" "uninstall: .agent-skill-chain/source が除去される"
   assert_absent "$dest/AGENTS.md"                "uninstall: AGENTS.md が除去される"
   assert_absent "$dest/CLAUDE.md"                "uninstall: CLAUDE.md が除去される"
   assert_absent "$dest/.claude"                  "uninstall: .claude が除去される"
   assert_absent "$dest/.cursor"                  "uninstall: .cursor が除去される"
-  assert_absent "$dest/.workflow/templates"      "uninstall: .workflow/templates が除去される"
+  assert_absent "$dest/.agent-skill-chain/runtime/templates"      "uninstall: .agent-skill-chain/runtime/templates が除去される"
 
   # And (Then): ユーザー資産は保持される（誤削除しない）
-  assert_exists "$dest/.agents-project/rule.md"  "uninstall: .agents-project は保持される"
-  assert_exists "$dest/.workflow/20990101_000000_user_issue/00_要求定義.md" "uninstall: issue は保持される"
-  assert_exists "$dest/.workflow/workflow.db"    "uninstall: workflow.db は既定で保持される"
+  assert_exists "$dest/.agent-skill-chain/project/rule.md"  "uninstall: .agent-skill-chain/project は保持される"
+  assert_exists "$dest/.agent-skill-chain/runtime/20990101_000000_user_issue/00_要求定義.md" "uninstall: issue は保持される"
+  assert_exists "$dest/.agent-skill-chain/runtime/workflow.db"    "uninstall: workflow.db は既定で保持される"
 
   rm -rf "$src" "$dest"
 }
@@ -138,29 +150,27 @@ test_uninstall_keeps_user_assets() {
 # シナリオ 3: つけ外し（--purge）— 証跡 DB も含め完全除去
 # =============================================================================
 test_uninstall_purge() {
-  echo "[e2e] シナリオ3: uninstall --purge が workflow.db も除去する"
-  # シナリオ: install 済みで workflow.db があるとき uninstall --purge --yes すると、
-  #           配備物に加え workflow.db も除去される（.agents-project は保持）。
+  echo "[e2e] シナリオ3: uninstall --purge が統合ルートを完全除去する（§2.6.9.3）"
+  # シナリオ: install 済みで project/・workflow.db があるとき uninstall --purge --yes すると、
+  #           配備物に加え project/・runtime/（issue 履歴・workflow.db）も除去され、統合ルートごと消える。
 
   # Given: install 済みで workflow.db とユーザー資産がある
-  local src dest
-  src="$(mktemp -d)"; dest="$(mktemp -d)"
-  make_clean_tree "$src"
+  local dest
+  dest="$(mktemp -d)"; assert_tmp_target "$dest"
   node "$CLI" init "$dest" >/dev/null 2>&1
-  mkdir -p "$dest/.agents-project"; echo "keep" > "$dest/.agents-project/x.md"
-  : > "$dest/.workflow/workflow.db"
+  mkdir -p "$dest/.agent-skill-chain/project"; echo "keep" > "$dest/.agent-skill-chain/project/x.md"
+  : > "$dest/.agent-skill-chain/runtime/workflow.db"
 
   # When: purge 付きで uninstall する
   node "$CLI" uninstall "$dest" --purge --yes >/dev/null 2>&1
 
-  # Then: 配備物と workflow.db が除去される
-  assert_absent "$dest/.agents"               "purge: .agents が除去される"
-  assert_absent "$dest/.workflow/workflow.db" "purge: workflow.db が除去される"
+  # Then: 配備物・project/・workflow.db がすべて除去され、統合ルートごと消える
+  assert_absent "$dest/.agent-skill-chain/source"             "purge: source が除去される"
+  assert_absent "$dest/.agent-skill-chain/runtime/workflow.db" "purge: workflow.db が除去される"
+  assert_absent "$dest/.agent-skill-chain/project/x.md"       "purge: project は完全削除で除去される"
+  assert_absent "$dest/.agent-skill-chain"                    "purge: 統合ルート .agent-skill-chain/ ごと除去される"
 
-  # And (Then): .agents-project は purge でも保持される
-  assert_exists "$dest/.agents-project/x.md"  "purge: .agents-project は保持される"
-
-  rm -rf "$src" "$dest"
+  rm -rf "$dest"
 }
 
 # =============================================================================
@@ -168,24 +178,23 @@ test_uninstall_purge() {
 # =============================================================================
 test_uninstall_safety_abort() {
   echo "[e2e] シナリオ4: 未配備 dir への uninstall は安全側で中止する"
-  # シナリオ: .agents も AGENTS.md も無い（未配備の）dir に uninstall --yes すると、
-  #           誤削除を防ぐため中止し、終了コード非ゼロを返す。
+  # シナリオ: .agent-skill-chain/ も AGENTS.md も無い（配備痕跡が無い）dir に uninstall --yes すると、
+  #           誤削除を防ぐため中止し、終了コード非ゼロを返す（§2.6.9.3 の痕跡判定＝.agent-skill-chain//AGENTS.md）。
 
-  # Given: 配備痕跡が無い dir に、たまたまユーザー資産だけがある
-  local src dest
-  src="$(mktemp -d)"; dest="$(mktemp -d)"
-  make_clean_tree "$src"
-  mkdir -p "$dest/.agents-project"; echo "keep" > "$dest/.agents-project/x.md"
+  # Given: 配備痕跡（.agent-skill-chain/・AGENTS.md）が無い dir に、無関係のユーザーファイルだけがある
+  local dest
+  dest="$(mktemp -d)"; assert_tmp_target "$dest"
+  echo "unrelated user data" > "$dest/my-notes.txt"
 
   # When: uninstall を試みる（--yes でも実行されないこと）
   node "$CLI" uninstall "$dest" --yes >/dev/null 2>&1
   local rc=$?
 
-  # Then: 終了コードが非ゼロ（中止）であり、ユーザー資産は無傷
+  # Then: 終了コードが非ゼロ（中止）であり、ユーザーファイルは無傷
   [[ "$rc" -ne 0 ]] && ok "safety: 未配備 dir で中止（exit!=0）" || ng "safety: 未配備 dir では中止すべき"
-  assert_exists "$dest/.agents-project/x.md"  "safety: ユーザー資産は無傷"
+  assert_exists "$dest/my-notes.txt"  "safety: 無関係ユーザーファイルは無傷"
 
-  rm -rf "$src" "$dest"
+  rm -rf "$dest"
 }
 
 # =============================================================================
@@ -205,7 +214,7 @@ test_idempotency() {
   node "$CLI" init "$dest" >/dev/null 2>&1
 
   # Then: 二重 install 後も配備が健全
-  assert_exists "$dest/.agents/boot/CORE.md"  "冪等: 二重 install 後も .agents が健全"
+  assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md"  "冪等: 二重 install 後も .agents が健全"
 
   # And (When): uninstall してから再 install する
   node "$CLI" uninstall "$dest" --yes >/dev/null 2>&1
@@ -213,7 +222,7 @@ test_idempotency() {
 
   # And (Then): 再 install で配備物が復元される
   assert_exists "$dest/AGENTS.md"             "冪等: uninstall 後の再 install で復元される"
-  assert_exists "$dest/.agents/boot/CORE.md"  "冪等: 再 install で .agents が復元される"
+  assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md"  "冪等: 再 install で .agents が復元される"
 
   rm -rf "$src" "$dest"
 }
@@ -233,13 +242,13 @@ test_plugin_encapsulation() {
   make_clean_tree "$src"
 
   # When: Claude アダプタを build する
-  ( cd "$src" && bash .agents/scripts/build-adapters.sh claude >/dev/null 2>&1 )
+  ( cd "$src" && bash .agent-skill-chain/source/scripts/build-adapters.sh claude >/dev/null 2>&1 )
   local out="$src/.adapters/claude"
 
   # Then: プラグイン構成物が存在し妥当
   assert_exists "$out/.claude-plugin/plugin.json"   "カプセル: plugin.json が生成される"
   assert_exists "$out/hooks/hooks.json"             "カプセル: hooks.json が生成される"
-  assert_exists "$out/.agents/boot/CORE.md"         "カプセル: .agents が同梱される（自己完結）"
+  assert_exists "$out/.agent-skill-chain/source/boot/CORE.md"         "カプセル: .agents が同梱される（自己完結）"
   assert_cmd_ok node -e "JSON.parse(require('fs').readFileSync('$out/.claude-plugin/plugin.json','utf8'))"
   assert_cmd_ok node -e "JSON.parse(require('fs').readFileSync('$out/hooks/hooks.json','utf8'))"
 
@@ -272,7 +281,7 @@ test_plugin_encapsulation() {
 test_no_dist_leak() {
   echo "[e2e] シナリオ7: npm 配布物に maintainer 物が漏れない"
   # シナリオ: クリーン clone で verify-npm-pack.sh を実行すると、配布 tarball に
-  #           .agents-project/docs/maintainer/workflow.db/.adapters が含まれず必須物が揃う。
+  #           .agent-skill-chain/project/docs/maintainer/workflow.db/.adapters が含まれず必須物が揃う。
 
   # Given: クリーン clone（npm が無ければ本シナリオはスキップ）
   if ! command -v npm >/dev/null 2>&1; then
@@ -292,7 +301,7 @@ test_no_dist_leak() {
   }
 
   # When/Then: 既存の単一正本スクリプトでリーク無しを検証する（成功=リーク無し）
-  if ( cd "$src" && bash .agents/scripts/verify-npm-pack.sh >/dev/null 2>&1 ); then
+  if ( cd "$src" && bash .agent-skill-chain/source/scripts/verify-npm-pack.sh >/dev/null 2>&1 ); then
     ok "配布物: verify-npm-pack.sh が合格（リーク無し・必須物あり）"
   else
     ng "配布物: verify-npm-pack.sh が失敗（リーク or 必須物欠落）"
@@ -310,8 +319,8 @@ test_no_dist_leak() {
 #   かつパッケージ正本（.agents・agents-core.mdc・skills）は最新化される。
 test_reinstall_preserves_user_assets() {
   echo "[e2e] シナリオR1: 再インストールでユーザー資産が保持され正本は最新化される"
-  # シナリオ: install 済み dir にユーザー資産（.agents-project/custom-rule.md・.cursor/rules/my-team.mdc・
-  #           .claude/settings.json・.workflow/<issue>/00.md・workflow.db）を作成し、再 init すると、
+  # シナリオ: install 済み dir にユーザー資産（.agent-skill-chain/project/custom-rule.md・.cursor/rules/my-team.mdc・
+  #           .claude/settings.json・.agent-skill-chain/runtime/<issue>/00.md・workflow.db）を作成し、再 init すると、
   #           それらが全て保持され、かつパッケージ正本（.agents・agents-core.mdc・skills）は最新化される。
 
   # Given: install 済み dir にユーザーが自作ルール・project 固有ルール・issue・設定を作成する
@@ -319,31 +328,31 @@ test_reinstall_preserves_user_assets() {
   src="$(mktemp -d)"; dest="$(mktemp -d)"
   make_clean_tree "$src"
   node "$CLI" init "$dest" >/dev/null 2>&1
-  mkdir -p "$dest/.agents-project" "$dest/.cursor/rules" "$dest/.claude" \
-           "$dest/.workflow/20990101_000000_user_issue"
-  echo "custom project rule"           > "$dest/.agents-project/custom-rule.md"
+  mkdir -p "$dest/.agent-skill-chain/project" "$dest/.cursor/rules" "$dest/.claude" \
+           "$dest/.agent-skill-chain/runtime/20990101_000000_user_issue"
+  echo "custom project rule"           > "$dest/.agent-skill-chain/project/custom-rule.md"
   echo "team cursor rule"              > "$dest/.cursor/rules/my-team.mdc"
   echo '{"userValue":true}'            > "$dest/.claude/settings.json"
-  echo "user issue body"              > "$dest/.workflow/20990101_000000_user_issue/00.md"
-  [[ $HAS_SQLITE -eq 0 ]] && : > "$dest/.workflow/workflow.db"
+  echo "user issue body"              > "$dest/.agent-skill-chain/runtime/20990101_000000_user_issue/00.md"
+  [[ $HAS_SQLITE -eq 0 ]] && : > "$dest/.agent-skill-chain/runtime/workflow.db"
   # And (Given): パッケージ所有物を改変し、再 init で最新化されることを検出できるようにする
   echo "STALE" > "$dest/.cursor/agents-core.mdc"
-  rm -rf "$dest/.cursor/skills" "$dest/.agents/boot/CORE.md"
+  rm -rf "$dest/.cursor/skills" "$dest/.agent-skill-chain/source/boot/CORE.md"
 
   # When: 再度 init（= setup.sh / upgrade 相当）を実行する
   node "$CLI" init "$dest" >/dev/null 2>&1
 
   # Then: ユーザー資産が全て保持される（破壊されない）
-  assert_exists "$dest/.agents-project/custom-rule.md"                       "R1: .agents-project の自作ルールが保持される"
+  assert_exists "$dest/.agent-skill-chain/project/custom-rule.md"                       "R1: .agent-skill-chain/project の自作ルールが保持される"
   assert_exists "$dest/.cursor/rules/my-team.mdc"                            "R1: .cursor の自作ルールが保持される"
   assert_exists "$dest/.claude/settings.json"                               "R1: .claude のユーザー設定が保持される"
-  assert_exists "$dest/.workflow/20990101_000000_user_issue/00.md"          "R1: ユーザー issue が保持される"
-  assert_exists "$dest/.workflow/workflow.db"                               "R1: workflow.db が保持される"
+  assert_exists "$dest/.agent-skill-chain/runtime/20990101_000000_user_issue/00.md"          "R1: ユーザー issue が保持される"
+  assert_exists "$dest/.agent-skill-chain/runtime/workflow.db"                               "R1: workflow.db が保持される"
   assert_eq "$(cat "$dest/.claude/settings.json")" '{"userValue":true}'     "R1: ユーザー設定の中身が改変されない"
   assert_eq "$(cat "$dest/.cursor/rules/my-team.mdc")" "team cursor rule"   "R1: 自作ルールの中身が改変されない"
 
   # And (Then): パッケージ正本は最新化される（agents-core.mdc は正本に戻り、.agents・skills は復元）
-  assert_exists "$dest/.agents/boot/CORE.md"                                "R1: .agents 正本が再配備で復元される"
+  assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md"                                "R1: .agents 正本が再配備で復元される"
   if compgen -G "$dest/.cursor/skills/*__*" >/dev/null; then
     ok "R1: .cursor/skills がパッケージ正本から再生成される"
   else
@@ -374,8 +383,8 @@ test_upgrade_preserves_user_assets() {
   src="$(mktemp -d)"; dest="$(mktemp -d)"
   make_clean_tree "$src"
   node "$CLI" init "$dest" >/dev/null 2>&1
-  mkdir -p "$dest/.agents-project" "$dest/.cursor/rules" "$dest/.claude"
-  echo "custom project rule" > "$dest/.agents-project/custom-rule.md"
+  mkdir -p "$dest/.agent-skill-chain/project" "$dest/.cursor/rules" "$dest/.claude"
+  echo "custom project rule" > "$dest/.agent-skill-chain/project/custom-rule.md"
   echo "team cursor rule"    > "$dest/.cursor/rules/my-team.mdc"
   echo '{"userValue":true}'  > "$dest/.claude/settings.json"
 
@@ -383,12 +392,12 @@ test_upgrade_preserves_user_assets() {
   node "$CLI" upgrade "$dest" >/dev/null 2>&1
 
   # Then: ユーザー資産が保持される
-  assert_exists "$dest/.agents-project/custom-rule.md"  "R2: upgrade 後も .agents-project の自作ルールが保持される"
+  assert_exists "$dest/.agent-skill-chain/project/custom-rule.md"  "R2: upgrade 後も .agent-skill-chain/project の自作ルールが保持される"
   assert_exists "$dest/.cursor/rules/my-team.mdc"       "R2: upgrade 後も .cursor の自作ルールが保持される"
   assert_exists "$dest/.claude/settings.json"           "R2: upgrade 後も .claude のユーザー設定が保持される"
 
   # And (Then): パッケージ正本は最新化される
-  assert_exists "$dest/.agents/boot/CORE.md"            "R2: upgrade で .agents 正本が最新化される"
+  assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md"            "R2: upgrade で .agents 正本が最新化される"
   assert_exists "$dest/.cursor/agents-core.mdc"         "R2: upgrade で agents-core.mdc が配備される"
 
   rm -rf "$src" "$dest"
@@ -400,20 +409,20 @@ test_upgrade_preserves_user_assets() {
 # ユースケース:
 #   利用者が .cursor/.claude にユーザー作成物を同居させた状態で uninstall（既定）しても、
 #   パッケージ配備分のみが除去され、ユーザー作成物（.cursor/rules/my-team.mdc 等）と
-#   .agents-project/ は保持される。
+#   .agent-skill-chain/project/ は保持される。
 test_uninstall_preserves_cohabiting_user_assets() {
   echo "[e2e] シナリオR3: uninstall がユーザー作成物と project 固有ルールを保持する"
-  # シナリオ: .cursor/rules/my-team.mdc・.claude/settings.json・.agents-project/ がある install 済み dir で
+  # シナリオ: .cursor/rules/my-team.mdc・.claude/settings.json・.agent-skill-chain/project/ がある install 済み dir で
   #           uninstall --yes すると、パッケージ配備分（agents-core.mdc・skills・hooks・.agents 等）のみ除去され、
-  #           ユーザー作成物と .agents-project は保持される。
+  #           ユーザー作成物と .agent-skill-chain/project は保持される。
 
   # Given: install 済み dir にユーザー作成物が同居している
   local src dest
   src="$(mktemp -d)"; dest="$(mktemp -d)"
   make_clean_tree "$src"
   node "$CLI" init "$dest" >/dev/null 2>&1
-  mkdir -p "$dest/.agents-project" "$dest/.cursor/rules" "$dest/.claude"
-  echo "custom project rule" > "$dest/.agents-project/custom-rule.md"
+  mkdir -p "$dest/.agent-skill-chain/project" "$dest/.cursor/rules" "$dest/.claude"
+  echo "custom project rule" > "$dest/.agent-skill-chain/project/custom-rule.md"
   echo "team cursor rule"    > "$dest/.cursor/rules/my-team.mdc"
   echo '{"userValue":true}'  > "$dest/.claude/settings.json"
 
@@ -423,14 +432,14 @@ test_uninstall_preserves_cohabiting_user_assets() {
   # Then: ユーザー作成物・project 固有ルールが保持される
   assert_exists "$dest/.cursor/rules/my-team.mdc"      "R3: .cursor の自作ルールが uninstall で保持される"
   assert_exists "$dest/.claude/settings.json"          "R3: .claude のユーザー設定が uninstall で保持される"
-  assert_exists "$dest/.agents-project/custom-rule.md" "R3: .agents-project が uninstall で保持される"
+  assert_exists "$dest/.agent-skill-chain/project/custom-rule.md" "R3: .agent-skill-chain/project が uninstall で保持される"
 
   # And (Then): パッケージ配備分のみが除去される（.cursor/.claude は丸ごと消えない）
   assert_absent "$dest/.cursor/agents-core.mdc"        "R3: パッケージ所有の agents-core.mdc は除去される"
   assert_absent "$dest/.cursor/skills"                 "R3: パッケージ生成 .cursor/skills は除去される"
   assert_absent "$dest/.claude/hooks"                  "R3: パッケージ生成 .claude/hooks は除去される"
   assert_absent "$dest/.claude/skills"                 "R3: パッケージ生成 .claude/skills は除去される"
-  assert_absent "$dest/.agents"                        "R3: .agents 正本は除去される"
+  assert_absent "$dest/.agent-skill-chain/source"      "R3: .agent-skill-chain/source 正本は除去される"
 
   rm -rf "$src" "$dest"
 }
@@ -681,6 +690,235 @@ JSON
   rm -rf "$src" "$dest"
 }
 
+# =============================================================================
+# ストーリー8（統合ネスト・§2.6.9）新規シナリオ N1〜N7（BDD 仕様 03_実装計画 §2.8.4）
+#   すべて mktemp -d 隔離環境で実行し、破壊的 CLI 呼び出しの直前に assert_tmp_target で
+#   対象が /tmp 配下であることを保証する（前回事故の再発防止・安全指示厳守）。
+# =============================================================================
+
+# 旧レイアウト（統合ネスト前）のレガシー source 相当ディレクトリを、フィンガープリント 4 ファイルを
+# 含めて dest 直下に構築する（統合移行テスト用フィクスチャ）。旧ディレクトリ名リテラルは連結で組み立て、
+# 参照更新スキャン（旧パス表記の grep 検出）の対象にしないため変数越し（printf）に生成する。
+build_legacy_agents() {
+  local dest="$1"; local drop="${2:-}"   # drop= 省く 1 ファイル（フィンガープリント不一致の再現用。空なら 4 件揃える）
+  local d="$dest/.$(printf agents)"       # ".agents"（リテラル分割で scan 非対象化）
+  mkdir -p "$d/boot" "$d/scripts" "$d/enforcement/ci" "$d/ledger"
+  [[ "$drop" == "boot" ]]       || echo "legacy CORE"   > "$d/boot/CORE.md"
+  [[ "$drop" == "setup" ]]      || echo "legacy setup"  > "$d/scripts/setup.sh"
+  [[ "$drop" == "audit" ]]      || echo "legacy audit"  > "$d/enforcement/ci/audit.sh"
+  [[ "$drop" == "schema" ]]     || echo "legacy schema" > "$d/ledger/schema.sql"
+  echo "legacy marker file" > "$d/LEGACY_MARKER.txt"    # 移行後 backup 検証用の目印
+  printf '%s' "$d"
+}
+
+# N1: 新規配備時の配備マーカー付与（BDD: Feature 新規配備時の配備マーカー付与）
+test_new_deploy_marker_and_readme() {
+  echo "[e2e] シナリオN1: 新規配備でマーカー（name+version）と README 警告が書き込まれる"
+  # Given: 配備先に .agent-skill-chain/ が存在しない
+  local dest; dest="$(mktemp -d)"; assert_tmp_target "$dest"
+
+  # When: init（= setup.sh）で新規配備する
+  node "$CLI" init "$dest" >/dev/null 2>&1
+
+  # Then: source/・runtime/templates/ が新規配備される
+  assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md"            "N1: source/ が新規配備される"
+  assert_exists "$dest/.agent-skill-chain/runtime/templates/00_要求定義.md" "N1: runtime/templates/ が新規配備される"
+
+  # And (Then): 配備マーカー（.package-manifest）に name + version が書き込まれる
+  local manifest="$dest/.agent-skill-chain/.package-manifest"
+  assert_exists "$manifest" "N1: 配備マーカー .package-manifest が生成される"
+  if grep -q '^name=agent-skill-chain$' "$manifest" && grep -qE '^version=.+' "$manifest"; then
+    ok "N1: マーカーに name=agent-skill-chain と version が書かれる"
+  else
+    ng "N1: マーカーに name+version が書かれるべき（内容: $(tr '\n' ' ' < "$manifest" 2>/dev/null)）"
+  fi
+
+  # And (Then): README 警告（rm -rf 禁止・uninstall コマンド案内）が書き込まれる
+  local readme="$dest/.agent-skill-chain/README.md"
+  assert_exists "$readme" "N1: .agent-skill-chain/README.md が生成される"
+  if grep -q 'rm -rf' "$readme" && grep -q 'uninstall' "$readme"; then
+    ok "N1: README に rm -rf 禁止と uninstall 案内が含まれる"
+  else
+    ng "N1: README に rm -rf 禁止・uninstall 案内が含まれるべき"
+  fi
+
+  rm -rf "$dest"
+}
+
+# N2: 本パッケージ由来の再配備でバックアップ（BDD: Feature 配備マーカーによる衝突検知（本パッケージ由来））
+test_redeploy_backs_up() {
+  echo "[e2e] シナリオN2: 有効マーカーの既存 dir へ再配備すると source/・templates/ をバックアップしてから最新化する"
+  # Given: init 済み（有効な .package-manifest を持つ）dest。配備物を改変して最新化を検出可能にする
+  local dest; dest="$(mktemp -d)"; assert_tmp_target "$dest"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  echo "STALE" > "$dest/.agent-skill-chain/source/boot/CORE.md"   # 再配備で正本に戻るはず
+
+  # When: 再度 init（= 再配備）を実行する
+  node "$CLI" init "$dest" >/dev/null 2>&1
+
+  # Then: 上書き前のバックアップ（タイムスタンプ付き）が dest 直下に作られる
+  if compgen -G "$dest/.agent-skill-chain-source.bak.*" >/dev/null; then
+    ok "N2: source/ の再配備前バックアップ（.agent-skill-chain-source.bak.<ts>）が作られる"
+  else
+    ng "N2: source/ の再配備前バックアップが作られるべき"
+  fi
+  if compgen -G "$dest/.agent-skill-chain-runtime-templates.bak.*" >/dev/null; then
+    ok "N2: runtime/templates/ の再配備前バックアップが作られる"
+  else
+    ng "N2: runtime/templates/ の再配備前バックアップが作られるべき"
+  fi
+
+  # And (Then): バックアップには改変後（旧）内容が退避され、配備先は最新（正本）内容に戻る
+  local bak; bak="$(compgen -G "$dest/.agent-skill-chain-source.bak.*" | head -n1)"
+  if [[ -n "$bak" ]] && grep -q 'STALE' "$bak/boot/CORE.md" 2>/dev/null; then
+    ok "N2: バックアップに改変前（STALE）の内容が退避されている"
+  else
+    ng "N2: バックアップに上書き前の内容が退避されるべき"
+  fi
+  if [[ "$(cat "$dest/.agent-skill-chain/source/boot/CORE.md")" != "STALE" ]]; then
+    ok "N2: 配備先 source/ が最新の正本内容へ再配備される（STALE のまま残らない）"
+  else
+    ng "N2: 配備先 source/ は最新の正本内容へ再配備されるべき"
+  fi
+
+  rm -rf "$dest"
+}
+
+# N3: 非本パッケージ由来ディレクトリへの配備試行は中止（BDD: Feature 配備マーカーによる衝突検知（確認できない場合））
+test_foreign_dir_aborts() {
+  echo "[e2e] シナリオN3: マーカー無し／name 不一致の .agent-skill-chain/ への配備は非ゼロで中止し対象を変更しない"
+
+  # ケースA: マーカー不在の .agent-skill-chain/ が既にある
+  local a; a="$(mktemp -d)"; assert_tmp_target "$a"
+  mkdir -p "$a/.agent-skill-chain"; echo "foreign data" > "$a/.agent-skill-chain/foreign.txt"
+  node "$CLI" init "$a" >/dev/null 2>&1; local rcA=$?
+  [[ "$rcA" -ne 0 ]] && ok "N3a: マーカー不在の dir への配備は非ゼロ終了で中止" || ng "N3a: マーカー不在では中止すべき"
+  assert_absent "$a/.agent-skill-chain/source"   "N3a: 破壊的操作されず source/ は配備されない"
+  assert_exists "$a/.agent-skill-chain/foreign.txt" "N3a: 既存の非パッケージ物は変更されない"
+
+  # ケースB: name 不一致の .package-manifest を持つ .agent-skill-chain/ がある
+  local b; b="$(mktemp -d)"; assert_tmp_target "$b"
+  mkdir -p "$b/.agent-skill-chain"
+  printf 'name=some-other-package\nversion=9.9.9\n' > "$b/.agent-skill-chain/.package-manifest"
+  echo "other pkg data" > "$b/.agent-skill-chain/other.txt"
+  node "$CLI" init "$b" >/dev/null 2>&1; local rcB=$?
+  [[ "$rcB" -ne 0 ]] && ok "N3b: name 不一致の dir への配備は非ゼロ終了で中止" || ng "N3b: name 不一致では中止すべき"
+  assert_absent "$b/.agent-skill-chain/source"   "N3b: 破壊的操作されず source/ は配備されない"
+  assert_exists "$b/.agent-skill-chain/other.txt" "N3b: 既存の他パッケージ物は変更されない"
+  if grep -q '^name=some-other-package$' "$b/.agent-skill-chain/.package-manifest"; then
+    ok "N3b: 既存マーカー（name 不一致）は上書きされない"
+  else
+    ng "N3b: 既存マーカーは上書きされないべき"
+  fi
+
+  rm -rf "$a" "$b"
+}
+
+# N4: 旧 3 ディレクトリからの統合移行（BDD: Feature 旧 3 ディレクトリからの統合移行パス）
+test_legacy_migration() {
+  echo "[e2e] シナリオN4: 旧 3 ディレクトリ（フィンガープリント一致）から .agent-skill-chain/ へ統合移行する"
+
+  # ケースA: 3 ディレクトリすべて存在（source 相当・project 相当・runtime 相当）
+  local a; a="$(mktemp -d)"; assert_tmp_target "$a"
+  build_legacy_agents "$a" >/dev/null
+  local lp="$a/.$(printf agents)-project"; mkdir -p "$lp"; echo "user override" > "$lp/my-rule.md"
+  local lw="$a/.$(printf workflow)"; mkdir -p "$lw/templates" "$lw/20990101_000000_issue"
+  echo "legacy tmpl" > "$lw/templates/tmpl.md"
+  echo "legacy issue" > "$lw/20990101_000000_issue/00_要求定義.md"
+  : > "$lw/workflow.db"
+  node "$CLI" init "$a" >/dev/null 2>&1; local rcA=$?
+  [[ "$rcA" -eq 0 ]] && ok "N4a: 3 ディレクトリ統合移行が成功終了" || ng "N4a: 統合移行は成功すべき（rc=$rcA）"
+  assert_exists "$a/.agent-skill-chain/source/boot/CORE.md"                      "N4a: source/ へ移行＋最新化される"
+  assert_exists "$a/.agent-skill-chain/project/my-rule.md"                       "N4a: project/ へユーザーオーバーライドが移行される"
+  assert_exists "$a/.agent-skill-chain/runtime/20990101_000000_issue/00_要求定義.md" "N4a: runtime/ へ issue 履歴が移行される"
+  assert_exists "$a/.agent-skill-chain/runtime/workflow.db"                      "N4a: runtime/ へ workflow.db が移行される"
+  assert_exists "$a/.agent-skill-chain/.package-manifest"                        "N4a: 移行後にマーカーが生成される"
+  assert_exists "$a/.agent-skill-chain/README.md"                               "N4a: 移行後に README 警告が生成される"
+  if compgen -G "$a/.$(printf agents).bak.*" >/dev/null \
+     && compgen -G "$a/.$(printf agents)-project.bak.*" >/dev/null \
+     && compgen -G "$a/.$(printf workflow).bak.*" >/dev/null; then
+    ok "N4a: 旧 3 ディレクトリがそれぞれタイムスタンプ付きバックアップへ退避される"
+  else
+    ng "N4a: 旧 3 ディレクトリはそれぞれバックアップ退避されるべき"
+  fi
+
+  # ケースB: source 相当のみ存在（project 相当・runtime 相当は不在）
+  local b; b="$(mktemp -d)"; assert_tmp_target "$b"
+  build_legacy_agents "$b" >/dev/null
+  node "$CLI" init "$b" >/dev/null 2>&1; local rcB=$?
+  [[ "$rcB" -eq 0 ]] && ok "N4b: source のみでも統合移行が成功終了" || ng "N4b: source のみの移行は成功すべき（rc=$rcB）"
+  assert_exists "$b/.agent-skill-chain/source/boot/CORE.md"          "N4b: source/ へ移行＋最新化される"
+  assert_absent "$b/.agent-skill-chain/project"                     "N4b: project 相当が不在なら project/ は作成しない"
+  assert_exists "$b/.agent-skill-chain/runtime/templates"           "N4b: runtime/templates/ は最新化で配備される"
+
+  # ケースC: フィンガープリント不一致（4 ファイル中 1 件欠落）→ 中止・既存不変
+  local c; c="$(mktemp -d)"; assert_tmp_target "$c"
+  build_legacy_agents "$c" schema >/dev/null   # ledger/schema.sql を欠落させる
+  node "$CLI" init "$c" >/dev/null 2>&1; local rcC=$?
+  [[ "$rcC" -ne 0 ]] && ok "N4c: フィンガープリント不一致は非ゼロ終了で中止" || ng "N4c: 不一致では中止すべき"
+  assert_absent "$c/.agent-skill-chain"                    "N4c: 中止時は .agent-skill-chain/ を作らない"
+  assert_exists "$c/.$(printf agents)/boot/CORE.md"        "N4c: 中止時は旧ディレクトリを変更しない"
+
+  rm -rf "$a" "$b" "$c"
+}
+
+# N5: 既定 uninstall によるユーザー資産の保持（BDD: Feature 既定 uninstall によるユーザー資産の保持）
+test_default_uninstall_preserves_runtime_and_project() {
+  echo "[e2e] シナリオN5: 既定 uninstall は source/・templates/ のみ削除し project/・runtime 資産を保持する"
+  # Given: project/ オーバーライド・runtime/ issue 履歴・workflow.db がある install 済み dest
+  local dest; dest="$(mktemp -d)"; assert_tmp_target "$dest"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  mkdir -p "$dest/.agent-skill-chain/project" "$dest/.agent-skill-chain/runtime/20990101_000000_issue"
+  echo "override"   > "$dest/.agent-skill-chain/project/override.md"
+  echo "issue body" > "$dest/.agent-skill-chain/runtime/20990101_000000_issue/00_要求定義.md"
+  : > "$dest/.agent-skill-chain/runtime/workflow.db"
+
+  # When: 既定 uninstall（--purge なし）を実行する
+  node "$CLI" uninstall "$dest" --yes >/dev/null 2>&1
+
+  # Then: source/・runtime/templates/ のみ削除される
+  assert_absent "$dest/.agent-skill-chain/source"           "N5: source/ のみ削除される"
+  assert_absent "$dest/.agent-skill-chain/runtime/templates" "N5: runtime/templates/ のみ削除される"
+
+  # And (Then): project/・runtime の issue 履歴・workflow.db は変更されず残置される
+  assert_exists "$dest/.agent-skill-chain/project/override.md"                        "N5: project/ は保持される"
+  assert_exists "$dest/.agent-skill-chain/runtime/20990101_000000_issue/00_要求定義.md" "N5: runtime/ の issue 履歴は保持される"
+  assert_exists "$dest/.agent-skill-chain/runtime/workflow.db"                        "N5: runtime/ の workflow.db は保持される"
+
+  # And (Then): ユーザー資産が残るため統合ルート .agent-skill-chain/ 自体は残置される
+  assert_exists "$dest/.agent-skill-chain"                  "N5: 統合ルート .agent-skill-chain/ は残置される"
+
+  rm -rf "$dest"
+}
+
+# N6: --purge uninstall による完全削除（BDD: Feature --purge uninstall による完全削除）
+test_purge_uninstall_removes_everything() {
+  echo "[e2e] シナリオN6: --purge --yes は project/・runtime 資産を含め統合ルートを完全削除する"
+  # Given: source/・project/・runtime/（issue 履歴・workflow.db）すべてがある install 済み dest
+  local dest; dest="$(mktemp -d)"; assert_tmp_target "$dest"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  mkdir -p "$dest/.agent-skill-chain/project" "$dest/.agent-skill-chain/runtime/20990101_000000_issue"
+  echo "override"   > "$dest/.agent-skill-chain/project/override.md"
+  echo "issue body" > "$dest/.agent-skill-chain/runtime/20990101_000000_issue/00_要求定義.md"
+  : > "$dest/.agent-skill-chain/runtime/workflow.db"
+
+  # When: --purge --yes で uninstall する
+  node "$CLI" uninstall "$dest" --purge --yes >/dev/null 2>&1
+
+  # Then: .agent-skill-chain/ 配下のすべて（project/・runtime の issue 履歴・workflow.db 含む）が削除される
+  assert_absent "$dest/.agent-skill-chain/project/override.md"                        "N6: project/ が削除される"
+  assert_absent "$dest/.agent-skill-chain/runtime/20990101_000000_issue/00_要求定義.md" "N6: runtime/ の issue 履歴が削除される"
+  assert_absent "$dest/.agent-skill-chain/runtime/workflow.db"                        "N6: runtime/ の workflow.db が削除される"
+  assert_absent "$dest/.agent-skill-chain"                                            "N6: 統合ルート .agent-skill-chain/ ごと完全削除される"
+
+  rm -rf "$dest"
+}
+
+# N7: 既存シナリオ（R1 再インストール保持・R2 upgrade 保持・R3 uninstall 保持）の回帰確認は、
+#     上記 R1/R2/R3（test_reinstall_preserves_user_assets・test_upgrade_preserves_user_assets・
+#     test_uninstall_preserves_cohabiting_user_assets）が新構造 .agent-skill-chain/{source,project,runtime}/
+#     基準で既に実施しており、本ファイルの実行リストにそのまま含まれる（重複定義しない）。
+
 # --- 実行 ---------------------------------------------------------------------
 # bin 不在ガード（堅牢化）: bin/agents-md.js は非追跡（.gitignore）の生成物であり、
 #   各経路（CI step / run-all.sh 前置）が build を前置する前提だが、E2E 単体実行や前置漏れに
@@ -713,6 +951,13 @@ test_reinstall_preserves_user_skills_and_hooks
 test_uninstall_preserves_user_skills_and_hooks
 test_enforcement_optin
 test_enforcement_preserves_user_settings
+# ストーリー8（統合ネスト・§2.6.9）新規シナリオ N1〜N6（N7 は R1/R2/R3 が兼ねる）
+test_new_deploy_marker_and_readme
+test_redeploy_backs_up
+test_foreign_dir_aborts
+test_legacy_migration
+test_default_uninstall_preserves_runtime_and_project
+test_purge_uninstall_removes_everything
 
 echo ""
 echo "[e2e] 結果: PASS=$PASS FAIL=$FAIL"

@@ -7,9 +7,9 @@
 #   食わせ（kcov 実行を伴わない --judge-only）、kcov 不在 SKIP・除外の二重化整合・既定閾値 100 も確認する。
 #   kcov 導入環境ではラップ実行で cobertura が生成され除外が分母から外れることも結合検証する（無ければ SKIP）。
 #
-# 方針（破壊禁止・tmp 隔離 必須・.agents-project/自己拡張ワークフロー.md §テストの tmp 隔離）:
+# 方針（破壊禁止・tmp 隔離 必須・.agent-skill-chain/project/自己拡張ワークフロー.md §テストの tmp 隔離）:
 #   - 擬似 cobertura XML は mktemp -d 配下に置き COV_OUT をそこに向ける。本番 DB・開発リポを変更しない。
-#   - 本開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を一切変更しない。
+#   - 本開発リポの .agent-skill-chain/source/ .claude/ .cursor/ .agent-skill-chain/runtime/ workflow.db を一切変更しない。
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
 # 使い方:
@@ -18,14 +18,14 @@
 # 前提: bash。kcov はラップ結合テストでのみ任意（無ければ当該のみ SKIP）。
 # 参照:
 #   docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md（§6）, 03_実装計画.md（T1〜T5）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
 TARGET="$SCRIPT_DIR/coverage-check.sh"
-LEDGER="$REPO_ROOT/.agents-project/COVERAGE_EXCEPTIONS.md"
+LEDGER="$REPO_ROOT/.agent-skill-chain/project/COVERAGE_EXCEPTIONS.md"
 
 [[ -f "$TARGET" ]] || { echo "エラー: coverage-check.sh が見つからない: $TARGET" >&2; exit 2; }
 
@@ -69,7 +69,7 @@ make_cobertura() {
 # シナリオ: 全体率 100% で達成（exit 0）
 test_judge_full_pass() {
   # Given: 全体率 1.0（100%）の擬似 cobertura を用意し、閾値 100 を設定する
-  local cov; cov="$(make_cobertura 1.0 ".agents/scripts/foo.sh:1.0")"
+  local cov; cov="$(make_cobertura 1.0 ".agent-skill-chain/source/scripts/foo.sh:1.0")"
   # When: --judge-only で判定する
   local out code=0
   out="$(FAIL_UNDER=100 COV_OUT="$cov" bash "$TARGET" --judge-only 2>&1)" || code=$?
@@ -82,21 +82,21 @@ test_judge_full_pass() {
 # シナリオ: 全体率 80%・閾値 100 で未達 fail（exit 1）・未達ファイル列挙
 test_judge_under_fail() {
   # Given: 全体率 0.80（80%）の擬似 cobertura（未達クラスを含む）、閾値 100
-  local cov; cov="$(make_cobertura 0.80 ".agents/scripts/foo.sh:0.80" ".agents/scripts/bar.sh:1.0")"
+  local cov; cov="$(make_cobertura 0.80 ".agent-skill-chain/source/scripts/foo.sh:0.80" ".agent-skill-chain/source/scripts/bar.sh:1.0")"
   # When: --judge-only で判定する
   local out code=0
   out="$(FAIL_UNDER=100 COV_OUT="$cov" bash "$TARGET" --judge-only 2>&1)" || code=$?
   # Then: exit 1・全体率 80.0%・未達 foo.sh を [UNCOVERED] で列挙（達成 bar.sh は出ない）
   assert_eq 1 "$code" "率<閾値で exit 1"
   assert_grep "全体カバレッジ率 = 80.0% (閾値 100)" "$out" "全体率 80.0% を表示"
-  assert_grep "\[UNCOVERED\] .agents/scripts/foo.sh: 80.0%" "$out" "未達 foo.sh を列挙"
-  assert_no_grep "\[UNCOVERED\] .agents/scripts/bar.sh" "$out" "達成 bar.sh は列挙しない"
+  assert_grep "\[UNCOVERED\] .agent-skill-chain/source/scripts/foo.sh: 80.0%" "$out" "未達 foo.sh を列挙"
+  assert_no_grep "\[UNCOVERED\] .agent-skill-chain/source/scripts/bar.sh" "$out" "達成 bar.sh は列挙しない"
 }
 
 # シナリオ: 率＝閾値ちょうど（境界値）で達成（exit 0）
 test_judge_boundary_equal() {
   # Given: 全体率 0.90（90%）で閾値も 90（ちょうど一致）
-  local cov; cov="$(make_cobertura 0.90 ".agents/scripts/foo.sh:0.90")"
+  local cov; cov="$(make_cobertura 0.90 ".agent-skill-chain/source/scripts/foo.sh:0.90")"
   # When: --judge-only で判定する
   local out code=0
   out="$(FAIL_UNDER=90 COV_OUT="$cov" bash "$TARGET" --judge-only 2>&1)" || code=$?
@@ -108,7 +108,7 @@ test_judge_boundary_equal() {
 # シナリオ: 閾値直下（境界値の反対側）で fail（exit 1）
 test_judge_boundary_just_under() {
   # Given: 全体率 0.899（89.9%）で閾値 90（わずかに下回る）
-  local cov; cov="$(make_cobertura 0.899 ".agents/scripts/foo.sh:0.899")"
+  local cov; cov="$(make_cobertura 0.899 ".agent-skill-chain/source/scripts/foo.sh:0.899")"
   # When: --judge-only で判定する
   local out code=0
   out="$(FAIL_UNDER=90 COV_OUT="$cov" bash "$TARGET" --judge-only 2>&1)" || code=$?

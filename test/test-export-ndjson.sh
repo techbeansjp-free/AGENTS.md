@@ -11,7 +11,7 @@
 #
 # 方針（破壊禁止・tmp 隔離 必須）:
 #   - mktemp -d で隔離環境を作り、書記経路で既知ログを持つ DB を作って検証する。
-#   - 本開発リポの .agents/ .workflow/ workflow.db を変更しない。
+#   - 本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db を変更しない。
 #
 # 使い方:
 #   bash test/test-export-ndjson.sh
@@ -19,7 +19,7 @@
 # 前提: bash・git・tar・node・sqlite3・python3（JSON 妥当性検証）。
 # 参照:
 #   docs/maintainer/workflow/20260616_042911_npmスコープ無し公開_将来組織移管/02_設計.md §3.9, 03_実装計画.md（T6）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
@@ -42,18 +42,18 @@ BIN="$REPO_ROOT/bin/agents-md.js"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-( cd "$REPO_ROOT" && git archive HEAD | tar -x -C "$TMP" )
-mkdir -p "$TMP/.agents/scripts"
-cp "$REPO_ROOT/.agents/scripts/gen-entry-hash.sh" "$TMP/.agents/scripts/"
-cp "$REPO_ROOT/.agents/scripts/write-workflow-log.sh" "$TMP/.agents/scripts/"
-cp "$REPO_ROOT/.agents/scripts/export-ndjson.sh" "$TMP/.agents/scripts/"
-chmod +x "$TMP/.agents/scripts/"*.sh
-WWL="$TMP/.agents/scripts/write-workflow-log.sh"
-EXP="$TMP/.agents/scripts/export-ndjson.sh"
+( cd "$REPO_ROOT" && git ls-files -z | tar --null -T - -cf - ) | tar -x -C "$TMP"
+mkdir -p "$TMP/.agent-skill-chain/source/scripts"
+cp "$REPO_ROOT/.agent-skill-chain/source/scripts/gen-entry-hash.sh" "$TMP/.agent-skill-chain/source/scripts/"
+cp "$REPO_ROOT/.agent-skill-chain/source/scripts/write-workflow-log.sh" "$TMP/.agent-skill-chain/source/scripts/"
+cp "$REPO_ROOT/.agent-skill-chain/source/scripts/export-ndjson.sh" "$TMP/.agent-skill-chain/source/scripts/"
+chmod +x "$TMP/.agent-skill-chain/source/scripts/"*.sh
+WWL="$TMP/.agent-skill-chain/source/scripts/write-workflow-log.sh"
+EXP="$TMP/.agent-skill-chain/source/scripts/export-ndjson.sh"
 
 # 既知ログを持つ DB を構築（書記経路・連鎖を作る: parent_entry_id でつながる）。
 H="$TMP/repo"
-mkdir -p "$H/.workflow"
+mkdir -p "$H/.agent-skill-chain/runtime"
 PARENT_ID="11111111-1111-4111-8111-111111111111"
 ( cd "$H" && AGENT_ROLE=scribe ENTRY_ID="$PARENT_ID" ISSUE_ID="22222222-2222-4222-8222-222222222222" \
     DOCUMENT_ID="33333333-3333-4333-8333-333333333331" \
@@ -62,7 +62,7 @@ PARENT_ID="11111111-1111-4111-8111-111111111111"
     DOCUMENT_ID="33333333-3333-4333-8333-333333333332" CHANGED_FILES_JSON='["a.txt","b.txt"]' \
     "$WWL" implement-feature "export テスト 子（実装）" 1 "2026-06-16T00:00:02Z" "x/issue" >/dev/null 2>&1 )
 
-n=$(sqlite3 "$H/.workflow/workflow.db" "SELECT COUNT(*) FROM workflow_log;" 2>/dev/null || echo 0)
+n=$(sqlite3 "$H/.agent-skill-chain/runtime/workflow.db" "SELECT COUNT(*) FROM workflow_log;" 2>/dev/null || echo 0)
 [[ "$n" -eq 2 ]] && ok "既知ログ DB を 2 件作成（親→子の連鎖）" || ng "DB 作成失敗（件数=$n）"
 
 # =====================================================================================
@@ -111,12 +111,12 @@ export_readonly() {
   # シナリオ: export 後も DB が変化しない（read-only）
   # Given: export 前の DB ハッシュ
   local before after
-  before="$(sha256sum "$H/.workflow/workflow.db" | awk '{print $1}')"
+  before="$(sha256sum "$H/.agent-skill-chain/runtime/workflow.db" | awk '{print $1}')"
   # When: export を実行
   ( cd "$H" && node "$BIN" export . >/dev/null 2>&1 )
   ( cd "$H" && bash "$EXP" . >/dev/null 2>&1 )
   # Then: DB ハッシュ不変
-  after="$(sha256sum "$H/.workflow/workflow.db" | awk '{print $1}')"
+  after="$(sha256sum "$H/.agent-skill-chain/runtime/workflow.db" | awk '{print $1}')"
   assert_eq "$before" "$after" "export: read-only（実行後 DB 不変）"
 }
 export_readonly
@@ -132,8 +132,8 @@ export_missing_db() {
 }
 export_empty_table() {
   # シナリオ: workflow_log テーブル不在は空出力＋警告 exit 0
-  local E="$TMP/emptytable"; mkdir -p "$E/.workflow"
-  sqlite3 "$E/.workflow/workflow.db" "CREATE TABLE other(x);"
+  local E="$TMP/emptytable"; mkdir -p "$E/.agent-skill-chain/runtime"
+  sqlite3 "$E/.agent-skill-chain/runtime/workflow.db" "CREATE TABLE other(x);"
   local out rc=0
   out="$( cd "$E" && bash "$EXP" . 2>/dev/null )" || rc=$?
   assert_eq 0 "$rc" "export: workflow_log 不在は exit 0（空出力＋警告）"

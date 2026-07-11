@@ -8,10 +8,10 @@
 #   「kcov 実行 → cobertura 解析 → fail-under 判定 → 終了コード決定」の薄いオーケストレーションのみ。
 #
 # 方針（破壊禁止・非破壊契約・正本 1 か所）:
-#   - 開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を変更しない。
+#   - 開発リポの .agent-skill-chain/source/ .claude/ .cursor/ .agent-skill-chain/runtime/ workflow.db を変更しない。
 #     kcov 出力は .gitignore 済みパス（COV_OUT 既定 .coverage/）のみ。
 #   - 計測対象・除外・閾値の定義は本ファイルの正本変数 1 か所に集約する（CI・ローカルで二重化しない）。
-#   - 除外は kcov のパス指定（A）＋ 例外台帳 .agents-project/COVERAGE_EXCEPTIONS.md（B）の二重化。
+#   - 除外は kcov のパス指定（A）＋ 例外台帳 .agent-skill-chain/project/COVERAGE_EXCEPTIONS.md（B）の二重化。
 #     行単位 ignore は bash に公式手段が無いため使わない（COVERAGE_AND_EXCEPTIONS.md §1.1 / 1）。
 #   - 閾値は緩めない（段階導入は分母を絞って fail-under=100 を維持。不足はテスト追加 or 台帳除外）。
 #
@@ -36,8 +36,8 @@
 #
 # 参照:
 #   docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md（§5 I/F）, 03_実装計画.md（T1〜T5）
-#   .agents/COVERAGE_AND_EXCEPTIONS.md（§1 方針・§3 台帳必須列）
-#   .agents-project/COVERAGE_EXCEPTIONS.md（除外の二重化 B）
+#   .agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md（§1 方針・§3 台帳必須列）
+#   .agent-skill-chain/project/COVERAGE_EXCEPTIONS.md（除外の二重化 B）
 #   test/run-all.sh（被ラップ対象・前提 issue）
 
 set -uo pipefail
@@ -50,12 +50,12 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "
 # ============================================================================
 
 # 計測対象（分母）= 実行ロジックを持つ bash 本体。
-INCLUDE_PATHS="${INCLUDE_PATHS:-.agents/scripts}"
+INCLUDE_PATHS="${INCLUDE_PATHS:-.agent-skill-chain/source/scripts}"
 
-# 除外（分母から外す）= 台帳一致分（.agents-project/COVERAGE_EXCEPTIONS.md の「適用手段」列と一致）。
+# 除外（分母から外す）= 台帳一致分（.agent-skill-chain/project/COVERAGE_EXCEPTIONS.md の「適用手段」列と一致）。
 #   ',' 区切り。各値は kcov の --exclude-path に渡る。台帳（B）と必ず一致させること。
-#   ※ 自己テスト一式（test/）は INCLUDE_PATHS（.agents/scripts）の配下ではない＝分母外のため除外指定は不要。
-EXCLUDE_PATHS="${EXCLUDE_PATHS:-.agents/scripts/lib/deploy-skills.sh}"
+#   ※ 自己テスト一式（test/）は INCLUDE_PATHS（.agent-skill-chain/source/scripts）の配下ではない＝分母外のため除外指定は不要。
+EXCLUDE_PATHS="${EXCLUDE_PATHS:-.agent-skill-chain/source/scripts/lib/deploy-skills.sh}"
 
 # fail-under 閾値（最終目標 100。閾値は恒久的に下げない＝COVERAGE_AND_EXCEPTIONS.md §1）。
 FAIL_UNDER="${FAIL_UNDER:-100}"

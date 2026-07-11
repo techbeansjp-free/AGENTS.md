@@ -7,9 +7,9 @@
 #   展開されてしまう。本テストは「changed_files に * / ? / [..] を含めても実ファイル展開されず、文字どおり
 #   記録される」ことと、「通常のカンマ/改行区切りの分割・hash 計算の後方互換が壊れない」ことを保証する。
 #
-# 方針（破壊禁止・tmp 隔離 必須・.agents-project/自己拡張ワークフロー.md §テストの tmp 隔離）:
+# 方針（破壊禁止・tmp 隔離 必須・.agent-skill-chain/project/自己拡張ワークフロー.md §テストの tmp 隔離）:
 #   - 全シナリオを mktemp -d の一時 DB／クリーン環境で実行する。PROJECT_ROOT を tmp に向け、本リポの
-#     .workflow/workflow.db を一切読み書き・変更しない。write-workflow-log.sh は read のみ（呼び出すのみ・無改造）。
+#     .agent-skill-chain/runtime/workflow.db を一切読み書き・変更しない。write-workflow-log.sh は read のみ（呼び出すのみ・無改造）。
 #   - cwd を「glob 展開すると実ファイルにマッチする」ディレクトリへ移して実行し、展開の有無を検証する。
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
@@ -18,15 +18,15 @@
 #
 # 前提: bash・sqlite3。
 # 参照:
-#   .agents/scripts/write-workflow-log.sh（to_json_array・noglob 適用）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/scripts/write-workflow-log.sh（to_json_array・noglob 適用）
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"
-WWL="$REPO_ROOT/.agents/scripts/write-workflow-log.sh"
-SCHEMA="$REPO_ROOT/.agents/ledger/schema.sql"
+WWL="$REPO_ROOT/.agent-skill-chain/source/scripts/write-workflow-log.sh"
+SCHEMA="$REPO_ROOT/.agent-skill-chain/source/ledger/schema.sql"
 
 PASS=0
 FAIL=0
@@ -51,7 +51,7 @@ record_changed() {
   local cwd="$1" root="$2" changed="$3"
   ( cd "$cwd" && PROJECT_ROOT="$root" AGENT_ROLE=scribe DOCUMENT_ID="$DOCID" \
       "$WWL" implement-feature "glob regression check" 1 "2026-06-16T10:00:00Z" "" "$changed" >/dev/null 2>&1 )
-  sqlite3 "$root/.workflow/workflow.db" "SELECT changed_files_json FROM workflow_log ORDER BY rowid DESC LIMIT 1;" 2>/dev/null
+  sqlite3 "$root/.agent-skill-chain/runtime/workflow.db" "SELECT changed_files_json FROM workflow_log ORDER BY rowid DESC LIMIT 1;" 2>/dev/null
 }
 
 echo "== to_json_array glob 是正（LOW） =="

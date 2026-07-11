@@ -8,7 +8,7 @@
 #
 # 方針（破壊禁止・tmp 隔離 必須）:
 #   - 全シナリオを mktemp -d の一時 DB／クリーン環境で実行する。
-#   - 本開発リポの .workflow/workflow.db を一切読み書き・変更しない（PROJECT_ROOT を一時ディレクトリに向ける）。
+#   - 本開発リポの .agent-skill-chain/runtime/workflow.db を一切読み書き・変更しない（PROJECT_ROOT を一時ディレクトリに向ける）。
 #   - schema.sql は read のみ（一時 DB に流す）。
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
@@ -18,14 +18,14 @@
 # 前提: bash・sqlite3。
 # 参照:
 #   docs/maintainer/workflow/20260614_184756_台帳prev_hash自動連結/02_設計.md, 03_実装計画.md（SC-01〜05）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
-WWL="$REPO_ROOT/.agents/scripts/write-workflow-log.sh"
-SCHEMA="$REPO_ROOT/.agents/ledger/schema.sql"
+WWL="$REPO_ROOT/.agent-skill-chain/source/scripts/write-workflow-log.sh"
+SCHEMA="$REPO_ROOT/.agent-skill-chain/source/ledger/schema.sql"
 
 PASS=0
 FAIL=0
@@ -45,7 +45,7 @@ record() {
 }
 
 echo "== 本番 DB 非破壊の事前計測 =="
-BEFORE_DB="$REPO_ROOT/.workflow/workflow.db"
+BEFORE_DB="$REPO_ROOT/.agent-skill-chain/runtime/workflow.db"
 before_rows="$(sqlite3 "$BEFORE_DB" 'SELECT COUNT(*) FROM workflow_log;' 2>/dev/null || echo NA)"
 before_mtime="$(stat -c %Y "$BEFORE_DB" 2>/dev/null || echo NA)"
 
@@ -74,7 +74,7 @@ t2_head() {
   # Given: 1 件記録済みの一時環境（書記として記録 → 自動連結経路を通る）
   local TMP; TMP="$(mktemp -d)"
   record "$TMP" "33333333-3333-3333-3333-333333333333" "first entry text" >/dev/null
-  local DB="$TMP/.workflow/workflow.db"
+  local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
   local want; want="$(sqlite3 "$DB" "SELECT entry_hash FROM workflow_log ORDER BY rowid DESC LIMIT 1;")"
   # When: AGENT_ROLE 未設定（書記以外）で --print-head を実行
   local out rc
@@ -104,7 +104,7 @@ echo "== T3: prev_hash 自動連結 =="
 # シナリオ: 連続 2 件（PREV_HASH 未指定）で 2 件目の prev_hash が 1 件目の entry_hash に一致し中間 NULL なし（SC-01）。
 t3_chain() {
   # Given: クリーン一時環境に 1 件目を PREV_HASH 未指定で記録
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
   record "$TMP" "44444444-4444-4444-4444-444444444444" "first entry text"  >/dev/null
   # When: 2 件目も PREV_HASH 未指定で記録（自動連結）
   record "$TMP" "55555555-5555-5555-5555-555555555555" "second entry text" >/dev/null
@@ -121,7 +121,7 @@ t3_chain
 # シナリオ: 空 DB への初回記録は prev_hash が NULL・exit 0（SC-02）。
 t3_first_null() {
   # Given: クリーン一時環境（DB 未作成）
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
   # When: 初回 1 件を PREV_HASH 未指定で記録
   local rc; record "$TMP" "66666666-6666-6666-6666-666666666666" "only entry text" >/dev/null; rc=$?
   local p1; p1="$(sqlite3 "$DB" "SELECT CASE WHEN prev_hash IS NULL THEN 'NULL' ELSE prev_hash END FROM workflow_log ORDER BY rowid DESC LIMIT 1;")"
@@ -134,7 +134,7 @@ t3_first_null
 # シナリオ: PREV_HASH 明示指定時は自動取得で上書きしない（SC-04・後方互換）。
 t3_explicit() {
   # Given: 1 件記録済みの一時環境（head が存在する状態）
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
   record "$TMP" "77777777-7777-7777-7777-777777777777" "first entry text" >/dev/null
   # When: 2 件目を PREV_HASH 明示指定で記録
   PROJECT_ROOT="$TMP" AGENT_ROLE=scribe DOCUMENT_ID="88888888-8888-8888-8888-888888888888" \
@@ -149,7 +149,7 @@ t3_explicit
 # シナリオ: 自動連結と --print-head が同一ロジックで整合する（結合）。
 t3_consistency() {
   # Given: 連続 2 件を PREV_HASH 未指定で記録した一時環境
-  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.workflow/workflow.db"
+  local TMP; TMP="$(mktemp -d)"; local DB="$TMP/.agent-skill-chain/runtime/workflow.db"
   record "$TMP" "99999999-9999-9999-9999-999999999999" "first entry text"  >/dev/null
   record "$TMP" "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" "second entry text" >/dev/null
   # When: --print-head と DB 直読みの head を比較
@@ -196,7 +196,7 @@ t5_check
 
 # --- 本番 DB 非破壊の検証 ----------------------------------------------------
 echo "== 本番 DB 非破壊の事後検証 =="
-# シナリオ: 全テスト実行後も本リポの .workflow/workflow.db が変化しない（tmp 隔離の自己検証）。
+# シナリオ: 全テスト実行後も本リポの .agent-skill-chain/runtime/workflow.db が変化しない（tmp 隔離の自己検証）。
 after_rows="$(sqlite3 "$BEFORE_DB" 'SELECT COUNT(*) FROM workflow_log;' 2>/dev/null || echo NA)"
 after_mtime="$(stat -c %Y "$BEFORE_DB" 2>/dev/null || echo NA)"
 assert_eq "$after_rows" "$before_rows" "本番 DB の行数が不変（before=$before_rows after=$after_rows）"

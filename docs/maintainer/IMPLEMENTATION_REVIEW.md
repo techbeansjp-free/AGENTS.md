@@ -39,7 +39,7 @@
 | 3 | 04_review 未更新（verify-and-close 未実行） | 上記 #2 と同一ロジックで検出。 |
 | 4 | テスト観点未記載 | 03_実装計画.md に「テスト観点」「単体テスト」「BDD」「TEST_BDD」のいずれかが含まれるかを grep で検証。 |
 | 5 | docs 更新要否未記載 | 04_review.md に「docs/」「仕様書」「DOCS_RULES」「システム仕様書」「00_review」のいずれかが含まれるかを grep で検証。 |
-| 6 | 内部参照禁止の PR テンプレ違反 | 環境変数 PR_BODY が渡された場合、.workflow/ または docs/ へのリンクを正規表現で検出。 |
+| 6 | 内部参照禁止の PR テンプレ違反 | 環境変数 PR_BODY が渡された場合、.agent-skill-chain/runtime/ または docs/ へのリンクを正規表現で検出。 |
 
 **memo 関連の検知**:
 
@@ -77,7 +77,7 @@
 - 117〜127 行: **#3**。`03_実装計画.md` を find し、同一 issue 配下に `04_review.md` が無ければ `EXIT_CODE=1`（verify-and-close 未実行の検知）。
 - 129〜141 行: **#4**。03_実装計画.md に「テスト観点」「単体テスト」「BDD」「TEST_BDD」のいずれかが含まれるか grep。無ければ `EXIT_CODE=1`。
 - 143〜155 行: **#5**。04_review.md に「docs/」「仕様書」「DOCS_RULES」「システム仕様書」「00_review」のいずれかが含まれるか grep。無ければ `EXIT_CODE=1`。
-- 157〜164 行: **#6**。環境変数 `PR_BODY` が渡されている場合、`.workflow/` または `docs/` へのリンクを正規表現で検出し、あれば `EXIT_CODE=1`。
+- 157〜164 行: **#6**。環境変数 `PR_BODY` が渡されている場合、`.agent-skill-chain/runtime/` または `docs/` へのリンクを正規表現で検出し、あれば `EXIT_CODE=1`。
 - 166〜170 行: `EXIT_CODE` に応じてメッセージ出力し **exit $EXIT_CODE**（失敗時は 1）。
 
 ---
@@ -138,7 +138,7 @@ exit 0
 
 - **第 1 優先**: README / DESIGN / IMPLEMENTATION_REVIEW の表現を完全に揃える。最上位 README にも「現状は案内＋CI、hook reject は未達」を明記する（enforcement/README.md の「矯正するもの（物理強制の例）」に従い実施）。
 - **第 2 優先**: sqlite3 直接実行をやめ、**専用ラッパー 1 本**経由に一本化する。
-  - ラッパー要件: 書き込み先は .workflow/workflow.db 固定、workflow_log テーブルのみ、INSERT のみ、必須カラム未指定なら失敗、1 回の呼び出しで 1 レコードのみ、UPDATE/DELETE/任意 SQL 禁止。hook で「誰が sqlite3 を叩いたか」を当てにしない。
+  - ラッパー要件: 書き込み先は .agent-skill-chain/runtime/workflow.db 固定、workflow_log テーブルのみ、INSERT のみ、必須カラム未指定なら失敗、1 回の呼び出しで 1 レコードのみ、UPDATE/DELETE/任意 SQL 禁止。hook で「誰が sqlite3 を叩いたか」を当てにしない。
 - **第 3 優先**: audit を「存在チェック」から「経路・証跡チェック」に強化する。
   - workflow.db の品質監査: 異常件数、created_at/ts_utc 形式、command が許可一覧にあるか、summary が空でないか。
   - 成果物と証跡の対応: 03/04 と command 実行ログの有無、verify-and-close 痕跡。

@@ -13,7 +13,7 @@
 #
 # 方針（破壊禁止・tmp 隔離 必須）:
 #   - mktemp -d ＋ git archive HEAD | tar -x のクリーン clone で agents-md init/enforce を実行する。
-#   - 本開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を一切変更しない。
+#   - 本開発リポの .agent-skill-chain/source/ .claude/ .cursor/ .agent-skill-chain/runtime/ workflow.db を一切変更しない。
 #
 # 使い方:
 #   bash test/e2e-claude-hook.sh
@@ -22,7 +22,7 @@
 # 参照:
 #   docs/maintainer/workflow/20260616_042911_npmスコープ無し公開_将来組織移管/02_設計.md §3.5, 03_実装計画.md（T7）
 #   docs/maintainer/claude-hook-e2e.md（実機実行手順）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
@@ -48,15 +48,15 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 PROJ="$TMP/proj"
 mkdir -p "$PROJ"
-( cd "$REPO_ROOT" && git archive HEAD | tar -x -C "$PROJ" )
+( cd "$REPO_ROOT" && git ls-files -z | tar --null -T - -cf - ) | tar -x -C "$PROJ"
 # 作業ツリーの最新 hook・settings.enforce.json をオーバーレイ（未コミットの是正を E2E で検証）。
-cp "$REPO_ROOT/.agents/enforcement/claude/PreToolUse.sh" "$PROJ/.agents/enforcement/claude/PreToolUse.sh"
-cp "$REPO_ROOT/.agents/platforms/claude/settings.enforce.json" "$PROJ/.agents/platforms/claude/settings.enforce.json"
+cp "$REPO_ROOT/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh" "$PROJ/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh"
+cp "$REPO_ROOT/.agent-skill-chain/source/platforms/claude/settings.enforce.json" "$PROJ/.agent-skill-chain/source/platforms/claude/settings.enforce.json"
 
 # init 相当（setup ではなく hook 配備を最小再現）: .claude/hooks に正本 hook を配置。
 mkdir -p "$PROJ/.claude/hooks"
-cp "$PROJ/.agents/enforcement/claude/PreToolUse.sh" "$PROJ/.claude/hooks/PreToolUse.sh"
-[[ -f "$PROJ/.agents/enforcement/claude/PostToolUse.sh" ]] && cp "$PROJ/.agents/enforcement/claude/PostToolUse.sh" "$PROJ/.claude/hooks/PostToolUse.sh"
+cp "$PROJ/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh" "$PROJ/.claude/hooks/PreToolUse.sh"
+[[ -f "$PROJ/.agent-skill-chain/source/enforcement/claude/PostToolUse.sh" ]] && cp "$PROJ/.agent-skill-chain/source/enforcement/claude/PostToolUse.sh" "$PROJ/.claude/hooks/PostToolUse.sh"
 
 # enforce on で settings.json に PreToolUse 配線をマージする（CLI 経由＝実構成）。
 ( cd "$PROJ" && node "$BIN" enforce on . >/dev/null 2>&1 )
@@ -115,7 +115,7 @@ e2e_orchestrator_read_allowed() {
 e2e_workflow_edit_blocked() {
   # シナリオ: 配線経由で .workflow 直接 Edit が block（全 ROLE 適用 R1）
   # Given: settings 配線・AGENT_ROLE=worker・保護パス Edit JSON
-  local json='{"tool_name":"Edit","tool_input":{"file_path":".workflow/x/00_要求定義.md"}}'
+  local json='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"}}'
   # When: settings の hook コマンドへ stdin JSON 注入
   run_wired worker "$json"
   # Then: exit 2（R1 は配線経由でも発火）

@@ -1,0 +1,159 @@
+# テンプレート: .agent-skill-chain/runtime/templates/github/workflows/ci-check.yml（パッケージルート基準）
+# 採用先では .github/workflows/ci-check.yml にコピーし、以下をプロジェクトに合わせて変更する。
+#
+# カスタマイズ箇所:
+#   - on.push / on.pull_request の branches（例: main, develop, feature/**）
+#   - permissions: pull_requests: read は paths-filter で PR 変更ファイル取得に必須（省略時は Resource not accessible by integration）
+#   - detect ジョブの paths-filter: frontend / backend のパス（例: frontend/**, backend/**）
+#   - frontend-check: node-version-file, cache-dependency-path, working-directory, pnpm version, Make ターゲット
+#     ※ pnpm は setup-node より先に Install pnpm（pnpm/action-setup）を実行すること。逆だと cache: 'pnpm' で pnpm 未導入エラーになる。
+#   - backend-check: python-version-file, working-directory, Make ターゲット。テストで必須の環境変数（Pydantic Settings 等）がある場合は job の env に設定する。
+#   - 監査ステップ: AUDIT_LABEL（例: フロントエンド, バックエンド）, AUDIT_JSON_PATH, AUDIT_FORMAT
+#   - 監査スクリプト: .github/scripts/audit-table.ts を同テンプレートの scripts/ からコピーしておくこと
+#
+# 必須: pull_requests: read は dorny/paths-filter が PR の変更ファイルを GitHub API で取得するために必要。
+#       省略すると "Resource not accessible by integration" になる。フォーク PR の場合は list-files: none + base/head で git diff に切り替える検討を。
+#
+# CI: format-check / lint / typecheck / 単体テスト（変更パスに応じて frontend / backend を分岐）
+
+name: ci-check
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  pull_request:
+    branches: [main, develop, "feature/**"]
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'Makefile'
+              - '.github/**'
+              - 'docker-compose*.yml'
+            backend:
+              - 'backend/**'
+              - 'Makefile'
+              - '.github/**'
+              - 'docker-compose*.yml'
+
+  frontend-check:
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.node-version"
+          cache: "pnpm"
+          cache-dependency-path: "frontend/pnpm-lock.yaml"
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: セキュリティ監査（pnpm audit）
+        id: security-audit
+        continue-on-error: true
+        working-directory: frontend
+        run: |
+          pnpm audit --json > audit-report.json 2>/dev/null || true
+          npx tsx@4.20.3 ../.github/scripts/audit-table.ts
+        env:
+          AUDIT_LABEL: フロントエンド
+          AUDIT_JSON_PATH: audit-report.json
+          AUDIT_FORMAT: pnpm
+
+      - name: Format check
+        run: make -C frontend format-check
+
+      - name: Lint
+        run: make -C frontend lint
+
+      - name: Typecheck
+        run: make -C frontend typecheck
+
+      - name: Unit tests (coverage)
+        working-directory: frontend
+        run: pnpm run test:coverage
+
+  backend-check:
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    # テスト実行時に必須の環境変数がある場合（Pydantic Settings 等）は env を追加する。例:
+    # env:
+    #   MINIO_SECRET_KEY: ci-dummy-value
+    #   SECRET_KEY: ci-dummy-value
+    #   INTERNAL_API_KEY: ci-dummy-value
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "backend/.python-version"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          if [ -f uv.lock ]; then
+            uv lock --check
+            uv sync --locked
+          else
+            uv sync
+          fi
+
+      - name: Set up Node（監査サマリ用）
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: セキュリティ監査（pip-audit）
+        id: security-audit
+        continue-on-error: true
+        working-directory: backend
+        run: |
+          uv run pip-audit --format json --output audit-report.json 2>/dev/null || true
+          npx tsx@4.20.3 ../.github/scripts/audit-table.ts
+        env:
+          PIP_AUDIT_NO_PROGRESS: "1"
+          AUDIT_LABEL: バックエンド
+          AUDIT_JSON_PATH: audit-report.json
+          AUDIT_FORMAT: pip
+
+      - name: Format check
+        run: make -C backend format-check
+
+      - name: Lint
+        run: make -C backend lint
+
+      - name: Typecheck
+        run: make -C backend typecheck
+
+      - name: Tests
+        run: make -C backend test

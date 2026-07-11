@@ -100,8 +100,8 @@ jobs:
       - name: Sync plugin.json version & verify
         run: |
           set -e
-          bash .agents/scripts/sync-version.sh --write
-          bash .agents/scripts/sync-version.sh --check
+          bash .agent-skill-chain/source/scripts/sync-version.sh --write
+          bash .agent-skill-chain/source/scripts/sync-version.sh --check
 
       # 公開前ビルド: 非追跡の bin を作業ツリーへ生成（prepack 代替＝使用前 build 方式）。
       - name: Build CLI bin (replaces prepack)
@@ -115,7 +115,7 @@ jobs:
       - name: Verify npm pack (leak / required files)
         run: |
           set -e
-          bash .agents/scripts/verify-npm-pack.sh
+          bash .agent-skill-chain/source/scripts/verify-npm-pack.sh
 
       # bump 結果を main へ書き戻す。既定 GITHUB_TOKEN による push は on:push を再トリガしない（主防御）。
       # コミットメッセージの [skip ci] と non-fast-forward 時の rebase 再試行は補助防御。
@@ -123,10 +123,10 @@ jobs:
         run: |
           set -e
           version="${{ steps.bump.outputs.version }}"
-          if git diff --quiet -- package.json package-lock.json .agents/platforms/claude/plugin.json; then
+          if git diff --quiet -- package.json package-lock.json .agent-skill-chain/source/platforms/claude/plugin.json; then
             echo "変更なし。bump 書き戻しをスキップします。"
           else
-            git add package.json package-lock.json .agents/platforms/claude/plugin.json
+            git add package.json package-lock.json .agent-skill-chain/source/platforms/claude/plugin.json
             git commit -m "chore(release): v${version} [skip ci]"
             # 書き戻し push が non-fast-forward で reject されたら rebase の上で 1 回再試行する（N-B）。
             if ! git push origin HEAD:main; then
@@ -248,15 +248,15 @@ jobs:
       - name: Verify version sync (package.json == plugin.json)
         run: |
           set -e
-          bash .agents/scripts/sync-version.sh --check
+          bash .agent-skill-chain/source/scripts/sync-version.sh --check
           pkg="$(node -p "require('./package.json').version")"
           echo "OK: package.json=$pkg（plugin.json と一致）。"
 
-      # 正本 .agents/ から Claude（＋cursor）アダプタを生成する。
+      # 正本 .agent-skill-chain/source/ から Claude（＋cursor）アダプタを生成する。
       - name: Build adapters (claude, cursor)
         run: |
           set -e
-          bash .agents/scripts/build-adapters.sh claude cursor
+          bash .agent-skill-chain/source/scripts/build-adapters.sh claude cursor
 
       # 再生成 diff ゼロ検証: もう一度 build しても生成物が変わらない（決定性）。
       - name: Re-build determinism check (diff-zero)
@@ -264,7 +264,7 @@ jobs:
           set -e
           rm -rf /tmp/adapters_first
           cp -R .adapters /tmp/adapters_first
-          bash .agents/scripts/build-adapters.sh claude cursor
+          bash .agent-skill-chain/source/scripts/build-adapters.sh claude cursor
           diff -r /tmp/adapters_first/claude .adapters/claude
           diff -r /tmp/adapters_first/cursor .adapters/cursor
           echo "OK: 再生成で生成物の差分なし（決定性）。"
@@ -305,7 +305,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "変更なし（同一生成物）。commit をスキップします。"
           else
-            git commit -m "release: v${version} adapters (generated from .agents/) [skip ci]"
+            git commit -m "release: v${version} adapters (generated from .agent-skill-chain/source/) [skip ci]"
           fi
           git push origin "$RELEASE_BRANCH"
           echo "OK: $RELEASE_BRANCH へ生成物を公開しました（marketplace source 解決先）。"

@@ -17,7 +17,7 @@ output_source.py
 */.env.*
 */build/
 */dist/
-*/.agents-project/
+*/.agent-skill-chain/project/
 */.venv/
 */venv/
 */env/
@@ -34,7 +34,7 @@ output_source.py
 */dmypy.json
 */.dmypy/
 */.dmypy.json
-*/.workflow/
+*/.agent-skill-chain/runtime/
 */.claude/
 */.cursor/
 */.tmp/

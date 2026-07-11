@@ -8,7 +8,7 @@
 #   逐次呼び出し・終了コード集約・サマリ出力・全体終了コード決定」のみを担う。
 #
 # 方針（破壊禁止・非破壊契約）:
-#   - runner は開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を読み書き・変更しない。
+#   - runner は開発リポの .agent-skill-chain/source/ .claude/ .cursor/ .agent-skill-chain/runtime/ workflow.db を読み書き・変更しない。
 #     tmp 隔離・破壊的操作の安全性は各テストスクリプトの責務（02 §2.1.2）。
 #   - 個別テスト呼び出しは if/|| でラップし、非 0 でも runner が即終了しない（set -e 由来の中断を避ける）。
 #
@@ -41,7 +41,7 @@
 #     （runner 自体のテスト＝test-run-all.sh が stub を tmp 隔離で並べて検証するための入口）。
 # 参照:
 #   docs/maintainer/workflow/20260615_054806_テスト実行基盤の整備/02_設計.md（§5 runner I/F）, 03_実装計画.md（T1）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 

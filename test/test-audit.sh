@@ -7,8 +7,8 @@
 #   SKIP し、必須ファイルが揃った最小 issue ツリーで「Audit passed.」（exit 0）すること。
 #   判定ロジックは変更しないため、本テストは挙動不変の回帰として機能する。
 #
-# 方針（破壊禁止・tmp 隔離 必須・.agents-project/自己拡張ワークフロー.md §テストの tmp 隔離）:
-#   - 検証は mktemp -d の隔離ツリーで行う。本開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を
+# 方針（破壊禁止・tmp 隔離 必須・.agent-skill-chain/project/自己拡張ワークフロー.md §テストの tmp 隔離）:
+#   - 検証は mktemp -d の隔離ツリーで行う。本開発リポの .agent-skill-chain/source/ .claude/ .cursor/ .agent-skill-chain/runtime/ workflow.db を
 #     一切読み書き・変更しない（audit.sh 本体のみ読み取りで参照する）。
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
@@ -18,13 +18,13 @@
 # 前提: bash。sqlite3・git は任意（無くても SKIP として通る）。
 # 参照:
 #   docs/maintainer/workflow/20260614_235244_enforcement宣言と実装の乖離是正/02_設計.md, 03_実装計画.md（T4）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
-AUDIT="$REPO_ROOT/.agents/enforcement/ci/audit.sh"
+AUDIT="$REPO_ROOT/.agent-skill-chain/source/enforcement/ci/audit.sh"
 
 [[ -f "$AUDIT" ]] || { echo "エラー: audit.sh が見つからない: $AUDIT" >&2; exit 2; }
 
@@ -44,11 +44,11 @@ make_min_tree() {
   local tmp
   tmp="$(mktemp -d)"
   TMP_DIRS+=("$tmp")
-  mkdir -p "$tmp/.agents/boot" "$tmp/.agents/workflow" "$tmp/.workflow"
-  : > "$tmp/.agents/boot/CORE.md"
-  : > "$tmp/.agents/boot/LOAD_POLICY.md"
-  : > "$tmp/.agents/workflow/PHASES.md"
-  : > "$tmp/.agents/workflow/TEMPLATES.md"
+  mkdir -p "$tmp/.agent-skill-chain/source/boot" "$tmp/.agent-skill-chain/source/workflow" "$tmp/.agent-skill-chain/runtime"
+  : > "$tmp/.agent-skill-chain/source/boot/CORE.md"
+  : > "$tmp/.agent-skill-chain/source/boot/LOAD_POLICY.md"
+  : > "$tmp/.agent-skill-chain/source/workflow/PHASES.md"
+  : > "$tmp/.agent-skill-chain/source/workflow/TEMPLATES.md"
   printf '%s\n' "$tmp"
 }
 
@@ -69,8 +69,8 @@ if grep -q "Audit passed." <<< "$T1_OUT"; then ok "出力に Audit passed. を�
 # When:  audit.sh <tmp> を実行する
 # Then:  git 依存 check は SKIP され FAIL: を出さず exit 0
 T2_TREE="$(make_min_tree)"
-mkdir -p "$T2_TREE/.workflow/20260101_000000_dummy"
-cat > "$T2_TREE/.workflow/20260101_000000_dummy/04_review.md" <<'EOF'
+mkdir -p "$T2_TREE/.agent-skill-chain/runtime/20260101_000000_dummy"
+cat > "$T2_TREE/.agent-skill-chain/runtime/20260101_000000_dummy/04_review.md" <<'EOF'
 # 04_review
 
 ## 敵対的観点
@@ -93,7 +93,7 @@ if ! grep -q "^FAIL:" <<< "$T2_OUT"; then ok "非 git ツリーで FAIL: 行が�
 # When:  audit.sh <tmp> を実行する
 # Then:  必須ファイル未参照で FAIL し exit 0 以外
 T3_TREE="$(make_min_tree)"
-rm -f "$T3_TREE/.agents/boot/CORE.md"
+rm -f "$T3_TREE/.agent-skill-chain/source/boot/CORE.md"
 T3_OUT="$(bash "$AUDIT" "$T3_TREE" 2>&1)"; T3_RC=$?
 if [[ $T3_RC -ne 0 ]]; then ok "必須ファイル欠落で exit != 0（判定不変）"; else ng "必須ファイル欠落でも exit 0 になった: $T3_OUT"; fi
 if grep -q "Missing required file" <<< "$T3_OUT"; then ok "必須ファイル未参照の FAIL メッセージを出す"; else ng "必須ファイル未参照メッセージが無い: $T3_OUT"; fi
@@ -108,7 +108,7 @@ if command -v sqlite3 >/dev/null 2>&1; then
   C="20260101_000000_closed_issue"
   mkdir -p "$T4_TREE/docs/maintainer/workflow/close/$C"
   : > "$T4_TREE/docs/maintainer/workflow/close/$C/04_review.md"
-  T4_DB="$T4_TREE/.workflow/workflow.db"
+  T4_DB="$T4_TREE/.agent-skill-chain/runtime/workflow.db"
   sqlite3 "$T4_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
   # 親 (orphan) verify-and-close 行: issue_path はディレクトリ粒度（close 前パス）。basename 一致で除外される従来ケース。
   sqlite3 "$T4_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'verify-and-close', 'docs/maintainer/workflow/$C/');" 2>/dev/null
@@ -149,9 +149,9 @@ fi
 # When:  audit.sh <tmp> を実行する
 # Then:  終了コード 0 で「重要パスに TODO/FIXME が残存」を出力しない
 SC1_TREE="$(make_min_tree)"
-mkdir -p "$SC1_TREE/.workflow/20260101_000000_x"
+mkdir -p "$SC1_TREE/.agent-skill-chain/runtime/20260101_000000_x"
 printf '本 issue では「TODO/FIXME 残骸チェック」の偽陽性を是正する。\nレビュー証跡: 残骸タグ（TODO 等）0件を確認した。\n' \
-  > "$SC1_TREE/.workflow/20260101_000000_x/00_要求定義.md"
+  > "$SC1_TREE/.agent-skill-chain/runtime/20260101_000000_x/00_要求定義.md"
 SC1_OUT="$(bash "$AUDIT" "$SC1_TREE" 2>&1)"; SC1_RC=$?
 if [[ $SC1_RC -eq 0 ]] && ! grep -q '重要パスに TODO/FIXME が残存' <<< "$SC1_OUT"; then
   ok "C-SC1 言及のみの散文は PASS"
@@ -167,8 +167,8 @@ sc2_case() {
   # $1=ラベル $2=ファイル内容 $3=期待（fail|pass）
   local label="$1" content="$2" expect="$3" tree out
   tree="$(make_min_tree)"
-  mkdir -p "$tree/.workflow/20260101_000000_m"
-  printf '%b' "$content" > "$tree/.workflow/20260101_000000_m/00_要求定義.md"
+  mkdir -p "$tree/.agent-skill-chain/runtime/20260101_000000_m"
+  printf '%b' "$content" > "$tree/.agent-skill-chain/runtime/20260101_000000_m/00_要求定義.md"
   out="$(bash "$AUDIT" "$tree" 2>&1)"
   if grep -q '重要パスに TODO/FIXME が残存' <<< "$out"; then
     if [[ "$expect" == fail ]]; then ok "$label"; else ng "$label（FAIL すべきでないのに FAIL）: $out"; fi
@@ -188,9 +188,9 @@ sc2_case "C-SC2e 実マーカ 全角 TODO：v は FAIL"       'TODO：全角コ�
 # When:  audit.sh <tmp> を実行する
 # Then:  #7 は FAIL しない（インラインコードスパン除去段で例示が落ちる）
 SC4A_TREE="$(make_min_tree)"
-mkdir -p "$SC4A_TREE/.workflow/20260101_000000_a"
+mkdir -p "$SC4A_TREE/.agent-skill-chain/runtime/20260101_000000_a"
 printf 'マーカ語の直後に `TODO:` や `FIXME:` が続く形を実マーカとみなす。\nこれは例示であり実際の積み残しではない。\n' \
-  > "$SC4A_TREE/.workflow/20260101_000000_a/01_要件定義.md"
+  > "$SC4A_TREE/.agent-skill-chain/runtime/20260101_000000_a/01_要件定義.md"
 SC4A_OUT="$(bash "$AUDIT" "$SC4A_TREE" 2>&1)"; SC4A_RC=$?
 if [[ $SC4A_RC -eq 0 ]] && ! grep -q '重要パスに TODO/FIXME が残存' <<< "$SC4A_OUT"; then
   ok "C-SC4a バッククォート例示は PASS"
@@ -204,8 +204,8 @@ fi
 # When:  audit.sh <tmp> を実行する
 # Then:  #7 は FAIL しない（フェンス除去段で例示が落ちる）
 SC4B_TREE="$(make_min_tree)"
-mkdir -p "$SC4B_TREE/.workflow/20260101_000000_b"
-cat > "$SC4B_TREE/.workflow/20260101_000000_b/02_設計.md" <<'EOF'
+mkdir -p "$SC4B_TREE/.agent-skill-chain/runtime/20260101_000000_b"
+cat > "$SC4B_TREE/.agent-skill-chain/runtime/20260101_000000_b/02_設計.md" <<'EOF'
 本書では実マーカと例示を判別する。以下はテストコード例（コードブロック内＝例示）。
 
 ```bash
@@ -233,8 +233,8 @@ fi
 # When:  audit.sh <tmp> を実行する
 # Then:  #7 は当該パスを検知しない（既存除外ガードを撤去・変更していない）
 GUARD_TREE="$(make_min_tree)"
-mkdir -p "$GUARD_TREE/.workflow/templates" "$GUARD_TREE/docs/maintainer/workflow/close/20260101_000000_c"
-printf '// TODO: in templates\n' > "$GUARD_TREE/.workflow/templates/00_要求定義.md"
+mkdir -p "$GUARD_TREE/.agent-skill-chain/runtime/templates" "$GUARD_TREE/docs/maintainer/workflow/close/20260101_000000_c"
+printf '// TODO: in templates\n' > "$GUARD_TREE/.agent-skill-chain/runtime/templates/00_要求定義.md"
 printf '// TODO: in close\n'     > "$GUARD_TREE/docs/maintainer/workflow/close/20260101_000000_c/00_要求定義.md"
 GUARD_OUT="$(bash "$AUDIT" "$GUARD_TREE" 2>&1)"; GUARD_RC=$?
 if [[ $GUARD_RC -eq 0 ]] && ! grep -q '重要パスに TODO/FIXME が残存' <<< "$GUARD_OUT"; then
@@ -248,8 +248,8 @@ fi
 # When:  audit.sh <tmp> を実行する
 # Then:  #7 が FAIL する（EOF 時に未閉ならバッファ行を救済出力＝抑制されない）
 EDGE_TREE="$(make_min_tree)"
-mkdir -p "$EDGE_TREE/.workflow/20260101_000000_e"
-cat > "$EDGE_TREE/.workflow/20260101_000000_e/03_実装計画.md" <<'EOF'
+mkdir -p "$EDGE_TREE/.agent-skill-chain/runtime/20260101_000000_e"
+cat > "$EDGE_TREE/.agent-skill-chain/runtime/20260101_000000_e/03_実装計画.md" <<'EOF'
 ここで未閉フェンスを開く（閉じない）。
 
 ```bash

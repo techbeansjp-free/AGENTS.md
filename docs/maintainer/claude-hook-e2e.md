@@ -1,6 +1,6 @@
 # Claude Code hook 実機 E2E 手順（保守者向け）
 
-本書は、Claude Code の PreToolUse hook（`.agents/enforcement/claude/PreToolUse.sh`）が**実機の Claude Code 上で**期待どおり違反操作を block / 正当操作を allow することを確認する手順を示す。**保守者（自己拡張）向けの非配布ドキュメント**であり、CI・パッケージには含めない。
+本書は、Claude Code の PreToolUse hook（`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh`）が**実機の Claude Code 上で**期待どおり違反操作を block / 正当操作を allow することを確認する手順を示す。**保守者（自己拡張）向けの非配布ドキュメント**であり、CI・パッケージには含めない。
 
 合成環境での自動検証は `test/e2e-claude-hook.sh`（settings.json 配線経由で hook プロセスへ stdin JSON を注入）で行う。本書はそれを**実機 Claude Code で追認する**ための手順を補う（合成は SC 対象、実機実行は SC 対象外）。
 
@@ -50,4 +50,4 @@
 - 合成 E2E: `test/e2e-claude-hook.sh`
 - hook 単体テスト: `test/test-pretooluse-hook.sh`
 - C-4 バイパス耐性: `test/test-c4-bypass-resistance.sh`
-- enforcement 正本: `.agents/enforcement/README.md`、`.agents/enforcement/claude/PreToolUse.sh`
+- enforcement 正本: `.agent-skill-chain/source/enforcement/README.md`、`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh`

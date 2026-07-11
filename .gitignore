@@ -6,25 +6,36 @@
 node_modules/
 
 # === ランタイム/生成物（パッケージ正本ではない。setup・実行・build で生成される） ===
-# 消費者ランタイム名前空間。正本として追跡するのは templates/ のみ。
+# 消費者ランタイム名前空間（統合ネスト .agent-skill-chain/runtime/）。
+# 正本として追跡するのは templates/ のみ。
 # 自己拡張（ドッグフーディング）の自己 issue はここではなく docs/maintainer/workflow/ に作る
-# （.agents-project/自己拡張ワークフロー.md 参照）。
-/.workflow/*
-!/.workflow/.gitignore
-!/.workflow/templates/
-# 証跡DB（.agents/SETUP.md: 配布物に絶対含めない）。-wal/-shm/.lock/journal も拾う
-.workflow/workflow.db*
+# （.agent-skill-chain/project/自己拡張ワークフロー.md 参照）。
+/.agent-skill-chain/runtime/*
+!/.agent-skill-chain/runtime/.gitignore
+!/.agent-skill-chain/runtime/templates/
+# 証跡DB（source/SETUP.md: 配布物に絶対含めない）。-wal/-shm/.lock/journal も拾う
+.agent-skill-chain/runtime/workflow.db*
 # リポルート直下に誤生成される stray な証跡DB（テスト/誤 cwd 由来の副産物）。
-# 正規の証跡DBは .workflow/workflow.db のみ。ルート直下 workflow.db は追跡しない。
+# 正規の証跡DBは .agent-skill-chain/runtime/workflow.db のみ。ルート直下 workflow.db は追跡しない。
 /workflow.db*
 # scribe nonce（C-4b 出所制御の期待 nonce・enforce on が 0600 で生成するセッション秘匿値）。
 # 配布物に含めない・git 追跡しない（生成物・秘匿値）。実 nonce は .claude/settings.json の env に配線される。
-/.agents/.scribe-nonce
+/.agent-skill-chain/source/.scribe-nonce
+# 統合ネスト（source/・runtime/templates/）の再配備前タイムスタンプ付きバックアップ。
+# setup.sh の backup_agent_skill_chain / agents-md.ts の backupAgentSkillChain が生成する
+# 一時退避先（プロジェクトルート直下）。配布物・追跡対象ではない。
+/.agent-skill-chain-*.bak.*/
+# 配備マーカー・README 警告（.agent-skill-chain/README.md（新設・生成物）・.package-manifest）。
+# setup が新規配備・再配備のたびに書き込む生成物であり、.claude/・.cursor/ と同様に
+# 配布物・追跡対象ではない（source/・project/ 等の正本サブディレクトリとは異なり、
+# ルート直下の本 2 ファイルのみが対象。02_設計 §2.6.9.2）。
+/.agent-skill-chain/README.md
+/.agent-skill-chain/.package-manifest
 # 各ツール向けフック/スキルの生成物（setup.sh が自己インストール時に生成）
 /.claude/
 /.cursor/
 # 生成物アダプタ（100% 生成物）。手書き土台は正本側に分離済み:
-#   - .agents/platforms/claude/plugin.json（build がコピー生成）
+#   - .agent-skill-chain/source/platforms/claude/plugin.json（build がコピー生成）
 #   - docs/maintainer/adapters.md（旧 .adapters/README.md）
 # marketplace 配布はリリース時に CI が build → 専用ブランチ/タグへ commit（案A、main は生成物ゼロ）。
 # 正本: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/02_設計.md, 03_実装計画.md

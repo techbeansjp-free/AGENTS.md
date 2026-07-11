@@ -9,7 +9,7 @@
 #
 # 方針（破壊禁止・tmp 隔離 必須）:
 #   - 検証は mktemp -d ＋ git archive HEAD | tar -x のクリーン clone 再現環境で行う。
-#   - 本開発リポの .agents/ .claude/ .cursor/ .workflow/ workflow.db を一切読み書き・変更しない。
+#   - 本開発リポの .agent-skill-chain/source/ .claude/ .cursor/ .agent-skill-chain/runtime/ workflow.db を一切読み書き・変更しない。
 #   - jq 無し系統は jq を除いた PATH（NOJQ_PATH）で同テストを再実行する。
 #   - 各テストは TEST_BDD_FORMAT に従い `# シナリオ:` と `# Given:` `# When:` `# Then:` を本文に書く。
 #
@@ -19,7 +19,7 @@
 # 前提: bash・git・tar。jq は任意（無い系統も検証する）。
 # 参照:
 #   docs/maintainer/workflow/20260614_183739_enforcement-runtime実効性是正/02_設計.md, 03_実装計画.md（T1〜T6・UC1〜7）
-#   .agents/TEST_BDD_FORMAT.md
+#   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
 
@@ -43,17 +43,17 @@ assert_grep() { grep -q "$1" "$2" && ok "${3:-stderr に '$1'}" || ng "${3:-stde
 #   （未コミットの是正を verify するための運用。確定後は HEAD のみで一致する。）
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-( cd "$REPO_ROOT" && git archive HEAD | tar -x -C "$TMP" )
+( cd "$REPO_ROOT" && git ls-files -z | tar --null -T - -cf - ) | tar -x -C "$TMP"
 # 作業ツリーの最新 hook をオーバーレイ（read-only コピー。本リポ側は変更しない）。
-cp "$REPO_ROOT/.agents/enforcement/claude/PreToolUse.sh"  "$TMP/.agents/enforcement/claude/PreToolUse.sh"
-cp "$REPO_ROOT/.agents/enforcement/claude/PostToolUse.sh" "$TMP/.agents/enforcement/claude/PostToolUse.sh"
+cp "$REPO_ROOT/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh"  "$TMP/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh"
+cp "$REPO_ROOT/.agent-skill-chain/source/enforcement/claude/PostToolUse.sh" "$TMP/.agent-skill-chain/source/enforcement/claude/PostToolUse.sh"
 
-HOOK="$TMP/.agents/enforcement/claude/PreToolUse.sh"
-POST_HOOK="$TMP/.agents/enforcement/claude/PostToolUse.sh"
+HOOK="$TMP/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh"
+POST_HOOK="$TMP/.agent-skill-chain/source/enforcement/claude/PostToolUse.sh"
 [[ -f "$HOOK" && -f "$POST_HOOK" ]] || { echo "エラー: 隔離環境に hook がありません" >&2; exit 2; }
 
-# AGENTS_ROOT を隔離環境の .agents に固定（案内出力を有効化しつつ、判定は確定変数で行う）。
-export AGENTS_ROOT="$TMP/.agents"
+# AGENTS_ROOT を隔離環境の .agent-skill-chain/source に固定（案内出力を有効化しつつ、判定は確定変数で行う）。
+export AGENTS_ROOT="$TMP/.agent-skill-chain/source"
 
 # jq 不在 PATH を作る（jq バイナリだけを除いたディレクトリ群を再構成）。
 make_nojq_path() {
@@ -168,7 +168,7 @@ echo "== UC2: jq 非依存フォールバック =="
 uc2_nojq_sqlite_blocked() {
   # シナリオ: jq 不在で sqlite3 直接実行が exit 2 ブロックされる（01 SC-4 / UC2 シナリオ2-1）
   # Given: jq を除いた PATH、AGENT_ROLE=scribe、sqlite3 直叩きコマンドの stdin JSON
-  local json='{"tool_name":"Bash","tool_input":{"command":"sqlite3 .workflow/workflow.db \"SELECT 1\""}}'
+  local json='{"tool_name":"Bash","tool_input":{"command":"sqlite3 .agent-skill-chain/runtime/workflow.db \"SELECT 1\""}}'
   # When: jq 不在の PATH で違反 JSON を stdin に渡す
   run_pre "$NOJQ_PATH" scribe "$json"
   # Then: 終了コードは 2 かつ sqlite3 禁止メッセージ
@@ -194,12 +194,12 @@ echo "== UC3: exit 2 ブロック化 =="
 uc3_workflow_edit_exit2() {
   # シナリオ: .workflow 配下 Edit が exit 2（01 SC-1 / UC3 シナリオ3-1）
   # Given: AGENT_ROLE=worker、保護パスを対象とした Edit JSON
-  local json='{"tool_name":"Edit","tool_input":{"file_path":".workflow/x/00_要求定義.md"}}'
+  local json='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"}}'
   # When: 違反 JSON を stdin で渡す
   run_pre "$PATH" worker "$json"
   # Then: 終了コードは 2（1 ではない）かつ理由が出る
   assert_eq 2 "$RC" "UC3: .workflow Edit は exit 2"
-  assert_grep "direct edit of .workflow/ is forbidden" "$ERR" "UC3: .workflow 直接編集禁止メッセージ"
+  assert_grep "direct edit of .agent-skill-chain/runtime/ is forbidden" "$ERR" "UC3: .workflow 直接編集禁止メッセージ"
 }
 uc3_worker_normal_write_allowed() {
   # シナリオ: worker の通常 Write（保護外）は exit 0（worker は実作業者）
@@ -278,7 +278,7 @@ uc5_worker_bash_blocked() {
 uc5_scribe_writelog_allowed() {
   # シナリオ: scribe の write-workflow-log.sh 単独実行は許可（01 SC-5 / UC5 シナリオ5-3）
   # Given: AGENT_ROLE=scribe、write-workflow-log.sh の単独実行コマンド
-  local json='{"tool_name":"Bash","tool_input":{"command":".agents/scripts/write-workflow-log.sh requirement-discovery x"}}'
+  local json='{"tool_name":"Bash","tool_input":{"command":".agent-skill-chain/source/scripts/write-workflow-log.sh requirement-discovery x"}}'
   # When: 正当 JSON を stdin で渡す（cwd を隔離環境に置き相対パスを解決可能にする）
   : > "$ERR"
   ( cd "$TMP" && echo "$json" | env PATH="$PATH" AGENT_ROLE=scribe bash "$HOOK" >/dev/null 2>"$ERR" )
@@ -299,7 +299,7 @@ uc5_scribe_sqlite_blocked() {
 uc5_scribe_compound_blocked() {
   # シナリオ: scribe の複合シェル（&&）は exit 2（R4）
   # Given: AGENT_ROLE=scribe、複合シェルコマンド（write-workflow-log.sh && rm）
-  local json='{"tool_name":"Bash","tool_input":{"command":".agents/scripts/write-workflow-log.sh x && rm -rf /"}}'
+  local json='{"tool_name":"Bash","tool_input":{"command":".agent-skill-chain/source/scripts/write-workflow-log.sh x && rm -rf /"}}'
   # When: 違反 JSON を stdin で渡す
   run_pre "$PATH" scribe "$json"
   # Then: 終了コードは 2 かつ複合シェル禁止メッセージ
@@ -309,7 +309,7 @@ uc5_scribe_compound_blocked() {
 uc5_unknown_role_workflow_blocked() {
   # シナリオ: ROLE=unknown でも R1（.workflow 編集）は発火する（role 非依存）
   # Given: AGENT_ROLE=unknown、.workflow 配下 Write JSON
-  local json='{"tool_name":"Write","tool_input":{"file_path":".workflow/x/note.md"}}'
+  local json='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/x/note.md"}}'
   # When: 違反 JSON を stdin で渡す
   run_pre "$PATH" unknown "$json"
   # Then: 終了コードは 2（R1 は全 ROLE 適用）
@@ -334,18 +334,18 @@ uc6_setup_path_blocks() {
   local json='{"tool_name":"Write","tool_input":{"file_path":"00_要求定義.md"}}'
   : > "$ERR"
   # When: 違反 JSON を setup 経路の hook に stdin で渡す
-  echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agents" AGENT_ROLE=orchestrator bash "$TMP/.claude/hooks/PreToolUse.sh" >/dev/null 2>"$ERR"
+  echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agent-skill-chain/source" AGENT_ROLE=orchestrator bash "$TMP/.claude/hooks/PreToolUse.sh" >/dev/null 2>"$ERR"
   RC=$?
   # Then: 終了コードは 2
   assert_eq 2 "$RC" "UC6: setup 経路で違反 JSON は exit 2"
 }
 uc6_plugin_path_blocks() {
-  # シナリオ: plugin 経路（hooks.json → ${CLAUDE_PLUGIN_ROOT}/.agents/enforcement/claude/PreToolUse.sh）で違反 JSON が exit 2（01 SC-6 / UC6 シナリオ6-2）
+  # シナリオ: plugin 経路（hooks.json → ${CLAUDE_PLUGIN_ROOT}/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh）で違反 JSON が exit 2（01 SC-6 / UC6 シナリオ6-2）
   # Given: plugin 結線先は同梱 .agents 配下の正本 hook（隔離環境の HOOK そのもの）
   local json='{"tool_name":"Bash","tool_input":{"command":"sqlite3 a.db x"}}'
   : > "$ERR"
   # When: 違反 JSON を plugin 結線先 hook に stdin で渡す
-  echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agents" AGENT_ROLE=orchestrator bash "$HOOK" >/dev/null 2>"$ERR"
+  echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agent-skill-chain/source" AGENT_ROLE=orchestrator bash "$HOOK" >/dev/null 2>"$ERR"
   RC=$?
   # Then: 終了コードは 2（plugin 経路でも同一 hook が発火）
   assert_eq 2 "$RC" "UC6: plugin 経路で違反 JSON は exit 2"
@@ -363,7 +363,7 @@ uc7_posttooluse_exit0() {
   local json='{"tool_name":"Write","tool_input":{"file_path":"x"}}'
   : > "$ERR"
   # When: PostToolUse に stdin で渡す
-  echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agents" bash "$POST_HOOK" >/dev/null 2>"$ERR"
+  echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agent-skill-chain/source" bash "$POST_HOOK" >/dev/null 2>"$ERR"
   RC=$?
   # Then: 終了コードは 0 かつ証跡規約案内
   assert_eq 0 "$RC" "UC7: PostToolUse は stdin JSON で exit 0"
@@ -374,7 +374,7 @@ uc7_posttooluse_empty_exit0() {
   : > "$ERR"
   # Given: 空 stdin
   # When: PostToolUse に空 stdin を渡す
-  echo -n "" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agents" bash "$POST_HOOK" >/dev/null 2>"$ERR"
+  echo -n "" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agent-skill-chain/source" bash "$POST_HOOK" >/dev/null 2>"$ERR"
   RC=$?
   # Then: 終了コードは 0
   assert_eq 0 "$RC" "UC7: PostToolUse は空 stdin でも exit 0"

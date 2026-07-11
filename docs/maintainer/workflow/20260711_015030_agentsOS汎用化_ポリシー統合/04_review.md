@@ -244,4 +244,131 @@ document_id: "ad96201a-9028-4ef2-b955-97f44c26a34c"
 ## 15. 次のステップ
 
 - タスク1〜7は本レビューで収束（指摘0件）。次はストーリー8（名前空間衝突安全化）の実装・別途レビューへ進む（本issue内の別フェーズとして、または別issueとして進行役が判断する）。
-- 課題1（src/agents-md.ts #26違反）の是正タイミングは進行役が確定する（本レビューでは「責任スレッドが拾う順送り」に判定済み）。
+- 課題1（src/agents-md.ts #26違反）の是正タイミングは進行役が確定する（本レビューでは「責任スレッドが拾う順送り」に判定済み）。**（更新: 下記タスク8レビューにて、audit.sh #26 がフル実行で PASS することを実測確認。当該 #26 違反はタスク8の CODE_COMMENT_RULES 是正〈8-B〉で解消済み。課題1はクローズ相当。）**
+
+---
+
+# タスク8（ストーリー8: ディレクトリ名前空間衝突安全化・統合ネスト）レビュー
+
+**レビュー日**: 2026-07-11
+**レビュー担当**: verify-and-close 監査サブエージェント（opus / reasoning effort=max。story8 以降の監査・レビューは opus 固定・fable 委譲禁止のユーザー明示指示に従う）
+**レビュー対象**: ストーリー8（タスク8）実装。サブタスク 8-A（統合ネスト git mv・マーカー/衝突検知/バックアップ/README 警告）・8-B（フィンガープリント統合移行・runUninstall 安全拡張・CODE_COMMENT_RULES 是正）・8-C（122 件超の参照更新・自己適用 bootstrap 是正・source ノイズ除去）・8-D（e2e 新規 BDD 7 項目・npm test 全体の新レイアウト追従）の 4 段階委譲の統合。
+**深度**: full（新規・大規模かつデータ破壊のおそれがある領域。REVIEW_RULE §実行モード）。
+
+> **範囲**: 本節はストーリー8 のみを対象とする。タスク1〜7 は既に上記で収束済み（指摘0件）であり再レビューしない。
+
+## T8-1. 実装内容の確認（§2.8.2 の 9 サブタスクとの対応）
+
+| 実装項目 | 実装の所在 | 確認結果 |
+| --- | --- | --- |
+| ①統合ネスト（git mv） | `.agents/`→`.agent-skill-chain/source/`・`.agents-project/`→`.agent-skill-chain/project/`・`.workflow/`→`.agent-skill-chain/runtime/`。`.gitignore`・`package.json` files allowlist の追随 | git のステージ済みリネームで確認。`package.json` files=`[".agent-skill-chain/source/","AGENTS.md","CLAUDE.md",".agent-skill-chain/runtime/templates/","bin/","README.md"]` に更新済み。 |
+| ②マーカー・衝突検知（fail-closed） | `scripts/lib/package-manifest.sh` `check_package_manifest`（正本）・`src/agents-md.ts` `checkPackageManifest`（ミラー） | 4 分岐（own/new/match/abort）を実装。setup は `check_package_manifest` を最優先で source し、abort 時は以降の破壊的操作を一切行わない（`setup.sh:45-55`）。 |
+| ③バックアップ | `package-manifest.sh` `backup_agent_skill_chain`。`source/`・`runtime/templates/` をタイムスタンプ付き退避。失敗時は上書き中止 | 実装確認。退避関数は本体・templates で共用（二重実装なし）。 |
+| ④SETUP.md/README 所有区分・名前空間一覧 | `SETUP.md` §所有区分表（3 サブディレクトリ＋配備先の 4 行）・workflow.db 由来検知欠如のサブ issue 参照 | 確認。**ただし移行パス節・fail-closed/fail-open 明示が欠落 → 本レビューで是正（下記 T8-指摘1）。** |
+| ⑤移行パス（3 ディレクトリ統合移行） | `package-manifest.sh` `legacy_fingerprint_ok`（4 ファイル AND）・`migrate_legacy_dirs`。setup の upgrade 経路 | 実装確認。3 バックアップのうち 1 つでも失敗で移行全体を中止（`migrate_legacy_dirs:154-169`）。 |
+| ⑥参照更新（122 件超） | 全追跡テキストファイル | `git ls-files -z \| xargs -0 grep -lE '\.agents/\|\.agents-project\|\.workflow/'`（issue 履歴記録除く）＝**0 件**を実測確認（下記 T8-4）。 |
+| ⑦テスト更新（e2e 新規シナリオ） | `test/e2e-install-uninstall.sh` シナリオ N1〜N6（＋ N3a/b・N4a/b/c サブケース） | 7 BDD シナリオを全て実装。§2.8.4 の Gherkin と 1 対 1 対応（下記 T8-2）。 |
+| ⑧安全な uninstall（runUninstall 拡張） | `src/agents-md.ts` `runUninstall`・`finalizeAscRoot`。既定=`source/`・`runtime/templates/` のみ削除、`--purge`=`project/`・`runtime/` も削除 | 実装確認。既定モードは `project/`・`runtime/<issue>/`・`workflow.db*` を保持。既存安全策（dry-run・痕跡なし中止・`.claude`/`.cursor` 選択的削除）を維持。 |
+| ⑨README 警告 | `package-manifest.sh` `readme_warning_text`（正本）・配備先 `.agent-skill-chain/README.md`（生成物・非追跡）・`SETUP.md` §7 転記 | README 本体＝`readme_warning_text` の heredoc 本体とバイト一致を実測確認（bash==deployed: true）。TS `readmeWarningText` も同文言。 |
+
+## T8-2. 受け入れ基準の確認（01 ユースケース8 BDD ／ 03 §2.8.4 Gherkin ／ e2e 対応）
+
+| Gherkin シナリオ（§2.8.4・ユースケース8） | 対応 e2e テスト | 結果 |
+| --- | --- | --- |
+| S1 本パッケージ由来の再配備（バックアップ後上書き） | `test_redeploy_backs_up`（N2） | PASS |
+| S2 マーカー無し／name 不一致で rm -rf 中止 | `test_foreign_dir_aborts`（N3a/N3b） | PASS |
+| S3 新規配備でマーカー＋README 付与 | `test_new_deploy_marker_and_readme`（N1） | PASS |
+| S4 旧 3 ディレクトリからの統合移行（フィンガープリント） | `test_legacy_migration`（N4a/b/c） | PASS |
+| S5 再配備時の runtime/templates 置換前バックアップ | N2 内で確認 | PASS |
+| S6 既定 uninstall によるユーザー資産保持 | `test_default_uninstall_preserves_runtime_and_project`（N5） | PASS |
+| S7 --purge --yes による完全削除 | `test_purge_uninstall_removes_everything`（N6）・`test_uninstall_purge` | PASS |
+
+全 7 シナリオがテストコード化され、テストとの対応が取れている（PHASES §監査観点「全シナリオのテストコード化の網羅」を充足）。テストは `TEST_BDD_FORMAT` の `# シナリオ:`・`# Given/When/Then:` インラインコメントを備える（実測確認）。
+
+## T8-3. 設計整合（02 §2.6.9 の決定事項との一致）
+
+- **命名（§2.6.9.2）**: `source/`（正本・置換可）・`project/`（不可侵）・`runtime/`（実行時生成物）。実装・SETUP.md 所有区分表と一致。
+- **fail-closed 方針（§2.6.4/§2.6.9.5/§3.8.4）**: 衝突検知・移行判定は判定不能時に必ず中止。setup.sh・package-manifest.sh に明記。enforcement の fail-open との対比は setup.sh に既存、**SETUP.md には欠落していたため本レビューで是正（T8-指摘1）**。
+- **バックアップ方針（§2.6.4）**: `.bak.<ts>` 退避パターン。バックアップ成立を上書きの前提とし失敗時中止。一致。
+- **uninstall 安全策（§2.6.9.3）**: 既定＝`source/`・`runtime/templates/` のみ／`--purge --yes`＝完全削除。後片付け判定（ユーザー資産残存時はルート＋マーカー＋README を残す）を `finalizeAscRoot` が実装。既存 3 安全策（dry-run・痕跡なし中止・選択的削除）を維持。一致。
+- **README 警告文面（§2.6.9.4）**: §2.6.9.4 の文面と実装（`readme_warning_text`）が一致。SETUP.md §7 に要旨転記あり。
+- **自己適用（§2.6.9.5・8-C 是正）**: PACKAGE_ROOT=PROJECT_ROOT の実パス一致時のみマーカー検査をスキップして続行する `own` 分岐を setup.sh・TS 双方に実装。他人の無関係ディレクトリは実パス不一致で本分岐に入らず fail-closed 境界は弱まらない（T8-7 で敵対的に検証）。
+
+## T8-4. 旧パス参照 grep（§2.8.3 バリデーション）
+
+`git ls-files -z | xargs -0 grep -lE '\.agents/|\.agents-project|\.workflow/'` の結果、`docs/maintainer/workflow/` 配下（issue 履歴記録）を除いた**現行運用文書・コードは 0 件**（実測）。マッチする issue 履歴ディレクトリは (a) `20260614_173500_multi-tool対応/`（他の現行 issue 記録・§2.8.7 で除外指定）、(b) 本 issue 自身の `00〜04`・`90_issues.md`（履歴の不変性を優先し当時の記述のまま保持）、(c) `close/`（完了 issue 履歴）のみで、いずれも意図的な除外対象。`package-manifest.sh` の `legacy_*` 変数（`$root/.agents` 等・末尾スラッシュ無し／連結構成）はレガシー移行の対象名として意図的に残す実装であり、`\.agents/`（末尾スラッシュ付き）grep には合致しない（実測確認）。**evidence_source: observed_runtime**。
+
+## T8-5. CODE_COMMENT_RULES（audit #26）／全体監査
+
+`audit.sh .` フル実行＝**PASS（exit 0）**。#26（コメント外部参照禁止）を含む全チェックが PASS。タスク1〜7 レビュー時に「範囲外の既知事項」として記録した `src/agents-md.ts` の #26 違反は、8-B の是正（7 箇所）で解消済みであることを実測確認（課題1 はクローズ相当）。SETUP.md への追記（T8-指摘1 是正）後も audit は PASS を維持。**evidence_source: observed_runtime**。
+
+## T8-6. テスト再実行（npm test 5 回連続）・flakiness 調査
+
+`npm test`（`test/run-all.sh`＝12 テストファイル逐次実行）を **5 回連続実行し、全回 12/12 PASS・FAIL=0・SKIP=0**（`合計=12 PASS=12 FAIL=0 SKIP=0` × 5）。
+
+- Run1〜Run5: いずれも `合計=12 PASS=12 FAIL=0 SKIP=0`、exit 0。
+
+**flakiness 調査（8-D で 1 回のみ観測された `test-write-workflow-log-multidoc` の FAIL）**:
+
+- **根本原因を特定**（evidence_source: existing_code + observed_runtime）。当該テストの本体シナリオ（M1〜M4）はすべて `mktemp -d` で完全隔離され `PROJECT_ROOT` を tmp に向けるため、本リポの `.agent-skill-chain/runtime/workflow.db` を一切読み書きしない。唯一の共有状態依存は末尾の「本番 DB 非破壊の事後検証」で、実リポの `workflow.db` の**行数（`SELECT COUNT(*)`）と mtime（`stat -c %Y`）が実行前後で不変**であることを表明する自己検査である。この 2 表明は、テスト実行中に**外部の別プロセスが共有の実 `workflow.db` へ書き込む**（例: 進行中セッションの書記＝write-workflow-log による INSERT）と、行数増加または mtime 変化により FAIL する。8-D の 1 回の FAIL は、その検証実行と並行して実 DB への書記書き込みが発生したことによる環境的レースであり、ストーリー8 実装のロジック欠陥ではない。
+- **再現性の確認**: 実 DB への並行書記が発生しない状態（本 5 回の逐次実行では書記ステップは全テスト完了後に実施）では、5 回連続で決定的に PASS。root cause と整合。
+- **評価**: 当該自己検査が共有の実 DB を参照する設計に起因する環境感受性であり、実装の正しさには影響しない。テスト頑健性の観点では（実 DB のスナップショットをアトミックに取得して比較する等の）改善余地があるが、これは既存テストの設計であってストーリー8 の変更対象ではなく、本レビューの指摘としては計上しない（改善提案として T8-課題 に記録）。
+
+## T8-7. 事故起因の安全性の重点監査（項目7・fail-closed 境界の敵対的検証）
+
+`mktemp -d` で完全隔離した環境に対し、常に対象ディレクトリを明示指定して敵対的テストを実施した（実リポジトリへの配備系操作は一切行っていない）。**evidence_source: observed_runtime**。
+
+| 敵対的シナリオ | 期待 | 結果 |
+| --- | --- | --- |
+| A: 別パッケージ由来マーカー（name=evil）を持つ dir へ init | fail-closed で中止・既存不変 | exit≠0。sentinel ファイル保持・foreign マーカー非上書き・source 未配備（コピー前に中止）を確認 |
+| B: マーカー不在の空 `.agent-skill-chain/` へ init | fail-closed で中止・ユーザーデータ保持 | exit≠0。ユーザーデータ保持・source 未配備を確認 |
+| C: project/＋runtime/<issue>/＋workflow.db を持つ配備済み dir へ既定 uninstall --yes | source/・templates のみ削除、ユーザー資産全保持・ルート残置 | source/・templates 除去、project/・issue・workflow.db 全保持、ルート `.agent-skill-chain/` 残置を確認 |
+| D1: フィンガープリント一致の旧 3 ディレクトリで upgrade | 3 ディレクトリを個別バックアップ後 source/project/runtime へ移行 | source/・project/・runtime(db) へ移行、`.agents.bak.<ts>` 生成、旧 `.agents/` 退避を確認 |
+| D2: フィンガープリント不一致（schema.sql 欠落）で upgrade | 中止・レガシー不変 | exit≠0。`.agent-skill-chain/` 非生成、旧 `.agents/` 無変更を確認 |
+
+境界条件の見落とし（他人のディレクトリを誤削除しうる経路／user 資産＝project・runtime issue 履歴を誤削除しうる経路）は発見されなかった。`checkPackageManifest`/`check_package_manifest`（own/new/match/abort の 4 分岐）・`legacyFingerprintOk`/`legacy_fingerprint_ok`（4 ファイル AND）・`runUninstall`/`finalizeAscRoot`（既定はユーザー資産を対象外）のコードを精読し、いずれも安全側（fail-closed・保持）に倒れることを確認した。自己適用 `own` 分岐は実パス一致を要件とするため、他人の無関係ディレクトリには波及しない。
+
+## T8-8. 敵対的観点リスト（REVIEW_DUAL_LENS §2.1・§3）
+
+1. **uninstall に自己適用ガードが無い＝実リポで uninstall --yes すると source が消える経路（事故の再現条件）**: `runUninstall` は `looksInstalled`（`.agent-skill-chain/` または `AGENTS.md` の存在）のみを痕跡判定に用い、PACKAGE_ROOT との実パス一致ガードを持たない。ただしこれは設計 §2.6.9.3 の must-preserve（既存 3 安全策=dry-run 既定・痕跡なし中止・選択的削除）と完全に一致し、設計は uninstall への自己適用ガードを要件化していない（uninstall は本質的に「配備物を消す」操作であり、自リポでは source が配備物そのもの＝git 追跡で復元可能）。8-B の事故は「検証スクリプトの引数バグで実リポを対象に指定した」ことが原因で、実装の fail-closed 欠陥ではない。**結論: 設計整合。実装欠陥ではない（ただし将来の防御的改善余地は T8-課題 に記録）。**
+2. **フィンガープリント false-negative で正規の旧ユーザー移行を誤拒否**: 4 ファイル AND は構造的に安定なファイルを選定。将来 `source/` 構成変化時の陳腐化リスクは 03 §2.8.6 リスク節・サブ issue で既知管理済み。**結論: 既知・管理済み。**
+3. **バックアップ失敗時に上書きが進む経路**: `backup_agent_skill_chain`・`migrate_legacy_dirs` はいずれも `cp` 失敗時に `exit 1` し、上書き/移動へ進まない（実測 D2 で移行中止を確認）。**結論: 問題なし。**
+4. **既定 uninstall が runtime/ を丸ごと消す経路**: `DEPLOYED_ARTIFACTS` は `runtime/templates` のみ（`runtime` 全体ではない）。`finalizeAscRoot` は `runtime` の `.gitignore` 以外の残存物があればルートを保持（実測 C で確認）。**結論: 問題なし。**
+5. **README/警告文の三重定義（bash/TS/配備物）ドリフト**: `readme_warning_text`（bash 正本）・`readmeWarningText`（TS ミラー）・配備 README の三者がバイト一致することを実測確認。**結論: 現時点でドリフト無し（ミラー方式の宿命的リスクは T8-課題2 で扱う）。**
+
+## T8-9. must-preserve リスト（REVIEW_DUAL_LENS §2.2・§3）
+
+1. **既存 uninstall 3 安全策（dry-run 既定・痕跡なし中止・`.claude`/`.cursor` 選択的削除）**: 拡張後も維持（e2e シナリオ4・N3・実測 A/B/C）。**保持を確認**。
+2. **`.agent-skill-chain/project/` の setup 不可侵性**: setup は `project/` を作成も削除もしない（SETUP.md 所有区分表・実測 C で保持）。**保持を確認**。
+3. **`runtime/<issue>/`・`workflow.db*` の保持**: 既定配備・既定 uninstall いずれでも touch しない（実測 C）。**保持を確認**。
+4. **workflow.db 非破壊のテスト隔離契約**: 全テストが tmp 隔離。本 5 回実行後も実 DB 不変（run-all は実 DB を読み書きしない設計）。**保持を確認**。
+5. **正本一元化（単一定義ミラー方式）**: 判定規則・警告文・バックアップ命名は `package-manifest.sh` を単一正本とし TS がミラー（drift 時は両方更新の注記あり）。**保持を確認（ミラー健全性は T8-課題2）**。
+6. **配布物範囲（package.json files allowlist）不変**: `.agents/`→`.agent-skill-chain/source/`・`.workflow/templates/`→`.agent-skill-chain/runtime/templates/` の平行移動のみで配布範囲は不変。**保持を確認**。
+
+## T8-指摘・是正（本レビューで直接是正した軽微指摘）
+
+- **T8-指摘1（是正済み・ドキュメント記述の過不足）**: `.agent-skill-chain/source/SETUP.md` に、02_設計 §2.6.9.5／§3.8.4 が **setup.sh・SETUP.md の双方に明記**を求めた「配備マーカーによる衝突検知（fail-closed）・再配備前バックアップ・旧 3 ディレクトリからの統合移行パス」および「enforcement の fail-open との対比」が欠落していた（setup.sh には存在。SETUP.md は所有区分表と uninstall 契約のみで、移行パス節と fail-closed/fail-open 明示が無かった）。本レビューで SETUP.md に「### 配備マーカーによる衝突検知・バックアップ・統合移行（fail-closed）」節を新設し、状況別挙動表・レガシー移行手順・fail-closed/fail-open 対比を実装（`package-manifest.sh`）に忠実に追記した。追記後 `audit.sh` PASS を再確認。既存の「保持・上書き契約」表（行数・列構成）は改変していない（§2.8.3 の表フォーマット一致要件を維持）。
+
+## T8-課題（非ブロッキング・進行役判断／将来課題として記録）
+
+- **T8-課題1（テスト頑健性・改善提案）**: `test-write-workflow-log-multidoc.sh` の「本番 DB 非破壊」自己検査（実 `workflow.db` の行数・mtime 比較）は、並行する実 DB への書記書き込みに感受性があり flaky の温床となる（T8-6 参照）。実装の正しさには影響しないが、将来的にスナップショットのアトミック取得等で頑健化する余地がある。ストーリー8 の変更対象外のため本 issue では対応しない。
+- **T8-課題2（コード品質・ミラー方式の未実行コード）**: `src/agents-md.ts` の衝突検知・移行系ミラー関数（`checkPackageManifest`・`legacyFingerprintOk`・`backupAgentSkillChain`・`writePackageManifest`・`writeReadmeWarning`）は、init/upgrade が `runSetup` 経由で `setup.sh`（＝単一正本 `package-manifest.sh`）に完全委譲する設計のため、**production 実行経路・テストのいずれからも呼ばれていない**（全リポ grep で定義元 `agents-md.ts` 以外に参照なし・実測）。設計 §2.8.2② は「両実装が同一判定規則を持つ」ことを、§2.8.3 は「setup.sh と agents-md.ts が同一判定結果を返す（ドリフト検知）」パリティ試験を求めているが、後者のパリティ試験は存在しない（`ownedSkillNames` ミラーが uninstall で実際に使われ live なのとは対照的に、本マーカー系ミラーは dead）。**ストーリー8 の fail-closed 安全性には影響しない**（正本の setup.sh/package-manifest.sh は実装・e2e・本レビューの敵対的テストで十分に検証済み）が、「同一規則をミラーする」旨の権威的コメントが実際には何にも強制されていない。**是正方針（(a) dead な TS ミラーの削除 vs (b) §2.8.3 パリティ試験の新規追加）は、事故発生領域の safety モジュールに関わる設計判断のため、本レビューでは自己修正せず進行役の判断を仰ぐ**（拙速な自己修正よりも報告を優先。REVIEW_DUAL_LENS の「不確実なら要修正に倒す」に従い記録するが、安全性は非該当のため非ブロッキングと判定）。
+
+## T8-10. 総合評価
+
+- **実装品質**: 良好。§2.8.2 の 9 サブタスクが実装・テストで充足。fail-closed 境界は敵対的検証（隔離環境 5 ケース）で堅牢。
+- **テスト品質**: 良好。7 BDD シナリオが e2e にコード化され Gherkin と 1 対 1 対応。npm test 5 回連続 12/12 PASS、flakiness の根本原因を特定。
+- **設計整合**: 良好。02 §2.6.9 の決定事項（命名・fail-closed・バックアップ・uninstall 安全策・README 文面）と一致。唯一の記述欠落（SETUP.md 移行パス節・fail-closed/fail-open 明示）は本レビューで是正。
+- **総合**: **ストーリー8 はブロッキング指摘 0 件で収束**（T8-指摘1 は本レビューで直接是正済み・audit 再 PASS）。非ブロッキングの課題 2 件（T8-課題1 テスト頑健性・T8-課題2 TS ミラー dead コード＋パリティ試験欠如）を記録し、T8-課題2 は進行役判断を要する事項として明示的にエスカレーションする。
+
+### T8 重要判断の evidence_source
+
+| 判断内容 | evidence_source | 根拠 |
+| --- | --- | --- |
+| fail-closed 境界が他人ディレクトリ・ユーザー資産を誤削除しない | observed_runtime | 隔離環境 A/B/C/D1/D2 の敵対的テスト実測 |
+| 旧パス参照が現行運用文書・コードに 0 件 | observed_runtime | `git ls-files` ベース grep 実測 |
+| audit #26 を含む全監査 PASS | observed_runtime | `audit.sh .` フル実行 exit 0 |
+| npm test 5 回連続 12/12 PASS・flakiness 根本原因 | observed_runtime + existing_code | 5 回逐次実行ログ＋テスト本体の共有状態依存箇所の精読 |
+| README/警告文の bash/TS/配備物ドリフト無し | observed_runtime | バイト一致比較（bash==deployed: true） |
+| TS ミラー関数が未使用（dead） | observed_runtime | 全リポ grep で定義元以外に参照 0 件 |
+| 設計 §2.6.9 の各決定事項と実装の一致 | existing_code | 02_設計 §2.6.9.1〜5 と実装ファイル本文の突合 |
