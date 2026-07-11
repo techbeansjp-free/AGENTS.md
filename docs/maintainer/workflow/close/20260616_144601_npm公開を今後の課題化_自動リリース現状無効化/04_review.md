@@ -8,7 +8,7 @@ document_id: "31c6b8f3-6903-4dc5-8768-a539366e6a18"
 **作成日**: 2026 年 06 月 16 日
 **最終更新**: 2026 年 06 月 16 日
 
-> **必須**: レビュー深度は [`.agents/REVIEW_RULE.md`](../../../../.agents/REVIEW_RULE.md) に従う。本件は CI 設定（YAML）と Markdown の編集であり変更規模は限定的だが、誤公開ゼロ（SC-2）と前提 issue 資産の非破壊（must-preserve）が最重要のため **standard** で実施した。二観点（[`.agents/REVIEW_DUAL_LENS.md`](../../../../.agents/REVIEW_DUAL_LENS.md)）の両リストを §9.4 に記載する。
+> **必須**: レビュー深度は [`.agents/REVIEW_RULE.md`](../../../../../.agents/REVIEW_RULE.md) に従う。本件は CI 設定（YAML）と Markdown の編集であり変更規模は限定的だが、誤公開ゼロ（SC-2）と前提 issue 資産の非破壊（must-preserve）が最重要のため **standard** で実施した。二観点（[`.agents/REVIEW_DUAL_LENS.md`](../../../../../.agents/REVIEW_DUAL_LENS.md)）の両リストを §9.4 に記載する。
 
 ---
 
@@ -347,8 +347,8 @@ pie title 受け入れ基準カバレッジ（SC-1〜SC-5）
 
 ### 13.2 その他の参考資料
 
-- [.github/workflows/release.yml](../../../../.github/workflows/release.yml)（dormant 化対象）
-- [README.md](../../../../README.md)・[docs/maintainer/RELEASE.md](../../../RELEASE.md)（トリガ記述整合対象）
+- [.github/workflows/release.yml](../../../../../.github/workflows/release.yml)（dormant 化対象）
+- [README.md](../../../../../README.md)・[docs/maintainer/RELEASE.md](../../../RELEASE.md)（トリガ記述整合対象）
 - 実装証跡 memo: `memo/20260616_153135_implement-feature実装証跡.md`
 - 前提 issue: [`20260616_042911_npmスコープ無し公開_将来組織移管/`](../20260616_042911_npmスコープ無し公開_将来組織移管/00_要求定義.md)（案C 資産の正本）
 

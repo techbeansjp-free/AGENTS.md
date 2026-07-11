@@ -46,6 +46,18 @@ orchestrator が「実作業をしない」「run_command 経由のみ」から�
 
 ---
 
+## 系統D: hooks overlay 配備の設計思想（`.agents-project/` 優先）
+
+**なぜファイル単位で固有が汎用を上書きするのか**: 本パッケージの正本 `.agents/enforcement/claude/` は全採用先に共通する汎用 hook を提供するが、採用先固有の事情（追加の禁止コマンド・固有のロール判定等）は `.agents-project/` 側でしか表現できない。ファイル単位のオーバーライド（同名ファイルが存在する場合のみ `.agents-project/enforcement/claude/` 側を優先して配備する）とすることで、採用先は汎用 hook 全体を複製・改変することなく、必要なファイルだけを差し替えられる。これは既存の「汎用/固有境界」パターン（コア＝抽象原則の必須最小集合、`.agents-project/`＝具体値）の**配備層への適用**であり、`MODEL_SELECTION.md`・`CONTEXT_EFFICIENCY.md` 等が採る「コアに具体値を持ち込まず `.agents-project/` に委ねる」思想と同型である。
+
+**既存 overlay 配備思想との整合**: 本パッケージの setup は既に `.claude/skills/`・`.cursor/` 配下で「パッケージ所有分のみ更新・ユーザー独自分は保持」という衝突安全な配備（`sync_skills_selective`・`copy_owned_files`）を行っている。系統Dはこれと同じ「所有権の細分化による安全な重ね合わせ」という設計原則を hooks 配備（`enforcement/claude/` → `.claude/hooks/`）に適用したものであり、新規の配備パターンを導入するものではない。
+
+**決定的規則（fail-open の余地なし）**: 系統A・C（[enforcement/README.md §強制の4層と現状](README.md#強制の-4-層と現状)）が fail-open（誤検知時はブロックしない）を既定とするのに対し、系統Dは「ファイル単位で `.agents-project/` が `.agents/` を上書きする」という決定的な配備規則であり、fail-open の余地はない。ただし両ディレクトリのいずれにも当該ファイルが無い場合は、[enforcement/README.md §配置するファイル一覧](README.md#配置するファイル一覧) の既定動作（展開先ディレクトリのみ作成）を踏襲する。
+
+**本節の範囲**: 本節は抽象仕様（配備規則の設計思想）の確定までを扱う。overlay 配備処理の実装コード自体は本 issue の対象外であり、実コードの実装・配備は将来の別 issue に委ねる。
+
+---
+
 ## 参照
 
 - enforcement/README.md（配置一覧・矯正するもの・失敗条件→実装→強制レベル 対応表）

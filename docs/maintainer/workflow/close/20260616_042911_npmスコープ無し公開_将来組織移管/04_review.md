@@ -9,7 +9,7 @@ document_id: "b96cf67e-f4b1-46e8-bb9f-831173ae0a61"
 **最終更新**: 2026 年 06 月 16 日
 
 > レビュー深度: **full**（パッケージ名変更・CI リリースフロー・enforcement 強化という後方互換／配布物に直結する高影響変更のため）。
-> 二観点（[REVIEW_DUAL_LENS.md](../../../../.agents/REVIEW_DUAL_LENS.md)）必須。敵対的観点リスト・must-preserve リストを §9.4/§9.5 に記載。
+> 二観点（[REVIEW_DUAL_LENS.md](../../../../../.agents/REVIEW_DUAL_LENS.md)）必須。敵対的観点リスト・must-preserve リストを §9.4/§9.5 に記載。
 
 ---
 
@@ -314,7 +314,7 @@ publish 直前に実施したセキュリティ脆弱性是正（HIGH 1・MEDIUM
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
 - 実装証跡 memo: `memo/20260616_064615_実装Part1_…`・`memo/20260616_071017_実装Part2_…`
-- [REVIEW_DUAL_LENS.md](../../../../.agents/REVIEW_DUAL_LENS.md)
+- [REVIEW_DUAL_LENS.md](../../../../../.agents/REVIEW_DUAL_LENS.md)
 
 ---
 

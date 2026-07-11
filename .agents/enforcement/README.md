@@ -54,6 +54,33 @@ flowchart TD
   E --> F
 ```
 
+### 系統A・系統C（拡張仕様・抽象仕様）
+
+品質ゲートのモデルティア切り下げ検知（系統A）と、進行役の Read/Grep 過大読込抑制（系統C）の抽象仕様を以下に追記する。**本節の記載は抽象仕様（対象・fail-open 方針・false positive 回避方針）の確定までを扱い、hook スクリプトの実装コード自体は本節の対象外**（実コードの実装・配備は将来の別 issue に委ねる）。
+
+- **系統A（品質ゲートのモデルティア切り下げ検知）**
+  - **対象**: 委譲パケットの宣言ティア明記行（[MODEL_SELECTION.md](../MODEL_SELECTION.md) の委譲時のティア明記に従い記載される値）と、実際に指定された model パラメータ。委譲パケットが監査・verify-and-close 等の品質ゲート相当の作業を含み、宣言ティアが top 相当であるにもかかわらず実際の model パラメータが下位ティアである場合を自己矛盾として検知対象に含める。
+  - **fail-open 方針**: 誤検知が疑われる場合はブロックせず警告に留める。既存の `PreToolUse-model-tier.sh`（system-graph 側の先行実装）と同じ設計方針を踏襲する。
+  - **false positive 回避方針**: 「品質ゲート相当」の判定パターン・具体閾値・スクリプト実体は `.agents-project/` に委ねる（コアに具体値を持ち込まない）。
+- **系統C（進行役の Read/Grep 過大読込抑制）**
+  - **対象**: orchestrator セッションの Read/Grep 呼び出し履歴。直近呼び出し件数が閾値（`.agents-project/` 定義）を超過した場合を対象とする。
+  - **fail-open 方針**: 閾値超過時もブロックせず、警告と要約読込（索引化・スライス渡し）への誘導に留める。既存の `PreToolUse-context-economy.sh`（system-graph 側の先行実装）と同じ設計方針を踏襲する。
+  - **false positive 回避方針**: 具体閾値は `.agents-project/` に委ねる（コアに具体値を持ち込まない）。
+
+系統A・C はいずれも既存 `PreToolUse.sh` の stdin JSON 契約・exit code 規約（違反=2/許可=0）と矛盾しない。fail-open 方針のため、判定できない場合は既存契約と同様に案内のみ exit 0 に倒す想定である。対応する失敗条件の行は下記「失敗条件 → 実装の所在 → 強制レベル 対応表」に追加する。
+
+### 系統E（サブエージェント作業記録のリアルタイム強制・抽象仕様）
+
+サブエージェントが作業を完了する時点で、書記（write-workflow-log）による workflow.db への記録が済んでいるかを `SubagentStop` 相当の hook イベントで**その場で**検査する抽象仕様を以下に追記する。**本節の記載は抽象仕様（対象・高信頼判定条件・fail-open 条件・既存 CI 事後検知との関係）の確定までを扱い、hook スクリプトの実装コード自体は本節の対象外**（実コードの実装・配備は将来の別 issue に委ねる）。評価根拠の正本は該当 issue の 02_設計.md §2.5.2 とし、本節では重複させず結論のみを記載する。
+
+- **対象**: サブエージェント終了（`SubagentStop` 相当のイベント）時点の `last_assistant_message`（完了報告パターンとの一致有無）と、当該サブエージェント起動時刻以降の workflow_log への INSERT 有無。`SubagentStop` の入力には workflow_log の該当行と一意に紐付くキー（issue_id・document_id 等）が含まれないため、厳密な 1:1 突合はできない前提に立つ。
+- **高信頼判定条件（block 対象）**: 次の 2 条件を **AND** で満たす場合に限り「未記録」を高信頼で判定し、終了をブロック（exit 2 相当）する。
+  1. `last_assistant_message` が完了報告パターンに一致する。
+  2. 当該サブエージェント起動時刻以降、workflow_log への INSERT が **0 件**である。
+- **fail-open 条件**: 上記 2 条件を高信頼で確認できない場合（完了報告パターン不一致、または起動時刻・workflow_log 突合に必要な情報が取得できない等の判定材料不足）は、終了をブロックせず exit 0 で許可する。既存の `PreToolUse-model-tier.sh`（系統A）・`PreToolUse-context-economy.sh`（系統C）と同じ「fail-open・高信頼ケースのみ block」方針を踏襲する。
+- **既存 audit.sh 事後検知との関係（補完であり置き換えではない）**: 既存 audit.sh の失敗条件 **#5**（書記未実行）・**#9**（04_review と証跡の不整合）・**#18**（04 変更に verify ログなし）・**#19**（成果物変更にログなし）は、いずれも push/merge 前の**事後的パターンマッチ**による間接検知である。系統Eはこれらを**置き換えるものではなく補完**する。系統Eは「その場で気付かせる即応性」を担い、CI 側（#5/#9/#18/#19）は「厳密な因果・順序監査」を担う、二層構成である（本 README §強制の 4 層と現状 の runtime／CI 二段構えと同型）。
+- **本 issue のスコープ確定**: 系統Eは本節の抽象仕様の記載までを対象とし、**`SubagentStop` を用いた具体的な hook スクリプトの実装・配備は本 issue の範囲外**である（要否・時期は将来の別 issue に委ねる）。
+
 ## ツール別強制力マトリクス
 
 **正本はここ（enforcement/README）1 か所**。README.md からは参照のみ（重複させない）。上の「強制の 4 層」が**層**の観点であるのに対し、本節は**ツール別**にどの強制力区分かを示す。`.agents/` を単一の正本とし各 AI ツールへ段階的に配備するが、**強制力はツールごとに異なり、最終保証は CI audit が担う**。
@@ -108,6 +135,8 @@ flowchart TD
 | **（直下）** | PROTECTED_PATHS.txt（成果物パス参照用。PreToolUse のパス別拒否に拡張可能） | 参照のみ（コピーしない） |
 
 上記ファイルを本ディレクトリに配置する。setup 脚本は本ディレクトリを参照して .claude/・.cursor/・CI へ展開する。配置するファイルが無い場合は、setup は展開先のディレクトリのみ作成する。
+
+**系統D（`.agents-project/` 優先の hooks overlay 配備・抽象仕様）**: 上表の `claude/`（配置先）は `.agents/enforcement/claude/` を指すが、採用先プロジェクトの `.agents-project/enforcement/claude/` に同名ファイル（例: `PreToolUse.sh`）が存在する場合、setup 相当の配備処理は `.claude/hooks/` への展開時に **`.agents-project/` 側のファイルを優先して配備する**（ファイル単位のオーバーライド。fail-open の余地はない決定的規則）。両ディレクトリのいずれにも当該ファイルが無い場合は、既定動作（上記「配置するファイルが無い場合は、setup は展開先のディレクトリのみ作成する」）を踏襲する。設計思想（同名ファイルの優先解決規則）は [DESIGN.md §系統D](DESIGN.md#系統d-hooks-overlay-配備の設計思想agents-project-優先) を参照。**本節の記載は抽象仕様であり、overlay 配備処理の実装コード自体は本節の対象外**（実コードの実装・配備は将来の別 issue に委ねる）。
 
 **subagent-guard の実体（CI guard）**: PR/Push 時に失敗条件の一部を検出する subagent-guard は `.workflow/templates/github/scripts/subagent-guard.sh`（git 追跡される配布テンプレ）に実体がある。enforcement 正本（`.agents/`）は実体を移設せず、この実体パスへの参照でトレーサビリティを確保する。subagent-guard が検査するのは (1) 内部参照禁止（#6 相当）(2) ログ frontmatter 禁止 (3) `.workflow/**/logs/` 廃止 の 3 点のみであり、#22–#24 は実装しない（§失敗条件 #22–#24・対応表を参照）。`.github/workflows/` から本スクリプトを呼ぶことで CI guard として有効化する。
 
@@ -216,6 +245,10 @@ SQLite WAL モードでは
 | #22 自立進行（許可確認） | （未実装） | 未実装・runtime/人手監査 |
 | #23 自立進行（指示文案だけ） | （未実装） | 未実装・runtime/人手監査 |
 | #24 高リスク確認省略 | （未実装） | 未実装・runtime/人手監査 |
+| 系統A 品質ゲートのモデルティア切り下げ検知 | （未実装・抽象仕様のみ確定。hook 実体は本 issue 範囲外） | fail-open（advisory のみ・具体閾値は `.agents-project/`） |
+| 系統C 進行役の Read/Grep 過大読込抑制 | （未実装・抽象仕様のみ確定。hook 実体は本 issue 範囲外） | fail-open（advisory のみ・具体閾値は `.agents-project/`） |
+| 系統E サブエージェント作業記録のリアルタイム強制 | （未実装・抽象仕様のみ確定。hook 実体は本 issue 範囲外） | fail-open（高信頼判定＝完了報告パターン一致 かつ 起動時刻以降 INSERT 0 件の場合のみ block 相当・それ以外は既存 audit.sh #5/#9/#18/#19 で補完） |
+| #30 AGENT_CONDUCT §3 進捗の実証違反 | （未実装） | 未実装・runtime/人手監査 |
 
 > **subagent-guard の実体**: 上表で参照する subagent-guard は `.workflow/templates/github/scripts/subagent-guard.sh`（git 追跡される配布テンプレ）にある。enforcement 正本（`.agents/`）からの実体パス参照によりトレーサビリティを確保する。subagent-guard が検査するのは内部参照禁止（#6 相当）・ログ frontmatter 禁止・`logs/` 廃止の 3 点のみであり、#22–#24 は実装しない（§配置するファイル一覧・#22–#24 を参照）。
 
@@ -254,6 +287,7 @@ SQLite WAL モードでは
 | 27 | **04_review 両リスト欠落** | 04_review.md に「敵対的観点」リストと「must-preserve（不変条件）」リストの両方が記載されていない（片方欠落も含む）。REVIEW_DUAL_LENS §3 の証跡要求違反でレビュー未完了。検査対象は Git 差分で変更された 04_review.md。 | 04_review.md に敵対的観点リストと must-preserve リストの両方を記載し、verify-and-close を再実行する。 |
 | 28 | **issue ドキュメントの誤配置（gitignore 配下）** | issue ドキュメント(00〜04)が git 追跡対象外（gitignore 配下）のパスに存在＝誤配置。`git check-ignore` の exit 0 のみ FAIL（非 git ツリーは SKIP）。 | issue ドキュメントを `.agents-project/` の上書き先（本リポは `docs/maintainer/workflow/`）へ移動し、`.workflow/<issue>/`（gitignore 配下）から除去。CLAUDE.md §issue 作成標準フローのポインタを確認。 |
 | 29 | **実装前 04** | workflow.db 採用かつ当該 issue（issue_path 前方一致）に implement-feature/verify-and-close ログが 0 件なのに 04_review.md が存在＝実装前に 04 を作成。既存 #3（04 欠落）の逆方向で非交差。DB 不採用は SKIP・前方一致で完了済み issue は誤 FAIL しない。 | 実装前なら 04_review.md を削除し memo にレビュー証跡を残す。実装完了後に verify-and-close を実行して 04 を再生成。 |
+| 30 | **AGENT_CONDUCT §3 進捗の実証違反** | [AGENT_CONDUCT.md §3 進捗の実証](../AGENT_CONDUCT.md) が定める「未検証を未検証と明言する」「テスト失敗は出力ごと報告する」「捏造された進捗報告をしない」に反し、ツール結果と突合していない主張を検証済みとして報告した、またはテスト失敗・スキップした手順を隠して完了と言い切った。**強制レベル＝未実装（CI 非強制・runtime/人手監査）**: audit.sh・subagent-guard いずれでも未実装。#22–#24 と同型で、思考プロセスの質そのものは成果物・git 差分・ツールメタデータに痕跡を残さず機械検出が不能。[AGENT_CONDUCT.md §機構的強制の非対象](../AGENT_CONDUCT.md) が定める構造的代替（REVIEW_DUAL_LENS 両リスト・CLOSEOUT malformed 自己検証・document_id 紐付け）で部分的に補完する。 | 該当報告を撤回し、各主張をツール結果と突合したうえで再報告する。未検証の項目は未検証と明言し、AGENT_CONDUCT.md §3 に従い言い切りとヘッジを混同しない。 |
 
 ### 差し戻し先の固定
 
