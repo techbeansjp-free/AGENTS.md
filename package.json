@@ -6,7 +6,7 @@
   "bin": { "agents-md": "bin/agents-md.js" },
   "files": [".agent-skill-chain/source/", "AGENTS.md", "CLAUDE.md", ".agent-skill-chain/runtime/templates/", "bin/", "README.md"],
   "engines": { "node": ">=20" },
-  "scripts": { "build:claude": "bash .agent-skill-chain/source/scripts/build-plugin-claude.sh", "build": "tsc && chmod +x bin/agents-md.js", "typecheck": "tsc --noEmit", "test": "bash test/run-all.sh" },
+  "scripts": { "build:claude": "bash .agent-skill-chain/source/scripts/build-plugin-claude.sh", "build": "tsc && chmod +x bin/agents-md.js", "typecheck": "tsc --noEmit", "test": "bash test/run-all.sh", "prepare": "npm run build" },
   "devDependencies": { "typescript": "^5", "@types/node": "^20" },
   "keywords": ["agents", "ai", "workflow", "claude-code", "cursor", "skills", "agents-md"],
   "license": "MIT",

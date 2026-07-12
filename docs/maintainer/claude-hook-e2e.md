@@ -11,18 +11,18 @@
 
 ## 手順
 
-1. テスト用ディレクトリを作り、パッケージを配備する。
+1. テスト用ディレクトリを作り、パッケージを配備する。GitHub 直接参照の詳細は [README.md §導入](../../README.md#導入プロジェクトへ配備するとき) を参照。
 
    ```bash
    mkdir -p /tmp/hook-e2e && cd /tmp/hook-e2e
-   npx agent-skill-chain init
+   npx github:techbeansjp-free/AGENTS.md init
    ```
 
 2. enforcement を opt-in で有効化する（`.claude/settings.json` に PreToolUse/PostToolUse を配線）。
 
    ```bash
-   npx agent-skill-chain enforce on
-   npx agent-skill-chain enforce status   # on（配線あり）・hook スクリプト実在を確認
+   npx github:techbeansjp-free/AGENTS.md enforce on
+   npx github:techbeansjp-free/AGENTS.md enforce status   # on（配線あり）・hook スクリプト実在を確認
    ```
 
 3. Claude Code を当該ディレクトリで起動する（settings.json を読み込ませるため再起動が必要）。

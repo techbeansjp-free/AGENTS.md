@@ -188,11 +188,13 @@ init/upgrade（setup）は、既存の `.agent-skill-chain/` を上書きする�
 
 プラグイン（配備一式）は簡単につけ外しできる。除去は CLI の `uninstall` サブコマンドで行う（正本は `bin/agents-md.js` の `runUninstall`）。setup/init が配備した成果物のみを除去し、人間が編集する資産は既定で保持する。
 
+> GitHub 直接参照の詳細は [README.md §導入](../../README.md#導入プロジェクトへ配備するとき) を参照。
+
 ```bash
 # 採用先プロジェクトのルートで実行
-npx agent-skill-chain uninstall            # dry-run（削除対象の表示のみ。何も消さない）
-npx agent-skill-chain uninstall --yes      # 実際に配備物を除去する
-npx agent-skill-chain uninstall --purge --yes  # workflow.db 等の証跡も含め完全除去
+npx github:techbeansjp-free/AGENTS.md uninstall            # dry-run（削除対象の表示のみ。何も消さない）
+npx github:techbeansjp-free/AGENTS.md uninstall --yes      # 実際に配備物を除去する
+npx github:techbeansjp-free/AGENTS.md uninstall --purge --yes  # workflow.db 等の証跡も含め完全除去
 ```
 
 | 対象 | 既定 `uninstall` | 説明 |
