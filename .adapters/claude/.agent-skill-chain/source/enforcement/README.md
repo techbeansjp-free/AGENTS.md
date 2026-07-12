@@ -242,6 +242,7 @@ SQLite WAL モードでは
 | #29 実装前 04 | audit.sh check_review_before_implement | CI FAIL（DB 不採用は SKIP） |
 | #31 システム仕様書レビュー証跡欠落 | audit.sh check_docs_review_evidence | CI FAIL（DB 不採用・docs/ 非採用・実装変更ログ 0 件は SKIP） |
 | #32 実装前 review-docs 未実行 | audit.sh check_reviewdocs_before_implement | CI FAIL（DB 不採用・発効日前（grandfather）・close/templates 配下は SKIP。#29 と非交差） |
+| #33 close 移動未実施 | audit.sh check_close_move_pending | CI FAIL（DB 不採用・発効日前（grandfather）・猶予内・close/90_issues/templates 配下は SKIP。#32 と非交差） |
 | orchestrator の Write/Edit/Shell 拒否 | PreToolUse.sh（ロール判定 → block 関数）。**委譲先 subagent（stdin `agent_id` あり＝`IS_SUBAGENT=1`）は worker として実作業（Bash/Edit/Write）を許可し、main（`agent_id` なし）のみ block する**（判定の実体は PreToolUse.sh のみ・本表は参照）。 | runtime reject（条件付き：ロール伝達時 exit 2／未伝達時 案内 exit 0）＋ CI 補完 |
 | ログ frontmatter 禁止 / `logs/` 廃止 | `.agent-skill-chain/runtime/templates/github/scripts/subagent-guard.sh` §1 / §2 | CI FAIL |
 | #22 自立進行（許可確認） | （未実装） | 未実装・runtime/人手監査 |
@@ -292,6 +293,7 @@ SQLite WAL モードでは
 | 30 | **AGENT_CONDUCT §3 進捗の実証違反** | [AGENT_CONDUCT.md §3 進捗の実証](../AGENT_CONDUCT.md) が定める「未検証を未検証と明言する」「テスト失敗は出力ごと報告する」「捏造された進捗報告をしない」に反し、ツール結果と突合していない主張を検証済みとして報告した、またはテスト失敗・スキップした手順を隠して完了と言い切った。**強制レベル＝未実装（CI 非強制・runtime/人手監査）**: audit.sh・subagent-guard いずれでも未実装。#22–#24 と同型で、思考プロセスの質そのものは成果物・git 差分・ツールメタデータに痕跡を残さず機械検出が不能。[AGENT_CONDUCT.md §機構的強制の非対象](../AGENT_CONDUCT.md) が定める構造的代替（REVIEW_DUAL_LENS 両リスト・CLOSEOUT malformed 自己検証・document_id 紐付け）で部分的に補完する。 | 該当報告を撤回し、各主張をツール結果と突合したうえで再報告する。未検証の項目は未検証と明言し、AGENT_CONDUCT.md §3 に従い言い切りとヘッジを混同しない。 |
 | 31 | **システム仕様書レビュー証跡欠落** | workflow.db 採用・`docs/` 採用・当該 issue に implement-feature/verify-and-close ログが 1 件以上ある（実装変更を伴う）にもかかわらず、変更された 04_review.md の「§docs 更新」に、要＝`docs/00_review/` レビュー記録への参照、または不要＝更新不要と判定した根拠、のいずれの**内容**も記載されていない。既存 #5（docs 更新要否未記載＝記載の**有無**を検査）とは非交差（#31 は記載の**内容**を検査する）。sqlite3/workflow_log 不在・`docs/` 非採用・実装変更ログ 0 件・`templates/`/`close/` 配下は SKIP。 | 04_review.md §docs 更新に、要の場合は対応する `docs/00_review/YYYYMMDD_HHMMSS_review.md` への参照を、不要の場合は根拠を追記し、verify-and-close を再実行する。 |
 | 32 | **実装前 review-docs 未実行** | workflow.db 採用かつ当該 issue（issue_path 前方一致・basename 末尾一致）に implement-feature ログが 1 件以上あるのに、review-docs ログが 1 件も存在しない（＝design-feature 完了後・実装着手前の必須ゲートである review-docs を経ずに実装した）。既存 #29（implement/verify ログ 0 件なのに 04 存在）とは implement ログ件数（0 件 vs 1 件以上）で排他・非交差。issue ディレクトリ名の `YYYYMMDD_HHMMSS_` プレフィックスが `REVIEWDOCS_GATE_EFFECTIVE_FROM`（既定 `20260712_000000`・env 上書き可）**未満**の issue は grandfather として SKIP（遡及適用しない）。`close/`・`templates/` 配下・DB 非採用は SKIP。存在監査のみであり、review-docs と implement-feature の厳密な時刻順序（どちらが先か）は監査しない。 | 実装着手前に review-docs（実装前ドキュメントレビュー）を実行し、memo 証跡＋書記委譲を完了させたうえで、必要なら implement-feature を再実行する。 |
+| 33 | **close 移動未実施**（`check_close_move_pending`） | workflow.db 採用かつ当該 issue（issue_path 前方一致・basename 末尾一致）に verify-and-close ログの最新 ts_utc が存在する（＝レビューフェーズ完了済み）にもかかわらず、`close/` へ未移動（`04_review.md` が `close/`・`templates/`・`90_issues/` 配下以外に find される）。issue ディレクトリ名の `YYYYMMDD_HHMMSS_` プレフィックスが `CLOSE_MOVE_GATE_EFFECTIVE_FROM`（既定 `20260712_000000`・env 上書き可）**未満**の issue は grandfather として SKIP（遡及適用しない）。さらに verify-and-close 最新 ts_utc からの経過日数が `CLOSE_MOVE_GRACE_DAYS`（既定 `3`・env 上書き可）**以下**の場合も SKIP（猶予期間内・別 PR 運用の通常フローを誤 FAIL しない）。`close/`・`90_issues/`・`templates/` 配下・DB 非採用・ts_utc 解析不能は SKIP。既存 #32（review-docs 未実行）とは走査対象（`04_review.md` vs `03_実装計画.md`）・判定内容（close 未移動 vs review-docs 未実行）で排他・非交差。close 移動という状態変更自体（`git mv`）は本項の対象外（検知のみ・Query に徹する）。 | 該当 issue のリンク補正・移動前検証（[.agent-skill-chain/project/自己拡張ワークフロー.md §完了 issue の close 移動](../../project/自己拡張ワークフロー.md)）を実施したうえで、`close/<issue>/` へ移動し（`git mv`）、audit を再実行する。 |
 
 ### 差し戻し先の固定
 
@@ -327,6 +329,7 @@ SQLite WAL モードでは
 | #29 実装前 04 | 実装前に作成された 04_review.md を削除し memo にレビュー証跡を移す | 実装完了後に verify-and-close を実行して 04 を再生成。 |
 | #31 システム仕様書レビュー証跡欠落 | 04_review.md §docs 更新に、要の場合は対応する `docs/00_review/` レビュー記録への参照、不要の場合は根拠を追記 | verify-and-close を再実行（書記委譲を含む）。 |
 | #32 実装前 review-docs 未実行 | 該当 issue の 00/01/02/03 に対して review-docs（実装前ドキュメントレビュー）を実行し、memo 証跡＋書記委譲を完了させる | review-docs を実行して書記に記録させたうえで、implement-feature を再実行（既に実装済みの場合は再実行不要。証跡の補完のみ）。 |
+| #33 close 移動未実施 | 移動前検証（相対リンク補正・[.agent-skill-chain/project/自己拡張ワークフロー.md §完了 issue の close 移動](../../project/自己拡張ワークフロー.md) 参照）を完了させ、当該トップレベル issue を `close/<issue>/` へ移動する | `git mv` で close/ へ移動後、audit を再実行して FAIL が解消したことを確認する。 |
 
 - **03_実装計画.md** — 必須ファイル未参照・テスト観点未記載など、計画・仕様の欠損が原因のとき。
 - **該当 issue ドキュメント** — 当該 issue の .agent-skill-chain/runtime/{issue}/ 内の 02_設計・03_実装計画や、issue 本文で補完すべきとき。
