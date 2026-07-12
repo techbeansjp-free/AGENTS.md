@@ -280,6 +280,8 @@ if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
   for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
+    # 完了 issue（close 配下）は in-progress 前提のテスト観点記載要求の対象外（#29/#31/#32 と同型・audit.sh の */close/* ガードと一貫）。
+    [[ "$f" == *"/close/"* ]] && continue
     if ! grep -qE '^## (テスト観点|単体テスト|BDD)$' "$f" 2>/dev/null; then
       echo "FAIL: テスト観点未記載 (03 must have section ## テスト観点 or ## 単体テスト or ## BDD): $f" >&2
       echo "$ROLLBACK_MSG" >&2
@@ -298,6 +300,8 @@ if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
   for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
+    # 完了 issue（close 配下）は in-progress 前提の docs 更新要否記載要求の対象外（#29/#31/#32 と同型・audit.sh の */close/* ガードと一貫）。
+    [[ "$f" == *"/close/"* ]] && continue
     if grep -qE '^## docs 更新$' "$f" 2>/dev/null && grep -qE '^- 要否:' "$f" 2>/dev/null; then
       : # OK（対象・理由はテンプレで推奨、要否は必須）
     else
@@ -410,7 +414,7 @@ fi
 # 10. workflow.db の WAL/SHM sidecar が Git 追跡されていないこと（証跡の信頼性・別環境での破損を防ぐ）
 check_sqlite_sidecar() {
   echo "[audit] checking sqlite sidecar files" >&2
-  if [[ ! -d "$PROJECT_ROOT/.git" ]]; then
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then
     return 0
   fi
   if (cd "$PROJECT_ROOT" && git ls-files --error-unmatch "$WORKFLOW_DIR/workflow.db-wal" >/dev/null 2>&1); then
@@ -560,7 +564,7 @@ check_verify_parent_command() {
 
 # 18. 04_review.md 変更があるのに verify-and-close ログが無いなら FAIL（Git リポジトリ。差分範囲は AUDIT_GIT_RANGE または第2引数、未指定時は HEAD~1..HEAD）
 check_review_file_has_verify_log() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -qE '(^|/)\.agent-skill-chain/runtime/.*/04_review\.md$|(^|/)\.agent-skill-chain/runtime/04_review\.md$'; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
@@ -575,7 +579,7 @@ check_review_file_has_verify_log() {
 
 # 19. 成果物変更があるのに implement/design/verify ログが無いなら FAIL（Git リポジトリ。差分範囲は GIT_RANGE）
 check_artifact_change_has_implement_log() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -qE '(^|/)\.agent-skill-chain/runtime/.*\.md$|(^|/)docs/.*\.md$'; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
@@ -599,7 +603,7 @@ check_artifact_change_has_implement_log
 
 # 25. メインが実作業を直接行った（#25）: 成果物変更があるのに委譲・証跡の対応がない場合は FAIL
 check_25_main_did_real_work() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
   changed="$(git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -E '(^|/)\.agent-skill-chain/runtime/.*\.md$|(^|/)docs/.*\.md$|(^|/)src/|(^|/)app/' || true)"
@@ -736,7 +740,7 @@ check_code_comment_external_ref() {
 #   （既存 check_review_file_has_verify_log と同方式）。既存の過去レビューを一律に再判定して誤 FAIL させない。
 #   非 git ツリーは SKIP。templates は除外。
 check_review_dual_lists() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   echo "[audit] checking 04_review dual lists (#27)" >&2
   local changed rel f
@@ -765,7 +769,6 @@ check_review_dual_lists() {
 #   （exit 1=非 ignore、exit 128=非 git/エラー は FAIL にしない）。templates は二重除外。
 #   走査は WORKFLOW_SCAN_DIRS（docs/... は追跡対象なので check-ignore 偽 → pass）。
 check_issue_doc_in_gitignored_path() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
   if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   echo "[audit] checking issue docs in gitignored paths (#28)" >&2
