@@ -1,6 +1,6 @@
 # RELEASE / 公開手順（メンテナ向け・正本）
 
-本ドキュメントは marketplace（Claude プラグイン）／apm（Agent Package Manager）配布の**リリース手順の詳細正本**である。README §リリース手順は入口リンクと要約のみを持ち、詳細はここに一本化する（重複させない）。
+本ドキュメントは marketplace（Claude プラグイン）／apm（Agent Package Manager）配布の**リリース手順の詳細正本**である。CONTRIBUTING.md §リリース は入口リンクと要約のみを持ち、詳細はここに一本化する（重複させない）。
 
 > **重要（リリース発火は push 契機・PR レビュー承認をもって人間承認済みとみなす）**
 >
@@ -81,7 +81,7 @@ CI は次の 3 ジョブを直列（`version-bump` → `release-marketplace` →
 
 - [`.agent-skill-chain/source/scripts/sync-version.sh`](../../.agent-skill-chain/source/scripts/sync-version.sh) — version 同期（正本）
 - [`.github/workflows/release.yml`](../../.github/workflows/release.yml) — main push（配布影響 paths 限定）起点の version bump／marketplace／apm リリース CI（`workflow_dispatch` は緊急時の手動代替）
-- [`README.md`](../../README.md) §リリース手順（メンテナ向け） — 入口リンク・要約
+- [`CONTRIBUTING.md`](../../CONTRIBUTING.md) §リリース — 入口リンク・要約
 - [`package.json`](../../package.json)（`files`・`bin`・`publishConfig.access=public`）、[`LICENSE`](../../LICENSE)（MIT）
 - [`docs/maintainer/adapters.md`](./adapters.md) — Claude/Cursor アダプタ生成方式（marketplace 生成物の解説）
 - [`docs/maintainer/apm-package.md`](./apm-package.md) — apm パッケージ生成方式（`.apm/` 生成物の解説）
