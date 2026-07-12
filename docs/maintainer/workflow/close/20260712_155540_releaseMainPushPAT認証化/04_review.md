@@ -9,8 +9,8 @@ document_id: "d0767ed6-40c1-4210-8b97-9a8ab6a3013d"
 **作成日**: 2026 年 07 月 12 日
 **最終更新**: 2026 年 07 月 12 日
 
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
-> **レビュー実施時は [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md) を必ず参照**。レビュー深度: **standard**（既存 CI 設定 1 ジョブの認証入力差し替え＋ドキュメント整合。新規コンポーネント追加なし。変更範囲は 02_設計 §1.1 のとおり限定的）。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **レビュー実施時は [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) を必ず参照**。レビュー深度: **standard**（既存 CI 設定 1 ジョブの認証入力差し替え＋ドキュメント整合。新規コンポーネント追加なし。変更範囲は 02_設計 §1.1 のとおり限定的）。
 
 ---
 
@@ -30,7 +30,7 @@ document_id: "d0767ed6-40c1-4210-8b97-9a8ab6a3013d"
 
 ## 2. 実装内容の確認
 
-**用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+**用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 
 ### 2.1 実装完了タスク（または Issue）
 

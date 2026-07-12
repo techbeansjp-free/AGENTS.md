@@ -32,6 +32,7 @@
 #   (29) 実装前 04（DB 採用時・issue_path スコープで implement/verify ログ 0 件かつ 04 存在）
 #   (31) システム仕様書レビュー証跡欠落（DB・docs/ 採用時・実装変更ログありの 04_review に要=docs/00_review参照/不要=根拠 の内容が無い場合 FAIL）
 #   (32) 実装前 review-docs 未実行検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ review-docs ログ 0 件なら FAIL。#29 と非交差。発効日 grandfather あり）
+#   (33) close 移動未実施検知（DB 採用時・verify-and-close 証跡ありかつ close/ 未移動のトップレベル issue が、発効日以降・猶予超過なら FAIL。#32 と非交差）
 #   (34) 実装前 GitHub Issue 起票ゲート未通過検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter github_issue が null/欠落なら FAIL。#32 と非交差。close/templates/90_issues 配下・GitHub 非採用環境・発効日 grandfather は SKIP）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
@@ -63,6 +64,11 @@
 #      プレフィックスが REVIEWDOCS_GATE_EFFECTIVE_FROM（既定 20260712_000000・env 上書き可）未満なら
 #      grandfather として SKIP（遡及適用しない）。存在監査のみで review-docs と implement の厳密な
 #      時刻順序は監査しない。
+#  33. workflow.db 採用時のみ・issue_path スコープ前方一致で、verify-and-close ログの最新 ts_utc があるのに
+#      close/ 配下へ未移動（04_review.md が close/・templates/・90_issues/ 配下以外に find される）なら FAIL。
+#      発効日 grandfather（CLOSE_MOVE_GATE_EFFECTIVE_FROM・既定 20260712_000000）と猶予日数
+#      （CLOSE_MOVE_GRACE_DAYS・既定 3・ts_utc からの経過日数）のいずれも満たす場合のみ FAIL。ts_utc 解析
+#      不能・証跡なしは fail-open（SKIP）。既存 #32（review-docs 未実行）とは走査対象・判定内容で非交差。
 #  34. workflow.db 採用時のみ・issue_path スコープ前方一致で、implement-feature ログが 1 件以上あるのに
 #      00_要求定義.md frontmatter の github_issue が null/欠落（＝GitHub Issue 起票ゲート未通過）なら
 #      FAIL。既存 #32（review-docs ログの有無）とは検知対象が異なり非交差。issue ディレクトリ名の
@@ -287,6 +293,8 @@ if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
   for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
+    # 完了 issue（close 配下）は in-progress 前提のテスト観点記載要求の対象外（#29/#31/#32 と同型・audit.sh の */close/* ガードと一貫）。
+    [[ "$f" == *"/close/"* ]] && continue
     if ! grep -qE '^## (テスト観点|単体テスト|BDD)$' "$f" 2>/dev/null; then
       echo "FAIL: テスト観点未記載 (03 must have section ## テスト観点 or ## 単体テスト or ## BDD): $f" >&2
       echo "$ROLLBACK_MSG" >&2
@@ -305,6 +313,8 @@ if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
   for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
   while IFS= read -r -d '' f; do
     [[ "$f" == *"/templates/"* ]] && continue
+    # 完了 issue（close 配下）は in-progress 前提の docs 更新要否記載要求の対象外（#29/#31/#32 と同型・audit.sh の */close/* ガードと一貫）。
+    [[ "$f" == *"/close/"* ]] && continue
     if grep -qE '^## docs 更新$' "$f" 2>/dev/null && grep -qE '^- 要否:' "$f" 2>/dev/null; then
       : # OK（対象・理由はテンプレで推奨、要否は必須）
     else
@@ -417,7 +427,7 @@ fi
 # 10. workflow.db の WAL/SHM sidecar が Git 追跡されていないこと（証跡の信頼性・別環境での破損を防ぐ）
 check_sqlite_sidecar() {
   echo "[audit] checking sqlite sidecar files" >&2
-  if [[ ! -d "$PROJECT_ROOT/.git" ]]; then
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then
     return 0
   fi
   if (cd "$PROJECT_ROOT" && git ls-files --error-unmatch "$WORKFLOW_DIR/workflow.db-wal" >/dev/null 2>&1); then
@@ -567,7 +577,7 @@ check_verify_parent_command() {
 
 # 18. 04_review.md 変更があるのに verify-and-close ログが無いなら FAIL（Git リポジトリ。差分範囲は AUDIT_GIT_RANGE または第2引数、未指定時は HEAD~1..HEAD）
 check_review_file_has_verify_log() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -qE '(^|/)\.agent-skill-chain/runtime/.*/04_review\.md$|(^|/)\.agent-skill-chain/runtime/04_review\.md$'; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
@@ -582,7 +592,7 @@ check_review_file_has_verify_log() {
 
 # 19. 成果物変更があるのに implement/design/verify ログが無いなら FAIL（Git リポジトリ。差分範囲は GIT_RANGE）
 check_artifact_change_has_implement_log() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -qE '(^|/)\.agent-skill-chain/runtime/.*\.md$|(^|/)docs/.*\.md$'; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
@@ -606,7 +616,7 @@ check_artifact_change_has_implement_log
 
 # 25. メインが実作業を直接行った（#25）: 成果物変更があるのに委譲・証跡の対応がない場合は FAIL
 check_25_main_did_real_work() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
   changed="$(git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -E '(^|/)\.agent-skill-chain/runtime/.*\.md$|(^|/)docs/.*\.md$|(^|/)src/|(^|/)app/' || true)"
@@ -743,7 +753,7 @@ check_code_comment_external_ref() {
 #   （既存 check_review_file_has_verify_log と同方式）。既存の過去レビューを一律に再判定して誤 FAIL させない。
 #   非 git ツリーは SKIP。templates は除外。
 check_review_dual_lists() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   echo "[audit] checking 04_review dual lists (#27)" >&2
   local changed rel f
@@ -772,7 +782,6 @@ check_review_dual_lists() {
 #   （exit 1=非 ignore、exit 128=非 git/エラー は FAIL にしない）。templates は二重除外。
 #   走査は WORKFLOW_SCAN_DIRS（docs/... は追跡対象なので check-ignore 偽 → pass）。
 check_issue_doc_in_gitignored_path() {
-  [[ ! -d "$PROJECT_ROOT/.git" ]] && return 0
   if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   echo "[audit] checking issue docs in gitignored paths (#28)" >&2
@@ -934,6 +943,53 @@ check_reviewdocs_before_implement() {
   done
 }
 
+# 33. close 移動未実施検知（check_close_move_pending）。
+#   workflow.db に verify-and-close 証跡がありながら close/ 未移動のトップレベル issue を、
+#   発効日以降・猶予超過時に検知して FAIL する（02_設計 ADR-1〜5）。
+#   走査対象は 04_review.md（#29/#31 と同型・unbounded find）。close/・templates/・90_issues/ 配下は
+#   除外する（ADR-5・トップレベル近似。close 配下は移動済み、90_issues 配下はサブ issue 単独完了）。
+#   証跡は workflow_log の verify-and-close 最新 ts_utc を path-component 照合（#29/#32 と同型）で取得する。
+#   grandfather は CLOSE_MOVE_GATE_EFFECTIVE_FROM（既定 20260712_000000・env 上書き可・#32 と同型）。
+#   猶予は CLOSE_MOVE_GRACE_DAYS（既定 3・env 上書き可）で、既存 ts_to_epoch ヘルパーによる
+#   経過日数判定（ADR-3）。sqlite3/DB/workflow_log 不在・ts_utc 解析不能・証跡なしはすべて
+#   fail-open（continue／return 0・ADR-4）。DB・FS への書き込みは一切しない（Query のみ・ADR-CQRS）。
+check_close_move_pending() {
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
+  echo "[audit] checking close-move-pending (#33)" >&2
+  local cutoff="${CLOSE_MOVE_GATE_EFFECTIVE_FROM:-20260712_000000}"
+  local grace_days="${CLOSE_MOVE_GRACE_DAYS:-3}"
+  local _wfd f issue_dir dir dir_esc base base_esc ts vc_ts vc_epoch now_epoch
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *"/templates/"* || "$f" == *"/close/"* || "$f" == *"/90_issues/"* ]] && continue
+      issue_dir="$(dirname "$f")"
+      dir="${issue_dir#$PROJECT_ROOT/}"
+      dir_esc="${dir//\'/\'\'}"
+      base="$(basename "$issue_dir")"
+      base_esc="${base//\'/\'\'}"
+      # grandfather（ADR-3）: issue basename の日時プレフィックスが cutoff 未満なら遡及適用しない。
+      # プレフィックス形式でない issue はカットオフ判定できないため素通りさせる（誤 FAIL を出さない安全側）。
+      if [[ "$base" =~ ^([0-9]{8})_([0-9]{6})_ ]]; then
+        ts="${BASH_REMATCH[1]}_${BASH_REMATCH[2]}"
+        if [[ "$ts" < "$cutoff" ]]; then
+          continue
+        fi
+      fi
+      vc_ts="$(sqlite3 "$WF_DB" "SELECT ts_utc FROM workflow_log WHERE command='verify-and-close' AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') ORDER BY ts_utc DESC LIMIT 1;" 2>/dev/null || true)"
+      [[ -z "$vc_ts" ]] && continue
+      vc_epoch="$(ts_to_epoch "$vc_ts")" || continue
+      now_epoch="$(date +%s)"
+      if (( now_epoch - vc_epoch > grace_days * 86400 )); then
+        echo "FAIL: close 移動未実施（verify-and-close 完了だが close/ 未移動・猶予超過）: $dir" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    done < <(find "$PROJECT_ROOT/$_wfd" -name "04_review.md" -type f -print0 2>/dev/null || true)
+  done
+}
+
 # 34. 実装前 GitHub Issue 起票ゲート未通過検知（check_github_issue_before_implement）。
 #   workflow.db 採用時のみ・issue_path スコープ前方一致で「implement-feature ログが 1 件以上あるのに
 #   00_要求定義.md frontmatter の github_issue が有効な記録でない＝実装前 GitHub Issue 起票ゲートを
@@ -1029,6 +1085,7 @@ check_issue_doc_in_gitignored_path
 check_review_before_implement
 check_docs_review_evidence
 check_reviewdocs_before_implement
+check_close_move_pending
 check_github_issue_before_implement
 
 if [[ $EXIT_CODE -eq 0 ]]; then
