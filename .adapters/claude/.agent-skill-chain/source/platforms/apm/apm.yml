@@ -3,7 +3,7 @@
 # 二重管理禁止: version は sync-version.sh が package.json を正本として同期する（本ファイルの
 # version を直接編集しない）。
 name: agent-skill-chain
-version: 0.1.5
+version: 0.1.6
 # description にはパッケージ管理ディレクトリ名（実装依存の内部パス）を直接埋め込まない。
 description: "正本一式を Claude Code / Cursor / Gemini / Copilot / Codex へ配備するAI実行契約・ワークフロー仕様パッケージ。apm経由ではskillsプリミティブとして個々のスキル、および参照コンテキストとして正本一式（agent-skill-chain-full）を配布する。AGENTS.md/CLAUDE.md本体は引き続きリポジトリ直下の完成ファイルとして配布する。"
 author: TechBeans Inc.
