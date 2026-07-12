@@ -1,0 +1,47 @@
+# EVIDENCE_POLICY.md — 上流フェーズ（要求・要件・設計）でのフィジビリティ確認・ADR 的根拠記録
+
+**責務**: 上流フェーズ（requirement-discovery / design-feature）における①フィジビリティ確認・根拠記録の義務、②ADR 記録形式、③重要判断の定義と規模比例、④inference_only の執筆時顕在化、⑤greenfield 決定の ADR 対象化、を正本として定義する。**evidence_source の 6 分類定義は本ファイルでは再定義しない**。正本は [CONCEPTS.md §外部根拠の必須化](CONCEPTS.md#外部根拠の必須化external-anchor) の 1 か所のみであり、本ファイルはそこへの参照のみを行う。
+
+---
+
+## 節1: 上流フェーズの義務
+
+- requirement-discovery / design-feature を実行するサブエージェントは、執筆対象に**重要判断**（§節3 で定義）が含まれる場合、その判断について**一次情報**（[CONCEPTS.md §外部根拠の必須化](CONCEPTS.md#外部根拠の必須化external-anchor) の evidence_source のうち inference_only 以外）でフィジビリティを確認し、成果物（00/01/02/03）中の当該判断に **evidence_source** を付記すること。
+- 根拠の取得手段（WebFetch・コード grep・実測・テスト実行等）は特定ツールに固定しない（ランタイム非依存）。外部ネットワークアクセスが不能なランタイムでは、到達可能な evidence_source（existing_code / observed_runtime / test_output 等）で代替し、いずれも到達不能な場合は inference_only として顕在化させる（§節4）。
+- 一次情報調査で高リスク操作（外部サービスへの書き込み・大量削除等）を行う場合は、既存の事前確認ルール（CORE / RULES / enforcement）に**従う**（本ポリシーはこれを緩和しない）。
+
+## 節2: ADR 記録形式
+
+- 重要判断は、以下を最小集合とする ADR（Architecture Decision Records）的形式で記録する。
+  1. **コンテキスト**: なぜこの判断が必要か。
+  2. **検討した選択肢**: 比較した候補（2 案以上が望ましい）。
+  3. **決定**: 採用した選択肢。
+  4. **根拠**: 決定に至った理由（**evidence_source 付き**。分類は CONCEPTS.md を参照）。
+  5. **帰結**: この決定によって何が確定し、何に影響するか。
+- 本形式は `.agent-skill-chain/runtime/templates/02_設計.md` の「横断設計判断（ADR）」節から参照される（02 設計に限らず、00/01 の重要判断にも同形式を適用してよい）。
+
+## 節3: 重要判断の定義 + 規模比例の軽量パス
+
+- **重要判断**とは、採否がその issue の成果物の構造・実現可能性・後続フェーズを左右する判断を指す。代表例: 技術選定、外部依存の採用、既存資産の変更方針、要件の除外、greenfield プロジェクトの土台決定（§節5）。
+- 重要判断を**含まない**軽量 issue（例: 誤字修正・表現整理等）では、evidence_source の網羅的な付記や一次情報調査の強制は行わない。既存テンプレートの必須セクション充足のみで完了してよい（軽量パス）。
+- 本節の規模比例の考え方は [CONTEXT_EFFICIENCY.md §適用のスケーリング](CONTEXT_EFFICIENCY.md) の規模比例の思想と整合する（過剰適用の回避）。
+
+## 節4: inference_only のみの重要判断の執筆時顕在化
+
+- 重要判断の根拠が **inference_only のみ**（一次情報に当たれなかった推論のみ）である場合、成果物中でその判断が **「要人間確認」** である旨を明示すること。
+- この原則自体の正本は [CONCEPTS.md §外部根拠の必須化](CONCEPTS.md#外部根拠の必須化external-anchor)（「inference_only のみの重要判断は承認不可または要注意」）であり、本節はこれを**上流の執筆プロセス（process）に接続するのみ**で再定義しない。
+- **process と event の役割分担**: 本ファイル（EVIDENCE_POLICY.md）は執筆時点（process）の義務を定義する。[commands/verify-and-close.md](commands/verify-and-close.md) は事後（event）の検証を担う。両者は重複定義なく共存し、二重の安全網として機能する。verify-and-close 側は本 issue で変更しない。
+
+## 節5: greenfield プロジェクトのアーキテクチャ・コーディング規約・ディレクトリ構成決定
+
+- まだ開発環境・規約が定まっていない greenfield プロジェクトにおける**アーキテクチャ・コーディング規約・ディレクトリ構成の決定**は、重要判断の代表例として ADR 形式（§節2）での記録対象に含める。
+- これらの決定の記録は、[spec/00_spec概要.md §spec と docs の違い](spec/00_spec概要.md) の役割分担に従い、**プロジェクト個別の docs 側**（当該プロジェクトの `docs/`）に位置づける。`.agent-skill-chain/source/spec/`（全プロジェクト共通の汎用設計原則）を ADR が**上書きすることはない**。
+
+---
+
+## 参照
+
+- [CONCEPTS.md §外部根拠の必須化](CONCEPTS.md#外部根拠の必須化external-anchor) — evidence_source 6 分類・inference_only 原則の正本（本ファイルでは再定義しない）
+- [CONTEXT_EFFICIENCY.md](CONTEXT_EFFICIENCY.md) §適用のスケーリング — 規模比例の思想
+- [commands/verify-and-close.md](commands/verify-and-close.md) — event（事後検証）側。本ファイルは process（執筆時）側を担う
+- [spec/00_spec概要.md](spec/00_spec概要.md) — spec と docs の役割分担（greenfield 決定の記録先）

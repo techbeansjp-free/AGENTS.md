@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENTS_ROOT=\"${CLAUDE_PLUGIN_ROOT}/.agent-skill-chain/source\" AGENT_ROLE=\"${AGENT_ROLE:-orchestrator}\" bash \"${CLAUDE_PLUGIN_ROOT}/.agent-skill-chain/source/enforcement/claude/PreToolUse.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENTS_ROOT=\"${CLAUDE_PLUGIN_ROOT}/.agent-skill-chain/source\" bash \"${CLAUDE_PLUGIN_ROOT}/.agent-skill-chain/source/enforcement/claude/PostToolUse.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
