@@ -546,6 +546,183 @@ else
 fi
 
 # =====================================================================================
+# #33 close 移動未実施検知（check_close_move_pending）の回帰テスト
+#   tmp 隔離（mktemp -d）。本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db は変更しない。
+#   参照: docs/maintainer/workflow/20260712_181917_close移動監査強制/03_実装計画.md §2.2
+# =====================================================================================
+echo "== #33 close 移動未実施検知 =="
+
+if command -v sqlite3 >/dev/null 2>&1; then
+  # シナリオ1: 発効日以降・猶予超過・close 未移動 → FAIL（S1）
+  # Given: 発効日以降(20260801)の issue に 04_review.md と、猶予日数(既定3日)より古い verify-and-close ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "close 移動未実施" の FAIL が出る
+  S33_1_TREE="$(make_min_tree)"
+  S33_1_ISS="docs/maintainer/workflow/20260801_120000_pending_close"
+  mkdir -p "$S33_1_TREE/$S33_1_ISS"
+  : > "$S33_1_TREE/$S33_1_ISS/04_review.md"
+  S33_1_DB="$S33_1_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S33_1_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S33_1_OLD_TS="$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S33_1_DB" "INSERT INTO workflow_log VALUES ('e1','verify-and-close','$S33_1_ISS/','$S33_1_OLD_TS');" 2>/dev/null
+  S33_1_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_1_TREE" 2>&1)"
+  if grep -q "close 移動未実施" <<< "$S33_1_OUT"; then
+    ok "#33 猶予超過・発効日以降・未移動で FAIL する（S1）"
+  else
+    ng "#33 S1 で FAIL しなかった（見逃し）: $S33_1_OUT"
+  fi
+
+  # シナリオ2: 猶予期間内の未移動 → 検知しない（S2）
+  # Given: 発効日以降の issue に 04_review.md と、現在時刻に近い verify-and-close ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "close 移動未実施" の FAIL を出力しない
+  S33_2_TREE="$(make_min_tree)"
+  S33_2_ISS="docs/maintainer/workflow/20260801_120000_recent_close"
+  mkdir -p "$S33_2_TREE/$S33_2_ISS"
+  : > "$S33_2_TREE/$S33_2_ISS/04_review.md"
+  S33_2_DB="$S33_2_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S33_2_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S33_2_RECENT_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S33_2_DB" "INSERT INTO workflow_log VALUES ('e1','verify-and-close','$S33_2_ISS/','$S33_2_RECENT_TS');" 2>/dev/null
+  S33_2_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_2_TREE" 2>&1)"
+  if ! grep -q "close 移動未実施" <<< "$S33_2_OUT"; then
+    ok "#33 猶予内は FAIL しない（S2）"
+  else
+    ng "#33 S2 で誤って FAIL した: $S33_2_OUT"
+  fi
+
+  # シナリオ3: basename prefix が発効日未満 → grandfather SKIP（S3）
+  # Given: 発効日未満(20260101)の issue に 04_review.md と猶予超過の verify-and-close ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "close 移動未実施" の FAIL を出力しない（遡及適用なし）
+  S33_3_TREE="$(make_min_tree)"
+  S33_3_ISS="docs/maintainer/workflow/20260101_000000_old_issue"
+  mkdir -p "$S33_3_TREE/$S33_3_ISS"
+  : > "$S33_3_TREE/$S33_3_ISS/04_review.md"
+  S33_3_DB="$S33_3_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S33_3_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S33_3_OLD_TS="$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S33_3_DB" "INSERT INTO workflow_log VALUES ('e1','verify-and-close','$S33_3_ISS/','$S33_3_OLD_TS');" 2>/dev/null
+  S33_3_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 bash "$AUDIT" "$S33_3_TREE" 2>&1)"
+  if ! grep -q "close 移動未実施" <<< "$S33_3_OUT"; then
+    ok "#33 grandfather SKIP（発効日未満 issue は FAIL しない・S3）"
+  else
+    ng "#33 grandfather が機能せず遡及 FAIL した: $S33_3_OUT"
+  fi
+
+  # シナリオ4: close/ 配下に在籍（find 対象外）→ 検知しない（S4）
+  # Given: close/ 配下の issue に 04_review.md と猶予超過の verify-and-close ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "close 移動未実施" の FAIL を出力しない
+  S33_4_TREE="$(make_min_tree)"
+  S33_4_ISS="docs/maintainer/workflow/close/20260801_120000_already_closed"
+  mkdir -p "$S33_4_TREE/$S33_4_ISS"
+  : > "$S33_4_TREE/$S33_4_ISS/04_review.md"
+  S33_4_DB="$S33_4_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S33_4_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S33_4_OLD_TS="$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S33_4_DB" "INSERT INTO workflow_log VALUES ('e1','verify-and-close','$S33_4_ISS/','$S33_4_OLD_TS');" 2>/dev/null
+  S33_4_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_4_TREE" 2>&1)"
+  if ! grep -q "close 移動未実施" <<< "$S33_4_OUT"; then
+    ok "#33 close 済み issue は FAIL しない（S4）"
+  else
+    ng "#33 close 除外が効いていない: $S33_4_OUT"
+  fi
+
+  # シナリオ6: 90_issues/ 配下のサブ issue は検知対象外（S6）
+  # Given: 90_issues 配下のサブ issue に 04_review.md と猶予超過の verify-and-close ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "close 移動未実施" の FAIL を出力しない（top-level 近似で除外）
+  S33_6_TREE="$(make_min_tree)"
+  S33_6_ISS="docs/maintainer/workflow/20260801_120000_parent/90_issues/20260801_120000_sub"
+  mkdir -p "$S33_6_TREE/$S33_6_ISS"
+  : > "$S33_6_TREE/$S33_6_ISS/04_review.md"
+  S33_6_DB="$S33_6_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S33_6_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S33_6_OLD_TS="$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S33_6_DB" "INSERT INTO workflow_log VALUES ('e1','verify-and-close','$S33_6_ISS/','$S33_6_OLD_TS');" 2>/dev/null
+  S33_6_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_6_TREE" 2>&1)"
+  if ! grep -q "close 移動未実施" <<< "$S33_6_OUT"; then
+    ok "#33 90_issues 配下のサブ issue は FAIL しない（S6）"
+  else
+    ng "#33 90_issues 除外が効いていない: $S33_6_OUT"
+  fi
+
+  # 回帰: verify-and-close 証跡なし（他 command のみ）→ FAIL しない
+  # Given: 発効日以降の issue に 04_review.md と implement-feature ログのみ（verify-and-close 無し）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "close 移動未実施" の FAIL を出力しない（未完了）
+  S33_7_TREE="$(make_min_tree)"
+  S33_7_ISS="docs/maintainer/workflow/20260801_120000_not_reviewed"
+  mkdir -p "$S33_7_TREE/$S33_7_ISS"
+  : > "$S33_7_TREE/$S33_7_ISS/04_review.md"
+  S33_7_DB="$S33_7_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S33_7_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S33_7_OLD_TS="$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S33_7_DB" "INSERT INTO workflow_log VALUES ('e1','implement-feature','$S33_7_ISS/','$S33_7_OLD_TS');" 2>/dev/null
+  S33_7_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_7_TREE" 2>&1)"
+  if ! grep -q "close 移動未実施" <<< "$S33_7_OUT"; then
+    ok "#33 verify-and-close 証跡なしは FAIL しない（未完了）"
+  else
+    ng "#33 証跡なしでも誤って FAIL した: $S33_7_OUT"
+  fi
+
+  # 回帰: ts_utc 解析不能（不正文字列）でも誤 FAIL しない（fail-open・ADR-4）
+  # Given: 発効日以降の issue に 04_review.md と、ts_utc が不正文字列の verify-and-close ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "close 移動未実施" の FAIL を出力しない（ts_to_epoch 失敗で continue）
+  S33_8_TREE="$(make_min_tree)"
+  S33_8_ISS="docs/maintainer/workflow/20260801_120000_bad_ts"
+  mkdir -p "$S33_8_TREE/$S33_8_ISS"
+  : > "$S33_8_TREE/$S33_8_ISS/04_review.md"
+  S33_8_DB="$S33_8_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S33_8_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  sqlite3 "$S33_8_DB" "INSERT INTO workflow_log VALUES ('e1','verify-and-close','$S33_8_ISS/','not-a-valid-timestamp');" 2>/dev/null
+  S33_8_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_8_TREE" 2>&1)"
+  if ! grep -q "close 移動未実施" <<< "$S33_8_OUT"; then
+    ok "#33 ts_utc 解析不能は誤 FAIL しない（fail-open）"
+  else
+    ng "#33 ts_utc 不正でも FAIL した: $S33_8_OUT"
+  fi
+
+  # 回帰: prefix 非準拠命名の issue で誤 FAIL しない場合の判定（grandfather スキップし DB＋猶予で判定）
+  # Given: basename が YYYYMMDD_HHMMSS_ プレフィックス非準拠・猶予内の verify-and-close ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  grandfather 判定はスキップされるが猶予内のため FAIL を出力しない
+  S33_9_TREE="$(make_min_tree)"
+  S33_9_ISS="docs/maintainer/workflow/non_standard_name"
+  mkdir -p "$S33_9_TREE/$S33_9_ISS"
+  : > "$S33_9_TREE/$S33_9_ISS/04_review.md"
+  S33_9_DB="$S33_9_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S33_9_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S33_9_RECENT_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S33_9_DB" "INSERT INTO workflow_log VALUES ('e1','verify-and-close','$S33_9_ISS/','$S33_9_RECENT_TS');" 2>/dev/null
+  S33_9_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_9_TREE" 2>&1)"
+  if ! grep -q "close 移動未実施" <<< "$S33_9_OUT"; then
+    ok "#33 prefix 非準拠命名でも猶予内は誤 FAIL しない"
+  else
+    ng "#33 prefix 非準拠命名で誤 FAIL した: $S33_9_OUT"
+  fi
+else
+  echo "  [SKIP] #33 close 移動未実施検知の回帰（sqlite3 不在）"
+fi
+
+# シナリオ5: DB 非採用 SKIP（sqlite3/DB 無し）
+# Given: workflow.db を作らない最小ツリー（verify-and-close ログが存在しえない）
+# When:  audit.sh <tmp> を実行する
+# Then:  #33 の FAIL は出ない（DB 非採用は SKIP）
+S33_5_TREE="$(make_min_tree)"
+S33_5_ISS="docs/maintainer/workflow/20260801_120000_nodb"
+mkdir -p "$S33_5_TREE/$S33_5_ISS"
+: > "$S33_5_TREE/$S33_5_ISS/04_review.md"
+S33_5_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_5_TREE" 2>&1)"
+if ! grep -q "close 移動未実施" <<< "$S33_5_OUT"; then
+  ok "#33 DB 非採用 SKIP（sqlite3/DB 無しで FAIL しない・S5）"
+else
+  ng "#33 DB 非採用でも FAIL した: $S33_5_OUT"
+fi
+
+# =====================================================================================
 # #31 システム仕様書レビュー証跡欠落検知（check_docs_review_evidence）の tmp 隔離回帰テスト
 #   tmp 隔離（mktemp -d）。本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db は変更しない。
 #   参照: docs/maintainer/workflow/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/
