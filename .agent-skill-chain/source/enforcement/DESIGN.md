@@ -50,6 +50,8 @@ orchestrator が「実作業をしない」「run_command 経由のみ」から�
 
 **偽装耐性と限界（ADR-2）**: `agent_id` は**ハーネス注入（エージェント非制御領域）であり自己申告できない**。エージェントは hook stdin のトップレベルを構築できず（制御できるのは `tool_input` の中身のみ）、`export` 可能な env 昇格 twin（`CLAUDE_AGENT_ID` 等）は意図的に設けない。ゆえに素朴な `export AGENT_ROLE=worker` では orchestrator 制限を外せない。ただし C-4b（scribe nonce）と同種の限界があり、hook 入力構築を完全に掌握できる相手への完全防御ではない。最終保証は CI audit（#25）＋外部証跡が担う。scribe（nonce 検証済み）は `agent_id` を伴っても最優先で判定され、worker allow へ落ちず R5（write-workflow-log 単独のみ）を維持する。
 
+**R1（path 軸）との非対称は意図的（誤診断防止のための明記）**: 上記の `IS_SUBAGENT` によるロール軸の判定（R2・R3(b)）とは別に、PreToolUse.sh の R1 は `.agent-skill-chain/runtime/` 配下への直接 Write/Edit を **IS_SUBAGENT の値に関わらず全 ROLE 一律で block** する（path 軸のガード）。これは、runtime/ 配下に timestamp をシステム時計へ固定すべき memo（§Orchestrator 逸脱の検知「timestamp 付き memo の自由生成」行）と書記のみが書く workflow.db が含まれるためであり、R1 が subagent を除外すると当該保護が worker 経路で破れることを防ぐための意図的設計である。R1（path 軸・全 ROLE）と R2/R3(b)（role 軸・subagent 除外）は**目的の異なる独立ガード**であり、非対称そのものはバグではない。subagent が runtime/ 配下へ内容を書く正規ルートは、R3(b) が許可する Bash 経由（heredoc/cp/new-workflow-memo.sh 等）である。
+
 ---
 
 ## 系統D: hooks overlay 配備の設計思想（`.agent-skill-chain/project/` 優先）

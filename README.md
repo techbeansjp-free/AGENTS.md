@@ -92,13 +92,13 @@ phase に紐づく実行単位。次の 6 種がある。
 
 ## 導入（プロジェクトへ配備するとき）
 
-導線は **apm install（一次配布導線）**・**npx github:techbeansjp-free/AGENTS.md init（開発者・自己拡張向け補助導線・GitHub 直接参照）**・**Claude marketplace（副導線）** の 3 つ。**基本は `apm install` を推奨する。**
+導線は **npx github:techbeansjp-free/AGENTS.md init（推奨・GitHub 直接参照）**・**apm install（バンドル参照・複数ツール横断配布向けの副導線）**・**Claude marketplace（副導線）** の 3 つ。**基本は `npx github:techbeansjp-free/AGENTS.md init` を推奨する。**
 
-> CLI コマンド名は `agents-md`。`apm install` は npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得する。
+> CLI コマンド名は `agents-md`。`npx github:owner/repo` は npm レジストリを経由せず GitHub リポジトリを直接参照する記法。`apm install` も同様に npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得するが、展開するのは skills のバンドル参照のみで CLI バイナリ（`agents-md`）は導入しない。
 
-開発者・自己拡張向けの GitHub 直接参照配備は [CONTRIBUTING.md](CONTRIBUTING.md) を参照。
+`npx` 経由の GitHub 直接参照配備の具体的な手順は [CONTRIBUTING.md](CONTRIBUTING.md) に記載する（開発者・自己拡張・メンテナ向けの追加情報も同ファイルに集約）。
 
-### apm 経由（推奨）
+### apm 経由（バンドル参照・複数ツール横断配布向け）
 
 [`microsoft/apm`](https://github.com/microsoft/apm)（Agent Package Manager）で配布する。`apm` CLI を導入したうえで、採用先プロジェクトのルートで次を実行する。
 

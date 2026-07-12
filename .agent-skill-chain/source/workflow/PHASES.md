@@ -63,6 +63,7 @@
 - **ドキュメントレビュー「完了」の定義**: 完了とは **(1) memo 作成 (2) 指摘がなくなるまでの修正反復 (3) 書記委譲**の**すべて**を指す。**(3) を実施するまで「完了」とみなしてはならない**。書記委譲を省略してユーザーに報告のみして終了することは禁止（enforcement §失敗条件 #23）。
 - **ユーザーが「レビュー用の指示文だけ教えて」等と明示した場合を除き、ドキュメントレビュー依頼は常に本ルール（memo への記録＋指摘がなくなるまでの反復＋書記委譲）を適用すること**。レビュー本文やサマリだけを返して memo・書記を省略することを禁止する（enforcement §失敗条件 #22–#23 と整合させる）。
 - **review-docs は補助手順（auxiliary）であり phase→command 表には載せない**: 実装前ドキュメントレビューの command [review-docs](../commands/review-docs.md) は特定 phase に対応しない横断的な補助手順であり、`create-pr-review-issue` の内部 step やユーザーの「ドキュメントレビューして」依頼から呼ばれる。[PHASE_COMMAND_MAP.md §補助手順（auxiliary）](PHASE_COMMAND_MAP.md#phase--command-一覧) の注記と一致させる（同表の「本表にない command の起動は禁止」は phase からの選択経路に関する禁止であり、補助手順の呼び出しは対象外）。**ただし review-docs は design-feature（設計・実装計画）完了と implement-feature 着手の間の必須ゲートであり（全 issue 一律・規模比例の免除なし）、「auxiliary（表に載らない）」は「任意・省略可」を意味しない。** 委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
+- **GitHub Issue 起票ゲートは review-docs 完了後・implement-feature 着手前の必須ゲート**: review-docs 完了後・implement-feature 着手前に、対応 GitHub Issue の記録（00_要求定義.md frontmatter の `github_issue` に実 Issue 番号、**または** 意図的に起票しない決定の理由付き記録 `"declined: <理由>"`）を必須とする（トップレベル issue のみ・**デフォルトは起票**・GitHub 非採用環境は非発火）。強度は「デフォルト起票＋理由付き記録による代替経路あり」であり、review-docs ゲートの「一律・免除なし」とは異なる（代替経路は免除ではなく、記録なし・理由なしのスキップは不可）。**本ゲートは review-docs 完了の定義（memo＋指摘収束＋書記委譲・上記）を再定義せず、その直後に独立した 1 段として追加するのみ**である。委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #34 を参照。
 
 ---
 
@@ -75,7 +76,11 @@
 - **close ステップ**: verify-and-close 完了後にトップレベル完了が確認できたら、当該トップレベル issue ディレクトリ（配下のサブ issue を含む）をワークフローの `close/` ディレクトリ配下へ移動する。
 - **配置先（一般）**: ワークフロールート直下の `close/` ディレクトリ（消費者ランタイムでは `.agent-skill-chain/runtime/close/<issue>/`）。
 - **自己拡張（本リポ）の配置先**: `docs/maintainer/workflow/close/<issue>/`。詳細は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../.agent-skill-chain/project/自己拡張ワークフロー.md) §完了 issue の close 移動（上書き）を参照。
+- **移動の検知（汎用原則）**: close 移動は妥当な期間内に行われるべきであり、CI（`enforcement/ci/audit.sh` #33）で検知可能にする。具体閾値（発効日・猶予日数）・具体パスはコアに持ち込まず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。
 - 移動は**完了状態の整理のみ**を目的とし、close 後も証跡（04_review.md・workflow.db ログ）はそのまま残す。書記記録の書き換え・削除はしない。
+- **移動に伴う相対リンクの深度補正（原則）**: close への移動は、issue ディレクトリの階層を **1 段深くする**操作である。issue 成果物（00〜04・memo 等）内の相対リンクのうち、**issue ディレクトリの外**（リポジトリルート配下等）を指すものは、移動によって基準ディレクトリの深度が変わるため**補正が必要**である。一方、**同一 issue ディレクトリ内の相互参照**（兄弟ファイル間・配下 memo 等）は移動後も相対位置が変わらないため**補正不要**である。
+- **検証は必ず移動前に行う（強制）**: リンク補正の妥当性検証は、成果物がまだ**元の場所にある間**に完了させ、補正後の内容を確定してから移動を実行すること。**移動後の close 配下に対してファイル読み取り・grep・glob 等による検証を行う設計にしてはならない**。当該ディレクトリへの読み取りアクセスを制限する環境設定がありうるため、移動後検証に依存する手順は環境によって実行不能になる。リンク補正・検証は、ファイルがまだ元の場所にある間に完了させ、補正後の内容を確定してから移動を実行すること。
+- **具体手順の委譲**: 具体的な補正手順・検証手段（コマンド・パス）はコアに置かず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。自己拡張（本リポ）の具体化は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../.agent-skill-chain/project/自己拡張ワークフロー.md) §close 移動時の相対リンク補正 を参照。
 
 ---
 
