@@ -56,19 +56,12 @@ marketplace 配布ではプラグイン生成物 `.adapters/claude/` がイン�
 
 **フロー（[.github/workflows/release.yml](../../.github/workflows/release.yml)）**
 
-1. 保守者が `package.json` / `plugin.json` の version を揃える（`bash .agent-skill-chain/source/scripts/sync-version.sh --write`）。
-2. version と一致するタグ（例 `v0.1.0`）を push する。
-3. `release.yml` がタグ push を検知し、2 系統を実行する:
-   - **(A) npm publish ジョブ（`npm-publish`）**:
-     - **version 同期検証**: タグ `vX.Y.Z` ＝ `package.json.version` ＝ `plugin.json.version`（不一致なら fail）。
-     - **配布物リーク検査**: `verify-npm-pack.sh`（tarball にリポ固有物が漏れず必須物がある）。
-     - **NPM_TOKEN ゲート**: secret `NPM_TOKEN` が未設定なら publish を skip（未設定では発火しない）。
-     - **publish**: `npm publish --access public`（scoped public、`publishConfig.access=public`）。認証は `NODE_AUTH_TOKEN=${{ secrets.NPM_TOKEN }}`。
-   - **(B) marketplace ジョブ（`release`）**:
-     - **version 同期検証**: 上と同じ一致検証。
-     - **生成**: `build-adapters.sh claude cursor` で正本 `.agent-skill-chain/source/` から `.adapters/` を生成。
-     - **再生成 diff ゼロ**: もう一度生成しても同一（決定性）であることを検証。
-     - **公開**: 生成物 `.adapters/claude`（＋cursor）と `marketplace.json` を専用ブランチ **`release/marketplace`** へ commit/push。
+1. 保守者が version を揃える（`bash .agent-skill-chain/source/scripts/sync-version.sh --write`）。詳細は [`docs/maintainer/RELEASE.md`](./RELEASE.md)。
+2. [`release.yml`](../../.github/workflows/release.yml) の `workflow_dispatch` を手動起動し、リポジトリ変数 `RELEASE_ENABLED=true` を設定する（両方を満たしたときのみ実行）。
+3. `release.yml` が 3 ジョブを直列（`version-bump` → `release-marketplace` → `apm-release`）に実行する:
+   - **`version-bump`**: `package.json` の semver patch を +1 し `plugin.json`・`apm.yml` へ従属同期して main へ書き戻す。続けて日時タグ `vYYYYMMDD.HHMMSS` と GitHub Release（自動生成ノート）を作成する。
+   - **`release-marketplace`**: `build-adapters.sh claude cursor` で正本 `.agent-skill-chain/source/` から `.adapters/` を生成し、再生成 diff ゼロ（決定性）を検証して生成物 `.adapters/claude`（＋cursor）と `marketplace.json` を専用ブランチ **`release/marketplace`** へ commit/push する。
+   - **`apm-release`**: 正本から apm パッケージ（`apm.yml`・`.apm/`）を生成し `release/apm` ブランチへ公開して `apm-vX.Y.Z` タグを付与する（詳細は [`apm-package.md`](./apm-package.md)）。
 
 **marketplace.json の `source` 解決**
 
@@ -80,14 +73,11 @@ marketplace 登録時は当該リリースブランチ/タグ時点のツリー�
 
 | 項目 | 既定 |
 |------|------|
-| トリガ | タグ push `v*`（例 `v0.1.0`） |
-| npm パッケージ | `agent-skill-chain`（unscoped public / npmjs.com、`publishConfig.access=public`。CLI コマンド名は `agents-md`） |
+| トリガ | `workflow_dispatch`（手動起動・`RELEASE_ENABLED=true` のときのみ実行） |
+| パッケージ名 | `agent-skill-chain`（`package.json` の name。CLI コマンド名は `agents-md`。配布は GitHub 直接参照／apm 経由） |
 | リリースブランチ | `release/marketplace` |
 | version 正本 | `package.json`（`plugin.json` は従属。`sync-version.sh` で同期） |
 | LICENSE | MIT（`Copyright (c) 2026 TechBeans Inc.`） |
-
-> npm publish は `release.yml` の `npm-publish` ジョブで配線済み。`NPM_TOKEN` secret によるゲートで保護し、
-> 未設定なら publish step を skip する（ユーザーが `NPM_TOKEN` を設定し `v*` タグを push したときのみ発火）。
 
 ## cursor/ ・ gemini/（将来）
 

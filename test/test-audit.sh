@@ -292,6 +292,53 @@ else
 fi
 
 # =====================================================================================
+# #26 コメント外部参照禁止（check-comment-refs.sh への委譲）の回帰テスト
+#   tmp 隔離（make_min_tree が tmp を作る）。本開発リポの追跡物は読み取りのみ。
+#   委譲先スクリプトは audit.sh 自身の位置基準（enforcement/ci/ 同居）で解決される。
+# =====================================================================================
+echo "== #26 コメント外部参照禁止（委譲）回帰 =="
+
+# シナリオ: src 配下のコメント違反を従来どおり FAIL にする
+# Given: tmp 隔離ツリーの src/foo.sh に "# DESIGN.md §3 参照" というコメントがある
+# When:  audit.sh を当該ツリーに対して実行する
+# Then:  出力に "FAIL: コメント外部参照禁止違反" と "src/foo.sh" が含まれ、終了コードが 1
+C26_TREE="$(make_min_tree)"
+mkdir -p "$C26_TREE/src"
+printf '%s\n' '# DESIGN.md §3 参照' > "$C26_TREE/src/foo.sh"
+C26_OUT="$(bash "$AUDIT" "$C26_TREE" 2>&1)"; C26_RC=$?
+if grep -q 'FAIL: コメント外部参照禁止違反' <<< "$C26_OUT" && grep -q 'src/foo.sh' <<< "$C26_OUT" && [[ $C26_RC -eq 1 ]]; then
+  ok "#26 src 配下の違反を委譲経由で FAIL 検出（exit 1）"
+else
+  ng "#26 委譲経由の FAIL 検出に失敗（rc=$C26_RC）: $C26_OUT"
+fi
+
+# シナリオ: src/app/components が無いツリーでは何も検出しない（既定挙動維持）
+# Given: ソースディレクトリを一切持たない最小ツリー
+# When:  audit.sh を実行する
+# Then:  #26 由来の FAIL を出さない
+C26B_TREE="$(make_min_tree)"
+C26B_OUT="$(bash "$AUDIT" "$C26B_TREE" 2>&1)"
+if ! grep -q 'FAIL: コメント外部参照禁止違反' <<< "$C26B_OUT"; then
+  ok "#26 ソースディレクトリ不在では無検出（既定挙動維持）"
+else
+  ng "#26 ソースディレクトリ不在でも FAIL した: $C26B_OUT"
+fi
+
+# シナリオ: CODE_COMMENT_SRC_DIRS 上書きが機能する
+# Given: custom/bar.py に "# 第3章 を参照" を置き、CODE_COMMENT_SRC_DIRS=custom を指定
+# When:  audit.sh を実行する
+# Then:  custom/bar.py が違反として検出される
+C26C_TREE="$(make_min_tree)"
+mkdir -p "$C26C_TREE/custom"
+printf '%s\n' '# 第3章 を参照' > "$C26C_TREE/custom/bar.py"
+C26C_OUT="$(CODE_COMMENT_SRC_DIRS=custom bash "$AUDIT" "$C26C_TREE" 2>&1)"
+if grep -q 'custom/bar.py' <<< "$C26C_OUT"; then
+  ok "#26 CODE_COMMENT_SRC_DIRS 上書きで custom 配下を検出"
+else
+  ng "#26 CODE_COMMENT_SRC_DIRS 上書きが機能しない: $C26C_OUT"
+fi
+
+# =====================================================================================
 # GIT_RANGE インジェクション是正（MEDIUM）: 不正 range の無害化・正当 range の非破壊
 # =====================================================================================
 echo "== GIT_RANGE 検証（git オプション注入の無害化・正当 range 非破壊） =="

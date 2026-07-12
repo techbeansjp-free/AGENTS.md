@@ -8,13 +8,13 @@
 
 ## なぜ apm 経由の配布か
 
-- 本パッケージは npm 公開を取りやめ（`docs/maintainer/RELEASE.md` §5 参照）、`apm install` を一次配布導線とする（README.md §導入）。
+- 本パッケージは `apm install` を一次配布導線とする（README.md §導入）。
 - `.agent-skill-chain/source/` は**ツール非依存の共通仕様**であり、apm はスキル等のプリミティブを複数ハーネス（Claude/Cursor/Gemini/Copilot/Codex 等）へ横断的に配布できる仕組みを提供する。
 - 既存の `.adapters/`（Claude/Cursor 向け生成物・`release/marketplace` ブランチ）とは独立したチャネルとして共存する（互いに変更しない。02_設計 §2.1.2）。
 
 ## v1 スコープ（skills のみ）
 
-**v1 では skills プリミティブのみを apm ネイティブに配備する。** agents（`.apm/agents/*.agent.md`）・commands/prompts（`.apm/prompts/*.prompt.md`）・instructions（`.apm/instructions/*.instructions.md`）・hooks（`.apm/hooks/*.json`）への個別分解は、意味論的な差異（消費モデルの違い・コンパイル方式の違い等）を理由に本 v1 の対象外とし、後続 issue へ申し送る。詳細な根拠は [npm 公開中止・APM 転換 issue の 02_設計.md §2.6.5・§9.2](../maintainer/workflow/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/20260711_024021_npm公開中止_APM転換/02_設計.md#265-v1-スコープをスキルのみに限定する理由agentspromptscommandsinstructionshooks-を対象外とする根拠) を参照。
+**v1 では skills プリミティブのみを apm ネイティブに配備する。** agents（`.apm/agents/*.agent.md`）・commands/prompts（`.apm/prompts/*.prompt.md`）・instructions（`.apm/instructions/*.instructions.md`）・hooks（`.apm/hooks/*.json`）への個別分解は、意味論的な差異（消費モデルの違い・コンパイル方式の違い等）を理由に本 v1 の対象外とし、後続 issue へ申し送る。詳細な根拠は [npm 公開中止・APM 転換 issue の 02_設計.md §2.6.5・§9.2](../maintainer/workflow/close/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/20260711_024021_npm公開中止_APM転換/02_設計.md#265-v1-スコープをスキルのみに限定する理由agentspromptscommandsinstructionshooks-を対象外とする根拠) を参照。
 
 「`.agents/` 一式が展開できる」という受け入れ基準を満たすため、正本一式（`.agent-skill-chain/source/`）を 1 つの skill バンドル `agent-skill-chain-full` として同梱している（§2 参照）。
 
@@ -83,7 +83,7 @@ rm -rf "$A" "$B"
 3. `apm.yml`・`.apm/` を **`release/apm`** ブランチへ commit/push する。
 4. 同一コミットに **`apm-vX.Y.Z`**（`X.Y.Z` は `package.json` の version）タグを付与する。
 
-`apm-release` ジョブは既存 `release-npm`/`release-marketplace` ジョブと**完全に同一の dormant ゲート**（`github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'`。かつ `workflow_dispatch` のみがトリガ）配下にあり、現状は自動発火しない。再開手順は [`docs/maintainer/RELEASE.md`](./RELEASE.md) §5 を参照。
+`apm-release` ジョブは `release-marketplace` ジョブと同一の実行ゲート（`github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'`。トリガは `workflow_dispatch` のみ）配下にある。リリース手順は [`docs/maintainer/RELEASE.md`](./RELEASE.md) を参照。
 
 消費者向けの install コマンド（README.md §導入）:
 
@@ -97,6 +97,6 @@ apm install techbeansjp-free/AGENTS.md#apm-v0.1.0             # 特定版（タ�
 - [`.agent-skill-chain/source/scripts/build-adapters.sh`](../../.agent-skill-chain/source/scripts/build-adapters.sh)（`adapter_apm()`）
 - [`.agent-skill-chain/source/scripts/sync-version.sh`](../../.agent-skill-chain/source/scripts/sync-version.sh)
 - [`.agent-skill-chain/source/platforms/apm/apm.yml`](../../.agent-skill-chain/source/platforms/apm/apm.yml) — 手書き正本
-- [`docs/maintainer/RELEASE.md`](./RELEASE.md) — リリース手順（version 同期・dormant ゲート・再開手順）
+- [`docs/maintainer/RELEASE.md`](./RELEASE.md) — リリース手順（version 同期・リリース実行手順）
 - [`docs/maintainer/adapters.md`](./adapters.md) — Claude/Cursor アダプタ生成方式（対の解説ドキュメント）
-- [npm 公開中止・APM 転換 issue（02_設計.md・03_実装計画.md）](../maintainer/workflow/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/20260711_024021_npm公開中止_APM転換/) — 一次情報調査・設計判断の詳細
+- [npm 公開中止・APM 転換 issue（02_設計.md・03_実装計画.md）](../maintainer/workflow/close/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/20260711_024021_npm公開中止_APM転換/) — 一次情報調査・設計判断の詳細

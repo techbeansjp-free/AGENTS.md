@@ -692,6 +692,15 @@ check_document_id_linked
 #   ソースディレクトリが 1 つも実在しない（本リポのような文書/フレームワーク専用パッケージ）場合は何も検出しない。
 check_code_comment_external_ref() {
   echo "[audit] checking code comment external refs (#26)" >&2
+  # 検出ロジックは同居する check-comment-refs.sh（単一正本）へ委譲する。本 check は
+  # 走査対象ディレクトリの決定（CODE_COMMENT_SRC_DIRS の解釈・実在確認）と FAIL 集約のみを担う。
+  local script_dir refs_script
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  refs_script="$script_dir/check-comment-refs.sh"
+  if [[ ! -f "$refs_script" ]]; then
+    echo "[audit] WARN: check-comment-refs.sh が見つからないため #26 を SKIP します: $refs_script" >&2
+    return 0
+  fi
   local src_dirs=()
   if [[ -n "${CODE_COMMENT_SRC_DIRS:-}" ]]; then
     local IFS=':'
@@ -699,56 +708,22 @@ check_code_comment_external_ref() {
   else
     src_dirs=("src" "app" "components")
   fi
-  local found=""
-  # コメント行内の外部参照パターン（誤検出回避のためキーワード前置を要求）。
-  #   - 章節番号: §3.2 / 第4節 / セクション 5 / section 2.1（全角数字も許容）
-  #   - PR/issue/タスク番号: PR #123 / Issue #42 / チケット 100 / タスク #7 / 裸 #NN（2桁以上）
-  #   - 仕様ドキュメント名: XXX.md / XXX.adoc
-  # 全角数字は [0-9０-９] のような範囲指定だと一部 locale で "Invalid collation character" に
-  # なるため、全角数字は列挙（０-９の各バイト列を | で並べる）で表し、grep は LC_ALL=C（バイト一致）で実行する。
-  local fw='[0-9]|０|１|２|３|４|５|６|７|８|９'
-  local pat_section="(§(${fw})|第(${fw})+[節章条]|(セクション|[Ss]ection)[[:space:]]*[0-9])"
-  local pat_ticket='((PR|Issue|ISSUE|issue|チケット|task|タスク)[[:space:]]*#?[0-9]|#[0-9][0-9]+)'
-  local pat_docname='[A-Za-z0-9_]+\.(md|adoc)'
-  local d f
+  # 実在するソースディレクトリのみを検知スクリプトへ渡す（実在が 1 つも無ければ何も検出しない）。
+  local scan_targets=() d
   for d in "${src_dirs[@]}"; do
     [[ -z "$d" ]] && continue
-    [[ ! -d "$PROJECT_ROOT/$d" ]] && continue
-    while IFS= read -r -d '' f; do
-      # 行番号付きで「コメント行」のみ抽出（行頭の // # ;; -- 、または行中の /* * """）。
-      # import/require/include/from/using で始まる行は除外（ファイルパスは §3 で許可）。
-      local hits
-      hits="$(awk '
-        {
-          line=$0
-          cmt=""
-          if (match(line, /(\/\/|#|;;|--)/)) {
-            tline=line; sub(/^[[:space:]]+/, "", tline)
-            if (tline ~ /^(import|from|require|include|#include|using)/) next
-            cmt=substr(line, RSTART)
-          } else if (line ~ /\/\*|^[[:space:]]*\*|"""/) {
-            cmt=line
-          } else next
-          print NR "\t" cmt
-        }
-      ' "$f" 2>/dev/null)"
-      [[ -z "$hits" ]] && continue
-      local line_no cmt_text
-      while IFS=$'\t' read -r line_no cmt_text; do
-        [[ -z "$line_no" ]] && continue
-        if printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_section" 2>/dev/null \
-          || printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_ticket" 2>/dev/null \
-          || printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_docname" 2>/dev/null; then
-          if [[ -z "$found" ]]; then
-            echo "FAIL: コメント外部参照禁止違反 (CODE_COMMENT_RULES):" >&2
-            found=1
-          fi
-          echo "  ${f#$PROJECT_ROOT/}:$line_no" >&2
-        fi
-      done <<< "$hits"
-    done < <(find "$PROJECT_ROOT/$d" -type f \( -name "*.sh" -o -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.go" -o -name "*.rb" -o -name "*.rs" -o -name "*.java" \) -print0 2>/dev/null || true)
+    [[ -d "$PROJECT_ROOT/$d" ]] && scan_targets+=("$PROJECT_ROOT/$d")
   done
-  if [[ -n "$found" ]]; then
+  [[ ${#scan_targets[@]} -eq 0 ]] && return 0
+  local out rc=0
+  out="$(bash "$refs_script" "${scan_targets[@]}")" || rc=$?
+  if [[ $rc -eq 1 && -n "$out" ]]; then
+    echo "FAIL: コメント外部参照禁止違反 (CODE_COMMENT_RULES):" >&2
+    local line
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "  ${line#$PROJECT_ROOT/}" >&2
+    done <<< "$out"
     echo "$ROLLBACK_MSG" >&2
     EXIT_CODE=1
   fi

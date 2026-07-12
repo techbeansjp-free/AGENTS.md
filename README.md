@@ -46,9 +46,9 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 ## 導入（プロジェクトへ配備するとき）
 
-導線は **apm install（一次配布導線）**・**npx agent-skill-chain init（開発者・自己拡張向け補助導線）**・**Claude marketplace（副導線）** の 3 つ。**npm 公開は取りやめ済みであり、基本は `apm install` を推奨する。**
+導線は **apm install（一次配布導線）**・**npx github:techbeansjp-free/AGENTS.md init（開発者・自己拡張向け補助導線・GitHub 直接参照）**・**Claude marketplace（副導線）** の 3 つ。**基本は `apm install` を推奨する。**
 
-> npm パッケージ名は `agent-skill-chain`（unscoped public / npmjs.com）。CLI コマンド名は `agents-md`（パッケージ名と独立）。`apm install` は npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得する。
+> CLI コマンド名は `agents-md`。`apm install` は npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得する。
 
 ### 0. apm 経由（一次配布導線・推奨）
 
@@ -68,13 +68,13 @@ apm install techbeansjp-free/AGENTS.md#release/apm --target claude
 
 再現性を求める場合はブランチ ref の代わりにタグ ref（`#apm-vX.Y.Z`。例: `apm install techbeansjp-free/AGENTS.md#apm-v0.1.0`）でピン留めできる。v1 スコープは skills プリミティブのみであり、agents/commands(prompts)/instructions/hooks の apm ネイティブ配備は今後の課題（詳細は [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md) を参照）。
 
-### 1. npm 経由（開発者・自己拡張向けの補助導線。npm 公開は取りやめ済み）
+### 1. GitHub 直接参照（開発者・自己拡張向けの補助導線。npm レジストリは経由しない）
 
-採用先プロジェクトのルートで次を実行する。`init` が内部で `.agent-skill-chain/source/scripts/setup.sh` を呼び、配備一式を行う。
+`npx` は GitHub リポジトリを直接参照する（`npx github:owner/repo` 記法）。`package.json` の `prepare` フックにより git 経由インストール時に `npm run build` が自動実行され、非追跡（`.gitignore` 対象）の `bin/agents-md.js` が自動生成される。採用先プロジェクトのルートで次を実行する。`init` が内部で `.agent-skill-chain/source/scripts/setup.sh` を呼び、配備一式を行う。
 
 ```bash
 cd my-project
-npx agent-skill-chain init
+npx github:techbeansjp-free/AGENTS.md init
 ```
 
 これで以下が行われる:
@@ -99,14 +99,14 @@ npx agent-skill-chain init
 **版のピン留め・アップグレード**:
 
 ```bash
-# 特定版をピン留めして導入（@x.y.z で固定。再現的に同一内容を取り込める）
-npx agent-skill-chain@0.1.0 init
+# 特定版をピン留めして導入（#<tag-or-branch> で git ref を固定。再現的に同一内容を取り込める）
+npx github:techbeansjp-free/AGENTS.md#<tag-or-branch> init
 
-# 既存配備を新版へ再同期（アップグレード）
-npx agent-skill-chain@latest upgrade
+# 既存配備を新版へ再同期（アップグレード。ref 省略時は既定ブランチ＝最新を指す）
+npx github:techbeansjp-free/AGENTS.md upgrade
 
 # 配備前提（bash・sqlite3 等）の健全性を確認
-npx agent-skill-chain doctor
+npx github:techbeansjp-free/AGENTS.md doctor
 ```
 
 **アンインストール（つけ外し）**:
@@ -115,13 +115,13 @@ npx agent-skill-chain doctor
 
 ```bash
 # 採用先プロジェクトのルートで実行。まず削除対象を表示（dry-run。何も消さない）
-npx agent-skill-chain uninstall
+npx github:techbeansjp-free/AGENTS.md uninstall
 
 # 実際に配備物のみを除去する（.cursor/.claude は丸ごと消さず配備分のみ。自作スキル/独自フックは保持）
-npx agent-skill-chain uninstall --yes
+npx github:techbeansjp-free/AGENTS.md uninstall --yes
 
 # workflow.db 等の証跡も含めて完全除去する
-npx agent-skill-chain uninstall --purge --yes
+npx github:techbeansjp-free/AGENTS.md uninstall --purge --yes
 ```
 
 | 区分 | 既定の `uninstall` | `--purge` 付き |
@@ -138,9 +138,9 @@ enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` へ
 
 ```bash
 # 採用先プロジェクトのルートで実行
-npx agent-skill-chain enforce status   # 現在の on/off と hook 実在性を表示
-npx agent-skill-chain enforce on       # opt-in（settings.json に配線をマージ。既存値は保持・.bak 退避）
-npx agent-skill-chain enforce off      # 解除（enforcement 配線のみ外す。ユーザー値は保持）
+npx github:techbeansjp-free/AGENTS.md enforce status   # 現在の on/off と hook 実在性を表示
+npx github:techbeansjp-free/AGENTS.md enforce on       # opt-in（settings.json に配線をマージ。既存値は保持・.bak 退避）
+npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement 配線のみ外す。ユーザー値は保持）
 ```
 
 - `enforce on` は正本テンプレート（`.agent-skill-chain/source/platforms/claude/settings.enforce.json`）から `hooks.PreToolUse`/`PostToolUse`（`.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` を指す）と `env.AGENT_ROLE=orchestrator` を配線する。既存の `settings.json` があれば**ユーザー値を破壊せず**マージし、上書き前に `settings.json.bak` へ退避する。
@@ -160,18 +160,7 @@ Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コ�
 
 #### リリース手順（メンテナ向け）
 
-> **現在 npm 公開は今後の課題として保留中であり、自動リリースは無効化（dormant）されている。** 自動リリース（[.github/workflows/release.yml](.github/workflows/release.yml)）は main マージ・タグ push のいずれでも発火せず、自動 publish/marketplace 公開は起きない。**再開手順（最小 2 手＋前提）の正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md) §5** を参照する（本節は要約のみとし詳細を重複させない）。
-
-要約（再開後の発火方式）: 再開後は publish と marketplace 公開を **main への push（マージ）** で CI（[.github/workflows/release.yml](.github/workflows/release.yml)）が自動実行する（タグ push が発火条件ではない）。現状は dormant のため、main マージでもタグ push でも発火しない。
-
-再開手順の概要（詳細は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md) §5）:
-
-1. 配布方法を確定する。
-2. （npm publish を行う場合）リポジトリの Secrets に `NPM_TOKEN`（npmjs の Automation トークン）を設定する。
-3. `release.yml` の `on:` に `push: branches:[main]` を戻す。
-4. リポジトリ変数 `RELEASE_ENABLED=true` を設定する。
-
-> **要 secret**: 再開後も npm publish は `NPM_TOKEN` secret が必要。未設定の場合 publish step は skip される（marketplace 公開は影響を受けない）。実 publish はユーザー承認前提（詳細は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)）。
+リリースは [.github/workflows/release.yml](.github/workflows/release.yml) の `workflow_dispatch` を手動起動して行う。リポジトリ変数 `RELEASE_ENABLED` が `true` のときのみ実行され、version bump（patch +1）・日時タグ・GitHub Release 作成 → marketplace 公開 → apm release が直列に実行される。リリース発火はユーザー承認前提。詳細正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)。
 
 ### 3. ローカル配備（リポを直接置く場合）
 

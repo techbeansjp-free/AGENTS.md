@@ -11,9 +11,10 @@
 #   6. install/uninstall・カプセル化 E2E（隔離 dir で実 install→検証→uninstall→再 install を確認）
 #   7. enforcement/ci/audit.sh の呼び出し（このリポの issue は docs/maintainer/workflow 配下のため、
 #      audit.sh はそのまま通らない。continue-on-error 相当で「呼ぶが失敗させない」運用）
+#   8. コメント外部参照禁止の blocking 検知（.github/workflows 配下の CI 定義コメントに、外部ドキュメント名・
+#      章節番号・追跡番号の直書きが無いことを検証する。検出ロジックは check-comment-refs.sh に集約）
 #
 # トリガ: PR（必ず検証）と、merge 先ブランチ（main, develop）への push。
-# 正本: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/03_実装計画.md（フェーズ5/軽微3）
 
 name: self-enforce
 
@@ -54,7 +55,6 @@ jobs:
       #   後続の各検証 step が担う）、kcov が導入できない runner ではカバレッジ step を SKIP する。
       #   coverage-check.sh は kcov 不在で exit 2(SKIP) し、run-all.sh も kcov 非依存で完走する。
       #   計測ロジックは test/coverage-check.sh に集約（CI とローカルで二重化しない）。
-      # 正本: docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md, 03_実装計画.md
       - name: Install kcov (best-effort)
         run: |
           sudo apt-get update -qq || true
@@ -94,10 +94,10 @@ jobs:
       # 2.5) CLI TypeScript: 依存導入 → typecheck → build（REPO_ROOT/bin を生成）
       #    src/agents-md.ts（strict）が正本。bin/agents-md.js は非追跡（.gitignore）の生成物であり、
       #    本 step で `npm ci && npm run build` し REPO_ROOT に bin を生成する。これにより後続 step
-      #    （#3 生成物差分ゼロ・#4 pack・#6 E2E）が REPO_ROOT/bin を前提にできる（順序保証）。
-      #    typecheck は src 正本の型健全性検証として存続する。bin は非追跡のため「追跡 bin の差分ゼロ」
-      #    検証は不要（無意味化）になり削除した（使用前 build 方式へ転換）。
-      #    正本: docs/maintainer/workflow/20260615_114305_bin生成物のgitignore化とpublish時ビルド/02_設計.md §3.3, 03_実装計画.md（T2）
+      #    （Generated-output diff-zero check・npm pack leak check・Install/uninstall &
+      #    encapsulation E2E の各 step）が REPO_ROOT/bin を前提にできる（順序保証）。
+      #    typecheck は src 正本の型健全性検証として存続する。bin は非追跡のため
+      #    追跡差分の検証対象に含めない。
       - name: CLI typecheck & build (tsc)
         run: |
           set -e
@@ -148,7 +148,7 @@ jobs:
       #    ロジック二重化回避（方針 A・最小変更）: ローカルの一括 runner（test/run-all.sh）も
       #    本 E2E スクリプトを「呼ぶだけ」で、テスト本体は e2e-install-uninstall.sh の単一正本に集約する。
       #    CI と runner は同一テスト本体を別実装で持たない（CI は bash <script> を呼ぶだけ）。
-      #    CI に run-all.sh を呼ぶ step は追加しない（追加すると本 E2E step と二重実行になるため／02_設計 §3.3）。
+      #    CI に run-all.sh を呼ぶ step は追加しない（追加すると本 E2E step と二重実行になるため）。
       #    schema/pack/version/audit の各 step はテストスクリプトと別系統の検証であり runner には取り込まない。
       - name: Install/uninstall & encapsulation E2E
         run: |
@@ -158,8 +158,9 @@ jobs:
       # 6.5) カバレッジ計測・閾値矯正（kcov ラップ＋fail-under 判定）
       #    テスト一括 runner（run-all.sh）を kcov でラップ計測し、cobertura を後処理して
       #    fail-under（既定 100）未達なら fail させる。計測ロジックは coverage-check.sh に集約
-      #    （CI とローカルで二重化しない）。出力（.coverage/）は .gitignore 済みで step #3/#4 を破らない。
-      #    除外は kcov --exclude-path（A）＋ .agent-skill-chain/project/COVERAGE_EXCEPTIONS.md（B）の二重化。
+      #    （CI とローカルで二重化しない）。出力（.coverage/）は .gitignore 済みで
+      #    Generated-output diff-zero check・npm pack leak check の各 step を破らない。
+      #    除外は kcov --exclude-path（A）＋ .agent-skill-chain/project/ 配下の COVERAGE_EXCEPTIONS 台帳（B）の二重化。
       #
       #    終了コード契約（coverage-check.sh 冒頭の正本）に従い CI 側で解釈する:
       #      0 = 閾値達成（PASS）/ 1 = 未達 or 計測失敗（FAIL→CI を赤くする）/ 2 = kcov 不在（SKIP）。
@@ -188,3 +189,11 @@ jobs:
           else
             echo "[audit] skip: audit.sh が見つかりません"
           fi
+
+      # 8) コメント外部参照禁止の検知（blocking）
+      #    .github/workflows 配下の CI 定義コメントに、外部ドキュメント名・章節番号・追跡番号の
+      #    直書きが無いことを検証する。検出ロジックは check-comment-refs.sh（単一正本）に集約。
+      - name: Comment external-ref check (blocking)
+        run: |
+          set -e
+          bash .agent-skill-chain/source/enforcement/ci/check-comment-refs.sh .github/workflows

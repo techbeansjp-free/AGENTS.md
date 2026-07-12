@@ -1,35 +1,20 @@
-# release.yml — 自動リリース（案C）＋ marketplace 生成物公開【現在 dormant＝無効化中】
+# release.yml — バージョン bump と marketplace / apm 生成物の公開
 #
-# ┌─ 現状（dormant）─────────────────────────────────────────────────────────┐
-# │ npm 公開は今後の課題として保留中であり、自動リリースは無効化（dormant）している。 │
-# │ on: から push: branches:[main] を撤去し workflow_dispatch（手動）のみとし、       │
-# │ 3 job（release-npm / release-marketplace / apm-release）の if: に RELEASE_ENABLED │
-# │ ゲートを付与した。main マージ・タグ push のいずれでも自動発火（version bump /     │
-# │ 日時タグ / GitHub Release / npm publish / marketplace 公開 / apm release/apm      │
-# │ 発行）は起きない。apm-release ジョブも他 2 job と同一の dormant ゲート配下。        │
-# │ 案C の step 本体・action の SHA ピン・無限ループ防止策・NPM_TOKEN ゲートは資産   │
-# │ として保持（削除でなく可逆な無効化）。経緯は自己拡張 issue                        │
-# │ 20260616_144601_npm公開を今後の課題化_自動リリース現状無効化 を参照。            │
-# │                                                                                  │
-# │ 再開手順（最小 2 手）:                                                            │
-# │   ① on: に push: branches:[main] を戻す（下記 on: の NOTE 参照）                  │
-# │   ② リポジトリ変数 RELEASE_ENABLED=true を設定（Repository variables）            │
-# │ （配布方法の確定・NPM_TOKEN 登録を含む詳細は docs/maintainer/RELEASE.md §5）      │
-# └──────────────────────────────────────────────────────────────────────────┘
+# このワークフローは手動 workflow_dispatch でのみ起動し、リポジトリ変数 RELEASE_ENABLED が
+# 'true' のときだけ実行する。3 つのジョブを直列に実行する:
+#   - version-bump: 最新 main を取得して package.json の semver patch を +1 し、plugin.json・apm.yml へ
+#     従属同期して 4 ファイルを main へ書き戻す。続けて JST 日時タグ vYYYYMMDD.HHMMSS を付与し、
+#     同タグの GitHub Release（自動生成ノート）を作成する。
+#   - release-marketplace: 正本から Claude/Cursor アダプタを生成し release/marketplace ブランチへ公開する。
+#   - apm-release: 正本から apm パッケージを生成し release/apm ブランチへ公開し apm-vX.Y.Z タグを付与する。
 #
-# 方針（案C・再開後に有効となる本来の動作）:
-#   - 再開後のトリガは「main への push」。手動タグ運用は廃止し、main マージを契機に自動でリリースする。
-#   - version は bump 後の package.json:version を単一の真実源とする（semver patch +1）。
-#   - 日時タグ vYYYYMMDD.HHMMSS は「リリースの目印」であり semver とは独立（タグ==package.json の不変条件は撤去）。
-#   - 正本リポ（main）には生成物 .adapters/ を一切置かない（/.adapters/ は gitignore のまま）。
-#   - npm publish は NPM_TOKEN ゲートで保護し、未設定なら skip（ジョブ失敗にしない）。既存 version は冪等に skip。
+# version の正本は bump 後の package.json:version（plugin.json・apm.yml は sync-version.sh で従属同期）。
+# 正本リポ（main）には生成物 .adapters/・.apm/ を一切置かない（gitignore のまま）。
 #
-# 無限ループ防止（02_設計 §3.2.2・§9.2）:
+# 無限ループ防止:
 #   - 主防御: bump 結果の書き戻し push は GitHub Actions 既定 GITHUB_TOKEN を用いる。
-#     既定 GITHUB_TOKEN による push は on:push workflow を再トリガしない（GitHub 仕様）。
-#     PAT / deploy key は使わない（使うと再発火しうる）。
-#   - 補助防御（belt-and-suspenders）: コミットメッセージに [skip ci]、concurrency 直列化、
-#     actor != github-actions[bot] のガード。
+#     既定 GITHUB_TOKEN による push は workflow を再トリガしない（GitHub 仕様）。PAT / deploy key は使わない。
+#   - 補助防御: コミットメッセージの [skip ci]、concurrency による直列化、actor != github-actions[bot] のガード。
 
 name: release
 
@@ -38,10 +23,7 @@ permissions:
   contents: write
 
 on:
-  # NOTE(dormant): main への自動リリースは現在無効化（dormant）。
-  # 自動発火（version bump / 日時タグ / GitHub Release / npm publish）を止めるため
-  # push: branches:[main] を撤去し、手動 workflow_dispatch のみ残す。
-  # 再開時は push: branches:[main] を戻す（ファイル先頭の再開手順 参照）。
+  # 自動発火は設定していない。手動 workflow_dispatch でのみ起動する。
   workflow_dispatch:
 
 # release ジョブ群を直列化し、同秒衝突・並行 bump の競合確率を下げる。
@@ -51,32 +33,24 @@ concurrency:
 
 jobs:
   # =====================================================================
-  # (A) version bump + 日時タグ + GitHub Release + npm publish（案C）
+  # version bump + 日時タグ + GitHub Release
   # =====================================================================
-  release-npm:
+  version-bump:
     runs-on: ubuntu-latest
-    # bot 自身の書き戻し push では発火しない（補助防御）。
-    # dormant 補助防御: RELEASE_ENABLED が 'true' のときのみ実行（未設定/その他は skip）。
+    # bot 自身の書き戻し push では発火しない。RELEASE_ENABLED が 'true' のときのみ実行する。
     if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
     outputs:
       version: ${{ steps.bump.outputs.version }}
-      tag: ${{ steps.datetag.outputs.tag }}
     steps:
       - name: Checkout (full history + tags)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
-      - name: Setup Node (with npm registry)
+      - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Install sqlite3
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq sqlite3
 
       # bump 起点を最新 main に取り直す（並行マージで同一 patch を二度採番するのを緩和）。
       - name: Sync latest main (rebase)
@@ -97,39 +71,26 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "OK: package.json version を $version へ bump しました（semver patch +1）。"
 
-      # package.json ↔ plugin.json の整合（tag 非依存）。bump 後の version を plugin.json へ反映して検証する。
-      - name: Sync plugin.json version & verify
+      # package.json を正本に plugin.json・apm.yml へ version を従属同期し、三者一致を検証する。
+      - name: Sync plugin.json/apm.yml version & verify
         run: |
           set -e
           bash .agent-skill-chain/source/scripts/sync-version.sh --write
           bash .agent-skill-chain/source/scripts/sync-version.sh --check
 
-      # 公開前ビルド: 非追跡の bin を作業ツリーへ生成（prepack 代替＝使用前 build 方式）。
-      - name: Build CLI bin (replaces prepack)
-        run: |
-          set -e
-          npm ci
-          npm run build
-          echo "OK: src -> bin を生成しました（非追跡の生成物を作業ツリーに用意）。"
-
-      # 配布物リーク検査: 改名後 name でも tarball にリポ固有物が漏れず必須物があること（SC-3 と兼ねる）。
-      - name: Verify npm pack (leak / required files)
-        run: |
-          set -e
-          bash .agent-skill-chain/source/scripts/verify-npm-pack.sh
-
-      # bump 結果を main へ書き戻す。既定 GITHUB_TOKEN による push は on:push を再トリガしない（主防御）。
+      # bump 結果を main へ書き戻す。既定 GITHUB_TOKEN による push は workflow を再トリガしない（主防御）。
       # コミットメッセージの [skip ci] と non-fast-forward 時の rebase 再試行は補助防御。
+      # 書き戻し対象は sync-version.sh が更新する 4 ファイル（package.json・package-lock.json・plugin.json・apm.yml）。
       - name: Commit & push version bump to main
         run: |
           set -e
           version="${{ steps.bump.outputs.version }}"
-          if git diff --quiet -- package.json package-lock.json .agent-skill-chain/source/platforms/claude/plugin.json; then
+          if git diff --quiet -- package.json package-lock.json .agent-skill-chain/source/platforms/claude/plugin.json .agent-skill-chain/source/platforms/apm/apm.yml; then
             echo "変更なし。bump 書き戻しをスキップします。"
           else
-            git add package.json package-lock.json .agent-skill-chain/source/platforms/claude/plugin.json
+            git add package.json package-lock.json .agent-skill-chain/source/platforms/claude/plugin.json .agent-skill-chain/source/platforms/apm/apm.yml
             git commit -m "chore(release): v${version} [skip ci]"
-            # 書き戻し push が non-fast-forward で reject されたら rebase の上で 1 回再試行する（N-B）。
+            # 書き戻し push が non-fast-forward で reject されたら rebase の上で 1 回再試行する。
             if ! git push origin HEAD:main; then
               git pull --rebase origin main
               git push origin HEAD:main
@@ -137,7 +98,7 @@ jobs:
           fi
 
       # JST 日時タグ vYYYYMMDD.HHMMSS を決定する（ランナー TZ 既定 UTC に依存しない）。
-      # 既存タグと衝突する場合は秒 +1 → サフィックス -2 → -3 の最大 3 段で再試行し、尽きたら失敗させる（N-C）。
+      # 既存タグと衝突する場合は秒 +1 → サフィックス -2 → -3 の最大 3 段で再試行し、尽きたら失敗させる。
       - name: Decide datetime tag (collision retry, max 3)
         id: datetag
         run: |
@@ -178,45 +139,14 @@ jobs:
             echo "OK: GitHub Release $tag を作成しました（自動ノート）。"
           fi
 
-      # トークンゲート: NPM_TOKEN secret が未設定なら publish せず skip して案内する。
-      - name: Check NPM_TOKEN gate
-        id: npm_gate
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "${NPM_TOKEN:-}" ]; then
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::NPM_TOKEN secret が未設定のため npm publish を skip します。Secrets に NPM_TOKEN を設定して main へ push すると publish されます。"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-            echo "NPM_TOKEN を検出しました。publish を実行します。"
-          fi
-
-      # publish 本体（冪等）: 当該 version が既に npm に存在すれば skip（再実行で二重 publish しない）。
-      # unscoped public（agent-skill-chain）でも --access public を明示する。
-      - name: npm publish (public, idempotent)
-        if: steps.npm_gate.outputs.present == 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -e
-          name="$(node -p "require('./package.json').name")"
-          version="${{ steps.bump.outputs.version }}"
-          if npm view "${name}@${version}" version >/dev/null 2>&1; then
-            echo "${name}@${version} は既に publish 済み。skip します（冪等）。"
-          else
-            npm publish --access public
-            echo "OK: ${name}@${version} を publish しました。"
-          fi
-
   # =====================================================================
-  # (B) marketplace リリース（案A）— 生成物を release/marketplace へ commit
+  # marketplace リリース — 生成物を release/marketplace へ commit
   # =====================================================================
   release-marketplace:
     runs-on: ubuntu-latest
-    # dormant 補助防御: RELEASE_ENABLED が 'true' のときのみ実行（未設定/その他は skip）。
+    # RELEASE_ENABLED が 'true' のときのみ実行する（他ジョブと同一のゲート）。
     if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
-    needs: release-npm
+    needs: version-bump
     env:
       RELEASE_BRANCH: release/marketplace
     steps:
@@ -245,7 +175,7 @@ jobs:
           git checkout main
           git pull --rebase origin main
 
-      # package.json ↔ plugin.json の整合（tag 非依存）。tag 起点比較は撤去済み。
+      # package.json ↔ plugin.json の version 一致を検証する。
       - name: Verify version sync (package.json == plugin.json)
         run: |
           set -e
@@ -270,12 +200,12 @@ jobs:
           diff -r /tmp/adapters_first/cursor .adapters/cursor
           echo "OK: 再生成で生成物の差分なし（決定性）。"
 
-      # 生成物をリリースブランチへ commit/push（案A）。main には生成物を置かない。
-      # commit メッセージは bump 後 version を参照する（main push では GITHUB_REF_NAME=main のため使わない）。
+      # 生成物をリリースブランチへ commit/push する。main には生成物を置かない。
+      # commit メッセージは bump 後 version を参照する。
       - name: Publish adapters to release branch
         run: |
           set -e
-          version="${{ needs.release-npm.outputs.version }}"
+          version="${{ needs.version-bump.outputs.version }}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -312,13 +242,12 @@ jobs:
           echo "OK: $RELEASE_BRANCH へ生成物を公開しました（marketplace source 解決先）。"
 
   # =====================================================================
-  # (C) apm release（案A）— apm.yml + .apm/ を release/apm ブランチへ commit し、
+  # apm release — apm.yml + .apm/ を release/apm ブランチへ commit し、
   #     同一コミットへ apm-vX.Y.Z タグを付与する
   # =====================================================================
   apm-release:
     runs-on: ubuntu-latest
-    # dormant 補助防御: RELEASE_ENABLED が 'true' のときのみ実行（未設定/その他は skip）。
-    # 他 2 job（release-npm/release-marketplace）と完全に同一のゲート条件を維持する。
+    # RELEASE_ENABLED が 'true' のときのみ実行する（他ジョブと同一のゲート）。
     if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
     needs: release-marketplace
     env:
