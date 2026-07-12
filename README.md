@@ -160,7 +160,7 @@ Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コ�
 
 #### リリース手順（メンテナ向け）
 
-リリースは [.github/workflows/release.yml](.github/workflows/release.yml) の `workflow_dispatch` を手動起動して行う。リポジトリ変数 `RELEASE_ENABLED` が `true` のときのみ実行され、version bump（patch +1）・日時タグ・GitHub Release 作成 → marketplace 公開 → apm release が直列に実行される。リリース発火はユーザー承認前提。詳細正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)。
+リリースは [.github/workflows/release.yml](.github/workflows/release.yml) が、配布影響パスを含む変更が main へ push（PR レビュー承認済みマージ）されると自動発火し、version bump（patch +1）・日時タグ・GitHub Release 作成 → marketplace 公開 → apm release を直列に実行する。リポジトリ変数 `RELEASE_ENABLED` は緊急停止スイッチ（既定で有効、`false` 設定時のみ停止）。`workflow_dispatch` は緊急時の手動代替。詳細正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)。
 
 ### 3. ローカル配備（リポを直接置く場合）
 

@@ -2,9 +2,11 @@
 
 本ドキュメントは marketplace（Claude プラグイン）／apm（Agent Package Manager）配布の**リリース手順の詳細正本**である。README §リリース手順は入口リンクと要約のみを持ち、詳細はここに一本化する（重複させない）。
 
-> **重要（リリース発火はユーザー承認前提）**
+> **重要（リリース発火は push 契機・PR レビュー承認をもって人間承認済みとみなす）**
 >
-> - リリースは [`.github/workflows/release.yml`](../../.github/workflows/release.yml) の `workflow_dispatch` を手動起動し、リポジトリ変数 `RELEASE_ENABLED=true` を設定したときのみ実行される。この**リリース発火（`workflow_dispatch` 起動・`RELEASE_ENABLED` 設定・main への書き戻し push）は、必ずユーザーの明示承認を得てから行う。** 承認なしにリリースを起動しない。
+> - リリースは [`.github/workflows/release.yml`](../../.github/workflows/release.yml) が main への push（配布影響パス `.agent-skill-chain/source/**`・`package.json`・`.claude-plugin/marketplace.json` のいずれかに一致する変更を含む場合）を検知して自動発火する。main は branch protection（PR 必須・レビュー承認 1 件以上・`self-enforce` 必須）で保護されており、**PR レビュー承認をもって人間承認済みとみなす**。承認された変更が main へマージされた時点で自動発火し、リリース起動のための追加操作・追加承認は不要。
+> - `RELEASE_ENABLED` はリポジトリ変数で、**緊急停止スイッチ**として機能する。既定（未設定を含む）は有効（fail-open）であり、リリースを止めたいときのみ正確に文字列 `false` を設定する（`'true'`・誤字・空文字はすべて「有効」に倒れる）。
+> - `workflow_dispatch` は緊急時の手動代替発火手段として残っているが、手動起動時は `paths` フィルタが適用されない（GitHub Actions の仕様）。通常運用は push 自動発火であり、手動起動は補助手段である。
 > - **検証フェーズ（version 同期の `--check`・生成物のローカル build 確認）は read-only であり、リポジトリ・リリースブランチを書き換えない。**
 
 ---
@@ -15,7 +17,7 @@
 | ---- | ---- |
 | node | `>=20`（[`package.json`](../../package.json) の `engines.node`）。version 同期・アダプタ生成に使用する。 |
 | npm | version 採番（`npm version`）・ローカル build 確認に使用する。検証時の実測例: npm 10.x。 |
-| 認可 | リリースはリポジトリ変数 `RELEASE_ENABLED` の設定権限と `workflow_dispatch` の起動権限を持つメンテナが行う。 |
+| 認可 | 通常運用のリリース起動操作は不要（PR レビュー承認が人間承認を兼ねる）。緊急停止・再開の操作にはリポジトリ変数 `RELEASE_ENABLED` の設定権限を持つメンテナが必要。緊急時の `workflow_dispatch` 手動起動にはワークフロー起動権限を持つメンテナが必要。 |
 
 前提確認:
 
@@ -47,8 +49,10 @@ bash .agent-skill-chain/source/scripts/sync-version.sh --write   # package.json 
 
 リリースは CI（[`release.yml`](../../.github/workflows/release.yml)）が担う。ローカルからブランチ／タグの push は行わない。
 
-1. **version 同期の確認**: §1 の `--check` が exit 0 であることを確認する。
-2. **リリース起動（ユーザー承認後）**: [`release.yml`](../../.github/workflows/release.yml) の `workflow_dispatch` を手動起動し、リポジトリ変数 `RELEASE_ENABLED=true` を設定する。両方を満たしたときのみ 3 ジョブが実行される（未設定／その他の値では全ジョブが skip される）。
+1. **version 同期の確認（任意）**: §1 の `--check` が exit 0 であることを事前に確認しておくとよい（bump 後の CI ゲートと同じ検証を先取りできる）。
+2. **自動発火**: 配布影響パス（`.agent-skill-chain/source/**`・`package.json`・`.claude-plugin/marketplace.json`）を含む変更を PR でレビュー承認（branch protection・1 件以上）を得たうえで main へマージすると、その push を検知して 3 ジョブが自動的に走る。`RELEASE_ENABLED` は既定で有効（未設定時も動作）であり、追加の起動操作は不要。
+3. **緊急停止**: 不具合発覚時などリリースを即座に止めたい場合は、リポジトリ変数 `RELEASE_ENABLED` に正確に文字列 `false` を設定する。停止解除は変数を削除するか `'true'`（または `'false'` 以外の任意の値）に戻す。
+4. **緊急時の手動起動**: `paths` フィルタの想定漏れ等で自動発火しない場合、[`release.yml`](../../.github/workflows/release.yml) の `workflow_dispatch` を手動起動できる（`RELEASE_ENABLED` ゲートは push と同様に適用される）。手動起動時は `paths` フィルタの対象外になるため、配布に影響しない変更のみのコミットでも実行される点に注意する。
 
 CI は次の 3 ジョブを直列（`version-bump` → `release-marketplace` → `apm-release`）に実行する。
 
@@ -74,7 +78,7 @@ CI は次の 3 ジョブを直列（`version-bump` → `release-marketplace` →
 ## 4. 参照
 
 - [`.agent-skill-chain/source/scripts/sync-version.sh`](../../.agent-skill-chain/source/scripts/sync-version.sh) — version 同期（正本）
-- [`.github/workflows/release.yml`](../../.github/workflows/release.yml) — `workflow_dispatch` 起点の version bump／marketplace／apm リリース CI
+- [`.github/workflows/release.yml`](../../.github/workflows/release.yml) — main push（配布影響 paths 限定）起点の version bump／marketplace／apm リリース CI（`workflow_dispatch` は緊急時の手動代替）
 - [`README.md`](../../README.md) §リリース手順（メンテナ向け） — 入口リンク・要約
 - [`package.json`](../../package.json)（`files`・`bin`・`publishConfig.access=public`）、[`LICENSE`](../../LICENSE)（MIT）
 - [`docs/maintainer/adapters.md`](./adapters.md) — Claude/Cursor アダプタ生成方式（marketplace 生成物の解説）
