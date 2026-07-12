@@ -72,8 +72,8 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 #### テスト実行結果（必須: 数値で記載）
 
 - **実行日**: 2026-07-12
-- **静的検証項目数**: 12（下表）
-- **成功**: 12
+- **静的検証項目数**: 13（下表）
+- **成功**: 13
 - **失敗**: 0
 - **スキップ**: 0
 
@@ -93,6 +93,7 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 | 10 | CONTRIBUTING→docs/maintainer 4文書 `test -f` | 全実在 | OK |
 | 11 | RELEASE.md→`../../CONTRIBUTING.md` 解決 | 実在 | OK |
 | 12 | 歴史的経緯記述（移した/かつては/以前は 等）不在 | 不在 | OK（§4.2 指摘1 参照） |
+| 13 | README.md・CONTRIBUTING.md 内の全 markdown リンクを `grep -noE '\]\([^)]+\)'` で列挙し、各リンク先（http(s) 外部リンクを除く）を相対パスで `test -f` 解決 | 内部リンク全件解決 | OK（README 12件＋CONTRIBUTING 7件＝計19出現、外部リンク1件（`https://github.com/microsoft/apm`）を除く内部18件すべて実在ファイルへ解決。アンカー付き1件は見出し `## ツール別強制力マトリクス` の実在も確認） |
 
 ### 3.2 統合テスト（既存テストスイート非回帰）
 
@@ -103,7 +104,17 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 ```
 
 - **FAIL=0**（本変更で FAIL を増やしていない＝非回帰確認）。evidence_source: test_output。
-- SKIP=5 の内訳は環境依存（`kcov` 未導入、`bin/agents-md.js` 未生成＝npm/node_modules 不在、必須依存欠如による `test-package-manifest-parity`・`test-cli-audit-doctor`・`test-export-ndjson`・`e2e-claude-hook`・`e2e-install-uninstall` の SKIP）であり、本 markdown 変更とは無関係。
+- SKIP=5 の内訳は以下の 5 テストで、全件が同一原因（`bin/agents-md.js` 未生成＝この worktree に npm/node_modules が導入されておらずビルド未実行）による必須依存欠如の SKIP であり、本 markdown 変更とは無関係。1 対 1 の対応は次のとおり（`bash test/run-all.sh` 実出力より、evidence_source: test_output）。
+
+  | # | テスト名 | SKIP 理由（実出力） |
+  | ---- | ---- | ---- |
+  | 1 | `test-package-manifest-parity` | `bin/agents-md.js 未生成かつビルド不可（npm/node_modules なし）` → 必須依存欠如 (exit 2) |
+  | 2 | `test-cli-audit-doctor` | `bin/agents-md.js が無い（npm run build を先に）` → 必須依存欠如 (exit 2) |
+  | 3 | `test-export-ndjson` | `bin/agents-md.js が無い（npm run build を先に）` → 必須依存欠如 (exit 2) |
+  | 4 | `e2e-claude-hook` | `bin/agents-md.js が無い（npm run build を先に）` → 必須依存欠如 (exit 2) |
+  | 5 | `e2e-install-uninstall` | `CLI が見つかりません（bin/agents-md.js は非追跡の生成物。先に npm ci && npm run build が必要）` → 必須依存欠如 (exit 2) |
+
+  なお `test-coverage-check`（`test-coverage-check.sh` 内の1アサーション）に現れる `[SKIP] kcov 未導入のためラップ結合テストを省略` は、上記5件とは無関係な**別テストファイル内の個別アサーションの SKIP**であり、当該テストファイル自体は `PASS=30 FAIL=0` で PASS 扱いのため合計の `SKIP=5` には含まれない（混同注意）。
 - **重要**: `test-check-comment-refs`（コードコメントの外部参照検出）は **PASS**。03 §リスクで懸念した「markdown リンクによる comment-refs 誤発火」は発生しなかった（markdown リンクは対象外である設計どおり）。
 
 ### 3.3 E2E テスト
@@ -142,8 +153,8 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 
 - **重要度**: 低
 - **指摘内容**: 00/01/02/03 に未コミット差分がある（`README.md（全204行）`→`207行`、`L179-186`→`L179-187` 等の行番号更新）。
-- **対応状況**: 完了（許容と確定）
-- **対応方法**: 実装で README の行数が変わったことに追従した as-built 同期であり、内容・設計判断の変更を伴わない。document_id は不変（既存値を維持）。DOCS_RULES §行番号直リンク禁止はコア/command/spec のドキュメント間参照が対象で、issue 内の現状分析記述（00 §2.3 等）は対象外。害はなく整合性を高める更新のため許容する。
+- **対応状況**: 完了（許容と確定・記述を基準明確化のうえ更新）
+- **対応方法**: この「207行」は 00 §2.3・§8、01 §5、02 §1・§9 が参照する**分離前（実装前）の README.md の行数**である（00 §2.3 冒頭に「README.md（全207行）を精読した結果の分類。行番号は現状のもの」と明記済みで、切り分け表の前提記述であり実装後の状態を表すものではない）。したがって実装（README 縮小）後もこれらの参照箇所は変更不要である。一方、**実装後の最終 README.md は実測 185 行**（`wc -l README.md` で実測、evidence_source: test_output）であり、00〜03 のいずれにもこの実装後の総行数を「207行」等の旧行数で誤って主張する記述は存在しない（00/01/02/03 全文 grep で「207行」の出現箇所を確認した結果、全て分離前基準の記述であることを確認済み）。document_id は不変（既存値を維持）。DOCS_RULES §行番号直リンク禁止はコア/command/spec のドキュメント間参照が対象で、issue 内の現状分析記述（00 §2.3 等）は対象外。害はなく整合性を高める更新のため許容する。
 
 ### 4.3 敵対的観点リスト（review-code）
 
@@ -222,7 +233,7 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 | S2 | 詳細を書き写さず docs/maintainer へリンク委譲 | version-bump 非複製＋4文書リンク解決（検証8,10） | 達成 |
 | S3 分割後もリンクが壊れない | SETUP.md・claude-hook-e2e.md の §導入 参照が解決 | grep＋アンカー完全一致（検証1,2） | 達成 |
 | S3 | RELEASE.md 後方参照が要約の実所在（CONTRIBUTING）と整合 | RELEASE.md grep＋パス解決（検証11・§2.2 タスク3） | 達成 |
-| S3 | README/CONTRIBUTING→docs/maintainer 全リンク解決（リンク切れ0件） | 4文書 `test -f`＋repo 全体 `README.md#` grep（検証10・§4.3 A5） | 達成 |
+| S3 | README/CONTRIBUTING→docs/maintainer 全リンク解決（リンク切れ0件） | README・CONTRIBUTING 内の全 markdown リンクを列挙し解決確認（検証13）＋4文書 `test -f`（検証10）＋repo 全体 `README.md#` grep（§4.3 A5） | 達成（全リンク解決確認済み。内部18件全実在、外部1件は対象外） |
 
 ### 8.2 00 §6 成功基準（5件）× カバレッジ
 
@@ -230,7 +241,7 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 | ---- | ---- | ---- | ---- |
 | 1 | README に「開発者・自己拡張向け」「メンテナ向け」限定見出しが存在しない | grep 不在（検証3） | ○ |
 | 2 | 開発者・メンテナ向け情報が単一分離先に集約され README から1リンク到達 | CONTRIBUTING 存在＋リンク（検証6, §2.2） | ○ |
-| 3 | 全 markdown リンク・参照が解決（特に §導入 2箇所・RELEASE 後方参照・docs/maintainer 各リンク）＝リンク切れ0件 | 検証1,2,10,11＋repo 全体 grep（§4.3 A5,A9） | ○ |
+| 3 | 全 markdown リンク・参照が解決（特に §導入 2箇所・RELEASE 後方参照・docs/maintainer 各リンク）＝リンク切れ0件 | README・CONTRIBUTING 全リンク列挙による解決確認（検証13）＋検証1,2,10,11＋repo 全体 grep（§4.3 A5,A9） | ○（全リンク解決確認済み） |
 | 4 | README・分離先・コメントに歴史的経緯の記述がない | grep（検証12・指摘1 で false positive 確認） | ○ |
 | 5 | 既存 RELEASE.md の内容が重複コピーされていない | version-bump 非複製（検証8,9） | ○ |
 
