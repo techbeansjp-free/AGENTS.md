@@ -1018,6 +1018,476 @@ else
   ng "B2 templates 除外が壊れた: $BUGB2_OUT"
 fi
 
+# #34 実装前 GitHub Issue 起票ゲート未通過検知（check_github_issue_before_implement）の回帰テスト
+#   tmp 隔離（mktemp -d）。本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db は変更しない。
+#   参照: docs/maintainer/workflow/20260712_175901_GitHubIssue起票ゲート追加/03_実装計画.md §2.3
+# =====================================================================================
+echo "== #34 実装前 GitHub Issue 起票ゲート未通過検知 =="
+
+# git tree（github.com remote 付き）を作るヘルパー
+make_git_tree_github() {
+  local tmp
+  tmp="$(make_min_tree)"
+  ( cd "$tmp" && git init -q && git config user.email t@e.x && git config user.name t \
+      && git remote add origin https://github.com/example/repo.git \
+      && git add -A && git commit -qm init >/dev/null )
+  printf '%s\n' "$tmp"
+}
+
+# git tree（github.com 以外の remote）を作るヘルパー（GitHub 非採用環境フォールバック検証用）
+make_git_tree_nongithub() {
+  local tmp
+  tmp="$(make_min_tree)"
+  ( cd "$tmp" && git init -q && git config user.email t@e.x && git config user.name t \
+      && git remote add origin https://gitlab.com/example/repo.git \
+      && git add -A && git commit -qm init >/dev/null )
+  printf '%s\n' "$tmp"
+}
+
+if command -v sqlite3 >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+  # シナリオ1: 違反系 FAIL（発効日以降・github remote・implement-feature ログのみ・github_issue null）
+  # Given: 発効日以降の issue に implement-feature ログがあり、00 frontmatter の github_issue が null
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "実装前 GitHub Issue 起票ゲート未通過" の FAIL が出る
+  S34_1_TREE="$(make_git_tree_github)"
+  S34_1_ISS="docs/maintainer/workflow/20260801_000000_gh_ng"
+  mkdir -p "$S34_1_TREE/$S34_1_ISS"
+  cat > "$S34_1_TREE/$S34_1_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "d1"
+issue_id: "i1"
+github_issue: null
+---
+EOF
+  S34_1_DB="$S34_1_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_1_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_1_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_1_ISS');" 2>/dev/null
+  S34_1_OUT="$(bash "$AUDIT" "$S34_1_TREE" 2>&1)"
+  if grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_1_OUT"; then
+    ok "#34 違反系（github_issue null）で FAIL する"
+  else
+    ng "#34 違反系で FAIL しなかった（見逃し）: $S34_1_OUT"
+  fi
+
+  # シナリオ1b: プロジェクト全体でのゲート無効化トグル ON（GITHUB_ISSUE_GATE_ENABLED=false）→ 最優先で SKIP
+  # Given: シナリオ1 と同じ状態（本来なら FAIL するはず）だが GITHUB_ISSUE_GATE_ENABLED=false を設定
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "実装前 GitHub Issue 起票ゲート未通過" の FAIL は出ない（他のどの判定よりも先に SKIP・ADR-8）
+  S34_1B_OUT="$(GITHUB_ISSUE_GATE_ENABLED=false bash "$AUDIT" "$S34_1_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_1B_OUT"; then
+    ok "#34 プロジェクト全体の無効化トグル ON（GITHUB_ISSUE_GATE_ENABLED=false）で SKIP する（最優先ガード）"
+  else
+    ng "#34 無効化トグル ON でも誤って FAIL した: $S34_1B_OUT"
+  fi
+
+  # シナリオ1c: 無効化トグルが既定（未設定）／明示 true の場合は従来どおり動作する（回帰なし）
+  # Given: シナリオ1 と同じ状態。GITHUB_ISSUE_GATE_ENABLED は未設定、または明示的に true
+  # When:  audit.sh <tmp> を実行する
+  # Then:  従来どおり FAIL する
+  S34_1C_OUT="$(bash "$AUDIT" "$S34_1_TREE" 2>&1)"
+  S34_1C_TRUE_OUT="$(GITHUB_ISSUE_GATE_ENABLED=true bash "$AUDIT" "$S34_1_TREE" 2>&1)"
+  if grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_1C_OUT" && grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_1C_TRUE_OUT"; then
+    ok "#34 無効化トグル未設定/true は従来どおり FAIL する（回帰なし）"
+  else
+    ng "#34 無効化トグル未設定/true で挙動が変化した（回帰）: unset=$S34_1C_OUT / true=$S34_1C_TRUE_OUT"
+  fi
+
+  # シナリオ2: 正常系 pass（github_issue に番号が記録済み）
+  # Given: 発効日以降の issue に implement-feature ログがあり、00 frontmatter の github_issue が非 null
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "実装前 GitHub Issue 起票ゲート未通過" の FAIL が出ない
+  S34_2_TREE="$(make_git_tree_github)"
+  S34_2_ISS="docs/maintainer/workflow/20260801_000000_gh_ok"
+  mkdir -p "$S34_2_TREE/$S34_2_ISS"
+  cat > "$S34_2_TREE/$S34_2_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "d1"
+issue_id: "i1"
+github_issue: "#123"
+---
+EOF
+  S34_2_DB="$S34_2_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_2_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_2_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_2_ISS');" 2>/dev/null
+  S34_2_OUT="$(bash "$AUDIT" "$S34_2_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_2_OUT"; then
+    ok "#34 正常系（github_issue 記録済み）は FAIL しない"
+  else
+    ng "#34 正常系で誤って FAIL した: $S34_2_OUT"
+  fi
+
+  # シナリオ2b: 正常系 pass（理由付き declined＝意図的に起票しない決定を理由付きで記録）
+  # Given: 発効日以降の issue に implement-feature ログがあり、github_issue が "declined: <理由>"（理由あり）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #34 の FAIL は出ない（理由付き代替記録は通過・ADR-1/ADR-7）
+  S34_2B_TREE="$(make_git_tree_github)"
+  S34_2B_ISS="docs/maintainer/workflow/20260801_000000_gh_declined_ok"
+  mkdir -p "$S34_2B_TREE/$S34_2B_ISS"
+  cat > "$S34_2B_TREE/$S34_2B_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "d2b"
+issue_id: "i2b"
+github_issue: "declined: 設定ファイルの軽微な値修正のみで外部追跡が不要なため"
+---
+EOF
+  S34_2B_DB="$S34_2B_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_2B_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_2B_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_2B_ISS');" 2>/dev/null
+  S34_2B_OUT="$(bash "$AUDIT" "$S34_2B_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_2B_OUT"; then
+    ok "#34 理由付き declined は FAIL しない（代替記録で通過）"
+  else
+    ng "#34 理由付き declined で誤って FAIL した: $S34_2B_OUT"
+  fi
+
+  # シナリオ2c: 違反系 FAIL（理由なし declined＝空虚なバイパス）
+  # Given: 発効日以降の issue に implement-feature ログがあり、github_issue が "declined:"（理由なし）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #34 の FAIL が出る（理由なしの declined は弾く・ADR-7）
+  S34_2C_TREE="$(make_git_tree_github)"
+  S34_2C_ISS="docs/maintainer/workflow/20260801_000000_gh_declined_ng"
+  mkdir -p "$S34_2C_TREE/$S34_2C_ISS"
+  cat > "$S34_2C_TREE/$S34_2C_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "d2c"
+issue_id: "i2c"
+github_issue: "declined:"
+---
+EOF
+  S34_2C_DB="$S34_2C_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_2C_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_2C_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_2C_ISS');" 2>/dev/null
+  S34_2C_OUT="$(bash "$AUDIT" "$S34_2C_TREE" 2>&1)"
+  if grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_2C_OUT"; then
+    ok "#34 理由なし declined（\"declined:\" のみ）は FAIL する（空虚バイパス防止）"
+  else
+    ng "#34 理由なし declined を見逃した: $S34_2C_OUT"
+  fi
+
+  # シナリオ2d: 違反系 FAIL（declined の理由が空白のみ）
+  # Given: github_issue が "declined:    "（理由が空白のみ）
+  # Then:  #34 の FAIL が出る（トリム後に空＝理由なし扱い・ADR-7）
+  S34_2D_TREE="$(make_git_tree_github)"
+  S34_2D_ISS="docs/maintainer/workflow/20260801_000000_gh_declined_ws"
+  mkdir -p "$S34_2D_TREE/$S34_2D_ISS"
+  cat > "$S34_2D_TREE/$S34_2D_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "d2d"
+issue_id: "i2d"
+github_issue: "declined:    "
+---
+EOF
+  S34_2D_DB="$S34_2D_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_2D_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_2D_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_2D_ISS');" 2>/dev/null
+  S34_2D_OUT="$(bash "$AUDIT" "$S34_2D_TREE" 2>&1)"
+  if grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_2D_OUT"; then
+    ok "#34 declined の理由が空白のみは FAIL する（トリム後に空）"
+  else
+    ng "#34 空白のみ理由の declined を見逃した: $S34_2D_OUT"
+  fi
+
+  # シナリオ3: サブ issue（90_issues 配下）は対象外 SKIP
+  # Given: 90_issues 配下のサブ issue に implement-feature ログがあり github_issue が欠落
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #34 の FAIL は出ない（親 Issue に集約・ADR-6）
+  S34_3_TREE="$(make_git_tree_github)"
+  S34_3_ISS="docs/maintainer/workflow/20260801_000000_parent/90_issues/20260801_000000_sub"
+  mkdir -p "$S34_3_TREE/$S34_3_ISS"
+  cat > "$S34_3_TREE/$S34_3_ISS/00_要求定義.md" <<'EOF'
+---
+github_issue: null
+---
+EOF
+  S34_3_DB="$S34_3_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_3_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_3_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_3_ISS');" 2>/dev/null
+  S34_3_OUT="$(bash "$AUDIT" "$S34_3_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_3_OUT"; then
+    ok "#34 サブ issue（90_issues 配下）SKIP（親 Issue に集約）"
+  else
+    ng "#34 サブ issue で誤って FAIL した: $S34_3_OUT"
+  fi
+
+  # シナリオ4: GitHub 非採用環境（remote が github.com 以外）は非発火 SKIP
+  # Given: git remote が gitlab.com。implement-feature ログがあり github_issue が欠落
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #34 の FAIL は出ない（対象外環境フォールバック・ADR-4）
+  S34_4_TREE="$(make_git_tree_nongithub)"
+  S34_4_ISS="docs/maintainer/workflow/20260801_000000_nongh"
+  mkdir -p "$S34_4_TREE/$S34_4_ISS"
+  cat > "$S34_4_TREE/$S34_4_ISS/00_要求定義.md" <<'EOF'
+---
+github_issue: null
+---
+EOF
+  S34_4_DB="$S34_4_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_4_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_4_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_4_ISS');" 2>/dev/null
+  S34_4_OUT="$(bash "$AUDIT" "$S34_4_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_4_OUT"; then
+    ok "#34 GitHub 非採用環境 SKIP（remote が github.com 以外）"
+  else
+    ng "#34 GitHub 非採用環境でも FAIL した: $S34_4_OUT"
+  fi
+
+  # シナリオ5: grandfather SKIP（発効日前）
+  # Given: 発効日前(20260101)の issue に implement-feature ログのみ・github_issue 欠落
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #34 の FAIL は出ない（遡及適用なし）
+  S34_5_TREE="$(make_git_tree_github)"
+  S34_5_ISS="docs/maintainer/workflow/20260101_000000_gh_old"
+  mkdir -p "$S34_5_TREE/$S34_5_ISS"
+  cat > "$S34_5_TREE/$S34_5_ISS/00_要求定義.md" <<'EOF'
+---
+github_issue: null
+---
+EOF
+  S34_5_DB="$S34_5_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_5_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_5_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_5_ISS');" 2>/dev/null
+  S34_5_OUT="$(bash "$AUDIT" "$S34_5_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_5_OUT"; then
+    ok "#34 grandfather SKIP（発効日前 issue は FAIL しない）"
+  else
+    ng "#34 grandfather が機能せず遡及 FAIL した: $S34_5_OUT"
+  fi
+
+  # シナリオ6: close 配下 SKIP
+  # Given: close/ 配下の issue に implement-feature ログのみ・github_issue 欠落
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #34 の FAIL は出ない
+  S34_6_TREE="$(make_git_tree_github)"
+  S34_6_ISS="docs/maintainer/workflow/close/20260801_000000_gh_closed"
+  mkdir -p "$S34_6_TREE/$S34_6_ISS"
+  cat > "$S34_6_TREE/$S34_6_ISS/00_要求定義.md" <<'EOF'
+---
+github_issue: null
+---
+EOF
+  S34_6_DB="$S34_6_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_6_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_6_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_6_ISS');" 2>/dev/null
+  S34_6_OUT="$(bash "$AUDIT" "$S34_6_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_6_OUT"; then
+    ok "#34 close SKIP（close 配下 issue は FAIL しない）"
+  else
+    ng "#34 close 除外が効いていない: $S34_6_OUT"
+  fi
+
+  # シナリオ7: implement-feature ログ 0 件は対象外（continue）
+  # Given: implement-feature ログが無い issue（github_issue も欠落）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #34 の FAIL は出ない（#34 の対象外・未実装の issue は関知しない）
+  S34_7_TREE="$(make_git_tree_github)"
+  S34_7_ISS="docs/maintainer/workflow/20260801_000000_gh_noimpl"
+  mkdir -p "$S34_7_TREE/$S34_7_ISS"
+  cat > "$S34_7_TREE/$S34_7_ISS/00_要求定義.md" <<'EOF'
+---
+github_issue: null
+---
+EOF
+  S34_7_DB="$S34_7_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_7_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  S34_7_OUT="$(bash "$AUDIT" "$S34_7_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_7_OUT"; then
+    ok "#34 implement-feature ログ 0 件は対象外（FAIL しない）"
+  else
+    ng "#34 impl ログ 0 件でも FAIL した: $S34_7_OUT"
+  fi
+else
+  echo "  [SKIP] #34 GitHub Issue 起票ゲート未通過検知の回帰（sqlite3 または git 不在）"
+fi
+
+# シナリオ8: DB 非採用 SKIP（sqlite3/DB 無し）
+# Given: workflow.db を作らない最小ツリー（github remote 有りだが DB 無し）
+# When:  audit.sh <tmp> を実行する
+# Then:  #34 の FAIL は出ない（DB 非採用は SKIP）
+if command -v git >/dev/null 2>&1; then
+  S34_8_TREE="$(make_git_tree_github)"
+  S34_8_ISS="docs/maintainer/workflow/20260801_000000_gh_nodb"
+  mkdir -p "$S34_8_TREE/$S34_8_ISS"
+  cat > "$S34_8_TREE/$S34_8_ISS/00_要求定義.md" <<'EOF'
+---
+github_issue: null
+---
+EOF
+  S34_8_OUT="$(bash "$AUDIT" "$S34_8_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_8_OUT"; then
+    ok "#34 DB 非採用 SKIP（sqlite3/DB 無しで FAIL しない）"
+  else
+    ng "#34 DB 非採用でも FAIL した: $S34_8_OUT"
+  fi
+else
+  echo "  [SKIP] #34 DB 非採用 SKIP 検証（git 不在）"
+fi
+
+# シナリオ9: git worktree 内でも #34 が発火する（.git がファイルでも false-SKIP しない）
+# Given: github remote 付きリポの worktree（worktree では .git は gitdir ポインタの「ファイル」）に
+#        implement-feature ログ 1 件＋00 frontmatter github_issue: null の issue がある
+# When:  audit.sh <worktree> を実行する
+# Then:  #34 の FAIL が出る（worktree も git ツリーであり rev-parse で判定する。`.git` のディレクトリ
+#        検査に依存すると worktree でゲートが骨抜きになる回帰を防ぐ）
+if command -v sqlite3 >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+  S34_9_MAIN="$(make_git_tree_github)"
+  S34_9_WT="$(mktemp -d)"; TMP_DIRS+=("$S34_9_WT")
+  ( cd "$S34_9_MAIN" && git worktree add -q -b wt-gate-test "$S34_9_WT" >/dev/null 2>&1 )
+  S34_9_ISS="docs/maintainer/workflow/20260801_000000_gh_worktree"
+  mkdir -p "$S34_9_WT/$S34_9_ISS" "$S34_9_WT/.agent-skill-chain/runtime"
+  cat > "$S34_9_WT/$S34_9_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "d9"
+issue_id: "i9"
+github_issue: null
+---
+EOF
+  S34_9_DB="$S34_9_WT/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_9_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_9_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_9_ISS');" 2>/dev/null
+  S34_9_OUT="$(bash "$AUDIT" "$S34_9_WT" 2>&1)"
+  if grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_9_OUT"; then
+    ok "#34 git worktree 内でも FAIL する（.git がファイルでも false-SKIP しない）"
+  else
+    ng "#34 worktree で false-SKIP した（.git ディレクトリ検査の回帰）: $S34_9_OUT"
+  fi
+  ( cd "$S34_9_MAIN" && git worktree remove --force "$S34_9_WT" >/dev/null 2>&1 || true )
+else
+  echo "  [SKIP] #34 worktree 発火検証（sqlite3 または git 不在）"
+fi
+
+# =====================================================================================
+# #31 システム仕様書レビュー証跡欠落検知（check_docs_review_evidence）の tmp 隔離回帰テスト
+#   tmp 隔離（mktemp -d）。本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db は変更しない。
+#   参照: docs/maintainer/workflow/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/
+#         20260712_004252_audit監査31番tmp隔離検証恒久テスト化/03_実装計画.md
+# =====================================================================================
+echo "== #31 システム仕様書レビュー証跡欠落検知 =="
+
+# Given: sqlite3 の有無で分岐するガード（sqlite3 不在ではケース A〜G を再現できないため SKIP）
+if command -v sqlite3 >/dev/null 2>&1; then
+  # シナリオA: 要否プレースホルダの 04 で #31 は FAIL・#5 は非FAIL（非交差、ADR-3）
+  # Given: docs/ 実在・workflow_log に implement-feature 行・04_review の要否が （要 / 不要）
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に "FAIL: システム仕様書レビュー証跡欠落" を含み、"FAIL: docs 更新要否未記載" を含まない
+  A_TREE="$(make_min_tree)"
+  A_ISS="docs/maintainer/workflow/20260101_000000_a31"
+  mkdir -p "$A_TREE/$A_ISS"
+  cat > "$A_TREE/$A_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+- 対象: （...）
+- 理由: （...）
+EOF
+  A_DB="$A_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$A_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$A_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$A_ISS');" 2>/dev/null
+  A_OUT="$(bash "$AUDIT" "$A_TREE" 2>&1)"
+  if grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$A_OUT"; then ok "#31-A 要否プレースホルダで FAIL"; else ng "#31-A FAIL せず: $A_OUT"; fi
+  if ! grep -q 'FAIL: docs 更新要否未記載' <<< "$A_OUT"; then ok "#31/#5 非交差（同一フィクスチャで #5 は非発火）"; else ng "#5 が誤発火（非交差崩れ）: $A_OUT"; fi
+
+  # シナリオB: 要=実タイムスタンプ参照では #31 は FAIL しない（誤検知なし）
+  # Given: docs/ 実在・implement ログあり・04_review の要否=要 + docs/00_review/実タイムスタンプ 参照
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  B_TREE="$(make_min_tree)"; B_ISS="docs/maintainer/workflow/20260101_000000_b31"
+  mkdir -p "$B_TREE/$B_ISS"
+  cat > "$B_TREE/$B_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: 要
+- 対象: docs/00_review/20260101_000000_review.md
+- 理由: 指摘 N→0 の反復を実施
+EOF
+  B_DB="$B_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$B_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$B_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$B_ISS');" 2>/dev/null
+  B_OUT="$(bash "$AUDIT" "$B_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$B_OUT"; then ok "#31-B 要=実TS参照で非FAIL"; else ng "#31-B 誤 FAIL: $B_OUT"; fi
+
+  # シナリオC: 不要=実質理由では #31 は FAIL しない（誤検知なし）
+  # Given: docs/ 実在・implement ログあり・04_review の要否=不要 + 理由が非プレースホルダの実質内容
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  C_TREE="$(make_min_tree)"; C_ISS="docs/maintainer/workflow/20260101_000000_c31"
+  mkdir -p "$C_TREE/$C_ISS"
+  cat > "$C_TREE/$C_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: 不要
+- 対象: なし
+- 理由: 変更が仕様に影響しないため
+EOF
+  C_DB="$C_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$C_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$C_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$C_ISS');" 2>/dev/null
+  C_OUT="$(bash "$AUDIT" "$C_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$C_OUT"; then ok "#31-C 不要=実質理由で非FAIL"; else ng "#31-C 誤 FAIL: $C_OUT"; fi
+
+  # シナリオD: docs/ 不在で #31 は SKIP（非FAIL）
+  # Given: docs/ を作らず issue を .agent-skill-chain/runtime/ 配下に配置（04 はプレースホルダ・implement ログあり）
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  D_TREE="$(make_min_tree)"; D_ISS=".agent-skill-chain/runtime/20260101_000000_d31"
+  mkdir -p "$D_TREE/$D_ISS"
+  cat > "$D_TREE/$D_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+EOF
+  D_DB="$D_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$D_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$D_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$D_ISS');" 2>/dev/null
+  D_OUT="$(bash "$AUDIT" "$D_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$D_OUT"; then ok "#31-D docs/ 不在 SKIP"; else ng "#31-D docs/ 不在でも FAIL: $D_OUT"; fi
+
+  # シナリオE: implement/verify ログ 0件で #31 は continue（非FAIL）
+  # Given: docs/ 実在・04 はプレースホルダだが workflow_log は design-feature のみ（implement/verify 0件）
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  E_TREE="$(make_min_tree)"; E_ISS="docs/maintainer/workflow/20260101_000000_e31"
+  mkdir -p "$E_TREE/$E_ISS"
+  cat > "$E_TREE/$E_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+EOF
+  E_DB="$E_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$E_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$E_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'design-feature', '$E_ISS');" 2>/dev/null
+  E_OUT="$(bash "$AUDIT" "$E_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$E_OUT"; then ok "#31-E implement/verify ログ 0件で SKIP"; else ng "#31-E ログ0件でも FAIL: $E_OUT"; fi
+
+  # シナリオF: workflow.db 不在で #31 は SKIP（非FAIL）
+  # Given: workflow.db を作らない（ケースF）
+  F_TREE="$(make_min_tree)"; F_ISS="docs/maintainer/workflow/20260101_000000_f31"
+  mkdir -p "$F_TREE/$F_ISS"
+  cat > "$F_TREE/$F_ISS/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+EOF
+  # （workflow.db は作らない）
+  # When: audit.sh を実行
+  F_OUT="$(bash "$AUDIT" "$F_TREE" 2>&1)"
+  # Then: DB 不在ガードで #31 は SKIP（非FAIL）
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$F_OUT"; then ok "#31-F DB 不在 SKIP"; else ng "#31-F DB 不在でも FAIL: $F_OUT"; fi
+
+  # シナリオG: 04 が templates/ 配下で #31 は continue（非FAIL）
+  # Given: docs/ ディレクトリと workflow_log テーブルを持つ workflow.db のみ用意し、
+  #        04_review.md を .agent-skill-chain/runtime/templates/ 配下に配置
+  #        （templates 外に #31 を発火させうる 04 は置かない・implement ログは不要）
+  # When:  audit.sh <隔離パス> を実行する
+  # Then:  stderr に #31 由来の "FAIL: システム仕様書レビュー証跡欠落" を含まない
+  G_TREE="$(make_min_tree)"
+  mkdir -p "$G_TREE/docs" "$G_TREE/.agent-skill-chain/runtime/templates"
+  cat > "$G_TREE/.agent-skill-chain/runtime/templates/04_review.md" <<'EOF'
+## docs 更新
+- 要否: （要 / 不要）
+EOF
+  G_DB="$G_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$G_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  G_OUT="$(bash "$AUDIT" "$G_TREE" 2>&1)"
+  if ! grep -q 'FAIL: システム仕様書レビュー証跡欠落' <<< "$G_OUT"; then ok "#31-G templates 配下 SKIP"; else ng "#31-G templates 配下でも FAIL: $G_OUT"; fi
+else
+  # Then: sqlite3 不在は SKIP（集計を汚さない）
+  echo "  [SKIP] #31 システム仕様書レビュー証跡欠落検知（sqlite3 不在）"
+fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then
