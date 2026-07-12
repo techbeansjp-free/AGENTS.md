@@ -8,7 +8,7 @@ document_id: "7d4dc7e5-fdb2-44f8-ace6-99f70f387b64"
 **作成日**: 2026 年 07 月 12 日
 **最終更新**: 2026 年 07 月 12 日
 
-> **重要**: 本レビューは verify-and-close command の skill chain（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従い、[.agent-skill-chain/source/REVIEW_RULE.md](../../../../.agent-skill-chain/source/REVIEW_RULE.md) を参照して実施した。
+> **重要**: 本レビューは verify-and-close command の skill chain（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従い、[.agent-skill-chain/source/REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) を参照して実施した。
 > **レビュー深度**: full（新規スクリプト・CI 定義の構造変更・複数ドキュメント改訂を含む中〜大規模。最重要 issue のため）。
 
 ---
@@ -239,7 +239,7 @@ document_id: "7d4dc7e5-fdb2-44f8-ace6-99f70f387b64"
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
-- [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md) / [`.agent-skill-chain/source/CODE_COMMENT_RULES.md`](../../../../.agent-skill-chain/source/CODE_COMMENT_RULES.md)
+- [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) / [`.agent-skill-chain/source/CODE_COMMENT_RULES.md`](../../../../../.agent-skill-chain/source/CODE_COMMENT_RULES.md)
 
 ---
 
