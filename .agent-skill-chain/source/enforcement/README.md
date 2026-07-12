@@ -242,7 +242,7 @@ SQLite WAL モードでは
 | #29 実装前 04 | audit.sh check_review_before_implement | CI FAIL（DB 不採用は SKIP） |
 | #31 システム仕様書レビュー証跡欠落 | audit.sh check_docs_review_evidence | CI FAIL（DB 不採用・docs/ 非採用・実装変更ログ 0 件は SKIP） |
 | #32 実装前 review-docs 未実行 | audit.sh check_reviewdocs_before_implement | CI FAIL（DB 不採用・発効日前（grandfather）・close/templates 配下は SKIP。#29 と非交差） |
-| orchestrator の Write/Edit/Shell 拒否 | PreToolUse.sh（ロール判定 → block 関数）。**委譲先 subagent（stdin `agent_id` あり＝`IS_SUBAGENT=1`）は worker として実作業（Bash/Edit/Write）を許可し、main（`agent_id` なし）のみ block する**（判定の実体は PreToolUse.sh のみ・本表は参照）。 | runtime reject（条件付き：ロール伝達時 exit 2／未伝達時 案内 exit 0）＋ CI 補完 |
+| orchestrator の Write/Edit/Shell 拒否 | PreToolUse.sh（ロール判定 → block 関数）。**委譲先 subagent（stdin `agent_id` あり＝`IS_SUBAGENT=1`）は worker として実作業（Bash/Edit/Write）を許可し、main（`agent_id` なし）のみ block する**（判定の実体は PreToolUse.sh のみ・本表は参照）。**ただし `.agent-skill-chain/runtime/` 配下への直接 Write/Edit は R1（path 軸）により IS_SUBAGENT の値に関わらず全 ROLE 一律で block される**。R1（path 軸・全 ROLE 一律）と本行の判定（role 軸・subagent 除外）は目的の異なる独立ガードであり、非対称は意図的である（timestamp memo・workflow.db 保護のため）。subagent が runtime/ 配下へ書く正規ルートは Bash（heredoc/cp/new-workflow-memo.sh 等）である。 | runtime reject（条件付き：ロール伝達時 exit 2／未伝達時 案内 exit 0）＋ CI 補完 |
 | ログ frontmatter 禁止 / `logs/` 廃止 | `.agent-skill-chain/runtime/templates/github/scripts/subagent-guard.sh` §1 / §2 | CI FAIL |
 | #22 自立進行（許可確認） | （未実装） | 未実装・runtime/人手監査 |
 | #23 自立進行（指示文案だけ） | （未実装） | 未実装・runtime/人手監査 |
