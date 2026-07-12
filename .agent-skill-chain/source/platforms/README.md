@@ -1,6 +1,6 @@
 # platforms — Cursor / Claude Code / Gemini の差分
 
-各プラットフォームの**入口・設定**の差分と、**スキル形式・配置**の差分をまとめる。**workflow/ は phase と templates のみ**とし、プラットフォーム差分は本 platforms/ に集約する。**「いつ何を読むか」の正本は boot/LOAD_POLICY.md。** 本 platforms はスキル形式・配備・ツール別設定のみを記載する。
+各プラットフォームの**入口・設定**の差分と、**スキル形式・配置**の差分をまとめる。**workflow/ は phase と templates のみ**とし、プラットフォーム差分は本 platforms/ に集約する。**「いつ何を読むか」の正本は boot/LOAD_POLICY.md。** 本 platforms はスキル形式・配備・ツール別設定、および **PF 固有のモデルティア推奨デフォルト（advisory）** を記載する。
 
 ---
 

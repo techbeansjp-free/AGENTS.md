@@ -25,6 +25,13 @@
 2. あればその内容に従う。
 3. なければ `.agent-skill-chain/source/` の標準ルール（実行ルール.md 等）に従う。
 
+### 明確化注記: source 内部のサブ層と特化ドメインの順序
+
+上記の一般規約「**project > source の 2 層**」は維持する。そのうえで次を明確化する（一般規約は変更しない）。
+
+- **source 内部には PF 限定名前空間（`platforms/<pf>/`）のサブ層があり得る。** `platforms/<pf>/` も MODEL_SELECTION 等のコア本体も、いずれも `source/` 配下である。したがって `.agent-skill-chain/project/` は、`platforms/<pf>/` を含む**全 source に優先する**（2 層規約と矛盾しない、その内部詳細化にすぎない）。
+- **特化ドメインの具体的な解決順序は、当該ドメインのドキュメント側を正本とする。** 例: モデルティア解決順（`project/MODEL_TIER_TABLE.md` > `source/platforms/claude/MODEL_TIER_RECOMMENDED.md` > `source/MODEL_SELECTION.md` 抽象原則）の正本は当該 tier ドキュメント側にあり、本 README には重複記載しない（単一責務）。
+
 ## 配置例
 
 採用先プロジェクトで次のようなファイルを用意する場合、このディレクトリに置く。
