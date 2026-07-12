@@ -91,7 +91,7 @@ npx github:techbeansjp-free/AGENTS.md init
 | `init [dir]` | 採用先（既定: カレントディレクトリ）へ `.agent-skill-chain/source/` 等を配備する |
 | `upgrade [dir]` | 既存配備を再同期する（当面 `init` と同等。新版取り込みに使う） |
 | `uninstall [dir]` | `init`/`setup` が配備した成果物のみを除去する（ユーザー資産は既定で保持） |
-| `doctor` | 配備に必要な前提（`setup.sh`・`bash`・`sqlite3` 等）の有無を確認する。enforcement 配線の on/off も表示する |
+| `doctor [dir]` | 採用先（既定: カレントディレクトリ）の配備前提の有無を確認する。enforcement 配線の on/off・証跡健全性も表示する |
 | `enforce <on\|off\|status> [dir]` | enforcement フックを `.claude/settings.json` に着脱する（**既定 off / opt-in**） |
 | `version` | パッケージのバージョンを表示する |
 | `help` | 使い方を表示する |
@@ -126,11 +126,13 @@ npx github:techbeansjp-free/AGENTS.md uninstall --purge --yes
 
 | 区分 | 既定の `uninstall` | `--purge` 付き |
 |------|-------------------|----------------|
-| 除去する配備物 | `.agent-skill-chain/source/`・`AGENTS.md`・`CLAUDE.md`・`.cursor/agents-core.mdc`・`.claude/hooks` の所有フック・`.claude/skills` と `.cursor/skills` の所有 skill エントリ・`.agent-skill-chain/runtime/templates/` | 同左 |
-| 保持するユーザー資産 | `.agent-skill-chain/project/`・`.cursor` のユーザー作成物・`.claude` のユーザー設定・**自作スキル**（`.claude/skills`・`.cursor/skills`）・**独自フック**（`.claude/hooks`）・`.agent-skill-chain/runtime/<issue>`・`.agent-skill-chain/runtime/workflow.db*` | 左に同じ（`workflow.db` は削除） |
+| 除去する配備物 | `.agent-skill-chain/source/`・`AGENTS.md`・`CLAUDE.md`・`.cursor/agents-core.mdc`・`.claude/hooks` の所有フック・`.claude/skills` と `.cursor/skills` の所有 skill エントリ・`.agent-skill-chain/runtime/templates/` | 同左 ＋ `.agent-skill-chain/project/`・`.agent-skill-chain/runtime/`（issue 履歴・`workflow.db` を含む） |
+| 保持するユーザー資産 | `.agent-skill-chain/project/`・`.cursor` のユーザー作成物・`.claude` のユーザー設定・**自作スキル**（`.claude/skills`・`.cursor/skills`）・**独自フック**（`.claude/hooks`）・`.agent-skill-chain/runtime/<issue>`・`.agent-skill-chain/runtime/workflow.db*` | `.agent-skill-chain/project/` を含め**すべて削除**（統合ルート `.agent-skill-chain/` ごと完全削除）。`.cursor`/`.claude` のユーザー作成物・自作スキル・独自フックは既定同様に保持 |
 | 安全策 | `.agent-skill-chain/source/` も `AGENTS.md` も無い（未配備の）ディレクトリでは誤削除を防ぐため中止する。`.cursor`/`.claude` は丸ごと消さず**配備分（既知エントリ）のみ**除去（自作スキル/独自フックは保持）。`--yes` 無しは表示のみ。 | 同左 |
 
-> 補足: `init`／`upgrade` は workflow.db の初期化に `sqlite3` バイナリを必要とする（`doctor` で確認できる）。**project 固有ルールは `.agent-skill-chain/project/` に置くこと**を推奨する（再インストール・upgrade・uninstall で保持される）。`.cursor`/`.claude` に置いたユーザー作成物も保持される。`AGENTS.md`・`CLAUDE.md`・`.agent-skill-chain/project/` 等の人間編集領域は無断破壊されない（保持・上書き契約の正本は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md)）。
+> **注意**: `--purge --yes` は上記「保持するユーザー資産」の `.agent-skill-chain/project/`・`.agent-skill-chain/runtime/` を含め `.agent-skill-chain/` を丸ごと削除する。project 固有ルールも失われるため、必要な資産は事前に退避すること。
+
+> 補足: `init`／`upgrade` は workflow.db の初期化に `sqlite3` バイナリを必要とする（`doctor` で確認できる）。**project 固有ルールは `.agent-skill-chain/project/` に置くこと**を推奨する（再インストール・upgrade・**既定の** uninstall で保持される。ただし `--purge` では削除される）。`.cursor`/`.claude` に置いたユーザー作成物も保持される。`AGENTS.md`・`CLAUDE.md`・`.agent-skill-chain/project/` 等の人間編集領域は無断破壊されない（保持・上書き契約の正本は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md)）。
 
 **enforcement の opt-in（既定 off）**:
 
