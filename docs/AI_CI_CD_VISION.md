@@ -240,6 +240,6 @@ AI 開発では **成果物だけでなく「作り方」も監査対象** に�
 
 ## 参照
 
-- [.agents/enforcement/README.md](../.agents/enforcement/README.md) — 強制の配置・失敗条件
-- [.agents/enforcement/DESIGN.md](../.agents/enforcement/DESIGN.md) — 強制の4層・逸脱検知
-- [META_LAYER.md](../.agents/META_LAYER.md) — 基盤の設計原則・膨張防止
+- [.agent-skill-chain/source/enforcement/README.md](../.agent-skill-chain/source/enforcement/README.md) — 強制の配置・失敗条件
+- [.agent-skill-chain/source/enforcement/DESIGN.md](../.agent-skill-chain/source/enforcement/DESIGN.md) — 強制の4層・逸脱検知
+- [META_LAYER.md](../.agent-skill-chain/source/META_LAYER.md) — 基盤の設計原則・膨張防止

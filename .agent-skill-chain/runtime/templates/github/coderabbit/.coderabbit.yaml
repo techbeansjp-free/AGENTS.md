@@ -1,0 +1,23 @@
+# CodeRabbit 設定テンプレート
+# 採用先ではこのファイルをリポジトリルートにコピーし、.coderabbit.yaml として配置する。
+# 公式: https://docs.coderabbit.com/reference/configuration-yaml
+# .workflow / .agents / .agent-skill-chain/project は AI 向け規約・ワークフロー管理用のためレビュー対象外とする。
+
+# 応答言語（レビュー・チャット・コメント・Issue 作成・更新を日本語で。不要なら削除または en-US 等に変更）
+language: "ja"
+
+reviews:
+  path_filters:
+    # レビュー対象外: ワークフロー・規約・プロジェクト固有ルール
+    - "!.agent-skill-chain/runtime/**"
+    - "!.agent-skill-chain/source/**"
+    - "!.agent-skill-chain/project/**"
+    - "!docs/00_review/**"
+    - "!AGENTS.md"
+    - "!CLAUDE.md"
+    - "!output_*.py"
+  # 日本語でレビューコメントするよう明示（language の補足）
+  path_instructions:
+    - path: "**"
+      instructions: |
+        コードレビュー、チャット、PR コメント、**Issue の作成・更新**は常に**日本語**で行ってください。

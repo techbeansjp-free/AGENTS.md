@@ -1,13 +1,13 @@
 # AGENTS.md — 入口案内
 
-**メインエージェントは進行役（orchestrator）としてのみ動作し、実作業は例外なく必ずサブエージェントに委譲する（絶対強制）。** 作業依頼（実装・編集・設計・レビュー・コマンド実行・00〜04 の作成・更新など）を受けたら、**規模・内容・手間の大小にかかわらずいかなる場合も** phase 判定 → command 選択 → **必ずサブへ委譲**のみ行う。メインが自らファイル作成・編集・コマンド実行を行うことは**絶対禁止**とする。成果物が 01_要件定義.md / 02_設計.md / 03_実装計画.md 等のドキュメントである場合も、メインは実作業（ドキュメント本文の執筆・編集）を**例外なく**行わず、**必ず**サブに委譲する。enforcement で runtime または CI により強制する（[.agents/enforcement/README.md](.agents/enforcement/README.md) §絶対強制）。
+**メインエージェントは進行役（orchestrator）としてのみ動作し、実作業は例外なく必ずサブエージェントに委譲する（絶対強制）。** 作業依頼（実装・編集・設計・レビュー・コマンド実行・00〜04 の作成・更新など）を受けたら、**規模・内容・手間の大小にかかわらずいかなる場合も** phase 判定 → command 選択 → **必ずサブへ委譲**のみ行う。メインが自らファイル作成・編集・コマンド実行を行うことは**絶対禁止**とする。成果物が 01_要件定義.md / 02_設計.md / 03_実装計画.md 等のドキュメントである場合も、メインは実作業（ドキュメント本文の執筆・編集）を**例外なく**行わず、**必ず**サブに委譲する。enforcement で runtime または CI により強制する（[.agent-skill-chain/source/enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) §絶対強制）。
 
-- **依頼タイプ**（作業依頼 vs 質問・分析依頼）の振る舞い: [CORE](.agents/boot/CORE.md) §依頼タイプ別振る舞い。
-- **委譲フロー**のパターン（説明＋計画までメイン／計画も含めてサブ）: [CORE](.agents/boot/CORE.md) §委譲フローのパターン。
-- **委譲の実行手段**（Cursor 上で何を呼ぶか）: [.agents/skills/agent/run_command.md](.agents/skills/agent/run_command.md) の 1 か所で規定。
-- **委譲できない環境**では委譲計画のみを返し実作業は行わない: [CORE](.agents/boot/CORE.md) §依頼タイプ別振る舞い。
-- **フォールバック方針**（委譲手段がプラットフォームで利用できない場合に限定。軽作業・小規模を理由にメインが実作業することは禁止）: [CORE](.agents/boot/CORE.md) §フォールバック方針。
-- **HEARTBEAT 読了**の強制: [CORE](.agents/boot/CORE.md) §Heartbeat。
+- **依頼タイプ**（作業依頼 vs 質問・分析依頼）の振る舞い: [CORE](.agent-skill-chain/source/boot/CORE.md) §依頼タイプ別振る舞い。
+- **委譲フロー**のパターン（説明＋計画までメイン／計画も含めてサブ）: [CORE](.agent-skill-chain/source/boot/CORE.md) §委譲フローのパターン。
+- **委譲の実行手段**（Cursor 上で何を呼ぶか）: [.agent-skill-chain/source/skills/agent/run_command.md](.agent-skill-chain/source/skills/agent/run_command.md) の 1 か所で規定。
+- **委譲できない環境**では委譲計画のみを返し実作業は行わない: [CORE](.agent-skill-chain/source/boot/CORE.md) §依頼タイプ別振る舞い。
+- **フォールバック方針**（委譲手段がプラットフォームで利用できない場合に限定。軽作業・小規模を理由にメインが実作業することは禁止）: [CORE](.agent-skill-chain/source/boot/CORE.md) §フォールバック方針。
+- **HEARTBEAT 読了**の強制: [CORE](.agent-skill-chain/source/boot/CORE.md) §Heartbeat。
 
 ---
 
@@ -16,7 +16,7 @@
 - **解釈**: 全依頼を **agents workflow** で解釈する。
 - **進行役**: 常に **orchestrator** とする。phase 判定 → command 選択 → 委譲を行う。
 - **自動選択**: 必要に応じて **sub-agent / skills / commands** を自動選択し、**必ず委譲**して適用する（メインが自ら実作業しない）。
-- **出力**: 必ず [.agents/IO_CONTRACT.md](.agents/IO_CONTRACT.md) および [.agents/RULES.md](.agents/RULES.md) に従う。
+- **出力**: 必ず [.agent-skill-chain/source/IO_CONTRACT.md](.agent-skill-chain/source/IO_CONTRACT.md) および [.agent-skill-chain/source/RULES.md](.agent-skill-chain/source/RULES.md) に従う。
 
 さらに次の **自立進行ルール** を強制する:
 
@@ -29,7 +29,7 @@
     - 実際に作成・更新された成果物（パス・タイトル・概要・差分など）をユーザーに報告する。
   - 作成・レビューいずれのケースでも、サブへの指示文案だけを提案して終了することは **禁止** とする。
   - 特に **実装前のドキュメントレビュー**（00/01/02/03 に対するレビュー依頼）では、PHASES.md §レビュー成果物の配置ルール および run_command.md §実装前のドキュメントレビュー に従い、
-    - `.workflow/{issue}/memo/` 以下に YYYYMMDD_HHMMSS_ プレフィックス付き memo を作成しレビュー証跡を記録し、
+    - `.agent-skill-chain/runtime/{issue}/memo/` 以下に YYYYMMDD_HHMMSS_ プレフィックス付き memo を作成しレビュー証跡を記録し、
     - 「レビュー＋修正」を 1 セットとして指摘がなくなるまで繰り返し、
     - **完了後に書記（write-workflow-log）へ委譲して証跡を記録させる**（書記委譲まで実施してはじめて「完了」。書記を省略してユーザーに報告のみで終了することは禁止）
     ことを、**通常依頼時のデフォルト挙動**とする。レビュー本文だけを返して memo 作成・修正反復・書記委譲を省略することは enforcement §失敗条件 #23 に該当する。
@@ -59,17 +59,17 @@
     - **提案して系**（例: 「issueを作成するためのサブへの指示文を提案して」「プロンプト案だけ教えて」）→ 委譲せず、サブへの指示文案のみを返す（SC-02 相当）。
     - **説明して系**（例: 「issueを作ってもらうための流れを教えて」「手順だけ説明して」）→ 自動で issue 作成せず、手順・ルールの説明のみを行う（SC-03 相当）。
   - **キーワード衝突時の優先度**: ①提案して系、②説明して系、③作成して系。曖昧な場合はユーザーに確認する。
-  - **要件・シナリオの詳細**: 作成して系は必ずサブに issue 作成を委譲し報告（SC-01）。提案して系は委譲せず指示文案のみ（SC-02）。説明して系は手順説明のみ（SC-03）。種別は提案して系＞説明して系＞作成して系の優先度で判定。詳細は .agents/workflow 配下の issue 作成関連ドキュメントを参照。
+  - **要件・シナリオの詳細**: 作成して系は必ずサブに issue 作成を委譲し報告（SC-01）。提案して系は委譲せず指示文案のみ（SC-02）。説明して系は手順説明のみ（SC-03）。種別は提案して系＞説明して系＞作成して系の優先度で判定。詳細は .agent-skill-chain/source/workflow 配下の issue 作成関連ドキュメントを参照。
 
-軽作業時の実行モード（quick / standard / full）・違反時の失敗条件と差し戻し先は後述および [.agents/enforcement/README.md](.agents/enforcement/README.md) に従う。
+軽作業時の実行モード（quick / standard / full）・違反時の失敗条件と差し戻し先は後述および [.agent-skill-chain/source/enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) に従う。
 
-> **実行契約の正本**: [.agents/boot/CORE.md](.agents/boot/CORE.md)（AI はここを必ず読む）。読込順・いつ何を読むかは [.agents/boot/LOAD_POLICY.md](.agents/boot/LOAD_POLICY.md) に委譲。
+> **実行契約の正本**: [.agent-skill-chain/source/boot/CORE.md](.agent-skill-chain/source/boot/CORE.md)（AI はここを必ず読む）。読込順・いつ何を読むかは [.agent-skill-chain/source/boot/LOAD_POLICY.md](.agent-skill-chain/source/boot/LOAD_POLICY.md) に委譲。
 
 ---
 
 ## 標準実行モード
 
-上記のとおり、明示がなくても **agents workflow** に従って解釈する。進行役は常に orchestrator。sub-agent / skill / rule は明示的に禁止されていない限り適用する。出力は IO_CONTRACT に従う。依頼受付時に仕様・設計・実装・レビューのいずれの段階かを最初に判定する。規模に応じた **quick / standard / full** は [.agents/RULES.md](.agents/RULES.md) の実行モードを参照する。
+上記のとおり、明示がなくても **agents workflow** に従って解釈する。進行役は常に orchestrator。sub-agent / skill / rule は明示的に禁止されていない限り適用する。出力は IO_CONTRACT に従う。依頼受付時に仕様・設計・実装・レビューのいずれの段階かを最初に判定する。規模に応じた **quick / standard / full** は [.agent-skill-chain/source/RULES.md](.agent-skill-chain/source/RULES.md) の実行モードを参照する。
 
 ---
 
@@ -79,28 +79,28 @@
 
 | 順 | 対象 | 備考 |
 |----|------|------|
-| 0 | **.agents-project/**（プロジェクトルート） | **存在すれば最優先**。.agents より優先（CORE §ルールの優先順位）。 |
+| 0 | **.agent-skill-chain/project/**（プロジェクトルート） | **存在すれば最優先**。.agents より優先（CORE §ルールの優先順位）。 |
 | 1 | 本ファイル（**AGENTS.md**） | 人間・AI の入口。 |
-| 2 | .agents/boot/**CORE.md** | 実行契約の正本。 |
-| 3 | .agents/**IO_CONTRACT.md** | command / skill の入出力契約。 |
-| 4 | .agents/**RULES.md** | 実行・ドキュメント・テスト要約・実行モード。 |
-| 5 | .agents/**GETTING_STARTED.md** | メイン・サブの手順要約。 |
-| 6 | .agents/workflow/**PHASES.md** | フェーズ・成果物・DoD。 |
-| 7 | .agents/**commands/** および 該当 command | 実行時は LOAD_POLICY に従い run_command と commands/{name}.md を読む。 |
+| 2 | .agent-skill-chain/source/boot/**CORE.md** | 実行契約の正本。 |
+| 3 | .agent-skill-chain/source/**IO_CONTRACT.md** | command / skill の入出力契約。 |
+| 4 | .agent-skill-chain/source/**RULES.md** | 実行・ドキュメント・テスト要約・実行モード。 |
+| 5 | .agent-skill-chain/source/**GETTING_STARTED.md** | メイン・サブの手順要約。 |
+| 6 | .agent-skill-chain/source/workflow/**PHASES.md** | フェーズ・成果物・DoD。 |
+| 7 | .agent-skill-chain/source/**commands/** および 該当 command | 実行時は LOAD_POLICY に従い run_command と commands/{name}.md を読む。 |
 
-トリガー別の「いつ何を読むか」の詳細は [.agents/boot/LOAD_POLICY.md](.agents/boot/LOAD_POLICY.md) に委譲する。詳細ルールは各 spec / skills / enforcement を参照する。
+トリガー別の「いつ何を読むか」の詳細は [.agent-skill-chain/source/boot/LOAD_POLICY.md](.agent-skill-chain/source/boot/LOAD_POLICY.md) に委譲する。詳細ルールは各 spec / skills / enforcement を参照する。
 
 ---
 
 ## 何があるか
 
-- **人間・ツールの入口**: 本ファイル。詳細は [.agents/README.md](.agents/README.md) を参照。
-- **プロジェクト固有・最優先**: プロジェクトルートの **.agents-project/** が .agents より優先される。同名・同目的のルールは .agents-project を採用（.agents/CORE.md §ルールの優先順位）。
-- **AI の契約**: .agents/boot/CORE.md（正本）。思想は .agents/CONCEPTS.md、読込順は LOAD_POLICY へ委譲。
-- **ワークフロー**: .agents/workflow/PHASES.md（フェーズ = gate）。**実行単位は command**（skill chain）。.agents/commands/ を参照。
-- **command 実行時**: LOAD_POLICY の表に従い、.agents/skills/agent/run_command.md と .agents/commands/{name}.md を読む。
-- **単体 capability**: .agents/skills/{domain}/{capability}/ を LOAD_POLICY に従い読む。
-- **違反時**: 失敗条件と差し戻し先は [.agents/enforcement/README.md](.agents/enforcement/README.md) §失敗条件と差し戻しに従う。CI および subagent-guard が同一の判定ルールを参照する。
+- **人間・ツールの入口**: 本ファイル。詳細は [.agent-skill-chain/source/README.md](.agent-skill-chain/source/README.md) を参照。
+- **プロジェクト固有・最優先**: プロジェクトルートの **.agent-skill-chain/project/** が .agents より優先される。同名・同目的のルールは .agent-skill-chain/project を採用（.agent-skill-chain/source/CORE.md §ルールの優先順位）。
+- **AI の契約**: .agent-skill-chain/source/boot/CORE.md（正本）。思想は .agent-skill-chain/source/CONCEPTS.md、読込順は LOAD_POLICY へ委譲。
+- **ワークフロー**: .agent-skill-chain/source/workflow/PHASES.md（フェーズ = gate）。**実行単位は command**（skill chain）。.agent-skill-chain/source/commands/ を参照。
+- **command 実行時**: LOAD_POLICY の表に従い、.agent-skill-chain/source/skills/agent/run_command.md と .agent-skill-chain/source/commands/{name}.md を読む。
+- **単体 capability**: .agent-skill-chain/source/skills/{domain}/{capability}/ を LOAD_POLICY に従い読む。
+- **違反時**: 失敗条件と差し戻し先は [.agent-skill-chain/source/enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) §失敗条件と差し戻しに従う。CI および subagent-guard が同一の判定ルールを参照する。
 
 ---
 
@@ -108,17 +108,17 @@
 
 | 変えたいもの | 見るファイル |
 |--------------|--------------|
-| 絶対制約・読了義務 | .agents/boot/CORE.md |
-| いつ何を読むか・command/capability トリガー | .agents/boot/LOAD_POLICY.md |
-| フェーズ・成果物・DoD | .agents/workflow/PHASES.md |
-| 実行モード（full/standard/quick） | .agents/RULES.md |
-| カバレッジ 100% 目標と例外運用（台帳・言語別マーカ） | .agents/COVERAGE_AND_EXCEPTIONS.md |
-| command 実行の形・skill chain | .agents/skills/agent/run_command.md と .agents/commands/ |
-| 構成・索引 | .agents/README.md |
-| 失敗条件・差し戻し先 | .agents/enforcement/README.md |
-| プロジェクト固有ルール（最優先） | プロジェクトルートの .agents-project/ |
-| コピー対象・セットアップ詳細 | .agents/SETUP.md |
-| 基盤の肥大化防止・文書追加ルール | .agents/META_LAYER.md |
+| 絶対制約・読了義務 | .agent-skill-chain/source/boot/CORE.md |
+| いつ何を読むか・command/capability トリガー | .agent-skill-chain/source/boot/LOAD_POLICY.md |
+| フェーズ・成果物・DoD | .agent-skill-chain/source/workflow/PHASES.md |
+| 実行モード（full/standard/quick） | .agent-skill-chain/source/RULES.md |
+| カバレッジ 100% 目標と例外運用（台帳・言語別マーカ） | .agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md |
+| command 実行の形・skill chain | .agent-skill-chain/source/skills/agent/run_command.md と .agent-skill-chain/source/commands/ |
+| 構成・索引 | .agent-skill-chain/source/README.md |
+| 失敗条件・差し戻し先 | .agent-skill-chain/source/enforcement/README.md |
+| プロジェクト固有ルール（最優先） | プロジェクトルートの .agent-skill-chain/project/ |
+| コピー対象・セットアップ詳細 | .agent-skill-chain/source/SETUP.md |
+| 基盤の肥大化防止・文書追加ルール | .agent-skill-chain/source/META_LAYER.md |
 
 ---
 

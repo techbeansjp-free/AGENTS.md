@@ -2,19 +2,21 @@
 
 LLM エージェント（AI）と人間が協働するための**実行契約・能力（skills）中心のワークフロー**を定義する仕様パッケージ。プロジェクトにコピーして、AI に「.agents に従って」と指示すると、フェーズ（要求→要件→設計→実装計画→実装→レビュー）に沿って動く。
 
-**メタレイヤー**: 本仕様で定義する orchestrator / worker 等は「プロジェクト内で動くエージェント」の振る舞いである。これら仕様ファイルを編集するアシスタント（Cursor 等）は別レイヤー。**基盤の自己肥大化防止**（Feature First・文書追加前の統合検討・一時文書の寿命・責務境界・監視指標）も [.agents/META_LAYER.md](.agents/META_LAYER.md) で定義する。
+**配備と強制力の考え方**: `.agent-skill-chain/source/` を**単一の正本**とし、各 AI ツール（Claude Code / Cursor / Gemini / Copilot / Codex）へ**段階的に配備**する（全ツールが同一機能で対応するわけではない）。**強制力はツールごとに異なる**（Claude Code は runtime hook で物理強制、Cursor はルール配布・一部誘導、Gemini / Copilot / Codex は方針適用予定）。**最終保証は CI audit**（全ツール共通の最後の砦）が担う。ツール別の強制力区分の正本は [.agent-skill-chain/source/enforcement/README.md §ツール別強制力マトリクス](.agent-skill-chain/source/enforcement/README.md#ツール別強制力マトリクス) を参照。
+
+**メタレイヤー**: 本仕様で定義する orchestrator / worker 等は「プロジェクト内で動くエージェント」の振る舞いである。これら仕様ファイルを編集するアシスタント（Cursor 等）は別レイヤー。**基盤の自己肥大化防止**（Feature First・文書追加前の統合検討・一時文書の寿命・責務境界・監視指標）も [.agent-skill-chain/source/META_LAYER.md](.agent-skill-chain/source/META_LAYER.md) で定義する。
 
 ---
 
 ## 何がどこに置かれるか
 
 - **プロジェクトルートに置くもの（その他・今まで通り）**: `AGENTS.md`, `CLAUDE.md`。入口として 1 ファイルずつ。AI はここから .agents を参照する。
-- **.agents-project/**（プロジェクト固有・**最優先**）: プロジェクトごとの固有ルールを置く。**.agents-project が .agents より優先**される。同名・同目的のルールは .agents-project を採用。setup では作成しない。プロジェクト側で必要に応じて用意する。
-- **.agents ディレクトリ配下に置くもの**: 実行契約・能力・ワークフロー・強制の正本。**正本は本パッケージの `.agents/` にあり、セットアップでプロジェクトの `.agents/` にコピーする。**
+- **.agent-skill-chain/project/**（プロジェクト固有・**最優先**）: プロジェクトごとの固有ルールを置く。**.agent-skill-chain/project が .agents より優先**される。同名・同目的のルールは .agent-skill-chain/project を採用。setup では作成しない。プロジェクト側で必要に応じて用意する。
+- **.agents ディレクトリ配下に置くもの**: 実行契約・能力・ワークフロー・強制の正本。**正本は本パッケージの `.agent-skill-chain/source/` にあり、セットアップでプロジェクトの `.agent-skill-chain/source/` にコピーする。**
 
 ---
 
-## .agents 配下の構成（正本: パッケージの `.agents/`）
+## .agents 配下の構成（正本: パッケージの `.agent-skill-chain/source/`）
 
 | 配置 | 内容 |
 |------|------|
@@ -38,29 +40,148 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 中心は **skill（能力）** と **command（skill chain）**。phase は gate、agents はオーケストレーションのみ。
 
-**テンプレート（00〜04 等）**: .agents 配下には置かない。**`.workflow/templates/`** にあり、setup でプロジェクトの **.workflow/templates/** にコピーする。プロジェクトは .workflow/templates を参照する。
+**テンプレート（00〜04 等）**: .agents 配下には置かない。**`.agent-skill-chain/runtime/templates/`** にあり、setup でプロジェクトの **.agent-skill-chain/runtime/templates/** にコピーする。プロジェクトは .agent-skill-chain/runtime/templates を参照する。
 
 ---
 
-## セットアップ（プロジェクトへ導入するとき）
+## 導入（プロジェクトへ配備するとき）
 
-1. **本パッケージをプロジェクトに置く**  
-   プロジェクトルート直下に本リポジトリを置く（clone またはコピー。ディレクトリ名は慣例として `agents-package` とすることが多い）。
+導線は **apm install（一次配布導線）**・**npx github:techbeansjp-free/AGENTS.md init（開発者・自己拡張向け補助導線・GitHub 直接参照）**・**Claude marketplace（副導線）** の 3 つ。**基本は `apm install` を推奨する。**
 
-2. **セットアップ脚本を実行する**（**パッケージのルート**で実行する）  
-   ```bash
-   cd agents-package   # 配置したディレクトリ名に合わせる
-   bash .agents/scripts/setup.sh
-   ```
-   プロジェクトルートに留まったまま実行する場合は `bash <配置ディレクトリ名>/.agents/scripts/setup.sh` とする。
-   これで以下が行われる:
-   - パッケージルートの `AGENTS.md` と `CLAUDE.md` がプロジェクトルートにコピーされる
-   - パッケージの `.agents/` がプロジェクトの `.agents/` にコピーされる
-   - `.workflow/templates` が無い場合は **`.workflow/templates/`**（パッケージ内）からコピーされる
-   - `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
+> CLI コマンド名は `agents-md`。`apm install` は npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得する。
 
-3. **動作確認**  
-   プロジェクトルートに `AGENTS.md` と `.agents/` が存在することを確認する。詳細は [.agents/SETUP.md](.agents/SETUP.md) のスモークテストを参照。
+### 0. apm 経由（一次配布導線・推奨）
+
+[`microsoft/apm`](https://github.com/microsoft/apm)（Agent Package Manager）で配布する。`apm` CLI を導入したうえで、採用先プロジェクトのルートで次を実行する。
+
+```bash
+apm install techbeansjp-free/AGENTS.md#release/apm
+# ハーネスマーカー（.claude/ .github/ 等）が無いプロジェクトでは --target を明示する
+apm install techbeansjp-free/AGENTS.md#release/apm --target claude
+```
+
+これで以下が行われる:
+
+- `.agents/skills/{domain}-{capability}/`（例: `.agents/skills/architecture-define-boundaries/`）に、個々の能力（skill）が apm skill プリミティブとして展開される（正本側のディレクトリ名は `{domain}__{capability}` だが、apm が展開時に `__` を `-` へ暗黙に正規化する。`SKILL.md` の frontmatter `name` は正本のまま変化しない）
+- `.agents/skills/agent-skill-chain-full/reference/.agent-skill-chain/source/` 配下に、正本一式（実行契約・skills・commands・boot・workflow・spec・enforcement 等）が参照コンテキストとして展開される
+- `apm.lock.yaml` が採用先プロジェクトのルートに生成される
+
+再現性を求める場合はブランチ ref の代わりにタグ ref（`#apm-vX.Y.Z`。例: `apm install techbeansjp-free/AGENTS.md#apm-v0.1.0`）でピン留めできる。v1 スコープは skills プリミティブのみであり、agents/commands(prompts)/instructions/hooks の apm ネイティブ配備は今後の課題（詳細は [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md) を参照）。
+
+### 1. GitHub 直接参照（開発者・自己拡張向けの補助導線。npm レジストリは経由しない）
+
+`npx` は GitHub リポジトリを直接参照する（`npx github:owner/repo` 記法）。`package.json` の `prepare` フックにより git 経由インストール時に `npm run build` が自動実行され、非追跡（`.gitignore` 対象）の `bin/agents-md.js` が自動生成される。採用先プロジェクトのルートで次を実行する。`init` が内部で `.agent-skill-chain/source/scripts/setup.sh` を呼び、配備一式を行う。
+
+```bash
+cd my-project
+npx github:techbeansjp-free/AGENTS.md init
+```
+
+これで以下が行われる:
+
+- パッケージの `AGENTS.md` と `CLAUDE.md` がプロジェクトルートにコピーされる
+- パッケージの `.agent-skill-chain/source/` がプロジェクトの `.agent-skill-chain/source/` にコピーされる
+- `.agent-skill-chain/runtime/templates` が無い場合は **`.agent-skill-chain/runtime/templates/`**（パッケージ内）からコピーされる
+- `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
+
+**サブコマンド**:
+
+| コマンド | 役割 |
+|----------|------|
+| `init [dir]` | 採用先（既定: カレントディレクトリ）へ `.agent-skill-chain/source/` 等を配備する |
+| `upgrade [dir]` | 既存配備を再同期する（当面 `init` と同等。新版取り込みに使う） |
+| `uninstall [dir]` | `init`/`setup` が配備した成果物のみを除去する（ユーザー資産は既定で保持） |
+| `doctor` | 配備に必要な前提（`setup.sh`・`bash`・`sqlite3` 等）の有無を確認する。enforcement 配線の on/off も表示する |
+| `enforce <on\|off\|status> [dir]` | enforcement フックを `.claude/settings.json` に着脱する（**既定 off / opt-in**） |
+| `version` | パッケージのバージョンを表示する |
+| `help` | 使い方を表示する |
+
+**版のピン留め・アップグレード**:
+
+```bash
+# 特定版をピン留めして導入（#<tag-or-branch> で git ref を固定。再現的に同一内容を取り込める）
+npx github:techbeansjp-free/AGENTS.md#<tag-or-branch> init
+
+# 既存配備を新版へ再同期（アップグレード。ref 省略時は既定ブランチ＝最新を指す）
+npx github:techbeansjp-free/AGENTS.md upgrade
+
+# 配備前提（bash・sqlite3 等）の健全性を確認
+npx github:techbeansjp-free/AGENTS.md doctor
+```
+
+**アンインストール（つけ外し）**:
+
+プラグインは簡単につけ外しできる。`init`/`upgrade`/`uninstall` は **パッケージ配備物（既知エントリ）のみ**を管理し、ユーザー資産（`.agent-skill-chain/project/`・`.cursor`/`.claude` のユーザー作成物・`.claude/skills` や `.cursor/skills` の**自作スキル**・`.claude/hooks` の**独自フック**・`.agent-skill-chain/runtime/<issue>`・`workflow.db`）は**破壊しない**。`uninstall` は配備物のみを除去し、人間が編集する資産は**既定で保持**する。引数なしは dry-run（削除対象の表示のみ）。
+
+```bash
+# 採用先プロジェクトのルートで実行。まず削除対象を表示（dry-run。何も消さない）
+npx github:techbeansjp-free/AGENTS.md uninstall
+
+# 実際に配備物のみを除去する（.cursor/.claude は丸ごと消さず配備分のみ。自作スキル/独自フックは保持）
+npx github:techbeansjp-free/AGENTS.md uninstall --yes
+
+# workflow.db 等の証跡も含めて完全除去する
+npx github:techbeansjp-free/AGENTS.md uninstall --purge --yes
+```
+
+| 区分 | 既定の `uninstall` | `--purge` 付き |
+|------|-------------------|----------------|
+| 除去する配備物 | `.agent-skill-chain/source/`・`AGENTS.md`・`CLAUDE.md`・`.cursor/agents-core.mdc`・`.claude/hooks` の所有フック・`.claude/skills` と `.cursor/skills` の所有 skill エントリ・`.agent-skill-chain/runtime/templates/` | 同左 |
+| 保持するユーザー資産 | `.agent-skill-chain/project/`・`.cursor` のユーザー作成物・`.claude` のユーザー設定・**自作スキル**（`.claude/skills`・`.cursor/skills`）・**独自フック**（`.claude/hooks`）・`.agent-skill-chain/runtime/<issue>`・`.agent-skill-chain/runtime/workflow.db*` | 左に同じ（`workflow.db` は削除） |
+| 安全策 | `.agent-skill-chain/source/` も `AGENTS.md` も無い（未配備の）ディレクトリでは誤削除を防ぐため中止する。`.cursor`/`.claude` は丸ごと消さず**配備分（既知エントリ）のみ**除去（自作スキル/独自フックは保持）。`--yes` 無しは表示のみ。 | 同左 |
+
+> 補足: `init`／`upgrade` は workflow.db の初期化に `sqlite3` バイナリを必要とする（`doctor` で確認できる）。**project 固有ルールは `.agent-skill-chain/project/` に置くこと**を推奨する（再インストール・upgrade・uninstall で保持される）。`.cursor`/`.claude` に置いたユーザー作成物も保持される。`AGENTS.md`・`CLAUDE.md`・`.agent-skill-chain/project/` 等の人間編集領域は無断破壊されない（保持・上書き契約の正本は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md)）。
+
+**enforcement の opt-in（既定 off）**:
+
+enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` への配線は**既定 off**。配線するとセッション挙動が変わる（orchestrator の Write/Edit/Bash 等が拒否される）ため、**ドッグフーディング時に任意で opt-in** する。常時 on にはしない。
+
+```bash
+# 採用先プロジェクトのルートで実行
+npx github:techbeansjp-free/AGENTS.md enforce status   # 現在の on/off と hook 実在性を表示
+npx github:techbeansjp-free/AGENTS.md enforce on       # opt-in（settings.json に配線をマージ。既存値は保持・.bak 退避）
+npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement 配線のみ外す。ユーザー値は保持）
+```
+
+- `enforce on` は正本テンプレート（`.agent-skill-chain/source/platforms/claude/settings.enforce.json`）から `hooks.PreToolUse`/`PostToolUse`（`.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` を指す）と `env.AGENT_ROLE=orchestrator` を配線する。既存の `settings.json` があれば**ユーザー値を破壊せず**マージし、上書き前に `settings.json.bak` へ退避する。
+- `enforce off` は enforcement 由来の配線のみを外し、ユーザーの env・hooks・permissions 等は保持する。
+- 設定変更を**ライブの Claude セッションに反映するには再起動が必要**。無効 JSON の場合 `enforce` は破壊を避けて中止する。
+
+### 2. Claude marketplace 経由（副導線）
+
+Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コマンド）から導入する経路。本リポの [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) を marketplace として登録し、プラグイン `agents-package`（正本 `.agent-skill-chain/source/` から生成される Claude アダプタ）を追加する。
+
+```text
+/plugin marketplace add techbeansjp-free/AGENTS.md
+/plugin install agents-package
+```
+
+> marketplace のプラグイン生成物（`.adapters/claude`）は正本 `.agent-skill-chain/source/` から `build-adapters.sh` で生成される。詳細は [docs/maintainer/adapters.md](docs/maintainer/adapters.md) を参照。
+
+#### リリース手順（メンテナ向け）
+
+リリースは [.github/workflows/release.yml](.github/workflows/release.yml) の `workflow_dispatch` を手動起動して行う。リポジトリ変数 `RELEASE_ENABLED` が `true` のときのみ実行され、version bump（patch +1）・日時タグ・GitHub Release 作成 → marketplace 公開 → apm release が直列に実行される。リリース発火はユーザー承認前提。詳細正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)。
+
+### 3. ローカル配備（リポを直接置く場合）
+
+npm を使わずパッケージを直接置く場合は、パッケージルートで `setup.sh` を実行する。
+
+```bash
+bash .agent-skill-chain/source/scripts/setup.sh /path/to/my-project   # 引数省略時はカレントを採用先とする
+```
+
+### 動作確認
+
+プロジェクトルートに `AGENTS.md` と `.agent-skill-chain/source/` が存在することを確認する。詳細は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) のスモークテストを参照。
+
+本リポジトリ（パッケージ正本／自己拡張）でテストを回す場合は、一括 runner で 1 コマンド実行できる。
+
+```bash
+npm test                                  # = bash test/run-all.sh
+bash test/run-all.sh                      # npm を使わない場合
+```
+
+全テストを順に実行し、末尾サマリ（`合計=N PASS=p FAIL=f SKIP=s`）と終了コード（全成功で 0・1 件以上 FAIL で非 0）を返す。個別実行・前提依存マトリクス（bash/git/node/tar/sqlite3）・SKIP 規約は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) §テスト実行 を参照。
 
 ---
 
@@ -68,17 +189,17 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 | 目的 | 読むファイル |
 |------|--------------|
-| プロジェクトの入口 | ルートの AGENTS.md → .agents/README.md |
-| 絶対制約・読了義務 | .agents/boot/CORE.md |
-| いつ何を読むか | .agents/boot/LOAD_POLICY.md |
-| フェーズ・成果物・DoD | .agents/workflow/PHASES.md |
-| command を実行するとき | .agents/skills/agent/run_command.md と .agents/commands/{name}.md |
-| コピー対象・セットアップ詳細 | [.agents/SETUP.md](.agents/SETUP.md) |
-| 基盤の肥大化防止・文書追加ルール | [.agents/META_LAYER.md](.agents/META_LAYER.md) |
+| プロジェクトの入口 | ルートの AGENTS.md → .agent-skill-chain/source/README.md |
+| 絶対制約・読了義務 | .agent-skill-chain/source/boot/CORE.md |
+| いつ何を読むか | .agent-skill-chain/source/boot/LOAD_POLICY.md |
+| フェーズ・成果物・DoD | .agent-skill-chain/source/workflow/PHASES.md |
+| command を実行するとき | .agent-skill-chain/source/skills/agent/run_command.md と .agent-skill-chain/source/commands/{name}.md |
+| コピー対象・セットアップ詳細 | [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) |
+| 基盤の肥大化防止・文書追加ルール | [.agent-skill-chain/source/META_LAYER.md](.agent-skill-chain/source/META_LAYER.md) |
 
 ---
 
 ## その他（今まで通り）
 
-- テンプレート一式・.workflow の運用は従来どおり。**spec（設計原則等）は .agents/spec/ に含まれ、要求・設計の前に参照する。**issue 用フォルダは `.workflow/{YYYYMMDD_HHMMSS_issue_name}/` に作成し、証跡（memo）のファイル名は `YYYYMMDD_HHMMSS_` プレフィックスを付ける。
-- 本 README は本パッケージの概要と .agents 配下の構成・セットアップ手順を説明する。実行契約の詳細は .agents 配下（とくに .agents/README.md, boot/CORE.md, GETTING_STARTED.md）を参照すること。
+- テンプレート一式・.workflow の運用は従来どおり。**spec（設計原則等）は .agent-skill-chain/source/spec/ に含まれ、要求・設計の前に参照する。**issue 用フォルダは `.agent-skill-chain/runtime/{YYYYMMDD_HHMMSS_issue_name}/` に作成し、証跡（memo）のファイル名は `YYYYMMDD_HHMMSS_` プレフィックスを付ける。
+- 本 README は本パッケージの概要と .agents 配下の構成・セットアップ手順を説明する。実行契約の詳細は .agents 配下（とくに .agent-skill-chain/source/README.md, boot/CORE.md, GETTING_STARTED.md）を参照すること。

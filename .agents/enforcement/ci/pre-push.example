@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-# pre-push.example — push 前に audit を実行するフックの例
-# 採用先で .git/hooks/pre-push にコピーして利用する。
-
-cd "$(git rev-parse --show-toplevel)" || exit 1
-AGENTS_ROOT="${AGENTS_ROOT:-.agents}"
-"${AGENTS_ROOT}/enforcement/ci/audit.sh" "."
-exit $?

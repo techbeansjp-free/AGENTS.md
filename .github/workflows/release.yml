@@ -1,0 +1,351 @@
+# release.yml — バージョン bump と marketplace / apm 生成物の公開
+#
+# このワークフローは手動 workflow_dispatch でのみ起動し、リポジトリ変数 RELEASE_ENABLED が
+# 'true' のときだけ実行する。3 つのジョブを直列に実行する:
+#   - version-bump: 最新 main を取得して package.json の semver patch を +1 し、plugin.json・apm.yml へ
+#     従属同期して 4 ファイルを main へ書き戻す。続けて JST 日時タグ vYYYYMMDD.HHMMSS を付与し、
+#     同タグの GitHub Release（自動生成ノート）を作成する。
+#   - release-marketplace: 正本から Claude/Cursor アダプタを生成し release/marketplace ブランチへ公開する。
+#   - apm-release: 正本から apm パッケージを生成し release/apm ブランチへ公開し apm-vX.Y.Z タグを付与する。
+#
+# version の正本は bump 後の package.json:version（plugin.json・apm.yml は sync-version.sh で従属同期）。
+# 正本リポ（main）には生成物 .adapters/・.apm/ を一切置かない（gitignore のまま）。
+#
+# 無限ループ防止:
+#   - 主防御: bump 結果の書き戻し push は GitHub Actions 既定 GITHUB_TOKEN を用いる。
+#     既定 GITHUB_TOKEN による push は workflow を再トリガしない（GitHub 仕様）。PAT / deploy key は使わない。
+#   - 補助防御: コミットメッセージの [skip ci]、concurrency による直列化、actor != github-actions[bot] のガード。
+
+name: release
+
+# bump 書き戻し push・生成物の release ブランチ push・GitHub Release 作成のため write を要求する。
+permissions:
+  contents: write
+
+on:
+  # 自動発火は設定していない。手動 workflow_dispatch でのみ起動する。
+  workflow_dispatch:
+
+# release ジョブ群を直列化し、同秒衝突・並行 bump の競合確率を下げる。
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # =====================================================================
+  # version bump + 日時タグ + GitHub Release
+  # =====================================================================
+  version-bump:
+    runs-on: ubuntu-latest
+    # bot 自身の書き戻し push では発火しない。RELEASE_ENABLED が 'true' のときのみ実行する。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      # bump 起点を最新 main に取り直す（並行マージで同一 patch を二度採番するのを緩和）。
+      - name: Sync latest main (rebase)
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git pull --rebase origin main
+
+      # version bump（patch +1）。git tag は npm に作らせず、後段で日時タグを別途作る。
+      - name: Bump version (patch, no git tag)
+        id: bump
+        run: |
+          set -e
+          npm version patch --no-git-tag-version
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "OK: package.json version を $version へ bump しました（semver patch +1）。"
+
+      # package.json を正本に plugin.json・apm.yml へ version を従属同期し、三者一致を検証する。
+      - name: Sync plugin.json/apm.yml version & verify
+        run: |
+          set -e
+          bash .agent-skill-chain/source/scripts/sync-version.sh --write
+          bash .agent-skill-chain/source/scripts/sync-version.sh --check
+
+      # bump 結果を main へ書き戻す。既定 GITHUB_TOKEN による push は workflow を再トリガしない（主防御）。
+      # コミットメッセージの [skip ci] と non-fast-forward 時の rebase 再試行は補助防御。
+      # 書き戻し対象は sync-version.sh が更新する 4 ファイル（package.json・package-lock.json・plugin.json・apm.yml）。
+      - name: Commit & push version bump to main
+        run: |
+          set -e
+          version="${{ steps.bump.outputs.version }}"
+          if git diff --quiet -- package.json package-lock.json .agent-skill-chain/source/platforms/claude/plugin.json .agent-skill-chain/source/platforms/apm/apm.yml; then
+            echo "変更なし。bump 書き戻しをスキップします。"
+          else
+            git add package.json package-lock.json .agent-skill-chain/source/platforms/claude/plugin.json .agent-skill-chain/source/platforms/apm/apm.yml
+            git commit -m "chore(release): v${version} [skip ci]"
+            # 書き戻し push が non-fast-forward で reject されたら rebase の上で 1 回再試行する。
+            if ! git push origin HEAD:main; then
+              git pull --rebase origin main
+              git push origin HEAD:main
+            fi
+          fi
+
+      # JST 日時タグ vYYYYMMDD.HHMMSS を決定する（ランナー TZ 既定 UTC に依存しない）。
+      # 既存タグと衝突する場合は秒 +1 → サフィックス -2 → -3 の最大 3 段で再試行し、尽きたら失敗させる。
+      - name: Decide datetime tag (collision retry, max 3)
+        id: datetag
+        run: |
+          set -e
+          git fetch --tags --quiet
+          base="$(TZ=Asia/Tokyo date +v%Y%m%d.%H%M%S)"
+          candidates=("$base")
+          # 秒 +1 候補
+          plus1="v$(TZ=Asia/Tokyo date -d '+1 second' +%Y%m%d.%H%M%S)"
+          candidates+=("$plus1" "${base}-2" "${base}-3")
+          tag=""
+          for c in "${candidates[@]}"; do
+            if git rev-parse -q --verify "refs/tags/$c" >/dev/null; then
+              echo "タグ $c は既存。次候補へ。"
+              continue
+            fi
+            tag="$c"
+            break
+          done
+          if [ -z "$tag" ]; then
+            echo "ERROR: 日時タグ候補（最大 3 段リトライ）がすべて衝突しました。打ち切ります。" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "OK: 日時タグ $tag を採用します。"
+
+      # GitHub Release 作成（自動生成ノート）。既存判定で二重作成を避ける（冪等）。
+      - name: Create GitHub Release (generate notes)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          tag="${{ steps.datetag.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag は既存。作成をスキップします（冪等）。"
+          else
+            gh release create "$tag" --target "$(git rev-parse HEAD)" --title "$tag" --generate-notes
+            echo "OK: GitHub Release $tag を作成しました（自動ノート）。"
+          fi
+
+  # =====================================================================
+  # marketplace リリース — 生成物を release/marketplace へ commit
+  # =====================================================================
+  release-marketplace:
+    runs-on: ubuntu-latest
+    # RELEASE_ENABLED が 'true' のときのみ実行する（他ジョブと同一のゲート）。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
+    needs: version-bump
+    env:
+      RELEASE_BRANCH: release/marketplace
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Install sqlite3
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sqlite3
+
+      # bump 書き戻し後の main を取り直し、最新 version 基準で生成する（並行 bump 後の整合）。
+      - name: Sync latest main (rebase)
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --rebase origin main
+
+      # package.json ↔ plugin.json の version 一致を検証する。
+      - name: Verify version sync (package.json == plugin.json)
+        run: |
+          set -e
+          bash .agent-skill-chain/source/scripts/sync-version.sh --check
+          pkg="$(node -p "require('./package.json').version")"
+          echo "OK: package.json=$pkg（plugin.json と一致）。"
+
+      # 正本 .agent-skill-chain/source/ から Claude（＋cursor）アダプタを生成する。
+      - name: Build adapters (claude, cursor)
+        run: |
+          set -e
+          bash .agent-skill-chain/source/scripts/build-adapters.sh claude cursor
+
+      # 再生成 diff ゼロ検証: もう一度 build しても生成物が変わらない（決定性）。
+      - name: Re-build determinism check (diff-zero)
+        run: |
+          set -e
+          rm -rf /tmp/adapters_first
+          cp -R .adapters /tmp/adapters_first
+          bash .agent-skill-chain/source/scripts/build-adapters.sh claude cursor
+          diff -r /tmp/adapters_first/claude .adapters/claude
+          diff -r /tmp/adapters_first/cursor .adapters/cursor
+          echo "OK: 再生成で生成物の差分なし（決定性）。"
+
+      # 生成物をリリースブランチへ commit/push する。main には生成物を置かない。
+      # commit メッセージは bump 後 version を参照する。
+      - name: Publish adapters to release branch
+        run: |
+          set -e
+          version="${{ needs.version-bump.outputs.version }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 生成物を退避（checkout でツリーが入れ替わっても残るよう作業ツリー外へ）
+          work="$(mktemp -d)"
+          cp -R .adapters "$work/.adapters"
+          cp .claude-plugin/marketplace.json "$work/marketplace.json"
+
+          # リリースブランチを用意（無ければ orphan で作る）
+          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$RELEASE_BRANCH"
+            git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+            git rm -rf --quiet .adapters 2>/dev/null || true
+          else
+            git checkout --orphan "$RELEASE_BRANCH"
+            git rm -rf --quiet . 2>/dev/null || true
+          fi
+
+          # 生成物と marketplace.json を配置（source: "./.adapters/claude" はここで解決される）
+          rm -rf .adapters .claude-plugin
+          mkdir -p .claude-plugin
+          cp -R "$work/.adapters" .adapters
+          cp "$work/marketplace.json" .claude-plugin/marketplace.json
+
+          # .adapters を確実に追跡対象にする（リリースブランチでは生成物を追跡する）
+          git add -f .adapters .claude-plugin/marketplace.json
+
+          if git diff --cached --quiet; then
+            echo "変更なし（同一生成物）。commit をスキップします。"
+          else
+            git commit -m "release: v${version} adapters (generated from .agent-skill-chain/source/) [skip ci]"
+          fi
+          git push origin "$RELEASE_BRANCH"
+          echo "OK: $RELEASE_BRANCH へ生成物を公開しました（marketplace source 解決先）。"
+
+  # =====================================================================
+  # apm release — apm.yml + .apm/ を release/apm ブランチへ commit し、
+  #     同一コミットへ apm-vX.Y.Z タグを付与する
+  # =====================================================================
+  apm-release:
+    runs-on: ubuntu-latest
+    # RELEASE_ENABLED が 'true' のときのみ実行する（他ジョブと同一のゲート）。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
+    needs: release-marketplace
+    env:
+      RELEASE_BRANCH: release/apm
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      # bump 書き戻し・marketplace job 完了後の main を取り直し、最新 version 基準で生成する。
+      - name: Sync latest main (rebase)
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --rebase origin main
+
+      # package.json ↔ plugin.json ↔ apm.yml の整合（tag 非依存）。
+      - name: Verify version sync (package.json == plugin.json == apm.yml)
+        run: |
+          set -e
+          bash .agent-skill-chain/source/scripts/sync-version.sh --check
+          pkg="$(node -p "require('./package.json').version")"
+          echo "OK: package.json=$pkg（plugin.json/apm.yml と一致）。"
+
+      # 正本 .agent-skill-chain/source/ から apm パッケージ（apm.yml + .apm/）を生成する。
+      - name: Build apm package
+        run: bash .agent-skill-chain/source/scripts/build-adapters.sh apm
+
+      # 再生成 diff ゼロ検証: もう一度生成しても同一（決定性）であることを検証する
+      # （既存 release-marketplace の「再生成 diff ゼロ」検証パターンを踏襲）。
+      - name: Re-build determinism check (diff-zero)
+        run: |
+          set -e
+          work="$(mktemp -d)"
+          find .apm apm.yml -type f -exec sha256sum {} \; | sort > "$work/hash1.txt"
+          bash .agent-skill-chain/source/scripts/build-adapters.sh apm
+          find .apm apm.yml -type f -exec sha256sum {} \; | sort > "$work/hash2.txt"
+          diff "$work/hash1.txt" "$work/hash2.txt"
+          echo "OK: 再生成で生成物の差分なし（決定性）。"
+
+      # 生成物を release/apm ブランチへ commit/push し、同一コミットへ apm-vX.Y.Z タグを付与する
+      # （既存 release-marketplace の「退避 → ブランチ用意 → 配置 → git add -f → commit/push」を
+      #  apm.yml/.apm/ に読み替えて流用し、末尾でタグを付与する）。
+      - name: Publish to release/apm and tag
+        run: |
+          set -e
+          version="$(node -p "require('./package.json').version")"
+          tag="apm-v${version}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 生成物を退避（checkout でツリーが入れ替わっても残るよう作業ツリー外へ）
+          work="$(mktemp -d)"
+          cp -R .apm "$work/.apm"
+          cp apm.yml "$work/apm.yml"
+
+          # リリースブランチを用意（無ければ orphan で作る）
+          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$RELEASE_BRANCH"
+            git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+            git rm -rf --quiet .apm apm.yml 2>/dev/null || true
+          else
+            git checkout --orphan "$RELEASE_BRANCH"
+            git rm -rf --quiet . 2>/dev/null || true
+          fi
+
+          # 生成物を配置
+          rm -rf .apm apm.yml
+          cp -R "$work/.apm" .apm
+          cp "$work/apm.yml" apm.yml
+
+          # .apm/apm.yml を確実に追跡対象にする（リリースブランチでは生成物を追跡する）
+          git add -f .apm apm.yml
+
+          if git diff --cached --quiet; then
+            echo "変更なし（同一生成物）。commit をスキップします。"
+          else
+            git commit -m "release: apm-v${version} package (generated from .agent-skill-chain/source/) [skip ci]"
+          fi
+          git push origin "$RELEASE_BRANCH"
+
+          # 同一コミットへ apm-vX.Y.Z タグを付与する（既定 GITHUB_TOKEN によるタグ push は
+          # on:push を再トリガしない。既存の日時タグ vYYYYMMDD.HHMMSS とは接頭辞が異なり衝突しない）。
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "タグ $tag は既存。付与をスキップします（冪等）。"
+          else
+            git tag "$tag" "$(git rev-parse HEAD)"
+            git push origin "refs/tags/$tag"
+            echo "OK: タグ $tag を付与しました。"
+          fi
+
+          echo "OK: $RELEASE_BRANCH へ apm パッケージを公開しました。"
