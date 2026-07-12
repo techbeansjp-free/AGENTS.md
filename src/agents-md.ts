@@ -114,7 +114,7 @@ function printHelp(): void {
   init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agent-skill-chain/ 等を配備する
   upgrade [dir]         既存配備を再同期する（旧 3 ディレクトリ構成は統合移行してから再同期）
   uninstall [dir]       init/setup が配備した成果物のみを除去する（ユーザー資産は既定で保持）
-  doctor                配備に必要な前提（setup.sh・bash・sqlite3 等）の有無 ＋ 証跡健全性
+  doctor [dir]          配備に必要な前提（setup.sh・bash・sqlite3 等）の有無 ＋ 証跡健全性
                         （workflow.db の hash チェーン・integrity_check・配線差分）を確認する
   audit [dir]           .agent-skill-chain/source/enforcement/ci/audit.sh を実行する（CI 監査の薄ラッパー・終了コード透過）
   export [dir]          workflow.db を NDJSON（1 行 1 JSON）で標準出力へ書き出す（read-only）
@@ -369,8 +369,7 @@ function shellQuote(s: string): string {
 }
 
 // doctor: 配備に必要な前提を確認する。終了コードで成否を返す。
-function runDoctor(): number {
-  const projectRoot = process.cwd();
+function runDoctor(projectRoot: string = process.cwd()): number {
   let ok = true;
 
   const check = (label: string, present: boolean, hint?: string): void => {
@@ -1248,8 +1247,13 @@ function main(argv: string[]): number {
       }
       return runEnforce(projectRoot, action);
     }
-    case "doctor":
-      return runDoctor();
+    case "doctor": {
+      // doctor [dir]。dir 省略時は cwd。init/uninstall/audit/export と同じ引数解決規約。
+      const dirArg = argv.slice(3).find((a) => !a.startsWith("-"));
+      let dir = process.cwd();
+      if (dirArg) dir = dirArg.startsWith("/") ? dirArg : join(process.cwd(), dirArg);
+      return runDoctor(dir);
+    }
     case "audit": {
       // audit [dir]。dir 省略時は cwd。audit.sh の終了コードを透過。
       const dirArg = argv.slice(3).find((a) => !a.startsWith("-"));

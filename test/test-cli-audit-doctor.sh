@@ -87,6 +87,31 @@ doctor_healthy() {
 }
 doctor_healthy
 
+doctor_dir_arg() {
+  # ユースケース: doctor の診断対象ディレクトリ
+  # シナリオ: cwd と別の配備済み dir を doctor <dir> で診断する（引数が効くこと）
+  # Given: 健全 DB を持つ配備済み dir H が存在し、シェルの cwd は H とは別の場所である
+  local WORK; WORK="$(mktemp -d)"
+  local out
+  # When: cwd を WORK にしたまま第1引数で H を渡す
+  out="$( cd "$WORK" && node "$BIN" doctor "$H" 2>&1 )"
+  # Then: 採用先が H で、H の証跡健全性が診断される（無関係な cwd=WORK が診断されない）
+  assert_contains "採用先=$H" "$out" "doctor [dir]: 引数の dir が採用先になる"
+  assert_contains "hash チェーン検証 = 整合" "$out" "doctor [dir]: 渡した dir の証跡が診断される"
+  rm -rf "$WORK"
+}
+doctor_dir_arg
+
+doctor_no_arg_backward_compat() {
+  # シナリオ: 引数なし doctor は従来どおり cwd を診断する（後方互換）
+  # Given: 健全 DB を持つ配備済み dir H。cwd を H にして引数なしで実行する
+  local out
+  out="$( cd "$H" && node "$BIN" doctor 2>&1 )"
+  # Then: 採用先が cwd（H）になる
+  assert_contains "採用先=$H" "$out" "doctor: 引数なしは cwd（$H）が採用先になる（後方互換）"
+}
+doctor_no_arg_backward_compat
+
 doctor_tamper_hash() {
   # シナリオ: entry_hash 改ざんを doctor が [NG] 検知し DB は不変
   # Given: 健全 DB の 1 行 entry_hash を改ざん
