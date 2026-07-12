@@ -855,6 +855,169 @@ else
   echo "  [SKIP] #31 システム仕様書レビュー証跡欠落検知（sqlite3 不在）"
 fi
 
+# =====================================================================================
+# バグ A（worktree 誤 SKIP 是正）の回帰テスト
+#   git worktree ではルートの .git が「ファイル」になるため、旧実装の
+#   [[ ! -d "$PROJECT_ROOT/.git" ]] 判定が誤って真になり -d .git 系監査（#10/#18/#19/#25/#27/#28）が
+#   静かに SKIP（fail-open＝偽陰性）していた。git rev-parse --is-inside-work-tree 化により worktree でも
+#   監査が実行されることを、#27（両リスト欠落）の FAIL 発火・非発火と #28 の実行ログで確認する。
+#   tmp 隔離（mktemp -d）。本開発リポの source/DB は変更しない。
+# =====================================================================================
+echo "== バグA worktree 誤 SKIP 是正（-d .git → is-inside-work-tree） =="
+
+# 親リポ（最小 issue ツリー＋初期コミット）から git worktree を切り出すヘルパー。
+# 返すパスは worktree ルート（そこでは .git はディレクトリではなくファイルになる）。
+make_worktree() {
+  local parent wt
+  parent="$(make_min_tree)"
+  ( cd "$parent" && git init -q && git config user.email t@e.x && git config user.name t \
+      && git add -A && git commit -qm init >/dev/null )
+  wt="$(mktemp -d)"
+  TMP_DIRS+=("$wt")
+  rmdir "$wt"   # git worktree add は対象パス不在（または空）を要求する
+  ( cd "$parent" && git worktree add -q -b wtbranch "$wt" >/dev/null 2>&1 )
+  printf '%s\n' "$wt"
+}
+
+if command -v git >/dev/null 2>&1; then
+  # 前提: worktree ルートの .git が「ファイル」であること（フィクスチャの妥当性確認）。
+  WT_CHECK="$(make_worktree)"
+  if [[ -f "$WT_CHECK/.git" && ! -d "$WT_CHECK/.git" ]]; then
+    ok "worktree フィクスチャ: ルート .git がファイル（旧 -d .git 判定が誤発火する条件）"
+  else
+    ng "worktree フィクスチャ生成に失敗（.git がファイルでない）: $WT_CHECK"
+  fi
+
+  # シナリオ W1: worktree で両リスト欠落 04 が #27 で FAIL する（旧実装では SKIP＝見逃していた）
+  # Given: worktree ルートで docs 配下 04_review.md を追加コミット。04 に「敵対的観点」「must-preserve」が無い
+  #        （#5 は満たすよう ## docs 更新 を入れて #27 を単独発火させる）
+  # When:  audit.sh <worktree> を実行する
+  # Then:  #27「REVIEW_DUAL 両リスト欠落」が FAIL する（worktree でも #27 が実行されている証拠）
+  W1_WT="$(make_worktree)"
+  W1_ISS="docs/maintainer/workflow/20260101_000000_wt27"
+  mkdir -p "$W1_WT/$W1_ISS"
+  # 注意: 本文に #27 が grep するキーワード（敵対的観点 / must-preserve / 不変条件）を
+  #       一切含めないこと（含めると欠落を再現できず #27 が誤って PASS する）。
+  cat > "$W1_WT/$W1_ISS/04_review.md" <<'EOF'
+# 04_review
+
+本レビューには両リストが欠けている。
+
+## docs 更新
+- 要否: 不要
+- 対象: なし
+- 理由: 文書のみ
+EOF
+  ( cd "$W1_WT" && git add -A && git commit -qm add04 >/dev/null 2>&1 )
+  W1_OUT="$(bash "$AUDIT" "$W1_WT" 2>&1)"
+  if grep -q 'REVIEW_DUAL 両リスト欠落' <<< "$W1_OUT"; then
+    ok "W1 worktree で #27 が実行され両リスト欠落を FAIL（-d .git 誤 SKIP の是正）"
+  else
+    ng "W1 worktree で #27 が SKIP された（偽陰性の回帰）: $W1_OUT"
+  fi
+
+  # シナリオ W2: worktree で両リストが揃った 04 は #27 で FAIL しない（誤 FAIL でないこと）
+  # Given: worktree ルートで docs 配下 04_review.md を追加コミット。04 に両リストと ## docs 更新 がある
+  # When:  audit.sh <worktree> を実行する
+  # Then:  #27「REVIEW_DUAL 両リスト欠落」は出ない（過検知でないことの確認）
+  W2_WT="$(make_worktree)"
+  W2_ISS="docs/maintainer/workflow/20260101_000000_wt27ok"
+  mkdir -p "$W2_WT/$W2_ISS"
+  cat > "$W2_WT/$W2_ISS/04_review.md" <<'EOF'
+# 04_review
+
+## 敵対的観点
+- ダミーの敵対的観点
+
+## must-preserve（不変条件）
+- ダミーの不変条件
+
+## docs 更新
+- 要否: 不要
+- 対象: なし
+- 理由: 文書のみ
+EOF
+  ( cd "$W2_WT" && git add -A && git commit -qm add04 >/dev/null 2>&1 )
+  W2_OUT="$(bash "$AUDIT" "$W2_WT" 2>&1)"
+  if ! grep -q 'REVIEW_DUAL 両リスト欠落' <<< "$W2_OUT"; then
+    ok "W2 worktree で両リスト充足 04 は #27 が誤 FAIL しない（過検知なし）"
+  else
+    ng "W2 worktree で両リスト充足なのに #27 が誤 FAIL した: $W2_OUT"
+  fi
+
+  # シナリオ W3: worktree で #28 の実行ログが出る（-d .git 先行ガード除去の確認）
+  # Given: worktree ルートに docs 配下 issue ドキュメント（WORKFLOW_SCAN_DIRS 非空化）
+  # When:  audit.sh <worktree> を実行する
+  # Then:  "[audit] checking issue docs in gitignored paths (#28)" が出力される
+  #        （旧実装は 768 行の -d .git で 769 の is-inside より先に return し echo に到達しなかった）
+  W3_WT="$(make_worktree)"
+  W3_ISS="docs/maintainer/workflow/20260101_000000_wt28"
+  mkdir -p "$W3_WT/$W3_ISS"
+  : > "$W3_WT/$W3_ISS/00_要求定義.md"
+  ( cd "$W3_WT" && git add -A && git commit -qm add00 >/dev/null 2>&1 )
+  W3_OUT="$(bash "$AUDIT" "$W3_WT" 2>&1)"
+  if grep -q 'checking issue docs in gitignored paths (#28)' <<< "$W3_OUT"; then
+    ok "W3 worktree で #28 が実行される（768 行の冗長 -d .git ガード除去の確認）"
+  else
+    ng "W3 worktree で #28 が SKIP された（768 行の誤ガード回帰）: $W3_OUT"
+  fi
+else
+  echo "  [SKIP] バグA worktree 回帰（git 不在）"
+fi
+
+# =====================================================================================
+# バグ B（close 除外漏れ是正）の回帰テスト
+#   #4（テスト観点未記載・03_実装計画.md）と #5（docs 更新要否未記載・04_review.md）は
+#   従来 */templates/* のみ除外し、close 済み issue を除外していなかったため close 配下が永久 FAIL
+#   していた。ループへ */close/* 除外 continue を追加した。close 配下は非 FAIL・close 外 in-progress は
+#   従来どおり FAIL（過剰除外なし）を確認する。git 不要（#4/#5 は非 git チェック）。tmp 隔離。
+# =====================================================================================
+echo "== バグB close 除外漏れ是正（#4 テスト観点・#5 docs 更新要否） =="
+
+# シナリオ B1: close 配下の欠落 03/04 は #4/#5 で FAIL せず、close 外 in-progress の欠落は FAIL する
+# Given: close 配下に「テスト観点」欠落 03 と「docs 更新」欠落 04、close 外 in-progress に同様の欠落 03/04
+# When:  audit.sh <tmp> を実行する
+# Then:  FAIL 出力に close パスは含まれず、in-progress パスは #4/#5 で含まれる
+BUGB_TREE="$(make_min_tree)"
+BUGB_CLOSE="docs/maintainer/workflow/close/20260101_000000_closed"
+BUGB_INPROG="docs/maintainer/workflow/20260101_000000_inprog"
+mkdir -p "$BUGB_TREE/$BUGB_CLOSE" "$BUGB_TREE/$BUGB_INPROG"
+# テスト観点セクションを欠く 03（#4 対象）
+printf '# 実装計画\n\n本文のみ（テスト観点セクション無し）。\n' > "$BUGB_TREE/$BUGB_CLOSE/03_実装計画.md"
+printf '# 実装計画\n\n本文のみ（テスト観点セクション無し）。\n' > "$BUGB_TREE/$BUGB_INPROG/03_実装計画.md"
+# docs 更新セクションを欠く 04（#5 対象。#27 は非 git ツリーで SKIP のため干渉しない）
+printf '# 04_review\n\n本文のみ（docs 更新セクション無し）。\n' > "$BUGB_TREE/$BUGB_CLOSE/04_review.md"
+printf '# 04_review\n\n本文のみ（docs 更新セクション無し）。\n' > "$BUGB_TREE/$BUGB_INPROG/04_review.md"
+BUGB_OUT="$(bash "$AUDIT" "$BUGB_TREE" 2>&1)"
+# close 配下は #4/#5 いずれの FAIL 行にも現れない
+if ! grep -E 'FAIL: (テスト観点未記載|docs 更新要否未記載)' <<< "$BUGB_OUT" | grep -q "$BUGB_CLOSE"; then
+  ok "B1 close 配下の欠落 03/04 は #4/#5 で FAIL しない（close 除外追加）"
+else
+  ng "B1 close 配下が #4/#5 で FAIL した（close 除外が効いていない）: $BUGB_OUT"
+fi
+# close 外 in-progress は従来どおり #4/#5 で FAIL する（過剰除外していない）
+if grep -q "FAIL: テスト観点未記載.*$BUGB_INPROG" <<< "$BUGB_OUT" \
+   && grep -q "FAIL: docs 更新要否未記載.*$BUGB_INPROG" <<< "$BUGB_OUT"; then
+  ok "B1 close 外 in-progress の欠落 03/04 は従来どおり #4/#5 で FAIL（過剰除外なし）"
+else
+  ng "B1 close 外 in-progress が #4/#5 で FAIL しない（過剰除外の回帰）: $BUGB_OUT"
+fi
+
+# シナリオ B2: templates 除外は不変（既存ガードの非回帰）
+# Given: templates 配下に「テスト観点」欠落 03 と「docs 更新」欠落 04
+# When:  audit.sh <tmp> を実行する
+# Then:  templates は #4/#5 で FAIL しない（既存 */templates/* 除外を撤去していない）
+BUGB2_TREE="$(make_min_tree)"
+mkdir -p "$BUGB2_TREE/.agent-skill-chain/runtime/templates"
+printf '# 実装計画\n\n本文のみ。\n' > "$BUGB2_TREE/.agent-skill-chain/runtime/templates/03_実装計画.md"
+printf '# 04_review\n\n本文のみ。\n' > "$BUGB2_TREE/.agent-skill-chain/runtime/templates/04_review.md"
+BUGB2_OUT="$(bash "$AUDIT" "$BUGB2_TREE" 2>&1)"
+if ! grep -E 'FAIL: (テスト観点未記載|docs 更新要否未記載)' <<< "$BUGB2_OUT" | grep -q '/templates/'; then
+  ok "B2 templates 配下は #4/#5 で FAIL しない（既存 templates 除外の非回帰）"
+else
+  ng "B2 templates 除外が壊れた: $BUGB2_OUT"
+fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then
