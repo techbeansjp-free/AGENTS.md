@@ -37,6 +37,7 @@
 #   | e2e-install-uninstall.sh            | bash・git・node・tar（sqlite3 はスクリプト内で任意 SKIP） |
 #   | test-build-adapters-apm.sh          | bash・git・tar（apm 配備件数一致・決定性・.adapters/ 非改変・除外規則・gitignore・tmp 隔離） |
 #   | test-sync-version-apm.sh            | bash・git・tar・node（apm.yml 3 者 version 同期・--write/--check・tmp 隔離） |
+#   | test-release-workflow-trigger.sh    | bash のみ（release.yml の push トリガー・paths・RELEASE_ENABLED 静的シミュレーション。python3/PyYAML 不在時は該当シナリオのみ内部でインライン SKIP） |
 #
 # I/F（02_設計 §5 の正本に従う・後続のカバレッジ issue が相乗りする）:
 #   - 終了コード契約: 全テストが PASS/SKIP で FAIL=0 のとき exit 0、1 件以上 FAIL なら exit 1。
@@ -76,6 +77,7 @@ e2e-claude-hook|e2e-claude-hook.sh|bash git tar node python3
 e2e-install-uninstall|e2e-install-uninstall.sh|bash git node tar
 test-build-adapters-apm|test-build-adapters-apm.sh|bash git tar
 test-sync-version-apm|test-sync-version-apm.sh|bash git tar node
+test-release-workflow-trigger|test-release-workflow-trigger.sh|bash
 EOF
 }
 

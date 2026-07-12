@@ -1,7 +1,9 @@
 # release.yml — バージョン bump と marketplace / apm 生成物の公開
 #
-# このワークフローは手動 workflow_dispatch でのみ起動し、リポジトリ変数 RELEASE_ENABLED が
-# 'true' のときだけ実行する。3 つのジョブを直列に実行する:
+# このワークフローは main への push（配布影響 paths に一致する変更を含む場合）で自動起動する。
+# 緊急時の手動代替として workflow_dispatch も残すが、手動起動時は paths フィルタの対象外になる
+# （GitHub Actions の仕様）。RELEASE_ENABLED は「緊急停止スイッチ」であり、既定（未設定含む）は
+# 有効＝ fail-open。'false' を明示設定したときのみ 3 ジョブを止める。3 つのジョブを直列に実行する:
 #   - version-bump: 最新 main を取得して package.json の semver patch を +1 し、plugin.json・apm.yml へ
 #     従属同期して 4 ファイルを main へ書き戻す。続けて JST 日時タグ vYYYYMMDD.HHMMSS を付与し、
 #     同タグの GitHub Release（自動生成ノート）を作成する。
@@ -11,10 +13,12 @@
 # version の正本は bump 後の package.json:version（plugin.json・apm.yml は sync-version.sh で従属同期）。
 # 正本リポ（main）には生成物 .adapters/・.apm/ を一切置かない（gitignore のまま）。
 #
-# 無限ループ防止:
+# 無限ループ防止（push トリガー化後も全て機能する設計とした）:
 #   - 主防御: bump 結果の書き戻し push は GitHub Actions 既定 GITHUB_TOKEN を用いる。
 #     既定 GITHUB_TOKEN による push は workflow を再トリガしない（GitHub 仕様）。PAT / deploy key は使わない。
+#     この主防御は on: の条件式とは独立した GitHub 側の挙動であり、push トリガー化で変化しない。
 #   - 補助防御: コミットメッセージの [skip ci]、concurrency による直列化、actor != github-actions[bot] のガード。
+#     いずれもトリガー種別（push/workflow_dispatch）に依存せず機能する。
 
 name: release
 
@@ -23,7 +27,16 @@ permissions:
   contents: write
 
 on:
-  # 自動発火は設定していない。手動 workflow_dispatch でのみ起動する。
+  # main への push のうち、配布影響パス（marketplace/apm 生成物が実際に読み書きするパスのみに
+  # 絞り込み済み）に一致する変更を含む場合にのみ自動発火する。
+  push:
+    branches: [main]
+    paths:
+      - ".agent-skill-chain/source/**"
+      - "package.json"
+      - ".claude-plugin/marketplace.json"
+  # 緊急時の手動代替発火手段。paths フィルタは適用されない
+  # （workflow_dispatch は paths の対象外という GitHub Actions の仕様どおり）。
   workflow_dispatch:
 
 # release ジョブ群を直列化し、同秒衝突・並行 bump の競合確率を下げる。
@@ -37,8 +50,8 @@ jobs:
   # =====================================================================
   version-bump:
     runs-on: ubuntu-latest
-    # bot 自身の書き戻し push では発火しない。RELEASE_ENABLED が 'true' のときのみ実行する。
-    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
+    # bot 自身の書き戻し push では発火しない。RELEASE_ENABLED が 'false'（緊急停止）以外のときに実行する。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED != 'false'
     outputs:
       version: ${{ steps.bump.outputs.version }}
     steps:
@@ -144,8 +157,8 @@ jobs:
   # =====================================================================
   release-marketplace:
     runs-on: ubuntu-latest
-    # RELEASE_ENABLED が 'true' のときのみ実行する（他ジョブと同一のゲート）。
-    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
+    # RELEASE_ENABLED が 'false'（緊急停止）以外のときに実行する（他ジョブと同一のゲート）。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED != 'false'
     needs: version-bump
     env:
       RELEASE_BRANCH: release/marketplace
@@ -247,8 +260,8 @@ jobs:
   # =====================================================================
   apm-release:
     runs-on: ubuntu-latest
-    # RELEASE_ENABLED が 'true' のときのみ実行する（他ジョブと同一のゲート）。
-    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED == 'true'
+    # RELEASE_ENABLED が 'false'（緊急停止）以外のときに実行する（他ジョブと同一のゲート）。
+    if: github.actor != 'github-actions[bot]' && vars.RELEASE_ENABLED != 'false'
     needs: release-marketplace
     env:
       RELEASE_BRANCH: release/apm
