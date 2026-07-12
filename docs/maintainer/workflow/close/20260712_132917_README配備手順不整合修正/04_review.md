@@ -9,8 +9,8 @@ document_id: "5d834098-5a86-487b-abed-cf1a6910bc94"
 **作成日**: 2026 年 07 月 12 日
 **最終更新**: 2026 年 07 月 12 日
 
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
-> **必須**: レビュー実施は [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md) に従う。レビュー深度: **standard**（既存 3 ファイルへの局所修正。新規モジュール・新規テストファイルは無いが、CLI 引数解決の分岐変更を含むため quick より 1 段上）。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **必須**: レビュー実施は [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) に従う。レビュー深度: **standard**（既存 3 ファイルへの局所修正。新規モジュール・新規テストファイルは無いが、CLI 引数解決の分岐変更を含むため quick より 1 段上）。
 
 ---
 

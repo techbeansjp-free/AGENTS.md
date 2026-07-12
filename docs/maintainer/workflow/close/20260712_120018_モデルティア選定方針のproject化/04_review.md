@@ -11,7 +11,7 @@ issue_id: "b42b0916-5186-4299-9977-3926b2d6c63c"
 **レビュー深度**: standard（新規 2 ファイル・ドキュメント整備・コア無改変。RULES §実行モード）
 **レビュー結論**: **合格（要修正なし）**
 
-> **正本参照**: 監査観点は [REVIEW_RULE.md](../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[workflow/PHASES.md](../../../../.agent-skill-chain/source/workflow/PHASES.md)、ルール正本は [RULES.md](../../../../.agent-skill-chain/source/RULES.md)。
+> **正本参照**: 監査観点は [REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[workflow/PHASES.md](../../../../../.agent-skill-chain/source/workflow/PHASES.md)、ルール正本は [RULES.md](../../../../../.agent-skill-chain/source/RULES.md)。
 
 ---
 
@@ -128,5 +128,5 @@ issue_id: "b42b0916-5186-4299-9977-3926b2d6c63c"
 ## 9. 参考
 
 - [00_要求定義.md](./00_要求定義.md)・[01_要件定義.md](./01_要件定義.md)・[02_設計.md](./02_設計.md)・[03_実装計画.md](./03_実装計画.md)
-- [REVIEW_RULE.md](../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[commands/verify-and-close.md](../../../../.agent-skill-chain/source/commands/verify-and-close.md)
+- [REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[commands/verify-and-close.md](../../../../../.agent-skill-chain/source/commands/verify-and-close.md)
 - 実装記録: workflow.db `entry_id=deee1648-73e1-45c0-83c8-474c6cb2e45a`
