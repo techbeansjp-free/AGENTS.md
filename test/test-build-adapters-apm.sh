@@ -2,8 +2,10 @@
 # test-build-adapters-apm.sh — build-adapters.sh apm（adapter_apm()）・.gitignore の回帰テスト。
 #
 # ユースケース（このテストファイル全体）:
-#   npm 公開中止・APM 転換 issue（03_実装計画 タスク2・タスク3）で追加した adapter_apm() が、
-#   (1) 正本 .agent-skill-chain/source/skills/ のスキル件数と .apm/skills/ の配備件数が一致すること、
+#   apm-npx スキル二重コピー解消 issue（修正方針 D1）で変更した adapter_apm() が、
+#   (1) 個別スキル（{domain}__{capability}）を配備せず .apm/skills/ が agent-skill-chain-full
+#       バンドル 1 件のみであること（apm と npx の併用で同一 .claude/skills/ に別名重複が
+#       生じない構造的保証。個別スキルの配備は npx 導線が唯一の主体）、
 #   (2) 同一入力に対して再生成しても .apm/ の内容が bit-for-bit 一致する（決定性）こと、
 #   (3) .apm/skills/agent-skill-chain-full/SKILL.md が存在し frontmatter name が正しいこと、
 #   (4) 既存 .adapters/claude・.adapters/cursor が adapter_apm() 実行前後で変化しないこと（境界の遵守）、
@@ -28,8 +30,8 @@
 #
 # 前提: bash・git・tar。
 # 参照:
-#   docs/maintainer/workflow/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/
-#     20260711_024021_npm公開中止_APM転換/03_実装計画.md §2.2, §2.3
+#   docs/maintainer/workflow/20260713_033406_apm-npx-skill重複解消/02_設計.md（ADR-1 D1）,
+#     03_実装計画.md（タスク1・タスク2）
 #   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail
@@ -59,8 +61,8 @@ BUILD_SH="$TMP/.agent-skill-chain/source/scripts/build-adapters.sh"
 [[ -f "$BUILD_SH" ]] || { echo "エラー: 隔離環境に build-adapters.sh がありません（未追跡？）" >&2; exit 2; }
 
 # =====================================================================================
-echo "== シナリオ: 正本スキル件数と apm 配備件数が一致する =="
-# Given: .agent-skill-chain/source/skills 配下の SKILL.md 件数を数える
+echo "== シナリオ: apm 生成物は個別スキルを含まずバンドルのみ（D1） =="
+# Given: 正本 .agent-skill-chain/source/skills 配下に複数スキルが存在する（前提の可視化）
 N=$(find "$TMP/.agent-skill-chain/source/skills" -name SKILL.md | wc -l | tr -d ' ')
 
 # When: bash build-adapters.sh apm を実行する
@@ -68,9 +70,13 @@ N=$(find "$TMP/.agent-skill-chain/source/skills" -name SKILL.md | wc -l | tr -d 
 RC=$?
 [[ $RC -eq 0 ]] && ok "build-adapters.sh apm が exit 0 で完了する" || ng "build-adapters.sh apm が非 0 終了（$RC）"
 
-# Then: {domain}__{capability} 形式のディレクトリが N 件生成される（agent-skill-chain-full を除く）
+# Then: {domain}__{capability} 形式の個別スキルディレクトリは 0 件（apm は個別スキルを配らない）
 M=$(find "$TMP/.apm/skills" -mindepth 1 -maxdepth 1 -type d ! -name agent-skill-chain-full 2>/dev/null | wc -l | tr -d ' ')
-[[ "$N" -eq "$M" ]] && ok "配備件数が正本件数と一致（N=$N M=$M）" || ng "配備件数が不一致（N=$N M=$M）"
+[[ "$M" -eq 0 ]] && ok "個別スキル({domain}__{capability})は 0 件（正本 N=$N 件に依らずバンドルのみ）" || ng "個別スキルが残存（M=$M・D1 違反）"
+
+# And: .apm/skills 直下のディレクトリは agent-skill-chain-full の 1 件のみ
+TOT=$(find "$TMP/.apm/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+[[ "$TOT" -eq 1 ]] && ok ".apm/skills 直下ディレクトリは 1 件（agent-skill-chain-full のみ）" || ng ".apm/skills 直下ディレクトリ数が想定外（TOT=$TOT）"
 
 # And: .apm/skills/agent-skill-chain-full/SKILL.md が存在し frontmatter name が正しい
 BUNDLE_SKILL="$TMP/.apm/skills/agent-skill-chain-full/SKILL.md"
