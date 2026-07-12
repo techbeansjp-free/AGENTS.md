@@ -9,8 +9,8 @@ document_id: "d0767ed6-40c1-4210-8b97-9a8ab6a3013d"
 **作成日**: 2026 年 07 月 12 日
 **最終更新**: 2026 年 07 月 12 日
 
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
-> **レビュー実施時は [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../.agent-skill-chain/source/REVIEW_RULE.md) を必ず参照**。レビュー深度: **standard**（既存 CI 設定 1 ジョブの認証入力差し替え＋ドキュメント整合。新規コンポーネント追加なし。変更範囲は 02_設計 §1.1 のとおり限定的）。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **レビュー実施時は [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md) を必ず参照**。レビュー深度: **standard**（既存 CI 設定 1 ジョブの認証入力差し替え＋ドキュメント整合。新規コンポーネント追加なし。変更範囲は 02_設計 §1.1 のとおり限定的）。
 
 ---
 
@@ -290,7 +290,7 @@ document_id: "d0767ed6-40c1-4210-8b97-9a8ab6a3013d"
   | `allow_deletions.enabled` | `false` | ブランチ削除禁止 | 一致 |
   | `required_conversation_resolution.enabled` | `true` | （00/01/02 では明示されないが保護を弱める変更ではない） | 現状維持 |
 
-  実測値は 00 §1.2・01 §1.1・02 §2.1.2 に記載された保護設定（PR 必須・レビュー承認 1 件以上・self-enforce 必須・`enforce_admins: false`・force push/削除禁止）と完全一致する。本 issue の変更ファイル（release.yml・RELEASE.md）は branch protection API に一切接触しないため、変更前後で保護設定は不変である（PAT の admin バイパスが乗る `enforce_admins: false` も維持）。
+  実測値は 00 §1.2・01 §1.1・02 §2.1.2 に記載された保護設定（PR 必須・レビュー承認 1 件以上・self-enforce 必須・`enforce_admins: false`・force push/削除禁止）と完全一致する（PAT の admin バイパスが乗る `enforce_admins: false` も 00/01/02 の基準どおり）。加えて、本 issue の変更ファイル（release.yml・RELEASE.md）は branch protection API に一切接触しない。以上 2 点——**00/01/02 の基準と現時点の実測値が一致していること**、および**本 PR の変更ファイルが protection API に非接触であること**——を根拠として、保護設定への影響がないと判断する。
   - **補足（implement-feature 実測結果との比較について）**: 本 issue の memo ディレクトリには review-docs memo（`20260712_161610_review-docs.md`）のみが存在し、implement-feature が別途 before/after の protection JSON を memo に退避した記録は見当たらなかった。このため比較の基準は 00/01/02 に文書化された保護設定とし、上表のとおり実測が完全一致することをもって「変更なし」を確認した。変更が release.yml/RELEASE.md に閉じており protection API に非接触である以上、この確認で成功基準（branch protection 不変）は充足される。
 
 ### 9.3 重要判断の根拠（evidence_source）
