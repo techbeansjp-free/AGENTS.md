@@ -33,6 +33,7 @@
 #   (31) システム仕様書レビュー証跡欠落（DB・docs/ 採用時・実装変更ログありの 04_review に要=docs/00_review参照/不要=根拠 の内容が無い場合 FAIL）
 #   (32) 実装前 review-docs 未実行検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ review-docs ログ 0 件なら FAIL。#29 と非交差。発効日 grandfather あり）
 #   (33) close 移動未実施検知（DB 採用時・verify-and-close 証跡ありかつ close/ 未移動のトップレベル issue が、発効日以降・猶予超過なら FAIL。#32 と非交差）
+#   (34) 実装前 GitHub Issue 起票ゲート未通過検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter github_issue が null/欠落なら FAIL。#32 と非交差。close/templates/90_issues 配下・GitHub 非採用環境・発効日 grandfather は SKIP）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -68,6 +69,12 @@
 #      発効日 grandfather（CLOSE_MOVE_GATE_EFFECTIVE_FROM・既定 20260712_000000）と猶予日数
 #      （CLOSE_MOVE_GRACE_DAYS・既定 3・ts_utc からの経過日数）のいずれも満たす場合のみ FAIL。ts_utc 解析
 #      不能・証跡なしは fail-open（SKIP）。既存 #32（review-docs 未実行）とは走査対象・判定内容で非交差。
+#  34. workflow.db 採用時のみ・issue_path スコープ前方一致で、implement-feature ログが 1 件以上あるのに
+#      00_要求定義.md frontmatter の github_issue が null/欠落（＝GitHub Issue 起票ゲート未通過）なら
+#      FAIL。既存 #32（review-docs ログの有無）とは検知対象が異なり非交差。issue ディレクトリ名の
+#      YYYYMMDD_HHMMSS_ プレフィックスが GITHUB_ISSUE_GATE_EFFECTIVE_FROM（既定 20260712_000000・env
+#      上書き可）未満なら grandfather として SKIP。close/templates/90_issues 配下・DB 非採用・git remote
+#      に github.com を含まない（GitHub 非採用環境）は SKIP（fail-open）。
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
@@ -983,6 +990,95 @@ check_close_move_pending() {
   done
 }
 
+# 34. 実装前 GitHub Issue 起票ゲート未通過検知（check_github_issue_before_implement）。
+#   workflow.db 採用時のみ・issue_path スコープ前方一致で「implement-feature ログが 1 件以上あるのに
+#   00_要求定義.md frontmatter の github_issue が有効な記録でない＝実装前 GitHub Issue 起票ゲートを
+#   経ずに実装した」を検知する。ゲートの強度は「デフォルト起票＋理由付き記録による代替経路あり」
+#   （02_設計 ADR-1）。github_issue の値が (a) 実 Issue 参照（"#<番号>"/URL 等の非空値）、または
+#   (b) 理由付き declined（"declined: <非空の理由>"）なら PASS。null/空/~・理由なし declined
+#   （"declined:" のみ・理由が空白のみ）は FAIL（意図的スキップの記録を必須化し空虚なバイパスを防ぐ・
+#   ADR-7）。既存 #32（review-docs ログの有無を検知）とは検知対象（review-docs ログ vs
+#   github_issue 記録）が異なり非交差（02_設計 ADR-3）。
+#   ★プロジェクト全体でのゲート無効化トグル（ADR-8）: GITHUB_ISSUE_GATE_ENABLED（既定 true）が
+#   false/0/no/off の場合、他のどのガード（DB 採用・GitHub 採用環境・grandfather・declined 等）
+#   よりも先に SKIP する（fail-open）。GitHub は使うが Issue 運用自体を採用しないプロジェクト向け。
+#   既存の enforce on/off（enforcement 全体の opt-in）とは独立した、本ゲート単体の無効化トグル。
+#   ★grandfather（ADR-5 と同型）: issue ディレクトリ名の YYYYMMDD_HHMMSS_ プレフィックスが
+#   GITHUB_ISSUE_GATE_EFFECTIVE_FROM（既定 20260712_000000・env 上書き可）未満なら SKIP（遡及適用しない）。
+#   ★対象外環境フォールバック（ADR-4）: 非 git ツリー、または git remote に github.com を含まない
+#   （GitHub 非採用環境）は SKIP（fail-open・ロックアウト回避）。
+#   ★サブ issue 集約（ADR-6）: パスに /90_issues/ を含む場合は SKIP（#32 が 90_issues を含める
+#   unbounded find なのとは逆・実装上の差分）。
+#   走査対象は 00_要求定義.md（frontmatter を読む目印。unbounded find・maxdepth を付けない）。
+#   close/templates 除外。前方一致＋basename 末尾一致の安全側（#32 と同型）。存在監査のみ（ADR-3）。
+check_github_issue_before_implement() {
+  # 0. プロジェクト全体でのゲート無効化トグル（ADR-8）: 最優先で評価する最初のガード。
+  #    GITHUB_ISSUE_GATE_EFFECTIVE_FROM 等の既存 env 命名パターン（GITHUB_ISSUE_GATE_ 接頭辞）に揃える。
+  case "${GITHUB_ISSUE_GATE_ENABLED:-true}" in
+    [Ff][Aa][Ll][Ss][Ee]|0|[Nn][Oo]|[Oo][Ff][Ff]) return 0 ;;
+  esac
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
+  # 対象外環境フォールバック（ADR-4）: 非 git ツリー／git remote に github.com を含まない場合は SKIP。
+  # 「git ツリーか」の判定は rev-parse --is-inside-work-tree を正とする（通常リポジトリ・worktree・
+  # submodule いずれも正しく true を返す）。`.git` がディレクトリかの検査は worktree では `.git` が
+  # gitdir ポインタの「ファイル」になるため false-SKIP を生む（ゲートが worktree で骨抜きになる）ので用いない。
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
+  if ! git -C "$PROJECT_ROOT" remote -v 2>/dev/null | grep -q 'github\.com'; then return 0; fi
+  echo "[audit] checking github-issue-gate-before-implement (#34)" >&2
+  local cutoff="${GITHUB_ISSUE_GATE_EFFECTIVE_FROM:-20260712_000000}"
+  local _wfd f issue_dir dir dir_esc base base_esc ts hit_impl fm gh_line gh_val gate_fail decl_reason
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *"/templates/"* ]] && continue
+      # close 配下（完了 issue）は検知対象外（#32 と同型・安全側）。
+      [[ "$f" == *"/close/"* ]] && continue
+      # サブ issue（90_issues 配下）は親 Issue に集約するためゲート対象外（ADR-6）。
+      [[ "$f" == *"/90_issues/"* ]] && continue
+      issue_dir="$(dirname "$f")"
+      dir="${issue_dir#$PROJECT_ROOT/}"
+      dir_esc="${dir//\'/\'\'}"
+      base="$(basename "$issue_dir")"
+      base_esc="${base//\'/\'\'}"
+      # grandfather（ADR-5 と同型）: issue basename の日時プレフィックスが cutoff 未満なら遡及適用しない。
+      # プレフィックス形式でない issue は判定不能として素通り（誤 FAIL を出さない安全側）。
+      if [[ "$base" =~ ^([0-9]{8})_([0-9]{6})_ ]]; then
+        ts="${BASH_REMATCH[1]}_${BASH_REMATCH[2]}"
+        if [[ "$ts" < "$cutoff" ]]; then
+          continue
+        fi
+      fi
+      hit_impl="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command='implement-feature' AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') LIMIT 1;" 2>/dev/null || true)"
+      # implement-feature ログが 0 件＝未実装。#34 の対象外（continue）。
+      [[ -z "$hit_impl" ]] && continue
+      # frontmatter ブロック（先頭 --- 〜 次の ---）内の github_issue: 行を抽出する（コメント行 # は
+      # 行頭一致の正規表現で自然に除外される）。
+      fm="$(awk 'NR==1 && $0=="---"{p=1;next} p && $0=="---"{exit} p' "$f" 2>/dev/null)"
+      gh_line="$(printf '%s\n' "$fm" | grep -m1 -E '^github_issue:' || true)"
+      gh_val="$(printf '%s' "$gh_line" | sed -E 's/^github_issue:[[:space:]]*//; s/[[:space:]]+$//')"
+      gh_val="${gh_val%\"}"; gh_val="${gh_val#\"}"
+      # ゲート通過判定（ADR-1・ADR-7）: 値が (a) 実 Issue 参照（"#<番号>"/URL 等の非空値）、または
+      # (b) 理由付き declined（"declined: <非空の理由>"）なら PASS。null/空/~、または理由なし declined
+      # （"declined:" のみ・理由が空白のみ）は FAIL（意図的スキップの記録を必須化し空虚なバイパスを防ぐ）。
+      gate_fail=0
+      if [[ -z "$gh_val" ]] || [[ "${gh_val,,}" == "null" ]] || [[ "$gh_val" == "~" ]]; then
+        gate_fail=1
+      elif [[ "${gh_val,,}" == "declined:"* ]]; then
+        # "declined:" 以降の理由を抽出し、前後空白トリム後に空なら理由なし declined＝未通過。
+        decl_reason="${gh_val#*:}"
+        decl_reason="$(printf '%s' "$decl_reason" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+        [[ -z "$decl_reason" ]] && gate_fail=1
+      fi
+      if [[ $gate_fail -eq 1 ]]; then
+        echo "FAIL: 実装前 GitHub Issue 起票ゲート未通過（implement-feature ログはあるが 00 frontmatter の github_issue が null/欠落、または理由なしの declined。実 Issue 番号/URL または 'declined: <理由>' を記録すること）: $dir" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    done < <(find "$PROJECT_ROOT/$_wfd" -name "00_要求定義.md" -type f -print0 2>/dev/null || true)
+  done
+}
+
 check_code_comment_external_ref
 check_review_dual_lists
 check_issue_doc_in_gitignored_path
@@ -990,6 +1086,7 @@ check_review_before_implement
 check_docs_review_evidence
 check_reviewdocs_before_implement
 check_close_move_pending
+check_github_issue_before_implement
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."
