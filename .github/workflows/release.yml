@@ -13,7 +13,7 @@
 # version の正本は bump 後の package.json:version（plugin.json・apm.yml は sync-version.sh で従属同期）。
 # 正本リポ（main）には生成物 .adapters/・.apm/ を一切置かない（gitignore のまま）。
 #
-# 無限ループ防止（push トリガー化後も全て機能する。docs/maintainer/workflow/20260712_143913_release自動発火push化/02_設計.md ADR-4）:
+# 無限ループ防止（push トリガー化後も全て機能する設計とした）:
 #   - 主防御: bump 結果の書き戻し push は GitHub Actions 既定 GITHUB_TOKEN を用いる。
 #     既定 GITHUB_TOKEN による push は workflow を再トリガしない（GitHub 仕様）。PAT / deploy key は使わない。
 #     この主防御は on: の条件式とは独立した GitHub 側の挙動であり、push トリガー化で変化しない。
@@ -27,15 +27,15 @@ permissions:
   contents: write
 
 on:
-  # main への push のうち、配布影響パス（marketplace/apm 生成物が実際に読み書きするパスのみ。
-  # 02_設計.md ADR-1 で確定）に一致する変更を含む場合にのみ自動発火する。
+  # main への push のうち、配布影響パス（marketplace/apm 生成物が実際に読み書きするパスのみに
+  # 絞り込み済み）に一致する変更を含む場合にのみ自動発火する。
   push:
     branches: [main]
     paths:
       - ".agent-skill-chain/source/**"
       - "package.json"
       - ".claude-plugin/marketplace.json"
-  # 緊急時の手動代替発火手段（02_設計.md ADR-2）。paths フィルタは適用されない
+  # 緊急時の手動代替発火手段。paths フィルタは適用されない
   # （workflow_dispatch は paths の対象外という GitHub Actions の仕様どおり）。
   workflow_dispatch:
 
