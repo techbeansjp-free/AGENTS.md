@@ -46,13 +46,15 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 ## 導入（プロジェクトへ配備するとき）
 
-導線は **npx github:techbeansjp-free/AGENTS.md init（完全導線・GitHub 直接参照）**・**apm install（横断バンドル配布の補助導線）**・**Claude marketplace（副導線）** の 3 つ。**基本は `npx github:techbeansjp-free/AGENTS.md init` を推奨する**（apm は個別スキルを配布せず `agent-skill-chain-full` バンドル参照のみのため、個別スキル・enforcement・管理 CLI を含むフル機能を得るには npx が必要）。
+導線は **npx github:techbeansjp-free/AGENTS.md init（推奨・GitHub 直接参照）**・**apm install（バンドル参照・複数ツール横断配布向けの副導線）**・**Claude marketplace（副導線）** の 3 つ。**基本は `npx github:techbeansjp-free/AGENTS.md init` を推奨する**（apm は個別スキルを配布せず `agent-skill-chain-full` バンドル参照のみのため、個別スキル・enforcement・管理 CLI を含むフル機能を得るには npx が必要）。
 
 > **導線ごとの配布責務**: 個別スキル（`{domain}__{capability}`）・`AGENTS.md`/`CLAUDE.md` 本体・enforcement フック・管理 CLI（uninstall/doctor/enforce/upgrade 等）を配れる**完全導線は npx** のみ。**apm は参照コンテキストとして `agent-skill-chain-full` バンドルのみを配布**し、個別スキルは配らない（apm と npx を併用してもスキルが二重コピーされないようにするため。詳細は [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md)）。apm と npx は併用してよい（重複は生じない）。
 
-> CLI コマンド名は `agents-md`。`apm install` は npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得する。
+> CLI コマンド名は `agents-md`。`npx github:owner/repo` は npm レジストリを経由せず GitHub リポジトリを直接参照する記法。`apm install` も同様に npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得するが、展開するのは skills のバンドル参照のみで CLI バイナリ（`agents-md`）は導入しない。
 
-### 0. apm 経由（横断バンドル配布の補助導線）
+`npx` 経由の GitHub 直接参照配備の具体的な手順は [CONTRIBUTING.md](CONTRIBUTING.md) に記載する（開発者・自己拡張・メンテナ向けの追加情報も同ファイルに集約）。
+
+### apm 経由（バンドル参照・複数ツール横断配布向け）
 
 [`microsoft/apm`](https://github.com/microsoft/apm)（Agent Package Manager）で配布する。`apm` CLI を導入したうえで、採用先プロジェクトのルートで次を実行する。
 
@@ -70,21 +72,32 @@ apm install techbeansjp-free/AGENTS.md#release/apm --target claude
 
 再現性を求める場合はブランチ ref の代わりにタグ ref（`#apm-vX.Y.Z`。例: `apm install techbeansjp-free/AGENTS.md#apm-v0.1.0`）でピン留めできる。個別スキルや enforcement・管理 CLI・契約本体を要する場合は npx 導線（§1）を使う（詳細は [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md) を参照）。
 
-### 1. GitHub 直接参照（完全導線・npm レジストリは経由しない）
+### Claude marketplace 経由
 
-`npx` は GitHub リポジトリを直接参照する（`npx github:owner/repo` 記法）。`package.json` の `prepare` フックにより git 経由インストール時に `npm run build` が自動実行され、非追跡（`.gitignore` 対象）の `bin/agents-md.js` が自動生成される。採用先プロジェクトのルートで次を実行する。`init` が内部で `.agent-skill-chain/source/scripts/setup.sh` を呼び、配備一式を行う。
+Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コマンド）から導入する経路。本リポの [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) を marketplace として登録し、プラグイン `agents-package`（正本 `.agent-skill-chain/source/` から生成される Claude アダプタ）を追加する。
 
-```bash
-cd my-project
-npx github:techbeansjp-free/AGENTS.md init
+```text
+/plugin marketplace add techbeansjp-free/AGENTS.md
+/plugin install agents-package
 ```
 
-これで以下が行われる:
+> marketplace のプラグイン生成物（`.adapters/claude`）は正本 `.agent-skill-chain/source/` から `build-adapters.sh` で生成される。詳細は [docs/maintainer/adapters.md](docs/maintainer/adapters.md) を参照。
 
-- パッケージの `AGENTS.md` と `CLAUDE.md` がプロジェクトルートにコピーされる
-- パッケージの `.agent-skill-chain/source/` がプロジェクトの `.agent-skill-chain/source/` にコピーされる
-- `.agent-skill-chain/runtime/templates` が無い場合は **`.agent-skill-chain/runtime/templates/`**（パッケージ内）からコピーされる
-- `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
+### ローカル配備
+
+npm を使わずパッケージを直接置く場合は、パッケージルートで `setup.sh` を実行する。
+
+```bash
+bash .agent-skill-chain/source/scripts/setup.sh /path/to/my-project   # 引数省略時はカレントを採用先とする
+```
+
+### 動作確認
+
+プロジェクトルートに `AGENTS.md` と `.agent-skill-chain/source/` が存在することを確認する。詳細は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) のスモークテストを参照。
+
+---
+
+## 配備後の管理（CLI）
 
 **サブコマンド**:
 
@@ -151,42 +164,6 @@ npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement �
 - `enforce off` は enforcement 由来の配線のみを外し、ユーザーの env・hooks・permissions 等は保持する。
 - 設定変更を**ライブの Claude セッションに反映するには再起動が必要**。無効 JSON の場合 `enforce` は破壊を避けて中止する。
 
-### 2. Claude marketplace 経由（副導線）
-
-Claude Code のプラグイン・マーケットプレイス（`/plugin` 系コマンド）から導入する経路。本リポの [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) を marketplace として登録し、プラグイン `agents-package`（正本 `.agent-skill-chain/source/` から生成される Claude アダプタ）を追加する。
-
-```text
-/plugin marketplace add techbeansjp-free/AGENTS.md
-/plugin install agents-package
-```
-
-> marketplace のプラグイン生成物（`.adapters/claude`）は正本 `.agent-skill-chain/source/` から `build-adapters.sh` で生成される。詳細は [docs/maintainer/adapters.md](docs/maintainer/adapters.md) を参照。
-
-#### リリース手順（メンテナ向け）
-
-リリースは [.github/workflows/release.yml](.github/workflows/release.yml) が、配布影響パスを含む変更が main へ push（PR レビュー承認済みマージ）されると自動発火し、version bump（patch +1）・日時タグ・GitHub Release 作成 → marketplace 公開 → apm release を直列に実行する。リポジトリ変数 `RELEASE_ENABLED` は緊急停止スイッチ（既定で有効、`false` 設定時のみ停止）。`workflow_dispatch` は緊急時の手動代替。詳細正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)。
-
-### 3. ローカル配備（リポを直接置く場合）
-
-npm を使わずパッケージを直接置く場合は、パッケージルートで `setup.sh` を実行する。
-
-```bash
-bash .agent-skill-chain/source/scripts/setup.sh /path/to/my-project   # 引数省略時はカレントを採用先とする
-```
-
-### 動作確認
-
-プロジェクトルートに `AGENTS.md` と `.agent-skill-chain/source/` が存在することを確認する。詳細は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) のスモークテストを参照。
-
-本リポジトリ（パッケージ正本／自己拡張）でテストを回す場合は、一括 runner で 1 コマンド実行できる。
-
-```bash
-npm test                                  # = bash test/run-all.sh
-bash test/run-all.sh                      # npm を使わない場合
-```
-
-全テストを順に実行し、末尾サマリ（`合計=N PASS=p FAIL=f SKIP=s`）と終了コード（全成功で 0・1 件以上 FAIL で非 0）を返す。個別実行・前提依存マトリクス（bash/git/node/tar/sqlite3）・SKIP 規約は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) §テスト実行 を参照。
-
 ---
 
 ## 入口と参照
@@ -200,6 +177,7 @@ bash test/run-all.sh                      # npm を使わない場合
 | command を実行するとき | .agent-skill-chain/source/skills/agent/run_command.md と .agent-skill-chain/source/commands/{name}.md |
 | コピー対象・セットアップ詳細 | [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) |
 | 基盤の肥大化防止・文書追加ルール | [.agent-skill-chain/source/META_LAYER.md](.agent-skill-chain/source/META_LAYER.md) |
+| 開発者・自己拡張・メンテナ向け入口 | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ---
 
