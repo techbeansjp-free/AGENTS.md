@@ -14,11 +14,13 @@
 # 正本リポ（main）には生成物 .adapters/・.apm/ を一切置かない（gitignore のまま）。
 #
 # 無限ループ防止（push トリガー化後も全て機能する設計とした）:
-#   - 主防御: bump 結果の書き戻し push は GitHub Actions 既定 GITHUB_TOKEN を用いる。
-#     既定 GITHUB_TOKEN による push は workflow を再トリガしない（GitHub 仕様）。PAT / deploy key は使わない。
-#     この主防御は on: の条件式とは独立した GitHub 側の挙動であり、push トリガー化で変化しない。
-#   - 補助防御: コミットメッセージの [skip ci]、concurrency による直列化、actor != github-actions[bot] のガード。
-#     いずれもトリガー種別（push/workflow_dispatch）に依存せず機能する。
+#   - version-bump の main 書き戻しは admin PAT（secrets.RELEASE_MAIN_PAT）で認証し branch protection を
+#     バイパスする。PAT push は on: push を再トリガしうるため、無限ループ防止の主防御はコミットメッセージの
+#     [skip ci]（GitHub Actions が push/pull_request の workflow run 自体を作成しない公式仕様）である。
+#     actor != github-actions[bot] のガードは PAT push では actor が admin 主体になるため実効防御にならない
+#     （残存ガードとして据え置くのみ）。
+#   - セーフティネット: concurrency による直列化。ループを止める機構ではなく並行実行の直列化のみ。
+#   - 他ジョブ（release-marketplace・apm-release）・タグ付与・GitHub Release 作成は既定 GITHUB_TOKEN のまま。
 
 name: release
 
@@ -59,6 +61,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_MAIN_PAT }}
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -91,8 +94,8 @@ jobs:
           bash .agent-skill-chain/source/scripts/sync-version.sh --write
           bash .agent-skill-chain/source/scripts/sync-version.sh --check
 
-      # bump 結果を main へ書き戻す。既定 GITHUB_TOKEN による push は workflow を再トリガしない（主防御）。
-      # コミットメッセージの [skip ci] と non-fast-forward 時の rebase 再試行は補助防御。
+      # bump 結果を main へ書き戻す。Checkout が持たせた RELEASE_MAIN_PAT（admin PAT）で認証し push する。
+      # 再発火防止の主防御はコミットメッセージの [skip ci]。non-fast-forward 時の rebase 再試行は別途の再試行機構。
       # 書き戻し対象は sync-version.sh が更新する 4 ファイル（package.json・package-lock.json・plugin.json・apm.yml）。
       - name: Commit & push version bump to main
         run: |

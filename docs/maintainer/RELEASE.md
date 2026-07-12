@@ -60,7 +60,9 @@ CI は次の 3 ジョブを直列（`version-bump` → `release-marketplace` →
 - **`release-marketplace`**: 正本 `.agent-skill-chain/source/` から `build-adapters.sh claude cursor` で生成物を build し、決定性（再生成 diff ゼロ）を検証して `release/marketplace` ブランチへ commit/push する。commit メッセージの version は `version-bump` の `outputs.version` を参照する。
 - **`apm-release`**: `needs: release-marketplace` で後段に直列化。正本から `build-adapters.sh apm` で `apm.yml`・`.apm/skills/**` を build し、決定性を検証して `release/apm` ブランチへ commit/push したうえで、同一コミットへ `apm-vX.Y.Z`（`X.Y.Z` は `package.json` の version）タグを付与する。
 
-> main への書き戻し push・リリースブランチ push・タグ付与・GitHub Release 作成は GitHub Actions 既定 `GITHUB_TOKEN`（`permissions: contents: write`）のみを使用する（PAT／deploy key を使わない）。既定 `GITHUB_TOKEN` による push は workflow を再トリガしない（無限ループ防止）。
+> `version-bump` の main 書き戻し push のみ admin PAT（secret `RELEASE_MAIN_PAT`）で認証し、branch protection（`enforce_admins: false`）をバイパスして通す。PAT push は `on: push` を再トリガしうるため、無限ループ防止の**主防御はコミットメッセージの `[skip ci]`**（`concurrency: group: release` は直列化のセーフティネット）。リリースブランチ push・タグ付与・GitHub Release 作成は引き続き GitHub Actions 既定 `GITHUB_TOKEN`（`permissions: contents: write`）を使用する。
+>
+> **障害切り分け**: `GH006`（Protected branch update failed）が再発した場合は PAT が Checkout に渡っていない、または PAT の実行主体が admin 権限を持たないことを疑う。`401`/`403` は PAT の失効・スコープ不足・対象リポジトリ不一致を示し `GH006` とは別事象。復旧は secret `RELEASE_MAIN_PAT` の再登録。
 
 ---
 
