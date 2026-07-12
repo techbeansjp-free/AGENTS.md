@@ -244,7 +244,7 @@ SQLite WAL モードでは
 | #32 実装前 review-docs 未実行 | audit.sh check_reviewdocs_before_implement | CI FAIL（DB 不採用・発効日前（grandfather）・close/templates 配下は SKIP。#29 と非交差） |
 | #33 close 移動未実施 | audit.sh check_close_move_pending | CI FAIL（DB 不採用・発効日前（grandfather）・猶予内・close/90_issues/templates 配下は SKIP。#32 と非交差） |
 | #34 実装前 GitHub Issue 起票ゲート未通過 | audit.sh check_github_issue_before_implement | CI FAIL（実 Issue 記録 or 理由付き declined なら PASS。null/空/理由なし declined は FAIL。`GITHUB_ISSUE_GATE_ENABLED=false`（プロジェクト全体でのゲート無効化・最優先ガード）・DB 不採用・発効日前（grandfather）・close/templates/`90_issues/` 配下・GitHub 非採用環境（`git remote` に github.com 無し）は SKIP。#32 と非交差） |
-| orchestrator の Write/Edit/Shell 拒否 | PreToolUse.sh（ロール判定 → block 関数）。**委譲先 subagent（stdin `agent_id` あり＝`IS_SUBAGENT=1`）は worker として実作業（Bash/Edit/Write）を許可し、main（`agent_id` なし）のみ block する**（判定の実体は PreToolUse.sh のみ・本表は参照）。 | runtime reject（条件付き：ロール伝達時 exit 2／未伝達時 案内 exit 0）＋ CI 補完 |
+| orchestrator の Write/Edit/Shell 拒否 | PreToolUse.sh（ロール判定 → block 関数）。**委譲先 subagent（stdin `agent_id` あり＝`IS_SUBAGENT=1`）は worker として実作業（Bash/Edit/Write）を許可し、main（`agent_id` なし）のみ block する**（判定の実体は PreToolUse.sh のみ・本表は参照）。**ただし `.agent-skill-chain/runtime/` 配下への直接 Write/Edit は R1（path 軸）により IS_SUBAGENT の値に関わらず全 ROLE 一律で block される**。R1（path 軸・全 ROLE 一律）と本行の判定（role 軸・subagent 除外）は目的の異なる独立ガードであり、非対称は意図的である（timestamp memo・workflow.db 保護のため）。subagent が runtime/ 配下へ書く正規ルートは Bash（heredoc/cp/new-workflow-memo.sh 等）である。 | runtime reject（条件付き：ロール伝達時 exit 2／未伝達時 案内 exit 0）＋ CI 補完 |
 | ログ frontmatter 禁止 / `logs/` 廃止 | `.agent-skill-chain/runtime/templates/github/scripts/subagent-guard.sh` §1 / §2 | CI FAIL |
 | #22 自立進行（許可確認） | （未実装） | 未実装・runtime/人手監査 |
 | #23 自立進行（指示文案だけ） | （未実装） | 未実装・runtime/人手監査 |
