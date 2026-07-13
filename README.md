@@ -46,7 +46,9 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 ## 導入（プロジェクトへ配備するとき）
 
-導線は **npx github:techbeansjp-free/AGENTS.md init（推奨・GitHub 直接参照）**・**apm install（バンドル参照・複数ツール横断配布向けの副導線）**・**Claude marketplace（副導線）** の 3 つ。**基本は `npx github:techbeansjp-free/AGENTS.md init` を推奨する。**
+導線は **npx github:techbeansjp-free/AGENTS.md init（推奨・GitHub 直接参照）**・**apm install（バンドル参照・複数ツール横断配布向けの副導線）**・**Claude marketplace（副導線）** の 3 つ。**基本は `npx github:techbeansjp-free/AGENTS.md init` を推奨する**（apm は個別スキルを配布せず `agent-skill-chain-full` バンドル参照のみのため、個別スキル・enforcement・管理 CLI を含むフル機能を得るには npx が必要）。
+
+> **導線ごとの配布責務**: 個別スキル（`{domain}__{capability}`）・`AGENTS.md`/`CLAUDE.md` 本体・enforcement フック・管理 CLI（uninstall/doctor/enforce/upgrade 等）を配れる**完全導線は npx** のみ。**apm は参照コンテキストとして `agent-skill-chain-full` バンドルのみを配布**し、個別スキルは配らない（apm と npx を併用してもスキルが二重コピーされないようにするため。詳細は [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md)）。apm と npx は併用してよい（重複は生じない）。
 
 > CLI コマンド名は `agents-md`。`npx github:owner/repo` は npm レジストリを経由せず GitHub リポジトリを直接参照する記法。`apm install` も同様に npm レジストリを経由せず GitHub リポジトリ（`techbeansjp-free/AGENTS.md`）から直接取得するが、展開するのは skills のバンドル参照のみで CLI バイナリ（`agents-md`）は導入しない。
 
@@ -64,11 +66,11 @@ apm install techbeansjp-free/AGENTS.md#release/apm --target claude
 
 これで以下が行われる:
 
-- `.agents/skills/{domain}-{capability}/`（例: `.agents/skills/architecture-define-boundaries/`）に、個々の能力（skill）が apm skill プリミティブとして展開される（正本側のディレクトリ名は `{domain}__{capability}` だが、apm が展開時に `__` を `-` へ暗黙に正規化する。`SKILL.md` の frontmatter `name` は正本のまま変化しない）
-- `.agents/skills/agent-skill-chain-full/reference/.agent-skill-chain/source/` 配下に、正本一式（実行契約・skills・commands・boot・workflow・spec・enforcement 等）が参照コンテキストとして展開される
+- `.agents/skills/agent-skill-chain-full/reference/.agent-skill-chain/source/` 配下に、正本一式（実行契約・skills・commands・boot・workflow・spec・enforcement 等）が参照コンテキストとして展開される（apm 経由で配布されるスキルはこのバンドル 1 件のみ）
+- 個別スキル（`{domain}__{capability}`）は apm では配備されない。個別スキルは npx 導線（§1）が `.claude/skills/`・`.cursor/skills/` に配備する
 - `apm.lock.yaml` が採用先プロジェクトのルートに生成される
 
-再現性を求める場合はブランチ ref の代わりにタグ ref（`#apm-vX.Y.Z`。例: `apm install techbeansjp-free/AGENTS.md#apm-v0.1.0`）でピン留めできる。v1 スコープは skills プリミティブのみであり、agents/commands(prompts)/instructions/hooks の apm ネイティブ配備は今後の課題（詳細は [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md) を参照）。
+再現性を求める場合はブランチ ref の代わりにタグ ref（`#apm-vX.Y.Z`。例: `apm install techbeansjp-free/AGENTS.md#apm-v0.1.0`）でピン留めできる。個別スキルや enforcement・管理 CLI・契約本体を要する場合は npx 導線（§1）を使う（詳細は [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md) を参照）。
 
 ### Claude marketplace 経由
 

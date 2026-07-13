@@ -8,15 +8,17 @@
 
 ## なぜ apm 経由の配布か
 
-- 本パッケージは `apm install` を一次配布導線とする（README.md §導入）。
-- `.agent-skill-chain/source/` は**ツール非依存の共通仕様**であり、apm はスキル等のプリミティブを複数ハーネス（Claude/Cursor/Gemini/Copilot/Codex 等）へ横断的に配布できる仕組みを提供する。
+- 本パッケージは `apm install` を補助的な横断配布導線とする（README.md §導入。個別スキル＋契約本体＋enforcement＋管理 CLI を配れる**完全導線は npx**）。
+- `.agent-skill-chain/source/` は**ツール非依存の共通仕様**であり、apm は正本一式を参照コンテキスト（バンドル）として複数ハーネス（Claude/Cursor/Gemini/Copilot/Codex 等）へ横断的に配布できる。
 - 既存の `.adapters/`（Claude/Cursor 向け生成物・`release/marketplace` ブランチ）とは独立したチャネルとして共存する（互いに変更しない。02_設計 §2.1.2）。
 
-## v1 スコープ（skills のみ）
+## apm 配布スコープ（agent-skill-chain-full バンドルのみ）
 
-**v1 では skills プリミティブのみを apm ネイティブに配備する。** agents（`.apm/agents/*.agent.md`）・commands/prompts（`.apm/prompts/*.prompt.md`）・instructions（`.apm/instructions/*.instructions.md`）・hooks（`.apm/hooks/*.json`）への個別分解は、意味論的な差異（消費モデルの違い・コンパイル方式の違い等）を理由に本 v1 の対象外とし、後続 issue へ申し送る。詳細な根拠は [npm 公開中止・APM 転換 issue の 02_設計.md §2.6.5・§9.2](../maintainer/workflow/close/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/20260711_024021_npm公開中止_APM転換/02_設計.md#265-v1-スコープをスキルのみに限定する理由agentspromptscommandsinstructionshooks-を対象外とする根拠) を参照。
+**apm 経由では `agent-skill-chain-full` バンドル（正本一式の参照コンテキスト）のみを配布する。** 個別スキル（`{domain}__{capability}`）は apm では配備しない。個別スキルの `.claude/skills/`・`.cursor/skills/` への配備は **npx 導線**（`setup.sh`／`lib/deploy-skills.sh`）が唯一の主体である。
 
-「`.agents/` 一式が展開できる」という受け入れ基準を満たすため、正本一式（`.agent-skill-chain/source/`）を 1 つの skill バンドル `agent-skill-chain-full` として同梱している（§2 参照）。
+> **背景（二重コピー解消・修正方針 D1）**: apm（Claude ターゲット）と npx が同一の `.claude/skills/` へ**異なる命名規則**（apm＝ハイフン正規化、npx＝ダブルアンダースコア）で同じ個別スキルを配備すると、Claude Code が同一スキルを 2 件として認識する二重コピーが発生していた。apm が個別スキルを配らずバンドル 1 件のみを配ることで、同一ディレクトリに個別スキルを置く主体が npx のみになり、併用しても別名重複が構造的に生じない。詳細は [apm-npx スキル二重コピー解消 issue の 02_設計.md（ADR-1）](./workflow/20260713_033406_apm-npx-skill重複解消/02_設計.md) を参照。
+
+agents（`.apm/agents/*.agent.md`）・commands/prompts・instructions・hooks への個別分解も引き続き対象外である（後続 issue へ申し送り。根拠は [npm 公開中止・APM 転換 issue の 02_設計.md §2.6.5・§9.2](../maintainer/workflow/close/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/20260711_024021_npm公開中止_APM転換/02_設計.md#265-v1-スコープをスキルのみに限定する理由agentspromptscommandsinstructionshooks-を対象外とする根拠)）。
 
 ## 生成物の構成
 
@@ -25,13 +27,21 @@
 | 生成物 | 由来 |
 |--------|------|
 | `apm.yml`（repo root） | 手書き正本 [`.agent-skill-chain/source/platforms/apm/apm.yml`](../../.agent-skill-chain/source/platforms/apm/apm.yml) をコピー |
-| `.apm/skills/{domain}__{capability}/SKILL.md` | `.agent-skill-chain/source/skills/{domain}/{capability}/`（命名規約は [DESIGN_SYNC_SKILLS_NAMING.md](../../.agent-skill-chain/source/platforms/DESIGN_SYNC_SKILLS_NAMING.md) と同一。既存共有関数 `deploy_skills_impl` を claude/cursor アダプタと共用） |
 | `.apm/skills/agent-skill-chain-full/SKILL.md` | 新規生成（frontmatter: `name: agent-skill-chain-full`）。正本一式バンドルの説明文 |
 | `.apm/skills/agent-skill-chain-full/reference/.agent-skill-chain/source/` | `.agent-skill-chain/source/` 全体を同梱（既存 `bundle_agents_src` を無改変で呼び出す。保守/導入専用スクリプト `setup.sh`・`build-plugin-claude.sh`・`build-adapters.sh`・`sync-version.sh`・`verify-npm-pack.sh`・`lib/` は既存規則どおり除外） |
 
-`.apm/skills/{domain}__{capability}/SKILL.md` の frontmatter `name`（例: `define-boundaries`）とディレクトリ名は一致しないが、apm 公式仕様によりディレクトリ名が優先されるため許容済みの既知事項である（既存 `.adapters/claude` と同じ扱い）。
+`.apm/skills/` 直下には `agent-skill-chain-full` の 1 ディレクトリのみが生成される（個別スキル `{domain}__{capability}/` は生成しない）。共有関数 `deploy_skills_impl`／`list_owned_skill_names` は npx 導線が引き続き使用するため削除していない。
 
-**実機確認事項（`apm install` 時の暗黙正規化）**: 本パッケージ側で生成する `.apm/skills/` のディレクトリ名は `{domain}__{capability}`（例: `architecture__define-boundaries`）だが、apm CLI（v0.24.1 で実機確認）は `apm install` 実行時にこれを `-`（ハイフン）区切りへ暗黙に正規化する。そのため消費者プロジェクトの `.agents/skills/` 配下には `architecture-define-boundaries` のように展開される（`SKILL.md` の frontmatter `name` はディレクトリ名にかかわらず正本のまま無改変）。
+**apm install 時の展開（外部仕様）**: apm CLI は Claude ターゲットでは `.claude/skills/`、その他の横断ハーネスでは `.agents/skills/` へ配備する（external_spec: apm 公式）。本パッケージが配るのは `agent-skill-chain-full` の 1 スキルのみのため、apm 経由では消費者プロジェクトに `agent-skill-chain-full/`（バンドル）が 1 件展開される。過去に apm CLI が個別スキル名の `__`→`-` 正規化を行っていた事象（v0.24.1 実機確認）は、本パッケージが個別スキルを配らなくなったため apm 経由では発生しない（`SKILL.md` の frontmatter `name` は無改変）。
+
+## 既存の二重コピーの掃除（併用済みプロジェクトの是正）
+
+本修正の適用前に `apm install`（Claude ターゲット）と `npx init` を併用していたプロジェクトでは、旧 apm が置いた**ハイフン名の個別スキル**（例: `.claude/skills/architecture-define-boundaries/`）が残存しうる。これらは以下の手順で掃除する（npx 由来のダブルアンダースコア名スキル・ユーザー自作スキルは残す）。
+
+- apm を新版へ更新し `apm uninstall`（または当該パッケージの再同期）で apm 管理エントリを除去する、もしくは
+- `.claude/skills/` 配下の**ハイフン区切りの個別スキルディレクトリ**（`{domain}-{capability}` 形式・apm 由来）を手動で削除する。`{domain}__{capability}`（ダブルアンダースコア＝npx 由来）と `agent-skill-chain-full` は削除しない。
+
+その後 `npx github:techbeansjp-free/AGENTS.md upgrade` を実行すると、npx 所有分（ダブルアンダースコア名）が最新化され、`.claude/skills/` に同一スキルの別名コピーが 0 件になる。
 
 ## ビルドコマンド
 
@@ -66,7 +76,8 @@ B=$(mktemp -d)
 
 # 確認
 test -d "$B/.agents/skills/agent-skill-chain-full/reference/.agent-skill-chain/source" && echo "full bundle OK"
-test -f "$B/.agents/skills/architecture-define-boundaries/SKILL.md" && echo "individual skill OK"  # apm が __ を - へ正規化する
+# 個別スキルは apm では配らない（D1）。バンドル以外の個別スキルディレクトリが 0 件であることを確認する。
+[ "$(find "$B/.agents/skills" -mindepth 1 -maxdepth 1 -type d ! -name agent-skill-chain-full | wc -l)" -eq 0 ] && echo "no individual skills OK"
 test -f "$B/apm.lock.yaml" && echo "lockfile OK"
 
 rm -rf "$A" "$B"
