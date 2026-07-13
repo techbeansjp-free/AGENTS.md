@@ -25,7 +25,8 @@ set -uo pipefail
 # 呼び出し元シェルの環境変数汚染からテストを隔離する（audit.sh の上書き入力のうち、
 # テストが呼び出しごとに設定しないものを unset して既定解決を保証する）。
 # 背景・根拠: 02_設計 ADR-1（AGENTS_ROOT 汚染で #1 が偽陰性化する既存不具合の是正）。
-unset AGENTS_ROOT WORKFLOW_DIR WORKFLOW_DIRS PR_BODY CODE_COMMENT_SRC_DIRS REVIEWDOCS_GATE_EFFECTIVE_FROM
+unset AGENTS_ROOT WORKFLOW_DIR WORKFLOW_DIRS PR_BODY CODE_COMMENT_SRC_DIRS REVIEWDOCS_GATE_EFFECTIVE_FROM \
+  BRANCH_LINK_GATE_ENABLED BRANCH_LINK_GATE_EFFECTIVE_FROM PR_LINK_GATE_ENABLED PR_LINK_GATE_EFFECTIVE_FROM
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))"   # test/ -> repo root（配置非依存）
@@ -1489,7 +1490,9 @@ else
 fi
 
 # #37 システム仕様書の作業用 issue フォルダ参照禁止（check_docs_transient_issue_ref）の tmp 隔離回帰テスト。
-# 判定は「#37 由来の FAIL 文字列の有無」で行う（audit 全体の rc は他 check の影響を受けうるため）。
+# 判定は「#37 由来の FAIL 文字列の有無」に加えて「audit 全体の終了コード」でも行う（CodeRabbit 指摘6）。
+# make_min_tree は他 check を全て SKIP/PASS させる clean な最小ツリー（シナリオ1 で rc=0 を確認済み）で、
+# docs/ 追加で発火しうるのは #37 のみ（#31 は DB 採用時のみ）。よって正例＝rc 非 0・負例/SKIP＝rc 0 を安全に検証できる。
 FAIL37='FAIL: システム仕様書が作業用 issue フォルダ'
 echo "== #37 システム仕様書の作業用 issue フォルダ参照禁止 =="
 
@@ -1499,8 +1502,9 @@ echo "== #37 システム仕様書の作業用 issue フォルダ参照禁止 ==
 # Then:  stderr に #37 由来の FAIL を含む
 A37_TREE="$(make_min_tree)"; mkdir -p "$A37_TREE/docs"
 printf 'see .agent-skill-chain/runtime/20260713_075722_foo/02_設計.md\n' > "$A37_TREE/docs/01_システム概要.md"
-A37_OUT="$(bash "$AUDIT" "$A37_TREE" 2>&1)"
+A37_OUT="$(bash "$AUDIT" "$A37_TREE" 2>&1)"; A37_RC=$?
 if grep -qF "$FAIL37" <<< "$A37_OUT"; then ok "#37-A runtime issue 参照で FAIL"; else ng "#37-A runtime issue 参照で FAIL せず: $A37_OUT"; fi
+if [[ $A37_RC -ne 0 ]]; then ok "#37-A 正例で終了コード非 0（rc=$A37_RC）"; else ng "#37-A 正例なのに終了コード 0: $A37_OUT"; fi
 
 # シナリオB: 本リポ上書きパス（docs/maintainer/workflow/{issue}/）への参照で FAIL
 # Given: docs/ 配下の仕様書が workflow の issue フォルダを参照する
@@ -1508,8 +1512,9 @@ if grep -qF "$FAIL37" <<< "$A37_OUT"; then ok "#37-A runtime issue 参照で FAI
 # Then:  stderr に #37 由来の FAIL を含む
 B37_TREE="$(make_min_tree)"; mkdir -p "$B37_TREE/docs/maintainer"
 printf 'link docs/maintainer/workflow/20260713_075722_foo/00_要求定義.md\n' > "$B37_TREE/docs/maintainer/adapters.md"
-B37_OUT="$(bash "$AUDIT" "$B37_TREE" 2>&1)"
+B37_OUT="$(bash "$AUDIT" "$B37_TREE" 2>&1)"; B37_RC=$?
 if grep -qF "$FAIL37" <<< "$B37_OUT"; then ok "#37-B workflow issue 参照で FAIL"; else ng "#37-B workflow issue 参照で FAIL せず: $B37_OUT"; fi
+if [[ $B37_RC -ne 0 ]]; then ok "#37-B 正例で終了コード非 0（rc=$B37_RC）"; else ng "#37-B 正例なのに終了コード 0: $B37_OUT"; fi
 
 # シナリオC: close/ 配下（完了後の永続パス）への参照は誤検知しない
 # Given: docs/ 配下の仕様書が close 済み issue を参照する
@@ -1517,8 +1522,9 @@ if grep -qF "$FAIL37" <<< "$B37_OUT"; then ok "#37-B workflow issue 参照で FA
 # Then:  stderr に #37 由来の FAIL を含まない
 C37_TREE="$(make_min_tree)"; mkdir -p "$C37_TREE/docs"
 printf 'docs/maintainer/workflow/close/20260713_foo/04_review.md and .agent-skill-chain/runtime/close/20260713_bar/00_要求定義.md\n' > "$C37_TREE/docs/x.md"
-C37_OUT="$(bash "$AUDIT" "$C37_TREE" 2>&1)"
+C37_OUT="$(bash "$AUDIT" "$C37_TREE" 2>&1)"; C37_RC=$?
 if ! grep -qF "$FAIL37" <<< "$C37_OUT"; then ok "#37-C close 参照は非 FAIL"; else ng "#37-C close 参照で誤 FAIL: $C37_OUT"; fi
+if [[ $C37_RC -eq 0 ]]; then ok "#37-C 負例で終了コード 0"; else ng "#37-C 負例なのに終了コード非 0（rc=$C37_RC）: $C37_OUT"; fi
 
 # シナリオD: 汎用ディレクトリ参照・DB 参照は誤検知しない
 # Given: docs/ 配下の仕様書が workflow.db や日時プレフィックスなしの一般ディレクトリを参照する
@@ -1526,8 +1532,9 @@ if ! grep -qF "$FAIL37" <<< "$C37_OUT"; then ok "#37-C close 参照は非 FAIL";
 # Then:  stderr に #37 由来の FAIL を含まない
 D37_TREE="$(make_min_tree)"; mkdir -p "$D37_TREE/docs"
 printf 'db at .agent-skill-chain/runtime/workflow.db and dir .agent-skill-chain/runtime/ and docs/maintainer/workflow/README.md\n' > "$D37_TREE/docs/y.md"
-D37_OUT="$(bash "$AUDIT" "$D37_TREE" 2>&1)"
+D37_OUT="$(bash "$AUDIT" "$D37_TREE" 2>&1)"; D37_RC=$?
 if ! grep -qF "$FAIL37" <<< "$D37_OUT"; then ok "#37-D 汎用/DB 参照は非 FAIL"; else ng "#37-D 汎用/DB 参照で誤 FAIL: $D37_OUT"; fi
+if [[ $D37_RC -eq 0 ]]; then ok "#37-D 負例で終了コード 0"; else ng "#37-D 負例なのに終了コード非 0（rc=$D37_RC）: $D37_OUT"; fi
 
 # シナリオE: 作業用 issue ドキュメント自身（docs/maintainer/workflow/ 配下）は走査対象外
 # Given: workflow 配下の issue ドキュメントが別の issue フォルダを参照する
@@ -1535,16 +1542,18 @@ if ! grep -qF "$FAIL37" <<< "$D37_OUT"; then ok "#37-D 汎用/DB 参照は非 FA
 # Then:  stderr に #37 由来の FAIL を含まない（/workflow/ 除外）
 E37_TREE="$(make_min_tree)"; mkdir -p "$E37_TREE/docs/maintainer/workflow/20260713_075722_foo"
 printf 'refers .agent-skill-chain/runtime/20260713_x_bar/02_設計.md\n' > "$E37_TREE/docs/maintainer/workflow/20260713_075722_foo/02_設計.md"
-E37_OUT="$(bash "$AUDIT" "$E37_TREE" 2>&1)"
+E37_OUT="$(bash "$AUDIT" "$E37_TREE" 2>&1)"; E37_RC=$?
 if ! grep -qF "$FAIL37" <<< "$E37_OUT"; then ok "#37-E workflow 配下 issue ドキュメントは走査対象外"; else ng "#37-E 走査対象外が効かず誤 FAIL: $E37_OUT"; fi
+if [[ $E37_RC -eq 0 ]]; then ok "#37-E 走査対象外で終了コード 0"; else ng "#37-E 走査対象外なのに終了コード非 0（rc=$E37_RC）: $E37_OUT"; fi
 
 # シナリオF: docs/ 不在は SKIP（docs/ 未採用プロジェクトでは不発動）
 # Given: docs/ を持たない最小ツリー
 # When:  audit.sh <tmp> を実行する
 # Then:  stderr に #37 由来の FAIL を含まない
 F37_TREE="$(make_min_tree)"
-F37_OUT="$(bash "$AUDIT" "$F37_TREE" 2>&1)"
+F37_OUT="$(bash "$AUDIT" "$F37_TREE" 2>&1)"; F37_RC=$?
 if ! grep -qF "$FAIL37" <<< "$F37_OUT"; then ok "#37-F docs/ 不在 SKIP"; else ng "#37-F docs/ 不在でも FAIL: $F37_OUT"; fi
+if [[ $F37_RC -eq 0 ]]; then ok "#37-F docs/ 不在 SKIP で終了コード 0"; else ng "#37-F docs/ 不在なのに終了コード非 0（rc=$F37_RC）: $F37_OUT"; fi
 
 # シナリオG: サブ issue（日付のみプレフィックス）の参照も FAIL（日時プレフィックス検出の下限を lock）
 # Given: docs/ 配下の仕様書が YYYYMMDD_ のみのサブ issue ディレクトリを参照する
@@ -1552,8 +1561,248 @@ if ! grep -qF "$FAIL37" <<< "$F37_OUT"; then ok "#37-F docs/ 不在 SKIP"; else 
 # Then:  stderr に #37 由来の FAIL を含む
 G37_TREE="$(make_min_tree)"; mkdir -p "$G37_TREE/docs"
 printf 'sub docs/maintainer/workflow/20260314_PR4_PR指摘対応/00_要求定義.md\n' > "$G37_TREE/docs/z.md"
-G37_OUT="$(bash "$AUDIT" "$G37_TREE" 2>&1)"
+G37_OUT="$(bash "$AUDIT" "$G37_TREE" 2>&1)"; G37_RC=$?
 if grep -qF "$FAIL37" <<< "$G37_OUT"; then ok "#37-G サブ issue（日付プレフィックス）参照で FAIL"; else ng "#37-G サブ issue 参照で FAIL せず: $G37_OUT"; fi
+if [[ $G37_RC -ne 0 ]]; then ok "#37-G 正例で終了コード非 0（rc=$G37_RC）"; else ng "#37-G 正例なのに終了コード 0: $G37_OUT"; fi
+
+# シナリオH: パス文字列に "/workflow/" を含むが WORKFLOW_SCAN_DIRS 配下ではない正当な仕様書は走査対象
+#   （CodeRabbit 指摘2 の退行ロック。パス例は説明用の仮想パスで特定のディレクトリ規約に依存しない）。
+# Given: 名前にたまたま "workflow" を含む一般ディレクトリ（WORKFLOW_SCAN_DIRS ではない）配下の仕様書が
+#        issue フォルダを参照する
+# When:  audit.sh <tmp> を実行する
+# Then:  "/workflow/" 部分一致では除外されず #37 由来の FAIL を含む（前方一致除外に修正済みであること）
+H37_TREE="$(make_min_tree)"; mkdir -p "$H37_TREE/docs/spec/workflow"
+printf 'see .agent-skill-chain/runtime/20260713_075722_foo/02_設計.md\n' > "$H37_TREE/docs/spec/workflow/design.md"
+H37_OUT="$(bash "$AUDIT" "$H37_TREE" 2>&1)"; H37_RC=$?
+if grep -qF "$FAIL37" <<< "$H37_OUT"; then ok "#37-H /workflow/ を含む正当仕様書は走査対象（前方一致除外）で FAIL"; else ng "#37-H /workflow/ 部分一致で誤って走査対象外になり FAIL せず: $H37_OUT"; fi
+if [[ $H37_RC -ne 0 ]]; then ok "#37-H 正例で終了コード非 0（rc=$H37_RC）"; else ng "#37-H 正例なのに終了コード 0: $H37_OUT"; fi
+
+# =====================================================================================
+# #35 実装前ブランチ紐づけ未記録検知（check_branch_linkage_before_implement）の回帰テスト
+#   tmp 隔離（mktemp -d）。本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db は変更しない。
+#   参照: docs/maintainer/workflow/20260713_050350_issue紐づけ機械強制/03_実装計画.md §2.1
+# =====================================================================================
+echo "== #35 実装前ブランチ紐づけ未記録検知 =="
+
+# #35 用 seed ヘルパー: <tree> <issue_path> <00 本文> で issue + implement ログを用意する。
+seed_branch_issue() {
+  local tree="$1" iss="$2" body="$3"
+  mkdir -p "$tree/$iss"
+  printf '%s' "$body" > "$tree/$iss/00_要求定義.md"
+  local db="$tree/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$db" "CREATE TABLE IF NOT EXISTS workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$db" "INSERT INTO workflow_log VALUES ('e_$RANDOM$RANDOM', NULL, 'implement-feature', '$iss');" 2>/dev/null
+}
+
+if command -v sqlite3 >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+  # シナリオ1: 違反系 FAIL（発効日以降・implement ログあり・branch null）。github.com remote 無しの
+  #            git tree（gitlab remote）で発火することを確認＝#34 と違い github.com remote を要求しない。
+  S35_1_TREE="$(make_git_tree_nongithub)"
+  seed_branch_issue "$S35_1_TREE" "docs/maintainer/workflow/20260801_000000_br_ng" \
+$'---\ndocument_id: "d1"\nissue_id: "i1"\ngithub_issue: "#1"\nbranch: null\n---\n'
+  S35_1_OUT="$(bash "$AUDIT" "$S35_1_TREE" 2>&1)"
+  if grep -q "ブランチ紐づけ未記録" <<< "$S35_1_OUT"; then
+    ok "#35 違反系（branch null・非 github remote でも発火）で FAIL する"
+  else
+    ng "#35 違反系で FAIL しなかった（見逃し）: $S35_1_OUT"
+  fi
+
+  # シナリオ1b: branch キーが完全に欠落していても FAIL（後方互換パース＝未記録扱い）
+  S35_1B_TREE="$(make_git_tree_github)"
+  seed_branch_issue "$S35_1B_TREE" "docs/maintainer/workflow/20260801_000000_br_missing" \
+$'---\ngithub_issue: "#1"\n---\n'
+  S35_1B_OUT="$(bash "$AUDIT" "$S35_1B_TREE" 2>&1)"
+  if grep -q "ブランチ紐づけ未記録" <<< "$S35_1B_OUT"; then
+    ok "#35 branch キー欠落は未記録扱いで FAIL する"
+  else
+    ng "#35 branch キー欠落を見逃した: $S35_1B_OUT"
+  fi
+
+  # シナリオ2: 正常系 PASS（branch 非空）
+  S35_2_TREE="$(make_git_tree_github)"
+  seed_branch_issue "$S35_2_TREE" "docs/maintainer/workflow/20260801_000000_br_ok" \
+$'---\ngithub_issue: "#1"\nbranch: "feat/some-branch"\n---\n'
+  S35_2_OUT="$(bash "$AUDIT" "$S35_2_TREE" 2>&1)"
+  if ! grep -q "ブランチ紐づけ未記録" <<< "$S35_2_OUT"; then
+    ok "#35 正常系（branch 記録済み）は FAIL しない"
+  else
+    ng "#35 正常系で誤って FAIL した: $S35_2_OUT"
+  fi
+
+  # シナリオ3: 無効化トグル ON（BRANCH_LINK_GATE_ENABLED=false）→ 最優先 SKIP
+  S35_3_OUT="$(BRANCH_LINK_GATE_ENABLED=false bash "$AUDIT" "$S35_1_TREE" 2>&1)"
+  if ! grep -q "ブランチ紐づけ未記録" <<< "$S35_3_OUT"; then
+    ok "#35 無効化トグル ON（BRANCH_LINK_GATE_ENABLED=false）で SKIP する（最優先ガード）"
+  else
+    ng "#35 無効化トグル ON でも FAIL した: $S35_3_OUT"
+  fi
+
+  # シナリオ4: grandfather SKIP（発効日前 prefix）
+  S35_4_TREE="$(make_git_tree_github)"
+  seed_branch_issue "$S35_4_TREE" "docs/maintainer/workflow/20260101_000000_br_old" \
+$'---\nbranch: null\n---\n'
+  S35_4_OUT="$(bash "$AUDIT" "$S35_4_TREE" 2>&1)"
+  if ! grep -q "ブランチ紐づけ未記録" <<< "$S35_4_OUT"; then
+    ok "#35 grandfather SKIP（発効日前 issue は FAIL しない）"
+  else
+    ng "#35 grandfather が機能せず遡及 FAIL した: $S35_4_OUT"
+  fi
+
+  # シナリオ5: implement-feature ログ 0 件は対象外 SKIP
+  S35_5_TREE="$(make_git_tree_github)"
+  S35_5_ISS="docs/maintainer/workflow/20260801_000000_br_noimpl"
+  mkdir -p "$S35_5_TREE/$S35_5_ISS"
+  printf '%s' $'---\nbranch: null\n---\n' > "$S35_5_TREE/$S35_5_ISS/00_要求定義.md"
+  sqlite3 "$S35_5_TREE/.agent-skill-chain/runtime/workflow.db" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  S35_5_OUT="$(bash "$AUDIT" "$S35_5_TREE" 2>&1)"
+  if ! grep -q "ブランチ紐づけ未記録" <<< "$S35_5_OUT"; then
+    ok "#35 implement-feature ログ 0 件は対象外（FAIL しない）"
+  else
+    ng "#35 impl ログ 0 件でも FAIL した: $S35_5_OUT"
+  fi
+
+  # シナリオ6: close 配下 SKIP
+  S35_6_TREE="$(make_git_tree_github)"
+  seed_branch_issue "$S35_6_TREE" "docs/maintainer/workflow/close/20260801_000000_br_closed" \
+$'---\nbranch: null\n---\n'
+  S35_6_OUT="$(bash "$AUDIT" "$S35_6_TREE" 2>&1)"
+  if ! grep -q "ブランチ紐づけ未記録" <<< "$S35_6_OUT"; then
+    ok "#35 close SKIP（close 配下 issue は FAIL しない）"
+  else
+    ng "#35 close 除外が効いていない: $S35_6_OUT"
+  fi
+else
+  echo "  [SKIP] #35 ブランチ紐づけ未記録検知の回帰（sqlite3 または git 不在）"
+fi
+
+# シナリオ7: DB 非採用 SKIP（sqlite3/DB 無し）
+if command -v git >/dev/null 2>&1; then
+  S35_7_TREE="$(make_git_tree_github)"
+  S35_7_ISS="docs/maintainer/workflow/20260801_000000_br_nodb"
+  mkdir -p "$S35_7_TREE/$S35_7_ISS"
+  printf '%s' $'---\nbranch: null\n---\n' > "$S35_7_TREE/$S35_7_ISS/00_要求定義.md"
+  S35_7_OUT="$(bash "$AUDIT" "$S35_7_TREE" 2>&1)"
+  if ! grep -q "ブランチ紐づけ未記録" <<< "$S35_7_OUT"; then
+    ok "#35 DB 非採用 SKIP（sqlite3/DB 無しで FAIL しない）"
+  else
+    ng "#35 DB 非採用でも FAIL した: $S35_7_OUT"
+  fi
+else
+  echo "  [SKIP] #35 DB 非採用 SKIP 検証（git 不在）"
+fi
+
+# =====================================================================================
+# #36 PR 紐づけ未記録検知（check_pr_issue_linkage）の回帰テスト
+#   tmp 隔離（mktemp -d）。差分（GIT_RANGE）に issue を載せるため commit する git tree を使う。
+#   参照: docs/maintainer/workflow/20260713_050350_issue紐づけ機械強制/03_実装計画.md §2.2
+# =====================================================================================
+echo "== #36 PR 紐づけ未記録検知 =="
+
+# #36 用 seed ヘルパー: <tree> <issue_path> <github_issue 値> で issue を作り commit する（差分に載せる）。
+# 直前に空コミットで base を作り HEAD~1..HEAD が当該 issue の追加を含むようにする。
+seed_pr_issue() {
+  local tree="$1" iss="$2" ghval="$3"
+  mkdir -p "$tree/$iss"
+  printf '%s' $'---\ngithub_issue: '"$ghval"$'\n---\n' > "$tree/$iss/00_要求定義.md"
+  ( cd "$tree" && git add -A && git commit -qm "add $iss" >/dev/null )
+}
+
+if command -v git >/dev/null 2>&1; then
+  # シナリオ1: PR_BODY 未設定（ローカル/push）は SKIP
+  S36_1_TREE="$(make_git_tree_github)"
+  ( cd "$S36_1_TREE" && git commit -q --allow-empty -m base >/dev/null )
+  seed_pr_issue "$S36_1_TREE" "docs/maintainer/workflow/20260801_000000_pr1" '"#28"'
+  S36_1_OUT="$(AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_1_TREE" 2>&1)"
+  if ! grep -q "PR 紐づけ未記録" <<< "$S36_1_OUT"; then
+    ok "#36 PR_BODY 未設定（ローカル/push）は SKIP する"
+  else
+    ng "#36 PR_BODY 未設定でも FAIL した: $S36_1_OUT"
+  fi
+
+  # シナリオ2: PR_BODY 設定あり・Closes/Refs 無し・差分に非 declined の実 Issue 参照 issue → FAIL
+  S36_2_OUT="$(PR_BODY="実装しました。説明のとおりです。" AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_1_TREE" 2>&1)"
+  if grep -q "PR 紐づけ未記録" <<< "$S36_2_OUT"; then
+    ok "#36 違反系（Closes/Refs 無し・実 Issue 参照 issue 残存）で FAIL する"
+  else
+    ng "#36 違反系で FAIL しなかった（見逃し）: $S36_2_OUT"
+  fi
+
+  # シナリオ3: PR_BODY に Closes #N があれば PASS
+  S36_3_OUT="$(PR_BODY="Closes #28" AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_1_TREE" 2>&1)"
+  if ! grep -q "PR 紐づけ未記録" <<< "$S36_3_OUT"; then
+    ok "#36 正常系（PR 本文に Closes #N）は FAIL しない"
+  else
+    ng "#36 Closes #N ありで誤って FAIL した: $S36_3_OUT"
+  fi
+
+  # シナリオ3b: キーワード変種（fixes / resolves / refs / references / owner/repo#N・大小文字不問）で PASS
+  S36_3B_FAIL=0
+  for kw in "This fixes #28" "resolves #28" "Refs #28" "references #28" "CLOSES #28" "Fixes techbeansjp-free/AGENTS.md#28"; do
+    _out="$(PR_BODY="$kw" AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_1_TREE" 2>&1)"
+    if grep -q "PR 紐づけ未記録" <<< "$_out"; then S36_3B_FAIL=1; echo "    [debug] 変種で誤 FAIL: '$kw'" >&2; fi
+  done
+  if [[ $S36_3B_FAIL -eq 0 ]]; then
+    ok "#36 キーワード変種（fixes/resolves/refs/references/大小文字/owner-repo#N）を全て有効と判定"
+  else
+    ng "#36 一部のキーワード変種を有効と判定できなかった"
+  fi
+
+  # シナリオ4: 差分内 issue が declined のみ・Closes/Refs 無し → SKIP（対象外）
+  S36_4_TREE="$(make_git_tree_github)"
+  ( cd "$S36_4_TREE" && git commit -q --allow-empty -m base >/dev/null )
+  seed_pr_issue "$S36_4_TREE" "docs/maintainer/workflow/20260801_000000_pr_declined" '"declined: 軽微な値修正のため"'
+  S36_4_OUT="$(PR_BODY="実装しました" AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_4_TREE" 2>&1)"
+  if ! grep -q "PR 紐づけ未記録" <<< "$S36_4_OUT"; then
+    ok "#36 declined のみの PR は対象外 SKIP（FAIL しない）"
+  else
+    ng "#36 declined 除外が効いていない: $S36_4_OUT"
+  fi
+
+  # シナリオ4b: 差分内 issue が github_issue null のみ・Closes/Refs 無し → SKIP（#34 の責務・非交差）
+  S36_4B_TREE="$(make_git_tree_github)"
+  ( cd "$S36_4B_TREE" && git commit -q --allow-empty -m base >/dev/null )
+  seed_pr_issue "$S36_4B_TREE" "docs/maintainer/workflow/20260801_000000_pr_null" 'null'
+  S36_4B_OUT="$(PR_BODY="実装しました" AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_4B_TREE" 2>&1)"
+  if ! grep -q "PR 紐づけ未記録" <<< "$S36_4B_OUT"; then
+    ok "#36 github_issue null のみは対象外 SKIP（#34 と非交差）"
+  else
+    ng "#36 null 除外が効いていない（#34 と交差）: $S36_4B_OUT"
+  fi
+
+  # シナリオ5: 差分内 issue が grandfather（発効日前 prefix）のみ → SKIP
+  S36_5_TREE="$(make_git_tree_github)"
+  ( cd "$S36_5_TREE" && git commit -q --allow-empty -m base >/dev/null )
+  seed_pr_issue "$S36_5_TREE" "docs/maintainer/workflow/20260101_000000_pr_old" '"#5"'
+  S36_5_OUT="$(PR_BODY="実装しました" AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_5_TREE" 2>&1)"
+  if ! grep -q "PR 紐づけ未記録" <<< "$S36_5_OUT"; then
+    ok "#36 grandfather のみの PR は対象外 SKIP（FAIL しない）"
+  else
+    ng "#36 grandfather 除外が効いていない: $S36_5_OUT"
+  fi
+
+  # シナリオ6: 差分に workflow issue 無し（コードのみ変更）→ SKIP
+  S36_6_TREE="$(make_git_tree_github)"
+  ( cd "$S36_6_TREE" && git commit -q --allow-empty -m base >/dev/null )
+  mkdir -p "$S36_6_TREE/src"
+  printf 'x\n' > "$S36_6_TREE/src/foo.txt"
+  ( cd "$S36_6_TREE" && git add -A && git commit -qm codeonly >/dev/null )
+  S36_6_OUT="$(PR_BODY="実装しました" AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_6_TREE" 2>&1)"
+  if ! grep -q "PR 紐づけ未記録" <<< "$S36_6_OUT"; then
+    ok "#36 差分に workflow issue 無し（コードのみ）は SKIP（誤 FAIL なし）"
+  else
+    ng "#36 workflow issue 無しでも FAIL した: $S36_6_OUT"
+  fi
+
+  # シナリオ7: 無効化トグル ON（PR_LINK_GATE_ENABLED=false）→ 最優先 SKIP
+  S36_7_OUT="$(PR_LINK_GATE_ENABLED=false PR_BODY="実装しました" AUDIT_GIT_RANGE="HEAD~1..HEAD" bash "$AUDIT" "$S36_1_TREE" 2>&1)"
+  if ! grep -q "PR 紐づけ未記録" <<< "$S36_7_OUT"; then
+    ok "#36 無効化トグル ON（PR_LINK_GATE_ENABLED=false）で SKIP する（最優先ガード）"
+  else
+    ng "#36 無効化トグル ON でも FAIL した: $S36_7_OUT"
+  fi
+else
+  echo "  [SKIP] #36 PR 紐づけ未記録検知の回帰（git 不在）"
+fi
 
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
