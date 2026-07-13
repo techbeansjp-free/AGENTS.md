@@ -100,6 +100,11 @@ const required = [
   { label: "README.md", test: (p) => p === "README.md" },
   { label: "package.json", test: (p) => p === "package.json" },
   { label: ".agent-skill-chain/runtime/templates/", test: (p) => p.startsWith(".agent-skill-chain/runtime/templates/") },
+  // runtime/.gitignore 配布の実体テンプレート（ADR-4）。npm-packlist は「.gitignore」という
+  // 名前のファイルを 2 階層以上ネストした位置では files 指定に関わらず強制除外するため、
+  // 配布経路上は非 .gitignore 名のこのテンプレートを正本とし setup.sh がコピー時に
+  // .gitignore へリネームする。回帰時（誤って除外・削除された場合）に検知するための必須物。
+  { label: ".agent-skill-chain/source/runtime-gitignore.template", test: (p) => p === ".agent-skill-chain/source/runtime-gitignore.template" },
 ];
 const missing = required.filter((r) => !files.some((p) => r.test(p)));
 

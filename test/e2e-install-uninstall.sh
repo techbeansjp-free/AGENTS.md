@@ -723,6 +723,13 @@ test_new_deploy_marker_and_readme() {
   # Then: source/・runtime/templates/ が新規配備される
   assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md"            "N1: source/ が新規配備される"
   assert_exists "$dest/.agent-skill-chain/runtime/templates/00_要求定義.md" "N1: runtime/templates/ が新規配備される"
+  assert_exists "$dest/.agent-skill-chain/source/runtime-gitignore.template" "N1: runtime/.gitignore のコピー元テンプレート（ADR-4）が source/ 配下に配備される"
+  assert_exists "$dest/.agent-skill-chain/runtime/.gitignore"             "N1: runtime/.gitignore がテンプレートからリネームされ新規配備される"
+  if grep -q 'workflow\.db\*' "$dest/.agent-skill-chain/runtime/.gitignore" 2>/dev/null; then
+    ok "N1: 配備された runtime/.gitignore の内容に workflow.db* を含む"
+  else
+    ng "N1: 配備された runtime/.gitignore の内容に workflow.db* を含むべき"
+  fi
 
   # And (Then): 配備マーカー（.package-manifest）に name + version が書き込まれる
   local manifest="$dest/.agent-skill-chain/.package-manifest"
@@ -782,6 +789,60 @@ test_redeploy_backs_up() {
   fi
 
   rm -rf "$dest"
+}
+
+# N2b: runtime/.gitignore はローカル変更を尊重し再配備で上書きされない（01_要件定義.md UC1 シナリオ2）
+test_gitignore_not_overwritten_on_reinstall() {
+  echo "[e2e] シナリオN2b: runtime/.gitignore はローカル変更を尊重し setup 再実行で上書きされない"
+  # Given: init 済み（runtime/.gitignore が配布済み）の dest で、ローカルに内容を書き換える
+  local dest; dest="$(mktemp -d)"; assert_tmp_target "$dest"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  echo "# local override" > "$dest/.agent-skill-chain/runtime/.gitignore"
+
+  # When: 再度 init（= 再配備。upgrade 相当）を実行する
+  node "$CLI" init "$dest" >/dev/null 2>&1
+
+  # Then: ローカル変更した内容が保持され、パッケージ既定（workflow.db*）に巻き戻らない
+  assert_eq "$(cat "$dest/.agent-skill-chain/runtime/.gitignore")" "# local override" \
+    "N2b: runtime/.gitignore は再配備で内容が上書きされない"
+
+  rm -rf "$dest"
+}
+
+# N2c: runtime-gitignore.template がパッケージから欠落している場合、setup.sh は中断せず
+#      stderr に警告を出す（配布漏れの無言再発防止・CodeRabbit指摘・PR#33）
+test_gitignore_template_missing_warns() {
+  echo "[e2e] シナリオN2c: runtime-gitignore.template 欠落時に setup.sh は stderr へ警告し処理は継続する"
+  # Given: パッケージのクリーンコピーから runtime-gitignore.template を削除し、配布物からの
+  #        欠落（本 issue が修正した回帰と同種）を再現する
+  local pkg dest err
+  pkg="$(mktemp -d)"; assert_tmp_target "$pkg"
+  dest="$(mktemp -d)"; assert_tmp_target "$dest"
+  err="$(mktemp)"
+  make_clean_tree "$pkg"
+  rm -f "$pkg/.agent-skill-chain/source/runtime-gitignore.template"
+
+  # When: このパッケージコピーを PACKAGE_ROOT として setup.sh を直接実行する
+  bash "$pkg/.agent-skill-chain/source/scripts/setup.sh" "$dest" >/dev/null 2>"$err"
+  local rc=$?
+
+  # Then: setup.sh は中断せず正常終了する（他の配備処理は継続する）
+  assert_eq "0" "$rc" "N2c: テンプレート欠落時も setup.sh は exit 0 で継続する"
+
+  # And (Then): stderr に欠落の明示的な警告が出る（無言スキップにしない）
+  if grep -q "runtime/.gitignore のコピー元テンプレートが見つかりません" "$err"; then
+    ok "N2c: テンプレート欠落時に stderr へ警告が出る"
+  else
+    ng "N2c: テンプレート欠落時に stderr へ警告が出るべき"
+  fi
+
+  # And (Then): コピー元が無いため runtime/.gitignore は配布されない
+  assert_absent "$dest/.agent-skill-chain/runtime/.gitignore" "N2c: コピー元欠落時は runtime/.gitignore を配布しない"
+
+  # And (Then): 他の配備処理（source/ 等）には影響しない
+  assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md" "N2c: テンプレート欠落時も source/ の配備は継続する"
+
+  rm -rf "$pkg" "$dest"; rm -f "$err"
 }
 
 # N3: 非本パッケージ由来ディレクトリへの配備試行は中止（BDD: Feature 配備マーカーによる衝突検知（確認できない場合））
@@ -954,6 +1015,8 @@ test_enforcement_preserves_user_settings
 # ストーリー8（統合ネスト・§2.6.9）新規シナリオ N1〜N6（N7 は R1/R2/R3 が兼ねる）
 test_new_deploy_marker_and_readme
 test_redeploy_backs_up
+test_gitignore_not_overwritten_on_reinstall
+test_gitignore_template_missing_warns
 test_foreign_dir_aborts
 test_legacy_migration
 test_default_uninstall_preserves_runtime_and_project

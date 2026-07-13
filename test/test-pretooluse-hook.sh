@@ -484,6 +484,60 @@ run_uc8 "jq" "$JQ_PATH"
 run_uc8 "nojq" "$NOJQ_PATH"
 
 # =====================================================================================
+# UC9: runtime/.gitignore の厳密パス一致例外（ADR-3・01_要件定義.md UC2 シナリオ1〜3）
+#   配布漏れの自己修復用の正規手段。厳密一致のみ allow し、他の runtime/ 配下ファイルへの
+#   禁止・過剰マッチ防止（サブディレクトリ/紛らわしいファイル名）は維持されることを検証する。
+#   jq 有/無の両系統で同一合否になることを確認する。
+# =====================================================================================
+echo "== UC9: runtime/.gitignore 厳密パス一致例外 =="
+run_uc9() {
+  local label="$1" pathval="$2"
+
+  # シナリオ1: runtime/.gitignore への直接 Edit は厳密パス一致で allow される（01 UC2 シナリオ1）
+  # Given: AGENT_ROLE=worker、file_path が厳密に .agent-skill-chain/runtime/.gitignore
+  local json1='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/.gitignore"}}'
+  # When: 正当 JSON を stdin で渡す
+  run_pre "$pathval" worker "$json1"
+  # Then: 終了コードは 0（allow）
+  assert_eq 0 "$RC" "UC9[$label]: runtime/.gitignore の厳密一致 Edit は exit 0"
+
+  # シナリオ2: 他の runtime/ 配下ファイルへの Write は引き続き block される（01 UC2 シナリオ2）
+  # Given: AGENT_ROLE=worker、file_path が .agent-skill-chain/runtime/workflow.db
+  local json2='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/workflow.db"}}'
+  # When: 違反 JSON を stdin で渡す
+  run_pre "$pathval" worker "$json2"
+  # Then: 終了コードは 2（block・現状維持）
+  assert_eq 2 "$RC" "UC9[$label]: runtime/workflow.db の Write は exit 2（現状維持）"
+  assert_grep "direct edit of .agent-skill-chain/runtime/ is forbidden" "$ERR" "UC9[$label]: 従来どおりの禁止メッセージ"
+
+  # シナリオ3: サブディレクトリの .gitignore は厳密一致でないため例外対象外（01 UC2 シナリオ3・過剰マッチ防止）
+  # Given: AGENT_ROLE=worker、file_path が .agent-skill-chain/runtime/<issue>/.gitignore（厳密パスと不一致）
+  local json3='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/x/.gitignore"}}'
+  # When: 違反 JSON を stdin で渡す
+  run_pre "$pathval" worker "$json3"
+  # Then: 終了コードは 2（block・例外は完全一致のみ）
+  assert_eq 2 "$RC" "UC9[$label]: サブディレクトリの .gitignore は exit 2（過剰マッチ防止）"
+
+  # シナリオ4（境界値）: 紛らわしいファイル名（.gitignore.bak）は厳密一致でないため block される
+  # Given: AGENT_ROLE=worker、file_path が .agent-skill-chain/runtime/.gitignore.bak
+  local json4='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/.gitignore.bak"}}'
+  # When: 違反 JSON を stdin で渡す
+  run_pre "$pathval" worker "$json4"
+  # Then: 終了コードは 2（前方一致で誤許可しないことの確認）
+  assert_eq 2 "$RC" "UC9[$label]: .gitignore.bak は exit 2（前方一致で誤許可しない）"
+
+  # シナリオ5（境界値）: 絶対パス表記の runtime/.gitignore も厳密一致として allow される（既存 R1 の絶対パス regex 分岐との整合）
+  # Given: AGENT_ROLE=worker、file_path が絶対パス /repo/.agent-skill-chain/runtime/.gitignore
+  local json5='{"tool_name":"Edit","tool_input":{"file_path":"/repo/.agent-skill-chain/runtime/.gitignore"}}'
+  # When: 正当 JSON を stdin で渡す
+  run_pre "$pathval" worker "$json5"
+  # Then: 終了コードは 0（絶対パスでも末尾セグメントが厳密一致すれば allow）
+  assert_eq 0 "$RC" "UC9[$label]: 絶対パス表記の runtime/.gitignore も exit 0"
+}
+run_uc9 "jq" "$JQ_PATH"
+run_uc9 "nojq" "$NOJQ_PATH"
+
+# =====================================================================================
 # UC1/UC2 系: jq 経路（jq シムまたは本物 jq を PATH 前段に）— jq 有/無の両系統で同一合否
 # =====================================================================================
 echo "== jq 経路（jq present 系統）: 違反→2 / 正当→0 が jq 無し系統と一致 =="
