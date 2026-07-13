@@ -135,10 +135,22 @@ fi
 #   コピー時にのみ .gitignore へリネームする。
 WF_GITIGNORE="$PROJECT_ROOT/.agent-skill-chain/runtime/.gitignore"
 WF_GITIGNORE_SOURCE="$PACKAGE_ROOT/.agent-skill-chain/source/runtime-gitignore.template"
-if [[ -f "$WF_GITIGNORE_SOURCE" && ! -f "$WF_GITIGNORE" ]]; then
-  mkdir -p "$PROJECT_ROOT/.agent-skill-chain/runtime"
-  cp "$WF_GITIGNORE_SOURCE" "$WF_GITIGNORE"
-  echo "runtime/.gitignore を配布しました（未存在時のみ）。"
+if [[ -f "$WF_GITIGNORE_SOURCE" ]]; then
+  if [[ ! -f "$WF_GITIGNORE" ]]; then
+    mkdir -p "$PROJECT_ROOT/.agent-skill-chain/runtime"
+    cp "$WF_GITIGNORE_SOURCE" "$WF_GITIGNORE"
+    echo "runtime/.gitignore を配布しました（未存在時のみ）。"
+  fi
+else
+  # コピー元テンプレートがパッケージ内に見つからない（本 issue が修正した配布漏れと同種の
+  # 回帰の可能性がある）。処理は中止せず（enforcement/claude・enforcement/cursor 欠落時と
+  # 同じ非致命方針。L187-207 参照）、workflow-db-guard.sh の 3 要素警告書式を踏襲して
+  # stderr へ明示的に警告する（無言スキップにしない。CodeRabbit指摘・回帰防止）。
+  {
+    echo "警告: runtime/.gitignore のコピー元テンプレートが見つかりません: $WF_GITIGNORE_SOURCE"
+    echo "  推定される問題: パッケージの配布物（npm tarball 等）から .agent-skill-chain/source/runtime-gitignore.template が欠落している可能性があります（本パッケージが過去に修正した配布漏れと同種の回帰）。"
+    echo "  確認手順: パッケージのバージョン・配布経路（npm publish の files 設定等）を確認してください。setup 処理はこのまま続行しますが、runtime/.gitignore は配布されません。"
+  } >&2
 fi
 
 # スキルをプラットフォーム別パスに同期する（.claude/skills, .cursor/skills）
