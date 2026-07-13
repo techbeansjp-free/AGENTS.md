@@ -22,6 +22,9 @@
 #   - 章節番号（節/章/条・section 表記。全角数字は列挙で表す）
 #   - 追跡番号（PR/Issue/チケット/タスク + 数字、裸の #NN 2 桁以上）
 #   - ドキュメント名（非空白文字が続く .md / .adoc）
+#   - 作業用 issue フォルダへのパス参照（.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/。
+#     issue フォルダ名の日時プレフィックス YYYYMMDD_ を含むパスに限定。close/ 配下・日時プレフィックスの無い
+#     汎用ディレクトリ言及は対象外。CODE_COMMENT_RULES.md §2・DOCS_NOISE_RULES.md (iv-b) と対称）
 #
 # 出力: 違反を <file>:<line> 形式で標準出力へ列挙する。
 # 終了コード: 0=違反なし（走査対象 0 件を含む）／1=違反 1 件以上／2=引数なし等の使用方法エラー。
@@ -41,6 +44,10 @@ pat_ticket='((PR|Issue|ISSUE|issue|チケット|task|タスク)[[:space:]]*#?[0-
 # ドキュメント名: 直前が非空白バイトなら CJK 文字で終わる名前も検出する（全角名対応）。
 # 拡張子は語末境界（非英数字または行末）を要求し、.mdc 等の別拡張子を .md と誤認しない。
 pat_docname='[^[:space:]]+\.(md|adoc)([^[:alnum:]]|$)'
+# 作業用 issue フォルダへのパス参照: issue フォルダ名の日時プレフィックス（YYYYMMDD_）を要求することで、
+# 汎用ディレクトリ言及（.agent-skill-chain/runtime/workflow.db 等）を誤検知しない。close/ 配下は
+# runtime/ または workflow/ の直後が "close"（非数字）のため構造的に一致せず対象外（audit.sh #37 と同一パターン）。
+pat_issuefolder='(\.agent-skill-chain/runtime|docs/maintainer/workflow)/[0-9]{8}_'
 
 found=""
 
@@ -68,7 +75,8 @@ scan_file() {
     [[ -z "$line_no" ]] && continue
     if printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_section" 2>/dev/null \
       || printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_ticket" 2>/dev/null \
-      || printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_docname" 2>/dev/null; then
+      || printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_docname" 2>/dev/null \
+      || printf '%s' "$cmt_text" | LC_ALL=C grep -qE "$pat_issuefolder" 2>/dev/null; then
       echo "${f}:${line_no}"
       found=1
     fi

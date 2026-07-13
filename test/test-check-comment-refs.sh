@@ -118,6 +118,49 @@ T="$(mk)"
 out="$(bash "$REFS" "$T" 2>/dev/null)"; rc=$?
 if [[ $rc -eq 0 && -z "$out" ]]; then ok "空ディレクトリで exit 0（走査対象 0 件）"; else ng "空ディレクトリで exit 0 でない（rc=$rc, out=$out）"; fi
 
+# ============================================================================
+# 作業用 issue フォルダへのパス参照検出（pat_issuefolder。CODE_COMMENT_RULES §2・
+# DOCS_NOISE_RULES (iv-b)・audit.sh #37 と対称）の回帰テスト。
+# ============================================================================
+echo "== 作業用 issue フォルダへのパス参照検出（コード層） =="
+
+# シナリオ: runtime issue フォルダのファイル参照（非 .md）を検出
+# Given: ".agent-skill-chain/runtime/{日時プレフィックス issue}/config.json" を参照するコメント
+# When:  check-comment-refs.sh に渡す
+# Then:  終了コードが 1（pat_docname では捕捉できない非 .md 参照だが pat_issuefolder で検出）
+T="$(mk)"
+printf '%s\n' '# config lives at .agent-skill-chain/runtime/20260713_075722_foo/config.json' > "$T/i.py"
+out="$(bash "$REFS" "$T/i.py" 2>/dev/null)"; rc=$?
+if [[ $rc -eq 1 ]] && grep -q "i.py:1" <<< "$out"; then ok "runtime issue フォルダの非 .md ファイル参照を検出（exit 1）"; else ng "runtime issue フォルダの非 .md 参照を検出できない（rc=$rc, out=$out）"; fi
+
+# シナリオ: workflow issue フォルダのフォルダのみの参照（ファイル名なし）を検出
+# Given: "docs/maintainer/workflow/{日時プレフィックス issue}/" のみを参照するコメント（ファイル名なし）
+# When:  check-comment-refs.sh に渡す
+# Then:  終了コードが 1
+T="$(mk)"
+printf '%s\n' '# created under docs/maintainer/workflow/20260713_075722_foo/' > "$T/j.py"
+out="$(bash "$REFS" "$T/j.py" 2>/dev/null)"; rc=$?
+if [[ $rc -eq 1 ]] && grep -q "j.py:1" <<< "$out"; then ok "workflow issue フォルダのみの参照（ファイル名なし）を検出（exit 1）"; else ng "workflow issue フォルダのみの参照を検出できない（rc=$rc, out=$out）"; fi
+
+# シナリオ: close/ 配下（完了後の永続パス）への参照は誤検知しない
+# Given: "docs/maintainer/workflow/close/{issue}/" および ".agent-skill-chain/runtime/close/{issue}/" のみ（ファイル名なし）を参照するコメント
+# When:  check-comment-refs.sh に渡す
+# Then:  終了コードが 0（close は誤検知しない）
+T="$(mk)"
+printf '%s\n' '# see docs/maintainer/workflow/close/20260713_foo/' > "$T/k1.py"
+printf '%s\n' '# see .agent-skill-chain/runtime/close/20260713_bar/' > "$T/k2.py"
+out="$(bash "$REFS" "$T/k1.py" "$T/k2.py" 2>/dev/null)"; rc=$?
+if [[ $rc -eq 0 && -z "$out" ]]; then ok "close/ 配下フォルダのみの参照は誤検知しない（exit 0）"; else ng "close/ 参照で誤 FAIL した（rc=$rc, out=$out）"; fi
+
+# シナリオ: 汎用ディレクトリ参照・DB 参照は誤検知しない（日時プレフィックスなし）
+# Given: 日時プレフィックスの無い汎用言及（.agent-skill-chain/runtime/workflow.db 等）のコメント
+# When:  check-comment-refs.sh に渡す
+# Then:  終了コードが 0
+T="$(mk)"
+printf '%s\n' '# db path .agent-skill-chain/runtime/workflow.db' > "$T/l.py"
+out="$(bash "$REFS" "$T/l.py" 2>/dev/null)"; rc=$?
+if [[ $rc -eq 0 && -z "$out" ]]; then ok "汎用ディレクトリ/DB 参照（日時プレフィックスなし）は誤検知しない（exit 0）"; else ng "汎用参照で誤 FAIL した（rc=$rc, out=$out）"; fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then
