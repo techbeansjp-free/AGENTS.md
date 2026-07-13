@@ -34,6 +34,8 @@
 #   (32) 実装前 review-docs 未実行検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ review-docs ログ 0 件なら FAIL。#29 と非交差。発効日 grandfather あり）
 #   (33) close 移動未実施検知（DB 採用時・verify-and-close 証跡ありかつ close/ 未移動のトップレベル issue が、発効日以降・猶予超過なら FAIL。#32 と非交差）
 #   (34) 実装前 GitHub Issue 起票ゲート未通過検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter github_issue が null/欠落なら FAIL。#32 と非交差。close/templates/90_issues 配下・GitHub 非採用環境・発効日 grandfather は SKIP）
+#   (35) 実装前ブランチ紐づけ未記録検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter branch が空/null/~/欠落なら FAIL。#34 の写像だが declined 概念なし・github.com remote 不要。close/templates/90_issues 配下・非 git・発効日 grandfather は SKIP）
+#   (36) PR 紐づけ未記録検知（CI で PR_BODY が渡されたときのみ・PR 本文に有効な Closes/Refs #<番号> が 1 件以上あれば PASS。無い場合は差分内 workflow issue のうち実 Issue 参照を持つ非 declined・非 grandfather の issue が残れば FAIL。PR_BODY 未設定＝ローカル/push は SKIP。#6 の写像・#34 と非交差）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -75,6 +77,18 @@
 #      YYYYMMDD_HHMMSS_ プレフィックスが GITHUB_ISSUE_GATE_EFFECTIVE_FROM（既定 20260712_000000・env
 #      上書き可）未満なら grandfather として SKIP。close/templates/90_issues 配下・DB 非採用・git remote
 #      に github.com を含まない（GitHub 非採用環境）は SKIP（fail-open）。
+#  35. workflow.db 採用時のみ・issue_path スコープ前方一致で、implement-feature ログが 1 件以上あるのに
+#      00_要求定義.md frontmatter の branch が空/null/~/キー無し（＝対応 feature ブランチ名が未記録）なら
+#      FAIL。#34（github_issue の記録）の写像だが branch には declined 概念が無く「非空なら PASS」の単純
+#      判定で、github.com remote は要求しない（ブランチは GitHub 非採用でも成立）。非 git・DB 非採用・
+#      close/templates/90_issues 配下・発効日 grandfather（BRANCH_LINK_GATE_EFFECTIVE_FROM・既定
+#      20260713_000000）・無効化トグル（BRANCH_LINK_GATE_ENABLED=false）は SKIP。
+#  36. CI で PR_BODY が渡されたときのみ・PR 本文に有効な GitHub Issue 参照（Closes/Fixes/Resolves/Refs/
+#      References #<番号> または <owner>/<repo>#<番号>・大小文字不問）が 1 件以上あれば PASS。無い場合は
+#      差分（GIT_RANGE）に含まれる workflow issue のうち、実 Issue 参照を持つ（declined でも grandfather
+#      でも null でもない）issue が 1 件以上残れば FAIL、残らなければ SKIP。PR_BODY 未設定（ローカル/push）は
+#      SKIP＝ローカルと CI で挙動が異なる。#6（PR_BODY 検証）の写像・#34 と非交差。発効日 grandfather
+#      （PR_LINK_GATE_EFFECTIVE_FROM・既定 20260713_000000）・無効化トグル（PR_LINK_GATE_ENABLED=false）あり。
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
@@ -1079,6 +1093,149 @@ check_github_issue_before_implement() {
   done
 }
 
+# 35. ブランチ紐づけ未記録検知（check_branch_linkage_before_implement）。
+#   workflow.db 採用時のみ・issue_path スコープ前方一致で「implement-feature ログが 1 件以上あるのに
+#   00_要求定義.md frontmatter の branch が空/null/~/キー無し＝対応 feature ブランチ名が未記録」なら FAIL。
+#   既存 #34（github_issue の記録を検知）の写像だが、以下が差分（02_設計 ADR-2/ADR-7）:
+#     (a) branch には declined 概念が無く「非空なら PASS・空/null/~/欠落なら FAIL」の単純判定。
+#     (b) github.com remote は要求しない（ブランチは GitHub 非採用でも成立する）。非 git ツリーのみ SKIP。
+#   ★無効化トグル: BRANCH_LINK_GATE_ENABLED（既定 true）が false/0/no/off なら最優先で SKIP（fail-open）。
+#   ★grandfather: issue basename の YYYYMMDD_HHMMSS_ プレフィックスが BRANCH_LINK_GATE_EFFECTIVE_FROM
+#     （既定 20260713_000000・env 上書き可）未満なら SKIP（遡及適用しない）。
+#   走査対象は 00_要求定義.md（unbounded find）。close/templates/90_issues 配下・DB 非採用・非 git は SKIP。
+check_branch_linkage_before_implement() {
+  case "${BRANCH_LINK_GATE_ENABLED:-true}" in
+    [Ff][Aa][Ll][Ss][Ee]|0|[Nn][Oo]|[Oo][Ff][Ff]) return 0 ;;
+  esac
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
+  # 対象外環境フォールバック: 非 git ツリーは SKIP（github.com remote は要求しない・#34 との差分・ADR-7）。
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
+  echo "[audit] checking branch-linkage-before-implement (#35)" >&2
+  local cutoff="${BRANCH_LINK_GATE_EFFECTIVE_FROM:-20260713_000000}"
+  local _wfd f issue_dir dir dir_esc base base_esc ts hit_impl fm br_line br_val
+  for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *"/templates/"* ]] && continue
+      # close 配下（完了 issue）は検知対象外（#34 と同型・安全側）。
+      [[ "$f" == *"/close/"* ]] && continue
+      # サブ issue（90_issues 配下）は親 issue に集約するため対象外（#34 ADR-6 と同型）。
+      [[ "$f" == *"/90_issues/"* ]] && continue
+      issue_dir="$(dirname "$f")"
+      dir="${issue_dir#$PROJECT_ROOT/}"
+      dir_esc="${dir//\'/\'\'}"
+      base="$(basename "$issue_dir")"
+      base_esc="${base//\'/\'\'}"
+      # grandfather: issue basename の日時プレフィックスが cutoff 未満なら遡及適用しない。
+      # プレフィックス形式でない issue は判定不能として素通り（誤 FAIL を出さない安全側）。
+      if [[ "$base" =~ ^([0-9]{8})_([0-9]{6})_ ]]; then
+        ts="${BASH_REMATCH[1]}_${BASH_REMATCH[2]}"
+        if [[ "$ts" < "$cutoff" ]]; then
+          continue
+        fi
+      fi
+      hit_impl="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command='implement-feature' AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') LIMIT 1;" 2>/dev/null || true)"
+      # implement-feature ログが 0 件＝未実装。#35 の対象外（continue）。
+      [[ -z "$hit_impl" ]] && continue
+      # frontmatter ブロック（先頭 --- 〜 次の ---）内の branch: 行を抽出する（#34 と同型のパース）。
+      fm="$(awk 'NR==1 && $0=="---"{p=1;next} p && $0=="---"{exit} p' "$f" 2>/dev/null)"
+      br_line="$(printf '%s\n' "$fm" | grep -m1 -E '^branch:' || true)"
+      br_val="$(printf '%s' "$br_line" | sed -E 's/^branch:[[:space:]]*//; s/[[:space:]]+$//')"
+      br_val="${br_val%\"}"; br_val="${br_val#\"}"
+      # 判定: 空/null/~/キー無し＝未記録＝FAIL。非空＝PASS（declined 分岐は持たない・ADR-2）。
+      if [[ -z "$br_val" ]] || [[ "${br_val,,}" == "null" ]] || [[ "$br_val" == "~" ]]; then
+        echo "FAIL: ブランチ紐づけ未記録（implement-feature ログはあるが 00 frontmatter の branch が空/null/欠落。対応 feature ブランチ名を記録すること）: $dir" >&2
+        echo "$ROLLBACK_MSG" >&2
+        EXIT_CODE=1
+      fi
+    done < <(find "$PROJECT_ROOT/$_wfd" -name "00_要求定義.md" -type f -print0 2>/dev/null || true)
+  done
+}
+
+# 36. PR 紐づけ未記録検知（check_pr_issue_linkage）。
+#   CI で PR_BODY が渡されたとき（PR イベント）に限り、PR 本文へ有効な GitHub Issue 参照
+#   （Closes/Fixes/Resolves/Refs/References #<番号> または <owner>/<repo>#<番号>・大小文字不問）が
+#   1 件以上含まれることを検証する。既存 #6（PR_BODY を渡して PR 本文を検証する唯一の前例）の写像。
+#   PR_BODY 未設定（ローカル・push）は SKIP＝ローカルと CI で挙動が異なる仕様（ADR-4）。
+#   本文に有効な参照が無い場合のみ、差分（GIT_RANGE）に含まれる workflow issue を調べ、実 Issue 参照を
+#   持つ（＝declined でも grandfather でも null でもない）対象 issue が 1 件以上残れば FAIL。残らなければ
+#   （差分に workflow issue が無い／全て除外）SKIP（安全側 fail-open・ADR-6）。
+#   ★無効化トグル: PR_LINK_GATE_ENABLED（既定 true）が false/0/no/off なら最優先で SKIP。
+#   ★grandfather: 差分内 issue basename プレフィックスが PR_LINK_GATE_EFFECTIVE_FROM
+#     （既定 20260713_000000・env 上書き可）未満なら対象外。
+#   ★除外: github_issue が declined:／空/null/~/キー無し（実 Issue 番号が無く PR 参照不能＝#34 の責務・非交差）。
+check_pr_issue_linkage() {
+  case "${PR_LINK_GATE_ENABLED:-true}" in
+    [Ff][Aa][Ll][Ss][Ee]|0|[Nn][Oo]|[Oo][Ff][Ff]) return 0 ;;
+  esac
+  # PR_BODY 未設定（ローカル・push）は SKIP。既存 #6 と同型の PR_BODY ガード（ADR-4）。
+  [[ -z "${PR_BODY:-}" ]] && return 0
+  echo "[audit] checking pr-issue-linkage (#36)" >&2
+  # PR 本文に有効な Closes/Refs 等が 1 件以上あれば PASS（ADR-5 のキーワードパターン・大小文字不問）。
+  if printf '%s' "$PR_BODY" | grep -qiE '(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed)|refs?|references?)[[:space:]]+([[:alnum:]._-]+/[[:alnum:]._-]+)?#[0-9]+'; then
+    return 0
+  fi
+  # 本文に紐づけが無い場合のみ、差分内の workflow issue を調べて残存対象があれば FAIL。
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
+  [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
+  local cutoff="${PR_LINK_GATE_EFFECTIVE_FROM:-20260713_000000}"
+  local changed rel _wfd sub issue idir base ts f fm gh_line gh_val remaining seen
+  # core.quotepath=false: 非 ASCII（日本語）パスを八進エスケープ・二重引用符で囲まずそのまま出力させる
+  # （00_要求定義.md のような日本語ファイル名を含む issue パスを正しく照合するため）。
+  changed="$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --name-only $GIT_RANGE 2>/dev/null || true)"
+  [[ -z "$changed" ]] && return 0
+  # 変更ファイルから WORKFLOW_SCAN_DIRS 配下の issue ディレクトリを抽出（重複排除・出現順）。
+  local issue_dirs=()
+  seen=""
+  while IFS= read -r rel; do
+    [[ -z "$rel" ]] && continue
+    for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+      case "$rel" in
+        "$_wfd"/*)
+          sub="${rel#$_wfd/}"
+          issue="${sub%%/*}"
+          [[ -z "$issue" ]] && continue
+          idir="$_wfd/$issue"
+          case ":$seen:" in *":$idir:"*) continue ;; esac
+          seen="$seen:$idir"
+          issue_dirs+=("$idir")
+          ;;
+      esac
+    done
+  done <<< "$changed"
+  [[ ${#issue_dirs[@]} -eq 0 ]] && return 0
+  remaining=0
+  for idir in "${issue_dirs[@]}"; do
+    case "$idir" in
+      */templates/*|*/close/*|*/90_issues/*) continue ;;
+    esac
+    base="$(basename "$idir")"
+    # grandfather: 差分内 issue basename プレフィックスが cutoff 未満なら対象外。
+    if [[ "$base" =~ ^([0-9]{8})_([0-9]{6})_ ]]; then
+      ts="${BASH_REMATCH[1]}_${BASH_REMATCH[2]}"
+      [[ "$ts" < "$cutoff" ]] && continue
+    fi
+    f="$PROJECT_ROOT/$idir/00_要求定義.md"
+    [[ ! -f "$f" ]] && continue
+    fm="$(awk 'NR==1 && $0=="---"{p=1;next} p && $0=="---"{exit} p' "$f" 2>/dev/null)"
+    gh_line="$(printf '%s\n' "$fm" | grep -m1 -E '^github_issue:' || true)"
+    gh_val="$(printf '%s' "$gh_line" | sed -E 's/^github_issue:[[:space:]]*//; s/[[:space:]]+$//')"
+    gh_val="${gh_val%\"}"; gh_val="${gh_val#\"}"
+    # 除外: null/空/~/キー無し（実 Issue 番号が無く PR 参照不能＝#34 の責務・非交差）。
+    if [[ -z "$gh_val" ]] || [[ "${gh_val,,}" == "null" ]] || [[ "$gh_val" == "~" ]]; then continue; fi
+    # 除外: declined:（起票しない決定＝PR 紐づけ対象外・ADR-6）。
+    if [[ "${gh_val,,}" == "declined:"* ]]; then continue; fi
+    # 実 Issue 参照を持つ非 declined・非 grandfather の対象 issue が残った＝FAIL。
+    remaining=1
+    echo "FAIL: PR 紐づけ未記録（PR 本文に Closes/Refs #<番号> が無く、差分内 issue '$base' の github_issue は実 Issue を参照している。PR 本文へ Closes/Refs を追記すること）: $idir" >&2
+  done
+  if [[ $remaining -eq 1 ]]; then
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+}
+
 check_code_comment_external_ref
 check_review_dual_lists
 check_issue_doc_in_gitignored_path
@@ -1087,6 +1244,8 @@ check_docs_review_evidence
 check_reviewdocs_before_implement
 check_close_move_pending
 check_github_issue_before_implement
+check_branch_linkage_before_implement
+check_pr_issue_linkage
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."
