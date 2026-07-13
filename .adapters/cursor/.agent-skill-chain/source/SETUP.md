@@ -155,6 +155,7 @@ npx github:techbeansjp-free/AGENTS.md doctor
 | パッケージ正本 | **`.agent-skill-chain/source/`** | パッケージ | 完全所有・毎回置換（再配備で最新化。復元可能） |
 | プロジェクト固有オーバーライド | **`.agent-skill-chain/project/`** | ユーザー資産・不可侵 | **setup は touch しない**（作成も削除もしない）。`source/` より優先される |
 | 消費者ランタイム生成物 | **`.agent-skill-chain/runtime/`** | 混在 | `runtime/templates/` のみパッケージ所有（毎回置換）。`runtime/<issue>/`・`runtime/workflow.db*` はユーザー資産・保持 |
+| 消費者ランタイム生成物（配布ルール定義） | **`.agent-skill-chain/runtime/.gitignore`** | 初回配布のみパッケージ所有（配布後はユーザー資産） | 未存在時のみコピー（毎回上書きしない）。既存があれば touch しない |
 | プラットフォーム配備先 | **`.claude/`・`.cursor/`** | 混在（プラットフォーム固定名） | ディレクトリ名はプラットフォーム側の固定名で**ネスト対象外**。パッケージ所有エントリ（hooks・所有 skill・所有ファイル）のみ更新し、ユーザー設定・自作物は保持 |
 
 - `.agent-skill-chain/` 直下の `.package-manifest`・`README.md` は 3 サブディレクトリのいずれの所有物でもなく、統合ルート全体の識別・警告を担う setup 生成物である。
@@ -206,6 +207,7 @@ init/upgrade（setup）は、既存の `.agent-skill-chain/` を上書きする�
 | **AGENTS.md, CLAUDE.md** | 既存が無い場合にコピー。ソースと採用先が同一パスのときはスキップ。 |
 | **.agent-skill-chain/source/** | 既存 .agent-skill-chain/source がソースと別パスなら削除して再コピー（最新化）。 |
 | **.agent-skill-chain/runtime/templates/** | 未存在時にパッケージから最新化。 |
+| **.agent-skill-chain/runtime/.gitignore** | 未存在時にパッケージから配布。既存の場合は上書きしない（ローカル変更を尊重）。 |
 | **workflow.db** | setup の init_workflow_db で無い場合のみ作成。既存 DB は上書きしない。 |
 
 ---
