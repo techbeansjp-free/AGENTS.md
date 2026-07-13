@@ -209,6 +209,8 @@ npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement �
 - `enforce on` は正本テンプレート（`.agent-skill-chain/source/platforms/claude/settings.enforce.json`）から `hooks.PreToolUse`/`PostToolUse`（`.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` を指す）と `env.AGENT_ROLE=orchestrator` を配線する。既存の `settings.json` があれば**ユーザー値を破壊せず**マージし、上書き前に `settings.json.bak` へ退避する。
 - `enforce off` は enforcement 由来の配線のみを外し、ユーザーの env・hooks・permissions 等は保持する。
 - 設定変更を**ライブの Claude セッションに反映するには再起動が必要**。無効 JSON の場合 `enforce` は破壊を避けて中止する。
+- **ロックアウトからの復旧**: orchestrator が PreToolUse フックで全ツールをブロックされた場合は、`!` シェルモードで `!npx github:techbeansjp-free/AGENTS.md enforce off` を実行し再起動して復旧する（`!` はフック対象外経路）。手順・機構は [SETUP.md §ロックアウトからの復旧](.agent-skill-chain/source/SETUP.md) を参照。
+- **orchestrator allowlist の project 拡張**: 消費先固有ツールは `.agent-skill-chain/project/orchestrator-allowlist.txt`（opt-in）で許可を追加できる（コア default は不変・fail-closed）。形式・警告・更新経路は [SETUP.md §orchestrator allowlist の project 拡張（opt-in）](.agent-skill-chain/source/SETUP.md) を参照。
 
 ---
 
@@ -219,6 +221,7 @@ npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement �
 | カテゴリ | 代表例 | 詳細 |
 |----------|--------|------|
 | enforcement の opt-in | `enforce on/off`（既定 off） | 本 README [§配備後の管理（CLI）](#配備後の管理cli)・[enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) |
+| orchestrator allowlist の project 拡張 | `orchestrator-allowlist.txt`（opt-in） | [SETUP.md §orchestrator allowlist の project 拡張（opt-in）](.agent-skill-chain/source/SETUP.md) |
 | 版のピン留め・アップグレード | `#<tag-or-branch>` で git ref を固定 | 本 README [§配備後の管理（CLI）](#配備後の管理cli) |
 | 監査・走査スコープ等の環境変数 | 走査対象ディレクトリ（`WORKFLOW_DIRS`） | [enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) |
 

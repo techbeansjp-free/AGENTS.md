@@ -180,10 +180,20 @@ uc1_orchestrator_task_allowed() {
   # Then: 終了コードは 0（allowlist 内・既存互換）
   assert_eq 0 "$RC" "UC1: orchestrator Task は exit 0"
 }
+uc1_orchestrator_askuserquestion_allowed() {
+  # シナリオ: orchestrator の AskUserQuestion（読み取り専用・非破壊のユーザー対話ツール・allowlist 内）は exit 0 で許可される（FR-1・ADR-1）
+  # Given: AGENT_ROLE=orchestrator、AskUserQuestion の stdin JSON
+  local json='{"tool_name":"AskUserQuestion","tool_input":{"questions":[]}}'
+  # When: AskUserQuestion JSON を stdin で渡す
+  run_pre "$PATH" orchestrator "$json"
+  # Then: 終了コードは 0（allowlist 内）
+  assert_eq 0 "$RC" "UC1: orchestrator AskUserQuestion は exit 0"
+}
 uc1_orchestrator_write_blocked
 uc1_orchestrator_grep_allowed
 uc1_orchestrator_agent_allowed
 uc1_orchestrator_task_allowed
+uc1_orchestrator_askuserquestion_allowed
 
 # =====================================================================================
 # UC2: jq 非依存フォールバック（jq を PATH から外す）
@@ -536,6 +546,161 @@ run_uc9() {
 }
 run_uc9 "jq" "$JQ_PATH"
 run_uc9 "nojq" "$NOJQ_PATH"
+
+# =====================================================================================
+# UC10: project 固有 allowlist 拡張（FR-4・ADR-3/ADR-4）— jq 有/無の両系統で同一合否
+#   .agent-skill-chain/project/orchestrator-allowlist.txt に厳密一致で列挙された未知ツールのみ opt-in 許可。
+#   ファイル不在・空・注入行・内部空白難読化は fail-closed（default block）。明示拒否名（Bash/Edit）は
+#   case のより手前で block され拡張では覆せない。能力ベース残余（mcp__* 書込ツール）も証跡化する。
+#   本リポの .agent-skill-chain/project/ は触らず、隔離環境 $TMP 配下のみに例ファイルを書く（破壊禁止方針）。
+# =====================================================================================
+echo "== UC10: project 固有 allowlist 拡張 =="
+run_uc10() {
+  local label="$1" pathval="$2"
+  local proj_dir="$TMP/.agent-skill-chain/project"
+  local proj_file="$proj_dir/orchestrator-allowlist.txt"
+  mkdir -p "$proj_dir"
+
+  # シナリオ(a): 未設定（ファイル不在）は fail-closed
+  # Given: 拡張ファイルが存在しない
+  rm -f "$proj_file"
+  # When: orchestrator が未知ツール Foo を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"Foo","tool_input":{}}'
+  # Then: exit 2（default 拒否）
+  assert_eq 2 "$RC" "UC10[$label]: 拡張未設定の未知ツール Foo は exit 2（fail-closed）"
+
+  # シナリオ(b): opt-in 追加したツールが許可される
+  # Given: 拡張ファイルに Foo を 1 行で列挙
+  printf 'Foo\n' > "$proj_file"
+  # When: orchestrator が Foo を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"Foo","tool_input":{}}'
+  # Then: exit 0（project opt-in 許可）
+  assert_eq 0 "$RC" "UC10[$label]: 拡張に列挙した Foo は exit 0"
+
+  # シナリオ(c): 拡張は明示拒否名（変更系）を覆せない
+  # Given: 拡張ファイルに Bash を列挙
+  printf 'Bash\n' > "$proj_file"
+  # When: orchestrator が Bash を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
+  # Then: exit 2（case のより手前で block・拡張で覆せない）
+  assert_eq 2 "$RC" "UC10[$label]: 拡張に Bash があっても exit 2（case 手前で block）"
+  # Edit も同様に覆せない
+  printf 'Edit\n' > "$proj_file"
+  run_pre "$pathval" orchestrator '{"tool_name":"Edit","tool_input":{"file_path":"src/x"}}'
+  assert_eq 2 "$RC" "UC10[$label]: 拡張に Edit があっても exit 2（明示拒否名は覆せない）"
+
+  # シナリオ(d): 注入行は厳密文字種不一致で無視（read-as-data のため副作用も無い）
+  # Given: 拡張ファイルに 'Foo; rm -rf /' を書く
+  printf 'Foo; rm -rf /\n' > "$proj_file"
+  # When: orchestrator が Foo を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"Foo","tool_input":{}}'
+  # Then: 当該行は無視され Foo は許可されない（exit 2）。'; rm -rf /' も実行されない
+  assert_eq 2 "$RC" "UC10[$label]: 注入行 'Foo; rm -rf /' は無視され Foo は exit 2"
+
+  # シナリオ(e): # コメント・空行の無視
+  # Given: コメント行と空行のみ（Foo はコメント内）
+  printf '# Foo\n\n' > "$proj_file"
+  # When: orchestrator が Foo を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"Foo","tool_input":{}}'
+  # Then: exit 2（コメント内の Foo は許可されない）
+  assert_eq 2 "$RC" "UC10[$label]: コメント/空行のみは exit 2（Foo は許可されない）"
+
+  # シナリオ(f): 内部空白の難読化無効化（trim のみ・collapse しない）
+  # Given: 拡張ファイルに 'Foo bar'（内部空白）
+  printf 'Foo bar\n' > "$proj_file"
+  # When: orchestrator が Foo を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"Foo","tool_input":{}}'
+  # Then: exit 2（'Foobar' に化けず Foo も bar も許可しない）
+  assert_eq 2 "$RC" "UC10[$label]: 内部空白 'Foo bar' は無視され exit 2（化けない）"
+
+  # シナリオ(g): CRLF 耐性
+  # Given: 拡張ファイルに 'Foo\r\n'（CRLF）
+  printf 'Foo\r\n' > "$proj_file"
+  # When: orchestrator が Foo を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"Foo","tool_input":{}}'
+  # Then: 末尾 trim で \r が除去され Foo として exit 0
+  assert_eq 0 "$RC" "UC10[$label]: CRLF 'Foo\\r' は末尾 trim で exit 0"
+
+  # シナリオ(h): 能力ベース残余リスクの証跡（ADR-3/ADR-4 残余2）
+  #   mcp__foo__write（*) に落ちる MCP 書込ツール名）を opt-in すると exit 0 になり得る。
+  #   機構は「名前一致」のみ保証し「能力（非破壊性）」は保証しない。未知＝安全ではない・人間レビュー前提。
+  # Given: 拡張ファイルに mcp__foo__write を列挙
+  printf 'mcp__foo__write\n' > "$proj_file"
+  # When: orchestrator が mcp__foo__write を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"mcp__foo__write","tool_input":{}}'
+  # Then: exit 0（opt-in で許可・能力ベース残余の可視化）
+  assert_eq 0 "$RC" "UC10[$label]: mcp__foo__write の opt-in は exit 0（能力は機構で保証されない）"
+
+  # シナリオ(i): サブエージェント（agent_id あり）は R2 対象外で拡張判定に入らない（UC8 と整合）
+  # Given: 拡張ファイルは Foo のみ、agent_id 付きの未知ツール Bar
+  printf 'Foo\n' > "$proj_file"
+  # When: agent_id ありの worker が Bar を呼ぶ（R2 は IS_SUBAGENT!=1 のみ対象）
+  run_pre "$pathval" orchestrator '{"tool_name":"Bar","tool_input":{},"agent_id":"abc-123"}'
+  # Then: R2 の allowlist 判定自体に入らず、他の R に該当しないため exit 0（worker 非対象・不変）
+  assert_eq 0 "$RC" "UC10[$label]: agent_id ありは R2 対象外（拡張判定に入らない）exit 0"
+
+  rm -f "$proj_file"
+}
+run_uc10 "jq" "$JQ_PATH"
+run_uc10 "nojq" "$NOJQ_PATH"
+
+# =====================================================================================
+# UC11: FR-6/FR-7 常時バナーとブロック理由の出力分離・日英併記（ADR-7・ADR-8）
+#   許可時は [PreToolUse:info] バナーのみで違反 prefix は出ない。違反時は [enforcement:block] で区別でき、
+#   理由は日英併記（英語部分文字列は保持）。挙動（exit code）は不変。
+# =====================================================================================
+echo "== UC11: 出力分離・日英併記（FR-6/FR-7） =="
+uc11_info_banner_on_allow() {
+  # シナリオ: 許可時は info バナーのみ・違反 prefix は出ない
+  # Given: orchestrator × 許可ツール Read
+  local json='{"tool_name":"Read","tool_input":{"file_path":"x"}}'
+  # When: hook を実行
+  run_pre "$PATH" orchestrator "$json"
+  # Then: exit 0、info バナーが出て、違反 prefix は出ない
+  assert_eq 0 "$RC" "UC11: orchestrator Read は exit 0"
+  assert_grep "\[PreToolUse:info\]" "$ERR" "UC11: 許可時に [PreToolUse:info] バナーが出る"
+  if grep -q "\[enforcement:block\]" "$ERR"; then ng "UC11: 許可時に違反 prefix が出ない"; else ok "UC11: 許可時に違反 prefix が出ない"; fi
+}
+uc11_block_prefix_and_bilingual() {
+  # シナリオ: 違反時は [enforcement:block] prefix で区別でき日英併記になる
+  # Given: orchestrator × Edit（変更系・明示拒否）
+  local json='{"tool_name":"Edit","tool_input":{"file_path":"src/x"}}'
+  # When: hook を実行
+  run_pre "$PATH" orchestrator "$json"
+  # Then: exit 2、block prefix・英語部分文字列・日本語併記が揃う
+  assert_eq 2 "$RC" "UC11: orchestrator Edit は exit 2"
+  assert_grep "\[enforcement:block\]" "$ERR" "UC11: 違反時に [enforcement:block] が出る"
+  assert_grep "orchestrator must never modify files" "$ERR" "UC11: 英語部分文字列が保持される"
+  assert_grep "サブへ委譲" "$ERR" "UC11: 日本語が併記される"
+}
+uc11_bash_bilingual() {
+  # シナリオ: orchestrator Bash の block 理由が日英併記
+  # Given: orchestrator × Bash
+  local json='{"tool_name":"Bash","tool_input":{"command":"ls"}}'
+  # When: hook を実行
+  run_pre "$PATH" orchestrator "$json"
+  # Then: exit 2、英語保持＋日本語併記
+  assert_eq 2 "$RC" "UC11: orchestrator Bash は exit 2"
+  assert_grep "orchestrator cannot run Bash" "$ERR" "UC11: 英語 'orchestrator cannot run Bash' 保持"
+  assert_grep "orchestrator は Bash を実行できません" "$ERR" "UC11: 日本語併記"
+}
+uc11_posttooluse_bilingual() {
+  # シナリオ: PostToolUse バナーが日英併記（英語部分文字列保持）
+  # Given: 任意の実行後 JSON
+  local json='{"tool_name":"Write","tool_input":{"file_path":"x"}}'
+  : > "$ERR"
+  # When: PostToolUse に stdin で渡す
+  echo "$json" | env PATH="$PATH" AGENTS_ROOT="$TMP/.agent-skill-chain/source" bash "$POST_HOOK" >/dev/null 2>"$ERR"
+  RC=$?
+  # Then: exit 0、英語 'workflow.db is canonical' 保持＋日本語併記
+  assert_eq 0 "$RC" "UC11: PostToolUse は exit 0"
+  assert_grep "workflow.db is canonical" "$ERR" "UC11: 英語 'workflow.db is canonical' 保持"
+  assert_grep "workflow ログを省略しないこと" "$ERR" "UC11: 日本語併記"
+}
+uc11_info_banner_on_allow
+uc11_block_prefix_and_bilingual
+uc11_bash_bilingual
+uc11_posttooluse_bilingual
 
 # =====================================================================================
 # UC1/UC2 系: jq 経路（jq シムまたは本物 jq を PATH 前段に）— jq 有/無の両系統で同一合否
