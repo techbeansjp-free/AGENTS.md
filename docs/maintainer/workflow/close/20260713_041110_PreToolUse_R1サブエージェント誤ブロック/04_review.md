@@ -11,9 +11,9 @@ issue_id: "3da91761-8bf7-4b18-a3c6-6b9ddb71644b"
 
 > **重要**: 本レビューは verify-and-close command（skill chain: generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従って実施した。本 issue はコード変更を伴わないドキュメント追記のみ（3 ファイル）であり、テストは grep ベースの存在確認（03_実装計画 §2.1.4・§2.2.4）と本レビューでの内容確認で担保する。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 >
-> **必須参照**: [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[`REVIEW_DUAL_LENS.md`](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)。レビュー深度は **quick**（ドキュメント 3 ファイルの小規模追記）を選択（[RULES.md §実行モード](../../../../.agent-skill-chain/source/RULES.md)）。深さによらず二観点（敵対的＋must-preserve）両リストは §12.3・§12.4 に必須記載。
+> **必須参照**: [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[`REVIEW_DUAL_LENS.md`](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)。レビュー深度は **quick**（ドキュメント 3 ファイルの小規模追記）を選択（[RULES.md §実行モード](../../../../../.agent-skill-chain/source/RULES.md)）。深さによらず二観点（敵対的＋must-preserve）両リストは §12.3・§12.4 に必須記載。
 
 ---
 
@@ -243,7 +243,7 @@ TASK2: PASS
 
 ### 10.2 改善提案（範囲外・メインへの提案に留める。サブは起票しない）
 
-- **提案 1（範囲外・繰延）**: EVIDENCE_POLICY §節1 は現状「requirement-discovery / design-feature を実行するサブエージェント」にスコープ限定されているため、追記した横断確認規律も上流フェーズに限定される。review-code・verify-and-close 等の他 command にも及ぼすべきかは 01 §5「未検証・要人間確認事項」で design-feature の ADR 判断事項として明示的に繰延済み。ADR-1 は EVIDENCE_POLICY 配置を採用しており、本 issue のスコープ内では要修正ではない。**繰延理由**: スコープ外（横展開は別 issue 相当・優先度は今回の誤診断が発生した上流フェーズへの対処で充足）。起票の要否判断・起票実行はメイン（orchestrator）が行う（[CLOSEOUT.md §起票の実行権限](../../../../.agent-skill-chain/source/CLOSEOUT.md)）。
+- **提案 1（範囲外・繰延）**: EVIDENCE_POLICY §節1 は現状「requirement-discovery / design-feature を実行するサブエージェント」にスコープ限定されているため、追記した横断確認規律も上流フェーズに限定される。review-code・verify-and-close 等の他 command にも及ぼすべきかは 01 §5「未検証・要人間確認事項」で design-feature の ADR 判断事項として明示的に繰延済み。ADR-1 は EVIDENCE_POLICY 配置を採用しており、本 issue のスコープ内では要修正ではない。**繰延理由**: スコープ外（横展開は別 issue 相当・優先度は今回の誤診断が発生した上流フェーズへの対処で充足）。起票の要否判断・起票実行はメイン（orchestrator）が行う（[CLOSEOUT.md §起票の実行権限](../../../../../.agent-skill-chain/source/CLOSEOUT.md)）。
 
 ---
 

@@ -9,9 +9,9 @@ issue_id: "fb71bffb-3bda-438a-9d46-cbc3bad63508"
 **作成日**: 2026 年 07 月 13 日
 **最終更新**: 2026 年 07 月 13 日
 
-> **重要**: 本ドキュメントは verify-and-close（skill chain: generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）の成果物。レビュー深度は **standard**（audit.sh への 1 関数追加＋回帰テスト＋3 層ドキュメント追記の中規模変更・[RULES.md §実行モード](../../../.agent-skill-chain/source/RULES.md) に基づく）。
+> **重要**: 本ドキュメントは verify-and-close（skill chain: generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）の成果物。レビュー深度は **standard**（audit.sh への 1 関数追加＋回帰テスト＋3 層ドキュメント追記の中規模変更・[RULES.md §実行モード](../../../../../.agent-skill-chain/source/RULES.md) に基づく）。
 >
-> **必須参照**: [REVIEW_RULE.md](../../../.agent-skill-chain/source/REVIEW_RULE.md)・[REVIEW_DUAL_LENS.md](../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)（敵対的観点リスト＋must-preserve リストの両方が必須）。
+> **必須参照**: [REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[REVIEW_DUAL_LENS.md](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)（敵対的観点リスト＋must-preserve リストの両方が必須）。
 
 ---
 
@@ -31,7 +31,7 @@ issue_id: "fb71bffb-3bda-438a-9d46-cbc3bad63508"
 
 ## 2. 実装内容の確認
 
-**用語**: [CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+**用語**: [CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 
 ### 2.1 実装完了タスク
 
@@ -218,7 +218,7 @@ audit.sh フル実行を隔離ツリー（`mktemp -d`）に対して行い #33 �
 
 ## docs 更新
 
-（継続追随ゲート判定）[DOCS_RULES.md §継続追随ゲート](../../../.agent-skill-chain/source/DOCS_RULES.md) に従い判定する。
+（継続追随ゲート判定）[DOCS_RULES.md §継続追随ゲート](../../../../../.agent-skill-chain/source/DOCS_RULES.md) に従い判定する。
 
 - 要否: **不要**（軽量パス）
 - 対象: なし
@@ -322,7 +322,7 @@ audit.sh フル実行を隔離ツリー（`mktemp -d`）に対して行い #33 �
 
 ## 11. システム仕様書の更新
 
-本リポジトリはシステム仕様書 `docs/`（番号付きセクション・`docs/00_review/`）を採用していないため、[DOCS_RULES.md §継続追随ゲート](../../../.agent-skill-chain/source/DOCS_RULES.md) は**不発動**（軽量パス）。詳細は本書 §docs 更新（継続追随ゲート判定）に記載。更新対象・更新履歴の追記はなし。
+本リポジトリはシステム仕様書 `docs/`（番号付きセクション・`docs/00_review/`）を採用していないため、[DOCS_RULES.md §継続追随ゲート](../../../../../.agent-skill-chain/source/DOCS_RULES.md) は**不発動**（軽量パス）。詳細は本書 §docs 更新（継続追随ゲート判定）に記載。更新対象・更新履歴の追記はなし。
 
 ---
 
@@ -351,12 +351,12 @@ audit.sh フル実行を隔離ツリー（`mktemp -d`）に対して行い #33 �
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
-- [enforcement/ci/audit.sh](../../../.agent-skill-chain/source/enforcement/ci/audit.sh)（#33 `check_close_move_pending`）
-- [enforcement/README.md](../../../.agent-skill-chain/source/enforcement/README.md)（失敗条件 #33）
-- [workflow/PHASES.md](../../../.agent-skill-chain/source/workflow/PHASES.md)（§完了 issue の close 移動・汎用原則）
-- [.agent-skill-chain/project/自己拡張ワークフロー.md](../../../.agent-skill-chain/project/自己拡張ワークフロー.md)（§close 移動未実施の検知）
-- [test/test-audit.sh](../../../test/test-audit.sh)（#33 回帰テスト）
-- [REVIEW_DUAL_LENS.md](../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) / [CLOSEOUT.md](../../../.agent-skill-chain/source/CLOSEOUT.md) / [DOCS_RULES.md](../../../.agent-skill-chain/source/DOCS_RULES.md)
+- [enforcement/ci/audit.sh](../../../../../.agent-skill-chain/source/enforcement/ci/audit.sh)（#33 `check_close_move_pending`）
+- [enforcement/README.md](../../../../../.agent-skill-chain/source/enforcement/README.md)（失敗条件 #33）
+- [workflow/PHASES.md](../../../../../.agent-skill-chain/source/workflow/PHASES.md)（§完了 issue の close 移動・汎用原則）
+- [.agent-skill-chain/project/自己拡張ワークフロー.md](../../../../../.agent-skill-chain/project/自己拡張ワークフロー.md)（§close 移動未実施の検知）
+- [test/test-audit.sh](../../../../../test/test-audit.sh)（#33 回帰テスト）
+- [REVIEW_DUAL_LENS.md](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) / [CLOSEOUT.md](../../../../../.agent-skill-chain/source/CLOSEOUT.md) / [DOCS_RULES.md](../../../../../.agent-skill-chain/source/DOCS_RULES.md)
 
 ---
 
@@ -369,4 +369,4 @@ audit.sh フル実行を隔離ツリー（`mktemp -d`）に対して行い #33 �
 ## 15. 次のステップ
 
 - 外部設定が不要なため 05 は作成しない（CLI 監査スクリプト＋ドキュメントの変更のみ）。
-- 本レビュー合格をもって close 相当（トップレベル完了）へ進める。**commit・close 移動はメイン（orchestrator）側でユーザー確認のもと実施**（本レビュー範囲外）。close 移動時は本 issue 自体が #33 の検知対象となるため、[project 自己拡張ワークフロー.md §close 移動時の相対リンク補正](../../../.agent-skill-chain/project/自己拡張ワークフロー.md)（移動前検証）に従い `docs/maintainer/workflow/close/` へ移動すること。
+- 本レビュー合格をもって close 相当（トップレベル完了）へ進める。**commit・close 移動はメイン（orchestrator）側でユーザー確認のもと実施**（本レビュー範囲外）。close 移動時は本 issue 自体が #33 の検知対象となるため、[project 自己拡張ワークフロー.md §close 移動時の相対リンク補正](../../../../../.agent-skill-chain/project/自己拡張ワークフロー.md)（移動前検証）に従い `docs/maintainer/workflow/close/` へ移動すること。

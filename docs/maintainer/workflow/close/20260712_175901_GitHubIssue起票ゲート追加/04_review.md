@@ -12,7 +12,7 @@ issue_id: "a5a60331-257a-4b34-887a-94d5a5967433"
 **最終更新**: 2026 年 07 月 13 日
 
 > 本 04_review は verify-and-close command（skill chain: generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）により作成した。検証対象は **最新の実装状態**（declined opt-out ＋ プロジェクト全体無効化トグル `GITHUB_ISSUE_GATE_ENABLED` の両方が反映された状態）である。
-> レビュー深度: **full**（新規の必須ゲート追加＋enforcement 追加のため。[REVIEW_RULE.md](../../../../.agent-skill-chain/source/REVIEW_RULE.md)）。
+> レビュー深度: **full**（新規の必須ゲート追加＋enforcement 追加のため。[REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md)）。
 
 ---
 
@@ -119,7 +119,7 @@ pie title #34 観点カバレッジ（13 ケース全 PASS）
 - **対応状況**: **完了（本レビューで修正）**。
 - **対応方法**: 冗長かつ有害な `[[ ! -d "$PROJECT_ROOT/.git" ]]` 行を削除し、次行の `git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree`（通常リポジトリ・worktree・submodule すべてで正しく判定する正準チェック）に一本化。意図をコメントで明記。回帰防止として test-audit.sh に **worktree シナリオ（シナリオ9）**を追加（`git worktree add` した木で implement ログ有＋`github_issue: null` → #34 が FAIL することを assert）。修正後 test-audit=56 PASS、実リポ audit で #34 が正しく発火（§3.3）。
 
-### 4.3 敵対的観点リスト（review-code + review-architecture 統合・[REVIEW_DUAL_LENS.md](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) §2.1）
+### 4.3 敵対的観点リスト（review-code + review-architecture 統合・[REVIEW_DUAL_LENS.md](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) §2.1）
 
 不確実な点は「問題なし」ではなく要修正/要確認に倒した。
 
@@ -134,7 +134,7 @@ pie title #34 観点カバレッジ（13 ケース全 PASS）
 | A7 | 90_issues 配下（サブ issue）が誤発火しないか | 発火しない。パスに `/90_issues/` を含む場合 continue（#32 が 90_issues を含めるのと逆・実装差分としてコメント・README で明記済み）。テストで SKIP を実測。 |
 | A8 | GitHub API 障害時の運用が inference_only で未確定 | 既知（02 ADR-4 で inference_only 明示・project §5 でドラフト＋要人間確認注記）。本 issue スコープでは方針のみ確定で許容。実運用適用前にユーザー確認が必要（申し送り）。 |
 
-### 4.4 must-preserve リスト（不変条件・[REVIEW_DUAL_LENS.md](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) §2.2）
+### 4.4 must-preserve リスト（不変条件・[REVIEW_DUAL_LENS.md](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) §2.2）
 
 本変更が保持すべき既存契約。各項目について保持を確認済み。
 
@@ -214,7 +214,7 @@ pie title #34 観点カバレッジ（13 ケース全 PASS）
 
 - 要否: **不要**
 - 対象: なし
-- 理由: 本リポジトリは **システム仕様書（`docs/` の 01_システム概要・02_画面設計・03_データ設計・04_機能設計 および `docs/00_review/`・`docs/README` 更新履歴）を採用していない**（`docs/` 配下は `maintainer/`（ワークフロー issue）と `AI_CI_CD_VISION.md` のみで、`docs/00_review/` も存在しない）。したがって [DOCS_RULES.md §継続追随ゲート](../../../../.agent-skill-chain/source/DOCS_RULES.md) は §6「不発動の範囲（docs/ を採用していないプロジェクトでは発動しない）」に該当し**不発動**（軽量パス）。本 issue の変更対象（`.agent-skill-chain/source/` のコア文書・audit.sh・project override）は、フレームワーク自身が正本＝自己記述であり、別途同期すべきシステム仕様書は存在しない。
+- 理由: 本リポジトリは **システム仕様書（`docs/` の 01_システム概要・02_画面設計・03_データ設計・04_機能設計 および `docs/00_review/`・`docs/README` 更新履歴）を採用していない**（`docs/` 配下は `maintainer/`（ワークフロー issue）と `AI_CI_CD_VISION.md` のみで、`docs/00_review/` も存在しない）。したがって [DOCS_RULES.md §継続追随ゲート](../../../../../.agent-skill-chain/source/DOCS_RULES.md) は §6「不発動の範囲（docs/ を採用していないプロジェクトでは発動しない）」に該当し**不発動**（軽量パス）。本 issue の変更対象（`.agent-skill-chain/source/` のコア文書・audit.sh・project override）は、フレームワーク自身が正本＝自己記述であり、別途同期すべきシステム仕様書は存在しない。
 
 ---
 
@@ -222,7 +222,7 @@ pie title #34 観点カバレッジ（13 ケース全 PASS）
 
 ### 9.1 設計の確認
 
-- **設計原則の準拠**: UNIX 哲学（ゲートは 1 責務）・単一責務（規約/具体手順/近似検知を別ファイル）・明確な境界（コア抽象/project 具体）に準拠（[spec/01_設計原則](../../../../.agent-skill-chain/source/spec/01_設計原則.md)）。
+- **設計原則の準拠**: UNIX 哲学（ゲートは 1 責務）・単一責務（規約/具体手順/近似検知を別ファイル）・明確な境界（コア抽象/project 具体）に準拠（[spec/01_設計原則](../../../../../.agent-skill-chain/source/spec/01_設計原則.md)）。
 - **ディレクトリ構成・命名**: #34 は既存 #32 の写像で配置・命名（`check_*_before_implement`）が一貫。
 
 ### 9.2 境界・依存の確認
@@ -261,7 +261,7 @@ pie title #34 観点カバレッジ（13 ケース全 PASS）
 
 ## 11. システム仕様書の更新
 
-「docs 更新」節のとおり、本リポジトリはシステム仕様書（`docs/` の 01_システム概要等・`docs/00_review/`）を採用していないため、[DOCS_RULES.md §継続追随ゲート](../../../../.agent-skill-chain/source/DOCS_RULES.md) は不発動。更新不要。
+「docs 更新」節のとおり、本リポジトリはシステム仕様書（`docs/` の 01_システム概要等・`docs/00_review/`）を採用していないため、[DOCS_RULES.md §継続追随ゲート](../../../../../.agent-skill-chain/source/DOCS_RULES.md) は不発動。更新不要。
 
 ---
 
@@ -285,7 +285,7 @@ pie title #34 観点カバレッジ（13 ケース全 PASS）
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
-- [REVIEW_DUAL_LENS.md](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) / [REVIEW_RULE.md](../../../../.agent-skill-chain/source/REVIEW_RULE.md) / [CLOSEOUT.md](../../../../.agent-skill-chain/source/CLOSEOUT.md) / [DOCS_RULES.md](../../../../.agent-skill-chain/source/DOCS_RULES.md)
+- [REVIEW_DUAL_LENS.md](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) / [REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) / [CLOSEOUT.md](../../../../../.agent-skill-chain/source/CLOSEOUT.md) / [DOCS_RULES.md](../../../../../.agent-skill-chain/source/DOCS_RULES.md)
 
 ---
 
