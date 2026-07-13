@@ -723,6 +723,13 @@ test_new_deploy_marker_and_readme() {
   # Then: source/・runtime/templates/ が新規配備される
   assert_exists "$dest/.agent-skill-chain/source/boot/CORE.md"            "N1: source/ が新規配備される"
   assert_exists "$dest/.agent-skill-chain/runtime/templates/00_要求定義.md" "N1: runtime/templates/ が新規配備される"
+  assert_exists "$dest/.agent-skill-chain/source/runtime-gitignore.template" "N1: runtime/.gitignore のコピー元テンプレート（ADR-4）が source/ 配下に配備される"
+  assert_exists "$dest/.agent-skill-chain/runtime/.gitignore"             "N1: runtime/.gitignore がテンプレートからリネームされ新規配備される"
+  if grep -q 'workflow\.db\*' "$dest/.agent-skill-chain/runtime/.gitignore" 2>/dev/null; then
+    ok "N1: 配備された runtime/.gitignore の内容に workflow.db* を含む"
+  else
+    ng "N1: 配備された runtime/.gitignore の内容に workflow.db* を含むべき"
+  fi
 
   # And (Then): 配備マーカー（.package-manifest）に name + version が書き込まれる
   local manifest="$dest/.agent-skill-chain/.package-manifest"
@@ -780,6 +787,24 @@ test_redeploy_backs_up() {
   else
     ng "N2: 配備先 source/ は最新の正本内容へ再配備されるべき"
   fi
+
+  rm -rf "$dest"
+}
+
+# N2b: runtime/.gitignore はローカル変更を尊重し再配備で上書きされない（01_要件定義.md UC1 シナリオ2）
+test_gitignore_not_overwritten_on_reinstall() {
+  echo "[e2e] シナリオN2b: runtime/.gitignore はローカル変更を尊重し setup 再実行で上書きされない"
+  # Given: init 済み（runtime/.gitignore が配布済み）の dest で、ローカルに内容を書き換える
+  local dest; dest="$(mktemp -d)"; assert_tmp_target "$dest"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  echo "# local override" > "$dest/.agent-skill-chain/runtime/.gitignore"
+
+  # When: 再度 init（= 再配備。upgrade 相当）を実行する
+  node "$CLI" init "$dest" >/dev/null 2>&1
+
+  # Then: ローカル変更した内容が保持され、パッケージ既定（workflow.db*）に巻き戻らない
+  assert_eq "$(cat "$dest/.agent-skill-chain/runtime/.gitignore")" "# local override" \
+    "N2b: runtime/.gitignore は再配備で内容が上書きされない"
 
   rm -rf "$dest"
 }
@@ -954,6 +979,7 @@ test_enforcement_preserves_user_settings
 # ストーリー8（統合ネスト・§2.6.9）新規シナリオ N1〜N6（N7 は R1/R2/R3 が兼ねる）
 test_new_deploy_marker_and_readme
 test_redeploy_backs_up
+test_gitignore_not_overwritten_on_reinstall
 test_foreign_dir_aborts
 test_legacy_migration
 test_default_uninstall_preserves_runtime_and_project
