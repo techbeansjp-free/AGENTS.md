@@ -36,6 +36,7 @@
 #   (34) 実装前 GitHub Issue 起票ゲート未通過検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter github_issue が null/欠落なら FAIL。#32 と非交差。close/templates/90_issues 配下・GitHub 非採用環境・発効日 grandfather は SKIP）
 #   (35) 実装前ブランチ紐づけ未記録検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter branch が空/null/~/欠落なら FAIL。#34 の写像だが declined 概念なし・github.com remote 不要。close/templates/90_issues 配下・非 git・発効日 grandfather は SKIP）
 #   (36) PR 紐づけ未記録検知（CI で PR_BODY が渡されたときのみ・PR 本文に有効な Closes/Refs #<番号> が 1 件以上あれば PASS。無い場合は差分内 workflow issue のうち実 Issue 参照を持つ非 declined・非 grandfather の issue が残れば FAIL。PR_BODY 未設定＝ローカル/push は SKIP。#6 の写像・#34 と非交差）
+#   (37) システム仕様書の作業用 issue フォルダ参照禁止（docs/ 配下の仕様書が作業用 issue フォルダ＝.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/ へのパス参照を含むと FAIL。DOCS_NOISE_RULES (iv-b)。close/ は対象外）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -89,6 +90,12 @@
 #      でも null でもない）issue が 1 件以上残れば FAIL、残らなければ SKIP。PR_BODY 未設定（ローカル/push）は
 #      SKIP＝ローカルと CI で挙動が異なる。#6（PR_BODY 検証）の写像・#34 と非交差。発効日 grandfather
 #      （PR_LINK_GATE_EFFECTIVE_FROM・既定 20260713_000000）・無効化トグル（PR_LINK_GATE_ENABLED=false）あり。
+#  37. docs/ 採用時のみ・git/sqlite3 非依存。docs/ 配下のシステム仕様書（*.md）が、作業用 issue フォルダ
+#      （.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/）への直接パス参照を
+#      含むと FAIL（DOCS_NOISE_RULES (iv-b)）。検出は issue フォルダ名の日時プレフィックス（YYYYMMDD_）を
+#      含むパスに限定し、汎用ディレクトリ参照（.agent-skill-chain/runtime/workflow.db 等）・close/ 配下
+#      （完了後の永続パス）を誤検知しない。作業用 issue フォルダ自身（docs/maintainer/workflow/ 配下の
+#      issue ドキュメント）は「システム仕様書」ではないため走査対象外（兄弟 issue の正当参照を誤 FAIL しない）。
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
@@ -715,7 +722,9 @@ check_document_id_linked
 
 # 26. コメント/docstring 外部参照禁止違反（CODE_COMMENT_RULES §2）。
 #   プロジェクトのソースコード（既定 src/ app/ components/。CODE_COMMENT_SRC_DIRS で上書き可・コロン区切り）の
-#   コメント/docstring 行に限定して、章節番号・PR/issue/タスク番号・仕様ドキュメント名を grep 検出する。
+#   コメント/docstring 行に限定して、章節番号・PR/issue/タスク番号・仕様ドキュメント名・作業用 issue フォルダへの
+#   パス参照（.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/。日時プレフィックス
+#   限定・close/ 対象外。#37 と対称）を grep 検出する。
 #   - 走査対象はソースコードのみ。.agent-skill-chain/source/（フレームワーク基盤スクリプトは正当に仕様名/章節を参照する）と
 #     ドキュメント（WORKFLOW_SCAN_DIRS・docs 等。仕様名/章節参照が正当）は対象外＝誤検出させない。
 #   - import/require/include 等の行は除外（ファイルパスは §3 で許可）。obj.method() 等のコード参照は
@@ -1236,6 +1245,49 @@ check_pr_issue_linkage() {
   fi
 }
 
+# 37. システム仕様書の作業用 issue フォルダ参照禁止（check_docs_transient_issue_ref）。
+#   docs/ 配下のシステム仕様書（*.md）が、作業用 issue フォルダ（.agent-skill-chain/runtime/{issue}/ または
+#   docs/maintainer/workflow/{issue}/）への直接パス参照を含むと FAIL する（DOCS_NOISE_RULES (iv-b)）。
+#   git/sqlite3 に非依存の純粋なファイル走査。docs/ 不在は SKIP（docs/ 未採用プロジェクトでは不発動）。
+#   検出パターン: (\.agent-skill-chain/runtime|docs/maintainer/workflow)/[0-9]{8}_
+#     - issue フォルダ名の日時プレフィックス（YYYYMMDD_）を要求することで、汎用ディレクトリ参照
+#       （.agent-skill-chain/runtime/workflow.db・規約説明中の一般記述）や DB 参照を誤検知しない。
+#     - close/ 配下（完了後の永続パス）は runtime/ または workflow/ の直後が "close"（非数字）となり
+#       構造的に一致しないため、追加の除外なしで機械検出の対象外となる（DOCS_NOISE_RULES §役割分担）。
+#   走査対象外（作業用 issue ドキュメント自身。兄弟 issue の正当参照を誤 FAIL しない）:
+#     相対パス（PROJECT_ROOT からの相対）が WORKFLOW_SCAN_DIRS のいずれか（本リポでは
+#     docs/maintainer/workflow。汎用消費者では WORKFLOW_DIR/WORKFLOW_DIRS で解決される値）で厳密に
+#     前方一致するファイル。/workflow/ の部分一致では判定しない（docs/architecture/workflow/... のような
+#     正当な仕様書を誤って対象外にしないため）。加えて /templates/ を含むファイル（テンプレの例示パスを
+#     誤検知しない防御的除外）。除外パスの正本は WORKFLOW_SCAN_DIRS（#28/#29 等 他チェックと同一基点）。
+check_docs_transient_issue_ref() {
+  [[ ! -d "$PROJECT_ROOT/docs" ]] && return 0
+  echo "[audit] checking docs transient issue-folder refs (#37)" >&2
+  local f rel first="" _wfd skip
+  while IFS= read -r -d '' f; do
+    rel="${f#"$PROJECT_ROOT"/}"
+    # 走査対象外: 作業用 issue ドキュメント自身（WORKFLOW_SCAN_DIRS 配下）。相対パスの厳密な前方一致で
+    # 判定し、/workflow/ の部分一致で正当な仕様書を巻き込まない（CodeRabbit 指摘2）。
+    skip=""
+    for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
+      [[ "$rel" == "$_wfd/"* ]] && { skip=1; break; }
+    done
+    [[ -n "$skip" ]] && continue
+    [[ "$rel" == *"/templates/"* ]] && continue
+    if grep -qE '(\.agent-skill-chain/runtime|docs/maintainer/workflow)/[0-9]{8}_' "$f" 2>/dev/null; then
+      if [[ -z "$first" ]]; then
+        echo "FAIL: システム仕様書が作業用 issue フォルダを参照しています (DOCS_NOISE_RULES (iv-b); 要約+安定参照へ張り替える。close/ は対象外):" >&2
+        first=1
+      fi
+      echo "  $rel" >&2
+    fi
+  done < <(find "$PROJECT_ROOT/docs" -name "*.md" -type f -print0 2>/dev/null || true)
+  if [[ -n "$first" ]]; then
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+}
+
 check_code_comment_external_ref
 check_review_dual_lists
 check_issue_doc_in_gitignored_path
@@ -1246,6 +1298,7 @@ check_close_move_pending
 check_github_issue_before_implement
 check_branch_linkage_before_implement
 check_pr_issue_linkage
+check_docs_transient_issue_ref
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."

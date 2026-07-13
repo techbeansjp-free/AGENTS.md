@@ -21,6 +21,7 @@ document_id: "a3f1c9d2-5e84-4b17-9a06-2c7d8f1e4b30"
 - **仕様ドキュメント名**: `XXX.md` / `XXX.adoc` 等のドキュメントファイル名（コメント本文での参照。コードの import/require/include 行は対象外）。
 - **章節番号**: `§3.2` / `第4節` / `セクション 5` / `section 2.1` 等、ドキュメントの章・節・条への番号参照。
 - **PR/issue/タスク番号**: `PR #123` / `Issue #42` / `チケット 100` / `タスク #7` 等の追跡番号、および裸の `#NN`（追跡番号を意図したもの）。
+- **作業用 issue フォルダへのパス参照**: 作業用 issue フォルダ（消費者標準 `.agent-skill-chain/runtime/{issue}/`、本リポジトリでは `docs/maintainer/workflow/{issue}/`。ただし `close/` 配下は完了後の永続パスのため除く）への直接パス参照。issue 完了時の `close/` 移動でパスが変わりうるため、コメントに書くと陳腐化する（[DOCS_NOISE_RULES.md (iv-b)](DOCS_NOISE_RULES.md) と対称の理由。§3 の「他コードファイルへの参照」許可には含まれない）。
 
 ---
 
@@ -31,6 +32,8 @@ document_id: "a3f1c9d2-5e84-4b17-9a06-2c7d8f1e4b30"
 - **他コードファイルへの参照**: ファイルパス・モジュール名（`foo/bar.py`、`pkg.module`）。
 - **シンボル参照**: 関数名・クラス名・メソッド名（`ClassName.method`、`build_index()`）。
 - import/require/include 等の言語機能による依存記述（コメントではないコード行）。
+
+> **注意（§2 との境界）**: 「他コードファイルへの参照」の許可は**通常のソースコードファイル**を指す。作業用 issue フォルダへのパス参照（§2）は、ファイルパスの形式であってもこの許可対象に**含まれない**。通常のコードファイルはリネームされても grep で追従できるが、作業用 issue フォルダは「フォルダごと `close/` へ移動する」という異なる陳腐化要因を持つため。
 
 ---
 
@@ -57,4 +60,5 @@ document_id: "a3f1c9d2-5e84-4b17-9a06-2c7d8f1e4b30"
 
 - [RULES.md](RULES.md)（実行・ドキュメント・テスト要約）
 - [enforcement/README.md](enforcement/README.md)（失敗条件と差し戻し）
+- [DOCS_NOISE_RULES.md](DOCS_NOISE_RULES.md) (iv-b)（docs 層の対称規約。作業用 issue フォルダ参照禁止）
 - CORE.md §境界（正本1か所・重複禁止）
