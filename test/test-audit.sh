@@ -678,6 +678,73 @@ else
   echo "  [SKIP] #31 システム仕様書レビュー証跡欠落検知（sqlite3 不在）"
 fi
 
+# #37 システム仕様書の作業用 issue フォルダ参照禁止（check_docs_transient_issue_ref）の tmp 隔離回帰テスト。
+# 判定は「#37 由来の FAIL 文字列の有無」で行う（audit 全体の rc は他 check の影響を受けうるため）。
+FAIL37='FAIL: システム仕様書が作業用 issue フォルダ'
+echo "== #37 システム仕様書の作業用 issue フォルダ参照禁止 =="
+
+# シナリオA: 消費者標準パス（.agent-skill-chain/runtime/{issue}/）への参照で FAIL
+# Given: docs/ 配下の仕様書が runtime の issue フォルダ（日時プレフィックス付き）を参照する
+# When:  audit.sh <tmp> を実行する
+# Then:  stderr に #37 由来の FAIL を含む
+A37_TREE="$(make_min_tree)"; mkdir -p "$A37_TREE/docs"
+printf 'see .agent-skill-chain/runtime/20260713_075722_foo/02_設計.md\n' > "$A37_TREE/docs/01_システム概要.md"
+A37_OUT="$(bash "$AUDIT" "$A37_TREE" 2>&1)"
+if grep -qF "$FAIL37" <<< "$A37_OUT"; then ok "#37-A runtime issue 参照で FAIL"; else ng "#37-A runtime issue 参照で FAIL せず: $A37_OUT"; fi
+
+# シナリオB: 本リポ上書きパス（docs/maintainer/workflow/{issue}/）への参照で FAIL
+# Given: docs/ 配下の仕様書が workflow の issue フォルダを参照する
+# When:  audit.sh <tmp> を実行する
+# Then:  stderr に #37 由来の FAIL を含む
+B37_TREE="$(make_min_tree)"; mkdir -p "$B37_TREE/docs/maintainer"
+printf 'link docs/maintainer/workflow/20260713_075722_foo/00_要求定義.md\n' > "$B37_TREE/docs/maintainer/adapters.md"
+B37_OUT="$(bash "$AUDIT" "$B37_TREE" 2>&1)"
+if grep -qF "$FAIL37" <<< "$B37_OUT"; then ok "#37-B workflow issue 参照で FAIL"; else ng "#37-B workflow issue 参照で FAIL せず: $B37_OUT"; fi
+
+# シナリオC: close/ 配下（完了後の永続パス）への参照は誤検知しない
+# Given: docs/ 配下の仕様書が close 済み issue を参照する
+# When:  audit.sh <tmp> を実行する
+# Then:  stderr に #37 由来の FAIL を含まない
+C37_TREE="$(make_min_tree)"; mkdir -p "$C37_TREE/docs"
+printf 'docs/maintainer/workflow/close/20260713_foo/04_review.md and .agent-skill-chain/runtime/close/20260713_bar/00_要求定義.md\n' > "$C37_TREE/docs/x.md"
+C37_OUT="$(bash "$AUDIT" "$C37_TREE" 2>&1)"
+if ! grep -qF "$FAIL37" <<< "$C37_OUT"; then ok "#37-C close 参照は非 FAIL"; else ng "#37-C close 参照で誤 FAIL: $C37_OUT"; fi
+
+# シナリオD: 汎用ディレクトリ参照・DB 参照は誤検知しない
+# Given: docs/ 配下の仕様書が workflow.db や日時プレフィックスなしの一般ディレクトリを参照する
+# When:  audit.sh <tmp> を実行する
+# Then:  stderr に #37 由来の FAIL を含まない
+D37_TREE="$(make_min_tree)"; mkdir -p "$D37_TREE/docs"
+printf 'db at .agent-skill-chain/runtime/workflow.db and dir .agent-skill-chain/runtime/ and docs/maintainer/workflow/README.md\n' > "$D37_TREE/docs/y.md"
+D37_OUT="$(bash "$AUDIT" "$D37_TREE" 2>&1)"
+if ! grep -qF "$FAIL37" <<< "$D37_OUT"; then ok "#37-D 汎用/DB 参照は非 FAIL"; else ng "#37-D 汎用/DB 参照で誤 FAIL: $D37_OUT"; fi
+
+# シナリオE: 作業用 issue ドキュメント自身（docs/maintainer/workflow/ 配下）は走査対象外
+# Given: workflow 配下の issue ドキュメントが別の issue フォルダを参照する
+# When:  audit.sh <tmp> を実行する
+# Then:  stderr に #37 由来の FAIL を含まない（/workflow/ 除外）
+E37_TREE="$(make_min_tree)"; mkdir -p "$E37_TREE/docs/maintainer/workflow/20260713_075722_foo"
+printf 'refers .agent-skill-chain/runtime/20260713_x_bar/02_設計.md\n' > "$E37_TREE/docs/maintainer/workflow/20260713_075722_foo/02_設計.md"
+E37_OUT="$(bash "$AUDIT" "$E37_TREE" 2>&1)"
+if ! grep -qF "$FAIL37" <<< "$E37_OUT"; then ok "#37-E workflow 配下 issue ドキュメントは走査対象外"; else ng "#37-E 走査対象外が効かず誤 FAIL: $E37_OUT"; fi
+
+# シナリオF: docs/ 不在は SKIP（docs/ 未採用プロジェクトでは不発動）
+# Given: docs/ を持たない最小ツリー
+# When:  audit.sh <tmp> を実行する
+# Then:  stderr に #37 由来の FAIL を含まない
+F37_TREE="$(make_min_tree)"
+F37_OUT="$(bash "$AUDIT" "$F37_TREE" 2>&1)"
+if ! grep -qF "$FAIL37" <<< "$F37_OUT"; then ok "#37-F docs/ 不在 SKIP"; else ng "#37-F docs/ 不在でも FAIL: $F37_OUT"; fi
+
+# シナリオG: サブ issue（日付のみプレフィックス）の参照も FAIL（日時プレフィックス検出の下限を lock）
+# Given: docs/ 配下の仕様書が YYYYMMDD_ のみのサブ issue ディレクトリを参照する
+# When:  audit.sh <tmp> を実行する
+# Then:  stderr に #37 由来の FAIL を含む
+G37_TREE="$(make_min_tree)"; mkdir -p "$G37_TREE/docs"
+printf 'sub docs/maintainer/workflow/20260314_PR4_PR指摘対応/00_要求定義.md\n' > "$G37_TREE/docs/z.md"
+G37_OUT="$(bash "$AUDIT" "$G37_TREE" 2>&1)"
+if grep -qF "$FAIL37" <<< "$G37_OUT"; then ok "#37-G サブ issue（日付プレフィックス）参照で FAIL"; else ng "#37-G サブ issue 参照で FAIL せず: $G37_OUT"; fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then

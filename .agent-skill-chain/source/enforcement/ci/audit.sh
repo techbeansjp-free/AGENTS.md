@@ -32,6 +32,7 @@
 #   (29) 実装前 04（DB 採用時・issue_path スコープで implement/verify ログ 0 件かつ 04 存在）
 #   (31) システム仕様書レビュー証跡欠落（DB・docs/ 採用時・実装変更ログありの 04_review に要=docs/00_review参照/不要=根拠 の内容が無い場合 FAIL）
 #   (32) 実装前 review-docs 未実行検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ review-docs ログ 0 件なら FAIL。#29 と非交差。発効日 grandfather あり）
+#   (37) システム仕様書の作業用 issue フォルダ参照禁止（docs/ 配下の仕様書が作業用 issue フォルダ＝.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/ へのパス参照を含むと FAIL。DOCS_NOISE_RULES (iv-b)。close/ は対象外）
 #
 # 失敗とみなす条件（enforcement/README と一致）:
 #   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
@@ -62,6 +63,12 @@
 #      プレフィックスが REVIEWDOCS_GATE_EFFECTIVE_FROM（既定 20260712_000000・env 上書き可）未満なら
 #      grandfather として SKIP（遡及適用しない）。存在監査のみで review-docs と implement の厳密な
 #      時刻順序は監査しない。
+#  37. docs/ 採用時のみ・git/sqlite3 非依存。docs/ 配下のシステム仕様書（*.md）が、作業用 issue フォルダ
+#      （.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/）への直接パス参照を
+#      含むと FAIL（DOCS_NOISE_RULES (iv-b)）。検出は issue フォルダ名の日時プレフィックス（YYYYMMDD_）を
+#      含むパスに限定し、汎用ディレクトリ参照（.agent-skill-chain/runtime/workflow.db 等）・close/ 配下
+#      （完了後の永続パス）を誤検知しない。作業用 issue フォルダ自身（docs/maintainer/workflow/ 配下の
+#      issue ドキュメント）は「システム仕様書」ではないため走査対象外（兄弟 issue の正当参照を誤 FAIL しない）。
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
@@ -684,7 +691,9 @@ check_document_id_linked
 
 # 26. コメント/docstring 外部参照禁止違反（CODE_COMMENT_RULES §2）。
 #   プロジェクトのソースコード（既定 src/ app/ components/。CODE_COMMENT_SRC_DIRS で上書き可・コロン区切り）の
-#   コメント/docstring 行に限定して、章節番号・PR/issue/タスク番号・仕様ドキュメント名を grep 検出する。
+#   コメント/docstring 行に限定して、章節番号・PR/issue/タスク番号・仕様ドキュメント名・作業用 issue フォルダへの
+#   パス参照（.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/。日時プレフィックス
+#   限定・close/ 対象外。#37 と対称）を grep 検出する。
 #   - 走査対象はソースコードのみ。.agent-skill-chain/source/（フレームワーク基盤スクリプトは正当に仕様名/章節を参照する）と
 #     ドキュメント（WORKFLOW_SCAN_DIRS・docs 等。仕様名/章節参照が正当）は対象外＝誤検出させない。
 #   - import/require/include 等の行は除外（ファイルパスは §3 で許可）。obj.method() 等のコード参照は
@@ -927,12 +936,46 @@ check_reviewdocs_before_implement() {
   done
 }
 
+# 37. システム仕様書の作業用 issue フォルダ参照禁止（check_docs_transient_issue_ref）。
+#   docs/ 配下のシステム仕様書（*.md）が、作業用 issue フォルダ（.agent-skill-chain/runtime/{issue}/ または
+#   docs/maintainer/workflow/{issue}/）への直接パス参照を含むと FAIL する（DOCS_NOISE_RULES (iv-b)）。
+#   git/sqlite3 に非依存の純粋なファイル走査。docs/ 不在は SKIP（docs/ 未採用プロジェクトでは不発動）。
+#   検出パターン: (\.agent-skill-chain/runtime|docs/maintainer/workflow)/[0-9]{8}_
+#     - issue フォルダ名の日時プレフィックス（YYYYMMDD_）を要求することで、汎用ディレクトリ参照
+#       （.agent-skill-chain/runtime/workflow.db・規約説明中の一般記述）や DB 参照を誤検知しない。
+#     - close/ 配下（完了後の永続パス）は runtime/ または workflow/ の直後が "close"（非数字）となり
+#       構造的に一致しないため、追加の除外なしで機械検出の対象外となる（DOCS_NOISE_RULES §役割分担）。
+#   走査対象外: パスに /workflow/ を含むファイル（作業用 issue フォルダ自身＝issue ドキュメント。兄弟 issue の
+#     正当参照を誤 FAIL しない）、および /templates/ を含むファイル（防御的除外）。
+check_docs_transient_issue_ref() {
+  [[ ! -d "$PROJECT_ROOT/docs" ]] && return 0
+  echo "[audit] checking docs transient issue-folder refs (#37)" >&2
+  local f rel first=""
+  while IFS= read -r -d '' f; do
+    [[ "$f" == *"/workflow/"* ]] && continue
+    [[ "$f" == *"/templates/"* ]] && continue
+    if grep -qE '(\.agent-skill-chain/runtime|docs/maintainer/workflow)/[0-9]{8}_' "$f" 2>/dev/null; then
+      if [[ -z "$first" ]]; then
+        echo "FAIL: システム仕様書が作業用 issue フォルダを参照しています (DOCS_NOISE_RULES (iv-b); 要約+安定参照へ張り替える。close/ は対象外):" >&2
+        first=1
+      fi
+      rel="${f#$PROJECT_ROOT/}"
+      echo "  $rel" >&2
+    fi
+  done < <(find "$PROJECT_ROOT/docs" -name "*.md" -type f -print0 2>/dev/null || true)
+  if [[ -n "$first" ]]; then
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+}
+
 check_code_comment_external_ref
 check_review_dual_lists
 check_issue_doc_in_gitignored_path
 check_review_before_implement
 check_docs_review_evidence
 check_reviewdocs_before_implement
+check_docs_transient_issue_ref
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."
