@@ -9,7 +9,7 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 **作成日**: 2026 年 07 月 12 日
 **最終更新**: 2026 年 07 月 12 日
 
-> **必須**: レビューは [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[`REVIEW_DUAL_LENS.md`](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) に従う。レビュー深度は **standard**（markdown 3 ファイルの再編・中規模）。
+> **必須**: レビューは [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[`REVIEW_DUAL_LENS.md`](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) に従う。レビュー深度は **standard**（markdown 3 ファイルの再編・中規模）。
 
 ---
 
@@ -266,7 +266,7 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 
 ## docs 更新
 
-（[`.agent-skill-chain/source/DOCS_RULES.md`](../../../../.agent-skill-chain/source/DOCS_RULES.md) §継続追随ゲートに従う判定）
+（[`.agent-skill-chain/source/DOCS_RULES.md`](../../../../../.agent-skill-chain/source/DOCS_RULES.md) §継続追随ゲートに従う判定）
 
 - **要否**: 不要（軽量パス・DOCS_RULES §継続追随ゲート step5）
 - **対象**: なし
@@ -375,7 +375,7 @@ issue_id: "c0b8c9e0-7170-4e14-a876-11a1721532a4"
 ### 13.2 その他の参考資料
 
 - 成果物: `README.md`（縮小）、`CONTRIBUTING.md`（新設）、`docs/maintainer/RELEASE.md`（後方参照更新）
-- レビュー規約: [`REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md)、[`REVIEW_DUAL_LENS.md`](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)、[`DOCS_RULES.md`](../../../../.agent-skill-chain/source/DOCS_RULES.md)、[`CLOSEOUT.md`](../../../../.agent-skill-chain/source/CLOSEOUT.md)
+- レビュー規約: [`REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md)、[`REVIEW_DUAL_LENS.md`](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)、[`DOCS_RULES.md`](../../../../../.agent-skill-chain/source/DOCS_RULES.md)、[`CLOSEOUT.md`](../../../../../.agent-skill-chain/source/CLOSEOUT.md)
 
 ---
 

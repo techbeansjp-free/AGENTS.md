@@ -11,9 +11,9 @@ issue_id: "ae437b9c-8ecb-4591-97bb-ae606f56e105"
 
 > **重要**: 本レビューは verify-and-close command（skill chain: generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）に従って実施した。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 >
-> **必須参照**: [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[`REVIEW_DUAL_LENS.md`](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)。レビュー深度は **standard**（実行コード変更2ファイル＋テスト2ファイル＋ドキュメント1ファイルの中規模変更、うち PreToolUse.sh は enforcement 正本のためセキュリティ観点で厚めに検証）を選択（[RULES.md §実行モード](../../../../.agent-skill-chain/source/RULES.md)）。深さによらず二観点（敵対的＋must-preserve）両リストは §12.3・§12.4 に必須記載。
+> **必須参照**: [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md)・[`REVIEW_DUAL_LENS.md`](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)。レビュー深度は **standard**（実行コード変更2ファイル＋テスト2ファイル＋ドキュメント1ファイルの中規模変更、うち PreToolUse.sh は enforcement 正本のためセキュリティ観点で厚めに検証）を選択（[RULES.md §実行モード](../../../../../.agent-skill-chain/source/RULES.md)）。深さによらず二観点（敵対的＋must-preserve）両リストは §12.3・§12.4 に必須記載。
 >
 > **結論（先出し・2026-07-13 追記後）**: 実装（setup.sh・SETUP.md・PreToolUse.sh・テスト2件）は 02_設計・03_実装計画のとおりに行われ、既存テスト・新規テストはすべて PASS。本レビューで発見した **重要度「高」の指摘 1 件**（`package.json` の `files` allowlist 未更新により、実際の消費者配布経路[`npx github:...`]では `runtime/.gitignore` が届かない）は、**ADR-4（02_設計.md §2.5・03_実装計画.md §2.4 に追記）に基づき対応完了**した。単純な `files` 配列への追加では npm-packlist の仕様上機能しないことが判明したため、`.agent-skill-chain/source/runtime-gitignore.template`（新規・非 `.gitignore` 名）を追加し、`setup.sh` のコピー元をそちらに変更、コピー時に `.gitignore` へリネームする方式で恒久修正した。実際に `npm pack` で tarball を生成し `tar -tzf` で内容物を直接確認し、テンプレートが実際に含まれること、および packed tarball を展開した「真の npm 配布物のみ」の環境で `setup.sh` を実行し `.gitignore` が正しい内容で生成されることを end-to-end で確認済み（§16 追記参照）。**指摘1は解消。本 issue は close 可能と判断する。**
 
