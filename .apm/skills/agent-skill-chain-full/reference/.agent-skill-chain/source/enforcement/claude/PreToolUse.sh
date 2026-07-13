@@ -165,8 +165,13 @@ fi
 # ---------------------------------------------------------------------------
 if [[ -n "$TOOL" ]]; then
   # R1. .workflow 配下への直接 Write/Edit 禁止（全 ROLE）
+  #   例外（ADR-3）: 対象パスが厳密に .agent-skill-chain/runtime/.gitignore と一致する場合のみ許可する。
+  #   配布漏れの自己修復用の正規手段。前方一致・正規表現の緩いマッチではなくファイル名までの完全一致で
+  #   判定し、他の runtime/ 配下ファイル（workflow.db*・issue ドキュメント等）への禁止は一切広げない。
   if [[ "$TOOL" == "Edit" || "$TOOL" == "Write" ]]; then
-    if [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/ ]]; then
+    if [[ "$PATH_TARGET" == ".agent-skill-chain/runtime/.gitignore" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/runtime/.gitignore ]]; then
+      : # allow（厳密パス一致の狭い例外。R1 の他条件には進まない）
+    elif [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/ ]]; then
       block "direct edit of .agent-skill-chain/runtime/ is forbidden"
     fi
   fi
