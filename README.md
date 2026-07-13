@@ -8,6 +8,17 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 ---
 
+## 導入すると何が変わるか
+
+「.agents に従って」と指示すると、AI アシスタントの進め方が次のように変わる。思想・詳細は正本 [CONCEPTS.md](.agent-skill-chain/source/CONCEPTS.md)・[GETTING_STARTED.md](.agent-skill-chain/source/GETTING_STARTED.md) を参照。
+
+- **進行役がサブに委譲する**: メイン（orchestrator）は phase 判定・command 選択・証跡確認に徹し、実作業（要求・要件・設計・実装・レビューの執筆やコード編集）は必ずサブエージェントに委譲する。
+- **phase gate に沿って進む**: 作業は 要求 → 要件 → 設計 → 実装計画 → 実装 → レビュー の順に command（skill chain）で回り、各 phase の DoD を満たしてから次へ進む。
+- **enforcement を opt-in すると挙動が制約される**: `enforce on`（既定 off）でフックを配線すると、orchestrator の直接 Write/Edit/Bash 等が拒否され、サブへの委譲が物理的に強制される（[§配備後の管理（CLI）](#配備後の管理cli)）。
+- **証跡が workflow.db に残る**: 各 command の完了は書記（scribe）が workflow.db に記録し、監査で検証できる。
+
+---
+
 ## 何がどこに置かれるか
 
 - **プロジェクトルートに置くもの（その他・今まで通り）**: `AGENTS.md`, `CLAUDE.md`。入口として 1 ファイルずつ。AI はここから .agents を参照する。
@@ -41,6 +52,41 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 中心は **skill（能力）** と **command（skill chain）**。phase は gate、agents はオーケストレーションのみ。
 
 **テンプレート（00〜04 等）**: .agents 配下には置かない。**`.agent-skill-chain/runtime/templates/`** にあり、setup でプロジェクトの **.agent-skill-chain/runtime/templates/** にコピーする。プロジェクトは .agent-skill-chain/runtime/templates を参照する。
+
+---
+
+## 使えるもの（command とスキル）
+
+上記「.agents 配下の構成」のディレクトリマップを補完し、導入すると使える command と skills（能力）の概要を示す。個別 capability の詳細カタログは正本 [.agent-skill-chain/source/README.md](.agent-skill-chain/source/README.md) の索引を参照。
+
+### command（skill chain）
+
+phase に紐づく実行単位。次の 6 種がある。
+
+| command | 役割 |
+|---------|------|
+| `requirement-discovery` | 要求・要件を発見し、00/01 と BDD を書く |
+| `design-feature` | 責務・境界・API を設計し、02（設計）・03（実装計画）を書く |
+| `implement-feature` | 03 の計画に従って実装し、単体テストと証跡を残す |
+| `verify-and-close` | 検証・レビューし、04_review を書いてクローズする |
+| `review-docs` | 実装前に 00〜03 をドキュメントレビューする（実装着手の必須ゲート） |
+| `create-pr-review-issue` | PR 指摘対応のための issue を起票する |
+
+### skills（能力）
+
+1 目的の最小部品。`skills/{domain}/{capability}/` に配置し、command が chain して使う。ドメインは次の 7 つ。
+
+| ドメイン | 概要 |
+|----------|------|
+| requirements | 目的抽出・前提整理・制約定義・BDD 執筆 |
+| architecture | 責務境界の定義・API 契約設計・依存レビュー |
+| implementation | 実装・安全なリファクタ |
+| testing | テストシナリオ生成・カバレッジ対応確認 |
+| review | 設計レビュー・コードレビュー |
+| logging | workflow.db への証跡記録（書記） |
+| agent | command 実行・委譲のオーケストレーション |
+
+個別 capability の一覧・詳細は [.agent-skill-chain/source/README.md](.agent-skill-chain/source/README.md) の索引から辿る。
 
 ---
 
@@ -163,6 +209,20 @@ npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement �
 - `enforce on` は正本テンプレート（`.agent-skill-chain/source/platforms/claude/settings.enforce.json`）から `hooks.PreToolUse`/`PostToolUse`（`.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` を指す）と `env.AGENT_ROLE=orchestrator` を配線する。既存の `settings.json` があれば**ユーザー値を破壊せず**マージし、上書き前に `settings.json.bak` へ退避する。
 - `enforce off` は enforcement 由来の配線のみを外し、ユーザーの env・hooks・permissions 等は保持する。
 - 設定変更を**ライブの Claude セッションに反映するには再起動が必要**。無効 JSON の場合 `enforce` は破壊を避けて中止する。
+
+---
+
+## 設定できること（設定一覧）
+
+導入後に調整できる設定は次のカテゴリに分かれる。README は代表例のみを示し、設定の全カタログは詳細正本 [enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) 等へのリンクで委譲する。
+
+| カテゴリ | 代表例 | 詳細 |
+|----------|--------|------|
+| enforcement の opt-in | `enforce on/off`（既定 off） | 本 README [§配備後の管理（CLI）](#配備後の管理cli)・[enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) |
+| 版のピン留め・アップグレード | `#<tag-or-branch>` で git ref を固定 | 本 README [§配備後の管理（CLI）](#配備後の管理cli) |
+| 監査・走査スコープ等の環境変数 | 走査対象ディレクトリ（`WORKFLOW_DIRS`） | [enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) |
+
+個別の環境変数の網羅はここでは行わず、詳細正本を参照する。
 
 ---
 

@@ -117,7 +117,7 @@
 | 構成・索引 | .agent-skill-chain/source/README.md |
 | 失敗条件・差し戻し先 | .agent-skill-chain/source/enforcement/README.md |
 | プロジェクト固有ルール（最優先） | プロジェクトルートの .agent-skill-chain/project/ |
-| コピー対象・セットアップ詳細 | .agent-skill-chain/source/SETUP.md |
+| コピー対象・セットアップ・アップデート（upgrade）詳細 | .agent-skill-chain/source/SETUP.md（`init`/`upgrade`/`enforce`/`uninstall` の実行コマンド自体を含む） |
 | 基盤の肥大化防止・文書追加ルール | .agent-skill-chain/source/META_LAYER.md |
 
 ---
