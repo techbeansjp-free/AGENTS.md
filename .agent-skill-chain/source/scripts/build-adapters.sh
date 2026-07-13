@@ -210,8 +210,12 @@ adapter_cursor() {
 
 # adapter_apm — microsoft/apm（Agent Package Manager）向けパッケージを
 #   リポジトリルート直下の apm.yml・.apm/ に生成する（claude/cursor と対称の 100% 生成物）。
-#   出力: apm.yml（正本コピー）・.apm/skills/{domain}__{capability}/・
-#         .apm/skills/agent-skill-chain-full/{SKILL.md,reference/}（正本一式の同梱バンドル）。
+#   出力: apm.yml（正本コピー）・.apm/skills/agent-skill-chain-full/{SKILL.md,reference/}
+#         （正本一式の同梱バンドルのみ）。
+#   個別スキル（{domain}__{capability}）は apm では配備しない（修正方針 D1・二重コピー解消）。
+#   個別スキルの配備は npx 導線（setup.sh／lib/deploy-skills.sh）が唯一の主体であり、apm と npx を
+#   併用しても同一 .claude/skills/ に別名重複が生じないよう、apm はバンドル 1 件のみを配る。
+#   根拠: docs/maintainer/workflow/20260713_033406_apm-npx-skill重複解消/02_設計.md ADR-1。
 #   実装規約: .agents というリテラルパスを直書きせず、既存の AGENTS 変数（本ファイル冒頭 1 箇所の
 #   み定義）のみを参照する（story8 改称に自動追従させるため）。
 adapter_apm() {
@@ -232,13 +236,14 @@ adapter_apm() {
   cp "$apm_yml_src" "$out/apm.yml"
   echo "[build] apm.yml を正本からコピーしました。"
 
-  # 2) skills を apm skill プリミティブとして配備（{domain}__{capability}。既存共有関数を再利用）
+  # 2) 個別スキル（{domain}__{capability}）は apm では配備しない（修正方針 D1）。
+  #    apm と npx の併用時に同一 .claude/skills/ へ別名で二重配備されるのを構造的に防ぐため、
+  #    個別スキルの配備は npx 導線（setup.sh／lib/deploy-skills.sh）に一元化する。
+  #    共有関数 deploy_skills_impl／list_owned_skill_names は npx 導線が引き続き使用するため削除しない。
   mkdir -p "$apm_root/skills"
-  local n_skill
-  n_skill=$(deploy_skills_impl "$AGENTS/skills" "$apm_root/skills")
 
   # 3) agent-skill-chain-full: 正本一式（$AGENTS）を 1 skill バンドルとして同梱する
-  #    （正本一式が展開できることを満たすための v1 暫定方式）。
+  #    （apm 経由で配布する唯一のスキル。正本一式を参照コンテキストとして提供する）。
   local bundle="$apm_root/skills/agent-skill-chain-full"
   mkdir -p "$bundle/reference"
   cat > "$bundle/SKILL.md" <<'MD'
@@ -252,17 +257,19 @@ description: "本パッケージ(agent-skill-chain)の正本一式（AGENTS.md �
 このスキルは、本パッケージ（agent-skill-chain）の正本一式を参照コンテキストとして同梱したものです。
 `reference/` 配下に、実行契約・skills・commands・boot・workflow・spec・enforcement 等の正本一式が展開されています。
 
-個々の能力（skill）は `{domain}__{capability}` 形式の別スキルとして個別配備されています。本スキルは、
-orchestrator が正本一式全体（横断参照・skill chain 定義の読み込み等）を必要とする場合に使用してください。
+個々の能力（skill）は **npx 導線**（`npx github:techbeansjp-free/AGENTS.md init`）が `.claude/skills/`・
+`.cursor/skills/` へ `{domain}__{capability}` 形式で配備します。apm 経由では本バンドル（参照コンテキスト）
+のみを配布します（apm と npx の併用でスキルが二重コピーされるのを防ぐため）。本スキルは、orchestrator が
+正本一式全体（横断参照・skill chain 定義の読み込み等）を必要とする場合に使用してください。
 MD
 
   # 既存 bundle_agents_src を無改変で呼び出す（reference/ 配下に一式がコピーされる）。
   bundle_agents_src "$bundle/reference"
 
-  # 4) 配備件数を報告する（既存ログ規約に合わせる）。
+  # 4) 配備件数を報告する（既存ログ規約に合わせる）。個別スキルは配らないためバンドルのみ報告する。
   local n_bundle_files
   n_bundle_files=$(find "$bundle/reference" -type f | wc -l | tr -d ' ')
-  echo "[build] apm: skills を $n_skill 件, agent-skill-chain-full を $n_bundle_files ファイル配備しました。"
+  echo "[build] apm: agent-skill-chain-full を $n_bundle_files ファイル配備しました（個別スキルは npx 導線が配備）。"
 
   echo "[build] 完了。試用（tmp隔離）: apm install <このworktreeの絶対パス> --target agent-skills"
 }

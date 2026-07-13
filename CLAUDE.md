@@ -6,6 +6,7 @@
 - 実行契約の正本は [.agent-skill-chain/source/boot/CORE.md](.agent-skill-chain/source/boot/CORE.md)。読込順は [.agent-skill-chain/source/boot/LOAD_POLICY.md](.agent-skill-chain/source/boot/LOAD_POLICY.md) に委譲。
 - 作業は **command**（skill chain）で実行する。command 実行時は run_command と commands/{name}.md を読むこと。
 - プロジェクト概要・詳細は .agent-skill-chain/source/README.md および boot / workflow / commands / skills を参照すること。
+- セットアップ・アップデート（`init`/`upgrade`/`enforce`/`uninstall` の実行コマンド自体）は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) を参照すること。
 
 ---
 
