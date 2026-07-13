@@ -104,6 +104,15 @@ bash .agent-skill-chain/source/scripts/setup.sh
 | `agents-md enforce off [dir]` | enforcement 由来の配線（パッケージが注入した hook エントリ・managed env キー）のみを外す。ユーザーの他設定（env・hooks・permissions 等）は保持する。 |
 | `agents-md enforce status [dir]` | 現在の on/off と hook スクリプト（`.claude/hooks/PreToolUse.sh`・`PostToolUse.sh`）の実在性を表示する。 |
 
+**実行コマンド（GitHub 直接参照）**:
+
+```bash
+# 採用先プロジェクトのルートで実行
+npx github:techbeansjp-free/AGENTS.md enforce status   # 現在の on/off と hook 実在性を表示
+npx github:techbeansjp-free/AGENTS.md enforce on       # opt-in（settings.json に配線をマージ。既存値は保持・.bak 退避）
+npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement 配線のみ外す。ユーザー値は保持）
+```
+
 - **正本テンプレート**: `.agent-skill-chain/source/platforms/claude/settings.enforce.json`。`hooks.PreToolUse`/`PostToolUse` を setup 配備物 `.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` へ `${CLAUDE_PROJECT_DIR}` 相対で結線し、`env.AGENT_ROLE=orchestrator`・`env.AGENTS_ROOT` を設定する。各 hook エントリには `__agentsMdEnforce: true` の目印を付与し、`enforce off` で正確に除去する。
 - **既定 install では書き込まない**: `init`/`setup` は `.claude/settings.json` に enforcement を**書かない**（off）。`doctor` は enforcement 配線の on/off と hook スクリプト実在性を表示する。
 - **安全策**: `.claude/settings.json` が無効 JSON の場合、`enforce` は破壊を避けるため中止する（Claude 起動時エラーを事前に防ぐ）。
@@ -119,6 +128,23 @@ bash .agent-skill-chain/source/scripts/setup.sh
 ## init / upgrade / uninstall の保持・上書き契約（正本）
 
 **結論: install/upgrade/uninstall は「パッケージ配備物」のみを管理し、ユーザー資産は破壊しない。** 再インストール・upgrade でユーザーが個人的に作成した project 固有ルールや自作エディタルールが消えることはない。判断に迷う場合は安全側（保持）に倒す。
+
+### 実行コマンド（GitHub 直接参照）
+
+**本節は導入先プロジェクトへ配布される（README.md は配布されない）。既に導入済みのプロジェクトで「どう最新版へアップデートするか」を知りたい場合は本節を参照する。**
+
+```bash
+# 特定版をピン留めして初回導入（#<tag-or-branch> で git ref を固定。再現的に同一内容を取り込める）
+npx github:techbeansjp-free/AGENTS.md#<tag-or-branch> init
+
+# 既存配備を新版へ再同期（アップデート。ref 省略時は既定ブランチ＝最新を指す）
+npx github:techbeansjp-free/AGENTS.md upgrade
+
+# 配備前提（bash・sqlite3 等）の健全性を確認
+npx github:techbeansjp-free/AGENTS.md doctor
+```
+
+`enforce` の実行コマンドは [§enforcement の opt-in（既定 off）](#enforcement-の-opt-in既定-off) を、`uninstall` の実行コマンドは [§アンインストール（つけ外し）](#アンインストールつけ外し) を参照。上記は README.md §配備後の管理（CLI）の実コマンド例と同一内容（配布物単体で完結させるため実体を SETUP.md にも保持する）。
 
 ### 所有区分（統合ルート `.agent-skill-chain/` の 3 サブディレクトリと配備先）
 
