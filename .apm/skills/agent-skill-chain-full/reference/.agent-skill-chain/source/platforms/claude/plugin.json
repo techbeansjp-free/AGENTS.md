@@ -1,7 +1,7 @@
 {
   "name": "agents-package",
   "description": "AI 実行契約・能力(skills)中心のワークフロー仕様。フェーズ(要求→要件→設計→実装計画→実装→レビュー)に沿って AI を進行させる。正本は同梱の .agent-skill-chain/source/。",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "author": {
     "name": "TechBeans Inc.",
     "url": "https://github.com/techbeansjp-free"
