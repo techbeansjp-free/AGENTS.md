@@ -180,6 +180,8 @@ jobs:
       # 7) enforcement audit（このリポでは適用範囲外のため失敗させない）
       #    本リポの issue は docs/maintainer/workflow 配下で、audit.sh は .workflow を前提とするため
       #    そのままでは通らない。呼び出すが結果で CI を赤くしない（continue-on-error）。
+      #    この非ブロッキング運用は意図的な暫定運用であり、DB 系チェックの追跡状況が解消され次第
+      #    改めてブロッキング化を判断する（詳細・理由は正本ドキュメントを参照）。
       - name: Enforcement audit (non-blocking)
         continue-on-error: true
         run: |
