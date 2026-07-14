@@ -980,6 +980,129 @@ test_purge_uninstall_removes_everything() {
 #     test_uninstall_preserves_cohabiting_user_assets）が新構造 .agent-skill-chain/{source,project,runtime}/
 #     基準で既に実施しており、本ファイルの実行リストにそのまま含まれる（重複定義しない）。
 
+# =============================================================================
+# シナリオ C1〜C3: 同名衝突の保持・レガシー移行 backfill（由来マーカー・02_設計 ADR-1）
+#   03_実装計画 §2.4.2 は本観点を「R4/R5/R6」と呼称するが、本ファイルの既存シナリオ番号
+#   R4〜R7 と衝突するため、採番を C1〜C3（Collision guard）とする（設計 §6.1 の
+#   「同名・別内容の自作 agent が upgrade/uninstall で保持される」「レガシー移行 backfill」に対応）。
+#   R4/R5 が「別名 my-user-skill」の保持を検証するのに対し、C1〜C3 は **同名 agent**（名前一致）
+#   が由来判定で保護されることを検証する（名前一致無条件削除の恒久是正）。
+# =============================================================================
+
+# C1: upgrade（再 init）で同名の自作 agent スキルが保持され警告が出る（設計 §6.1・03 T2/R4）
+test_collision_upgrade_preserves_same_name_skill() {
+  echo "[e2e] シナリオC1: upgrade で同名（agent）の自作スキルが保持され警告が出る"
+  # シナリオ: install 済み dir の .claude/skills/agent・.cursor/skills/agent をユーザーが自作スキル
+  #           （マーカー無し・name 不一致）で置き換えた状態で再 init（upgrade 相当）すると、
+  #           自作物が保持され、警告が stderr に出て、他の __ 配備は健全なままである。
+
+  # Given: install 済み dir で agent を「無関係な自作スキル」に置き換える（マーカーを消し name を変える）
+  local src dest err
+  src="$(mktemp -d)"; dest="$(mktemp -d)"; err="$(mktemp)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  rm -rf "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+  mkdir -p "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+  printf -- '---\nname: my-totally-unrelated-skill\n---\n' > "$dest/.claude/skills/agent/SKILL.md"
+  printf -- '---\nname: my-totally-unrelated-skill\n---\n' > "$dest/.cursor/skills/agent/SKILL.md"
+  : > "$dest/.claude/skills/agent/unrelated.txt"
+  : > "$dest/.cursor/skills/agent/unrelated.txt"
+
+  # When: 再度 init（= upgrade 相当）を実行し stderr を捕捉する
+  node "$CLI" init "$dest" 2> "$err" >/dev/null
+
+  # Then: 同名の自作スキル（中身・付随ファイル）が保持される（削除・上書きされない）
+  assert_exists "$dest/.claude/skills/agent/unrelated.txt" "C1: .claude 同名自作スキルの付随ファイルが保持される"
+  assert_exists "$dest/.cursor/skills/agent/unrelated.txt" "C1: .cursor 同名自作スキルの付随ファイルが保持される"
+  assert_eq "$(grep -c my-totally-unrelated "$dest/.claude/skills/agent/SKILL.md")" "1" "C1: .claude 自作 SKILL.md が上書きされない"
+  assert_absent "$dest/.claude/skills/agent/.agent-skill-chain-owned" "C1: 非所有の同名ディレクトリにマーカーを書かない"
+
+  # And (Then): 警告が stderr に出る（誤削除防止の明示）
+  if grep -q '警告' "$err"; then
+    ok "C1: 衝突時に警告が stderr へ出力される"
+  else
+    ng "C1: 衝突時に警告を stderr へ出力すべき"
+  fi
+
+  # And (Then): 他の所有スキル（__ 配備）は健全に最新化されマーカーが付与される
+  if compgen -G "$dest/.claude/skills/*__*" >/dev/null; then
+    ok "C1: 他の __ 配備は健全（部分 fail-open）"
+  else
+    ng "C1: 他の __ 配備は健全であるべき"
+  fi
+  assert_exists "$dest/.claude/skills/architecture__define-boundaries/.agent-skill-chain-owned" "C1: 所有エントリにマーカーが付与される"
+
+  rm -f "$err"; rm -rf "$src" "$dest"
+}
+
+# C2: uninstall で同名の自作 agent スキルが保持され、skills ディレクトリも残る（設計 §6.1・03 T3/R5）
+test_collision_uninstall_preserves_same_name_skill() {
+  echo "[e2e] シナリオC2: uninstall で同名（agent）の自作スキルが保持されディレクトリも残る"
+  # シナリオ: .claude/skills/agent・.cursor/skills/agent を自作スキル（マーカー無し・name 不一致）に
+  #           置き換えた install 済み dir で uninstall --yes すると、同名自作スキルは保持され、
+  #           保持エントリが残るため .claude/skills/ ディレクトリ自体も空片付けで消えない。
+
+  # Given: install 済み dir で agent を無関係な自作スキルに置き換える
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  rm -rf "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+  mkdir -p "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+  printf -- '---\nname: my-totally-unrelated-skill\n---\n' > "$dest/.claude/skills/agent/SKILL.md"
+  printf -- '---\nname: my-totally-unrelated-skill\n---\n' > "$dest/.cursor/skills/agent/SKILL.md"
+  : > "$dest/.claude/skills/agent/unrelated.txt"
+
+  # When: 既定 uninstall を実行する
+  node "$CLI" uninstall "$dest" --yes >/dev/null 2>&1
+
+  # Then: 同名の自作スキルが保持される（由来判定 collision のため削除対象に含めない）
+  assert_exists "$dest/.claude/skills/agent/SKILL.md"      "C2: .claude 同名自作スキルが uninstall で保持される"
+  assert_exists "$dest/.claude/skills/agent/unrelated.txt" "C2: .claude 自作スキルの付随ファイルが保持される"
+  assert_exists "$dest/.cursor/skills/agent/SKILL.md"      "C2: .cursor 同名自作スキルが uninstall で保持される"
+
+  # And (Then): 保持エントリが残るため skills ディレクトリ自体は空片付けで消えない
+  assert_exists "$dest/.claude/skills" "C2: 保持エントリが残るため .claude/skills は保持される"
+
+  # And (Then): パッケージ所有の __ エントリ（マーカー付き）は通常どおり除去される
+  if compgen -G "$dest/.claude/skills/*__*" >/dev/null; then
+    ng "C2: パッケージ所有 __ エントリは除去されるべき"
+  else
+    ok "C2: パッケージ所有 __ エントリ（マーカー付き）は除去される"
+  fi
+
+  rm -rf "$src" "$dest"
+}
+
+# C3: レガシー移行 backfill（マーカー無し・name 一致の旧配備物が更新＋マーカー付与）（設計 §6.1・03 T2/R6）
+test_legacy_marker_backfill() {
+  echo "[e2e] シナリオC3: マーカー無しの旧配備物が再 init で最新化されマーカーが backfill される"
+  # シナリオ: install 後に所有スキルのマーカーを削除（マーカー未付与の旧消費者環境を模擬）し、
+  #           配備物を改変してから再 init すると、マーカーが再生成（backfill）され SKILL.md が最新化される。
+
+  # Given: install 済み dir で所有スキルのマーカーを削除し（旧配備物を模擬）、内容を改変する
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  assert_exists "$dest/.claude/skills/agent/.agent-skill-chain-owned" "C3(前提): 初回 init で所有スキルにマーカーが付与される"
+  rm -f "$dest/.claude/skills/agent/.agent-skill-chain-owned"
+  echo "STALE" >> "$dest/.claude/skills/agent/SKILL.md"
+
+  # When: 再度 init（= upgrade 相当）を実行する
+  node "$CLI" init "$dest" >/dev/null 2>&1
+
+  # Then: マーカーが backfill され、SKILL.md が正本内容へ最新化される（STALE が消える）
+  assert_exists "$dest/.claude/skills/agent/.agent-skill-chain-owned" "C3: レガシー所有にマーカーが backfill される"
+  if grep -q 'STALE' "$dest/.claude/skills/agent/SKILL.md"; then
+    ng "C3: 旧配備物は正本内容へ最新化されるべき（STALE が残ってはならない）"
+  else
+    ok "C3: 旧配備物が正本内容へ最新化される（STALE が消える）"
+  fi
+
+  rm -rf "$src" "$dest"
+}
+
 # --- 実行 ---------------------------------------------------------------------
 # bin 不在ガード（堅牢化）: bin/agents-md.js は非追跡（.gitignore）の生成物であり、
 #   各経路（CI step / run-all.sh 前置）が build を前置する前提だが、E2E 単体実行や前置漏れに
@@ -1021,6 +1144,10 @@ test_foreign_dir_aborts
 test_legacy_migration
 test_default_uninstall_preserves_runtime_and_project
 test_purge_uninstall_removes_everything
+# 同名衝突の保持・レガシー移行 backfill（由来マーカー・02_設計 ADR-1。03 呼称 R4/R5/R6→本ファイル C1/C2/C3）
+test_collision_upgrade_preserves_same_name_skill
+test_collision_uninstall_preserves_same_name_skill
+test_legacy_marker_backfill
 
 echo ""
 echo "[e2e] 結果: PASS=$PASS FAIL=$FAIL"

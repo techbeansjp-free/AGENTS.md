@@ -732,7 +732,7 @@ export function writeReadmeWarning(projectRoot: string): void {
 //      .claude/skills や .cursor/skills のユーザー自作スキル等）が同居していれば保持する。
 //      パッケージ所有ファイル/skill 名は正本（enforcement・skills）から動的に導出する（setup.sh と単一整合）。
 // 注3: .claude/hooks・.claude/skills・.cursor/skills は**ディレクトリごと消さず**、所有エントリのみ除去する
-//      （下記 deployedOwnedHookFiles / deployedOwnedSkillEntries で導出）。
+//      （下記 deployedOwnedHookFiles / planSkillUninstall で導出。skill は由来判定に従属）。
 const DEPLOYED_ARTIFACTS: string[] = [
   ".agent-skill-chain/source", // パッケージ正本（setup がコピー配備・再配備で復元可能）
   "AGENTS.md", // ルート契約（setup がコピー）
@@ -765,40 +765,107 @@ function deployedOwnedHookFiles(): string[] {
   return ownedFilesFrom(join(enforcement, "claude"), join(".claude", "hooks"));
 }
 
-// パッケージが配備した所有 skill エントリ名（{domain}__{capability}・ドメイン直下 {domain}）を
-// 正本 source/skills/ から導出する。命名規約の正本は lib/deploy-skills.sh（list_owned_skill_names）。
-// 本関数はその走査規則を Node 側でミラーし（同一規則）、setup.sh と同じ所有集合を得る。
+// 配備先スキルディレクトリに書き込まれる所有マーカー（配備証跡）のファイル名。
+// 由来判定・書込みの単一正本は lib/deploy-skills.sh（ASC_SKILL_OWNED_MARKER）。本定数はその同型ミラー。
+// drift を避けるため、名前を変えるときは lib/deploy-skills.sh と本定数の双方を整合させること。
+const ASC_SKILL_OWNED_MARKER = ".agent-skill-chain-owned";
+
+// 配備先スキルディレクトリの由来区分。lib/deploy-skills.sh の is_owned_skill_dir と同一の 4 区分。
+type SkillOwnership = "absent" | "owned" | "legacy_owned" | "collision";
+
+// skillFrontmatterName: SKILL.md の frontmatter `name` フィールド値を返す（先頭一致・前後空白トリム・
+//   引用符除去）。ファイル無し・`name:` 行無し・読取り不能なら空文字を返す。
+//   lib/deploy-skills.sh の _asc_skill_frontmatter_name と同一の正規化規則（drift 防止）。
+function skillFrontmatterName(skillMd: string): string {
+  try {
+    for (const raw of readFileSync(skillMd, "utf8").split("\n")) {
+      const m = raw.match(/^\s*name:\s*(.*)$/);
+      if (!m) continue;
+      let v = m[1].trim();
+      v = v.replace(/^["']/, "").replace(/["']$/, "");
+      return v.trim();
+    }
+  } catch {
+    // 読取り不能は空（＝一致せず collision へ倒す）。
+  }
+  return "";
+}
+
+// isOwnedSkillDir: 配備先の 1 スキルディレクトリの由来を判定する副作用のない Query。
+//   lib/deploy-skills.sh の is_owned_skill_dir の同型ミラー。判定優先順（fail-safe＝判定不能は
+//   破壊しない collision へ倒す）:
+//     (1) destDir 不在                                  → absent
+//     (2) destDir/.agent-skill-chain-owned 有            → owned
+//     (3) マーカー無・dest SKILL.md の name == 正本 name  → legacy_owned（backfill 対象）
+//     (4) それ以外（name 不一致・SKILL.md/name 欠落）      → collision（非所有＝保持）
+function isOwnedSkillDir(destDir: string, srcSkillMd: string): SkillOwnership {
+  try {
+    if (!existsSync(destDir)) return "absent";
+    if (existsSync(join(destDir, ASC_SKILL_OWNED_MARKER))) return "owned";
+    const destName = skillFrontmatterName(join(destDir, "SKILL.md"));
+    const srcName = skillFrontmatterName(srcSkillMd);
+    if (destName !== "" && srcName !== "" && destName === srcName) return "legacy_owned";
+    return "collision";
+  } catch {
+    return "collision";
+  }
+}
+
+// パッケージが配備した所有 skill エントリ（名前と正本 SKILL.md パスの対）を正本 source/skills/ から
+// 導出する。命名規約の正本は lib/deploy-skills.sh（list_owned_skill_entries）。本関数はその走査規則を
+// Node 側でミラーし（同一規則）、setup.sh と同じ所有集合＋由来判定用の正本 SKILL.md パスを得る。
 // drift を避けるため、命名規則を変えるときは lib/deploy-skills.sh と本関数の双方を整合させること。
-function ownedSkillNames(): string[] {
+interface OwnedSkillEntry {
+  name: string;
+  srcSkillMd: string;
+}
+function ownedSkillEntries(): OwnedSkillEntry[] {
   const skillsRoot = join(PACKAGE_SOURCE, "skills");
   if (!existsSync(skillsRoot)) return [];
-  const names: string[] = [];
+  const entries: OwnedSkillEntry[] = [];
   for (const domainEnt of readdirSync(skillsRoot, { withFileTypes: true })) {
     if (!domainEnt.isDirectory()) continue;
     const domain = domainEnt.name;
     const domainDir = join(skillsRoot, domain);
     // ドメイン直下に skill 定義を持つケース（例: agent/）は {domain} を所有名とする。
-    if (existsSync(join(domainDir, "SKILL.md"))) names.push(domain);
+    const domainSkill = join(domainDir, "SKILL.md");
+    if (existsSync(domainSkill)) entries.push({ name: domain, srcSkillMd: domainSkill });
     // capability 配下に skill 定義を持つものは {domain}__{capability} を所有名とする。
     for (const capEnt of readdirSync(domainDir, { withFileTypes: true })) {
       if (!capEnt.isDirectory()) continue;
-      if (existsSync(join(domainDir, capEnt.name, "SKILL.md"))) {
-        names.push(`${domain}__${capEnt.name}`);
-      }
+      const capSkill = join(domainDir, capEnt.name, "SKILL.md");
+      if (existsSync(capSkill)) entries.push({ name: `${domain}__${capEnt.name}`, srcSkillMd: capSkill });
     }
   }
-  return names;
+  return entries;
 }
 
-// .claude/skills・.cursor/skills 配下のパッケージ所有 skill エントリの配備物相対パス。
-// ユーザー自作スキル（所有集合外のディレクトリ）は対象に含めない（保持される）。
-function deployedOwnedSkillEntries(): string[] {
-  const names = ownedSkillNames();
-  const rels: string[] = [];
+// 所有 skill エントリ名の集合（後方互換の薄いラッパー。list_owned_skill_names 相当）。
+function ownedSkillNames(): string[] {
+  return ownedSkillEntries().map((e) => e.name);
+}
+
+// uninstall 時の所有 skill エントリ削除計画。各配備先（.claude/skills・.cursor/skills）の同名
+// ディレクトリを isOwnedSkillDir で評価し、owned/legacy_owned のみ削除対象（targets）に、
+// collision は「保持するユーザー資産」（preserved）に振り分ける。absent は何もしない。
+interface SkillUninstallPlan {
+  targets: string[]; // 削除対象の配備物相対パス（owned/legacy_owned）
+  preserved: string[]; // 非所有のため保持する同名ディレクトリ相対パス（collision）
+}
+function planSkillUninstall(projectRoot: string): SkillUninstallPlan {
+  const entries = ownedSkillEntries();
+  const targets: string[] = [];
+  const preserved: string[] = [];
   for (const base of [".claude/skills", ".cursor/skills"]) {
-    for (const name of names) rels.push(join(base, name));
+    for (const e of entries) {
+      const rel = join(base, e.name);
+      const verdict = isOwnedSkillDir(join(projectRoot, rel), e.srcSkillMd);
+      if (verdict === "owned" || verdict === "legacy_owned") targets.push(rel);
+      else if (verdict === "collision") preserved.push(rel);
+      // absent は削除対象にも保持表示にも含めない（存在しない）。
+    }
   }
-  return rels;
+  return { targets, preserved };
 }
 
 // --purge 時のみ追加で除去するユーザー資産（統合ルート配下）。project/ とランタイム名前空間
@@ -868,13 +935,16 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
   // パッケージ所有分を正本から動的に加える:
   //   - .cursor 直下の所有ファイル                              … deployedOwnedFiles
   //   - .claude/hooks の所有フックファイル                      … deployedOwnedHookFiles
-  //   - .claude/skills・.cursor/skills の所有 skill エントリ      … deployedOwnedSkillEntries
+  //   - .claude/skills・.cursor/skills の所有 skill エントリ      … planSkillUninstall（由来判定に従属）
   // いずれもユーザー自作物（独自フック・自作スキル・自作 rules 等）は対象外（保持）。
+  // skill エントリは名前一致だけでなく **由来判定（isOwnedSkillDir）** に従属させ、マーカー無し・
+  // 正本 name 不一致の同名ディレクトリ（＝ユーザー自作スキル）は削除対象に含めず保持する。
+  const skillPlan = planSkillUninstall(projectRoot);
   const targets: string[] = [
     ...DEPLOYED_ARTIFACTS,
     ...deployedOwnedFiles(),
     ...deployedOwnedHookFiles(),
-    ...deployedOwnedSkillEntries(),
+    ...skillPlan.targets,
   ];
   if (purge) targets.push(...PURGE_ARTIFACTS);
 
@@ -909,6 +979,12 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
   }
   console.log("  .cursor/ のユーザー作成物（自作 rules/*.mdc 等。配備分以外は保持）");
   console.log("  .claude/ のユーザー設定 （settings.json 等。配備分以外は保持）");
+  if (skillPlan.preserved.length > 0) {
+    // マーカー無し・正本 name 不一致の同名スキルディレクトリ（＝ユーザー自作スキル）は削除しない。
+    skillPlan.preserved.forEach((rel) =>
+      console.log(`  保持: ${rel}（非所有の同名ディレクトリ）`)
+    );
+  }
 
   if (!yes) {
     console.log(
