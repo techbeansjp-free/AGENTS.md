@@ -9,6 +9,7 @@
 | 役割 | ティア | 選定手順・根拠 |
 | ---- | ------ | -------------- |
 | 設計・レビュー・監査 | opus | 常に opus。品質ゲート（レビュー・テスト・受け入れ基準）に直結するため格下げしない。 |
+| システム仕様書（docs/ 配下）の処理 | opus | 常に opus。docs/ 配下のシステム仕様書（定義は [../source/RULES.md §システム仕様書（docs/）](../source/RULES.md) / LOAD_POLICY の docs/ 更新・レビュートリガー）の更新・レビュー等は、複数フェーズ・複数コンポーネントへ横断的に影響し重要なため格下げしない。opus 要否の先行判定を経るまでもなく一律 opus に固定する（非裁量）。`evidence_source: human_decision`（プロジェクトオーナーの明示判断）。 |
 | 実装 | 原則 sonnet（複雑箇所は opus 格上げ可） | **まず opus 要否を判定し、不要と確定した場合のみ sonnet を選ぶ**（sonnet をデフォルトにして複雑な時だけ格上げする、という逆順ではない）。 |
 | 書記（ログ記録専任） | haiku | `evidence_source: existing_code`。実在実例: `scribe_claude.md:11` の `model: haiku`（[../runtime/templates/agents/scribe_claude.md](../runtime/templates/agents/scribe_claude.md)）。 |
 | fable | 原則禁止 | ユーザーが個別 issue を「最重要」と明示指定した場合のみ、都度例外として許容する。日常運用化しない。 |
