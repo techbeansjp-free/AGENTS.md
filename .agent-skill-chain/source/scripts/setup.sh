@@ -162,10 +162,12 @@ fi
 
 # sync_skills <dest_root> [<src_skills>]
 #   共有ライブラリの sync_skills_selective に委譲する。**dest を丸ごと rm -rf しない**。
-#   パッケージ所有エントリ（{domain}__{capability}・ドメイン直下 {domain}）のみを削除→再配備し、
-#   所有集合に含まれないディレクトリ（＝ユーザー自作スキル）は保持する。
-#   命名/所有集合の単一定義は lib/deploy-skills.sh（list_owned_skill_names）に集約。
-#   （SETUP.md「保持・上書き契約」参照）
+#   パッケージ所有エントリ（{domain}__{capability}・ドメイン直下 {domain}）のうち、
+#   **由来マーカー（無い場合は正本 SKILL.md の name 一致）で所有を確認したエントリのみ**を
+#   削除→再配備＋マーカー付与し、マーカー無し・name 不一致の同名ディレクトリ（＝ユーザー自作スキル）は
+#   保持する。命名/所有集合/由来判定の単一定義は lib/deploy-skills.sh
+#   （list_owned_skill_entries / is_owned_skill_dir）に集約。
+#   （SETUP.md「所有区分／保持・上書き契約」参照）
 sync_skills() {
   local dest_root="$1"
   local agents_skills="${2:-$PROJECT_ROOT/.agent-skill-chain/source/skills}"

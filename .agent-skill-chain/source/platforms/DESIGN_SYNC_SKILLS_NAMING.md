@@ -107,4 +107,6 @@
 - **案C（サブディレクトリ）** はツールのネスト対応状況を見てから検討。
 - **案D（配備しない）** はツールが .agents を直接参照する仕様になってから検討。
 
-参照: CONCEPTS.md §既知の将来課題、platforms/SKILLS.md、scripts/setup.sh（sync_skills）。
+> **別軸の同名衝突（ユーザー自作スキルとの衝突）との区別**: 本ファイルが扱うのは **パッケージ内の異なる domain 間**での同名 capability 衝突（`{domain}__{capability}` で解消）である。これとは別に、**ユーザーが配備先（`.claude/skills/`・`.cursor/skills/`）に置いた無関係な自作スキルが、パッケージ所有名（例: `agent`）と偶然同名になる**衝突は、`sync_skills_selective`／`runUninstall` が**由来マーカー `.agent-skill-chain-owned`（無い場合は正本 `SKILL.md` の `name` 一致）で所有を確認したエントリだけを削除・上書きする**ことで保護する（判定正本は `lib/deploy-skills.sh` の `is_owned_skill_dir`）。契約の詳細は SETUP.md §所有区分／保持・上書き契約を参照。
+
+参照: CONCEPTS.md §既知の将来課題、platforms/SKILLS.md、scripts/setup.sh（sync_skills）、scripts/lib/deploy-skills.sh（is_owned_skill_dir・由来判定）、SETUP.md（所有区分／保持・上書き契約）。

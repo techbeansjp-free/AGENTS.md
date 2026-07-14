@@ -22,6 +22,7 @@
 #   | test-run-all.sh                     | bash のみ（runner 自体の単体/結合テスト・stub は tmp 隔離） |
 #   | test-coverage-check.sh              | bash のみ（coverage-check.sh の判定/SKIP は擬似 cobertura で tmp 隔離。kcov ラップ結合は kcov 無で SKIP） |
 #   | test-audit.sh                       | bash のみ（sqlite3/git はスクリプト内で任意 SKIP→PASS） |
+#   | test-deploy-skills-owned-guard.sh   | bash のみ（deploy-skills.sh を source し由来判定・衝突ガードを関数直呼びで検証・tmp 隔離） |
 #   | test-check-comment-refs.sh          | bash のみ（awk/grep/find 前提。tmp 隔離フィクスチャで正例/負例を検証） |
 #   | test-pretooluse-hook.sh             | bash・git・tar（jq はスクリプト内で任意系統検証） |
 #   | test-write-workflow-log-prevhash.sh | bash・sqlite3 |
@@ -62,6 +63,7 @@ default_tests() {
 test-run-all|test-run-all.sh|bash
 test-coverage-check|test-coverage-check.sh|bash
 test-audit|test-audit.sh|bash
+test-deploy-skills-owned-guard|test-deploy-skills-owned-guard.sh|bash
 test-check-comment-refs|test-check-comment-refs.sh|bash
 test-pretooluse-hook|test-pretooluse-hook.sh|bash git tar
 test-write-workflow-log-prevhash|test-write-workflow-log-prevhash.sh|bash sqlite3
