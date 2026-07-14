@@ -122,6 +122,7 @@
 - command 実行時は必ず該当 command ファイルと skills/agent/run_command.md に従う。LOAD_POLICY でトリガーごとに読むファイルを守ること。
 - 証跡（書記・ログ）を省略してはならない。memo 作成時はファイル名に YYYYMMDD_HHMMSS_ プレフィックスを付与すること。
 - **ログは書記に任せる**。証跡・ログの記録は**書記（write-workflow-log capability）のみ**が行う。書記以外の workflow.db または CONTRACT 準拠ログへの書き込みは禁止。enforcement で矯正する。
+- **enforcement ロックアウトからの復旧**: orchestrator が PreToolUse フックで全ツールをブロックされて動けなくなった場合（allowlist 未追従等による自己ロックアウト）は、`!` シェルモードで `enforce off` を実行しセッションを再起動して復旧する。手順・機構は [SETUP.md §ロックアウトからの復旧](../SETUP.md) を参照。
 
 ---
 

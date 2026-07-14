@@ -123,6 +123,44 @@ npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement �
 |------|--------------|-----------|-------------|-----------|
 | **.claude/settings.json**（ユーザー値） | touch しない（保持） | **ユーザー値は保持**し enforcement 配線のみ追加（マージ・`.bak` 退避） | enforcement 配線のみ除去（ユーザー値は保持） | touch しない（ユーザー設定として保持） |
 
+### ロックアウトからの復旧（enforce off で解除）
+
+**結論: PreToolUse フックで orchestrator が全ツールをブロックされて動けなくなった場合（自己ロックアウト）は、`!` シェルモードで `enforce off` を実行し、Claude セッションを再起動して復旧する。**
+
+allowlist 方式の enforcement は、ハーネス組み込みツール（`Agent`・`AskUserQuestion` 等）の追加に追従できていないと、orchestrator が委譲や確認の手段ごと拒否され、テキスト以外の操作が一切できなくなることがある（過去に `Agent` ツール名で実際に発生済み）。この状態からの復旧手順は次のとおり。
+
+1. **`!` シェルモードで enforcement 配線を外す**（採用先プロジェクトのルートで実行）:
+
+   ```bash
+   !npx github:techbeansjp-free/AGENTS.md enforce off
+   ```
+
+   （ローカルにインストール済みなら `!agents-md enforce off` でもよい。）
+2. **Claude セッションを再起動する**（設定変更をライブセッションに反映するには再起動が必要）。
+
+**なぜ `!` 経由なら効くのか（機構）**: Claude Code の `!` プレフィックス（シェルモード）は「モデルのツール呼び出しループを介さず、ユーザーが直接シェルコマンドを実行する」経路であり、モデルの解釈・承認を要さない（evidence: code.claude.com/docs/en/interactive-mode §"Shell mode with `!` prefix"）。PreToolUse フックはモデルのツール呼び出し（`tool_name`/`tool_input` を伴う）に対してのみ発火するため（同 hooks ドキュメント）、`!` 実行は**フック判定の対象外経路**である。したがって orchestrator が全ツールをブロックされている最中でも、`!enforce off` はフックを迂回して実行でき、enforcement 配線を外して復旧できる。
+
+> 恒久対応としては、ロックアウトの原因となったツール名をコア allowlist（`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh`）へ追加するか、消費先固有のツールであれば下記 §orchestrator allowlist の project 拡張（opt-in）で opt-in する。
+
+### orchestrator allowlist の project 拡張（opt-in）
+
+**結論: コア default の fail-closed allowlist を変更せずに、消費先プロジェクト固有のツール名だけを opt-in で許可できる。何も設定しなければ従来どおり厳格なまま。**
+
+orchestrator（メインエージェント）が使えるツールは、`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh` の R2 allowlist（`Read`・`Grep`・`Glob`・`LS`・`Task`・`Agent`・`AskUserQuestion` 等の「読む・検索・委譲・確認」ツール）に限定されている（fail-closed＝明示的に許可したツールのみ通す）。消費先固有のツール（社内 MCP ツール等）を追加したい場合、コア正本を編集せずに以下の拡張ファイルで opt-in できる。
+
+- **拡張ファイル（実効・ユーザー資産）**: `.agent-skill-chain/project/orchestrator-allowlist.txt`。setup は touch せず、upgrade/uninstall（既定）で保持される。
+- **雛形**: `.agent-skill-chain/source/enforcement/claude/orchestrator-allowlist.example.txt`（使い方コメントのみ。これ自体はフックから読まれない）。上記パスへコピーして使う。
+- **形式**: 1 行 1 ツール名。厳密文字種 `^[A-Za-z][A-Za-z0-9_-]*$`（英字始まり・英数字と `_`・`-` のみ。ハイフン付き MCP 名 `mcp__brave-search__search` 等も許容）。`#` 以降はコメント、空行可、先頭末尾の空白は無視。**内部空白・メタ文字・内部 CR・BOM を含む行は無視される**（注入・難読化対策。`Foo bar` や `mcp __ shell` は正規名に化けず弾かれる）。なお **CRLF の末尾 CR は末尾空白として trim されるため許可される**（`Foo\r\n` は `Foo` として受理される）が、行の内部に現れる CR は不正として弾かれる。ファイルは `source` されず**データとして**読まれる。
+- **fail-closed**: ファイル不在・空・全行不正・読取不可は従来どおり厳格（default 拒否）。
+
+**制約（名前ベースの保証）**: `Bash`・`Edit`・`Write`・`Delete`・`StrReplace`・`Shell`・`TodoWrite`・`EditNotebook`・`call_mcp_tool`・`GenerateImage` は、この拡張より手前の case で明示 block されるため、拡張に書いても**覆せない**。
+
+**⚠️ 警告（能力ベースのリスク・必読）**: 上記は「明示拒否**名**を覆せない」という**名前一致**の保証であり、**能力（capability）の保証ではない**。`*)` default に落ちる MCP 書込/実行ツール（`mcp__<server>__<tool>` 形式。明示拒否列の `call_mcp_tool` とは別名）を opt-in すると、orchestrator が `Edit`/`Write` を介さずに**書込・実行の等価権限を獲得できる**（拡張ファイル自身の書き換えを含む）。「未知ツール＝安全」ではない。書込/実行等価ツールを追加する場合、その安全性は**人間の PR レビュー**に全面依存する。追加は clean な素名で記述し、PR で必ず妥当性を確認すること。
+
+**更新経路（ガバナンス）**: 拡張ファイルの編集は 00-04 ドキュメントと同様に **worker サブエージェントへ委譲**して行う（orchestrator の `Edit`/`Write` は R2 で拒否されるため、orchestrator は自分の allowlist を**自分では直接書けない**＝機構的な第一防壁）。変更は **PR レビュー → 人間による main マージ**を経て初めてリポジトリの正となる（プロセス的な第二防壁）。
+
+> **残余リスクの正直化**: (1) 委譲は orchestrator 起点であり人間起点ではない。人間の関与点は PR マージ（事後の可視化）にあり、セッション内でリアルタイムに阻止する機構ではない。委譲された worker がディスク上のファイルを編集すると、フックは毎回ライブでファイルを読むため PR マージを待たず即時に有効化される。(2) 拡張に書込/実行等価ツール（`mcp__*` 系）が含まれる場合、第一防壁（orchestrator は自分では書けない）は無効化され、残るのは PR レビュー（事後可視）のみとなる。ゆえに本機構は「拡張 allowlist に書込/実行等価ツールが含まれていない」ことを暗黙の前提とする。
+
 ---
 
 ## init / upgrade / uninstall の保持・上書き契約（正本）
