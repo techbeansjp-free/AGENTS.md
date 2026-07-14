@@ -103,6 +103,16 @@
 #      含むパスに限定し、汎用ディレクトリ参照（.agent-skill-chain/runtime/workflow.db 等）・close/ 配下
 #      （完了後の永続パス）を誤検知しない。作業用 issue フォルダ自身（docs/maintainer/workflow/ 配下の
 #      issue ドキュメント）は「システム仕様書」ではないため走査対象外（兄弟 issue の正当参照を誤 FAIL しない）。
+#  38. workflow.db 採用時のみ・workflow_log の行単位で、モデルティア明記義務の記録有無を検査する。
+#      多層ガード（ADR-5）: (0) MODEL_TIER_GATE_ENABLED（既定 true）が false/0/no/off なら最優先で SKIP、
+#      (1) sqlite3/workflow.db/workflow_log 不在は SKIP、(2) model_tier カラム不在（audit_has_column）は SKIP、
+#      (3) 非空 model_tier 行が 1 件も無い（tier 未使用＝非 Claude/未採用運用）は SKIP。いずれも fail-open。
+#      各行は issue_path basename の YYYYMMDD_HHMMSS_ プレフィックスで grandfather 判定（MODEL_TIER_GATE_
+#      EFFECTIVE_FROM・既定 20260714_000000・env 上書き可）。cutoff 未満・非プレフィックス/空 issue_path は
+#      判定不能として素通り（安全側・ADR-6/ADR-8）。判定: model_tier が空/null/~ なら FAIL（ティア未明記）、
+#      tier_rationale が空なら FAIL（根拠未明記）、model_tier=fable（大小文字不問）かつ tier_exception が空
+#      なら FAIL（無申告 fable・#34 declined 同型・ADR-4）。明記の有無のみ検査し MODEL_TIER_TABLE.md とは
+#      照合しない（ADR-3・二重管理しない）。既存 #3〜#37 の SELECT 対象カラムと重ならず非交差（ADR-7）。
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
@@ -1372,6 +1382,72 @@ check_docs_transient_issue_ref() {
   fi
 }
 
+# 38. モデルティア明記義務の機械検証（check_model_tier_recorded）。
+#   workflow_log の各行について、委譲時のモデルティア記録の有無を検査する（Query のみ・DB/FS へ書き込まない）。
+#   ★多層ガード（ADR-5・fail-open）: 以下の順で SKIP を評価し、いずれにも該当しないときのみ per-row 検査する。
+#     (0) MODEL_TIER_GATE_ENABLED（既定 true）が false/0/no/off → 最優先で SKIP。
+#     (1) sqlite3 不在／workflow.db 不在／workflow_log テーブル不在 → SKIP。
+#     (2) model_tier カラム不在（audit_has_column）→ SKIP（スキーマ未マイグレーション＝未採用）。
+#     (3) 非空 model_tier 行が 1 件も存在しない → SKIP（tier 未使用＝対象外/非 Claude 運用と判定）。
+#   ★grandfather: 各行の issue_path basename の YYYYMMDD_HHMMSS_ プレフィックスが MODEL_TIER_GATE_EFFECTIVE_FROM
+#     （既定 20260714_000000・env 上書き可）未満なら遡及適用しない。プレフィックス非該当・空 issue_path は
+#     判定不能として素通り（誤 FAIL を出さない安全側・ADR-6/ADR-8）。
+#   ★判定（明記の有無のみ・MODEL_TIER_TABLE.md とは照合しない・ADR-3）:
+#     model_tier が空/null/~ → FAIL（ティア未明記）／tier_rationale が空 → FAIL（根拠未明記）／
+#     model_tier=fable（大小文字不問）かつ tier_exception が空 → FAIL（無申告 fable・#34 declined 同型・ADR-4）。
+#   フィールド区切りは US（0x1f・非空白）で列崩れ（IFS 空白の連続畳み込み）を防ぎ、値中の改行/タブは空白へ正規化。
+check_model_tier_recorded() {
+  case "${MODEL_TIER_GATE_ENABLED:-true}" in
+    [Ff][Aa][Ll][Ss][Ee]|0|[Nn][Oo]|[Oo][Ff][Ff]) return 0 ;;
+  esac
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #38（モデルティア記録有無の検知）をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #38（モデルティア記録有無の検知）をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
+  # (2) model_tier カラム不在＝スキーマ未マイグレーション（tier 未採用）は SKIP。
+  if ! audit_has_column "model_tier"; then echo "SKIP: #38（モデルティア記録有無の検知）をスキップします（model_tier カラム不在＝tier 未採用）" >&2; return 0; fi
+  # (3) 非空 model_tier 行が 1 件も無い＝tier 未使用（非 Claude/未採用運用）は SKIP（安全側 fail-open）。
+  local has_tier
+  has_tier="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE model_tier IS NOT NULL AND TRIM(model_tier) != '' LIMIT 1;" 2>/dev/null || true)"
+  if [[ -z "$has_tier" ]]; then echo "SKIP: #38（モデルティア記録有無の検知）をスキップします（非空 model_tier 行が皆無＝tier 未使用）" >&2; return 0; fi
+  echo "[audit] checking model-tier-recorded (#38)" >&2
+  local cutoff="${MODEL_TIER_GATE_EFFECTIVE_FROM:-20260714_000000}"
+  local eid ip cmd mt tr te base ts
+  # 値中の改行(char(10))/復帰(char(13))/タブ(char(9))を空白へ正規化して 1 行 1 レコードを保証。区切りは US(0x1f)。
+  while IFS=$'\x1f' read -r eid ip cmd mt tr te; do
+    [[ -z "$eid" ]] && continue
+    # issue_path 空は判定不能として素通り（安全側・ADR-8）。
+    [[ -z "$ip" ]] && continue
+    base="$(basename -- "$ip" 2>/dev/null || echo "")"
+    # grandfather: 日時プレフィックスが cutoff 未満なら遡及適用しない。非プレフィックスは判定不能として素通り。
+    if [[ "$base" =~ ^([0-9]{8})_([0-9]{6})_ ]]; then
+      ts="${BASH_REMATCH[1]}_${BASH_REMATCH[2]}"
+      [[ "$ts" < "$cutoff" ]] && continue
+    else
+      continue
+    fi
+    # 判定1: ティア未明記（空/null/~）。NULLIF 経由で空文字列は NULL 化されるが両方を安全側で未記録扱い。
+    if [[ -z "$mt" ]] || [[ "${mt,,}" == "null" ]] || [[ "$mt" == "~" ]]; then
+      echo "FAIL: モデルティア未明記（委譲時の選定ティアが workflow_log に記録されていない。MODEL_TIER を書記へ渡すこと。entry_id=$eid / issue_path=$ip / command=$cmd）" >&2
+      echo "$ROLLBACK_MSG" >&2
+      EXIT_CODE=1
+      continue
+    fi
+    # 判定2: 根拠未明記。
+    if [[ -z "$tr" ]]; then
+      echo "FAIL: ティア選定根拠未明記（model_tier=$mt は記録されているが tier_rationale が空。MODEL_TIER_TABLE.md 該当行の引用 1 行を TIER_RATIONALE で渡すこと。entry_id=$eid / issue_path=$ip / command=$cmd）" >&2
+      echo "$ROLLBACK_MSG" >&2
+      EXIT_CODE=1
+      continue
+    fi
+    # 判定3: 無申告 fable（fable かつ tier_exception 空）。理由の内容妥当性は機械検知外＝人手監査（ADR-4）。
+    if [[ "${mt,,}" == "fable" ]] && [[ -z "$te" ]]; then
+      echo "FAIL: 無申告 fable（model_tier=fable だが tier_exception が空。ユーザーが当該 issue を最重要と明示指定した旨を TIER_EXCEPTION で申告すること。entry_id=$eid / issue_path=$ip / command=$cmd）" >&2
+      echo "$ROLLBACK_MSG" >&2
+      EXIT_CODE=1
+      continue
+    fi
+  done < <(sqlite3 -separator $'\x1f' "$WF_DB" "SELECT entry_id, COALESCE(issue_path,''), COALESCE(command,''), COALESCE(replace(replace(replace(model_tier, char(9),' '), char(10),' '), char(13),' '),''), COALESCE(replace(replace(replace(tier_rationale, char(9),' '), char(10),' '), char(13),' '),''), COALESCE(replace(replace(replace(tier_exception, char(9),' '), char(10),' '), char(13),' '),'') FROM workflow_log;" 2>/dev/null || true)
+}
+
 check_code_comment_external_ref
 check_review_dual_lists
 check_issue_doc_in_gitignored_path
@@ -1383,6 +1459,7 @@ check_github_issue_before_implement
 check_branch_linkage_before_implement
 check_pr_issue_linkage
 check_docs_transient_issue_ref
+check_model_tier_recorded
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."

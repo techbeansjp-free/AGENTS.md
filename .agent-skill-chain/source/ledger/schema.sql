@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS workflow_log (
   summary TEXT NOT NULL,
   dod_met INTEGER NOT NULL CHECK (dod_met IN (0, 1)),
 
+  model_tier TEXT NULL,
+  tier_rationale TEXT NULL,
+  tier_exception TEXT NULL,
+
   prev_hash TEXT NULL,
   entry_hash TEXT NOT NULL,
 
@@ -54,3 +58,6 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document
 CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path) WHERE document_path IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_workflow_log_model_tier ON workflow_log(model_tier);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_tier_rationale ON workflow_log(tier_rationale);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_tier_exception ON workflow_log(tier_exception);
