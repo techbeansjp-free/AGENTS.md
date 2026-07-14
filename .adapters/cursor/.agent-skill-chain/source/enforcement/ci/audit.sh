@@ -38,71 +38,35 @@
 #   (36) PR 紐づけ未記録検知（CI で PR_BODY が渡されたときのみ・PR 本文に有効な Closes/Refs #<番号> が 1 件以上あれば PASS。無い場合は差分内 workflow issue のうち実 Issue 参照を持つ非 declined・非 grandfather の issue が残れば FAIL。PR_BODY 未設定＝ローカル/push は SKIP。#6 の写像・#34 と非交差）
 #   (37) システム仕様書の作業用 issue フォルダ参照禁止（docs/ 配下の仕様書が作業用 issue フォルダ＝.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/ へのパス参照を含むと FAIL。DOCS_NOISE_RULES (iv-b)。close/ は対象外）
 #
-# 失敗とみなす条件（enforcement/README と一致）:
-#   1. 必須ファイル未参照（本 script では必須ファイル存在で代用）
-#   2. メインが許可されないツール経路で成果物を生成した場合の扱い: 03 が存在するのに 04 が無い場合は
-#      「verify-and-close 未実行」または「実装のみでレビューを飛ばした」とみなし reject（#3 で検出）。
-#      メインの直接 Write/Edit は hooks でブロックする仕様であり、本 script では 04_review 未更新で事後検知する。
-#   3. 04_review 未更新（実装後 verify-and-close 未実行）
-#   4. テスト観点未記載（03_実装計画 に テスト観点/単体テスト/BDD の記載があるか）
-#   5. docs 更新要否未記載（04_review に docs/仕様書 更新の言及があるか）
-#   6. 内部参照禁止の PR テンプレ違反（PR 本文は CI 側で $PR_BODY を渡して検証可能）
-#   7. 重要パスに TODO または FIXME が残っている（*.md に限定、下記で検出）
-#   8. workflow.db 品質違反（許可 command 外・summary 空・ts_utc 形式異常）。sqlite3 が無い場合はスキップ。
-#   9. 04_review が存在するが workflow.db に該当証跡がない。workflow.db が無い場合はスキップ。
-#  10. workflow.db の WAL/SHM sidecar が Git 追跡されていないこと（追跡されていたら FAIL）。
-#  11. workflow.db が存在する場合、PRAGMA integrity_check が ok であること。
-#  12–17. 新スキーマ時: actor_role=scribe, delegated_by 必須 orchestrator, implement に changed_files_json, verify に review_path/parent 且つ親が implement/design。
-#  18–19. Git 時: 04 変更なら verify ログ、成果物変更なら implement/design/verify のいずれかログが存在すること。
-#  25. workflow.db 採用時のみ・成果物変更（.agent-skill-chain/runtime/*.md・docs/*.md・src/・app/ の差分）があるとき、
-#      対象差分（GIT_RANGE）に含まれる最古コミットの committer date を基準に、workflow_log の対象 command
-#      （implement-feature/design-feature/verify-and-close/review-docs/create-pr-review-issue）の最新 ts_utc が
-#      その基準時刻から MAIN_WORK_GATE_TOLERANCE_SECONDS（既定 172800 秒=48時間・env 上書き可）を超えて過去
-#      でないこと。workflow.db は累積型のため、対象差分と無関係な過去のログが 1 件でも存在すれば恒久的に
-#      PASS してしまう単純な件数判定の弱点を避け、時系列的な対応関係を検証する。GIT_RANGE のコミット日時が
-#      取得できない場合は従来どおり件数のみの判定にフォールバック（fail-open 寄りの安全側）。sqlite3/DB 不在は SKIP。
-#  26. コメント/docstring に外部参照（章節番号・PR/issue/タスク番号・仕様ドキュメント名）があれば FAIL。コード参照は誤検出しない。
-#  27. 04_review に「敵対的観点」リストと「must-preserve（不変条件）」リストの両方が無ければ FAIL（片欠落も FAIL）。
-#  28. issue ドキュメント(00〜04)が git 追跡対象外（gitignore 配下）のパスに存在したら FAIL。非 git ツリーは SKIP、exit 0 のみ FAIL。
-#  29. workflow.db 採用時のみ・issue_path スコープで implement/verify ログ 0 件かつ 04_review.md 存在なら FAIL（#3 の逆方向・非交差）。
-#  31. workflow.db・docs/ 採用時のみ・当該 issue に implement/verify ログがある（実装変更を伴う）04_review.md について、
-#      「## docs 更新」に要=docs/00_review の実タイムスタンプ参照 or 不要=プレースホルダでない理由 のいずれの内容も無ければ FAIL。
-#      既存 #5（記載の有無のみ検査）とは非交差（#31 は記載の内容を検査する）。
-#  32. workflow.db 採用時のみ・issue_path スコープ前方一致で、implement-feature ログが 1 件以上あるのに
-#      review-docs ログが 0 件（＝実装前レビューを飛ばした）なら FAIL。既存 #29（04 のみ・impl 0 件）とは
-#      implement ログ件数（0 件 vs 1 件以上）で排他・非交差。issue ディレクトリ名の YYYYMMDD_HHMMSS_
-#      プレフィックスが REVIEWDOCS_GATE_EFFECTIVE_FROM（既定 20260712_000000・env 上書き可）未満なら
-#      grandfather として SKIP（遡及適用しない）。存在監査のみで review-docs と implement の厳密な
-#      時刻順序は監査しない。
-#  33. workflow.db 採用時のみ・issue_path スコープ前方一致で、verify-and-close ログの最新 ts_utc があるのに
-#      close/ 配下へ未移動（04_review.md が close/・templates/・90_issues/ 配下以外に find される）なら FAIL。
-#      発効日 grandfather（CLOSE_MOVE_GATE_EFFECTIVE_FROM・既定 20260712_000000）と猶予日数
-#      （CLOSE_MOVE_GRACE_DAYS・既定 3・ts_utc からの経過日数）のいずれも満たす場合のみ FAIL。ts_utc 解析
-#      不能・証跡なしは fail-open（SKIP）。既存 #32（review-docs 未実行）とは走査対象・判定内容で非交差。
-#  34. workflow.db 採用時のみ・issue_path スコープ前方一致で、implement-feature ログが 1 件以上あるのに
-#      00_要求定義.md frontmatter の github_issue が null/欠落（＝GitHub Issue 起票ゲート未通過）なら
-#      FAIL。既存 #32（review-docs ログの有無）とは検知対象が異なり非交差。issue ディレクトリ名の
-#      YYYYMMDD_HHMMSS_ プレフィックスが GITHUB_ISSUE_GATE_EFFECTIVE_FROM（既定 20260712_000000・env
-#      上書き可）未満なら grandfather として SKIP。close/templates/90_issues 配下・DB 非採用・git remote
-#      に github.com を含まない（GitHub 非採用環境）は SKIP（fail-open）。
-#  35. workflow.db 採用時のみ・issue_path スコープ前方一致で、implement-feature ログが 1 件以上あるのに
-#      00_要求定義.md frontmatter の branch が空/null/~/キー無し（＝対応 feature ブランチ名が未記録）なら
-#      FAIL。#34（github_issue の記録）の写像だが branch には declined 概念が無く「非空なら PASS」の単純
-#      判定で、github.com remote は要求しない（ブランチは GitHub 非採用でも成立）。非 git・DB 非採用・
-#      close/templates/90_issues 配下・発効日 grandfather（BRANCH_LINK_GATE_EFFECTIVE_FROM・既定
-#      20260713_000000）・無効化トグル（BRANCH_LINK_GATE_ENABLED=false）は SKIP。
-#  36. CI で PR_BODY が渡されたときのみ・PR 本文に有効な GitHub Issue 参照（Closes/Fixes/Resolves/Refs/
-#      References #<番号> または <owner>/<repo>#<番号>・大小文字不問）が 1 件以上あれば PASS。無い場合は
-#      差分（GIT_RANGE）に含まれる workflow issue のうち、実 Issue 参照を持つ（declined でも grandfather
-#      でも null でもない）issue が 1 件以上残れば FAIL、残らなければ SKIP。PR_BODY 未設定（ローカル/push）は
-#      SKIP＝ローカルと CI で挙動が異なる。#6（PR_BODY 検証）の写像・#34 と非交差。発効日 grandfather
-#      （PR_LINK_GATE_EFFECTIVE_FROM・既定 20260713_000000）・無効化トグル（PR_LINK_GATE_ENABLED=false）あり。
-#  37. docs/ 採用時のみ・git/sqlite3 非依存。docs/ 配下のシステム仕様書（*.md）が、作業用 issue フォルダ
-#      （.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/）への直接パス参照を
-#      含むと FAIL（DOCS_NOISE_RULES (iv-b)）。検出は issue フォルダ名の日時プレフィックス（YYYYMMDD_）を
-#      含むパスに限定し、汎用ディレクトリ参照（.agent-skill-chain/runtime/workflow.db 等）・close/ 配下
-#      （完了後の永続パス）を誤検知しない。作業用 issue フォルダ自身（docs/maintainer/workflow/ 配下の
-#      issue ドキュメント）は「システム仕様書」ではないため走査対象外（兄弟 issue の正当参照を誤 FAIL しない）。
+# 失敗とみなす条件（1 行/チェックの索引。判定ルール・SKIP 条件・差し戻し先の正本は
+# enforcement/README.md §失敗条件と差し戻し の失敗条件対応表・共通前提ノートを参照。
+# 番号は上記「必須チェック:」と同一。README の #N 番号と一部ずれる箇所のみ矢印で明示する）:
+#   (1)  必須ファイル未参照 → README #1
+#   (2)  04_review 未更新（verify-and-close 未実行） → README #3
+#   (3)  テスト観点未記載 → README #2
+#   (4)  docs 更新要否未記載 → README #4
+#   (5)  memo プレフィックス・timestamp 乖離 → README §矯正するもの「timestamp 付き memo ファイルの作成経路の固定」
+#   (6)  内部参照禁止の PR テンプレ違反 → README #6
+#   (7)  重要パス TODO/FIXME 残存 → README #7
+#   (8)  workflow.db 品質違反 → README #8
+#   (9)  04_review と証跡の不整合 → README #9
+#  (10)  workflow.db sidecar Git 追跡 → README #10
+#  (11)  workflow.db 整合性不良 → README #11
+#  (12)–(17) 新スキーマ因果（actor_role/delegated_by/changed_files_json/review_path/parent/verify 親） → README #12–#17
+#  (18)–(19) 04 変更・成果物変更時のログ有無 → README #18–#19
+#  (20)/(20+) document_id 紐付け・不変 → README #20/#20+
+#  (25) メイン直接作業（時系列突合・許容窓既定 48h） → README #25
+#  (26) コメント外部参照禁止違反 → README #26
+#  (27) 04_review 両リスト欠落 → README #27
+#  (28) issue ドキュメント誤配置（gitignore 配下） → README #28
+#  (29) 実装前 04 → README #29
+#  (31) システム仕様書レビュー証跡欠落 → README #31
+#  (32) 実装前 review-docs 未実行 → README #32
+#  (33) close 移動未実施 → README #33
+#  (34) 実装前 GitHub Issue 起票ゲート未通過 → README #34
+#  (35) 実装前ブランチ紐づけ未記録 → README #35
+#  (36) PR 紐づけ未記録 → README #36
+#  (37) システム仕様書の作業用 issue フォルダ参照禁止 → README #37
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
