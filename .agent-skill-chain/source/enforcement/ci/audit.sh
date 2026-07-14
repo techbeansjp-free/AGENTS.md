@@ -25,7 +25,7 @@
 #   (19) 成果物変更時に implement/design/verify ログ存在（Git 時）
 #   (20) document_id 紐付け: frontmatter に document_id がある成果ドキュメントについて、workflow_log にその document_id が 1 件以上存在すること
 #   (20+) document_id 不変: 同一 document_path に過去記録された document_id と現在の frontmatter が異なる場合は FAIL（RULES.md §document_id 不変）
-#   (25) メインが実作業を直接行った（成果物変更に委譲・証跡の対応がない）
+#   (25) メインが実作業を直接行った（成果物変更に委譲・証跡の対応がない・対象差分と時系列的に対応しない古い証跡のみの場合も含む）
 #   (26) コメント外部参照禁止違反（CODE_COMMENT_RULES §2 の grep 検出）
 #   (27) 04_review 両リスト欠落（REVIEW_DUAL_LENS: 敵対的観点 ＋ must-preserve）
 #   (28) issue ドキュメントが gitignore 配下のパスに存在（誤配置）
@@ -54,6 +54,13 @@
 #  11. workflow.db が存在する場合、PRAGMA integrity_check が ok であること。
 #  12–17. 新スキーマ時: actor_role=scribe, delegated_by 必須 orchestrator, implement に changed_files_json, verify に review_path/parent 且つ親が implement/design。
 #  18–19. Git 時: 04 変更なら verify ログ、成果物変更なら implement/design/verify のいずれかログが存在すること。
+#  25. workflow.db 採用時のみ・成果物変更（.agent-skill-chain/runtime/*.md・docs/*.md・src/・app/ の差分）があるとき、
+#      対象差分（GIT_RANGE）に含まれる最古コミットの committer date を基準に、workflow_log の対象 command
+#      （implement-feature/design-feature/verify-and-close/review-docs/create-pr-review-issue）の最新 ts_utc が
+#      その基準時刻から MAIN_WORK_GATE_TOLERANCE_SECONDS（既定 172800 秒=48時間・env 上書き可）を超えて過去
+#      でないこと。workflow.db は累積型のため、対象差分と無関係な過去のログが 1 件でも存在すれば恒久的に
+#      PASS してしまう単純な件数判定の弱点を避け、時系列的な対応関係を検証する。GIT_RANGE のコミット日時が
+#      取得できない場合は従来どおり件数のみの判定にフォールバック（fail-open 寄りの安全側）。sqlite3/DB 不在は SKIP。
 #  26. コメント/docstring に外部参照（章節番号・PR/issue/タスク番号・仕様ドキュメント名）があれば FAIL。コード参照は誤検出しない。
 #  27. 04_review に「敵対的観点」リストと「must-preserve（不変条件）」リストの両方が無ければ FAIL（片欠落も FAIL）。
 #  28. issue ドキュメント(00〜04)が git 追跡対象外（gitignore 配下）のパスに存在したら FAIL。非 git ツリーは SKIP、exit 0 のみ FAIL。
@@ -650,15 +657,55 @@ check_review_file_has_verify_log
 check_artifact_change_has_implement_log
 
 # 25. メインが実作業を直接行った（#25）: 成果物変更があるのに委譲・証跡の対応がない場合は FAIL
+#   時系列突合（is-3163305 是正）: workflow.db は累積型のため、単純な件数（COUNT）判定だと
+#   過去のどこかで対象 command が 1 件でも記録されていれば、それ以降のあらゆる差分に対して
+#   恒久的に PASS してしまう（対象差分との時系列対応を見ていない不具合）。本改善では、対象差分
+#   （GIT_RANGE）に含まれる最古のコミット日時を基準に、workflow_log の該当 command の最新
+#   ts_utc がその基準時刻から MAIN_WORK_GATE_TOLERANCE_SECONDS（既定 172800 秒=48 時間。env
+#   上書き可）より過去でないことを要求する。許容窓を設けるのは、実装 → ログ記録 → コミット の
+#   順序（ログが必ずしもコミットより後とは限らない）を許容しつつ、対象差分と無関係な古いログでの
+#   恒久 PASS を防ぐため。コミット日時が取得できない（GIT_RANGE 解決不能等）場合は、従来どおり
+#   件数のみの判定にフォールバックする（fail-open 方向の安全側・既存消費者への互換維持）。
 check_25_main_did_real_work() {
   if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
   if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
   changed="$(git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -E '(^|/)\.agent-skill-chain/runtime/.*\.md$|(^|/)docs/.*\.md$|(^|/)src/|(^|/)app/' || true)"
   if [[ -z "$changed" ]]; then return 0; fi
-  count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue');" 2>/dev/null || echo "0")"
-  if [[ "${count:-0}" -eq 0 ]]; then
+  local main_work_query="SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue');"
+  # 対象差分（GIT_RANGE）に含まれる最古コミットの committer date（ISO8601）を取得する。
+  # 複数コミットが束ねられた push でも、範囲内で最も古いコミットを基準にすることで、
+  # 「その範囲の作業」に対応する証跡の有無を判定する（新しすぎる基準にしない安全側）。
+  local oldest_commit_ts oldest_commit_epoch
+  oldest_commit_ts="$(git -C "$PROJECT_ROOT" log --format=%cI $GIT_RANGE 2>/dev/null | tail -1 || true)"
+  if [[ -z "$oldest_commit_ts" ]] || ! oldest_commit_epoch="$(ts_to_epoch "$oldest_commit_ts")"; then
+    # コミット日時が取得できない（GIT_RANGE 解決不能・単一コミットで %cI が空等）場合は、
+    # 時系列突合ができないため従来どおり件数のみで判定する（fail-open 寄りの安全側）。
+    count="$(sqlite3 "$WF_DB" "$main_work_query" 2>/dev/null || echo "0")"
+    if [[ "${count:-0}" -eq 0 ]]; then
+      echo "[audit] ERROR: artifact changes present but no delegation/evidence in workflow_log (#25: main may have done real work)" >&2
+      echo "$ROLLBACK_MSG" >&2
+      EXIT_CODE=1
+    fi
+    return 0
+  fi
+  local tolerance="${MAIN_WORK_GATE_TOLERANCE_SECONDS:-172800}"
+  local threshold_epoch=$(( oldest_commit_epoch - tolerance ))
+  local latest_log_ts
+  latest_log_ts="$(sqlite3 "$WF_DB" "SELECT MAX(ts_utc) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue');" 2>/dev/null || true)"
+  if [[ -z "$latest_log_ts" ]]; then
     echo "[audit] ERROR: artifact changes present but no delegation/evidence in workflow_log (#25: main may have done real work)" >&2
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+    return 0
+  fi
+  local latest_log_epoch
+  if ! latest_log_epoch="$(ts_to_epoch "$latest_log_ts")"; then
+    # ts_utc が解析不能な場合は判定不能のため fail-open（既存 #33 と同型の安全側）。
+    return 0
+  fi
+  if (( latest_log_epoch < threshold_epoch )); then
+    echo "[audit] ERROR: workflow_log の該当証跡が対象差分に対して古すぎる（最新ログ ts_utc=${latest_log_ts} が対象差分の最古コミット日時=${oldest_commit_ts} より許容窓（${tolerance}秒）を超えて前）。#25: main may have done real work without delegation evidence corresponding to this diff" >&2
     echo "$ROLLBACK_MSG" >&2
     EXIT_CODE=1
   fi
