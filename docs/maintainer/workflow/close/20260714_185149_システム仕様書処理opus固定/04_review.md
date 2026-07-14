@@ -13,9 +13,9 @@ issue_id: "68aaac5c-52ce-40c0-ba1c-701142c8a452"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 >
-> **必須**: レビュー実施時は [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md) を参照。本 issue は**ドキュメント（対応表への 1 行追加）変更**のため、レビュー深度は **quick**（[RULES.md §実行モード](../../../../.agent-skill-chain/source/RULES.md) の「小修正→quick」）とし、テスト＝レビュー観点チェックリストで代替する（02_設計 §6・03_実装計画 §テスト観点と一致）。
+> **必須**: レビュー実施時は [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) を参照。本 issue は**ドキュメント（対応表への 1 行追加）変更**のため、レビュー深度は **quick**（[RULES.md §実行モード](../../../../../.agent-skill-chain/source/RULES.md) の「小修正→quick」）とし、テスト＝レビュー観点チェックリストで代替する（02_設計 §6・03_実装計画 §テスト観点と一致）。
 
 ---
 
@@ -142,7 +142,7 @@ issue_id: "68aaac5c-52ce-40c0-ba1c-701142c8a452"
 
 - 要否: 不要
 - 対象: なし
-- 理由: 本変更は `.agent-skill-chain/project/MODEL_TIER_TABLE.md`（本リポ固有の運用ルール＝役割→ティア対応表）への 1 行追加であり、`docs/` 配下のシステム仕様書（01_システム概要・02_画面設計・03_データ設計・04_機能設計 等の product spec）の記載範囲に影響しない。よって [DOCS_RULES.md §継続追随ゲート](../../../../.agent-skill-chain/source/DOCS_RULES.md) の**軽量パス（更新不要判定 1 件）**で通過する（issue を立てず・反復もしない）。`docs/00_review/` への記録は不要。
+- 理由: 本変更は `.agent-skill-chain/project/MODEL_TIER_TABLE.md`（本リポ固有の運用ルール＝役割→ティア対応表）への 1 行追加であり、`docs/` 配下のシステム仕様書（01_システム概要・02_画面設計・03_データ設計・04_機能設計 等の product spec）の記載範囲に影響しない。よって [DOCS_RULES.md §継続追随ゲート](../../../../../.agent-skill-chain/source/DOCS_RULES.md) の**軽量パス（更新不要判定 1 件）**で通過する（issue を立てず・反復もしない）。`docs/00_review/` への記録は不要。
 
 ---
 
@@ -223,9 +223,9 @@ issue_id: "68aaac5c-52ce-40c0-ba1c-701142c8a452"
 
 ### 13.2 その他の参考資料
 
-- [.agent-skill-chain/project/MODEL_TIER_TABLE.md](../../../../.agent-skill-chain/project/MODEL_TIER_TABLE.md) - 変更対象
-- [.agent-skill-chain/source/REVIEW_RULE.md](../../../../.agent-skill-chain/source/REVIEW_RULE.md) - レビュー観点
-- [.agent-skill-chain/source/DOCS_RULES.md](../../../../.agent-skill-chain/source/DOCS_RULES.md) §継続追随ゲート
+- [.agent-skill-chain/project/MODEL_TIER_TABLE.md](../../../../../.agent-skill-chain/project/MODEL_TIER_TABLE.md) - 変更対象
+- [.agent-skill-chain/source/REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) - レビュー観点
+- [.agent-skill-chain/source/DOCS_RULES.md](../../../../../.agent-skill-chain/source/DOCS_RULES.md) §継続追随ゲート
 
 ---
 
