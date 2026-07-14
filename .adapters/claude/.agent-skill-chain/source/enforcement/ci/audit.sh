@@ -965,6 +965,24 @@ check_docs_review_evidence() {
   done
 }
 
+# mode 信号（00_要求定義.md frontmatter の mode:）を読み取り、正規化（trim・前後クオート除去・
+#   小文字化）して返す。quick モードは #32（review-docs）・#34（GitHub Issue 起票）ゲートの免除条件に
+#   用いる（#35 branch は mode を一切参照しない・02_設計 ADR-3）。欠落・不明値・00 不在はすべて
+#   空文字を返す（呼び出し側で「quick 以外は非免除＝従来判定」として扱う・fail-safe＝ADR-2）。
+#   #34 の frontmatter 抽出（awk による --- 〜 --- ブロック抽出）と同型のロジックを流用する。
+#   DB/FS への書き込みは一切しない（read-only）。
+get_issue_mode() {
+  local zero_file="$1"
+  [[ -f "$zero_file" ]] || { printf '%s\n' ""; return 0; }
+  local fm mode_line mode_val
+  fm="$(awk 'NR==1 && $0=="---"{p=1;next} p && $0=="---"{exit} p' "$zero_file" 2>/dev/null)"
+  mode_line="$(printf '%s\n' "$fm" | grep -m1 -E '^mode:' || true)"
+  mode_val="$(printf '%s' "$mode_line" | sed -E 's/^mode:[[:space:]]*//; s/[[:space:]]+$//')"
+  mode_val="${mode_val%\"}"; mode_val="${mode_val#\"}"
+  mode_val="${mode_val%\'}"; mode_val="${mode_val#\'}"
+  printf '%s\n' "${mode_val,,}"
+}
+
 # 32. 実装前 review-docs 未実行検知（check_reviewdocs_before_implement）。
 #   workflow.db 採用時のみ・issue_path スコープ前方一致で「implement-feature ログが 1 件以上あるのに
 #   review-docs ログが 0 件＝実装前レビューを飛ばした」を検知する。既存 #29（04 のみ・impl 0 件）とは
@@ -975,6 +993,9 @@ check_docs_review_evidence() {
 #   maxdepth を付けない。90_issues 配下の深い階層のサブ issue を確実に含めるため）。close/templates 除外。
 #   前方一致＋basename 末尾一致の安全側（#29 と同型）。存在監査のみ（review-docs と implement の厳密な
 #   時刻順序は監査しない・ADR-3）。
+#   ★mode ガード（quick モード免除・163206 issue ADR-2/ADR-5/ADR-6）: 同一 issue_dir の
+#   00_要求定義.md frontmatter mode が quick なら SKIP（review-docs 反復を免除する軽量化。記録省略ではない）。
+#   mode 欠落・不明値・00 不在は非 quick として素通り（従来判定・fail-safe）。
 check_reviewdocs_before_implement() {
   if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #32（実装前レビュー実行有無の検知）をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
   if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #32（実装前レビュー実行有無の検知）をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
@@ -1000,6 +1021,12 @@ check_reviewdocs_before_implement() {
         if [[ "$ts" < "$cutoff" ]]; then
           continue
         fi
+      fi
+      # mode ガード（quick モードは #32 を免除・163206 issue ADR-2/ADR-5/ADR-6）: 同一 issue_dir の
+      # 00_要求定義.md frontmatter mode が quick なら SKIP。00 不在・mode 欠落/不明値は非 quick として
+      # 素通り（従来判定・fail-safe）。
+      if [[ "$(get_issue_mode "$issue_dir/00_要求定義.md")" == "quick" ]]; then
+        continue
       fi
       hit_impl="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command='implement-feature' AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') LIMIT 1;" 2>/dev/null || true)"
       # implement-feature ログが 0 件＝未実装。#32 の対象外（#29 の対象になりうるがここでは無関係・continue）。
@@ -1082,6 +1109,10 @@ check_close_move_pending() {
 #   unbounded find なのとは逆・実装上の差分）。
 #   走査対象は 00_要求定義.md（frontmatter を読む目印。unbounded find・maxdepth を付けない）。
 #   close/templates 除外。前方一致＋basename 末尾一致の安全側（#32 と同型）。存在監査のみ（ADR-3）。
+#   ★mode ガード（quick モード免除・163206 issue ADR-2/ADR-5/ADR-6）: 当該 00_要求定義.md frontmatter
+#   mode が quick なら SKIP（GitHub Issue 起票を免除する軽量化。記録省略ではない）。mode 欠落・不明値は
+#   非 quick として素通り（従来判定・fail-safe）。プロジェクト全体トグル（GITHUB_ISSUE_GATE_ENABLED）の
+#   冒頭 SKIP とは独立（本ガードは per-issue ループ内・grandfather 直後）。
 check_github_issue_before_implement() {
   # 0. プロジェクト全体でのゲート無効化トグル（ADR-8）: 最優先で評価する最初のガード。
   #    GITHUB_ISSUE_GATE_EFFECTIVE_FROM 等の既存 env 命名パターン（GITHUB_ISSUE_GATE_ 接頭辞）に揃える。
@@ -1119,6 +1150,12 @@ check_github_issue_before_implement() {
         if [[ "$ts" < "$cutoff" ]]; then
           continue
         fi
+      fi
+      # mode ガード（quick モードは #34 を免除・163206 issue ADR-2/ADR-5/ADR-6）: 走査中の
+      # 00_要求定義.md（$f）frontmatter mode が quick なら SKIP。mode 欠落/不明値は非 quick として
+      # 従来判定（fail-safe）。冒頭の GITHUB_ISSUE_GATE_ENABLED トグル SKIP は不変（本ガードより前段）。
+      if [[ "$(get_issue_mode "$f")" == "quick" ]]; then
+        continue
       fi
       hit_impl="$(sqlite3 "$WF_DB" "SELECT 1 FROM workflow_log WHERE command='implement-feature' AND (issue_path = '$dir_esc' OR issue_path = '$dir_esc/' OR issue_path LIKE '$dir_esc/%' OR issue_path LIKE '%/$base_esc' OR issue_path LIKE '%/$base_esc/%') LIMIT 1;" 2>/dev/null || true)"
       # implement-feature ログが 0 件＝未実装。#34 の対象外（continue）。

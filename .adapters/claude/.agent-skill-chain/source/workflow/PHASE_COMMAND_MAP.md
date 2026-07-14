@@ -28,7 +28,7 @@
 
 本表が定義するのは **phase → command（フェーズ遷移コマンドの起動経路）** である。これとは別に、特定の phase に対応せず横断的に必須となる**ゲート**というカテゴリが存在し、本表には行を持たない。表に行を持たないことはカテゴリの欠落や矛盾ではなく、以下のとおり定義された分類である（本節が review-docs の位置づけの正本。PHASES.md 側は本節を参照し、内容を重複記載しない）。
 
-- **[review-docs](../commands/review-docs.md)**（実装前ドキュメントレビュー）: design-feature（設計・実装計画）完了と implement-feature 着手の間の**必須ゲート**（全 issue 一律・規模比例の免除なし）。phase→command の選択対象ではなく、`create-pr-review-issue` の内部 step（対応方針の監査）や、ユーザーの「ドキュメントレビューして」依頼から起動される。**「表に載らない（本表に行を持たない）」は「省略可・任意」を意味しない。** 義務の正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
+- **[review-docs](../commands/review-docs.md)**（実装前ドキュメントレビュー）: design-feature（設計・実装計画）完了と implement-feature 着手の間の**必須ゲート**（**full/standard は一律必須・quick モード（`mode: quick`）は免除**。免除は軽量化であり記録省略ではない。詳細は RULES.md §実行モードおよび run_command.md §Constraints）。phase→command の選択対象ではなく、`create-pr-review-issue` の内部 step（対応方針の監査）や、ユーザーの「ドキュメントレビューして」依頼から起動される。**「表に載らない（本表に行を持たない）」は「省略可・任意」を意味しない**（full/standard において）。義務の正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
 - 下記「禁止事項」の「**本表にない command の起動は禁止**」は、**phase からの選択経路に関する禁止**（phase 判定後に表外 command を勝手に選ぶな）であり、横断的必須ゲート（review-docs 等）の呼び出し（別 command の step・ドキュメントレビュー依頼からの直接起動）はこの禁止の対象外とする。
 
 ---

@@ -58,7 +58,7 @@
 - タスク分解・テスト仕様（BDD）が 03 に記載されている。
 - 01 の BDD と 03 のテスト観点が対応している。
 - **サブissueを 1 件以上作成（分割）した場合**: 親ワークフローのルートに 90_issues.md が存在すること。未作成のまま完了とみなさない。
-- **次工程＝実装着手前の review-docs が必須**: 本 command（02/03）完了後、implement-feature 着手前に [review-docs](review-docs.md)（実装前ドキュメントレビュー）を必ず経ること（全 issue 一律・免除なし）。
+- **次工程＝実装着手前の review-docs が必須**: 本 command（02/03）完了後、implement-feature 着手前に [review-docs](review-docs.md)（実装前ドキュメントレビュー）を必ず経ること（**full/standard は必須。quick モード（`mode: quick`）は免除**。正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)）。
 
 ---
 
@@ -70,4 +70,4 @@
 - 02/03 を更新する際、frontmatter に既に document_id が存在する場合はその値を変更・上書きしてはならない。document_id は 02/03 を新規作成するときまたは初回付与時にのみ設定する。
 - **完了後に書記（write-workflow-log）に依頼して記録させること。** 本 command は 02 と 03 の**複数成果物**を生成・更新しうるため、**生成・更新した全成果物それぞれ**（02_設計.md・03_実装計画.md など）について、各成果物の **DOCUMENT_ID**（frontmatter の UUID）と **DOCUMENT_PATH**（プロジェクトルート相対パス）を渡して書記に **1 回ずつ**記録させること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
 - **重要判断は** [EVIDENCE_POLICY.md](../EVIDENCE_POLICY.md) **の ADR 形式で記録し**、フィジビリティ確認のうえ **evidence_source** を付記すること。greenfield の土台決定（アーキテクチャ・コーディング規約・ディレクトリ構成）も重要判断に含む。
-- **本 command 完了後・implement-feature 委譲前に review-docs を必須で経ること（絶対強制）**: 実装着手前の実装前ドキュメントレビュー [review-docs](review-docs.md) は、design-feature 完了と implement-feature 着手の間の必須ゲートである（規模比例の免除なし）。委譲義務の正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)。未実行のまま implement-feature へ進むと enforcement #32 で FAIL する（[enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し）。
+- **本 command 完了後・implement-feature 委譲前に review-docs を必須で経ること（絶対強制）**: 実装着手前の実装前ドキュメントレビュー [review-docs](review-docs.md) は、design-feature 完了と implement-feature 着手の間の必須ゲートである（**full/standard は必須・quick モードは免除**。正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)）。未実行のまま implement-feature へ進むと enforcement #32 で FAIL する（[enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し。**quick モードは #32 の対象外＝SKIP**）。
