@@ -189,11 +189,22 @@ uc1_orchestrator_askuserquestion_allowed() {
   # Then: 終了コードは 0（allowlist 内）
   assert_eq 0 "$RC" "UC1: orchestrator AskUserQuestion は exit 0"
 }
+uc1_orchestrator_skill_allowed() {
+  # シナリオ: orchestrator の Skill（本フレームワークの command 実行の正規委譲経路・allowlist 内）は exit 0 で許可される
+  #           （allowlist 欠如による自己ロックアウト再発防止。Agent 名未対応ロックアウト事故と同型）
+  # Given: AGENT_ROLE=orchestrator、Skill の stdin JSON
+  local json='{"tool_name":"Skill","tool_input":{"skill":"agent"}}'
+  # When: Skill JSON を stdin で渡す
+  run_pre "$PATH" orchestrator "$json"
+  # Then: 終了コードは 0（allowlist 内）
+  assert_eq 0 "$RC" "UC1: orchestrator Skill は exit 0"
+}
 uc1_orchestrator_write_blocked
 uc1_orchestrator_grep_allowed
 uc1_orchestrator_agent_allowed
 uc1_orchestrator_task_allowed
 uc1_orchestrator_askuserquestion_allowed
+uc1_orchestrator_skill_allowed
 
 # =====================================================================================
 # UC2: jq 非依存フォールバック（jq を PATH から外す）
