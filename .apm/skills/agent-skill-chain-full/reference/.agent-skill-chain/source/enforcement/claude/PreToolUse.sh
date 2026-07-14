@@ -120,6 +120,54 @@ json_get() {
 }
 
 # ---------------------------------------------------------------------------
+# is_sqlite3_invocation <cmd> — R6: sqlite3 直接実行の判定（コマンド名としての起動のみ検知）。
+#   旧実装 `[[ "$CMD" =~ sqlite3 ]]` は部分文字列一致であり、`grep sqlite3 doc.md` のような
+#   引数中の言及（文字列としての言及）まで一律ブロックする過剰検知だった。
+#   本関数は CMD をセパレータ（改行 / ; / & / |。&& や || も同じ文字の並びとして分割される）で
+#   セグメントに分割し、各セグメントの「実行コマンド名」（先頭の VAR=val 環境変数代入を読み飛ばした
+#   最初のトークン。パス付き実行はベースネームで比較）が厳密に `sqlite3` であるセグメントのみを
+#   違反とする。これにより `grep sqlite3 doc.md`（先頭トークンは grep）は誤ブロックしない。
+#   回避耐性の強化として、`python3 -c "import sqlite3"` 等インタプリタの -c インライン経由での
+#   sqlite3 モジュール利用も簡易検知する（先頭コマンドが python/python3/python2 かつ -c を含み、
+#   `import sqlite3` / `from sqlite3 import` パターンを含む場合を検知）。
+#   限界（00_要求定義.md §7.1 のとおり正直に明記）: シェル文字列の静的解析には限界があり、
+#   エイリアス・関数経由の呼び出しやスクリプトファイル内部での import など、あらゆる回避経路を
+#   完全に防ぐものではない。実用上のバランスを優先した簡易判定に留める。
+# ---------------------------------------------------------------------------
+is_sqlite3_invocation() {
+  local raw="$1" normalized seg trimmed first base
+  [[ -z "$raw" ]] && return 1
+  # ; & | 改行をセパレータとして分割（&& / || は同一文字の連続として分割される）。
+  normalized="${raw//$'\n'/$'\n'}"
+  normalized="${normalized//;/$'\n'}"
+  normalized="${normalized//&/$'\n'}"
+  normalized="${normalized//\|/$'\n'}"
+  while IFS= read -r seg; do
+    trimmed="$seg"
+    # 先頭空白の trim。
+    trimmed="${trimmed#"${trimmed%%[![:space:]]*}"}"
+    [[ -z "$trimmed" ]] && continue
+    # 先頭の `VAR=val` 環境変数代入（0 個以上）を読み飛ばして実行コマンド名を得る。
+    while [[ "$trimmed" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+(.*)$ ]]; do
+      trimmed="${BASH_REMATCH[1]}"
+    done
+    first="${trimmed%%[[:space:]]*}"
+    base="${first##*/}"
+    if [[ "$base" == "sqlite3" ]]; then
+      return 0
+    fi
+    # 回避耐性: python(3)? -c "import sqlite3 ..." / "from sqlite3 import ..." の簡易検知。
+    if [[ "$base" =~ ^python[23]?$ ]] && [[ "$trimmed" == *"-c"* ]]; then
+      if [[ "$trimmed" =~ (^|[^A-Za-z0-9_])import[[:space:]]+sqlite3([^A-Za-z0-9_]|$) ]] \
+        || [[ "$trimmed" =~ (^|[^A-Za-z0-9_])from[[:space:]]+sqlite3[[:space:]]+import([^A-Za-z0-9_]|$) ]]; then
+        return 0
+      fi
+    fi
+  done <<< "$normalized"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # parse_input — 唯一 stdin/env を読む入力層。TOOL / PATH_TARGET / CMD / ROLE を確定する。
 #   stdin が JSON 様なら json_get で抽出、そうでなければ env を後方互換で読む。
 # ---------------------------------------------------------------------------
@@ -287,7 +335,9 @@ if [[ "$TOOL" == "Bash" ]]; then
     if [[ -n "$CMD" ]]; then
       # R6（先行）. sqlite3 直接実行禁止（全 ROLE）。role 共通の明確な理由を優先表示するため
       #            scribe の write-workflow-log.sh 単独実行制約（R5）より前に判定する。
-      if [[ "$CMD" =~ sqlite3 ]]; then
+      #            判定はコマンド名としての起動のみを見る is_sqlite3_invocation に委譲する
+      #            （`grep sqlite3 ...` 等の引数中の言及を誤ブロックしないため）。
+      if is_sqlite3_invocation "$CMD"; then
         block "sqlite3 direct execution forbidden (use write-workflow-log.sh) / sqlite3 の直接実行は禁止です（write-workflow-log.sh を使用してください）"
       fi
       # R4. 複合シェル禁止（改行・;・&&・||・|）
@@ -335,8 +385,10 @@ if [[ "$TOOL" == "Bash" ]]; then
 fi
 
 # R6. sqlite3 直接実行禁止（全 ROLE・wrapper のみ許可）
+#     判定はコマンド名としての起動のみを見る is_sqlite3_invocation に委譲する
+#     （`grep sqlite3 ...` 等の引数中の言及を誤ブロックしないため）。
 if [[ -n "$CMD" ]]; then
-  if [[ "$CMD" =~ sqlite3 ]]; then
+  if is_sqlite3_invocation "$CMD"; then
     block "sqlite3 direct execution forbidden (use write-workflow-log.sh)"
   fi
 fi
