@@ -21,8 +21,8 @@
 # 前提: bash のみ（正本 lib を source して関数を直呼びする。tmp 隔離フィクスチャで検証）。
 # 参照:
 #   .agent-skill-chain/source/scripts/lib/deploy-skills.sh（単一正本）
-#   docs/maintainer/workflow/20260714_185358_npmアップデートで無関係スキル消失/02_設計.md（ADR-1・§6）
-#   docs/maintainer/workflow/20260714_185358_npmアップデートで無関係スキル消失/03_実装計画.md（T1・T2）
+#   docs/maintainer/workflow/close/20260714_185358_npmアップデートで無関係スキル消失/02_設計.md（ADR-1・§6）
+#   docs/maintainer/workflow/close/20260714_185358_npmアップデートで無関係スキル消失/03_実装計画.md（T1・T2）
 #   .agent-skill-chain/source/TEST_BDD_FORMAT.md
 
 set -uo pipefail

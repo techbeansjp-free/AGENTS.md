@@ -10,7 +10,7 @@ document_id: "c731f7e1-69d9-4aaf-8b8f-81a711cedd09"
 
 > **重要**: 本レビューは verify-and-close（レビューフェーズ）で作成した。実装完了後の監査成果物であり、00〜03 の受け入れ基準・BDD と実装・テストの対応を検証した結果を記録する。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 
 ---
 
