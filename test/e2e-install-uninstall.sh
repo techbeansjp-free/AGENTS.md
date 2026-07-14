@@ -134,7 +134,10 @@ test_uninstall_keeps_user_assets() {
   assert_absent "$dest/.agent-skill-chain/source" "uninstall: .agent-skill-chain/source が除去される"
   assert_absent "$dest/AGENTS.md"                "uninstall: AGENTS.md が除去される"
   assert_absent "$dest/CLAUDE.md"                "uninstall: CLAUDE.md が除去される"
-  assert_absent "$dest/.claude"                  "uninstall: .claude が除去される"
+  # .claude/hooks（配備分）は除去されるが、.claude/settings.json は新規配備で既定 on 化された
+  # ユーザー設定として保持されるため、.claude ディレクトリ自体は残る（空でなければ削除しない契約）。
+  assert_absent "$dest/.claude/hooks"            "uninstall: .claude/hooks（配備分）が除去される"
+  assert_exists "$dest/.claude/settings.json"    "uninstall: .claude/settings.json（既定 on のユーザー設定）は保持される"
   assert_absent "$dest/.cursor"                  "uninstall: .cursor が除去される"
   assert_absent "$dest/.agent-skill-chain/runtime/templates"      "uninstall: .agent-skill-chain/runtime/templates が除去される"
 
@@ -551,40 +554,34 @@ test_uninstall_preserves_user_skills_and_hooks() {
 }
 
 # =============================================================================
-# シナリオ R6: enforcement opt-in — 既定 off／enforce on で配線・off で解除（ユーザー値保持）
+# シナリオ R6: enforcement 既定 on／opt-out（enforce off）・再 on・ユーザー値保持
 # =============================================================================
 # ユースケース:
-#   利用者がドッグフーディング時にだけ enforcement フックを opt-in できる。既定 install では
-#   .claude/settings.json に enforcement を書き込まず（off）、`enforce on` で正本テンプレートから
-#   妥当な settings.json を生成/マージし（既存ユーザー値は破壊しない）、`enforce off` で配線のみ外す。
-#   `status` が on/off を正しく表示し、hooks の command は実在する .claude/hooks/PreToolUse.sh 等を指す。
+#   新規配備（.agent-skill-chain/ が未配備の採用先への初回 init/upgrade）では enforcement フックが
+#   既定 on で自動配線される（docs/maintainer/workflow/.../20260714_163833_enforceoff既定で強制未配線/）。
+#   .claude/settings.json は妥当 JSON として生成され、hooks が実在 hook を指し AGENT_ROLE=orchestrator
+#   が設定される。利用者は `enforce off` でいつでも opt-out でき、その後 `enforce on` で再度有効化
+#   （既存ユーザー値は破壊せずマージ）できる。`status` が on/off を正しく表示する。
+#   新規配備固有の判定（ASC_MODE=new のときのみ既定 on）は test-enforce-default-on.sh が担当し、
+#   本シナリオは「既定 on 後の CLI（on/off/status）の挙動」を担当する（責務分離・重複なし）。
 test_enforcement_optin() {
-  echo "[e2e] シナリオR6: enforcement opt-in（既定 off／on 配線・off 解除・ユーザー値保持）"
-  # シナリオ: 既定 install では settings.json に enforcement が書かれず、enforce on で妥当 JSON が生成され
-  #           hooks が実在 hook を指し、AGENT_ROLE=orchestrator が設定される。既存ユーザー settings があれば
-  #           マージで破壊せず .bak を退避し、enforce off で配線のみ外れてユーザー値が残る。status が on/off を表示する。
+  echo "[e2e] シナリオR6: enforcement 既定 on／opt-out（enforce off）・再 on・ユーザー値保持"
+  # シナリオ: 新規配備の install では settings.json に enforcement が既定で書かれ妥当 JSON になり、
+  #           hooks が実在 hook を指し AGENT_ROLE=orchestrator が設定される。enforce off で配線のみ外れ
+  #           ユーザー値は残り、enforce on で再度配線される（既存ユーザー値はマージで破壊しない）。
+  #           status が on/off を正しく表示する。
 
-  # Given: クリーン clone を隔離 dir へ install する
+  # Given: クリーン clone を隔離 dir へ install する（新規配備 = ASC_MODE=new）
   local src dest settings
   src="$(mktemp -d)"; dest="$(mktemp -d)"
   make_clean_tree "$src"
   node "$CLI" init "$dest" >/dev/null 2>&1
   settings="$dest/.claude/settings.json"
 
-  # Then: 既定 install では enforcement が書かれない（off）
-  assert_absent "$settings"                                 "R6: 既定 install では settings.json に enforcement を書かない（off）"
+  # Then: 新規配備では enforcement が既定で書かれる（on）
+  assert_exists "$settings"                                 "R6: 新規配備では settings.json に enforcement が既定で書かれる（on）"
 
-  # And (When): enforce status は off を表示する
-  if node "$CLI" enforce status "$dest" 2>&1 | grep -q "off"; then
-    ok "R6: status が off を表示する（配線前）"
-  else
-    ng "R6: status は off を表示すべき（配線前）"
-  fi
-
-  # When: enforce on で opt-in する
-  node "$CLI" enforce on "$dest" >/dev/null 2>&1
-
-  # Then: settings.json が妥当 JSON である（無効 JSON での Claude 起動エラーを防ぐ）
+  # And (Then): settings.json が妥当 JSON である（無効 JSON での Claude 起動エラーを防ぐ）
   assert_cmd_ok node -e "JSON.parse(require('fs').readFileSync('$settings','utf8'))"
 
   # And (Then): hooks の command が実在する .claude/hooks/PreToolUse.sh を指し、AGENT_ROLE=orchestrator が設定される
@@ -601,21 +598,31 @@ test_enforcement_optin() {
     ng "R6: hooks が実在 hook を指し AGENT_ROLE=orchestrator を設定すべき"
   fi
 
-  # And (When): enforce status は on を表示する
+  # And (When): enforce status は on を表示する（新規配備直後）
   if node "$CLI" enforce status "$dest" 2>&1 | grep -q "on"; then
-    ok "R6: status が on を表示する（配線後）"
+    ok "R6: status が on を表示する（新規配備直後）"
   else
-    ng "R6: status は on を表示すべき（配線後）"
+    ng "R6: status は on を表示すべき（新規配備直後）"
   fi
 
-  # And (When): enforce off で配線を外す
+  # When: enforce off で opt-out する
   node "$CLI" enforce off "$dest" >/dev/null 2>&1
 
-  # And (Then): enforcement 配線が外れ、status が off に戻る
+  # Then: enforcement 配線が外れ、status が off になる
   if node "$CLI" enforce status "$dest" 2>&1 | grep -q "off"; then
-    ok "R6: enforce off で配線が外れ status が off に戻る"
+    ok "R6: enforce off で配線が外れ status が off になる"
   else
-    ng "R6: enforce off 後は status が off に戻るべき"
+    ng "R6: enforce off 後は status が off になるべき"
+  fi
+
+  # When: enforce on で再度有効化する（既存ユーザー値を破壊せずマージ）
+  node "$CLI" enforce on "$dest" >/dev/null 2>&1
+
+  # Then: 再度 status が on を表示する
+  if node "$CLI" enforce status "$dest" 2>&1 | grep -q "on"; then
+    ok "R6: enforce on で再度 status が on になる"
+  else
+    ng "R6: enforce on 後は status が on になるべき"
   fi
 
   rm -rf "$src" "$dest"
@@ -980,6 +987,129 @@ test_purge_uninstall_removes_everything() {
 #     test_uninstall_preserves_cohabiting_user_assets）が新構造 .agent-skill-chain/{source,project,runtime}/
 #     基準で既に実施しており、本ファイルの実行リストにそのまま含まれる（重複定義しない）。
 
+# =============================================================================
+# シナリオ C1〜C3: 同名衝突の保持・レガシー移行 backfill（由来マーカー・02_設計 ADR-1）
+#   03_実装計画 §2.4.2 は本観点を「R4/R5/R6」と呼称するが、本ファイルの既存シナリオ番号
+#   R4〜R7 と衝突するため、採番を C1〜C3（Collision guard）とする（設計 §6.1 の
+#   「同名・別内容の自作 agent が upgrade/uninstall で保持される」「レガシー移行 backfill」に対応）。
+#   R4/R5 が「別名 my-user-skill」の保持を検証するのに対し、C1〜C3 は **同名 agent**（名前一致）
+#   が由来判定で保護されることを検証する（名前一致無条件削除の恒久是正）。
+# =============================================================================
+
+# C1: upgrade（再 init）で同名の自作 agent スキルが保持され警告が出る（設計 §6.1・03 T2/R4）
+test_collision_upgrade_preserves_same_name_skill() {
+  echo "[e2e] シナリオC1: upgrade で同名（agent）の自作スキルが保持され警告が出る"
+  # シナリオ: install 済み dir の .claude/skills/agent・.cursor/skills/agent をユーザーが自作スキル
+  #           （マーカー無し・name 不一致）で置き換えた状態で再 init（upgrade 相当）すると、
+  #           自作物が保持され、警告が stderr に出て、他の __ 配備は健全なままである。
+
+  # Given: install 済み dir で agent を「無関係な自作スキル」に置き換える（マーカーを消し name を変える）
+  local src dest err
+  src="$(mktemp -d)"; dest="$(mktemp -d)"; err="$(mktemp)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  rm -rf "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+  mkdir -p "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+  printf -- '---\nname: my-totally-unrelated-skill\n---\n' > "$dest/.claude/skills/agent/SKILL.md"
+  printf -- '---\nname: my-totally-unrelated-skill\n---\n' > "$dest/.cursor/skills/agent/SKILL.md"
+  : > "$dest/.claude/skills/agent/unrelated.txt"
+  : > "$dest/.cursor/skills/agent/unrelated.txt"
+
+  # When: 再度 init（= upgrade 相当）を実行し stderr を捕捉する
+  node "$CLI" init "$dest" 2> "$err" >/dev/null
+
+  # Then: 同名の自作スキル（中身・付随ファイル）が保持される（削除・上書きされない）
+  assert_exists "$dest/.claude/skills/agent/unrelated.txt" "C1: .claude 同名自作スキルの付随ファイルが保持される"
+  assert_exists "$dest/.cursor/skills/agent/unrelated.txt" "C1: .cursor 同名自作スキルの付随ファイルが保持される"
+  assert_eq "$(grep -c my-totally-unrelated "$dest/.claude/skills/agent/SKILL.md")" "1" "C1: .claude 自作 SKILL.md が上書きされない"
+  assert_absent "$dest/.claude/skills/agent/.agent-skill-chain-owned" "C1: 非所有の同名ディレクトリにマーカーを書かない"
+
+  # And (Then): 警告が stderr に出る（誤削除防止の明示）
+  if grep -q '警告' "$err"; then
+    ok "C1: 衝突時に警告が stderr へ出力される"
+  else
+    ng "C1: 衝突時に警告を stderr へ出力すべき"
+  fi
+
+  # And (Then): 他の所有スキル（__ 配備）は健全に最新化されマーカーが付与される
+  if compgen -G "$dest/.claude/skills/*__*" >/dev/null; then
+    ok "C1: 他の __ 配備は健全（部分 fail-open）"
+  else
+    ng "C1: 他の __ 配備は健全であるべき"
+  fi
+  assert_exists "$dest/.claude/skills/architecture__define-boundaries/.agent-skill-chain-owned" "C1: 所有エントリにマーカーが付与される"
+
+  rm -f "$err"; rm -rf "$src" "$dest"
+}
+
+# C2: uninstall で同名の自作 agent スキルが保持され、skills ディレクトリも残る（設計 §6.1・03 T3/R5）
+test_collision_uninstall_preserves_same_name_skill() {
+  echo "[e2e] シナリオC2: uninstall で同名（agent）の自作スキルが保持されディレクトリも残る"
+  # シナリオ: .claude/skills/agent・.cursor/skills/agent を自作スキル（マーカー無し・name 不一致）に
+  #           置き換えた install 済み dir で uninstall --yes すると、同名自作スキルは保持され、
+  #           保持エントリが残るため .claude/skills/ ディレクトリ自体も空片付けで消えない。
+
+  # Given: install 済み dir で agent を無関係な自作スキルに置き換える
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  rm -rf "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+  mkdir -p "$dest/.claude/skills/agent" "$dest/.cursor/skills/agent"
+  printf -- '---\nname: my-totally-unrelated-skill\n---\n' > "$dest/.claude/skills/agent/SKILL.md"
+  printf -- '---\nname: my-totally-unrelated-skill\n---\n' > "$dest/.cursor/skills/agent/SKILL.md"
+  : > "$dest/.claude/skills/agent/unrelated.txt"
+
+  # When: 既定 uninstall を実行する
+  node "$CLI" uninstall "$dest" --yes >/dev/null 2>&1
+
+  # Then: 同名の自作スキルが保持される（由来判定 collision のため削除対象に含めない）
+  assert_exists "$dest/.claude/skills/agent/SKILL.md"      "C2: .claude 同名自作スキルが uninstall で保持される"
+  assert_exists "$dest/.claude/skills/agent/unrelated.txt" "C2: .claude 自作スキルの付随ファイルが保持される"
+  assert_exists "$dest/.cursor/skills/agent/SKILL.md"      "C2: .cursor 同名自作スキルが uninstall で保持される"
+
+  # And (Then): 保持エントリが残るため skills ディレクトリ自体は空片付けで消えない
+  assert_exists "$dest/.claude/skills" "C2: 保持エントリが残るため .claude/skills は保持される"
+
+  # And (Then): パッケージ所有の __ エントリ（マーカー付き）は通常どおり除去される
+  if compgen -G "$dest/.claude/skills/*__*" >/dev/null; then
+    ng "C2: パッケージ所有 __ エントリは除去されるべき"
+  else
+    ok "C2: パッケージ所有 __ エントリ（マーカー付き）は除去される"
+  fi
+
+  rm -rf "$src" "$dest"
+}
+
+# C3: レガシー移行 backfill（マーカー無し・name 一致の旧配備物が更新＋マーカー付与）（設計 §6.1・03 T2/R6）
+test_legacy_marker_backfill() {
+  echo "[e2e] シナリオC3: マーカー無しの旧配備物が再 init で最新化されマーカーが backfill される"
+  # シナリオ: install 後に所有スキルのマーカーを削除（マーカー未付与の旧消費者環境を模擬）し、
+  #           配備物を改変してから再 init すると、マーカーが再生成（backfill）され SKILL.md が最新化される。
+
+  # Given: install 済み dir で所有スキルのマーカーを削除し（旧配備物を模擬）、内容を改変する
+  local src dest
+  src="$(mktemp -d)"; dest="$(mktemp -d)"
+  make_clean_tree "$src"
+  node "$CLI" init "$dest" >/dev/null 2>&1
+  assert_exists "$dest/.claude/skills/agent/.agent-skill-chain-owned" "C3(前提): 初回 init で所有スキルにマーカーが付与される"
+  rm -f "$dest/.claude/skills/agent/.agent-skill-chain-owned"
+  echo "STALE" >> "$dest/.claude/skills/agent/SKILL.md"
+
+  # When: 再度 init（= upgrade 相当）を実行する
+  node "$CLI" init "$dest" >/dev/null 2>&1
+
+  # Then: マーカーが backfill され、SKILL.md が正本内容へ最新化される（STALE が消える）
+  assert_exists "$dest/.claude/skills/agent/.agent-skill-chain-owned" "C3: レガシー所有にマーカーが backfill される"
+  if grep -q 'STALE' "$dest/.claude/skills/agent/SKILL.md"; then
+    ng "C3: 旧配備物は正本内容へ最新化されるべき（STALE が残ってはならない）"
+  else
+    ok "C3: 旧配備物が正本内容へ最新化される（STALE が消える）"
+  fi
+
+  rm -rf "$src" "$dest"
+}
+
 # --- 実行 ---------------------------------------------------------------------
 # bin 不在ガード（堅牢化）: bin/agents-md.js は非追跡（.gitignore）の生成物であり、
 #   各経路（CI step / run-all.sh 前置）が build を前置する前提だが、E2E 単体実行や前置漏れに
@@ -1021,6 +1151,10 @@ test_foreign_dir_aborts
 test_legacy_migration
 test_default_uninstall_preserves_runtime_and_project
 test_purge_uninstall_removes_everything
+# 同名衝突の保持・レガシー移行 backfill（由来マーカー・02_設計 ADR-1。03 呼称 R4/R5/R6→本ファイル C1/C2/C3）
+test_collision_upgrade_preserves_same_name_skill
+test_collision_uninstall_preserves_same_name_skill
+test_legacy_marker_backfill
 
 echo ""
 echo "[e2e] 結果: PASS=$PASS FAIL=$FAIL"

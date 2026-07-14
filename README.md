@@ -14,7 +14,7 @@ LLM エージェント（AI）と人間が協働するための**実行契約・
 
 - **進行役がサブに委譲する**: メイン（orchestrator）は phase 判定・command 選択・証跡確認に徹し、実作業（要求・要件・設計・実装・レビューの執筆やコード編集）は必ずサブエージェントに委譲する。
 - **phase gate に沿って進む**: 作業は 要求 → 要件 → 設計 → 実装計画 → 実装 → レビュー の順に command（skill chain）で回り、各 phase の DoD を満たしてから次へ進む。
-- **enforcement を opt-in すると挙動が制約される**: `enforce on`（既定 off）でフックを配線すると、orchestrator の直接 Write/Edit/Bash 等が拒否され、サブへの委譲が物理的に強制される（[§配備後の管理（CLI）](#配備後の管理cli)）。
+- **enforcement 配線が入ると挙動が制約される**: フック（PreToolUse/PostToolUse）が `.claude/settings.json` に配線されると、orchestrator の直接 Write/Edit/Bash 等が拒否され、サブへの委譲が物理的に強制される。新規配備では既定でこの配線が入り（`enforce off` で opt-out 可）、既存配備・本パッケージ自己適用では現状を変えない（[§配備後の管理（CLI）](#配備後の管理cli)）。
 - **証跡が workflow.db に残る**: 各 command の完了は書記（scribe）が workflow.db に記録し、監査で検証できる。
 
 ---
@@ -149,11 +149,11 @@ bash .agent-skill-chain/source/scripts/setup.sh /path/to/my-project   # 引数�
 
 | コマンド | 役割 |
 |----------|------|
-| `init [dir]` | 採用先（既定: カレントディレクトリ）へ `.agent-skill-chain/source/` 等を配備する |
-| `upgrade [dir]` | 既存配備を再同期する（当面 `init` と同等。新版取り込みに使う） |
+| `init [dir]` | 採用先（既定: カレントディレクトリ）へ `.agent-skill-chain/source/` 等を配備する。新規配備（既存の `.agent-skill-chain/` が無い場合）は enforcement を既定 on で自動配線する |
+| `upgrade [dir]` | 既存配備を再同期する（当面 `init` と同等。新版取り込みに使う）。既存配備・本パッケージ自己適用では enforcement 配線を touch しない |
 | `uninstall [dir]` | `init`/`setup` が配備した成果物のみを除去する（ユーザー資産は既定で保持） |
 | `doctor [dir]` | 採用先（既定: カレントディレクトリ）の配備前提の有無を確認する。enforcement 配線の on/off・証跡健全性も表示する |
-| `enforce <on\|off\|status> [dir]` | enforcement フックを `.claude/settings.json` に着脱する（**既定 off / opt-in**） |
+| `enforce <on\|off\|status> [dir]` | enforcement フックを `.claude/settings.json` に着脱する（**新規配備は既定 on。`enforce off` で opt-out 可**） |
 | `version` | パッケージのバージョンを表示する |
 | `help` | 使い方を表示する |
 
@@ -195,15 +195,15 @@ npx github:techbeansjp-free/AGENTS.md uninstall --purge --yes
 
 > 補足: `init`／`upgrade` は workflow.db の初期化に `sqlite3` バイナリを必要とする（`doctor` で確認できる）。**project 固有ルールは `.agent-skill-chain/project/` に置くこと**を推奨する（再インストール・upgrade・**既定の** uninstall で保持される。ただし `--purge` では削除される）。`.cursor`/`.claude` に置いたユーザー作成物も保持される。`AGENTS.md`・`CLAUDE.md`・`.agent-skill-chain/project/` 等の人間編集領域は無断破壊されない（保持・上書き契約の正本は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md)）。
 
-**enforcement の opt-in（既定 off）**:
+**enforcement（新規セットアップ既定 on・opt-out 可）**:
 
-enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` への配線は**既定 off**。配線するとセッション挙動が変わる（orchestrator の Write/Edit/Bash 等が拒否される）ため、**ドッグフーディング時に任意で opt-in** する。常時 on にはしない。
+enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` への配線は、新規配備（`.agent-skill-chain/` が未配備の採用先への初回 `init`/`upgrade`）では**既定 on**。既存の再配備・本パッケージ自己適用では touch しない（現状維持）。配線するとセッション挙動が変わる（orchestrator の Write/Edit/Bash 等が拒否される）ため、不要なら `enforce off` でいつでも opt-out できる。
 
 ```bash
 # 採用先プロジェクトのルートで実行
 npx github:techbeansjp-free/AGENTS.md enforce status   # 現在の on/off と hook 実在性を表示
-npx github:techbeansjp-free/AGENTS.md enforce on       # opt-in（settings.json に配線をマージ。既存値は保持・.bak 退避）
-npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement 配線のみ外す。ユーザー値は保持）
+npx github:techbeansjp-free/AGENTS.md enforce on       # settings.json に配線をマージ（既存値は保持・.bak 退避）
+npx github:techbeansjp-free/AGENTS.md enforce off      # 解除・opt-out（enforcement 配線のみ外す。ユーザー値は保持）
 ```
 
 - `enforce on` は正本テンプレート（`.agent-skill-chain/source/platforms/claude/settings.enforce.json`）から `hooks.PreToolUse`/`PostToolUse`（`.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` を指す）と `env.AGENT_ROLE=orchestrator` を配線する。既存の `settings.json` があれば**ユーザー値を破壊せず**マージし、上書き前に `settings.json.bak` へ退避する。
@@ -220,7 +220,7 @@ npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement �
 
 | カテゴリ | 代表例 | 詳細 |
 |----------|--------|------|
-| enforcement の opt-in | `enforce on/off`（既定 off） | 本 README [§配備後の管理（CLI）](#配備後の管理cli)・[enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) |
+| enforcement（新規セットアップ既定 on） | `enforce on/off`（新規配備は既定 on・既存/自己適用は現状維持・opt-out 可） | 本 README [§配備後の管理（CLI）](#配備後の管理cli)・[enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) |
 | orchestrator allowlist の project 拡張 | `orchestrator-allowlist.txt`（opt-in） | [SETUP.md §orchestrator allowlist の project 拡張（opt-in）](.agent-skill-chain/source/SETUP.md) |
 | 版のピン留め・アップグレード | `#<tag-or-branch>` で git ref を固定 | 本 README [§配備後の管理（CLI）](#配備後の管理cli) |
 | 監査・走査スコープ等の環境変数 | 走査対象ディレクトリ（`WORKFLOW_DIRS`） | [enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) |

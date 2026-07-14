@@ -178,8 +178,9 @@ jobs:
           esac
 
       # 7) enforcement audit（このリポでは適用範囲外のため失敗させない）
-      #    本リポの issue は docs/maintainer/workflow 配下で、audit.sh は .workflow を前提とするため
-      #    そのままでは通らない。呼び出すが結果で CI を赤くしない（continue-on-error）。
+      #    本リポの issue は docs/maintainer/workflow 配下にあり、audit.sh は既定の WORKFLOW_DIR
+      #    （.agent-skill-chain/runtime）に加えて実在時のみ docs/maintainer/workflow も走査対象に含める
+      #    （resolve_workflow_dirs）。呼び出すが結果で CI を赤くしない（continue-on-error）。
       #    証跡 DB を用いるチェック群は、証跡 DB 自体が Git 非追跡（ローカルの累積ストア）であるため
       #    クリーンな checkout には実体が無く、CI 上では構造的に SKIP される（設計上の必然。詳細・
       #    実効的な検知経路は enforcement ディレクトリの正本ドキュメントを参照）。本 step の

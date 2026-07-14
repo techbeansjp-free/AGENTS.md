@@ -11,7 +11,9 @@
 //   doctor           配備に必要な前提ファイル・依存の存在確認 ＋ 証跡健全性診断（hash チェーン・integrity）
 //   audit [dir]      .agent-skill-chain/source/enforcement/ci/audit.sh の薄ラッパー（終了コード透過）
 //   export [dir]     workflow.db を NDJSON で書き出す（export-ndjson.sh の薄ラッパー・read-only）
-//   enforce on|off|status  enforcement フックを .claude/settings.json に着脱（既定 off / opt-in）
+//   enforce on|off|status  enforcement フックを .claude/settings.json に着脱する CLI サブコマンド自体は不変。
+//                    ただし新規配備（init/upgrade で ASC_MODE=new）時は setup.sh が enforce on 相当を
+//                    既定で自動実行する（既存再配備 ASC_MODE=match・本パッケージ自己適用 ASC_MODE=own では touch しない）。
 //   version          package.json の version を表示
 //   help / (既定)    使い方を表示
 
@@ -42,7 +44,7 @@ const AUDIT_PATH = join(PACKAGE_SOURCE, "enforcement", "ci", "audit.sh");
 const EXPORT_NDJSON_PATH = join(PACKAGE_SOURCE, "scripts", "export-ndjson.sh");
 // entry_hash 計算の共有正本（gen_entry_hash）。doctor の hash チェーン検証はこれを source して使う（再実装禁止）。
 const GEN_ENTRY_HASH_PATH = join(PACKAGE_SOURCE, "scripts", "gen-entry-hash.sh");
-// enforcement 用 settings.json の正本テンプレート（既定 off。opt-in で配線する）。
+// enforcement 用 settings.json の正本テンプレート（新規配備は既定 on。既存/自己適用は opt-in で配線する）。
 const ENFORCE_TEMPLATE_PATH = join(
   PACKAGE_SOURCE,
   "platforms",
@@ -111,8 +113,11 @@ function printHelp(): void {
   npx agent-skill-chain <command>
 
 コマンド:
-  init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agent-skill-chain/ 等を配備する
-  upgrade [dir]         既存配備を再同期する（旧 3 ディレクトリ構成は統合移行してから再同期）
+  init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agent-skill-chain/ 等を配備する。
+                        新規配備（既存の .agent-skill-chain/ が無い場合）は enforcement を既定 on で自動配線する
+                        （enforce on 相当。不要なら enforce off で opt-out できる）。
+  upgrade [dir]         既存配備を再同期する（旧 3 ディレクトリ構成は統合移行してから再同期）。既存配備・
+                        本パッケージ自己適用では .claude/settings.json の enforcement 配線を touch しない。
   uninstall [dir]       init/setup が配備した成果物のみを除去する（ユーザー資産は既定で保持）
   doctor [dir]          配備に必要な前提（setup.sh・bash・sqlite3 等）の有無 ＋ 証跡健全性
                         （workflow.db の hash チェーン・integrity_check・配線差分）を確認する
@@ -120,7 +125,8 @@ function printHelp(): void {
   export [dir]          workflow.db を NDJSON（1 行 1 JSON）で標準出力へ書き出す（read-only）
   enforce <on|off|status> [dir]
                         enforcement フック（PreToolUse/PostToolUse）を .claude/settings.json に着脱する。
-                        既定は off（init では配線しない）。on で opt-in、off で解除、status で現状表示。
+                        新規配備は init/upgrade が既定で on にする（上記参照）。on で明示配線、off で解除
+                        （opt-out）、status で現状表示。
   version               パッケージのバージョンを表示する
   help                  このヘルプを表示する
 
@@ -144,11 +150,17 @@ enforce のオプション:
   setup.sh は workflow.db 初期化に sqlite3 バイナリを必要とします（doctor で確認可能）。
   uninstall は既定で .agent-skill-chain/project/・runtime/ の issue 履歴・workflow.db を保持します
   （--purge で project/・runtime/ も削除）。引数なしの場合は dry-run（表示のみ）です。
-  enforcement は既定 off。ドッグフーディング時に enforce on で opt-in（セッション挙動が変わるため任意）。
-  enforce off で解除します。enforce は .claude/settings.json のユーザー値を破壊せず配線のみ着脱します。`);
+  enforcement は新規配備（init/upgrade で .agent-skill-chain/ が未配備）のときのみ既定 on。既存配備・
+  本パッケージ自己適用では touch しません。不要なら enforce off で opt-out できます（セッション挙動が変わるため）。
+  enforce は .claude/settings.json のユーザー値を破壊せず配線のみ着脱します。`);
 }
 
 // setup.sh を projectRoot 引数つきで実行する。
+//   init/upgrade（TS CLI）は setup.sh（bash）へ完全委譲する薄いラッパであり、init 経路の実体は
+//   常に setup.sh 側 1 箇所のみである。新規配備（ASC_MODE=new）時の enforcement 既定 on 配線
+//   （enforce on 相当の自動実行）は setup.sh 側の enforce_default_on_if_possible が担い、
+//   本関数はそれを内包する setup.sh を呼ぶだけで新規/既存/自己適用いずれの判定・分岐にも
+//   自動的に追従する（TS 側に判定・呼び出しを二重実装しない。重複実装の禁止）。
 function runSetup(projectRoot: string): number {
   if (!existsSync(SETUP_PATH)) {
     console.error(
@@ -397,7 +409,7 @@ function runDoctor(projectRoot: string = process.cwd()): number {
     "Claude enforcement が未配備の場合は init を実行してください。"
   );
 
-  // enforcement の on/off 判定（opt-in 機構。既定 off）。
+  // enforcement の on/off 判定（新規配備は init/upgrade が既定 on。既存配備・自己適用は現状維持）。
   // settings.json に本パッケージ由来の hook 配線があるかで判定する。hook スクリプト実在性も併せて表示する。
   const settingsPath = join(projectRoot, ".claude", "settings.json");
   const settings = readSettings(settingsPath);
@@ -406,8 +418,8 @@ function runDoctor(projectRoot: string = process.cwd()): number {
   } else {
     const on = enforceIsOn(settings);
     console.log(
-      `[INFO] enforcement 配線 = ${on ? "on" : "off（既定）"}` +
-        `${on ? "" : "。ドッグフーディング時に `agents-md enforce on` で opt-in できます。"}`
+      `[INFO] enforcement 配線 = ${on ? "on" : "off"}` +
+        `${on ? "" : "。`agents-md enforce on` で有効化できます。"}`
     );
     if (on && !(existsSync(preHookPath) && existsSync(postHookPath))) {
       console.log("[NG]  enforcement は on ですが hook スクリプトが未配備です。init を実行してください。");
@@ -732,7 +744,7 @@ export function writeReadmeWarning(projectRoot: string): void {
 //      .claude/skills や .cursor/skills のユーザー自作スキル等）が同居していれば保持する。
 //      パッケージ所有ファイル/skill 名は正本（enforcement・skills）から動的に導出する（setup.sh と単一整合）。
 // 注3: .claude/hooks・.claude/skills・.cursor/skills は**ディレクトリごと消さず**、所有エントリのみ除去する
-//      （下記 deployedOwnedHookFiles / deployedOwnedSkillEntries で導出）。
+//      （下記 deployedOwnedHookFiles / planSkillUninstall で導出。skill は由来判定に従属）。
 const DEPLOYED_ARTIFACTS: string[] = [
   ".agent-skill-chain/source", // パッケージ正本（setup がコピー配備・再配備で復元可能）
   "AGENTS.md", // ルート契約（setup がコピー）
@@ -765,40 +777,107 @@ function deployedOwnedHookFiles(): string[] {
   return ownedFilesFrom(join(enforcement, "claude"), join(".claude", "hooks"));
 }
 
-// パッケージが配備した所有 skill エントリ名（{domain}__{capability}・ドメイン直下 {domain}）を
-// 正本 source/skills/ から導出する。命名規約の正本は lib/deploy-skills.sh（list_owned_skill_names）。
-// 本関数はその走査規則を Node 側でミラーし（同一規則）、setup.sh と同じ所有集合を得る。
+// 配備先スキルディレクトリに書き込まれる所有マーカー（配備証跡）のファイル名。
+// 由来判定・書込みの単一正本は lib/deploy-skills.sh（ASC_SKILL_OWNED_MARKER）。本定数はその同型ミラー。
+// drift を避けるため、名前を変えるときは lib/deploy-skills.sh と本定数の双方を整合させること。
+const ASC_SKILL_OWNED_MARKER = ".agent-skill-chain-owned";
+
+// 配備先スキルディレクトリの由来区分。lib/deploy-skills.sh の is_owned_skill_dir と同一の 4 区分。
+type SkillOwnership = "absent" | "owned" | "legacy_owned" | "collision";
+
+// skillFrontmatterName: SKILL.md の frontmatter `name` フィールド値を返す（先頭一致・前後空白トリム・
+//   引用符除去）。ファイル無し・`name:` 行無し・読取り不能なら空文字を返す。
+//   lib/deploy-skills.sh の _asc_skill_frontmatter_name と同一の正規化規則（drift 防止）。
+function skillFrontmatterName(skillMd: string): string {
+  try {
+    for (const raw of readFileSync(skillMd, "utf8").split("\n")) {
+      const m = raw.match(/^\s*name:\s*(.*)$/);
+      if (!m) continue;
+      let v = m[1].trim();
+      v = v.replace(/^["']/, "").replace(/["']$/, "");
+      return v.trim();
+    }
+  } catch {
+    // 読取り不能は空（＝一致せず collision へ倒す）。
+  }
+  return "";
+}
+
+// isOwnedSkillDir: 配備先の 1 スキルディレクトリの由来を判定する副作用のない Query。
+//   lib/deploy-skills.sh の is_owned_skill_dir の同型ミラー。判定優先順（fail-safe＝判定不能は
+//   破壊しない collision へ倒す）:
+//     (1) destDir 不在                                  → absent
+//     (2) destDir/.agent-skill-chain-owned 有            → owned
+//     (3) マーカー無・dest SKILL.md の name == 正本 name  → legacy_owned（backfill 対象）
+//     (4) それ以外（name 不一致・SKILL.md/name 欠落）      → collision（非所有＝保持）
+function isOwnedSkillDir(destDir: string, srcSkillMd: string): SkillOwnership {
+  try {
+    if (!existsSync(destDir)) return "absent";
+    if (existsSync(join(destDir, ASC_SKILL_OWNED_MARKER))) return "owned";
+    const destName = skillFrontmatterName(join(destDir, "SKILL.md"));
+    const srcName = skillFrontmatterName(srcSkillMd);
+    if (destName !== "" && srcName !== "" && destName === srcName) return "legacy_owned";
+    return "collision";
+  } catch {
+    return "collision";
+  }
+}
+
+// パッケージが配備した所有 skill エントリ（名前と正本 SKILL.md パスの対）を正本 source/skills/ から
+// 導出する。命名規約の正本は lib/deploy-skills.sh（list_owned_skill_entries）。本関数はその走査規則を
+// Node 側でミラーし（同一規則）、setup.sh と同じ所有集合＋由来判定用の正本 SKILL.md パスを得る。
 // drift を避けるため、命名規則を変えるときは lib/deploy-skills.sh と本関数の双方を整合させること。
-function ownedSkillNames(): string[] {
+interface OwnedSkillEntry {
+  name: string;
+  srcSkillMd: string;
+}
+function ownedSkillEntries(): OwnedSkillEntry[] {
   const skillsRoot = join(PACKAGE_SOURCE, "skills");
   if (!existsSync(skillsRoot)) return [];
-  const names: string[] = [];
+  const entries: OwnedSkillEntry[] = [];
   for (const domainEnt of readdirSync(skillsRoot, { withFileTypes: true })) {
     if (!domainEnt.isDirectory()) continue;
     const domain = domainEnt.name;
     const domainDir = join(skillsRoot, domain);
     // ドメイン直下に skill 定義を持つケース（例: agent/）は {domain} を所有名とする。
-    if (existsSync(join(domainDir, "SKILL.md"))) names.push(domain);
+    const domainSkill = join(domainDir, "SKILL.md");
+    if (existsSync(domainSkill)) entries.push({ name: domain, srcSkillMd: domainSkill });
     // capability 配下に skill 定義を持つものは {domain}__{capability} を所有名とする。
     for (const capEnt of readdirSync(domainDir, { withFileTypes: true })) {
       if (!capEnt.isDirectory()) continue;
-      if (existsSync(join(domainDir, capEnt.name, "SKILL.md"))) {
-        names.push(`${domain}__${capEnt.name}`);
-      }
+      const capSkill = join(domainDir, capEnt.name, "SKILL.md");
+      if (existsSync(capSkill)) entries.push({ name: `${domain}__${capEnt.name}`, srcSkillMd: capSkill });
     }
   }
-  return names;
+  return entries;
 }
 
-// .claude/skills・.cursor/skills 配下のパッケージ所有 skill エントリの配備物相対パス。
-// ユーザー自作スキル（所有集合外のディレクトリ）は対象に含めない（保持される）。
-function deployedOwnedSkillEntries(): string[] {
-  const names = ownedSkillNames();
-  const rels: string[] = [];
+// 所有 skill エントリ名の集合（後方互換の薄いラッパー。list_owned_skill_names 相当）。
+function ownedSkillNames(): string[] {
+  return ownedSkillEntries().map((e) => e.name);
+}
+
+// uninstall 時の所有 skill エントリ削除計画。各配備先（.claude/skills・.cursor/skills）の同名
+// ディレクトリを isOwnedSkillDir で評価し、owned/legacy_owned のみ削除対象（targets）に、
+// collision は「保持するユーザー資産」（preserved）に振り分ける。absent は何もしない。
+interface SkillUninstallPlan {
+  targets: string[]; // 削除対象の配備物相対パス（owned/legacy_owned）
+  preserved: string[]; // 非所有のため保持する同名ディレクトリ相対パス（collision）
+}
+function planSkillUninstall(projectRoot: string): SkillUninstallPlan {
+  const entries = ownedSkillEntries();
+  const targets: string[] = [];
+  const preserved: string[] = [];
   for (const base of [".claude/skills", ".cursor/skills"]) {
-    for (const name of names) rels.push(join(base, name));
+    for (const e of entries) {
+      const rel = join(base, e.name);
+      const verdict = isOwnedSkillDir(join(projectRoot, rel), e.srcSkillMd);
+      if (verdict === "owned" || verdict === "legacy_owned") targets.push(rel);
+      else if (verdict === "collision") preserved.push(rel);
+      // absent は削除対象にも保持表示にも含めない（存在しない）。
+    }
   }
-  return rels;
+  return { targets, preserved };
 }
 
 // --purge 時のみ追加で除去するユーザー資産（統合ルート配下）。project/ とランタイム名前空間
@@ -868,13 +947,16 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
   // パッケージ所有分を正本から動的に加える:
   //   - .cursor 直下の所有ファイル                              … deployedOwnedFiles
   //   - .claude/hooks の所有フックファイル                      … deployedOwnedHookFiles
-  //   - .claude/skills・.cursor/skills の所有 skill エントリ      … deployedOwnedSkillEntries
+  //   - .claude/skills・.cursor/skills の所有 skill エントリ      … planSkillUninstall（由来判定に従属）
   // いずれもユーザー自作物（独自フック・自作スキル・自作 rules 等）は対象外（保持）。
+  // skill エントリは名前一致だけでなく **由来判定（isOwnedSkillDir）** に従属させ、マーカー無し・
+  // 正本 name 不一致の同名ディレクトリ（＝ユーザー自作スキル）は削除対象に含めず保持する。
+  const skillPlan = planSkillUninstall(projectRoot);
   const targets: string[] = [
     ...DEPLOYED_ARTIFACTS,
     ...deployedOwnedFiles(),
     ...deployedOwnedHookFiles(),
-    ...deployedOwnedSkillEntries(),
+    ...skillPlan.targets,
   ];
   if (purge) targets.push(...PURGE_ARTIFACTS);
 
@@ -909,6 +991,12 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
   }
   console.log("  .cursor/ のユーザー作成物（自作 rules/*.mdc 等。配備分以外は保持）");
   console.log("  .claude/ のユーザー設定 （settings.json 等。配備分以外は保持）");
+  if (skillPlan.preserved.length > 0) {
+    // マーカー無し・正本 name 不一致の同名スキルディレクトリ（＝ユーザー自作スキル）は削除しない。
+    skillPlan.preserved.forEach((rel) =>
+      console.log(`  保持: ${rel}（非所有の同名ディレクトリ）`)
+    );
+  }
 
   if (!yes) {
     console.log(
@@ -971,10 +1059,13 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
 }
 
 // ----------------------------------------------------------------------------
-// enforce: enforcement フックを .claude/settings.json に着脱する（既定 off / opt-in）。
+// enforce: enforcement フックを .claude/settings.json に着脱する。
 //
 // 方針（ライブセッション保護・ユーザー値非破壊）:
-//   - 既定では init/setup は settings.json に enforcement を書き込まない（off）。
+//   - 新規配備（init/upgrade で .agent-skill-chain/ が未配備＝ASC_MODE=new）のときのみ、
+//     setup.sh が本サブコマンドの `on` 相当を自動実行し settings.json に enforcement を既定で書き込む。
+//     既存再配備（ASC_MODE=match）・本パッケージ自己適用（ASC_MODE=own）では書き込まない（現状維持）。
+//     本関数群（enforceOn/enforceOff/enforceStatus）自体の契約は不変（呼び出し元が増えるのみ）。
 //   - `enforce on`  … 正本テンプレート（.agent-skill-chain/source/platforms/claude/settings.enforce.json）から
 //                     hooks.PreToolUse/PostToolUse・env(AGENT_ROLE 等)を **既存 settings.json にマージ**する。
 //                     注入したエントリには見えない目印を持たせず、env は managed キー集合で識別する。

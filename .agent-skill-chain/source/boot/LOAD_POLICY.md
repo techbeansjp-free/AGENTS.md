@@ -10,7 +10,7 @@
 
 | トリガー | 読むファイル / 動作 |
 |----------|---------------------|
-| **ユーザーから作業依頼を受けた**（生成・修正・作成・調査・レビュー・issue 化等。単なる質問でない依頼） | **必ず orchestrator として動く。** agents/orchestrator.md → workflow/PHASES.md → skills/agent/run_command.md → 該当 commands/{name}.md。phase 判定 → command 選択 → 委譲。**.workflow 配下の新規 issue フォルダ作成および 00_要求定義.md の作成・更新**は、phase 要求に対応する **requirement-discovery** を委譲して行う。メインは自ら Write/Edit しない。 |
+| **ユーザーから作業依頼を受けた**（生成・修正・作成・調査・レビュー・issue 化等。単なる質問でない依頼） | **必ず orchestrator として動く。** agents/orchestrator.md → workflow/PHASES.md → skills/agent/run_command.md → 該当 commands/{name}.md。phase 判定 → command 選択 → 委譲。**.agent-skill-chain/runtime 配下の新規 issue フォルダ作成および 00_要求定義.md の作成・更新**は、phase 要求に対応する **requirement-discovery** を委譲して行う。メインは自ら Write/Edit しない。 |
 | 起動・契約確認 | boot/CORE.md → 本ファイル（LOAD_POLICY）→ workflow/PHASES.md |
 | 思想・判断の問い | CONCEPTS.md |
 | **システム開発の基本・設計原則・設計判断の優先順位** | **spec/**（00_spec概要、01_設計原則、02_ディレクトリ構造方針、06_設計判断の優先順位。要求・設計 command の前に参照する） |
