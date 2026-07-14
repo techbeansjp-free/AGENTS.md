@@ -131,7 +131,7 @@ allowlist 方式の enforcement は、ハーネス組み込みツール（`Agent
 
 1. **`!` シェルモードで enforcement 配線を外す**（採用先プロジェクトのルートで実行）:
 
-   ```
+   ```bash
    !npx github:techbeansjp-free/AGENTS.md enforce off
    ```
 
@@ -150,7 +150,7 @@ orchestrator（メインエージェント）が使えるツールは、`.agent-
 
 - **拡張ファイル（実効・ユーザー資産）**: `.agent-skill-chain/project/orchestrator-allowlist.txt`。setup は touch せず、upgrade/uninstall（既定）で保持される。
 - **雛形**: `.agent-skill-chain/source/enforcement/claude/orchestrator-allowlist.example.txt`（使い方コメントのみ。これ自体はフックから読まれない）。上記パスへコピーして使う。
-- **形式**: 1 行 1 ツール名。厳密文字種 `^[A-Za-z][A-Za-z0-9_]*$`（英字始まり・英数字と `_` のみ）。`#` 以降はコメント、空行可、先頭末尾の空白は無視。**内部空白・メタ文字・CR・BOM を含む行は無視される**（注入・難読化対策。`Foo bar` や `mcp __ shell` は正規名に化けず弾かれる）。ファイルは `source` されず**データとして**読まれる。
+- **形式**: 1 行 1 ツール名。厳密文字種 `^[A-Za-z][A-Za-z0-9_-]*$`（英字始まり・英数字と `_`・`-` のみ。ハイフン付き MCP 名 `mcp__brave-search__search` 等も許容）。`#` 以降はコメント、空行可、先頭末尾の空白は無視。**内部空白・メタ文字・内部 CR・BOM を含む行は無視される**（注入・難読化対策。`Foo bar` や `mcp __ shell` は正規名に化けず弾かれる）。なお **CRLF の末尾 CR は末尾空白として trim されるため許可される**（`Foo\r\n` は `Foo` として受理される）が、行の内部に現れる CR は不正として弾かれる。ファイルは `source` されず**データとして**読まれる。
 - **fail-closed**: ファイル不在・空・全行不正・読取不可は従来どおり厳格（default 拒否）。
 
 **制約（名前ベースの保証）**: `Bash`・`Edit`・`Write`・`Delete`・`StrReplace`・`Shell`・`TodoWrite`・`EditNotebook`・`call_mcp_tool`・`GenerateImage` は、この拡張より手前の case で明示 block されるため、拡張に書いても**覆せない**。

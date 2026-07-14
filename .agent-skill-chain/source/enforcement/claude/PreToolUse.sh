@@ -44,8 +44,9 @@ allow() {
 #     - 各行は `#` 以降をコメント除去し、**先頭末尾のみ trim（内部空白は collapse しない）**。
 #       collapse すると `mcp __ shell`→`mcp__shell` 等の内部空白難読化が正規名に化けて regex を通過し、
 #       PR レビューの目視をすり抜ける余地を残すため、trim のみとする。
-#     - 衛生フィルタとして厳密文字種 `^[A-Za-z][A-Za-z0-9_]*$` を要求（内部空白・メタ文字・CR・BOM を含む
-#       不正行は不一致で無視＝注入対策）。許可の実ゲートは `[[ "$line" == "$want" ]]` の厳密一致
+#     - 衛生フィルタとして厳密文字種 `^[A-Za-z][A-Za-z0-9_-]*$` を要求（`-` は末尾 literal。MCP 名の
+#       ハイフンを許容。内部空白・その他メタ文字・内部 CR・BOM を含む不正行は不一致で無視＝注入対策）。
+#       許可の実ゲートは `[[ "$line" == "$want" ]]` の厳密一致
 #       （RHS を quote＝リテラル比較・glob 無効）であり、regex は衛生に過ぎない。
 #     - ファイル不在・空・全行不正・読取不可・非正規ファイル（`-f` 偽＝デバイス/FIFO への symlink 等）は
 #       偽を返し *) default 拒否へ落ちる＝**fail-closed を保全**。
@@ -67,8 +68,10 @@ is_in_project_allowlist() {
     line="${line#"${line%%[![:space:]]*}"}"     # 先頭空白の trim
     line="${line%"${line##*[![:space:]]}"}"     # 末尾空白の trim（CRLF の \r を含む）
     [[ -z "$line" ]] && continue
-    # 厳密文字種検証（衛生フィルタ・内部空白/メタ文字/CR/BOM を含む行はここで無視）。
-    [[ "$line" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || continue
+    # 厳密文字種検証（衛生フィルタ・内部空白/メタ文字/内部 CR/BOM を含む行はここで無視）。
+    #   `-` は末尾に置いた literal（範囲演算子でない）。MCP 名 `mcp__brave-search__search` 等の
+    #   ハイフン付き正式名を許容するため許可集合に含める（厳密一致ゲートは下行で不変）。
+    [[ "$line" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] || continue
     [[ "$line" == "$want" ]] && return 0        # 厳密一致（RHS quote＝リテラル比較・glob 無効）
   done < "$proj_file"
   return 1

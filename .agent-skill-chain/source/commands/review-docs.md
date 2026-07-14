@@ -23,7 +23,7 @@
 
 2. **レビュー＋修正ループ（self-progress）**
    - 次のステップを **指摘がなくなるまで繰り返す**:
-     1. 対象ドキュメント群（targets）を読み、.agent-skill-chain/source/RULES.md および PHASES.md の監査観点に加えて **[REVIEW_DUAL_LENS.md](../REVIEW_DUAL_LENS.md) の二観点**に従ってレビューを行う。二観点とは (a) **敵対的観点**＝反証・破壊を試み、境界・異常系・前提崩れを攻める（判断が不確実なら「問題なし」ではなく**要修正に倒す**）、(b) **肯定的観点**＝壊してはならない不変条件（**must-preserve**）を同定する、の両立をいう。各ラウンドで同定した must-preserve リストを次ラウンドへ継承し、ラウンドをまたいだ退行を検知する（REVIEW_DUAL_LENS.md §6）。二観点ルールの本体は正本 REVIEW_DUAL_LENS.md に委譲し、本 command では再定義しない。
+     1. 対象ドキュメント群（targets）を読み、.agent-skill-chain/source/RULES.md および PHASES.md の監査観点に加えて **[REVIEW_DUAL_LENS.md](../REVIEW_DUAL_LENS.md) の二観点**に従ってレビューを行う。適用する観点・証跡要求・ラウンド間継承の定義は正本 REVIEW_DUAL_LENS.md の **§2（敵対的観点・肯定的観点＝must-preserve の同定）／§3（両リストの証跡要求）／§6（ラウンド間の must-preserve 継承と退行検知）** に従い、本 command では再定義しない。
      2. 指摘一覧（場所・内容・優先度など）と、対応方針（修正／却下／別 issue など）を整理する。**「敵対的観点リスト」（攻めた観点と結論）**と**「must-preserve リスト」（不変条件と保持の確認）**の**両方**を成果物へ書き出す（REVIEW_DUAL_LENS.md §3）。
      3. 必要に応じて、設計・実装計画などの修正 command（例: design-feature, implement-feature の関連タスク）へ委譲し、ドキュメントを更新するか、人間の修正指示をガイドする。
      4. `.agent-skill-chain/runtime/{issue}/memo/` に対して、run_command.md §memo 作成時 の Constraints に従い:

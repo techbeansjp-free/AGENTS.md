@@ -631,6 +631,16 @@ run_uc10() {
   # Then: exit 0（opt-in で許可・能力ベース残余の可視化）
   assert_eq 0 "$RC" "UC10[$label]: mcp__foo__write の opt-in は exit 0（能力は機構で保証されない）"
 
+  # シナリオ(h2): ハイフン付き MCP 名の opt-in（`^[A-Za-z][A-Za-z0-9_-]*$` 許可集合）
+  #   MCP サーバ名は `brave-search` 等ハイフンを含むのが正式。厳密文字種にハイフンを含めないと
+  #   正式名を allowlist できない。末尾 literal `-` を許可集合に含め、厳密一致ゲートは不変。
+  # Given: 拡張ファイルに mcp__brave-search__search を列挙
+  printf 'mcp__brave-search__search\n' > "$proj_file"
+  # When: orchestrator が mcp__brave-search__search を呼ぶ
+  run_pre "$pathval" orchestrator '{"tool_name":"mcp__brave-search__search","tool_input":{}}'
+  # Then: exit 0（ハイフン付き正式 MCP 名が衛生フィルタを通過し opt-in で許可）
+  assert_eq 0 "$RC" "UC10[$label]: ハイフン付き mcp__brave-search__search の opt-in は exit 0"
+
   # シナリオ(i): サブエージェント（agent_id あり）は R2 対象外で拡張判定に入らない（UC8 と整合）
   # Given: 拡張ファイルは Foo のみ、agent_id 付きの未知ツール Bar
   printf 'Foo\n' > "$proj_file"
