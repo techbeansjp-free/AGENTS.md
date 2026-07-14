@@ -10,6 +10,14 @@
 # 失敗条件・差し戻し先: .agent-skill-chain/source/enforcement/README.md §失敗条件と差し戻し に従う。
 # 検知内容（audit.sh）: 必須ファイル存在・04_review 未更新・テスト観点未記載・docs 更新要否・
 #   memo プレフィックス・PR 内部リンク・workflow.db 品質/整合・証跡の因果/順序・document_id 紐付け 等。
+#
+# push イベントの GIT_RANGE（複数コミット push 監査漏れ対策）:
+#   push イベントは複数コミットをまとめて含みうるため、既定の HEAD~1..HEAD（直近1コミットのみ）では
+#   途中コミットの変更が監査をすり抜ける。本テンプレートは push イベント時に github.event.before/after
+#   から動的に AUDIT_GIT_RANGE=<before>..<after> を組み立てて audit.sh に渡す。before が新規ブランチ
+#   作成等で全ゼロ SHA の場合は解決不能な参照のため AUDIT_GIT_RANGE を設定せず、audit.sh 既定の
+#   HEAD~1..HEAD にフォールバックさせる（audit.sh 側にも同フォールバックの防御的チェックがある）。
+#   before..after の差分を確実に取得するため checkout は fetch-depth: 0（全履歴）にする。
 
 name: audit
 
@@ -23,13 +31,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # HEAD~1..HEAD の差分監査に必要（変更ファイル検出）。
-          fetch-depth: 2
+          # push イベントの before..after 差分監査（複数コミット push 監査漏れ対策）を確実に解決するため
+          # 全履歴を取得する。fetch-depth を固定の小さい値にすると、before が古い場合に取得漏れが起き
+          # うる（前掲コメント参照）。
+          fetch-depth: 0
 
       - name: Install sqlite3
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq sqlite3
+
+      - name: Resolve GIT_RANGE for push events
+        if: github.event_name == 'push'
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          set -e
+          if [[ -z "$PUSH_BEFORE" ]] || [[ "$PUSH_BEFORE" =~ ^0+$ ]]; then
+            # 新規ブランチ作成時等、before が存在しない/全ゼロの場合は解決不能な参照のため、
+            # AUDIT_GIT_RANGE を設定せず audit.sh 既定（HEAD~1..HEAD）にフォールバックする。
+            echo "[audit] push event 'before' is unset/all-zero (new branch?); using audit.sh default GIT_RANGE" >&2
+          else
+            echo "AUDIT_GIT_RANGE=${PUSH_BEFORE}..${PUSH_AFTER}" >> "$GITHUB_ENV"
+          fi
 
       - name: Run enforcement audit (required)
         env:
@@ -50,5 +75,6 @@ jobs:
           fi
           chmod +x "$AUDIT_SCRIPT" 2>/dev/null || true
           export PR_BODY
-          # 必須実行: exit 非 0 でジョブを fail させる（最後の砦）。
+          # 必須実行: exit 非 0 でジョブを fail させる（最後の砦）。AUDIT_GIT_RANGE は前段の
+          # Resolve GIT_RANGE for push events が設定していれば GITHUB_ENV 経由で自動的に反映される。
           "$AUDIT_SCRIPT" .
