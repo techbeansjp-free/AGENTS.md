@@ -9,7 +9,7 @@ document_id: "cf63920b-aabd-418d-b815-db1baf9bb9da"
 **作成日**: 2026 年 07 月 14 日
 **最終更新**: 2026 年 07 月 14 日
 
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 >
 > **レビュー深度**: quick（変更範囲が CLAUDE.md 1 ファイル 2 ブロックの文言置換に限定され、コードを持たないドキュメント修正のため。02_設計 §6・03_実装計画 §テスト観点の割当に整合）。
 
