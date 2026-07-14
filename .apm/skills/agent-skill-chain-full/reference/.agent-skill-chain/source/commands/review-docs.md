@@ -23,8 +23,8 @@
 
 2. **レビュー＋修正ループ（self-progress）**
    - 次のステップを **指摘がなくなるまで繰り返す**:
-     1. 対象ドキュメント群（targets）を読み、.agent-skill-chain/source/RULES.md および PHASES.md の監査観点に従ってレビューを行う。
-     2. 指摘一覧（場所・内容・優先度など）と、対応方針（修正／却下／別 issue など）を整理する。
+     1. 対象ドキュメント群（targets）を読み、.agent-skill-chain/source/RULES.md および PHASES.md の監査観点に加えて **[REVIEW_DUAL_LENS.md](../REVIEW_DUAL_LENS.md) の二観点**に従ってレビューを行う。適用する観点・証跡要求・ラウンド間継承の定義は正本 REVIEW_DUAL_LENS.md の **§2（敵対的観点・肯定的観点＝must-preserve の同定）／§3（両リストの証跡要求）／§6（ラウンド間の must-preserve 継承と退行検知）** に従い、本 command では再定義しない。
+     2. 指摘一覧（場所・内容・優先度など）と、対応方針（修正／却下／別 issue など）を整理する。**「敵対的観点リスト」（攻めた観点と結論）**と**「must-preserve リスト」（不変条件と保持の確認）**の**両方**を成果物へ書き出す（REVIEW_DUAL_LENS.md §3）。
      3. 必要に応じて、設計・実装計画などの修正 command（例: design-feature, implement-feature の関連タスク）へ委譲し、ドキュメントを更新するか、人間の修正指示をガイドする。
      4. `.agent-skill-chain/runtime/{issue}/memo/` に対して、run_command.md §memo 作成時 の Constraints に従い:
         - 事前に **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S または .agent-skill-chain/source/scripts/memo-prefix.sh** を実行してプレフィックスを取得し、
@@ -42,11 +42,13 @@
 
 - **updated_docs**: レビューと修正を経て最新化された 00/01/02/03 のパス一覧。
 - **memos**: `.agent-skill-chain/runtime/{issue}/memo/` 以下に作成された YYYYMMDD_HHMMSS_ プレフィックス付き memo ファイルのパス一覧。
+- **dual_lens_lists**: 「敵対的観点リスト」と「must-preserve リスト」の両方（REVIEW_DUAL_LENS.md §3）。memo または 00-03 ドキュメント自体に記載する。**git 追跡される 00-03 への記載を推奨経路**とする（memo は過渡的・非追跡構成があり、機械的な内容強制が確実には効かないため。将来 audit を #27 と同型の git 差分内容チェックへ拡張できる余地を残す）。
 - **log_ref**: write-workflow-log によって記録された workflow.db エントリ、または memo_ref の参照情報。
 
 ### Done (DoD)
 
 - 対象 00/01/02/03 について、**既知の指摘が 0 件** であることが確認されている。
+- **二観点の両リストが成果物に記載されている**: 「敵対的観点リスト」と「must-preserve リスト」の**両方**が memo または 00-03 ドキュメント自体に記載されている。**いずれか一方でも欠落しているレビューは未完了**とする（REVIEW_DUAL_LENS.md §3。review-code / review-architecture と同じ強制水準）。
 - 各レビューサイクルに対応する memo が `.agent-skill-chain/runtime/{issue}/memo/` に **1 件以上** 作成されている。
 - memo ファイル名はすべて **YYYYMMDD_HHMMSS_ プレフィックス**を持ち、プレフィックスは **実行時のシステム時計から取得**されている（推測・固定値ではない）。
 - 最後のサイクル完了後に **write-workflow-log** が実行され、CONTRACT 準拠の証跡が記録されている。
@@ -59,4 +61,5 @@
 - ユーザーからの「ドキュメントレビュー」依頼に対して、review-docs を起動せずに **レビューコメントだけを返して終了**すること。これは enforcement §失敗条件 #23 に該当する。
 - `.agent-skill-chain/runtime/{issue}/memo/` 以下の memo を、**システム時計を用いずに**手入力・固定値・推測のプレフィックスで作成すること。
 - 実装が完了しているにもかかわらず、verify-and-close を経ずに review-docs のみで正式レビュー（04_review 相当）を完結させること。
+- **二観点のいずれかのリスト（敵対的観点リスト / must-preserve リスト）を欠いたまま review-docs を完了とみなすこと**（REVIEW_DUAL_LENS.md §3・DoD と整合）。
 
