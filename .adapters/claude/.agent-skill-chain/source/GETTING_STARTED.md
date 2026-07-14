@@ -39,9 +39,9 @@
 ## 1 issue を回す流れ
 
 1. メイン: phase = 要求 → サブに「requirement-discovery を実行」と委譲（Task/Constraints/OutputSpec と 00/01 テンプレート参照を渡す）。
-2. サブ: commands/requirement-discovery.md を読み、extract-goals → identify-assumptions → define-constraints → write-bdd の順に実行。00_要求定義.md と 01_要件定義.md を出す。証跡を memo に書く。
+2. サブ: commands/requirement-discovery.md を読み、extract-goals → identify-assumptions → define-constraints → write-bdd の順に実行。00_要求定義.md と 01_要件定義.md を出す。**証跡は write-workflow-log（workflow.db・本則）に記録する**（scribe/CONTRACT.md §どこに保存するか）。workflow.db を採用しないプロジェクトの過渡的・例外運用でのみ memo に記録する。
 3. メイン: 完了受領。phase = 設計に進む → サブに「design-feature を実行」と委譲。
-4. 同様に design-feature → implement-feature → verify-and-close まで回す。最後に 04_review.md と証跡が揃う。
+4. 同様に design-feature → implement-feature → verify-and-close まで回す。**各 phase 完了時に write-workflow-log で証跡を記録する（本則）。** 最後に 04_review.md と証跡が揃う。
 
 **「この issue を最初から最後まで実行」** で、親 issue に PR 指摘対応 issue の起票が含まれる場合は、03_実装計画の後に **issue_creation.create_pr_review_issue**（command: create-pr-review-issue）を実行し、`.agent-skill-chain/runtime/{親}/90_issues/{プレフィックス}PR指摘対応/00_要求定義.md` を生成してから実装フェーズに進む。詳細は [workflow/PHASES.md](workflow/PHASES.md) §issue_creation サブフェーズ および [commands/create-pr-review-issue.md](commands/create-pr-review-issue.md) を参照。
 
