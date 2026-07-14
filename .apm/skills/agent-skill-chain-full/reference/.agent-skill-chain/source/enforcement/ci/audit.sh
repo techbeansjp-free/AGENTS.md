@@ -218,6 +218,21 @@ file_mtime_epoch() {
 
 echo "=== Audit: contract and evidence (enforcement/README §失敗条件と差し戻し) ==="
 
+# 0. DB 系チェックの SKIP 状況を CI ログ上で明示する（#3, #8-#25, #29, #31-#35 が対象）。
+#   workflow.db は Git 非追跡（ローカルの累積証跡ストア）であるため、CI のクリーンな checkout には
+#   実体が存在せず、DB 系チェックは構造的に SKIP される（バグではなく意図された設計上の帰結）。
+#   詳細・実効的な検知経路（ローカル pre-push）は enforcement/README.md「workflow.db の扱い」を参照。
+#   本ブロックは検知結果の要約表示のみを担い、各チェック本体の SKIP 条件・判定ロジックは
+#   単一正本（各 check 関数）に委ねる（判定ロジックの二重化はしない）。
+_audit_db_probe_path="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  echo "SKIP-SUMMARY: sqlite3 コマンドが見つかりません。DB 系チェック（#3, #8-#25, #29, #31-#35）はすべて SKIP されます。実効的な検知経路はローカル pre-push フックです（enforcement/ci/pre-push.example を .git/hooks/pre-push へ導入）。" >&2
+elif [[ ! -f "$_audit_db_probe_path" ]]; then
+  echo "SKIP-SUMMARY: workflow.db が見つかりません ($_audit_db_probe_path)。DB 系チェック（#3, #8-#25, #29, #31-#35）はすべて SKIP されます。CI のクリーンな checkout では workflow.db は Git 非追跡のため常にこの状態になります（意図的な設計。詳細は enforcement/README.md「workflow.db の扱い」を参照）。実効的な検知経路はローカル pre-push フックです（enforcement/ci/pre-push.example を .git/hooks/pre-push へ導入）。" >&2
+else
+  echo "[audit] INFO: workflow.db が見つかりました ($_audit_db_probe_path)。DB 系チェック（#3, #8-#25, #29, #31-#35）を評価します。" >&2
+fi
+
 # 1. 証跡 memo のファイル名プレフィックス（YYYYMMDD_HHMMSS_）および実時間との整合性検証
 if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
   for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
@@ -324,6 +339,8 @@ if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$PROJECT_ROOT/$WORKFLOW_DIR/work
       fi
     done < <(sqlite3 "$WF_DB_3" "SELECT DISTINCT issue_path FROM workflow_log WHERE command IN ('implement-feature','verify-and-close') AND issue_path IS NOT NULL AND trim(issue_path) != '';" 2>/dev/null | while IFS= read -r p; do printf '%s\0' "$p"; done)
   fi
+else
+  echo "SKIP: #3 04_review 未更新チェックをスキップします（workflow.db 不在または sqlite3 不在）" >&2
 fi
 
 # 4. テスト観点未記載: 03_実装計画.md に固定セクション「## テスト観点」「## 単体テスト」「## BDD」のいずれかが存在し、該当セクションに空でない行が1行以上あること（見出しのみは FAIL）
@@ -443,6 +460,8 @@ if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$WF_DB" ]]; then
       EXIT_CODE=1
     fi
   fi
+else
+  echo "SKIP: #8 workflow.db 品質監査をスキップします（workflow.db 不在または sqlite3 不在）" >&2
 fi
 
 # 9. 成果物と証跡の対応（04_review が存在する issue について workflow_log に該当 issue_path の行または verify-and-close が 1 件以上あること）
@@ -464,6 +483,8 @@ if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$WF_DB" ]]; then
       fi
     done < <(find "$PROJECT_ROOT/$WORKFLOW_DIR" -name "04_review.md" -type f -print0 2>/dev/null || true)
   fi
+else
+  echo "SKIP: #9 成果物と証跡の対応チェックをスキップします（workflow.db 不在または sqlite3 不在）" >&2
 fi
 
 # 10. workflow.db の WAL/SHM sidecar が Git 追跡されていないこと（証跡の信頼性・別環境での破損を防ぐ）
@@ -488,10 +509,12 @@ check_sqlite_sidecar() {
 check_db_integrity() {
   local db="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
   if [[ ! -f "$db" ]]; then
+    echo "SKIP: #11 workflow.db 整合性チェックをスキップします（workflow.db 不在）" >&2
     return 0
   fi
   echo "[audit] checking workflow.db integrity" >&2
   if ! command -v sqlite3 >/dev/null 2>&1; then
+    echo "SKIP: #11 workflow.db 整合性チェックをスキップします（sqlite3 不在）" >&2
     return 0
   fi
   if ! sqlite3 "$db" "PRAGMA integrity_check;" 2>/dev/null | grep -q "ok"; then
@@ -890,8 +913,8 @@ check_issue_doc_in_gitignored_path() {
 #   ★H-2'/M-1': 完全一致でなく前方一致（= dir OR = dir/ OR LIKE dir/%）で「ログが 1 件でも拾えれば pass」の
 #   安全側に倒す（偽陰性＝見逃しを許容し、誤 FAIL を絶対に出さない）。DB 不採用は冒頭 SKIP。
 check_review_before_implement() {
-  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
-  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #29 実装前04チェックをスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #29 実装前04チェックをスキップします（workflow_log テーブル不在）" >&2; return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   echo "[audit] checking review-before-implement (#29)" >&2
   local _wfd f issue_dir dir dir_esc base base_esc hit
@@ -929,8 +952,8 @@ check_review_before_implement() {
 #   SKIP ガード（#29 と同型・安全側）: sqlite3/workflow_log 不在、docs/ 未採用、templates/・close/ 配下、
 #   当該 issue に implement/verify ログ 0 件（実装変更を伴わない）。
 check_docs_review_evidence() {
-  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
-  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #31 システム仕様書レビュー証跡欠落検知をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #31 システム仕様書レビュー証跡欠落検知をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
   if [[ ! -d "$PROJECT_ROOT/docs" ]]; then return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   echo "[audit] checking docs review evidence (#31)" >&2
@@ -989,8 +1012,8 @@ check_docs_review_evidence() {
 #   前方一致＋basename 末尾一致の安全側（#29 と同型）。存在監査のみ（review-docs と implement の厳密な
 #   時刻順序は監査しない・ADR-3）。
 check_reviewdocs_before_implement() {
-  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
-  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #32（実装前レビュー実行有無の検知）をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #32（実装前レビュー実行有無の検知）をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   echo "[audit] checking reviewdocs-before-implement (#32)" >&2
   local cutoff="${REVIEWDOCS_GATE_EFFECTIVE_FROM:-20260712_000000}"
@@ -1038,8 +1061,8 @@ check_reviewdocs_before_implement() {
 #   経過日数判定（ADR-3）。sqlite3/DB/workflow_log 不在・ts_utc 解析不能・証跡なしはすべて
 #   fail-open（continue／return 0・ADR-4）。DB・FS への書き込みは一切しない（Query のみ・ADR-CQRS）。
 check_close_move_pending() {
-  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
-  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #33（close ディレクトリ移動状況の検知）をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #33（close ディレクトリ移動状況の検知）をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   echo "[audit] checking close-move-pending (#33)" >&2
   local cutoff="${CLOSE_MOVE_GATE_EFFECTIVE_FROM:-20260712_000000}"
@@ -1101,8 +1124,8 @@ check_github_issue_before_implement() {
   case "${GITHUB_ISSUE_GATE_ENABLED:-true}" in
     [Ff][Aa][Ll][Ss][Ee]|0|[Nn][Oo]|[Oo][Ff][Ff]) return 0 ;;
   esac
-  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
-  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #34（GitHub Issue 起票の記録有無の検知）をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #34（GitHub Issue 起票の記録有無の検知）をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   # 対象外環境フォールバック（ADR-4）: 非 git ツリー／git remote に github.com を含まない場合は SKIP。
   # 「git ツリーか」の判定は rev-parse --is-inside-work-tree を正とする（通常リポジトリ・worktree・
@@ -1177,8 +1200,8 @@ check_branch_linkage_before_implement() {
   case "${BRANCH_LINK_GATE_ENABLED:-true}" in
     [Ff][Aa][Ll][Ss][Ee]|0|[Nn][Oo]|[Oo][Ff][Ff]) return 0 ;;
   esac
-  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then return 0; fi
-  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then return 0; fi
+  if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #35（ブランチ名記録有無の検知）をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
+  if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #35（ブランチ名記録有無の検知）をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   # 対象外環境フォールバック: 非 git ツリーは SKIP（github.com remote は要求しない・#34 との差分・ADR-7）。
   if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
