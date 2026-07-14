@@ -3,6 +3,8 @@
 # パッケージ正本（source/）をプロジェクトの .agent-skill-chain/source/ にコピーし、AGENTS.md /
 # CLAUDE.md をルートに配置する。旧 3 ディレクトリ構成の検出時は統合移行してから配備する。
 # .claude/・.cursor/ の生成とスキル同期・runtime/templates コピーを行う。
+# 新規配備（ASC_MODE=new）のときのみ enforcement を既定 on として自動配線する（既存の再配備
+# ASC_MODE=match・本パッケージ自己適用 ASC_MODE=own では touch しない。opt-out は enforce off）。
 # 配置: .agent-skill-chain/source/scripts/（パッケージルート基準）。参照: source/SETUP.md
 
 set -e
@@ -238,5 +240,54 @@ init_workflow_db() {
 }
 
 init_workflow_db
+
+# enforce_default_on_if_possible <project_root> <package_root>
+#   新規配備（ASC_MODE=new）のときのみ呼ばれる。既存 CLI の `enforce on`（src/agents-md.ts の
+#   enforceOn()。無効 JSON 時中止・.claude/settings.json.bak 退避・冪等マージ・scribe nonce
+#   ローテートを実装済み）をそのまま起動し、配線ロジック自体は再実装しない（重複実装禁止）。
+#   既存の再配備（ASC_MODE=match）・本パッケージ自己適用（ASC_MODE=own）では絶対に呼ばない
+#   （呼び出し側で ASC_MODE=new のときのみ呼び出す）。
+#   node が無い／CLI（bin/agents-md.js）が未生成でビルドもできない／配線自体が失敗、のいずれでも
+#   処理を中止せず警告のみに倒す（安全側フォールバック。既存の init/setup を壊さない）。
+enforce_default_on_if_possible() {
+  local project_root="$1" package_root="$2"
+  local cli="$package_root/bin/agents-md.js"
+
+  if ! command -v node >/dev/null 2>&1; then
+    echo "注: node が見つからないため既定 on の enforcement 配線をスキップしました（後で 'agents-md enforce on' を実行すると手動で有効化できます）。" >&2
+    return 0
+  fi
+
+  if [[ ! -f "$cli" ]]; then
+    if command -v npm >/dev/null 2>&1 && [[ -d "$package_root/node_modules" ]]; then
+      echo "[setup] CLI（bin/agents-md.js）が未生成のため既定 on 配線のためにビルドします。"
+      if ! ( cd "$package_root" && npm run build >/dev/null 2>&1 ); then
+        echo "注: CLI のビルドに失敗したため既定 on の enforcement 配線をスキップしました（'agents-md enforce on' で手動有効化できます）。" >&2
+        return 0
+      fi
+    else
+      echo "注: CLI（bin/agents-md.js）が見つからずビルドもできないため、既定 on の enforcement 配線をスキップしました（'agents-md enforce on' で手動有効化できます）。" >&2
+      return 0
+    fi
+  fi
+
+  if [[ ! -f "$cli" ]]; then
+    echo "注: CLI（bin/agents-md.js）が見つからないため既定 on の enforcement 配線をスキップしました。" >&2
+    return 0
+  fi
+
+  echo "新規配備（ASC_MODE=new）を検出しました。enforcement を既定 on として配線します（'enforce on' 相当。不要なら 'enforce off' で opt-out できます）。"
+  if ! node "$cli" enforce on "$project_root"; then
+    echo "警告: enforcement の既定 on 配線に失敗しました。'agents-md enforce on' で手動有効化してください。" >&2
+  fi
+  return 0
+}
+
+# 新規配備（ASC_MODE=new）のときのみ既定 on を自動配線する。既存再配備（match）・
+# 自己適用（own）では絶対に呼ばない（消費者の既存 enforce off 設定・本リポの settings.json を
+# 自動変更しない。ADR-1・ADR-3）。
+if [[ "$ASC_MODE" == "new" ]]; then
+  enforce_default_on_if_possible "$PROJECT_ROOT" "$PACKAGE_ROOT"
+fi
 
 echo "セットアップ完了。スモークテストは .agent-skill-chain/source/SETUP.md を参照してください。"

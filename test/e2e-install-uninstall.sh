@@ -134,7 +134,10 @@ test_uninstall_keeps_user_assets() {
   assert_absent "$dest/.agent-skill-chain/source" "uninstall: .agent-skill-chain/source が除去される"
   assert_absent "$dest/AGENTS.md"                "uninstall: AGENTS.md が除去される"
   assert_absent "$dest/CLAUDE.md"                "uninstall: CLAUDE.md が除去される"
-  assert_absent "$dest/.claude"                  "uninstall: .claude が除去される"
+  # .claude/hooks（配備分）は除去されるが、.claude/settings.json は新規配備で既定 on 化された
+  # ユーザー設定として保持されるため、.claude ディレクトリ自体は残る（空でなければ削除しない契約）。
+  assert_absent "$dest/.claude/hooks"            "uninstall: .claude/hooks（配備分）が除去される"
+  assert_exists "$dest/.claude/settings.json"    "uninstall: .claude/settings.json（既定 on のユーザー設定）は保持される"
   assert_absent "$dest/.cursor"                  "uninstall: .cursor が除去される"
   assert_absent "$dest/.agent-skill-chain/runtime/templates"      "uninstall: .agent-skill-chain/runtime/templates が除去される"
 
@@ -551,40 +554,34 @@ test_uninstall_preserves_user_skills_and_hooks() {
 }
 
 # =============================================================================
-# シナリオ R6: enforcement opt-in — 既定 off／enforce on で配線・off で解除（ユーザー値保持）
+# シナリオ R6: enforcement 既定 on／opt-out（enforce off）・再 on・ユーザー値保持
 # =============================================================================
 # ユースケース:
-#   利用者がドッグフーディング時にだけ enforcement フックを opt-in できる。既定 install では
-#   .claude/settings.json に enforcement を書き込まず（off）、`enforce on` で正本テンプレートから
-#   妥当な settings.json を生成/マージし（既存ユーザー値は破壊しない）、`enforce off` で配線のみ外す。
-#   `status` が on/off を正しく表示し、hooks の command は実在する .claude/hooks/PreToolUse.sh 等を指す。
+#   新規配備（.agent-skill-chain/ が未配備の採用先への初回 init/upgrade）では enforcement フックが
+#   既定 on で自動配線される（docs/maintainer/workflow/.../20260714_163833_enforceoff既定で強制未配線/）。
+#   .claude/settings.json は妥当 JSON として生成され、hooks が実在 hook を指し AGENT_ROLE=orchestrator
+#   が設定される。利用者は `enforce off` でいつでも opt-out でき、その後 `enforce on` で再度有効化
+#   （既存ユーザー値は破壊せずマージ）できる。`status` が on/off を正しく表示する。
+#   新規配備固有の判定（ASC_MODE=new のときのみ既定 on）は test-enforce-default-on.sh が担当し、
+#   本シナリオは「既定 on 後の CLI（on/off/status）の挙動」を担当する（責務分離・重複なし）。
 test_enforcement_optin() {
-  echo "[e2e] シナリオR6: enforcement opt-in（既定 off／on 配線・off 解除・ユーザー値保持）"
-  # シナリオ: 既定 install では settings.json に enforcement が書かれず、enforce on で妥当 JSON が生成され
-  #           hooks が実在 hook を指し、AGENT_ROLE=orchestrator が設定される。既存ユーザー settings があれば
-  #           マージで破壊せず .bak を退避し、enforce off で配線のみ外れてユーザー値が残る。status が on/off を表示する。
+  echo "[e2e] シナリオR6: enforcement 既定 on／opt-out（enforce off）・再 on・ユーザー値保持"
+  # シナリオ: 新規配備の install では settings.json に enforcement が既定で書かれ妥当 JSON になり、
+  #           hooks が実在 hook を指し AGENT_ROLE=orchestrator が設定される。enforce off で配線のみ外れ
+  #           ユーザー値は残り、enforce on で再度配線される（既存ユーザー値はマージで破壊しない）。
+  #           status が on/off を正しく表示する。
 
-  # Given: クリーン clone を隔離 dir へ install する
+  # Given: クリーン clone を隔離 dir へ install する（新規配備 = ASC_MODE=new）
   local src dest settings
   src="$(mktemp -d)"; dest="$(mktemp -d)"
   make_clean_tree "$src"
   node "$CLI" init "$dest" >/dev/null 2>&1
   settings="$dest/.claude/settings.json"
 
-  # Then: 既定 install では enforcement が書かれない（off）
-  assert_absent "$settings"                                 "R6: 既定 install では settings.json に enforcement を書かない（off）"
+  # Then: 新規配備では enforcement が既定で書かれる（on）
+  assert_exists "$settings"                                 "R6: 新規配備では settings.json に enforcement が既定で書かれる（on）"
 
-  # And (When): enforce status は off を表示する
-  if node "$CLI" enforce status "$dest" 2>&1 | grep -q "off"; then
-    ok "R6: status が off を表示する（配線前）"
-  else
-    ng "R6: status は off を表示すべき（配線前）"
-  fi
-
-  # When: enforce on で opt-in する
-  node "$CLI" enforce on "$dest" >/dev/null 2>&1
-
-  # Then: settings.json が妥当 JSON である（無効 JSON での Claude 起動エラーを防ぐ）
+  # And (Then): settings.json が妥当 JSON である（無効 JSON での Claude 起動エラーを防ぐ）
   assert_cmd_ok node -e "JSON.parse(require('fs').readFileSync('$settings','utf8'))"
 
   # And (Then): hooks の command が実在する .claude/hooks/PreToolUse.sh を指し、AGENT_ROLE=orchestrator が設定される
@@ -601,21 +598,31 @@ test_enforcement_optin() {
     ng "R6: hooks が実在 hook を指し AGENT_ROLE=orchestrator を設定すべき"
   fi
 
-  # And (When): enforce status は on を表示する
+  # And (When): enforce status は on を表示する（新規配備直後）
   if node "$CLI" enforce status "$dest" 2>&1 | grep -q "on"; then
-    ok "R6: status が on を表示する（配線後）"
+    ok "R6: status が on を表示する（新規配備直後）"
   else
-    ng "R6: status は on を表示すべき（配線後）"
+    ng "R6: status は on を表示すべき（新規配備直後）"
   fi
 
-  # And (When): enforce off で配線を外す
+  # When: enforce off で opt-out する
   node "$CLI" enforce off "$dest" >/dev/null 2>&1
 
-  # And (Then): enforcement 配線が外れ、status が off に戻る
+  # Then: enforcement 配線が外れ、status が off になる
   if node "$CLI" enforce status "$dest" 2>&1 | grep -q "off"; then
-    ok "R6: enforce off で配線が外れ status が off に戻る"
+    ok "R6: enforce off で配線が外れ status が off になる"
   else
-    ng "R6: enforce off 後は status が off に戻るべき"
+    ng "R6: enforce off 後は status が off になるべき"
+  fi
+
+  # When: enforce on で再度有効化する（既存ユーザー値を破壊せずマージ）
+  node "$CLI" enforce on "$dest" >/dev/null 2>&1
+
+  # Then: 再度 status が on を表示する
+  if node "$CLI" enforce status "$dest" 2>&1 | grep -q "on"; then
+    ok "R6: enforce on で再度 status が on になる"
+  else
+    ng "R6: enforce on 後は status が on になるべき"
   fi
 
   rm -rf "$src" "$dest"

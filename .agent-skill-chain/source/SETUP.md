@@ -94,9 +94,15 @@ bash .agent-skill-chain/source/scripts/setup.sh
 
 ---
 
-## enforcement の opt-in（既定 off）
+## enforcement（新規セットアップ既定 on・opt-out 可）
 
-**結論: enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` への配線は既定 off。ドッグフーディング時に明示的に opt-in する。** 常時 on にはしない（自己拡張・通常開発のノイズ回避。03_実装計画 §2.6）。配線はセッション挙動を変えるため、利用者が任意のタイミングで着脱できる。
+**結論: enforcement フック（PreToolUse/PostToolUse）の `.claude/settings.json` への配線は、新規配備（`ASC_MODE=new`。`.agent-skill-chain/` が未配備の採用先への初回 `init`/`upgrade`）では既定 on。既存の再配備（`ASC_MODE=match`）・本パッケージ自己適用（`ASC_MODE=own`）では touch しない（現状維持）。** 配線はセッション挙動を変えるため、`enforce off` でいつでも opt-out できる。ロックアウト時の復旧手順は [§ロックアウトからの復旧（enforce off で解除）](#ロックアウトからの復旧enforce-off-で解除) を参照。
+
+| `ASC_MODE`（配備判定） | `init`/`upgrade` 時の enforcement 配線 |
+|------|------|
+| `new`（新規配備。`.agent-skill-chain/` 未配備） | **既定 on**（`enforce on` 相当を自動実行。node が使えない等の理由で配線できない場合は警告のみで見送る＝安全側フォールバック） |
+| `match`（既存の再配備・upgrade） | touch しない（利用者が意図的に `enforce off` した設定を維持する） |
+| `own`（本パッケージ自己適用） | touch しない（本リポ自身への適用は別途手動） |
 
 | コマンド | 役割 |
 |----------|------|
@@ -114,14 +120,14 @@ npx github:techbeansjp-free/AGENTS.md enforce off      # 解除（enforcement �
 ```
 
 - **正本テンプレート**: `.agent-skill-chain/source/platforms/claude/settings.enforce.json`。`hooks.PreToolUse`/`PostToolUse` を setup 配備物 `.claude/hooks/PreToolUse.sh`/`PostToolUse.sh` へ `${CLAUDE_PROJECT_DIR}` 相対で結線し、`env.AGENT_ROLE=orchestrator`・`env.AGENTS_ROOT` を設定する。各 hook エントリには `__agentsMdEnforce: true` の目印を付与し、`enforce off` で正確に除去する。
-- **既定 install では書き込まない**: `init`/`setup` は `.claude/settings.json` に enforcement を**書かない**（off）。`doctor` は enforcement 配線の on/off と hook スクリプト実在性を表示する。
-- **安全策**: `.claude/settings.json` が無効 JSON の場合、`enforce` は破壊を避けるため中止する（Claude 起動時エラーを事前に防ぐ）。
+- **新規配備では既定で書き込む**: `init`/`setup` は、新規配備（`ASC_MODE=new`）のときのみ `.claude/settings.json` に enforcement を既定で書き込む（on）。既存の再配備（`ASC_MODE=match`）・本パッケージ自己適用（`ASC_MODE=own`）では**書かない**（touch しない・現状維持）。`doctor` は enforcement 配線の on/off と hook スクリプト実在性を表示する。
+- **安全策**: `.claude/settings.json` が無効 JSON の場合、`enforce`（既定 on の自動実行を含む）は破壊を避けるため配線を見送る（Claude 起動時エラーを事前に防ぐ）。既定 on の自動実行は node 不在時にも同様に見送り、警告のみ出力する（安全側フォールバック）。
 
 ### settings.json の保持・上書き契約
 
-| 対象 | init/upgrade | enforce on | enforce off | uninstall |
-|------|--------------|-----------|-------------|-----------|
-| **.claude/settings.json**（ユーザー値） | touch しない（保持） | **ユーザー値は保持**し enforcement 配線のみ追加（マージ・`.bak` 退避） | enforcement 配線のみ除去（ユーザー値は保持） | touch しない（ユーザー設定として保持） |
+| 対象 | init/upgrade（新規配備 `ASC_MODE=new`） | init/upgrade（既存再配備 `match`・自己適用 `own`） | enforce on | enforce off | uninstall |
+|------|------------------------------------------|--------------------------------------------------|-----------|-------------|-----------|
+| **.claude/settings.json**（ユーザー値） | **既定 on**（`enforce on` 相当を自動実行。ユーザー値は保持しマージ・`.bak` 退避） | touch しない（保持） | **ユーザー値は保持**し enforcement 配線のみ追加（マージ・`.bak` 退避） | enforcement 配線のみ除去（ユーザー値は保持） | touch しない（ユーザー設定として保持） |
 
 ### ロックアウトからの復旧（enforce off で解除）
 
@@ -182,7 +188,7 @@ npx github:techbeansjp-free/AGENTS.md upgrade
 npx github:techbeansjp-free/AGENTS.md doctor
 ```
 
-`enforce` の実行コマンドは [§enforcement の opt-in（既定 off）](#enforcement-の-opt-in既定-off) を、`uninstall` の実行コマンドは [§アンインストール（つけ外し）](#アンインストールつけ外し) を参照。上記は README.md §配備後の管理（CLI）の実コマンド例と同一内容（配布物単体で完結させるため実体を SETUP.md にも保持する）。
+`enforce` の実行コマンドは [§enforcement（新規セットアップ既定 on・opt-out 可）](#enforcement新規セットアップ既定-onopt-out-可) を、`uninstall` の実行コマンドは [§アンインストール（つけ外し）](#アンインストールつけ外し) を参照。上記は README.md §配備後の管理（CLI）の実コマンド例と同一内容（配布物単体で完結させるため実体を SETUP.md にも保持する）。
 
 ### 所有区分（統合ルート `.agent-skill-chain/` の 3 サブディレクトリと配備先）
 
@@ -232,7 +238,7 @@ init/upgrade（setup）は、既存の `.agent-skill-chain/` を上書きする�
 |------|------|
 | **.agent-skill-chain/project/** | project 固有ルール。setup は touch しない。**project 固有ルールは必ずここに置くこと**（推奨）。.agent-skill-chain/source より優先される。 |
 | **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc`・独自ファイル・`.cursor/skills/` の自作スキル） | setup は `.cursor/` を丸ごと削除せず、パッケージ所有ファイル・所有 skill エントリのみ更新するため**保持**される。 |
-| **.claude/ のユーザー設定・自作物**（`settings.json`・`.claude/skills/` の自作スキル・`.claude/hooks/` の独自フック） | setup は `.claude/hooks`・`.claude/skills` の**パッケージ配備分のみ**更新し、ユーザー設定・自作スキル・独自フックは touch しない（保持）。`settings.json` の enforcement 配線は `enforce on`/`off` でのみ着脱し、ユーザー値は破壊しない（§enforcement の opt-in）。 |
+| **.claude/ のユーザー設定・自作物**（`settings.json`・`.claude/skills/` の自作スキル・`.claude/hooks/` の独自フック） | setup は `.claude/hooks`・`.claude/skills` の**パッケージ配備分のみ**更新し、ユーザー設定・自作スキル・独自フックは touch しない（保持）。`settings.json` の enforcement 配線は新規配備でのみ既定 on として自動着脱され、既存再配備・自己適用では touch しない。手動の着脱は `enforce on`/`off` で行い、ユーザー値は破壊しない（[§enforcement（新規セットアップ既定 on・opt-out 可）](#enforcement新規セットアップ既定-onopt-out-可)）。 |
 | **.agent-skill-chain/runtime/<issue>/** | issue 成果物（消費者ランタイム）。保持。 |
 | **workflow.db** | 証跡 DB。初回のみ生成、既存は上書きしない（保持）。 |
 
