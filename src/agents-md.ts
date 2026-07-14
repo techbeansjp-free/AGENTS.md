@@ -11,7 +11,9 @@
 //   doctor           配備に必要な前提ファイル・依存の存在確認 ＋ 証跡健全性診断（hash チェーン・integrity）
 //   audit [dir]      .agent-skill-chain/source/enforcement/ci/audit.sh の薄ラッパー（終了コード透過）
 //   export [dir]     workflow.db を NDJSON で書き出す（export-ndjson.sh の薄ラッパー・read-only）
-//   enforce on|off|status  enforcement フックを .claude/settings.json に着脱（既定 off / opt-in）
+//   enforce on|off|status  enforcement フックを .claude/settings.json に着脱する CLI サブコマンド自体は不変。
+//                    ただし新規配備（init/upgrade で ASC_MODE=new）時は setup.sh が enforce on 相当を
+//                    既定で自動実行する（既存再配備 ASC_MODE=match・本パッケージ自己適用 ASC_MODE=own では touch しない）。
 //   version          package.json の version を表示
 //   help / (既定)    使い方を表示
 
@@ -42,7 +44,7 @@ const AUDIT_PATH = join(PACKAGE_SOURCE, "enforcement", "ci", "audit.sh");
 const EXPORT_NDJSON_PATH = join(PACKAGE_SOURCE, "scripts", "export-ndjson.sh");
 // entry_hash 計算の共有正本（gen_entry_hash）。doctor の hash チェーン検証はこれを source して使う（再実装禁止）。
 const GEN_ENTRY_HASH_PATH = join(PACKAGE_SOURCE, "scripts", "gen-entry-hash.sh");
-// enforcement 用 settings.json の正本テンプレート（既定 off。opt-in で配線する）。
+// enforcement 用 settings.json の正本テンプレート（新規配備は既定 on。既存/自己適用は opt-in で配線する）。
 const ENFORCE_TEMPLATE_PATH = join(
   PACKAGE_SOURCE,
   "platforms",
@@ -111,8 +113,11 @@ function printHelp(): void {
   npx agent-skill-chain <command>
 
 コマンド:
-  init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agent-skill-chain/ 等を配備する
-  upgrade [dir]         既存配備を再同期する（旧 3 ディレクトリ構成は統合移行してから再同期）
+  init [dir]            採用先プロジェクト（既定: カレントディレクトリ）へ .agent-skill-chain/ 等を配備する。
+                        新規配備（既存の .agent-skill-chain/ が無い場合）は enforcement を既定 on で自動配線する
+                        （enforce on 相当。不要なら enforce off で opt-out できる）。
+  upgrade [dir]         既存配備を再同期する（旧 3 ディレクトリ構成は統合移行してから再同期）。既存配備・
+                        本パッケージ自己適用では .claude/settings.json の enforcement 配線を touch しない。
   uninstall [dir]       init/setup が配備した成果物のみを除去する（ユーザー資産は既定で保持）
   doctor [dir]          配備に必要な前提（setup.sh・bash・sqlite3 等）の有無 ＋ 証跡健全性
                         （workflow.db の hash チェーン・integrity_check・配線差分）を確認する
@@ -120,7 +125,8 @@ function printHelp(): void {
   export [dir]          workflow.db を NDJSON（1 行 1 JSON）で標準出力へ書き出す（read-only）
   enforce <on|off|status> [dir]
                         enforcement フック（PreToolUse/PostToolUse）を .claude/settings.json に着脱する。
-                        既定は off（init では配線しない）。on で opt-in、off で解除、status で現状表示。
+                        新規配備は init/upgrade が既定で on にする（上記参照）。on で明示配線、off で解除
+                        （opt-out）、status で現状表示。
   version               パッケージのバージョンを表示する
   help                  このヘルプを表示する
 
@@ -144,11 +150,17 @@ enforce のオプション:
   setup.sh は workflow.db 初期化に sqlite3 バイナリを必要とします（doctor で確認可能）。
   uninstall は既定で .agent-skill-chain/project/・runtime/ の issue 履歴・workflow.db を保持します
   （--purge で project/・runtime/ も削除）。引数なしの場合は dry-run（表示のみ）です。
-  enforcement は既定 off。ドッグフーディング時に enforce on で opt-in（セッション挙動が変わるため任意）。
-  enforce off で解除します。enforce は .claude/settings.json のユーザー値を破壊せず配線のみ着脱します。`);
+  enforcement は新規配備（init/upgrade で .agent-skill-chain/ が未配備）のときのみ既定 on。既存配備・
+  本パッケージ自己適用では touch しません。不要なら enforce off で opt-out できます（セッション挙動が変わるため）。
+  enforce は .claude/settings.json のユーザー値を破壊せず配線のみ着脱します。`);
 }
 
 // setup.sh を projectRoot 引数つきで実行する。
+//   init/upgrade（TS CLI）は setup.sh（bash）へ完全委譲する薄いラッパであり、init 経路の実体は
+//   常に setup.sh 側 1 箇所のみである。新規配備（ASC_MODE=new）時の enforcement 既定 on 配線
+//   （enforce on 相当の自動実行）は setup.sh 側の enforce_default_on_if_possible が担い、
+//   本関数はそれを内包する setup.sh を呼ぶだけで新規/既存/自己適用いずれの判定・分岐にも
+//   自動的に追従する（TS 側に判定・呼び出しを二重実装しない。重複実装の禁止）。
 function runSetup(projectRoot: string): number {
   if (!existsSync(SETUP_PATH)) {
     console.error(
@@ -397,7 +409,7 @@ function runDoctor(projectRoot: string = process.cwd()): number {
     "Claude enforcement が未配備の場合は init を実行してください。"
   );
 
-  // enforcement の on/off 判定（opt-in 機構。既定 off）。
+  // enforcement の on/off 判定（新規配備は init/upgrade が既定 on。既存配備・自己適用は現状維持）。
   // settings.json に本パッケージ由来の hook 配線があるかで判定する。hook スクリプト実在性も併せて表示する。
   const settingsPath = join(projectRoot, ".claude", "settings.json");
   const settings = readSettings(settingsPath);
@@ -406,8 +418,8 @@ function runDoctor(projectRoot: string = process.cwd()): number {
   } else {
     const on = enforceIsOn(settings);
     console.log(
-      `[INFO] enforcement 配線 = ${on ? "on" : "off（既定）"}` +
-        `${on ? "" : "。ドッグフーディング時に `agents-md enforce on` で opt-in できます。"}`
+      `[INFO] enforcement 配線 = ${on ? "on" : "off"}` +
+        `${on ? "" : "。`agents-md enforce on` で有効化できます。"}`
     );
     if (on && !(existsSync(preHookPath) && existsSync(postHookPath))) {
       console.log("[NG]  enforcement は on ですが hook スクリプトが未配備です。init を実行してください。");
@@ -1047,10 +1059,13 @@ function runUninstall(projectRoot: string, opts: UninstallOpts): number {
 }
 
 // ----------------------------------------------------------------------------
-// enforce: enforcement フックを .claude/settings.json に着脱する（既定 off / opt-in）。
+// enforce: enforcement フックを .claude/settings.json に着脱する。
 //
 // 方針（ライブセッション保護・ユーザー値非破壊）:
-//   - 既定では init/setup は settings.json に enforcement を書き込まない（off）。
+//   - 新規配備（init/upgrade で .agent-skill-chain/ が未配備＝ASC_MODE=new）のときのみ、
+//     setup.sh が本サブコマンドの `on` 相当を自動実行し settings.json に enforcement を既定で書き込む。
+//     既存再配備（ASC_MODE=match）・本パッケージ自己適用（ASC_MODE=own）では書き込まない（現状維持）。
+//     本関数群（enforceOn/enforceOff/enforceStatus）自体の契約は不変（呼び出し元が増えるのみ）。
 //   - `enforce on`  … 正本テンプレート（.agent-skill-chain/source/platforms/claude/settings.enforce.json）から
 //                     hooks.PreToolUse/PostToolUse・env(AGENT_ROLE 等)を **既存 settings.json にマージ**する。
 //                     注入したエントリには見えない目印を持たせず、env は managed キー集合で識別する。

@@ -10,7 +10,7 @@ hooks で矯正するもの／しないものの正本をここに置く。setup
 
 **メイン（orchestrator）の直接実作業は例外なく禁止とする（絶対強制）。** いかなる理由・規模・内容であっても、メインが Write/Edit/Shell 等で成果物を直接作成・編集・実行することは許容しない。
 
-- **Runtime（条件付き）**: **ロール（`AGENT_ROLE=orchestrator` または stdin JSON 等）が渡る環境では、PreToolUse は orchestrator による Write/Edit/StrReplace/Shell/Delete 等を必ず exit 2（block）で拒否する**（拒否時に「必ずサブに委譲すること」を案内する）。**ロールが渡らない環境では案内のみ exit 0 とし、CI（audit.sh #25 等）で事後補完する**（hooks の物理限界。詳細は §Layer2・§「Runtime reject が効く条件」）。
+- **Runtime（条件付き・新規配備は既定 on）**: **ロール（`AGENT_ROLE=orchestrator` または stdin JSON 等）が渡る環境では、PreToolUse は orchestrator による Write/Edit/StrReplace/Shell/Delete 等を必ず exit 2（block）で拒否する**（拒否時に「必ずサブに委譲すること」を案内する）。この runtime hook 配線自体は、**新規配備（`ASC_MODE=new`）では `init`/`setup` が既定で自動配線する**（opt-out は `enforce off`）。既存の再配備・本パッケージ自己適用では配線を変更しない（[SETUP.md §enforcement（新規セットアップ既定 on・opt-out 可）](../SETUP.md) 参照）。**ロールが渡らない環境では案内のみ exit 0 とし、CI（audit.sh #25 等）で事後補完する**（hooks の物理限界。詳細は §Layer2・§「Runtime reject が効く条件」）。
 - **CI**: audit.sh は **失敗条件 #25（メインが実作業を直接行った）を必須チェックに含め**、該当する証跡・整合性違反を検出したら FAIL とする。#25 は成果物変更に対応する委譲・証跡が対象差分と時系列的に対応していないときに FAIL する**間接検出**であり、変更者（orchestrator か sub か）の同一性までは識別しない（#12/#13 と PreToolUse の orchestrator reject で補完する。対応表・#25 を参照）。**時系列突合**: workflow.db は累積型であるため、証跡の有無を単純な件数（COUNT）のみで判定すると、過去のどこかで対象 command が 1 件でも記録されていればそれ以降のあらゆる差分で恒久的に PASS してしまう。check_25 は対象差分（GIT_RANGE）に含まれる最古コミットの日時を基準に、workflow_log の対象 command の最新 ts_utc がそこから許容窓（既定 48 時間・`MAIN_WORK_GATE_TOLERANCE_SECONDS` で上書き可）を超えて過去でないことを検証する。
 - **例外**: 認めない。委譲手段がプラットフォームで利用できない場合は「委譲計画のみ返し実作業は行わない」（CORE §依頼タイプ別振る舞い）。軽作業・小規模・「1 ファイルだけ」等を理由にメインが実作業することは禁止である。
 - **verify-and-close 実行時は 04_review.md を必ず作成する（絶対強制）**: verify-and-close を実行したら、**必ず** issue 直下に 04_review.md ファイルを作成する。memo にレビューを書いて 04 を省略することは禁止。省略した場合は失敗条件 #3 で **必ず FAIL** とする。commands/verify-and-close.md の OUTPUT・DoD および run_command の Constraints に従う。
@@ -22,7 +22,7 @@ hooks で矯正するもの／しないものの正本をここに置く。setup
 | 層 | 担い手 | 役割 | 現状 |
 |----|--------|------|------|
 | **Layer1 プラットフォーム権限** | 実行環境 | ロール別のツール許可・拒否 | プラットフォーム依存。設定で orchestrator を Read のみにできる場合は推奨。 |
-| **Layer2 Tool hook** | PreToolUse.sh | ツール実行前に違反なら exit 2（block） | **プラットフォームがツール名・対象パス・コマンド・ロールをフックに渡す場合に有効**。.agent-skill-chain/runtime 直接編集・許可外 Shell・sqlite3 直接・orchestrator の Write/Edit を拒否。渡されない場合は案内のみ exit 0。 |
+| **Layer2 Tool hook** | PreToolUse.sh | ツール実行前に違反なら exit 2（block） | **新規配備（`ASC_MODE=new`）では `init`/`setup` が既定で配線（on）**。既存の再配備・本パッケージ自己適用では配線を変更しない（`enforce on`/`off` で手動着脱可）。配線が入っている環境で、プラットフォームがツール名・対象パス・コマンド・ロールをフックに渡す場合は exit 2 で拒否（.agent-skill-chain/runtime 直接編集・許可外 Shell・sqlite3 直接・orchestrator の Write/Edit 等）。渡されない場合は案内のみ exit 0（CI 補完）。 |
 | **Layer3 Wrapper command** | write-workflow-log.sh | DB 書き込みはラッパー経由のみ | 実装済。書記は sqlite3 直接禁止、本ラッパーのみ使用。 |
 | **Layer4 CI audit** | audit.sh | 証跡・順序・品質・sidecar 等の事後検知 | 実装済。push/merge 前に reject。 |
 
@@ -93,7 +93,7 @@ flowchart TD
 
 | ツール | 強制力区分 | 手段 | 備考 |
 |--------|-----------|------|------|
-| **Claude Code** | runtime 強制あり | PreToolUse hook で exit 2 物理ブロック | ロール・ツール名・対象パス・コマンドが hook に渡る場合に有効（渡らない場合は案内のみ exit 0 → CI 補完）。 |
+| **Claude Code** | runtime 強制あり（新規配備は既定 on・既存/自己適用は現状維持） | PreToolUse hook で exit 2 物理ブロック | **新規配備（`ASC_MODE=new`）では配線を `init`/`setup` が既定で自動実行**（opt-out は `enforce off`）。既存の再配備・本パッケージ自己適用では touch しない。配線済み環境でロール・ツール名・対象パス・コマンドが hook に渡る場合に有効（渡らない場合は案内のみ exit 0 → CI 補完）。 |
 | **Cursor** | advisory のみ | `agents-core.mdc` によるルール配布・一部誘導 | ルールで orchestrator の許可ツールを誘導するが物理ブロックではない。 |
 | **Gemini** | advisory のみ | 方針・プロンプト適用（予定） | 配備手段は今後整備。 |
 | **Copilot** | advisory のみ | リポジトリルール適用（予定） | 配備手段は今後整備。 |
@@ -200,7 +200,7 @@ SQLite WAL モードでは
 
 **「04 作成のみで書記未実行」の防止**: 04_review.md が issue 直下に存在するにもかかわらず、workflow.db に対応する verify-and-close の書記ログ（write-workflow-log 経由）が存在しない場合は、失敗条件 #9「04_review と証跡の不整合」として **必ず FAIL** とする。これは、メインが「レビュー作成」を verify-and-close の実行としてではなく、「04_review を作成せよ」という成果物のみの委譲として解釈した結果、skill chain の最終 step（write-workflow-log）が実行されないケースを想定したものである。再発防止のため、run_command §Constraints で「レビュー作成依頼は verify-and-close を command として委譲し、skill chain を最後まで（書記含む）実行させること」を**必須**とし、04_review のみ作成して書記を省略する運用を禁止する。
 
-**現状の実装について**: PreToolUse.sh と PostToolUse.sh は、**デフォルトでは案内メッセージの出力のみで exit 0 で終了する**（違反をその場では止めない）。一方、プラットフォームがツール名・対象パス・コマンド・ロール等のメタデータをフックに渡す環境で実行される場合は、**違反時に exit 2（block）を返して実行をブロックする**。メタデータの有無とフック契約の詳細は、本 README の「強制の 4 層と現状」§Layer2・「Runtime reject が効く条件」（上記 Line 14 / 23 付近）および [DESIGN.md](DESIGN.md) を参照すること。メタデータが渡されない環境ではその場で違反を止められないため、**CI（audit.sh）で事後検知する構成**とする。必要なメタデータ／フック契約の詳細は **DESIGN.md** および本節に記載されている。上記を参照すること。
+**現状の実装について**: PreToolUse.sh と PostToolUse.sh 自体の挙動は「**配線が入っている環境で実行された場合**、プラットフォームがツール名・対象パス・コマンド・ロール等のメタデータをフックに渡すなら違反時に exit 2（block）で実行をブロックし、渡さないなら案内メッセージの出力のみで exit 0 で終了する（違反をその場では止めない）」という契約である。**この配線自体は、新規配備（`ASC_MODE=new`）では `init`/`setup` が既定で自動実行する**（`.claude/settings.json` へ既定 on。opt-out は `enforce off`）。既存の再配備（`ASC_MODE=match`）・本パッケージ自己適用（`ASC_MODE=own`）では配線を変更しない（現状維持。[SETUP.md §enforcement（新規セットアップ既定 on・opt-out 可）](../SETUP.md) 参照）。メタデータの有無とフック契約の詳細は、本 README の「強制の 4 層と現状」§Layer2・「Runtime reject が効く条件」（上記 Line 14 / 23 付近）および [DESIGN.md](DESIGN.md) を参照すること。メタデータが渡されない環境ではその場で違反を止められないため、**CI（audit.sh）で事後検知する構成**とする。必要なメタデータ／フック契約の詳細は **DESIGN.md** および本節に記載されている。上記を参照すること。
 
 **試験運用では「hooks で止める」を前提にしないこと。** ルール違反をその場で止める仕組みではなく、**後から検知する仕組み**である。本当に守らせる中心は **audit / pre-push / CI** とする。強制を高めるには、**フックだけで止めない**・**呼び出し経路を細くする**・**ロール識別を task 契約で外部化する**・**CI で最終確定する** の 4 本柱で組む（DESIGN.md の思想と整合）。
 

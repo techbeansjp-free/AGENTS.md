@@ -32,6 +32,7 @@
 #   | test-workflow-db-guard.sh           | bash のみ（workflow.db 由来検知の軽量警告。sqlite3 不在時は関数内で沈黙 return 0 として検証・tmp 隔離） |
 #   | test-c4-bypass-resistance.sh        | bash・git・tar（C-4 パス正規化・AGENT_ROLE 出所制御の回帰・tmp 隔離） |
 #   | test-package-manifest-parity.sh     | bash・node（package-manifest.sh↔agents-md.ts ミラー同期のパリティ・tmp 隔離） |
+#   | test-enforce-default-on.sh          | bash・git・tar・node・sqlite3（新規配備 ASC_MODE=new での enforcement 既定 on 化・既存/自己適用は不変・無効JSON安全見送り・冪等性・tmp 隔離） |
 #   | test-cli-audit-doctor.sh            | bash・git・tar・node・sqlite3（C-5 audit 透過・doctor hash/integrity・tmp 隔離） |
 #   | test-export-ndjson.sh               | bash・git・tar・node・sqlite3・python3（C-7 NDJSON export 検証・tmp 隔離） |
 #   | e2e-claude-hook.sh                  | bash・git・tar・node・python3（C-3 settings 配線経由 hook E2E・tmp 隔離） |
@@ -73,6 +74,7 @@ test-write-workflow-log-schema-idempotent|test-write-workflow-log-schema-idempot
 test-workflow-db-guard|test-workflow-db-guard.sh|bash
 test-c4-bypass-resistance|test-c4-bypass-resistance.sh|bash git tar
 test-package-manifest-parity|test-package-manifest-parity.sh|bash node
+test-enforce-default-on|test-enforce-default-on.sh|bash git tar node sqlite3
 test-cli-audit-doctor|test-cli-audit-doctor.sh|bash git tar node sqlite3
 test-export-ndjson|test-export-ndjson.sh|bash git tar node sqlite3 python3
 e2e-claude-hook|e2e-claude-hook.sh|bash git tar node python3
