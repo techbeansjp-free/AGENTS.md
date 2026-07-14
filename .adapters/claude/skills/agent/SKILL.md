@@ -5,7 +5,7 @@ description: "command 実行の入口。commands/{name}.md の skill chain を�
 
 # run_command
 
-**契約**: [IO_CONTRACT.md](../../IO_CONTRACT.md) に従い Purpose / Inputs / Process / Outputs / Done / Forbidden で定義する。
+**契約**: IO_CONTRACT.md（`.agent-skill-chain/source/IO_CONTRACT.md`。本スキルは配備後に `.claude/skills/agent/` へ単体コピーされるため相対リンクではなくパス表記で示す）に従い Purpose / Inputs / Process / Outputs / Done / Forbidden で定義する。
 
 ## Purpose
 

@@ -5,7 +5,7 @@ description: "BDD シナリオ・ユーザーストーリー・受け入れ基�
 
 # write-bdd
 
-**契約**: [IO_CONTRACT.md](../../IO_CONTRACT.md) に従い Purpose / Inputs / Process / Outputs / Done / Forbidden で定義する。
+**契約**: IO_CONTRACT.md（`.agent-skill-chain/source/IO_CONTRACT.md`。本スキルは配備後に `.claude/skills/requirements__write-bdd/` へ単体コピーされるため相対リンクではなくパス表記で示す）に従い Purpose / Inputs / Process / Outputs / Done / Forbidden で定義する。
 
 ## Purpose
 
