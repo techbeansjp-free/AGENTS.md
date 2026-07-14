@@ -759,6 +759,95 @@ jq_orchestrator_write_blocked
 jq_scribe_sqlite_blocked
 jq_orchestrator_grep_allowed
 
+# =====================================================================================
+# UC12: sqlite3 判定の過剰ブロック解消・回避耐性強化（R6・is_sqlite3_invocation）
+#   docs/maintainer/workflow/20260714_180751_自己点検issue群対応/90_issues/
+#   20260714_163600_sqlite3判定の過剰ブロックと回避耐性不足/00_要求定義.md 対応。
+#   旧実装 `[[ "$CMD" =~ sqlite3 ]]` の部分文字列一致による過剰検知（false positive）と、
+#   python -c 経由の import アクセス見逃し（false negative）の両方を検証する。
+#   jq 有/無の両系統で同一合否になることを確認する。
+# =====================================================================================
+echo "== UC12: sqlite3 判定の過剰ブロック解消・回避耐性強化 =="
+run_uc12() {
+  local label="$1" pathval="$2"
+
+  # シナリオ1: grep 引数中の文字列言及は誤ブロックしない（過剰ブロック解消の核心）
+  # Given: AGENT_ROLE=worker、"sqlite3" を検索文字列として grep するだけの Bash コマンド
+  local json1='{"tool_name":"Bash","tool_input":{"command":"grep sqlite3 doc.md"},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" worker "$json1"
+  # Then: sqlite3 直接実行ではないため exit 0（過剰ブロックしない）
+  assert_eq 0 "$RC" "UC12[$label]: grep sqlite3 doc.md は exit 0（過剰ブロック解消）"
+
+  # シナリオ2: grep -rn 等オプション付きでも同様に誤ブロックしない
+  # Given: AGENT_ROLE=worker、grep -rn "sqlite3" によるコードベース検索
+  local json2='{"tool_name":"Bash","tool_input":{"command":"grep -rn \"sqlite3\" README.md"},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" worker "$json2"
+  # Then: exit 0（先頭コマンド名は grep であり sqlite3 起動ではない）
+  assert_eq 0 "$RC" "UC12[$label]: grep -rn \"sqlite3\" README.md は exit 0"
+
+  # シナリオ3: sqlite3 直接実行は引き続き block される（既存検知の維持）
+  # Given: AGENT_ROLE=worker、sqlite3 の直接実行
+  local json3='{"tool_name":"Bash","tool_input":{"command":"sqlite3 x.db \"select 1\""},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" worker "$json3"
+  # Then: exit 2（既存検知は維持）
+  assert_eq 2 "$RC" "UC12[$label]: sqlite3 直接実行は exit 2（既存検知維持）"
+
+  # シナリオ4: パス付き実行（/usr/bin/sqlite3）も検知する
+  # Given: AGENT_ROLE=worker、絶対パス経由の sqlite3 実行
+  local json4='{"tool_name":"Bash","tool_input":{"command":"/usr/bin/sqlite3 x.db"},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" worker "$json4"
+  # Then: exit 2（ベースネーム比較で検知）
+  assert_eq 2 "$RC" "UC12[$label]: /usr/bin/sqlite3 は exit 2（パス付き実行も検知）"
+
+  # シナリオ5: セミコロン区切り後の sqlite3 起動も検知する
+  # Given: AGENT_ROLE=worker、無害なコマンドの後に ; で sqlite3 を起動
+  local json5='{"tool_name":"Bash","tool_input":{"command":"echo hi; sqlite3 x.db"},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" worker "$json5"
+  # Then: exit 2（セグメント分割後の先頭トークン判定で検知）
+  assert_eq 2 "$RC" "UC12[$label]: echo hi; sqlite3 x.db は exit 2（セミコロン区切り後も検知）"
+
+  # シナリオ6: 回避耐性強化 — python3 -c "import sqlite3" 経由のアクセスを検知する
+  # Given: AGENT_ROLE=worker、python3 -c 経由で sqlite3 モジュールを import するコマンド
+  local json6='{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import sqlite3 as s; s.connect(1)\""},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" worker "$json6"
+  # Then: exit 2（python -c 経由の import アクセスを検知・回避耐性強化）
+  assert_eq 2 "$RC" "UC12[$label]: python3 -c \"import sqlite3\" は exit 2（回避耐性強化）"
+
+  # シナリオ7: from sqlite3 import 形式も検知する
+  # Given: AGENT_ROLE=worker、python3 -c "from sqlite3 import connect"
+  local json7='{"tool_name":"Bash","tool_input":{"command":"python3 -c \"from sqlite3 import connect\""},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" worker "$json7"
+  # Then: exit 2
+  assert_eq 2 "$RC" "UC12[$label]: python3 -c \"from sqlite3 import connect\" は exit 2"
+
+  # シナリオ8: -c を伴わない python スクリプト実行はスコープ外（誤検知しない）
+  # Given: AGENT_ROLE=worker、通常の python スクリプトファイル実行（-c ではない）
+  local json8='{"tool_name":"Bash","tool_input":{"command":"python3 script_using_sqlite3.py"},"agent_id":"abc-123"}'
+  # When: hook を実行
+  run_pre "$pathval" worker "$json8"
+  # Then: exit 0（-c インライン経由の簡易検知が本 issue のスコープであり、ファイル内部の import までは対象外）
+  assert_eq 0 "$RC" "UC12[$label]: python3 script_using_sqlite3.py は exit 0（-c 以外はスコープ外）"
+
+  # シナリオ9: write-workflow-log.sh の単独実行は引き続き許可される（既存動作の非劣化）
+  # Given: AGENT_ROLE=scribe、正規の write-workflow-log.sh 単独実行
+  local json9='{"tool_name":"Bash","tool_input":{"command":".agent-skill-chain/source/scripts/write-workflow-log.sh requirement-discovery x"}}'
+  : > "$ERR"
+  # When: cwd を隔離環境に置き相対パスを解決可能にして hook を実行
+  ( cd "$TMP" && echo "$json9" | env PATH="$pathval" AGENT_ROLE=scribe bash "$HOOK" >/dev/null 2>"$ERR" )
+  RC=$?
+  # Then: exit 0（非劣化）
+  assert_eq 0 "$RC" "UC12[$label]: write-workflow-log.sh 単独実行は exit 0（非劣化）"
+}
+run_uc12 "jq" "$JQ_PATH"
+run_uc12 "nojq" "$NOJQ_PATH"
+
 # ---- 本番 DB / 本リポ非破壊の確認（隔離環境のみを触ったこと） ----
 echo "== 非破壊確認 =="
 # Given/When: 上記テストは全て $TMP 配下で実行している。Then: 本リポ .agents の hook が未変更（mtime 比較は省略、git status は呼び出し側で確認）。
