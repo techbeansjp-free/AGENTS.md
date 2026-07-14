@@ -49,11 +49,12 @@ erDiagram
 | `issue_id` / `review_id` | issue / レビュー成果物の UUID |
 | `changed_files_json` | 変更ファイルの JSON 配列（`implement-feature` で必須） |
 | `summary` / `dod_met` | 実施要約 / DoD 充足（0 または 1） |
+| `model_tier` / `tier_rationale` / `tier_exception` | 委譲時の選定モデルティア / 根拠 1 行（`MODEL_TIER_TABLE.md` 該当行の引用）/ fable 例外申告。記録有無を audit.sh #38 が検査（`TEXT NULL`） |
 | `prev_hash` / `entry_hash` | 改ざん検知（前レコード hash / 本レコード hash） |
 
 ## 3.5 索引
 
-`workflow_log` には索引が 7 件ある（`ts_utc`・`command`・`parent_entry_id`・`document_id`・`issue_id`・`review_id`・`document_path`）。定義の実体は [schema.sql](../../.agent-skill-chain/source/ledger/schema.sql)。
+`workflow_log` には索引が 10 件ある（`ts_utc`・`command`・`parent_entry_id`・`document_id`・`issue_id`・`review_id`・`document_path`・`model_tier`・`tier_rationale`・`tier_exception`）。定義の実体は [schema.sql](../../.agent-skill-chain/source/ledger/schema.sql)。
 
 ## 3.6 整合性・排他
 
