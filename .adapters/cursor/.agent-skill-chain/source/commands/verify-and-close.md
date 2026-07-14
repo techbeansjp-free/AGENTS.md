@@ -79,7 +79,7 @@
 - 04_review のテンプレート（.agent-skill-chain/runtime/templates または親 04）に従う。基準ごと・シナリオごとに「検証方法・結果」を書く。
 - **skill chain を最後まで実行すること。** step 5（write-workflow-log）を省略しない。workflow.db 採用時は write-workflow-log.sh を実行すること（run_command の Constraints 参照）。CORE の証跡省略禁止を守る。
 - **システム仕様書（docs/）の継続追随（必須ゲート）**: 実装変更を伴う issue の close 前に、[DOCS_RULES.md §継続追随ゲート](../DOCS_RULES.md) に従いレビュー反復（指摘 0 件になるまで。更新不要時は根拠付き判定 1 件の軽量パスで可）を**必須**とする。**そのために issue を立てる必要はない**。レビュー用ディレクトリ `docs/00_review/` にレビュー結果を記載する。docs/ を採用していないプロジェクトでは本ゲートは不発動とする。.agent-skill-chain/source/RULES.md（システム仕様書）および .agent-skill-chain/source/DOCS_RULES.md を参照。
-- **重要判断・レビュー結論には根拠の種別（evidence_source）を記載し、inference_only のみに依存する重要判断は承認不可または要人間確認とする。** .agents の「外部根拠の必須化」（CONCEPTS.md §外部根拠の必須化）を参照。
+- **重要判断・レビュー結論には根拠の種別（evidence_source）を記載する。inference_only のみに依存する重要判断は、RULES.md §高リスク操作に該当する場合は「要人間確認」（ブロッキング）、非該当の場合は「要注意」（非ブロッキング）とする（二段階）。** .agents の「外部根拠の必須化」（CONCEPTS.md §外部根拠の必須化）および EVIDENCE_POLICY.md 節4 を参照。
 
 ---
 
