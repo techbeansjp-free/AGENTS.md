@@ -4,7 +4,9 @@
 #   AGENT_ROLE=scribe .agent-skill-chain/source/scripts/write-workflow-log.sh command summary dod_met ts_utc [issue_path] [changed_files]
 #   ENTRY_ID= PARENT_ENTRY_ID= ACTOR_ROLE=scribe DELEGATED_BY_ROLE=orchestrator 等を任意で指定。
 # 位置引数: command summary dod_met ts_utc [issue_path] [changed_files]
-# 環境変数: ENTRY_ID, PARENT_ENTRY_ID, DOCUMENT_ID, DOCUMENT_PATH, ACTOR_ROLE, DELEGATED_BY_ROLE, REVIEW_PATH, REVIEW_ID, ISSUE_ID, CHANGED_FILES_JSON, PREV_HASH
+# 環境変数: ENTRY_ID, PARENT_ENTRY_ID, DOCUMENT_ID, DOCUMENT_PATH, ACTOR_ROLE, DELEGATED_BY_ROLE, REVIEW_PATH, REVIEW_ID, ISSUE_ID, CHANGED_FILES_JSON, PREV_HASH, MODEL_TIER, TIER_RATIONALE, TIER_EXCEPTION
+# MODEL_TIER/TIER_RATIONALE/TIER_EXCEPTION: 委譲時に選定したモデルティア・根拠（MODEL_TIER_TABLE.md 該当行の引用）・fable 例外申告。
+#   いずれも任意（未指定は NULL）。値の妥当性はスクリプト層では検証しない（判定は audit.sh #38 に集約）。
 # DOCUMENT_PATH: 成果ドキュメントのパス（プロジェクトルート相対、例: .agent-skill-chain/runtime/xxx/04_review.md）。指定時は document_id 不変チェックに使用（同一パスで既に別の document_id が記録されていれば INSERT を拒否）。
 # DB パスは固定（.agent-skill-chain/runtime/workflow.db）。引数で別 DB を渡せない。
 # 新スキーマ（entry_id 等）の DB では因果チェーン・actor を記録。旧スキーマでは従来どおり INSERT。
@@ -182,6 +184,9 @@ DOCUMENT_PATH="${DOCUMENT_PATH:-}"
 ISSUE_ID="${ISSUE_ID:-}"
 REVIEW_ID="${REVIEW_ID:-}"
 PREV_HASH="${PREV_HASH:-}"
+MODEL_TIER="${MODEL_TIER:-}"
+TIER_RATIONALE="${TIER_RATIONALE:-}"
+TIER_EXCEPTION="${TIER_EXCEPTION:-}"
 
 # (A) DOCUMENT_ID / ISSUE_ID / REVIEW_ID の UUID 形式検証（指定時のみ。不正なら exit 1）
 validate_uuid_if_set "DOCUMENT_ID" "$DOCUMENT_ID"
@@ -320,10 +325,13 @@ fi
 
 # スキーマ検知・マイグレーション（ledger/schema.md の定義順。不足カラムがあれば ensure_column で冪等に ADD COLUMN する）
 if [[ -n "$HAS_NEW_SCHEMA" ]]; then
-  ensure_column "$WF_DB" document_id   || exit 1
-  ensure_column "$WF_DB" issue_id      || exit 1
-  ensure_column "$WF_DB" review_id     || exit 1
-  ensure_column "$WF_DB" document_path || exit 1
+  ensure_column "$WF_DB" document_id     || exit 1
+  ensure_column "$WF_DB" issue_id        || exit 1
+  ensure_column "$WF_DB" review_id       || exit 1
+  ensure_column "$WF_DB" document_path   || exit 1
+  ensure_column "$WF_DB" model_tier      || exit 1
+  ensure_column "$WF_DB" tier_rationale  || exit 1
+  ensure_column "$WF_DB" tier_exception  || exit 1
   # CHECK に review-docs または create-pr-review-issue が無い場合はテーブル再作成でマイグレーション
   if [[ "$COMMAND" == "review-docs" || "$COMMAND" == "create-pr-review-issue" ]]; then
     CREATED_SQL="$(sqlite3 "$WF_DB" "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_log';")"
@@ -351,6 +359,9 @@ CREATE TABLE workflow_log_new (
   changed_files_json TEXT NULL,
   summary TEXT NOT NULL,
   dod_met INTEGER NOT NULL CHECK (dod_met IN (0, 1)),
+  model_tier TEXT NULL,
+  tier_rationale TEXT NULL,
+  tier_exception TEXT NULL,
   prev_hash TEXT NULL,
   entry_hash TEXT NOT NULL,
   CHECK (length(entry_id) > 0),
@@ -364,7 +375,7 @@ CREATE TABLE workflow_log_new (
   CHECK (delegated_by_role = 'orchestrator'),
   CHECK (command IN ('requirement-discovery', 'design-feature', 'implement-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue'))
 );
-INSERT INTO workflow_log_new SELECT entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash FROM workflow_log;
+INSERT INTO workflow_log_new SELECT entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, model_tier, tier_rationale, tier_exception, prev_hash, entry_hash FROM workflow_log;
 DROP TABLE workflow_log;
 ALTER TABLE workflow_log_new RENAME TO workflow_log;
 CREATE INDEX IF NOT EXISTS idx_workflow_log_ts_utc ON workflow_log(ts_utc);
@@ -374,6 +385,9 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_document_id ON workflow_log(document
 CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_model_tier ON workflow_log(model_tier);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_tier_rationale ON workflow_log(tier_rationale);
+CREATE INDEX IF NOT EXISTS idx_workflow_log_tier_exception ON workflow_log(tier_exception);
 COMMIT;
 MIGRATE
       [[ $? -eq 0 ]] || { echo "ERROR: CHECK マイグレーションに失敗しました（review-docs / create-pr-review-issue）。" >&2; exit 1; }
@@ -399,6 +413,9 @@ if [[ -n "$HAS_NEW_SCHEMA" ]]; then
   E_DP="$(escape_sql "$DOCUMENT_PATH")"
   E_CF="$(escape_sql "$CHANGED_FILES_JSON")"
   E_SUM="$(escape_sql "$SUMMARY")"
+  E_MT="$(escape_sql "$MODEL_TIER")"
+  E_TR="$(escape_sql "$TIER_RATIONALE")"
+  E_TE="$(escape_sql "$TIER_EXCEPTION")"
   # prev_hash 自動連結: 明示 PREV_HASH 未指定時のみ、flock 取得後・INSERT 直前に現 head を取得して
   # 連結する（明示指定時は上書きしない＝後方互換）。head 不在（空 DB 初回）は空のまま→NULLIF で NULL。
   if [[ -z "${PREV_HASH//[[:space:]]/}" ]]; then
@@ -415,7 +432,7 @@ if [[ -n "$HAS_NEW_SCHEMA" ]]; then
       exit 1
     fi
   fi
-  INSERT_SQL="INSERT INTO workflow_log (entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, prev_hash, entry_hash) VALUES ('$E_EID', NULLIF('$E_PID',''), NULLIF('$E_DOCID',''), '$E_TS', '$E_CA', '$E_AR', '$E_DR', '$E_CMD', NULLIF('$E_IID',''), NULLIF('$E_RID',''), NULLIF('$E_IP',''), NULLIF('$E_RP',''), NULLIF('$E_DP',''), '$E_CF', '$E_SUM', $DOD_MET, NULLIF('$E_PH',''), '$E_EH');"
+  INSERT_SQL="INSERT INTO workflow_log (entry_id, parent_entry_id, document_id, ts_utc, created_at, actor_role, delegated_by_role, command, issue_id, review_id, issue_path, review_path, document_path, changed_files_json, summary, dod_met, model_tier, tier_rationale, tier_exception, prev_hash, entry_hash) VALUES ('$E_EID', NULLIF('$E_PID',''), NULLIF('$E_DOCID',''), '$E_TS', '$E_CA', '$E_AR', '$E_DR', '$E_CMD', NULLIF('$E_IID',''), NULLIF('$E_RID',''), NULLIF('$E_IP',''), NULLIF('$E_RP',''), NULLIF('$E_DP',''), '$E_CF', '$E_SUM', $DOD_MET, NULLIF('$E_MT',''), NULLIF('$E_TR',''), NULLIF('$E_TE',''), NULLIF('$E_PH',''), '$E_EH');"
   insert_with_retries "$WF_DB" "$INSERT_SQL" "${WFL_ERRFILE:-}" || exit 1
 else
   E_TS="$(escape_sql "$TS_UTC")"
