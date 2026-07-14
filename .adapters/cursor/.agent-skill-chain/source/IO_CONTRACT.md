@@ -43,6 +43,35 @@
 
 ## 運用
 
-- 新規 command / skill を追加するときは、本契約の見出しに従う。既存の commands/*.md と skills/*/SKILL.md は、追って本契約の見出しに揃える（後方互換のため「Skill chain」「成果物」「DoD」等の併記は可）。
+- **新規 command / skill は猶予なし**: 新規に追加する `commands/*.md`・`skills/*/SKILL.md` は、作成時点で必ず本契約の見出し（command は INPUT/PROCESS/OUTPUT/DONE、skill は Purpose/Inputs/Process/Outputs/Done/Forbidden）に従う。後方互換の併記（「Skill chain」「成果物」「DoD」等）を新規ファイルの言い訳にしてはならない。
+- **既存 skill の猶予（対象範囲・期限・監査基準を明文化）**: 本節策定時点で契約見出しに未対応だった既存 skill は、下記「既存 skill 契約見出し対応状況」表に列挙する。猶予は**この表に列挙された skill のみ**に適用し、表に無い skill（新規追加分・表から「対応済」に更新された分）は通常どおり 6 見出し必須とする。
+  - **猶予期限**: 明確な日付は設けない。**当該 skill の SKILL.md を実質的な内容変更（手順・成果物・制約の変更）を伴って改修する回（次回実質改修時）に、必ず 6 見出しへ揃える。** typo 修正・リンク修正等、実質的な内容変更を伴わない差分は「改修」に数えない。
+  - **監査基準（機械チェックで判定する場合）**:
+    1. 下表に**無い** skill の SKILL.md に Purpose/Inputs/Process/Outputs/Done/Forbidden の 6 見出しが揃っていない → **FAIL**。
+    2. 下表で「未対応（猶予対象）」の skill が、実質的な内容変更を伴うコミットの**後**もなお 6 見出しに揃っていない → **FAIL**（猶予切れ）。
+    3. 下表で「未対応（猶予対象）」の skill が無改修のまま据え置かれている、または typo・リンク修正のみの差分に留まる → **PASS**（猶予継続）。
+    4. 下表の行は、当該 skill の SKILL.md を 6 見出しへ揃えた時点で「対応済」に更新すること。以後は通常の必須ルール（猶予なし）に戻る。
+  - 見出しの表記は `## Purpose` のような Markdown 見出しを既定とするが、`review-architecture`/`review-code` のように Purpose のみ `**Purpose**:` 太字表記でも、Inputs/Process/Outputs/Done/Forbidden が見出しとして揃っていれば「対応済」とみなす（既存の合理的な表記ゆれを許容する）。
+
+### 既存 skill 契約見出し対応状況（棚卸し・2026-07-14 時点）
+
+| skill | 対応状況 | 備考 |
+|---|---|---|
+| `skills/agent/SKILL.md` | 対応済 | command 実行の入口（run_command）。本節の猶予明文化と合わせて 6 見出しを追加（委譲の形・実行要領等の既存内容は不変） |
+| `skills/requirements/write-bdd/SKILL.md` | 対応済 | 6 見出しあり |
+| `skills/review/review-architecture/SKILL.md` | 対応済 | Purpose は太字表記、Inputs/Process/Outputs/Done/Forbidden は見出しあり |
+| `skills/review/review-code/SKILL.md` | 対応済 | 同上 |
+| `skills/architecture/define-boundaries/SKILL.md` | 未対応（猶予対象） | 旧形式（手順/制約・禁止/成果物の形式） |
+| `skills/architecture/design-api-contract/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/architecture/review-dependencies/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/implementation/implement-change/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/implementation/refactor-safely/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/logging/write-workflow-log/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/requirements/define-constraints/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/requirements/extract-goals/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/requirements/identify-assumptions/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/testing/generate-scenarios/SKILL.md` | 未対応（猶予対象） | 同上 |
+| `skills/testing/map-coverage/SKILL.md` | 未対応（猶予対象） | 同上 |
+
 - 監査（review-code, verify-and-close）では、成果物が各 command の OUTPUT / DONE を満たしているかを確認する。
 - 参照: CONCEPTS.md（契約付きフィルタ）、workflow/TEMPLATES.md、RULES.md。
