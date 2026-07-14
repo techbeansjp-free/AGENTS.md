@@ -40,6 +40,7 @@ document_id: "c8b4e2a7-1f63-49d5-8e0a-3b9c7d260f54"
 
 ## 5 参照
 
+- **本ルールの適用先には review-docs（実装前 00-03 ドキュメントレビュー）も含む**。実装後レビュー（[review-code](skills/review/review-code/SKILL.md) / [review-architecture](skills/review/review-architecture/SKILL.md)＝04_review 出力）に加え、実装前レビュー（[commands/review-docs.md](commands/review-docs.md)）でも §2 の二観点と §3 の両リスト記載を必須とする。
 - [REVIEW_RULE.md](REVIEW_RULE.md)（レビュー骨格。本ファイルは直交追加）
 - [CLOSEOUT.md §verify-実経路検証](CLOSEOUT.md#verify-実経路検証)（CLOSEOUT の verify(ii) 実経路検証）
 - [CLOSEOUT.md §verify 報告様式（分離記載・誤導防止）](CLOSEOUT.md#verify-報告様式分離記載誤導防止)（verify 証跡の (i)/(ii) 分離記載・緑≠実経路の射程の見極めは §3 の両リストと整合させる）

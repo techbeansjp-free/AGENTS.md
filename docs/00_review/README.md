@@ -18,7 +18,7 @@ document_id: "da1d1ce0-c4c5-4566-9487-4a7e46858466"
 
 | 日時 | 対象 | 指摘 N→0 | 対応 issue / 版番号 |
 | ---- | ---- | -------- | -------------------- |
-| （採用以後の実装変更 issue で追記） | — | — | — |
+| [20260714_080312](./20260714_080312_review.md) | enforcement 変更（PreToolUse allowlist/出力/日英併記）↔ `docs/04_機能設計/enforcement/README.md` | 更新不要判定（軽量パス） | `docs/maintainer/workflow/20260713_224235_orchestratorAskUserQuestion許可/`（#35） |
 
 - **日時**: レビュー記録ファイル名の `YYYYMMDD_HHMMSS` プレフィックス。
 - **対象**: 照合した実装・レビューしたシステム仕様書のセクション。

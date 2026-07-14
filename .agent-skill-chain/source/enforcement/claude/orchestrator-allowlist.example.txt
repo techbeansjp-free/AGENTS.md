@@ -1,0 +1,36 @@
+# orchestrator-allowlist.example.txt — orchestrator allowlist の project 拡張 雛形（FR-4・ADR-3/ADR-4）
+#
+# これは「雛形（example）」です。**このファイル自体は enforcement から読まれません**。
+# 実効ファイルは消費先プロジェクトの以下のパス（ユーザー資産・setup が touch しない）:
+#     .agent-skill-chain/project/orchestrator-allowlist.txt
+# このファイルをそこへコピーし、追加したいツール名だけを 1 行 1 名で記述してください。
+# 何も設定しなければ従来どおり厳格（fail-closed）で、コア default の allowlist のみが有効です。
+#
+# ── 形式 ──────────────────────────────────────────────────────────────────
+#   - 1 行 1 ツール名。厳密文字種 `^[A-Za-z][A-Za-z0-9_-]*$`（英字始まり・英数字と _・- のみ。ハイフン付き MCP 名 mcp__brave-search__search 等も可）。
+#   - `#` 以降はコメント。空行可。先頭末尾の空白は無視。
+#   - 内部空白・メタ文字・CR・BOM を含む行は無視されます（注入・難読化対策）。
+#     例: `Foo bar` や `mcp __ shell` は正規名に化けず、無視されます。
+#   - 実際の許可は「呼び出しツール名と行の厳密一致」でのみ成立します。
+#
+# ── 効き方（重要）─────────────────────────────────────────────────────────
+#   - ここに列挙できるのは「コア default で未知（*) default に落ちる）ツール名」だけです。
+#   - Bash・Edit・Write・Delete・StrReplace・Shell・TodoWrite・EditNotebook・call_mcp_tool・
+#     GenerateImage は、この拡張より手前の case で明示 block されるため**覆せません**（fail-closed 保全）。
+#
+# ── 警告（能力ベースのリスク・必読）───────────────────────────────────────
+#   「明示拒否**名**を覆せない」のは名前一致の保証であり、**能力（capability）の保証ではありません**。
+#   `*)` に落ちる MCP 書込/実行ツール（`mcp__<server>__<tool>` 形式。明示拒否列の `call_mcp_tool` とは
+#   別名）を opt-in すると、orchestrator が Edit/Write を介さずに書込・実行の等価権限を獲得できます。
+#   「未知ツール＝安全」ではありません。書込/実行等価ツールをここに追加する場合、その安全性は
+#   人間の PR レビューに全面依存します。追加は clean な素名で記述し、PR で必ず妥当性を確認してください。
+#
+# ── 更新経路（ガバナンス・ADR-4）─────────────────────────────────────────
+#   実効ファイルの編集は 00-04 ドキュメントと同様に worker サブエージェントへ委譲します
+#   （orchestrator の Edit/Write は R2 で拒否されるため、自分では直接書けません）。
+#   変更は PR レビューを経て人間が main にマージして初めてリポジトリの正となります。
+#   詳細・残余リスクは SETUP.md §orchestrator allowlist の project 拡張（opt-in）を参照。
+#
+# ── 記入例（コメントアウト。有効化するには先頭の # を外す）────────────────
+# ExampleReadOnlyTool
+# mcp__myserver__search
