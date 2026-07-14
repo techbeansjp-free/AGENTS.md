@@ -22,8 +22,14 @@
 
 **証跡の原則**: レビュー phase の証跡は本則として workflow.db に記録する。memo は過渡的・例外運用のみ（scribe/CONTRACT 参照）。
 
-**補助手順（auxiliary）— [review-docs](../commands/review-docs.md) は本表に載せない**: [review-docs](../commands/review-docs.md)（実装前ドキュメントレビュー）は特定 phase に対応しない横断的な**補助手順**であり、phase→command の選択対象ではない。`create-pr-review-issue` の内部 step（対応方針の監査）や、ユーザーの「ドキュメントレビューして」依頼から呼ばれる。よって本表に行を持たない。後述の「**本表にない command の起動は禁止**」は **phase からの選択経路に関する禁止**（phase 判定後に表外 command を勝手に選ぶな）であり、**補助手順の呼び出し（別 command の step・ドキュメントレビュー依頼からの起動）はこの禁止の対象外**とする。これにより「review-docs が実在するが起動経路が無い／禁止対象」という矛盾を解消する。整合の本体は PHASES §レビュー成果物の配置ルール と一致させる。
-**必須ゲートとしての位置づけ（表本体は変更しない）**: review-docs は**本表に行を持たないまま**、design（設計・実装計画）完了と実装着手の**間の必須ゲート**である（全 issue 一律・規模比例の免除なし）。義務の正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。「auxiliary（表に載らない）」は「省略可・任意」の意ではない。
+---
+
+## 横断的必須ゲート
+
+本表が定義するのは **phase → command（フェーズ遷移コマンドの起動経路）** である。これとは別に、特定の phase に対応せず横断的に必須となる**ゲート**というカテゴリが存在し、本表には行を持たない。表に行を持たないことはカテゴリの欠落や矛盾ではなく、以下のとおり定義された分類である（本節が review-docs の位置づけの正本。PHASES.md 側は本節を参照し、内容を重複記載しない）。
+
+- **[review-docs](../commands/review-docs.md)**（実装前ドキュメントレビュー）: design-feature（設計・実装計画）完了と implement-feature 着手の間の**必須ゲート**（全 issue 一律・規模比例の免除なし）。phase→command の選択対象ではなく、`create-pr-review-issue` の内部 step（対応方針の監査）や、ユーザーの「ドキュメントレビューして」依頼から起動される。**「表に載らない（本表に行を持たない）」は「省略可・任意」を意味しない。** 義務の正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
+- 下記「禁止事項」の「**本表にない command の起動は禁止**」は、**phase からの選択経路に関する禁止**（phase 判定後に表外 command を勝手に選ぶな）であり、横断的必須ゲート（review-docs 等）の呼び出し（別 command の step・ドキュメントレビュー依頼からの直接起動）はこの禁止の対象外とする。
 
 ---
 
@@ -37,7 +43,7 @@
 
 禁止事項:
 
-- **本表が phase → command の唯一の経路である。本表にない command の起動は禁止。**（この禁止は phase からの選択経路に関するもの。上記「補助手順（auxiliary）」で明記したとおり、review-docs 等の補助手順の呼び出しは対象外。）
+- **本表は phase → command（フェーズ遷移コマンドの起動経路）の唯一の経路である。フェーズ判定後に本表にない command を選ぶことは禁止。**（横断的必須ゲート（review-docs 等）の呼び出しは対象外。上記「横断的必須ゲート」参照。）
 - 本表にない command を自由に作ってはいけない。
 - 本表と異なる command を「便利そうだから」という理由で選んではいけない。
 - PHASES.md と矛盾する対応を作ってはいけない（矛盾がある場合は PHASES.md / 本ファイルを更新して解消する）。
