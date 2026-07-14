@@ -197,6 +197,7 @@ npx github:techbeansjp-free/AGENTS.md doctor
 | プラットフォーム配備先 | **`.claude/`・`.cursor/`** | 混在（プラットフォーム固定名） | ディレクトリ名はプラットフォーム側の固定名で**ネスト対象外**。パッケージ所有エントリ（hooks・所有 skill・所有ファイル）のみ更新し、ユーザー設定・自作物は保持 |
 
 - `.agent-skill-chain/` 直下の `.package-manifest`・`README.md` は 3 サブディレクトリのいずれの所有物でもなく、統合ルート全体の識別・警告を担う setup 生成物である。
+- **スキルディレクトリ粒度の所有マーカー**: `.claude/skills/{name}/.agent-skill-chain-owned`・`.cursor/skills/{name}/.agent-skill-chain-owned`（パッケージ所有・配備証跡）。統合ルート `.package-manifest` の由来検知を**スキルエントリ粒度へ一貫適用**した軽量版で、setup が所有スキルを配備するたびに書き込む。**所有スキルの削除・上書きは、この由来マーカー（無い場合は配備先 `SKILL.md` の frontmatter `name` が正本の `name` と一致するか）で所有を確認したエントリに限定し、マーカー無し・`name` 不一致の同名ディレクトリ（＝ユーザー自作スキル）は削除・上書きせず保持する**（名前一致だけでの無条件 `rm -rf` はしない）。判定規則の正本は `.agent-skill-chain/source/scripts/lib/deploy-skills.sh`（`is_owned_skill_dir`。`src/agents-md.ts` の `isOwnedSkillDir` が同一規則をミラー）。マーカーはセキュリティ境界ではなく偶発的な名前衝突事故の防止に用いる。
 - `.agent-skill-chain/runtime/workflow.db` の由来検知欠如（sqlite3 有効性・`workflow_log` テーブル有無をファイル単位で検査しないためサイレントスキップし得る）は本パッケージのルート単位マーカーでは解消されない別軸の課題であり、サブ issue「workflowDB由来検知欠如是正」で扱う（当該 issue が旧レイアウトで記載する `workflow.db` の対象パスは `.agent-skill-chain/runtime/workflow.db` に読み替える）。
 
 ### 配備マーカーによる衝突検知・バックアップ・統合移行（fail-closed）
@@ -220,11 +221,11 @@ init/upgrade（setup）は、既存の `.agent-skill-chain/` を上書きする�
 | **AGENTS.md, CLAUDE.md** | ルート契約 | パッケージ正本をルートへコピー（最新化）。 |
 | **.agent-skill-chain/runtime/templates/** | テンプレート | パッケージの `.agent-skill-chain/runtime/templates/` から最新化する。 |
 | **.cursor/agents-core.mdc**（enforcement/cursor の所有ファイル） | エディタルール | setup がパッケージ所有ファイルのみを上書き。**.cursor/ を丸ごと削除しない。** |
-| **.cursor/skills/**（パッケージ配備分 {domain}__{capability}・ドメイン直下 {domain}） | 生成 skills | **パッケージ配備分のみ**毎回更新（古い版を消して再コピー）。**ユーザー自作スキルは保持**（共存可）。 |
+| **.cursor/skills/**（パッケージ配備分 {domain}__{capability}・ドメイン直下 {domain}） | 生成 skills | **由来マーカーで所有を確認した配備分のみ**毎回更新（古い版を消して再コピー＋マーカー付与）。**ユーザー自作スキル（同名含む）は保持**（共存可）。 |
 | **.claude/hooks/**（パッケージ所有フックファイル） | enforcement | **パッケージ所有フックファイルのみ**毎回上書き。**ユーザー独自フックは保持**（共存可）。 |
-| **.claude/skills/**（パッケージ配備分 {domain}__{capability}・ドメイン直下 {domain}） | 生成 skills | **パッケージ配備分のみ**毎回更新。**ユーザー自作スキルは保持**（共存可）。 |
+| **.claude/skills/**（パッケージ配備分 {domain}__{capability}・ドメイン直下 {domain}） | 生成 skills | **由来マーカーで所有を確認した配備分のみ**毎回更新＋マーカー付与。**ユーザー自作スキル（同名含む）は保持**（共存可）。 |
 
-> 注: `.cursor/skills/`・`.claude/skills/`・`.claude/hooks/` は **パッケージ配備分（既知エントリ）のみ**を毎回更新する。Claude Code では `.claude/skills/` はユーザーが自作スキルを置く一般的な場所であり、`.claude/hooks/` にも独自フックを置けるため、**ユーザー自作スキル/フックは保持され、パッケージ配備分と共存できる**。パッケージ skill のカスタムは `.agent-skill-chain/source/skills/` 正本を、フックは `.agent-skill-chain/source/enforcement/` 正本を編集して反映する。所有エントリの導出は単一定義（skills は `lib/deploy-skills.sh` の `list_owned_skill_names`、フックは `enforcement/claude` のトップレベルファイル）。
+> 注: `.cursor/skills/`・`.claude/skills/`・`.claude/hooks/` は **パッケージ配備分（既知エントリ）のみ**を毎回更新する。Claude Code では `.claude/skills/` はユーザーが自作スキルを置く一般的な場所であり、`.claude/hooks/` にも独自フックを置けるため、**ユーザー自作スキル/フックは保持され、パッケージ配備分と共存できる**。スキルの削除・上書きは名前一致だけでは行わず、**由来マーカー `.agent-skill-chain-owned`（無い場合は配備先 `SKILL.md` の `name` が正本の `name` と一致するか）で所有を確認したエントリに限定する**。したがって、ユーザーが偶然パッケージ所有名（例: `agent`）と同名のディレクトリに無関係な自作スキルを置いていても、`upgrade`/`uninstall` で誤削除されず保持され、警告が表示される。パッケージ skill のカスタムは `.agent-skill-chain/source/skills/` 正本を、フックは `.agent-skill-chain/source/enforcement/` 正本を編集して反映する。所有エントリの導出・由来判定は単一定義（skills は `lib/deploy-skills.sh` の `list_owned_skill_entries`／`is_owned_skill_dir`、フックは `enforcement/claude` のトップレベルファイル）。
 
 ### ユーザー資産（保持・破壊しない）
 
@@ -236,7 +237,7 @@ init/upgrade（setup）は、既存の `.agent-skill-chain/` を上書きする�
 | **.agent-skill-chain/runtime/<issue>/** | issue 成果物（消費者ランタイム）。保持。 |
 | **workflow.db** | 証跡 DB。初回のみ生成、既存は上書きしない（保持）。 |
 
-**保証**: 上記の保持は E2E テスト `test/e2e-install-uninstall.sh` のシナリオ R1（再インストール保持）・R2（upgrade 保持）・R3（uninstall 保持）で再現確認される。
+**保証**: 上記の保持は E2E テスト `test/e2e-install-uninstall.sh` のシナリオ R1（再インストール保持）・R2（upgrade 保持）・R3（uninstall 保持）で再現確認される。加えて、**パッケージ所有名と同名（例: `agent`）の無関係な自作スキル**が保持されることは C1（upgrade 保持・警告）・C2（uninstall 保持）で、マーカー未付与の旧配備物の由来マーカー backfill は C3 で再現確認される。由来判定関数（`is_owned_skill_dir`／`isOwnedSkillDir`）の 4 区分・衝突ガード・マーカー書込みの単体検証は `test/test-deploy-skills-owned-guard.sh` で行う。
 
 ### 初回コピー時の挙動補足
 
@@ -266,7 +267,7 @@ npx github:techbeansjp-free/AGENTS.md uninstall --purge --yes  # workflow.db 等
 | 対象 | 既定 `uninstall` | 説明 |
 |------|------------------|------|
 | **.agent-skill-chain/source/・AGENTS.md・CLAUDE.md** | 除去 | setup/init がコピー配備した正本（配備物）。 |
-| **.claude/hooks の所有フック・.claude/skills と .cursor/skills の所有 skill エントリ** | 除去 | パッケージ配備分（既知エントリ）のみ。ディレクトリごとは消さない。 |
+| **.claude/hooks の所有フック・.claude/skills と .cursor/skills の所有 skill エントリ** | 除去 | パッケージ配備分（既知エントリ）のみ。skill は**由来マーカーで所有を確認したエントリに限定**し、同名の自作スキルは保持する。ディレクトリごとは消さない。 |
 | **.cursor/ のパッケージ所有ファイル**（agents-core.mdc 等） | 除去 | enforcement 正本由来の配備ファイルのみ。 |
 | **.agent-skill-chain/runtime/templates/** | 除去 | setup がコピーしたテンプレート（`.agent-skill-chain/runtime/` 自体は残す）。 |
 | **.cursor/ 配下のユーザー作成物**（他の `rules/*.mdc`・`.cursor/skills/` の自作スキル等） | 保持 | `.cursor/` を丸ごと消さず、配備分のみ除去する。 |
@@ -275,9 +276,9 @@ npx github:techbeansjp-free/AGENTS.md uninstall --purge --yes  # workflow.db 等
 | **.agent-skill-chain/runtime/<issue>/**（templates 以外） | 保持 | issue 成果物（消費者ランタイム）。 |
 | **workflow.db** | 保持（`--purge` 時のみ除去） | 証跡 DB。既定では残す。 |
 
-> uninstall は `.cursor/`・`.claude/` を**丸ごと削除しない**。パッケージが配備した**既知エントリ**（`.cursor/agents-core.mdc`・`.claude/hooks` の所有フックファイル・`.claude/skills` と `.cursor/skills` の所有 skill エントリ {domain}__{capability}・{domain}）のみを除去し、ユーザー作成物（自作スキル・独自フック・自作 rules 等）が同居していれば残す。除去後に `.claude/hooks`・`.claude/skills`・`.cursor/skills`・`.cursor/`・`.claude/` が空になった場合のみ、空ディレクトリを片付ける。所有エントリ集合は setup.sh と単一整合（skills は `lib/deploy-skills.sh` の `list_owned_skill_names`、フックは `enforcement/claude` のトップレベルファイル、cursor 直下は `enforcement/cursor` のトップレベルファイル）。
+> uninstall は `.cursor/`・`.claude/` を**丸ごと削除しない**。パッケージが配備した**既知エントリ**（`.cursor/agents-core.mdc`・`.claude/hooks` の所有フックファイル・`.claude/skills` と `.cursor/skills` の所有 skill エントリ {domain}__{capability}・{domain}）のみを除去し、ユーザー作成物（自作スキル・独自フック・自作 rules 等）が同居していれば残す。**skill エントリの除去は名前一致だけでなく由来マーカー `.agent-skill-chain-owned`（無い場合は `SKILL.md` の `name` 一致）で所有を確認したものに限定し、同名でも非所有の自作スキルは保持・表示する**（dry-run では「保持: …（非所有の同名ディレクトリ）」として列挙）。除去後に `.claude/hooks`・`.claude/skills`・`.cursor/skills`・`.cursor/`・`.claude/` が空になった場合のみ、空ディレクトリを片付ける（保持した同名自作スキルが残る間はディレクトリも残る）。所有エントリ集合・由来判定は setup.sh と単一整合（skills は `lib/deploy-skills.sh` の `list_owned_skill_entries`／`is_owned_skill_dir`、フックは `enforcement/claude` のトップレベルファイル、cursor 直下は `enforcement/cursor` のトップレベルファイル）。
 
-**安全策**: 採用先に配備の痕跡（`.agent-skill-chain/source/` または `AGENTS.md`）が無い場合、誤削除を防ぐため uninstall を中止する。存在しない対象はスキップし、`--yes` を付けない限り削除は行わず対象の一覧表示（dry-run）に留める。`uninstall` の挙動は E2E テスト `test/e2e-install-uninstall.sh`（install→uninstall→冪等→カプセル化→リーク→**R1 再インストール保持・R2 upgrade 保持・R3 uninstall 保持**）で再現確認される。
+**安全策**: 採用先に配備の痕跡（`.agent-skill-chain/source/` または `AGENTS.md`）が無い場合、誤削除を防ぐため uninstall を中止する。存在しない対象はスキップし、`--yes` を付けない限り削除は行わず対象の一覧表示（dry-run）に留める。`uninstall` の挙動は E2E テスト `test/e2e-install-uninstall.sh`（install→uninstall→冪等→カプセル化→リーク→**R1 再インストール保持・R2 upgrade 保持・R3 uninstall 保持**、および**同名自作スキルの保持 C1/C2・由来マーカー backfill C3**）で再現確認される。
 
 ---
 
