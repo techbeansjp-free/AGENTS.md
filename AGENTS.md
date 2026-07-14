@@ -122,4 +122,4 @@
 
 ---
 
-詳細は .agents 配下を参照する。中心は **skill（能力）** と **command（skill chain）**。
+詳細は .agent-skill-chain/source 配下を参照する。中心は **skill（能力）** と **command（skill chain）**。
