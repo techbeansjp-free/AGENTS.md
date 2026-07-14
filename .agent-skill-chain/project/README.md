@@ -34,6 +34,15 @@
 
 ファイル名は `.agent-skill-chain/source/` の規約ファイル名と揃えてもよいし、プロジェクト独自の名前でもよい。エージェントは「同目的のルール」がある場合に .agent-skill-chain/project を優先する。
 
+## orchestrator allowlist 拡張
+
+orchestrator（メインエージェント）が使えるツールは PreToolUse フックの allowlist（fail-closed）で限定されている。消費先固有のツール（社内 MCP ツール等）を追加したい場合、コア正本を編集せずにこのディレクトリの **`orchestrator-allowlist.txt`** で opt-in で許可を追加できる。
+
+- 置き方: `.agent-skill-chain/source/enforcement/claude/orchestrator-allowlist.example.txt`（雛形）を `.agent-skill-chain/project/orchestrator-allowlist.txt` へコピーし、追加したいツール名を 1 行 1 名で記述する。
+- 何も置かなければ従来どおり厳格（fail-closed）で、コア default の allowlist のみが有効。
+- 形式・**能力ベースのリスク警告**（`mcp__*` 系書込ツールの opt-in は書込権限付与に等しい）・更新経路ガバナンス（worker 委譲＋ PR レビュー＋人間 main マージ／orchestrator は自分では直接書けない）は [SETUP.md §orchestrator allowlist の project 拡張（opt-in）](../source/SETUP.md) を参照。
+- enforcement でロックアウトされた場合の復旧は [SETUP.md §ロックアウトからの復旧](../source/SETUP.md) を参照。
+
 ## 注意
 
 - 採用先でプロジェクト固有ルールを使う場合のみ、このディレクトリにファイルを追加する。

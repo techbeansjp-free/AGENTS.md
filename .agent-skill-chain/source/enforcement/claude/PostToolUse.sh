@@ -15,5 +15,5 @@ if [[ ! -t 0 ]]; then
 fi
 
 # 証跡の規約案内。証跡は本則 workflow.db。memo は過渡的・例外のみ。
-echo "[PostToolUse] Evidence: workflow.db is canonical; memo is transitional/exception only. Memo files must use YYYYMMDD_HHMMSS_ prefix (JST). Do not omit workflow log." >&2
+echo "[PostToolUse:info] Evidence: workflow.db is canonical; memo is transitional/exception only. Memo files must use YYYYMMDD_HHMMSS_ prefix (JST). Do not omit workflow log. / 証跡は workflow.db が正本、memo は過渡的・例外のみ。memo は YYYYMMDD_HHMMSS_（JST）prefix 必須。workflow ログを省略しないこと。" >&2
 exit 0
