@@ -236,12 +236,17 @@ if [[ -n "$TOOL" ]]; then
   #    scribe は ROLE!=orchestrator のため本 R2 の対象外（scribe 経路は R3 以降で判定）。
   if [[ "$ROLE" == "orchestrator" && "$IS_SUBAGENT" != "1" ]]; then
     case "$TOOL" in
-      Read|Grep|Glob|LS|list_dir|Task|Agent|mcp_task|ReadLints|fetch_mcp_resource|list_mcp_resources|AskUserQuestion)
+      Read|Grep|Glob|LS|list_dir|Task|Agent|Skill|mcp_task|ReadLints|fetch_mcp_resource|list_mcp_resources|AskUserQuestion)
         # allowed（R2'）
         #   AskUserQuestion: 読み取り専用・非破壊のユーザー対話ツール。ファイル変更・コード実行を伴わず、
         #   CORE.md §メインエージェントがやってはいけないこと（ファイル作成/編集/コード実装/設計本文/
         #   レビュー本文/テスト作成/コマンド実行）に非該当のため orchestrator に許可する（FR-1・ADR-1）。
-        #   注: ハーネス組み込みツールの追加時は、Agent（下記注記）と同様に allowlist 追従漏れによる
+        #   Skill: 本フレームワークの command 実行の正規入口（.claude/skills/agent 経由の skill chain 呼び出し）。
+        #   orchestrator が委譲経路として Skill を使う配備（CLAUDE.md「command 実行時は run_command と
+        #   commands/{name}.md を読むこと」）で、本 allowlist に無いと *) で fail-closed ブロックされ、
+        #   Agent 名未対応時と同型の自己ロックアウトが起きる。ツール名レベルの判定しかできないため
+        #   Task/Agent と同水準で許可する（呼び出し先 skill 種別の絞り込みは本 hook の対象外）。
+        #   注: ハーネス組み込みツールの追加時は、Agent/Skill（本注記）と同様に allowlist 追従漏れによる
         #   自己ロックアウトが起こりうる。同種ツール追加時は本 allowlist の追従を検討すること。
         :
         ;;
