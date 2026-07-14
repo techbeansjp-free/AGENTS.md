@@ -24,7 +24,7 @@ description: "設計・境界・依存の妥当性をレビューし、04_review
 ## Outputs
 
 - 04_review の「設計・境界の確認」に追記する内容。通過/要対応を分けて書く。PHASES の監査観点（成果物の必須セクション・証跡の規約遵守）も確認する。
-- **二観点の両リストを必須出力**（[REVIEW_DUAL_LENS.md](../../../REVIEW_DUAL_LENS.md)）: 04_review に「敵対的観点リスト」と「must-preserve リスト」を**両方**出力する。両リスト未記載は未完了。
+- **二観点の両リストを必須出力**（REVIEW_DUAL_LENS.md。`.agent-skill-chain/source/REVIEW_DUAL_LENS.md`）: 04_review に「敵対的観点リスト」と「must-preserve リスト」を**両方**出力する。両リスト未記載は未完了。
 
 ## Done
 

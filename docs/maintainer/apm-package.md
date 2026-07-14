@@ -16,7 +16,7 @@
 
 **apm 経由では `agent-skill-chain-full` バンドル（正本一式の参照コンテキスト）のみを配布する。** 個別スキル（`{domain}__{capability}`）は apm では配備しない。個別スキルの `.claude/skills/`・`.cursor/skills/` への配備は **npx 導線**（`setup.sh`／`lib/deploy-skills.sh`）が唯一の主体である。
 
-> **背景（二重コピー解消・修正方針 D1）**: apm（Claude ターゲット）と npx が同一の `.claude/skills/` へ**異なる命名規則**（apm＝ハイフン正規化、npx＝ダブルアンダースコア）で同じ個別スキルを配備すると、Claude Code が同一スキルを 2 件として認識する二重コピーが発生していた。apm が個別スキルを配らずバンドル 1 件のみを配ることで、同一ディレクトリに個別スキルを置く主体が npx のみになり、併用しても別名重複が構造的に生じない。詳細は [apm-npx スキル二重コピー解消 issue の 02_設計.md（ADR-1）](./workflow/20260713_033406_apm-npx-skill重複解消/02_設計.md) を参照。
+> **背景（二重コピー解消・修正方針 D1）**: apm（Claude ターゲット）と npx が同一の `.claude/skills/` へ**異なる命名規則**（apm＝ハイフン正規化、npx＝ダブルアンダースコア）で同じ個別スキルを配備すると、Claude Code が同一スキルを 2 件として認識する二重コピーが発生していた。apm が個別スキルを配らずバンドル 1 件のみを配ることで、同一ディレクトリに個別スキルを置く主体が npx のみになり、併用しても別名重複が構造的に生じない。詳細は [apm-npx スキル二重コピー解消 issue の 02_設計.md（ADR-1）](./workflow/close/20260713_033406_apm-npx-skill重複解消/02_設計.md) を参照。
 
 agents（`.apm/agents/*.agent.md`）・commands/prompts・instructions・hooks への個別分解も引き続き対象外である（後続 issue へ申し送り。根拠は [npm 公開中止・APM 転換 issue の 02_設計.md §2.6.5・§9.2](../maintainer/workflow/close/20260711_015030_agentsOS汎用化_ポリシー統合/90_issues/20260711_024021_npm公開中止_APM転換/02_設計.md#265-v1-スコープをスキルのみに限定する理由agentspromptscommandsinstructionshooks-を対象外とする根拠)）。
 

@@ -1,8 +1,8 @@
 # COVERAGE_EXCEPTIONS.md — 本リポ（自己拡張の消費者）の例外台帳（実データ）
 
-本ファイルは配布物正本 [.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md](../.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md) 第3章の必須列に従う、本リポジトリの**カバレッジ例外台帳（実データ）**である。列定義・認定基準（第2章の 1〜4）・100% 方針・禁止パターンは**正本を参照**し、本台帳では重複定義しない（DRY）。本台帳は**実データ行のみ**を持つ。
+本ファイルは配布物正本 [.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md](../source/COVERAGE_AND_EXCEPTIONS.md) 第3章の必須列に従う、本リポジトリの**カバレッジ例外台帳（実データ）**である。列定義・認定基準（第2章の 1〜4）・100% 方針・禁止パターンは**正本を参照**し、本台帳では重複定義しない（DRY）。本台帳は**実データ行のみ**を持つ。
 
-- **二重化（A↔B）**: 「適用手段」列に記載した kcov のパス除外オプション（`--exclude-path` に渡すパス）は、計測スクリプト [test/coverage-check.sh](../test/coverage-check.sh) の `EXCLUDE_PATHS`（正本変数・除外 A）と**一致させること**。片方だけの除外（A のみ・B のみ）は禁止（正本 §1）。
+- **二重化（A↔B）**: 「適用手段」列に記載した kcov のパス除外オプション（`--exclude-path` に渡すパス）は、計測スクリプト [test/coverage-check.sh](../../test/coverage-check.sh) の `EXCLUDE_PATHS`（正本変数・除外 A）と**一致させること**。片方だけの除外（A のみ・B のみ）は禁止（正本 §1）。
 - **100% の分母**: 計測対象（分母）は `INCLUDE_PATHS=.agent-skill-chain/source/scripts` 配下の**実行ロジックを持つ bash 本体**。本台帳に載せた対象を分母から外したうえで、**残りの計測対象に対して `FAIL_UNDER=100` を強制**する（閾値は下げない）。
 - **行単位 ignore 不使用**: bash には行単位無視の公式手段が無いため、除外は**パス単位（kcov `--exclude-path` / `--exclude-pattern`）＋本台帳**の二重化のみで行う（行 pragma は使わない）。
 
@@ -27,7 +27,7 @@
 
 ## 関連ドキュメント
 
-- 配布物正本: [.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md](../.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md)（§1 方針・§1.1 禁止パターン・§2 認定基準・§3 必須列）
-- 計測スクリプト: [test/coverage-check.sh](../test/coverage-check.sh)（正本変数 `INCLUDE_PATHS` / `EXCLUDE_PATHS` / `FAIL_UNDER` / `COV_OUT`）
-- CI 配線: [.github/workflows/self-enforce.yml](../.github/workflows/self-enforce.yml)（kcov 導入 step ＋ coverage step）
+- 配布物正本: [.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md](../source/COVERAGE_AND_EXCEPTIONS.md)（§1 方針・§1.1 禁止パターン・§2 認定基準・§3 必須列）
+- 計測スクリプト: [test/coverage-check.sh](../../test/coverage-check.sh)（正本変数 `INCLUDE_PATHS` / `EXCLUDE_PATHS` / `FAIL_UNDER` / `COV_OUT`）
+- CI 配線: [.github/workflows/self-enforce.yml](../../.github/workflows/self-enforce.yml)（kcov 導入 step ＋ coverage step）
 - 設計・実装計画: `docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md`・`03_実装計画.md`

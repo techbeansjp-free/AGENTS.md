@@ -26,7 +26,7 @@ description: "実装内容・規約遵守・テスト観点を確認し、04_rev
 ## Outputs
 
 - 04_review の「実装内容の確認」に追記する内容。表または箇条書き。指摘があれば「指摘」「推奨対応」を分けて書く。review-architecture と合わせて 04 を完成させる。
-- **二観点の両リストを必須出力**（[REVIEW_DUAL_LENS.md](../../../REVIEW_DUAL_LENS.md)）: 04_review に「敵対的観点リスト」と「must-preserve リスト」を**両方**出力する。両リスト未記載は未完了。
+- **二観点の両リストを必須出力**（REVIEW_DUAL_LENS.md。`.agent-skill-chain/source/REVIEW_DUAL_LENS.md`）: 04_review に「敵対的観点リスト」と「must-preserve リスト」を**両方**出力する。両リスト未記載は未完了。
 
 ## Done
 
