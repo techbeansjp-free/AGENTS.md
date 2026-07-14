@@ -23,12 +23,58 @@ set +e
 # ---------------------------------------------------------------------------
 block() {
   # 違反確証時: 理由を stderr に出し exit 2（fail-closed）。
-  echo "[enforcement] ERROR: $1" >&2
+  # prefix `[enforcement:block]` は「実際の違反（BLOCK）」であることを示す。常時案内の
+  # `[PreToolUse:info]` バナー（下記）と体裁で明確に区別する（FR-6・ADR-7）。理由本文 $1 は
+  # `<英語> / <日本語>` の日英併記（FR-7・ADR-8）。英語部分文字列は先頭に保持し既存テストを壊さない。
+  echo "[enforcement:block] 違反(BLOCK): $1" >&2
   exit 2
 }
 allow() {
   # 許可・案内のみ: exit 0（fail-safe 側）。
   exit 0
+}
+
+# ---------------------------------------------------------------------------
+# is_in_project_allowlist <tool> — project 固有 allowlist 拡張（FR-4・ADR-3/ADR-4）。
+#   R2 の *) default に落ちた未知ツール名が、消費先のユーザー資産
+#   `.agent-skill-chain/project/orchestrator-allowlist.txt` に厳密一致で列挙されていれば真。
+#
+#   設計原則（ADR-3）:
+#     - 拡張ファイルは **source せずデータとして** read する（任意コード実行ベクタを作らない）。
+#     - 各行は `#` 以降をコメント除去し、**先頭末尾のみ trim（内部空白は collapse しない）**。
+#       collapse すると `mcp __ shell`→`mcp__shell` 等の内部空白難読化が正規名に化けて regex を通過し、
+#       PR レビューの目視をすり抜ける余地を残すため、trim のみとする。
+#     - 衛生フィルタとして厳密文字種 `^[A-Za-z][A-Za-z0-9_-]*$` を要求（`-` は末尾 literal。MCP 名の
+#       ハイフンを許容。内部空白・その他メタ文字・内部 CR・BOM を含む不正行は不一致で無視＝注入対策）。
+#       許可の実ゲートは `[[ "$line" == "$want" ]]` の厳密一致
+#       （RHS を quote＝リテラル比較・glob 無効）であり、regex は衛生に過ぎない。
+#     - ファイル不在・空・全行不正・読取不可・非正規ファイル（`-f` 偽＝デバイス/FIFO への symlink 等）は
+#       偽を返し *) default 拒否へ落ちる＝**fail-closed を保全**。
+#   パス導出（ADR-3）: `$(dirname "$AGENTS_ROOT")/project/orchestrator-allowlist.txt`
+#     （AGENTS_ROOT=.../.agent-skill-chain/source → .../.agent-skill-chain/project）。字句 dirname
+#     （symlink 解決なし）。非標準配置ではファイル不在で fail-closed に落ちるだけで許可は漏れない。
+#   注意（能力ベース残余リスク）: 「明示拒否**名**を覆せない」のは名前一致の保証であり、能力の保証ではない。
+#     `*)` に落ちる MCP 書込/実行ツール（`mcp__*` 系。明示拒否列の `call_mcp_tool` とは別名）を opt-in
+#     すれば orchestrator が Edit/Write を介さず書込/実行の等価権限を得る余地が残る。安全性は opt-in 内容の
+#     人間 PR レビューに全面依存する（SETUP.md §orchestrator allowlist の project 拡張 参照）。
+# ---------------------------------------------------------------------------
+is_in_project_allowlist() {
+  local want="$1" line proj_file
+  [[ -z "$want" ]] && return 1
+  proj_file="$(dirname "$AGENTS_ROOT")/project/orchestrator-allowlist.txt"
+  [[ -f "$proj_file" ]] || return 1        # 不在・非正規ファイルは fail-closed（default block へ）
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"                          # # 以降はコメント除去
+    line="${line#"${line%%[![:space:]]*}"}"     # 先頭空白の trim
+    line="${line%"${line##*[![:space:]]}"}"     # 末尾空白の trim（CRLF の \r を含む）
+    [[ -z "$line" ]] && continue
+    # 厳密文字種検証（衛生フィルタ・内部空白/メタ文字/内部 CR/BOM を含む行はここで無視）。
+    #   `-` は末尾に置いた literal（範囲演算子でない）。MCP 名 `mcp__brave-search__search` 等の
+    #   ハイフン付き正式名を許容するため許可集合に含める（厳密一致ゲートは下行で不変）。
+    [[ "$line" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] || continue
+    [[ "$line" == "$want" ]] && return 0        # 厳密一致（RHS quote＝リテラル比較・glob 無効）
+  done < "$proj_file"
+  return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -148,15 +194,19 @@ parse_input
 
 AGENTS_ROOT="${AGENTS_ROOT:-.agent-skill-chain/source}"
 if [[ ! -d "$AGENTS_ROOT" ]]; then
-  echo "[PreToolUse] .agents not found; skip contract check." >&2
+  echo "[PreToolUse:info] .agents not found; skip contract check. / .agents が見つからないため契約チェックをスキップします（これは違反ではありません）。" >&2
   allow
 fi
 
 # 案内（常に表示・exit には影響しない）
+#   prefix `[PreToolUse:info]` は「常時表示の案内であり、ツール呼び出しのブロック（違反）ではない」
+#   ことを示す（FR-6・ADR-7）。実際の違反は `block()` の `[enforcement:block]` 行で出る。
+#   各行は `<英語> / <日本語>` の日英併記（FR-7・ADR-8）。
 if [[ -f "$AGENTS_ROOT/boot/CORE.md" ]]; then
-  echo "[PreToolUse] Ensure you have read: $AGENTS_ROOT/boot/CORE.md, $AGENTS_ROOT/boot/LOAD_POLICY.md, $AGENTS_ROOT/workflow/PHASES.md before starting workflow or running a command." >&2
-  echo "[PreToolUse] Main (orchestrator) must NOT do real work (absolute): do not directly edit 00/01/02/03/04 or code. Always delegate via Task/Constraints/OutputSpec to sub. No exceptions." >&2
-  echo "[PreToolUse] Evidence: workflow.db via write-workflow-log.sh only. Do NOT run sqlite3 directly. 書記は write-workflow-log.sh のみ実行可。sqlite3 直接は全ロールで reject。Memo timestamps must come from system clock (new-workflow-memo.sh or write-workflow-log)." >&2
+  echo "[PreToolUse:info] This is always-shown guidance, not a block. / 以下は常時表示の案内であり、違反（ブロック）ではありません。" >&2
+  echo "[PreToolUse:info] Ensure you have read: $AGENTS_ROOT/boot/CORE.md, $AGENTS_ROOT/boot/LOAD_POLICY.md, $AGENTS_ROOT/workflow/PHASES.md before starting workflow or running a command. / workflow やコマンド開始前に上記を読んでください。" >&2
+  echo "[PreToolUse:info] Main (orchestrator) must NOT do real work (absolute): do not directly edit 00/01/02/03/04 or code. Always delegate via Task/Constraints/OutputSpec to sub. No exceptions. / メイン（orchestrator）は実作業（00/01/02/03/04・コードの直接編集）をしてはいけません（絶対）。必ずサブへ委譲してください。" >&2
+  echo "[PreToolUse:info] Evidence: workflow.db via write-workflow-log.sh only. Do NOT run sqlite3 directly. 書記は write-workflow-log.sh のみ実行可。sqlite3 直接は全ロールで reject。Memo timestamps must come from system clock (new-workflow-memo.sh or write-workflow-log)." >&2
 fi
 
 # ---------------------------------------------------------------------------
@@ -172,7 +222,7 @@ if [[ -n "$TOOL" ]]; then
     if [[ "$PATH_TARGET" == ".agent-skill-chain/runtime/.gitignore" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/runtime/.gitignore ]]; then
       : # allow（厳密パス一致の狭い例外。R1 の他条件には進まない）
     elif [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/ ]]; then
-      block "direct edit of .agent-skill-chain/runtime/ is forbidden"
+      block "direct edit of .agent-skill-chain/runtime/ is forbidden / .agent-skill-chain/runtime/ の直接編集は禁止です"
     fi
   fi
 
@@ -186,18 +236,32 @@ if [[ -n "$TOOL" ]]; then
   #    scribe は ROLE!=orchestrator のため本 R2 の対象外（scribe 経路は R3 以降で判定）。
   if [[ "$ROLE" == "orchestrator" && "$IS_SUBAGENT" != "1" ]]; then
     case "$TOOL" in
-      Read|Grep|Glob|LS|list_dir|Task|Agent|mcp_task|ReadLints|fetch_mcp_resource|list_mcp_resources)
-        : # allowed（R2'）
+      Read|Grep|Glob|LS|list_dir|Task|Agent|mcp_task|ReadLints|fetch_mcp_resource|list_mcp_resources|AskUserQuestion)
+        # allowed（R2'）
+        #   AskUserQuestion: 読み取り専用・非破壊のユーザー対話ツール。ファイル変更・コード実行を伴わず、
+        #   CORE.md §メインエージェントがやってはいけないこと（ファイル作成/編集/コード実装/設計本文/
+        #   レビュー本文/テスト作成/コマンド実行）に非該当のため orchestrator に許可する（FR-1・ADR-1）。
+        #   注: ハーネス組み込みツールの追加時は、Agent（下記注記）と同様に allowlist 追従漏れによる
+        #   自己ロックアウトが起こりうる。同種ツール追加時は本 allowlist の追従を検討すること。
+        :
         ;;
       Bash)
-        block "orchestrator cannot run Bash"
+        block "orchestrator cannot run Bash / orchestrator は Bash を実行できません"
         ;;
       Edit|Write|Delete|StrReplace|Shell|TodoWrite|EditNotebook|call_mcp_tool|GenerateImage)
-        block "orchestrator must never modify files or run write/edit/shell (absolute). Delegate to sub only. No exceptions."
+        block "orchestrator must never modify files or run write/edit/shell (absolute). Delegate to sub only. No exceptions. / orchestrator はファイル変更・write/edit/shell の実行をしてはいけません（絶対）。サブへ委譲してください。例外はありません。"
         ;;
       *)
-        # 未知のツールは orchestrator には許可しない（許可リスト方式）
-        block "orchestrator may only use allowed tools (Read, Grep, Glob, LS, Task, etc.): $TOOL"
+        # 未知のツールは原則 orchestrator には許可しない（許可リスト方式・fail-closed）。
+        #   ただし project 固有 opt-in 拡張（.agent-skill-chain/project/orchestrator-allowlist.txt）に
+        #   厳密一致で列挙されたツール名のみ許可する（FR-4・ADR-3/ADR-4）。
+        #   重要: Bash・Edit|Write|... はこの *) より手前の case で block されるため、拡張では覆せない
+        #   （明示拒否**名**の保証。ただし能力=capability の保証ではない。ADR-3 帰結・SETUP.md 参照）。
+        if is_in_project_allowlist "$TOOL"; then
+          : # project opt-in で許可
+        else
+          block "orchestrator may only use allowed tools (Read, Grep, Glob, LS, Task, etc.): $TOOL / orchestrator は許可ツール（Read, Grep, Glob, LS, Task 等）のみ使用できます: $TOOL"
+        fi
         ;;
     esac
   fi
@@ -219,12 +283,12 @@ if [[ "$TOOL" == "Bash" ]]; then
       # R6（先行）. sqlite3 直接実行禁止（全 ROLE）。role 共通の明確な理由を優先表示するため
       #            scribe の write-workflow-log.sh 単独実行制約（R5）より前に判定する。
       if [[ "$CMD" =~ sqlite3 ]]; then
-        block "sqlite3 direct execution forbidden (use write-workflow-log.sh)"
+        block "sqlite3 direct execution forbidden (use write-workflow-log.sh) / sqlite3 の直接実行は禁止です（write-workflow-log.sh を使用してください）"
       fi
       # R4. 複合シェル禁止（改行・;・&&・||・|）
       case "$CMD" in
         *$'\n'*|*';'*|*'&&'*|*'||'*|*'|'* )
-          block "compound shell command forbidden"
+          block "compound shell command forbidden / 複合シェルコマンドは禁止です"
           ;;
       esac
       # R5. write-workflow-log.sh は単独実行のみ（C-4a: 正規化済み絶対パス比較で回避ベクタを塞ぐ）。
@@ -249,7 +313,7 @@ if [[ "$TOOL" == "Bash" ]]; then
       # 許可正本パス: 実行 cwd 起点の配備先を realpath 解決（実行時算出・固定文字列禁止）。
       canonical_wwl="$(norm_path "${AGENTS_ROOT}/scripts/write-workflow-log.sh")"
       if [[ -z "$resolved" ]] || [[ -z "$canonical_wwl" ]] || [[ "$resolved" != "$canonical_wwl" ]]; then
-        block "only the canonical write-workflow-log.sh (realpath of \$AGENTS_ROOT/scripts/write-workflow-log.sh) may be run directly"
+        block "only the canonical write-workflow-log.sh (realpath of \$AGENTS_ROOT/scripts/write-workflow-log.sh) may be run directly / 正規の write-workflow-log.sh（\$AGENTS_ROOT/scripts/write-workflow-log.sh の realpath）のみ直接実行できます"
       fi
     fi
   elif [[ "$IS_SUBAGENT" == "1" ]]; then
@@ -258,10 +322,10 @@ if [[ "$TOOL" == "Bash" ]]; then
     :
   elif [[ "$ROLE" == "orchestrator" ]]; then
     # (c) main（orchestrator かつ 非 subagent）: Bash 不可。
-    block "orchestrator cannot run Bash"
+    block "orchestrator cannot run Bash / orchestrator は Bash を実行できません"
   else
     # (d) 非 scribe・非 subagent・非 orchestrator（unknown/env-worker 等）は従来どおり block。
-    block "only scribe may run Bash for workflow logging"
+    block "only scribe may run Bash for workflow logging / Bash 実行は workflow 記録の scribe のみ可能です"
   fi
 fi
 
