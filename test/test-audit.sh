@@ -127,6 +127,47 @@ else
   ng "既定値＋解決先不在で #1 由来の WARN/FAIL が出た: $ENV2_OUT"
 fi
 
+# シナリオ SKIP-SUMMARY-1: workflow.db 不在時に DB 系チェックの SKIP 状況を要約する SKIP-SUMMARY 行を出す
+# Given: workflow.db を作らない最小ツリー（T1_TREE を再利用。sqlite3 の有無は環境依存）
+# When:  audit.sh <tmp> を実行する（T1_OUT を再利用）
+# Then:  sqlite3 があれば "workflow.db が見つかりません" を含む SKIP-SUMMARY、無ければ "sqlite3 コマンドが見つかりません" を含む SKIP-SUMMARY が出る
+if command -v sqlite3 >/dev/null 2>&1; then
+  if grep -q 'SKIP-SUMMARY: workflow.db が見つかりません' <<< "$T1_OUT"; then
+    ok "SKIP-SUMMARY: workflow.db 不在を要約表示する（sqlite3 あり）"
+  else
+    ng "SKIP-SUMMARY: workflow.db 不在の要約行が出ない: $T1_OUT"
+  fi
+else
+  if grep -q 'SKIP-SUMMARY: sqlite3 コマンドが見つかりません' <<< "$T1_OUT"; then
+    ok "SKIP-SUMMARY: sqlite3 不在を要約表示する"
+  else
+    ng "SKIP-SUMMARY: sqlite3 不在の要約行が出ない: $T1_OUT"
+  fi
+fi
+
+# シナリオ SKIP-SUMMARY-2: workflow.db が存在し workflow_log テーブルもある場合は SKIP-SUMMARY を出さず INFO 行を出す
+# Given: workflow.db（workflow_log テーブルあり）を含む最小ツリー
+# When:  audit.sh <tmp> を実行する
+# Then:  "[audit] INFO: workflow.db が見つかりました" を含み、"SKIP-SUMMARY:" は出ない
+if command -v sqlite3 >/dev/null 2>&1; then
+  SS2_TREE="$(make_min_tree)"
+  SS2_DB="$SS2_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$SS2_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  SS2_OUT="$(bash "$AUDIT" "$SS2_TREE" 2>&1)"
+  if grep -q '\[audit\] INFO: workflow.db が見つかりました' <<< "$SS2_OUT"; then
+    ok "SKIP-SUMMARY: workflow.db 存在時は INFO 行を出す"
+  else
+    ng "SKIP-SUMMARY: workflow.db 存在時の INFO 行が出ない: $SS2_OUT"
+  fi
+  if ! grep -q 'SKIP-SUMMARY:' <<< "$SS2_OUT"; then
+    ok "SKIP-SUMMARY: workflow.db 存在時は SKIP-SUMMARY 行を出さない"
+  else
+    ng "SKIP-SUMMARY: workflow.db 存在時にも SKIP-SUMMARY 行が出た（誤検知）: $SS2_OUT"
+  fi
+else
+  echo "  [SKIP] SKIP-SUMMARY-2 workflow.db 存在時の INFO 表示（sqlite3 不在）"
+fi
+
 # シナリオ4: #17 close ガードが issue_path のファイル粒度記録でも close 完了 issue を除外する
 # Given: close 配下に実在する issue ディレクトリ <C> と、workflow.db に「親が implement/design でない
 #        verify-and-close 行」が 2 件（issue_path がディレクトリ粒度 .../<C>/ と ファイル粒度 .../<C>/04_review.md）
