@@ -102,13 +102,23 @@
 
 set -e
 PROJECT_ROOT="${1:-.}"
-# Git 差分範囲。CI で PR base 等を渡す想定。例: main..HEAD または HEAD~1..HEAD
+# Git 差分範囲。CI で PR base や push イベントの before..after 等を渡す想定。例: main..HEAD, HEAD~1..HEAD, <before>..<after>
+# push イベントで複数コミットをまとめて push した場合の監査漏れ対策として、呼び出し元（消費者テンプレート
+# .agent-skill-chain/runtime/templates/github/workflows/audit.yml）は github.event.before/after から動的に
+# AUDIT_GIT_RANGE を組み立てて渡すことを想定する（before が新規ブランチ作成等で全ゼロ SHA の場合は、
+# テンプレート側で AUDIT_GIT_RANGE を設定せず、本スクリプトの既定 HEAD~1..HEAD にフォールバックさせる）。
 GIT_RANGE="${AUDIT_GIT_RANGE:-${2:-HEAD~1..HEAD}}"
 # GIT_RANGE は unquoted で `git diff $GIT_RANGE` に展開されるため、git オプション注入（--output= 等）や
 # 単語分割による任意引数注入を遮断する。許可は revision / range 構文に限定する:
 #   先頭は英数（- 始まりのオプション混入を排除）、以降に英数・_ . / ~ ^ - を許し、
 #   任意で ..（2 点）または ...（3 点）で 2 リビジョンを結ぶ形のみ。各リビジョンも先頭は英数に固定。
 # 不正な値（空白・--option・; 等・先頭 -）は既定 HEAD~1..HEAD へ無害化し、警告する（既存の正当 range は素通り）。
+# 追加の防御: 全ゼロ SHA（40 桁の 0）を起点/終点に含む場合も解決不能な参照のため既定へフォールバックする
+# （push イベントの before が全ゼロになる新規ブランチ作成時等、呼び出し元が誤ってそのまま渡した場合の保険）。
+if [[ "$GIT_RANGE" =~ ^0{40}(\.\.\.?.*)?$ ]] || [[ "$GIT_RANGE" =~ \.\.\.?0{40}$ ]]; then
+  echo "[audit] WARN: GIT_RANGE の起点/終点が全ゼロ SHA (新規ブランチ作成時等) のため既定 (HEAD~1..HEAD) にフォールバックします: '$GIT_RANGE'" >&2
+  GIT_RANGE="HEAD~1..HEAD"
+fi
 if [[ -n "$GIT_RANGE" ]] && ! [[ "$GIT_RANGE" =~ ^[A-Za-z0-9][A-Za-z0-9_./~^-]*(\.\.\.?[A-Za-z0-9][A-Za-z0-9_./~^-]*)?$ ]]; then
   echo "[audit] WARN: GIT_RANGE が不正なため既定 (HEAD~1..HEAD) に無害化します: '$GIT_RANGE'" >&2
   GIT_RANGE="HEAD~1..HEAD"
@@ -348,8 +358,12 @@ if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
 fi
 
 # 6. 内部参照禁止: PR 本文が渡された場合に .agent-skill-chain/runtime/ や docs/ へのリンクを検出（CI で PR_BODY を渡す想定）
+#   外部サイトの絶対 URL（例: https://example.com/docs/page）まで誤検知しないよう、判定前に
+#   http(s):// で始まる絶対 URL トークンを除去してから内部パス（.agent-skill-chain/runtime/・docs/）の
+#   有無を検査する。POSIX 移植性のため \s（GNU 拡張）は使わず [[:space:]] を使う（BSD/GNU grep 両対応）。
 if [[ -n "${PR_BODY:-}" ]]; then
-  if echo "$PR_BODY" | grep -qE '\]\([^)]*\.agent-skill-chain/runtime/|\]\([^)]*/docs/|\.agent-skill-chain/runtime/[^)\s]+\)|/docs/[^)\s]+\)'; then
+  _pr_body_no_url="$(printf '%s' "$PR_BODY" | sed -E 's#https?://[^)[:space:]]*##g')"
+  if printf '%s' "$_pr_body_no_url" | grep -qE '\]\([^)]*\.agent-skill-chain/runtime/|\]\([^)]*/docs/|\.agent-skill-chain/runtime/[^)[:space:]]+\)|/docs/[^)[:space:]]+\)'; then
     echo "FAIL: 内部参照禁止の PR テンプレ違反 (PR body must not link to .agent-skill-chain/runtime/ or docs/). See 99_PR.md." >&2
     echo "$ROLLBACK_MSG" >&2
     EXIT_CODE=1
