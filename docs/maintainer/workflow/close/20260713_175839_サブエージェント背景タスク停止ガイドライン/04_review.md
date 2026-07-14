@@ -13,7 +13,7 @@ issue_id: "ffe95495-88a3-47c0-a2d3-55ec3381d7e5"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。
 >
-> **必須**: 本レビューは [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../.agent-skill-chain/source/REVIEW_RULE.md) および [`REVIEW_DUAL_LENS.md`](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)（敵対的観点リスト・must-preserve リスト両立を必須化。両リスト欠落は未完了）に従う。ユーザー指示「review は実装前 review 含めてすべて肯定的・敵対的観点から review すること」に基づき、実装前 review-docs（memo）の二観点も継承・再確認する。
+> **必須**: 本レビューは [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) および [`REVIEW_DUAL_LENS.md`](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)（敵対的観点リスト・must-preserve リスト両立を必須化。両リスト欠落は未完了）に従う。ユーザー指示「review は実装前 review 含めてすべて肯定的・敵対的観点から review すること」に基づき、実装前 review-docs（memo）の二観点も継承・再確認する。
 > **レビュー深度**: standard（変更 2 ファイル各 1 行追記のドキュメント差分・実行コードなし）。
 
 ---
@@ -282,7 +282,7 @@ REVIEW_DUAL_LENS §2.2/§6 に従い、review-docs memo §4 の 10 項目をラ�
 
 ### 13.2 その他の参考資料
 
-- [`.agent-skill-chain/source/REVIEW_DUAL_LENS.md`](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) - 二観点必須化の正本
+- [`.agent-skill-chain/source/REVIEW_DUAL_LENS.md`](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) - 二観点必須化の正本
 - 本セッションで進行役が観測した停滞事例（同一サブで 2 回）。evidence_source: orchestrator_report。
 
 ---

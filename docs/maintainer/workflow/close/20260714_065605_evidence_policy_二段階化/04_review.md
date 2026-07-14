@@ -11,7 +11,7 @@ document_id: "0fba7d94-4829-4d8f-a20a-ec8aa230af01"
 **command**: verify-and-close（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）
 **適用基準**: `.agent-skill-chain/source/REVIEW_DUAL_LENS.md`（敵対的観点リスト＋肯定的 must-preserve リストの両立が必須）、`REVIEW_RULE.md`、`PHASES.md` 監査観点
 
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 
 ---
 

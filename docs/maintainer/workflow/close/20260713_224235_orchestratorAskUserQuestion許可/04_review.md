@@ -8,8 +8,8 @@ document_id: "47942099-baf1-42c5-b6f0-0011e42384cb"
 **作成日**: 2026 年 07 月 14 日
 **最終更新**: 2026 年 07 月 14 日
 
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
-> **レビュー深度**: standard（enforcement のセキュリティ境界に触れるため、敵対的観点は full 相当で実施）。二観点必須化は [REVIEW_DUAL_LENS.md](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) に従い、敵対的観点リストと must-preserve リストの両方を §4.3/§4.4 に記載する。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **レビュー深度**: standard（enforcement のセキュリティ境界に触れるため、敵対的観点は full 相当で実施）。二観点必須化は [REVIEW_DUAL_LENS.md](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) に従い、敵対的観点リストと must-preserve リストの両方を §4.3/§4.4 に記載する。
 
 ---
 
@@ -154,7 +154,7 @@ document_id: "47942099-baf1-42c5-b6f0-0011e42384cb"
 
 - **要否**: 不要（軽量パス・根拠付き更新不要判定 1 件）
 - **対象**: なし
-- **理由**: 本リポは `docs/` 採用済みでゲート発動対象。実装変更は enforcement の Layer2（PreToolUse allowlist・出力文言）およびドキュメント正本 `.agent-skill-chain/source/enforcement/README.md` に限定される。システム仕様書側 [`docs/04_機能設計/enforcement/README.md`](../../../04_機能設計/enforcement/README.md) は「本ドキュメントは俯瞰に留める」方針で、allowlist の具体的ツール列挙・block メッセージ文言・project 拡張の詳細を**保持しておらず、それらは source 正本へ委譲**している（evidence_source: existing_code, 当該 spec を実読）。今回の変更（AskUserQuestion 追加・opt-in 拡張・prefix 分離・日英併記）は spec の as-built 記述（「Layer2 PreToolUse がツール実行前に違反を block」「サブ委譲の絶対強制」「allowlist 機構」）のいずれも偽にしない。よって仕様書更新は不要と判定。反復不要（指摘 0 の軽量パス）。この判定の記録は本 §および `docs/00_review/20260714_080312_review.md` に残す。
+- **理由**: 本リポは `docs/` 採用済みでゲート発動対象。実装変更は enforcement の Layer2（PreToolUse allowlist・出力文言）およびドキュメント正本 `.agent-skill-chain/source/enforcement/README.md` に限定される。システム仕様書側 [`docs/04_機能設計/enforcement/README.md`](../../../../04_機能設計/enforcement/README.md) は「本ドキュメントは俯瞰に留める」方針で、allowlist の具体的ツール列挙・block メッセージ文言・project 拡張の詳細を**保持しておらず、それらは source 正本へ委譲**している（evidence_source: existing_code, 当該 spec を実読）。今回の変更（AskUserQuestion 追加・opt-in 拡張・prefix 分離・日英併記）は spec の as-built 記述（「Layer2 PreToolUse がツール実行前に違反を block」「サブ委譲の絶対強制」「allowlist 機構」）のいずれも偽にしない。よって仕様書更新は不要と判定。反復不要（指摘 0 の軽量パス）。この判定の記録は本 §および `docs/00_review/20260714_080312_review.md` に残す。
 
 ---
 
@@ -227,8 +227,8 @@ document_id: "47942099-baf1-42c5-b6f0-0011e42384cb"
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
-- [`.agent-skill-chain/source/REVIEW_DUAL_LENS.md`](../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) — 二観点必須化の正本
-- [`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh`](../../../../.agent-skill-chain/source/enforcement/claude/PreToolUse.sh) — 主対象実装
+- [`.agent-skill-chain/source/REVIEW_DUAL_LENS.md`](../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) — 二観点必須化の正本
+- [`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh`](../../../../../.agent-skill-chain/source/enforcement/claude/PreToolUse.sh) — 主対象実装
 
 ---
 

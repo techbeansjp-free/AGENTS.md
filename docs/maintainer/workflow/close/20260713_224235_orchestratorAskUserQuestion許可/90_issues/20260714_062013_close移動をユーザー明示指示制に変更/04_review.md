@@ -12,7 +12,7 @@ document_id: "3f2a9c14-6d5b-4e07-9a1c-8b47e2f5a930"
 **設計書**: [`02_設計.md`](02_設計.md)（document_id: `c1338e9b-c854-4d73-9eb3-30ef1ce14483`）
 **実装計画**: [`03_実装計画.md`](03_実装計画.md)（document_id: `be2faefe-6756-4c04-a00f-a15e16f85efc`）
 **ブランチ / PR**: `docs/orchestrator-askuserquestion-gate` / PR #38（親 issue に集約・追加コミット）
-**レビューモード**: full（ユーザー指示により肯定的＋敵対的の二観点を必須適用。[REVIEW_DUAL_LENS.md](../../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) 準拠）
+**レビューモード**: full（ユーザー指示により肯定的＋敵対的の二観点を必須適用。[REVIEW_DUAL_LENS.md](../../../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md) 準拠）
 
 > 本記録は verify-and-close の skill chain（generate-scenarios → map-coverage → review-code → review-architecture → write-workflow-log）の産物。実装前 review-docs（[memo/20260714_083932_review-docs.md](memo/20260714_083932_review-docs.md)）の両観点結論を継承し、実装後の実体（`git diff`）に対して再検証した。
 
@@ -126,6 +126,6 @@ document_id: "3f2a9c14-6d5b-4e07-9a1c-8b47e2f5a930"
 
 - [00_要求定義.md](00_要求定義.md) / [02_設計.md](02_設計.md) / [03_実装計画.md](03_実装計画.md)
 - [memo/20260714_083932_review-docs.md](memo/20260714_083932_review-docs.md)（実装前二観点レビュー）
-- [`.agent-skill-chain/source/workflow/PHASES.md`](../../../../../../.agent-skill-chain/source/workflow/PHASES.md) §完了 issue の close 移動（改訂対象）
-- [`.agent-skill-chain/project/自己拡張ワークフロー.md`](../../../../../../.agent-skill-chain/project/自己拡張ワークフロー.md) §完了 issue の close 移動（上書き）（改訂対象）
-- [`.agent-skill-chain/source/REVIEW_DUAL_LENS.md`](../../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)
+- [`.agent-skill-chain/source/workflow/PHASES.md`](../../../../../../../.agent-skill-chain/source/workflow/PHASES.md) §完了 issue の close 移動（改訂対象）
+- [`.agent-skill-chain/project/自己拡張ワークフロー.md`](../../../../../../../.agent-skill-chain/project/自己拡張ワークフロー.md) §完了 issue の close 移動（上書き）（改訂対象）
+- [`.agent-skill-chain/source/REVIEW_DUAL_LENS.md`](../../../../../../../.agent-skill-chain/source/REVIEW_DUAL_LENS.md)
