@@ -568,6 +568,81 @@ EOF
   else
     ng "#32 サブ issue（深さ4）で FAIL しなかった（取りこぼし回帰）: $S32_7_OUT"
   fi
+
+  # ユースケース: mode:quick による #32 ゲート免除（163206 issue T-1/T-4/T-5）
+  # シナリオ8: mode: quick は #32 を SKIP（review-docs ログ 0 件でも FAIL しない）
+  # Given: 00_要求定義.md frontmatter mode: quick の issue に implement-feature ログのみ（review-docs 無し）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #32 の FAIL は出ない（quick 免除）
+  S32_8_TREE="$(make_min_tree)"
+  S32_8_ISS="docs/maintainer/workflow/20260801_000000_quick"
+  mkdir -p "$S32_8_TREE/$S32_8_ISS"
+  : > "$S32_8_TREE/$S32_8_ISS/03_実装計画.md"
+  cat > "$S32_8_TREE/$S32_8_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "aaaaaaaa-0000-0000-0000-000000000032"
+mode: quick
+---
+# ダミー
+EOF
+  S32_8_DB="$S32_8_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_8_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_8_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_8_ISS');" 2>/dev/null
+  S32_8_OUT="$(bash "$AUDIT" "$S32_8_TREE" 2>&1)"
+  if ! grep -q "実装前 review-docs 未実行" <<< "$S32_8_OUT"; then
+    ok "#32 mode:quick は SKIP される（review-docs 無しでも FAIL しない）"
+  else
+    ng "#32 mode:quick なのに FAIL した: $S32_8_OUT"
+  fi
+
+  # シナリオ9: mode: standard 明示は #32 が従来どおり FAIL する（回帰なし）
+  # Given: 00_要求定義.md frontmatter mode: standard の issue に implement-feature ログのみ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #32 が FAIL する（quick 以外は免除しない）
+  S32_9_TREE="$(make_min_tree)"
+  S32_9_ISS="docs/maintainer/workflow/20260801_000000_standard"
+  mkdir -p "$S32_9_TREE/$S32_9_ISS"
+  : > "$S32_9_TREE/$S32_9_ISS/03_実装計画.md"
+  cat > "$S32_9_TREE/$S32_9_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "aaaaaaaa-0000-0000-0000-000000000033"
+mode: standard
+---
+# ダミー
+EOF
+  S32_9_DB="$S32_9_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_9_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_9_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_9_ISS');" 2>/dev/null
+  S32_9_OUT="$(bash "$AUDIT" "$S32_9_TREE" 2>&1)"
+  if grep -q "実装前 review-docs 未実行" <<< "$S32_9_OUT"; then
+    ok "#32 mode:standard は従来どおり FAIL する（免除は quick のみ）"
+  else
+    ng "#32 mode:standard なのに SKIP された（免除範囲の誤拡大）: $S32_9_OUT"
+  fi
+
+  # シナリオ10: mode 欠落（00 はあるが mode キー無し）は standard 扱いで FAIL（fail-safe）
+  # Given: 00_要求定義.md に mode キーが無い issue に implement-feature ログのみ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #32 が FAIL する（mode 欠落は免除しない）
+  S32_10_TREE="$(make_min_tree)"
+  S32_10_ISS="docs/maintainer/workflow/20260801_000000_nomode"
+  mkdir -p "$S32_10_TREE/$S32_10_ISS"
+  : > "$S32_10_TREE/$S32_10_ISS/03_実装計画.md"
+  cat > "$S32_10_TREE/$S32_10_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "aaaaaaaa-0000-0000-0000-000000000034"
+---
+# ダミー
+EOF
+  S32_10_DB="$S32_10_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S32_10_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S32_10_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S32_10_ISS');" 2>/dev/null
+  S32_10_OUT="$(bash "$AUDIT" "$S32_10_TREE" 2>&1)"
+  if grep -q "実装前 review-docs 未実行" <<< "$S32_10_OUT"; then
+    ok "#32 mode 欠落は standard 扱いで FAIL する（fail-safe）"
+  else
+    ng "#32 mode 欠落なのに SKIP された（fail-safe 違反）: $S32_10_OUT"
+  fi
 else
   echo "  [SKIP] #32 review-docs 未実行検知の回帰（sqlite3 不在）"
 fi
@@ -1337,6 +1412,57 @@ EOF
   else
     ng "#34 impl ログ 0 件でも FAIL した: $S34_7_OUT"
   fi
+
+  # ユースケース: mode:quick による #34 ゲート免除（163206 issue T-2/T-4/T-5）
+  # シナリオ9: mode: quick は #34 を SKIP（github_issue null でも FAIL しない）
+  # Given: 発効日以降の issue に implement-feature ログがあり、github_issue は null だが mode: quick
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "実装前 GitHub Issue 起票ゲート未通過" の FAIL は出ない（quick 免除）
+  S34_9M_TREE="$(make_git_tree_github)"
+  S34_9M_ISS="docs/maintainer/workflow/20260801_000000_gh_quick"
+  mkdir -p "$S34_9M_TREE/$S34_9M_ISS"
+  cat > "$S34_9M_TREE/$S34_9M_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "d9m"
+issue_id: "i9m"
+github_issue: null
+mode: quick
+---
+EOF
+  S34_9M_DB="$S34_9M_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_9M_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_9M_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_9M_ISS');" 2>/dev/null
+  S34_9M_OUT="$(bash "$AUDIT" "$S34_9M_TREE" 2>&1)"
+  if ! grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_9M_OUT"; then
+    ok "#34 mode:quick は SKIP される（github_issue null でも FAIL しない）"
+  else
+    ng "#34 mode:quick なのに FAIL した: $S34_9M_OUT"
+  fi
+
+  # シナリオ10: mode: standard 明示は #34 が従来どおり FAIL する（回帰なし）
+  # Given: 同上の状態だが mode: standard（github_issue は null のまま）
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #34 が FAIL する（免除は quick のみ）
+  S34_10M_TREE="$(make_git_tree_github)"
+  S34_10M_ISS="docs/maintainer/workflow/20260801_000000_gh_standard"
+  mkdir -p "$S34_10M_TREE/$S34_10M_ISS"
+  cat > "$S34_10M_TREE/$S34_10M_ISS/00_要求定義.md" <<'EOF'
+---
+document_id: "d10m"
+issue_id: "i10m"
+github_issue: null
+mode: standard
+---
+EOF
+  S34_10M_DB="$S34_10M_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S34_10M_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, parent_entry_id TEXT NULL, command TEXT NOT NULL, issue_path TEXT NULL);" 2>/dev/null
+  sqlite3 "$S34_10M_DB" "INSERT INTO workflow_log VALUES ('e1', NULL, 'implement-feature', '$S34_10M_ISS');" 2>/dev/null
+  S34_10M_OUT="$(bash "$AUDIT" "$S34_10M_TREE" 2>&1)"
+  if grep -q "実装前 GitHub Issue 起票ゲート未通過" <<< "$S34_10M_OUT"; then
+    ok "#34 mode:standard は従来どおり FAIL する（免除は quick のみ）"
+  else
+    ng "#34 mode:standard なのに SKIP された（免除範囲の誤拡大）: $S34_10M_OUT"
+  fi
 else
   echo "  [SKIP] #34 GitHub Issue 起票ゲート未通過検知の回帰（sqlite3 または git 不在）"
 fi
@@ -1711,6 +1837,21 @@ $'---\nbranch: null\n---\n'
     ok "#35 close SKIP（close 配下 issue は FAIL しない）"
   else
     ng "#35 close 除外が効いていない: $S35_6_OUT"
+  fi
+
+  # ユースケース: mode:quick でも #35 は非対象（163206 issue T-3・ADR-3）
+  # シナリオ7: mode: quick でも branch 未記録なら #35 は FAIL する（mode を一切参照しない）
+  # Given: 発効日以降の issue に implement-feature ログがあり、branch null かつ mode: quick
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #35 は FAIL する（#32/#34 と異なり quick でも免除されない）
+  S35_8M_TREE="$(make_git_tree_github)"
+  seed_branch_issue "$S35_8M_TREE" "docs/maintainer/workflow/20260801_000000_br_quick" \
+$'---\ndocument_id: "d8m"\nissue_id: "i8m"\ngithub_issue: "#1"\nbranch: null\nmode: quick\n---\n'
+  S35_8M_OUT="$(bash "$AUDIT" "$S35_8M_TREE" 2>&1)"
+  if grep -q "ブランチ紐づけ未記録" <<< "$S35_8M_OUT"; then
+    ok "#35 mode:quick でも branch 未記録なら FAIL する（mode 非参照）"
+  else
+    ng "#35 mode:quick で誤って SKIP された（mode を参照してはならない）: $S35_8M_OUT"
   fi
 else
   echo "  [SKIP] #35 ブランチ紐づけ未記録検知の回帰（sqlite3 または git 不在）"
