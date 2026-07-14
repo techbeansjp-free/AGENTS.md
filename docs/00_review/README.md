@@ -19,6 +19,7 @@ document_id: "da1d1ce0-c4c5-4566-9487-4a7e46858466"
 | 日時 | 対象 | 指摘 N→0 | 対応 issue / 版番号 |
 | ---- | ---- | -------- | -------------------- |
 | [20260714_080312](./20260714_080312_review.md) | enforcement 変更（PreToolUse allowlist/出力/日英併記）↔ `docs/04_機能設計/enforcement/README.md` | 更新不要判定（軽量パス） | `docs/maintainer/workflow/20260713_224235_orchestratorAskUserQuestion許可/`（#35） |
+| [20260714_221215](./20260714_221215_review.md) | enforcement 既定 on 化（新規配備で自動配線）↔ `docs/04_機能設計/CLI/README.md`（CLI コマンド一覧） | 更新済み・整合確認（指摘 0） | enforce 新規既定 on 化 issue（issue_id: `b78fc168-77b2-434d-8b98-cdfd68deafbf`） |
 
 - **日時**: レビュー記録ファイル名の `YYYYMMDD_HHMMSS` プレフィックス。
 - **対象**: 照合した実装・レビューしたシステム仕様書のセクション。
