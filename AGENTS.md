@@ -7,7 +7,7 @@
 - **委譲の実行手段**（Cursor 上で何を呼ぶか）: [.agent-skill-chain/source/skills/agent/run_command.md](.agent-skill-chain/source/skills/agent/run_command.md) の 1 か所で規定。
 - **委譲できない環境**では委譲計画のみを返し実作業は行わない: [CORE](.agent-skill-chain/source/boot/CORE.md) §依頼タイプ別振る舞い。
 - **フォールバック方針**（委譲手段がプラットフォームで利用できない場合に限定。軽作業・小規模を理由にメインが実作業することは禁止）: [CORE](.agent-skill-chain/source/boot/CORE.md) §フォールバック方針。
-- **HEARTBEAT 読了**の強制: [CORE](.agent-skill-chain/source/boot/CORE.md) §Heartbeat。
+- **HEARTBEAT 読了**の推奨: [CORE](.agent-skill-chain/source/boot/CORE.md) §Heartbeat。
 
 ---
 
@@ -59,7 +59,7 @@
     - **提案して系**（例: 「issueを作成するためのサブへの指示文を提案して」「プロンプト案だけ教えて」）→ 委譲せず、サブへの指示文案のみを返す（SC-02 相当）。
     - **説明して系**（例: 「issueを作ってもらうための流れを教えて」「手順だけ説明して」）→ 自動で issue 作成せず、手順・ルールの説明のみを行う（SC-03 相当）。
   - **キーワード衝突時の優先度**: ①提案して系、②説明して系、③作成して系。曖昧な場合はユーザーに確認する。
-  - **要件・シナリオの詳細**: 作成して系は必ずサブに issue 作成を委譲し報告（SC-01）。提案して系は委譲せず指示文案のみ（SC-02）。説明して系は手順説明のみ（SC-03）。種別は提案して系＞説明して系＞作成して系の優先度で判定。詳細は .agent-skill-chain/source/workflow 配下の issue 作成関連ドキュメントを参照。
+  - **要件・シナリオの詳細**: 作成して系は必ずサブに issue 作成を委譲し報告（SC-01）。提案して系は委譲せず指示文案のみ（SC-02）。説明して系は手順説明のみ（SC-03）。種別は提案して系＞説明して系＞作成して系の優先度で判定。詳細は [.agent-skill-chain/source/workflow/PHASES.md §一般的な issue 作成ステップ](.agent-skill-chain/source/workflow/PHASES.md#一般的な-issue-作成ステップ) を参照。
 
 軽作業時の実行モード（quick / standard / full）・違反時の失敗条件と差し戻し先は後述および [.agent-skill-chain/source/enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) に従う。
 
