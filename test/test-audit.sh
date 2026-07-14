@@ -1804,6 +1804,125 @@ else
   echo "  [SKIP] #36 PR 紐づけ未記録検知の回帰（git 不在）"
 fi
 
+# =====================================================================================
+# #25 メイン直接作業検知の時系列突合是正（check_25_main_did_real_work）の回帰テスト
+#   tmp 隔離（mktemp -d）。本開発リポの .agent-skill-chain/source/ .agent-skill-chain/runtime/ workflow.db は変更しない。
+#   参照: docs/maintainer/workflow/20260714_180751_自己点検issue群対応/90_issues/20260714_163305_直接作業検知の弱い間接検出問題/03_実装計画.md
+# =====================================================================================
+echo "== #25 メイン直接作業検知の時系列突合是正 =="
+
+# git tree を作るヘルパー（最小 issue ツリー＋初期コミット＋ check_25 の対象パターンに
+# マッチする src/foo.txt を追加する 2 個目のコミット）。HEAD~1..HEAD の diff で src/foo.txt が
+# 検出され、check_25 の「成果物変更あり」判定を発火させる。
+make_git_tree_src() {
+  local tmp
+  tmp="$(make_min_tree)"
+  ( cd "$tmp" && git init -q && git config user.email t@e.x && git config user.name t \
+      && git add -A && git commit -qm init >/dev/null \
+      && mkdir -p src && echo x > src/foo.txt && git add -A && git commit -qm "add src/foo.txt" >/dev/null )
+  printf '%s\n' "$tmp"
+}
+
+if command -v git >/dev/null 2>&1 && command -v sqlite3 >/dev/null 2>&1; then
+  # シナリオ1: 対象 command ログが皆無 → FAIL（既存動作を維持する回帰）
+  # Given: 成果物変更（src/foo.txt）ありの git tree、workflow_log は空
+  # When:  audit.sh <tmp> を AUDIT_GIT_RANGE=HEAD~1..HEAD で実行する
+  # Then:  #25 の FAIL メッセージが出る
+  S25_1_TREE="$(make_git_tree_src)"
+  S25_1_DB="$S25_1_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S25_1_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S25_1_OUT="$(AUDIT_GIT_RANGE='HEAD~1..HEAD' bash "$AUDIT" "$S25_1_TREE" 2>&1)"
+  if grep -q "may have done real work" <<< "$S25_1_OUT"; then
+    ok "#25 対象 command ログが皆無で FAIL する（既存動作の回帰確認）"
+  else
+    ng "#25 ログ皆無でも FAIL しなかった（見逃し）: $S25_1_OUT"
+  fi
+
+  # シナリオ2（是正確認・異常系）: 対象差分と無関係な古いログのみ → FAIL する（旧実装は恒久 PASS していた不具合）
+  # Given: 成果物変更ありの git tree（コミットは「今」）、workflow_log に 30 日前の implement-feature ログのみ
+  # When:  audit.sh <tmp> を AUDIT_GIT_RANGE=HEAD~1..HEAD（既定許容窓 48h）で実行する
+  # Then:  「証跡が対象差分に対して古すぎる」の FAIL メッセージが出る（時系列突合による新規検知）
+  S25_2_TREE="$(make_git_tree_src)"
+  S25_2_DB="$S25_2_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S25_2_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S25_2_OLD_TS="$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S25_2_DB" "INSERT INTO workflow_log VALUES ('e1','implement-feature',NULL,'$S25_2_OLD_TS');" 2>/dev/null
+  S25_2_OUT="$(AUDIT_GIT_RANGE='HEAD~1..HEAD' bash "$AUDIT" "$S25_2_TREE" 2>&1)"
+  if grep -q "証跡が対象差分に対して古すぎる" <<< "$S25_2_OUT"; then
+    ok "#25 対象差分と無関係な古いログのみで FAIL する（時系列突合・新規検知）"
+  else
+    ng "#25 古いログのみでも FAIL しなかった（旧実装の恒久 PASS バグが再発）: $S25_2_OUT"
+  fi
+
+  # シナリオ3（正常系）: 対象差分の直近に対応するログがある → FAIL しない
+  # Given: 成果物変更ありの git tree、workflow_log に現在時刻の implement-feature ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #25 の FAIL メッセージが出ない
+  S25_3_TREE="$(make_git_tree_src)"
+  S25_3_DB="$S25_3_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S25_3_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S25_3_RECENT_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S25_3_DB" "INSERT INTO workflow_log VALUES ('e1','implement-feature',NULL,'$S25_3_RECENT_TS');" 2>/dev/null
+  S25_3_OUT="$(AUDIT_GIT_RANGE='HEAD~1..HEAD' bash "$AUDIT" "$S25_3_TREE" 2>&1)"
+  if ! grep -q "may have done real work" <<< "$S25_3_OUT" && ! grep -q "証跡が対象差分に対して古すぎる" <<< "$S25_3_OUT"; then
+    ok "#25 直近ログありは FAIL しない（正常フロー回帰無し）"
+  else
+    ng "#25 直近ログありでも誤って FAIL した: $S25_3_OUT"
+  fi
+
+  # シナリオ4: 許容窓（MAIN_WORK_GATE_TOLERANCE_SECONDS）が既定(48h)超で FAIL し、拡大すると FAIL しない
+  # Given: 成果物変更ありの git tree、workflow_log に 3 日前の implement-feature ログ
+  # When:  (a) 既定許容窓で実行 (b) MAIN_WORK_GATE_TOLERANCE_SECONDS=604800（7日）で実行
+  # Then:  (a) FAIL する (b) FAIL しない
+  S25_4_TREE="$(make_git_tree_src)"
+  S25_4_DB="$S25_4_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S25_4_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S25_4_TS="$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+  sqlite3 "$S25_4_DB" "INSERT INTO workflow_log VALUES ('e1','implement-feature',NULL,'$S25_4_TS');" 2>/dev/null
+  S25_4A_OUT="$(AUDIT_GIT_RANGE='HEAD~1..HEAD' bash "$AUDIT" "$S25_4_TREE" 2>&1)"
+  if grep -q "証跡が対象差分に対して古すぎる" <<< "$S25_4A_OUT"; then
+    ok "#25 既定許容窓(48h)超のログで FAIL する（3日前ログ）"
+  else
+    ng "#25 既定許容窓超でも FAIL しなかった: $S25_4A_OUT"
+  fi
+  S25_4B_OUT="$(MAIN_WORK_GATE_TOLERANCE_SECONDS=604800 AUDIT_GIT_RANGE='HEAD~1..HEAD' bash "$AUDIT" "$S25_4_TREE" 2>&1)"
+  if ! grep -q "証跡が対象差分に対して古すぎる" <<< "$S25_4B_OUT"; then
+    ok "#25 許容窓を env で拡大(7日)すると同ログで FAIL しない"
+  else
+    ng "#25 許容窓拡大が反映されず誤って FAIL した: $S25_4B_OUT"
+  fi
+
+  # シナリオ5: 非 git ツリーは従来どおり SKIP（既存動作維持）
+  # Given: 成果物変更相当のファイルを含むが .git が無いツリー、workflow_log にログあり
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #25 の FAIL メッセージが出ない（git 依存 check は SKIP）
+  S25_5_TREE="$(make_min_tree)"
+  mkdir -p "$S25_5_TREE/src"
+  : > "$S25_5_TREE/src/foo.txt"
+  S25_5_DB="$S25_5_TREE/.agent-skill-chain/runtime/workflow.db"
+  sqlite3 "$S25_5_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+  S25_5_OUT="$(bash "$AUDIT" "$S25_5_TREE" 2>&1)"
+  if ! grep -q "may have done real work" <<< "$S25_5_OUT" && ! grep -q "証跡が対象差分に対して古すぎる" <<< "$S25_5_OUT"; then
+    ok "#25 非 git ツリーは SKIP する（既存動作維持）"
+  else
+    ng "#25 非 git ツリーで誤って FAIL した: $S25_5_OUT"
+  fi
+
+  # シナリオ6: workflow.db 不在は従来どおり SKIP（既存動作維持）
+  # Given: 成果物変更ありの git tree、workflow.db 自体を作らない
+  # When:  audit.sh <tmp> を実行する
+  # Then:  #25 の FAIL メッセージが出ない
+  S25_6_TREE="$(make_git_tree_src)"
+  S25_6_OUT="$(AUDIT_GIT_RANGE='HEAD~1..HEAD' bash "$AUDIT" "$S25_6_TREE" 2>&1)"
+  if ! grep -q "may have done real work" <<< "$S25_6_OUT" && ! grep -q "証跡が対象差分に対して古すぎる" <<< "$S25_6_OUT"; then
+    ok "#25 workflow.db 不在は SKIP する（既存動作維持）"
+  else
+    ng "#25 DB 不在でも誤って FAIL した: $S25_6_OUT"
+  fi
+else
+  echo "  [SKIP] #25 メイン直接作業検知の時系列突合是正の回帰（git/sqlite3 不在）"
+fi
+
 echo
 echo "== 結果: PASS=$PASS FAIL=$FAIL =="
 if [[ $FAIL -gt 0 ]]; then
