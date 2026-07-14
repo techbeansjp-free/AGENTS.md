@@ -4,7 +4,7 @@ document_id: "b24ab361-adaa-468f-bfd1-488bd5a49eaa"
 
 # CONTEXT_EFFICIENCY.md — issue 起票時のコンテキスト効率（ISSUE_CREATION）の正本
 
-**責務**: 大規模一括起票時のコンテキスト肥大を防ぐ汎用原理（ISSUE_CREATION）の正本を 1 か所に持つ。具体数値・タグ運用は混入させず `.agent-skill-chain/project/` に委ねる。規模比例で、単一/少数 issue は [CLAUDE.md §issue 作成タスク受領時の標準フロー](../CLAUDE.md) の軽量運用を保つ。
+**責務**: 大規模一括起票時のコンテキスト肥大を防ぐ汎用原理（ISSUE_CREATION）の正本を 1 か所に持つ。具体数値・タグ運用は混入させず `.agent-skill-chain/project/` に委ねる（**該当の具体化が project 側に存在しない環境では、この委譲は発生させず本ファイルの抽象原則のみを適用する**）。規模比例で、単一/少数 issue は [CLAUDE.md §issue 作成タスク受領時の標準フロー](../CLAUDE.md) の軽量運用を保つ（**該当節が CLAUDE.md に存在しない環境ではこの参照は適用しない**）。
 
 ---
 
@@ -61,4 +61,4 @@ fresh サブ構成（文脈リセット）をまたいでもレビューの収�
 - **単一/少数 issue（軽量運用）**: issue-persist 境界とフェーズ省略禁止原則**のみ**を適用する。仕様 inventory の索引化・確定起票順序表・fresh サブの構造化ハンドオフといった全機構は発動しない。
 - **大規模一括起票（全機構発動）**: 上記の issue-persist 境界に加え、仕様 inventory の索引化＋スライス渡し、確定起票順序の正本化、1 issue = 1 fresh サブの構造化ハンドオフを**すべて**発動する。
 
-単一/少数 issue の場合の軽量運用は [CLAUDE.md §issue 作成タスク受領時の標準フロー](../CLAUDE.md) に従う。
+単一/少数 issue の場合の軽量運用は [CLAUDE.md §issue 作成タスク受領時の標準フロー](../CLAUDE.md) に従う。**CLAUDE.md に該当節が存在しない消費者環境では、この参照は適用せず、本節（§適用のスケーリング）の軽量運用の記載（issue-persist 境界とフェーズ省略禁止原則のみを適用する）にそのまま従う。**
