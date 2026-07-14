@@ -4,7 +4,7 @@
 
 ## 本パッケージを「配布テンプレート」として編集している場合
 
-**汎用版の仕様本文**（全採用先に共通する規約）は **`../.agent-skill-chain/source/`** に置く。例: カバレッジ例外の**方針・台帳の列定義・言語別マーカ**の正本は [`../.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md`](../.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md)。採用先では、そのファイルの **第3章の台帳テンプレート** をここ（または `docs/`）に**コピー**して、プロジェクト固有の例外行を追記する。
+**汎用版の仕様本文**（全採用先に共通する規約）は **`../.agent-skill-chain/source/`** に置く。例: カバレッジ例外の**方針・台帳の列定義・言語別マーカ**の正本は [`../.agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md`](../source/COVERAGE_AND_EXCEPTIONS.md)。採用先では、そのファイルの **第3章の台帳テンプレート** をここ（または `docs/`）に**コピー**して、プロジェクト固有の例外行を追記する。
 
 ## 目的
 

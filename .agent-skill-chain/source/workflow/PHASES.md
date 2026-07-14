@@ -30,8 +30,8 @@
 
 ### 一般的な issue 作成ステップ
 
-- **作成場所の上書き**: 作成場所は `.agent-skill-chain/project/` の上書きを最優先で確認（[CLAUDE.md §issue 作成タスク受領時の標準フロー](../../CLAUDE.md) 参照。本体定義は再記述しない）。**`.agent-skill-chain/project/` の上書きも CLAUDE.md 該当節も存在しない環境では、この参照は適用せず、command 実行主体が定める一般的な既定の作成場所にそのまま従ってよい。**
-- **概要**: ユーザーが「この要件で issue を作成して」「issueを作成して」等と依頼した場合、メインエージェントは **issue 作成をサブに自動委譲**する（サブへの指示文案だけを返して終了してはならない）。サブは作成場所（汎用標準では `.agent-skill-chain/runtime/<timestamp>_<title>/`。`.agent-skill-chain/project/` の上書きがある場合は :33 のとおりそれを最優先）配下に 00_要求定義.md 等を作成し、タイトル・概要・保存場所を返却する。
+- **作成場所の上書き**: 作成場所は `.agent-skill-chain/project/` の上書きを最優先で確認（[CLAUDE.md §issue 作成タスク受領時の標準フロー](../../../CLAUDE.md) 参照。本体定義は再記述しない）。**`.agent-skill-chain/project/` の上書きも CLAUDE.md 該当節も存在しない環境では、この参照は適用せず、command 実行主体が定める一般的な既定の作成場所にそのまま従ってよい。**
+- **概要**: ユーザーが「この要件で issue を作成して」「issueを作成して」等と依頼した場合、メインエージェントは **issue 作成をサブに自動委譲**する（サブへの指示文案だけを返して終了してはならない）。サブは作成場所（汎用標準では `.agent-skill-chain/runtime/<timestamp>_<title>/`。`.agent-skill-chain/project/` の上書きがある場合は 前掲「作成場所の上書き」のとおりそれを最優先）配下に 00_要求定義.md 等を作成し、タイトル・概要・保存場所を返却する。
 - **適用ルール**: AGENTS.md §issue 作成依頼時のサブ自動委譲ルール、CLAUDE.md §issue 作成タスク受領時の標準フロー に従う。「提案して」「説明して」と明示された場合は委譲せず指示案・説明のみ返す。
 - **本ルールの根拠（自己完結）**: issue 作成依頼を受けたメインエージェントは、作成をサブへ自動委譲すること・サブは実際に成果物を作成して返却すること・書記で証跡を残すことを必須とする（サブへの指示文案だけを返して終了することの禁止、作成場所の上書き確認、監査・証跡の必須化を含む）。この規定は上記の各項目で自己完結しており、外部の issue 記録に依存しない。
 
@@ -62,8 +62,8 @@
 - **ドキュメントレビューはレビューと修正を一組とする**。指摘がなくなるまでレビュー→修正を繰り返すこと。各回の証跡は memo に記録する。**完了後は必ず書記（write-workflow-log）に依頼**すること（run_command §実装前のドキュメントレビュー）。
 - **ドキュメントレビュー「完了」の定義**: 完了とは **(1) memo 作成 (2) 指摘がなくなるまでの修正反復 (3) 書記委譲**の**すべて**を指す。**(3) を実施するまで「完了」とみなしてはならない**。書記委譲を省略してユーザーに報告のみして終了することは禁止（enforcement §失敗条件 #23）。
 - **ユーザーが「レビュー用の指示文だけ教えて」等と明示した場合を除き、ドキュメントレビュー依頼は常に本ルール（memo への記録＋指摘がなくなるまでの反復＋書記委譲）を適用すること**。レビュー本文やサマリだけを返して memo・書記を省略することを禁止する（enforcement §失敗条件 #22–#23 と整合させる）。
-- **review-docs の位置づけ（横断的必須ゲート）**: 実装前ドキュメントレビューの command [review-docs](../commands/review-docs.md) は、design-feature（設計・実装計画）完了と implement-feature 着手の間で全 issue 一律に必須の**横断的必須ゲート**である（表に行を持たないことは省略可を意味しない）。位置づけの定義・「本表にない command の起動は禁止」との整合は [PHASE_COMMAND_MAP.md §横断的必須ゲート](PHASE_COMMAND_MAP.md#横断的必須ゲート) を正本とし、本節では重複記載しない。委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
-- **GitHub Issue 起票ゲートは review-docs 完了後・implement-feature 着手前の必須ゲート**: review-docs 完了後・implement-feature 着手前に、対応 GitHub Issue の記録（00_要求定義.md frontmatter の `github_issue` に実 Issue 番号、**または** 意図的に起票しない決定の理由付き記録 `"declined: <理由>"`）を必須とする（トップレベル issue のみ・**デフォルトは起票**・GitHub 非採用環境は非発火）。強度は「デフォルト起票＋理由付き記録による代替経路あり」であり、review-docs ゲートの「一律・免除なし」とは異なる（代替経路は免除ではなく、記録なし・理由なしのスキップは不可）。**本ゲートは review-docs 完了の定義（memo＋指摘収束＋書記委譲・上記）を再定義せず、その直後に独立した 1 段として追加するのみ**である。委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #34 を参照。
+- **review-docs の位置づけ（横断的必須ゲート）**: 実装前ドキュメントレビューの command [review-docs](../commands/review-docs.md) は、design-feature（設計・実装計画）完了と implement-feature 着手の間の**横断的必須ゲート**である（表に行を持たないことは省略可を意味しない）。**full/standard は一律必須。quick モード（00_要求定義.md frontmatter `mode: quick`）は本ゲートを免除する**（軽量化。免除は記録省略ではない。詳細は RULES.md §実行モードおよび run_command.md §Constraints）。位置づけの定義・「本表にない command の起動は禁止」との整合は [PHASE_COMMAND_MAP.md §横断的必須ゲート](PHASE_COMMAND_MAP.md#横断的必須ゲート) を正本とし、本節では重複記載しない。委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
+- **GitHub Issue 起票ゲートは review-docs 完了後・implement-feature 着手前の必須ゲート**: review-docs 完了後・implement-feature 着手前に、対応 GitHub Issue の記録（00_要求定義.md frontmatter の `github_issue` に実 Issue 番号、**または** 意図的に起票しない決定の理由付き記録 `"declined: <理由>"`）を必須とする（トップレベル issue のみ・**デフォルトは起票**・GitHub 非採用環境は非発火・**quick モードは免除**）。強度は「デフォルト起票＋理由付き記録による代替経路あり」であり、review-docs ゲートの「full/standard 一律・免除なし」とは異なる（代替経路は免除ではなく、記録なし・理由なしのスキップは不可）。**本ゲートは review-docs 完了の定義（memo＋指摘収束＋書記委譲・上記）を再定義せず、その直後に独立した 1 段として追加するのみ**である。委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #34 を参照。
 
 ---
 
@@ -76,12 +76,12 @@
 - **close ステップ**: verify-and-close 完了後にトップレベル完了が確認できたら、当該トップレベル issue ディレクトリ（配下のサブ issue を含む）をワークフローの `close/` ディレクトリ配下へ移動する。
 - **実行確定手段（分岐・原則）**: 完了検知と `git mv` の実行確定は分離する。完了検知（verify-and-close 完了判定・CI 督促）は本節のとおり不変とし、**実際の移動（`git mv`）を確定させる手段は、リポジトリが GitHub 連携しているかで分岐**させる。**GitHub 連携時**は close 移動を **PR 経由に統一**し（feature branch → PR → レビュー → マージ）、main への **direct push で確定しない**。**GitHub 非連携時**は PR という確定手段が無いため、**ユーザーの明示指示を受けてから**移動する（進行役の自己判定のみでの移動は行わない）。いずれの分岐でも、進行役が完了検知後に移動作業へ着手する自動性（feature branch 作成・リンク補正・`git mv` 準備）は維持してよいが、**最終確定は必ず人間関与点（PR マージ／ユーザー明示指示）を経る**。GitHub 連携有無の判定シグナル・PR 手順・ユーザー確認の具体形はコアに持ち込まず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。
 - **配置先（一般）**: ワークフロールート直下の `close/` ディレクトリ（消費者ランタイムでは `.agent-skill-chain/runtime/close/<issue>/`）。
-- **自己拡張（本リポ）の配置先**: `docs/maintainer/workflow/close/<issue>/`。詳細は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../.agent-skill-chain/project/自己拡張ワークフロー.md) §完了 issue の close 移動（上書き）を参照。
+- **自己拡張（本リポ）の配置先**: `docs/maintainer/workflow/close/<issue>/`。詳細は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../project/自己拡張ワークフロー.md) §完了 issue の close 移動（上書き）を参照。
 - **移動の検知（汎用原則）**: close 移動は妥当な期間内に行われるべきであり、CI（`enforcement/ci/audit.sh` #33）で検知可能にする。具体閾値（発効日・猶予日数）・具体パスはコアに持ち込まず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。
 - 移動は**完了状態の整理のみ**を目的とし、close 後も証跡（04_review.md・workflow.db ログ）はそのまま残す。書記記録の書き換え・削除はしない。
 - **移動に伴う相対リンクの深度補正（原則）**: close への移動は、issue ディレクトリの階層を **1 段深くする**操作である。issue 成果物（00〜04・memo 等）内の相対リンクのうち、**issue ディレクトリの外**（リポジトリルート配下等）を指すものは、移動によって基準ディレクトリの深度が変わるため**補正が必要**である。一方、**同一 issue ディレクトリ内の相互参照**（兄弟ファイル間・配下 memo 等）は移動後も相対位置が変わらないため**補正不要**である。
 - **検証は必ず移動前に行う（強制）**: リンク補正の妥当性検証は、成果物がまだ**元の場所にある間**に完了させ、補正後の内容を確定してから移動を実行すること。**移動後の close 配下に対してファイル読み取り・grep・glob 等による検証を行う設計にしてはならない**。当該ディレクトリへの読み取りアクセスを制限する環境設定がありうるため、移動後検証に依存する手順は環境によって実行不能になる。リンク補正・検証は、ファイルがまだ元の場所にある間に完了させ、補正後の内容を確定してから移動を実行すること。
-- **具体手順の委譲**: 具体的な補正手順・検証手段（コマンド・パス）はコアに置かず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。自己拡張（本リポ）の具体化は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../.agent-skill-chain/project/自己拡張ワークフロー.md) §close 移動時の相対リンク補正 を参照。
+- **具体手順の委譲**: 具体的な補正手順・検証手段（コマンド・パス）はコアに置かず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。自己拡張（本リポ）の具体化は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../project/自己拡張ワークフロー.md) §close 移動時の相対リンク補正 を参照。
 
 ---
 

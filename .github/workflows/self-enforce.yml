@@ -13,6 +13,7 @@
 #      audit.sh はそのまま通らない。continue-on-error 相当で「呼ぶが失敗させない」運用）
 #   8. コメント外部参照禁止の blocking 検知（.github/workflows 配下の CI 定義コメントに、外部ドキュメント名・
 #      章節番号・追跡番号の直書きが無いことを検証する。検出ロジックは check-comment-refs.sh に集約）
+#   9. 相対リンク切れ検査（非ブロッキング。新規検査のため段階導入とし、まず非ブロッキングで運用する）
 #
 # トリガ: PR（必ず検証）と、merge 先ブランチ（main, develop）への push。
 
@@ -203,3 +204,13 @@ jobs:
         run: |
           set -e
           bash .agent-skill-chain/source/enforcement/ci/check-comment-refs.sh .github/workflows
+
+      # 9) 相対リンク切れ検査（非ブロッキング）
+      #    正本 Markdown 群の相対リンクが実在解決するかを検査する（検出ロジックは
+      #    check-relative-links.sh に集約。CI とローカルで二重化しない）。新規検査のため、
+      #    まずは非ブロッキングで導入し、安定して 0 件が続くことを確認できたらブロッキング化を検討する
+      #    （enforcement audit の non-blocking 運用と同じ段階導入の考え方）。
+      - name: Relative link check (non-blocking)
+        continue-on-error: true
+        run: |
+          bash .agent-skill-chain/source/scripts/check-relative-links.sh . || echo "[link-check] non-blocking: 切れ検出（段階導入中のため CI は赤くしない）"
