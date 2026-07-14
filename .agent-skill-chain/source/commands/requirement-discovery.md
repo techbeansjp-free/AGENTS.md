@@ -20,7 +20,7 @@
 ## INPUT
 
 - **issue**: .agent-skill-chain/runtime/{issue}/ のパス。00/01 の更新対象。
-- **context**: 親 00、03、REBUILD_PLAN 等の参照（存在する場合）。
+- **context**: 親 00、03 等の参照（存在する場合）。
 - **spec**: .agent-skill-chain/source/spec/（設計原則・設計判断の優先順位）。着手前に参照する。
 - **テンプレート**: .agent-skill-chain/runtime/templates/00_要求定義.md, .agent-skill-chain/runtime/templates/01_要件定義.md（未存在時はパッケージの `.agent-skill-chain/runtime/templates/` を参照）。
 
@@ -59,7 +59,7 @@
 
 - 目的・受け入れ基準・参照元が 00 に記載されている。
 - ユーザーストーリー・受け入れ基準・BDD シナリオが 01 に記載されている。
-- 参照元（親 00、03、REBUILD_PLAN 等）が 01 に明記されている。
+- 参照元（親 00、03 等）が 01 に明記されている。
 
 ---
 
