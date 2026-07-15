@@ -215,6 +215,37 @@ r1_has_extra_hardlink() {
 }
 
 # ---------------------------------------------------------------------------
+# r1_carveout_guard <path> — R1 carve-out 一致後の symlink/hardlink 実体すり替え検査（共通ヘルパ）。
+#   doc allowlist carve-out・templates carve-out の双方から呼ぶ（重複排除・02_設計 ADR-3）。
+#   carve-out で「編集して良い」と一致判定された後、対象パスの**実体**が実は保護対象
+#   （memo/ 配下・workflow.db*）を指す symlink/hardlink であった場合に block する（善意の Edit/Write に
+#   よる保護対象の破壊を防ぐ・事故防止。権限昇格の問題ではない）。判定は読み取り（realpath/stat）のみで
+#   対象を一切変更しない（CQRS Query 側・副作用なし）。
+#   分岐（既存 doc 分岐のインライン 4 分岐を振る舞い不変で移送）:
+#     ① symlink 実在だが実体解決不能（realpath/readlink 不在等）＝検証不能 → 安全側で block。
+#     ② 実体が /memo/ を含む または basename が workflow.db* → 保護対象すり替え → block。
+#     ③ 通常ファイルで nlink>1（ハードリンクで保護対象と inode 共有の疑い）→ best-effort に block。
+#     ④ いずれにも該当しなければ安全 → return 0（呼び出し側で no-op フォールスルー）。
+#   block はここから呼んでよい（exit 2 で即終了する）。
+# ---------------------------------------------------------------------------
+r1_carveout_guard() {
+  local path="$1" real real_base
+  real="$(r1_norm_path "$path")"
+  real_base="${real##*/}"
+  if [[ -L "$path" && -z "$real" ]]; then
+    # symlink は実在するが実体解決できない（realpath/readlink 不在等）＝検証不能。安全側で block。
+    block "carve-out target is an unresolved symlink; refusing to follow / carve-out 対象が解決不能な symlink のため拒否します"
+  elif [[ -n "$real" ]] && { [[ "$real" == *"/memo/"* ]] || [[ "$real_base" == workflow.db* ]]; }; then
+    # symlink 実体が保護対象（memo 配下 / workflow.db*）を指している。block。
+    block "carve-out target resolves to a protected path (memo/ or workflow.db*) via symlink / carve-out 対象の実体が保護パス（memo/ または workflow.db*）を指すため拒否します"
+  elif [[ -f "$path" && ! -L "$path" ]] && r1_has_extra_hardlink "$path"; then
+    # doc 名の通常ファイルが nlink>1＝ハードリンクで保護対象と inode 共有の疑い。best-effort に block。
+    block "carve-out target is a hard link (nlink>1); refusing to follow / carve-out 対象がハードリンク（nlink>1）のため拒否します"
+  fi
+  return 0  # 安全（保護対象すり替えなし）。呼び出し側で no-op フォールスルー。
+}
+
+# ---------------------------------------------------------------------------
 # parse_input — 唯一 stdin/env を読む入力層。TOOL / PATH_TARGET / CMD / ROLE を確定する。
 #   stdin が JSON 様なら json_get で抽出、そうでなければ env を後方互換で読む。
 # ---------------------------------------------------------------------------
@@ -331,10 +362,26 @@ if [[ -n "$TOOL" ]]; then
   #     (b) basename が workflow.db* に一致するなら block する。symlink が既に存在するのに解決できない場合も
   #     （検証不能＝安全側で）block する。hardlink は実体をたどれないため r1_has_extra_hardlink で
   #     nlink>1 の異常リンク数を best-effort に検知して block する（限界は各関数コメント参照）。
+  #   例外3（ADR-1/ADR-2/ADR-4・02_設計「templates carve-out」参照）: 対象パスが配布物テンプレート置き場
+  #   .agent-skill-chain/runtime/templates/ 配下（かつ /memo/ を含まない）の場合も allow する。templates/ は
+  #   npm 配布物（追跡対象）でありながら runtime/ 名前空間の配下に置かれるため R1 の一律 block と重なるが、
+  #   memo（タイムスタンプ整合性）・workflow.db*（書込整合性）のような**保護目的を持たない**（配布物の真正性は
+  #   Bash 経由でも Edit/Write 経由でも同じ）。そのため basename によらず templates/ 配下全体を編集手段として
+  #   統一する。判定は basename allowlist ではなく **path-prefix**（`.agent-skill-chain/runtime/templates/`・
+  #   末尾スラッシュ付き）とする。理由: templates/ 配下には README.md・00_README.md 等の汎用 basename が多数あり、
+  #   basename 方式だと消費者の他 issue フォルダの同名ファイルにも allow が波及するため（ADR-2）。末尾スラッシュ
+  #   により `templates-evil/`・`mytemplates/` 等の別名ディレクトリを誤マッチさせない。/memo/ 除外は doc 分岐と
+  #   対称の防御で保護範囲を広げないため（ADR-4）。この carve-out も no-op（フォールスルー）で実装し allow() を
+  #   使わない（R2 独立性の必須制約）。symlink/hardlink すり替え耐性は doc 分岐と共通の r1_carveout_guard が担う。
   ALLOWED_DOC_BASENAMES="00_要求定義.md 00_システム理解.md 01_要件定義.md 02_設計.md 03_実装計画.md 04_review.md 05_最終確認チェックリスト.md 90_issues.md 99_PR.md 99_PR_review.md"
   if [[ "$TOOL" == "Edit" || "$TOOL" == "Write" ]]; then
     if [[ "$PATH_TARGET" == ".agent-skill-chain/runtime/.gitignore" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/runtime/.gitignore ]]; then
       : # allow（厳密パス一致の狭い例外。R1 の他条件には進まない）
+    elif { [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/templates/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/templates/ ]]; } && [[ "$PATH_TARGET" != *"/memo/"* ]]; then
+      # templates carve-out（path-prefix・末尾スラッシュで別名ディレクトリを誤マッチ除外・/memo/ 除外）。
+      # doc 分岐と共通のヘルパで symlink/hardlink 実体すり替えを検査し、安全なら no-op フォールスルー（R2 独立性維持）。
+      r1_carveout_guard "$PATH_TARGET"
+      : # allow（templates carve-out・no-op フォールスルーで後続 R2 評価を妨げない）
     elif [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/ ]]; then
       R1_BASENAME="${PATH_TARGET##*/}"
       R1_DOC_ALLOWED=0
@@ -345,21 +392,9 @@ if [[ -n "$TOOL" ]]; then
         fi
       done
       if [[ "$R1_DOC_ALLOWED" == "1" ]] && [[ "$PATH_TARGET" != *"/memo/"* ]]; then
-        # carve-out 候補。ここで symlink/hardlink による実体すり替えを実体パスで再検査する。
-        R1_REAL="$(r1_norm_path "$PATH_TARGET")"
-        R1_REAL_BASE="${R1_REAL##*/}"
-        if [[ -L "$PATH_TARGET" && -z "$R1_REAL" ]]; then
-          # symlink は実在するが実体解決できない（realpath/readlink 不在等）＝検証不能。安全側で block。
-          block "carve-out target is an unresolved symlink; refusing to follow / carve-out 対象が解決不能な symlink のため拒否します"
-        elif [[ -n "$R1_REAL" ]] && { [[ "$R1_REAL" == *"/memo/"* ]] || [[ "$R1_REAL_BASE" == workflow.db* ]]; }; then
-          # symlink 実体が保護対象（memo 配下 / workflow.db*）を指している。block。
-          block "carve-out target resolves to a protected path (memo/ or workflow.db*) via symlink / carve-out 対象の実体が保護パス（memo/ または workflow.db*）を指すため拒否します"
-        elif [[ -f "$PATH_TARGET" && ! -L "$PATH_TARGET" ]] && r1_has_extra_hardlink "$PATH_TARGET"; then
-          # doc 名の通常ファイルが nlink>1＝ハードリンクで保護対象と inode 共有の疑い。best-effort に block。
-          block "carve-out target is a hard link (nlink>1); refusing to follow / carve-out 対象がハードリンク（nlink>1）のため拒否します"
-        else
-          : # allow（issue ドキュメントの carve-out・no-op フォールスルーで後続 R2 評価を妨げない）
-        fi
+        # carve-out 候補。symlink/hardlink による実体すり替えを共通ヘルパで再検査する（振る舞い不変・ADR-3）。
+        r1_carveout_guard "$PATH_TARGET"
+        : # allow（issue ドキュメントの carve-out・no-op フォールスルーで後続 R2 評価を妨げない）
       else
         block "direct edit of .agent-skill-chain/runtime/ is forbidden / .agent-skill-chain/runtime/ の直接編集は禁止です"
       fi
