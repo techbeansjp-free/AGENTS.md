@@ -1,6 +1,8 @@
 # command: create-pr-review-issue
 
-**本ファイルの責務**: PR 指摘対応 issue の起票を行う command の定義。**どの skill / worker をどの順で実行するか**のみを記載。実行手順・委譲の形は skills/agent/run_command.md に従う。**契約**: [IO_CONTRACT.md](../IO_CONTRACT.md) に従い INPUT / PROCESS / OUTPUT / DONE で定義する。
+**本ファイルの責務**: PR レビュー指摘対応の**3 ステップフロー**（独立技術評価 → 進行役の一括承認 → 委譲実行での対応実施）を定義する command。**どの skill / worker をどの順で実行するか**のみを記載。実行手順・委譲の形は skills/agent/run_command.md に従う。**契約**: [IO_CONTRACT.md](../IO_CONTRACT.md) に従い INPUT / PROCESS / OUTPUT / DONE で定義する。
+
+> **横断ルールは正本参照・本 command で再定義しない**: サブによる独断起票の禁止・Go は進行役・進行役の直接 Edit 禁止は、`skills/agent/run_command.md` §Forbidden / Execution Path Rule・`boot/CORE.md`・`workflow/PHASES.md` を正本とする。データ形式（`Disposition`・`TriageRow`・起票条件 C1〜C5・`security_flag`・`defer_reason`）の正本は [workers/create-pr-review-issue/OUTPUT_FORMAT.md](../workers/create-pr-review-issue/OUTPUT_FORMAT.md)。
 
 ---
 
@@ -10,67 +12,84 @@
 |------|-----|
 | **Allowed Phase** | issue_creation（サブフェーズ: create_pr_review_issue） |
 | **Required Inputs** | pr_url, review_comments_raw, issue_dir_hint（任意）, parent_issue_id |
-| **Produces** | created_issue_dir（.agent-skill-chain/runtime/{parent}/90_issues/{ディレクトリ名}/）、当該配下の 00_要求定義.md |
-| **Next Phase** | 実装（当該サブ issue の 01→02→03→実装→04 へ進む場合） |
+| **Produces** | トリアージ記録用 00_要求定義.md（全指摘 disposition 記録・一括承認記録）。起票 disposition がある場合は追加で created_issue_dir（`.agent-skill-chain/runtime/{parent}/90_issues/{ディレクトリ名}/`）と配下の 00_要求定義.md |
+| **Next Phase** | 実装（起票したサブ issue の 01→02→03→実装→04 へ進む場合） |
 
 ---
 
-## INPUT
+## INPUT（本改定で不変・既存互換）
 
 - **pr_url**: string。PR を一意に特定する URL（例: `https://github.com/techbeansjp-free/AGENTS.md/pull/4`）。
 - **review_comments_raw**: string。ユーザーが貼り付けた PR レビューコメント一覧（テキスト）。手動取得前提（github MCP は使わない）。
-- **issue_dir_hint**: string | null。既存 issue ディレクトリ名。指定時は新規作成せず当該ディレクトリを採用する。省略時は pr_url からプレフィックスを生成し新規作成する。
+- **issue_dir_hint**: string | null。既存 issue ディレクトリ名。起票 disposition の指摘があり指定された場合は新規作成せず当該ディレクトリを採用する。
 - **parent_issue_id**: string。親 issue のディレクトリ名（`.agent-skill-chain/runtime/{parent_issue_id}/` が存在する前提）。
 
 ---
 
-## PROCESS（Skill chain・この順で実行）
+## PROCESS（3 ステップフロー・この順で実行）
 
-1. **create-pr-review-issue-worker** — ディレクトリ決定・作成、指摘抽出・対応方針案生成、00_要求定義.md 生成  
-   `workers/create-pr-review-issue/`（または scripts/ に配置した実装を呼ぶ）
-2. **対応方針の監査** — 00_要求定義.md（指摘一覧・各指摘の対応方針案）を対象に、**[commands/review-docs](review-docs.md) を参照して**監査・レビュー（実装前ドキュメントレビュー）に依頼する。問題があれば 00 を修正して差し戻し、指摘がなくなるまで繰り返す。証跡は `.agent-skill-chain/runtime/{当該 issue}/memo/` に YYYYMMDD_HHMMSS_ プレフィックスの memo で記録する（PHASES §レビュー成果物の配置ルール・run_command §実装前のドキュメントレビューに準拠）。既存の review-docs やドキュメントレビュー運用（memo ＋ 修正反復）に合わせる。
-3. **write-workflow-log** — 書記に依頼し、本 command の実施内容・作成した issue ディレクトリ・00_要求定義.md を workflow.db に記録する。`skills/logging/write-workflow-log/` を参照。
+本 command は**アクター境界を跨ぐ**（進行役とサブ）。受け渡し構造は「**ステップ 1 はサブが実行しトリアージ表を進行役へ返却して一旦終了 → ステップ 2 は進行役が承認（サブは自己承認しない） → ステップ 3 は進行役が承認後に改めてサブへ委譲**」である。サブがステップ 2 を自己完結して起票・修正まで走らせない（サブ独断起票禁止・Go は進行役の正本と整合）。
 
-委譲方針: メインエージェントは本 command を run_command 経由でサブに委譲する。サブは上記 1→2→3 の順で実行する。worker 完了後に監査（2）を経て指摘がなくなるまで修正反復し、最後に書記（3）で証跡を記録する。
+1. **ステップ 1: 独立技術評価（トリアージ表生成・サブが実行）**
+   `workers/create-pr-review-issue/` の手順に従い、全指摘（`ReviewFinding[]`）を調査し、起票条件チェックリスト（C1〜C5）を適用して各指摘の disposition 提案・根拠・`security_flag` を判断し、**全指摘一括のトリアージ表 `TriageRow[]`（列: 指摘 / 判定案 / 根拠）**を進行役へ返却する。サブは提案に留め、起票・即時対応を独断実行しない（`skills/agent/run_command.md` §Forbidden 参照）。
+2. **ステップ 2: 進行役の一括承認（進行役が実施）**
+   進行役がトリアージ表を一括承認（必要に応じ個別修正）し、各指摘の最終 disposition を確定する。**`security_flag=true`・C5 該当は一括承認に埋没させず個別承認**する（[OUTPUT_FORMAT.md §4.4](../workers/create-pr-review-issue/OUTPUT_FORMAT.md)）。承認記録は 00 の一括承認ブロックへ記録する（[00_TEMPLATE_MAPPING.md](../workers/create-pr-review-issue/00_TEMPLATE_MAPPING.md)）。
+3. **ステップ 3: 対応実施（進行役が承認後にサブへ委譲）**
+   確定 disposition に従い分岐する（`workers/create-pr-review-issue/README.md` ステップ 3）:
+   - **即時対応**: **委譲実行**で現 PR ブランチ内を修正（**進行役は直接 Edit しない**）＋テスト実行（green 維持ゲート）。テスト破壊時、またはテストが実行不能で green を確定できない場合は軽微判定を取り消し起票側／再評価へ。
+   - **起票**: **起票条件チェックリスト（C1〜C5）該当時のみ**、既存起票フロー（`create-pr-review-issue-dir.sh` によるディレクトリ決定・00 生成・監査・書記記録）でサブ issue を起票する。
+   - **見送り**: `defer_reason` を 00 に必須記録。
+4. **監査**（起票した場合の 00 を対象）— 起票したサブ issue の 00_要求定義.md を対象に、**[commands/review-docs](review-docs.md) を参照して**監査・レビュー（実装前ドキュメントレビュー）に依頼する。問題があれば修正して差し戻し、指摘がなくなるまで繰り返す。証跡は当該 issue の `memo/` に YYYYMMDD_HHMMSS_ プレフィックスの memo で記録する。
+5. **write-workflow-log** — 書記に依頼し、本 command の実施内容・トリアージ記録 00・起票した issue ディレクトリ（あれば）・即時対応の結果を workflow.db に記録する。`skills/logging/write-workflow-log/` を参照。
+
+委譲方針: メインエージェント（進行役）は本 command を run_command 経由でサブに委譲する。ステップ 1 の返却後は進行役が承認（ステップ 2）し、承認後に改めてステップ 3 を委譲する。
 
 ---
 
 ## OUTPUT
 
-- **created_issue_dir**: string。作成または採用した issue ディレクトリのパス（例: `.agent-skill-chain/runtime/{parent_issue_id}/90_issues/20260314_PR4_PR指摘対応/`）。
-- 当該ディレクトリ配下の **00_要求定義.md**（90_issues 用テンプレートに従い、指摘一覧・各指摘の対応方針案を埋めた状態）。
-- **対応方針の監査完了**: 00 に対する監査を経て指摘がなくなるまで修正反復済みであること。証跡は当該 issue の memo に記録されている。
-- **書記記録済み**: write-workflow-log により workflow.db に実施内容・作成 issue ディレクトリ・00_要求定義.md が記録されていること。
+- **トリアージ記録用 00_要求定義.md**: 全指摘の disposition（即時対応／起票／見送り）・根拠・一括承認ブロックを一本化した記録面（PR レビューバッチにつき 1 つ）。**起票が 0 件でも生成する**（監査可能性）。
+- **created_issue_dir**（起票 disposition がある場合のみ）: 起票した指摘の追跡用サブ issue ディレクトリ（例: `.agent-skill-chain/runtime/{parent_issue_id}/90_issues/20260314_PR4_PR指摘対応/`）と配下の 00_要求定義.md。
+- **即時対応の反映**（該当時）: 現 PR ブランチ内の修正＋テスト green 確認。
+- **書記記録済み**: write-workflow-log により workflow.db に実施内容が記録されている。
 
 ---
 
 ## DONE（DoD）
 
-- `.agent-skill-chain/runtime/{parent_issue_id}/90_issues/{ディレクトリ名}/` が存在し、その配下に 00_要求定義.md が存在する。
-- 00_要求定義.md に指摘一覧・各指摘への対応方針案・受け入れ基準・次のステップ（対応方針レビュー（人間）を含む）が記載されている。
-- **対応方針の監査を経ていること**: 00 を対象に監査・レビューを実施し、問題があれば修正して差し戻し、指摘がなくなるまで繰り返している。証跡は当該 issue の `.agent-skill-chain/runtime/{当該 issue}/memo/` に YYYYMMDD_HHMMSS_ プレフィックスの memo で記録されている。
-- **書記（write-workflow-log）で証跡が記録されていること**: 本 command の実施内容・作成した issue ディレクトリ・00_要求定義.md が workflow.db に記録されている。
+- **全指摘に disposition（即時対応／起票／見送り）が漏れなく付与**され、根拠とともにトリアージ記録用 00_要求定義（指摘一覧）へ記録されている。
+- 起票要否が「非可逆」の主観語ではなく、**起票条件チェックリスト（C1〜C5）の該当有無**で判定・説明されている。サブ issue 化は**起票条件該当時のみ**に限定されている。
+- **見送りは理由（`defer_reason`）が必須記録**されている。**セキュリティ指摘（`security_flag=true`）は軽微でも記録・監査**されている。
+- **即時対応は委譲実行**であり、進行役の直接 Edit 禁止ルール（Execution Path Rule）に抵触していない。テストゲート（green 維持・実行不能時の fail-safe）が適用されている。
+- 起票した場合、当該 `90_issues/{ディレクトリ名}/` 配下に 00_要求定義.md が存在し、監査を経ている。証跡は当該 issue の `memo/` に記録されている。
+- **書記（write-workflow-log）で証跡が記録**されている。
 
 ---
 
 ## 想定されるユーザーの 1 行指示パターン
 
-- 「`https://github.com/techbeansjp-free/AGENTS.md/pull/4` の指摘対応のための issue を作成して」
-- 「この PR コメント一覧で PR 指摘対応 issue を作って」
-- 「既存の `AGENTS-PR4_PR指摘対応` ディレクトリを使って、この PR の指摘対応 issue を更新して」
+- 「`https://github.com/techbeansjp-free/AGENTS.md/pull/4` の指摘対応をして」
+- 「この PR コメント一覧の指摘をトリアージして対応して」
+- 「既存の `AGENTS-PR4_PR指摘対応` ディレクトリを使って、この PR の起票対象の指摘を起票して」
 
 ---
 
 ## ERROR / Forbidden
 
-- **既存ディレクトリが見つからない**: issue_dir_hint を指定したが `.agent-skill-chain/runtime/{parent_issue_id}/90_issues/{issue_dir_hint}/` が存在しない場合 → エラーとしてユーザーに「指定されたディレクトリが見つかりません。ディレクトリ名を確認するか、未指定で新規作成してください。」を返す。不完全なディレクトリを .workflow 配下に作成しない。
-- **指摘一覧が空**: review_comments_raw が空または有意な指摘を 1 件も抽出できなかった場合 → 00_要求定義.md に「指摘一覧が空です。手動で指摘を追加するか、review_comments_raw を再入力してください。」旨を明記し、受け入れ基準に「指摘一覧が 1 件以上埋まっていること」を含める。
-- **PR URL が不正形式**: URL として解釈できない・PR 番号が抽出できない場合 → 00_要求定義.md に「PR を一意に特定できるか不明です。有効な PR URL を確認してください。」旨を明記する。処理は継続し、ディレクトリ名はプレフィックスに「PR不明」等のフォールバックを用いてもよい。
+- **横断ルール（正本参照・再定義しない）**: サブによる独断起票の禁止・起票/即時対応の Go は進行役・進行役の直接 Edit 禁止は、`skills/agent/run_command.md` §Forbidden / Execution Path Rule・`boot/CORE.md`・`workflow/PHASES.md` を正本とする。サブはステップ 1 の提案に留め、承認前に起票・即時対応を独断実行しない。
+- **既存ディレクトリが見つからない**: 起票時に issue_dir_hint を指定したが `.agent-skill-chain/runtime/{parent_issue_id}/90_issues/{issue_dir_hint}/` が存在しない場合 → 「指定されたディレクトリが見つかりません。ディレクトリ名を確認するか、未指定で新規作成してください。」を返す。不完全なディレクトリを runtime 配下に作成しない。
+- **指摘一覧が空**: review_comments_raw が空または有意な指摘を 1 件も抽出できなかった場合 → トリアージ記録 00 に「指摘一覧が空です。手動で指摘を追加するか、review_comments_raw を再入力してください。」旨を明記し、受け入れ基準に「指摘一覧が 1 件以上埋まっていること」を含める。
+- **PR URL が不正形式**: URL として解釈できない・PR 番号が抽出できない場合 → 00 に「PR を一意に特定できるか不明です。有効な PR URL を確認してください。」旨を明記する。処理は継続し、ディレクトリ名はプレフィックスに「PR不明」等のフォールバックを用いてもよい。
+- **判定情報不足**: 起票要否の判定に必要な情報が不足する場合は保守側（起票）へ倒す（C5・保守側デフォルトと整合）。
 
 ---
 
 ## 参照
 
-- 02_設計: データモデル（PrReviewIssueRequest, ReviewFinding, PrReviewIssueDefinition）、フロー（ディレクトリ決定・指摘抽出・00 生成）
-- workflow/TEMPLATES.md（00_要求定義のテンプレート。90_issues 用は 00_要求定義.md の必須セクションを満たしつつ指摘一覧・対応方針案セクションを追加）
-- PHASES.md（issue_creation.create_pr_review_issue サブフェーズ）
+- [workers/create-pr-review-issue/README.md](../workers/create-pr-review-issue/README.md)（3 ステップ手順）
+- [workers/create-pr-review-issue/OUTPUT_FORMAT.md](../workers/create-pr-review-issue/OUTPUT_FORMAT.md)（`Disposition`・`TriageRow`・起票条件 C1〜C5・security の正本）
+- [workers/create-pr-review-issue/00_TEMPLATE_MAPPING.md](../workers/create-pr-review-issue/00_TEMPLATE_MAPPING.md)（disposition・承認記録の 00 一本化）
+- `skills/agent/run_command.md`（§Forbidden「サブによる独断起票」・Execution Path Rule。横断ルールの正本）
+- `boot/CORE.md`・`workflow/PHASES.md`（issue_creation.create_pr_review_issue サブフェーズ・起票 / Go 判断の正本）
+- workflow/TEMPLATES.md（00_要求定義のテンプレート）
+- `scripts/create-pr-review-issue-dir.sh`（起票 disposition 時のみ用いる。本改定で変更しない）
