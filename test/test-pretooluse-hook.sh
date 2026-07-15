@@ -1036,6 +1036,109 @@ run_uc14() {
 run_uc14 "jq" "$JQ_PATH"
 run_uc14 "nojq" "$NOJQ_PATH"
 
+# =====================================================================================
+# UC15: R1 templates carve-out（配布物テンプレートの path-prefix 例外・issue #103 対応）
+#   docs/maintainer/workflow/20260714_180751_自己点検issue群対応/90_issues/
+#     20260714_163639_templates配置がruntime名前空間同居/02_設計.md ADR-1/2/4・03_実装計画.md T2/T4 に対応。
+#   .agent-skill-chain/runtime/templates/ 配下（/memo/ 除く）は basename によらず Edit/Write allow される
+#   ことを検証する。42 非 doc ファイルの代表・R2 独立性・保護維持・誤マッチ防止・memo 除外・絶対パス・
+#   symlink 実体すり替え耐性を jq/nojq 両経路で確認する。
+# =====================================================================================
+echo "== UC15: R1 templates carve-out（配布物テンプレートの path-prefix 例外） =="
+run_uc15() {
+  local label="$1" pathval="$2"
+
+  # シナリオ（正常系・42 代表）: basename 非該当の templates ファイルを worker が Edit/Write → allow
+  # Given: AGENT_ROLE=worker、templates/ 配下の各種 basename（現行 doc allowlist 非該当・元は block）
+  local reps=(
+    ".agent-skill-chain/runtime/templates/agents/scribe_claude.md"
+    ".agent-skill-chain/runtime/templates/github/scripts/subagent-guard.sh"
+    ".agent-skill-chain/runtime/templates/docs/README.md"
+    ".agent-skill-chain/runtime/templates/指摘対応/00_README.md"
+    ".agent-skill-chain/runtime/templates/AGENTS_MERMAID_RULES.md"
+  )
+  local f
+  for f in "${reps[@]}"; do
+    local jr="{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$f\"}}"
+    # When: JSON を stdin で渡す
+    run_pre "$pathval" worker "$jr"
+    # Then: 終了コードは 0（templates carve-out で allow・42 ファイル代表）
+    assert_eq 0 "$RC" "UC15[$label]: templates 非 doc ファイル($f) の Edit は exit 0（carve-out）"
+  done
+
+  # シナリオ（回帰・allow 維持）: templates 配下の doc 名ファイルも引き続き allow
+  # Given: AGENT_ROLE=worker、templates/02_設計.md（doc 名かつ templates 配下）
+  local jd='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/templates/02_設計.md"}}'
+  run_pre "$pathval" worker "$jd"
+  assert_eq 0 "$RC" "UC15[$label]: templates/02_設計.md の Write は exit 0（回帰・allow 維持）"
+
+  # シナリオ（R2 独立性）: orchestrator（main・非subagent）の templates 編集は carve-out 後も R2 で block
+  # Given: AGENT_ROLE=orchestrator、agent_id 無し、templates 配下の非 doc ファイル
+  local jo='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/templates/agents/scribe_claude.md"}}'
+  run_pre "$pathval" orchestrator "$jo"
+  # Then: 終了コードは 2（no-op フォールスルーで R2 が独立に発火）
+  assert_eq 2 "$RC" "UC15[$label]: orchestrator の templates Edit は exit 2（R2独立性）"
+
+  # シナリオ（保護維持）: templates 分岐追加後も memo・workflow.db* の block は不変
+  # Given: AGENT_ROLE=worker、memo 配下 / workflow.db
+  local jm='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/memo/foo.md"}}'
+  run_pre "$pathval" worker "$jm"
+  assert_eq 2 "$RC" "UC15[$label]: memo Edit は exit 2（保護維持）"
+  local jw='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/workflow.db"}}'
+  run_pre "$pathval" worker "$jw"
+  assert_eq 2 "$RC" "UC15[$label]: workflow.db Write は exit 2（保護維持）"
+
+  # シナリオ（境界値・誤マッチ防止）: templates-evil/・mytemplates/ は templates carve-out に入らない
+  # Given: AGENT_ROLE=worker、末尾スラッシュ判定で templates carve-out 非対象の別名ディレクトリ
+  local je='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/templates-evil/x.md"}}'
+  run_pre "$pathval" worker "$je"
+  # Then: 汎用 runtime 分岐で basename 非該当（x.md）→ exit 2
+  assert_eq 2 "$RC" "UC15[$label]: templates-evil/x.md は carve-out 非対象で exit 2（誤マッチ防止）"
+  local jmy='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/mytemplates/x.md"}}'
+  run_pre "$pathval" worker "$jmy"
+  assert_eq 2 "$RC" "UC15[$label]: mytemplates/x.md は carve-out 非対象で exit 2（誤マッチ防止）"
+
+  # シナリオ（境界値・memo 除外）: templates 配下でも /memo/ を含めば carve-out に入らず block
+  # Given: AGENT_ROLE=worker、templates/x/memo/ 配下（basename 非該当）
+  local jtm='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/templates/x/memo/foo.md"}}'
+  run_pre "$pathval" worker "$jtm"
+  # Then: templates 分岐に入らず汎用 runtime 分岐で basename 非該当 → exit 2（保護範囲を広げない）
+  assert_eq 2 "$RC" "UC15[$label]: templates/x/memo/foo.md は exit 2（memo 除外・保護維持）"
+
+  # シナリオ（絶対パス）: 絶対表記の templates 配下も allow される
+  # Given: AGENT_ROLE=worker、絶対パスの templates/github/README.md（非 doc）
+  local ja='{"tool_name":"Write","tool_input":{"file_path":"/repo/.agent-skill-chain/runtime/templates/github/README.md"}}'
+  run_pre "$pathval" worker "$ja"
+  assert_eq 0 "$RC" "UC15[$label]: 絶対パスの templates/github/README.md の Write は exit 0（carve-out）"
+
+  # シナリオ（symlink 実体すり替え耐性）: templates 配下の非 doc 名 symlink が workflow.db を指す → block
+  #   隔離 runtime/templates ツリーを作り実体解決で block できることを検証する（$TMP・本リポ非破壊）。
+  local base="$TMP/r1tpl_$label"
+  rm -rf "$base"
+  mkdir -p "$base/.agent-skill-chain/runtime/templates/x/memo"
+  printf 'db\n'   > "$base/.agent-skill-chain/runtime/workflow.db"
+  printf 'memo\n' > "$base/.agent-skill-chain/runtime/templates/x/memo/foo.md"
+  local rt="$base/.agent-skill-chain/runtime"
+  # Given: templates/x/scribe_claude.md（非 doc 名）が ../../workflow.db を指す symlink
+  ln -sf ../../workflow.db "$rt/templates/x/scribe_claude.md"
+  local js="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$rt/templates/x/scribe_claude.md\"}}"
+  run_pre "$pathval" worker "$js"
+  # Then: templates carve-out でも共通ヘルパの実体検査で block
+  assert_eq 2 "$RC" "UC15[$label]: templates 配下 symlink→workflow.db は exit 2"
+  assert_grep "protected path" "$ERR" "UC15[$label]: templates symlink→workflow.db は保護パス理由で block"
+
+  # Given: templates/x/scribe_claude2.md が memo/foo.md を指す symlink
+  ln -sf memo/foo.md "$rt/templates/x/scribe_claude2.md"
+  local js2="{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$rt/templates/x/scribe_claude2.md\"}}"
+  run_pre "$pathval" worker "$js2"
+  assert_eq 2 "$RC" "UC15[$label]: templates 配下 symlink→memo/ は exit 2"
+  assert_grep "protected path" "$ERR" "UC15[$label]: templates symlink→memo/ は保護パス理由で block"
+
+  rm -rf "$base"
+}
+run_uc15 "jq" "$JQ_PATH"
+run_uc15 "nojq" "$NOJQ_PATH"
+
 # ---- 本番 DB / 本リポ非破壊の確認（隔離環境のみを触ったこと） ----
 echo "== 非破壊確認 =="
 # Given/When: 上記テストは全て $TMP 配下で実行している。Then: 本リポ .agents の hook が未変更（mtime 比較は省略、git status は呼び出し側で確認）。
