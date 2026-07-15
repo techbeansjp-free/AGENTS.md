@@ -10,7 +10,7 @@ document_id: "36aeaba9-4ba2-452b-a020-b61dba6ff76c"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 >
 > **必須**: レビュー深度は **standard**（`00_要求定義.md` frontmatter `mode: standard`）。ドキュメント成果物のため「テスト」＝ドキュメント審査（grep による記述検査）に相当する。
 
@@ -253,8 +253,8 @@ document_id: "36aeaba9-4ba2-452b-a020-b61dba6ff76c"
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
-- [.agent-skill-chain/source/skills/agent/run_command.md](../../../../.agent-skill-chain/source/skills/agent/run_command.md)（正本・改定対象）
-- [.agent-skill-chain/source/boot/CORE.md](../../../../.agent-skill-chain/source/boot/CORE.md) / [.agent-skill-chain/source/RULES.md](../../../../.agent-skill-chain/source/RULES.md) / [.agent-skill-chain/project/自己拡張ワークフロー.md](../../../../.agent-skill-chain/project/自己拡張ワークフロー.md)
+- [.agent-skill-chain/source/skills/agent/run_command.md](../../../../../.agent-skill-chain/source/skills/agent/run_command.md)（正本・改定対象）
+- [.agent-skill-chain/source/boot/CORE.md](../../../../../.agent-skill-chain/source/boot/CORE.md) / [.agent-skill-chain/source/RULES.md](../../../../../.agent-skill-chain/source/RULES.md) / [.agent-skill-chain/project/自己拡張ワークフロー.md](../../../../../.agent-skill-chain/project/自己拡張ワークフロー.md)
 
 ---
 
