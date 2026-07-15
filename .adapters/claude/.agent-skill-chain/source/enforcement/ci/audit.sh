@@ -1042,6 +1042,21 @@ check_reviewdocs_before_implement() {
   done
 }
 
+# 実効モード解決（02_設計 ADR-2/ADR-5・ADR-S1-3）。純関数/Query・副作用なし。
+# 既定 local_tracked（fail-safe・後方互換）。ISSUE_TRACKING_MODE=github_native かつ
+# git remote に github.com を含むときのみ github_native を返す。未設定・不明値・非 git・
+# 非 GitHub はすべて local_tracked（ロックアウト・非追跡データ消失の回避）。github.com 判定は
+# #34（GitHub 採用判定・audit.sh:1131）と同一シグナルを再利用し新規判定を作らない。
+resolve_issue_tracking_mode() {
+  if [[ "${ISSUE_TRACKING_MODE:-}" != "github_native" ]]; then
+    printf '%s\n' "local_tracked"; return 0
+  fi
+  if git -C "$PROJECT_ROOT" remote -v 2>/dev/null | grep -q 'github\.com'; then
+    printf '%s\n' "github_native"; return 0
+  fi
+  printf '%s\n' "local_tracked"
+}
+
 # 33. close 移動未実施検知（check_close_move_pending）。
 #   workflow.db に verify-and-close 証跡がありながら close/ 未移動のトップレベル issue を、
 #   発効日以降・猶予超過時に検知して FAIL する（02_設計 ADR-1〜5）。
@@ -1053,6 +1068,13 @@ check_reviewdocs_before_implement() {
 #   経過日数判定（ADR-3）。sqlite3/DB/workflow_log 不在・ts_utc 解析不能・証跡なしはすべて
 #   fail-open（continue／return 0・ADR-4）。DB・FS への書き込みは一切しない（Query のみ・ADR-CQRS）。
 check_close_move_pending() {
+  # 0. モードガード（最優先・02_設計 ADR-5/ADR-S1-1）: 実効モードが github_native なら
+  #    close 移動運用は廃止済みのため本チェックを丸ごと SKIP する。GITHUB_ISSUE_GATE_ENABLED
+  #    の最優先トグル前例（audit.sh:1118-1122）と同型で、既存 DB ガードより前に置く。
+  if [[ "$(resolve_issue_tracking_mode)" == "github_native" ]]; then
+    echo "SKIP: #33（close ディレクトリ移動状況の検知）をスキップします（実効モードが github_native のため。ISSUE_TRACKING_MODE=github_native かつ github.com remote 検出・02_設計 ADR-5/ADR-S1-2）" >&2
+    return 0
+  fi
   if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #33（close ディレクトリ移動状況の検知）をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
   if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #33（close ディレクトリ移動状況の検知）をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
