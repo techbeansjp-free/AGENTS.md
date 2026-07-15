@@ -105,6 +105,9 @@ const required = [
   // 配布経路上は非 .gitignore 名のこのテンプレートを正本とし setup.sh がコピー時に
   // .gitignore へリネームする。回帰時（誤って除外・削除された場合）に検知するための必須物。
   { label: ".agent-skill-chain/source/runtime-gitignore.template", test: (p) => p === ".agent-skill-chain/source/runtime-gitignore.template" },
+  // .worktree/.gitignore 配布の実体テンプレート（02_設計 ADR-7）。runtime-gitignore.template と同型の
+  // npm-packlist 回避（非 .gitignore 名）であり、setup.sh がコピー時に .gitignore へリネームする。
+  { label: ".agent-skill-chain/source/worktree-gitignore.template", test: (p) => p === ".agent-skill-chain/source/worktree-gitignore.template" },
 ];
 const missing = required.filter((r) => !files.some((p) => r.test(p)));
 

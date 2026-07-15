@@ -155,6 +155,28 @@ else
   } >&2
 fi
 
+# .worktree/ 雛形（未存在時のみ生成）。worktree 一元配置先。追跡除外は .worktree/.gitignore 自身
+# （`*` ＋ `!.gitignore` の 2 行）で完結し、ルート .gitignore は変更しない（BR-8・02_設計 ADR-7）。
+# テンプレ名を .gitignore にしないのは npm-packlist の 2 階層ネスト .gitignore 除外を回避するため
+# （runtime/.gitignore と同型の回避策）。
+WT_DIR="$PROJECT_ROOT/.worktree"
+WT_GITIGNORE="$WT_DIR/.gitignore"
+WT_GITIGNORE_SOURCE="$PACKAGE_ROOT/.agent-skill-chain/source/worktree-gitignore.template"
+if [[ -f "$WT_GITIGNORE_SOURCE" ]]; then
+  if [[ ! -f "$WT_GITIGNORE" ]]; then
+    mkdir -p "$WT_DIR"
+    cp "$WT_GITIGNORE_SOURCE" "$WT_GITIGNORE"
+    echo ".worktree/.gitignore を配布しました（未存在時のみ）。"
+  fi
+else
+  # コピー元テンプレート欠落は非致命（runtime/.gitignore と同じ方針）。無言スキップにせず警告する。
+  {
+    echo "警告: .worktree/.gitignore のコピー元テンプレートが見つかりません: $WT_GITIGNORE_SOURCE"
+    echo "  推定される問題: パッケージの配布物から .agent-skill-chain/source/worktree-gitignore.template が欠落している可能性があります。"
+    echo "  確認手順: パッケージのバージョン・配布経路を確認してください。setup 処理はこのまま続行しますが、.worktree/.gitignore は配布されません。"
+  } >&2
+fi
+
 # スキルをプラットフォーム別パスに同期する（.claude/skills, .cursor/skills）
 # 配備ロジック（{domain}__{capability} 命名の単一正本）は共有ライブラリに集約。
 # build-adapters.sh も同じ lib を source する。配備ロジックを二重定義しないこと。
