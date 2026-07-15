@@ -10,7 +10,7 @@ document_id: "3910499a-5379-478c-8ff7-59df89bdc796"
 
 > **重要**: 本レビューは verify-and-close（レビューフェーズ）の成果物である。実装（commit `a1a6783`）で改訂された 4 ファイルの差分を独立に検証した結果を記載する。前工程（implement-feature・review-docs）の報告を鵜呑みにせず、改訂後の実ファイルを読んで自分で判定した。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 
 ---
 
@@ -200,7 +200,7 @@ pie title 構造チェック観点の充足
 
 ## 9. 設計・境界の確認
 
-> review-architecture の結果。設計原則 [.agent-skill-chain/source/spec/01_設計原則.md](../../../.agent-skill-chain/source/spec/01_設計原則.md) に照らして確認した。
+> review-architecture の結果。設計原則 [.agent-skill-chain/source/spec/01_設計原則.md](../../../../../.agent-skill-chain/source/spec/01_設計原則.md) に照らして確認した。
 
 ### 9.1 設計の確認
 
@@ -278,10 +278,10 @@ pie title 構造チェック観点の充足
 
 ### 13.2 その他の参考資料
 
-- [.agent-skill-chain/source/CLOSEOUT.md](../../../.agent-skill-chain/source/CLOSEOUT.md) - §fresh サブ分割（改訂対象・正本）
-- [.agent-skill-chain/project/OPERATING_PRINCIPLES.md](../../../.agent-skill-chain/project/OPERATING_PRINCIPLES.md) - §(b)（具体値）
-- [.agent-skill-chain/source/CONTEXT_EFFICIENCY.md](../../../.agent-skill-chain/source/CONTEXT_EFFICIENCY.md) - §適用のスケーリング
-- [.agent-skill-chain/source/enforcement/README.md](../../../.agent-skill-chain/source/enforcement/README.md) - §CI 強制対象外
+- [.agent-skill-chain/source/CLOSEOUT.md](../../../../../.agent-skill-chain/source/CLOSEOUT.md) - §fresh サブ分割（改訂対象・正本）
+- [.agent-skill-chain/project/OPERATING_PRINCIPLES.md](../../../../../.agent-skill-chain/project/OPERATING_PRINCIPLES.md) - §(b)（具体値）
+- [.agent-skill-chain/source/CONTEXT_EFFICIENCY.md](../../../../../.agent-skill-chain/source/CONTEXT_EFFICIENCY.md) - §適用のスケーリング
+- [.agent-skill-chain/source/enforcement/README.md](../../../../../.agent-skill-chain/source/enforcement/README.md) - §CI 強制対象外
 
 ---
 
