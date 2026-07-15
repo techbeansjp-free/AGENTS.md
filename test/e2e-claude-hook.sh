@@ -113,18 +113,30 @@ e2e_orchestrator_read_allowed() {
 }
 
 e2e_workflow_edit_blocked() {
-  # シナリオ: 配線経由で .workflow 直接 Edit が block（全 ROLE 適用 R1）
-  # Given: settings 配線・AGENT_ROLE=worker・保護パス Edit JSON
+  # シナリオ（review-docs ラウンド1で対象パスを修正）: 配線経由で memo（保護対象）直接 Edit が block（R1 は保護対象に絞って適用）
+  #   旧: 00_要求定義.md を対象にしていたが、carve-out 導入後は allow になるため保護対象ファイル（memo 配下）へ差し替え。
+  # Given: settings 配線・AGENT_ROLE=worker・保護パス（memo 配下）Edit JSON
+  local json='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/memo/20260715_100000_foo.md"}}'
+  # When: settings の hook コマンドへ stdin JSON 注入
+  run_wired worker "$json"
+  # Then: exit 2（R1 は memo・workflow.db* に絞って配線経由でも発火）
+  assert_eq 2 "$RC" "C-3: 配線経由 memo 直接 Edit は exit 2（block・保護維持）"
+}
+
+e2e_workflow_doc_edit_allowed() {
+  # シナリオ（carve-out 導入・review-docs ラウンド1で追加）: 配線経由で issue ドキュメントへの Edit が allow される
+  # Given: settings 配線・AGENT_ROLE=worker・対象パスが 00_要求定義.md（carve-out 対象）
   local json='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"}}'
   # When: settings の hook コマンドへ stdin JSON 注入
   run_wired worker "$json"
-  # Then: exit 2（R1 は配線経由でも発火）
-  assert_eq 2 "$RC" "C-3: 配線経由 .workflow 直接 Edit は exit 2（block）"
+  # Then: exit 0（配線経由でも carve-out が機能する）
+  assert_eq 0 "$RC" "C-3: 配線経由 00_要求定義.md の Edit は exit 0（allow）"
 }
 
 e2e_orchestrator_write_blocked
 e2e_orchestrator_read_allowed
 e2e_workflow_edit_blocked
+e2e_workflow_doc_edit_allowed
 
 # ---- 非破壊確認 ----
 echo "== 非破壊確認 =="

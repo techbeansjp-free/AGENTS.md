@@ -233,18 +233,30 @@ uc2_nojq_sqlite_blocked
 uc2_nojq_extracts_file_path
 
 # =====================================================================================
-# UC3: exit 2 ブロック化（.workflow 直接編集）
+# UC3: exit 2 ブロック化（保護対象への直接編集）と issue ドキュメントへの allow（carve-out）
+#   R1 は memo・workflow.db* にのみ保護を絞っている（本 issue で narrowing）。
+#   00_要求定義.md 等の issue ドキュメントへの Edit は allow される新仕様を uc3_workflow_doc_edit_now_allowed で検証する。
 # =====================================================================================
-echo "== UC3: exit 2 ブロック化 =="
+echo "== UC3: exit 2 ブロック化（保護対象）／issue ドキュメントの allow =="
 uc3_workflow_edit_exit2() {
-  # シナリオ: .workflow 配下 Edit が exit 2（01 SC-1 / UC3 シナリオ3-1）
-  # Given: AGENT_ROLE=worker、保護パスを対象とした Edit JSON
-  local json='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"}}'
+  # シナリオ: memo（保護対象）配下 Edit が exit 2（01 SC-1 / UC3 シナリオ3-1。旧: 00_要求定義.md を対象にしていたが
+  #   carve-out 後は allow になるため、保護対象ファイルへ差し替え）
+  # Given: AGENT_ROLE=worker、保護パス（memo 配下）を対象とした Edit JSON
+  local json='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/memo/foo.md"}}'
   # When: 違反 JSON を stdin で渡す
   run_pre "$PATH" worker "$json"
   # Then: 終了コードは 2（1 ではない）かつ理由が出る
-  assert_eq 2 "$RC" "UC3: .workflow Edit は exit 2"
+  assert_eq 2 "$RC" "UC3: memo Edit は exit 2"
   assert_grep "direct edit of .agent-skill-chain/runtime/ is forbidden" "$ERR" "UC3: .workflow 直接編集禁止メッセージ"
+}
+uc3_workflow_doc_edit_now_allowed() {
+  # シナリオ（carve-out 導入・review-docs ラウンド1で追加）: issue ドキュメント（00_要求定義.md）への Edit は exit 0
+  # Given: AGENT_ROLE=worker、対象パスが 00_要求定義.md（carve-out 対象・basename allowlist 一致）
+  local json='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$PATH" worker "$json"
+  # Then: 終了コードは 0（allow・carve-out 導入後の新仕様）
+  assert_eq 0 "$RC" "UC3: 00_要求定義.md の Edit は exit 0（carve-out）"
 }
 uc3_worker_normal_write_allowed() {
   # シナリオ: worker の通常 Write（保護外）は exit 0（worker は実作業者）
@@ -256,6 +268,7 @@ uc3_worker_normal_write_allowed() {
   assert_eq 0 "$RC" "UC3: worker 通常 Write は exit 0"
 }
 uc3_workflow_edit_exit2
+uc3_workflow_doc_edit_now_allowed
 uc3_worker_normal_write_allowed
 
 # =====================================================================================
@@ -460,13 +473,14 @@ run_uc8() {
   # Then: subagent worker として exit 0（jq 経路と同一合否）
   assert_eq 0 "$RC" "UC8[$label]: subagent worker Bash(ls) は exit 0"
 
-  # シナリオ（ケース3）: agent_id 付きでも .workflow 直接編集は R1 で block（不変）
-  # Given: agent_id 付きだが保護パス .agent-skill-chain/runtime/ への Edit
-  local json3='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"},"agent_id":"abc-123"}'
+  # シナリオ（ケース3・review-docs ラウンド1で対象パスを確定修正）: agent_id 付きでも memo への直接編集は R1 で block（不変）
+  #   旧: 00_要求定義.md を対象にしていたが、carve-out 導入後は allow になるため保護対象ファイル（memo 配下）へ差し替え。
+  # Given: agent_id 付きだが保護対象パス（memo 配下）への Edit
+  local json3='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/memo/foo.md"},"agent_id":"abc-123"}'
   # When: hook を実行
   run_pre "$pathval" orchestrator "$json3"
-  # Then: R1 は全ロール（subagent 含む）で block（exit 2）
-  assert_eq 2 "$RC" "UC8[$label]: subagent worker の .workflow Edit は exit 2（R1 不変）"
+  # Then: R1（memo・workflow.db* への直接編集）は subagent でも不変（exit 2）
+  assert_eq 2 "$RC" "UC8[$label]: subagent worker の memo Edit は exit 2（R1 保護対象は不変）"
 
   # シナリオ（ケース4）: agent_id 付きでも sqlite3 直接実行は R6 で block（不変）
   # Given: agent_id 付きだが sqlite3 直叩き
@@ -847,6 +861,82 @@ run_uc12() {
 }
 run_uc12 "jq" "$JQ_PATH"
 run_uc12 "nojq" "$NOJQ_PATH"
+
+# =====================================================================================
+# UC13: R1 carve-out（issue ドキュメントの allow・memo/workflow.db* の block 維持）
+#   docs/maintainer/workflow/20260715_095026_R1runtime直接編集禁止のBash強制がAutoModeBypass分類器と衝突/
+#   02_設計.md ADR-1/ADR-2・03_実装計画.md タスク4 に対応。jq 有/無の両系統で同一合否。
+# =====================================================================================
+echo "== UC13: R1 carve-out（issue ドキュメントの allow・memo/workflow.db* の block 維持） =="
+run_uc13() {
+  local label="$1" pathval="$2"
+
+  # シナリオ: サブ issue 配下の 02_設計.md への Write も allow される（深さに依存しない）
+  # Given: AGENT_ROLE=worker、対象パスがサブ issue 配下の 02_設計.md
+  local json1='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/x/90_issues/y/02_設計.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" worker "$json1"
+  # Then: 終了コードは 0（allow）
+  assert_eq 0 "$RC" "UC13[$label]: サブ issue配下の02_設計.mdは exit 0"
+
+  # シナリオ（境界値）: 前方一致のみの偽装ファイル名は block される（過剰許可防止）
+  # Given: AGENT_ROLE=worker、対象パスが allowlist basename と前方一致するが完全一致しない
+  local json2='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md.bak"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" worker "$json2"
+  # Then: 終了コードは 2（block、過剰許可防止）
+  assert_eq 2 "$RC" "UC13[$label]: 00_要求定義.md.bak は exit 2（前方一致で誤許可しない）"
+
+  # シナリオ: 保護対象（workflow.db）への Write は引き続き block される（回帰）
+  # Given: AGENT_ROLE=worker、対象パスが workflow.db
+  local json3='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/workflow.db"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" worker "$json3"
+  # Then: 終了コードは 2（block・回帰なし）
+  assert_eq 2 "$RC" "UC13[$label]: workflow.db の Write は exit 2（保護維持）"
+
+  # シナリオ（review-docs ラウンド1・敵対的観点1）: orchestrator（main・非subagent）は carve-out 後も R2 により block される
+  # Given: AGENT_ROLE=orchestrator、agent_id 無し（main 自身）、対象パスが 00_要求定義.md（carve-out 対象）
+  local json4='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" orchestrator "$json4"
+  # Then: 終了コードは 2（block・carve-out がフォールスルーのため R2 が独立に発火する）
+  assert_eq 2 "$RC" "UC13[$label]: orchestrator の 00_要求定義.md Edit は carve-out 後も exit 2（R2独立性）"
+
+  # シナリオ（review-docs ラウンド1・敵対的観点3）: ROLE=unknown は doc basename について新たに allow される（残存リスクの固定化）
+  # Given: AGENT_ROLE=unknown、対象パスが 00_要求定義.md（carve-out 対象）
+  local json5='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_要求定義.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" unknown "$json5"
+  # Then: 終了コードは 0（allow・02_設計 ADR-1 で受容した残存リスクの挙動を固定化）
+  assert_eq 0 "$RC" "UC13[$label]: unknown role の 00_要求定義.md Edit は exit 0（残存リスク固定化）"
+
+  # シナリオ（review-docs ラウンド1・敵対的観点3）: 同じ ROLE=unknown でも memo は引き続き block される
+  # Given: AGENT_ROLE=unknown、対象パスが memo 配下
+  local json6='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/memo/foo.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" unknown "$json6"
+  # Then: 終了コードは 2（block・保護維持）
+  assert_eq 2 "$RC" "UC13[$label]: unknown role の memo Edit は exit 2（保護維持）"
+
+  # シナリオ（review-docs ラウンド1・敵対的観点5）: memo lookalike ディレクトリ（memo2/）は誤って block されない
+  # Given: AGENT_ROLE=worker、対象パスが memo2/（保護対象 memo/ の lookalike・実際は非保護）
+  local json7='{"tool_name":"Edit","tool_input":{"file_path":".agent-skill-chain/runtime/x/memo2/00_要求定義.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" worker "$json7"
+  # Then: 終了コードは 0（allow・"/memo/" 部分文字列判定が "memo2/" を誤検知しないことの確認）
+  assert_eq 0 "$RC" "UC13[$label]: memo2/00_要求定義.md の Edit は exit 0（誤block防止）"
+
+  # シナリオ: 新設 allowlist の追加4件（00_システム理解.md・05_最終確認チェックリスト.md・99_PR.md・99_PR_review.md）も allow される
+  # Given: AGENT_ROLE=worker、対象パスが 05_最終確認チェックリスト.md
+  local json8='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/x/05_最終確認チェックリスト.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" worker "$json8"
+  # Then: 終了コードは 0（allow・網羅性是正の確認）
+  assert_eq 0 "$RC" "UC13[$label]: 05_最終確認チェックリスト.md の Write は exit 0（allowlist網羅性）"
+}
+run_uc13 "jq" "$JQ_PATH"
+run_uc13 "nojq" "$NOJQ_PATH"
 
 # ---- 本番 DB / 本リポ非破壊の確認（隔離環境のみを触ったこと） ----
 echo "== 非破壊確認 =="

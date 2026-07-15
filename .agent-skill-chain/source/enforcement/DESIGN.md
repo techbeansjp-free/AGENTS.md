@@ -52,6 +52,10 @@ orchestrator が「実作業をしない」「run_command 経由のみ」から�
 
 **R1（path 軸）との非対称は意図的（誤診断防止のための明記）**: 上記の `IS_SUBAGENT` によるロール軸の判定（R2・R3(b)）とは別に、PreToolUse.sh の R1 は `.agent-skill-chain/runtime/` 配下への直接 Write/Edit を **IS_SUBAGENT の値に関わらず全 ROLE 一律で block** する（path 軸のガード）。これは、runtime/ 配下に timestamp をシステム時計へ固定すべき memo（§Orchestrator 逸脱の検知「timestamp 付き memo の自由生成」行）と書記のみが書く workflow.db が含まれるためであり、R1 が subagent を除外すると当該保護が worker 経路で破れることを防ぐための意図的設計である。R1（path 軸・全 ROLE）と R2/R3(b)（role 軸・subagent 除外）は**目的の異なる独立ガード**であり、非対称そのものはバグではない。subagent が runtime/ 配下へ内容を書く正規ルートは、R3(b) が許可する Bash 経由（heredoc/cp/new-workflow-memo.sh 等）である。
 
+**R1 の保護範囲は「memo・workflow.db\*」のみに絞られている（issue 起票時点の追加の洗練・上記の意図を否定しない）**: R1 が実際に保護すべき対象は上記のとおり memo のタイムスタンプ整合性と workflow.db\* の書込整合性の2点であり、`00_要求定義.md` 等の issue ドキュメント自体はこの保護を必要としない（内容の真正性は Bash 経由でも Edit/Write 経由でも同じ）。そのため R1 は、basename が固定 allowlist（`00_要求定義.md`・`00_システム理解.md`・`01_要件定義.md`・`02_設計.md`・`03_実装計画.md`・`04_review.md`・`05_最終確認チェックリスト.md`・`90_issues.md`・`99_PR.md`・`99_PR_review.md`）に厳密一致し、かつパスが `/memo/` を含まない場合は Edit/Write を allow する（既存の `.gitignore` 厳密一致例外と同型の carve-out）。この carve-out は上記の「R1 は全 ROLE 一律」という設計判断そのものを覆すものではなく、**保護「範囲」を実際に保護が必要な対象へ絞り込む追加の洗練**である（保護「目的」の有無を扱った既存の結論とは別軸）。
+- **実装制約**: この carve-out は既存の `.gitignore` 例外と同じ **no-op（フォールスルー）** 方式で実装する。`allow()`（`exit 0` の早期終了）を用いると、R2（`ROLE=orchestrator` かつ `IS_SUBAGENT!="1"` の Edit/Write 拒否）の評価に到達する前にスクリプトが終了してしまい、orchestrator（main）自身の直接編集が R2 を経由せず素通りする退行を招くため、フォールスルーであることが必須の実装制約である。
+- **残存リスク（受容済み）**: `AGENT_ROLE` が `orchestrator` でも `scribe` でもない `unknown`（役割検知の失敗、または非標準ハーネス経由）の場合、carve-out 導入後は issue ドキュメントへの Edit/Write が新たに allow される（従来は R1 の役割非依存な防衛線により block されていた）。memo・workflow.db\* の保護は ROLE に関わらず維持されるため保護目的の中核は損なわれず、正規配備環境（`enforce on` 時 `AGENT_ROLE=orchestrator` が静的配線される）では本ケースは主に手動実行・テスト環境でのみ生じる限定的なリスクとして受容する。
+
 ---
 
 ## 系統D: hooks overlay 配備の設計思想（`.agent-skill-chain/project/` 優先）

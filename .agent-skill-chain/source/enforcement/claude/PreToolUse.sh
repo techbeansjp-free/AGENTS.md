@@ -262,15 +262,36 @@ fi
 # 入力が取れない（TOOL も CMD も空）場合は保守的に倒す（BR-4: 違反確証なしは reject しない）。
 # ---------------------------------------------------------------------------
 if [[ -n "$TOOL" ]]; then
-  # R1. .workflow 配下への直接 Write/Edit 禁止（全 ROLE）
-  #   例外（ADR-3）: 対象パスが厳密に .agent-skill-chain/runtime/.gitignore と一致する場合のみ許可する。
-  #   配布漏れの自己修復用の正規手段。前方一致・正規表現の緩いマッチではなくファイル名までの完全一致で
-  #   判定し、他の runtime/ 配下ファイル（workflow.db*・issue ドキュメント等）への禁止は一切広げない。
+  # R1. .workflow 配下への直接 Write/Edit 禁止（全 ROLE・ただし保護対象を絞った allowlist 方式）
+  #   例外1（ADR-3）: 対象パスが厳密に .agent-skill-chain/runtime/.gitignore と一致する場合のみ許可する。
+  #   配布漏れの自己修復用の正規手段。前方一致・正規表現の緩いマッチではなくファイル名までの完全一致で判定する。
+  #   例外2（ADR-1/ADR-2・02_設計 参照）: R1 の本来の保護対象は memo（YYYYMMDD_HHMMSS_*.md のタイムスタンプ
+  #   整合性）と workflow.db*（書記のみが書く DB 書込整合性）の2点であり、00_要求定義.md 等の issue ドキュメント
+  #   自体はこの保護を必要としない（内容の真正性は Bash 経由でも Edit/Write 経由でも同じ）。したがって、
+  #   basename が ALLOWED_DOC_BASENAMES に厳密一致し、かつパスが /memo/ を含まない場合のみ allow する。
+  #   この allow 判定は既存の .gitignore 例外と同じ **no-op（フォールスルー）** で実装し、allow()（exit 0 の
+  #   早期終了）は使わない。フォールスルーにすることで、carve-out に一致した後も後続の R2（ROLE=orchestrator
+  #   かつ IS_SUBAGENT!="1" の Edit/Write 拒否）が必ず評価され、orchestrator（main）自身の直接編集は carve-out
+  #   の有無に関わらず引き続き block される（R2 との独立性を保つための必須の実装制約）。
+  #   ALLOWED_DOC_BASENAMES に含まれないファイル（memo・workflow.db* を含む）への禁止は一切広げない。
+  ALLOWED_DOC_BASENAMES="00_要求定義.md 00_システム理解.md 01_要件定義.md 02_設計.md 03_実装計画.md 04_review.md 05_最終確認チェックリスト.md 90_issues.md 99_PR.md 99_PR_review.md"
   if [[ "$TOOL" == "Edit" || "$TOOL" == "Write" ]]; then
     if [[ "$PATH_TARGET" == ".agent-skill-chain/runtime/.gitignore" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/runtime/.gitignore ]]; then
       : # allow（厳密パス一致の狭い例外。R1 の他条件には進まない）
     elif [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/ ]]; then
-      block "direct edit of .agent-skill-chain/runtime/ is forbidden / .agent-skill-chain/runtime/ の直接編集は禁止です"
+      R1_BASENAME="${PATH_TARGET##*/}"
+      R1_DOC_ALLOWED=0
+      for r1_name in $ALLOWED_DOC_BASENAMES; do
+        if [[ "$R1_BASENAME" == "$r1_name" ]]; then
+          R1_DOC_ALLOWED=1
+          break
+        fi
+      done
+      if [[ "$R1_DOC_ALLOWED" == "1" ]] && [[ "$PATH_TARGET" != *"/memo/"* ]]; then
+        : # allow（issue ドキュメントの carve-out・no-op フォールスルーで後続 R2 評価を妨げない）
+      else
+        block "direct edit of .agent-skill-chain/runtime/ is forbidden / .agent-skill-chain/runtime/ の直接編集は禁止です"
+      fi
     fi
   fi
 
