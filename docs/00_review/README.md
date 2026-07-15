@@ -22,7 +22,7 @@ document_id: "da1d1ce0-c4c5-4566-9487-4a7e46858466"
 | [20260714_221215](./20260714_221215_review.md) | enforcement 既定 on 化（新規配備で自動配線）↔ `docs/04_機能設計/CLI/README.md`（CLI コマンド一覧） | 更新済み・整合確認（指摘 0） | enforce 新規既定 on 化 issue（issue_id: `b78fc168-77b2-434d-8b98-cdfd68deafbf`） |
 | [20260715_000910](./20260715_000910_review.md) | モデルティア記録 3 カラム＋#38 追加 ↔ `docs/03_データ設計/README.md`（主要カラム俯瞰・索引件数）＋ ledger 正本 `schema.md` | 更新済み（指摘 2→0） | `docs/maintainer/workflow/close/20260714_204451_モデルティア明記義務の機械強制欠如/`（Issue #73） |
 | [20260715_110423](./20260715_110423_review.md) | R1 carve-out（runtime/ 直接編集禁止を memo・workflow.db\* に絞る）↔ `docs/04_機能設計/enforcement/README.md`（enforcement 抽象度・レイヤ記述） | 更新不要判定（軽量パス） | `docs/maintainer/workflow/close/20260715_095026_R1runtime直接編集禁止のBash強制がAutoModeBypass分類器と衝突/`（Issue #91） |
-| [20260715_134942](./20260715_134942_review.md) | R1 templates carve-out（配布物テンプレート置き場の path-prefix 例外・共通ヘルパ抽出）↔ `docs/04_機能設計/enforcement/README.md`（enforcement 抽象度・レイヤ記述） | 更新不要判定（軽量パス） | `docs/maintainer/workflow/20260714_180751_自己点検issue群対応/90_issues/20260714_163639_templates配置がruntime名前空間同居/`（Issue #103） |
+| [20260715_134942](./20260715_134942_review.md) | R1 templates carve-out（配布物テンプレート置き場の path-prefix 例外・共通ヘルパ抽出）↔ `docs/04_機能設計/enforcement/README.md`（enforcement 抽象度・レイヤ記述） | 更新不要判定（軽量パス） | `docs/maintainer/workflow/close/20260714_180751_自己点検issue群対応/90_issues/20260714_163639_templates配置がruntime名前空間同居/`（Issue #103） |
 | [20260715_154342](./20260715_154342_review.md) | create-pr-review-issue フロー是正（三値 disposition・起票条件 C1〜C5・記録一本化）↔ `docs/04_機能設計/スクリプト群/README.md`・`docs/03_データ設計/README.md`（スクリプト存在・command enum の抽象度） | 更新不要判定（軽量パス） | `docs/maintainer/workflow/20260715_124505_PR指摘対応フロー是正/`（Issue #98） |
 
 - **日時**: レビュー記録ファイル名の `YYYYMMDD_HHMMSS` プレフィックス。
