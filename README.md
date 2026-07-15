@@ -244,6 +244,13 @@ npx github:techbeansjp-free/AGENTS.md enforce off      # 解除・opt-out（enfo
 
 ---
 
+## PR マージ時の注意（Claude Code 利用時）
+
+オーケストレータ自身のサブエージェントが作成・レビューした PR を、Claude Code の auto mode がブロックすることがあります（人間による承認が確認できない場合の安全機構）。これは想定内の挙動です。
+その場合は、PR を人間が直接確認・マージするか、ご自身の Claude Code 設定（settings.json の permissions）を必要に応じて調整してください。詳細は Claude Code 自体のドキュメントを参照してください。
+
+---
+
 ## その他（今まで通り）
 
 - テンプレート一式・.workflow の運用は従来どおり。**spec（設計原則等）は .agent-skill-chain/source/spec/ に含まれ、要求・設計の前に参照する。**issue 用フォルダは `.agent-skill-chain/runtime/{YYYYMMDD_HHMMSS_issue_name}/` に作成し、証跡（memo）のファイル名は `YYYYMMDD_HHMMSS_` プレフィックスを付ける。
