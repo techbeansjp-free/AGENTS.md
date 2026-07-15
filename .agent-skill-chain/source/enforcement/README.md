@@ -245,6 +245,14 @@ workflow.db は Git 非追跡（本節冒頭のとおり）かつ、ローカル
 - **grandfather（遡及適用しない）**: 各ゲートは issue ディレクトリ名の `YYYYMMDD_HHMMSS_` プレフィックスが、そのゲート固有の `*_EFFECTIVE_FROM` 環境変数（既定値はゲートごとに異なる。各行を参照）**未満**なら SKIP する。
 - **env 無効化トグル**: 各ゲート固有の `*_GATE_ENABLED=false`（`0`/`no`/`off` も可）を設定すると、他のどの判定よりも先にそのゲート単体を SKIP する（既定はすべて `true`）。
 - **共通 SKIP 条件（fail-open）**: 次のいずれかに該当する場合は SKIP する。workflow.db／sqlite3 が存在しない（DB 非採用環境）。`close/`・`templates/`・`90_issues/` 配下（完了済み・雛形・親集約先のため対象外）。非 git ツリー、または対象コミットの日時が解析不能。
+- **設定方法（配布先向け具体例）**: `*_GATE_ENABLED`・`*_GATE_EFFECTIVE_FROM` 系の env は、audit.sh の実行時に参照できる場所であればどこで設定してもよい。代表的な設定先は次の 2 通り。
+  - **シェル環境変数として設定する場合**: ローカルで `audit.sh`（または pre-push フック経由）を実行するシェルで `export GITHUB_ISSUE_GATE_ENABLED=false` のように export する。その場限りではなく恒常的に効かせたい場合は、`.bashrc`/`.zshrc` や CI 起動前のセットアップスクリプトなど、シェル起動のたびに読み込まれる箇所に記載して永続化する。
+  - **CI（GitHub Actions）で設定する場合**: audit.sh を呼ぶワークフローファイル（例: `.github/workflows/audit.yml`）の `env:` ブロックに直接記載するか、リポジトリまたは Organization の **Settings → Secrets and variables → Actions → Variables** に登録し、ワークフロー内で次のように参照する。
+    ```yaml
+    env:
+      GITHUB_ISSUE_GATE_ENABLED: ${{ vars.GITHUB_ISSUE_GATE_ENABLED }}
+    ```
+  - 有効/無効そのものの判断（このゲートを無効化すべきかどうか）は消費者環境ごとの運用方針に委ねる。判断の正本は `.agent-skill-chain/project/自己拡張ワークフロー.md §8`（`GITHUB_ISSUE_GATE_ENABLED` の例）を参照。本項目は「設定すると決めた場合に、どこに書けば実際に効くか」という汎用的な設定手段のみを示す（判断そのものは代行しない）。
 
 ### 失敗条件 → 実装の所在 → 実装状態 → 強制レベル 対応表（レジストリ・正本）
 
