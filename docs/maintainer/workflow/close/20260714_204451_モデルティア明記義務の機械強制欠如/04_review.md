@@ -212,7 +212,7 @@ PASS:               01f32e62 implement-feature mt=sonnet
 ## 9. docs 更新（継続追随ゲート・DOCS_RULES §継続追随ゲート）
 
 - **要否**: 要（`docs/` 採用リポ・実装変更あり）。
-- **対象**: `docs/03_データ設計/README.md`（§3.4 主要カラム俯瞰へ 3 カラム追記・§3.5 索引件数 7→10 是正）。レビュー記録: [`docs/00_review/20260715_000910_review.md`](../../../00_review/20260715_000910_review.md)（指摘 2→0）。
+- **対象**: `docs/03_データ設計/README.md`（§3.4 主要カラム俯瞰へ 3 カラム追記・§3.5 索引件数 7→10 是正）。レビュー記録: [`docs/00_review/20260715_000910_review.md`](../../../../00_review/20260715_000910_review.md)（指摘 2→0）。
 - **理由**: `workflow_log` に 3 カラム＋3 索引を追加したため、俯瞰と索引件数の as-built 同期が必要だった。`docs/04_機能設計/enforcement/README.md` は失敗条件を source 正本へ委譲し「等」で非網羅列挙のため #38 追加で更新不要（根拠付き不要判定）。
 - 併せて ledger 意味正本 `schema.md`（システム仕様書ではないが正本）も指摘 A として同期済み。
 
@@ -260,8 +260,8 @@ PASS:               01f32e62 implement-feature mt=sonnet
 ## 13. 参考資料
 
 - [`00_要求定義.md`](./00_要求定義.md)・[`01_要件定義.md`](./01_要件定義.md)・[`02_設計.md`](./02_設計.md)・[`03_実装計画.md`](./03_実装計画.md)
-- [.agent-skill-chain/source/enforcement/ci/audit.sh](../../../../.agent-skill-chain/source/enforcement/ci/audit.sh)（#38）・[ledger/schema.sql](../../../../.agent-skill-chain/source/ledger/schema.sql)・[ledger/schema.md](../../../../.agent-skill-chain/source/ledger/schema.md)
-- [docs/00_review/20260715_000910_review.md](../../../00_review/20260715_000910_review.md)（継続追随ゲート記録）
+- [.agent-skill-chain/source/enforcement/ci/audit.sh](../../../../../.agent-skill-chain/source/enforcement/ci/audit.sh)（#38）・[ledger/schema.sql](../../../../../.agent-skill-chain/source/ledger/schema.sql)・[ledger/schema.md](../../../../../.agent-skill-chain/source/ledger/schema.md)
+- [docs/00_review/20260715_000910_review.md](../../../../00_review/20260715_000910_review.md)（継続追随ゲート記録）
 
 ---
 
