@@ -1,0 +1,29 @@
+# worktree-naming-grandfather.txt — #40（非準拠ブランチ名の事後検知）の既存ブランチ救済リスト（BR-9・SC-7）。
+# 本 issue 完了時点に存在したブランチ名のスナップショット。ここに載る名前は grandfather 対象＝#40 で救済（SKIP）する。
+# 生成: git branch --format='%(refname:short)' | LC_ALL=C sort（実装時に 1 度）。追加は Tier3 allowlist としても機能する。
+# 空行・'#' 始まりの行は無視される。
+chore/close-completed-issues
+chore/close-move-20260715-freshサブ分割義務化
+chore/readme-fix-verify-close
+docs/autonomous-scope-includes-pr
+docs/close-link-depth-fix
+docs/model-tier-operating-principles
+feature/package-adapter
+feature/release-push-trigger
+feature/worktree-operation-discipline
+feature/スリム化/20260306
+fix/readme-uninstall-doctor-mismatch
+fix/release-main-push-pat
+main
+worktree-agent-163333gate
+worktree-agent-163408onboarding
+worktree-agent-163639templates
+worktree-agent-163956classify
+worktree-agent-90issues-update
+worktree-agent-a6c2132e73c7bf065
+worktree-agent-a82a768e69d08d732
+worktree-agent-adr6-gap
+worktree-agent-close-move-2small
+worktree-agent-close-move-jikotenken
+worktree-agent-gateenv-readme
+worktree-fix-claude-md-issue-location-override

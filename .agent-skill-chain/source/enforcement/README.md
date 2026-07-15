@@ -387,6 +387,8 @@ workflow.db は Git 非追跡（本節冒頭のとおり）かつ、ローカル
 | #36 PR 紐づけ未記録 | PR 本文へ対応 GitHub Issue の `Closes #<番号>` または `Refs #<番号>` を追記する（`github_issue` が `declined:` の issue は対象外。具体手順は `.agent-skill-chain/project/自己拡張ワークフロー.md`） | PR 本文を修正して push を再試行。 |
 | #37 システム仕様書の作業用issueフォルダ参照禁止 | 該当ソースコード/仕様書の参照を、作業用 issue フォルダへの直接パス参照から要約＋安定参照（見出しやコード内シンボル）へ張り替える | 修正後、audit を再実行する。 |
 | #38 モデルティア明記義務の機械検証未通過 | 委譲時に選定ティア・根拠（fable 時は例外申告）を書記へ `MODEL_TIER`/`TIER_RATIONALE`/`TIER_EXCEPTION` として渡して `workflow_log` へ記録する。tier ゲート自体が不要な環境では `MODEL_TIER_GATE_ENABLED=false` を設定する | 記録後 audit を再実行して FAIL 解消を確認。 |
+| #39 ルート起点 unbounded find の `.worktree` prune 欠落（ベストエフォート lint） | 新規にルート起点 `find "$PROJECT_ROOT"` を書く場合は `-path '*/.worktree' -prune -o …` を必ず入れて `.worktree/` 配下を走査除外する（既存の `$_wfd`/`$WORKFLOW_DIR`/`close` スコープの find は対象外） | 修正後、audit を再実行する。ゲート自体が不要な環境は該当シェルが無ければ SKIP。 |
+| #40 非準拠ブランチ名の事後検知（Tier2・grandfather 救済） | ブランチ名を命名規則 `<type>/<YYYYMMDD_HHMMSS>/<name>`（type=feature/bugfix/hotfix/release/chore）へ是正する。`gh pr checkout` 由来等の外部名や既存名は `.agent-skill-chain/project/worktree-naming-grandfather.txt` へ追記して救済（Tier3 allowlist）。ゲート全体の無効化は env `WORKTREE_NAMING_AUDIT_ENABLED=false` | 是正/追記後 audit を再実行して FAIL 解消を確認。baseline 不在時は SKIP（初回導入前）。 |
 
 - **03_実装計画.md** — 必須ファイル未参照・テスト観点未記載など、計画・仕様の欠損が原因のとき。
 - **該当 issue ドキュメント** — 当該 issue の .agent-skill-chain/runtime/{issue}/ 内の 02_設計・03_実装計画や、issue 本文で補完すべきとき。
