@@ -151,7 +151,7 @@ flowchart TD
 
 **走査スコープ（複数ディレクトリ対応）**: audit.sh の find ベースの走査は単一の `WORKFLOW_DIR` ではなく走査ディレクトリ「リスト」で回す。環境変数 `WORKFLOW_DIRS`（コロン区切り）を指定した場合はその値を**そのまま採用（置換）**し、未指定時の既定リストは `WORKFLOW_DIR`（既定 `.agent-skill-chain/runtime`）＋`docs/maintainer/workflow`（実在時のみ）とする。実在しないディレクトリは除外し重複は 1 回に正規化する。`docs/maintainer/workflow` が存在しない汎用消費者では `.agent-skill-chain/runtime` のみとなる。
 
-**CI 強制対象外（人手監査）**: /clear 境界・safe-clear invariant、別セッション引継ぎの質、fresh サブの収束保証は実行コンテキスト依存のため CI で機械強制せず、PHASES 監査観点（人手レビュー）で担保する。#29（実装前 04 検知）が対象とするのは「実装前 04 の誤生成」のみであり、上記の /clear 境界・引継ぎ・fresh サブ収束は #29 の対象外（CI 非強制・人手監査）である。
+**CI 強制対象外（人手監査）**: /clear 境界・safe-clear invariant、別セッション引継ぎの質、**fresh サブ分割義務およびその収束保証・退行防止継承**は実行コンテキスト依存のため現状 CI で機械強制せず、PHASES 監査観点（人手レビュー）で担保する（機械強制の要否・実装は別 issue へ申し送り）。#29（実装前 04 検知）が対象とするのは「実装前 04 の誤生成」のみであり、上記の /clear 境界・引継ぎ・fresh サブ分割義務／収束は #29 の対象外（CI 非強制・人手監査）である。
 
 ---
 
