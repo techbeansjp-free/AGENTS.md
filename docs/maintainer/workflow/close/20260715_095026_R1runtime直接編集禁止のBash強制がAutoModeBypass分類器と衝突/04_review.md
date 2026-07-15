@@ -10,7 +10,7 @@ document_id: "6f4805cc-0761-41b8-9cc9-126b9bbcc6b1"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座に本ドキュメントを更新すること。
 >
-> **必須**: 本レビューは [.agent-skill-chain/source/REVIEW_RULE.md](../../../../.agent-skill-chain/source/REVIEW_RULE.md) に従う。レビュー深度: **standard**（enforcement 中核 1 ファイル + ルール文書 3 件 + テスト 2 件の変更。regression 面が広いため軽量パスは採らない）。
+> **必須**: 本レビューは [.agent-skill-chain/source/REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) に従う。レビュー深度: **standard**（enforcement 中核 1 ファイル + ルール文書 3 件 + テスト 2 件の変更。regression 面が広いため軽量パスは採らない）。
 
 ---
 
@@ -155,7 +155,7 @@ document_id: "6f4805cc-0761-41b8-9cc9-126b9bbcc6b1"
 
 ## 9. システム仕様書（docs/）の更新 — 継続追随ゲート判定
 
-[DOCS_RULES.md §継続追随ゲート](../../../../.agent-skill-chain/source/DOCS_RULES.md) に基づき、本 issue の実装変更がシステム仕様書（`docs/`）の記載範囲に影響するかを判定した。
+[DOCS_RULES.md §継続追随ゲート](../../../../../.agent-skill-chain/source/DOCS_RULES.md) に基づき、本 issue の実装変更がシステム仕様書（`docs/`）の記載範囲に影響するかを判定した。
 
 - **照合対象**: `docs/04_機能設計/enforcement/README.md`（enforcement を記述する唯一の系統ドキュメント）。
 - **判定**: **更新不要（軽量パス）**。
@@ -208,8 +208,8 @@ PR #92 に対する CodeRabbit（自動レビュー）の指摘 2 件のうち�
 
 
 - [00_要求定義.md](./00_要求定義.md) / [01_要件定義.md](./01_要件定義.md) / [02_設計.md](./02_設計.md) / [03_実装計画.md](./03_実装計画.md)
-- [.agent-skill-chain/source/enforcement/claude/PreToolUse.sh](../../../../.agent-skill-chain/source/enforcement/claude/PreToolUse.sh)
-- [.agent-skill-chain/source/REVIEW_RULE.md](../../../../.agent-skill-chain/source/REVIEW_RULE.md) / [DOCS_RULES.md](../../../../.agent-skill-chain/source/DOCS_RULES.md)
+- [.agent-skill-chain/source/enforcement/claude/PreToolUse.sh](../../../../../.agent-skill-chain/source/enforcement/claude/PreToolUse.sh)
+- [.agent-skill-chain/source/REVIEW_RULE.md](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) / [DOCS_RULES.md](../../../../../.agent-skill-chain/source/DOCS_RULES.md)
 
 ---
 
