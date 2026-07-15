@@ -151,7 +151,7 @@ flowchart TD
 
 **走査スコープ（複数ディレクトリ対応）**: audit.sh の find ベースの走査は単一の `WORKFLOW_DIR` ではなく走査ディレクトリ「リスト」で回す。環境変数 `WORKFLOW_DIRS`（コロン区切り）を指定した場合はその値を**そのまま採用（置換）**し、未指定時の既定リストは `WORKFLOW_DIR`（既定 `.agent-skill-chain/runtime`）＋`docs/maintainer/workflow`（実在時のみ）とする。実在しないディレクトリは除外し重複は 1 回に正規化する。`docs/maintainer/workflow` が存在しない汎用消費者では `.agent-skill-chain/runtime` のみとなる。
 
-**CI 強制対象外（人手監査）**: /clear 境界・safe-clear invariant、別セッション引継ぎの質、fresh サブの収束保証は実行コンテキスト依存のため CI で機械強制せず、PHASES 監査観点（人手レビュー）で担保する。#29（実装前 04 検知）が対象とするのは「実装前 04 の誤生成」のみであり、上記の /clear 境界・引継ぎ・fresh サブ収束は #29 の対象外（CI 非強制・人手監査）である。
+**CI 強制対象外（人手監査）**: /clear 境界・safe-clear invariant、別セッション引継ぎの質、**fresh サブ分割義務およびその収束保証・退行防止継承**は実行コンテキスト依存のため現状 CI で機械強制せず、PHASES 監査観点（人手レビュー）で担保する（機械強制の要否・実装は別 issue へ申し送り）。#29（実装前 04 検知）が対象とするのは「実装前 04 の誤生成」のみであり、上記の /clear 境界・引継ぎ・fresh サブ分割義務／収束は #29 の対象外（CI 非強制・人手監査）である。
 
 ---
 
@@ -211,6 +211,7 @@ SQLite WAL モードでは
 - **scribe 未実行の次 Task 拒否**: 検証・クローズ command で write-workflow-log を経ずに次に進むことを防ぐ（hooks / CI で証跡の有無を確認）。
 - 証跡未実行の検出。証跡は**本則 workflow.db**、memo は過渡的・例外のみ。**ログは書記のみ**が書き込む。workflow.db 以外へのログ書き込み・書記以外の workflow.db 書き込みは禁止（CORE）。
 - **timestamp 付き memo ファイルの作成経路の固定**: `.agent-skill-chain/runtime/{issue}/memo/` 以下の `YYYYMMDD_HHMMSS_*.md` は、write-workflow-log capability または `.agent-skill-chain/source/scripts/new-workflow-memo.sh` 等、**システム時計からプレフィックスを生成する専用スクリプト経由でのみ**作成する。メインが自由入力でプレフィックス付きファイル名を指定して Write/Edit する経路は hooks / CI で検知・拒否する。
+- **R1 の保護範囲は memo・workflow.db\* に絞られた carve-out（issue ドキュメントは Edit/Write 可）**: `.agent-skill-chain/runtime/` 配下への直接 Write/Edit（R1）は、memo（上記のタイムスタンプ規約対象）と `workflow.db`/`workflow.db-wal`/`workflow.db-shm` に対しては全 ROLE 一律で block し続ける。一方、`00_要求定義.md` 等の issue ドキュメント（固定 basename allowlist: `00_要求定義.md`・`00_システム理解.md`・`01_要件定義.md`・`02_設計.md`・`03_実装計画.md`・`04_review.md`・`05_最終確認チェックリスト.md`・`90_issues.md`・`99_PR.md`・`99_PR_review.md`）は、これらの保護を必要としないため Edit/Write を allow する（既存 `.gitignore` 厳密一致例外と同型の carve-out。詳細は [DESIGN.md](DESIGN.md) を参照）。orchestrator（main）自身の直接編集は、この carve-out の有無に関わらず R2 により引き続き block される。
 - CI で CONTRACT 違反・証跡欠落を検出したら reject する（audit.sh 等）。
 - **自立進行ルール違反の検出**（#22・#23）: 通常の作業依頼に対し、メインが毎回ユーザーへ許可確認を前提とする、または「指示文案だけを返して実作業 command を実行しない」場合を違反として扱う（高リスク操作を除く）。audit.sh・subagent-guard いずれも未実装（機械検出不能・AI の自律判断＋人手監査に委ねる）。詳細・判定ルールは §失敗条件と差し戻し #22・#23 を参照。
 - **高リスク操作の事前確認省略**（#24）: 高リスク操作（大量削除・外部サービスへの書き込み等）を事前のユーザー明示確認なしに実行した場合は違反とみなす。audit.sh・subagent-guard いずれも未実装（機械検出不能・AI の自律判断＋人手監査に委ねる）。詳細は §失敗条件と差し戻し #24 を参照。
