@@ -7,7 +7,7 @@
 - 作業は **command**（skill chain）で実行する。command 実行時は run_command と commands/{name}.md を読むこと。
 - プロジェクト概要・詳細は .agent-skill-chain/source/README.md および boot / workflow / commands / skills を参照すること。
 - セットアップ・アップデート（`init`/`upgrade`/`enforce`/`uninstall` の実行コマンド自体）は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) を参照すること。
-- **実装・編集を伴う作業は、常に `git worktree` で `main` から新規ブランチを切って行うこと（メインの作業ツリーを直接変更してはならない）。** 詳細・例外は [.agent-skill-chain/project/自己拡張ワークフロー.md](.agent-skill-chain/project/自己拡張ワークフロー.md) §作業ツリーの worktree 必須化 を参照。
+- **実装・編集を伴う作業は、常に `git worktree` で `main` から新規ブランチを切って行うこと（メインの作業ツリーを直接変更してはならない）。** 詳細・例外の上書き定義が `.agent-skill-chain/project/` にある場合はそれを最優先で参照する（上書き定義の有無・具体的なファイル名はプロジェクトごとに異なるため、本ファイルには具体パスを記載しない）。
 
 ---
 
