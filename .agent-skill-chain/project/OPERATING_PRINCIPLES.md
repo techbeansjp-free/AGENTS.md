@@ -10,7 +10,25 @@
 
 本リポでは、issue 起票局面に限らず**AI 駆動システム開発全般**でトークン・コンテキストへの配慮を基本姿勢とする。設計・実装・レビュー等いずれの作業局面でも、不要な文脈肥大化を避けることを常に意識する。
 
-具体機構（issue-persist 境界・仕様 inventory の索引化＋スライス渡し・fresh サブの構造化ハンドオフ）は引き続き issue 起票局面に特化したものとして [../source/CONTEXT_EFFICIENCY.md §適用のスケーリング](../source/CONTEXT_EFFICIENCY.md#適用のスケーリング) に定める。単一/少数 issue の軽量運用（過剰適用回避）はそこで維持され、本節の一般原則化によって軽量作業に全機構が新たに強制されることはない。
+**fresh サブ分割義務の一般化と起票局面固有機構の区別**: fresh サブ**分割**義務は issue 起票局面に限らず**全工程へ一般化された**。その抽象原則（義務・発火/免除の抽象条件・継承前提・対象範囲の境界）は [../source/CLOSEOUT.md §fresh サブ分割](../source/CLOSEOUT.md#fresh-サブ分割) を正本とし、本節は本リポの具体値（発火 phase の具体一覧・免除の実値）のみを持つ。一方、issue 起票局面**固有**の機構（仕様 inventory の索引化・スライス渡し・fresh サブの構造化ハンドオフ）は、なお起票局面に特化したものとして [../source/CONTEXT_EFFICIENCY.md §適用のスケーリング](../source/CONTEXT_EFFICIENCY.md#適用のスケーリング) に定める（fresh サブ分割義務の一般化とは別実体であり、両者を混同しない）。
+
+### 発火する phase の具体一覧（本リポ）
+
+fresh サブ分割義務が発火する本リポの工程は次のとおり。抽象条件（発火工程）の正本は [../source/CLOSEOUT.md §fresh サブ分割](../source/CLOSEOUT.md#fresh-サブ分割) を参照する（本節は具体値のみを持ち、抽象原則を複製しない）。
+
+- **phase 遷移**: 00（要求）→01（要件）→02（設計）→03（実装計画）→実装→レビュー の各 phase を完了して次 phase へ移る時点。
+- **反復ループ**: レビュー↔修正の反復ループに入る各回。
+
+### 免除の実値（本リポ）
+
+過剰適用回避のため、次の軽量運用は fresh サブ分割義務の対象外とする。免除の抽象条件の正本は [../source/CLOSEOUT.md §fresh サブ分割](../source/CLOSEOUT.md#fresh-サブ分割) を参照する。
+
+| 免除対象 | 実値・根拠 |
+| --- | --- |
+| quick モードの軽微作業 | `mode: quick`（00_要求定義.md frontmatter）。定義は [../source/RULES.md §実行モード](../source/RULES.md#実行モードquick--standard--full) |
+| 単一/少数 issue の軽量運用 | [../source/CONTEXT_EFFICIENCY.md §適用のスケーリング](../source/CONTEXT_EFFICIENCY.md#適用のスケーリング)（issue-persist 境界とフェーズ省略禁止原則のみ適用） |
+
+単一/少数 issue の軽量運用（過剰適用回避）は CONTEXT_EFFICIENCY で維持され、fresh サブ分割義務の一般化によって軽量作業に全機構が新たに強制されることはない。
 
 ---
 
