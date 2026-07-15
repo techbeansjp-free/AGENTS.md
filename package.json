@@ -1,6 +1,6 @@
 {
   "name": "agent-skill-chain",
-  "version": "0.1.32",
+  "version": "0.1.33",
   "description": ".agent-skill-chain/source を正本に各 AI ツール（Claude Code / Cursor / Gemini / Copilot / Codex）へ段階的に配備するワークフロー仕様パッケージ。強制力はツールごとに異なり（Claude Code は runtime hook で強制、他はルール配布/方針適用）、最終保証は CI audit が担う。",
   "type": "module",
   "bin": {
