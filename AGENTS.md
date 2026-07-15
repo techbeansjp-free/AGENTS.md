@@ -80,7 +80,7 @@
 
 | 順 | 対象 | 備考 | 読むタイミング |
 |----|------|------|----------------|
-| 0 | **.agent-skill-chain/project/**（プロジェクトルート） | **存在すれば最優先**。.agents より優先（CORE §ルールの優先順位）。 | 起動時（存在すれば・最優先） |
+| 0 | **.agent-skill-chain/project/**（プロジェクトルート） | **存在すれば最優先**。.agents より優先（CORE §ルールの優先順位）。 | オンデマンド（存在すれば command 実行時等に確認・最優先）。起動時必須コアではない |
 | 1 | 本ファイル（**AGENTS.md**） | 人間・AI の入口。 | 入口（本ファイル） |
 | 2 | .agent-skill-chain/source/boot/**CORE.md** | 実行契約の正本。 | **起動時必須（コア）** |
 | 3 | .agent-skill-chain/source/**IO_CONTRACT.md** | command / skill の入出力契約。 | オンデマンド（command/skill 入出力時） |
@@ -89,7 +89,7 @@
 | 6 | .agent-skill-chain/source/workflow/**PHASES.md** | フェーズ・成果物・DoD。 | **起動時必須（コア）** |
 | 7 | .agent-skill-chain/source/**commands/** および 該当 command | 実行時は LOAD_POLICY に従い run_command と commands/{name}.md を読む。 | オンデマンド（command 実行時・LOAD_POLICY に従う） |
 
-**起動時に必ず読了するのは CORE / LOAD_POLICY / PHASES（＋存在すれば project/）のコアセットのみ**である（`boot/CORE.md §禁止事項` と一致）。LOAD_POLICY.md はこの表には行として現れないが、起動時必須コアに含まれる。IO_CONTRACT / RULES / GETTING_STARTED / commands / skills / テンプレートは、LOAD_POLICY.md のトリガー表に従い該当トリガー発生時にオンデマンドで読む。これは CONTEXT_EFFICIENCY.md の規模比例・過剰適用回避と整合する。
+**起動時に必ず読了するのは CORE / LOAD_POLICY / PHASES のコアセットのみ**である（`boot/CORE.md §禁止事項` と一致）。LOAD_POLICY.md はこの表には行として現れないが、起動時必須コアに含まれる。**順 0 の `.agent-skill-chain/project/` は「最優先」だが起動時必須コアには含めない**——「最優先」はルールの優先順位（同名・同目的なら project/ を採用。CORE §ルールの優先順位）を指すものであり、読むタイミングを指すものではない。project/ は存在する場合に **LOAD_POLICY.md トリガー表の「command を実行するとき」行に従いオンデマンドで確認する**（起動時に全体を一括読了する対象ではない）。IO_CONTRACT / RULES / GETTING_STARTED / commands / skills / テンプレートも同様に、LOAD_POLICY.md のトリガー表に従い該当トリガー発生時にオンデマンドで読む。これは CONTEXT_EFFICIENCY.md の規模比例・過剰適用回避と整合する。
 
 トリガー別の「いつ何を読むか」の詳細は [.agent-skill-chain/source/boot/LOAD_POLICY.md](.agent-skill-chain/source/boot/LOAD_POLICY.md) に委譲する。詳細ルールは各 spec / skills / enforcement を参照する。
 
