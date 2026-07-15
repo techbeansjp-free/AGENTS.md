@@ -177,20 +177,33 @@ document_id: "6f4805cc-0761-41b8-9cc9-126b9bbcc6b1"
 
 ## 12. CodeRabbit 指摘（PR #92・profile: CHILL）への対応
 
-PR #92 に対する CodeRabbit（自動レビュー）の指摘 2 件のうち、指摘1（symlink/hardlink 耐性）への対応を記録する。指摘2（テストカバレッジ）は `test/test-pretooluse-hook.sh` へのテストケース追加で対応済み（別コミット）。
+PR #92 に対する CodeRabbit（自動レビュー）の指摘 2 件のうち、指摘1（symlink/hardlink 耐性）への対応を記録する。指摘2（テストカバレッジ）は `test/test-pretooluse-hook.sh` へのテストケース追加で対応済み。
 
-### 12.1 指摘1: R1 carve-out の symlink/hardlink 耐性
+### 12.1 指摘1: R1 carve-out の symlink/hardlink 耐性（コードで対応・是正済み）
 
 **指摘内容**: R1 の doc basename allowlist 判定（PreToolUse.sh）は `file_path` 文字列の basename のみを見ており、realpath 解決を行わない。symlink/hardlink で basename を詐称すれば、実体が memo・workflow.db\* であっても allowlist に一致させて carve-out を通過できる余地があるのではないか。
 
-**独立検証結果（本エージェントが実コードを再確認）**:
+**前回判断（残存リスク受容・コード変更なし）の撤回と是正**:
 
-- 基名抽出は実際に文字列演算のみで、realpath 解決を経ない。PreToolUse.sh 282 行 `R1_BASENAME="${PATH_TARGET##*/}"` で `PATH_TARGET`（stdin JSON の `tool_input.file_path` をそのまま抽出した値）から `##*/` によるパス区切り文字までの前方一致除去を行うのみであり、シンボリックリンク先の実体パスを解決する処理（`realpath`/`readlink -f` 等）は R1 のこの判定経路に存在しない。指摘は事実として妥当。
-- 一方、symlink/hardlink を作成する `ln` コマンドの実行には Bash が必要である。PreToolUse.sh の Bash 実行判定（R3、352〜406 行）を確認すると、Bash を無条件 allow されるのは 395〜398 行の `(b) 非 scribe の subagent worker（IS_SUBAGENT=1）` のみである。この分岐に該当する worker は scribe 専用の R4/R5 制約（コマンド単独実行制約・複合シェル禁止）を一切適用されず、任意のシェルコマンドを実行できる。
-- 他ロールは symlink を作成できない: orchestrator（main）は 322〜324 行および 399〜401 行で Bash 実行そのものが block される。scribe は 353〜394 行で `write-workflow-log.sh` の単独実行のみに制限され（R4 で複合コマンド禁止・R5 で第 1 トークンの realpath が正本パスと厳密一致することを要求）、`ln -s` 等の任意コマンドは実行できない。unknown/env-worker 等その他ロールは 402〜404 行で Bash 実行自体が block される。
-- したがって、symlink/hardlink で R1 carve-out の basename 判定を回避できる主体は「Bash を無制限に allow されている非 scribe subagent worker」のみに限定される。しかし、この worker は symlink 経路を使わずとも、Bash 経由で `.agent-skill-chain/runtime/` 配下の memo・workflow.db\* に直接書込可能である（R1 は `TOOL == "Edit" || "Write"` の場合のみ判定対象とし、Bash 経由のファイル書込＝`cat >`/`echo >>` 等はそもそも R1 の対象外であるため、278 行の条件分岐に入らず素通りする）。ゆえに symlink 経路を追加で使っても、到達可能な書込先集合は「その worker が既に Bash で直接到達できる範囲」を超えて拡大しない＝新規の権限昇格は生じない。
+初回レビューでは「symlink 作成には Bash が必要で、Bash を持つ非 scribe subagent worker は既に Bash 経由で memo・workflow.db へ直接書込可能だから新規の**権限昇格**は生じない」として残存リスク受容・コード変更なしと結論づけた。**この結論は評価軸が的外れであり撤回する**。R1 の保護目的は「攻撃者による権限昇格の防止」だけでなく、**memo タイムスタンプ整合性・workflow.db 書込整合性の事故防止**でもある。見落としていた攻撃/事故シナリオは、攻撃者が Bash でその場に symlink を作るケースではなく、**事前に（過去のコミット・操作等で）doc 名の symlink が仕込まれているケース**であり、この場合 Bash 権限の有無に関わらず、**善意の通常の Edit/Write が気づかずに実体（memo/・workflow.db）を書き換えてしまう**。CodeRabbit が再レビューで確認したとおり、実コードは是正されておらず指摘は未解決のままであった。
 
-**判定**: 指摘1は理論上の指摘として正しいが、実害を検証した結果、既存のロール権限モデル（R2/R3 の role 軸）の下では新規の権限昇格を生まないため、**残存リスクとして受容し、コード変更は行わない**。R5（scribe 経路）が同種の basename/symlink 詐称攻撃を realpath 正規化（370〜393 行の `norm_path()`）で既に封じているのと同じパターンを R1 の doc carve-out にも適用する defense-in-depth は、コストに対して実効性の低い（到達可能集合を変えない）硬化であるため、本 issue のスコープでは対応せず、将来課題として申し送る。
+**実際に行った是正（コード変更）**:
+
+- `PreToolUse.sh` に 2 ヘルパを追加した:
+  - `r1_norm_path()`: 対象パスを `realpath -m`（欠損許容・末尾 symlink は実体へ解決）→ `readlink -f` → `realpath` の優先順で実体解決する（新規作成予定ファイルと既存 symlink の双方を扱う。R5 の `norm_path()` と同型）。
+  - `r1_has_extra_hardlink()`: `stat` のリンク数（`nlink>1`）を best-effort に検知する。
+- R1 carve-out の allow 分岐（フォールスルー方式は維持）に以下の block 分岐を挿入した:
+  - 実体解決先が `/memo/` を含む、または basename が `workflow.db*` に一致 → block（保護パスへの symlink すり替え）。
+  - symlink が実在するのに解決不能（`-L` かつ解決結果が空）→ 安全側で block（fail-closed）。
+  - doc 名の通常ファイルが `nlink>1` → block（hardlink による inode 共有の疑い）。
+- 限界は `is_sqlite3_invocation` と同じスタイルで正直にコメント化した（hardlink 相手側リンク名の非列挙・`stat`/`realpath` 不在時の省略）。
+
+**検証（回帰テスト・全 PASS）**:
+
+- `test/test-pretooluse-hook.sh` に UC14（jq/nojq 両系統・各9アサーション＝計18件）を追加。実際に隔離ディレクトリへ symlink/hardlink を作成し、①workflow.db を指す symlink Write→exit2、②memo/ を指す symlink Edit→exit2、③workflow.db へのハードリンク Write→exit2、④実在通常 doc→exit0、⑤未実在新規 doc→exit0、⑥非保護 doc を指す symlink→exit0 を検証（すべて PASS）。
+- `test/test-pretooluse-hook.sh` は既存 140 + 新規 18 = **158 件全 PASS**。`test/e2e-claude-hook.sh` は 6 件全 PASS。
+
+**判定**: 指摘1は妥当であり、**コードで是正済み**（残存リスク受容の前回判断は撤回）。実体解決により、doc 名の symlink/hardlink による保護対象すり替えは block されるようになり、R1 の保護目的（事故防止を含む）が basename 詐称に対しても維持される。設計判断は 02_設計 ADR-4 に記録。
 
 
 

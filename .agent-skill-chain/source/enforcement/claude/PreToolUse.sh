@@ -168,6 +168,53 @@ is_sqlite3_invocation() {
 }
 
 # ---------------------------------------------------------------------------
+# r1_norm_path <path> — R1 carve-out 用のパス正規化（symlink 実体解決）。
+#   R5 の norm_path と同型だが、Edit/Write の対象は **まだ存在しないファイル**（Write 新規作成）や
+#   **既存 symlink**（同名の symlink が先に置かれているケース）の双方を扱う必要があるため、
+#   欠損許容（missing 可）フラグを優先して用いる:
+#     ① realpath -m（欠損コンポーネントを許容しつつ、途中・末尾の既存 symlink は実体へ解決する）。
+#     ② readlink -f（同様に末尾欠損を許容し symlink を追う）。
+#     ③ realpath（-m 非対応な古い実装向け）。
+#   いずれも無い環境では空を返す（呼び出し側で symlink 実在時は fail-closed に倒す）。
+#   純 bash の cd+pwd 代替は末尾 symlink を解決できない（basename が symlink 名のまま残る）ため、
+#   ここでは採らない。この限界は呼び出し側の `-L` チェックで補償する（下記 R1 参照）。
+# ---------------------------------------------------------------------------
+r1_norm_path() {
+  local p="$1"
+  [[ -z "$p" ]] && return 0
+  if command -v realpath &>/dev/null && realpath -m -- "." &>/dev/null; then
+    realpath -m -- "$p" 2>/dev/null
+  elif command -v readlink &>/dev/null && readlink -f -- "." &>/dev/null; then
+    readlink -f -- "$p" 2>/dev/null
+  elif command -v realpath &>/dev/null; then
+    realpath -- "$p" 2>/dev/null
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# r1_has_extra_hardlink <path> — R1 carve-out 用のハードリンク簡易検知（best-effort）。
+#   symlink と異なりハードリンクは「リンク先」を持たず realpath で実体をたどれないため、
+#   carve-out 対象の doc 名の通常ファイルが実は workflow.db や memo と inode を共有している
+#   （`ln workflow.db 00_要求定義.md` 等）ケースを完全に見分けることはシェルでは難しい。
+#   ここでは実用的な信号として **st_nlink（ハードリンク数）> 1** を用い、doc として異常な
+#   リンク数を持つ通常ファイルは carve-out を fail-closed で拒否する（allow せず R1 の通常 block へ）。
+#   限界（is_sqlite3_invocation 等と同じく正直に明記）:
+#     - 別名（相手側リンク）の実体までは列挙できないため、真に workflow.db 等を指すかまでは断定しない。
+#       通常の issue doc は nlink==1 のため、実運用での誤 block はほぼ起きないが、
+#       ごく稀に「意図的にハードリンクした正当な doc」も carve-out からは外れて block される。
+#     - `stat` が無い環境ではこの検査を省略する（return 1＝追加リンク未検知）。真の防御は
+#       symlink 実体解決（r1_norm_path）と R2/R3 の role 軸、CI audit が多層で担う。
+# ---------------------------------------------------------------------------
+r1_has_extra_hardlink() {
+  local f="$1" n
+  command -v stat &>/dev/null || return 1
+  n="$(stat -c %h -- "$f" 2>/dev/null)"          # GNU: ハードリンク数
+  [[ "$n" =~ ^[0-9]+$ ]] || n="$(stat -f %l -- "$f" 2>/dev/null)"   # BSD fallback
+  [[ "$n" =~ ^[0-9]+$ ]] && (( n > 1 )) && return 0
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # parse_input — 唯一 stdin/env を読む入力層。TOOL / PATH_TARGET / CMD / ROLE を確定する。
 #   stdin が JSON 様なら json_get で抽出、そうでなければ env を後方互換で読む。
 # ---------------------------------------------------------------------------
@@ -274,6 +321,16 @@ if [[ -n "$TOOL" ]]; then
   #   かつ IS_SUBAGENT!="1" の Edit/Write 拒否）が必ず評価され、orchestrator（main）自身の直接編集は carve-out
   #   の有無に関わらず引き続き block される（R2 との独立性を保つための必須の実装制約）。
   #   ALLOWED_DOC_BASENAMES に含まれないファイル（memo・workflow.db* を含む）への禁止は一切広げない。
+  #
+  #   symlink/hardlink 実体すり替え耐性（CodeRabbit PR#92 指摘対応）:
+  #     文字列 basename だけを見ると、doc 名（例 00_要求定義.md）の **symlink** が実体として memo 配下や
+  #     workflow.db* を指していた場合、通常の（善意の）Edit/Write が気づかず実体を破壊しうる（権限昇格では
+  #     なく事故防止の問題。R1 本来の目的＝memo タイムスタンプ整合性・workflow.db 書込整合性の保護は、事前に
+  #     仕込まれた symlink 経由の書換からも守られるべき）。そこで basename が allowlist に一致した後、
+  #     r1_norm_path で **realpath 解決した実体パス**を再検査し、解決先が (a) /memo/ を含む または
+  #     (b) basename が workflow.db* に一致するなら block する。symlink が既に存在するのに解決できない場合も
+  #     （検証不能＝安全側で）block する。hardlink は実体をたどれないため r1_has_extra_hardlink で
+  #     nlink>1 の異常リンク数を best-effort に検知して block する（限界は各関数コメント参照）。
   ALLOWED_DOC_BASENAMES="00_要求定義.md 00_システム理解.md 01_要件定義.md 02_設計.md 03_実装計画.md 04_review.md 05_最終確認チェックリスト.md 90_issues.md 99_PR.md 99_PR_review.md"
   if [[ "$TOOL" == "Edit" || "$TOOL" == "Write" ]]; then
     if [[ "$PATH_TARGET" == ".agent-skill-chain/runtime/.gitignore" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/runtime/.gitignore ]]; then
@@ -288,7 +345,21 @@ if [[ -n "$TOOL" ]]; then
         fi
       done
       if [[ "$R1_DOC_ALLOWED" == "1" ]] && [[ "$PATH_TARGET" != *"/memo/"* ]]; then
-        : # allow（issue ドキュメントの carve-out・no-op フォールスルーで後続 R2 評価を妨げない）
+        # carve-out 候補。ここで symlink/hardlink による実体すり替えを実体パスで再検査する。
+        R1_REAL="$(r1_norm_path "$PATH_TARGET")"
+        R1_REAL_BASE="${R1_REAL##*/}"
+        if [[ -L "$PATH_TARGET" && -z "$R1_REAL" ]]; then
+          # symlink は実在するが実体解決できない（realpath/readlink 不在等）＝検証不能。安全側で block。
+          block "carve-out target is an unresolved symlink; refusing to follow / carve-out 対象が解決不能な symlink のため拒否します"
+        elif [[ -n "$R1_REAL" ]] && { [[ "$R1_REAL" == *"/memo/"* ]] || [[ "$R1_REAL_BASE" == workflow.db* ]]; }; then
+          # symlink 実体が保護対象（memo 配下 / workflow.db*）を指している。block。
+          block "carve-out target resolves to a protected path (memo/ or workflow.db*) via symlink / carve-out 対象の実体が保護パス（memo/ または workflow.db*）を指すため拒否します"
+        elif [[ -f "$PATH_TARGET" && ! -L "$PATH_TARGET" ]] && r1_has_extra_hardlink "$PATH_TARGET"; then
+          # doc 名の通常ファイルが nlink>1＝ハードリンクで保護対象と inode 共有の疑い。best-effort に block。
+          block "carve-out target is a hard link (nlink>1); refusing to follow / carve-out 対象がハードリンク（nlink>1）のため拒否します"
+        else
+          : # allow（issue ドキュメントの carve-out・no-op フォールスルーで後続 R2 評価を妨げない）
+        fi
       else
         block "direct edit of .agent-skill-chain/runtime/ is forbidden / .agent-skill-chain/runtime/ の直接編集は禁止です"
       fi

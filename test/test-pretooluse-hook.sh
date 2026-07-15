@@ -61,7 +61,7 @@ make_nojq_path() {
   mkdir -p "$d"
   # よく使うコアコマンドを symlink（jq は意図的に含めない）。
   local cmd src
-  for cmd in bash sh cat sed grep head env dirname basename realpath readlink printf echo cut tr; do
+  for cmd in bash sh cat sed grep head env dirname basename realpath readlink printf echo cut tr stat ln; do
     src="$(command -v "$cmd" 2>/dev/null)" || continue
     ln -sf "$src" "$d/$cmd" 2>/dev/null || true
   done
@@ -961,6 +961,80 @@ run_uc13() {
 }
 run_uc13 "jq" "$JQ_PATH"
 run_uc13 "nojq" "$NOJQ_PATH"
+
+# =====================================================================================
+# UC14: R1 carve-out の symlink/hardlink 実体すり替え耐性（CodeRabbit PR#92 指摘1 対応）
+#   docs/maintainer/workflow/20260715_095026_.../02_設計.md ADR-4・03_実装計画.md タスク6 に対応。
+#   実際に隔離ディレクトリ内へ symlink/hardlink を作成し、doc 名で保護対象（memo/・workflow.db*）を
+#   指す実体を realpath 解決で block できることを検証する。tmp 隔離のため絶対パスを file_path に渡す。
+#   （JSON の file_path が .agent-skill-chain/runtime/ を含めば R1 の対象になる＝$TMP 配下の絶対パスでも成立。）
+# =====================================================================================
+echo "== UC14: R1 carve-out の symlink/hardlink 実体すり替え耐性 =="
+run_uc14() {
+  local label="$1" pathval="$2"
+  # 各ケース独立の隔離 runtime ツリーを作る（$TMP 配下・本リポ非破壊）。
+  local base="$TMP/r1sym_$label"
+  rm -rf "$base"
+  mkdir -p "$base/.agent-skill-chain/runtime/x/memo"
+  printf 'db\n'  > "$base/.agent-skill-chain/runtime/workflow.db"
+  printf 'memo\n'> "$base/.agent-skill-chain/runtime/x/memo/foo.md"
+  local rt="$base/.agent-skill-chain/runtime"
+
+  # シナリオ1: doc 名の symlink が workflow.db を指す → block（実体解決）
+  # Given: 00_要求定義.md が ../workflow.db を指す symlink
+  ln -sf ../workflow.db "$rt/x/00_要求定義.md"
+  local j1="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$rt/x/00_要求定義.md\"}}"
+  run_pre "$pathval" worker "$j1"
+  assert_eq 2 "$RC" "UC14[$label]: workflow.db を指す symlink(doc名) の Write は exit 2"
+  assert_grep "protected path" "$ERR" "UC14[$label]: symlink→workflow.db は保護パス理由で block"
+
+  # シナリオ2: doc 名の symlink が memo/ 配下を指す → block
+  # Given: 02_設計.md が memo/foo.md を指す symlink
+  ln -sf memo/foo.md "$rt/x/02_設計.md"
+  local j2="{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$rt/x/02_設計.md\"}}"
+  run_pre "$pathval" worker "$j2"
+  assert_eq 2 "$RC" "UC14[$label]: memo/ を指す symlink(doc名) の Edit は exit 2"
+  assert_grep "protected path" "$ERR" "UC14[$label]: symlink→memo/ は保護パス理由で block"
+
+  # シナリオ3: doc 名のハードリンクが workflow.db と inode 共有 → block（nlink>1 検知）
+  # Given: 01_要件定義.md を workflow.db へのハードリンクとして作成
+  ln -f "$rt/workflow.db" "$rt/x/01_要件定義.md" 2>/dev/null
+  if [[ -f "$rt/x/01_要件定義.md" && ! -L "$rt/x/01_要件定義.md" ]]; then
+    local j3="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$rt/x/01_要件定義.md\"}}"
+    run_pre "$pathval" worker "$j3"
+    assert_eq 2 "$RC" "UC14[$label]: workflow.db へのハードリンク(doc名) の Write は exit 2"
+    assert_grep "hard link" "$ERR" "UC14[$label]: hardlink は nlink>1 理由で block"
+  else
+    ok "UC14[$label]: ハードリンク未作成（同一 FS でない等）につきスキップ"
+  fi
+
+  # シナリオ4（回帰・偽陰性防止）: doc 名の実在通常ファイル（symlink/hardlink でない）は allow のまま
+  # Given: 03_実装計画.md が普通の通常ファイル（nlink==1）
+  printf '# plan\n' > "$rt/x/03_実装計画.md"
+  local j4="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$rt/x/03_実装計画.md\"}}"
+  run_pre "$pathval" worker "$j4"
+  assert_eq 0 "$RC" "UC14[$label]: 実在する通常 doc ファイルの Write は exit 0（誤 block しない）"
+
+  # シナリオ5（回帰・偽陰性防止）: 新規作成予定（未実在）の doc は allow のまま（realpath -m 欠損許容）
+  # Given: 04_review.md はまだ存在しない（Write が新規作成する想定）
+  local j5="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$rt/x/04_review.md\"}}"
+  run_pre "$pathval" worker "$j5"
+  assert_eq 0 "$RC" "UC14[$label]: 未実在の新規 doc の Write は exit 0（欠損許容で誤 block しない）"
+
+  # シナリオ6（回帰）: doc 名の symlink が別の正当な doc（非保護）を指す場合は allow のまま
+  # Given: 90_issues.md が同ディレクトリの別の通常 doc を指す symlink
+  printf '# real\n' > "$rt/x/real_doc_target.md"
+  # real_doc_target.md は allowlist 外だが、symlink の basename(90_issues.md)で allowlist 判定され、
+  # 実体解決先は memo/・workflow.db* のいずれでもないため allow される（保護対象すり替えではない）。
+  ln -sf real_doc_target.md "$rt/x/90_issues.md"
+  local j6="{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$rt/x/90_issues.md\"}}"
+  run_pre "$pathval" worker "$j6"
+  assert_eq 0 "$RC" "UC14[$label]: 非保護 doc を指す symlink(doc名) の Edit は exit 0（過剰 block しない）"
+
+  rm -rf "$base"
+}
+run_uc14 "jq" "$JQ_PATH"
+run_uc14 "nojq" "$NOJQ_PATH"
 
 # ---- 本番 DB / 本リポ非破壊の確認（隔離環境のみを触ったこと） ----
 echo "== 非破壊確認 =="
