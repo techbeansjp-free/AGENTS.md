@@ -167,6 +167,349 @@ is_sqlite3_invocation() {
   return 1
 }
 
+# >>> worktree-discipline lib (BEGIN) ---------------------------------------
+# worktree 運用規律（命名規則 Tier1 強制・削除前 untracked 退避）の純関数・副作用関数群。
+# 本ブロックは既存関数・R1〜R6 を変更せず**追加のみ**（02_設計 ADR-1/ADR-2）。
+# 全経路 fail-safe: 対象外・判定不能・内部エラーは allow 側に倒し、作成形と確定した命名違反のみ block。
+# 単体テストは本 BEGIN/END マーカ間を sed 抽出して source する（test-worktree-discipline.sh）。
+#
+# git_subcommand_of / _wt_effective — git サブコマンド抽出のトークナイザ（ADR-3・fable 助言統合）。
+#   ラッパー（command/env/nohup/…）・先頭 VAR=val・パス付き git を読み飛ばし、グローバルオプションを
+#   スキップしてサブコマンド以降の argv を WT_ARGV に格納する。未知オプションは 1 進みで allow 側に自然
+#   落下（誤 block でなく見逃しに倒れる非対称）。bare `--exec-path` は実 git がそこで exec-path を印字して
+#   終了し後続サブコマンドを実行しないため（実機 git 2.43.0 で確認・observed_runtime）、サブコマンド無し
+#   （return 1）として扱う（`--exec-path=<path>` の = 形は `--*=*` で自己完結・後続を実行するため別扱い）。
+_wt_effective() {
+  local LC_ALL=C; local -a tok; read -ra tok <<< "$1"
+  WT_ARGV=()
+  local i=0 n=${#tok[@]}
+  while (( i < n )); do
+    case "${tok[i]}" in
+      *=*) ((i++)); continue ;;                 # VAR=val 代入
+      command|env|nohup|nice|stdbuf) ((i++)); continue ;;  # ラッパー
+      *) break ;;
+    esac
+  done
+  (( i < n )) || return 1
+  [[ "${tok[i]##*/}" != "git" ]] && return 1    # basename が git でなければ対象外
+  ((i++))
+  while (( i < n )); do
+    case "${tok[i]}" in
+      --*=*|-C?*|-c?*) ((i++)) ;;                # 結合/=形は自己完結 → 1 進む
+      --exec-path) return 1 ;;                   # bare --exec-path: git はここで終了・サブコマンド無し
+      -C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source) ((i+=2)) ;;  # 引数を別トークンで取る
+      -p|--paginate|-P|--no-pager|--bare|--no-replace-objects|--literal-pathspecs|--no-optional-locks|--no-advice) ((i++)) ;;  # 引数なし既知フラグ
+      -*) ((i++)) ;;                             # 未知オプション: 1 進み（allow 側へ自然落下）
+      *) break ;;                                # サブコマンド確定
+    esac
+  done
+  (( i < n )) || return 1
+  WT_ARGV=( "${tok[@]:i}" )
+  return 0
+}
+
+git_subcommand_of() {
+  local LC_ALL=C
+  _wt_effective "$1" || return 0
+  printf '%s' "${WT_ARGV[0]}"
+}
+
+# validate_name <固有名> — 固有名（<name> 部分）の妥当性（ADR-4・LC_ALL=C ブラックリスト＋構造＋長さ上限）。
+#   日本語（マルチバイト）は許容し、ASCII 危険文字・制御文字・先頭 . / 先頭 - / .. / 末尾 .lock を排除する。
+#   長さ上限 200 バイト（LC_ALL=C 下の ${#name} はバイト数。ext4 NAME_MAX=255 に安全マージン）。
+validate_name() {
+  local LC_ALL=C name="$1"
+  [[ -z "$name" ]] && return 1
+  (( ${#name} > 200 )) && return 1
+  case "$name" in
+    .*|-*|*..*|*.lock) return 1 ;;              # 先頭./先頭-/親escape/refロック
+  esac
+  case "$name" in
+    *[]]*) return 1 ;;                          # ] を含む（] は bracket 先頭で扱えないため単独判定）
+  esac
+  local danger ctl
+  danger=$(printf ' \t/;&|$`"'\''\\<>(){}[^~:#?*!\177')   # ASCII 危険文字（space/tab/… /0x7f）
+  case "$name" in
+    *["$danger"]*) return 1 ;;
+  esac
+  ctl=$(printf '\1\2\3\4\5\6\7\10\11\12\13\14\15\16\17\20\21\22\23\24\25\26\27\30\31\32\33\34\35\36\37')
+  case "$name" in
+    *["$ctl"]*) return 1 ;;                     # 制御文字 0x01-0x1f
+  esac
+  return 0
+}
+
+# validate_branch_ref <ref> — ブランチ名/ref が <type>/<YYYYMMDD_HHMMSS>/<固有名> 準拠か。
+#   type ∈ {feature,bugfix,hotfix,release,chore}・ts=[0-9]{8}_[0-9]{6}・name は validate_name（/ 不可＝3 階層固定）。
+validate_branch_ref() {
+  local LC_ALL=C ref="$1" type ts name rest
+  [[ -z "$ref" ]] && return 1
+  type="${ref%%/*}"; rest="${ref#*/}"
+  [[ "$rest" == "$ref" ]] && return 1           # / 無し（1 階層のみ）
+  ts="${rest%%/*}"; name="${rest#*/}"
+  [[ "$name" == "$rest" ]] && return 1          # 2 階層のみ
+  case "$type" in feature|bugfix|hotfix|release|chore) ;; *) return 1 ;; esac
+  [[ "$ts" =~ ^[0-9]{8}_[0-9]{6}$ ]] || return 1
+  validate_name "$name" || return 1             # name に / があれば validate_name が弾く（4 階層以上拒否）
+  return 0
+}
+
+# validate_worktree_path <path> — worktree ディレクトリが .worktree/<type>/<ts>/<name>/ 準拠か。
+validate_worktree_path() {
+  local LC_ALL=C p="${1%/}" rest
+  p="${p#./}"
+  case "$p" in *..*) return 1 ;; esac           # 親 escape
+  case "$p" in
+    .worktree/*) rest="${p#.worktree/}" ;;
+    */.worktree/*) rest="${p##*/.worktree/}" ;; # 絶対/ネスト表記
+    *) return 1 ;;                              # .worktree 配下でない
+  esac
+  validate_branch_ref "$rest"
+}
+
+# _wt_extract_creation — WT_ARGV から作成されるブランチ名・worktree path を抽出（Query・副作用なし）。
+#   出力: WT_CREATE(0/1) WT_CREATE_BRANCH WT_CREATE_PATH。作成形と確定できないものは WT_CREATE=0（fail-open）。
+_wt_extract_creation() {
+  WT_CREATE=0; WT_CREATE_BRANCH=""; WT_CREATE_PATH=""
+  local sub="${WT_ARGV[0]:-}" i n tok
+  n=${#WT_ARGV[@]}
+  case "$sub" in
+    worktree)
+      [[ "${WT_ARGV[1]:-}" == "add" ]] || return 0   # add のみ作成（list/remove/prune/move 等は対象外）
+      local -a pos=(); local branch=""
+      i=2
+      while (( i < n )); do
+        tok="${WT_ARGV[i]}"
+        case "$tok" in
+          -b|-B) ((i++)); branch="${WT_ARGV[i]:-}" ;;
+          -b?*|-B?*) branch="${tok#-?}" ;;      # -bNAME 結合形
+          --reason) ((i++)) ;;                  # 引数取りオプション
+          --*=*) : ;;
+          -*) : ;;
+          *) pos+=("$tok") ;;
+        esac
+        ((i++))
+      done
+      local wtpath="${pos[0]:-}"
+      [[ -z "$wtpath" ]] && return 0            # path 無し＝曖昧 → allow
+      WT_CREATE=1; WT_CREATE_PATH="$wtpath"
+      if [[ -n "$branch" ]]; then
+        WT_CREATE_BRANCH="$branch"
+      else
+        local b="${wtpath%/}"; WT_CREATE_BRANCH="${b##*/}"   # -b 無し＝path basename が暗黙ブランチ
+      fi
+      ;;
+    switch)
+      i=1
+      while (( i < n )); do
+        tok="${WT_ARGV[i]}"
+        case "$tok" in
+          -c|-C) ((i++)); WT_CREATE_BRANCH="${WT_ARGV[i]:-}"; WT_CREATE=1 ;;
+          -c?*|-C?*) WT_CREATE_BRANCH="${tok#-?}"; WT_CREATE=1 ;;
+        esac
+        ((i++))
+      done
+      ;;
+    checkout)
+      i=1
+      while (( i < n )); do
+        tok="${WT_ARGV[i]}"
+        case "$tok" in
+          -b|-B) ((i++)); WT_CREATE_BRANCH="${WT_ARGV[i]:-}"; WT_CREATE=1 ;;
+          -b?*|-B?*) WT_CREATE_BRANCH="${tok#-?}"; WT_CREATE=1 ;;
+        esac
+        ((i++))
+      done
+      ;;
+    branch)
+      # 作成形のみ: 位置引数 name が 1 つ以上あり listing/削除/rename/copy/変更系フラグを含まない。
+      local -a pos=(); local noncreate=0
+      i=1
+      while (( i < n )); do
+        tok="${WT_ARGV[i]}"
+        case "$tok" in
+          -d|-D|--delete|-m|-M|--move|-c|-C|--copy|-l|--list|-a|--all|-r|--remotes|-v|-vv|--verbose|--edit-description|--set-upstream-to|--set-upstream-to=*|-u|--unset-upstream|--contains|--no-contains|--merged|--no-merged|--points-at|--show-current|--format|--format=*|--sort|--sort=*|-t|--track|--track=*|--no-track|--recurse-submodules)
+            noncreate=1 ;;
+          -*) : ;;
+          *) pos+=("$tok") ;;
+        esac
+        ((i++))
+      done
+      if [[ "$noncreate" -eq 0 && -n "${pos[0]:-}" ]]; then
+        WT_CREATE=1; WT_CREATE_BRANCH="${pos[0]}"
+      fi
+      ;;
+  esac
+  return 0
+}
+
+# is_worktree_destroy — 削除形（worktree remove / clean -x|-X / clean が .worktree を対象）検知（Query）。
+#   出力: WT_DESTROY(0/1) WT_DESTROY_PATH（対象 path。無ければ空＝呼び出し側で CWD 既定）。
+is_worktree_destroy() {
+  WT_DESTROY=0; WT_DESTROY_PATH=""
+  local sub="${WT_ARGV[0]:-}" i n tok
+  n=${#WT_ARGV[@]}
+  case "$sub" in
+    worktree)
+      if [[ "${WT_ARGV[1]:-}" == "remove" ]]; then   # --force 有無問わず
+        WT_DESTROY=1
+        i=2; local -a pos=()
+        while (( i < n )); do
+          tok="${WT_ARGV[i]}"
+          case "$tok" in -*) : ;; *) pos+=("$tok") ;; esac
+          ((i++))
+        done
+        WT_DESTROY_PATH="${pos[0]:-}"
+      fi
+      ;;
+    clean)
+      i=1; local -a pos=(); local hasx=0
+      while (( i < n )); do
+        tok="${WT_ARGV[i]}"
+        case "$tok" in
+          --) ((i++)); while (( i < n )); do pos+=("${WT_ARGV[i]}"); ((i++)); done; break ;;
+          -x|-X) hasx=1 ;;                       # 単独 -x/-X
+          --*) : ;;
+          -*x*|-*X*) hasx=1 ;;                   # 結合形 -xf/-dfx 等
+          -*) : ;;
+          *) pos+=("$tok") ;;
+        esac
+        ((i++))
+      done
+      [[ "$hasx" -eq 1 ]] && { WT_DESTROY=1; WT_DESTROY_PATH="${pos[0]:-}"; }
+      ;;
+  esac
+  # clean が対象パスに .worktree を含む場合も検知対象に含める（BR-12・保全のみ）。
+  # worktree サブコマンドの破壊性は remove で確定済み（add は作成のため対象外）。
+  if [[ "$WT_DESTROY" -eq 0 && "$sub" == "clean" ]]; then
+    for tok in "${WT_ARGV[@]}"; do
+      case "$tok" in
+        -*) continue ;;
+        *.worktree|*.worktree/*|.worktree|.worktree/*) WT_DESTROY=1; WT_DESTROY_PATH="$tok" ;;
+      esac
+    done
+  fi
+  [[ "$WT_DESTROY" -eq 1 ]] && return 0 || return 1
+}
+
+# worktree_name_reject <got> — 命名違反 reject（期待パターン＋got＋fix example・日英併記・BR-16）。exit 2。
+worktree_name_reject() {
+  local got="$1"
+  {
+    echo "[enforcement:block] 違反(BLOCK): worktree/branch name violates naming rule / worktree・ブランチ名が命名規則に違反しています"
+    echo "  expected: <type>/<YYYYMMDD_HHMMSS>/<name>  (type = feature|bugfix|hotfix|release|chore)"
+    echo "  got:      $got"
+    echo "  fix example: feature/20260716_143000/worktree運用規律"
+    echo "  worktree path must be under: .worktree/<type>/<YYYYMMDD_HHMMSS>/<name>/"
+  } >&2
+  exit 2
+}
+
+# _wt_purge_trash <trash_root> — 退避先の lazy purge（保持期限超過エントリのみ削除・自 trash 配下のみ・SC-5）。
+_wt_purge_trash() {
+  local trash="$1"
+  [[ -d "$trash" ]] || return 0
+  local retention="${WORKTREE_TRASH_RETENTION_DAYS:-14}"
+  [[ "$retention" =~ ^[0-9]+$ ]] || retention=14
+  local now cutoff entry base
+  now="$(date +%s 2>/dev/null)" || return 0
+  cutoff=$(( now - retention*86400 ))
+  for entry in "$trash"/*/; do
+    [[ -d "$entry" ]] || continue
+    base="${entry%/}"; base="${base##*/}"
+    if [[ "$base" =~ ^([0-9]{8})_([0-9]{6})_ ]]; then
+      local d="${BASH_REMATCH[1]}" t="${BASH_REMATCH[2]}" eepoch
+      eepoch="$(date -d "${d:0:4}-${d:4:2}-${d:6:2} ${t:0:2}:${t:2:2}:${t:4:2}" +%s 2>/dev/null)" || continue
+      (( eepoch < cutoff )) && rm -rf "$entry" 2>/dev/null
+    fi
+  done
+}
+
+# worktree_untracked_rescue <target> — 削除前 untracked を退避先へ copy 保全（Command・fail-safe・block しない）。
+#   copy（move でなく）で原本を保持し退避失敗が原本を壊さない（ADR-5）。実削除は本来のコマンドに委ねる。
+worktree_untracked_rescue() {
+  local target="$1"
+  [[ -z "$target" ]] && return 0
+  command -v git >/dev/null 2>&1 || return 0
+  [[ -d "$target" ]] || return 0
+  git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  local trash ts base dest
+  trash="${WORKTREE_TRASH_ROOT:-.claude/.worktree-trash}"
+  ts="$(TZ=Asia/Tokyo date +%Y%m%d_%H%M%S 2>/dev/null || date +%Y%m%d_%H%M%S 2>/dev/null || echo unknown)"
+  base="${target%/}"; base="${base##*/}"
+  local -a untracked=()
+  while IFS= read -r -d '' rec; do
+    [[ "$rec" == '??'* ]] && untracked+=("${rec:3}")   # porcelain -z: "?? <path>\0"
+  done < <(git -C "$target" status --porcelain=v1 -z 2>/dev/null)
+  if [[ ${#untracked[@]} -eq 0 ]]; then
+    _wt_purge_trash "$trash"
+    return 0                                     # untracked 無し → 退避しない（BR-1・SC-4）
+  fi
+  dest="$trash/${ts}_${base}"
+  if ! mkdir -p "$dest" 2>/dev/null; then
+    echo "[enforcement:warn] worktree untracked rescue: 退避先を作成できませんでした（削除は継続・保全のみ失敗）: $dest" >&2
+    return 0
+  fi
+  local f rc=0 src ddir
+  for f in "${untracked[@]}"; do
+    [[ -z "$f" ]] && continue
+    case "$f" in .git|.git/*|*/.git|*/.git/*) continue ;; esac   # .git 実体は除外
+    src="$target/$f"
+    ddir="$dest/$(dirname "$f")"
+    mkdir -p "$ddir" 2>/dev/null || { rc=1; continue; }
+    cp -a "$src" "$ddir/" 2>/dev/null || rc=1
+  done
+  if [[ "$rc" -eq 0 ]]; then
+    echo "[enforcement:info] rescued ${#untracked[@]} untracked path(s) to $dest (restore from there) / untracked 成果物を退避しました（復元元）: $dest" >&2
+  else
+    echo "[enforcement:warn] worktree untracked rescue: 一部の退避に失敗しました（削除は継続）: $dest" >&2
+  fi
+  _wt_purge_trash "$trash"
+  return 0
+}
+
+# worktree_name_enforce <cmd> — R7 本体: CMD をセグメント分割し、作成形の命名違反のみ block（exit 2）。
+worktree_name_enforce() {
+  local cmd="$1" seg normalized
+  normalized="${cmd//;/$'\n'}"; normalized="${normalized//&/$'\n'}"; normalized="${normalized//\|/$'\n'}"
+  while IFS= read -r seg; do
+    [[ -z "${seg//[[:space:]]/}" ]] && continue
+    _wt_effective "$seg" || continue
+    case "${WT_ARGV[0]:-}" in
+      worktree|switch|checkout|branch) ;;
+      *) continue ;;
+    esac
+    _wt_extract_creation
+    [[ "${WT_CREATE:-0}" == "1" ]] || continue   # 作成形と確定できなければ allow（fail-open）
+    if ! validate_branch_ref "$WT_CREATE_BRANCH"; then
+      worktree_name_reject "$WT_CREATE_BRANCH"    # exit 2
+    fi
+    if [[ -n "$WT_CREATE_PATH" ]] && ! validate_worktree_path "$WT_CREATE_PATH"; then
+      worktree_name_reject "$WT_CREATE_PATH (worktree path)"   # exit 2
+    fi
+  done <<< "$normalized"
+}
+
+# worktree_destroy_rescue <cmd> — R8 本体: CMD をセグメント分割し、削除形の前に untracked を退避（block しない）。
+worktree_destroy_rescue() {
+  local cmd="$1" seg normalized tgt
+  normalized="${cmd//;/$'\n'}"; normalized="${normalized//&/$'\n'}"; normalized="${normalized//\|/$'\n'}"
+  while IFS= read -r seg; do
+    [[ -z "${seg//[[:space:]]/}" ]] && continue
+    _wt_effective "$seg" || continue
+    case "${WT_ARGV[0]:-}" in
+      worktree|clean) ;;
+      *) continue ;;
+    esac
+    if is_worktree_destroy; then
+      tgt="$WT_DESTROY_PATH"
+      [[ -z "$tgt" ]] && tgt="."                  # clean で path 省略時は CWD
+      worktree_untracked_rescue "$tgt"
+    fi
+  done <<< "$normalized"
+}
+# <<< worktree-discipline lib (END) -----------------------------------------
+
 # ---------------------------------------------------------------------------
 # r1_norm_path <path> — R1 carve-out 用のパス正規化（symlink 実体解決）。
 #   R5 の norm_path と同型だが、Edit/Write の対象は **まだ存在しないファイル**（Write 新規作成）や
@@ -518,6 +861,21 @@ if [[ -n "$CMD" ]]; then
   if is_sqlite3_invocation "$CMD"; then
     block "sqlite3 direct execution forbidden (use write-workflow-log.sh)"
   fi
+fi
+
+# R7. worktree/ブランチ命名規則の Tier1 機械強制（B・ADR-2/ADR-3）。
+#   TOOL=Bash かつ CMD 非空のときのみ評価（ROLE 非依存）。作成形（worktree add / switch -c/-C /
+#   checkout -b/-B / branch <name>）と確定でき、かつ命名規則違反のときのみ block（exit 2・fail-closed）。
+#   listing/削除/rename・曖昧・対象外・非 git は allow（worktree_name_enforce 内で自然に素通り＝fail-open）。
+if [[ "$TOOL" == "Bash" && -n "$CMD" ]]; then
+  worktree_name_enforce "$CMD"
+fi
+
+# R8. 削除前 untracked 退避（C・ADR-5）。TOOL=Bash かつ CMD 非空のときのみ評価。
+#   削除形（worktree remove〈--force 含む〉/ clean -x|-X / clean が .worktree 対象）の前に untracked を
+#   退避先へ copy 保全する（block しない・保全のみ）。untracked なし/対象外/内部エラー/退避失敗は allow。
+if [[ "$TOOL" == "Bash" && -n "$CMD" ]]; then
+  worktree_destroy_rescue "$CMD"
 fi
 
 allow
