@@ -175,7 +175,24 @@ document_id: "6f4805cc-0761-41b8-9cc9-126b9bbcc6b1"
 
 ---
 
-## 11. 参考資料
+## 12. CodeRabbit 指摘（PR #92・profile: CHILL）への対応
+
+PR #92 に対する CodeRabbit（自動レビュー）の指摘 2 件のうち、指摘1（symlink/hardlink 耐性）への対応を記録する。指摘2（テストカバレッジ）は `test/test-pretooluse-hook.sh` へのテストケース追加で対応済み（別コミット）。
+
+### 12.1 指摘1: R1 carve-out の symlink/hardlink 耐性
+
+**指摘内容**: R1 の doc basename allowlist 判定（PreToolUse.sh）は `file_path` 文字列の basename のみを見ており、realpath 解決を行わない。symlink/hardlink で basename を詐称すれば、実体が memo・workflow.db\* であっても allowlist に一致させて carve-out を通過できる余地があるのではないか。
+
+**独立検証結果（本エージェントが実コードを再確認）**:
+
+- 基名抽出は実際に文字列演算のみで、realpath 解決を経ない。PreToolUse.sh 282 行 `R1_BASENAME="${PATH_TARGET##*/}"` で `PATH_TARGET`（stdin JSON の `tool_input.file_path` をそのまま抽出した値）から `##*/` によるパス区切り文字までの前方一致除去を行うのみであり、シンボリックリンク先の実体パスを解決する処理（`realpath`/`readlink -f` 等）は R1 のこの判定経路に存在しない。指摘は事実として妥当。
+- 一方、symlink/hardlink を作成する `ln` コマンドの実行には Bash が必要である。PreToolUse.sh の Bash 実行判定（R3、352〜406 行）を確認すると、Bash を無条件 allow されるのは 395〜398 行の `(b) 非 scribe の subagent worker（IS_SUBAGENT=1）` のみである。この分岐に該当する worker は scribe 専用の R4/R5 制約（コマンド単独実行制約・複合シェル禁止）を一切適用されず、任意のシェルコマンドを実行できる。
+- 他ロールは symlink を作成できない: orchestrator（main）は 322〜324 行および 399〜401 行で Bash 実行そのものが block される。scribe は 353〜394 行で `write-workflow-log.sh` の単独実行のみに制限され（R4 で複合コマンド禁止・R5 で第 1 トークンの realpath が正本パスと厳密一致することを要求）、`ln -s` 等の任意コマンドは実行できない。unknown/env-worker 等その他ロールは 402〜404 行で Bash 実行自体が block される。
+- したがって、symlink/hardlink で R1 carve-out の basename 判定を回避できる主体は「Bash を無制限に allow されている非 scribe subagent worker」のみに限定される。しかし、この worker は symlink 経路を使わずとも、Bash 経由で `.agent-skill-chain/runtime/` 配下の memo・workflow.db\* に直接書込可能である（R1 は `TOOL == "Edit" || "Write"` の場合のみ判定対象とし、Bash 経由のファイル書込＝`cat >`/`echo >>` 等はそもそも R1 の対象外であるため、278 行の条件分岐に入らず素通りする）。ゆえに symlink 経路を追加で使っても、到達可能な書込先集合は「その worker が既に Bash で直接到達できる範囲」を超えて拡大しない＝新規の権限昇格は生じない。
+
+**判定**: 指摘1は理論上の指摘として正しいが、実害を検証した結果、既存のロール権限モデル（R2/R3 の role 軸）の下では新規の権限昇格を生まないため、**残存リスクとして受容し、コード変更は行わない**。R5（scribe 経路）が同種の basename/symlink 詐称攻撃を realpath 正規化（370〜393 行の `norm_path()`）で既に封じているのと同じパターンを R1 の doc carve-out にも適用する defense-in-depth は、コストに対して実効性の低い（到達可能集合を変えない）硬化であるため、本 issue のスコープでは対応せず、将来課題として申し送る。
+
+
 
 - [00_要求定義.md](./00_要求定義.md) / [01_要件定義.md](./01_要件定義.md) / [02_設計.md](./02_設計.md) / [03_実装計画.md](./03_実装計画.md)
 - [.agent-skill-chain/source/enforcement/claude/PreToolUse.sh](../../../../.agent-skill-chain/source/enforcement/claude/PreToolUse.sh)

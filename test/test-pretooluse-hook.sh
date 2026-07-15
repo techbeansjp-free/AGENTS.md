@@ -934,6 +934,30 @@ run_uc13() {
   run_pre "$pathval" worker "$json8"
   # Then: 終了コードは 0（allow・網羅性是正の確認）
   assert_eq 0 "$RC" "UC13[$label]: 05_最終確認チェックリスト.md の Write は exit 0（allowlist網羅性）"
+
+  # シナリオ: 新設 allowlist の追加4件のうち 00_システム理解.md も allow される
+  # Given: AGENT_ROLE=worker、対象パスが 00_システム理解.md
+  local json9='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/x/00_システム理解.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" worker "$json9"
+  # Then: 終了コードは 0（allow・網羅性是正の確認）
+  assert_eq 0 "$RC" "UC13[$label]: 00_システム理解.md の Write は exit 0（allowlist網羅性）"
+
+  # シナリオ: 新設 allowlist の追加4件のうち 99_PR.md も allow される
+  # Given: AGENT_ROLE=worker、対象パスが 99_PR.md
+  local json10='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/x/99_PR.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" worker "$json10"
+  # Then: 終了コードは 0（allow・網羅性是正の確認）
+  assert_eq 0 "$RC" "UC13[$label]: 99_PR.md の Write は exit 0（allowlist網羅性）"
+
+  # シナリオ: 新設 allowlist の追加4件のうち 99_PR_review.md も allow される
+  # Given: AGENT_ROLE=worker、対象パスが 99_PR_review.md
+  local json11='{"tool_name":"Write","tool_input":{"file_path":".agent-skill-chain/runtime/x/99_PR_review.md"}}'
+  # When: JSON を stdin で渡す
+  run_pre "$pathval" worker "$json11"
+  # Then: 終了コードは 0（allow・網羅性是正の確認）
+  assert_eq 0 "$RC" "UC13[$label]: 99_PR_review.md の Write は exit 0（allowlist網羅性）"
 }
 run_uc13 "jq" "$JQ_PATH"
 run_uc13 "nojq" "$NOJQ_PATH"
