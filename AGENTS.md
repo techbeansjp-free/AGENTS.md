@@ -58,7 +58,8 @@
     - **作成して系**（例: 「この要件で issue を作成して」「issueを作成して」）→ サブに issue 作成タスクを委譲し、作成された issue のタイトル・概要・保存場所を報告する（SC-01 相当）。
     - **提案して系**（例: 「issueを作成するためのサブへの指示文を提案して」「プロンプト案だけ教えて」）→ 委譲せず、サブへの指示文案のみを返す（SC-02 相当）。
     - **説明して系**（例: 「issueを作ってもらうための流れを教えて」「手順だけ説明して」）→ 自動で issue 作成せず、手順・ルールの説明のみを行う（SC-03 相当）。
-  - **キーワード衝突時の優先度**: ①提案して系、②説明して系、③作成して系。曖昧な場合はユーザーに確認する。
+  - **キーワード衝突時の優先度**: ①提案して系、②説明して系、③作成して系。これは複数分類のキーワードが同一依頼文に同時該当した場合の解決規則である。
+  - **分類曖昧ケースの既定挙動（キーワード衝突とは別条件）**: 依頼文がいずれの分類キーワードにも明確に該当しない／該当が希薄な「分類曖昧ケース」では、既定分類を**作成して系**とし、ユーザーに確認せずサブへ委譲する（本 AGENTS.md の**自立進行ルール**＝高リスク操作を除き逐一確認を禁止、に従う）。**ただし当該依頼の内容が RULES.md §高リスク操作（[.agent-skill-chain/source/RULES.md](.agent-skill-chain/source/RULES.md)）に該当する場合に限り**、既定分類に倒さず、**自立進行ルール**および**委譲時のユーザー確認ルール**の高リスク操作の例外規定に従って事前にユーザーの明示的な確認を得る。高リスク操作の判定基準は RULES.md §高リスク操作（[.agent-skill-chain/source/RULES.md](.agent-skill-chain/source/RULES.md)）を唯一の正本として参照し、本節で別基準を定義しない。
   - **要件・シナリオの詳細**: 作成して系は必ずサブに issue 作成を委譲し報告（SC-01）。提案して系は委譲せず指示文案のみ（SC-02）。説明して系は手順説明のみ（SC-03）。種別は提案して系＞説明して系＞作成して系の優先度で判定。詳細は [.agent-skill-chain/source/workflow/PHASES.md §一般的な issue 作成ステップ](.agent-skill-chain/source/workflow/PHASES.md#一般的な-issue-作成ステップ) を参照。
 
 軽作業時の実行モード（quick / standard / full）・違反時の失敗条件と差し戻し先は後述および [.agent-skill-chain/source/enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) に従う。
@@ -75,18 +76,20 @@
 
 ## 読み込み順・優先順位（絶対）
 
-**読む順番は次の 1 か所で固定する。** 運用でブレないため、入口ではこの順を守ること。
+**読む順番は次の 1 か所で固定する。** 順＝優先順位であり、起動時に全 8 行を一括読了する意味ではない。入口ではこの順を守ること。
 
-| 順 | 対象 | 備考 |
-|----|------|------|
-| 0 | **.agent-skill-chain/project/**（プロジェクトルート） | **存在すれば最優先**。.agents より優先（CORE §ルールの優先順位）。 |
-| 1 | 本ファイル（**AGENTS.md**） | 人間・AI の入口。 |
-| 2 | .agent-skill-chain/source/boot/**CORE.md** | 実行契約の正本。 |
-| 3 | .agent-skill-chain/source/**IO_CONTRACT.md** | command / skill の入出力契約。 |
-| 4 | .agent-skill-chain/source/**RULES.md** | 実行・ドキュメント・テスト要約・実行モード。 |
-| 5 | .agent-skill-chain/source/**GETTING_STARTED.md** | メイン・サブの手順要約。 |
-| 6 | .agent-skill-chain/source/workflow/**PHASES.md** | フェーズ・成果物・DoD。 |
-| 7 | .agent-skill-chain/source/**commands/** および 該当 command | 実行時は LOAD_POLICY に従い run_command と commands/{name}.md を読む。 |
+| 順 | 対象 | 備考 | 読むタイミング |
+|----|------|------|----------------|
+| 0 | **.agent-skill-chain/project/**（プロジェクトルート） | **存在すれば最優先**。.agents より優先（CORE §ルールの優先順位）。 | オンデマンド（存在すれば command 実行時等に確認・最優先）。起動時必須コアではない |
+| 1 | 本ファイル（**AGENTS.md**） | 人間・AI の入口。 | 入口（本ファイル） |
+| 2 | .agent-skill-chain/source/boot/**CORE.md** | 実行契約の正本。 | **起動時必須（コア）** |
+| 3 | .agent-skill-chain/source/**IO_CONTRACT.md** | command / skill の入出力契約。 | オンデマンド（command/skill 入出力時） |
+| 4 | .agent-skill-chain/source/**RULES.md** | 実行・ドキュメント・テスト要約・実行モード。 | オンデマンド（実行モード判定・レビュー・docs 時） |
+| 5 | .agent-skill-chain/source/**GETTING_STARTED.md** | メイン・サブの手順要約。 | オンデマンド（手順要約・必要時） |
+| 6 | .agent-skill-chain/source/workflow/**PHASES.md** | フェーズ・成果物・DoD。 | **起動時必須（コア）** |
+| 7 | .agent-skill-chain/source/**commands/** および 該当 command | 実行時は LOAD_POLICY に従い run_command と commands/{name}.md を読む。 | オンデマンド（command 実行時・LOAD_POLICY に従う） |
+
+**起動時に必ず読了するのは CORE / LOAD_POLICY / PHASES のコアセットのみ**である（`boot/CORE.md §禁止事項` と一致）。LOAD_POLICY.md はこの表には行として現れないが、起動時必須コアに含まれる。**順 0 の `.agent-skill-chain/project/` は「最優先」だが起動時必須コアには含めない**——「最優先」はルールの優先順位（同名・同目的なら project/ を採用。CORE §ルールの優先順位）を指すものであり、読むタイミングを指すものではない。project/ は存在する場合に **LOAD_POLICY.md トリガー表の「command を実行するとき」行に従いオンデマンドで確認する**（起動時に全体を一括読了する対象ではない）。IO_CONTRACT / RULES / GETTING_STARTED / commands / skills / テンプレートも同様に、LOAD_POLICY.md のトリガー表に従い該当トリガー発生時にオンデマンドで読む。これは CONTEXT_EFFICIENCY.md の規模比例・過剰適用回避と整合する。
 
 トリガー別の「いつ何を読むか」の詳細は [.agent-skill-chain/source/boot/LOAD_POLICY.md](.agent-skill-chain/source/boot/LOAD_POLICY.md) に委譲する。詳細ルールは各 spec / skills / enforcement を参照する。
 

@@ -245,6 +245,14 @@ workflow.db は Git 非追跡（本節冒頭のとおり）かつ、ローカル
 - **grandfather（遡及適用しない）**: 各ゲートは issue ディレクトリ名の `YYYYMMDD_HHMMSS_` プレフィックスが、そのゲート固有の `*_EFFECTIVE_FROM` 環境変数（既定値はゲートごとに異なる。各行を参照）**未満**なら SKIP する。
 - **env 無効化トグル**: 各ゲート固有の `*_GATE_ENABLED=false`（`0`/`no`/`off` も可）を設定すると、他のどの判定よりも先にそのゲート単体を SKIP する（既定はすべて `true`）。
 - **共通 SKIP 条件（fail-open）**: 次のいずれかに該当する場合は SKIP する。workflow.db／sqlite3 が存在しない（DB 非採用環境）。`close/`・`templates/`・`90_issues/` 配下（完了済み・雛形・親集約先のため対象外）。非 git ツリー、または対象コミットの日時が解析不能。
+- **設定方法（配布先向け具体例）**: `*_GATE_ENABLED`・`*_GATE_EFFECTIVE_FROM` 系の env は、audit.sh の実行時に参照できる場所であればどこで設定してもよい。代表的な設定先は次の 2 通り。
+  - **シェル環境変数として設定する場合**: ローカルで `audit.sh`（または pre-push フック経由）を実行するシェルで `export GITHUB_ISSUE_GATE_ENABLED=false` のように export する。その場限りではなく恒常的に効かせたい場合は、`.bashrc`/`.zshrc` や CI 起動前のセットアップスクリプトなど、シェル起動のたびに読み込まれる箇所に記載して永続化する。
+  - **CI（GitHub Actions）で設定する場合**: audit.sh を呼ぶワークフローファイル（例: `.github/workflows/audit.yml`）の `env:` ブロックに直接記載するか、リポジトリまたは Organization の **Settings → Secrets and variables → Actions → Variables** に登録し、ワークフロー内で次のように参照する。
+    ```yaml
+    env:
+      GITHUB_ISSUE_GATE_ENABLED: ${{ vars.GITHUB_ISSUE_GATE_ENABLED }}
+    ```
+  - 有効/無効そのものの判断（このゲートを無効化すべきかどうか）は消費者環境ごとの運用方針に委ねる。判断の正本は `.agent-skill-chain/project/自己拡張ワークフロー.md §8`（`GITHUB_ISSUE_GATE_ENABLED` の例）を参照。本項目は「設定すると決めた場合に、どこに書けば実際に効くか」という汎用的な設定手段のみを示す（判断そのものは代行しない）。
 
 ### 失敗条件 → 実装の所在 → 実装状態 → 強制レベル 対応表（レジストリ・正本）
 
@@ -258,7 +266,7 @@ workflow.db は Git 非追跡（本節冒頭のとおり）かつ、ローカル
 
 | # / 対象 | 概要 | 実装の所在 | 実装状態 | 強制レベル | 差し戻し先（要点） |
 |----------|------|------------|----------|------------|---------------------|
-| #1 必須参照 | LOAD_POLICY や command/skill で定めた必須読了ファイルの参照有無 | audit.sh §2（必須ファイル存在で代用） | 実装済み | CI FAIL（間接） | 03_実装計画 or 該当 issue |
+| #1 必須参照 | LOAD_POLICY や command/skill で定めた必須読了ファイルの参照有無。本 #1 は起動時必須コア（CORE / LOAD_POLICY / PHASES。audit.sh §2 はこれらに加え requirement-discovery 用の TEMPLATES.md の存在も確認する）の**存在による間接検証**であり、実際に読んだかは検証しない（self-report 依存・読了の完全機械検証は原理的に不能）。読了義務範囲の縮小（コア明確化）により、検証対象と「実際に読むべき最小集合」が一致し相対的実効性が向上する。 | audit.sh §2（必須ファイル存在で代用） | 実装済み | CI FAIL（間接） | 03_実装計画 or 該当 issue |
 | #2 02/03 テスト観点不足 | 02/03 に BDD/単体テスト観点の記載が無い | audit.sh check（テスト観点未記載） | 実装済み | CI FAIL | 03_実装計画 or 該当 issue |
 | #3 04 未更新 | 実装後 verify-and-close 未実行で 04_review 未作成/未更新［絶対強制］ | audit.sh check 3 | 実装済み | CI FAIL | verify-and-close 再実行し 04 作成 |
 | #4 docs 更新要否未記載 | 04 に docs 更新要否の記載が無い | audit.sh check（docs 更新要否未記載） | 実装済み | CI FAIL | 04 に追記 or 03/該当 issue |
@@ -300,7 +308,7 @@ workflow.db は Git 非追跡（本節冒頭のとおり）かつ、ローカル
 
 | # | 失敗条件 | 説明 | 差し戻し先 |
 |---|----------|------|------------|
-| 1 | **必須参照ファイル未読** | LOAD_POLICY や command/skill で定めた必須読了ファイルを参照していない。証跡・実行経路の前提が満たされない。 | 03_実装計画 または 該当 issue |
+| 1 | **必須参照ファイル未読** | LOAD_POLICY や command/skill で定めた必須読了ファイルを参照していない。証跡・実行経路の前提が満たされない。**間接検証（存在確認）である旨の詳細は上記レジストリ #1 行を参照**（重複記載しない）。 | 03_実装計画 または 該当 issue |
 | 2 | **02/03 のテスト観点不足** | 02_設計 §6 または 03_実装計画のタスク別テスト観点（BDD/単体テスト仕様）が記載されていない。RULES・PHASES の DoD に反する。 | 03_実装計画 または 該当 issue |
 | 3 | **04_review 未更新［絶対強制］** | 実装・レビュー完了とみなすべきタイミングで 04_review.md が未作成または未更新。**verify-and-close を実行したが 04_review.md を issue 直下に作成しなかった場合も本項に該当**。memo のみでレビュー証跡を残し 04 を省略した場合も FAIL。 | 該当 issue で verify-and-close を再実行し、**必ず** 04_review.md を作成・更新する。 |
 | 4 | **docs 更新要否未記載** | 実装・設計変更に伴うシステム仕様書（docs/）の更新要否が判定・記載されていない。04_review §11 および DOCS_RULES で求められる記載が欠落している。 | 04_review に追記 または 03/該当 issue |
