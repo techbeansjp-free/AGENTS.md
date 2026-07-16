@@ -86,6 +86,10 @@ echo "== 単体: validate_worktree_path =="
 ev ".worktree準拠 accept" 0 validate_worktree_path ".worktree/feature/20260716_143000/x/"
 ev ".. reject" 1 validate_worktree_path "../x"
 ev ".worktree外 reject" 1 validate_worktree_path "foo/bar"
+# finding-5: repo_root 供給時、絶対/ネスト表記の .worktree は <repo_root>/.worktree/ 直下に限定する
+ev "root供給: 無関係 /tmp/other/.worktree reject（finding-5）" 1 validate_worktree_path "/tmp/other/.worktree/feature/20260716_143000/x" "$REPO_ROOT"
+ev "root供給: repo直下 .worktree accept（finding-5）" 0 validate_worktree_path "$REPO_ROOT/.worktree/feature/20260716_143000/x" "$REPO_ROOT"
+ev "root未供給: 従来どおり構造のみで accept（fail-safe）" 0 validate_worktree_path "/tmp/other/.worktree/feature/20260716_143000/x"
 
 # シナリオ: ラッパー・VAR=val・パス付き git・グローバルオプション（space/=/結合形）を跨いでサブコマンドを正しく抽出し、bare --exec-path はサブコマンド無し扱いにする（03 単体・round2 回帰 ← ADR-3）。
 # Given: hook から抽出した git_subcommand_of（_wt_effective トークナイザ）
@@ -163,6 +167,9 @@ run_hook "env -i git switch -c badname"; assert_rc 2 "env -i git switch -c 非�
 run_hook "git switch --create badname"; assert_rc 2 "switch --create 非準拠は exit 2（finding-4）"
 run_hook "git branch --track badname origin/x"; assert_rc 2 "branch --track 非準拠は exit 2（finding-4）"
 run_hook "git worktree add --detach .worktree/feature/20260716_143000/x HEAD"; assert_rc 0 "worktree add --detach は準拠 path なら exit 0（ブランチ検証せず・finding-4）"
+# finding-5: 構造は準拠だがリポジトリルート外の .worktree（/tmp/other/.worktree/…）は exit 2（ブランチ名は準拠にして path 判定を分離）
+run_hook "git worktree add -b feature/20260716_143000/x /tmp/other/.worktree/feature/20260716_143000/x"; assert_rc 2 "リポジトリルート外の .worktree path は exit 2（finding-5）"
+run_hook "git worktree add -b feature/20260716_143000/x $REPO_ROOT/.worktree/feature/20260716_143000/x"; assert_rc 0 "リポジトリルート直下の絶対 .worktree path は exit 0（finding-5）"
 
 # シナリオ: 削除形（remove --force / clean -xf）の前に untracked を退避先へ copy 保全し、原本は残し、untracked 無しは退避せず、いずれも block しない（03 T-C1/T-C2/T-C3 ← 01 UC2・SC-3/SC-4）。
 # Given: tmp 隔離の git リポ（untracked あり/なし）と WORKTREE_TRASH_ROOT=$TRASH で正本 hook を起動する
