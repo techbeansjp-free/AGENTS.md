@@ -71,6 +71,7 @@
 
 完了したトップレベル issue を `close/` に移動する手順詳細。**宣言は [CORE.md](../boot/CORE.md) §完了 issue の close 分離**、本節はライフサイクル（いつ・どう移動するか）を定める（1 ファイル 1 責務・重複禁止）。
 
+- **本節は `ISSUE_TRACKING_MODE=local_tracked`（既定）専用の運用である。** `github_native`（`ISSUE_TRACKING_MODE=github_native` かつ `git remote` に github.com を含む場合の実効モード）では、GitHub Issue 自体の close で完結し、本節が定める close 移動（`git mv`）は行わない。以下のトリガー・実行確定手段の分岐は `local_tracked` 運用が前提である。既定値・フォールバック等の全文説明は [skills/agent/run_command.md](../skills/agent/run_command.md) §Constraints を参照。
 - **トリガー（厳密）**: 移動は**トップレベル issue が完了したときのみ**行う。**サブ issue が完了しても、親が未完了なら移動しない。** サブ issue が**すべて完了し、かつ親も完了と判断できたとき**に、当該トップレベル issue（配下のサブ issue 含む）を close へ移動する。
 - **完了の定義（接続）**: ここでの「完了」は、当該 issue の**レビューフェーズ（verify-and-close）が完了**（issue 直下に 04_review.md を作成＋ write-workflow-log による書記記録、本表「レビュー」DoD）を満たし、かつ**トップレベルとして残タスク・未完了サブ issue が無い**状態を指す。サブ issue を持つ場合は、配下サブ issue がすべてこの完了条件を満たしていること。
 - **close ステップ**: verify-and-close 完了後にトップレベル完了が確認できたら、当該トップレベル issue ディレクトリ（配下のサブ issue を含む）をワークフローの `close/` ディレクトリ配下へ移動する。

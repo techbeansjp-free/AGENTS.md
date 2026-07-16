@@ -140,6 +140,7 @@
 - **完了したトップレベル issue は `close/` ディレクトリへ移動する。** アクティブな issue と完了 issue を分離し混乱を防ぐ。
 - **移動はトップレベル issue が完了したときのみ行う。サブ issue が完了しても、親が未完了なら移動しない。** サブ issue がすべて完了し、かつ親も完了と判断できたときに、当該トップレベル issue（配下のサブ issue 含む）を close へ移動する。
 - ここは宣言のみ。**いつ・どう移動するか（完了判定との接続を含むライフサイクル詳細）は [workflow/PHASES.md](../workflow/PHASES.md) §完了 issue の close 移動に委譲する。** 自己拡張固有の配置先は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../project/自己拡張ワークフロー.md) を参照（1 ファイル 1 責務・重複禁止）。
+- **本節は `ISSUE_TRACKING_MODE=local_tracked`（既定）専用の運用である。** `github_native`（`ISSUE_TRACKING_MODE=github_native` かつ `git remote` に github.com を含む場合の実効モード）では、GitHub Issue 自体の close で完結し、close 移動は不要となる。既定値・フォールバック等の全文説明は [skills/agent/run_command.md](../skills/agent/run_command.md) §Constraints を参照。
 
 ---
 
