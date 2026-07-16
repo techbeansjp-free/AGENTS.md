@@ -1,0 +1,63 @@
+# issue-request.example.yml — GitHub Issue Forms 雛形（ISSUE_TRACKING_MODE=github_native・手動起票の構造強制）
+#
+# これは「雛形（example）」です。**このファイル自体は enforcement（audit.sh・hook）から読まれません**。
+# 実効ファイルは消費先プロジェクトの以下のパスへコピーして使ってください（GitHub Issue Forms の既定探索先）:
+#     .github/ISSUE_TEMPLATE/issue-request.yml
+#
+# ── 目的 ──────────────────────────────────────────────────────────────────
+#   ISSUE_TRACKING_MODE=github_native を採用する場合、AI 起票（gh issue create --body）は
+#   run_command.md §Constraints が定める body テンプレートを直接渡せるが、オーナーによる
+#   GitHub Web UI 上の手動起票には同等の構造強制がない。本雛形は GitHub Issue Forms の
+#   `required` 機構を使い、目的・成功基準・受け入れ基準の入力を Web UI 側でも必須化する。
+#
+# ── 効き方（重要） ────────────────────────────────────────────────────────
+#   - 消費者が本ファイルを自リポの .github/ISSUE_TEMPLATE/ 配下へコピーして初めて有効化される。
+#   - 有効化後、GitHub の「New Issue」画面で本フォームが選択肢として表示される。
+#   - `validations.required: true` のフィールドが未入力だと Web UI 側で submit できない
+#     （本リポジトリでの自動テスト対象外。GitHub 側の既存機構が保証する契約）。
+#   - AI 経路（gh issue create --body）は本 Forms を経由せず、run_command.md §Constraints の
+#     body テンプレートを直接渡すため、本雛形の有無に関わらず AI 起票フローは不変。
+#
+# ── フィールド対応（00_要求定義.md との対応） ────────────────────────────
+#   目的・成功基準・受け入れ基準は必須（required: true）。全体像・フロー／参照は任意（required: false）。
+#
+name: "Issue 起票（要求定義）"
+description: "目的・成功基準・受け入れ基準を明確にした Issue を起票します。"
+title: "[Issue] "
+labels: []
+body:
+  - type: textarea
+    id: purpose
+    attributes:
+      label: 目的
+      description: "この issue で達成したいこと（00_要求定義.md §1.1 目的 相当）。"
+    validations:
+      required: true
+  - type: textarea
+    id: success-criteria
+    attributes:
+      label: 成功基準
+      description: "○/× で判定できる成功基準（00_要求定義.md §6 成功基準 相当）。"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 受け入れ基準
+      description: "Given/When/Then 等で確認できる受け入れ基準。"
+    validations:
+      required: true
+  - type: textarea
+    id: overview-flow
+    attributes:
+      label: 全体像・フロー
+      description: "（任意）関連する処理フロー・マインドマップ等。"
+    validations:
+      required: false
+  - type: textarea
+    id: references
+    attributes:
+      label: 参照
+      description: "（任意）関連 Issue・ドキュメントへのリンク。"
+    validations:
+      required: false
