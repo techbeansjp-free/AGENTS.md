@@ -213,7 +213,10 @@ assert_rc 0 "clean -xfd（path省略）は block せず exit 0（保全のみ）
 [[ ! -f "$R6/untracked6.md" ]] && ok || ng "原本は clean で消える（退避が唯一のコピー）"
 
 # ---- audit #39/#40 ----
-run_audit(){ local root="$1"; shift; env "$@" bash "$AUDIT" "$root" 2>"$ERR" >/dev/null; }
+# run_audit は終了コードを AUDIT_RC に保存する（finding-9: 旧実装は終了コードを破棄していた）。
+#   audit.sh は FAIL 時 exit 1・SKIP/PASS 時 exit 0。呼び出し側は AUDIT_RC も検証する。
+run_audit(){ local root="$1"; shift; env "$@" bash "$AUDIT" "$root" 2>"$ERR" >/dev/null; AUDIT_RC=$?; }
+assert_audit_rc(){ [[ "$AUDIT_RC" == "$1" ]] && ok || ng "$2 (AUDIT_RC=$AUDIT_RC exp=$1)"; }
 # シナリオ: audit.sh #40 が grandfather baseline 未登録の非準拠新規ブランチのみ FAIL、baseline 済み・準拠は救済、gate 無効/baseline 不在は SKIP（03 T-D1 ← 01 UC1.5 シナリオ3・SC-10/SC-7）。
 # Given: tmp 隔離 git リポに準拠/grandfathered/非準拠ブランチと baseline ファイルを用意する
 # When:  正本 audit.sh を通常・gate 無効・baseline 不在の 3 条件で駆動する
@@ -228,15 +231,20 @@ A="$TMP/auditrepo"; mkdir -p "$A/.agent-skill-chain/project"
 printf '%s\n' "grandfathered-old-name" > "$A/.agent-skill-chain/project/worktree-naming-grandfather.txt"
 run_audit "$A"
 grep -q "bogus-new-branch" "$ERR" && ok || ng "#40 baseline 未登録の非準拠新規ブランチを FAIL"
+assert_audit_rc 1 "#40 非準拠ブランチありは exit 1（FAIL・finding-9）"
 grep -q "grandfathered-old-name" "$ERR" && ng "#40 baseline 登録済みは救済（FAIL しない）" || ok
-grep -qE "compliant.*(FAIL|非準拠)" "$ERR" && ng "#40 準拠ブランチは FAIL しない" || ok
+# 準拠ブランチは FAIL 行（`  <branch>` 単独行）に現れない（finding-9: 旧 `compliant.*(FAIL|非準拠)` は
+#   FAIL 出力がブランチ名単独行のため常に非マッチな空虚テストだった。ブランチ行の厳密一致へ置換）。
+grep -Fx "  feature/20260716_143000/compliant" "$ERR" && ng "#40 準拠ブランチは FAIL しない（finding-9・厳密一致）" || ok
 # gate 無効化で SKIP
 run_audit "$A" WORKTREE_NAMING_AUDIT_ENABLED=false
 grep -q "bogus-new-branch" "$ERR" && ng "#40 gate 無効時は検査しない" || ok
+assert_audit_rc 0 "#40 gate 無効時は exit 0（SKIP・finding-9）"
 # baseline 不在で SKIP（非破壊・初回導入前）
 rm -f "$A/.agent-skill-chain/project/worktree-naming-grandfather.txt"
 run_audit "$A"
 grep -q "grandfather baseline 不在" "$ERR" && ok || ng "#40 baseline 不在時は SKIP"
+assert_audit_rc 0 "#40 baseline 不在時は exit 0（SKIP・finding-9）"
 
 # シナリオ: CI（GitHub Actions）では PR の source branch が detached HEAD の checkout で git branch に現れない。
 #   GITHUB_HEAD_REF（設定時のみ）を列挙対象へ追加し、非準拠は FAIL・準拠は非 FAIL・baseline 済みは救済、
@@ -255,6 +263,18 @@ grep -qFx "  grandfathered-old-name" "$ERR" && ng "#40 baseline 登録済み GIT
 run_audit "$A"   # GITHUB_HEAD_REF 未設定（非 CI）は従来どおりローカル branch のみ
 grep -q "bogus/head/ref-noncompliant" "$ERR" && ng "#40 非 CI では GITHUB_HEAD_REF を列挙しない(finding-3・fail-safe)" || ok
 
+# シナリオ: audit #40 の内部 _audit_valid_branch_ref も Tier1 validate_name と同じ 200 バイト上限を適用し、
+#   極端に長い固有名のブランチを FAIL する（03 追加ケース ← PR#120 finding-2・非対称の是正）。
+# Given: 準拠 type/ts だが固有名が 201 バイトのローカルブランチを baseline 未登録で用意する
+# When:  正本 audit.sh を駆動する
+# Then:  201 バイト超のブランチ名が FAIL 行に現れる（旧実装は長さ上限が無く PASS していた）
+echo "== 結合: audit #40 固有名 200 バイト上限（finding-2・Tier1 と対称） =="
+N201B=$(printf 'a%.0s' $(seq 1 201))
+( cd "$A" && git branch "feature/20260716_143000/$N201B" ) >/dev/null 2>&1
+printf '%s\n' "grandfathered-old-name" > "$A/.agent-skill-chain/project/worktree-naming-grandfather.txt"
+run_audit "$A"
+grep -q "feature/20260716_143000/$N201B" "$ERR" && ok || ng "#40 201バイト超の固有名ブランチを FAIL(finding-2)"
+
 # シナリオ: audit.sh #39 がルート起点 unbounded find の .worktree prune 欠落のみ FAIL し、scoped find・prune 済み find は誤検知しない（03 T-D2 ← 01 UC1.6 シナリオ5・BR-11）。
 # Given: tmp 隔離 git リポに scoped find・root 起点 prune 欠落 find・prune 済み find の各スクリプトを追加する
 # When:  各スクリプトを追跡対象に加えて正本 audit.sh を駆動する
@@ -267,17 +287,32 @@ printf '#!/usr/bin/env bash\nfind "$PROJECT_ROOT/docs" -name "*.md"\n' > "$B/scr
 ( cd "$B" && git add scripts/scoped.sh && git commit -qm scoped ) >/dev/null 2>&1
 run_audit "$B"
 grep -q "ルート起点 unbounded find" "$ERR" && ng "#39 scoped find は誤検知しない" || ok
+assert_audit_rc 0 "#39 scoped find のみは exit 0（PASS・finding-9）"
 # root 起点 unbounded find（prune 欠落）は FAIL
 printf '#!/usr/bin/env bash\nfind "$PROJECT_ROOT" -name "*.md"\n' > "$B/scripts/rootfind.sh"
 ( cd "$B" && git add scripts/rootfind.sh && git commit -qm rootfind ) >/dev/null 2>&1
 run_audit "$B"
 grep -q "ルート起点 unbounded find" "$ERR" && ok || ng "#39 root 起点 prune 欠落 find を FAIL"
 grep -q "scripts/rootfind.sh" "$ERR" && ok || ng "#39 該当ファイルを指摘"
+assert_audit_rc 1 "#39 prune 欠落 find ありは exit 1（FAIL・finding-9）"
 # prune 節があれば FAIL しない
 printf '#!/usr/bin/env bash\nfind "$PROJECT_ROOT" -path "*/.worktree" -prune -o -name "*.md" -print\n' > "$B/scripts/rootfind.sh"
 ( cd "$B" && git add scripts/rootfind.sh && git commit -qm pruned ) >/dev/null 2>&1
 run_audit "$B"
 grep -q "rootfind.sh" "$ERR" && ng "#39 prune 節があれば FAIL しない" || ok
+assert_audit_rc 0 "#39 prune 済みのみは exit 0（PASS・finding-9）"
+# finding-1: .worktree を -name 対象/print 対象に含むだけで prune 構造（-prune ＋ -o）が無い迂回形は FAIL
+#   （旧判定は `.worktree` 文字列の存在有無だけで許容し迂回可能だった）。
+printf '#!/usr/bin/env bash\nfind "$PROJECT_ROOT" -name ".worktree-backup" -print\n' > "$B/scripts/bypass.sh"
+( cd "$B" && git add scripts/bypass.sh && git commit -qm bypass ) >/dev/null 2>&1
+run_audit "$B"
+grep -q "scripts/bypass.sh" "$ERR" && ok || ng "#39 .worktree を名前に含むだけで prune 構造の無い迂回 find を FAIL(finding-1)"
+assert_audit_rc 1 "#39 迂回 find ありは exit 1（FAIL・finding-1/9）"
+# prune 構造を正しく備えた find（.worktree を print 対象名に含んでも -prune -o があれば許容・偽陽性回避）
+printf '#!/usr/bin/env bash\nfind "$PROJECT_ROOT" -path "*/.worktree" -prune -o -name "*.md" -print\n' > "$B/scripts/bypass.sh"
+( cd "$B" && git add scripts/bypass.sh && git commit -qm bypassfixed ) >/dev/null 2>&1
+run_audit "$B"
+grep -q "scripts/bypass.sh" "$ERR" && ng "#39 prune 構造を備えた find は誤検知しない(finding-1・偽陽性回避)" || ok
 
 echo ""
 echo "==================== 結果 ===================="

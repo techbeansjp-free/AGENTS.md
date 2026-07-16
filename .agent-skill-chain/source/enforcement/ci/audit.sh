@@ -1497,12 +1497,20 @@ check_find_worktree_prune() {
     while IFS= read -r line; do
       _trim="${line#"${line%%[![:space:]]*}"}"
       [[ "$_trim" == \#* ]] && continue
-      if [[ "$line" == *"$needle"* && "$line" != *'.worktree'* ]]; then
-        if [[ "$found" -eq 0 ]]; then
-          echo "FAIL: ルート起点 unbounded find が .worktree prune を欠いています（新規 find は -path '*/.worktree' -prune -o … を入れること・#39・BR-11）:" >&2
-          found=1
+      if [[ "$line" == *"$needle"* ]]; then
+        # ルート起点 unbounded find を検知。正しい prune 構造（`.worktree` ＋ `-prune` ＋ `-o` が同一 find
+        #   式内に共起し後続処理と分岐している形＝`-path '*/.worktree' -prune -o …`）を伴う場合のみ許容する。
+        #   単に `.worktree` 文字列を `-name` 対象や print 対象に含むだけで prune 構造を欠く迂回形は
+        #   引き続き FAIL に倒す（finding-1: `.worktree` 存在有無だけの旧判定は迂回可能だった）。
+        if [[ "$line" == *'.worktree'* && "$line" == *'-prune'* && "$line" == *'-o'* ]]; then
+          :   # 正しい prune 構造あり → 許容
+        else
+          if [[ "$found" -eq 0 ]]; then
+            echo "FAIL: ルート起点 unbounded find が .worktree prune を欠いています（新規 find は -path '*/.worktree' -prune -o … を入れること・#39・BR-11）:" >&2
+            found=1
+          fi
+          echo "  $t: $line" >&2
         fi
-        echo "  $t: $line" >&2
       fi
     done < "$PROJECT_ROOT/$t"
   done
@@ -1554,6 +1562,7 @@ check_worktree_branch_naming() {
     case "$type" in feature|bugfix|hotfix|release|chore) ;; *) return 1 ;; esac
     [[ "$ts" =~ ^[0-9]{8}_[0-9]{6}$ ]] || return 1
     [[ -z "$name" ]] && return 1
+    (( ${#name} > 200 )) && return 1              # 長さ上限（LC_ALL=C でバイト数）。Tier1 validate_name と対称（finding-2）
     case "$name" in .*|-*|*..*|*.lock|*/*) return 1 ;; esac
     local danger; danger=$(printf ' \t;&|$`"'\''\\<>(){}[^~:#?*!\177')
     case "$name" in *["$danger"]*) return 1 ;; esac
