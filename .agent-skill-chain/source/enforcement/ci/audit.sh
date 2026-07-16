@@ -856,6 +856,15 @@ check_review_dual_lists() {
 #   （exit 1=非 ignore、exit 128=非 git/エラー は FAIL にしない）。templates は二重除外。
 #   走査は WORKFLOW_SCAN_DIRS（docs/... は追跡対象なので check-ignore 偽 → pass）。
 check_issue_doc_in_gitignored_path() {
+  # 0. モードガード（最優先・02_設計 ADR-S2-1/ADR-S2-2）: 実効モードが github_native なら
+  #    ローカル issue ドラフト(00〜04)は意図的に非追跡化されるため、非追跡ドラフトを検知する
+  #    本チェックを丸ごと SKIP する（#33 の github_native SKIP ガードと同型・resolve_issue_tracking_mode
+  #    を再利用し新規判定を作らない）。非 git ツリー SKIP より前に置いても安全（github_native は
+  #    github.com remote 検出を要し非 git では local_tracked へフォールバックする）。
+  if [[ "$(resolve_issue_tracking_mode)" == "github_native" ]]; then
+    echo "SKIP: #28（gitignore 配下の issue ドキュメント検知）をスキップします（実効モードが github_native のため。ISSUE_TRACKING_MODE=github_native かつ github.com remote 検出・02_設計 ADR-S2-2）" >&2
+    return 0
+  fi
   if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
   echo "[audit] checking issue docs in gitignored paths (#28)" >&2
