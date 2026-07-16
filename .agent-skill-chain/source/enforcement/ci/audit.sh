@@ -1561,8 +1561,11 @@ check_worktree_branch_naming() {
     return 0
   }
   local br found=0
+  declare -A _seen=()
   while IFS= read -r br; do
     [[ -z "$br" ]] && continue
+    [[ -n "${_seen[$br]:-}" ]] && continue        # 重複除去（GITHUB_HEAD_REF とローカル branch の重なり）
+    _seen["$br"]=1
     [[ -n "${_gf[$br]:-}" ]] && continue          # grandfather 救済
     if ! _audit_valid_branch_ref "$br"; then
       if [[ "$found" -eq 0 ]]; then
@@ -1571,7 +1574,15 @@ check_worktree_branch_naming() {
       fi
       echo "  $br" >&2
     fi
-  done < <(git -C "$PROJECT_ROOT" branch --format='%(refname:short)' 2>/dev/null || true)
+  done < <(
+    # CI（GitHub Actions）では actions/checkout が PR のマージコミットを detached HEAD で checkout するため、
+    #   git branch だけでは PR の source branch を拾えない。GITHUB_HEAD_REF（設定時のみ・GitHub Actions 標準）を
+    #   列挙対象へ追加する。既存のローカル branch 列挙への追加に留め、無差別な remote 全列挙は行わない
+    #   （他者のリモートブランチを誤 FAIL しない）。非 CI（未設定）は従来どおりローカル branch のみ（fail-safe）。
+    #   grandfather baseline による救済は GITHUB_HEAD_REF にも同様に効く（上のループの _gf 判定）。
+    [[ -n "${GITHUB_HEAD_REF:-}" ]] && printf '%s\n' "$GITHUB_HEAD_REF"
+    git -C "$PROJECT_ROOT" branch --format='%(refname:short)' 2>/dev/null || true
+  )
   if [[ "$found" -eq 1 ]]; then
     echo "$ROLLBACK_MSG" >&2
     EXIT_CODE=1

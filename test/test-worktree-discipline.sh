@@ -238,6 +238,23 @@ rm -f "$A/.agent-skill-chain/project/worktree-naming-grandfather.txt"
 run_audit "$A"
 grep -q "grandfather baseline 不在" "$ERR" && ok || ng "#40 baseline 不在時は SKIP"
 
+# シナリオ: CI（GitHub Actions）では PR の source branch が detached HEAD の checkout で git branch に現れない。
+#   GITHUB_HEAD_REF（設定時のみ）を列挙対象へ追加し、非準拠は FAIL・準拠は非 FAIL・baseline 済みは救済、
+#   非 CI（未設定）は従来どおり（03 追加ケース ← PR#120 finding-3）。
+# Given: baseline を復活し、GITHUB_HEAD_REF を各条件で設定して正本 audit.sh を駆動する
+# When:  GITHUB_HEAD_REF に 非準拠名 / 準拠名 / baseline 登録済み名 を与える
+# Then:  非準拠名のみ FAIL 行に現れ、準拠名・baseline 済み名は現れない（非 CI は従来どおり検査されない）
+echo "== 結合: audit #40 GITHUB_HEAD_REF 列挙（finding-3・CI PR source branch） =="
+printf '%s\n' "grandfathered-old-name" > "$A/.agent-skill-chain/project/worktree-naming-grandfather.txt"  # baseline 復活
+run_audit "$A" GITHUB_HEAD_REF="bogus/head/ref-noncompliant"
+grep -q "bogus/head/ref-noncompliant" "$ERR" && ok || ng "#40 GITHUB_HEAD_REF の非準拠名を FAIL(finding-3)"
+run_audit "$A" GITHUB_HEAD_REF="feature/20260716_143000/ci-head"
+grep -q "ci-head" "$ERR" && ng "#40 GITHUB_HEAD_REF の準拠名は FAIL しない(finding-3)" || ok
+run_audit "$A" GITHUB_HEAD_REF="grandfathered-old-name"
+grep -qFx "  grandfathered-old-name" "$ERR" && ng "#40 baseline 登録済み GITHUB_HEAD_REF は救済(finding-3)" || ok
+run_audit "$A"   # GITHUB_HEAD_REF 未設定（非 CI）は従来どおりローカル branch のみ
+grep -q "bogus/head/ref-noncompliant" "$ERR" && ng "#40 非 CI では GITHUB_HEAD_REF を列挙しない(finding-3・fail-safe)" || ok
+
 # シナリオ: audit.sh #39 がルート起点 unbounded find の .worktree prune 欠落のみ FAIL し、scoped find・prune 済み find は誤検知しない（03 T-D2 ← 01 UC1.6 シナリオ5・BR-11）。
 # Given: tmp 隔離 git リポに scoped find・root 起点 prune 欠落 find・prune 済み find の各スクリプトを追加する
 # When:  各スクリプトを追跡対象に加えて正本 audit.sh を駆動する
