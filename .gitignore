@@ -62,3 +62,15 @@ node_modules/
 # memo は非追跡（transient）。レビュー等の本則証跡は workflow.db に残る（git 追跡する成果物は issue ドキュメント 00〜04 のみ）。
 # 正本: docs/maintainer/workflow/20260615_124812_自己拡張memoのgitignore矛盾是正/02_設計.md, 03_実装計画.md
 **/memo/*
+
+# S-2: ローカル issue ドラフト（00〜04）の非追跡化（本リポ github_native 採用）。
+# 起票検討段階の使い捨てドラフト（docs/maintainer/workflow/** 配下の 00〜04）を git 非追跡にする。
+# git 機構により追跡済みファイルは温存され（check-ignore は index を参照し tracked→exit1）、
+# 新規未追跡ドラフトのみ非追跡になる。90_issues.md・README.md・別パスの DECISIONS.md・.github/ は
+# 巻き込まない（5 明示ファイル名に限定・02_設計 ADR-S2-4）。
+# 正本: docs/maintainer/workflow/20260715_160558_issue運用ポリシー全面移行/90_issues/20260716_174958_S-2本リポgithub_native採用/02_設計.md, 03_実装計画.md
+docs/maintainer/workflow/**/00_要求定義.md
+docs/maintainer/workflow/**/01_要件定義.md
+docs/maintainer/workflow/**/02_設計.md
+docs/maintainer/workflow/**/03_実装計画.md
+docs/maintainer/workflow/**/04_review.md
