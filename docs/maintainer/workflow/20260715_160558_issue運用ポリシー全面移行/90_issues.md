@@ -21,7 +21,7 @@ document_id: "e72fef57-1f3b-4cee-89e5-91b42a787acf"
 | Issue 名 | 概要 | 優先度 | ステータス | 対応タスク(03) |
 | -------- | ---- | ------ | ---------- | -------------- |
 | S-1: audit.sh モード分岐 | `resolve_issue_tracking_mode` 新設＋#33 の github_native SKIP ガード。#34/#35/#36 は不変（回帰保証）。既定 local_tracked ゆえ単独マージ安全。 | 高 | **完了**・PR #116 マージ済み | T1 |
-| S-2: 本リポ github_native 採用 | `.gitignore` 新規ドラフト非追跡＋`自己拡張ワークフロー.md` 両モード具体手順化（起票本文完全転記・全体像/フロー図の転記・close 移動を local_tracked 専用化）＋決定ログ `docs/maintainer/decisions/DECISIONS.md` 新設＋本リポ `.github/ISSUE_TEMPLATE/`（GitHub Issue Forms）実ファイル新設で手動起票の構造強制。スイッチ投入は最後。 | 高 | requirement-discovery 完了（00/01 作成済み）・design-feature 未着手・[`90_issues/20260716_174958_S-2本リポgithub_native採用/`](./90_issues/20260716_174958_S-2本リポgithub_native採用/00_要求定義.md) | T2, T3, T5, T7 |
+| S-2: 本リポ github_native 採用 | `.gitignore` 新規ドラフト非追跡＋`自己拡張ワークフロー.md` 両モード具体手順化（起票本文完全転記・全体像/フロー図の転記・close 移動を local_tracked 専用化）＋決定ログ `docs/maintainer/decisions/DECISIONS.md` 新設＋本リポ `.github/ISSUE_TEMPLATE/`（GitHub Issue Forms）実ファイル新設で手動起票の構造強制。**加えて非追跡化と直接衝突する audit.sh #28（`check_issue_doc_in_gitignored_path`）へ S-1 の #33 と同型の github_native SKIP ガードを追加**（C2 例外・#33 本体/その他チェックは不変）。スイッチ投入は最後。 | 高 | requirement-discovery 完了（00/01 作成済み・#28 ガード編入で更新）・design-feature 未着手・[`90_issues/20260716_174958_S-2本リポgithub_native採用/`](./90_issues/20260716_174958_S-2本リポgithub_native採用/00_要求定義.md) | T2, T3, T5, T7 |
 | S-3: source 契約ドキュメント | `run_command.md`/CORE/PHASES/AGENT_CONDUCT へ `ISSUE_TRACKING_MODE`（既定 local_tracked・非GitHubフォールバック・close は local_tracked 専用・AI 自律設定禁止）の抽象原則を追記。具体は project へ委譲。加えて GitHub Issue Forms の汎用雛形（`source/enforcement/github/*.example.yml`・消費者がコピー）を新設（ADR-9）。 | 中 | **完了**・PR #121（verify-and-close合格） | T4, T6 |
 
 **依存順（03 §1.2）**: S-1（安全な既定）→ S-3（契約）→ S-2（本リポ採用＝スイッチ投入）。
