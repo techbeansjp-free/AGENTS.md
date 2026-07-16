@@ -257,7 +257,7 @@ validate_branch_ref() {
 
 # validate_worktree_path <path> [repo_root] — worktree ディレクトリが .worktree/<type>/<ts>/<name>/ 準拠か。
 #   repo_root（呼び出し側が git rev-parse --show-toplevel で解決して供給・任意）を与えると、絶対/ネスト
-#   表記の .worktree は「<repo_root>/.worktree/ 直下」に限定し、無関係な /tmp/other/.worktree/... 等を排除
+#   表記の .worktree は「<repo_root>/.worktree/ 直下」に限定し、リポジトリ外（他ディレクトリ配下）の .worktree 等を排除
 #   する（finding-5）。先頭が .worktree/ の相対表記はリポジトリルート相対とみなし従来どおり許容する。
 #   repo_root 未供給（非 git・解決不能）時は構造チェックのみ＝従来動作へ fail-safe フォールバック。
 #   注記: repo_root 供給時は _wt_abspath（realpath）で正規化照合するため、本関数は「単一文字列の純関数」
