@@ -425,6 +425,33 @@ _wt_purge_trash() {
   done
 }
 
+# _wt_abspath <path> — path を絶対パスへ正規化（末尾コンポーネント未存在でも許容）。解決不能時は空。
+#   退避先が削除対象配下かを判定するための正規化に用いる（finding-6/7）。
+_wt_abspath() {
+  local p="$1" d b
+  [[ -z "$p" ]] && return 0
+  if command -v realpath >/dev/null 2>&1 && realpath -m -- "." >/dev/null 2>&1; then
+    realpath -m -- "$p" 2>/dev/null; return 0
+  fi
+  d="$(dirname -- "$p" 2>/dev/null)"; b="$(basename -- "$p" 2>/dev/null)"
+  if [[ -d "$d" ]]; then printf '%s/%s' "$(cd "$d" 2>/dev/null && pwd -P)" "$b"
+  elif [[ "$p" == /* ]]; then printf '%s' "$p"
+  else printf '%s/%s' "$(pwd -P)" "$p"; fi
+}
+
+# _wt_main_worktree_root <target> — target（git worktree）の main worktree ルート絶対パスを返す。
+#   `worktree list --porcelain` の先頭 worktree エントリが main worktree（linked worktree でも共有）。
+#   git バージョン差に強い（--porcelain は 2.7+）。解決不能時は空を返す（呼び出し側で fail-safe）。
+_wt_main_worktree_root() {
+  local t="$1" line
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) printf '%s' "${line#worktree }"; return 0 ;;
+    esac
+  done < <(git -C "$t" worktree list --porcelain 2>/dev/null)
+  return 0
+}
+
 # worktree_untracked_rescue <target> — 削除前 untracked を退避先へ copy 保全（Command・fail-safe・block しない）。
 #   copy（move でなく）で原本を保持し退避失敗が原本を壊さない（ADR-5）。実削除は本来のコマンドに委ねる。
 worktree_untracked_rescue() {
@@ -433,8 +460,40 @@ worktree_untracked_rescue() {
   command -v git >/dev/null 2>&1 || return 0
   [[ -d "$target" ]] || return 0
   git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
-  local trash ts base dest
-  trash="${WORKTREE_TRASH_ROOT:-.claude/.worktree-trash}"
+  local trash ts base dest target_abs trash_abs
+  # 削除対象（target）の絶対パス。退避先が target 配下に入ると、直後の clean（-x path 省略で
+  #   target=CWD）で退避物ごと非可逆消失するため必ず算出する（finding-6/7・実測再現）。
+  target_abs="$(cd "$target" 2>/dev/null && pwd -P)" || return 0
+  [[ -z "$target_abs" ]] && return 0
+  # 退避先ルートの解決:
+  #   ① WORKTREE_TRASH_ROOT 明示時はそれを尊重（値はそのまま利用・従来互換）。
+  #   ② 既定は「削除対象の外側」＝ main worktree ルート直下の .claude/.worktree-trash
+  #      （target が linked worktree でも main ルートは別サブツリー）。target 相対の
+  #      .claude/.worktree-trash に置くと clean -x path 省略（CWD=target）で退避物ごと消える。
+  if [[ -n "${WORKTREE_TRASH_ROOT:-}" ]]; then
+    trash="$WORKTREE_TRASH_ROOT"
+  else
+    local main_root
+    main_root="$(_wt_main_worktree_root "$target")"
+    if [[ -n "$main_root" ]]; then
+      trash="$main_root/.claude/.worktree-trash"
+    else
+      trash=".claude/.worktree-trash"          # 最終手段（main ルート解決不能時の相対）
+    fi
+  fi
+  # 安全ガード（finding-6/7）: 退避先が target 自身/配下なら clean で退避物ごと消える。
+  #   絶対化して判定し、該当時は target 外（システム temp）へフォールバックする。
+  trash_abs="$(_wt_abspath "$trash")"; [[ -z "$trash_abs" ]] && trash_abs="$trash"
+  if [[ "$trash_abs" == "$target_abs" || "$trash_abs" == "$target_abs"/* ]]; then
+    trash="${TMPDIR:-/tmp}/agents-md-worktree-trash"
+    trash_abs="$(_wt_abspath "$trash")"; [[ -z "$trash_abs" ]] && trash_abs="$trash"
+  fi
+  # フォールバック先も target 配下（TMPDIR が target 配下等の病的ケース）なら、退避を見送り
+  #   fail-safe（allow・WARN のみ・原本は本来のコマンドに委ねる。退避しても直後に消えるため）。
+  if [[ "$trash_abs" == "$target_abs" || "$trash_abs" == "$target_abs"/* ]]; then
+    echo "[enforcement:warn] worktree untracked rescue: 安全な退避先を target 外に確保できませんでした（退避見送り・原本は本来のコマンドに委ねる・保全のみ失敗）: target=$target_abs" >&2
+    return 0
+  fi
   ts="$(TZ=Asia/Tokyo date +%Y%m%d_%H%M%S 2>/dev/null || date +%Y%m%d_%H%M%S 2>/dev/null || echo unknown)"
   base="${target%/}"; base="${base##*/}"
   local -a untracked=()

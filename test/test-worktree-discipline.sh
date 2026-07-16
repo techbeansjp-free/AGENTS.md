@@ -172,6 +172,26 @@ R3="$TMP/wt3"; mk_repo "$R3"; echo ig > "$R3/ignored.log"; rm -rf "$TRASH"
 run_hook "git clean -xf $R3"
 assert_rc 0 "clean -xf は block せず exit 0（検知対象）"
 
+# シナリオ: clean -x を path 省略で実行すると target=CWD となり、既定 trash（target 相対）が削除対象の
+#   内側に生成され、直後の clean で退避物ごと非可逆消失する（finding-6/7）。退避先を target 外へ解決し、
+#   実 clean 後も退避物が生存することを検証する（03 追加ケース ← PR#120 finding-6/7・データ整合性）。
+# Given: untracked を含む tmp git リポ（CWD=target）と WORKTREE_TRASH_ROOT 未設定・TMPDIR を制御下に置く
+# When:  cwd を target にして `git clean -xfd`（path 省略）で正本 hook を起動し、その後 実 clean を走らせる
+# Then:  退避物は target 外（フォールバック先）へ copy され、実 clean 後も生存する（原本は消える）
+echo "== 結合: R8 退避先が削除対象の外側に置かれる（finding-6/7・非可逆消失防止） =="
+R6="$TMP/wt6"; mk_repo "$R6"; echo secret6 > "$R6/untracked6.md"
+FB="$TMP/fallback6"; mkdir -p "$FB"
+: > "$ERR"
+( cd "$R6" && echo '{"tool_name":"Bash","agent_id":"sub-1","tool_input":{"command":"git clean -xfd"}}' \
+    | env AGENTS_ROOT="$REPO_SRC" AGENT_ROLE="worker" TMPDIR="$FB" bash "$HOOK" >/dev/null 2>"$ERR" )
+RC=$?
+assert_rc 0 "clean -xfd（path省略）は block せず exit 0（保全のみ）"
+[[ -n "$(find "$FB" -name 'untracked6.md' 2>/dev/null)" ]] && ok || ng "退避物が target 外（フォールバック先）へ保全される(finding-6/7)"
+[[ -z "$(find "$R6/.claude" -name 'untracked6.md' 2>/dev/null)" ]] && ok || ng "退避物は target 配下に置かれない(finding-6/7)"
+( cd "$R6" && git clean -xfd >/dev/null 2>&1 )   # 実 clean で target 内 untracked を破壊
+[[ -n "$(find "$FB" -name 'untracked6.md' 2>/dev/null)" ]] && ok || ng "実 clean 後も退避物が生存する(finding-6/7・非可逆消失防止)"
+[[ ! -f "$R6/untracked6.md" ]] && ok || ng "原本は clean で消える（退避が唯一のコピー）"
+
 # ---- audit #39/#40 ----
 run_audit(){ local root="$1"; shift; env "$@" bash "$AUDIT" "$root" 2>"$ERR" >/dev/null; }
 # シナリオ: audit.sh #40 が grandfather baseline 未登録の非準拠新規ブランチのみ FAIL、baseline 済み・準拠は救済、gate 無効/baseline 不在は SKIP（03 T-D1 ← 01 UC1.5 シナリオ3・SC-10/SC-7）。
