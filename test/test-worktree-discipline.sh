@@ -274,15 +274,27 @@ assert_audit_rc 0 "#40 baseline 不在時は exit 0（SKIP・finding-9）"
 # When:  GITHUB_HEAD_REF に 非準拠名 / 準拠名 / baseline 登録済み名 を与える
 # Then:  非準拠名のみ FAIL 行に現れ、準拠名・baseline 済み名は現れない（非 CI は従来どおり検査されない）
 echo "== 結合: audit #40 GITHUB_HEAD_REF 列挙（finding-3・CI PR source branch） =="
-printf '%s\n' "grandfathered-old-name" > "$A/.agent-skill-chain/project/worktree-naming-grandfather.txt"  # baseline 復活
+# ローカル非準拠ブランチ（bogus-new-branch・既定ブランチ master/main）を baseline へ追加して中立化し、
+#   FAIL/PASS の駆動要因を GITHUB_HEAD_REF 単独に限定する。これで各シナリオの意図した exit code
+#   （1/0/0/0）を明示検証できる（旧テストは常に FAIL 要因が残り AUDIT_RC を検証できなかった・round2 F）。
+DEFBR="$(git -C "$A" branch --show-current 2>/dev/null)"
+printf '%s\n' "grandfathered-old-name" "bogus-new-branch" "$DEFBR" > "$A/.agent-skill-chain/project/worktree-naming-grandfather.txt"
+# ① 非準拠 HEAD_REF → FAIL 行に現れ exit 1
 run_audit "$A" GITHUB_HEAD_REF="bogus/head/ref-noncompliant"
-grep -q "bogus/head/ref-noncompliant" "$ERR" && ok || ng "#40 GITHUB_HEAD_REF の非準拠名を FAIL(finding-3)"
+if grep -q "bogus/head/ref-noncompliant" "$ERR"; then ok; else ng "#40 GITHUB_HEAD_REF の非準拠名を FAIL(finding-3)"; fi
+assert_audit_rc 1 "#40 非準拠 GITHUB_HEAD_REF は exit 1（finding-3・round2 F）"
+# ② 準拠 HEAD_REF → FAIL せず・ローカルも中立化済み → exit 0
 run_audit "$A" GITHUB_HEAD_REF="feature/20260716_143000/ci-head"
-grep -q "ci-head" "$ERR" && ng "#40 GITHUB_HEAD_REF の準拠名は FAIL しない(finding-3)" || ok
+if grep -q "ci-head" "$ERR"; then ng "#40 GITHUB_HEAD_REF の準拠名は FAIL しない(finding-3)"; else ok; fi
+assert_audit_rc 0 "#40 準拠 GITHUB_HEAD_REF は exit 0（finding-3・round2 F）"
+# ③ baseline 登録済み HEAD_REF → 救済され exit 0
 run_audit "$A" GITHUB_HEAD_REF="grandfathered-old-name"
-grep -qFx "  grandfathered-old-name" "$ERR" && ng "#40 baseline 登録済み GITHUB_HEAD_REF は救済(finding-3)" || ok
-run_audit "$A"   # GITHUB_HEAD_REF 未設定（非 CI）は従来どおりローカル branch のみ
-grep -q "bogus/head/ref-noncompliant" "$ERR" && ng "#40 非 CI では GITHUB_HEAD_REF を列挙しない(finding-3・fail-safe)" || ok
+if grep -qFx "  grandfathered-old-name" "$ERR"; then ng "#40 baseline 登録済み GITHUB_HEAD_REF は救済(finding-3)"; else ok; fi
+assert_audit_rc 0 "#40 baseline 登録済み GITHUB_HEAD_REF は exit 0（finding-3・round2 F）"
+# ④ 非 CI（未設定）→ ローカルのみ・全て中立化済み → GITHUB_HEAD_REF を列挙しない・exit 0
+run_audit "$A"
+if grep -q "bogus/head/ref-noncompliant" "$ERR"; then ng "#40 非 CI では GITHUB_HEAD_REF を列挙しない(finding-3・fail-safe)"; else ok; fi
+assert_audit_rc 0 "#40 非 CI（HEAD_REF 未設定）は exit 0（finding-3・round2 F）"
 
 # シナリオ: audit #40 の内部 _audit_valid_branch_ref も Tier1 validate_name と同じ 200 バイト上限を適用し、
 #   極端に長い固有名のブランチを FAIL する（03 追加ケース ← PR#120 finding-2・非対称の是正）。
