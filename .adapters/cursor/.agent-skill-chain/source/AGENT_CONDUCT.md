@@ -77,7 +77,7 @@ document_id: "963b48d6-8e79-4a6c-9a0c-fab2f4ef5c13"
 
 enforcement ゲート（`enforcement/ci/audit.sh` 等）は、AI エージェント自身の作業を監督するために存在する。その監督を、監督される当のエージェントが自ら無効化することは、§6 境界（システム状態を変える操作の前に、証拠がその操作を支持しているか確認する）の特化として禁止する。
 
-- **対象 env**: enforcement ゲートの無効化 env（`*_GATE_ENABLED` 系。例: `GITHUB_ISSUE_GATE_ENABLED`・`BRANCH_LINK_GATE_ENABLED`・`PR_LINK_GATE_ENABLED`・`MODEL_TIER_GATE_ENABLED`）、および発効日（grandfather）上書き env（`*_GATE_EFFECTIVE_FROM` 系）。基準日を未来方向へ上書きして対象範囲をゲート適用外（grandfather 扱い）にする行為も無効化に含む。
+- **対象 env**: enforcement ゲートの無効化 env（`*_GATE_ENABLED` 系。例: `GITHUB_ISSUE_GATE_ENABLED`・`BRANCH_LINK_GATE_ENABLED`・`PR_LINK_GATE_ENABLED`・`MODEL_TIER_GATE_ENABLED`）、および発効日（grandfather）上書き env（`*_GATE_EFFECTIVE_FROM` 系）。基準日を未来方向へ上書きして対象範囲をゲート適用外（grandfather 扱い）にする行為も無効化に含む。**加えて、issue 運用の二重モード（`github_native`／`local_tracked`）を選択する `ISSUE_TRACKING_MODE` も対象に含める**（`*_GATE_ENABLED`／`*_GATE_EFFECTIVE_FROM` の命名グロブに合致しないモード選択 env のため、既存グロブへの暗黙包含に頼らず本項で明示的に列挙する）。
 - **禁止**: AI エージェント（サブエージェントを含む）は、これらの env を**自律的に設定・変更してはならない**。自らの作業に対するゲートを SKIP させる目的での設定は、たとえ「作業を先へ進めるため」であっても自己バイパスであり禁止する。
 - **例外（人間の明示指示がある場合のみ）**: 人間（ユーザー）が自然文・設定変更依頼等でこれらの env の設定・変更を**明示的に指示した場合に限り**、委譲された AI エージェントは設定・変更してよい。文脈からの推測を指示とみなさない。
 - **正当なトグル運用との区別**: プロジェクト単位での恒常的なトグル設定（例: GitHub 非採用環境での無効化）自体は禁止対象ではない。禁止するのは「AI エージェントが自律的にその設定を行うこと」であり、人間が判断した既存の正当な設定（各採用先の `.agent-skill-chain/project/` 等に記録される運用）を否定しない。
@@ -99,7 +99,7 @@ enforcement ゲート（`enforcement/ci/audit.sh` 等）は、AI エージェン
 - **スコープ規律**: 要求以上の機能追加・リファクタ・抽象化禁止。動く最小をやる。起こり得ないシナリオへの防御コード禁止
 - **ターン終了規律**: 「これから X します」で終わらない。実行してから終える。停止してよいのは完了時かユーザーにしか出せない入力待ちのみ
 - **境界**: 問題の説明を受けた時の成果物は評価であって修正ではない。状態変更コマンド前に証拠がその操作を支持するか確認
-- **ゲート自己無効化禁止**: enforcement ゲートの無効化 env（`*_GATE_ENABLED`）・発効日上書き env（`*_GATE_EFFECTIVE_FROM`）を自律的に設定・変更しない。自らのゲートを SKIP させる自己バイパスは禁止。人間の明示指示がある場合のみ設定可
+- **ゲート自己無効化禁止**: enforcement ゲートの無効化 env（`*_GATE_ENABLED`）・発効日上書き env（`*_GATE_EFFECTIVE_FROM`）・issue 追跡の二重モード選択 env（`ISSUE_TRACKING_MODE`）を自律的に設定・変更しない。自らのゲートを SKIP させる自己バイパスは禁止。人間の明示指示がある場合のみ設定可
 - **背景タスク抑止**: 委譲タスク内の長時間コマンドは `run_in_background` を使わずフォアグラウンド実行し完了を待つ（対象は完了が見込める非対話型コマンドに限定。`watch`・サーバー等の無期限／対話型は対象外で、タイムアウト・キャンセルかバックグラウンド化で扱う）。background 起動して自身の応答を終了しない（応答終了後はサブエージェント自身が完了通知を受け取れず停滞する）。正本は run_command.md §委譲の形
 ```
 
