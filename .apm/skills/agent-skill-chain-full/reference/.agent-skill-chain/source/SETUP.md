@@ -167,6 +167,13 @@ orchestrator（メインエージェント）が使えるツールは、`.agent-
 
 > **残余リスクの正直化**: (1) 委譲は orchestrator 起点であり人間起点ではない。人間の関与点は PR マージ（事後の可視化）にあり、セッション内でリアルタイムに阻止する機構ではない。委譲された worker がディスク上のファイルを編集すると、フックは毎回ライブでファイルを読むため PR マージを待たず即時に有効化される。(2) 拡張に書込/実行等価ツール（`mcp__*` 系）が含まれる場合、第一防壁（orchestrator は自分では書けない）は無効化され、残るのは PR レビュー（事後可視）のみとなる。ゆえに本機構は「拡張 allowlist に書込/実行等価ツールが含まれていない」ことを暗黙の前提とする。
 
+### Issue Forms 雛形の利用（opt-in）
+
+`ISSUE_TRACKING_MODE=github_native`（[skills/agent/run_command.md](skills/agent/run_command.md) §Constraints 参照）を採用する場合、GitHub Web UI からの手動起票にも目的・成功基準・受け入れ基準の入力を構造強制できる雛形を用意している。
+
+- **拡張ファイル（実効・ユーザー資産）**: `.github/ISSUE_TEMPLATE/issue-request.yml`（消費先プロジェクトの GitHub 標準探索先）。
+- **雛形**: `.agent-skill-chain/source/enforcement/github/issue-request.example.yml`（使い方コメントのみ。これ自体は enforcement から読まれない）。上記パスへコピーして使う。
+
 ---
 
 ## init / upgrade / uninstall の保持・上書き契約（正本）
