@@ -68,6 +68,8 @@
 #  (36) PR 紐づけ未記録 → README #36
 #  (37) システム仕様書の作業用 issue フォルダ参照禁止 → README #37
 #  (38) モデルティア明記義務の機械検証未通過 → README #38
+#  (39) ルート起点 unbounded find の .worktree prune 欠落（ベストエフォート lint） → README #39
+#  (40) 非準拠ブランチ名の事後検知（grandfather baseline 救済・Tier2） → README #40
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
@@ -1462,6 +1464,141 @@ check_model_tier_recorded() {
   done < <(sqlite3 -separator $'\x1f' "$WF_DB" "SELECT entry_id, COALESCE(issue_path,''), COALESCE(command,''), COALESCE(replace(replace(replace(model_tier, char(9),' '), char(10),' '), char(13),' '),''), COALESCE(replace(replace(replace(tier_rationale, char(9),' '), char(10),' '), char(13),' '),''), COALESCE(replace(replace(replace(tier_exception, char(9),' '), char(10),' '), char(13),' '),'') FROM workflow_log;" 2>/dev/null || true)
 }
 
+# 39. find prune 規約検知（check_find_worktree_prune・B'・P2・BR-11・ベストエフォート lint）。
+#   追跡対象シェル（enforcement/・scripts/ 配下 *.sh）に**ルート起点の unbounded find**
+#   （`find "$PROJECT_ROOT"` 直後が閉じ引用符＝サブディレクトリでスコープされていない）が入り、かつ
+#   同一行に `.worktree` の prune 節（`-path '*/.worktree' -prune` 等）を欠く場合を FAIL とする。
+#   限界（正直に明記）: 静的 grep のため 1 行 find のみ対象・動的生成/複数行継続 find は検知外
+#   （is_sqlite3_invocation と同じベストエフォート）。既存 audit.sh の find は全て $_wfd/$WORKFLOW_DIR/close
+#   スコープ（"$PROJECT_ROOT/..."）であり root 起点でないため本検知の対象外（実測確認済み）。
+#   SKIP: 非 git ツリー、または対象シェルが無い環境。
+check_find_worktree_prune() {
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then
+    echo "SKIP: #39 find prune 規約検知をスキップします（非 git ツリー）" >&2
+    return 0
+  fi
+  echo "[audit] checking find .worktree prune convention (#39)" >&2
+  local found=0 f line
+  local -a targets=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && targets+=("$f")
+  done < <(cd "$PROJECT_ROOT" 2>/dev/null && git ls-files 'enforcement/*.sh' 'scripts/*.sh' '.agent-skill-chain/source/enforcement/*.sh' '.agent-skill-chain/source/scripts/*.sh' 2>/dev/null || true)
+  # 検索ニードルは部品から組み立て、本 check 自身のソース行に contiguous な検知対象文字列が現れないようにする
+  # （self-match 回避）。needle = `find <root> -`（ルート起点＋述語 `-`）の実コマンド形。
+  local _root='"$PROJECT_ROOT"'
+  local needle="find $_root -"
+  local t _trim
+  for t in "${targets[@]}"; do
+    [[ -f "$PROJECT_ROOT/$t" ]] || continue
+    # ルート起点 unbounded find の実コマンド形のみを対象にする。誤検知抑制:
+    #   (a) コメント行（trim 後 '#' 始まり）はスキップ（本 check 自身の説明文を誤検知しない）。
+    #   (b) 実コマンド形のみ＝ルート直後に述語 `-` が続く（`find <root> -name` 等）。コメント中の言及や
+    #       スコープ付き find（`find <root>/<subdir>`）は本 needle に一致しない。
+    while IFS= read -r line; do
+      _trim="${line#"${line%%[![:space:]]*}"}"
+      [[ "$_trim" == \#* ]] && continue
+      if [[ "$line" == *"$needle"* ]]; then
+        # ルート起点 unbounded find を検知。正しい prune 構造（`.worktree` ＋ `-prune` ＋ `-o` が同一 find
+        #   式内に共起し後続処理と分岐している形＝`-path '*/.worktree' -prune -o …`）を伴う場合のみ許容する。
+        #   単に `.worktree` 文字列を `-name` 対象や print 対象に含むだけで prune 構造を欠く迂回形は
+        #   引き続き FAIL に倒す（finding-1: `.worktree` 存在有無だけの旧判定は迂回可能だった）。
+        if [[ "$line" == *'.worktree'* && "$line" == *'-prune'* && "$line" == *'-o'* ]]; then
+          :   # 正しい prune 構造あり → 許容
+        else
+          if [[ "$found" -eq 0 ]]; then
+            echo "FAIL: ルート起点 unbounded find が .worktree prune を欠いています（新規 find は -path '*/.worktree' -prune -o … を入れること・#39・BR-11）:" >&2
+            found=1
+          fi
+          echo "  $t: $line" >&2
+        fi
+      fi
+    done < "$PROJECT_ROOT/$t"
+  done
+  if [[ "$found" -eq 1 ]]; then
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+}
+
+# 40. 非準拠ブランチ名の事後検知（check_worktree_branch_naming・Tier2・BR-14・SC-10）。
+#   全ローカルブランチ名を列挙し、grandfather baseline に**無い**新規ブランチ名が命名規則
+#   <type>/<YYYYMMDD_HHMMSS>/<固有名>（type=feature|bugfix|hotfix|release|chore）に非準拠なら FAIL
+#   （Tier1 hook の網羅バックストップ）。
+#   SKIP（多層・fail-open）: 非 git ツリー／WORKTREE_NAMING_AUDIT_ENABLED（既定 true）が false／
+#   grandfather baseline ファイル不在（初回導入で既存ブランチを誤 FAIL させない・SC-7 非破壊）。
+#   grandfather: baseline（.agent-skill-chain/project/worktree-naming-grandfather.txt・'#'/空行無視）に載る
+#   名前は既存＝対象外（Tier3 allowlist としても機能・gh pr checkout 由来等はここへ追記して救済・BR-15）。
+check_worktree_branch_naming() {
+  case "${WORKTREE_NAMING_AUDIT_ENABLED:-true}" in
+    [Ff][Aa][Ll][Ss][Ee]|0|[Nn][Oo]|[Oo][Ff][Ff]) return 0 ;;
+  esac
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then
+    echo "SKIP: #40 非準拠ブランチ名の事後検知をスキップします（非 git ツリー）" >&2
+    return 0
+  fi
+  local baseline="$PROJECT_ROOT/.agent-skill-chain/project/worktree-naming-grandfather.txt"
+  if [[ ! -f "$baseline" ]]; then
+    echo "SKIP: #40 非準拠ブランチ名の事後検知をスキップします（grandfather baseline 不在＝初回導入前）" >&2
+    return 0
+  fi
+  echo "[audit] checking worktree branch naming (#40)" >&2
+  # baseline を連想配列へ（'#'/空行除去・前後空白 trim）。
+  declare -A _gf=()
+  local gl
+  while IFS= read -r gl || [[ -n "$gl" ]]; do
+    gl="${gl%%$'\r'}"
+    gl="${gl#"${gl%%[![:space:]]*}"}"; gl="${gl%"${gl##*[![:space:]]}"}"
+    [[ -z "$gl" || "$gl" == \#* ]] && continue
+    _gf["$gl"]=1
+  done < "$baseline"
+  # ブランチ名妥当性（LC_ALL=C・validate_branch_ref 相当を自己完結で実装）。
+  _audit_valid_branch_ref() {
+    local LC_ALL=C ref="$1" type ts name rest
+    [[ -z "$ref" ]] && return 1
+    type="${ref%%/*}"; rest="${ref#*/}"
+    [[ "$rest" == "$ref" ]] && return 1
+    ts="${rest%%/*}"; name="${rest#*/}"
+    [[ "$name" == "$rest" ]] && return 1
+    case "$type" in feature|bugfix|hotfix|release|chore) ;; *) return 1 ;; esac
+    [[ "$ts" =~ ^[0-9]{8}_[0-9]{6}$ ]] || return 1
+    [[ -z "$name" ]] && return 1
+    (( ${#name} > 200 )) && return 1              # 長さ上限（LC_ALL=C でバイト数）。Tier1 validate_name と対称（finding-2）
+    case "$name" in .*|-*|*..*|*.lock|*/*) return 1 ;; esac
+    local danger; danger=$(printf ' \t;&|$`"'\''\\<>(){}[^~:#?*!\177')
+    case "$name" in *["$danger"]*) return 1 ;; esac
+    case "$name" in *[]]*) return 1 ;; esac
+    return 0
+  }
+  local br found=0
+  declare -A _seen=()
+  while IFS= read -r br; do
+    [[ -z "$br" ]] && continue
+    [[ -n "${_seen[$br]:-}" ]] && continue        # 重複除去（GITHUB_HEAD_REF とローカル branch の重なり）
+    _seen["$br"]=1
+    [[ -n "${_gf[$br]:-}" ]] && continue          # grandfather 救済
+    if ! _audit_valid_branch_ref "$br"; then
+      if [[ "$found" -eq 0 ]]; then
+        echo "FAIL: 命名規則に非準拠なブランチ名（baseline 未登録の新規）が存在します（#40・BR-14。<type>/<YYYYMMDD_HHMMSS>/<name> に是正、または gh pr checkout 由来等なら baseline へ追記して救済）:" >&2
+        found=1
+      fi
+      echo "  $br" >&2
+    fi
+  done < <(
+    # CI（GitHub Actions）では actions/checkout が PR のマージコミットを detached HEAD で checkout するため、
+    #   git branch だけでは PR の source branch を拾えない。GITHUB_HEAD_REF（設定時のみ・GitHub Actions 標準）を
+    #   列挙対象へ追加する。既存のローカル branch 列挙への追加に留め、無差別な remote 全列挙は行わない
+    #   （他者のリモートブランチを誤 FAIL しない）。非 CI（未設定）は従来どおりローカル branch のみ（fail-safe）。
+    #   grandfather baseline による救済は GITHUB_HEAD_REF にも同様に効く（上のループの _gf 判定）。
+    [[ -n "${GITHUB_HEAD_REF:-}" ]] && printf '%s\n' "$GITHUB_HEAD_REF"
+    git -C "$PROJECT_ROOT" branch --format='%(refname:short)' 2>/dev/null || true
+  )
+  if [[ "$found" -eq 1 ]]; then
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+  unset -f _audit_valid_branch_ref 2>/dev/null || true
+}
+
 check_code_comment_external_ref
 check_review_dual_lists
 check_issue_doc_in_gitignored_path
@@ -1474,6 +1611,8 @@ check_branch_linkage_before_implement
 check_pr_issue_linkage
 check_docs_transient_issue_ref
 check_model_tier_recorded
+check_find_worktree_prune
+check_worktree_branch_naming
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Audit passed."
