@@ -26,6 +26,7 @@
 #   | test-deploy-skills-owned-guard.sh   | bash のみ（deploy-skills.sh を source し由来判定・衝突ガードを関数直呼びで検証・tmp 隔離） |
 #   | test-check-comment-refs.sh          | bash のみ（awk/grep/find 前提。tmp 隔離フィクスチャで正例/負例を検証） |
 #   | test-pretooluse-hook.sh             | bash・git・tar（jq はスクリプト内で任意系統検証） |
+#   | test-worktree-discipline.sh         | bash・git（命名 Tier1 R7・削除前退避 R8・audit #39/#40 を lib 抽出 source＋stdin JSON＋隔離 git リポで検証・tmp 隔離） |
 #   | test-write-workflow-log-prevhash.sh | bash・sqlite3 |
 #   | test-write-workflow-log-multidoc.sh | bash・sqlite3 |
 #   | test-write-workflow-log-glob.sh     | bash・sqlite3（to_json_array の glob 展開是正・noglob 回帰・tmp 隔離） |
@@ -69,6 +70,7 @@ test-model-tier-gate|test-model-tier-gate.sh|bash sqlite3
 test-deploy-skills-owned-guard|test-deploy-skills-owned-guard.sh|bash
 test-check-comment-refs|test-check-comment-refs.sh|bash
 test-pretooluse-hook|test-pretooluse-hook.sh|bash git tar
+test-worktree-discipline|test-worktree-discipline.sh|bash git
 test-write-workflow-log-prevhash|test-write-workflow-log-prevhash.sh|bash sqlite3
 test-write-workflow-log-multidoc|test-write-workflow-log-multidoc.sh|bash sqlite3
 test-write-workflow-log-glob|test-write-workflow-log-glob.sh|bash sqlite3
