@@ -100,6 +100,8 @@ ee "--config-env space（round2）" "status" git_subcommand_of "git --config-env
 ee "--exec-path bare はサブコマンド抽出しない（round2）" "" git_subcommand_of "git --exec-path status"
 ee "--exec-path= 形は抽出する" "status" git_subcommand_of "git --exec-path=/foo status"
 ee "env ラッパー" "switch" git_subcommand_of "env FOO=bar git switch -c x"
+ee "env -i 引数なしフラグを跨いで git 到達（finding-4）" "switch" git_subcommand_of "env -i git switch -c x"
+ee "env --ignore-environment を跨ぐ（finding-4）" "switch" git_subcommand_of "env --ignore-environment git switch -c x"
 ee "非 git" "" git_subcommand_of "grep sqlite3 doc.md"
 
 # シナリオ: 作成形（worktree add/switch -c/checkout -b/branch 作成形）のみを検知し、listing/rename は非作成、削除形（remove/clean -x）のみ破壊検知する（03 T-B2/T-B3/T-C3 ← 01 UC1.5/UC2）。
@@ -116,6 +118,12 @@ ev "switch -c 抽出" 0 _cc 1 "feature/ts/x" "git switch -c feature/ts/x"
 ev "branch 作成形抽出" 0 _cc 1 "feature/ts/x" "git branch feature/ts/x"
 ev "branch -a 非作成" 0 _cc 0 "" "git branch -a"
 ev "branch -m 非作成" 0 _cc 0 "" "git branch -m old new"
+ev "switch --create 長形 抽出（finding-4）" 0 _cc 1 "feature/ts/x" "git switch --create feature/ts/x"
+ev "switch --create= 形 抽出（finding-4）" 0 _cc 1 "feature/ts/x" "git switch --create=feature/ts/x"
+ev "branch --track 作成形抽出（finding-4）" 0 _cc 1 "feature/ts/x" "git branch --track feature/ts/x origin/x"
+ev "branch -t 作成形抽出（finding-4）" 0 _cc 1 "feature/ts/x" "git branch -t feature/ts/x origin/x"
+# worktree add --detach はブランチを作らない → WT_CREATE=1 だが WT_CREATE_BRANCH は空（basename を検証しない・finding-4）
+ev "worktree add --detach はブランチ空（finding-4）" 0 _cc 1 "" "git worktree add --detach .worktree/feature/20260716_143000/x HEAD"
 _dd(){ local eD="$1" seg="$2"; WT_ARGV=(); _wt_effective "$seg" && is_worktree_destroy; local d="${WT_DESTROY:-0}"; [[ "$d" == "$eD" ]]; }
 ev "worktree remove 検知" 0 _dd 1 "git worktree remove foo"
 ev "worktree remove --force 検知" 0 _dd 1 "git worktree remove --force foo"
@@ -150,6 +158,11 @@ run_hook "git status"; assert_rc 0 "status は exit 0"
 run_hook "ls -la"; assert_rc 0 "非 git は exit 0（fail-safe）"
 run_hook "git switch -c release/20260716_143000/x"; assert_rc 0 "準拠 release は exit 0"
 run_hook "git worktree add -b feature/20260716_143000/x /tmp/notunderworktree"; assert_rc 2 "path が .worktree 外は exit 2"
+# finding-4: env -i / switch --create / branch --track の作成形も命名検証、--detach はブランチ検証しない
+run_hook "env -i git switch -c badname"; assert_rc 2 "env -i git switch -c 非準拠は exit 2（finding-4・env -i 迂回防止）"
+run_hook "git switch --create badname"; assert_rc 2 "switch --create 非準拠は exit 2（finding-4）"
+run_hook "git branch --track badname origin/x"; assert_rc 2 "branch --track 非準拠は exit 2（finding-4）"
+run_hook "git worktree add --detach .worktree/feature/20260716_143000/x HEAD"; assert_rc 0 "worktree add --detach は準拠 path なら exit 0（ブランチ検証せず・finding-4）"
 
 # シナリオ: 削除形（remove --force / clean -xf）の前に untracked を退避先へ copy 保全し、原本は残し、untracked 無しは退避せず、いずれも block しない（03 T-C1/T-C2/T-C3 ← 01 UC2・SC-3/SC-4）。
 # Given: tmp 隔離の git リポ（untracked あり/なし）と WORKTREE_TRASH_ROOT=$TRASH で正本 hook を起動する

@@ -185,8 +185,9 @@ _wt_effective() {
   local i=0 n=${#tok[@]}
   while (( i < n )); do
     case "${tok[i]}" in
-      *=*) ((i++)); continue ;;                 # VAR=val 代入
+      *=*) ((i++)); continue ;;                 # VAR=val 代入（env の NAME=val 含む）
       command|env|nohup|nice|stdbuf) ((i++)); continue ;;  # ラッパー
+      -i|--ignore-environment|-|-0|--null|-v|--debug) ((i++)); continue ;;  # env の引数なしフラグ（`env -i git …` で git に到達させる・finding-4）
       *) break ;;
     esac
   done
@@ -276,13 +277,14 @@ _wt_extract_creation() {
   case "$sub" in
     worktree)
       [[ "${WT_ARGV[1]:-}" == "add" ]] || return 0   # add のみ作成（list/remove/prune/move 等は対象外）
-      local -a pos=(); local branch=""
+      local -a pos=(); local branch="" detach=0
       i=2
       while (( i < n )); do
         tok="${WT_ARGV[i]}"
         case "$tok" in
           -b|-B) ((i++)); branch="${WT_ARGV[i]:-}" ;;
           -b?*|-B?*) branch="${tok#-?}" ;;      # -bNAME 結合形
+          --detach) detach=1 ;;                 # detached worktree（ブランチを作らない・finding-4）
           --reason) ((i++)) ;;                  # 引数取りオプション
           --*=*) : ;;
           -*) : ;;
@@ -293,7 +295,9 @@ _wt_extract_creation() {
       local wtpath="${pos[0]:-}"
       [[ -z "$wtpath" ]] && return 0            # path 無し＝曖昧 → allow
       WT_CREATE=1; WT_CREATE_PATH="$wtpath"
-      if [[ -n "$branch" ]]; then
+      if [[ "$detach" -eq 1 && -z "$branch" ]]; then
+        WT_CREATE_BRANCH=""                     # --detach はブランチを作らない → 暗黙 basename をブランチ検証しない（finding-4）
+      elif [[ -n "$branch" ]]; then
         WT_CREATE_BRANCH="$branch"
       else
         local b="${wtpath%/}"; WT_CREATE_BRANCH="${b##*/}"   # -b 無し＝path basename が暗黙ブランチ
@@ -306,6 +310,8 @@ _wt_extract_creation() {
         case "$tok" in
           -c|-C) ((i++)); WT_CREATE_BRANCH="${WT_ARGV[i]:-}"; WT_CREATE=1 ;;
           -c?*|-C?*) WT_CREATE_BRANCH="${tok#-?}"; WT_CREATE=1 ;;
+          --create|--force-create) ((i++)); WT_CREATE_BRANCH="${WT_ARGV[i]:-}"; WT_CREATE=1 ;;   # -c/-C の長形（finding-4）
+          --create=*|--force-create=*) WT_CREATE_BRANCH="${tok#*=}"; WT_CREATE=1 ;;
         esac
         ((i++))
       done
@@ -328,8 +334,9 @@ _wt_extract_creation() {
       while (( i < n )); do
         tok="${WT_ARGV[i]}"
         case "$tok" in
-          -d|-D|--delete|-m|-M|--move|-c|-C|--copy|-l|--list|-a|--all|-r|--remotes|-v|-vv|--verbose|--edit-description|--set-upstream-to|--set-upstream-to=*|-u|--unset-upstream|--contains|--no-contains|--merged|--no-merged|--points-at|--show-current|--format|--format=*|--sort|--sort=*|-t|--track|--track=*|--no-track|--recurse-submodules)
+          -d|-D|--delete|-m|-M|--move|-c|-C|--copy|-l|--list|-a|--all|-r|--remotes|-v|-vv|--verbose|--edit-description|--set-upstream-to|--set-upstream-to=*|-u|--unset-upstream|--contains|--no-contains|--merged|--no-merged|--points-at|--show-current|--format|--format=*|--sort|--sort=*|--recurse-submodules)
             noncreate=1 ;;
+          -t|--track|--track=*|--no-track) : ;;  # `git branch --track <name>` は作成形（name を検証・finding-4）。値は = 形で自己完結し次トークンを消費しない
           -*) : ;;
           *) pos+=("$tok") ;;
         esac
@@ -540,8 +547,8 @@ worktree_name_enforce() {
     esac
     _wt_extract_creation
     [[ "${WT_CREATE:-0}" == "1" ]] || continue   # 作成形と確定できなければ allow（fail-open）
-    if ! validate_branch_ref "$WT_CREATE_BRANCH"; then
-      worktree_name_reject "$WT_CREATE_BRANCH"    # exit 2
+    if [[ -n "$WT_CREATE_BRANCH" ]] && ! validate_branch_ref "$WT_CREATE_BRANCH"; then
+      worktree_name_reject "$WT_CREATE_BRANCH"    # exit 2（ブランチ名が空＝--detach 等はブランチ検証しない・finding-4）
     fi
     if [[ -n "$WT_CREATE_PATH" ]] && ! validate_worktree_path "$WT_CREATE_PATH"; then
       worktree_name_reject "$WT_CREATE_PATH (worktree path)"   # exit 2
