@@ -189,6 +189,10 @@ jobs:
       #    再構築しない限り解消しない。
       - name: Enforcement audit (non-blocking)
         continue-on-error: true
+        # 本リポの実効 Issue 追跡モードを github_native にする env（本リポ CI 限定・配布物には波及しない）。
+        # 既定は local_tracked のため、消費者環境で unset のときは従来どおり local_tracked にフォールバックする。
+        env:
+          ISSUE_TRACKING_MODE: github_native
         run: |
           if [ -f .agent-skill-chain/source/enforcement/ci/audit.sh ]; then
             chmod +x .agent-skill-chain/source/enforcement/ci/audit.sh || true
