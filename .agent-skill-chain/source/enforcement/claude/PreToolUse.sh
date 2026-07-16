@@ -518,9 +518,16 @@ worktree_untracked_rescue() {
   ts="$(TZ=Asia/Tokyo date +%Y%m%d_%H%M%S 2>/dev/null || date +%Y%m%d_%H%M%S 2>/dev/null || echo unknown)"
   base="${target%/}"; base="${base##*/}"
   local -a untracked=()
-  while IFS= read -r -d '' rec; do
-    [[ "$rec" == '??'* ]] && untracked+=("${rec:3}")   # porcelain -z: "?? <path>\0"
-  done < <(git -C "$target" status --porcelain=v1 -z 2>/dev/null)
+  local _rescue_rec _rescue_path
+  # untracked（??）に加え ignored（!!）も収集する。git clean -x/-X は ignored も削除するため、
+  #   退避対象に含めないと ignored 成果物が非可逆消失する（--ignored=matching で個別パス列挙）。
+  while IFS= read -r -d '' _rescue_rec; do
+    case "$_rescue_rec" in
+      '??'*|'!!'*)                                # porcelain -z: "?? <path>\0"（untracked）/ "!! <path>\0"（ignored）
+        _rescue_path="${_rescue_rec:3}"; _rescue_path="${_rescue_path%/}"  # ignored ディレクトリ表記の末尾 / を正規化
+        [[ -n "$_rescue_path" ]] && untracked+=("$_rescue_path") ;;
+    esac
+  done < <(git -C "$target" status --porcelain=v1 -z --ignored=matching 2>/dev/null)
   if [[ ${#untracked[@]} -eq 0 ]]; then
     _wt_purge_trash "$trash"
     return 0                                     # untracked 無し → 退避しない（BR-1・SC-4）
@@ -540,7 +547,7 @@ worktree_untracked_rescue() {
     cp -a "$src" "$ddir/" 2>/dev/null || rc=1
   done
   if [[ "$rc" -eq 0 ]]; then
-    echo "[enforcement:info] rescued ${#untracked[@]} untracked path(s) to $dest (restore from there) / untracked 成果物を退避しました（復元元）: $dest" >&2
+    echo "[enforcement:info] rescued ${#untracked[@]} untracked/ignored path(s) to $dest (restore from there) / untracked・ignored 成果物を退避しました（復元元）: $dest" >&2
   else
     echo "[enforcement:warn] worktree untracked rescue: 一部の退避に失敗しました（削除は継続）: $dest" >&2
   fi

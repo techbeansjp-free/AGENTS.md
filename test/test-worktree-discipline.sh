@@ -212,6 +212,27 @@ assert_rc 0 "clean -xfd（path省略）は block せず exit 0（保全のみ）
 [[ -n "$(find "$FB" -name 'untracked6.md' 2>/dev/null)" ]] && ok || ng "実 clean 後も退避物が生存する(finding-6/7・非可逆消失防止)"
 [[ ! -f "$R6/untracked6.md" ]] && ok || ng "原本は clean で消える（退避が唯一のコピー）"
 
+# シナリオ: git clean -x/-X は ignored（!!）ファイルも削除するため、退避対象に untracked（??）だけでなく
+#   ignored も含めないと ignored 成果物が非可逆消失する（round2 B: 退避収集を --ignored=matching に拡張）。
+# Given: .gitignore に一致する ignored ファイルを持つ tmp git リポ（CWD=target・TMPDIR 制御下）
+# When:  cwd=target で `git clean -xfd`（path 省略）で正本 hook を起動し、その後 実 clean を走らせる
+# Then:  ignored ファイルも target 外へ退避され、実 clean 後も生存する（原本は消える）
+echo "== 結合: R8 退避対象に ignored（!!）を含む（clean -x データ整合性・退避漏れ防止・round2 B） =="
+R7="$TMP/wt7"; mk_repo "$R7"
+printf '%s\n' "ignored-artifact.bin" > "$R7/.gitignore"
+( cd "$R7" && git add .gitignore && git commit -qm gitignore ) >/dev/null 2>&1
+echo secret7 > "$R7/ignored-artifact.bin"        # .gitignore に一致する ignored（!!）ファイル
+FB7="$TMP/fallback7"; mkdir -p "$FB7"
+: > "$ERR"
+( cd "$R7" && echo '{"tool_name":"Bash","agent_id":"sub-1","tool_input":{"command":"git clean -xfd"}}' \
+    | env AGENTS_ROOT="$REPO_SRC" AGENT_ROLE="worker" TMPDIR="$FB7" bash "$HOOK" >/dev/null 2>"$ERR" )
+RC=$?
+assert_rc 0 "ignored 退避: clean -xfd（path省略）は block せず exit 0（保全のみ）"
+[[ -n "$(find "$FB7" -name 'ignored-artifact.bin' 2>/dev/null)" ]] && ok || ng "ignored（!!）ファイルも退避対象に含まれ target 外へ保全される(round2 B)"
+( cd "$R7" && git clean -xfd >/dev/null 2>&1 )   # 実 clean で ignored も破壊
+[[ -n "$(find "$FB7" -name 'ignored-artifact.bin' 2>/dev/null)" ]] && ok || ng "実 clean 後も ignored 退避物が生存する(round2 B・非可逆消失防止)"
+[[ ! -f "$R7/ignored-artifact.bin" ]] && ok || ng "ignored 原本は clean で消える（退避が唯一のコピー）"
+
 # ---- audit #39/#40 ----
 # run_audit は終了コードを AUDIT_RC に保存する（finding-9: 旧実装は終了コードを破棄していた）。
 #   audit.sh は FAIL 時 exit 1・SKIP/PASS 時 exit 0。呼び出し側は AUDIT_RC も検証する。
