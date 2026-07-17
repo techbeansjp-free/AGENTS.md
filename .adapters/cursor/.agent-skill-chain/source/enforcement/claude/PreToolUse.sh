@@ -968,4 +968,41 @@ if [[ "$TOOL" == "Bash" && -n "$CMD" ]]; then
   worktree_destroy_rescue "$CMD"
 fi
 
+# R9. 削除前の記録 commit・push 漏れ検知（失敗条件 #41・ADR-1〜4）。TOOL=Bash かつ CMD 非空のときのみ評価。
+#   削除形（worktree remove〈--force 含む〉/ clean -x|-X / clean が .worktree 対象）検知時に、対象 worktree の
+#   issue 記録（00〜04・90_issues.md）に未 commit 差分または未 push ユニークコミットがあれば block（exit 2）。
+#   **R8 評価の直後・最終 allow の直前に併置**し、R8（物理退避）の関数本体は編集しない（SC-4 非破壊の設計担保）。
+#   共有 lib（worktree_record_guard.sh・R8 と別レイヤー）を source して検知コアを in-process 呼び出しする。
+#   信頼境界: 本 lib はパッケージ所有ソースで PreToolUse.sh と同一信頼レベル（PR レビュー対象・source 可）。
+#   fail-open: lib 不在・関数未定義・非 git・R7 命名非準拠パス・判定不能・内部エラーは SKIP（allow）。
+#   バイパス（ADR-4）: ASC_WORKTREE_CLOSE_BYPASS 設定時は block を解除し、使用を stderr へ明示警告（監査痕跡）。
+if [[ "$TOOL" == "Bash" && -n "$CMD" ]]; then
+  _r9_lib="$AGENTS_ROOT/enforcement/lib/worktree_record_guard.sh"
+  if [[ -f "$_r9_lib" ]]; then
+    # shellcheck source=/dev/null
+    source "$_r9_lib" 2>/dev/null || true
+    if declare -F worktree_record_scan >/dev/null 2>&1; then
+      _r9_norm="${CMD//;/$'\n'}"; _r9_norm="${_r9_norm//&/$'\n'}"; _r9_norm="${_r9_norm//\|/$'\n'}"
+      while IFS= read -r _r9_seg; do
+        [[ -z "${_r9_seg//[[:space:]]/}" ]] && continue
+        _wt_effective "$_r9_seg" || continue
+        case "${WT_ARGV[0]:-}" in worktree|clean) ;; *) continue ;; esac
+        if is_worktree_destroy; then
+          _r9_tgt="$WT_DESTROY_PATH"
+          [[ -z "$_r9_tgt" ]] && _r9_tgt="."       # path 省略時は CWD（clean 等）
+          worktree_record_scan "$_r9_tgt"
+          if [[ "${RECORD_DIRTY:-0}" == "1" ]]; then
+            if _wt_record_bypass_active; then
+              _wt_record_bypass_warn "$_r9_tgt"    # バイパス通過（監査痕跡）→ allow へ落ちる
+            else
+              worktree_record_reject >&2           # A/B 共通文面を stderr へ（transport＝exit 2）
+              exit 2
+            fi
+          fi
+        fi
+      done <<< "$_r9_norm"
+    fi
+  fi
+fi
+
 allow
