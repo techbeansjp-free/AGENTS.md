@@ -32,7 +32,7 @@
 #   (29) 実装前 04（DB 採用時・issue_path スコープで implement/verify ログ 0 件かつ 04 存在）
 #   (31) システム仕様書レビュー証跡欠落（DB・docs/ 採用時・実装変更ログありの 04_review に要=docs/00_review参照/不要=根拠 の内容が無い場合 FAIL）
 #   (32) 実装前 review-docs 未実行検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ review-docs ログ 0 件なら FAIL。#29 と非交差。発効日 grandfather あり）
-#   (33) close 移動未実施検知（DB 採用時・verify-and-close 証跡ありかつ close/ 未移動のトップレベル issue が、発効日以降・猶予超過なら FAIL。#32 と非交差）
+#   (33) close 移動未実施検知（DB 採用時・verify-and-close 証跡ありかつ close/ 未移動のトップレベル issue が、発効日以降・猶予超過なら FAIL。両モードで検知＝github_native はローカルで発火/CI は no-op・GitHub Issue #137。#32 と非交差）
 #   (34) 実装前 GitHub Issue 起票ゲート未通過検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter github_issue が null/欠落なら FAIL。#32 と非交差。close/templates/90_issues 配下・GitHub 非採用環境・発効日 grandfather は SKIP）
 #   (35) 実装前ブランチ紐づけ未記録検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter branch が空/null/~/欠落なら FAIL。#34 の写像だが declined 概念なし・github.com remote 不要。close/templates/90_issues 配下・非 git・発効日 grandfather は SKIP）
 #   (36) PR 紐づけ未記録検知（CI で PR_BODY が渡されたときのみ・PR 本文に有効な Closes/Refs #<番号> が 1 件以上あれば PASS。無い場合は差分内 workflow issue のうち実 Issue 参照を持つ非 declined・非 grandfather の issue が残れば FAIL。PR_BODY 未設定＝ローカル/push は SKIP。#6 の写像・#34 と非交差）
@@ -1078,7 +1078,10 @@ resolve_issue_tracking_mode() {
 
 # 33. close 移動未実施検知（check_close_move_pending）。
 #   workflow.db に verify-and-close 証跡がありながら close/ 未移動のトップレベル issue を、
-#   発効日以降・猶予超過時に検知して FAIL する（02_設計 ADR-1〜5）。
+#   発効日以降・猶予超過時に検知して FAIL する（02_設計 ADR-1〜5、GitHub Issue #137 ADR-137-1/137-4）。
+#   close 移動は両モード（local_tracked／github_native）で行う整理整頓運用のため、本チェックも
+#   両モードで有効（実効モードによる一括 SKIP はしない）。github_native は非追跡ドラフトが実在する
+#   ローカルでのみ発火し CI では走査対象 0 件で no-op になる（下記関数本体コメント参照）。
 #   走査対象は 04_review.md（#29/#31 と同型・unbounded find）。close/・templates/・90_issues/ 配下は
 #   除外する（ADR-5・トップレベル近似。close 配下は移動済み、90_issues 配下はサブ issue 単独完了）。
 #   証跡は workflow_log の verify-and-close 最新 ts_utc を path-component 照合（#29/#32 と同型）で取得する。
@@ -1087,13 +1090,13 @@ resolve_issue_tracking_mode() {
 #   経過日数判定（ADR-3）。sqlite3/DB/workflow_log 不在・ts_utc 解析不能・証跡なしはすべて
 #   fail-open（continue／return 0・ADR-4）。DB・FS への書き込みは一切しない（Query のみ・ADR-CQRS）。
 check_close_move_pending() {
-  # 0. モードガード（最優先・02_設計 ADR-5/ADR-S1-1）: 実効モードが github_native なら
-  #    close 移動運用は廃止済みのため本チェックを丸ごと SKIP する。GITHUB_ISSUE_GATE_ENABLED
-  #    の最優先トグル前例（audit.sh:1118-1122）と同型で、既存 DB ガードより前に置く。
-  if [[ "$(resolve_issue_tracking_mode)" == "github_native" ]]; then
-    echo "SKIP: #33（close ディレクトリ移動状況の検知）をスキップします（実効モードが github_native のため。ISSUE_TRACKING_MODE=github_native かつ github.com remote 検出・02_設計 ADR-5/ADR-S1-2）" >&2
-    return 0
-  fi
+  # 両モード共通で検知する（GitHub Issue #137・ADR-137-1/137-4）: close 移動は tracking の手段
+  # ではなくローカル整理整頓を目的とするため github_native でも行う。よって本チェックは実効モードで
+  # SKIP せず両モードで走らせる。検知はファイルシステム走査（04_review.md）で行われるため、
+  # github_native の非追跡ドラフトが実在するローカル環境（pre-push・手動）でのみ発火し、CI
+  # （actions/checkout は追跡ファイルのみ展開＝非追跡ドラフト不在）では走査対象 0 件で構造的に
+  # no-op になる（#36 PR 紐づけゲートが CI 限定であるのと対称）。resolve_issue_tracking_mode は
+  # #28 と共用のため参照しない・不変。
   if ! command -v sqlite3 >/dev/null 2>&1 || [[ ! -f "$WF_DB" ]]; then echo "SKIP: #33（close ディレクトリ移動状況の検知）をスキップします（workflow.db 不在または sqlite3 不在）" >&2; return 0; fi
   if ! sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then echo "SKIP: #33（close ディレクトリ移動状況の検知）をスキップします（workflow_log テーブル不在）" >&2; return 0; fi
   [[ ${#WORKFLOW_SCAN_DIRS[@]} -eq 0 ]] && return 0
