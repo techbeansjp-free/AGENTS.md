@@ -45,7 +45,7 @@ make_repo() {
   tmp="$(mktemp -d)"
   TMP_DIRS+=("$tmp")
   (
-    cd "$tmp"
+    cd "$tmp" || exit 1
     git init -q
     git config user.email "test@example.com"
     git config user.name "test"
