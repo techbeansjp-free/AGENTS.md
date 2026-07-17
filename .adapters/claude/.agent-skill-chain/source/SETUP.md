@@ -49,7 +49,7 @@ bash .agent-skill-chain/source/scripts/setup.sh
 - .agent-skill-chain/source/boot/（CORE.md, LOAD_POLICY.md）
 - .agent-skill-chain/source/workflow/（PHASES.md, TEMPLATES.md のみ。phase と templates の責務に限定。プラットフォーム・スキル配備は platforms/ に含める）
 - .agent-skill-chain/source/commands/（requirement-discovery, design-feature, implement-feature, verify-and-close）
-- .agent-skill-chain/source/skills/（agent/, requirements/, architecture/, implementation/, testing/, review/, logging/ 各 capability）
+- .agent-skill-chain/source/skills/（agent/, requirements/, experience/, architecture/, implementation/, testing/, review/, logging/ 各 capability）
 - .agent-skill-chain/source/agents/README.md
 - .agent-skill-chain/source/enforcement/（claude/, cursor/, ci/）
 - .agent-skill-chain/source/scribe/README.md
