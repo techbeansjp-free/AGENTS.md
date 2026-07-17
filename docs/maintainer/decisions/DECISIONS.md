@@ -6,7 +6,7 @@ document_id: "aa9911ab-cadc-41be-8620-2053d5f20fa5"
 
 本ファイルは、本リポジトリ（`techbeansjp-free/AGENTS.md`）の設計・運用に関する**恒久的な設計判断（ADR: Architecture Decision Records）**を git 追跡で永続保存する単一の記録先である。
 
-`ISSUE_TRACKING_MODE=github_native` 採用により、起票検討段階のローカル issue ドラフト（`docs/maintainer/workflow/**` 配下の 00〜04）は非追跡化され、完了時も `close/` 移動を行わず GitHub Issue の close で完結する。そのため、非追跡ドラフトが破棄されても失われてはならない**恒久的な設計判断**を、追跡ファイルである本ファイルへ集約する（2026-07-15 の worktree 削除で 02/03 が失われた事故の再発防止も兼ねる）。
+`ISSUE_TRACKING_MODE=github_native` 採用により、起票検討段階のローカル issue ドラフト（`docs/maintainer/workflow/**` 配下の 00〜04）は非追跡化され、tracking は GitHub Issue の close で完結する。**close 移動（`close/` へのローカル整理整頓）は両モードで行う**（ADR-137-1）が、非追跡ドラフトは worktree 削除等で破棄されうる。そのため、破棄されても失われてはならない**恒久的な設計判断**を、追跡ファイルである本ファイルへ集約する（2026-07-15 の worktree 削除で 02/03 が失われた事故の再発防止も兼ねる）。
 
 - **記録形式の正本**: ADR 最小集合の定義は [.agent-skill-chain/source/EVIDENCE_POLICY.md §節2](../../../.agent-skill-chain/source/EVIDENCE_POLICY.md) を正本とする（本ファイルは同形式を適用するのみで再定義しない）。
 - **evidence_source の分類定義**: [.agent-skill-chain/source/CONCEPTS.md §外部根拠の必須化](../../../.agent-skill-chain/source/CONCEPTS.md#外部根拠の必須化external-anchor) を正本とする。
@@ -234,3 +234,35 @@ verify-and-close（04_review）フェーズで本節へ転記した（02_設計 
 - **決定**: **(d) を主軸**とし、追跡対象を「起票前・作業中ドラフト（00〜04 draft）＝ transient・非追跡（S-2 ADR-S2-4 の思想維持）」と「完了済みの恒久判断＝ 追跡ファイル `DECISIONS.md` へ verify-and-close で転記完了」に線引きする。worktree 削除前に恒久判断が DECISIONS.md（追跡）に載っていることを完了要件として担保すれば、transient な 04_review draft が失われても恒久情報は失われない（S-2 設計と非衝突で問題2 を解消）。local_tracked モードの consumer では 04_review 自体が追跡・commit されるため喪失しない。**(c) を即時運用ガード**（enforce off の現状で今日から有効な削除前 `git status --ignored` 確認）として併用。**(e)（enforce 再有効化による退避発火）は本 issue では実施せず、安全策を明文化して別 issue／人間判断へ委譲**する。
 - **根拠 [evidence_source: existing_code + observed_runtime + human_decision]**: existing_code＝PreToolUse.sh の退避機構が `git status --porcelain=v1 -z --ignored=matching` で ignored も収集し `cp -a` 保全する非 block 設計・R8 配線を実読確認。observed_runtime＝`.claude/settings.json` に `hooks` 無し（`grep -c hooks`=0）で退避機構が不発である現状を確認。human_decision＝enforce 再有効化リスクの根拠はユーザーメモリ `feedback_enforce-on-lockout-incident`（2026-07-15 事故）。(d) は機構（hook 発火）非依存で恒久記録を保証するため (e) はクリティカルパスではなく belt-and-suspenders に留まる。
 - **帰結**: 問題2 の恒久記録保全は「恒久判断の DECISIONS.md 転記完了 + 削除前 ignored 確認」で機構非依存に達成する。将来 enforce を再有効化して退避機構を実機発火させる場合の**安全策要件**を残す：①退避は決して block しない事実を活用し reject しうる全ルールを一括有効化しない、②Agent 等 orchestrator 委譲ツールの通過保証を先に確立（2026-07-15 の根本原因修正）、③`!` 付き `enforce off` の緊急解除手段確保・tmp 隔離での先行検証、④発火対象を削除形コマンドに限定。この (e) 安全策の実施・退避ロジック本体・enforce 再有効化・settings.json への hooks 配線は本 issue スコープ外（既存 `20260716_013937` 系／別 issue／人間判断へ申し送り）。
+
+### ADR-137-1: close 移動を「整理整頓目的」と再定義し github_native でも復活させる（ADR-S2-toggle/ADR-S2-5 の該当部を上書き）（2026-07-17・issue: GitHub Issue #137）
+
+- **コンテキスト**: S-2（親 GitHub Issue #115）は close 移動を「tracking の手段」と捉え、github_native では GitHub Issue の close で完結するため close 移動不要と判断した（ADR-S2-toggle 帰結・ADR-S2-5 コンテキスト・正本 4 文書に明記）。しかしプロジェクトオーナーから「close 移動は tracking ではなくローカル整理整頓（active/completed の分離）であり tracking モードに依らず必要。そうなっていないならバグ」との指摘があった。実測でも CLOSED 済み 4 件（#115/#119/#127/#132）が `docs/maintainer/workflow/` 直下に残留している。
+- **検討した選択肢**: (A) close 移動の目的を「整理整頓」と再定義し両モードで実行する。(B) S-2 の判断を維持し github_native では close 移動しない（現状）。(C) github_native 専用に close/ とは別の「アーカイブ」概念を新設する。
+- **決定**: (A)。close 移動の目的を「ローカル整理整頓（`docs/maintainer/workflow/` 直下を active issue のみに保つ）」と正本で再定義し、github_native でも実行する。
+- **根拠 [evidence_source: human_decision]**: プロジェクトオーナーの明示指摘（本 issue 要件 §6・「完了と同時に close へ移動させるべき。ルールがそうなっていないならバグ」）。(B) はオーナー要求と矛盾し残留を放置する。(C) は close/ という既存の完了分離概念があるのに二重概念を持ち込み単一責務・可読性を損なう（spec/06）。
+- **帰結**: CORE.md/PHASES.md/run_command.md/project 自己拡張ワークフロー.md の「close 移動は local_tracked 専用／github_native では不要」の記述を上書きし、両モードで close 移動を行う。**ADR-S2-toggle・ADR-S2-5 の「close 移動を行わない」に相当する該当部は本 ADR で上書きされる**（旧エントリ本文は改変せず履歴として残す）。トリガー・実行主体・実行場所・監査は ADR-137-2〜137-4 で確定する。
+
+### ADR-137-2: トリガー＝GitHub Issue close（人間関与点）、実行主体＝進行役、実行場所＝メインツリー（2026-07-17・issue: GitHub Issue #137）
+
+- **コンテキスト**: PHASES.md は close 移動の最終確定を「人間関与点」で経ることを要求する（local_tracked では PR マージ）。github_native の非追跡ドラフトは git diff に乗らず PR 経由確定が字義どおり成立しない。加えて非追跡ドラフトはメインツリーにのみ実体があり worktree の `git mv`/`mv` は空振りする（#132 の workflow.db 問題と同型）。本日の実例（#115/#119/#127/#132）は verify-and-close 完了と GitHub Issue close のタイミングが必ずしも一致せず、#115 は PR 群マージ後にユーザーが手動で close 確認した。
+- **検討した選択肢**: (a) verify-and-close 完了時点で即座に close 移動まで一括実行する。(b) GitHub Issue が close したローカルディレクトリを移動する（人間関与点＝GitHub Issue close をトリガーにする）。(c) 進行役が手動判断で都度移動する（トリガー規定なし）。
+- **決定**: (b)。**GitHub Issue の close を github_native における人間関与点（＝local_tracked の PR マージに相当）とし、これをトリガー兼確定点とする**。実行主体は**進行役**（承認の直接性を持ち、メインツリーを操作する立場）。実行場所は**メインツリー**（非追跡ドラフトが実在する唯一の場所）。進行役は完了検知後に着手（リンク補正等）してよいが、最終確定は GitHub Issue close を経る。
+- **根拠 [evidence_source: human_decision + existing_code]**: human_decision＝実例（#115 は close タイミングが verify-and-close と乖離）とオーナー指摘「close 移動はメインのディレクトリで対応する必要がある（workflow.db をメインで更新するのと同じ理由）」。existing_code＝PHASES.md「最終確定は必ず人間関与点を経る」の既存原則を github_native に写像（PR マージ→GitHub Issue close）。(a) は close タイミング乖離の実例に反し早期移動してしまう。(c) は silent skip（放置）を招く。サブエージェントはメインツリー直接変更禁止（CLAUDE.md）かつ非追跡ドラフトを worktree から見られないため、実行主体は進行役に限定される。
+- **帰結**: github_native の close 移動フローが「GitHub Issue close（人間関与点）→ 進行役がメインツリーで移動」と確定する。「PR 経由確定」は非追跡ドラフトには適用されない旨を正本へ明記する。project 自己拡張ワークフロー.md §実行確定の 2 分岐 に github_native 分岐（分岐 C）を追加する。
+
+### ADR-137-3: 追跡/非追跡混在をファイル単位で扱うヘルパースクリプト `close-move-issue.sh` を新設する（2026-07-17・issue: GitHub Issue #137）
+
+- **コンテキスト**: 遡及 4 件は追跡状態が混在する。`git ls-files` の実測で #119/#127 は全追跡、#132 は全非追跡、**#115 は同一ディレクトリ内で追跡と非追跡が混在する**。#115 はトップレベル 00〜04 を持たない親ワークフローディレクトリであり、直下は `90_issues.md`（追跡）と `90_issues/`（3 サブ issue）のみで、17 ファイル中 16 が追跡・**唯一の非追跡は `90_issues/20260716_174958_S-2本リポgithub_native採用/04_review.md` の 1 件**。追跡ファイルへ `mv` すると git 履歴上の move を失い、非追跡ファイルへ `git mv` すると失敗するため、ファイル単位の判定が要る。今後の github_native issue も 00〜04・04_review 非追跡＋tests 等追跡が混在しうる。
+- **検討した選択肢**: (A) ファイル単位で追跡状態を判定し追跡=`git mv`／非追跡=`mv` を使い分ける軽量ヘルパースクリプトを新設する。(B) 手順書のみ（人手で使い分け）。(C) ディレクトリ一括 `git mv`（非追跡ファイルが取り残される／エラーになる）。
+- **決定**: (A)。単一 issue ディレクトリを受け取り、配下ファイルを追跡状態でファイル単位に使い分けて `close/<issue>/` へ移動する `close-move-issue.sh` を `.agent-skill-chain/source/scripts/` へ新設する。メインツリー外実行・既存 close/ 衝突はガードで拒否する。リンク補正・完了判断・GitHub 操作は含まない（呼び出し側責務・単一責務）。
+- **根拠 [evidence_source: observed_runtime]**: `git ls-files` によるファイル別の追跡状態を実測（#115=16/17 追跡・唯一の非追跡は S-2 サブ issue の 04_review.md、#119=13/13 追跡、#127=10/10 追跡、#132=0/4 追跡）。混在はディレクトリ内でも発生するため (B)(C) では取り違え・履歴喪失リスクが残る。ファイル単位の機械判定でメインツリーに実在する非追跡ドラフトの取りこぼしと追跡ファイルの履歴喪失を同時に防ぐ。
+- **帰結**: 混在ケースを含む close 移動が機械的に正しく実行される。スクリプトは追加物・opt-in であり既定挙動を変えない（消費者は呼ばない＝非波及）。**スクリプトの守備範囲は「非追跡ドラフト（メインツリーにのみ実在）を含むディレクトリを、メインツリーで移動する」機械部分に限定**し、追跡ファイルの close 移動を PR で確定する経路（feature branch→PR→マージ・direct push 禁止）は呼び出し側（進行役）の worktree+PR フローが担う。
+
+### ADR-137-4: audit #33 の github_native 一括 SKIP を撤廃し、FS/DB 走査による未移動検知を両モードで有効化する（gh 依存は採らない）（2026-07-17・issue: GitHub Issue #137）
+
+- **コンテキスト**: 現状 #33（`check_close_move_pending`）は冒頭で実効モード github_native なら丸ごと SKIP する（「close 移動運用は廃止済み」前提）。ADR-137-1 で close 移動を両モード必要と再定義したため、この SKIP は矛盾する。一方 github_native の完了ドラフト（04_review.md 含む）は非追跡であり、CI（`actions/checkout`）は追跡ファイルのみ展開するため CI では走査対象が不在になる。GitHub Issue の CLOSED 状態を厳密トリガーにするには `gh` CLI（ネットワーク・認証依存）が必要になる。
+- **検討した選択肢**: (A) github_native 一括 SKIP を撤廃し、既存の「verify-and-close 証跡＋猶予超過」FS/DB 走査ロジックを両モードで用いる（`gh` 非依存・決定論的・ローカル主体）。(B) SKIP を維持（現状・ADR-137-1 と矛盾）。(C) #33 を `gh issue view` で GitHub Issue CLOSED 状態を判定する形へ作り替える。
+- **決定**: (A)。#33 冒頭の `resolve_issue_tracking_mode == github_native` 早期 return SKIP ブロックを撤廃する。関数本体の走査・grandfather（既定 20260712）・猶予（`CLOSE_MOVE_GRACE_DAYS` 既定 3）・FAIL メッセージ・`*/close/*` 除外は不変とする。検知はファイルシステム走査で行われ、**非追跡ドラフトが実在するローカル環境でのみ発火し、CI では走査対象不在で自然に no-op になる**（ローカル限定検知・#36 PR 紐づけゲートが CI 限定であるのと対称）。`resolve_issue_tracking_mode` 自体は #28 と共用のため変更しない。
+- **根拠 [evidence_source: existing_code + observed_runtime]**: existing_code＝audit.sh は「人間が事前レビューした固定ロジック・決定論的走査・内容を読んで判断しない」という設計であり、`gh` のネットワーク/認証/レート/オフライン依存を持ち込むと監査の純粋性・可搬性を破壊する。observed_runtime＝CI は追跡ファイルのみ展開＝非追跡 04_review.md 不在＝`find` が対象 0 件＝github_native の CI 検知は構造的に no-op（追加コードなしで安全側）。(C) は監査純粋性を壊し CI では走査対象不在で無意味。(B) は ADR-137-1 と矛盾。
+- **帰結**: #33 は両モードで未移動を検知する Query になる。github_native では local 主体（pre-push・手動）で発火する。遡及の追跡済み完了 issue（#119/#127 の追跡 04_review.md 等）は T3 の SKIP 撤廃後・T5 の移動前の期間に github_native CI で FAIL 検知されうるが、`continue-on-error: true` の**非ブロッキング督促**であり T5 移動後は `*/close/*` 除外で収束する（放置防止の督促として設計意図どおり）。local_tracked の #33 挙動は完全不変（SKIP は元々 github_native のみ・回帰安全）。#33 コメント・SKIP メッセージの「廃止済み」表現を是正する。
