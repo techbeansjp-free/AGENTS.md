@@ -10,7 +10,7 @@ document_id: "e72fef57-1f3b-4cee-89e5-91b42a787acf"
 
 > **重要**: **このドキュメントは常に更新**。本ファイルは一覧・進捗・依存関係の index。各サブ issue の詳細 00〜03 は当該 issue ディレクトリの requirement-discovery/design-feature で個別に起こす（本 index 作成時点では未起票）。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 >
 > **分割理由**: 実装が (a) 審査済み enforcement コード、(b) 本リポ固有の採用（.gitignore＋project override＋新設正本）、(c) 配布物 source 契約ドキュメント、という**別ドメインで独立にレビュー/テストできる 3 単位**に分かれるため（02_設計 §4・03 §2）。tmp 隔離テストを要する audit.sh を独立させ、PR を小さく保つ。
 

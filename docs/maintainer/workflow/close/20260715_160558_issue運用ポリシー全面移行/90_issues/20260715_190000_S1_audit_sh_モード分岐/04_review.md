@@ -9,8 +9,8 @@ document_id: "0c9b9ffd-4584-4e58-ab8c-834d16b20075"
 **最終更新**: 2026 年 07 月 15 日
 
 > **レビュー深度**: standard（変更は「純関数 1 つ＋#33 冒頭ガード 1 ブロック」の挿入のみ・既定 local_tracked で挙動不変）。
-> **参照**: [REVIEW_RULE.md](../../../../../../.agent-skill-chain/source/REVIEW_RULE.md) / [PHASES.md 監査観点](../../../../../../.agent-skill-chain/source/workflow/PHASES.md) / [TEST_BDD_FORMAT.md](../../../../../../.agent-skill-chain/source/TEST_BDD_FORMAT.md) / [DOCS_RULES.md 継続追随ゲート](../../../../../../.agent-skill-chain/source/DOCS_RULES.md)。
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約)。
+> **参照**: [REVIEW_RULE.md](../../../../../../../.agent-skill-chain/source/REVIEW_RULE.md) / [PHASES.md 監査観点](../../../../../../../.agent-skill-chain/source/workflow/PHASES.md) / [TEST_BDD_FORMAT.md](../../../../../../../.agent-skill-chain/source/TEST_BDD_FORMAT.md) / [DOCS_RULES.md 継続追随ゲート](../../../../../../../.agent-skill-chain/source/DOCS_RULES.md)。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約)。
 
 ---
 
@@ -106,7 +106,7 @@ S1-BDD-6〜8 が audit.sh を tmp 隔離リポで**実プロセス実行**し、
 #### 指摘 1: テストコードが TEST_BDD_FORMAT の必須インラインコメント様式を満たさない
 
 - **重要度**: 中
-- **指摘内容**: `tests/s1_bdd.sh` は各ケースを `# ===== S1-BDD-N（G/CO）=====` の区切りコメントで表しており、[TEST_BDD_FORMAT.md](../../../../../../.agent-skill-chain/source/TEST_BDD_FORMAT.md) §0/§1 が**強制**する `ユースケース:`（テスト群）・`シナリオ:`（各ケース）の doc コメント、および `# Given:` / `# When:` / `# Then:` のインラインコメント（各ブロック直上に 1 つ）を備えていない（grep 0 件）。Gherkin 本体（Feature/Scenario/Given/When/Then）は 03_実装計画 §BDD に完全に記述され、テスト ID（S1-BDD-1〜10）で 1:1 対応するが、**テストコード自身**には規約が要求する BDD コメントが載っていない。REVIEW_RULE §フォーマットの正しさ・PHASES 監査観点（テストコードの `ユースケース:`/`シナリオ:`/GWT インラインコメント必須）に照らし、フォーマット逸脱として記録する。
+- **指摘内容**: `tests/s1_bdd.sh` は各ケースを `# ===== S1-BDD-N（G/CO）=====` の区切りコメントで表しており、[TEST_BDD_FORMAT.md](../../../../../../../.agent-skill-chain/source/TEST_BDD_FORMAT.md) §0/§1 が**強制**する `ユースケース:`（テスト群）・`シナリオ:`（各ケース）の doc コメント、および `# Given:` / `# When:` / `# Then:` のインラインコメント（各ブロック直上に 1 つ）を備えていない（grep 0 件）。Gherkin 本体（Feature/Scenario/Given/When/Then）は 03_実装計画 §BDD に完全に記述され、テスト ID（S1-BDD-1〜10）で 1:1 対応するが、**テストコード自身**には規約が要求する BDD コメントが載っていない。REVIEW_RULE §フォーマットの正しさ・PHASES 監査観点（テストコードの `ユースケース:`/`シナリオ:`/GWT インラインコメント必須）に照らし、フォーマット逸脱として記録する。
 - **対応状況**: 対応済み（`tests/s1_bdd.sh` へ付与済み。実測: `ユースケース:` 5 件・`シナリオ:` 10 件・`# Given:` 10 件・`# When:` 9 件・`# Then:` 10 件）
 - **対応方法**: `tests/s1_bdd.sh` の各 S1-BDD ブロック直上に `シナリオ:`（03 の対応 Scenario 名を参照）を、ファイル冒頭のセットアップ群・resolve 系/#33 系/回帰系のまとまりに `ユースケース:` を、各ケース本体の前提/実行/検証に `# Given:`/`# When:`/`# Then:`（必要時 `# And (...)`）を付与した。**機能・アサーションは変更なし**（コメント付与のみ）で、実装成果物・回帰性への影響はない。
 - **evidence_source**: existing_code（テストファイル本文の grep 実測）／external_spec（TEST_BDD_FORMAT.md の強制要件）。
@@ -216,7 +216,7 @@ S1-BDD-6〜8 が audit.sh を tmp 隔離リポで**実プロセス実行**し、
 - [`00_要求定義.md`](./00_要求定義.md) / [`01_要件定義.md`](./01_要件定義.md) / [`02_設計.md`](./02_設計.md) / [`03_実装計画.md`](./03_実装計画.md)
 - [`tests/s1_bdd.sh`](./tests/s1_bdd.sh) / [`memo/20260715_192746_review-docs.md`](./memo/20260715_192746_review-docs.md)
 - 親 issue（GitHub Issue #115）: [`../../02_設計.md`](../../02_設計.md)（ADR-1/2/4/5）／[`../../03_実装計画.md`](../../03_実装計画.md)（T1）
-- [`.agent-skill-chain/source/enforcement/ci/audit.sh`](../../../../../../.agent-skill-chain/source/enforcement/ci/audit.sh)
+- [`.agent-skill-chain/source/enforcement/ci/audit.sh`](../../../../../../../.agent-skill-chain/source/enforcement/ci/audit.sh)
 
 ---
 
