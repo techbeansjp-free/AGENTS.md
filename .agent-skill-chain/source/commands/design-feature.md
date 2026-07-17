@@ -28,11 +28,11 @@
 
 ## PROCESS（Skill chain・この順で実行）
 
-0a. **frame-experience**（体験サーフェス=あり のときのみ）— 体験の前提づけ ※fresh サブ①へ委譲  
+0a. **frame-experience**（`experience_surface` が `null（未記入）または` `"yes: ..."` の場合に実行。`"no: ..."` はスキップ）— 体験の前提づけ ※fresh サブ①へ委譲  
    `skills/experience/frame-experience/`
-0b. **map-experience**（体験サーフェス=あり のときのみ）— 体験の流れ ※fresh サブ②へ委譲  
+0b. **map-experience**（0a の判定結果=あり の場合に実行）— 体験の流れ ※fresh サブ②へ委譲  
    `skills/experience/map-experience/`
-0c. **detail-experience**（体験サーフェス=あり のときのみ）— 体験の具体化 ※fresh サブ③へ委譲  
+0c. **detail-experience**（0a の判定結果=あり の場合に実行）— 体験の具体化 ※fresh サブ③へ委譲  
    `skills/experience/detail-experience/`
 1. **define-boundaries** — 責務・境界の定義  
    `skills/architecture/define-boundaries/`
@@ -42,6 +42,7 @@
    `skills/architecture/review-dependencies/`
 
 > 0a/0b/0c は**各々別の fresh サブ**へ委譲する（一気通貫にしない）。委譲粒度の具体形は「実行時の注意」を参照（ADR-7 委譲手順）。
+> `experience_surface` が `null（未記入）`の場合も 0a を起動し、frame-experience が『あり/なし』を判定する（INPUT の約束と整合）。0b/0c の要否は 0a の判定結果に従う。
 
 ---
 
