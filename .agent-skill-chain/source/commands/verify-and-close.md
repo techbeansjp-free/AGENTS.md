@@ -90,6 +90,7 @@
 確認する欠落工程（抽象形・詳細は上記正本）:
 
 - **commit ステップ**: 1 サブ issue = 1 論理コミット／既定ブランチなら feature ブランチ／**push はユーザー明示時のみ**（[RULES.md](../RULES.md) §高リスク操作）。
+- **記録 commit・push 漏れ検知（終了時契約・アダプタ B）**: worktree 上で作業した issue の close 前に、**当該 worktree の issue 記録（00〜04・90_issues.md）が commit・push 済みか**を機械検証する。削除前ゲート（PreToolUse.sh の R9・失敗条件 #41）と同一の共有 lib を **`bash "$AGENTS_ROOT/enforcement/lib/worktree_record_guard.sh" <close 対象 worktree>`** で実行し、**終了コード**（0＝漏れなし／非 0＝未 commit・未 push 検知）と **stdout レポート**を close 可否判定に用いる。終了コード非 0 かつ非バイパスなら**完了条件不成立**として close を止め、レポートの未 commit／未 push 一覧と解消手順（`git add && git commit`／`git push`）をそのまま提示する。非 git・R7 命名非準拠パス・判定不能はスクリプトが終了コード 0（SKIP）で返すため合格扱い（過剰阻害回避）。stale 警告（stderr）があれば合格でも併記する。バイパスは削除前ゲートと同一の環境変数 `ASC_WORKTREE_CLOSE_BYPASS`（単発は `ASC_WORKTREE_CLOSE_BYPASS=1 <cmd>` のインライン指定を推奨・`export` は避ける）。**このゲートは削除前ゲート（A）の hook 非経由抜けを完了条件として補う二重担保**（[enforcement/lib/worktree_record_guard.sh](../enforcement/lib/worktree_record_guard.sh) が A・B 共有の単一正本）。
 - **別セッション引継ぎ**: 引継ぎ記録＋再開プロンプトを残したか。
 - **clear 境界**: 1 feature = 1 コンテキスト（safe-clear invariant）を保ったか。
 - **fresh サブ分割**: 却下済み指摘＋理由を継承し収束を保証したか。
