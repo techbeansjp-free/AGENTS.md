@@ -10,7 +10,7 @@ document_id: "6b0d3576-15ae-43d9-b7a1-a6f92765f5b0"
 
 > **重要**: **このドキュメントは常に更新**: レビューで発見した問題点や改善提案、対応内容などがあった場合は、即座にこのドキュメントを更新してください。
 >
-> **必須**: 本レビューは [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../.agent-skill-chain/source/REVIEW_RULE.md) を参照して実施した。**レビュー深度**: standard（ドキュメント・command 定義の静的変更・11 ファイル・28 挿入/26 削除）。
+> **必須**: 本レビューは [`.agent-skill-chain/source/REVIEW_RULE.md`](../../../../../../../.agent-skill-chain/source/REVIEW_RULE.md) を参照して実施した。**レビュー深度**: standard（ドキュメント・command 定義の静的変更・11 ファイル・28 挿入/26 削除）。
 
 ---
 
