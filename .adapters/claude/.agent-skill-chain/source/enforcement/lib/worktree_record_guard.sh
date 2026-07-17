@@ -74,17 +74,18 @@ _wt_record_env_gate() {
   abspath="$(_wt_record_abspath "$target")"
   [[ -z "$abspath" ]] && return 0
   abspath="${abspath%/}"
-  # パスフィルタ: 最も内側の .worktree/ 以降が <type>/<YYYYMMDD_HHMMSS>/<name>（3 階層固定）か。
-  #   既存 R7 validate_worktree_path（PreToolUse.sh）と同一の type 集合・timestamp 形式をミラーする。
+  # パスフィルタ: 最も内側の .worktree/ 以降が <type>/<YYYYMMDD_HHMMSS>-<name> か。
+  #   既存 R7 validate_worktree_path（PreToolUse.sh）と同一の type 集合・timestamp 形式・区切りをミラーする
+  #   （<type> と ts の間は `/`、ts と <name> の間は `-`。ts に `-` は無いため最初の `-` が区切りに一意対応）。
   case "$abspath" in
     */.worktree/*) rest="${abspath##*/.worktree/}" ;;   # 最後の .worktree/ 以降（ネスト耐性）
     *) return 0 ;;
   esac
   type="${rest%%/*}"; r2="${rest#*/}"
-  [[ "$r2" == "$rest" ]] && return 0            # 1 階層のみ
-  ts="${r2%%/*}"; name="${r2#*/}"
-  [[ "$name" == "$r2" ]] && return 0            # 2 階層のみ
-  case "$name" in */*) return 0 ;; esac         # 4 階層以上（name に / があれば非準拠）
+  [[ "$r2" == "$rest" ]] && return 0            # type 区切り（/）無し
+  ts="${r2%%-*}"; name="${r2#*-}"
+  [[ "$name" == "$r2" ]] && return 0            # ts と固有名の区切り（-）無し
+  case "$name" in */*) return 0 ;; esac         # name に / があれば非準拠（余分な階層）
   [[ -n "$name" ]] || return 0
   case "$type" in feature|bugfix|hotfix|release|chore) ;; *) return 0 ;; esac
   [[ "$ts" =~ ^[0-9]{8}_[0-9]{6}$ ]] || return 0
