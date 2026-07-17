@@ -14,9 +14,14 @@
 set -euo pipefail
 
 # DB パス解決（read 経路でも使うため早期に定義。INSERT 経路と同一の固定パス）
-PROJECT_ROOT="${PROJECT_ROOT:-.}"
+# worktree 横断で単一 canonical DB を指すよう、共有ヘルパ resolve-wf-db.sh の resolve_wf_db_path を用いる
+# （Issue #132・ADR-132-1）。呼び出し規約: 本スクリプトは PROJECT_ROOT を環境変数で受け取り hint として渡す。
+# PROJECT_ROOT 明示指定は尊重し、未指定/"." のときは git main root（sentinel ガード付き）へ解決する。
+_WFDB_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=resolve-wf-db.sh
+. "$_WFDB_SCRIPT_DIR/resolve-wf-db.sh"
 WORKFLOW_DIR="${WORKFLOW_DIR:-.agent-skill-chain/runtime}"
-WF_DB="${PROJECT_ROOT}/${WORKFLOW_DIR}/workflow.db"
+WF_DB="$(resolve_wf_db_path "${PROJECT_ROOT:-}" "$WORKFLOW_DIR")"
 
 # head 決定関数（共有 Query）: 現 head（最新 entry）の entry_hash を固定 read クエリで返す。
 # head 決定キー = 暗黙 rowid（INSERT 順に単調増加）。DB 未存在・workflow_log 不在・旧スキーマ

@@ -98,6 +98,14 @@ if [[ -n "$GIT_RANGE" ]] && ! [[ "$GIT_RANGE" =~ ^[A-Za-z0-9][A-Za-z0-9_./~^-]*(
   GIT_RANGE="HEAD~1..HEAD"
 fi
 WORKFLOW_DIR="${WORKFLOW_DIR:-.agent-skill-chain/runtime}"
+# DB パス解決（worktree 横断で単一 canonical DB を指す。Issue #132・ADR-132-1）。
+# 走査用 PROJECT_ROOT（$1 由来・上記 L78）は不変のまま、workflow.db パスの導出のみを共有ヘルパへ集約し、
+# 書記（write-workflow-log.sh）と同一の解決規則で read/write を単一 canonical DB へ揃える。
+# 呼び出し規約: audit.sh は位置引数由来の PROJECT_ROOT を hint として渡す（write-workflow-log.sh の env 経由との差はヘルパ引数で吸収）。
+_AUDIT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../../scripts/resolve-wf-db.sh
+. "$_AUDIT_SCRIPT_DIR/../../scripts/resolve-wf-db.sh"
+WF_DB_CANONICAL="$(resolve_wf_db_path "$PROJECT_ROOT" "$WORKFLOW_DIR")"
 # AGENTS_ROOT が呼び出し元で明示的に（非空で）設定されているかを、既定値へのフォールバック前に捕捉する。
 # 未設定時のみを既定値扱いとし、既定値置換後には判別できなくなるため事前に記録しておく。
 if [[ -n "${AGENTS_ROOT:-}" ]]; then AGENTS_ROOT_EXPLICIT=1; else AGENTS_ROOT_EXPLICIT=0; fi
@@ -191,7 +199,7 @@ echo "=== Audit: contract and evidence (enforcement/README §失敗条件と差�
 #   詳細・実効的な検知経路（ローカル pre-push）は enforcement/README.md「workflow.db の扱い」を参照。
 #   本ブロックは検知結果の要約表示のみを担い、各チェック本体の SKIP 条件・判定ロジックは
 #   単一正本（各 check 関数）に委ねる（判定ロジックの二重化はしない）。
-_audit_db_probe_path="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
+_audit_db_probe_path="$WF_DB_CANONICAL"
 if ! command -v sqlite3 >/dev/null 2>&1; then
   echo "SKIP-SUMMARY: sqlite3 コマンドが見つかりません。DB 系チェック（#3, #8-#25, #29, #31-#35）はすべて SKIP されます。実効的な検知経路はローカル pre-push フックです（enforcement/ci/pre-push.example を .git/hooks/pre-push へ導入）。" >&2
 elif [[ ! -f "$_audit_db_probe_path" ]]; then
@@ -290,8 +298,8 @@ if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
 fi
 
 # 3. 実装後 verify-and-close 未実行: workflow.db に implement-feature または verify-and-close が記録されている issue_path のディレクトリには 04_review.md が存在すること
-if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db" ]]; then
-  WF_DB_3="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
+if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$WF_DB_CANONICAL" ]]; then
+  WF_DB_3="$WF_DB_CANONICAL"
   if sqlite3 "$WF_DB_3" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then
     while IFS= read -r -d '' issue_path; do
       [[ -z "$issue_path" ]] && continue
@@ -402,7 +410,7 @@ if [[ ${#WORKFLOW_SCAN_DIRS[@]} -gt 0 ]]; then
 fi
 
 # 8. workflow.db 品質監査（.agent-skill-chain/runtime/workflow.db が存在し workflow_log テーブルがある場合のみ。sqlite3 が無い場合はスキップ）
-WF_DB="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
+WF_DB="$WF_DB_CANONICAL"
 if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$WF_DB" ]]; then
   if sqlite3 "$WF_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_log';" 2>/dev/null | grep -q 'workflow_log'; then
     # 許可されていない command 名
@@ -474,7 +482,7 @@ check_sqlite_sidecar() {
 
 # 11. workflow.db 整合性チェック（存在する場合のみ。証跡破損の検出）
 check_db_integrity() {
-  local db="$PROJECT_ROOT/$WORKFLOW_DIR/workflow.db"
+  local db="$WF_DB_CANONICAL"
   if [[ ! -f "$db" ]]; then
     echo "SKIP: #11 workflow.db 整合性チェックをスキップします（workflow.db 不在）" >&2
     return 0
