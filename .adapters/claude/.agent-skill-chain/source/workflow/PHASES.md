@@ -71,11 +71,15 @@
 
 完了したトップレベル issue を `close/` に移動する手順詳細。**宣言は [CORE.md](../boot/CORE.md) §完了 issue の close 分離**、本節はライフサイクル（いつ・どう移動するか）を定める（1 ファイル 1 責務・重複禁止）。
 
-- **本節は `ISSUE_TRACKING_MODE=local_tracked`（既定）専用の運用である。** `github_native`（`ISSUE_TRACKING_MODE=github_native` かつ `git remote` に github.com を含む場合の実効モード）では、GitHub Issue 自体の close で完結し、本節が定める close 移動（`git mv`）は行わない。以下のトリガー・実行確定手段の分岐は `local_tracked` 運用が前提である。既定値・フォールバック等の全文説明は [skills/agent/run_command.md](../skills/agent/run_command.md) §Constraints を参照。
+- **本節は両モード（`local_tracked`・`github_native`）共通の運用である。** close 移動はローカル整理整頓（アクティブ／完了の分離）を目的とし、tracking モードに依らず必要である。**モード差は実行を確定させる手段（人間関与点）にある**: `local_tracked`（既定）は **PR マージ**で確定し、`github_native`（`ISSUE_TRACKING_MODE=github_native` かつ `git remote` に github.com を含む場合の実効モード）は **GitHub Issue 自体の close** をトリガー兼確定点とする（下記「実行確定手段（分岐・原則）」参照）。既定値・フォールバック等の全文説明は [skills/agent/run_command.md](../skills/agent/run_command.md) §Constraints を参照。
 - **トリガー（厳密）**: 移動は**トップレベル issue が完了したときのみ**行う。**サブ issue が完了しても、親が未完了なら移動しない。** サブ issue が**すべて完了し、かつ親も完了と判断できたとき**に、当該トップレベル issue（配下のサブ issue 含む）を close へ移動する。
 - **完了の定義（接続）**: ここでの「完了」は、当該 issue の**レビューフェーズ（verify-and-close）が完了**（issue 直下に 04_review.md を作成＋ write-workflow-log による書記記録、本表「レビュー」DoD）を満たし、かつ**トップレベルとして残タスク・未完了サブ issue が無い**状態を指す。サブ issue を持つ場合は、配下サブ issue がすべてこの完了条件を満たしていること。
 - **close ステップ**: verify-and-close 完了後にトップレベル完了が確認できたら、当該トップレベル issue ディレクトリ（配下のサブ issue を含む）をワークフローの `close/` ディレクトリ配下へ移動する。
-- **実行確定手段（分岐・原則）**: 完了検知と `git mv` の実行確定は分離する。完了検知（verify-and-close 完了判定・CI 督促）は本節のとおり不変とし、**実際の移動（`git mv`）を確定させる手段は、リポジトリが GitHub 連携しているかで分岐**させる。**GitHub 連携時**は close 移動を **PR 経由に統一**し（feature branch → PR → レビュー → マージ）、main への **direct push で確定しない**。**GitHub 非連携時**は PR という確定手段が無いため、**ユーザーの明示指示を受けてから**移動する（進行役の自己判定のみでの移動は行わない）。いずれの分岐でも、進行役が完了検知後に移動作業へ着手する自動性（feature branch 作成・リンク補正・`git mv` 準備）は維持してよいが、**最終確定は必ず人間関与点（PR マージ／ユーザー明示指示）を経る**。GitHub 連携有無の判定シグナル・PR 手順・ユーザー確認の具体形はコアに持ち込まず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。
+- **実行確定手段（分岐・原則）**: 完了検知と移動の実行確定は分離する。完了検知（verify-and-close 完了判定・CI 督促）は本節のとおり不変とし、**実際の移動を確定させる手段は実効モード（および GitHub 連携有無）で分岐**させる。いずれの分岐でも、進行役が完了検知後に移動作業へ着手する自動性（feature branch 作成・リンク補正・移動準備）は維持してよいが、**最終確定は必ず人間関与点（PR マージ／GitHub Issue close／ユーザー明示指示）を経る**。
+  - **`local_tracked` かつ GitHub 連携時**: close 移動を **PR 経由に統一**し（feature branch → PR → レビュー → マージ）、追跡ファイルの `git mv` を PR で確定する。main への **direct push で確定しない**。
+  - **`local_tracked` かつ GitHub 非連携時**: PR という確定手段が無いため、**ユーザーの明示指示を受けてから**移動する（進行役の自己判定のみでの移動は行わない）。
+  - **`github_native` 時**: **GitHub Issue の close** を人間関与点（＝`local_tracked` の PR マージに相当）とし、これをトリガー兼確定点とする。github_native の完了ドラフト（00〜04・04_review 等）は**非追跡でメインツリーにのみ実在**するため、git diff に乗らず **PR 経由確定が字義どおり成立しない**。したがって非追跡ドラフトの移動は**メインツリーで実行**し（worktree の `git mv`/`mv` は空振りする）、同一ディレクトリに追跡ファイルが混在する場合はファイル単位で追跡=`git mv`（worktree+PR 経路で確定）／非追跡=`mv`（メインツリーで完結）を使い分ける。
+  - GitHub 連携有無・実効モードの判定シグナル・PR 手順・ユーザー確認・移動スクリプトの具体形はコアに持ち込まず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。
 - **配置先（一般）**: ワークフロールート直下の `close/` ディレクトリ（消費者ランタイムでは `.agent-skill-chain/runtime/close/<issue>/`）。
 - **自己拡張（本リポ）の配置先**: `docs/maintainer/workflow/close/<issue>/`。詳細は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../project/自己拡張ワークフロー.md) §完了 issue の close 移動（上書き）を参照。
 - **移動の検知（汎用原則）**: close 移動は妥当な期間内に行われるべきであり、CI（`enforcement/ci/audit.sh` #33）で検知可能にする。具体閾値（発効日・猶予日数）・具体パスはコアに持ち込まず、消費者ランタイム／自己拡張それぞれの `.agent-skill-chain/project/` 側の上書き定義に委ねる（既存の汎用/固有境界パターンを踏襲）。

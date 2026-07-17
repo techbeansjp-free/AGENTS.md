@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# close-move-issue.sh — 単一 issue ディレクトリを close/ 配下へ移動する（追跡=git mv / 非追跡=mv）
+#
+# 目的（GitHub Issue #137・ADR-137-3）:
+#   完了した単一 issue ディレクトリを、配下ファイルの git 追跡状態でファイル単位に使い分けて
+#   `<workflow>/close/<issue>/` へ機械的に移動する Command。追跡ファイルは `git mv`（履歴 move 保持）、
+#   非追跡ファイル（github_native の 00〜04・04_review ドラフト・memo 等）は素の `mv` で移動する。
+#
+# 守備範囲（単一責務・境界）:
+#   本スクリプトは「メインツリーにのみ実在する非追跡ドラフトを含むディレクトリを、メインツリーで移動する」
+#   機械部分に限定する。リンク補正・完了判断・`gh issue` 操作・PR 作成・commit は含まない（呼び出し側責務）。
+#   追跡ファイルの close 移動を PR で確定する経路（feature branch→PR→マージ）は呼び出し側の worktree+PR
+#   フローが担う。混在ディレクトリでは本スクリプトを whole-dir で使わず、追跡分は worktree+PR、非追跡分のみ
+#   本スクリプト（または素の mv）で扱う運用を推奨する（.agent-skill-chain/project 具体手順・分岐 C 参照）。
+#
+# 使い方:
+#   .agent-skill-chain/source/scripts/close-move-issue.sh <issue-dir>
+#   例: .agent-skill-chain/source/scripts/close-move-issue.sh docs/maintainer/workflow/20260717_124638_xxx
+#
+# 事前条件（呼び出し側責務）:
+#   (1) リンク補正・移動前検証が完結していること、(2) 対象 GitHub Issue が CLOSED（人間関与点を経ている）
+#   こと、(3) メインツリーで実行すること（worktree 実行は下記ガードで拒否）。
+#
+# ガード:
+#   - メインツリー実行ガード: worktree 内実行（`--git-dir` != `--git-common-dir`）・非 git・解決失敗は
+#     安全側にエラー終了（ADR-132-1 の sentinel パターンと一貫＝解決先 root 直下に `.agent-skill-chain/`
+#     が実在することを要求）。非追跡ドラフトはメインツリーにのみ実在し worktree では空振りするため。
+#   - 衝突ガード: 移動先 `close/<issue>/` が既存ならエラー終了（上書きしない）。
+#
+# 出力: 移動したファイルのパス一覧（stdout）。exit 0=成功 / 非 0=ガード発火・失敗。
+#   close/ 配下は読まない（`git status` のパスのみで確認する。移動後の内容読取に依存しない）。
+
+set -euo pipefail
+
+die() { printf 'close-move-issue: ERROR: %s\n' "$*" >&2; exit 1; }
+
+# --- 引数検証 ---
+[[ $# -eq 1 ]] || die "引数は <issue-dir> の 1 つ（渡された数: $#）。使い方: close-move-issue.sh <issue-dir>"
+issue_arg="$1"
+[[ -d "$issue_arg" ]] || die "issue-dir が存在しないかディレクトリでない: $issue_arg"
+
+# 絶対パス化（末尾スラッシュ除去）
+issue_dir="$(cd "$issue_arg" && pwd)"
+issue_name="$(basename "$issue_dir")"
+workflow_dir="$(dirname "$issue_dir")"
+# workflow ルート直下の issue であること（close/ 直下や workflow/ そのものを渡さない）
+[[ "$(basename "$workflow_dir")" != "close" ]] || die "close/ 配下の issue は移動対象にできない: $issue_arg"
+target_parent="$workflow_dir/close"
+target_dir="$target_parent/$issue_name"
+
+# --- メインツリー実行ガード（worktree 実行拒否・非 git/解決失敗は安全側エラー） ---
+git_dir="$(git -C "$issue_dir" rev-parse --path-format=absolute --git-dir 2>/dev/null)" \
+  || die "git リポジトリとして解決できない（非 git ツリー等）。メインツリーで実行すること: $issue_arg"
+common_dir="$(git -C "$issue_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+  || die "git-common-dir を解決できない。メインツリーで実行すること: $issue_arg"
+if [[ "$git_dir" != "$common_dir" ]]; then
+  die "worktree 内での実行を検知した（非追跡ドラフトは worktree に実在せず空振りする）。メインツリーで実行すること。"
+fi
+main_root="$(dirname "$common_dir")"
+# sentinel: メインツリー root 直下に .agent-skill-chain/ が実在すること（ADR-132-1 と一貫）
+[[ -d "$main_root/.agent-skill-chain" ]] \
+  || die "メインツリー root（$main_root）直下に .agent-skill-chain/ が見つからない（sentinel 不成立・安全側停止）。"
+
+# --- 衝突ガード ---
+[[ ! -e "$target_dir" ]] || die "移動先が既に存在する（上書きしない）: ${target_dir#$main_root/}"
+
+# --- ファイル単位移動（追跡=git mv / 非追跡=mv） ---
+mkdir -p "$target_parent"
+moved=0
+while IFS= read -r -d '' f; do
+  rel="${f#$issue_dir/}"
+  dest="$target_dir/$rel"
+  dest_parent="$(dirname "$dest")"
+  mkdir -p "$dest_parent"
+  if git -C "$main_root" ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+    git -C "$main_root" mv "$f" "$dest"
+  else
+    mv "$f" "$dest"
+  fi
+  printf '%s -> %s\n' "${f#$main_root/}" "${dest#$main_root/}"
+  moved=$((moved + 1))
+done < <(find "$issue_dir" -type f -print0)
+
+# --- 空になった元ディレクトリを削除 ---
+# （git mv はディレクトリを残す・mv はファイルのみ移すため、空ディレクトリを掃除する）
+if [[ -d "$issue_dir" ]]; then
+  find "$issue_dir" -type d -empty -delete 2>/dev/null || true
+  rmdir "$issue_dir" 2>/dev/null || true
+fi
+
+if [[ "$moved" -eq 0 ]]; then
+  die "移動対象ファイルが 0 件だった（空ディレクトリ？）: $issue_arg"
+fi
+
+# --- 移動確認（パスのみ・close/ 配下の内容は読まない） ---
+printf 'close-move-issue: %d ファイルを %s へ移動しました。\n' "$moved" "${target_dir#$main_root/}"
+printf '確認は `git status`（パス一覧のみ）で行い、close/ 配下の内容は読まないこと。\n'
+git -C "$main_root" status --porcelain -- "${target_dir#$main_root/}" 2>/dev/null | sed 's/^/  /' || true
+exit 0
