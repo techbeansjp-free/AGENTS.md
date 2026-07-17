@@ -65,6 +65,7 @@ flowchart TD
 | フェーズ・成果物・DoD（phase = gate） | workflow/PHASES.md |
 | command を実行するとき（skill chain の実行） | commands/{command}.md と skills/agent/run_command.md |
 | 特定 capability を使うとき | skills/{domain}/{capability}/ |
+| 体験設計（UX/IA/UI の観点確認・experience domain） | skills/experience/README.md |
 | 思想・判断の問い・既知の注意点 | CONCEPTS.md |
 | command / skill の共通入出力契約（filter 化） | IO_CONTRACT.md |
 | システム開発の基本・設計原則・設計判断の優先順位 | spec/（要求・設計の前に参照） |
