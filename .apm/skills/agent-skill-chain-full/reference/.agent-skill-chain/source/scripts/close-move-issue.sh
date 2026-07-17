@@ -25,6 +25,10 @@
 #   - メインツリー実行ガード: worktree 内実行（`--git-dir` != `--git-common-dir`）・非 git・解決失敗は
 #     安全側にエラー終了（ADR-132-1 の sentinel パターンと一貫＝解決先 root 直下に `.agent-skill-chain/`
 #     が実在することを要求）。非追跡ドラフトはメインツリーにのみ実在し worktree では空振りするため。
+#   - workflow root 制限ガード（ADR-137-5）: 移動対象の親ディレクトリが、許可された workflow root
+#     （`<main_root>/docs/maintainer/workflow` または `<main_root>/.agent-skill-chain/runtime`）の直下で
+#     あることを絶対パス照合で要求する。無関係なディレクトリ（例: `.agent-skill-chain/source`）を誤って
+#     渡してフレームワーク本体を移動する事故を防ぐ（close/ 直下も root 不一致で自然に拒否される）。
 #   - 衝突ガード: 移動先 `close/<issue>/` が既存ならエラー終了（上書きしない）。
 #
 # 出力: 移動したファイルのパス一覧（stdout）。exit 0=成功 / 非 0=ガード発火・失敗。
@@ -43,12 +47,10 @@ issue_arg="$1"
 issue_dir="$(cd "$issue_arg" && pwd)"
 issue_name="$(basename "$issue_dir")"
 workflow_dir="$(dirname "$issue_dir")"
-# workflow ルート直下の issue であること（close/ 直下や workflow/ そのものを渡さない）
-[[ "$(basename "$workflow_dir")" != "close" ]] || die "close/ 配下の issue は移動対象にできない: $issue_arg"
-target_parent="$workflow_dir/close"
-target_dir="$target_parent/$issue_name"
 
 # --- メインツリー実行ガード（worktree 実行拒否・非 git/解決失敗は安全側エラー） ---
+#   workflow root 制限（下記）は main_root を基準にした絶対パス照合で行うため、main_root の解決
+#   （git 解決・worktree 拒否・sentinel）を workflow root 制限より前に済ませる（ADR-137-5）。
 git_dir="$(git -C "$issue_dir" rev-parse --path-format=absolute --git-dir 2>/dev/null)" \
   || die "git リポジトリとして解決できない（非 git ツリー等）。メインツリーで実行すること: $issue_arg"
 common_dir="$(git -C "$issue_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
@@ -60,6 +62,26 @@ main_root="$(dirname "$common_dir")"
 # sentinel: メインツリー root 直下に .agent-skill-chain/ が実在すること（ADR-132-1 と一貫）
 [[ -d "$main_root/.agent-skill-chain" ]] \
   || die "メインツリー root（$main_root）直下に .agent-skill-chain/ が見つからない（sentinel 不成立・安全側停止）。"
+
+# --- workflow root 制限（許可された workflow root 直下の issue に限定・ADR-137-5） ---
+#   従来は「workflow_dir の basename が close でない」ことしか見ておらず、無関係なディレクトリ
+#   （例: .agent-skill-chain/source）を誤って渡すと全ガード（メインツリー判定・sentinel）を通過し
+#   フレームワーク本体を close/<basename>/ へ移動してしまう危険があった（CodeRabbit 指摘・Major）。
+#   対策として、移動対象の親ディレクトリ（workflow_dir）が、許可された workflow root の**直下**である
+#   ことを絶対パスで照合する。許可 root は 2 つに固定する（過剰な一般化はしない・安全側）:
+#     (1) 本リポ（自己拡張元）の docs/maintainer/workflow
+#     (2) 消費者ランタイムの既定 .agent-skill-chain/runtime（本スクリプトは配布物のため消費者環境でも使われる）
+#   これにより close/ 直下（親が <root>/close で不一致）や workflow root 外の任意ディレクトリは拒否される。
+case "$workflow_dir" in
+  "$main_root/docs/maintainer/workflow"|"$main_root/.agent-skill-chain/runtime")
+    ;;
+  *)
+    die "許可された workflow root 直下の issue ではない（許可: <main_root>/docs/maintainer/workflow または <main_root>/.agent-skill-chain/runtime。close/ 直下や無関係ディレクトリは拒否）: $issue_arg"
+    ;;
+esac
+
+target_parent="$workflow_dir/close"
+target_dir="$target_parent/$issue_name"
 
 # --- 衝突ガード ---
 [[ ! -e "$target_dir" ]] || die "移動先が既に存在する（上書きしない）: ${target_dir#$main_root/}"
