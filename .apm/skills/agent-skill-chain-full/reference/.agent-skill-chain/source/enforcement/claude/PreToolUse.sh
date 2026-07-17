@@ -240,22 +240,24 @@ validate_name() {
   return 0
 }
 
-# validate_branch_ref <ref> — ブランチ名/ref が <type>/<YYYYMMDD_HHMMSS>/<固有名> 準拠か。
-#   type ∈ {feature,bugfix,hotfix,release,chore}・ts=[0-9]{8}_[0-9]{6}・name は validate_name（/ 不可＝3 階層固定）。
+# validate_branch_ref <ref> — ブランチ名/ref が <type>/<YYYYMMDD_HHMMSS>-<固有名> 準拠か。
+#   type ∈ {feature,bugfix,hotfix,release,chore}・ts=[0-9]{8}_[0-9]{6}・name は validate_name。
+#   区切り: <type> と ts の間は `/`、ts と <固有名> の間は `-`。ts に `-` は含まれないため最初の `-` が
+#   区切りに一意対応する（固有名内部の `-` は保持される）。name に `/` があれば validate_name が弾く。
 validate_branch_ref() {
   local LC_ALL=C ref="$1" type ts name rest
   [[ -z "$ref" ]] && return 1
   type="${ref%%/*}"; rest="${ref#*/}"
-  [[ "$rest" == "$ref" ]] && return 1           # / 無し（1 階層のみ）
-  ts="${rest%%/*}"; name="${rest#*/}"
-  [[ "$name" == "$rest" ]] && return 1          # 2 階層のみ
+  [[ "$rest" == "$ref" ]] && return 1           # / 無し（type 区切りが無い）
+  ts="${rest%%-*}"; name="${rest#*-}"
+  [[ "$name" == "$rest" ]] && return 1          # - 無し（ts と固有名の区切りが無い）
   case "$type" in feature|bugfix|hotfix|release|chore) ;; *) return 1 ;; esac
   [[ "$ts" =~ ^[0-9]{8}_[0-9]{6}$ ]] || return 1
-  validate_name "$name" || return 1             # name に / があれば validate_name が弾く（4 階層以上拒否）
+  validate_name "$name" || return 1             # name に / があれば validate_name が弾く（余分な階層を拒否）
   return 0
 }
 
-# validate_worktree_path <path> [repo_root] — worktree ディレクトリが .worktree/<type>/<ts>/<name>/ 準拠か。
+# validate_worktree_path <path> [repo_root] — worktree ディレクトリが .worktree/<type>/<ts>-<name>/ 準拠か。
 #   repo_root（呼び出し側が git rev-parse --show-toplevel で解決して供給・任意）を与えると、絶対/ネスト
 #   表記の .worktree は「<repo_root>/.worktree/ 直下」に限定し、リポジトリ外（他ディレクトリ配下）の .worktree 等を排除
 #   する（finding-5）。先頭が .worktree/ の相対表記はリポジトリルート相対とみなし従来どおり許容する。
@@ -418,10 +420,10 @@ worktree_name_reject() {
   local got="$1"
   {
     echo "[enforcement:block] 違反(BLOCK): worktree/branch name violates naming rule / worktree・ブランチ名が命名規則に違反しています"
-    echo "  expected: <type>/<YYYYMMDD_HHMMSS>/<name>  (type = feature|bugfix|hotfix|release|chore)"
+    echo "  expected: <type>/<YYYYMMDD_HHMMSS>-<name>  (type = feature|bugfix|hotfix|release|chore)"
     echo "  got:      $got"
-    echo "  fix example: feature/20260716_143000/worktree運用規律"
-    echo "  worktree path must be under: .worktree/<type>/<YYYYMMDD_HHMMSS>/<name>/"
+    echo "  fix example: feature/20260716_143000-worktree運用規律"
+    echo "  worktree path must be under: .worktree/<type>/<YYYYMMDD_HHMMSS>-<name>/"
   } >&2
   exit 2
 }
