@@ -820,6 +820,64 @@ if command -v sqlite3 >/dev/null 2>&1; then
   else
     ng "#33 prefix 非準拠命名で誤 FAIL した: $S33_9_OUT"
   fi
+
+  # シナリオ10: github_native かつ猶予超過 → WARN（非 FAIL・ADR-137-5）
+  # Given: git リポ＋github.com remote＋ISSUE_TRACKING_MODE=github_native、発効日以降(20260801)の
+  #        issue に 04_review.md と猶予超過(30日前)の verify-and-close ログ
+  # When:  audit.sh <tmp> を実行する
+  # Then:  "WARN: close 移動未実施" を出力し "FAIL: close 移動未実施" は出力しない（#33 が FAIL に寄与しない）
+  if command -v git >/dev/null 2>&1; then
+    S33_10_TREE="$(make_min_tree)"
+    ( cd "$S33_10_TREE" && git init -q && git remote add origin https://github.com/example/repo.git ) 2>/dev/null
+    S33_10_ISS="docs/maintainer/workflow/20260801_120000_gh_native_pending"
+    mkdir -p "$S33_10_TREE/$S33_10_ISS"
+    : > "$S33_10_TREE/$S33_10_ISS/04_review.md"
+    S33_10_DB="$S33_10_TREE/.agent-skill-chain/runtime/workflow.db"
+    sqlite3 "$S33_10_DB" "CREATE TABLE workflow_log (entry_id TEXT PRIMARY KEY, command TEXT NOT NULL, issue_path TEXT NULL, ts_utc TEXT NULL);" 2>/dev/null
+    S33_10_OLD_TS="$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+    sqlite3 "$S33_10_DB" "INSERT INTO workflow_log VALUES ('e1','verify-and-close','$S33_10_ISS/','$S33_10_OLD_TS');" 2>/dev/null
+    S33_10_OUT="$(ISSUE_TRACKING_MODE=github_native CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_10_TREE" 2>&1)"; S33_10_RC=$?
+    if grep -q "WARN: close 移動未実施" <<< "$S33_10_OUT" && ! grep -q "FAIL: close 移動未実施" <<< "$S33_10_OUT"; then
+      ok "#33 github_native は猶予超過を WARN（非 FAIL）に格下げする（ADR-137-5・S10）"
+    else
+      ng "#33 github_native で WARN にならなかった: $S33_10_OUT"
+    fi
+
+    # EXIT_CODE 不変（差分検証）: 同一 github_native ツリーで verify-and-close を「猶予内(現在時刻)」に
+    #   差し替えると #33 は何も出さない（no-emit）。この no-emit 基準と、猶予超過(WARN)時の exit code が
+    #   一致すれば、WARN は EXIT_CODE を一切変えていない＝「不変」が証明される（空 04 由来の #5/#31 等
+    #   無関係 FAIL は両者で共通に発生するため相殺され、#33 の寄与のみを厳密に切り出せる）。
+    sqlite3 "$S33_10_DB" "UPDATE workflow_log SET ts_utc='$(date -u +%Y-%m-%dT%H:%M:%SZ)' WHERE entry_id='e1';" 2>/dev/null
+    ISSUE_TRACKING_MODE=github_native CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_10_TREE" >/dev/null 2>&1; S33_10_BASE_RC=$?
+    if [[ $S33_10_RC -eq $S33_10_BASE_RC ]]; then
+      ok "#33 github_native の WARN は EXIT_CODE を変えない（猶予超過時 rc=$S33_10_RC == 猶予内 no-emit 時 rc=$S33_10_BASE_RC・S10）"
+    else
+      ng "#33 github_native の WARN が EXIT_CODE を変えた（猶予超過 rc=$S33_10_RC ≠ 猶予内 rc=$S33_10_BASE_RC）: $S33_10_OUT"
+    fi
+
+    # シナリオ11: 同一 git ツリーだが ISSUE_TRACKING_MODE 未設定（local_tracked）→ 従来どおり FAIL（回帰安全の核心）
+    # Given: シナリオ10 と同一構成（github.com remote あり・猶予超過に戻す）だが ISSUE_TRACKING_MODE を設定しない
+    # When:  audit.sh <tmp> を実行する
+    # Then:  "FAIL: close 移動未実施" を出力する（local_tracked の挙動は完全不変）。
+    #        かつ github_native 実行との FAIL 集合の差分は close 移動 FAIL の 1 行のみ（他 FAIL 集合に差分なし）。
+    sqlite3 "$S33_10_DB" "UPDATE workflow_log SET ts_utc='$S33_10_OLD_TS' WHERE entry_id='e1';" 2>/dev/null
+    S33_11_OUT="$(CLOSE_MOVE_GATE_EFFECTIVE_FROM=20260712_000000 CLOSE_MOVE_GRACE_DAYS=3 bash "$AUDIT" "$S33_10_TREE" 2>&1)"
+    if grep -q "FAIL: close 移動未実施" <<< "$S33_11_OUT"; then
+      ok "#33 local_tracked（ISSUE_TRACKING_MODE 未設定）は同一ツリーでも従来どおり FAIL（回帰安全・S11）"
+    else
+      ng "#33 local_tracked で FAIL しなくなった（回帰）: $S33_11_OUT"
+    fi
+    # 他の FAIL 集合に差分が無い（close 移動 FAIL 行を除けば github_native と local_tracked の FAIL 集合は同一）
+    S33_10_OTHER_FAILS="$(grep '^FAIL:' <<< "$S33_10_OUT" | grep -v 'close 移動未実施' | sort)"
+    S33_11_OTHER_FAILS="$(grep '^FAIL:' <<< "$S33_11_OUT" | grep -v 'close 移動未実施' | sort)"
+    if [[ "$S33_10_OTHER_FAILS" == "$S33_11_OTHER_FAILS" ]]; then
+      ok "#33 close 移動 FAIL 以外の FAIL 集合は両モードで同一（他 FAIL 集合に差分なし・S11）"
+    else
+      ng "#33 close 移動 FAIL 以外の FAIL 集合に差分が出た（github_native と local_tracked で不一致）"
+    fi
+  else
+    echo "  [SKIP] #33 github_native WARN 格下げの検証（git 不在）"
+  fi
 else
   echo "  [SKIP] #33 close 移動未実施検知の回帰（sqlite3 不在）"
 fi
