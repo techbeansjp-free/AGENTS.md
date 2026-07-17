@@ -123,6 +123,102 @@ verify-and-close（04_review）フェーズで本節へ転記した（02_設計 
   - **AC1/AC3/AC4 [evidence_source: observed_runtime]**: `.gitignore` は既存追跡（S-2 の 00〜03）・`DECISIONS.md`・Forms・`90_issues.md`・`docs/README.md` を巻き込まない（over-ignore 0）。Forms は YAML パース可・required 設計妥当。DECISIONS.md は追跡・ADR 5 要素充足。
   - **既知の設計上の帰結（欠陥ではない）**: #36（`check_pr_issue_linkage`）は `git diff --name-only`（追跡ファイルのみ）起点のため非追跡ドラフトを検知対象にできない（Issue 紐づけは GitHub Issue／#34 ゲートで担保）。
 
+### ADR-EXP-1: 新規 skill domain `experience` を 1 つ追加する（既存 skill への統合ではなく）（2026-07-17・issue: GitHub Issue #127（デザイナー視点組込・close済み））
+
+- **コンテキスト**: デザイナー視点（UX/プロダクトデザイン）をどこに置くか。
+- **検討した選択肢**: (a) 既存 skill（extract-goals / define-boundaries）へ観点統合。(b) 新規 domain 追加。(c) ハイブリッド。
+- **決定**: (b)＋(c) の折衷。新規 domain `experience` を 1 つ追加し、`design-feature` chain に条件付き工程として差す。要求フェーズへは新規 skill を置かず、00_要求定義.md の trigger 記入とテンプレート枠で「参加」させる（軽量統合）。ドメイン内のフェーズ分割数は ADR-EXP-7 で決定する。
+- **根拠 [evidence_source: human_decision]**: (a) は該当 skill が二責務化し単一責務を崩す・条件発動（UI/UX 時のみ）の制御が困難。(b) は既存 domain（requirements/architecture/…）の構成に倣え、条件発動を chain step の分岐で表現できる。spec/01 単一責務・spec/06「再利用のために責務を曖昧にしてはならない」に整合し、META_LAYER Rule 1（統合検討）に対しては、体験設計は requirements/architecture のいずれとも責務が異なり統合すると単一責務が崩れるため新規化を選択した。プロジェクトオーナーの「デザイナーがいない」という明示指摘に基づく判断。
+- **帰結**: 新規 domain が 1 つ増える（内部フェーズ capability 数は ADR-EXP-7 が決定）。ただし新規 command・新規 enforcement・新規成果物ファイルは増やさない（ADR-EXP-4/ADR-EXP-5/ADR-EXP-7 で担保）。
+
+### ADR-EXP-2: 差し込み位置は design-feature 冒頭の 1 箇所のみとし、requirement-discovery には新規工程を置かない（2026-07-17・issue: GitHub Issue #127（デザイナー視点組込・close済み））
+
+- **コンテキスト**: アドバイザー（fable、助言限定起用）は requirement-discovery 中盤（extract-goals と write-bdd の間）と design-feature 冒頭の 2 箇所への差し込みを提案していた。
+- **検討した選択肢**: (a) 2 箇所差し込み（アドバイザー案）。(b) design-feature 冒頭 1 箇所のみ＋00_要求定義.md へのトリガー記入で要求フェーズは軽量参加。
+- **決定**: (b)。requirement-discovery の chain（extract-goals→identify-assumptions→define-constraints→write-bdd）は変えない。要求フェーズは 00_要求定義.md の `experience_surface` 記入で参加する。
+- **根拠 [evidence_source: existing_code]**: アドバイザー自身が落とし穴として挙げた「extract-goals・write-bdd との重複」を最小化する。write-bdd は既に「As a / I want / So that」のユーザーストーリーを担っており、体験の流れは設計フェーズで責務・API を逆算する側に置く方が、要件定義の要求（「設計フェーズで体験設計視点が入る」）に直結する。既存の requirement-discovery chain・write-bdd の既存責務を観察した上での判断であり、CONTEXT_EFFICIENCY の過剰適用回避・META_LAYER Rule 3 の最小変更にも整合する。要件定義の受け入れ基準「要求定義フェーズまたは設計フェーズのいずれか」を満たす。
+- **帰結**: 差し込みは 1 箇所。要求フェーズの体験関与はトリガー記入という 1 行コストに抑えられる。将来、要求フェーズ専用の体験 capability（例: `map-user-journey`）が必要と判明した場合は別 issue で追加できる（拡張余地を残す）。
+
+### ADR-EXP-3: 発動トリガーは 00_要求定義.md frontmatter `experience_surface` に記録し、silent skip を防ぐ（2026-07-17・issue: GitHub Issue #127（デザイナー視点組込・close済み））
+
+- **コンテキスト**: UI/UX 非関与 issue への過剰適用を避けつつ、「なし」を黙って素通りさせない（アドバイザー助言）。
+- **検討した選択肢**: (a) 00_要求定義.md frontmatter に必須項目として追加。(b) frontmatter に任意項目として追加し、値が無い場合は frame-experience（体験フェーズ1）の step 1 が設計時に判定・記録。(c) 本文セクションに記録。
+- **決定**: (b)。`experience_surface: "yes: <理由1行>"` または `"no: <理由1行>"`（既存の `github_issue: "declined: <理由>"` パターンに倣う）。任意項目とし、後方互換（既存の 00・既存消費者）を保つ。値が無い/未知の場合、frame-experience の step 1 が体験サーフェスを判定し、判定結果（あり/なし＋理由1行）を必ず 02_設計.md §7.0 に記録する（silent skip 防止は skill レベルで担保）。判定が「なし」なら後続フェーズ（map/detail）はスキップ。00 に `no: <理由>` が明示記入されている場合も無検証で採用せず、設計フェーズで最初に委譲されるサブが §7.0 へ転記した上で体験サーフェス定義（人間が感覚器で直接体験する出力があるか。画面に限らず CLI 出力・エラー・生成 Markdown・エージェント指示文を含む）に照らして検証し、定型理由が実際の出力と矛盾する場合は「あり」へ倒す（fail-safe）。
+- **根拠 [evidence_source: existing_code]**: `github_issue` の declined パターンを踏襲。frontmatter を必須化すると全 issue（バックエンドのみ含む）に記入を強制し過剰適用・後方互換破壊となる。任意＋skill レベルの判定記録なら、過剰適用回避と silent skip 防止（アドバイザー助言）を両立できる。
+- **帰結**: 00_要求定義.md テンプレートに任意 1 項目が増える。判定の実施責任は「値なし→frame-experience step 1」「明示なし値→設計フェーズ最初の委譲サブの転記・検証」に定まり、いずれの経路でも 02_設計.md §7.0 に記録が残る。
+
+### ADR-EXP-4: 新規 enforcement（audit.sh チェック）を追加せず、既存 review-docs ゲート＋DUAL_LENS に相乗りする（2026-07-17・issue: GitHub Issue #127（デザイナー視点組込・close済み））
+
+- **コンテキスト**: META_LAYER Rule 3 は「enforcement を伴わないルール追加」を禁じる。一方で新規 audit チェックの追加は基盤肥大・機械強制の複雑化を招く。
+- **検討した選択肢**: (a) 新規 audit.sh チェック（体験観点欠落を機械検知）。(b) 既存 review-docs ゲート（implement 前の必須ゲート・full/standard 一律必須）と DUAL_LENS（review-docs も対象と明記されている）に「体験観点の有無確認」を相乗りさせる。
+- **決定**: (b)。review-docs.md の確認観点に「体験面=あり の issue は 02_設計.md §7 に体験設計観点が記載されているか」を 1 項追加する。新規 audit.sh チェックは追加しない。
+- **根拠 [evidence_source: existing_code]**: 体験観点は静的機械監査になじまない（ナラティブの質は機械判定不能。アドバイザー助言の「幻覚ペルソナ」「チェックボックス化」リスク）。既存の実装前必須ゲート＝review-docs は既に横断的に発動しており、そこに人手＋DUAL_LENS で確認させる方が実効的。既存の review-docs ゲート構造を観察した上で、本件は「既存 enforcement（review-docs ゲート）を利用する」ため META_LAYER Rule 3 の「enforcement を伴わないルール」には該当しないと判断した。
+- **帰結**: 機械検知は追加されない。実効性は review-docs レビュアーの観点＋DUAL_LENS に依存する（限界として明記）。
+
+### ADR-EXP-5: 成果物ファイルを増やさず、既存 02_設計.md §7 を拡張して体験設計を吸収する（2026-07-17・issue: GitHub Issue #127（デザイナー視点組込・close済み））
+
+- **コンテキスト**: アドバイザー助言「`05_UX設計.md` 等の新規ファイルは避け既存 00〜02 のセクション吸収が望ましい」。
+- **検討した選択肢**: (a) 新規成果物 `05_UX設計.md`。(b) 既存の 02_設計.md テンプレート §7「UI 設計」を「UI/UX・体験設計」へ拡張。
+- **決定**: (b)。02_設計.md テンプレートの §7 を拡張し、7.0 体験サーフェス判定・7.1 フェーズ1（体験の前提）・7.2 フェーズ2（体験の流れ）・7.3 フェーズ3（体験の具体化）・7.4 幻覚ペルソナ注意 を 3 フェーズ対応の受け皿とする（既存 7.1 画面遷移図・7.2 画面設計 は 7.5 以降へ再配置）。
+- **根拠 [evidence_source: human_decision]**: META_LAYER Rule 1（新規文書追加前の統合検討）。成果物ファイル増殖は追跡・監査コストを増やす。既存 §7 は元々「UI 設計」で体験設計と親和性が高い。アドバイザー助言を採用した人間側（設計担当）の判断。
+- **帰結**: 新規成果物ファイルは 0。02_設計.md テンプレートの §7 見出しが変わる（後方互換: 既存 issue の 02_設計.md は §7 を持つため破壊しない）。
+
+### ADR-EXP-6: 基盤修正ファイル数が META_LAYER 目安（≤2）を超えることの明示（2026-07-17・issue: GitHub Issue #127（デザイナー視点組込・close済み））
+
+- **コンテキスト**: META_LAYER の監視指標「1 issue あたり基盤修正ファイル数 ≤ 2（目安）」。本件は新規 7 ファイル（domain README 1 ＋ 3 フェーズ capability × README/SKILL 各 2）＋改修 8 ファイル（command 3〈design-feature / requirement-discovery / review-docs〉・テンプレート 2〈00/02〉・索引/必須条件 2〈workflow/TEMPLATES.md / workflow/SKILL_MANDATORY.md〉・source/README 1）＝計 15 ファイルを触る（ADR-EXP-7 のフェーズ分割で新規ファイルが増える）。
+- **検討した選択肢**: (a) 目安に収めるため機能を削る。(b) 目安超過を許容し、各ファイルの変更を最小に保つ。
+- **決定**: (b)。ただし、(1) フェーズ capability を 3 に絞る（11 工程を丸写ししない・ADR-EXP-7）、(2) 新規 command を作らず既存 design-feature に相乗り、(3) 新規 audit を作らない、(4) 新規成果物ファイルを作らない、(5) 既存 §7 を拡張、(6) requirement-discovery は注記のみ、という 6 つの簡素化で touch ファイルあたりの変更を最小化する。
+- **根拠 [evidence_source: existing_code]**: META_LAYER の指標は「目安」であり「超えた場合、基盤の簡素化を検討する」と定める。既存の META_LAYER 指標定義を踏まえ、本件は「新しい役割（デザイナー視点＝デザインチーム）を CORE に組み込む」という性質上、フェーズ分担（fresh サブ per phase）を成立させるには複数の capability（＝複数ステップ）が不可欠であり（ADR-EXP-7）、単一ファイルには収まらない。指標超過を隠さず明記し、上記 6 簡素化で正当化する。
+- **帰結**: 目安超過を許容。ただし実装 PR は最小 diff を維持し、review-docs で肥大化チェックを受ける。
+
+### ADR-EXP-7: 体験設計を 3 フェーズに分割し、各フェーズを都度 fresh サブへ委譲する（単一 capability 一気通貫の否定）（2026-07-17・issue: GitHub Issue #127（デザイナー視点組込・close済み））
+
+- **コンテキスト**: プロジェクトオーナーが design-feature 完了後に追加要望を提示した。要旨:「デザイナー」を Claude Code の Skill ではなく AI 社員の職務定義（Job Description）として設計し、Web デザインの一連の業務フロー（要件受領 → ビジネス理解 → ユーザー分析 → 競合調査 → 情報設計 → UX 設計 → ワイヤーフレーム → UI → デザインシステム → アクセシビリティ → 実装レビュー → デザインレビュー）を、1 人の AI が一気通貫でこなすのではなく、役割を分担したデザインチームとして、フェーズごとに新規サブエージェント（別のデザイナー）へ引き継ぐべき、というもの。従前の設計は体験設計を単一 capability `map-experience`（＝単一ステップ）に畳み込んでいたが、本フレームワークの標準運用では進行役（orchestrator）は command 単位で委譲し、委譲を受けた 1 サブ（worker）が commands/{name}.md の skill chain を順に実行する。委譲を分割できるのは step（skill）境界のみであり、1 つの capability の内部フェーズを進行役が分割委譲する経路は存在しない。したがって単一 capability では体験設計全工程が 1 サブの一気通貫になり、ユーザー要望と矛盾する。
+- **検討した選択肢**: (a) `map-experience` を単一 capability に維持し、SKILL.md 内で「各フェーズを fresh サブへ委譲せよ」と記す。→ 却下（capability 内部の工程は委譲境界にならず、単一ステップは単一サブに帰結しフレームワーク非整合）。(b) `experience` を独立 command（例 `design-experience`）に切り出し、複数 skill の chain として各ステップを fresh サブへ委譲する。→ PHASE_COMMAND_MAP（phase→command の決定的単一正本）の改変・02_設計.md の所有権の再整理が必要でコア routing への侵襲が大きい。(c) (b) の実行モデル（複数ステップ・各ステップ fresh サブ）を採りつつ、独立 command を新設せず、既存 design-feature chain 冒頭の条件付き複数ステップとして実現する。→ PHASE_COMMAND_MAP・02_設計.md 所有権は不変。
+- **決定**: (c)。体験設計を 3 フェーズ（`frame-experience`〈ビジネス目的＋ユーザー/課題〉→ `map-experience`〈IA＋UXフロー〉→ `detail-experience`〈UI＋デザインシステム＋アクセシビリティ＋実装可能性〉）に分割し、design-feature chain の step 0a/0b/0c として差す。各ステップは orchestrator が都度 fresh サブへ委譲する。ユーザーの「役割分担したデザインチーム」は、フェーズごとに役割の異なる fresh サブ（＝別デザイナー）が担当する構造として実現する。委譲手順（design-feature.md 実行時の注意に明文化）: 体験面=あり の場合、進行役は design-feature の委譲を「step 0a」「step 0b」「step 0c」「残り chain（step 1〜3）」の単位に分割し、既存 run_command の委譲 I/F（Task/Constraints/OutputSpec）で個別に委譲する。各委譲パケットには (1) Task（担当 step と成果物・参照・前フェーズの確定出力）、(2) Constraints（却下済み指摘＋理由・must-preserve リスト・選定ティア/effort の明記）、(3) OutputSpec（当該フェーズの Done）を含める。規模比例で統合する場合は統合対象の工程群を 1 委譲に畳んでよい。11 工程は丸写しせず 3 フェーズへ統合する（要件受領〜競合調査 → frame、情報設計〜ワイヤーフレーム → map、UI〜アクセシビリティ → detail）。「実装レビュー・デザインレビュー・成果物提出」は既存の review-docs（実装前）／verify-and-close（実装後 04_review）が担い、experience に専用フェーズを新設しない。
+- **根拠 [evidence_source: human_decision]**: プロジェクトオーナーの最重要指定。加えて `[evidence_source: existing_code]`（CLOSEOUT.md §fresh サブ分割 の継承前提・委譲 I/F run_command）— ただし既存の fresh サブ分割義務（発火するのは phase 遷移時・レビュー↔修正反復であり command 内の step 単位では自動発火しない）の自動発火ではなく、同原則を体験フェーズ境界へ拡張適用する新たな運用規定を design-feature.md（コア）に明文化する変更である（発火点の追加。CLOSEOUT.md 自体・project 側の発火一覧は改変しない）。3 フェーズ強制による過剰適用リスクを避けるため、`experience_surface: no` は 3 フェーズとも非発動、体験サーフェスが小さい場合は orchestrator の裁量でフェーズを統合してよく最小 1 サブまで畳んでよい（規模比例）。
+- **帰結**: experience domain の capability が 1 → 3 に増える（ADR-EXP-6 のファイル数に反映）。design-feature chain が step 0a/0b/0c を持つ。アドバイザーの「skill は 2 つまで／1 capability に絞る」提言は、それより後に届いたユーザーの fresh サブ分割要望が優先し 3 フェーズへ更新した。
+
+### ADR-EXP-8: detail-experience は「新規作成」より「既存デザイン資産の再利用」を優先する（探索順序と新規作成正当化条件の明文化）（2026-07-17・issue: GitHub Issue #127（デザイナー視点組込・close済み））
+
+- **コンテキスト**: プロジェクトオーナーが design-feature 完了・review-docs 1 回目完了後に追加インプットを提示した。要旨:「Web デザイナー」の設計行為では Atomic Design のような部品分解の名称だけでは統一性を保てず、実務でありがちな失敗（Container が Atom か Template か曖昧・レイアウトがページごとにバラつく・コンポーネントが肥大化する等）が起きる。そこで責務で階層分けした構成（例: Design Tokens → UI Primitives → UI Components → Layout Components → Patterns/Sections → Page Templates → Pages の 7 層）と、AI（デザイナー役）に「新しい画面をデザインする能力」より先に「既存デザインシステムを読み取り・再利用し・必要最小限だけ拡張する能力」を持たせることが最重要と指摘された。従前の detail-experience（ADR-EXP-7）は UI/ビジュアル・デザインシステム適用・アクセシビリティ・実装可能性を扱うが、「新規 UI 要素をいきなり作らせない／既存資産を優先探索する」という決定順序と新規作成が正当化される条件が Process/Done に明文化されていなかった。
+- **検討した選択肢**: (a) プロジェクトオーナー提示の具体例（React/Figma/Storybook 前提のディレクトリ構成・TypeScript コード例・7 層の固定名称）を CORE 成果物にそのままコピーして強制する。→ 却下。本フレームワーク（`.agent-skill-chain/source/`）は特定技術スタック非依存な汎用ワークフロー定義であり、特定の階層名・ディレクトリ構成を CORE にハードコードすると対象外スタックの消費者に不要な制約を課す（META_LAYER Feature First・過剰適用回避）。(b) 技術スタックに依存しない汎用原則のみを抽出して detail-experience に組み込み、具体的な階層名は「消費者プロジェクトが持つ既存の階層・デザインシステム命名を最優先で使い、無ければ一般化した考え方を参考にする」柔軟な形にする。→ 採用。
+- **決定**: (b)。detail-experience に次の技術非依存な汎用原則を組み込む: 1) 既存資産の再利用探索順序（新規作成の前に必ず実施）: ①既存のページテンプレート相当 → ②既存のパターン／セクション相当 → ③既存のコンポーネント相当 → ④既存のレイアウト相当の組み合わせ → ⑤既存のプリミティブ相当 → ⑥それでも不足する場合のみ新規作成。2) 新規作成が正当化される条件（すべて満たすことが望ましい）: 複数箇所での再利用が見込まれる／責務が明確／既存の組み合わせで表現できない／バリアントが明示されている／アクセシビリティ要件が文書化されている／レスポンシブ挙動が文書化されている。3) 4 原則（detail-experience の判断基準）: (i) 基礎値（トークン相当）を自由に増やさない、(ii) レイアウトを個別成果物に直接埋め込まない、(iii) 既存資産を先に探索する、(iv) 新規作成条件を明文化する。4) 階層の考え方（参考・強制しない）: 一般化した多層構造（基礎値 → 最小部品 → 複合部品 → レイアウト → パターン → テンプレート → 個別成果物）は参考情報として示すに留める。消費者プロジェクトが独自の階層・デザインシステム命名を持つ場合はそれを最優先で使う。CORE は特定フレームワーク・特定ディレクトリ構成・特定の階層名を強制しない。判断基準優先順位（§2.1.4）は、プロジェクトオーナー提示のレビュー優先順位（ビジネス目標→ユーザータスク→情報階層→アクセシビリティ→デザインシステム一貫性→レスポンシブ→保守性→ビジュアル洗練度）を統合・精緻化したもの（旧 6 段を 8 段へ細分・矛盾なし）であり、「デザインシステムの一貫性」を明示順位に組み込むことで本 ADR の再利用優先原則と価値観を共有する。
+- **根拠 [evidence_source: human_decision]**: プロジェクトオーナーの追加インプット。META_LAYER Feature First・過剰適用回避（技術非依存性を壊さない）に整合。ADR-EXP-4/ADR-EXP-5 と整合（新規 audit・新規成果物ファイルを増やさず、detail-experience の既存契約 Process/Done と 02_設計.md §7.3 受け皿への追記のみで吸収する）。
+- **帰結**: 新規ファイル・新規 command・新規 audit は増えない（detail-experience の既存契約 Process/Done と 02_設計.md §7.3 テンプレートへの追記のみ）。detail-experience は「新規 UI を作る役」から「既存を読み取り最小拡張する役」へ責務の重心が移る。特定技術スタックは CORE に固定しない。
+
+### ADR-EXPPR128-1: グループ C — design-feature chain の PROCESS 実行条件を「null（未記入）または yes」へ改める（2026-07-17・issue: PR#128指摘対応（親: GitHub Issue #127配下のサブissue））
+
+- **コンテキスト**: `commands/design-feature.md` の INPUT（L25）は「`experience_surface` 未記入の場合は frame-experience が判定する」とするが、PROCESS（L31/33/35）は 0a/0b/0c いずれも「体験サーフェス=あり のときのみ」という条件文で、文字どおり適用すると `experience_surface: null` の issue は 0a（frame-experience）自体が起動されず、INPUT の約束が果たされない（chain 中核の制御フロー矛盾。PR#128 レビュー指摘 finding-2, 7, 14 の根本原因）。
+- **検討した選択肢**: (a) PROCESS 0a の実行条件を「`experience_surface` が `null`（未記入）または `"yes: ..."` の場合に 0a を実行し、0a の判定結果（あり/なし）に応じて 0b/0c の要否を決める。`"no: ..."` は 0a〜0c をスキップ」へ変更する。(b) INPUT 側を「`experience_surface=あり` のときのみ frame-experience が起動」へ書き換え、PROCESS に合わせる。(c) 未記入検出用の新規 audit/enforcement を追加してスキップを検知する。
+- **決定**: (a)。
+- **根拠 [evidence_source: existing_code]**: (b) は「未記入時は frame-experience が判定する」という fail-safe 設計（親issue 02_設計.md ADR-EXP-3・過剰スキップ回避）を捨てることになり後退。(c) は「新規 audit 追加禁止」（本サブ issue 01/00 の制約）に反する。(a) のみが INPUT の意図（未記入→frame-experience が判定）と PROCESS を無矛盾にし、既存の「`no:`＝トリガー非該当の正常系」「0b/0c は 0a の判定結果に従う」という設計を保存する。`design-feature.md` L25/31-35・`skills/experience/README.md` L17 発動条件・親issue 02_設計.md §3.1.4/§3.2.2 を実ファイル確認した上での判断。
+- **帰結**: `commands/design-feature.md` PROCESS・`workflow/SKILL_MANDATORY.md` L13・`workflow/TEMPLATES.md` L27・親issue 02_設計.md §3.2.2 の 4 箇所を同じ条件表現へ揃える。挙動が実際に変わるのは `experience_surface: null` の issue のみ（0a が起動するようになる）。既に `"yes:"`／`"no:"` が明記された issue の挙動・DONE の 2 条件分岐（あり/なし）の意味・step1-3 の順序・委譲粒度（親issue ADR-EXP-7）・規模比例統合は不変。`commands/run_command.md`・`CLOSEOUT.md` は触らない。
+
+### ADR-EXPPR128-2: グループ B — 新規 UI 作成条件の必須レベルの統一先を「満たす場合に限る」（必須）とする（2026-07-17・issue: PR#128指摘対応（親: GitHub Issue #127配下のサブissue））
+
+- **コンテキスト**: 「新規 UI 作成が正当化される条件」の必須レベルが 3 ファイルで不統一（PR#128 レビュー指摘 finding-4, 6）。`skills/experience/detail-experience/README.md`（L21 手順7・L38）は「すべて満たすことが望ましく／望ましい」（努力目標）、`skills/experience/README.md`（L42）は「満たす場合に限る」（必須）、`runtime/templates/02_設計.md` テンプレート §7.3（L305）は「満たすことを明記」（必須度が曖昧）。
+- **検討した選択肢**: (a) 最も厳格な「満たす場合に限る」（必須）へ揃える。(b) 最も緩い「望ましい」（努力目標）へ揃える。
+- **決定**: (a)。
+- **根拠 [evidence_source: existing_code]**: `skills/experience/README.md`（判断基準の domain 正本）が既に採用している「満たす場合に限る」を基準に揃えるのが、既存の再利用優先原則（新規作成を抑制する。親issue ADR-EXP-8）と整合し、二重定義を生まない。(b) は新規 UI 濫造の抑止を弱めるため後退。3 ファイルを実ファイル確認し、誤帰属注記どおり `detail-experience/SKILL.md` には「望ましい」表記が無く `README.md` 側（L21/L38）にあることを確認した上での判断。
+- **帰結**: 是正対象は `skills/experience/detail-experience/README.md`（L21 手順7・L38）・`skills/experience/README.md`（既に必須表現のため原則無変更・用語の一致確認のみ）・`runtime/templates/02_設計.md` テンプレート §7.3（L305）。`detail-experience/SKILL.md` へは誤って新規追記しない。条件 6 項目の内容自体は変更しない。
+
+### ADR-EXPPR128-3: グループ E — review-docs の体験観点確認を各フェーズ必須項目の個別充足へ強化する（2026-07-17・issue: PR#128指摘対応（親: GitHub Issue #127配下のサブissue））
+
+- **コンテキスト**: `commands/review-docs.md` Process 1.1（L27）の体験観点確認は「02_設計.md §7 に体験設計観点が記載されているか」という §7 の存在確認にとどまり、§7 が存在しさえすれば通過する形骸化の余地があった（PR#128 レビュー指摘 finding-13。グループ A・D と同族の「§7 完全性が検証層で完結していない」テーマ）。
+- **検討した選択肢**: (a) `commands/review-docs.md` 本体の確認観点を §7.1/§7.2/§7.3 各フェーズの必須項目の個別充足確認へ書き換える。(b) 新規 audit を追加して各項目の存在を機械検査する。
+- **決定**: (a)。
+- **根拠 [evidence_source: existing_code]**: (b) は新規 audit 追加禁止に反する。(a) は既存 review-docs ゲート（DUAL_LENS 相乗り）の枠内で確認観点を精緻化するのみで、後方互換（体験面=なしを差し戻さない・親issue ADR-EXP-3 形骸化防止）を保つ。`commands/review-docs.md` L27・各フェーズ Done を frame/map/detail の SKILL.md と `runtime/templates/02_設計.md` テンプレート §7.1-7.3 で確認した上での判断。
+- **帰結**: 是正対象は `commands/review-docs.md` L27 と親issue 02_設計.md §3.3（L349 の review-docs 記述）。他の確認観点（DUAL_LENS 敵対的観点・must-preserve・memo 記録・書記委譲）は不変。
+
+### ADR-EXPPR128-4: finding-8 の是正範囲 — 変更対象スコープ記述を §4.1 を主対象として横断整合する（2026-07-17・issue: PR#128指摘対応（親: GitHub Issue #127配下のサブissue））
+
+- **コンテキスト**: 親issue `00_要求定義.md` §4.1（L161）の「変更対象は `.agent-skill-chain/source/`」が、実際の変更範囲（`source/` ＋ `runtime/templates/`）と不一致（PR#128 レビュー指摘 finding-8）。同型の「変更対象＝source/ 限定」記述が 00 の他所・01・03 にも点在する。
+- **検討した選択肢**: (a) §4.1 のみ修正する。(b) §4.1 を主対象としつつ、同じ「変更対象スコープ」を主張する箇所（00 L91/L191・01 L94/L196/L237・03 L25 実装方針文・03 L51 のリスト見出し）も同一規則で整合する。
+- **決定**: (b)。
+- **根拠 [evidence_source: existing_code]**: サブ issue 01_要件定義.md の finding-8 受け入れ基準が「00/01/03 に同種の記述があれば同様に是正対象として確認する」を明記。§4.1 だけ直すと同一ファイル・関連ファイル内に不整合が残り、finding-8 の趣旨（読み手が誤った制約を前提にしない）を満たさない。ただし CORE の概念定義（「`source/` は配布パッケージ正本＝CORE である」という事実記述）は正しいため変更しない。修正するのは「変更対象（スコープ）が source/ に限られる」と読める記述に限る。grep で 00/01/03 の全該当箇所を列挙し、03 L25 の実装方針文「`.agent-skill-chain/source/` 配下の新規 7 ファイル・改修 8 ファイル」と 03 L51 のリスト見出しはいずれも「source/ 配下」と称するが、ファイル表の項目 10-11 が `runtime/templates/` を含むため不正確であることを確認した上での判断。
+- **帰結**: 該当各箇所へ「`.agent-skill-chain/source/`（配布パッケージ正本＝CORE）および `.agent-skill-chain/runtime/templates/`（テンプレート正本）」相当の表現を反映。制約の趣旨（全消費者へ届く／project 限定でない）は維持する。
+
 ### ADR-132-1: workflow.db の worktree 横断集約（`git-common-dir` 固定 + sentinel ガード）（2026-07-17・issue: GitHub Issue #132）
 
 - **コンテキスト**: `write-workflow-log.sh:17` は `PROJECT_ROOT="${PROJECT_ROOT:-.}"`（CWD 基準）で DB パスを解決するため、サブエージェントが git worktree 内（CWD=worktree）で書記を実行すると DB が `<worktree>/.agent-skill-chain/runtime/workflow.db` を指す。`workflow.db` は `.gitignore` 対象＝worktree 間で非共有のため、記録が main ツリーの canonical DB に載らず、`git worktree remove` で失われる。本日（2026-07-17）2 issue・計 7 フェーズ分の記録が欠落し、`audit.sh` が「実装前に 04_review（implement/verify ログ 0 件）」の誤 FAIL を出した。

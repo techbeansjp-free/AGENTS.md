@@ -1531,7 +1531,7 @@ check_find_worktree_prune() {
 
 # 40. 非準拠ブランチ名の事後検知（check_worktree_branch_naming・Tier2・BR-14・SC-10）。
 #   全ローカルブランチ名を列挙し、grandfather baseline に**無い**新規ブランチ名が命名規則
-#   <type>/<YYYYMMDD_HHMMSS>/<固有名>（type=feature|bugfix|hotfix|release|chore）に非準拠なら FAIL
+#   <type>/<YYYYMMDD_HHMMSS>-<固有名>（type=feature|bugfix|hotfix|release|chore）に非準拠なら FAIL
 #   （Tier1 hook の網羅バックストップ）。
 #   SKIP（多層・fail-open）: 非 git ツリー／WORKTREE_NAMING_AUDIT_ENABLED（既定 true）が false／
 #   grandfather baseline ファイル不在（初回導入で既存ブランチを誤 FAIL させない・SC-7 非破壊）。
@@ -1565,9 +1565,9 @@ check_worktree_branch_naming() {
     local LC_ALL=C ref="$1" type ts name rest
     [[ -z "$ref" ]] && return 1
     type="${ref%%/*}"; rest="${ref#*/}"
-    [[ "$rest" == "$ref" ]] && return 1
-    ts="${rest%%/*}"; name="${rest#*/}"
-    [[ "$name" == "$rest" ]] && return 1
+    [[ "$rest" == "$ref" ]] && return 1           # type 区切り（/）無し
+    ts="${rest%%-*}"; name="${rest#*-}"           # ts と固有名の区切りは `-`（ts に `-` は無く一意）
+    [[ "$name" == "$rest" ]] && return 1          # 区切り（-）無し
     case "$type" in feature|bugfix|hotfix|release|chore) ;; *) return 1 ;; esac
     [[ "$ts" =~ ^[0-9]{8}_[0-9]{6}$ ]] || return 1
     [[ -z "$name" ]] && return 1
@@ -1587,7 +1587,7 @@ check_worktree_branch_naming() {
     [[ -n "${_gf[$br]:-}" ]] && continue          # grandfather 救済
     if ! _audit_valid_branch_ref "$br"; then
       if [[ "$found" -eq 0 ]]; then
-        echo "FAIL: 命名規則に非準拠なブランチ名（baseline 未登録の新規）が存在します（#40・BR-14。<type>/<YYYYMMDD_HHMMSS>/<name> に是正、または gh pr checkout 由来等なら baseline へ追記して救済）:" >&2
+        echo "FAIL: 命名規則に非準拠なブランチ名（baseline 未登録の新規）が存在します（#40・BR-14。<type>/<YYYYMMDD_HHMMSS>-<name> に是正、または gh pr checkout 由来等なら baseline へ追記して救済）:" >&2
         found=1
       fi
       echo "  $br" >&2

@@ -66,30 +66,30 @@ ev '$ reject' 1 validate_name 'a$b'
 N200=$(printf 'a%.0s' $(seq 1 200)); ev "200バイトちょうど accept（境界値）" 0 validate_name "$N200"
 N201=$(printf 'a%.0s' $(seq 1 201)); ev "201バイト超 reject（境界値・round2）" 1 validate_name "$N201"
 
-# シナリオ: ブランチ/ref が <type>/<YYYYMMDD_HHMMSS>/<固有名>（type 5 種・3 階層固定）に準拠するか判定する（03 T-B1/T-B6 ← 01 UC1）。
+# シナリオ: ブランチ/ref が <type>/<YYYYMMDD_HHMMSS>-<固有名>（type 5 種・ts と固有名は `-` 区切り）に準拠するか判定する（03 T-B1/T-B6 ← 01 UC1）。
 # Given: hook から抽出した validate_branch_ref（type 集合・ts 形式・name は validate_name）
-# When:  準拠名・type 違反・ts 違反・name 欠落・bare 名・4 階層を与える
+# When:  準拠名・type 違反・ts 違反・区切り欠落・bare 名・固有名に余分な / を与える
 # Then:  準拠のみ accept、他は reject
 echo "== 単体: validate_branch_ref =="
-ev "準拠 accept" 0 validate_branch_ref "feature/20260716_143000/worktree運用規律"
-ev "type違反 reject" 1 validate_branch_ref "feat/20260716_143000/x"
-ev "ts違反 reject" 1 validate_branch_ref "feature/2026_143000/x"
-ev "name欠落 reject" 1 validate_branch_ref "feature/20260716_143000"
+ev "準拠 accept" 0 validate_branch_ref "feature/20260716_143000-worktree運用規律"
+ev "type違反 reject" 1 validate_branch_ref "feat/20260716_143000-x"
+ev "ts違反 reject" 1 validate_branch_ref "feature/2026_143000-x"
+ev "区切り(-)欠落 reject" 1 validate_branch_ref "feature/20260716_143000"
 ev "bare名 reject" 1 validate_branch_ref "myname"
-ev "4階層 reject" 1 validate_branch_ref "feature/20260716_143000/a/b"
+ev "固有名に余分な / reject" 1 validate_branch_ref "feature/20260716_143000-a/b"
 
-# シナリオ: worktree ディレクトリが .worktree/<type>/<ts>/<name>/ 準拠か、.worktree 外・.. を弾くか判定する（03 T-B6b ← 01 UC1 シナリオ3）。
+# シナリオ: worktree ディレクトリが .worktree/<type>/<ts>-<name>/ 準拠か、.worktree 外・.. を弾くか判定する（03 T-B6b ← 01 UC1 シナリオ3）。
 # Given: hook から抽出した validate_worktree_path（.worktree/ 起点＋validate_branch_ref）
 # When:  .worktree 配下の準拠 path・../x・.worktree 外 path を与える
 # Then:  準拠のみ accept、親 escape・配下外は reject
 echo "== 単体: validate_worktree_path =="
-ev ".worktree準拠 accept" 0 validate_worktree_path ".worktree/feature/20260716_143000/x/"
+ev ".worktree準拠 accept" 0 validate_worktree_path ".worktree/feature/20260716_143000-x/"
 ev ".. reject" 1 validate_worktree_path "../x"
 ev ".worktree外 reject" 1 validate_worktree_path "foo/bar"
 # finding-5: repo_root 供給時、絶対/ネスト表記の .worktree は <repo_root>/.worktree/ 直下に限定する
-ev "root供給: 無関係 /tmp/other/.worktree reject（finding-5）" 1 validate_worktree_path "/tmp/other/.worktree/feature/20260716_143000/x" "$REPO_ROOT"
-ev "root供給: repo直下 .worktree accept（finding-5）" 0 validate_worktree_path "$REPO_ROOT/.worktree/feature/20260716_143000/x" "$REPO_ROOT"
-ev "root未供給: 従来どおり構造のみで accept（fail-safe）" 0 validate_worktree_path "/tmp/other/.worktree/feature/20260716_143000/x"
+ev "root供給: 無関係 /tmp/other/.worktree reject（finding-5）" 1 validate_worktree_path "/tmp/other/.worktree/feature/20260716_143000-x" "$REPO_ROOT"
+ev "root供給: repo直下 .worktree accept（finding-5）" 0 validate_worktree_path "$REPO_ROOT/.worktree/feature/20260716_143000-x" "$REPO_ROOT"
+ev "root未供給: 従来どおり構造のみで accept（fail-safe）" 0 validate_worktree_path "/tmp/other/.worktree/feature/20260716_143000-x"
 
 # シナリオ: ラッパー・VAR=val・パス付き git・グローバルオプション（space/=/結合形）を跨いでサブコマンドを正しく抽出し、bare --exec-path はサブコマンド無し扱いにする（03 単体・round2 回帰 ← ADR-3）。
 # Given: hook から抽出した git_subcommand_of（_wt_effective トークナイザ）
@@ -115,7 +115,7 @@ ee "非 git" "" git_subcommand_of "grep sqlite3 doc.md"
 echo "== 単体: 作成形抽出・is_worktree_destroy =="
 _cc(){ local eC="$1" eB="$2" seg="$3"; WT_ARGV=(); _wt_effective "$seg" && _wt_extract_creation || { WT_CREATE=0; WT_CREATE_BRANCH=""; }
   [[ "${WT_CREATE:-0}" == "$eC" && "${WT_CREATE_BRANCH:-}" == "$eB" ]]; }
-ev "worktree add -b 抽出" 0 _cc 1 "feature/20260716_143000/x" "git worktree add -b feature/20260716_143000/x .worktree/feature/20260716_143000/x"
+ev "worktree add -b 抽出" 0 _cc 1 "feature/20260716_143000-x" "git worktree add -b feature/20260716_143000-x .worktree/feature/20260716_143000-x"
 ev "-b 無し暗黙 basename" 0 _cc 1 "myname" "git worktree add .worktree/feature/ts/myname"
 ev "worktree list 非作成" 0 _cc 0 "" "git worktree list"
 ev "switch -c 抽出" 0 _cc 1 "feature/ts/x" "git switch -c feature/ts/x"
@@ -127,7 +127,7 @@ ev "switch --create= 形 抽出（finding-4）" 0 _cc 1 "feature/ts/x" "git swit
 ev "branch --track 作成形抽出（finding-4）" 0 _cc 1 "feature/ts/x" "git branch --track feature/ts/x origin/x"
 ev "branch -t 作成形抽出（finding-4）" 0 _cc 1 "feature/ts/x" "git branch -t feature/ts/x origin/x"
 # worktree add --detach はブランチを作らない → WT_CREATE=1 だが WT_CREATE_BRANCH は空（basename を検証しない・finding-4）
-ev "worktree add --detach はブランチ空（finding-4）" 0 _cc 1 "" "git worktree add --detach .worktree/feature/20260716_143000/x HEAD"
+ev "worktree add --detach はブランチ空（finding-4）" 0 _cc 1 "" "git worktree add --detach .worktree/feature/20260716_143000-x HEAD"
 _dd(){ local eD="$1" seg="$2"; WT_ARGV=(); _wt_effective "$seg" && is_worktree_destroy; local d="${WT_DESTROY:-0}"; [[ "$d" == "$eD" ]]; }
 ev "worktree remove 検知" 0 _dd 1 "git worktree remove foo"
 ev "worktree remove --force 検知" 0 _dd 1 "git worktree remove --force foo"
@@ -151,7 +151,7 @@ assert_err(){ grep -q "$1" "$ERR" && ok || ng "$2 (stderr に '$1' が無い)"; 
 # When:  準拠 add・非準拠 switch -c・bad type branch・listing・非 git・path .worktree 外を順に与える
 # Then:  違反確定は exit 2＋expected/got/fix メッセージ、listing/対象外/非 git は exit 0
 echo "== 結合: R7 命名 Tier1（subagent worker・stdin JSON） =="
-run_hook "git worktree add -b feature/20260716_143000/worktree運用規律 .worktree/feature/20260716_143000/worktree運用規律"; assert_rc 0 "準拠 add は exit 0"
+run_hook "git worktree add -b feature/20260716_143000-worktree運用規律 .worktree/feature/20260716_143000-worktree運用規律"; assert_rc 0 "準拠 add は exit 0"
 run_hook "git switch -c badname"; assert_rc 2 "非準拠 switch -c は exit 2"; assert_err "violates naming rule" "reject メッセージ"; assert_err "expected:" "expected 行"; assert_err "got:" "got 行"
 run_hook "git branch feat/x/y"; assert_rc 2 "bad type branch は exit 2"
 run_hook "git branch -a"; assert_rc 0 "listing branch -a は exit 0（fail-open）"
@@ -160,16 +160,16 @@ run_hook "git worktree list"; assert_rc 0 "worktree list は exit 0"
 run_hook "git checkout main"; assert_rc 0 "既存 checkout は exit 0"
 run_hook "git status"; assert_rc 0 "status は exit 0"
 run_hook "ls -la"; assert_rc 0 "非 git は exit 0（fail-safe）"
-run_hook "git switch -c release/20260716_143000/x"; assert_rc 0 "準拠 release は exit 0"
-run_hook "git worktree add -b feature/20260716_143000/x /tmp/notunderworktree"; assert_rc 2 "path が .worktree 外は exit 2"
+run_hook "git switch -c release/20260716_143000-x"; assert_rc 0 "準拠 release は exit 0"
+run_hook "git worktree add -b feature/20260716_143000-x /tmp/notunderworktree"; assert_rc 2 "path が .worktree 外は exit 2"
 # finding-4: env -i / switch --create / branch --track の作成形も命名検証、--detach はブランチ検証しない
 run_hook "env -i git switch -c badname"; assert_rc 2 "env -i git switch -c 非準拠は exit 2（finding-4・env -i 迂回防止）"
 run_hook "git switch --create badname"; assert_rc 2 "switch --create 非準拠は exit 2（finding-4）"
 run_hook "git branch --track badname origin/x"; assert_rc 2 "branch --track 非準拠は exit 2（finding-4）"
-run_hook "git worktree add --detach .worktree/feature/20260716_143000/x HEAD"; assert_rc 0 "worktree add --detach は準拠 path なら exit 0（ブランチ検証せず・finding-4）"
+run_hook "git worktree add --detach .worktree/feature/20260716_143000-x HEAD"; assert_rc 0 "worktree add --detach は準拠 path なら exit 0（ブランチ検証せず・finding-4）"
 # finding-5: 構造は準拠だがリポジトリルート外の .worktree（/tmp/other/.worktree/…）は exit 2（ブランチ名は準拠にして path 判定を分離）
-run_hook "git worktree add -b feature/20260716_143000/x /tmp/other/.worktree/feature/20260716_143000/x"; assert_rc 2 "リポジトリルート外の .worktree path は exit 2（finding-5）"
-run_hook "git worktree add -b feature/20260716_143000/x $REPO_ROOT/.worktree/feature/20260716_143000/x"; assert_rc 0 "リポジトリルート直下の絶対 .worktree path は exit 0（finding-5）"
+run_hook "git worktree add -b feature/20260716_143000-x /tmp/other/.worktree/feature/20260716_143000-x"; assert_rc 2 "リポジトリルート外の .worktree path は exit 2（finding-5）"
+run_hook "git worktree add -b feature/20260716_143000-x $REPO_ROOT/.worktree/feature/20260716_143000-x"; assert_rc 0 "リポジトリルート直下の絶対 .worktree path は exit 0（finding-5）"
 
 # シナリオ: 削除形（remove --force / clean -xf）の前に untracked を退避先へ copy 保全し、原本は残し、untracked 無しは退避せず、いずれも block しない（03 T-C1/T-C2/T-C3 ← 01 UC2・SC-3/SC-4）。
 # Given: tmp 隔離の git リポ（untracked あり/なし）と WORKTREE_TRASH_ROOT=$TRASH で正本 hook を起動する
@@ -245,7 +245,7 @@ assert_audit_rc(){ [[ "$AUDIT_RC" == "$1" ]] && ok || ng "$2 (AUDIT_RC=$AUDIT_RC
 echo "== 結合: audit #40 非準拠ブランチ名事後検知 =="
 A="$TMP/auditrepo"; mkdir -p "$A/.agent-skill-chain/project"
 ( cd "$A" && git init -q && git config user.email t@t && git config user.name t && echo x>x && git add x && git commit -qm i \
-  && git branch "feature/20260716_143000/compliant" \
+  && git branch "feature/20260716_143000-compliant" \
   && git branch "grandfathered-old-name" \
   && git branch "bogus-new-branch" ) >/dev/null 2>&1
 # baseline に既存の grandfathered のみ登録
@@ -256,7 +256,7 @@ assert_audit_rc 1 "#40 非準拠ブランチありは exit 1（FAIL・finding-9�
 grep -q "grandfathered-old-name" "$ERR" && ng "#40 baseline 登録済みは救済（FAIL しない）" || ok
 # 準拠ブランチは FAIL 行（`  <branch>` 単独行）に現れない（finding-9: 旧 `compliant.*(FAIL|非準拠)` は
 #   FAIL 出力がブランチ名単独行のため常に非マッチな空虚テストだった。ブランチ行の厳密一致へ置換）。
-grep -Fx "  feature/20260716_143000/compliant" "$ERR" && ng "#40 準拠ブランチは FAIL しない（finding-9・厳密一致）" || ok
+grep -Fx "  feature/20260716_143000-compliant" "$ERR" && ng "#40 準拠ブランチは FAIL しない（finding-9・厳密一致）" || ok
 # gate 無効化で SKIP
 run_audit "$A" WORKTREE_NAMING_AUDIT_ENABLED=false
 grep -q "bogus-new-branch" "$ERR" && ng "#40 gate 無効時は検査しない" || ok
@@ -284,7 +284,7 @@ run_audit "$A" GITHUB_HEAD_REF="bogus/head/ref-noncompliant"
 if grep -q "bogus/head/ref-noncompliant" "$ERR"; then ok; else ng "#40 GITHUB_HEAD_REF の非準拠名を FAIL(finding-3)"; fi
 assert_audit_rc 1 "#40 非準拠 GITHUB_HEAD_REF は exit 1（finding-3・round2 F）"
 # ② 準拠 HEAD_REF → FAIL せず・ローカルも中立化済み → exit 0
-run_audit "$A" GITHUB_HEAD_REF="feature/20260716_143000/ci-head"
+run_audit "$A" GITHUB_HEAD_REF="feature/20260716_143000-ci-head"
 if grep -q "ci-head" "$ERR"; then ng "#40 GITHUB_HEAD_REF の準拠名は FAIL しない(finding-3)"; else ok; fi
 assert_audit_rc 0 "#40 準拠 GITHUB_HEAD_REF は exit 0（finding-3・round2 F）"
 # ③ baseline 登録済み HEAD_REF → 救済され exit 0
@@ -303,10 +303,10 @@ assert_audit_rc 0 "#40 非 CI（HEAD_REF 未設定）は exit 0（finding-3・ro
 # Then:  201 バイト超のブランチ名が FAIL 行に現れる（旧実装は長さ上限が無く PASS していた）
 echo "== 結合: audit #40 固有名 200 バイト上限（finding-2・Tier1 と対称） =="
 N201B=$(printf 'a%.0s' $(seq 1 201))
-( cd "$A" && git branch "feature/20260716_143000/$N201B" ) >/dev/null 2>&1
+( cd "$A" && git branch "feature/20260716_143000-$N201B" ) >/dev/null 2>&1
 printf '%s\n' "grandfathered-old-name" > "$A/.agent-skill-chain/project/worktree-naming-grandfather.txt"
 run_audit "$A"
-grep -q "feature/20260716_143000/$N201B" "$ERR" && ok || ng "#40 201バイト超の固有名ブランチを FAIL(finding-2)"
+grep -q "feature/20260716_143000-$N201B" "$ERR" && ok || ng "#40 201バイト超の固有名ブランチを FAIL(finding-2)"
 
 # シナリオ: audit.sh #39 がルート起点 unbounded find の .worktree prune 欠落のみ FAIL し、scoped find・prune 済み find は誤検知しない（03 T-D2 ← 01 UC1.6 シナリオ5・BR-11）。
 # Given: tmp 隔離 git リポに scoped find・root 起点 prune 欠落 find・prune 済み find の各スクリプトを追加する
