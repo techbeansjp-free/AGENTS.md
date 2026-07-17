@@ -11,8 +11,8 @@ document_id: "15d2b9c9-0504-4a32-a299-8813b313bde1"
 
 > **重要**: 本レビューは独立レビュー（implement-feature を実施した別エージェントの成果物を、事前結論を鵜呑みにせずゼロベースで再検証）である。全テストを再実行し、実測ログに基づいて判定した。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
-> **必須参照**: [.agent-skill-chain/source/REVIEW_RULE.md](../../../../../../.agent-skill-chain/source/REVIEW_RULE.md)。レビュー深度 = **full**（新規 lib + 正本 hook 拡張 + 新規テストを含む中〜大規模）。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **必須参照**: [.agent-skill-chain/source/REVIEW_RULE.md](../../../../../../../.agent-skill-chain/source/REVIEW_RULE.md)。レビュー深度 = **full**（新規 lib + 正本 hook 拡張 + 新規テストを含む中〜大規模）。
 
 ---
 
@@ -273,7 +273,7 @@ document_id: "15d2b9c9-0504-4a32-a299-8813b313bde1"
 
 ### 13.2 その他の参考資料
 
-- 正本: [enforcement/README.md](../../../../../../.agent-skill-chain/source/enforcement/README.md) §失敗条件と差し戻し（#41）
+- 正本: [enforcement/README.md](../../../../../../../.agent-skill-chain/source/enforcement/README.md) §失敗条件と差し戻し（#41）
 - 実装: `.agent-skill-chain/source/enforcement/lib/worktree_record_guard.sh`・`.agent-skill-chain/source/enforcement/claude/PreToolUse.sh`（R9）
 - テスト: `test/test-worktree-record-guard.sh`
 - docs 継続追随: `docs/00_review/20260717_110041_review.md`

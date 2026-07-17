@@ -10,7 +10,7 @@ document_id: "e2024a2c-b451-4866-bb42-c310ef375fac"
 
 > **重要**: 本ファイルは親 issue（`20260716_013937_worktree運用規律/`）配下のサブ issue 一覧・進捗の index。各サブ issue の詳細は当該 `90_issues/{issue}/` を参照する。
 >
-> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
+> **用語**: [.agent-skill-chain/source/CONCEPTS.md §用語規約](../../../../../.agent-skill-chain/source/CONCEPTS.md#用語規約) を参照。
 
 ---
 
