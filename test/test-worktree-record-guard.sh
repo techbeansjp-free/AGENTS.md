@@ -93,8 +93,8 @@ assert_nerr() { grep -q "$1" "$ERR" && ng "$2 (stderr に '$1' が現れた)" ||
 echo "== 単体: _wt_record_env_gate（パスベースのスコープ） =="
 
 # シナリオ: R7準拠パスは作成時期を問わず対象  # RG-T1b ← 01 シナリオ8-G(a)
-# Given: target が .worktree/feature/20260716_143000/x/ 形式の git ツリー
-W=$(mk_wt "feature/20260716_143000/x")
+# Given: target が .worktree/feature/20260716_143000-x/ 形式の git ツリー
+W=$(mk_wt "feature/20260716_143000-x")
 # When: _wt_record_env_gate を呼ぶ（baseline・作成時刻を一切参照しない）
 _wt_record_env_gate "$W"
 # Then: IN_SCOPE=1（時期ベースの「新規のみ」ではない）
@@ -102,7 +102,7 @@ _wt_record_env_gate "$W"
 
 # シナリオ: 準拠パスだが state を一切持たない（導入前相当）でも対象  # RG-T1b2 ← 01 シナリオ8-G(a)
 # Given: 別の準拠パス（新しい state を持たない）
-W2=$(mk_wt "bugfix/20250101_000000/legacy")
+W2=$(mk_wt "bugfix/20250101_000000-legacy")
 # When: env gate を評価する
 _wt_record_env_gate "$W2"
 # Then: 時期を判定しないため IN_SCOPE=1
@@ -118,7 +118,7 @@ _wt_record_env_gate "$N"
 
 # シナリオ: type が 5 種以外の準拠風パスは対象外  # RG-T1d ← 境界値
 # Given: type=feat（5 種外）の準拠風パス
-BAD=$(mk_wt "feat/20260716_143000/x")
+BAD=$(mk_wt "feat/20260716_143000-x")
 # When: env gate を評価する
 _wt_record_env_gate "$BAD"
 # Then: IN_SCOPE=0（type 集合 feature|bugfix|hotfix|release|chore に不一致）
@@ -126,7 +126,7 @@ _wt_record_env_gate "$BAD"
 
 # シナリオ: 非gitツリーはSKIP  # RG-T1a ← 01 シナリオ8
 # Given: target が git ツリーでない一時ディレクトリ
-NG="$TMP/.worktree/feature/20260716_143000/notgit"; mkdir -p "$NG"
+NG="$TMP/.worktree/feature/20260716_143000-notgit"; mkdir -p "$NG"
 # When: env gate を評価する
 _wt_record_env_gate "$NG"
 # Then: IN_SCOPE=0（rev-parse --is-inside-work-tree 偽）
@@ -147,7 +147,7 @@ echo "== 単体: _wt_record_scope / _wt_record_uncommitted =="
 
 # シナリオ: 記録対象ファイルの未commit差分を検知  # RG-T2a ← 01 シナリオ1
 # Given: 追跡済み 02_設計.md に未ステージ変更がある準拠 worktree
-W=$(mk_wt "feature/20260716_143000/rec2a"); d="$W/docs/maintainer/workflow/20260101_000000_x"
+W=$(mk_wt "feature/20260716_143000-rec2a"); d="$W/docs/maintainer/workflow/20260101_000000_x"
 mkdir -p "$d"; echo v1 > "$d/02_設計.md"; git -C "$W" add -A; git -C "$W" commit -qm init; echo v2 >> "$d/02_設計.md"
 # When: 未 commit 判定を呼ぶ
 _wt_record_uncommitted "$W"
@@ -156,7 +156,7 @@ grep -q "02_設計.md" <<<"$RECORD_UNCOMMITTED" && ok || ng "RG-T2a 追跡済み
 
 # シナリオ: 一度も commit されていない未追跡ディレクトリを個別展開  # RG-T2b ← 01 シナリオ1（finding-1・SC-5同型）
 # Given: issue ディレクトリ一式が一度も add されていない未追跡状態
-W=$(mk_wt "feature/20260716_143000/rec2b"); add_rec "$W" 20260101_000000_x 00_要求定義.md 04_review.md
+W=$(mk_wt "feature/20260716_143000-rec2b"); add_rec "$W" 20260101_000000_x 00_要求定義.md 04_review.md
 # When: -uall で status 走査する（未 commit 判定）
 _wt_record_uncommitted "$W"
 # Then: 00_要求定義.md〜04_review.md が個別に RECORD_UNCOMMITTED へ載る
@@ -173,7 +173,7 @@ collapsed="$(git -C "$W" -c core.quotepath=false status --porcelain -- docs/main
 
 # シナリオ: 親ワークフローの 90_issues.md を取りこぼさない  # RG-T2c ← 01 シナリオ1（finding-3）
 # Given: 未commit（新規 ??）の 90_issues.md がある準拠 worktree
-W=$(mk_wt "feature/20260716_143000/rec2c"); pd="$W/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$pd"; : > "$pd/90_issues.md"
+W=$(mk_wt "feature/20260716_143000-rec2c"); pd="$W/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$pd"; : > "$pd/90_issues.md"
 # When: 未 commit 判定を呼ぶ
 _wt_record_uncommitted "$W"
 # Then: RECORD_UNCOMMITTED に 90_issues.md が載る（0[0-4]_*.md 単独では不一致・独立併記が効く）
@@ -181,7 +181,7 @@ grep -q "90_issues.md" <<<"$RECORD_UNCOMMITTED" && ok || ng "RG-T2c 90_issues.md
 
 # シナリオ: 記録対象外の変更のみでは検知しない  # RG-T2d ← 01 シナリオ1 の And 節
 # Given: memo/ 配下・非追跡 transient のみ変更がある準拠 worktree
-W=$(mk_wt "feature/20260716_143000/rec2d"); md="$W/docs/maintainer/workflow/20260101_000000_x/memo"; mkdir -p "$md"; : > "$md/20260101_000000_note.md"
+W=$(mk_wt "feature/20260716_143000-rec2d"); md="$W/docs/maintainer/workflow/20260101_000000_x/memo"; mkdir -p "$md"; : > "$md/20260101_000000_note.md"
 # When: 未 commit 判定を呼ぶ
 _wt_record_uncommitted "$W"
 # Then: RECORD_UNCOMMITTED は空（memo/ は対象外・誤検知しない）
@@ -202,7 +202,7 @@ echo "== 単体: _wt_record_unpushed =="
 
 # シナリオ: 記録に無関係なコード変更のみの未pushは検知しない  # RG-T3b ← 01 シナリオ4-N（finding-2）
 # Given: ローカル bare を origin にした準拠 worktree で、記録に無関係なコミットのみ未push
-W=$(setup_wt_with_origin "feature/20260716_143000/up3b")
+W=$(setup_wt_with_origin "feature/20260716_143000-up3b")
 mkdir -p "$W/enforcement"; echo x >> "$W/enforcement/dummy.sh"; git -C "$W" add -A; git -C "$W" commit -qm "code only"
 # When: 未 push 判定を呼ぶ
 _wt_record_unpushed "$W"
@@ -226,7 +226,7 @@ _wt_record_unpushed "$W"
 
 # シナリオ: upstream未設定でも origin/<branch> フォールバックで検知継続  # RG-T3d ← 01 シナリオ4（フォールバック）
 # Given: origin/<branch> は在るが upstream 未設定の準拠 worktree
-W=$(setup_wt_with_origin "feature/20260716_143000/up3d")
+W=$(setup_wt_with_origin "feature/20260716_143000-up3d")
 git -C "$W" branch --unset-upstream 2>/dev/null
 d="$W/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$d"; echo z >> "$d/01_要件定義.md"
 git -C "$W" add -A; git -C "$W" commit -qm "record change no upstream"
@@ -237,7 +237,7 @@ _wt_record_unpushed "$W"
 
 # シナリオ: origin未解決（remote不在）はSKIP＋警告  # RG-T3e ← 境界値・fail-open
 # Given: remote を持たない準拠 worktree（origin 未解決）
-W=$(mk_wt "feature/20260716_143000/up3e"); d="$W/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$d"; echo a > "$d/00_要求定義.md"; git -C "$W" add -A; git -C "$W" commit -qm c
+W=$(mk_wt "feature/20260716_143000-up3e"); d="$W/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$d"; echo a > "$d/00_要求定義.md"; git -C "$W" add -A; git -C "$W" commit -qm c
 # When: 未 push 判定を呼ぶ
 _wt_record_unpushed "$W"
 # Then: 判定不能として RECORD_UNPUSHED 空・RECORD_WARN 非空（過剰 block しない）
@@ -252,7 +252,7 @@ echo "== 単体/結合: worktree_record_scan / worktree_record_reject / main（B
 
 # シナリオ: 未commitありで検知コアが RECORD_DIRTY=1  # RG-T4core ← 01 シナリオ1
 # Given: 未 commit ありの準拠 worktree
-W=$(mk_wt "feature/20260716_143000/scan"); add_rec "$W" 20260101_000000_x 00_要求定義.md
+W=$(mk_wt "feature/20260716_143000-scan"); add_rec "$W" 20260101_000000_x 00_要求定義.md
 # When: 検知コアを呼ぶ
 worktree_record_scan "$W"
 # Then: RECORD_DIRTY=1
@@ -278,7 +278,7 @@ grep -q "enforcement:block" <<<"$rep" && grep -q "00_要求定義.md" <<<"$rep" 
 
 # シナリオ: 検知時は既定でblock（B 経路 main）  # RG-T4a ← 01 シナリオ2
 # Given: 未commit差分ありの準拠 worktree、ASC_WORKTREE_CLOSE_BYPASS 未設定
-W=$(mk_wt "feature/20260716_143000/blk"); add_rec "$W" 20260101_000000_x 00_要求定義.md
+W=$(mk_wt "feature/20260716_143000-blk"); add_rec "$W" 20260101_000000_x 00_要求定義.md
 # When: main（B 経路）を bash 直接実行する
 out=$(bash "$LIB_RG" "$W"); rc=$?
 # Then: 非0終了し、stdout に解消手順つきレポートを出す
@@ -293,7 +293,7 @@ err=$(ASC_WORKTREE_CLOSE_BYPASS=1 bash "$LIB_RG" "$W" 2>&1 >/dev/null); rc=$?
 
 # シナリオ: 漏れなしなら終了コード0（B 経路合格）  # RG-T4clean ← 01 シナリオ1-B 対偶
 # Given: 記録漏れなしの準拠 worktree（記録を commit 済み）
-C=$(mk_wt "feature/20260716_143000/clean"); cd_="$C/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$cd_"; echo ok > "$cd_/00_要求定義.md"; git -C "$C" add -A; git -C "$C" commit -qm rec
+C=$(mk_wt "feature/20260716_143000-clean"); cd_="$C/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$cd_"; echo ok > "$cd_/00_要求定義.md"; git -C "$C" add -A; git -C "$C" commit -qm rec
 # When: main を bash 実行する
 bash "$LIB_RG" "$C" >/dev/null 2>&1; rc=$?
 # Then: 終了コード0（合格・close 続行可）
@@ -308,7 +308,7 @@ echo "== 結合: R9 削除前ゲート（正本 hook・stdin JSON） =="
 
 # シナリオ: 削除コマンドの実行前に未commitを検知しblock  # RG-T5a ← 01 シナリオ1-A
 # Given: 準拠 worktree の記録対象ファイルに未commit差分がある
-W=$(mk_wt "feature/20260716_143000/gate5a"); add_rec "$W" 20260101_000000_x 00_要求定義.md
+W=$(mk_wt "feature/20260716_143000-gate5a"); add_rec "$W" 20260101_000000_x 00_要求定義.md
 # When: git worktree remove <path> を stdin JSON で hook に渡す
 run_hook "git worktree remove $W"
 # Then: hook が R9 で exit 2（block）し stderr に解消手順を出す
@@ -318,7 +318,7 @@ assert_err "解消手順" "RG-T5a 解消手順の提示"
 
 # シナリオ: 2026-07-15事故同型の削除が防止される  # RG-T5b ← 01 シナリオ7（SC-5・E2E）
 # Given: 未commit の 00〜03 一式（未追跡）を含む準拠 worktree
-W=$(mk_wt "feature/20260716_143000/e2e5b"); add_rec "$W" 20260101_000000_x 00_要求定義.md 01_要件定義.md 02_設計.md 03_実装計画.md
+W=$(mk_wt "feature/20260716_143000-e2e5b"); add_rec "$W" 20260101_000000_x 00_要求定義.md 01_要件定義.md 02_設計.md 03_実装計画.md
 # When: バイパス無しで git worktree remove --force <path> を hook に渡す（CWD=$W）
 run_hook "git worktree remove --force $W" "$W"
 # Then: exit 2 で block され、明示フラグ無しでは記録が失われない
@@ -327,7 +327,7 @@ assert_err "enforcement:block" "RG-T5b 解消手順メッセージ"
 
 # シナリオ: 削除形だが記録漏れなしは素通り  # RG-T5c ← 01 シナリオ1-A 対偶
 # Given: 記録を commit 済みの準拠 worktree
-W=$(mk_wt "feature/20260716_143000/gate5c"); gd="$W/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$gd"; echo ok > "$gd/00_要求定義.md"; git -C "$W" add -A; git -C "$W" commit -qm rec
+W=$(mk_wt "feature/20260716_143000-gate5c"); gd="$W/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$gd"; echo ok > "$gd/00_要求定義.md"; git -C "$W" add -A; git -C "$W" commit -qm rec
 # When: remove を stdin JSON で渡す
 run_hook "git worktree remove $W"
 # Then: R9 は発火せず exit 0（allow）
@@ -335,7 +335,7 @@ assert_rc 0 "RG-T5c 記録漏れなしの削除は exit 0"
 
 # シナリオ: 非削除形は素通り  # RG-T5d ← 01 シナリオ1-A 対偶
 # Given: 未 commit ありの準拠 worktree（発火要因は無し・非削除形コマンド）
-W=$(mk_wt "feature/20260716_143000/gate5d"); add_rec "$W" 20260101_000000_x 00_要求定義.md
+W=$(mk_wt "feature/20260716_143000-gate5d"); add_rec "$W" 20260101_000000_x 00_要求定義.md
 # When: git worktree list（非削除形）を渡す
 run_hook "git worktree list"
 # Then: R9 は発火せず exit 0（fail-open）
@@ -351,7 +351,7 @@ assert_rc 0 "RG-T5e 非準拠パス削除は exit 0（env gate 対象外）"
 
 # シナリオ: バイパス下では未commitありでも通過し痕跡を残す  # RG-T5f ← 01 シナリオ3（A 経路）
 # Given: 未 commit ありの準拠 worktree ＋ ASC_WORKTREE_CLOSE_BYPASS=1
-W=$(mk_wt "feature/20260716_143000/gate5f"); add_rec "$W" 20260101_000000_x 00_要求定義.md
+W=$(mk_wt "feature/20260716_143000-gate5f"); add_rec "$W" 20260101_000000_x 00_要求定義.md
 json="{\"tool_name\":\"Bash\",\"agent_id\":\"sub-1\",\"tool_input\":{\"command\":\"git worktree remove --force $W\"}}"
 : > "$ERR"
 echo "$json" | env AGENTS_ROOT="$REPO_SRC" AGENT_ROLE="worker" WORKTREE_TRASH_ROOT="$TRASH" ASC_WORKTREE_CLOSE_BYPASS=1 bash "$HOOK" >/dev/null 2>"$ERR"; RC=$?
@@ -368,7 +368,7 @@ echo "== 結合: アダプタ B（bash <lib> <target> 契約） =="
 
 # シナリオ: close終了条件判定時に記録漏れで不成立  # RG-T6a ← 01 シナリオ1-B
 # Given: close 対象 worktree の記録対象ファイルに未commit差分がある
-W=$(mk_wt "feature/20260716_143000/close6a"); add_rec "$W" 20260101_000000_x 02_設計.md
+W=$(mk_wt "feature/20260716_143000-close6a"); add_rec "$W" 20260101_000000_x 02_設計.md
 # When: B 経路と同じく bash 直接実行する
 out=$(bash "$LIB_RG" "$W"); rc=$?
 # Then: 終了コード非0＋stdoutレポートを受け、完了条件不成立として close を止められる
@@ -376,7 +376,7 @@ out=$(bash "$LIB_RG" "$W"); rc=$?
 
 # シナリオ: 漏れなしなら合格しcloseを続行  # RG-T6b ← 01 シナリオ1-B 対偶
 # Given: 記録漏れなしの close 対象 worktree
-C=$(mk_wt "feature/20260716_143000/close6b"); ccd="$C/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$ccd"; echo ok > "$ccd/02_設計.md"; git -C "$C" add -A; git -C "$C" commit -qm rec
+C=$(mk_wt "feature/20260716_143000-close6b"); ccd="$C/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$ccd"; echo ok > "$ccd/02_設計.md"; git -C "$C" add -A; git -C "$C" commit -qm rec
 # When: 同スクリプトを実行する
 bash "$LIB_RG" "$C" >/dev/null 2>&1; rc=$?
 # Then: 終了コード0で合格し close 続行可
@@ -405,7 +405,7 @@ grep -q "^| #41 " "$REPO_SRC/enforcement/README.md" && ok || ng "RG-T7reg #41 �
 
 # シナリオ: 対象外・判定不能・内部エラーはfail-openでallow  # RG-T7b ← 01 シナリオ9
 # Given: remote-tracking 解決不能な準拠 worktree（origin 不在）
-N=$(mk_wt "feature/20260716_143000/noremote"); nd="$N/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$nd"; echo a > "$nd/00_要求定義.md"; git -C "$N" add -A; git -C "$N" commit -qm rec
+N=$(mk_wt "feature/20260716_143000-noremote"); nd="$N/docs/maintainer/workflow/20260101_000000_x"; mkdir -p "$nd"; echo a > "$nd/00_要求定義.md"; git -C "$N" add -A; git -C "$N" commit -qm rec
 # When: bash 直接実行する（記録は commit 済み・未 push は origin 未解決で SKIP）
 bash "$LIB_RG" "$N" >/dev/null 2>&1; rc=$?
 # Then: fail-safe 原則に従い SKIP/allow へ倒れる（過剰 block 回避・exit 0）
