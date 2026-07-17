@@ -67,6 +67,7 @@ default_tests() {
 test-run-all|test-run-all.sh|bash
 test-coverage-check|test-coverage-check.sh|bash
 test-audit|test-audit.sh|bash
+test-close-move-issue|test-close-move-issue.sh|bash git
 test-model-tier-gate|test-model-tier-gate.sh|bash sqlite3
 test-deploy-skills-owned-guard|test-deploy-skills-owned-guard.sh|bash
 test-check-comment-refs|test-check-comment-refs.sh|bash

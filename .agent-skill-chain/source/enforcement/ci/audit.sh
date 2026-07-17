@@ -32,7 +32,7 @@
 #   (29) 実装前 04（DB 採用時・issue_path スコープで implement/verify ログ 0 件かつ 04 存在）
 #   (31) システム仕様書レビュー証跡欠落（DB・docs/ 採用時・実装変更ログありの 04_review に要=docs/00_review参照/不要=根拠 の内容が無い場合 FAIL）
 #   (32) 実装前 review-docs 未実行検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ review-docs ログ 0 件なら FAIL。#29 と非交差。発効日 grandfather あり）
-#   (33) close 移動未実施検知（DB 採用時・verify-and-close 証跡ありかつ close/ 未移動のトップレベル issue が、発効日以降・猶予超過なら FAIL。両モードで検知＝github_native は新規非追跡ドラフトはローカルで発火/CI は走査対象不在で no-op だが追跡済み完了 issue（遡及分等）は CI でも発火しうる・GitHub Issue #137。#32 と非交差）
+#   (33) close 移動未実施検知（DB 採用時・verify-and-close 証跡ありかつ close/ 未移動のトップレベル issue が、発効日以降・猶予超過なら検知。両モードで走査＝github_native は新規非追跡ドラフトはローカルで発火/CI は走査対象不在で no-op だが追跡済み完了 issue（遡及分等）は CI でも発火しうる・GitHub Issue #137。猶予超過の重大度は実効モードで分岐＝local_tracked は FAIL・github_native は WARN 非 FAIL（GitHub Issue close 待ちが正当にありうるため・ADR-137-5）。#32 と非交差）
 #   (34) 実装前 GitHub Issue 起票ゲート未通過検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter github_issue が null/欠落なら FAIL。#32 と非交差。close/templates/90_issues 配下・GitHub 非採用環境・発効日 grandfather は SKIP）
 #   (35) 実装前ブランチ紐づけ未記録検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter branch が空/null/~/欠落なら FAIL。#34 の写像だが declined 概念なし・github.com remote 不要。close/templates/90_issues 配下・非 git・発効日 grandfather は SKIP）
 #   (36) PR 紐づけ未記録検知（CI で PR_BODY が渡されたときのみ・PR 本文に有効な Closes/Refs #<番号> が 1 件以上あれば PASS。無い場合は差分内 workflow issue のうち実 Issue 参照を持つ非 declined・非 grandfather の issue が残れば FAIL。PR_BODY 未設定＝ローカル/push は SKIP。#6 の写像・#34 と非交差）
@@ -1090,6 +1090,11 @@ resolve_issue_tracking_mode() {
 #   猶予は CLOSE_MOVE_GRACE_DAYS（既定 3・env 上書き可）で、既存 ts_to_epoch ヘルパーによる
 #   経過日数判定（ADR-3）。sqlite3/DB/workflow_log 不在・ts_utc 解析不能・証跡なしはすべて
 #   fail-open（continue／return 0・ADR-4）。DB・FS への書き込みは一切しない（Query のみ・ADR-CQRS）。
+#   ★猶予超過時の重大度は実効モードで分岐する（ADR-137-5）: local_tracked は従来どおり FAIL（EXIT_CODE=1・
+#   確定点は PR マージでエージェント完結・回帰安全・完全不変）、github_native は WARN（非 FAIL・確定点は
+#   ユーザーによる GitHub Issue close であり、verify-and-close 完了後の close 待ちが正常にありうるため一律
+#   FAIL は誤検知になる。ADR-137-4 は gh CLI 依存の CLOSED 判定を却下済みのため CLOSED をローカル厳密確認
+#   する手段は持たず、放置防止の非ブロッキング督促に留める）。
 check_close_move_pending() {
   # 両モード共通で検知する（GitHub Issue #137・ADR-137-1/137-4）: close 移動は tracking の手段
   # ではなくローカル整理整頓を目的とするため github_native でも行う。よって本チェックは実効モードで
@@ -1105,6 +1110,16 @@ check_close_move_pending() {
   echo "[audit] checking close-move-pending (#33)" >&2
   local cutoff="${CLOSE_MOVE_GATE_EFFECTIVE_FROM:-20260712_000000}"
   local grace_days="${CLOSE_MOVE_GRACE_DAYS:-3}"
+  # 実効モードで「猶予超過」の重大度を分岐する（ADR-137-5）:
+  #   local_tracked: PR マージが close 移動の確定点であり、verify-and-close 完了後の未移動は
+  #     エージェント側で完結できる督促なので従来どおり FAIL（EXIT_CODE=1・回帰安全・完全不変）。
+  #   github_native: 確定点は「ユーザーによる GitHub Issue の close」であり、verify-and-close 完了後も
+  #     ユーザーがまだ close していない（正当な理由で待機中の）状態が正常にありうる。この状態を一律 FAIL
+  #     すると監査が正常状態を誤検知する。ADR-137-4 は決定論維持のため gh CLI 依存の CLOSED 判定を却下
+  #     しているため、CLOSED をローカルで厳密確認する手段は持たない。よって github_native では「猶予超過」を
+  #     WARN（非 FAIL・EXIT_CODE 不変）へ格下げし、放置防止の非ブロッキング督促に留める。
+  # resolve_issue_tracking_mode は #28/#33 冒頭ノートと共用・不変（ループ前に一度だけ解決する）。
+  local eff_mode; eff_mode="$(resolve_issue_tracking_mode)"
   local _wfd f issue_dir dir dir_esc base base_esc ts vc_ts vc_epoch now_epoch
   for _wfd in "${WORKFLOW_SCAN_DIRS[@]}"; do
     while IFS= read -r -d '' f; do
@@ -1127,9 +1142,15 @@ check_close_move_pending() {
       vc_epoch="$(ts_to_epoch "$vc_ts")" || continue
       now_epoch="$(date +%s)"
       if (( now_epoch - vc_epoch > grace_days * 86400 )); then
-        echo "FAIL: close 移動未実施（verify-and-close 完了だが close/ 未移動・猶予超過）: $dir" >&2
-        echo "$ROLLBACK_MSG" >&2
-        EXIT_CODE=1
+        if [[ "$eff_mode" == "github_native" ]]; then
+          # github_native: GitHub Issue の close 待ち（正当）でも猶予超過しうるため WARN（非 FAIL・ADR-137-5）。
+          echo "WARN: close 移動未実施（verify-and-close 完了だが close/ 未移動・猶予超過。github_native では GitHub Issue の close 待ちが正当にありうるため非 FAIL 督促）: $dir" >&2
+        else
+          # local_tracked（既定・非 GitHub 含む）: 従来どおり FAIL（回帰安全・完全不変）。
+          echo "FAIL: close 移動未実施（verify-and-close 完了だが close/ 未移動・猶予超過）: $dir" >&2
+          echo "$ROLLBACK_MSG" >&2
+          EXIT_CODE=1
+        fi
       fi
     done < <(find "$PROJECT_ROOT/$_wfd" -name "04_review.md" -type f -print0 2>/dev/null || true)
   done
