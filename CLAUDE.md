@@ -1,6 +1,6 @@
 # CLAUDE.md — Claude Code 向け
 
-- 本プロジェクトでは [AGENTS.md](AGENTS.md) および [.agent-skill-chain/source/](.agent-skill-chain/source/) に従うこと。**プロジェクト固有ルールは .agent-skill-chain/project/ が最優先**（.agents より優先。同名・同目的は .agent-skill-chain/project を採用）。
+- 本プロジェクトでは [AGENTS.md](AGENTS.md) および [.agent-skill-chain/source/](.agent-skill-chain/source/) に従うこと。**プロジェクト固有ルールは .agent-skill-chain/project/ が最優先**（.agent-skill-chain/source より優先。同名・同目的は .agent-skill-chain/project を採用）。
 - **ユーザーの依頼が作業要求である場合、明示がなくても必ず本 agents に従い、進行役として phase 判定・command 選択・委譲を行うこと。** 正本は CORE §デフォルト起動 と LOAD_POLICY の「ユーザーから作業依頼を受けた」トリガー。
 - 応答は日本語とする。
 - 実行契約の正本は [.agent-skill-chain/source/boot/CORE.md](.agent-skill-chain/source/boot/CORE.md)。読込順は [.agent-skill-chain/source/boot/LOAD_POLICY.md](.agent-skill-chain/source/boot/LOAD_POLICY.md) に委譲。

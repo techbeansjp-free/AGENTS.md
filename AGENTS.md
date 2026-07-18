@@ -80,7 +80,7 @@
 
 | 順 | 対象 | 備考 | 読むタイミング |
 |----|------|------|----------------|
-| 0 | **.agent-skill-chain/project/**（プロジェクトルート） | **存在すれば最優先**。.agents より優先（CORE §ルールの優先順位）。 | オンデマンド（存在すれば command 実行時等に確認・最優先）。起動時必須コアではない |
+| 0 | **.agent-skill-chain/project/**（プロジェクトルート） | **存在すれば最優先**。.agent-skill-chain/source より優先（CORE §ルールの優先順位）。 | オンデマンド（存在すれば command 実行時等に確認・最優先）。起動時必須コアではない |
 | 1 | 本ファイル（**AGENTS.md**） | 人間・AI の入口。 | 入口（本ファイル） |
 | 2 | .agent-skill-chain/source/boot/**CORE.md** | 実行契約の正本。 | **起動時必須（コア）** |
 | 3 | .agent-skill-chain/source/**IO_CONTRACT.md** | command / skill の入出力契約。 | オンデマンド（command/skill 入出力時） |
@@ -98,7 +98,7 @@
 ## 何があるか
 
 - **人間・ツールの入口**: 本ファイル。詳細は [.agent-skill-chain/source/README.md](.agent-skill-chain/source/README.md) を参照。
-- **プロジェクト固有・最優先**: プロジェクトルートの **.agent-skill-chain/project/** が .agents より優先される。同名・同目的のルールは .agent-skill-chain/project を採用（.agent-skill-chain/source/CORE.md §ルールの優先順位）。
+- **プロジェクト固有・最優先**: プロジェクトルートの **.agent-skill-chain/project/** が .agent-skill-chain/source より優先される。同名・同目的のルールは .agent-skill-chain/project を採用（.agent-skill-chain/source/CORE.md §ルールの優先順位）。
 - **AI の契約**: .agent-skill-chain/source/boot/CORE.md（正本）。思想は .agent-skill-chain/source/CONCEPTS.md、読込順は LOAD_POLICY へ委譲。
 - **ワークフロー**: .agent-skill-chain/source/workflow/PHASES.md（フェーズ = gate）。**実行単位は command**（skill chain）。.agent-skill-chain/source/commands/ を参照。
 - **command 実行時**: LOAD_POLICY の表に従い、.agent-skill-chain/source/skills/agent/run_command.md と .agent-skill-chain/source/commands/{name}.md を読む。
