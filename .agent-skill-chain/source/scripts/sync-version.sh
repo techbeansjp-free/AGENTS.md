@@ -38,12 +38,14 @@ read_version() {
 }
 
 # apm.yml（YAML）の version フィールドを行単位の正規表現で読む（他フィールドには触れない）。
+# E-16: 手編集でクォート付き version: "0.1.48" になっていても比較できるよう、前後 1 対の
+# クォート（二重引用符・単一引用符）のみをトリムして読む（書込みは非クォートのまま現状維持）。
 read_yaml_version() {
   node -e '
     const fs=require("fs");
     const text=fs.readFileSync(process.argv[1],"utf8");
     const m=text.match(/^version:\s*(\S+)\s*$/m);
-    process.stdout.write(m ? m[1] : "");
+    process.stdout.write(m ? m[1].replace(/^["\x27]|["\x27]$/g,"") : "");
   ' "$1"
 }
 

@@ -16,8 +16,8 @@
 
 set -euo pipefail
 
-if [[ "${TZ:-}" == "" ]]; then
-  export TZ="Asia/Tokyo"
-fi
+# E-12: memo プレフィックスは JST で一意採番する契約のため、呼び出し環境の TZ に依存させない
+# （既存 TZ を尊重すると環境ごとに時系列順序が崩れる）。無条件で JST を強制する。
+export TZ="Asia/Tokyo"
 
 date +%Y%m%d_%H%M%S

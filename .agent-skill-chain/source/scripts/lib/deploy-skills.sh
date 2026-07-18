@@ -133,9 +133,15 @@ deploy_skills_impl() {
       [[ -n "$only_name" && "$only_name" != "$name" ]] && continue
       dest="$out_skills/$name"
       mkdir -p "$dest"
-      cp -R "$cap_dir"/* "$dest"/ 2>/dev/null || true
-      [[ -n "$write_marker" ]] && _asc_write_skill_marker "$dest"
-      n_skill=$((n_skill+1))
+      # E-13: cp の実失敗も `2>/dev/null || true` で沈黙し、配備件数（n_skill）は無条件加算
+      # されるため成功報告になっていた。終了コードを検査し、成功時のみマーカー書込み＋件数加算する。
+      # 警告は必ず stderr へ出す（本関数の唯一の stdout 出力＝件数を汚さないため）。
+      if cp -R "$cap_dir"/* "$dest"/ 2>/dev/null; then
+        [[ -n "$write_marker" ]] && _asc_write_skill_marker "$dest"
+        n_skill=$((n_skill+1))
+      else
+        echo "警告: skill '$name' のコピーに失敗しました（$cap_dir → $dest）。" >&2
+      fi
     done
   done
 

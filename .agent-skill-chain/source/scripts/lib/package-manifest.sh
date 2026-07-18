@@ -106,20 +106,33 @@ backup_agent_skill_chain() {
   local ts
   ts="$(date +%Y%m%d%H%M%S)"
 
+  # E-15: バックアップ先が既に存在すると（同一秒の再実行等）cp -R src dest は dest 配下へ
+  # コピーし二重ネストになる。cp 直前に存在チェックし、既存なら fail-closed で中止する
+  # （date +%N はポータビリティを損なうため採らず、既存の fail-closed 哲学で対処する）。
   if [[ -d "$dir/source" ]]; then
-    if ! cp -R "$dir/source" "$root/.agent-skill-chain-source.bak.$ts"; then
+    local bak_source="$root/.agent-skill-chain-source.bak.$ts"
+    if [[ -e "$bak_source" ]]; then
+      echo "エラー: バックアップ先が既に存在します（同一秒の再実行？）: $bak_source。中止します。" >&2
+      exit 1
+    fi
+    if ! cp -R "$dir/source" "$bak_source"; then
       echo "エラー: .agent-skill-chain/source/ のバックアップに失敗しました。上書きを中止します。" >&2
       exit 1
     fi
-    echo "source/ をバックアップしました: $root/.agent-skill-chain-source.bak.$ts"
+    echo "source/ をバックアップしました: $bak_source"
   fi
 
   if [[ -d "$dir/runtime/templates" ]]; then
-    if ! cp -R "$dir/runtime/templates" "$root/.agent-skill-chain-runtime-templates.bak.$ts"; then
+    local bak_templates="$root/.agent-skill-chain-runtime-templates.bak.$ts"
+    if [[ -e "$bak_templates" ]]; then
+      echo "エラー: バックアップ先が既に存在します（同一秒の再実行？）: $bak_templates。中止します。" >&2
+      exit 1
+    fi
+    if ! cp -R "$dir/runtime/templates" "$bak_templates"; then
       echo "エラー: .agent-skill-chain/runtime/templates/ のバックアップに失敗しました。上書きを中止します。" >&2
       exit 1
     fi
-    echo "runtime/templates/ をバックアップしました: $root/.agent-skill-chain-runtime-templates.bak.$ts"
+    echo "runtime/templates/ をバックアップしました: $bak_templates"
   fi
 }
 
@@ -161,17 +174,31 @@ migrate_legacy_dirs() {
   local legacy_project="${legacy_source}-project"
   local legacy_runtime="$root/.workflow"
 
+  # E-15: 同一秒の再実行でバックアップ先が既存だと二重ネストするため、cp -R 直前に
+  # 存在チェックし既存なら fail-closed で中止する（source/project/runtime の 3 箇所）。
+  if [[ -e "${legacy_source}.bak.$ts" ]]; then
+    echo "エラー: バックアップ先が既に存在します（同一秒の再実行？）: ${legacy_source}.bak.$ts。統合移行を中止します。" >&2
+    exit 1
+  fi
   if ! cp -R "$legacy_source" "${legacy_source}.bak.$ts"; then
     echo "エラー: 旧 source ディレクトリのバックアップに失敗しました。統合移行を中止します。" >&2
     exit 1
   fi
   if [[ -d "$legacy_project" ]]; then
+    if [[ -e "${legacy_project}.bak.$ts" ]]; then
+      echo "エラー: バックアップ先が既に存在します（同一秒の再実行？）: ${legacy_project}.bak.$ts。統合移行を中止します。" >&2
+      exit 1
+    fi
     if ! cp -R "$legacy_project" "${legacy_project}.bak.$ts"; then
       echo "エラー: 旧 project ディレクトリのバックアップに失敗しました。統合移行を中止します。" >&2
       exit 1
     fi
   fi
   if [[ -d "$legacy_runtime" ]]; then
+    if [[ -e "${legacy_runtime}.bak.$ts" ]]; then
+      echo "エラー: バックアップ先が既に存在します（同一秒の再実行？）: ${legacy_runtime}.bak.$ts。統合移行を中止します。" >&2
+      exit 1
+    fi
     if ! cp -R "$legacy_runtime" "${legacy_runtime}.bak.$ts"; then
       echo "エラー: 旧 runtime ディレクトリのバックアップに失敗しました。統合移行を中止します。" >&2
       exit 1
@@ -204,7 +231,7 @@ readme_warning_text() {
   issue 記録がすべて失われます。これは公式なアンインストール手順ではありません。
 - 安全にアンインストールするには次のコマンドを使用してください:
 
-    npx agent-skill-chain uninstall
+    npx github:techbeansjp-free/AGENTS.md uninstall
 
   既定ではパッケージ所有物（source/ と再生成可能な runtime/templates/）のみを削除し、
   project/ と runtime/ のユーザー資産（issue 記録・監査履歴）は保持します。

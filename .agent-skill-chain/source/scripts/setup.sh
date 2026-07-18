@@ -88,7 +88,7 @@ echo ".agent-skill-chain/.package-manifest と README.md を最新化しまし�
 
 for f in AGENTS.md CLAUDE.md; do
   if [[ -f "$PACKAGE_ROOT/$f" ]]; then
-    if [[ "$(cd "$PACKAGE_ROOT" && pwd)/$f" != "$(cd "$PROJECT_ROOT" && pwd)/$f" ]]; then
+    if [[ "$(cd "$PACKAGE_ROOT" && pwd -P)/$f" != "$(cd "$PROJECT_ROOT" && pwd -P)/$f" ]]; then
       cp "$PACKAGE_ROOT/$f" "$PROJECT_ROOT/$f"
       echo "$f をプロジェクトルートにコピーしました。"
     else
@@ -98,8 +98,21 @@ for f in AGENTS.md CLAUDE.md; do
 done
 
 ASC_SOURCE_DEST="$PROJECT_ROOT/.agent-skill-chain/source"
-if [[ "$(cd "$AGENTS_SOURCE" && pwd)" != "$(cd "$ASC_SOURCE_DEST" 2>/dev/null && pwd)" ]]; then
+# E-1: own 判定（lib/package-manifest.sh の check_package_manifest）は pwd -P（物理パス）で
+# 自己適用を確定させる一方、ここが pwd（論理パス）のままだと、PROJECT_ROOT が PACKAGE_ROOT への
+# symlink 経由の場合に own 判定は一致・ここの判定は不一致という非対称が生じ、正本 source を
+# rm -rf してしまう危険がある（symlink 経由 rm -rf 事故）。比較を物理パスへ統一する。
+src_phys="$(cd "$AGENTS_SOURCE" && pwd -P)"
+dest_phys="$(cd "$ASC_SOURCE_DEST" 2>/dev/null && pwd -P || true)"
+if [[ "$src_phys" != "$dest_phys" ]]; then
   if [[ -d "$ASC_SOURCE_DEST" ]]; then
+    # E-1 削除直前アサート: 物理パスを独立再解決し、正本 source と一致するなら自己削除を防いで中止する
+    # （回帰時の防波堤・多重防御。上の比較と評価タイミングが異なるため意味を持つ）。
+    assert_dest="$(cd "$ASC_SOURCE_DEST" && pwd -P)"
+    if [[ "$assert_dest" == "$src_phys" ]]; then
+      echo "エラー: 削除対象 $ASC_SOURCE_DEST が正本 source と物理的に同一です。自己削除を防ぐため中止します。" >&2
+      exit 1
+    fi
     rm -rf "$ASC_SOURCE_DEST"
     echo "既存の .agent-skill-chain/source を削除しました。"
   fi
@@ -116,7 +129,17 @@ fi
 WF_TEMPLATES="$PROJECT_ROOT/.agent-skill-chain/runtime/templates"
 WF_SOURCE="$PACKAGE_ROOT/.agent-skill-chain/runtime/templates"
 if [[ -d "$WF_SOURCE" ]]; then
-  if [[ "$(cd "$WF_SOURCE" 2>/dev/null && pwd)" != "$(cd "$WF_TEMPLATES" 2>/dev/null && pwd)" ]]; then
+  # E-1 同型対策: WF_SOURCE/WF_TEMPLATES も pwd -P（物理パス）比較＋削除直前アサートへ統一する。
+  wf_src_phys="$(cd "$WF_SOURCE" 2>/dev/null && pwd -P || true)"
+  wf_dest_phys="$(cd "$WF_TEMPLATES" 2>/dev/null && pwd -P || true)"
+  if [[ "$wf_src_phys" != "$wf_dest_phys" ]]; then
+    if [[ -d "$WF_TEMPLATES" ]]; then
+      wf_assert_dest="$(cd "$WF_TEMPLATES" && pwd -P)"
+      if [[ "$wf_assert_dest" == "$wf_src_phys" ]]; then
+        echo "エラー: 削除対象 $WF_TEMPLATES が正本 runtime/templates と物理的に同一です。自己削除を防ぐため中止します。" >&2
+        exit 1
+      fi
+    fi
     rm -rf "$WF_TEMPLATES"
     mkdir -p "$PROJECT_ROOT/.agent-skill-chain/runtime"
     cp -R "$WF_SOURCE" "$PROJECT_ROOT/.agent-skill-chain/runtime/"
@@ -253,6 +276,13 @@ fi
 # 証跡 DB を setup 時に生成（実体は Git 管理対象外。配布物に含めない）
 init_workflow_db() {
   local db="$PROJECT_ROOT/.agent-skill-chain/runtime/workflow.db"
+  # E-9: sqlite3 不在環境で「sqlite3: command not found」により set -e で不可解に中断し、
+  # 後続の enforcement 既定 on 配線・完了メッセージまで実行されなくなるのを防ぐ。DB 作成は
+  # setup の必須成果物ではないため、不在なら警告して setup 自体は続行する。
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    echo "[setup] 警告: sqlite3 が見つかりません。ワークフロー用 DB の作成をスキップします（後で doctor で確認してください）。" >&2
+    return 0
+  fi
   if [[ -f "$db" ]]; then
     warn_if_foreign_workflow_db "$db"
     return 0
