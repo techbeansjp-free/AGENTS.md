@@ -11,7 +11,7 @@
 | 要求 | requirement-discovery | 00_要求定義.md | 目的・受け入れ基準・参照元が記載されている |
 | 要件 | requirement-discovery（続き） | 01_要件定義.md | ユーザーストーリー・受け入れ基準・BDD シナリオが記載されている |
 | 設計 | design-feature | 02_設計.md | 責務・参照関係・テスト観点が記載されている |
-| 実装計画 | design-feature または implement-feature の入口 | 03_実装計画.md | タスク分解・テスト仕様（BDD）が記載されている |
+| 実装計画 | design-feature（review-dependencies が 03 を生成） | 03_実装計画.md | タスク分解・テスト仕様（BDD）が記載されている |
 | 実装 | implement-feature | 成果物・コード等 | 実装計画に従い実装され、単体テスト観点を満たす |
 | レビュー | verify-and-close | **04_review.md（必須・絶対強制）** | 実装内容・受け入れ基準の確認が記載されている。**04_review.md を issue 直下に作成しないと完了とみなさない。** |
 
@@ -19,7 +19,7 @@
 
 ## issue_creation サブフェーズ
 
-親 issue の 00→01→02→03 まで完了したあと、**PR 指摘対応用のサブ issue を起票する**場合に次のサブフェーズを用いる。
+**実装→PR 作成→レビューの後（PR レビューコメントが得られてから）**、PR 指摘対応用のサブ issue を起票する場合に次のサブフェーズを用いる。本サブフェーズの INPUT（`pr_url`・`review_comments_raw`）は PR 作成・レビュー後にしか存在しないため、親 issue の 00→03 完了時点では起動できない（フロー上の位置は下記「この issue を最初から最後まで実行」フローを参照）。
 
 | サブフェーズ | 起動する command | 必須成果物 | DoD |
 |--------------|------------------|------------|-----|
@@ -44,22 +44,22 @@
 1. **要求** — requirement-discovery → 00_要求定義.md
 2. **要件** — requirement-discovery（続き）→ 01_要件定義.md
 3. **設計** — design-feature → 02_設計.md
-4. **実装計画** — design-feature / implement-feature の入口 → 03_実装計画.md
-5. **issue_creation.create_pr_review_issue**（該当する場合のみ）— 親 00/01/02/03 の内容で「PR 指摘対応 issue を起票する」と判断されたとき、create-pr-review-issue を実行し、90_issues 配下にサブ issue と 00_要求定義.md を用意する。
-6. **実装** — implement-feature → 成果物・コード等
-7. **レビュー** — verify-and-close → 04_review.md（必須）
+4. **実装計画** — design-feature（review-dependencies が 03 を生成）→ 03_実装計画.md
+5. **実装** — implement-feature → 成果物・コード等
+6. **レビュー** — verify-and-close → 04_review.md（必須）
+7. **issue_creation.create_pr_review_issue**（該当する場合のみ・PR 作成後）— PR を作成しレビューコメントが得られた後、その指摘対応 issue を起票すると判断されたとき、create-pr-review-issue を実行し、90_issues 配下にサブ issue と 00_要求定義.md を用意する。
 
-通常の issue（PR 指摘対応起票を含まない）の場合は 5 を省略する。PR 指摘対応 issue 自動作成フローを組み込んだ親 issue の場合は、03 完了後に 5 を実行してから 6 に進む。
+通常の issue（PR 指摘対応起票を含まない）の場合は 7 を省略する。7 は PR 作成・レビュー後に発生する随時ゲートであり、親 00〜03 完了時点（4 の直後）では起動できない（INPUT の `pr_url`・`review_comments_raw` が PR 作成前には存在しないため）。
 
 ---
 
 ## レビュー成果物の配置ルール
 
-- **二経路の区別**: **実装前のドキュメントレビュー**（run_command §実装前のドキュメントレビュー）では memo のみに証跡を残し、04_review.md は作成しない。**実装完了後のレビュー**（verify-and-close）では 04_review.md を必須で作成し、write-workflow-log を必須で実行する。memo は 04_review の代わりにはならない。
+- **二経路の区別**: **実装前のドキュメントレビュー**（run_command §実装前のドキュメントレビュー）では証跡は memo に残し、04_review.md は作成しない。**ただし dual_lens の両リスト（敵対的観点リスト／must-preserve リスト）は git 追跡される 00-03 への記載を推奨する**（review-docs.md §Outputs と整合。memo のみへの記載でも DoD 上は可だが、将来 audit 拡張への耐性のため 00-03 記載を推奨経路とする）。**実装完了後のレビュー**（verify-and-close）では 04_review.md を必須で作成し、write-workflow-log を必須で実行する。memo は 04_review の代わりにはならない。
 - **04_review（04_review.md）は、実装フェーズ完了後のレビューフェーズ（verify-and-close を実行するとき）でのみ作成・更新する。要求・要件・設計・実装計画・実装のいずれかのフェーズで 04_review を作成してはならない。**
 - **レビューフェーズで verify-and-close が実施するレビュー**（00/01/02/03 および実装成果物の確認を含む）の成果物は、**必ず issue フォルダ直下に 04_review（04_review.md）を直接作成する（絶対強制）。** verify-and-close を実行したら 04_review.md を作成しないで完了とみなしてはならない。省略は認めない。enforcement 失敗条件 #3 で検出する。
 - **memo にはドキュメントレビュー証跡を記録してよい（推奨）**。実装前の 00/01/02/03 に対するドキュメントレビューの指摘一覧・修正内容・完了判定などの証跡は memo に残してよい。**04_review に相当する正式なレビュー成果物は memo に書かない**。memo はメモ・証跡用とする。**実装完了レビュー（verify-and-close）では必ず 04_review.md を issue 直下に作成し、memo のみで済ませること禁止。**
-- **ドキュメントレビューはレビューと修正を一組とする**。指摘がなくなるまでレビュー→修正を繰り返すこと。各回の証跡は memo に記録する。**完了後は必ず書記（write-workflow-log）に依頼**すること（run_command §実装前のドキュメントレビュー）。
+- **ドキュメントレビューはレビューと修正を一組とする**。指摘がなくなるまでレビュー→修正を繰り返すこと。各回の証跡は memo に記録する。**完了後は必ず書記（write-workflow-log）を実行する**こと（chain 実行者自身が実行する。正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)。run_command §実装前のドキュメントレビュー も参照）。
 - **ドキュメントレビュー「完了」の定義**: 完了とは **(1) memo 作成 (2) 指摘がなくなるまでの修正反復 (3) 書記委譲**の**すべて**を指す。**(3) を実施するまで「完了」とみなしてはならない**。書記委譲を省略してユーザーに報告のみして終了することは禁止（enforcement §失敗条件 #23）。
 - **ユーザーが「レビュー用の指示文だけ教えて」等と明示した場合を除き、ドキュメントレビュー依頼は常に本ルール（memo への記録＋指摘がなくなるまでの反復＋書記委譲）を適用すること**。レビュー本文やサマリだけを返して memo・書記を省略することを禁止する（enforcement §失敗条件 #22–#23 と整合させる）。
 - **review-docs の位置づけ（横断的必須ゲート）**: 実装前ドキュメントレビューの command [review-docs](../commands/review-docs.md) は、design-feature（設計・実装計画）完了と implement-feature 着手の間の**横断的必須ゲート**である（表に行を持たないことは省略可を意味しない）。**full/standard は一律必須。quick モード（00_要求定義.md frontmatter `mode: quick`）は本ゲートを免除する**（軽量化。免除は記録省略ではない。詳細は RULES.md §実行モードおよび run_command.md §Constraints）。位置づけの定義・「本表にない command の起動は禁止」との整合は [PHASE_COMMAND_MAP.md §横断的必須ゲート](PHASE_COMMAND_MAP.md#横断的必須ゲート) を正本とし、本節では重複記載しない。委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
@@ -93,8 +93,8 @@
 ## 監査観点
 
 - 各フェーズの成果物が**テンプレート**の必須セクションを満たしていること。
-- **各工程で監査・書記に依頼する**。worker（監査・書記以外）の command 完了後は、要求・要件・設計・実装計画・実装のいずれの工程でも必ず verify-and-close（監査・書記）を経ること。レビュー・クローズ前に必ず verify-and-close を経ること。
-- **各フェーズ完了時の監査・書記は run_command の定義に従うこと**。実装前のドキュメントレビューは memo 証跡＋書記委譲（04_review は作らない）。実装完了後のレビューは verify-and-close を実行し 04_review.md を必須で作成する。run_command の Constraints と整合させる。
+- **各工程で監査を経て、書記（write-workflow-log）を実行する**（chain 実行者自身が実行する。工程により監査の委譲先が異なる。正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)）。**実装完了後、クローズ前には必ず verify-and-close（監査・書記）を経ること。** **要求・要件・設計・実装計画の各工程完了後（実装着手前）**は、verify-and-close ではなく review-docs（実装前ドキュメントレビュー。memo 証跡＋指摘収束＋書記（write-workflow-log）の実行）を経ること。「いずれの工程でも verify-and-close を経る」運用は行わない（04_review を実装前に作ると audit #29 で FAIL するため）。
+- **各フェーズ完了時の監査・書記は run_command の定義に従うこと**。実装前のドキュメントレビューは memo 証跡＋書記委譲（04_review は作らない）。実装完了後のレビューは verify-and-close を実行し 04_review.md を必須で作成する。**dual_lens の両リスト（敵対的観点リスト／must-preserve リスト）は git 追跡される 00-03 への記載を推奨する**（review-docs.md §Outputs と整合）。run_command の Constraints と整合させる。
 - **ユースケースに基づく全シナリオ**について、**テストコード化できるものは全て**テストコード化されていること（できない場合は理由が明記されていること）。01 の BDD シナリオとテスト仕様（単体テスト仕様・チェックリスト等）の対応が取れていることを確認する。
 - **フォーマットは正しいか**。成果物がフォーマット規約に適合していること（テンプレート必須セクション・用語・参照リンク・BDD 形式等）。ディレクトリ構成・ファイルの作成場所・命名規則（spec/03）・**プレフィックス**（memo および issue フォルダ名の YYYYMMDD_HHMMSS_ は実行環境現在時刻 JST 取得。推測・固定・未来禁止）・spec 準拠（設計原則・UNIX 哲学等）を含む。
 - 証跡（memo・ログ）のプレフィックスは **YYYYMMDD_HHMMSS_** とし、**実行環境の現在時刻（JST）を取得して付与すること**。**memo プレフィックスは専用経路のみで取得すること**: **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** の実行、または **.agent-skill-chain/source/scripts/memo-prefix.sh** の実行で得た値を使用する。**issue フォルダ名のプレフィックス**も同様に**実行環境の現在時刻（JST）を取得**して付与すること。**TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** の実行、または **.agent-skill-chain/source/scripts/memo-prefix.sh** の実行で得た値を使用する。**推測・固定・未来日時の使用は禁止**（手入力・固定値・推測・未来日時を使わない）。**プレフィックスは、memo/issue を作成するたびに、memo-prefix.sh または TZ=Asia/Tokyo date を実行して得た値のみを使用すること。** 実行せずにプレフィックスを決めること、およびコンテキストの日付・推測でファイル名・フォルダ名を組み立てることは違反とする。ログは一定のルールで必ず記録すること。

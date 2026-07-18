@@ -19,37 +19,37 @@
 | 項目 | 必須 | 説明 |
 |------|------|------|
 | command | ○ | 実行した command 名（例: requirement-discovery, design-feature, implement-feature, verify-and-close） |
-| issue_path | △ | 対象 issue のパス（.agent-skill-chain/runtime/YYYYMMDD_HHMMSS_* 形式のフォルダ名を必須とする）。不明時は空でも可。 |
+| issue_path | △ | 対象 issue のパス（.agent-skill-chain/runtime/YYYYMMDD_HHMMSS_* 形式のフォルダ名）。command 別の要否は [ledger/schema.md §command ごとの必須カラム規約](../ledger/schema.md) に従う（多くの command で必須。真に不明な場合のみ空）。 |
 | issue_id | △（推奨） | issue を一意に識別する UUID。00_要求定義.md の frontmatter の issue_id と一致させる。新スキーマではログに推奨。環境変数 ISSUE_ID で渡す。 |
 | review_id | △（verify-and-close で推奨） | レビュー成果物（例: 04 の document_id）を一意に識別する UUID。環境変数 REVIEW_ID で渡す。 |
 | summary | ○ | 実施内容の要約（1 文以上）。 |
 | changed_files | △（implement-feature は必須） | 変更ファイル一覧（改行区切りまたは JSON）。implement-feature 時は必須。 |
 | dod_met | ○ | DoD 達成 0 または 1。 |
-| document_id | ○ | 対応する成果ドキュメント（00/01/02/03/04/05/90/memo 等）の UUID。全ての成果ドキュメントには document_id を必ず設定すること。任意とすることは禁止。document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。write-workflow-log は環境変数 DOCUMENT_ID で受け取る。 |
-| memo ファイルパス（memo 運用時） | △ | memo_ref に登録する memo の相対パス。過渡的・例外・**非推奨**運用時のみ。本則は workflow.db。 |
+| document_id | ○（新規記録） | 対応する成果ドキュメント（00/01/02/03/04/05/90/memo 等）の UUID。**新規記録では必須**（ラッパー write-workflow-log.sh が空を exit 1 で拒否する）。DB スキーマ上は既存行・移行互換のため NULL 許容だが、任意扱いは禁止。document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。write-workflow-log は環境変数 DOCUMENT_ID で受け取る。 |
+| memo ファイルパス（memo 運用時） | △ | memo の相対パス（DB テーブルには登録しない思考メモ）。過渡的・例外・**非推奨**運用時のみ。本則は workflow.db。 |
 
 ---
 
 ## 何を出力するか（出力）
 
 - **workflow.db 採用時**: workflow_log テーブルに 1 行を INSERT。必須キーを満たす。記録は .agent-skill-chain/source/scripts/write-workflow-log.sh 経由で行うこと。
-- **memo 運用時**: .agent-skill-chain/runtime/{issue}/memo/ に YYYYMMDD_HHMMSS_ プレフィックスの .md を 1 件以上作成し、CONTRACT 準拠の内容を記載。**{issue} は YYYYMMDD_HHMMSS_ をプレフィックスとするフォルダ名（必須）。** 必要に応じて memo_ref に登録。**memo のみの運用は非推奨（移行モード）であり、将来の仕様で廃止予定とする。** 採用可能なプロジェクトは workflow.db を必ず用いること。
+- **memo 運用時**: .agent-skill-chain/runtime/{issue}/memo/ に YYYYMMDD_HHMMSS_ プレフィックスの .md を 1 件以上作成し、CONTRACT 準拠の内容を記載。**{issue} は YYYYMMDD_HHMMSS_ をプレフィックスとするフォルダ名（必須）。** memo はファイルとして扱う思考メモであり、DB テーブルへは登録しない。**memo のみの運用は非推奨（移行モード）であり、将来の仕様で廃止予定とする。** 採用可能なプロジェクトは workflow.db を必ず用いること。
 
 ---
 
 ## 必須キー一覧
 
-**workflow_log テーブル**（[ledger/schema.md](../ledger/schema.md) 準拠）:
+**workflow_log テーブル**: 必須カラムの正本は [ledger/schema.md §command ごとの必須カラム規約](../ledger/schema.md)（command 別の必須表）と [schema.sql](../ledger/schema.sql)（CHECK 制約）である。本表はその要点の索引であり、相違時は schema.md / schema.sql を正とする。
 
 | キー | 型 | 必須 | 説明 |
 |------|-----|------|------|
 | ts_utc | TEXT | ○ | ISO8601 時刻。 |
 | command | TEXT | ○ | 上記「何を受け取るか」の command。 |
-| issue_path | TEXT | △ | 対象 issue パス。 |
+| issue_path | TEXT | △ | 対象 issue パス（command 別の要否は schema.md の必須表に従う）。 |
 | summary | TEXT | ○ | 実施内容の要約。 |
-| changed_files | TEXT | △ | 変更ファイル一覧。 |
+| changed_files | TEXT | △ | 変更ファイル一覧（implement-feature は必須）。 |
 | dod_met | INTEGER | ○ | 0 または 1。 |
-| created_at | TEXT | ○ | デフォルトで datetime('now')。 |
+| created_at | TEXT | ○ | ISO8601 時刻。ラッパーが未指定時に生成する（新スキーマに `datetime('now')` デフォルトは無い）。 |
 
 **推奨スキーマ（チェーン型証跡）**（[ledger/schema.md](../ledger/schema.md) の推奨スキーマ完成版）では、さらに以下を記録する。write-workflow-log.sh は環境変数で受け取る。
 
@@ -63,7 +63,7 @@
 | issue_id | TEXT | △（推奨） | issue を一意に識別する UUID。00 の frontmatter の issue_id と一致。環境変数 ISSUE_ID。 |
 | review_id | TEXT | △（verify-and-close で推奨） | レビュー成果物（04 の document_id 等）の UUID。環境変数 REVIEW_ID。 |
 | changed_files_json | TEXT | △（implement-feature は必須） | 変更ファイル一覧の JSON 配列文字列。 |
-| document_id | TEXT | ○ | 対応する成果ドキュメントの UUID。全ての成果ドキュメントには document_id を必ず設定すること。任意とすることは禁止。document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。環境変数 DOCUMENT_ID で渡す。 |
+| document_id | TEXT | ○（新規記録） | 対応する成果ドキュメントの UUID。**新規記録では必須**（ラッパーが空を exit 1 で拒否）。DB スキーマ上は既存行・移行互換のため NULL 許容だが任意扱いは禁止。document_id は作成時または初回付与時にのみ設定し、既に存在する場合は変更・上書きしてはならない。環境変数 DOCUMENT_ID で渡す。 |
 
 **必須キー不足時**: 記録を失敗とみなし、親にエラーを返す。完了とみなさない。
 

@@ -28,7 +28,7 @@
 
 ## PROCESS（Skill chain・この順で実行）
 
-0a. **frame-experience**（`experience_surface` が `null（未記入）または` `"yes: ..."` の場合に実行。`"no: ..."` はスキップ）— 体験の前提づけ ※fresh サブ①へ委譲  
+0a. **frame-experience**（`experience_surface` が `null`（未記入）または `"yes: ..."` の場合に実行。`"no: ..."` はスキップ）— 体験の前提づけ ※fresh サブ①へ委譲  
    `skills/experience/frame-experience/`
 0b. **map-experience**（0a の判定結果=あり の場合に実行）— 体験の流れ ※fresh サブ②へ委譲  
    `skills/experience/map-experience/`
@@ -61,7 +61,7 @@
 
 - 02_設計.md（責務・参照関係・テスト観点・API。体験サーフェス=あり の場合は §7 に体験設計〈3 フェーズ分または統合記録〉を含む）
 - 03_実装計画.md（タスク分解・テスト仕様 BDD）
-- **サブissueを 1 件以上分割した場合**: 親ワークフロー（.agent-skill-chain/runtime/{親issue}/）のルートに 90_issues.md を作成すること。
+- **サブissueを 1 件以上分割した場合**: 親ワークフロー（.agent-skill-chain/runtime/{親issue}/）のルートに 90_issues.md を作成すること（**作成主体・作成手段の正本は [skills/agent/run_command.md §サブissue作成時](../skills/agent/run_command.md)**。サブは独断で起票せず、進行役承認後に issue 作成 command へ再委譲する）。
 
 ---
 
@@ -86,10 +86,10 @@
   - **Task**: 担当 step（例: step0a）・成果物（02 §7.x）・参照（本 command・該当 `skills/experience/{phase}-experience/`・00/01・**前フェーズの確定出力 §7.x**〈step0a は無し〉）。
   - **Constraints**: 継承物（前フェーズまでの**却下済み指摘＋理由**・**must-preserve リスト**＝CLOSEOUT §fresh サブ分割の継承前提。会話文脈そのものは引き継がない）・選定ティア/effort（MODEL_SELECTION / EFFORT_POLICY に基づき明記）。
   - **OutputSpec**: 当該フェーズの Done（各 SKILL.md の Done を転記）。
-  - **規模比例統合可**: 体験サーフェスが小さい場合、統合対象の工程群（例: 0a+0b+0c）を 1 委譲に畳んでよい。統合した場合は 02 §7 に「どのフェーズを統合したか」を 1 行残す。
+  - **規模比例統合可**: 体験サーフェスが小さい場合、統合対象の工程群（例: 0a+0b+0c）を 1 委譲に畳んでよい。統合した場合は 02 §7 に「どのフェーズを統合したか」を 1 行残す。（この規模比例の考え方は本 command に限らない一般原則であり、正本は [skills/agent/run_command.md §規模比例原則](../skills/agent/run_command.md) を参照。）
   - **体験サーフェス=なし はトリガー非該当の正常系**であり、委譲分割は不要（工程欠落ではない）。
   - **00 に `experience_surface: "no: <理由>"` が明示されている場合も無検証で採用しない**: 設計フェーズで最初に委譲されるサブ（=通常は define-boundaries 担当）が、00 の値を 02 §7.0 へ**転記**した上で、体験サーフェス定義（人間が感覚器で直接体験する出力があるか。画面に限らず CLI 出力・エラー・生成 Markdown・エージェント指示文を含む）に照らして**検証**する。定型理由が実際の出力と矛盾する場合は「あり」へ倒し（fail-safe）、進行役へ差し戻して step0a から実行し直す。
 - 02/03 を更新する際、frontmatter に既に document_id が存在する場合はその値を変更・上書きしてはならない。document_id は 02/03 を新規作成するときまたは初回付与時にのみ設定する。
-- **完了後に書記（write-workflow-log）に依頼して記録させること。** 本 command は 02 と 03 の**複数成果物**を生成・更新しうるため、**生成・更新した全成果物それぞれ**（02_設計.md・03_実装計画.md など）について、各成果物の **DOCUMENT_ID**（frontmatter の UUID）と **DOCUMENT_PATH**（プロジェクトルート相対パス）を渡して書記に **1 回ずつ**記録させること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
+- **完了後に書記（write-workflow-log）を実行すること（chain 実行者自身が実行する。正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)）。** 本 command は 02 と 03 の**複数成果物**を生成・更新しうるため、**生成・更新した全成果物それぞれ**（02_設計.md・03_実装計画.md など）について、各成果物の **DOCUMENT_ID**（frontmatter の UUID）と **DOCUMENT_PATH**（プロジェクトルート相対パス）を渡して **1 回ずつ**実行すること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
 - **重要判断は** [EVIDENCE_POLICY.md](../EVIDENCE_POLICY.md) **の ADR 形式で記録し**、フィジビリティ確認のうえ **evidence_source** を付記すること。greenfield の土台決定（アーキテクチャ・コーディング規約・ディレクトリ構成）も重要判断に含む。
 - **本 command 完了後・implement-feature 委譲前に review-docs を必須で経ること（絶対強制）**: 実装着手前の実装前ドキュメントレビュー [review-docs](review-docs.md) は、design-feature 完了と implement-feature 着手の間の必須ゲートである（**full/standard は必須・quick モードは免除**。正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)）。未実行のまま implement-feature へ進むと enforcement #32 で FAIL する（[enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し。**quick モードは #32 の対象外＝SKIP**）。

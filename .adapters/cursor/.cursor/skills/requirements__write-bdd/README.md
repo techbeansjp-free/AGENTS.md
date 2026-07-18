@@ -35,4 +35,4 @@
 - CONCEPTS、RULES
 - PHASES（要件フェーズの必須成果物・DoD）
 - .agent-skill-chain/runtime/templates または親 01_要件定義.md
-- delegate_to_sub の OutputSpec（完了条件・証跡）
+- skills/agent/run_command.md の OutputSpec（完了条件・証跡）

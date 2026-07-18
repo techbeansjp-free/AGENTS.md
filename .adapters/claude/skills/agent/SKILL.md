@@ -27,7 +27,7 @@ command を実行するときは必ず本ファイルを読むこと。**command
 
 1. **command を指定する**: フェーズに応じて commands/requirement-discovery.md 等を指定する。
 2. **command ファイルを開く**: 先頭から skill chain の順序を確認する。
-3. **各 capability を順に実行する**: 各 skills/{domain}/{capability}/ の SKILL.md または README.md の「手順」に従う。前の capability の OUT を次の IN として渡す。
+3. **各 capability を順に実行する**: 各 skills/{domain}/{capability}/ の **SKILL.md（手順・Done の正本）** に従う。README.md は索引であり SKILL.md への参照に留まる（手順の正本ではない）。前の capability の OUT を次の IN として渡す。
 4. **DoD を確認する**: command ファイル末尾の DoD を満たしているか確認する。
 5. **証跡を残す**: 実施内容・変更ファイルを記録する。**本則は workflow.db（write-workflow-log を使用する）**。memo は workflow.db を採用しない場合の過渡的・例外運用のみ（詳細は run_command.md の OutputSpec を参照）。
 

@@ -11,7 +11,7 @@
 | 項目 | 値 |
 |------|-----|
 | **Allowed Phase** | レビュー |
-| **Required Inputs** | issue、00/01/02/03/04、REVIEW_RULE、PHASES 監査観点 |
+| **Required Inputs** | issue、00/01/02/03、04（再実行時のみ・任意。初回実行時は本 command が 04 を新規作成するため存在しない）、REVIEW_RULE、PHASES 監査観点 |
 | **Produces** | 04_review.md、証跡（本則 workflow.db、memo は過渡的・例外時のみ） |
 | **Next Phase** | close（本 command 完了後、phase を閉じる） |
 
@@ -20,7 +20,7 @@
 ## INPUT
 
 - **issue**: .agent-skill-chain/runtime/{issue}/ のパス。04_review の更新対象。
-- **context**: 00/01/02/03/04 のパス。委譲時に指定された参照ファイル。
+- **context**: 00/01/02/03 のパス。**04 は再実行時のみ・任意**（初回実行時は本 command が新規作成するため存在しない）。委譲時に指定された参照ファイル。
 - **参照**: .agent-skill-chain/source/REVIEW_RULE.md、.agent-skill-chain/source/workflow/PHASES.md の監査観点。監査時には PHASES の監査観点（ユースケースに基づく全シナリオのテストコード化の網羅・フォーマットの正しさ）に従い、証跡として「01 の BDD とテスト仕様の対応」「必須フォーマットの充足」を確認すること。
 
 **レビュー成果物の参照先**: **04_review は issue 直下で実装フェーズ完了後のレビューフェーズ（本 command 実行時）でのみ作成・更新する。** 実装前の 00/01/02/03 に対するドキュメントレビュー証跡は memo に残してよい。本 command は 04_review を作成・更新し、その内容を検証・クローズの根拠とする。正式なレビュー成果物（04_review）の配置先は 04_review のみとする。必要に応じ証跡の補足を memo に残すことも許容する。
@@ -48,7 +48,7 @@
 - generate-scenarios の OUT（シナリオ・観点一覧）→ map-coverage の IN。
 - map-coverage の OUT（カバレッジ表・未達一覧）→ 04_review に反映。review-code / review-architecture でも参照する。
 - review-code と review-architecture の OUT を 04_review にまとめる。
-- 最後に write-workflow-log で実施内容・変更ファイル・完了判定を記録する。本則は workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス必須（専用経路で取得）。本 command が 04_review.md に加えて**複数の成果ドキュメント**（frontmatter に document_id を持つ 00/01/02/03/04 等）を作成・更新した場合は、**生成・更新した全成果物それぞれ**について各成果物の **DOCUMENT_ID** と **DOCUMENT_PATH**（ルート相対）を渡して書記に **1 回ずつ**記録させること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
+- 最後に write-workflow-log を**chain 実行者自身が実行**し、実施内容・変更ファイル・完了判定を記録する（正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)）。本則は workflow.db。memo 運用時は YYYYMMDD_HHMMSS_ プレフィックス必須（専用経路で取得）。本 command が 04_review.md に加えて**複数の成果ドキュメント**（frontmatter に document_id を持つ 00/01/02/03/04 等）を作成・更新した場合は、**生成・更新した全成果物それぞれ**について各成果物の **DOCUMENT_ID** と **DOCUMENT_PATH**（ルート相対）を渡して **1 回ずつ**実行すること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
 
 ---
 

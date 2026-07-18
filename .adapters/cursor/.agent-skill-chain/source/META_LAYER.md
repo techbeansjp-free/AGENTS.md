@@ -84,6 +84,13 @@ AGENTS 基盤は、放置すると自然に膨張する。
 - audit 強化
 - command 実装強化
 
+**advisory ルールの判定基準（enforcement 相当とみなす条件）**: AGENT_CONDUCT.md・PLATFORM_SAFETY_RESPONSE.md 等、機構（hooks/CI）による直接強制を伴わない advisory ルールを新設する場合、次の (a)(b) の**両方**を満たせば「enforcement を伴わないルール」の禁止には抵触しない（Rule 3 を満たす）とみなす。
+
+- (a) 当該ルールの失敗シナリオが [enforcement/README.md](enforcement/README.md) §失敗条件表へ登載されている（未実装・人手監査の分類でもよい）。
+- (b) 当該ルールに対する人手監査観点（何を・誰が・いつ確認するか）が指定されている。
+
+(a)(b) のいずれも満たさない advisory ルールの新設は Rule 3 違反として扱う。失敗条件表本体（登載作業）は enforcement 所有であり、本判定基準は本ファイル側の基準文言のみを正本とする（登載運用は領域C 連携）。
+
 ---
 
 ## 責務境界
@@ -104,6 +111,10 @@ AGENTS 基盤は以下の 4 層で構成される。
 - command に policy を書く
 - skill に rule を書く
 - template に workflow を書く
+
+**carve-out（`skills/agent/` の位置づけ）**: `skills/agent/`（run_command.md・SKILL.md）は、他ドメイン skill（requirements/architecture/review 等の **domain capability skill**）とは異なり、**委譲そのものを実行する orchestration I/F 層**である。委譲形式（Task/Constraints/OutputSpec）に加え、各ゲート（review-docs 必須ゲート・GitHub Issue 起票ゲート・branch 紐づけゲート等）の policy を指定する場所として run_command.md を用いてよい。「skill に rule を書く」の禁止は **domain capability skill**（requirements/architecture/review/testing/logging/experience 等）を対象とし、`skills/agent/` の orchestration I/F 層には適用しない。
+
+**注記（4 層モデルと物理構造の関係）**: 上表（RULES/COMMANDS/SKILLS/TEMPLATES）の 4 層は**概念分類**であり、実際のディレクトリ構造（`boot/`・`workflow/`・`spec/`・`enforcement/`・ルート直下の policy ファイル群等）と物理的に 1 対 1 対応するものではない。判定に迷う場合は本節の carve-out・各ファイル冒頭の責務宣言を優先する。
 
 ---
 
@@ -130,6 +141,8 @@ AGENTS 基盤の肥大化を防ぐため、次の指標を監視する。
 | 基盤修正 | ≤ 2 |
 
 これを超えた場合、基盤の簡素化を検討する。
+
+**「参照必須文書」の計測定義**: 上記「参照文書 ≤ 8」の計測対象は、**起動時に一括必読の文書（CORE / LOAD_POLICY / PHASES の 3 ファイル）のみ**を指す（正本は [boot/LOAD_POLICY.md](boot/LOAD_POLICY.md) 冒頭）。LOAD_POLICY のトリガー表に従いオンデマンドで読む各行の対象ファイルは、この指標の加算対象に**含めない**。これにより「読了義務を果たすほど基準超過で警告される」自己矛盾を避ける。**越境申し送り**: enforcement 系統C（orchestrator の Read/Grep 過大読込を警告する hook）は未実装であり、実装時は本定義（起動必読のみを計測）と整合させること（領域C）。深い簡素化（読了義務そのものの凝縮版＋オンデマンド再設計）は本 issue のスコープ外とし、別途フォローアップ issue で検討する。
 
 ---
 

@@ -7,6 +7,8 @@
 CREATE TABLE IF NOT EXISTS workflow_log (
   entry_id TEXT PRIMARY KEY,
   parent_entry_id TEXT NULL,
+  -- document_id: 既存行・移行互換のため DB スキーマ上は NULL 許容。
+  -- 新規記録での必須性はラッパー write-workflow-log.sh が担保する（空を exit 1 で拒否）。
   document_id TEXT NULL,
   ts_utc TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -31,6 +33,9 @@ CREATE TABLE IF NOT EXISTS workflow_log (
 
   prev_hash TEXT NULL,
   entry_hash TEXT NOT NULL,
+  -- hash_version: entry_hash 算出式の版。NULL=レガシー v1（既存行）、2=v2（新規行）。
+  -- DEFAULT は付けない（新規行はラッパーが必ず 2 を明示 INSERT し、新規 DB と移行 DB の挙動を一致させる）。
+  hash_version INTEGER NULL,
 
   CHECK (length(entry_id) > 0),
   CHECK (length(ts_utc) > 0),
@@ -59,5 +64,5 @@ CREATE INDEX IF NOT EXISTS idx_workflow_log_issue_id ON workflow_log(issue_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_review_id ON workflow_log(review_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_log_document_path ON workflow_log(document_path) WHERE document_path IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_workflow_log_model_tier ON workflow_log(model_tier);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_tier_rationale ON workflow_log(tier_rationale);
-CREATE INDEX IF NOT EXISTS idx_workflow_log_tier_exception ON workflow_log(tier_exception);
+-- tier_rationale / tier_exception は自由文カラムであり、audit #38 は非空判定のみで等価検索を行わない。
+-- 索引は無益なため作成しない（D-18）。絞込に有用な model_tier のみ索引を維持する。

@@ -13,8 +13,9 @@
 | 要求 | requirement-discovery | 依頼内容の把握と 00_要求定義.md の作成・更新 |
 | 要件 | requirement-discovery | 01_要件定義.md の作成・更新（ユーザーストーリー／受け入れ基準／BDD シナリオ） |
 | 設計 | design-feature | 02_設計.md の作成・更新 |
-| 実装計画 | design-feature / implement-feature | 03_実装計画.md の作成・更新。必要に応じて implement-feature の入口として扱う |
-| issue_creation（サブフェーズ create_pr_review_issue） | create-pr-review-issue | PR 指摘対応 issue の起票。90_issues 配下にディレクトリと 00_要求定義.md を生成（「この issue を最初から最後まで実行」フローで 03 の後に実行される場合あり） |
+| 実装計画 | design-feature（review-dependencies が 03 を生成） | 03_実装計画.md の作成・更新。「implement-feature の入口」という表現は用いない（implement-feature の Allowed Phase は「実装」のみで 03 生成 capability を持たない） |
+| issue_creation（一般） | requirement-discovery | 一般的な issue 作成依頼（PR 指摘対応以外）。issue ディレクトリの新規作成を含む（PHASES.md §一般的な issue 作成ステップ） |
+| issue_creation（サブフェーズ create_pr_review_issue） | create-pr-review-issue | PR 指摘対応 issue の起票。90_issues 配下にディレクトリと 00_要求定義.md を生成（実装→PR 作成→レビューの後、PR レビューコメントが得られてから起動する随時ゲート。「この issue を最初から最後まで実行」フローではレビュー phase の後に実行される） |
 | 実装 | implement-feature | 実装およびテストコード作成。既存 03_実装計画.md に従う |
 | レビュー | verify-and-close | 04_review.md の作成・更新とクローズ判定 |
 
