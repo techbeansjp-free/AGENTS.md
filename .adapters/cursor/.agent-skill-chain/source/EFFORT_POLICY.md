@@ -18,6 +18,10 @@ document_id: "165b969b-5bc7-40d1-a404-6bc4432cb375"
 
 reasoning effort は、サブ委譲時に選定する **model ティア**（[MODEL_SELECTION.md](MODEL_SELECTION.md) が規定）とは**独立した別次元の軸**である。ティア選定は「どの model で実行するか」、effort 制御は「同一 model 上でどれだけ深く推論させるか」を扱い、両者を混同しない。委譲時に**ティアを明記する義務**（MODEL_SELECTION.md §2 ティア明記義務）と、委譲時に**effort を明記する義務**（本ファイルが規定）は**別々に**満たす必要があり、一方を満たしたことで他方の明記を省略してよいことにはならない。**role×effort の具体対応表・モデル名・閾値は本ファイルに記載しない**（コアへの具体値混入禁止）。具体対応表は `.agent-skill-chain/project/` の定義に従う。
 
+### 記録・検証の非対称性（現在の事実）
+
+model_tier とは異なり、本ファイルが課す effort 明記義務には対応する記録欄・audit 検査が現時点では未整備である（実装スコープの切り分けは [../project/MODEL_TIER_TABLE.md §role×effort 対応表（受け皿）](../project/MODEL_TIER_TABLE.md#roleeffort-対応表受け皿) を参照）。未整備の間も §2 の effort 明記義務（委譲パケットへの明記）そのものは変わらず有効である。
+
 ---
 
 ## 3 品質ゲート非劣化原則
@@ -42,4 +46,4 @@ effort フィールドを**解決できないランタイム**では、本ファ
 ## 汎用/固有境界
 
 - **コア（本ファイル）**: 適用条件・ティア明記義務との別次元性・品質ゲート非劣化原則・対象外環境のフォールバック（抽象原則）。
-- **`.agent-skill-chain/project/`（採用先で定義）**: 具体 role×effort 対応表・モデル名・閾値。**対応表はコアに置かない（PF 中立性）。**
+- **`.agent-skill-chain/project/`（採用先で定義）**: 具体 role×effort 対応表・モデル名・閾値。**対応表はコアに置かない（PF 中立性）。** 本リポでは [`../project/MODEL_TIER_TABLE.md` §role×effort 対応表（受け皿）](../project/MODEL_TIER_TABLE.md#roleeffort-対応表受け皿) がこの受け皿を兼ねる（role→ティア対応表と併記）。

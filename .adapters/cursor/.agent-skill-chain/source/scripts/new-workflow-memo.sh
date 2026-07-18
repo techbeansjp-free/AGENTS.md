@@ -20,10 +20,9 @@
 
 set -euo pipefail
 
-if [[ "${TZ:-}" == "" ]]; then
-  # 日本標準時での一意な日時付与を強制する
-  export TZ="Asia/Tokyo"
-fi
+# E-12: memo プレフィックスは JST で一意採番する契約のため、呼び出し環境の TZ に依存させない
+# （既存 TZ を尊重すると環境ごとに時系列順序が崩れる）。無条件で JST を強制する。
+export TZ="Asia/Tokyo"
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 ISSUE_DIR [TITLE]" >&2
@@ -68,12 +67,15 @@ create_memo_once() {
   ts="$(date +%Y%m%d_%H%M%S)"
   fname="${ts}_${SANITIZED_TITLE}.md"
   path="${MEMO_DIR}/${fname}"
-  if [[ -e "$path" ]]; then
-    return 1
+  # E-11: [[ -e "$path" ]] チェックと > "$path" の間に他プロセスが同名を作ると黙って上書きする
+  # TOCTOU があった。set -C（noclobber）をサブシェルの if 条件文脈で使い作成を原子化する。
+  # 既存なら redirect が失敗して return 1 となり、呼び出し側の再試行ループに委ねる
+  # （if ( ... ) 条件文脈のため外側 set -e はここで発火しない）。
+  if ( set -C; printf '# %s\n\n' "$TITLE" > "$path" ) 2>/dev/null; then
+    printf '%s\n' "$path"
+    return 0
   fi
-  printf '# %s\n\n' "$TITLE" > "$path"
-  printf '%s\n' "$path"
-  return 0
+  return 1
 }
 
 # タイムスタンプ衝突を避けるため、最大 5 回まで 1 秒刻みで再試行

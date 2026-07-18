@@ -84,13 +84,24 @@ target_parent="$workflow_dir/close"
 target_dir="$target_parent/$issue_name"
 
 # --- 衝突ガード ---
-[[ ! -e "$target_dir" ]] || die "移動先が既に存在する（上書きしない）: ${target_dir#$main_root/}"
+[[ ! -e "$target_dir" ]] || die "移動先が既に存在する（上書きしない）: ${target_dir#"$main_root"/}"
 
 # --- ファイル単位移動（追跡=git mv / 非追跡=mv） ---
+# E-4: 途中で git mv/mv が失敗すると set -e で即終了し、一部は close/ 側・残りは元位置という
+# 分裂状態が残りうる。全自動ロールバックは git mv の逆再生自体が失敗し得るため採用せず、
+# 既存の fail-closed 哲学（バックアップ不成立＝上書き中止）に合わせ「失敗時レポート＋人手解決」とする。
+moved_list=()
+on_move_fail() {
+  printf 'close-move-issue: ERROR: 移動が途中で失敗しました。以下は移動済み（未ロールバック）:\n' >&2
+  printf '  %s\n' "${moved_list[@]:-(なし)}" >&2
+  printf '手動で close/ 側と元位置の分裂を解消してください（自動ロールバックはしません）。\n' >&2
+}
+trap on_move_fail ERR
+
 mkdir -p "$target_parent"
 moved=0
 while IFS= read -r -d '' f; do
-  rel="${f#$issue_dir/}"
+  rel="${f#"$issue_dir"/}"
   dest="$target_dir/$rel"
   dest_parent="$(dirname "$dest")"
   mkdir -p "$dest_parent"
@@ -99,9 +110,11 @@ while IFS= read -r -d '' f; do
   else
     mv "$f" "$dest"
   fi
-  printf '%s -> %s\n' "${f#$main_root/}" "${dest#$main_root/}"
+  moved_list+=("${f#"$main_root"/} -> ${dest#"$main_root"/}")
+  printf '%s -> %s\n' "${f#"$main_root"/}" "${dest#"$main_root"/}"
   moved=$((moved + 1))
-done < <(find "$issue_dir" -type f -print0)
+done < <(find "$issue_dir" \( -type f -o -type l \) -print0)
+trap - ERR
 
 # --- 空になった元ディレクトリを削除 ---
 # （git mv はディレクトリを残す・mv はファイルのみ移すため、空ディレクトリを掃除する）
@@ -115,7 +128,7 @@ if [[ "$moved" -eq 0 ]]; then
 fi
 
 # --- 移動確認（パスのみ・close/ 配下の内容は読まない） ---
-printf 'close-move-issue: %d ファイルを %s へ移動しました。\n' "$moved" "${target_dir#$main_root/}"
+printf 'close-move-issue: %d ファイルを %s へ移動しました。\n' "$moved" "${target_dir#"$main_root"/}"
 printf '確認は `git status`（パス一覧のみ）で行い、close/ 配下の内容は読まないこと。\n'
-git -C "$main_root" status --porcelain -- "${target_dir#$main_root/}" 2>/dev/null | sed 's/^/  /' || true
+git -C "$main_root" status --porcelain -- "${target_dir#"$main_root"/}" 2>/dev/null | sed 's/^/  /' || true
 exit 0
