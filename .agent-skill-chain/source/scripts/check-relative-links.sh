@@ -154,6 +154,9 @@ import sys
 
 path = sys.argv[1]
 in_fence = False
+fence_char = ''
+fence_len = 0
+fence_re = re.compile(r'^(`{3,}|~{3,})')
 link_re = re.compile(r'\]\(([^)]+)\)')
 
 try:
@@ -161,9 +164,20 @@ try:
         for lineno, raw in enumerate(fh, start=1):
             line = raw.rstrip("\n")
             stripped = line.lstrip()
-            if stripped.startswith("```") or stripped.startswith("~~~"):
-                in_fence = not in_fence
-                continue
+            # E-19: 開始フェンスの記号種（` / ~）と長さを記憶し、同種・同長以上の行でのみ
+            # 閉じる（CommonMark 準拠）。単一フラグの単純トグルだと ``` ブロック内の ~~~ 行が
+            # 誤って開閉をトグルし、以降のファイル全体で誤検出が連鎖していた。
+            m = fence_re.match(stripped)
+            if m:
+                marker = m.group(1)
+                ch, ln_len = marker[0], len(marker)
+                if not in_fence:
+                    in_fence, fence_char, fence_len = True, ch, ln_len
+                    continue
+                elif ch == fence_char and ln_len >= fence_len:
+                    in_fence, fence_char, fence_len = False, '', 0
+                    continue
+                # in_fence かつ別種/短いフェンス行はコンテンツ扱い（開閉しない）
             if in_fence:
                 continue
             line = re.sub(r"`[^`]*`", "", line)
@@ -186,6 +200,9 @@ import sys
 
 path, anchor = sys.argv[1], sys.argv[2]
 in_fence = False
+fence_char = ''
+fence_len = 0
+fence_re = re.compile(r'^(`{3,}|~{3,})')
 seen = {}
 slugs = set()
 heading_re = re.compile(r"^(#{1,6})\s+(.*)$")
@@ -195,9 +212,17 @@ try:
         for raw in fh:
             line = raw.rstrip("\n")
             stripped = line.lstrip()
-            if stripped.startswith("```") or stripped.startswith("~~~"):
-                in_fence = not in_fence
-                continue
+            # E-19: extract_links と同一のフェンス種別・長さ追跡ロジック（ロジック二重化はここに明示）。
+            m_fence = fence_re.match(stripped)
+            if m_fence:
+                marker = m_fence.group(1)
+                ch, ln_len = marker[0], len(marker)
+                if not in_fence:
+                    in_fence, fence_char, fence_len = True, ch, ln_len
+                    continue
+                elif ch == fence_char and ln_len >= fence_len:
+                    in_fence, fence_char, fence_len = False, '', 0
+                    continue
             if in_fence:
                 continue
             m = heading_re.match(line)
@@ -231,6 +256,15 @@ broken_count=0
 link_count=0
 
 for file in "${FILES[@]}"; do
+  # E-7: extract_links（python3）が失敗しても、プロセス置換 < <(...) の終了コードは
+  # pipefail の対象外のため while ループが単に空入力を受け取るだけになり、全ファイル
+  # 「リンク 0 件」の偽 PASS になっていた。一時ファイルへ落として終了コードを検査してから読む。
+  _links_tmp="$(mktemp)"
+  if ! extract_links "$file" > "$_links_tmp"; then
+    echo "エラー: リンク抽出ヘルパー（python3）が失敗しました: $file" >&2
+    rm -f "$_links_tmp"
+    exit 2
+  fi
   while IFS=$'\t' read -r lineno target; do
     [[ -z "${lineno:-}" ]] && continue
     link_count=$((link_count + 1))
@@ -276,7 +310,8 @@ for file in "${FILES[@]}"; do
         broken_count=$((broken_count + 1))
       fi
     fi
-  done < <(extract_links "$file")
+  done < "$_links_tmp"
+  rm -f "$_links_tmp"
 done
 
 echo "---"
