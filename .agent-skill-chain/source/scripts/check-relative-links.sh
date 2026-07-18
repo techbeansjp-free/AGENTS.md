@@ -260,6 +260,7 @@ for file in "${FILES[@]}"; do
   # pipefail の対象外のため while ループが単に空入力を受け取るだけになり、全ファイル
   # 「リンク 0 件」の偽 PASS になっていた。一時ファイルへ落として終了コードを検査してから読む。
   _links_tmp="$(mktemp)"
+  trap 'rm -f "$_links_tmp"' EXIT INT TERM
   if ! extract_links "$file" > "$_links_tmp"; then
     echo "エラー: リンク抽出ヘルパー（python3）が失敗しました: $file" >&2
     rm -f "$_links_tmp"
