@@ -7,3 +7,14 @@ docs/
 src/
 app/
 components/
+
+# --- enforcement 正本（C-1・参照用リスト。本ファイルは PreToolUse から読まれない） ---
+# 全 ROLE（worker 含む）で Edit/Write を block する強制正本パス群（実際の判定ロジックは
+# claude/PreToolUse.sh R1B に実装済み・本ファイルはトレーサビリティ目的の参照用リストであり、
+# 上記 docs/・src/ 等の「orchestrator 拒否対象」とは性質が異なる＝「全 ROLE 拒否対象」）。
+# 消費者環境では常時 block、本リポのドッグフーディング開発時のみ env ASC_ENFORCEMENT_SELF_DEV で
+# 解除できる（解除時は監査痕跡が stderr に出る。詳細は README.md §絶対強制・DESIGN.md 参照）。
+.agent-skill-chain/source/enforcement/
+.agent-skill-chain/project/orchestrator-allowlist.txt
+.agent-skill-chain/project/settings.enforce.json
+.scribe-nonce

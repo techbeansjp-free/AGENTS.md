@@ -83,6 +83,14 @@ is_in_project_allowlist() {
 #             agent_id（= トップレベル .agent_id・サブエージェント実行時のみハーネスが注入する識別信号）。
 #   jq があれば jq、無ければ sed/grep の保守的 fallback。抽出失敗は空文字（誤検知抑制）。
 #   注: agent_id は stdin JSON のトップレベルからのみ読む（env 経路は設けない＝ADR-2 非自己申告性）。
+#   C-5（jq 非搭載時の agent_id fail-safe）: jq 非依存フォールバックは RAW 全量に対する sed/grep の
+#   単純パターン一致であり、`.agent_id` がトップレベルにあることを保証できない（ネストした JSON 値の
+#   中に偶然 `"agent_id"` というキー文字列が現れても抽出しうる）。tool_name/command/file_path は
+#   誤って値を取り違えても実害が限定的だが、agent_id は IS_SUBAGENT 判定に直結し、main が誤って
+#   worker（IS_SUBAGENT=1）に昇格すると R2 の orchestrator 制限が丸ごと外れる自己弱体化になる。
+#   そのため jq 非搭載時は agent_id のみ抽出を行わず常に空文字を返す（fail-safe＝制限が強まる側に倒す）。
+#   可用性コスト: enforce-on かつ jq 不在環境では、正規の subagent 委譲も IS_SUBAGENT=0 と評価され、
+#   main と同様の R2 制限を受けうる（jq 導入を推奨。他キーの fallback 抽出ロジックは据え置き）。
 # ---------------------------------------------------------------------------
 json_get() {
   local key="$1"
@@ -103,7 +111,10 @@ json_get() {
     tool_name) pat='"tool_name"' ;;
     command)   pat='"command"' ;;
     file_path) pat='"file_path"' ;;
-    agent_id)  pat='"agent_id"' ;;
+    agent_id)
+      # C-5: jq 非搭載時は agent_id を抽出しない（トップレベル保証を失うため常に空＝IS_SUBAGENT=0 に倒す）。
+      return 0
+      ;;
     *) return 0 ;;
   esac
   # grep -o で `"key"\s*:\s*"...(エスケープ許容)..."` を抜き、sed で値部分だけ取り出す。
@@ -130,12 +141,17 @@ json_get() {
 #   回避耐性の強化として、`python3 -c "import sqlite3"` 等インタプリタの -c インライン経由での
 #   sqlite3 モジュール利用も簡易検知する（先頭コマンドが python/python3/python2 かつ -c を含み、
 #   `import sqlite3` / `from sqlite3 import` パターンを含む場合を検知）。
+#   C-6: `bash -c "sqlite3 ..."` 等シェルラッパー -c インライン経由の起動も、python 分岐と対称に
+#   簡易検知する（先頭コマンドが bash/sh/zsh/dash/ksh かつ、-c 直後の最初のトークン（引用符除去・
+#   コマンド名位置）が厳密に sqlite3 の場合を検知）。複合演算子（;/&/|）を含む -c 引数は本関数の
+#   セグメント分割（上記コメント）の時点で既に別セグメントへ分離されるため、本分岐が追加で担うのは
+#   「-c 直後が単一の sqlite3 起動」の場合に限られる。
 #   限界（00_要求定義.md §7.1 のとおり正直に明記）: シェル文字列の静的解析には限界があり、
 #   エイリアス・関数経由の呼び出しやスクリプトファイル内部での import など、あらゆる回避経路を
 #   完全に防ぐものではない。実用上のバランスを優先した簡易判定に留める。
 # ---------------------------------------------------------------------------
 is_sqlite3_invocation() {
-  local raw="$1" normalized seg trimmed first base
+  local raw="$1" normalized seg trimmed first base c_first c_base
   [[ -z "$raw" ]] && return 1
   # ; & | 改行をセパレータとして分割（&& / || は同一文字の連続として分割される）。
   normalized="${raw//$'\n'/$'\n'}"
@@ -160,6 +176,16 @@ is_sqlite3_invocation() {
     if [[ "$base" =~ ^python[23]?$ ]] && [[ "$trimmed" == *"-c"* ]]; then
       if [[ "$trimmed" =~ (^|[^A-Za-z0-9_])import[[:space:]]+sqlite3([^A-Za-z0-9_]|$) ]] \
         || [[ "$trimmed" =~ (^|[^A-Za-z0-9_])from[[:space:]]+sqlite3[[:space:]]+import([^A-Za-z0-9_]|$) ]]; then
+        return 0
+      fi
+    fi
+    # 回避耐性（C-6）: bash/sh/zsh/dash/ksh -c "sqlite3 ..." の簡易検知（python 分岐と対称）。
+    #   -c 直後の最初のトークン（先頭の " ' を除去）がコマンド名として厳密に sqlite3 の場合のみ検知する。
+    if [[ "$base" =~ ^(bash|sh|zsh|dash|ksh)$ ]] \
+      && [[ "$trimmed" =~ (^|[[:space:]])-c[[:space:]]+[\"\']*([^[:space:]\"\']+) ]]; then
+      c_first="${BASH_REMATCH[2]}"
+      c_base="${c_first##*/}"
+      if [[ "$c_base" == "sqlite3" ]]; then
         return 0
       fi
     fi
@@ -808,9 +834,23 @@ if [[ -n "$TOOL" ]]; then
   #   により `templates-evil/`・`mytemplates/` 等の別名ディレクトリを誤マッチさせない。/memo/ 除外は doc 分岐と
   #   対称の防御で保護範囲を広げないため（ADR-4）。この carve-out も no-op（フォールスルー）で実装し allow() を
   #   使わない（R2 独立性の必須制約）。symlink/hardlink すり替え耐性は doc 分岐と共通の r1_carveout_guard が担う。
+  #   C-7（`..` パストラバーサル除外・02_設計 参照）: 上記の templates carve-out（path-prefix 一致）・
+  #   doc carve-out（basename 一致）はいずれも、対象パスに `..` を含む場合でも realpath 解決前の
+  #   文字列一致だけで carve-out 候補と判定してしまう（r1_carveout_guard の realpath 検査は memo/・
+  #   workflow.db* の実体すり替えのみを見るため、`..` で他 issue の任意ファイルへ迂回しても検査を通過し
+  #   うる構造欠陥）。carve-out（.gitignore 厳密一致／templates／doc）はいずれも正当な用途で `..` を
+  #   含むパスを要求しないため、対象パスが `..` を含み、かつ .agent-skill-chain/runtime/ を参照する
+  #   場合は carve-out 判定に一切進ませず、既存の R1 通常 block へ落とす（除外されたパスは誤 allow を
+  #   生まず、従来どおり block される）。
   ALLOWED_DOC_BASENAMES="00_要求定義.md 00_システム理解.md 01_要件定義.md 02_設計.md 03_実装計画.md 04_review.md 05_最終確認チェックリスト.md 90_issues.md 99_PR.md 99_PR_review.md"
   if [[ "$TOOL" == "Edit" || "$TOOL" == "Write" ]]; then
-    if [[ "$PATH_TARGET" == ".agent-skill-chain/runtime/.gitignore" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/runtime/.gitignore ]]; then
+    R1_HAS_DOTDOT=0
+    case "$PATH_TARGET" in
+      *..*) R1_HAS_DOTDOT=1 ;;
+    esac
+    if [[ "$R1_HAS_DOTDOT" == "1" ]] && { [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/ ]]; }; then
+      block "direct edit of .agent-skill-chain/runtime/ is forbidden (path traversal '..' is not eligible for any carve-out) / .agent-skill-chain/runtime/ の直接編集は禁止です（'..' を含むパスは carve-out 対象外です）"
+    elif [[ "$PATH_TARGET" == ".agent-skill-chain/runtime/.gitignore" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/runtime/.gitignore ]]; then
       : # allow（厳密パス一致の狭い例外。R1 の他条件には進まない）
     elif { [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/templates/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/templates/ ]]; } && [[ "$PATH_TARGET" != *"/memo/"* ]]; then
       # templates carve-out（path-prefix・末尾スラッシュで別名ディレクトリを誤マッチ除外・/memo/ 除外）。
@@ -832,6 +872,37 @@ if [[ -n "$TOOL" ]]; then
         : # allow（issue ドキュメントの carve-out・no-op フォールスルーで後続 R2 評価を妨げない）
       else
         block "direct edit of .agent-skill-chain/runtime/ is forbidden / .agent-skill-chain/runtime/ の直接編集は禁止です"
+      fi
+    fi
+  fi
+
+  # R1B. enforcement 正本ファイル保護（C-1・02_設計 参照・全 ROLE・path 軸・R1 と同レイヤー）。
+  #   消費者環境では強制正本（source/enforcement/** 一式・orchestrator-allowlist.txt・
+  #   settings.enforce.json・.scribe-nonce）への Edit/Write を全 ROLE（worker 含む）で block する。
+  #   これらは worker が書換できると PreToolUse 自体・allowlist・scribe nonce 検証など強制の実効性が
+  #   丸ごと無効化される high 経路であり、R1（runtime/ 配下）とは別の保護対象のため独立ガードとする。
+  #   本リポ自身のドッグフーディング開発（worker が正規に enforcement を編集する作業）のみ、env
+  #   ASC_ENFORCEMENT_SELF_DEV（非空かつ "0" 以外）で解除する。解除時は ASC_WORKTREE_CLOSE_BYPASS
+  #   （lib/worktree_record_guard.sh の _wt_record_bypass_warn）と同型の stderr 監査痕跡
+  #   （[enforcement:warn]）を必ず出す。残余リスク（受容済み・正直化）: 当該 env は env 空間を
+  #   掌握した相手には偽装可能であり、既存 ASC_WORKTREE_CLOSE_BYPASS・scribe nonce と同一の脅威モデル
+  #   （最終保証は CI audit の enforcement 差分証跡チェック＋外部証跡）。新規リスククラスは増やさない。
+  if [[ "$TOOL" == "Edit" || "$TOOL" == "Write" ]]; then
+    R1B_MATCH=0
+    if [[ "$PATH_TARGET" =~ \.agent-skill-chain/source/enforcement/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/source/enforcement/ ]]; then
+      R1B_MATCH=1
+    elif [[ "$PATH_TARGET" == ".agent-skill-chain/project/orchestrator-allowlist.txt" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/project/orchestrator-allowlist.txt ]]; then
+      R1B_MATCH=1
+    elif [[ "$PATH_TARGET" == ".agent-skill-chain/project/settings.enforce.json" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/project/settings.enforce.json ]]; then
+      R1B_MATCH=1
+    elif [[ "${PATH_TARGET##*/}" == ".scribe-nonce" ]]; then
+      R1B_MATCH=1
+    fi
+    if [[ "$R1B_MATCH" == "1" ]]; then
+      if [[ -n "${ASC_ENFORCEMENT_SELF_DEV:-}" && "${ASC_ENFORCEMENT_SELF_DEV}" != "0" ]]; then
+        echo "[enforcement:warn] enforcement master file protection bypassed via ASC_ENFORCEMENT_SELF_DEV (self-dev mode; audited by ci/audit.sh) / ASC_ENFORCEMENT_SELF_DEV による enforcement 正本保護の解除（ドッグフーディング開発時のみ・ci/audit.sh の証跡監査対象）: $PATH_TARGET" >&2
+      else
+        block "direct edit of enforcement master files is forbidden (.agent-skill-chain/source/enforcement/**, project/orchestrator-allowlist.txt, project/settings.enforce.json, .scribe-nonce). Set ASC_ENFORCEMENT_SELF_DEV for self-dev editing (audited) / enforcement 正本ファイルの直接編集は禁止です。ドッグフーディング開発時は ASC_ENFORCEMENT_SELF_DEV を設定してください（監査痕跡あり）"
       fi
     fi
   fi
