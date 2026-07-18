@@ -848,16 +848,16 @@ if [[ -n "$TOOL" ]]; then
     case "$PATH_TARGET" in
       *..*) R1_HAS_DOTDOT=1 ;;
     esac
-    if [[ "$R1_HAS_DOTDOT" == "1" ]] && { [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/ ]]; }; then
+    if [[ "$R1_HAS_DOTDOT" == "1" ]] && [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]]; then
       block "direct edit of .agent-skill-chain/runtime/ is forbidden (path traversal '..' is not eligible for any carve-out) / .agent-skill-chain/runtime/ の直接編集は禁止です（'..' を含むパスは carve-out 対象外です）"
     elif [[ "$PATH_TARGET" == ".agent-skill-chain/runtime/.gitignore" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/runtime/.gitignore ]]; then
       : # allow（厳密パス一致の狭い例外。R1 の他条件には進まない）
-    elif { [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/templates/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/templates/ ]]; } && [[ "$PATH_TARGET" != *"/memo/"* ]]; then
+    elif [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/templates/ ]] && [[ "$PATH_TARGET" != *"/memo/"* ]]; then
       # templates carve-out（path-prefix・末尾スラッシュで別名ディレクトリを誤マッチ除外・/memo/ 除外）。
       # doc 分岐と共通のヘルパで symlink/hardlink 実体すり替えを検査し、安全なら no-op フォールスルー（R2 独立性維持）。
       r1_carveout_guard "$PATH_TARGET"
       : # allow（templates carve-out・no-op フォールスルーで後続 R2 評価を妨げない）
-    elif [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/runtime/ ]]; then
+    elif [[ "$PATH_TARGET" =~ \.agent-skill-chain/runtime/ ]]; then
       R1_BASENAME="${PATH_TARGET##*/}"
       R1_DOC_ALLOWED=0
       for r1_name in $ALLOWED_DOC_BASENAMES; do
@@ -889,7 +889,7 @@ if [[ -n "$TOOL" ]]; then
   #   （最終保証は CI audit の enforcement 差分証跡チェック＋外部証跡）。新規リスククラスは増やさない。
   if [[ "$TOOL" == "Edit" || "$TOOL" == "Write" ]]; then
     R1B_MATCH=0
-    if [[ "$PATH_TARGET" =~ \.agent-skill-chain/source/enforcement/ ]] || [[ "$PATH_TARGET" =~ /\.agent-skill-chain/source/enforcement/ ]]; then
+    if [[ "$PATH_TARGET" =~ \.agent-skill-chain/source/enforcement/ ]]; then
       R1B_MATCH=1
     elif [[ "$PATH_TARGET" == ".agent-skill-chain/project/orchestrator-allowlist.txt" ]] || [[ "$PATH_TARGET" == */.agent-skill-chain/project/orchestrator-allowlist.txt ]]; then
       R1B_MATCH=1
