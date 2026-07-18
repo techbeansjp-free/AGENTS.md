@@ -77,17 +77,17 @@ document_id: "963b48d6-8e79-4a6c-9a0c-fab2f4ef5c13"
 
 enforcement ゲート（`enforcement/ci/audit.sh` 等）は、AI エージェント自身の作業を監督するために存在する。その監督を、監督される当のエージェントが自ら無効化することは、§6 境界（システム状態を変える操作の前に、証拠がその操作を支持しているか確認する）の特化として禁止する。
 
-- **対象 env**: enforcement ゲートの無効化 env（`*_GATE_ENABLED` 系。例: `GITHUB_ISSUE_GATE_ENABLED`・`BRANCH_LINK_GATE_ENABLED`・`PR_LINK_GATE_ENABLED`・`MODEL_TIER_GATE_ENABLED`）、および発効日（grandfather）上書き env（`*_GATE_EFFECTIVE_FROM` 系）。基準日を未来方向へ上書きして対象範囲をゲート適用外（grandfather 扱い）にする行為も無効化に含む。**加えて、issue 運用の二重モード（`github_native`／`local_tracked`）を選択する `ISSUE_TRACKING_MODE` も対象に含める**（`*_GATE_ENABLED`／`*_GATE_EFFECTIVE_FROM` の命名グロブに合致しないモード選択 env のため、既存グロブへの暗黙包含に頼らず本項で明示的に列挙する）。
-- **禁止**: AI エージェント（サブエージェントを含む）は、これらの env を**自律的に設定・変更してはならない**。自らの作業に対するゲートを SKIP させる目的での設定は、たとえ「作業を先へ進めるため」であっても自己バイパスであり禁止する。
-- **例外（人間の明示指示がある場合のみ）**: 人間（ユーザー）が自然文・設定変更依頼等でこれらの env の設定・変更を**明示的に指示した場合に限り**、委譲された AI エージェントは設定・変更してよい。文脈からの推測を指示とみなさない。
+- **対象 env**: enforcement ゲートの無効化 env（`*_GATE_ENABLED` 系。例: `GITHUB_ISSUE_GATE_ENABLED`・`BRANCH_LINK_GATE_ENABLED`・`PR_LINK_GATE_ENABLED`・`MODEL_TIER_GATE_ENABLED`）、および発効日（grandfather）上書き env（`*_GATE_EFFECTIVE_FROM` 系）。基準日を未来方向へ上書きして対象範囲をゲート適用外（grandfather 扱い）にする行為も無効化に含む。**加えて、issue 運用の二重モード（`github_native`／`local_tracked`）を選択する `ISSUE_TRACKING_MODE` も対象に含める**（`*_GATE_ENABLED`／`*_GATE_EFFECTIVE_FROM` の命名グロブに合致しないモード選択 env のため、既存グロブへの暗黙包含に頼らず本項で明示的に列挙する）。**さらに、enforcement 全体トグルである `enforce off`／`enforce on` コマンド自体も対象に含める**（個別ゲート env ではなく enforcement 機構全体を無効化・有効化する操作のため、同様に明示的に列挙する）。
+- **禁止**: AI エージェント（サブエージェントを含む）は、これらの env・コマンドを**自律的に設定・変更・実行してはならない**。自らの作業に対するゲートを SKIP させる目的での設定は、たとえ「作業を先へ進めるため」であっても自己バイパスであり禁止する。**`enforce off` の実行主体は人間（ユーザー）のみであり、エージェントが自己ロックアウトからの復旧等を理由に自律的に実行することも禁止する（正本は [boot/CORE.md](boot/CORE.md) §禁止事項「enforcement ロックアウトからの復旧」）。**
+- **例外（人間の明示指示がある場合のみ）**: 人間（ユーザー）が自然文・設定変更依頼等でこれらの env の設定・変更を**明示的に指示した場合に限り**、委譲された AI エージェントは設定・変更してよい。文脈からの推測を指示とみなさない。**ただし `enforce off` はこの一般例外の対象外とする**: enforcement ロックアウト（PreToolUse フックで全ツールがブロックされた状態）からの復旧としての `enforce off` は、実行主体が人間のみであり、人間からの指示を受けたエージェントが代行実行することも認めない（正本は [boot/CORE.md](boot/CORE.md) §禁止事項「enforcement ロックアウトからの復旧」）。ロックアウト時、エージェントはツール実行自体が塞がれているため代行しようがなく、ユーザーへのエスカレーションのみを行う。
 - **正当なトグル運用との区別**: プロジェクト単位での恒常的なトグル設定（例: GitHub 非採用環境での無効化）自体は禁止対象ではない。禁止するのは「AI エージェントが自律的にその設定を行うこと」であり、人間が判断した既存の正当な設定（各採用先の `.agent-skill-chain/project/` 等に記録される運用）を否定しない。
 - **強制レベル**: 本規範は advisory である（env はシェルで自由に設定でき技術的強制は困難）。§機構的強制の非対象 と同様、機構（hooks/CI）による直接強制はせず、人手監査・レビュー（トグル差分・env 設定の確認等）で補完する。
 
 ---
 
-## 第 3 部: サブエージェント向け凝縮版（委譲時に Constraints 末尾へ転記する）
+## 第 3 部: サブエージェント向け凝縮版（委譲時に Constraints 末尾へ転記または参照する）
 
-進行役（orchestrator）は委譲パケット組み立て時、Constraints 末尾へ以下をそのまま転記する。
+進行役（orchestrator）は委譲パケット組み立て時、Constraints 末尾へ以下を**転記または参照**する。**運用の正本は [skills/agent/run_command.md §委譲時の行動規範参照](skills/agent/run_command.md) であり、通常はリンク参照のみで足りる（全文の逐語転記は不要）。リンク先を読めないランタイムに限り、以下を全文転記する。**
 
 ```markdown
 以下は行動規範。全て命令。

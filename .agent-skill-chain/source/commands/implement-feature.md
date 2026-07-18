@@ -46,7 +46,7 @@
 - コード・成果物（03_実装計画に従う）
 - 単体テスト（BDD 観点を満たす）
 - 証跡（変更ファイル。本則 workflow.db、memo は過渡的・例外時のみ）
-- **サブissueを 1 件以上作成した場合**: 親ワークフロー（.agent-skill-chain/runtime/{親issue}/）のルートに 90_issues.md を作成すること。
+- **サブissueを 1 件以上作成した場合**: 親ワークフロー（.agent-skill-chain/runtime/{親issue}/）のルートに 90_issues.md を作成すること（**作成主体・作成手段の正本は [skills/agent/run_command.md §サブissue作成時](../skills/agent/run_command.md)**。サブは独断で起票せず、進行役承認後に issue 作成 command へ再委譲する）。
 
 ---
 
@@ -66,7 +66,7 @@
 - **実装着手の前提（ブランチ紐づけ）**: 本 command 委譲前に、**この issue の実装作業に用いる feature ブランチ名が 00_要求定義.md frontmatter の `branch` に記録されていること**を要する（空/null/未記載は不可）。未記録のまま implement-feature ログが記録されると enforcement #35（[enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し）で FAIL する。委譲義務の正本は [skills/agent/run_command.md §Constraints](../skills/agent/run_command.md)、具体手順（いつ・どの値を書くか）は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../project/自己拡張ワークフロー.md) を参照。
 - **PR 化の前提（PR 紐づけ）**: 実装を PR にする際は、**PR 本文へ対応 GitHub Issue の `Closes #<番号>` または `Refs #<番号>` を含めること**（`github_issue` が `declined:` の issue は対象外）。CI（PR イベント）で enforcement #36 が検証し、紐づけが無ければ FAIL する（ローカル・push では非発火）。具体手順は [.agent-skill-chain/project/自己拡張ワークフロー.md](../../project/自己拡張ワークフロー.md) を参照。
 - **実装完了後は必ず verify-and-close を委譲すること。** 実装 phase の成果物がある場合、クローズ前に verify-and-close を経ずに次に進んではならない（enforcement で拒否する）。
-- **完了後に書記（write-workflow-log）に依頼して記録させること。**
+- **完了後に書記（write-workflow-log）を実行すること**（chain 実行者自身が実行する。正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)）。
 - **証跡・書記に渡す項目**: implement-feature 完了時は書記（write-workflow-log）に **CHANGED_FILES_JSON**（変更ファイルの JSON 配列）を渡すことが**必須**。enforcement の audit で検証する。
 - Task/Constraints/OutputSpec で委譲されている場合は、指定された参照ファイル（00/01/02/03）を読んだうえで実装する。
 - テストファーストを推奨。03 のテスト観点を先に満たす実装をする。
