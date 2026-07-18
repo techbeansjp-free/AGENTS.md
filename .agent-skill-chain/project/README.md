@@ -27,14 +27,14 @@
 
 ## 配置例
 
-採用先プロジェクトで次のようなファイルを用意する場合、このディレクトリに置く（下記 2 つは**あくまで一例のファイル名**であり、実在必須のファイルではない。本リポジトリでの実在ファイルは下記 §project 配下ファイル索引 を参照）。
+採用先プロジェクトで次のようなファイルを用意する場合、このディレクトリに置く（下記 2 つは**あくまで一例のファイル名**であり、実在必須のファイルではない。本リポジトリでの実在ファイルは下記 project 配下ファイル索引 を参照）。
 
 - `プロジェクト固有.md` - プロジェクト固有の規約（開発環境の起動方法、テスト実行方法、ディレクトリ構成など）
 - `フレームワークベストプラクティス.md` - 使用フレームワークのベストプラクティス（Laravel / Next.js / Astro 等）
 
 ファイル名は `.agent-skill-chain/source/` の規約ファイル名と揃えてもよいし、プロジェクト独自の名前でもよい。エージェントは「同目的のルール」がある場合に .agent-skill-chain/project を優先する。
 
-## §project 配下ファイル索引
+## project 配下ファイル索引
 
 本リポジトリ（自己拡張ワークフローの開発元）の `.agent-skill-chain/project/` 配下に実在するファイルとその責務は次のとおり。名指しで参照したい場合はこの索引から辿る。
 
@@ -44,6 +44,7 @@
 | [MODEL_TIER_TABLE.md](MODEL_TIER_TABLE.md) | サブ委譲時の役割→ティア／role×effort 対応表と選定手順（opus 要否判定チェックリスト・降格凍結・未収束エスカレーション）の正本。 |
 | [COVERAGE_EXCEPTIONS.md](COVERAGE_EXCEPTIONS.md) | 本リポジトリのカバレッジ例外台帳（実データ）。分母外の参考事項と例外行（COV-00N）を管理する。 |
 | [worktree-naming-grandfather.txt](worktree-naming-grandfather.txt) | #40（非準拠ブランチ名の事後検知）の既存ブランチ救済リスト。初期凍結スナップショットと追記 allowlist を分離管理する。 |
+| [自己拡張ワークフロー.md](自己拡張ワークフロー.md) | 本リポジトリ自身の開発（自己拡張）に適用する標準フローの上書き正本（issue 作成場所・memo 作成場所・Issue 追跡モードの本リポ運用等）。 |
 | `orchestrator-allowlist.txt`（配置は任意・存在すれば適用） | orchestrator（メインエージェント）向け PreToolUse allowlist の opt-in 拡張。詳細は本ファイル §orchestrator allowlist 拡張 を参照。 |
 
 ## orchestrator allowlist 拡張

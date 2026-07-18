@@ -32,12 +32,12 @@
 | 要求・要件定義の執筆（00_要求定義.md／01_要件定義.md 等の作成・改訂） | opus 要否判定に従う（原則 sonnet、該当時 opus） | opus 時 high / sonnet 時 medium | [§opus 要否判定チェックリスト](#opus-要否判定チェックリスト)で判定する。要件が曖昧・設計判断を多く含む執筆はチェックリスト該当4に当てはまりやすい。 |
 | issue 起票（サブによる 00〜04 相当ドキュメントの新規作成・トリアージ） | opus 要否判定に従う（原則 sonnet、該当時 opus） | opus 時 high / sonnet 時 medium | 同上。issue の規模・複雑性・後戻りコストに応じて[§opus 要否判定チェックリスト](#opus-要否判定チェックリスト)で判定する。 |
 | 調査・探索（Explore 等の読み取り専用の調査・検索） | sonnet（原則固定・格上げ不要） | low | 読み取り専用で後戻りコストが低く、公開 I/F 等にも通常触れないため、チェックリストの各項目に該当しないことが多い。複数コンポーネント横断・複雑な調査は[§opus 要否判定チェックリスト](#opus-要否判定チェックリスト)で判定する。 |
-| chore（close 移動・軽微な機械的置換・定型的な繰り返し作業） | sonnet（原則固定） | low | 定型的・後戻りコストが低い作業のため通常は opus 不要。該当する場合は[§opus 要否判定チェックリスト](#opus-要否判定チェックリスト)で判定する。 |
+| chore（close 移動・軽微な機械的置換・定型的な繰り返し作業） | sonnet（原則固定・格上げ不要） | low | 定型的・後戻りコストが低い作業のため通常は opus 不要。該当する場合は[§opus 要否判定チェックリスト](#opus-要否判定チェックリスト)で判定する。 |
 | デフォルト（上記いずれの行にも明示的に該当しない役割の救済行） | opus 要否判定に従う（原則 sonnet、該当時 opus） | opus 時 high / sonnet 時 medium | 本表に明示行が無い役割はこの行を適用し、[§opus 要否判定チェックリスト](#opus-要否判定チェックリスト)で判定する。網羅漏れによる「無理やり当てはめたTIER_RATIONALE」を防ぐための救済行。 |
 | 書記（ログ記録専任） | haiku | low | `evidence_source: existing_code`。実在実例: `scribe_claude.md:11` の `model: haiku`（[../runtime/templates/agents/scribe_claude.md](../runtime/templates/agents/scribe_claude.md)）。 |
 | fable | 原則禁止 | 対象外（原則禁止のため定義しない） | 次のいずれかを満たす場合のみ、都度例外として許容する（日常運用化しない）: (1) ユーザーが個別 issue を「最重要」と明示指定した場合、または (2) **実行ティア化しない助言・監査役としての、都度ユーザー承認に基づく利用**（例: 独立監査レビューを都度承認のうえ依頼する場合）。(2) は fable を実行系ティアとして日常委譲に組み込むことを意味しない。 |
 
-各行はそのまま委譲パケットの根拠 1 行として引用できる粒度で書いている。委譲時は MODEL_SELECTION.md のティア明記義務（TIER_RATIONALE）と EFFORT_POLICY.md の effort 明記義務（EFFORT_RATIONALE）を**それぞれ独立に**満たす（[../source/EFFORT_POLICY.md §2](../source/EFFORT_POLICY.md#2-ティア明記義務との別次元性)）。
+各行はそのまま委譲パケットの根拠 1 行として引用できる粒度で書いている。委譲時は MODEL_SELECTION.md のティア明記義務（TIER_RATIONALE）と EFFORT_POLICY.md の effort 明記義務（委譲パケットへの記載。記録欄は未整備）を**それぞれ独立に**満たす（[../source/EFFORT_POLICY.md §2](../source/EFFORT_POLICY.md#2-ティア明記義務との別次元性)）。
 
 ### role×effort 対応表（受け皿）
 
