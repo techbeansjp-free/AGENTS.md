@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # pre-push.example — push 前に audit を実行するフックの例
 # 採用先で .git/hooks/pre-push にコピーして利用する。
+# C-2: AUDIT_STRICT=1 を既定化する。無効化系 env（*_GATE_ENABLED 等）による骨抜きを防ぐ strict
+#   モードで実行する（audit.sh 側の詳細は enforcement/README.md §失敗条件と差し戻し 参照）。
+#   個別に無効化したい場合は、本ファイルをコピーした先で AUDIT_STRICT=0 を明示的に export すること。
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 AGENTS_ROOT="${AGENTS_ROOT:-.agent-skill-chain/source}"
+AUDIT_STRICT="${AUDIT_STRICT:-1}"
+export AUDIT_STRICT
 "${AGENTS_ROOT}/enforcement/ci/audit.sh" "."
 exit $?
