@@ -59,7 +59,7 @@
 - **04_review（04_review.md）は、実装フェーズ完了後のレビューフェーズ（verify-and-close を実行するとき）でのみ作成・更新する。要求・要件・設計・実装計画・実装のいずれかのフェーズで 04_review を作成してはならない。**
 - **レビューフェーズで verify-and-close が実施するレビュー**（00/01/02/03 および実装成果物の確認を含む）の成果物は、**必ず issue フォルダ直下に 04_review（04_review.md）を直接作成する（絶対強制）。** verify-and-close を実行したら 04_review.md を作成しないで完了とみなしてはならない。省略は認めない。enforcement 失敗条件 #3 で検出する。
 - **memo にはドキュメントレビュー証跡を記録してよい（推奨）**。実装前の 00/01/02/03 に対するドキュメントレビューの指摘一覧・修正内容・完了判定などの証跡は memo に残してよい。**04_review に相当する正式なレビュー成果物は memo に書かない**。memo はメモ・証跡用とする。**実装完了レビュー（verify-and-close）では必ず 04_review.md を issue 直下に作成し、memo のみで済ませること禁止。**
-- **ドキュメントレビューはレビューと修正を一組とする**。指摘がなくなるまでレビュー→修正を繰り返すこと。各回の証跡は memo に記録する。**完了後は必ず書記（write-workflow-log）に依頼**すること（run_command §実装前のドキュメントレビュー）。
+- **ドキュメントレビューはレビューと修正を一組とする**。指摘がなくなるまでレビュー→修正を繰り返すこと。各回の証跡は memo に記録する。**完了後は必ず書記（write-workflow-log）を実行する**こと（chain 実行者自身が実行する。正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)。run_command §実装前のドキュメントレビュー も参照）。
 - **ドキュメントレビュー「完了」の定義**: 完了とは **(1) memo 作成 (2) 指摘がなくなるまでの修正反復 (3) 書記委譲**の**すべて**を指す。**(3) を実施するまで「完了」とみなしてはならない**。書記委譲を省略してユーザーに報告のみして終了することは禁止（enforcement §失敗条件 #23）。
 - **ユーザーが「レビュー用の指示文だけ教えて」等と明示した場合を除き、ドキュメントレビュー依頼は常に本ルール（memo への記録＋指摘がなくなるまでの反復＋書記委譲）を適用すること**。レビュー本文やサマリだけを返して memo・書記を省略することを禁止する（enforcement §失敗条件 #22–#23 と整合させる）。
 - **review-docs の位置づけ（横断的必須ゲート）**: 実装前ドキュメントレビューの command [review-docs](../commands/review-docs.md) は、design-feature（設計・実装計画）完了と implement-feature 着手の間の**横断的必須ゲート**である（表に行を持たないことは省略可を意味しない）。**full/standard は一律必須。quick モード（00_要求定義.md frontmatter `mode: quick`）は本ゲートを免除する**（軽量化。免除は記録省略ではない。詳細は RULES.md §実行モードおよび run_command.md §Constraints）。位置づけの定義・「本表にない command の起動は禁止」との整合は [PHASE_COMMAND_MAP.md §横断的必須ゲート](PHASE_COMMAND_MAP.md#横断的必須ゲート) を正本とし、本節では重複記載しない。委譲義務の正本は [run_command.md §Constraints](../skills/agent/run_command.md)、未実行検知は [enforcement/README.md](../enforcement/README.md) §失敗条件と差し戻し の #32 を参照。
@@ -93,7 +93,7 @@
 ## 監査観点
 
 - 各フェーズの成果物が**テンプレート**の必須セクションを満たしていること。
-- **各工程で監査・書記に依頼する（工程により委譲先が異なる）**。**実装完了後**は必ず verify-and-close（監査・書記）を経ること。**要求・要件・設計・実装計画の各工程完了後（実装着手前）**は、verify-and-close ではなく review-docs（実装前ドキュメントレビュー。memo 証跡＋指摘収束＋書記委譲）を経ること。「いずれの工程でも verify-and-close を経る」運用は行わない（04_review を実装前に作ると audit #29 で FAIL するため）。レビュー・クローズ前に必ず verify-and-close を経ること。
+- **各工程で監査を経て、書記（write-workflow-log）を実行する**（chain 実行者自身が実行する。工程により監査の委譲先が異なる。正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)）。**実装完了後、クローズ前には必ず verify-and-close（監査・書記）を経ること。** **要求・要件・設計・実装計画の各工程完了後（実装着手前）**は、verify-and-close ではなく review-docs（実装前ドキュメントレビュー。memo 証跡＋指摘収束＋書記（write-workflow-log）の実行）を経ること。「いずれの工程でも verify-and-close を経る」運用は行わない（04_review を実装前に作ると audit #29 で FAIL するため）。
 - **各フェーズ完了時の監査・書記は run_command の定義に従うこと**。実装前のドキュメントレビューは memo 証跡＋書記委譲（04_review は作らない）。実装完了後のレビューは verify-and-close を実行し 04_review.md を必須で作成する。**dual_lens の両リスト（敵対的観点リスト／must-preserve リスト）は git 追跡される 00-03 への記載を推奨する**（review-docs.md §Outputs と整合）。run_command の Constraints と整合させる。
 - **ユースケースに基づく全シナリオ**について、**テストコード化できるものは全て**テストコード化されていること（できない場合は理由が明記されていること）。01 の BDD シナリオとテスト仕様（単体テスト仕様・チェックリスト等）の対応が取れていることを確認する。
 - **フォーマットは正しいか**。成果物がフォーマット規約に適合していること（テンプレート必須セクション・用語・参照リンク・BDD 形式等）。ディレクトリ構成・ファイルの作成場所・命名規則（spec/03）・**プレフィックス**（memo および issue フォルダ名の YYYYMMDD_HHMMSS_ は実行環境現在時刻 JST 取得。推測・固定・未来禁止）・spec 準拠（設計原則・UNIX 哲学等）を含む。

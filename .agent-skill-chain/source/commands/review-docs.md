@@ -5,7 +5,7 @@
 - 実装前の 00/01/02/03（要求定義・要件定義・設計・実装計画）に対する **ドキュメントレビュー**を行い、  
   - レビュー指摘と修正内容を `.agent-skill-chain/runtime/{issue}/memo/` 以下に **YYYYMMDD_HHMMSS_ プレフィックス付き memo** として記録し、
   - 「レビュー＋修正」を 1 セットとして **指摘がなくなるまで反復**し、
-  - 完了後に **書記（write-workflow-log）へ委譲**して証跡を残す。  
+  - 完了後に **書記（write-workflow-log）を実行**して証跡を残す（chain 実行者自身が実行する。正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)）。  
 - verify-and-close（04_review.md）とは異なり、**実装完了前のドキュメントレビュー専用** command とする。
 
 ### Inputs
@@ -34,11 +34,11 @@
    - 各ループ毎に「残っている指摘があるか」を判定し、0 件になった時点でループを終了する。
    - **打ち切り規定（反復上限・非収束時のエスカレーション。本 command が正本。他 command は本節を参照）**: 既定 **N=3 ラウンド**を上限とする。**ブロッキング指摘（矛盾・欠落・退行）は N に関わらず必ず解消**すること（打ち切りの対象外）。N ラウンドを終えてもなお指摘が残る場合、残っているのが**低優先度の新規指摘のみ**であれば、これ以上の反復は行わず、**残指摘を優先度付きリストとして進行役へエスカレーション**してループを終了する（無限反復によるトークン・時間の浪費を防ぐ）。ブロッキング指摘が残っている状態での打ち切りは行わない。
 
-3. **書記への委譲（必須）**
-   - 最終サイクル完了後、scribe/CONTRACT.md に従い **write-workflow-log** に委譲し、  
+3. **書記（write-workflow-log）の実行（必須）**
+   - 最終サイクル完了後、chain 実行者自身が scribe/CONTRACT.md に従い **write-workflow-log** を実行し、  
      - 対象 issue の issue_id / document_id 群
      - 実行した review-docs の結果（完了判定・変更ファイル・memo パスなど）
-     を workflow.db（本則）または memo_ref に記録させる。
+     を workflow.db（本則）または memo_ref に記録する。
 
 ### Outputs
 
