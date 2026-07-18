@@ -1,128 +1,110 @@
-# AGENTS.md — 入口案内
+# AGENTS.md — agent-skill-chain 憲法
 
-**メインエージェントは進行役（orchestrator）としてのみ動作し、実作業は例外なく必ずサブエージェントに委譲する（絶対強制）。** 作業依頼（実装・編集・設計・レビュー・コマンド実行・00〜04 の作成・更新など）を受けたら、**規模・内容・手間の大小にかかわらずいかなる場合も** phase 判定 → command 選択 → **必ずサブへ委譲**のみ行う。メインが自らファイル作成・編集・コマンド実行を行うことは**絶対禁止**とする。成果物が 01_要件定義.md / 02_設計.md / 03_実装計画.md 等のドキュメントである場合も、メインは実作業（ドキュメント本文の執筆・編集）を**例外なく**行わず、**必ず**サブに委譲する。enforcement で runtime または CI により強制する（[.agent-skill-chain/source/enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) §絶対強制）。
+> 本ファイルが正本。CLAUDE.md 等の他ランタイム設定ファイルは `@AGENTS.md` インポートのみを行う。
 
-- **依頼タイプ**（作業依頼 vs 質問・分析依頼）の振る舞い: [CORE](.agent-skill-chain/source/boot/CORE.md) §依頼タイプ別振る舞い。
-- **委譲フロー**のパターン（説明＋計画までメイン／計画も含めてサブ）: [CORE](.agent-skill-chain/source/boot/CORE.md) §委譲フローのパターン。
-- **委譲の実行手段**（Cursor 上で何を呼ぶか）: [.agent-skill-chain/source/skills/agent/run_command.md](.agent-skill-chain/source/skills/agent/run_command.md) の 1 か所で規定。
-- **委譲できない環境**では委譲計画のみを返し実作業は行わない: [CORE](.agent-skill-chain/source/boot/CORE.md) §依頼タイプ別振る舞い。
-- **フォールバック方針**（委譲手段がプラットフォームで利用できない場合に限定。軽作業・小規模を理由にメインが実作業することは禁止）: [CORE](.agent-skill-chain/source/boot/CORE.md) §フォールバック方針。
-- **HEARTBEAT 読了**の推奨: [CORE](.agent-skill-chain/source/boot/CORE.md) §Heartbeat。
+本システムはソフトウェア開発の管理そのものをドメインとする。状態は選択した Coordination Backend（GitHub の Issue・ブランチ・PR・Check Run、またはローカルの Git 管理下状態ファイル）だけに存在し、Issue を集約ルート、GitHub Flow 標準語彙をユビキタス言語とし、すべての強制は commit・Check Run・マージというイベントへの反応として実装する（DDD）。仕様の受け入れ基準は一意な ID で検証証跡と機械的に結線され、承認後の仕様変更はゲート再通過を自動要求する——文書は書いて終わる散文ではなく、検証され続ける契約である（BDD）。作業は 1 Issue = 1 ブランチ = 1 worktree = 1 PR の小さなバッチで 4 セグメントを通じ並行に流れ、セグメントごとの push により失敗は常に安価に巻き戻せる。可逆だから安全であり、安全だから速い。改善はふりかえり専用の儀式ではなく通常の Issue として自システムの規律の下で処理される（アジャイル）。各スクリプトはちょうど 1 つの状態遷移だけを行い、検査は grep できる形で書き、疑わしい機能は追加しない（UNIX）。既定は常に安全側であり、速度は人間の明示的なオプトイン、危険信号による降格は自動である。
 
----
+## 不変条件 I1〜I8
 
-**通常依頼でも agents を自動適用する。** ユーザーが「〇〇して」とだけ言った場合でも、明示がなくても次のように動く。
+「(a) 違反がユーザーの実痛に直結し、(b) 機械的に検査可能」の両方を満たすものだけが不変条件。片方だけならテンプレート内のガイドラインに降格する。
 
-- **解釈**: 全依頼を **agents workflow** で解釈する。
-- **進行役**: 常に **orchestrator** とする。phase 判定 → command 選択 → 委譲を行う。
-- **自動選択**: 必要に応じて **sub-agent / skills / commands** を自動選択し、**必ず委譲**して適用する（メインが自ら実作業しない）。
-- **出力**: 必ず [.agent-skill-chain/source/IO_CONTRACT.md](.agent-skill-chain/source/IO_CONTRACT.md) および [.agent-skill-chain/source/RULES.md](.agent-skill-chain/source/RULES.md) に従う。
+| # | 不変条件 | 検査手段 |
+|---|---|---|
+| I1 追跡可能性 | 全変更は Issue に紐づき、要求→設計(ADR)→実装→レビューの証跡が Git 履歴に残り、現在有効な決定を指し続ける | PR に Issue 参照必須、成果物存在チェック、`scripts/adr-lint.sh check`（CI） |
+| I2 フェーズゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する | GitHub モード：Check Run の成功状態（required status を専用 App/Workflow に限定）。ローカルモード：`reviews/<gate>.yaml` + `schemas/gate-report.schema.yaml` |
+| I3 耐久性 | 作業状態は常に Git（remote push 済み）から完全復元可能。頭の中にしか無い状態を作らない | セグメント完了ごとの commit+push、`scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
+| I4 分離 | 1 Issue = 1 ブランチ = 1 worktree = 1 PR。main への変更は PR 経由のみ | branch protection、`ci/verify-branch-name.sh`・`ci/verify-worktree-path.sh` |
+| I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | credential/権限分離（ツール名の一律 deny はしない）、main worktree clean チェック、ワーカー報告固定スキーマ |
+| I6 正準モデル | 調整状態は選択された Coordination Backend のプリミティブにのみ存在し、GitHub Flow 標準語彙で記述する。複数バックエンド間で同一 Issue の状態を同期しない | GitHub モード：`scripts/lint-vocab.sh` + Check Run 正本。ローカルモード：`state.yaml` が正本 |
+| I7 仕様⇔検証の追跡 | 全 AC-ID は最低1つの検証方法(`automated\|manual\|hybrid`)と証跡に対応する。承認後の AC 変更はゲート再通過を強制する | `ci/verify-ac-coverage.sh`、SPEC 差分検知によるゲート無効化（A-6 相当） |
+| I8 安全側ラチェット | autonomy の降格は自動、昇格は人間の明示行為のみ。既定は `autonomy:gated`。`risk != normal`（`unclassified` 含む）OR `autonomy == full` → `review_profile: strict` | Actions の状態遷移規則（昇格 workflow が存在しないことを含め検査） |
 
-さらに次の **自立進行ルール** を強制する:
+## コーディネーションバックエンド
 
-- **issue / ドキュメント作成・レビュー依頼時の自立進行（強制）**
-  - ユーザーが  
-    - 「issueを作成して」「この内容で要件定義を書いて」等のように、**具体的な成果物の作成**を依頼した場合、または  
-    - 「この issue の 00/01/02/03 をドキュメントレビューして」「この要件定義のレビューを実施して」等のように、**既存ドキュメントのレビュー**を依頼した場合、
-    メインエージェントは次をデフォルト挙動とする:
-    - サブエージェントに対して **「実際に issue / ドキュメントを作成せよ／レビューと修正を実施せよ」** という command を選択・実行し、
-    - 実際に作成・更新された成果物（パス・タイトル・概要・差分など）をユーザーに報告する。
-  - 作成・レビューいずれのケースでも、サブへの指示文案だけを提案して終了することは **禁止** とする。
-  - 特に **実装前のドキュメントレビュー**（00/01/02/03 に対するレビュー依頼）では、PHASES.md §レビュー成果物の配置ルール および run_command.md §実装前のドキュメントレビュー に従い、
-    - `.agent-skill-chain/runtime/{issue}/memo/` 以下に YYYYMMDD_HHMMSS_ プレフィックス付き memo を作成しレビュー証跡を記録し、
-    - 「レビュー＋修正」を 1 セットとして指摘がなくなるまで繰り返し、
-    - **完了後に書記（write-workflow-log）へ委譲して証跡を記録させる**（書記委譲まで実施してはじめて「完了」。書記を省略してユーザーに報告のみで終了することは禁止）
-    ことを、**通常依頼時のデフォルト挙動**とする。レビュー本文だけを返して memo 作成・修正反復・書記委譲を省略することは enforcement §失敗条件 #23 に該当する。
-    実装完了後の「レビューを作成して」「04_review を書いて」等の依頼では、**必ず verify-and-close を command として委譲**し、commands/verify-and-close.md に定義された skill chain を最後まで（step 5 write-workflow-log を含む）実行させること。04_review.md の作成だけを委譲し、書記依頼（write-workflow-log）を省略してはならない。
-  - ただしユーザーが明示的に「サブへの指示文を提案して」「プロンプト案だけ教えて」「レビュー用の指示文だけほしい」等と依頼した場合は例外であり、  
-    そのときのみメインエージェントは実際の作成・レビュー command を実行せず、指示案の提示のみに留まってよい。
-  - 上記を含む通常の issue / ドキュメント作成・レビュー依頼に対して、メインエージェントが「サブを呼んでよいか」「この方針で進めてよいか」等を**逐一ユーザーに確認してから** command を実行することは、後述の**高リスク操作**に該当する場合を除き**禁止**とする。メインエージェントは、依頼を受けた時点で phase 判定 → command 選択 → run_command によるサブ委譲 → 結果報告までを**自立的に実行する**。
+正本は必ずどちらか一方であり、二重化しない。
 
-- **委譲時のユーザー確認ルール**
-  - メインエージェントは、作業依頼（issue 作成・要件定義・設計・実装計画・実装・レビュー等）を受けたとき、明示がなくても **phase 判定 → command 選択 → run_command によるサブ委譲 → 結果報告** をデフォルト挙動とする。
-  - 上記デフォルト挙動において、メインエージェントが「サブを起動してよいか」「この command を実行してよいか」「この方針で進めてよいか」等を**ユーザーに許可を求めることを原則としない**。ユーザーから「プロンプト案だけ教えて」「手順だけ教えて」など**説明モードへの切り替えが明示された場合のみ**、委譲ではなく説明に切り替えてよい（CORE §依頼タイプ別振る舞い と整合させる）。
-  - 破壊的・高リスクな操作（大量削除・外部サービスへの書き込み等）、および RULES / CORE / enforcement で**高リスク操作**として別途定義された command・capability を実行しようとする場合は例外とし、そのときのみメインエージェントは事前にユーザーの**明示的な確認**を要求する。
-  - **「〜を指示して」という依頼文の扱い**: 「ドキュメントレビューを指示して」「この PR 対応 issue 作成をサブに指示して」等のように、  
-    「〜を指示して」という表現を含む依頼は、**説明モードではなく通常の作業依頼として解釈する**。  
-    デフォルトでは「サブへの指示文案だけを返す」のではなく、対応する command を選択し、run_command により**実際にサブへ委譲して実作業を行わせる**こと。
-  - **説明モードの明示条件の強化**: 「プロンプト案だけ教えて」「サブへの指示文だけほしい」「自分で実行するのでコマンド文だけ出して」等、  
-    **人間または別ツールが実作業を行うことを明示した文言がある場合に限り**、メインエージェントは run_command を実行せず、委譲パケットや指示文案のみを返してよい。
-  - **委譲不能なプラットフォームでの明示義務**: CORE §依頼タイプ別振る舞い が定める「委譲できない環境」で動作しており、  
-    実際に run_command に相当するサブ実行ができない場合、メインエージェントは  
-    回答の**冒頭で必ず**「この環境ではサブへの実行委譲ができないため、以下は委譲計画（指示文案）のみであり、実作業は人間または別ランタイムが行う必要がある」ことを明示する。  
-    これにより、ユーザーが「サブに委譲された」と誤解することを防ぐ。
+| モード | 調整状態の正本 | ゲートの正本 |
+|---|---|---|
+| GitHub モード | Issue・PR・branch・Check Run | GitHub Check Run（`agent-skill-chain/{spec,design,implementation,validation}-gate`） |
+| ローカルモード | `state.yaml`（Issue 毎、Git 管理下） | `reviews/<gate>.yaml`（Git 管理下） |
 
-- **issue 作成依頼時のサブ自動委譲ルール（種別判定）**
-  - **作成して系**の issue 作成依頼の場合は、必ずサブに実際の issue 作成を委譲する。サブへの指示文案だけを返して終了してはならない。カテゴリ別ルールが優先される: 作成して系は必ず委譲、提案して系と説明して系は委譲しない。
-  - **種別と挙動**:
-    - **作成して系**（例: 「この要件で issue を作成して」「issueを作成して」）→ サブに issue 作成タスクを委譲し、作成された issue のタイトル・概要・保存場所を報告する（SC-01 相当）。
-    - **提案して系**（例: 「issueを作成するためのサブへの指示文を提案して」「プロンプト案だけ教えて」）→ 委譲せず、サブへの指示文案のみを返す（SC-02 相当）。
-    - **説明して系**（例: 「issueを作ってもらうための流れを教えて」「手順だけ説明して」）→ 自動で issue 作成せず、手順・ルールの説明のみを行う（SC-03 相当）。
-  - **キーワード衝突時の優先度**: ①提案して系、②説明して系、③作成して系。これは複数分類のキーワードが同一依頼文に同時該当した場合の解決規則である。
-  - **分類曖昧ケースの既定挙動（キーワード衝突とは別条件）**: 依頼文がいずれの分類キーワードにも明確に該当しない／該当が希薄な「分類曖昧ケース」では、既定分類を**作成して系**とし、ユーザーに確認せずサブへ委譲する（本 AGENTS.md の**自立進行ルール**＝高リスク操作を除き逐一確認を禁止、に従う）。**ただし当該依頼の内容が RULES.md §高リスク操作（[.agent-skill-chain/source/RULES.md](.agent-skill-chain/source/RULES.md)）に該当する場合に限り**、既定分類に倒さず、**自立進行ルール**および**委譲時のユーザー確認ルール**の高リスク操作の例外規定に従って事前にユーザーの明示的な確認を得る。高リスク操作の判定基準は RULES.md §高リスク操作（[.agent-skill-chain/source/RULES.md](.agent-skill-chain/source/RULES.md)）を唯一の正本として参照し、本節で別基準を定義しない。
-  - **要件・シナリオの詳細**: 作成して系は必ずサブに issue 作成を委譲し報告（SC-01）。提案して系は委譲せず指示文案のみ（SC-02）。説明して系は手順説明のみ（SC-03）。種別は提案して系＞説明して系＞作成して系の優先度で判定。詳細は [.agent-skill-chain/source/workflow/PHASES.md §一般的な issue 作成ステップ](.agent-skill-chain/source/workflow/PHASES.md#一般的な-issue-作成ステップ) を参照。
+共通の状態モデル（フィールド・enum）は `schemas/state.schema.yaml` が定義する。
 
-軽作業時の実行モード（quick / standard / full）・違反時の失敗条件と差し戻し先は後述および [.agent-skill-chain/source/enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) に従う。
+## 4 セグメント・4 ゲート
 
-> **実行契約の正本**: [.agent-skill-chain/source/boot/CORE.md](.agent-skill-chain/source/boot/CORE.md)（AI はここを必ず読む）。読込順・いつ何を読むかは [.agent-skill-chain/source/boot/LOAD_POLICY.md](.agent-skill-chain/source/boot/LOAD_POLICY.md) に委譲。
+固定4セグメント（`config/segments.yaml`）。追加・変更は破壊的変更とし ADR + 本ファイル改定 + `schema_version` 更新 + migration を要する。
 
----
+```
+Issue作成 → worktree作成 → SPECワーカーが最初のcheckpointをpush
+→ SPECワーカーがDraft PRを作成（Closes #<id>）
+→ 設計・実装・独立検証ワーカーが同一PRのheadブランチへcommit/push
+→ 検証ゲート通過後、Draft→Ready for Review → auto-mergeまたは人間マージ
+```
 
-## 標準実行モード
+| セグメント | 主成果物 | ゲート |
+|---|---|---|
+| ①要求・要件 | `SPEC.md` | spec-gate |
+| ②設計・実装計画 | `DESIGN.md` / ADR / `PLAN.md` | design-gate |
+| ③実装 | コード・単体テスト結果 | implementation-gate |
+| ④独立検証 | 受入/統合/回帰テスト・PR | validation-gate |
 
-上記のとおり、明示がなくても **agents workflow** に従って解釈する。進行役は常に orchestrator。sub-agent / skill / rule は明示的に禁止されていない限り適用する。出力は IO_CONTRACT に従う。依頼受付時に仕様・設計・実装・レビューのいずれの段階かを最初に判定する。規模に応じた **quick / standard / full** は [.agent-skill-chain/source/RULES.md](.agent-skill-chain/source/RULES.md) の実行モードを参照する。
+レビュープロファイル：Standard（既定、レビュア1体が conformance→falsification を順に実行）／Strict（`risk != normal` OR `autonomy == full`、専任2体）。ゲートは次のワーカーを直接起動しない——進行役がゲート状態のみを読み、次セグメント起動・`finding.origin`（`specification|design|implementation|validation`）に基づく差し戻し先決定・人間判断への昇格・マージ条件確認を行う。
 
----
+## 役割・権限・writer lease
 
-## 読み込み順・優先順位（絶対）
+> 1 Issue には同時に1つの writer lease のみを許可する。read-only レビュアは複数並列実行できる。
 
-**読む順番は次の 1 か所で固定する。** 順＝優先順位であり、起動時に全 8 行を一括読了する意味ではない。入口ではこの順を守ること。
+| 役割 | 権限 | 種別 |
+|---|---|---|
+| 進行役 | Issue作成・状態遷移・worktree管理・マージ | writer lease対象外（成果物branchへのcommit禁止） |
+| セグメント作業ワーカー | 自branchへのcommit/push、Draft PR作成（SPECワーカーのみ）、Issueコメント | writer（同時1つ） |
+| ゲートレビュア | read-only + レビュー結果をCheck Run/レビューAPIへ送信 | read-only（複数並列可） |
 
-| 順 | 対象 | 備考 | 読むタイミング |
-|----|------|------|----------------|
-| 0 | **.agent-skill-chain/project/**（プロジェクトルート） | **存在すれば最優先**。.agent-skill-chain/source より優先（CORE §ルールの優先順位）。 | オンデマンド（存在すれば command 実行時等に確認・最優先）。起動時必須コアではない |
-| 1 | 本ファイル（**AGENTS.md**） | 人間・AI の入口。 | 入口（本ファイル） |
-| 2 | .agent-skill-chain/source/boot/**CORE.md** | 実行契約の正本。 | **起動時必須（コア）** |
-| 3 | .agent-skill-chain/source/**IO_CONTRACT.md** | command / skill の入出力契約。 | オンデマンド（command/skill 入出力時） |
-| 4 | .agent-skill-chain/source/**RULES.md** | 実行・ドキュメント・テスト要約・実行モード。 | オンデマンド（実行モード判定・レビュー・docs 時） |
-| 5 | .agent-skill-chain/source/**GETTING_STARTED.md** | メイン・サブの手順要約。 | オンデマンド（手順要約・必要時） |
-| 6 | .agent-skill-chain/source/workflow/**PHASES.md** | フェーズ・成果物・DoD。 | **起動時必須（コア）** |
-| 7 | .agent-skill-chain/source/**commands/** および 該当 command | 実行時は LOAD_POLICY に従い run_command と commands/{name}.md を読む。 | オンデマンド（command 実行時・LOAD_POLICY に従う） |
+権限は credential/GitHub 権限分離（fine-grained PAT・GitHub App installation permission）で担保し、ツール名の一律 deny では実装しない。lease スキーマは `schemas/lease.schema.yaml`、既定 `ttl_seconds: 3600` / `renewal_interval_seconds: 900`。WIP 上限は worktree 残存数ではなく有効 writer lease 数で判定（既定 `wip_limit: 3`）。
 
-**起動時に必ず読了するのは CORE / LOAD_POLICY / PHASES のコアセットのみ**である（`boot/CORE.md §禁止事項` と一致）。LOAD_POLICY.md はこの表には行として現れないが、起動時必須コアに含まれる。**順 0 の `.agent-skill-chain/project/` は「最優先」だが起動時必須コアには含めない**——「最優先」はルールの優先順位（同名・同目的なら project/ を採用。CORE §ルールの優先順位）を指すものであり、読むタイミングを指すものではない。project/ は存在する場合に **LOAD_POLICY.md トリガー表の「command を実行するとき」行に従いオンデマンドで確認する**（起動時に全体を一括読了する対象ではない）。IO_CONTRACT / RULES / GETTING_STARTED / commands / skills / テンプレートも同様に、LOAD_POLICY.md のトリガー表に従い該当トリガー発生時にオンデマンドで読む。これは CONTEXT_EFFICIENCY.md の規模比例・過剰適用回避と整合する。
+## ブランチ・worktree
 
-トリガー別の「いつ何を読むか」の詳細は [.agent-skill-chain/source/boot/LOAD_POLICY.md](.agent-skill-chain/source/boot/LOAD_POLICY.md) に委譲する。詳細ルールは各 spec / skills / enforcement を参照する。
+```
+branch:   <type>/<issue-id>-<slug>   例: feature/123-user-authentication
+worktree: .worktrees/<YYYYMMDD_HHMMSS>-<type>-<issue-id>-<slug>/   (timestamp = Issue起票日時, Asia/Tokyo)
+```
 
----
+正本は `git worktree list --porcelain`。削除は `scripts/cleanup.sh` 経由のみ（writer lease不在・未commit/未push無し・PR完了済みを検査後 `git worktree remove` → `prune`）。詳細は `standards/GIT_CONVENTIONS.md` + `config/agent-skill-chain.yaml` + `scripts/issue-start.sh` + `ci/verify-branch-name.sh`/`ci/verify-worktree-path.sh` の4層。
 
-## 何があるか
+## ゲートの継承・無効化
 
-- **人間・ツールの入口**: 本ファイル。詳細は [.agent-skill-chain/source/README.md](.agent-skill-chain/source/README.md) を参照。
-- **プロジェクト固有・最優先**: プロジェクトルートの **.agent-skill-chain/project/** が .agent-skill-chain/source より優先される。同名・同目的のルールは .agent-skill-chain/project を採用（.agent-skill-chain/source/CORE.md §ルールの優先順位）。
-- **AI の契約**: .agent-skill-chain/source/boot/CORE.md（正本）。思想は .agent-skill-chain/source/CONCEPTS.md、読込順は LOAD_POLICY へ委譲。
-- **ワークフロー**: .agent-skill-chain/source/workflow/PHASES.md（フェーズ = gate）。**実行単位は command**（skill chain）。.agent-skill-chain/source/commands/ を参照。
-- **command 実行時**: LOAD_POLICY の表に従い、.agent-skill-chain/source/skills/agent/run_command.md と .agent-skill-chain/source/commands/{name}.md を読む。
-- **単体 capability**: .agent-skill-chain/source/skills/{domain}/{capability}/ を LOAD_POLICY に従い読む。
-- **違反時**: 失敗条件と差し戻し先は [.agent-skill-chain/source/enforcement/README.md](.agent-skill-chain/source/enforcement/README.md) §失敗条件と差し戻しに従う。CI および subagent-guard が同一の判定ルールを参照する。
+Check Run は commit SHA に紐づく。`scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行、変化ありなら当該ゲートと全下流ゲートを無効化する（対応表は `schemas/gate-report.schema.yaml` 添付ドキュメント参照）。
 
----
+## ADR・テンプレート・テスト適用性
 
-## 変更マップ
+ADR は `proposed → accepted`（設計ゲート承認時、finalization ワーカーが writer lease 取得の上 status のみ更新）→ `superseded/deprecated` のライフサイクルを取り、`docs/adr/` に保存する。テンプレート正本は `templates/`（`templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`、`templates/adr/ADR.md`、`templates/github/.github/...`）。AC ごとの検証方法・適用すべきテスト種別（常時必須／変更種別ごと／リリース単位）は `standards/TEST_POLICY.md` を正本とする。
 
-| 変えたいもの | 見るファイル |
-|--------------|--------------|
-| 絶対制約・読了義務 | .agent-skill-chain/source/boot/CORE.md |
-| いつ何を読むか・command/capability トリガー | .agent-skill-chain/source/boot/LOAD_POLICY.md |
-| フェーズ・成果物・DoD | .agent-skill-chain/source/workflow/PHASES.md |
-| 実行モード（full/standard/quick） | .agent-skill-chain/source/RULES.md |
-| カバレッジ 100% 目標と例外運用（台帳・言語別マーカ） | .agent-skill-chain/source/COVERAGE_AND_EXCEPTIONS.md |
-| command 実行の形・skill chain | .agent-skill-chain/source/skills/agent/run_command.md と .agent-skill-chain/source/commands/ |
-| 構成・索引 | .agent-skill-chain/source/README.md |
-| 失敗条件・差し戻し先 | .agent-skill-chain/source/enforcement/README.md |
-| プロジェクト固有ルール（最優先） | プロジェクトルートの .agent-skill-chain/project/ |
-| コピー対象・セットアップ・アップデート（upgrade）詳細 | .agent-skill-chain/source/SETUP.md（`init`/`upgrade`/`enforce`/`uninstall` の実行コマンド自体を含む） |
-| 基盤の肥大化防止・文書追加ルール | .agent-skill-chain/source/META_LAYER.md |
+## GitHub配布・マルチAI対応
 
----
+`templates/github/.github/` を配布元の正本とし、対象リポジトリの `.github/` はその展開結果（`scripts/verify-template-sync.sh` で同期検査）。ラベル・ruleset は GitHub API 経由のみで適用（`provisioning/labels.yaml` → `scripts/setup-labels.sh`、`provisioning/rulesets/main.json` → `scripts/setup-ruleset.sh`）。作業エージェントの実体はベンダー中立の role contract（`config/roles.yaml`）を正本とし、`adapters/{claude,codex,human}.sh` が実行系へ変換する。
 
-詳細は .agent-skill-chain/source 配下を参照する。中心は **skill（能力）** と **command（skill chain）**。
+## 設定
+
+初期値は `config/agent-skill-chain.yaml`（`schema_version: agent-skill-chain/config/v1`）が確定させる。項目追加は「①ハードコード不可の理由→②プロジェクト単位で変わる必要性→③スキーマ更新→④既定値定義→⑤migration定義→⑥必要ならADR」の手順を必須とする。スキーマ名前空間は `agent-skill-chain/{config,segments,state,gate-report,validation-report,lease,integration}/v1` に階層化する。
+
+## ディレクトリ構成
+
+```
+AGENTS.md  CLAUDE.md  README.md
+docs/{GLOSSARY.md, adr/}
+standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY}.md
+templates/{issue/, adr/, github/}
+schemas/{state,gate-report,validation-report,integration,lease,segments}.schema.yaml
+config/{agent-skill-chain.yaml, segments.yaml, roles.yaml}
+adapters/{claude,codex,human}.sh
+scripts/  (setup*, issue-start/resume, lease-*, segment-start, gate-*, pr-create,
+           adr-finalize, cleanup, doctor, reconcile, lint-vocab, adr-lint)
+ci/  (verify-branch-name, verify-worktree-path, verify-template-sync,
+      verify-ac-coverage, verify-gate-report, verify-artifacts, verify-adr)
+.github/            # templates/github/.github/ の展開結果
+.worktrees/
+```
+
+## 用語
+
+「Issue」= GitHub Issue（またはローカルモードの Issue 状態ファイル）のみ。SPEC/DESIGN/PLAN/検証結果は「Issue に紐づく成果物」であり issue とは呼ばない。Task はセッション内の揮発的作業単位（永続化禁止）。用語集の正本は `docs/GLOSSARY.md`（用語・定義・禁止同義語の3列、20行以内）。禁止語混入は `scripts/lint-vocab.sh` が検査する。
