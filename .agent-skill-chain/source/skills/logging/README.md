@@ -4,4 +4,4 @@
 
 | capability | 目的 |
 |------------|------|
-| [write-workflow-log](write-workflow-log/) | 書記・ログの記録（memo / workflow.db） |
+| [write-workflow-log](write-workflow-log/) | 書記・ログの記録（**workflow.db**。memo は例外運用） |

@@ -2,7 +2,7 @@
 
 **本ファイルの責務**: **どの skill をどの順で実行するか**（skill chain）の定義のみ。実行手順・委譲の形は skills/agent/run_command.md に従う。各 step の手順は各 capability の README/SKILL に従う。**契約**: [IO_CONTRACT.md](../IO_CONTRACT.md) に従い INPUT / PROCESS / OUTPUT / DONE で定義する。
 
-要求・要件の整理と BDD までを一連の skill chain で実行する。
+要求・要件の整理と BDD までを一連の skill chain で実行する。**一般的な issue 作成依頼（PR 指摘対応以外）を受けた場合、issue ディレクトリの新規作成（`.agent-skill-chain/runtime/<timestamp>_<title>/` 等）を本 command の責務に含む**（PHASE_COMMAND_MAP.md §Phase → Command 一覧「issue_creation（一般）」行、PHASES.md §一般的な issue 作成ステップと整合）。
 
 ---
 
@@ -22,7 +22,7 @@
 - **issue**: .agent-skill-chain/runtime/{issue}/ のパス。00/01 の更新対象。
 - **context**: 親 00、03 等の参照（存在する場合）。
 - **spec**: .agent-skill-chain/source/spec/（設計原則・設計判断の優先順位）。着手前に参照する。
-- **テンプレート**: .agent-skill-chain/runtime/templates/00_要求定義.md, .agent-skill-chain/runtime/templates/01_要件定義.md（未存在時はパッケージの `.agent-skill-chain/runtime/templates/` を参照）。
+- **テンプレート**: .agent-skill-chain/runtime/templates/00_要求定義.md, .agent-skill-chain/runtime/templates/01_要件定義.md。**未配備時の解決手段は [workflow/TEMPLATES.md §テンプレートの正本](../workflow/TEMPLATES.md) を正本とする**（setup 再実行によるパッケージ同梱テンプレートの配備。具体コマンドは [SETUP.md](../SETUP.md) を参照）。
 
 ---
 
@@ -65,12 +65,12 @@
 
 ## 実行時の注意
 
-- **着手前に**、00_要求定義.md および 01_要件定義.md の**テンプレートファイル**（.agent-skill-chain/runtime/templates/ またはプロジェクトに無い場合はパッケージの `.agent-skill-chain/runtime/templates/`）を**開いて確認**すること。成果物はテンプレートの**見出し・セクション番号・必須セクション**を欠かさずに作成すること。
+- **着手前に**、00_要求定義.md および 01_要件定義.md の**テンプレートファイル**（.agent-skill-chain/runtime/templates/。**未配備時の解決手段は [workflow/TEMPLATES.md §テンプレートの正本](../workflow/TEMPLATES.md) を正本とする**＝setup 再実行によるパッケージ同梱テンプレートの配備）を**開いて確認**すること。成果物はテンプレートの**見出し・セクション番号・必須セクション**を欠かさずに作成すること。
 - **着手前に .agent-skill-chain/source/spec/ を参照する**。spec 概要・設計原則・設計判断の優先順位（spec/00_spec概要.md, spec/01_設計原則.md, spec/06_設計判断の優先順位.md）を踏まえて要求・制約を整理する。
 - 既存の 00/01 がある場合は上書きせず、該当 issue の 00/01 を更新する。テンプレートは .agent-skill-chain/runtime/templates または親 issue を参照する。
 - 00/01 を更新する際、frontmatter に既に document_id が存在する場合はその値を変更・上書きしてはならない。document_id は 00/01 を新規作成するときまたは初回付与時にのみ設定する。
 - **00_要求定義.md を新規作成する場合**、issue_id（UUID）を 1 回発行し、00 の frontmatter に `issue_id: "<UUID>"` を記載すること。既存 00 を更新する場合は issue_id を変更しないこと。issue フォルダの識別は 00 の frontmatter の issue_id を正とする。
 - run_command の Constraints（順序・memo プレフィックス）を守ること。
 - UI/UX を伴うか要求時に判明していれば 00 frontmatter の `experience_surface` に記録してよい（任意・design-feature の frame-experience が最終判定する）。
-- **完了後に書記（write-workflow-log）に依頼して記録させること。** 本 command は 00 と 01 の**複数成果物**を生成・更新しうるため、**生成・更新した全成果物それぞれ**（00_要求定義.md・01_要件定義.md など）について、各成果物の **DOCUMENT_ID**（frontmatter の UUID）と **DOCUMENT_PATH**（プロジェクトルート相対パス）を渡して書記に **1 回ずつ**記録させること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
+- **完了後に書記（write-workflow-log）を実行すること（chain 実行者自身が実行する。正本は [skills/agent/run_command.md §書記（write-workflow-log）の実行主体（chain 実行者自身）](../skills/agent/run_command.md)）。** 本 command は 00 と 01 の**複数成果物**を生成・更新しうるため、**生成・更新した全成果物それぞれ**（00_要求定義.md・01_要件定義.md など）について、各成果物の **DOCUMENT_ID**（frontmatter の UUID）と **DOCUMENT_PATH**（プロジェクトルート相対パス）を渡して **1 回ずつ**実行すること（「1 command につき書記 1 回」の単数解釈は禁止。1 件でも漏れると audit#20 で FAIL する）。詳細は [skills/logging/write-workflow-log/SKILL.md](../skills/logging/write-workflow-log/SKILL.md) を参照。
 - **重要判断については** [EVIDENCE_POLICY.md](../EVIDENCE_POLICY.md) **に従い**、執筆時点でフィジビリティ確認・一次情報調査を行い、成果物中の重要判断に **evidence_source** を付記すること（軽量 issue の軽量パスは EVIDENCE_POLICY.md 参照）。

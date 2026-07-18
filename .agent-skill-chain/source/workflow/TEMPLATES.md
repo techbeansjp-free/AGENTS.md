@@ -6,14 +6,14 @@
 
 ## テンプレートの正本
 
-- **00/01/02/03/04**: プロジェクトの **.agent-skill-chain/runtime/templates/** に 00*要求定義.md, 01*要件定義.md, 02*設計.md, 03*実装計画.md, 04_review.md を置く。存在しない場合は、setup が **`.agent-skill-chain/runtime/templates/`**（パッケージ内）からコピーする。それも無い場合は親 issue の同種ファイルを形式の参照とする。
+- **00/01/02/03/04**: プロジェクトの **.agent-skill-chain/runtime/templates/** に 00*要求定義.md, 01*要件定義.md, 02*設計.md, 03*実装計画.md, 04_review.md を置く。**未配備（プロジェクトの .agent-skill-chain/runtime/templates/ にファイルが存在しない）の場合の解決手段は「setup を再実行し、パッケージ同梱テンプレートをプロジェクトへ配備する」こと**である（具体コマンドは [SETUP.md](../SETUP.md) を参照）。setup 再実行が行えない・直後で未配備が解消しない場合に限り、それも無い場合は親 issue の同種ファイルを形式の参照とする。
 - **レビュー成果物の配置**: 04_review は**レビューフェーズ**（実装完了後に verify-and-close を実行するとき）でのみ作成する。その成果物は **issue フォルダ直下に 04_review（04_review.md）を直接作成**する。実装前の要求・要件・設計・実装計画・実装フェーズで 04_review を作成してはならない。**04_review に相当する正式なレビュー成果物は memo に書かない**。memo はメモ・証跡用とし、ドキュメントレビュー等の証跡を含む。
 - **memo（証跡）**:
   - **配置**: .agent-skill-chain/runtime/{issue}/memo/
   - **用途**: メモ・証跡用。**ドキュメントレビュー等の証跡を含む**。実装完了後の正式なレビュー成果物は 04_review に作成する。
   - **issue フォルダ名**: YYYYMMDD_HHMMSS_ をプレフィックスとする（必須）。
   - **memo ファイル名**: YYYYMMDD_HHMMSS_ プレフィックス必須。
-  - **プレフィックス取得**: 実行環境の現在時刻（JST）を **TZ=Asia/Tokyo date +%Y%m%d_%H%M%S** の実行、または **.agent-skill-chain/source/scripts/memo-prefix.sh** の実行で得た値のみを使用する。取得は memo ファイル作成のたびに実行すること（キャッシュ・事前計算に依存しない）。推測・固定・未来日時の使用は禁止。**作成のたびに** memo-prefix.sh または TZ=Asia/Tokyo date を**実行**し、その標準出力をプレフィックスに用いること。実行しないでプレフィックスを組み立ててはならない。
+  - **プレフィックス取得**: **取得規則の正本は [skills/agent/run_command.md §memo/issue フォルダ作成時（プレフィックス取得）](../skills/agent/run_command.md)**（要点: 作成のたびに TZ=Asia/Tokyo date +%Y%m%d_%H%M%S または memo-prefix.sh を実行して得た値のみを使用し、推測・固定・未来日時は禁止）。
   - **中身**: CONTRACT 準拠（実施内容・変更・完了判定が分かる形）。
 
 ---
@@ -24,12 +24,14 @@
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------- |
 | 00\_要求定義.md     | .agent-skill-chain/runtime/templates/00\_要求定義.md または親 issue の 00                                                                                          | requirement-discovery       | extract-goals, define-constraints, write-bdd                                                        |
 | 01\_要件定義.md     | .agent-skill-chain/runtime/templates/01\_要件定義.md または親 issue の 01                                                                                          | requirement-discovery       | write-bdd                                                                                           |
-| 02\_設計.md         | .agent-skill-chain/runtime/templates/02\_設計.md または親 issue の 02                                                                                              | design-feature              | define-boundaries, design-api-contract, review-dependencies, frame-experience, map-experience, detail-experience（体験面=あり時。`experience_surface` が `null（未記入）または` `yes:` のとき frame-experience が判定）                                         |
+| 02\_設計.md         | .agent-skill-chain/runtime/templates/02\_設計.md または親 issue の 02                                                                                              | design-feature              | define-boundaries, design-api-contract, review-dependencies, frame-experience, map-experience, detail-experience（体験面=あり時。`experience_surface` が `null`（未記入）または `yes:` のとき frame-experience が判定）                                         |
 | 03\_実装計画.md     | .agent-skill-chain/runtime/templates/03\_実装計画.md または親 issue の 03                                                                                          | design-feature              | review-dependencies                                                                                 |
 | 04_review.md        | .agent-skill-chain/runtime/templates/04_review.md または親 issue の 04                                                                                             | verify-and-close            | generate-scenarios, map-coverage, review-code, review-architecture                                  |
 | memo（証跡）        | **.agent-skill-chain/runtime/{issue}/memo/** に配置。**{issue} は YYYYMMDD_HHMMSS_ プレフィックス必須。** ファイル名も YYYYMMDD_HHMMSS_ 必須。中身は CONTRACT 準拠 | verify-and-close の最後など | write-workflow-log                                                                                  |
-| **99_PR.md**        | .agent-skill-chain/runtime/templates/99_PR.md                                                                                                                      | PR 作成時                   | **PR 本文用（簡潔）**。GitHub 等に貼る内容。内部リンク禁止。                                        |
-| **99_PR_review.md** | .agent-skill-chain/runtime/templates/99_PR_review.md                                                                                                               | PR 作成前・内部             | **内部レビュー用**。要件・定義・テスト詳細・レビュー観点の詳細チェックリスト。PR 本文には載せない。 |
+| **99_PR.md**        | .agent-skill-chain/runtime/templates/99_PR.md                                                                                                                      | （phase command ではない。役割注記: **PR 作成時に進行役ゲートで生成**） | **PR 本文用（簡潔）**。GitHub 等に貼る内容。内部リンク禁止。                                        |
+| **99_PR_review.md** | .agent-skill-chain/runtime/templates/99_PR_review.md                                                                                                               | （phase command ではない。役割注記: **PR 作成前・内部レビュー用に生成**） | **内部レビュー用**。要件・定義・テスト詳細・レビュー観点の詳細チェックリスト。PR 本文には載せない。 |
+| **05_最終確認チェックリスト.md** | 親 issue の 05（テンプレート未配備時は 04 に準じる） | （phase command ではない。役割注記: **verify-and-close 後の任意最終確認**。外部設定が必要な場合のみ生成） | 外部設定確認用チェックリスト。すべての issue で必須ではない（04_review §15 参照）。 |
+| **00_システム理解.md** | 親 issue または docs/ の 00_システム理解.md 形式を参照 | （phase command ではない。役割注記: **システム理解 command/工程で生成**。既存プロジェクト把握時に requirement-discovery 着手前の準備工程として作成） | 既存システムの理解記録（既存プロジェクトの要求定義前提として参照される） |
 
 ---
 
