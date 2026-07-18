@@ -1,5 +1,5 @@
 ---
-document_id: "3c8cd09b-093e-4d8f-9967-b3252d94b06f"
+document_id: "76a2059f-f94d-4c8c-bc9c-93a394679f1c"
 ---
 
 # レビュー: .agent-skill-chain: 運用スクリプトのバグ修正

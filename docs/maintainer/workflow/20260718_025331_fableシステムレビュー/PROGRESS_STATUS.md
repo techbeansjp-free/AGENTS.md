@@ -8,7 +8,7 @@ fableによる`.agent-skill-chain`フレームワーク徹底レビュー(112件
 ## 完了フェーズ
 - [x] Phase 0: fable7領域レビュー → opus独立検証 → `02_対応方針.md`確定
 - [x] Phase 1: 6サブissue起票 + GitHub Issue化(#143〜#148) + frontmatter書き戻し
-- [x] Phase 2: 6パッケージ設計+実装前レビュー(`02_設計.md`) → ユーザーが全15件の要確認ポイントを「推奨案どおり進める」で承認済み
+- [x] Phase 2: 6パッケージ設計+実装前レビュー(`02_設計.md`) → ユーザーが全15件の要確認ポイントを承認済み（14件は推奨案どおり、D-12のみユーザー承認によりフォールバック案C〈ledger/audit実装は見送り、EFFORT_POLICY.mdの方針確定とproject側role×effort受け皿の確定に留める〉を採用。詳細は`90_issues/20260718_041240_プロジェクト上書きモデル選定整合/03_実装計画.md`・`04_review.md`参照）
 - [x] Phase 3: 6パッケージ並列実装 → 各専用worktree/ブランチで実装・自己レビュー・コミット完了
 - [x] Phase 4a: 7ブランチ全てpush + PR作成完了(下表参照)
 - [ ] Phase 4b: CIチェック・CodeRabbit等レビュー対応 → ユーザー確認のうえマージ（**未着手**）
@@ -33,7 +33,7 @@ fableによる`.agent-skill-chain`フレームワーク徹底レビュー(112件
 ## レビュー・トラッキング用worktree（実装ではなくドキュメント管理）
 - パス: `/home/adachi/projects/AGENTS.md/.worktree/chore/20260718_025331-fableシステムレビュー/`
 - ブランチ: `chore/20260718_025331-fableシステムレビュー`
-- 最新commit: `f28a824`（本ファイル更新分含む）
+- 最新commit: `af3c7b6`（本ファイル更新分含む）
 - 内容: `docs/maintainer/workflow/20260718_025331_fableシステムレビュー/` 配下に親issue(00/01/02/90_issues.md) + 6サブissue(各00/02/03/04)
 - **push・PR #155 作成済み**
 
