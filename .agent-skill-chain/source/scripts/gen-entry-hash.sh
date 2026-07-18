@@ -18,7 +18,7 @@
 #        v1 は不変（1 文字も変更しない）。prev_hash を含まないため、行削除・並べ替え・prev_hash
 #        書換をチェーンとしては検知できない（劣化境界。ledger/schema.md 参照）。
 #
-#   [v2] hash_version = 2（新規行）。entry_hash を除く全 20 カラム（prev_hash を含む）を、
+#   [v2] hash_version = 2（新規行）。entry_hash と hash_version を除く全 20 カラム（prev_hash を含む）を、
 #        LC_ALL=C 下のバイト長プレフィックス枠付けで連結し sha256sum の先頭語。
 #        引数順（schema.sql のカラム順・entry_hash と hash_version を除く 20 個）:
 #          entry_id parent_entry_id document_id ts_utc created_at actor_role delegated_by_role \
