@@ -77,9 +77,12 @@ if [[ -n "${ISSUE_DIR_HINT:-}" ]]; then
     echo "ERROR_INVALID_HINT: issue_dir_hint に '/' または '..' を含むことはできません: ${ISSUE_DIR_HINT}" >&2
     exit 1
   fi
-  # 隠し名前（先頭ドット）は許可しない。
-  if [[ ! "$ISSUE_DIR_HINT" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo "ERROR_INVALID_HINT: issue_dir_hint は英数字・ハイフン・アンダースコアのみ使用できます: ${ISSUE_DIR_HINT}" >&2
+  # 隠し名前（先頭ドット）・制御文字は許可しない。非 ASCII（日本語ディレクトリ名等、自動生成
+  # ディレクトリ名 ${PREFIX}_PR${PR_NUM}_PR指摘対応 を含む）は許可する（E-6）。
+  # traversal は上の '/' '..' チェックで、解決後パスの base 配下判定は下記の resolved 検証で
+  # 既に多重防御されているため、ASCII 限定の検証は不要かつ自スクリプト生成物を誤って拒否していた。
+  if [[ "$ISSUE_DIR_HINT" == .* ]] || [[ "$ISSUE_DIR_HINT" == *[[:cntrl:]]* ]]; then
+    echo "ERROR_INVALID_HINT: issue_dir_hint に先頭ドット・制御文字は使用できません: ${ISSUE_DIR_HINT}" >&2
     exit 1
   fi
   TARGET_DIR="${BASE_DIR}/${ISSUE_DIR_HINT}"
@@ -102,7 +105,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -x "${SCRIPT_DIR}/memo-prefix.sh" ]]; then
   PREFIX="$("${SCRIPT_DIR}/memo-prefix.sh")"
 else
-  export TZ="${TZ:-Asia/Tokyo}"
+  # E-12: memo 系プレフィックスは JST で一意採番する契約のため、呼び出し環境の TZ に依存させない
+  # （既存 TZ を尊重すると環境ごとに時系列順序が崩れる）。無条件で JST を強制する。
+  export TZ="Asia/Tokyo"
   PREFIX="$(date +%Y%m%d_%H%M%S)"
 fi
 
@@ -117,5 +122,17 @@ fi
 
 DIR_NAME="${PREFIX}_PR${PR_NUM}_PR指摘対応"
 TARGET_DIR="${BASE_DIR}/${DIR_NAME}"
-mkdir -p "$TARGET_DIR"
+# E-17: BASE_DIR は既に mkdir -p 済みのため、新規作成は mkdir（-p なし）にして EEXIST を検知する。
+# 同秒並行実行で 2 プロセスが同一ディレクトリ名を新規作成しようとした場合に、双方が黙って
+# 成功して同一ディレクトリを共有する（成果物混線）のを防ぐため、衝突時は連番サフィックスで
+# 別ディレクトリへ分離する。
+n=1
+while ! mkdir "$TARGET_DIR" 2>/dev/null; do
+  n=$((n+1))
+  if (( n > 50 )); then
+    echo "ERROR_DIR_CREATE: ディレクトリ作成に失敗しました（衝突が解消しません）: ${DIR_NAME}" >&2
+    exit 1
+  fi
+  TARGET_DIR="${BASE_DIR}/${DIR_NAME}_${n}"
+done
 echo "$(resolve_abs_path "$TARGET_DIR")"

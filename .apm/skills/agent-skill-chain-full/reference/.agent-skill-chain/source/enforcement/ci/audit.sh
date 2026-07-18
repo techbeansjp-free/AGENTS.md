@@ -37,6 +37,7 @@
 #   (35) 実装前ブランチ紐づけ未記録検知（DB 採用時・issue_path スコープで implement-feature ログ 1 件以上かつ 00 frontmatter branch が空/null/~/欠落なら FAIL。#34 の写像だが declined 概念なし・github.com remote 不要。close/templates/90_issues 配下・非 git・発効日 grandfather は SKIP）
 #   (36) PR 紐づけ未記録検知（CI で PR_BODY が渡されたときのみ・PR 本文に有効な Closes/Refs #<番号> が 1 件以上あれば PASS。無い場合は差分内 workflow issue のうち実 Issue 参照を持つ非 declined・非 grandfather の issue が残れば FAIL。PR_BODY 未設定＝ローカル/push は SKIP。#6 の写像・#34 と非交差）
 #   (37) システム仕様書の作業用 issue フォルダ参照禁止（docs/ 配下の仕様書が作業用 issue フォルダ＝.agent-skill-chain/runtime/{issue}/ または docs/maintainer/workflow/{issue}/ へのパス参照を含むと FAIL。DOCS_NOISE_RULES (iv-b)。close/ は対象外）
+#   (42) enforcement 正本差分の委譲・レビュー証跡必須検知（C-1・対象差分が .agent-skill-chain/source/enforcement/** または project/orchestrator-allowlist.txt・settings.enforce.json・.scribe-nonce に触れる場合、workflow_log の委譲・レビュー証跡 1 件以上を要求）
 #
 # 失敗とみなす条件（1 行/チェックの索引。判定ルール・SKIP 条件・差し戻し先の正本は
 # enforcement/README.md §失敗条件と差し戻し の失敗条件対応表・共通前提ノートを参照。
@@ -70,11 +71,17 @@
 #  (38) モデルティア明記義務の機械検証未通過 → README #38
 #  (39) ルート起点 unbounded find の .worktree prune 欠落（ベストエフォート lint） → README #39
 #  (40) 非準拠ブランチ名の事後検知（grandfather baseline 救済・Tier2） → README #40
+#  (42) enforcement 正本差分の委譲・レビュー証跡必須検知（C-1） → README #42
 # 差し戻し先: 失敗時は 04_review に戻さず、03_実装計画.md または該当 issue ドキュメント。
 #
 # 以下で実施: #8 workflow.db 品質監査、#9 成果物と証跡の対応、#10 sidecar 追跡禁止、#11 DB 整合性（sqlite3 が無い環境では #8/#9/#11 はスキップ）。
 
-set -e
+# C-9: set -e ではなく set +e とする（1 行変更・02_設計 参照）。合否は全 check 関数が明示的に
+#   EXIT_CODE=1 を立て、末尾の `exit $EXIT_CODE` が確定する設計であり、set -e は合否判定に一切
+#   寄与しない（non load-bearing）。set -e を残すと、いずれかの check 内の想定外の非 0 終了で
+#   以降の check がまるごと skip される構造的ハザードだけが生じる（前段の GIT_RANGE 無害化・
+#   ディレクトリ解決等も明示条件分岐・フォールバックのみで書かれており set -e に依存しない）。
+set +e
 PROJECT_ROOT="${1:-.}"
 # Git 差分範囲。CI で PR base や push イベントの before..after 等を渡す想定。例: main..HEAD, HEAD~1..HEAD, <before>..<after>
 # push イベントで複数コミットをまとめて push した場合の監査漏れ対策として、呼び出し元（消費者テンプレート
@@ -112,6 +119,42 @@ if [[ -n "${AGENTS_ROOT:-}" ]]; then AGENTS_ROOT_EXPLICIT=1; else AGENTS_ROOT_EX
 AGENTS_ROOT="${AGENTS_ROOT:-.agent-skill-chain/source}"
 EXIT_CODE=0
 ROLLBACK_MSG="ROLLBACK: Fix in 03_実装計画.md or the issue doc under .agent-skill-chain/runtime/{issue}/ then re-run verify-and-close. See .agent-skill-chain/source/enforcement/README.md §失敗条件と差し戻し."
+
+# C-2（AUDIT_STRICT・02_設計 参照）: 各ゲートは *_GATE_ENABLED=false・許容窓・WORKFLOW_DIRS 等の
+#   env で個別に無効化できるため、唯一の実効検知経路であるローカル pre-push を、被監査 AI 自身が
+#   同一シェルで env を設定して骨抜きにできる（例: `GITHUB_ISSUE_GATE_ENABLED=false git push`）。
+#   AUDIT_STRICT=1（既定は非 strict=0・後方互換維持）を設定すると、以下の無効化系 env を無視して
+#   既定値を強制し、無効化トグルが指定されていた事実を stderr へ WARN する（監査痕跡）。
+#   強制対象は次の3種に限定する（AUDIT_GIT_RANGE は CI が正当に渡す差分範囲の入力でありトグルでは
+#   ないため対象外・既にサニタイズ済み）:
+#     - *_GATE_ENABLED 系（GITHUB_ISSUE_GATE_ENABLED / BRANCH_LINK_GATE_ENABLED /
+#       PR_LINK_GATE_ENABLED / MODEL_TIER_GATE_ENABLED）を既定 true に強制。
+#     - MAIN_WORK_GATE_TOLERANCE_SECONDS を既定 172800（48h）に強制。
+#     - WORKFLOW_DIRS を無視（unset）し、既定の走査ディレクトリ解決へフォールバックさせる
+#       （scan-nothing 化＝空/存在しないディレクトリを指定して監査対象をゼロにする迂回の防止）。
+#   pre-push.example は AUDIT_STRICT=1 を既定化する（README §失敗条件と差し戻し 参照）。
+case "${AUDIT_STRICT:-0}" in
+  1|true|TRUE|True|yes|YES|on|ON) AUDIT_STRICT_ON=1 ;;
+  *) AUDIT_STRICT_ON=0 ;;
+esac
+if [[ "$AUDIT_STRICT_ON" == "1" ]]; then
+  for _as_var in GITHUB_ISSUE_GATE_ENABLED BRANCH_LINK_GATE_ENABLED PR_LINK_GATE_ENABLED MODEL_TIER_GATE_ENABLED; do
+    if [[ -n "${!_as_var:-}" ]]; then
+      echo "[audit] WARN: AUDIT_STRICT=1 のため ${_as_var}=${!_as_var} の指定を無視し既定 true を強制します" >&2
+    fi
+    printf -v "$_as_var" '%s' "true"
+    export "$_as_var"
+  done
+  if [[ -n "${MAIN_WORK_GATE_TOLERANCE_SECONDS:-}" ]]; then
+    echo "[audit] WARN: AUDIT_STRICT=1 のため MAIN_WORK_GATE_TOLERANCE_SECONDS=${MAIN_WORK_GATE_TOLERANCE_SECONDS} の指定を無視し既定 172800 を強制します" >&2
+  fi
+  MAIN_WORK_GATE_TOLERANCE_SECONDS=172800
+  export MAIN_WORK_GATE_TOLERANCE_SECONDS
+  if [[ -n "${WORKFLOW_DIRS:-}" ]]; then
+    echo "[audit] WARN: AUDIT_STRICT=1 のため WORKFLOW_DIRS=${WORKFLOW_DIRS} の指定を無視します（scan-nothing 化防止・既定の走査ディレクトリ解決にフォールバック）" >&2
+  fi
+  unset WORKFLOW_DIRS
+fi
 
 # 補助関数: 走査対象の workflow ディレクトリ「リスト」を解決して 1 行 1 ディレクトリ（PROJECT_ROOT 相対）で出力する。
 #
@@ -645,6 +688,32 @@ check_artifact_change_has_implement_log() {
   fi
 }
 
+# 42. enforcement 正本差分の委譲・レビュー証跡必須検知（check_enforcement_diff_has_evidence・C-1）。
+#   対象差分（GIT_RANGE）が enforcement 正本（.agent-skill-chain/source/enforcement/** 一式、または
+#   .agent-skill-chain/project/orchestrator-allowlist.txt・settings.enforce.json、または
+#   */.scribe-nonce）に触れる場合、workflow_log に対応する command
+#   （implement-feature/design-feature/verify-and-close/review-docs/create-pr-review-issue）の記録が
+#   1 件以上存在することを要求する（無ければ FAIL）。本リポのドッグフーディング開発で
+#   PreToolUse.sh R1B の ASC_ENFORCEMENT_SELF_DEV による runtime bypass を使って enforcement を
+#   編集した場合も、本チェックにより委譲・レビュー証跡が突合され追跡可能になる（#19 の写像だが
+#   走査対象パスを enforcement 正本に限定する点が差分・非交差）。
+#   SKIP: 非 git ツリー、対象差分に該当パスなし、sqlite3/workflow.db 不在。
+check_enforcement_diff_has_evidence() {
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
+  if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
+  local changed
+  changed="$(git -C "$PROJECT_ROOT" diff --name-only $GIT_RANGE 2>/dev/null | grep -E '(^|/)\.agent-skill-chain/source/enforcement/|(^|/)\.agent-skill-chain/project/orchestrator-allowlist\.txt$|(^|/)\.agent-skill-chain/project/settings\.enforce\.json$|(^|/)\.scribe-nonce$' || true)"
+  if [[ -z "$changed" ]]; then return 0; fi
+  if ! [[ -f "$WF_DB" ]] || ! command -v sqlite3 &>/dev/null; then return 0; fi
+  local count
+  count="$(sqlite3 "$WF_DB" "SELECT COUNT(*) FROM workflow_log WHERE command IN ('implement-feature', 'design-feature', 'verify-and-close', 'review-docs', 'create-pr-review-issue');" 2>/dev/null || echo "0")"
+  if [[ "${count:-0}" -eq 0 ]]; then
+    echo "[audit] ERROR: enforcement master files changed but no delegation/review evidence in workflow_log (#42: enforcement master file changes require implement-feature/design-feature/verify-and-close/review-docs/create-pr-review-issue evidence)" >&2
+    echo "$ROLLBACK_MSG" >&2
+    EXIT_CODE=1
+  fi
+}
+
 check_actor_role_is_scribe
 check_delegated_by_role
 check_implement_has_changed_files
@@ -653,6 +722,7 @@ check_verify_has_parent
 check_verify_parent_command
 check_review_file_has_verify_log
 check_artifact_change_has_implement_log
+check_enforcement_diff_has_evidence
 
 # 25. メインが実作業を直接行った（#25）: 成果物変更があるのに委譲・証跡の対応がない場合は FAIL
 #   時系列突合（is-3163305 是正）: workflow.db は累積型のため、単純な件数（COUNT）判定だと
@@ -664,6 +734,11 @@ check_artifact_change_has_implement_log
 #   順序（ログが必ずしもコミットより後とは限らない）を許容しつつ、対象差分と無関係な古いログでの
 #   恒久 PASS を防ぐため。コミット日時が取得できない（GIT_RANGE 解決不能等）場合は、従来どおり
 #   件数のみの判定にフォールバックする（fail-open 方向の安全側・既存消費者への互換維持）。
+#   検出限界（C-8・正直化。README #25 参照）: 突合は「対象差分に対応する command が許容窓内に
+#   記録されているか」のみを見ており、記録された workflow_log 行が**対象差分と同一の issue**の
+#   ものであるかまでは突合しない。したがって、対象差分と無関係な別 issue の implement-feature 等の
+#   ログが許容窓内に存在するだけでも本チェックは PASS しうる（変更ファイル・issue_path の突合は
+#   実装しない。低深刻度・費用対効果に基づく見送りであり、将来 issue で再判定可能な可逆的決定）。
 check_25_main_did_real_work() {
   if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then return 0; fi
   if ! git -C "$PROJECT_ROOT" rev-parse HEAD &>/dev/null; then return 0; fi
