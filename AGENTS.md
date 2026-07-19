@@ -14,7 +14,7 @@
 | I2 フェーズゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する | GitHub モード：Check Run の成功状態（required status を専用 App/Workflow に限定）。ローカルモード：`reviews/<gate>.yaml` + `schemas/gate-report.schema.yaml` |
 | I3 耐久性 | 作業状態は常に Git（remote push 済み）から完全復元可能。頭の中にしか無い状態を作らない | セグメント完了ごとの commit+push、`scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
 | I4 分離 | 1 Issue = 1 ブランチ = 1 worktree = 1 PR。main への変更は PR 経由のみ | branch protection、`ci/verify-branch-name.sh`・`ci/verify-worktree-path.sh` |
-| I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | credential/権限分離（ツール名の一律 deny はしない）、main worktree clean チェック、ワーカー報告固定スキーマ |
+| I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | credential/権限分離（ツール名の一律 deny はしない）、main worktree clean チェック、ワーカー報告固定スキーマ（`schemas/worker-report.schema.yaml`） |
 | I6 正準モデル | 調整状態は選択された Coordination Backend のプリミティブにのみ存在し、GitHub Flow 標準語彙で記述する。複数バックエンド間で同一 Issue の状態を同期しない | GitHub モード：`scripts/lint-vocab.sh` + Check Run 正本。ローカルモード：`state.yaml` が正本 |
 | I7 仕様⇔検証の追跡 | 全 AC-ID は最低1つの検証方法(`automated\|manual\|hybrid`)と証跡に対応する。承認後の AC 変更はゲート再通過を強制する | `ci/verify-ac-coverage.sh`、SPEC 差分検知によるゲート無効化（A-6 相当） |
 | I8 安全側ラチェット | autonomy の降格は自動、昇格は人間の明示行為のみ。既定は `autonomy:gated`。`risk != normal`（`unclassified` 含む）OR `autonomy == full` → `review_profile: strict` | Actions の状態遷移規則（昇格 workflow が存在しないことを含め検査） |
@@ -85,7 +85,7 @@ ADR は `proposed → accepted`（設計ゲート承認時、finalization ワー
 
 ## 設定
 
-初期値は `config/agent-skill-chain.yaml`（`schema_version: agent-skill-chain/config/v1`）が確定させる。項目追加は「①ハードコード不可の理由→②プロジェクト単位で変わる必要性→③スキーマ更新→④既定値定義→⑤migration定義→⑥必要ならADR」の手順を必須とする。スキーマ名前空間は `agent-skill-chain/{config,segments,state,gate-report,validation-report,lease,integration}/v1` に階層化する。
+初期値は `config/agent-skill-chain.yaml`（`schema_version: agent-skill-chain/config/v1`）が確定させる。項目追加は「①ハードコード不可の理由→②プロジェクト単位で変わる必要性→③スキーマ更新→④既定値定義→⑤migration定義→⑥必要ならADR」の手順を必須とする。スキーマ名前空間は `agent-skill-chain/{config,segments,state,gate-report,validation-report,worker-report,lease,integration}/v1` に階層化する。
 
 ## ディレクトリ構成
 
@@ -94,7 +94,7 @@ AGENTS.md  CLAUDE.md  README.md
 docs/{GLOSSARY.md, adr/}
 standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY}.md
 templates/{issue/, adr/, github/}
-schemas/{state,gate-report,validation-report,integration,lease,segments}.schema.yaml
+schemas/{state,gate-report,validation-report,worker-report,integration,lease,segments}.schema.yaml
 config/{agent-skill-chain.yaml, segments.yaml, roles.yaml}
 adapters/{claude,codex,human}.sh
 scripts/  (setup*, issue-start/resume, lease-*, segment-start, gate-*, pr-create,

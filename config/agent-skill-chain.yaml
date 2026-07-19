@@ -1,0 +1,63 @@
+# agent-skill-chain 設定初期値
+# 正本: AGENTS.md §設定 / memo/システム刷新/システム刷新.md §A-11
+#
+# 項目追加は以下の手順を必須とする（内部で固定できる値は設定に出さない）:
+#   ①ハードコードでは対応できない理由の提示
+#   ②利用者/プロジェクト単位で変わる必要性の提示
+#   ③schema_version の更新
+#   ④既定値の定義
+#   ⑤migration/後方互換性の定義
+#   ⑥必要なら ADR の作成
+
+schema_version: agent-skill-chain/config/v1
+
+coordination:
+  backend: github            # github | local
+
+durability:
+  backend: remote             # remote | local_mirror
+
+autonomy:
+  default: gated               # gated | full
+
+risk:
+  default: unclassified        # unclassified | normal | high
+
+review:
+  standard: {reviewer_count: 1, modes: [conformance, falsification]}
+  strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
+
+worktree:
+  root: .worktrees
+  path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
+  timestamp: {source: issue_created_at, format: "%Y%m%d_%H%M%S", timezone: Asia/Tokyo}
+  slug_max_length: 48
+  immutable_path: true
+
+branch:
+  pattern: "{type}/{issue_id}-{slug}"
+
+issue:
+  allowed_types: [feature, bugfix, hotfix, refactor, docs, process]
+
+wip:
+  limit: 3
+  count_by: active_writer_lease
+
+lease:
+  ttl_seconds: 3600
+  renewal_interval_seconds: 900
+
+bdd:
+  profile: standard            # standard | strict
+
+templates:
+  github_source: templates/github/.github
+  github_target: .github
+  verify_sync: true
+
+checks:
+  spec: agent-skill-chain/spec-gate
+  design: agent-skill-chain/design-gate
+  implementation: agent-skill-chain/implementation-gate
+  validation: agent-skill-chain/validation-gate

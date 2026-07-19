@@ -1,0 +1,55 @@
+# 正本: AGENTS.md §不変条件I5（ワーカー報告固定スキーマ）/ config/roles.yaml の blocked_report_schema
+# 作業ワーカー（spec/design/implementation/validation）およびADR finalizationワーカーが
+# 完了・blocked時に進行役へ返す固定スキーマ。進行役はこのスキーマのみを読み、成果物の中身を
+# 読んで裁定しない（I5「進行役の純粋性」）。blocked時は推測で補完せず、明確なブロッカーを記述する。
+$schema: http://json-schema.org/draft-07/schema#
+schema_version: agent-skill-chain/worker-report/v1
+title: agent-skill-chain worker report
+type: object
+required: [schema_version, issue_id, role, segment, status, target_sha]
+additionalProperties: false
+properties:
+  schema_version:
+    const: agent-skill-chain/worker-report/v1
+  issue_id:
+    type: string
+    pattern: '^ISSUE-[0-9]+$'
+  role:
+    type: string
+    enum: [spec_worker, design_worker, implementation_worker, validation_worker, adr_finalization_worker]
+  segment:
+    type: string
+    enum: [spec, design, implementation, validation, adr_finalization]
+  status:
+    type: string
+    enum: [completed, blocked]
+  target_sha:
+    type: string
+    description: 報告時点のcommit SHA（push済み）。
+  artifacts:
+    type: array
+    items: {type: string}
+    description: 完了時に作成・更新した成果物パスの一覧（config/roles.yaml の role_contracts.<role>.outputs に対応）。
+  blocked_reason:
+    type: string
+    description: "status=blocked の場合必須。推測で補完せず、明確なブロッカーを記述する。"
+  human_escalation_requested:
+    type: boolean
+    default: false
+
+examples:
+  - schema_version: agent-skill-chain/worker-report/v1
+    issue_id: ISSUE-123
+    role: spec_worker
+    segment: spec
+    status: completed
+    target_sha: abc123
+    artifacts: ['issues/123/SPEC.md']
+  - schema_version: agent-skill-chain/worker-report/v1
+    issue_id: ISSUE-123
+    role: implementation_worker
+    segment: implementation
+    status: blocked
+    target_sha: def456
+    blocked_reason: "PLAN.mdの変更単位3が依存する外部APIの仕様が未確定。設計ワーカーへの差し戻しを要する。"
+    human_escalation_requested: false

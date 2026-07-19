@@ -1,0 +1,44 @@
+# 正本: AGENTS.md §4セグメント・4ゲート・§不変条件I4 / memo/システム刷新/システム刷新.md §A-3, §A-10
+# 1 Issue = 1 PR の集約状態。GitHubモードでは実PRの補助記録、ローカルモードでは
+# Integration Recordが正本となる（GitHub未連携時のDraft PR相当）。
+$schema: http://json-schema.org/draft-07/schema#
+schema_version: agent-skill-chain/integration/v1
+title: agent-skill-chain integration record
+type: object
+required: [schema_version, issue_id, branch, status, closes, gates]
+additionalProperties: false
+properties:
+  schema_version:
+    const: agent-skill-chain/integration/v1
+  issue_id:
+    type: string
+    pattern: '^ISSUE-[0-9]+$'
+  branch:
+    type: string
+  pr_url:
+    type: string
+    description: GitHubモードのみ。ローカルモードでは省略する。
+  status:
+    type: string
+    enum: [draft, ready_for_review, merged, closed]
+  closes:
+    type: string
+    pattern: '^ISSUE-[0-9]+$'
+  gates:
+    type: object
+    required: [spec, design, implementation, validation]
+    additionalProperties: false
+    properties:
+      spec: {type: string, enum: [pending, approved, rejected]}
+      design: {type: string, enum: [pending, approved, rejected]}
+      implementation: {type: string, enum: [pending, approved, rejected]}
+      validation: {type: string, enum: [pending, approved, rejected]}
+
+examples:
+  - schema_version: agent-skill-chain/integration/v1
+    issue_id: ISSUE-123
+    branch: feature/123-user-authentication
+    pr_url: 'https://github.com/example/repo/pull/45'
+    status: draft
+    closes: ISSUE-123
+    gates: {spec: approved, design: approved, implementation: pending, validation: pending}
