@@ -1,0 +1,59 @@
+# 正本: AGENTS.md §4セグメント・4ゲート / §不変条件I8 / config/agent-skill-chain.yaml review.*・checks.*
+#
+# PRへのpushごとに4ゲート（spec/design/implementation/validation）のレビューを起動し、
+# gate-reportを検証したうえでCheck Runへ発行する。scripts/gate-review.sh・scripts/gate-publish.sh・
+# ci/verify-gate-report.sh はいずれもインターフェーススタブであり、CLI実装（src/agents-md.ts）が
+# 完了するまでこのワークフローは失敗し続ける（意図的な挙動。偽の成功シグナルを出さない）。
+#
+# レビュープロファイルの判定は不変条件I8をそのまま実装する：
+# risk != normal（unclassified含む）OR autonomy == full → strict。
+name: agent-skill-chain / gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: read
+
+jobs:
+  gate-review:
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [spec, design, implementation, validation]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive issue_id and review profile
+        id: ctx
+        env:
+          BRANCH: ${{ github.head_ref }}
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
+          if ! [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
+            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（config/agent-skill-chain.yaml branch.pattern に非適合）" >&2
+            exit 1
+          fi
+          echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
+
+          PROFILE=standard
+          if ! echo "$LABELS_JSON" | grep -q '"risk:normal"'; then PROFILE=strict; fi
+          if echo "$LABELS_JSON" | grep -q '"autonomy:full"'; then PROFILE=strict; fi
+          echo "profile=$PROFILE" >> "$GITHUB_OUTPUT"
+
+      - name: Run gate review (${{ matrix.gate }})
+        id: review
+        run: |
+          REPORT_PATH="$(./scripts/gate-review.sh "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}")"
+          echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Verify gate report schema
+        run: ./ci/verify-gate-report.sh "${{ steps.review.outputs.report_path }}"
+
+      - name: Publish gate report
+        run: ./scripts/gate-publish.sh "${{ steps.ctx.outputs.issue_id }}" "${{ steps.review.outputs.report_path }}"

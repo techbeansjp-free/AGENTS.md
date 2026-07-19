@@ -1,0 +1,48 @@
+# 正本: AGENTS.md §不変条件I8
+#
+# 「autonomyの降格は自動、昇格は人間の明示行為のみ」を機械的に強制する。
+# config/agent-skill-chain.yaml の autonomy.default・risk.default を緩める方向へ変更する
+# PRには、人間が明示的に付与するラベル risk-upgrade-approved を必須とする
+# （provisioning/labels.yaml 定義）。このワークフロー自体が「昇格workflowが存在しないこと」の
+# 検査対象でもあるため、ラベル付与以外の経路で自動承認を行ってはならない。
+name: agent-skill-chain / risk
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - config/agent-skill-chain.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  risk-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect autonomy/risk upgrade
+        id: diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+          if git diff "origin/$BASE_REF"...HEAD -- config/agent-skill-chain.yaml \
+             | grep -Eq '^\+\s*default:\s*(full|normal|high)\s*$'; then
+            echo "upgrade=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upgrade=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require explicit human approval label for upgrade
+        if: steps.diff.outputs.upgrade == 'true'
+        env:
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          if ! echo "$LABELS_JSON" | grep -q '"risk-upgrade-approved"'; then
+            echo "autonomy/risk のデフォルトを緩める変更には risk-upgrade-approved ラベル（人間による明示付与）が必要です（AGENTS.md 不変条件I8）" >&2
+            exit 1
+          fi
