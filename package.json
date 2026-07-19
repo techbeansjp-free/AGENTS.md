@@ -1,28 +1,10 @@
 {
   "name": "agent-skill-chain",
   "version": "0.1.51",
-  "description": ".agent-skill-chain/source を正本に各 AI ツール（Claude Code / Cursor / Gemini / Copilot / Codex）へ段階的に配備するワークフロー仕様パッケージ。強制力はツールごとに異なり（Claude Code は runtime hook で強制、他はルール配布/方針適用）、最終保証は CI audit が担う。",
+  "description": "Coordination Backend（GitHub Issue/PR/Check Run、またはローカルGit管理下状態）を正本とする、ソフトウェア開発ワークフロー規律のためのagentic constitution + CLIパッケージ。",
   "type": "module",
-  "bin": {
-    "agents-md": "bin/agents-md.js"
-  },
-  "files": [
-    ".agent-skill-chain/source/",
-    "AGENTS.md",
-    "CLAUDE.md",
-    ".agent-skill-chain/runtime/templates/",
-    "bin/",
-    "README.md"
-  ],
   "engines": {
     "node": ">=20"
-  },
-  "scripts": {
-    "build:claude": "bash .agent-skill-chain/source/scripts/build-plugin-claude.sh",
-    "build": "tsc && chmod +x bin/agents-md.js",
-    "typecheck": "tsc --noEmit",
-    "test": "bash test/run-all.sh",
-    "prepare": "npm run build"
   },
   "devDependencies": {
     "typescript": "^5",
@@ -33,8 +15,7 @@
     "ai",
     "workflow",
     "claude-code",
-    "cursor",
-    "skills",
+    "codex",
     "agents-md"
   ],
   "license": "MIT",
