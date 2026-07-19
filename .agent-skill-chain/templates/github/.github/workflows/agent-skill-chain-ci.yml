@@ -1,7 +1,8 @@
 # 正本: AGENTS.md §不変条件I1・I4・I6・I7 / §参照・コメントの陳腐化防止
 #
-# PRへのpushごとに、ブランチ名・worktreeパス・テンプレート同期・用語・参照規約・ADR・
-# 成果物・AC対応の各検査（.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
+# PRへのpushごとに、agent-skill-chain CLI自体のテストスイート（npm test）を実行したうえで、
+# ブランチ名・worktreeパス・テンプレート同期・用語・参照規約・ADR・成果物・AC対応の各検査
+# （.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
 # .agent-skill-chain/scripts/adr-lint.sh）を実行する。各スクリプトは agent-skill-chain CLI
 # （src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパーであるため、検査本体の前に
 # ビルドを行う。
@@ -29,6 +30,8 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+
+      - run: npm test
 
       - name: Derive issue_id
         id: ctx

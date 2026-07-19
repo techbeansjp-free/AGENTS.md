@@ -10,6 +10,7 @@ export interface AgentSkillChainConfig {
   autonomy: { default: 'gated' | 'full' };
   risk: { default: 'unclassified' | 'normal' | 'high' };
   review: {
+    adapter?: 'claude' | 'codex' | 'human';
     standard: { reviewer_count: number; modes: string[] };
     strict: { reviewer_count: number; trigger: { risk_not_normal: boolean; autonomy_full: boolean } };
   };

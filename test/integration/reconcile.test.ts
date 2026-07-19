@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+import { createGhStub } from '../helpers/gh-stub.js';
 
 // このファイルは名前が近い2つの別コマンドをまとめて検証する:
 //   1. `gate reconcile <issue_id> <target_sha>`（src/commands/gate.ts の reconcile 関数）
@@ -36,31 +38,39 @@ interface WriterLease {
 /** issue start + SPEC.md/DESIGN.mdをcommit・push（checkpoint）した状態を作る共通準備。
  * checkpointは `git push -u origin <branch>` でupstream追跡を設定するため、以後の
  * `git show <sha>:<path>`（gate reconcileがrepo.dir側から実行する）やupstream依存の判定でも
- * 一貫した状態になる。 */
-function setupApprovedSpecAndDesignGates() {
-  const repo = createTmpRepo({ backend: 'local' });
-  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], { cwd: repo.dir });
+ * 一貫した状態になる。backend: 'github' の場合、envにgh-stubのPATH注入環境を渡すこと
+ * （gate publishがCheck Run発行のためgh apiを呼ぶため）。 */
+function setupApprovedSpecAndDesignGates(opts: { backend?: 'local' | 'github'; env?: NodeJS.ProcessEnv } = {}) {
+  const { backend = 'local', env = process.env } = opts;
+  const repo = createTmpRepo({ backend });
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], { cwd: repo.dir, env });
   assert.equal(start.status, 0, start.stderr);
   const [, worktreePath] = start.stdout.trim().split('\n');
 
   fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: サンプル\n', 'utf8');
   fs.writeFileSync(path.join(worktreePath, 'DESIGN.md'), '# DESIGN\n\nサンプル設計\n', 'utf8');
-  const checkpoint = runCli(['checkpoint', 'wip: SPEC/DESIGN追加'], { cwd: worktreePath });
+  const checkpoint = runCli(['checkpoint', 'wip: SPEC/DESIGN追加'], { cwd: worktreePath, env });
   assert.equal(checkpoint.status, 0, checkpoint.stderr);
   const sha1 = checkpoint.stdout.trim();
 
-  approveGate(repo, worktreePath, 'spec', 'SPEC.md');
-  approveGate(repo, worktreePath, 'design', 'DESIGN.md');
+  approveGate(repo, worktreePath, 'spec', 'SPEC.md', env);
+  approveGate(repo, worktreePath, 'design', 'DESIGN.md', env);
 
   return { repo, worktreePath, sha1 };
 }
 
-function approveGate(repo: ReturnType<typeof createTmpRepo>, worktreePath: string, gateId: string, artifactRelPath: string) {
-  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', gateId], { cwd: repo.dir });
+function approveGate(
+  repo: ReturnType<typeof createTmpRepo>,
+  worktreePath: string,
+  gateId: string,
+  artifactRelPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', gateId], { cwd: repo.dir, env });
   assert.equal(acquire.status, 0, acquire.stderr);
   const token = /token:\s*(\S+)/.exec(acquire.stdout)![1];
 
-  const gateReview = runCli(['gate', 'review', 'ISSUE-1', gateId, 'standard'], { cwd: worktreePath });
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', gateId, 'standard'], { cwd: worktreePath, env });
   assert.equal(gateReview.status, 0, gateReview.stderr);
   const reportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
 
@@ -72,10 +82,10 @@ function approveGate(repo: ReturnType<typeof createTmpRepo>, worktreePath: strin
   report.gate.final = 'approved';
   fs.writeFileSync(reportPath, stringify(report), 'utf8');
 
-  const gatePublish = runCli(['gate', 'publish', 'ISSUE-1', reportPath], { cwd: repo.dir });
+  const gatePublish = runCli(['gate', 'publish', 'ISSUE-1', reportPath], { cwd: repo.dir, env });
   assert.equal(gatePublish.status, 0, gatePublish.stderr);
 
-  const release = runCli(['lease', 'release', 'ISSUE-1', token], { cwd: repo.dir });
+  const release = runCli(['lease', 'release', 'ISSUE-1', token], { cwd: repo.dir, env });
   assert.equal(release.status, 0, release.stderr);
 }
 
@@ -121,6 +131,85 @@ test('gate reconcile: spec成果物の変更commitを渡すとspec/design双方�
     fs.readFileSync(path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'design.yaml'), 'utf8'),
   ) as GateReport;
   assert.equal(designReport.gate.final, 'pending');
+});
+
+function makeGhStub() {
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-reconcile-'));
+  const stub = createGhStub(scratchDir);
+  return { stub, env: stub.env(process.env), cleanup: () => fs.rmSync(scratchDir, { recursive: true, force: true }) };
+}
+
+interface CheckRunRecord {
+  name: string;
+  head_sha: string;
+  conclusion: string;
+}
+
+test('gate reconcile (github backend): 成果物が変化していないcommitへは両ゲートとも成功Check Runが再発行される', async (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const { repo, sha1 } = setupApprovedSpecAndDesignGates({ backend: 'github', env });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  // Given: gate publish（spec/design承認）で既にCheck Runが2件発行済み。
+  // When: 承認時と同じsha1（＝成果物が変化していないcommit）を対象に gate reconcile を呼ぶ。
+  const reconcile = runCli(['gate', 'reconcile', 'ISSUE-1', sha1], { cwd: repo.dir, env });
+
+  // Then: 以前は「local バックエンドのみ対応」で必ず失敗していたが、githubモードでも成功し、
+  // 両ゲートについてsha1へのsuccess Check Runが追加発行されること。
+  assert.equal(reconcile.status, 0, reconcile.stderr);
+  assert.match(reconcile.stdout, /reissued: spec, design/);
+  assert.match(reconcile.stdout, /invalidated: \(none\)/);
+
+  const checkRuns = (stub.readState() as unknown as { checkRuns?: CheckRunRecord[] }).checkRuns ?? [];
+  assert.equal(checkRuns.length, 4, 'gate publish時2件 + reconcile時2件のCheck Runが記録されること');
+  const reconcileRuns = checkRuns.slice(2);
+  assert.deepEqual(
+    reconcileRuns.map((r) => r.conclusion),
+    ['success', 'success'],
+  );
+  assert.deepEqual(
+    reconcileRuns.map((r) => r.head_sha),
+    [sha1, sha1],
+  );
+});
+
+test('gate reconcile (github backend): spec成果物の変更commitを渡すとspec/design双方でaction_required Check Runが発行される', async (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const { repo, worktreePath } = setupApprovedSpecAndDesignGates({ backend: 'github', env });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  // Given: spec/design gateが共に承認済みの状態から、SPEC.md（spec gateのapproved_artifacts）を
+  // 変更して新しいcommitを作る。
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: 変更後のサンプル\n', 'utf8');
+  const checkpoint = runCli(['checkpoint', 'wip: SPEC変更'], { cwd: worktreePath, env });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const sha2 = checkpoint.stdout.trim();
+
+  // When: 変更後のsha2を対象に gate reconcile を呼ぶ。
+  const reconcile = runCli(['gate', 'reconcile', 'ISSUE-1', sha2], { cwd: repo.dir, env });
+
+  // Then: spec/designともにinvalidatedされ、それぞれについてsha2へのaction_required Check Runが
+  // 発行されること（成功のまま放置されず、新SHAでは要再レビューであることが可視化される）。
+  assert.equal(reconcile.status, 0, reconcile.stderr);
+  assert.match(reconcile.stdout, /reissued: \(none\)/);
+  assert.match(reconcile.stdout, /invalidated: spec, design/);
+
+  const checkRuns = (stub.readState() as unknown as { checkRuns?: CheckRunRecord[] }).checkRuns ?? [];
+  const reconcileRuns = checkRuns.slice(2);
+  assert.deepEqual(
+    reconcileRuns.map((r) => r.conclusion),
+    ['action_required', 'action_required'],
+  );
+  assert.deepEqual(
+    reconcileRuns.map((r) => r.head_sha),
+    [sha2, sha2],
+  );
 });
 
 /** issues/<n>/.agent-skill-chain/lease.yaml のパス（src/lib/local-state.ts の leaseFilePath と

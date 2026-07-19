@@ -13,6 +13,8 @@ import * as setup from './commands/setup.js';
 import * as sync from './commands/sync.js';
 import * as lint from './commands/lint.js';
 import * as verify from './commands/verify.js';
+import * as report from './commands/report.js';
+import * as testing from './commands/testing.js';
 
 type Handler = (args: string[]) => Promise<number> | number;
 
@@ -26,8 +28,14 @@ const routes: Record<string, Handler> = {
   'gate review': gate.review,
   'gate publish': gate.publish,
   'gate reconcile': gate.reconcile,
+  'gate record-verdict': gate.recordVerdict,
+  'gate mark-human-required': gate.markHumanRequired,
+  'gate reviewer-context': gate.reviewerContext,
+  'gate reviewer-prompt': gate.reviewerPrompt,
   'pr create': pr.create,
   'adr finalize': adr.finalize,
+  'report status': report.status,
+  'test run': testing.run,
   'lint vocab': lint.vocab,
   'lint references': lint.references,
   'lint adr': lint.adr,
