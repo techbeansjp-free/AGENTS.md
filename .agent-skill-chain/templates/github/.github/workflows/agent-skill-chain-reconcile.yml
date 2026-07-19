@@ -1,9 +1,11 @@
 # 正本: AGENTS.md §ゲートの継承・無効化
 #
 # pushごとに、承認済み成果物digestを対象commit SHAへ照合する。変化なしなら最新SHAへ
-# 成功を再発行し、変化ありなら当該ゲートと全下流ゲートを無効化する（.agent-skill-chain/scripts/gate-reconcile.sh、
-# 判定ルールは.agent-skill-chain/schemas/gate-report.schema.yaml末尾を参照）。インターフェーススタブであり、
-# CLI実装（src/agents-md.ts）が完了するまでこのワークフローは失敗し続ける（意図的な挙動）。
+# 成功を再発行し、変化ありなら当該ゲートと全下流ゲートを無効化する
+# （.agent-skill-chain/scripts/gate-reconcile.sh、判定ルールは
+# .agent-skill-chain/schemas/gate-report.schema.yaml末尾を参照）。agent-skill-chain CLI
+# （src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパーであるため、検査本体の前に
+# ビルドを行う。
 name: agent-skill-chain / reconcile
 
 on:
@@ -19,6 +21,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - run: npm run build
 
       - name: Derive issue_id
         id: ctx

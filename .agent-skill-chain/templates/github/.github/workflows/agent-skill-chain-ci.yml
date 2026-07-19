@@ -2,9 +2,9 @@
 #
 # PRへのpushごとに、ブランチ名・worktreeパス・テンプレート同期・用語・参照規約・ADR・
 # 成果物・AC対応の各検査（.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
-# .agent-skill-chain/scripts/adr-lint.sh）を実行する。
-# いずれもインターフェーススタブであり、CLI実装（src/agents-md.ts）が完了するまで
-# このワークフローは失敗し続ける（意図的な挙動。偽の成功シグナルを出さない）。
+# .agent-skill-chain/scripts/adr-lint.sh）を実行する。各スクリプトは agent-skill-chain CLI
+# （src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパーであるため、検査本体の前に
+# ビルドを行う。
 name: agent-skill-chain / ci
 
 on:
@@ -21,6 +21,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - run: npm run build
 
       - name: Derive issue_id
         id: ctx

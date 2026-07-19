@@ -1,9 +1,10 @@
 # 正本: AGENTS.md §4セグメント・4ゲート / §不変条件I8 / .agent-skill-chain/config/agent-skill-chain.yaml review.*・checks.*
 #
 # PRへのpushごとに4ゲート（spec/design/implementation/validation）のレビューを起動し、
-# gate-reportを検証したうえでCheck Runへ発行する。.agent-skill-chain/scripts/gate-review.sh・.agent-skill-chain/scripts/gate-publish.sh・
-# .agent-skill-chain/ci/verify-gate-report.sh はいずれもインターフェーススタブであり、CLI実装（src/agents-md.ts）が
-# 完了するまでこのワークフローは失敗し続ける（意図的な挙動。偽の成功シグナルを出さない）。
+# gate-reportを検証したうえでCheck Runへ発行する。.agent-skill-chain/scripts/gate-review.sh・
+# .agent-skill-chain/scripts/gate-publish.sh・.agent-skill-chain/ci/verify-gate-report.sh は
+# いずれも agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパー
+# であるため、検査本体の前にビルドを行う。
 #
 # レビュープロファイルの判定は不変条件I8をそのまま実装する：
 # risk != normal（unclassified含む）OR autonomy == full → strict。
@@ -27,6 +28,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - run: npm run build
 
       - name: Derive issue_id and review profile
         id: ctx
