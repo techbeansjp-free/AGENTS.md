@@ -77,7 +77,7 @@ Check Run は commit SHA に紐づく。`scripts/gate-reconcile.sh` が push ご
 
 ## ADR・テンプレート・テスト適用性
 
-ADR は `proposed → accepted`（設計ゲート承認時、finalization ワーカーが writer lease 取得の上 status のみ更新）→ `superseded/deprecated` のライフサイクルを取り、`docs/adr/` に保存する。テンプレート正本は `templates/`（`templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`、`templates/adr/ADR.md`、`templates/github/.github/...`）。AC ごとの検証方法・適用すべきテスト種別（常時必須／変更種別ごと／リリース単位）は `standards/TEST_POLICY.md` を正本とする。
+ADR は `proposed → accepted`（設計ゲート承認時、finalization ワーカーが writer lease 取得の上 status のみ更新）→ `superseded/deprecated` のライフサイクルを取り、`docs/adr/` に保存する。テンプレート正本は `templates/`（`templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`、`templates/adr/ADR.md`、`templates/github/.github/...`）。AC ごとの検証方法・適用すべきテスト種別（常時必須／変更種別ごと／リリース単位）は `standards/TEST_POLICY.md` を正本とする。文書量は AGENTS.md 150 行・各テンプレート 100 行を上限とし、`ci/verify-doc-length.sh` がCIで検査する。
 
 ## 成果物の自己完結性
 
@@ -109,7 +109,11 @@ Issue をまたいで永続する、システムの外部から観測できる�
 
 ## 設定
 
-初期値は `config/agent-skill-chain.yaml`（`schema_version: agent-skill-chain/config/v1`）が確定させる。項目追加は「①ハードコード不可の理由→②プロジェクト単位で変わる必要性→③スキーマ更新→④既定値定義→⑤migration定義→⑥必要ならADR」の手順を必須とする。スキーマ名前空間は `agent-skill-chain/{config,segments,state,gate-report,validation-report,worker-report,lease,integration}/v1` に階層化する。
+初期値は `config/agent-skill-chain.yaml`（`schema_version: agent-skill-chain/config/v1`）が確定させる。項目追加は「①ハードコード不可の理由→②プロジェクト単位で変わる必要性→③スキーマ更新→④既定値定義→⑤migration定義→⑥必要ならADR」の手順を必須とする。スキーマ名前空間は `agent-skill-chain/{config,segments,state,gate-report,validation-report,worker-report,lease,integration,project-policy}/v1` に階層化する。
+
+## プロジェクト固有ポリシー
+
+consumer project は `.agent-skill-chain/project/`（`manifest.yaml` + `RULES.md`、role固有の追加規約が必要な場合のみ `roles/<role>.md`）で、プロジェクト固有の追加プロセス規約を自然文で記述できる。`manifest.yaml`（`schemas/project-policy.schema.yaml` で検証）に登録された文書のみを規範として扱い、未登録文書はCIが無視する。優先順位は「agent-skill-chain の不変条件 ＞ プロジェクトポリシー ＞ 標準規約・既定値 ＞ adapter既定動作」。I3・I4・I5、4セグメント・4ゲート、writer lease、Check Run承認、禁止語・secretスキャンは上書き不可で、上書きを試みる記述はCIが `human_required` ではなく**設定エラーとして実行停止**する。進行役は `manifest.yaml` 全体を読み、各ワーカーには `documents.common` と自role分のみを渡す（前節「参照・コメントの陳腐化防止」の局所契約原則と同一）。プロジェクトポリシーと `docs/system-spec/` が矛盾する場合はどちらも自動優先せず `human_required`。
 
 ## ディレクトリ構成
 
@@ -118,12 +122,12 @@ AGENTS.md  CLAUDE.md  README.md
 docs/{GLOSSARY.md, adr/}
 standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY}.md
 templates/{issue/, adr/, github/}
-schemas/{state,gate-report,validation-report,worker-report,integration,lease,segments}.schema.yaml
+schemas/{state,gate-report,validation-report,worker-report,integration,lease,segments,project-policy}.schema.yaml
 config/{agent-skill-chain.yaml, segments.yaml, roles.yaml}
 adapters/{claude,codex,human}.sh
 scripts/  (setup*, issue-start/resume, lease-*, segment-start, gate-*, pr-create,
            adr-finalize, cleanup, doctor, reconcile, lint-vocab, lint-references, adr-lint)
-ci/  (verify-branch-name, verify-worktree-path, verify-template-sync,
+ci/  (verify-branch-name, verify-worktree-path, verify-template-sync, verify-doc-length,
       verify-ac-coverage, verify-gate-report, verify-artifacts, verify-adr)
 .github/            # templates/github/.github/ の展開結果
 .worktrees/

@@ -23,7 +23,14 @@ properties:
         description: ゲート承認対象のcommit SHA（A-6）。
       conformance: {type: string, enum: [pass, fail, pending]}
       falsification: {type: string, enum: [pass, fail, pending]}
-      final: {type: string, enum: [approved, rejected, pending]}
+      final:
+        type: string
+        enum: [approved, rejected, pending, human_required]
+        description: >
+          human_required はレビューが完了したが判定不能（inconclusive／origin衝突等）で
+          人間判断を要する状態。pending（レビュー未了）とは意味が異なり、進行役が
+          pendingを解釈で人間判断へ昇格させる余地を作らないため、レビュア自身がこの値を
+          表明する（12巡目、実装チェックリストとの整合レビューで追加）。
       blockers:
         type: array
         items: {$ref: '#/definitions/finding'}
