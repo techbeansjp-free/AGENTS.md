@@ -1,7 +1,7 @@
 <!--
-正本: AGENTS.md §不変条件I7 / memo/システム刷新/システム刷新.md §A-9, §3.3
+正本: AGENTS.md §不変条件I7
 このファイルは Issue 毎に複製して使う雛形である（セグメント: validation、ゲート: validation-gate）。
-フィールドは schemas/validation-report.schema.yaml（agent-skill-chain/validation-report/v1）と完全一致させること。
+フィールドは .agent-skill-chain/schemas/validation-report.schema.yaml（agent-skill-chain/validation-report/v1）と完全一致させること。
 <...> のプレースホルダを実際の内容に置き換えて記入すること。
 -->
 

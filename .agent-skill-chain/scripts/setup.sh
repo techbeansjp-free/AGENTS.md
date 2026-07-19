@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 正本: AGENTS.md §ディレクトリ構成 / §GitHub配布・マルチAI対応 / §設定
 #
-# 対象リポジトリへの agent-skill-chain 初回導入一式（templates/github/.github/ の展開、
-# config/ 配置等）を行う入口。setup-github.sh を含む導入手順を束ねる。
+# 対象リポジトリへの agent-skill-chain 初回導入一式（.agent-skill-chain/templates/github/.github/ の展開、
+# .agent-skill-chain/config/ 配置等）を行う入口。setup-github.sh を含む導入手順を束ねる。
 #
 # スタブ: 実処理は将来 `agent-skill-chain setup`（src/agents-md.ts のCLI再実装後）
 # として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。

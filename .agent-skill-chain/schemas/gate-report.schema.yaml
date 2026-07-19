@@ -1,4 +1,4 @@
-# 正本: AGENTS.md §ゲートの継承・無効化 / memo/システム刷新/システム刷新.md §A-3, §A-6, §A-7
+# 正本: AGENTS.md §ゲートの継承・無効化
 # 4ゲート（spec/design/implementation/validation）共通のレビュー結果スキーマ。
 # GitHubモードではCheck Run + PR reviewとして表現し、ローカルモードでは reviews/<gate>.yaml として保存する。
 $schema: http://json-schema.org/draft-07/schema#

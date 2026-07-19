@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §GitHub配布・マルチAI対応 / templates/github/provisioning/rulesets/main.json
+# 正本: AGENTS.md §GitHub配布・マルチAI対応 / .agent-skill-chain/templates/github/provisioning/rulesets/main.json
 #
-# templates/github/provisioning/rulesets/main.json の定義を GitHub Rulesets API（gh api 経由）へ適用する。
+# .agent-skill-chain/templates/github/provisioning/rulesets/main.json の定義を GitHub Rulesets API（gh api 経由）へ適用する。
 #
 # スタブ: 実処理は将来 `agent-skill-chain setup ruleset`（src/agents-md.ts のCLI再実装後）
 # として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。

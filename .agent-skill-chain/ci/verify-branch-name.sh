@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §ブランチ・worktree / standards/GIT_CONVENTIONS.md §配置・命名規則の4層構造（層4）
-#       / config/agent-skill-chain.yaml の branch.pattern・issue.allowed_types
+# 正本: AGENTS.md §ブランチ・worktree / .agent-skill-chain/standards/GIT_CONVENTIONS.md §配置・命名規則の4層構造（層4）
+#       / .agent-skill-chain/config/agent-skill-chain.yaml の branch.pattern・issue.allowed_types
 #
-# ブランチ名が config/agent-skill-chain.yaml の branch.pattern
+# ブランチ名が .agent-skill-chain/config/agent-skill-chain.yaml の branch.pattern
 # （"{type}/{issue_id}-{slug}"、type は issue.allowed_types のいずれか）に適合するか検査する。
 # I4（分離）の検査手段の一つ。
 #
@@ -20,7 +20,7 @@ usage() {
 branch_name: 検査対象のブランチ名。省略時はカレントブランチ
              （git rev-parse --abbrev-ref HEAD）を対象とする。
 
-config/agent-skill-chain.yaml の branch.pattern（"{type}/{issue_id}-{slug}"）に
+.agent-skill-chain/config/agent-skill-chain.yaml の branch.pattern（"{type}/{issue_id}-{slug}"）に
 適合するか、および type が issue.allowed_types に含まれるかを検査する。
 
 終了コード:

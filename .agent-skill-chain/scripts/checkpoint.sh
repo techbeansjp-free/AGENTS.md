@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md 不変条件I3 / config/agent-skill-chain.yaml durability.backend
+# 正本: AGENTS.md 不変条件I3 / .agent-skill-chain/config/agent-skill-chain.yaml durability.backend
 #
 # セグメント完了ごとにcommit+pushし、耐久性（I3）のチェックポイントを作る。
-# config/agent-skill-chain.yaml の durability.backend（remote|local_mirror）を参照する。
+# .agent-skill-chain/config/agent-skill-chain.yaml の durability.backend（remote|local_mirror）を参照する。
 #
 # スタブ: 実処理は将来 `agent-skill-chain checkpoint`（src/agents-md.ts のCLI再実装後）
 # として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。

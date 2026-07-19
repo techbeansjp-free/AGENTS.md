@@ -1,5 +1,5 @@
 <!--
-正本: AGENTS.md §4セグメント・4ゲート / memo/システム刷新/システム刷新.md §A-3, §A-9, §3.3
+正本: AGENTS.md §4セグメント・4ゲート
 このファイルは Issue 毎に複製して使う雛形である（セグメント: spec、成果物: SPEC.md、ゲート: spec-gate）。
 <...> のプレースホルダを実際の内容に置き換えて記入すること。
 -->
@@ -29,7 +29,7 @@
 
 ### 受入条件（Acceptance Criteria）
 
-各 AC には、散文形式の Given/When/Then による受け入れシナリオを添える（構造化マーカーの強制は `bdd.profile: strict` の場合のみ。`config/agent-skill-chain.yaml` 参照）。
+各 AC には、散文形式の Given/When/Then による受け入れシナリオを添える（構造化マーカーの強制は `bdd.profile: strict` の場合のみ。`.agent-skill-chain/config/agent-skill-chain.yaml` 参照）。
 
 #### AC-1: <受入条件の要約>
 

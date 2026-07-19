@@ -1,9 +1,9 @@
 # 固定4セグメントの入出力マニフェスト。
-# 正本: AGENTS.md §4セグメント・4ゲート / memo/システム刷新/システム刷新.md §A-3
+# 正本: AGENTS.md §4セグメント・4ゲート
 #
 # セグメント自体の追加・変更は破壊的変更とする。
 # 変更には ADR 作成 + AGENTS.md 改定 + schema_version 更新 + migration を要する。
-# 検証は schemas/segments.schema.yaml。
+# 検証は .agent-skill-chain/schemas/segments.schema.yaml。
 
 schema_version: agent-skill-chain/segments/v1
 segments:

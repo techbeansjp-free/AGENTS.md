@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §4セグメント・4ゲート / config/roles.yaml role_contracts
+# 正本: AGENTS.md §4セグメント・4ゲート / .agent-skill-chain/config/roles.yaml role_contracts
 #
-# 進行役が次セグメントのワーカーを起動する。config/roles.yaml の role_contracts に基づく
+# 進行役が次セグメントのワーカーを起動する。.agent-skill-chain/config/roles.yaml の role_contracts に基づく
 # 入出力契約（inputs/outputs/rules/completion/forbidden）をワーカーへ渡す。
 #
 # スタブ: 実処理は将来 `agent-skill-chain segment start`（src/agents-md.ts のCLI再実装後）

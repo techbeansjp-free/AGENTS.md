@@ -1,5 +1,5 @@
 # agent-skill-chain 設定初期値
-# 正本: AGENTS.md §設定 / memo/システム刷新/システム刷新.md §A-11
+# 正本: AGENTS.md §設定
 #
 # 項目追加は以下の手順を必須とする（内部で固定できる値は設定に出さない）:
 #   ①ハードコードでは対応できない理由の提示
@@ -52,7 +52,7 @@ bdd:
   profile: standard            # standard | strict
 
 templates:
-  github_source: templates/github/.github
+  github_source: .agent-skill-chain/templates/github/.github
   github_target: .github
   verify_sync: true
 

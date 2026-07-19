@@ -2,7 +2,7 @@
 # 正本: AGENTS.md §用語
 #
 # 禁止語彙（旧システム名称等）の混入を検査する。対象は生きたファイル
-# （AGENTS.md・standards/・templates/・config/・schemas/・scripts/・ci/等）であり、
+# （AGENTS.md・.agent-skill-chain/standards/・.agent-skill-chain/templates/・.agent-skill-chain/config/・.agent-skill-chain/schemas/・.agent-skill-chain/scripts/・.agent-skill-chain/ci/等）であり、
 # memo/等の非追跡scratchは対象外。禁止語・許容語の一覧はdocs/GLOSSARY.mdを正本とする。
 #
 # スタブ: 実処理は将来 `agent-skill-chain lint vocab`（src/agents-md.ts のCLI再実装後）

@@ -1,6 +1,6 @@
 # テストポリシー
 
-> 正本: `AGENTS.md` §不変条件I7 / `memo/システム刷新/システム刷新.md` §3.3, §A-9
+> 正本: `AGENTS.md` §不変条件I7
 
 ## 不変条件 I7（仕様⇔検証の追跡）
 
@@ -8,9 +8,9 @@
 
 - 自動化可能な AC は自動テストを必須とする。
 - 手動・混合（`manual`/`hybrid`）の場合は、自動化できない理由（`reason`）・検証手順（`procedure`）・実行者または実行エージェント（`executor`）・証跡（`evidence`）を必須とする。
-- 検証方法・結果・証跡の記録先は Issue ごとの `templates/issue/VALIDATION.md`（複製後に記入）であり、そのスキーマは `schemas/validation-report.schema.yaml` を正本とする。フィールド名は `ac_id` / `verification.mode` / `verification.result` / `verification.reason` / `verification.procedure` / `verification.executor` / `evidence` / `regression` に統一し、独自の別名フィールドを作らない。
-- 孤児 AC（検証記録の無い AC-ID）・孤児テスト参照（存在しない AC-ID を指す証跡）は許可しない。検査は `ci/verify-ac-coverage.sh` が担う。
-- 承認済み SPEC.md の AC が変更された場合、当該 Issue の全ゲート（またはそれ以降のゲート）は無効化され、再レビューが要求される（`schemas/gate-report.schema.yaml` の無効化ルールに従う）。
+- 検証方法・結果・証跡の記録先は Issue ごとの `.agent-skill-chain/templates/issue/VALIDATION.md`（複製後に記入）であり、そのスキーマは `.agent-skill-chain/schemas/validation-report.schema.yaml` を正本とする。フィールド名は `ac_id` / `verification.mode` / `verification.result` / `verification.reason` / `verification.procedure` / `verification.executor` / `evidence` / `regression` に統一し、独自の別名フィールドを作らない。
+- 孤児 AC（検証記録の無い AC-ID）・孤児テスト参照（存在しない AC-ID を指す証跡）は許可しない。検査は `.agent-skill-chain/ci/verify-ac-coverage.sh` が担う。
+- 承認済み SPEC.md の AC が変更された場合、当該 Issue の全ゲート（またはそれ以降のゲート）は無効化され、再レビューが要求される（`.agent-skill-chain/schemas/gate-report.schema.yaml` の無効化ルールに従う）。
 
 ## テスト適用性マトリクス（3分類）
 
@@ -53,7 +53,7 @@
 
 Given/When/Then のインラインマーカー（コード・テスト内への構造化コメント等）は不変条件ではない。以下のいずれかに該当するプロジェクトのみ、戦術として強制する。
 
-- `config/agent-skill-chain.yaml` の `bdd.profile` が `strict` に設定されている場合
+- `.agent-skill-chain/config/agent-skill-chain.yaml` の `bdd.profile` が `strict` に設定されている場合
 - Gherkin を採用しているプロジェクトの場合
 
 `bdd.profile: standard`（既定）のプロジェクトでは、SPEC.md の受け入れシナリオを散文としての Given/When/Then 記述（構造化マーカー不要）で記載すれば足りる。この散文形式の受け入れシナリオ自体は、`bdd.profile` の値に関わらず標準として扱う。

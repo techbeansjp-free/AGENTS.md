@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §不変条件I7 / standards/TEST_POLICY.md §不変条件I7（仕様⇔検証の追跡）
-#       / schemas/validation-report.schema.yaml
+# 正本: AGENTS.md §不変条件I7 / .agent-skill-chain/standards/TEST_POLICY.md §不変条件I7（仕様⇔検証の追跡）
+#       / .agent-skill-chain/schemas/validation-report.schema.yaml
 #
 # 全 AC-ID（SPEC.md、正規表現 ^AC-[0-9]+$）に検証方法（verification.mode:
 # automated|manual|hybrid）と証跡（evidence）が対応しているかを検査する。
@@ -19,7 +19,7 @@ usage() {
 
 issue_id: 検査対象の Issue ID（例: ISSUE-123）。
 
-SPEC.md の全 AC-ID が VALIDATION.md（schemas/validation-report.schema.yaml 準拠）の
+SPEC.md の全 AC-ID が VALIDATION.md（.agent-skill-chain/schemas/validation-report.schema.yaml 準拠）の
 acceptance_criteria に対応し、各エントリに verification.mode・verification.result・
 evidence（mode=manual|hybrid の場合は reason・procedure・executor も）が
 記録されているかを検査する。孤児 AC・孤児テスト参照は違反として扱う。

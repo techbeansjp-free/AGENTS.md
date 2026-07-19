@@ -1,5 +1,5 @@
 <!--
-正本: AGENTS.md §4セグメント・4ゲート / memo/システム刷新/システム刷新.md §A-3, §3.2
+正本: AGENTS.md §4セグメント・4ゲート
 このファイルは Issue 毎に複製して使う雛形である（セグメント: design、成果物: DESIGN.md（PLAN.md は別ファイル）、ゲート: design-gate）。
 <...> のプレースホルダを実際の内容に置き換えて記入すること。
 -->
@@ -37,7 +37,7 @@ SPEC.md の全要件・全 AC-ID が、いずれかの設計要素に対応し�
 
 ## 関連ADR
 
-この設計に関連する ADR を構造化リストで記載する（`related_adrs:` フィールド）。ID は `templates/adr/ADR.md` の `id` と対応させる。stale 参照検査（`adr-lint.sh check`）はこのフィールドのみを対象とし、`accepted` の ADR のみ参照可能とする。
+この設計に関連する ADR を構造化リストで記載する（`related_adrs:` フィールド）。ID は `.agent-skill-chain/templates/adr/ADR.md` の `id` と対応させる。stale 参照検査（`adr-lint.sh check`）はこのフィールドのみを対象とし、`accepted` の ADR のみ参照可能とする。
 
 ```yaml
 related_adrs:

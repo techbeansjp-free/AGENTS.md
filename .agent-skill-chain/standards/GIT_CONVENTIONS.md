@@ -1,8 +1,8 @@
 # Git 規約
 
-> 正本: `AGENTS.md` §ブランチ・worktree / `memo/システム刷新/システム刷新.md` §A-5
+> 正本: `AGENTS.md` §ブランチ・worktree
 >
-> 本ファイルは人間向けの説明文書である。**値（正規表現・タイムスタンプ書式・許可 type 一覧等）の正本は `config/agent-skill-chain.yaml`。** 値を変更したい場合は本ファイルではなく `config/agent-skill-chain.yaml` を更新すること。本ファイルに数値・正規表現をハードコードして二重管理にしない。
+> 本ファイルは人間向けの説明文書である。**値（正規表現・タイムスタンプ書式・許可 type 一覧等）の正本は `.agent-skill-chain/config/agent-skill-chain.yaml`。** 値を変更したい場合は本ファイルではなく `.agent-skill-chain/config/agent-skill-chain.yaml` を更新すること。本ファイルに数値・正規表現をハードコードして二重管理にしない。
 
 ## 配置・命名規則の4層構造
 
@@ -10,10 +10,10 @@
 
 | 層 | 役割 | 実体 |
 |---|---|---|
-| 1. 人間向け説明 | 規約の意図・理由を人間に説明する | 本ファイル（`standards/GIT_CONVENTIONS.md`） |
-| 2. 設定値・正規表現 | 命名パターン・許可 type・タイムスタンプ書式などの値の正本 | `config/agent-skill-chain.yaml` |
-| 3. 正しい名前の生成 | Issue 起票時に規約に従ったブランチ名・worktree パスを機械的に生成する | `scripts/issue-start.sh` |
-| 4. 検査・強制 | 生成された（または人手で作られた）ブランチ名・worktree パスが規約に適合するかを CI 等で検査する | `ci/verify-branch-name.sh` / `ci/verify-worktree-path.sh` |
+| 1. 人間向け説明 | 規約の意図・理由を人間に説明する | 本ファイル（`.agent-skill-chain/standards/GIT_CONVENTIONS.md`） |
+| 2. 設定値・正規表現 | 命名パターン・許可 type・タイムスタンプ書式などの値の正本 | `.agent-skill-chain/config/agent-skill-chain.yaml` |
+| 3. 正しい名前の生成 | Issue 起票時に規約に従ったブランチ名・worktree パスを機械的に生成する | `.agent-skill-chain/scripts/issue-start.sh` |
+| 4. 検査・強制 | 生成された（または人手で作られた）ブランチ名・worktree パスが規約に適合するかを CI 等で検査する | `.agent-skill-chain/ci/verify-branch-name.sh` / `.agent-skill-chain/ci/verify-worktree-path.sh` |
 
 新しい規則を追加・変更する場合も、この4層の役割分担を崩さないこと（例: 値を本ファイルに直接書き足さない、検査ロジックを `issue-start.sh` に混ぜない）。
 
@@ -26,7 +26,7 @@ type: feature | bugfix | hotfix | refactor | docs | process
 例:    feature/123-user-authentication
 ```
 
-- `type` は `config/agent-skill-chain.yaml` の `issue.allowed_types` に列挙された値のみを許可する。
+- `type` は `.agent-skill-chain/config/agent-skill-chain.yaml` の `issue.allowed_types` に列挙された値のみを許可する。
 - `#` は含めない（`feature/#123-...` のような記法は不可）。
 - Issue との紐付けはブランチ名自体では行わず、Draft PR 本文の `Closes #<issue-id>` によって行う。
 
@@ -47,7 +47,7 @@ worktree の正本は `git worktree list --porcelain` の出力であり、`.wor
 
 ## worktree の削除
 
-worktree を直接 `rm -rf` で削除してはならない。削除は必ず `scripts/cleanup.sh` 経由で行う。`cleanup.sh` は削除前に以下を検査する。
+worktree を直接 `rm -rf` で削除してはならない。削除は必ず `.agent-skill-chain/scripts/cleanup.sh` 経由で行う。`cleanup.sh` は削除前に以下を検査する。
 
 1. 当該 Issue に有効な writer lease が存在しないこと
 2. worktree 内に未 commit の変更が無いこと

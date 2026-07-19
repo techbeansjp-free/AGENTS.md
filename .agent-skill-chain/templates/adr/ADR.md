@@ -1,5 +1,5 @@
 <!--
-正本: AGENTS.md §ADR・テンプレート・テスト適用性 / memo/システム刷新/システム刷新.md §A-8, §3.2
+正本: AGENTS.md §ADR・テンプレート・テスト適用性
 このファイルは Issue 毎（design セグメント）に複製して使う雛形である。docs/adr/ に保存する。
 <...> のプレースホルダを実際の内容に置き換えて記入すること。
 -->
@@ -49,7 +49,7 @@ ADR finalization → writer lease を取得 → status を accepted へ更新
 ワーカー           → commit・push → content digest を再検査
 ```
 
-- `proposed → accepted`: 設計ゲート承認時に遷移する。設計レビュアは ADR 本文をレビューし content digest を承認するのみ（read-only、直接 status を書き換えない）。進行役が `scripts/adr-finalize.sh` を起動し、専任の ADR finalization ワーカーが writer lease を取得したうえで `status` のみを `accepted` に更新して commit・push する（`config/roles.yaml` の `adr_finalization_worker`、`scope: adr_status_only`）。finalization ワーカーは書込み前に content digest を再検査する。
+- `proposed → accepted`: 設計ゲート承認時に遷移する。設計レビュアは ADR 本文をレビューし content digest を承認するのみ（read-only、直接 status を書き換えない）。進行役が `.agent-skill-chain/scripts/adr-finalize.sh` を起動し、専任の ADR finalization ワーカーが writer lease を取得したうえで `status` のみを `accepted` に更新して commit・push する（`.agent-skill-chain/config/roles.yaml` の `adr_finalization_worker`、`scope: adr_status_only`）。finalization ワーカーは書込み前に content digest を再検査する。
 - `accepted → superseded`: 新しい ADR を含む同一 PR 内で、新 ADR の作者（ワーカー）が旧 ADR の `status` / `superseded-by` を同一 PR で更新する。`supersedes` ⇔ `superseded-by` の対称性・参照先の実在が機械検査される。
 - `accepted → deprecated`: 前提が消滅し後継が無い場合に遷移する。`deprecated-reason` に1行の理由を記録する（存在検査あり）。
 

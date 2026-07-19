@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 正本: templates/adr/ADR.md §related_adrs参照ルール / AGENTS.md §ADR・テンプレート・テスト適用性
+# 正本: .agent-skill-chain/templates/adr/ADR.md §related_adrs参照ルール / AGENTS.md §ADR・テンプレート・テスト適用性
 #
 # ADRのstale参照検査（related_adrs:の参照先が実在しaccepted状態か）、
-# supersedes⇔superseded-byの対称性検査を行う（templates/adr/ADR.md「related_adrs参照ルール」節）。
+# supersedes⇔superseded-byの対称性検査を行う（.agent-skill-chain/templates/adr/ADR.md「related_adrs参照ルール」節）。
 #
 # スタブ: 実処理は将来 `agent-skill-chain lint adr`（src/agents-md.ts のCLI再実装後）
 # として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。

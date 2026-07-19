@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 正本: schemas/gate-report.schema.yaml / config/agent-skill-chain.yaml coordination.backend, checks.*
+# 正本: .agent-skill-chain/schemas/gate-report.schema.yaml / .agent-skill-chain/config/agent-skill-chain.yaml coordination.backend, checks.*
 #
 # gate-reportをCheck Run（GitHubモード、agent-skill-chain/<gate>-gate）または
 # ローカルモード reviews/<gate>.yaml へ発行する。
@@ -15,7 +15,7 @@ usage() {
 使い方: gate-publish.sh <issue_id> <gate_report_path>
 
 issue_id:         ISSUE-<番号> 形式のIssue ID
-gate_report_path: schemas/gate-report.schema.yaml準拠のgate-reportファイルパス
+gate_report_path: .agent-skill-chain/schemas/gate-report.schema.yaml準拠のgate-reportファイルパス
 
 出力:
   成功時: 終了コード0。発行先（Check Run URLまたはreviews/<gate>.yamlパス）を標準出力へ。

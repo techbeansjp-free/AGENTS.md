@@ -1,4 +1,4 @@
-# 正本: AGENTS.md §不変条件I5（ワーカー報告固定スキーマ）/ config/roles.yaml の blocked_report_schema
+# 正本: AGENTS.md §不変条件I5（ワーカー報告固定スキーマ）/ .agent-skill-chain/config/roles.yaml の blocked_report_schema
 # 作業ワーカー（spec/design/implementation/validation）およびADR finalizationワーカーが
 # 完了・blocked時に進行役へ返す固定スキーマ。進行役はこのスキーマのみを読み、成果物の中身を
 # 読んで裁定しない（I5「進行役の純粋性」）。blocked時は推測で補完せず、明確なブロッカーを記述する。
@@ -29,7 +29,7 @@ properties:
   artifacts:
     type: array
     items: {type: string}
-    description: 完了時に作成・更新した成果物パスの一覧（config/roles.yaml の role_contracts.<role>.outputs に対応）。
+    description: 完了時に作成・更新した成果物パスの一覧（.agent-skill-chain/config/roles.yaml の role_contracts.<role>.outputs に対応）。
   blocked_reason:
     type: string
     description: "status=blocked の場合必須。推測で補完せず、明確なブロッカーを記述する。"

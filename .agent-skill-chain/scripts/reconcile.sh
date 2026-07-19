@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §役割・権限・writer lease / standards/SECURITY_POLICY.md writer leaseによる同時書込み制御
+# 正本: AGENTS.md §役割・権限・writer lease / .agent-skill-chain/standards/SECURITY_POLICY.md writer leaseによる同時書込み制御
 #
 # 期限切れwriter leaseを検出し、成果物のpush状態を確認したうえで回収するか、
 # 人間判断へ昇格する。

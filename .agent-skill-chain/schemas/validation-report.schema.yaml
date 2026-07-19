@@ -1,4 +1,4 @@
-# 正本: AGENTS.md §不変条件I7 / memo/システム刷新/システム刷新.md §A-9
+# 正本: AGENTS.md §不変条件I7
 # 全AC-IDと検証方法・証跡の対応を記録する。孤児AC・孤児テスト参照を禁止する（I7）。
 # 自動化可能なACは自動テストを必須。手動/混合は理由・手順・結果・証跡・実行者を必須とする。
 $schema: http://json-schema.org/draft-07/schema#
@@ -58,7 +58,7 @@ properties:
       evidence: {type: array, items: {type: string}}
 
 # mode=manual|hybrid の場合、reason・procedure・executor の3項目は required とみなす
-# （JSON Schemaのif/thenで強制する場合は ci/verify-ac-coverage.sh 側の実装で担保する）。
+# （JSON Schemaのif/thenで強制する場合は .agent-skill-chain/ci/verify-ac-coverage.sh 側の実装で担保する）。
 
 examples:
   - schema_version: agent-skill-chain/validation-report/v1

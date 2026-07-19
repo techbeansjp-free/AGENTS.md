@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §ブランチ・worktree / standards/GIT_CONVENTIONS.md worktreeの削除
+# 正本: AGENTS.md §ブランチ・worktree / .agent-skill-chain/standards/GIT_CONVENTIONS.md worktreeの削除
 #
-# worktreeを削除する。standards/GIT_CONVENTIONS.mdの削除条件（writer lease不在・
+# worktreeを削除する。.agent-skill-chain/standards/GIT_CONVENTIONS.mdの削除条件（writer lease不在・
 # 未commit変更なし・未push commitなし・PR/Integration Record完了済み）を検査してから
 # git worktree remove → git worktree prune を実行する。直接rm -rfしない。
 #

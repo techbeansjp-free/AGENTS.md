@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §4セグメント・4ゲート / config/agent-skill-chain.yaml review.* / schemas/gate-report.schema.yaml
+# 正本: AGENTS.md §4セグメント・4ゲート / .agent-skill-chain/config/agent-skill-chain.yaml review.* / .agent-skill-chain/schemas/gate-report.schema.yaml
 #
 # ゲートレビュア（conformance/falsification、Standardは1体・Strictは専任2体）を起動し、
-# schemas/gate-report.schema.yaml準拠のgate-reportを出力させる。
+# .agent-skill-chain/schemas/gate-report.schema.yaml準拠のgate-reportを出力させる。
 #
 # スタブ: 実処理は将来 `agent-skill-chain gate review`（src/agents-md.ts のCLI再実装後）
 # として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。
@@ -16,10 +16,10 @@ usage() {
 
 issue_id: ISSUE-<番号> 形式のIssue ID
 gate_id:  spec|design|implementation|validation
-profile:  standard|strict（config/agent-skill-chain.yaml review.*参照）
+profile:  standard|strict（.agent-skill-chain/config/agent-skill-chain.yaml review.*参照）
 
 出力:
-  成功時: 終了コード0。schemas/gate-report.schema.yaml準拠のgate-reportパスを標準出力へ。
+  成功時: 終了コード0。.agent-skill-chain/schemas/gate-report.schema.yaml準拠のgate-reportパスを標準出力へ。
   失敗時: 終了コード1以上。理由を標準エラー出力へ。
 USAGE
 }

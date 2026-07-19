@@ -1,4 +1,4 @@
-# 正本: AGENTS.md §コーディネーションバックエンド / memo/システム刷新/システム刷新.md §A-2, §A-3
+# 正本: AGENTS.md §コーディネーションバックエンド
 # Issue毎の状態モデル。ローカルモードでは state.yaml が正本。GitHubモードでは不使用またはキャッシュ。
 $schema: http://json-schema.org/draft-07/schema#
 schema_version: agent-skill-chain/state/v1

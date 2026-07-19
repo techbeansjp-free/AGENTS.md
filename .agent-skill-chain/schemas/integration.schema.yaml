@@ -1,4 +1,4 @@
-# 正本: AGENTS.md §4セグメント・4ゲート・§不変条件I4 / memo/システム刷新/システム刷新.md §A-3, §A-10
+# 正本: AGENTS.md §4セグメント・4ゲート・§不変条件I4
 # 1 Issue = 1 PR の集約状態。GitHubモードでは実PRの補助記録、ローカルモードでは
 # Integration Recordが正本となる（GitHub未連携時のDraft PR相当）。
 $schema: http://json-schema.org/draft-07/schema#

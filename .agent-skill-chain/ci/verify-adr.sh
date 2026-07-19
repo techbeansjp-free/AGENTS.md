@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §ADR・テンプレート・テスト適用性 / templates/adr/ADR.md
+# 正本: AGENTS.md §ADR・テンプレート・テスト適用性 / .agent-skill-chain/templates/adr/ADR.md
 #       §accepted後の不変項目・可変項目・§ライフサイクル・§related_adrs参照ルール
 #
 # ADR のライフサイクル（proposed → accepted → superseded/deprecated）遵守と
@@ -19,7 +19,7 @@ usage() {
   cat <<'USAGE'
 使い方: verify-adr.sh <adr_path>
 
-adr_path: 検査対象の ADR ファイルパス（docs/adr/ 配下、templates/adr/ADR.md 準拠）。
+adr_path: 検査対象の ADR ファイルパス（docs/adr/ 配下、.agent-skill-chain/templates/adr/ADR.md 準拠）。
 
 status が accepted 以降の場合、id・Context・Decision・Consequences・supersedes が
 過去バージョンから変更されていないか、related_adrs が accepted の ADR のみを

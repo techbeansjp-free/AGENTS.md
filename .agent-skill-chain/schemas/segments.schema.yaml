@@ -1,5 +1,5 @@
-# 正本: AGENTS.md §4セグメント・4ゲート / memo/システム刷新/システム刷新.md §A-3
-# config/segments.yaml（固定4セグメントの入出力マニフェスト）自体の構造を検査するスキーマ。
+# 正本: AGENTS.md §4セグメント・4ゲート
+# .agent-skill-chain/config/segments.yaml（固定4セグメントの入出力マニフェスト）自体の構造を検査するスキーマ。
 # セグメントの追加・変更は破壊的変更（ADR + AGENTS.md改定 + schema_version更新 + migration必須）。
 $schema: http://json-schema.org/draft-07/schema#
 schema_version: agent-skill-chain/segments/v1

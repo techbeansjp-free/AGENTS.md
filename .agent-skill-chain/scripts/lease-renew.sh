@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 正本: schemas/lease.schema.yaml / config/agent-skill-chain.yaml lease.renewal_interval_seconds
+# 正本: .agent-skill-chain/schemas/lease.schema.yaml / .agent-skill-chain/config/agent-skill-chain.yaml lease.renewal_interval_seconds
 #
-# 保持中のwriter leaseを延長する。config/agent-skill-chain.yaml の
+# 保持中のwriter leaseを延長する。.agent-skill-chain/config/agent-skill-chain.yaml の
 # lease.renewal_interval_seconds を用いる。
 #
 # スタブ: 実処理は将来 `agent-skill-chain lease renew`（src/agents-md.ts のCLI再実装後）

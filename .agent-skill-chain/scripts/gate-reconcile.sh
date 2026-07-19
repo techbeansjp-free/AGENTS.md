@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §ゲートの継承・無効化 / schemas/gate-report.schema.yaml 無効化ルール
+# 正本: AGENTS.md §ゲートの継承・無効化 / .agent-skill-chain/schemas/gate-report.schema.yaml 無効化ルール
 #
 # pushごとにapproved_artifactsのdigestを照合し、変化なしなら最新SHAへ成功を再発行、
 # 変化ありなら当該ゲートと全下流ゲートを無効化する
-# （対応表はschemas/gate-report.schema.yaml末尾の無効化ルールを参照）。
+# （対応表は.agent-skill-chain/schemas/gate-report.schema.yaml末尾の無効化ルールを参照）。
 #
 # スタブ: 実処理は将来 `agent-skill-chain gate reconcile`（src/agents-md.ts のCLI再実装後）
 # として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。

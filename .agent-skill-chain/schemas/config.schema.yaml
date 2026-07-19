@@ -1,5 +1,5 @@
-# 正本: AGENTS.md §設定 / config/agent-skill-chain.yaml
-# config/agent-skill-chain.yaml 自体の構造を検査するスキーマ。
+# 正本: AGENTS.md §設定 / .agent-skill-chain/config/agent-skill-chain.yaml
+# .agent-skill-chain/config/agent-skill-chain.yaml 自体の構造を検査するスキーマ。
 $schema: http://json-schema.org/draft-07/schema#
 schema_version: agent-skill-chain/config/v1
 title: agent-skill-chain config
@@ -141,7 +141,7 @@ examples:
     wip: {limit: 3, count_by: active_writer_lease}
     lease: {ttl_seconds: 3600, renewal_interval_seconds: 900}
     bdd: {profile: standard}
-    templates: {github_source: templates/github/.github, github_target: .github, verify_sync: true}
+    templates: {github_source: .agent-skill-chain/templates/github/.github, github_target: .github, verify_sync: true}
     checks:
       spec: agent-skill-chain/spec-gate
       design: agent-skill-chain/design-gate

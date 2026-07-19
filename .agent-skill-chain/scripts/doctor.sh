@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §コーディネーションバックエンド / config/agent-skill-chain.yaml
+# 正本: AGENTS.md §コーディネーションバックエンド / .agent-skill-chain/config/agent-skill-chain.yaml
 #
 # 環境診断（git・gh・Coordination Backend用の認証状態等、必要な外部依存の有無）を検査する。
 #

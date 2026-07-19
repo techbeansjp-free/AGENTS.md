@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §ADR・テンプレート・テスト適用性 / config/roles.yaml adr_finalization_worker /
-#      templates/adr/ADR.md ライフサイクル
+# 正本: AGENTS.md §ADR・テンプレート・テスト適用性 / .agent-skill-chain/config/roles.yaml adr_finalization_worker /
+#      .agent-skill-chain/templates/adr/ADR.md ライフサイクル
 #
 # 設計ゲート承認後、進行役が起動する。ADR finalizationワーカーがwriter leaseを取得のうえ
 # ADRのstatusをacceptedへ更新してcommit・push する
-# （config/roles.yaml の adr_finalization_worker、scope: adr_status_only）。
+# （.agent-skill-chain/config/roles.yaml の adr_finalization_worker、scope: adr_status_only）。
 #
 # スタブ: 実処理は将来 `agent-skill-chain adr finalize`（src/agents-md.ts のCLI再実装後）
 # として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。

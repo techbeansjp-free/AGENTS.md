@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §4セグメント・4ゲート / schemas/integration.schema.yaml
+# 正本: AGENTS.md §4セグメント・4ゲート / .agent-skill-chain/schemas/integration.schema.yaml
 #
 # SPECワーカーが最初のcheckpoint push後にDraft PRを作成する（Closes #<issue-id>）。
-# GitHubモードでは実PR、ローカルモードではschemas/integration.schema.yaml準拠の
+# GitHubモードでは実PR、ローカルモードでは.agent-skill-chain/schemas/integration.schema.yaml準拠の
 # Integration Recordを作成する。
 #
 # スタブ: 実処理は将来 `agent-skill-chain pr create`（src/agents-md.ts のCLI再実装後）

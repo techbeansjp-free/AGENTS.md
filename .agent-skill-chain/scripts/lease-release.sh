@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 正本: schemas/lease.schema.yaml / AGENTS.md §役割・権限・writer lease
+# 正本: .agent-skill-chain/schemas/lease.schema.yaml / AGENTS.md §役割・権限・writer lease
 #
 # 保持中のwriter leaseを解放する。
 #

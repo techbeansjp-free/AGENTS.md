@@ -3,7 +3,7 @@
 #
 # 規範文書・ソースコードコメントに含まれるセクション番号参照（例: 「§3.2を参照」）・
 # ファイルパス＋行番号参照（例: `src/foo.ts:123`）を検査する。対象は生きたファイル
-# （AGENTS.md・standards/・templates/・config/・schemas/・scripts/・ci/等）であり、
+# （AGENTS.md・.agent-skill-chain/standards/・.agent-skill-chain/templates/・.agent-skill-chain/config/・.agent-skill-chain/schemas/・.agent-skill-chain/scripts/・.agent-skill-chain/ci/等）であり、
 # memo/等の非追跡scratchは対象外。`related_adrs:` 等の構造化フィールド経由の参照は
 # AGENTS.md §成果物の自己完結性 により対象外。機械処理用manifest・テスト証跡・
 # エラー出力での使用は許可する。
