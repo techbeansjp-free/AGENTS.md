@@ -165,7 +165,7 @@ test_paths_match_distribution_files() {
   r2="$(fnmatch_match "package.json" "${patterns[@]}")"
   r3="$(fnmatch_match ".claude-plugin/marketplace.json" "${patterns[@]}")"
   # Then: .agent-skill-chain/source/ 配下のファイルは一致と判定される
-  assert_eq "$r1" "match" ".agent-skill-chain/source/skills/architecture/x.md が一致すると判定される"
+  assert_eq "$r1" "SMOKETEST_INTENTIONAL_WRONG_VALUE" ".agent-skill-chain/source/skills/architecture/x.md が一致すると判定される"
   # And (Then): package.json は一致と判定される
   assert_eq "$r2" "match" "package.json が一致すると判定される"
   # And (Then): .claude-plugin/marketplace.json は一致と判定される
