@@ -5,6 +5,9 @@ import { resolveAsset } from './paths.js';
 
 // スキーマ側が schema_version（非標準の注記キー）を宣言しているため strict:false で許容する。
 const ajv = new Ajv({ strict: false, allErrors: true });
+// lease.schema.yaml が使う format: date-time はここでは形式検証しない（ajv-formats
+// 依存追加を避けるための簡易許容）。値の妥当性は new Date().toISOString() 生成元で担保する。
+ajv.addFormat('date-time', true);
 const compiled = new Map<string, ValidateFunction>();
 
 export type SchemaName =

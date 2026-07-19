@@ -86,3 +86,25 @@ export function findIssueWorktree(
   const pathRegex = new RegExp(`^${patternSource}/?$`);
   return listWorktrees(root).find((w) => pathRegex.test(path.basename(w.path)));
 }
+
+/** 特定Issue番号に限定しない、worktree.path_pattern汎用の検証用正規表現。ci/verify-worktree-path.sh用。 */
+export function worktreePathRegex(config: AgentSkillChainConfig): RegExp {
+  const timestampSource = formatToRegex(config.worktree.timestamp.format).source.replace(/^\^|\$$/g, '');
+  const patternSource = expandPattern(config.worktree.path_pattern, {
+    issue_created_at: timestampSource,
+    type: `(?:${config.issue.allowed_types.join('|')})`,
+    issue_id: '[0-9]+',
+    slug: `[a-z0-9-]{1,${config.worktree.slug_max_length}}`,
+  });
+  return new RegExp(`^${patternSource}/?$`);
+}
+
+/** branch.pattern汎用の検証用正規表現。ci/verify-branch-name.sh用。 */
+export function branchNameRegex(config: AgentSkillChainConfig): RegExp {
+  const patternSource = expandPattern(config.branch.pattern, {
+    type: `(?:${config.issue.allowed_types.join('|')})`,
+    issue_id: '[0-9]+',
+    slug: `[a-z0-9-]{1,${config.worktree.slug_max_length}}`,
+  });
+  return new RegExp(`^${patternSource}$`);
+}

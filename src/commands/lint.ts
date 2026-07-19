@@ -70,17 +70,39 @@ export async function vocab(args: string[]): Promise<number> {
   });
 }
 
-const SECTION_REF_RE = /§([^\s、。,\)）」』】]+)/gu;
+// §参照が指す見出しテキストは括弧の手前で終わるのが通例（例:「§不変条件I7（仕様⇔検証の追跡）」の
+// 括弧内は見出しの補足であり参照本体ではない）ため、開き括弧の類でも捕捉を止める。
+const SECTION_REF_RE = /§([^\s、。,\)）(（「」『』【】]+)/gu;
 const FILE_LINE_REF_RE = /\b[\w./-]+\.\w{1,10}:[0-9]+\b/g;
 
-function extractHeadings(agentsMdPath: string): string[] {
-  if (!fs.existsSync(agentsMdPath)) return [];
+function extractHeadings(filePath: string): string[] {
   const headings: string[] = [];
-  for (const line of fs.readFileSync(agentsMdPath, 'utf8').split('\n')) {
+  for (const line of fs.readFileSync(filePath, 'utf8').split('\n')) {
     const m = /^#{1,6}\s+(.+)$/.exec(line);
     if (m) headings.push(m[1].trim().replace(/\s+/g, ''));
   }
   return headings;
+}
+
+/** 末尾の英数字・ローマ数字風コード（例: 見出し「不変条件 I1〜I8」に対する参照「§不変条件I7」の
+ * 「I7」部分）を取り除いた芯部分で比較する。AGENTS.md I1〜I8 のような、見出し内に列挙された
+ * 安定IDへの参照は本文の「陳腐化防止」原則の対象外（安定ID使用は明示的に許可されている）。 */
+function headingCore(value: string): string {
+  return value.replace(/(?:[・、,]?[0-9A-Za-z〜～\-]+)+$/u, '');
+}
+
+/** 「§3.2を参照」のように、禁止パターン自体を例示する引用（「」・バッククォート囲み）は
+ * ルール本文中の説明であって実際の参照ではないため対象外とする。 */
+function isQuotedExample(line: string, matchIndex: number | undefined, matchLength: number, open: string, close: string): boolean {
+  if (matchIndex === undefined) return false;
+  return line[matchIndex - 1] === open && line[matchIndex + matchLength] === close;
+}
+
+function isResolvable(captured: string, headings: string[]): boolean {
+  if (headings.some((h) => h.startsWith(captured) || captured.startsWith(h))) return true;
+  const core = headingCore(captured);
+  if (!core) return false;
+  return headings.some((h) => headingCore(h) === core);
 }
 
 export async function references(args: string[]): Promise<number> {
@@ -90,21 +112,22 @@ export async function references(args: string[]): Promise<number> {
       return 0;
     }
     const root = repoRoot();
-    const headings = extractHeadings(path.join(root, 'AGENTS.md'));
     const files = walkTextFiles(resolveTargets(args, root));
+    const headings = [...new Set(files.filter((f) => f.endsWith('.md')).flatMap((f) => extractHeadings(f)))];
 
     const violations: string[] = [];
     for (const file of files) {
       const lines = fs.readFileSync(file, 'utf8').split('\n');
       lines.forEach((line, index) => {
         for (const match of line.matchAll(SECTION_REF_RE)) {
+          if (isQuotedExample(line, match.index, match[0].length, '「', '」')) continue;
           const captured = match[1].replace(/\s+/g, '');
-          const resolvable = headings.some((h) => h.startsWith(captured) || captured.startsWith(h));
-          if (!resolvable) {
+          if (!isResolvable(captured, headings)) {
             violations.push(`${file}:${index + 1}: 禁止参照 '§${match[1]}'（見出しテキストで解決できないセクション番号参照）`);
           }
         }
         for (const match of line.matchAll(FILE_LINE_REF_RE)) {
+          if (isQuotedExample(line, match.index, match[0].length, '`', '`')) continue;
           violations.push(`${file}:${index + 1}: 禁止参照 '${match[0]}'（ファイルパス＋行番号参照）`);
         }
       });

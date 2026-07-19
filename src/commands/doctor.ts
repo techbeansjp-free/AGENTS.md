@@ -1,4 +1,4 @@
-import { commandExists, run } from '../lib/exec.js';
+import { commandExists, run as exec } from '../lib/exec.js';
 import { loadConfig } from '../lib/config.js';
 import { repoRoot } from '../lib/paths.js';
 import { isHelp, printUsage, guard } from '../lib/cli-io.js';
@@ -19,7 +19,7 @@ interface Check {
   reason?: string;
 }
 
-export async function run_(args: string[]): Promise<number> {
+export async function run(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
       printUsage(USAGE);
@@ -40,13 +40,13 @@ export async function run_(args: string[]): Promise<number> {
     if (root) {
       try {
         const config = loadConfig(root);
-        checks.push({ label: 'config/agent-skill-chain.yaml', ok: true });
+        checks.push({ label: '.agent-skill-chain/config/agent-skill-chain.yaml', ok: true });
 
         if (config.coordination.backend === 'github') {
           const ghOk = commandExists('gh');
           checks.push({ label: 'gh CLI', ok: ghOk, reason: ghOk ? undefined : 'gh コマンドが見つかりません' });
           if (ghOk) {
-            const auth = run('gh', ['auth', 'status']);
+            const auth = exec('gh', ['auth', 'status']);
             checks.push({
               label: 'gh auth status',
               ok: auth.status === 0,
@@ -55,7 +55,7 @@ export async function run_(args: string[]): Promise<number> {
           }
         }
       } catch (error) {
-        checks.push({ label: 'config/agent-skill-chain.yaml', ok: false, reason: (error as Error).message });
+        checks.push({ label: '.agent-skill-chain/config/agent-skill-chain.yaml', ok: false, reason: (error as Error).message });
       }
     }
 
