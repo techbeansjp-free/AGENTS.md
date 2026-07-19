@@ -79,6 +79,30 @@ Check Run は commit SHA に紐づく。`scripts/gate-reconcile.sh` が push ご
 
 ADR は `proposed → accepted`（設計ゲート承認時、finalization ワーカーが writer lease 取得の上 status のみ更新）→ `superseded/deprecated` のライフサイクルを取り、`docs/adr/` に保存する。テンプレート正本は `templates/`（`templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`、`templates/adr/ADR.md`、`templates/github/.github/...`）。AC ごとの検証方法・適用すべきテスト種別（常時必須／変更種別ごと／リリース単位）は `standards/TEST_POLICY.md` を正本とする。
 
+## 成果物の自己完結性
+
+各成果物（`SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md`・ADR・`docs/system-spec/` 等）は、自身の責務範囲について目的・対象範囲・前提・用語・入力・出力・要求または判断内容・制約・完了条件・検証方法・未決事項・対象外を**内部に**記載する。外部参照は由来・追跡・根拠を示す補助情報としてのみ用い、成果物の意味を外部へ委譲してはならない。
+
+```text
+禁止: 詳細はIssue #123を参照。仕様はADR-0012を参照。動作は実装コードを参照。
+許可: 本成果物内に必要な要求・動作・制約を完全に記載する。
+      Issue #123・ADR-0012は由来・根拠を示す補助情報としてのみ記載する。
+```
+
+自己完結の単位は成果物パッケージであり、ディレクトリ全体で1つの成果物となる場合を含む（例：`docs/system-spec/`）。パッケージ内部のモジュール間参照は許容する。`related_adrs:` のような構造化フィールド経由の参照は、判断の帰結自体を自己完結して記載したうえでの由来提示であり本原則には抵触しない（`templates/adr/ADR.md` §related_adrs参照ルール）。ADRは「なぜその判断をしたか」を記録する成果物であり、参照元（例：`DESIGN.md`）は設計要素・責務・境界を自己完結して記載したうえで、根拠として当該ADRを併記する。
+
+## 参照・コメントの陳腐化防止
+
+規範文書・ソースコードコメントでは、セクション番号参照（例：「§3.2を参照」）・ファイルパス＋行番号参照（例：`src/foo.ts:123`）を禁止する。セクション追加・ファイル分割・見出し移動のたびに参照が陳腐化し、AI がその陳腐化に気付かず古い位置情報を正しいものとして誤解釈するため。機械処理用manifest・テスト証跡・エラー出力での使用は許可する。`docs/system-spec/` 内部では安定ID（例：`ASC-GATE-FR-0014`）を用いる。参照元にはその文脈で必要な契約の要旨を本文へ記載し、参照だけで意味を委譲しない（前節「成果物の自己完結性」）。禁止参照の機械検査は `scripts/lint-references.sh` が行う（対象：生きたファイル。`related_adrs:` 等の構造化フィールド経由の参照は前節により対象外）。
+
+ソースコードコメントは、コードから読み取れない「なぜ」を説明し、処理内容の逐語的な説明は書かない。非自明な制約・互換処理・回避策・例外処理には、追跡識別子として **Issue ID のみ**を記載してよい（例：`// Issue #123: ...`）。文書の章番号・見出し位置・行番号への参照は禁止する（本節冒頭と同じ理由）。要求ID・ADR ID・テストIDの対応はソースコメントではなく機械管理されるtraceability情報（`docs/system-spec/90-traceability/`、実体構築は別途ADRによる段階導入）で管理する。
+
+## `docs/system-spec/`（システム仕様書）
+
+Issue をまたいで永続する、システムの外部から観測できる振る舞い・機能・状態・制約・権限・異常時の振る舞い・非機能要求を集約する唯一の正本。Issue 単位の `SPEC.md`（今回の Issue で仕様をどう変更するか、Issue 毎に破棄）・ADR（なぜその判断をしたか）とは役割を分離する。参照可能な情報源は (a) system-spec内部の別モジュール（安定IDを介した参照）、(b) 外部の公式一次情報のみとし、Issue・PR・commit・ソースコード・テストコード・AGENTS.md・ADR・`DESIGN.md`・`PLAN.md`・`VALIDATION.md`・会話履歴・非公式サイトを規範的参照先にしてはならない。依存方向は「外部公式一次情報 → システム仕様書 → Issue SPEC → DESIGN/PLAN → ADR → 実装 → テスト・VALIDATION」の一方向であり、システム仕様書は下流に依存してはならない。
+
+**現状**：新設する方針とディレクトリ・スキーマ設計は `docs/adr/ADR-0001-docs-system-spec-construction.md`（`status: proposed`）で確定済み。実体（ディレクトリ・`schemas/system-spec.schema.yaml`・`config/system-spec-sources.yaml`・`config/roles.yaml` の読み取りscope追加等）はこの ADR が accepted になった後、別 Issue で構築する（`config/segments.yaml` のoutputsの意味的変更を伴うため、本ファイル §4セグメント・4ゲート が定める「セグメント自体の追加・変更は破壊的変更、ADR作成必須」の規約に従う）。構築完了までは `system_spec_impact` フィールドの必須化を含む下流の統合は行わない。
+
 ## GitHub配布・マルチAI対応
 
 `templates/github/.github/` を配布元の正本とし、対象リポジトリの `.github/` はその展開結果（`scripts/verify-template-sync.sh` で同期検査）。ラベル・ruleset は GitHub API 経由のみで適用（`provisioning/labels.yaml` → `scripts/setup-labels.sh`、`provisioning/rulesets/main.json` → `scripts/setup-ruleset.sh`）。作業エージェントの実体はベンダー中立の role contract（`config/roles.yaml`）を正本とし、`adapters/{claude,codex,human}.sh` が実行系へ変換する。
@@ -98,7 +122,7 @@ schemas/{state,gate-report,validation-report,worker-report,integration,lease,seg
 config/{agent-skill-chain.yaml, segments.yaml, roles.yaml}
 adapters/{claude,codex,human}.sh
 scripts/  (setup*, issue-start/resume, lease-*, segment-start, gate-*, pr-create,
-           adr-finalize, cleanup, doctor, reconcile, lint-vocab, adr-lint)
+           adr-finalize, cleanup, doctor, reconcile, lint-vocab, lint-references, adr-lint)
 ci/  (verify-branch-name, verify-worktree-path, verify-template-sync,
       verify-ac-coverage, verify-gate-report, verify-artifacts, verify-adr)
 .github/            # templates/github/.github/ の展開結果
