@@ -42,6 +42,7 @@ jobs:
         env:
           BRANCH: ${{ github.head_ref }}
           LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
           if ! [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
@@ -49,6 +50,7 @@ jobs:
             exit 1
           fi
           echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
           PROFILE=standard
           if ! echo "$LABELS_JSON" | grep -q '"risk:normal"'; then PROFILE=strict; fi
@@ -61,8 +63,50 @@ jobs:
           REPORT_PATH="$(./.agent-skill-chain/scripts/gate-review.sh "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}")"
           echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
 
+      # 判定ステップ（欠落していた「判定工程」）: config で選択したアダプタの launch_gate_reviewer を
+      # 起動し、pending gate-report を判定済みへ遷移させる（または deferred を表明する）。
+      # 終了コードで後続を分岐する（絶対に崩さない不変契約・AGENTS.md I8）:
+      #   0        判定完了 → verify + publish
+      #   3        deferred（human 非同期）→ publish が action_required 発行・pending 拒否スキップ・job 緑
+      #   その他    error → publish が action_required 発行（フェイルセーフ）+ 末尾で step を赤に可視化
+      # レビュア認証は secrets を env で渡す（実値はログに出さない）。
+      - name: Run gate reviewer judgment (${{ matrix.gate }})
+        id: judgment
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set +e
+          ./.agent-skill-chain/scripts/gate-launch-reviewer.sh \
+            "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}" \
+            "${{ steps.review.outputs.report_path }}" "${{ steps.ctx.outputs.target_sha }}"
+          CODE=$?
+          set -e
+          if [ "$CODE" -eq 0 ]; then
+            echo "outcome=completed" >> "$GITHUB_OUTPUT"
+          elif [ "$CODE" -eq 3 ]; then
+            echo "outcome=deferred" >> "$GITHUB_OUTPUT"
+          else
+            echo "outcome=error" >> "$GITHUB_OUTPUT"
+          fi
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+
+      # 判定完了時のみスキーマ検証を通す（deferred/error は human_required で schema 準拠のまま publish へ）。
       - name: Verify gate report schema
+        if: steps.judgment.outputs.outcome == 'completed'
         run: ./.agent-skill-chain/ci/verify-gate-report.sh "${{ steps.review.outputs.report_path }}"
 
+      # completed/deferred/error のいずれでも publish する。final に応じ success/failure/action_required を発行し、
+      # 真に未レビュー（final==pending）のみ拒否する（起動失敗を決して success にしない＝I8）。
       - name: Publish gate report
+        if: steps.judgment.outputs.outcome != ''
         run: ./.agent-skill-chain/scripts/gate-publish.sh "${{ steps.ctx.outputs.issue_id }}" "${{ steps.review.outputs.report_path }}"
+
+      # error（起動失敗・timeout・未構成）は publish で action_required を発行したうえで、step を赤にして
+      # 可視化する（merge は action_required でブロック済み。ここでの失敗は「判定が完了しなかった」ことの通知）。
+      - name: Surface reviewer error
+        if: steps.judgment.outputs.outcome == 'error'
+        run: |
+          echo "ゲートレビュア判定が完了しませんでした（launch_gate_reviewer exit=${{ steps.judgment.outputs.code }}）。gate は action_required（merge blocked）です。" >&2
+          exit 1

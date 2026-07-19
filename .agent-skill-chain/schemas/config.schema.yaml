@@ -33,6 +33,7 @@ properties:
     required: [standard, strict]
     additionalProperties: false
     properties:
+      adapter: {type: string, enum: [claude, codex, human]}
       standard:
         type: object
         required: [reviewer_count, modes]
