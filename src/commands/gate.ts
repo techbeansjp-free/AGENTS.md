@@ -146,7 +146,9 @@ export async function publish(args: string[]): Promise<number> {
             : `blockers: ${JSON.stringify(report.gate.blockers)}`,
       },
     });
-    const result = gh(['api', 'repos/{owner}/{repo}/check-runs', '--input', '-'], root, body);
+    // gh api は --input だけではPOSTにならず既定のGETのまま送信されてしまう（-f/-Fを渡した場合の
+    // みPOSTへ暗黙変更される。setup.ts の rulesetStep() と同様に -X で明示する必要がある）。
+    const result = gh(['api', '-X', 'POST', 'repos/{owner}/{repo}/check-runs', '--input', '-'], root, body);
     if (result.status !== 0) return fail(`Check Run 発行に失敗しました: ${result.stderr.trim()}`);
     try {
       const parsed = JSON.parse(result.stdout) as { html_url?: string };

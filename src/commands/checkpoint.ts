@@ -35,7 +35,10 @@ export async function run(args: string[]): Promise<number> {
     if (commit.status !== 0) return fail(`git commit に失敗しました: ${commit.stderr.trim()}`);
 
     const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], root).stdout.trim();
-    const push = git(['push', 'origin', branch], root);
+    // -u で upstream 追跡を設定する（worktree add -b で作成した新規branchは追跡未設定のため、
+    // 素の push だけでは lib/worktree.ts の hasUnpushedCommits が @{upstream} を解決できず、
+    // push成功後も常に「未push」と誤判定してしまう）。
+    const push = git(['push', '-u', 'origin', branch], root);
     if (push.status !== 0) return fail(`git push に失敗しました（commitは成功済み）: ${push.stderr.trim()}`);
 
     const sha = git(['rev-parse', 'HEAD'], root).stdout.trim();

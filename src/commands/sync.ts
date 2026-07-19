@@ -20,7 +20,9 @@ export async function templates(args: string[]): Promise<number> {
       return 0;
     }
     const targetDir = args[0] ? path.resolve(args[0]) : process.cwd();
-    const source = resolveAsset(path.join('templates', 'github', '.github'));
+    // setup.ts の syncStep() と同様、target_dir を root として明示する（省略すると repoRoot()
+    // が cwd 起点で .git を遡るため、cwd が非git・target_dirと異なるリポジトリの場合に破綻する）。
+    const source = resolveAsset(path.join('templates', 'github', '.github'), targetDir);
     const dest = path.join(targetDir, '.github');
 
     const results = copyTreeMirror(source, dest);

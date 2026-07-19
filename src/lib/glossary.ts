@@ -21,7 +21,7 @@ export function parseForbiddenTerms(glossaryPath: string): ForbiddenTerm[] {
       .split('|')
       .map((c) => c.trim());
     if (cells.length !== 3) continue;
-    if (cells[0] === '用語' || /^-+$/.test(cells[0].replace(/[^-]/g, '-'))) continue;
+    if (cells[0] === '用語') continue;
     if (/^-{2,}$/.test(cells[0])) continue;
     rows.push({ term: stripBackticks(cells[0]), forbiddenRaw: cells[2] });
   }

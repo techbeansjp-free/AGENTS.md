@@ -70,10 +70,13 @@ export async function finalize(args: string[]): Promise<number> {
     const fenceMatch = /```yaml\n([\s\S]*?)```/.exec(text);
     if (!fenceMatch) throw new CliError(`${adrRelPath} に templates/adr/ADR.md 準拠のyamlフロントマターが見つかりません`);
     const frontmatter = fenceMatch[1];
-    if (!/^status:\s*proposed\s*$/m.test(frontmatter)) {
+    // templates/adr/ADR.md 本来の `status: proposed   # proposed | accepted | ...` という
+    // インラインコメント付き行も許容する（コメント無し厳密一致だと、テンプレートをそのまま
+    // 複製しただけのADRが finalize できなくなるため）。
+    if (!/^status:\s*proposed\s*(#.*)?$/m.test(frontmatter)) {
       throw new CliError(`${adrRelPath} は status: proposed ではありません（既に accepted 済み、または不正な状態）`);
     }
-    const updatedFrontmatter = frontmatter.replace(/^status:\s*proposed\s*$/m, 'status: accepted');
+    const updatedFrontmatter = frontmatter.replace(/^status:\s*proposed\s*(#.*)?$/m, 'status: accepted');
     const updatedText = text.replace(frontmatter, updatedFrontmatter);
     fs.writeFileSync(adrPath, updatedText, 'utf8');
 

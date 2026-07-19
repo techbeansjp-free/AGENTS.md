@@ -49,7 +49,11 @@ export async function worktreePath(args: string[]): Promise<number> {
     const root = repoRoot();
     const config = loadConfig(root);
     const regex = worktreePathRegex(config);
-    const targets = args.length > 0 ? args : listWorktrees(root).map((w) => w.path);
+    // 引数省略時は git worktree list --porcelain の全entryが対象になるが、その先頭は常に
+    // 主worktree（root自身）であり、Issue worktree命名規則には決して適合しないため、
+    // 除外しないと1件以上のworktreeが存在する限り必ず違反してしまう。
+    const targets =
+      args.length > 0 ? args : listWorktrees(root).map((w) => w.path).filter((p) => path.resolve(p) !== path.resolve(root));
     const bad = targets.filter((p) => !regex.test(path.basename(p)));
     return violations(bad.map((p) => `worktree '${p}' は worktree.path_pattern（${config.worktree.path_pattern}）に適合しません`));
   });
