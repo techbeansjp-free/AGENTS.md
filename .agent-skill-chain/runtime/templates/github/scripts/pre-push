@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+# pre-push: プッシュ対象の変更ファイルに応じて検証（make test / test-frontend / test-backend）を実行する。
+# 失敗時は push を中止する。設置: make setup-hooks
+#
+# テンプレート: .agent-skill-chain/runtime/templates/github/scripts/pre-push（パッケージルート基準）
+# 採用先では リポジトリルートの scripts/pre-push にコピーし、必要なら scripts/pre-push.conf でカスタマイズする。
+#
+# 注意: 本スクリプトが書き出す scripts/logs/ のログは**ローカル検証・デバッグ用**であり、
+#       ワークフロー契約（CONTRACT / workflow.db）のログとは別物である。トレーサビリティの正本は workflow.db のみ。
+#
+# 汎用版。次の環境変数または設定ファイルでカスタマイズ可能。
+#   PREPUSH_BACKEND_DIR   - バックエンドのパス接頭辞（既定: backend）
+#   PREPUSH_FRONTEND_DIR  - フロントエンドのパス接頭辞（既定: frontend）
+#   PREPUSH_MAKE_FULL     - 全体テストの Make ターゲット（既定: test）
+#   PREPUSH_MAKE_BACKEND  - バックエンドのみの Make ターゲット（既定: test-backend）
+#   PREPUSH_MAKE_FRONTEND - フロントエンドのみの Make ターゲット（既定: test-frontend）
+# ログローテーション（設定ファイルまたは環境変数で上書き可能）
+#   PREPUSH_LOG_MAX_LINES   - pre-push.log の最大保持行数（超過時は古い行を削除）。既定: 5000
+#   PREPUSH_MAKE_LOG_KEEP   - 保持する pre-push-make-*.log の最大件数（採用先で make 出力をファイル保存する場合）。既定: 30
+# 設定ファイル（あれば上記を上書き）: scripts/pre-push.conf または .pre-push.conf（リポジトリルート）
+
+set -o pipefail
+set -e
+
+# PATH: IDE 等では継承 PATH が最小限のため、make/pnpm/poetry が通るようにする。
+# .zshrc/.bashrc の source は非対話フックでハング・副作用の原因になるため行わない。
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin:${PATH:-}"
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
+cd "$ROOT" || exit 1
+
+# 起動時必ずログを試行（失敗時は stderr に出力。ログが残らない問題の切り分け用）
+log_dir="${ROOT}/scripts/logs"
+PREPUSH_LOG_FILE="${log_dir}/pre-push.log"
+if ! mkdir -p "$log_dir" 2>/dev/null; then
+  echo "pre-push: ログディレクトリを作成できません: $log_dir" >&2
+elif ! ( printf '[%s] pre-push started PWD=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$ROOT" >> "$PREPUSH_LOG_FILE" ) 2>/dev/null; then
+  echo "pre-push: ログファイルに書き込めません: $PREPUSH_LOG_FILE" >&2
+fi
+
+# 既定値（設定ファイルで上書き可能）
+PREPUSH_BACKEND_DIR="${PREPUSH_BACKEND_DIR:-backend}"
+PREPUSH_FRONTEND_DIR="${PREPUSH_FRONTEND_DIR:-frontend}"
+PREPUSH_MAKE_FULL="${PREPUSH_MAKE_FULL:-test}"
+PREPUSH_MAKE_BACKEND="${PREPUSH_MAKE_BACKEND:-test-backend}"
+PREPUSH_MAKE_FRONTEND="${PREPUSH_MAKE_FRONTEND:-test-frontend}"
+PREPUSH_LOG_MAX_LINES="${PREPUSH_LOG_MAX_LINES:-5000}"
+PREPUSH_MAKE_LOG_KEEP="${PREPUSH_MAKE_LOG_KEEP:-30}"
+for f in "scripts/pre-push.conf" ".pre-push.conf"; do
+  [[ -f "$f" ]] && { set +e; . "./$f" 2>/dev/null; set -e; break; }
+done
+
+# スコープ判定: 1ファイル1スコープに分類してからマージ（考慮漏れ防止・保守性のため明示的パス一覧化）
+# 分類順は「上から最初にマッチしたもの」が採用される。
+classify_one() {
+  local path="$1"
+  [[ -z "$path" ]] && { echo "full"; return; }
+  # 契約・依存変更は安全側で full（テストスキップしない）
+  if [[ "$path" == openapi*.yaml ]] || [[ "$path" == "package.json" ]] \
+    || [[ "$path" == "pnpm-lock.yaml" ]] || [[ "$path" == "pyproject.toml" ]] \
+    || [[ "$path" == "poetry.lock" ]] || [[ "$path" == "${PREPUSH_FRONTEND_DIR}/package.json" ]]; then
+    echo "full"; return
+  fi
+  # 1. docs_only: ドキュメント・図・画像（テスト不要）
+  if [[ "$path" == docs/* ]] || [[ "$path" == *.md ]] || [[ "$path" == *.txt ]] || [[ "$path" == *.adoc ]] \
+    || [[ "$path" == README* ]] || [[ "$path" == *.png ]] || [[ "$path" == *.jpg ]] || [[ "$path" == *.jpeg ]] \
+    || [[ "$path" == *.svg ]] || [[ "$path" == *.drawio ]] || [[ "$path" == *.plantuml ]]; then
+    echo "docs_only"; return
+  fi
+  # 2. infra_only: CI・ビルド・設定（単体なら検証スキップ、backend/frontend と混在時はコード変更側を優先）
+  if [[ "$path" == "Makefile" || "$path" == */Makefile ]] \
+    || [[ "$path" == scripts/* ]] || [[ "$path" == .github/* ]] || [[ "$path" == .agent-skill-chain/source/* ]] \
+    || [[ "$path" == .claude/* ]] || [[ "$path" == .cursor/* ]] || [[ "$path" == .agent-skill-chain/runtime/* ]] \
+    || [[ "$path" == .gitignore ]] \
+    || [[ "$path" == ".env.example" ]] || [[ "$path" == ".node-version" ]] || [[ "$path" == ".python-version" ]] \
+    || [[ "$path" =~ ^docker-compose.*\.yml$ ]] || [[ "$path" == tooling/* ]] \
+    || [[ "$path" == "tsconfig.json" ]] \
+    || [[ "$path" == vitest.config.* ]] || [[ "$path" == .eslintrc* ]] || [[ "$path" == .prettierrc* ]]; then
+    echo "infra_only"; return
+  fi
+  # 3. backend_only / 4. frontend_only
+  if [[ "$path" == ${PREPUSH_BACKEND_DIR}/* ]]; then echo "backend_only"; return; fi
+  if [[ "$path" == ${PREPUSH_FRONTEND_DIR}/* ]]; then echo "frontend_only"; return; fi
+  # 5. 上記以外（LICENSE, Dockerfile 等）は安全側で full
+  echo "full"
+}
+
+# 複数パスをマージして最終スコープを決定（テストモード・本体で同じロジック）
+detect_scope() {
+  local changed="$1" path scope
+  local scopes=""
+  [[ -z "$changed" ]] && { echo "full"; return; }
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    scope="$(classify_one "$path")"
+    # 重複を除いて列挙（空白区切り）
+    [[ " ${scopes} " != *" ${scope} "* ]] && scopes="${scopes} ${scope}"
+  done <<< "$changed"
+  scopes="${scopes# }"
+  # マージルール（優先順）: full 含む → full / backend+frontend 両方 → full / それ以外はコード変更側を優先（infra+backend → backend_only）
+  if [[ " ${scopes} " == *" full "* ]]; then echo "full"
+  elif [[ " ${scopes} " == *" backend_only "* ]] && [[ " ${scopes} " == *" frontend_only "* ]]; then echo "full"
+  elif [[ " ${scopes} " == *" backend_only "* ]]; then echo "backend_only"
+  elif [[ " ${scopes} " == *" frontend_only "* ]]; then echo "frontend_only"
+  elif [[ " ${scopes} " == *" infra_only "* ]]; then echo "infra_only"
+  elif [[ " ${scopes} " == *" docs_only "* ]]; then echo "docs_only"
+  else echo "full"; fi
+}
+
+# テスト用: PREPUSH_TEST_PATHS にファイルパスを指定すると、その1行1パスからスコープのみ判定して表示し exit 0 する
+if [[ -n "${PREPUSH_TEST_PATHS:-}" && -f "${PREPUSH_TEST_PATHS}" ]]; then
+  changed_files="$(sed '/^$/d' "$PREPUSH_TEST_PATHS" | sort -u)"
+  echo "scope=$(detect_scope "$changed_files")"
+  exit 0
+fi
+
+# stdin から local_ref local_sha remote_ref remote_sha を読む（複数行・新規 push 時は remote_sha が 0...）
+# 変更ファイルは一時ファイルに集約し、最後に sort -u（echo -e は環境差があるため使わない）
+: "${PREPUSH_TIMEOUT_SEC:=900}"
+# mktemp が IDE 環境等で失敗することがあるため、システム一時ディレクトリにフォールバック（log_dir はログ用のため push をブロックしない）
+tmp_files="$(mktemp 2>/dev/null)" || tmp_files="${TMPDIR:-/tmp}/pre-push.tmp.$$"
+if [[ ! -e "$tmp_files" ]]; then
+  : > "$tmp_files" 2>/dev/null || { echo "pre-push: 一時ファイルを作成できません: $tmp_files" >&2; exit 1; }
+fi
+empty_tree="$(git hash-object -t tree /dev/null 2>/dev/null)" || empty_tree=""
+running_mode=""   # "pgid" or "pid"（cleanup では片方だけ kill）
+running_pgid=""
+running_pid=""
+timed_out=0       # timeout 経路で 1 にセット → cleanup の二重 kill を抑制
+
+cleanup() {
+  set +e
+  rm -f "$tmp_files" 2>/dev/null || true
+  (( timed_out )) && { set -e; return; }  # timeout 経路では既に kill 済み
+  if [[ "${running_mode}" == "pgid" && -n "${running_pgid:-}" ]]; then
+    if kill -0 -- -"${running_pgid}" 2>/dev/null; then
+      kill -TERM -- -"${running_pgid}" 2>/dev/null || true
+      sleep 1
+      kill -KILL -- -"${running_pgid}" 2>/dev/null || true
+    fi
+  elif [[ "${running_mode}" == "pid" && -n "${running_pid:-}" ]]; then
+    if kill -0 "${running_pid}" 2>/dev/null; then
+      kill -TERM "${running_pid}" 2>/dev/null || true
+      sleep 1
+      kill -KILL "${running_pid}" 2>/dev/null || true
+    fi
+  fi
+  set -e
+}
+
+trap 'cleanup; exit 130' SIGINT
+trap 'cleanup; exit 143' SIGTERM
+trap 'cleanup' EXIT
+
+run_with_timeout() {
+  local timeout_sec="$1"; shift
+  local pid use_pgid=0
+  local start=$SECONDS
+  local ret=0
+
+  running_mode=""
+  running_pgid=""
+  running_pid=""
+  timed_out=0
+
+  # 新しいセッション（＝新しい PG）で起動してグループ kill を可能にする
+  # setsid が使えればそれを使い、なければ perl の POSIX::setsid() で代替（macOS 対応）
+  if command -v setsid &>/dev/null; then
+    setsid "$@" < /dev/null &
+    use_pgid=1
+  elif command -v perl &>/dev/null; then
+    perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or die $!' -- "$@" < /dev/null &
+    use_pgid=1
+  else
+    "$@" < /dev/null &
+    use_pgid=0
+  fi
+  pid=$!
+
+  if (( use_pgid )); then
+    # setsid 起動直後は子がまだ setsid() を実行しておらず ps だと親の pgid になるため、
+    # 子が自身のリーダーになることを利用して running_pgid=$pid とする
+    running_pgid="$pid"
+    running_mode="pgid"
+  else
+    running_mode="pid"
+    running_pid="$pid"
+  fi
+
+  # 生存判定：pid が生きているか、（pgid モードなら）pgid が生きているか
+  # ゾンビ（Z）の場合は子は既に終了しているので break して wait で回収する
+  # → 親が先に終わっても子孫が残っている限りループを継続する
+  # SECONDS を使うことで時計変更に耐性を持たせる
+  local alive=0
+  while true; do
+    alive=0
+    if kill -0 "$pid" 2>/dev/null; then
+      # ゾンビ（Z/Z+）または既に回収済み（state 空）の場合は終了扱い
+      local state
+      state="$(ps -o state= -p "$pid" 2>/dev/null | tr -d ' \t')"
+      if [[ -n "$state" && "$state" != Z* ]]; then
+        alive=1
+      fi
+    elif [[ "${running_mode}" == "pgid" ]] && kill -0 -- -"${running_pgid}" 2>/dev/null; then
+      alive=1
+    fi
+    (( alive == 0 )) && break
+
+    if (( SECONDS - start >= timeout_sec )); then
+      timed_out=1   # kill より前にセット（SIGINT 競合での cleanup 二重 kill を防止）
+      echo "pre-push: timeout（${timeout_sec}s）に達したため中断します。" >&2
+      if [[ "${running_mode}" == "pgid" ]]; then
+        kill -TERM -- -"${running_pgid}" 2>/dev/null || true
+        sleep 2
+        kill -KILL -- -"${running_pgid}" 2>/dev/null || true
+        for i in 1 2 3; do
+          kill -0 -- -"${running_pgid}" 2>/dev/null || break
+          sleep 1
+          kill -KILL -- -"${running_pgid}" 2>/dev/null || true
+        done
+      else
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 2
+        kill -KILL "$pid" 2>/dev/null || true
+        for i in 1 2 3; do
+          kill -0 "$pid" 2>/dev/null || break
+          sleep 1
+          kill -KILL "$pid" 2>/dev/null || true
+        done
+      fi
+      wait "$pid" 2>/dev/null || true
+      running_mode=""
+      running_pgid=""
+      running_pid=""
+      return 124
+    fi
+
+    sleep 1
+  done
+
+  ret=0
+  wait "$pid" 2>/dev/null || ret=$?
+  running_mode=""
+  running_pgid=""
+  running_pid=""
+  return "$ret"
+}
+
+# stdin が TTY のとき（手動実行）は read でブロックしないようスキップする
+lines_read=0
+if [[ -t 0 ]]; then
+  # 手動実行: リフ情報がないためスキップ判定へ
+  :
+else
+  while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+    lines_read=$(( lines_read + 1 ))
+    if [[ -z "$remote_sha" || "$remote_sha" =~ ^0+$ ]]; then
+      [[ -n "$empty_tree" ]] && git diff --name-only "$empty_tree" "$local_sha" 2>/dev/null >> "$tmp_files"
+    else
+      git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null >> "$tmp_files"
+    fi
+  done
+fi
+
+if [[ "${lines_read:-0}" -eq 0 ]]; then
+  echo "pre-push: stdin が空のためスコープ判定できずスキップします（手動実行想定）。" >&2
+  exit 0
+fi
+
+changed_files="$(sort -u < "$tmp_files" | sed '/^$/d')"
+# 変更一覧が空の場合は安全側で full（新規 push で empty_tree 取得失敗等）
+scope="$(detect_scope "$changed_files")"
+# 切り分け用: scope 算出直後に 1 行だけ必ず追記（ここまで到達していればログに scope が残る）
+( printf '[%s] scope=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$scope" >> "$PREPUSH_LOG_FILE" ) 2>/dev/null || true
+
+# ログ出力設定（scripts/logs/pre-push.log に結果を追記）。make の出力は pre-push-make-*.log に保存し失敗時に末尾を表示する。ログはベストエフォートのため、log_dir が使えない場合は make はログなしで実行する。
+log_file="$PREPUSH_LOG_FILE"
+make_log=""
+if [[ -d "$log_dir" && -w "$log_dir" ]]; then
+  make_log="${log_dir}/pre-push-make-$(date '+%Y%m%d-%H%M%S').log"
+fi
+if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
+  # pre-push.log ローテーション: 最大行数を超えていれば古い行を捨てる
+  if [[ -f "$log_file" ]] && [[ "$(wc -l < "$log_file" 2>/dev/null)" -gt "${PREPUSH_LOG_MAX_LINES:-5000}" ]]; then
+    tail -n "${PREPUSH_LOG_MAX_LINES:-5000}" "$log_file" > "${log_file}.rotated" 2>/dev/null && mv "${log_file}.rotated" "$log_file" 2>/dev/null || true
+  fi
+  # 古い pre-push-make-*.log を削除（新しい方から KEEP 件だけ残す。Linux/macOS 両対応）
+  # while read は入力が空だと EOF で終了コード 1 を返すため、set -e でスクリプトが落ちないよう || true する
+  _keep="${PREPUSH_MAKE_LOG_KEEP:-30}"
+  (cd "$log_dir" && shopt -s nullglob && for f in pre-push-make-*.log; do echo "$f"; done) 2>/dev/null | \
+    sort -r 2>/dev/null | tail -n +$(( _keep + 1 )) | while read -r _f; do
+      [[ -n "$_f" ]] && rm -f "${log_dir}/${_f}" 2>/dev/null || true
+    done || true
+  if ! ( {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] scope=${scope}"
+    echo "changed_files:"
+    printf '%s\n' "$changed_files"
+    echo
+  } >> "$PREPUSH_LOG_FILE" ); then
+    echo "pre-push: ログ追記に失敗しました: $log_file" >&2
+  fi
+fi
+
+# docs_only / infra_only のときは make 不要（検証スキップのため）
+if [[ "$scope" != "docs_only" && "$scope" != "infra_only" ]]; then
+  if ! command -v make &>/dev/null; then
+    echo "make が見つかりません。git push は make が使える環境（ターミナル等）から実行してください。" >&2
+    exit 1
+  fi
+fi
+
+case "$scope" in
+  docs_only)
+    echo "pre-push: ドキュメント等のみの変更のため、コード検証をスキップします。" >&2
+    exit 0
+    ;;
+  infra_only)
+    echo "pre-push: CI・Makefile 等のみの変更のため、コード検証をスキップします。" >&2
+    exit 0
+    ;;
+  backend_only) make_target="$PREPUSH_MAKE_BACKEND" ;;
+  frontend_only) make_target="$PREPUSH_MAKE_FRONTEND" ;;
+  full)         make_target="$PREPUSH_MAKE_FULL" ;;
+  *)
+    echo "pre-push フックが失敗しました（不明なスコープ）。" >&2
+    exit 1
+    ;;
+esac
+
+echo "pre-push: スコープ ${scope} → make ${make_target} を実行します。" >&2
+set +e
+if [[ -n "$make_log" ]]; then
+  run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target" >"$make_log" 2>&1
+else
+  run_with_timeout "$PREPUSH_TIMEOUT_SEC" make "$make_target"
+fi
+ret=$?
+set -e
+if [[ $ret -ne 0 ]]; then
+  [[ -n "$make_log" && -f "$make_log" ]] && tail -n 200 "$make_log" >&2
+  if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
+    ( echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=FAIL code=${ret}" >> "$log_file" ) || echo "pre-push: ログ追記に失敗: $log_file" >&2
+  fi
+  echo "pre-push フックが失敗しました（終了コード ${ret}）。" >&2
+  [[ -d "$log_dir" ]] && echo "pre-push ログ: ${log_file}" >&2
+  exit $ret
+fi
+if [[ -n "${ROOT:-}" && -d "$log_dir" ]]; then
+  ( echo "[$(date '+%Y-%m-%d %H:%M:%S')] result=OK" >> "$log_file" ) || echo "pre-push: ログ追記に失敗: $log_file" >&2
+fi

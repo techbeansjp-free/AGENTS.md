@@ -1,0 +1,56 @@
+# テンプレート: サブエージェント強制ガード
+# 採用先では .github/workflows/subagent-guard.yml にコピーするか、既存 CI に step を統合する。
+#
+# 失敗条件・差し戻し先: .agent-skill-chain/source/enforcement/README.md §失敗条件と差し戻し に従う。
+# 検知内容:
+#   - .workflow 配下の .md にログっぽい frontmatter（issue_id 等）が含まれる（ログは workflow.db のみ）
+#   - .agent-skill-chain/runtime/**/logs/ に .md が追加される（廃止違反）
+#   - 変更 .md 内の内部参照（.agent-skill-chain/runtime/ や docs/ へのリンク）禁止（99_PR.md 絶対ルール）
+#   - audit.sh 実行時: 証跡プレフィックス・必須ファイル・テスト観点・docs 更新要否・PR 本文の内部リンク
+
+name: subagent-guard
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Run subagent guard
+        env:
+          PR_BODY: ${{ github.event_name == 'pull_request' && github.event.pull_request.body || '' }}
+        run: |
+          chmod +x .agent-skill-chain/runtime/templates/github/scripts/subagent-guard.sh 2>/dev/null || true
+          if [[ -f .agent-skill-chain/runtime/templates/github/scripts/subagent-guard.sh ]]; then
+            .agent-skill-chain/runtime/templates/github/scripts/subagent-guard.sh
+          elif [[ -f .github/scripts/subagent-guard.sh ]]; then
+            chmod +x .github/scripts/subagent-guard.sh
+            .github/scripts/subagent-guard.sh
+          else
+            echo "[subagent-guard] skip: script not found"
+          fi
+
+      - name: Run enforcement audit (optional)
+        env:
+          PR_BODY: ${{ github.event_name == 'pull_request' && github.event.pull_request.body || '' }}
+        run: |
+          AUDIT_SCRIPT=""
+          for p in .agent-skill-chain/source/enforcement/ci/audit.sh .github/scripts/audit.sh; do
+            if [[ -f "$p" ]]; then
+              AUDIT_SCRIPT="$p"
+              break
+            fi
+          done
+          if [[ -n "$AUDIT_SCRIPT" ]]; then
+            chmod +x "$AUDIT_SCRIPT" 2>/dev/null || true
+            export PR_BODY
+            "$AUDIT_SCRIPT" .
+          else
+            echo "[audit] skip: audit.sh not found"
+          fi
