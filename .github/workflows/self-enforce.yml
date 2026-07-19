@@ -1,0 +1,220 @@
+# self-enforce.yml — フレームワーク自身の CI（自己強制 Layer4）
+#
+# このリポジトリは「パッケージの正本」かつ「自己拡張する消費者」を兼ねる。
+# 本 CI は正本リポを守る最小の自己強制であり、確実に green になる構成のみで成り立たせる
+# （実在しないツールに依存して赤くしない）。検証内容:
+#   1. シェルスクリプト構文チェック（bash -n .agent-skill-chain/source/scripts/*.sh）
+#   2. DB スキーマ正本ズレ検証（sqlite3 で schema.sql が流せ、workflow_log が作られること）
+#   3. 生成物の差分ゼロ検証（build 実行後、追跡ファイルに差分が出ないこと。生成物は .gitignore 済み）
+#   4. npm 配布物リーク検査（npm pack --dry-run。リポ固有物が tarball に漏れず必須物が含まれる）
+#   5. version 同期検証（package.json.version == .agent-skill-chain/source/platforms/claude/plugin.json.version）
+#   6. install/uninstall・カプセル化 E2E（隔離 dir で実 install→検証→uninstall→再 install を確認）
+#   7. enforcement/ci/audit.sh の呼び出し（このリポの issue は docs/maintainer/workflow 配下のため、
+#      audit.sh はそのまま通らない。continue-on-error 相当で「呼ぶが失敗させない」運用）
+#   8. コメント外部参照禁止の blocking 検知（.github/workflows 配下の CI 定義コメントに、外部ドキュメント名・
+#      章節番号・追跡番号の直書きが無いことを検証する。検出ロジックは check-comment-refs.sh に集約）
+#   9. 相対リンク切れ検査（非ブロッキング。新規検査のため段階導入とし、まず非ブロッキングで運用する）
+#
+# トリガ: PR（必ず検証）と、merge 先ブランチ（main, develop）への push。
+
+name: self-enforce
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  self-enforce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      # node/npm を使う step（verify-npm-pack.sh / sync-version.sh / E2E）のため現行 LTS を明示する。
+      # setup-node@v4 は node20 ランタイムで動く現行メジャー action（node16 非推奨警告を出さない）。
+      # 本プロジェクトの実行系は node22 を対象とする（package.json engines.node >=20）。
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Install sqlite3
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sqlite3
+
+      # kcov（bash カバレッジ計測器）を best-effort で導入する。
+      #   ubuntu-latest は 24.04(noble) へ移行済みで、kcov は noble の apt リポジトリから
+      #   削除されている（jammy/universe には在ったが noble には無い）。このため
+      #   `apt-get install kcov` は "Unable to locate package kcov" で exit 100 になる。
+      #   カバレッジ計測は enforcement の必須ゲートではなく（テスト本体の PASS/FAIL ゲートは
+      #   後続の各検証 step が担う）、kcov が導入できない runner ではカバレッジ step を SKIP する。
+      #   coverage-check.sh は kcov 不在で exit 2(SKIP) し、run-all.sh も kcov 非依存で完走する。
+      #   計測ロジックは test/coverage-check.sh に集約（CI とローカルで二重化しない）。
+      - name: Install kcov (best-effort)
+        run: |
+          sudo apt-get update -qq || true
+          if sudo apt-get install -y -qq kcov; then
+            echo "OK: kcov を導入しました（カバレッジ計測を実行します）"
+          else
+            echo "WARN: この runner では kcov を導入できません（noble で apt 提供なし）。カバレッジ計測は SKIP します。" >&2
+          fi
+
+      # 1) シェルスクリプト構文チェック
+      - name: Shell syntax check (bash -n)
+        run: |
+          set -e
+          fail=0
+          for f in .agent-skill-chain/source/scripts/*.sh; do
+            if bash -n "$f"; then
+              echo "OK: $f"
+            else
+              echo "SYNTAX ERROR: $f"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+      # 2) DB スキーマ正本ズレ検証（schema.sql が流せ、workflow_log が作られる）
+      - name: Schema source-of-truth check (schema.sql)
+        run: |
+          set -e
+          tmp="$(mktemp -d)"
+          sqlite3 "$tmp/t.db" < .agent-skill-chain/source/ledger/schema.sql
+          tables="$(sqlite3 "$tmp/t.db" "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")"
+          echo "created tables: $tables"
+          # 実在テーブルは workflow_log のみ（schema.sql が単一正本）
+          echo "$tables" | grep -qx 'workflow_log' || { echo "ERROR: workflow_log が作られていない"; exit 1; }
+          rm -rf "$tmp"
+
+      # 2.5) CLI TypeScript: 依存導入 → typecheck → build（REPO_ROOT/bin を生成）
+      #    src/agents-md.ts（strict）が正本。bin/agents-md.js は非追跡（.gitignore）の生成物であり、
+      #    本 step で `npm ci && npm run build` し REPO_ROOT に bin を生成する。これにより後続 step
+      #    （Generated-output diff-zero check・npm pack leak check・Install/uninstall &
+      #    encapsulation E2E の各 step）が REPO_ROOT/bin を前提にできる（順序保証）。
+      #    typecheck は src 正本の型健全性検証として存続する。bin は非追跡のため
+      #    追跡差分の検証対象に含めない。
+      - name: CLI typecheck & build (tsc)
+        run: |
+          set -e
+          npm ci                         # devDependencies(typescript,@types/node) を導入（lockfile 前提）
+          npm run typecheck              # 型エラーがあれば非0で fail（src 正本の型健全性）
+          npm run build                  # src -> bin を生成（REPO_ROOT/bin を後続 step へ供給）
+          echo "OK: typecheck 通過・REPO_ROOT/bin を生成（非追跡の生成物）"
+
+      # 3) 生成物の差分ゼロ検証（build 実行後、追跡ファイルに差分が出ない）
+      - name: Generated-output diff-zero check
+        run: |
+          set -e
+          bash .agent-skill-chain/source/scripts/build-adapters.sh claude cursor
+          # 生成物（.adapters/ 等）は .gitignore 済み。追跡ファイルに変化が無いことを確認する。
+          changed="$(git status --porcelain --untracked-files=no)"
+          if [ -n "$changed" ]; then
+            echo "ERROR: build により追跡ファイルに差分が発生しました:"
+            echo "$changed"
+            git --no-pager diff
+            exit 1
+          fi
+          echo "OK: 追跡ファイルに差分なし（生成物は無視済み）"
+          # 正本リポのクリーンさ: .adapters 生成物が誤って追跡されていないこと
+          if [ -n "$(git ls-files .adapters)" ]; then
+            echo "ERROR: .adapters 配下が Git 追跡されています（生成物は追跡しない）"
+            exit 1
+          fi
+          echo "OK: .adapters は未追跡"
+
+      # 4) npm 配布物リーク検査（npm pack --dry-run の単一正本スクリプトを呼ぶ）
+      #    検証ロジックは .agent-skill-chain/source/scripts/verify-npm-pack.sh に集約。CI とローカルで二重化しない。
+      - name: npm pack leak check (verify-npm-pack.sh)
+        run: |
+          set -e
+          bash .agent-skill-chain/source/scripts/verify-npm-pack.sh
+
+      # 5) version 同期検証（package.json と plugin.json の version 一致。正本=package.json）
+      #    検証ロジックは .agent-skill-chain/source/scripts/sync-version.sh に集約（CI とローカルで二重化しない）。
+      - name: Version sync check (sync-version.sh --check)
+        run: |
+          set -e
+          bash .agent-skill-chain/source/scripts/sync-version.sh --check
+
+      # 6) install/uninstall・カプセル化 E2E（実際に使うユースケース/シナリオで配備・除去を検証）
+      #    隔離した一時ディレクトリ（mktemp -d ＋ git archive HEAD）で実行し、開発リポを破壊しない。
+      #    検証ロジックは test/e2e-install-uninstall.sh に集約（CI とローカルで二重化しない）。
+      #
+      #    ロジック二重化回避（方針 A・最小変更）: ローカルの一括 runner（test/run-all.sh）も
+      #    本 E2E スクリプトを「呼ぶだけ」で、テスト本体は e2e-install-uninstall.sh の単一正本に集約する。
+      #    CI と runner は同一テスト本体を別実装で持たない（CI は bash <script> を呼ぶだけ）。
+      #    CI に run-all.sh を呼ぶ step は追加しない（追加すると本 E2E step と二重実行になるため）。
+      #    schema/pack/version/audit の各 step はテストスクリプトと別系統の検証であり runner には取り込まない。
+      - name: Install/uninstall & encapsulation E2E
+        run: |
+          set -e
+          bash test/e2e-install-uninstall.sh
+
+      # 6.5) カバレッジ計測・閾値矯正（kcov ラップ＋fail-under 判定）
+      #    テスト一括 runner（run-all.sh）を kcov でラップ計測し、cobertura を後処理して
+      #    fail-under（既定 100）未達なら fail させる。計測ロジックは coverage-check.sh に集約
+      #    （CI とローカルで二重化しない）。出力（.coverage/）は .gitignore 済みで
+      #    Generated-output diff-zero check・npm pack leak check の各 step を破らない。
+      #    除外は kcov --exclude-path（A）＋ .agent-skill-chain/project/ 配下の COVERAGE_EXCEPTIONS 台帳（B）の二重化。
+      #
+      #    終了コード契約（coverage-check.sh 冒頭の正本）に従い CI 側で解釈する:
+      #      0 = 閾値達成（PASS）/ 1 = 未達 or 計測失敗（FAIL→CI を赤くする）/ 2 = kcov 不在（SKIP）。
+      #    kcov を導入できない runner（noble 等）では exit 2(SKIP) となるため CI を落とさない。
+      #    閾値未達・計測失敗（exit 1）のときだけブロックする。テスト本体の PASS/FAIL ゲートは
+      #    別系統（E2E・schema・pack・version 等の各 step）が担い、本 step の SKIP では緩まない。
+      - name: Coverage check (coverage-check.sh)
+        run: |
+          code=0
+          bash test/coverage-check.sh || code=$?
+          case "$code" in
+            0) echo "OK: カバレッジ閾値を達成しました" ;;
+            2) echo "SKIP: kcov 不在のためカバレッジ計測を省略（テスト本体ゲートは別 step が担保）" ;;
+            *) echo "ERROR: カバレッジ未達 or 計測失敗 (exit $code)"; exit "$code" ;;
+          esac
+
+      # 7) enforcement audit（このリポでは適用範囲外のため失敗させない）
+      #    本リポの issue は docs/maintainer/workflow 配下にあり、audit.sh は既定の WORKFLOW_DIR
+      #    （.agent-skill-chain/runtime）に加えて実在時のみ docs/maintainer/workflow も走査対象に含める
+      #    （resolve_workflow_dirs）。呼び出すが結果で CI を赤くしない（continue-on-error）。
+      #    証跡 DB を用いるチェック群は、証跡 DB 自体が Git 非追跡（ローカルの累積ストア）であるため
+      #    クリーンな checkout には実体が無く、CI 上では構造的に SKIP される（設計上の必然。詳細・
+      #    実効的な検知経路は enforcement ディレクトリの正本ドキュメントを参照）。本 step の
+      #    non-blocking 運用はこの構造的制約を踏まえた意図的な運用であり、証跡 DB をこの CI 上で
+      #    再構築しない限り解消しない。
+      - name: Enforcement audit (non-blocking)
+        continue-on-error: true
+        # 本リポの実効 Issue 追跡モードを github_native にする env（本リポ CI 限定・配布物には波及しない）。
+        # 既定は local_tracked のため、消費者環境で unset のときは従来どおり local_tracked にフォールバックする。
+        env:
+          ISSUE_TRACKING_MODE: github_native
+        run: |
+          if [ -f .agent-skill-chain/source/enforcement/ci/audit.sh ]; then
+            chmod +x .agent-skill-chain/source/enforcement/ci/audit.sh || true
+            bash .agent-skill-chain/source/enforcement/ci/audit.sh . || echo "[audit] non-blocking: 失敗を許容（適用範囲外）"
+          else
+            echo "[audit] skip: audit.sh が見つかりません"
+          fi
+
+      # 8) コメント外部参照禁止の検知（blocking）
+      #    .github/workflows 配下の CI 定義コメントに、外部ドキュメント名・章節番号・追跡番号の
+      #    直書きが無いことを検証する。検出ロジックは check-comment-refs.sh（単一正本）に集約。
+      - name: Comment external-ref check (blocking)
+        run: |
+          set -e
+          bash .agent-skill-chain/source/enforcement/ci/check-comment-refs.sh .github/workflows
+
+      # 9) 相対リンク切れ検査（非ブロッキング）
+      #    正本 Markdown 群の相対リンクが実在解決するかを検査する（検出ロジックは
+      #    check-relative-links.sh に集約。CI とローカルで二重化しない）。新規検査のため、
+      #    まずは非ブロッキングで導入し、安定して 0 件が続くことを確認できたらブロッキング化を検討する
+      #    （enforcement audit の non-blocking 運用と同じ段階導入の考え方）。
+      - name: Relative link check (non-blocking)
+        continue-on-error: true
+        run: |
+          bash .agent-skill-chain/source/scripts/check-relative-links.sh . || echo "[link-check] non-blocking: 切れ検出（段階導入中のため CI は赤くしない）"
