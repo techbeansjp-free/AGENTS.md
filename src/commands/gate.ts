@@ -55,6 +55,34 @@ function validateGateId(value: string): asserts value is Segment {
   validateSegment(value);
 }
 
+/** gate publish / gate reconcile 共通の Check Run 発行処理。 */
+function publishCheckRun(
+  root: string,
+  checkName: string,
+  headSha: string,
+  conclusion: 'success' | 'failure' | 'action_required',
+  title: string,
+  summary: string,
+): { url?: string; error?: string } {
+  const body = JSON.stringify({
+    name: checkName,
+    head_sha: headSha,
+    status: 'completed',
+    conclusion,
+    output: { title, summary },
+  });
+  // gh api は --input だけではPOSTにならず既定のGETのまま送信されてしまう（-f/-Fを渡した場合の
+  // みPOSTへ暗黙変更される。setup.ts の rulesetStep() と同様に -X で明示する必要がある）。
+  const result = gh(['api', '-X', 'POST', 'repos/{owner}/{repo}/check-runs', '--input', '-'], root, body);
+  if (result.status !== 0) return { error: result.stderr.trim() };
+  try {
+    const parsed = JSON.parse(result.stdout) as { html_url?: string };
+    return { url: parsed.html_url ?? result.stdout.trim() };
+  } catch {
+    return { url: result.stdout.trim() };
+  }
+}
+
 export async function review(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -133,29 +161,18 @@ export async function publish(args: string[]): Promise<number> {
     const checkName = config.checks[report.gate.id];
     const conclusion =
       report.gate.final === 'approved' ? 'success' : report.gate.final === 'rejected' ? 'failure' : 'action_required';
-    const body = JSON.stringify({
-      name: checkName,
-      head_sha: report.gate.target_sha,
-      status: 'completed',
+    const summary =
+      report.gate.blockers.length === 0 ? 'no blockers' : `blockers: ${JSON.stringify(report.gate.blockers)}`;
+    const published = publishCheckRun(
+      root,
+      checkName,
+      report.gate.target_sha,
       conclusion,
-      output: {
-        title: `${report.gate.id} gate: ${report.gate.final}`,
-        summary:
-          report.gate.blockers.length === 0
-            ? 'no blockers'
-            : `blockers: ${JSON.stringify(report.gate.blockers)}`,
-      },
-    });
-    // gh api は --input だけではPOSTにならず既定のGETのまま送信されてしまう（-f/-Fを渡した場合の
-    // みPOSTへ暗黙変更される。setup.ts の rulesetStep() と同様に -X で明示する必要がある）。
-    const result = gh(['api', '-X', 'POST', 'repos/{owner}/{repo}/check-runs', '--input', '-'], root, body);
-    if (result.status !== 0) return fail(`Check Run 発行に失敗しました: ${result.stderr.trim()}`);
-    try {
-      const parsed = JSON.parse(result.stdout) as { html_url?: string };
-      return ok(parsed.html_url ?? result.stdout.trim());
-    } catch {
-      return ok(result.stdout.trim());
-    }
+      `${report.gate.id} gate: ${report.gate.final}`,
+      summary,
+    );
+    if (published.error) return fail(`Check Run 発行に失敗しました: ${published.error}`);
+    return ok(published.url ?? '');
   });
 }
 
@@ -171,9 +188,6 @@ export async function reconcile(args: string[]): Promise<number> {
 
     const root = repoRoot();
     const config = loadConfig(root);
-    if (config.coordination.backend !== 'local') {
-      return fail('gate reconcile は現時点で local バックエンドのみ対応しています（githubモードはCheck Run digest照合が別途必要）');
-    }
 
     const reissued: string[] = [];
     const invalidated: string[] = [];
@@ -188,20 +202,13 @@ export async function reconcile(args: string[]): Promise<number> {
         continue; // このゲートは未レビュー・未発行
       }
 
-      if (downstreamInvalidated) {
-        report.gate.conformance = 'pending';
-        report.gate.falsification = 'pending';
-        report.gate.final = 'pending';
-        writeYamlFileAtomic(reportPath, report);
-        invalidated.push(gateId);
-        continue;
-      }
-
-      const changed = report.gate.approved_artifacts.some((artifact) => {
-        const show = git(['show', `${targetSha}:${artifact.path}`], root);
-        if (show.status !== 0) return true; // 削除された等 = 変化あり
-        return digestOf(show.stdout) !== artifact.digest;
-      });
+      const changed =
+        downstreamInvalidated ||
+        report.gate.approved_artifacts.some((artifact) => {
+          const show = git(['show', `${targetSha}:${artifact.path}`], root);
+          if (show.status !== 0) return true; // 削除された等 = 変化あり
+          return digestOf(show.stdout) !== artifact.digest;
+        });
 
       if (changed) {
         report.gate.conformance = 'pending';
@@ -214,6 +221,32 @@ export async function reconcile(args: string[]): Promise<number> {
         report.gate.target_sha = targetSha;
         writeYamlFileAtomic(reportPath, report);
         reissued.push(gateId);
+      }
+
+      // ローカルモードでは reviews/<gate>.yaml（上記writeYamlFileAtomic）が正本。GitHubモードでは
+      // Check Runが正本（AGENTS.md §コーディネーションバックエンド）のため、新しいtarget_shaに対して
+      // 再発行または無効化のCheck Runを明示的に発行し直す必要がある（発行しないと新SHAにrequired
+      // status checkが一切存在せず、merge判定が永久にpending留まりになる）。
+      if (config.coordination.backend === 'github') {
+        const checkName = config.checks[gateId];
+        const published = changed
+          ? publishCheckRun(
+              root,
+              checkName,
+              targetSha,
+              'action_required',
+              `${gateId} gate: invalidated`,
+              `approved artifacts changed at ${targetSha}; ${gateId} gate must be re-reviewed`,
+            )
+          : publishCheckRun(
+              root,
+              checkName,
+              targetSha,
+              'success',
+              `${gateId} gate: reconciled`,
+              `approved artifacts unchanged; reissued for ${targetSha}`,
+            );
+        if (published.error) return fail(`Check Run 再発行に失敗しました（${gateId}）: ${published.error}`);
       }
     }
 
