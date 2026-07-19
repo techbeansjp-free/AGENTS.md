@@ -1,7 +1,7 @@
 # 正本: AGENTS.md §不変条件I8
 #
 # 「autonomyの降格は自動、昇格は人間の明示行為のみ」を機械的に強制する。
-# config/agent-skill-chain.yaml の autonomy.default・risk.default を緩める方向へ変更する
+# .agent-skill-chain/config/agent-skill-chain.yaml の autonomy.default・risk.default を緩める方向へ変更する
 # PRには、人間が明示的に付与するラベル risk-upgrade-approved を必須とする
 # （provisioning/labels.yaml 定義）。このワークフロー自体が「昇格workflowが存在しないこと」の
 # 検査対象でもあるため、ラベル付与以外の経路で自動承認を行ってはならない。
@@ -11,7 +11,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
-      - config/agent-skill-chain.yaml
+      - .agent-skill-chain/config/agent-skill-chain.yaml
 
 permissions:
   contents: read
@@ -30,7 +30,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           git fetch origin "$BASE_REF" --depth=1
-          if git diff "origin/$BASE_REF"...HEAD -- config/agent-skill-chain.yaml \
+          if git diff "origin/$BASE_REF"...HEAD -- .agent-skill-chain/config/agent-skill-chain.yaml \
              | grep -Eq '^\+\s*default:\s*(full|normal|high)\s*$'; then
             echo "upgrade=true" >> "$GITHUB_OUTPUT"
           else

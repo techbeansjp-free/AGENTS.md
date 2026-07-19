@@ -1,7 +1,8 @@
 # 正本: AGENTS.md §不変条件I1・I4・I6・I7 / §参照・コメントの陳腐化防止
 #
 # PRへのpushごとに、ブランチ名・worktreeパス・テンプレート同期・用語・参照規約・ADR・
-# 成果物・AC対応の各検査（ci/verify-*.sh・scripts/lint-*.sh・scripts/adr-lint.sh）を実行する。
+# 成果物・AC対応の各検査（.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
+# .agent-skill-chain/scripts/adr-lint.sh）を実行する。
 # いずれもインターフェーススタブであり、CLI実装（src/agents-md.ts）が完了するまで
 # このワークフローは失敗し続ける（意図的な挙動。偽の成功シグナルを出さない）。
 name: agent-skill-chain / ci
@@ -28,28 +29,28 @@ jobs:
         run: |
           ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
           if ! [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
-            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（config/agent-skill-chain.yaml branch.pattern に非適合）" >&2
+            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（.agent-skill-chain/config/agent-skill-chain.yaml branch.pattern に非適合）" >&2
             exit 1
           fi
           echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
 
       - name: verify-branch-name
-        run: ./ci/verify-branch-name.sh
+        run: ./.agent-skill-chain/ci/verify-branch-name.sh
 
       - name: verify-worktree-path
-        run: ./ci/verify-worktree-path.sh
+        run: ./.agent-skill-chain/ci/verify-worktree-path.sh
 
       - name: verify-template-sync
-        run: ./ci/verify-template-sync.sh
+        run: ./.agent-skill-chain/ci/verify-template-sync.sh
 
       - name: verify-artifacts (対象PRで変更されたセグメントごと)
         run: |
           for segment in spec design implementation validation; do
-            ./ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" "$segment"
+            ./.agent-skill-chain/ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" "$segment"
           done
 
       - name: verify-ac-coverage
-        run: ./ci/verify-ac-coverage.sh "${{ steps.ctx.outputs.issue_id }}"
+        run: ./.agent-skill-chain/ci/verify-ac-coverage.sh "${{ steps.ctx.outputs.issue_id }}"
 
       - name: verify-adr (PRで変更されたADRごと)
         env:
@@ -58,14 +59,14 @@ jobs:
           git fetch origin "$BASE_REF" --depth=1
           CHANGED_ADRS="$(git diff --name-only "origin/$BASE_REF"...HEAD -- 'docs/adr/*.md')"
           for adr_path in $CHANGED_ADRS; do
-            ./ci/verify-adr.sh "$adr_path"
+            ./.agent-skill-chain/ci/verify-adr.sh "$adr_path"
           done
 
       - name: lint-vocab
-        run: ./scripts/lint-vocab.sh
+        run: ./.agent-skill-chain/scripts/lint-vocab.sh
 
       - name: lint-references
-        run: ./scripts/lint-references.sh
+        run: ./.agent-skill-chain/scripts/lint-references.sh
 
       - name: adr-lint
-        run: ./scripts/adr-lint.sh check
+        run: ./.agent-skill-chain/scripts/adr-lint.sh check
