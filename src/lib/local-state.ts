@@ -33,3 +33,7 @@ export function integrationFilePath(root: string, issueNumber: string): string {
 export function reviewFilePath(root: string, issueNumber: string, gateId: string): string {
   return path.join(coordinationDir(root, issueNumber), 'reviews', `${gateId}.yaml`);
 }
+
+export function reportFilePath(root: string, issueNumber: string, segment: string): string {
+  return path.join(coordinationDir(root, issueNumber), 'reports', `${segment}.yaml`);
+}

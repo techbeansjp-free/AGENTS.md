@@ -2,60 +2,61 @@
 # 正本: AGENTS.md §GitHub配布・マルチAI対応 / .agent-skill-chain/config/roles.yaml
 #
 # ベンダー中立の role contract（.agent-skill-chain/config/roles.yaml）を実行系（OpenAI Codex CLI 等経由の起動）へ
-# 変換するアダプタのインターフェース定義。各関数は .agent-skill-chain/scripts/*.sh の実スクリプト（未実装）を呼び出す
-# スタブであり、実処理は行わない。.agent-skill-chain/scripts/*.sh 実装後、各関数の中身をそれらの呼び出しに置き換える。
-#
-# 現時点ではサイレントに成功したふりをせず、明確なプレースホルダとして失敗する。
+# 変換するアダプタ。lease・commit・test・report等の状態操作系関数は .agent-skill-chain/scripts/*.sh
+# （agent-skill-chain CLIへの薄いラッパー）へ結線済み。ワーカー・ゲートレビュアを実際に起動する
+# launch_worker/launch_gate_reviewer相当の関数はまだ存在しない（起動方式は別途設計・実装が必要な
+# ため、本ファイルでは意図的に対象外としている）。
 
 set -euo pipefail
 
-# writer lease を取得する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる想定。
+ADAPTER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+SCRIPTS_DIR="$ADAPTER_DIR/../scripts"
+
+# writer lease を取得する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる。
 # 引数: issue_id, segment
 acquire_lease() {
-  echo "not implemented: .agent-skill-chain/scripts/lease-acquire.sh" >&2
-  exit 1
+  "$SCRIPTS_DIR/lease-acquire.sh" "$@"
 }
 
-# 保持中の writer lease を延長する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.renewal_interval_seconds を用いる想定。
+# 保持中の writer lease を延長する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.renewal_interval_seconds を用いる。
 # 引数: issue_id, token
 renew_lease() {
-  echo "not implemented: .agent-skill-chain/scripts/lease-renew.sh" >&2
-  exit 1
+  "$SCRIPTS_DIR/lease-renew.sh" "$@"
 }
 
 # 保持中の writer lease を解放する。
 # 引数: issue_id, token
 release_lease() {
-  echo "not implemented: .agent-skill-chain/scripts/lease-release.sh" >&2
-  exit 1
+  "$SCRIPTS_DIR/lease-release.sh" "$@"
 }
 
 # 自ブランチへ commit・push する（自ブランチ以外への書込みは禁止）。
 # 引数: message
 commit_and_push() {
-  echo "not implemented: .agent-skill-chain/scripts/commit-and-push.sh" >&2
-  exit 1
+  "$SCRIPTS_DIR/checkpoint.sh" "$@"
 }
 
 # テストを実行する（常時必須／変更内容別必須のテストは .agent-skill-chain/standards/TEST_POLICY.md 参照）。
 run_tests() {
-  echo "not implemented: .agent-skill-chain/scripts/run-tests.sh" >&2
-  exit 1
+  "$SCRIPTS_DIR/run-tests.sh" "$@"
 }
 
-# Integration Record を更新する。GitHubモード=Draft PR、ローカルモード=Integration Record
-# （.agent-skill-chain/schemas/integration.schema.yaml）。
+# Integration Record / Draft PR を新規作成する（SPECワーカーの最初のcheckpoint push直後のみ）。
+# 既存レコードへの更新（design/implementation/validationワーカーによるgatesフィールド反映等）は
+# 現時点でCLI側に実装が無く、spec以外のセグメントから呼び出すと失敗する
+# （pr-create.sh・.agent-skill-chain/schemas/integration.schema.yaml参照。GitHubモードでは
+# 後続のcommit_and_pushによるpushがPRへ自動反映されるため、実害は無い）。
+# 引数: issue_id, branch
 update_integration_record() {
-  echo "not implemented: .agent-skill-chain/scripts/integration-record-update.sh" >&2
-  exit 1
+  "$SCRIPTS_DIR/pr-create.sh" "$@"
 }
 
 # 完了・blocked を固定スキーマ（.agent-skill-chain/schemas/worker-report.schema.yaml）で進行役へ報告する。
+# 引数: issue_id, role, segment, status, target_sha, [blocked_reason]
 report_status() {
-  echo "not implemented: .agent-skill-chain/scripts/report-status.sh" >&2
-  exit 1
+  "$SCRIPTS_DIR/report-status.sh" "$@"
 }
 
 # --- codex.sh 固有の差分 ---
 # 本アダプタは OpenAI Codex CLI 等、Claude 系以外の実行系経由でのワーカー・ゲートレビュア起動を想定する。
-# 起動系は .agent-skill-chain/scripts/*.sh の実装完了後にここへ結線する。
+# launch_worker/launch_gate_reviewer相当の起動系関数は未実装（別途設計が必要）。
