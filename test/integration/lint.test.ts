@@ -1,0 +1,201 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createTmpRepo } from '../helpers/tmp-repo.js';
+import { runCli } from '../helpers/cli.js';
+
+// lint vocab / lint references / lint adr check の3サブコマンドを、bin/agents-md.js（ビルド後の
+// 実体）に対する subprocess 実行で検証する。createTmpRepo は .agent-skill-chain/ 資産一式
+// （docs/GLOSSARY.md・AGENTS.md 含む）を複製するため、lint コマンドが内部で使う repoRoot() 解決や
+// docs/GLOSSARY.md 読み込みが素通しで動く状態を用意できる。
+
+// このリポジトリ自身（test/integration からニ階層上）。lint adr check を実物 docs/adr/ に対して
+// 実行する検証で使う。
+const realRepoRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+
+test('lint vocab: 禁止語を含まないファイルは終了コード0、禁止語を含むファイルは終了コード1で箇所を報告する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 禁止同義語を含まない自作ファイル（docs/GLOSSARY.md にある正しい用語「Issue」のみ使用）
+  const cleanFile = path.join(repo.dir, 'clean.md');
+  fs.writeFileSync(cleanFile, 'これは Issue の説明です。\n正しい用語のみを使っています。\n');
+
+  // When: 明示的にそのファイルを対象として lint vocab を実行する
+  const clean = runCli(['lint', 'vocab', 'clean.md'], { cwd: repo.dir });
+
+  // Then: 違反なしとして終了コード0、標準エラー出力は空
+  assert.equal(clean.status, 0, clean.stderr);
+  assert.equal(clean.stderr, '');
+
+  // Given: docs/GLOSSARY.md 上で「Issue」の禁止同義語と定義されている「チケット」を2行目に含む
+  // 自作ファイル（1行目は違反なし、2行目・3行目に別の禁止語も含めて複数箇所検出できることを見る）
+  const violatingFile = path.join(repo.dir, 'violation.md');
+  fs.writeFileSync(
+    violatingFile,
+    ['違反なしの行です。', 'これはチケットの説明です。', '別の禁止語であるオーケストレーターも使う。'].join('\n') + '\n',
+  );
+
+  // When: そのファイルを対象として lint vocab を実行する
+  const violating = runCli(['lint', 'vocab', 'violation.md'], { cwd: repo.dir });
+
+  // Then: 終了コード1、ファイル:行・禁止語・正しい用語を含む標準エラー出力が得られる
+  assert.equal(violating.status, 1);
+  assert.match(
+    violating.stderr,
+    /violation\.md:2: 禁止語 'チケット' が見つかりました（'Issue' を使用してください）/,
+  );
+  assert.match(
+    violating.stderr,
+    /violation\.md:3: 禁止語 'オーケストレーター' が見つかりました（'進行役' を使用してください）/,
+  );
+  assert.doesNotMatch(violating.stderr, /violation\.md:1:/, '違反を含まない1行目は報告されないこと');
+});
+
+test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・docs/GLOSSARY.md・.agent-skill-chain資産）でも例外を起こさず動作する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given/When: path引数を省略し、defaultLiveFileRoots（AGENTS.md・docs/GLOSSARY.md・
+  // .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}）を対象に実行する
+  const result = runCli(['lint', 'vocab'], { cwd: repo.dir });
+
+  // Then: クラッシュ（「予期しないエラー」）せず、終了コードは0か1のいずれか、報告行があれば
+  // すべて既定の「ファイル:行: 禁止語 '...' が見つかりました（'...' を使用してください）」形式に従う。
+  // 実物の docs/GLOSSARY.md 自体が用語定義の一環として禁止語の実例を列挙しているため、
+  // デフォルト対象では終了コード1（違反報告あり）になり得ること自体は正常な挙動として扱う。
+  assert.ok(result.status === 0 || result.status === 1, `${result.status}: ${result.stderr}`);
+  assert.doesNotMatch(result.stderr, /予期しないエラー/);
+  if (result.status === 1) {
+    for (const line of result.stderr.trim().split('\n')) {
+      assert.match(line, /^.+:\d+: 禁止語 '.+' が見つかりました（'.+' を使用してください）$/);
+    }
+  }
+});
+
+test('lint references: 実在する見出しへの§参照・安定ID接尾辞つき参照・バッククォート例示は違反にならない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 見出し「不変条件 I1〜I8」を持つファイルと、それを参照する側のファイル。参照側は
+  // (a) 見出しテキストそのものへの§参照、(b) 見出しの安定ID接尾辞（headingCore が取り除く末尾の
+  // 英数字コード「I7」）を伴う§参照、(c) バッククォートで囲んだ例示的な file:line 参照 を含む。
+  fs.writeFileSync(path.join(repo.dir, 'headings.md'), '# 見出し\n\n## 不変条件 I1〜I8\n\n本文。\n');
+  fs.writeFileSync(
+    path.join(repo.dir, 'refs.md'),
+    [
+      '見出しテキストそのものへの参照: §不変条件I1〜I8 を確認する。',
+      '安定ID接尾辞つき参照: §不変条件I7 を確認する。',
+      'バッククォート例示は違反にならない: `file.ts:123` を参照。',
+    ].join('\n') + '\n',
+  );
+
+  // When: 両ファイルを対象に lint references を実行する
+  const result = runCli(['lint', 'references', 'headings.md', 'refs.md'], { cwd: repo.dir });
+
+  // Then: いずれも正当な参照として扱われ、違反なしで終了コード0
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+});
+
+test('lint references: 見出しに解決できない§参照と素のfile:line参照は違反として検出される', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: (a) どの見出しにも解決できない§参照、(b) バッククォートで囲まれていない素の
+  // ファイルパス+行番号参照 を含む自作ファイル（見出しを持つファイルは対象に含めない）
+  fs.writeFileSync(
+    path.join(repo.dir, 'bad-refs.md'),
+    ['不明な節: §存在しない見出し を参照。', '直書きの行番号参照: src/foo.ts:123 は禁止パターン。'].join('\n') + '\n',
+  );
+
+  // When: そのファイルを対象に lint references を実行する
+  const result = runCli(['lint', 'references', 'bad-refs.md'], { cwd: repo.dir });
+
+  // Then: 終了コード1、両方の違反がそれぞれ標準エラー出力に報告される
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /bad-refs\.md:1: 禁止参照 '§存在しない見出し'（見出しテキストで解決できないセクション番号参照）/,
+  );
+  assert.match(result.stderr, /bad-refs\.md:2: 禁止参照 'src\/foo\.ts:123'（ファイルパス＋行番号参照）/);
+});
+
+test('lint adr check: 実物 docs/adr/ は違反0で通る', async () => {
+  // Given/When: このリポジトリ自身の docs/adr/（現時点では ADR-0001 のみ、supersedes: []・
+  // superseded-by: null で自己完結）に対して lint adr check を実行する
+  const result = runCli(['lint', 'adr', 'check'], { cwd: realRepoRoot });
+
+  // Then: 違反なしで終了コード0
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+});
+
+test('lint adr check: supersedes/superseded-byの非対称は違反として検出され、対称に直せば違反なしになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 自作の docs/adr/ に2つのADRを作る。ADR-0002 は ADR-0001 を supersedes するが、
+  // ADR-0001 側の superseded-by はまだ null のまま（非対称）。
+  const adrDir = path.join(repo.dir, 'docs', 'adr');
+  fs.mkdirSync(adrDir, { recursive: true });
+  const adr1Path = path.join(adrDir, 'ADR-0001-test.md');
+  fs.writeFileSync(
+    adr1Path,
+    ['# ADR', '', '```yaml', 'id: ADR-0001', 'status: accepted', 'supersedes: []', 'superseded-by: null', '```', ''].join(
+      '\n',
+    ),
+  );
+  fs.writeFileSync(
+    path.join(adrDir, 'ADR-0002-test.md'),
+    [
+      '# ADR',
+      '',
+      '```yaml',
+      'id: ADR-0002',
+      'status: accepted',
+      'supersedes: [ADR-0001]',
+      'superseded-by: null',
+      '```',
+      '',
+    ].join('\n'),
+  );
+
+  // When: この非対称な状態で lint adr check を実行する
+  const asymmetric = runCli(['lint', 'adr', 'check'], { cwd: repo.dir });
+
+  // Then: 終了コード1、非対称の当事者2件（ADR-0002・ADR-0001）を含む違反理由が報告される
+  assert.equal(asymmetric.status, 1);
+  assert.match(asymmetric.stderr, /ADR-0002 と ADR-0001: supersedes ⇔ superseded-by が非対称です/);
+
+  // Given: ADR-0001 側の superseded-by を ADR-0002 に直し、対称にする
+  const fixedText = fs.readFileSync(adr1Path, 'utf8').replace('superseded-by: null', 'superseded-by: ADR-0002');
+  fs.writeFileSync(adr1Path, fixedText);
+
+  // When: 対称に直した後で再度 lint adr check を実行する
+  const symmetric = runCli(['lint', 'adr', 'check'], { cwd: repo.dir });
+
+  // Then: 違反なしで終了コード0
+  assert.equal(symmetric.status, 0, symmetric.stderr);
+});
+
+test('lint adr check: check以外のサブコマンドはエラーになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given/When: 'check' 以外の未知のサブコマンドを渡す
+  const unknown = runCli(['lint', 'adr', 'foo'], { cwd: repo.dir });
+
+  // Then: 終了コード1、未知のサブコマンドである旨のエラーメッセージ
+  assert.equal(unknown.status, 1);
+  assert.match(unknown.stderr, /未知のサブコマンドです/);
+
+  // Given/When: サブコマンドを省略する
+  const missing = runCli(['lint', 'adr'], { cwd: repo.dir });
+
+  // Then: こちらも終了コード1、未知のサブコマンドエラー
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /未知のサブコマンドです/);
+});

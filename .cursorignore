@@ -1,4 +1,0 @@
-# Cursor の AI（chat/インデックス/補完）から除外する対象。
-# .claude/settings.json の permissions.deny（Read/Grep/Glob）と同趣旨:
-# close 済み issue（過去の開発記録）を AI の参照対象から外す。
-docs/maintainer/workflow/close/

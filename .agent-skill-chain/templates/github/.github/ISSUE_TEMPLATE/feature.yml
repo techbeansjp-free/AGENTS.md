@@ -1,0 +1,46 @@
+name: "feature: 新機能"
+description: 新しい機能・振る舞いの追加を提案する。
+title: "[feature] "
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        このフォームは spec セグメントの開始点です。ここで取得するのは課題・目的・制約・初期自走範囲のみであり、正式な要求・要件・受入条件は spec セグメントで `SPEC.md` に確定します。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 課題・目的
+      description: 解決したい問題、達成したい目的を記述してください。なぜ今これが必要かの背景も含めてください。
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 制約
+      description: 既知の制約・前提があれば記述してください（無ければ「無し」と記載）。
+    validations:
+      required: true
+  - type: dropdown
+    id: autonomy
+    attributes:
+      label: 初期自走範囲
+      description: この Issue の初期 autonomy を選択してください。既定は gated。full は明示的な人間のオプトインが必要（AGENTS.md 不変条件I8）。
+      options:
+        - gated
+        - full
+      default: 0
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: リスク分類
+      description: この Issue の初期リスク分類を選択してください。既定は unclassified（unclassified・normal 以外は Strict レビュープロファイルが適用される）。
+      options:
+        - unclassified
+        - normal
+        - high
+      default: 0
+    validations:
+      required: true
