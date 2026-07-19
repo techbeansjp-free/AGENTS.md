@@ -5,33 +5,23 @@
 # .agent-skill-chain/templates/github/.github/（配布元の正本）と対象リポジトリの .github/（展開結果）が
 # 同期しているかを検査する。
 #
-# スタブ: 実処理は将来 `agent-skill-chain verify template-sync`（src/agents-md.ts のCLI再実装後）
-# として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。
-# 現時点ではサイレントに成功したふりをせず、明確なプレースホルダとして失敗する
-# （CI上で「検査未実装なのに緑」という誤った安全信号を出さないため、終了コード1で失敗する）。
+# 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
+# `verify template-sync` サブコマンドへの薄いラッパーである（使い方は `verify template-sync -h` 参照）。
 
 set -euo pipefail
 
-usage() {
-  cat <<'USAGE'
-使い方: verify-template-sync.sh [repo_root]
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
-repo_root: 検査対象リポジトリのルートパス。省略時はカレントディレクトリを対象とする。
-
-.agent-skill-chain/config/agent-skill-chain.yaml の templates.github_source（配布元の正本）と
-templates.github_target（対象リポジトリ側の展開結果）を比較し、両者が
-同期しているかを検査する。
-
-終了コード:
-  0: .github/ は .agent-skill-chain/templates/github/.github/ と同期
-  1: .github/ は未同期（差分あり）、またはスタブ未実装
-USAGE
-}
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
+if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
+  CLI=(node "$REPO_ROOT/bin/agents-md.js")
+elif [[ -x "$REPO_ROOT/node_modules/.bin/agent-skill-chain" ]]; then
+  CLI=("$REPO_ROOT/node_modules/.bin/agent-skill-chain")
+elif command -v agent-skill-chain >/dev/null 2>&1; then
+  CLI=(agent-skill-chain)
+else
+  echo "agent-skill-chain CLI が見つかりません（bin/agents-md.js 未ビルド、node_modules/.bin/agent-skill-chain 不在、PATH上にも無し）。'npm run build' を実行するか agent-skill-chain を導入してください。" >&2
+  exit 1
 fi
 
-echo "not implemented: agent-skill-chain verify template-sync（src/agents-md.ts CLI再実装待ち）" >&2
-exit 1
+exec "${CLI[@]}" verify template-sync "$@"

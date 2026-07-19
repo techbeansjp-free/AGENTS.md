@@ -4,28 +4,23 @@
 # セグメント完了ごとにcommit+pushし、耐久性（I3）のチェックポイントを作る。
 # .agent-skill-chain/config/agent-skill-chain.yaml の durability.backend（remote|local_mirror）を参照する。
 #
-# スタブ: 実処理は将来 `agent-skill-chain checkpoint`（src/agents-md.ts のCLI再実装後）
-# として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。
-# 現時点ではサイレントに成功したふりをせず、明確なプレースホルダとして失敗する。
+# 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
+# `checkpoint` サブコマンドへの薄いラッパーである（使い方は `checkpoint -h` 参照）。
 
 set -euo pipefail
 
-usage() {
-  cat <<'USAGE'
-使い方: checkpoint.sh <message>
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
-message: commitメッセージ。
-
-出力:
-  成功時: 終了コード0。commitしたSHAを標準出力へ。
-  失敗時: 終了コード1以上。durability.backend未設定・push失敗等の理由を標準エラー出力へ。
-USAGE
-}
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
+if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
+  CLI=(node "$REPO_ROOT/bin/agents-md.js")
+elif [[ -x "$REPO_ROOT/node_modules/.bin/agent-skill-chain" ]]; then
+  CLI=("$REPO_ROOT/node_modules/.bin/agent-skill-chain")
+elif command -v agent-skill-chain >/dev/null 2>&1; then
+  CLI=(agent-skill-chain)
+else
+  echo "agent-skill-chain CLI が見つかりません（bin/agents-md.js 未ビルド、node_modules/.bin/agent-skill-chain 不在、PATH上にも無し）。'npm run build' を実行するか agent-skill-chain を導入してください。" >&2
+  exit 1
 fi
 
-echo "not implemented: agent-skill-chain checkpoint（src/agents-md.ts CLI再実装待ち）" >&2
-exit 1
+exec "${CLI[@]}" checkpoint "$@"

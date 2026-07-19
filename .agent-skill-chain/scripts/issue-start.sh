@@ -6,32 +6,23 @@
 # 従いブランチ名・worktreeパスを機械的に生成し、worktreeを作成する
 # （.agent-skill-chain/standards/GIT_CONVENTIONS.md 4層構造の「3. 正しい名前の生成」層）。
 #
-# スタブ: 実処理は将来 `agent-skill-chain issue start`（src/agents-md.ts のCLI再実装後）
-# として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。
-# 現時点ではサイレントに成功したふりをせず、明確なプレースホルダとして失敗する。
+# 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
+# `issue start` サブコマンドへの薄いラッパーである（使い方は `issue start -h` 参照）。
 
 set -euo pipefail
 
-usage() {
-  cat <<'USAGE'
-使い方: issue-start.sh <issue_id> <type> <slug> <issue_created_at>
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
-issue_id:         ISSUE-<番号> 形式のIssue ID
-type:             .agent-skill-chain/config/agent-skill-chain.yaml issue.allowed_types のいずれか
-                   （feature|bugfix|hotfix|refactor|docs|process）
-slug:             ブランチ名・worktreeパスに用いるslug（worktree.slug_max_length以下）
-issue_created_at: Issue起票日時（Asia/Tokyo、worktree.timestamp.format に従う）
-
-出力:
-  成功時: 終了コード0。生成したブランチ名・worktreeパスを標準出力へ。
-  失敗時: 終了コード1以上。規約違反の理由を標準エラー出力へ。
-USAGE
-}
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
+if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
+  CLI=(node "$REPO_ROOT/bin/agents-md.js")
+elif [[ -x "$REPO_ROOT/node_modules/.bin/agent-skill-chain" ]]; then
+  CLI=("$REPO_ROOT/node_modules/.bin/agent-skill-chain")
+elif command -v agent-skill-chain >/dev/null 2>&1; then
+  CLI=(agent-skill-chain)
+else
+  echo "agent-skill-chain CLI が見つかりません（bin/agents-md.js 未ビルド、node_modules/.bin/agent-skill-chain 不在、PATH上にも無し）。'npm run build' を実行するか agent-skill-chain を導入してください。" >&2
+  exit 1
 fi
 
-echo "not implemented: agent-skill-chain issue start（src/agents-md.ts CLI再実装待ち）" >&2
-exit 1
+exec "${CLI[@]}" issue start "$@"

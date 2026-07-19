@@ -5,29 +5,23 @@
 # compare-and-set相当の原子的処理）。1 Issueにつき同時1つの制約を強制する。
 # .agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる。
 #
-# スタブ: 実処理は将来 `agent-skill-chain lease acquire`（src/agents-md.ts のCLI再実装後）
-# として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。
-# 現時点ではサイレントに成功したふりをせず、明確なプレースホルダとして失敗する。
+# 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
+# `lease acquire` サブコマンドへの薄いラッパーである（使い方は `lease acquire -h` 参照）。
 
 set -euo pipefail
 
-usage() {
-  cat <<'USAGE'
-使い方: lease-acquire.sh <issue_id> <segment>
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
-issue_id: ISSUE-<番号> 形式のIssue ID
-segment:  spec|design|implementation|validation|adr_finalization
-
-出力:
-  成功時: 終了コード0。.agent-skill-chain/schemas/lease.schema.yaml準拠のwriter_lease（token含む）を標準出力へ。
-  失敗時: 終了コード1以上。既存leaseと競合した場合はholder・expires_atを標準エラー出力へ。
-USAGE
-}
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
+if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
+  CLI=(node "$REPO_ROOT/bin/agents-md.js")
+elif [[ -x "$REPO_ROOT/node_modules/.bin/agent-skill-chain" ]]; then
+  CLI=("$REPO_ROOT/node_modules/.bin/agent-skill-chain")
+elif command -v agent-skill-chain >/dev/null 2>&1; then
+  CLI=(agent-skill-chain)
+else
+  echo "agent-skill-chain CLI が見つかりません（bin/agents-md.js 未ビルド、node_modules/.bin/agent-skill-chain 不在、PATH上にも無し）。'npm run build' を実行するか agent-skill-chain を導入してください。" >&2
+  exit 1
 fi
 
-echo "not implemented: agent-skill-chain lease acquire（src/agents-md.ts CLI再実装待ち）" >&2
-exit 1
+exec "${CLI[@]}" lease acquire "$@"

@@ -8,33 +8,23 @@
 # deprecated-reason・tags のみ。related_adrs の stale 参照（accepted 以外の
 # ADR への参照、実在しない ADR への参照）も禁止する。
 #
-# スタブ: 実処理は将来 `agent-skill-chain verify adr`（src/agents-md.ts のCLI再実装後）
-# として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。
-# 現時点ではサイレントに成功したふりをせず、明確なプレースホルダとして失敗する
-# （CI上で「検査未実装なのに緑」という誤った安全信号を出さないため、終了コード1で失敗する）。
+# 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
+# `verify adr` サブコマンドへの薄いラッパーである（使い方は `verify adr -h` 参照）。
 
 set -euo pipefail
 
-usage() {
-  cat <<'USAGE'
-使い方: verify-adr.sh <adr_path>
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
-adr_path: 検査対象の ADR ファイルパス（docs/adr/ 配下、.agent-skill-chain/templates/adr/ADR.md 準拠）。
-
-status が accepted 以降の場合、id・Context・Decision・Consequences・supersedes が
-過去バージョンから変更されていないか、related_adrs が accepted の ADR のみを
-指しているか（stale 参照でないか）を検査する。
-
-終了コード:
-  0: ADR はライフサイクル・不変項目を遵守
-  1: 不変項目の変更、stale 参照、またはスタブ未実装
-USAGE
-}
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
+if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
+  CLI=(node "$REPO_ROOT/bin/agents-md.js")
+elif [[ -x "$REPO_ROOT/node_modules/.bin/agent-skill-chain" ]]; then
+  CLI=("$REPO_ROOT/node_modules/.bin/agent-skill-chain")
+elif command -v agent-skill-chain >/dev/null 2>&1; then
+  CLI=(agent-skill-chain)
+else
+  echo "agent-skill-chain CLI が見つかりません（bin/agents-md.js 未ビルド、node_modules/.bin/agent-skill-chain 不在、PATH上にも無し）。'npm run build' を実行するか agent-skill-chain を導入してください。" >&2
+  exit 1
 fi
 
-echo "not implemented: agent-skill-chain verify adr（src/agents-md.ts CLI再実装待ち）" >&2
-exit 1
+exec "${CLI[@]}" verify adr "$@"

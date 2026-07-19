@@ -6,33 +6,23 @@
 # unit_test_results / validation: acceptance_test_results, regression_test_results, pr）
 # の必須成果物ファイルが揃っているかを検査する。
 #
-# スタブ: 実処理は将来 `agent-skill-chain verify artifacts`（src/agents-md.ts のCLI再実装後）
-# として実装され、本スクリプトはそれを呼び出す薄いラッパーに置き換わる。
-# 現時点ではサイレントに成功したふりをせず、明確なプレースホルダとして失敗する
-# （CI上で「検査未実装なのに緑」という誤った安全信号を出さないため、終了コード1で失敗する）。
+# 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
+# `verify artifacts` サブコマンドへの薄いラッパーである（使い方は `verify artifacts -h` 参照）。
 
 set -euo pipefail
 
-usage() {
-  cat <<'USAGE'
-使い方: verify-artifacts.sh <issue_id> <segment>
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
-issue_id: 検査対象の Issue ID（例: ISSUE-123）。
-segment:  検査対象セグメント（spec | design | implementation | validation）。
-          .agent-skill-chain/config/segments.yaml の segments[].id に対応する。
-
-指定セグメントの .agent-skill-chain/config/segments.yaml 定義 outputs が全て存在するかを検査する。
-
-終了コード:
-  0: 当該セグメントの必須成果物は全て存在
-  1: 必須成果物の欠落、不正な segment 指定、またはスタブ未実装
-USAGE
-}
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
+if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
+  CLI=(node "$REPO_ROOT/bin/agents-md.js")
+elif [[ -x "$REPO_ROOT/node_modules/.bin/agent-skill-chain" ]]; then
+  CLI=("$REPO_ROOT/node_modules/.bin/agent-skill-chain")
+elif command -v agent-skill-chain >/dev/null 2>&1; then
+  CLI=(agent-skill-chain)
+else
+  echo "agent-skill-chain CLI が見つかりません（bin/agents-md.js 未ビルド、node_modules/.bin/agent-skill-chain 不在、PATH上にも無し）。'npm run build' を実行するか agent-skill-chain を導入してください。" >&2
+  exit 1
 fi
 
-echo "not implemented: agent-skill-chain verify artifacts（src/agents-md.ts CLI再実装待ち）" >&2
-exit 1
+exec "${CLI[@]}" verify artifacts "$@"
