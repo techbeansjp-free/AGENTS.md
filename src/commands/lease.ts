@@ -5,7 +5,7 @@ import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
 import { leaseFilePath } from '../lib/local-state.js';
-import { tryReadYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
+import { tryReadYamlFile, writeYamlFileAtomic, writeYamlFileExclusive } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import {
   activeLeaseFor,
@@ -98,22 +98,44 @@ export async function acquire(args: string[]): Promise<number> {
     if (!outcome.valid) return fail(`生成したleaseがスキーマに適合しません: ${outcome.errors.join('; ')}`);
 
     if (config.coordination.backend === 'local') {
-      const existing = tryReadYamlFile<WriterLease>(leaseFilePath(root, number));
+      // ローカルモードは issue 毎に lease.yaml が1ファイルのみのため、この排他生成が同一segment・
+      // 他segmentいずれの競合検査も兼ねる（1 Issueにつき同時1つのwriter leaseのみ許可。DESIGN.md参照）。
+      const filePath = leaseFilePath(root, number);
       const now = new Date().toISOString();
-      if (existing && existing.writer_lease.expires_at > now) {
-        // ローカルモードは issue 毎に lease.yaml が1ファイルのみのため、この検査が同一segment・
-        // 他segmentいずれの競合も兼ねる（1 Issueにつき同時1つのwriter leaseのみ許可。DESIGN.md参照）。
-        return fail(
-          `既存の writer lease と競合しています: holder=${existing.writer_lease.holder}, expires_at=${existing.writer_lease.expires_at}`,
-        );
+
+      // 1回目: 既存ファイル無しからの排他生成（O_CREAT|O_EXCL相当）を試みる。成功すれば
+      // read-check-then-writeを経由しない真のcompare-and-setとして取得完了する。
+      let created = writeYamlFileExclusive(filePath, lease);
+      if (!created) {
+        const existing = tryReadYamlFile<WriterLease>(filePath);
+        if (existing && existing.writer_lease.expires_at > now) {
+          return fail(
+            `既存の writer lease と競合しています: holder=${existing.writer_lease.holder}, expires_at=${existing.writer_lease.expires_at}`,
+          );
+        }
+        // 期限切れ（stale）のため回収し、1回だけ再試行する（無限リトライしない）。
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          // 既に他プロセスが回収済みの可能性がある。後続の再試行の成否に委ねる。
+        }
+        created = writeYamlFileExclusive(filePath, lease);
+        if (!created) {
+          return fail('lease の回収中に別プロセスが再取得したため取得できませんでした（再試行してください）');
+        }
       }
+
+      // 取得成功後にWIP上限チェックを行う（自分自身を含めて数えるため、書込み前の`>=`判定と
+      // 同値になるよう`>`で比較する。DESIGN.md参照）。超過していれば直前に書いたlease.yamlを
+      // ロールバックする（advisoryなWIP上限のためのロールバックであり、1 Issue内の排他性という
+      // 主目的の原子性には影響しない）。
       const activeCount = countLocalActiveWriterLeases(root);
-      if (activeCount >= config.wip.limit) {
+      if (activeCount > config.wip.limit) {
+        fs.unlinkSync(filePath);
         return fail(
-          `WIP上限（wip.limit=${config.wip.limit}）に達しているため writer lease を取得できません（現在の有効writer lease数: ${activeCount}）`,
+          `WIP上限（wip.limit=${config.wip.limit}）に達しているため writer lease を取得できません（現在の有効writer lease数: ${activeCount - 1}）`,
         );
       }
-      writeYamlFileAtomic(leaseFilePath(root, number), lease);
       return ok(toYamlString(lease).trim());
     }
 
