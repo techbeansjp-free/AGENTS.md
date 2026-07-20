@@ -75,6 +75,46 @@ export function activeLeaseFor(issueNumber: string, segment: string, cwd?: strin
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
 }
 
+/**
+ * 有効期限内の writer lease を segment を問わず全て返す（1 Issueにつき同時1つのみ許可する制約の
+ * issue横断コンフリクト検査に使う。AGENTS.md §役割・権限・writer lease）。
+ */
+export function activeLeasesFor(issueNumber: string, cwd?: string): LeaseComment[] {
+  const now = new Date().toISOString();
+  return listLeaseComments(issueNumber, cwd).filter((c) => c.lease.writer_lease.expires_at > now);
+}
+
+const ACTIVE_LEASE_LABEL = 'writer-lease:active';
+
+/**
+ * WIP上限（wip.limit、既定3、有効writer lease数で判定）用: writer-lease:active ラベルが
+ * 付与された open issue の件数を数える（GitHubモード）。
+ */
+export function countActiveWriterLeaseIssues(cwd?: string): number {
+  const result = gh(['issue', 'list', '--label', ACTIVE_LEASE_LABEL, '--state', 'open', '--json', 'number'], cwd);
+  if (result.status !== 0) {
+    throw new Error(`gh issue list に失敗しました: ${result.stderr.trim()}`);
+  }
+  const parsed = JSON.parse(result.stdout) as { number: number }[];
+  return parsed.length;
+}
+
+/**
+ * lease acquire 成功時に WIP 上限判定用ラベルを付与する（best-effort）。
+ * ラベル操作の失敗は WIP 判定の可用性を下げるのみで、同issue内lease競合検査
+ * （コメント本体照合）は独立して機能し続けるため、ここでは例外を投げない
+ * （AGENTS.md §障害・ロールバック考慮: 過大カウントはあってもゼロ件見逃しにはならない設計）。
+ */
+export function markActiveWriterLeaseLabel(issueNumber: string, cwd?: string): void {
+  gh(['label', 'create', ACTIVE_LEASE_LABEL], cwd);
+  gh(['issue', 'edit', issueNumber, '--add-label', ACTIVE_LEASE_LABEL], cwd);
+}
+
+/** lease release 成功時に WIP 上限判定用ラベルを除去する（best-effort）。 */
+export function unmarkActiveWriterLeaseLabel(issueNumber: string, cwd?: string): void {
+  gh(['issue', 'edit', issueNumber, '--remove-label', ACTIVE_LEASE_LABEL], cwd);
+}
+
 export function postLeaseComment(issueNumber: string, lease: WriterLease, cwd?: string): string {
   const result = gh(['issue', 'comment', issueNumber, '--body', renderLeaseComment(lease)], cwd);
   if (result.status !== 0) {
