@@ -14,6 +14,9 @@ export interface AgentSkillChainConfig {
     standard: { reviewer_count: number; modes: string[] };
     strict: { reviewer_count: number; trigger: { risk_not_normal: boolean; autonomy_full: boolean } };
   };
+  worker: {
+    adapter?: 'claude' | 'codex' | 'human';
+  };
   worktree: {
     root: string;
     path_pattern: string;

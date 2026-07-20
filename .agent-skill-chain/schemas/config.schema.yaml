@@ -4,7 +4,7 @@ $schema: http://json-schema.org/draft-07/schema#
 schema_version: agent-skill-chain/config/v1
 title: agent-skill-chain config
 type: object
-required: [schema_version, coordination, durability, autonomy, risk, review, worktree, branch, issue, wip, lease, bdd, templates, checks]
+required: [schema_version, coordination, durability, autonomy, risk, review, worker, worktree, branch, issue, wip, lease, bdd, templates, checks]
 additionalProperties: false
 properties:
   schema_version: {const: agent-skill-chain/config/v1}
@@ -54,6 +54,12 @@ properties:
             properties:
               risk_not_normal: {type: boolean}
               autonomy_full: {type: boolean}
+  worker:
+    type: object
+    required: []
+    additionalProperties: false
+    properties:
+      adapter: {type: string, enum: [claude, codex, human]}
   worktree:
     type: object
     required: [root, path_pattern, timestamp, slug_max_length, immutable_path]
@@ -131,6 +137,7 @@ examples:
     review:
       standard: {reviewer_count: 1, modes: [conformance, falsification]}
       strict: {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
+    worker: {adapter: human}
     worktree:
       root: .worktrees
       path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
