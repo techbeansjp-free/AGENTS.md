@@ -1,165 +1,174 @@
-# DESIGN: agent-skill-chain — 完全自走の実効化: ruleset実適用・worker/review adapterのclaude切替実機検証
+# DESIGN: agent-skill-chain — launch_worker の権限モード不足解消・ローカルバックエンド issue 本文スキーマ拡張
 
-- Issue: `ISSUE-180`
+- Issue: `ISSUE-183`
 - 対応する SPEC: `SPEC.md`
 
 ## 目的・対象範囲・前提・用語
 
-本設計の目的は、リポジトリ `techbeansjp-free/AGENTS.md` において「完全自走（人間が介在しなくても、真に危険な場合以外は止まらない）」を、既存機構を新規実装せずにライブ環境で有効化・機械強制する具体的方式を確定することである。対象は3点。(1) ライブの GitHub 側でゲート Check Run（`agent-skill-chain/{spec,design,implementation,validation}-gate` と `verify`）を `main` と統合ブランチ双方で required として機械強制する。(2) `worker.adapter`/`review.adapter` を `human` から `claude` へ切り替える。(3) 本物の `claude` CLI で `launch_worker` を人間介在なく1セグメント完走させ、正常経路で `human_required` が誤発火しないこと・真の異常時のみ発火することを実測する。
+本設計の目的は、`.agent-skill-chain/adapters/claude.sh` の `launch_worker` が本物の `claude` CLI をヘッドレスで起動した際、ワーカーの正規責務範囲（自 branch への `git commit`／`git push`、Draft PR 作成、テスト実行、`report-status`／`lease-*`／`checkpoint` の各スクリプト実行）を人間の追加承認なく完走できるようにし、あわせてローカルバックエンドの状態モデル（`state.yaml`）に Issue の本文（タイトル・要求内容）を保持できるようにすることで、使い捨て issue による `launch_worker` の実機再検証（AC-6/AC-7/AC-8 相当）を成立させることである。
 
-前提: 本リポジトリは agent-skill-chain の**正本（配布元）**であると同時に、その規律を自らに適用する**ドッグフーディング消費者**でもある二役を兼ねる。正本アセット（`.agent-skill-chain/templates/` 配下の配布物）へ消費者固有・一過性の設定を混入させてはならない（混入すると `setup-ruleset.sh` 経由で全下流消費者へ再配布されてしまう）。
+対象は4点。(1) 既定 `WORKER_CMD` の権限付与方式を、無制限な `bypassPermissions` ではなく責務スコープを allowlist で明示する方式へ変更する。(2) `state.schema.yaml` に Issue のタイトル・要求内容フィールドを後方互換で追加する。(3) `issue start`（ローカルバックエンド）がそれらを受け取り `state.yaml` へ永続化し、`segment start` がワーカー起動プロンプトへそれらを供給する。(4) これらの変更を本物の `claude` CLI で実機再検証する具体手順を定める。
+
+前提: 本リポジトリは agent-skill-chain の**正本（配布元）**であると同時に、その規律を自らに適用する**ドッグフーディング消費者**でもある。正本アセットへ消費者固有・一過性の値を混入させない。ワーカーの起動系（`WORKER_CMD`）は環境変数で完全上書き可能であり、この上書き余地は本設計でも維持する（テストのモック境界・CI/sandbox での差し替えに不可欠）。`worker.adapter`/`review.adapter` は先行 Issue #180 で既に `claude` へ切替済み（本 Issue のスコープ外）。
 
 用語（自己完結のため本文で定義する）:
-- **required check**: branch protection / ruleset でマージ条件として必須指定された Check Run。未達の PR はマージ不可になる。本 Issue の対象は `agent-skill-chain/{spec,design,implementation,validation}-gate` と CI job 名 `verify` の計5コンテキスト。
-- **統合ブランチ**: 本 Issue 群の base である `chore/162-agent-skill-chain-bootstrap`。各 Issue の PR を `main` への最終マージ前に集約する一過性ブランチ。最終マージ後は削除される想定。
-- **正本 ruleset**: `.agent-skill-chain/templates/github/provisioning/rulesets/main.json`。`conditions.ref_name.include` は現状 `refs/heads/main` のみを対象とし、required_status_checks に上記5コンテキストを定める。`setup-ruleset.sh`（`setup ruleset` CLI の薄いラッパー）が対象リポジトリの GitHub Rulesets API へ適用する。
-- **launch_worker**: `.agent-skill-chain/adapters/claude.sh` のセグメント作業ワーカー起動関数。lease取得 → `segment start`（role_contract取得）→ ワーカー起動 → 完了確認（`report latest` の直近レコードの `status=completed` かつ `target_sha` が push 済み HEAD と一致）→ lease解放、の順で1セグメントを機械的に完走させる。認証欠如・CLI不在・timeout・完了偽装検知の各異常では `report_status blocked`（`human_escalation_requested` 扱い）を書いて非0非3で返すフェイルセーフを持つ。
-- **使い捨て検証**: 検証専用に作成し確認後にマージせず close・削除する一回性のブランチ／PR。ライブの機械強制やダミー失敗の挙動を実測するために用い、成果物・履歴を `main`・統合ブランチへ混入させない。
-- **human_required（誤発火）**: 認証あり・CLI 利用可という正常な前提のもとで、`launch_worker` のフェイルセーフ経路や `launch_gate_reviewer` の `gate mark-human-required` が呼ばれてしまうこと。
+- **launch_worker**: `.agent-skill-chain/adapters/claude.sh` のセグメント作業ワーカー起動関数。lease 取得 → `segment start`（role_contract 取得）→ ワーカー起動 → 完了確認（`report latest` の直近レコードが `status=completed` かつ `target_sha` が push 済み HEAD と一致）→ lease 解放、の順で1セグメントを機械的に完走させる。起動後の各異常（認証欠如・CLI 不在・起動失敗・timeout・完了偽装）では `report_status blocked`（`human_escalation_requested` 扱い）を書き非0非3で返すフェイルセーフを持つ。
+- **WORKER_CMD**: `launch_worker` がワーカーを起動する実行系コマンド文字列。env で完全上書き可。未指定かつ `claude` 検出時の既定が本設計の変更対象。
+- **権限モード（permission mode）／`--allowed-tools`**: `claude` CLI がツール実行時の承認をどう扱うかを定める起動時設定。`acceptEdits`（ファイル編集のみ自動承認、Bash 等は都度承認＝ヘッドレスでは事実上停止）／`bypassPermissions`（全ツール無制限自動承認）／`--allowed-tools <list>`（許可するツール名・Bash パターンを明示列挙し、列挙外はヘッドレスで拒否＝安全側 fail）が該当する。受理値は `claude --help` の一次情報（`--permission-mode {acceptEdits,auto,bypassPermissions,manual,dontAsk,plan}`、`--allowed-tools <tools...>`（カンマ／空白区切り、`Bash(git *)` 等のパターン可））。
+- **ワーカーの正規責務範囲**: `.agent-skill-chain/config/roles.yaml` の `worker` role の capability。自 worktree 内 read/write、test 実行、writer lease の acquire/renew/release、**自 branch への commit/push**、Integration Record／Draft PR 更新（Draft PR 作成は spec のみ）、固定スキーマによる report。自 branch 以外への書込みは禁止（I5）。
+- **allowlist（責務スコープ許可リスト）**: 上記責務範囲の操作だけを列挙した `--allowed-tools` の内容。列挙外はヘッドレスで拒否される。
+- **ローカルバックエンド**: `coordination.backend: local` 時の調整状態の正本。Issue 毎に `issues/<number>/.agent-skill-chain/state.yaml`（正本）等を Git 管理下に置く。Issue 本文は GitHub API から取れず状態ファイルにのみ存在しうる。
+- **安全分類器衝突**: 権限モード緩和（特に `bypassPermissions`）の検証が、検証を行うエージェント自身のセッションの安全分類器にブロックされ、ネストした `claude` 起動へ到達しない副次的現象（SPEC 根本原因3）。
 
 ## 要件 → 設計要素の対応表
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| 要件1（ruleset実適用） / `AC-1`,`AC-2` | 設計要素A-1「main への正本 ruleset 適用」 | 正本 `main.json` を無変更で `setup-ruleset.sh` により実適用 |
-| 要件2（main・統合ブランチ双方での機械強制） / `AC-3` | 設計要素A-2「統合ブランチ保護の実現方式」（本文「統合ブランチ機械強制の実現方式（設計判断）」で採用案(b)を確定） | 採用: 統合ブランチへの branch protection 個別適用。却下: (a)正本 ruleset の ref 拡張・(c)別 ruleset |
-| 要件3（failing check がブロックする実機確認） / `AC-4` | 設計要素A-3「使い捨て失敗 PR による実機確認」 | `verify` を意図的に失敗させる使い捨て PR で `mergeable != MERGEABLE` を実測 |
-| 要件4（adapter の claude 切替） / `AC-5` | 設計要素B「config の adapter 切替」 | `worker.adapter`・`review.adapter` を `human`→`claude` |
-| 要件5（launch_worker 実機完走） / `AC-6`,`AC-7` | 設計要素C「launch_worker 実機完走手順」 | 使い捨て Issue・disposable segment で本物 `claude` CLI 起動、証跡採取 |
-| 要件6（正常経路で human_required 誤発火せず／真の異常時のみ発火） / `AC-8`,`AC-9` | 設計要素C「human_required 対照確認」 | 正常経路（発火せず）と認証欠如注入（発火）の対照。異常注入の自動テストは既存 `worker-adapters.test.ts` が網羅済み |
-| 要件7（既存テストスイート維持） / `AC-10` | 設計要素D「回帰の維持」 | adapter 切替はテストの tmp-repo 隔離により無影響。`npm test` 全 pass を維持 |
+| 要件1（責務限定の権限モード） / `AC-1`,`AC-2` | 設計要素A「既定 WORKER_CMD の権限付与方式」 | 候補A（allowlist）を採用。bypassPermissions 既定化を却下 |
+| 要件2（安全分類器衝突への配慮） / （AC 直結なし・要件2） | 設計要素E「再検証の分離実行」 | 既定を bypass にしない＋検証を外側セッションから分離した独立プロセスで実行 |
+| 要件3（state スキーマへの本文フィールド追加） / `AC-3` | 設計要素B「state.schema.yaml 拡張」 | `title`・`request` を任意追加、`schema_version` 据え置き、migration 不要 |
+| 要件4（issue start の対応） / `AC-4` | 設計要素C「issue start のフィールド受理・永続化」 | `--title`／`--request-file`／`--request` を追加。4 positional は不変（後方互換） |
+| 要件5（ワーカーへの本文供給経路） / `AC-5` | 設計要素D「segment start の issue 本文供給」 | local backend で state.yaml の本文を contract 出力へ同梱 |
+| 要件6（launch_worker 実機完走） / `AC-6`,`AC-7` | 設計要素E「launch_worker 実機再検証手順」 | 使い捨て issue・分離プロセス起動・証跡採取 |
+| 要件7（正常経路で誤発火せず／真の異常時のみ発火） / `AC-8`,`AC-9` | 設計要素E「human_required 対照確認」 | 正常経路（不発火）と認証欠如注入（発火）の対照 |
+| 要件8（既存テスト維持） / `AC-10` | 設計要素F「回帰の維持・追加テスト」 | 既定 WORKER_CMD 変更はテストの WORKER_CMD 注入により無影響 |
 
 ## 責務・境界
 
 ### コンポーネント構成
 
-#### A. ライブ GitHub 保護の実適用（要件1・要件2・要件3）
+#### A. 既定 WORKER_CMD の権限付与方式（要件1・AC-1・AC-2）
 
-- **A-1. `main` への正本 ruleset 適用**（AC-1・AC-2）: 正本 `.agent-skill-chain/templates/github/provisioning/rulesets/main.json` を**無変更**のまま、`.agent-skill-chain/scripts/setup-ruleset.sh`（`setup ruleset` CLI の薄いラッパー）経由で `techbeansjp-free/AGENTS.md` へ適用する。`rulesetStep`（`src/commands/setup.ts`）は既存 ruleset 一覧を取得し、同名 `main-protection` があれば `PUT`、無ければ `POST` する冪等実装であり、現状 `[]`（未適用）なので新規 `POST` になる。適用後、ruleset `main-protection` が `enforcement: active` で存在し、`required_status_checks` に5コンテキスト（`agent-skill-chain/spec-gate`・`design-gate`・`implementation-gate`・`validation-gate`・`verify`）が含まれることを GitHub API で実測確認する。
-  - **既存 classic 保護との共存**: `main` には現状 classic branch protection（`required_status_checks.contexts: ["self-enforce"]`, app_id 15368）が別途存在する。ruleset と classic protection は GitHub 側で**論理和（union）**として評価されるため、ruleset 適用後の `main` は「`self-enforce`（既存）＋5コンテキスト（新規）」がいずれも required になる（より厳格側へ動くのみ）。既存 `self-enforce` 保護の是非・整理は本 Issue のスコープ外（SPEC.md スコープ外「過去状態の遡及監査」）とし、削除・改変しない。
+`launch_worker` の既定 `worker_cmd`（現 `claude -p --output-format text --permission-mode acceptEdits`）を、責務スコープを明示した allowlist 起動へ変更する。実現方式の比較・採用判断は後述「権限付与方式の設計判断」に記す。**採用: 候補A（`--allowed-tools` による責務スコープ allowlist）**。既定 permission mode（bypass でも accept でもない通常モード）のまま `--allowed-tools` に責務範囲のツール・Bash パターンを列挙し、列挙外はヘッドレスで拒否（安全側 fail）とする。allowlist の内容は claude.sh 内に grep 可能な名前付きシェル変数 `WORKER_ALLOWED_TOOLS`（env で上書き可）として定義する。
 
-- **A-2. 統合ブランチ保護の実現方式**（AC-3）: 統合ブランチ `chore/162-agent-skill-chain-bootstrap` は現状 protection 未設定（`branches/<branch>/protection` が 404）である。ここへ同等の required check を機能させる。実現方式の比較検討と採用判断は後述「統合ブランチ機械強制の実現方式（設計判断）」に記す。**採用案: 統合ブランチへ classic branch protection を個別適用する**（`PUT /repos/{owner}/{repo}/branches/{branch}/protection`）。正本 `main.json` は一切変更しない。
+#### B. state.schema.yaml 拡張（要件3・AC-3）
 
-- **A-3. 使い捨て失敗 PR による実機確認**（AC-4）: A-1・A-2 適用後、`verify` を意図的に失敗させる差分を含む使い捨てブランチ・PR を作成し、`gh pr view --json mergeable,statusCheckRollup` で `mergeable` が `MERGEABLE` でない（required check 未達によりマージ不可）ことを実測する。`verify` を確実に失敗させる差分としては、ライブ対象ファイルへの禁止語（`lint-vocab` 違反）混入、または既存単体テストを1件失敗させる改変を用いる（`verify` job 内の型検査・テスト・lint いずれの失敗も `verify` の失敗として伝播する）。確認後、この使い捨て PR・ブランチはマージせず close・削除し、`main`・統合ブランチへ混入させない。
+`.agent-skill-chain/schemas/state.schema.yaml` に、Issue のタイトルと要求内容を保持する2フィールドを追加する。具体的なフィールド定義・後方互換・migration 方針は後述「state スキーマ拡張の具体定義」に記す。
 
-#### B. config の adapter 切替（要件4・AC-5）
+#### C. issue start のフィールド受理・永続化（要件4・AC-4）
 
-`.agent-skill-chain/config/agent-skill-chain.yaml` の `worker.adapter`（現 `human`）と `review.adapter`（現 `human`）をいずれも `claude` へ変更する。これは実機検証を成立させるための設定変更であり、恒久既定値とするかの意思決定は SPEC.md スコープ外。
-- **回帰無影響の根拠**（AC-10 と連動）: テストスイートは adapter の実値をリポジトリ本体から読まず、`test/helpers/tmp-repo.ts` の `setWorkerAdapter`/`setAdapter`/`unsetAdapter` により各テスト専用の tmp-repo 内で明示設定する（例: `gate-judgment.test.ts` は `unsetAdapter` で除去し「未設定時の CLI 既定フォールバック（`claude`）」を検証する）。したがって本体 config の値を `claude` に変えてもテストの期待は変わらない。
+`src/commands/issue.ts` の `start`（ローカルバックエンド分岐）と、その薄いラッパー `.agent-skill-chain/scripts/issue-start.sh`（`exec ... issue start "$@"` 透過）で、Issue のタイトル・要求内容を受け取り `state.yaml` の追加フィールドへ永続化できるようにする。既存の4 positional 引数（`issue_id type slug issue_created_at`）は不変とし、タイトル・要求内容は**任意フラグ**で受ける（後方互換）。`issue-start.sh` は `"$@"` 透過のためコード変更不要（フラグはそのまま CLI へ渡る）。GitHub バックエンドでは state.yaml を生成しないため本フィールドは書かない（SPEC スコープ外の GitHub モードは対象外）。
 
-#### C. launch_worker 実機完走・human_required 対照確認（要件5・要件6）
+#### D. segment start の issue 本文供給（要件5・AC-5）
 
-- **C-1. 検証セグメントの選定**（AC-6・AC-7）: 使い捨て Issue を1件用意し、launch_worker の全契約経路（lease取得→segment start→本物 `claude` CLI 起動→ワーカー自身の checkpoint push＋`report_status completed`→完了確認→lease解放）を最も副作用少なく通せる**`spec` セグメント**を第一候補とする。`spec` は上流セグメント成果物への依存が無く、単一の `SPEC.md` 生成のみで完結し、`launch_worker` が要求する「report latest が `status=completed` かつ `target_sha` = push 済み HEAD 一致」を満たしやすい。副作用の局所化のため、この検証は**ローカルバックエンド（`coordination.backend: local`）の使い捨て作業ツリー**で行うことを推奨する（GitHub 上に検証用 Issue/PR/ref を残さず、lease も Git 管理下状態ファイルで完結するため後始末が容易）。ただし launch_worker の契約自体は backend 非依存であり、GitHub バックエンドでの実施を妨げない。
-- **C-2. 完了判定と証跡**（AC-6・AC-7）: `launch_worker <issue_id> spec` が終了コード0で返り、`report latest <issue_id> spec` の直近レコードが `status=completed` かつ `target_sha` が `git rev-parse HEAD` と一致し、lease が解放（`lease-release` 済み）されていることを確認する。launch_worker の標準出力・標準エラー（認証実値は非出力）と report-status 記録を証跡として採取し VALIDATION.md に記載する。
-- **C-3. human_required の対照確認**（AC-8・AC-9）:
-  - **正常経路（発火しないこと）**: C-2 の正常起動中および完了時に、フェイルセーフ経路（`report_status blocked` の `human_escalation_requested` 扱い）が一度も発火していないこと（report 履歴に blocked が無いこと）を確認する。
-  - **異常注入（真の異常時のみ発火すること）**: 認証欠如（`env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN` で launch_worker を起動）を対照条件として注入し、`report_status blocked`（`human_escalation_requested=true`, `blocked_reason` に「認証」を含む）が発火し非0非3で返ることを確認する。この対比により「正常経路では発火せず、真の異常時のみ発火する」ことを裏付ける。
-  - **自動テストの現況**: 認証欠如・起動失敗・完了偽装・target_sha 不一致の各フェイルセーフは `test/integration/worker-adapters.test.ts` が WORKER_CMD スタブ＋env 操作で既に網羅している（AC-9 の automated 部分は追加実装不要。既存テストが pass することを AC-10 の回帰確認で担保する）。本 Issue で新規に加えるのは本物 `claude` CLI を用いた**正常経路との対照（manual/live 部分）**である。
+`src/commands/segment.ts` の `start` が、ローカルバックエンドで `state.yaml` を読み、`title`／`request` が存在する場合に、現在の出力（`role: <role>\n<contract yaml>`）へ Issue 本文ブロック（例: `issue:` に `id`・`title`・`request` を含む）を同梱する。`launch_worker` は `segment start` の出力全文をワーカーの stdin プロンプトへ渡すため、この同梱だけでワーカーへ本文が供給される（`launch_worker` 自体は無改修）。本文が無い state.yaml（後方互換ケース）では従来どおり本文ブロックを付けない。GitHub モードは Issue 本文を API から取得できるため本経路の対象外（SPEC スコープ外）。
 
-#### D. 回帰の維持（要件7・AC-10）
+#### E. launch_worker 実機再検証・human_required 対照（要件6・要件7・要件2）
 
-本 Issue の全変更（config の adapter 切替、DESIGN/PLAN 等の文書追加）を統合ブランチ上へ反映した状態で `npm run build && npm test` が全 pass することを実測確認する。ライブの ruleset/branch protection 適用は GitHub 側の状態変更でありコードベースを変えないため、テスト結果には影響しない。config の adapter 切替は B の根拠により無影響。
+使い捨て issue を local backend で起票（設計要素C で本文を渡す）し、本物 `claude` CLI・認証情報下で `launch_worker <id> spec` を**外側セッションから分離した独立プロセス**で起動して完走を実測し、正常経路で human_required が不発火であること・認証欠如注入で発火することを対照確認する。手順詳細は後述「launch_worker 実機再検証手順」に記す。
+
+#### F. 回帰の維持・追加テスト（要件8・AC-10）
+
+既定 WORKER_CMD 変更は、テストが常に `WORKER_CMD` を stub 注入する（`test/integration/worker-adapters.test.ts`）ため既定文字列に依存せず無影響。既定文字列を直接 assert するテストは存在しない（リポジトリ全体で `acceptEdits`／`bypassPermissions` を assert するテストは無い）。新規追加テストは設計要素B/C/Dの自動化部分（AC-3/AC-4/AC-5 automated）と、既定 WORKER_CMD が `--allowed-tools` を用い `bypassPermissions` を用いないことのコード検査（AC-1/AC-2 の automated 部分）。
 
 ### 依存関係
 
 ```text
-A-1(main ruleset適用) ─┐
-A-2(統合ブランチ保護) ─┼→ A-3(使い捨て失敗PRでブロック実機確認)
-B(config adapter切替) ──→ C(launch_worker実機完走・human_required対照) ─→ D(回帰: npm test 全pass)
+A(既定WORKER_CMD allowlist) ─────────────────────────┐
+B(state schema拡張) → C(issue start永続化) → D(segment start供給) → E(launch_worker実機再検証)
+A,B,C,D ─────────────────────────────────────────────→ F(回帰: npm test 全pass)
 ```
 
-循環依存は無い。A 群（GitHub 保護）と B→C（adapter・自走実機）は独立に着手できる。D は全変更反映後に行う。
+循環依存は無い。A（権限方式）と B→C→D（本文経路）は独立に着手でき、E は A・D の両方が揃った後に実施する。F は全変更反映後。
 
-## 統合ブランチ機械強制の実現方式（設計判断）
+## 権限付与方式の設計判断
 
-要件2/AC-3 が求める「`main` と統合ブランチ双方で required check を機械強制する」実現方式について、以下3案を比較した。
+SPEC 要件1が提示した3候補を、**安全性（無制限な自動承認にしない）と実効性（launch_worker が実際に完走できる）のトレードオフ**を明示して比較する。
 
-### 採用案 (b): 統合ブランチへ classic branch protection を個別適用する
+### 採用案 候補A: `--allowed-tools` による責務スコープ allowlist
 
-`PUT /repos/techbeansjp-free/AGENTS.md/branches/chore%2F162-agent-skill-chain-bootstrap/protection` に、`main.json` と同一の5 required contexts を持つ classic branch protection を適用する。正本 `main.json` は一切変更しない。
+既定 permission mode のまま、`--allowed-tools` にワーカーの正規責務範囲のツール・Bash パターンを列挙して起動する。列挙外のツール呼び出しはヘッドレスで拒否され、`launch_worker` の完了確認（report=completed かつ target_sha 一致）が満たされなければ blocked へ倒れる（安全側 fail）。
 
 採用理由:
-1. **正本アセットの純粋性を保つ**: 統合ブランチ名 `chore/162-agent-skill-chain-bootstrap` は本リポジトリのブートストラップ限定・一過性の構築物であり、下流の消費者リポジトリには存在しない概念である。これを正本 `main.json`（`setup-ruleset.sh` 経由で全消費者へ配布される）へ書き込むと、消費者へ無意味な ref パターンが再配布され、二役（正本×消費者）の境界を侵す。本リポジトリはこの種のドッグフーディング固有値の配布物への漏洩を過去に繰り返し修正してきた経緯があり、同種の混入を避ける。
-2. **一過性・可逆性**: 統合ブランチは `main` への最終マージ後に削除される想定の一過性ブランチである。branch protection は当該ブランチに対して命令的（imperative）に適用・削除でき、ブランチ削除時に自然に消える。正本アセットの構造を恒久的に変える案(a)より切り戻しが局所的で安全。
-3. **SPEC の観測状態を直接解消する**: SPEC.md が現状として観測した「統合ブランチが protection 未設定＝404」を、まさに `branches/<branch>/protection` エンドポイントを 404 でない状態にすることで直接解消する（AC-3 の検証手段が参照するエンドポイントと一致）。
+1. **安全性**: 既定が「列挙外は拒否」であり、`bypassPermissions` のような無制限自動承認ではない（AC-2 を直接満たす）。自 branch 以外への書込み禁止（I5）は、worktree 隔離＋自 branch スコープの credential 分離という本システムの一次防御で担保され、allowlist は「責務外操作を自動承認しない」層として機能する（AGENTS.md「権限は credential/権限分離で担保し、ツール名の一律 deny では実装しない」と整合——本 allowlist は一律 deny ではなく責務範囲の scoped allow）。
+2. **実効性**: 根本原因1の停止点である `git push` を allowlist（`Bash(git push:*)`）に含めることで、非対話ヘッドレスでも承認待ちにならず完走できる（AC-1）。状態遷移は既に `checkpoint.sh`／`report-status.sh`／`lease-*.sh`／`pr-create.sh` へ結線済みで、ワーカーが発行する top-level コマンドは有限に列挙可能（スクリプト内部の子プロセスは1回の Bash 承認の内側で走り、個別ゲートされない）。
+3. **既存機構との対称性・独立性**: `launch_gate_reviewer` は既に `--allowed-tools ''`（空＝read-only）で起動しており、`--allowed-tools` はこのアダプタの確立パターン。`enforce on`（PreToolUse hook 配線）の有無に依存せず単体で機能する。
+4. **安全分類器衝突の回避**: 既定を `bypassPermissions` にしないため、根本原因3で観測された「bypassPermissions 検証が外側の安全分類器に阻まれる」衝突を既定経路では引き起こさない。
 
-### 却下案 (a): 正本 ruleset `main.json` の `conditions.ref_name.include` を拡張する
+トレードオフ（明示）: allowlist は責務が拡大すると列挙保守が必要になり、列挙漏れがあるとワーカーが当該操作で拒否され未完了（→ blocked）になりうる。この脆さは (i) 状態遷移を asc スクリプトへ集約して発行コマンドを有限化する、(ii) `WORKER_CMD` 完全上書き余地を残す、(iii) AC-6 の実機検証で列挙漏れを検出し allowlist を調整する、で緩和する。
 
-`refs/heads/chore/162-*` 等のパターンを `main.json` の include に追加する案。**却下**。理由: 上記採用理由1の裏返しで、正本かつ配布物である `main.json` に消費者固有・一過性のブランチ名パターンを恒久的に焼き込むことになり、`setup-ruleset.sh` で全下流消費者へ再配布される。`verify-template-sync.sh` の対象でもあり、消費者側にも無意味な ref パターンが同期される。正本／消費者の分離という本システムの中核前提に反する。
+**採用する既定 allowlist（`WORKER_ALLOWED_TOOLS` の既定値、AC-6 で調整前提）**:
 
-### 却下案 (c): 統合ブランチ用の別 ruleset を ad-hoc に作成する
-
-`main.json` とは別に、`refs/heads/chore/162-agent-skill-chain-bootstrap` を対象とする専用 ruleset（例: `integration-branch-protection`）を GitHub API で ad-hoc 作成する案。正本 `main.json` を汚さない点は採用案(b)と同等で、機構としては成立する。しかし**却下**。理由: (i) ruleset は `branches/<branch>/protection` エンドポイントを populate しないため、SPEC.md が明示する「404 の解消」という AC-3 の観測指標を文言どおりには満たさない。(ii) 一過性ブランチ1本のために独立した ruleset オブジェクトを増設するのは、単一の branch protection PUT に比べ管理面（一覧・削除・混同リスク）が重い。UNIX 原則「疑わしい機能は追加しない」に照らし、より小さい面積の手段（採用案(b)）を選ぶ。
-
-### 採用案の具体コマンド案
-
-`main` への ruleset 適用（A-1）:
-
-```bash
-# 正本 main.json を無変更で実適用（冪等: 既存 main-protection があれば PUT、無ければ POST）
-./.agent-skill-chain/scripts/setup-ruleset.sh techbeansjp-free/AGENTS.md
-# 確認
-gh api repos/techbeansjp-free/AGENTS.md/rulesets            # [] でなく main-protection(active) が出る
-gh api repos/techbeansjp-free/AGENTS.md/rulesets/<id> --jq '.rules[] | select(.type=="required_status_checks")'
+```
+Read Grep Glob Edit Write MultiEdit
+Bash(git add:*) Bash(git commit:*) Bash(git push:*) Bash(git status:*) Bash(git diff:*)
+Bash(git rev-parse:*) Bash(git log:*) Bash(git show:*) Bash(git fetch:*) Bash(git restore:*)
+Bash(gh pr create:*) Bash(gh pr view:*) Bash(gh pr edit:*) Bash(gh pr comment:*) Bash(gh issue comment:*)
+Bash(.agent-skill-chain/scripts/*) Bash(bash .agent-skill-chain/scripts/*) Bash(node bin/agents-md.js:*)
+Bash(npm run:*) Bash(npm test:*) Bash(npm ci:*) Bash(mkdir:*) Bash(ls:*)
 ```
 
-統合ブランチへの branch protection 適用（A-2、body 案）:
+- `Edit`/`Write`/`MultiEdit` は自 worktree 内の成果物編集（SPEC.md 等）。`acceptEdits` は**採用しない**——編集許可は allowlist に一元化し、暗黙の第2承認チャネルを設けないことで「責務範囲へ限定」を明確化する（AC-2）。
+- Draft PR 作成（`gh pr create`）は spec セグメントの責務。全セグメント共通 allowlist に含めても、他セグメントでの実行有無はワーカー側の責務判断に委ねる（責務外実行はワーカーが行わない）。
+- `bash -c "$worker_cmd"` 経由で起動するため、`--allowed-tools` の値（空白を含む単一引数）はシェルクォートを保つ必要がある（実装上の注意。値は二重引用符で囲んで1引数として渡す）。
 
-```bash
-gh api -X PUT \
-  "repos/techbeansjp-free/AGENTS.md/branches/chore/162-agent-skill-chain-bootstrap/protection" \
-  --input - <<'JSON'
-{
-  "required_status_checks": {
-    "strict": true,
-    "contexts": [
-      "agent-skill-chain/spec-gate",
-      "agent-skill-chain/design-gate",
-      "agent-skill-chain/implementation-gate",
-      "agent-skill-chain/validation-gate",
-      "verify"
-    ]
-  },
-  "enforce_admins": false,
-  "required_pull_request_reviews": {
-    "required_approving_review_count": 0,
-    "dismiss_stale_reviews": true,
-    "require_code_owner_reviews": false
-  },
-  "restrictions": null
-}
-JSON
-# 確認（404 が解消され protection が返る）
-gh api "repos/techbeansjp-free/AGENTS.md/branches/chore/162-agent-skill-chain-bootstrap/protection"
-```
+### 却下案 候補B: 専用ラッパー／PreToolUse hook 仲介
 
-補足:
-- `enforce_admins: false` は `main` の既存 classic 保護と同値であり、本リポジトリの admin merge（`gh pr merge --admin`）運用を温存する。required check 未達の PR は `mergeable`/`statusCheckRollup` 上でブロック状態として観測され（AC-3/AC-4 の検証はこれを見る）、admin bypass はそれとは別の明示的なマージ操作である。
-- classic protection の PUT body は `required_status_checks`・`enforce_admins`・`required_pull_request_reviews`・`restrictions` の4フィールドを揃える必要がある（`restrictions: null` = 誰でもマージ可の意）。会話スレッド解決の強制（`main.json` の `required_review_thread_resolution`）を統合ブランチにも揃えたい場合は `required_conversation_resolution` の付与を実装時に検討する（AC-3 の必須要件ではないため任意）。
+許可操作のみを通す専用ラッパー、または `PreToolUse` hook（`.agent-skill-chain/hooks/` 系）でワーカーの Bash を仲介し allowlist 外を拒否する。**却下**。理由: (i) 既存 PreToolUse hook（`claude-pretooluse.sh`）は fail-open の**狭い deny 網**（2 パターンのみ拒否、それ以外は無条件通過）として設計されており（その設計判断は当該 hook の役割）、これを「allow を能動付与する機構」へ転用すると deny 網と allow 付与という別責務を混載する。(ii) hook 経路は `enforce on` の配線状態にワーカー起動が結合し、`launch_gate_reviewer`／`launch_worker` が単体で権限を確定できる現状の独立性を損なう。(iii) 同じ「責務スコープ限定」を候補A がより小さい面積（WORKER_CMD 1 箇所）で達成する。既存 hook は defense-in-depth の deny 網として（`enforce on` 時に）併存させ、権限付与の主機構にはしない。
+
+### 却下案 候補C: `bypassPermissions` ＋外側スコープ限定
+
+`bypassPermissions` で全ツール自動承認とし、credential/worktree 隔離で責務外影響を外部から不能化する。**却下**。理由: (i) 「無制限な `bypassPermissions` を既定として安易に採用しない」という SPEC 要件1・AC-2 の明示条件に真っ向から反する（既定化しない）。(ii) 根本原因3の安全分類器衝突を既定経路で誘発する。(iii) 実効性上は完走しうるが、安全性の代償が大きく、候補A で同じ実効性（`git push` 完走）を安全側既定のまま達成できる。ただし `bypassPermissions` を**完全に禁止**はしない——隔離された CI/sandbox で allowlist の列挙保守を回避したい特殊ケース向けに、`WORKER_CMD` の明示上書きとしてのみ利用可能とする（既定にはしない）。
+
+## 安全分類器衝突への配慮（要件2）
+
+根本原因3（bypassPermissions 検証が外側セッションの安全分類器に阻まれる）への対応は2層で行う。安全分類器自体は変更しない（スコープ外）。
+
+1. **既定を bypass にしない**: 採用案（候補A allowlist）は `bypassPermissions` を既定に用いないため、既定経路の再検証（AC-6）は分類器の主たる発火対象（無制限承認）を含まない。
+2. **検証の分離実行**: AC-6 の実機起動は、進行役の対話セッションのツール呼び出し経路（ネストした `claude` 起動）としてではなく、**外側セッションから分離した独立プロセス／環境**で行う。具体的には `setsid`／`nohup`／CI ジョブ等で `launch_worker` を detached に起動し、専用の env と作業ディレクトリを与える。これにより外側セッションの分類器が呼び出し経路上に存在しなくなる。証跡（stdout/stderr ログ・report 記録）はファイルへ採取する（認証実値は非出力）。
+
+## state スキーマ拡張の具体定義
+
+`.agent-skill-chain/schemas/state.schema.yaml`（`schema_version: agent-skill-chain/state/v1`、`additionalProperties: false`）へ以下を追加する。
+
+- `title`: `{type: string}`。Issue のタイトル（短い識別子）。**任意**（`required` に加えない）。
+- `request`: `{type: string}`。Issue の要求内容（本文、「何を作るか」）。複数行可。**任意**。
+
+**後方互換・migration 方針**:
+- 両フィールドは任意のため、当該フィールドを持たない既存 `state.yaml` は引き続きスキーマ検証を通過する（`required` 不変）。`additionalProperties: false` を維持したまま `properties` に2項目を追加するので、本フィールドを含む新しい state も検証を通過する（追加しないと未知プロパティとして弾かれるため、追加は必須）。
+- **`schema_version` は据え置き（v1 のまま）**。追加は純粋に加算的（既存ファイルが無効化されない）であり、`v2` へ上げると `const` 不一致で旧 v1 ファイルが読めなくなる破壊的変更になる。AGENTS.md §設定「schema_version の扱い」は「上げない」判断とその根拠の明記で満たす。
+- **migration は不要（no-op）**: 旧 `state.yaml` はそのまま読める。`issue start` 経由で本文を渡さない起票は従来どおり本フィールドを持たない state を生成する。既存データの一括変換は行わない。
+- `examples` には本フィールドを含む例を1つ追記してよい（任意、スキーマの自己文書化のため）。
+
+## launch_worker 実機再検証手順（要件6・要件7）
+
+`worker.adapter: claude`・本物 `claude` CLI・認証情報あり・local backend の使い捨て issue（本文の人間作り込みなし）で、以下を分離プロセスで実行する。
+
+1. **使い捨て issue 起票**: `issue start ISSUE-<大きな番号> feature <slug> <ts> --title "<検証用タイトル>" --request-file <本文ファイル>` を実行し、worktree と本文入り `state.yaml` を生成する（本文は `--request-file` で供給し、人間が別途 SPEC を作り込まない）。
+2. **セグメント選定**: 上流成果物依存が無く単一 `SPEC.md` 生成で完結する **spec セグメント**を第一候補とする（`launch_worker` の全契約経路を最小副作用で通せる）。
+3. **分離起動**: `worker.adapter: claude`・認証 env（`ANTHROPIC_API_KEY` または `CLAUDE_CODE_OAUTH_TOKEN`）下で、`launch_worker <id> spec` を `setsid`/`nohup`/CI ジョブ等で**外側セッションから分離**して起動し、stdout/stderr をログへ採取する（認証実値は非出力）。
+4. **完走確認（AC-6・AC-7）**: `launch_worker` が終了コード0で返り、`report latest <id> spec` の直近が `status=completed` かつ `target_sha` = `git rev-parse HEAD`、lease 解放済みであることを実測。ログと report 記録を証跡として保存する。
+5. **正常経路の不発火確認（AC-8）**: 上記実行の report 履歴に `blocked`／`human_escalation_requested` が一度も無いことを確認する。
+6. **対照（真の異常時のみ発火、AC-9）**: `env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN launch_worker <id> spec` を起動し、`report_status blocked`（`human_escalation_requested=true`・`blocked_reason` に「認証」を含む）が発火し非0非3で返ることを確認、AC-8 と対比する。既存 `worker-adapters.test.ts` が認証欠如・起動失敗・完了偽装・target_sha 不一致の各フェイルセーフを automated で網羅しており、本手順は正常経路との**live 対照**を加える。
+7. **後始末**: 使い捨て issue・worktree・lease（ローカル状態ファイルまたは lease ref）を `cleanup.sh`／`git worktree remove`（cleanup 経由）／`git push origin --delete` 等で除去し、`main`・統合ブランチ・WIP 枠へ痕跡を残さない。マージしない。
+
+実機検証（AC-6〜AC-9 の manual/live 部分）の実施・証跡採取・記載は独立検証セグメント（VALIDATION.md）の責務。本 DESIGN は手順を確定する。
 
 ## 関連ADR
 
-新規 ADR は作成しない。
-
-判断根拠: ADR は「なぜその**アーキテクチャ上の**判断をしたか」を後から参照するための成果物である。本 Issue の中核判断（統合ブランチには採用案(b)の branch protection を用いる）は、正本アセット `main.json` を**一切変更しない**一過性・命令的な provisioning 操作であり、コード・スキーマ・配布物の構造を変えない。恒久的な抽象・契約の新設を伴わないため、ADR 化する durable な意思決定に当たらない。「正本 ruleset は安定・汎用な ref のみを対象とし、消費者一過性ブランチは正本外の手段で保護する」という原理は本 DESIGN.md 内に自己完結して記載しており（前節）、これで追跡可能性（I1）は満たされる。#178 でも同様に、変更が durable な architecture 決定に当たらない場合に ADR を新設しない判断を採っている。
+本 Issue の中核判断「セグメント作業ワーカーの権限付与を、無制限な `bypassPermissions` ではなく責務スコープ allowlist（`--allowed-tools`）を既定とする」は、ワーカーへのツール権限付与という**恒久的・横断的なアーキテクチャ契約**であり、`launch_gate_reviewer` の read-only（`--allowed-tools ''`）と対をなす。将来のアダプタ（codex 等）や権限方式変更が honor すべき durable な原理であるため ADR を新設する。
 
 ```yaml
-related_adrs: []
+related_adrs:
+  - id: ADR-0003
+    relation: adopts
 ```
+
+`docs/adr/ADR-0003-worker-permission-model.md`（`status: proposed`）を作成する。設計ゲート承認時に `accepted` へ遷移する。
 
 ## 障害・ロールバック考慮
 
 - 想定される失敗モードとロールバック:
-  - **ruleset 適用で意図せず全 PR がブロックされる**: 適用直後、`self-enforce` に加え5コンテキストが required になるため、必要な Check Run を報告しない過去 PR がマージ不可になり得る。切り戻しは `gh api -X DELETE repos/techbeansjp-free/AGENTS.md/rulesets/<id>` で ruleset を削除すれば適用前状態（`[]`）へ戻る（`main.json` 自体は無変更なので配布物への影響なし）。
-  - **統合ブランチ保護の切り戻し**: `gh api -X DELETE repos/.../branches/chore/162-agent-skill-chain-bootstrap/protection` で 404（未設定）状態へ戻せる。統合ブランチ削除時にも自然消滅する。
-  - **使い捨て検証物の残存（AC-4/AC-6）**: 使い捨て PR・ブランチ・検証用 Issue・lease ref が残ると `main`・統合ブランチや WIP 枠を汚す。後始末を手順化する（PLAN.md の後始末タスクで close/delete/prune を必須化）。
-  - **adapter 切替による回帰**: 万一テストが本体 config を参照して落ちる想定外があれば、config を `human` へ戻せば即時復旧する（1行の値変更のため可逆）。ただし B の根拠によりテストは tmp-repo 隔離のため無影響を見込む。
+  - **allowlist 列挙漏れでワーカーが特定操作で拒否され未完了になる**: 完了確認が満たされず `launch_worker` は blocked へ安全側に倒れる（実害はワーカー未完了のみ、誤 approve は起きない）。切り戻し・調整は `WORKER_ALLOWED_TOOLS` へ不足パターンを追記、または `WORKER_CMD` で一時上書き。既定文字列変更は1関数内に閉じ、`git revert` で即時復旧可能。
+  - **state スキーマ拡張による既存 state 破壊**: 追加は任意フィールドのため既存 state は無効化されない。万一問題があればスキーマから2 properties を除去すれば元に戻る（追加した state.yaml が無い限り無影響）。
+  - **issue start/segment start 変更による後方互換退行**: フラグ未指定の従来起票・本文なし state での segment start が従来どおり動くことをテストで担保する。退行時は当該 CLI 変更を revert。
+  - **使い捨て検証物の残存**: 使い捨て issue／worktree／lease が残ると WIP 枠・状態を汚す。後始末を手順化（PLAN の後始末タスクで必須化）。
 - 影響を受ける既存機能:
-  - `main`・統合ブランチのマージ条件が厳格化する（required check 未達 PR がマージ不可になる）。これは本 Issue の目的そのものであり意図した変更。
-  - 配布物（`main.json` 等の `.agent-skill-chain/templates/`）・CI workflow・ソースコードは**変更しない**（ライブ設定と config 1箇所の adapter 値のみ）。
+  - `launch_worker` の既定起動フラグのみが変わる（`WORKER_CMD` 明示時は無影響）。`launch_gate_reviewer` は無変更。
+  - 配布物（`.agent-skill-chain/templates/`）・CI workflow・GitHub 側共有設定（ruleset/branch protection）は**変更しない**（本 Issue は #180 と異なり共有インフラ変更を含まない）。
 
 ## 制約・未決事項・対象外
 
-- **共有インフラへの不可逆操作の扱い**: ruleset の本適用・統合ブランチ protection の本適用は本リポジトリの共有 GitHub 設定を変える不可逆・共有影響のある操作である。使い捨て検証（disposable な Issue/PR/ブランチ/ローカル lease）は自由に進めてよいが、本適用の直前ではユーザーへの確認を挟む（PLAN.md 注意事項に明記）。
-- **対象外（SPEC.md スコープ外の再掲）**: `worker.adapter`/`review.adapter` を恒久既定値として `claude` に固定するかの意思決定、`main` の既存 `self-enforce` classic 保護の整理、`claude` CLI の恒久起動フラグ（`--permission-mode` 等）の確定、`human_required` 4異常経路すべての網羅的故障注入、過去 commit の遡及監査。
-- **未決事項**: 統合ブランチ protection に会話スレッド解決強制（`required_conversation_resolution`）を含めるか（AC 必須ではなく実装時の任意判断）。C の検証を GitHub バックエンドで行うかローカルバックエンドで行うか（本設計はローカル使い捨てを推奨するが、実施バックエンドは検証者が最終決定してよい）。
+- **制約**: `WORKER_CMD` 完全上書き余地を維持する（テストのモック境界・CI/sandbox 差し替えに必須）。認証実値をログ・PR・Issue・証跡へ出力しない。既定 allowlist は「安全側 fail（列挙外は拒否）」を崩さない範囲でのみ拡張する。
+- **未決事項**: 既定 allowlist の最終確定形は AC-6 の実機検証で列挙漏れを検出して調整する（DESIGN は初期値と調整方針を定める）。実機検証を local backend で行うか GitHub backend で行うか（本設計は local 使い捨てを推奨するが最終判断は検証者に委ねる。launch_worker 契約は backend 非依存）。
+- **対象外（SPEC スコープ外の再掲）**: 外側セッションの安全分類器自体の変更・無効化、`codex` アダプタへの同等対応、GitHub モードの Issue 本文供給経路の再設計、GitHub 側ライブ設定（ruleset/branch protection）の変更、`worker.adapter`/`review.adapter` の恒久既定値化の意思決定、`human_required` 4異常経路すべての網羅的故障注入テストの新規整備。
