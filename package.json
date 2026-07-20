@@ -9,6 +9,13 @@
   "bin": {
     "agent-skill-chain": "./bin/agents-md.js"
   },
+  "files": [
+    "bin/",
+    ".agent-skill-chain/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/GLOSSARY.md"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",

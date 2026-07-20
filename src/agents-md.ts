@@ -10,6 +10,10 @@ import * as cleanup from './commands/cleanup.js';
 import * as doctor from './commands/doctor.js';
 import * as reconcile from './commands/reconcile.js';
 import * as setup from './commands/setup.js';
+import * as init from './commands/init.js';
+import * as upgrade from './commands/upgrade.js';
+import * as uninstall from './commands/uninstall.js';
+import * as enforce from './commands/enforce.js';
 import * as sync from './commands/sync.js';
 import * as lint from './commands/lint.js';
 import * as verify from './commands/verify.js';
@@ -56,6 +60,10 @@ const routes: Record<string, Handler> = {
   cleanup: cleanup.run,
   doctor: doctor.run,
   reconcile: reconcile.run,
+  init: init.init,
+  upgrade: upgrade.upgrade,
+  uninstall: uninstall.uninstall,
+  enforce: enforce.enforce,
 };
 
 function printTopUsage(): void {

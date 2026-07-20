@@ -1,6 +1,10 @@
+import path from 'node:path';
 import { commandExists, run as exec } from '../lib/exec.js';
 import { loadConfig } from '../lib/config.js';
 import { repoRoot } from '../lib/paths.js';
+import { readInstalledVersion } from '../lib/version-marker.js';
+import { readSettings, isPreToolUseHookWired } from '../lib/claude-settings.js';
+import { HOOK_RELATIVE_PATH } from './enforce.js';
 import { isHelp, printUsage, guard } from '../lib/cli-io.js';
 
 const USAGE = `
@@ -62,6 +66,25 @@ export async function run(args: string[]): Promise<number> {
     for (const check of checks) {
       const line = check.ok ? `OK  ${check.label}` : `NG  ${check.label}: ${check.reason ?? '不明な理由'}`;
       process.stdout.write(`${line}\n`);
+    }
+
+    // Issue #169 T8: init導入済み・enforce配線状態は情報表示のみ（失敗要因にしない）。
+    // 未導入・非配線はいずれも安全な既定状態であり、doctorの成否判定には影響させない。
+    if (root) {
+      const installedVersion = readInstalledVersion(root);
+      process.stdout.write(
+        `情報  init 導入済み: ${installedVersion ? `OK (${installedVersion})` : 'NG（未導入）'}\n`,
+      );
+
+      let enforceOn = false;
+      try {
+        const settingsPath = path.join(root, '.claude', 'settings.json');
+        const settings = readSettings(settingsPath);
+        enforceOn = isPreToolUseHookWired(settings, HOOK_RELATIVE_PATH);
+      } catch {
+        enforceOn = false;
+      }
+      process.stdout.write(`情報  enforce の配線状態: ${enforceOn ? 'ON' : 'OFF'}\n`);
     }
 
     const failed = checks.filter((c) => !c.ok);

@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { packageRoot, repoRoot, resolveAsset, ASSET_NAMESPACE } from '../lib/paths.js';
 import { copyTreeFailOnConflict, copyTreeMirror } from '../lib/fs-copy.js';
+import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES } from '../lib/asset-manifest.js';
 import { readYamlFile } from '../lib/yaml-io.js';
 import { gh } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
@@ -40,16 +41,15 @@ const RULESET_USAGE = `
   失敗時: 終了コード1以上。gh api のエラーを標準エラー出力に転記。
 `;
 
-// root直下に残す物のみ（AGENTS.md §ディレクトリ構成）。他は .agent-skill-chain/ 配下へ。
-const ROOT_LEVEL_ENTRIES = ['AGENTS.md', 'CLAUDE.md', path.join('docs', 'GLOSSARY.md')];
-const NAMESPACED_ENTRIES = ['standards', 'templates', 'schemas', 'config', 'adapters', 'scripts', 'ci'];
-
 export async function setup(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
       printUsage(SETUP_USAGE);
       return 0;
     }
+    // Issue #169 ADR-1: setup（bare）は非推奨。init（+ 必要なら setup github）へ移行してもらうため
+    // 処理開始前に警告するが、戻り値・生成物は変更しない（既存テストとの後方互換維持）。
+    process.stderr.write('警告: setup は非推奨です。init（+ 必要なら setup github）を使用してください。\n');
     const targetDir = args[0] ? path.resolve(args[0]) : process.cwd();
     fs.mkdirSync(targetDir, { recursive: true });
 
