@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §ブランチ・worktree / .agent-skill-chain/standards/GIT_CONVENTIONS.md / .agent-skill-chain/config/agent-skill-chain.yaml
-#      （branch.pattern, worktree.path_pattern, worktree.timestamp, `issue.allowed_types`）
+# 正本: AGENTS.md §不変条件I1〜I8 / .agent-skill-chain/standards/TEST_POLICY.md「常時必須」区分
 #
-# Issue起票時に、.agent-skill-chain/config/agent-skill-chain.yaml の branch.pattern・worktree.path_pattern 規約に
-# 従いブランチ名・worktreeパスを機械的に生成し、worktreeを作成する
-# （.agent-skill-chain/standards/GIT_CONVENTIONS.md 4層構造の「3. 正しい名前の生成」層）。
+# secret（認証情報・APIキー等）の混入を検査する。既知のsecretフォーマットの接頭辞
+# （AWS/GitHub/Slack/Google/Stripeキー・PEM秘密鍵ヘッダ等）に限定した軽量な自前正規表現
+# ベースの検査であり、エントロピーベースの汎用検出は持たない。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
-# `issue start` サブコマンドへの薄いラッパーである（使い方は `issue start -h` 参照）。
+# `lint secrets` サブコマンドへの薄いラッパーである（使い方は `lint secrets -h` 参照）。
 
 set -euo pipefail
 
@@ -25,4 +24,4 @@ else
   exit 1
 fi
 
-exec "${CLI[@]}" issue start "$@"
+exec "${CLI[@]}" lint secrets "$@"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 正本: AGENTS.md 不変条件I3 / .agent-skill-chain/config/agent-skill-chain.yaml durability.backend
 #
-# セグメント完了ごとにcommit+pushし、耐久性（I3）のチェックポイントを作る。
+# セグメント完了ごとにcommit+pushし、耐久性（I3）を確保する復元可能な地点を作る。
 # .agent-skill-chain/config/agent-skill-chain.yaml の durability.backend（remote|local_mirror）を参照する。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の

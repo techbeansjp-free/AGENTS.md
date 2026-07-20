@@ -15,7 +15,7 @@ labels:
     description: "外部から観測できる振る舞いを変えない内部構造の改善"
   - name: "type:docs"
     color: "0075ca"
-    description: "ドキュメントの追加・修正"
+    description: "資料の追加・修正"
   - name: "type:process"
     color: "6f42c1"
     description: "開発プロセス・運用規約自体の変更"

@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { repoRoot } from '../lib/paths.js';
 import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../lib/scan.js';
 import { parseForbiddenTerms } from '../lib/glossary.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
+import { routes } from '../lib/cli-routes.js';
 
 const VOCAB_USAGE = `
 使い方: agent-skill-chain lint vocab [path...]
@@ -33,6 +35,18 @@ check: 検査を実行するサブコマンド（他のサブコマンドは将�
 出力:
   成功時（違反なし）: 終了コード0。
   失敗時（違反あり）: 終了コード1以上。違反ADR ID・理由を標準エラー出力へ。
+`;
+
+const SECRETS_USAGE = `
+使い方: agent-skill-chain lint secrets <path...>
+       agent-skill-chain lint secrets --diff <base-ref>
+
+path...: 検査対象ファイル（1つ以上必須）。全行を検査する。
+--diff <base-ref>: \`git diff <base-ref>...HEAD\` で追加された行（+始まり）のみを検査する（CI向け）。
+
+出力:
+  成功時（違反なし）: 終了コード0。
+  失敗時（違反あり）: 終了コード1以上。違反箇所（ファイル:行）を標準エラー出力へ。
 `;
 
 function resolveTargets(args: string[], root: string, defaultRoots: (root: string) => string[] = defaultLiveFileRoots): string[] {
@@ -75,7 +89,8 @@ function isCodeLikeReference(line: string, start: number, length: number, banned
   };
   if (containedIn(BACKTICK_SPAN_RE)) return true;
   if (containedIn(PLACEHOLDER_SPAN_RE)) return true;
-  return containedInPathToken(line, start, end);
+  if (containedInPathToken(line, start, end)) return true;
+  return isIdentifierContext(line, start, end, banned);
 }
 
 function containedInPathToken(line: string, start: number, end: number): boolean {
@@ -87,6 +102,164 @@ function containedInPathToken(line: string, start: number, end: number): boolean
     if (tokenStart <= start && end <= tokenEnd && m[0].includes('/')) return true;
   }
   return false;
+}
+
+// ---- 識別子文脈判定（ISSUE-178 DESIGN.md「A. lint-vocab識別子認識」） ----
+//
+// コード・YAML・CLIサブコマンドの各識別子文脈として禁止語が出現する箇所を、散文の誤用と
+// 区別して検査対象から除外する。上記の既存3除外（バッククォート・placeholder・パストークン）を
+// 後退させない後段の追加判定として動作する（isCodeLikeReference の最後で呼び出す）。
+
+const IDENT_CHAR_RE = /[A-Za-z0-9_]/;
+
+interface IdentifierRun {
+  runStart: number;
+  runEnd: number;
+}
+
+/** [start, end) を含む最大の識別子文字（英数字・アンダースコア）runを返す。[start, end) の
+ * いずれかの文字が識別子文字でなければ undefined（= 禁止語自体がASCII識別子文字のみで
+ * 構成されていない。日本語の禁止語はこの時点で常にundefinedになり、識別子文脈の対象外のまま
+ * 散文誤用として引き続き検出される）。 */
+function identifierRunAt(line: string, start: number, end: number): IdentifierRun | undefined {
+  for (let i = start; i < end; i++) {
+    if (!IDENT_CHAR_RE.test(line[i])) return undefined;
+  }
+  let runStart = start;
+  while (runStart > 0 && IDENT_CHAR_RE.test(line[runStart - 1])) runStart--;
+  let runEnd = end;
+  while (runEnd < line.length && IDENT_CHAR_RE.test(line[runEnd])) runEnd++;
+  return { runStart, runEnd };
+}
+
+/** `_` 区切り→各chunk内をcamelCase境界（小文字/数字→大文字の遷移直前）でさらに分割する。 */
+function splitIdentifierSegments(run: string): string[] {
+  return run
+    .split('_')
+    .filter((chunk) => chunk.length > 0)
+    .flatMap((chunk) => chunk.split(/(?<=[a-z0-9])(?=[A-Z])/));
+}
+
+/** A-1 コード識別子文脈: snake_case/camelCase/SCREAMING_SNAKE_CASEの複合識別子の一部として
+ * 禁止語が出現する場合に除外する。run長が禁止語長と等しい（単独の語そのもの）場合は対象外
+ * （要件1「単独のissueは識別子文脈と誤認しない」）。 */
+function isCodeIdentifierContext(line: string, run: IdentifierRun, banned: string): boolean {
+  const runText = line.slice(run.runStart, run.runEnd);
+  if (runText.length <= banned.length) return false;
+  return splitIdentifierSegments(runText).some((seg) => seg.toLowerCase() === banned.toLowerCase());
+}
+
+function prevNonSpaceChar(line: string, pos: number): string | undefined {
+  let i = pos - 1;
+  while (i >= 0 && line[i] === ' ') i--;
+  return i >= 0 ? line[i] : undefined;
+}
+
+function nextNonSpaceChar(line: string, pos: number): string | undefined {
+  let i = pos;
+  while (i < line.length && line[i] === ' ') i++;
+  return i < line.length ? line[i] : undefined;
+}
+
+/** A-2 YAML識別子文脈（キー構文＋flow-sequence要素）: runが禁止語そのもの（複合でない）の
+ * 場合に限り判定する。 */
+function isYamlIdentifierContext(line: string, run: IdentifierRun, banned: string): boolean {
+  const runText = line.slice(run.runStart, run.runEnd);
+  if (runText.length !== banned.length) return false;
+
+  // (a) キー構文: 直前が「行頭からの空白＋任意の`- `」のみ、直後（空白を挟んでよい）が`:`。
+  const prefix = line.slice(0, run.runStart);
+  const isKeyPrefix = /^\s*(-\s+)?$/.test(prefix);
+  const isKeySuffix = /^\s*:/.test(line.slice(run.runEnd));
+  if (isKeyPrefix && isKeySuffix) return true;
+
+  // (b) flow-sequence要素: 直前（空白を挟んでよい）が`[`または`,`、直後（同様）が`,`または`]`。
+  const before = prevNonSpaceChar(line, run.runStart);
+  const after = nextNonSpaceChar(line, run.runEnd);
+  if ((before === '[' || before === ',') && (after === ',' || after === ']')) return true;
+
+  return false;
+}
+
+interface Token {
+  text: string;
+  start: number;
+  end: number;
+}
+
+function tokenize(line: string): Token[] {
+  const tokens: Token[] = [];
+  const re = /\S+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line))) {
+    tokens.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+  }
+  return tokens;
+}
+
+function stripQuotes(token: string): string {
+  return token.replace(/^"+|"+$/g, '');
+}
+
+let cachedCliVerbs: Set<string> | undefined;
+
+/** cli-routes.ts の2トークンキー（例: 'issue start'）の2トークン目をverbホワイトリストとして
+ * 導出する。ハードコード二重管理・ドリフトを防ぐ（ISSUE-178 DESIGN.md「A-3」）。
+ *
+ * 遅延評価する: lint.ts は cli-routes.ts を import し、cli-routes.ts は lint.ts の各サブコマンド
+ * ハンドラを routes オブジェクトに登録するため相互import（循環）になる。ESM の循環import自体は
+ * 許容されるが、トップレベルで即時に routes を読むと初期化順序次第で TDZ エラーになりうるため、
+ * 実行時（CLIディスパッチ完了後）に初めて評価される関数内に閉じ込める。 */
+function cliVerbs(): Set<string> {
+  if (!cachedCliVerbs) {
+    cachedCliVerbs = new Set(
+      Object.keys(routes)
+        .map((key) => key.split(' '))
+        .filter((parts) => parts.length === 2)
+        .map((parts) => parts[1]),
+    );
+  }
+  return cachedCliVerbs;
+}
+
+/** A-3 CLIサブコマンド文脈: runが禁止語そのもの（複合でない）で、独立したシェルトークンとして
+ * 出現し、前後いずれかのトークンが既知CLI verbホワイトリストに含まれる場合に除外する。
+ * 「生の隣接文字」（空白スキップ無し）で境界を判定するため、日本語の仮名文字が直接隣接する
+ * 場合（例:「issueについて」）は境界条件を満たさず誤って除外しない。 */
+function isCliSubcommandContext(line: string, run: IdentifierRun, banned: string): boolean {
+  const runText = line.slice(run.runStart, run.runEnd);
+  if (runText.length !== banned.length) return false;
+
+  const before = run.runStart > 0 ? line[run.runStart - 1] : undefined;
+  const after = run.runEnd < line.length ? line[run.runEnd] : undefined;
+  const isBoundary = (c: string | undefined): boolean => c === undefined || c === ' ' || c === '"';
+  if (!isBoundary(before) || !isBoundary(after)) return false;
+
+  const tokens = tokenize(line);
+  const idx = tokens.findIndex((t) => t.start <= run.runStart && run.runEnd <= t.end);
+  if (idx === -1) return false;
+  const prevToken = idx > 0 ? stripQuotes(tokens[idx - 1].text) : undefined;
+  const nextToken = idx < tokens.length - 1 ? stripQuotes(tokens[idx + 1].text) : undefined;
+  const verbs = cliVerbs();
+  return (prevToken !== undefined && verbs.has(prevToken)) || (nextToken !== undefined && verbs.has(nextToken));
+}
+
+/** A-4 外部語彙の明示許可リスト: 改名不可・バッククォート付与不可の既知の少数の完全一致
+ * トークンのみを列挙する（ISSUE-178 DESIGN.md「A-4」）。正規表現・部分一致は持たない。 */
+const EXTERNAL_VOCAB_ALLOWLIST: readonly string[] = ['blank_issues_enabled'];
+
+function isExternalVocabAllowlisted(line: string, run: IdentifierRun): boolean {
+  const runText = line.slice(run.runStart, run.runEnd);
+  return EXTERNAL_VOCAB_ALLOWLIST.includes(runText);
+}
+
+function isIdentifierContext(line: string, start: number, end: number, banned: string): boolean {
+  const run = identifierRunAt(line, start, end);
+  if (!run) return false;
+  if (isCodeIdentifierContext(line, run, banned)) return true;
+  if (isYamlIdentifierContext(line, run, banned)) return true;
+  if (isCliSubcommandContext(line, run, banned)) return true;
+  return isExternalVocabAllowlisted(line, run);
 }
 
 /** 行中に出現する banned の全箇所を走査し、いずれもコード的参照（バッククォート・
@@ -273,5 +446,124 @@ export async function adr(args: string[]): Promise<number> {
       return 1;
     }
     return ok();
+  });
+}
+
+// ---- lint secrets（ISSUE-178 DESIGN.md「D. secret scan CI」） ----
+//
+// 既知のsecretフォーマットの接頭辞に限定した軽量な自前正規表現ベースの検査。エントロピー
+// ベースの汎用検出は持たない（誤検出率を抑えるため）。lint vocab/lint references と同じ
+// 「軽量な自前実装＋薄いshラッパー」アーキテクチャを踏襲する。
+
+interface SecretPattern {
+  name: string;
+  re: RegExp;
+}
+
+const SECRET_PATTERNS: SecretPattern[] = [
+  { name: 'AWS Access Key ID', re: /\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b/ },
+  { name: 'AWS Secret Access Key', re: /aws_secret_access_key\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}['"]?/i },
+  { name: 'GitHub PAT', re: /\bgh[pousr]_[A-Za-z0-9]{36}\b/ },
+  { name: 'Slack token', re: /\bxox[baprs]-[0-9A-Za-z-]{10,48}\b/ },
+  { name: 'Google API key', re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
+  { name: 'Stripe secret key', re: /\bsk_(?:live|test)_[0-9A-Za-z]{24,}\b/ },
+  { name: 'PEM秘密鍵ヘッダ', re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----/ },
+];
+
+function detectSecrets(line: string): string[] {
+  const hits: string[] = [];
+  for (const { name, re } of SECRET_PATTERNS) {
+    if (re.test(line)) hits.push(name);
+  }
+  return hits;
+}
+
+function reportViolations(violations: string[]): number {
+  if (violations.length > 0) {
+    process.stderr.write(`${violations.join('\n')}\n`);
+    return 1;
+  }
+  return ok();
+}
+
+function scanFilesForSecrets(files: string[]): number {
+  const violations: string[] = [];
+  for (const file of files) {
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    lines.forEach((line, index) => {
+      for (const name of detectSecrets(line)) {
+        violations.push(`${file}:${index + 1}: secretパターン '${name}' の疑いがある文字列が見つかりました`);
+      }
+    });
+  }
+  return reportViolations(violations);
+}
+
+interface DiffAddedLine {
+  file: string;
+  lineNumber: number;
+  text: string;
+}
+
+/** unified diff（`git diff <base>...HEAD`の出力）から、追加された行（`+`始まり、`+++`ヘッダを
+ * 除く）のみを新ファイル側の行番号付きで抽出する。 */
+function parseDiffAddedLines(diffText: string): DiffAddedLine[] {
+  const result: DiffAddedLine[] = [];
+  let currentFile = '';
+  let newLineNo = 0;
+  for (const line of diffText.split('\n')) {
+    if (line.startsWith('+++ ')) {
+      const m = /^\+\+\+ (?:b\/)?(.+)$/.exec(line);
+      currentFile = m ? m[1] : '';
+      continue;
+    }
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunk) {
+      newLineNo = parseInt(hunk[1], 10);
+      continue;
+    }
+    if (line.startsWith('+')) {
+      result.push({ file: currentFile, lineNumber: newLineNo, text: line.slice(1) });
+      newLineNo++;
+      continue;
+    }
+    if (line.startsWith('-')) continue; // 削除行は新ファイルに存在しないため行番号を進めない
+    if (line.startsWith(' ')) {
+      newLineNo++;
+    }
+  }
+  return result;
+}
+
+function scanDiffForSecrets(root: string, baseRef: string): number {
+  const diffText = execFileSync('git', ['diff', `${baseRef}...HEAD`], { cwd: root, encoding: 'utf8' });
+  const violations: string[] = [];
+  for (const added of parseDiffAddedLines(diffText)) {
+    for (const name of detectSecrets(added.text)) {
+      violations.push(`${added.file}:${added.lineNumber}: secretパターン '${name}' の疑いがある文字列が見つかりました`);
+    }
+  }
+  return reportViolations(violations);
+}
+
+export async function secrets(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(SECRETS_USAGE);
+      return 0;
+    }
+    if (args[0] === '--diff') {
+      const baseRef = args[1];
+      if (!baseRef) {
+        process.stderr.write("'--diff' には base-ref の指定が必要です\n");
+        return 1;
+      }
+      return scanDiffForSecrets(repoRoot(), baseRef);
+    }
+    if (args.length === 0) {
+      process.stderr.write('検査対象パスを1つ以上指定してください（またはヘルプ: lint secrets -h）\n');
+      return 1;
+    }
+    return scanFilesForSecrets(args.map((p) => path.resolve(p)));
   });
 }
