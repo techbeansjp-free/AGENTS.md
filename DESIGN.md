@@ -1,156 +1,165 @@
-# DESIGN: agent-skill-chain — lint-vocab識別子認識本格実装・ADR-0002 finalize・secret scan CI導入
+# DESIGN: agent-skill-chain — 完全自走の実効化: ruleset実適用・worker/review adapterのclaude切替実機検証
 
-- Issue: `ISSUE-178`
+- Issue: `ISSUE-180`
 - 対応する SPEC: `SPEC.md`
+
+## 目的・対象範囲・前提・用語
+
+本設計の目的は、リポジトリ `techbeansjp-free/AGENTS.md` において「完全自走（人間が介在しなくても、真に危険な場合以外は止まらない）」を、既存機構を新規実装せずにライブ環境で有効化・機械強制する具体的方式を確定することである。対象は3点。(1) ライブの GitHub 側でゲート Check Run（`agent-skill-chain/{spec,design,implementation,validation}-gate` と `verify`）を `main` と統合ブランチ双方で required として機械強制する。(2) `worker.adapter`/`review.adapter` を `human` から `claude` へ切り替える。(3) 本物の `claude` CLI で `launch_worker` を人間介在なく1セグメント完走させ、正常経路で `human_required` が誤発火しないこと・真の異常時のみ発火することを実測する。
+
+前提: 本リポジトリは agent-skill-chain の**正本（配布元）**であると同時に、その規律を自らに適用する**ドッグフーディング消費者**でもある二役を兼ねる。正本アセット（`.agent-skill-chain/templates/` 配下の配布物）へ消費者固有・一過性の設定を混入させてはならない（混入すると `setup-ruleset.sh` 経由で全下流消費者へ再配布されてしまう）。
+
+用語（自己完結のため本文で定義する）:
+- **required check**: branch protection / ruleset でマージ条件として必須指定された Check Run。未達の PR はマージ不可になる。本 Issue の対象は `agent-skill-chain/{spec,design,implementation,validation}-gate` と CI job 名 `verify` の計5コンテキスト。
+- **統合ブランチ**: 本 Issue 群の base である `chore/162-agent-skill-chain-bootstrap`。各 Issue の PR を `main` への最終マージ前に集約する一過性ブランチ。最終マージ後は削除される想定。
+- **正本 ruleset**: `.agent-skill-chain/templates/github/provisioning/rulesets/main.json`。`conditions.ref_name.include` は現状 `refs/heads/main` のみを対象とし、required_status_checks に上記5コンテキストを定める。`setup-ruleset.sh`（`setup ruleset` CLI の薄いラッパー）が対象リポジトリの GitHub Rulesets API へ適用する。
+- **launch_worker**: `.agent-skill-chain/adapters/claude.sh` のセグメント作業ワーカー起動関数。lease取得 → `segment start`（role_contract取得）→ ワーカー起動 → 完了確認（`report latest` の直近レコードの `status=completed` かつ `target_sha` が push 済み HEAD と一致）→ lease解放、の順で1セグメントを機械的に完走させる。認証欠如・CLI不在・timeout・完了偽装検知の各異常では `report_status blocked`（`human_escalation_requested` 扱い）を書いて非0非3で返すフェイルセーフを持つ。
+- **使い捨て検証**: 検証専用に作成し確認後にマージせず close・削除する一回性のブランチ／PR。ライブの機械強制やダミー失敗の挙動を実測するために用い、成果物・履歴を `main`・統合ブランチへ混入させない。
+- **human_required（誤発火）**: 認証あり・CLI 利用可という正常な前提のもとで、`launch_worker` のフェイルセーフ経路や `launch_gate_reviewer` の `gate mark-human-required` が呼ばれてしまうこと。
 
 ## 要件 → 設計要素の対応表
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| 要件1（識別子認識） / `AC-1`,`AC-2`,`AC-3` | `IdentifierContext`判定（`isCodeLikeReference`拡張：YAML識別子文脈・CLIサブコマンド文脈・コード識別子文脈の3判定＋外部語彙明示許可リスト） | 既存3除外（バッククォート・placeholder・パストークン）は変更せず追加のみ |
-| 要件2（対象復帰） / `AC-4`,`AC-5` | `defaultVocabFileRoots()`改修＋残存誤検出の内容是正 | GLOSSARY.mdの恒久除外は維持 |
-| 要件3（ADR-0002実機検証） / `AC-6` | 実機push検証（本DESIGN.md「ADR-0002実機検証結果」節に実施済み・証跡記載） | 本フェーズで完了済み |
-| 要件4（ADR-0002確定） / `AC-7` | ADR-0002 `status: accepted`更新（本フェーズで実施済み） | Consequences本文は不変。status更新自体が検証完了を意味する運用として本節で確定 |
-| 要件5（secret scan CIジョブ） / `AC-8`,`AC-9` | `SecretScanner`（新規`lint secrets`サブコマンド）＋CI `verify`ジョブへのステップ追加 | 新規jobではなく既存`verify`ジョブへ追加 |
-| 要件6（required check化） / `AC-10`,`AC-11` | 既存job（`verify`）内への統合により`main.json`のruleset変更を不要化 | `verify-template-sync.sh`が両ファイル同期を検査 |
-| AC-12（regression） | 「障害・ロールバック考慮」節＋PLAN.mdの全体回帰確認タスク | - |
+| 要件1（ruleset実適用） / `AC-1`,`AC-2` | 設計要素A-1「main への正本 ruleset 適用」 | 正本 `main.json` を無変更で `setup-ruleset.sh` により実適用 |
+| 要件2（main・統合ブランチ双方での機械強制） / `AC-3` | 設計要素A-2「統合ブランチ保護の実現方式」（本文「統合ブランチ機械強制の実現方式（設計判断）」で採用案(b)を確定） | 採用: 統合ブランチへの branch protection 個別適用。却下: (a)正本 ruleset の ref 拡張・(c)別 ruleset |
+| 要件3（failing check がブロックする実機確認） / `AC-4` | 設計要素A-3「使い捨て失敗 PR による実機確認」 | `verify` を意図的に失敗させる使い捨て PR で `mergeable != MERGEABLE` を実測 |
+| 要件4（adapter の claude 切替） / `AC-5` | 設計要素B「config の adapter 切替」 | `worker.adapter`・`review.adapter` を `human`→`claude` |
+| 要件5（launch_worker 実機完走） / `AC-6`,`AC-7` | 設計要素C「launch_worker 実機完走手順」 | 使い捨て Issue・disposable segment で本物 `claude` CLI 起動、証跡採取 |
+| 要件6（正常経路で human_required 誤発火せず／真の異常時のみ発火） / `AC-8`,`AC-9` | 設計要素C「human_required 対照確認」 | 正常経路（発火せず）と認証欠如注入（発火）の対照。異常注入の自動テストは既存 `worker-adapters.test.ts` が網羅済み |
+| 要件7（既存テストスイート維持） / `AC-10` | 設計要素D「回帰の維持」 | adapter 切替はテストの tmp-repo 隔離により無影響。`npm test` 全 pass を維持 |
 
 ## 責務・境界
 
 ### コンポーネント構成
 
-#### A. lint-vocab識別子認識（要件1・要件2）
+#### A. ライブ GitHub 保護の実適用（要件1・要件2・要件3）
 
-- **`IdentifierContext`判定ロジック**（`src/commands/lint.ts` `isCodeLikeReference()`の拡張）: 既存3除外（バッククォートスパン・`<placeholder>`・スラッシュ入りパストークン、および「パス形式禁止語は常に除外対象外」ガード）の**後段に追加**する。既存3除外・パス形式禁止語ガードの評価順序・挙動は変更しない（AC-3の後退防止）。
-  1. **コード識別子文脈**（snake_case/camelCase/SCREAMING_SNAKE_CASE）: 禁止語の出現位置を含む最大の識別子文字列run（`[A-Za-z0-9_]+`）を抽出する。run長が禁止語長より長い場合（＝複合語の一部）、runを`_`区切り→各chunk内をcamelCase境界（小文字/数字→大文字の遷移直前）でさらに分割し、いずれかのセグメントが禁止語と大小文字を無視して完全一致すれば識別子文脈として除外する。run長が禁止語長と等しい場合（＝単独の語そのもの）はこの判定では除外しない（要件1「単独のissueは識別子文脈と誤認しない」）。
-     - 例: `issue_id` → `[issue, id]` → `issue`に一致 → 除外。`issueId` → camelCase分割で`[issue, Id]` → 除外。`ISSUE_ID` → 大小無視で一致 → 除外。`issues`（区切り無し、複合境界なし） → 対象外のまま（散文誤用として引き続き検出対象）。
-  2. **YAML識別子文脈**（キー構文＋flow-sequence要素の2形態。要件1「YAMLキー文脈」を、YAML構文上の裸スカラー識別子という同一原理でキー位置以外にも一般化したもの）: runが禁止語そのもの（複合でない）の場合に限り判定する。
-     - (a) キー構文: 当該run直前が「行頭からの空白＋任意の`- `」のみであり、run直後（空白を挟んでよい）が`:`である（例: `issue:`、`  issue:`、`orchestrator:`）。
-     - (b) flow-sequence要素: run直前（空白を挟んでよい、生の隣接文字で判定）が`[`または`,`、run直後（同様）が`,`または`]`である（例: `[issue, wip]`、`inputs: [issue, ...]`）。
-  3. **CLIサブコマンド文脈**: runが禁止語そのもの（複合でない）で、かつ直前の生の1文字（空白スキップ無し）が「空白・行頭・`"`」のいずれかであり、直後の生の1文字も「空白・行末・`"`」のいずれかである場合（＝独立したシェルトークンとして出現）、前後の空白区切りトークン（引用符除去後）のいずれかが既知CLI verbホワイトリストに含まれれば除外する（例: `issue start`・`issue resume`）。この「生の隣接文字」判定により、日本語の仮名文字が直接隣接する場合（例:「issueについて」）は境界条件を満たさず誤って除外しない。
-     - **verbホワイトリストの正本化**: `src/agents-md.ts`の`routes`オブジェクト（2トークンキー`'issue start'`等）を`src/lib/cli-routes.ts`へ切り出す（`agents-md.ts`は末尾で`main(...)`を副作用として実行するモジュールのため、`lint.ts`から直接importすると意図せずCLIが実行されてしまう。切り出しにより両者が同一の`routes`定義を安全にimportできるようにする）。`lint.ts`は`cli-routes.ts`のキーからverb（2トークン目）集合を導出し、ホワイトリストのハードコード二重管理・ドリフトを防ぐ。
-  4. **外部語彙の明示許可リスト**（`EXTERNAL_VOCAB_ALLOWLIST`、`lint.ts`内の小さな定数配列）: 上記1〜3のいずれにも該当しないが、外部システム（GitHub等）が仕様として定めるフィールド名そのものであり、改名（外部仕様のため不可）・バッククォート付与（YAML構文を壊すため不可）のいずれの対応も取れない既知の少数の完全一致トークンのみを列挙する明示的な例外リスト。現時点で1件: `blank_issues_enabled`（`.github/ISSUE_TEMPLATE/config.yml`、GitHub公式スキーマのキー名。`blank_issues_enabled`を`_`分割すると`[blank, issues, enabled]`となり`issues`は`issue`の複数形であって完全一致しないため、上記1のコード識別子文脈では救えない）。runがこのリストの要素と完全一致する場合のみ除外する。正規表現・部分一致は持たず、無制限のsuppress機構にはしない。
+- **A-1. `main` への正本 ruleset 適用**（AC-1・AC-2）: 正本 `.agent-skill-chain/templates/github/provisioning/rulesets/main.json` を**無変更**のまま、`.agent-skill-chain/scripts/setup-ruleset.sh`（`setup ruleset` CLI の薄いラッパー）経由で `techbeansjp-free/AGENTS.md` へ適用する。`rulesetStep`（`src/commands/setup.ts`）は既存 ruleset 一覧を取得し、同名 `main-protection` があれば `PUT`、無ければ `POST` する冪等実装であり、現状 `[]`（未適用）なので新規 `POST` になる。適用後、ruleset `main-protection` が `enforcement: active` で存在し、`required_status_checks` に5コンテキスト（`agent-skill-chain/spec-gate`・`design-gate`・`implementation-gate`・`validation-gate`・`verify`）が含まれることを GitHub API で実測確認する。
+  - **既存 classic 保護との共存**: `main` には現状 classic branch protection（`required_status_checks.contexts: ["self-enforce"]`, app_id 15368）が別途存在する。ruleset と classic protection は GitHub 側で**論理和（union）**として評価されるため、ruleset 適用後の `main` は「`self-enforce`（既存）＋5コンテキスト（新規）」がいずれも required になる（より厳格側へ動くのみ）。既存 `self-enforce` 保護の是非・整理は本 Issue のスコープ外（SPEC.md スコープ外「過去状態の遡及監査」）とし、削除・改変しない。
 
-- **`defaultVocabFileRoots()`改修**（`src/lib/scan.ts`）: `templates`・`config`・`schemas`・`scripts`の一時除外コメント・除外ロジックを撤廃し、`defaultLiveFileRoots()`と同一集合（`docs/GLOSSARY.md`のみ恒久除外）を返すようにする。
+- **A-2. 統合ブランチ保護の実現方式**（AC-3）: 統合ブランチ `chore/162-agent-skill-chain-bootstrap` は現状 protection 未設定（`branches/<branch>/protection` が 404）である。ここへ同等の required check を機能させる。実現方式の比較検討と採用判断は後述「統合ブランチ機械強制の実現方式（設計判断）」に記す。**採用案: 統合ブランチへ classic branch protection を個別適用する**（`PUT /repos/{owner}/{repo}/branches/{branch}/protection`）。正本 `main.json` は一切変更しない。
 
-#### B. 残存誤検出の内容是正（要件2、AC-4を満たすための実データに基づく是正）
+- **A-3. 使い捨て失敗 PR による実機確認**（AC-4）: A-1・A-2 適用後、`verify` を意図的に失敗させる差分を含む使い捨てブランチ・PR を作成し、`gh pr view --json mergeable,statusCheckRollup` で `mergeable` が `MERGEABLE` でない（required check 未達によりマージ不可）ことを実測する。`verify` を確実に失敗させる差分としては、ライブ対象ファイルへの禁止語（`lint-vocab` 違反）混入、または既存単体テストを1件失敗させる改変を用いる（`verify` job 内の型検査・テスト・lint いずれの失敗も `verify` の失敗として伝播する）。確認後、この使い捨て PR・ブランチはマージせず close・削除し、`main`・統合ブランチへ混入させない。
 
-設計時点で`npm run build && node bin/agents-md.js lint vocab .agent-skill-chain/templates .agent-skill-chain/config .agent-skill-chain/schemas .agent-skill-chain/scripts`を実測実行し、上記Aの3判定＋許可リストで解消される行（`issue_id`・`issue_created_at`等の複合識別子、`issue:`・`orchestrator:`等のYAMLキー、`[issue, ...]`等のflow-sequence要素、`issue start`・`issue resume`のCLIサブコマンド、`blank_issues_enabled`）を除いた**真の残存分**を洗い出した。実装フェーズはこのリストを起点に、上記コマンドを再実行しながら是正する。
+#### B. config の adapter 切替（要件4・AC-5）
 
-| 対象 | 内容 | 是正方針 |
-|---|---|---|
-| `.github/ISSUE_TEMPLATE/docs.yml`（1,2,14行目）、`provisioning/labels.yaml`（18行目） | 散文としての「ドキュメント」使用（GitHub Issueテンプレートの表示名・説明文） | 内容修正：「ドキュメント」を含まない表現へ言い換える（例:「資料」「README等」）。真の散文誤用であり識別子文脈の対象外 |
-| `config/roles.yaml`（119行目）、`.github/workflows/agent-skill-chain-gate.yml`（115行目） | 「ブロック」（block、禁止語「ロック」とは無関係な意味）の部分文字列として「ロック」が一致する仮名の偶発衝突 | 内容修正：「ブロック」を含まない表現へ言い換える（例:「停止」「中断」）。識別子文脈判定（YAML/CLI/コード識別子）では解決できない別種の問題（日本語の部分文字列衝突）であり、本Issueのスコープ（3種の識別子文脈）外。恒久対応（仮名の単語境界判定の一般化）は本Issueでは行わず、必要性が再確認された時点で別Issueとする |
-| `config/roles.yaml`（15,16,37行目 `issue.create`・`issue.state_transition`・`issue.report`）、`scripts/issue-start.sh`（3行目コメント中の`issue.allowed_types`） | ドット区切りの複合識別子（capability名・config参照）。snake_case/camelCase/SCREAMING_SNAKE_CASEのいずれでもないため上記A-1（コード識別子文脈）の対象外 | 内容修正：該当箇所をバッククォートで囲み既存のコードスパン除外を適用する。実装時に`src/lib/roles.ts`の型定義（`RolesDocument.role_contracts`のみが型付けされ、`roles.<role>.capabilities`は型付けされていない自由記述であることを`roles.ts`で確認済み）を再確認し、バッククォート付与が既存の読み出しロジック・`test/unit/roles.test.ts`のアサーションに影響しないことを検証してから適用する |
+`.agent-skill-chain/config/agent-skill-chain.yaml` の `worker.adapter`（現 `human`）と `review.adapter`（現 `human`）をいずれも `claude` へ変更する。これは実機検証を成立させるための設定変更であり、恒久既定値とするかの意思決定は SPEC.md スコープ外。
+- **回帰無影響の根拠**（AC-10 と連動）: テストスイートは adapter の実値をリポジトリ本体から読まず、`test/helpers/tmp-repo.ts` の `setWorkerAdapter`/`setAdapter`/`unsetAdapter` により各テスト専用の tmp-repo 内で明示設定する（例: `gate-judgment.test.ts` は `unsetAdapter` で除去し「未設定時の CLI 既定フォールバック（`claude`）」を検証する）。したがって本体 config の値を `claude` に変えてもテストの期待は変わらない。
 
-上記是正後、AC-4の期待（引数無しデフォルト対象で終了コード0）を満たす。
+#### C. launch_worker 実機完走・human_required 対照確認（要件5・要件6）
 
-#### C. ADR-0002実機検証・finalize（要件3・要件4）
+- **C-1. 検証セグメントの選定**（AC-6・AC-7）: 使い捨て Issue を1件用意し、launch_worker の全契約経路（lease取得→segment start→本物 `claude` CLI 起動→ワーカー自身の checkpoint push＋`report_status completed`→完了確認→lease解放）を最も副作用少なく通せる**`spec` セグメント**を第一候補とする。`spec` は上流セグメント成果物への依存が無く、単一の `SPEC.md` 生成のみで完結し、`launch_worker` が要求する「report latest が `status=completed` かつ `target_sha` = push 済み HEAD 一致」を満たしやすい。副作用の局所化のため、この検証は**ローカルバックエンド（`coordination.backend: local`）の使い捨て作業ツリー**で行うことを推奨する（GitHub 上に検証用 Issue/PR/ref を残さず、lease も Git 管理下状態ファイルで完結するため後始末が容易）。ただし launch_worker の契約自体は backend 非依存であり、GitHub バックエンドでの実施を妨げない。
+- **C-2. 完了判定と証跡**（AC-6・AC-7）: `launch_worker <issue_id> spec` が終了コード0で返り、`report latest <issue_id> spec` の直近レコードが `status=completed` かつ `target_sha` が `git rev-parse HEAD` と一致し、lease が解放（`lease-release` 済み）されていることを確認する。launch_worker の標準出力・標準エラー（認証実値は非出力）と report-status 記録を証跡として採取し VALIDATION.md に記載する。
+- **C-3. human_required の対照確認**（AC-8・AC-9）:
+  - **正常経路（発火しないこと）**: C-2 の正常起動中および完了時に、フェイルセーフ経路（`report_status blocked` の `human_escalation_requested` 扱い）が一度も発火していないこと（report 履歴に blocked が無いこと）を確認する。
+  - **異常注入（真の異常時のみ発火すること）**: 認証欠如（`env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN` で launch_worker を起動）を対照条件として注入し、`report_status blocked`（`human_escalation_requested=true`, `blocked_reason` に「認証」を含む）が発火し非0非3で返ることを確認する。この対比により「正常経路では発火せず、真の異常時のみ発火する」ことを裏付ける。
+  - **自動テストの現況**: 認証欠如・起動失敗・完了偽装・target_sha 不一致の各フェイルセーフは `test/integration/worker-adapters.test.ts` が WORKER_CMD スタブ＋env 操作で既に網羅している（AC-9 の automated 部分は追加実装不要。既存テストが pass することを AC-10 の回帰確認で担保する）。本 Issue で新規に加えるのは本物 `claude` CLI を用いた**正常経路との対照（manual/live 部分）**である。
 
-本DESIGN.mdの作成と同一フェーズで実施済み。詳細は次節「ADR-0002実機検証結果」。
+#### D. 回帰の維持（要件7・AC-10）
 
-#### D. secret scan CI（要件5・要件6）
+本 Issue の全変更（config の adapter 切替、DESIGN/PLAN 等の文書追加）を統合ブランチ上へ反映した状態で `npm run build && npm test` が全 pass することを実測確認する。ライブの ruleset/branch protection 適用は GitHub 側の状態変更でありコードベースを変えないため、テスト結果には影響しない。config の adapter 切替は B の根拠により無影響。
 
-- **`SecretScanner`**（新規`src/commands/lint.ts`の`secrets()`、CLIサブコマンド`lint secrets`、ラッパー`.agent-skill-chain/scripts/lint-secrets.sh`）: 既存の`lint vocab`/`lint references`と同じ「軽量な自前正規表現ベースの検査」方式を採る（外部ツール未導入。理由は下記）。
-  - **検出パターン**（既知の秘密情報フォーマットの接頭辞に限定し誤検出率を抑える。エントロピーベースの汎用検出は持たない）:
-    - AWS Access Key ID: `\b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b`
-    - AWS Secret Access Key（`aws_secret_access_key`キー名への代入文脈に限定し誤検出を抑える）: `(?i)aws_secret_access_key\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}['"]?`
-    - GitHub PAT: `\bgh[pousr]_[A-Za-z0-9]{36}\b`
-    - Slack token: `\bxox[baprs]-[0-9A-Za-z-]{10,48}\b`
-    - Google API key: `\bAIza[0-9A-Za-z_-]{35}\b`
-    - Stripe secret key: `\bsk_(live|test)_[0-9A-Za-z]{24,}\b`
-    - PEM秘密鍵ヘッダ: `-----BEGIN (RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----`
-  - **動作モード2種**（`lint vocab`/`lint references`の引数契約パターンを踏襲しつつ、diffスコープの新モードを追加する）:
-    - `lint secrets <path...>`: 指定ファイルの全行を対象に検査する（単体テスト・手動実行向け。AC-8/AC-9のGiven/When/Thenをファイル単位で構成できる）。
-    - `lint secrets --diff <base-ref>`: `git diff <base-ref>...HEAD`で追加された行（`+`始まり、`+++`ヘッダを除く）のみを対象に検査する（CI向け。SPEC.mdスコープ外の「既存commit履歴の遡及監査」を行わず、当該PRで新たに追加される行のみを対象とすることで両立させる）。
-  - 出力契約は`lint vocab`/`lint references`と同一（成功: 終了コード0、失敗: 終了コード1以上＋`ファイル:行`形式の標準エラー出力）。
-  - **ツール選定の理由（gitleaks等の外部OSSツール不採用）**: 本リポジトリの依存関係は`ajv`・`yaml`の2つのみ（`package.json`）に抑えられており、CIも`actions/checkout`・`actions/setup-node`以外のMarketplace actionを使っていない。gitleaks等は別言語binaryの追加導入（Marketplace action経由のダウンロード、またはnpm wrapper経由の間接依存）を要し、本プロジェクトが一貫して採る「lint-vocab・lint-references同様、自前の小さなTypeScript実装＋薄いshラッパー」という既存アーキテクチャ・依存最小方針との整合性を優先し、既知フォーマット限定の軽量自前実装を採用する。検出網羅性の継続拡充（エントロピーベース検出等）は本Issueのスコープ外とし、必要が生じた時点で別Issueとする（AGENTS.md UNIX原則「疑わしい機能は追加しない」）。
-- **CI統合**（正本`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-ci.yml`、配布先`.github/workflows/agent-skill-chain-ci.yml`は同一内容に同期）: 新規jobを作らず、既存`verify`job内の`lint-references`ステップの後段に`lint-secrets`ステップを追加する。
-  ```yaml
-  - name: Fetch base branch for secret scan
-    if: github.base_ref != ''
-    env:
-      BASE_REF: ${{ github.base_ref }}
-    run: git fetch origin "$BASE_REF" --depth=1
+### 依存関係
 
-  - name: lint-secrets (PRで追加された行のみ)
-    if: github.base_ref != ''
-    env:
-      BASE_REF: ${{ github.base_ref }}
-    run: ./.agent-skill-chain/scripts/lint-secrets.sh --diff "origin/$BASE_REF"
-  ```
-  既存の「Fetch base branch for diff-based checks」ステップ・`verify-adr`ステップも同様にそれぞれ個別に`git fetch`を行っており（shallow fetchで低コスト）、本ステップはこの既存パターンを踏襲する。`if: github.base_ref != ''`によりPR以外のトリガーでは実行しない（既存の同条件ステップと同じガード）。
-  - **required check化（要件6）**: 新規jobを作らず既存`verify`job内のステップとして追加するため、`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`の`required_status_checks`（既に`{"context": "verify"}`を含む）は変更不要。secret scanステップの失敗はそのまま`verify`job全体・ひいてはrequired checkである`verify`の失敗として伝播する。
+```text
+A-1(main ruleset適用) ─┐
+A-2(統合ブランチ保護) ─┼→ A-3(使い捨て失敗PRでブロック実機確認)
+B(config adapter切替) ──→ C(launch_worker実機完走・human_required対照) ─→ D(回帰: npm test 全pass)
+```
+
+循環依存は無い。A 群（GitHub 保護）と B→C（adapter・自走実機）は独立に着手できる。D は全変更反映後に行う。
+
+## 統合ブランチ機械強制の実現方式（設計判断）
+
+要件2/AC-3 が求める「`main` と統合ブランチ双方で required check を機械強制する」実現方式について、以下3案を比較した。
+
+### 採用案 (b): 統合ブランチへ classic branch protection を個別適用する
+
+`PUT /repos/techbeansjp-free/AGENTS.md/branches/chore%2F162-agent-skill-chain-bootstrap/protection` に、`main.json` と同一の5 required contexts を持つ classic branch protection を適用する。正本 `main.json` は一切変更しない。
+
+採用理由:
+1. **正本アセットの純粋性を保つ**: 統合ブランチ名 `chore/162-agent-skill-chain-bootstrap` は本リポジトリのブートストラップ限定・一過性の構築物であり、下流の消費者リポジトリには存在しない概念である。これを正本 `main.json`（`setup-ruleset.sh` 経由で全消費者へ配布される）へ書き込むと、消費者へ無意味な ref パターンが再配布され、二役（正本×消費者）の境界を侵す。本リポジトリはこの種のドッグフーディング固有値の配布物への漏洩を過去に繰り返し修正してきた経緯があり、同種の混入を避ける。
+2. **一過性・可逆性**: 統合ブランチは `main` への最終マージ後に削除される想定の一過性ブランチである。branch protection は当該ブランチに対して命令的（imperative）に適用・削除でき、ブランチ削除時に自然に消える。正本アセットの構造を恒久的に変える案(a)より切り戻しが局所的で安全。
+3. **SPEC の観測状態を直接解消する**: SPEC.md が現状として観測した「統合ブランチが protection 未設定＝404」を、まさに `branches/<branch>/protection` エンドポイントを 404 でない状態にすることで直接解消する（AC-3 の検証手段が参照するエンドポイントと一致）。
+
+### 却下案 (a): 正本 ruleset `main.json` の `conditions.ref_name.include` を拡張する
+
+`refs/heads/chore/162-*` 等のパターンを `main.json` の include に追加する案。**却下**。理由: 上記採用理由1の裏返しで、正本かつ配布物である `main.json` に消費者固有・一過性のブランチ名パターンを恒久的に焼き込むことになり、`setup-ruleset.sh` で全下流消費者へ再配布される。`verify-template-sync.sh` の対象でもあり、消費者側にも無意味な ref パターンが同期される。正本／消費者の分離という本システムの中核前提に反する。
+
+### 却下案 (c): 統合ブランチ用の別 ruleset を ad-hoc に作成する
+
+`main.json` とは別に、`refs/heads/chore/162-agent-skill-chain-bootstrap` を対象とする専用 ruleset（例: `integration-branch-protection`）を GitHub API で ad-hoc 作成する案。正本 `main.json` を汚さない点は採用案(b)と同等で、機構としては成立する。しかし**却下**。理由: (i) ruleset は `branches/<branch>/protection` エンドポイントを populate しないため、SPEC.md が明示する「404 の解消」という AC-3 の観測指標を文言どおりには満たさない。(ii) 一過性ブランチ1本のために独立した ruleset オブジェクトを増設するのは、単一の branch protection PUT に比べ管理面（一覧・削除・混同リスク）が重い。UNIX 原則「疑わしい機能は追加しない」に照らし、より小さい面積の手段（採用案(b)）を選ぶ。
+
+### 採用案の具体コマンド案
+
+`main` への ruleset 適用（A-1）:
+
+```bash
+# 正本 main.json を無変更で実適用（冪等: 既存 main-protection があれば PUT、無ければ POST）
+./.agent-skill-chain/scripts/setup-ruleset.sh techbeansjp-free/AGENTS.md
+# 確認
+gh api repos/techbeansjp-free/AGENTS.md/rulesets            # [] でなく main-protection(active) が出る
+gh api repos/techbeansjp-free/AGENTS.md/rulesets/<id> --jq '.rules[] | select(.type=="required_status_checks")'
+```
+
+統合ブランチへの branch protection 適用（A-2、body 案）:
+
+```bash
+gh api -X PUT \
+  "repos/techbeansjp-free/AGENTS.md/branches/chore/162-agent-skill-chain-bootstrap/protection" \
+  --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "agent-skill-chain/spec-gate",
+      "agent-skill-chain/design-gate",
+      "agent-skill-chain/implementation-gate",
+      "agent-skill-chain/validation-gate",
+      "verify"
+    ]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 0,
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": false
+  },
+  "restrictions": null
+}
+JSON
+# 確認（404 が解消され protection が返る）
+gh api "repos/techbeansjp-free/AGENTS.md/branches/chore/162-agent-skill-chain-bootstrap/protection"
+```
+
+補足:
+- `enforce_admins: false` は `main` の既存 classic 保護と同値であり、本リポジトリの admin merge（`gh pr merge --admin`）運用を温存する。required check 未達の PR は `mergeable`/`statusCheckRollup` 上でブロック状態として観測され（AC-3/AC-4 の検証はこれを見る）、admin bypass はそれとは別の明示的なマージ操作である。
+- classic protection の PUT body は `required_status_checks`・`enforce_admins`・`required_pull_request_reviews`・`restrictions` の4フィールドを揃える必要がある（`restrictions: null` = 誰でもマージ可の意）。会話スレッド解決の強制（`main.json` の `required_review_thread_resolution`）を統合ブランチにも揃えたい場合は `required_conversation_resolution` の付与を実装時に検討する（AC-3 の必須要件ではないため任意）。
 
 ## 関連ADR
 
+新規 ADR は作成しない。
+
+判断根拠: ADR は「なぜその**アーキテクチャ上の**判断をしたか」を後から参照するための成果物である。本 Issue の中核判断（統合ブランチには採用案(b)の branch protection を用いる）は、正本アセット `main.json` を**一切変更しない**一過性・命令的な provisioning 操作であり、コード・スキーマ・配布物の構造を変えない。恒久的な抽象・契約の新設を伴わないため、ADR 化する durable な意思決定に当たらない。「正本 ruleset は安定・汎用な ref のみを対象とし、消費者一過性ブランチは正本外の手段で保護する」という原理は本 DESIGN.md 内に自己完結して記載しており（前節）、これで追跡可能性（I1）は満たされる。#178 でも同様に、変更が durable な architecture 決定に当たらない場合に ADR を新設しない判断を採っている。
+
 ```yaml
-related_adrs:
-  - id: ADR-0002
-    relation: references
+related_adrs: []
 ```
-
-ADR-0002は本Issueのスコープである「ADR-0002 finalize」自体の対象ADRであり、本DESIGN.mdの作成と同一フェーズで`status: accepted`へ更新済み（次節参照）。
-
-## ADR-0002実機検証結果
-
-`SPEC.md`要件3に基づき、本リポジトリ（`techbeansjp-free/AGENTS.md`、`gh auth status`で確認したtoken scope: `gist, read:org, repo, workflow`）に対し、ADR-0002 Decision節記載の方式（`git commit-tree`によるparentlessコミット作成＋カスタムref namespaceへの`git push`）を実際に実行した。
-
-### 実行コマンドと出力（証跡）
-
-```
-$ git hash-object -t tree /dev/null
-4b825dc642cb6eb9a060e54bf8d69288fbee4904
-
-# --- acquire相当: 新規refへのpush ---
-$ SHA1=$(git commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 -m "test lease acquire (ISSUE-178 ADR-0002 verification)")
-# SHA1=0832afaf56e6b7f5c7c0932c7c7a27462a1d58a0
-$ git push origin "$SHA1:refs/agent-skill-chain/leases/adr0002-verification-178"
-To https://github.com/techbeansjp-free/AGENTS.md.git
- * [new reference]   0832afaf56e6b7f5c7c0932c7c7a27462a1d58a0 -> refs/agent-skill-chain/leases/adr0002-verification-178
-（終了コード0：成功）
-
-# --- 競合pushの試行: 別のparentlessコミットを同じrefへforce無しでpush ---
-$ SHA2=$(git commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 -m "test lease acquire CONFLICT attempt (ISSUE-178 ADR-0002 verification)")
-# SHA2=9eec500b1e22b8e2b5efec9970ee4532e76d720e
-$ git push origin "$SHA2:refs/agent-skill-chain/leases/adr0002-verification-178"
-To https://github.com/techbeansjp-free/AGENTS.md.git
- ! [rejected]        9eec500b1e22b8e2b5efec9970ee4532e76d720e -> refs/agent-skill-chain/leases/adr0002-verification-178 (non-fast-forward)
-error: failed to push some refs to 'https://github.com/techbeansjp-free/AGENTS.md.git'
-（終了コード1：拒否＝compare-and-set保証の実測確認）
-
-# --- release相当: テスト用refの削除 ---
-$ git push origin --delete refs/agent-skill-chain/leases/adr0002-verification-178
-To https://github.com/techbeansjp-free/AGENTS.md.git
- - [deleted]         refs/agent-skill-chain/leases/adr0002-verification-178
-（終了コード0：成功）
-
-# --- クリーンアップ確認 ---
-$ git ls-remote origin 'refs/agent-skill-chain/*'
-（出力なし：残存ref無しを確認）
-```
-
-### 結論
-
-3項目すべてが実測どおりに成功した。
-
-1. カスタムref namespace（`refs/agent-skill-chain/leases/*`）への新規push（acquire相当）が成功した。
-2. 既存refに対する非fast-forwardなpushが`[rejected]`（`non-fast-forward`）としてサーバ側で拒否され、compare-and-set保証が実機で機能することを確認した。
-3. `git push origin --delete`によるref削除（release相当）が成功し、テスト用refを残さずクリーンアップできた。
-
-これにより、SPEC.md AC-6・AC-7の要求どおり、現在の資格情報（`contents: write`相当の権限を持つtoken）でADR-0002 Decision節の方式が実機で機能することを確認できたため、**要件4の「push成功時」の分岐**を採用する。ADR-0002の`status`フィールドのみを`proposed`から`accepted`へ更新済み（`docs/adr/ADR-0002-github-lease-git-ref-cas.md`）。Context/Decision/Consequences/`supersedes`は一切変更していない（`adr_finalization_worker`のscope: `adr_status_only`を遵守）。
-
-Consequences節に残る「実機検証がまだ完了していない」という記述と、実際には検証が完了したという状態の間の不整合は、SPEC.md要件4が定める運用（**`status: accepted`への遷移それ自体が「検証完了」を意味する**）で解消する。ADR本文（Context/Decision/Consequences）はaccepted後不変というライフサイクル規約（`.agent-skill-chain/templates/adr/ADR.md`）があるため、新規ADRでの補記や本文書き換えは行わない。Consequences節の当該文は「ADR-0002がproposedだった当時に残っていた既知の未検証事項」という単なる歴史的記述として扱い、`status: accepted`という事実そのものが読者に「その後検証済みである」ことを伝える運用とする。この解釈はADR本文を一切変更しないため、`.agent-skill-chain/scripts/adr-lint.sh check`の構造検査にも影響しない（実測: `node bin/agents-md.js lint adr check` 終了コード0）。
 
 ## 障害・ロールバック考慮
 
-- 想定される失敗モード:
-  - 識別子文脈判定の過剰除外（本来検出すべき散文誤用を誤って除外してしまう）: AC-2の回帰テストが防止する。実装フェーズは`test/integration/lint.test.ts`に新規テストケースを追加し、3種の識別子文脈それぞれについて「除外される例」と「隣接する散文誤用は除外されない例」を対で検証する。
-  - secret scanの誤検知によるCI全体停止（AC-9）: 検出パターンを既知フォーマットの接頭辞限定にし、汎用エントロピー検出を持たないことでリスクを抑える。誤検知が実際に発生した場合はパターン自体を狭める方向で対応し、抑制リストの濫用（何でも許可する方向）は避ける。
-  - secret scanの検出漏れ（AC-8）: MVPパターンセットは既知の主要フォーマットに限定されるため、未知フォーマットの秘密情報は検出できない可能性がある。本Issueのスコープは「検知・失敗させる振る舞いの導入」であり、検出網羅性の継続拡充は別Issueとする（SPEC.mdスコープ外）。
-  - `blank_issues_enabled`の外部語彙許可リストが将来他の外部スキーマフィールドでも必要になり肥大化する可能性 → 完全一致のみを許可する狭い設計のため、肥大化しても各エントリの妥当性はコードレビューで個別に検証可能（正規表現による包括suppressにはしない）。
-- ロールバック手順: 本Issueの全変更はこのPR単位でのcommitであり、PRをrevertすれば`defaultVocabFileRoots()`の4ディレクトリ除外・ADR-0002の`status`・CI workflowの変更はすべて同時に巻き戻る。ADR-0002のみを個別に戻す必要が生じた場合は、`status`フィールドのみの変更であるため、`accepted`→`proposed`への逆更新も本文に影響しない。
+- 想定される失敗モードとロールバック:
+  - **ruleset 適用で意図せず全 PR がブロックされる**: 適用直後、`self-enforce` に加え5コンテキストが required になるため、必要な Check Run を報告しない過去 PR がマージ不可になり得る。切り戻しは `gh api -X DELETE repos/techbeansjp-free/AGENTS.md/rulesets/<id>` で ruleset を削除すれば適用前状態（`[]`）へ戻る（`main.json` 自体は無変更なので配布物への影響なし）。
+  - **統合ブランチ保護の切り戻し**: `gh api -X DELETE repos/.../branches/chore/162-agent-skill-chain-bootstrap/protection` で 404（未設定）状態へ戻せる。統合ブランチ削除時にも自然消滅する。
+  - **使い捨て検証物の残存（AC-4/AC-6）**: 使い捨て PR・ブランチ・検証用 Issue・lease ref が残ると `main`・統合ブランチや WIP 枠を汚す。後始末を手順化する（PLAN.md の後始末タスクで close/delete/prune を必須化）。
+  - **adapter 切替による回帰**: 万一テストが本体 config を参照して落ちる想定外があれば、config を `human` へ戻せば即時復旧する（1行の値変更のため可逆）。ただし B の根拠によりテストは tmp-repo 隔離のため無影響を見込む。
 - 影響を受ける既存機能:
-  - `agent-skill-chain lint vocab`のデフォルト対象範囲が拡大する（AC-4）。既存の`test/integration/lint.test.ts`の「path引数省略時のデフォルト対象は違反なしで終了コード0」テストは、除外ディレクトリ変更後も同じ期待（0件）を維持する前提（是正完了後）。
-  - CI実行時間: `lint-secrets`ステップ追加によりCI全体の所要時間がわずかに増加する（diffベースのため軽量、既存`verify-adr`ステップと同等オーダー）。
-  - branch protection / rulesetは変更しない（`main.json`は無変更、既存の`verify`必須チェックがそのままsecret scanも包含する）。
+  - `main`・統合ブランチのマージ条件が厳格化する（required check 未達 PR がマージ不可になる）。これは本 Issue の目的そのものであり意図した変更。
+  - 配布物（`main.json` 等の `.agent-skill-chain/templates/`）・CI workflow・ソースコードは**変更しない**（ライブ設定と config 1箇所の adapter 値のみ）。
+
+## 制約・未決事項・対象外
+
+- **共有インフラへの不可逆操作の扱い**: ruleset の本適用・統合ブランチ protection の本適用は本リポジトリの共有 GitHub 設定を変える不可逆・共有影響のある操作である。使い捨て検証（disposable な Issue/PR/ブランチ/ローカル lease）は自由に進めてよいが、本適用の直前ではユーザーへの確認を挟む（PLAN.md 注意事項に明記）。
+- **対象外（SPEC.md スコープ外の再掲）**: `worker.adapter`/`review.adapter` を恒久既定値として `claude` に固定するかの意思決定、`main` の既存 `self-enforce` classic 保護の整理、`claude` CLI の恒久起動フラグ（`--permission-mode` 等）の確定、`human_required` 4異常経路すべての網羅的故障注入、過去 commit の遡及監査。
+- **未決事項**: 統合ブランチ protection に会話スレッド解決強制（`required_conversation_resolution`）を含めるか（AC 必須ではなく実装時の任意判断）。C の検証を GitHub バックエンドで行うかローカルバックエンドで行うか（本設計はローカル使い捨てを推奨するが、実施バックエンドは検証者が最終決定してよい）。
