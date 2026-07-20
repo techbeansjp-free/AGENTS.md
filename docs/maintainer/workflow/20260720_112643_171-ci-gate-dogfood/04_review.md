@@ -459,3 +459,57 @@ verify-artifacts (対象PRで変更されたセグメントごと)	segment 'impl
 ### 教訓
 
 `fetch-depth: 0`は「対象refの全履歴を取得する」であって「全ブランチを取得する」ではない——このリポジトリの`agent-skill-chain-ci.yml`は既に`fetch-depth: 0`だったにもかかわらず本バグが発生した事実がそれを証明している。diffベースの検査（`git diff base...HEAD`）を新設・変更する際は、`base`側のrefが対象workflow内で実際にフェッチ済みかどうかを、`fetch-depth`の値だけで判断せず個別に確認する必要がある。同一workflowファイル内に既に動いている類似パターン（今回は`verify-adr`ステップ）がある場合は、それを流用・前段へ移動することが最も確実な再発防止策になる。
+
+---
+
+## 14. 追記（9回目）: PR #172 実地実行で`lint-vocab`が失敗（禁止語スキャナの識別子/パス非対応・AGENTS.md自身の用語不整合）
+
+**発生**: §13までの修正後、PR #172の実GitHub Actions上での再実行（run 29718355217、job 88275922279）で`lint-vocab`が失敗した。抜粋:
+
+```
+.agent-skill-chain/ci/verify-doc-length.sh:4: 禁止語 'issue' が見つかりました（'成果物' を使用してください）
+.agent-skill-chain/ci/verify-gate-report.sh:2: 禁止語 'フェーズ' が見つかりました（'セグメント' を使用してください）
+.agent-skill-chain/ci/verify-worktree-path.sh:6: 禁止語 'issue' が見つかりました（'成果物' を使用してください）
+```
+
+実際にはこの3件は氷山の一角で、`node bin/agents-md.js lint vocab`（引数省略・デフォルト対象全体）を実測すると、この時点のデフォルト対象（`AGENTS.md`・`docs/GLOSSARY.md`・`.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}`）全体で**120件**の違反が報告されていた。`.github/`（このリポジトリへのCI導入自体）が本Issue #171のスコープであり、`lint-vocab`ステップがこのリポジトリで実際に稼働したのは今回が初めてだったため、これまで一度も機械検査されたことのない既存の誤検出・不整合が一挙に露見した。
+
+### 根本原因（2種類）
+
+1. **`src/commands/lint.ts`の`vocab()`が単純な部分文字列一致（`line.includes(banned)`）だった**: `docs/GLOSSARY.md`の禁止同義語列にある注釈（例:「issue（小文字）」の「（小文字）」）は`src/lib/glossary.ts`の`stripAnnotation()`で除去され、素の`issue`という文字列が禁止語として登録される。この禁止語チェックがバッククォートのコードスパン・`<placeholder>`トークン・スラッシュ区切りのファイルパスリテラルを一切区別しなかったため、`.agent-skill-chain/templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`のような実在するディレクトリパス（`verify-doc-length.sh:4`）や`<issue-id>`のようなプレースホルダ構文（`verify-worktree-path.sh:6`）まで「散文中でissueを成果物の意味で誤用している」ものとして誤検出していた。
+2. **AGENTS.md自身の用語不整合**: `.agent-skill-chain/ci/verify-gate-report.sh:2`のコメントは`AGENTS.md §不変条件I2（フェーズゲート）`を引用していたが、AGENTS.md本文の他の箇所（見出し「## 4 セグメント・4ゲート」等）は一貫して「セグメント」を使っているのに、不変条件表のI2行だけが「フェーズゲート」という表記になっていた（AGENTS.md自身がGLOSSARY.mdの禁止語「フェーズ」に違反していた）。
+
+### 対応
+
+1. **スキャナ側（`src/commands/lint.ts`）**: `hasProseViolation()`を新設し、行中の禁止語の全出現箇所それぞれについて、以下いずれかに完全に包含される場合は散文の誤用ではなく正当な技術的参照とみなし対象外にした。
+   - バッククォートのコードスパン（`` `...` ``）
+   - `<...>`形式のプレースホルダトークン
+   - ASCIIのパス・識別子構成文字（英数字・`` _.-{},/ ``）のみからなり、かつ`/`を1つ以上含む連続run（ファイルパスリテラル。例: `.agent-skill-chain/templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`）
+
+   ただし禁止語自体がパス形式の文字列である場合（`docs/GLOSSARY.md`で定義されている`.agent-skill-chain/source`。禁止されているのは旧ディレクトリパスへの言及そのもの）はこれら3種の除外を一切適用しないようにした。禁止語自体がパスなら「パスに見えるから誤検出」ではなく「禁止されているパス文字列そのもの」であり、除外すると禁止語が検査不能になってしまうため。日本語の助詞・句読点は上記いずれの除外対象文字集合にも含まれないため、散文中で禁止語が単独の語として使われている箇所（例:「issueの説明」）を誤って対象外にすることはない。
+2. **AGENTS.md**: 不変条件表の「I2 フェーズゲート」を「I2 セグメントゲート」へ表記統一した（不変条件の内容・検査手段列は変更なし）。あわせて`.agent-skill-chain/ci/verify-gate-report.sh:2`のコメントも同じ表記へ追随修正した（AGENTS.mdの当該見出しを引用する側であるため）。`grep -n "フェーズ" AGENTS.md`で他に残存箇所が無いことを確認済み。`.agent-skill-chain/ci/verify-doc-length.sh`でAGENTS.mdが144行（上限150行）に収まっていることを確認した。
+
+### 検証（修正前後の比較）
+
+`node bin/agents-md.js lint vocab`（デフォルト対象全体）を修正前後で実行し、報告された`ファイル:行:禁止語`の集合を`comm`で突き合わせた。
+
+- 件数: 120件 → 84件（36件減少、新規に出現した違反は0件）。
+- 消えた36件は全て「issue（`.agent-skill-chain/templates/issue/...`等のパスリテラル、`<issue-id>`等のプレースホルダ、`` `issue start` ``等のバッククォート内コマンド名を含む）」または「フェーズ（AGENTS.md・verify-gate-report.shの2箇所）」であることを1件ずつ実際の該当行を`sed`で確認した。いずれも散文としての誤用ではなく、実在するパス・プレースホルダ・コード参照であることを確認済み（例: `roles.yaml`の`Closes #<issue-id>`、`GIT_CONVENTIONS.md`の`` `issue-start.sh` ``、`gate-report.schema.yaml`のサンプルパス`issues/123/SPEC.md`等）。
+- 元々CIが報告していた3件（`verify-doc-length.sh:4`・`verify-gate-report.sh:2`・`verify-worktree-path.sh:6`）は全て解消を確認した。
+- `.agent-skill-chain/schemas`,`config`,`scripts`,`standards`等に残る84件のうち大半は「issue」の識別子的用法（YAMLキー`issue:`・ドット区切り参照`issue.allowed_types`等、スラッシュを含まないためパスリテラル除外の対象外）で、既存の設計判断（本修正は「今回実際に踏んだ誤検出パターンの是正」であり、`src/`/`bin/`への対象拡大を検討したADR-5（`docs/maintainer/workflow/20260720_090158_169-cli-lifecycle-commands/02_設計.md`）とは別スコープ）どおり本Issueでは対応せず残置した。`docs/GLOSSARY.md`自体が用語定義の一環として禁止語の実例を列挙しているために生じる違反（既存`test/integration/lint.test.ts`が「正常な挙動」として明示的に許容している）も引き続き残る。したがって`lint vocab`全体の終了コードは本修正後も1のままである。
+- 禁止語自体がパス形式の`.agent-skill-chain/source`（`docs/GLOSSARY.md:16`）は、パスリテラル除外の対象から明示的に除外しているため、修正後も引き続き検出されることを確認した（一度は汎用的なパス除外ルールに巻き込まれて検出漏れになりかけたため、`banned.includes('/')`によるガードを追加して是正した）。
+
+### 追加したテスト
+
+`test/integration/lint.test.ts`に2件追加した。
+
+- `lint vocab: バッククォートのコードスパン・<placeholder>・スラッシュ区切りのパスリテラル内の禁止語は違反にならない（散文の誤用は引き続き検出される）`: 同一ファイル内にコードスパン・プレースホルダ・パスリテラルの3パターンと、実際の散文誤用（「このissueの内容を確認してください。」）を1行ずつ用意し、前者3行は違反にならず後者1行のみが違反として報告されることを検証。
+- `lint vocab: 禁止語自体がパス形式の文字列（.agent-skill-chain/source）の場合は、バッククォートやパスリテラル文脈でも除外せず検出する`: バッククォート内・バッククォート無しパスリテラル文脈の両方で`.agent-skill-chain/source`を検出できることを検証。
+
+### 検証結果
+
+`npm test`実測: `# tests 341 / # pass 341 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（既存339件全pass + 新規2件全pass）。
+
+### 教訓
+
+禁止語彙スキャナのような「文字列一致ベースの機械検査」は、対象コーパスが自然文だけでなく識別子・パス・プレースホルダ構文を含む技術文書の場合、部分文字列一致だけでは早晩誤検出を蓄積する。`.github/`導入によってこのリポジトリで`lint-vocab`が初めて実行された結果、120件もの既存誤検出・不整合が一度に露見したことは、「機械検査は追加した瞬間に一度は必ず実地で全量を洗い出す（サンプルの数件だけで判断しない）」ことの重要性を示している。また、禁止語自体がパス形式の文字列である場合（`.agent-skill-chain/source`）のように、誤検出除外ルールの適用対象外にすべき禁止語が存在しうるため、汎用的な除外ルールを足す際は「その禁止語自身の形状」を踏まえた例外条件を必ず検討する必要がある。

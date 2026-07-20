@@ -11,7 +11,7 @@
 | # | 不変条件 | 検査手段 |
 |---|---|---|
 | I1 追跡可能性 | 全変更は Issue に紐づき、要求→設計(ADR)→実装→レビューの証跡が Git 履歴に残り、現在有効な決定を指し続ける | PR に Issue 参照必須、成果物存在チェック、`.agent-skill-chain/scripts/adr-lint.sh check`（CI） |
-| I2 フェーズゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する | GitHub モード：Check Run の成功状態（required status を専用 App/Workflow に限定）。ローカルモード：`reviews/<gate>.yaml` + `.agent-skill-chain/schemas/gate-report.schema.yaml` |
+| I2 セグメントゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する | GitHub モード：Check Run の成功状態（required status を専用 App/Workflow に限定）。ローカルモード：`reviews/<gate>.yaml` + `.agent-skill-chain/schemas/gate-report.schema.yaml` |
 | I3 耐久性 | 作業状態は常に Git（remote push 済み）から完全復元可能。頭の中にしか無い状態を作らない | セグメント完了ごとの commit+push、`.agent-skill-chain/scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
 | I4 分離 | 1 Issue = 1 ブランチ = 1 worktree = 1 PR。main への変更は PR 経由のみ | branch protection、`.agent-skill-chain/ci/verify-branch-name.sh`・`.agent-skill-chain/ci/verify-worktree-path.sh` |
 | I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | credential/権限分離（ツール名の一律 deny はしない）、main worktree clean チェック、ワーカー報告固定スキーマ（`.agent-skill-chain/schemas/worker-report.schema.yaml`） |

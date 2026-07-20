@@ -54,6 +54,75 @@ test('lint vocab: 禁止語を含まないファイルは終了コード0、禁�
   assert.doesNotMatch(violating.stderr, /violation\.md:1:/, '違反を含まない1行目は報告されないこと');
 });
 
+test('lint vocab: バッククォートのコードスパン・<placeholder>・スラッシュ区切りのパスリテラル内の禁止語は違反にならない（散文の誤用は引き続き検出される）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: docs/GLOSSARY.md 上で禁止語と定義されている「issue」（小文字。正しくは「成果物」）を、
+  // (a) バッククォートのコードスパン内のファイルパス、(b) `<placeholder>` トークン内、
+  // (c) バッククォート無しのスラッシュ区切りパスリテラル内、のそれぞれに埋め込んだファイルと、
+  // (d) 実際に散文として「issue」を「成果物」の意味で誤用している行を用意する。
+  const file = path.join(repo.dir, 'code-like.md');
+  fs.writeFileSync(
+    file,
+    [
+      'コードスパン内のパス参照: `.agent-skill-chain/templates/issue/SPEC.md` を正本とする。',
+      'プレースホルダ: ブランチ名は `<type>/<issue-id>-<slug>` の形式に従う。',
+      'バッククォート無しのパスリテラル: .agent-skill-chain/templates/issue/{SPEC,DESIGN}.md を参照する。',
+      '散文としての誤用: このissueの内容を確認してください。',
+    ].join('\n') + '\n',
+  );
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'code-like.md'], { cwd: repo.dir });
+
+  // Then: 終了コード1（4行目の散文誤用のみが違反として報告される）。1〜3行目は
+  // コード的参照（コードスパン・プレースホルダ・パスリテラル）として対象外になる。
+  assert.equal(result.status, 1);
+  assert.doesNotMatch(result.stderr, /code-like\.md:1:/, 'バッククォートのコードスパン内は対象外');
+  assert.doesNotMatch(result.stderr, /code-like\.md:2:/, '<placeholder>内は対象外');
+  assert.doesNotMatch(result.stderr, /code-like\.md:3:/, 'バッククォート無しのパスリテラルも対象外');
+  assert.match(
+    result.stderr,
+    /code-like\.md:4: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+    '散文としての誤用は引き続き検出される',
+  );
+});
+
+test('lint vocab: 禁止語自体がパス形式の文字列（.agent-skill-chain/source）の場合は、バッククォートやパスリテラル文脈でも除外せず検出する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: docs/GLOSSARY.md で「.agent-skill-chain/source」自体が禁止語（正しくは
+  // 「agent-skill-chain」）と定義されている。この禁止語はパス形式のため、パスリテラル除外の
+  // 対象にしてしまうと禁止語自体が検査不能になる（GLOSSARY.mdの用語定義列挙以外の箇所で
+  // 誤って旧パス名を参照した場合に検出できなくなる）。バッククォート内・パスリテラル文脈の
+  // 両方で埋め込んだファイルを用意する。
+  const file = path.join(repo.dir, 'old-path.md');
+  fs.writeFileSync(
+    file,
+    [
+      'バッククォート内: `.agent-skill-chain/source` はもう存在しない旧ディレクトリである。',
+      'バッククォート無し: .agent-skill-chain/source を参照していた記述は更新済みである。',
+    ].join('\n') + '\n',
+  );
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'old-path.md'], { cwd: repo.dir });
+
+  // Then: 終了コード1、両方の行が禁止語違反として報告される（パス形式の禁止語はコード的参照
+  // 除外の対象外であるため）
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /old-path\.md:1: 禁止語 '\.agent-skill-chain\/source' が見つかりました（'agent-skill-chain' を使用してください）/,
+  );
+  assert.match(
+    result.stderr,
+    /old-path\.md:2: 禁止語 '\.agent-skill-chain\/source' が見つかりました（'agent-skill-chain' を使用してください）/,
+  );
+});
+
 test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・docs/GLOSSARY.md・.agent-skill-chain資産）でも例外を起こさず動作する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
