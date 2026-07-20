@@ -1,7 +1,7 @@
 import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, validateSegment, CliError } from '../lib/issue.js';
-import { leaseFilePath } from '../lib/local-state.js';
+import { leaseFilePath, stateFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile, toYamlString } from '../lib/yaml-io.js';
 import { activeLeaseFor, type WriterLease } from '../lib/github-lease.js';
 import { loadRoles } from '../lib/roles.js';
@@ -24,6 +24,30 @@ const SEGMENT_TO_ROLE: Record<string, string> = {
   implementation: 'implementation_worker',
   validation: 'validation_worker',
 };
+
+interface LocalStateIssueFields {
+  id?: string;
+  title?: string;
+  request?: string;
+}
+
+/**
+ * ローカルバックエンドの state.yaml が保持する title/request（ISSUE-183）を、ワーカー起動プロンプトへ
+ * 同梱する `issue:` ブロックへ整形する。title/request のいずれも無い state（後方互換ケース）では
+ * undefined を返し、呼び出し側は従来どおりの出力（ブロック無し）のままにする。
+ */
+function buildIssueBlock(issueIdRaw: string, state: LocalStateIssueFields | undefined): string | undefined {
+  if (!state || (state.title === undefined && state.request === undefined)) return undefined;
+  const issueYaml: Record<string, string> = { id: state.id ?? issueIdRaw };
+  if (state.title !== undefined) issueYaml.title = state.title;
+  if (state.request !== undefined) issueYaml.request = state.request;
+  const indented = toYamlString(issueYaml)
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => `  ${line}`)
+    .join('\n');
+  return `issue:\n${indented}`;
+}
 
 export async function start(args: string[]): Promise<number> {
   return guard(() => {
@@ -57,6 +81,17 @@ export async function start(args: string[]): Promise<number> {
     const contract = roles.role_contracts[role];
     if (!contract) return fail(`config/roles.yaml に role_contracts.${role} が定義されていません`);
 
-    return ok(`role: ${role}\n${toYamlString(contract).trim()}`);
+    // local backend で state.yaml に title/request（Issue本文）があれば、ワーカー起動プロンプトへ
+    // 同梱する（ISSUE-183 要件5・AC-5）。本文が無い state・GitHubモードでは従来どおり同梱しない。
+    let issueBlock: string | undefined;
+    if (config.coordination.backend === 'local') {
+      const state = tryReadYamlFile<LocalStateIssueFields>(stateFilePath(root, number));
+      issueBlock = buildIssueBlock(issueIdRaw, state);
+    }
+
+    const parts = [`role: ${role}`];
+    if (issueBlock) parts.push(issueBlock);
+    parts.push(toYamlString(contract).trim());
+    return ok(parts.join('\n'));
   });
 }

@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { parse } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 
@@ -87,6 +89,85 @@ test('issue lifecycle (local backend): start -> lease -> segment -> gate -> chec
   assert.equal(cleanup.status, 0, cleanup.stderr);
   assert.equal(cleanup.stdout.trim(), worktreePath);
   assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
+});
+
+test('issue start (local backend): --title/--request-fileを渡すとstate.yamlへ永続化され、segment startのプロンプトへ供給される（ISSUE-183 AC-4/AC-5）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const requestFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-request-')), 'request.md');
+  const requestBody = 'launch_workerの実機再検証用に、spec segmentを1つ完走させる。\n複数行の本文も許容する。';
+  fs.writeFileSync(requestFile, requestBody);
+
+  const start = runCli(
+    [
+      'issue',
+      'start',
+      'ISSUE-2',
+      'feature',
+      'sample-feature-2',
+      FIXED_TIMESTAMP,
+      '--title',
+      '使い捨て検証用issue',
+      '--request-file',
+      requestFile,
+    ],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+
+  // Then (AC-4): state.yamlへ title/request が永続化されていること。
+  const statePath = path.join(repo.dir, 'issues', '2', '.agent-skill-chain', 'state.yaml');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as { title?: string; request?: string };
+  assert.equal(state.title, '使い捨て検証用issue');
+  assert.equal(state.request, requestBody);
+
+  // When/Then (AC-5): lease取得後の segment start の出力へ title/request が同梱されること。
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-2', 'spec'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  const segmentStart = runCli(['segment', 'start', 'ISSUE-2', 'spec'], { cwd: repo.dir });
+  assert.equal(segmentStart.status, 0, segmentStart.stderr);
+  assert.match(segmentStart.stdout, /role: spec_worker/);
+  assert.match(segmentStart.stdout, /issue:/);
+  assert.match(segmentStart.stdout, /title: 使い捨て検証用issue/);
+  assert.match(segmentStart.stdout, /request:/);
+  assert.match(segmentStart.stdout, /launch_workerの実機再検証用に/);
+});
+
+test('issue start (local backend): --title/--requestを指定しない従来どおりの起票は引き続き成功し、state.yamlはtitle/requestを持たない（後方互換、ISSUE-183 AC-4）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-3', 'feature', 'sample-feature-3', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+
+  const statePath = path.join(repo.dir, 'issues', '3', '.agent-skill-chain', 'state.yaml');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  assert.ok(!('title' in state), '従来どおりの起票ではtitleフィールドを持たないこと');
+  assert.ok(!('request' in state), '従来どおりの起票ではrequestフィールドを持たないこと');
+
+  // segment startの出力も従来どおり（issue:ブロックが同梱されない）であること。
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-3', 'spec'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+  const segmentStart = runCli(['segment', 'start', 'ISSUE-3', 'spec'], { cwd: repo.dir });
+  assert.equal(segmentStart.status, 0, segmentStart.stderr);
+  assert.match(segmentStart.stdout, /role: spec_worker/);
+  assert.doesNotMatch(segmentStart.stdout, /^issue:/m, 'title/requestが無いstateではissue:ブロックを同梱しないこと');
+});
+
+test('issue start (local backend): --requestと--request-fileを同時指定するとエラーになる（ISSUE-183）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-4', 'feature', 'sample-feature-4', FIXED_TIMESTAMP, '--request', 'a', '--request-file', '/nonexistent'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 1);
+  assert.match(start.stderr, /同時に指定できません/);
 });
 
 test('gate review (CI単一checkout): .worktrees/ レイアウト無しでも、現在のブランチがissue_idに一致すればrootを対象に動作する', async (t) => {

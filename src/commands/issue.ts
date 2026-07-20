@@ -13,13 +13,18 @@ import { validateAgainstSchema } from '../lib/schema.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const START_USAGE = `
-使い方: agent-skill-chain issue start <issue_id> <type> <slug> <issue_created_at>
+使い方: agent-skill-chain issue start <issue_id> <type> <slug> <issue_created_at> [options]
 
 issue_id:         ISSUE-<番号> 形式のIssue ID
 type:             config/agent-skill-chain.yaml issue.allowed_types のいずれか
                    （feature|bugfix|hotfix|refactor|docs|process）
 slug:             ブランチ名・worktreeパスに用いるslug（worktree.slug_max_length以下）
 issue_created_at: Issue起票日時（Asia/Tokyo、worktree.timestamp.format に従う）
+
+options（すべて任意。coordination.backend: local の場合のみ state.yaml へ永続化される。ISSUE-183）:
+  --title <str>          Issueのタイトル（state.yaml の title フィールドへ永続化）
+  --request <str>        Issueの要求内容（本文）
+  --request-file <path>  Issueの要求内容をファイルから読み込む（--request と同時指定不可）
 
 出力:
   成功時: 終了コード0。生成したブランチ名・worktreeパスを標準出力へ。
@@ -36,15 +41,55 @@ issue_id: ISSUE-<番号> 形式のIssue ID。
   失敗時: 終了コード1以上。push済み状態が存在しない等の理由を標準エラー出力へ。
 `;
 
+/**
+ * positional引数（issue_id, type, slug, issue_created_at）と任意フラグ（--title, --request,
+ * --request-file）を分離する。既存の4 positional引数の呼び出し形は後方互換のため不変（ISSUE-183）。
+ */
+function parseStartArgs(args: string[]): {
+  positional: string[];
+  title?: string;
+  request?: string;
+  requestFile?: string;
+} {
+  const positional: string[] = [];
+  let title: string | undefined;
+  let request: string | undefined;
+  let requestFile: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--title') {
+      title = args[++i];
+    } else if (arg === '--request') {
+      request = args[++i];
+    } else if (arg === '--request-file') {
+      requestFile = args[++i];
+    } else {
+      positional.push(arg);
+    }
+  }
+  return { positional, title, request, requestFile };
+}
+
 export async function start(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
       printUsage(START_USAGE);
       return 0;
     }
-    const [issueIdRaw, type, slug, issueCreatedAt] = args;
+    const { positional, title, request, requestFile } = parseStartArgs(args);
+    const [issueIdRaw, type, slug, issueCreatedAt] = positional;
     if (!issueIdRaw || !type || !slug || !issueCreatedAt) {
       throw new CliError('issue_id, type, slug, issue_created_at はすべて必須です');
+    }
+    if (request !== undefined && requestFile !== undefined) {
+      throw new CliError('--request と --request-file は同時に指定できません');
+    }
+    let resolvedRequest = request;
+    if (requestFile !== undefined) {
+      if (!fs.existsSync(requestFile)) {
+        throw new CliError(`--request-file で指定したファイルが存在しません: ${requestFile}`);
+      }
+      resolvedRequest = fs.readFileSync(requestFile, 'utf8');
     }
 
     const { number } = parseIssueId(issueIdRaw);
@@ -88,6 +133,8 @@ export async function start(args: string[]): Promise<number> {
       const state = {
         schema_version: 'agent-skill-chain/state/v1',
         id: issueIdRaw,
+        ...(title !== undefined ? { title } : {}),
+        ...(resolvedRequest !== undefined ? { request: resolvedRequest } : {}),
         autonomy: config.autonomy.default,
         risk: config.risk.default,
         review_profile: reviewProfile,
