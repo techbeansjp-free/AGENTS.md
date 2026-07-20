@@ -9,3 +9,7 @@ node_modules/
 
 # スクラッチ・非追跡メモ（issueドキュメント本則の外）
 **/memo/*
+
+# worktree自体（各worktree配下は独立したリポジトリとして扱われるためgit管理外。
+# 空の親ディレクトリのuntracked表示のみを防ぐ）
+.worktrees/

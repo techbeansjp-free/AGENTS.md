@@ -210,6 +210,9 @@ export async function renew(args: string[]): Promise<number> {
       const existing = tryReadYamlFile<WriterLease>(leaseFilePath(root, number));
       if (!existing) return fail('更新対象の writer lease が存在しません');
       if (existing.writer_lease.token !== token) return fail('token が一致しません');
+      if (existing.writer_lease.expires_at <= now.toISOString()) {
+        return fail(`lease は既に期限切れです（expires_at=${existing.writer_lease.expires_at}）`);
+      }
       existing.writer_lease.expires_at = expiresAt;
       writeYamlFileAtomic(leaseFilePath(root, number), existing);
       return ok(expiresAt);
