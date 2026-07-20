@@ -172,6 +172,13 @@ test('doctor (local backend): git/リポジトリ/configの検査がすべてOK�
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
+  // Issue #174: doctorにtemplate-sync検査・main worktree cleanチェックが追加されたため、
+  // 事前に .github/ を同期・commitして必須チェックがすべてOKになる状態を整える。
+  const sync = runCli(['sync', 'templates', repo.dir], { cwd: repo.dir });
+  assert.equal(sync.status, 0, sync.stderr);
+  execFileSync('git', ['add', '-A'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'chore: sync templates'], { cwd: repo.dir, stdio: 'pipe' });
+
   const result = runCli(['doctor'], { cwd: repo.dir });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /OK {2}git\n/);
