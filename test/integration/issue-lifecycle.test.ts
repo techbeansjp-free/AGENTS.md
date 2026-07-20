@@ -107,6 +107,55 @@ test('gate review (CI単一checkout): .worktrees/ レイアウト無しでも、
   const gateReportPathMatch = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout);
   assert.ok(gateReportPathMatch, 'gate_report_path が出力されること');
   assert.ok(fs.existsSync(gateReportPathMatch![1]));
+
+  // 後方互換: target_sha 省略時は従来通り entry.path の実際の HEAD を自己解決すること。
+  const actualHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir }).toString().trim();
+  const reportWithoutArg = fs.readFileSync(gateReportPathMatch![1], 'utf8');
+  assert.match(reportWithoutArg, new RegExp(`target_sha: ${actualHead}`));
+});
+
+test('gate review: target_shaを明示指定した場合、entry.pathの実際のHEADと異なっていてもそれが採用されること（Issue #171: CIのdetached HEAD対応）', async (t) => {
+  // actions/checkout@v4 は pull_request イベントで refs/pull/<n>/merge をdetached HEADで
+  // チェックアウトするため、CI上の実際のHEADはPRの実際のブランチ先端コミット（
+  // github.event.pull_request.head.sha）とは異なる別のSHA（マージコミット）になる。
+  // ここではdetached HEADへ実際に切り替えたうえでgate reviewにtarget_shaを明示指定し、
+  // 発行されるgate-reportのtarget_shaが「detached HEADの実SHA」ではなく「明示指定したSHA」に
+  // なることを検証する（workflowテンプレートが渡す steps.ctx.outputs.target_sha 相当）。
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  execFileSync('git', ['checkout', '-b', 'feature/172-explicit-target-sha'], { cwd: repo.dir, stdio: 'pipe' });
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: サンプル\n');
+  execFileSync('git', ['add', '-A'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'wip: SPEC追加(branch tip)'], { cwd: repo.dir, stdio: 'pipe' });
+  const branchTipSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir }).toString().trim();
+
+  // CIのマージコミット相当: さらに1つ空commitを積んでdetached HEADへ切り替える
+  // （branchTipShaとは異なる別のSHAをHEADにする。実CIでは actions/checkout がこの状態を作る）。
+  execFileSync('git', ['commit', '--allow-empty', '-m', 'merge commit (CI checkout相当)'], {
+    cwd: repo.dir,
+    stdio: 'pipe',
+  });
+  const mergeCommitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir }).toString().trim();
+  assert.notEqual(mergeCommitSha, branchTipSha, '前提: detached HEAD相当のSHAはbranch先端SHAと異なること');
+  execFileSync('git', ['checkout', '--detach', 'HEAD'], { cwd: repo.dir, stdio: 'pipe' });
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-172', 'spec', 'strict', branchTipSha], { cwd: repo.dir });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPathMatch = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout);
+  assert.ok(gateReportPathMatch, 'gate_report_path が出力されること');
+  const reportText = fs.readFileSync(gateReportPathMatch![1], 'utf8');
+
+  assert.match(
+    reportText,
+    new RegExp(`target_sha: ${branchTipSha}`),
+    '明示指定したtarget_sha（PRの実際のブランチ先端コミット）が採用されること',
+  );
+  assert.doesNotMatch(
+    reportText,
+    new RegExp(`target_sha: ${mergeCommitSha}`),
+    'entry.pathの実際のHEAD（detached HEADのマージコミット相当）が採用されないこと',
+  );
 });
 
 test('doctor (local backend): git/リポジトリ/configの検査がすべてOKになる', async (t) => {

@@ -57,10 +57,14 @@ jobs:
           if echo "$LABELS_JSON" | grep -q '"autonomy:full"'; then PROFILE=strict; fi
           echo "profile=$PROFILE" >> "$GITHUB_OUTPUT"
 
+      # target_sha を明示的に渡す（4番目の引数）。actions/checkout@v4 は pull_request イベントで
+      # マージref（refs/pull/<n>/merge）をdetached HEADでチェックアウトするため、gate review が
+      # entry.path の git rev-parse HEAD で自己解決するとPRの実際のブランチ先端コミットと乖離し、
+      # 発行されるCheck RunのSHAがPRのSHAと一致しなくなる（Issue #171 実地障害）。
       - name: Run gate review (${{ matrix.gate }})
         id: review
         run: |
-          REVIEW_OUTPUT="$(./.agent-skill-chain/scripts/gate-review.sh "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}")"
+          REVIEW_OUTPUT="$(./.agent-skill-chain/scripts/gate-review.sh "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}" "${{ steps.ctx.outputs.target_sha }}")"
           REPORT_PATH="$(echo "$REVIEW_OUTPUT" | sed -n 's/^gate_report_path: //p')"
           echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
 
