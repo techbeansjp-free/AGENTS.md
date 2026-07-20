@@ -66,7 +66,7 @@ test('lease renew (異常系): tokenが一致しない場合は失敗する', as
 });
 
 test(
-  'lease renew (仕様上の非対称性の記録): ローカルバックエンドは期限切れ後でもtokenさえ一致すればrenewが成功する',
+  'lease renew (ISSUE-176 AC-6): ローカルバックエンドも期限切れ後はtokenが一致してもrenewを拒否する',
   async (t) => {
     const repo = createTmpRepo({ backend: 'local' });
     t.after(() => repo.cleanup());
@@ -85,18 +85,11 @@ test(
     // When: 期限切れ状態のまま、正しいtokenで renew を呼ぶ。
     const renew = runCli(['lease', 'renew', 'ISSUE-1', token], { cwd: repo.dir });
 
-    // Then: 【非対称性】src/commands/lease.ts のローカルバックエンド実装（renew関数）は、
-    // 既存leaseが期限切れかどうかを一切チェックせずtoken一致のみで無条件にexpires_atを
-    // 更新する。同ファイルのgithubバックエンド実装は
-    // `held.lease.writer_lease.expires_at <= now.toISOString()` で明示的に期限切れを検査し
-    // 失敗させており、ローカル/github間でこの挙動が非対称になっている（バグか仕様か本テストの
-    // 範囲では判断せず、実際の挙動として renew成功をそのまま固定する）。
-    assert.equal(renew.status, 0, renew.stderr);
-    const renewedExpiresAt = renew.stdout.trim();
-    assert.ok(
-      new Date(renewedExpiresAt).getTime() > new Date(pastExpiresAt).getTime(),
-      '期限切れ後でもrenew後のexpires_atは新しい未来の時刻へ更新されること',
-    );
-    assert.ok(new Date(renewedExpiresAt).getTime() > Date.now());
+    // Then: バックエンド間の非対称性を解消済み（ISSUE-176）。githubバックエンドと同一の理由
+    // （lease は既に期限切れです）で失敗し、expires_atは書き換えられないこと。
+    assert.equal(renew.status, 1);
+    assert.match(renew.stderr, /期限切れ/);
+    const after = parse(fs.readFileSync(leasePath, 'utf8')) as WriterLease;
+    assert.equal(after.writer_lease.expires_at, pastExpiresAt, '失敗時はexpires_atが変化しないこと');
   },
 );

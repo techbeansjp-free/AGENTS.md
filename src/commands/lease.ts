@@ -5,14 +5,17 @@ import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
 import { leaseFilePath } from '../lib/local-state.js';
-import { tryReadYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
+import { tryReadYamlFile, writeYamlFileAtomic, writeYamlFileExclusive } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import {
   activeLeaseFor,
   activeLeasesFor,
+  allLeasesFor,
+  acquireLeaseRef,
+  renewLeaseRef,
+  releaseLeaseRef,
   postLeaseComment,
-  deleteLeaseComment,
-  listLeaseComments,
+  cleanupLeaseComment,
   countActiveWriterLeaseIssues,
   markActiveWriterLeaseLabel,
   unmarkActiveWriterLeaseLabel,
@@ -98,25 +101,51 @@ export async function acquire(args: string[]): Promise<number> {
     if (!outcome.valid) return fail(`生成したleaseがスキーマに適合しません: ${outcome.errors.join('; ')}`);
 
     if (config.coordination.backend === 'local') {
-      const existing = tryReadYamlFile<WriterLease>(leaseFilePath(root, number));
+      // ローカルモードは issue 毎に lease.yaml が1ファイルのみのため、この排他生成が同一segment・
+      // 他segmentいずれの競合検査も兼ねる（1 Issueにつき同時1つのwriter leaseのみ許可。DESIGN.md参照）。
+      const filePath = leaseFilePath(root, number);
       const now = new Date().toISOString();
-      if (existing && existing.writer_lease.expires_at > now) {
-        // ローカルモードは issue 毎に lease.yaml が1ファイルのみのため、この検査が同一segment・
-        // 他segmentいずれの競合も兼ねる（1 Issueにつき同時1つのwriter leaseのみ許可。DESIGN.md参照）。
-        return fail(
-          `既存の writer lease と競合しています: holder=${existing.writer_lease.holder}, expires_at=${existing.writer_lease.expires_at}`,
-        );
+
+      // 1回目: 既存ファイル無しからの排他生成（O_CREAT|O_EXCL相当）を試みる。成功すれば
+      // read-check-then-writeを経由しない真のcompare-and-setとして取得完了する。
+      let created = writeYamlFileExclusive(filePath, lease);
+      if (!created) {
+        const existing = tryReadYamlFile<WriterLease>(filePath);
+        if (existing && existing.writer_lease.expires_at > now) {
+          return fail(
+            `既存の writer lease と競合しています: holder=${existing.writer_lease.holder}, expires_at=${existing.writer_lease.expires_at}`,
+          );
+        }
+        // 期限切れ（stale）のため回収し、1回だけ再試行する（無限リトライしない）。
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          // 既に他プロセスが回収済みの可能性がある。後続の再試行の成否に委ねる。
+        }
+        created = writeYamlFileExclusive(filePath, lease);
+        if (!created) {
+          return fail('lease の回収中に別プロセスが再取得したため取得できませんでした（再試行してください）');
+        }
       }
+
+      // 取得成功後にWIP上限チェックを行う（自分自身を含めて数えるため、書込み前の`>=`判定と
+      // 同値になるよう`>`で比較する。DESIGN.md参照）。超過していれば直前に書いたlease.yamlを
+      // ロールバックする（advisoryなWIP上限のためのロールバックであり、1 Issue内の排他性という
+      // 主目的の原子性には影響しない）。
       const activeCount = countLocalActiveWriterLeases(root);
-      if (activeCount >= config.wip.limit) {
+      if (activeCount > config.wip.limit) {
+        fs.unlinkSync(filePath);
         return fail(
-          `WIP上限（wip.limit=${config.wip.limit}）に達しているため writer lease を取得できません（現在の有効writer lease数: ${activeCount}）`,
+          `WIP上限（wip.limit=${config.wip.limit}）に達しているため writer lease を取得できません（現在の有効writer lease数: ${activeCount - 1}）`,
         );
       }
-      writeYamlFileAtomic(leaseFilePath(root, number), lease);
       return ok(toYamlString(lease).trim());
     }
 
+    // 事前チェック（fail-fast用）: 既に有効なleaseが存在すれば、refへのpushを試みるまでもなく
+    // 速やかに競合として拒否する。実際の排他性の担保はこの事前チェックではなく、後続の
+    // acquireLeaseRef（refへのforce無しpush、ADR-0002）が担う——事前チェックと押下の間に他プロセスが
+    // 先取りした場合も、pushのfast-forward拒否によって二重取得は発生しない（AC-1）。
     const conflict = activeLeaseFor(number, segment, root);
     if (conflict) {
       return fail(
@@ -138,22 +167,27 @@ export async function acquire(args: string[]): Promise<number> {
         `WIP上限（wip.limit=${config.wip.limit}）に達しているため writer lease を取得できません（現在の有効writer lease数: ${activeCount}）`,
       );
     }
-    const commentId = postLeaseComment(number, lease, root);
-    // 楽観的排他制御: 投稿直後に再確認し、より古い（=先着の）アクティブleaseが他にあれば取得を撤回する。
-    const rivals = listLeaseComments(number, root).filter(
-      (c) => c.lease.writer_lease.segment === segment && c.lease.writer_lease.token !== lease.writer_lease.token,
-    );
-    const now = new Date().toISOString();
-    // 「自分より先に acquire を開始していた」rival = 相手のコメント投稿がこちらの
-    // lease生成時刻（acquired_at、投稿前に確定済み）より前であるもの。
-    const olderActiveRival = rivals.find(
-      (r) => r.lease.writer_lease.expires_at > now && r.createdAt < lease.writer_lease.acquired_at,
-    );
-    if (olderActiveRival) {
-      deleteLeaseComment(commentId, root);
-      return fail(
-        `投稿直後に競合を検出したため取得を撤回しました: holder=${olderActiveRival.lease.writer_lease.holder}`,
-      );
+
+    const acquired = acquireLeaseRef(number, segment, lease, root);
+    if (!acquired.ok) {
+      if (acquired.reason === 'conflict') {
+        // push時点で真の競合が検出された（事前チェックをすり抜けた真の並行acquireのケース）。
+        const rival = activeLeaseFor(number, segment, root);
+        return fail(
+          rival
+            ? `既存の writer lease と競合しています（ref pushで検出）: holder=${rival.lease.writer_lease.holder}, expires_at=${rival.lease.writer_lease.expires_at}`
+            : 'writer lease ref への push が競合により拒否されました（既に他プロセスが取得済みの可能性があります）',
+        );
+      }
+      return fail(`writer lease ref への push に失敗しました（権限または接続の問題の可能性があります）: ${acquired.stderr}`);
+    }
+
+    // Issueコメントへの投稿はhuman向け可視性のためのbest-effort処理であり、正本（git ref）の
+    // 取得成否には影響させない（ADR-0002）。
+    try {
+      postLeaseComment(number, lease, root);
+    } catch {
+      // best-effort: 可視性コメントの投稿失敗はlease取得自体の成功を妨げない。
     }
     // WIP上限判定用ラベル付与（best-effort。失敗してもlease自体の取得成功を妨げない）。
     markActiveWriterLeaseLabel(number, root);
@@ -182,9 +216,14 @@ export async function release(args: string[]): Promise<number> {
       return ok(issueIdRaw);
     }
 
-    const held = listLeaseComments(number, root).find((c) => c.lease.writer_lease.token === token);
+    const held = allLeasesFor(number, root).find((c) => c.lease.writer_lease.token === token);
     if (!held) return fail('token が一致する writer lease が見つかりません');
-    deleteLeaseComment(held.commentId, root);
+    const released = releaseLeaseRef(number, held.segment, root);
+    if (!released.ok) {
+      return fail(`writer lease ref の削除に失敗しました: ${released.stderr}`);
+    }
+    // best-effort: acquire時に投稿した可視性コメントの削除（lease自体の解放成否には影響しない）。
+    cleanupLeaseComment(number, token, root);
     // WIP上限判定用ラベル除去（best-effort）。
     unmarkActiveWriterLeaseLabel(number, root);
     return ok(issueIdRaw);
@@ -210,19 +249,31 @@ export async function renew(args: string[]): Promise<number> {
       const existing = tryReadYamlFile<WriterLease>(leaseFilePath(root, number));
       if (!existing) return fail('更新対象の writer lease が存在しません');
       if (existing.writer_lease.token !== token) return fail('token が一致しません');
+      if (existing.writer_lease.expires_at <= now.toISOString()) {
+        return fail(`lease は既に期限切れです（expires_at=${existing.writer_lease.expires_at}）`);
+      }
       existing.writer_lease.expires_at = expiresAt;
       writeYamlFileAtomic(leaseFilePath(root, number), existing);
       return ok(expiresAt);
     }
 
-    const held = listLeaseComments(number, root).find((c) => c.lease.writer_lease.token === token);
+    const held = allLeasesFor(number, root).find((c) => c.lease.writer_lease.token === token);
     if (!held) return fail('token が一致する writer lease が見つかりません');
     if (held.lease.writer_lease.expires_at <= now.toISOString()) {
       return fail(`lease は既に期限切れです（expires_at=${held.lease.writer_lease.expires_at}）`);
     }
-    held.lease.writer_lease.expires_at = expiresAt;
-    deleteLeaseComment(held.commentId, root);
-    postLeaseComment(number, held.lease, root);
+    const updatedLease: WriterLease = {
+      ...held.lease,
+      writer_lease: { ...held.lease.writer_lease, expires_at: expiresAt },
+    };
+    const renewed = renewLeaseRef(number, held.segment, updatedLease, root);
+    if (!renewed.ok) {
+      return fail(
+        renewed.reason === 'conflict'
+          ? `renew に失敗しました（他プロセスがrefを更新済みの可能性があります）: ${renewed.stderr}`
+          : `writer lease ref への push に失敗しました（権限または接続の問題の可能性があります）: ${renewed.stderr}`,
+      );
+    }
     return ok(expiresAt);
   });
 }

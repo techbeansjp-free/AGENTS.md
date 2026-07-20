@@ -1,25 +1,31 @@
-# PLAN: agent-skill-chain — doctor網羅性拡張・branch-name自己違反・segments.yaml矛盾・PRテンプレート未使用の解消
+# PLAN: agent-skill-chain — writer leaseの真の原子性強化・.worktrees未gitignore・gate-report digest不一致検知漏れ
 
-- Issue: `ISSUE-174`
+- Issue: `ISSUE-176`
 - 対応する DESIGN: `DESIGN.md`
 
 ## 実装順序・変更単位
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | `issue.allowed_types`へ`chore`追加 | `.agent-skill-chain/config/agent-skill-chain.yaml`と`.agent-skill-chain/schemas/config.schema.yaml`のenumへ同一コミットで`chore`を追加する。`.agent-skill-chain/standards/GIT_CONVENTIONS.md`の`type: feature \| bugfix \| ...`列挙にも追記する | `AC-6`, `AC-7` | なし |
-| 2 | `segments.yaml`の`pr`除去 | `.agent-skill-chain/config/segments.yaml`の`validation.outputs`から`pr`を削除し、`src/commands/verify.ts`の`checkOutputExists()`から`case 'pr': return true;`を削除する（同一コミットで対にする） | `AC-8`, `AC-9` | なし |
-| 3 | `lib/template-sync.ts`新設 | `verify.ts`の`templateSync()`内の`listFilesRecursive()`と差分計算を`computeTemplateSyncDiffs(targetRoot): string[]`として切り出し、`verify.ts`はこれを呼ぶ薄いラッパーに書き換える。既存`verify template-sync`の挙動・出力形式は変えない（既存テスト無破壊であることを確認しながら進める） | `AC-3`の前提 | なし |
-| 4 | `doctor.ts`: worktree命名規約・main worktree cleanチェック追加 | DESIGN.mdの方式に従い、既存`checks`配列へ2項目追加する。`listWorktrees`/`worktreePathRegex`/`hasUncommittedChanges`はいずれも既存関数を再利用するのみ | `AC-1`, `AC-2` | なし |
-| 5 | `doctor.ts`: template-syncチェック追加 | `#3`で切り出した`computeTemplateSyncDiffs(root)`を呼び、非空なら該当Checkを`ok:false`にする | `AC-3` | `#3` |
-| 6 | `doctor.ts`: schemas構文チェック追加 | `resolveAsset('schemas', root)`配下`*.yaml`を`readYamlFile()`でtry/catch parseし、例外があればNGにする | `AC-4` | なし |
-| 7 | doctor正常系の確認 | `#4`〜`#6`実装後、意図的に条件を崩さない状態（本リポジトリ自身）で`doctor`を実行し、追加4項目が全てOK表示・終了コード0であることを確認する（実装作業中の暫定確認。正式なテストは`#11`） | `AC-5` | `#4`〜`#6` |
-| 8 | `pull_request_template.md`拡張 | `.agent-skill-chain/templates/github/.github/pull_request_template.md`の「## Issue」節直後へ「変更概要／理由／影響範囲／ロールバック方針／成果物リンク」の5節（プレースホルダ付き）を追加する。追加後`sync templates .`相当を実行し、`.github/pull_request_template.md`（配布先コピー）を同期させる（`#5`のtemplate-syncチェックが自己矛盾しないようにするため） | `AC-10`の前提 | `#5` |
-| 9 | `pr.ts`: 本文組み立てロジック実装 | `create()`のGitHubモード分岐に、DESIGN.mdの「PR本文組み込み方式」節に従い、`findIssueWorktree`でissueのworktreeを解決→`SPEC.md`のH1行・`## 目的・背景`節抽出→（存在すれば）`DESIGN.md`の`## 障害・ロールバック考慮`節の該当箇条書き抽出→存在する成果物ファイル名の列挙、という順で本文を組み立てる関数を追加する。テンプレート読込失敗時は`Closes #${number}`のみのフォールバックを維持する | `AC-10` | `#8` |
-| 10 | 既存テストの更新（regression対応） | `test/unit/config.test.ts`の`allowed_types`期待値に`chore`を追加、`test/unit/segments.test.ts`の`EXPECTED`から`'pr'`を除去する | `AC-7`, `AC-9` | `#1`, `#2` |
-| 11 | 新規テスト追加 | (a) `test/integration/doctor.test.ts`へ4項目それぞれの正常系・異常系（worktree命名規約違反、main worktree未commit差分、template不一致、schema構文エラー）を追加、(b) `test/integration/verify.test.ts`または新規テストで`chore/`ブランチの`verify branch-name`成功・既存type/許容外typeのregressionなしを確認、(c) `test/integration/github-backend.test.ts`または新規テストで、gh-stubが記録する`--body`の内容を検証し、`Closes #<id>`に加え5節見出しが含まれることを確認する（テンプレート不在時のフォールバックも別ケースで確認） | `AC-1`〜`AC-4`, `AC-6`, `AC-7`, `AC-10`（`automated`分） | `#1`〜`#9` |
-| 12 | 全体回帰確認 | `npm test`を実行し、既存357件超＋新規テストが全てpassすることを確認する。`node bin/agents-md.js doctor`を本リポジトリ自身に対して実行し終了コード0を確認する（dogfooding） | `AC-11` | `#1`〜`#11` |
+| 1 | `.gitignore`へ`.worktrees/`追加 | DESIGN.mdの記載どおり1行追加するのみ | `AC-3` | なし |
+| 2 | `verify.ts`のgate-report digest不一致検知修正 | `gateReport()`内の存在チェック条件式を`if/else if`へ分離し、削除済みファイルも不一致として検知する | `AC-4`, `AC-5` | なし |
+| 3 | `lease.ts` renewの非対称性是正 | local分岐へGitHubモードと同一の期限切れチェックを追加する | `AC-6` | なし |
+| 4 | `yaml-io.ts`: `writeYamlFileExclusive`新設 | `O_CREAT\|O_EXCL`ベースの排他生成関数を追加する（既存`writeYamlFileAtomic`は無変更） | `AC-2`の前提 | なし |
+| 5 | `lease.ts` local acquireの原子化 | DESIGN.mdの手順（排他生成→競合/stale判定→1回だけ再試行→WIP超過時ロールバック）へ書き換える | `AC-2` | `#4` |
+| 6 | `github-lease.ts`のref-based実装への置換 | `leaseRefName`・`acquireLeaseRef`・`renewLeaseRef`・`releaseLeaseRef`・ref読み出しヘルパーを新設し、`activeLeaseFor`/`activeLeasesFor`の外部シグネチャは維持したまま内部実装をref読み出しへ差し替える。`postLeaseComment`はbest-effort呼び出しとして残し、`listLeaseComments`等の旧・競合判定ロジックは削除する | `AC-1` | なし |
+| 7 | `lease.ts` GitHubモード分岐の書き換え | `acquire`/`release`/`renew`のgithub分岐を`#6`の新API呼び出しへ置換する。CLI引数・標準出力形式は変更しない | `AC-1` | `#6` |
+| 8 | `docs/adr/ADR-0002-...`確定 | 本フェーズで作成済みの`status: proposed`のまま実装フェーズへ引き継ぐ（design-gate通過後、accepted遷移は別途adr-finalizeワーカーが行う） | `AC-1`の前提 | なし |
+| 9 | 既存テストの更新（regression対応） | (a) `test/integration/lease-renew.test.ts`の「ローカルバックエンドは期限切れ後もrenew成功する（非対称性の記録）」テストを、`#3`の修正により期待値を反転させて更新する（期限切れ後は失敗するのが正になる）。(b) `test/unit/github-lease.test.ts`をref前提の内容へ全面書き換える（gh-stub依存のコメントベースAPIテストを廃止し、`test/helpers/tmp-repo.ts`が既に提供するbare remote（`repo.remoteDir`）を使うテストへ置換する） | `AC-1`, `AC-6`, `AC-7` | `#6`, `#7`, `#3` |
+| 10 | 並行acquireの実競合テスト新規追加（GitHubモード） | `createTmpRepo()`（backend既定=github、`origin`→`repo.remoteDir`のbare remoteが既に構成済み）に対し、`child_process.spawn`で複数（目安8プロセス）の`lease acquire ISSUE-1 spec`を同時起動し、成功が常に1件のみであることを検証する。git側のref-transaction lockが実際の排他性を担保するため、モック無しで真の並行性を検証できる | `AC-1` | `#6`, `#7` |
+| 11 | 並行acquireの実競合テスト新規追加（ローカルモード） | `createTmpRepo({backend:'local'})`に対し、同様に複数プロセスの`lease acquire ISSUE-1 spec`を同時起動し、成功が常に1件のみであることを検証する（OSの`O_EXCL`が排他性を担保） | `AC-2` | `#5` |
+| 12 | `verify gate-report`のregressionテスト追加 | `test/integration/verify.test.ts`へ、`approved_artifacts`記載ファイルを削除したケース（新規、AC-4）と内容変更のケース（既存、AC-5）の両方を確認するテストを追加する | `AC-4`, `AC-5` | `#2` |
+| 13 | 全体回帰確認 | `npm test`を実行し、既存371件＋新規テストが全てpassすることを確認する。`node bin/agents-md.js doctor`を実行し、main worktree cleanチェックが`.worktrees/`未追跡ファイルの影響を受けずOKになることを確認する | `AC-7` | `#1`〜`#12` |
 
 ## 実装順序の見直しについて
 
-`#1`と`#2`は独立した変更単位であり並行実装可能（SPEC.mdの「4件は相互依存がない」との記載どおり）。`#4`〜`#6`（doctorの3系統のチェック追加）も内部的には独立しており、実装順序を入れ替えてよい。`#8`→`#9`（PRテンプレート拡張→pr.ts実装）の順序のみ依存があるため崩さないこと。作業順序のみを見直す場合は本ファイルのみを更新すればよく、`DESIGN.md`の更新は不要である。
+`#1`・`#2`・`#3`は完全に独立しており並行実装可能。`#4`→`#5`、`#6`→`#7`の順序のみ依存があるため崩さないこと。`#10`・`#11`（並行実競合テスト）は実装（`#5`〜`#7`）完了後でなければ意味を持たないため最後に回す。作業順序のみを見直す場合は本ファイルのみを更新すればよく、`DESIGN.md`の更新は不要である。
+
+## 実装フェーズへの申し送り事項
+
+- `ADR-0002`は本フェーズで`status: proposed`として作成済み（`docs/adr/ADR-0002-github-lease-git-ref-cas.md`）。設計ゲート承認後、`accepted`への遷移はAGENTS.mdの既定ライフサイクル（専任のADR finalizationワーカーがwriter leaseを取得しstatusのみ更新）に従う。実装フェーズはADR本文（Context/Decision/Consequences）を書き換えない。
+- fine-grained PAT／GitHub App installation permissionの`contents`権限がカスタムref namespace（`refs/agent-skill-chain/leases/*`）への実pushを許可するかどうかの実機検証は、実装フェーズの最初のタスクとして行う（SPEC.mdのスコープ外事項として明記済み、DESIGN.mdの「障害・ロールバック考慮」参照）。許可されない場合はADR-0002をsupersedeする別ADRの起票が必要になる可能性がある。

@@ -182,7 +182,9 @@ export async function gateReport(args: string[]): Promise<number> {
     if (report.gate.final === 'pending') errors.push('gate.final が pending のままです');
     for (const artifact of report.gate.approved_artifacts) {
       const abs = path.join(root, artifact.path);
-      if (fs.existsSync(abs) && digestOfFile(abs) !== artifact.digest) {
+      if (!fs.existsSync(abs)) {
+        errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
+      } else if (digestOfFile(abs) !== artifact.digest) {
         errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
     }
