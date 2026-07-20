@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parse, stringify } from 'yaml';
-import { createTmpRepo } from '../helpers/tmp-repo.js';
+import { createTmpRepo, unsetAdapter } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 
@@ -235,6 +235,9 @@ test('gate mark-human-required: final を human_required に倒す（sub-verdict
 test('gate reviewer-context: adapter/backend/issue_number/base_dir を出力する（既定 adapter=claude）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
+  // review.adapter を config から取り除き、本物のリポジトリ側の現在値ではなく
+  // CLI の既定値フォールバック（未設定時 claude）を検証する。
+  unsetAdapter(repo.dir);
 
   const res = runCli(['gate', 'reviewer-context', 'ISSUE-1'], { cwd: repo.dir });
   assert.equal(res.status, 0, res.stderr);
