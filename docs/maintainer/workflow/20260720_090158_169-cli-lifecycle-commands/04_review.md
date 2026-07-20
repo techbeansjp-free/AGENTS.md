@@ -16,13 +16,13 @@ document_id: "f1a2b3c4-5d6e-47f8-9a0b-1c2d3e4f5a6b"
 
 ## 1. レビュー結論（サマリ）
 
-**判定: 条件付き合格（CONDITIONAL PASS）**
+**判定: 合格（PASS）**（初回レビュー時はCONDITIONAL PASS。F1・F2は本レビュアとは別の担当者がcommit `a1f0f56`(F1)・`adc3b82`(F2)で修正し、さらに別の独立検証者が両修正を実機再現・再検証した結果を§11に追記のうえPASSへ更新した。§11参照）
 
 Issue #169 が要求する `init`/`upgrade`/`uninstall`/`enforce` の4コマンドは実際に実装され、CLIとして動作することを実機実行で確認した。`npm test` は実測 **320/320 pass**（実装者報告と一致）。`npm pack --dry-run` は実測 **128ファイル**（実装者報告と一致）で `src/`・`test/`・`tsconfig*` を含まない。2026-07-15型ロックアウト事故の再発防止（ADR-2: `tool_name=="Bash"` 限定matcher）は、`Agent`/`Task` 等の非Bashツール名を模した入力で実際にhookスクリプトを実行し、構造的に評価対象外であることを直接確認した。`uninstall`の安全確認（未commit差分・残存worktree）も実際に壊れた状態を作って拒否されることを確認した。
 
 一方、falsification観点の能動的探索により **F1（材料的・中程度）**: `init`が既存ファイルとの内容衝突を検出した際、設計・実装計画が明記する「他のファイルへの書込みも行わない（部分適用しない）」という保証が実際には守られていないことを実機実行で発見した。また **F2（軽微）**: `uninstall`が`.agent-skill-chain/.installed_version`を削除対象に含めておらず、完全撤去後も`doctor`が「init 導入済み: OK」と誤表示することを発見した。いずれも既存テストスイートでは検出されない（アサーションが該当観点をカバーしていない）。
 
-いずれもデータ消失・安全側原則（AGENTS.md I8）の毀損には至らないため**ブロッキングではない**と判断するが、02_設計・03_実装計画が明記した契約からの逸脱であり、実装完了として扱う前に認識しておくべき事項として記載する。マージ判断は進行役に委ねる。
+いずれもデータ消失・安全側原則（AGENTS.md I8）の毀損には至らないため**ブロッキングではない**と初回レビュー時点では判断したが、02_設計・03_実装計画が明記した契約からの逸脱であったため修正を推奨事項とした。両修正はその後実施され、本レビュアが独立に実機再検証した結果（§11）、F1・F2とも意図どおりに是正されていることを確認した。F1・F2以外の新たな逸脱は今回の再検証範囲（両修正の実機再現手順・`npm test`全体の再実行）では発見されなかった。
 
 ---
 
@@ -163,18 +163,71 @@ $ echo '{"tool_name":"Bash","tool_input":{"command":"agent-skill-chain enforce o
 
 ## 9. 残課題・follow-up提案（独断起票はしない）
 
-進行役の判断・Go出しを前提に、以下を提案する。
+F1・F2はいずれも修正済み・再検証済み（§11参照）。以下は初回レビュー時点の提案の記録（履歴として残す）。
 
-1. **F1（init部分適用）**: 02_設計・03_実装計画の記述を実装の実態（衝突検出は逐次・部分書込みが起こりうる）に合わせて修正するか、`copyTreeFailOnConflict`を「全件先読みで衝突を検査してから書き込む」2パス方式へ改修するか、いずれかを次Issueで判断する。既存の`setup`コマンドも同じ関数を使っており同様の制約を持つため、修正する場合は影響範囲が`init`単体に留まらない点に留意。
-2. **F2（uninstallの.installed_version残存）**: `uninstall`の削除対象へ`.agent-skill-chain/.installed_version`を追加するか、`doctor`の「init導入済み」判定を実体（例: `.agent-skill-chain/config/agent-skill-chain.yaml`存在）ベースに変更するか判断する。
-3. （軽微）`test/integration/init.test.ts`の衝突検知テストへ「他ファイルが作成されていないこと」のアサーションを追加し、F1の回帰を今後検出できるようにする。
+1. ~~**F1（init部分適用）**: 02_設計・03_実装計画の記述を実装の実態（衝突検出は逐次・部分書込みが起こりうる）に合わせて修正するか、`copyTreeFailOnConflict`を「全件先読みで衝突を検査してから書き込む」2パス方式へ改修するか、いずれかを次Issueで判断する。既存の`setup`コマンドも同じ関数を使っており同様の制約を持つため、修正する場合は影響範囲が`init`単体に留まらない点に留意。~~ → commit `a1f0f56`で2パス方式へ改修済み。
+2. ~~**F2（uninstallの.installed_version残存）**: `uninstall`の削除対象へ`.agent-skill-chain/.installed_version`を追加するか、`doctor`の「init導入済み」判定を実体（例: `.agent-skill-chain/config/agent-skill-chain.yaml`存在）ベースに変更するか判断する。~~ → commit `adc3b82`で削除対象へ追加済み。
+3. ~~（軽微）`test/integration/init.test.ts`の衝突検知テストへ「他ファイルが作成されていないこと」のアサーションを追加し、F1の回帰を今後検出できるようにする。~~ → commit `a1f0f56`に同梱するテストで対応済み（`uninstall.test.ts`側もcommit `adc3b82`で対応）。
+
+残課題は無し。
 
 ---
 
-## 10. 参照
+## 10. F1・F2修正の独立再検証（本追記・別担当の独立検証者による実施）
+
+本節は、初回レビュー（§1〜§9、判定CONDITIONAL PASS）を行った検証者とは別の独立検証者が、F1・F2の修正commitのみを対象に、実機実行で再検証した結果の記録である（全体の再検証は行っていない。再検証範囲はF1・F2の再現手順と`npm test`全体のみ）。
+
+**対象commit**: `a1f0f56`（fix(169): initの衝突検知を先読み2段階化し部分書込みを防止(F1)）、`adc3b82`（fix(169): uninstallの削除対象に.installed_versionを追加(F2)）。両commitとも修正対象ファイルへの回帰テスト追加込みであることをdiffで確認済み（`a1f0f56`は`src/commands/init.ts`+`test/integration/init.test.ts`、`adc3b82`は`src/commands/uninstall.ts`・`src/lib/version-marker.ts`+`test/integration/uninstall.test.ts`）。
+
+### F1再検証（実機再現）
+
+`/tmp`配下の隔離ディレクトリ（`docs/GLOSSARY.md`のみ事前配置し、本パッケージ生成物と異なる内容にして意図的に衝突させた状態）でビルド済み`bin/agents-md.js`経由の`init`を実行した。
+
+```
+$ node bin/agents-md.js init <isolated_dir>
+導入先に既存の異なる内容のファイルがあるため展開を中断しました: .../docs/GLOSSARY.md（内容が競合しています。...）
+exit=1
+```
+
+実行後、`ls`で`<isolated_dir>`配下を実測したところ、`AGENTS.md`・`CLAUDE.md`・`.agent-skill-chain`・`.github`のいずれも作成されていないことを確認した（初回レビュー時点では`AGENTS.md`・`CLAUDE.md`が衝突検出前に書き込まれていた）。衝突した`docs/GLOSSARY.md`自体の内容も事前配置したものと一致し変更されていないことを確認した。**F1は修正済みであることを実機で確認した。**
+
+### F2再検証（実機再現）
+
+同じく`/tmp`配下の隔離ディレクトリで、`git init`→`init`→`git commit`→`uninstall`→`doctor`の順に実行した。
+
+```
+$ node bin/agents-md.js init <isolated_dir>          # .agent-skill-chain/.installed_version が作成されることを確認
+$ git add -A && git commit -q -m "chore: init"
+$ node bin/agents-md.js uninstall <isolated_dir>
+...
+removed: .../.agent-skill-chain/.installed_version    # 削除対象に含まれていることを実測
+.agent-skill-chain/project/ は保持されます（削除対象に含まれません）
+exit=0
+$ node bin/agents-md.js doctor   # <isolated_dir> をcwdとして実行
+情報  init 導入済み: NG（未導入）
+```
+
+`uninstall`の出力に`.installed_version`削除のログが実際に現れ、実行後は当該ファイルが存在せず、`doctor`が「NG（未導入）」と正しく表示することを実機で確認した（初回レビュー時点では「OK」と誤表示され続けていた）。**F2は修正済みであることを実機で確認した。**
+
+検証に使用した一時ディレクトリ2つは、再検証完了後にいずれも削除済みであり、本リポジトリ・既存の隔離環境への影響はない。
+
+### npm test最終再実行
+
+`npm run build`成功後、`npm test`を独立して再実行した。
+
+- 結果: **`# tests 322 / # pass 322 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`**（duration ≈ 103.2s）。
+- 初回レビュー時点の320件から、F1・F2それぞれの修正commitに同梱された回帰テスト2件（`init.test.ts`1件・`uninstall.test.ts`1件）が加わり322件になったことをテスト件数の差分で確認した。全件pass、fail 0件。
+
+### 再検証結論
+
+F1・F2はいずれも実機実行で修正が効いていることを確認した。再検証範囲内（F1・F2の再現手順・`npm test`全体）で新たな逸脱は発見されなかった。ただし本節はF1・F2の再検証のみを目的としており、§1〜§9が対象とした実装全体（T1〜T10・enforce hookのfalsification・uninstallの安全側動作等）を再度網羅的に反証したものではない点に留意（初回レビューの当該範囲の妥当性はそのまま引き継ぐ）。
+
+---
+
+## 11. 参照
 
 - `docs/maintainer/workflow/20260720_090158_169-cli-lifecycle-commands/00_要求定義.md` / `01_要件定義.md` / `02_設計.md`（ADR-1〜5） / `03_実装計画.md`（T1〜T10）。
-- 対象commit `4a013ca`・`8ac05e7`・`e92aeb7`（35ファイル変更、3124行追加・41行削除、`git diff --stat 76afcf9 e92aeb7`で実測）。
+- 対象commit `4a013ca`・`8ac05e7`・`e92aeb7`（35ファイル変更、3124行追加・41行削除、`git diff --stat 76afcf9 e92aeb7`で実測）。F1・F2修正commit `a1f0f56`・`adc3b82`（§10）。
 - GitHub Issue #169（techbeansjp-free/AGENTS.md）。
 - AGENTS.md（§不変条件 I8・§役割権限・§GitHub配布マルチAI対応）。
-- 検証環境: `/tmp`配下の隔離した一時gitリポジトリ4つ（本レビュー完了後に削除済み、既存リポジトリへの影響なし）。
+- 検証環境: `/tmp`配下の隔離した一時gitリポジトリ4つ（初回レビュー時点、レビュー完了後に削除済み）＋F1・F2再検証用の隔離ディレクトリ2つ（§10、再検証完了後に削除済み）。既存リポジトリへの影響はいずれもなし。
