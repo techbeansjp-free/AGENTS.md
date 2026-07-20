@@ -17,25 +17,17 @@ export function defaultLiveFileRoots(repoRoot: string): string[] {
   return roots.filter((p) => fs.existsSync(p));
 }
 
-/** lint vocab のデフォルト対象。defaultLiveFileRoots から次の2種類を除外する。
+/** lint vocab のデフォルト対象。defaultLiveFileRoots から docs/GLOSSARY.md（恒久的な除外）のみを
+ * 除外する。GLOSSARY.md自体が「禁止同義語」列で禁止語を文字通り列挙する用語定義文書であり、
+ * 構造上必然的に自分自身の禁止語検査に引っかかる（スペルチェッカーが自分の「既知の誤字一覧」
+ * ファイルを誤字として検出するのと同種の自己言及）。lint referencesの§参照解決には引き続き
+ * GLOSSARY.mdの見出しが必要なため、defaultLiveFileRootsからは除外しない。
  *
- * 1. templates/config/schemas/scripts（一時的な除外）: これらの配下では "issue" 等の禁止語が
- *    YAML キー名（例: issue.allowed_types, issue_id）・CLI サブコマンド名（例: issue start,
- *    issue resume）として識別子的に大量使用されており、現行の lint-vocab スキャナは識別子・
- *    技術参照と散文中の誤用を区別できず大量誤検出を起こす。識別子・YAMLキー・CLIサブコマンド名を
- *    認識するスキャナ実装後、follow-up issueでこの4ディレクトリを対象復帰する。standards・ciは
- *    この問題が無いため対象に残す。
- * 2. docs/GLOSSARY.md（恒久的な除外）: GLOSSARY.md自体が「禁止同義語」列で禁止語を文字通り
- *    列挙する用語定義文書であり、構造上必然的に自分自身の禁止語検査に引っかかる（スペル
- *    チェッカーが自分の「既知の誤字一覧」ファイルを誤字として検出するのと同種の自己言及）。
- *    lint referencesの§参照解決には引き続きGLOSSARY.mdの見出しが必要なため、
- *    defaultLiveFileRootsからは除外しない。 */
+ * templates/config/schemas/scripts は ISSUE-178 で識別子・YAMLキー・CLIサブコマンド文脈を
+ * 認識するスキャナ（src/commands/lint.ts の isIdentifierContext）を実装したことにより対象復帰
+ * 済み（defaultLiveFileRootsと同一集合）。 */
 export function defaultVocabFileRoots(repoRoot: string): string[] {
-  const excluded = new Set(
-    ['templates', 'config', 'schemas', 'scripts']
-      .map((dir) => path.join(repoRoot, ASSET_NAMESPACE, dir))
-      .concat(path.join(repoRoot, 'docs', 'GLOSSARY.md')),
-  );
+  const excluded = new Set([path.join(repoRoot, 'docs', 'GLOSSARY.md')]);
   return defaultLiveFileRoots(repoRoot).filter((p) => !excluded.has(p));
 }
 

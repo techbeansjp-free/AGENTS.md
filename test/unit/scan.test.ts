@@ -35,12 +35,16 @@ test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENT
   assert.deepEqual(result, expected);
 });
 
-test('defaultVocabFileRoots: lint vocabのデフォルト対象。templates/config/schemas/scriptsはissue識別子誤検出のため一時除外し、docs/GLOSSARY.mdは自己言及のため恒久除外し、AGENTS.md, .agent-skill-chain/{standards,ci}のみを返す', () => {
+test('defaultVocabFileRoots: lint vocabのデフォルト対象。docs/GLOSSARY.mdは自己言及のため恒久除外し、AGENTS.md・.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}（defaultLiveFileRootsと同一集合）を返す（ISSUE-178 AC-4: 識別子文脈スキャナ実装によりtemplates/config/schemas/scriptsの一時除外を撤廃）', () => {
   const root = repoRoot();
   const result = defaultVocabFileRoots(root);
   const expected = [
     path.join(root, 'AGENTS.md'),
     path.join(root, '.agent-skill-chain', 'standards'),
+    path.join(root, '.agent-skill-chain', 'templates'),
+    path.join(root, '.agent-skill-chain', 'config'),
+    path.join(root, '.agent-skill-chain', 'schemas'),
+    path.join(root, '.agent-skill-chain', 'scripts'),
     path.join(root, '.agent-skill-chain', 'ci'),
   ];
   for (const p of expected) {

@@ -123,17 +123,90 @@ test('lint vocab: 禁止語自体がパス形式の文字列（.agent-skill-chai
   );
 });
 
-test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.agent-skill-chain資産）は違反なしで終了コード0になる', async (t) => {
+test('lint vocab: 識別子文脈（YAMLキー・flow-sequence要素・コード識別子・CLIサブコマンド・外部語彙許可リスト）としての禁止語利用は誤検出されない（ISSUE-178 AC-1）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
-  // Given/When: path引数を省略し、defaultVocabFileRoots（AGENTS.md・.agent-skill-chain/{standards,ci}。
-  // docs/GLOSSARY.mdは自己言及のため恒久除外、templates/config/schemas/scriptsはissue識別子誤検出のため
-  // 一時除外中）を対象に実行する
+  // Given: docs/GLOSSARY.md で禁止語と定義されている「issue」（小文字）を、識別子文脈
+  // （YAMLキー・flow-sequence要素・コード識別子・CLIサブコマンド・外部語彙許可リスト）の
+  // それぞれで用いた行を用意する。
+  const file = path.join(repo.dir, 'identifier-context.md');
+  fs.writeFileSync(
+    file,
+    [
+      // YAMLキー文脈: 「行頭からの空白＋任意の`- `」の直後に出現し、直後（空白を挟んでよい）が`:`。
+      'issue: 単独のYAMLキー文脈',
+      '  issue: 字下げされたYAMLキー文脈',
+      '- issue: リスト項目のキーとしてのYAMLキー文脈',
+      // flow-sequence要素: 直前（空白を挟んでよい）が`[`または`,`、直後（同様）が`,`または`]`。
+      'flow-sequence要素: inputs: [issue, wip] のように書く。',
+      // コード識別子文脈: snake_case/camelCaseの複合識別子の一部。
+      'コード識別子文脈（snake_case）: issue_id フィールドを参照する。',
+      'コード識別子文脈（camelCase）: issueId フィールドを参照する。',
+      // CLIサブコマンド文脈: 独立したシェルトークンとして、既知verbと隣接する。
+      'CLIサブコマンド文脈（動詞が後）: agent-skill-chain issue start を実行する。',
+      'CLIサブコマンド文脈（動詞が前）: acquire issue のように書く（対称チェック）。',
+      // 外部語彙の明示許可リスト: 改名不可の既知の完全一致トークン。
+      '外部語彙許可リスト: blank_issues_enabled は GitHub公式スキーマのキー名である。',
+    ].join('\n') + '\n',
+  );
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'identifier-context.md'], { cwd: repo.dir });
+
+  // Then: 終了コード0（識別子文脈はいずれも誤検出されない）
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+});
+
+test('lint vocab: 識別子文脈に隣接していても、散文としての禁止語混入は引き続き検出される（regressionなし、ISSUE-178 AC-2）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const file = path.join(repo.dir, 'identifier-context-prose.md');
+  fs.writeFileSync(
+    file,
+    [
+      // 1行目: 同一行内で識別子文脈（issue_id）と散文誤用（単独のissue）が両方出現する。
+      // 識別子文脈側は除外されるが、散文側は引き続き検出されなければならない。
+      'issue_id フィールドと、issueそのものの説明は別物である。',
+      // 2行目: 単独の散文誤用のみ。
+      'このissueの内容を確認してください。',
+      // 3行目: 複合境界が無い「issues」（複数形）は識別子文脈のいずれにも該当せず、
+      // 散文誤用として引き続き検出対象に残る（DESIGN.md「A-1」の明示的な非除外例）。
+      'issuesを一覧するコマンドがある。',
+    ].join('\n') + '\n',
+  );
+
+  const result = runCli(['lint', 'vocab', 'identifier-context-prose.md'], { cwd: repo.dir });
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /identifier-context-prose\.md:1: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+    '1行目の識別子文脈（issue_id）は除外されつつ、同一行の散文誤用は検出されること',
+  );
+  assert.match(
+    result.stderr,
+    /identifier-context-prose\.md:2: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+  );
+  assert.match(
+    result.stderr,
+    /identifier-context-prose\.md:3: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+    '複合境界の無い"issues"は識別子文脈と誤認せず引き続き検出されること',
+  );
+});
+
+test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.agent-skill-chain資産全体）は違反なしで終了コード0になる（ISSUE-178 AC-4: templates/config/schemas/scriptsも含めて対象）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given/When: path引数を省略し、defaultVocabFileRoots（AGENTS.md・.agent-skill-chain/{standards,
+  // templates,config,schemas,scripts,ci}。docs/GLOSSARY.mdは自己言及のため恒久除外のみ）を対象に実行する
   const result = runCli(['lint', 'vocab'], { cwd: repo.dir });
 
-  // Then: 複製元である実物のAGENTS.md・.agent-skill-chain/{standards,ci}は禁止語混入が無い状態を
-  // 維持している前提のため、終了コード0・標準エラー出力は空になることを期待する。
+  // Then: 複製元である実物のAGENTS.md・.agent-skill-chain/資産一式は識別子文脈認識スキャナ導入後、
+  // 禁止語混入が無い状態を維持している前提のため、終了コード0・標準エラー出力は空になることを期待する。
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, '');
 });
