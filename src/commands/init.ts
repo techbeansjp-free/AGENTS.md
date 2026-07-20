@@ -32,19 +32,32 @@ export async function init(args: string[]): Promise<number> {
     const targetDir = positional ? path.resolve(positional) : process.cwd();
     if (!dryRun) fs.mkdirSync(targetDir, { recursive: true });
 
-    const prefix = dryRun ? 'planned ' : '';
-    const summary: string[] = [];
-
+    const conflictCheckedEntries: Array<{ src: string; dest: string }> = [];
     for (const entry of ROOT_LEVEL_ENTRIES) {
       const src = path.join(packageRoot(), entry);
       if (!fs.existsSync(src)) continue;
-      const results = copyTreeFailOnConflict(src, path.join(targetDir, entry), { dryRun });
-      summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
+      conflictCheckedEntries.push({ src, dest: path.join(targetDir, entry) });
     }
     for (const entry of NAMESPACED_ENTRIES) {
       const src = path.join(packageRoot(), ASSET_NAMESPACE, entry);
       if (!fs.existsSync(src)) continue;
-      const results = copyTreeFailOnConflict(src, path.join(targetDir, ASSET_NAMESPACE, entry), { dryRun });
+      conflictCheckedEntries.push({ src, dest: path.join(targetDir, ASSET_NAMESPACE, entry) });
+    }
+
+    // 02_設計§3.1.4/03_実装計画T2.2.3: 衝突検出時は他ファイルへの書込みも一切行わない
+    // （部分適用しない）。そのため、実書き込みの前に全対象を dryRun:true で先読み検査する
+    // （Issue #169 F1: 逐次書込みだと衝突検出前のエントリが既にディスクへ書かれてしまう不備の是正）。
+    if (!dryRun) {
+      for (const { src, dest } of conflictCheckedEntries) {
+        copyTreeFailOnConflict(src, dest, { dryRun: true });
+      }
+    }
+
+    const prefix = dryRun ? 'planned ' : '';
+    const summary: string[] = [];
+
+    for (const { src, dest } of conflictCheckedEntries) {
+      const results = copyTreeFailOnConflict(src, dest, { dryRun });
       summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
     }
 

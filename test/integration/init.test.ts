@@ -63,6 +63,36 @@ test('init: 既存docs資産と衝突する場合は非破壊で停止し、終�
   assert.match(result.stderr, /導入先に既存の異なる内容のファイルがあるため展開を中断しました/);
 });
 
+test('init: 既存docs資産と衝突する場合、衝突より前に処理される他のファイルも一切書き込まれない（部分適用しない）', (t) => {
+  const targetDir = mkScratch('init-conflict-no-partial-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(targetDir, 'docs'), { recursive: true });
+  const originalGlossary = '# 別内容のGLOSSARY.md（衝突させるため）\n';
+  fs.writeFileSync(path.join(targetDir, 'docs', 'GLOSSARY.md'), originalGlossary);
+
+  const result = runCli(['init', targetDir]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /導入先に既存の異なる内容のファイルがあるため展開を中断しました/);
+  assert.equal(
+    fs.existsSync(path.join(targetDir, 'AGENTS.md')),
+    false,
+    'AGENTS.mdも作成されないこと（ROOT_LEVEL_ENTRIESの中でGLOSSARY.mdより先に処理されるため、対策前は書き込まれてしまっていた）',
+  );
+  assert.equal(fs.existsSync(path.join(targetDir, 'CLAUDE.md')), false, 'CLAUDE.mdも作成されないこと');
+  assert.equal(
+    fs.existsSync(path.join(targetDir, '.agent-skill-chain')),
+    false,
+    '.agent-skill-chain名前空間も一切作成されないこと',
+  );
+  assert.equal(fs.existsSync(path.join(targetDir, '.github')), false, '.githubも作成されないこと');
+  assert.equal(
+    fs.readFileSync(path.join(targetDir, 'docs', 'GLOSSARY.md'), 'utf8'),
+    originalGlossary,
+    '衝突した既存ファイル自体の内容も変更されないこと',
+  );
+});
+
 test('init: 同一target_dirへの2回目の実行は冪等に成功する（unchanged）', (t) => {
   const targetDir = mkScratch('init-idempotent-target');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
