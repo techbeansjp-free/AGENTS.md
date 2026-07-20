@@ -9,12 +9,15 @@ import { gh } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const USAGE = `
-使い方: agent-skill-chain report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason]
+使い方: agent-skill-chain report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason] [human_escalation_requested]
 
 role:     spec_worker|design_worker|implementation_worker|validation_worker|adr_finalization_worker
 segment:  spec|design|implementation|validation|adr_finalization
 status:   completed|blocked
 blocked_reason: status=blocked の場合必須（推測で補完せず、明確なブロッカーを記述する）
+human_escalation_requested: 省略可（既定false）。'true' を指定すると、起動失敗・timeout・
+  完了を騙るケース等、進行役への人間エスカレーションを要する blocked であることを明示する
+  （AGENTS.md 不変条件I8。launch_worker等のアダプタが使う）。
 
 出力:
   成功時: 終了コード0。発行先（Issueコメントurlまたはreportファイルパス）を標準出力へ。
@@ -44,6 +47,7 @@ interface WorkerReport {
   status: 'completed' | 'blocked';
   target_sha: string;
   blocked_reason?: string;
+  human_escalation_requested?: boolean;
 }
 
 export async function status(args: string[]): Promise<number> {
@@ -52,7 +56,7 @@ export async function status(args: string[]): Promise<number> {
       printUsage(USAGE);
       return 0;
     }
-    const [issueIdRaw, role, segment, statusValue, targetSha, blockedReason] = args;
+    const [issueIdRaw, role, segment, statusValue, targetSha, blockedReason, humanEscalationRaw] = args;
     if (!issueIdRaw || !role || !segment || !statusValue || !targetSha) {
       throw new CliError('issue_id, role, segment, status, target_sha はすべて必須です');
     }
@@ -75,6 +79,7 @@ export async function status(args: string[]): Promise<number> {
       status: statusValue,
       target_sha: targetSha,
       ...(blockedReason ? { blocked_reason: blockedReason } : {}),
+      ...(humanEscalationRaw === 'true' ? { human_escalation_requested: true } : {}),
     };
     const outcome = validateAgainstSchema('worker-report', report, root);
     if (!outcome.valid) return fail(`worker report がスキーマに適合しません: ${outcome.errors.join('; ')}`);

@@ -255,7 +255,7 @@ launch_worker() {
     local reason="$1" sha
     echo "launch_worker: $reason（フェイルセーフでblockedへ倒します）" >&2
     sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-    report_status "$issue_id" "$role" "$segment" blocked "$sha" "$reason" >/dev/null 2>&1 || true
+    report_status "$issue_id" "$role" "$segment" blocked "$sha" "$reason" true >/dev/null 2>&1 || true
     release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
     return 2
   }
@@ -300,9 +300,13 @@ launch_worker() {
   worker_pid=$!
 
   # renewループ: サブプロセス生存中のみ renewal_interval_seconds ごとに renew_lease を呼ぶ。
+  # 待機には sleep（外部コマンド）ではなく read -t（bashビルトイン）を使う: サブシェル自体へ
+  # SIGTERM（後述のkill "$renew_pid"）を送った際、外部コマンドとしてforkされたsleepは
+  # シグナルを受け取らず孤児プロセスとして生き残り得るが、ビルトインのread -tはサブシェル
+  # プロセス自身の実行なのでSIGTERMで即座に中断される（stdinは干渉を避けるため/dev/nullへ）。
   (
     while kill -0 "$worker_pid" 2>/dev/null; do
-      sleep "$renew_interval"
+      read -r -t "$renew_interval" _renew_wait </dev/null || true
       kill -0 "$worker_pid" 2>/dev/null || break
       renew_lease "$issue_id" "$token" >/dev/null 2>&1 || true
     done
