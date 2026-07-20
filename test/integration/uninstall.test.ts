@@ -103,6 +103,34 @@ test('uninstall: 安全確認を通過した場合、project/を除く導入資�
   assert.ok(fs.existsSync(path.join(projectDir, 'RULES.md')), 'project/RULES.mdは削除されず残ること');
 });
 
+test('uninstall: 実行後は.installed_versionも削除され、doctorが「未導入」と正しく表示する', (t) => {
+  const targetDir = initGitRepoWithInit('uninstall-version-marker');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  git(targetDir, ['add', '-A']);
+  git(targetDir, ['commit', '-q', '-m', 'chore: init']);
+
+  assert.ok(
+    fs.existsSync(path.join(targetDir, '.agent-skill-chain', '.installed_version')),
+    '前提: init直後は.installed_versionが存在すること',
+  );
+
+  const result = runCli(['uninstall', targetDir]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    fs.existsSync(path.join(targetDir, '.agent-skill-chain', '.installed_version')),
+    false,
+    'uninstall後は.installed_versionも削除されること',
+  );
+
+  const doctorResult = runCli(['doctor'], { cwd: targetDir });
+  assert.match(
+    doctorResult.stdout,
+    /情報 {2}init 導入済み: NG（未導入）/,
+    'uninstall後にdoctorを実行すると「未導入」と表示されること（削除漏れがあるとOKと誤表示され続けていた）',
+  );
+});
+
 test('uninstall: --force オプションは提供されない（未知フラグとして使い方表示・成功しない）', (t) => {
   const targetDir = initGitRepoWithInit('uninstall-noforce');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));

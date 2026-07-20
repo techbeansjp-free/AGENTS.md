@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { ASSET_NAMESPACE } from '../lib/paths.js';
 import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES } from '../lib/asset-manifest.js';
+import { versionMarkerRelativePath } from '../lib/version-marker.js';
 import { git } from '../lib/exec.js';
 import { listWorktrees } from '../lib/worktree.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
@@ -21,12 +22,17 @@ target_dir: 撤去対象リポジトリのルートディレクトリ（省略�
 
 const PROJECT_KEEP_NOTICE = '.agent-skill-chain/project/ は保持されます（削除対象に含まれません）';
 
-/** ROOT_LEVEL_ENTRIES + NAMESPACED_ENTRIES(project除く、元々含まれない) + .github のうち、実在するもの。 */
+/**
+ * ROOT_LEVEL_ENTRIES + NAMESPACED_ENTRIES(project除く、元々含まれない) + .github
+ * + `.installed_version`（Issue #169 F2: これが撤去対象に含まれないと、完全撤去後も
+ * doctorが「init 導入済み」と誤表示し続けるため削除対象に含める）のうち、実在するもの。
+ */
 function managedRelativePaths(targetDir: string): string[] {
   const candidates = [
     ...ROOT_LEVEL_ENTRIES,
     ...NAMESPACED_ENTRIES.map((entry) => path.join(ASSET_NAMESPACE, entry)),
     '.github',
+    versionMarkerRelativePath(),
   ];
   return candidates.filter((relative) => fs.existsSync(path.join(targetDir, relative)));
 }

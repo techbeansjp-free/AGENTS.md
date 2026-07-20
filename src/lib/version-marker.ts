@@ -4,9 +4,14 @@ import { ASSET_NAMESPACE } from './paths.js';
 
 const VERSION_FILE_NAME = '.installed_version';
 
+/** `.agent-skill-chain/.installed_version` の root からの相対パス。`uninstall` の削除対象一覧等が参照する。 */
+export function versionMarkerRelativePath(): string {
+  return path.join(ASSET_NAMESPACE, VERSION_FILE_NAME);
+}
+
 /** `.agent-skill-chain/.installed_version` の絶対パス（Issue #169: 02_設計§4データ設計）。 */
 export function versionMarkerPath(root: string): string {
-  return path.join(root, ASSET_NAMESPACE, VERSION_FILE_NAME);
+  return path.join(root, versionMarkerRelativePath());
 }
 
 /** 導入済みバージョンを読み取る。未導入（ファイル不在）なら undefined を返す。 */
