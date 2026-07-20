@@ -28,6 +28,8 @@ test('setup: 空のtarget_dirへの初回導入が成功し、標準資産・.ag
 
   // Then: 成功し、root直下資産・.agent-skill-chain名前空間配下・.githubテンプレートが作成される
   assert.equal(result.status, 0, result.stderr);
+  // Then: 非推奨警告がstderrへ出力される（Issue #169 ADR-1、戻り値・生成物は無変更のまま警告のみ追加）
+  assert.match(result.stderr, /警告: setup は非推奨です。init（\+ 必要なら setup github）を使用してください。/);
   assert.ok(fs.existsSync(path.join(targetDir, 'AGENTS.md')), 'AGENTS.md が作成されること');
   assert.ok(
     fs.existsSync(path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml')),

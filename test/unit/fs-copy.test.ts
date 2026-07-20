@@ -124,3 +124,56 @@ test('copyTreeMirror: ネストしたディレクトリ構造を再帰的にミ�
   assert.equal(fs.readFileSync(path.join(dest, 'sub', 'deep', 'leaf.txt'), 'utf8'), 'leaf');
   assert.ok(results.every((r) => r.action === 'created'));
 });
+
+// Issue #169 T1: dry-run 対応（02_設計§2.5 ADR / 03_実装計画 2.1.3）
+
+test('copyTreeFailOnConflict: dryRun:true では宛先にファイルが一切作成されない', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.mkdirSync(path.join(src, 'sub'), { recursive: true });
+  fs.writeFileSync(path.join(src, 'a.txt'), 'hello');
+  fs.writeFileSync(path.join(src, 'sub', 'b.txt'), 'world');
+
+  const results = copyTreeFailOnConflict(src, dest, { dryRun: true });
+
+  assert.equal(results.length, 2);
+  assert.ok(results.every((r) => r.planned === true));
+  assert.equal(fs.existsSync(path.join(dest, 'a.txt')), false);
+  assert.equal(fs.existsSync(path.join(dest, 'sub')), false, 'ネストしたサブディレクトリも作成されないこと');
+});
+
+test('copyTreeFailOnConflict: dryRun:true でも内容が異なる既存ファイルへの衝突は検知されCliErrorを投げる', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'a.txt'), 'new-content');
+  fs.writeFileSync(path.join(dest, 'a.txt'), 'old-content');
+
+  assert.throws(() => copyTreeFailOnConflict(src, dest, { dryRun: true }), CliError);
+  assert.equal(fs.readFileSync(path.join(dest, 'a.txt'), 'utf8'), 'old-content', '衝突検知後も既存ファイルは変更されないこと');
+});
+
+test('copyTreeFailOnConflict: dryRun:true・内容が同一な既存ファイルは unchanged (planned) になる', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'a.txt'), 'same-content');
+  fs.writeFileSync(path.join(dest, 'a.txt'), 'same-content');
+
+  const results = copyTreeFailOnConflict(src, dest, { dryRun: true });
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0]?.action, 'unchanged');
+  assert.equal(results[0]?.planned, true);
+});
+
+test('copyTreeMirror: dryRun:true では宛先にファイルが一切作成されない', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'a.txt'), 'hello');
+
+  const results = copyTreeMirror(src, dest, { dryRun: true });
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0]?.action, 'created');
+  assert.equal(results[0]?.planned, true);
+  assert.equal(fs.existsSync(path.join(dest, 'a.txt')), false);
+});
