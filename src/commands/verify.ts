@@ -16,6 +16,7 @@ import { readYamlFile } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { digestOfFile } from '../lib/digest.js';
 import { git } from '../lib/exec.js';
+import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 function violations(lines: string[]): number {
@@ -127,8 +128,6 @@ function checkOutputExists(worktreePath: string, output: string): boolean {
       // VALIDATION.md（schemas/validation-report.schema.yaml）内に記録される抽象出力。
       // ファイル単体としては存在しないため、VALIDATION.md自体の存在で代替確認する。
       return fs.existsSync(path.join(worktreePath, 'VALIDATION.md'));
-    case 'pr':
-      return true; // pr作成有無は pr create / gate publish 側の責務。ここでは検査対象外。
     default:
       return false;
   }
@@ -197,37 +196,11 @@ const TEMPLATE_SYNC_USAGE = `
 
 出力: 0=.github/は同期済み、1=未同期・スタブ未実装
 `;
-function listFilesRecursive(dir: string): string[] {
-  if (!fs.existsSync(dir)) return [];
-  const out: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listFilesRecursive(p));
-    else out.push(p);
-  }
-  return out;
-}
 export async function templateSync(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) return printUsage(TEMPLATE_SYNC_USAGE), 0;
     const targetRoot = args[0] ? path.resolve(args[0]) : process.cwd();
-    const source = resolveAsset(path.join('templates', 'github', '.github'), targetRoot);
-    const dest = path.join(targetRoot, '.github');
-
-    const sourceFiles = listFilesRecursive(source).map((p) => path.relative(source, p));
-    const destFiles = new Set(listFilesRecursive(dest).map((p) => path.relative(dest, p)));
-
-    const diffs: string[] = [];
-    for (const rel of sourceFiles) {
-      if (!destFiles.has(rel)) {
-        diffs.push(`未同期（欠落）: ${rel}`);
-        continue;
-      }
-      if (!fs.readFileSync(path.join(source, rel)).equals(fs.readFileSync(path.join(dest, rel)))) {
-        diffs.push(`未同期（差分あり）: ${rel}`);
-      }
-    }
-    return violations(diffs);
+    return violations(computeTemplateSyncDiffs(targetRoot));
   });
 }
 

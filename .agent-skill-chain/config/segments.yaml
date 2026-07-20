@@ -10,4 +10,4 @@ segments:
   - {id: spec,           outputs: [SPEC.md],                                                next: design}
   - {id: design,         outputs: [DESIGN.md, ADR, PLAN.md],                                 next: implementation}
   - {id: implementation, outputs: [code, unit_test_results],                                 next: validation}
-  - {id: validation,     outputs: [acceptance_test_results, regression_test_results, pr],    next: completed}
+  - {id: validation,     outputs: [acceptance_test_results, regression_test_results],        next: completed}

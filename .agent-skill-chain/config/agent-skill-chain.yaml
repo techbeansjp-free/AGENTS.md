@@ -42,7 +42,7 @@ branch:
   pattern: "{type}/{issue_id}-{slug}"
 
 issue:
-  allowed_types: [feature, bugfix, hotfix, refactor, docs, process]
+  allowed_types: [feature, bugfix, hotfix, refactor, docs, process, chore]
 
 wip:
   limit: 3
