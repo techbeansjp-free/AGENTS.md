@@ -19,6 +19,7 @@ import * as lint from './commands/lint.js';
 import * as verify from './commands/verify.js';
 import * as report from './commands/report.js';
 import * as testing from './commands/testing.js';
+import * as worker from './commands/worker.js';
 
 type Handler = (args: string[]) => Promise<number> | number;
 
@@ -39,6 +40,8 @@ const routes: Record<string, Handler> = {
   'pr create': pr.create,
   'adr finalize': adr.finalize,
   'report status': report.status,
+  'report latest': report.latest,
+  'worker context': worker.context,
   'test run': testing.run,
   'lint vocab': lint.vocab,
   'lint references': lint.references,

@@ -102,15 +102,51 @@ export function setAdapter(repoDir: string, adapter: ReviewAdapter): void {
 /**
  * review.adapter 行そのものを config から取り除く（schema上 review.adapter は任意項目）。
  * CLI 側の既定値フォールバック（未設定時 claude）を、本物のリポジトリ側の現在値に依存せず検証するために使う。
+ *
+ * review: ブロック直下の adapter 行のみを対象にする（worker.adapter 行も同名で存在するため、
+ * ブロックを跨いだ誤マッチを避ける）。
  */
 export function unsetAdapter(repoDir: string): void {
   const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
   const text = fs.readFileSync(configPath, 'utf8');
-  const patched = text.replace(/^\s*adapter: \w+.*\n/m, '');
+  const patched = text.replace(/(review:\n)(\s*adapter: \w+.*\n)/, '$1');
   fs.writeFileSync(configPath, patched);
 
   const after = fs.readFileSync(configPath, 'utf8');
-  if (/adapter: \w+/.test(after)) {
+  if (/review:\n\s*adapter: \w+/.test(after)) {
     throw new Error('review.adapter 行を削除できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
+  }
+}
+
+/**
+ * worker.adapter を書き換える（launch_worker が起動するセグメント作業ワーカーの実体）。
+ * setAdapter と同型だが、review: ブロックの adapter 行と誤マッチしないよう worker: ブロックに
+ * スコープする。
+ */
+export function setWorkerAdapter(repoDir: string, adapter: ReviewAdapter): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/(worker:\n\s*adapter: )\w+/, `$1${adapter}`);
+  fs.writeFileSync(configPath, patched);
+
+  const after = fs.readFileSync(configPath, 'utf8');
+  if (!new RegExp(`worker:\\n\\s*adapter: ${adapter}\\b`).test(after)) {
+    throw new Error(`worker.adapter を ${adapter} へ書き換えられませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）`);
+  }
+}
+
+/**
+ * worker.adapter 行そのものを config から取り除く（schema上 worker.adapter は任意項目）。
+ * CLI 側の既定値フォールバック（未設定時 human）を検証するために使う。
+ */
+export function unsetWorkerAdapter(repoDir: string): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/(worker:\n)(\s*adapter: \w+.*\n)/, '$1');
+  fs.writeFileSync(configPath, patched);
+
+  const after = fs.readFileSync(configPath, 'utf8');
+  if (/worker:\n\s*adapter: \w+/.test(after)) {
+    throw new Error('worker.adapter 行を削除できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
   }
 }

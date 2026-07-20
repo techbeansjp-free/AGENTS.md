@@ -1,12 +1,23 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
 import { leaseFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
-import { activeLeaseFor, postLeaseComment, deleteLeaseComment, listLeaseComments, type WriterLease } from '../lib/github-lease.js';
+import {
+  activeLeaseFor,
+  activeLeasesFor,
+  postLeaseComment,
+  deleteLeaseComment,
+  listLeaseComments,
+  countActiveWriterLeaseIssues,
+  markActiveWriterLeaseLabel,
+  unmarkActiveWriterLeaseLabel,
+  type WriterLease,
+} from '../lib/github-lease.js';
 import { toYamlString } from '../lib/yaml-io.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
@@ -36,6 +47,23 @@ const RENEW_USAGE = `
   成功時: 終了コード0。更新後のexpires_atを標準出力へ。
   失敗時: 終了コード1以上。token不一致・lease期限切れの場合は理由を標準エラー出力へ。
 `;
+
+/**
+ * WIP上限（wip.limit、既定3、有効writer lease数で判定）用: ローカルモードで全 issue を横断し
+ * issues 配下各issueの lease.yaml のうち expires_at > now の件数を数える。
+ */
+function countLocalActiveWriterLeases(root: string): number {
+  const issuesDir = path.join(root, 'issues');
+  if (!fs.existsSync(issuesDir)) return 0;
+  const now = new Date().toISOString();
+  let count = 0;
+  for (const entry of fs.readdirSync(issuesDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const lease = tryReadYamlFile<WriterLease>(leaseFilePath(root, entry.name));
+    if (lease && lease.writer_lease.expires_at > now) count++;
+  }
+  return count;
+}
 
 function buildLease(issueId: string, segment: string, ttlSeconds: number): WriterLease {
   const now = new Date();
@@ -73,8 +101,16 @@ export async function acquire(args: string[]): Promise<number> {
       const existing = tryReadYamlFile<WriterLease>(leaseFilePath(root, number));
       const now = new Date().toISOString();
       if (existing && existing.writer_lease.expires_at > now) {
+        // ローカルモードは issue 毎に lease.yaml が1ファイルのみのため、この検査が同一segment・
+        // 他segmentいずれの競合も兼ねる（1 Issueにつき同時1つのwriter leaseのみ許可。DESIGN.md参照）。
         return fail(
           `既存の writer lease と競合しています: holder=${existing.writer_lease.holder}, expires_at=${existing.writer_lease.expires_at}`,
+        );
+      }
+      const activeCount = countLocalActiveWriterLeases(root);
+      if (activeCount >= config.wip.limit) {
+        return fail(
+          `WIP上限（wip.limit=${config.wip.limit}）に達しているため writer lease を取得できません（現在の有効writer lease数: ${activeCount}）`,
         );
       }
       writeYamlFileAtomic(leaseFilePath(root, number), lease);
@@ -85,6 +121,21 @@ export async function acquire(args: string[]): Promise<number> {
     if (conflict) {
       return fail(
         `既存の writer lease と競合しています: holder=${conflict.lease.writer_lease.holder}, expires_at=${conflict.lease.writer_lease.expires_at}`,
+      );
+    }
+    // 1 Issueにつき同時1つのwriter leaseのみ許可する（AGENTS.md §役割・権限・writer lease）。
+    // activeLeaseFor は同一segmentのみを判定するため、同issue内の他segmentの有効leaseを
+    // 別途検出する（segment start が活用する activeLeaseFor 自体のスコープは変更しない）。
+    const crossSegmentConflict = activeLeasesFor(number, root).find((c) => c.lease.writer_lease.segment !== segment);
+    if (crossSegmentConflict) {
+      return fail(
+        `ISSUE内の他segment（${crossSegmentConflict.lease.writer_lease.segment}）に有効な writer lease が存在するため取得できません（1 Issueにつき同時1つのみ許可）: holder=${crossSegmentConflict.lease.writer_lease.holder}, expires_at=${crossSegmentConflict.lease.writer_lease.expires_at}`,
+      );
+    }
+    const activeCount = countActiveWriterLeaseIssues(root);
+    if (activeCount >= config.wip.limit) {
+      return fail(
+        `WIP上限（wip.limit=${config.wip.limit}）に達しているため writer lease を取得できません（現在の有効writer lease数: ${activeCount}）`,
       );
     }
     const commentId = postLeaseComment(number, lease, root);
@@ -104,6 +155,8 @@ export async function acquire(args: string[]): Promise<number> {
         `投稿直後に競合を検出したため取得を撤回しました: holder=${olderActiveRival.lease.writer_lease.holder}`,
       );
     }
+    // WIP上限判定用ラベル付与（best-effort。失敗してもlease自体の取得成功を妨げない）。
+    markActiveWriterLeaseLabel(number, root);
     return ok(toYamlString(lease).trim());
   });
 }
@@ -132,6 +185,8 @@ export async function release(args: string[]): Promise<number> {
     const held = listLeaseComments(number, root).find((c) => c.lease.writer_lease.token === token);
     if (!held) return fail('token が一致する writer lease が見つかりません');
     deleteLeaseComment(held.commentId, root);
+    // WIP上限判定用ラベル除去（best-effort）。
+    unmarkActiveWriterLeaseLabel(number, root);
     return ok(issueIdRaw);
   });
 }

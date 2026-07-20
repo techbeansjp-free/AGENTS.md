@@ -1,24 +1,23 @@
-# PLAN: CI/gate運用の本番導入とE2Eフロー実地一周
+# PLAN: agent-skill-chain Tier 1 — adapters launch_worker（spec/design/implementation/validationワーカー起動）の実装計画
 
-- Issue: `ISSUE-171`
+- Issue: `ISSUE-166`
 - 対応する DESIGN: `DESIGN.md`
 
 ## 実装順序・変更単位
 
-本Issueは実地実行が先行し、CI上で発見された問題への対応を都度追加した経緯があるため、実際に実施した順序をそのまま記録する。
-
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | `init`実行・config変更 | `npm ci` → `init --dry-run` → `init`実行 → `review.adapter`を`human`へ編集 | `AC-1, AC-2, AC-3, AC-4` | なし |
-| 2 | branch-name/既存テスト確認 | `verify branch-name`実行、`npm test`実測（初回314/322pass、8fail特定） | `AC-5, AC-6` | `#1` |
-| 3 | テストfixtureの実リポジトリ状態結合解消 | `test/helpers/tmp-repo.ts`が本リポジトリの可変な現在状態（`.installed_version`・`review.adapter`）に結合していた問題を修正（commit `9fb39e9`） | `AC-6` | `#2` |
-| 4 | CI単一checkout対応（`findIssueWorktree`） | `.worktrees/`型レイアウトが無いCI単一checkoutでもissueを解決できるようフォールバック追加（commit `edd5990`） | `AC-6` | `#1` |
-| 5 | detached HEAD対応（`findIssueWorktree`） | `GITHUB_HEAD_REF`フォールバックを追加（commit `7182636`） | `AC-6` | `#4` |
-| 6 | `GITHUB_OUTPUT`形式エラー修正 | gate workflowの複数行標準出力から`gate_report_path:`のみ`sed`抽出（commit `686bbd3`） | `AC-6` | `#5` |
-| 7 | `GH_TOKEN`欠落修正 | gate/reconcile workflowの`gh`呼び出しステップに`GH_TOKEN`を付与（commit `37b96b2`） | `AC-6` | `#6` |
-| 8 | detached HEAD対応の共有ヘルパー統一 | `resolveCurrentBranchInfo()`/`resolveCurrentBranch()`を新設し、`verify branch-name`・`checkpoint`・`findIssueWorktree`から共通利用（commit `bae0fda`）。副次的に`checkpoint`のpush refspecを`HEAD:refs/heads/<branch>`へ修正 | `AC-5, AC-6` | `#5` |
-| 9 | 正式成果物規約への対応 | `segments.yaml`が定める`SPEC.md`/`DESIGN.md`/`PLAN.md`/`VALIDATION.md`をリポジトリルートへ新設し、旧`docs/maintainer/workflow/`形式から正式規約へ対応させる | `AC-7` | `#1〜#8` |
+| 1 | `worker`設定セクション新設 | `.agent-skill-chain/schemas/config.schema.yaml`・`.agent-skill-chain/config/agent-skill-chain.yaml`・`src/lib/config.ts`（`AgentSkillChainConfig`型）へ`worker: {adapter: claude\|codex\|human}`（既定`human`）を追加する。`review.adapter`と対称の追加のためmigrationはoptionalフィールド追加のみ | `AC-1` | なし |
+| 2 | `lease acquire`: issue横断コンフリクト検査 | `src/commands/lease.ts`のGitHubモード`acquire()`へ、`activeLeaseFor(number, segment, root)`による既存の同一segment判定に加え、`listLeaseComments(number, root)`で同issue内の**他segment**の有効leaseも検出し拒否する分岐を追加する。ローカルモードは既存の1ファイル/issue構造により対応済みのため変更しない | `AC-2` | なし |
+| 3 | `lease acquire`: `wip.limit`事前チェック | ローカルモード=`issues/*/.agent-skill-chain/lease.yaml`のうち`expires_at > now`件数、GitHubモード=`writer-lease:active`ラベル付きopen issue件数を数え、`wip.limit`以上なら`acquire()`を拒否する。`release()`成功時に同ラベルを除去する処理も追加する | `AC-8` | `#2` |
+| 4 | `worker-launch.sh`新設 | `.agent-skill-chain/scripts/worker-launch.sh`を`gate-launch-reviewer.sh`と対称の構造で新設する（`worker.adapter`解決→adapter source→`launch_worker`呼び出し→終端コード安全網） | `AC-1`, `AC-7` | `#1` |
+| 5 | `claude.sh`: `launch_worker`実装 | DESIGN.mdの「claude adapter」節に従い、lease取得→`segment start`→`WORKER_CMD`起動（`timeout`＋renewループ＋PID監視）→完了確認（`report-status`直近レコード突合）→解放・報告を実装する。`WORKER_CMD`/`WORKER_TIMEOUT_SEC`のデフォルト値は実機の`claude` CLIで書込み許可フラグを検証してから確定する | `AC-1`, `AC-2`, `AC-3`, `AC-4`, `AC-7`, `AC-9` | `#1`〜`#4` |
+| 6 | `codex.sh`: `launch_worker`実装 | lease取得を行わず、即座に`report_status blocked`（理由: 未構成）＋`exit 2`で返すfail-safe実装。将来のCodex実行系結線に向けた拡張ポイントコメントを付す | `AC-1`, `AC-5` | `#1` |
+| 7 | `human.sh`: `launch_worker`実装 | lease取得→`segment start`→通知（`gh issue comment`＋`worker:<segment>:awaiting-human`ラベル／ローカルmarker）→`exit 3`（deferred、release無し）。通知本文に`lease renew`／完了時手順（`checkpoint`→（specのみ）`pr create`→`report status`→`lease release`）を明記する | `AC-1`, `AC-2`, `AC-3`, `AC-6`, `AC-9` | `#1`〜`#4` |
+| 8 | 3 adapterの冒頭コメント更新 | 「launch_worker 相当は別途設計・実装が必要なため対象外」という記述を、実装済み・#166参照に更新する | `AC-1` | `#5`〜`#7` |
+| 9 | テスト追加 | `test/integration/gate-adapters.test.ts`と対称の`test/integration/worker-adapters.test.ts`を新設し、`WORKER_CMD`をstubに差し替えてbash経由で`worker-launch.sh`を駆動する。少なくとも以下を検証する: (a) claude成功時のexit 0・lease解放・`report_status completed`、(b) claude timeout/認証未設定時のexit非0非3・lease解放・`report_status blocked(human_escalation_requested=true)`、(c) codexの即blocked・exit 2・lease未取得のまま、(d) humanのexit 3・lease未解放・通知内容、(e) `wip.limit`到達時の`lease acquire`拒否、(f) 同issue内の他segment lease保持時の`lease acquire`拒否 | `AC-1`〜`AC-9`（`automated`分） | `#1`〜`#8` |
+| 10 | 既存テスト回帰確認 | `npm test`を実行し、既存`launch_gate_reviewer`関連テスト（`gate-adapters.test.ts`等）・`lease-renew.test.ts`・`github-lease.test.ts`が無破壊であることを確認する | `AC-10` | `#1`〜`#9` |
 
 ## 実装順序の見直しについて
 
-#1〜#8は既に完了・commit済みである。本ファイルは#9（本セッションの作業）着手前の実施済み内容を含めて記録した。#9以降に作業順序のみを見直す場合は本ファイルのみ更新すればよく、DESIGN.mdの更新は不要である。
+`#2`（issue横断コンフリクト検査）と`#3`（wip.limit検査）はどちらも`src/commands/lease.ts`の`acquire()`内であるため、実装時に1コミットへ統合してもよい（設計要素としては別関心事のため本ファイルでは分けて記載した）。`#5`〜`#7`（3 adapterの`launch_worker`本体）は`#1`〜`#4`共通基盤の完成後であれば並行実装可能である。作業順序のみを見直す場合は本ファイルのみを更新すればよく、`DESIGN.md`の更新は不要である。

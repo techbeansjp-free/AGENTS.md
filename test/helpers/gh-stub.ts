@@ -70,6 +70,32 @@ if (cmd === 'issue' && sub === 'view') {
   process.exit(0);
 }
 
+if (cmd === 'issue' && sub === 'edit') {
+  const issueNumber = args[2];
+  const addLabel = flag('--add-label');
+  const removeLabel = flag('--remove-label');
+  const state = loadState();
+  state.issueLabels = state.issueLabels || {};
+  state.issueLabels[issueNumber] = state.issueLabels[issueNumber] || [];
+  if (addLabel && !state.issueLabels[issueNumber].includes(addLabel)) {
+    state.issueLabels[issueNumber].push(addLabel);
+  }
+  if (removeLabel) {
+    state.issueLabels[issueNumber] = state.issueLabels[issueNumber].filter((l) => l !== removeLabel);
+  }
+  saveState(state);
+  process.exit(0);
+}
+
+if (cmd === 'issue' && sub === 'list') {
+  const label = flag('--label');
+  const state = loadState();
+  const issueLabels = state.issueLabels || {};
+  const numbers = Object.keys(issueLabels).filter((n) => !label || (issueLabels[n] || []).includes(label));
+  process.stdout.write(JSON.stringify(numbers.map((n) => ({ number: Number(n) }))));
+  process.exit(0);
+}
+
 if (cmd === 'pr' && sub === 'create') {
   process.stdout.write('https://github.com/test/repo/pull/1\\n');
   process.exit(0);
@@ -156,6 +182,7 @@ export interface GhStubState {
   rulesets: unknown[];
   prs: Record<string, unknown[]>;
   labels: string[];
+  issueLabels: Record<string, string[]>;
 }
 
 export interface GhStub {
@@ -176,7 +203,15 @@ export function createGhStub(baseDir: string): GhStub {
   const binDir = path.join(baseDir, 'gh-stub-bin');
   fs.mkdirSync(binDir, { recursive: true });
   const statePath = path.join(baseDir, 'gh-stub-state.json');
-  const initialState: GhStubState = { nextId: 1, clock: 1700000000000, comments: {}, rulesets: [], prs: {}, labels: [] };
+  const initialState: GhStubState = {
+    nextId: 1,
+    clock: 1700000000000,
+    comments: {},
+    rulesets: [],
+    prs: {},
+    labels: [],
+    issueLabels: {},
+  };
   fs.writeFileSync(statePath, JSON.stringify(initialState));
 
   const scriptPath = path.join(binDir, 'gh');
