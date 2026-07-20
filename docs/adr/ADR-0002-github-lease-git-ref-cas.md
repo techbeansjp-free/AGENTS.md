@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0002
-status: proposed
+status: accepted
 title: GitHubモードのwriter leaseをgit ref-based compare-and-setへ置換する
 tags: [lease, coordination-backend, github]
 supersedes: []
