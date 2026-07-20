@@ -4,7 +4,14 @@ import { repoRoot, resolveAsset } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { loadSegments } from '../lib/segments.js';
 import { parseIssueId, validateSegment, CliError, type Segment } from '../lib/issue.js';
-import { findIssueWorktree, worktreePathRegex, branchNameRegex, listWorktrees, defaultBranch } from '../lib/worktree.js';
+import {
+  findIssueWorktree,
+  worktreePathRegex,
+  branchNameRegex,
+  listWorktrees,
+  defaultBranch,
+  resolveCurrentBranch,
+} from '../lib/worktree.js';
 import { readYamlFile } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { digestOfFile } from '../lib/digest.js';
@@ -28,7 +35,12 @@ export async function branchName(args: string[]): Promise<number> {
     if (isHelp(args)) return printUsage(BRANCH_NAME_USAGE), 0;
     const root = repoRoot();
     const config = loadConfig(root);
-    const target = args[0] ?? git(['rev-parse', '--abbrev-ref', 'HEAD'], root).stdout.trim();
+    const target = args[0] ?? resolveCurrentBranch(root);
+    if (target === undefined) {
+      return fail(
+        '現在のブランチ名を解決できません（detached HEADかつ GITHUB_HEAD_REF 未設定）。branch_name を明示的に指定してください。',
+      );
+    }
     const regex = branchNameRegex(config);
     if (!regex.test(target)) {
       return violations([`branch '${target}' は branch.pattern（${config.branch.pattern}）に適合しません`]);

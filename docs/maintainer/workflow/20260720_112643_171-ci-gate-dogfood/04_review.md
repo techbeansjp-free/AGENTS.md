@@ -253,3 +253,59 @@ gate-review (design)	Publish gate report	Check Run 発行に失敗しました: 
 ### 教訓
 
 `gh`コマンドを内部で呼ぶステップは、`ANTHROPIC_API_KEY`等の外部サービス認証とは別に`GH_TOKEN`（GitHub CLI自身の認証）が必要であり、これを見落とすとjob自体の異常終了として現れる。また、あるworkflowステップがCI実行で「pass」した事実は、そのステップ内の`gh`呼び出しが実際に実行され成功したことを意味しない場合がある（今回のreconcile.ymlのように、条件分岐によって`gh`呼び出し自体がスキップされていただけの可能性がある）。true positiveのpassかどうかは、実行ログの分岐条件とコードパスを突き合わせて確認する必要がある。
+
+---
+
+## 10. 追記（5回目）: PR #172 実地実行で§9の修正後、`verify`ジョブの`verify branch-name`が同種のdetached HEADバグで失敗
+
+**発生**: §9の修正をpushし、PR #172の実GitHub Actions上で再実行したところ（run 29714290922、job 88264151305）、`verify`ジョブが以下のエラーで失敗した。
+
+```
+verify	verify-branch-name	branch 'HEAD' は branch.pattern（{type}/{issue_id}-{slug}）に適合しません
+##[error]Process completed with exit code 1.
+```
+
+### 根本原因
+
+§7で`src/lib/worktree.ts`の`findIssueWorktree()`に施した「detached HEAD状態でのブランチ名解決」修正と**同種・別箇所のバグ**。`git grep -n "abbrev-ref" src/`で調査したところ、`git(['rev-parse', '--abbrev-ref', 'HEAD'], root)`を直接呼び、detached HEAD時に文字列`"HEAD"`が返ることを考慮していない箇所が他に2つ存在した。
+
+- `src/commands/verify.ts:31`（`verify branch-name`コマンドで引数省略時に現在のHEADブランチを対象にする処理。今回実際にCIで踏んだ）
+- `src/commands/checkpoint.ts:37`（`checkpoint`コマンド。現状CIからは直接呼ばれていないが、将来的にworkerが実行する可能性がある同種のコード）
+
+同一ロジックを検証済みの`findIssueWorktree()`内にすでに実装していたにもかかわらず、それを他の呼び出し元と共有していなかったため、修正が1箇所にしか反映されず再発した。
+
+### 対応
+
+同じロジックを3箇所に別々に持つのではなく、`src/lib/worktree.ts`に共有ヘルパー`resolveCurrentBranchInfo(root): CurrentBranchInfo | undefined`（`{ branch: string | undefined; detached: boolean }`を返す）と、その薄いラッパー`resolveCurrentBranch(root): string | undefined`を新設し、1箇所に統一した。
+
+- `findIssueWorktree()`内の既存のdetached HEAD対応ロジック（`git rev-parse --abbrev-ref HEAD`の直接呼び出し＋`"HEAD"`判定＋`GITHUB_HEAD_REF`フォールバック）を`resolveCurrentBranchInfo()`の呼び出しに置き換えた（挙動は変えていない）。
+- `src/commands/verify.ts`の`branchName()`は`args[0] ?? git(['rev-parse', '--abbrev-ref', 'HEAD'], root).stdout.trim()`を`args[0] ?? resolveCurrentBranch(root)`に変更し、`resolveCurrentBranch`が`undefined`を返す場合（detached HEADかつ`GITHUB_HEAD_REF`未設定）は「現在のブランチ名を解決できません」という明確なエラーメッセージで終了コード1にした（従来は`undefined`が素通しで`target`に代入され、`target.trim()`相当の呼び出しで例外や無意味な文字列比較になっていた）。
+- `src/commands/checkpoint.ts`の`run()`も同様に`resolveCurrentBranch(root)`を使うよう変更し、`undefined`の場合は「commitは成功済み」である旨を明示したエラーメッセージを返すようにした（`git add`→`git commit`が先に成功しているため、push直前でブランチ名解決に失敗しても手動pushで復旧できることを示す）。
+
+### 副次的に発見・修正したバグ: `checkpoint`のpush refspecがdetached HEAD時に誤ったcommitをpushしうる
+
+`checkpoint.ts`の修正過程で、既存の`git push -u origin ${branch}`という呼び出し自体に別の潜在バグがあることに気づいた。`<branch>`のみを指定するrefspecは「ローカルの同名branch refの内容」をpushするのであり、現在のHEADをpushするわけではない。通常のチェックアウト（HEADがそのbranchを指している）では両者が一致するため問題は顕在化しないが、detached HEAD状態で`resolveCurrentBranch`が`GITHUB_HEAD_REF`経由でブランチ名を解決した場合、ローカルにその名前のbranch ref自体が存在しない、または存在しても現在のHEAD（今しがたcommitした内容）より古い可能性があり、その場合は今回commitした変更ではなく古い内容がpushされる、もしくはpush自体が"src refspec does not match any"で失敗する。実機（使い捨てリポジトリ）で`git push -u origin HEAD:refs/heads/<branch>`なら通常時・detached HEAD時のいずれでも常に現在のHEADの内容が正しくpushされることを確認し、refspecを`HEAD:refs/heads/${branch}`に変更した。
+
+### 追加したテスト
+
+- `test/unit/worktree.test.ts`
+  - `resolveCurrentBranch/resolveCurrentBranchInfo: 通常チェックアウトでは実ブランチ名を返しdetached=falseになる`
+  - `resolveCurrentBranch/resolveCurrentBranchInfo: detached HEADかつGITHUB_HEAD_REF設定済みならそのブランチ名を返しdetached=trueになる`（`git checkout --detach`後に`git rev-parse --abbrev-ref HEAD`が実際に`"HEAD"`を返すことをテスト内でassert）
+  - `resolveCurrentBranch/resolveCurrentBranchInfo: detached HEADかつGITHUB_HEAD_REF未設定ならbranchはundefinedのままdetached=trueになる`
+- `test/integration/verify.test.ts`
+  - `verify branch-name: 引数省略・detached HEAD状態でもGITHUB_HEAD_REFが設定されていればそのブランチ名で判定する`（`issue start`で作った実worktreeを`git checkout --detach`し、`GITHUB_HEAD_REF`環境変数経由で`verify branch-name`引数省略実行が成功することを確認）
+  - `verify branch-name: 引数省略・detached HEAD状態でGITHUB_HEAD_REFが未設定なら解決不能として明確なエラーになる`
+  - `checkpoint: detached HEAD状態でもGITHUB_HEAD_REFが設定されていればそのブランチへpushする`（`origin/feature/1-sample-feature`のSHAが実際にcheckpointの出力SHAと一致することまで確認し、refspec修正の効果を実地相当で検証）
+  - `checkpoint: detached HEAD状態でGITHUB_HEAD_REFが未設定なら解決不能として明確なエラーになる`（commit自体は成功済みでpushのみ失敗することも確認）
+
+### 横断確認
+
+`git grep -n "abbrev-ref" src/`・`git grep -n "rev-parse.*HEAD" src/`で全リポジトリを再確認し、他に同種の「現在のブランチ/HEADへの暗黙依存」箇所が無いことを確認した。`src/commands/adr.ts`・`src/commands/gate.ts`の`git(['rev-parse', 'HEAD'], entry.path)`はいずれも対象worktreeのSHA取得のみでdetached HEADでも問題なく動作するため対象外。
+
+### 検証結果
+
+`npm test`実測：`# tests 335 / # pass 335 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（既存328件全pass + 新規7件全pass）。
+
+### 教訓
+
+同一の「detached HEAD対応」ロジックを複数箇所に個別実装すると、1箇所を修正しても他の箇所は直らず、同じ障害が形を変えて再発する。CI実行で1つのバグを見つけて直したら、必ず同種のコードパターン（今回は`git rev-parse --abbrev-ref HEAD`の直接呼び出し）を`grep`で横断的に洗い出し、共有ヘルパーへ統一すべきである。また、ヘルパーを共有する過程で隣接コード（今回は`git push`のrefspec）まで併せて読むと、テストが通っていても実運用でのみ顕在化する別の潜在バグ（今回のpush refspec問題）を発見できることがある。

@@ -2,6 +2,7 @@ import { git } from '../lib/exec.js';
 import { repoRoot } from '../lib/paths.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { CliError } from '../lib/issue.js';
+import { resolveCurrentBranch } from '../lib/worktree.js';
 
 const USAGE = `
 使い方: agent-skill-chain checkpoint <message>
@@ -34,11 +35,21 @@ export async function run(args: string[]): Promise<number> {
     const commit = git(['commit', '-m', message], root);
     if (commit.status !== 0) return fail(`git commit に失敗しました: ${commit.stderr.trim()}`);
 
-    const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], root).stdout.trim();
+    const branch = resolveCurrentBranch(root);
+    if (branch === undefined) {
+      return fail(
+        '現在のブランチ名を解決できません（detached HEADかつ GITHUB_HEAD_REF 未設定。commitは成功済み）: git push を手動で実行してください。',
+      );
+    }
     // -u で upstream 追跡を設定する（worktree add -b で作成した新規branchは追跡未設定のため、
     // 素の push だけでは lib/worktree.ts の hasUnpushedCommits が @{upstream} を解決できず、
     // push成功後も常に「未push」と誤判定してしまう）。
-    const push = git(['push', '-u', 'origin', branch], root);
+    // refspec は素の `branch` ではなく `HEAD:refs/heads/${branch}` を使う: 素の `branch` は
+    // ローカルの同名branch refを指す refspec であり、detached HEAD状態（resolveCurrentBranch が
+    // GITHUB_HEAD_REF へフォールバックした場合）では現在のHEADと一致しない可能性があり、
+    // 今しがたcommitした内容ではなく古いbranch refの内容を push してしまう。HEAD を明示することで
+    // 常に「今このcheckoutで作った commit」がpushされることを保証する（attached時は従来と同じ）。
+    const push = git(['push', '-u', 'origin', `HEAD:refs/heads/${branch}`], root);
     if (push.status !== 0) return fail(`git push に失敗しました（commitは成功済み）: ${push.stderr.trim()}`);
 
     const sha = git(['rev-parse', 'HEAD'], root).stdout.trim();

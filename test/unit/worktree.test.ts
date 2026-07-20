@@ -13,6 +13,8 @@ import {
   findIssueWorktree,
   worktreePathRegex,
   branchNameRegex,
+  resolveCurrentBranch,
+  resolveCurrentBranchInfo,
 } from '../../src/lib/worktree.js';
 
 function gitIn(cwd: string, args: string[]): void {
@@ -222,6 +224,65 @@ test('findIssueWorktree: detached HEADかつGITHUB_HEAD_REF未設定でも単一
   assert.equal(found!.branch, undefined);
   assert.equal(found!.detached, true);
   assert.equal(found!.head, sha);
+});
+
+// resolveCurrentBranch / resolveCurrentBranchInfo は findIssueWorktree・verify branch-name・
+// checkpoint が共有する「現在のブランチ名解決」ロジックの唯一の実装。detached HEAD状態を
+// `git checkout --detach <sha>` で実際に再現し、GITHUB_HEAD_REF設定済み・未設定の両方を検証する。
+
+test('resolveCurrentBranch/resolveCurrentBranchInfo: 通常チェックアウトでは実ブランチ名を返しdetached=falseになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+
+  assert.equal(resolveCurrentBranch(repo.dir), 'feature/171-ci-gate-dogfood');
+  const info = resolveCurrentBranchInfo(repo.dir);
+  assert.deepEqual(info, { branch: 'feature/171-ci-gate-dogfood', detached: false });
+});
+
+test('resolveCurrentBranch/resolveCurrentBranchInfo: detached HEADかつGITHUB_HEAD_REF設定済みならそのブランチ名を返しdetached=trueになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  const sha = gitRev(repo.dir);
+  gitIn(repo.dir, ['checkout', '--detach', sha]);
+  assert.equal(
+    execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim(),
+    'HEAD',
+    '前提: detached HEAD状態を再現できていること',
+  );
+
+  const originalHeadRef = process.env.GITHUB_HEAD_REF;
+  process.env.GITHUB_HEAD_REF = 'feature/171-ci-gate-dogfood';
+  t.after(() => {
+    if (originalHeadRef === undefined) delete process.env.GITHUB_HEAD_REF;
+    else process.env.GITHUB_HEAD_REF = originalHeadRef;
+  });
+
+  assert.equal(resolveCurrentBranch(repo.dir), 'feature/171-ci-gate-dogfood');
+  const info = resolveCurrentBranchInfo(repo.dir);
+  assert.deepEqual(info, { branch: 'feature/171-ci-gate-dogfood', detached: true });
+});
+
+test('resolveCurrentBranch/resolveCurrentBranchInfo: detached HEADかつGITHUB_HEAD_REF未設定ならbranchはundefinedのままdetached=trueになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  const sha = gitRev(repo.dir);
+  gitIn(repo.dir, ['checkout', '--detach', sha]);
+
+  const originalHeadRef = process.env.GITHUB_HEAD_REF;
+  delete process.env.GITHUB_HEAD_REF;
+  t.after(() => {
+    if (originalHeadRef !== undefined) process.env.GITHUB_HEAD_REF = originalHeadRef;
+  });
+
+  assert.equal(resolveCurrentBranch(repo.dir), undefined);
+  const info = resolveCurrentBranchInfo(repo.dir);
+  assert.deepEqual(info, { branch: undefined, detached: true });
 });
 
 test('worktreePathRegex: path_patternに沿った形式のみ許容する', (t) => {

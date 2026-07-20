@@ -62,6 +62,62 @@ test('verify branch-name: 引数省略時は現在のHEADブランチを対象�
   assert.equal(onWorktree.status, 0, onWorktree.stderr);
 });
 
+// 実際の actions/checkout@v4 が pull_request イベントで作る detached HEAD 状態
+// （`switching to 'refs/remotes/pull/<n>/merge'`）を `git checkout --detach <sha>` で再現し、
+// `verify branch-name` の引数省略時の解決を検証する（PR #172 run 29714290922 で実落ち）。
+
+test('verify branch-name: 引数省略・detached HEAD状態でもGITHUB_HEAD_REFが設定されていればそのブランチ名で判定する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  execFileSync('git', ['checkout', '--detach', sha], { cwd: worktreePath, stdio: 'pipe' });
+  assert.equal(
+    execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim(),
+    'HEAD',
+    '前提: detached HEAD状態を再現できていること',
+  );
+
+  // Given: GITHUB_HEAD_REF が実際のブランチ名（pattern適合）で設定されている
+  // When: 引数省略・detached HEADで実行する
+  // Then: GITHUB_HEAD_REF経由で解決したブランチ名が pattern に適合し成功する
+  const withHeadRef = runCli(['verify', 'branch-name'], {
+    cwd: worktreePath,
+    env: { ...process.env, GITHUB_HEAD_REF: 'feature/1-sample-feature' },
+  });
+  assert.equal(withHeadRef.status, 0, withHeadRef.stderr);
+});
+
+test('verify branch-name: 引数省略・detached HEAD状態でGITHUB_HEAD_REFが未設定なら解決不能として明確なエラーになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  execFileSync('git', ['checkout', '--detach', sha], { cwd: worktreePath, stdio: 'pipe' });
+
+  // Given: GITHUB_HEAD_REF を明示的に未設定にする
+  const env = { ...process.env };
+  delete (env as Record<string, string | undefined>).GITHUB_HEAD_REF;
+
+  // When: 引数省略・detached HEAD・GITHUB_HEAD_REF未設定で実行する
+  // Then: ブランチ名を解決できない旨の明確なエラーで終了コード1になる（スタックトレースやTypeErrorではない）
+  const result = runCli(['verify', 'branch-name'], { cwd: worktreePath, env });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /現在のブランチ名を解決できません/);
+});
+
 // ---- verify worktree-path ----
 
 test('verify worktree-path: 明示引数で path_pattern 適合・違反を判定できる', async (t) => {
@@ -504,4 +560,77 @@ test('verify ac-coverage: 孤児AC・孤児テスト参照・evidence空をそ�
   assert.equal(orphanRefAndEmptyEvidence.status, 1);
   assert.match(orphanRefAndEmptyEvidence.stderr, /孤児テスト参照: AC-3 は SPEC\.md に存在しません/);
   assert.match(orphanRefAndEmptyEvidence.stderr, /AC-1: evidence が空です/);
+});
+
+// ---- checkpoint（detached HEAD） ----
+// checkpoint も lib/worktree.ts の resolveCurrentBranch を共有するため、verify branch-name と
+// 同じdetached HEAD観点（GITHUB_HEAD_REF設定済み・未設定）を実地相当で検証する。
+
+test('checkpoint: detached HEAD状態でもGITHUB_HEAD_REFが設定されていればそのブランチへpushする', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  execFileSync('git', ['checkout', '--detach', sha], { cwd: worktreePath, stdio: 'pipe' });
+  assert.equal(
+    execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim(),
+    'HEAD',
+    '前提: detached HEAD状態を再現できていること',
+  );
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: サンプル\n');
+
+  // Given: GITHUB_HEAD_REF が実際のブランチ名で設定されている
+  // When/Then: detached HEADでもGITHUB_HEAD_REF経由でブランチ名を解決し、commit+pushに成功する
+  const checkpoint = runCli(['checkpoint', 'wip: SPEC.md追加'], {
+    cwd: worktreePath,
+    env: { ...process.env, GITHUB_HEAD_REF: 'feature/1-sample-feature' },
+  });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const checkpointSha = checkpoint.stdout.trim();
+  assert.match(checkpointSha, /^[0-9a-f]{40}$/);
+
+  // detached HEAD状態でのpushは `git push origin <branch>`（ローカルの同名branch refを指す
+  // refspec）だと、今しがた作ったcommit（HEAD）ではなく古いbranch refの内容を押してしまいうる
+  // （checkoutされているのがbranchではないため）。origin側の実体（remote-tracking ref）を見て
+  // 実際にこのcommitがpushされたことを検証する。
+  const remoteRef = execFileSync('git', ['rev-parse', 'origin/feature/1-sample-feature'], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+  }).trim();
+  assert.equal(remoteRef, checkpointSha, 'commitがorigin/feature/1-sample-featureへ実際にpushされていること');
+});
+
+test('checkpoint: detached HEAD状態でGITHUB_HEAD_REFが未設定なら解決不能として明確なエラーになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  execFileSync('git', ['checkout', '--detach', sha], { cwd: worktreePath, stdio: 'pipe' });
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: サンプル\n');
+
+  const env = { ...process.env };
+  delete (env as Record<string, string | undefined>).GITHUB_HEAD_REF;
+
+  // When/Then: commit自体は成功するが、push先ブランチ名を解決できず明確なエラーで終了コード1になる
+  const checkpoint = runCli(['checkpoint', 'wip: SPEC.md追加'], { cwd: worktreePath, env });
+  assert.equal(checkpoint.status, 1);
+  assert.match(checkpoint.stderr, /現在のブランチ名を解決できません/);
+
+  // commitはすでに成立している（HEADが変わっている）ことを確認する
+  const newSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  assert.notEqual(newSha, sha, 'commit自体は成功済みであること');
 });

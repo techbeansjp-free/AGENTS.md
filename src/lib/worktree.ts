@@ -57,6 +57,45 @@ export function defaultBranch(repoRoot: string): string {
   throw new Error('デフォルトブランチを特定できません（origin/HEAD 未設定・main/master 不在）');
 }
 
+export interface CurrentBranchInfo {
+  /**
+   * 解決されたブランチ名。通常チェックアウトなら実ブランチ名、detached HEAD状態では
+   * `GITHUB_HEAD_REF` から取得したブランチ名、いずれからも得られない場合は undefined。
+   */
+  branch: string | undefined;
+  /** `git rev-parse --abbrev-ref HEAD` が文字列 "HEAD" を返す（detached HEAD状態）かどうか。 */
+  detached: boolean;
+}
+
+/**
+ * 現在のHEADのブランチ名を解決する（詳細版）。`git rev-parse --abbrev-ref HEAD` は通常
+ * チェックアウトでは実ブランチ名を返すが、`actions/checkout@v4` が pull_request イベントで
+ * PRのマージrefをdetached HEADでチェックアウトする場合（`switching to 'refs/remotes/pull/<n>/merge'`）
+ * は文字列 "HEAD" しか返らない。この場合 GitHub Actions が設定する `GITHUB_HEAD_REF`
+ * （PRのheadブランチ名）を代替のブランチ名ソースとして使う。`git rev-parse` 自体が失敗する場合
+ * （gitリポジトリでない等）は undefined を返す。
+ *
+ * `findIssueWorktree` のdetached HEAD対応と `verify branch-name`/`checkpoint` の
+ * 「現在のブランチ名」解決は同一ロジックであるため、本関数を唯一の実装として共有する。
+ */
+export function resolveCurrentBranchInfo(root: string): CurrentBranchInfo | undefined {
+  const result = git(['rev-parse', '--abbrev-ref', 'HEAD'], root);
+  if (result.status !== 0) return undefined;
+  const rawBranch = result.stdout.trim();
+  const detached = rawBranch === 'HEAD';
+  const branch = detached ? process.env.GITHUB_HEAD_REF || undefined : rawBranch;
+  return { branch, detached };
+}
+
+/**
+ * 現在のHEADのブランチ名のみを解決する薄いラッパー。detached HEAD状態では `GITHUB_HEAD_REF` へ
+ * フォールバックし、それも無ければ undefined を返す。呼び出し元は undefined を
+ * 「ブランチ名を解決できない」ケースとして明示的にハンドリングすること。
+ */
+export function resolveCurrentBranch(root: string): string | undefined {
+  return resolveCurrentBranchInfo(root)?.branch;
+}
+
 export function hasUnpushedCommits(worktreePath: string, branch: string): boolean {
   const upstream = git(['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], worktreePath);
   if (upstream.status !== 0) {
@@ -113,11 +152,9 @@ export function findIssueWorktree(
   });
   const branchRegex = new RegExp(`^${branchPatternSource}$`);
 
-  const currentBranch = git(['rev-parse', '--abbrev-ref', 'HEAD'], root);
-  if (currentBranch.status !== 0) return undefined;
-  const rawBranch = currentBranch.stdout.trim();
-  const isDetached = rawBranch === 'HEAD';
-  const branch = isDetached ? process.env.GITHUB_HEAD_REF : rawBranch;
+  const currentBranchInfo = resolveCurrentBranchInfo(root);
+  if (!currentBranchInfo) return undefined;
+  const { branch, detached: isDetached } = currentBranchInfo;
 
   const head = git(['rev-parse', 'HEAD'], root);
   if (head.status !== 0) return undefined;
