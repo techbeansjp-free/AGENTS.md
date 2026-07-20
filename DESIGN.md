@@ -1,155 +1,155 @@
-# DESIGN: agent-skill-chain Tier 1 — adapters launch_worker（spec/design/implementation/validationワーカー起動）の設計
+# DESIGN: agent-skill-chain — doctor網羅性拡張・branch-name自己違反・segments.yaml矛盾・PRテンプレート未使用の解消
 
-- Issue: `ISSUE-166`
+- Issue: `ISSUE-174`
 - 対応する SPEC: `SPEC.md`
 
 ## 要件 → 設計要素の対応表
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| `AC-1` | `launch_worker`共通シグネチャ（`<issue_id> <segment>`、CWD=対象worktree） | 3 adapter（claude/codex/human）同一 |
-| `AC-2` | `launch_worker`内のlease取得→segment start→起動→解放/blocked報告の一連処理 | 失敗時は必ず`release_lease`または`report_status blocked` |
-| `AC-3` | `_asc_cli segment start`の標準出力（`role: <role>\n<role_contract yaml>`）をそのままworker起動系（プロンプト/通知本文）へ引き渡す | 新規CLIサブコマンド不要 |
-| `AC-4` | claude.sh `launch_worker`: `WORKER_CMD`（既定`claude -p ...`）をworktree内で起動、認証未設定はfail-safe | 起動系はテスト時`WORKER_CMD`で完全にモック可能 |
-| `AC-5` | codex.sh `launch_worker`: lease取得を試みず即fail-safe（`report_status blocked`＋exit 2） | 将来の実結線ポイントをコメントで明記 |
-| `AC-6` | human.sh `launch_worker`: lease取得→`segment start`→通知発行（`gh issue comment`/ローカルmarker）→exit 3（deferred） | 人間自身が`lease renew`/`report_status`/（spec限定）`pr create`を実行する手順を通知本文に明記 |
-| `AC-7` | claude.sh: 起動失敗・timeout・認証未設定はすべて`release_lease`＋`report_status blocked(human_escalation_requested=true)`＋非0非3で返す | worker-report.schema.yamlの`status=blocked`語彙へ写像 |
-| `AC-8` | `lease acquire`（`src/commands/lease.ts`）への`wip.limit`事前チェック追加（GitHubモード=`writer-lease:active`ラベル数、ローカルモード=`issues/*/.agent-skill-chain/lease.yaml`件数） | `launch_worker`はacquire失敗をそのままblocked報告として扱うのみで独自のWIP判定を持たない |
-| `AC-9` | segment分岐なし。`segment start`が返すrole_contract自体（`roles.yaml`の`role_contracts.spec_worker`）がDraft PR作成をspecのみの完了条件として既に記述しているため、`launch_worker`は全segment共通処理のまま成立する | 詳細は「Draft PR非対称性の扱い」節 |
-| `AC-10` | 既存`launch_gate_reviewer`のシグネチャ・終了コード契約は無変更。新規関数`launch_worker`を追加するのみ | 既存237件超＋#164/#165テストを無破壊に保つ |
+| `AC-1` | `doctor.ts`: worktree命名規約チェック（`listWorktrees`+`worktreePathRegex`再利用） | 新規lib関数不要、既存`verify worktree-path`と同一ロジックを直接呼び出す |
+| `AC-2` | `doctor.ts`: main worktree cleanチェック（`hasUncommittedChanges`再利用） | 対象は`listWorktrees()[0].path`（主worktree）。cwdが非主worktreeでも正しく主worktreeを判定する |
+| `AC-3` | `doctor.ts`: template-syncチェック（`lib/template-sync.ts`新設・共有化） | `verify.ts`の`templateSync()`と実装を共有し、重複を避ける |
+| `AC-4` | `doctor.ts`: schemas構文チェック（`resolveAsset('schemas', root)`配下`*.yaml`を`readYamlFile`で構文検査） | JSON Schema自体としての妥当性ではなく、YAML構文としてのparse可否のみを見る |
+| `AC-5` | 上記4項目とも、正常系では`Check{ok:true}`を返し既存5項目と合流する | 既存`checks`配列への追加のみ、出力形式（`OK`/`NG`行）は既存踏襲 |
+| `AC-6`, `AC-7` | `.agent-skill-chain/config/agent-skill-chain.yaml`の`issue.allowed_types`へ`chore`追加、`.agent-skill-chain/schemas/config.schema.yaml`の対応enum更新 | `branchNameRegex`/`worktreePathRegex`は`config.issue.allowed_types`を動的参照するためコード変更不要 |
+| `AC-8` | `.agent-skill-chain/config/segments.yaml`の`validation.outputs`から`pr`削除、`src/commands/verify.ts`の`checkOutputExists()`から`case 'pr':`削除 | `segments.schema.yaml`の`outputs`はenum制約が無いため schema変更不要 |
+| `AC-9` | `checkOutputExists()`の`default: return false`へ委譲（安全側） | `acceptance_test_results`/`regression_test_results`の既存判定ロジックは無変更 |
+| `AC-10` | `src/commands/pr.ts`の`create()`GitHubモード分岐: PRテンプレート読込→5節挿入→`findIssueWorktree`経由でSPEC.md/DESIGN.mdから可能な範囲を自動充填→`gh pr create --body` | 詳細は「PR本文組み込み方式」節 |
+| `AC-11` | 4項目とも既存関数・既存フィールドの追加的拡張のみ（削除・置換を伴うのは`case 'pr':`の1箇所のみで、これは`segments.yaml`側除去と対）であり、影響範囲は限定的 | 影響を受けるテスト一覧は「障害・ロールバック考慮」節 |
 
 ## 責務・境界
 
 ### コンポーネント構成
 
-- `.agent-skill-chain/adapters/{claude,codex,human}.sh`の`launch_worker`関数: 本Issueの主成果物。役割・権限を実行系へ変換する薄い層。lease取得・`segment start`呼び出し・worker実行系起動・lease解放・完了報告の一連を担う。
-- `.agent-skill-chain/scripts/worker-launch.sh`（新設、`gate-launch-reviewer.sh`と対称の起動ラッパー）: `.agent-skill-chain/config/agent-skill-chain.yaml`の`worker.adapter`からadapterを解決し、該当`launch_worker`を起動する。adapter未解決・関数未定義時のフェイルセーフ書込みを担う（`gate-launch-reviewer.sh`と同型）。
-- `src/commands/lease.ts`（既存拡張）: `acquire()`へ (a) GitHubモードのissue横断コンフリクト検査、(b) `wip.limit`事前チェックを追加する。`launch_worker`自体はこの2点を独自に判定しない（既存のacquire失敗経路にそのまま乗る）。
-- `.agent-skill-chain/config/agent-skill-chain.yaml` / `config.schema.yaml`: `worker.adapter`（`claude|codex|human`、既定`human`）を新設する。
-- `segment-start.sh`（既存・無変更）: `launch_worker`が唯一のrole_contract取得手段として呼び出す。
+- `src/commands/doctor.ts`（既存拡張）: 既存5項目（git／git repository／config／［githubモード時のみ］gh CLI／gh auth）に加え、worktree命名規約・main worktree clean・template-sync・schemas構文の4項目を`checks`配列へ追加する。既存の「1項目=1 Check{label,ok,reason}」構造を踏襲し、新規のCheck表現形式は導入しない。
+- `src/lib/template-sync.ts`（新設）: `verify.ts`の`templateSync()`内にあった`listFilesRecursive()`と差分計算ロジックを`computeTemplateSyncDiffs(targetRoot: string): string[]`として抽出する。`verify.ts`の`templateSync()`はこれを呼び出す薄いラッパーに変わり、`doctor.ts`も同じ関数を呼ぶ。ロジックの二重実装を避ける（DRY）。
+- `.agent-skill-chain/config/agent-skill-chain.yaml` / `.agent-skill-chain/schemas/config.schema.yaml`: `issue.allowed_types`に`chore`を追加（設定値＋対応enum）。
+- `.agent-skill-chain/config/segments.yaml`: `validation`セグメントの`outputs`から`pr`を除去。
+- `src/commands/verify.ts`: `checkOutputExists()`の`case 'pr': return true;`を削除する（`default: return false`に委譲）。
+- `.agent-skill-chain/templates/github/.github/pull_request_template.md`: 既存の「Issue」「このPRに含まれるセグメント」「自己完結性チェック」の3節はそのまま維持し、「Issue」節の直後に「変更概要」「理由」「影響範囲」「ロールバック方針」「成果物リンク」の5節をプレースホルダ付きで追加する。
+- `src/commands/pr.ts`: `create()`のGitHubモード分岐を拡張し、上記テンプレートを読み込んで本文を組み立てる。ローカルモード分岐（Integration Record）は無変更。
+- `.agent-skill-chain/standards/GIT_CONVENTIONS.md`: `type: feature | bugfix | hotfix | refactor | docs | process`の列挙に`chore`を追記し、`issue.allowed_types`との整合を保つ（ドキュメント側の陳腐化防止）。
 
 ### 依存関係
 
 ```text
-launch_worker(issue_id, segment)
-  → acquire_lease(issue_id, segment)            [lease-acquire.sh: wip.limit検査 + 同issue内他segmentコンフリクト検査]
-  → _asc_cli segment start <issue_id> <segment>  [role_contract取得。lease有効性の再検証を兼ねる]
-  → (claude) WORKER_CMD 起動 + renew_lease 定期実行ループ
-  → (human)  gh issue comment / ローカルmarker 通知
-  → (codex)  何もしない（fail-safe）
-  → release_lease + report_status(completed|blocked)
+doctor.ts
+  → lib/worktree.ts（listWorktrees, worktreePathRegex, hasUncommittedChanges）  ※既存、無変更
+  → lib/template-sync.ts（computeTemplateSyncDiffs）  ※新設、verify.tsと共有
+  → lib/paths.ts（resolveAsset）  ※既存、schemas ディレクトリ列挙に利用
+  → lib/yaml-io.ts（readYamlFile）  ※既存、schemas構文検査に利用
+
+verify.ts（templateSync）
+  → lib/template-sync.ts（computeTemplateSyncDiffs）  ※doctor.tsと共有元を一本化
+
+pr.ts（create, GitHubモード）
+  → lib/worktree.ts（findIssueWorktree）  ※既存、issue_idからworktree実体を解決（cwdに依存しない）
+  → lib/paths.ts（resolveAsset）  ※pull_request_template.md読込
+  → gh pr create --body <組立本文>
 ```
 
-循環依存は無い。`launch_worker`は`segment start`・`lease-*.sh`・`checkpoint.sh`・`report-status.sh`・`pr-create.sh`という既存の薄いCLIラッパーのみに依存し、これらの内部実装（TypeScript側）には触れない。
+循環依存は無い。4項目は互いに独立（SPEC.mdの「相互依存はない」記載のとおり）であり、`doctor.ts`・`verify.ts`・`pr.ts`・`config`/`segments`は既存の依存方向（commands → lib → 外部コマンド）を維持する。
 
-## `launch_worker`共通シグネチャ（3 adapter同一）
+## doctor拡張4項目の実装方式（AC-1〜AC-5）
 
+既存`doctor.ts`は「1チェック=1カテゴリ（該当インスタンスが複数あっても集約して1つのCheckとして報告し、`reason`に詳細を列挙する）」という粒度を採用している（例: 既存の「.agent-skill-chain/config/agent-skill-chain.yaml」チェックはファイル1つだが、仮に複数の設定エラーがあってもreason文字列内に列挙する設計）。新規4項目もこの粒度に合わせ、個別インスタンス（worktree複数件・schemaファイル複数件）ごとのCheckを増殖させない。
+
+1. **worktree命名規約**（AC-1）: `root`解決済みかつ`config`読込済みの後、`listWorktrees(root)`を呼び、`verify.ts`の`worktreePath()`と同じ除外規則（先頭の主worktree自身を対象外にする）で残りのworktreeを`worktreePathRegex(config)`に照合する。全滴合ならCheck `{label: 'worktree命名規約', ok: true}`。不適合が1件以上あれば `{ok: false, reason: '<path1>, <path2> は worktree.path_pattern に適合しません'}`。追加worktreーが0件の場合は自明にOK（対象なしでも「OK」表示、AC-5の「4項目全てがOK表示される」を満たす）。
+2. **main worktreeのclean状態**（AC-2）: `listWorktrees(root)[0].path`を主worktreeのパスとする（`git worktree list --porcelain`の先頭は常に主worktree、既存コメントで確立済みの前提）。`hasUncommittedChanges(mainPath)`が`false`ならOK。doctorはどのworktree（main／issue用）から実行されても、常に主worktree自体の状態を見る（cwd依存にしない）。
+3. **template-sync相当**（AC-3）: `lib/template-sync.ts`の`computeTemplateSyncDiffs(root)`を呼び、空配列ならOK、非空なら`{ok:false, reason: diffs.join('; ')}`。既存`verify template-sync`と全く同じ判定基準（欠落・内容不一致）を用いる。
+4. **schemas構文妥当性**（AC-4）: `resolveAsset('schemas', root)`でディレクトリを解決し、`fs.readdirSync`で`*.yaml`を列挙、各ファイルを`readYamlFile()`でtry/catchしながらparseする。1件でも例外が出れば`{ok:false, reason: '<file>: <エラーメッセージ>'}`（複数ある場合は`; `区切りで連結）。JSON Schemaとしての意味的検証（`$schema`準拠等）は行わない（AC-4の要求はYAML構文の妥当性のみ）。
+
+いずれも「root解決失敗時（`repoRoot()`が例外）」の既存分岐の外側（`if (root) {...}`ブロック内）に置き、config読込に失敗した場合はconfigに依存する1・3の2項目をスキップする（既存のgh CLIチェックと同じ「configが無ければ後続をスキップ」方針を踏襲）。4（schemas構文）はconfigに依存しないため、config読込失敗時も独立して実行する。
+
+## `issue.allowed_types`への`chore`追加の影響範囲（AC-6, AC-7）
+
+- **設定値**: `.agent-skill-chain/config/agent-skill-chain.yaml`の`issue.allowed_types`を`[feature, bugfix, hotfix, refactor, docs, process, chore]`に変更する（末尾追加、既存順序は保持）。
+- **schema側**: `.agent-skill-chain/schemas/config.schema.yaml`の`properties.issue.allowed_types.items.enum`に`chore`を追加する。ここを更新しないと、実際のconfigは受理可能になっても`agent-skill-chain/config/v1`スキーマとしては不正値扱いになり、schema検証を行う経路（`validateAgainstSchema('config', ...)`を将来的に呼ぶ箇所や、consumer projectが自身のconfigをこのschemaで検証するケース）で矛盾が生じる。examplesブロックは既存のまま（enum網羅の例示ではなく有効値の1サンプルであるため`chore`追加は必須ではない）。
+- **既存テストへの影響**: `test/unit/config.test.ts`の`deepEqual(config.issue.allowed_types, [...])`が現状6要素を期待しており、`chore`追加後は7要素の配列に更新が必要（実装フェーズのタスク）。`test/integration/claude-pretooluse.test.ts`は独自の`allowed_types: [feature]`をテスト内で個別に書き込んで検証しており、ベース設定の変更による影響を受けない。
+- **ドキュメント側の整合**: `.agent-skill-chain/standards/GIT_CONVENTIONS.md`の`type: feature | bugfix | hotfix | refactor | docs | process`という列挙表記に`chore`を追記する（「参照・コメントの陳腐化防止」原則には抵触しない。これは他ファイルへの位置参照ではなく許容type一覧の直接列挙であり、値そのものの記載）。
+- **対象外とする関連物**: `.agent-skill-chain/templates/github/.github/ISSUE_TEMPLATE/`配下は`{bugfix,docs,feature,hotfix,process,refactor}.yml`の6種＋GitHub予約ファイル`config.yml`（Issue Formピッカー設定、typeとは無関係）で構成されるが、`chore.yml`の新設は本Issueのスコープに含めない。理由: SPEC.mdの要件2は「`issue.allowed_types`とschema・関連ドキュメントの整合」のみを求めており、GitHub Issue Form（起票UI）の追加は别関心事（配布物拡張）である。既存の自己矛盾（`chore/162-...`ブランチはIssue Formを経由せず作成されたブートストラップ作業）はIssue Form不在でも解消される（`verify branch-name`はブランチ名文字列のみを見る）。
+
+## `segments.yaml`矛盾解消の影響範囲（AC-8, AC-9）
+
+- **`segments.yaml`側**: `validation`セグメントの`outputs`を`[acceptance_test_results, regression_test_results, pr]`から`[acceptance_test_results, regression_test_results]`へ変更する。
+- **`segments.schema.yaml`側**: `properties.segments.items.properties.outputs`は`{type: array, items: {type: string}, minItems: 1}`のみでenum制約が無いため、**schema変更は不要**（`pr`という文字列値自体に対する列挙制約が元々存在しない）。schema_versionの更新も不要（4セグメントのid/next連鎖という構造自体は無変更のため、AGENTS.mdが定める「セグメント自体の追加・変更」には該当しないと判断する。詳細は「関連ADR」節）。
+- **`verify.ts`側**: `checkOutputExists()`の`case 'pr': return true;`を削除する。`pr`という文字列はもう`outputs`に出現しないため到達不能コードになるが、削除しない場合「常にtrueを返す出力名」という誤誘導的な分岐が残置され、将来別の出力名として`pr`相当の文字列が誤って復活しても無条件成功してしまう危険がある（安全側ではない）。削除後は`default: return false`に委譲され、未知の出力名は常にNG（欠落）として扱われる——安全側ラチェット（I8）に合致する。
+- **既存テストへの影響**: `test/unit/segments.test.ts`の`EXPECTED`配列内、`validation`セグメントの`outputs`から`'pr'`を削除する（実装フェーズのタスク）。`test/integration/verify.test.ts`には`'pr'`出力を直接検証するテストが無いため、`verify artifacts <issue> validation`関連の既存テスト（VALIDATION.mdの有無で成否が切り替わる旨のテスト）は無変更で通過する。
+
+## PR本文組み込み方式（AC-10）
+
+### 前提となる制約: PR作成タイミングでは大半の節が埋まらない
+
+AGENTS.md §4セグメント・4ゲートのフローは「SPECワーカーが最初のcheckpointをpush → SPECワーカーがDraft PRを作成」であり、`pr create`はspecセグメント完了直後、すなわち**DESIGN.md／PLAN.md／VALIDATION.mdがまだ存在しない時点**で呼ばれる。したがって「変更概要・理由・影響範囲・ロールバック方針・成果物リンク」の全節を作成時点で意味のある内容で埋めることは原理的に不可能であり、設計は「どの節が作成時点で自動充填可能か」を切り分ける。
+
+### テンプレート側の変更
+
+`.agent-skill-chain/templates/github/.github/pull_request_template.md`の「## Issue」節の直後に、以下5節をプレースホルダ付きで追加する（既存の「このPRに含まれるセグメント」「自己完結性チェック」の2節はそのまま後続に残す）。
+
+```markdown
+## 変更概要
+
+<変更概要をここに記述>
+
+## 理由
+
+<理由をここに記述>
+
+## 影響範囲
+
+<影響範囲をここに記述>
+
+## ロールバック方針
+
+<ロールバック方針をここに記述>
+
+## 成果物リンク
+
+<成果物リンクをここに記述>
 ```
-launch_worker <issue_id> <segment>
-```
 
-- 引数: `issue_id`（`ISSUE-<番号>`）、`segment`（`spec|design|implementation|validation`）の2つのみ。
-- 前提: カレントディレクトリが対象Issueのworktree内であること（`checkpoint.sh`/`gate-review.sh`と同じ規約。`worktree_path`を引数化しない）。
-- 終了コード契約（`launch_gate_reviewer`の0/3/errorと対称）:
-  - `0`: worker完了（`report_status completed`済み、lease解放済み）
-  - `3`: deferred（human adapterのみ。正常系。lease は保持継続、人間の非同期作業待ち）
-  - それ以外（`!=0,!=3`）: error（`report_status blocked`・lease解放済み、`human_escalation_requested=true`）
-- env（3 adapter共通）: `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`（claude認証、実値は非ログ出力）、`WORKER_CMD`（起動系の上書き・テスト用モック境界）、`WORKER_TIMEOUT_SEC`（既定値は実装フェーズで`lease.ttl_seconds`との整合を見て確定。テストでは短時間値を注入）。
+### `pr.ts`側の充填ロジック（呼び出し元からは受け取らない設計）
 
-`launch_worker`はrole（`spec_worker`等）を引数に取らない。`segment`→`role`の対応は`SEGMENT_TO_ROLE`（`src/commands/segment.ts`）が既に唯一の正本であり、`launch_worker`はこれを`_asc_cli segment start`経由で間接的にのみ利用する（bashコード側に対応表を複製しない＝DRY）。
+`create()`のシグネチャ（`<issue_id> <branch>`）は変更しない。呼び出し元（spec worker）に新規CLI引数で本文各節を渡させる設計は採らない——理由は次の2点。(1) 影響範囲・ロールバック方針はDESIGN.mdの内容そのものであり、spec worker自身がpr create実行時点でこれを正しく記述できる立場にない。(2) 複数行テキストをCLI引数・環境変数経由で安全に受け渡す実装（shellクォーティング・改行エスケープ）は`worker-launch.sh`系の既存adapterとの整合を新たに設計し直す必要が生じ、本Issueのスコープ（既存機構の拡張）を超える。
 
-## lease取得→起動→解放の順序（AC-2）
+代わりに、`findIssueWorktree(root, config, number)`（`lib/worktree.js`、既存関数）で解決した対象issueのworktreeパスから、既に存在する成果物ファイルの**雛形で固定された見出し・箇条書きラベル**（自由記述ではなく`.agent-skill-chain/templates/issue/{SPEC,DESIGN}.md`が定める安定した見出し文字列）にのみ依存した抽出を行う。雛形の見出し変更はテンプレート変更（配布物の変更）であり日常的に起こらないため、抽出ロジックが恒常的にずれるリスクは低いと判断する。
 
-1. **取得**: `acquire_lease "$issue_id" "$segment"`（`lease-acquire.sh`）。失敗（`wip.limit`超過・同issue内他segmentのlease競合・同一segmentの競合のいずれか）はここで即`return 1`。この時点ではまだ何のプロセスも起動しておらず解放すべきleaseも存在しないため、blocked報告は行わない（呼び出し側=`worker-launch.sh`が非0終了コードをそのまま人間可視化する）。
-2. **役割取得**: `_asc_cli segment start "$issue_id" "$segment"`でrole_contractを取得する。取得後にlease有効性が再検証される（`segment-start.sh`が内部でlease確認する既存動作）。失敗時は`release_lease`してから`return`する（起動前のためworker-report無し）。
-3. **起動**（adapter別。次節）。
-4. **終了処理**:
-   - 成功（claude完了 / human通知成功）: claudeは`release_lease`＋`report_status completed`まで実行してから`return 0`。humanは**releaseしない**（作業継続中のため）まま`return 3`。
-   - 失敗・timeout: `release_lease`（失敗しても`|| true`で握り潰さず、少なくとも1回は試行しログに残す）＋`report_status blocked, human_escalation_requested=true`の後、非0非3で`return`する。
-
-この順序により、起動失敗時にleaseが保持されたまま放置される経路が存在しない（AC-2充足）。「保持継続」はSPEC本文の想定どおり、claude起動中〜完了確認までの区間でrenewループにより維持される状態を指し、完了・失敗いずれの終端でも明示的な解放（またはhuman deferred時の意図的保持）に必ず帰結する。
-
-## `segment-start.sh`との統合方法（AC-3）
-
-`segment start`の標準出力（`role: <role_name>\n<role_contractのYAML>`）を**唯一のrole_contract受け渡し経路**として再利用する。新規CLIサブコマンドは追加しない。
-
-- claude adapter: この出力をそのままworkerプロンプトの本文として（前後に短い定型の指示文を付けて）標準入力経由でworker実行系へ渡す（`launch_gate_reviewer`が`gate reviewer-prompt`の出力をstdin経由でレビュアへ渡す既存パターンと同型）。
-- human adapter: この出力を通知本文（`gh issue comment`本文 / ローカルmarkerファイル）へそのまま埋め込む。
-- codex adapter: 未構成のため出力を取得・使用しない（lease未取得のまま即fail-safeするため）。
-
-## adapter別の実装方針
-
-### claude adapter（実起動・AC-4/AC-7）
-
-既存`launch_gate_reviewer`の「認証チェック→実行系解決→timeout付き起動→結果を trusted CLI へ結線」という骨格を踏襲しつつ、以下の3点が異なる。
-
-| 観点 | `launch_gate_reviewer`（read-only） | `launch_worker`（writer） |
+| 節 | 充填方法 | 作成時点で埋まる想定 |
 |---|---|---|
-| 起動系の権限 | `--allowed-tools ''`（無ツール） | 書込みツール（Edit/Write/Bash）を許可する非対話フラグ |
-| リトライ | 一時障害を`retries`回リトライ | **リトライしない**（後述の理由） |
-| 完了後の書込み | 呼び出し側（adapter）が`record-verdict`で結線 | worker自身が`checkpoint.sh`（＋specのみ`pr-create.sh`）で自ら書込む |
-| lease | 対象外（`lease: none`） | 取得・renewループ・解放を`launch_worker`が管理 |
+| 変更概要 | `SPEC.md`のH1行（`# SPEC: <タイトル>`の`<タイトル>`部分） | 埋まる（SPEC.mdは必ず存在） |
+| 理由 | `SPEC.md`の`## 目的・背景`節の本文全体 | 埋まる |
+| 影響範囲 | `DESIGN.md`が存在すれば、その`## 障害・ロールバック考慮`節内の`- 影響を受ける既存機能: ...`行 | 通常は埋まらない（DESIGN.md未作成のため）。プレースホルダのまま残す |
+| ロールバック方針 | 同節内の`- ロールバック手順: ...`行 | 通常は埋まらない。プレースホルダのまま残す |
+| 成果物リンク | worktree直下に存在する`SPEC.md`/`DESIGN.md`/`PLAN.md`/`VALIDATION.md`を、存在するものだけ`` `ファイル名` ``形式で箇条書き | SPEC.mdのみが埋まる（他は後続segmentで追加された時点でPR本文上は反映されないが、diff自体で確認可能なため許容） |
 
-- **起動**: `WORKER_CMD`（既定は`claude -p --output-format text`＋書込み許可のための非対話フラグ）を`timeout "$WORKER_TIMEOUT_SEC" bash -c "$WORKER_CMD"`でバックグラウンド起動し、PIDを保持する。書込み許可フラグの正確な値（`--permission-mode`系か`--dangerously-skip-permissions`系か）は実装フェーズでインストール済みCLIバージョンに対し実機検証のうえ確定する——`WORKER_CMD`による完全上書きが可能なため、この確定の遅延は`launch_worker`関数自体の契約（引数・終了コード・lease連携）に影響しない。
-- **renewループ**: サブプロセスPIDに対し`kill -0`で生存確認しつつ`renewal_interval_seconds`ごとに`renew_lease`を呼ぶバックグラウンドループを子プロセス実行中のみ動かし、`wait`でサブプロセス終了を待つ。
-- **リトライしない理由**: ゲート判定は状態を変更しない冪等な操作なので一時障害のリトライが安全だが、workerは実際にファイルを書き換える非冪等な操作を行う。失敗直後に無条件リトライすると、部分的に書き換わった状態の上に二重に作業させる・二重commitを生む等の実害があるため、1回の起動失敗は即座に`blocked`として人間判断へ委ねる（I8: 迷ったら安全側）。
-- **完了確認**: サブプロセスの終了コードが0のみでは「本当にcheckpointまで終えたか」を保証しないため、`launch_worker`は終了後に`report-status.sh`が生成した直近レポート（`worker-report.schema.yaml`準拠）の`status`を確認し、`completed`かつ`target_sha`がpush済みHEADと一致する場合のみ`return 0`とする。一致しない場合は「完了を騙る」ケースも安全側でblocked扱いにする（I8）。
-- **認証未設定・CLI不在**: `launch_gate_reviewer`と同じフェイルセーフ（`ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN`いずれも無ければ起動せず即blocked）。
+`SPEC.md`/`DESIGN.md`のいずれかが読めない場合（`findIssueWorktree`が`undefined`を返す、または該当ファイルが無い、または該当見出し・箇条書きが見つからない）は、該当節のプレースホルダをそのまま残す（例外を投げてpr create自体を失敗させない——「呼び出し時点で埋まらない節はプレースホルダのまま残す」という設計方針の直接的な実装）。「## Issue」節内の`Closes #<issue-id>`は既存どおり`#${number}`へ機械的に置換する。
 
-### codex adapter（I/Fパリティ・fail-safe deferral・AC-5）
+### テンプレートファイル不在時のフォールバック
 
-`launch_gate_reviewer`のcodex実装と同型。**lease取得を一切試みない**——Codex実行系は未構成で必ず失敗するとわかっているため、WIP枠を消費させないことを優先する（lease取得済みで即失敗すると解放処理が余計に発生し、かつその間WIP上限を無駄に消費する）。
+`resolveAsset(path.join('templates','github','.github','pull_request_template.md'), root)`が例外を投げる場合（配布同期前・パッケージ側にも同ファイルが無い状態）は、本文組み立て自体を行わず、**Issue #174着手前の既存挙動と完全に同一の`Closes #${number}`のみの本文**にフォールバックする。これにより既存の`pr create`呼び出し（`test/integration/issue-lifecycle.test.ts`・`github-backend.test.ts`）に対する後方互換を保つ。
 
-```
-launch_worker() {
-  # 引数検証のみ行い、lease取得前に「codex未構成」を明示してreport_status blockedを1回書き、exit 2で返す。
-  # 将来の拡張ポイント: Codex実行系（CLI/API・認証OPENAI_API_KEY・書込み許可）が確定したら、
-  # claude.shのlaunch_workerと同じ「lease取得→起動→renewループ→完了確認→解放」構造へ置き換える。
-}
-```
+### ローカルモードへの影響
 
-### human adapter（通知＋非同期・AC-6）
-
-lease取得と`segment start`まではclaudeと共通（役割・入力を人間へ正確に伝達するため）。その後はサブプロセスを起動せず、`launch_gate_reviewer`のhuman実装と同じ通知経路（GitHubモード=`gh issue comment`＋`worker:<segment>:awaiting-human`ラベル、ローカルモード=marker file）で以下を明記した通知を送り、`return 3`で即座に返す。
-
-- 実施すべき作業内容（`segment start`が返したrole_contract全文）。
-- 作業が長時間に及ぶ場合は`lease renew <issue_id> <token>`を`renewal_interval_seconds`間隔で自ら呼び出すこと（怠るとTTL切れで`reconcile.sh`が回収し人間判断へ再エスカレーションされる＝安全側だが二度手間になる）。
-- 完了時は`checkpoint.sh`→（spec segmentのみ）`pr-create.sh`→`report-status.sh`→`lease-release.sh`の順に自ら実行すること。
-
-renewループは`launch_worker`側では起動しない（サブプロセスが存在せず生存監視の対象が無いため）。TTL切れによる自然な回収が安全側のフォールバックになる。
-
-## WIP上限との整合（AC-8）
-
-`wip.limit`（既定3、`count_by: active_writer_lease`）は`launch_worker`ではなく`lease acquire`（`src/commands/lease.ts`）が判定する唯一の関所とする。
-
-- **ローカルモード**: `issues/*/.agent-skill-chain/lease.yaml`を走査し`expires_at > now`の件数を数える。
-- **GitHubモード**: 全Issueのコメントを毎回スキャンするのはコスト過大なため、`lease acquire`成功時に`writer-lease:active`ラベルをIssueへ付与し（`human.sh`の`gate:${gate_id}:awaiting-human`ラベル運用と同型）、`lease release`時に外す。WIP判定は`gh issue list --label writer-lease:active --state open`の件数のみで完結させる。
-- `launch_worker`はこの判定結果を独自に持たず、`acquire_lease`の失敗をそのまま「起動前のerror」として扱う。
-
-## Draft PR作成の非対称性の扱い（AC-9）
-
-`launch_worker`にsegment分岐は追加しない。`roles.yaml`の`role_contracts.spec_worker.completion`には元々「Draft PRを作成済み（Closes #<issue-id>）※このセグメントのみ」が記述済みであり、`design_worker`/`implementation_worker`/`validation_worker`の`completion`にはこの項目が無い。`segment start`はこの差分をそのまま返すため、`launch_worker`（起動する側）はrole_contractを不透明なテキストとして一律に扱うだけで、spec/非specの分岐ロジックを一切持つ必要がない。実際にDraft PR作成（`pr-create.sh`）を呼び出すのはworker自身（AI／人間）であり、これは`checkpoint.sh`呼び出しと同じ「roleが自分の完了条件に従って行う作業」として扱う。
-
-## I8安全側ラチェットの踏襲
-
-`launch_gate_reviewer`のI8実装（起動失敗・timeout・未構成→常に`human_required`相当へ）を、worker-report.schema.yamlの語彙（`status: blocked` + `human_escalation_requested: true`）に写像して踏襲する。silent passする経路（起動失敗を`completed`として報告する、leaseを取得したまま何も報告しない等）が存在しないことを、後述のテストで直接確認する。
-
-## 責務・境界の要約
-
-- `launch_worker`は「起動」と「lease生死管理」のみを担い、成果物の内容判断・完了可否のビジネス判定は行わない（role_contractの`completion`充足判定はworker自身の責務）。
-- `worker-launch.sh`はadapter解決とフェイルセーフの安全網のみを担う（`gate-launch-reviewer.sh`と対称）。
-- `lease acquire`はWIP上限・issue内排他の唯一の関所であり、`launch_worker`はこれを信頼して二重実装しない。
+`coordination.backend: local`の分岐（Integration Record生成）はPRテンプレートを一切参照しないため無変更。
 
 ## 関連ADR
 
-新規の`docs/adr/`配下ADRは作成しない。本Issueは (1) 既存`launch_gate_reviewer`の起動骨格の横展開（claude=実起動/codex=fail-safe/human=通知、`launch_gate_reviewer`実装時に確立済みの型）、(2) `review.adapter`と対称な`worker.adapter`設定項目の追加（AGENTS.md §設定の6手順のうち②③④を満たす横展開、①は`review.adapter`で既に承認済みの理由の再適用）、(3) 既存`lease acquire`への追加検査（新規の状態遷移や`segments.yaml`の構成変更を伴わない）のみで完結し、`docs/system-spec/`にも影響しない。先行するIssue #164/#165（`launch_gate_reviewer`実装）・#171（本規約対応実地確認）も同種の判断で新規ADRを作成しておらず、本Issueもこの先例に従う。
+新規の`docs/adr/`配下ADRは作成しない。判断根拠は4項目それぞれについて以下のとおり:
+
+1. **doctor拡張**: 既存`doctor`コマンドへの検査項目追加であり、`doctor`自体の入出力契約（引数なし、終了コード0/1、Check形式の標準出力）や役割・権限モデルを変更しない。既存の「1コマンド=1チェック配列」構造の範囲内の拡張。
+2. **`issue.allowed_types`への`chore`追加**: AGENTS.md §設定が定める設定項目「追加」手順の対象は新規キーの追加であり、既存キー（`issue.allowed_types`）の値集合への1要素追加はこの手続きの主眼ではない。またこの変更はconfigの`schema_version`（`agent-skill-chain/config/v1`）が定める構造（キー集合・型）を変えず、許容される値集合を広げるのみであるため、schema_version更新もmigrationも不要と判断する。
+3. **`segments.yaml`のoutputs変更**: AGENTS.md §4セグメント・4ゲートが定める「セグメント自体の追加・変更」は4セグメントの`id`集合・`next`連鎖（DAG構造）を指す。`outputs`は各セグメントの成果物チェックリストであり、DAG構造にも`schema_version`が固定するトップレベル構造（`segments`配列の要素数4、`id`enum、`next`enum）にも変更を加えない。既に実装が"no-op"として扱っている出力名を除去する整合修正であり、破壊的変更に該当しないと判断する。
+4. **PRテンプレート反映**: `pr create`の入出力契約（`<issue_id> <branch>`という引数、成功時の標準出力仕様）は無変更。GitHubモード分岐内部で`--body`に渡す文字列の組み立てロジックを拡張するのみであり、新たな状態遷移・新たな設定項目（`worker.adapter`のような）を導入しない。
+
+先行するIssue #166（`launch_worker`）も同種の判断（既存起動骨格の横展開・既存設定への対称的追加）でADR作成を見送っており、本Issueもこの先例に従う。
 
 ## 障害・ロールバック考慮
 
 - 想定される失敗モード:
-  - workerサブプロセスがtimeout・クラッシュ・認証エラーで異常終了→lease放置。対策: `launch_worker`の終端処理で常に`release_lease`（`|| true`で失敗を握り潰さずログに残しつつ処理継続）を試みる。
-  - workerが`report_status`を呼ばずに終了コード0で終わる（完了を騙る）→「完了確認」ステップ（`report-status`の直近レコードと`target_sha`突合）が無いと誤ってsuccess扱いになる。対策: 前述の完了確認ステップで安全側blockedへ倒す。
-  - GitHubモードの`lease acquire`が同issue内の他segmentの既存leaseを見逃す（現行`activeLeaseFor`はsegment一致のみ判定）→ 本Issueで`acquire()`へ追加するissue横断コンフリクト検査で解消する（既存`activeLeaseFor`のsegmentスコープ判定自体は`segment start`の正当な用途があるため変更しない）。
-  - `writer-lease:active`ラベル付与・除去が`gh`エラーで失敗する→ best-effort（`|| true`）とし、WIP判定は現状より安全側（過大にカウントされることはあってもゼロ件見逃しにはならない設計）に倒す。ラベル操作自体の失敗はWIP判定の可用性を下げるのみで、既存の同issue内lease競合検査（コメント本体照合）は独立して機能し続ける。
-- ロールバック手順: 本Issueの変更は (1) 3 adapterへの`launch_worker`関数追加、(2) `worker-launch.sh`新設、(3) `config.schema.yaml`/`agent-skill-chain.yaml`への`worker`セクション追加、(4) `lease.ts`への追加検査、のいずれも既存関数・既存フィールドの削除や置換を伴わない追加のみであるため、当該commitを`git revert`すれば個別に切り戻せる。`launch_gate_reviewer`のシグネチャ・挙動には一切触れない。
-- 影響を受ける既存機能: `lease acquire`（GitHubモードの検査追加により、既存の同一segment再入コンフリクトの検査結果自体は変更しない＝既存テスト無破壊）。`launch_gate_reviewer`・`checkpoint`・`report status`・`pr create`は無変更（`launch_worker`から呼び出されるのみ）。
+  - doctor拡張4項目のいずれかが誤ってOKと判定し続ける（false negative）→ 各項目とも既存の`verify`サブコマンド（`worktree-path`/`template-sync`）または既存lib関数（`hasUncommittedChanges`）と同一ロジックを再利用するため、`verify`側で検出できる不整合はdoctorでも同様に検出できる。schemas構文チェックのみ新規ロジックだが、`readYamlFile`の例外送出に素直に依存するため誤判定の余地は小さい。
+  - `chore`追加後、`config.schema.yaml`のenum更新を忘れる→ 実際の設定ファイルはCLIの`loadConfig()`内部でschema検証を必須で通していない場合、動作上は影響が出ないが、consumer projectが自身のconfigをschemaで検証するケースで不整合が露見する。実装フェーズで`agent-skill-chain.yaml`と`config.schema.yaml`を同一コミットで変更することで防ぐ。
+  - `segments.yaml`から`pr`除去後、`.github/pull_request_template.md`（配布先コピー）を更新し忘れる→ `.agent-skill-chain/templates/github/.github/pull_request_template.md`（正本）のみ変更して`sync templates`を実行しなければ、本リポジトリ自身の新設doctor template-syncチェックがNGになる（自己矛盾の再発）。実装フェーズの最終ステップで`sync templates .`相当を実行し、doctor自体で無矛盾を確認する。
+  - PR本文自動充填ロジックが`SPEC.md`/`DESIGN.md`の見出し表記ゆれ（雛形から逸脱した自由記述）に遭遇し抽出に失敗する→ 例外を投げず該当節のプレースホルダを残す設計のため、pr create自体は失敗しない（劣化のみ）。
+- ロールバック手順: 本Issueの変更は (1) `doctor.ts`への4チェック追加、(2) `lib/template-sync.ts`新設＋`verify.ts`のリファクタ、(3) `agent-skill-chain.yaml`/`config.schema.yaml`への`chore`追加、(4) `segments.yaml`からの`pr`除去＋`verify.ts`の`case 'pr':`削除、(5) `pull_request_template.md`拡張＋`pr.ts`の本文組み立てロジック追加、のいずれも既存機能の一部削除（`case 'pr':`のみ）を除き追加的である。当該コミットを`git revert`すれば個別に切り戻せる。`case 'pr':`削除は`segments.yaml`側の`pr`除去とセットでのみ意味を持つため、切り戻す場合は両方を同時にrevertする。
+- 影響を受ける既存機能: `verify.ts`の`templateSync()`（ロジックを`lib/template-sync.ts`へ移すリファクタだが、コマンドとしての入出力契約は無変更）。`pr create`のローカルモード分岐（無変更）。`loadConfig()`/`worktreePathRegex()`/`branchNameRegex()`（`issue.allowed_types`を動的参照する既存実装のため、値集合が増えても壊れない）。
