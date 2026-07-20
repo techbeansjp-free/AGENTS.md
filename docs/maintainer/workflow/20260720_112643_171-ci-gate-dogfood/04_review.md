@@ -209,3 +209,47 @@ reviewer_count: 2
 ### 教訓
 
 CLIコマンドの標準出力を人間可読な複数行フォーマット（`key: value`形式の複数行）で設計する場合、それをそのままシェル変数へ代入して`$GITHUB_OUTPUT`へ書き込む呼び出し側コードは、行数が変わった時点で静かに壊れる。呼び出し側では必ず対象の1行だけを明示的に抽出するか、CLI側で機械可読な単一値の出力モードを別途用意すべきである。
+
+---
+
+## 9. 追記（4回目）: PR #172 実地実行で§8の修正後、`GH_TOKEN`未設定により`gh`コマンドが失敗
+
+**発生**: §8の修正をpushし、PR #172の実GitHub Actions上で再実行したところ（run 29714290913、job 88264151197）、`Run gate reviewer judgment`ステップと`Publish gate report`ステップの双方で`gh`コマンドの失敗が観測された。
+
+```
+gate-review (design)	Run gate reviewer judgment (design)	launch_gate_reviewer: gh issue comment に失敗しました（通知未達）。silent pass せず human_required のまま deferred します
+gate-review (design)	Publish gate report	Check Run 発行に失敗しました: gh: To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN environment variable. Example:
+  env:
+    GH_TOKEN: ${{ github.token }}
+##[error]Process completed with exit code 1.
+```
+
+### 根本原因
+
+`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml`の「Run gate reviewer judgment」「Publish gate report」の両ステップは、内部で`gh`コマンドを呼ぶにもかかわらず`GH_TOKEN`環境変数を設定していなかった。
+
+- 「Run gate reviewer judgment」ステップ: `gate-launch-reviewer.sh`が`review.adapter=human`（`.agent-skill-chain/adapters/human.sh`の`launch_gate_reviewer`）を起動し、`gh label create`・`gh issue edit`・`gh issue comment`を呼ぶ（`.agent-skill-chain/adapters/human.sh:140-142`）。`gh issue comment`の失敗はこのアダプタ自身がfail-safeで検知し、`human_required`のまま`deferred`（exit 3）へ倒す設計であるため、**このステップ自体はI8の安全側原則どおり正しく機能した**（silent passしていない）。
+- 「Publish gate report」ステップ: `gate-publish.sh` → CLI `gate publish`サブコマンド（`src/commands/gate.ts`の`publishCheckRun()`、`gh(['api', '-X', 'POST', 'repos/{owner}/{repo}/check-runs', ...])`、`src/lib/exec.ts`の`gh()`経由）がCheck Run発行のため`gh api`を呼ぶ。こちらは`gh`コマンド自体がfail-safe機構を持たず、認証エラーで即座に非ゼロ終了しjob全体が`##[error]Process completed with exit code 1`で失敗した。
+
+いずれのステップも既存の`ANTHROPIC_API_KEY`等とは別に、GitHub CLI自体の認証（`GH_TOKEN`）が必要であり、これが抜けていたことが直接原因。
+
+### 追加調査: reconcile.yml / risk.yml / ci.ymlの`gh`呼び出し有無
+
+実行結果の見かけの「pass」を鵜呑みにせず、コード上`gh`呼び出しがあるかどうかで判断した。
+
+- **`agent-skill-chain-reconcile.yml`（要修正・追加した）**: `gate-reconcile.sh` → CLI `gate reconcile`サブコマンド（`src/commands/gate.ts`の`reconcile()`、269行目以降）は、対象issueの4ゲート全てについて`reviews/<gate>.yaml`が存在する場合のみ`publishCheckRun()`（`gh api ... check-runs`）を呼ぶ。今回のCI実行でこのworkflowが「pass」したのは、実行時点で対象issueのgate-reportが1件も存在せず（`readYamlFile`が例外を投げ`continue`）、`gh`呼び出し自体が発生しなかったためであり、`GH_TOKEN`が不要だったことを意味しない。gate-reportが存在する状態でpushされれば同じ`GH_TOKEN`欠落エラーで失敗する。よって`GH_TOKEN`を追加した。
+- **`agent-skill-chain-risk.yml`**: 呼び出すスクリプト（`git diff`・`grep`のみ）に`gh`呼び出しは無い。追加不要。
+- **`agent-skill-chain-ci.yml`**: 呼び出す全スクリプト（`verify-branch-name.sh`・`verify-worktree-path.sh`・`verify-template-sync.sh`・`verify-artifacts.sh`・`verify-ac-coverage.sh`・`verify-adr.sh`・`lint-vocab.sh`・`lint-references.sh`・`adr-lint.sh`）を`grep`で確認したが`gh`呼び出しは無い。追加不要。
+- リポジトリ全体で`gh`を呼ぶスクリプトは`.agent-skill-chain/scripts/setup-labels.sh`・`setup-ruleset.sh`（`init`系、CI workflowからは呼ばれない）と`.agent-skill-chain/adapters/human.sh`・`src/commands/gate.ts`（`gate publish`/`gate reconcile`経由、`gh api check-runs`）のみであることを`grep -rln "gh \|gh("`で確認済み。
+
+### 対応
+
+`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml`の「Run gate reviewer judgment (${{ matrix.gate }})」ステップと「Publish gate report」ステップに`GH_TOKEN: ${{ github.token }}`を追加した（既存の`ANTHROPIC_API_KEY`等と併記）。あわせて`agent-skill-chain-reconcile.yml`の「Reconcile gates against pushed SHA」ステップにも同様に追加した。`.github/workflows/`（展開結果）は`node bin/agents-md.js sync templates .`で再生成し、`node bin/agents-md.js verify template-sync .`で終了コード0（同期済み）を確認した。
+
+### 検証結果
+
+`npm test`実測：`# tests 328 / # pass 328 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（workflow YAMLのみの変更のため既存328件への影響は無く、全件pass）。
+
+### 教訓
+
+`gh`コマンドを内部で呼ぶステップは、`ANTHROPIC_API_KEY`等の外部サービス認証とは別に`GH_TOKEN`（GitHub CLI自身の認証）が必要であり、これを見落とすとjob自体の異常終了として現れる。また、あるworkflowステップがCI実行で「pass」した事実は、そのステップ内の`gh`呼び出しが実際に実行され成功したことを意味しない場合がある（今回のreconcile.ymlのように、条件分岐によって`gh`呼び出し自体がスキップされていただけの可能性がある）。true positiveのpassかどうかは、実行ログの分岐条件とコードパスを突き合わせて確認する必要がある。

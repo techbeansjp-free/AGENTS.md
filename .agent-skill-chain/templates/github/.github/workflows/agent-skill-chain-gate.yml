@@ -74,6 +74,7 @@ jobs:
       - name: Run gate reviewer judgment (${{ matrix.gate }})
         id: judgment
         env:
+          GH_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -102,6 +103,8 @@ jobs:
       # 真に未レビュー（final==pending）のみ拒否する（起動失敗を決して success にしない＝I8）。
       - name: Publish gate report
         if: steps.judgment.outputs.outcome != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: ./.agent-skill-chain/scripts/gate-publish.sh "${{ steps.ctx.outputs.issue_id }}" "${{ steps.review.outputs.report_path }}"
 
       # error（起動失敗・timeout・未構成）は publish で action_required を発行したうえで、step を赤にして

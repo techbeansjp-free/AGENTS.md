@@ -43,4 +43,6 @@ jobs:
           echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
 
       - name: Reconcile gates against pushed SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: ./.agent-skill-chain/scripts/gate-reconcile.sh "${{ steps.ctx.outputs.issue_id }}" "${{ github.sha }}"
