@@ -5,7 +5,7 @@ import { loadConfig } from '../lib/config.js';
 import { findIssueWorktree, hasUncommittedChanges, hasUnpushedCommits, listWorktrees } from '../lib/worktree.js';
 import { leaseFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile } from '../lib/yaml-io.js';
-import { listLeaseComments, deleteLeaseComment, type WriterLease } from '../lib/github-lease.js';
+import { allLeasesFor, releaseLeaseRef, type WriterLease } from '../lib/github-lease.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 
 const USAGE = `
@@ -59,25 +59,17 @@ export async function run(args: string[]): Promise<number> {
         if (match) issueNumbers.add(match[1]);
       }
       for (const issueNumber of issueNumbers) {
-        const leases = listLeaseComments(issueNumber, root);
-        const bySegment = new Map<string, typeof leases>();
+        // ref-based lock（ADR-0002）ではsegmentごとにref自体が1つしか存在し得ないため、
+        // 同一segmentで複数の有効leaseが競合する状態は構造的に発生しない
+        // （旧・Issueコメントベース実装で存在した「複数の有効leaseが競合」escalationは不要になった）。
+        const leases = allLeasesFor(issueNumber, root);
         for (const l of leases) {
-          const key = l.lease.writer_lease.segment;
-          bySegment.set(key, [...(bySegment.get(key) ?? []), l]);
-        }
-        for (const [segment, segmentLeases] of bySegment) {
-          const active = segmentLeases.filter((l) => l.lease.writer_lease.expires_at > now);
-          const label = `ISSUE-${issueNumber}:${segment}`;
-          if (active.length > 1) {
-            escalated.push(`${label}（複数の有効leaseが競合、human_required）`);
-            continue;
-          }
-          if (active.length === 1) continue; // 有効なleaseはそのまま
-          const expired = segmentLeases.filter((l) => l.lease.writer_lease.expires_at <= now);
-          if (expired.length === 0) continue;
+          const label = `ISSUE-${issueNumber}:${l.segment}`;
+          if (l.lease.writer_lease.expires_at > now) continue; // 有効なleaseはそのまま
           if (isSafeToReclaim(root, config, issueNumber)) {
-            for (const l of expired) deleteLeaseComment(l.commentId, root);
-            reclaimed.push(label);
+            const released = releaseLeaseRef(issueNumber, l.segment, root);
+            if (released.ok) reclaimed.push(label);
+            // 削除に失敗した場合は次回reconcileに委ねる（reclaimed/escalatedいずれにも計上しない）。
           } else {
             escalated.push(`${label}（未push/未commitの変更が残存、human_required）`);
           }
