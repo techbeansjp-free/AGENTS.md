@@ -24,12 +24,12 @@ risk:
   default: unclassified        # unclassified | normal | high
 
 review:
-  adapter: human                # claude | codex | human（判定ステップが起動する launch_gate_reviewer 実体）
+  adapter: claude                # claude | codex | human（判定ステップが起動する launch_gate_reviewer 実体）
   standard: {reviewer_count: 1, modes: [conformance, falsification]}
   strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
 
 worker:
-  adapter: human                # claude | codex | human（launch_worker が起動するセグメント作業ワーカー実体）
+  adapter: claude                # claude | codex | human（launch_worker が起動するセグメント作業ワーカー実体）
 
 worktree:
   root: .worktrees
