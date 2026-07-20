@@ -4,9 +4,10 @@
 # ベンダー中立の role contract（.agent-skill-chain/config/roles.yaml）を実行系（人間オペレータへの通知・手動報告待ち）へ
 # 変換するアダプタ。lease・commit・test・report等の状態操作系関数はgit/gh状態への機械操作であり
 # 人間オペレータが実行する場合もclaude.sh/codex.shと同じ.agent-skill-chain/scripts/*.sh
-# （agent-skill-chainCLIへの薄いラッパー）へ結線する。人間固有の差分が生じるのは launch_gate_reviewer
-# （実際の判定を人間へ委ねる部分）であり、これは「自動実行」ではなく「人間への通知発行・非同期の
-# 手動報告待ち」へ結線される（launch_worker 相当は別途設計が必要なため対象外）。
+# （agent-skill-chainCLIへの薄いラッパー）へ結線する。人間固有の差分が生じるのは
+# launch_gate_reviewer（実際の判定を人間へ委ねる部分）と launch_worker（実際のセグメント作業を
+# 人間へ委ねる部分、#166）であり、これらは「自動実行」ではなく「人間への通知発行・非同期の
+# 手動報告待ち」へ結線される。
 
 set -euo pipefail
 
@@ -154,5 +155,126 @@ EOF
     echo "launch_gate_reviewer: final=human_required の書込みに失敗しました" >&2
     return 1
   }
+  return 3
+}
+
+# --- human.sh 固有の差分: セグメント作業ワーカー起動（launch_worker、通知＋非同期、#166・AC-6） ---
+#
+# lease取得と segment start（role_contract取得）は claude.sh と共通（役割・入力を人間へ正確に
+# 伝達するため）。その後はサブプロセスを起動せず、launch_gate_reviewer の human実装と同じ
+# 通知経路（GitHubモード=gh issue comment＋worker:<segment>:awaiting-humanラベル、
+# ローカルモード=marker file）で、実施すべき作業内容（role_contract全文）・
+# lease renewの自己実行手順・完了時手順（checkpoint→（specのみ）pr create→report status→
+# lease release）を明記した通知を送り、return 3 で即座に返す（同期ブロックしない）。
+#
+# lease は解放しない（return 3 は正常系＝人間の非同期作業継続中を意味するため。DESIGN.md参照）。
+# renewループはここでは起動しない（サブプロセスが存在せず生存監視の対象が無いため）。人間が
+# 自らlease renewを呼ばなければTTL切れで自然に回収される（安全側フォールバック）。
+#
+# 引数: <issue_id> <segment>
+# 終了コード: 3=deferred（正常系。lease保持継続）/ 1=引数・lease取得前のエラー
+#             （lease未取得または解放済み、report未発行）。
+launch_worker() {
+  local issue_id="${1:-}" segment="${2:-}"
+
+  if [[ -z "$issue_id" || -z "$segment" ]]; then
+    echo "launch_worker: 引数 <issue_id> <segment> が必要です" >&2
+    return 1
+  fi
+  case "$segment" in
+    spec | design | implementation | validation) ;;
+    *)
+      echo "launch_worker: segment は spec|design|implementation|validation のいずれかである必要があります: $segment" >&2
+      return 1
+      ;;
+  esac
+
+  # lease取得。失敗時はまだ何も起動していないため blocked報告なしで即 return 1。
+  local lease_yaml token
+  if ! lease_yaml="$(acquire_lease "$issue_id" "$segment")"; then
+    echo "launch_worker: writer lease の取得に失敗しました（wip.limit超過または既存leaseとの競合）" >&2
+    return 1
+  fi
+  token="$(sed -n 's/^[[:space:]]*token:[[:space:]]*//p' <<<"$lease_yaml" | head -n1)"
+  if [[ -z "$token" ]]; then
+    echo "launch_worker: 取得した writer lease から token を抽出できませんでした" >&2
+    return 1
+  fi
+
+  # segment start（role_contract取得）。失敗時は起動前のため worker-report は書かず lease解放のみ。
+  local contract role
+  if ! contract="$(_asc_cli segment start "$issue_id" "$segment")"; then
+    echo "launch_worker: segment start に失敗しました（role_contract取得不可）" >&2
+    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    return 1
+  fi
+  role="$(sed -n 's/^role:[[:space:]]*//p' <<<"$contract" | head -n1)"
+  if [[ -z "$role" ]]; then
+    echo "launch_worker: segment start の出力から role を抽出できませんでした" >&2
+    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  # backend / issue 番号を解決する（通知先の判定用）。
+  local ctx backend issue_number
+  ctx="$(_asc_cli worker context "$issue_id")" || {
+    echo "launch_worker: worker context の解決に失敗しました" >&2
+    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    return 1
+  }
+  backend="$(sed -n 's/^backend=//p' <<<"$ctx")"
+  issue_number="$(sed -n 's/^issue_number=//p' <<<"$ctx")"
+
+  # spec segmentのみDraft PR作成手順を通知本文へ追加する（roles.yamlのworker.segment_overrides.spec.
+  # additional_capabilities: [pr.draft_create] に対応。launch_worker自身はsegment分岐を持たず、
+  # 通知本文の案内文だけがsegmentで変わる。実際の判断・実行は人間自身が行う）。
+  local pr_step=""
+  if [[ "$segment" == "spec" ]]; then
+    pr_step="
+     - 'agent-skill-chain pr create ${issue_id} <branch>'（Draft PR作成。SPECワーカーのみ）"
+  fi
+
+  # 通知本文（必須フィールド: issue / segment / role / role_contract全文 / lease renew手順 / 完了手順）。
+  local body
+  body="$(
+    cat <<EOF
+[agent-skill-chain] ${segment} セグメントの作業ワーカーが必要です（awaiting-human）。
+
+- issue: ${issue_id}
+- segment: ${segment}
+- role: ${role}
+- lease_token: ${token}
+
+役割・入力・出力・規約（segment start の出力全文）:
+${contract}
+
+作業手順:
+  1. 上記契約に従い成果物を作成・編集する（自worktree内でのみ作業する）。
+  2. 長時間作業になる場合は 'agent-skill-chain lease renew ${issue_id} ${token}' を
+     renewal_interval_seconds（既定900秒）間隔で自ら呼び出すこと（怠るとTTL切れで
+     reconcileが回収し人間判断へ再エスカレーションされる＝安全側だが二度手間になる）。
+  3. 完了時は以下を自ら実行すること:
+     - 'agent-skill-chain checkpoint "<message>"'（commit + push）${pr_step}
+     - 'agent-skill-chain report status ${issue_id} ${role} ${segment} completed <target_sha>'
+     - 'agent-skill-chain lease release ${issue_id} ${token}'
+EOF
+  )"
+
+  if [[ "$backend" == "github" ]] && command -v gh >/dev/null 2>&1; then
+    # 通知ラベルを用意し（冪等）、コメントで人間へ通知する。ラベル付与・失敗は非致命（best-effort）。
+    gh label create "worker:${segment}:awaiting-human" >/dev/null 2>&1 || true
+    gh issue edit "$issue_number" --add-label "worker:${segment}:awaiting-human" >/dev/null 2>&1 || true
+    if ! gh issue comment "$issue_number" --body "$body" >/dev/null 2>&1; then
+      echo "launch_worker: gh issue comment に失敗しました（通知未達）。silent pass せず deferred のまま返します" >&2
+    fi
+  else
+    # ローカルモード（または gh 不在）: pending マーカー + 指示を出力する。
+    local marker="issues/${issue_number}/.agent-skill-chain/worker-${segment}.awaiting-human"
+    mkdir -p "$(dirname "$marker")"
+    printf '%s\n' "$body" >"$marker"
+    printf '%s\n' "$body"
+  fi
+
+  # lease は解放しない（human deferred = 作業継続中）。deferred(exit 3) を返す。
   return 3
 }

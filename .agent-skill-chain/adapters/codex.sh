@@ -3,9 +3,9 @@
 #
 # ベンダー中立の role contract（.agent-skill-chain/config/roles.yaml）を実行系（OpenAI Codex CLI 等経由の起動）へ
 # 変換するアダプタ。lease・commit・test・report等の状態操作系関数は .agent-skill-chain/scripts/*.sh
-# （agent-skill-chain CLIへの薄いラッパー）へ結線済み。ゲートレビュアの起動 launch_gate_reviewer は
-# claude/human と同一シグネチャの I/F のみ実装済み（Codex 実行系の具体起動は要別途決定。未構成時は
-# fail-safe deferral を返す）。ワーカー起動 launch_worker 相当は別途設計が必要なため対象外。
+# （agent-skill-chain CLIへの薄いラッパー）へ結線済み。ゲートレビュアの起動 launch_gate_reviewer・
+# セグメント作業ワーカーの起動 launch_worker（#166）はいずれも claude/human と同一シグネチャの
+# I/F のみ実装済み（Codex 実行系の具体起動は要別途決定。未構成時は fail-safe deferral を返す）。
 
 set -euo pipefail
 
@@ -109,5 +109,48 @@ launch_gate_reviewer() {
   # 未構成 fail-safe（I8）: Codex 実行系が未確定のため必ず human_required へ倒す（silent pass 禁止）。
   echo "launch_gate_reviewer: codex レビュア実行系は未構成です（要別途決定）。フェイルセーフで human_required へ倒します" >&2
   _asc_cli gate mark-human-required "$report_path" >/dev/null || true
+  return 2
+}
+
+# --- codex.sh 固有の差分: セグメント作業ワーカー起動（launch_worker、fail-safe deferral、#166・AC-5） ---
+#
+# claude/human と同一シグネチャの launch_worker を提供する。ただし Codex 実行系の具体起動
+# （CLI/API・認証 OPENAI_API_KEY・書込み許可の範囲）は要別途決定のため未実装であり、現時点では
+# 未構成として扱う。
+#
+# 【lease取得を一切試みない】: Codex 実行系は未構成で必ず失敗するとわかっているため、
+# writer lease を取得してから失敗させると（a) WIP枠（wip.limit）を無駄に消費し、
+# (b) 解放処理が余計に発生するだけで得るものが無い。よって claude.sh/human.sh と異なり
+# acquire_lease を呼ばず、引数検証の直後に即座に未構成であることを表明して return する
+# （DESIGN.md「codex adapter」節参照）。
+#
+# I8 安全側ラチェット: 未構成は決して silent pass（0 や 3 を装う）しない。必ず非ゼロ（!=0,!=3）で
+# 返す＝呼び出し側（進行役）が機械的に「起動できていない」と判別できる状態にする。
+#
+# 【将来の拡張ポイント】Codex 実行系を結線する際は、この関数内の「未構成 fail-safe」ブロックを、
+# claude.sh:launch_worker と同じ「lease取得→segment start→起動（timeout+renewループ）→
+# 完了確認（report-status直近レコードとtarget_sha突合）→解放/blocked報告」構造へ置き換える
+# （書込み許可の範囲・認証 OPENAI_API_KEY の扱いは実装時に確定する）。
+#
+# 引数: <issue_id> <segment>
+# 終了コード: 2（!=0,!=3）=error（未構成。lease取得前のため report_status/release_lease 対象無し）/
+#             1=引数エラー。
+# env: OPENAI_API_KEY（Codex 認証。将来の具体起動で使用）。
+launch_worker() {
+  local issue_id="${1:-}" segment="${2:-}"
+
+  if [[ -z "$issue_id" || -z "$segment" ]]; then
+    echo "launch_worker: 引数 <issue_id> <segment> が必要です" >&2
+    return 1
+  fi
+  case "$segment" in
+    spec | design | implementation | validation) ;;
+    *)
+      echo "launch_worker: segment は spec|design|implementation|validation のいずれかである必要があります: $segment" >&2
+      return 1
+      ;;
+  esac
+
+  echo "launch_worker: codex ワーカー実行系は未構成です（要別途決定）。lease取得前にフェイルセーフで倒します（silent passしません）" >&2
   return 2
 }

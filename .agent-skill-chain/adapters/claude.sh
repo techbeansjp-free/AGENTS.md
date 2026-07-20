@@ -3,8 +3,9 @@
 #
 # ベンダー中立の role contract（.agent-skill-chain/config/roles.yaml）を実行系（Claude Code / Claude Agent SDK 経由の起動）へ
 # 変換するアダプタ。lease・commit・test・report等の状態操作系関数は .agent-skill-chain/scripts/*.sh
-# （agent-skill-chain CLIへの薄いラッパー）へ結線済み。ゲートレビュアの起動は launch_gate_reviewer
-# として実装済み（ワーカー起動 launch_worker 相当は別途設計・実装が必要なため対象外）。
+# （agent-skill-chain CLIへの薄いラッパー）へ結線済み。ゲートレビュアの起動は launch_gate_reviewer、
+# セグメント作業ワーカー（spec/design/implementation/validation）の起動は launch_worker として
+# いずれも実装済み（#166）。
 
 set -euo pipefail
 
@@ -172,5 +173,169 @@ launch_gate_reviewer() {
     _fail_safe "verdict の gate-report への結線に失敗しました"
     return
   fi
+  return 0
+}
+
+# --- claude.sh 固有の差分: セグメント作業ワーカー起動（launch_worker、#166） ---
+#
+# writer（セグメント作業ワーカー、spec/design/implementation/validation）を Claude Code CLI
+# headless（既定）または WORKER_CMD で指定した実行系で起動し、segment start が返す role_contract
+# 全文をプロンプトとして stdin 経由で渡す（launch_gate_reviewer と同型）。read-only な
+# ゲートレビュアと異なり、書込みツールを許可した非対話フラグで起動する。ワーカー自身が
+# checkpoint.sh（＋specのみ pr-create.sh）・report-status.sh・lease-release.sh を呼び出して
+# 完了させる。launch_worker自身は「成果物の中身」を判断せず、report-status の直近レコードと
+# target_shaの一致だけで完了を機械的に確認する（役割・権限の境界。DESIGN.md参照）。
+#
+# lease取得→segment start→起動→完了確認→解放/blocked報告の順序（AC-2）:
+#   1. lease取得に失敗した場合、まだ何も起動していないため blocked報告は行わず即 return 1。
+#   2. segment start（role_contract取得）に失敗した場合も起動前のため worker-report は書かず、
+#      lease解放のみ行って return 1。
+#   3. 起動後（認証未設定・CLI不在・起動失敗・timeout・完了を騙る＝未報告/target_sha不一致）は
+#      すべて report_status blocked(human_escalation_requested扱いの理由メッセージ) + release_lease
+#      を行い、0でも3でもない終了コードで返す（I8: silent passしない）。
+#   4. 完了確認（worker自身のreport statusがcompletedかつtarget_shaがpush済みHEADと一致）が
+#      取れた場合のみ release_lease + return 0。
+#
+# リトライしない: workerは実際にファイルを書き換える非冪等な操作を行うため、失敗直後の無条件
+# リトライは部分書込みの上に二重に作業させる・二重commitを生む実害がある。1回の起動失敗は
+# 即座に人間判断（blocked）へ委ねる（I8: 迷ったら安全側）。
+#
+# 引数: <issue_id> <segment>
+# 終了コード: 0=worker完了 / 2（!=0,!=3）=error（blocked報告・lease解放済み）/
+#             1=引数・lease取得前のエラー（lease未取得または解放済み、report未発行）。
+# env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、実値非ログ出力）、
+#      WORKER_CMD（起動系上書き。テストではecho等のモックコマンドに完全差し替え可能）、
+#      WORKER_TIMEOUT_SEC（既定1800）、WORKER_RENEW_INTERVAL_SEC（leaseのrenewループ間隔、既定900）。
+launch_worker() {
+  local issue_id="${1:-}" segment="${2:-}"
+
+  if [[ -z "$issue_id" || -z "$segment" ]]; then
+    echo "launch_worker: 引数 <issue_id> <segment> が必要です" >&2
+    return 1
+  fi
+  case "$segment" in
+    spec | design | implementation | validation) ;;
+    *)
+      echo "launch_worker: segment は spec|design|implementation|validation のいずれかである必要があります: $segment" >&2
+      return 1
+      ;;
+  esac
+
+  # 1. lease取得。失敗時はまだ何も起動していないため blocked報告なしで即 return 1
+  #    （AC-2: wip.limit超過・同issue内他segment競合・同一segment競合はいずれもここで拒否される。
+  #    launch_worker自身はWIP判定・コンフリクト判定を独自に持たず lease acquire の結果を信頼する）。
+  local lease_yaml token
+  if ! lease_yaml="$(acquire_lease "$issue_id" "$segment")"; then
+    echo "launch_worker: writer lease の取得に失敗しました（wip.limit超過または既存leaseとの競合）" >&2
+    return 1
+  fi
+  token="$(sed -n 's/^[[:space:]]*token:[[:space:]]*//p' <<<"$lease_yaml" | head -n1)"
+  if [[ -z "$token" ]]; then
+    echo "launch_worker: 取得した writer lease から token を抽出できませんでした" >&2
+    return 1
+  fi
+
+  # 2. segment start（role_contract取得。lease有効性の再検証を兼ねる）。
+  #    失敗時は起動前のため worker-report は書かず lease解放のみ行う。
+  local contract role
+  if ! contract="$(_asc_cli segment start "$issue_id" "$segment")"; then
+    echo "launch_worker: segment start に失敗しました（role_contract取得不可）" >&2
+    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    return 1
+  fi
+  role="$(sed -n 's/^role:[[:space:]]*//p' <<<"$contract" | head -n1)"
+  if [[ -z "$role" ]]; then
+    echo "launch_worker: segment start の出力から role を抽出できませんでした" >&2
+    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  # 3. 起動後のフェイルセーフ（I8）: blocked報告 + lease解放 + 非0非3で返す共通処理。
+  _fail_blocked() {
+    local reason="$1" sha
+    echo "launch_worker: $reason（フェイルセーフでblockedへ倒します）" >&2
+    sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+    report_status "$issue_id" "$role" "$segment" blocked "$sha" "$reason" >/dev/null 2>&1 || true
+    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    return 2
+  }
+
+  # 認証未設定はフェイルセーフ（実値はログ・stdoutに出さない）。
+  if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    _fail_blocked "認証情報（ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN）が未設定です"
+    return
+  fi
+
+  # 起動系。WORKER_CMD で上書き可能（テスト用モック境界）。既定は claude CLI headless
+  # （書込みツールを許可する非対話フラグ。正確なフラグは実機検証のうえ確定するスコープ外事項——
+  # WORKER_CMDによる完全上書きが可能なため、この確定の遅延はlaunch_worker自体の契約に影響しない）。
+  local worker_cmd="${WORKER_CMD:-}"
+  if [[ -z "$worker_cmd" ]]; then
+    if command -v claude >/dev/null 2>&1; then
+      worker_cmd="claude -p --output-format text --permission-mode acceptEdits"
+    else
+      _fail_blocked "claude CLI が見つからず WORKER_CMD も未設定です"
+      return
+    fi
+  fi
+
+  local timeout_sec="${WORKER_TIMEOUT_SEC:-1800}"
+  local renew_interval="${WORKER_RENEW_INTERVAL_SEC:-900}"
+
+  # role_contract全文をプロンプトとしてstdin経由で渡す（唯一の正規契約伝達経路。AC-3）。
+  # ASC_ISSUE_ID/ASC_SEGMENT/ASC_ROLE は worker_cmd 実装（テスト用stub含む）の便宜のためのenvであり、
+  # 契約の内容自体はstdinのrole_contractに完全に含まれる。
+  local prompt_file
+  prompt_file="$(mktemp)"
+  printf '%s' "$contract" >"$prompt_file"
+
+  local worker_pid rc
+  if command -v timeout >/dev/null 2>&1; then
+    ASC_ISSUE_ID="$issue_id" ASC_SEGMENT="$segment" ASC_ROLE="$role" \
+      timeout "$timeout_sec" bash -c "$worker_cmd" <"$prompt_file" &
+  else
+    ASC_ISSUE_ID="$issue_id" ASC_SEGMENT="$segment" ASC_ROLE="$role" \
+      bash -c "$worker_cmd" <"$prompt_file" &
+  fi
+  worker_pid=$!
+
+  # renewループ: サブプロセス生存中のみ renewal_interval_seconds ごとに renew_lease を呼ぶ。
+  (
+    while kill -0 "$worker_pid" 2>/dev/null; do
+      sleep "$renew_interval"
+      kill -0 "$worker_pid" 2>/dev/null || break
+      renew_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    done
+  ) &
+  local renew_pid=$!
+
+  wait "$worker_pid"
+  rc=$?
+  kill "$renew_pid" >/dev/null 2>&1 || true
+  wait "$renew_pid" 2>/dev/null || true
+  rm -f "$prompt_file"
+
+  if [[ $rc -ne 0 ]]; then
+    _fail_blocked "worker起動が失敗またはtimeoutしました（rc=$rc, timeout=${timeout_sec}s）"
+    return
+  fi
+
+  # 完了確認（I8: 完了を騙るケースの安全側判定）: report-status直近レコードのstatus・target_shaを
+  # 実際のpush済みHEADと突合する。サブプロセスの終了コード0だけでは信頼しない。
+  local latest reported_status reported_sha current_sha
+  if ! latest="$(_asc_cli report latest "$issue_id" "$segment")"; then
+    _fail_blocked "worker完了後の report status を確認できませんでした（未報告の可能性）"
+    return
+  fi
+  reported_status="$(sed -n 's/^status=//p' <<<"$latest")"
+  reported_sha="$(sed -n 's/^target_sha=//p' <<<"$latest")"
+  current_sha="$(git rev-parse HEAD 2>/dev/null || echo '')"
+
+  if [[ "$reported_status" != "completed" || -z "$reported_sha" || "$reported_sha" != "$current_sha" ]]; then
+    _fail_blocked "worker完了を確認できませんでした（報告status=${reported_status:-無し}, 報告target_sha=${reported_sha:-無し}, 現在HEAD=${current_sha:-無し}）"
+    return
+  fi
+
+  release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
   return 0
 }

@@ -1,9 +1,9 @@
-import { stringify } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
 import { reportFilePath } from '../lib/local-state.js';
-import { writeYamlFileAtomic } from '../lib/yaml-io.js';
+import { tryReadYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { gh } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
@@ -19,6 +19,19 @@ blocked_reason: status=blocked の場合必須（推測で補完せず、明確�
 出力:
   成功時: 終了コード0。発行先（Issueコメントurlまたはreportファイルパス）を標準出力へ。
   失敗時: 終了コード1以上。スキーマ不適合等の理由を標準エラー出力へ。
+`;
+
+const LATEST_USAGE = `
+使い方: agent-skill-chain report latest <issue_id> <segment>
+
+対象segmentの直近のworker報告（schemas/worker-report.schema.yaml準拠）を1件、KEY=VALUE形式で
+標準出力へ出す。launch_worker（アダプタ）が「起動したworkerが実際にcompletedを報告し、
+target_shaが押し済みHEADと一致するか」を確認するために使う（AGENTS.md不変条件I8:
+完了を騙る場合でもsilent passせず安全側に倒す判定の材料）。
+
+出力:
+  成功時: 終了コード0。status=<completed|blocked>\\ntarget_sha=<sha> を標準出力へ。
+  失敗時: 終了コード1以上（報告が1件も無い場合を含む）。
 `;
 
 const MARKER = '<!-- agent-skill-chain:worker-report -->';
@@ -76,5 +89,51 @@ export async function status(args: string[]): Promise<number> {
     const result = gh(['issue', 'comment', number, '--body', body], root);
     if (result.status !== 0) return fail(`gh issue comment に失敗しました: ${result.stderr.trim()}`);
     return ok(result.stdout.trim());
+  });
+}
+
+/**
+ * 対象segmentの直近のworker報告を1件取得する（launch_workerの完了確認・I8安全側判定に使う）。
+ * ローカルモードはreportFilePath（1segment1ファイル）を直接読む。GitHubモードは
+ * MARKER付きコメントのうちsegmentが一致するものを createdAt 昇順の最後（＝最新）として採用する。
+ */
+export async function latest(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(LATEST_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, segment] = args;
+    if (!issueIdRaw || !segment) throw new CliError('issue_id, segment はすべて必須です');
+    const { number } = parseIssueId(issueIdRaw);
+
+    const root = repoRoot();
+    const config = loadConfig(root);
+
+    if (config.coordination.backend === 'local') {
+      const report = tryReadYamlFile<WorkerReport>(reportFilePath(root, number, segment));
+      if (!report) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
+      return ok(`status=${report.status}\ntarget_sha=${report.target_sha}`);
+    }
+
+    const result = gh(['issue', 'view', number, '--json', 'comments'], root);
+    if (result.status !== 0) return fail(`gh issue view に失敗しました: ${result.stderr.trim()}`);
+    const parsed = JSON.parse(result.stdout) as { comments: { body: string; createdAt: string }[] };
+    const reports = parsed.comments
+      .filter((c) => c.body.includes(MARKER))
+      .map((c) => {
+        const match = /```yaml\n([\s\S]*?)```/.exec(c.body);
+        if (!match) return undefined;
+        try {
+          return { report: parse(match[1]) as WorkerReport, createdAt: c.createdAt };
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((r): r is { report: WorkerReport; createdAt: string } => !!r && r.report.segment === segment)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const last = reports[reports.length - 1];
+    if (!last) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
+    return ok(`status=${last.report.status}\ntarget_sha=${last.report.target_sha}`);
   });
 }
