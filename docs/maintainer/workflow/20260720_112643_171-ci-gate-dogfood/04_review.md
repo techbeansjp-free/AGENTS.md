@@ -162,3 +162,50 @@ gate-review (spec)	Run gate review (spec)	ISSUE-171 の worktree が見つかり
 ### 教訓
 
 §6時点の「ローカルで動くはず」というテストは、CI固有の環境特性（`actions/checkout`のdetached HEAD化）を再現していなかったため、実地で再度失敗した。今後この関数を変更する際は、必ず`git checkout --detach`で実際にdetached HEAD状態を作った上でテストすること。
+
+---
+
+## 8. 追記（3回目）: PR #172 実地実行で§7の修正後、`gate-review`成功も後続の`GITHUB_OUTPUT`書き込みで失敗
+
+**発生**: §7の修正（commit `7182636`）をpushし、PR #172の実GitHub Actions上で再実行したところ（run 29714055077、job 88263414379）、`findIssueWorktree`のdetached HEAD対応は正しく機能し`gate review` CLIコマンド自体は成功した。しかし新たに以下のエラーで`gate-review (spec)`ステップが失敗した。
+
+```
+gate-review (spec)	Run gate review (spec)	##[error]Unable to process file command 'output' successfully.
+gate-review (spec)	Run gate review (spec)	##[error]Invalid format 'reviewer_count: 2'
+```
+
+### 根本原因
+
+`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml`の「Run gate review」ステップは、`gate-review.sh`（`src/commands/gate.ts`の`review()`）の標準出力全体をそのまま単一の変数`REPORT_PATH`へ代入し、`echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"`していた。しかし`review()`は成功時に`gate_report_path: <path>\nreviewer_count: <n>`という**2行**を標準出力へ返す実装（`src/commands/gate.ts:205`）であるため、`$GITHUB_OUTPUT`ファイルの中身が
+
+```
+report_path=gate_report_path: /path/to/report.yaml
+reviewer_count: 2
+```
+
+という2行になり、2行目`reviewer_count: 2`が`key=value`形式（`=`を含まない）でないためGitHub Actionsの`$GITHUB_OUTPUT`パーサーが`Invalid format`エラーで停止した。後続ステップ（judgment・verify・publish）は`steps.review.outputs.report_path`のみを参照しており、`reviewer_count`はワークフロー側で使用されていなかった。
+
+### 対応
+
+`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml`の「Run gate review」ステップを、`gate-review.sh`の標準出力をいったん`REVIEW_OUTPUT`へ保持したうえで、`sed -n 's/^gate_report_path: //p'`で`gate_report_path:`行のみを抽出し`REPORT_PATH`とする実装へ修正した。
+
+```yaml
+      - name: Run gate review (${{ matrix.gate }})
+        id: review
+        run: |
+          REVIEW_OUTPUT="$(./.agent-skill-chain/scripts/gate-review.sh "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}")"
+          REPORT_PATH="$(echo "$REVIEW_OUTPUT" | sed -n 's/^gate_report_path: //p')"
+          echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
+```
+
+`.github/workflows/agent-skill-chain-gate.yml`（展開結果）は`node bin/agents-md.js sync templates .`で再生成し、テンプレートと一致させた。`node bin/agents-md.js verify template-sync .`実行で終了コード0（同期済み）を確認した。
+
+他の3つのworkflow（`agent-skill-chain-ci.yml`・`agent-skill-chain-reconcile.yml`・`agent-skill-chain-risk.yml`）の`$GITHUB_OUTPUT`書き込み箇所を全て確認したが、いずれも単一行の値（`issue_id`・`target_sha`・`profile`・`upgrade`等、bashの単純な文字列処理の結果）のみを書き込んでおり、複数行出力をそのまま1変数へ代入する同種のパターンは存在しなかった。
+
+### 検証結果
+
+`npm test`実測：`# tests 328 / # pass 328 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（workflow YAMLのみの変更のため既存328件への影響は無く、全件pass）。
+
+### 教訓
+
+CLIコマンドの標準出力を人間可読な複数行フォーマット（`key: value`形式の複数行）で設計する場合、それをそのままシェル変数へ代入して`$GITHUB_OUTPUT`へ書き込む呼び出し側コードは、行数が変わった時点で静かに壊れる。呼び出し側では必ず対象の1行だけを明示的に抽出するか、CLI側で機械可読な単一値の出力モードを別途用意すべきである。

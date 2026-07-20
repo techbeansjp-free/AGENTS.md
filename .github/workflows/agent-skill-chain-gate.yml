@@ -60,7 +60,8 @@ jobs:
       - name: Run gate review (${{ matrix.gate }})
         id: review
         run: |
-          REPORT_PATH="$(./.agent-skill-chain/scripts/gate-review.sh "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}")"
+          REVIEW_OUTPUT="$(./.agent-skill-chain/scripts/gate-review.sh "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}")"
+          REPORT_PATH="$(echo "$REVIEW_OUTPUT" | sed -n 's/^gate_report_path: //p')"
           echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
 
       # 判定ステップ（欠落していた「判定工程」）: config で選択したアダプタの launch_gate_reviewer を
