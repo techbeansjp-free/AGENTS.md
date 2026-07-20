@@ -70,6 +70,11 @@ export function hasUnpushedCommits(worktreePath: string, branch: string): boolea
 /**
  * config/agent-skill-chain.yaml の worktree.path_pattern に issue番号を埋め込んだ正規表現で
  * `git worktree list --porcelain` の実体を照合する（standards/GIT_CONVENTIONS.md §worktreeの正本）。
+ *
+ * CI（actions/checkout）は `.worktrees/` 型レイアウトを作らず、単一の通常チェックアウトのみを行うため
+ * 上記照合は常に空振りする。この場合、現在のHEADブランチ名が対象issueの branch.pattern に一致するなら、
+ * 単一チェックアウト自体がそのissueの作業対象であるとみなしフォールバックする（現在のチェックアウト =
+ * そのブランチの作業状態そのものであるため、AGENTS.md I4 分離不変条件と矛盾しない）。
  */
 export function findIssueWorktree(
   root: string,
@@ -84,7 +89,23 @@ export function findIssueWorktree(
     slug: '[a-z0-9-]+',
   });
   const pathRegex = new RegExp(`^${patternSource}/?$`);
-  return listWorktrees(root).find((w) => pathRegex.test(path.basename(w.path)));
+  const found = listWorktrees(root).find((w) => pathRegex.test(path.basename(w.path)));
+  if (found) return found;
+
+  const branchPatternSource = expandPattern(config.branch.pattern, {
+    type: '[a-z]+',
+    issue_id: issueNumber,
+    slug: '[a-z0-9-]+',
+  });
+  const branchRegex = new RegExp(`^${branchPatternSource}$`);
+  const currentBranch = git(['rev-parse', '--abbrev-ref', 'HEAD'], root);
+  if (currentBranch.status !== 0) return undefined;
+  const branch = currentBranch.stdout.trim();
+  if (!branchRegex.test(branch)) return undefined;
+
+  const head = git(['rev-parse', 'HEAD'], root);
+  if (head.status !== 0) return undefined;
+  return { path: root, head: head.stdout.trim(), branch };
 }
 
 /** 特定Issue番号に限定しない、worktree.path_pattern汎用の検証用正規表現。ci/verify-worktree-path.sh用。 */

@@ -87,3 +87,36 @@ Issue #171 の目的1・2（`init`実行による`.github/`一式導入、`revie
 - `00_要求定義.md` / `01_要件定義.md` / `02_設計.md` / `03_実装計画.md`（本ディレクトリ）。
 - `test/helpers/tmp-repo.ts`（`createTmpRepo()`実装）、`test/integration/gate-adapters.test.ts`（`setAdapter()`実装、T2/T3/T4/T5テスト本体）、`test/integration/doctor.test.ts`（test 23本体）、`test/integration/gate-judgment.test.ts`（test 49本体）。
 - `.agent-skill-chain/schemas/config.schema.yaml`（`review.adapter`のenum定義）。
+
+---
+
+## 6. 追記: PR #172 実地実行での `gate-review (spec)` 失敗と対応
+
+**発生**: 本Issueの成果を実際にPR #172として本番導入した後、GitHub Actions上の実地実行（run 29713314233、job 88261048289）で`gate-review (spec)`が下記エラーで失敗した。
+
+```
+ISSUE-171 の worktree が見つかりません
+##[error]Process completed with exit code 1.
+```
+
+### 根本原因
+
+`src/lib/worktree.ts`の`findIssueWorktree()`は、`git worktree list --porcelain`の実体（`.worktrees/<timestamp>-<type>-<issue>-<slug>/`パターンに一致するエントリ）にのみ依存していた。ローカル開発機では`git worktree add`済みの実物worktreeが存在するため機能するが、GitHub Actionsの`actions/checkout`は単一の通常チェックアウトを行うだけで`git worktree add`を一切使わない。そのため`git worktree list --porcelain`はチェックアウト先（リポジトリルートそのもの）1件のみを返し、`.worktrees/...`パターンには一致せず、常に`undefined`が返っていた。この関数は`src/commands/gate.ts`・`src/commands/verify.ts`・`src/commands/reconcile.ts`から呼ばれ、いずれもCI workflow（`.github/workflows/agent-skill-chain-{gate,ci,reconcile}.yml`）経由で実行されうる。
+
+### 対応
+
+`findIssueWorktree()`に、既存の`.worktrees/`型レイアウト照合が空振りした場合のフォールバックを追加した：リポジトリルートの現在のHEADブランチ名を取得し、そのブランチ名が対象issueの`branch.pattern`（`{type}/{issue_id}-{slug}`）に一致するなら、リポジトリルート自体をそのissueの作業対象とみなし`{ path: root, head: <HEAD SHA>, branch: <currentBranch> }`を返す。一致しなければ従来通り`undefined`を返す。
+
+この設計は「GitHub Actionsの単一チェックアウトでは`.worktrees/`型レイアウトを作らないため、現在のチェックアウト自体をそのissueの作業対象とみなす」という判断であり、単一チェックアウト＝そのブランチの作業状態そのものであるためAGENTS.md I4（分離）不変条件と矛盾しない。`cleanup.ts`等ローカル専用コマンド（CI workflowからは呼ばれない）がこのフォールバックを誤って踏んだ場合でも、`git worktree remove`はgit自身がmain working treeの削除を`fatal: '<path>' is a main working tree`として拒否するため、危険な副作用は生じないことを実機（`/tmp`の使い捨てリポジトリ）で確認済み。
+
+### 追加したテスト
+
+- `test/unit/worktree.test.ts`
+  - `findIssueWorktree: .worktrees型レイアウトが無い単一checkout状態でも、現在のブランチがissue_idに一致すればrootをentryとして返す（CI actions/checkoutフォールバック）`
+  - `findIssueWorktree: 単一checkout状態で現在のブランチがissue_idに一致しない場合はundefinedのまま`
+- `test/integration/issue-lifecycle.test.ts`
+  - `gate review (CI単一checkout): .worktrees/ レイアウト無しでも、現在のブランチがissue_idに一致すればrootを対象に動作する`（`.worktrees/`を経由せず、CI相当の単一checkoutから`gate review`コマンドが実際に成功することを確認）
+
+### 検証結果
+
+`npm test`実測：`# tests 325 / # pass 325 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（既存322件全pass + 新規3件全pass）。§3で報告した8件のtest fail（`review.adapter`デフォルト値変更・`.installed_version`混入起因）は、本追記時点では別途解消済みであり本追記のスコープ外。

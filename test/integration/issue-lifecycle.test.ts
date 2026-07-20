@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 
@@ -86,6 +87,26 @@ test('issue lifecycle (local backend): start -> lease -> segment -> gate -> chec
   assert.equal(cleanup.status, 0, cleanup.stderr);
   assert.equal(cleanup.stdout.trim(), worktreePath);
   assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
+});
+
+test('gate review (CI単一checkout): .worktrees/ レイアウト無しでも、現在のブランチがissue_idに一致すればrootを対象に動作する', async (t) => {
+  // GitHub Actions の actions/checkout は git worktree add を一切使わず、対象ブランチを
+  // リポジトリルートへ直接チェックアウトするだけの単一チェックアウトを行う（Issue #171 実地障害の再現）。
+  // findIssueWorktree の .worktrees/ 型レイアウト照合は空振りするため、rootへのフォールバックで
+  // gate review が動作することを確認する。
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  execFileSync('git', ['checkout', '-b', 'feature/171-ci-gate-dogfood'], { cwd: repo.dir, stdio: 'pipe' });
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: サンプル\n');
+  execFileSync('git', ['add', '-A'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'wip: SPEC追加'], { cwd: repo.dir, stdio: 'pipe' });
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-171', 'spec', 'strict'], { cwd: repo.dir });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPathMatch = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout);
+  assert.ok(gateReportPathMatch, 'gate_report_path が出力されること');
+  assert.ok(fs.existsSync(gateReportPathMatch![1]));
 });
 
 test('doctor (local backend): git/リポジトリ/configの検査がすべてOKになる', async (t) => {

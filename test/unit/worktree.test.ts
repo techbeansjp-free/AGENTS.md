@@ -19,6 +19,10 @@ function gitIn(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'pipe' });
 }
 
+function gitRev(cwd: string): string {
+  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+}
+
 test('listWorktrees: 初期状態ではメインworktree1件のみをbranch:mainで列挙する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -102,6 +106,33 @@ test('findIssueWorktree: worktree.path_patternに沿ったworktreeをissue番号
 
   const notFound = findIssueWorktree(repo.dir, config, '12345');
   assert.equal(notFound, undefined, '存在しないissue番号はundefined');
+});
+
+test('findIssueWorktree: .worktrees型レイアウトが無い単一checkout状態でも、現在のブランチがissue_idに一致すればrootをentryとして返す（CI actions/checkoutフォールバック）', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+
+  // actions/checkout は git worktree add を使わないため、.worktrees/ 型レイアウトは一切作られず
+  // `git worktree list --porcelain` はチェックアウト先（root）1件のみを返す状態を再現する。
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+
+  const found = findIssueWorktree(repo.dir, config, '171');
+  assert.ok(found, 'issue 171 に対応するエントリがフォールバックで見つかること');
+  assert.equal(path.resolve(found!.path), path.resolve(repo.dir));
+  assert.equal(found!.branch, 'feature/171-ci-gate-dogfood');
+  assert.equal(found!.head, gitRev(repo.dir));
+});
+
+test('findIssueWorktree: 単一checkout状態で現在のブランチがissue_idに一致しない場合はundefinedのまま', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+
+  const notFound = findIssueWorktree(repo.dir, config, '999');
+  assert.equal(notFound, undefined, 'issue 999 のブランチではないためフォールバックも不一致でundefined');
 });
 
 test('worktreePathRegex: path_patternに沿った形式のみ許容する', (t) => {
