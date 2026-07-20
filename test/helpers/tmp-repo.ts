@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { versionMarkerRelativePath } from '../../src/lib/version-marker.js';
 
 const packageRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 
@@ -37,7 +38,14 @@ export function createTmpRepo({ backend = 'local' }: { backend?: CoordinationBac
   git(dir, ['config', 'user.name', 'agent-skill-chain test']);
   git(dir, ['remote', 'add', 'origin', remoteDir]);
 
-  fs.cpSync(path.join(packageRoot, '.agent-skill-chain'), path.join(dir, '.agent-skill-chain'), { recursive: true });
+  // 本物のリポジトリ（このパッケージ自身）の .agent-skill-chain/ を複製するが、
+  // .installed_version は init 実行によって生成される実行時状態でありテンプレートに含めない
+  // （本物側で init 済みだとテスト fixture が「init未導入」を装えなくなる）。
+  const installedVersionAbs = path.join(packageRoot, versionMarkerRelativePath());
+  fs.cpSync(path.join(packageRoot, '.agent-skill-chain'), path.join(dir, '.agent-skill-chain'), {
+    recursive: true,
+    filter: (src) => src !== installedVersionAbs,
+  });
   fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
   fs.copyFileSync(path.join(packageRoot, 'docs', 'GLOSSARY.md'), path.join(dir, 'docs', 'GLOSSARY.md'));
   fs.copyFileSync(path.join(packageRoot, 'AGENTS.md'), path.join(dir, 'AGENTS.md'));
@@ -69,3 +77,40 @@ export function createTmpRepo({ backend = 'local' }: { backend?: CoordinationBac
 
 /** worktree.timestamp.format（既定 "%Y%m%d_%H%M%S"）に適合する固定タイムスタンプ。 */
 export const FIXED_TIMESTAMP = '20260101_000000';
+
+export type ReviewAdapter = 'claude' | 'codex' | 'human';
+
+/**
+ * review.adapter を書き換える。
+ *
+ * 書き換え前後でテキストが変わらないこと（= 既に目的の値だった場合）を失敗とはしない
+ * （本物のリポジトリ側の既定値が変わった場合に誤って no-op 判定してしまうバグの修正）。
+ * 代わりに、書き換え後のファイルを読み直し、実際に目的の adapter 値になっていることを検証する。
+ */
+export function setAdapter(repoDir: string, adapter: ReviewAdapter): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/adapter: \w+/, `adapter: ${adapter}`);
+  fs.writeFileSync(configPath, patched);
+
+  const after = fs.readFileSync(configPath, 'utf8');
+  if (!new RegExp(`adapter: ${adapter}\\b`).test(after)) {
+    throw new Error(`review.adapter を ${adapter} へ書き換えられませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）`);
+  }
+}
+
+/**
+ * review.adapter 行そのものを config から取り除く（schema上 review.adapter は任意項目）。
+ * CLI 側の既定値フォールバック（未設定時 claude）を、本物のリポジトリ側の現在値に依存せず検証するために使う。
+ */
+export function unsetAdapter(repoDir: string): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/^\s*adapter: \w+.*\n/m, '');
+  fs.writeFileSync(configPath, patched);
+
+  const after = fs.readFileSync(configPath, 'utf8');
+  if (/adapter: \w+/.test(after)) {
+    throw new Error('review.adapter 行を削除できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
+  }
+}

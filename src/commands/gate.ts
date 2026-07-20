@@ -12,10 +12,18 @@ import { digestOf, digestOfFile } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const REVIEW_USAGE = `
-使い方: agent-skill-chain gate review <issue_id> <gate_id> <profile>
+使い方: agent-skill-chain gate review <issue_id> <gate_id> <profile> [target_sha]
 
 gate_id: spec|design|implementation|validation
 profile: standard|strict
+target_sha: 省略可。指定時はこの値をgate-reportのtarget_shaとして採用し、
+            entry.pathでのgit rev-parse HEADによる自己解決を行わない。
+            CI環境（actions/checkoutがpull_requestのマージrefをdetached HEADで
+            チェックアウトするケース）では、呼び出し元（workflow）がPRの実際の
+            ブランチ先端コミット（github.event.pull_request.head.sha）を明示的に
+            渡すことで、Check Runのhead_shaとPRの実際のコミットの不一致を防ぐ。
+            省略時は従来通りgit rev-parse HEADで自己解決する（ローカル開発機での
+            既存の使い方はそのまま）。
 
 出力:
   成功時: 終了コード0。schemas/gate-report.schema.yaml準拠のgate-reportパス（レビュア記入用の
@@ -167,7 +175,7 @@ export async function review(args: string[]): Promise<number> {
       printUsage(REVIEW_USAGE);
       return 0;
     }
-    const [issueIdRaw, gateId, profile] = args;
+    const [issueIdRaw, gateId, profile, targetShaArg] = args;
     if (!issueIdRaw || !gateId || !profile) throw new CliError('issue_id, gate_id, profile はすべて必須です');
     const { number } = parseIssueId(issueIdRaw);
     validateGateId(gateId);
@@ -179,7 +187,11 @@ export async function review(args: string[]): Promise<number> {
     const config = loadConfig(root);
     const entry = findIssueWorktree(root, config, number);
     if (!entry) throw new CliError(`ISSUE-${number} の worktree が見つかりません`);
-    const targetSha = git(['rev-parse', 'HEAD'], entry.path).stdout.trim();
+    // target_sha が明示指定された場合はそれを採用する（CI環境ではentry.pathのHEADが
+    // actions/checkoutのマージrefdetached HEADになりPRの実際のブランチ先端コミットと
+    // 乖離するため。呼び出し元workflowがgithub.event.pull_request.head.shaを渡す）。
+    // 未指定時は従来通りentry.pathのHEADから自己解決する（ローカル開発機での既存利用を維持）。
+    const targetSha = targetShaArg || git(['rev-parse', 'HEAD'], entry.path).stdout.trim();
     if (!targetSha) throw new CliError('target_sha を取得できませんでした');
 
     const scaffold: GateReport = {
@@ -314,7 +326,7 @@ export async function reconcile(args: string[]): Promise<number> {
       }
 
       // ローカルモードでは reviews/<gate>.yaml（上記writeYamlFileAtomic）が正本。GitHubモードでは
-      // Check Runが正本（AGENTS.md §コーディネーションバックエンド）のため、新しいtarget_shaに対して
+      // Check Runが正本（AGENTS.md §Coordination Backend）のため、新しいtarget_shaに対して
       // 再発行または無効化のCheck Runを明示的に発行し直す必要がある（発行しないと新SHAにrequired
       // status checkが一切存在せず、merge判定が永久にpending留まりになる）。
       if (config.coordination.backend === 'github') {

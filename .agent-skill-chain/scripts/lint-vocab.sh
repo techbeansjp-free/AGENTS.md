@@ -2,8 +2,15 @@
 # 正本: AGENTS.md §用語
 #
 # 禁止語彙（旧システム名称等）の混入を検査する。対象は生きたファイル
-# （AGENTS.md・.agent-skill-chain/standards/・.agent-skill-chain/templates/・.agent-skill-chain/config/・.agent-skill-chain/schemas/・.agent-skill-chain/scripts/・.agent-skill-chain/ci/等）であり、
+# （AGENTS.md・.agent-skill-chain/standards/・.agent-skill-chain/ci/等）であり、
 # memo/等の非追跡scratchは対象外。禁止語・許容語の一覧はdocs/GLOSSARY.mdを正本とする。
+#
+# docs/GLOSSARY.md自体は対象外（禁止同義語列で禁止語を文字通り列挙する構造上、恒久的に
+# 自分自身を誤検出するため）。
+#
+# .agent-skill-chain/{templates,config,schemas,scripts}/ は一時的に対象外（識別子・YAMLキー・
+# CLIサブコマンド名としての"issue"等の正当利用を、現行スキャナが散文の誤用と区別できず大量誤検出
+# するため）。識別子対応スキャナ実装後、follow-up issueで対象復帰する。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
 # `lint vocab` サブコマンドへの薄いラッパーである（使い方は `lint vocab -h` 参照）。

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 正本: AGENTS.md §不変条件I2（フェーズゲート）・§ゲートの継承・無効化 / .agent-skill-chain/schemas/gate-report.schema.yaml
+# 正本: AGENTS.md §不変条件I2（セグメントゲート）・§ゲートの継承・無効化 / .agent-skill-chain/schemas/gate-report.schema.yaml
 #
 # gate-report が .agent-skill-chain/schemas/gate-report.schema.yaml（schema_version:
 # agent-skill-chain/gate-report/v1）に適合し、gate.conformance と gate.falsification の

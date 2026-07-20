@@ -24,7 +24,7 @@ risk:
   default: unclassified        # unclassified | normal | high
 
 review:
-  adapter: claude              # claude | codex | human（判定ステップが起動する launch_gate_reviewer 実体）
+  adapter: human                # claude | codex | human（判定ステップが起動する launch_gate_reviewer 実体）
   standard: {reviewer_count: 1, modes: [conformance, falsification]}
   strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
 

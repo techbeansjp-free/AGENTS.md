@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
-import { createTmpRepo, FIXED_TIMESTAMP, type CoordinationBackend } from '../helpers/tmp-repo.js';
+import { createTmpRepo, setAdapter, FIXED_TIMESTAMP, type CoordinationBackend } from '../helpers/tmp-repo.js';
 import { runCli, binPath } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 
@@ -49,15 +49,6 @@ function installCliShim(repoDir: string): void {
   fs.writeFileSync(shim, `#!/usr/bin/env bash\nexec node ${JSON.stringify(binPath)} "$@"\n`, { mode: 0o755 });
 }
 
-/** review.adapter を書き換える（既定 claude）。 */
-function setAdapter(repoDir: string, adapter: 'claude' | 'codex' | 'human'): void {
-  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
-  const text = fs.readFileSync(configPath, 'utf8');
-  const patched = text.replace(/adapter: \w+/, `adapter: ${adapter}`);
-  assert.notEqual(patched, text, 'review.adapter の書き換えに失敗しました');
-  fs.writeFileSync(configPath, patched);
-}
-
 /** issue start → SPEC.md → checkpoint → gate review を行い、pending gate-report を得る共通準備。 */
 function setupGateReview(opts: { backend?: CoordinationBackend; env?: NodeJS.ProcessEnv } = {}) {
   const { backend = 'local', env = process.env } = opts;
@@ -99,6 +90,7 @@ function envWithout(keys: string[], extra: NodeJS.ProcessEnv = {}): NodeJS.Proce
 test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-report へ結線し exit 0（final=approved）', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
 
   // Given: pass/pass を返す stub レビュア（GATE_REVIEWER_CMD）と認証キーあり。
   const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
@@ -126,6 +118,7 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
 test('claude launch_gate_reviewer: 認証未設定は安全側（human_required）へ倒し exit が 0 でも 3 でもない', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
 
   // Given: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 未設定。
   const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], { GATE_REVIEWER_RETRY_INTERVAL_SEC: '0' });
@@ -142,6 +135,7 @@ test('claude launch_gate_reviewer: 認証未設定は安全側（human_required�
 test('claude launch_gate_reviewer: レビュア起動失敗は human_required へ倒す（silent pass しない）', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
 
   // Given: 認証キーはあるが、レビュアが非ゼロ終了する（API 障害相当）。
   const env = envWithout([], {
@@ -232,6 +226,7 @@ test('gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了�
   {
     const { repo, reportPath, targetSha } = setupGateReview();
     t.after(() => repo.cleanup());
+    setAdapter(repo.dir, 'claude');
     const env = envWithout([], {
       ANTHROPIC_API_KEY: 'dummy',
       GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '{"conformance":"pass","falsification":"pass","blockers":[]}'`,

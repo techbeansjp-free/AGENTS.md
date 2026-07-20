@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot } from '../lib/paths.js';
-import { defaultLiveFileRoots, walkTextFiles } from '../lib/scan.js';
+import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../lib/scan.js';
 import { parseForbiddenTerms } from '../lib/glossary.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 
@@ -35,8 +35,70 @@ check: 検査を実行するサブコマンド（他のサブコマンドは将�
   失敗時（違反あり）: 終了コード1以上。違反ADR ID・理由を標準エラー出力へ。
 `;
 
-function resolveTargets(args: string[], root: string): string[] {
-  return args.length > 0 ? args.map((p) => path.resolve(p)) : defaultLiveFileRoots(root);
+function resolveTargets(args: string[], root: string, defaultRoots: (root: string) => string[] = defaultLiveFileRoots): string[] {
+  return args.length > 0 ? args.map((p) => path.resolve(p)) : defaultRoots(root);
+}
+
+// バッククォートで囲まれたインラインコードスパン。スパン内は実コード・実パスの引用であり
+// 散文としての禁止語誤用ではないため、vocab検査の対象外とする。
+const BACKTICK_SPAN_RE = /`[^`]*`/g;
+
+// `<placeholder>` 形式のプレースホルダトークン（例: `<issue-id>`、`<gate>`）。設定値・命名規則が
+// 使う実際のプレースホルダ構文であり、散文中の語の言い換えではないため対象外とする。
+const PLACEHOLDER_SPAN_RE = /<[^<>\n]*>/g;
+
+// ASCII のパス・識別子構成文字（英数字・`_.-{},/`）のみからなる連続runで、かつ `/` を1つ以上含む
+// もの（例: `.agent-skill-chain/templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`）。日本語の助詞・
+// 句読点はこの文字集合に含まれないため、散文中で禁止語が単独の語として使われている箇所（例:
+// 「issueの説明」）まで誤って対象外にすることはない。
+const PATH_TOKEN_RE = /[\w.{}\-,/]+/g;
+
+/** 行内の指定範囲 [start, start+length) が、バッククォートスパン・プレースホルダスパン・
+ * スラッシュを含むパス風トークンのいずれかに完全に包含される場合、散文の誤用ではなく
+ * 正当な技術的参照（コード引用・プレースホルダ・ファイルパス）とみなし検査対象から除外する。
+ *
+ * ただし禁止語自体がパス形式の文字列（例: GLOSSARY.md の `.agent-skill-chain/source`。旧パス名への
+ * 言及そのものを禁止する意図）である場合はこれらの除外を一切適用しない。この種の禁止語は
+ * 「パス風に見えるから誤検出」なのではなく、禁止されているパス文字列そのものであるため、
+ * バッククォートや `/` の有無に関わらず常に検出しなければならない（除外すると禁止語自体が
+ * 検査不能になってしまう）。 */
+function isCodeLikeReference(line: string, start: number, length: number, banned: string): boolean {
+  if (banned.includes('/')) return false;
+  const end = start + length;
+  const containedIn = (re: RegExp): boolean => {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(line))) {
+      if (m.index <= start && end <= m.index + m[0].length) return true;
+    }
+    return false;
+  };
+  if (containedIn(BACKTICK_SPAN_RE)) return true;
+  if (containedIn(PLACEHOLDER_SPAN_RE)) return true;
+  return containedInPathToken(line, start, end);
+}
+
+function containedInPathToken(line: string, start: number, end: number): boolean {
+  PATH_TOKEN_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = PATH_TOKEN_RE.exec(line))) {
+    const tokenStart = m.index;
+    const tokenEnd = m.index + m[0].length;
+    if (tokenStart <= start && end <= tokenEnd && m[0].includes('/')) return true;
+  }
+  return false;
+}
+
+/** 行中に出現する banned の全箇所を走査し、いずれもコード的参照（バッククォート・
+ * プレースホルダ・パス風トークン）に包含されない箇所が1つでもあれば、散文の誤用として検出する。 */
+function hasProseViolation(line: string, banned: string): boolean {
+  let searchFrom = 0;
+  while (true) {
+    const idx = line.indexOf(banned, searchFrom);
+    if (idx === -1) return false;
+    if (!isCodeLikeReference(line, idx, banned.length, banned)) return true;
+    searchFrom = idx + banned.length;
+  }
 }
 
 export async function vocab(args: string[]): Promise<number> {
@@ -48,14 +110,14 @@ export async function vocab(args: string[]): Promise<number> {
     const root = repoRoot();
     const glossaryPath = path.join(root, 'docs', 'GLOSSARY.md');
     const forbidden = parseForbiddenTerms(glossaryPath);
-    const files = walkTextFiles(resolveTargets(args, root));
+    const files = walkTextFiles(resolveTargets(args, root, defaultVocabFileRoots));
 
     const violations: string[] = [];
     for (const file of files) {
       const lines = fs.readFileSync(file, 'utf8').split('\n');
       lines.forEach((line, index) => {
         for (const { banned, correctTerm } of forbidden) {
-          if (line.includes(banned)) {
+          if (hasProseViolation(line, banned)) {
             violations.push(`${file}:${index + 1}: 禁止語 '${banned}' が見つかりました（'${correctTerm}' を使用してください）`);
           }
         }
