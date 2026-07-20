@@ -485,6 +485,48 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   assert.match(stale.stderr, /approved_artifacts の digest が現在のファイル内容と一致しません: SPEC\.md/);
 });
 
+// ISSUE-176 AC-4: 承認済み成果物が削除された場合も digest 不一致として検知されること
+// （旧実装は `fs.existsSync(abs) && digestOfFile(abs) !== artifact.digest` という条件式のため、
+// existsSync が false の場合は条件全体がfalseになり検知が完全にスキップされていた）。
+test('verify gate-report (ISSUE-176 AC-4): 承認済み成果物が削除されている場合はdigest不一致として検知される', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
+
+  // Given: SPEC.mdをapproved_artifactsに対応付け、承認済みにする。
+  const specDigest = sha256(fs.readFileSync(path.join(worktreePath, 'SPEC.md')));
+  const approvedText = fs
+    .readFileSync(gateReportPath, 'utf8')
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: pass')
+    .replace('final: pending', 'final: approved')
+    .replace('approved_artifacts: []', `approved_artifacts:\n    - path: SPEC.md\n      digest: ${specDigest}`);
+  fs.writeFileSync(gateReportPath, approvedText);
+
+  // 削除前は成功すること（regressionの前提確認）。
+  const beforeDelete = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(beforeDelete.status, 0, beforeDelete.stderr);
+
+  // When: 承認後にSPEC.md自体を削除する（内容変更ではなく削除）。
+  fs.unlinkSync(path.join(worktreePath, 'SPEC.md'));
+
+  // Then: 削除もdigest不一致として検知され、失敗すること（AC-4）。
+  const afterDelete = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(afterDelete.status, 1);
+  assert.match(afterDelete.stderr, /approved_artifacts のファイルが削除されています（digest不一致として扱います）: SPEC\.md/);
+});
+
 // ---- verify template-sync ----
 
 test('verify template-sync: 未同期・同期後の一致・再改変による差分検出をすべて確認する', async (t) => {
