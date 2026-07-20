@@ -224,7 +224,7 @@ acceptance_criteria:
     verification:
       mode: manual
       result: fail
-      reason: "secret scanを含む`verify`ジョブが、本リポジトリのライブ設定では required check として機能していないことを、branch protection/ruleset APIおよび実PRのmergeable状態で実測確認した"
+      reason: "secret scanを含む`verify`ジョブが、本リポジトリのライブ設定では required check として機能していないことを、branch protection/ruleset APIおよび実PRのmergeable状態で実測確認した。この実測結果（fail）はコード実装の不備ではなく、本リポジトリのライブbranch protection/ruleset設定が未適用であるというインフラ設定の不備に起因する（finding-3参照）。進行役はこれを本Issue（ISSUE-178）のコード実装スコープ外と判断し、SPEC.md AC-10・スコープ外節を『テンプレート設定への反映まで』に改定したうえで、ライブ適用・実機確認の完了はIssue #180へ切り出すことを決定した。本エントリのresult: failはこの判断後も実測事実として書き換えず、そのまま保持する"
       procedure: "1) gh api repos/techbeansjp-free/AGENTS.md/rulesets を実行し空配列（ruleset未適用）であることを確認。2) gh api repos/techbeansjp-free/AGENTS.md/branches/main/protection を実行し、required_status_checks.contexts が['self-enforce']のみで'verify'を含まないことを確認。3) gh api repos/techbeansjp-free/AGENTS.md/branches/chore%2F162-agent-skill-chain-bootstrap/protection を実行し404『Branch not protected』（本Issueのマージ先ブランチに保護が一切無い）ことを確認。4) 本Issue自身のPR #179（対chore/162-agent-skill-chain-bootstrap）で、'verify' Check RunがFAILUREである現在の状態でも gh pr view --json mergeable,mergeStateStatus が mergeable: MERGEABLE を返すこと（ブロックされていない）を確認した。使い捨てPRによる直接実験はツール権限制約により実施できなかったが、上記4点で十分な実測証跡と判断した"
       executor: claude
     evidence:
@@ -233,6 +233,7 @@ acceptance_criteria:
       - "実機確認: gh api .../branches/chore%2F162-agent-skill-chain-bootstrap/protection → 404 Branch not protected"
       - "実機確認: gh pr view 179 --json mergeable,mergeStateStatus → mergeable: MERGEABLE（verify job FAILURE中でも）"
       - "finding-3参照: 是正には.agent-skill-chain/scripts/setup-ruleset.sh等によるライブリポジトリへの適用が必要だが、他worktree/セッションへの影響を考慮し独立検証者の権限では実行しなかった"
+      - "進行役判断: この不合格はコード実装の不備ではなくライブ設定の不備であるため、ライブ適用・実機確認の完了をIssue #180へ切り出す（SPEC.md AC-10・スコープ外節を改定済み）。result: failは実測事実として維持する"
 
   - ac_id: AC-11
     verification:

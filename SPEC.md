@@ -57,7 +57,7 @@ Issue #178本文（対象範囲1〜3・成功基準）に基づく要求：
   - push成功時: ADR-0002の`status`フィールドのみを`accepted`へ更新する（AGENTS.md「ADR・テンプレート・テスト適用性」節が定めるADR finalization手順に従い、Context/Decision/Consequences本文・`supersedes`は変更しない）。Consequences節の「実機検証がまだ完了していない」という記述と実際の状態の不整合は、本文不変の原則があるため新規ADRでの補記ではなく、`status`更新それ自体が「検証完了」を意味する運用としてPLAN.md/DESIGN.mdで確定する。
   - push失敗時（権限不足等）: ADR-0002の本文は書き換えず、新規ADR（`docs/adr/ADR-0003-*.md`）を作成してADR-0002を`superseded`にし、対応方針（PAT scope拡張の運用手順文書化、または別方式への転換）をこの新規ADRのDecision節に記録する。
 - **要件5（secret scan CIジョブ）**: `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-ci.yml`（正本）と`.github/workflows/agent-skill-chain-ci.yml`（配布先、内容同一で同期）の両方にsecret scanのステップまたはジョブを追加する。検出時はステップが非ゼロ終了しCI全体を失敗させる。既存の`npm ci`・`npm run build`・`npm test`・各種`verify-*`/`lint-*`ステップとの実行順序・所要時間への影響を考慮し、依存の無いステップ同士の並列化（別jobへの分離）または既存jobの適切な位置への追加を設計フェーズで判断する。
-- **要件6（secret scanのrequired check化）**: GitHub branch protection / rulesetの設定（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`が正本、`.agent-skill-chain/scripts/setup-ruleset.sh`で適用）にsecret scanジョブ（または追加後のCI全体のCheck Run名）が含まれるようにし、このリポジトリへ実際に適用してrequired checkとして機能することを確認する。
+- **要件6（secret scanのrequired check設定への反映）**: GitHub branch protection / rulesetの設定（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`が正本、`.agent-skill-chain/scripts/setup-ruleset.sh`で適用）にsecret scanジョブ（または追加後のCI全体のCheck Run名）が含まれるようにする。このテンプレート設定を本リポジトリ（`techbeansjp-free/AGENTS.md`）のライブのbranch protection/ruleset設定へ実際に適用し、required checkとして機能することを実機確認する作業は、リポジトリ全体の保護設定を変更する強い副作用を持ち、本Issue実施時点で並行稼働中の他worktree/セッションに影響しうるインフラ設定操作であるため、本Issueのスコープから切り出す（切り出し先はIssue #180、詳細は「スコープ外」節参照）。
 
 ### 受入条件（Acceptance Criteria）
 
@@ -124,12 +124,13 @@ Issue #178本文（対象範囲1〜3・成功基準）に基づく要求：
 - Then: secret scanステップが誤検知（false positive）を起こさず、CI全体が従来通りpassすることを実測確認する（既存テストスイート・既存の`verify-*`/`lint-*`ステップの実行結果に影響しないこと含む）
 - 検証方法見込み: `automated`
 
-#### AC-10: secret scanがrequired checkとして機能する
+#### AC-10: secret scanを含むCI全体のCheck Run名がruleset設定テンプレートのrequired checkに含まれている（ライブ適用の実機確認は対象外）
 
-- Given: secret scanを含むCIジョブが追加され、branch protection / ruleset設定（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`）に反映された状態
-- When: secret scanが失敗する差分を含むPRを作成する
-- Then: GitHub上でこのPRがrequired checkの未達によりmerge不可状態になることを実際のPR画面・API（`gh pr view --json statusCheckRollup`等）で実測確認する
-- 検証方法見込み: `manual`（GitHub UI/APIでのrequired check状態の実機確認）
+- Given: secret scanを含むCIジョブが追加された状態
+- When: branch protection / ruleset設定の正本（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`）の内容を確認する
+- Then: secret scanを含むCI全体のCheck Run名（`verify`）が`required_status_checks`に含まれていることを確認する
+- 検証方法見込み: `automated`（テンプレートファイルの内容検査）
+- 対象外（Issue #180へ切り出し）: 上記テンプレート設定を本リポジトリ（`techbeansjp-free/AGENTS.md`）のライブのbranch protection/ruleset設定へ実際に適用し、secret scanが失敗する差分を含むPRがGitHub上でrequired checkの未達によりmerge不可状態になることを実際のPR画面・API（`gh pr view --json statusCheckRollup`等）で実測確認するところまでは、本Issueのスコープに含めない。理由：ライブのruleset適用（`.agent-skill-chain/scripts/setup-ruleset.sh`の実行）はリポジトリ全体の保護設定を変更する強い副作用を持ち、本Issue実施時点で並行稼働中の他worktree/セッションに影響しうるインフラ設定操作であり、テンプレートファイルを更新するというコード変更の範囲を超えるため。この判断は独立検証（VALIDATION.md finding-3）で発見された実測結果（ライブ設定に未適用であること）を受けて進行役が行った。由来はIssue #180。
 
 #### AC-11: 正本（`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-ci.yml`）と配布先（`.github/workflows/agent-skill-chain-ci.yml`）が同期している
 
@@ -155,3 +156,4 @@ Issue #178本文（対象範囲1〜3・成功基準）に基づく要求：
 - ADR-0002の実機検証がpush失敗に終わった場合の、新方式（PAT scope拡張以外の代替lease機構）の実装自体（新規ADRでの方針決定・記録までを本Issueのスコープとし、方針が「別方式への転換」だった場合の実装は別Issue）。
 - secret scanで使用する具体的なツール・実装方式（例：正規表現ベースの自作スクリプトか、既存OSSツールの導入か）の選定は設計フェーズ（DESIGN.md）で確定する。本SPEC.mdでは「検知・失敗させる」という振る舞い要件のみを定め、実装手段は指定しない。
 - 既存のsecret検出漏れ（過去commitに既に混入している可能性のあるsecretの遡及スキャン・履歴からの除去）。本Issueは今後のPRに対するCI検査の追加のみを対象とし、履歴の遡及監査は別Issue。
+- secret scanのrequired check化のうち、branch protection / ruleset設定を本リポジトリ（`techbeansjp-free/AGENTS.md`）のライブ環境へ実際に適用し、secret scanが失敗する差分を含むPRがrequired check未達でmerge不可になることを実機（PR画面・API）で確認する作業。テンプレートファイル（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`）へrequired checkの設定を反映するところまでは本Issueのスコープ内（AC-10）だが、そのライブ適用（`.agent-skill-chain/scripts/setup-ruleset.sh`の実行）はリポジトリ全体の保護設定を変更する強い副作用を持ち、本Issue実施時点で並行稼働中の他worktree/セッションに影響しうるインフラ設定操作であるため切り出す。独立検証（VALIDATION.md finding-3）で、本リポジトリのライブ設定が未適用であることが実測判明したことを受けた進行役判断であり、切り出し先はIssue #180。
