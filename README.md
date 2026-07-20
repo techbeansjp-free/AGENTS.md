@@ -7,26 +7,33 @@ Coordination Backend（GitHub の Issue・PR・Check Run、またはローカル
 対象リポジトリのルートで実行する。npm レジストリを経由せず GitHub を直接参照する。
 
 ```bash
-npx github:techbeansjp-free/AGENTS.md setup
+npx github:techbeansjp-free/AGENTS.md init
 ```
 
 版を固定する場合は git ref を指定する。
 
 ```bash
-npx github:techbeansjp-free/AGENTS.md#<tag-or-branch> setup
+npx github:techbeansjp-free/AGENTS.md#<tag-or-branch> init
 ```
 
-`setup` は `AGENTS.md`・`CLAUDE.md`・`docs/GLOSSARY.md` をルート直下へ、`standards/templates/schemas/config/adapters/scripts/ci` を `.agent-skill-chain/` 配下へ配置したうえで、続けて `.github/` ワークフロー一式の同期・ラベル（`type:*` 等）・branch ruleset（`main` 保護・4 ゲートの required status checks）の適用まで一括で行う（衝突するファイルがある場合は上書きせず日本語の理由付きエラーで停止する）。ラベル・ruleset の適用には認証済みの `gh` CLI と対象リポジトリの GitHub remote（または `--repo`/`owner/repo` 引数）が必要。
-
-`.github/` 同期・ラベル・ruleset の適用だけを単体で再実行したい場合（テンプレート更新後の再同期など）は次を使う。
+`init` は `AGENTS.md`・`CLAUDE.md`・`docs/GLOSSARY.md` をルート直下へ、`standards/templates/schemas/config/adapters/scripts/ci/hooks` を `.agent-skill-chain/` 配下へローカルファイル操作のみで導入する（GitHub API 呼び出しは行わない。衝突するファイルがある場合は上書きせず日本語の理由付きエラーで停止する）。`--dry-run` で実ファイルを書き込まずに導入予定一覧を確認できる。GitHub 側（`.github/` ワークフロー同期・ラベル・branch ruleset）の適用は続けて次を実行する（認証済みの `gh` CLI と対象リポジトリの GitHub remote、または `--repo`/`owner/repo` 引数が必要）。
 
 ```bash
-npx github:techbeansjp-free/AGENTS.md setup github   # 3つまとめて再実行
+npx github:techbeansjp-free/AGENTS.md setup github   # .github同期 + ラベル + ruleset をまとめて実行
 npx github:techbeansjp-free/AGENTS.md setup labels [owner/repo]    # ラベルのみ
 npx github:techbeansjp-free/AGENTS.md setup ruleset [owner/repo]   # rulesetのみ
 ```
 
-GitHub Issue/PR/Check Run を使わないローカルモード（`coordination.backend: local`）では GitHub 側の適用は不要だが、現状 `setup` は無条件に GitHub 適用まで行うため、`gh` 未認証・remote 未設定の環境では `setup` 自体が失敗する。
+導入後の更新・撤去には `upgrade`/`uninstall` を使う。
+
+```bash
+npx github:techbeansjp-free/AGENTS.md upgrade [target_dir] [--dry-run]     # 正本アセットを現行バージョンへミラー更新（project/は不可侵）
+npx github:techbeansjp-free/AGENTS.md uninstall [target_dir] [--dry-run]  # 安全確認（未commit差分なし・残存worktreeなし）を経て撤去（project/は保持）
+```
+
+`setup`（引数なし）は `init` + `setup github` を一括実行する後方互換の非推奨エイリアスとして残置している（実行時にstderrへ非推奨警告を出す）。GitHub Issue/PR/Check Run を使わないローカルモード（`coordination.backend: local`）では `init` のみで導入が完結する。
+
+`enforce on`/`enforce off` は `.claude/settings.json` へ PreToolUse hook を配線/非配線する。配線されるhookは `tool_name=="Bash"` のコマンド文字列のみを検査し、`git worktree remove` の直接実行と命名規約違反のブランチ作成のみを拒否する狭い安全網であり、Agent/Task 等の非Bashツール呼び出しは対象外（拒否されない）。詳細・設計根拠は [AGENTS.md §不変条件](AGENTS.md) を参照。
 
 ## CLI コマンド一覧
 
@@ -34,7 +41,9 @@ GitHub Issue/PR/Check Run を使わないローカルモード（`coordination.b
 
 | 分類 | コマンド |
 |------|----------|
-| セットアップ | `setup [target_dir]`, `setup github [target_dir]`, `setup labels [owner/repo]`, `setup ruleset [owner/repo]`, `sync templates` |
+| ライフサイクル | `init [target_dir] [--dry-run]`, `upgrade [target_dir] [--dry-run]`, `uninstall [target_dir] [--dry-run]` |
+| enforce | `enforce on [target_dir]`, `enforce off [target_dir]` |
+| セットアップ（GitHub側・非推奨エイリアス含む） | `setup [target_dir]`（非推奨）, `setup github [target_dir]`, `setup labels [owner/repo]`, `setup ruleset [owner/repo]`, `sync templates` |
 | Issue・worktree | `issue start`, `issue resume`, `checkpoint`, `cleanup` |
 | writer lease | `lease acquire`, `lease release`, `lease renew` |
 | セグメント・ゲート | `segment start`, `gate review`, `gate publish`, `gate reconcile` |

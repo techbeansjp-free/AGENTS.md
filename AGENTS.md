@@ -129,8 +129,10 @@ docs/{GLOSSARY.md, adr/, system-spec/}
   schemas/{config,state,gate-report,validation-report,worker-report,integration,lease,segments,project-policy}.schema.yaml
   config/{agent-skill-chain.yaml, segments.yaml, roles.yaml}
   adapters/{claude,codex,human}.sh
-  scripts/  (setup*, issue-start/resume, lease-*, segment-start, gate-*, pr-create,
-             adr-finalize, cleanup, doctor, reconcile, lint-vocab, lint-references, adr-lint)
+  hooks/{claude-pretooluse.sh}   # `enforce on` が配線するPreToolUse hook本体
+  scripts/  (init, upgrade, uninstall, enforce, setup*, issue-start/resume, lease-*,
+             segment-start, gate-*, pr-create, adr-finalize, cleanup, doctor, reconcile,
+             lint-vocab, lint-references, adr-lint)
   ci/  (verify-branch-name, verify-worktree-path, verify-template-sync, verify-doc-length,
         verify-ac-coverage, verify-gate-report, verify-artifacts, verify-adr)
 ```
