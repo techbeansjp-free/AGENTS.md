@@ -90,5 +90,17 @@ jobs:
       - name: lint-references
         run: ./.agent-skill-chain/scripts/lint-references.sh
 
+      - name: Fetch base branch for secret scan
+        if: github.base_ref != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF" --depth=1
+
+      - name: lint-secrets (PRで追加された行のみ)
+        if: github.base_ref != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: ./.agent-skill-chain/scripts/lint-secrets.sh --diff "origin/$BASE_REF"
+
       - name: adr-lint
         run: ./.agent-skill-chain/scripts/adr-lint.sh check
