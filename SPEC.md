@@ -3,22 +3,20 @@
 このファイルは Issue 毎に複製して使う雛形である（セグメント: spec、成果物: SPEC.md、ゲート: spec-gate）。
 -->
 
-# SPEC: agent-skill-chain — doctor網羅性拡張・branch-name自己違反・segments.yaml矛盾・PRテンプレート未使用の解消
+# SPEC: agent-skill-chain — writer leaseの真の原子性強化・.worktrees未gitignore・gate-report digest不一致検知漏れ
 
-- Issue: `ISSUE-174`
+- Issue: `ISSUE-176`
 - 作成者: `claude`
-- 対象ブランチ: `feature/174-gap-batch2`
+- 対象ブランチ: `feature/176-lease-atomicity`
 
 ## 目的・背景
 
-実装チェックリスト（35章）とagent-skill-chain CLI実装とのギャップ分析（`memo/システム刷新/20260719_173313_実装チェックリスト_ギャップ一覧.md`）で識別された、比較的小〜中規模の残課題4件を一括で解消する。個別にIssue化するには小粒だが、放置するとdoctorの検査網羅性・自己整合性（このプロジェクト自身がAGENTS.md/CI規約に違反していないこと）・PR運用品質のいずれかを損ない続けるため、まとめて対応する。
+実装チェックリストとのギャップ分析の残課題のうち、writer leaseの排他制御の堅牢性に関わるものをまとめて対応する。対象は独立した4件（相互依存なし、変更規模が小さいためのバッチ化）。
 
-4件はそれぞれ独立した不整合であり、相互依存はない（同一PRでまとめて扱うのは変更規模が小さいためのバッチ化であり、機能的な結合はない）。
-
-1. **doctorの検査範囲不足**: 現状`src/commands/doctor.ts`の`doctor`コマンドはgit有無・gitリポジトリ判定・`.agent-skill-chain/config/agent-skill-chain.yaml`読込・（GitHubモード時のみ）gh CLI有無・gh認証状態の5項目（うち必須3・情報2）のみを検査する。worktree命名規約・main worktreeのclean状態・GitHub配布テンプレート同期・schemas構文という、CI（`.agent-skill-chain/ci/`配下の各verify-*.sh）では検査されているがローカル`doctor`実行では検査されない項目が存在し、開発者がpush前にローカルで問題を検知できない。
-2. **branch-name自己矛盾**: `.agent-skill-chain/config/agent-skill-chain.yaml`の`issue.allowed_types`（Issue本文は`branch.allowed_types`と表記するが、実装上の該当キーは`issue.allowed_types`であり、`branch.pattern`の`{type}`部分の許容値としてこの`issue.allowed_types`が参照される）に`chore`が含まれていないため、このリポジトリ自身に実在する`chore/162-agent-skill-chain-bootstrap`等`chore/`プレフィックスのブランチが`agent-skill-chain verify branch-name`で不適合（NG）と判定される。自プロジェクトが自身の規約検査に違反するという自己矛盾を解消する。
-3. **segments.yamlの自己矛盾**: `.agent-skill-chain/config/segments.yaml`の`validation`セグメント`outputs`に`pr`が含まれているが、`src/commands/verify.ts`の`checkOutputExists()`の`case 'pr':`は常に`true`を返す実質no-opであり、`outputs`一覧に含める意味がない。これはAGENTS.md「④独立検証」の主成果物定義（受入/統合/回帰テスト・PR）とチェックリストが定める「VALIDATION出力にPR自体を検証項目として含めない」原則との不整合であり、`outputs`定義とその実装の乖離を解消する。
-4. **PRテンプレート未使用**: `src/commands/pr.ts`の`pr create`（GitHubモード）は`gh pr create`実行時に本文を`Closes #<id>`のみで生成し、`.agent-skill-chain/templates/github/.github/pull_request_template.md`（変更概要・自己完結性チェック等を含む正式テンプレート）の内容を一切反映しない。作成されるPRが自己完結性チェック・セグメント進捗チェックボックス等、レビュアが必要とする情報を欠いたまま作成され続ける。
+1. **writer leaseの真の原子性強化**（第13.2章）: `src/lib/github-lease.ts`のGitHubモードは「投稿前に既存アクティブleaseの有無を確認し、投稿後に競合有無を再確認する」楽観的排他制御（`acquire()`内、`postLeaseComment`後の`rivals`再確認ロジック）で近似しており、コード内コメントに「真の原子性は保証しない」と明記されている。2プロセスがほぼ同時に`activeLeaseFor`の確認をパスしてから投稿する場合、投稿タイムスタンプの分解能・GitHub API応答順序に依存するTOCTOUウィンドウが残る。ローカルモード（`src/commands/lease.ts`の`acquire()`）も`tryReadYamlFile`（存在確認）→`writeYamlFileAtomic`（tmp+rename）という read-check-then-write であり、`writeYamlFileAtomic`はファイル内容の書込み自体は原子的だが「既存ファイルが無い場合のみ書く」という compare-and-swap ではないため、2プロセスが共に「既存lease無し」を確認した直後に両者が書き込むと後勝ちで前者のlease保持を無言のまま奪う（局所TOCTOU）。
+2. **main worktreeが`.worktrees/`未gitignore登録により常時dirty表示される**（Issue #174のdoctor拡張検証で発見）: AGENTS.mdは`.worktrees/`をroot直下の正規ディレクトリと位置づけるが`.gitignore`に未登録のため、worktreeが1つも無くても`.worktrees/`という空の親ディレクトリ自体がuntracked表示され、`git status`が常時dirtyになる。
+3. **`verify gate-report`が削除済み成果物のdigest不一致を検知しない**: `src/commands/verify.ts`の`gateReport()`は`if (fs.existsSync(abs) && digestOfFile(abs) !== artifact.digest) {...}`という実装であり、`fs.existsSync(abs)`がfalse（承認後にファイルが削除された）の場合は条件全体がfalseになり一致検査自体がスキップされる。承認済み成果物が削除された状態でも`verify gate-report`は成功してしまい、AGENTS.md「ゲートの継承・無効化」が求める「digest不一致（この場合は削除）→ゲート無効化」の前提が崩れる。
+4. **lease renewのバックエンド間非対称性**: `src/commands/lease.ts`の`renew()`はGitHubモードで`held.lease.writer_lease.expires_at <= now.toISOString()`を検査し期限切れなら`fail`するが、ローカルモード分岐（同関数内の`if (config.coordination.backend === 'local') {...}`）にはこの期限切れチェックが無く、token一致さえすれば期限切れ後でも無条件にrenewが成功し期限切れleaseを復活させてしまう。両バックエンドで意図的な差異が無いにもかかわらず挙動が異なる。
 
 ## 要求 → 要件 → 受入条件
 
@@ -26,114 +24,93 @@
 
 ### 要求
 
-Issue #174本文（対象範囲1〜4・成功基準）に基づく要求：
+Issue #176本文（対象範囲1〜4・成功基準）に基づく要求：
 
-- doctorの検査範囲を拡張し、CIでのみ検査されている項目の一部をローカルでも事前検知できるようにしたい。
-- このリポジトリ自身が自身のbranch-name検査に違反しない状態にしたい。
-- segments.yamlのvalidation出力定義と実装（checkOutputExists）の不整合を解消したい。
-- `pr create`が生成するPR本文に、正式PRテンプレートの内容（変更概要・理由・影響範囲・ロールバック方針・成果物リンク）が反映されるようにしたい。
-- 上記変更後も既存テストスイート（357件超）が統合ブランチ`chore/162-agent-skill-chain-bootstrap`上で全てpassする状態を維持したい。
+- GitHubモードのwriter lease取得について、並行acquireで二重取得が発生しないことを実際に競わせて確認できる、真に原子的（またはそれに準ずる、TOCTOUウィンドウを実質排除する）機構にしたい。
+- ローカルモードのwriter lease取得についても、同様に並行acquireで二重取得が発生しない機構にしたい。
+- このリポジトリのmain worktreeが、worktreeが1つも存在しない状態で`git status`上clean（untracked表示無し）になるようにしたい。
+- `verify gate-report`が、承認済み成果物が削除された場合を確実にdigest不一致として検知するようにしたい。
+- lease renewのバックエンド間非対称性を解消し、期限切れleaseの復活をどちらのバックエンドでも一貫して拒否したい。
+- 上記変更後も既存テストスイート（371件超）が統合ブランチ`chore/162-agent-skill-chain-bootstrap`上で全てpassする状態を維持したい。
 
 ### 要件
 
-- **要件1（doctor拡張）**: `doctor`コマンドに以下4項目の検査を追加する。
-  - worktree一覧が`.agent-skill-chain/config/agent-skill-chain.yaml`の`worktree.path_pattern`に適合するか（`git worktree list --porcelain`の各エントリに対し、既存の`worktreePathRegex()`相当のロジックで判定）。
-  - main worktree（`repoRoot()`が指すworktree）が未commit差分なし（clean）であるか。
-  - `.agent-skill-chain/ci/verify-template-sync.sh`相当の検査（`.github/`とテンプレート配布元`.agent-skill-chain/templates/github/.github/`の同期状態）。
-  - `.agent-skill-chain/schemas/*.yaml`自体がYAMLとして構文妥当であるか。
-  - 追加した各項目は、意図的に条件を崩した状態（例：worktreeを規約外の名前で作る、main worktreeに未commit差分を作る、`.github/`とテンプレートを乖離させる、schemasに構文エラーを混入する）で正しくNG表示されることを自動テストで確認する。
-  - docs/system-spec関連・requirement ID traceability・Durability Backend検査は、ADR-0001（`docs/adr/ADR-0001-docs-system-spec-construction.md`）が`status: proposed`のまま先送り決定済みのため、本Issueでは追加しない（対象外のまま据え置く）。
-- **要件2（branch-name自己矛盾解消）**: `.agent-skill-chain/config/agent-skill-chain.yaml`の`issue.allowed_types`に`chore`を追加する。追加後、`.agent-skill-chain/schemas/config.schema.yaml`の`allowed_types`列挙定義・関連ドキュメント（AGENTS.mdやコメントで許容type一覧を列挙している箇所があれば）との整合も確認する。
-- **要件3（segments.yaml矛盾解消）**: `.agent-skill-chain/config/segments.yaml`の`validation`セグメント`outputs`から`pr`を削除する。`src/commands/verify.ts`の`checkOutputExists()`の`case 'pr':`分岐は、`segments.yaml`から参照されなくなるため削除するか、あるいはコメントで「segments.yamlのoutputsには含めない、no-op分岐として残置する理由」を明記する（設計フェーズで判断）。`.agent-skill-chain/schemas/segments.schema.yaml`のoutputs列挙値やその他`pr`出力を前提とするテスト・ドキュメントとの整合も確認する。
-- **要件4（PRテンプレート反映）**: `src/commands/pr.ts`の`create()`（GitHubモード分岐）が`gh pr create`へ渡す`--body`を、`.agent-skill-chain/templates/github/.github/pull_request_template.md`の内容（Issue参照節・セグメントチェックボックス節・自己完結性チェック節）をベースに、少なくとも変更概要・理由・影響範囲・ロールバック方針・成果物リンクの各節を含む本文へ拡張する。テンプレートファイルが存在しない環境（配布同期前等）でのフォールバック挙動（最低限`Closes #<id>`を含む本文を生成する等）も設計フェーズで定める。
+- **要件1（GitHubモードのlease原子性）**: GitHubモードのwriter lease取得・解放を、真に原子的な比較更新（compare-and-set）プリミティブに置き換える。技術検討の結果、gitのref更新はGitHub上でも真のcompare-and-swap保証を持つことを確認した（下記「技術検討: gitのref-based lock機構」参照）。設計フェーズでは、この保証を活かす具体的な実装（lock専用ref・issueコメントとの役割分担・token/holder/expires_atのエンコード方式・renewの実装方式）を確定する。既存の「投稿→再確認→撤回」ロジックとの共存可否・置換範囲も設計フェーズの判断とする。
+- **要件2（ローカルモードのlease原子性）**: ローカルモードのwriter lease取得を、OS提供の排他的ファイル作成（例: `O_CREAT | O_EXCL`相当、既存ファイルが存在すればエラーになる原子的操作）を用いた真のcompare-and-set相当の機構に強化する。既存の`writeYamlFileAtomic`（tmp+rename）は書込み内容の原子性のみを保証し、存在確認との組合せでは compare-and-set にならないため、acquire経路はこの強化された原子的作成を用いる（release/renewは既存token検査ベースのままで良いか設計フェーズで判断する）。
+- **要件3（.worktrees/のgitignore登録）**: `.gitignore`に`.worktrees/`を追加する。worktree自体の中身（各worktree配下は別リポジトリとして扱われるためgit管理外）ではなく、空の親ディレクトリのuntracked表示のみを対象とする。
+- **要件4（gate-report削除検知）**: `src/commands/verify.ts`の`gateReport()`を、`approved_artifacts`の各要素についてファイルが存在しない場合も不一致（削除された成果物）として検知するよう修正する。ファイルが存在する場合の内容不一致検知（既存ロジック）は維持する。
+- **要件5（lease renew非対称性の是正）**: ローカルモードの`renew()`にGitHubモードと同等の期限切れチェックを追加し、期限切れ後のrenewをどちらのバックエンドでも一貫して拒否する。
+
+### 技術検討: gitのref-based lock機構
+
+Issue本文が提案する「git自体のfast-forward-only pushを使ったlock ref機構」について、実際にローカルbareリポジトリで2クライアントが同一refを競合作成するシナリオを再現して検証した。
+
+- 存在しないref（例: `refs/agent-skill-chain/leases/<issue>-<segment>`）へ`git push origin <sha>:<ref>`で作成すると新規ref作成として成功する。
+- 別クライアントが同名refへ別コミット（祖先関係なし）を同様にforce無しでpushすると、`! [rejected] ... (fetch first)`で拒否されることを実測確認した。この拒否はgitのreceive-pack側がref更新時に現在値を再検証する処理であり、クライアント側の事前知識に依存しない（サーバ側で真にatomicなref更新保証を提供する、git自体の一般的性質）。
+- 同名refへの`--force`指定時は上書きに成功することも確認した（＝lock機構としてはacquire/renewでforceを使わない設計にする必要がある）。
+- ref削除（release相当）後は再作成が成功することを確認した。
+- GitHub.com上での実運用可否については、公式一次情報に基づき「GitHubは`refs/heads/`・`refs/tags/`以外の任意のカスタムref namespaceへのpushをネイティブgitプロトコル経由でサポートする（GitHub自身が管理する`refs/pull/*`等一部の予約済みnamespaceのみ書込み拒否対象）」ことを確認した。本Issueで提案するnamespace（`refs/agent-skill-chain/leases/*`）はこの予約済みnamespaceと衝突しない。
+- 未検証・設計フェーズでの確認事項として残るのは、fine-grained PAT／GitHub App installation permissionの`contents`権限がこのカスタムref namespaceへのpushも実際に許可するかどうかの実機確認（本セッションでは実リポジトリへの実push権限が付与されておらず未実施）。
+
+以上より、GitHubモードでのref-based lock機構は技術的に実現可能と見込む（設計フェーズで実装方式を確定する）。
 
 ### 受入条件（Acceptance Criteria）
 
-各 AC には、散文形式の Given/When/Then による受け入れシナリオを添える。
+#### AC-1: GitHubモードで並行acquireが二重取得を許さない
 
-#### AC-1: doctorがworktree一覧のpath_pattern適合を検査する
-
-- Given: `.agent-skill-chain/config/agent-skill-chain.yaml`の`worktree.path_pattern`に適合しない名前のworktreeが`git worktree list`に存在する
-- When: `agent-skill-chain doctor`を実行する
-- Then: 当該worktreeについてNG表示され、終了コードが1以上になる
+- Given: 同一Issue・同一segmentに対して2つのプロセスがほぼ同時に`lease acquire`を試みる状況を、実際に並行実行するテストで再現する
+- When: 2プロセスが競合してacquireを実行する
+- Then: 一方のみが成功し、他方は既存leaseとの競合を理由に失敗する（両者が成功する＝二重取得が発生することは無い）ことを実測確認する
 - 検証方法見込み: `automated`
 
-#### AC-2: doctorがmain worktreeのclean状態を検査する
+#### AC-2: ローカルモードで並行acquireが二重取得を許さない
 
-- Given: main worktree（repoRootが指すworktree）に未commitの差分（staged/unstaged問わず）が存在する
-- When: `agent-skill-chain doctor`を実行する
-- Then: main worktree cleanチェックがNG表示され、終了コードが1以上になる
+- Given: 同一Issueに対して2つのプロセスがほぼ同時に`lease acquire`を試みる状況を、実際に並行実行するテストで再現する
+- When: 2プロセスが競合してacquireを実行する
+- Then: 一方のみが成功し、他方は既存leaseとの競合を理由に失敗する（後勝ちで前者のlease保持を無言で奪うことが無い）ことを実測確認する
 - 検証方法見込み: `automated`
 
-#### AC-3: doctorがverify-template-sync相当を検査する
+#### AC-3: .worktrees/がgitignoreされmain worktreeがclean判定される
 
-- Given: `.github/`が`.agent-skill-chain/templates/github/.github/`の配布内容と乖離している（ファイル欠落または内容不一致）
-- When: `agent-skill-chain doctor`を実行する
-- Then: template-sync検査がNG表示され、終了コードが1以上になる
+- Given: `.gitignore`に`.worktrees/`を追加済みで、かつworktreeが1つも存在しない状態（`git worktree list`がmain worktreeのみを返す）
+- When: `git status`および`agent-skill-chain doctor`のmain worktree cleanチェックを実行する
+- Then: `.worktrees/`がuntracked表示されず、`git status`はclean、doctorのmain worktree cleanチェックはOKになる（worktree存在時にdirty判定される問題は本Issueのスコープ外として残ってよい）
 - 検証方法見込み: `automated`
 
-#### AC-4: doctorがschemas構文妥当性を検査する
+#### AC-4: verify gate-reportが削除済み承認成果物のdigest不一致を検知する
 
-- Given: `.agent-skill-chain/schemas/*.yaml`のいずれかにYAML構文エラーが混入している
-- When: `agent-skill-chain doctor`を実行する
-- Then: 当該schemaファイルについてNG表示され、終了コードが1以上になる
+- Given: gate-reportの`approved_artifacts`に記載されたパスのファイルが実際には削除されている
+- When: `agent-skill-chain verify gate-report <path>`を実行する
+- Then: 終了コード1以上になり、標準エラーに当該パスが削除されている旨（digest不一致として扱われる）が出力される
 - 検証方法見込み: `automated`
 
-#### AC-5: doctor追加4項目がいずれも正常系でOK表示される
+#### AC-5: verify gate-reportの既存digest不一致検知（内容変更）が引き続き正しく動作する
 
-- Given: worktree命名規約・main worktreeのclean状態・`.github/`とテンプレートの同期・schemas構文がいずれも正常な状態
-- When: `agent-skill-chain doctor`を実行する
-- Then: 追加した4項目全てがOK表示され、既存項目と合わせて終了コード0になる
+- Given: `approved_artifacts`記載のファイルが存在するがdigestが記録値と異なる（内容が変更された）
+- When: `agent-skill-chain verify gate-report <path>`を実行する
+- Then: 従来通り終了コード1以上になる（regressionなし）
 - 検証方法見込み: `automated`
 
-#### AC-6: verify branch-nameがchore/162-agent-skill-chain-bootstrapで成功する
+#### AC-6: lease renewが期限切れleaseの復活をどちらのバックエンドでも拒否する
 
-- Given: `.agent-skill-chain/config/agent-skill-chain.yaml`の`issue.allowed_types`に`chore`を追加済みである
-- When: `agent-skill-chain verify branch-name chore/162-agent-skill-chain-bootstrap`を実行する
-- Then: 終了コード0になる（現状はNG終了する自己矛盾状態からの解消）
+- Given: 有効期限が過ぎた（`expires_at`が現在時刻より過去の）writer leaseが存在し、正しいtokenを保持している
+- When: ローカルモード・GitHubモードそれぞれで`lease renew <issue_id> <token>`を実行する
+- Then: どちらのバックエンドでも「lease は既に期限切れです」相当の理由で失敗し、期限切れleaseがrenewによって復活しない
 - 検証方法見込み: `automated`
 
-#### AC-7: 既存allowed_typesのブランチ名検査が引き続き正しく動作する
+#### AC-7: 既存371件超のテストが全てpassする
 
-- Given: `chore`追加後の`issue.allowed_types`設定
-- When: `feature/`、`bugfix/`等の既存許容typeのブランチ名および許容外type（例：`invalidtype/`）のブランチ名それぞれについて`verify branch-name`を実行する
-- Then: 既存許容typeは終了コード0、許容外typeは終了コード1以上のまま変化しない（regressionなし）
-- 検証方法見込み: `automated`
-
-#### AC-8: segments.yamlのvalidation.outputsからprが除去される
-
-- Given: `.agent-skill-chain/config/segments.yaml`の`validation`セグメント`outputs`から`pr`を削除済みである
-- When: `.agent-skill-chain/schemas/segments.schema.yaml`に対して`segments.yaml`を検証する、または`agent-skill-chain`のsegments読込処理を実行する
-- Then: スキーマ適合エラーが発生せず、`validation.outputs`は`[acceptance_test_results, regression_test_results]`のみになる
-- 検証方法見込み: `automated`
-
-#### AC-9: verify artifactsがpr除去後も正しく動作する
-
-- Given: 対象IssueのworktreeにVALIDATION.md・受入/回帰テスト結果に相当する記録が存在し、`segments.yaml`の`validation.outputs`から`pr`が除去済みである
-- When: `agent-skill-chain verify artifacts <issue_id> validation`を実行する
-- Then: `pr`出力の欠落を理由にした誤検知（false negative／false positive）が発生せず、他の必須成果物（acceptance_test_results・regression_test_results）の欠落判定は従来通り正しく機能する
-- 検証方法見込み: `automated`
-
-#### AC-10: pr createが生成するPR本文にテンプレート由来の必須節が含まれる
-
-- Given: `.agent-skill-chain/templates/github/.github/pull_request_template.md`が配布済みの環境で`pr create <issue_id> <branch>`（GitHubモード）を実行する
-- When: `gh pr create`が呼び出される
-- Then: 渡される`--body`に、Issue参照（`Closes #<id>`）に加えて、変更概要・理由・影響範囲・ロールバック方針・成果物リンクの各節が含まれる
-- 検証方法見込み: `automated`（`gh`呼び出し部分はテスト内でモック/スタブ化し、生成される本文文字列を検証する）
-
-#### AC-11: 既存357件超のテストが全てpassする
-
-- Given: 本Issueの全変更（doctor拡張・issue.allowed_types更新・segments.yaml更新・pr.ts更新）を`chore/162-agent-skill-chain-bootstrap`統合ブランチ上へ反映した状態
+- Given: 本Issueの全変更（github-lease.ts・lease.ts・.gitignore・verify.ts）を`chore/162-agent-skill-chain-bootstrap`統合ブランチ上へ反映した状態
 - When: リポジトリのテストスイート全体（`npm test`相当）を実行する
-- Then: 既存テスト（357件超）が全てpassし、新規追加テストも全てpassする（regressionなし）
+- Then: 既存テスト（371件超）が全てpassし、新規追加テストも全てpassする（regressionなし）
 - 検証方法見込み: `automated`
 
 ## スコープ外
 
 この Issue では対応しない事項を明記する。曖昧語・対象外欠落は仕様ゲートの反証観点で指摘される。
 
-- doctor全項目中、docs/system-spec関連・requirement ID traceability・Durability Backend検査（`ADR-0001-docs-system-spec-construction.md`が`status: proposed`のまま先送り決定済みのため、本Issueの対象外として据え置く）。
-- writer leaseの真の原子性強化（TOCTOU解消）。別Issueで扱う。
-- lint-vocabスキャナの識別子・YAML/CLIサブコマンド名認識の本格実装（Issue #171で一時除外されたfollow-up事項）。別Issueで扱う。
-- `docs/system-spec/`の新設・構築自体（ADR-0001がacceptedになった後に別Issueで着手する既定方針であり、本Issueはこれに影響しない）。
-- `.agent-skill-chain/project/`配下のプロジェクト固有ポリシー文書の変更（本Issueの4項目はいずれもpackage本体（`.agent-skill-chain/config/`・`src/`・`.agent-skill-chain/templates/`）の変更であり、project固有ポリシーの変更を伴わない）。
+- doctorの残り検査項目（docs/system-spec関連・requirement ID traceability・Durability Backend、ADR-0001先送り分）。
+- lint-vocabスキャナの本格改修（別途follow-up）。
+- secret scanの新規導入（第25.3章、別Issue）。
+- worktree存在時にmain worktreeがdirty判定される問題（AC-3注記の通り、本Issueのスコープ外として残る）。
+- fine-grained PAT／GitHub App installation permissionのカスタムref namespaceへの書込み許可の実機検証（設計・実装フェーズでの確認事項として持ち越す）。
