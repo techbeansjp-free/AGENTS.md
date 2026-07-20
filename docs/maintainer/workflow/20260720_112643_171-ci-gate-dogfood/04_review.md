@@ -309,3 +309,51 @@ verify	verify-branch-name	branch 'HEAD' は branch.pattern（{type}/{issue_id}-{
 ### 教訓
 
 同一の「detached HEAD対応」ロジックを複数箇所に個別実装すると、1箇所を修正しても他の箇所は直らず、同じ障害が形を変えて再発する。CI実行で1つのバグを見つけて直したら、必ず同種のコードパターン（今回は`git rev-parse --abbrev-ref HEAD`の直接呼び出し）を`grep`で横断的に洗い出し、共有ヘルパーへ統一すべきである。また、ヘルパーを共有する過程で隣接コード（今回は`git push`のrefspec）まで併せて読むと、テストが通っていても実運用でのみ顕在化する別の潜在バグ（今回のpush refspec問題）を発見できることがある。
+
+---
+
+## 11. 追記（6回目）: PR #172 実地実行で`verify`ジョブが`segment 'spec' の必須成果物が欠落しています: SPEC.md`で失敗、正式成果物規約への対応
+
+**発生**: §10の修正後、PR #172の実GitHub Actions上での再実行（run 29715272198）で`verify`ジョブが以下のエラーで失敗した。
+
+```
+segment 'spec' の必須成果物が欠落しています: SPEC.md
+```
+
+### 根本原因
+
+`.agent-skill-chain/config/segments.yaml`が定める正式な成果物規約は、Issueのブランチ（worktree）の**リポジトリルート直下**に`SPEC.md`・`DESIGN.md`（+ ADR + `PLAN.md`）・`VALIDATION.md`を配置することである（`src/commands/verify.ts`の`artifacts()`・`checkOutputExists()`実装で確定）。しかし本Issue #171の作業は、requirement-discovery/design-feature等のcommand chainが慣習的に生成する`docs/maintainer/workflow/20260720_112643_171-ci-gate-dogfood/00_要求定義.md`〜`04_review.md`という別形式で進めてしまい、正式規約が要求するリポジトリルート直下のファイル自体を一度も作成していなかった。ローカルの`verify artifacts`・`verify ac-coverage`を一度も実行していなかったため、この不整合はローカルでは検出されず、CI上で初めて顕在化した。
+
+### 対応
+
+`.agent-skill-chain/templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`の正式テンプレートに沿って、リポジトリルート直下に`SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md`を新規作成した。内容は`docs/maintainer/workflow/20260720_112643_171-ci-gate-dogfood/00_要求定義.md`〜`03_実装計画.md`（および本ファイルの§1〜§10）の実質を保持しつつ、正式テンプレートが要求する構造（`SPEC.md`の`AC-N`形式受入条件、`DESIGN.md`の要件→設計要素対応表・関連ADR・障害/ロールバック考慮、`PLAN.md`の変更単位テーブル）に合わせて書き直した。
+
+`docs/maintainer/workflow/20260720_112643_171-ci-gate-dogfood/00_要求定義.md`〜`04_review.md`（本ファイル）はそのまま残置する（削除・移行はしない）。ユーザーの判断により、既にマージ済みの旧issue（#164/#169）は遡及修正しないが、本Issue #171は本PR内で正式規約へ対応させることになった。旧ドキュメントは経緯・詳細調査記録として引き続き有効であり、`SPEC.md`等はそれらの実質を正式テンプレート構造で再構成した成果物という位置付けになる。
+
+### 重要な発見: `VALIDATION.md`テンプレートと`verify ac-coverage`実装の不整合
+
+`.agent-skill-chain/templates/issue/VALIDATION.md`のテンプレートは、Markdown見出し＋AC毎に分割した複数の`` ```yaml ``フェンスという構造である。一方`src/commands/verify.ts`の`acCoverage()`は、`VALIDATION.md`全体を`readYamlFile()`（`yaml`パッケージの`parse()`を生テキストへ直接適用）で1つのYAML文書として読み込む実装である。
+
+実機で検証したところ、テンプレートそのままの構造（Markdown見出し＋HTMLコメント＋複数`` ```yaml ``フェンス）を`parse()`に通すと`Implicit keys need to be on a single line`でパースに失敗することを確認した。`ADR.md`・`SPEC.md`は正規表現によるフェンス抽出（`adr()`）またはAC-IDの正規表現走査（`acCoverage()`のSPEC.md側）のみでMarkdown構造を許容するが、`VALIDATION.md`だけは全文を直接YAMLとしてパースするため、テンプレートのMarkdown構造とCLI実装が非互換になっている。
+
+このため本Issueの`VALIDATION.md`は、テンプレートの見出し構造をそのまま複製するのではなく、`.agent-skill-chain/schemas/validation-report.schema.yaml`が要求するフィールド（`schema_version`・`issue_id`・`target_sha`・`acceptance_criteria`・`regression`）のみを持つ単一YAML文書として記述し、見出し相当の情報はコメント（`#`）とキー名・配列構造で表現した。この既知の齟齬（テンプレートとCLI実装の不整合）は本Issueのスコープ外として実装修正は行わず、事実として記録するに留める。対応候補（判断は進行役へ委ねる）:
+
+1. `.agent-skill-chain/templates/issue/VALIDATION.md`のテンプレート自体を、`ADR.md`と同様の「Markdown本文＋単一yamlフェンス」形式、または本Issueで採用した「純粋YAML＋コメント」形式へ書き換える。
+2. `src/commands/verify.ts`の`acCoverage()`側に、`adr()`と同様のフェンス抽出処理を追加し、テンプレートのMarkdown＋複数フェンス構造をサポートする。
+
+### 検証結果（実機実行）
+
+- `node bin/agents-md.js verify artifacts ISSUE-171 spec` → 終了コード0
+- `node bin/agents-md.js verify artifacts ISSUE-171 design` → 終了コード0
+- `node bin/agents-md.js verify artifacts ISSUE-171 implementation` → 終了コード0
+- `node bin/agents-md.js verify artifacts ISSUE-171 validation` → 終了コード0
+- `node bin/agents-md.js verify ac-coverage ISSUE-171` → 終了コード0
+- `npm test`実測: `# tests 335 / # pass 335 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（`src/`配下は無変更のため既存335件と完全一致、影響なし）
+
+### ADR作成要否の判断
+
+本Issueは既存CLI・既存設定ファイルの値変更・既存ロジックの重複解消・CI workflowの記述修正・成果物ドキュメントの追加のみで完結し、`segments.yaml`が定めるセグメント構成自体（4区分・各segmentのoutputs定義）の追加・変更は行っていない。よって新規のアーキテクチャ決定を伴わずADR新設は不要と判断した（判断根拠は`DESIGN.md`の「関連ADR」節に記載）。なお`verify artifacts`のdesign segment・`ADR`成果物チェックは「`docs/adr/`配下に最低1件の`.md`が存在するか」のみを検査する実装であり、既存の`docs/adr/ADR-0001-docs-system-spec-construction.md`（本Issueとは無関係の別件）が既に存在するため、新規ADRを作成しなくても`verify artifacts design`は成功する。
+
+### 教訓
+
+command chain（requirement-discovery等）が生成する`docs/maintainer/workflow/`形式のドキュメントは、進行の記録としては有用だが、`.agent-skill-chain/config/segments.yaml`が定めるCI gateの検証対象（リポジトリルート直下の`SPEC.md`等）とは別物である。Issue着手時点で`verify artifacts`・`verify ac-coverage`をローカルで一度実行し、正式成果物規約への適合を早期に確認しておけば、CI上で初めて発覚するという手戻りを避けられた。
