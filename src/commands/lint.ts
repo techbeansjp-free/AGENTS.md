@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot } from '../lib/paths.js';
-import { defaultLiveFileRoots, walkTextFiles } from '../lib/scan.js';
+import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../lib/scan.js';
 import { parseForbiddenTerms } from '../lib/glossary.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 
@@ -35,8 +35,8 @@ check: 検査を実行するサブコマンド（他のサブコマンドは将�
   失敗時（違反あり）: 終了コード1以上。違反ADR ID・理由を標準エラー出力へ。
 `;
 
-function resolveTargets(args: string[], root: string): string[] {
-  return args.length > 0 ? args.map((p) => path.resolve(p)) : defaultLiveFileRoots(root);
+function resolveTargets(args: string[], root: string, defaultRoots: (root: string) => string[] = defaultLiveFileRoots): string[] {
+  return args.length > 0 ? args.map((p) => path.resolve(p)) : defaultRoots(root);
 }
 
 // バッククォートで囲まれたインラインコードスパン。スパン内は実コード・実パスの引用であり
@@ -110,7 +110,7 @@ export async function vocab(args: string[]): Promise<number> {
     const root = repoRoot();
     const glossaryPath = path.join(root, 'docs', 'GLOSSARY.md');
     const forbidden = parseForbiddenTerms(glossaryPath);
-    const files = walkTextFiles(resolveTargets(args, root));
+    const files = walkTextFiles(resolveTargets(args, root, defaultVocabFileRoots));
 
     const violations: string[] = [];
     for (const file of files) {

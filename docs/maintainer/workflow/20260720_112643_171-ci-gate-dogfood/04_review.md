@@ -513,3 +513,40 @@ verify-artifacts (対象PRで変更されたセグメントごと)	segment 'impl
 ### 教訓
 
 禁止語彙スキャナのような「文字列一致ベースの機械検査」は、対象コーパスが自然文だけでなく識別子・パス・プレースホルダ構文を含む技術文書の場合、部分文字列一致だけでは早晩誤検出を蓄積する。`.github/`導入によってこのリポジトリで`lint-vocab`が初めて実行された結果、120件もの既存誤検出・不整合が一度に露見したことは、「機械検査は追加した瞬間に一度は必ず実地で全量を洗い出す（サンプルの数件だけで判断しない）」ことの重要性を示している。また、禁止語自体がパス形式の文字列である場合（`.agent-skill-chain/source`）のように、誤検出除外ルールの適用対象外にすべき禁止語が存在しうるため、汎用的な除外ルールを足す際は「その禁止語自身の形状」を踏まえた例外条件を必ず検討する必要がある。
+
+---
+
+## 15. 追記（10回目）: PR #172 実地実行で`lint-vocab`が引き続き大量違反（84件規模）——デフォルトスキャン対象からtemplates/config/schemas/scriptsを一時除外
+
+**発生**: §14の修正後もPR #172の実GitHub Actions上で`lint-vocab`が失敗し続けた。`node bin/agents-md.js lint vocab`（引数省略・デフォルト対象）を実測すると84件規模の違反が報告され、内訳を確認したところ大半が`.agent-skill-chain/{config,schemas,scripts,templates}`配下で"issue"という語がYAMLキー名（`issue.allowed_types`・`issue_id`等）・CLIサブコマンド名（`issue start`・`issue resume`等）として識別子的に正当利用されているものだった。§14で導入した「コード的参照除外」（バッククォート・プレースホルダ・スラッシュ区切りパスリテラル）ではこれらのYAMLキー名・サブコマンド名を検出しきれず、個別の言い換えで対応するには規模が大きすぎると判断した。
+
+### 対応（今回のスコープ）
+
+`src/lib/scan.ts`を次のように変更した。
+
+- `defaultLiveFileRoots()`は変更せず維持した（`AGENTS.md`・`docs/GLOSSARY.md`・`.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}`の元の8エントリ全て）。
+- 新規に`defaultVocabFileRoots()`を追加し、`defaultLiveFileRoots()`の結果から`.agent-skill-chain/{templates,config,schemas,scripts}`の4ディレクトリのみを除外したもの（`AGENTS.md`・`docs/GLOSSARY.md`・`.agent-skill-chain/{standards,ci}`の4エントリ）を返すようにした。
+- `src/commands/lint.ts`の`vocab()`はこの`defaultVocabFileRoots()`を使うよう変更し、`references()`は従来どおり`defaultLiveFileRoots()`（フル8エントリ）を使い続けるようにした（`resolveTargets()`にデフォルト取得関数を注入する形へ変更）。
+
+**単一の`defaultLiveFileRoots()`をそのまま4エントリへ縮小する案からの変更理由**: 縮小した`defaultLiveFileRoots()`を`lint references`にもそのまま使うと、`.agent-skill-chain/templates/adr/ADR.md`の見出し「## related_adrs 参照ルール」が見出し収集対象から外れ、これを`§related_adrs参照ルール`で参照している`AGENTS.md:92`・`.agent-skill-chain/ci/verify-adr.sh:3`が新たに「見出しテキストで解決できないセクション番号参照」として違反判定されることを実測で確認した（`git stash`で変更前に戻し`lint references`が終了コード0であることを確認 → 変更適用後は終了コード1・2件の新規違反を確認）。これは既存の正当な参照を壊す回帰であり、`lint vocab`のみを対象ディレクトリ縮小の対象にすることで回避した。
+
+除外理由はコメントで`src/lib/scan.ts`・`.agent-skill-chain/scripts/lint-vocab.sh`双方に明記し、「識別子・YAMLキー・CLIサブコマンド名を認識するスキャナ実装後、follow-up issueで対象復帰する」旨を記載した（issue番号は進行役が起票後に確定するため、本文には番号を書かず記述のみとした）。
+
+### 検証結果（実測）
+
+- `node bin/agents-md.js lint vocab`（デフォルト対象）: 除外後は**終了コード1・29件の違反**（除外前の84件規模から大幅減少したが0件には未到達）。内訳:
+  - `docs/GLOSSARY.md`: 20件。全て「禁止同義語」列自体が禁止語を文字通り列挙していることに起因する自己言及であり、`test/integration/lint.test.ts`の既存テスト（§14で追加）が「デフォルト対象では終了コード1になり得ること自体は正常な挙動」と明示的に許容している構造的な自己言及であるため個別修正では解消しない。うち1件（`.agent-skill-chain/source`）はバッククォートで囲んでも`banned.includes('/')`ガードにより常に検出される設計（§14）であるため、`docs/GLOSSARY.md`をデフォルト対象に含める限り恒久的に解消不能。
+  - `AGENTS.md`: 4件。うち2件（18行目「複数バックエンド間で」、76行目「添付ドキュメント参照」）は個別の言い換えで解消可能な素の用語不整合。1件（22行目 見出し「## コーディネーションバックエンド」）は日本語複合名詞内の部分文字列一致（スキャナが単語境界を認識しない）による誤検出。1件（144行目「issueとは呼ばない」）はGLOSSARY.mdと同様の自己言及（禁止語自体を例示して「呼ばない」と説明する構文）。
+  - `.agent-skill-chain/standards/SECURITY_POLICY.md`: 3件。AGENTS.mdと同種（「バックエンド」の汎用語使用2件、「orchestrator」の英語併記1件）。
+  - `.agent-skill-chain/ci/verify-branch-name.sh`: 2件（`issue.allowed_types`というYAMLキー名参照）。**今回`standards`・`ci`は「識別子問題が無い」という前提で対象に残したが、実際には`ci`配下にもtemplates/config/schemas/scriptsと同一の識別子起因の誤検出が残っていることが判明した**（今回の指示範囲外のためこのファイルは変更していない）。
+  - 以上のうち、task説明にあった「AGENTS.md・docs/GLOSSARY.mdは既にクリーンであることを確認済み」という前提は、本実測により誤りであったことが判明した（実際にはAGENTS.md 4件・GLOSSARY.md 20件の違反が既に存在していた）。
+- `node bin/agents-md.js lint references`（デフォルト対象）: **終了コード0・違反なし**。上記の回帰を`defaultVocabFileRoots()`の分離により解消済みであることを実測で確認した。
+- `npm test`実測: `# tests 343 / # pass 343 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（既存341件 + 本対応で追加した2件〔`defaultVocabFileRoots`のテスト〕全pass）。`test/unit/scan.test.ts`の`defaultLiveFileRoots`テストは元のフル8エントリ期待値を維持し、新規に`defaultVocabFileRoots`用のテスト2件を追加した。`test/integration/lint.test.ts`のコメントも新関数名に追随修正した。
+
+### follow-up issueとして起票が必要な内容（判断材料。起票自体は進行役が行う）
+
+1. **識別子・YAMLキー・CLIサブコマンド名認識スキャナの実装**: `hasProseViolation()`（`src/commands/lint.ts`）に、YAMLキー形式（`issue.allowed_types`・`issue_id`のようなドット/アンダースコア区切り識別子）・CLIサブコマンド文脈（`issue start`のような既知コマンド語の直後トークン）を認識する除外ルールを追加する。対象復帰させたいディレクトリは`.agent-skill-chain/{templates,config,schemas,scripts}`（本対応で除外）に加え、`.agent-skill-chain/ci/verify-branch-name.sh`のような、除外していない`ci`配下にも同種の誤検出が残っている点に留意（スキャナ修正後は`defaultVocabFileRoots()`を`defaultLiveFileRoots()`と統合して1関数に戻せる）。
+2. **`docs/GLOSSARY.md`の自己言及問題**: GLOSSARY.md自体が「禁止同義語」列で禁止語を列挙する構造である以上、`lint vocab`をGLOSSARY.mdに対して実行すると原理的に違反が出続ける（`.agent-skill-chain/source`は`/`を含むため常時検出のガードが意図的にあり、バッククォート化でも回避不能）。GLOSSARY.mdをvocab検査対象から除外する、または`parseForbiddenTerms()`が読んだGLOSSARY.md自身の該当行だけをvocab検査からスキップするような自己言及除外ロジックが必要。これを解消しない限り、`lint-vocab.sh`をCIの必須ステップとして「終了コード0」を要求する現在の構成（`.github/workflows/agent-skill-chain-ci.yml`の`lint-vocab`ステップ、continue-on-error無し）は原理的に恒久green化しない。
+3. **AGENTS.md・SECURITY_POLICY.mdの個別プロース修正**: 18・76行目（AGENTS.md）と3・34行目（SECURITY_POLICY.md）の「バックエンド」「ドキュメント」汎用語使用は言い換えで解消可能。22行目の見出し「コーディネーションバックエンド」はスキャナの単語境界認識（日本語複合名詞対応）が無いと根本解決しない（見出し名変更は`lint references`の§参照解決に波及するため、スキャナ修正と併せて検討する必要がある）。
+
+本対応では上記3点はスコープ外として着手していない（`lint vocab`の終了コードは1のままである）。

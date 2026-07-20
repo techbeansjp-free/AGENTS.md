@@ -127,8 +127,9 @@ test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・docs
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
-  // Given/When: path引数を省略し、defaultLiveFileRoots（AGENTS.md・docs/GLOSSARY.md・
-  // .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}）を対象に実行する
+  // Given/When: path引数を省略し、defaultVocabFileRoots（AGENTS.md・docs/GLOSSARY.md・
+  // .agent-skill-chain/{standards,ci}。templates/config/schemas/scriptsはissue識別子誤検出のため
+  // 一時除外中）を対象に実行する
   const result = runCli(['lint', 'vocab'], { cwd: repo.dir });
 
   // Then: クラッシュ（「予期しないエラー」）せず、終了コードは0か1のいずれか、報告行があれば

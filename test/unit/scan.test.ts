@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { defaultLiveFileRoots, walkTextFiles } from '../../src/lib/scan.js';
+import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../../src/lib/scan.js';
 import { repoRoot } from '../../src/lib/paths.js';
 
 function withTmpDir(fn: (dir: string) => void): void {
@@ -15,7 +15,7 @@ function withTmpDir(fn: (dir: string) => void): void {
   }
 }
 
-test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}）', () => {
+test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}）。lint referencesの見出し解決に必要な完全な一覧', () => {
   const root = repoRoot();
   const result = defaultLiveFileRoots(root);
   const expected = [
@@ -33,6 +33,28 @@ test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENT
     assert.equal(fs.existsSync(p), true, `${p} が存在しない前提が崩れている`);
   }
   assert.deepEqual(result, expected);
+});
+
+test('defaultVocabFileRoots: lint vocabのデフォルト対象。templates/config/schemas/scriptsはissue識別子誤検出のため一時除外し、AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,ci}のみを返す', () => {
+  const root = repoRoot();
+  const result = defaultVocabFileRoots(root);
+  const expected = [
+    path.join(root, 'AGENTS.md'),
+    path.join(root, 'docs', 'GLOSSARY.md'),
+    path.join(root, '.agent-skill-chain', 'standards'),
+    path.join(root, '.agent-skill-chain', 'ci'),
+  ];
+  for (const p of expected) {
+    assert.equal(fs.existsSync(p), true, `${p} が存在しない前提が崩れている`);
+  }
+  assert.deepEqual(result, expected);
+});
+
+test('defaultVocabFileRoots: 存在しないパスは除外される', () => {
+  withTmpDir((dir) => {
+    const result = defaultVocabFileRoots(dir);
+    assert.deepEqual(result, []);
+  });
 });
 
 test('defaultLiveFileRoots: 存在しないパスは除外される', () => {
