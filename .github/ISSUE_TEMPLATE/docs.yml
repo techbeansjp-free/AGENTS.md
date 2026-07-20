@@ -1,5 +1,5 @@
-name: "docs: ドキュメント"
-description: ドキュメントの追加・修正を行う。
+name: "docs: 資料"
+description: 資料の追加・修正を行う。
 title: "[docs] "
 labels: ["type:docs"]
 body:
@@ -11,7 +11,7 @@ body:
     id: problem
     attributes:
       label: 課題・目的
-      description: 追加・修正したいドキュメント、解決したい分かりにくさ・過不足を記述してください。
+      description: 追加・修正したい資料、解決したい分かりにくさ・過不足を記述してください。
     validations:
       required: true
   - type: textarea

@@ -112,7 +112,7 @@ jobs:
         run: ./.agent-skill-chain/scripts/gate-publish.sh "${{ steps.ctx.outputs.issue_id }}" "${{ steps.review.outputs.report_path }}"
 
       # error（起動失敗・timeout・未構成）は publish で action_required を発行したうえで、step を赤にして
-      # 可視化する（merge は action_required でブロック済み。ここでの失敗は「判定が完了しなかった」ことの通知）。
+      # 可視化する（merge は action_required で停止済み。ここでの失敗は「判定が完了しなかった」ことの通知）。
       - name: Surface reviewer error
         if: steps.judgment.outputs.outcome == 'error'
         run: |

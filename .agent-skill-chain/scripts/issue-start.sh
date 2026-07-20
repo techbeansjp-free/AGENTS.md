@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 正本: AGENTS.md §ブランチ・worktree / .agent-skill-chain/standards/GIT_CONVENTIONS.md / .agent-skill-chain/config/agent-skill-chain.yaml
-#      （branch.pattern, worktree.path_pattern, worktree.timestamp, issue.allowed_types）
+#      （branch.pattern, worktree.path_pattern, worktree.timestamp, `issue.allowed_types`）
 #
 # Issue起票時に、.agent-skill-chain/config/agent-skill-chain.yaml の branch.pattern・worktree.path_pattern 規約に
 # 従いブランチ名・worktreeパスを機械的に生成し、worktreeを作成する

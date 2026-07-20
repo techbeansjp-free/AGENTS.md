@@ -8,9 +8,9 @@
 # docs/GLOSSARY.md自体は対象外（禁止同義語列で禁止語を文字通り列挙する構造上、恒久的に
 # 自分自身を誤検出するため）。
 #
-# .agent-skill-chain/{templates,config,schemas,scripts}/ は一時的に対象外（識別子・YAMLキー・
-# CLIサブコマンド名としての"issue"等の正当利用を、現行スキャナが散文の誤用と区別できず大量誤検出
-# するため）。識別子対応スキャナ実装後、follow-up issueで対象復帰する。
+# .agent-skill-chain/{templates,config,schemas,scripts}/ は対象に含む（識別子・YAMLキー・
+# CLIサブコマンド文脈としての正当利用と散文中の誤用を区別するスキャナを実装済み。
+# src/commands/lint.ts の isIdentifierContext 参照）。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
 # `lint vocab` サブコマンドへの薄いラッパーである（使い方は `lint vocab -h` 参照）。

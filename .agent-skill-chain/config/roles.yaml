@@ -12,8 +12,8 @@ roles:
   orchestrator:
     lease: none
     capabilities:
-      - issue.create
-      - issue.state_transition
+      - "`issue.create`"
+      - "`issue.state_transition`"
       - worktree.lifecycle
       - pr.merge
     forbidden:
@@ -34,7 +34,7 @@ roles:
       - branch.commit              # 自branchのみ
       - branch.push                 # 自branchのみ
       - integration_record.update   # GitHubモード=Draft PR更新, ローカルモード=Integration Record更新
-      - issue.report                 # 固定スキーマによる完了・blocked報告
+      - "`issue.report`"                 # 固定スキーマによる完了・blocked報告
     segment_overrides:
       spec:
         additional_capabilities: [pr.draft_create]   # Draft PRはSPECワーカーのみ作成
@@ -116,7 +116,7 @@ role_contracts:
     outputs: [code, unit_test_results]
     rules:
       - 承認済みSPEC/DESIGNを変更しない
-      - PLANの順序に従う（ブロック時は報告する。推測で補完しない）
+      - PLANの順序に従う（中断時は報告する。推測で補完しない）
       - gate-reportを書き換えない
       - 自worktree内でのみ作業する
     completion:
