@@ -357,3 +357,15 @@ segment 'spec' の必須成果物が欠落しています: SPEC.md
 ### 教訓
 
 command chain（requirement-discovery等）が生成する`docs/maintainer/workflow/`形式のドキュメントは、進行の記録としては有用だが、`.agent-skill-chain/config/segments.yaml`が定めるCI gateの検証対象（リポジトリルート直下の`SPEC.md`等）とは別物である。Issue着手時点で`verify artifacts`・`verify ac-coverage`をローカルで一度実行し、正式成果物規約への適合を早期に確認しておけば、CI上で初めて発覚するという手戻りを避けられた。
+
+### 対応（テンプレート修正）
+
+上記「重要な発見」の対応候補1を採用し、`.agent-skill-chain/templates/issue/VALIDATION.md`を「Markdown見出し＋AC毎に分割した複数の`` ```yaml ``フェンス」構造から、`.agent-skill-chain/schemas/validation-report.schema.yaml`（`agent-skill-chain/validation-report/v1`）に完全一致する**純粋なYAMLドキュメント**へ書き直した。実装（`src/commands/verify.ts`の`acCoverage()`）側は変更していない。見出し相当の情報（雛形であること・schema参照・複製単位の指示・パースが壊れる根本原因の注記）は`#`コメントで冒頭に記述し、`schema_version`・`issue_id`・`target_sha`・`acceptance_criteria`（`ac_id`/`verification`/`evidence`、複製単位はコメントで明示）・`regression`のみを本体に持つ構造にした。プレースホルダは`<...>`表記のまま残し、Issue #171で実際に作成した`VALIDATION.md`（`a9a9d60`）を参考にした。
+
+**検証**:
+- `node -e "yaml.parse(fs.readFileSync('.agent-skill-chain/templates/issue/VALIDATION.md','utf8'))"` → 例外なく成功（旧構造で発生していた`Implicit keys need to be on a single line`が解消したことを確認）。
+- `node bin/agents-md.js verify doc-length` → 終了コード0（新テンプレートは43行で上限100行以内）。
+- `node bin/agents-md.js verify template-sync .` → 終了コード0。ただし`.agent-skill-chain/templates/issue/`は`verify template-sync`の対象外（同コマンドは`.agent-skill-chain/templates/github/.github/`と`.github/`の同期のみを検査する実装であることを`src/commands/verify.ts`のtemplate-sync実装で確認済み）であり、本テンプレート変更は同コマンドの検査範囲そのものには影響しない。
+- `grep -rn "VALIDATION.md" test/` → `test/integration/verify.test.ts`のみヒット。同ファイルの各テストは`fs.writeFileSync`でテスト用YAMLを直接インラインで生成しており、`.agent-skill-chain/templates/issue/VALIDATION.md`テンプレートの内容には依存していないため、既存テストへの影響は無い。
+- `npm run build`（`tsc`）→ エラー無し。
+- `npm test` → `# tests 335 / # pass 335 / # fail 0`（既存335件全件pass、テンプレート修正はsrc/を変更しないため回帰無し）。
