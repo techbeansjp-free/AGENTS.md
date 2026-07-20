@@ -590,3 +590,41 @@ verify-artifacts (対象PRで変更されたセグメントごと)	segment 'impl
 ### follow-up issueとして起票が必要な内容として残るもの
 
 §15のfollow-up 1（識別子・YAMLキー・CLIサブコマンド名認識スキャナの実装、`.agent-skill-chain/{templates,config,schemas,scripts}`の対象復帰）は本対応のスコープ外であり、引き続きfollow-up issueとしての起票が必要（起票自体は進行役が行う）。今回の`verify-branch-name.sh`の対応は個別のバッククォート化による回避であり、このスキャナ改善が実現すれば`defaultVocabFileRoots()`と`defaultLiveFileRoots()`を1つに統合できる点は変わらない。
+
+---
+
+## 17. 追記（12回目）: PR #172 実地実行で`verify`ジョブのテストが実CIの環境変数漏れ込みで失敗（テスト側のenv隔離漏れ）
+
+**発生**: §16までの修正後、PR #172の実GitHub Actions上の`verify`ジョブ内での`npm test`実行（run 29721948198）で、Issue #171の直前の対応（§10、`gate review`への`target_sha`明示指定対応）で追加したテストが失敗した。
+
+```
+not ok 60 - gate review: target_shaを明示指定した場合、entry.pathの実際のHEADと異なっていてもそれが採用されること（Issue #171: CIのdetached HEAD対応）
+error: ISSUE-172 の worktree が見つかりません
+```
+
+### 根本原因
+
+`test/integration/issue-lifecycle.test.ts`の該当テスト（`gate review: target_shaを明示指定した場合...`）は、`runCli(['gate', 'review', 'ISSUE-172', 'spec', 'strict', branchTipSha], { cwd: repo.dir })`を`env`オプション無しで呼んでいた。`test/helpers/cli.ts`の`runCli()`は`env: options.env ?? process.env`という実装であるため、`env`未指定時は**このテストプロセス自身の環境変数をそのまま子プロセスへ継承する**。
+
+このテスト自体がGitHub Actions CIの`verify`ジョブの中で（`npm test`経由で）実行されるため、実際のPRブランチ（`process/171-ci-gate-dogfood`）に対して`actions/checkout@v4`が設定した本物の`GITHUB_HEAD_REF`環境変数が、そのままテストの子プロセスへ漏れ込んでいた。
+
+このテストは一時repoでdetached HEAD状態を作り、「`GITHUB_HEAD_REF`が未設定かつ単一worktreeの状況で、issueNumber（172）を信頼してrootをentryとして返す」という`findIssueWorktree()`のフォールバック経路（§7で追加した「単一checkoutエントリへの最終フォールバック」）を検証する意図だった。しかし実際のCI環境では`GITHUB_HEAD_REF`が（テストの意図とは無関係な値`process/171-ci-gate-dogfood`で）既に設定されていたため、`findIssueWorktree`は「ブランチ名は`GITHUB_HEAD_REF`経由で解決できたが対象issue（172）とは不一致→安全側で`undefined`のまま」という別の分岐（§7で追加した「ブランチ名照合に失敗した場合は誤爆させない」ガード）に落ちてしまい、テストが本来検証したかった「単一worktreeエントリを信頼するフォールバック」に到達できなかった。
+
+同種の対策は既に`test/integration/verify.test.ts`の他のテスト（`verify branch-name: ...GITHUB_HEAD_REFが未設定なら...`、`checkpoint: ...GITHUB_HEAD_REFが未設定なら...`）で`const env = { ...process.env }; delete (env as Record<string, string | undefined>).GITHUB_HEAD_REF;`という形で既に行われていたが、issue-lifecycle.test.tsの本テストにだけこのサニタイズが漏れていた。
+
+### 対応
+
+`test/integration/issue-lifecycle.test.ts`の該当テストの`runCli`呼び出しに、既存パターンと同じ`env`（`GITHUB_HEAD_REF`・`GITHUB_BASE_REF`の両方を明示的に`delete`したもの）を渡すよう修正した。
+
+### 横断確認
+
+同種の「`GITHUB_HEAD_REF`/`GITHUB_BASE_REF`が未設定であることに暗黙依存する`runCli`呼び出し」が他に無いか、`test/`配下の全`runCli`呼び出し箇所（217件）を確認した。`src/lib/worktree.ts`の`resolveCurrentBranchInfo()`は現在のHEADが真にdetached（`git rev-parse --abbrev-ref HEAD`が文字列`"HEAD"`を返す場合）のみ`GITHUB_HEAD_REF`を参照し、`defaultBranch()`も`origin/HEAD`・ローカル`main`/`master`のいずれも解決できない場合のみ`GITHUB_BASE_REF`を参照する実装であるため、`createTmpRepo()`＋通常チェックアウトのみを行う大多数のテストではこれらの分岐は構造的に実行されない。実際に`git checkout --detach`等でCI相当の状態を意図的に作っているテストは本件を含め4箇所のみであり、他の3箇所（`verify.test.ts`の`GITHUB_HEAD_REF`未設定系2件、`GITHUB_BASE_REF`設定系1件）は既に`env`を明示していることを確認した。他に同種の漏れは無い。
+
+### 検証結果
+
+- `GITHUB_HEAD_REF=process/171-ci-gate-dogfood npm test`（実際のCI環境の汚染を模した実行）: `# tests 344 / # pass 344 / # fail 0`。
+- `npm test`（環境変数設定無しの通常実行）: `# tests 344 / # pass 344 / # fail 0`。
+
+### 教訓
+
+テストヘルパー`runCli()`は`env`未指定時に「テストプロセス自身の環境」をそのまま子プロセスへ継承する設計であるため、CI固有の環境変数（`GITHUB_HEAD_REF`・`GITHUB_BASE_REF`等）が「未設定であること」を前提にするテストは、テストコード自身がその環境変数を実行するCI環境の中で走る場合に限り、ローカルでは決して再現しない形で汚染される。この種のテストはローカル実行だけでは絶対に検出できず、実際にCIの`verify`ジョブとして走らせて初めて発覚する。今後、`GITHUB_HEAD_REF`/`GITHUB_BASE_REF`の「未設定であること」を前提とするテストを追加する際は、既存パターン（`env`をコピーして対象キーを`delete`）に必ず倣い、サニタイズを機械的に徹底する。

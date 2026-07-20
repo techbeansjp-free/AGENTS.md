@@ -140,7 +140,17 @@ test('gate review: target_shaを明示指定した場合、entry.pathの実際�
   assert.notEqual(mergeCommitSha, branchTipSha, '前提: detached HEAD相当のSHAはbranch先端SHAと異なること');
   execFileSync('git', ['checkout', '--detach', 'HEAD'], { cwd: repo.dir, stdio: 'pipe' });
 
-  const gateReview = runCli(['gate', 'review', 'ISSUE-172', 'spec', 'strict', branchTipSha], { cwd: repo.dir });
+  // Given: GITHUB_HEAD_REF/GITHUB_BASE_REF を明示的に未設定にする（このテスト自体がCIの
+  // verifyジョブ内で実行されるため、未サニタイズだと実行中プロセスの本物のGITHUB_HEAD_REFが
+  // 子プロセスへ継承され、意図した「単一worktreeを信頼するフォールバック」経路を検証できない）。
+  const env = { ...process.env };
+  delete (env as Record<string, string | undefined>).GITHUB_HEAD_REF;
+  delete (env as Record<string, string | undefined>).GITHUB_BASE_REF;
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-172', 'spec', 'strict', branchTipSha], {
+    cwd: repo.dir,
+    env,
+  });
   assert.equal(gateReview.status, 0, gateReview.stderr);
   const gateReportPathMatch = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout);
   assert.ok(gateReportPathMatch, 'gate_report_path が出力されること');
