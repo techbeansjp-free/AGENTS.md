@@ -118,6 +118,41 @@ test('verify branch-name: 引数省略・detached HEAD状態でGITHUB_HEAD_REF�
   assert.match(result.stderr, /現在のブランチ名を解決できません/);
 });
 
+// Issue #174 AC-6: issue.allowed_types に chore を追加したことで、このリポジトリ自身に実在する
+// `chore/162-agent-skill-chain-bootstrap` ブランチが verify branch-name で適合すること
+// （自プロジェクトが自身の規約検査に違反するという自己矛盾の解消）を確認する。
+test('verify branch-name: issue.allowed_typesにchoreを追加後、chore/162-agent-skill-chain-bootstrapが終了コード0になる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['verify', 'branch-name', 'chore/162-agent-skill-chain-bootstrap'], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+// Issue #174 AC-7: chore追加後も既存許容type（feature等）は引き続き成功し、許容外type
+// （invalidtype等）は引き続き失敗する（regressionなし）ことを確認する。
+test('verify branch-name: chore追加後も既存許容typeは成功し、許容外typeは引き続き失敗する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  for (const validBranch of [
+    'feature/1-sample-feature',
+    'bugfix/2-sample-bugfix',
+    'hotfix/3-sample-hotfix',
+    'refactor/4-sample-refactor',
+    'docs/5-sample-docs',
+    'process/6-sample-process',
+    'chore/7-sample-chore',
+  ]) {
+    const result = runCli(['verify', 'branch-name', validBranch], { cwd: repo.dir });
+    assert.equal(result.status, 0, `${validBranch}: ${result.stderr}`);
+  }
+
+  const invalid = runCli(['verify', 'branch-name', 'invalidtype/8-sample'], { cwd: repo.dir });
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stderr, /branch\.pattern/);
+});
+
 // ---- verify worktree-path ----
 
 test('verify worktree-path: 明示引数で path_pattern 適合・違反を判定できる', async (t) => {
@@ -373,7 +408,7 @@ test('verify artifacts: validation segmentはVALIDATION.mdの有無で成否が�
   const [, worktreePath] = start.stdout.trim().split('\n');
 
   // Given/When: VALIDATION.md が無い状態（acceptance_test_results/regression_test_resultsが代替確認する）
-  // Then: 欠落として失敗する（pr は常にtrue扱いのため報告されない）
+  // Then: 欠落として失敗する（pr はIssue #174でsegments.yamlのoutputsから除去済みのため報告されない）
   const before = runCli(['verify', 'artifacts', 'ISSUE-1', 'validation'], { cwd: repo.dir });
   assert.equal(before.status, 1);
   assert.match(before.stderr, /欠落しています: acceptance_test_results/);

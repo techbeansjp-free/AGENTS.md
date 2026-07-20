@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 
@@ -96,6 +97,13 @@ test('1トークンルーティング: checkpoint / cleanup / doctor / reconcile
     assert.match(cleanup.stderr, /issue_id は必須です/);
 
     // doctor は引数無しで実行できるコマンドなので、正常終了そのものがハンドラ到達の証拠。
+    // Issue #174: doctorにtemplate-sync検査・main worktree cleanチェックが追加されたため、
+    // 事前に .github/ を同期・commitして必須チェックがすべてOKになる状態を整える。
+    const sync = runCli(['sync', 'templates', repo.dir], { cwd: repo.dir });
+    assert.equal(sync.status, 0, sync.stderr);
+    execFileSync('git', ['add', '-A'], { cwd: repo.dir, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-m', 'chore: sync templates'], { cwd: repo.dir, stdio: 'pipe' });
+
     const doctor = runCli(['doctor'], { cwd: repo.dir });
     assert.equal(doctor.status, 0, doctor.stderr);
     assert.match(doctor.stdout, /OK {2}git\n/);

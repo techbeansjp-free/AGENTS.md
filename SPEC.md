@@ -1,113 +1,139 @@
-# SPEC: agent-skill-chain Tier 1 — adapters launch_worker（spec/design/implementation/validationワーカー起動）の設計・実装
+<!--
+正本: AGENTS.md §4セグメント・4ゲート
+このファイルは Issue 毎に複製して使う雛形である（セグメント: spec、成果物: SPEC.md、ゲート: spec-gate）。
+-->
 
-- Issue: `ISSUE-166`
+# SPEC: agent-skill-chain — doctor網羅性拡張・branch-name自己違反・segments.yaml矛盾・PRテンプレート未使用の解消
+
+- Issue: `ISSUE-174`
 - 作成者: `claude`
-- 対象ブランチ: `feature/166-launch-worker`
+- 対象ブランチ: `feature/174-gap-batch2`
 
 ## 目的・背景
 
-`.agent-skill-chain/adapters/{claude,codex,human}.sh` は、ゲート判定ワーカー起動（`launch_gate_reviewer`、read-only、#164項目②・PR #165で実装済み）まではカバーしているが、セグメント作業ワーカー起動（`launch_worker`相当：Issueのspec/design/implementation/validation各セグメントで実際にAIエージェント（claude/codex）または人間へ作業を割り当て・起動する部分）は3ファイルとも冒頭コメントで「別途設計・実装が必要なため対象外」と明記されたまま未着手である。
+実装チェックリスト（35章）とagent-skill-chain CLI実装とのギャップ分析（`memo/システム刷新/20260719_173313_実装チェックリスト_ギャップ一覧.md`）で識別された、比較的小〜中規模の残課題4件を一括で解消する。個別にIssue化するには小粒だが、放置するとdoctorの検査網羅性・自己整合性（このプロジェクト自身がAGENTS.md/CI規約に違反していないこと）・PR運用品質のいずれかを損ない続けるため、まとめて対応する。
 
-`launch_worker`はベンダー中立のrole contract（`.agent-skill-chain/config/roles.yaml`の`role_contracts`）と、進行役が呼び出す`.agent-skill-chain/scripts/segment-start.sh`（`segment start` CLIサブコマンドへの薄いラッパー。現状はwriter lease有効性を検査しrole_contractを標準出力へ返すのみで、実際のワーカー実行系起動は行わない）を、実行系起動へ変換する未実装の中間層である。本Issueはこの中間層を設計・実装し、`launch_gate_reviewer`で確立した「ゲート判定の起動」に続けて「セグメント作業そのものの起動」を機能させる。
+4件はそれぞれ独立した不整合であり、相互依存はない（同一PRでまとめて扱うのは変更規模が小さいためのバッチ化であり、機能的な結合はない）。
 
-`launch_gate_reviewer`との本質的な相違点は、レビュアの権限が**read-only**（`roles.yaml`の`gate_reviewer`は`lease: none`、複数並列可、`artifact.edit`禁止）であるのに対し、`launch_worker`が起動するセグメント作業ワーカーは**writer**（AGENTS.md「役割・権限・writer lease」節、1 Issueにつき同時1つのみ、成果物branchへのcommit/push、SPECワーカーのみDraft PR作成を行う）である点にある。この違いにより、writer lease取得・解放の順序、ワーカー自身によるcommit/push、WIP上限（有効writer lease数）との整合、SPECワーカーのみに課される非対称な責務（Draft PR作成）という、`launch_gate_reviewer`には無かった設計論点が新たに発生する。
+1. **doctorの検査範囲不足**: 現状`src/commands/doctor.ts`の`doctor`コマンドはgit有無・gitリポジトリ判定・`.agent-skill-chain/config/agent-skill-chain.yaml`読込・（GitHubモード時のみ）gh CLI有無・gh認証状態の5項目（うち必須3・情報2）のみを検査する。worktree命名規約・main worktreeのclean状態・GitHub配布テンプレート同期・schemas構文という、CI（`.agent-skill-chain/ci/`配下の各verify-*.sh）では検査されているがローカル`doctor`実行では検査されない項目が存在し、開発者がpush前にローカルで問題を検知できない。
+2. **branch-name自己矛盾**: `.agent-skill-chain/config/agent-skill-chain.yaml`の`issue.allowed_types`（Issue本文は`branch.allowed_types`と表記するが、実装上の該当キーは`issue.allowed_types`であり、`branch.pattern`の`{type}`部分の許容値としてこの`issue.allowed_types`が参照される）に`chore`が含まれていないため、このリポジトリ自身に実在する`chore/162-agent-skill-chain-bootstrap`等`chore/`プレフィックスのブランチが`agent-skill-chain verify branch-name`で不適合（NG）と判定される。自プロジェクトが自身の規約検査に違反するという自己矛盾を解消する。
+3. **segments.yamlの自己矛盾**: `.agent-skill-chain/config/segments.yaml`の`validation`セグメント`outputs`に`pr`が含まれているが、`src/commands/verify.ts`の`checkOutputExists()`の`case 'pr':`は常に`true`を返す実質no-opであり、`outputs`一覧に含める意味がない。これはAGENTS.md「④独立検証」の主成果物定義（受入/統合/回帰テスト・PR）とチェックリストが定める「VALIDATION出力にPR自体を検証項目として含めない」原則との不整合であり、`outputs`定義とその実装の乖離を解消する。
+4. **PRテンプレート未使用**: `src/commands/pr.ts`の`pr create`（GitHubモード）は`gh pr create`実行時に本文を`Closes #<id>`のみで生成し、`.agent-skill-chain/templates/github/.github/pull_request_template.md`（変更概要・自己完結性チェック等を含む正式テンプレート）の内容を一切反映しない。作成されるPRが自己完結性チェック・セグメント進捗チェックボックス等、レビュアが必要とする情報を欠いたまま作成され続ける。
 
 ## 要求 → 要件 → 受入条件
 
+要求から要件、そして機械検証可能な受入条件（AC-ID）まで一意に追跡できる形で記述する。AC-ID は `AC-1` のように `^AC-[0-9]+$` の形式に従う。
+
 ### 要求
 
-`.agent-skill-chain/adapters/{claude,codex,human}.sh` に `launch_worker` 関数群を実装し、Issueのspec/design/implementation/validation各セグメントで実際にAIエージェント（claude/codex）または人間へ作業を割り当て・起動できるようにしたいという要求（Issue #166本文「目的」節）。
+Issue #174本文（対象範囲1〜4・成功基準）に基づく要求：
+
+- doctorの検査範囲を拡張し、CIでのみ検査されている項目の一部をローカルでも事前検知できるようにしたい。
+- このリポジトリ自身が自身のbranch-name検査に違反しない状態にしたい。
+- segments.yamlのvalidation出力定義と実装（checkOutputExists）の不整合を解消したい。
+- `pr create`が生成するPR本文に、正式PRテンプレートの内容（変更概要・理由・影響範囲・ロールバック方針・成果物リンク）が反映されるようにしたい。
+- 上記変更後も既存テストスイート（357件超）が統合ブランチ`chore/162-agent-skill-chain-bootstrap`上で全てpassする状態を維持したい。
 
 ### 要件
 
-- 4 adapter（`claude.sh`/`codex.sh`/`human.sh`）が同一シグネチャの`launch_worker`関数を持ち、将来の adapter 追加（4番目以降）でも同じ契約に従える起動契約を定義する。
-- 4セグメント（spec/design/implementation/validation）すべてに対応し、`.agent-skill-chain/config/roles.yaml`の`role_contracts`（`spec_worker`/`design_worker`/`implementation_worker`/`validation_worker`のinputs/outputs/rules/completion/forbidden）を起動先ワーカーへ渡す。
-- writer lease取得（`.agent-skill-chain/scripts/lease-acquire.sh`相当）と`launch_worker`起動の順序、および起動失敗時のlease解放（`.agent-skill-chain/scripts/lease-release.sh`相当）を明確にする。1 Issueには同時に1つのwriter leaseのみ許可される制約（AGENTS.md「役割・権限・writer lease」節）を`launch_worker`の呼び出し手順が壊さないことを保証する。
-- 進行役からの呼び出し方法として、`.agent-skill-chain/scripts/segment-start.sh`（`segment start` CLI）が返すrole_contractを`launch_worker`へどう受け渡すかを確定する。
-- adapter別の実装方針を分担する。claude/codexはAI実行系の実起動、humanは通知発行＋非同期の人間作業待ちとする方針を、`launch_gate_reviewer`の前例（claude=実起動、codex=同一シグネチャのI/Fのみでfail-safe deferral、human=通知＋非同期）を踏まえて定める。
-- エラー・タイムアウト・未起動時の安全側挙動（AGENTS.md I8「既定は常に安全側」）を定める。特に、writer lease取得済み状態でワーカー起動が失敗した場合に、leaseを保持したまま放置しない（解放するか、明示的にblocked報告する）ことを保証する。
-- WIP上限（`wip_limit`、既定3、有効writer lease数で判定）との整合を、`launch_worker`がlease取得前提のためどこで担保されるかを含めて定める。
-- SPECワーカーのみが担うDraft PR作成という非対称な責務（`roles.yaml`の`worker.segment_overrides.spec.additional_capabilities: [pr.draft_create]`）を、`launch_worker`のsegment別分岐でどう扱うかを定める。
-- ワーカーによる実際のcommit/push（`launch_gate_reviewer`は書込みをadapterシェル側の`record-verdict`等trusted CLIに限定していたが、`launch_worker`ではワーカー自身が成果物へ書込み、`checkpoint.sh`経由でcommit/pushする）の権限境界を定める。
-- `launch_gate_reviewer`と同様、認証情報（`ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN`等）の実値をログ・stdoutに出さない。
+- **要件1（doctor拡張）**: `doctor`コマンドに以下4項目の検査を追加する。
+  - worktree一覧が`.agent-skill-chain/config/agent-skill-chain.yaml`の`worktree.path_pattern`に適合するか（`git worktree list --porcelain`の各エントリに対し、既存の`worktreePathRegex()`相当のロジックで判定）。
+  - main worktree（`repoRoot()`が指すworktree）が未commit差分なし（clean）であるか。
+  - `.agent-skill-chain/ci/verify-template-sync.sh`相当の検査（`.github/`とテンプレート配布元`.agent-skill-chain/templates/github/.github/`の同期状態）。
+  - `.agent-skill-chain/schemas/*.yaml`自体がYAMLとして構文妥当であるか。
+  - 追加した各項目は、意図的に条件を崩した状態（例：worktreeを規約外の名前で作る、main worktreeに未commit差分を作る、`.github/`とテンプレートを乖離させる、schemasに構文エラーを混入する）で正しくNG表示されることを自動テストで確認する。
+  - docs/system-spec関連・requirement ID traceability・Durability Backend検査は、ADR-0001（`docs/adr/ADR-0001-docs-system-spec-construction.md`）が`status: proposed`のまま先送り決定済みのため、本Issueでは追加しない（対象外のまま据え置く）。
+- **要件2（branch-name自己矛盾解消）**: `.agent-skill-chain/config/agent-skill-chain.yaml`の`issue.allowed_types`に`chore`を追加する。追加後、`.agent-skill-chain/schemas/config.schema.yaml`の`allowed_types`列挙定義・関連ドキュメント（AGENTS.mdやコメントで許容type一覧を列挙している箇所があれば）との整合も確認する。
+- **要件3（segments.yaml矛盾解消）**: `.agent-skill-chain/config/segments.yaml`の`validation`セグメント`outputs`から`pr`を削除する。`src/commands/verify.ts`の`checkOutputExists()`の`case 'pr':`分岐は、`segments.yaml`から参照されなくなるため削除するか、あるいはコメントで「segments.yamlのoutputsには含めない、no-op分岐として残置する理由」を明記する（設計フェーズで判断）。`.agent-skill-chain/schemas/segments.schema.yaml`のoutputs列挙値やその他`pr`出力を前提とするテスト・ドキュメントとの整合も確認する。
+- **要件4（PRテンプレート反映）**: `src/commands/pr.ts`の`create()`（GitHubモード分岐）が`gh pr create`へ渡す`--body`を、`.agent-skill-chain/templates/github/.github/pull_request_template.md`の内容（Issue参照節・セグメントチェックボックス節・自己完結性チェック節）をベースに、少なくとも変更概要・理由・影響範囲・ロールバック方針・成果物リンクの各節を含む本文へ拡張する。テンプレートファイルが存在しない環境（配布同期前等）でのフォールバック挙動（最低限`Closes #<id>`を含む本文を生成する等）も設計フェーズで定める。
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: 4 adapterすべてに同一シグネチャの`launch_worker`関数が定義される
+各 AC には、散文形式の Given/When/Then による受け入れシナリオを添える。
 
-- Given: `.agent-skill-chain/adapters/{claude,codex,human}.sh`（現状は3ファイルとも`launch_worker`相当が未実装のプレースホルダコメントのみ）
-- When: 本Issueの設計・実装が完了した状態で3ファイルを確認する
-- Then: 3ファイルすべてに同一の位置引数・env変数シグネチャを持つ`launch_worker`関数が定義されており、呼び出し側（進行役・CI）がadapterの種類を意識せず同一の呼び出し方法で起動できる
+#### AC-1: doctorがworktree一覧のpath_pattern適合を検査する
+
+- Given: `.agent-skill-chain/config/agent-skill-chain.yaml`の`worktree.path_pattern`に適合しない名前のworktreeが`git worktree list`に存在する
+- When: `agent-skill-chain doctor`を実行する
+- Then: 当該worktreeについてNG表示され、終了コードが1以上になる
 - 検証方法見込み: `automated`
 
-#### AC-2: writer lease取得→`launch_worker`起動→解放の順序が設計され、起動失敗時にleaseが放置されない
+#### AC-2: doctorがmain worktreeのclean状態を検査する
 
-- Given: Issueの対象segmentに対しwriter leaseが未取得の状態
-- When: `launch_worker`の呼び出し手順（設計成果物に記載）に従い、lease取得→ワーカー起動→（成功時は保持継続／失敗時は解放またはblocked報告）を実行する
-- Then: ワーカー起動が失敗した場合でも、leaseが取得されたまま放置される（renewが止まりTTL切れまで他ワーカーがacquireできない状態が長時間続く）ことがなく、解放または明示的なblocked報告のいずれかが行われる
+- Given: main worktree（repoRootが指すworktree）に未commitの差分（staged/unstaged問わず）が存在する
+- When: `agent-skill-chain doctor`を実行する
+- Then: main worktree cleanチェックがNG表示され、終了コードが1以上になる
 - 検証方法見込み: `automated`
 
-#### AC-3: `segment-start.sh`が返すrole_contractを`launch_worker`が受け取り、ワーカーへ引き渡す
+#### AC-3: doctorがverify-template-sync相当を検査する
 
-- Given: `.agent-skill-chain/scripts/segment-start.sh <issue_id> <segment>`が返すrole（`spec_worker`等）とrole_contract（inputs/outputs/rules/completion/forbidden）
-- When: 進行役が`segment-start.sh`実行後に`launch_worker`を呼び出す
-- Then: `launch_worker`はrole_contractの内容（またはそれを引き渡すための確立された手順）をもとに起動対象ワーカーへ入力・規約を伝達する
+- Given: `.github/`が`.agent-skill-chain/templates/github/.github/`の配布内容と乖離している（ファイル欠落または内容不一致）
+- When: `agent-skill-chain doctor`を実行する
+- Then: template-sync検査がNG表示され、終了コードが1以上になる
 - 検証方法見込み: `automated`
 
-#### AC-4: claude adapterはAI実行系を実起動する
+#### AC-4: doctorがschemas構文妥当性を検査する
 
-- Given: `ANTHROPIC_API_KEY`または`CLAUDE_CODE_OAUTH_TOKEN`が設定済みで、対象segmentのworktree・writer leaseが有効な状態
-- When: `claude.sh`の`launch_worker`を呼び出す
-- Then: claude実行系（Claude Code CLI等）がworktree内で起動し、role_contractに従った作業（commit/push含む）を試行する。認証未設定・CLI不在は`launch_gate_reviewer`と同様のfail-safe（silent passしない）で扱う
+- Given: `.agent-skill-chain/schemas/*.yaml`のいずれかにYAML構文エラーが混入している
+- When: `agent-skill-chain doctor`を実行する
+- Then: 当該schemaファイルについてNG表示され、終了コードが1以上になる
 - 検証方法見込み: `automated`
 
-#### AC-5: codex adapterは同一シグネチャのI/Fのみを提供しfail-safe deferralへ倒す
+#### AC-5: doctor追加4項目がいずれも正常系でOK表示される
 
-- Given: Codex実行系の具体起動（CLI/API・認証・read-write制約）が未確定な現状
-- When: `codex.sh`の`launch_worker`を呼び出す
-- Then: `launch_gate_reviewer`と同様、silent passせず、未構成であることを明示した上で安全側（error/human_required相当）へ倒す。将来のCodex実行系結線のための拡張ポイントが関数内コメントとして明記される
-- 検証方法見込み: `manual`
-
-#### AC-6: human adapterは通知発行＋非同期の人間作業待ちへ結線する
-
-- Given: 対象Issue・segment・writer leaseが有効な状態
-- When: `human.sh`の`launch_worker`を呼び出す
-- Then: 人間オペレータへの通知（GitHubモードでは`gh issue comment`等、ローカルモードではpendingマーカー）が発行され、同期ブロックせずdeferredとして返る。人間が作業完了後に報告する手順（`report_status`等既存関数との連携）が明記される
-- 検証方法見込み: `manual`
-
-#### AC-7: エラー・タイムアウト・未起動時に常に安全側（silent passしない）挙動になる
-
-- Given: ワーカー実行系の起動失敗・timeout・異常終了が発生する状態
-- When: 3 adapterいずれかの`launch_worker`がこれらの異常系に遭遇する
-- Then: AGENTS.md I8「既定は常に安全側」に従い、完了扱い（success）へ誤って倒れることがなく、終了コードまたは報告により失敗・要人間確認の状態が呼び出し側から機械的に判別できる
+- Given: worktree命名規約・main worktreeのclean状態・`.github/`とテンプレートの同期・schemas構文がいずれも正常な状態
+- When: `agent-skill-chain doctor`を実行する
+- Then: 追加した4項目全てがOK表示され、既存項目と合わせて終了コード0になる
 - 検証方法見込み: `automated`
 
-#### AC-8: WIP上限（有効writer lease数、既定`wip_limit: 3`）との整合が保たれる
+#### AC-6: verify branch-nameがchore/162-agent-skill-chain-bootstrapで成功する
 
-- Given: 既に`wip_limit`件のwriter leaseが有効な状態
-- When: 新たなIssue/segmentに対し`launch_worker`呼び出しの前段でlease取得を試みる
-- Then: `wip_limit`超過となるlease取得が行われず（既存の`lease-acquire.sh`側の制約、または`launch_worker`呼び出し手順側の事前チェックのいずれかで）、超過したまま`launch_worker`が起動されることはない
-- 検証方法見込み: `manual`
+- Given: `.agent-skill-chain/config/agent-skill-chain.yaml`の`issue.allowed_types`に`chore`を追加済みである
+- When: `agent-skill-chain verify branch-name chore/162-agent-skill-chain-bootstrap`を実行する
+- Then: 終了コード0になる（現状はNG終了する自己矛盾状態からの解消）
+- 検証方法見込み: `automated`
 
-#### AC-9: SPECワーカーのみに課されるDraft PR作成の非対称性が`launch_worker`のsegment分岐で扱われる
+#### AC-7: 既存allowed_typesのブランチ名検査が引き続き正しく動作する
 
-- Given: `roles.yaml`の`worker.segment_overrides.spec.additional_capabilities: [pr.draft_create]`（spec segmentのみDraft PR作成を追加で行う）
-- When: segment=`spec`とsegment=`design`/`implementation`/`validation`のそれぞれで`launch_worker`を呼び出す
-- Then: spec segmentの場合のみ、ワーカー完了後の最初のcheckpoint push直後に`update_integration_record`（`pr-create.sh`）相当の呼び出しが行われる導線が設計に含まれ、他segmentでは行われない
-- 検証方法見込み: `manual`
+- Given: `chore`追加後の`issue.allowed_types`設定
+- When: `feature/`、`bugfix/`等の既存許容typeのブランチ名および許容外type（例：`invalidtype/`）のブランチ名それぞれについて`verify branch-name`を実行する
+- Then: 既存許容typeは終了コード0、許容外typeは終了コード1以上のまま変化しない（regressionなし）
+- 検証方法見込み: `automated`
 
-#### AC-10: 既存テストスイート・既存`launch_gate_reviewer`機能を壊さない
+#### AC-8: segments.yamlのvalidation.outputsからprが除去される
 
-- Given: 本Issue着手前の`npm test`が全pass、かつ`launch_gate_reviewer`が3 adapterで動作する状態
-- When: 本Issueの設計・実装（`launch_worker`追加）を適用した状態で`npm test`を実行する
-- Then: 追加分を含め全テストがpassし、既存の`launch_gate_reviewer`関数の挙動（シグネチャ・終了コード契約）に変更が生じない
+- Given: `.agent-skill-chain/config/segments.yaml`の`validation`セグメント`outputs`から`pr`を削除済みである
+- When: `.agent-skill-chain/schemas/segments.schema.yaml`に対して`segments.yaml`を検証する、または`agent-skill-chain`のsegments読込処理を実行する
+- Then: スキーマ適合エラーが発生せず、`validation.outputs`は`[acceptance_test_results, regression_test_results]`のみになる
+- 検証方法見込み: `automated`
+
+#### AC-9: verify artifactsがpr除去後も正しく動作する
+
+- Given: 対象IssueのworktreeにVALIDATION.md・受入/回帰テスト結果に相当する記録が存在し、`segments.yaml`の`validation.outputs`から`pr`が除去済みである
+- When: `agent-skill-chain verify artifacts <issue_id> validation`を実行する
+- Then: `pr`出力の欠落を理由にした誤検知（false negative／false positive）が発生せず、他の必須成果物（acceptance_test_results・regression_test_results）の欠落判定は従来通り正しく機能する
+- 検証方法見込み: `automated`
+
+#### AC-10: pr createが生成するPR本文にテンプレート由来の必須節が含まれる
+
+- Given: `.agent-skill-chain/templates/github/.github/pull_request_template.md`が配布済みの環境で`pr create <issue_id> <branch>`（GitHubモード）を実行する
+- When: `gh pr create`が呼び出される
+- Then: 渡される`--body`に、Issue参照（`Closes #<id>`）に加えて、変更概要・理由・影響範囲・ロールバック方針・成果物リンクの各節が含まれる
+- 検証方法見込み: `automated`（`gh`呼び出し部分はテスト内でモック/スタブ化し、生成される本文文字列を検証する）
+
+#### AC-11: 既存357件超のテストが全てpassする
+
+- Given: 本Issueの全変更（doctor拡張・issue.allowed_types更新・segments.yaml更新・pr.ts更新）を`chore/162-agent-skill-chain-bootstrap`統合ブランチ上へ反映した状態
+- When: リポジトリのテストスイート全体（`npm test`相当）を実行する
+- Then: 既存テスト（357件超）が全てpassし、新規追加テストも全てpassする（regressionなし）
 - 検証方法見込み: `automated`
 
 ## スコープ外
 
-- `launch_gate_reviewer`自体の変更（#164項目②・PR #165で実装済み、対象外）。
-- #164の他の対象範囲（配布用CIへの`npm test`組み込み、`gate reconcile`のGitHubモード対応）は完了済みのため対象外。
-- Tier 2以降（CLI管理コマンド不足、`.agent-skill-chain/project/`統合、doctor網羅性等）は別Issueで対応。
-- Codex実行系の具体的な起動コマンド・認証方式の確定（AC-5が定めるのはfail-safe deferralのI/Fのみであり、実起動結線は別途のADR・Issueで決定する）。
-- `docs/system-spec/`実体構築（別ADR承認後、別Issueで対応。本SPECの対象外）。
-- 本Issueの設計（`DESIGN.md`/ADR/`PLAN.md`）・実装・検証（`VALIDATION.md`）の作成そのもの（これらは本SPECを入力として後続segmentで作成する別成果物であり、本ファイルの記述範囲外）。
+この Issue では対応しない事項を明記する。曖昧語・対象外欠落は仕様ゲートの反証観点で指摘される。
+
+- doctor全項目中、docs/system-spec関連・requirement ID traceability・Durability Backend検査（`ADR-0001-docs-system-spec-construction.md`が`status: proposed`のまま先送り決定済みのため、本Issueの対象外として据え置く）。
+- writer leaseの真の原子性強化（TOCTOU解消）。別Issueで扱う。
+- lint-vocabスキャナの識別子・YAML/CLIサブコマンド名認識の本格実装（Issue #171で一時除外されたfollow-up事項）。別Issueで扱う。
+- `docs/system-spec/`の新設・構築自体（ADR-0001がacceptedになった後に別Issueで着手する既定方針であり、本Issueはこれに影響しない）。
+- `.agent-skill-chain/project/`配下のプロジェクト固有ポリシー文書の変更（本Issueの4項目はいずれもpackage本体（`.agent-skill-chain/config/`・`src/`・`.agent-skill-chain/templates/`）の変更であり、project固有ポリシーの変更を伴わない）。

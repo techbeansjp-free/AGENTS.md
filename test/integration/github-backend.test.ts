@@ -174,3 +174,113 @@ test('issue resume (github backend): PRが見つからない場合とgh pr list�
   assert.match(resumeWithPr.stdout, /"number":5/);
   assert.match(resumeWithPr.stdout, /"state":"OPEN"/);
 });
+
+// Issue #174 AC-10: pr create（githubモード）がPRテンプレートの5節を反映した本文を組み立てることを
+// gh-stub が記録する --body の内容から検証する。
+
+test('pr create (github backend): SPEC.mdのみが存在する場合、変更概要・理由・成果物リンクが自動充填され、影響範囲・ロールバック方針はプレースホルダのまま残る', async (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  const start = runCli(['issue', 'start', 'ISSUE-20', 'feature', 'pr-template-flow', FIXED_TIMESTAMP], { cwd: repo.dir, env });
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(
+    path.join(worktreePath, 'SPEC.md'),
+    ['# SPEC: サンプル機能のテンプレート反映', '', '## 目的・背景', '', 'これはテスト用の目的説明です。', '', '## スコープ外', '', '- なし', ''].join('\n'),
+  );
+  const checkpoint = runCli(['checkpoint', 'wip: SPEC.md追加'], { cwd: worktreePath, env });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-20', branch], { cwd: repo.dir, env });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+
+  const calls = stub.readState().prCreateCalls ?? [];
+  assert.equal(calls.length, 1, 'gh pr create が1回呼ばれること');
+  const body = calls[0].body ?? '';
+
+  assert.match(body, /Closes #20/);
+  assert.match(body, /## 変更概要\n\nサンプル機能のテンプレート反映/);
+  assert.match(body, /## 理由\n\nこれはテスト用の目的説明です。/);
+  assert.match(body, /## 影響範囲\n\n<影響範囲をここに記述>/, '影響範囲はDESIGN.md未作成のためプレースホルダのまま残ること');
+  assert.match(body, /## ロールバック方針\n\n<ロールバック方針をここに記述>/, 'ロールバック方針はDESIGN.md未作成のためプレースホルダのまま残ること');
+  assert.match(body, /## 成果物リンク\n\n- `SPEC\.md`/);
+  assert.match(body, /## このPRに含まれるセグメント/, '既存の2節（セグメント・自己完結性チェック）はそのまま維持されること');
+});
+
+test('pr create (github backend): DESIGN.mdも存在する場合、影響範囲・ロールバック方針も自動充填される', async (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  const start = runCli(['issue', 'start', 'ISSUE-21', 'feature', 'pr-template-design', FIXED_TIMESTAMP], { cwd: repo.dir, env });
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(
+    path.join(worktreePath, 'SPEC.md'),
+    ['# SPEC: DESIGN反映確認用', '', '## 目的・背景', '', '目的の本文。', ''].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(worktreePath, 'DESIGN.md'),
+    [
+      '# DESIGN: DESIGN反映確認用',
+      '',
+      '## 障害・ロールバック考慮',
+      '',
+      '- 想定される失敗モード: サンプルの失敗モード',
+      '- ロールバック手順: ロールバック手順のテスト値',
+      '- 影響を受ける既存機能: 影響範囲のテスト値',
+      '',
+    ].join('\n'),
+  );
+  const checkpoint = runCli(['checkpoint', 'wip: SPEC.md/DESIGN.md追加'], { cwd: worktreePath, env });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-21', branch], { cwd: repo.dir, env });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+
+  const calls = stub.readState().prCreateCalls ?? [];
+  const body = calls[calls.length - 1].body ?? '';
+
+  assert.match(body, /## 影響範囲\n\n影響範囲のテスト値/);
+  assert.match(body, /## ロールバック方針\n\nロールバック手順のテスト値/);
+  assert.match(body, /## 成果物リンク\n\n- `SPEC\.md`\n- `DESIGN\.md`/);
+});
+
+test('pr create (github backend): PRテンプレートが読めない場合はIssue #174着手前と同一のCloses #<id>のみの本文にフォールバックする', async (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  const start = runCli(['issue', 'start', 'ISSUE-22', 'feature', 'pr-template-fallback', FIXED_TIMESTAMP], { cwd: repo.dir, env });
+  assert.equal(start.status, 0, start.stderr);
+  const [branch] = start.stdout.trim().split('\n');
+
+  // Given: 対象リポジトリ側のテンプレートファイルパスをディレクトリに差し替える。
+  // resolveAsset は target_root 側の .agent-skill-chain 配下を優先して existsSync のみで判定するため、
+  // ファイルではなくディレクトリが存在する状態を作ると readFileSync が例外を投げ、
+  // 「テンプレートが読めない」状態（配布同期前・パッケージ側にも同ファイルが無い状態と同種の失敗）を
+  // 安全に再現できる（パッケージ本体の実ファイルには一切触れない）。
+  const templatePath = path.join(repo.dir, '.agent-skill-chain', 'templates', 'github', '.github', 'pull_request_template.md');
+  fs.rmSync(templatePath);
+  fs.mkdirSync(templatePath);
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-22', branch], { cwd: repo.dir, env });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+
+  const calls = stub.readState().prCreateCalls ?? [];
+  const body = calls[calls.length - 1].body ?? '';
+  assert.equal(body, 'Closes #22');
+});

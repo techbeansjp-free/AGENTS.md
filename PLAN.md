@@ -1,23 +1,25 @@
-# PLAN: agent-skill-chain Tier 1 — adapters launch_worker（spec/design/implementation/validationワーカー起動）の実装計画
+# PLAN: agent-skill-chain — doctor網羅性拡張・branch-name自己違反・segments.yaml矛盾・PRテンプレート未使用の解消
 
-- Issue: `ISSUE-166`
+- Issue: `ISSUE-174`
 - 対応する DESIGN: `DESIGN.md`
 
 ## 実装順序・変更単位
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | `worker`設定セクション新設 | `.agent-skill-chain/schemas/config.schema.yaml`・`.agent-skill-chain/config/agent-skill-chain.yaml`・`src/lib/config.ts`（`AgentSkillChainConfig`型）へ`worker: {adapter: claude\|codex\|human}`（既定`human`）を追加する。`review.adapter`と対称の追加のためmigrationはoptionalフィールド追加のみ | `AC-1` | なし |
-| 2 | `lease acquire`: issue横断コンフリクト検査 | `src/commands/lease.ts`のGitHubモード`acquire()`へ、`activeLeaseFor(number, segment, root)`による既存の同一segment判定に加え、`listLeaseComments(number, root)`で同issue内の**他segment**の有効leaseも検出し拒否する分岐を追加する。ローカルモードは既存の1ファイル/issue構造により対応済みのため変更しない | `AC-2` | なし |
-| 3 | `lease acquire`: `wip.limit`事前チェック | ローカルモード=`issues/*/.agent-skill-chain/lease.yaml`のうち`expires_at > now`件数、GitHubモード=`writer-lease:active`ラベル付きopen issue件数を数え、`wip.limit`以上なら`acquire()`を拒否する。`release()`成功時に同ラベルを除去する処理も追加する | `AC-8` | `#2` |
-| 4 | `worker-launch.sh`新設 | `.agent-skill-chain/scripts/worker-launch.sh`を`gate-launch-reviewer.sh`と対称の構造で新設する（`worker.adapter`解決→adapter source→`launch_worker`呼び出し→終端コード安全網） | `AC-1`, `AC-7` | `#1` |
-| 5 | `claude.sh`: `launch_worker`実装 | DESIGN.mdの「claude adapter」節に従い、lease取得→`segment start`→`WORKER_CMD`起動（`timeout`＋renewループ＋PID監視）→完了確認（`report-status`直近レコード突合）→解放・報告を実装する。`WORKER_CMD`/`WORKER_TIMEOUT_SEC`のデフォルト値は実機の`claude` CLIで書込み許可フラグを検証してから確定する | `AC-1`, `AC-2`, `AC-3`, `AC-4`, `AC-7`, `AC-9` | `#1`〜`#4` |
-| 6 | `codex.sh`: `launch_worker`実装 | lease取得を行わず、即座に`report_status blocked`（理由: 未構成）＋`exit 2`で返すfail-safe実装。将来のCodex実行系結線に向けた拡張ポイントコメントを付す | `AC-1`, `AC-5` | `#1` |
-| 7 | `human.sh`: `launch_worker`実装 | lease取得→`segment start`→通知（`gh issue comment`＋`worker:<segment>:awaiting-human`ラベル／ローカルmarker）→`exit 3`（deferred、release無し）。通知本文に`lease renew`／完了時手順（`checkpoint`→（specのみ）`pr create`→`report status`→`lease release`）を明記する | `AC-1`, `AC-2`, `AC-3`, `AC-6`, `AC-9` | `#1`〜`#4` |
-| 8 | 3 adapterの冒頭コメント更新 | 「launch_worker 相当は別途設計・実装が必要なため対象外」という記述を、実装済み・#166参照に更新する | `AC-1` | `#5`〜`#7` |
-| 9 | テスト追加 | `test/integration/gate-adapters.test.ts`と対称の`test/integration/worker-adapters.test.ts`を新設し、`WORKER_CMD`をstubに差し替えてbash経由で`worker-launch.sh`を駆動する。少なくとも以下を検証する: (a) claude成功時のexit 0・lease解放・`report_status completed`、(b) claude timeout/認証未設定時のexit非0非3・lease解放・`report_status blocked(human_escalation_requested=true)`、(c) codexの即blocked・exit 2・lease未取得のまま、(d) humanのexit 3・lease未解放・通知内容、(e) `wip.limit`到達時の`lease acquire`拒否、(f) 同issue内の他segment lease保持時の`lease acquire`拒否 | `AC-1`〜`AC-9`（`automated`分） | `#1`〜`#8` |
-| 10 | 既存テスト回帰確認 | `npm test`を実行し、既存`launch_gate_reviewer`関連テスト（`gate-adapters.test.ts`等）・`lease-renew.test.ts`・`github-lease.test.ts`が無破壊であることを確認する | `AC-10` | `#1`〜`#9` |
+| 1 | `issue.allowed_types`へ`chore`追加 | `.agent-skill-chain/config/agent-skill-chain.yaml`と`.agent-skill-chain/schemas/config.schema.yaml`のenumへ同一コミットで`chore`を追加する。`.agent-skill-chain/standards/GIT_CONVENTIONS.md`の`type: feature \| bugfix \| ...`列挙にも追記する | `AC-6`, `AC-7` | なし |
+| 2 | `segments.yaml`の`pr`除去 | `.agent-skill-chain/config/segments.yaml`の`validation.outputs`から`pr`を削除し、`src/commands/verify.ts`の`checkOutputExists()`から`case 'pr': return true;`を削除する（同一コミットで対にする） | `AC-8`, `AC-9` | なし |
+| 3 | `lib/template-sync.ts`新設 | `verify.ts`の`templateSync()`内の`listFilesRecursive()`と差分計算を`computeTemplateSyncDiffs(targetRoot): string[]`として切り出し、`verify.ts`はこれを呼ぶ薄いラッパーに書き換える。既存`verify template-sync`の挙動・出力形式は変えない（既存テスト無破壊であることを確認しながら進める） | `AC-3`の前提 | なし |
+| 4 | `doctor.ts`: worktree命名規約・main worktree cleanチェック追加 | DESIGN.mdの方式に従い、既存`checks`配列へ2項目追加する。`listWorktrees`/`worktreePathRegex`/`hasUncommittedChanges`はいずれも既存関数を再利用するのみ | `AC-1`, `AC-2` | なし |
+| 5 | `doctor.ts`: template-syncチェック追加 | `#3`で切り出した`computeTemplateSyncDiffs(root)`を呼び、非空なら該当Checkを`ok:false`にする | `AC-3` | `#3` |
+| 6 | `doctor.ts`: schemas構文チェック追加 | `resolveAsset('schemas', root)`配下`*.yaml`を`readYamlFile()`でtry/catch parseし、例外があればNGにする | `AC-4` | なし |
+| 7 | doctor正常系の確認 | `#4`〜`#6`実装後、意図的に条件を崩さない状態（本リポジトリ自身）で`doctor`を実行し、追加4項目が全てOK表示・終了コード0であることを確認する（実装作業中の暫定確認。正式なテストは`#11`） | `AC-5` | `#4`〜`#6` |
+| 8 | `pull_request_template.md`拡張 | `.agent-skill-chain/templates/github/.github/pull_request_template.md`の「## Issue」節直後へ「変更概要／理由／影響範囲／ロールバック方針／成果物リンク」の5節（プレースホルダ付き）を追加する。追加後`sync templates .`相当を実行し、`.github/pull_request_template.md`（配布先コピー）を同期させる（`#5`のtemplate-syncチェックが自己矛盾しないようにするため） | `AC-10`の前提 | `#5` |
+| 9 | `pr.ts`: 本文組み立てロジック実装 | `create()`のGitHubモード分岐に、DESIGN.mdの「PR本文組み込み方式」節に従い、`findIssueWorktree`でissueのworktreeを解決→`SPEC.md`のH1行・`## 目的・背景`節抽出→（存在すれば）`DESIGN.md`の`## 障害・ロールバック考慮`節の該当箇条書き抽出→存在する成果物ファイル名の列挙、という順で本文を組み立てる関数を追加する。テンプレート読込失敗時は`Closes #${number}`のみのフォールバックを維持する | `AC-10` | `#8` |
+| 10 | 既存テストの更新（regression対応） | `test/unit/config.test.ts`の`allowed_types`期待値に`chore`を追加、`test/unit/segments.test.ts`の`EXPECTED`から`'pr'`を除去する | `AC-7`, `AC-9` | `#1`, `#2` |
+| 11 | 新規テスト追加 | (a) `test/integration/doctor.test.ts`へ4項目それぞれの正常系・異常系（worktree命名規約違反、main worktree未commit差分、template不一致、schema構文エラー）を追加、(b) `test/integration/verify.test.ts`または新規テストで`chore/`ブランチの`verify branch-name`成功・既存type/許容外typeのregressionなしを確認、(c) `test/integration/github-backend.test.ts`または新規テストで、gh-stubが記録する`--body`の内容を検証し、`Closes #<id>`に加え5節見出しが含まれることを確認する（テンプレート不在時のフォールバックも別ケースで確認） | `AC-1`〜`AC-4`, `AC-6`, `AC-7`, `AC-10`（`automated`分） | `#1`〜`#9` |
+| 12 | 全体回帰確認 | `npm test`を実行し、既存357件超＋新規テストが全てpassすることを確認する。`node bin/agents-md.js doctor`を本リポジトリ自身に対して実行し終了コード0を確認する（dogfooding） | `AC-11` | `#1`〜`#11` |
 
 ## 実装順序の見直しについて
 
-`#2`（issue横断コンフリクト検査）と`#3`（wip.limit検査）はどちらも`src/commands/lease.ts`の`acquire()`内であるため、実装時に1コミットへ統合してもよい（設計要素としては別関心事のため本ファイルでは分けて記載した）。`#5`〜`#7`（3 adapterの`launch_worker`本体）は`#1`〜`#4`共通基盤の完成後であれば並行実装可能である。作業順序のみを見直す場合は本ファイルのみを更新すればよく、`DESIGN.md`の更新は不要である。
+`#1`と`#2`は独立した変更単位であり並行実装可能（SPEC.mdの「4件は相互依存がない」との記載どおり）。`#4`〜`#6`（doctorの3系統のチェック追加）も内部的には独立しており、実装順序を入れ替えてよい。`#8`→`#9`（PRテンプレート拡張→pr.ts実装）の順序のみ依存があるため崩さないこと。作業順序のみを見直す場合は本ファイルのみを更新すればよく、`DESIGN.md`の更新は不要である。

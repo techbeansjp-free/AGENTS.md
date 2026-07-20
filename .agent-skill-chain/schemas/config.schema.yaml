@@ -89,7 +89,7 @@ properties:
     properties:
       allowed_types:
         type: array
-        items: {type: string, enum: [feature, bugfix, hotfix, refactor, docs, process]}
+        items: {type: string, enum: [feature, bugfix, hotfix, refactor, docs, process, chore]}
         minItems: 1
   wip:
     type: object

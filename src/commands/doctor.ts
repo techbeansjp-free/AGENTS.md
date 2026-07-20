@@ -1,11 +1,15 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { commandExists, run as exec } from '../lib/exec.js';
 import { loadConfig } from '../lib/config.js';
-import { repoRoot } from '../lib/paths.js';
+import { repoRoot, resolveAsset } from '../lib/paths.js';
 import { readInstalledVersion } from '../lib/version-marker.js';
 import { readSettings, isPreToolUseHookWired } from '../lib/claude-settings.js';
 import { HOOK_RELATIVE_PATH } from './enforce.js';
 import { isHelp, printUsage, guard } from '../lib/cli-io.js';
+import { listWorktrees, worktreePathRegex, hasUncommittedChanges } from '../lib/worktree.js';
+import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
+import { readYamlFile } from '../lib/yaml-io.js';
 
 const USAGE = `
 使い方: agent-skill-chain doctor
@@ -46,6 +50,37 @@ export async function run(args: string[]): Promise<number> {
         const config = loadConfig(root);
         checks.push({ label: '.agent-skill-chain/config/agent-skill-chain.yaml', ok: true });
 
+        // Issue #174 AC-1: worktree一覧が worktree.path_pattern に適合するかを検査する。
+        // `git worktree list --porcelain` の先頭は常に主worktree自身であり、issue用worktreeの
+        // 命名規則には決して適合しないため対象から外す（doctorがどのworktreeから実行されても
+        // 正しく主worktreeを判定できるよう、cwd由来のrootとのパス比較ではなく先頭要素を除外する）。
+        try {
+          const regex = worktreePathRegex(config);
+          const targets = listWorktrees(root)
+            .slice(1)
+            .map((w) => w.path);
+          const bad = targets.filter((p) => !regex.test(path.basename(p)));
+          checks.push({
+            label: 'worktree命名規約',
+            ok: bad.length === 0,
+            reason: bad.length === 0 ? undefined : `${bad.join(', ')} は worktree.path_pattern に適合しません`,
+          });
+        } catch (error) {
+          checks.push({ label: 'worktree命名規約', ok: false, reason: (error as Error).message });
+        }
+
+        // Issue #174 AC-3: .github/ が templates/github/.github/（配布元の正本）と同期しているかを検査する。
+        try {
+          const diffs = computeTemplateSyncDiffs(root);
+          checks.push({
+            label: 'template-sync',
+            ok: diffs.length === 0,
+            reason: diffs.length === 0 ? undefined : diffs.join('; '),
+          });
+        } catch (error) {
+          checks.push({ label: 'template-sync', ok: false, reason: (error as Error).message });
+        }
+
         if (config.coordination.backend === 'github') {
           const ghOk = commandExists('gh');
           checks.push({ label: 'gh CLI', ok: ghOk, reason: ghOk ? undefined : 'gh コマンドが見つかりません' });
@@ -60,6 +95,45 @@ export async function run(args: string[]): Promise<number> {
         }
       } catch (error) {
         checks.push({ label: '.agent-skill-chain/config/agent-skill-chain.yaml', ok: false, reason: (error as Error).message });
+      }
+
+      // Issue #174 AC-2: main worktree（repoRootが指すworktree）に未commit差分が無いかを検査する。
+      // config読込の成否に依存しないため、上記try/catchの外側で独立して実行する。
+      try {
+        const entries = listWorktrees(root);
+        const mainPath = entries[0]?.path;
+        if (!mainPath) throw new Error('git worktree list --porcelain の結果が空です');
+        const clean = !hasUncommittedChanges(mainPath);
+        checks.push({
+          label: 'main worktreeのclean状態',
+          ok: clean,
+          reason: clean ? undefined : `未commitの変更があります: ${mainPath}`,
+        });
+      } catch (error) {
+        checks.push({ label: 'main worktreeのclean状態', ok: false, reason: (error as Error).message });
+      }
+
+      // Issue #174 AC-4: .agent-skill-chain/schemas/*.yaml がYAML構文として妥当かを検査する
+      // （JSON Schemaとしての意味的妥当性ではなく、YAML構文としてのparse可否のみを見る）。
+      // config読込に依存しないため、config読込失敗時も独立して実行する。
+      try {
+        const schemasDir = resolveAsset('schemas', root);
+        const files = fs.readdirSync(schemasDir).filter((f) => f.endsWith('.yaml'));
+        const errors: string[] = [];
+        for (const file of files) {
+          try {
+            readYamlFile(path.join(schemasDir, file));
+          } catch (error) {
+            errors.push(`${file}: ${(error as Error).message}`);
+          }
+        }
+        checks.push({
+          label: 'schemas構文妥当性',
+          ok: errors.length === 0,
+          reason: errors.length === 0 ? undefined : errors.join('; '),
+        });
+      } catch (error) {
+        checks.push({ label: 'schemas構文妥当性', ok: false, reason: (error as Error).message });
       }
     }
 

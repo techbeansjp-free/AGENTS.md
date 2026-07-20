@@ -22,7 +22,7 @@
 ```text
 <type>/<issue-id>-<slug>
 
-type: feature | bugfix | hotfix | refactor | docs | process
+type: feature | bugfix | hotfix | refactor | docs | process | chore
 例:    feature/123-user-authentication
 ```
 

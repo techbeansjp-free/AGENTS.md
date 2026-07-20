@@ -97,6 +97,10 @@ if (cmd === 'issue' && sub === 'list') {
 }
 
 if (cmd === 'pr' && sub === 'create') {
+  const state = loadState();
+  state.prCreateCalls = state.prCreateCalls || [];
+  state.prCreateCalls.push({ args, body: flag('--body') });
+  saveState(state);
   process.stdout.write('https://github.com/test/repo/pull/1\\n');
   process.exit(0);
 }
@@ -183,6 +187,7 @@ export interface GhStubState {
   prs: Record<string, unknown[]>;
   labels: string[];
   issueLabels: Record<string, string[]>;
+  prCreateCalls?: { args: string[]; body: string | undefined }[];
 }
 
 export interface GhStub {

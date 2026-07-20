@@ -17,7 +17,7 @@ test('loadConfig: 実物の .agent-skill-chain/config/agent-skill-chain.yaml を
   assert.equal(config.worktree.root, '.worktrees');
   assert.equal(config.worktree.slug_max_length, 48);
   assert.equal(config.branch.pattern, '{type}/{issue_id}-{slug}');
-  assert.deepEqual(config.issue.allowed_types, ['feature', 'bugfix', 'hotfix', 'refactor', 'docs', 'process']);
+  assert.deepEqual(config.issue.allowed_types, ['feature', 'bugfix', 'hotfix', 'refactor', 'docs', 'process', 'chore']);
   assert.equal(config.wip.limit, 3);
   assert.equal(config.lease.ttl_seconds, 3600);
   assert.equal(config.bdd.profile, 'standard');

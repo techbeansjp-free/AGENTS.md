@@ -9,7 +9,7 @@ const EXPECTED = [
   { id: 'implementation', outputs: ['code', 'unit_test_results'], next: 'validation' },
   {
     id: 'validation',
-    outputs: ['acceptance_test_results', 'regression_test_results', 'pr'],
+    outputs: ['acceptance_test_results', 'regression_test_results'],
     next: 'completed',
   },
 ];
