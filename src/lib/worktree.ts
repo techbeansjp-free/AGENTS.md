@@ -72,9 +72,22 @@ export function hasUnpushedCommits(worktreePath: string, branch: string): boolea
  * `git worktree list --porcelain` の実体を照合する（standards/GIT_CONVENTIONS.md §worktreeの正本）。
  *
  * CI（actions/checkout）は `.worktrees/` 型レイアウトを作らず、単一の通常チェックアウトのみを行うため
- * 上記照合は常に空振りする。この場合、現在のHEADブランチ名が対象issueの branch.pattern に一致するなら、
- * 単一チェックアウト自体がそのissueの作業対象であるとみなしフォールバックする（現在のチェックアウト =
- * そのブランチの作業状態そのものであるため、AGENTS.md I4 分離不変条件と矛盾しない）。
+ * 上記照合は常に空振りする。この場合、単一チェックアウト自体がそのissueの作業対象であるとみなし
+ * 以下の順でフォールバックする（いずれもAGENTS.md I4 分離不変条件と矛盾しない。単一チェックアウト =
+ * そのブランチの作業状態そのものであるため）。
+ *
+ * 1. `git rev-parse --abbrev-ref HEAD` が実ブランチ名を返す通常チェックアウトなら、それを
+ *    branch.pattern と照合する。
+ * 2. `actions/checkout@v4` は pull_request イベントに対しPRのマージrefをdetached HEADで
+ *    チェックアウトするため（switching to 'refs/remotes/pull/<n>/merge'）、上記1は "HEAD" という
+ *    文字列しか得られず機能しない。この場合 GitHub Actions が設定する `GITHUB_HEAD_REF`
+ *    （PRのheadブランチ名）を代替のブランチ名ソースとして branch.pattern と照合する。
+ * 3. 1・2いずれでもブランチ名が一切得られない場合（detached HEADかつ `GITHUB_HEAD_REF` 未設定）、
+ *    `git worktree list --porcelain` のエントリがちょうど1件（linked worktreeが存在しない = CI相当の
+ *    単一checkout環境）であれば、ブランチ名照合を諦め、呼び出し元が渡したissueNumber自体を信頼して
+ *    rootを返す（ローカル開発は通常複数worktreeが存在するため、この分岐が発火するのは実質CI相当の
+ *    環境に限られる）。ブランチ名が判明していて単に一致しない場合（issueNumberの取り違え等）まで
+ *    無条件で信頼すると誤爆の危険があるため対象外とする。
  */
 export function findIssueWorktree(
   root: string,
@@ -89,7 +102,8 @@ export function findIssueWorktree(
     slug: '[a-z0-9-]+',
   });
   const pathRegex = new RegExp(`^${patternSource}/?$`);
-  const found = listWorktrees(root).find((w) => pathRegex.test(path.basename(w.path)));
+  const entries = listWorktrees(root);
+  const found = entries.find((w) => pathRegex.test(path.basename(w.path)));
   if (found) return found;
 
   const branchPatternSource = expandPattern(config.branch.pattern, {
@@ -98,14 +112,25 @@ export function findIssueWorktree(
     slug: '[a-z0-9-]+',
   });
   const branchRegex = new RegExp(`^${branchPatternSource}$`);
+
   const currentBranch = git(['rev-parse', '--abbrev-ref', 'HEAD'], root);
   if (currentBranch.status !== 0) return undefined;
-  const branch = currentBranch.stdout.trim();
-  if (!branchRegex.test(branch)) return undefined;
+  const rawBranch = currentBranch.stdout.trim();
+  const isDetached = rawBranch === 'HEAD';
+  const branch = isDetached ? process.env.GITHUB_HEAD_REF : rawBranch;
 
   const head = git(['rev-parse', 'HEAD'], root);
   if (head.status !== 0) return undefined;
-  return { path: root, head: head.stdout.trim(), branch };
+
+  if (branch && branchRegex.test(branch)) {
+    return { path: root, head: head.stdout.trim(), branch, detached: isDetached || undefined };
+  }
+
+  if (!branch && entries.length === 1) {
+    return { path: root, head: head.stdout.trim(), branch: undefined, detached: isDetached || undefined };
+  }
+
+  return undefined;
 }
 
 /** 特定Issue番号に限定しない、worktree.path_pattern汎用の検証用正規表現。ci/verify-worktree-path.sh用。 */

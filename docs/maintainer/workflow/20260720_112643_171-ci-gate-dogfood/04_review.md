@@ -120,3 +120,45 @@ ISSUE-171 の worktree が見つかりません
 ### 検証結果
 
 `npm test`実測：`# tests 325 / # pass 325 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（既存322件全pass + 新規3件全pass）。§3で報告した8件のtest fail（`review.adapter`デフォルト値変更・`.installed_version`混入起因）は、本追記時点では別途解消済みであり本追記のスコープ外。
+
+---
+
+## 7. 追記（2回目）: PR #172 実地実行で§6の修正後も再度失敗（detached HEAD）
+
+**発生**: §6の修正（commit `edd5990`）をpushし、PR #172の実GitHub Actions上で再実行したところ（run 29713661947）、`gate-review (spec/design/implementation/validation)`が全滅し、`verify`も失敗した。
+
+```
+gate-review (spec)	Run actions/checkout@v4	Note: switching to 'refs/remotes/pull/172/merge'.
+gate-review (spec)	Run actions/checkout@v4	You are in 'detached HEAD' state.
+...
+gate-review (spec)	Run gate review (spec)	ISSUE-171 の worktree が見つかりません
+```
+
+### 根本原因（§6の修正が機能しなかった理由）
+
+`actions/checkout@v4`は`pull_request`イベントに対し、PRのマージref（`refs/remotes/pull/172/merge`）を**detached HEAD**でチェックアウトする。この状態で`git rev-parse --abbrev-ref HEAD`を実行すると、実際のブランチ名ではなく文字列`"HEAD"`が返る。§6で追加したフォールバックは`git rev-parse --abbrev-ref HEAD`の戻り値を直接`branch.pattern`と照合していたため、`"HEAD"`という文字列がどのissueの`branch.pattern`にも一致せず、常に`undefined`を返していた。§6のローカルテスト（`git checkout -b <branch>`による通常チェックアウトの再現）はdetached HEADという実環境特有の状態を再現しておらず、この欠陥を検出できなかった。
+
+### 対応
+
+`findIssueWorktree()`のフォールバックを以下の2段構えに拡張した。
+
+1. **`GITHUB_HEAD_REF`環境変数を代替ブランチ名ソースとして使用**: `git rev-parse --abbrev-ref HEAD`が`"HEAD"`（detached）を返した場合、GitHub Actionsが`pull_request`イベントで設定する`GITHUB_HEAD_REF`（PRのheadブランチ名。例: `process/171-ci-gate-dogfood`）を代替のブランチ名候補とし、これを`branch.pattern`と照合する。一致すればrootをそのissueの対象として返す。
+2. **単一checkoutエントリへの最終フォールバック**: 上記1でもブランチ名が一切得られない場合（detached HEADかつ`GITHUB_HEAD_REF`未設定）に限り、`git worktree list --porcelain`のエントリがちょうど1件（linked worktreeが存在しない＝CI相当の単一checkout環境）であれば、ブランチ名照合を諦め、呼び出し元が渡した`issueNumber`自体を信頼してrootを返す。ブランチ名が判明していて単に対象issueと一致しない場合（issueNumberの取り違え等）はこの分岐を発火させず、従来通り`undefined`を返す——無条件にブランチ名照合をスキップすると誤爆の危険があるため、「ブランチ名が完全に不明」な場合のみに限定した。
+
+いずれもAGENTS.md I4（分離）不変条件と矛盾しない。単一チェックアウト状態＝そのブランチ（PR head）の作業状態そのものであるため。
+
+### 追加・修正したテスト
+
+`test/unit/worktree.test.ts`に、`git checkout --detach <sha>`で実際にdetached HEAD状態を作った上で検証するテストを3件追加した（§6で追加した2件は通常チェックアウトのみを再現しており維持、detached HEADは別途新設）。
+
+- `findIssueWorktree: detached HEAD状態でもGITHUB_HEAD_REFがissue_idに一致すればrootをentryとして返す`: `git checkout --detach`後に`git rev-parse --abbrev-ref HEAD`が実際に`"HEAD"`を返すことをテスト内でassertした上で、`process.env.GITHUB_HEAD_REF`を設定し、`findIssueWorktree`が`branch`・`detached: true`付きでrootを返すことを確認。
+- `findIssueWorktree: detached HEAD状態でGITHUB_HEAD_REFが対象issueと一致しない場合はundefinedのまま`: `GITHUB_HEAD_REF`が判明していても要求issue番号と不一致なら誤爆せず`undefined`を返すことを確認（単一checkoutフォールバックが暴走しないことの検証）。
+- `findIssueWorktree: detached HEADかつGITHUB_HEAD_REF未設定でも単一checkoutエントリならissueNumberを信頼してrootを返す`: `GITHUB_HEAD_REF`を明示的に未設定にした状態でも、`git worktree list --porcelain`が単一エントリであることをテスト内でassertした上で、`findIssueWorktree`が`branch: undefined`・`detached: true`でrootを返すことを確認。
+
+### 検証結果
+
+`npm test`実測：`# tests 328 / # pass 328 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（既存325件全pass + 新規detached HEADテスト3件全pass）。
+
+### 教訓
+
+§6時点の「ローカルで動くはず」というテストは、CI固有の環境特性（`actions/checkout`のdetached HEAD化）を再現していなかったため、実地で再度失敗した。今後この関数を変更する際は、必ず`git checkout --detach`で実際にdetached HEAD状態を作った上でテストすること。

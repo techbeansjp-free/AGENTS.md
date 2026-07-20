@@ -135,6 +135,95 @@ test('findIssueWorktree: 単一checkout状態で現在のブランチがissue_id
   assert.equal(notFound, undefined, 'issue 999 のブランチではないためフォールバックも不一致でundefined');
 });
 
+// 以下は実際の actions/checkout@v4 が pull_request イベントで作る detached HEAD 状態
+// （`switching to 'refs/remotes/pull/<n>/merge'` → `You are in 'detached HEAD' state.`）を
+// `git checkout --detach <sha>` で実際に再現して検証する。前回追加分のフォールバックテストは
+// 通常ブランチのcheckoutしか再現しておらず、detached HEADでは `git rev-parse --abbrev-ref HEAD`
+// が実ブランチ名ではなく文字列 "HEAD" を返すために機能しなかった（PR #172 run 29713661947 で実落ち）。
+
+test('findIssueWorktree: detached HEAD状態でもGITHUB_HEAD_REFがissue_idに一致すればrootをentryとして返す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  const sha = gitRev(repo.dir);
+  gitIn(repo.dir, ['checkout', '--detach', sha]);
+  // detached HEAD の再現を明示的に確認する（ここが 'HEAD' でなければ以降の検証が無意味になる）。
+  assert.equal(
+    execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim(),
+    'HEAD',
+    '前提: detached HEAD状態を再現できていること',
+  );
+
+  const originalHeadRef = process.env.GITHUB_HEAD_REF;
+  process.env.GITHUB_HEAD_REF = 'feature/171-ci-gate-dogfood';
+  t.after(() => {
+    if (originalHeadRef === undefined) delete process.env.GITHUB_HEAD_REF;
+    else process.env.GITHUB_HEAD_REF = originalHeadRef;
+  });
+
+  const found = findIssueWorktree(repo.dir, config, '171');
+  assert.ok(found, 'GITHUB_HEAD_REF経由でissue 171 に対応するエントリが見つかること');
+  assert.equal(path.resolve(found!.path), path.resolve(repo.dir));
+  assert.equal(found!.branch, 'feature/171-ci-gate-dogfood');
+  assert.equal(found!.detached, true);
+  assert.equal(found!.head, sha);
+});
+
+test('findIssueWorktree: detached HEAD状態でGITHUB_HEAD_REFが対象issueと一致しない場合はundefinedのまま', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  const sha = gitRev(repo.dir);
+  gitIn(repo.dir, ['checkout', '--detach', sha]);
+
+  const originalHeadRef = process.env.GITHUB_HEAD_REF;
+  process.env.GITHUB_HEAD_REF = 'feature/171-ci-gate-dogfood';
+  t.after(() => {
+    if (originalHeadRef === undefined) delete process.env.GITHUB_HEAD_REF;
+    else process.env.GITHUB_HEAD_REF = originalHeadRef;
+  });
+
+  // GITHUB_HEAD_REF自体はissue 171のブランチ名で判明しているが、要求されたissue番号(999)とは
+  // 一致しないため、単一checkoutフォールバック(entries.length===1)は発火せずundefinedのまま。
+  const notFound = findIssueWorktree(repo.dir, config, '999');
+  assert.equal(notFound, undefined, 'ブランチ名が判明していて単に不一致な場合は誤爆せずundefined');
+});
+
+test('findIssueWorktree: detached HEADかつGITHUB_HEAD_REF未設定でも単一checkoutエントリならissueNumberを信頼してrootを返す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  const sha = gitRev(repo.dir);
+  gitIn(repo.dir, ['checkout', '--detach', sha]);
+  assert.equal(
+    execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim(),
+    'HEAD',
+    '前提: detached HEAD状態を再現できていること',
+  );
+
+  const originalHeadRef = process.env.GITHUB_HEAD_REF;
+  delete process.env.GITHUB_HEAD_REF;
+  t.after(() => {
+    if (originalHeadRef !== undefined) process.env.GITHUB_HEAD_REF = originalHeadRef;
+  });
+
+  // git worktree list --porcelain のエントリはこのroot自身1件のみ（linked worktree無し）。
+  assert.equal(listWorktrees(repo.dir).length, 1, '前提: 単一checkoutエントリであること');
+
+  const found = findIssueWorktree(repo.dir, config, '171');
+  assert.ok(found, 'ブランチ名が一切判明しなくても単一checkoutエントリならissueNumberを信頼して見つかること');
+  assert.equal(path.resolve(found!.path), path.resolve(repo.dir));
+  assert.equal(found!.branch, undefined);
+  assert.equal(found!.detached, true);
+  assert.equal(found!.head, sha);
+});
+
 test('worktreePathRegex: path_patternに沿った形式のみ許容する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
