@@ -409,3 +409,53 @@ verify-artifacts (対象PRで変更されたセグメントごと)	予期しな�
 ### 教訓
 
 detached HEAD対応（§7〜§10）は「現在のブランチ名の解決」という1種類の問題だったが、今回の`defaultBranch()`は「デフォルトブランチ名の解決」という別種の問題であり、同じ「CI環境のgit状態はローカル前提と異なる」という根本原因が複数の異なる関数に個別に現れうることを示している。CI実行で1つの`git`状態依存バグを潰しても、関数ごとに前提が異なるため横断的な`grep`だけでは検出しきれない場合がある——実際にCIで一通り流し切るまで、同種の欠陥が別関数に潜んでいないと断言できない。
+
+---
+
+## 13. 追記（8回目）: PR #172 実地実行で§12の修正後も`verify-artifacts`が失敗（baseブランチ自体が未フェッチ）
+
+**発生**: §12の修正（commit `e8abf4f`）をpushし、PR #172の実GitHub Actions上で再実行したところ（run 29717941752、job 88274757933）、`verify-artifacts`（対象PRで変更されたセグメントごと）が以下のエラーで失敗した。
+
+```
+verify-artifacts (対象PRで変更されたセグメントごと)	segment 'implementation' の必須成果物が欠落しています: code
+##[error]Process completed with exit code 1.
+```
+
+### 根本原因
+
+§12で`defaultBranch()`に`GITHUB_BASE_REF`環境変数へのフォールバックを追加した結果、「デフォルトブランチを特定できません」というエラー自体は解消したが、`src/commands/verify.ts`の`checkOutputExists()`の`case 'code':`が実行する`git diff --stat ${base}...HEAD`の`base`に、**ローカルで一切解決できないブランチ名文字列**（`GITHUB_BASE_REF`の値そのもの、例: `chore/162-agent-skill-chain-bootstrap`）がそのまま渡っていた。
+
+`agent-skill-chain-ci.yml`の`actions/checkout@v4`ステップは`fetch-depth: 0`だが、これは「チェックアウト対象refの履歴を全て取得する」という意味であり、「他ブランチも含めて全ブランチをフェッチする」という意味ではない。実際にフェッチされるのはPRのマージref（チェックアウト対象）のみで、baseブランチ（`chore/162-agent-skill-chain-bootstrap`）自体はローカルにもリモート追跡ref（`origin/chore/162-agent-skill-chain-bootstrap`）としても一切存在しない。そのため`git diff base...HEAD`は`base`が解決不能で非ゼロ終了し（`diff.status !== 0`）、`checkOutputExists`は「成果物なし」と誤判定していた。
+
+これは§12までの「detached HEAD」「main/masterローカルref不在」とは異なる、**baseブランチの実体そのものがローカルに一切存在しない**という別の欠落パターンであり、`defaultBranch()`側の対応（文字列としてのブランチ名を返すこと）だけでは解決できない——workflow側で当該refを明示的にフェッチする必要がある。
+
+同一workflowファイル内の`verify-adr`ステップは既に`git fetch origin "$BASE_REF" --depth=1`を実行してから`origin/$BASE_REF`を参照しており、この問題を踏んでいなかった。`verify-artifacts`ステップはこのfetchより前に実行されるため、`origin/$BASE_REF`が未フェッチのまま`defaultBranch()`が呼ばれていた。
+
+### 対応
+
+1. `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-ci.yml`に、`npm test`の直後・`verify-artifacts`より前段で`git fetch origin "$BASE_REF" --depth=1`を実行する「Fetch base branch for diff-based checks」ステップを追加した（`verify-adr`ステップと同一の呼び出しパターン）。actions/checkout@v4は`git remote add origin <url>`で標準の`+refs/heads/*:refs/remotes/origin/*`という`remote.origin.fetch`をそのまま設定するため、明示的な宛先refspecを書かなくても`git fetch origin <branch> --depth=1`だけで`refs/remotes/origin/<branch>`が作成されることを、実際のbare remote＋`git remote add`＋`git clone --branch`の3パターンで再現・比較して確認した（後述）。
+2. `src/lib/worktree.ts`の`defaultBranch()`を、`GITHUB_BASE_REF`フォールバック内で`origin/<GITHUB_BASE_REF>`が解決可能ならそれを優先して返すよう変更した（解決できなければ従来通り素のブランチ名文字列へフォールバックし、既存のローカル開発機向けテスト・挙動は変えていない）。これにより`checkOutputExists('code', ...)`が使う`git diff --stat ${base}...HEAD`の`base`が、上記1のfetch後は常に解決可能な参照になる。
+
+### 実機での検証（shallow checkout相当の状態を実際に作って確認）
+
+以下を`/tmp`の使い捨てgitリポジトリ（bare remote＋作業repo）で実際に実行し、修正前後の挙動を確認した。
+
+- `git remote add origin <bare>` → `git fetch --depth=1 origin +<branch>:refs/remotes/origin/<branch>`（actions/checkoutのPRマージref取得を模す）だけの状態では、`git fetch origin <base> --depth=1`（宛先refspec省略）だけで`refs/remotes/origin/<base>`が作成されることを確認（`remote.origin.fetch`の既定refspecがそのまま効くため）。
+- `git clone --depth 1 --branch <feature>`（`--single-branch`相当）で作った場合は`remote.origin.fetch`が当該ブランチのみへ絞られ、`git fetch origin <base>`だけでは宛先refが作られない（`FETCH_HEAD`のみ更新）ことも確認した。actions/checkout@v4は前者のパターン（`git remote add`＋個別fetch）であり、既存の`verify-adr`ステップが実際に機能している事実と整合する。
+
+### 追加したテスト
+
+- `test/unit/worktree.test.ts`
+  - `defaultBranch: GITHUB_BASE_REFのブランチが未フェッチのローカルrefでは解決不能でも、fetch後にorigin/<base>が解決可能になればそれを優先して返す（CI fetchステップ後を再現）`: 実際のbare remoteへbaseブランチ・feature branchをpushした上で、pushした側のリポジトリが自動作成する`origin/<base>`のremote-trackingrefを`git branch -rd`で明示的に削除しshallow checkout相当（未フェッチ）の状態を再現。この状態では`defaultBranch()`が素のブランチ名へフォールバックすること、`git fetch origin <base> --depth=1`実行後は`origin/<base>`を優先して返すこと、その値で実際に`git diff --stat`が解決・成功することまで検証した。
+- `test/integration/verify.test.ts`
+  - `verify artifacts: 単一checkout（CI相当）でbaseブランチ未フェッチだとcode判定が失敗し、base branch fetch後は成功する`: `.worktrees/`型レイアウトを使わない単一checkout（`findIssueWorktree`のCIフォールバック経路）で、`verify artifacts ISSUE-171 implementation`がbaseブランチ未フェッチ時に`欠落しています: code`で失敗し、`git fetch origin "$BASE_REF" --depth=1`相当の操作後は終了コード0になることをCLI経由（subprocess実行）で確認した。
+
+### 検証結果
+
+`npm test`実測: `# tests 339 / # pass 339 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（既存337件全pass + 新規2件全pass）。
+
+`node bin/agents-md.js sync templates .`でワークフロー変更を`.github/workflows/agent-skill-chain-ci.yml`へ反映し、`node bin/agents-md.js verify template-sync .`で終了コード0（同期済み）を確認した。`git diff --stat`で意図した5ファイル（テンプレート・展開結果・`src/lib/worktree.ts`・テスト2ファイル）のみが変更されていることを確認済み。
+
+### 教訓
+
+`fetch-depth: 0`は「対象refの全履歴を取得する」であって「全ブランチを取得する」ではない——このリポジトリの`agent-skill-chain-ci.yml`は既に`fetch-depth: 0`だったにもかかわらず本バグが発生した事実がそれを証明している。diffベースの検査（`git diff base...HEAD`）を新設・変更する際は、`base`側のrefが対象workflow内で実際にフェッチ済みかどうかを、`fetch-depth`の値だけで判断せず個別に確認する必要がある。同一workflowファイル内に既に動いている類似パターン（今回は`verify-adr`ステップ）がある場合は、それを流用・前段へ移動することが最も確実な再発防止策になる。

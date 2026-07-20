@@ -33,6 +33,17 @@ jobs:
 
       - run: npm test
 
+      - name: Fetch base branch for diff-based checks
+        # verify-artifacts の code 判定（git diff base...HEAD）が base を解決できるようにする。
+        # actions/checkout@v4 はPRのマージrefのみをフェッチし、baseブランチ自体はローカルに
+        # 存在しないため（PR #172 run 29717941752 で実落ち）、ここで明示的にフェッチする
+        # （下記 verify-adr ステップと同一パターン。remote.origin.fetch の既定refspecにより
+        # `origin/$BASE_REF` としてローカルへ反映される）。
+        if: github.base_ref != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF" --depth=1
+
       - name: Derive issue_id
         id: ctx
         env:

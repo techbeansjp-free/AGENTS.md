@@ -133,6 +133,66 @@ test('defaultBranch: origin/HEAD未設定・main/masterのローカルref不在�
   assert.throws(() => defaultBranch(repo.dir), /デフォルトブランチを特定できません/);
 });
 
+// PR #172 run 29717941752 で実落ち: agent-skill-chain-ci.yml が GITHUB_BASE_REF のブランチ自体を
+// フェッチしていなかったため、defaultBranch() が返した素のブランチ名では
+// `git diff <base>...HEAD` がref解決不能で失敗した（checkOutputExists('code', ...) が
+// 誤って「成果物なし」と判定する）。ワークフロー側の修正（`git fetch origin "$BASE_REF" --depth=1`）
+// を経ると `origin/<base>` というremote-trackingとして解決可能になるため、defaultBranch() は
+// それを優先して返す必要がある。以下はその状態を実際のgit操作（bare remoteへのpush・
+// 明示的なremote-trackingref削除でshallow checkout相当を再現→fetch）で検証する。
+test('defaultBranch: GITHUB_BASE_REFのブランチが未フェッチのローカルrefでは解決不能でも、fetch後にorigin/<base>が解決可能になればそれを優先して返す（CI fetchステップ後を再現）', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const base = 'chore/162-agent-skill-chain-bootstrap';
+  gitIn(repo.dir, ['checkout', '-b', base]);
+  fs.writeFileSync(path.join(repo.dir, 'BASE_ONLY.md'), '# base\n');
+  gitIn(repo.dir, ['add', '-A']);
+  gitIn(repo.dir, ['commit', '-m', 'chore: base-only change']);
+  gitIn(repo.dir, ['push', 'origin', base]);
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  fs.mkdirSync(path.join(repo.dir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(repo.dir, 'src', 'app.js'), 'console.log(1);\n');
+  gitIn(repo.dir, ['add', '-A']);
+  gitIn(repo.dir, ['commit', '-m', 'feat: add app.js']);
+  gitIn(repo.dir, ['branch', '-D', 'main']);
+  gitIn(repo.dir, ['branch', '-D', base]);
+  // push した側のリポジトリは remote-tracking ref (origin/<base>) を自動更新してしまうため、
+  // 「actions/checkout がPRのマージrefのみをフェッチしbaseブランチ自体は一切フェッチしていない」
+  // 状態を明示的に再現するために削除する。
+  gitIn(repo.dir, ['branch', '-rd', `origin/${base}`]);
+
+  // 前提: main/master/base いずれのローカルrefも、origin/<base> のremote-trackingも存在しないこと
+  assert.equal(gitOk(repo.dir, ['symbolic-ref', 'refs/remotes/origin/HEAD']), false);
+  for (const candidate of ['main', 'master', base, `origin/${base}`]) {
+    assert.equal(gitOk(repo.dir, ['rev-parse', '--verify', candidate]), false, `前提: ${candidate} refが存在しないこと`);
+  }
+
+  const original = process.env.GITHUB_BASE_REF;
+  process.env.GITHUB_BASE_REF = base;
+  t.after(() => {
+    if (original === undefined) delete process.env.GITHUB_BASE_REF;
+    else process.env.GITHUB_BASE_REF = original;
+  });
+
+  // フェッチ前: origin/<base> が解決不能なため、素のブランチ名へフォールバックする
+  // （既存挙動を維持。実CIではこの状態で git diff base...HEAD が失敗し今回のバグを引き起こした）。
+  assert.equal(defaultBranch(repo.dir), base);
+
+  // ワークフロー修正後の挙動を再現: base branchを明示的にfetchする
+  gitIn(repo.dir, ['fetch', 'origin', base, '--depth=1']);
+  assert.equal(gitOk(repo.dir, ['rev-parse', '--verify', `origin/${base}`]), true, 'fetch後はorigin/<base>が解決可能になること');
+
+  // フェッチ後: origin/<base> を優先して返す
+  assert.equal(defaultBranch(repo.dir), `origin/${base}`);
+
+  // その値で実際に git diff --stat base...HEAD が解決・成功することを検証する
+  // （checkOutputExists('code', ...) が使う実際のコマンド）。
+  const diff = execFileSync('git', ['diff', '--stat', `origin/${base}...HEAD`], { cwd: repo.dir, encoding: 'utf8' });
+  assert.match(diff, /app\.js/);
+});
+
 test('hasUnpushedCommits: push前はtrue、git push -u origin後はfalseになる', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

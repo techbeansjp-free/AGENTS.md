@@ -54,6 +54,14 @@ export function hasUncommittedChanges(worktreePath: string): boolean {
  * （PRのbaseブランチ名）を代替のブランチ名ソースとして使う。
  *
  * `resolveCurrentBranchInfo` の `GITHUB_HEAD_REF` フォールバックと同一パターン。
+ *
+ * `GITHUB_BASE_REF` はブランチ名文字列に過ぎず、それ自体がローカルで解決可能なrefである保証は
+ * ない（PR #172 run 29717941752 で実落ち：`agent-skill-chain-ci.yml` がbaseブランチを
+ * フェッチしていなかったため `git diff base...HEAD` がref解決不能で失敗した）。ワークフロー側で
+ * `git fetch origin <base>:refs/remotes/origin/<base>` を実行済みであれば `origin/<base>` が
+ * 解決可能になるため、その形を優先して返す。ローカル開発機で `GITHUB_BASE_REF` を手動設定した
+ * だけのケース（`origin/<base>` 側は未フェッチ）まで壊さないよう、解決できなければ素の値へ
+ * フォールバックする（既存挙動を保つ）。
  */
 export function defaultBranch(repoRoot: string): string {
   const symbolic = git(['symbolic-ref', 'refs/remotes/origin/HEAD'], repoRoot);
@@ -63,7 +71,12 @@ export function defaultBranch(repoRoot: string): string {
   for (const candidate of ['main', 'master']) {
     if (git(['rev-parse', '--verify', candidate], repoRoot).status === 0) return candidate;
   }
-  if (process.env.GITHUB_BASE_REF) return process.env.GITHUB_BASE_REF;
+  if (process.env.GITHUB_BASE_REF) {
+    const base = process.env.GITHUB_BASE_REF;
+    const remoteRef = `origin/${base}`;
+    if (git(['rev-parse', '--verify', remoteRef], repoRoot).status === 0) return remoteRef;
+    return base;
+  }
   throw new Error('デフォルトブランチを特定できません（origin/HEAD 未設定・main/master 不在）');
 }
 

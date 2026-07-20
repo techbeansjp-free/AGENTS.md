@@ -307,6 +307,61 @@ test('verify artifacts: implementation segmentはdefaultBranchとの差分（コ
   assert.equal(after.status, 0, after.stderr);
 });
 
+// PR #172 run 29717941752 で実落ち: agent-skill-chain-ci.yml の actions/checkout@v4 はPRの
+// マージrefのみをフェッチし、baseブランチ（GITHUB_BASE_REF）自体はローカルに一切存在しないため、
+// `verify artifacts <issue> implementation` の code 判定（git diff base...HEAD）がref解決不能で
+// 失敗し「成果物なし」と誤判定していた。以下は .worktrees/型レイアウトを使わない単一checkout
+// （actions/checkoutを模す。findIssueWorktreeのCIフォールバック経路）+ 実際のbare remoteへの
+// push・remote-trackingrefの明示的削除でshallow checkout相当を再現し、
+// ワークフロー側の修正（git fetch origin "$BASE_REF" --depth=1）を適用する前後でこのバグと
+// その解消の両方を検証する。
+test('verify artifacts: 単一checkout（CI相当）でbaseブランチ未フェッチだとcode判定が失敗し、base branch fetch後は成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  function gitIn(args: string[]): void {
+    execFileSync('git', args, { cwd: repo.dir, stdio: 'pipe' });
+  }
+
+  const base = 'chore/162-agent-skill-chain-bootstrap';
+  gitIn(['checkout', '-b', base]);
+  fs.writeFileSync(path.join(repo.dir, 'BASE_ONLY.md'), '# base\n');
+  gitIn(['add', '-A']);
+  gitIn(['commit', '-m', 'chore: base-only change']);
+  gitIn(['push', 'origin', base]);
+
+  // actions/checkout は git worktree add を使わないため、.worktrees/型レイアウトは作らず
+  // 単一checkoutのブランチ名自体がissue 171の作業ブランチになる状態を再現する。
+  gitIn(['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  fs.mkdirSync(path.join(repo.dir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(repo.dir, 'src', 'app.js'), 'console.log(1);\n');
+  fs.writeFileSync(path.join(repo.dir, 'VALIDATION.md'), '# VALIDATION\n');
+  gitIn(['add', '-A']);
+  gitIn(['commit', '-m', 'feat: add app.js']);
+
+  gitIn(['branch', '-D', 'main']);
+  gitIn(['branch', '-D', base]);
+  // push した側のリポジトリは remote-tracking ref (origin/<base>) を自動更新してしまうため、
+  // 「actions/checkout がPRのマージrefのみをフェッチしbaseブランチ自体は一切フェッチしていない」
+  // 状態を明示的に再現するために削除する。
+  gitIn(['branch', '-rd', `origin/${base}`]);
+
+  const env = { ...process.env, GITHUB_BASE_REF: base };
+
+  // Given/When: baseブランチが一切フェッチされていない状態（今回のワークフロー修正前を再現）
+  // Then: code の diff 判定がref解決不能で失敗し「欠落」と誤判定される
+  const before = runCli(['verify', 'artifacts', 'ISSUE-171', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(before.status, 1);
+  assert.match(before.stderr, /欠落しています: code/);
+
+  // When: ワークフロー側の修正（`git fetch origin "$BASE_REF" --depth=1`）を適用する
+  gitIn(['fetch', 'origin', base, '--depth=1']);
+
+  // Then: origin/<base> が解決可能になり、code の diff 判定も成功する
+  const after = runCli(['verify', 'artifacts', 'ISSUE-171', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(after.status, 0, after.stderr);
+});
+
 test('verify artifacts: validation segmentはVALIDATION.mdの有無で成否が切り替わり、不正segmentやissue不在はエラーになる', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
