@@ -550,3 +550,43 @@ verify-artifacts (対象PRで変更されたセグメントごと)	segment 'impl
 3. **AGENTS.md・SECURITY_POLICY.mdの個別プロース修正**: 18・76行目（AGENTS.md）と3・34行目（SECURITY_POLICY.md）の「バックエンド」「ドキュメント」汎用語使用は言い換えで解消可能。22行目の見出し「コーディネーションバックエンド」はスキャナの単語境界認識（日本語複合名詞対応）が無いと根本解決しない（見出し名変更は`lint references`の§参照解決に波及するため、スキャナ修正と併せて検討する必要がある）。
 
 本対応では上記3点はスコープ外として着手していない（`lint vocab`の終了コードは1のままである）。
+
+---
+
+## 16. 追記（11回目）: §15で残置した29件（follow-up 1〜3）を解消し、`lint vocab`終了コード0を達成
+
+**発生**: §15で`node bin/agents-md.js lint vocab`（デフォルト対象）は29件の違反まで減少したが0件には未到達だった。内訳は`docs/GLOSSARY.md`20件・`AGENTS.md`4件・`.agent-skill-chain/standards/SECURITY_POLICY.md`3件・`.agent-skill-chain/ci/verify-branch-name.sh`2件。§15のfollow-up 1〜3として整理されていたこの残置分を、今回すべて解消した。
+
+### 対応1: `docs/GLOSSARY.md`を`defaultVocabFileRoots()`から恒久除外（follow-up 2）
+
+`src/lib/scan.ts`の`defaultVocabFileRoots()`に`docs/GLOSSARY.md`のパスを除外集合へ追加した（`defaultLiveFileRoots()`自体は変更せず、`lint references`の見出し解決には引き続きGLOSSARY.mdを含める）。GLOSSARY.md自体が「禁止同義語」列で禁止語を文字通り列挙する用語定義文書であり、構造上必然的に自分自身の禁止語検査に引っかかる（スペルチェッカーが自分の「既知の誤字一覧」ファイルを誤字として検出するのと同種の自己言及）ため、`.agent-skill-chain/{templates,config,schemas,scripts}`と同様の除外対象に加えた。除外理由は`src/lib/scan.ts`のdocコメントと`.agent-skill-chain/scripts/lint-vocab.sh`のコメント双方に明記した。
+
+`test/unit/scan.test.ts`の`defaultVocabFileRoots`期待値テストを、GLOSSARY.mdを含まない3エントリ（`AGENTS.md`・`.agent-skill-chain/{standards,ci}`）へ更新した。`test/integration/lint.test.ts`の該当テストも、GLOSSARY.mdの自己言及により「終了コード0か1のいずれかもあり得る」としていた曖昧な期待値を、「終了コード0・stderr空」の厳密な期待値へ更新した（この除外により、実物のAGENTS.md・SECURITY_POLICY.mdが禁止語混入なしを維持する限り、デフォルト対象での`lint vocab`は決定的に終了コード0になるため）。
+
+### 対応2: `AGENTS.md`4件（follow-up 3）
+
+- **18行目**（実測後の行番号。§15時点の記述とも一致）「複数バックエンド間で同一 Issue の状態を同期しない」: 真の散文誤用と判断し、「複数の Coordination Backend 間で同一 Issue の状態を同期しない」へ言い換えた。
+- **22行目** 見出し「## コーディネーションバックエンド」: AGENTS.md本文が他の全箇所（冒頭段落・I3・I6・README.md・各schema/scriptのコメント）で一貫して英語表記「Coordination Backend」を用いているのに対し、この見出しのみ日本語複合名詞（カタカナ）表記になっており文書内で不整合だった。見出し自体を`## Coordination Backend`へ変更し、本文中の用語表記を統一した（単なるスキャナの単語境界問題として除外ロジックで回避するのではなく、見出し自体の表記をドキュメント全体の慣行に合わせる根本対応を選んだ）。この見出しを`§コーディネーションバックエンド`として参照していた4箇所（`.agent-skill-chain/standards/SECURITY_POLICY.md:3`、`.agent-skill-chain/schemas/state.schema.yaml:1`、`.agent-skill-chain/scripts/doctor.sh:2`、`src/commands/gate.ts`）も`§Coordination Backend`へ追随修正し、`lint references`が新たに参照切れを報告しないことを実測確認した。
+- **76行目**「対応表は`.agent-skill-chain/schemas/gate-report.schema.yaml`添付ドキュメント参照」: `gate-report.schema.yaml`内の実体を確認したところ、対応表はYAMLコメントとして書かれた表（`# 変更対象 | 無効化するゲート`）であり、Issueに紐づく成果物（SPEC/DESIGN/PLAN等）を指す語ではなかった。「ドキュメント」を「コメント」へ言い換え、「添付コメント参照」とした。
+- **144行目**「SPEC/DESIGN/PLAN/検証結果は「Issue に紐づく成果物」であり issue とは呼ばない」: GLOSSARY.mdと同種の自己言及（禁止語自体を例示して用法を説明する構文）と判断した。GLOSSARY.mdと異なりAGENTS.mdはvocab検査対象から除外できない（本体の憲法文書のため）ため、`issue`をバッククォートで囲み`` `issue`（小文字）とは呼ばない``へ変更し、散文中の語ではなく引用された語形であることを明示した。
+
+### 対応3: `SECURITY_POLICY.md`3件（follow-up 3）
+
+- **3行目**（§コーディネーションバックエンドの参照）: 対応2の見出し変更に伴い`§Coordination Backend`へ追随修正。
+- **23行目**「進行役（orchestrator）」: `roles.yaml`のロール識別子キー名`orchestrator`への参照であり、同一表内の他ロール行（`worker`・`gate_reviewer`・`adr_finalization_worker`）や同じ行内の`` `artifact_branch.commit` ``・`` `artifact.author` ``と同様、識別子はバッククォートで囲む既存の表内慣行に倣って`` 進行役（`orchestrator`）``へ変更した。
+- **34行目**「複数バックエンド間で同一 Issue の状態を同期する設計は採用しない」: AGENTS.md18行目と同一パターンの真の散文誤用であり、「複数の Coordination Backend 間で同一 Issue の状態を同期する設計は採用しない」へ言い換えた。
+
+### 対応4: `.agent-skill-chain/ci/verify-branch-name.sh`2件
+
+3行目・6行目の`issue.allowed_types`は`.agent-skill-chain/config/agent-skill-chain.yaml`のYAMLキー名への技術的参照であり、他の`ci/*.sh`（`verify-worktree-path.sh`の`worktree.path_pattern`等）と同じコメント慣行だが、banned wordが偶然「issue」であるため誤検出していた。他ファイルの`worktree.*`・`branch.*`はbanned wordではないため影響を受けない。`issue.allowed_types`のみバッククォートで囲み、YAMLキーの技術的参照であることを明示することで解消した（`verify-worktree-path.sh`側は変更不要）。
+
+### 検証結果（実測）
+
+- `node bin/agents-md.js lint vocab`（デフォルト対象）: **終了コード0・違反0件**（29件 → 0件）。
+- `node bin/agents-md.js lint references`（デフォルト対象）: **終了コード0・違反なし**（GLOSSARY.md除外・見出し名変更による副作用が無いことを確認）。
+- `node bin/agents-md.js verify doc-length`: 終了コード0。AGENTS.mdは144行（上限150行以内）。
+- `npm test`実測: `# tests 343 / # pass 343 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`。`test/unit/scan.test.ts`の既存テスト1件を新しい除外仕様に合わせて更新、`test/integration/lint.test.ts`の既存テスト1件をより厳密な期待値（終了コード0固定）へ更新した（テスト件数の増減なし）。
+
+### follow-up issueとして起票が必要な内容として残るもの
+
+§15のfollow-up 1（識別子・YAMLキー・CLIサブコマンド名認識スキャナの実装、`.agent-skill-chain/{templates,config,schemas,scripts}`の対象復帰）は本対応のスコープ外であり、引き続きfollow-up issueとしての起票が必要（起票自体は進行役が行う）。今回の`verify-branch-name.sh`の対応は個別のバッククォート化による回避であり、このスキャナ改善が実現すれば`defaultVocabFileRoots()`と`defaultLiveFileRoots()`を1つに統合できる点は変わらない。

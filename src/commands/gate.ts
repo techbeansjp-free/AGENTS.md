@@ -314,7 +314,7 @@ export async function reconcile(args: string[]): Promise<number> {
       }
 
       // ローカルモードでは reviews/<gate>.yaml（上記writeYamlFileAtomic）が正本。GitHubモードでは
-      // Check Runが正本（AGENTS.md §コーディネーションバックエンド）のため、新しいtarget_shaに対して
+      // Check Runが正本（AGENTS.md §Coordination Backend）のため、新しいtarget_shaに対して
       // 再発行または無効化のCheck Runを明示的に発行し直す必要がある（発行しないと新SHAにrequired
       // status checkが一切存在せず、merge判定が永久にpending留まりになる）。
       if (config.coordination.backend === 'github') {

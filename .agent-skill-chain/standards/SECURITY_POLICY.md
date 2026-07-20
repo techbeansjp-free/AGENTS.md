@@ -1,6 +1,6 @@
 # セキュリティポリシー
 
-> 正本: `AGENTS.md` §不変条件I5・I6 / §役割・権限・writer lease / §コーディネーションバックエンド / `.agent-skill-chain/config/roles.yaml`
+> 正本: `AGENTS.md` §不変条件I5・I6 / §役割・権限・writer lease / §Coordination Backend / `.agent-skill-chain/config/roles.yaml`
 >
 > 本ファイルは仕様書中の既存原則を集約したものであり、新しい方針を独自に定義しない。矛盾が生じた場合は `AGENTS.md` および `.agent-skill-chain/config/roles.yaml` を正とする。
 
@@ -20,7 +20,7 @@
 
 | ロール | 権限境界の要旨 |
 |---|---|
-| 進行役（orchestrator） | writer lease 対象外。成果物ブランチへの commit（`artifact_branch.commit`）・成果物の著述/内容取り込み（`artifact.author`）は禁止（I5：進行役の純粋性）。Issue 作成・状態遷移・worktree ライフサイクル管理・PR マージのみを行う。 |
+| 進行役（`orchestrator`） | writer lease 対象外。成果物ブランチへの commit（`artifact_branch.commit`）・成果物の著述/内容取り込み（`artifact.author`）は禁止（I5：進行役の純粋性）。Issue 作成・状態遷移・worktree ライフサイクル管理・PR マージのみを行う。 |
 | セグメント作業ワーカー（worker） | writer lease を保持し、自ブランチへの commit/push のみが許可される。他 Issue・他ブランチへの書込みは行わない。 |
 | ゲートレビュア（gate_reviewer） | read-only。`branch.commit` / `branch.push` / `artifact.edit` は禁止。レビュー結果は Check Run（GitHub モード）または `reviews/<gate>.yaml`（ローカルモード）への発行のみ行う。 |
 | ADR finalization ワーカー（adr_finalization_worker） | writer lease を保持するが、書込み範囲は ADR の status 系フィールド（`status` / `superseded-by` / `deprecated-reason` / `tags`）のみに限定（`scope: adr_status_only`）。`id` / Context / Decision / Consequences / `supersedes` を含む ADR 本文の編集（`adr.content_edit`）は禁止。 |
@@ -31,4 +31,4 @@
 
 ## Coordination Backend の正本は一方のみ
 
-調整状態（Issue・ブランチ・PR・ゲート状態等）の正本は、GitHub モードまたはローカルモードのいずれか一方のみであり、二重化しない（`AGENTS.md` I6）。複数バックエンド間で同一 Issue の状態を同期する設計は採用しない——「どちらが正しいか」という二重正本問題を再生産するためである。GitHub モードでは Issue・PR・ブランチ・Check Run が正本、ローカルモードでは `state.yaml`（Issue 毎、Git 管理下）が正本となる。
+調整状態（Issue・ブランチ・PR・ゲート状態等）の正本は、GitHub モードまたはローカルモードのいずれか一方のみであり、二重化しない（`AGENTS.md` I6）。複数の Coordination Backend 間で同一 Issue の状態を同期する設計は採用しない——「どちらが正しいか」という二重正本問題を再生産するためである。GitHub モードでは Issue・PR・ブランチ・Check Run が正本、ローカルモードでは `state.yaml`（Issue 毎、Git 管理下）が正本となる。

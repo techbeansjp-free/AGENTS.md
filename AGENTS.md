@@ -15,11 +15,11 @@
 | I3 耐久性 | 作業状態は常に Git（remote push 済み）から完全復元可能。頭の中にしか無い状態を作らない | セグメント完了ごとの commit+push、`.agent-skill-chain/scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
 | I4 分離 | 1 Issue = 1 ブランチ = 1 worktree = 1 PR。main への変更は PR 経由のみ | branch protection、`.agent-skill-chain/ci/verify-branch-name.sh`・`.agent-skill-chain/ci/verify-worktree-path.sh` |
 | I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | credential/権限分離（ツール名の一律 deny はしない）、main worktree clean チェック、ワーカー報告固定スキーマ（`.agent-skill-chain/schemas/worker-report.schema.yaml`） |
-| I6 正準モデル | 調整状態は選択された Coordination Backend のプリミティブにのみ存在し、GitHub Flow 標準語彙で記述する。複数バックエンド間で同一 Issue の状態を同期しない | GitHub モード：`.agent-skill-chain/scripts/lint-vocab.sh` + Check Run 正本。ローカルモード：`state.yaml` が正本 |
+| I6 正準モデル | 調整状態は選択された Coordination Backend のプリミティブにのみ存在し、GitHub Flow 標準語彙で記述する。複数の Coordination Backend 間で同一 Issue の状態を同期しない | GitHub モード：`.agent-skill-chain/scripts/lint-vocab.sh` + Check Run 正本。ローカルモード：`state.yaml` が正本 |
 | I7 仕様⇔検証の追跡 | 全 AC-ID は最低1つの検証方法(`automated\|manual\|hybrid`)と証跡に対応する。承認後の AC 変更はゲート再通過を強制する | `.agent-skill-chain/ci/verify-ac-coverage.sh`、SPEC 差分検知によるゲート無効化（A-6 相当） |
 | I8 安全側ラチェット | autonomy の降格は自動、昇格は人間の明示行為のみ。既定は `autonomy:gated`。`risk != normal`（`unclassified` 含む）OR `autonomy == full` → `review_profile: strict` | Actions の状態遷移規則（昇格 workflow が存在しないことを含め検査） |
 
-## コーディネーションバックエンド
+## Coordination Backend
 
 正本は必ずどちらか一方であり、二重化しない。
 
@@ -73,7 +73,7 @@ worktree: .worktrees/<YYYYMMDD_HHMMSS>-<type>-<issue-id>-<slug>/   (timestamp = 
 
 ## ゲートの継承・無効化
 
-Check Run は commit SHA に紐づく。`.agent-skill-chain/scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行、変化ありなら当該ゲートと全下流ゲートを無効化する（対応表は `.agent-skill-chain/schemas/gate-report.schema.yaml` 添付ドキュメント参照）。
+Check Run は commit SHA に紐づく。`.agent-skill-chain/scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行、変化ありなら当該ゲートと全下流ゲートを無効化する（対応表は `.agent-skill-chain/schemas/gate-report.schema.yaml` 添付コメント参照）。
 
 ## ADR・テンプレート・テスト適用性
 
@@ -141,4 +141,4 @@ root直下は AGENTS.md・CLAUDE.md・README.md・`docs/`・`.github/`・`.workt
 
 ## 用語
 
-「Issue」= GitHub Issue（またはローカルモードの Issue 状態ファイル）のみ。SPEC/DESIGN/PLAN/検証結果は「Issue に紐づく成果物」であり issue とは呼ばない。Task はセッション内の揮発的作業単位（永続化禁止）。用語集の正本は `docs/GLOSSARY.md`（用語・定義・禁止同義語の3列、20行以内）。禁止語混入は `.agent-skill-chain/scripts/lint-vocab.sh` が検査する。
+「Issue」= GitHub Issue（またはローカルモードの Issue 状態ファイル）のみ。SPEC/DESIGN/PLAN/検証結果は「Issue に紐づく成果物」であり `issue`（小文字）とは呼ばない。Task はセッション内の揮発的作業単位（永続化禁止）。用語集の正本は `docs/GLOSSARY.md`（用語・定義・禁止同義語の3列、20行以内）。禁止語混入は `.agent-skill-chain/scripts/lint-vocab.sh` が検査する。

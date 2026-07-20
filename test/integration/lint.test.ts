@@ -123,26 +123,19 @@ test('lint vocab: 禁止語自体がパス形式の文字列（.agent-skill-chai
   );
 });
 
-test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・docs/GLOSSARY.md・.agent-skill-chain資産）でも例外を起こさず動作する', async (t) => {
+test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.agent-skill-chain資産）は違反なしで終了コード0になる', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
-  // Given/When: path引数を省略し、defaultVocabFileRoots（AGENTS.md・docs/GLOSSARY.md・
-  // .agent-skill-chain/{standards,ci}。templates/config/schemas/scriptsはissue識別子誤検出のため
+  // Given/When: path引数を省略し、defaultVocabFileRoots（AGENTS.md・.agent-skill-chain/{standards,ci}。
+  // docs/GLOSSARY.mdは自己言及のため恒久除外、templates/config/schemas/scriptsはissue識別子誤検出のため
   // 一時除外中）を対象に実行する
   const result = runCli(['lint', 'vocab'], { cwd: repo.dir });
 
-  // Then: クラッシュ（「予期しないエラー」）せず、終了コードは0か1のいずれか、報告行があれば
-  // すべて既定の「ファイル:行: 禁止語 '...' が見つかりました（'...' を使用してください）」形式に従う。
-  // 実物の docs/GLOSSARY.md 自体が用語定義の一環として禁止語の実例を列挙しているため、
-  // デフォルト対象では終了コード1（違反報告あり）になり得ること自体は正常な挙動として扱う。
-  assert.ok(result.status === 0 || result.status === 1, `${result.status}: ${result.stderr}`);
-  assert.doesNotMatch(result.stderr, /予期しないエラー/);
-  if (result.status === 1) {
-    for (const line of result.stderr.trim().split('\n')) {
-      assert.match(line, /^.+:\d+: 禁止語 '.+' が見つかりました（'.+' を使用してください）$/);
-    }
-  }
+  // Then: 複製元である実物のAGENTS.md・.agent-skill-chain/{standards,ci}は禁止語混入が無い状態を
+  // 維持している前提のため、終了コード0・標準エラー出力は空になることを期待する。
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
 });
 
 test('lint references: 実在する見出しへの§参照・安定ID接尾辞つき参照・バッククォート例示は違反にならない', async (t) => {

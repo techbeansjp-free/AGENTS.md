@@ -35,18 +35,18 @@ test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENT
   assert.deepEqual(result, expected);
 });
 
-test('defaultVocabFileRoots: lint vocabのデフォルト対象。templates/config/schemas/scriptsはissue識別子誤検出のため一時除外し、AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,ci}のみを返す', () => {
+test('defaultVocabFileRoots: lint vocabのデフォルト対象。templates/config/schemas/scriptsはissue識別子誤検出のため一時除外し、docs/GLOSSARY.mdは自己言及のため恒久除外し、AGENTS.md, .agent-skill-chain/{standards,ci}のみを返す', () => {
   const root = repoRoot();
   const result = defaultVocabFileRoots(root);
   const expected = [
     path.join(root, 'AGENTS.md'),
-    path.join(root, 'docs', 'GLOSSARY.md'),
     path.join(root, '.agent-skill-chain', 'standards'),
     path.join(root, '.agent-skill-chain', 'ci'),
   ];
   for (const p of expected) {
     assert.equal(fs.existsSync(p), true, `${p} が存在しない前提が崩れている`);
   }
+  assert.equal(fs.existsSync(path.join(root, 'docs', 'GLOSSARY.md')), true, 'docs/GLOSSARY.md が存在しない前提が崩れている');
   assert.deepEqual(result, expected);
 });
 
