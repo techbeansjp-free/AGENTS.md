@@ -46,6 +46,15 @@ export function hasUncommittedChanges(worktreePath: string): boolean {
   return result.stdout.trim().length > 0;
 }
 
+/**
+ * リポジトリのデフォルトブランチ名を解決する。`actions/checkout@v4` は既定で
+ * `fetch-depth: 1` かつPRのマージrefのみをフェッチするため、`origin/HEAD` のsymrefは
+ * 設定されず、`main`/`master` のローカルrefも（フェッチ対象外のため）存在しない。
+ * この場合 GitHub Actions が pull_request イベントで設定する `GITHUB_BASE_REF`
+ * （PRのbaseブランチ名）を代替のブランチ名ソースとして使う。
+ *
+ * `resolveCurrentBranchInfo` の `GITHUB_HEAD_REF` フォールバックと同一パターン。
+ */
 export function defaultBranch(repoRoot: string): string {
   const symbolic = git(['symbolic-ref', 'refs/remotes/origin/HEAD'], repoRoot);
   if (symbolic.status === 0) {
@@ -54,6 +63,7 @@ export function defaultBranch(repoRoot: string): string {
   for (const candidate of ['main', 'master']) {
     if (git(['rev-parse', '--verify', candidate], repoRoot).status === 0) return candidate;
   }
+  if (process.env.GITHUB_BASE_REF) return process.env.GITHUB_BASE_REF;
   throw new Error('デフォルトブランチを特定できません（origin/HEAD 未設定・main/master 不在）');
 }
 

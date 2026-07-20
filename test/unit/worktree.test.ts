@@ -25,6 +25,16 @@ function gitRev(cwd: string): string {
   return execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
 }
 
+/** `git <args>` が成功するかどうかだけを真偽値で返す（前提条件の確認用）。 */
+function gitOk(cwd: string, args: string[]): boolean {
+  try {
+    execFileSync('git', args, { cwd, stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 test('listWorktrees: 初期状態ではメインworktree1件のみをbranch:mainで列挙する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -69,6 +79,58 @@ test('defaultBranch: mainを返す', (t) => {
   t.after(() => repo.cleanup());
 
   assert.equal(defaultBranch(repo.dir), 'main');
+});
+
+// actions/checkout@v4 は既定で fetch-depth: 1 かつPRのマージrefのみをフェッチするため、
+// origin/HEAD のsymrefが未設定・main/masterのローカルrefも不在という状態になる
+// （PR #172 run 29717720242 で実落ち）。以下は `git branch -D main` でローカルmain refを
+// 実際に削除し、shallow checkout相当の状態を再現して検証する。
+
+test('defaultBranch: origin/HEAD未設定・main/masterのローカルref不在でもGITHUB_BASE_REFが設定済みならそれを返す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  gitIn(repo.dir, ['branch', '-D', 'main']);
+
+  // 前提: origin/HEAD未設定・ローカルmain/master ref不在であること
+  assert.equal(
+    gitOk(repo.dir, ['symbolic-ref', 'refs/remotes/origin/HEAD']),
+    false,
+    '前提: origin/HEADのsymrefが未設定であること',
+  );
+  for (const candidate of ['main', 'master']) {
+    assert.equal(
+      gitOk(repo.dir, ['rev-parse', '--verify', candidate]),
+      false,
+      `前提: ローカルの${candidate} refが存在しないこと`,
+    );
+  }
+
+  const original = process.env.GITHUB_BASE_REF;
+  process.env.GITHUB_BASE_REF = 'chore/162-agent-skill-chain-bootstrap';
+  t.after(() => {
+    if (original === undefined) delete process.env.GITHUB_BASE_REF;
+    else process.env.GITHUB_BASE_REF = original;
+  });
+
+  assert.equal(defaultBranch(repo.dir), 'chore/162-agent-skill-chain-bootstrap');
+});
+
+test('defaultBranch: origin/HEAD未設定・main/masterのローカルref不在かつGITHUB_BASE_REFも未設定ならエラーになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  gitIn(repo.dir, ['checkout', '-b', 'feature/171-ci-gate-dogfood']);
+  gitIn(repo.dir, ['branch', '-D', 'main']);
+
+  const original = process.env.GITHUB_BASE_REF;
+  delete process.env.GITHUB_BASE_REF;
+  t.after(() => {
+    if (original !== undefined) process.env.GITHUB_BASE_REF = original;
+  });
+
+  assert.throws(() => defaultBranch(repo.dir), /デフォルトブランチを特定できません/);
 });
 
 test('hasUnpushedCommits: push前はtrue、git push -u origin後はfalseになる', (t) => {

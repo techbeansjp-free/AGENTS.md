@@ -369,3 +369,43 @@ command chain（requirement-discovery等）が生成する`docs/maintainer/workf
 - `grep -rn "VALIDATION.md" test/` → `test/integration/verify.test.ts`のみヒット。同ファイルの各テストは`fs.writeFileSync`でテスト用YAMLを直接インラインで生成しており、`.agent-skill-chain/templates/issue/VALIDATION.md`テンプレートの内容には依存していないため、既存テストへの影響は無い。
 - `npm run build`（`tsc`）→ エラー無し。
 - `npm test` → `# tests 335 / # pass 335 / # fail 0`（既存335件全件pass、テンプレート修正はsrc/を変更しないため回帰無し）。
+
+---
+
+## 12. 追記（7回目）: PR #172 実地実行で`verify-artifacts`が`defaultBranch()`のshallow checkout非対応で失敗
+
+**発生**: §11までの修正後、PR #172の実GitHub Actions上での再実行（run 29717720242、job 88274146995）で`verify-artifacts`（対象PRで変更されたセグメントごと）が以下のエラーで失敗した。
+
+```
+verify-artifacts (対象PRで変更されたセグメントごと)	予期しないエラー: デフォルトブランチを特定できません（origin/HEAD 未設定・main/master 不在）
+##[error]Process completed with exit code 1.
+```
+
+### 根本原因
+
+`src/lib/worktree.ts`の`defaultBranch(repoRoot)`は「①`git symbolic-ref refs/remotes/origin/HEAD` → ②ダメなら`main`/`master`のローカルref存在確認」の順で解決していた。呼び出し元は`src/commands/verify.ts`の`artifacts()`（`base = defaultBranch(root)`として変更差分検査の基点に使う）。
+
+しかし`actions/checkout@v4`は既定で`fetch-depth: 1`かつPRのマージrefのみをフェッチするため、origin/HEADのsymrefは設定されず、`main`ブランチのローカルrefも（フェッチ対象外のため）存在しない。§7〜§10で修正した`findIssueWorktree`・`resolveCurrentBranchInfo`（detached HEAD対応）とは異なる系統だが、根っこは同じ——「CI環境のgit状態はローカル開発機の前提（`origin/HEAD`設定済み・`main`ローカルref存在）と異なる」ことをこの関数だけが未対応だった。
+
+### 対応
+
+`defaultBranch()`に3番目のフォールバックとして、`pull_request`イベントでGitHub Actionsが設定する`GITHUB_BASE_REF`環境変数（PRのbaseブランチ名。例: `chore/162-agent-skill-chain-bootstrap`）を追加した。優先順位は①`origin/HEAD`のsymref → ②ローカルの`main`/`master` ref → ③`GITHUB_BASE_REF` → ④いずれも無ければ従来通りエラー。`resolveCurrentBranchInfo`の`GITHUB_HEAD_REF`フォールバックと同一パターンを踏襲した。
+
+### 追加したテスト
+
+`test/unit/worktree.test.ts`に2件追加した。`git branch -D main`でローカルの`main` refを実際に削除し、`origin/HEAD`のsymrefが未設定であること・ローカルの`main`/`master` refが存在しないことをテスト内で明示的に前提確認（`gitOk()`ヘルパー新設）した上で検証している。
+
+- `defaultBranch: origin/HEAD未設定・main/masterのローカルref不在でもGITHUB_BASE_REFが設定済みならそれを返す`
+- `defaultBranch: origin/HEAD未設定・main/masterのローカルref不在かつGITHUB_BASE_REFも未設定ならエラーになる`
+
+### 横断確認
+
+`git grep -n "defaultBranch" src/`で呼び出し元を確認したところ、`src/commands/issue.ts`・`src/commands/pr.ts`・`src/commands/verify.ts`の3箇所すべてが`defaultBranch()`経由であり、本修正は3箇所すべてに効く。`git grep -n "'main'" src/`・`git grep -n "rev-parse.*--verify" src/`で「main/masterのローカルref存在を前提にする」同種のコードを再確認したが、`src/commands/issue.ts:71`の`git(['rev-parse', '--verify', branch], root)`は新規作成しようとしているissueブランチ自体の重複チェックであり、defaultBranchと同種の前提（main/masterのローカルref存在）には依存していないため対象外。他に同種箇所は無かった。
+
+### 検証結果
+
+`npm test`実測：`# tests 337 / # pass 337 / # fail 0 / # cancelled 0 / # skipped 0 / # todo 0`（既存335件全pass + 新規2件全pass）。
+
+### 教訓
+
+detached HEAD対応（§7〜§10）は「現在のブランチ名の解決」という1種類の問題だったが、今回の`defaultBranch()`は「デフォルトブランチ名の解決」という別種の問題であり、同じ「CI環境のgit状態はローカル前提と異なる」という根本原因が複数の異なる関数に個別に現れうることを示している。CI実行で1つの`git`状態依存バグを潰しても、関数ごとに前提が異なるため横断的な`grep`だけでは検出しきれない場合がある——実際にCIで一通り流し切るまで、同種の欠陥が別関数に潜んでいないと断言できない。
