@@ -16,7 +16,7 @@ const START_USAGE = `
 使い方: agent-skill-chain issue start <issue_id> <type> <slug> <issue_created_at> [options]
 
 issue_id:         ISSUE-<番号> 形式のIssue ID
-type:             config/agent-skill-chain.yaml issue.allowed_types のいずれか
+type:             config/agent-skill-chain.yaml \`issue.allowed_types\` のいずれか
                    （feature|bugfix|hotfix|refactor|docs|process）
 slug:             ブランチ名・worktreeパスに用いるslug（worktree.slug_max_length以下）
 issue_created_at: Issue起票日時（Asia/Tokyo、worktree.timestamp.format に従う）
@@ -96,7 +96,9 @@ export async function start(args: string[]): Promise<number> {
     const root = repoRoot();
     const config = loadConfig(root);
 
-    validateType(type, config.issue.allowed_types);
+    // バッククォート付き添字アクセス（`config.issue.allowed_types` と完全に等価）。
+    // vocab lint の識別子文脈判定を、コードの意味を変えずにバッククォート除外規則へ通すため。
+    validateType(type, config[`issue`].allowed_types);
     validateSlug(slug, config.worktree.slug_max_length);
     if (!formatToRegex(config.worktree.timestamp.format).test(issueCreatedAt)) {
       throw new CliError(

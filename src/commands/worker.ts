@@ -13,7 +13,7 @@ KEY=VALUE 形式で標準出力へ出す。
   issue_number=<n>                issue_id から抽出した番号
 `;
 
-/** worker.adapter・coordination.backend・issue番号を解決する（launch_worker起動ラッパー用）。 */
+/** worker.adapter・coordination.backend・Issue番号を解決する（launch_worker起動ラッパー用）。 */
 export async function context(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {

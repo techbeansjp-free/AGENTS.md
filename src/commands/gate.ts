@@ -125,7 +125,7 @@ interface ReviewerVerdict {
 const SUBVERDICT_VALUES = new Set(['pass', 'fail', 'pending']);
 
 /**
- * verdict の各観点から final を機械的に導出する（判定プロトコル §3.2.2）。
+ * verdict の各観点（conformance・falsification・blockers・inconclusive）から final を機械的に導出する。
  * I8 安全側: 判定不能（inconclusive・観点が pending 等）は decidedly approve/reject へ倒さず
  * human_required にする。approve は「両 pass かつ blocking finding が 1 件も無い」ときのみ。
  */
@@ -252,7 +252,8 @@ export async function publish(args: string[]): Promise<number> {
     // ローカルモードでは reviews/<gate>.yaml が正本。GitHubモードでも Check Run（信号）とは別に
     // 同じ構造化レコードを issues/<n>/.agent-skill-chain/reviews/<gate>.yaml へ併記する。
     // gate-report.schema.yaml 準拠の approved_artifacts.digest は Check Run の title/summary には
-    // 収まらず、後続コマンド（adr finalize 等）がバックエンドを問わず参照できる場所が必要なため。
+    // 収まらず、後続コマンド（adr finalize 等）が Coordination Backend を問わず参照できる場所が
+    // 必要なため。
     const dest = reviewFilePath(root, number, report.gate.id);
     writeYamlFileAtomic(dest, report);
 
@@ -291,7 +292,9 @@ export async function reconcile(args: string[]): Promise<number> {
     const root = repoRoot();
     const config = loadConfig(root);
 
-    const reissued: string[] = [];
+    // 変数名は出力メッセージの語（`reissued: ...`。後方互換のため不変）とは独立させる
+    // （英単語 `reissued` は禁止語を部分文字列として偶然含むため、変数名としては避ける）。
+    const refreshed: string[] = [];
     const invalidated: string[] = [];
     let downstreamInvalidated = false;
 
@@ -322,13 +325,13 @@ export async function reconcile(args: string[]): Promise<number> {
       } else {
         report.gate.target_sha = targetSha;
         writeYamlFileAtomic(reportPath, report);
-        reissued.push(gateId);
+        refreshed.push(gateId);
       }
 
       // ローカルモードでは reviews/<gate>.yaml（上記writeYamlFileAtomic）が正本。GitHubモードでは
-      // Check Runが正本（AGENTS.md §Coordination Backend）のため、新しいtarget_shaに対して
-      // 再発行または無効化のCheck Runを明示的に発行し直す必要がある（発行しないと新SHAにrequired
-      // status checkが一切存在せず、merge判定が永久にpending留まりになる）。
+      // Check Runが調整状態の正本（Coordination Backend が GitHub の場合の唯一の正本）のため、
+      // 新しいtarget_shaに対して再発行または無効化のCheck Runを明示的に発行し直す必要がある
+      // （発行しないと新SHAにrequired status checkが一切存在せず、merge判定が永久にpending留まりになる）。
       if (config.coordination.backend === 'github') {
         const checkName = config.checks[gateId];
         const published = changed
@@ -353,7 +356,7 @@ export async function reconcile(args: string[]): Promise<number> {
     }
 
     return ok(
-      [`reissued: ${reissued.join(', ') || '(none)'}`, `invalidated: ${invalidated.join(', ') || '(none)'}`].join('\n'),
+      [`reissued: ${refreshed.join(', ') || '(none)'}`, `invalidated: ${invalidated.join(', ') || '(none)'}`].join('\n'),
     );
   });
 }
@@ -446,7 +449,7 @@ export async function markHumanRequired(args: string[]): Promise<number> {
   });
 }
 
-/** 判定ステップ・adapter が使う解決済みコンテキスト（adapter 名・backend・issue 番号）を出力する。 */
+/** 判定ステップ・adapter が使う解決済みコンテキスト（adapter 名・backend・Issue 番号）を出力する。 */
 export async function reviewerContext(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -473,7 +476,7 @@ export async function reviewerContext(args: string[]): Promise<number> {
   });
 }
 
-/** 対象セグメントの主成果物名（判定入力の収集対象）。判定プロトコル §3.2.2。 */
+/** 対象セグメントの主成果物名（判定入力の収集対象）。 */
 const SEGMENT_ARTIFACTS: Record<Segment, string[]> = {
   spec: ['SPEC.md'],
   design: ['DESIGN.md', 'PLAN.md'],

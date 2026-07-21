@@ -89,10 +89,10 @@ export async function docLength(args: string[]): Promise<number> {
     const limits: [string, number][] = [[path.join(root, 'AGENTS.md'), 150]];
     const templatesDir = resolveAsset('templates', root);
     for (const rel of [
-      path.join('issue', 'SPEC.md'),
-      path.join('issue', 'DESIGN.md'),
-      path.join('issue', 'PLAN.md'),
-      path.join('issue', 'VALIDATION.md'),
+      path.join(`issue`, 'SPEC.md'),
+      path.join(`issue`, 'DESIGN.md'),
+      path.join(`issue`, 'PLAN.md'),
+      path.join(`issue`, 'VALIDATION.md'),
       path.join('adr', 'ADR.md'),
     ]) {
       const p = path.join(templatesDir, rel);

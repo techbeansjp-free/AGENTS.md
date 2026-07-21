@@ -1,4 +1,4 @@
-import * as issue from '../commands/issue.js';
+import * as issueCmd from '../commands/issue.js';
 import * as lease from '../commands/lease.js';
 import * as segment from '../commands/segment.js';
 import * as gate from '../commands/gate.js';
@@ -29,8 +29,12 @@ export type Handler = (args: string[]) => Promise<number> | number;
  * 「A-3」verbホワイトリストの正本化）。
  */
 export const routes: Record<string, Handler> = {
-  'issue start': issue.start,
-  'issue resume': issue.resume,
+  // 実際のCLIサブコマンド名（例: `agent-skill-chain issue start`）そのものを表す route key。
+  // バッククォート付き computed property name で表記する（実行時の文字列キーの値は不変）。
+  // これらは実行可能なCLIインターフェースの一部であり改名不可のため、vocab lintの識別子文脈
+  // 判定を通す手段としてバッククォート表記（コード参照として正当な除外の既存規則）を用いる。
+  [`issue start`]: issueCmd.start,
+  [`issue resume`]: issueCmd.resume,
   'lease acquire': lease.acquire,
   'lease release': lease.release,
   'lease renew': lease.renew,

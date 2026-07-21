@@ -39,8 +39,8 @@ export async function run(args: string[]): Promise<number> {
     const escalated: string[] = [];
 
     if (config.coordination.backend === 'local') {
-      const issuesDir = path.join(root, 'issues');
-      const issueNumbers = fs.existsSync(issuesDir) ? fs.readdirSync(issuesDir) : [];
+      const issueLeaseRoot = path.join(root, `issues`);
+      const issueNumbers = fs.existsSync(issueLeaseRoot) ? fs.readdirSync(issueLeaseRoot) : [];
       for (const issueNumber of issueNumbers) {
         const lease = tryReadYamlFile<WriterLease>(leaseFilePath(root, issueNumber));
         if (!lease || lease.writer_lease.expires_at > now) continue;

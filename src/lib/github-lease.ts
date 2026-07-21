@@ -35,7 +35,7 @@ interface GhComment {
 }
 
 /**
- * GitHubモードの writer lease 正本は issue番号+segmentごとの専用git ref
+ * GitHubモードの writer lease 正本は Issue番号+segmentごとの専用git ref
  * （`refs/agent-skill-chain/leases/<issue_number>-<segment>`）である（ADR-0002）。
  * git の receive-pack はref更新時に現在値をサーバ側で再検証するため、force無しpushは
  * 真にatomicなcompare-and-set保証を持つ（SPEC.mdの技術検証で実測確認済み）。
@@ -56,16 +56,16 @@ export type LeaseRefPushOutcome =
   | { ok: false; reason: 'error'; stderr: string };
 
 /**
- * pushの失敗理由を2種に分類する（DESIGN.md §権限不足時のfallback）。
+ * pushの失敗理由を2種に分類する（権限不足時のfallbackを取り違えないための分類。DESIGN.md参照）。
  * 非fast-forward・既存ref衝突（`[rejected]`）は既存leaseとの競合として扱う。加えて、真に
- * 同時（ほぼ同時刻）に同一ref新規作成を試みた場合、サーバ側のref lock競合により
+ * 同時（ほぼ同時刻）に同一ref新規作成を試みた場合、サーバ側のref作成競合により
  * `[remote rejected] ... (failed to update ref)` / `cannot lock ref '...': reference already
  * exists` という別系統の文言で拒否されることを実プロセス並行実行テストで実測確認した
- * （非fast-forward判定より前の、ref作成そのものの排他ロック層で先に競合するケース）。
+ * （非fast-forward判定より前の、ref作成そのものの排他生成層で先に競合するケース）。
  * これも既存leaseとの競合（＝取得済みだった）として分類する——同じくfast-forward拒否と同様、
  * 「他プロセスが同じrefを取得しようとした」ことを示す信号であり、権限・接続エラーとは性質が
- * 異なるため。それ以外（認証・権限・接続エラー等）は既存の楽観的排他制御へフォールバックせず
- * 別種のエラーとして扱う（安全側ラチェット。権限不足を無自覚にTOCTOU再導入で覆い隠さないため）。
+ * 異なるため。それ以外（認証・権限・接続エラー等）は既存の楽観的な同時実行制御へフォールバック
+ * せず別種のエラーとして扱う（安全側ラチェット。権限不足を無自覚にTOCTOU再導入で覆い隠さないため）。
  */
 export function classifyPushFailure(stderr: string): 'conflict' | 'error' {
   return /\[rejected\]/.test(stderr) ||
@@ -133,7 +133,7 @@ export function activeLeaseFor(issueNumber: string, segment: string, cwd?: strin
 
 /**
  * 有効期限内の writer lease を segment を問わず全て返す（1 Issueにつき同時1つのみ許可する制約の
- * issue横断コンフリクト検査に使う。AGENTS.md §役割・権限・writer lease）。
+ * Issue横断コンフリクト検査に使う。AGENTS.md の役割・権限・writer lease の定義を参照）。
  */
 export function activeLeasesFor(issueNumber: string, cwd?: string): LeaseRefEntry[] {
   const now = new Date().toISOString();
@@ -184,10 +184,10 @@ const ACTIVE_LEASE_LABEL = 'writer-lease:active';
 
 /**
  * WIP上限（wip.limit、既定3、有効writer lease数で判定）用: writer-lease:active ラベルが
- * 付与された open issue の件数を数える（GitHubモード）。
+ * 付与された open Issue の件数を数える（GitHubモード）。
  */
 export function countActiveWriterLeaseIssues(cwd?: string): number {
-  const result = gh(['issue', 'list', '--label', ACTIVE_LEASE_LABEL, '--state', 'open', '--json', 'number'], cwd);
+  const result = gh([`issue`, 'list', '--label', ACTIVE_LEASE_LABEL, '--state', 'open', '--json', 'number'], cwd);
   if (result.status !== 0) {
     throw new Error(`gh issue list に失敗しました: ${result.stderr.trim()}`);
   }
@@ -198,21 +198,21 @@ export function countActiveWriterLeaseIssues(cwd?: string): number {
 /**
  * lease acquire 成功時に WIP 上限判定用ラベルを付与する（best-effort）。
  * ラベル操作の失敗は WIP 判定の可用性を下げるのみで、lease自体の正本（git ref）とは独立して
- * 機能し続けるため、ここでは例外を投げない（AGENTS.md §障害・ロールバック考慮）。
+ * 機能し続けるため、ここでは例外を投げない（AGENTS.md の障害・ロールバック考慮の方針に従う）。
  */
 export function markActiveWriterLeaseLabel(issueNumber: string, cwd?: string): void {
   gh(['label', 'create', ACTIVE_LEASE_LABEL], cwd);
-  gh(['issue', 'edit', issueNumber, '--add-label', ACTIVE_LEASE_LABEL], cwd);
+  gh([`issue`, 'edit', issueNumber, '--add-label', ACTIVE_LEASE_LABEL], cwd);
 }
 
 /** lease release 成功時に WIP 上限判定用ラベルを除去する（best-effort）。 */
 export function unmarkActiveWriterLeaseLabel(issueNumber: string, cwd?: string): void {
-  gh(['issue', 'edit', issueNumber, '--remove-label', ACTIVE_LEASE_LABEL], cwd);
+  gh([`issue`, 'edit', issueNumber, '--remove-label', ACTIVE_LEASE_LABEL], cwd);
 }
 
 /** acquire成功後にhuman向け可視性のためbest-effortで投稿するIssueコメント。失敗しても呼び出し元は無視してよい。 */
 export function postLeaseComment(issueNumber: string, lease: WriterLease, cwd?: string): string {
-  const result = gh(['issue', 'comment', issueNumber, '--body', renderLeaseComment(lease)], cwd);
+  const result = gh([`issue`, 'comment', issueNumber, '--body', renderLeaseComment(lease)], cwd);
   if (result.status !== 0) {
     throw new Error(`gh issue comment に失敗しました: ${result.stderr.trim()}`);
   }
@@ -240,7 +240,7 @@ function parseLeaseCommentToken(comment: GhComment): string | undefined {
  */
 export function cleanupLeaseComment(issueNumber: string, token: string, cwd?: string): void {
   try {
-    const result = gh(['issue', 'view', issueNumber, '--json', 'comments'], cwd);
+    const result = gh([`issue`, 'view', issueNumber, '--json', 'comments'], cwd);
     if (result.status !== 0) return;
     const parsed = JSON.parse(result.stdout) as { comments: GhComment[] };
     const match = parsed.comments.find((c) => parseLeaseCommentToken(c) === token);

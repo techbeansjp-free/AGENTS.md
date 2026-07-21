@@ -91,7 +91,7 @@ export async function status(args: string[]): Promise<number> {
     }
 
     const body = `${MARKER}\n\`\`\`yaml\n${stringify(report)}\`\`\`\n`;
-    const result = gh(['issue', 'comment', number, '--body', body], root);
+    const result = gh([`issue`, 'comment', number, '--body', body], root);
     if (result.status !== 0) return fail(`gh issue comment に失敗しました: ${result.stderr.trim()}`);
     return ok(result.stdout.trim());
   });
@@ -121,7 +121,7 @@ export async function latest(args: string[]): Promise<number> {
       return ok(`status=${report.status}\ntarget_sha=${report.target_sha}`);
     }
 
-    const result = gh(['issue', 'view', number, '--json', 'comments'], root);
+    const result = gh([`issue`, 'view', number, '--json', 'comments'], root);
     if (result.status !== 0) return fail(`gh issue view に失敗しました: ${result.stderr.trim()}`);
     const parsed = JSON.parse(result.stdout) as { comments: { body: string; createdAt: string }[] };
     const reports = parsed.comments

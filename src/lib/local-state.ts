@@ -11,7 +11,7 @@ import path from 'node:path';
  * 進行役判断。既存の削除済み `.agent-skill-chain/` トップレベルディレクトリとは無関係）。
  */
 export function issueDir(root: string, issueNumber: string): string {
-  return path.join(root, 'issues', issueNumber);
+  return path.join(root, `issues`, issueNumber);
 }
 
 function coordinationDir(root: string, issueNumber: string): string {

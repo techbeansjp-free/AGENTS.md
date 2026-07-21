@@ -19,7 +19,7 @@ function withTmpDir(fn: (dir: string) => void): void {
   }
 }
 
-test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}）。lint referencesの見出し解決に必要な完全な一覧', () => {
+test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}, src/）。lint referencesの見出し解決に必要な完全な一覧（Issue #187: src/ を対象へ追加。bin/ はビルド生成物のため対象外＝ADR-2）', () => {
   const root = worktreeRoot();
   const result = defaultLiveFileRoots(root);
   const expected = [
@@ -31,15 +31,17 @@ test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENT
     path.join(root, '.agent-skill-chain', 'schemas'),
     path.join(root, '.agent-skill-chain', 'scripts'),
     path.join(root, '.agent-skill-chain', 'ci'),
+    path.join(root, 'src'),
   ];
   // このworktreeには全パスが実在するはず（存在しなければテストで検出する）。
   for (const p of expected) {
     assert.equal(fs.existsSync(p), true, `${p} が存在しない前提が崩れている`);
   }
   assert.deepEqual(result, expected);
+  assert.ok(!result.includes(path.join(root, 'bin')), 'bin/ はビルド生成物のため対象へ含まれないこと（ADR-2）');
 });
 
-test('defaultVocabFileRoots: lint vocabのデフォルト対象。docs/GLOSSARY.mdは自己言及のため恒久除外し、AGENTS.md・.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}（defaultLiveFileRootsと同一集合）を返す（ISSUE-178 AC-4: 識別子文脈スキャナ実装によりtemplates/config/schemas/scriptsの一時除外を撤廃）', () => {
+test('defaultVocabFileRoots: lint vocabのデフォルト対象。docs/GLOSSARY.mdは自己言及のため恒久除外し、AGENTS.md・.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}・src/（defaultLiveFileRootsと同一集合）を返す（識別子文脈スキャナ実装によりtemplates/config/schemas/scriptsの一時除外を撤廃済み。Issue #187: src/ を追加）', () => {
   const root = worktreeRoot();
   const result = defaultVocabFileRoots(root);
   const expected = [
@@ -50,6 +52,7 @@ test('defaultVocabFileRoots: lint vocabのデフォルト対象。docs/GLOSSARY.
     path.join(root, '.agent-skill-chain', 'schemas'),
     path.join(root, '.agent-skill-chain', 'scripts'),
     path.join(root, '.agent-skill-chain', 'ci'),
+    path.join(root, 'src'),
   ];
   for (const p of expected) {
     assert.equal(fs.existsSync(p), true, `${p} が存在しない前提が崩れている`);

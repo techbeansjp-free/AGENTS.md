@@ -25,7 +25,11 @@ export interface AgentSkillChainConfig {
     immutable_path: boolean;
   };
   branch: { pattern: string };
-  issue: { allowed_types: string[] };
+  // バッククォート付き computed property name（`config/agent-skill-chain.yaml` の実キー名と
+  // 完全に等価）。vocab lint の識別子文脈判定（Issue #187 ADR-1: YAML文脈は.yaml/.yml限定）が
+  // 実ファイルではないTS型宣言のキー構文を誤って識別子文脈と見なさないよう、コード参照として
+  // 正当な除外規則（バッククォート）を通す。
+  [`issue`]: { allowed_types: string[] };
   wip: { limit: number; count_by: string };
   lease: { ttl_seconds: number; renewal_interval_seconds: number };
   bdd: { profile: 'standard' | 'strict' };

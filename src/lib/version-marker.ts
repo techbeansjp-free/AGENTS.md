@@ -9,7 +9,7 @@ export function versionMarkerRelativePath(): string {
   return path.join(ASSET_NAMESPACE, VERSION_FILE_NAME);
 }
 
-/** `.agent-skill-chain/.installed_version` の絶対パス（Issue #169: 02_設計§4データ設計）。 */
+/** `.agent-skill-chain/.installed_version` の絶対パス（Issue #169のデータ設計に基づく）。 */
 export function versionMarkerPath(root: string): string {
   return path.join(root, versionMarkerRelativePath());
 }

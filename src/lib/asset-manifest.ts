@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { packageRoot } from './paths.js';
 
 /**
- * root直下に残す物のみ（AGENTS.md §ディレクトリ構成）。他は .agent-skill-chain/ 配下へ。
+ * root直下に残す物のみ（AGENTS.md のディレクトリ構成定義）。他は .agent-skill-chain/ 配下へ。
  * `init`/`upgrade`/`uninstall`/`setup` が共有する定数（Issue #169: 重複定義の解消）。
  */
 export const ROOT_LEVEL_ENTRIES = ['AGENTS.md', 'CLAUDE.md', path.join('docs', 'GLOSSARY.md')];

@@ -32,9 +32,10 @@ interface LocalStateIssueFields {
 }
 
 /**
- * ローカルバックエンドの state.yaml が保持する title/request（ISSUE-183）を、ワーカー起動プロンプトへ
- * 同梱する `issue:` ブロックへ整形する。title/request のいずれも無い state（後方互換ケース）では
- * undefined を返し、呼び出し側は従来どおりの出力（ブロック無し）のままにする。
+ * ローカル Coordination Backend の state.yaml が保持する title/request（ISSUE-183）を、
+ * ワーカー起動プロンプトへ同梱する `issue:` セクションへ整形する。title/request のいずれも
+ * 無い state（後方互換ケース）では undefined を返し、呼び出し側は従来どおりの出力
+ * （セクション無し）のままにする。
  */
 function buildIssueBlock(issueIdRaw: string, state: LocalStateIssueFields | undefined): string | undefined {
   if (!state || (state.title === undefined && state.request === undefined)) return undefined;

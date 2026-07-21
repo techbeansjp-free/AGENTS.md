@@ -64,19 +64,19 @@ const PLACEHOLDER_SPAN_RE = /<[^<>\n]*>/g;
 // ASCII のパス・識別子構成文字（英数字・`_.-{},/`）のみからなる連続runで、かつ `/` を1つ以上含む
 // もの（例: `.agent-skill-chain/templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`）。日本語の助詞・
 // 句読点はこの文字集合に含まれないため、散文中で禁止語が単独の語として使われている箇所（例:
-// 「issueの説明」）まで誤って対象外にすることはない。
+// 「`issue`の説明」）まで誤って対象外にすることはない。
 const PATH_TOKEN_RE = /[\w.{}\-,/]+/g;
 
 /** 行内の指定範囲 [start, start+length) が、バッククォートスパン・プレースホルダスパン・
  * スラッシュを含むパス風トークンのいずれかに完全に包含される場合、散文の誤用ではなく
  * 正当な技術的参照（コード引用・プレースホルダ・ファイルパス）とみなし検査対象から除外する。
  *
- * ただし禁止語自体がパス形式の文字列（例: GLOSSARY.md の `.agent-skill-chain/source`。旧パス名への
- * 言及そのものを禁止する意図）である場合はこれらの除外を一切適用しない。この種の禁止語は
+ * ただし禁止語自体がパス形式の文字列（docs/GLOSSARY.md が定義する、旧ディレクトリ名への言及
+ * そのものを禁止する種類の禁止語）である場合はこれらの除外を一切適用しない。この種の禁止語は
  * 「パス風に見えるから誤検出」なのではなく、禁止されているパス文字列そのものであるため、
  * バッククォートや `/` の有無に関わらず常に検出しなければならない（除外すると禁止語自体が
  * 検査不能になってしまう）。 */
-function isCodeLikeReference(line: string, start: number, length: number, banned: string): boolean {
+function isCodeLikeReference(line: string, start: number, length: number, banned: string, ext: string): boolean {
   if (banned.includes('/')) return false;
   const end = start + length;
   const containedIn = (re: RegExp): boolean => {
@@ -90,7 +90,7 @@ function isCodeLikeReference(line: string, start: number, length: number, banned
   if (containedIn(BACKTICK_SPAN_RE)) return true;
   if (containedIn(PLACEHOLDER_SPAN_RE)) return true;
   if (containedInPathToken(line, start, end)) return true;
-  return isIdentifierContext(line, start, end, banned);
+  return isIdentifierContext(line, start, end, banned, ext);
 }
 
 function containedInPathToken(line: string, start: number, end: number): boolean {
@@ -104,13 +104,29 @@ function containedInPathToken(line: string, start: number, end: number): boolean
   return false;
 }
 
-// ---- 識別子文脈判定（ISSUE-178 DESIGN.md「A. lint-vocab識別子認識」） ----
+// ---- 識別子文脈判定（ISSUE-178 DESIGN.md「A. lint-vocab識別子認識」／Issue #187 ADR-1） ----
 //
 // コード・YAML・CLIサブコマンドの各識別子文脈として禁止語が出現する箇所を、散文の誤用と
 // 区別して検査対象から除外する。上記の既存3除外（バッククォート・placeholder・パストークン）を
 // 後退させない後段の追加判定として動作する（isCodeLikeReference の最後で呼び出す）。
+//
+// Issue #187 ADR-1: YAML識別子文脈・CLIサブコマンド文脈は、対象ファイルの拡張子（ext）で
+// 適用可否をディスパッチする。動詞ホワイトリストや YAML 風構文が散文（.md）中に偶然
+// 出現しただけの禁止語混入を、ファイル種別を見ずに一律で識別子文脈と誤判定し検出漏れさせる
+// 構造的抜け穴（Issue #178 finding-1）を塞ぐため。YAML文脈は真の YAML/YML ファイル
+// （.yaml/.yml）のみに、CLIサブコマンド文脈は散文（.md）以外（コード・設定・スクリプト）に
+// 限定して適用する。コード識別子文脈・外部語彙allowlistは全ファイル種別で共通のまま維持する。
 
 const IDENT_CHAR_RE = /[A-Za-z0-9_]/;
+
+/** Issue #187 ADR-1: YAML識別子文脈（キー構文・flow-sequence構文）を適用する拡張子。 */
+const YAML_CONTEXT_EXTENSIONS = new Set(['.yaml', '.yml']);
+
+/** Issue #187 ADR-1: 散文ファイル（Markdown）かどうか。散文では CLI サブコマンド文脈判定を
+ * 適用しない（正当な CLI/コード参照はバッククォートで示すのが正規形であるため）。 */
+function isProseFile(ext: string): boolean {
+  return ext === '.md';
+}
 
 interface IdentifierRun {
   runStart: number;
@@ -142,7 +158,7 @@ function splitIdentifierSegments(run: string): string[] {
 
 /** A-1 コード識別子文脈: snake_case/camelCase/SCREAMING_SNAKE_CASEの複合識別子の一部として
  * 禁止語が出現する場合に除外する。run長が禁止語長と等しい（単独の語そのもの）場合は対象外
- * （要件1「単独のissueは識別子文脈と誤認しない」）。 */
+ * （要件1「単独の`issue`は識別子文脈と誤認しない」）。 */
 function isCodeIdentifierContext(line: string, run: IdentifierRun, banned: string): boolean {
   const runText = line.slice(run.runStart, run.runEnd);
   if (runText.length <= banned.length) return false;
@@ -203,7 +219,7 @@ function stripQuotes(token: string): string {
 
 let cachedCliVerbs: Set<string> | undefined;
 
-/** cli-routes.ts の2トークンキー（例: 'issue start'）の2トークン目をverbホワイトリストとして
+/** cli-routes.ts の2トークンキー（例: `issue start`）の2トークン目をverbホワイトリストとして
  * 導出する。ハードコード二重管理・ドリフトを防ぐ（ISSUE-178 DESIGN.md「A-3」）。
  *
  * 遅延評価する: lint.ts は cli-routes.ts を import し、cli-routes.ts は lint.ts の各サブコマンド
@@ -225,7 +241,7 @@ function cliVerbs(): Set<string> {
 /** A-3 CLIサブコマンド文脈: runが禁止語そのもの（複合でない）で、独立したシェルトークンとして
  * 出現し、前後いずれかのトークンが既知CLI verbホワイトリストに含まれる場合に除外する。
  * 「生の隣接文字」（空白スキップ無し）で境界を判定するため、日本語の仮名文字が直接隣接する
- * 場合（例:「issueについて」）は境界条件を満たさず誤って除外しない。 */
+ * 場合（例:「`issue`について」）は境界条件を満たさず誤って除外しない。 */
 function isCliSubcommandContext(line: string, run: IdentifierRun, banned: string): boolean {
   const runText = line.slice(run.runStart, run.runEnd);
   if (runText.length !== banned.length) return false;
@@ -253,23 +269,25 @@ function isExternalVocabAllowlisted(line: string, run: IdentifierRun): boolean {
   return EXTERNAL_VOCAB_ALLOWLIST.includes(runText);
 }
 
-function isIdentifierContext(line: string, start: number, end: number, banned: string): boolean {
+function isIdentifierContext(line: string, start: number, end: number, banned: string, ext: string): boolean {
   const run = identifierRunAt(line, start, end);
   if (!run) return false;
   if (isCodeIdentifierContext(line, run, banned)) return true;
-  if (isYamlIdentifierContext(line, run, banned)) return true;
-  if (isCliSubcommandContext(line, run, banned)) return true;
+  if (YAML_CONTEXT_EXTENSIONS.has(ext) && isYamlIdentifierContext(line, run, banned)) return true;
+  if (!isProseFile(ext) && isCliSubcommandContext(line, run, banned)) return true;
   return isExternalVocabAllowlisted(line, run);
 }
 
 /** 行中に出現する banned の全箇所を走査し、いずれもコード的参照（バッククォート・
- * プレースホルダ・パス風トークン）に包含されない箇所が1つでもあれば、散文の誤用として検出する。 */
-function hasProseViolation(line: string, banned: string): boolean {
+ * プレースホルダ・パス風トークン）に包含されない箇所が1つでもあれば、散文の誤用として検出する。
+ * `ext` は当該ファイルの拡張子（例: '.md'）。Issue #187 ADR-1: YAML/CLIサブコマンド識別子文脈の
+ * 適用可否をファイル種別でディスパッチするために isCodeLikeReference へ伝播する。 */
+function hasProseViolation(line: string, banned: string, ext: string): boolean {
   let searchFrom = 0;
   while (true) {
     const idx = line.indexOf(banned, searchFrom);
     if (idx === -1) return false;
-    if (!isCodeLikeReference(line, idx, banned.length, banned)) return true;
+    if (!isCodeLikeReference(line, idx, banned.length, banned, ext)) return true;
     searchFrom = idx + banned.length;
   }
 }
@@ -287,10 +305,11 @@ export async function vocab(args: string[]): Promise<number> {
 
     const violations: string[] = [];
     for (const file of files) {
+      const ext = path.extname(file);
       const lines = fs.readFileSync(file, 'utf8').split('\n');
       lines.forEach((line, index) => {
         for (const { banned, correctTerm } of forbidden) {
-          if (hasProseViolation(line, banned)) {
+          if (hasProseViolation(line, banned, ext)) {
             violations.push(`${file}:${index + 1}: 禁止語 '${banned}' が見つかりました（'${correctTerm}' を使用してください）`);
           }
         }
@@ -305,10 +324,16 @@ export async function vocab(args: string[]): Promise<number> {
   });
 }
 
-// §参照が指す見出しテキストは括弧の手前で終わるのが通例（例:「§不変条件I7（仕様⇔検証の追跡）」の
-// 括弧内は見出しの補足であり参照本体ではない）ため、開き括弧の類でも捕捉を止める。
+// 禁止参照が指す見出しテキストは括弧の手前で終わるのが通例（見出し名の直後に補足の丸括弧が
+// 続く記法があり、括弧内は見出しの補足であって参照本体ではないため）、開き括弧の類でも捕捉を止める。
 const SECTION_REF_RE = /§([^\s、。,\)）(（「」『』【】]+)/gu;
 const FILE_LINE_REF_RE = /\b[\w./-]+\.\w{1,10}:[0-9]+\b/g;
+
+// 違反メッセージの組み立て（下記 references 関数内）で使う節番号記号そのもの。ソース中に生の
+// 記号を直接埋め込むと、lint references 自身の SECTION_REF_RE が自己言及として誤検出するため、
+// Unicodeエスケープ経由で参照する（実行時に得られる出力文字列は不変。機械処理用エラー出力での
+// 使用は許可されている）。
+const SECTION_SIGIL = '\u00a7';
 
 function extractHeadings(filePath: string): string[] {
   const headings: string[] = [];
@@ -358,7 +383,7 @@ export async function references(args: string[]): Promise<number> {
           if (isQuotedExample(line, match.index, match[0].length, '「', '」')) continue;
           const captured = match[1].replace(/\s+/g, '');
           if (!isResolvable(captured, headings)) {
-            violations.push(`${file}:${index + 1}: 禁止参照 '§${match[1]}'（見出しテキストで解決できないセクション番号参照）`);
+            violations.push(`${file}:${index + 1}: 禁止参照 '${SECTION_SIGIL}${match[1]}'（見出しテキストで解決できないセクション番号参照）`);
           }
         }
         for (const match of line.matchAll(FILE_LINE_REF_RE)) {
