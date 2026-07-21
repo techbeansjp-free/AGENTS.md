@@ -1,5 +1,5 @@
 import { git } from '../lib/exec.js';
-import { repoRoot } from '../lib/paths.js';
+import { worktreeRoot } from '../lib/paths.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { CliError } from '../lib/issue.js';
 import { resolveCurrentBranch } from '../lib/worktree.js';
@@ -23,7 +23,10 @@ export async function run(args: string[]): Promise<number> {
     const [message] = args;
     if (!message) throw new CliError('message は必須です');
 
-    const root = repoRoot();
+    // Issue #185: commit/push は現在の作業ツリー（自worktree・自branch）を対象にする必要があるため
+    // repoRoot()（共通/メイン作業ツリー）ではなく worktreeRoot() を使う（誤ってメイン作業ツリーを
+    // commit/pushするregressionを防ぐ）。
+    const root = worktreeRoot();
     const add = git(['add', '-A'], root);
     if (add.status !== 0) return fail(`git add に失敗しました: ${add.stderr.trim()}`);
 

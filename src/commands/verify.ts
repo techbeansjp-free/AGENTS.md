@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { repoRoot, resolveAsset } from '../lib/paths.js';
+import { repoRoot, worktreeRoot, resolveAsset } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { loadSegments } from '../lib/segments.js';
 import { parseIssueId, validateSegment, CliError, type Segment } from '../lib/issue.js';
@@ -36,7 +36,11 @@ export async function branchName(args: string[]): Promise<number> {
     if (isHelp(args)) return printUsage(BRANCH_NAME_USAGE), 0;
     const root = repoRoot();
     const config = loadConfig(root);
-    const target = args[0] ?? resolveCurrentBranch(root);
+    // Issue #185: 判定対象は「現在の作業ツリー（cwd）で実際にチェックアウトされているブランチ」
+    // であり、repoRoot()（共通/メイン作業ツリー）ではなくworktreeRoot()（現在の作業ツリー）で
+    // 解決する必要がある（ADR-0004）。config（branch.pattern）はコーディネーション同一性の
+    // 基点であるrepoRoot()のまま読む。
+    const target = args[0] ?? resolveCurrentBranch(worktreeRoot());
     if (target === undefined) {
       return fail(
         '現在のブランチ名を解決できません（detached HEADかつ GITHUB_HEAD_REF 未設定）。branch_name を明示的に指定してください。',
@@ -180,8 +184,12 @@ export async function gateReport(args: string[]): Promise<number> {
     if (report.gate.conformance === 'pending') errors.push('gate.conformance が pending のままです');
     if (report.gate.falsification === 'pending') errors.push('gate.falsification が pending のままです');
     if (report.gate.final === 'pending') errors.push('gate.final が pending のままです');
+    // Issue #185: approved_artifacts はgate reviewが実行された作業ツリー（ワーカー自身のworktree）
+    // 上のファイルを指すため、repoRoot()（共通/メイン作業ツリー）ではなくworktreeRoot()
+    // （現在の作業ツリー）を基点に解決する（ADR-0004）。スキーマ検証（アセット解決）はrepoRoot()のまま。
+    const artifactRoot = worktreeRoot();
     for (const artifact of report.gate.approved_artifacts) {
-      const abs = path.join(root, artifact.path);
+      const abs = path.join(artifactRoot, artifact.path);
       if (!fs.existsSync(abs)) {
         errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
       } else if (digestOfFile(abs) !== artifact.digest) {

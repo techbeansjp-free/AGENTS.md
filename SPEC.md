@@ -3,36 +3,33 @@
 このファイルは Issue 毎に複製して使う雛形である（セグメント: spec、成果物: SPEC.md、ゲート: spec-gate）。
 -->
 
-# SPEC: agent-skill-chain — launch_worker の権限モード不足解消・ローカルバックエンド issue 本文スキーマ拡張
+# SPEC: agent-skill-chain — repoRoot() の worktree 分裂バグ解消・launch_worker 認証チェックの誤検知解消
 
-- Issue: `ISSUE-183`
+- Issue: `ISSUE-185`
 - 作成者: `claude`
-- 対象ブランチ: `feature/183-worker-permission-mode`
+- 対象ブランチ: `feature/185-reporoot-worktree-split`
 
 ## 目的・背景
 
-このリポジトリ（`techbeansjp-free/AGENTS.md`）が目指す「完全自走（人間が介在しなくても、真に危険な場合以外は止まらない）」の end-to-end 実証は、先行 Issue #180 の独立検証（VALIDATION.md、AC-6/AC-7/AC-8）において **未達成** で確定した。本物の `claude` CLI（headless・認証あり・CLI 利用可という正常な前提）で `.agent-skill-chain/adapters/claude.sh` の `launch_worker` を人間介在なく 1 セグメント完走させる実機検証を複数回試みたが、認証や CLI 可用性ではなく以下の構造的な不足により達成できなかった。本 Issue はこの根本原因を恒久的に解消し、AC-6/AC-7/AC-8 相当を改めて実機で成立させることを目的とする。
-
-> **本 Issue #183 の実行結果（独立検証確定後の追記）**: 中核である権限モードの責務スコープ allowlist 化（要件1・AC-1/AC-2）とローカルバックエンドの issue 本文スキーマ拡張・供給（要件3〜5・AC-3/AC-4/AC-5）は達成した。一方で AC-6/AC-7/AC-8（`launch_worker` 自身の完走検知）は本 Issue の実行結果としては **未達成（FAIL）** で確定した。原因は権限モードではなく、後述「既知の未達成事項」の 2 つの新規バグ（`repoRoot()` の worktree 分裂・認証チェックの誤検知）である。これら 2 バグの恒久解消と AC-6/AC-7/AC-8 相当の再検証は後継 **Issue #185** へ切り出し、本 Issue #183 は本 SPEC 改定の上でクローズする（先行 Issue #180 で達成できなかった AC を後続へ切り出してクローズした前例に倣う）。詳細は本文「既知の未達成事項」節を参照。
+このリポジトリ（`techbeansjp-free/AGENTS.md`）が目指す「完全自走（人間が介在しなくても、真に危険な場合以外は止まらない）」の end-to-end 実証は、先行 Issue #180・#183 の独立検証でいずれも **未達成** で確定した。Issue #183 の実機検証により、`launch_worker` の権限モード修正（責務スコープ allowlist 化・`claude` CLI の `--allowed-tools`）自体は実機で有効であり、本物の `claude` CLI（headless）がワーカーの実質作業——`SPEC.md` 作成・`git commit`・`git push`・`report status completed`——を人間介在なく完走できることが確認された。しかし `launch_worker` オーケストレーション層は依然として完走を正しく検知できず `blocked` へフェイルセーフした。その根本原因は権限モードとは独立した以下 2 つの新規バグであると、Issue #183 の独立検証（VALIDATION.md、`target_sha=7bad757`）で確定した。本 Issue #185 はこの 2 バグを恒久解消し、Issue #180・#183 で持ち越された「`launch_worker` 自身の 1 セグメント完走検知」を改めて実機で成立させることを目的とする。
 
 根本原因（成果物の自己完結性の原則に従い、外部参照に意味を委譲せず本文に明記する）：
 
-1. **既定 `WORKER_CMD` の権限モード不足**: `launch_worker` は `WORKER_CMD` 未指定時、`claude` CLI を `claude -p --output-format text --permission-mode acceptEdits` で起動する。`acceptEdits` はファイル編集ツール（Edit/Write 等）を非対話で自動承認するが、`git push` 等の Bash／ネットワーク操作は非対話ヘッドレス実行では自動承認しない。そのため spec worker は `SPEC.md` 作成・`git commit` までは人間介在なく進むが、`git push` で承認待ちのまま停止し、`launch_worker` が完了未検知としてフェイルセーフ（`report_status blocked` の `human_escalation_requested` 扱い、終了コード 2）へ倒れた。認証あり・CLI 利用可という正常経路でのこの発火は、AC-8（正常経路で `human_required` が誤発火しないこと）の観点で「誤発火」に該当し、完走（AC-6）・完走証跡（AC-7）も成立しない。なお、フェイルセーフ機構自体は「`git push` 続行不能」という実ブロッカーに対して正しく安全側へ倒れており、機構の欠陥ではない。
+1. **`repoRoot()` の worktree 分裂バグ（最重要）**: `src/lib/paths.ts` の `repoRoot()` は、起点ディレクトリから上へ辿り `fs.existsSync(path.join(dir, '.git'))` が真となる最初の祖先ディレクトリを対象リポジトリのルートとして返す。しかし git worktree では各 worktree のルートが `.git` を「ファイル」として持つ（内容は `gitdir: <メインリポジトリの .git/worktrees/<name> への絶対パス>` というポインタ）。`fs.existsSync` はファイルとディレクトリを区別しないため、worktree 内から `repoRoot()` を呼ぶと、メインの作業ツリー（`issue start` 等を実行した場所）ではなく **その worktree 自身のパス** が返る。coordination 状態（`issues/<n>/.agent-skill-chain/{state,lease,integration}.yaml`・`reviews/<gate>.yaml`・`reports/<segment>.yaml`）はすべてこの `repoRoot()` 基準の相対パスへ書き込まれる（`src/lib/local-state.ts` の各パス関数が `root` を基点にする）ため、ワーカーが（正しく）自分の worktree 内から `report status`・`checkpoint`・`lease acquire` 等を実行すると、それらの状態ファイルは **worktree 内へ分裂して書き込まれ**、メインの作業ツリー側で走る `launch_worker` の完了確認（`report latest` の直近レコード照合）からは見えない。実機で実際に再現：ワーカーは `SPEC.md` 作成・`git commit`・`git push`・`report status completed` まですべて正しく実行したにもかかわらず、`launch_worker` は「worker report がありません／完了を確認できません」と誤検知し `blocked`（`report_status blocked`／`human_escalation_requested`・非0非3 return）へ倒れた。これは安全機構が実ブロッカーに対して正しく安全側へ倒れた結果ではなく、パス解決の実装バグによる誤検知（false negative）である。
 
-2. **ローカルバックエンドの状態スキーマに issue 本文を運ぶフィールドが無い**: ローカルモードの状態モデル `.agent-skill-chain/schemas/state.schema.yaml` には Issue のタイトル・要求内容に相当するフィールドが存在しない。`issue start` は `state.yaml` に `id`・`autonomy`・`risk`・`review_profile`・`segment`・`gate` のみを書き、Issue が「何を作るのか」という本文を保持しない。また `segment start` がワーカーへ渡すプロンプトはベンダー中立の汎用 role_contract（`spec_worker` の `inputs: [issue, ...]` 等）のみで、Issue 固有の本文を含まない。このため、使い捨て issue で実機検証を行う際に Issue 内容を人間（またはワーカーの前段）が別途作り込む必要があり、Issue #180 の DESIGN が推奨した「ローカルバックエンドでの使い捨て検証」という検証手順自体が想定通りに機能しなかった。
-
-3. **権限モード緩和の検証と外側の安全分類器の衝突（副次的現象）**: 権限モードを緩める調整（`--permission-mode bypassPermissions` 等）の検証自体が、検証を行っていたエージェント自身のセッションの安全分類器にブロックされ、ネストした `claude` 呼び出しへ到達する前に拒否される、という副次的現象が観測された。本 Issue は対応方針の検討時にこの衝突可能性を考慮するが、安全分類器自体の変更は行わない（スコープ外）。
+2. **認証チェックの誤検知**: `.agent-skill-chain/adapters/claude.sh` の `launch_worker`（および `launch_gate_reviewer`）の認証チェックは、`ANTHROPIC_API_KEY`／`CLAUDE_CODE_OAUTH_TOKEN` という 2 つの環境変数の非空チェックのみで認証可否を判定する（両方未設定なら即フェイルセーフ）。しかし `claude` CLI 自体は OS キーチェーン等のセッション認証でも動作するため、これらの環境変数が未設定でも実際には `claude -p` が正常に応答する環境が存在する（実機確認済み：`claude -p "1+1"` が env 無しで正しく応答）。この場合 `launch_worker` は実際には動作可能な環境を「認証欠如」と誤判定し、本物の CLI 起動を試みる前に `blocked`／`human_required` へ倒れる。Issue #183 の実機検証時は、このチェックを迂回するためダミー値を設定する必要があった。
 
 ## 用語
 
-- **`launch_worker`**: `.agent-skill-chain/adapters/claude.sh` のセグメント作業ワーカー起動関数。lease 取得 → `segment start`（role_contract 取得）→ ワーカー起動 → 完了確認（`report latest` 直近レコードの `status` と `target_sha` を push 済み HEAD と突合）→ lease 解放、の順で 1 セグメントを機械的に完走させる。
-- **`WORKER_CMD`**: `launch_worker` がワーカーを起動する実行系コマンド。環境変数で完全上書き可能（テストではモックへ差し替え）。未指定時の既定は本文根本原因 1 の `claude -p --output-format text --permission-mode acceptEdits`。
-- **権限モード（permission mode）**: `claude` CLI がツール実行時の承認をどう扱うかを定める起動時設定。`acceptEdits`（ファイル編集のみ自動承認）／`bypassPermissions`（全ツールを無制限に自動承認）／`--allowed-tools`（許可するツール名・Bash パターンを明示列挙し、それ以外は不許可）等が該当する。実際の受理値・挙動は `claude` CLI の公式仕様を一次情報とする。
-- **ワーカーの正規責務範囲**: `.agent-skill-chain/config/roles.yaml` の `worker` role が持つ capability。具体的には自 worktree 内の read/write、テスト実行、writer lease の acquire/renew/release、**自 branch への commit/push**、Integration Record／Draft PR の更新（Draft PR 作成は spec セグメントのみ）、固定スキーマによる report。自 branch 以外への書込みは禁止（I5）。
-- **ローカルバックエンド（local coordination backend）**: `coordination.backend: local` 時の調整状態の正本。Issue 毎に `issues/<number>/.agent-skill-chain/state.yaml`（正本）・lease・reports 等を Git 管理下に置く。GitHub モードと異なり、Issue 本文は GitHub API から取得できず状態ファイルにのみ存在しうる。
-- **使い捨て検証（disposable verification）用 issue**: 実機検証専用に作成し、確認後にマージせず破棄する一回性の Issue／ブランチ。ローカルバックエンドではこの Issue に本文（何を作るか）を持たせる必要があるが、現状スキーマにはそのフィールドが無い。
-- **human_required（誤発火）**: 認証あり・CLI 利用可という正常な前提のもとで、`launch_worker` のフェイルセーフ経路（`report_status blocked` の `human_escalation_requested` 扱い）が呼ばれてしまうこと。真の異常時（認証欠如・CLI 不在・timeout・完了偽装検知）以外での発火を指す。
-- **人間介在なしの完了**: `launch_worker` が起動したワーカーが、人間の追加入力・手動代行なしに `report_status completed`（`target_sha` = push 済み HEAD 一致）を記録し、`launch_worker` が終了コード 0 で lease を解放した状態。
+- **`repoRoot()`**: `src/lib/paths.ts` の関数。起点ディレクトリ（既定は `process.cwd()`）から祖先方向へ辿り、`.git` エントリを持つ最初のディレクトリを「対象リポジトリのルート」として返す。ローカルバックエンドの coordination 状態・成果物パスはすべてこの返り値を基点に解決される。
+- **coordination 状態ファイル**: ローカルバックエンドで Issue 毎の調整状態を保持する Git 管理下ファイル群。`issues/<n>/.agent-skill-chain/` 配下の `state.yaml`（正本）・`lease.yaml`・`integration.yaml`・`reviews/<gate>.yaml`・`reports/<segment>.yaml`（`src/lib/local-state.ts` が配置規約を定義）。本 Issue はこの **配置規約自体は変更せず**、基点となる `repoRoot()` の解決だけを修正する。
+- **git worktree の `.git` ファイル**: `git worktree add` で作られた作業ツリーのルート直下に置かれる通常ファイル（ディレクトリではない）。内容は `gitdir: <path>` の 1 行で、メインリポジトリの `.git/worktrees/<name>` を指すポインタ。通常リポジトリのルートでは `.git` はディレクトリである。
+- **`--git-common-dir`（`git rev-parse --git-common-dir`）**: worktree 内から呼んでもメインの作業ツリー内から呼んでも、共通の `.git` ディレクトリ（メインリポジトリの `.git`）の絶対パスを返す git ネイティブ判定。本 Issue が返すべき「一貫した基準ディレクトリ」を導出するための候補手段（このディレクトリの親がメインの作業ツリールートに相当する。ただし外部 worktree 配置や bare 構成での挙動差は DESIGN.md で確定する）。
+- **`launch_worker`**: `.agent-skill-chain/adapters/claude.sh` のセグメント作業ワーカー起動関数。lease 取得 → `segment start`（role_contract 取得）→ 認証チェック → ワーカー起動 → 完了確認（`report latest` 直近レコードの `status`・`target_sha` を push 済み HEAD と突合）→ lease 解放、の順で 1 セグメントを機械的に完走させる。完了確認で不一致なら `_fail_blocked`（`report_status blocked`／`human_escalation_requested`・lease 解放・非0非3 return）へ倒れる。
+- **`launch_gate_reviewer`**: `.agent-skill-chain/adapters/claude.sh` の read-only ゲートレビュア起動関数。`launch_worker` と同一形式の認証チェック（env 非空のみ）を持つため、認証チェックの誤検知は本関数にも共通して存在する。
+- **認証チェックの誤検知（false negative）**: 実際には `claude` CLI が認証済みで動作可能（キーチェーン等のセッション認証）であるにもかかわらず、`ANTHROPIC_API_KEY`／`CLAUDE_CODE_OAUTH_TOKEN` の env 非空のみを見る現行チェックが「認証欠如」と判定し、フェイルセーフへ倒すこと。
+- **実疎通確認（authentication probe）**: env 認証情報が無い場合に、`claude` コマンドが実際に認証済みで応答可能かを軽量に確認する手段（例: 短い `claude -p` プローブ、または `claude` 側が提供する認証状態確認手段があればそれ）。既存の env 非空チェックを完全に置き換えるのではなく、env が無い場合のフォールバックとして追加する。
+- **人間介在なしの完了**: `launch_worker` が起動したワーカーが、人間の追加入力・手動代行なしに `report_status completed`（`target_sha` = push 済み HEAD 一致）を記録し、`launch_worker` が終了コード 0 で lease を解放した状態。本 Issue ではこれを `launch_worker` 自身が正しく検知することまでを含む。
 - **統合ブランチ**: 本 Issue 群の base である `chore/162-agent-skill-chain-bootstrap`。`main` への最終マージ前に各 Issue の PR を集約するブランチ。本 Issue の base branch でもある。
 
 ## 要求 → 要件 → 受入条件
@@ -41,132 +38,93 @@
 
 ### 要求
 
-Issue #183 本文（背景・対象範囲 1〜3・成功基準）に基づく要求：
+Issue #185 本文（背景・対象範囲 1〜3・成功基準）に基づく要求：
 
-- `launch_worker` が本物の `claude` CLI をヘッドレスで起動する際、少なくとも自ブランチへの `git push`（ワーカーの正規責務範囲内の操作）を人間の追加承認なく実行できるようにしたい。ただし無制限な `bypassPermissions` を安易に採用せず、ワーカーの責務範囲（自ブランチへの commit/push・Draft PR 作成）に限定した権限設計としたい。
-- ローカルバックエンドの状態スキーマに Issue のタイトル・要求内容相当のフィールドを追加し、使い捨て issue での実機検証が Issue 本文の人間による作り込みなしに成立するようにしたい。
-- 上記対応後、本物の `claude` CLI（headless・認証あり）で `launch_worker` が人間介在なく 1 セグメント以上完走し（`report status=completed`・`target_sha` 一致・lease 解放）、その正常経路で `human_required` が誤発火せず、かつ認証欠如・CLI 不在等の真の異常時には引き続き `human_required` が正しく発火する（regression なし）ことを実機で裏付けたい。
+- `repoRoot()` を、git worktree 内から呼ばれた場合でもメインの作業ツリーから呼ばれた場合でも **一貫した同一の基準ディレクトリ** を返すよう修正したい。これにより、ワーカーが worktree 内から書いた coordination 状態ファイルと、メインの作業ツリー側の `launch_worker` が読む coordination 状態ファイルが、同一 Issue に対して同一の実体を指すようにしたい。coordination 状態の配置規約（`issues/<n>/.agent-skill-chain/`）自体は変更せず、基準ディレクトリの解決だけを直したい。
+- `launch_worker`（および同一チェックを持つ `launch_gate_reviewer`）の認証チェックを、環境変数の有無だけでなく、実際に `claude` コマンドが認証済みかを確認する方式へ見直したい。env 認証情報が有る場合の高速判定は維持し、env が無い場合のフォールバックとして実疎通確認を追加することで、キーチェーン等のセッション認証で動作する環境を「認証欠如」と誤判定しないようにしたい。ただし、真に認証が欠如している（env も無くプローブも失敗する）場合には、引き続きフェイルセーフが正しく発火する（regression なし）ようにしたい。
+- 上記 2 修正後、`worker.adapter: claude` 設定下・本物の `claude` CLI（headless）で `launch_worker` が 1 セグメント以上を人間介在なく、起動から完了検知まで一気通貫で成功すること（`launch_worker` 自身の終了コード 0・`report latest` の status=completed・`target_sha` 一致・lease 解放）を実機で裏付けたい。
 - 上記の全変更後も、既存テストスイート（`chore/162-agent-skill-chain-bootstrap` 統合ブランチ上の全件）が引き続き全て pass する状態を維持したい。
 
 ### 要件
 
-- **要件1（ワーカー責務限定の権限モード設計・実装）**: `launch_worker` の既定起動系（既定 `WORKER_CMD` またはそれに代わる起動機構）が、ワーカーの正規責務範囲の操作——自 branch への `git commit`／`git push`、Draft PR 作成（`gh pr create` 等、spec セグメント）、テスト実行、`report-status`／`lease-*`／`checkpoint` スクリプト実行——を、非対話ヘッドレス実行で人間の追加承認なく実行できるようにする。**無制限な `bypassPermissions` を既定として安易に採用しない**責務限定設計とし、自 branch 以外への書込みを許容しない（I5）。以下の実現方式を要件レベルの候補として提示し、最終確定は DESIGN.md に委ねる：
-  - 候補A（allowlist 明示）: `claude` CLI の `--allowed-tools` に責務範囲のツール・Bash パターンを明示列挙する（例: `Bash(git commit:*)`・`Bash(git push:*)`・`Bash(gh pr create:*)` および Edit/Write と本アダプタが結線する各スクリプト呼び出し）。責務外の操作は既定で不許可のまま残る。
-  - 候補B（ラッパー／hook 仲介）: 許可操作のみを通す専用ラッパースクリプトまたは `PreToolUse` hook（`.agent-skill-chain/hooks/` 系）を介してワーカーの Bash 実行を仲介し、allowlist 外を拒否する。
-  - 候補C（bypass + 外側スコープ限定）: `bypassPermissions` を用いるが、ワーカーが起動される環境側（credential/GitHub 権限分離・自 worktree 隔離）で責務範囲外への影響を外部から不能にする。この候補を採る場合、無制限承認に伴うリスク（本文根本原因 3 の安全分類器衝突を含む）と、それを外側でどう限定するかの根拠を DESIGN.md に明記することを条件とする。
-  いずれの候補でも「自 branch 以外への書込み禁止（I5）」「無制限承認を安易に既定化しない」原則を満たすこと。`WORKER_CMD` による完全上書き余地は維持する。
-- **要件2（安全分類器衝突への配慮）**: 権限モード緩和の検証がネストした `claude` 起動へ到達する前に外側セッションの安全分類器にブロックされる副次的現象（本文根本原因 3）を、権限設計・再検証手順の設計時に考慮する。回避策（例: 検証を外側セッションと分離した独立プロセス／環境で実行する手順）は検討・提示してよいが、安全分類器自体の変更は行わない（スコープ外）。
-- **要件3（state スキーマへの issue 本文フィールド追加）**: `.agent-skill-chain/schemas/state.schema.yaml` に、Issue のタイトルおよび要求内容（本文）に相当するフィールドを追加する。追加は AGENTS.md §設定 が定めるスキーマ変更手順（`schema_version` の扱い・既定値・後方互換／migration の定義）に従う。既存の `state.yaml`（当該フィールドを持たないもの）が引き続き読める後方互換を保つこと（フィールドは任意、または migration により補完可能とする）。フィールドの具体名・必須性・`schema_version` を上げるか否かは DESIGN.md で確定してよいが、本 SPEC は「タイトル・要求内容を保持できる状態モデルにする」という振る舞い要件を定める。
-- **要件4（issue start・関連スクリプトの対応）**: ローカルバックエンドで `issue start`（`src/commands/issue.ts` の `start` および `.agent-skill-chain/scripts/issue-start.sh`）が Issue のタイトル・要求内容を受け取り、`state.yaml` の要件3 で追加したフィールドへ永続化できるようにする。既存の引数体系との後方互換（新フィールド未指定でも従来通り動作する）を保つ。
-- **要件5（ワーカーへの issue 本文供給経路）**: ローカルバックエンドで、要件3・4 で保持した Issue タイトル・要求内容が、ワーカー起動時のプロンプト（`segment start` が返す入力、または `launch_worker` が組み立てる起動コンテキスト）を通じてワーカーへ供給されるようにする。これにより、使い捨て issue が Issue 本文の人間による別途作り込みなしに、`issue start` へタイトル・要求内容を渡すだけで検証を開始できる状態にする。
-- **要件6（launch_worker の実機完走）**: `worker.adapter: claude` 設定下・本物の `claude` CLI（headless・認証情報あり・CLI 利用可）・ローカルバックエンドの使い捨て issue（Issue 本文の人間作り込みなし）で `launch_worker <issue_id> <segment>` を 1 セグメント以上起動し、人間の追加入力・手動代行なしにワーカーが完了することを実測する。完了は、`launch_worker` が終了コード 0 で返り、`report latest` の直近レコードが `status=completed` かつ `target_sha` が push 済み HEAD と一致し、lease が解放された状態で判定する。実行ログ・report-status 記録を証跡として残す。
-- **要件7（正常経路で human_required が誤発火しないこと／真の異常時は発火すること）**: 要件6 の正常経路の実行中、`launch_worker` のフェイルセーフ（`report_status blocked` の `human_escalation_requested` 扱い）が一度も発火しないことを実測する。あわせて、認証欠如または CLI 不在といった真の異常を注入した対照条件では `human_required` が引き続き正しく発火する（regression なし）ことを確認し、「正常経路では発火せず、真の異常時のみ発火する」ことを対照的に裏付ける。
-- **要件8（既存テストスイートの維持）**: 本 Issue の全変更（権限モード設計の実装・state スキーマ拡張・issue start／ワーカー供給経路の変更・追加テスト）を反映した状態で、リポジトリのテストスイート全体（`npm test` 相当）が全て pass する（regression なし）。
+- **要件1（`repoRoot()` の worktree 一貫化）**: `repoRoot()` を、git worktree 内から呼ばれた場合でもメインの作業ツリーから呼ばれた場合でも、同一リポジトリに対して同一の基準ディレクトリを返すよう修正する。実現方式を要件レベルの候補として提示し、最終確定は DESIGN.md に委ねる：
+  - 候補A（`.git` ファイル判定＋ポインタ解決）: `path.join(dir, '.git')` が **ディレクトリ** の場合のみ従来どおりそのディレクトリをルートとし、`.git` が **ファイル**（worktree の gitdir ポインタ）の場合はその内容（`gitdir: <path>`）を解決してメインの作業ツリーを特定する。`fs.existsSync` をファイル/ディレクトリ非区別のまま用いない。
+  - 候補B（git ネイティブ判定）: `git rev-parse --git-common-dir`（または `--show-toplevel` と `--git-common-dir` の組み合わせ）で共通 `.git` ディレクトリを求め、そこからメインの作業ツリールートを導出する。git バイナリへの依存が増える点、bare／外部 worktree 配置での挙動差を DESIGN.md で確認することを条件とする。
+  いずれの候補でも、(i) 通常リポジトリ（`.git` がディレクトリ）での従来返り値が変わらないこと（regression なし）、(ii) worktree 内から呼んでもメイン作業ツリールートと同一値を返すこと、(iii) `.git` が見つからない場合は従来どおり明示エラーで停止すること、を満たす。coordination 状態・成果物の配置規約（`src/lib/local-state.ts` の相対パス構成）自体は変更しない。
+- **要件2（coordination 状態の worktree 非分裂）**: 要件1 の修正により、`src/lib/local-state.ts` の各パス関数（`stateFilePath`・`leaseFilePath`・`integrationFilePath`・`reviewFilePath`・`reportFilePath`）を `repoRoot()` 基点で解決したとき、worktree 内から解決した絶対パスとメインの作業ツリーから解決した絶対パスが、同一 Issue・同一種別について一致するようにする。すなわち worktree 内で `report status` 等を実行して書いた状態ファイルを、メイン作業ツリー側の処理が同一実体として読めるようにする。
+- **要件3（認証チェックの実疎通フォールバック追加）**: `.agent-skill-chain/adapters/claude.sh` の `launch_worker` および `launch_gate_reviewer` の認証チェックを、次の 2 段構成へ見直す：(a) `ANTHROPIC_API_KEY`／`CLAUDE_CODE_OAUTH_TOKEN` のいずれかが非空なら従来どおり認証ありとみなす（高速パス・実値は非ログ）、(b) いずれの env も無い場合は即フェイルセーフせず、`claude` コマンドが実際に認証済みかを軽量に確認する実疎通確認（フォールバック）を行い、成功時は認証ありとみなす。既存の env 非空チェックを完全に置換せず、フォールバックとして追加する。実疎通確認の具体手段（プローブコマンド・タイムアウト・判定条件）は DESIGN.md で確定してよいが、本 SPEC は「env 認証情報が無くても、実際に認証済みなら認証欠如と判定しない」という振る舞い要件を定める。
+- **要件4（真の認証欠如検知の維持・regression なし）**: 要件3 の変更後も、env 認証情報が無く、かつ実疎通確認も失敗する（`claude` が認証されていない・CLI 不在等）場合には、`launch_worker` は `_fail_blocked`（`report_status blocked`／`human_escalation_requested`・lease 解放・非0非3 return）、`launch_gate_reviewer` は `_fail_safe`（`final=human_required`・非0非3 return）へ引き続き正しく倒れる。実疎通確認は自動テストで検証可能なよう、モック／上書き可能な境界（例: 認証プローブを `WORKER_CMD` 同様に env で差し替え可能にする等）を設けることを条件とする。CLI 不在（`WORKER_CMD` 未設定かつ `claude` コマンド不在）のフェイルセーフも維持する。
+- **要件5（launch_worker の実機完走・自己検知）**: 要件1〜4 の修正を反映した状態で、`worker.adapter: claude` 設定下・本物の `claude` CLI（headless・認証済み・CLI 利用可）・ローカルバックエンドの使い捨て issue で `launch_worker <issue_id> <segment>` を 1 セグメント以上起動し、人間の追加入力・手動代行なしに (a) ワーカーが実質作業を完走し、かつ (b) `launch_worker` 自身がそれを正しく検知して終了コード 0 で返ることを実測する。判定は、`launch_worker` の終了コード 0・`report latest <issue_id> <segment>` の直近レコードが `status=completed` かつ `target_sha` が push 済み HEAD と一致・lease 解放、で行う。実行ログ・report-status 記録を証跡として残す。
+- **要件6（既存テストスイートの維持）**: 本 Issue の全変更（`repoRoot()` の修正・認証チェックのフォールバック追加・追加テスト）を反映した状態で、リポジトリのテストスイート全体（`npm test` 相当）が全て pass する（regression なし）。ビルド（`npm run build`／tsc）も終了コード 0 であること。
 
 ### 受入条件（Acceptance Criteria）
 
 各 AC には、散文形式の Given/When/Then による受け入れシナリオを添える。
 
-#### AC-1: launch_worker の既定起動系が自ブランチへの git push を非対話で人間介在なく実行できる
+#### AC-1: repoRoot() が worktree 内から呼ばれてもメイン作業ツリーと同一の基準ディレクトリを返す
 
-- Given: `worker.adapter: claude`・`WORKER_CMD` 未指定（既定起動系を用いる）状態
-- When: `launch_worker` が起動したワーカーが自 branch への `git commit`／`git push` を非対話ヘッドレスで実行する
-- Then: `git push` を含むワーカーの正規責務範囲の Bash 操作が人間の追加承認を要さずに完了し、`git push` 承認待ちに起因するフェイルセーフ（`report_status blocked`）が発火しないことを実測確認する（本 Issue 修正前は `acceptEdits` により `git push` で承認待ち停止していた）
-- 検証方法見込み: `hybrid`（既定起動フラグ／権限機構の存在はコード・設定検査で自動化でき、非対話 `git push` の実挙動は本物の CLI 実行で確認するため）
+- Given: 通常リポジトリ（`.git` がディレクトリ）と、そこに `git worktree add` で作成した worktree（ルートに `gitdir:` ポインタの `.git` ファイルを持つ）
+- When: `repoRoot()` をメイン作業ツリー内の起点と worktree 内の起点それぞれから呼ぶ
+- Then: 両者が同一リポジトリに対して同一の基準ディレクトリ（メイン作業ツリールート）を返すことを実測確認する（本 Issue 修正前は worktree 内からの呼び出しが worktree 自身のパスを返していた）
+- 検証方法見込み: `automated`（一時リポジトリ＋worktree を作り `repoRoot()` の返り値を突合するユニット／統合テスト）
 
-#### AC-2: 権限設計が無制限 bypassPermissions の安易な既定化ではなく、ワーカー責務範囲に限定されている
+#### AC-2: 通常リポジトリでの repoRoot() 返り値が従来どおりで regression がない
 
-- Given: 本 Issue で実装した `launch_worker` の権限モード設計（既定起動系および DESIGN.md で確定した実現方式）
-- When: 既定起動系のフラグ・許可範囲・関連実装／設計文書を確認する
-- Then: 既定が無制限な `--permission-mode bypassPermissions` を単純採用したものではなく、ワーカーの正規責務範囲（自 branch への commit/push・Draft PR 作成・テスト実行・report/lease 操作）へ限定する設計（allowlist・ラッパー／hook、または外側スコープ限定の根拠明記）になっており、自 branch 以外への書込みを許容しない（I5 整合）ことを確認する
-- 検証方法見込み: `manual`（実現方式の限定性は設計判断とコードの照合による確認のため。DESIGN.md 確定内容と実装の整合を検証する）
+- Given: git worktree ではない通常のリポジトリ（`.git` がディレクトリ）
+- When: リポジトリルートおよびその配下のサブディレクトリを起点に `repoRoot()` を呼ぶ。あわせて `.git` が全く見つからない起点でも呼ぶ
+- Then: 通常リポジトリでは従来どおりリポジトリルートを返し、`.git` が見つからない場合は従来どおり明示エラー（`.git が見つかりません`）で停止することを実測確認する（worktree 対応の追加により通常経路が変化していないこと）
+- 検証方法見込み: `automated`
 
-#### AC-3: state.schema.yaml に issue タイトル・要求内容フィールドが追加されスキーマ検証を通る
+#### AC-3: 同一 issue の coordination 状態ファイルが worktree とメイン作業ツリーで同一実体を指す
 
-- Given: 本 Issue で拡張した `.agent-skill-chain/schemas/state.schema.yaml`
-- When: 当該スキーマと、タイトル・要求内容フィールドを含む `state.yaml` サンプルをスキーマバリデータ（`validateAgainstSchema('state', ...)` 相当）にかける
-- Then: Issue のタイトル・要求内容に相当するフィールドがスキーマ上に定義され、当該フィールドを含む state が検証を通過することを実測確認する
-- 検証方法見込み: `automated`（スキーマ定義・バリデーションの検査）
+- Given: ローカルバックエンドで、あるリポジトリとその worktree
+- When: worktree 内から `report status`（および `lease acquire`／`checkpoint` 相当）を実行して当該 Issue の coordination 状態ファイルを書き込み、メインの作業ツリー側から同一 Issue の同一種別の状態ファイルを読む
+- Then: worktree 側が書いた状態ファイルとメイン作業ツリー側が参照する状態ファイルが同一の絶対パス（同一実体）を指し、メイン作業ツリー側から worktree 側の書き込み内容が読めることを実測確認する（本 Issue 修正前は worktree 内へ分裂して書かれメイン側から不可視だった）
+- 検証方法見込み: `automated`（一時リポジトリ＋worktree で `report status` 実行→メイン側読み取りを突合する統合テスト）
 
-#### AC-4: issue start が issue タイトル・要求内容を state.yaml へ永続化する（後方互換あり）
+#### AC-4: 認証チェックが env 認証情報なしでも実疎通で認証済み環境を認証欠如と誤判定しない
 
-- Given: `coordination.backend: local` の環境
-- When: `issue start` にタイトル・要求内容を与えて Issue を起票し、生成された `state.yaml` を読む
-- Then: 与えたタイトル・要求内容が `state.yaml` の要件3 で追加したフィールドへ永続化されていること、および当該フィールドを指定しない従来どおりの起票も引き続き成功する（後方互換）ことを実測確認する
-- 検証方法見込み: `automated`（CLI 実行結果と生成ファイルの検査）
+- Given: `ANTHROPIC_API_KEY`／`CLAUDE_CODE_OAUTH_TOKEN` がいずれも未設定だが、実疎通確認は成功する（`claude` が認証済みで応答する）環境ないしそのモック
+- When: `launch_worker`（および `launch_gate_reviewer`）の認証チェックを通過させる
+- Then: env 非空チェックで false になっても実疎通フォールバックが認証ありと判定し、認証欠如としてのフェイルセーフ（`_fail_blocked`／`_fail_safe`）が発火せず起動処理へ進むことを実測確認する（本 Issue 修正前は env 非空のみ判定でこの環境を誤って認証欠如と判定していた）
+- 検証方法見込み: `hybrid`（実疎通確認をモック／上書き可能な境界で自動テスト化できる一方、真のキーチェーン認証環境での不誤判定は本物の `claude` を用いた実機で裏付けるため）
 
-#### AC-5: 使い捨て issue が issue 本文の人間作り込みなしに検証を開始できる
+#### AC-5: 真の認証欠如時は引き続きフェイルセーフが発火する（regression なし）
 
-- Given: ローカルバックエンドの使い捨て issue を、`issue start` へタイトル・要求内容を渡して起票した状態（人間が別途 Issue 本文を作り込んでいない）
-- When: 当該 issue に対しワーカー起動プロンプト（`segment start` の返す入力、または `launch_worker` が組み立てる起動コンテキスト）を生成する
-- Then: 起票時に渡したタイトル・要求内容がワーカーへ供給される入力に含まれ、ワーカーが「何を作るか」を Issue 本文の別途作り込みなしに把握できる状態であることを実測確認する
-- 検証方法見込み: `hybrid`（供給経路の存在は自動テスト化でき、本物のワーカーが内容を受け取り着手できることは実機実行で確認するため）
+- Given: `ANTHROPIC_API_KEY`／`CLAUDE_CODE_OAUTH_TOKEN` がいずれも未設定で、かつ実疎通確認も失敗する（`claude` 未認証・CLI 不在等）を注入した対照条件
+- When: 同条件で `launch_worker`（および `launch_gate_reviewer`）の認証チェックを起動する
+- Then: 当該条件では認証欠如として `launch_worker` は `_fail_blocked`（`report_status blocked`／`human_escalation_requested`・非0非3 return）、`launch_gate_reviewer` は `_fail_safe`（`final=human_required`・非0非3 return）へ倒れることを実測確認し、AC-4 の正常環境との対比により「実際に認証済みなら通し、真に欠如なら倒す」ことが裏付けられること（フォールバック追加による regression が無いこと）を確認する
+- 検証方法見込み: `hybrid`（実疎通失敗はプローブモック／env 操作で自動テスト化でき、AC-4 の正常環境との対照は実機を伴うため）
 
-#### AC-6: launch_worker が本物の claude CLI で 1 セグメントを人間介在なく完了させる
+#### AC-6: launch_worker が本物の claude CLI で 1 セグメントを人間介在なく完走し、自身もそれを検知する
 
-- Given: `worker.adapter: claude`・認証情報あり（`ANTHROPIC_API_KEY` または `CLAUDE_CODE_OAUTH_TOKEN`）・`claude` CLI 利用可・ローカルバックエンドの使い捨て issue（本文作り込みなし）という正常な前提
+- Given: `worker.adapter: claude`・本物の `claude` CLI（headless・認証済み・CLI 利用可）・ローカルバックエンドの使い捨て issue という正常な前提（要件1〜4 の修正反映済み）
 - When: `launch_worker <issue_id> <segment>` を 1 セグメント（spec/design/implementation/validation のいずれか）に対して起動し、人間の追加入力・手動代行を一切与えずに完了まで待つ
-- Then: `launch_worker` が終了コード 0 で返り、`report latest <issue_id> <segment>` の直近レコードが `status=completed` かつ `target_sha` が push 済み HEAD と一致し、lease が解放されていることを実測確認する（本 Issue 修正前は `git push` 承認待ちにより未達であった）
-- 検証方法見込み: `manual`（本物の `claude` CLI・認証情報を用いたライブ起動の一回性検証のため。手順・実行者・証跡は VALIDATION.md で確定する）
+- Then: `launch_worker` が終了コード 0 で返り、`report latest <issue_id> <segment>` の直近レコードが `status=completed` かつ `target_sha` が push 済み HEAD と一致し、lease が解放されていることを実測確認する（本 Issue 修正前は `repoRoot()` 分裂により worker report が不可視で `blocked` へ誤フェイルセーフしていた）
+- 検証方法見込み: `manual`（本物の `claude` CLI・認証を用いたライブ起動の一回性検証のため。手順・実行者・証跡は VALIDATION.md で確定する）
 
-#### AC-7: launch_worker 完走の証跡（ログ・report-status 記録）が残る
+#### AC-7: launch_worker 完走・自己検知の証跡（ログ・report-status 記録）が残る
 
 - Given: AC-6 の実機起動
 - When: `launch_worker` の実行ログと report-status の記録を採取する
-- Then: 「人間介在なしに 1 セグメントが正常完了した（`report_status completed`・`target_sha` 一致）」ことを示す実行ログ・report-status 記録が VALIDATION.md に実測証跡として記載されることを確認する
+- Then: 「人間介在なしに 1 セグメントが正常完了し（`report_status completed`・`target_sha` 一致）、`launch_worker` 自身が終了コード 0 でそれを検知した」ことを示す実行ログ・report-status 記録が VALIDATION.md に実測証跡として記載され、`blocked`／`human_escalation_requested` の誤発火が無かったことも併せて記録されることを確認する
 - 検証方法見込み: `manual`（実機実行の証跡採取・記載のため）
 
-#### AC-8: 正常経路で human_required が発生しない
+#### AC-8: 既存テストスイートが全て pass しビルドが通る（regression なし）
 
-- Given: AC-6 の正常経路（認証あり・CLI 利用可・issue 本文供給あり）の実機起動
-- When: `launch_worker` の実行中および完了時の report-status 履歴を確認する
-- Then: フェイルセーフ経路（`report_status blocked` の `human_escalation_requested` 扱い）が一度も発火していないこと（正常経路で `human_required` が誤発火していないこと）を実測確認する
-- 検証方法見込み: `manual`（正常経路のライブ実行結果を確認するため）
-
-#### AC-9: human_required は真の異常時のみ発火する（対照確認・regression なし）
-
-- Given: 認証欠如（`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` 未設定）または CLI 不在（`WORKER_CMD` 未設定かつ `claude` コマンド不在）を注入した対照条件
-- When: 同条件で `launch_worker` を起動する
-- Then: 当該異常条件では `report_status blocked`（`human_escalation_requested` 扱い）が発火し非ゼロ（≠3）で返ることを確認し、AC-8 の正常経路との対比により「正常経路では発火せず、真の異常時のみ発火する」ことが裏付けられること（権限モード変更による regression が無いこと）を実測確認する
-- 検証方法見込み: `hybrid`（異常注入は `WORKER_CMD` モックや環境変数操作で自動テスト化でき、正常経路との対照は本物の CLI 実行を伴うため）
-
-#### AC-10: 既存テストスイートが全て pass する（regression なし）
-
-- Given: 本 Issue の全変更（権限モード設計の実装・state スキーマ拡張・issue start／ワーカー供給経路の変更・追加テスト）を反映した状態
-- When: リポジトリのテストスイート全体（`npm test` 相当）を実行する
-- Then: 既存テストが全て pass し、新規追加テスト（AC-3/AC-4/AC-9 の自動化部分等を追加した場合はそれも含む）も全て pass する（regression なし）ことを実測確認する
+- Given: 本 Issue の全変更（`repoRoot()` の worktree 対応・認証チェックのフォールバック追加・追加テスト）を反映した状態
+- When: リポジトリのビルド（`npm run build`／tsc）とテストスイート全体（`npm test` 相当）を実行する
+- Then: ビルドが終了コード 0 で成功し、既存テストが全て pass し、新規追加テスト（AC-1/AC-2/AC-3/AC-4/AC-5 の自動化部分）も全て pass する（regression なし）ことを実測確認する
 - 検証方法見込み: `automated`
-
-## 既知の未達成事項（AC-6/AC-7/AC-8 と Issue #185 への切り出し）
-
-独立検証（VALIDATION.md、検証対象 `target_sha=7bad757`）が確定した本 Issue #183 の実行結果を、成果物の自己完結性の原則に従い本 SPEC 内へ要約する。外部参照は由来提示に留め、意味は本文へ記載する。AC-6/AC-7/AC-8 の定義自体は、VALIDATION.md が記録した実測結果・追跡可能性（I7）を保つため削除せず上記「受入条件」に残す。
-
-### 達成（本 Issue #183 の完了条件）
-
-- **要件1・AC-1/AC-2**: `launch_worker` の既定権限モードを、無制限 `bypassPermissions` ではなくワーカー責務スコープの allowlist（`claude` CLI の `--allowed-tools`。自 branch の `git commit`／`git push`・`gh pr create`・テスト実行・`.agent-skill-chain/scripts/*`・Edit/Write 等に限定）へ変更した。本物の `claude` CLI（headless）で自 branch への `git commit`／`git push` が人間の追加承認なく完走することを実機で確認し、先行 Issue #180 で確定していた「`git push` の壁（`acceptEdits` による承認待ち停止）」がこの変更で解消されたことを裏付けた。
-- **要件3〜5・AC-3/AC-4/AC-5**: ローカルバックエンドの `state.schema.yaml` に issue タイトル・要求内容（`title`／`request`、いずれも任意・後方互換）フィールドを追加し、`issue start` での受理・永続化、`segment start` 経由でのワーカーへの本文供給を実装・検証した。
-- **要件8・AC-10**: 既存テストスイート全件（401/401 pass）・regression なし。
-
-### 未達成（本 Issue #183 の実行結果としては FAIL）
-
-- **AC-6**（`launch_worker` 自身の 1 セグメント完走検知）・**AC-7**（その完走証跡）・**AC-8**（正常経路で `human_required` が誤発火しないこと）は、VALIDATION.md で `result: fail` に確定した。
-- 原因は本 Issue の中核である**権限モード（allowlist 方式）ではない**——allowlist 方式は実機で有効性が確認でき、ワーカーの実質作業（SPEC.md 作成・`git commit`・`git push`・`report status completed`）自体は人間介在なく完走した。未達なのは `launch_worker` オーケストレーション層の「完走検知」であり、権限モードとは独立した以下の 2 つの新規バグに起因する:
-  1. **`repoRoot()` の worktree 分裂**: `src/lib/paths.ts` の `repoRoot()` が `fs.existsSync(path.join(dir, '.git'))` で祖先を判定するため、git worktree のルートが持つ `.git`「ファイル」（gitdir ポインタ）にもマッチしてしまう。その結果、ワーカーが worktree 内から書いた状態ファイル（reports 等）が worktree ローカルへ分裂して書かれ、メイン作業ツリー側で走る `launch_worker` からは worker report が見えず、完走済みでも「report がありません」と誤検知して blocked へ倒れた（安全機構の正常動作ではなくパス解決の実装バグによる誤検知）。
-  2. **認証チェックの誤検知**: `.agent-skill-chain/adapters/claude.sh` の `launch_worker`（および `launch_gate_reviewer`）の認証チェックが `ANTHROPIC_API_KEY`／`CLAUDE_CODE_OAUTH_TOKEN` の env 非空のみで判定するため、キーチェーン等のセッション認証で動く環境（本検証環境が該当。`claude -p` が env 無しで正常応答することを確認済み）を誤って認証欠如と判定する。
-
-### 恒久解消の切り出し先（Issue #185）
-
-上記 2 バグの恒久修正と AC-6/AC-7/AC-8 相当の再検証は、後継 **Issue #185**（`techbeansjp-free/AGENTS.md`、OPEN。内容は `gh api repos/techbeansjp-free/AGENTS.md/issues/185` で確認可）へ切り出した。本 Issue #183 は本 SPEC 改定の上でクローズする。これは先行 Issue #180 で、達成できなかった AC を後続 Issue へ切り出したうえで当該 Issue をクローズした前例に倣った措置である。
 
 ## スコープ外
 
 この Issue では対応しない事項を明記する。曖昧語・対象外欠落は仕様ゲートの反証観点で指摘される。
 
-- **`launch_worker` 自身の完走検知（AC-6/AC-7/AC-8 の "達成"）の恒久実現**: 本 Issue #183 のスコープにおける「完了」の意味は、(a) `launch_worker` の既定権限モードを責務スコープ allowlist へ変更し、それが実機で `git push` 等の壁を解消することを確認したこと（要件1・AC-1/AC-2）、および (b) ローカルバックエンドの issue 本文スキーマ拡張・供給経路の実装（要件3〜5・AC-3/AC-4/AC-5）である。AC-6/AC-7/AC-8 が問う `launch_worker` 自身の完走検知は、Issue #180 由来の「`git push` の壁」の解消までは実機で確認できたが、その先の別バグ（前節「既知の未達成事項」の 2 件——`repoRoot()` の worktree 分裂・認証チェックの誤検知）により、本 Issue の完了条件そのものではない。当該 2 バグの恒久解消と AC-6/AC-7/AC-8 相当の再検証は Issue #185 の担当とする。
-
 - **GitHub 側のライブ設定変更（ruleset／branch protection）**: `main`・統合ブランチの required check 機械強制は先行 Issue #180 で実施済み・完了済みであり、本 Issue では変更しない。
-- **権限モード緩和と外側の安全分類器との衝突の根本解決**: 本文根本原因 3 の副次的現象について、権限設計・再検証手順の設計時に考慮し回避策の検討・提示はするが（要件2）、外側セッションの安全分類器自体の変更・無効化は行わない。
-- **`worker.adapter` / `review.adapter` を本リポジトリの恒久的な既定値として `claude` へ確定する意思決定**: 本 Issue は再実機検証を成立させるための設定・実装と実測までを対象とし、恒久既定値化の判断は別途行う（先行 Issue #180 のスコープ外事項と整合）。
-- **`codex` アダプタ（`.agent-skill-chain/adapters/codex.sh`）への同等の権限モード対応**: 本 Issue は `claude` アダプタ（`launch_worker`）の権限モード不足の解消を対象とする。他アダプタへの展開は対象外。
-- **GitHub モードにおける Issue 本文取得経路の変更**: GitHub モードでは Issue 本文を GitHub API 経由で取得できるため、本 Issue が扱う「本文を運ぶフィールドの欠落」はローカルバックエンドの `state.schema.yaml` に固有の問題である。GitHub モードのワーカーへの本文供給経路の再設計は対象外。
-- **`human_required` の 4 種の真の異常経路（認証欠如・CLI 不在・timeout・完了偽装検知）すべての網羅的な故障注入テストの新規整備**: 本 Issue は「正常経路で誤発火しない」ことの実測と、それを裏付けるための最小限の対照（認証欠如または CLI 不在の少なくとも 1 種）までを対象とする。
+- **権限モードの allowlist 内容自体の見直し**: `launch_worker` の権限モード（`--allowed-tools` 責務スコープ allowlist）は Issue #183 で実装済みであり、実機で良好に機能することが確認済みである。本 Issue は権限モードには手を入れず、`repoRoot()` のパス解決と認証チェックのみを対象とする。
+- **coordination 状態の配置規約自体の変更**: `issues/<n>/.agent-skill-chain/{state,lease,integration,reviews,reports}` という配置規約（`src/lib/local-state.ts`）は変更しない。本 Issue が直すのはその基点となる `repoRoot()` の解決だけである。
+- **`codex` アダプタ（`.agent-skill-chain/adapters/codex.sh`）への同等の認証チェック対応**: 本 Issue は `claude` アダプタ（`launch_worker`／`launch_gate_reviewer`）の認証チェック誤検知の解消を対象とする。他アダプタへの展開は対象外。
+- **`claude` CLI 側の認証状態確認手段の有無に関する仕様確定**: 実疎通確認の具体手段（`claude` 側に認証状態確認の公式手段があるか、無ければ軽量プローブで代替するか）の最終選定は DESIGN.md の責務とし、本 SPEC は「env が無くても実際に認証済みなら通す」という振る舞い要件のみを定める。
+- **`worker.adapter` / `review.adapter` を本リポジトリの恒久的な既定値として `claude` へ確定する意思決定**: 本 Issue は再実機検証を成立させるための修正と実測までを対象とし、恒久既定値化の判断は別途行う（Issue #180・#183 のスコープ外事項と整合）。
+- **`human_required` の 4 種の真の異常経路（認証欠如・CLI 不在・timeout・完了偽装検知）すべての網羅的な故障注入テストの新規整備**: 本 Issue は認証欠如検知の regression 確認（AC-5）と実機正常経路の完走検知（AC-6）までを対象とし、timeout・完了偽装検知の網羅的整備は対象外（既存テストの維持で足りる）。

@@ -91,8 +91,11 @@ function envWithout(keys: string[], extra: NodeJS.ProcessEnv = {}): NodeJS.Proce
   return env;
 }
 
-function readWorkerReport(worktreePath: string, segment: string): WorkerReport {
-  const reportPath = path.join(worktreePath, 'issues', '1', '.agent-skill-chain', 'reports', `${segment}.yaml`);
+// Issue #185: report status（worker report）は repoRoot()（共通/メイン作業ツリー）基点で書かれる
+// ため、worktreePath ではなく repo.dir（メイン作業ツリー）からの相対パスで読む必要がある
+// （ADR-0004。修正前はworktree内へ分裂して書かれていたバグの解消）。
+function readWorkerReport(repoDir: string, segment: string): WorkerReport {
+  const reportPath = path.join(repoDir, 'issues', '1', '.agent-skill-chain', 'reports', `${segment}.yaml`);
   return parse(fs.readFileSync(reportPath, 'utf8')) as WorkerReport;
 }
 
@@ -101,7 +104,7 @@ function readWorkerReport(worktreePath: string, segment: string): WorkerReport {
 test('claude launch_worker: WORKER_CMDが成果物commit+push+report completedまで行った場合、exit 0でlease解放・完了確認される', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'claude');
+  setWorkerAdapter(repo.dir, 'claude');
 
   // Given: role_contractを標準入力で受け取り、成果物をcommit+pushし、その場で
   // report status completedを自ら発行するWORKER_CMD stub。
@@ -123,7 +126,7 @@ test('claude launch_worker: WORKER_CMDが成果物commit+push+report completed�
   // Then: exit 0・成果物push済み・report completed・lease解放済み（再取得できることで検証）。
   assert.equal(res.status, 0, res.stderr);
   assert.ok(fs.existsSync(path.join(worktreePath, 'WORKER_OUTPUT.md')));
-  const report = readWorkerReport(worktreePath, 'spec');
+  const report = readWorkerReport(repo.dir, 'spec');
   assert.equal(report.status, 'completed');
 
   const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
@@ -142,7 +145,7 @@ test('claude launch_worker: WORKER_CMDが成果物commit+push+report completed�
 test('claude launch_worker: WORKER_CMD未指定時の既定起動はclaude CLIを--allowed-toolsで起動し、bypassPermissions/acceptEditsを含まない（ISSUE-183 AC-1/AC-2）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'claude');
+  setWorkerAdapter(repo.dir, 'claude');
 
   // Given: PATH上に「claude」という名のstub実行系を用意する（既定起動系のcommand -v claude判定を
   // 満たすため）。stubは受け取った引数をファイルへ記録したうえで、成果物commit+push+report
@@ -188,7 +191,7 @@ test('claude launch_worker: WORKER_CMD未指定時の既定起動はclaude CLI�
 test('claude launch_worker: WORKER_ALLOWED_TOOLS envで既定allowlistを完全上書きできる（ISSUE-183）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'claude');
+  setWorkerAdapter(repo.dir, 'claude');
 
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-claude-stub-'));
   t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
@@ -224,7 +227,7 @@ test('claude launch_worker: WORKER_ALLOWED_TOOLS envで既定allowlistを完全�
 test('claude launch_worker: WORKER_CMD起動失敗はblocked報告(human_escalation_requested=true)+lease解放+非0非3で返す（silent passしない）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'claude');
+  setWorkerAdapter(repo.dir, 'claude');
 
   const env = envWithout([], {
     ANTHROPIC_API_KEY: 'dummy-key',
@@ -236,7 +239,7 @@ test('claude launch_worker: WORKER_CMD起動失敗はblocked報告(human_escalat
   assert.notEqual(res.status, 0, 'worker起動失敗はexit 0（完了）にならないこと');
   assert.notEqual(res.status, 3, 'worker起動失敗はexit 3（human deferred）にもならないこと');
 
-  const report = readWorkerReport(worktreePath, 'spec');
+  const report = readWorkerReport(repo.dir, 'spec');
   assert.equal(report.status, 'blocked');
   assert.equal(report.human_escalation_requested, true);
   assert.ok(report.blocked_reason && report.blocked_reason.length > 0);
@@ -246,18 +249,22 @@ test('claude launch_worker: WORKER_CMD起動失敗はblocked報告(human_escalat
   assert.equal(reacquire.status, 0, 'worker起動失敗後もleaseが放置されず解放されていること: ' + reacquire.stderr);
 });
 
-test('claude launch_worker: 認証未設定（ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN無し）はblocked+lease解放+非0非3で返す', async (t) => {
+test('claude launch_worker: 認証未設定（ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN無し）かつ実疎通確認も失敗する場合はblocked+lease解放+非0非3で返す（真の認証欠如、regressionなし）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'claude');
+  setWorkerAdapter(repo.dir, 'claude');
 
-  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN']);
+  // Issue #185: 認証チェックがenv非空チェック→claude auth statusの実疎通フォールバックの2段化に
+  // なったため、このテストは「真の認証欠如」（env無し・実疎通確認も失敗）を明示的に固定する
+  // 必要がある。CLAUDE_AUTH_PROBE_CMD=false でプローブを常に失敗させ、実行機のclaude CLIの
+  // 実際の認証状態に依存せずhermeticにする。
+  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], { CLAUDE_AUTH_PROBE_CMD: 'false' });
 
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
 
   assert.notEqual(res.status, 0);
   assert.notEqual(res.status, 3);
-  const report = readWorkerReport(worktreePath, 'spec');
+  const report = readWorkerReport(repo.dir, 'spec');
   assert.equal(report.status, 'blocked');
   assert.equal(report.human_escalation_requested, true);
   assert.match(report.blocked_reason ?? '', /認証/);
@@ -266,10 +273,37 @@ test('claude launch_worker: 認証未設定（ANTHROPIC_API_KEY/CLAUDE_CODE_OAUT
   assert.equal(reacquire.status, 0, reacquire.stderr);
 });
 
+// Issue #185 AC-4: env認証情報（ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN）が無くても、実疎通確認
+// （CLAUDE_AUTH_PROBE_CMDでモック）が成功すれば認証欠如として誤判定せず起動処理へ進むことを検証する。
+test('claude launch_worker: env認証情報が無くてもCLAUDE_AUTH_PROBE_CMDの実疎通確認が成功すれば認証欠如と誤判定せず起動処理へ進む（AC-4）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+
+  const workerCmd = [
+    'cat >/dev/null',
+    `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: auth probe success")`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+  ].join(' && ');
+
+  // Given: env認証情報は無いが、実疎通確認（CLAUDE_AUTH_PROBE_CMD）はexit0（認証済み）を模す。
+  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    WORKER_CMD: workerCmd,
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  // Then: 認証欠如のfail-safe（blocked）は発火せず、通常の完了経路になる。
+  assert.equal(res.status, 0, res.stderr);
+  const report = readWorkerReport(repo.dir, 'spec');
+  assert.equal(report.status, 'completed');
+});
+
 test('claude launch_worker (I8直接検証): WORKER_CMDがexit 0でも完了を報告しなければ「完了を騙る」ケースとしてblocked扱いにする（silent passしない）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'claude');
+  setWorkerAdapter(repo.dir, 'claude');
 
   // Given: サブプロセス自体はexit 0で正常終了するが、report statusを一切呼ばない
   // （commit/reportをサボる・クラッシュ直前で終了コードだけ0を返す等を模す）。
@@ -285,9 +319,9 @@ test('claude launch_worker (I8直接検証): WORKER_CMDがexit 0でも完了を�
   assert.notEqual(res.status, 0, 'report未達のexit 0は「完了」として扱われないこと');
   assert.notEqual(res.status, 3);
 
-  const reportPath = path.join(worktreePath, 'issues', '1', '.agent-skill-chain', 'reports', 'spec.yaml');
+  const reportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reports', 'spec.yaml');
   assert.ok(fs.existsSync(reportPath), 'launch_worker自身がblocked reportを書くこと');
-  const report = readWorkerReport(worktreePath, 'spec');
+  const report = readWorkerReport(repo.dir, 'spec');
   assert.equal(report.status, 'blocked');
   assert.equal(report.human_escalation_requested, true);
 
@@ -298,7 +332,7 @@ test('claude launch_worker (I8直接検証): WORKER_CMDがexit 0でも完了を�
 test('claude launch_worker (I8直接検証): target_shaが不一致（workerが古いSHAを騙って報告）の場合もblocked扱いにする', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'claude');
+  setWorkerAdapter(repo.dir, 'claude');
 
   // Given: commit+pushはせず、でたらめなtarget_shaでcompletedを報告するWORKER_CMD stub。
   const workerCmd = [
@@ -314,7 +348,7 @@ test('claude launch_worker (I8直接検証): target_shaが不一致（workerが�
   assert.notEqual(res.status, 3);
   // report latestが返す直近レコードはworkerが騙って報告したcompletedのままだが、
   // launch_worker自身は不一致を検出した結果を新たなblocked reportとして上書きする。
-  const report = readWorkerReport(worktreePath, 'spec');
+  const report = readWorkerReport(repo.dir, 'spec');
   assert.equal(report.status, 'blocked');
 });
 
@@ -323,7 +357,7 @@ test('claude launch_worker (I8直接検証): target_shaが不一致（workerが�
 test('codex launch_worker: 未構成のためlease取得を一切試みずexit 2で即fail-safeを返す（WIP枠を消費しない）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'codex');
+  setWorkerAdapter(repo.dir, 'codex');
 
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], process.env);
 
@@ -335,7 +369,7 @@ test('codex launch_worker: 未構成のためlease取得を一切試みずexit 2
   assert.equal(acquire.status, 0, 'codexはlease取得を試みないため、後続のacquireが競合しないこと: ' + acquire.stderr);
 
   // worker-reportも一切書かれていないこと（起動前のため報告対象が存在しない）。
-  const reportPath = path.join(worktreePath, 'issues', '1', '.agent-skill-chain', 'reports', 'spec.yaml');
+  const reportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reports', 'spec.yaml');
   assert.ok(!fs.existsSync(reportPath), 'lease取得前のためworker-reportは書かれないこと');
 });
 
@@ -344,7 +378,7 @@ test('codex launch_worker: 未構成のためlease取得を一切試みずexit 2
 test('human launch_worker (local): マーカーを生成しexit 3・leaseは解放しない（作業継続中）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'human');
+  setWorkerAdapter(repo.dir, 'human');
 
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], process.env);
 
@@ -367,7 +401,7 @@ test('human launch_worker (local): マーカーを生成しexit 3・leaseは解�
 test('human launch_worker (local, design segment): Draft PR作成手順は案内されないこと（specのみの非対称性）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  setWorkerAdapter(worktreePath, 'human');
+  setWorkerAdapter(repo.dir, 'human');
 
   // design segmentを起動する前提として、design segmentのrole_contractが取得できる必要がある
   // （segment startはlease有効性のみ検査しSPEC.md等の内容は見ないため、worktree側の前提整備は不要）。
@@ -388,7 +422,7 @@ test('human launch_worker (github): gh issue commentで通知しexit 3・ラベ�
     repo.cleanup();
     fs.rmSync(scratchDir, { recursive: true, force: true });
   });
-  setWorkerAdapter(worktreePath, 'human');
+  setWorkerAdapter(repo.dir, 'human');
 
   const res = runWorkerLauncher(worktreePath, ['ISSUE-9', 'spec'], env);
 

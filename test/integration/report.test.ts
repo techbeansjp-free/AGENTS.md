@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parse } from 'yaml';
-import { createTmpRepo } from '../helpers/tmp-repo.js';
+import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 
@@ -80,6 +80,44 @@ test('report status: statusがcompleted|blocked以外は使い方エラーとし
   const result = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'in_progress', 'abc123'], { cwd: repo.dir });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /status は completed\|blocked/);
+});
+
+// Issue #185 AC-3: repoRoot()のworktree一貫化（ADR-0004）により、linked worktree内から
+// 実行した`report status`が書くcoordination状態ファイルと、メイン作業ツリー側が読む
+// coordination状態ファイルが同一実体（同一絶対パス）を指すことを検証する。修正前は
+// worktree内へ分裂して書かれ、メイン作業ツリー側（launch_workerの完了確認）から不可視だった。
+test('report status (local backend, AC-3): worktree内から実行したreportがメイン作業ツリー側から同一実体として読める（worktree分裂の解消）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  assert.notEqual(path.resolve(worktreePath), path.resolve(repo.dir), '前提: worktreePathはrepo.dirとは別の実ディレクトリであること');
+
+  // Given/When: worktree内（cwd=worktreePath）から report status を実行する
+  //             （ワーカーが自worktree内から報告する実際の経路を再現する）。
+  const result = runCli(
+    ['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', 'deadbeef00000000'],
+    { cwd: worktreePath },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const dest = result.stdout.trim();
+
+  // Then: 書込み先はworktreePath配下ではなく、repoRoot()が一貫して返すメイン作業ツリー
+  //       （repo.dir）配下であること（worktree内へ分裂しないこと）。
+  const expectedDest = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reports', 'spec.yaml');
+  assert.equal(path.resolve(dest), expectedDest);
+  assert.equal(fs.existsSync(path.join(worktreePath, 'issues', '1', '.agent-skill-chain', 'reports', 'spec.yaml')), false, 'worktree側には分裂して書かれないこと');
+
+  // Then: メイン作業ツリー側（cwd=repo.dir）の `report latest` が、worktree側から書いた
+  //       内容を同一実体として読めること（AC-3）。
+  const latest = runCli(['report', 'latest', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(latest.status, 0, latest.stderr);
+  assert.match(latest.stdout, /status=completed/);
+  assert.match(latest.stdout, /target_sha=deadbeef00000000/);
 });
 
 test('report status (github backend): Issueコメントとして固定スキーマのworker reportを投稿する', async (t) => {
