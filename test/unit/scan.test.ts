@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../../src/lib/scan.js';
-import { repoRoot } from '../../src/lib/paths.js';
+// Issue #185: このテストは「このworktree自身の実在パス」を検証する意図であり、コーディネーション
+// 状態の基点であるrepoRoot()（共通/メイン作業ツリー）ではなく、現在の作業ツリー自身を返す
+// worktreeRoot()を使う（開発環境自体がlinked worktreeの場合、repoRoot()はメイン側を返してしまい
+// このworktree自身のアセットの存在確認にならないため）。
+import { worktreeRoot } from '../../src/lib/paths.js';
 
 function withTmpDir(fn: (dir: string) => void): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-scan-'));
@@ -16,7 +20,7 @@ function withTmpDir(fn: (dir: string) => void): void {
 }
 
 test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}）。lint referencesの見出し解決に必要な完全な一覧', () => {
-  const root = repoRoot();
+  const root = worktreeRoot();
   const result = defaultLiveFileRoots(root);
   const expected = [
     path.join(root, 'AGENTS.md'),
@@ -36,7 +40,7 @@ test('defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENT
 });
 
 test('defaultVocabFileRoots: lint vocabのデフォルト対象。docs/GLOSSARY.mdは自己言及のため恒久除外し、AGENTS.md・.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}（defaultLiveFileRootsと同一集合）を返す（ISSUE-178 AC-4: 識別子文脈スキャナ実装によりtemplates/config/schemas/scriptsの一時除外を撤廃）', () => {
-  const root = repoRoot();
+  const root = worktreeRoot();
   const result = defaultVocabFileRoots(root);
   const expected = [
     path.join(root, 'AGENTS.md'),
