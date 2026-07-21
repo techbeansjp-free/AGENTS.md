@@ -135,6 +135,90 @@ test('claude launch_worker: WORKER_CMDが成果物commit+push+report completed�
   fs.rmSync('/tmp/worker-received-contract.txt', { force: true });
 });
 
+// --- (h) 既定WORKER_CMD（未指定時）: --allowed-toolsによる責務スコープallowlist ------------
+//        ISSUE-183 AC-1: 既定起動が自branchへのgit push等を非対話で完走できる
+//        ISSUE-183 AC-2: 既定がbypassPermissions/acceptEditsの安易な採用ではなく責務範囲へ限定
+
+test('claude launch_worker: WORKER_CMD未指定時の既定起動はclaude CLIを--allowed-toolsで起動し、bypassPermissions/acceptEditsを含まない（ISSUE-183 AC-1/AC-2）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(worktreePath, 'claude');
+
+  // Given: PATH上に「claude」という名のstub実行系を用意する（既定起動系のcommand -v claude判定を
+  // 満たすため）。stubは受け取った引数をファイルへ記録したうえで、成果物commit+push+report
+  // completedまで行う（(a)のWORKER_CMD stubと同じ最小契約）。
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-claude-stub-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const argvCapturePath = path.join(stubDir, 'argv.txt');
+  const claudeStub = path.join(stubDir, 'claude');
+  fs.writeFileSync(
+    claudeStub,
+    [
+      '#!/usr/bin/env bash',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
+      'cat >/dev/null',
+      'echo "worker output" > WORKER_OUTPUT.md',
+      `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: default worker_cmd output")`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+
+  const env = envWithout(['WORKER_CMD', 'WORKER_ALLOWED_TOOLS'], {
+    ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
+
+  // When: WORKER_CMD未指定のまま worker-launch.sh 経由で launch_worker を実行する。
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  // Then: 既定起動が完走し（AC-1）、実際にclaude stubへ渡された引数に--allowed-toolsが含まれ、
+  // --permission-mode（acceptEdits等）・bypassPermissionsのいずれも含まれないこと（AC-2）。
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+  assert.match(argv, /--allowed-tools/, '既定起動は--allowed-toolsを用いること');
+  assert.doesNotMatch(argv, /--permission-mode/, '既定起動はacceptEdits等の--permission-modeを用いないこと');
+  assert.doesNotMatch(argv, /bypassPermissions/, '既定起動はbypassPermissionsを用いないこと');
+  assert.match(argv, /Bash\(git push:\*\)/, 'allowlistにワーカーの正規責務範囲であるgit pushが含まれること');
+  assert.match(argv, /Bash\(git commit:\*\)/, 'allowlistにgit commitが含まれること');
+  assert.match(argv, /Bash\(gh pr create:\*\)/, 'allowlistにDraft PR作成（gh pr create）が含まれること');
+});
+
+test('claude launch_worker: WORKER_ALLOWED_TOOLS envで既定allowlistを完全上書きできる（ISSUE-183）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(worktreePath, 'claude');
+
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-claude-stub-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const argvCapturePath = path.join(stubDir, 'argv.txt');
+  const claudeStub = path.join(stubDir, 'claude');
+  fs.writeFileSync(
+    claudeStub,
+    [
+      '#!/usr/bin/env bash',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
+      'cat >/dev/null',
+      `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: override allowlist")`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+
+  const env = envWithout(['WORKER_CMD'], {
+    ANTHROPIC_API_KEY: 'dummy-key',
+    PATH: `${stubDir}:${process.env.PATH}`,
+    WORKER_ALLOWED_TOOLS: 'Read Edit',
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvCapturePath, 'utf8').trim();
+  assert.equal(argv.split('\n').pop(), 'Read Edit', 'WORKER_ALLOWED_TOOLSの値がそのまま--allowed-toolsへ渡ること');
+});
+
 // --- (b)/(c)/(d) claude launch_worker: 異常系はすべてblocked + lease解放 + exit非0非3 ------
 
 test('claude launch_worker: WORKER_CMD起動失敗はblocked報告(human_escalation_requested=true)+lease解放+非0非3で返す（silent passしない）', async (t) => {

@@ -13,6 +13,15 @@ ADAPTER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 SCRIPTS_DIR="$ADAPTER_DIR/../scripts"
 REPO_ROOT="$(cd -- "$ADAPTER_DIR/../.." &>/dev/null && pwd)"
 
+# launch_worker の既定起動系（WORKER_CMD 未指定時）が claude CLI へ渡す --allowed-tools の既定値
+# （ワーカーの正規責務範囲——自worktree内ファイル編集、自branchへのcommit/push、Draft PR作成
+# （gh pr create、specセグメントのみ想定）、テスト実行、report/lease/checkpoint 各スクリプト実行——
+# のみに限定したallowlist）。列挙外はヘッドレスで拒否される（安全側 fail）。無制限自動承認
+# （--permission-mode bypassPermissions）は既定に用いない。env WORKER_ALLOWED_TOOLS で完全上書き可能
+# （grep可能な名前付き変数として定義。採用理由・却下案との比較は DESIGN.md（ISSUE-183）
+# 「権限付与方式の設計判断」参照）。
+WORKER_ALLOWED_TOOLS_DEFAULT='Read Grep Glob Edit Write MultiEdit Bash(git add:*) Bash(git commit:*) Bash(git push:*) Bash(git status:*) Bash(git diff:*) Bash(git rev-parse:*) Bash(git log:*) Bash(git show:*) Bash(git fetch:*) Bash(git restore:*) Bash(gh pr create:*) Bash(gh pr view:*) Bash(gh pr edit:*) Bash(gh pr comment:*) Bash(gh issue comment:*) Bash(.agent-skill-chain/scripts/*) Bash(bash .agent-skill-chain/scripts/*) Bash(node bin/agents-md.js:*) Bash(npm run:*) Bash(npm test:*) Bash(npm ci:*) Bash(mkdir:*) Bash(ls:*)'
+
 # agent-skill-chain CLI を解決して実行する（.agent-skill-chain/scripts/gate-*.sh と同じ優先順位）。
 _asc_cli() {
   if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
@@ -205,6 +214,8 @@ launch_gate_reviewer() {
 #             1=引数・lease取得前のエラー（lease未取得または解放済み、report未発行）。
 # env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、実値非ログ出力）、
 #      WORKER_CMD（起動系上書き。テストではecho等のモックコマンドに完全差し替え可能）、
+#      WORKER_ALLOWED_TOOLS（WORKER_CMD未指定時の既定claude起動が使う --allowed-tools 値の上書き。
+#      既定は WORKER_ALLOWED_TOOLS_DEFAULT、ワーカーの正規責務範囲に限定したallowlist）、
 #      WORKER_TIMEOUT_SEC（既定1800）、WORKER_RENEW_INTERVAL_SEC（leaseのrenewループ間隔、既定900）。
 launch_worker() {
   local issue_id="${1:-}" segment="${2:-}"
@@ -266,13 +277,18 @@ launch_worker() {
     return
   fi
 
-  # 起動系。WORKER_CMD で上書き可能（テスト用モック境界）。既定は claude CLI headless
-  # （書込みツールを許可する非対話フラグ。正確なフラグは実機検証のうえ確定するスコープ外事項——
-  # WORKER_CMDによる完全上書きが可能なため、この確定の遅延はlaunch_worker自体の契約に影響しない）。
+  # 起動系。WORKER_CMD で上書き可能（テスト用モック境界）。既定は claude CLI headless を
+  # --allowed-tools（責務スコープ allowlist、WORKER_ALLOWED_TOOLS）で起動する。無制限自動承認
+  # （--permission-mode bypassPermissions）・編集のみ自動承認（acceptEdits、Bashは都度承認＝
+  # ヘッドレスで事実上停止）のいずれも既定に用いない——既定は「列挙外は拒否」の安全側 fail を
+  # 保ったまま、ワーカーの正規責務範囲（自branchへのcommit/push・Draft PR作成・テスト実行・
+  # report/lease/checkpoint各スクリプト実行・自worktree内ファイル編集）だけを非対話で完走できる
+  # ようにする（DESIGN.md（ISSUE-183）「採用案 候補A」）。
   local worker_cmd="${WORKER_CMD:-}"
   if [[ -z "$worker_cmd" ]]; then
     if command -v claude >/dev/null 2>&1; then
-      worker_cmd="claude -p --output-format text --permission-mode acceptEdits"
+      local worker_allowed_tools="${WORKER_ALLOWED_TOOLS:-$WORKER_ALLOWED_TOOLS_DEFAULT}"
+      worker_cmd="claude -p --output-format text --allowed-tools \"$worker_allowed_tools\""
     else
       _fail_blocked "claude CLI が見つからず WORKER_CMD も未設定です"
       return

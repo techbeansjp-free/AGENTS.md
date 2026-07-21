@@ -51,6 +51,28 @@ for (const name of SCHEMA_NAMES) {
   });
 }
 
+test("validateAgainstSchema('state'): title/requestを含むstateは検証を通過する（ISSUE-183 AC-3）", () => {
+  const doc = loadSchemaDoc('state');
+  const withIssueBody = {
+    ...structuredClone(doc.examples[0]),
+    title: '使い捨て検証用issue',
+    request: 'launch_workerの実機再検証用にspec segmentを1つ完走させる。\n複数行も許容する。',
+  };
+  const outcome = validateAgainstSchema('state', withIssueBody);
+  assert.deepEqual(outcome, { valid: true, errors: [] });
+});
+
+test("validateAgainstSchema('state'): title/requestを持たない既存stateは引き続き検証を通過する（後方互換、ISSUE-183 AC-3）", () => {
+  const doc = loadSchemaDoc('state');
+  const withoutIssueBody = structuredClone(doc.examples[0]);
+  assert.ok(
+    !('title' in withoutIssueBody) && !('request' in withoutIssueBody),
+    '前提: examples[0]はtitle/requestを持たない既存形式であること',
+  );
+  const outcome = validateAgainstSchema('state', withoutIssueBody);
+  assert.deepEqual(outcome, { valid: true, errors: [] });
+});
+
 test('validateAgainstSchema: 実物の config/agent-skill-chain.yaml をそのまま渡すとvalidになる', () => {
   const configPath = resolveAsset(path.join('config', 'agent-skill-chain.yaml'));
   const config = readYamlFile(configPath);

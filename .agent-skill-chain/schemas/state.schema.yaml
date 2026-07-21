@@ -12,6 +12,18 @@ properties:
   id:
     type: string
     pattern: '^ISSUE-[0-9]+$'
+  title:
+    type: string
+    description: >
+      Issueのタイトル（短い識別子）。任意。Coordination Backendがローカルの場合に`issue start`へ
+      --titleを渡すと永続化される（ISSUE-183）。GitHubモードではIssue本文をGitHub API経由で
+      取得できるため未使用。
+  request:
+    type: string
+    description: >
+      Issueの要求内容（本文、「何を作るか」）。複数行可。任意。Coordination Backendがローカルの
+      場合に`issue start`へ--request/--request-fileを渡すと永続化される（ISSUE-183）。GitHubモード
+      では未使用。
   autonomy:
     type: string
     enum: [gated, full]
@@ -77,3 +89,17 @@ examples:
       profile: standard
       conformance: {verdict: pass, evidence: []}
       falsification: {verdict: pass, counterexamples_tested: []}
+  - schema_version: agent-skill-chain/state/v1
+    id: ISSUE-124
+    title: 使い捨て検証用Issue
+    request: |
+      launch_workerの実機再検証用に、spec segmentを1つ完走させる。
+    autonomy: gated
+    risk: normal
+    review_profile: standard
+    segment: {id: spec, status: pending, blockers: []}
+    gate:
+      id: spec
+      profile: standard
+      conformance: {verdict: pending, evidence: []}
+      falsification: {verdict: pending, counterexamples_tested: []}
