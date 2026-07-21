@@ -13,6 +13,8 @@
 
 このリポジトリ（`techbeansjp-free/AGENTS.md`）が目指す「完全自走（人間が介在しなくても、真に危険な場合以外は止まらない）」の end-to-end 実証は、先行 Issue #180 の独立検証（VALIDATION.md、AC-6/AC-7/AC-8）において **未達成** で確定した。本物の `claude` CLI（headless・認証あり・CLI 利用可という正常な前提）で `.agent-skill-chain/adapters/claude.sh` の `launch_worker` を人間介在なく 1 セグメント完走させる実機検証を複数回試みたが、認証や CLI 可用性ではなく以下の構造的な不足により達成できなかった。本 Issue はこの根本原因を恒久的に解消し、AC-6/AC-7/AC-8 相当を改めて実機で成立させることを目的とする。
 
+> **本 Issue #183 の実行結果（独立検証確定後の追記）**: 中核である権限モードの責務スコープ allowlist 化（要件1・AC-1/AC-2）とローカルバックエンドの issue 本文スキーマ拡張・供給（要件3〜5・AC-3/AC-4/AC-5）は達成した。一方で AC-6/AC-7/AC-8（`launch_worker` 自身の完走検知）は本 Issue の実行結果としては **未達成（FAIL）** で確定した。原因は権限モードではなく、後述「既知の未達成事項」の 2 つの新規バグ（`repoRoot()` の worktree 分裂・認証チェックの誤検知）である。これら 2 バグの恒久解消と AC-6/AC-7/AC-8 相当の再検証は後継 **Issue #185** へ切り出し、本 Issue #183 は本 SPEC 改定の上でクローズする（先行 Issue #180 で達成できなかった AC を後続へ切り出してクローズした前例に倣う）。詳細は本文「既知の未達成事項」節を参照。
+
 根本原因（成果物の自己完結性の原則に従い、外部参照に意味を委譲せず本文に明記する）：
 
 1. **既定 `WORKER_CMD` の権限モード不足**: `launch_worker` は `WORKER_CMD` 未指定時、`claude` CLI を `claude -p --output-format text --permission-mode acceptEdits` で起動する。`acceptEdits` はファイル編集ツール（Edit/Write 等）を非対話で自動承認するが、`git push` 等の Bash／ネットワーク操作は非対話ヘッドレス実行では自動承認しない。そのため spec worker は `SPEC.md` 作成・`git commit` までは人間介在なく進むが、`git push` で承認待ちのまま停止し、`launch_worker` が完了未検知としてフェイルセーフ（`report_status blocked` の `human_escalation_requested` 扱い、終了コード 2）へ倒れた。認証あり・CLI 利用可という正常経路でのこの発火は、AC-8（正常経路で `human_required` が誤発火しないこと）の観点で「誤発火」に該当し、完走（AC-6）・完走証跡（AC-7）も成立しない。なお、フェイルセーフ機構自体は「`git push` 続行不能」という実ブロッカーに対して正しく安全側へ倒れており、機構の欠陥ではない。
@@ -135,9 +137,32 @@ Issue #183 本文（背景・対象範囲 1〜3・成功基準）に基づく要
 - Then: 既存テストが全て pass し、新規追加テスト（AC-3/AC-4/AC-9 の自動化部分等を追加した場合はそれも含む）も全て pass する（regression なし）ことを実測確認する
 - 検証方法見込み: `automated`
 
+## 既知の未達成事項（AC-6/AC-7/AC-8 と Issue #185 への切り出し）
+
+独立検証（VALIDATION.md、検証対象 `target_sha=7bad757`）が確定した本 Issue #183 の実行結果を、成果物の自己完結性の原則に従い本 SPEC 内へ要約する。外部参照は由来提示に留め、意味は本文へ記載する。AC-6/AC-7/AC-8 の定義自体は、VALIDATION.md が記録した実測結果・追跡可能性（I7）を保つため削除せず上記「受入条件」に残す。
+
+### 達成（本 Issue #183 の完了条件）
+
+- **要件1・AC-1/AC-2**: `launch_worker` の既定権限モードを、無制限 `bypassPermissions` ではなくワーカー責務スコープの allowlist（`claude` CLI の `--allowed-tools`。自 branch の `git commit`／`git push`・`gh pr create`・テスト実行・`.agent-skill-chain/scripts/*`・Edit/Write 等に限定）へ変更した。本物の `claude` CLI（headless）で自 branch への `git commit`／`git push` が人間の追加承認なく完走することを実機で確認し、先行 Issue #180 で確定していた「`git push` の壁（`acceptEdits` による承認待ち停止）」がこの変更で解消されたことを裏付けた。
+- **要件3〜5・AC-3/AC-4/AC-5**: ローカルバックエンドの `state.schema.yaml` に issue タイトル・要求内容（`title`／`request`、いずれも任意・後方互換）フィールドを追加し、`issue start` での受理・永続化、`segment start` 経由でのワーカーへの本文供給を実装・検証した。
+- **要件8・AC-10**: 既存テストスイート全件（401/401 pass）・regression なし。
+
+### 未達成（本 Issue #183 の実行結果としては FAIL）
+
+- **AC-6**（`launch_worker` 自身の 1 セグメント完走検知）・**AC-7**（その完走証跡）・**AC-8**（正常経路で `human_required` が誤発火しないこと）は、VALIDATION.md で `result: fail` に確定した。
+- 原因は本 Issue の中核である**権限モード（allowlist 方式）ではない**——allowlist 方式は実機で有効性が確認でき、ワーカーの実質作業（SPEC.md 作成・`git commit`・`git push`・`report status completed`）自体は人間介在なく完走した。未達なのは `launch_worker` オーケストレーション層の「完走検知」であり、権限モードとは独立した以下の 2 つの新規バグに起因する:
+  1. **`repoRoot()` の worktree 分裂**: `src/lib/paths.ts` の `repoRoot()` が `fs.existsSync(path.join(dir, '.git'))` で祖先を判定するため、git worktree のルートが持つ `.git`「ファイル」（gitdir ポインタ）にもマッチしてしまう。その結果、ワーカーが worktree 内から書いた状態ファイル（reports 等）が worktree ローカルへ分裂して書かれ、メイン作業ツリー側で走る `launch_worker` からは worker report が見えず、完走済みでも「report がありません」と誤検知して blocked へ倒れた（安全機構の正常動作ではなくパス解決の実装バグによる誤検知）。
+  2. **認証チェックの誤検知**: `.agent-skill-chain/adapters/claude.sh` の `launch_worker`（および `launch_gate_reviewer`）の認証チェックが `ANTHROPIC_API_KEY`／`CLAUDE_CODE_OAUTH_TOKEN` の env 非空のみで判定するため、キーチェーン等のセッション認証で動く環境（本検証環境が該当。`claude -p` が env 無しで正常応答することを確認済み）を誤って認証欠如と判定する。
+
+### 恒久解消の切り出し先（Issue #185）
+
+上記 2 バグの恒久修正と AC-6/AC-7/AC-8 相当の再検証は、後継 **Issue #185**（`techbeansjp-free/AGENTS.md`、OPEN。内容は `gh api repos/techbeansjp-free/AGENTS.md/issues/185` で確認可）へ切り出した。本 Issue #183 は本 SPEC 改定の上でクローズする。これは先行 Issue #180 で、達成できなかった AC を後続 Issue へ切り出したうえで当該 Issue をクローズした前例に倣った措置である。
+
 ## スコープ外
 
 この Issue では対応しない事項を明記する。曖昧語・対象外欠落は仕様ゲートの反証観点で指摘される。
+
+- **`launch_worker` 自身の完走検知（AC-6/AC-7/AC-8 の "達成"）の恒久実現**: 本 Issue #183 のスコープにおける「完了」の意味は、(a) `launch_worker` の既定権限モードを責務スコープ allowlist へ変更し、それが実機で `git push` 等の壁を解消することを確認したこと（要件1・AC-1/AC-2）、および (b) ローカルバックエンドの issue 本文スキーマ拡張・供給経路の実装（要件3〜5・AC-3/AC-4/AC-5）である。AC-6/AC-7/AC-8 が問う `launch_worker` 自身の完走検知は、Issue #180 由来の「`git push` の壁」の解消までは実機で確認できたが、その先の別バグ（前節「既知の未達成事項」の 2 件——`repoRoot()` の worktree 分裂・認証チェックの誤検知）により、本 Issue の完了条件そのものではない。当該 2 バグの恒久解消と AC-6/AC-7/AC-8 相当の再検証は Issue #185 の担当とする。
 
 - **GitHub 側のライブ設定変更（ruleset／branch protection）**: `main`・統合ブランチの required check 機械強制は先行 Issue #180 で実施済み・完了済みであり、本 Issue では変更しない。
 - **権限モード緩和と外側の安全分類器との衝突の根本解決**: 本文根本原因 3 の副次的現象について、権限設計・再検証手順の設計時に考慮し回避策の検討・提示はするが（要件2）、外側セッションの安全分類器自体の変更・無効化は行わない。
