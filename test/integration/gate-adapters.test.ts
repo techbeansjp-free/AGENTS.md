@@ -115,13 +115,18 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
 });
 
-test('claude launch_gate_reviewer: 認証未設定は安全側（human_required）へ倒し exit が 0 でも 3 でもない', async (t) => {
+test('claude launch_gate_reviewer: 認証未設定かつ実疎通確認も失敗する場合は安全側（human_required）へ倒し exit が 0 でも 3 でもない（真の認証欠如、regressionなし）', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
 
-  // Given: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 未設定。
-  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], { GATE_REVIEWER_RETRY_INTERVAL_SEC: '0' });
+  // Given: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 未設定。Issue #185で認証チェックが
+  // env非空→claude auth statusの実疎通フォールバックの2段化になったため、CLAUDE_AUTH_PROBE_CMD=false
+  // でプローブを常に失敗させ、実行機のclaude CLIの実際の認証状態に依存せずhermeticにする。
+  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+    CLAUDE_AUTH_PROBE_CMD: 'false',
+  });
 
   // When: 起動する。
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
@@ -130,6 +135,28 @@ test('claude launch_gate_reviewer: 認証未設定は安全側（human_required�
   assert.notEqual(res.status, 0);
   assert.notEqual(res.status, 3);
   assert.equal(readFinal(reportPath), 'human_required');
+});
+
+// Issue #185 AC-4: env認証情報が無くても、実疎通確認（CLAUDE_AUTH_PROBE_CMDでモック）が成功すれば
+// 認証欠如として誤判定せず起動処理へ進むことを検証する。
+test('claude launch_gate_reviewer: env認証情報が無くてもCLAUDE_AUTH_PROBE_CMDの実疎通確認が成功すれば認証欠如と誤判定せず起動処理へ進む（AC-4）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  // Given: env認証情報は無いが、実疎通確認（CLAUDE_AUTH_PROBE_CMD）はexit0（認証済み）を模す。
+  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${stubVerdict}'`,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  // Then: 認証欠如のfail-safe（human_required）は発火せず、通常の判定経路（final=approved）になる。
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
 });
 
 test('claude launch_gate_reviewer: レビュア起動失敗は human_required へ倒す（silent pass しない）', async (t) => {

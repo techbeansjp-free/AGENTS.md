@@ -22,6 +22,40 @@ REPO_ROOT="$(cd -- "$ADAPTER_DIR/../.." &>/dev/null && pwd)"
 # 「権限付与方式の設計判断」参照）。
 WORKER_ALLOWED_TOOLS_DEFAULT='Read Grep Glob Edit Write MultiEdit Bash(git add:*) Bash(git commit:*) Bash(git push:*) Bash(git status:*) Bash(git diff:*) Bash(git rev-parse:*) Bash(git log:*) Bash(git show:*) Bash(git fetch:*) Bash(git restore:*) Bash(gh pr create:*) Bash(gh pr view:*) Bash(gh pr edit:*) Bash(gh pr comment:*) Bash(gh issue comment:*) Bash(.agent-skill-chain/scripts/*) Bash(bash .agent-skill-chain/scripts/*) Bash(node bin/agents-md.js:*) Bash(npm run:*) Bash(npm test:*) Bash(npm ci:*) Bash(mkdir:*) Bash(ls:*)'
 
+# Issue #185: launch_worker/launch_gate_reviewer 共通の認証チェック（2段化）。
+# (a) 高速パス: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN のいずれかが非空なら authed とみなす
+#     （従来どおり実値は非ログ）。
+# (b) フォールバック: いずれのenvも無い場合のみ、claudeが実際に認証済みかを軽量に確認する実疎通確認
+#     （既定 `claude auth status`。非対話・認証状態のみ確認・モデル呼び出しなし・トークン消費なし）を
+#     行い、終了コード0を authed とみなす。CLAUDE_AUTH_PROBE_CMD で完全上書き可能（テストのモック境界。
+#     WORKER_CMD/GATE_REVIEWER_CMDと同型）。claude 不在かつ CLAUDE_AUTH_PROBE_CMD 未指定なら
+#     真の認証欠如として1を返す。プローブの出力（`auth status --json`はアカウント情報を含みうる）は
+#     stdout/stderrとも非ログ（呼び出し元で2>/dev/null等により捨てる）。
+# 採用理由・却下案との比較はDESIGN.md（ISSUE-185）「認証チェック修正方式の設計判断」参照。
+# env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（高速パス）、
+#      CLAUDE_AUTH_PROBE_CMD（フォールバックプローブの上書き。既定は`claude auth status`）、
+#      CLAUDE_AUTH_PROBE_TIMEOUT_SEC（プローブのtimeout秒数、既定20）。
+# 終了コード: 0=authed / 1=真の認証欠如（env無し・プローブ失敗またはclaude不在）。
+_claude_auth_ok() {
+  if [[ -n "${ANTHROPIC_API_KEY:-}" || -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    return 0
+  fi
+  local probe="${CLAUDE_AUTH_PROBE_CMD:-}"
+  if [[ -z "$probe" ]]; then
+    if command -v claude >/dev/null 2>&1; then
+      probe='claude auth status'
+    else
+      return 1
+    fi
+  fi
+  local t="${CLAUDE_AUTH_PROBE_TIMEOUT_SEC:-20}"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$t" bash -c "$probe" >/dev/null 2>&1
+  else
+    bash -c "$probe" >/dev/null 2>&1
+  fi
+}
+
 # agent-skill-chain CLI を解決して実行する（.agent-skill-chain/scripts/gate-*.sh と同じ優先順位）。
 _asc_cli() {
   if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
@@ -89,13 +123,16 @@ report_status() {
 # read-only 契約（ADR-1 / AGENTS.md §役割・権限）: レビュアには書込みツールを一切与えない
 #   （claude CLI は `--allowed-tools ''` で無ツール起動）。gate-report への書込みは trusted な
 #   `agent-skill-chain gate record-verdict`（本アダプタ経由）のみが行う。
-# I8 安全側ラチェット: 認証未設定・CLI 不在・起動失敗・timeout・verdict 空・結線失敗はいずれも
-#   final=human_required を書いて非ゼロ（!=3）で返す（決して approve/success へ倒さない）。
-# 認証情報（ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN）は実値をログ・stdout に出さない。
+# I8 安全側ラチェット: 認証未設定（かつ実疎通確認も失敗）・CLI 不在・起動失敗・timeout・verdict 空・
+#   結線失敗はいずれも final=human_required を書いて非ゼロ（!=3）で返す（決して approve/success へ倒さない）。
+# 認証情報（ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN）・実疎通確認（claude auth status）の出力は
+#   実値をログ・stdout に出さない（Issue #185 _claude_auth_ok）。
 #
 # 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
 # 終了コード: 0=判定完了 / 2（!=0,!=3）=error（final=human_required 書込み後）。
-# env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証）、GATE_REVIEWER_CMD（レビュア実行系の上書き）、
+# env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、高速パス）、
+#      CLAUDE_AUTH_PROBE_CMD | CLAUDE_AUTH_PROBE_TIMEOUT_SEC（認証の実疎通フォールバック、_claude_auth_ok参照）、
+#      GATE_REVIEWER_CMD（レビュア実行系の上書き）、
 #      GATE_REVIEWER_TIMEOUT_SEC（既定900）、GATE_REVIEWER_RETRIES（既定3）、GATE_REVIEWER_RETRY_INTERVAL_SEC（既定30）。
 launch_gate_reviewer() {
   local issue_id="${1:-}" gate_id="${2:-}" profile="${3:-}" report_path="${4:-}" target_sha="${5:-}"
@@ -123,9 +160,10 @@ launch_gate_reviewer() {
     return 2
   }
 
-  # 認証（実値はログ・stdout に出さない）。未設定はフェイルセーフ。
-  if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
-    _fail_safe "認証情報（ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN）が未設定です"
+  # 認証（実値はログ・stdout に出さない）。env非空の高速パス→claude auth statusの実疎通フォールバック
+  # の2段判定（Issue #185 _claude_auth_ok）。真に認証が欠如している場合のみフェイルセーフする。
+  if ! _claude_auth_ok; then
+    _fail_safe "認証情報が未設定かつ実疎通確認にも失敗しました（env未設定・claude auth status失敗/不在）"
     return
   fi
 
@@ -212,7 +250,8 @@ launch_gate_reviewer() {
 # 引数: <issue_id> <segment>
 # 終了コード: 0=worker完了 / 2（!=0,!=3）=error（blocked報告・lease解放済み）/
 #             1=引数・lease取得前のエラー（lease未取得または解放済み、report未発行）。
-# env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、実値非ログ出力）、
+# env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、高速パス、実値非ログ出力）、
+#      CLAUDE_AUTH_PROBE_CMD | CLAUDE_AUTH_PROBE_TIMEOUT_SEC（認証の実疎通フォールバック、_claude_auth_ok参照）、
 #      WORKER_CMD（起動系上書き。テストではecho等のモックコマンドに完全差し替え可能）、
 #      WORKER_ALLOWED_TOOLS（WORKER_CMD未指定時の既定claude起動が使う --allowed-tools 値の上書き。
 #      既定は WORKER_ALLOWED_TOOLS_DEFAULT、ワーカーの正規責務範囲に限定したallowlist）、
@@ -271,9 +310,10 @@ launch_worker() {
     return 2
   }
 
-  # 認証未設定はフェイルセーフ（実値はログ・stdoutに出さない）。
-  if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
-    _fail_blocked "認証情報（ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN）が未設定です"
+  # 認証（実値はログ・stdoutに出さない）。env非空の高速パス→claude auth statusの実疎通フォールバック
+  # の2段判定（Issue #185 _claude_auth_ok）。真に認証が欠如している場合のみフェイルセーフする。
+  if ! _claude_auth_ok; then
+    _fail_blocked "認証情報が未設定かつ実疎通確認にも失敗しました（env未設定・claude auth status失敗/不在）"
     return
   fi
 
