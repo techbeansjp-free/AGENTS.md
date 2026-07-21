@@ -18,9 +18,9 @@ target_dir: 更新先リポジトリのルートディレクトリ（省略時�
 `;
 
 /**
- * 02_設計§3.2: init済みプロジェクトの正本アセット（.agent-skill-chain/project/を除く）を
- * 現行パッケージバージョンへミラー更新する。NAMESPACED_ENTRIES定数にprojectを含めないことで、
- * project/への不可侵性を構造的に保証する（ADR-1関連、02_設計§3.2.4）。
+ * init済みプロジェクトの正本アセット（.agent-skill-chain/project/を除く）を現行パッケージ
+ * バージョンへミラー更新する。NAMESPACED_ENTRIES定数にprojectを含めないことで、
+ * project/への不可侵性を構造的に保証する（ADR-1関連）。
  */
 export async function upgrade(args: string[]): Promise<number> {
   return guard(() => {

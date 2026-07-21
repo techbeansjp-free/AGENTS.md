@@ -14,7 +14,7 @@ export interface WorktreeEntry {
 
 /**
  * worktree の正本は `git worktree list --porcelain` であり、.worktrees/ 配下の
- * ディレクトリ走査ではない（standards/GIT_CONVENTIONS.md §worktreeの正本）。
+ * ディレクトリ走査ではない（standards/GIT_CONVENTIONS.md が定めるworktreeの正本の定義）。
  */
 export function listWorktrees(repoRoot: string): WorktreeEntry[] {
   const result = git(['worktree', 'list', '--porcelain'], repoRoot);
@@ -130,11 +130,12 @@ export function hasUnpushedCommits(worktreePath: string, branch: string): boolea
 }
 
 /**
- * config/agent-skill-chain.yaml の worktree.path_pattern に issue番号を埋め込んだ正規表現で
- * `git worktree list --porcelain` の実体を照合する（standards/GIT_CONVENTIONS.md §worktreeの正本）。
+ * config/agent-skill-chain.yaml の worktree.path_pattern に Issue番号を埋め込んだ正規表現で
+ * `git worktree list --porcelain` の実体を照合する（standards/GIT_CONVENTIONS.md が定める
+ * worktreeの正本の定義）。
  *
  * CI（actions/checkout）は `.worktrees/` 型レイアウトを作らず、単一の通常チェックアウトのみを行うため
- * 上記照合は常に空振りする。この場合、単一チェックアウト自体がそのissueの作業対象であるとみなし
+ * 上記照合は常に空振りする。この場合、単一チェックアウト自体がそのIssueの作業対象であるとみなし
  * 以下の順でフォールバックする（いずれもAGENTS.md I4 分離不変条件と矛盾しない。単一チェックアウト =
  * そのブランチの作業状態そのものであるため）。
  *

@@ -38,8 +38,8 @@ function managedRelativePaths(targetDir: string): string[] {
 }
 
 /**
- * 02_設計§3.3: 安全確認（未commit差分なし・残存worktreeなし）を経てから、init/upgradeが
- * 管理する一式（project/を除く）を削除する。--force は提供しない（意図的な摩擦、ADR系設計方針）。
+ * 安全確認（未commit差分なし・残存worktreeなし）を経てから、init/upgradeが管理する一式
+ * （project/を除く）を削除する。--force は提供しない（意図的な摩擦、ADR系設計方針）。
  */
 export async function uninstall(args: string[]): Promise<number> {
   return guard(() => {

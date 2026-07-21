@@ -18,8 +18,8 @@ target_dir: 導入先リポジトリのルートディレクトリ（省略時�
 `;
 
 /**
- * 02_設計§3.1: setup（bare）が持つローカルファイル操作部分（gh API呼び出しを伴わない部分）を
- * 吸収した新設コマンド。GitHub API（labels/ruleset）には触れない（ADR-1）。
+ * setup（bare）が持つローカルファイル操作部分（gh API呼び出しを伴わない部分）を吸収した新設
+ * コマンド。GitHub API（labels/ruleset）には触れない（ADR-1）。
  */
 export async function init(args: string[]): Promise<number> {
   return guard(() => {
@@ -44,8 +44,8 @@ export async function init(args: string[]): Promise<number> {
       conflictCheckedEntries.push({ src, dest: path.join(targetDir, ASSET_NAMESPACE, entry) });
     }
 
-    // 02_設計§3.1.4/03_実装計画T2.2.3: 衝突検出時は他ファイルへの書込みも一切行わない
-    // （部分適用しない）。そのため、実書き込みの前に全対象を dryRun:true で先読み検査する
+    // 衝突検出時は他ファイルへの書込みも一切行わない（部分適用しない）。
+    // そのため、実書き込みの前に全対象を dryRun:true で先読み検査する
     // （Issue #169 F1: 逐次書込みだと衝突検出前のエントリが既にディスクへ書かれてしまう不備の是正）。
     if (!dryRun) {
       for (const { src, dest } of conflictCheckedEntries) {

@@ -27,7 +27,7 @@ const ON_WARNING = [
 ].join('\n');
 
 /**
- * 02_設計§3.4・ADR-2/ADR-4: `.claude/settings.json`のPreToolUse hookエントリを配線/非配線する。
+ * `.claude/settings.json`のPreToolUse hookエントリを配線/非配線する（ADR-2/ADR-4）。
  * matcherは`tool_name=="Bash"`固定（ツール名の一律allow/denyリストにしない狭い安全網）。
  */
 export async function enforce(args: string[]): Promise<number> {

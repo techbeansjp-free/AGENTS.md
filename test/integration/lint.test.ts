@@ -123,29 +123,19 @@ test('lint vocab: 禁止語自体がパス形式の文字列（.agent-skill-chai
   );
 });
 
-test('lint vocab: 識別子文脈（YAMLキー・flow-sequence要素・コード識別子・CLIサブコマンド・外部語彙許可リスト）としての禁止語利用は誤検出されない（ISSUE-178 AC-1）', async (t) => {
+test('lint vocab: 識別子文脈（コード識別子・外部語彙許可リスト）としての禁止語利用は全ファイル種別で誤検出されない（Issue #187 ADR-1: 拡張子に依らず共通で維持）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
-  // Given: docs/GLOSSARY.md で禁止語と定義されている「issue」（小文字）を、識別子文脈
-  // （YAMLキー・flow-sequence要素・コード識別子・CLIサブコマンド・外部語彙許可リスト）の
-  // それぞれで用いた行を用意する。
+  // Given: docs/GLOSSARY.md で禁止語と定義されている「issue」（小文字）を、コード識別子文脈・
+  // 外部語彙許可リストのそれぞれで用いた行を用意する（.md 散文中でも維持される文脈）。
   const file = path.join(repo.dir, 'identifier-context.md');
   fs.writeFileSync(
     file,
     [
-      // YAMLキー文脈: 「行頭からの空白＋任意の`- `」の直後に出現し、直後（空白を挟んでよい）が`:`。
-      'issue: 単独のYAMLキー文脈',
-      '  issue: 字下げされたYAMLキー文脈',
-      '- issue: リスト項目のキーとしてのYAMLキー文脈',
-      // flow-sequence要素: 直前（空白を挟んでよい）が`[`または`,`、直後（同様）が`,`または`]`。
-      'flow-sequence要素: inputs: [issue, wip] のように書く。',
       // コード識別子文脈: snake_case/camelCaseの複合識別子の一部。
       'コード識別子文脈（snake_case）: issue_id フィールドを参照する。',
       'コード識別子文脈（camelCase）: issueId フィールドを参照する。',
-      // CLIサブコマンド文脈: 独立したシェルトークンとして、既知verbと隣接する。
-      'CLIサブコマンド文脈（動詞が後）: agent-skill-chain issue start を実行する。',
-      'CLIサブコマンド文脈（動詞が前）: acquire issue のように書く（対称チェック）。',
       // 外部語彙の明示許可リスト: 改名不可の既知の完全一致トークン。
       '外部語彙許可リスト: blank_issues_enabled は GitHub公式スキーマのキー名である。',
     ].join('\n') + '\n',
@@ -157,6 +147,90 @@ test('lint vocab: 識別子文脈（YAMLキー・flow-sequence要素・コード
   // Then: 終了コード0（識別子文脈はいずれも誤検出されない）
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, '');
+});
+
+test('lint vocab: YAMLキー・flow-sequence要素としての禁止語利用は .yaml/.yml でのみ誤検出されない（Issue #187 ADR-1: YAML文脈は真のYAMLファイルに限定適用）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 真の YAML ファイル（.yaml）に、YAMLキー文脈・flow-sequence要素文脈としての禁止語
+  // 「issue」を用いた行を用意する。
+  const file = path.join(repo.dir, 'identifier-context.yaml');
+  fs.writeFileSync(
+    file,
+    [
+      // YAMLキー文脈: 「行頭からの空白＋任意の`- `」の直後に出現し、直後（空白を挟んでよい）が`:`。
+      'issue: 単独のYAMLキー文脈',
+      '  issue: 字下げされたYAMLキー文脈',
+      '- issue: リスト項目のキーとしてのYAMLキー文脈',
+      // flow-sequence要素: 直前（空白を挟んでよい）が`[`または`,`、直後（同様）が`,`または`]`。
+      'flow-sequence要素: inputs: [issue, wip] のように書く。',
+    ].join('\n') + '\n',
+  );
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'identifier-context.yaml'], { cwd: repo.dir });
+
+  // Then: 終了コード0（.yaml では引き続きYAML識別子文脈として除外される）
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+});
+
+test('lint vocab: CLIサブコマンド文脈としての禁止語利用は散文（.md）以外でのみ誤検出されない（Issue #187 ADR-1: CLIサブコマンド文脈は非.mdに限定適用）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 実コマンドを記述するシェルスクリプト（.sh、散文=.md ではない）に、CLIサブコマンド
+  // 文脈としての禁止語「issue」を用いた行を用意する。
+  const file = path.join(repo.dir, 'run.sh');
+  fs.writeFileSync(
+    file,
+    [
+      '#!/bin/sh',
+      '# CLIサブコマンド文脈（動詞が後）: agent-skill-chain issue start を実行する。',
+      '# CLIサブコマンド文脈（動詞が前）: acquire issue のように書く（対称チェック）。',
+    ].join('\n') + '\n',
+  );
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'run.sh'], { cwd: repo.dir });
+
+  // Then: 終了コード0（.md ではないため引き続きCLIサブコマンド文脈として除外される）
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+});
+
+test('lint vocab: 散文（.md）中でYAMLキー風・CLIサブコマンド動詞と偶然共起する禁止語混入は、識別子文脈と誤判定せず違反として検出される（Issue #187 SC-3・Issue #178 finding-1 回帰）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 散文（.md）中に、(a) YAMLキー構文に見える行、(b) CLIサブコマンド動詞ホワイトリスト
+  // （routesから導出される'create'等）に偶然共起する行、をそれぞれ用意する。修正前はいずれも
+  // 識別子文脈と誤判定され検出漏れしていた（Issue #178 finding-1 が指摘した構造的抜け穴）。
+  const file = path.join(repo.dir, 'prose-false-context.md');
+  fs.writeFileSync(
+    file,
+    [
+      'issue: これは会議の議題そのものを指す散文である。',
+      '新しい issue create の手順を説明する。',
+    ].join('\n') + '\n',
+  );
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'prose-false-context.md'], { cwd: repo.dir });
+
+  // Then: 終了コード1、両行とも識別子文脈と誤判定せず違反として検出される（修正前は検出漏れ）
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /prose-false-context\.md:1: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+    'YAMLキー風の散文は.mdではYAML識別子文脈とみなさず検出されること',
+  );
+  assert.match(
+    result.stderr,
+    /prose-false-context\.md:2: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+    'CLIサブコマンド動詞と偶然共起する散文は.mdではCLIサブコマンド文脈とみなさず検出されること',
+  );
 });
 
 test('lint vocab: 識別子文脈に隣接していても、散文としての禁止語混入は引き続き検出される（regressionなし、ISSUE-178 AC-2）', async (t) => {

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { readYamlFile } from './yaml-io.js';
 import { resolveAsset, repoRoot } from './paths.js';
 
-// config/roles.yaml には専用スキーマが無いため（AGENTS.md §ディレクトリ構成参照）、
+// config/roles.yaml には専用スキーマが無いため（AGENTS.md のディレクトリ構成定義を参照）、
 // ここでは必要な形だけを緩く型付けする。
 export interface RolesDocument {
   schema_version: string;

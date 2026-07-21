@@ -52,15 +52,15 @@ const RENEW_USAGE = `
 `;
 
 /**
- * WIP上限（wip.limit、既定3、有効writer lease数で判定）用: ローカルモードで全 issue を横断し
- * issues 配下各issueの lease.yaml のうち expires_at > now の件数を数える。
+ * WIP上限（wip.limit、既定3、有効writer lease数で判定）用: ローカルモードで全 Issue を横断し
+ * `issues` 配下の各 Issue の lease.yaml のうち expires_at > now の件数を数える。
  */
 function countLocalActiveWriterLeases(root: string): number {
-  const issuesDir = path.join(root, 'issues');
-  if (!fs.existsSync(issuesDir)) return 0;
+  const issueLeaseRoot = path.join(root, `issues`);
+  if (!fs.existsSync(issueLeaseRoot)) return 0;
   const now = new Date().toISOString();
   let count = 0;
-  for (const entry of fs.readdirSync(issuesDir, { withFileTypes: true })) {
+  for (const entry of fs.readdirSync(issueLeaseRoot, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const lease = tryReadYamlFile<WriterLease>(leaseFilePath(root, entry.name));
     if (lease && lease.writer_lease.expires_at > now) count++;
@@ -101,7 +101,7 @@ export async function acquire(args: string[]): Promise<number> {
     if (!outcome.valid) return fail(`生成したleaseがスキーマに適合しません: ${outcome.errors.join('; ')}`);
 
     if (config.coordination.backend === 'local') {
-      // ローカルモードは issue 毎に lease.yaml が1ファイルのみのため、この排他生成が同一segment・
+      // ローカルモードは Issue 毎に lease.yaml が1ファイルのみのため、この排他生成が同一segment・
       // 他segmentいずれの競合検査も兼ねる（1 Issueにつき同時1つのwriter leaseのみ許可。DESIGN.md参照）。
       const filePath = leaseFilePath(root, number);
       const now = new Date().toISOString();
@@ -152,8 +152,8 @@ export async function acquire(args: string[]): Promise<number> {
         `既存の writer lease と競合しています: holder=${conflict.lease.writer_lease.holder}, expires_at=${conflict.lease.writer_lease.expires_at}`,
       );
     }
-    // 1 Issueにつき同時1つのwriter leaseのみ許可する（AGENTS.md §役割・権限・writer lease）。
-    // activeLeaseFor は同一segmentのみを判定するため、同issue内の他segmentの有効leaseを
+    // 1 Issueにつき同時1つのwriter leaseのみ許可する（AGENTS.md の役割・権限・writer lease の定義）。
+    // activeLeaseFor は同一segmentのみを判定するため、同一Issue内の他segmentの有効leaseを
     // 別途検出する（segment start が活用する activeLeaseFor 自体のスコープは変更しない）。
     const crossSegmentConflict = activeLeasesFor(number, root).find((c) => c.lease.writer_lease.segment !== segment);
     if (crossSegmentConflict) {

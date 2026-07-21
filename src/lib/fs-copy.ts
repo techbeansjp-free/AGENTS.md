@@ -58,7 +58,7 @@ export function copyTreeFailOnConflict(src: string, dest: string, options: CopyO
 
 /**
  * `.github/` は配布元 `.agent-skill-chain/templates/github/.github/` の展開結果そのもの
- * （AGENTS.md §GitHub配布・マルチAI対応）であり、常に完全一致させるミラーコピー。
+ * （AGENTS.md が定めるGitHub配布・マルチAI対応の方針）であり、常に完全一致させるミラーコピー。
  */
 export function copyTreeMirror(src: string, dest: string, options: CopyOptions = {}): CopyResult[] {
   const { dryRun = false } = options;

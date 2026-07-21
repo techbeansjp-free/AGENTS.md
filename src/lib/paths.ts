@@ -58,7 +58,7 @@ function resolveMainWorktreeRoot(worktreeDir: string, startDir: string): string 
 
 /**
  * 起点から上へ辿り `.git` エントリを持つ最初のディレクトリを、共通（メイン）作業ツリールートとして
- * 返す（ADR-0004）。ローカルバックエンドの coordination 状態・アセット解決の基点。
+ * 返す（ADR-0004）。ローカル Coordination Backend の coordination 状態・アセット解決の基点。
  *
  * `.git` の種別を判定する（fs.existsSync はファイル/ディレクトリを区別しないため用いない）:
  * - ディレクトリ（通常リポジトリのルート）: 従来どおりそのディレクトリを即返す
@@ -113,7 +113,7 @@ export function worktreeRoot(startDir: string = process.cwd()): string {
   return path.resolve(top);
 }
 
-/** AGENTS.md §ディレクトリ構成: standards/・templates/・schemas/・config/・adapters/・scripts/・ci/ は
+/** AGENTS.md のディレクトリ構成定義: standards/・templates/・schemas/・config/・adapters/・scripts/・ci/ は
  * 対象リポジトリ直下ではなく `.agent-skill-chain/` 配下に配置する（root直下は AGENTS.md・CLAUDE.md・
  * README.md・docs/・.github/・.worktrees/ のみ）。docs/ は対象外（root直下のまま）。 */
 export const ASSET_NAMESPACE = '.agent-skill-chain';

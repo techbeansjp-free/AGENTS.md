@@ -25,7 +25,7 @@ export function writeYamlFileAtomic(filePath: string, data: unknown): void {
  * OS提供の排他的ファイル作成（`O_CREAT|O_EXCL|O_WRONLY`相当の `wx` フラグ）で書き込む。
  * 既存ファイルが存在すれば例外を投げずに `false` を返し、成功時は `true` を返す
  * （呼び出し元がread-check-then-writeを介さず、真のcompare-and-setとして扱えるようにするため。
- * ISSUE-176 DESIGN.md §ローカルモードの原子性強化）。`EEXIST` 以外の例外は呼び出し元へ再送出する。
+ * ISSUE-176 DESIGN.md のローカルモード原子性強化の方針）。`EEXIST` 以外の例外は呼び出し元へ再送出する。
  */
 export function writeYamlFileExclusive(filePath: string, data: unknown): boolean {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });

@@ -40,7 +40,7 @@ export async function run(args: string[]): Promise<number> {
       throw new CliError(`ISSUE-${number} に対応する worktree が見つかりません（既に削除済みの可能性）`);
     }
 
-    // standards/GIT_CONVENTIONS.md §worktreeの削除: 4条件をすべて満たした場合のみ削除する。
+    // standards/GIT_CONVENTIONS.md が定めるworktree削除の条件: 4条件をすべて満たした場合のみ削除する。
     const now = new Date().toISOString();
     const activeLease =
       config.coordination.backend === 'local'

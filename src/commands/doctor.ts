@@ -51,7 +51,7 @@ export async function run(args: string[]): Promise<number> {
         checks.push({ label: '.agent-skill-chain/config/agent-skill-chain.yaml', ok: true });
 
         // Issue #174 AC-1: worktree一覧が worktree.path_pattern に適合するかを検査する。
-        // `git worktree list --porcelain` の先頭は常に主worktree自身であり、issue用worktreeの
+        // `git worktree list --porcelain` の先頭は常に主worktree自身であり、Issue用worktreeの
         // 命名規則には決して適合しないため対象から外す（doctorがどのworktreeから実行されても
         // 正しく主worktreeを判定できるよう、cwd由来のrootとのパス比較ではなく先頭要素を除外する）。
         try {
