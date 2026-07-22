@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 
@@ -597,6 +598,161 @@ test('verify adr: フロントマター欠落・必須セクション欠落・�
   assert.match(result.stderr, /必須セクション '## Decision' がありません/);
   assert.match(result.stderr, /必須セクション '## Consequences' がありません/);
   assert.match(result.stderr, /不正な status です: unknown-status/);
+});
+
+// ---- verify adr: finalize経路ガード（Issue #188 AC-7/AC-8） ----
+//
+// status: accepted のADRについて、statusをacceptedへ遷移させたcommitが
+// `adr finalize` CLI（正規経路）の署名（固定commitメッセージ・単一ファイル変更・status行のみの差分）
+// を満たすかを検証する。
+
+function adrFixtureText(status: string): string {
+  return [
+    '# ADR',
+    '',
+    '```yaml',
+    'id: ADR-0001',
+    `status: ${status}`,
+    'title: サンプル決定',
+    'tags: []',
+    'supersedes: []',
+    'superseded-by: null',
+    'deprecated-reason: null',
+    '```',
+    '',
+    '## Context',
+    '',
+    'サンプルの背景・制約。',
+    '',
+    '## Decision',
+    '',
+    'サンプルの決定内容。',
+    '',
+    '## Consequences',
+    '',
+    'サンプルの影響。',
+    '',
+  ].join('\n');
+}
+
+function gitIn(cwd: string, args: string[]): void {
+  execFileSync('git', args, { cwd, stdio: 'pipe' });
+}
+
+/** issue start して worktree に docs/adr/ADR-0001-sample.md（status: proposed）をcommit済みで配置する。 */
+function setupCommittedProposedAdr(): { repo: ReturnType<typeof createTmpRepo>; worktreePath: string; adrRelPath: string } {
+  const repo = createTmpRepo({ backend: 'local' });
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  const adrDir = path.join(worktreePath, 'docs', 'adr');
+  fs.mkdirSync(adrDir, { recursive: true });
+  const adrRelPath = path.join('docs', 'adr', 'ADR-0001-sample.md');
+  fs.writeFileSync(path.join(worktreePath, adrRelPath), adrFixtureText('proposed'));
+  gitIn(worktreePath, ['add', adrRelPath]);
+  gitIn(worktreePath, ['commit', '-m', 'feat(1): ADR-0001をproposedで追加']);
+
+  return { repo, worktreePath, adrRelPath };
+}
+
+test('verify adr (AC-7): commitメッセージがfinalize手順の固定形式と異なるとacceptedへの遷移を手順逸脱として検出する', async (t) => {
+  const { repo, worktreePath, adrRelPath } = setupCommittedProposedAdr();
+  t.after(() => repo.cleanup());
+
+  // Given: adr finalize CLIを経由せず、statusのみをacceptedへ直接書き換え、
+  // 固定形式（chore(adr): ADR-0001 を accepted へ更新）と異なるcommitメッセージでcommitする。
+  const adrAbsPath = path.join(worktreePath, adrRelPath);
+  fs.writeFileSync(adrAbsPath, adrFixtureText('accepted'));
+  gitIn(worktreePath, ['add', adrRelPath]);
+  gitIn(worktreePath, ['commit', '-m', 'manual: accept ADR-0001']);
+
+  // When: verify adr を実行する
+  const result = runCli(['verify', 'adr', adrRelPath], { cwd: worktreePath });
+
+  // Then: 手順逸脱として検出され、終了コード1以上になる
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ADR finalize手順逸脱の疑いがあります/);
+  assert.match(result.stderr, /commitメッセージがfinalize手順の固定形式と一致しません/);
+});
+
+test('verify adr (AC-7): status変更commitが他ファイルも変更していると手順逸脱として検出する', async (t) => {
+  const { repo, worktreePath, adrRelPath } = setupCommittedProposedAdr();
+  t.after(() => repo.cleanup());
+
+  // Given: 固定形式のcommitメッセージを使うが、ADR以外のファイルも同じcommitで変更する
+  // （adr finalizeは常にADRファイル1件のみをcommitする）。
+  const adrAbsPath = path.join(worktreePath, adrRelPath);
+  fs.writeFileSync(adrAbsPath, adrFixtureText('accepted'));
+  fs.writeFileSync(path.join(worktreePath, 'OTHER.md'), '# 無関係な変更\n');
+  gitIn(worktreePath, ['add', adrRelPath, 'OTHER.md']);
+  gitIn(worktreePath, ['commit', '-m', 'chore(adr): ADR-0001 を accepted へ更新']);
+
+  const result = runCli(['verify', 'adr', adrRelPath], { cwd: worktreePath });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ADR finalize手順逸脱の疑いがあります/);
+  assert.match(result.stderr, /ADRファイル以外も変更しています/);
+});
+
+test('verify adr (AC-7): status変更commitが本文（Decision等）も書き換えていると手順逸脱として検出する', async (t) => {
+  const { repo, worktreePath, adrRelPath } = setupCommittedProposedAdr();
+  t.after(() => repo.cleanup());
+
+  // Given: 固定形式のcommitメッセージ・単一ファイル変更だが、statusだけでなく本文（Decision）も
+  // 同じcommitで書き換える（adr finalizeはstatus行のみを書き換える）。
+  const adrAbsPath = path.join(worktreePath, adrRelPath);
+  const rewritten = adrFixtureText('accepted').replace('サンプルの決定内容。', '無断で書き換えた決定内容。');
+  fs.writeFileSync(adrAbsPath, rewritten);
+  gitIn(worktreePath, ['add', adrRelPath]);
+  gitIn(worktreePath, ['commit', '-m', 'chore(adr): ADR-0001 を accepted へ更新']);
+
+  const result = runCli(['verify', 'adr', adrRelPath], { cwd: worktreePath });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ADR finalize手順逸脱の疑いがあります/);
+  assert.match(result.stderr, /status行以外の本文も変更しています/);
+});
+
+test('verify adr (AC-8): adr finalize CLI経由の正規accepted化commitは手順逸脱として誤検知しない', async (t) => {
+  const { repo, worktreePath, adrRelPath } = setupCommittedProposedAdr();
+  t.after(() => repo.cleanup());
+
+  // Given: design gateでADRのcontent digestを承認済みにし、adr finalize CLI経由でacceptedへ更新する
+  // （test/integration/adr-finalize.test.ts と同一の正規経路）。
+  const adrAbsPath = path.join(worktreePath, adrRelPath);
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'design', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const reportPathMatch = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout);
+  assert.ok(reportPathMatch);
+  const reportPath = reportPathMatch![1];
+
+  const sha256 = (content: Buffer) => `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
+  const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+    gate: {
+      conformance: string;
+      falsification: string;
+      final: string;
+      approved_artifacts: { path: string; digest: string }[];
+    };
+  };
+  report.gate.approved_artifacts.push({ path: adrRelPath, digest: sha256(fs.readFileSync(adrAbsPath)) });
+  report.gate.conformance = 'pass';
+  report.gate.falsification = 'pass';
+  report.gate.final = 'approved';
+  fs.writeFileSync(reportPath, stringify(report), 'utf8');
+
+  const gatePublish = runCli(['gate', 'publish', 'ISSUE-1', reportPath], { cwd: repo.dir });
+  assert.equal(gatePublish.status, 0, gatePublish.stderr);
+
+  const finalize = runCli(['adr', 'finalize', 'ISSUE-1', 'ADR-0001'], { cwd: repo.dir });
+  assert.equal(finalize.status, 0, finalize.stderr);
+
+  // When: verify adr を実行する
+  const result = runCli(['verify', 'adr', adrRelPath], { cwd: worktreePath });
+
+  // Then: 正規finalize経由のため手順逸脱として誤検知されない
+  assert.equal(result.status, 0, result.stderr);
 });
 
 // ---- verify ac-coverage ----

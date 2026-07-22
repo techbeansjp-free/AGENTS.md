@@ -9,6 +9,17 @@ import { runCli } from '../helpers/cli.js';
 
 // setup / setup github / setup labels / setup ruleset を bin/agents-md.js 経由で subprocess 実行し、
 // 実際にファイルが実体化すること・gh呼び出しがgh-stub経由で記録されることを検証する。
+//
+// Issue #188 AC-1（local backend時はGitHub固有処理をスキップ）について: 資産コピー段
+// （copyTreeFailOnConflict）は既存内容と異なる内容のconfigが対象targetDirに事前存在すると
+// 非破壊のため必ずCliErrorで中断する仕様であり、これは本Issueのスコープ外の既存挙動である。
+// このため「backend: localを持つ既存configへ向けてbare setupを再実行する」という完全なCLI
+// subprocess経路でのAC-1実測は、事前存在するconfigとの内容衝突により資産コピー段で必ず失敗し
+// githubBundle判定へ到達できない（backend分岐のスキップ動作自体を隠蔽してしまう）。したがって
+// AC-1の中核ロジック（decideGithubBundle の判定分岐）は test/unit/setup.test.ts で
+// 資産コピーを経由しない単体テストとして実測する（SPEC.mdの検証方法見込み: hybrid に対応）。
+// AC-2（github明示時に既存挙動が後退しないこと）は本ファイルの後続テストが実際にCLI
+// subprocess経由でlabels/ruleset適用まで実測しており、githubBundle実行経路の回帰なしを担保する。
 
 function mkScratch(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agent-skill-chain-${prefix}-`));

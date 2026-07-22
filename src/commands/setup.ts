@@ -41,6 +41,43 @@ const RULESET_USAGE = `
   失敗時: 終了コード1以上。gh api のエラーを標準エラー出力に転記。
 `;
 
+export interface GithubBundleDecision {
+  /** true の場合のみ githubBundle()（GitHub固有処理）を実行する。 */
+  run: boolean;
+  /** run: false の場合に summary へ積む、スキップ理由を含む情報行。run: true の場合は空文字列。 */
+  message: string;
+}
+
+/**
+ * Issue #188 AC-1/AC-2: コピー済み config の `coordination.backend` を読み、GitHub固有処理
+ * （テンプレート同期・label作成・ruleset適用）を実行してよいかを判定する純関数。
+ * 副作用（githubBundle の実行）とは分離し、単体テスト可能にする（DESIGN.md 参照）。
+ *
+ * 安全側既定: backend が github と明示されている場合のみ実行する（AC-2、現状維持）。
+ * backend が local の場合・config が存在しない/読めない場合は、無条件に外部副作用を起こさない
+ * ことを優先しスキップする（AC-1）。GitHub固有処理が必要な場合は `setup github` を明示実行するよう促す。
+ */
+export function decideGithubBundle(targetDir: string): GithubBundleDecision {
+  const configPath = path.join(targetDir, ASSET_NAMESPACE, 'config', 'agent-skill-chain.yaml');
+  const skip = (reason: string): GithubBundleDecision => ({
+    run: false,
+    message: `[setup github] スキップ: ${reason}（GitHub固有処理が必要な場合は setup github を明示実行してください）`,
+  });
+  if (!fs.existsSync(configPath)) {
+    return skip('config/agent-skill-chain.yaml が見つかりません');
+  }
+  try {
+    const config = readYamlFile<{ coordination?: { backend?: string } }>(configPath);
+    const backend = config.coordination?.backend;
+    if (backend === 'github') {
+      return { run: true, message: '' };
+    }
+    return skip(`coordination.backend が github ではありません（現在: ${backend ?? '不明'}）`);
+  } catch (error) {
+    return skip(`config/agent-skill-chain.yaml の読込に失敗しました: ${(error as Error).message}`);
+  }
+}
+
 export async function setup(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -67,11 +104,18 @@ export async function setup(args: string[]): Promise<number> {
       summary.push(...results.map((r) => `${r.action}: ${r.path}`));
     }
 
-    const githubResult = githubBundle(targetDir);
-    if (githubResult.status !== 0) {
-      return fail(`setup github で失敗しました:\n${githubResult.message}`);
+    // Issue #188 AC-1/AC-2: コピー済み config の coordination.backend を読み、github 明示時のみ
+    // GitHub固有処理を実行する。local・config不読時は安全側でスキップする。
+    const decision = decideGithubBundle(targetDir);
+    if (decision.run) {
+      const githubResult = githubBundle(targetDir);
+      if (githubResult.status !== 0) {
+        return fail(`setup github で失敗しました:\n${githubResult.message}`);
+      }
+      summary.push(githubResult.message);
+    } else {
+      summary.push(decision.message);
     }
-    summary.push(githubResult.message);
 
     return ok(summary.join('\n'));
   });
