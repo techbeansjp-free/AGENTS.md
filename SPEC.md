@@ -3,73 +3,66 @@
 このファイルは Issue 毎に複製して使う雛形である（セグメント: spec、成果物: SPEC.md、ゲート: spec-gate）。
 -->
 
-# SPEC: release tagのgit committer identity未設定バグ修正
+# SPEC: verify-artifactsのunit_test_results判定がVALIDATION.mdの存在に不適切に結合している
 
-- Issue: `ISSUE-204`
+- Issue: `ISSUE-202`
 - 作成者: `spec_worker`
-- 対象ブランチ: `bugfix/204-release-tag-git-identity`
+- 対象ブランチ: `bugfix/202-unit-test-results-validation-coupling`
 
 ## 目的・背景
 
-`src/commands/release.ts` の `tag()`（`release tag` サブコマンド、`git tag -a` で注釈付きタグを作成しpushする処理）が、GitHub Actionsランナー上でgit committer identity未設定のため「Committer identity unknown」で失敗する。
+`src/commands/verify.ts` の `checkOutputExists()` において、implementationセグメントの必須成果物 `unit_test_results` の充足判定が、本来validationセグメント専用の成果物である `VALIDATION.md` の存在（または履歴上の実績）で代替されている設計上の欠陥を修正する。
 
-Issue #198 で `bump()`（`release bump` サブコマンド）における同種の問題（git author identity未設定でのcommit失敗）を修正し、`ensureGitIdentity()`（未解決の場合のみローカルスコープへ fallback identity `github-actions[bot]` / `github-actions[bot]@users.noreply.github.com` を書き込む）と `isIdentityConfigured()`（`git config <key>` が非空に解決できるかを副作用なく判定する）を導入した。しかしこの修正は `bump()` 関数内にのみ組み込まれ、`tag()` 関数には適用されなかった。`git tag -a`（注釈付きタグ）は `git commit` と同様にcommitter identityの解決を要求するため、`bump()` と同じ失敗モードが `tag()` でも発生する。実際にrelease workflowを再実行したところ、`release bump` は成功したが後続の `release tag` が「Committer identity unknown」エラーで失敗することを確認済みである。
+`.agent-skill-chain/config/segments.yaml` では、成果物の所属セグメントは以下のように定義されている。
 
-本Issueは、`tag()` 関数の呼び出し冒頭で `ensureGitIdentity()` を呼び出すことでこの欠落を解消する、小さなバグ修正である。
+- implementationセグメントの `outputs`: `code`, `unit_test_results`
+- validationセグメントの `outputs`: `acceptance_test_results`, `regression_test_results`
+
+しかし現行の `checkOutputExists()` は、`unit_test_results` / `acceptance_test_results` / `regression_test_results` の3つすべてを同一の条件（`VALIDATION.md` が worktree 内に存在する、または base ブランチからの分岐後にadd/modifyされた履歴がある）で判定している。`VALIDATION.md` はvalidationセグメントでのみ作成されるファイルであるため、**implementationセグメントの完了時点（validationセグメント着手前）では、`unit_test_results` の判定は必ず失敗する**。これは、implementationセグメントの成果物充足を、まだ着手していないはずの後続segmentの成果物の存在で判定するという、セグメント間の依存方向が逆転した状態であり、`.agent-skill-chain/config/segments.yaml` が定めるセグメントの入出力契約と矛盾する。
+
+本欠陥は Issue #200（mainルート直下に混入した SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md の削除、および削除に伴う `verify-artifacts` の自己言及的誤判定の修正）の実装レビュー中に発見された。Issue #200 が導入した `wasEverAddedOrModified()`（現在ファイルが存在しない場合でも、base ブランチからの分岐後にadd/modifyされた履歴があれば「実績あり」とみなすフォールバック）は `unit_test_results` の判定にも適用されているが、これは「存在」の確認手段を1つ追加しただけであり、判定対象が `VALIDATION.md` であるという結合構造自体は変えていない。したがって本欠陥は Issue #200 の変更が導入したものではなく、Issue #200 以前から存在し、Issue #200 の変更後も解消されていない。
+
+これまで、mainのルート直下に前Issue由来の `VALIDATION.md` が恒久的に混入し続けていた（Issue #200 が修正する別のバグ）ため、新規Issueのworktreeにも常に無関係な `VALIDATION.md` が最初から存在しており、この既存の欠陥が偶然マスクされ続けていた。Issue #200 がその混入を修正した結果、この隠れていた欠陥が露呈した。
 
 ## 要求 → 要件 → 受入条件
 
 ### 要求
 
-release workflow（`.github/workflows/agent-skill-chain-release.yml` から `.agent-skill-chain/scripts/release-tag.sh` 経由で呼ばれる `release tag` サブコマンド）が、git committer identityが設定されていないGitHub Actionsランナー上でも、`bump`・`publish` 同様に最後まで成功すること。
+`agent-skill-chain verify artifacts <issue_id> implementation` が、validationセグメントの成果物（`VALIDATION.md`）の有無に左右されず、implementationセグメント自身の作業実績のみに基づいて `unit_test_results` の充足を正しく判定すること。同時に、validationセグメントの既存判定（`acceptance_test_results`/`regression_test_results` の `VALIDATION.md` ベースの判定）は現状のまま維持されること。
 
 ### 要件
 
-- 要件1: `tag()` は、`git tag -a` の実行前に committer identity（`user.name`/`user.email`）が実効的に解決可能であることを保証する。
-- 要件2: 要件1の実現には、Issue #198 で導入済みの `ensureGitIdentity()` / `isIdentityConfigured()` をそのまま再利用し、同等ロジックを `tag()` 側に重複実装しない。
-- 要件3: `git config` でローカル・グローバル・システムいずれかに明示的に `user.name`/`user.email` が設定済みの環境では、その既存設定を上書き・破壊しない（`GIT_AUTHOR_*`/`GIT_COMMITTER_*` 環境変数由来のidentityとの混同を避けるため、この要件の前提は `git config` による明示的な設定に限定する）。
-- 要件4: 既存の自動テスト（`bump()` 関連を含む `test/integration/release.test.ts` 全体）が本修正後も通過し続ける。
-- 要件5: `tag()` がidentity未設定環境で成功することを直接検証する新しい自動テストを追加する（既存テストの非破壊確認だけでは `tag()` 自身の修正を立証できないため）。
+- 要件1: `checkOutputExists()` における `unit_test_results` の判定条件から、`VALIDATION.md` の存在・履歴への依存を除去する。
+- 要件2: 要件1の判定条件は、implementationセグメント自身の作業（例: 実装セグメントでのテスト実行・追加を示す何らかの証跡）に基づくものへ置き換える。この証跡として具体的に何を採用するか（例: テスト実行ログの記録方式、専用の証跡ファイルの形式・命名等）はDESIGN段階で確定する。
+- 要件3: `acceptance_test_results`/`regression_test_results` の判定条件（`VALIDATION.md` の存在または履歴上の実績）は変更しない。
+- 要件4: 通常のIssue開発フロー（spec→design→implementation→validationの順で進む）において、`agent-skill-chain verify artifacts` が各セグメントで意図したタイミング（そのセグメントの成果物が揃った時点）で正しく合格・不合格になることを、既存の自動テスト群の回帰確認および新規テストで担保する。
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: identity未設定環境でも `release tag` が成功する
+#### AC-1: implementationセグメントの `unit_test_results` 判定が `VALIDATION.md` の存在に依存しない
 
-- Given: `git config` のローカル・グローバル・システムいずれからも `user.name`/`user.email` が解決できない環境（`GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` を無効な参照先に差し替え、`GIT_AUTHOR_*`/`GIT_COMMITTER_*` 環境変数も未設定にすることでGitHub Actionsランナーの状態を模擬する）
-- When: 存在しない版数タグに対して `release tag <target> <ref>` を実行する
-- Then: 終了コード0で成功し、標準エラー出力に「Committer identity unknown」を含まない。作成された注釈付きタグのtagger identityが `github-actions[bot] <github-actions[bot]@users.noreply.github.com>` になっている
-- 検証方法見込み: `automated`（新規テストとして追加、`test/integration/release.test.ts` の既存Issue #198テストと同じ手法でidentity未設定環境を再現する）
+- Given: worktree内で `code`（implementationセグメントの成果物）は充足済みだが、`VALIDATION.md` が存在せず、かつbaseブランチからの分岐後に一度も add/modify されていない状態
+- When: implementationセグメント自身の作業実績（`unit_test_results` の新しい判定条件が要求する証跡）を作成したうえで `agent-skill-chain verify artifacts <issue_id> implementation` を実行する
+- Then: `unit_test_results` は欠落として報告されず、implementationセグメントの成果物チェック全体が合格する（このとき `VALIDATION.md` は一切作成・参照されていない）
+- 検証方法見込み: `automated`（`test/integration/verify.test.ts` に新規テストケースを追加し、`VALIDATION.md` を作成しない前提で `unit_test_results` が充足されることを検証する）
 
-#### AC-2: `ensureGitIdentity()` / `isIdentityConfigured()` を再利用し、ロジックを重複させない
+#### AC-2: validationセグメントの既存判定に影響を与えない
 
-- Given: `src/commands/release.ts` に既存の `ensureGitIdentity()` / `isIdentityConfigured()`（Issue #198 導入、`bump()` が使用中）が存在する
-- When: `tag()` の実装を確認する
-- Then: `tag()` は `git tag -a` 実行前に既存の `ensureGitIdentity()` を呼び出しており、identity解決判定・fallback書き込みの同等ロジックが `tag()` 内に別途新規実装されていない
-- 検証方法見込み: `hybrid`（実装差分のコードレビューで構造的な重複有無を確認し、AC-1の自動テストで挙動としての等価性を裏付ける）
+- Given: worktree内に `VALIDATION.md` が存在する、または base ブランチからの分岐後に add/modify された履歴がある状態
+- When: `agent-skill-chain verify artifacts <issue_id> validation` を実行する
+- Then: `acceptance_test_results`/`regression_test_results` は本Issueの変更前と同じ条件（`VALIDATION.md` の存在または履歴上の実績）で充足済みと判定され、本Issueによる回帰が無い
+- 検証方法見込み: `automated`（既存の `test/integration/verify.test.ts` 内のvalidationセグメント関連テストが本Issue適用後も無修正で通過することを確認する）
 
-#### AC-3: `git config` で明示的に設定済みの既存identityを破壊しない
+#### AC-3: 通常のIssue開発フローで各セグメントのverify artifactsが意図したタイミングで合否判定される
 
-- Given: 対象リポジトリのローカルスコープに `git config user.name`/`user.email` が明示的に設定済みの環境（`GIT_AUTHOR_*`/`GIT_COMMITTER_*` などの環境変数由来のidentityではなく、`git config` により恒久的に設定されているケースに限定する）
-- When: `release tag <target> <ref>` を実行する
-- Then: 実行前後で `git config user.name`/`user.email` の値が変化せず、かつ作成された注釈付きタグのtagger identityも既存設定のままである（`github-actions[bot]` へ上書きされていない）
-- 検証方法見込み: `automated`（Issue #198 の `bump()` 向けAC-4テストと同じ手法を `tag()` に対して追加する）
-
-#### AC-4: 既存の自動テストが引き続き通過する
-
-- Given: `test/integration/release.test.ts` に定義済みの、`bump()`・`tag()`（冪等スキップ含む）・`publish()` に関する既存テスト一式
-- When: 本Issueの変更を適用した上で全テストを実行する
-- Then: 既存テストが全て通過し、回帰が発生していない
-- 検証方法見込み: `automated`（既存テストスイートの実行結果）
-
-#### AC-5: mainマージ後、実際のrelease workflowが最後まで成功する
-
-- Given: 本Issueの変更が `main` へマージ済みであり、releaseワークフロー（`.github/workflows/agent-skill-chain-release.yml`）が起動可能な状態
-- When: releaseワークフローを実際に（再）実行し、`resolve-version` → `bump` → `tag` → `publish` の一連の処理を通す
-- Then: `release tag` ステップが「Committer identity unknown」で失敗せず、ワークフロー全体が成功で完了する
-- 検証方法見込み: `manual`（実リポジトリ・実ランナー上でのワークフロー実行結果の目視確認。ローカルの自動テストだけでは実行環境固有の未設定状態を保証できないため）
+- Given: spec→design→implementation→validationの順で進む通常のIssue開発フロー（各セグメントの成果物を1つずつ揃えていく状態遷移）
+- When: 各セグメント完了直前・直後のそれぞれの時点で `agent-skill-chain verify artifacts <issue_id> <segment>` を実行する
+- Then: 各セグメントの判定は、そのセグメント自身の成果物（`.agent-skill-chain/config/segments.yaml` が定義する `outputs`）のみに基づいて行われ、未着手の後続セグメントの成果物（例: implementation完了時点で存在しない `VALIDATION.md`）の有無によって不当に不合格にならない。逆に、後続セグメントの成果物が先行セグメントの判定を代替してすり抜けさせることもない
+- 検証方法見込み: `hybrid`（`test/integration/verify.test.ts` の自動テストで4セグメント通しの合否遷移を検証しつつ、AC-1/AC-2との整合をコードレビューで確認する）
 
 ## スコープ外
 
-- `publish()`（`release publish`、`gh release create` によるGitHub Release作成）へのidentity関連修正は対象外。`publish()` はgit操作を行わずGitHub API呼び出しのみで完結するため、committer identityの問題は原理的に発生しない。ただし実装時に `publish()` 内にgit操作が含まれていないことを念のため再確認する。
-- `resolveVersion()`（`release resolve-version`）は副作用のない読み取り専用処理であり、committer identityと無関係のため対象外。
-- `ensureGitIdentity()` / `isIdentityConfigured()` 自体のロジック変更（fallback identity値の変更、環境変数由来identityの扱いの変更等）は対象外。既存実装をそのまま再利用する。
+- `unit_test_results` の充足証跡として何を採用するか（例: テスト実行ログの記録方法、専用の証跡ファイルの形式・生成タイミング等）の具体的な設計は、本SPEC.mdの範囲外でありDESIGN段階で確定する。
+- `code`・`ADR` など、`unit_test_results` 以外の既存 `checkOutputExists()` 判定ロジックの変更は対象外とする。
+- `.agent-skill-chain/config/segments.yaml` のセグメント構成・`outputs` 一覧自体の変更（セグメントの追加・変更はAGENTS.mdが定める破壊的変更であり、別途ADRを要する）は対象外とする。
+- Issue #200 が対象としたmainルート直下への成果物混入問題自体（本Issueとは独立した既に別Issueで対応済みの欠陥）の再修正は対象外とする。
