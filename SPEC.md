@@ -53,7 +53,7 @@ fatal: empty ident name ... not allowed
 
 #### AC-4: 既存git author identity設定の非破壊性
 
-- Given: 実行環境に既存のgit author identity（`user.name`/`user.email`）が設定されている（ローカル開発者が `git config` で設定済み、またはCI環境変数等で事前設定済みの場合を含む）
+- Given: 実行環境に既存のgit author identity（`user.name`/`user.email`）が `git config` で設定済みである
 - When: `release bump` サブコマンドがバージョンbumpコミットを作成する
 - Then: 実行前後で `git config user.name` / `git config user.email` の値（scope・設定元を含む）が変化しない。すなわち本サブコマンドはこれらを上書き・削除・別scopeでの追加設定のいずれによっても改変しない
 - 検証方法見込み: `automated`
