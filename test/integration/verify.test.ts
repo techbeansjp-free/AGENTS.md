@@ -434,6 +434,103 @@ test('verify artifacts: validation segmentはVALIDATION.mdの有無で成否が�
   assert.match(unknownIssue.stderr, /ISSUE-999 の worktree が見つかりません/);
 });
 
+// Issue #200 AC-3: checkOutputExists()は「現在ファイルが存在するか」に加えて「baseブランチから
+// 分岐後の履歴でadd/modifyされた実績があるか」もOR条件で判定するため、成果物ファイル自体を
+// 意図的に削除するIssue（本Issue #200のSPEC.md自身が実例）でも自己言及的に不合格にならない。
+test('verify artifacts: SPEC.md/DESIGN.md/PLAN.mdをcommit後に削除しても、履歴上の実績によりspec/designセグメントは成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  // Given: SPEC.md/DESIGN.md/PLAN.md（design segmentはADRも要求するため合わせて作成する）を
+  // 作成し、branch履歴にadd実績を残す
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  fs.writeFileSync(path.join(worktreePath, 'DESIGN.md'), '# DESIGN\n');
+  fs.writeFileSync(path.join(worktreePath, 'PLAN.md'), '# PLAN\n');
+  fs.mkdirSync(path.join(worktreePath, 'docs', 'adr'), { recursive: true });
+  fs.writeFileSync(path.join(worktreePath, 'docs', 'adr', 'ADR-0001-sample.md'), '# ADR\n');
+  const added = runCli(['checkpoint', 'docs: add SPEC/DESIGN/PLAN'], { cwd: worktreePath });
+  assert.equal(added.status, 0, added.stderr);
+
+  // 前提: 削除前は当然「現在存在する」ため成功する
+  const beforeDelete = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(beforeDelete.status, 0, beforeDelete.stderr);
+
+  // When: SPEC.md/DESIGN.md/PLAN.mdを意図的に削除しcommitする（本Issue #200のspecセグメント自身と
+  // 同じ状況を再現する）
+  fs.rmSync(path.join(worktreePath, 'SPEC.md'));
+  fs.rmSync(path.join(worktreePath, 'DESIGN.md'));
+  fs.rmSync(path.join(worktreePath, 'PLAN.md'));
+  const removed = runCli(['checkpoint', 'docs: remove SPEC/DESIGN/PLAN intentionally'], { cwd: worktreePath });
+  assert.equal(removed.status, 0, removed.stderr);
+  assert.equal(fs.existsSync(path.join(worktreePath, 'SPEC.md')), false);
+
+  // Then: 現在は存在しないが、履歴上のadd実績があるためspec/design segmentともに成功する
+  const afterDeleteSpec = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(afterDeleteSpec.status, 0, afterDeleteSpec.stderr);
+
+  const afterDeleteDesign = runCli(['verify', 'artifacts', 'ISSUE-1', 'design'], { cwd: repo.dir });
+  assert.equal(afterDeleteDesign.status, 0, afterDeleteDesign.stderr);
+});
+
+test('verify artifacts: VALIDATION.mdをcommit後に削除しても、履歴上の実績によりvalidationセグメントは成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  // Given: VALIDATION.mdを作成し、branch履歴にadd実績を残す
+  fs.writeFileSync(path.join(worktreePath, 'VALIDATION.md'), '# VALIDATION\n');
+  const added = runCli(['checkpoint', 'docs: add VALIDATION.md'], { cwd: worktreePath });
+  assert.equal(added.status, 0, added.stderr);
+
+  // When: VALIDATION.mdを意図的に削除しcommitする
+  fs.rmSync(path.join(worktreePath, 'VALIDATION.md'));
+  const removed = runCli(['checkpoint', 'docs: remove VALIDATION.md intentionally'], { cwd: worktreePath });
+  assert.equal(removed.status, 0, removed.stderr);
+
+  // Then: 現在は存在しないが、履歴上のadd実績があるためvalidation segmentは成功する
+  const after = runCli(['verify', 'artifacts', 'ISSUE-1', 'validation'], { cwd: repo.dir });
+  assert.equal(after.status, 0, after.stderr);
+});
+
+test('verify artifacts: 対象ファイルを一度もcommitしていない未着手segmentは、無関係なcommitが存在しても引き続き失敗する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  // Given: SPEC.mdやVALIDATION.mdには一切触れず、無関係なファイルのみをcommitする
+  // （--diff-filter=AMのパス指定が正しく対象ファイルのみに絞り込めているかを確認する）
+  fs.writeFileSync(path.join(worktreePath, 'NOTES.md'), '# unrelated notes\n');
+  const unrelated = runCli(['checkpoint', 'docs: add unrelated notes'], { cwd: worktreePath });
+  assert.equal(unrelated.status, 0, unrelated.stderr);
+
+  // Then: SPEC.mdは現在も存在せず履歴上のadd実績も無いため、spec segmentは引き続き失敗する
+  const spec = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(spec.status, 1);
+  assert.match(spec.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+
+  // Then: VALIDATION.mdも同様にvalidation segmentは引き続き失敗する
+  const validation = runCli(['verify', 'artifacts', 'ISSUE-1', 'validation'], { cwd: repo.dir });
+  assert.equal(validation.status, 1);
+  assert.match(validation.stderr, /欠落しています: acceptance_test_results/);
+  assert.match(validation.stderr, /欠落しています: regression_test_results/);
+});
+
 // ---- verify gate-report ----
 
 test('verify gate-report: スキーマ適合・digest一致のgate-reportは成功し、pending/digest不一致は失敗する', async (t) => {
