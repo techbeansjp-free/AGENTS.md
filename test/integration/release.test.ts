@@ -100,6 +100,64 @@ test('release tag (AC-2, AC-4, AC-7): 未存在なら新規タグを作成・pus
   assert.equal('v1.0.0', `v${'1.0.0'}`);
 });
 
+// ---- tag: git tagger identity未設定環境での成功・既存identityの非破壊性（Issue #204） ----
+// identitylessEnv() は本ファイル下部で定義（Issue #198 で bump() 向けに導入済みのヘルパーを再利用）。
+
+test('release tag (AC-1, Issue #204): git tagger identityが未設定の環境でもrelease tagに成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  writePackageJson(repo.dir, '4.0.0', true);
+  const headSha = git(repo.dir, ['rev-parse', 'HEAD']);
+
+  // Given: createTmpRepo() が設定したローカルidentityを取り除き、かつグローバル/システム設定も
+  // 実行環境から見えなくする（実行機に開発者自身のgit identityが設定されていても再現できるように）。
+  git(repo.dir, ['config', '--unset', 'user.name']);
+  git(repo.dir, ['config', '--unset', 'user.email']);
+  const runEnv = identitylessEnv(process.env);
+  // 前提確認: この時点で git config user.name/user.email が実際に未解決であること
+  assert.throws(() => execFileSync('git', ['config', 'user.name'], { cwd: repo.dir, env: runEnv, stdio: 'pipe' }));
+  assert.throws(() => execFileSync('git', ['config', 'user.email'], { cwd: repo.dir, env: runEnv, stdio: 'pipe' }));
+
+  // When
+  const result = runCli(['release', 'tag', '4.0.0', headSha], { cwd: repo.dir, env: runEnv });
+
+  // Then: 「tagger identity unknown」で失敗せず成功する
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /tagger identity unknown/i);
+  assert.equal(result.stdout.trim(), 'v4.0.0');
+
+  // Then: fallback identity（github-actions[bot]）でtaggerが作成されている
+  const taggerLine = git(repo.dir, ['for-each-ref', '--format=%(taggername) %(taggeremail)', 'refs/tags/v4.0.0']);
+  assert.equal(taggerLine, 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>');
+});
+
+test('release tag (AC-3, Issue #204): 既存git identityを上書き・破壊しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  writePackageJson(repo.dir, '4.1.0', true);
+  const headSha = git(repo.dir, ['rev-parse', 'HEAD']);
+
+  // Given: createTmpRepo() が設定した既存identity
+  const nameBefore = git(repo.dir, ['config', 'user.name']);
+  const emailBefore = git(repo.dir, ['config', 'user.email']);
+  assert.equal(nameBefore, 'agent-skill-chain test');
+  assert.equal(emailBefore, 'test@example.com');
+
+  // When
+  const result = runCli(['release', 'tag', '4.1.0', headSha], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+
+  // Then: 実行前後で user.name/user.email の値（scope・設定元含む）が変化しない
+  const nameAfter = git(repo.dir, ['config', 'user.name']);
+  const emailAfter = git(repo.dir, ['config', 'user.email']);
+  assert.equal(nameAfter, nameBefore);
+  assert.equal(emailAfter, emailBefore);
+
+  // Then: 実際に作成されたtaggerも既存identityのままである（fallbackへ上書きされていない）
+  const taggerLine = git(repo.dir, ['for-each-ref', '--format=%(taggername) %(taggeremail)', 'refs/tags/v4.1.0']);
+  assert.equal(taggerLine, 'agent-skill-chain test <test@example.com>');
+});
+
 // ---- publish（AC-3, AC-4, AC-7: リリーサの冪等性） ----
 
 test('release publish (AC-3, AC-4, AC-7): 未存在ならGitHub Releaseを作成し、既存なら冪等スキップし重複作成しない', async (t) => {
