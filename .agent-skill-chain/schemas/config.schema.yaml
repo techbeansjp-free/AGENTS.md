@@ -1,0 +1,157 @@
+# 正本: AGENTS.md §設定 / .agent-skill-chain/config/agent-skill-chain.yaml
+# .agent-skill-chain/config/agent-skill-chain.yaml 自体の構造を検査するスキーマ。
+$schema: http://json-schema.org/draft-07/schema#
+schema_version: agent-skill-chain/config/v1
+title: agent-skill-chain config
+type: object
+required: [schema_version, coordination, durability, autonomy, risk, review, worker, worktree, branch, issue, wip, lease, bdd, templates, checks]
+additionalProperties: false
+properties:
+  schema_version: {const: agent-skill-chain/config/v1}
+  coordination:
+    type: object
+    required: [backend]
+    additionalProperties: false
+    properties: {backend: {type: string, enum: [github, local]}}
+  durability:
+    type: object
+    required: [backend]
+    additionalProperties: false
+    properties: {backend: {type: string, enum: [remote, local_mirror]}}
+  autonomy:
+    type: object
+    required: [default]
+    additionalProperties: false
+    properties: {default: {type: string, enum: [gated, full]}}
+  risk:
+    type: object
+    required: [default]
+    additionalProperties: false
+    properties: {default: {type: string, enum: [unclassified, normal, high]}}
+  review:
+    type: object
+    required: [standard, strict]
+    additionalProperties: false
+    properties:
+      adapter: {type: string, enum: [claude, codex, human]}
+      standard:
+        type: object
+        required: [reviewer_count, modes]
+        additionalProperties: false
+        properties:
+          reviewer_count: {type: integer, minimum: 1}
+          modes: {type: array, items: {type: string, enum: [conformance, falsification]}}
+      strict:
+        type: object
+        required: [reviewer_count, trigger]
+        additionalProperties: false
+        properties:
+          reviewer_count: {type: integer, minimum: 1}
+          trigger:
+            type: object
+            required: [risk_not_normal, autonomy_full]
+            additionalProperties: false
+            properties:
+              risk_not_normal: {type: boolean}
+              autonomy_full: {type: boolean}
+  worker:
+    type: object
+    required: []
+    additionalProperties: false
+    properties:
+      adapter: {type: string, enum: [claude, codex, human]}
+  worktree:
+    type: object
+    required: [root, path_pattern, timestamp, slug_max_length, immutable_path]
+    additionalProperties: false
+    properties:
+      root: {type: string}
+      path_pattern: {type: string}
+      timestamp:
+        type: object
+        required: [source, format, timezone]
+        additionalProperties: false
+        properties:
+          source: {type: string}
+          format: {type: string}
+          timezone: {type: string}
+      slug_max_length: {type: integer, minimum: 1}
+      immutable_path: {type: boolean}
+  branch:
+    type: object
+    required: [pattern]
+    additionalProperties: false
+    properties: {pattern: {type: string}}
+  issue:
+    type: object
+    required: [allowed_types]
+    additionalProperties: false
+    properties:
+      allowed_types:
+        type: array
+        items: {type: string, enum: [feature, bugfix, hotfix, refactor, docs, process, chore]}
+        minItems: 1
+  wip:
+    type: object
+    required: [limit, count_by]
+    additionalProperties: false
+    properties:
+      limit: {type: integer, minimum: 1}
+      count_by: {type: string, enum: [active_writer_lease]}
+  lease:
+    type: object
+    required: [ttl_seconds, renewal_interval_seconds]
+    additionalProperties: false
+    properties:
+      ttl_seconds: {type: integer, minimum: 1}
+      renewal_interval_seconds: {type: integer, minimum: 1}
+  bdd:
+    type: object
+    required: [profile]
+    additionalProperties: false
+    properties: {profile: {type: string, enum: [standard, strict]}}
+  templates:
+    type: object
+    required: [github_source, github_target, verify_sync]
+    additionalProperties: false
+    properties:
+      github_source: {type: string}
+      github_target: {type: string}
+      verify_sync: {type: boolean}
+  checks:
+    type: object
+    required: [spec, design, implementation, validation]
+    additionalProperties: false
+    properties:
+      spec: {type: string}
+      design: {type: string}
+      implementation: {type: string}
+      validation: {type: string}
+
+examples:
+  - schema_version: agent-skill-chain/config/v1
+    coordination: {backend: github}
+    durability: {backend: remote}
+    autonomy: {default: gated}
+    risk: {default: unclassified}
+    review:
+      standard: {reviewer_count: 1, modes: [conformance, falsification]}
+      strict: {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
+    worker: {adapter: human}
+    worktree:
+      root: .worktrees
+      path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
+      timestamp: {source: issue_created_at, format: "%Y%m%d_%H%M%S", timezone: Asia/Tokyo}
+      slug_max_length: 48
+      immutable_path: true
+    branch: {pattern: "{type}/{issue_id}-{slug}"}
+    issue: {allowed_types: [feature, bugfix, hotfix, refactor, docs, process]}
+    wip: {limit: 3, count_by: active_writer_lease}
+    lease: {ttl_seconds: 3600, renewal_interval_seconds: 900}
+    bdd: {profile: standard}
+    templates: {github_source: .agent-skill-chain/templates/github/.github, github_target: .github, verify_sync: true}
+    checks:
+      spec: agent-skill-chain/spec-gate
+      design: agent-skill-chain/design-gate
+      implementation: agent-skill-chain/implementation-gate
+      validation: agent-skill-chain/validation-gate

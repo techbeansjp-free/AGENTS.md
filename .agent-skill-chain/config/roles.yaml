@@ -1,0 +1,164 @@
+# ベンダー中立の role contract。
+# 正本: AGENTS.md §役割・権限・writer lease
+#
+# 各ロールの実行系への変換は .agent-skill-chain/adapters/{claude,codex,human}.sh が担う。
+# 権限は credential / GitHub 権限分離（fine-grained PAT・GitHub App installation permission）で
+# 担保し、ツール名の一律 deny では実装しない（AGENTS.md I5）。
+
+schema_version: agent-skill-chain/config/v1
+
+roles:
+  # 進行役: Issue作成・状態遷移・worktree管理・マージのみを行う。writer lease対象外。
+  orchestrator:
+    lease: none
+    capabilities:
+      - "`issue.create`"
+      - "`issue.state_transition`"
+      - worktree.lifecycle
+      - pr.merge
+    forbidden:
+      - artifact_branch.commit    # 成果物branchへのcommit禁止（I5）
+      - artifact.author            # 成果物の著述・内容取り込み禁止（I5）
+
+  # セグメント作業ワーカー: 1 Issueにつき同時1つのwriter leaseを保持する。
+  worker:
+    lease: writer
+    segments: [spec, design, implementation, validation]
+    capabilities:
+      - worktree.read
+      - worktree.write
+      - test.run
+      - lease.acquire
+      - lease.renew
+      - lease.release
+      - branch.commit              # 自branchのみ
+      - branch.push                 # 自branchのみ
+      - integration_record.update   # GitHubモード=Draft PR更新, ローカルモード=Integration Record更新
+      - "`issue.report`"                 # 固定スキーマによる完了・blocked報告
+    segment_overrides:
+      spec:
+        additional_capabilities: [pr.draft_create]   # Draft PRはSPECワーカーのみ作成
+
+  # ゲートレビュア: read-only。conformance/falsificationは複数並列実行可（Strictでは専任分離）。
+  gate_reviewer:
+    lease: none
+    modes: [conformance, falsification]
+    capabilities:
+      - worktree.read
+      - check_run.publish    # GitHubモード
+      - review.publish        # ローカルモード: reviews/<gate>.yaml
+    forbidden:
+      - branch.commit
+      - branch.push
+      - artifact.edit
+
+  # ADR finalizationワーカー: 設計ゲート承認後、進行役がadr-finalize.shを起動して割り当てる。
+  # content_digestを除くライフサイクル項目（status等）のみ書込み可能（A-8）。
+  adr_finalization_worker:
+    lease: writer
+    scope: adr_status_only
+    capabilities:
+      - lease.acquire
+      - lease.renew
+      - lease.release
+      - adr.digest_verify
+      - branch.commit    # status / superseded-by / deprecated-reason / tags のみ
+      - branch.push
+    forbidden:
+      - adr.content_edit   # id / Context / Decision / Consequences / supersedes は accepted 後不変
+
+# 各ロールを実行するアダプタの最小能力要件（A-10）:
+#   自worktree内read/write、テスト実行、writer leaseの取得・更新・解放、
+#   自ブランチへのcommit/push、Draft PR/Integration Recordの更新、
+#   Issueまたはローカル状態への報告、固定スキーマによる完了・blocked報告。
+adapters:
+  claude: .agent-skill-chain/adapters/claude.sh
+  codex: .agent-skill-chain/adapters/codex.sh
+  human: .agent-skill-chain/adapters/human.sh
+
+# --- 成果物契約（Control Plane / Worker Plane 分離） ---
+# 進行役（Control Plane）だけが、全体の状態遷移・現在地・次の起動先・差し戻し先・
+# 停止/再開/マージ条件を知る（I5, A-3「進行役の制御ロジック」）。
+# 各ワーカー（Worker Plane）は、自分の役割・入力・出力・適用規約・完了条件・禁止事項・
+# blocked時の報告方法だけを知ればよい。「次に誰が起動されるか」「全体の状態遷移図」は
+# 不要（進行役の専有情報）。ワーカー同士は互いの動作ではなく、以下の入出力契約を介して
+# のみ接続する。
+role_contracts:
+  spec_worker:
+    inputs: [issue, .agent-skill-chain/standards/, related_accepted_adrs]
+    outputs: [.agent-skill-chain/templates/issue/SPEC.md への記入結果]
+    rules:
+      - 全ACはAC-ID（正規表現 ^AC-[0-9]+$）を持つ
+      - 全ACはverification.mode（automated|manual|hybrid）を宣言する
+      - 設計・実装の詳細を含めない
+    completion:
+      - .agent-skill-chain/schemas/validation-report.schema.yaml が要求するAC構造に適合している
+      - 未解決の曖昧さがない
+      - checkpointをcommit + push済み
+      - Draft PRを作成済み（Closes #<issue-id>）※このセグメントのみ
+    forbidden: [DESIGN.md/PLAN.mdの作成, ADRの作成]
+
+  design_worker:
+    inputs: [SPEC.md, accepted ADR, .agent-skill-chain/standards/]
+    outputs: [DESIGN.md, PLAN.md, 'ADR（status: proposed）']
+    rules:
+      - 全要件が設計要素に対応する
+      - 責務集中・循環依存を避ける
+      - 障害/ロールバック方針を明記する
+    completion:
+      - DESIGN.md/PLAN.mdが.agent-skill-chain/templates/issue/{DESIGN,PLAN}.mdの構造に適合している
+      - proposed ADRを作成済み
+      - commit + push済み
+    forbidden: [SPEC.mdの承認済み内容の変更, 実装コードの作成]
+
+  implementation_worker:
+    inputs: [SPEC.md, DESIGN.md, PLAN.md, accepted ADR]
+    outputs: [code, unit_test_results]
+    rules:
+      - 承認済みSPEC/DESIGNを変更しない
+      - PLANの順序に従う（中断時は報告する。推測で補完しない）
+      - gate-reportを書き換えない
+      - 自worktree内でのみ作業する
+    completion:
+      - 実装完了
+      - 必須チェック（lint/test/build）実行済み
+      - commit + push済み
+    forbidden: [SPEC.md/DESIGN.md/PLAN.mdの編集, .agent-skill-chain/schemas/gate-report.schema.yaml準拠ファイルへの書込み]
+
+  validation_worker:
+    inputs: [SPEC.md, DESIGN.md, PLAN.md, code, unit_test_results]
+    outputs: [acceptance_test_results, regression_test_results, .agent-skill-chain/templates/issue/VALIDATION.md への記入結果]
+    rules:
+      - .agent-skill-chain/schemas/validation-report.schema.yaml に従い全AC-IDへ検証方法と証跡を対応させる
+      - 孤児AC・孤児テスト参照を作らない
+    completion:
+      - 全ACのverification.resultが記録されている
+      - regression実行結果が記録されている
+      - commit + push済み
+    forbidden: [SPEC.md/DESIGN.md/PLAN.mdの編集]
+
+  gate_reviewer:
+    inputs: [対象セグメントの成果物一式]
+    outputs: ['.agent-skill-chain/schemas/gate-report.schema.yaml 準拠のgate report']
+    rules:
+      - conformance（立証）とfalsification（反証）の2観点を分離して判定する（Strictでは専任分離）
+      - 成果物を編集しない（read-only）
+    completion:
+      - gate.conformance / gate.falsification / gate.final を記録済み
+      - blocking findingには必ずorigin（specification|design|implementation|validation）を付与する
+    forbidden: [branch.commit, branch.push, artifact.edit, 次セグメントの起動]
+    unnecessary_knowledge: [次に起動されるワーカー, 全体の状態遷移図, 他レビュアの内部判断, PRをいつReadyにするか]
+
+  adr_finalization_worker:
+    inputs: ['ADR（status: proposed, content digest承認済み）']
+    outputs: ['ADR（status: accepted）']
+    rules:
+      - content_digestが承認時と一致することを再検査してから書き込む
+      - status/superseded-by/deprecated-reason/tags以外のフィールドを変更しない
+    completion:
+      - status更新をcommit + push済み
+    forbidden: [Context/Decision/Consequences/supersedesの変更]
+
+# 完了・blocked報告は全ワーカー共通で .agent-skill-chain/schemas/worker-report.schema.yaml に従う。
+# 進行役はこの固定スキーマのみを読み、成果物の中身を読んで裁定しない（I5）。
+blocked_report_schema: .agent-skill-chain/schemas/worker-report.schema.yaml

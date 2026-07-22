@@ -1,0 +1,105 @@
+# 正本: AGENTS.md §Coordination Backend
+# Issue毎の状態モデル。ローカルモードでは state.yaml が正本。GitHubモードでは不使用またはキャッシュ。
+$schema: http://json-schema.org/draft-07/schema#
+schema_version: agent-skill-chain/state/v1
+title: agent-skill-chain state
+type: object
+required: [schema_version, id, autonomy, risk, review_profile, segment, gate]
+additionalProperties: false
+properties:
+  schema_version:
+    const: agent-skill-chain/state/v1
+  id:
+    type: string
+    pattern: '^ISSUE-[0-9]+$'
+  title:
+    type: string
+    description: >
+      Issueのタイトル（短い識別子）。任意。Coordination Backendがローカルの場合に`issue start`へ
+      --titleを渡すと永続化される（ISSUE-183）。GitHubモードではIssue本文をGitHub API経由で
+      取得できるため未使用。
+  request:
+    type: string
+    description: >
+      Issueの要求内容（本文、「何を作るか」）。複数行可。任意。Coordination Backendがローカルの
+      場合に`issue start`へ--request/--request-fileを渡すと永続化される（ISSUE-183）。GitHubモード
+      では未使用。
+  autonomy:
+    type: string
+    enum: [gated, full]
+    default: gated
+  risk:
+    type: string
+    enum: [unclassified, normal, high]
+    default: unclassified
+  review_profile:
+    type: string
+    enum: [standard, strict]
+    description: >
+      risk != normal（unclassified含む）OR autonomy == full の場合に strict へ自動遷移する派生値（I8）。
+  segment:
+    type: object
+    required: [id, status, blockers]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        enum: [spec, design, implementation, validation]
+      status:
+        type: string
+        enum: [pending, in_progress, blocked, completed]
+      blockers:
+        type: array
+        items: {type: string}
+  gate:
+    type: object
+    required: [id, profile, conformance, falsification]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        enum: [spec, design, implementation, validation]
+      profile:
+        type: string
+        enum: [standard, strict]
+      conformance:
+        type: object
+        required: [verdict, evidence]
+        additionalProperties: false
+        properties:
+          verdict: {type: string, enum: [pass, fail, pending]}
+          evidence: {type: array, items: {type: string}}
+      falsification:
+        type: object
+        required: [verdict, counterexamples_tested]
+        additionalProperties: false
+        properties:
+          verdict: {type: string, enum: [pass, fail, pending]}
+          counterexamples_tested: {type: array, items: {type: string}}
+
+examples:
+  - schema_version: agent-skill-chain/state/v1
+    id: ISSUE-123
+    autonomy: full
+    risk: unclassified
+    review_profile: strict
+    segment: {id: design, status: in_progress, blockers: []}
+    gate:
+      id: design
+      profile: standard
+      conformance: {verdict: pass, evidence: []}
+      falsification: {verdict: pass, counterexamples_tested: []}
+  - schema_version: agent-skill-chain/state/v1
+    id: ISSUE-124
+    title: 使い捨て検証用Issue
+    request: |
+      launch_workerの実機再検証用に、spec segmentを1つ完走させる。
+    autonomy: gated
+    risk: normal
+    review_profile: standard
+    segment: {id: spec, status: pending, blockers: []}
+    gate:
+      id: spec
+      profile: standard
+      conformance: {verdict: pending, evidence: []}
+      falsification: {verdict: pending, counterexamples_tested: []}

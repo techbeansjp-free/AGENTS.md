@@ -1,40 +1,43 @@
 {
   "name": "agent-skill-chain",
-  "version": "0.1.52",
-  "description": ".agent-skill-chain/source を正本に各 AI ツール（Claude Code / Cursor / Gemini / Copilot / Codex）へ段階的に配備するワークフロー仕様パッケージ。強制力はツールごとに異なり（Claude Code は runtime hook で強制、他はルール配布/方針適用）、最終保証は CI audit が担う。",
+  "version": "0.2.0",
+  "description": "Coordination Backend（GitHub Issue/PR/Check Run、またはローカルGit管理下状態）を正本とする、ソフトウェア開発ワークフロー規律のためのagentic constitution + CLIパッケージ。",
   "type": "module",
-  "bin": {
-    "agents-md": "bin/agents-md.js"
-  },
-  "files": [
-    ".agent-skill-chain/source/",
-    "AGENTS.md",
-    "CLAUDE.md",
-    ".agent-skill-chain/runtime/templates/",
-    "bin/",
-    "README.md"
-  ],
   "engines": {
     "node": ">=20"
   },
+  "bin": {
+    "agent-skill-chain": "./bin/agents-md.js"
+  },
+  "files": [
+    "bin/",
+    ".agent-skill-chain/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/GLOSSARY.md"
+  ],
   "scripts": {
-    "build:claude": "bash .agent-skill-chain/source/scripts/build-plugin-claude.sh",
-    "build": "tsc && chmod +x bin/agents-md.js",
-    "typecheck": "tsc --noEmit",
-    "test": "bash test/run-all.sh",
-    "prepare": "npm run build"
+    "build": "tsc",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "prepare": "npm run build",
+    "pretest": "npm run build",
+    "test": "node --import tsx --test $(find test/unit test/integration -name '*.test.ts')"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "yaml": "^2.5.1"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20"
+    "@types/node": "^20",
+    "tsx": "^4.23.1",
+    "typescript": "^5"
   },
   "keywords": [
     "agents",
     "ai",
     "workflow",
     "claude-code",
-    "cursor",
-    "skills",
+    "codex",
     "agents-md"
   ],
   "license": "MIT",
@@ -49,8 +52,5 @@
   },
   "bugs": {
     "url": "https://github.com/techbeansjp-free/AGENTS.md/issues"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

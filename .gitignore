@@ -1,76 +1,15 @@
 # macOS
 .DS_Store
 
-# Node 依存（ビルド専用 devDependency の展開先。配布物・追跡対象ではない）。
-# typescript/@types/node は package-lock.json から `npm ci` で再現する（lockfile は追跡）。
+# Node 依存（lockfileから npm ci で再現するため追跡不要）
 node_modules/
 
-# === ランタイム/生成物（パッケージ正本ではない。setup・実行・build で生成される） ===
-# 消費者ランタイム名前空間（統合ネスト .agent-skill-chain/runtime/）。
-# 正本として追跡するのは templates/ のみ。
-# 自己拡張（ドッグフーディング）の自己 issue はここではなく docs/maintainer/workflow/ に作る
-# （.agent-skill-chain/project/自己拡張ワークフロー.md 参照）。
-/.agent-skill-chain/runtime/*
-!/.agent-skill-chain/runtime/.gitignore
-!/.agent-skill-chain/runtime/templates/
-# 証跡DB（source/SETUP.md: 配布物に絶対含めない）。-wal/-shm/.lock/journal も拾う
-.agent-skill-chain/runtime/workflow.db*
-# リポルート直下に誤生成される stray な証跡DB（テスト/誤 cwd 由来の副産物）。
-# 正規の証跡DBは .agent-skill-chain/runtime/workflow.db のみ。ルート直下 workflow.db は追跡しない。
-/workflow.db*
-# scribe nonce（C-4b 出所制御の期待 nonce・enforce on が 0600 で生成するセッション秘匿値）。
-# 配布物に含めない・git 追跡しない（生成物・秘匿値）。実 nonce は .claude/settings.json の env に配線される。
-/.agent-skill-chain/source/.scribe-nonce
-# 統合ネスト（source/・runtime/templates/）の再配備前タイムスタンプ付きバックアップ。
-# setup.sh の backup_agent_skill_chain / agents-md.ts の backupAgentSkillChain が生成する
-# 一時退避先（プロジェクトルート直下）。配布物・追跡対象ではない。
-/.agent-skill-chain-*.bak.*/
-# 配備マーカー・README 警告（.agent-skill-chain/README.md（新設・生成物）・.package-manifest）。
-# setup が新規配備・再配備のたびに書き込む生成物であり、.claude/・.cursor/ と同様に
-# 配布物・追跡対象ではない（source/・project/ 等の正本サブディレクトリとは異なり、
-# ルート直下の本 2 ファイルのみが対象。02_設計 §2.6.9.2）。
-/.agent-skill-chain/README.md
-/.agent-skill-chain/.package-manifest
-# 各ツール向けフック/スキルの生成物（setup.sh が自己インストール時に生成）
-/.claude/
-/.cursor/
-# 生成物アダプタ（100% 生成物）。手書き土台は正本側に分離済み:
-#   - .agent-skill-chain/source/platforms/claude/plugin.json（build がコピー生成）
-#   - docs/maintainer/adapters.md（旧 .adapters/README.md）
-# marketplace 配布はリリース時に CI が build → 専用ブランチ/タグへ commit（案A、main は生成物ゼロ）。
-# 正本: docs/maintainer/workflow/20260614_124435_配布とパッケージ構成の再設計/02_設計.md, 03_実装計画.md
-/.adapters/
-# apm（Agent Package Manager, microsoft/apm）配布用生成物。100% 生成物であり main には置かない。
-# 手書き正本は .agent-skill-chain/source/platforms/apm/apm.yml。build-adapters.sh apm で生成し、
-# release 時に CI（release.yml）が release/apm ブランチへ commit する。
-/apm.yml
-/.apm/
+# CLI ビルド生成物（tsconfig.json outDir）
+/bin/
 
-# カバレッジ計測の生成物（kcov 出力先。cobertura XML / HTML レポート・中間生成物）。
-# coverage-check.sh が COV_OUT（既定 .coverage/）に出力する。配布物・追跡対象ではない
-# （self-enforce.yml #3 差分ゼロ検証・#4 npm pack リーク検査を破らないため無視する）。
-# 正本: docs/maintainer/workflow/20260615_054810_カバレッジ計測の自リポ適用/02_設計.md, 03_実装計画.md
-/.coverage/
-
-# CLI 生成物（src/agents-md.ts の tsc 生成物。パッケージ正本ではない）。
-# bin は派生物として追跡しない（src/agents-md.ts のみ正本として追跡）。
-# publish/E2E/CI は使用直前に `npm ci && npm run build` で bin を生成する
-# （tarball は publish 直前 build で作業ツリーから同梱。prepack は再導入しない）。
-# 正本: docs/maintainer/workflow/20260615_114305_bin生成物のgitignore化とpublish時ビルド/02_設計.md, 03_実装計画.md
-/bin/agents-md.js
-
-# memo は非追跡（transient）。レビュー等の本則証跡は workflow.db に残る（git 追跡する成果物は issue ドキュメント 00〜04 のみ）。
-# 正本: docs/maintainer/workflow/20260615_124812_自己拡張memoのgitignore矛盾是正/02_設計.md, 03_実装計画.md
+# スクラッチ・非追跡メモ（issueドキュメント本則の外）
 **/memo/*
 
-# S-2: ローカル issue ドラフト（00〜04）の非追跡化（本リポ github_native 採用）。
-# 起票検討段階の使い捨てドラフト（docs/maintainer/workflow/** 配下の 00〜04）を git 非追跡にする。
-# git 機構により追跡済みファイルは温存され（check-ignore は index を参照し tracked→exit1）、
-# 新規未追跡ドラフトのみ非追跡になる。90_issues.md・README.md・別パスの DECISIONS.md・.github/ は
-# 巻き込まない（5 明示ファイル名に限定・02_設計 ADR-S2-4）。
-# 正本: docs/maintainer/workflow/20260715_160558_issue運用ポリシー全面移行/90_issues/20260716_174958_S-2本リポgithub_native採用/02_設計.md, 03_実装計画.md
-docs/maintainer/workflow/**/00_要求定義.md
-docs/maintainer/workflow/**/01_要件定義.md
-docs/maintainer/workflow/**/02_設計.md
-docs/maintainer/workflow/**/03_実装計画.md
-docs/maintainer/workflow/**/04_review.md
+# worktree自体（各worktree配下は独立したリポジトリとして扱われるためgit管理外。
+# 空の親ディレクトリのuntracked表示のみを防ぐ）
+.worktrees/

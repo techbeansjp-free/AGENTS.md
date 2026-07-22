@@ -1,0 +1,106 @@
+# 正本: AGENTS.md §不変条件I1・I4・I6・I7 / §参照・コメントの陳腐化防止
+#
+# PRへのpushごとに、agent-skill-chain CLI自体のテストスイート（npm test）を実行したうえで、
+# ブランチ名・worktreeパス・テンプレート同期・用語・参照規約・ADR・成果物・AC対応の各検査
+# （.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
+# .agent-skill-chain/scripts/adr-lint.sh）を実行する。各スクリプトは agent-skill-chain CLI
+# （src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパーであるため、検査本体の前に
+# ビルドを行う。
+name: agent-skill-chain / ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+      - name: Fetch base branch for diff-based checks
+        # verify-artifacts の code 判定（git diff base...HEAD）が base を解決できるようにする。
+        # actions/checkout@v4 はPRのマージrefのみをフェッチし、baseブランチ自体はローカルに
+        # 存在しないため（PR #172 run 29717941752 で実落ち）、ここで明示的にフェッチする
+        # （下記 verify-adr ステップと同一パターン。remote.origin.fetch の既定refspecにより
+        # `origin/$BASE_REF` としてローカルへ反映される）。
+        if: github.base_ref != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF" --depth=1
+
+      - name: Derive issue_id
+        id: ctx
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
+          if ! [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
+            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（.agent-skill-chain/config/agent-skill-chain.yaml branch.pattern に非適合）" >&2
+            exit 1
+          fi
+          echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: verify-branch-name
+        run: ./.agent-skill-chain/ci/verify-branch-name.sh
+
+      - name: verify-worktree-path
+        run: ./.agent-skill-chain/ci/verify-worktree-path.sh
+
+      - name: verify-template-sync
+        run: ./.agent-skill-chain/ci/verify-template-sync.sh
+
+      - name: verify-artifacts (対象PRで変更されたセグメントごと)
+        run: |
+          for segment in spec design implementation validation; do
+            ./.agent-skill-chain/ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" "$segment"
+          done
+
+      - name: verify-ac-coverage
+        run: ./.agent-skill-chain/ci/verify-ac-coverage.sh "${{ steps.ctx.outputs.issue_id }}"
+
+      - name: verify-adr (PRで変更されたADRごと)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+          CHANGED_ADRS="$(git diff --name-only "origin/$BASE_REF"...HEAD -- 'docs/adr/*.md')"
+          for adr_path in $CHANGED_ADRS; do
+            ./.agent-skill-chain/ci/verify-adr.sh "$adr_path"
+          done
+
+      - name: lint-vocab
+        run: ./.agent-skill-chain/scripts/lint-vocab.sh
+
+      - name: lint-references
+        run: ./.agent-skill-chain/scripts/lint-references.sh
+
+      - name: Fetch base branch for secret scan
+        if: github.base_ref != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF" --depth=1
+
+      - name: lint-secrets (PRで追加された行のみ)
+        if: github.base_ref != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: ./.agent-skill-chain/scripts/lint-secrets.sh --diff "origin/$BASE_REF"
+
+      - name: adr-lint
+        run: ./.agent-skill-chain/scripts/adr-lint.sh check

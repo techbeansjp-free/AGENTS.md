@@ -1,45 +1,51 @@
-# Contributing — 開発者・自己拡張・メンテナ向けガイド
+# Contributing
 
-本リポジトリは仕様パッケージの正本である。拡張・リリースに必要な入口をここに集約する。
+本リポジトリは `agent-skill-chain` パッケージ（CLI + AGENTS.md 憲法 + 配布テンプレート）の正本である。運用規律そのものは [AGENTS.md](AGENTS.md) が正本であり、本リポジトリの開発自体も AGENTS.md の I1〜I8（追跡可能性・フェーズゲート・耐久性・分離・進行役の純粋性・正準モデル・仕様⇔検証の追跡・安全側ラチェット）に従う。本ファイルはパッケージ本体（CLI 実装）の開発手順に限定する。
 
-## GitHub 直接参照での配備（開発者・自己拡張向け）
-
-`npx` は GitHub リポジトリを直接参照する（`npx github:owner/repo` 記法）。`package.json` の `prepare` フックにより git 経由インストール時に `npm run build` が自動実行され、非追跡（`.gitignore` 対象）の `bin/agents-md.js` が自動生成される。採用先プロジェクトのルートで次を実行する。`init` が内部で `.agent-skill-chain/source/scripts/setup.sh` を呼び、配備一式を行う。
+## 開発環境
 
 ```bash
-cd my-project
-npx github:techbeansjp-free/AGENTS.md init
+npm install
+npm run build       # src/ (TypeScript) → bin/ (gitignore対象のビルド生成物)
+npm test            # node --import tsx --test でtest/unit・test/integrationを実行
+npm run typecheck   # tsconfig.test.json でsrc/・test/双方を型検査
 ```
 
-これで以下が行われる:
+Node.js 20 以上が必要（`package.json` `engines.node`）。
 
-- パッケージの `AGENTS.md` と `CLAUDE.md` がプロジェクトルートにコピーされる
-- パッケージの `.agent-skill-chain/source/` がプロジェクトの `.agent-skill-chain/source/` にコピーされる
-- `.agent-skill-chain/runtime/templates` が無い場合は **`.agent-skill-chain/runtime/templates/`**（パッケージ内）からコピーされる
-- `.claude/hooks` と `.cursor/` に enforcement が展開され、スキルが `.claude/skills` と `.cursor/skills` に同期される
+## リポジトリ構成
 
-npm レジストリを経由しない補助導線である。
-
-## 本リポジトリでテストを回す
-
-本リポジトリ（パッケージ正本／自己拡張）でテストを回す場合は、一括 runner で 1 コマンド実行できる。
-
-```bash
-npm test                                  # = bash test/run-all.sh
-bash test/run-all.sh                      # npm を使わない場合
+```
+src/agents-md.ts     # CLIエントリポイント（サブコマンドのルーティングのみ）
+src/commands/        # サブコマンド実装（issue.ts, lease.ts, gate.ts 等）
+src/lib/             # 共有ロジック（yaml-io, schema, worktree, github-lease 等）
+test/unit/           # src/lib/ の単体テスト（1モジュール1ファイル対応）
+test/integration/    # bin/agents-md.js をsubprocess実行するCLI結合テスト
+test/helpers/        # tmp-repo（一時repo構築）, cli（subprocess実行）, gh-stub（ghコマンド偽装）
+.agent-skill-chain/  # 配布される正本アセット（standards/templates/schemas/config/adapters/scripts/ci）
 ```
 
-全テストを順に実行し、末尾サマリ（`合計=N PASS=p FAIL=f SKIP=s`）と終了コード（全成功で 0・1 件以上 FAIL で非 0）を返す。個別実行・前提依存マトリクス（bash/git/node/tar/sqlite3）・SKIP 規約は [.agent-skill-chain/source/SETUP.md](.agent-skill-chain/source/SETUP.md) §テスト実行 を参照。
+`bin/` はビルド生成物であり Git 管理対象外（`.gitignore`）。ソースを変更したら `src/` を編集する。
 
-## リリース（メンテナ向け）
+## サブコマンドを追加する
 
-リリースは [.github/workflows/release.yml](.github/workflows/release.yml) が、配布影響パスを含む変更が main へ push（PR レビュー承認済みマージ）されると自動発火し、version bump（patch +1）・日時タグ・GitHub Release 作成 → marketplace 公開 → apm release を直列に実行する。リポジトリ変数 `RELEASE_ENABLED` は緊急停止スイッチ（既定で有効、`false` 設定時のみ停止）。`workflow_dispatch` は緊急時の手動代替。詳細正本は [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md)。
+1. `src/commands/<name>.ts` に実装を追加する（既存コマンドと同様、`guard`/`isHelp`/`printUsage` 等 `src/lib/cli-io.ts` の共通ヘルパーに従う）。
+2. `src/agents-md.ts` の `routes` に `'<command> <subcommand>': handler` を登録する。
+3. `test/unit/` に純粋ロジックの単体テスト、`test/integration/` に `bin/agents-md.js` を subprocess 実行する結合テストを追加する（既存の `test/integration/*.test.ts` を参考にする）。
+4. 配布物（`.agent-skill-chain/scripts/*.sh` または `ci/*.sh`）が対応する場合は、そのスクリプトを新コマンドへの薄いラッパーとして揃える。
 
-## さらに詳しく（詳細正本）
+## テスト方針
 
-| ファイル | 内容 |
-|------|------|
-| [docs/maintainer/RELEASE.md](docs/maintainer/RELEASE.md) | リリース詳細正本 |
-| [docs/maintainer/adapters.md](docs/maintainer/adapters.md) | Claude/Cursor アダプタ生成 |
-| [docs/maintainer/apm-package.md](docs/maintainer/apm-package.md) | apm パッケージ生成 |
-| [docs/maintainer/claude-hook-e2e.md](docs/maintainer/claude-hook-e2e.md) | Claude hook E2E 検証 |
+型ファースト（TypeScript）。`node:test` + `tsx` を使用し、追加の実行時依存は増やさない。CLI 結合テストは実際に `bin/agents-md.js` をビルド後 subprocess として起動し、GitHub API 呼び出しは `test/helpers/gh-stub.ts` の偽 `gh` コマンドで差し替える（本物の GitHub へは到達しない）。
+
+## ブランチ・worktree・PR
+
+このリポジトリ自身の開発も [AGENTS.md §ブランチ・worktree](AGENTS.md) の規約（`<type>/<issue-id>-<slug>` ブランチ、`.worktrees/<issue起票日時>-<type>-<issue-id>-<slug>/` worktree、1 Issue = 1 ブランチ = 1 worktree = 1 PR）に従う。worktree の削除は `rm -rf` ではなく `.agent-skill-chain/scripts/cleanup.sh`（または `agent-skill-chain cleanup`）経由で行う。
+
+## 実装状況の既知の制約
+
+`.agent-skill-chain/adapters/{claude,codex,human}.sh` は現時点でベンダー中立 role contract のインターフェーススタブであり、各関数はプレースホルダとして明示的に失敗する（サイレント成功を避けるため）。実処理は対応する `.agent-skill-chain/scripts/*.sh` を呼び出す形で今後実装する。
+
+## ライセンス
+
+コントリビュートしたコードは本リポジトリの [LICENSE](LICENSE)（MIT）の下でライセンスされる。
