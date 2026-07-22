@@ -1,80 +1,56 @@
 <!--
-正本: AGENTS.md 4セグメント・4ゲート
+正本: AGENTS.md §4セグメント・4ゲート
 このファイルは Issue 毎に複製して使う雛形である（セグメント: design、成果物: DESIGN.md（PLAN.md は別ファイル）、ゲート: design-gate）。
 -->
 
-# DESIGN: リリース自動化（バージョンbump・タグ付け・GitHub Release作成）
+# DESIGN: main リポジトリルート直下に混入した stray なセグメント成果物ファイルの削除
 
-- Issue: `ISSUE-196`
+- Issue: `ISSUE-200`
 - 対応する SPEC: `SPEC.md`
 
-mainへのリリース対象変更を契機に、`package.json` の `version` 自動更新・gitタグ・GitHub Release を人手なしで生成し続ける仕組みを、GitHub Actions ワークフロー1本として復元する。旧実装（削除済み `release.yml`）が抱えた「package.json は semver、実タグは日時形式」という二重版数体系を廃し、単一の semver 体系に統一することで SPEC レビューで問題化した AC-5 の曖昧さを構造的に解消する。
+## 前提
 
-## 決定した設計判断（6点）
+本 Issue は恒久的な設計判断を伴わない単純なファイル削除である。ADR は「なぜその判断をしたか」という恒久的判断を記録する成果物であり、本 Issue には該当する判断が存在しないため作成しない。
 
-1. **リリース対象の判定基準**: mainへのpushが「配布物・その生成元」を変更した場合のみをリリース対象とする。`paths` フィルタで対象を限定する。対象=`src/**`, `.agent-skill-chain/**`, `AGENTS.md`, `CLAUDE.md`, `docs/GLOSSARY.md`, `package.json`, `package-lock.json`, `tsconfig.json`, `tsconfig.test.json`。除外=`.github/**`（配布物でない）, `README.md`, `CONTRIBUTING.md`, `docs/adr/**`, `docs/system-spec/**`, `docs/maintainer/**`, `test/**`。除外群は `package.json` の `files`（`bin/`・`.agent-skill-chain/`・`AGENTS.md`・`CLAUDE.md`・`docs/GLOSSARY.md`）が配布する成果物にも、その生成元（`src/**`→`bin/`）にも該当せず、consumer が受け取る内容を変えないため、リリースを起こさない。
-2. **版数体系の統一**: リリース版数は `package.json` の semver を唯一の正本とし、gitタグ=`v<semver>`、GitHub Release の tag/name も同一文字列とする。3者は常に同一の `target` 値から生成されるため定義上一致する（AC-4）。旧日時形式タグ（`v20260720.060726` 等）は semver 正規表現 `^v[0-9]+\.[0-9]+\.[0-9]+$` に一致しないため、以後の後退判定の比較対象から機械的に除外される（AC-5 の「版数体系をまたいだ比較はしない」を体系選択そのもので保証）。
-3. **marketplace/apm の廃止**: 新配布方式は `npx github:techbeansjp-free/AGENTS.md` によるGitHub直接参照であり、旧 `release-marketplace`・`apm-release` ジョブが公開していた marketplace/apm 生成物は主導線から外れている。両ジョブは踏襲せず廃止する。併せて、既に削除済みパス（`.agent-skill-chain/source/`・`.adapters/claude`）を参照したまま放置され誤解を招く `.claude-plugin/marketplace.json` を本Issueの実装で削除する（判断根拠は ADR-0005）。
-4. **無限ループ・二重発火防止**: 版数bumpは専用の短命ブランチ上のコミット `chore(release): v<target> [skip ci]` として作り、squashマージでmainへ反映する。ここで、squashマージが生成するmain上のコミットのメッセージは**ブランチ側commitのメッセージを自動では引き継がない**——`gh pr merge --squash` はリポジトリのsquash既定メッセージ設定（PRタイトル由来など）に従い、`--subject`/`--body` を明示しない限り `[skip ci]` を欠く可能性がある。これが欠落するとmainへのsquashコミットが `package.json` 変更として本ワークフローを再トリガし、無限ループ防止（AC-6）が実質破綻する暴走リリース経路が生じる。そこで **`gh pr merge --admin --squash --subject "chore(release): v<target> [skip ci]"`（必要に応じ `--body` も併用）でsquashコミットのメッセージそのものを明示固定し**、リポジトリのsquash既定設定に一切依存せず `[skip ci]` の生存を設計として保証する。GitHub Actions は `[skip ci]` を含むpushに対しworkflow run自体を生成しない（公式仕様）ため、これが再帰トリガ抑止の主機構である（AC-6）。タグ生成・Release生成は本ワークフローのトリガ（`push: branches:[main]`）ではないため再帰トリガ源にならない。二重発火は `concurrency: {group: release, cancel-in-progress: false}` による直列化、bumpブランチ名への `target` 版数埋め込みによる同名ブランチ・PRの重複作成防止、タグ・Release作成前の存在チェック（冪等）で防ぐ（AC-7）。
-5. **認証・secret・I4適合（PR経由）**: main への版数bump反映は生pushではなく必ずPRを経由する。bumpコミットは短命ブランチ `release/bump-v<target>`（branch protection対象外）へ `GITHUB_TOKEN` でpushし、`gh pr create` で小さなPRを作成、`gh pr merge --admin --squash` でマージする。この admin merge は required status check を bypass するが、進行役に標準承認済みの `gh pr merge --admin` 運用（ruleset の bypass_actor に登録済みの admin 資格情報 secret `RELEASE_MAIN_PAT`）と同一の特権操作であり、生pushではなくPR経由である点で I4「mainへの変更はPR経由のみ」の文言上の要求を満たす。I4は「PR経由」を求めるのであって「全チェックが緑であること」までは求めておらず、ゲートCIのsecrets（`ANTHROPIC_API_KEY` 等）未設定という別問題には一切依存しない。タグpush・GitHub Release作成は保護対象外（tag ref はbranch protection非対象）のため `GITHUB_TOKEN`（`contents: write`）で足りる。`RELEASE_MAIN_PAT` を要するのは bump PR の admin merge のみに限定する（最小権限）。
-6. **障害・ロールバック**: 後述「障害・ロールバック考慮」に詳述。基本方針は「各ステップ冪等・失敗時は未完成物を残さず次回runが自己修復」「版数後退は禁止のためロールバックは後退でなくroll-forward（次patch）」。
+## 事前調査（削除の安全性確認）
+
+削除対象ファイル（`SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md`）が、CI・CLI 実装上「main リポジトリルート直下に恒久的に存在すること」を前提にしていないかを `grep` で確認した。結果は以下の通りで、いずれも Issue 固有の worktree 単位でこれらのファイルの有無を検査する設計であり、main のルート直下に恒久的に存在することを前提にしたコードは存在しない。
+
+- `.agent-skill-chain/ci/verify-artifacts.sh` / `.agent-skill-chain/ci/verify-ac-coverage.sh`: いずれも `src/commands/verify.ts` の `artifacts`/`acCoverage` サブコマンドへの薄いラッパーであり、`<issue_id>` 引数から `findIssueWorktree()` で解決した**当該 Issue の worktree パス**（`entry.path`）を基点にファイル存在を確認する。`repoRoot()`（main worktree）は検査対象にしていない。
+- `src/commands/verify.ts` の `checkOutputExists()` は `worktreePath` 引数配下の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を検査対象とし、常に `artifacts()` から渡される Issue worktree パスに対して実行される。
+- `src/commands/verify.ts` の `docLength()` が参照する `SPEC.md`/`DESIGN.md`/`PLAN.md`/`VALIDATION.md` は `.agent-skill-chain/templates/issue/` 配下の**雛形ファイル**であり、本 Issue の削除対象（root 直下の実ファイル）とは別物で影響を受けない。
+- `.github/workflows/agent-skill-chain-ci.yml` は `verify-artifacts.sh "$issue_id" "$segment"` の形で PR に対応する Issue 番号を渡しており、root 直下のファイルを直接参照する記述は無い。
+- `test/integration/verify.test.ts` 等の既存テストは全て一時リポジトリ・一時 worktree 上で `SPEC.md` 等を作成・検証しており、main リポジトリルートの実ファイルに依存するテストは存在しない。
+
+以上より、root 直下の4ファイル削除は既存 CI・CLI のいずれの前提にも抵触しない。
 
 ## 要件 → 設計要素の対応表
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| 要件1 / AC-1 | バージョン解決器（既定=patch自動bump経路）＋ bumpブランチ・PR作成／admin merge器 | 既定経路は人手ゼロで版数を更新（AC-1「人手の介在なく」を既定動作で充足） |
-| 要件2 / AC-2 | タガー（冪等） | `target` から `v<semver>` タグを生成 |
-| 要件2 / AC-3 | リリーサ（冪等） | 同タグを指す GitHub Release を生成 |
-| 要件3 / AC-4 | 版数体系の統一（単一 `target` 値を3者へ適用） | package.json=tag=release が同一文字列で定義上一致 |
-| 要件4 / AC-5 | バージョン解決器の単調保証（semver 比較 `target > latest`、seed規則、非semverタグ除外） | 自動化の内部一貫性のみを対象。非semverの旧タグは比較対象外 |
-| 要件5 / AC-6 | `--subject` で `[skip ci]` を明示固定したsquashマージ（主機構）＋ トリガ設計（tag/release非トリガ）＋ concurrency ＋ 防御的skip-ciガード | 再帰トリガの唯一の経路（bump PRのmainへのマージコミット）を、squash既定設定に依存せず `--subject` 明示で `[skip ci]` を保証して遮断 |
-| 要件6 / AC-7 | concurrency直列化 ＋ bumpブランチ名への `target` 埋め込みによる重複ブランチ・PR防止 ＋ タガー・リリーサの存在チェック（冪等） | 単一契機に対し高々1件、同一版数の重複生成なし |
+| `AC-1`（root 直下の stray ファイル削除） | 実装セグメントでの `git rm` 実行 | 対象は root 直下の4ファイルのみ。`.agent-skill-chain/templates/issue/` 配下の雛形・`.worktrees/` 配下の他 Issue 成果物は対象外（要件2） |
+| `AC-2`（削除後も CI が通過） | 上記「事前調査」による事前確認 ＋ 実装セグメントでの実際の CI 実行結果確認 | 削除に伴う追加のコード変更は不要（純粋な削除のみで完結する） |
 
 ## 責務・境界
 
 ### コンポーネント構成
 
-責務は6つに分割し、いずれも単一責務とする。
+本 Issue は新規コンポーネントを導入しない。既存 stray ファイルの削除のみが変更内容である。
 
-- **トリガ・concurrency層**（`.github/workflows/agent-skill-chain-release.yml`）: `on: push: branches:[main]` にリリース対象 `paths` フィルタを適用してリリース契機を検出し、`concurrency: {group: release, cancel-in-progress: false}` で契機を直列化する。`permissions: contents: write`。防御として、HEADコミットメッセージに `[skip ci]` を含む場合はジョブを早期skipする（GitHub側で既にrun抑止されるため冗長だが安価な二重防御）。次段以降を起動するのみで版数計算・生成物作成の内容判断は持たない。
-- **バージョン解決器**（単体テスト可能な単位。CLIサブコマンドまたは `.agent-skill-chain/ci/` 配下の独立nodeスクリプトとして実装し、YAMLインライン式の未テストロジックにしない）: 既存タグのうち semver 正規表現に一致する最大版数 `latest` を求め、下記アルゴリズムで `target`・`needCommit` を決定し、後退禁止ガードを適用する。責務は「次版数の決定」のみで、副作用（書込み・push・タグ作成）を持たない。
-
-  ```text
-  latest := semver正規表現 ^v[0-9]+\.[0-9]+\.[0-9]+$ に一致する既存タグの最大版数
-            （一致タグが1件も無ければ seed := package.json.version を latest とみなす）
-  pkg    := package.json.version
-  if semver(pkg) > semver(latest):
-      target := pkg          # マージ済みPRで人手が minor/major を先行bump済み → 尊重
-      needCommit := false    # package.json は既に target を保持
-  else:
-      target := patchIncrement(latest)   # 既定: 自動でpatch加算（人手介在なし＝AC-1既定経路）
-      needCommit := true                 # package.json を書き換えるコミットが必要
-  assert semver(target) > semver(latest) # AC-5 後退禁止ガード。不成立ならリリースせず失敗
-  ```
-
-  初回run時、既存の semver 一致タグは存在せず（旧タグ `v20260720.*` は非一致）、seed=`0.2.0` → else経路 → 初回自動リリースは `v0.2.1`。
-- **bumpブランチ・PR作成／admin merge器**（`needCommit` が真のときのみ実行）: `package.json` の `version` を `target` に書き換え、短命ブランチ `release/bump-v<target>` 上に `chore(release): v<target> [skip ci]` としてcommitして `GITHUB_TOKEN`（branch protection対象外の release ブランチ）でpushし、`gh pr create` で機械生成の版数台帳更新PR（本文にIssue-196 由来を明記）を作成する。マージは **`gh pr merge --admin --squash --subject "chore(release): v<target> [skip ci]"`**（必要に応じ `--body` も併用）で行い、squashコミットのメッセージそのものを明示固定してリポジトリのsquash既定設定に依存せず `[skip ci]` の生存を保証する（設計判断4）。マージには進行役に標準承認済みの admin merge 権限（bypass_actor 登録済み `RELEASE_MAIN_PAT`）を用い、required status check を bypass する。この bypass は「新しいゲート免除カテゴリの発明」ではなく、**既に ruleset の bypass_actor に承認済みで恒久的に存在する Repository admin の required status check bypass 能力を、人間が都度 `gh pr merge --admin` を手動発動する代わりに、狭く機械検査可能なシナリオに限って自動発動するもの**である。自動発動を許すのは以下2条件を機械的に満たすPRに限定する: (a) head ブランチが `release/bump-v*` に一致し、(b) 変更ファイル集合が `package.json`（および `needCommit` に伴い変化した場合の `package-lock.json`）のみである。
-
-  **スコープの機械検査手段（admin merge 直前ガード）**: 条件(b)は、admin merge を実行する直前に PR の変更ファイル一覧を GitHub API から取得して機械照合する。具体的には `gh pr view <pr番号> --json files --jq '.files[].path'` でPRが触れる全ファイルのパス集合を取得し、許可リスト `{package.json, package-lock.json}` を減算した差集合が空でない（＝許可リスト外のパスが1件でも含まれる）場合、および取得できたパスが0件（空PR＝想定外）の場合は、`gh pr merge --admin` を一切実行せず `human_required` として停止する。照合はパス完全一致で行い（前方一致・glob は用いない）、`package-lock.json` は `needCommit` に伴い実際に変化した場合のみ許可リストに含める。条件(a)は同 `gh pr view <pr番号> --json headRefName --jq '.headRefName'` の値が正規表現 `^release/bump-v[0-9]+\.[0-9]+\.[0-9]+$` に一致することで検査する。両条件の検査は admin merge の副作用が生じる前に完了し、いずれか不成立なら merge 呼び出しに到達しない。GitHub API の files は既定で最大件数の制約を持ち得るため、`--json files` が全件を返しているか（切り詰めが起きていないか）も併せて確認し、疑義があれば安全側に倒して `human_required` とする。
-
-  いずれかを満たさない（＝bump スコープを超えた変更が紛れ込んだ）場合は自動admin mergeを行わず `human_required` として停止する（例: 再利用した既存ブランチに想定外の差分が乗っていた残骸ケースを弾く）。このPRは SPEC/DESIGN/PLAN/VALIDATION を伴わない機械生成の版数台帳更新のみのPRであり、Issue成果物ではなく既に承認済みの決定（本Issueの design-gate 承認）の機械的執行に過ぎないため、上記の狭い自動bypassの範囲でCheck Run未通過のまま反映される（判断根拠と残余リスクの恒久受容は ADR-0005）。ブランチ名に `target` 版数を含むため、同一版数のbumpブランチ・PRは重複作成されない。同名ブランチ・同名PRが既存の場合（前回runのmerge失敗残骸等）は新規作成せず既存を検出し、上記スコープ検査を通過したときのみ再利用してマージする（冪等）。
-- **タガー（冪等）**: `v<target>` タグが未存在のときのみ、リリース対象commit（`needCommit`時は bump PR のマージ後に main へ着地した版数bumpコミット、非commit時はrunをトリガしたHEAD）へ注釈付きタグを作成しpushする。`GITHUB_TOKEN` を用いる。
-- **リリーサ（冪等）**: `v<target>` の GitHub Release が未存在のときのみ、当該タグを指すReleaseを作成する。`GITHUB_TOKEN` を用いる。
-- **テンプレート同期・stale除去**（実装セグメントの構成要素）: 上記ワークフローを配布元正本 `.agent-skill-chain/templates/github/.github/workflows/` と展開先 `.github/workflows/` の双方へ同一内容で配置する（`verify-template-sync.sh` が両者一致を検査するため片方だけの追加はCI失敗となる）。併せて stale な `.claude-plugin/marketplace.json` を削除する。
+- 実装セグメント: root 直下の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を `git rm` で削除する責務を持つ。他の場所（`.agent-skill-chain/templates/issue/`・`.worktrees/`）のファイルには一切触れない。
+- 独立検証セグメント: 削除後に既存 CI ワークフロー（`.agent-skill-chain/ci/` 配下の `verify-branch-name.sh`・`verify-worktree-path.sh`・`verify-template-sync.sh`・`verify-artifacts.sh`・`verify-ac-coverage.sh`・`verify-adr.sh` および `.github/workflows/agent-skill-chain-ci.yml`）が引き続き成功することを確認する責務を持つ。
 
 ### 依存関係
 
 ```text
-トリガ・concurrency層 → バージョン解決器 → bumpブランチ・PR作成／admin merge器(needCommit時のみ) → タガー → リリーサ
-バージョン解決器 → (読取のみ) 既存gitタグ / package.json
+実装セグメント（git rm） → 独立検証セグメント（既存CIワークフロー実行確認） → PR
 ```
 
-各コンポーネントは後段を起動する一方向依存のみで循環はない。バージョン解決器は読取専用で副作用を持たず、書込み系（bumpブランチ・PR作成／admin merge器・タガー・リリーサ）から独立して単体検証できる。責務は6分割され単一コンポーネントへの集中はない。
+新規の外部依存・コンポーネント間依存は発生しない。
 
 ## 関連ADR
 
-本設計の恒久的判断（版数体系のsemver統一・marketplace/apm廃止・版数bumpコミットをmainへPR経由 admin merge で反映するI4適合方式）は、本Issueで新規作成する ADR-0005（status: proposed）に記録する。ADR-0005 は本Issueのdesignセグメントで proposed として作成され、design-gate 承認時に accepted へ遷移する。accepted 前かつ同一Issue内の proposed ADR であるため、`accepted` のみ参照可能な下記構造化フィールドには登録せず、由来は本文で示す（構造化参照は accepted ADR が無いため空とする）。
+該当なし。本 Issue は恒久的な設計判断を伴わないファイル削除のため ADR を作成しない。
 
 ```yaml
 related_adrs: []
@@ -82,13 +58,6 @@ related_adrs: []
 
 ## 障害・ロールバック考慮
 
-- 想定される失敗モードと自己修復:
-  - **bumpブランチのpush失敗**（認証・権限、または競合による非fast-forward）: PR未作成・main不変（`package.json` 未bump）。タグ・Releaseも未生成。次のリリース契機で再試行され、状態不整合を残さない（安全側）。
-  - **PR作成後、admin mergeに失敗**: PR・bumpブランチは残るが main は不変。次run時、同一 `target` なら既存ブランチ・PRを検出して再利用しマージを再試行する（冪等）。契機が進み `target` が上がった場合、旧bump PR/ブランチはstaleとなるが、バージョン解決器はより高い版数を採用するためリリースの正しさに影響しない（stale PRは後述の掃除対象）。
-  - **マージ成功後、タグ作成に失敗**: main の `package.json` はbump済み（`pkg > latest`）だがタグ・Releaseが無い状態。次回run時バージョン解決器が case `needCommit=false` を選択し、欠落したタグ・Releaseを当該版数で補完する（自己修復・冪等）。
-  - **タグ作成後、GitHub Release作成に失敗**: 再run時、タガーは存在チェックによりタグ作成をskip、リリーサが欠落Releaseのみを作成する（冪等）。
-  - **契機の並行到来**: `concurrency: {group: release}` が直列化し、bumpブランチ名への `target` 埋め込みが同名ブランチ・PRの重複作成を弾き、後続runはタグ・Releaseの存在チェックによりno-opとなる（AC-7）。
-- ロールバック手順: 誤リリースの取消は、`gh release delete v<x>` と `git push origin --delete refs/tags/v<x>` でRelease・タグを除去する。`package.json` の版数は後退禁止（AC-5ガード）のため、版数を下げて再リリースはできず、修正は次patchへの roll-forward で行う（例: `v0.2.3` が不良なら `v0.2.4` を出す）。この方針を運用前提として明記する。marge失敗で残った stale な bumpブランチ・PR は `git push origin --delete release/bump-v<x>` と `gh pr close` で掃除する。
-- 影響を受ける既存機能・整合性上の留意点:
-  - 版数bumpコミットは main へ生pushせず、短命ブランチ `release/bump-v<target>` 上のコミットを小さなPRとして作成し `gh pr merge --admin --squash --subject "chore(release): v<target> [skip ci]"` でマージすることで、I4「mainへの変更はPR経由のみ」を文言通り満たす。この admin merge は required status check を bypass するが、I4が求めるのは「PR経由」であって「全チェックが緑であること」ではなく、かつ既に ruleset の bypass_actor に承認済みで恒久的に存在する Repository admin の bypass 能力を、狭く機械検査可能なシナリオ（head=`release/bump-v*` かつ変更ファイル=`package.json`（±`package-lock.json`）のみ）に限って自動発動するものである。したがってゲートCIのsecrets（`ANTHROPIC_API_KEY` 等）未設定という可修復な別問題には一切依存しない。このPRは機械生成の版数台帳更新（`[skip ci]` を `--subject` で明示固定・SPEC/DESIGN/PLAN/VALIDATION を伴わないIssue非成果物）であり、既に承認済みの本Issue design-gate 決定の機械的執行に過ぎない。上記スコープを超えた変更が紛れ込んだPRは自動admin mergeせず `human_required` とする。本判断（既存bypass能力の狭スコープ自動化・残余リスクの恒久受容・I1追跡可能性の結線先）は ADR-0005 に記録する。
-  - 既存ワークフロー（`agent-skill-chain-{ci,gate,risk,reconcile}.yml`）への影響: `reconcile` は `branches-ignore:[main]`、他は `pull_request` トリガである。bumpコミットの `[skip ci]` は当該pushおよびその head commit を持つ pull_request イベントの双方でworkflow run生成を抑止する（公式仕様）ため、bumpブランチpushによる `reconcile`、bump PR による `ci`/`gate`/`risk` はいずれも起動しない。仮にこれらが起動しても required status check は admin merge が bypass するため bump PR のマージは妨げられない。squashマージ後の main コミットも、`--subject` で明示固定した `[skip ci]` によりどのworkflow runも生成しない（リポジトリのsquash既定メッセージ設定に依存しない）ため、本ワークフロー追加による既存トリガとの競合・二重起動は発生しない。
+- 想定される失敗モード: 削除後に既存 CI が予期せず失敗する（「事前調査」で洗い出せなかった隠れた依存が存在した場合）。
+- ロールバック手順: 本 PR のブランチ（`chore/200-stray-root-artifacts`）は close・破棄すれば main には一切影響しない。万一 main へマージ後に問題が判明した場合も、削除された4ファイルは Git 履歴から `git revert` により復元可能。
+- 影響を受ける既存機能: なし。root 直下の4ファイルは過去 Issue（#196・#191）の作業過程で誤って main に混入した stray な成果物であり、他のいかなる機能もこれらの root 直下ファイルの恒久的存在を前提にしていないことを「事前調査」で確認済み。
