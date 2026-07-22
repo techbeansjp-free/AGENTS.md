@@ -6,42 +6,60 @@
 # 本ファイル全体を単一YAMLとして readYamlFile() で読み込むため、見出し相当の情報はコメントで表現する）。
 #
 # 本検証は実装者本人とは別の独立検証者（validation_worker）として実施した。
+# 前Issue（#204）由来のVALIDATION.mdが本worktreeルート直下に混入していたため、
+# 本ファイルは当該Issue #202自身の検証成果物として完全に上書きしたものである。
 #
 # 実施した検証の要旨:
-#   - AC-1（identity未設定環境での release tag 成功）: test/integration/release.test.ts に
-#     Issue #198（bump()向け）と同じ手法（GIT_CONFIG_GLOBAL/GIT_CONFIG_SYSTEMを/dev/nullへ
-#     差し替え、GIT_AUTHOR_*/GIT_COMMITTER_*環境変数も除去したidentitylessEnv()）でtag()を
-#     直接実行する新規テストが実装セグメントで追加済みであることを確認し、実行して
-#     終了コード0・tagger identityがgithub-actions[bot] <github-actions[bot]@users.noreply.github.com>
-#     であることを実測した。
-#   - implementation-gateレビューで指摘された既知の問題点（本検証で対処済み）: 追加当初の
-#     当該テストは `assert.doesNotMatch(result.stderr, /tagger identity unknown/i)` という
-#     アサーションを含んでいたが、実際にgitが出す文言は大文字小文字を区別しても
-#     "Committer identity unknown"（tagger identity unknownという文字列自体を出力しない）
-#     であることを、本検証で実際に `git tag -a` をidentity未設定環境で直接実行し確認した
-#     （すなわちこのアサーションは常に真になる無効な検査であり、tag()の修正有無に関わらず
-#     常にパスしていた）。本検証で当該アサーションを実際のgitエラー文言に合わせて
-#     `assert.doesNotMatch(result.stderr, /Committer identity unknown/i)` へ修正し、
-#     新たにcheckpointした。同テスト内の他のアサーション（終了コード0の確認、
-#     tagger identity実値の確認）は実装の実挙動を正しく検証しており有効である。
-#   - AC-2（ensureGitIdentity()/isIdentityConfigured()の再利用）: src/commands/release.ts の
-#     tag()の実装差分を確認し、既存の ensureGitIdentity()/isIdentityConfigured()（Issue #198
-#     導入、bump()と共有）自体には変更が無く、tag()はgit tag -a実行直前でensureGitIdentity(root)
-#     を1回呼び出すのみでidentity解決判定・fallback書き込みの同等ロジックを新規実装して
-#     いないことをコードレビューで確認した。AC-1の自動テストが実際にfallback identity
-#     （github-actions[bot]）でtaggerが作成されることを実測しており、再利用が挙動として
-#     機能していることも裏付けている。
-#   - AC-3（既存identityの非破壊性）: test/integration/release.test.ts の新規テストで、
-#     createTmpRepo()が設定した既存identity（agent-skill-chain test <test@example.com>）が
-#     tag()実行前後でgit config user.name/user.emailの値として変化しないこと、かつ実際に
-#     作成されたtaggerも既存identityのままでfallbackへ上書きされていないことを実測した。
-#   - AC-4（既存テストの回帰なし）: 下記regression参照。
-#   - AC-5: mainマージ後の実release workflow確認は本検証セッションでは実施していない
-#     （手順はprocedureに明記、実施は進行役またはマージ実施者の別工程）。
+#   - npm run build（tsc）: エラーなく完了した。
+#   - npm test（node --test、465 tests / 465 pass / 0 fail / 0 skipped、
+#     duration_ms 196337、test/unit・test/integrationの全ファイルを含む本worktreeでの
+#     実行結果）を実測した。regressionはこの全体実行結果を証跡とする。
+#   - AC-1（implementationセグメントのunit_test_results判定がVALIDATION.mdの存在に依存しない）:
+#     SPEC.mdが指定する通り「本validationセグメント作業着手前の直近commit（実装セグメント
+#     完了時点のSHA、70a51fb100ddfc2fc849faf99bcbb5d4363b666b）」に対して、本validation
+#     セグメント自身によるVALIDATION.md作成前の時点で
+#     `node bin/agents-md.js verify artifacts ISSUE-202 implementation` を実際に実行し、
+#     終了コード0（成果物欠落の報告なし）であることを確認した。このとき本worktreeルート
+#     直下には前Issue（#204）由来の無関係なVALIDATION.mdが混入していたが、
+#     src/commands/verify.ts の checkOutputExists() における unit_test_results ケースは
+#     ADR-0006の設計判断どおりVALIDATION.mdを一切参照しないコード（testディレクトリの
+#     baseブランチ三点差分）になっており、この混入ファイルの有無に判定が左右されないことを
+#     コードリーディングでも確認した。加えて自動テスト
+#     test/integration/verify.test.ts の以下2件が本Issue適用後に新規・更新され、
+#     いずれもVALIDATION.mdを作成しない前提でunit_test_resultsの充足を検証し合格している。
+#     - 'verify artifacts: implementation segmentはdefaultBranchとのtestディレクトリ差分を
+#       要求し、VALIDATION.mdには依存しない'
+#     - 'verify artifacts: AC-1 codeとtest/差分が揃えばVALIDATION.mdを作成せずに
+#       unit_test_resultsが充足される'
+#   - AC-2（validationセグメントの既存判定に回帰が無い）: DESIGN.md/PLAN.mdの記述どおり
+#     acceptance_test_results/regression_test_results ケースの条件式はgit diffで無変更
+#     であることを確認した（`git diff bcd00fe...HEAD -- src/commands/verify.ts` で
+#     unit_test_resultsケースの追加のみが差分に現れ、当該2ケースは触れられていない）。
+#     既存の関連テスト3件が本Issue適用後も無修正で通過することを実測した。
+#     - 'verify artifacts: validation segmentはVALIDATION.mdの有無で成否が切り替わり、
+#       不正segmentやissue不在はエラーになる'
+#     - 'verify artifacts: SPEC.md/DESIGN.md/PLAN.mdをcommit後に削除しても、履歴上の実績に
+#       よりspec/designセグメントは成功する'
+#     - 'verify artifacts: VALIDATION.mdをcommit後に削除しても、履歴上の実績により
+#       validationセグメントは成功する'
+#   - AC-3（4セグメント通しの合否遷移）: SPEC.mdは検証方法見込みをhybrid（自動テスト＋
+#     AC-1/AC-2整合のコードレビュー）としていたが、本検証では automated と判定した。
+#     理由: test/integration/verify.test.ts のspec/design/implementation/validation各
+#     セグメントのテスト（下記evidence該当9件）が、各セグメントの成果物のみに基づく合否・
+#     未着手後続セグメントに影響されないこと・先行セグメント成果物が後続判定を代替しない
+#     ことを既に自動で網羅的に検証しており、AC-1/AC-2で実施した自動テスト実行と
+#     コードリーディング（checkOutputExists()の各caseの独立性確認）によって、AC-1/AC-2との
+#     整合も含め機械的に確定できたため、追加の人手コードレビュー工程を要さなかった。
+#     加えて、実装セグメント完了時点（commit 70a51fb）に対して
+#     `node bin/agents-md.js verify artifacts ISSUE-202 <segment>` を
+#     spec/design/implementation/validationの4segmentすべてについて実行し、
+#     いずれも終了コード0であることを実測した（validationセグメントの合格は前Issue#204由来の
+#     混入VALIDATION.mdによるものであり、本Issueが解決する別の構造的課題であって本Issueの
+#     回帰ではないことをSPEC.mdスコープ外節に基づき確認済み）。
 
 schema_version: agent-skill-chain/validation-report/v1
-issue_id: ISSUE-204
-target_sha: 382a1f10d896f6d3d40a479bdf504f70e2f92ab2
+issue_id: ISSUE-202
+target_sha: 70a51fb100ddfc2fc849faf99bcbb5d4363b666b
 
 acceptance_criteria:
   - ac_id: AC-1
@@ -49,45 +67,41 @@ acceptance_criteria:
       mode: automated
       result: pass
     evidence:
-      - "test/integration/release.test.ts (release tag (AC-1, Issue #204): git tagger identityが未設定の環境でもrelease tagに成功する)"
+      - "test/integration/verify.test.ts (verify artifacts: implementation segmentはdefaultBranchとのtestディレクトリ差分を要求し、VALIDATION.mdには依存しない)"
+      - "test/integration/verify.test.ts (verify artifacts: AC-1 codeとtest/差分が揃えばVALIDATION.mdを作成せずにunit_test_resultsが充足される)"
+      - "node bin/agents-md.js verify artifacts ISSUE-202 implementation を commit 70a51fb100ddfc2fc849faf99bcbb5d4363b666b（本validationセグメント着手前・VALIDATION.md本Issue分未作成）に対して実行し終了コード0を実測"
 
   - ac_id: AC-2
     verification:
-      mode: hybrid
+      mode: automated
       result: pass
-      reason: "「ensureGitIdentity()/isIdentityConfigured()と同等のロジックがtag()内に重複実装されていないか」という構造的性質は、実行結果の観測だけでは機械的に確定できず、実装差分のコードレビューを要するためhybridとした。挙動としての等価性（fallback identityが実際に機能すること）はAC-1の自動テストが実測している。"
-      procedure: "src/commands/release.ts のtag()実装差分を読み、git tag -a実行前にensureGitIdentity(root)の呼び出しが1回追加されているのみで、isIdentityConfigured()判定やfallback値の書き込みロジックがtag()内に新規記述されていないことを目視確認する。"
-      executor: "validation_worker（本検証セッションで実施済み）"
     evidence:
-      - "src/commands/release.ts（tag()内、既存タグ検出の冪等スキップ判定後・git tag -a実行直前にensureGitIdentity(root)呼び出しが追加されており、ensureGitIdentity()/isIdentityConfigured()自体の実装はIssue #198から変更されていないことを確認）"
-      - "test/integration/release.test.ts (release tag (AC-1, Issue #204))"
+      - "git diff bcd00fe...HEAD -- src/commands/verify.ts（acceptance_test_results/regression_test_resultsケースが無変更であることを確認）"
+      - "test/integration/verify.test.ts (verify artifacts: validation segmentはVALIDATION.mdの有無で成否が切り替わり、不正segmentやissue不在はエラーになる)"
+      - "test/integration/verify.test.ts (verify artifacts: SPEC.md/DESIGN.md/PLAN.mdをcommit後に削除しても、履歴上の実績によりspec/designセグメントは成功する)"
+      - "test/integration/verify.test.ts (verify artifacts: VALIDATION.mdをcommit後に削除しても、履歴上の実績によりvalidationセグメントは成功する)"
 
   - ac_id: AC-3
     verification:
       mode: automated
       result: pass
+      reason: "SPEC.mdはhybrid（自動テスト＋AC-1/AC-2整合のコードレビュー）を見込んでいたが、AC-1/AC-2の自動テスト・コードリーディングで整合が既に機械的に確定できたため、追加の人手コードレビュー工程を要さずautomatedで検証を完結できた。"
+      procedure: "test/integration/verify.test.ts のspec/design/implementation/validation各セグメント関連テストをnpm test経由で全実行し、加えてcommit 70a51fb100ddfc2fc849faf99bcbb5d4363b666bに対しspec/design/implementation/validationの4segmentそれぞれについてnode bin/agents-md.js verify artifacts ISSUE-202 <segment>を直接実行し終了コードを確認した。"
+      executor: "validation_worker（本検証セッションで実施済み）"
     evidence:
-      - "test/integration/release.test.ts (release tag (AC-3, Issue #204): 既存git identityを上書き・破壊しない)"
-
-  - ac_id: AC-4
-    verification:
-      mode: automated
-      result: pass
-    evidence:
-      - "npm test（464 tests / 464 pass / 0 fail / 0 skipped、test/integration/release.test.ts全体を含む本worktreeでの実行結果）"
-
-  - ac_id: AC-5
-    verification:
-      mode: manual
-      result: pass
-      reason: "releaseワークフロー（.github/workflows/agent-skill-chain-release.yml）がresolve-version→bump→tag→publishを実際にGitHub Actionsランナー上で最後まで通すことは、本Issueの変更をmainへマージした後の実環境実行でしか観測できず、ローカルの自動テストでは実行環境固有の未設定状態（実ランナーのgit identity状態）を保証できないため、本検証セッション（マージ前の独立検証）では automated と判定せず manual とした。"
-      procedure: "mainマージ後、release workflowの実行ログでtag/publish両ステップが成功することを確認する。具体的には、gh run list --workflow=agent-skill-chain-release.yml で最新runを特定し、resolve-version・bump・tag・publishの各ジョブ/ステップがいずれも成功で完了していること、特にtagステップの標準エラー出力に'Committer identity unknown'が含まれていないこと、および作成されたタグのtagger identityを確認する。"
-      executor: "進行役（マージ実施後の人間またはマージを実施したエージェント）"
-    evidence:
-      - "SPEC.md AC-5（procedureの元記述）"
-      - ".github/workflows/agent-skill-chain-release.yml（release tagステップの呼び出し元）"
+      - "test/integration/verify.test.ts (verify artifacts: spec segmentはSPEC.mdの有無で成否が切り替わる)"
+      - "test/integration/verify.test.ts (verify artifacts: design segmentはDESIGN.md/ADR/PLAN.mdすべて揃って初めて成功する)"
+      - "test/integration/verify.test.ts (verify artifacts: implementation segmentはdefaultBranchとのtestディレクトリ差分を要求し、VALIDATION.mdには依存しない)"
+      - "test/integration/verify.test.ts (verify artifacts: AC-1 codeとtest/差分が揃えばVALIDATION.mdを作成せずにunit_test_resultsが充足される)"
+      - "test/integration/verify.test.ts (verify artifacts: 単一checkout（CI相当）でbaseブランチ未フェッチだとcode判定が失敗し、base branch fetch後は成功する)"
+      - "test/integration/verify.test.ts (verify artifacts: validation segmentはVALIDATION.mdの有無で成否が切り替わり、不正segmentやissue不在はエラーになる)"
+      - "test/integration/verify.test.ts (verify artifacts: SPEC.md/DESIGN.md/PLAN.mdをcommit後に削除しても、履歴上の実績によりspec/designセグメントは成功する)"
+      - "test/integration/verify.test.ts (verify artifacts: VALIDATION.mdをcommit後に削除しても、履歴上の実績によりvalidationセグメントは成功する)"
+      - "test/integration/verify.test.ts (verify artifacts: 対象ファイルを一度もcommitしていない未着手segmentは、無関係なcommitが存在しても引き続き失敗する)"
+      - "node bin/agents-md.js verify artifacts ISSUE-202 {spec,design,implementation,validation} を commit 70a51fb100ddfc2fc849faf99bcbb5d4363b666bに対して実行し、いずれも終了コード0を実測（validationセグメントの合格はIssue#204由来の混入VALIDATION.mdによるものであり、本Issue#202が対処する範囲外の別課題であることをSPEC.mdスコープ外節に基づき確認済み）"
 
 regression:
   executed: true
   evidence:
-    - "npm test（464 tests / 464 pass / 0 fail / 0 skipped、本worktreeで実行し全通過を確認）"
+    - "npm test（node --test、465 tests / 465 pass / 0 fail / 0 skipped、本worktreeで実行し全通過を確認）"
+    - "npm run build（tsc、エラーなく完了）"
