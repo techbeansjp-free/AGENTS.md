@@ -19,7 +19,7 @@ Issue #200 自身の SPEC.md は、次のとおり「マージのたびに main 
 
 > 「PR マージ後にセグメント成果物ファイルが main へ恒久的に混入する」という、より一般的な構造的原因（マージ時にこれらのファイルを main から除外する仕組みが存在しないこと）の恒久的解決策の設計・実装。別 Issue で検討する。
 
-この別 Issue はこれまで起票されていなかった。実際、`git log --oneline -- SPEC.md DESIGN.md PLAN.md VALIDATION.md` で確認する限り、Issue #200（マージ commit `d772946`）以降にマージされた各 Issue（`#198`・`#204`・`#202` を含む）はいずれも、自身の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を root 直下から削除せずにマージされている。そのため、Issue #202 マージ後の現在の main HEAD でも、この4ファイルは Issue #202 由来の内容のまま root 直下に残存していることを本 Issue の起票にあたり実測で確認した。新規 Issue の worktree は常に main（`defaultBranch()`）から分岐するため、この4ファイルが root 直下に残存している限り、新規 worktree 直下には最初から前回マージ Issue の成果物ファイルが存在してしまい、AGENTS.md が定める root 直下構成の不変条件に違反した状態がマージのたびに再生産される。
+この別 Issue はこれまで起票されていなかった。実際、`git log --oneline -- SPEC.md DESIGN.md PLAN.md VALIDATION.md` で確認する限り、Issue #200（マージ commit `d772946`）以降にマージされた Issue のうち `#204`・`#202` は、自身の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を root 直下から削除せずにマージされている（`#198`（マージ commit `b40ded4`）はこの4ファイルへの変更を一切含まないマージであったため、本構造的欠陥の実例ではない）。そのため、Issue #202 マージ後の現在の main HEAD でも、この4ファイルは Issue #202 由来の内容のまま root 直下に残存していることを本 Issue の起票にあたり実測で確認した。新規 Issue の worktree は常に main（`defaultBranch()`）から分岐するため、この4ファイルが root 直下に残存している限り、新規 worktree 直下には最初から前回マージ Issue の成果物ファイルが存在してしまい、AGENTS.md が定める root 直下構成の不変条件に違反した状態がマージのたびに再生産される。
 
 さらに、複数 Issue が並行して存在する期間に、あるIssueのマージによって main 上のこれら4ファイルの内容が別 Issue 由来の内容へ変化した場合、他の並行 Issue のブランチ側でも同名ファイルを変更していると、次のリベース・マージ時に想定外の削除/変更コンフリクトが発生しうることが運用上確認されている。
 
@@ -38,6 +38,7 @@ Issue #200 自身の SPEC.md は、次のとおり「マージのたびに main 
 - 要件3: 要件1の対策適用後も、複数 Issue が並行して存在する状況において、あるIssueのマージが他の並行 Issue のブランチ・worktree 内の同名成果物ファイルへ悪影響（想定外のマージ/削除コンフリクトの恒常的な発生等）を与えないこと。
 - 要件4: 要件1〜3の対策を、実際に1つ以上の Issue を通しでマージする形で実地回帰確認し、main ルート直下に成果物ファイルが混入しないことを確認すること。
 - 要件5: `.agent-skill-chain/templates/issue/` 配下の雛形ファイル自体、および4セグメント・4ゲートモデル自体（`.agent-skill-chain/config/segments.yaml` の `outputs` の意味的定義等）は変更しないこと。
+- 要件6: 要件1の対策として「誰が／どの仕組みが root 直下の成果物ファイルを扱うか」を DESIGN 段階で具体化する際は、AGENTS.md I5（進行役の純粋性：進行役は成果物の著述・内容の取り込みを行わない）との整合を確認すること。
 
 ### 受入条件（Acceptance Criteria）
 
