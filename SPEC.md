@@ -1,90 +1,57 @@
-# SPEC: リリース自動化（バージョンbump・タグ付け・GitHub Release作成）
+# SPEC: リリースworkflowのbumpステップがgit author identity未設定で失敗する
 
-- Issue: `ISSUE-196`
-- 作成者: `spec_worker (run-03e1102b)`
-- 対象ブランチ: `feature/196-release-automation`
+- Issue: `ISSUE-198`
+- 作成者: `spec_worker`
+- 対象ブランチ: `bugfix/198-release-git-author`
 
 ## 目的・背景
 
-agent-skill-chain 新実装（chore/162統合、PR #191でmainへマージ済み）には、リリース自動化（`package.json` のバージョンbump・gitタグ付け・GitHub Release作成）の仕組みが存在しない。この不在により、mainのGitHub Releaseは最終統合マージ以降更新が止まっており、最新リリース `v20260720.060726` は統合直前のcommit `dd59efc` を指したままである。本Issueは、mainへの変更を契機にリリースが自動生成され続ける状態を回復することを目的とする。
+Issue #196で実装したリリース自動化workflow（`agent-skill-chain / release`）が、マージ直後の初回実行（run 29902200805）で失敗した。原因はバージョンbumpコミット・PR作成ステップ（`release bump` CLIサブコマンド）が `git commit` を実行する際、GitHub Actionsランナー上でgit author identity（`user.name`/`user.email`）が設定されておらず、以下のエラーで停止すること。
 
-旧実装は `.github/workflows/release.yml` により、mainへのpush（配布影響パスへの変更を含む場合）を契機に自動でバージョンbump・タグ付け・GitHub Release作成・アダプタ生成物公開を行っていた。PR #191で旧実装一式（`.agent-skill-chain/source/` 等）を削除した際、`release.yml` は削除対象パスへ完全依存していたため同時に削除された。新実装（`src/*.ts` + `.agent-skill-chain/` 配下）はこれに代わる仕組みを持たない。
+```
+git commit に失敗しました: Author identity unknown
+*** Please tell me who you are.
+fatal: empty ident name ... not allowed
+```
 
-新パッケージは npm レジストリを経由せず `npx github:techbeansjp-free/AGENTS.md` によるGitHub直接参照配備が主導線である点が、旧実装と前提が異なる。現行の `package.json` バージョンは `0.2.0`（PR #191マージ時に手動bump、旧最終リリース `0.1.52` からの後退回避と破壊的刷新を表すminor bump）。
+この Issue では原因箇所を修正し、リリース自動化を実際に機能する状態へ復旧する。リリース自動化の設計自体（Issue #196・ADR-0005で確定済み）には変更を加えない。
 
 ## 要求 → 要件 → 受入条件
 
 ### 要求
 
-- mainへ変更を反映したら、その変更を反映した新しいリリース（バージョン・タグ・GitHub Release）が人手を介さず自動で作成されてほしい。
-- リリース自動化自身が引き起こす変更が、さらなるリリースを連鎖的に発火させない（無限ループ・二重発火が起きない）ことを保証してほしい。
-- バージョンが過去のリリースより後退しないことを保証してほしい。
+- リリース自動化workflowが、mainへのマージ後に人手介入なしでバージョンbumpコミット・タグ・GitHub Releaseの作成まで自動的に完走すること。
 
 ### 要件
 
-- **要件1（自動バージョン更新）**: mainへの、リリース対象と判定される変更の反映を契機に、`package.json` の `version` が自動的に更新される。「どの変更をリリース対象とみなすか」の判定基準の確定はDESIGN段階の責務（本Issueのスコープ内）とし、本SPECでは判定基準そのものを規定しない。
-- **要件2（タグ・Release自動作成）**: 更新後のバージョンに対応するgitタグとGitHub Releaseが自動作成される。
-- **要件3（整合性）**: `package.json`・gitタグ・GitHub Release の3者のバージョン表記が相互に整合する。
-- **要件4（後退禁止）**: 本Issueで導入するリリース自動化が生成する連続するリリースの間で、更新後のバージョンが、同じ自動化が直前に生成したリリースのバージョンより後退しない（同値または増加）。要件はこの自動化の内部一貫性のみを対象とし、新方式導入前に存在する既存タグとの版数体系をまたいだ比較は含まない。採用する版数体系（semver・日付形式など）の決定はDESIGN段階の責務であり、本SPECでは規定しない。
-- **要件5（無限ループ防止）**: リリース処理が生成するcommit/push・タグ・Releaseが、新たなリリース処理を再帰的にトリガしない。
-- **要件6（二重発火防止）**: 単一のリリース契機に対して生成されるリリース（タグ・GitHub Release）は高々1件で、同一バージョンの重複生成が起きない。
+- 要件1: `release bump` サブコマンドが実行するbumpコミット作成処理は、実行環境（ローカル・GitHub Actionsランナーいずれも）にgit author identityが未設定であっても `git commit` に成功すること。
+- 要件2: 既存のgit author identity設定（ローカル開発者の `user.name`/`user.email` 等）を上書き・破壊しないこと。
+- 要件3: 既存の単体テスト・統合テストの挙動を変えないこと（新規失敗を発生させない）。
 
 ### 受入条件（Acceptance Criteria）
 
-各 AC には散文形式の Given/When/Then を添える。AC-ID は `^AC-[0-9]+$` の形式に従う。
+#### AC-1: git author identity未設定環境でのbumpコミット成功
 
-#### AC-1: mainへのリリース対象変更でバージョンが自動更新される（要件1）
-
-- Given: mainが直前のリリース時点の状態にあり、`package.json` に現行 `version` が記録されている。
-- When: リリース対象と判定される変更がmainへ反映される。
-- Then: 人手の介在なく `package.json` の `version` が新しい値へ更新される。
+- Given: 実行環境にgit author identity（`user.name`/`user.email`）が設定されていない
+- When: `release bump` サブコマンドがバージョンbumpコミットを作成する
+- Then: `git commit` が「Author identity unknown」エラーを出さずに成功する
 - 検証方法見込み: `automated`
 
-#### AC-2: 更新バージョンに対応するgitタグが自動作成される（要件2）
+#### AC-2: 既存テストの継続通過
 
-- Given: AC-1により `package.json` の `version` が更新された。
-- When: リリース処理が完了する。
-- Then: 更新後バージョンに対応するgitタグがリポジトリに新規作成されている。
+- Given: 修正後のコードベース
+- When: 既存の単体テスト・統合テストを実行する
+- Then: 全テストが通過し、新規の失敗が発生しない
 - 検証方法見込み: `automated`
 
-#### AC-3: 更新バージョンに対応するGitHub Releaseが自動作成される（要件2）
+#### AC-3: 実環境でのリリース完走確認
 
-- Given: AC-2により更新後バージョンのgitタグが作成された。
-- When: リリース処理が完了する。
-- Then: 当該タグを指すGitHub Releaseが新規作成されている。
-- 検証方法見込み: `automated`
-
-#### AC-4: バージョン・タグ・Releaseの整合（要件3）
-
-- Given: リリース処理が1回完了した状態。
-- When: `package.json` の `version`・最新gitタグ・最新GitHub Releaseのバージョン表記を照合する。
-- Then: 3者のバージョン表記が相互に整合している。
-- 検証方法見込み: `automated`
-
-#### AC-5: バージョンが後退しない（要件4）
-
-- Given: 本Issueで導入するリリース自動化が直前に生成したリリースのバージョンが判明している。
-- When: 同じリリース自動化が次のリリースを作成する。
-- Then: 新バージョンは、その自動化が直前に生成したリリースのバージョンより後退していない（同値または増加）。新方式導入前に存在する既存タグとの版数体系をまたいだ比較は判定に含まない。
-- 検証方法見込み: `automated`
-
-#### AC-6: リリース処理が自身を再帰的にトリガしない（要件5）
-
-- Given: リリース処理が1回発火し、その処理がcommit/push・タグ・Releaseを生成した。
-- When: 生成された変更（commit/push・タグ・Release）がmainに反映され、以後に追加の外部変更を加えない。
-- Then: 当該リリース処理自身が生成したcommit/push・タグ・Releaseのみを原因として、新たなリリース処理のワークフロー実行が一切トリガされない。
-- 検証方法見込み: `hybrid`（「リリース処理自身の生成物を契機とする新規リリースワークフロー実行が発生しない」という負の条件の確認を含み、workflow実行履歴・commit系譜の自動走査を要するため。観測期間の具体的な長さを要する検証手順を採る場合、その期間の確定はDESIGN/VALIDATION段階の責務としてスコープ外委譲する。理由・手順・実行者は `VALIDATION.md` で確定する。）
-
-#### AC-7: 単一契機に対する二重発火・重複リリースが起きない（要件6）
-
-- Given: 単一のリリース契機（1件の変更反映）が発生した。
-- When: 当該契機に対して生成されたタグ・GitHub Releaseを数える。
-- Then: 生成されるリリースは高々1件であり、同一バージョンのタグ・Releaseが重複して作成されない。
-- 検証方法見込み: `hybrid`（単一契機に対する成果物件数の自動計測に加え、並行実行時の重複抑止という負の条件確認を要するため。理由・手順・実行者は `VALIDATION.md` で確定する。）
+- Given: 本Issueの修正がmainへマージされた状態
+- When: `agent-skill-chain / release` workflowが実行される
+- Then: workflowが成功し、v0.2.1相当のバージョンタグおよびGitHub Releaseが作成される
+- 検証方法見込み: `manual`
 
 ## スコープ外
 
-- Claude/Cursor marketplace パッケージ・apm パッケージの生成物公開を新実装でも継続するか否かの判断。旧実装は `release-marketplace`・`apm-release` ジョブでこれらを公開していたが、新実装は `npx github:...` によるGitHub直接参照配備を主導線とし配布前提が異なる。継続要否はDESIGN段階で検討・決定する事項であり、本SPECでは決めない。
-- リリース対象と判定する変更範囲（パス・変更種別）の具体的判定基準の確定。これはDESIGN段階の責務であり、本SPECはバージョン更新・タグ・Release生成という観測可能な結果のみを規定する。
-- リリース自動化の具体的実現手段（GitHub Actionsのジョブ構成、バージョンbumpアルゴリズム、`[skip ci]` 等の無限ループ防止手法、使用するsecret/variable）。これらはDESIGN/PLAN段階で決定する。
-- 停止中の既存リリース（`v20260720.060726`）の遡及的な作り直し。
+- リリース自動化ワークフロー自体の設計変更（Issue #196・ADR-0005で確定済みの範囲は変更しない）
+- バージョン採番ルールなど、git author identity修正と無関係な `release bump` の既存挙動の変更
