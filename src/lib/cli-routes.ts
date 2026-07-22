@@ -19,6 +19,7 @@ import * as verify from '../commands/verify.js';
 import * as report from '../commands/report.js';
 import * as testing from '../commands/testing.js';
 import * as worker from '../commands/worker.js';
+import * as release from '../commands/release.js';
 
 export type Handler = (args: string[]) => Promise<number> | number;
 
@@ -51,6 +52,10 @@ export const routes: Record<string, Handler> = {
   'report status': report.status,
   'report latest': report.latest,
   'worker context': worker.context,
+  'release resolve-version': release.resolveVersion,
+  'release bump': release.bump,
+  'release tag': release.tag,
+  'release publish': release.publish,
   'test run': testing.run,
   'lint vocab': lint.vocab,
   'lint references': lint.references,

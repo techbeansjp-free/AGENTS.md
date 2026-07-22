@@ -3,24 +3,24 @@
 このファイルは Issue 毎に複製して使う雛形である（セグメント: design、成果物: PLAN.md。DESIGN.md とは別ファイル）。
 -->
 
-# PLAN: setupバックエンド分岐是正・doctor網羅性拡張・PRテンプレート実運用徹底・ADR手順逸脱ガード
+# PLAN: リリース自動化（バージョンbump・タグ付け・GitHub Release作成）
 
-- Issue: `ISSUE-188`
+- Issue: `ISSUE-196`
 - 対応する DESIGN: `DESIGN.md`
 
 ## 実装順序・変更単位
 
-4件の是正は相互に独立しており、変更単位1〜4はどの順序でも実装できる。単位5（doctor 対象外理由の記録）は doctor 実装の確定後に、単位6（回帰確認）は全実装の後に行う。各実装単位は自身の AC を実測で満たすテストを同時に追加する。
+DESIGN.md の6コンポーネントを、下から（副作用の小さい・単体テスト可能なものから）順に実装する。バージョン解決器を最初に独立実装・単体テストし、後退禁止（AC-5）・冪等版数決定の正しさを先に固めてから、副作用を伴う書込み・タグ・Release・トリガ配線を積む。
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | `setup()` の coordination backend 分岐 | 資産コピー後にコピー済み config の `coordination.backend` を読む純関数を追加し、local または config 不読時は `githubBundle()` をスキップして情報行を出力、github 時は現行どおり実行する。判定関数と副作用実行を分離。分岐前後の挙動差をテストで実測 | `AC-1`, `AC-2` | なし |
-| 2 | `doctor` 追加検査 D1〜D5 | D1=各 Issue worktree の checkout ブランチが branch.pattern に適合／D2=durability.backend=remote は `git ls-remote` 到達性・local_mirror はミラー先存在／D3=local backend の lease 状態ファイル失効検知／D4=各 worktree の SPEC.md 内 AC-ID 重複検知／D5=ADR の supersedes⇔superseded-by 対称性・status enum 妥当性を surface。各検査を独立 try/catch で追加。各観点につき不整合を再現したフィクスチャで NG 検知・正常時沈黙を実測 | `AC-3` | なし |
-| 3 | `claude.sh` allowlist から `gh pr create` 除去 | `WORKER_ALLOWED_TOOLS_DEFAULT` から `Bash(gh pr create:*)` を除去し、除去理由と正規経路（`pr create` ラッパー）をアダプタ内コメントへ自己完結記載。`gh pr view/edit/comment` は残す。既定値に生 `gh pr create` が無いことをテストで実測 | `AC-5` | なし |
-| 4 | `verify adr` finalize 経路ガード | git 履歴走査の補助関数を追加し、status=accepted の ADR について accepted 化 commit を特定、(1)固定メッセージ一致・(2)単一 ADR ファイルのみ変更・(3)status 行のみの差分、の3条件論理積を満たさなければ手順逸脱として非ゼロ終了。正規 finalize 由来 commit を誤検知しないことも実測 | `AC-7`, `AC-8` | なし |
-| 5 | doctor 対象外観点の理由記録 | 実装しなかった観点（Check Run 状態・label projection・system-spec manifest 整合性）と部分除外（D3 の github lease・D4 の system-spec 安定 ID）の対象外理由を `VALIDATION.md` へ記録 | `AC-4` | `#2` |
-| 6 | PR テンプレート本文の実測・全体回帰 | 徹底策適用後、使い捨て PR を規定手順（`pr create` ラッパー）で作成しテンプレート各節を含む本文が生成されることを実測（`AC-6`）。`npm run build && npm test` を全件実行し全通過を確認（`AC-9`） | `AC-6`, `AC-9` | `#1`〜`#5` |
+| 1 | バージョン解決器 | semver一致タグの最大版数 `latest` 取得、`target`/`needCommit` 決定、後退禁止ガードを、副作用なしの単体テスト可能な単位（CLIサブコマンドまたは `.agent-skill-chain/ci/` 配下の独立nodeスクリプト）として実装。seed規則・非semverタグ除外・patch加算・manual先行bump尊重・後退時fail の各分岐を単体テストで固定 | `AC-5`（＋`AC-1`の版数決定部） | なし |
+| 2 | bumpブランチ・PR作成／admin merge器 | `needCommit` 時に `package.json.version` を `target` へ書換え、短命ブランチ `release/bump-v<target>` 上に `chore(release): v<target> [skip ci]` でcommitして `GITHUB_TOKEN` でpush、`gh pr create` で機械生成の版数台帳更新PRを作成、`gh pr merge --admin --squash --subject "chore(release): v<target> [skip ci]"`（bypass_actor登録済み `RELEASE_MAIN_PAT`）で main へマージ。`--subject` 明示でsquash既定設定に依存せず `[skip ci]` 生存を保証。admin merge前に head=`release/bump-v*` かつ変更ファイル=`package.json`（±`package-lock.json`）のみのスコープ検査を行い、逸脱時は `human_required` で停止。ブランチ名の `target` 埋め込みで重複防止、既存ブランチ・PRはスコープ検査通過時のみ再利用（冪等）。生pushではなくPR経由でありI4を満たす | `AC-1`, `AC-6` | `#1` |
+| 3 | タガー（冪等） | `v<target>` タグの存在チェック後、未存在時のみ対象commitへ注釈付きタグを作成・push（`GITHUB_TOKEN`） | `AC-2`, `AC-4`, `AC-7` | `#1`, `#2` |
+| 4 | リリーサ（冪等） | `v<target>` の GitHub Release 存在チェック後、未存在時のみ当該タグを指すReleaseを作成（`GITHUB_TOKEN`） | `AC-3`, `AC-4`, `AC-7` | `#3` |
+| 5 | トリガ・concurrency層＋ワークフロー統合 | `.github/workflows/agent-skill-chain-release.yml` を作成。`on: push: branches:[main]` ＋リリース対象 `paths` フィルタ、`concurrency:{group:release, cancel-in-progress:false}`、`permissions: contents: write`、`[skip ci]` 早期skipガード、#1〜#4 をステップとして配線 | `AC-1`〜`AC-7`（統合） | `#1`, `#2`, `#3`, `#4` |
+| 6 | テンプレート同期・stale除去 | #5 のワークフローを `.agent-skill-chain/templates/github/.github/workflows/` にも同一内容で配置し `verify-template-sync.sh` を通す。stale な `.claude-plugin/marketplace.json` を削除（marketplace/apm廃止決定の反映、ADR-0005） | `AC-1`〜`AC-7`（配布整合） | `#5` |
 
 ## 実装順序の見直しについて
 
-作業順序（上記の並び）のみを見直す場合は本ファイルのみを更新すればよい。設計要素・責務・境界そのもの（例: doctor 検査の実装/対象外の判別、finalize ガードの検出方式、allowlist 徹底の手段）を変更する場合は、DESIGN.md の更新および設計ゲートの再通過が必要になる。
+実装中に作業順序（上記の変更単位の並び）のみを見直す場合は、本ファイルのみを更新すればよい。設計要素・責務・境界そのもの（版数体系・トリガ判定基準・6コンポーネント分割・認証方式）を変更する場合は、DESIGN.md の更新（および設計ゲートの再通過）が必要になる点に注意する。

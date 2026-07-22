@@ -100,6 +100,20 @@ if (cmd === 'pr' && sub === 'create') {
   const state = loadState();
   state.prCreateCalls = state.prCreateCalls || [];
   state.prCreateCalls.push({ args, body: flag('--body') });
+  const head = flag('--head');
+  if (head) {
+    // Issue #196 release bump: findOpenBumpPr が直後に 'gh pr view <head>' で解決できるよう、
+    // head branch をキーに PR を登録する（実PR番号は本スタブ専用の採番、既存のnextId列とは独立）。
+    state.prsByBranch = state.prsByBranch || {};
+    state.nextPrNumber = state.nextPrNumber || 1;
+    const number = state.nextPrNumber++;
+    state.prsByBranch[head] = {
+      number,
+      state: 'OPEN',
+      headRefName: head,
+      files: state.defaultPrFiles || ['package.json'],
+    };
+  }
   saveState(state);
   process.stdout.write('https://github.com/test/repo/pull/1\\n');
   process.exit(0);
@@ -110,6 +124,74 @@ if (cmd === 'pr' && sub === 'list') {
   const state = loadState();
   const prs = (state.prs || {})[head] || [];
   process.stdout.write(JSON.stringify(prs));
+  process.exit(0);
+}
+
+if (cmd === 'pr' && sub === 'view') {
+  // release bump の findOpenBumpPr が 'gh pr view <branch> --json number,state,headRefName,files'
+  // として呼ぶ（常にbranch名で問い合わせる、PR番号ではない）。
+  const key = args[2];
+  const state = loadState();
+  const pr = (state.prsByBranch || {})[key];
+  if (!pr) {
+    process.stderr.write('gh-stub: no PR found for ' + key + '\\n');
+    process.exit(1);
+  }
+  process.stdout.write(
+    JSON.stringify({
+      number: pr.number,
+      state: pr.state,
+      headRefName: pr.headRefName,
+      files: pr.files.map((p) => ({ path: p })),
+    }),
+  );
+  process.exit(0);
+}
+
+if (cmd === 'pr' && sub === 'merge') {
+  const number = args[2];
+  const state = loadState();
+  state.mergeCalls = state.mergeCalls || [];
+  state.mergeCalls.push({ number, args });
+  if ((state.failMergeCount || 0) > 0) {
+    // 障害シナリオ検証用（DESIGN.md「PR作成後、admin mergeに失敗」の自己修復パス）:
+    // PRはOPENのまま（マージ扱いにしない）で失敗を模擬する。1回消費して残数を減らす。
+    state.failMergeCount -= 1;
+    saveState(state);
+    process.stderr.write('gh-stub: simulated admin merge failure\\n');
+    process.exit(1);
+  }
+  for (const key of Object.keys(state.prsByBranch || {})) {
+    if (String(state.prsByBranch[key].number) === String(number)) {
+      state.prsByBranch[key].state = 'MERGED';
+    }
+  }
+  saveState(state);
+  process.stdout.write('https://github.com/test/repo/pull/' + number + '\\n');
+  process.exit(0);
+}
+
+if (cmd === 'release' && sub === 'view') {
+  const tagName = args[2];
+  const state = loadState();
+  const releases = state.releases || [];
+  if (releases.includes(tagName)) {
+    process.stdout.write(JSON.stringify({ tagName }));
+    process.exit(0);
+  }
+  process.stderr.write('gh-stub: release not found: ' + tagName + '\\n');
+  process.exit(1);
+}
+
+if (cmd === 'release' && sub === 'create') {
+  const tagName = args[2];
+  const state = loadState();
+  state.releases = state.releases || [];
+  state.releaseCreateCalls = state.releaseCreateCalls || [];
+  state.releaseCreateCalls.push({ args });
+  if (!state.releases.includes(tagName)) state.releases.push(tagName);
+  saveState(state);
+  process.stdout.write('https://github.com/test/repo/releases/tag/' + tagName + '\\n');
   process.exit(0);
 }
 
@@ -179,6 +261,13 @@ process.stderr.write('gh-stub: unhandled command: ' + args.join(' ') + '\\n');
 process.exit(1);
 `;
 
+export interface GhStubBumpPr {
+  number: number;
+  state: string;
+  headRefName: string;
+  files: string[];
+}
+
 export interface GhStubState {
   nextId: number;
   clock: number;
@@ -188,6 +277,14 @@ export interface GhStubState {
   labels: string[];
   issueLabels: Record<string, string[]>;
   prCreateCalls?: { args: string[]; body: string | undefined }[];
+  // ---- Issue #196 release bump/tag/publish 検証用（gh pr view/merge, gh release view/create） ----
+  prsByBranch?: Record<string, GhStubBumpPr>;
+  nextPrNumber?: number;
+  defaultPrFiles?: string[];
+  mergeCalls?: { number: string; args: string[] }[];
+  failMergeCount?: number;
+  releases?: string[];
+  releaseCreateCalls?: { args: string[] }[];
 }
 
 export interface GhStub {
@@ -197,6 +294,12 @@ export interface GhStub {
   readState(): GhStubState;
   writeState(state: GhStubState): void;
   seedPrList(branch: string, prs: unknown[]): void;
+  /** `gh pr create` で新規登録される PR の files 一覧の既定値を上書きする（release bump の
+   * スコープ検査違反シナリオを再現するために使う。Issue #196）。 */
+  setDefaultPrFiles(files: string[]): void;
+  /** 直後の `gh pr merge` 呼び出しを count 回だけ失敗させる（PRはOPENのまま）。
+   * DESIGN.md の「PR作成後、admin mergeに失敗」自己修復シナリオの検証用（Issue #196）。 */
+  failNextMerge(count?: number): void;
 }
 
 /**
@@ -237,6 +340,16 @@ export function createGhStub(baseDir: string): GhStub {
     seedPrList(branch: string, prs: unknown[]): void {
       const state = this.readState();
       state.prs[branch] = prs;
+      this.writeState(state);
+    },
+    setDefaultPrFiles(files: string[]): void {
+      const state = this.readState();
+      state.defaultPrFiles = files;
+      this.writeState(state);
+    },
+    failNextMerge(count = 1): void {
+      const state = this.readState();
+      state.failMergeCount = count;
       this.writeState(state);
     },
   };
