@@ -312,7 +312,7 @@ test('verify artifacts: design segmentはDESIGN.md/ADR/PLAN.mdすべて揃って
   assert.equal(after.status, 0, after.stderr);
 });
 
-test('verify artifacts: implementation segmentはdefaultBranchとの差分（コード）とVALIDATION.mdの両方を要求する', async (t) => {
+test('verify artifacts: implementation segmentはdefaultBranchとのtestディレクトリ差分を要求し、VALIDATION.mdには依存しない', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
@@ -322,25 +322,61 @@ test('verify artifacts: implementation segmentはdefaultBranchとの差分（コ
   assert.equal(start.status, 0, start.stderr);
   const [, worktreePath] = start.stdout.trim().split('\n');
 
-  // Given/When: mainからの差分（docs等を除く）が無く、VALIDATION.mdも無い状態
+  // Given/When: mainからの差分（docs等を除く）が無く、test/配下の変更も無い状態
   // Then: code・unit_test_results の両方が欠落として報告される
   const before = runCli(['verify', 'artifacts', 'ISSUE-1', 'implementation'], { cwd: repo.dir });
   assert.equal(before.status, 1);
   assert.match(before.stderr, /欠落しています: code/);
   assert.match(before.stderr, /欠落しています: unit_test_results/);
 
-  // When: worktree内にコードファイルを追加しcheckpoint（add+commit+push）する。
-  // unit_test_results/acceptance_test_results/regression_test_results はVALIDATION.mdの存在で
-  // 代替確認されるため、それも作成する。
+  // When: worktree内にコードファイルとtest/配下の単体テストファイルを追加しcheckpoint
+  // （add+commit+push）する。unit_test_results はIssue #202以降、test/配下のbaseブランチ
+  // 三点差分（'code'ケースと同一技法）で判定され、VALIDATION.md（validationセグメント専用の
+  // 成果物）の存在には一切依存しない（ADR-0006）。ここでは意図的にVALIDATION.mdを作成しない。
   fs.mkdirSync(path.join(worktreePath, 'src'), { recursive: true });
   fs.writeFileSync(path.join(worktreePath, 'src', 'app.js'), 'console.log(1);\n');
-  fs.writeFileSync(path.join(worktreePath, 'VALIDATION.md'), '# VALIDATION\n');
-  const checkpoint = runCli(['checkpoint', 'feat: add app.js'], { cwd: worktreePath });
+  fs.mkdirSync(path.join(worktreePath, 'test', 'unit'), { recursive: true });
+  fs.writeFileSync(path.join(worktreePath, 'test', 'unit', 'app.test.js'), '// sample unit test\n');
+  const checkpoint = runCli(['checkpoint', 'feat: add app.js with unit test'], { cwd: worktreePath });
   assert.equal(checkpoint.status, 0, checkpoint.stderr);
 
-  // Then: 成功する
+  // Then: VALIDATION.mdが無くても成功する
+  assert.equal(fs.existsSync(path.join(worktreePath, 'VALIDATION.md')), false);
   const after = runCli(['verify', 'artifacts', 'ISSUE-1', 'implementation'], { cwd: repo.dir });
   assert.equal(after.status, 0, after.stderr);
+});
+
+test('verify artifacts: AC-1 codeとtest/差分が揃えばVALIDATION.mdを作成せずにunit_test_resultsが充足される', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  // Given: code（implementationセグメントの成果物）は充足済みである状態。VALIDATION.mdは
+  // worktree内に一切存在しない（当該Issue自身のvalidationセグメントは未着手）。
+  fs.mkdirSync(path.join(worktreePath, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(worktreePath, 'src', 'app.js'), 'console.log(1);\n');
+  const codeOnly = runCli(['checkpoint', 'feat: add app.js'], { cwd: worktreePath });
+  assert.equal(codeOnly.status, 0, codeOnly.stderr);
+  assert.equal(fs.existsSync(path.join(worktreePath, 'VALIDATION.md')), false);
+
+  // When: implementationセグメント自身の作業実績（test/配下ファイルの追加）を作成したうえで
+  // verify artifacts <issue_id> implementation を実行する。VALIDATION.mdの作成・参照は行わない。
+  fs.mkdirSync(path.join(worktreePath, 'test', 'unit'), { recursive: true });
+  fs.writeFileSync(path.join(worktreePath, 'test', 'unit', 'app.test.js'), '// sample unit test\n');
+  const withTest = runCli(['checkpoint', 'test: add unit test for app.js'], { cwd: worktreePath });
+  assert.equal(withTest.status, 0, withTest.stderr);
+
+  // Then: unit_test_resultsは欠落として報告されず、implementationセグメントの成果物チェック
+  // 全体が合格する。VALIDATION.mdは最後まで作成されていない。
+  assert.equal(fs.existsSync(path.join(worktreePath, 'VALIDATION.md')), false);
+  const result = runCli(['verify', 'artifacts', 'ISSUE-1', 'implementation'], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /欠落しています: unit_test_results/);
 });
 
 // PR #172 run 29717941752 で実落ち: agent-skill-chain-ci.yml の actions/checkout@v4 はPRの
@@ -371,7 +407,10 @@ test('verify artifacts: 単一checkout（CI相当）でbaseブランチ未フェ
   gitIn(['checkout', '-b', 'feature/171-ci-gate-dogfood']);
   fs.mkdirSync(path.join(repo.dir, 'src'), { recursive: true });
   fs.writeFileSync(path.join(repo.dir, 'src', 'app.js'), 'console.log(1);\n');
-  fs.writeFileSync(path.join(repo.dir, 'VALIDATION.md'), '# VALIDATION\n');
+  // Issue #202: unit_test_results は VALIDATION.md ではなく test/ 配下のbaseブランチ差分で
+  // 判定されるため、implementation segment全体の合格（after.status === 0）にはこれが必要。
+  fs.mkdirSync(path.join(repo.dir, 'test', 'unit'), { recursive: true });
+  fs.writeFileSync(path.join(repo.dir, 'test', 'unit', 'app.test.js'), '// sample unit test\n');
   gitIn(['add', '-A']);
   gitIn(['commit', '-m', 'feat: add app.js']);
 
