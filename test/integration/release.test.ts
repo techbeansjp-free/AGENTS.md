@@ -267,3 +267,76 @@ test('release bump: package-lock.json が存在しないリポジトリでは gi
   assert.notEqual(result.status, 0, 'package-lock.json 不在時は現状 git add 失敗により bump 全体が失敗する');
   assert.match(result.stderr, /git add に失敗しました/);
 });
+
+// ---- bump: git author identity未設定環境での成功・既存identityの非破壊性（Issue #198） ----
+
+/** git config のローカル/グローバル/システムいずれからも user.name/user.email を解決させない
+ * 環境変数を作る（AC-1: 「identity未設定」環境を実際に模擬するため）。GIT_CONFIG_GLOBAL/
+ * GIT_CONFIG_SYSTEM を /dev/null へ差し替えることで、テスト実行機に開発者自身の
+ * ~/.gitconfig（グローバルidentity）がある場合でも、それに依存せず常に「未設定」を再現できる。 */
+function identitylessEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...base };
+  delete env.GIT_AUTHOR_NAME;
+  delete env.GIT_AUTHOR_EMAIL;
+  delete env.GIT_COMMITTER_NAME;
+  delete env.GIT_COMMITTER_EMAIL;
+  env.GIT_CONFIG_GLOBAL = '/dev/null';
+  env.GIT_CONFIG_SYSTEM = '/dev/null';
+  return env;
+}
+
+test('release bump (AC-1, Issue #198): git author identityが未設定の環境でもbumpコミットに成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  writePackageJson(repo.dir, '0.6.0', true);
+  const { env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  // Given: createTmpRepo() が設定したローカルidentityを取り除き、かつグローバル/システム設定も
+  // 実行環境から見えなくする（実行機に開発者自身のgit identityが設定されていても再現できるように）。
+  git(repo.dir, ['config', '--unset', 'user.name']);
+  git(repo.dir, ['config', '--unset', 'user.email']);
+  const runEnv = identitylessEnv(env);
+  // 前提確認: この時点で git config user.name/user.email が実際に未解決であること
+  assert.throws(() => execFileSync('git', ['config', 'user.name'], { cwd: repo.dir, env: runEnv, stdio: 'pipe' }));
+  assert.throws(() => execFileSync('git', ['config', 'user.email'], { cwd: repo.dir, env: runEnv, stdio: 'pipe' }));
+
+  // When
+  const result = runCli(['release', 'bump', '0.6.1'], { cwd: repo.dir, env: runEnv });
+
+  // Then: 「Author identity unknown」で失敗せず成功する
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /Author identity unknown/);
+
+  // Then: fallback identity（github-actions[bot]）でcommitが作成されている
+  const authorLine = git(repo.dir, ['show', '-s', '--format=%an <%ae>', 'release/bump-v0.6.1']);
+  assert.equal(authorLine, 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>');
+});
+
+test('release bump (AC-4, Issue #198): 既存git author identityを上書き・破壊しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  writePackageJson(repo.dir, '0.7.0', true);
+  const { env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  // Given: createTmpRepo() が設定した既存identity
+  const nameBefore = git(repo.dir, ['config', 'user.name']);
+  const emailBefore = git(repo.dir, ['config', 'user.email']);
+  assert.equal(nameBefore, 'agent-skill-chain test');
+  assert.equal(emailBefore, 'test@example.com');
+
+  // When
+  const result = runCli(['release', 'bump', '0.7.1'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+
+  // Then: 実行前後で user.name/user.email の値（scope・設定元含む）が変化しない
+  const nameAfter = git(repo.dir, ['config', 'user.name']);
+  const emailAfter = git(repo.dir, ['config', 'user.email']);
+  assert.equal(nameAfter, nameBefore);
+  assert.equal(emailAfter, emailBefore);
+
+  // Then: 実際に作成されたcommitのauthorも既存identityのままである（fallbackへ上書きされていない）
+  const authorLine = git(repo.dir, ['show', '-s', '--format=%an <%ae>', 'release/bump-v0.7.1']);
+  assert.equal(authorLine, 'agent-skill-chain test <test@example.com>');
+});
