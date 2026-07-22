@@ -261,6 +261,9 @@ export async function tag(args: string[]): Promise<number> {
       return ok(`${tagName}（既存タグを検出したため冪等スキップ）`);
     }
 
+    const identityError = ensureGitIdentity(root);
+    if (identityError) return fail(identityError);
+
     const createTag = git(['tag', '-a', tagName, ref, '-m', `Release ${tagName}`], root);
     if (createTag.status !== 0) return fail(`git tag に失敗しました: ${createTag.stderr.trim()}`);
 
