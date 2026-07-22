@@ -42,7 +42,9 @@
 
 `checkOutputExists()`に、「現在存在する」判定に加えて、「当該ブランチのdefaultBranch（main）からの差分コミット履歴の中で、当該ファイルが一度でも追加(A)または変更(M)された記録があるか」を確認する判定を**OR条件**で追加する。いずれかが真であれば、そのセグメントの成果物は「存在した実績あり」と判定し完了扱いとする。
 
-判定コマンドは `git log --diff-filter=AM --name-only <base>...HEAD -- <file>` とし、`src/lib/exec.ts` の `git()` 実行ラッパーを用いる。`<base>` の解決には、既存の `code` 判定（`git diff --stat base...HEAD`）で既に使われている `defaultBranch(worktreePath)`（`src/lib/worktree.ts`）をそのまま再利用し、判定基点解決のロジックを重複させない。
+判定コマンドは `git log --diff-filter=AM --name-only <base>..HEAD -- <file>` とし、`src/lib/exec.ts` の `git()` 実行ラッパーを用いる。`<base>` の解決には、既存の `code` 判定（`git diff --stat base...HEAD`）で既に使われている `defaultBranch(worktreePath)`（`src/lib/worktree.ts`）をそのまま再利用し、判定基点解決のロジックを重複させない。
+
+`git log` は 2 ドット（`<base>..HEAD`、片側差分：`<base>` から分岐した後に `HEAD` 側に追加されたコミットのみを見る）を用いる点に注意する。`git diff` の3ドット（`<base>...HEAD`、マージベース基点の差分）とは意味が異なり、`git log` で3ドット（対称差分：`<base>` 側にのみ存在するコミットも含む）を用いると、`<base>` 側で当該ファイルが追加されただけで、現在の feature ブランチが一度もそのファイルに触れていなくても「実績あり」と誤判定してしまう。この誤判定を避けるため、`git log` には常に2ドットを用いる。
 
 対象は `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` の4ファイルの存在判定のみとし、`ADR`（ディレクトリ内ファイル有無判定）・`code`（diff --stat判定）には変更を加えない。
 
