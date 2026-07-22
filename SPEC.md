@@ -1,90 +1,57 @@
-# SPEC: リリース自動化（バージョンbump・タグ付け・GitHub Release作成）
+<!--
+正本: AGENTS.md §4セグメント・4ゲート
+このファイルは Issue 毎に複製して使う雛形である（セグメント: spec、成果物: SPEC.md、ゲート: spec-gate）。
+-->
 
-- Issue: `ISSUE-196`
-- 作成者: `spec_worker (run-03e1102b)`
-- 対象ブランチ: `feature/196-release-automation`
+# SPEC: main リポジトリルート直下に混入した stray なセグメント成果物ファイルの削除
+
+- Issue: `ISSUE-200`
+- 作成者: `spec_worker`
+- 対象ブランチ: `chore/200-stray-root-artifacts`
 
 ## 目的・背景
 
-agent-skill-chain 新実装（chore/162統合、PR #191でmainへマージ済み）には、リリース自動化（`package.json` のバージョンbump・gitタグ付け・GitHub Release作成）の仕組みが存在しない。この不在により、mainのGitHub Releaseは最終統合マージ以降更新が止まっており、最新リリース `v20260720.060726` は統合直前のcommit `dd59efc` を指したままである。本Issueは、mainへの変更を契機にリリースが自動生成され続ける状態を回復することを目的とする。
+AGENTS.md §ディレクトリ構成は、root 直下を `AGENTS.md`・`CLAUDE.md`・`README.md`・`docs/`・`.github/`・`.worktrees/` のみに限定すると規定している。しかし現在の main のリポジトリルート直下には、本来 Issue 毎の worktree 直下にのみ存在すべきセグメント成果物ファイル（`SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md`）が恒久的に存在してしまっている。
 
-旧実装は `.github/workflows/release.yml` により、mainへのpush（配布影響パスへの変更を含む場合）を契機に自動でバージョンbump・タグ付け・GitHub Release作成・アダプタ生成物公開を行っていた。PR #191で旧実装一式（`.agent-skill-chain/source/` 等）を削除した際、`release.yml` は削除対象パスへ完全依存していたため同時に削除された。新実装（`src/*.ts` + `.agent-skill-chain/` 配下）はこれに代わる仕組みを持たない。
+内訳:
+- `SPEC.md`: Issue #196 の内容。PR #197 のマージで持ち込まれた。
+- `DESIGN.md`・`PLAN.md`: テンプレートの空の内容。PR #191 の最終統合コミットで混入した。
+- `VALIDATION.md`: 同上。
 
-新パッケージは npm レジストリを経由せず `npx github:techbeansjp-free/AGENTS.md` によるGitHub直接参照配備が主導線である点が、旧実装と前提が異なる。現行の `package.json` バージョンは `0.2.0`（PR #191マージ時に手動bump、旧最終リリース `0.1.52` からの後退回避と破壊的刷新を表すminor bump）。
+これらのファイルは Issue 毎の worktree 直下で作業ワーカーが作成・更新するファイルであり、Issue 固有の内容（今回の Issue #200 自身の SPEC.md を含む）を保持する。新規 Issue の worktree は常に main から分岐するため、これらのファイルが main に残存している限り、新規 worktree 直下には常に前回 Issue の成果物ファイルが最初から存在してしまい、AGENTS.md が定めるディレクトリ構成の不変条件（root 直下の限定）に違反した状態が新規作業のたびに再生産される。
+
+本 Issue は、この現時点で main に存在する4ファイルを削除し、root 直下の構成を AGENTS.md の規定に適合させることを目的とする。これらのファイルをマージ時に恒久的に main へ混入させないための構造的な再発防止策の設計は、本 Issue のスコープ外とし別 Issue で扱う。
 
 ## 要求 → 要件 → 受入条件
 
 ### 要求
 
-- mainへ変更を反映したら、その変更を反映した新しいリリース（バージョン・タグ・GitHub Release）が人手を介さず自動で作成されてほしい。
-- リリース自動化自身が引き起こす変更が、さらなるリリースを連鎖的に発火させない（無限ループ・二重発火が起きない）ことを保証してほしい。
-- バージョンが過去のリリースより後退しないことを保証してほしい。
+main のリポジトリルート直下から、Issue 毎に作成される一時的なセグメント成果物ファイル（`SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md`）を削除し、AGENTS.md §ディレクトリ構成が定める root 直下の構成（`AGENTS.md`・`CLAUDE.md`・`README.md`・`docs/`・`.github/`・`.worktrees/` のみ）に適合させたい、というメンテナ（進行役）からの要求。
 
 ### 要件
 
-- **要件1（自動バージョン更新）**: mainへの、リリース対象と判定される変更の反映を契機に、`package.json` の `version` が自動的に更新される。「どの変更をリリース対象とみなすか」の判定基準の確定はDESIGN段階の責務（本Issueのスコープ内）とし、本SPECでは判定基準そのものを規定しない。
-- **要件2（タグ・Release自動作成）**: 更新後のバージョンに対応するgitタグとGitHub Releaseが自動作成される。
-- **要件3（整合性）**: `package.json`・gitタグ・GitHub Release の3者のバージョン表記が相互に整合する。
-- **要件4（後退禁止）**: 本Issueで導入するリリース自動化が生成する連続するリリースの間で、更新後のバージョンが、同じ自動化が直前に生成したリリースのバージョンより後退しない（同値または増加）。要件はこの自動化の内部一貫性のみを対象とし、新方式導入前に存在する既存タグとの版数体系をまたいだ比較は含まない。採用する版数体系（semver・日付形式など）の決定はDESIGN段階の責務であり、本SPECでは規定しない。
-- **要件5（無限ループ防止）**: リリース処理が生成するcommit/push・タグ・Releaseが、新たなリリース処理を再帰的にトリガしない。
-- **要件6（二重発火防止）**: 単一のリリース契機に対して生成されるリリース（タグ・GitHub Release）は高々1件で、同一バージョンの重複生成が起きない。
+- 要件1: main のリポジトリルート直下に存在する `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` の4ファイルを削除すること。
+- 要件2: 削除対象は root 直下の4ファイルのみとし、`.agent-skill-chain/templates/issue/` 配下の雛形ファイル（`SPEC.md` 等の同名テンプレート）や、`.worktrees/` 配下・他 Issue の worktree 内に存在する同名ファイルは削除対象に含めないこと。
+- 要件3: 削除後も既存の CI（lint・test・ビルド等の既存ワークフロー）が問題なく通過すること。すなわち、これら4ファイルの存在を前提とした CI 上の参照・チェックが存在しないことを確認すること。
 
 ### 受入条件（Acceptance Criteria）
 
-各 AC には散文形式の Given/When/Then を添える。AC-ID は `^AC-[0-9]+$` の形式に従う。
+#### AC-1: root 直下の stray な成果物ファイルが削除されている
 
-#### AC-1: mainへのリリース対象変更でバージョンが自動更新される（要件1）
+- Given: main のリポジトリルート直下に `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` が存在する状態
+- When: 本 Issue の変更を適用する
+- Then: リポジトリルート直下（`.agent-skill-chain/` 配下や `.worktrees/` 配下を除く）に `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` のいずれも存在しない
+- 検証方法見込み: `automated`（`git ls-files` またはファイル存在チェックによりルート直下の対象ファイル不在を確認する）
 
-- Given: mainが直前のリリース時点の状態にあり、`package.json` に現行 `version` が記録されている。
-- When: リリース対象と判定される変更がmainへ反映される。
-- Then: 人手の介在なく `package.json` の `version` が新しい値へ更新される。
-- 検証方法見込み: `automated`
+#### AC-2: 削除後もCIが正常に通過する
 
-#### AC-2: 更新バージョンに対応するgitタグが自動作成される（要件2）
-
-- Given: AC-1により `package.json` の `version` が更新された。
-- When: リリース処理が完了する。
-- Then: 更新後バージョンに対応するgitタグがリポジトリに新規作成されている。
-- 検証方法見込み: `automated`
-
-#### AC-3: 更新バージョンに対応するGitHub Releaseが自動作成される（要件2）
-
-- Given: AC-2により更新後バージョンのgitタグが作成された。
-- When: リリース処理が完了する。
-- Then: 当該タグを指すGitHub Releaseが新規作成されている。
-- 検証方法見込み: `automated`
-
-#### AC-4: バージョン・タグ・Releaseの整合（要件3）
-
-- Given: リリース処理が1回完了した状態。
-- When: `package.json` の `version`・最新gitタグ・最新GitHub Releaseのバージョン表記を照合する。
-- Then: 3者のバージョン表記が相互に整合している。
-- 検証方法見込み: `automated`
-
-#### AC-5: バージョンが後退しない（要件4）
-
-- Given: 本Issueで導入するリリース自動化が直前に生成したリリースのバージョンが判明している。
-- When: 同じリリース自動化が次のリリースを作成する。
-- Then: 新バージョンは、その自動化が直前に生成したリリースのバージョンより後退していない（同値または増加）。新方式導入前に存在する既存タグとの版数体系をまたいだ比較は判定に含まない。
-- 検証方法見込み: `automated`
-
-#### AC-6: リリース処理が自身を再帰的にトリガしない（要件5）
-
-- Given: リリース処理が1回発火し、その処理がcommit/push・タグ・Releaseを生成した。
-- When: 生成された変更（commit/push・タグ・Release）がmainに反映され、以後に追加の外部変更を加えない。
-- Then: 当該リリース処理自身が生成したcommit/push・タグ・Releaseのみを原因として、新たなリリース処理のワークフロー実行が一切トリガされない。
-- 検証方法見込み: `hybrid`（「リリース処理自身の生成物を契機とする新規リリースワークフロー実行が発生しない」という負の条件の確認を含み、workflow実行履歴・commit系譜の自動走査を要するため。観測期間の具体的な長さを要する検証手順を採る場合、その期間の確定はDESIGN/VALIDATION段階の責務としてスコープ外委譲する。理由・手順・実行者は `VALIDATION.md` で確定する。）
-
-#### AC-7: 単一契機に対する二重発火・重複リリースが起きない（要件6）
-
-- Given: 単一のリリース契機（1件の変更反映）が発生した。
-- When: 当該契機に対して生成されたタグ・GitHub Releaseを数える。
-- Then: 生成されるリリースは高々1件であり、同一バージョンのタグ・Releaseが重複して作成されない。
-- 検証方法見込み: `hybrid`（単一契機に対する成果物件数の自動計測に加え、並行実行時の重複抑止という負の条件確認を要するため。理由・手順・実行者は `VALIDATION.md` で確定する。）
+- Given: AC-1 の削除を適用した変更が本 PR のブランチに反映されている
+- When: 本 PR に対して既存の CI ワークフロー（lint・test・ビルド等）が実行される
+- Then: 既存の CI ワークフローが全て成功（green）で完了する。すなわち、削除した4ファイルの存在を前提とした CI 上の失敗が発生しない
+- 検証方法見込み: `automated`（GitHub Actions の Check Run 結果を確認する）
 
 ## スコープ外
 
-- Claude/Cursor marketplace パッケージ・apm パッケージの生成物公開を新実装でも継続するか否かの判断。旧実装は `release-marketplace`・`apm-release` ジョブでこれらを公開していたが、新実装は `npx github:...` によるGitHub直接参照配備を主導線とし配布前提が異なる。継続要否はDESIGN段階で検討・決定する事項であり、本SPECでは決めない。
-- リリース対象と判定する変更範囲（パス・変更種別）の具体的判定基準の確定。これはDESIGN段階の責務であり、本SPECはバージョン更新・タグ・Release生成という観測可能な結果のみを規定する。
-- リリース自動化の具体的実現手段（GitHub Actionsのジョブ構成、バージョンbumpアルゴリズム、`[skip ci]` 等の無限ループ防止手法、使用するsecret/variable）。これらはDESIGN/PLAN段階で決定する。
-- 停止中の既存リリース（`v20260720.060726`）の遡及的な作り直し。
+- 「PR マージ後にセグメント成果物ファイルが main へ恒久的に混入する」という、より一般的な構造的原因（マージ時にこれらのファイルを main から除外する仕組みが存在しないこと）の恒久的解決策の設計・実装。別 Issue で検討する。
+- `.agent-skill-chain/templates/issue/` 配下の雛形ファイル自体の変更。
+- `.worktrees/` 配下に存在する他 Issue の作業中 worktree の内容変更。
