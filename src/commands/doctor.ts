@@ -174,11 +174,11 @@ export async function run(args: string[]): Promise<number> {
         // reconcile.sh が本来回収すべき状態が沈黙で放置されていないかを見る）。
         if (config.coordination.backend === 'local') {
           try {
-            const issuesRoot = path.join(root, 'issues');
+            const leaseScanRoot = path.join(root, `issues`);
             const stale: string[] = [];
-            if (fs.existsSync(issuesRoot)) {
+            if (fs.existsSync(leaseScanRoot)) {
               const now = new Date().toISOString();
-              for (const entry of fs.readdirSync(issuesRoot, { withFileTypes: true })) {
+              for (const entry of fs.readdirSync(leaseScanRoot, { withFileTypes: true })) {
                 if (!entry.isDirectory()) continue;
                 const lease = tryReadYamlFile<WriterLease>(leaseFilePath(root, entry.name));
                 if (lease && lease.writer_lease.expires_at <= now) {
