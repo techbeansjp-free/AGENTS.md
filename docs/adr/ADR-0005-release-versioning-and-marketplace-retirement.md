@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0005
-status: proposed
+status: accepted
 title: リリース版数をpackage.json semverへ統一し、版数bumpコミットをmainへPR経由(admin merge)で反映し、marketplace/apm公開を廃止する
 tags: [release, versioning, distribution, github-actions, branch-protection]
 supersedes: []
