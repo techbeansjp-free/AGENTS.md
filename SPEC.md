@@ -35,15 +35,15 @@
 - 要件1: `checkOutputExists()` における `unit_test_results` の判定条件から、`VALIDATION.md` の存在・履歴への依存を除去する。
 - 要件2: 要件1の判定条件は、implementationセグメント自身の作業（例: 実装セグメントでのテスト実行・追加を示す何らかの証跡）に基づくものへ置き換える。この証跡として具体的に何を採用するか（例: テスト実行ログの記録方式、専用の証跡ファイルの形式・命名等）はDESIGN段階で確定する。
 - 要件3: `acceptance_test_results`/`regression_test_results` の判定条件（`VALIDATION.md` の存在または履歴上の実績）は変更しない。
-- 要件4: 通常のIssue開発フロー（spec→design→implementation→validationの順で進む）において、`agent-skill-chain verify artifacts` が各セグメントで意図したタイミング（そのセグメントの成果物が揃った時点）で正しく合格・不合格になることを、既存の自動テスト群の回帰確認および新規テストで担保する。
+- 要件4: 通常のIssue開発フロー（spec→design→implementation→validationの順で進む）において、`agent-skill-chain verify artifacts` が各セグメントで意図したタイミング（そのセグメントの成果物が揃った時点）で正しく合格・不合格になることを、既存の自動テスト群の回帰確認および新規テストで担保する。既存テストのうち、implementationセグメントの合格条件として `VALIDATION.md` の作成を前提としているものは、要件1〜3の変更後は前提が変わるため、DESIGN段階で更新方針を確定する。
 
 ### 受入条件（Acceptance Criteria）
 
 #### AC-1: implementationセグメントの `unit_test_results` 判定が `VALIDATION.md` の存在に依存しない
 
-- Given: worktree内で `code`（implementationセグメントの成果物）は充足済みだが、`VALIDATION.md` が存在せず、かつbaseブランチからの分岐後に一度も add/modify されていない状態
+- Given: worktree内で `code`（implementationセグメントの成果物）は充足済みである状態。worktreeルート直下に前Issue由来の無関係な `VALIDATION.md` が混入している場合（別途起票される構造的な穴が未解決の間は起こりうる）は、検証前にそれを除去した状態、または当該Issue自身のvalidationセグメントで新規作成されたものではないことを確認した状態を前提とする
 - When: implementationセグメント自身の作業実績（`unit_test_results` の新しい判定条件が要求する証跡）を作成したうえで `agent-skill-chain verify artifacts <issue_id> implementation` を実行する
-- Then: `unit_test_results` は欠落として報告されず、implementationセグメントの成果物チェック全体が合格する（このとき `VALIDATION.md` は一切作成・参照されていない）
+- Then: `unit_test_results` は欠落として報告されず、implementationセグメントの成果物チェック全体が合格する（このとき当該Issueのvalidationセグメントによる `VALIDATION.md` の作成・参照は行われていない）
 - 検証方法見込み: `automated`（`test/integration/verify.test.ts` に新規テストケースを追加し、`VALIDATION.md` を作成しない前提で `unit_test_results` が充足されることを検証する）
 
 #### AC-2: validationセグメントの既存判定に影響を与えない
@@ -65,4 +65,4 @@
 - `unit_test_results` の充足証跡として何を採用するか（例: テスト実行ログの記録方法、専用の証跡ファイルの形式・生成タイミング等）の具体的な設計は、本SPEC.mdの範囲外でありDESIGN段階で確定する。
 - `code`・`ADR` など、`unit_test_results` 以外の既存 `checkOutputExists()` 判定ロジックの変更は対象外とする。
 - `.agent-skill-chain/config/segments.yaml` のセグメント構成・`outputs` 一覧自体の変更（セグメントの追加・変更はAGENTS.mdが定める破壊的変更であり、別途ADRを要する）は対象外とする。
-- Issue #200 が対象としたmainルート直下への成果物混入問題自体（本Issueとは独立した既に別Issueで対応済みの欠陥）の再修正は対象外とする。
+- PRマージのたびにSPEC.md/DESIGN.md/PLAN.md/VALIDATION.mdがmainルート直下へ恒久的に混入するという構造的な穴自体（Issue #200のSPEC.mdが「恒久的解決策は別Issueで検討する」と明記した事項であり、本SPEC.md作成時点でその別Issueはまだ起票されていない）の解決は対象外とする。本Issue（#202）は、この構造的な穴の有無に関わらず `checkOutputExists()` の判定ロジック自体の欠陥を修正するものであり、両者は独立した問題として扱う。
