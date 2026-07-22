@@ -6,8 +6,11 @@ export interface ExecResult {
   stderr: string;
 }
 
+// Node既定の1MiB上限だと大規模diff等（例: mainとの初回統合マージの全差分）でENOBUFSになるため拡張する。
+const MAX_BUFFER_BYTES = 256 * 1024 * 1024;
+
 export function run(command: string, args: string[], cwd?: string, input?: string): ExecResult {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8', input });
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8', input, maxBuffer: MAX_BUFFER_BYTES });
   if (result.error) {
     return { status: 127, stdout: '', stderr: String(result.error.message) };
   }
