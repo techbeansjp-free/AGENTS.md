@@ -8,6 +8,19 @@ const STATUS_LINE_RE = /^status:.*$/m;
 const STATUS_VALUE_RE = /^status:\s*(\S+)/m;
 const ID_RE = /^id:\s*(\S+)/m;
 
+/**
+ * 本チェック導入（Issue #188）より前に accepted 化された、手順逸脱が既知・既承認のADR。
+ * 理由: ADR-0002 は Issue #178 で design/plan フェーズの直接編集により accepted 化された
+ * （commit 1c21269）。内容面のscope制約（Context/Decision/Consequences/supersedes不変）は
+ * 遵守済みで、この手順逸脱自体はIssue #178当時にVALIDATION.mdで確認・記録済み・修正しない
+ * 判断が下されている。過去commitは書き換え不可なため、以後この特定ADR・commitの組は
+ * 検査対象から除外する（新規のfinalizeには適用しない。worktree-naming-grandfather.txtと同型の
+ * 追記専用の既知例外リスト）。
+ */
+const KNOWN_FINALIZE_DEVIATIONS: ReadonlySet<string> = new Set([
+  'docs/adr/ADR-0002-github-lease-git-ref-cas.md:1c21269a40da4f342d076e176bca075e92ead95f',
+]);
+
 function extractFrontmatter(text: string): string | undefined {
   return /```yaml\n([\s\S]*?)```/.exec(text)?.[1];
 }
@@ -80,6 +93,8 @@ export function checkAdrFinalizePath(root: string, relPath: string, currentText:
 
   const transition = findAcceptedTransitionCommit(root, relPath);
   if (!transition) return [];
+
+  if (KNOWN_FINALIZE_DEVIATIONS.has(`${relPath}:${transition.sha}`)) return [];
 
   const errors: string[] = [];
   const id = idOf(currentText) ?? relPath;
