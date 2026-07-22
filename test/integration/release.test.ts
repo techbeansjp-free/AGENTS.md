@@ -121,9 +121,10 @@ test('release tag (AC-1, Issue #204): git tagger identityが未設定の環境�
   // When
   const result = runCli(['release', 'tag', '4.0.0', headSha], { cwd: repo.dir, env: runEnv });
 
-  // Then: 「tagger identity unknown」で失敗せず成功する
+  // Then: 「Committer identity unknown」（git tag -a が committer identity 未解決時に
+  // 実際に出すエラー文言）で失敗せず成功する
   assert.equal(result.status, 0, result.stderr);
-  assert.doesNotMatch(result.stderr, /tagger identity unknown/i);
+  assert.doesNotMatch(result.stderr, /Committer identity unknown/i);
   assert.equal(result.stdout.trim(), 'v4.0.0');
 
   // Then: fallback identity（github-actions[bot]）でtaggerが作成されている
