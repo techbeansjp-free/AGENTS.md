@@ -1,0 +1,84 @@
+# 正本: AGENTS.md §不変条件I4 / ADR-0005
+#
+# mainへのリリース対象変更（配布物・その生成元。paths参照）を契機に、package.json の version
+# を自動bumpし、gitタグ・GitHub Releaseを人手なしで生成し続ける（Issue #196）。バージョン解決器
+# （release resolve-version）・bumpブランチ・PR作成／admin merge器（release bump）・タガー
+# （release tag）・リリーサ（release publish）はいずれも agent-skill-chain CLI（src/agents-md.ts、
+# ビルド後 bin/agents-md.js）のサブコマンドへの薄いラッパー（.agent-skill-chain/scripts/
+# release-*.sh）を介して呼び出すため、各ステップの前にビルドを行う。
+#
+# 版数体系（package.json semverを唯一の正本としgitタグ・GitHub Releaseへ同一文字列を適用する）・
+# admin mergeによるI4適合方式（生pushではなくPR経由でmainへ反映する）・marketplace/apm廃止の
+# 恒久判断はADR-0005（accepted）に記録済み。squashコミットのメッセージを --subject で明示固定して
+# [skip ci] の生存を保証することが再帰トリガ防止（無限ループ防止）の主機構であり、concurrency と
+# bumpブランチ名へのtarget埋め込み・タグ／Releaseの存在チェックが二重発火防止を担う。
+name: agent-skill-chain / release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - '.agent-skill-chain/**'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'docs/GLOSSARY.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'tsconfig.test.json'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # 防御的skip-ciガード（GitHub側の[skip ci]によるrun抑止に対する安価な二重防御。Issue #196）。
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Resolve target version
+        id: version
+        run: ./.agent-skill-chain/scripts/release-resolve-version.sh >> "$GITHUB_OUTPUT"
+
+      - name: Create/merge version bump PR (need_commit時のみ)
+        if: steps.version.outputs.need_commit == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}
+        run: ./.agent-skill-chain/scripts/release-bump.sh "${{ steps.version.outputs.target }}"
+
+      - name: Resolve release commit ref
+        # need_commit=true の場合、直前のステップでmainへ着地した版数bumpコミットのSHAを
+        # 対象にする（このjob自身のcheckout時点のSHAではない）。need_commit=false の場合は
+        # package.jsonが既にtargetを保持しているため、このpushをトリガしたSHAをそのまま使う。
+        id: ref
+        run: |
+          if [[ "${{ steps.version.outputs.need_commit }}" == "true" ]]; then
+            git fetch origin main --depth=1
+            echo "sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag (冪等)
+        run: ./.agent-skill-chain/scripts/release-tag.sh "${{ steps.version.outputs.target }}" "${{ steps.ref.outputs.sha }}"
+
+      - name: Create GitHub Release (冪等)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./.agent-skill-chain/scripts/release-publish.sh "${{ steps.version.outputs.target }}"
