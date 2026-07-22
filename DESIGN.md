@@ -14,18 +14,18 @@
 |---|---|---|
 | AC-1 | `root-cleanup run`（新設CLIコマンド）+ `agent-skill-chain / root-cleanup` ワークフロー（新設） | mainへのpush契機で、root直下の当該4ファイルを検出し削除PRをadmin mergeする |
 | AC-2 | `checkOutputExists()`/`wasEverAddedOrModified()`（`src/commands/verify.ts`）を一切変更しない設計とする | 新設ロジックはIssueブランチ・worktreeに一切触れず、既存判定と完全に独立させる |
-| AC-3 | root-cleanupは常にmain上の短命ブランチ（`chore/root-cleanup-*`）のみを扱い、他Issueのブランチ・worktreeへは一切触れない | 「証跡方式の設計判断」節で、Issueブランチ内削除commit方式を却下した理由を示す |
+| AC-3 | root-cleanupは常にmain上の短命ブランチ（`chore/root-cleanup-*`）のみを扱い、他Issueのブランチ・worktreeへは一切触れない | 「証跡方式の設計判断」節で却下理由を示す。自動検証はPLAN.mdの専用タスク（並行Issue不干渉テスト）で行う |
 | AC-4 | `verify root-clean`（新設、`verify.ts`への独立追加）をroot-cleanupワークフロー内の事後確認として使う | SPEC.mdが要求する「automated（mainルート直下ファイル一覧チェック）」の実体 |
 | 要件5 | `.agent-skill-chain/config/segments.yaml` の `outputs`、`.agent-skill-chain/templates/issue/` は無変更 | 新設物は既存の「独立した構造検査」カテゴリ（branch-name/worktree-path等と同格）に位置づける |
-| 要件6 | 「I5（進行役の純粋性）との整合」節 | 実行主体はCI自動化であり進行役（AI）ではないこと、内容非解釈であることを論証する |
+| 要件6 | 「I5（進行役の純粋性）との整合」節・「I8（安全側ラチェット）との整合」節 | 実行主体はCI自動化であり進行役（AI）ではないこと・内容非解釈であること（I5）、admin mergeの自動発動がautonomy昇格に該当しないこと（I8）を論証する |
 
 ## 責務・境界
 
 ### コンポーネント構成
 
-- `root-cleanup run`（`src/commands/root-cleanup.ts`、新設）: repoRoot直下に `SPEC.md`/`DESIGN.md`/`PLAN.md`/`VALIDATION.md`（固定・非設定化のリテラル4件、`checkOutputExists()`の`code`ケースの除外リストと同一の4件を踏襲）が存在するか検出する。0件なら no-op で終了。1件以上あれば、現在のmain先端から短命ブランチ `chore/root-cleanup-<UTC timestamp>` を作成し、該当ファイルのみを `git rm` して固定メッセージ（`chore: remove stray root-level issue segment artifacts [skip ci]`、Issue固有内容を一切含まない）でcommit・pushし、PRを作成して `gh pr merge --admin --squash --subject` でmainへ反映する。マージ直前に「diffが上記4ファイルの削除のみで構成されているか」のスコープ検査を行い、逸脱時は admin merge を行わず `human_required` として停止する（`release bump`・ADR-0005と同型の安全弁）。同名の未マージ cleanup ブランチ/PRが既に存在する場合は、スコープ検査を通過したときのみ再利用する（冪等、`release bump`と同型）。**引数・設定入力は一切受け付けない**（対象ファイル名はコード内リテラルのみで、`workflow_dispatch`等の外部入力トリガも持たない）。
+- `root-cleanup run`（`src/commands/root-cleanup.ts`、新設）: repoRoot直下に `SPEC.md`/`DESIGN.md`/`PLAN.md`/`VALIDATION.md`（固定・非設定化のリテラル4件、`checkOutputExists()`の`code`ケースの除外リストと同一の4件を踏襲）が存在するか検出する。0件なら no-op で終了。1件以上あれば、現在のmain先端から短命ブランチ `chore/root-cleanup-<UTC timestamp>` を作成し、該当ファイルのみを `git rm` して固定メッセージ（`chore: remove stray root-level issue segment artifacts [skip ci]`、Issue固有内容を一切含まない）でcommit・pushし、PRを作成して `gh pr merge --admin --squash --subject` でmainへ反映する。マージ直前に、(a) headブランチ名が `chore/root-cleanup-*` に一致し、かつ (b) 変更内容が `SPEC.md`/`DESIGN.md`/`PLAN.md`/`VALIDATION.md`（repoRoot直下のみ）の**削除のみ**で構成されている（追加・変更・他パスへの変更が一切無い）ことを機械的に検査する。いずれか一方でも満たさない場合は admin merge を行わず `human_required` として停止する（`release bump`・ADR-0005と同型の安全弁。詳細な境界解釈は「I8（安全側ラチェット）との整合」節）。同名の未マージ cleanup ブランチ/PRが既に存在する場合は、スコープ検査を通過したときのみ再利用する（冪等、`release bump`と同型）。**引数・設定入力は一切受け付けない**（対象ファイル名はコード内リテラルのみで、`workflow_dispatch`等の外部入力トリガも持たない）。admin merge bypassを行使するcommit・push・PR作成・マージの各操作は、既定の`GITHUB_TOKEN`では実行できない（branch protectionのadmin bypassには昇格された権限を要する）ため、既存リリース自動化（`agent-skill-chain-release.yml`の`release bump`ステップ）と**同一の`secrets.RELEASE_MAIN_PAT`を再利用する**。新規credentialは追加しない——このPATは既に「admin merge可能」という能力を持つ既存の権限分離済み資格情報であり、本設計はその発動条件をコード内スコープ検査で狭めるのみで、PAT自体の権限範囲を拡張しない。
 - `verify root-clean`（`src/commands/verify.ts`への新規独立エクスポート追加、新設）: repoRoot直下に上記4ファイルが存在しないことを確認するだけの単純な存在チェック。`checkOutputExists()`・`wasEverAddedOrModified()`・`segments.yaml`には一切関与しない別関数として追加する。**PRごとの必須ステータスチェック（`main.json`の`required_status_checks`）には追加しない**——Issue自身のPRは開発途中で必ずこの4ファイルを保持するため、PR単位の必須チェックにすると通常のIssueマージ自体を阻害する。あくまでmainへのpush後の事後確認としてのみ用いる。
-- `agent-skill-chain / root-cleanup`（`.github/workflows/agent-skill-chain-root-cleanup.yml`、新設。配布元は`.agent-skill-chain/templates/github/.github/workflows/`）: `on: push: branches: [main]` のみをトリガとし、コミットメッセージに `[skip ci]` を含む場合は実行しない（既存 `agent-skill-chain-release.yml` と同型の再帰防止）。`concurrency: {group: root-cleanup}` で同時実行を直列化する。ステップは `root-cleanup run` → `verify root-clean` の順。
+- `agent-skill-chain / root-cleanup`（`.github/workflows/agent-skill-chain-root-cleanup.yml`、新設。配布元は`.agent-skill-chain/templates/github/.github/workflows/`）: `on: push: branches: [main]` のみをトリガとし、コミットメッセージに `[skip ci]` を含む場合は実行しない（既存 `agent-skill-chain-release.yml` と同型の再帰防止）。`concurrency: {group: root-cleanup}` で同時実行を直列化する。ステップは `root-cleanup run`（`env: GH_TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}`——push・PR作成・admin mergeに昇格権限を要するため）→ `verify root-clean`（読み取りのみのため `${{ github.token }}` で足り、追加権限は不要）の順。`permissions: contents: write` をjob単位で宣言する（`agent-skill-chain-release.yml`と同型）。
 - `.agent-skill-chain/scripts/root-cleanup.sh` / `.agent-skill-chain/ci/verify-root-clean.sh`（新設）: 既存の `release-bump.sh`・`verify-branch-name.sh` 等と同型の、CLIサブコマンドへの薄いラッパー。
 
 ### 依存関係
@@ -41,7 +41,10 @@ Issue PRのマージ（squash） → mainへのpush（[skip ci]なし）
     → verify root-clean（新設）でmain最新HEADを再確認、残存していればjob失敗
 ```
 
-`checkOutputExists()`/`wasEverAddedOrModified()`（Issue #200・#202導入分）は本設計のどの経路からも呼び出されない。`agent-skill-chain-reconcile.yml` は `branches-ignore: [main]` であり、root-cleanupの短命ブランチ・main本体のいずれもgate-reconcileの対象にならない。循環依存なし。
+`checkOutputExists()`/`wasEverAddedOrModified()`（Issue #200・#202導入分）は本設計のどの経路からも呼び出されない。循環依存なし。
+
+**`agent-skill-chain-reconcile.yml`との関係（訂正）**: `agent-skill-chain-reconcile.yml` は `branches-ignore: [main]`（main以外の全ブランチへのpushが対象）であるため、root-cleanupが作成する`chore/root-cleanup-*`ブランチへのpushも対象に含まれ、gate-reconcileジョブは起動する。このジョブはブランチ名から`ISSUE-<数字>`形式のissue_idを抽出しようとして失敗し（`chore/root-cleanup-*`はこの形式に一致しない）、`exit 1`でジョブが失敗する。ただし実害は無い——このジョブは`main.json`の`required_status_checks`に含まれておらず、cleanup PRのadmin merge可否を左右しない。また対象は`chore/root-cleanup-*`ブランチ自身であり、他Issueのgate-reportを誤って参照・無効化することもない（`gate-reconcile.sh`は起動時に渡されたissue_idに対応する自Issueのworktreeのみを操作対象とする）。
+この既知の失敗が今後CIのノイズとして蓄積することを避けるため、`.github/workflows/agent-skill-chain-reconcile.yml`（および配布元テンプレート）の`branches-ignore`に`chore/root-cleanup-*`を追加し `branches-ignore: [main, 'chore/root-cleanup-*']` とする対応を**採用する**。変更は既存トリガ条件への1行追加のみで、reconcileジョブ自体のロジック・`gate-reconcile.sh`には触れない。同種の非Issueブランチ（例: `release/bump-v*`）にも同じ問題が存在しうるが、これは本Issueの対象外（既存の受容済み挙動）として扱い、本Issueでは新設する`chore/root-cleanup-*`のみを除外対象に追加する。
 
 ## 証跡方式の設計判断（却下した代替案）
 
@@ -61,7 +64,15 @@ related_adrs:
 
 ## I5（進行役の純粋性）との整合
 
-削除の実行主体はCI自動化（`github-actions[bot]`、または既存リリース自動化と同一の権限分離済みcredential）であり、`.agent-skill-chain/config/roles.yaml`が定義するいずれのAIロール（`orchestrator`/`worker`/`gate_reviewer`/`adr_finalization_worker`）にも該当しない。既存の版数bump自動化（Issue #196/#198/#204、`release bump`）と同一カテゴリの、進行役とは別主体によるmainへの直接的な反映であり、進行役の権限・責務には一切変更を加えない。行為の内容も「4件の固定リテラルファイル名のパス一致による削除」のみであり、ファイル内容の読解・解釈・執筆を一切伴わないためI5が禁じる「成果物の著述・内容の取り込み」に該当しない。トリガは`push: branches: [main]`のみで`workflow_dispatch`等の外部パラメータ入力を持たないため、進行役や他の主体がこの仕組みを介して任意ファイルの削除・内容操作を行う迂回経路にもならない。
+削除の実行主体はCI自動化（git commitの著者名義は`github-actions[bot]`、push・PR作成・admin merge操作の認証は`secrets.RELEASE_MAIN_PAT`——「コンポーネント構成」節で確定済み）であり、`.agent-skill-chain/config/roles.yaml`が定義するいずれのAIロール（`orchestrator`/`worker`/`gate_reviewer`/`adr_finalization_worker`）にも該当しない。既存の版数bump自動化（Issue #196/#198/#204、`release bump`）と同一カテゴリの、進行役とは別主体によるmainへの直接的な反映であり、進行役の権限・責務には一切変更を加えない。行為の内容も「4件の固定リテラルファイル名のパス一致による削除」のみであり、ファイル内容の読解・解釈・執筆を一切伴わないためI5が禁じる「成果物の著述・内容の取り込み」に該当しない。トリガは`push: branches: [main]`のみで`workflow_dispatch`等の外部パラメータ入力を持たないため、進行役や他の主体がこの仕組みを介して任意ファイルの削除・内容操作を行う迂回経路にもならない。
+
+## I8（安全側ラチェット）との整合
+
+`root-cleanup run`のPR作成・admin merge（`gh pr merge --admin`）は、`main.json`の`required_status_checks`・`pull_request`ルールをbypassする特権行使である。I8は「autonomyの昇格は人間の明示行為のみ」「昇格workflowが存在しないことを含め検査」と定めるため、無人ワークフローがこのbypassを自動発動すること自体がI8抵触の疑義を生む。この論点はADR-0005（release自動化、accepted）が同一カテゴリの決定として既に扱っている——ADR-0005は、design-gate strictレビューでの規範解釈対立を受け、「既に人間が承認済みで恒久的に存在する`bypass_actor`（admin）の固定特権を、機械検査可能な狭スコープに限って自動発動すること」はI8が禁ずる「autonomyレベルそのものを機械が自律的に引き上げる昇格workflow」には該当しない、という境界解釈をリポジトリオーナーの明示確認により確定し、その適用範囲を「head=`release/bump-v*` かつ変更=`package.json`（±`package-lock.json`）のみ」という狭スコープに限定した。
+
+本設計が新設するbypassも、ADR-0005が確定した同一の境界解釈が適用される同種の決定である。適用にあたり、本設計はADR-0005よりもさらに狭いスコープを課す：自動発動条件は「(a) headブランチ名が`chore/root-cleanup-*`に一致し、かつ (b) 変更内容がrepoRoot直下の`SPEC.md`/`DESIGN.md`/`PLAN.md`/`VALIDATION.md`の**削除のみ**（追加・変更・他パスへの変更を一切含まない）」の両方を機械的に満たす場合に限る（「コンポーネント構成」節）。ADR-0005の対象（`package.json`の内容書き換え）は値の書き込みを伴うのに対し、本設計の対象は4件の固定ファイル名への削除操作のみであり、書き込む内容が存在しない分、境界はより狭い。いずれかの条件を満たさない場合は`human_required`として停止し、自動admin mergeは行わない。
+
+ADR-0007の`proposed → accepted`遷移（design-gate承認）にあたっては、ADR-0005と同様にこの境界解釈の適用可否をgate reviewer・進行役経由でリポジトリオーナーに確認し、承認記録をADR-0007自身に残すことを設計上の前提とする（ADR-0007「I8『昇格workflow』禁止規定との関係と人間承認」節を参照）。
 
 ## 障害・ロールバック考慮
 
