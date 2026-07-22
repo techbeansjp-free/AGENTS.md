@@ -75,6 +75,17 @@
 
 削除は「実装セグメントでの暫定削除（#1）→ validation セグメントでの最終削除（#6）」の2段階で構成する。実装セグメント直後に恒久的に削除できないのは、`SPEC.md`・`DESIGN.md`・`PLAN.md` を validation_worker が検証観点（要求・設計との整合性確認）のために参照する必要があるためである。加えて、実装セグメント完了後もこれらの成果物は spec-gate・design-gate の差し戻し（本 Issue 自身の DESIGN.md 差し戻しがその実例）のたびに読み書き・再作成され続けるのが正常な運営であり、その時点では「存在しないこと」を最終状態として確定できない。したがって4ファイルが実際に不要になり `AC-1` を最終状態として満たせるのは、全ゲートを通過し検証が完了した後の validation セグメント最後の1回に限られる。
 
+#### 最終削除commitが引き起こすゲート・CI側の帰結
+
+上記 #6 の最終削除commitは、それ自体が正常に完了する一方で、以下2つの副作用を確実に引き起こす。これらは実装上の見落とし（バグ）ではなく、「spec-gateが承認した成果物ファイルそのものを最終的に削除する」という本Issueの行為自体が持つ構造的な帰結であり、隠さずここに記載する。
+
+1. **4ゲート全ての `action_required` への巻き戻し**: `.github/workflows/agent-skill-chain-reconcile.yml` は main 以外の全ブランチへの push で `gate reconcile`（`src/commands/gate.ts` の `reconcile()`）を実行する。`reconcile()` はspec/design/implementation/validationの順にゲートを走査し、いずれかのゲートで承認済み成果物（`approved_artifacts`）のdigestが現在のcommit内容と一致しないと判定した時点で当該ゲートを無効化し、以降の`downstreamInvalidated`フラグにより残り全ての下流ゲートも連鎖的に無効化する。spec-gateが承認した`SPEC.md`は最終削除commitで消失するため、digest不一致によりspec-gateがまず無効化され、`downstreamInvalidated`により design/implementation/validationの3ゲートも連鎖して`action_required`へ遷移する。すなわち最終削除commitのpush後、4ゲート全てが`action_required`状態になることが確実に起こる。
+2. **`verify-ac-coverage`（CI必須`verify`ジョブ）の失敗**: `src/commands/verify.ts` の `acCoverage()`（`.agent-skill-chain/ci/verify-ac-coverage.sh` の実体）は、`AC-3対応の checkOutputExists()`とは独立した別ロジックであり、`fs.existsSync(specPath)` / `fs.existsSync(validationPath)` で `SPEC.md`・`VALIDATION.md` の**現在の存在のみ**を判定する。`checkOutputExists()`に追加した「過去に一度でもadd/modifyされた実績があるか」というOR条件の履歴判定は、`acCoverage()`には適用されない（上記「責務境界」節に記載の通り、本変更のスコープ外）。最終削除commit以降、`SPEC.md`・`VALIDATION.md`はworktreeに存在しなくなるため、`acCoverage()`は`fail()`を返し、CIの必須`verify`ジョブは確実に失敗する。
+
+これら2点は「AC-1（root直下に4ファイルが存在しない）を最終状態として満たす」という設計判断（前節「なぜ削除が2段階になるか」）を実行に移した瞬間に必ず発生する既知の帰結であり、`checkOutputExists()`拡張（AC-3対応）によっても解消されない。
+
+**この帰結が実害を追加しない理由**: 本リポジトリは現在、ゲートレビューCIに必要なsecretsが未設定であるため、いずれのPRも必須Check Run・必須statusの正常経路では完了できず、実質的に全てのPRが `gh pr merge --admin` による必須チェックのbypassでマージされる運用になっている（Issue #196・#198 も同様の運用）。この運用前提の下では、最終削除commit後に4ゲートが`action_required`になること・`verify-ac-coverage`が失敗することは、admin mergeというマージ手順そのものには何ら追加の実害を与えない。ゲート・CIが本来期待する「グリーンな状態でのマージ」という理想からは外れるが、その理想が既に本リポジトリの現運用では成立していないため、本Issueの最終削除がその状態を新たに悪化させるわけではない。本Issueの検証セグメントは、この既知の帰結（4ゲートのaction_required化・verify-ac-coverage失敗）を実際に確認したうえで、`gh pr merge --admin` によるマージを前提として完了とする。
+
 ### 依存関係
 
 ```text
@@ -96,5 +107,6 @@ related_adrs: []
 - 想定される失敗モード(1): 削除後に既存 CI が予期せず失敗する（「事前調査」で洗い出せなかった隠れた依存が存在した場合）。
 - 想定される失敗モード(2): `checkOutputExists()`拡張後の履歴判定が、意図せず本来不合格であるべきセグメントを合格させてしまう（過剰検出）。ただし判定は`--diff-filter=AM`かつ対象ファイルの完全一致パス指定であり、当該ファイルへの実際のadd/modify commitが当該ブランチの差分区間に存在する場合にのみtrueになるため、恣意的な合格化の余地はない。
 - 想定される失敗モード(3): `git log`実行自体が失敗し判定不能になる。「AC-3対応」節のフェイルセーフ方針により「実績なし」に倒れ、既存の「現在存在する」判定のみで従来どおり動作するため、誤って合格判定にはならない。
+- 既知の帰結（失敗モードではない）(4): 最終削除commit（PLAN.md 変更単位 #6）のpush後、上記「最終削除commitが引き起こすゲート・CI側の帰結」節の通り、`gate reconcile`により4ゲート全てが`action_required`へ遷移し、かつ`verify-ac-coverage`（CIの必須`verify`ジョブ）が`SPEC.md`/`VALIDATION.md`の不在により失敗することが確実に起こる。これは事前に想定外の失敗ではなく、削除という行為自体の構造的帰結として設計時点で識別済みであり、対処は「解消」ではなく「本リポジトリの現行運用（secrets未設定によるadmin merge運用）の下では追加の実害を生まない」ことの確認と、`gh pr merge --admin`によるマージの実施である。
 - ロールバック手順: 本 PR のブランチ（`chore/200-stray-root-artifacts`）は close・破棄すれば main には一切影響しない。万一 main へマージ後に問題が判明した場合も、削除された4ファイル・`checkOutputExists()`の変更のいずれも Git 履歴から `git revert` により復元・撤回可能。
 - 影響を受ける既存機能: root 直下4ファイルの削除自体は、過去 Issue（#196・#191）の作業過程で誤って main に混入した stray な成果物の除去であり、他のいかなる機能もこれらの root 直下ファイルの恒久的存在を前提にしていないことを「事前調査」で確認済み。一方、`checkOutputExists()`の拡張は`verify artifacts`を利用する**全Issue**の判定挙動に影響する（本Issue固有ではない）。ただし合格条件を「現在存在する」→「現在存在する OR 過去に一度でもadd/modifyされた実績がある」へ緩和する変更であり、既存の「ファイルが最後まで存在し続ける通常のIssue」の合格判定には影響を与えず、既存の不合格判定（一度も作成していない未着手セグメント）も維持される。
