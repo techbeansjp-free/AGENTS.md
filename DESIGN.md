@@ -68,8 +68,12 @@
 
 本 Issue の変更は「root 直下の stray ファイル削除」と「その結果露見したverify-artifactsの検査ロジック拡張」の2つで構成される。新規コンポーネント・新規外部依存の導入はない。
 
-- 実装セグメント: (1) root 直下の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を `git rm` で削除する。他の場所（`.agent-skill-chain/templates/issue/`・`.worktrees/`）のファイルには一切触れない。(2) `src/commands/verify.ts` の `checkOutputExists()` を上記「AC-3対応」の設計に従い拡張する。
-- 独立検証セグメント: 削除後・拡張後に既存 CI ワークフロー（`.agent-skill-chain/ci/` 配下の `verify-branch-name.sh`・`verify-worktree-path.sh`・`verify-template-sync.sh`・`verify-artifacts.sh`・`verify-ac-coverage.sh`・`verify-adr.sh` および `.github/workflows/agent-skill-chain-ci.yml`）が引き続き成功すること、および `checkOutputExists()` の拡張が意図通り動作すること（PLAN.md の回帰テスト参照）を確認する責務を持つ。
+- 実装セグメント: (1) root 直下の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` の**暫定削除**（PLAN.md 変更単位 #1）。これは `checkOutputExists()` 拡張（`AC-3` 対応）の動作確認のために一度 `git rm` で削除するものであり、この時点の削除は最終状態ではない。他の場所（`.agent-skill-chain/templates/issue/`・`.worktrees/`）のファイルには一切触れない。(2) `src/commands/verify.ts` の `checkOutputExists()` を上記「AC-3対応」の設計に従い拡張する（PLAN.md 変更単位 #3）。
+- 独立検証セグメント（validation_worker）: (1) `VALIDATION.md` を作成し、受入・回帰検証（既存 CI ワークフロー — `.agent-skill-chain/ci/` 配下の `verify-branch-name.sh`・`verify-worktree-path.sh`・`verify-template-sync.sh`・`verify-artifacts.sh`・`verify-ac-coverage.sh`・`verify-adr.sh` および `.github/workflows/agent-skill-chain-ci.yml` の成功確認、および `checkOutputExists()` 拡張の回帰テスト確認を含む）を実施する。(2) 検証完了後の**最終アクション**として、`SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` の4ファイルを `git rm` で再度削除し、最後の checkpoint として commit・push する（PLAN.md 変更単位 #6）。これにより `AC-1`（root 直下に4ファイルが存在しない）は、マージ時点の最終状態で満たされる。
+
+#### なぜ削除が2段階になるか
+
+削除は「実装セグメントでの暫定削除（#1）→ validation セグメントでの最終削除（#6）」の2段階で構成する。実装セグメント直後に恒久的に削除できないのは、`SPEC.md`・`DESIGN.md`・`PLAN.md` を validation_worker が検証観点（要求・設計との整合性確認）のために参照する必要があるためである。加えて、実装セグメント完了後もこれらの成果物は spec-gate・design-gate の差し戻し（本 Issue 自身の DESIGN.md 差し戻しがその実例）のたびに読み書き・再作成され続けるのが正常な運営であり、その時点では「存在しないこと」を最終状態として確定できない。したがって4ファイルが実際に不要になり `AC-1` を最終状態として満たせるのは、全ゲートを通過し検証が完了した後の validation セグメント最後の1回に限られる。
 
 ### 依存関係
 
