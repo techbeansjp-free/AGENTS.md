@@ -185,7 +185,16 @@ test('claude launch_worker: WORKER_CMD未指定時の既定起動はclaude CLI�
   assert.doesNotMatch(argv, /bypassPermissions/, '既定起動はbypassPermissionsを用いないこと');
   assert.match(argv, /Bash\(git push:\*\)/, 'allowlistにワーカーの正規責務範囲であるgit pushが含まれること');
   assert.match(argv, /Bash\(git commit:\*\)/, 'allowlistにgit commitが含まれること');
-  assert.match(argv, /Bash\(gh pr create:\*\)/, 'allowlistにDraft PR作成（gh pr create）が含まれること');
+  // Issue #188 AC-5: 生の `gh pr create` は既定allowlistに含まれない（PRテンプレート徹底のため、
+  // Draft PR作成は `.agent-skill-chain/scripts/pr-create.sh`（pr createラッパー）経由に一本化する）。
+  assert.doesNotMatch(argv, /Bash\(gh pr create:\*\)/, '既定allowlistに生のgh pr createが含まれないこと（Issue #188 AC-5）');
+  assert.match(
+    argv,
+    /Bash\(\.agent-skill-chain\/scripts\/\*\)/,
+    'allowlistにDraft PR作成の正規経路（pr createラッパー、.agent-skill-chain/scripts/*）が含まれること',
+  );
+  assert.match(argv, /Bash\(gh pr view:\*\)/, 'allowlistに参照用途のgh pr viewは引き続き含まれること');
+  assert.match(argv, /Bash\(gh pr edit:\*\)/, 'allowlistに更新用途のgh pr editは引き続き含まれること');
 });
 
 test('claude launch_worker: WORKER_ALLOWED_TOOLS envで既定allowlistを完全上書きできる（ISSUE-183）', async (t) => {

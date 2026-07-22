@@ -17,6 +17,7 @@ import { validateAgainstSchema } from '../lib/schema.js';
 import { digestOfFile } from '../lib/digest.js';
 import { git } from '../lib/exec.js';
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
+import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 function violations(lines: string[]): number {
@@ -240,6 +241,23 @@ export async function adr(args: string[]): Promise<number> {
     if (statusMatch && !['proposed', 'accepted', 'superseded', 'deprecated'].includes(statusMatch[1])) {
       errors.push(`${adrPath}: 不正な status です: ${statusMatch[1]}`);
     }
+
+    // Issue #188 AC-7/AC-8: status: accepted のADRについて、finalize経路（'adr finalize' CLI）を
+    // 経ずにacceptedへ遷移したcommitでないかを検査する。ADRのcommit履歴は「現在チェックアウト中の
+    // ブランチ」上にあるため、共通/メイン作業ツリーを指す repoRoot() ではなく、現在の作業ツリー
+    // （worktreeRoot()）を基点に git log/show を実行する必要がある（ADR-0004と同型の理由。
+    // verify branch-name の resolveCurrentBranch(worktreeRoot()) 参照）。
+    // gitリポジトリ外（root解決不能）の場合は既存の構造検査のみに留め、本検査は適用しない。
+    if (statusMatch?.[1] === 'accepted') {
+      try {
+        const root = worktreeRoot();
+        const relPath = path.relative(root, path.resolve(adrPath));
+        errors.push(...checkAdrFinalizePath(root, relPath, text));
+      } catch {
+        // worktreeRoot()解決不能（.git未検出）等の特殊ケースでは finalize経路ガードを適用しない。
+      }
+    }
+
     return violations(errors);
   });
 }

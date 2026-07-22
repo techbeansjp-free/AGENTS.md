@@ -6,6 +6,7 @@ import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../l
 import { parseForbiddenTerms } from '../lib/glossary.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { routes } from '../lib/cli-routes.js';
+import { collectAdrRecords, checkAdrSymmetry } from '../lib/adr-consistency.js';
 
 const VOCAB_USAGE = `
 使い方: agent-skill-chain lint vocab [path...]
@@ -401,31 +402,6 @@ export async function references(args: string[]): Promise<number> {
   });
 }
 
-interface AdrFrontmatter {
-  id: string;
-  status: string;
-  supersedes: string[];
-  'superseded-by': string | null;
-}
-
-function parseAdrFrontmatter(text: string): AdrFrontmatter | undefined {
-  const match = /```yaml\n([\s\S]*?)```/.exec(text);
-  if (!match) return undefined;
-  const lines = match[1].split('\n');
-  const get = (key: string): string | undefined => {
-    const line = lines.find((l) => l.startsWith(`${key}:`));
-    return line ? line.slice(key.length + 1).trim() : undefined;
-  };
-  const id = get('id');
-  const status = get('status');
-  if (!id || !status) return undefined;
-  const supersedesRaw = get('supersedes') ?? '[]';
-  const supersedes = [...supersedesRaw.matchAll(/ADR-[0-9]+/g)].map((m) => m[0]);
-  const supersededByRaw = get('superseded-by') ?? 'null';
-  const supersededBy = supersededByRaw === 'null' ? null : supersededByRaw.replace(/^["']|["']$/g, '');
-  return { id, status, supersedes, 'superseded-by': supersededBy };
-}
-
 export async function adr(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -438,33 +414,8 @@ export async function adr(args: string[]): Promise<number> {
     }
 
     const root = repoRoot();
-    const adrDir = path.join(root, 'docs', 'adr');
-    const files = fs.existsSync(adrDir) ? fs.readdirSync(adrDir).filter((f) => f.endsWith('.md')) : [];
-    const byId = new Map<string, AdrFrontmatter>();
-    for (const file of files) {
-      const fm = parseAdrFrontmatter(fs.readFileSync(path.join(adrDir, file), 'utf8'));
-      if (fm) byId.set(fm.id, fm);
-    }
-
-    const violations: string[] = [];
-    for (const [id, fm] of byId) {
-      for (const supersededId of fm.supersedes) {
-        const target = byId.get(supersededId);
-        if (!target) {
-          violations.push(`${id}: supersedes が指す ${supersededId} が存在しません`);
-        } else if (target['superseded-by'] !== id) {
-          violations.push(`${id} と ${supersededId}: supersedes ⇔ superseded-by が非対称です`);
-        }
-      }
-      if (fm['superseded-by']) {
-        const target = byId.get(fm['superseded-by']);
-        if (!target) {
-          violations.push(`${id}: superseded-by が指す ${fm['superseded-by']} が存在しません`);
-        } else if (!target.supersedes.includes(id)) {
-          violations.push(`${id} と ${fm['superseded-by']}: superseded-by ⇔ supersedes が非対称です`);
-        }
-      }
-    }
+    const byId = collectAdrRecords(root);
+    const violations = checkAdrSymmetry(byId);
 
     if (violations.length > 0) {
       process.stderr.write(`${violations.join('\n')}\n`);

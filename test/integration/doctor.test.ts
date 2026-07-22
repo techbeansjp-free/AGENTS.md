@@ -208,3 +208,228 @@ test('doctor: 追加4項目すべてが正常な状態であれば全項目OK・
   assert.match(result.stdout, /OK {2}template-sync/);
   assert.match(result.stdout, /OK {2}schemas構文妥当性/);
 });
+
+// Issue #188 D1〜D5（AC-3）: doctor追加5観点の意図的な不整合注入によるNG検知・正常時のOK（沈黙）を検証する。
+
+function setDurabilityBackend(repoDir: string, value: 'remote' | 'local_mirror'): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/(durability:\n\s*backend: )\w+/, `$1${value}`);
+  if (patched === text) {
+    throw new Error('durability.backend の書き換えに失敗しました（config/agent-skill-chain.yaml の書式が変わった可能性）');
+  }
+  fs.writeFileSync(configPath, patched);
+}
+
+function writeAdrFixture(
+  repoDir: string,
+  filename: string,
+  id: string,
+  status: string,
+  supersedes: string[],
+  supersededBy: string | null,
+): void {
+  const dir = path.join(repoDir, 'docs', 'adr');
+  fs.mkdirSync(dir, { recursive: true });
+  const text = [
+    '# ADR',
+    '',
+    '```yaml',
+    `id: ${id}`,
+    `status: ${status}`,
+    'title: sample',
+    'tags: []',
+    `supersedes: [${supersedes.join(', ')}]`,
+    `superseded-by: ${supersededBy ?? 'null'}`,
+    'deprecated-reason: null',
+    '```',
+    '',
+    '## Context',
+    'x',
+    '',
+    '## Decision',
+    'x',
+    '',
+    '## Consequences',
+    'x',
+    '',
+  ].join('\n');
+  fs.writeFileSync(path.join(dir, filename), text);
+}
+
+// ---- D1: branch名規約 ----
+
+test('doctor D1: worktreeのcheckoutブランチがbranch.patternに適合しないと branch名規約 がNGになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: worktreeのパス自体はworktree.path_patternに適合するが、branchはbranch.patternに適合しない
+  const worktreePath = path.join(repo.dir, '.worktrees', '20260101_000000-feature-42-branchmismatch');
+  execFileSync('git', ['worktree', 'add', '-b', 'not-a-valid-branch-name', worktreePath, 'main'], {
+    cwd: repo.dir,
+    stdio: 'pipe',
+  });
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, new RegExp(`NG {2}branch名規約: .*${escapeRegExp(worktreePath)}`));
+});
+
+test('doctor D1: 追加worktreeが無ければ branch名規約 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.match(result.stdout, /OK {2}branch名規約/);
+});
+
+// ---- D2: Durability Backend疎通 ----
+
+test('doctor D2: durability.backend=remoteでoriginへ疎通できないと Durability Backend疎通 がNGになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  execFileSync('git', ['remote', 'set-url', 'origin', '/path/does/not/exist-xyz'], { cwd: repo.dir, stdio: 'pipe' });
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}Durability Backend疎通/);
+});
+
+test('doctor D2: durability.backend=remoteでoriginへ疎通できれば Durability Backend疎通 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.match(result.stdout, /OK {2}Durability Backend疎通/);
+});
+
+test('doctor D2: durability.backend=local_mirrorでミラー先(origin)が存在しないと Durability Backend疎通 がNGになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setDurabilityBackend(repo.dir, 'local_mirror');
+  execFileSync('git', ['remote', 'set-url', 'origin', '/path/does/not/exist-xyz'], { cwd: repo.dir, stdio: 'pipe' });
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}Durability Backend疎通: .*ミラー先/);
+});
+
+test('doctor D2: durability.backend=local_mirrorでミラー先(origin)が実在すれば Durability Backend疎通 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setDurabilityBackend(repo.dir, 'local_mirror');
+
+  // Given: createTmpRepoのoriginは実在するローカルbare repo（remoteDir）を指している
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.match(result.stdout, /OK {2}Durability Backend疎通/);
+});
+
+// ---- D3: writer lease失効（localバックエンドのみ） ----
+
+test('doctor D3 (local backend): 失効済みのwriter leaseが残っていると writer lease失効 がNGになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+  const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
+  const text = fs.readFileSync(leasePath, 'utf8');
+  const patched = text.replace(/expires_at:.*/, "expires_at: '2000-01-01T00:00:00.000Z'");
+  assert.notEqual(patched, text, 'テスト前提: expires_atを書き換えられること');
+  fs.writeFileSync(leasePath, patched);
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}writer lease失効: .*ISSUE-1/);
+});
+
+test('doctor D3 (local backend): leaseが存在しなければ writer lease失効 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.match(result.stdout, /OK {2}writer lease失効/);
+});
+
+test('doctor D3 (github backend): writer lease失効 検査自体が実行されない（github backendのgit-ref leaseは対象外）', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.doesNotMatch(result.stdout, /writer lease失効/);
+});
+
+// ---- D4: AC-ID重複 ----
+
+test('doctor D4: worktree内SPEC.mdでAC-IDが重複していると AC-ID重複 がNGになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\nAC-1: duplicate\n');
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}AC-ID重複: .*AC-1/);
+});
+
+test('doctor D4: worktree内SPEC.mdのAC-IDが重複していなければ AC-ID重複 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\nAC-2: another\n');
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.match(result.stdout, /OK {2}AC-ID重複/);
+});
+
+// ---- D5: ADR整合性 ----
+
+test('doctor D5: supersedes⇔superseded-byが非対称だと ADR整合性 がNGになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  writeAdrFixture(repo.dir, 'ADR-0001-a.md', 'ADR-0001', 'superseded', [], 'ADR-0002');
+  // ADR-0002はADR-0001をsupersedesすると主張していない（非対称）。
+  writeAdrFixture(repo.dir, 'ADR-0002-b.md', 'ADR-0002', 'accepted', [], null);
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}ADR整合性/);
+});
+
+test('doctor D5: 不正なstatus値のADRがあると ADR整合性 がNGになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  writeAdrFixture(repo.dir, 'ADR-0001-a.md', 'ADR-0001', 'unknown-status', [], null);
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}ADR整合性: .*不正なstatus/);
+});
+
+test('doctor D5: supersedes⇔superseded-byが対称であれば ADR整合性 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  writeAdrFixture(repo.dir, 'ADR-0001-a.md', 'ADR-0001', 'superseded', [], 'ADR-0002');
+  writeAdrFixture(repo.dir, 'ADR-0002-b.md', 'ADR-0002', 'accepted', ['ADR-0001'], null);
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.match(result.stdout, /OK {2}ADR整合性/);
+});
+
+test('doctor D5: docs/adr/が存在しなければ ADR整合性 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.match(result.stdout, /OK {2}ADR整合性/);
+});

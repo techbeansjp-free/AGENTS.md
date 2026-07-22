@@ -1,30 +1,26 @@
 <!--
-正本: AGENTS.md §4セグメント・4ゲート
+正本: AGENTS.md 4セグメント・4ゲート
 このファイルは Issue 毎に複製して使う雛形である（セグメント: design、成果物: PLAN.md。DESIGN.md とは別ファイル）。
 -->
 
-# PLAN: agent-skill-chain — lint vocab/references の src/ 対象拡大・CLIサブコマンド文脈判定の構造的抜け穴修正
+# PLAN: setupバックエンド分岐是正・doctor網羅性拡張・PRテンプレート実運用徹底・ADR手順逸脱ガード
 
-- Issue: `ISSUE-187`
+- Issue: `ISSUE-188`
 - 対応する DESIGN: `DESIGN.md`
 
 ## 実装順序・変更単位
 
-文脈判定の厳格化（#2）を既存違反是正（#3）より先に行う。厳格化で新たに顕在化する違反も #3 の再カウント・是正に含めるため。対象拡大（#1）と文脈判定（#2）は独立だが、是正（#3）は両者の適用後に「本当に残る違反」を確定させる必要があるため後続にする。
+4件の是正は相互に独立しており、変更単位1〜4はどの順序でも実装できる。単位5（doctor 対象外理由の記録）は doctor 実装の確定後に、単位6（回帰確認）は全実装の後に行う。各実装単位は自身の AC を実測で満たすテストを同時に追加する。
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | `src/lib/scan.ts`: 既定対象根へ `src/` 追加 | `defaultLiveFileRoots` の根集合へ `path.join(repoRoot, 'src')` を追加（`existsSync` フィルタ維持）。`defaultVocabFileRoots` は継承のため無変更。コメントへ `src/` 追加理由と `bin/`（生成物）を含めない理由を記す | `AC-1` | なし |
-| 2 | `src/commands/lint.ts`: 文脈判定へファイル種別ディスパッチ導入 | `hasProseViolation`/`isCodeLikeReference`/`isIdentifierContext` へ `ext` 引数を伝播。`YAML_CONTEXT_EXTENSIONS`（`.yaml`/`.yml`）と `isProseFile`（`ext === '.md'`）を追加。YAML 文脈判定は `YAML_CONTEXT_EXTENSIONS.has(ext)` のとき、CLI サブコマンド文脈判定は `!isProseFile(ext)` のときのみ評価。複合コード識別子・外部語彙許可リスト・上流 3 除外は全 ext 共通で不変。`vocab()` で各ファイルの拡張子を判定チェーンへ渡す | `AC-3`, `AC-4` | なし |
-| 3 | `src/`（`src/commands/*.ts`・`src/lib/*.ts`）: 既存違反の分類是正 | #1・#2 適用後に `src/` の全違反を再カウントし、DESIGN.md の是正戦略（コメント散文の正規用語化・自己言及 mention のバッククォート化・禁止参照コメントのインライン化・正当コード識別子のバッククォート付き添字化・`references` の節番号記号を Unicode エスケープ定数へ）で解消する。各是正はコメント・コードの契約要旨を変えない。0 件になるまで反復 | `AC-2` | `#1`, `#2` |
-| 4 | `test/unit/scan.test.ts`: 既定対象根テストの更新 | 期待配列へ `src` 含有アサート、`bin` 非含有アサートを追加 | `AC-1` | `#1` |
-| 5 | `test/integration/lint.test.ts`: 文脈判定・回帰テストの更新／追加 | (a) 既存の識別子認識テストのうち YAML/CLI ケースを `.yaml`/`.sh` フィクスチャへ移設し非検出の期待を維持。(b) `.yaml` の YAML キー・flow-sequence は非検出、`.sh` の実 CLI サブコマンドは非検出、複合コード識別子・外部語彙許可リストは全 ext 非検出を検証。(c) 散文 `.md` 中の YAML 風・CLI 動詞偶然共起が違反検出される回帰テストを追加（親 commit ビルド版では検出漏れだった対比を含む） | `AC-3`, `AC-4` | `#2` |
-| 6 | 全体回帰・CI 継承の確認 | `npm run build && npm test` を全件実行し全通過を確認。CI ワークフローが引数なしで lint ラッパーを呼び新既定（`src/` 含む）を無改修で継承すること、CI 相当の引数なしローカル実行が終了コード0で完走することを実チェックアウト相当の環境で確認 | `AC-5`, `AC-6`, `AC-2` | `#1`〜`#5` |
+| 1 | `setup()` の coordination backend 分岐 | 資産コピー後にコピー済み config の `coordination.backend` を読む純関数を追加し、local または config 不読時は `githubBundle()` をスキップして情報行を出力、github 時は現行どおり実行する。判定関数と副作用実行を分離。分岐前後の挙動差をテストで実測 | `AC-1`, `AC-2` | なし |
+| 2 | `doctor` 追加検査 D1〜D5 | D1=各 Issue worktree の checkout ブランチが branch.pattern に適合／D2=durability.backend=remote は `git ls-remote` 到達性・local_mirror はミラー先存在／D3=local backend の lease 状態ファイル失効検知／D4=各 worktree の SPEC.md 内 AC-ID 重複検知／D5=ADR の supersedes⇔superseded-by 対称性・status enum 妥当性を surface。各検査を独立 try/catch で追加。各観点につき不整合を再現したフィクスチャで NG 検知・正常時沈黙を実測 | `AC-3` | なし |
+| 3 | `claude.sh` allowlist から `gh pr create` 除去 | `WORKER_ALLOWED_TOOLS_DEFAULT` から `Bash(gh pr create:*)` を除去し、除去理由と正規経路（`pr create` ラッパー）をアダプタ内コメントへ自己完結記載。`gh pr view/edit/comment` は残す。既定値に生 `gh pr create` が無いことをテストで実測 | `AC-5` | なし |
+| 4 | `verify adr` finalize 経路ガード | git 履歴走査の補助関数を追加し、status=accepted の ADR について accepted 化 commit を特定、(1)固定メッセージ一致・(2)単一 ADR ファイルのみ変更・(3)status 行のみの差分、の3条件論理積を満たさなければ手順逸脱として非ゼロ終了。正規 finalize 由来 commit を誤検知しないことも実測 | `AC-7`, `AC-8` | なし |
+| 5 | doctor 対象外観点の理由記録 | 実装しなかった観点（Check Run 状態・label projection・system-spec manifest 整合性）と部分除外（D3 の github lease・D4 の system-spec 安定 ID）の対象外理由を `VALIDATION.md` へ記録 | `AC-4` | `#2` |
+| 6 | PR テンプレート本文の実測・全体回帰 | 徹底策適用後、使い捨て PR を規定手順（`pr create` ラッパー）で作成しテンプレート各節を含む本文が生成されることを実測（`AC-6`）。`npm run build && npm test` を全件実行し全通過を確認（`AC-9`） | `AC-6`, `AC-9` | `#1`〜`#5` |
 
 ## 実装順序の見直しについて
 
-作業順序（上記の並び）のみを見直す場合は本ファイルのみを更新すればよい。設計要素・責務・境界そのものを変更する場合（例: ディスパッチ方式の変更、`bin/` の扱いの変更）は DESIGN.md の更新および設計ゲートの再通過が必要になる。
-
-## AC-2・AC-6 の検証上の申し送り
-
-作業 worktree から CLI を直接実行すると、実行時ルート解決の既知挙動により既定対象が主 worktree 側の `src/` を指すため、AC-2（引数なし lint の終了コード0）・AC-6（CI 相当の実行）は、実チェックアウト相当（実 `.git` ディレクトリを持つ環境に worktree 内容を配置）で CLI を実行して実測確認する。CI は実チェックアウトで走るため対象拡大は本番で正しく効く。継続的な `src/` 清浄性の回帰保証は CI が担う（`test/helpers/tmp-repo.ts` は `src/` を複製しないため、既定 lint の単体テストは `src/` 内容を回帰対象に含めない）。
+作業順序（上記の並び）のみを見直す場合は本ファイルのみを更新すればよい。設計要素・責務・境界そのもの（例: doctor 検査の実装/対象外の判別、finalize ガードの検出方式、allowlist 徹底の手段）を変更する場合は、DESIGN.md の更新および設計ゲートの再通過が必要になる。

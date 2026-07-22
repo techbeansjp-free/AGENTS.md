@@ -15,12 +15,23 @@ REPO_ROOT="$(cd -- "$ADAPTER_DIR/../.." &>/dev/null && pwd)"
 
 # launch_worker の既定起動系（WORKER_CMD 未指定時）が claude CLI へ渡す --allowed-tools の既定値
 # （ワーカーの正規責務範囲——自worktree内ファイル編集、自branchへのcommit/push、Draft PR作成
-# （gh pr create、specセグメントのみ想定）、テスト実行、report/lease/checkpoint 各スクリプト実行——
+# （specセグメントのみ想定）、テスト実行、report/lease/checkpoint 各スクリプト実行——
 # のみに限定したallowlist）。列挙外はヘッドレスで拒否される（安全側 fail）。無制限自動承認
 # （--permission-mode bypassPermissions）は既定に用いない。env WORKER_ALLOWED_TOOLS で完全上書き可能
 # （grep可能な名前付き変数として定義。採用理由・却下案との比較は DESIGN.md（ISSUE-183）
 # 「権限付与方式の設計判断」参照）。
-WORKER_ALLOWED_TOOLS_DEFAULT='Read Grep Glob Edit Write MultiEdit Bash(git add:*) Bash(git commit:*) Bash(git push:*) Bash(git status:*) Bash(git diff:*) Bash(git rev-parse:*) Bash(git log:*) Bash(git show:*) Bash(git fetch:*) Bash(git restore:*) Bash(gh pr create:*) Bash(gh pr view:*) Bash(gh pr edit:*) Bash(gh pr comment:*) Bash(gh issue comment:*) Bash(.agent-skill-chain/scripts/*) Bash(bash .agent-skill-chain/scripts/*) Bash(node bin/agents-md.js:*) Bash(npm run:*) Bash(npm test:*) Bash(npm ci:*) Bash(mkdir:*) Bash(ls:*)'
+#
+# Issue #188 AC-5/AC-6: `Bash(gh pr create:*)` は既定allowlistから除外している。Draft PR作成の
+# 正規経路は `.agent-skill-chain/scripts/pr-create.sh`（agent-skill-chain CLI `pr create`
+# サブコマンド）であり、PRテンプレート各節を自動充填したうえで `gh pr create` を実行する
+# （src/commands/pr.ts buildIssueBody）。このラッパーは `Bash(.agent-skill-chain/scripts/*)` /
+# `Bash(node bin/agents-md.js:*)` で既に許可された単一のBash呼び出しの中でNode子プロセスとして
+# `gh` を直接起動するため、allowlistから生 `gh pr create` を除いてもラッパー自身のPR作成は
+# 影響を受けない（DESIGN.md「論点3」参照）。生 `gh pr create` を残すと、ワーカーがテンプレート
+# 充填を経由しない素のPR本文でDraft PRを作成できてしまい、PRテンプレートの実効的な徹底
+# （AC-5/AC-6）を損なうため除外する。`gh pr view/edit/comment` はPR作成ではなく更新・参照用途
+# のため引き続き許可する。
+WORKER_ALLOWED_TOOLS_DEFAULT='Read Grep Glob Edit Write MultiEdit Bash(git add:*) Bash(git commit:*) Bash(git push:*) Bash(git status:*) Bash(git diff:*) Bash(git rev-parse:*) Bash(git log:*) Bash(git show:*) Bash(git fetch:*) Bash(git restore:*) Bash(gh pr view:*) Bash(gh pr edit:*) Bash(gh pr comment:*) Bash(gh issue comment:*) Bash(.agent-skill-chain/scripts/*) Bash(bash .agent-skill-chain/scripts/*) Bash(node bin/agents-md.js:*) Bash(npm run:*) Bash(npm test:*) Bash(npm ci:*) Bash(mkdir:*) Bash(ls:*)'
 
 # Issue #185: launch_worker/launch_gate_reviewer 共通の認証チェック（2段化）。
 # (a) 高速パス: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN のいずれかが非空なら authed とみなす
