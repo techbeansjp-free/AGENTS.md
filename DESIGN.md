@@ -1,80 +1,65 @@
 <!--
-正本: AGENTS.md 4セグメント・4ゲート
+正本: AGENTS.md §4セグメント・4ゲート
 このファイルは Issue 毎に複製して使う雛形である（セグメント: design、成果物: DESIGN.md（PLAN.md は別ファイル）、ゲート: design-gate）。
 -->
 
-# DESIGN: リリース自動化（バージョンbump・タグ付け・GitHub Release作成）
+# DESIGN: リリースworkflowのbumpステップがgit author identity未設定で失敗するバグの修正
 
-- Issue: `ISSUE-196`
+- Issue: `ISSUE-198`
 - 対応する SPEC: `SPEC.md`
 
-mainへのリリース対象変更を契機に、`package.json` の `version` 自動更新・gitタグ・GitHub Release を人手なしで生成し続ける仕組みを、GitHub Actions ワークフロー1本として復元する。旧実装（削除済み `release.yml`）が抱えた「package.json は semver、実タグは日時形式」という二重版数体系を廃し、単一の semver 体系に統一することで SPEC レビューで問題化した AC-5 の曖昧さを構造的に解消する。
+`release bump` サブコマンド（`src/commands/release.ts`）がバージョンbumpコミットを作成する際、実行環境にgit author identity（`user.name`/`user.email`）が未設定だと `git commit` が「Author identity unknown」で失敗する（Issue #196実装後の初回run 29902200805で実際に発生）。本Issueはこの1点のみを修正する。リリース自動化の設計自体（Issue #196・ADR-0005）は変更しない。
 
-## 決定した設計判断（6点）
+## 決定した設計判断
 
-1. **リリース対象の判定基準**: mainへのpushが「配布物・その生成元」を変更した場合のみをリリース対象とする。`paths` フィルタで対象を限定する。対象=`src/**`, `.agent-skill-chain/**`, `AGENTS.md`, `CLAUDE.md`, `docs/GLOSSARY.md`, `package.json`, `package-lock.json`, `tsconfig.json`, `tsconfig.test.json`。除外=`.github/**`（配布物でない）, `README.md`, `CONTRIBUTING.md`, `docs/adr/**`, `docs/system-spec/**`, `docs/maintainer/**`, `test/**`。除外群は `package.json` の `files`（`bin/`・`.agent-skill-chain/`・`AGENTS.md`・`CLAUDE.md`・`docs/GLOSSARY.md`）が配布する成果物にも、その生成元（`src/**`→`bin/`）にも該当せず、consumer が受け取る内容を変えないため、リリースを起こさない。
-2. **版数体系の統一**: リリース版数は `package.json` の semver を唯一の正本とし、gitタグ=`v<semver>`、GitHub Release の tag/name も同一文字列とする。3者は常に同一の `target` 値から生成されるため定義上一致する（AC-4）。旧日時形式タグ（`v20260720.060726` 等）は semver 正規表現 `^v[0-9]+\.[0-9]+\.[0-9]+$` に一致しないため、以後の後退判定の比較対象から機械的に除外される（AC-5 の「版数体系をまたいだ比較はしない」を体系選択そのもので保証）。
-3. **marketplace/apm の廃止**: 新配布方式は `npx github:techbeansjp-free/AGENTS.md` によるGitHub直接参照であり、旧 `release-marketplace`・`apm-release` ジョブが公開していた marketplace/apm 生成物は主導線から外れている。両ジョブは踏襲せず廃止する。併せて、既に削除済みパス（`.agent-skill-chain/source/`・`.adapters/claude`）を参照したまま放置され誤解を招く `.claude-plugin/marketplace.json` を本Issueの実装で削除する（判断根拠は ADR-0005）。
-4. **無限ループ・二重発火防止**: 版数bumpは専用の短命ブランチ上のコミット `chore(release): v<target> [skip ci]` として作り、squashマージでmainへ反映する。ここで、squashマージが生成するmain上のコミットのメッセージは**ブランチ側commitのメッセージを自動では引き継がない**——`gh pr merge --squash` はリポジトリのsquash既定メッセージ設定（PRタイトル由来など）に従い、`--subject`/`--body` を明示しない限り `[skip ci]` を欠く可能性がある。これが欠落するとmainへのsquashコミットが `package.json` 変更として本ワークフローを再トリガし、無限ループ防止（AC-6）が実質破綻する暴走リリース経路が生じる。そこで **`gh pr merge --admin --squash --subject "chore(release): v<target> [skip ci]"`（必要に応じ `--body` も併用）でsquashコミットのメッセージそのものを明示固定し**、リポジトリのsquash既定設定に一切依存せず `[skip ci]` の生存を設計として保証する。GitHub Actions は `[skip ci]` を含むpushに対しworkflow run自体を生成しない（公式仕様）ため、これが再帰トリガ抑止の主機構である（AC-6）。タグ生成・Release生成は本ワークフローのトリガ（`push: branches:[main]`）ではないため再帰トリガ源にならない。二重発火は `concurrency: {group: release, cancel-in-progress: false}` による直列化、bumpブランチ名への `target` 版数埋め込みによる同名ブランチ・PRの重複作成防止、タグ・Release作成前の存在チェック（冪等）で防ぐ（AC-7）。
-5. **認証・secret・I4適合（PR経由）**: main への版数bump反映は生pushではなく必ずPRを経由する。bumpコミットは短命ブランチ `release/bump-v<target>`（branch protection対象外）へ `GITHUB_TOKEN` でpushし、`gh pr create` で小さなPRを作成、`gh pr merge --admin --squash` でマージする。この admin merge は required status check を bypass するが、進行役に標準承認済みの `gh pr merge --admin` 運用（ruleset の bypass_actor に登録済みの admin 資格情報 secret `RELEASE_MAIN_PAT`）と同一の特権操作であり、生pushではなくPR経由である点で I4「mainへの変更はPR経由のみ」の文言上の要求を満たす。I4は「PR経由」を求めるのであって「全チェックが緑であること」までは求めておらず、ゲートCIのsecrets（`ANTHROPIC_API_KEY` 等）未設定という別問題には一切依存しない。タグpush・GitHub Release作成は保護対象外（tag ref はbranch protection非対象）のため `GITHUB_TOKEN`（`contents: write`）で足りる。`RELEASE_MAIN_PAT` を要するのは bump PR の admin merge のみに限定する（最小権限）。
-6. **障害・ロールバック**: 後述「障害・ロールバック考慮」に詳述。基本方針は「各ステップ冪等・失敗時は未完成物を残さず次回runが自己修復」「版数後退は禁止のためロールバックは後退でなくroll-forward（次patch）」。
+**修正箇所は `release bump` サブコマンドのcommit作成処理そのもの（CLI側）とし、GitHub Actions workflow YAMLへの `git config` ステップ追加は行わない。**
+
+理由は次の3点。
+
+1. **SPEC要件1の文言が「サブコマンド」を名指ししている**: 「`release bump` サブコマンドが実行するbumpコミット作成処理は、実行環境（ローカル・GitHub Actionsランナーいずれも）にgit author identityが未設定であっても `git commit` に成功すること」。workflow YAML側にのみ `git config` ステップを足す修正は、CIランナー経由の実行は救えるが、`release bump` をローカルから直接実行する経路（開発時の動作確認・将来的な手動実行）は依然として未修正のまま残り、要件1の「ローカル・GitHub Actionsランナーいずれも」を満たさない。
+2. **既存の統合テストが今回の不具合を再現できていない根本原因を特定した**: `test/helpers/tmp-repo.ts` の `createTmpRepo()` は fixture 構築時に無条件で `git config user.email`/`user.name` を設定している（`test/integration/release.test.ts` はこれを共通土台に使う）。そのため既存テストはCLIの外側（fixtureのテスト土台）でidentityを与えてしまい、「identity未設定」というAC-1の Given を一度も再現できていない。CLI側で対処すれば、AC-1検証用の新しい自動テストはfixtureのidentity設定を意図的に外した上でCLIの成功を直接検証でき、要件1の検証方法見込み（`automated`）を実質的に満たせる。workflow YAML側の修正では、この単体・結合テストレベルの自動検証を構成できない（実際のGitHub Actionsランナー環境を模倣する必要が生じ、`automated` として現実的に検証できない）。
+3. **UNIX的な単一責任・重複排除**: 同一のidentity保証ロジックをworkflow YAMLとCLIの両方に置くと、修正箇所が2つに分散し、どちらか一方だけ更新されて再度乖離する回帰リスクを生む。commit作成という単一の状態遷移の中で完結させるのが、AGENTS.md の「各スクリプトはちょうど1つの状態遷移だけを行う」という方針に合致する。
+
+なお、`.github/workflows/agent-skill-chain-release.yml`・`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml` 自体は変更しない（変更が不要なため）。
+
+### fallback identityの具体値と非破壊性（要件2）
+
+`git log --all -p -- '**/release.yml'` で確認したところ、本リポジトリの旧 `release.yml`（削除済み）は一貫して `git config user.name "github-actions[bot]"` / `git config user.email "github-actions[bot]@users.noreply.github.com"` という値を使っていた。この慣例をfallback identityの値としてそのまま踏襲する。
+
+非破壊性（要件2: 既存のidentity設定を上書き・破壊しない）は、次の2点で担保する。
+
+- **設定前に既存値の有無を確認し、既に解決可能な場合は何もしない**: `git config user.name`（`--global` を付けない実効値取得。ローカル→グローバル→システムの順に解決される既定挙動）が非空を返せば「設定済み」とみなし、fallback値を書き込まない。`user.name`/`user.email` は独立に判定する。
+- **書き込む場合も `--global` を使わず、実行対象リポジトリのローカル設定のみに書き込む**: 開発者のグローバル `~/.gitconfig` には一切触れない。CIランナーはジョブごとに使い捨てのcheckoutであるためローカル設定で完結し、ローカル開発環境でも対象リポジトリ限定の一時的な補完に留まる。
 
 ## 要件 → 設計要素の対応表
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| 要件1 / AC-1 | バージョン解決器（既定=patch自動bump経路）＋ bumpブランチ・PR作成／admin merge器 | 既定経路は人手ゼロで版数を更新（AC-1「人手の介在なく」を既定動作で充足） |
-| 要件2 / AC-2 | タガー（冪等） | `target` から `v<semver>` タグを生成 |
-| 要件2 / AC-3 | リリーサ（冪等） | 同タグを指す GitHub Release を生成 |
-| 要件3 / AC-4 | 版数体系の統一（単一 `target` 値を3者へ適用） | package.json=tag=release が同一文字列で定義上一致 |
-| 要件4 / AC-5 | バージョン解決器の単調保証（semver 比較 `target > latest`、seed規則、非semverタグ除外） | 自動化の内部一貫性のみを対象。非semverの旧タグは比較対象外 |
-| 要件5 / AC-6 | `--subject` で `[skip ci]` を明示固定したsquashマージ（主機構）＋ トリガ設計（tag/release非トリガ）＋ concurrency ＋ 防御的skip-ciガード | 再帰トリガの唯一の経路（bump PRのmainへのマージコミット）を、squash既定設定に依存せず `--subject` 明示で `[skip ci]` を保証して遮断 |
-| 要件6 / AC-7 | concurrency直列化 ＋ bumpブランチ名への `target` 埋め込みによる重複ブランチ・PR防止 ＋ タガー・リリーサの存在チェック（冪等） | 単一契機に対し高々1件、同一版数の重複生成なし |
+| 要件1 / AC-1 | `ensureGitIdentity()`（新設、`src/commands/release.ts`） | `bump()` 内でcheckout成功後・commit前に呼び出し、未設定時のみfallback identityをローカル設定へ書き込む |
+| 要件2 / AC-1 | `ensureGitIdentity()` の設定前チェック（`isIdentityConfigured()`） | 既存値が解決可能なら書き込みをskipし、非破壊を保証する |
+| 要件3 / AC-2 | 既存の `bump()` 制御フロー・戻り値・呼び出しシグネチャは変更しない | `ensureGitIdentity()` はcheckoutとcommitの間に副作用（設定確認・必要時のみ書き込み）を追加するのみで、既存の分岐・戻り値・エラーメッセージ文言は変更しない |
 
 ## 責務・境界
 
 ### コンポーネント構成
 
-責務は6つに分割し、いずれも単一責務とする。
-
-- **トリガ・concurrency層**（`.github/workflows/agent-skill-chain-release.yml`）: `on: push: branches:[main]` にリリース対象 `paths` フィルタを適用してリリース契機を検出し、`concurrency: {group: release, cancel-in-progress: false}` で契機を直列化する。`permissions: contents: write`。防御として、HEADコミットメッセージに `[skip ci]` を含む場合はジョブを早期skipする（GitHub側で既にrun抑止されるため冗長だが安価な二重防御）。次段以降を起動するのみで版数計算・生成物作成の内容判断は持たない。
-- **バージョン解決器**（単体テスト可能な単位。CLIサブコマンドまたは `.agent-skill-chain/ci/` 配下の独立nodeスクリプトとして実装し、YAMLインライン式の未テストロジックにしない）: 既存タグのうち semver 正規表現に一致する最大版数 `latest` を求め、下記アルゴリズムで `target`・`needCommit` を決定し、後退禁止ガードを適用する。責務は「次版数の決定」のみで、副作用（書込み・push・タグ作成）を持たない。
-
-  ```text
-  latest := semver正規表現 ^v[0-9]+\.[0-9]+\.[0-9]+$ に一致する既存タグの最大版数
-            （一致タグが1件も無ければ seed := package.json.version を latest とみなす）
-  pkg    := package.json.version
-  if semver(pkg) > semver(latest):
-      target := pkg          # マージ済みPRで人手が minor/major を先行bump済み → 尊重
-      needCommit := false    # package.json は既に target を保持
-  else:
-      target := patchIncrement(latest)   # 既定: 自動でpatch加算（人手介在なし＝AC-1既定経路）
-      needCommit := true                 # package.json を書き換えるコミットが必要
-  assert semver(target) > semver(latest) # AC-5 後退禁止ガード。不成立ならリリースせず失敗
-  ```
-
-  初回run時、既存の semver 一致タグは存在せず（旧タグ `v20260720.*` は非一致）、seed=`0.2.0` → else経路 → 初回自動リリースは `v0.2.1`。
-- **bumpブランチ・PR作成／admin merge器**（`needCommit` が真のときのみ実行）: `package.json` の `version` を `target` に書き換え、短命ブランチ `release/bump-v<target>` 上に `chore(release): v<target> [skip ci]` としてcommitして `GITHUB_TOKEN`（branch protection対象外の release ブランチ）でpushし、`gh pr create` で機械生成の版数台帳更新PR（本文にIssue-196 由来を明記）を作成する。マージは **`gh pr merge --admin --squash --subject "chore(release): v<target> [skip ci]"`**（必要に応じ `--body` も併用）で行い、squashコミットのメッセージそのものを明示固定してリポジトリのsquash既定設定に依存せず `[skip ci]` の生存を保証する（設計判断4）。マージには進行役に標準承認済みの admin merge 権限（bypass_actor 登録済み `RELEASE_MAIN_PAT`）を用い、required status check を bypass する。この bypass は「新しいゲート免除カテゴリの発明」ではなく、**既に ruleset の bypass_actor に承認済みで恒久的に存在する Repository admin の required status check bypass 能力を、人間が都度 `gh pr merge --admin` を手動発動する代わりに、狭く機械検査可能なシナリオに限って自動発動するもの**である。自動発動を許すのは以下2条件を機械的に満たすPRに限定する: (a) head ブランチが `release/bump-v*` に一致し、(b) 変更ファイル集合が `package.json`（および `needCommit` に伴い変化した場合の `package-lock.json`）のみである。
-
-  **スコープの機械検査手段（admin merge 直前ガード）**: 条件(b)は、admin merge を実行する直前に PR の変更ファイル一覧を GitHub API から取得して機械照合する。具体的には `gh pr view <pr番号> --json files --jq '.files[].path'` でPRが触れる全ファイルのパス集合を取得し、許可リスト `{package.json, package-lock.json}` を減算した差集合が空でない（＝許可リスト外のパスが1件でも含まれる）場合、および取得できたパスが0件（空PR＝想定外）の場合は、`gh pr merge --admin` を一切実行せず `human_required` として停止する。照合はパス完全一致で行い（前方一致・glob は用いない）、`package-lock.json` は `needCommit` に伴い実際に変化した場合のみ許可リストに含める。条件(a)は同 `gh pr view <pr番号> --json headRefName --jq '.headRefName'` の値が正規表現 `^release/bump-v[0-9]+\.[0-9]+\.[0-9]+$` に一致することで検査する。両条件の検査は admin merge の副作用が生じる前に完了し、いずれか不成立なら merge 呼び出しに到達しない。GitHub API の files は既定で最大件数の制約を持ち得るため、`--json files` が全件を返しているか（切り詰めが起きていないか）も併せて確認し、疑義があれば安全側に倒して `human_required` とする。
-
-  いずれかを満たさない（＝bump スコープを超えた変更が紛れ込んだ）場合は自動admin mergeを行わず `human_required` として停止する（例: 再利用した既存ブランチに想定外の差分が乗っていた残骸ケースを弾く）。このPRは SPEC/DESIGN/PLAN/VALIDATION を伴わない機械生成の版数台帳更新のみのPRであり、Issue成果物ではなく既に承認済みの決定（本Issueの design-gate 承認）の機械的執行に過ぎないため、上記の狭い自動bypassの範囲でCheck Run未通過のまま反映される（判断根拠と残余リスクの恒久受容は ADR-0005）。ブランチ名に `target` 版数を含むため、同一版数のbumpブランチ・PRは重複作成されない。同名ブランチ・同名PRが既存の場合（前回runのmerge失敗残骸等）は新規作成せず既存を検出し、上記スコープ検査を通過したときのみ再利用してマージする（冪等）。
-- **タガー（冪等）**: `v<target>` タグが未存在のときのみ、リリース対象commit（`needCommit`時は bump PR のマージ後に main へ着地した版数bumpコミット、非commit時はrunをトリガしたHEAD）へ注釈付きタグを作成しpushする。`GITHUB_TOKEN` を用いる。
-- **リリーサ（冪等）**: `v<target>` の GitHub Release が未存在のときのみ、当該タグを指すReleaseを作成する。`GITHUB_TOKEN` を用いる。
-- **テンプレート同期・stale除去**（実装セグメントの構成要素）: 上記ワークフローを配布元正本 `.agent-skill-chain/templates/github/.github/workflows/` と展開先 `.github/workflows/` の双方へ同一内容で配置する（`verify-template-sync.sh` が両者一致を検査するため片方だけの追加はCI失敗となる）。併せて stale な `.claude-plugin/marketplace.json` を削除する。
+- `ensureGitIdentity(root)`（新設関数、`src/commands/release.ts` 内、非公開）: 対象リポジトリの `user.name`/`user.email` が実効的に解決可能かを確認し、いずれか未解決ならfallback値（`github-actions[bot]` / `github-actions[bot]@users.noreply.github.com`）をローカル設定へ書き込む。責務は「commit実行に必要な最小限のidentity保証」のみで、既存identityの上書き判断・commit自体の実行・PR作成・マージ判断は持たない。
+- `isIdentityConfigured(root, key)`（新設ヘルパー、同ファイル内）: 指定キー（`user.name`|`user.email`）が `git config <key>` で非空に解決できるかを真偽値で返す。副作用を持たない読み取り専用の判定のみ。
+- `bump()`（既存、変更対象は呼び出し順序のみ）: `git(['checkout', '-b', branch], root)` 成功直後、`writeBumpedVersionFiles()`／`git add`／`git commit` より前に `ensureGitIdentity(root)` を呼び出す。それ以外の分岐・エラーハンドリング・戻り値は変更しない。
 
 ### 依存関係
 
 ```text
-トリガ・concurrency層 → バージョン解決器 → bumpブランチ・PR作成／admin merge器(needCommit時のみ) → タガー → リリーサ
-バージョン解決器 → (読取のみ) 既存gitタグ / package.json
+bump() → ensureGitIdentity(root) → isIdentityConfigured(root, 'user.name' | 'user.email')
+                                  → （未解決時のみ）git config user.name / user.email（ローカル設定への書き込み）
+bump() → writeBumpedVersionFiles() → git add → git commit
 ```
 
-各コンポーネントは後段を起動する一方向依存のみで循環はない。バージョン解決器は読取専用で副作用を持たず、書込み系（bumpブランチ・PR作成／admin merge器・タガー・リリーサ）から独立して単体検証できる。責務は6分割され単一コンポーネントへの集中はない。
+`ensureGitIdentity`／`isIdentityConfigured` は既存の `git()` 実行ラッパー（`src/lib/exec.ts`）のみに依存し、`bump()` の他の分岐（ブランチ既存チェック・PR作成・スコープ検査・admin merge）には影響しない一方向の追加である。循環依存はない。
 
 ## 関連ADR
 
-本設計の恒久的判断（版数体系のsemver統一・marketplace/apm廃止・版数bumpコミットをmainへPR経由 admin merge で反映するI4適合方式）は、本Issueで新規作成する ADR-0005（status: proposed）に記録する。ADR-0005 は本Issueのdesignセグメントで proposed として作成され、design-gate 承認時に accepted へ遷移する。accepted 前かつ同一Issue内の proposed ADR であるため、`accepted` のみ参照可能な下記構造化フィールドには登録せず、由来は本文で示す（構造化参照は accepted ADR が無いため空とする）。
+本Issueは実装の抜け漏れ（Issue #196で実装したリリース自動化が、GitHub Actionsランナー上でgit author identity未設定という実行環境条件を考慮していなかったこと）の修正であり、恒久的なアーキテクチャ判断を新たに行うものではない。Issue #196の既存設計判断（ADR-0005）を変更しないため、本Issueで新規ADRは作成しない。
 
 ```yaml
 related_adrs: []
@@ -82,13 +67,10 @@ related_adrs: []
 
 ## 障害・ロールバック考慮
 
-- 想定される失敗モードと自己修復:
-  - **bumpブランチのpush失敗**（認証・権限、または競合による非fast-forward）: PR未作成・main不変（`package.json` 未bump）。タグ・Releaseも未生成。次のリリース契機で再試行され、状態不整合を残さない（安全側）。
-  - **PR作成後、admin mergeに失敗**: PR・bumpブランチは残るが main は不変。次run時、同一 `target` なら既存ブランチ・PRを検出して再利用しマージを再試行する（冪等）。契機が進み `target` が上がった場合、旧bump PR/ブランチはstaleとなるが、バージョン解決器はより高い版数を採用するためリリースの正しさに影響しない（stale PRは後述の掃除対象）。
-  - **マージ成功後、タグ作成に失敗**: main の `package.json` はbump済み（`pkg > latest`）だがタグ・Releaseが無い状態。次回run時バージョン解決器が case `needCommit=false` を選択し、欠落したタグ・Releaseを当該版数で補完する（自己修復・冪等）。
-  - **タグ作成後、GitHub Release作成に失敗**: 再run時、タガーは存在チェックによりタグ作成をskip、リリーサが欠落Releaseのみを作成する（冪等）。
-  - **契機の並行到来**: `concurrency: {group: release}` が直列化し、bumpブランチ名への `target` 埋め込みが同名ブランチ・PRの重複作成を弾き、後続runはタグ・Releaseの存在チェックによりno-opとなる（AC-7）。
-- ロールバック手順: 誤リリースの取消は、`gh release delete v<x>` と `git push origin --delete refs/tags/v<x>` でRelease・タグを除去する。`package.json` の版数は後退禁止（AC-5ガード）のため、版数を下げて再リリースはできず、修正は次patchへの roll-forward で行う（例: `v0.2.3` が不良なら `v0.2.4` を出す）。この方針を運用前提として明記する。marge失敗で残った stale な bumpブランチ・PR は `git push origin --delete release/bump-v<x>` と `gh pr close` で掃除する。
+- 想定される失敗モード:
+  - `ensureGitIdentity()` 自体が失敗する可能性は、`git config` の書き込みが対象worktreeが書き込み不可（権限問題等）の場合に限られる。この場合 `git commit` も同様の権限問題で失敗するため、修正前後で失敗モードの性質は変わらない（新規の失敗経路を追加しない）。
+  - 既にidentityが設定済みの環境（開発者のローカル環境、または将来 workflow 側で別途identityを設定するケース）では `isIdentityConfigured()` が真を返し `ensureGitIdentity()` は何も書き込まないため、既存の挙動・commit authorは変化しない。
+- ロールバック手順: `bump()` 内の `ensureGitIdentity(root)` 呼び出し1行と、新設した2関数を削除するのみで、Issue #196時点の挙動に戻せる。他コンポーネント（タガー・リリーサ・トリガ層）への波及は無い。
 - 影響を受ける既存機能・整合性上の留意点:
-  - 版数bumpコミットは main へ生pushせず、短命ブランチ `release/bump-v<target>` 上のコミットを小さなPRとして作成し `gh pr merge --admin --squash --subject "chore(release): v<target> [skip ci]"` でマージすることで、I4「mainへの変更はPR経由のみ」を文言通り満たす。この admin merge は required status check を bypass するが、I4が求めるのは「PR経由」であって「全チェックが緑であること」ではなく、かつ既に ruleset の bypass_actor に承認済みで恒久的に存在する Repository admin の bypass 能力を、狭く機械検査可能なシナリオ（head=`release/bump-v*` かつ変更ファイル=`package.json`（±`package-lock.json`）のみ）に限って自動発動するものである。したがってゲートCIのsecrets（`ANTHROPIC_API_KEY` 等）未設定という可修復な別問題には一切依存しない。このPRは機械生成の版数台帳更新（`[skip ci]` を `--subject` で明示固定・SPEC/DESIGN/PLAN/VALIDATION を伴わないIssue非成果物）であり、既に承認済みの本Issue design-gate 決定の機械的執行に過ぎない。上記スコープを超えた変更が紛れ込んだPRは自動admin mergeせず `human_required` とする。本判断（既存bypass能力の狭スコープ自動化・残余リスクの恒久受容・I1追跡可能性の結線先）は ADR-0005 に記録する。
-  - 既存ワークフロー（`agent-skill-chain-{ci,gate,risk,reconcile}.yml`）への影響: `reconcile` は `branches-ignore:[main]`、他は `pull_request` トリガである。bumpコミットの `[skip ci]` は当該pushおよびその head commit を持つ pull_request イベントの双方でworkflow run生成を抑止する（公式仕様）ため、bumpブランチpushによる `reconcile`、bump PR による `ci`/`gate`/`risk` はいずれも起動しない。仮にこれらが起動しても required status check は admin merge が bypass するため bump PR のマージは妨げられない。squashマージ後の main コミットも、`--subject` で明示固定した `[skip ci]` によりどのworkflow runも生成しない（リポジトリのsquash既定メッセージ設定に依存しない）ため、本ワークフロー追加による既存トリガとの競合・二重起動は発生しない。
+  - `test/integration/release.test.ts` が使う `createTmpRepo()`（`test/helpers/tmp-repo.ts`）は fixture 構築時に既に `git config user.email`/`user.name` を設定済みのため、`isIdentityConfigured()` は常に真を返し、既存の `release bump` 系テストの挙動・アサーションは変更されない（要件3・AC-2）。
+  - AC-1の自動検証には、`createTmpRepo()` とは別に「identity未設定のリポジトリ」を用意する新規テスト経路が実装セグメントで必要になる（例: 別途 identity を unset した一時repoで `release bump` を実行し、成功することを確認する）。この新規テストの追加自体は本設計の範囲内（テストコードの追加）であり、`createTmpRepo()` 自体の既定挙動（既存テスト群が依存する「identity設定済み」の前提）は変更しない。

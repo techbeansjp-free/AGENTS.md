@@ -1,26 +1,27 @@
 <!--
-正本: AGENTS.md 4セグメント・4ゲート
+正本: AGENTS.md §4セグメント・4ゲート
 このファイルは Issue 毎に複製して使う雛形である（セグメント: design、成果物: PLAN.md。DESIGN.md とは別ファイル）。
+設計（何を・なぜ・どの構造にするか）と実装計画（どの順序で・どの変更単位で実装するか）は責務が異なる。
+実装途中で作業順序だけを見直す場合、DESIGN.md 自体を変更する必要はない。
 -->
 
-# PLAN: リリース自動化（バージョンbump・タグ付け・GitHub Release作成）
+# PLAN: リリースworkflowのbumpステップがgit author identity未設定で失敗するバグの修正
 
-- Issue: `ISSUE-196`
+- Issue: `ISSUE-198`
 - 対応する DESIGN: `DESIGN.md`
 
 ## 実装順序・変更単位
 
-DESIGN.md の6コンポーネントを、下から（副作用の小さい・単体テスト可能なものから）順に実装する。バージョン解決器を最初に独立実装・単体テストし、後退禁止（AC-5）・冪等版数決定の正しさを先に固めてから、副作用を伴う書込み・タグ・Release・トリガ配線を積む。
-
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | バージョン解決器 | semver一致タグの最大版数 `latest` 取得、`target`/`needCommit` 決定、後退禁止ガードを、副作用なしの単体テスト可能な単位（CLIサブコマンドまたは `.agent-skill-chain/ci/` 配下の独立nodeスクリプト）として実装。seed規則・非semverタグ除外・patch加算・manual先行bump尊重・後退時fail の各分岐を単体テストで固定 | `AC-5`（＋`AC-1`の版数決定部） | なし |
-| 2 | bumpブランチ・PR作成／admin merge器 | `needCommit` 時に `package.json.version` を `target` へ書換え、短命ブランチ `release/bump-v<target>` 上に `chore(release): v<target> [skip ci]` でcommitして `GITHUB_TOKEN` でpush、`gh pr create` で機械生成の版数台帳更新PRを作成、`gh pr merge --admin --squash --subject "chore(release): v<target> [skip ci]"`（bypass_actor登録済み `RELEASE_MAIN_PAT`）で main へマージ。`--subject` 明示でsquash既定設定に依存せず `[skip ci]` 生存を保証。admin merge前に head=`release/bump-v*` かつ変更ファイル=`package.json`（±`package-lock.json`）のみのスコープ検査を行い、逸脱時は `human_required` で停止。ブランチ名の `target` 埋め込みで重複防止、既存ブランチ・PRはスコープ検査通過時のみ再利用（冪等）。生pushではなくPR経由でありI4を満たす | `AC-1`, `AC-6` | `#1` |
-| 3 | タガー（冪等） | `v<target>` タグの存在チェック後、未存在時のみ対象commitへ注釈付きタグを作成・push（`GITHUB_TOKEN`） | `AC-2`, `AC-4`, `AC-7` | `#1`, `#2` |
-| 4 | リリーサ（冪等） | `v<target>` の GitHub Release 存在チェック後、未存在時のみ当該タグを指すReleaseを作成（`GITHUB_TOKEN`） | `AC-3`, `AC-4`, `AC-7` | `#3` |
-| 5 | トリガ・concurrency層＋ワークフロー統合 | `.github/workflows/agent-skill-chain-release.yml` を作成。`on: push: branches:[main]` ＋リリース対象 `paths` フィルタ、`concurrency:{group:release, cancel-in-progress:false}`、`permissions: contents: write`、`[skip ci]` 早期skipガード、#1〜#4 をステップとして配線 | `AC-1`〜`AC-7`（統合） | `#1`, `#2`, `#3`, `#4` |
-| 6 | テンプレート同期・stale除去 | #5 のワークフローを `.agent-skill-chain/templates/github/.github/workflows/` にも同一内容で配置し `verify-template-sync.sh` を通す。stale な `.claude-plugin/marketplace.json` を削除（marketplace/apm廃止決定の反映、ADR-0005） | `AC-1`〜`AC-7`（配布整合） | `#5` |
+| 1 | `isIdentityConfigured()` の実装 | `src/commands/release.ts` に非公開ヘルパーを追加。`git(['config', key], root)` の実行結果が `status === 0` かつ `stdout.trim()` が非空であれば真を返す（副作用なし） | `AC-1`（要件2の非破壊判定の土台） | なし |
+| 2 | `ensureGitIdentity()` の実装 | 同ファイルに非公開関数を追加。`user.name`/`user.email` それぞれについて `#1` で判定し、未解決の場合のみ `git(['config', 'user.name', 'github-actions[bot]'], root)` / `git(['config', 'user.email', 'github-actions[bot]@users.noreply.github.com'], root)` を実行（`--global` は使わない）。いずれかの `git config` 書き込みが失敗した場合はそのエラーを呼び出し元へ伝播させる | `AC-1` | `#1` |
+| 3 | `bump()` への組み込み | `git(['checkout', '-b', branch], root)` 成功直後・`writeBumpedVersionFiles()` 呼び出し前に `ensureGitIdentity(root)` を呼び出す。書き込み失敗時は既存の `fail()` パターンに合わせてエラーメッセージ付きで早期returnする | `AC-1` | `#2` |
+| 4 | AC-1の自動テスト追加 | `test/integration/release.test.ts`（または新規ヘルパー）に、identityを設定していない一時repoに対して `release bump` を実行し `git commit` が成功することを確認するテストケースを追加する。`createTmpRepo()` 自体は変更せず、当該テスト内でidentity未設定の状態を別途用意する（例: 専用の一時repoに対し `git config` を意図的に行わない、または `HOME`/`GIT_CONFIG_GLOBAL` を退避した環境で実行する） | `AC-1` | `#3` |
+| 5 | 既存テストの回帰確認 | `npm test`（単体・統合テスト全体）を実行し、`test/integration/release.test.ts` を含む既存テストが全て変更前と同じ結果で通過することを確認する（新規失敗が発生しないこと） | `AC-2` | `#3`, `#4` |
 
 ## 実装順序の見直しについて
 
-実装中に作業順序（上記の変更単位の並び）のみを見直す場合は、本ファイルのみを更新すればよい。設計要素・責務・境界そのもの（版数体系・トリガ判定基準・6コンポーネント分割・認証方式）を変更する場合は、DESIGN.md の更新（および設計ゲートの再通過）が必要になる点に注意する。
+実装中に作業順序（上記の変更単位の並び）のみを見直す場合は、本ファイルのみを更新すればよい。設計要素・責務・境界そのもの（修正箇所をCLI側に置く方針・fallback identityの値・非破壊判定の方式）を変更する場合は、DESIGN.md の更新（および設計ゲートの再通過）が必要になる点に注意する。
+
+AC-3（実環境でのリリース完走確認）は本Issueのマージ後、`agent-skill-chain / release` workflowの実run結果を人手で確認する検証セグメントの範囲であり、実装セグメントの変更単位には含まない。
