@@ -36,7 +36,7 @@
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
 | 要件1 / AC-1 | `ensureGitIdentity()`（新設、`src/commands/release.ts`） | `bump()` 内でcheckout成功後・commit前に呼び出し、未設定時のみfallback identityをローカル設定へ書き込む |
-| 要件2 / AC-1 | `ensureGitIdentity()` の設定前チェック（`isIdentityConfigured()`） | 既存値が解決可能なら書き込みをskipし、非破壊を保証する |
+| 要件2 / AC-4 | `ensureGitIdentity()` の設定前チェック（`isIdentityConfigured()`） | 既存値が解決可能なら書き込みをskipし、非破壊を保証する |
 | 要件3 / AC-2 | 既存の `bump()` 制御フロー・戻り値・呼び出しシグネチャは変更しない | `ensureGitIdentity()` はcheckoutとcommitの間に副作用（設定確認・必要時のみ書き込み）を追加するのみで、既存の分岐・戻り値・エラーメッセージ文言は変更しない |
 
 ## 責務・境界
