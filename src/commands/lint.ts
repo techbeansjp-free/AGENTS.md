@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { git } from '../lib/exec.js';
 import { repoRoot } from '../lib/paths.js';
 import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../lib/scan.js';
 import { parseForbiddenTerms } from '../lib/glossary.js';
@@ -512,7 +512,11 @@ function parseDiffAddedLines(diffText: string): DiffAddedLine[] {
 }
 
 function scanDiffForSecrets(root: string, baseRef: string): number {
-  const diffText = execFileSync('git', ['diff', `${baseRef}...HEAD`], { cwd: root, encoding: 'utf8' });
+  const diff = git(['diff', `${baseRef}...HEAD`], root);
+  if (diff.status !== 0) {
+    throw new Error(`git diff ${baseRef}...HEAD が失敗しました（終了コード ${diff.status}）: ${diff.stderr.trim()}`);
+  }
+  const diffText = diff.stdout;
   const violations: string[] = [];
   for (const added of parseDiffAddedLines(diffText)) {
     for (const name of detectSecrets(added.text)) {
