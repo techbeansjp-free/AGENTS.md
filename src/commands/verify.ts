@@ -112,12 +112,29 @@ const ARTIFACTS_USAGE = `
 
 出力: 0=当該セグメントの必須成果物は全て存在、1=欠落・不正segment・スタブ未実装
 `;
+// Issue #200: 「現在存在するか」だけでは、成果物ファイル自体を意図的に削除するIssue
+// （本Issue #200のSPEC.md等）を自己言及的に不合格にしてしまう。baseブランチから分岐後の
+// コミット履歴上でadd/modifyされた実績があるかをOR条件で加える。git log自体が失敗する場合
+// （shallow clone等でdefaultBranchが解決できない等）は安全側（実績なし=false）に倒す。
+function wasEverAddedOrModified(worktreePath: string, file: string): boolean {
+  try {
+    const base = defaultBranch(worktreePath);
+    // 2ドット（片側差分）を用いる。3ドット（対称差分）だとbase側にのみ存在する
+    // コミットまで含んでしまい、現ブランチが一度も触れていないファイルを誤って
+    // 「実績あり」と判定しうるため使わない。
+    const log = git(['log', '--diff-filter=AM', '--name-only', `${base}..HEAD`, '--', file], worktreePath);
+    return log.status === 0 && log.stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function checkOutputExists(worktreePath: string, output: string): boolean {
   switch (output) {
     case 'SPEC.md':
     case 'DESIGN.md':
     case 'PLAN.md':
-      return fs.existsSync(path.join(worktreePath, output));
+      return fs.existsSync(path.join(worktreePath, output)) || wasEverAddedOrModified(worktreePath, output);
     case 'ADR': {
       const dir = path.join(worktreePath, 'docs', 'adr');
       return fs.existsSync(dir) && fs.readdirSync(dir).some((f) => f.endsWith('.md'));
@@ -131,8 +148,12 @@ function checkOutputExists(worktreePath: string, output: string): boolean {
     case 'acceptance_test_results':
     case 'regression_test_results':
       // VALIDATION.md（schemas/validation-report.schema.yaml）内に記録される抽象出力。
-      // ファイル単体としては存在しないため、VALIDATION.md自体の存在で代替確認する。
-      return fs.existsSync(path.join(worktreePath, 'VALIDATION.md'));
+      // ファイル単体としては存在しないため、VALIDATION.md自体の存在（または履歴上の実績）で
+      // 代替確認する。
+      return (
+        fs.existsSync(path.join(worktreePath, 'VALIDATION.md')) ||
+        wasEverAddedOrModified(worktreePath, 'VALIDATION.md')
+      );
     default:
       return false;
   }
