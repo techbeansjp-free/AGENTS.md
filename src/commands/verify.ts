@@ -144,7 +144,14 @@ function checkOutputExists(worktreePath: string, output: string): boolean {
       const diff = git(['diff', '--stat', `${base}...HEAD`, '--', '.', ':!docs', ':!SPEC.md', ':!DESIGN.md', ':!PLAN.md', ':!VALIDATION.md'], worktreePath);
       return diff.status === 0 && diff.stdout.trim().length > 0;
     }
-    case 'unit_test_results':
+    case 'unit_test_results': {
+      // Issue #202: 実装セグメント自身の成果物であり、validationセグメント専用の
+      // VALIDATION.mdには依存しない。'code'ケースと同一技法（baseブランチとの三点差分）
+      // をpathspecのみ test/ に変更して再利用する（ADR-0006）。
+      const base = defaultBranch(worktreePath);
+      const diff = git(['diff', '--stat', `${base}...HEAD`, '--', 'test'], worktreePath);
+      return diff.status === 0 && diff.stdout.trim().length > 0;
+    }
     case 'acceptance_test_results':
     case 'regression_test_results':
       // VALIDATION.md（schemas/validation-report.schema.yaml）内に記録される抽象出力。

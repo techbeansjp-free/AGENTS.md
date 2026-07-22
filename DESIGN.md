@@ -3,58 +3,59 @@
 このファイルは Issue 毎に複製して使う雛形である（セグメント: design、成果物: DESIGN.md（PLAN.md は別ファイル）、ゲート: design-gate）。
 -->
 
-# DESIGN: release tagのgit committer identity未設定バグ修正
+# DESIGN: verify-artifactsのunit_test_results判定をVALIDATION.md結合から分離する
 
-- Issue: `ISSUE-204`
+- Issue: `ISSUE-202`
 - 対応する SPEC: `SPEC.md`
 
 ## 要件 → 設計要素の対応表
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| AC-1 | `tag()` 内、`git tag -a` 実行直前への `ensureGitIdentity(root)` 呼び出し追加 | fallback identityの書き込みは `ensureGitIdentity()` 側の既存ロジックがそのまま担う |
-| AC-2 | 既存の `ensureGitIdentity()` / `isIdentityConfigured()`（Issue #198 導入、`bump()` と共有）をそのまま再利用 | `tag()` 内に同等ロジックを新規実装しない。関数自体は変更しない |
-| AC-3 | `ensureGitIdentity()` 内部の非破壊ロジック（`isIdentityConfigured()` が真を返す既存identityには書き込まない）を `tag()` からも再利用することで保証 | ロジック自体は変更しないため、既存の非破壊性がそのまま `tag()` にも及ぶ |
-| AC-4 | 変更を `tag()` 内の1呼び出し追加のみに限定し、`bump()`・`publish()`・`resolveVersion()` のコードパスを変更しない | 既存テストへの影響範囲を最小化する設計判断 |
-| AC-5 | 実装セグメントで `test/integration/release.test.ts` に `tag()` 向けの新規テストを追加（本設計は追加箇所の指定のみ行う） | 実際のテストコード執筆は実装セグメントの責務 |
+| AC-1 | `src/commands/verify.ts` の `checkOutputExists()` 内 `unit_test_results` ケースを、`VALIDATION.md` 判定から独立した新ロジック（`test/` ディレクトリのbaseブランチ差分検査）へ差し替える | `acceptance_test_results`/`regression_test_results` とは別条件分岐に切り出す |
+| AC-2 | `unit_test_results` ケースの切り出しにより、`acceptance_test_results`/`regression_test_results` の既存条件式（`VALIDATION.md` の存在または `wasEverAddedOrModified()` による履歴実績）はコード上そのまま残す（削除・変更しない） | switch文の当該2ケースへは一切手を入れない |
+| AC-3 | `test/integration/verify.test.ts` の既存テスト（implementationセグメントテストがVALIDATION.md作成を前提としている箇所）を、VALIDATION.mdを作成せず `test/` 配下ファイルの変更で `unit_test_results` が充足する形へ更新し、4セグメント通しの合否遷移を回帰確認する | 実装・検証は実装／独立検証セグメントの責務。本設計は更新方針の確定のみ行う |
 
 ## 責務・境界
 
 ### コンポーネント構成
 
-- `tag()`（`src/commands/release.ts`）: `release tag` サブコマンドの入口。target/refのバリデーション、既存タグの冪等スキップ判定、注釈付きタグの作成・pushを行う。本Issueでは「`git tag -a` 実行前にcommitter identityが解決可能であることを保証する」責務を追加で引き受けるが、その保証の実現手段（identity解決判定・fallback書き込み）は自身では持たず `ensureGitIdentity()` に委譲する。
-- `ensureGitIdentity()` / `isIdentityConfigured()`（`src/commands/release.ts`、Issue #198 導入・変更なし）: identity解決判定とfallback書き込みの責務を独占する。`bump()` と `tag()` の双方から呼ばれる共有コンポーネントとなる（本Issueにより利用箇所が1→2に増える）。
-
-責務の分離は明確である。「identityを保証する」という決定ロジックを持つのは `ensureGitIdentity()` のみであり、`tag()` は「保証を要求する」呼び出し元として振る舞うだけで、identity解決の詳細（ローカル/グローバル/システムの解決順、fallback値）を知らない。これにより反証観点「1つのコンポーネントに責務が集中していないか」を満たす。
+- `checkOutputExists()`（`src/commands/verify.ts`）: `output` 種別ごとに1つの判定ロジックを持つswitch文。本Issueでは `unit_test_results` の1ケースのみを差し替え、他ケース（`SPEC.md`/`DESIGN.md`/`PLAN.md`/`ADR`/`code`/`acceptance_test_results`/`regression_test_results`）には触れない。
+- `unit_test_results` ケース（新設ロジック）: `code` ケースと同一の技法（`git(['diff', '--stat', 'BASE...HEAD', '--', <pathspec>], worktreePath)`、baseブランチとの三点差分）を、pathspecのみ `test`（このリポジトリの実際のテスト配置規約 `test/unit`・`test/integration`・`test/helpers` を包含する最上位ディレクトリ）に変更して再利用する。新規ヘルパー関数・新規ログファイル形式は導入しない。
+- `wasEverAddedOrModified()`・`defaultBranch()`・`git()`（既存共有ユーティリティ）: シグネチャ・実装とも変更しない。`unit_test_results` ケースは `defaultBranch()`/`git()` をそのまま呼ぶのみで、`wasEverAddedOrModified()` 自体は本ケースから呼ばない（後述「証跡方式の設計判断」参照）。
+- `acceptance_test_results`/`regression_test_results` ケース（既存、変更なし）: `VALIDATION.md` の存在または履歴実績による判定を維持する。validationセグメントの成果物判定は本Issueのスコープ外である。
 
 ### 依存関係
 
 ```text
-tag() → ensureGitIdentity() → isIdentityConfigured() → git config <key>（読み取り、副作用なし）
-tag() → ensureGitIdentity() → git config <key> <fallback値>（isIdentityConfigured() が偽の場合のみ、書き込み）
-tag() → git tag -a（committer identity解決を要求する）
-tag() → git push origin <tag>
+verify artifacts <issue> implementation
+  → checkOutputExists(worktreePath, 'unit_test_results')
+    → defaultBranch(worktreePath)                                            （既存、変更なし）
+    → git(['diff', '--stat', 'BASE...HEAD', '--', 'test'], worktreePath)     （既存gitラッパーの再利用。'code'ケースと同一技法・同一関数）
+
+verify artifacts <issue> validation
+  → checkOutputExists(worktreePath, 'acceptance_test_results' | 'regression_test_results')
+    → fs.existsSync(VALIDATION.md) または wasEverAddedOrModified(worktreePath, 'VALIDATION.md')   （既存、無変更）
 ```
 
-循環依存なし。`ensureGitIdentity()` は `tag()`・`bump()` のどちらの呼び出し文脈にも依存しない純粋な共有関数であり、呼び出し順の変更（`tag()` 内での呼び出し追加）が既存の `bump()` からの呼び出しに影響しないことは、関数のシグネチャ・内部状態（引数 `root` 以外の状態を持たない）から保証される。
+循環依存なし。`unit_test_results` の判定経路は `acceptance_test_results`/`regression_test_results` の判定経路と完全に独立し、`VALIDATION.md` を一切参照しない。これによりSPEC.md AC-1（実装セグメントの判定がVALIDATION.mdの有無に左右されない）を構造的に満たす。
 
-### 呼び出し位置の設計判断
+## 証跡方式の設計判断
 
-`tag()` 内での呼び出し位置は、「既存タグ検出時の冪等スキップ判定（`git ls-remote --tags`）」より後、「`git tag -a` 実行」の直前とする。理由:
+`unit_test_results`（実装セグメントで単体テストが書かれた実績）の充足証跡として、**「`test/` ディレクトリ配下ファイルの、baseブランチから分岐後の三点差分（`git diff --stat base...HEAD -- test`）に変更が存在すること」**を採用する。判定式は `code` ケースの `git diff --stat` 呼び出しと同一の関数・同一のフラグ構成で、pathspec のみを差し替えたものであり、新しい判定メカニズムを導入しない。
 
-- 冪等スキップ経路（既にタグが存在する場合）ではcommitter identityの解決は不要であり、この経路で `ensureGitIdentity()` を呼ぶと不要なfallback identity書き込み（副作用）を発生させうる。
-- `bump()` も同様のパターンを取っており（実際にcommitする分岐 `if (!branchExists)` の内側でのみ `ensureGitIdentity()` を呼ぶ）、「実際にgit操作でcommitter identityを要求する直前でのみ呼ぶ」という既存の設計判断と整合する。
+この方式は「実装セグメントでテストが実際に *パスした* こと」までは検証しない。この点は既存の `code` ケースが「コードが実際に動作すること」までを検証していないのと同じ位置付けであり、判定の厳密さの水準に一貫性を持たせる。テストが実際に実行され合格することの保証は `.agent-skill-chain/standards/TEST_POLICY.md` の「常時必須」区分（単体テスト・lint/format・型検査等）が別途CIの必須チェックとして担い、`unit_test_results` の本判定はそれとは独立した「テスト作業がこのブランチで行われたことの機械的痕跡」の確認に責務を限定する。
 
-## 関連ADR
-
-本Issueは小さなバグ修正であり、新規ADRは不要（既存 ADR-0005 リリース自動化の枠内での、Issue #198 修正の適用漏れ補完）。
+採用理由・却下した代替案（専用テスト実行ログファイル方式・設定可能なテストディレクトリパターン方式）の詳細な比較は、本判断の由来として `ADR-0006` に記録する。
 
 ```yaml
-related_adrs: []
+related_adrs:
+  - id: ADR-0006
+    relation: adopts
 ```
 
 ## 障害・ロールバック考慮
 
-- 想定される失敗モード: `ensureGitIdentity()` が内部で `git config` 書き込みに失敗した場合（例: `.git/config` への書き込み権限がない等の環境異常）、`tag()` は `fail()` 経由で終了コード非0・エラー内容を標準エラー出力へ返す。これは `bump()` の既存の失敗ハンドリングと同一パターンであり、新規の失敗モードを導入しない。
-- ロールバック手順: 変更は `tag()` 内の1行相当の呼び出し追加のみであり、当該呼び出しを削除すれば Issue #198 適用前の挙動（`bump()` のみ保護）へ即座に戻せる。`git config` への書き込みはCIランナーのworktreeローカルスコープに限定され、ランナーは実行毎に使い捨てられるため永続的な副作用は残らない。
-- 影響を受ける既存機能: `bump()`・`publish()`・`resolveVersion()` は本変更で参照・変更されないため影響なし。`tag()` の冪等スキップ経路（既存タグ検出時）は `ensureGitIdentity()` 呼び出しより前で早期returnするため、この経路の既存挙動（AC-4対象の既存テスト）にも影響しない。
+- 想定される失敗モード: `defaultBranch(worktreePath)` が解決不能な環境（shallow clone等でbaseブランチ未フェッチ）では `git diff --stat` がエラー終了し `diff.status !== 0` となるため、`unit_test_results` は「欠落」判定（安全側）になる。これは既存の `code` ケースと全く同じ失敗モードであり、新規の失敗系統を導入しない。
+- ロールバック手順: 変更は `checkOutputExists()` 内の `unit_test_results` 1ケースの条件式差し替えのみに閉じる。当該ケースを変更前の内容（`VALIDATION.md` 存在または履歴実績での代替判定）に戻せば即座に旧挙動へ復帰できる。他のケース・他ファイルへの変更を伴わないため、切り戻しに副作用は無い。
+- 影響を受ける既存機能: `acceptance_test_results`/`regression_test_results`・`code`・`SPEC.md`/`DESIGN.md`/`PLAN.md`/`ADR` の各判定ケースは条件式・呼び出し関係とも変更されないため無影響（AC-2）。`test/integration/verify.test.ts` のうち、implementationセグメントの成功条件としてVALIDATION.md作成を前提としていた既存テスト（PLAN.md変更単位2で特定）は、本ロジック変更により前提が変わるため更新が必須であり、更新しない場合はその既存テストが本Issue適用後に失敗する（regressionとして検出される）。
