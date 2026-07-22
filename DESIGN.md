@@ -28,9 +28,9 @@
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| `AC-1`（root 直下の stray ファイル削除） | 実装セグメントでの `git rm` 実行 | 対象は root 直下の4ファイルのみ。`.agent-skill-chain/templates/issue/` 配下の雛形・`.worktrees/` 配下の他 Issue 成果物は対象外（要件2） |
-| `AC-2`（削除後も CI が通過） | 上記「事前調査」による事前確認 ＋ 実装セグメントでの実際の CI 実行結果確認 | 削除に伴う追加のコード変更は不要（純粋な削除のみで完結する） |
-| `AC-3`（成果物ファイルを意図的に削除するIssueでもverify-artifactsが正しく判定する） | `src/commands/verify.ts` の `checkOutputExists()` の拡張（詳細は下記「AC-3対応」節） | AC-1・AC-2とは異なり実際のコード変更を伴う。対象は `checkOutputExists()` のSPEC.md/DESIGN.md/PLAN.md/VALIDATION.md判定のみ |
+| `AC-1`（root 直下の stray ファイル削除） | 実装セグメントでの**暫定削除**（PLAN.md 変更単位 #1、`checkOutputExists()` 拡張（AC-3対応）の動作確認用の一時削除） ＋ validation セグメントでの**最終削除**（PLAN.md 変更単位 #6、これにより AC-1 がマージ時点で真に充足される） | 対象は root 直下の4ファイルのみ。`.agent-skill-chain/templates/issue/` 配下の雛形・`.worktrees/` 配下の他 Issue 成果物は対象外（要件2）。削除は暫定（#1）→最終（#6）の2段階であり、その理由は下記「なぜ削除が2段階になるか」節に記載する |
+| `AC-2`（削除後も CI が通過。ただし削除という行為自体の構造的帰結は受容する） | AC-3 の `checkOutputExists()` 拡張（これにより `verify-artifacts` は既存 CI の通常運用へ回帰することなく green を維持する） ＋ 最終削除commit（PLAN.md 変更単位 #6）が引き起こす帰結（`gate-reconcile` による spec/design/implementation/validation の4ゲート action_required 化・`verify-ac-coverage` 失敗）を受容し、validation セグメントで実際に確認・証跡化すること | 本 AC-2 の合格は AC-3 のコード変更に依存する（純粋な削除のみでは `verify-artifacts` が自己言及的に失敗するため、「追加のコード変更は不要」ではない）。最終削除commitが引き起こすゲート・CI の巻き戻りは削除という行為自体の構造的帰結として明示的に受容し、下記「最終削除commitが引き起こすゲート・CI側の帰結」節および PLAN.md 変更単位 #6 の証跡化ステップの通り実際に確認・記録する |
+| `AC-3`（成果物ファイルを意図的に削除するIssueでもverify-artifactsが正しく判定する） | `src/commands/verify.ts` の `checkOutputExists()` の拡張（詳細は下記「AC-3対応」節） | AC-1・AC-2とは異なり実際のコード変更を伴う。対象は `checkOutputExists()` の SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md 判定のみ（実装済み・implementation-gate 承認済み） |
 
 ## AC-3対応: verify-artifacts の自己言及的欠陥の修正
 
