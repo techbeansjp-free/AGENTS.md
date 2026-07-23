@@ -15,7 +15,11 @@ Issue #208（PR #210、マージ commit `f4624d2`）のマージ後、main へ�
 
 Issue #196〜#204 のマージ（いずれも `.github/workflows/` 配下を変更しないマージ）では、agent-skill-chain / release は毎回正常に起動していた。一方 Issue #208 のマージは、`.github/workflows/agent-skill-chain-root-cleanup.yml` の新設と `.github/workflows/agent-skill-chain-reconcile.yml` の変更を含む、`.github/workflows/` 配下を変更する初めてのマージだった。またマージ時の GitHub PR 画面には「1 check was pending」という表示があり、マージ時点で何らかの check が保留状態だったことが示唆されている。本リポジトリは branch protection として比較的新しい「Rulesets」機能を使用しており、admin bypass マージとの組み合わせで GitHub Actions のトリガーに既知の相性問題が生じる可能性がある。
 
-本 Issue は、この「マージ後にワークフローが起動しない」という異常の原因を、実地観測によって切り分けることを目的とする。原因の候補は大きく (a) `.github/workflows/` 配下を変更するマージに固有の問題、(b) admin bypass マージ全般に共通する問題、の2つである。本 Issue 自体は通常の Issue 開発フロー（spec→design→implementation→validation）で進め、`.github/workflows/` 配下を一切変更しない小さな変更（具体的な変更内容は DESIGN/PLAN 段階で確定する）を実装し、`gh pr merge --admin --squash` でマージした上で、マージ後に agent-skill-chain / release が実際に起動するかを実地確認する。
+なお Issue #196〜#204 のマージも、承認レビュー0件・一部 required checks が failure のままの `gh pr merge --admin` による admin bypass マージだったと推定される。この事実は、「(b) admin bypass マージ全般に共通する問題」という仮説が今回の実測を待たずとも一定程度反証されていること（#196〜#204 では admin bypass マージであっても agent-skill-chain / release は毎回起動していた）を示す背景情報として記録しておく。
+
+本 Issue は、この「マージ後にワークフローが起動しない」という異常の原因を、実地観測によって切り分けることを目的とする。原因の候補は大きく (a) `.github/workflows/` 配下を変更するマージに固有の問題、(b) admin bypass マージ全般に共通する問題、の2つである。本 Issue 自体は通常の Issue 開発フロー（spec→design→implementation→validation）で進め、`.github/workflows/` 配下を一切変更せず、かつ agent-skill-chain / release ワークフローの起動条件（`on.push.paths`）に一致するパス（`src/**` または `.agent-skill-chain/**` を含む）を最低1件変更する小さな変更（具体的な変更内容は DESIGN/PLAN 段階で確定する）を実装し、`gh pr merge --admin --squash` でマージした上で、マージ後に agent-skill-chain / release が実際に起動するかを実地確認する。
+
+この「path フィルタに一致する変更を最低1件含む」という制約は、実験を有効にするための前提条件である。agent-skill-chain / release ワークフローのトリガーは `on.push.paths` によって `src/**`・`.agent-skill-chain/**` 等のパスに一致する変更が無い push には起動しないため、これらのパスに一致する変更を含まない実験を行うと、観測される「起動せず」が path フィルタ不一致による自明な結果なのか、`.github/workflows/` 変更固有の問題または admin bypass 全般の問題によるものなのかを区別できず、実験自体が無意味になる。
 
 ## 要求 → 要件 → 受入条件
 
@@ -25,7 +29,7 @@ Issue #208 マージ後に観測された「release・root-cleanup 双方のワ�
 
 ### 要件
 
-- 要件1: 本 Issue 自身が実装する変更内容は `.github/workflows/` 配下を一切含まないこと。
+- 要件1: 本 Issue 自身が実装する変更内容は `.github/workflows/` 配下を一切含まないこと、かつ agent-skill-chain / release ワークフローの起動条件（`on.push.paths`: `src/**`・`.agent-skill-chain/**` 等）に一致する変更を最低1件含むこと。
 - 要件2: 本 Issue の PR は `gh pr merge --admin --squash` によって admin bypass マージされること。
 - 要件3: マージ後、GitHub Actions の UI・API の双方で agent-skill-chain / release ワークフローの起動有無を実地観測し、起動した場合は起動した事実と起動までの時間・トリガーされた commit SHA を、起動しなかった場合は一定時間（マージ後20分以上）経過してもUI・API双方で実行回数が0件であることを記録すること。
 - 要件4: 観測結果に基づき、「`.github/workflows/` 配下の変更有無」を原因の主要な切り分け軸として、原因が (a) `.github/workflows/` 配下を変更するマージに固有の問題である、(b) admin bypass マージ全般に共通する問題である、(c) 今回は再現せず原因を切り分けられなかった、のいずれに該当するかを結論として明記すること。
@@ -33,12 +37,12 @@ Issue #208 マージ後に観測された「release・root-cleanup 双方のワ�
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: 本Issue自身の変更が.github/workflows/配下を含まない
+#### AC-1: 本Issue自身の変更が.github/workflows/配下を含まず、releaseワークフローのpathフィルタに一致する変更を含む
 
 - Given: 本 Issue の PR に含まれる差分（実装セグメントで加える変更）
 - When: PR の変更ファイル一覧を確認する
-- Then: `.github/workflows/` 配下のファイルが1件も変更・追加・削除されていない
-- 検証方法見込み: `automated`（PR差分に対する `.github/workflows/` パスの機械チェック）
+- Then: (1) `.github/workflows/` 配下のファイルが1件も変更・追加・削除されておらず、かつ (2) 変更ファイルのうち最低1件が agent-skill-chain / release ワークフローの `on.push.paths`（`src/**` または `.agent-skill-chain/**` を含むパスパターン群）のいずれかに一致する
+- 検証方法見込み: `automated`（PR差分に対する `.github/workflows/` パス非一致チェックと、`on.push.paths` パターン一致チェックの機械チェック）
 
 #### AC-2: マージ後のrelease/root-cleanupワークフロー起動有無の実地観測と記録
 
