@@ -10,7 +10,7 @@ name: agent-skill-chain / reconcile
 
 on:
   push:
-    branches-ignore: [main]
+    branches-ignore: [main, 'chore/root-cleanup-*']
 
 permissions:
   contents: read

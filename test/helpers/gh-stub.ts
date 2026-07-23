@@ -102,16 +102,26 @@ if (cmd === 'pr' && sub === 'create') {
   state.prCreateCalls.push({ args, body: flag('--body') });
   const head = flag('--head');
   if (head) {
-    // Issue #196 release bump: findOpenBumpPr が直後に 'gh pr view <head>' で解決できるよう、
-    // head branch をキーに PR を登録する（実PR番号は本スタブ専用の採番、既存のnextId列とは独立）。
+    // findOpenPrByHead（release bump・root-cleanup runが共有）が直後に
+    // 'gh pr view <head>' で解決できるよう、head branch をキーに PR を登録する
+    // （実PR番号は本スタブ専用の採番、既存のnextId列とは独立）。
     state.prsByBranch = state.prsByBranch || {};
     state.nextPrNumber = state.nextPrNumber || 1;
     const number = state.nextPrNumber++;
+    const paths = state.defaultPrFiles || ['package.json'];
+    const stats = state.defaultPrFileStats || {};
     state.prsByBranch[head] = {
       number,
       state: 'OPEN',
       headRefName: head,
-      files: state.defaultPrFiles || ['package.json'],
+      // additions/deletions は root-cleanup run のスコープ検査（削除のみで構成されているか）が
+      // 参照する。既定は「削除のみ」（additions:0）とし、release bump 側は現状これらの値を
+      // 見ないため既定値のままで従来どおり動作する。
+      files: paths.map((p) => ({
+        path: p,
+        additions: typeof stats[p]?.additions === 'number' ? stats[p].additions : 0,
+        deletions: typeof stats[p]?.deletions === 'number' ? stats[p].deletions : 1,
+      })),
     };
   }
   saveState(state);
@@ -122,14 +132,22 @@ if (cmd === 'pr' && sub === 'create') {
 if (cmd === 'pr' && sub === 'list') {
   const head = flag('--head');
   const state = loadState();
-  const prs = (state.prs || {})[head] || [];
-  process.stdout.write(JSON.stringify(prs));
+  if (head) {
+    const prs = (state.prs || {})[head] || [];
+    process.stdout.write(JSON.stringify(prs));
+    process.exit(0);
+  }
+  // root-cleanup run が既存のcleanup PRをブランチ名パターンで探すために使う
+  // 'gh pr list --state open --json number,headRefName' 相当（headを指定しない全件列挙）。
+  const all = Object.values(state.prsByBranch || {}).filter((pr) => pr.state === 'OPEN');
+  process.stdout.write(JSON.stringify(all.map((pr) => ({ number: pr.number, headRefName: pr.headRefName }))));
   process.exit(0);
 }
 
 if (cmd === 'pr' && sub === 'view') {
-  // release bump の findOpenBumpPr が 'gh pr view <branch> --json number,state,headRefName,files'
-  // として呼ぶ（常にbranch名で問い合わせる、PR番号ではない）。
+  // release bump・root-cleanup run の findOpenPrByHead が
+  // 'gh pr view <branch> --json number,state,headRefName,files' として呼ぶ
+  // （常にbranch名で問い合わせる、PR番号ではない）。
   const key = args[2];
   const state = loadState();
   const pr = (state.prsByBranch || {})[key];
@@ -142,7 +160,7 @@ if (cmd === 'pr' && sub === 'view') {
       number: pr.number,
       state: pr.state,
       headRefName: pr.headRefName,
-      files: pr.files.map((p) => ({ path: p })),
+      files: pr.files,
     }),
   );
   process.exit(0);
@@ -261,11 +279,17 @@ process.stderr.write('gh-stub: unhandled command: ' + args.join(' ') + '\\n');
 process.exit(1);
 `;
 
+export interface GhStubPrFile {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
 export interface GhStubBumpPr {
   number: number;
   state: string;
   headRefName: string;
-  files: string[];
+  files: GhStubPrFile[];
 }
 
 export interface GhStubState {
@@ -277,10 +301,12 @@ export interface GhStubState {
   labels: string[];
   issueLabels: Record<string, string[]>;
   prCreateCalls?: { args: string[]; body: string | undefined }[];
-  // ---- Issue #196 release bump/tag/publish 検証用（gh pr view/merge, gh release view/create） ----
+  // ---- Issue #196 release bump/tag/publish・Issue #208 root-cleanup run 検証用
+  //      (gh pr view/list/merge, gh release view/create) ----
   prsByBranch?: Record<string, GhStubBumpPr>;
   nextPrNumber?: number;
   defaultPrFiles?: string[];
+  defaultPrFileStats?: Record<string, { additions: number; deletions: number }>;
   mergeCalls?: { number: string; args: string[] }[];
   failMergeCount?: number;
   releases?: string[];
@@ -294,11 +320,16 @@ export interface GhStub {
   readState(): GhStubState;
   writeState(state: GhStubState): void;
   seedPrList(branch: string, prs: unknown[]): void;
-  /** `gh pr create` で新規登録される PR の files 一覧の既定値を上書きする（release bump の
-   * スコープ検査違反シナリオを再現するために使う。Issue #196）。 */
+  /** `gh pr create` で新規登録される PR の files 一覧（パスのみ）の既定値を上書きする
+   * （release bump・root-cleanup run のスコープ検査違反シナリオを再現するために使う。
+   * Issue #196・#208）。各ファイルの additions/deletions は既定で削除のみ（0/1）になる。 */
   setDefaultPrFiles(files: string[]): void;
+  /** `setDefaultPrFiles` で指定したパスのうち、特定ファイルの additions/deletions を上書きする
+   * （root-cleanup run のスコープ検査が要求する「削除のみ」条件に違反するケース、すなわち
+   * additions > 0 のファイルが混入したケースを再現するために使う。Issue #208）。 */
+  setDefaultPrFileStats(stats: Record<string, { additions: number; deletions: number }>): void;
   /** 直後の `gh pr merge` 呼び出しを count 回だけ失敗させる（PRはOPENのまま）。
-   * DESIGN.md の「PR作成後、admin mergeに失敗」自己修復シナリオの検証用（Issue #196）。 */
+   * 「PR作成後、admin mergeに失敗」自己修復シナリオの検証用（Issue #196・#208）。 */
   failNextMerge(count?: number): void;
 }
 
@@ -345,6 +376,11 @@ export function createGhStub(baseDir: string): GhStub {
     setDefaultPrFiles(files: string[]): void {
       const state = this.readState();
       state.defaultPrFiles = files;
+      this.writeState(state);
+    },
+    setDefaultPrFileStats(stats: Record<string, { additions: number; deletions: number }>): void {
+      const state = this.readState();
+      state.defaultPrFileStats = stats;
       this.writeState(state);
     },
     failNextMerge(count = 1): void {

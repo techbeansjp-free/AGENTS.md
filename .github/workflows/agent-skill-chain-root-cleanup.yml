@@ -1,0 +1,55 @@
+# 正本: AGENTS.md §不変条件I4・§ディレクトリ構成 / ADR-0007
+#
+# mainへのpush（[skip ci]を含まないもの）を契機に、repoRoot直下へ恒久混入したIssueセグメント
+# 成果物ファイル（SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md）を検出し、短命ブランチ
+# chore/root-cleanup-* 上でのgit rmコミット・PR作成・スコープ検査を経てadmin mergeでmainへ
+# 反映する（root-cleanup run、Issue #208）。既存のリリース自動化（agent-skill-chain-release.yml）
+# と同一の secrets.RELEASE_MAIN_PAT・admin mergeパターンを再利用し、新規credentialは追加しない
+# （ADR-0007）。squashコミットのメッセージを --subject で明示固定して '[skip ci]' の生存を保証する
+# ことが再帰トリガ防止（無限ループ防止）の主機構であり、concurrency が二重発火を防止する。
+name: agent-skill-chain / root-cleanup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  root-cleanup:
+    # 防御的skip-ciガード（GitHub側の[skip ci]によるrun抑止に対する安価な二重防御）。
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: root-cleanup
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Remove stray root-level segment artifacts（存在すれば）
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}
+        run: ./.agent-skill-chain/scripts/root-cleanup.sh
+
+      - name: Sync local checkout to latest main
+        # root-cleanup.sh がmainへ反映した変更（削除commit）をこのjobのローカル作業ツリーへ
+        # 取り込む。取り込まないと直後の verify-root-clean.sh が反映前の古いツリーを検査してしまう。
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+
+      - name: Verify root is clean
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./.agent-skill-chain/ci/verify-root-clean.sh

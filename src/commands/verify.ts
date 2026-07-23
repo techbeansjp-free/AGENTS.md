@@ -19,6 +19,7 @@ import { git } from '../lib/exec.js';
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
+import { ROOT_ARTIFACT_FILES } from '../lib/root-artifacts.js';
 
 function violations(lines: string[]): number {
   if (lines.length === 0) return 0;
@@ -240,6 +241,26 @@ export async function templateSync(args: string[]): Promise<number> {
     if (isHelp(args)) return printUsage(TEMPLATE_SYNC_USAGE), 0;
     const targetRoot = args[0] ? path.resolve(args[0]) : process.cwd();
     return violations(computeTemplateSyncDiffs(targetRoot));
+  });
+}
+
+// ---- root-clean ----
+const ROOT_CLEAN_USAGE = `
+使い方: agent-skill-chain verify root-clean
+
+repoRoot直下に SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md（Issueセグメント成果物）が
+残存していないことのみを確認する単純な存在チェック（Issue #208）。checkOutputExists()/
+wasEverAddedOrModified()・segments.yamlには一切関与しない、独立した構造検査。
+root-cleanup run（main post-merge cleanup自動化）の事後確認として使う。
+
+出力: 0=対象4ファイルすべて不在、1=いずれか残存
+`;
+export async function rootClean(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) return printUsage(ROOT_CLEAN_USAGE), 0;
+    const root = repoRoot();
+    const present = ROOT_ARTIFACT_FILES.filter((f) => fs.existsSync(path.join(root, f)));
+    return violations(present.map((f) => `root直下に残存しています: ${f}`));
   });
 }
 

@@ -693,6 +693,45 @@ test('verify template-sync: 未同期・同期後の一致・再改変による�
   assert.match(afterEdit.stderr, /未同期（差分あり）: CODEOWNERS/);
 });
 
+// ---- verify root-clean（Issue #208） ----
+
+test('verify root-clean: root直下に対象4ファイルが無ければ成功し、存在すればすべて列挙して失敗する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given/When: fixtureはroot直下に対象4ファイルを一切持たない
+  // Then: 成功する
+  const before = runCli(['verify', 'root-clean'], { cwd: repo.dir });
+  assert.equal(before.status, 0, before.stderr);
+
+  // When: root直下（repo.dir自身）にSPEC.md/DESIGN.md/PLAN.md/VALIDATION.mdを作成する
+  // （squash mergeで前Issueの成果物がmainルート直下へ恒久混入した状態の再現）
+  for (const file of ['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md']) {
+    fs.writeFileSync(path.join(repo.dir, file), `# ${file}\n`);
+  }
+
+  // Then: 4件すべてが残存として検出され、終了コード1になる
+  const after = runCli(['verify', 'root-clean'], { cwd: repo.dir });
+  assert.equal(after.status, 1);
+  for (const file of ['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md']) {
+    assert.match(after.stderr, new RegExp(`root直下に残存しています: ${escapeRegExp(file)}`));
+  }
+});
+
+test('verify root-clean: 対象4ファイルのうち一部のみが存在する場合はその分のみを報告する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n');
+
+  const result = runCli(['verify', 'root-clean'], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /root直下に残存しています: SPEC\.md/);
+  assert.doesNotMatch(result.stderr, /DESIGN\.md/);
+  assert.doesNotMatch(result.stderr, /PLAN\.md/);
+  assert.doesNotMatch(result.stderr, /VALIDATION\.md/);
+});
+
 // ---- verify adr ----
 
 test('verify adr: 実物ADR（ADR-0001）は違反0で成功する', async () => {
