@@ -6,7 +6,7 @@
 
 ## 目的・背景
 
-Dependabot が生成する依存関係更新 PR（本リポジトリでは `actions/checkout`・`actions/setup-node`・`typescript`・`@types/node` のバージョン bump 4件）が、GitHub Actions ワークフロー `agent-skill-chain / ci`（verify job）および `agent-skill-chain / reconcile` で恒久的に失敗し、マージ判定が BLOCKED のまま解消できない。本 Issue はこれを是正する。
+Dependabot が生成する依存関係更新 PR が、GitHub Actions ワークフロー `agent-skill-chain / ci`（verify job）および `agent-skill-chain / reconcile`（reconcile job）で、ブランチ名から issue_id を必須抽出する「Derive issue_id」ステップの `exit 1` により**恒久的に誤爆（本来無関係な追跡系検査がクラッシュして job 全体を巻き込む）**する。本リポジトリの Dependabot は現在4件の更新 PR を生成しうる（github-actions-ecosystem: `actions/checkout`・`actions/setup-node`／npm-ecosystem: `typescript`・`@types/node`）が、いずれのブランチ名（例: `dependabot/github_actions/actions/checkout-7`）も agent-skill-chain の Issue ブランチ規約 `{type}/{issue_id}-{slug}` に適合しないため、追跡系検査の入口である Derive issue_id が抽出に失敗し `exit 1` で job 全体を落とす。
 
 両ワークフローの「Derive issue_id」ステップは、ブランチ名から次の処理で issue_id を必須抽出する。
 
@@ -20,13 +20,19 @@ fi
 
 このガードは、agent-skill-chain が管理する Issue ブランチ規約 `{type}/{issue_id}-{slug}`（例: `feature/123-user-authentication`）を前提とし、全 PR/push トリガーへ無条件に適用されている。Dependabot のブランチ名（例: `dependabot/github_actions/actions/checkout-7`）はこのパターンに一切適合しないため issue_id 抽出が失敗し、`exit 1` で job 全体が落ちる。ci.yml（verify job）と reconcile.yml（reconcile job）で同一パターンが発生する。
 
+**本 Issue が達成すること**: この誤爆を解消する。全 Dependabot PR について、追跡系検査（verify-branch-name 等、Issue ブランチの命名・成果物・追跡を前提とし Dependabot ブランチには本質的に適用対象が存在しない検査群）の入口 Derive issue_id が `exit 1` で job 即死させる挙動を、Dependabot 限定のスキップで是正する。これにより各 Dependabot PR の CI 成否は「本来無関係な追跡系検査のクラッシュ」ではなく、そのPRの実態（ビルド健全性・テンプレート同期状態）に応じた正しい判定へ戻る。結果として **npm-ecosystem の更新 PR**（`typescript`・`@types/node`。`.github/workflows/` を一切変更しない）は、追跡系検査がスキップされビルド検証（`npm ci` / `npm run build` / `npm test`）に通り、本体・テンプレート正本に差分も生じないため verify-template-sync も成功し、**CI が完全自動で成功して BLOCKED 状態が解消される**。
+
+**本 Issue が達成しないこと（正直に明記）**: **github-actions-ecosystem の更新 PR**（`actions/checkout`・`actions/setup-node`。`.github/workflows/*.yml` 自体を書き換える。PR #192/#193 が該当）については、追跡系検査の誤爆は解消されるものの、verify-template-sync が本来の役割（本体とテンプレート正本の一致保証）を正しく果たし続けるため、テンプレート正本が古いままである限り**検査は正しく失敗し続け、BLOCKED 状態は自動解消されない**。これは Dependabot の github-actions スキャンが `.github/workflows/` のみを対象とし `.agent-skill-chain/templates/github/.github/workflows/` 配下のテンプレート正本を更新できないという、この種別の Dependabot PR の構造的性質に起因し、本 Issue が是正の対象とするものではない。BLOCKED 状態の解消には、マージ前に人間（進行役）がテンプレート正本を手動同期する運用が引き続き必要であり、本 Issue はこれを自動化しない。
+
+すなわち本 Issue の実質的価値は「CI の誤爆（本来無関係な検査がクラッシュして job 全体を巻き込むこと）を解消し、各 Dependabot PR の成否をそのPRの実態に応じた正しい判定に戻すこと」であり、「全 Dependabot PR を無条件で自動グリーン化すること」ではない。
+
 なお `agent-skill-chain / gate` job は同じ issue_id 抽出ロジックを持つが、`ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN` 未設定という別要因で恒久失敗しており（既知・対応方針確定済み、進行役の手動ゲートレビューで代替）、本 Issue のスコープ外とする。
 
 ## 要求 → 要件 → 受入条件
 
 ### 要求
 
-Dependabot の依存関係更新 PR が、ビルド健全性検証（`npm ci` / `npm run build` / `npm test`）を受けつつ、agent-skill-chain 固有の Issue ブランチ検査に足を引っ張られず、CI 全体を失敗させずに緑にできること。同時に、agent-skill-chain の Issue ブランチに対する既存の検査挙動は一切変えないこと。
+Dependabot の依存関係更新 PR に対し、追跡系固有検査（Issue ブランチの命名・成果物・追跡を前提とし Dependabot ブランチには適用対象が存在しない検査群）の入口 Derive issue_id が `exit 1` で誤爆して job 全体を巻き込む挙動を解消すること。具体的には、Dependabot ブランチではビルド健全性検証（`npm ci` / `npm run build` / `npm test`）を従来どおり実行しつつ、追跡系固有検査を Dependabot 限定でスキップし、各 PR の CI 成否をそのPRの実態（ビルド健全性・テンプレート同期状態）に基づく正しい判定へ戻すこと。これにより `.github/workflows/` を変更しない PR（npm-ecosystem）は完全自動で CI 成功・BLOCKED 解消に至る。ただし verify-template-sync は挙動を一切変えないため、`.github/workflows/*.yml` を書き換える PR（github-actions-ecosystem）はテンプレート正本が古い限り**正しく失敗し続けてよく**（BLOCKED は人間の手動同期で解消）、本要求は「全 Dependabot PR を無条件で緑化すること」を含まない。同時に、agent-skill-chain の Issue ブランチに対する既存の検査挙動は一切変えないこと。
 
 ### 要件（設計判断を含む）
 
@@ -56,30 +62,37 @@ Dependabot の依存関係更新 PR が、ビルド健全性検証（`npm ci` / 
 
 各 AC は Given/When/Then による受け入れシナリオで記述する。散文形式（`bdd.profile` が strict でない前提）。
 
-#### AC-1: Dependabot PR で verify job がビルド検証を通し追跡系固有検査をスキップする（template-sync は挙動不変）
+> AC-1 と AC-2 は verify job の同一挙動（追跡系固有検査の Dependabot 限定スキップ・verify-template-sync の挙動不変）に対する検証だが、Given の ecosystem 種別によって Then の最終結果が一意に分岐する（npm=自動成功／github-actions=template-sync が正しく失敗継続）ため、前提条件が結果を一意に決定するよう2つの AC に分割している。
 
-- Given: アクターが `dependabot[bot]` で、ブランチ名が `dependabot/` で始まる（例: `dependabot/github_actions/actions/checkout-7`）PR が開かれている。
+#### AC-1: npm-ecosystem の Dependabot PR で verify job が完全自動成功する
+
+- Given: アクターが `dependabot[bot]` で、ブランチ名が `dependabot/` で始まり、かつ **npm-ecosystem 更新**（例: `typescript`・`@types/node` の bump。`.github/workflows/` 配下を一切変更しない）である PR が開かれている。
 - When: `agent-skill-chain / ci` の verify job が起動する。
-- Then: `npm ci` / `npm run build` / `npm test` は実行され、ブランチ・Issue 追跡系の固有検査群（verify-branch-name / verify-worktree-path / verify-artifacts / verify-ac-coverage / verify-adr / lint-vocab / lint-references / lint-secrets / adr-lint）はスキップされる。verify-template-sync は本修正の対象外であり修正前と同一のブロッキング挙動を維持する。その結果は Dependabot PR の種別により次のとおり分岐する（本 Issue はこの分岐を偽装せず正直に扱う）:
-  - **npm-ecosystem 更新 PR**（typescript・@types/node の bump。`.github/workflows/` を一切変更しない）: 本体・テンプレート正本に差分が生じないため verify-template-sync も成功し、追跡系固有検査のスキップと相まって **verify job 全体が自動的に成功する**。
-  - **github-actions-ecosystem 更新 PR**（actions/checkout・actions/setup-node 等の bump。`.github/workflows/*.yml` 自体を書き換える）: 本修正により Derive issue_id の `exit 1` による追跡系検査の誤爆（job 即死）は解消されるが、テンプレート正本が古いままのため **verify-template-sync は正しく失敗し続ける**（偽陽性ではなく正しい検出）。この PR のマージには、マージ前に人間（進行役）が `.agent-skill-chain/templates/github/.github/workflows/` 配下の該当ファイルを `.github/workflows/` の内容へ手動同期する運用が必要であり、この運用手順は本 Issue では自動化しない。
-- 検証方法見込み: `hybrid`（ワークフロー YAML の条件式静的検証 + Dependabot PR での実 run 観測。npm-ecosystem PR は自動成功、github-actions-ecosystem PR は追跡系検査の非誤爆と verify-template-sync の正しい失敗継続を観測。詳細は `VALIDATION.md` で確定）
+- Then: `npm ci` / `npm run build` / `npm test` は実行され、ブランチ・Issue 追跡系の固有検査群（verify-branch-name / verify-worktree-path / verify-artifacts / verify-ac-coverage / verify-adr / lint-vocab / lint-references / lint-secrets / adr-lint）はスキップされる。verify-template-sync は本修正の対象外であり修正前と同一のブロッキング挙動のまま実行されるが、本体・テンプレート正本に差分が生じないため成功する。結果として **verify job 全体が自動的に成功し、BLOCKED 状態が解消される**。
+- 検証方法見込み: `hybrid`（ワークフロー YAML の条件式静的検証 + npm-ecosystem Dependabot PR での実 run 観測で自動成功を確認。詳細は `VALIDATION.md` で確定）
 
-#### AC-2: Dependabot ブランチで reconcile job が失敗しない
+#### AC-2: github-actions-ecosystem の Dependabot PR で追跡系検査の誤爆が解消され、verify-template-sync は正しく失敗し続ける
+
+- Given: アクターが `dependabot[bot]` で、ブランチ名が `dependabot/` で始まり、かつ **github-actions-ecosystem 更新**（例: `actions/checkout`・`actions/setup-node` の bump。`.github/workflows/*.yml` 自体を書き換える。PR #192/#193 が該当）である PR が開かれている。
+- When: `agent-skill-chain / ci` の verify job が起動する。
+- Then: `npm ci` / `npm run build` / `npm test` は実行され、ブランチ・Issue 追跡系の固有検査群（AC-1 に列挙した同一の検査群）はスキップされる——これにより Derive issue_id の `exit 1` による追跡系検査の誤爆（job 即死）は解消される。一方 verify-template-sync は本修正の対象外であり修正前と同一のブロッキング挙動のまま実行され、テンプレート正本が古いままのため **正しく失敗し続ける**（偽陽性ではなく正しい検出）。したがって verify job 全体は BLOCKED のままとなり、自動解消はしない。この PR のマージには、マージ前に人間（進行役）が `.agent-skill-chain/templates/github/.github/workflows/` 配下の該当ファイルを `.github/workflows/` の内容へ手動同期する運用が必要であり、この運用手順は本 Issue では自動化しない。
+- 検証方法見込み: `hybrid`（ワークフロー YAML の条件式静的検証 + github-actions-ecosystem Dependabot PR での実 run 観測で、追跡系検査の非誤爆＝スキップと verify-template-sync の正しい失敗継続を観測。詳細は `VALIDATION.md` で確定）
+
+#### AC-3: Dependabot ブランチで reconcile job が失敗しない
 
 - Given: アクターが `dependabot[bot]` で、ブランチ名が `dependabot/` で始まる push が発生している。
 - When: `agent-skill-chain / reconcile` の reconcile job が起動する。
 - Then: reconcile job は早期スキップされ、job 全体は失敗しない。
 - 検証方法見込み: `hybrid`（ワークフロー YAML の条件式静的検証 + 実 run 観測）
 
-#### AC-3: Issue ブランチに対する既存検査挙動が不変（回帰なし）
+#### AC-4: Issue ブランチに対する既存検査挙動が不変（回帰なし）
 
 - Given: agent-skill-chain 規約に適合する Issue ブランチ（例: `feature/<n>-<slug>`・`bugfix/<n>-<slug>`）からの PR/push。
 - When: `agent-skill-chain / ci`（verify job）および `agent-skill-chain / reconcile`（reconcile job）が起動する。
 - Then: Derive issue_id 以降の固有検査は修正前と同一条件で実行され、成功・失敗判定は修正前と一致する（スキップされない）。規約非適合かつ許可リスト外のブランチは従来どおり `exit 1` で失敗する。
 - 検証方法見込み: `hybrid`（条件式静的検証 + 既存 Issue ブランチ PR の run 観測。差分レビューで固有ステップの実行条件が Dependabot 許可リスト以外で変化していないことを確認）
 
-#### AC-4: verify-template-sync の挙動不変（本体・テンプレート正本一致の不変条件を一切緩和しない）
+#### AC-5: verify-template-sync の挙動不変（本体・テンプレート正本一致の不変条件を一切緩和しない）
 
 - Given: `.github/workflows/agent-skill-chain-ci.yml`・`.github/workflows/agent-skill-chain-reconcile.yml` と、対応するテンプレート `.agent-skill-chain/templates/github/.github/workflows/` 配下の同名 2 ファイルが本修正の対象である。verify-template-sync 自体は本修正の変更対象**外**である。
 - When: `./.agent-skill-chain/ci/verify-template-sync.sh` を実行する（Issue ブランチ・Dependabot ブランチのいずれからでも）。

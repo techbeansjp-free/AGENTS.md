@@ -11,10 +11,11 @@
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| AC-1（verify job: Dependabot でビルド検証は実行・追跡系検査はスキップ・template-sync は挙動不変） | 設計要素A（Derive issue_id の3分岐化 + `skip_checks` output）+ 設計要素B（追跡系固有検査群への `if:` 付与。verify-template-sync は対象外=無条件実行のまま） | `npm ci/build/test` と verify-template-sync は分岐の影響を受けず無条件実行 |
-| AC-2（reconcile job: Dependabot で早期スキップ） | 設計要素C（reconcile job のトリガーレベル `if:`） | job 全体を非実行にし失敗させない |
-| AC-3（Issue ブランチの既存挙動が不変・許可リスト外は `exit 1` 維持） | 設計要素A の第1分岐（`skip_checks=false`）+ 第3分岐（`exit 1`） | 許可条件に非該当なら従来と同一経路 |
-| AC-4（verify-template-sync の挙動不変・本体とテンプレート正本の一致を要求する不変条件を緩和しない） | 設計要素D（テンプレート正本2ファイルへの同一変更）+ 設計要素B が verify-template-sync を `if:`・`continue-on-error` 付与の対象から除外すること | verify-template-sync はブランチ種別によらず修正前と同一のブロッキング挙動。github-actions 系 Dependabot PR の乖離解消は人間の手動同期（自動化しない）、恒久的自動同期は別 Issue |
+| AC-1（npm-ecosystem Dependabot: ビルド検証実行・追跡系検査スキップ・template-sync 成功で verify job 全体が自動成功） | 設計要素A（Derive issue_id の3分岐化 + `skip_checks` output）+ 設計要素B（追跡系固有検査群への `if:` 付与。verify-template-sync は対象外=無条件実行のまま） | `.github/workflows/` を変更しないため verify-template-sync が成功し verify job 全体が自動成功・BLOCKED 解消 |
+| AC-2（github-actions-ecosystem Dependabot: 追跡系検査の誤爆解消・template-sync は正しく失敗継続） | 設計要素A（同上）+ 設計要素B（同上） | Derive issue_id の `exit 1` による誤爆（job 即死）は解消。テンプレート正本が古い限り verify-template-sync は正しくブロッキング失敗し BLOCKED は自動解消しない。解消は人間の手動同期（自動化しない） |
+| AC-3（reconcile job: Dependabot で早期スキップ） | 設計要素C（reconcile job のトリガーレベル `if:`） | job 全体を非実行にし失敗させない |
+| AC-4（Issue ブランチの既存挙動が不変・許可リスト外は `exit 1` 維持） | 設計要素A の第1分岐（`skip_checks=false`）+ 第3分岐（`exit 1`） | 許可条件に非該当なら従来と同一経路 |
+| AC-5（verify-template-sync の挙動不変・本体とテンプレート正本の一致を要求する不変条件を緩和しない） | 設計要素D（テンプレート正本2ファイルへの同一変更）+ 設計要素B が verify-template-sync を `if:`・`continue-on-error` 付与の対象から除外すること | verify-template-sync はブランチ種別によらず修正前と同一のブロッキング挙動。github-actions 系 Dependabot PR の乖離解消は人間の手動同期（自動化しない）、恒久的自動同期は別 Issue |
 
 ## 責務・境界
 
@@ -58,8 +59,8 @@ verify-template-sync を追跡系検査と扱いを分ける理由: 追跡系検
 ## 障害・ロールバック考慮
 
 - 想定失敗モード1（許可リストの過剰緩和）: Dependabot 以外の bot や偽装ブランチが固有検査を逃れるリスク。対策として、スキップ条件を「アクター識別子 `dependabot[bot]` の完全一致」**かつ**「ブランチ名 `dependabot/` prefix」の AND に限定し、いずれか一方のみでは第3分岐の `exit 1` に落ちる。`github.actor` は GitHub が付与する信頼済みコンテキストであり、任意ユーザーが `dependabot[bot]` を詐称できない。
-- 想定失敗モード2（Issue ブランチの誤スキップ = 回帰）: 第1分岐が最優先で評価され、規約適合ブランチは必ず `skip_checks=false` となるため固有検査は従来どおり実行される。AC-3 の差分レビュー・run 観測で検証する。
-- 想定失敗モード3（本体・テンプレート正本の乖離）: 本修正コミット時点の乖離は設計要素D の同時修正で解消し AC-4 で機械検証する。継続運用での乖離検出は、Issue ブランチ・Dependabot ブランチのいずれからでも verify-template-sync が**修正前と同一のブロッキング挙動**で検出・job 失敗させる（設計要素B により verify-template-sync には `if:` も `continue-on-error` も付与しない）。
+- 想定失敗モード2（Issue ブランチの誤スキップ = 回帰）: 第1分岐が最優先で評価され、規約適合ブランチは必ず `skip_checks=false` となるため固有検査は従来どおり実行される。AC-4 の差分レビュー・run 観測で検証する。
+- 想定失敗モード3（本体・テンプレート正本の乖離）: 本修正コミット時点の乖離は設計要素D の同時修正で解消し AC-5 で機械検証する。継続運用での乖離検出は、Issue ブランチ・Dependabot ブランチのいずれからでも verify-template-sync が**修正前と同一のブロッキング挙動**で検出・job 失敗させる（設計要素B により verify-template-sync には `if:` も `continue-on-error` も付与しない）。
   - 設計判断の論拠（2回にわたる design-gate 指摘への回答）: verify-template-sync の挙動を一切変更しないことで、テンプレート正本の不整合を検出する能力を 100% 維持する。中途半端な妥協策を採らない理由は次のとおり。(1) **完全スキップ（`if:`）は不採用**——1回目の指摘のとおり、乖離が無検査のまま静かに進行する穴になる。(2) **`continue-on-error` による非ブロッキング化も不採用**——2回目の指摘のとおり、`continue-on-error: true` を付けた step は失敗しても job 全体・PR のチェック一覧上は緑（成功）として表示され、個別 step を手動展開しない限り失敗に気づけない（既知の UX gap）。「可視化されるが非ブロッキング」という前提は成立せず、実質的に失敗を隠蔽し 1回目の穴と変わらない。(3) **verify-template-sync の失敗を安全に非ブロッキング化する GitHub Actions 標準機能は存在しない**。かつ Dependabot PR にテンプレート正本を自動更新させる手段も無い（`package-ecosystem: github-actions` は `.github/workflows/` のみを対象としテンプレート正本ディレクトリを対象にできず、Dependabot がトリガーする `pull_request` イベント実行には GitHub の仕様上 secrets/PAT が渡らないため CI 側からの逆方向 self-heal も安全に構築できない）。(4) **github-actions-ecosystem の Dependabot PR ではブロッキング失敗が発生し続けることを設計上許容する**——これは検出が正しく機能した結果であり偽陽性ではない。解消はマージ前に人間（進行役）が `.agent-skill-chain/templates/github/.github/workflows/` 配下の該当ファイルを `.github/workflows/` の内容へ手動同期して当該 PR ブランチへ push する運用に委ね、本 Issue では自動化しない。恒久的な逆方向自動同期の仕組みは別 Issue として起票する（SPEC スコープ外に明記）。すなわち本設計は「静かな乖離」も「隠蔽された乖離」も生まず、失敗を正直に露出させたうえで解消を人間の判断・作業に委ねる。
 - ロールバック手順: 本修正は該当2ファイル（+テンプレート2ファイル）への局所的 YAML 変更のみ。問題発生時は当該 PR/commit の revert で即座に修正前状態へ復帰でき、他コンポーネントへの波及はない。
 - 影響を受ける既存機能: verify job の固有検査群の実行条件と reconcile job のトリガー条件のみ。`npm ci/build/test`・各 `.sh` スクリプト本体・`branch.pattern` 定義は不変。
