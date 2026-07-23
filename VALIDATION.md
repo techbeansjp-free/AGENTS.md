@@ -6,75 +6,66 @@
 # 本ファイル全体を単一YAMLとして readYamlFile() で読み込むため、見出し相当の情報はコメントで表現する）。
 #
 # 本検証は実装者本人とは別の独立検証者（validation_worker）として実施した。
-# 本worktree直下には前Issue（#202）由来のVALIDATION.mdが混入していたため、
-# 本ファイルは当該内容を Issue #208 自身の検証成果物として完全に上書きしたものである。
+# 本worktree直下には前Issue（#208）由来のVALIDATION.mdが混入していたため、
+# 本ファイルは当該内容を Issue #211 自身の検証成果物として完全に上書きしたものである。
+#
+# 本Issueの構造的性質（自己完結の記載）:
+#   SPEC.md AC-2・AC-3 は、本Issue自身のPRが実際に `gh pr merge --admin --squash` で
+#   main へマージされ、マージ後にGitHub Actionsのワークフロー起動有無を実地観測して
+#   初めて検証可能な性質の受入条件である。ところが本検証セグメントは、通常のセグメント順序
+#   （spec→design→implementation→validation→ゲート通過→マージ）に従い、マージより前に実施
+#   される。検証実施時点（本ファイル作成時点）で `gh pr view 212` を実行し確認した結果、
+#   PR #212 は state: OPEN, mergedAt: null であり、マージは未実施である。したがって
+#   AC-2が要求する「マージ後の実地観測」・AC-3が要求する「観測結果に基づく結論記録」は、
+#   本検証セッションの時点で観測対象事象そのものが発生していない。
+#
+#   これは過去Issue #196のAC-6/AC-7（[skip ci]の残存という決定論的・検証可能な一次的根拠を
+#   使い、実行時点で確認できる事実からpassを積極的に論証したケース）とも、Issue #208の
+#   AC-4（対象workflow自体はmainに存在しなかったが、GitHub Actionsの一般仕様・既に実行実績の
+#   ある近縁workflowでの決定論的挙動という一次的根拠を積み重ねてpassを論証できたケース）とも
+#   構造が異なる。#196・#208はいずれも「今この時点で確認できる一次的根拠」が存在し、それを
+#   根拠にpass/failを確定できた。一方、本Issue #211のAC-2・AC-3は、検証対象の事象
+#   （マージ後のワークフロー起動有無というGitHub Actions側の外部観測）が本検証時点で
+#   文字通りまだ発生しておらず、代わりに援用できる一次的根拠も存在しない（AC-2・AC-3は
+#   本Issue固有の実験結果そのものを問うものであり、他workflowでの実績からの類推では
+#   代替できない）。ゆえに、この時点でpass/failのいずれを記録しても実態と乖離する
+#   （pass:未検証をpassしたと偽ることになりsilent passになる。fail:機能や設計が失敗した
+#   わけではなく、単に観測がまだ行われていないだけであり、失敗の烙印は不正確）。
+#
+#   本schema（agent-skill-chain/validation-report/v1）の verification.result は
+#   pass|fail の2値のみを許容し「未実施」を表す3値目は存在しない。この制約下で最も安全側
+#   （虚偽のpassを記録しない側）に倒す選択として、AC-2・AC-3はいずれも result: fail を
+#   記録する。ただし reason に明記する通り、これは「本Issueが実装した変更や設計判断が
+#   失敗した」という意味ではなく、「本検証セッション時点でPRが未マージであり、AC-2・AC-3が
+#   要求する観測事象自体がまだ発生していないため、この時点でpassと確定できない」という
+#   意味の fail である。マージ実行・実地観測・結論記録は、validation-gate承認後に進行役が
+#   PRマージを実行した後に行い、その結果はGitHub Issue #211のクローズ時コメントとして
+#   記録する。本VALIDATION.mdファイル自体はマージ後も削除されず本Issueの成果物として
+#   残り続けるため、可能であればマージ後に本ファイルへ実地観測結果・結論を追記することも
+#   検討する。
 #
 # 実施した検証の要旨:
-#   - npm run build（tsc）: エラーなく完了した。
-#   - npm test（node --import tsx --test、474 tests / 474 pass / 0 fail / 0 skipped、
-#     duration_ms 166321.14、test/unit・test/integrationの全ファイルを含む本worktreeでの
-#     実行結果）を実測した。regressionはこの全体実行結果を証跡とする。
-#     個別ファイル run（test/integration/root-cleanup.test.ts + test/integration/verify.test.ts、
-#     node --import tsx --test 経由、43 tests / 43 pass / 0 fail）も別途実測し、
-#     全体実行結果と整合することを確認した。
-#   - AC-1（通常フロー完了後にmainルート直下へ成果物ファイルが恒久的に残存しない）:
-#     PLAN.md #2/#3/#4 が実装した `root-cleanup run`（src/commands/root-cleanup.ts）・
-#     `agent-skill-chain-root-cleanup.yml` ワークフローの設計内容を読解し、
-#     test/integration/root-cleanup.test.ts が (a) 対象4ファイル0件時のno-op、
-#     (b) 1件以上時に該当ファイルのみを短命ブランチ chore/root-cleanup-* で削除し
-#     admin mergeする（無関係ファイルは削除しない）こと、(c) 4ファイルすべて存在する
-#     場合に全件削除対象になること、(d) スコープ検査違反（想定外パス混入・削除以外の
-#     変更混入）時にadmin mergeを行わずhuman_requiredで停止すること、(e) admin merge
-#     失敗後の次runでの自己修復（既存OPEN PRの再利用）、を実gitコマンド・ghスタブに
-#     よる統合テストで実際に実行し全件合格を確認した。あわせて verify root-clean
-#     （test/integration/verify.test.ts）が対象4ファイルの残存有無を正しく検出することを
-#     確認した。
-#   - AC-2（verify-artifactsによる成果物完了判定が引き続き正しく機能する）:
-#     `git diff main...HEAD -- src/commands/verify.ts` で確認する限り、本Issueの差分は
-#     rootClean()という新規独立エクスポート関数の追加のみであり、checkOutputExists()/
-#     wasEverAddedOrModified()の本体には一切触れていない（ヒットする2件はいずれも
-#     rootClean()のUSAGE文字列内のコメント的説明文であり、コードロジックの変更ではない
-#     ことを目視確認した）。既存の verify.test.ts のうち checkOutputExists()/
-#     wasEverAddedOrModified()を対象とする既存9テスト（下記evidence該当）が本Issue適用後も
-#     無修正で通過することを実測した。
-#   - AC-3（並行する他Issueのブランチ・worktreeへ悪影響を与えない）:
-#     SPEC.mdは検証方法見込みをhybrid（自動化可能な範囲を自動確認し、複数worktreeを跨いだ
-#     並行状態の再現確認は手順明記の上で実行者確認）としていたが、本検証では automated と
-#     判定した。理由: test/integration/root-cleanup.test.ts のAC-3専用テストが、2つの独立
-#     Issue（ISSUE-1/ISSUE-2）それぞれの実worktree・実ブランチをissue startで作成し、
-#     各worktreeにSPEC.md/DESIGN.mdをcheckpointした状態で、mainルート直下に別Issue由来の
-#     混入相当ファイル（4件）を作成した上でroot-cleanup runを実行し、実行前後で他Issueの
-#     worktree内ファイル内容（byte-for-byte）・HEAD SHAが完全一致することをアサートして
-#     おり、SPEC.mdが要求する「複数worktreeを跨いだ並行状態の再現・確認」を人手を介さず
-#     既に機械的に実行・合格していることを確認した。あわせて同テスト内で
-#     `verify worktree-path`・`verify artifacts ISSUE-1 spec` がroot-cleanup run後も
-#     正常終了することを確認しており、worktree命名規則検査・Issue解決系への影響が
-#     無いことも自動検証済みである。よって追加の人手による再現確認工程を要さず
-#     automatedで検証を完結できると判断した。
-#   - AC-4（対策適用後の実地回帰確認）: SPEC.mdはmanualを見込んでいたが、本検証ではhybridと
-#     判定した。root-cleanup workflow自体（agent-skill-chain-root-cleanup.yml）は本worktree内
-#     にのみ存在しmainにはまだ一度も存在せず本番実行実績も無いため、「別workflow（release自動化）
-#     での実績」を単なる類推として使うのではなく、一次的根拠へ論証を強化した: (1) GitHub Actions
-#     はdefault branch上の有効なworkflow定義に対しon.push.branchesを満たすpushで確実にworkflow
-#     runを生成するという、対象workflowに依存しないプラットフォーム仕様（Issue #196のAC-6/AC-7が
-#     用いた[skip ci]の決定論的事実と同種）、(2) secrets.RELEASE_MAIN_PATによるadmin merge
-#     bypass能力はsecret値・リポジトリ設定・branch protection設定に紐づく性質であり参照元
-#     workflowファイルには依存しないため、release自動化での4回以上の本番実績はsecretの効力範囲
-#     という一次的性質を介してroot-cleanup workflowへそのまま引き継がれる、という2点である。
-#     これにより残る真に未検証な要素は「workflow定義ファイル自体の構文・configの正しさ」のみに
-#     絞り込まれ、この点はyamlパッケージによる実parse実測とverify template-syncの実行結果
-#     （配布元テンプレートと展開結果のbyte-for-byte一致）で機械的に確認した。root-cleanup.test.ts
-#     の各テストがブランチ作成・git rm・commit・pushという実git操作を本物のgitリポジトリに対して
-#     実行していること（スタブ化はghコマンドのみ）もあわせて根拠とする。gh-stubが本番のGitHub API
-#     挙動（gh auth status等）を完全に模擬できていない限界は正直に開示した上で、上記の一次的根拠
-#     により補強されるためresult: passと判定した。なおPLAN.md項番7が想定する「VALIDATION.mdへの
-#     証跡記録」は、VALIDATION.md自体がroot-cleanupの削除対象であるため文字通りには実現できず、
-#     Issue #208のクローズ時コメントで代替する旨をAC-4のprocedureに明記した。詳細はAC-4の該当節を
-#     参照。
+#   - AC-1: `npm run build`（tsc）はエラーなく完了した。`npm test`
+#     （node --import tsx --test 経由）で 474 tests / 474 pass / 0 fail / 0 skipped、
+#     duration_ms 200374.21 を実測した。あわせて `git diff main...HEAD --stat` により、
+#     (1) `.github/workflows/` 配下の変更が0件であること（`git diff main...HEAD --stat --
+#     .github/workflows/` の出力が空であることを確認）、(2) `.agent-skill-chain/scripts/
+#     doctor.sh` への1行追加（1 file changed, 1 insertion(+)）が含まれること、の両方を
+#     機械的に確認した。さらに `.github/workflows/agent-skill-chain-release.yml` の
+#     `on.push.paths` 定義を実際に読み、`.agent-skill-chain/**` パターンが列挙されている
+#     こと（`.agent-skill-chain/scripts/doctor.sh` が一致すること）を確認した。以上より
+#     AC-1が要求する2条件（`.github/workflows/`配下非変更・pathフィルタ一致変更を含む）を
+#     いずれも実測で確認できたため、result: pass として記録する。
+#   - AC-2・AC-3: 上記の通り、observationが本質的にまだ行われていないため result: fail
+#     （「未実施」を表す安全側の値であり「失敗」ではない）として記録する。
+#
+# regressionについて: AC-1の検証で実施した `npm test` の全体実行結果（474/474 pass）を
+# regressionの証跡として扱う。本Issueの変更はコメント1行追加のみであり、既存テストへの
+# 影響は生じないことも実測で確認済みである。
 
 schema_version: agent-skill-chain/validation-report/v1
-issue_id: ISSUE-208
-target_sha: d4d099264448ef9236119c1561f574665163768b
+issue_id: ISSUE-211
+target_sha: 4881b82c25abf48d18e50cf3e9f57a805d99ebea
 
 acceptance_criteria:
   - ac_id: AC-1
@@ -82,144 +73,35 @@ acceptance_criteria:
       mode: automated
       result: pass
     evidence:
-      - "test/integration/root-cleanup.test.ts (root-cleanup run: 対象4ファイルが0件のときno-opになり、PR作成・admin mergeを一切行わない)"
-      - "test/integration/root-cleanup.test.ts (root-cleanup run: 対象ファイルが1件以上のとき、該当ファイルのみを短命ブランチで削除しPRをadmin mergeする（無関係ファイルは削除しない）)"
-      - "test/integration/root-cleanup.test.ts (root-cleanup run: 対象4ファイルすべてが存在する場合はすべて削除対象になる)"
-      - "test/integration/root-cleanup.test.ts (root-cleanup run スコープ検査違反（想定外パス混入）: 変更ファイルが対象4ファイル以外を含むPRは自動admin mergeせずhuman_requiredで停止する)"
-      - "test/integration/root-cleanup.test.ts (root-cleanup run スコープ検査違反（削除以外の変更混入）: additions>0のファイルを含むPRは自動admin mergeせずhuman_requiredで停止する)"
-      - "test/integration/root-cleanup.test.ts (root-cleanup run 自己修復: 1回目のadmin merge失敗後、次runは既存のOPEN cleanup PRを再利用し重複作成せず再試行に成功する)"
-      - "test/integration/verify.test.ts (verify root-clean: root直下に対象4ファイルが無ければ成功し、存在すればすべて列挙して失敗する)"
-      - "test/integration/verify.test.ts (verify root-clean: 対象4ファイルのうち一部のみが存在する場合はその分のみを報告する)"
+      - "npm test 実行結果: 474 tests / 474 pass / 0 fail / 0 skipped（duration_ms 200374.21、本worktreeでの実行、2026-07-23実測）"
+      - "npm run build 実行結果: tsc正常終了（エラー0件）"
+      - "git diff main...HEAD --stat -- .github/workflows/ の出力が空（.github/workflows/配下の変更0件を確認）"
+      - "git diff main...HEAD --stat -- .agent-skill-chain/scripts/doctor.sh の出力: 1 file changed, 1 insertion(+)（コメント1行追加を確認）"
+      - ".github/workflows/agent-skill-chain-release.yml の on.push.paths に '.agent-skill-chain/**' が列挙されていることを目視確認（pathフィルタ一致を確認）"
 
   - ac_id: AC-2
     verification:
-      mode: automated
-      result: pass
-      reason: "SPEC.mdはautomated（既存verify artifactsに対する回帰テスト・実行結果の確認）を見込んでおり、その通りgit diffと既存テストの無修正通過のみで機械的に確定できた。"
+      mode: manual
+      result: fail
+      reason: "AC-2はPRがgh pr merge --admin --squashによりmainへマージされた直後のGitHub Actions実地観測を要求する受入条件である。本検証セッション時点（VALIDATION.md作成時点）でgh pr view 212を実行し確認した結果、PR #212はstate: OPEN, mergedAt: nullでありマージ未実施である。したがってAC-2が要求する観測事象（マージ後のワークフロー起動有無の実地観測）自体が本検証時点でまだ発生していないため、この時点でpass/failを確定的に論証できる一次的根拠が存在しない。result: failは「本Issueの変更や設計が失敗した」ことを意味するものではなく、「観測が本検証セッション内では未実施である」ことを表す、schemaがpass|failの2値しか許容しない制約下での安全側（虚偽passを避ける側）の選択である。"
+      procedure: "validation-gate承認後、進行役がPR #212に対しgh pr merge --admin --squashを実行してmainへマージし、マージ直後からGitHub Actions UI（Actionsタブ）およびgh run list等のAPIの双方で、マージcommitを対象としたagent-skill-chain / releaseワークフローの実行有無を、マージ直後から少なくとも20分間観測する。起動した場合は起動時刻・対象commit SHA・実行結果を、起動しなかった場合は20分経過後もUI・API双方で実行回数が0件であったことを記録する。"
+      executor: "進行役（PRマージ後に実施。本検証セッションの実行者ではない）"
     evidence:
-      - "git diff main...HEAD -- src/commands/verify.ts（rootClean()新規関数の追加のみであり、checkOutputExists()/wasEverAddedOrModified()の本体は無変更であることを確認。ヒットする2件はUSAGE文字列内のコメント的説明文のみ）"
-      - "test/integration/verify.test.ts (verify artifacts: spec segmentはSPEC.mdの有無で成否が切り替わる)"
-      - "test/integration/verify.test.ts (verify artifacts: design segmentはDESIGN.md/ADR/PLAN.mdすべて揃って初めて成功する)"
-      - "test/integration/verify.test.ts (verify artifacts: implementation segmentはdefaultBranchとのtestディレクトリ差分を要求し、VALIDATION.mdには依存しない)"
-      - "test/integration/verify.test.ts (verify artifacts: AC-1 codeとtest/差分が揃えばVALIDATION.mdを作成せずにunit_test_resultsが充足される)"
-      - "test/integration/verify.test.ts (verify artifacts: 単一checkout（CI相当）でbaseブランチ未フェッチだとcode判定が失敗し、base branch fetch後は成功する)"
-      - "test/integration/verify.test.ts (verify artifacts: validation segmentはVALIDATION.mdの有無で成否が切り替わり、不正segmentやissue不在はエラーになる)"
-      - "test/integration/verify.test.ts (verify artifacts: SPEC.md/DESIGN.md/PLAN.mdをcommit後に削除しても、履歴上の実績によりspec/designセグメントは成功する)"
-      - "test/integration/verify.test.ts (verify artifacts: VALIDATION.mdをcommit後に削除しても、履歴上の実績によりvalidationセグメントは成功する)"
-      - "test/integration/verify.test.ts (verify artifacts: 対象ファイルを一度もcommitしていない未着手segmentは、無関係なcommitが存在しても引き続き失敗する)"
+      - "gh pr view 212 --json state,mergedAt,number,title 実行結果（本検証時点）: {\"mergedAt\":null,\"number\":212,\"state\":\"OPEN\",\"title\":\"ISSUE-211: 211 actions trigger diagnosis\"}"
+      - "SPEC.md AC-2定義（本Issue内成果物、要求する観測手順の一次情報源）"
 
   - ac_id: AC-3
     verification:
-      mode: automated
-      result: pass
-      reason: "SPEC.mdはhybrid（自動化可能な範囲は自動確認し、複数worktreeを跨いだ並行状態の再現・確認は手順を明記の上で実行者が確認する）を見込んでいたが、実装セグメントが追加した統合テストが2つの独立Issueの実worktree・実ブランチを実際に作成し、root-cleanup run実行前後のファイル内容（byte-for-byte）・HEAD SHA一致を機械的にアサートしており、SPEC.mdが要求する再現確認を人手を介さず既に自動化できているため、追加の人手再現確認工程を要さずautomatedで検証を完結できた。"
-      procedure: "test/integration/root-cleanup.test.ts のAC-3専用テストをnpm test経由で実行し、ISSUE-1/ISSUE-2の2並行worktree・ブランチに対しroot-cleanup runの実行前後でファイル内容・HEAD SHAが不変であること、およびverify worktree-path/verify artifacts ISSUE-1 specが引き続き正常終了することを確認した。"
-      executor: "validation_worker（本検証セッションで実施済み）"
+      mode: manual
+      result: fail
+      reason: "AC-3はAC-2による実地観測結果が得られていることを前提（Given）とする受入条件である。AC-2の観測自体が本検証セッション時点で未実施であるため（PR #212はマージ未実施、gh pr view 212で確認済み）、AC-3が要求する原因切り分けの結論記録はその入力データが存在せず、この時点で導出不可能である。result: failは「結論記録という作業が失敗した」ことを意味するものではなく、「その前提となる観測結果が本検証セッション内では存在しないため結論を確定できない」ことを表す、schemaの2値制約下での安全側の選択である。"
+      procedure: "AC-2の観測完了後、進行役が観測結果（起動有無・起動した場合の時刻や対象SHA、起動しなかった場合の非起動継続時間）を、SPEC.mdに記載済みのIssue #208マージ時の状況（.github/workflows/配下を変更、admin bypassマージ、「1 check was pending」表示）およびIssue #196〜#204マージ時の状況（.github/workflows/配下を変更しない、同じくadmin bypassマージだが毎回release起動）と比較し、原因が(a).github/workflows/配下を変更するマージに固有の問題である、(b) admin bypassマージ全般に共通する問題である、(c) 今回の観測のみでは切り分けられなかった、のいずれに該当するかを結論として明記する。"
+      executor: "進行役（AC-2観測完了後に実施。本検証セッションの実行者ではない）"
     evidence:
-      - "test/integration/root-cleanup.test.ts (root-cleanup run (AC-3): 並行する他Issueのworktree・ブランチのファイル内容・commit履歴は実行前後で一切変化しない)"
-
-  - ac_id: AC-4
-    verification:
-      mode: hybrid
-      result: pass
-      reason: |
-        SPEC.mdはmanual（自動化できない理由: 実際のPRマージという1回性のイベントを伴う実地確認である
-        ため）を見込んでいたが、本検証ではhybridと判定する。前回検証ではrelease自動化の本番実績を
-        根拠にpassとしたが、これはIssue #196/#198/#200/#202/#204が使う別workflowファイル
-        （agent-skill-chain-release.yml）の実績であり、root-cleanup workflow自体（
-        agent-skill-chain-root-cleanup.yml）は本worktree内にのみ存在しmainにはまだ一度も存在せず、
-        当然一度も実行されていない。これを別workflowでの実績からの類推のみに頼るのは、Issue #196の
-        AC-6/AC-7が用いた「[skip ci]はGitHub公式仕様が保証する決定論的事実」という一次的根拠と
-        比べて強度が弱いという指摘は妥当であるため、以下のとおり論証を類推から一次的根拠へ強化する。
-
-        (1) 一次的根拠その1（GitHub Actionsのプラットフォーム仕様）: GitHub Actionsは、default
-        branch上にpush時点で存在する有効なworkflow定義ファイルに対し、on.push.branchesの条件を
-        満たすpushが発生すれば確実にworkflow runを生成する。これは経験的観測を要する経験則ではなく、
-        GitHub公式のプラットフォーム動作仕様であり、Issue #196のAC-6/AC-7が用いた「[skip ci]を
-        含むpushはworkflow runを生成しない」という決定論的事実と同種の、対象workflowが何であるかに
-        依存しない一次的根拠である。
-
-        (2) 一次的根拠その2（secretの効力範囲は参照元workflowに依存しない）: secrets.
-        RELEASE_MAIN_PATによるadmin merge bypass能力（branch protectionのbypass_actorsとして
-        登録された同一PAT・同一リポジトリ・同一permission scope）は、そのsecret値・リポジトリ設定・
-        branch protection設定そのものに紐づく性質であり、どのworkflowファイルのどのstepから
-        `env: GH_TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}` として参照されるかには技術的に依存しない
-        （GitHub Actionsのsecrets機構は参照元workflowを区別して権限を変えることをしない）。
-        agent-skill-chain-release.ymlでの4回以上の本番実績は、単なる「別workflowでの成功例からの
-        類推」ではなく、secretの効力範囲という一次的性質を根拠に、同一secretを参照する
-        agent-skill-chain-root-cleanup.ymlへそのまま引き継がれると論証できる。
-
-        (3) 残る真に未検証な要素の絞り込み: 以上(1)(2)により、admin merge bypassという権限行使
-        そのものの成否は一次的根拠で保証される。残る真に未検証な要素は「root-cleanup workflow
-        定義ファイル自体の構文・configが正しいか」という一点のみに絞り込まれる。この点は本検証で
-        `yaml`パッケージ（src/lib/yaml-io.tsが依存する同一ライブラリ）により
-        .github/workflows/agent-skill-chain-root-cleanup.ymlを実際にparseし構文エラーがないこと、
-        on.push.branches: [main]・jobs.root-cleanupが期待通り読み取れることを実測した。また
-        `node bin/agents-md.js verify template-sync .`を実行し、配布元テンプレート
-        （.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-root-cleanup.yml）
-        と展開結果（.github/workflows/agent-skill-chain-root-cleanup.yml）がbyte-for-byte一致
-        すること（diffで確認済み、verify template-sync自体もexit 0）を実測しており、これは
-        implementation-gate/design-gateのレビュー済み内容がそのまま配布されることの機械的保証で
-        ある。
-
-        (4) git操作自体は本物: test/integration/root-cleanup.test.tsの各テストは、chore/
-        root-cleanup-*ブランチの作成・対象ファイルのgit rm・commit・実gitリポジトリへのpushを、
-        スタブではなく本物のgitバイナリで実行しており、スタブ化されているのはghコマンドのみである
-        （test/integration/release.test.tsと同一のテスト方式）。gh呼び出し引数自体（--admin
-        --squash --subject 'chore: remove stray root-level issue segment artifacts [skip ci]'
-        という固定文言、headブランチ名のchore/root-cleanup-<timestamp>パターン、スコープ検査
-        違反時にmergeが一切呼ばれないこと、admin merge失敗後の自己修復）は実コマンド経路（ビルド後の
-        bin/agents-md.jsを子プロセスとして実行）で検証している。
-
-        (5) 正直な開示（gh-stubの限界）: test/helpers/gh-stub.tsのgh auth statusは引数を見ずに
-        無条件で終了コード0を返すなど、本番のGitHub API認証・応答・実branch protectionの挙動を
-        完全には模擬できていない。この限界は隠さず記録する。ただし(1)(2)の一次的根拠が「実際の
-        GitHub API上でこのbypassパターンが機能するか」という論点そのものを、参照元workflowに
-        依存しない性質として既に保証しているため、gh-stubの模擬限界は追加の実地確認を待たねば
-        result: passと判定できない理由にはならないと判断する。
-
-        以上(1)〜(4)により、本検証時点でresult: passと積極的に判定する。それでもなお
-        root-cleanup workflow自体の初回本番実行という一回性のイベントは残るため、procedureに
-        定める事後確認（belt-and-suspenders）で補う。
-      procedure: |
-        本Issue（#208）のPRがmainへマージされた後、進行役が以下を事後確認する。
-        (1) `gh run list --workflow=agent-skill-chain-root-cleanup.yml` で、マージによるmainへの
-        pushを契機にワークフローが起動したことを確認する。
-        (2) ワークフローのログから、対象4ファイル（Issue #202由来の既存残存分を含む）が検出され、
-        chore/root-cleanup-*ブランチの作成・PR作成・admin mergeが行われたか、あるいは対象0件で
-        no-opだったかを確認する。
-        (3) admin mergeが行われた場合は、そのPRのdiffがSPEC.md/DESIGN.md/PLAN.md/VALIDATION.mdの
-        削除のみで構成されていること（無関係な変更を含まないこと）を確認する。
-        (4) mainの最新HEAD直下にSPEC.md/DESIGN.md/PLAN.md/VALIDATION.mdが存在しないことを
-        `git ls-tree`等で確認する。
-        (5) `.github/workflows/agent-skill-chain-reconcile.yml`のbranches-ignoreに
-        `chore/root-cleanup-*`が反映されていることを前提に、cleanupブランチへのpushで
-        reconcileジョブの不要な失敗ノイズが発生していないことをあわせて確認する。
-
-        PLAN.md項番7「実地回帰確認」との整合について: PLAN.md項番7は「証跡をVALIDATION.mdへ記録
-        する」と記載しているが、VALIDATION.md自体がroot-cleanup機構によりmainから削除される対象
-        4ファイルの1つであるため、本Issue自身のマージ後にmain上のVALIDATION.mdへ実地確認結果を
-        追記することは、その追記自体が次のroot-cleanup runにより削除されうる（あるいはmain直下に
-        当該ファイルを恒久残存させてしまいAC-1と自己矛盾する）という構造的な制約があり、文字通りの
-        実現はできない。したがって、上記(1)〜(5)の事後確認結果は、VALIDATION.mdファイルへの追記
-        ではなく、Issue #208のクローズ時コメント（GitHub Issueコメント、Git管理下ではないが
-        GitHub側に恒久的に保持されIssueから常時参照可能）として進行役が記録する。これはPLAN.md
-        項番7が意図する「証跡の恒久的記録」という目的を、本Issueが解決しようとしている問題
-        （成果物ファイルのmain root直下への恒久混入）を再発させない形で実現する代替手段であり、
-        本節に明記することでPLAN.mdとの矛盾を解消する。
-      executor: "validation_worker（(1)〜(4)の一次的根拠に基づく検証・PLAN.md項番7との整合確認を本検証セッションで実施済み）／進行役（マージ実施後の人間またはマージを実施したエージェントが、procedureの事後確認・Issue #208クローズ時コメントへの証跡記録を実施予定）"
-    evidence:
-      - "test/integration/root-cleanup.test.ts（AC-1〜AC-3節記載の全7テスト。gh stub経由でPR作成・admin merge呼び出し引数・スコープ検査・自己修復までを実gitコマンド経路で検証）"
-      - "test/integration/verify.test.ts (verify root-clean: root直下に対象4ファイルが無ければ成功し、存在すればすべて列挙して失敗する)"
-      - "test/integration/verify.test.ts (verify root-clean: 対象4ファイルのうち一部のみが存在する場合はその分のみを報告する)"
-      - "git log（chore(release): v0.2.1/v0.2.2/v0.2.3 の複数squashコミット — secrets.RELEASE_MAIN_PATによるgh pr merge --adminが本番で4回以上正しく機能した実績。secretの効力範囲は参照元workflowに依存しないためroot-cleanup runへも引き継がれる、という一次的根拠の裏付け）"
-      - "node -e \"import('yaml').then(({parse})=>...)\" による .github/workflows/agent-skill-chain-root-cleanup.yml の実parse実測（構文エラー無し、on.push.branches=[main]・jobs.root-cleanupを正しく読み取れることを確認）"
-      - "node bin/agents-md.js verify template-sync . の実行結果（exit 0）と、配布元テンプレート（.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-root-cleanup.yml）と展開結果（.github/workflows/agent-skill-chain-root-cleanup.yml）のdiffがbyte-for-byte一致することの実測（workflow定義ファイル自体の構成正しさの機械的保証）"
-      - "test/helpers/gh-stub.ts（gh auth statusが無条件成功を返す等、本番GitHub API挙動を完全には模擬しない制約を確認。この限界を正直に開示した上で(1)(2)の一次的根拠により補強）"
-      - "docs/adr/ADR-0007-stray-root-artifact-post-merge-cleanup.md（status: accepted。本番admin merge発動条件の境界解釈とリポジトリオーナー承認の記録）"
+      - "gh pr view 212 --json state,mergedAt,number,title 実行結果（本検証時点）: {\"mergedAt\":null,\"number\":212,\"state\":\"OPEN\",\"title\":\"ISSUE-211: 211 actions trigger diagnosis\"}"
+      - "SPEC.md AC-3定義（本Issue内成果物、要求する比較対象・結論区分の一次情報源）"
 
 regression:
   executed: true
   evidence:
-    - "npm test（node --import tsx --test、474 tests / 474 pass / 0 fail / 0 skipped、duration_ms 166321.14、本worktreeで実行し全通過を確認）"
-    - "npm run build（tsc、エラーなく完了）"
+    - "npm test 全体実行結果: 474 tests / 474 pass / 0 fail / 0 skipped（duration_ms 200374.21、本worktreeでの実行、2026-07-23実測）"
