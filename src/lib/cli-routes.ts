@@ -20,6 +20,7 @@ import * as report from '../commands/report.js';
 import * as testing from '../commands/testing.js';
 import * as worker from '../commands/worker.js';
 import * as release from '../commands/release.js';
+import * as rootCleanup from '../commands/root-cleanup.js';
 
 export type Handler = (args: string[]) => Promise<number> | number;
 
@@ -56,6 +57,7 @@ export const routes: Record<string, Handler> = {
   'release bump': release.bump,
   'release tag': release.tag,
   'release publish': release.publish,
+  'root-cleanup run': rootCleanup.run,
   'test run': testing.run,
   'lint vocab': lint.vocab,
   'lint references': lint.references,
@@ -67,6 +69,7 @@ export const routes: Record<string, Handler> = {
   'verify branch-name': verify.branchName,
   'verify doc-length': verify.docLength,
   'verify gate-report': verify.gateReport,
+  'verify root-clean': verify.rootClean,
   'verify template-sync': verify.templateSync,
   'verify worktree-path': verify.worktreePath,
   setup: setup.setup,

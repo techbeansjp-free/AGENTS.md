@@ -3,66 +3,76 @@
 このファイルは Issue 毎に複製して使う雛形である（セグメント: spec、成果物: SPEC.md、ゲート: spec-gate）。
 -->
 
-# SPEC: verify-artifactsのunit_test_results判定がVALIDATION.mdの存在に不適切に結合している
+# SPEC: PRマージのたびにSPEC/DESIGN/PLAN/VALIDATION.mdがmainルート直下へ恒久的に混入する構造的欠陥の解消
 
-- Issue: `ISSUE-202`
+- Issue: `ISSUE-208`
 - 作成者: `spec_worker`
-- 対象ブランチ: `bugfix/202-unit-test-results-validation-coupling`
+- 対象ブランチ: `process/208-stray-root-artifact-permanence`
 
 ## 目的・背景
 
-`src/commands/verify.ts` の `checkOutputExists()` において、implementationセグメントの必須成果物 `unit_test_results` の充足判定が、本来validationセグメント専用の成果物である `VALIDATION.md` の存在（または履歴上の実績）で代替されている設計上の欠陥を修正する。
+AGENTS.md §ディレクトリ構成は、main リポジトリルート直下を `AGENTS.md`・`CLAUDE.md`・`README.md`・`docs/`・`.github/`・`.worktrees/` のみに限定すると規定している。しかし現行の運用では、Issue 毎の worktree 直下で作業ワーカーが作成する当該 Issue 固有のセグメント成果物ファイル（`SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md`）が、squash merge によって PR がマージされるたびに main のリポジトリルート直下へ持ち込まれ、次の Issue がマージされるまで恒久的に残存し続ける。本 Issue は、この「マージのたびに再生産される」構造的な欠陥を解消することを目的とする。
 
-`.agent-skill-chain/config/segments.yaml` では、成果物の所属セグメントは以下のように定義されている。
+Issue #200 は、当時 main ルート直下に混入していた同4ファイルを削除するとともに、`checkOutputExists()`（`src/commands/verify.ts`）が「現在の worktree にファイルが存在するか」のみで成果物完了を判定していたために、成果物ファイル自体を意図的に削除する Issue 自身を誤って不合格にしてしまう自己言及的な欠陥を、`wasEverAddedOrModified()`（base ブランチとの `git log --diff-filter=AM --name-only base..HEAD` による履歴上の実績確認をOR条件で加えるフォールバック）の導入で修正した。この判定は当該 Issue 自身の worktree・ブランチの履歴のみを見るため、main ルート直下に前 Issue の成果物ファイルが残存しているか否かには依存しない。
 
-- implementationセグメントの `outputs`: `code`, `unit_test_results`
-- validationセグメントの `outputs`: `acceptance_test_results`, `regression_test_results`
+Issue #200 自身の SPEC.md は、次のとおり「マージのたびに main へ恒久的に混入する」構造的原因そのものへの恒久対策を明示的にスコープ外とし、別 Issue での検討へ先送りしていた。
 
-しかし現行の `checkOutputExists()` は、`unit_test_results` / `acceptance_test_results` / `regression_test_results` の3つすべてを同一の条件（`VALIDATION.md` が worktree 内に存在する、または base ブランチからの分岐後にadd/modifyされた履歴がある）で判定している。`VALIDATION.md` はvalidationセグメントでのみ作成されるファイルであるため、**implementationセグメントの完了時点（validationセグメント着手前）では、`unit_test_results` の判定は必ず失敗する**。これは、implementationセグメントの成果物充足を、まだ着手していないはずの後続segmentの成果物の存在で判定するという、セグメント間の依存方向が逆転した状態であり、`.agent-skill-chain/config/segments.yaml` が定めるセグメントの入出力契約と矛盾する。
+> 「PR マージ後にセグメント成果物ファイルが main へ恒久的に混入する」という、より一般的な構造的原因（マージ時にこれらのファイルを main から除外する仕組みが存在しないこと）の恒久的解決策の設計・実装。別 Issue で検討する。
 
-本欠陥は Issue #200（mainルート直下に混入した SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md の削除、および削除に伴う `verify-artifacts` の自己言及的誤判定の修正）の実装レビュー中に発見された。Issue #200 が導入した `wasEverAddedOrModified()`（現在ファイルが存在しない場合でも、base ブランチからの分岐後にadd/modifyされた履歴があれば「実績あり」とみなすフォールバック）は `unit_test_results` の判定にも適用されているが、これは「存在」の確認手段を1つ追加しただけであり、判定対象が `VALIDATION.md` であるという結合構造自体は変えていない。したがって本欠陥は Issue #200 の変更が導入したものではなく、Issue #200 以前から存在し、Issue #200 の変更後も解消されていない。
+この別 Issue はこれまで起票されていなかった。実際、`git log --oneline -- SPEC.md DESIGN.md PLAN.md VALIDATION.md` で確認する限り、Issue #200（マージ commit `d772946`）以降にマージされた Issue のうち `#204`・`#202` は、自身の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を root 直下から削除せずにマージされている（`#198`（マージ commit `b40ded4`）はこの4ファイルへの変更を一切含まないマージであったため、本構造的欠陥の実例ではない）。そのため、Issue #202 マージ後の現在の main HEAD でも、この4ファイルは Issue #202 由来の内容のまま root 直下に残存していることを本 Issue の起票にあたり実測で確認した。新規 Issue の worktree は常に main（`defaultBranch()`）から分岐するため、この4ファイルが root 直下に残存している限り、新規 worktree 直下には最初から前回マージ Issue の成果物ファイルが存在してしまい、AGENTS.md が定める root 直下構成の不変条件に違反した状態がマージのたびに再生産される。
 
-これまで、mainのルート直下に前Issue由来の `VALIDATION.md` が恒久的に混入し続けていた（Issue #200 が修正する別のバグ）ため、新規Issueのworktreeにも常に無関係な `VALIDATION.md` が最初から存在しており、この既存の欠陥が偶然マスクされ続けていた。Issue #200 がその混入を修正した結果、この隠れていた欠陥が露呈した。
+さらに、複数 Issue が並行して存在する期間に、あるIssueのマージによって main 上のこれら4ファイルの内容が別 Issue 由来の内容へ変化した場合、他の並行 Issue のブランチ側でも同名ファイルを変更していると、次のリベース・マージ時に想定外の削除/変更コンフリクトが発生しうることが運用上確認されている。
+
+なお、この恒久混入は副作用として Issue #202（`unit_test_results` 判定が `VALIDATION.md` の存在に不適切に結合していた欠陥）を長期間マスクし続けていたことが判明しているが、これは Issue #202 で独立に対応済みであり、本 Issue の対象外とする。
 
 ## 要求 → 要件 → 受入条件
 
 ### 要求
 
-`agent-skill-chain verify artifacts <issue_id> implementation` が、validationセグメントの成果物（`VALIDATION.md`）の有無に左右されず、implementationセグメント自身の作業実績のみに基づいて `unit_test_results` の充足を正しく判定すること。同時に、validationセグメントの既存判定（`acceptance_test_results`/`regression_test_results` の `VALIDATION.md` ベースの判定）は現状のまま維持されること。
+通常の Issue 開発フロー（spec→design→implementation→validation→マージ）を経ても、その Issue 自身が一時的に作成した `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` が main リポジトリルート直下へ恒久的に残存しないようにしたい、というメンテナ（進行役）からの要求。あわせて、この対策の導入によって、Issue #200 で修正済みの verify-artifacts の成果物完了判定（履歴ベースのフォールバックを含む）が壊れないこと、複数 Issue の並行作業に悪影響（想定外のマージコンフリクトの恒常化等）を与えないことも要求に含む。
 
 ### 要件
 
-- 要件1: `checkOutputExists()` における `unit_test_results` の判定条件から、`VALIDATION.md` の存在・履歴への依存を除去する。
-- 要件2: 要件1の判定条件は、implementationセグメント自身の作業（例: 実装セグメントでのテスト実行・追加を示す何らかの証跡）に基づくものへ置き換える。この証跡として具体的に何を採用するか（例: テスト実行ログの記録方式、専用の証跡ファイルの形式・命名等）はDESIGN段階で確定する。
-- 要件3: `acceptance_test_results`/`regression_test_results` の判定条件（`VALIDATION.md` の存在または履歴上の実績）は変更しない。
-- 要件4: 通常のIssue開発フロー（spec→design→implementation→validationの順で進む）において、`agent-skill-chain verify artifacts` が各セグメントで意図したタイミング（そのセグメントの成果物が揃った時点）で正しく合格・不合格になることを、既存の自動テスト群の回帰確認および新規テストで担保する。既存テストのうち、implementationセグメントの合格条件として `VALIDATION.md` の作成を前提としているものは、要件1〜3の変更後は前提が変わるため、DESIGN段階で更新方針を確定する。
+- 要件1: 通常の Issue 開発フロー（spec→design→implementation→validation→マージ）の完了後、main リポジトリルート直下に、当該 Issue が一時的に作成した `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` が残存しないこと。
+- 要件2: 要件1の対策適用後も、`checkOutputExists()`／`wasEverAddedOrModified()`（`src/commands/verify.ts`）による各セグメントの成果物完了判定が、本来完了すべきタイミングで正しく合格・不合格を判定し続けること。
+- 要件3: 要件1の対策適用後も、複数 Issue が並行して存在する状況において、あるIssueのマージが他の並行 Issue のブランチ・worktree 内の同名成果物ファイルへ悪影響（想定外のマージ/削除コンフリクトの恒常的な発生等）を与えないこと。
+- 要件4: 要件1〜3の対策を、実際に1つ以上の Issue を通しでマージする形で実地回帰確認し、main ルート直下に成果物ファイルが混入しないことを確認すること。
+- 要件5: `.agent-skill-chain/templates/issue/` 配下の雛形ファイル自体、および4セグメント・4ゲートモデル自体（`.agent-skill-chain/config/segments.yaml` の `outputs` の意味的定義等）は変更しないこと。
+- 要件6: 要件1の対策として「誰が／どの仕組みが root 直下の成果物ファイルを扱うか」を DESIGN 段階で具体化する際は、AGENTS.md I5（進行役の純粋性：進行役は成果物の著述・内容の取り込みを行わない）との整合を確認すること。
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: implementationセグメントの `unit_test_results` 判定が `VALIDATION.md` の存在に依存しない
+#### AC-1: 通常フロー完了後にmainルート直下へ成果物ファイルが恒久的に残存しない
 
-- Given: worktree内で `code`（implementationセグメントの成果物）は充足済みである状態。worktreeルート直下に前Issue由来の無関係な `VALIDATION.md` が混入している場合（別途起票される構造的な穴が未解決の間は起こりうる）は、検証前にそれを除去した状態、または当該Issue自身のvalidationセグメントで新規作成されたものではないことを確認した状態を前提とする
-- When: implementationセグメント自身の作業実績（`unit_test_results` の新しい判定条件が要求する証跡）を作成したうえで `agent-skill-chain verify artifacts <issue_id> implementation` を実行する
-- Then: `unit_test_results` は欠落として報告されず、implementationセグメントの成果物チェック全体が合格する（このとき当該Issueのvalidationセグメントによる `VALIDATION.md` の作成・参照は行われていない）
-- 検証方法見込み: `automated`（`test/integration/verify.test.ts` に新規テストケースを追加し、`VALIDATION.md` を作成しない前提で `unit_test_results` が充足されることを検証する）
+- Given: あるIssueが通常の Issue 開発フロー（spec→design→implementation→validation）の全セグメントを完了し、対応する PR が main へマージされた状態
+- When: マージ後の main HEAD のリポジトリルート直下を確認する
+- Then: 当該 Issue 自身が一時的に作成した `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` のいずれも、リポジトリルート直下（`.agent-skill-chain/` 配下・`.worktrees/` 配下・他 Issue の worktree を除く）に存在しない
+- 検証方法見込み: `automated`（マージ後の main HEAD に対する root 直下ファイル一覧チェック）
 
-#### AC-2: validationセグメントの既存判定に影響を与えない
+#### AC-2: verify-artifactsによる成果物完了判定が引き続き正しく機能する
 
-- Given: worktree内に `VALIDATION.md` が存在する、または base ブランチからの分岐後に add/modify された履歴がある状態
-- When: `agent-skill-chain verify artifacts <issue_id> validation` を実行する
-- Then: `acceptance_test_results`/`regression_test_results` は本Issueの変更前と同じ条件（`VALIDATION.md` の存在または履歴上の実績）で充足済みと判定され、本Issueによる回帰が無い
-- 検証方法見込み: `automated`（既存の `test/integration/verify.test.ts` 内のvalidationセグメント関連テストが本Issue適用後も無修正で通過することを確認する）
+- Given: AC-1 の対策が適用されている状態で、あるIssueが spec・design・implementation・validation の各セグメントを順に進めている（各セグメント完了直後、および未完了の時点をそれぞれ含む）
+- When: 各セグメントの完了時点・未完了時点それぞれで `verify artifacts` （`checkOutputExists()`／`wasEverAddedOrModified()` による履歴ベースのフォールバックを含む）を実行する
+- Then: 各セグメントが本来完了すべきタイミングでは合格、未完了の時点では不合格と、Issue #200 導入時と同等に正しく判定される（AC-1 の対策導入によって誤って合格・不合格が反転する回帰が発生しない）
+- 検証方法見込み: `automated`（既存の `verify artifacts` に対する回帰テスト・実行結果の確認）
 
-#### AC-3: 通常のIssue開発フローで各セグメントのverify artifactsが意図したタイミングで合否判定される
+#### AC-3: 並行する他Issueのブランチ・worktreeへ悪影響を与えない
 
-- Given: spec→design→implementation→validationの順で進む通常のIssue開発フロー（各セグメントの成果物を1つずつ揃えていく状態遷移）
-- When: 各セグメント完了直前・直後のそれぞれの時点で `agent-skill-chain verify artifacts <issue_id> <segment>` を実行する
-- Then: 各セグメントの判定は、そのセグメント自身の成果物（`.agent-skill-chain/config/segments.yaml` が定義する `outputs`）のみに基づいて行われ、未着手の後続セグメントの成果物（例: implementation完了時点で存在しない `VALIDATION.md`）の有無によって不当に不合格にならない。逆に、後続セグメントの成果物が先行セグメントの判定を代替してすり抜けさせることもない
-- 検証方法見込み: `hybrid`（`test/integration/verify.test.ts` の自動テストで4セグメント通しの合否遷移を検証しつつ、AC-1/AC-2との整合をコードレビューで確認する）
+- Given: 複数の Issue が並行してそれぞれ独自のブランチ・worktree で作業中であり、各々が自身の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を保持している状態
+- When: そのうち1つの Issue の PR が AC-1 の対策のもとで main へマージされる
+- Then: 他の並行 Issue のブランチ・worktree 内の同名ファイルの内容・Git 履歴が意図せず改変されず、当該他 Issue が後日 main と同期（rebase・merge 等）する際にも、この対策自体が原因の想定外の削除/変更コンフリクトが恒常的に発生しない
+- 検証方法見込み: `hybrid`（自動化可能な範囲は自動確認し、複数 worktree を跨いだ並行状態の再現・確認は手順を明記した上で実行者が確認する。自動化できない理由・手順・実行者は VALIDATION.md で確定する）
+
+#### AC-4: 対策適用後の実地回帰確認
+
+- Given: AC-1〜AC-3 の対策が適用された状態
+- When: 実際に1つ以上の Issue を通常の Issue 開発フロー（spec→design→implementation→validation→マージ）で最後までマージする
+- Then: マージ後の main ルート直下に、その Issue 自身の `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` が混入していないことが実地で確認される
+- 検証方法見込み: `manual`（自動化できない理由: 実際の PR マージという1回性のイベントを伴う実地確認であるため。検証手順・実行者・証跡は VALIDATION.md で確定する）
 
 ## スコープ外
 
-- `unit_test_results` の充足証跡として何を採用するか（例: テスト実行ログの記録方法、専用の証跡ファイルの形式・生成タイミング等）の具体的な設計は、本SPEC.mdの範囲外でありDESIGN段階で確定する。
-- `code`・`ADR` など、`unit_test_results` 以外の既存 `checkOutputExists()` 判定ロジックの変更は対象外とする。
-- `.agent-skill-chain/config/segments.yaml` のセグメント構成・`outputs` 一覧自体の変更（セグメントの追加・変更はAGENTS.mdが定める破壊的変更であり、別途ADRを要する）は対象外とする。
-- PRマージのたびにSPEC.md/DESIGN.md/PLAN.md/VALIDATION.mdがmainルート直下へ恒久的に混入するという構造的な穴自体（Issue #200のSPEC.mdが「恒久的解決策は別Issueで検討する」と明記した事項であり、本SPEC.md作成時点でその別Issueはまだ起票されていない）の解決は対象外とする。本Issue（#202）は、この構造的な穴の有無に関わらず `checkOutputExists()` の判定ロジック自体の欠陥を修正するものであり、両者は独立した問題として扱う。
+- `checkOutputExists()` の判定ロジック自体の詳細変更（Issue #202 が別途対応済み）。
+- `.agent-skill-chain/templates/issue/` 配下の雛形ファイル自体の変更。
+- 4セグメント・4ゲートモデル自体の変更（AGENTS.md が定める破壊的変更であり ADR を要する。本 Issue はあくまで運用上の恒久混入の解消が対象）。
+- 対策の具体的な実現方式（例: マージ前に成果物ファイルを削除する、マージ時に除外する等）そのものの設計・実装。これは DESIGN 段階の責務であり、本 SPEC では要求・要件・受入条件のみを定める。
