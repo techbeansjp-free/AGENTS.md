@@ -1,0 +1,164 @@
+// Issue #219: Derive issue_id ステップの bash 実体を実行して判定挙動を実測検証する。
+// 静的パーステスト（dependabot-ci-skip.test.ts）が YAML 構造を固定するのに対し、本テストは
+// run スクリプト本文を抽出し GitHub Actions 相当（bash -e -o pipefail、GITHUB_OUTPUT）で実行し、
+// 終了コードと出力を確認する。ci の ACTOR は YAML の env 式を解決して注入するため、
+// env 由来を github.actor へ戻す退行はシナリオ(c)の失敗として検出される。
+// reconcile の gh api は PATH 上のモック gh（GH_MOCK_AUTHOR を返す）で置換する。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { readYamlFile } from '../../src/lib/yaml-io.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const CI_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-ci.yml');
+const RECONCILE_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-reconcile.yml');
+
+interface Step {
+  id?: string;
+  run?: string;
+  env?: Record<string, string>;
+}
+
+interface Workflow {
+  jobs: Record<string, { steps: Step[] }>;
+}
+
+function ctxStep(file: string, job: string): Step {
+  const wf = readYamlFile<Workflow>(file);
+  const step = wf.jobs[job].steps.find((s) => s.id === 'ctx');
+  assert.ok(step?.run, `${job} に id 'ctx' の run ステップが存在すること`);
+  return step as Step;
+}
+
+const DEPENDABOT = 'dependabot[bot]';
+const HUMAN = 'adachi-tatsuru';
+
+// YAML の env.ACTOR 式を解決する。push実行者とPR作成者のどちらを参照しているかで注入値が変わる。
+function resolveActor(expr: string | undefined, pusher: string, prAuthor: string): string {
+  if (expr === '${{ github.actor }}') return pusher;
+  if (expr === '${{ github.event.pull_request.user.login }}') return prAuthor;
+  assert.fail(`env.ACTOR の式が未知の形式です: ${expr}`);
+}
+
+interface RunResult {
+  status: number;
+  outputs: Record<string, string>;
+  stderr: string;
+}
+
+function runStep(run: string, env: Record<string, string>, mockGhAuthor?: string): RunResult {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue219-exec-'));
+  try {
+    const script = path.join(dir, 'step.sh');
+    const outFile = path.join(dir, 'github_output');
+    fs.writeFileSync(script, run);
+    fs.writeFileSync(outFile, '');
+    let pathEnv = process.env.PATH ?? '';
+    if (mockGhAuthor !== undefined) {
+      const bin = path.join(dir, 'bin');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(
+        path.join(bin, 'gh'),
+        `#!/usr/bin/env bash\nif [[ -n "$GH_MOCK_AUTHOR" ]]; then echo "$GH_MOCK_AUTHOR"; fi\n`,
+        { mode: 0o755 },
+      );
+      pathEnv = `${bin}:${pathEnv}`;
+    }
+    const res = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', script], {
+      env: {
+        PATH: pathEnv,
+        GITHUB_OUTPUT: outFile,
+        GH_MOCK_AUTHOR: mockGhAuthor ?? '',
+        ...env,
+      },
+      encoding: 'utf8',
+    });
+    const outputs: Record<string, string> = {};
+    for (const line of fs.readFileSync(outFile, 'utf8').split('\n')) {
+      const eq = line.indexOf('=');
+      if (eq > 0) outputs[line.slice(0, eq)] = line.slice(eq + 1);
+    }
+    return { status: res.status ?? -1, outputs, stderr: res.stderr };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// --- ci.yml: Derive issue_id ---
+
+function runCi(branch: string, pusher: string, prAuthor: string): RunResult {
+  const step = ctxStep(CI_BODY, 'verify');
+  const actor = resolveActor(step.env?.ACTOR, pusher, prAuthor);
+  return runStep(step.run as string, { BRANCH: branch, ACTOR: actor });
+}
+
+test('ci実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false', () => {
+  const r = runCi('feature/123-user-authentication', HUMAN, HUMAN);
+  assert.equal(r.status, 0);
+  assert.equal(r.outputs.issue_id, 'ISSUE-123');
+  assert.equal(r.outputs.skip_checks, 'false');
+});
+
+test('ci実行(b): Dependabot が開いた直後の PR は skip_checks=true', () => {
+  const r = runCi('dependabot/npm_and_yarn/typescript-5.5.4', DEPENDABOT, DEPENDABOT);
+  assert.equal(r.status, 0);
+  assert.equal(r.outputs.skip_checks, 'true');
+});
+
+test('ci実行(c): Dependabot PR へ人間が追加 push しても skip_checks=true（push実行者に非依存）', () => {
+  const r = runCi('dependabot/npm_and_yarn/typescript-5.5.4', HUMAN, DEPENDABOT);
+  assert.equal(r.status, 0, `exit=0 であること（stderr: ${r.stderr}）`);
+  assert.equal(r.outputs.skip_checks, 'true');
+});
+
+test('ci実行(d): 人間が dependabot/ ブランチ名を偽装した PR は exit 1 で拒否される', () => {
+  const r = runCi('dependabot/npm_and_yarn/fake', 'impostor-human', 'impostor-human');
+  assert.equal(r.status, 1);
+});
+
+// --- reconcile.yml: Derive issue_id ---
+
+function runReconcile(branch: string, mockGhAuthor: string): RunResult {
+  const step = ctxStep(RECONCILE_BODY, 'reconcile');
+  return runStep(
+    step.run as string,
+    { BRANCH: branch, REPO: 'owner/repo', OWNER: 'owner', GH_TOKEN: 'dummy' },
+    mockGhAuthor,
+  );
+}
+
+test('reconcile実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false', () => {
+  const r = runReconcile('bugfix/219-dependabot-actor-check-pr-author', '');
+  assert.equal(r.status, 0);
+  assert.equal(r.outputs.issue_id, 'ISSUE-219');
+  assert.equal(r.outputs.skip_checks, 'false');
+});
+
+test('reconcile実行(b)(c): 実PR作成者が dependabot[bot] なら push 実行者に関係なく skip_checks=true', () => {
+  const r = runReconcile('dependabot/npm_and_yarn/typescript-5.5.4', DEPENDABOT);
+  assert.equal(r.status, 0, `exit=0 であること（stderr: ${r.stderr}）`);
+  assert.equal(r.outputs.skip_checks, 'true');
+});
+
+test('reconcile実行(d): 偽装ブランチは対応PRなし（empty）で exit 1', () => {
+  const r = runReconcile('dependabot/npm_and_yarn/fake', '');
+  assert.equal(r.status, 1);
+  assert.ok(r.stderr.includes('dependabot[bot]'), '拒否理由に判定基準が含まれること');
+});
+
+test('reconcile実行(d): 偽装ブランチは PR 作成者が人間でも exit 1', () => {
+  const r = runReconcile('dependabot/npm_and_yarn/fake', 'impostor-human');
+  assert.equal(r.status, 1);
+});
+
+test('reconcile実行(e): branch.pattern と衝突する dependabot/223-fake は第1分岐で通常照合される', () => {
+  const r = runReconcile('dependabot/223-fake', '');
+  assert.equal(r.status, 0);
+  assert.equal(r.outputs.issue_id, 'ISSUE-223');
+  assert.equal(r.outputs.skip_checks, 'false');
+});
