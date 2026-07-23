@@ -4,6 +4,7 @@
 // 終了コードと出力を確認する。ci の ACTOR は YAML の env 式を解決して注入するため、
 // env 由来を github.actor へ戻す退行はシナリオ(c)の失敗として検出される。
 // reconcile の gh api は PATH 上のモック gh（GH_MOCK_AUTHOR を返す）で置換する。
+// GH_MOCK_EXIT を非0に設定するとモック gh はレート制限等の API 障害を模擬して非0終了する。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -64,7 +65,7 @@ function runStep(run: string, env: Record<string, string>, mockGhAuthor?: string
       fs.mkdirSync(bin);
       fs.writeFileSync(
         path.join(bin, 'gh'),
-        `#!/usr/bin/env bash\nif [[ -n "$GH_MOCK_AUTHOR" ]]; then echo "$GH_MOCK_AUTHOR"; fi\n`,
+        `#!/usr/bin/env bash\nif [[ -n "$GH_MOCK_EXIT" && "$GH_MOCK_EXIT" != "0" ]]; then\n  echo "gh: HTTP 403: API rate limit exceeded" >&2\n  exit "$GH_MOCK_EXIT"\nfi\nif [[ -n "$GH_MOCK_AUTHOR" ]]; then echo "$GH_MOCK_AUTHOR"; fi\n`,
         { mode: 0o755 },
       );
       pathEnv = `${bin}:${pathEnv}`;
@@ -121,15 +122,24 @@ test('ci実行(d): 人間が dependabot/ ブランチ名を偽装した PR は e
   assert.equal(r.status, 1);
 });
 
+test('ci実行(e): branch.pattern と衝突する dependabot/223-fake は第1分岐で通常検査される', () => {
+  // 偽装者が人間の場合も、仮に PR 作成者が dependabot[bot] の場合も、第1分岐が先に一致し
+  // issue_id 抽出＋skip_checks=false（検査回避不可）となることを確認する。
+  for (const prAuthor of [HUMAN, DEPENDABOT]) {
+    const r = runCi('dependabot/223-fake', HUMAN, prAuthor);
+    assert.equal(r.status, 0, `PR作成者=${prAuthor} で exit=0 であること（stderr: ${r.stderr}）`);
+    assert.equal(r.outputs.issue_id, 'ISSUE-223');
+    assert.equal(r.outputs.skip_checks, 'false');
+  }
+});
+
 // --- reconcile.yml: Derive issue_id ---
 
-function runReconcile(branch: string, mockGhAuthor: string): RunResult {
+function runReconcile(branch: string, mockGhAuthor: string, mockGhExit?: number): RunResult {
   const step = ctxStep(RECONCILE_BODY, 'reconcile');
-  return runStep(
-    step.run as string,
-    { BRANCH: branch, REPO: 'owner/repo', OWNER: 'owner', GH_TOKEN: 'dummy' },
-    mockGhAuthor,
-  );
+  const env: Record<string, string> = { BRANCH: branch, REPO: 'owner/repo', OWNER: 'owner', GH_TOKEN: 'dummy' };
+  if (mockGhExit !== undefined) env.GH_MOCK_EXIT = String(mockGhExit);
+  return runStep(step.run as string, env, mockGhAuthor);
 }
 
 test('reconcile実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false', () => {
@@ -154,6 +164,15 @@ test('reconcile実行(d): 偽装ブランチは対応PRなし（empty）で exit
 test('reconcile実行(d): 偽装ブランチは PR 作成者が人間でも exit 1', () => {
   const r = runReconcile('dependabot/npm_and_yarn/fake', 'impostor-human');
   assert.equal(r.status, 1);
+});
+
+test('reconcile実行(f): gh api が非0終了する API 障害時は skip されず安全側の exit 1', () => {
+  // 対応 PR が本物の Dependabot 起源であっても、レート制限・認証失敗等で gh api が
+  // 失敗した場合は `|| true` により PR_AUTHOR が空文字となり、照合スキップは許可されない。
+  const r = runReconcile('dependabot/npm_and_yarn/typescript-5.5.4', DEPENDABOT, 1);
+  assert.equal(r.status, 1);
+  assert.notEqual(r.outputs.skip_checks, 'true', 'API障害時に skip_checks=true にならないこと');
+  assert.ok(r.stderr.includes('dependabot[bot]'), '拒否理由に判定基準が含まれること');
 });
 
 test('reconcile実行(e): branch.pattern と衝突する dependabot/223-fake は第1分岐で通常照合される', () => {
