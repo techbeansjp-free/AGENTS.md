@@ -48,33 +48,44 @@ jobs:
         id: ctx
         env:
           BRANCH: ${{ github.head_ref }}
+          ACTOR: ${{ github.actor }}
         run: |
           ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
-          if ! [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
-            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（.agent-skill-chain/config/agent-skill-chain.yaml branch.pattern に非適合）" >&2
+          if [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
+            echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
+            echo "skip_checks=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$ACTOR" == "dependabot[bot]" && "$BRANCH" == dependabot/* ]]; then
+            echo "issue_id=" >> "$GITHUB_OUTPUT"
+            echo "skip_checks=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（.agent-skill-chain/config/agent-skill-chain.yaml branch.pattern に非適合、かつ Dependabot許可リストにも非該当）" >&2
             exit 1
           fi
-          echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
 
       - name: verify-branch-name
+        if: steps.ctx.outputs.skip_checks != 'true'
         run: ./.agent-skill-chain/ci/verify-branch-name.sh
 
       - name: verify-worktree-path
+        if: steps.ctx.outputs.skip_checks != 'true'
         run: ./.agent-skill-chain/ci/verify-worktree-path.sh
 
       - name: verify-template-sync
         run: ./.agent-skill-chain/ci/verify-template-sync.sh
 
       - name: verify-artifacts (対象PRで変更されたセグメントごと)
+        if: steps.ctx.outputs.skip_checks != 'true'
         run: |
           for segment in spec design implementation validation; do
             ./.agent-skill-chain/ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" "$segment"
           done
 
       - name: verify-ac-coverage
+        if: steps.ctx.outputs.skip_checks != 'true'
         run: ./.agent-skill-chain/ci/verify-ac-coverage.sh "${{ steps.ctx.outputs.issue_id }}"
 
       - name: verify-adr (PRで変更されたADRごと)
+        if: steps.ctx.outputs.skip_checks != 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
@@ -85,22 +96,25 @@ jobs:
           done
 
       - name: lint-vocab
+        if: steps.ctx.outputs.skip_checks != 'true'
         run: ./.agent-skill-chain/scripts/lint-vocab.sh
 
       - name: lint-references
+        if: steps.ctx.outputs.skip_checks != 'true'
         run: ./.agent-skill-chain/scripts/lint-references.sh
 
       - name: Fetch base branch for secret scan
-        if: github.base_ref != ''
+        if: github.base_ref != '' && steps.ctx.outputs.skip_checks != 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: git fetch origin "$BASE_REF" --depth=1
 
       - name: lint-secrets (PRで追加された行のみ)
-        if: github.base_ref != ''
+        if: github.base_ref != '' && steps.ctx.outputs.skip_checks != 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: ./.agent-skill-chain/scripts/lint-secrets.sh --diff "origin/$BASE_REF"
 
       - name: adr-lint
+        if: steps.ctx.outputs.skip_checks != 'true'
         run: ./.agent-skill-chain/scripts/adr-lint.sh check

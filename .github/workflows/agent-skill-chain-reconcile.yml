@@ -18,6 +18,8 @@ permissions:
 
 jobs:
   reconcile:
+    if: >-
+      !(github.actor == 'dependabot[bot]' && startsWith(github.ref_name, 'dependabot/'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
