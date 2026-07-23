@@ -48,7 +48,8 @@ jobs:
         id: ctx
         env:
           BRANCH: ${{ github.head_ref }}
-          ACTOR: ${{ github.actor }}
+          # Issue #219: 追加pushで変化するgithub.actorではなく、PRの起源（PR作成者）で判定する
+          ACTOR: ${{ github.event.pull_request.user.login }}
         run: |
           ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
           if [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
