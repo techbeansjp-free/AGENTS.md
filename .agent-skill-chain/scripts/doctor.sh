@@ -2,6 +2,7 @@
 # 正本: AGENTS.md §Coordination Backend / .agent-skill-chain/config/agent-skill-chain.yaml
 #
 # 環境診断（git・gh・Coordination Backend用の認証状態等、必要な外部依存の有無）を検査する。
+# 本スクリプトは読み取り専用の診断であり、リポジトリの状態を変更しない。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
 # `doctor` サブコマンドへの薄いラッパーである（使い方は `doctor -h` 参照）。
