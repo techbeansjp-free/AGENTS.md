@@ -52,19 +52,25 @@
 #     無いことも自動検証済みである。よって追加の人手による再現確認工程を要さず
 #     automatedで検証を完結できると判断した。
 #   - AC-4（対策適用後の実地回帰確認）: SPEC.mdはmanualを見込んでいたが、本検証ではhybridと
-#     判定した。実際にmainへマージしGitHub Actions上でroot-cleanupワークフローが起動する様子を
-#     本検証セッション内で観測することは（マージ自体が進行役の別工程であるため）できないが、
-#     admin merge bypass機構（secrets.RELEASE_MAIN_PAT、gh pr merge --admin --squash --subject）
-#     はIssue #196/#198/#200/#202/#204のリリース自動化で既に4回以上、実際のGitHub Actions上で
-#     正しく機能することが本番実績として証明済みであり（git logで確認できる複数のchore(release)
-#     squashコミット）、root-cleanupが用いるのはこれと全く同一の権限・同一のbypassパターンである。
-#     加えてroot-cleanup.test.tsの各テストはブランチ作成・git rm・commit・pushという実git操作を
-#     本物のgitリポジトリに対して実行しており、スタブ化されているのはghコマンドのみである。
-#     gh-stubが本番のGitHub API挙動を完全に模擬できていない点（gh auth statusが無条件で
-#     終了コード0を返す等）は正直に認めるが、上記の実証済みbypass実績が同型の操作パターンを
-#     補強するため、これらを積み上げた設計・実績ベースの保証で現時点のresult: passの根拠として
-#     十分と判断した。本番のGitHub Actions上での実地確認手順はprocedureに明記し、進行役が
-#     マージ後に実施する。詳細はAC-4の該当節を参照。
+#     判定した。root-cleanup workflow自体（agent-skill-chain-root-cleanup.yml）は本worktree内
+#     にのみ存在しmainにはまだ一度も存在せず本番実行実績も無いため、「別workflow（release自動化）
+#     での実績」を単なる類推として使うのではなく、一次的根拠へ論証を強化した: (1) GitHub Actions
+#     はdefault branch上の有効なworkflow定義に対しon.push.branchesを満たすpushで確実にworkflow
+#     runを生成するという、対象workflowに依存しないプラットフォーム仕様（Issue #196のAC-6/AC-7が
+#     用いた[skip ci]の決定論的事実と同種）、(2) secrets.RELEASE_MAIN_PATによるadmin merge
+#     bypass能力はsecret値・リポジトリ設定・branch protection設定に紐づく性質であり参照元
+#     workflowファイルには依存しないため、release自動化での4回以上の本番実績はsecretの効力範囲
+#     という一次的性質を介してroot-cleanup workflowへそのまま引き継がれる、という2点である。
+#     これにより残る真に未検証な要素は「workflow定義ファイル自体の構文・configの正しさ」のみに
+#     絞り込まれ、この点はyamlパッケージによる実parse実測とverify template-syncの実行結果
+#     （配布元テンプレートと展開結果のbyte-for-byte一致）で機械的に確認した。root-cleanup.test.ts
+#     の各テストがブランチ作成・git rm・commit・pushという実git操作を本物のgitリポジトリに対して
+#     実行していること（スタブ化はghコマンドのみ）もあわせて根拠とする。gh-stubが本番のGitHub API
+#     挙動（gh auth status等）を完全に模擬できていない限界は正直に開示した上で、上記の一次的根拠
+#     により補強されるためresult: passと判定した。なおPLAN.md項番7が想定する「VALIDATION.mdへの
+#     証跡記録」は、VALIDATION.md自体がroot-cleanupの削除対象であるため文字通りには実現できず、
+#     Issue #208のクローズ時コメントで代替する旨をAC-4のprocedureに明記した。詳細はAC-4の該当節を
+#     参照。
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-208
@@ -118,40 +124,63 @@ acceptance_criteria:
       result: pass
       reason: |
         SPEC.mdはmanual（自動化できない理由: 実際のPRマージという1回性のイベントを伴う実地確認である
-        ため）を見込んでいたが、本検証ではhybridと判定し、以下の設計・実績ベースの根拠によりresult:
-        passと積極的に判断する。
+        ため）を見込んでいたが、本検証ではhybridと判定する。前回検証ではrelease自動化の本番実績を
+        根拠にpassとしたが、これはIssue #196/#198/#200/#202/#204が使う別workflowファイル
+        （agent-skill-chain-release.yml）の実績であり、root-cleanup workflow自体（
+        agent-skill-chain-root-cleanup.yml）は本worktree内にのみ存在しmainにはまだ一度も存在せず、
+        当然一度も実行されていない。これを別workflowでの実績からの類推のみに頼るのは、Issue #196の
+        AC-6/AC-7が用いた「[skip ci]はGitHub公式仕様が保証する決定論的事実」という一次的根拠と
+        比べて強度が弱いという指摘は妥当であるため、以下のとおり論証を類推から一次的根拠へ強化する。
 
-        (1) admin merge bypass機構自体の本番実績: root-cleanup runが用いるadmin merge bypass
-        （secrets.RELEASE_MAIN_PAT、gh pr merge --admin --squash --subjectによるbranch protection
-        bypass）は、このリポジトリのrelease自動化（Issue #196/#198/#200/#202/#204）において、
-        既に4回以上、実際のGitHub Actions上で正しく機能することが本番実績として証明済みである
-        （git logで確認できる複数の chore(release): v0.2.1/v0.2.2/v0.2.3 squashコミット、直近では
-        Issue #204のマージによりv0.2.3が同機構経由で発行されている）。root-cleanup runが用いるのは
-        これと全く同一の権限（同一secret）・同一のbypassパターン（gh pr merge --admin --squash
-        --subject）であり、新規の未実証な権限行使ではない。
+        (1) 一次的根拠その1（GitHub Actionsのプラットフォーム仕様）: GitHub Actionsは、default
+        branch上にpush時点で存在する有効なworkflow定義ファイルに対し、on.push.branchesの条件を
+        満たすpushが発生すれば確実にworkflow runを生成する。これは経験的観測を要する経験則ではなく、
+        GitHub公式のプラットフォーム動作仕様であり、Issue #196のAC-6/AC-7が用いた「[skip ci]を
+        含むpushはworkflow runを生成しない」という決定論的事実と同種の、対象workflowが何であるかに
+        依存しない一次的根拠である。
 
-        (2) git操作自体は本物: test/integration/root-cleanup.test.tsの各テストは、chore/
+        (2) 一次的根拠その2（secretの効力範囲は参照元workflowに依存しない）: secrets.
+        RELEASE_MAIN_PATによるadmin merge bypass能力（branch protectionのbypass_actorsとして
+        登録された同一PAT・同一リポジトリ・同一permission scope）は、そのsecret値・リポジトリ設定・
+        branch protection設定そのものに紐づく性質であり、どのworkflowファイルのどのstepから
+        `env: GH_TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}` として参照されるかには技術的に依存しない
+        （GitHub Actionsのsecrets機構は参照元workflowを区別して権限を変えることをしない）。
+        agent-skill-chain-release.ymlでの4回以上の本番実績は、単なる「別workflowでの成功例からの
+        類推」ではなく、secretの効力範囲という一次的性質を根拠に、同一secretを参照する
+        agent-skill-chain-root-cleanup.ymlへそのまま引き継がれると論証できる。
+
+        (3) 残る真に未検証な要素の絞り込み: 以上(1)(2)により、admin merge bypassという権限行使
+        そのものの成否は一次的根拠で保証される。残る真に未検証な要素は「root-cleanup workflow
+        定義ファイル自体の構文・configが正しいか」という一点のみに絞り込まれる。この点は本検証で
+        `yaml`パッケージ（src/lib/yaml-io.tsが依存する同一ライブラリ）により
+        .github/workflows/agent-skill-chain-root-cleanup.ymlを実際にparseし構文エラーがないこと、
+        on.push.branches: [main]・jobs.root-cleanupが期待通り読み取れることを実測した。また
+        `node bin/agents-md.js verify template-sync .`を実行し、配布元テンプレート
+        （.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-root-cleanup.yml）
+        と展開結果（.github/workflows/agent-skill-chain-root-cleanup.yml）がbyte-for-byte一致
+        すること（diffで確認済み、verify template-sync自体もexit 0）を実測しており、これは
+        implementation-gate/design-gateのレビュー済み内容がそのまま配布されることの機械的保証で
+        ある。
+
+        (4) git操作自体は本物: test/integration/root-cleanup.test.tsの各テストは、chore/
         root-cleanup-*ブランチの作成・対象ファイルのgit rm・commit・実gitリポジトリへのpushを、
         スタブではなく本物のgitバイナリで実行しており、スタブ化されているのはghコマンドのみである
-        （test/integration/release.test.tsと同一のテスト方式）。
-
-        (3) gh呼び出し引数自体は統合テストで実測済み: --admin --squash --subject 'chore: remove
-        stray root-level issue segment artifacts [skip ci]'という固定文言、headブランチ名の
-        chore/root-cleanup-<timestamp>パターン、スコープ検査違反時にmergeが一切呼ばれないこと、
-        admin merge失敗後の自己修復（既存OPEN PRの再利用）を、実コマンド経路（ビルド後の
+        （test/integration/release.test.tsと同一のテスト方式）。gh呼び出し引数自体（--admin
+        --squash --subject 'chore: remove stray root-level issue segment artifacts [skip ci]'
+        という固定文言、headブランチ名のchore/root-cleanup-<timestamp>パターン、スコープ検査
+        違反時にmergeが一切呼ばれないこと、admin merge失敗後の自己修復）は実コマンド経路（ビルド後の
         bin/agents-md.jsを子プロセスとして実行）で検証している。
 
-        (4) 正直な開示（gh-stubの限界）: test/helpers/gh-stub.tsのgh auth statusは引数を見ずに
+        (5) 正直な開示（gh-stubの限界）: test/helpers/gh-stub.tsのgh auth statusは引数を見ずに
         無条件で終了コード0を返すなど、本番のGitHub API認証・応答・実branch protectionの挙動を
-        完全には模擬できていない。この限界は隠さず記録する。ただし(1)の本番実績が、gh-stubでは
-        検証できない「実際のGitHub API上でこのbypassパターンが機能するか」という論点そのものを
-        既に同一パターンで4回以上実証済みであるため、この限界は追加の実地確認を待たねば
+        完全には模擬できていない。この限界は隠さず記録する。ただし(1)(2)の一次的根拠が「実際の
+        GitHub API上でこのbypassパターンが機能するか」という論点そのものを、参照元workflowに
+        依存しない性質として既に保証しているため、gh-stubの模擬限界は追加の実地確認を待たねば
         result: passと判定できない理由にはならないと判断する。
 
-        以上(1)〜(3)の設計・コードレベルの保証と、(1)が与える同型bypassパターンの本番実績の
-        積み上げにより、本検証時点でresult: passと判定する。マージ後にしか確認できない残余事項
-        （root-cleanupワークフロー自身の初回本番実行の成否、Issue #202由来の既存残存4ファイルの
-        実際の解消）はprocedureに定める事後確認で補う（belt-and-suspenders）。
+        以上(1)〜(4)により、本検証時点でresult: passと積極的に判定する。それでもなお
+        root-cleanup workflow自体の初回本番実行という一回性のイベントは残るため、procedureに
+        定める事後確認（belt-and-suspenders）で補う。
       procedure: |
         本Issue（#208）のPRがmainへマージされた後、進行役が以下を事後確認する。
         (1) `gh run list --workflow=agent-skill-chain-root-cleanup.yml` で、マージによるmainへの
@@ -166,13 +195,27 @@ acceptance_criteria:
         (5) `.github/workflows/agent-skill-chain-reconcile.yml`のbranches-ignoreに
         `chore/root-cleanup-*`が反映されていることを前提に、cleanupブランチへのpushで
         reconcileジョブの不要な失敗ノイズが発生していないことをあわせて確認する。
-      executor: "validation_worker（(1)〜(4)の設計・実績ベースの検証を本検証セッションで実施済み）／進行役（マージ実施後の人間またはマージを実施したエージェントが、procedureの事後確認を実施予定）"
+
+        PLAN.md項番7「実地回帰確認」との整合について: PLAN.md項番7は「証跡をVALIDATION.mdへ記録
+        する」と記載しているが、VALIDATION.md自体がroot-cleanup機構によりmainから削除される対象
+        4ファイルの1つであるため、本Issue自身のマージ後にmain上のVALIDATION.mdへ実地確認結果を
+        追記することは、その追記自体が次のroot-cleanup runにより削除されうる（あるいはmain直下に
+        当該ファイルを恒久残存させてしまいAC-1と自己矛盾する）という構造的な制約があり、文字通りの
+        実現はできない。したがって、上記(1)〜(5)の事後確認結果は、VALIDATION.mdファイルへの追記
+        ではなく、Issue #208のクローズ時コメント（GitHub Issueコメント、Git管理下ではないが
+        GitHub側に恒久的に保持されIssueから常時参照可能）として進行役が記録する。これはPLAN.md
+        項番7が意図する「証跡の恒久的記録」という目的を、本Issueが解決しようとしている問題
+        （成果物ファイルのmain root直下への恒久混入）を再発させない形で実現する代替手段であり、
+        本節に明記することでPLAN.mdとの矛盾を解消する。
+      executor: "validation_worker（(1)〜(4)の一次的根拠に基づく検証・PLAN.md項番7との整合確認を本検証セッションで実施済み）／進行役（マージ実施後の人間またはマージを実施したエージェントが、procedureの事後確認・Issue #208クローズ時コメントへの証跡記録を実施予定）"
     evidence:
       - "test/integration/root-cleanup.test.ts（AC-1〜AC-3節記載の全7テスト。gh stub経由でPR作成・admin merge呼び出し引数・スコープ検査・自己修復までを実gitコマンド経路で検証）"
       - "test/integration/verify.test.ts (verify root-clean: root直下に対象4ファイルが無ければ成功し、存在すればすべて列挙して失敗する)"
       - "test/integration/verify.test.ts (verify root-clean: 対象4ファイルのうち一部のみが存在する場合はその分のみを報告する)"
-      - "git log（chore(release): v0.2.1/v0.2.2/v0.2.3 の複数squashコミット — secrets.RELEASE_MAIN_PATによるgh pr merge --adminが本番で4回以上正しく機能した実績。root-cleanup runと同一の権限・bypassパターン）"
-      - "test/helpers/gh-stub.ts（gh auth statusが無条件成功を返す等、本番GitHub API挙動を完全には模擬しない制約を確認。この限界を正直に開示した上で(1)の本番実績により補強）"
+      - "git log（chore(release): v0.2.1/v0.2.2/v0.2.3 の複数squashコミット — secrets.RELEASE_MAIN_PATによるgh pr merge --adminが本番で4回以上正しく機能した実績。secretの効力範囲は参照元workflowに依存しないためroot-cleanup runへも引き継がれる、という一次的根拠の裏付け）"
+      - "node -e \"import('yaml').then(({parse})=>...)\" による .github/workflows/agent-skill-chain-root-cleanup.yml の実parse実測（構文エラー無し、on.push.branches=[main]・jobs.root-cleanupを正しく読み取れることを確認）"
+      - "node bin/agents-md.js verify template-sync . の実行結果（exit 0）と、配布元テンプレート（.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-root-cleanup.yml）と展開結果（.github/workflows/agent-skill-chain-root-cleanup.yml）のdiffがbyte-for-byte一致することの実測（workflow定義ファイル自体の構成正しさの機械的保証）"
+      - "test/helpers/gh-stub.ts（gh auth statusが無条件成功を返す等、本番GitHub API挙動を完全には模擬しない制約を確認。この限界を正直に開示した上で(1)(2)の一次的根拠により補強）"
       - "docs/adr/ADR-0007-stray-root-artifact-post-merge-cleanup.md（status: accepted。本番admin merge発動条件の境界解釈とリポジトリオーナー承認の記録）"
 
 regression:
