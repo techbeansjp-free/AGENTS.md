@@ -7,7 +7,7 @@
 
 ```yaml
 id: ADR-0007
-status: proposed   # proposed | accepted | superseded | deprecated
+status: accepted
 title: root直下へのIssueセグメント成果物の恒久混入は、Issueブランチ内削除ではなくmain post-merge cleanup自動化で解消する
 tags: [artifacts, ci, merge, root-cleanup, github-workflow]
 supersedes: []
