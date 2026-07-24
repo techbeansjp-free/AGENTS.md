@@ -129,6 +129,57 @@ function checkBumpPrScope(pr: BumpPr, expectedBranch: string): string | undefine
   return undefined;
 }
 
+interface BumpBaseDivergence {
+  diverged: boolean;
+  error?: string;
+}
+
+/** 既存 release/bump-v<target> ブランチのベースが現在の main より古いか（乖離しているか）を判定する
+ * （Issue #228）。origin を fetch した上で merge-base(origin/<branch>, origin/main) と origin/main HEAD
+ * を比較する。一致すれば「main はブランチ作成後に進んでいない（乖離なし）」、不一致なら「main が
+ * 進んでいる（乖離あり）」。版数フィールド比較ではなく merge-base を採るのは、乖離の定義そのもの
+ * （＝ base 前進）を main 側の版数変更有無に依存せず直接判定するため。fetch/merge-base/rev-parse の
+ * 失敗は error に載せ、呼び出し側が fail(...) で停止する材料にする。 */
+function detectBumpBaseDivergence(root: string, branch: string): BumpBaseDivergence {
+  const fetch = git(['fetch', 'origin'], root);
+  if (fetch.status !== 0) return { diverged: false, error: `git fetch に失敗しました: ${fetch.stderr.trim()}` };
+
+  const mergeBase = git(['merge-base', `origin/${branch}`, 'origin/main'], root);
+  if (mergeBase.status !== 0) return { diverged: false, error: `git merge-base に失敗しました: ${mergeBase.stderr.trim()}` };
+
+  const mainHead = git(['rev-parse', 'origin/main'], root);
+  if (mainHead.status !== 0) return { diverged: false, error: `git rev-parse origin/main に失敗しました: ${mainHead.stderr.trim()}` };
+
+  return { diverged: mergeBase.stdout.trim() !== mainHead.stdout.trim() };
+}
+
+/** 既存 bump ブランチのベースが現在の main と乖離しているときのみ呼び、ブランチ内容を現在の
+ * main 基準の正しい <現行version>→<target> 差分へ作り直す（Issue #228）。作業木を origin/main へ
+ * 揃え直し（checkout -B）、identity を保証し、版数ファイルを再生成して force-with-lease で push する。
+ * force push 競合時は自動 delete+recreate を採らず human_required 文言を返して安全側停止する
+ * （open PR を閉じ状態を複雑化しないため）。その他の失敗は理由文字列を返す。 */
+function rebuildBumpBranchToMain(root: string, branch: string, target: string, message: string): string | undefined {
+  const checkout = git(['checkout', '-B', branch, 'origin/main'], root);
+  if (checkout.status !== 0) return `git checkout -B に失敗しました: ${checkout.stderr.trim()}`;
+
+  const identityError = ensureGitIdentity(root);
+  if (identityError) return identityError;
+
+  writeBumpedVersionFiles(root, target);
+
+  const add = git(['add', 'package.json', 'package-lock.json'], root);
+  if (add.status !== 0) return `git add に失敗しました: ${add.stderr.trim()}`;
+
+  const commit = git(['commit', '-m', message], root);
+  if (commit.status !== 0) return `git commit に失敗しました: ${commit.stderr.trim()}`;
+
+  const push = git(['push', '--force-with-lease', 'origin', branch], root);
+  if (push.status !== 0) {
+    return `human_required: bumpブランチの現行main基準への再構築後、force push が競合しました（${push.stderr.trim()}）`;
+  }
+  return undefined;
+}
+
 export async function bump(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) return printUsage(BUMP_USAGE), 0;
@@ -162,6 +213,17 @@ export async function bump(args: string[]): Promise<number> {
 
       const push = git(['push', 'origin', branch], root);
       if (push.status !== 0) return fail(`git push に失敗しました: ${push.stderr.trim()}`);
+    } else {
+      // Issue #228: 既存ブランチ再利用時、そのベースが現在の main より古い（複数PR連続マージ等で
+      // main が進んだ）場合、内容を更新せず merge を再試行するだけでは実マージコンフリクトを起こす。
+      // 乖離を検知したときのみ現行 main 基準へ作り直し、常に正しい差分でマージを試みる状態を保つ。
+      // 乖離なし（純粋な一時 API レース）の場合は再生成・force push を行わず従来どおり再試行のみ。
+      const divergence = detectBumpBaseDivergence(root, branch);
+      if (divergence.error) return fail(divergence.error);
+      if (divergence.diverged) {
+        const rebuildError = rebuildBumpBranchToMain(root, branch, target, message);
+        if (rebuildError) return fail(rebuildError);
+      }
     }
 
     let pr = findOpenBumpPr(root, branch);
