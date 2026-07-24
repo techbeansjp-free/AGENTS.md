@@ -26,4 +26,3 @@ DESIGN.md の設計要素を、依存関係に沿って以下の順で実装す�
 作業順序のみの見直しは本ファイルの更新で足りる。DESIGN.md が定めた関数分割（乖離検知と再構築の分離）・
 merge-base による乖離判定方式・force push 失敗時の human_required 降格を変更する場合は、DESIGN.md の
 更新と設計ゲート再通過が必要になる。
-</content>

@@ -81,5 +81,3 @@ ADR-0005 は「短命ブランチ `release/bump-v<target>` を PR 経由 admin m
 - 自己修復性: 作成経路が checkout 時点の main を基準にするため単一 run 内で僅かに古い枝を作りうるが、
   次回 run の乖離検知が必ず再構築するため、最終的に常に現行 main 基準へ収束する。
 - 影響を受ける既存機能: `release bump` の既存ブランチ再利用のみ。`resolve-version`/`tag`/`publish` は無影響。
-</content>
-</invoke>
