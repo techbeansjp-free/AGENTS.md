@@ -4,7 +4,12 @@ import { repoRoot } from '../lib/paths.js';
 import { git, gh } from '../lib/exec.js';
 import { CliError } from '../lib/issue.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
-import { resolveVersion as resolveVersionPure, SEMVER_RE, RELEASE_BUMP_BRANCH_RE } from '../lib/release-version.js';
+import {
+  resolveVersion as resolveVersionPure,
+  previousSemverTag,
+  SEMVER_RE,
+  RELEASE_BUMP_BRANCH_RE,
+} from '../lib/release-version.js';
 import { ensureGitIdentity } from '../lib/git-identity.js';
 import { findOpenPrByHead } from '../lib/gh-open-pr.js';
 
@@ -313,6 +318,9 @@ target: 版数（'v'接頭辞なし、例: 0.2.1）。
 
 v<target> の GitHub Release が未存在のときのみ、v<target> タグを指すReleaseを作成する
 （存在すれば冪等スキップ）。事前に v<target> タグがリモートに存在している必要がある。
+Release本文にはWhat's Changed（マージ済みPR一覧）とFull Changelog（前回semverタグとの
+比較リンク）を自動生成で含める。起点は target 未満で最大のsemverタグを明示指定し、
+該当タグが無い場合は起点指定なしで自動生成する（失敗しない）。
 
 出力:
   成功時: 終了コード0。作成（またはスキップ）した v<target> を標準出力へ。
@@ -335,10 +343,33 @@ export async function publish(args: string[]): Promise<number> {
       return ok(`${tagName}（既存Releaseを検出したため冪等スキップ）`);
     }
 
-    const create = gh(
-      ['release', 'create', tagName, '--title', tagName, '--notes', `agent-skill-chain ${tagName} のリリース。`],
-      root,
-    );
+    // Issue #226: GitHub側の起点自動検出はRelease履歴由来で旧日時形式タグ（例: v20260720.060726）
+    // を起点に選びうるため、直前semverタグが存在する場合のみ --notes-start-tag で明示指定する。
+    // タグ一覧はローカルgitから取得する（release workflowは fetch-depth: 0 でcheckoutし、
+    // 同一job内の resolve-version が同じ手段で動作している）。
+    const tagList = git(['tag', '--list'], root);
+    if (tagList.status !== 0) return fail(`git tag --list に失敗しました: ${tagList.stderr.trim()}`);
+    const tags = tagList.stdout
+      .split('\n')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    const startTag = previousSemverTag(tags, target);
+
+    // Issue #226: --notes の固定文は --generate-notes 併用時、自動生成notes（What's Changed /
+    // Full Changelog）の先頭に付加される（gh CLI公式仕様）。
+    const createArgs = [
+      'release',
+      'create',
+      tagName,
+      '--title',
+      tagName,
+      '--notes',
+      `agent-skill-chain ${tagName} のリリース。`,
+      '--generate-notes',
+    ];
+    if (startTag) createArgs.push('--notes-start-tag', startTag);
+
+    const create = gh(createArgs, root);
     if (create.status !== 0) return fail(`gh release create に失敗しました: ${create.stderr.trim()}`);
 
     return ok(tagName);

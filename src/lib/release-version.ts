@@ -63,6 +63,26 @@ export function latestSemverTag(tags: string[]): string | undefined {
 }
 
 /**
+ * 既存タグ一覧のうち SEMVER_TAG_RE に一致し、かつ 'v' を除いた版数が target 未満のものの
+ * 最大を、タグ名（'v'付き）で返す。該当が1件も無ければ undefined。
+ *
+ * GitHub Release notes 自動生成の起点タグ（`gh release create --notes-start-tag`）の決定に使う
+ * （Issue #226）。GitHub側の起点自動検出はRelease履歴由来で旧日時形式タグを拾いうる（実測済み）
+ * ため、呼び出し側は本関数の結果が得られた場合のみ起点を明示指定し、旧日時形式タグとの間で
+ * changelogをまたがせない（ADR-0005の版数体系と整合させる）。
+ */
+export function previousSemverTag(tags: string[], target: string): string | undefined {
+  parseSemver(target); // 不正な形式はここで例外にする
+  const candidates = tags
+    .filter((t) => SEMVER_TAG_RE.test(t))
+    .map((t) => t.slice(1))
+    .filter((v) => compareSemver(v, target) < 0);
+  if (candidates.length === 0) return undefined;
+  const max = candidates.reduce((acc, current) => (compareSemver(current, acc) > 0 ? current : acc));
+  return `v${max}`;
+}
+
+/**
  * DESIGN.md「バージョン解決器」のアルゴリズムそのもの。
  *
  * ```text

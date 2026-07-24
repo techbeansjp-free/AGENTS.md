@@ -212,6 +212,66 @@ test('release publish (AC-3, AC-4, AC-7): 未存在ならGitHub Releaseを作成
   );
 });
 
+// ---- publish: Release notes自動生成の引数組み立て（Issue #226 AC-1, AC-2, AC-3） ----
+
+test('release publish (Issue #226 AC-1, AC-2): semver・旧日時形式タグ混在環境で --generate-notes と直前semverタグの --notes-start-tag を指定する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  // Given: 今回タグ v2.0.0 に対し、直前semverタグ v1.9.0・より古いsemverタグ v1.8.0・
+  // 旧日時形式タグ v20260720.060726・target超のタグ v2.1.0 が混在する
+  git(repo.dir, ['tag', 'v1.8.0']);
+  git(repo.dir, ['tag', 'v1.9.0']);
+  git(repo.dir, ['tag', 'v20260720.060726']);
+  git(repo.dir, ['tag', 'v2.0.0']);
+  git(repo.dir, ['tag', 'v2.1.0']);
+
+  // When
+  const result = runCli(['release', 'publish', '2.0.0'], { cwd: repo.dir, env });
+
+  // Then: Release作成が成功し、gh release create の引数に --generate-notes（AC-1）と
+  // --notes-start-tag v1.9.0（AC-2: target未満で最大のsemverタグ）が含まれる。
+  // 旧日時形式タグ・target超のタグは起点として選ばれない（ADR-0005: 新旧版数体系をまたがない）。
+  assert.equal(result.status, 0, result.stderr);
+  const calls = stub.readState().releaseCreateCalls ?? [];
+  assert.equal(calls.length, 1);
+  const argLine = calls[0].args.join(' ');
+  assert.match(argLine, /--generate-notes/);
+  assert.match(argLine, /--notes-start-tag v1\.9\.0/);
+  assert.doesNotMatch(argLine, /v20260720\.060726/);
+  assert.doesNotMatch(argLine, /--notes-start-tag v2\./);
+  // 既存の固定文も --notes として維持される（--generate-notes 併用時は自動生成notesの
+  // 先頭に付加される、gh CLI公式仕様）
+  const notesIndex = calls[0].args.indexOf('--notes');
+  assert.notEqual(notesIndex, -1);
+  assert.equal(calls[0].args[notesIndex + 1], 'agent-skill-chain v2.0.0 のリリース。');
+});
+
+test('release publish (Issue #226 AC-3): target未満のsemverタグが存在しない場合は --notes-start-tag を付けず成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  // Given: 旧日時形式タグと今回タグ v2.5.0 のみが存在する（新版数体系移行後の最初のリリース相当）
+  git(repo.dir, ['tag', 'v20260720.060726']);
+  git(repo.dir, ['tag', 'v2.5.0']);
+
+  // When
+  const result = runCli(['release', 'publish', '2.5.0'], { cwd: repo.dir, env });
+
+  // Then: コマンドは失敗せず成功し、--notes-start-tag は付与されない（起点はgh CLI/GitHubの
+  // 既定挙動に委ねる）。--generate-notes 自体は付与される。
+  assert.equal(result.status, 0, result.stderr);
+  const calls = stub.readState().releaseCreateCalls ?? [];
+  assert.equal(calls.length, 1);
+  const argLine = calls[0].args.join(' ');
+  assert.match(argLine, /--generate-notes/);
+  assert.doesNotMatch(argLine, /--notes-start-tag/);
+});
+
 // ---- 統合シナリオ: 単一契機に対する tag+publish の二重発火（AC-7 をより直接に近似） ----
 
 test('release tag+publish 連続二重発火 (AC-7): 同一 target への2回の全処理実行でも成果物は高々1件', async (t) => {
