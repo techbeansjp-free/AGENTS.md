@@ -1,4 +1,4 @@
-# 正本: AGENTS.md §不変条件I4・§ディレクトリ構成 / ADR-0007
+# 正本: AGENTS.md §不変条件I4 / §ディレクトリ構成 / ADR-0007
 #
 # mainへのpush（[skip ci]を含まないもの）を契機に、repoRoot直下へ恒久混入したIssueセグメント
 # 成果物ファイル（SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md）を検出し、短命ブランチ

@@ -35,6 +35,15 @@ export function defaultVocabFileRoots(repoRoot: string): string[] {
   return defaultLiveFileRoots(repoRoot).filter((p) => !excluded.has(p));
 }
 
+/** lint references のデフォルト対象。defaultLiveFileRoots に本体 `.github/workflows/` を加える。
+ * 実際に GitHub Actions として実行される、走査対象から漏れていた「生きたファイル」であるため
+ * （Issue #221）。vocab 検査への意図しない波及を避けるため defaultLiveFileRoots・
+ * defaultVocabFileRoots 自体は変更せず、references 専用にルート集合を拡張する。 */
+export function defaultReferenceFileRoots(repoRoot: string): string[] {
+  const roots = [...defaultLiveFileRoots(repoRoot), path.join(repoRoot, '.github', 'workflows')];
+  return roots.filter((p) => fs.existsSync(p));
+}
+
 export function walkTextFiles(entryPaths: string[]): string[] {
   const files: string[] = [];
   function walk(p: string): void {

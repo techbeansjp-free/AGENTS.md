@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../../src/lib/scan.js';
+import { defaultLiveFileRoots, defaultReferenceFileRoots, defaultVocabFileRoots, walkTextFiles } from '../../src/lib/scan.js';
 // Issue #185: このテストは「このworktree自身の実在パス」を検証する意図であり、コーディネーション
 // 状態の基点であるrepoRoot()（共通/メイン作業ツリー）ではなく、現在の作業ツリー自身を返す
 // worktreeRoot()を使う（開発環境自体がlinked worktreeの場合、repoRoot()はメイン側を返してしまい
@@ -82,6 +82,32 @@ test('defaultLiveFileRoots: 一部のみ存在する場合は存在するもの�
     fs.mkdirSync(path.join(dir, '.agent-skill-chain', 'schemas'), { recursive: true });
     const result = defaultLiveFileRoots(dir);
     assert.deepEqual(result, [path.join(dir, 'AGENTS.md'), path.join(dir, '.agent-skill-chain', 'schemas')]);
+  });
+});
+
+test('defaultReferenceFileRoots: このworktreeの実在パス（defaultLiveFileRootsの全パス + .github/workflows）を返す（Issue #221: 実デプロイ済みワークフローYAMLを走査対象へ含める）', () => {
+  const root = worktreeRoot();
+  const result = defaultReferenceFileRoots(root);
+  const workflowsPath = path.join(root, '.github', 'workflows');
+  assert.equal(fs.existsSync(workflowsPath), true, `${workflowsPath} が存在しない前提が崩れている`);
+  assert.deepEqual(result, [...defaultLiveFileRoots(root), workflowsPath]);
+});
+
+test('defaultReferenceFileRoots: .github/workflows が存在しない環境では除外され、defaultLiveFileRootsと同一集合に縮退する', () => {
+  withTmpDir((dir) => {
+    fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# agents\n');
+    const result = defaultReferenceFileRoots(dir);
+    assert.deepEqual(result, defaultLiveFileRoots(dir));
+    assert.ok(!result.includes(path.join(dir, '.github', 'workflows')));
+  });
+});
+
+test('defaultReferenceFileRoots: .github/workflows が存在する環境では末尾に追加される', () => {
+  withTmpDir((dir) => {
+    fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# agents\n');
+    fs.mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
+    const result = defaultReferenceFileRoots(dir);
+    assert.deepEqual(result, [...defaultLiveFileRoots(dir), path.join(dir, '.github', 'workflows')]);
   });
 });
 

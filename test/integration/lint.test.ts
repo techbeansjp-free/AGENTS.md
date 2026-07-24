@@ -333,6 +333,29 @@ test('lint references: 見出しに解決できない§参照と素のfile:line�
   assert.match(result.stderr, /bad-refs\.md:2: 禁止参照 'src\/foo\.ts:123'（ファイルパス＋行番号参照）/);
 });
 
+test('lint references: path省略時のデフォルト対象は本体 .github/workflows/ を含み、そこに置かれた解決不能な§参照を検出する（Issue #221: 実デプロイ済みワークフローYAMLが走査対象から漏れていた検出漏れの回帰テスト）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: このリポジトリには元々 .github/workflows/ が存在しない（createTmpRepo は
+  // .agent-skill-chain/・docs/GLOSSARY.md・AGENTS.md・README.md のみを複製する）ため、
+  // 実デプロイされるワークフローYAMLを模した、見出しに解決できない§参照を含むファイルを追加する。
+  const workflowsDir = path.join(repo.dir, '.github', 'workflows');
+  fs.mkdirSync(workflowsDir, { recursive: true });
+  fs.writeFileSync(path.join(workflowsDir, 'sample.yml'), '# 正本: AGENTS.md §存在しない見出し\n');
+
+  // When: path引数を省略し、デフォルト対象（defaultReferenceFileRoots）で lint references を実行する
+  const result = runCli(['lint', 'references'], { cwd: repo.dir });
+
+  // Then: 終了コード1、.github/workflows/sample.yml の禁止参照が報告される（対象拡張前は
+  // .github/ が走査対象外だったため、この違反は検出されなかった）
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /sample\.yml:1: 禁止参照 '§存在しない見出し'（見出しテキストで解決できないセクション番号参照）/,
+  );
+});
+
 test('lint adr check: 実物 docs/adr/ は違反0で通る', async () => {
   // Given/When: このリポジトリ自身の docs/adr/（現時点では ADR-0001 のみ、supersedes: []・
   // superseded-by: null で自己完結）に対して lint adr check を実行する
