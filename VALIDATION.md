@@ -3,7 +3,8 @@
 # ISSUE-226: release publish の gh release create が --generate-notes を使わず、
 # GitHub Release から What's Changed / Full Changelog の自動生成が失われている
 #
-# target_sha は本レポートを追加するcommit自身のSHA（自己参照）を指す。
+# target_sha は本レポートが検証対象とする実装commit（fbf0263c）のSHAを指す。
+# 本レポート自身を含むcommitへの自己参照は記載できないため。
 #
 # 実測メモ（AC-1/AC-2/AC-3 の hybrid/automated 判定の根拠、2026-07-24 実施）:
 # - 副作用のない POST /repos/techbeansjp-free/AGENTS.md/releases/generate-notes で確認:
@@ -19,7 +20,7 @@
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-226
-target_sha: adc4d6ed5c828af38f53028f34b363b0273d6afa
+target_sha: fbf0263c24c427d57a99a078206a9859aa020771
 
 acceptance_criteria:
   - ac_id: AC-1
