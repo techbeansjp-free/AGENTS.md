@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { git } from '../lib/exec.js';
 import { repoRoot } from '../lib/paths.js';
-import { defaultLiveFileRoots, defaultVocabFileRoots, walkTextFiles } from '../lib/scan.js';
+import { defaultLiveFileRoots, defaultReferenceFileRoots, defaultVocabFileRoots, walkTextFiles } from '../lib/scan.js';
 import { parseForbiddenTerms } from '../lib/glossary.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { routes } from '../lib/cli-routes.js';
@@ -373,7 +373,7 @@ export async function references(args: string[]): Promise<number> {
       return 0;
     }
     const root = repoRoot();
-    const files = walkTextFiles(resolveTargets(args, root));
+    const files = walkTextFiles(resolveTargets(args, root, defaultReferenceFileRoots));
     const headings = [...new Set(files.filter((f) => f.endsWith('.md')).flatMap((f) => extractHeadings(f)))];
 
     const violations: string[] = [];
