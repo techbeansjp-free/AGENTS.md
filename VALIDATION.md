@@ -20,7 +20,7 @@
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-226
-target_sha: 43c297424aa1e9888cf3ad41188897ddc3533c91
+target_sha: adc4d6ed5c828af38f53028f34b363b0273d6afa
 
 acceptance_criteria:
   - ac_id: AC-1
