@@ -47,6 +47,30 @@ function writePackageJson(repoDir: string, version: string, withLock: boolean): 
   git(repoDir, ['push', 'origin', 'main']);
 }
 
+/** 既存 main を新しい版数の別コミットで進める（Issue #228 の base 乖離シナリオ再現用）。
+ * bump 実行後は repo.dir の HEAD が bump ブランチ上に残るため、main を checkout し直してから
+ * package.json/package-lock.json の version を書き換えて commit・push し、origin/main を前進させる。 */
+function advanceMainVersion(repoDir: string, version: string): void {
+  git(repoDir, ['checkout', 'main']);
+  const pkgPath = path.join(repoDir, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as Record<string, unknown>;
+  pkg.version = version;
+  fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
+  const lockPath = path.join(repoDir, 'package-lock.json');
+  if (fs.existsSync(lockPath)) {
+    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as {
+      version?: string;
+      packages?: Record<string, { version?: string }>;
+    };
+    lock.version = version;
+    if (lock.packages?.['']) lock.packages[''].version = version;
+    fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`, 'utf8');
+  }
+  git(repoDir, ['add', '-A']);
+  git(repoDir, ['commit', '-m', `chore: advance main to ${version}`]);
+  git(repoDir, ['push', 'origin', 'main']);
+}
+
 // ---- resolve-version（AC-1: 版数決定ロジックのCLI配線） ----
 
 test('release resolve-version (AC-1): 実リポジトリの package.json・git tag からCLI出力形式で target/need_commit を決定する', async (t) => {
@@ -282,6 +306,74 @@ test('release bump 自己修復 (DESIGN.md「PR作成後、admin mergeに失敗�
   assert.equal(prCalls.length, 1, 'gh pr create は重複実行されないこと（同名ブランチ・既存OPEN PRの検出による再利用）');
   // Then: admin merge自体は失敗分+成功分の2回呼ばれている（再試行そのものは行われる）
   assert.equal((stub.readState().mergeCalls ?? []).length, 2);
+});
+
+test('release bump base乖離あり (Issue #228 AC-1, AC-3): 既存bumpブランチのbaseが古いmain基準のとき、現行main基準の正しい差分へ作り直してマージする', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  // Given: main が 0.2.5。実障害（Issue #228）と同一版数系列を再現する。
+  writePackageJson(repo.dir, '0.2.5', true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  // Given: 1回目 bump を admin merge 失敗で止め、0.2.5 基準の stale な bump ブランチ・OPEN PR を残す。
+  stub.failNextMerge(1);
+  const first = runCli(['release', 'bump', '0.2.7'], { cwd: repo.dir, env });
+  assert.notEqual(first.status, 0, '1回目はadmin merge失敗により非0終了すること');
+  const staleSha = git(repo.dir, ['ls-remote', 'origin', 'refs/heads/release/bump-v0.2.7']).split(/\s+/)[0];
+  // stale ブランチは 0.2.5→0.2.7 の差分（当時の main を基準）で作られている
+  assert.equal(JSON.parse(git(repo.dir, ['show', 'release/bump-v0.2.7:package.json'])).version, '0.2.7');
+  assert.equal(JSON.parse(git(repo.dir, ['show', 'release/bump-v0.2.7^:package.json'])).version, '0.2.5');
+
+  // Given: 別経路で main が 0.2.6 へ進む（bump ブランチの base が乖離した状態）。
+  advanceMainVersion(repo.dir, '0.2.6');
+  const mainSha = git(repo.dir, ['rev-parse', 'origin/main']);
+
+  // When: 修正後の bump を再実行する。
+  const second = runCli(['release', 'bump', '0.2.7'], { cwd: repo.dir, env });
+
+  // Then: マージまで成功する（乖離を検知し現行main基準へ作り直したため）。
+  assert.equal(second.status, 0, second.stderr);
+  const newSha = git(repo.dir, ['ls-remote', 'origin', 'refs/heads/release/bump-v0.2.7']).split(/\s+/)[0];
+  // Then（AC-1）: ブランチが force push で作り直されている（SHA が変化）。
+  assert.notEqual(newSha, staleSha, 'base乖離時はブランチが再構築され force push で SHA が変化すること');
+  // Then（AC-3）: 作り直されたブランチの tip の parent が現行 main であり、差分が 0.2.6→0.2.7 になっている。
+  const rebuiltParent = git(repo.dir, ['rev-parse', 'release/bump-v0.2.7^']);
+  assert.equal(rebuiltParent, mainSha, '再構築コミットの parent が現行 main であること');
+  assert.equal(JSON.parse(git(repo.dir, ['show', 'release/bump-v0.2.7:package.json'])).version, '0.2.7');
+  assert.equal(
+    JSON.parse(git(repo.dir, ['show', 'release/bump-v0.2.7^:package.json'])).version,
+    '0.2.6',
+    '再構築後の差分は現行 main（0.2.6）→ target（0.2.7）であること',
+  );
+  // Then: PR は再利用され重複作成されない（同一 OPEN PR へ force push で反映）。
+  assert.equal((stub.readState().prCreateCalls ?? []).length, 1, 'gh pr create は重複実行されないこと');
+});
+
+test('release bump base乖離なし (Issue #228 AC-2): 既存bumpブランチのbaseが現行mainと一致するときは再生成・force pushを行わずマージ再試行のみ', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  writePackageJson(repo.dir, '0.3.0', true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  // Given: 1回目 bump を admin merge 失敗で止め、現行 main 基準の bump ブランチ・OPEN PR を残す。
+  stub.failNextMerge(1);
+  const first = runCli(['release', 'bump', '0.3.1'], { cwd: repo.dir, env });
+  assert.notEqual(first.status, 0, '1回目はadmin merge失敗により非0終了すること');
+  const shaBefore = git(repo.dir, ['ls-remote', 'origin', 'refs/heads/release/bump-v0.3.1']).split(/\s+/)[0];
+
+  // When: main を進めずに（＝乖離なし）再実行する。
+  const second = runCli(['release', 'bump', '0.3.1'], { cwd: repo.dir, env });
+
+  // Then: マージ再試行のみで成功する。
+  assert.equal(second.status, 0, second.stderr);
+  const shaAfter = git(repo.dir, ['ls-remote', 'origin', 'refs/heads/release/bump-v0.3.1']).split(/\s+/)[0];
+  // Then（AC-2）: ブランチ SHA が不変（再生成・force push が発生していない）。
+  assert.equal(shaAfter, shaBefore, 'base一致時はブランチが再生成されず SHA が不変であること');
+  // Then: admin merge は失敗分+成功分の2回のみ（余計な処理が発生していない）。
+  assert.equal((stub.readState().mergeCalls ?? []).length, 2);
+  assert.equal((stub.readState().prCreateCalls ?? []).length, 1);
 });
 
 test('release bump スコープ検査違反 (AC-6, 防御的ガード): 変更ファイルがpackage.json/package-lock.json以外を含むPRは自動admin mergeせずhuman_requiredで停止する', async (t) => {
