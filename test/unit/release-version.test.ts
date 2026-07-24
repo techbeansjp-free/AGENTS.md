@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   resolveVersion,
   latestSemverTag,
+  previousSemverTag,
   SEMVER_TAG_RE,
   RELEASE_BUMP_BRANCH_RE,
 } from '../../src/lib/release-version.js';
@@ -28,6 +29,37 @@ test('latestSemverTag: 桁数の異なる版数を文字列比較ではなく数
 
 test('latestSemverTag: メジャー・マイナーの桁も数値として比較する', () => {
   assert.equal(latestSemverTag(['v1.9.0', 'v1.10.0', 'v2.0.0', 'v10.0.0']), '10.0.0');
+});
+
+// ---- previousSemverTag（Issue #226: Release notes自動生成の起点タグ選定） ----
+
+test('previousSemverTag: target未満で最大のsemverタグをタグ名（v付き）で返す', () => {
+  assert.equal(previousSemverTag(['v0.2.4', 'v0.2.5', 'v0.2.6'], '0.2.6'), 'v0.2.5');
+  assert.equal(previousSemverTag(['v0.1.0', 'v0.2.0'], '1.0.0'), 'v0.2.0');
+});
+
+test('previousSemverTag: 旧日時形式タグ（v20260720.060726等）は起点候補から除外される（ADR-0005: 新旧版数体系をまたいだ比較をしない）', () => {
+  assert.equal(previousSemverTag(['v20260720.060726', 'v0.2.5', 'v0.2.6'], '0.2.6'), 'v0.2.5');
+});
+
+test('previousSemverTag: target自身およびtarget以上のタグは起点候補から除外される', () => {
+  assert.equal(previousSemverTag(['v0.2.5', 'v0.2.6', 'v0.2.7'], '0.2.6'), 'v0.2.5');
+  assert.equal(previousSemverTag(['v0.2.6'], '0.2.6'), undefined);
+});
+
+test('previousSemverTag: target未満のsemverタグが1件も無ければ undefined を返す（AC-3: 初回リリース等）', () => {
+  assert.equal(previousSemverTag([], '0.2.6'), undefined);
+  assert.equal(previousSemverTag(['v20260720.060726', 'not-a-tag'], '0.2.6'), undefined);
+});
+
+test('previousSemverTag: 桁数の異なる版数を文字列比較ではなく数値として比較する（v0.2.9 < v0.2.10）', () => {
+  assert.equal(previousSemverTag(['v0.2.9', 'v0.2.10'], '0.2.11'), 'v0.2.10');
+  assert.equal(previousSemverTag(['v0.2.2', 'v0.2.10'], '0.2.10'), 'v0.2.2');
+});
+
+test('previousSemverTag: 不正なtarget（semver形式でない）は例外を投げる', () => {
+  assert.throws(() => previousSemverTag(['v0.2.5'], 'not-a-version'));
+  assert.throws(() => previousSemverTag(['v0.2.5'], 'v0.2.6')); // 'v'接頭辞つきはtargetとしては不正
 });
 
 // ---- resolveVersion: 初回run（seed規則） ----
