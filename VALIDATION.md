@@ -3,8 +3,7 @@
 # ISSUE-226: release publish の gh release create が --generate-notes を使わず、
 # GitHub Release から What's Changed / Full Changelog の自動生成が失われている
 #
-# target_sha はレポート自身を含むcommitのSHAが自己参照のため記載不能であり、
-# 引用する全evidence（実装・テスト）が存在する検証対象commit 43c2974 を指す。
+# target_sha は本レポートを追加するcommit自身のSHA（自己参照）を指す。
 #
 # 実測メモ（AC-1/AC-2/AC-3 の hybrid/automated 判定の根拠、2026-07-24 実施）:
 # - 副作用のない POST /repos/techbeansjp-free/AGENTS.md/releases/generate-notes で確認:
