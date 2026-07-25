@@ -436,6 +436,63 @@ test('release bump base乖離なし (Issue #228 AC-2): 既存bumpブランチの
   assert.equal((stub.readState().prCreateCalls ?? []).length, 1);
 });
 
+test('release bump (Issue #266): PR作成直後のbase更新競合を現行mainへ再同期して同一PRを一度だけ再試行し、tag/publish後続処理を継続する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  writePackageJson(repo.dir, '0.6.0', true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  // Given: 最初のadmin merge要求と同時に別の自動化がmainへcommitをpushし、GitHubが
+  // `Base branch was modified` を返す実競合をスタブ越しの実git remoteで再現する。
+  stub.simulateBaseBranchRaceOnNextMerge();
+
+  // When: bumpを一度だけ実行する。
+  const result = runCli(['release', 'bump', '0.6.1'], { cwd: repo.dir, env });
+
+  // Then: 同一PRを再利用し、初回失敗と再同期後の成功の計2回だけadmin mergeする。
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), '1');
+  assert.equal((stub.readState().prCreateCalls ?? []).length, 1, 'base更新競合でPRを重複作成しないこと');
+  assert.equal((stub.readState().mergeCalls ?? []).length, 2, 'admin mergeの再試行は一度だけであること');
+
+  // Then: 再構築されたbump commitの親は競合時に前進した現行mainであり、mainへ反映された
+  // 版数台帳はtargetを示す。これはworkflowの次ステップがorigin/mainをrelease refとして
+  // 解決できる契約を実git remoteで検証する。
+  const mainSha = git(repo.dir, ['rev-parse', 'origin/main']);
+  assert.equal(JSON.parse(git(repo.dir, ['show', 'origin/main:package.json'])).version, '0.6.1');
+  assert.match(git(repo.dir, ['show', 'origin/main:release-bump-base-race.txt']), /base advanced/);
+
+  // Then: release workflow相当の後続tag/publishが最新main SHAを使用して成功する。
+  const tagResult = runCli(['release', 'tag', '0.6.1', mainSha], { cwd: repo.dir, env });
+  assert.equal(tagResult.status, 0, tagResult.stderr);
+  const publishResult = runCli(['release', 'publish', '0.6.1'], { cwd: repo.dir, env });
+  assert.equal(publishResult.status, 0, publishResult.stderr);
+  assert.match(git(repo.dir, ['ls-remote', '--tags', 'origin', 'v0.6.1']), /refs\/tags\/v0\.6\.1/);
+  assert.deepEqual(stub.readState().releases, ['v0.6.1']);
+});
+
+test('release bump (Issue #266): base更新競合後の再試行merge失敗はhuman_requiredで停止し、追加再試行しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  writePackageJson(repo.dir, '0.7.0', true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  stub.simulateBaseBranchRaceOnNextMerge();
+  const state = stub.readState();
+  state.failMergeCount = 2;
+  stub.writeState(state);
+
+  const result = runCli(['release', 'bump', '0.7.1'], { cwd: repo.dir, env });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /human_required/);
+  assert.match(result.stderr, /admin merge再試行に失敗/);
+  assert.equal((stub.readState().prCreateCalls ?? []).length, 1, '再試行失敗でもPRを重複作成しないこと');
+  assert.equal((stub.readState().mergeCalls ?? []).length, 2, 'admin mergeは初回と一度だけの再試行に限ること');
+});
+
 test('release bump スコープ検査違反 (AC-6, 防御的ガード): 変更ファイルがpackage.json/package-lock.json以外を含むPRは自動admin mergeせずhuman_requiredで停止する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

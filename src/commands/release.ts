@@ -123,6 +123,7 @@ function findOpenBumpPr(root: string, branch: string): BumpPr | undefined {
 }
 
 const BUMP_PR_ALLOWED_FILES = new Set(['package.json', 'package-lock.json']);
+const BASE_BRANCH_MODIFIED_RE = /base branch was modified/i;
 
 /** admin merge直前のスコープ検査（ADR-0005）: (a) head が release/bump-v* に一致し、
  * (b) 変更ファイル集合が package.json（±package-lock.json）のみであることを機械検査する。
@@ -140,6 +141,12 @@ function checkBumpPrScope(pr: BumpPr, expectedBranch: string): string | undefine
     return `PR #${pr.number} にスコープ外の変更ファイルが含まれています: ${outOfScope.join(', ')}`;
   }
   return undefined;
+}
+
+/** GitHubがPR作成後のmain更新を理由にadmin mergeを拒否したことだけを判定する。認証・
+ * 権限・チェック失敗など他のmerge失敗は、一時的なbase競合として再試行してはならない。 */
+function isBaseBranchModifiedMergeFailure(stderr: string): boolean {
+  return BASE_BRANCH_MODIFIED_RE.test(stderr);
 }
 
 interface BumpBaseDivergence {
@@ -265,9 +272,55 @@ export async function bump(args: string[]): Promise<number> {
       ['pr', 'merge', String(pr.number), '--admin', '--squash', '--subject', message, '--body', ''],
       root,
     );
-    if (merge.status !== 0) return fail(`gh pr merge --admin に失敗しました: ${merge.stderr.trim()}`);
+    if (merge.status === 0) return ok(String(pr.number));
 
-    return ok(String(pr.number));
+    // Issue #266: PR作成直後に別の自動化がmainを更新すると、GitHubはbase更新競合だけを
+    // 返してmergeを拒否する。このケースに限り、最新mainから同じ短命branchを再構築し、
+    // 同じOPEN PRへ一度だけ再試行する。回数を固定し、他種の失敗を再試行対象にしないことで
+    // 無限再試行や認証障害の隠蔽を防ぐ。
+    if (!isBaseBranchModifiedMergeFailure(merge.stderr)) {
+      return fail(`gh pr merge --admin に失敗しました: ${merge.stderr.trim()}`);
+    }
+
+    const retryPrBeforeRebuild = findOpenBumpPr(root, branch);
+    if (!retryPrBeforeRebuild) {
+      return fail('human_required: base更新競合後にOPENのbump PRを再解決できないため自動再試行を停止します');
+    }
+    const retryScopeError = checkBumpPrScope(retryPrBeforeRebuild, branch);
+    if (retryScopeError) {
+      return fail(`human_required: base更新競合後の再同期前に自動admin mergeを停止します（${retryScopeError}）`);
+    }
+
+    // detectBumpBaseDivergence はoriginを更新する唯一の既存経路であり、ここでは乖離の真偽に
+    // かかわらず最新main基準へ再構築する。merge失敗時点から再試行までにmainが再度進んでも、
+    // 再試行は一度で打ち切りhuman_requiredへ移行する。
+    const refresh = detectBumpBaseDivergence(root, branch);
+    if (refresh.error) {
+      return fail(`human_required: base更新競合後に現行mainを取得できないため自動再試行を停止します（${refresh.error}）`);
+    }
+    const rebuildError = rebuildBumpBranchToMain(root, branch, target, message);
+    if (rebuildError) {
+      return fail(`human_required: base更新競合後の現行main基準への再同期に失敗しました（${rebuildError}）`);
+    }
+
+    const retryPr = findOpenBumpPr(root, branch);
+    if (!retryPr) {
+      return fail('human_required: base更新競合後に再構築済みbump PRを再解決できないため自動再試行を停止します');
+    }
+    const rebuiltScopeError = checkBumpPrScope(retryPr, branch);
+    if (rebuiltScopeError) {
+      return fail(`human_required: base更新競合後の再同期後に自動admin mergeを停止します（${rebuiltScopeError}）`);
+    }
+
+    const retryMerge = gh(
+      ['pr', 'merge', String(retryPr.number), '--admin', '--squash', '--subject', message, '--body', ''],
+      root,
+    );
+    if (retryMerge.status !== 0) {
+      return fail(`human_required: base更新競合後のadmin merge再試行に失敗しました（${retryMerge.stderr.trim()}）`);
+    }
+
+    return ok(String(retryPr.number));
   });
 }
 
