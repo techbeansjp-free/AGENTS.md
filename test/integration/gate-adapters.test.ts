@@ -91,7 +91,7 @@ function createClaudeStub(dir: string, verdict: string): { executable: string; a
   const argsLog = path.join(dir, 'claude-args.log');
   fs.writeFileSync(
     executable,
-    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" > "$CLAUDE_ARGS_LOG"\ncat >/dev/null\nprintf '%s' ${JSON.stringify(verdict)}\n`,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" > ${JSON.stringify(argsLog)}\ncat >/dev/null\nprintf '%s' ${JSON.stringify(verdict)}\n`,
     { mode: 0o755 },
   );
   return { executable, argsLog };
@@ -125,6 +125,33 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   assert.equal(report.gate.falsification, 'pass');
   assert.equal(report.gate.approved_artifacts[0].path, 'SPEC.md');
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
+});
+
+test('gate reviewer credential boundary: GitHub token・caller HOME・git/gh configをAI subprocessへ継承しない', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const command = [
+    'cat >/dev/null',
+    'test -z "${GH_TOKEN:-}"',
+    'test -z "${GITHUB_TOKEN:-}"',
+    'test "${GIT_CONFIG_GLOBAL:-}" = /dev/null',
+    'test "${GH_CONFIG_DIR:-}" != "${CALLER_GH_CONFIG_DIR:-}"',
+    `printf '%s' '${stubVerdict}'`,
+  ].join('; ');
+  const env = envWithout([], {
+    ANTHROPIC_API_KEY: 'dummy-key-not-forwarded',
+    GH_TOKEN: 'ghp_credential_boundary_test_value',
+    GITHUB_TOKEN: 'github-token-boundary-test',
+    CALLER_GH_CONFIG_DIR: '/credential-bearing/gh',
+    GH_CONFIG_DIR: '/credential-bearing/gh',
+    GATE_REVIEWER_CMD: command,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
 });
 
 test('claude launch_gate_reviewer: 認証未設定かつ実疎通確認も失敗する場合は安全側（human_required）へ倒し exit が 0 でも 3 でもない（真の認証欠如、regressionなし）', async (t) => {
@@ -348,7 +375,6 @@ test('claude core reviewer: 実在model・能力attestation・reasoning probeを
     ASC_REVIEW_SUBJECT: 'core_audit',
     ANTHROPIC_API_KEY: 'dummy',
     CLAUDE_EXECUTABLE: stub.executable,
-    CLAUDE_ARGS_LOG: stub.argsLog,
     CLAUDE_CORE_REVIEW_MODEL: 'claude-frontier-test-model',
     CLAUDE_CORE_REVIEW_MODEL_TIER: 'frontier_coding',
     CLAUDE_CORE_REVIEW_REASONING_TIER: 'maximum_reasoning',

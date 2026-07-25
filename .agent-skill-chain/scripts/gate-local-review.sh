@@ -21,10 +21,11 @@ if [[ -z "$ISSUE_ID" || -z "$GATE_ID" || -z "$PROFILE" || -z "$TARGET_SHA" || -z
 fi
 case "$ADAPTER" in codex | claude | human) ;; *) echo "未登録adapterです: $ADAPTER" >&2; exit 1 ;; esac
 
-PR_SHA_INFO="$(gh api "repos/{owner}/{repo}/pulls/$PR_NUMBER" --jq '.base.sha + " " + .head.sha')"
-read -r PR_BASE_SHA PR_HEAD_SHA <<<"$PR_SHA_INFO"
-if [[ "$PR_BASE_SHA" != "$BASE_SHA" || "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
-  echo "指定SHAがGitHub PR metadataと一致しません（base=$PR_BASE_SHA, head=$PR_HEAD_SHA）" >&2
+PR_SHA_INFO="$(gh api "repos/{owner}/{repo}/pulls/$PR_NUMBER" --jq '.base.ref + " " + .base.sha + " " + .head.sha')"
+read -r PR_BASE_REF PR_BASE_SHA PR_HEAD_SHA <<<"$PR_SHA_INFO"
+DEFAULT_BRANCH="$(gh api "repos/{owner}/{repo}" --jq '.default_branch')"
+if [[ -z "$DEFAULT_BRANCH" || "$PR_BASE_REF" != "$DEFAULT_BRANCH" || "$PR_BASE_SHA" != "$BASE_SHA" || "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
+  echo "指定baseがrepository default branchまたはGitHub PR metadataと一致しません（ref=$PR_BASE_REF, default=$DEFAULT_BRANCH, base=$PR_BASE_SHA, head=$PR_HEAD_SHA）" >&2
   exit 1
 fi
 
@@ -45,10 +46,11 @@ fi
 TRUSTED_TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-local-review.XXXXXX")"
 trap 'rm -rf -- "$TRUSTED_TMP"' EXIT
 TRUSTED_ROOT="$TRUSTED_TMP/repo"
-SOURCE_ORIGIN_URL="$(git -C "$REPO_ROOT" remote get-url origin)"
 git clone --quiet --no-checkout "$REPO_ROOT" "$TRUSTED_ROOT"
-git -C "$TRUSTED_ROOT" remote set-url origin "$SOURCE_ORIGIN_URL"
 git -C "$TRUSTED_ROOT" checkout --quiet --detach "$BASE_SHA"
+# reviewerにcredential-bearing remote URLやglobal Git設定を見せない。target objectはlocal clone済みなので
+# remoteを削除してもgit showによるread-only成果物参照は維持できる。
+git -C "$TRUSTED_ROOT" remote remove origin
 (
   cd -- "$TRUSTED_ROOT"
   npm ci --ignore-scripts
@@ -69,15 +71,48 @@ fi
 
 COUNT=1
 [[ "$PROFILE" == "strict" ]] && COUNT=2
+attempt_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(12).toString("hex"))')"
+attempt_id="attempt-${GATE_ID}-${TARGET_SHA:0:12}-${attempt_nonce}"
+declare -a run_ids=()
 for slot in $(seq 1 "$COUNT"); do
   run_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(12).toString("hex"))')"
-  run_id="review-${GATE_ID}-${TARGET_SHA:0:12}-${slot}-${run_nonce}"
+  run_ids+=("review-${GATE_ID}-${TARGET_SHA:0:12}-${slot}-${run_nonce}")
+done
+TOKEN_FILE="$TRUSTED_TMP/launcher-token.json"
+token_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(24).toString("hex"))')"
+node -e '
+  const fs = require("node:fs");
+  const [file, attemptId, expectedCount, profile, targetSha, baseSha, prNumber, nonce, ...runIds] = process.argv.slice(1);
+  const token = {
+    schema_version: "agent-skill-chain/launcher-token/v1",
+    attempt_id: attemptId,
+    expected_count: Number(expectedCount),
+    profile,
+    target_sha: targetSha,
+    base_sha: baseSha,
+    pr_number: prNumber,
+    nonce,
+    slots: runIds.map((run_id, index) => ({slot: index + 1, run_id})),
+    consumed_slots: [],
+  };
+  fs.writeFileSync(file, JSON.stringify(token) + "\n", {mode: 0o600, flag: "wx"});
+' "$TOKEN_FILE" "$attempt_id" "$COUNT" "$PROFILE" "$TARGET_SHA" "$BASE_SHA" "$PR_NUMBER" "$token_nonce" "${run_ids[@]}"
+
+for slot in $(seq 1 "$COUNT"); do
+  run_id="${run_ids[$((slot - 1))]}"
   ASC_BASE_REF="$BASE_SHA" \
   ASC_EVIDENCE_BASE_SHA="$BASE_SHA" \
   ASC_TRUSTED_BASE_SHA="$BASE_SHA" \
   ASC_EVIDENCE_PR_NUMBER="$PR_NUMBER" \
+  ASC_REVIEW_ATTEMPT_ID="$attempt_id" \
+  ASC_REVIEW_EXPECTED_COUNT="$COUNT" \
+  ASC_LAUNCHER_TOKEN_FILE="$TOKEN_FILE" \
   ASC_REVIEWER_RUN_ID="$run_id" \
   ASC_REVIEWER_SLOT="$slot" \
   ASC_REVIEW_ADAPTER_REQUESTED="$ADAPTER" \
     "$TRUSTED_SCRIPT_DIR/gate-launch-reviewer.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$REPORT_PATH" "$TARGET_SHA"
 done
+if [[ -e "$TOKEN_FILE" ]]; then
+  echo "launcher tokenが全slotで消費されませんでした" >&2
+  exit 1
+fi

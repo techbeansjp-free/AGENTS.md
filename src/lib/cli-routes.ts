@@ -47,6 +47,7 @@ export const routes: Record<string, Handler> = {
   'gate record-verdict': gate.recordVerdict,
   'gate submit-evidence': gate.submitEvidence,
   'gate verify-evidence': gate.verifyEvidence,
+  'gate materialize-check-report': gate.materializeCheckReport,
   'gate mark-human-required': gate.markHumanRequired,
   'gate reviewer-context': gate.reviewerContext,
   'gate reviewer-prompt': gate.reviewerPrompt,

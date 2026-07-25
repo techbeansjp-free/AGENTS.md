@@ -256,6 +256,11 @@ if (cmd === 'api') {
   const body = hasInput ? readStdin() : '';
   const state = loadState();
 
+  if (apiPath === 'repos/{owner}/{repo}' && method === 'GET') {
+    process.stdout.write(JSON.stringify({ default_branch: state.defaultBranch || 'main' }));
+    process.exit(0);
+  }
+
   const commentDeleteMatch = /\\/issues\\/comments\\/(\\d+)$/.exec(apiPath || '');
   if (commentDeleteMatch && method === 'DELETE') {
     const id = commentDeleteMatch[1];
@@ -325,11 +330,16 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  if (/\\/commits\\/[^/]+\\/check-runs(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
+    process.stdout.write(JSON.stringify({ check_runs: state.checkRuns || [] }));
+    process.exit(0);
+  }
+
   if (/\\/check-runs$/.test(apiPath || '') && method === 'POST') {
     const parsed = JSON.parse(body);
     const id = state.nextId++;
     state.checkRuns = state.checkRuns || [];
-    state.checkRuns.push(Object.assign({ id }, parsed));
+    state.checkRuns.push(Object.assign({ id, app: { slug: state.checkAppSlug || 'github-actions' } }, parsed));
     saveState(state);
     process.stdout.write(JSON.stringify({ id, html_url: 'https://github.com/test/repo/runs/' + id }));
     process.exit(0);
@@ -365,6 +375,9 @@ export interface GhStubState {
   labels: string[];
   issueLabels: Record<string, string[]>;
   apiActor?: string;
+  defaultBranch?: string;
+  checkAppSlug?: string;
+  checkRuns?: unknown[];
   pullMetadata?: unknown;
   pullCommits?: unknown[];
   pullReviews?: unknown[];
@@ -424,6 +437,7 @@ export function createGhStub(baseDir: string): GhStub {
     prs: {},
     labels: [],
     issueLabels: {},
+    defaultBranch: 'main',
   };
   fs.writeFileSync(statePath, JSON.stringify(initialState));
 

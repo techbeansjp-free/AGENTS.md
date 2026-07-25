@@ -22,11 +22,13 @@ Claude CodeへCodex固有slugや設定keyを渡さない。具体的Claude model
 
 ## ローカル実行とGitHub証跡
 
-AI reviewは進行役がcleanなprotected base worktreeまたはversion固定installed packageのadapterへ委譲する。launcherはprotected base SHAのephemeral cloneでbuildしたclassifier、prompt generator、adapter、recorderだけを使い、Issue worktreeが変更した実行コードを同じPRの証跡生成へ使わない。Codex/Claude Codeはローカルの既存ログインを使い、provider credentialをCIへ移送しない。
+AI reviewは進行役がcleanなrepository default branchのprotected base worktreeまたはversion固定installed packageのadapterへ委譲する。launcherはprotected base SHAのephemeral cloneでbuildしたclassifier、prompt generator、adapter、recorderだけを使い、credential-bearing remoteを削除し、Issue worktreeが変更した実行コードを同じPRの証跡生成へ使わない。Codex/Claude Codeはローカルの既存ログインを使い、provider credentialをCIへ移送しない。
 
-trusted recorderはverdict、target SHA、prompt/artifact/launcher digest、protected base SHA、ephemeral-clone/read-only attestation、adapter能力、`review-` namespaceのreviewer run ID/slotをGitHub PR reviewへ保存する。Review API actorはAIレビュア本人ではなくCoordination Backendへの記録主体であり、writer actorと同一でもよい。worker/reviewerにはReview API投稿能力を与えない。
+trusted recorderはverdict、target SHA、prompt/artifact/launcher digest、protected base SHA、one-time attempt ID/token、credential-scrubbed ephemeral-clone/read-only attestation、adapter能力、`review-` namespaceのreviewer run ID/slotをGitHub PR reviewへ保存する。Review API actorはAIレビュア本人ではなくCoordination Backendへの記録主体であり、writer actorと同一でもよい。worker/reviewerにはReview API投稿能力を与えない。
 
-GitHub Actionsはprotected baseのverifierでPR/commit/review API metadataと証跡を検証し、gate reportとCheck Runだけを生成する。AI、provider CLI、Codex Action、provider API credential、self-hosted runnerを使用しない。review actorが未登録、actor関係が未解決、実行attestation・SHA・digest不一致、Strict slot不足・重複、判定不能なら `action_required`。同一writer/recorder actorでもattestationを満たせば受理し、全reviewerがpass/passかつblocking無しの場合だけsuccessとする。
+GitHub Actionsはprotected baseのverifierでPR/commit/review API metadataと証跡を検証し、latest attemptのcanonical evidence digest付きgate reportとCheck Runだけを生成する。AI、provider CLI、Codex Action、provider API credential、self-hosted runnerを使用しない。review actorが未登録、actor関係が未解決、実行attestation・SHA・digest不一致、latest Strict attemptのslot不足・重複、判定不能なら `action_required`。旧attemptへfallbackせず、同一writer/recorder actorでもattestationを満たし、latest attemptの全reviewerがpass/passかつblocking無しの場合だけsuccessとする。
+
+GitHub Actions Appの一致だけではworkflow sourceを識別できない。#274は固定SHAのbootstrapとreport整合性までを扱い、通常のI2 enforcementはIssue #283が導入する専用GitHub App source identityを必須とする。
 
 ## 通常作業・配布・完了条件
 

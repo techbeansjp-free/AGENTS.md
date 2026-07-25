@@ -88,15 +88,28 @@ launch_gate_reviewer() {
   ASC_REVIEW_REASONING="$effort"
   export ASC_REVIEW_MODEL ASC_REVIEW_REASONING
 
+  local original_home="${HOME:-}"
+  local isolated_root
+  isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-reviewer.XXXXXX")"
+  ASC_REVIEWER_ORIGINAL_HOME="$original_home"
+  ASC_REVIEWER_SANITIZED_ROOT="$isolated_root"
+  export ASC_REVIEWER_ORIGINAL_HOME ASC_REVIEWER_SANITIZED_ROOT
+
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
     if ! command -v "$codex_executable" >/dev/null 2>&1; then
       _codex_fail_safe "Codex CLI が見つかりません"
+      rm -rf -- "$isolated_root"
       return
     fi
     local quoted_executable
+    local quoted_root
+    local denied_home
     printf -v quoted_executable '%q' "$codex_executable"
-    GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -"
+    printf -v quoted_root '%q' "$isolated_root/workspace"
+    denied_home="${original_home//\\/\\\\}"
+    denied_home="${denied_home//\"/\\\"}"
+    GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --ask-for-approval never --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -C $quoted_root --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"$denied_home\"=\"deny\"}' -"
   elif [[ -n "${CODEX_REVIEWER_CMD:-}" ]]; then
     GATE_REVIEWER_CMD="$CODEX_REVIEWER_CMD"
   fi
@@ -105,6 +118,7 @@ launch_gate_reviewer() {
   set +e
   _codex_gate_lifecycle "$@"
   local rc=$?
+  rm -rf -- "$isolated_root"
   return "$rc"
 }
 

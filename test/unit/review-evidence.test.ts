@@ -13,18 +13,22 @@ const baseSha = 'c'.repeat(40);
 const artifacts = [{ path: 'SPEC.md', digest: `sha256:${'b'.repeat(64)}` }];
 const promptDigest = evidencePromptDigest('canonical reviewer prompt');
 const launcherDigest = `sha256:${'d'.repeat(64)}`;
+const launcherTokenDigest = `sha256:${'e'.repeat(64)}`;
 
 function evidence(slot: 1 | 2, overrides: Partial<ReviewEvidence> = {}): ReviewEvidence {
   return {
-    schema_version: 'agent-skill-chain/gate-review-evidence/v2',
+    schema_version: 'agent-skill-chain/gate-review-evidence/v3',
     issue_id: 'ISSUE-271',
     gate: 'spec',
     profile: 'strict',
     target_sha: targetSha,
+    attempt_id: 'attempt-current',
+    expected_count: 2,
     execution: {
       launcher: 'agent-skill-chain/gate-local-review/v1',
       trusted_base_sha: baseSha,
       launcher_digest: launcherDigest,
+      launcher_token_digest: launcherTokenDigest,
       isolation: 'ephemeral_clone',
       sandbox: 'read_only',
     },
@@ -89,12 +93,43 @@ test('strict: trustedな独立slot 1/2だけがapprovedになる', () => {
   assert.equal(result.final, 'approved');
   assert.equal(result.reviewers.length, 2);
   assert.deepEqual(result.reviewers.map((entry) => entry.slot), [1, 2]);
+  assert.equal(result.review_attempt?.attempt_id, 'attempt-current');
+  assert.match(result.review_attempt?.evidence_digest ?? '', /^sha256:[0-9a-f]{64}$/);
 });
 
 test('strict: 1件不足またはslot重複はhuman_required', () => {
   assert.equal(verify([review(1, 1)]).final, 'human_required');
   assert.equal(verify([review(1, 1), review(2, 1)]).final, 'human_required');
   assert.equal(verify([review(1, 1)], { profile: 'standard' }).final, 'human_required');
+});
+
+test('retry: same-SHAの旧complete attemptを無視して最新attemptだけを採用し、最新不完全時はfallbackしない', () => {
+  const oldOne = evidence(1, { attempt_id: 'attempt-old' });
+  const oldTwo = evidence(2, { attempt_id: 'attempt-old' });
+  const newOne = evidence(1, { attempt_id: 'attempt-new' });
+  const newTwo = evidence(2, { attempt_id: 'attempt-new' });
+  const complete = verify([
+    review(1, 1, { body: renderReviewEvidence(oldOne) }),
+    review(2, 2, { body: renderReviewEvidence(oldTwo) }),
+    review(3, 1, { body: renderReviewEvidence(newOne) }),
+    review(4, 2, { body: renderReviewEvidence(newTwo) }),
+  ]);
+  assert.equal(complete.final, 'approved');
+  assert.equal(complete.review_attempt?.attempt_id, 'attempt-new');
+  const incomplete = verify([
+    review(1, 1, { body: renderReviewEvidence(oldOne) }),
+    review(2, 2, { body: renderReviewEvidence(oldTwo) }),
+    review(3, 1, { body: renderReviewEvidence(newOne) }),
+  ]);
+  assert.equal(incomplete.final, 'human_required');
+  const malformedOld = evidence(1, { attempt_id: 'attempt-old' });
+  delete (malformedOld.execution as Partial<ReviewEvidence['execution']>).launcher_token_digest;
+  const validAfterMalformedHistory = verify([
+    review(1, 1, { body: renderReviewEvidence(malformedOld) }),
+    review(2, 1, { body: renderReviewEvidence(newOne) }),
+    review(3, 2, { body: renderReviewEvidence(newTwo) }),
+  ]);
+  assert.equal(validAfterMalformedHistory.final, 'approved');
 });
 
 test('provenance: 同一actorのtrusted recorderをrun attestationで区別し、未登録・actor未解決は拒否する', () => {
@@ -120,6 +155,12 @@ test('freshness: API commit SHA、本文target、prompt、artifact digest改変�
   const badExecution = evidence(1);
   badExecution.execution.launcher_digest = `sha256:${'e'.repeat(64)}`;
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badExecution) }), review(2, 2)]).final, 'human_required');
+  const mismatchedToken = evidence(2);
+  mismatchedToken.execution.launcher_token_digest = `sha256:${'f'.repeat(64)}`;
+  assert.equal(
+    verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(mismatchedToken) })]).final,
+    'human_required',
+  );
   const badRun = evidence(1);
   badRun.reviewer.run_id = 'run-writer-1';
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badRun) }), review(2, 2)]).final, 'human_required');

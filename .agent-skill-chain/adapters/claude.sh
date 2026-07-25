@@ -81,6 +81,50 @@ _asc_cli() {
   fi
 }
 
+# AI reviewerへはmodel providerのローカルlogin保存先だけを渡し、GitHub credential・gh/git設定・
+# caller HOMEを渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace以外の読取りは不要。
+_run_reviewer_sanitized() {
+  local prompt="$1" reviewer_cmd="$2" timeout_sec="$3"
+  local isolated_root="${ASC_REVIEWER_SANITIZED_ROOT:-}"
+  local owns_root=false
+  if [[ -z "$isolated_root" ]]; then
+    isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-reviewer.XXXXXX")"
+    owns_root=true
+  fi
+  mkdir -p "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
+  chmod 700 "$isolated_root" "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
+
+  local original_home="${ASC_REVIEWER_ORIGINAL_HOME:-${HOME:-}}"
+  local codex_home="${CODEX_HOME:-${original_home:+$original_home/.codex}}"
+  local claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
+  local -a clean_env=(
+    env -i
+    "PATH=$PATH"
+    "HOME=$isolated_root/home"
+    "XDG_CONFIG_HOME=$isolated_root/xdg"
+    "GH_CONFIG_DIR=$isolated_root/xdg/gh"
+    "GIT_CONFIG_GLOBAL=/dev/null"
+    "GIT_CONFIG_SYSTEM=/dev/null"
+    "GIT_TERMINAL_PROMPT=0"
+    "TMPDIR=${TMPDIR:-/tmp}"
+    "LANG=${LANG:-C.UTF-8}"
+    "LC_ALL=${LC_ALL:-}"
+    "ASC_REVIEWER_SANITIZED_ROOT=$isolated_root"
+  )
+  [[ -n "$codex_home" && -d "$codex_home" ]] && clean_env+=("CODEX_HOME=$codex_home")
+  [[ -n "$claude_config" && -d "$claude_config" ]] && clean_env+=("CLAUDE_CONFIG_DIR=$claude_config")
+
+  local rc=0 output=""
+  if command -v timeout >/dev/null 2>&1; then
+    output="$(printf '%s' "$prompt" | timeout "$timeout_sec" "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+  else
+    output="$(printf '%s' "$prompt" | "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+  fi
+  [[ "$owns_root" == "true" ]] && rm -rf -- "$isolated_root"
+  printf '%s' "$output"
+  return "$rc"
+}
+
 # writer lease を取得する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる。
 # 引数: issue_id, segment
 acquire_lease() {
@@ -266,11 +310,7 @@ launch_gate_reviewer() {
   while ((attempt <= retries)); do
     verdict=""
     rc=0
-    if command -v timeout >/dev/null 2>&1; then
-      verdict="$(printf '%s' "$prompt" | timeout "$timeout_sec" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
-    else
-      verdict="$(printf '%s' "$prompt" | bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
-    fi
+    verdict="$(_run_reviewer_sanitized "$prompt" "$reviewer_cmd" "$timeout_sec")" || rc=$?
     if [[ $rc -eq 0 && -n "$verdict" ]]; then
       break
     fi
@@ -284,7 +324,7 @@ launch_gate_reviewer() {
   fi
 
   if [[ "$backend" == "github" ]]; then
-    for required in ASC_EVIDENCE_BASE_SHA ASC_TRUSTED_BASE_SHA ASC_EVIDENCE_PR_NUMBER ASC_REVIEWER_RUN_ID ASC_REVIEWER_SLOT; do
+    for required in ASC_EVIDENCE_BASE_SHA ASC_TRUSTED_BASE_SHA ASC_EVIDENCE_PR_NUMBER ASC_REVIEW_ATTEMPT_ID ASC_REVIEW_EXPECTED_COUNT ASC_LAUNCHER_TOKEN_FILE ASC_REVIEWER_RUN_ID ASC_REVIEWER_SLOT; do
       if [[ -z "${!required:-}" ]]; then
         _fail_safe "GitHub review evidence投稿に必要な $required がありません"
         return
@@ -294,7 +334,8 @@ launch_gate_reviewer() {
     local evidence_reasoning="${ASC_REVIEW_REASONING:-${CLAUDE_CORE_REVIEW_REASONING_TIER:-explicit_selection}}"
     if ! printf '%s' "$verdict" | _asc_cli gate submit-evidence \
       "$issue_id" "$gate_id" "$profile" "$target_sha" "$ASC_EVIDENCE_BASE_SHA" "$ASC_TRUSTED_BASE_SHA" \
-      "$ASC_EVIDENCE_PR_NUMBER" "$ASC_REVIEWER_RUN_ID" "$ASC_REVIEWER_SLOT" \
+      "$ASC_EVIDENCE_PR_NUMBER" "$ASC_REVIEW_ATTEMPT_ID" "$ASC_REVIEW_EXPECTED_COUNT" \
+      "$ASC_REVIEWER_RUN_ID" "$ASC_REVIEWER_SLOT" \
       "${ASC_REVIEW_ADAPTER:-claude}" "$evidence_model" "$evidence_reasoning" >/dev/null; then
       _fail_safe "verdict のGitHub PR review evidence投稿に失敗しました"
       return

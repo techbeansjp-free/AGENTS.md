@@ -18,15 +18,18 @@ export interface EvidenceVerdict {
 }
 
 export interface ReviewEvidence {
-  schema_version: 'agent-skill-chain/gate-review-evidence/v2';
+  schema_version: 'agent-skill-chain/gate-review-evidence/v3';
   issue_id: string;
   gate: 'spec' | 'design' | 'implementation' | 'validation';
   profile: 'standard' | 'strict';
   target_sha: string;
+  attempt_id: string;
+  expected_count: 1 | 2;
   execution: {
     launcher: 'agent-skill-chain/gate-local-review/v1';
     trusted_base_sha: string;
     launcher_digest: string;
+    launcher_token_digest: string;
     isolation: 'ephemeral_clone';
     sandbox: 'read_only';
   };
@@ -67,8 +70,15 @@ export interface VerifiedReviewer {
   actor_relation: 'same_as_writer' | 'distinct_from_writer';
   trusted_base_sha: string;
   launcher_digest: string;
+  launcher_token_digest: string;
   isolation: 'ephemeral_clone';
   sandbox: 'read_only';
+}
+
+export interface VerifiedReviewAttempt {
+  attempt_id: string;
+  expected_count: number;
+  evidence_digest: string;
 }
 
 export interface EvidenceVerification {
@@ -78,11 +88,24 @@ export interface EvidenceVerification {
   blockers: EvidenceFinding[];
   approved_artifacts: { path: string; digest: string }[];
   reviewers: VerifiedReviewer[];
+  review_attempt?: VerifiedReviewAttempt;
   reason?: string;
 }
 
 export function evidencePromptDigest(prompt: string): string {
   return digestOf(prompt);
+}
+
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson(entry)).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 export function renderReviewEvidence(evidence: ReviewEvidence): string {
@@ -150,15 +173,19 @@ export function isEvidenceVerdict(value: unknown, digestRequired = true): value 
 
 function isEvidenceShape(value: ReviewEvidence): boolean {
   return (
-    value.schema_version === 'agent-skill-chain/gate-review-evidence/v2' &&
+    value.schema_version === 'agent-skill-chain/gate-review-evidence/v3' &&
     /^ISSUE-[0-9]+$/.test(value.issue_id) &&
     ['spec', 'design', 'implementation', 'validation'].includes(value.gate) &&
     ['standard', 'strict'].includes(value.profile) &&
     typeof value.target_sha === 'string' &&
+    typeof value.attempt_id === 'string' &&
+    /^attempt-[A-Za-z0-9._-]+$/.test(value.attempt_id) &&
+    [1, 2].includes(value.expected_count) &&
     !!value.execution &&
     value.execution.launcher === 'agent-skill-chain/gate-local-review/v1' &&
     typeof value.execution.trusted_base_sha === 'string' &&
     /^sha256:[0-9a-f]{64}$/.test(value.execution.launcher_digest) &&
+    /^sha256:[0-9a-f]{64}$/.test(value.execution.launcher_token_digest) &&
     value.execution.isolation === 'ephemeral_clone' &&
     value.execution.sandbox === 'read_only' &&
     !!value.reviewer &&
@@ -204,32 +231,70 @@ export function verifyGithubReviewEvidence(options: {
     return fail('PR/commitのwriter actorを完全に解決できません');
   }
   const expectedByPath = new Map(options.expectedArtifacts.map((artifact) => [artifact.path, artifact.digest]));
-  const candidates: { api: GithubReviewRecord; evidence: ReviewEvidence; actor: string }[] = [];
+  const matching: {
+    api: GithubReviewRecord;
+    evidence: Partial<ReviewEvidence>;
+    reviewId: number;
+  }[] = [];
 
   for (const review of options.reviews) {
     if (!review.body.includes(REVIEW_EVIDENCE_MARKER)) continue;
-    let evidence: ReviewEvidence;
+    let parsed: unknown;
     try {
-      const parsed = parseReviewEvidence(review.body);
-      if (!parsed || !isEvidenceShape(parsed)) return fail(`review ${review.id} のevidence形式が不正です`);
-      evidence = parsed;
+      parsed = parseReviewEvidence(review.body);
     } catch {
       return fail(`review ${review.id} のevidence JSONを検証できません`);
     }
+    if (!parsed || typeof parsed !== 'object') continue;
+    const routed = parsed as Partial<ReviewEvidence>;
+    // 過去schemaと別Issue/gate/profile/targetの監査履歴は候補にしない。同一targetのv3だけを
+    // 最新attempt選択へ進めるため、same-SHA retry時も旧attemptを履歴として保持できる。
+    if (routed.schema_version !== 'agent-skill-chain/gate-review-evidence/v3') continue;
     if (
-      evidence.issue_id !== options.issueId ||
-      evidence.gate !== options.gate ||
-      evidence.profile !== options.profile
+      routed.issue_id !== options.issueId ||
+      routed.gate !== options.gate ||
+      routed.profile !== options.profile ||
+      routed.target_sha !== options.targetSha
     ) {
       continue;
     }
-    const actor = review.user?.login;
+    const reviewId = Number(review.id);
+    if (!Number.isSafeInteger(reviewId) || reviewId <= 0) return fail(`review ${review.id} のAPI IDが不正です`);
+    matching.push({ api: review, evidence: routed, reviewId });
+  }
+
+  if (matching.length === 0) return fail('現在のtarget SHA用review evidenceがありません');
+  const latest = matching.reduce((current, candidate) => candidate.reviewId > current.reviewId ? candidate : current);
+  if (!isEvidenceShape(latest.evidence as ReviewEvidence)) {
+    return fail(`review ${latest.api.id} のevidence形式が不正です`);
+  }
+  const latestEvidence = latest.evidence as ReviewEvidence;
+  const selected = matching.filter((candidate) => candidate.evidence.attempt_id === latestEvidence.attempt_id);
+  for (const candidate of selected) {
+    if (!isEvidenceShape(candidate.evidence as ReviewEvidence)) {
+      return fail(`review ${candidate.api.id} のevidence形式が不正です`);
+    }
+  }
+  const candidates = selected.map(({ api, evidence }) => ({
+    api,
+    evidence: evidence as ReviewEvidence,
+    actor: api.user?.login ?? '',
+  }));
+
+  const expectedCount = options.profile === 'strict' ? 2 : 1;
+  if (latestEvidence.expected_count !== expectedCount) {
+    return fail(`最新review attemptのexpected_countがprofileと一致しません: ${latestEvidence.attempt_id}`);
+  }
+
+  for (const candidate of candidates) {
+    const { api: review, evidence, actor } = candidate;
     if (!actor) return fail(`review ${review.id} のactorを解決できません`);
     if (!options.trustedActors.includes(actor)) return fail(`review ${review.id} のactorはtrusted recorderではありません`);
     if (review.state.toUpperCase() === 'DISMISSED') return fail(`review ${review.id} はdismiss済みです`);
-    if (review.commit_id !== options.targetSha || evidence.target_sha !== options.targetSha) {
-      return fail(`review ${review.id} のtarget SHAが現在のPR headと一致しません`);
+    if (review.commit_id !== options.targetSha) {
+      return fail(`review ${review.id} のAPI commit SHAが現在のPR headと一致しません`);
     }
+    if (evidence.expected_count !== expectedCount) return fail(`review ${review.id} のexpected_countが一致しません`);
     if (evidence.prompt_digest !== options.expectedPromptDigest) {
       return fail(`review ${review.id} のprompt digestが一致しません`);
     }
@@ -270,10 +335,9 @@ export function verifyGithubReviewEvidence(options: {
         return fail(`review ${review.id} の成果物digestが一致しません: ${artifactPath}`);
       }
     }
-    candidates.push({ api: review, evidence, actor });
   }
 
-  const expectedSlots = options.profile === 'strict' ? [1, 2] : [1];
+  const expectedSlots = expectedCount === 2 ? [1, 2] : [1];
   if (candidates.length !== expectedSlots.length) {
     return fail(`独立review evidence件数が不足または過剰です: expected=${expectedSlots.length}, actual=${candidates.length}`);
   }
@@ -283,6 +347,8 @@ export function verifyGithubReviewEvidence(options: {
     return fail('reviewer run IDまたはslotが重複しています');
   }
   if (expectedSlots.some((slot) => !slots.has(slot as 1 | 2))) return fail('必要なreviewer slotが揃っていません');
+  const tokenDigests = new Set(candidates.map((candidate) => candidate.evidence.execution.launcher_token_digest));
+  if (tokenDigests.size !== 1) return fail('review attempt内のlauncher token digestが一致しません');
 
   const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
   const blockers = verdicts.flatMap((verdict) => verdict.blockers);
@@ -332,8 +398,23 @@ export function verifyGithubReviewEvidence(options: {
       actor_relation: options.writerActors.includes(actor) ? 'same_as_writer' : 'distinct_from_writer',
       trusted_base_sha: evidence.execution.trusted_base_sha,
       launcher_digest: evidence.execution.launcher_digest,
+      launcher_token_digest: evidence.execution.launcher_token_digest,
       isolation: evidence.execution.isolation,
       sandbox: evidence.execution.sandbox,
     })),
+    review_attempt: {
+      attempt_id: latestEvidence.attempt_id,
+      expected_count: expectedCount,
+      evidence_digest: digestOf(canonicalJson(
+        [...candidates]
+          .sort((left, right) => left.evidence.reviewer.slot - right.evidence.reviewer.slot)
+          .map(({ api, evidence, actor }) => ({
+            review_id: String(api.id),
+            actor,
+            commit_id: api.commit_id,
+            evidence,
+          })),
+      )),
+    },
   };
 }

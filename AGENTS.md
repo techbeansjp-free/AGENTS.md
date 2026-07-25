@@ -14,7 +14,7 @@
 | I2 セグメントゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する | GitHub モード：Check Run の成功状態（required status を専用 App/Workflow に限定）。ローカルモード：`reviews/<gate>.yaml` + `.agent-skill-chain/schemas/gate-report.schema.yaml` |
 | I3 耐久性 | 作業状態は常に Git（remote push 済み）から完全復元可能。頭の中にしか無い状態を作らない | セグメント完了ごとの commit+push、`.agent-skill-chain/scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
 | I4 分離 | 1 Issue = 1 ブランチ = 1 worktree = 1 PR。main への変更は PR 経由のみ | branch protection、`.agent-skill-chain/ci/verify-branch-name.sh`・`.agent-skill-chain/ci/verify-worktree-path.sh` |
-| I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR review証跡・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | role capability分離、protected-base実行attestation、main worktree clean チェック、ワーカー報告固定スキーマ（`.agent-skill-chain/schemas/worker-report.schema.yaml`） |
+| I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR review証跡・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | role capability・credential分離、protected-base実行attestation、main worktree clean チェック、ワーカー報告固定スキーマ（`.agent-skill-chain/schemas/worker-report.schema.yaml`） |
 | I6 正準モデル | 調整状態は選択された Coordination Backend のプリミティブにのみ存在し、GitHub Flow 標準語彙で記述する。複数の Coordination Backend 間で同一 Issue の状態を同期しない | GitHub モード：`.agent-skill-chain/scripts/lint-vocab.sh` + Check Run 正本。ローカルモード：`state.yaml` が正本 |
 | I7 仕様⇔検証の追跡 | 全 AC-ID は最低1つの検証方法(`automated\|manual\|hybrid`)と証跡に対応する。承認後の AC 変更はゲート再通過を強制する | `.agent-skill-chain/ci/verify-ac-coverage.sh`、SPEC 差分検知によるゲート無効化（A-6 相当） |
 | I8 安全側ラチェット | autonomy の降格は自動、昇格は人間の明示行為のみ。既定は `autonomy:gated`。`risk != normal`（`unclassified` 含む）OR `autonomy == full` → `review_profile: strict` | Actions の状態遷移規則（昇格 workflow が存在しないことを含め検査） |
@@ -60,7 +60,7 @@ Issue作成 → worktree作成 → SPECワーカーが最初のcheckpointをpush
 | セグメント作業ワーカー | 自branchへのcommit/push、Draft PR作成（SPECワーカーのみ）、Issueコメント | writer（同時1つ） |
 | ゲートレビュア | read-only + verdictをtrusted recorderへ返却 | read-only（複数並列可） |
 
-権限はrole capabilityとcredential/GitHub権限を分離して担保する。GitHub actorがwriterとrecorderで同一でも、protected-baseの隔離launcher、read-only reviewer run、固有run ID/slot、SHA・prompt・artifact・launcher digestを検証できる場合は同一roleと見なさない。ツール名の一律 deny はしない。lease スキーマは `.agent-skill-chain/schemas/lease.schema.yaml`、既定 `ttl_seconds: 3600` / `renewal_interval_seconds: 900`。WIP 上限は worktree 残存数ではなく有効 writer lease 数で判定（既定 `wip_limit: 3`）。
+権限はrole capabilityとcredential/GitHub権限を分離して担保する。GitHub actorがwriterとrecorderで同一でも、repository default branchのprotected-base隔離launcher、GitHub credentialを持たないread-only reviewer、one-time attempt token、固有run ID/slot、SHA・prompt・artifact・launcher digest、latest attemptの集約digestを検証できる場合は同一roleと見なさない。ツール名の一律 deny はしない。lease スキーマは `.agent-skill-chain/schemas/lease.schema.yaml`、既定 `ttl_seconds: 3600` / `renewal_interval_seconds: 900`。WIP 上限は worktree 残存数ではなく有効 writer lease 数で判定（既定 `wip_limit: 3`）。
 
 ## ブランチ・worktree
 
@@ -73,7 +73,7 @@ worktree: .worktrees/<YYYYMMDD_HHMMSS>-<type>-<issue-id>-<slug>/   (timestamp = 
 
 ## ゲートの継承・無効化
 
-Check Run は commit SHA に紐づく。`.agent-skill-chain/scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行、変化ありなら当該ゲートと全下流ゲートを無効化する（対応表は `.agent-skill-chain/schemas/gate-report.schema.yaml` 添付コメント参照）。
+Check Run は commit SHA に紐づく。verified gate reportとreview evidence digestはCheck Run outputへ耐久保存し、I2の専用App/Workflowとして許可されたsource identityのlatest successだけからnoncanonical cacheを復元する。同じGitHub Actions Appであることだけをsource trustの証明にしてはならない。`.agent-skill-chain/scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行、変化ありなら当該ゲートと全下流ゲートを無効化する（対応表は `.agent-skill-chain/schemas/gate-report.schema.yaml` 添付コメント参照）。
 
 ## ADR・テンプレート・テスト適用性
 
