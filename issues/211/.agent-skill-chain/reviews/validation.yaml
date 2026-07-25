@@ -1,0 +1,20 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: validation
+  target_sha: 339d65ff5302bbae2d95fbdbfcda57f0693f5522
+  conformance: fail
+  falsification: fail
+  final: human_required
+  blockers:
+    - severity: blocking
+      origin: specification
+      code: post-merge-ac-precondition-unsatisfiable-pre-merge
+      evidence:
+        - SPEC.md
+          AC-2/AC-3は本Issue自身のマージ後にしか成立しない事象を、マージ前に完了すべきvalidationセグメントの受入条件としている構造的欠陥
+        - segments.yamlの固定4セグメント順序(spec→design→implementation→validation→completed)により、validation-gateは常にマージより前に実行され、マージ後の観測は原理的に立証不可能
+        - validation_workerの選択(AC-1=pass, AC-2/AC-3=fail+詳細理由)はI8(silent
+          pass禁止)に整合した安全側の妥当な判断であり、worker起因の欠陥ではなくSPEC設計自体の欠陥
+        - npm test 474/474 pass・AC-1のconformance自体には問題なし
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts: []

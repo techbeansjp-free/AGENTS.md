@@ -1,0 +1,19 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: validation
+  target_sha: 8ab47bbf1720ceec04835fcd4f4ee86ee428c697
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: validation
+      code: intermittent-regression-run1-unattributed
+      evidence:
+        - "VALIDATION.md regression:
+          run1=481/482(fail1件はログ捕捉前で特定不能)、run2/3=482/482。独立レビュアA/Bの再実行でもrelease\
+          関連テストは全pass・間欠failは非再現。本変更と無関係な既知flakyの可能性（別途Issue化して原因調査予定）"
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: VALIDATION.md
+      digest: sha256:aa5eb89b39806aee1fa9421d21c8905f4e510f3ba44b1de5f79379fa351dd4fc

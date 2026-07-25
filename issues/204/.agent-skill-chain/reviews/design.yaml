@@ -1,0 +1,19 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: design
+  target_sha: b5a021ed20d309e3a5a86f15b8f346c337279ec0
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: warning
+      origin: design
+      code: design-ac5-mapping-inaccurate
+      evidence:
+        - 対応表のAC-5行の記述がPLAN.mdのスコープアウト記述と食い違う。実質判断は妥当
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: DESIGN.md
+      digest: sha256:f9b9a64e3ae8f9f3d39fa859a927005d094b818cf09c8c2b9406ec0bc1ae3232
+    - path: PLAN.md
+      digest: sha256:19c9a5c61f555cb61d477b5bab065349d28c11e3315ec6d7b21012b4f302f02a

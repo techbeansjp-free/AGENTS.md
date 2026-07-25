@@ -1,0 +1,16 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: design
+  target_sha: be5678f5c58f71caffd2e215addd75d85f211938
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers: []
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: DESIGN.md
+      digest: sha256:f4ea99b870ddc0b03b7d9a83a0c8ba2f708cb8a215b7e17d5e13831c3a669ab5
+    - path: PLAN.md
+      digest: sha256:5980c3d262b523c9cdf15e25694623865138eaec8ddef7588930a2c9a9cd7cf4
+    - path: docs/adr/ADR-0007-stray-root-artifact-post-merge-cleanup.md
+      digest: sha256:df5d4484e6c56ed8aee1debd0ccf383cf31c63ae66b4454c8266d3ad3f1b7c1b

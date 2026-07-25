@@ -1,0 +1,19 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: design
+  target_sha: 51f991d131b9f6902cf44516c5a2b001650675a4
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: design
+      code: design-l20-wording
+      evidence:
+        - 事前調査の要約表現がやや不正確だが効果としては正しく非blocking
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: DESIGN.md
+      digest: sha256:cb3412fd4d4bc05557fc609398248ecf180a16b01b8ec022e25d93743f3f6379
+    - path: PLAN.md
+      digest: sha256:8e1ef89e0b21566cb0b1611ac0884fa2744813ce65858fba17ad758b9c6ac5ad

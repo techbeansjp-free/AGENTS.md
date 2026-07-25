@@ -1,0 +1,14 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: implementation
+  target_sha: 83c5dfa0a60d0487468732379b029cc985a8a4f1
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers: []
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: src/commands/release.ts
+      digest: sha256:c2aad2ff550c3be5ba971a57cc56b9b2d4a865dab96416a46a758e657645387b
+    - path: test/integration/release.test.ts
+      digest: sha256:00240edfb75a90e58b0e8a3231815e72c4e244bd66dba75a647f7ec3fbe69745

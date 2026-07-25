@@ -1,0 +1,20 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: validation
+  target_sha: 029d5ed
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: validation
+      code: pre-existing-lint-references-failure
+      evidence:
+        - root-cleanup.yml:1の禁止参照はISSUE-208(main)由来の既存違反、本PR変更対象外
+    - severity: info
+      origin: validation
+      code: gate-checks-action-required
+      evidence:
+        - gate-review系はANTHROPIC_API_KEY未設定による既知の恒久失敗、本validation-gate承認で解消される正常な待機状態
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts: []

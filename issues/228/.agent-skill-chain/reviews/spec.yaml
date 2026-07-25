@@ -1,0 +1,12 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: spec
+  target_sha: 92468894dda894359f9144177980695a90b4dcdd
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers: []
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: SPEC.md
+      digest: sha256:75bc6b85861372a5420c36972cc24a67776f52ba68ada066a39dc50ca38ef4ab

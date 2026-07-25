@@ -1,0 +1,12 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: validation
+  target_sha: d0032ae27d9548104b9ced52c13109f4f660ef66
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers: []
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: VALIDATION.md
+      digest: sha256:3dd3d358e265374055c6e03a9f77d3391201ee2ded3330e85c9e9ccfc6b716f3
