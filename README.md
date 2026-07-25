@@ -16,7 +16,7 @@ npx github:techbeansjp-free/AGENTS.md init
 npx github:techbeansjp-free/AGENTS.md#<tag-or-branch> init
 ```
 
-`init` は `AGENTS.md`・`CLAUDE.md`・`docs/GLOSSARY.md` をルート直下へ、`standards/templates/schemas/config/adapters/scripts/ci/hooks` を `.agent-skill-chain/` 配下へローカルファイル操作のみで導入する（GitHub API 呼び出しは行わない。衝突するファイルがある場合は上書きせず日本語の理由付きエラーで停止する）。`--dry-run` で実ファイルを書き込まずに導入予定一覧を確認できる。GitHub 側（`.github/` ワークフロー同期・ラベル・branch ruleset）の適用は続けて次を実行する（認証済みの `gh` CLI と対象リポジトリの GitHub remote、または `--repo`/`owner/repo` 引数が必要）。
+`init` は `AGENTS.md`・`CLAUDE.md`・`docs/GLOSSARY.md` をルート直下へ、`standards/templates/schemas/config/adapters/scripts/ci/hooks` を `.agent-skill-chain/` 配下へローカルファイル操作だけで導入する。`.github/` は変更しないため、インストールしただけでGitHub Actionsが追加・更新されることはない。衝突するファイルがある場合は上書きせず日本語の理由付きエラーで停止する。`--dry-run` で実ファイルを書き込まずに導入予定一覧を確認できる。GitHub 側（`.github/` ワークフロー同期・ラベル・branch ruleset）を有効にする場合だけ、続けて次を明示実行する（認証済みの `gh` CLI と対象リポジトリの GitHub remote、または `--repo`/`owner/repo` 引数が必要）。
 
 ```bash
 npx github:techbeansjp-free/AGENTS.md setup github   # .github同期 + ラベル + ruleset をまとめて実行
@@ -27,11 +27,11 @@ npx github:techbeansjp-free/AGENTS.md setup ruleset [owner/repo]   # rulesetの�
 導入後の更新・撤去には `upgrade`/`uninstall` を使う。
 
 ```bash
-npx github:techbeansjp-free/AGENTS.md upgrade [target_dir] [--dry-run]     # 正本アセットを現行バージョンへミラー更新（project/は不可侵）
+npx github:techbeansjp-free/AGENTS.md upgrade [target_dir] [--dry-run]     # 正本アセットを更新（project/・展開済み.github/は不可侵）
 npx github:techbeansjp-free/AGENTS.md uninstall [target_dir] [--dry-run]  # 安全確認（未commit差分なし・残存worktreeなし）を経て撤去（project/は保持）
 ```
 
-`setup`（引数なし）は `init` + `setup github` を一括実行する後方互換の非推奨エイリアスとして残置している（実行時にstderrへ非推奨警告を出す）。GitHub Issue/PR/Check Run を使わないローカルモード（`coordination.backend: local`）では `init` のみで導入が完結する。
+`setup`（引数なし）はローカル資産だけを導入する非推奨エイリアスとして残置している（実行時にstderrへ非推奨警告を出す）。`setup` と `upgrade` は `.github/` を暗黙変更しない。GitHub連携の追加・更新は `setup github` だけが行う。GitHub Issue/PR/Check Run を使わないローカルモード（`coordination.backend: local`）では `init` のみで導入が完結する。
 
 `enforce on`/`enforce off` は `.claude/settings.json` へ PreToolUse hook を配線/非配線する。配線されるhookは `tool_name=="Bash"` のコマンド文字列のみを検査し、`git worktree remove` の直接実行と命名規約違反のブランチ作成のみを拒否する狭い安全網であり、Agent/Task 等の非Bashツール呼び出しは対象外（拒否されない）。詳細・設計根拠は [AGENTS.md §不変条件](AGENTS.md) を参照。
 

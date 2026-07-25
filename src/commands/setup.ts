@@ -104,18 +104,9 @@ export async function setup(args: string[]): Promise<number> {
       summary.push(...results.map((r) => `${r.action}: ${r.path}`));
     }
 
-    // Issue #188 AC-1/AC-2: コピー済み config の coordination.backend を読み、github 明示時のみ
-    // GitHub固有処理を実行する。local・config不読時は安全側でスキップする。
-    const decision = decideGithubBundle(targetDir);
-    if (decision.run) {
-      const githubResult = githubBundle(targetDir);
-      if (githubResult.status !== 0) {
-        return fail(`setup github で失敗しました:\n${githubResult.message}`);
-      }
-      summary.push(githubResult.message);
-    } else {
-      summary.push(decision.message);
-    }
+    // 非推奨aliasから外部状態やconsumerの.githubを暗黙変更しない。GitHub連携は
+    // `setup github` という明示的なopt-inだけが実行する。
+    summary.push('[setup github] 未実行: 必要な場合だけ setup github を明示実行してください');
 
     return ok(summary.join('\n'));
   });

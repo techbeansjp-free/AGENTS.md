@@ -85,7 +85,7 @@ test('upgrade: .installed_versionが現行パッケージバージョンへ更�
   assert.notEqual(fs.readFileSync(versionPath, 'utf8').trim(), '0.0.1');
 });
 
-test('upgrade: 同期済みlegacy gate workflowは配布最新版へ安全に修復する', (t) => {
+test('upgrade: 配布templateは更新するが、展開済みlegacy workflowは暗黙変更しない', (t) => {
   const targetDir = mkScratch('upgrade-gate-migration');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
   assert.equal(runCli(['init', targetDir]).status, 0);
@@ -95,16 +95,17 @@ test('upgrade: 同期済みlegacy gate workflowは配布最新版へ安全に修
   const deployed = path.join(targetDir, '.github', relative);
   const legacy = 'name: legacy gate\n# in-ci model invocation\n';
   fs.writeFileSync(installedTemplate, legacy);
+  fs.mkdirSync(path.dirname(deployed), { recursive: true });
   fs.writeFileSync(deployed, legacy);
 
   const result = runCli(['upgrade', targetDir]);
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(fs.readFileSync(deployed, 'utf8'), fs.readFileSync(installedTemplate, 'utf8'));
-  assert.match(fs.readFileSync(deployed, 'utf8'), /gate verify-evidence/);
-  assert.doesNotMatch(fs.readFileSync(deployed, 'utf8'), /in-ci model invocation/);
+  assert.match(fs.readFileSync(installedTemplate, 'utf8'), /gate verify-evidence/);
+  assert.equal(fs.readFileSync(deployed, 'utf8'), legacy);
+  assert.match(result.stdout, /GitHub workflowは未更新/);
 });
 
-test('upgrade: 展開済みworkflowのlocal customization競合は全体を無変更で停止する', (t) => {
+test('upgrade: 展開済みworkflowのlocal customizationを保持して標準assetだけ更新する', (t) => {
   const targetDir = mkScratch('upgrade-gate-conflict');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
   assert.equal(runCli(['init', targetDir]).status, 0);
@@ -114,18 +115,17 @@ test('upgrade: 展開済みworkflowのlocal customization競合は全体を無�
   const deployed = path.join(targetDir, '.github', relative);
   const conventions = path.join(targetDir, '.agent-skill-chain', 'standards', 'GIT_CONVENTIONS.md');
   const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
+  fs.mkdirSync(path.dirname(deployed), { recursive: true });
+  fs.writeFileSync(deployed, 'name: consumer gate\n');
   fs.appendFileSync(deployed, '\n# consumer customization\n');
   fs.appendFileSync(conventions, '\ncustom standard before failed upgrade\n');
   fs.writeFileSync(version, '0.0.1\n');
-  const beforeTemplate = fs.readFileSync(installedTemplate);
   const beforeDeployed = fs.readFileSync(deployed);
-  const beforeConventions = fs.readFileSync(conventions);
 
   const result = runCli(['upgrade', targetDir]);
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /local customization競合/);
-  assert.deepEqual(fs.readFileSync(installedTemplate), beforeTemplate);
+  assert.equal(result.status, 0, result.stderr);
+  assert.notEqual(fs.readFileSync(installedTemplate, 'utf8'), '');
   assert.deepEqual(fs.readFileSync(deployed), beforeDeployed);
-  assert.deepEqual(fs.readFileSync(conventions), beforeConventions);
-  assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+  assert.doesNotMatch(fs.readFileSync(conventions, 'utf8'), /custom standard before failed upgrade/);
+  assert.notEqual(fs.readFileSync(version, 'utf8'), '0.0.1\n');
 });

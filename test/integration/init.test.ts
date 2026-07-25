@@ -26,7 +26,7 @@ test('init --dry-run: 実ファイルは一切作成されず、作成予定一�
   assert.equal(fs.existsSync(targetDir), false, 'target_dir自体が作成されないこと');
 });
 
-test('init: 標準資産・.agent-skill-chain名前空間（hooks含む）・.githubが実体化し、.installed_versionが記録される', (t) => {
+test('init: 標準資産・.agent-skill-chain名前空間だけを実体化し、GitHub Actionsは展開しない', (t) => {
   const targetDir = mkScratch('init-target');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
 
@@ -41,7 +41,8 @@ test('init: 標準資産・.agent-skill-chain名前空間（hooks含む）・.gi
     fs.existsSync(path.join(targetDir, '.agent-skill-chain', 'hooks', 'claude-pretooluse.sh')),
     'hooks/ 名前空間もinitで導入されること',
   );
-  assert.ok(fs.existsSync(path.join(targetDir, '.github', 'CODEOWNERS')));
+  assert.equal(fs.existsSync(path.join(targetDir, '.github')), false);
+  assert.match(result.stdout, /GitHub workflowは未展開/);
 
   const installedVersion = fs.readFileSync(
     path.join(targetDir, '.agent-skill-chain', '.installed_version'),
