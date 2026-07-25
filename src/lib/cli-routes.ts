@@ -48,6 +48,8 @@ export const routes: Record<string, Handler> = {
   'gate mark-human-required': gate.markHumanRequired,
   'gate reviewer-context': gate.reviewerContext,
   'gate reviewer-prompt': gate.reviewerPrompt,
+  'gate strict-prepare': gate.strictPrepare,
+  'gate aggregate-strict': gate.aggregateStrict,
   'pr create': pr.create,
   'adr finalize': adr.finalize,
   'report status': report.status,

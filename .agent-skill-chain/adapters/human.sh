@@ -83,10 +83,11 @@ report_status() {
 # 人間が out-of-band でレビューし verdict を提出→workflow を re-dispatch すると success/failure へ反転する。
 # I8: silent pass しない（未通知でも final=human_required＝approve へ倒さない）。
 #
-# 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
+# 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha> [reviewer_slot] [invocation_id]
 # 終了コード: 3=deferred（正常系。error ではない）/ 1=引数・前提エラー。
 launch_gate_reviewer() {
   local issue_id="${1:-}" gate_id="${2:-}" profile="${3:-}" report_path="${4:-}" target_sha="${5:-}"
+  local reviewer_slot="${6:-}" invocation_id="${7:-}"
 
   if [[ -z "$issue_id" || -z "$gate_id" || -z "$profile" || -z "$report_path" || -z "$target_sha" ]]; then
     echo "launch_gate_reviewer: 引数 <issue_id> <gate_id> <profile> <gate_report_path> <target_sha> が必要です" >&2
@@ -101,6 +102,10 @@ launch_gate_reviewer() {
   esac
   if [[ ! -f "$report_path" ]]; then
     echo "launch_gate_reviewer: gate-report が存在しません（gate review 未実行）: $report_path" >&2
+    return 1
+  fi
+  if [[ "$profile" == "strict" && ( -z "$reviewer_slot" || -z "$invocation_id" ) ]]; then
+    echo "launch_gate_reviewer: strict は reviewer_slot と invocation_id が必要です" >&2
     return 1
   fi
 
@@ -124,11 +129,13 @@ launch_gate_reviewer() {
 - profile: ${profile}
 - target_sha: ${target_sha}
 - gate_report_path: ${report_path}
+- reviewer_slot: ${reviewer_slot:-standard-single-reviewer}
+- invocation_id: ${invocation_id:-not-applicable}
 
 レビュー手順:
   1. 対象セグメントの成果物を read-only で確認する。
   2. conformance（立証: 全 AC-ID の証跡）と falsification（反証: 反例探索）を判定する。
-  3. verdict（conformance/falsification/blockers[origin付き]）を確定する。
+  3. peer reviewerの判定を参照せず、verdict（conformance/falsification/blockers[origin付き]）を確定する。
 
 verdict 提出方法:
   判定済み gate-report を書き込み（agent-skill-chain gate record-verdict "${report_path}" に verdict JSON を stdin で渡す）、

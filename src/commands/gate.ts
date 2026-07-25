@@ -1,4 +1,6 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
@@ -84,11 +86,25 @@ const REVIEWER_CONTEXT_USAGE = `
 `;
 
 const REVIEWER_PROMPT_USAGE = `
-使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha>
+使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha> [reviewer_slot] [invocation_id]
 
 対象セグメントの成果物・AC-ID・上流承認物を read-only で収集し、conformance（立証）/
 falsification（反証）判定プロトコルの指示（ルーブリック・出力 JSON 契約）を標準出力へ出す。
 レビュアへの入力プロンプトであり、本コマンドはファイルを読むのみ（書込みなし）。
+`;
+
+const STRICT_PREPARE_USAGE = `
+使い方: agent-skill-chain gate strict-prepare <issue_id> <gate_report_path>
+
+review_profile=strict かつ final=pending の最終 gate-report から、固定slot reviewer-1 /
+reviewer-2 の別invocationを持つscratch reportと、一回限りのprivate session manifestを作る。
+`;
+
+const AGGREGATE_STRICT_USAGE = `
+使い方: agent-skill-chain gate aggregate-strict <gate_report_path> <session_manifest_path>
+
+private session manifestに結線された2件のscratch reportを一度だけ消費し、slot・invocation・
+Issue・gate・target SHA・profile・完了状態・成果物digestを検査して最終gate-reportへ集約する。
 `;
 
 interface Finding {
@@ -98,9 +114,33 @@ interface Finding {
   evidence: string[];
 }
 
+type ReviewProfile = 'standard' | 'strict';
+type ReviewerSlot = 'reviewer-1' | 'reviewer-2';
+type InvocationStatus = 'pending' | 'completed' | 'failed';
+
+interface ReviewInvocation {
+  issue_id: string;
+  gate_id: Segment;
+  target_sha: string;
+  profile: 'strict';
+  reviewer_slot: ReviewerSlot;
+  invocation_id: string;
+  status: InvocationStatus;
+}
+
+interface ReviewerEvidence extends ReviewInvocation {
+  conformance: 'pass' | 'fail' | 'pending';
+  falsification: 'pass' | 'fail' | 'pending';
+  final: 'approved' | 'rejected' | 'pending' | 'human_required';
+  blockers: Finding[];
+  approved_digest: string;
+  approved_artifacts: { path: string; digest: string }[];
+}
+
 interface GateReport {
   schema_version: string;
   gate: {
+    issue_id?: string;
     id: Segment;
     target_sha: string;
     conformance: 'pass' | 'fail' | 'pending';
@@ -109,7 +149,27 @@ interface GateReport {
     blockers: Finding[];
     approved_digest: string;
     approved_artifacts: { path: string; digest: string }[];
+    review_profile?: ReviewProfile;
+    review_invocation?: ReviewInvocation;
+    reviewers?: ReviewerEvidence[];
   };
+}
+
+interface StrictSessionManifest {
+  schema_version: 'agent-skill-chain/strict-review-session/v1';
+  session_id: string;
+  issue_id: string;
+  gate_id: Segment;
+  target_sha: string;
+  profile: 'strict';
+  final_report_path: string;
+  consumed: boolean;
+  consumed_at?: string;
+  reviewers: {
+    reviewer_slot: ReviewerSlot;
+    invocation_id: string;
+    report_path: string;
+  }[];
 }
 
 interface ReviewerVerdict {
@@ -135,6 +195,86 @@ function deriveFinal(verdict: ReviewerVerdict): GateReport['gate']['final'] {
   if (verdict.conformance === 'pass' && verdict.falsification === 'pass' && !hasBlocking) return 'approved';
   if (verdict.conformance === 'fail' || verdict.falsification === 'fail' || hasBlocking) return 'rejected';
   return 'human_required';
+}
+
+function strictFinding(gateId: Segment, code: string, evidence: string[]): Finding {
+  return {
+    severity: 'blocking',
+    origin: SEGMENT_ORIGIN[gateId] as Finding['origin'],
+    code,
+    evidence,
+  };
+}
+
+function toReviewerEvidence(report: GateReport): ReviewerEvidence | undefined {
+  const invocation = report.gate.review_invocation;
+  if (!invocation) return undefined;
+  return {
+    ...invocation,
+    conformance: report.gate.conformance,
+    falsification: report.gate.falsification,
+    final: report.gate.final,
+    blockers: report.gate.blockers,
+    approved_digest: report.gate.approved_digest,
+    approved_artifacts: report.gate.approved_artifacts,
+  };
+}
+
+function aggregatedLens(reports: GateReport[], lens: 'conformance' | 'falsification'): 'pass' | 'fail' | 'pending' {
+  const values = reports.map((report) => report.gate[lens]);
+  if (values.some((value) => value === 'fail')) return 'fail';
+  if (values.length === 2 && values.every((value) => value === 'pass')) return 'pass';
+  return 'pending';
+}
+
+function artifactsFingerprint(artifacts: { path: string; digest: string }[]): string {
+  return JSON.stringify(
+    [...artifacts]
+      .map((artifact) => ({ path: artifact.path, digest: artifact.digest }))
+      .sort((a, b) => a.path.localeCompare(b.path) || a.digest.localeCompare(b.digest)),
+  );
+}
+
+function artifactFingerprint(report: GateReport): string {
+  return artifactsFingerprint(report.gate.approved_artifacts);
+}
+
+function writePrivateJsonAtomic(filePath: string, value: unknown): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const temporary = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(temporary, filePath);
+}
+
+function parseStrictSessionManifest(value: unknown): StrictSessionManifest | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const candidate = value as Partial<StrictSessionManifest>;
+  if (
+    typeof candidate.schema_version !== 'string' ||
+    typeof candidate.session_id !== 'string' ||
+    typeof candidate.issue_id !== 'string' ||
+    typeof candidate.gate_id !== 'string' ||
+    typeof candidate.target_sha !== 'string' ||
+    typeof candidate.profile !== 'string' ||
+    typeof candidate.final_report_path !== 'string' ||
+    typeof candidate.consumed !== 'boolean' ||
+    !Array.isArray(candidate.reviewers)
+  ) {
+    return undefined;
+  }
+  if (
+    !candidate.reviewers.every(
+      (reviewer) =>
+        typeof reviewer === 'object' &&
+        reviewer !== null &&
+        typeof reviewer.reviewer_slot === 'string' &&
+        typeof reviewer.invocation_id === 'string' &&
+        typeof reviewer.report_path === 'string',
+    )
+  ) {
+    return undefined;
+  }
+  return candidate as StrictSessionManifest;
 }
 
 function validateGateId(value: string): asserts value is Segment {
@@ -197,6 +337,7 @@ export async function review(args: string[]): Promise<number> {
     const scaffold: GateReport = {
       schema_version: 'agent-skill-chain/gate-report/v1',
       gate: {
+        issue_id: `ISSUE-${number}`,
         id: gateId,
         target_sha: targetSha,
         conformance: 'pending',
@@ -205,6 +346,7 @@ export async function review(args: string[]): Promise<number> {
         blockers: [],
         approved_digest: `sha256:${'0'.repeat(64)}`,
         approved_artifacts: [],
+        review_profile: profile,
       },
     };
     const outcome = validateAgainstSchema('gate-report', scaffold, root);
@@ -218,6 +360,288 @@ export async function review(args: string[]): Promise<number> {
   });
 }
 
+/**
+ * Strict reviewのtrusted launcherだけが使うprivate sessionを準備する。成果物branchの外にある
+ * OS runtime領域へ、固定2 slotの別invocationを持つscratch reportを生成する。
+ */
+export async function strictPrepare(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(STRICT_PREPARE_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, gateReportPathRaw] = args;
+    if (!issueIdRaw || !gateReportPathRaw) throw new CliError('issue_id, gate_report_path はすべて必須です');
+    const { issueId } = parseIssueId(issueIdRaw);
+    const root = repoRoot();
+    const gateReportPath = path.resolve(gateReportPathRaw);
+    if (!fs.existsSync(gateReportPath)) throw new CliError(`gate-report が存在しません: ${gateReportPath}`);
+
+    const finalReport = readYamlFile<GateReport>(gateReportPath);
+    const outcome = validateAgainstSchema('gate-report', finalReport, root);
+    if (!outcome.valid) return fail(`gate-report がスキーマに適合しません: ${outcome.errors.join('; ')}`);
+    if (finalReport.gate.review_profile !== 'strict') {
+      return fail(`strict-prepare は review_profile=strict のgate-reportだけを受け入れます`);
+    }
+    if (finalReport.gate.issue_id !== issueId) {
+      return fail(`strict-prepare のissue_idがgate-reportと一致しません: ${finalReport.gate.issue_id ?? '(missing)'}`);
+    }
+    if (finalReport.gate.final !== 'pending') {
+      return fail(`strict-prepare は final=pending のgate-reportだけを受け入れます`);
+    }
+    if (finalReport.gate.review_invocation || (finalReport.gate.reviewers?.length ?? 0) > 0) {
+      return fail('strict-prepare は未使用の最終gate-reportだけを受け入れます');
+    }
+
+    const sessionId = crypto.randomUUID();
+    const repoKey = crypto.createHash('sha256').update(fs.realpathSync(root)).digest('hex').slice(0, 16);
+    const sessionDir = path.join(os.tmpdir(), 'agent-skill-chain-strict-sessions', repoKey, sessionId);
+    fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+
+    const slots: ReviewerSlot[] = ['reviewer-1', 'reviewer-2'];
+    const manifest: StrictSessionManifest = {
+      schema_version: 'agent-skill-chain/strict-review-session/v1',
+      session_id: sessionId,
+      issue_id: issueId,
+      gate_id: finalReport.gate.id,
+      target_sha: finalReport.gate.target_sha,
+      profile: 'strict',
+      final_report_path: gateReportPath,
+      consumed: false,
+      reviewers: [],
+    };
+
+    for (const reviewerSlot of slots) {
+      const invocationId = crypto.randomUUID();
+      const reportPath = path.join(sessionDir, `${reviewerSlot}.yaml`);
+      const scratch: GateReport = structuredClone(finalReport);
+      scratch.gate.review_invocation = {
+        issue_id: issueId,
+        gate_id: finalReport.gate.id,
+        target_sha: finalReport.gate.target_sha,
+        profile: 'strict',
+        reviewer_slot: reviewerSlot,
+        invocation_id: invocationId,
+        status: 'pending',
+      };
+      delete scratch.gate.reviewers;
+      writeYamlFileAtomic(reportPath, scratch);
+      manifest.reviewers.push({ reviewer_slot: reviewerSlot, invocation_id: invocationId, report_path: reportPath });
+    }
+
+    const manifestPath = path.join(sessionDir, 'session.json');
+    writePrivateJsonAtomic(manifestPath, manifest);
+    return ok(
+      [
+        `session_manifest_path: ${manifestPath}`,
+        ...manifest.reviewers.flatMap((reviewer) => [
+          `${reviewer.reviewer_slot}_report_path: ${reviewer.report_path}`,
+          `${reviewer.reviewer_slot}_invocation_id: ${reviewer.invocation_id}`,
+        ]),
+      ].join('\n'),
+    );
+  });
+}
+
+/**
+ * Strict sessionの2件を一度だけ消費するtrusted aggregation。入力妥当性とhuman_requiredを
+ * rejectより先に判定し、両件approvedだけをapprovedにする。
+ */
+export async function aggregateStrict(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(AGGREGATE_STRICT_USAGE);
+      return 0;
+    }
+    const [gateReportPathRaw, manifestPathRaw] = args;
+    if (!gateReportPathRaw || !manifestPathRaw) {
+      throw new CliError('gate_report_path, session_manifest_path はすべて必須です');
+    }
+
+    const root = repoRoot();
+    const gateReportPath = path.resolve(gateReportPathRaw);
+    const manifestPath = path.resolve(manifestPathRaw);
+    if (!fs.existsSync(gateReportPath)) throw new CliError(`gate-report が存在しません: ${gateReportPath}`);
+    const finalReport = readYamlFile<GateReport>(gateReportPath);
+    const finalOutcome = validateAgainstSchema('gate-report', finalReport, root);
+    if (!finalOutcome.valid) return fail(`最終gate-reportがスキーマに適合しません: ${finalOutcome.errors.join('; ')}`);
+
+    const failClosed = (reason: string, reports: GateReport[] = []): number => {
+      finalReport.gate.review_profile = 'strict';
+      delete finalReport.gate.review_invocation;
+      finalReport.gate.reviewers = reports.map(toReviewerEvidence).filter((value): value is ReviewerEvidence => Boolean(value));
+      finalReport.gate.conformance = aggregatedLens(reports, 'conformance');
+      finalReport.gate.falsification = aggregatedLens(reports, 'falsification');
+      finalReport.gate.final = 'human_required';
+      finalReport.gate.blockers = [
+        ...reports.flatMap((report) => report.gate.blockers),
+        strictFinding(finalReport.gate.id, 'strict-aggregation-invalid', [reason]),
+      ];
+      writeYamlFileAtomic(gateReportPath, finalReport);
+      return ok(`final: human_required\nreason: ${reason}`);
+    };
+
+    if (finalReport.gate.review_profile !== 'strict') {
+      return failClosed('最終gate-reportのreview_profileがstrictではありません');
+    }
+    const repoKey = crypto.createHash('sha256').update(fs.realpathSync(root)).digest('hex').slice(0, 16);
+    const expectedRuntimeRoot = path.join(os.tmpdir(), 'agent-skill-chain-strict-sessions', repoKey);
+    const runtimeRelative = path.relative(expectedRuntimeRoot, manifestPath);
+    if (runtimeRelative.startsWith('..') || path.isAbsolute(runtimeRelative) || path.basename(manifestPath) !== 'session.json') {
+      return failClosed('private session manifestがtrusted runtime領域外です');
+    }
+    if (!fs.existsSync(manifestPath)) return failClosed(`private session manifestが存在しません: ${manifestPath}`);
+
+    let manifest: StrictSessionManifest;
+    try {
+      const parsed = parseStrictSessionManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')));
+      if (!parsed) return failClosed('private session manifestの構造が不正です');
+      manifest = parsed;
+    } catch (error) {
+      return failClosed(`private session manifestを解釈できません: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    if (manifest.consumed) return failClosed(`session ${manifest.session_id} は既に消費済みです`);
+    manifest.consumed = true;
+    manifest.consumed_at = new Date().toISOString();
+    writePrivateJsonAtomic(manifestPath, manifest);
+
+    const expectedSlots: ReviewerSlot[] = ['reviewer-1', 'reviewer-2'];
+    const manifestErrors: string[] = [];
+    if (manifest.schema_version !== 'agent-skill-chain/strict-review-session/v1') manifestErrors.push('schema_version不一致');
+    if (!/^ISSUE-[0-9]+$/.test(manifest.issue_id)) manifestErrors.push('issue_id不正');
+    if (manifest.issue_id !== finalReport.gate.issue_id) manifestErrors.push('最終gate-reportとのissue_id不一致');
+    if (manifest.session_id !== path.basename(path.dirname(manifestPath))) manifestErrors.push('session_id不一致');
+    if (manifest.profile !== 'strict') manifestErrors.push('profile不一致');
+    if (manifest.final_report_path !== gateReportPath) manifestErrors.push('final_report_path不一致');
+    if (manifest.gate_id !== finalReport.gate.id) manifestErrors.push('gate_id不一致');
+    if (manifest.target_sha !== finalReport.gate.target_sha) manifestErrors.push('target_sha不一致');
+    if (manifest.reviewers.length !== 2) manifestErrors.push(`reviewer件数=${manifest.reviewers.length}`);
+    const slots = manifest.reviewers.map((reviewer) => reviewer.reviewer_slot);
+    if (!expectedSlots.every((slot) => slots.filter((actual) => actual === slot).length === 1)) {
+      manifestErrors.push(`slot集合不一致: ${slots.join(',')}`);
+    }
+    const invocationIds = manifest.reviewers.map((reviewer) => reviewer.invocation_id);
+    if (new Set(invocationIds).size !== invocationIds.length) manifestErrors.push('invocation_id重複');
+    const reportPaths = manifest.reviewers.map((reviewer) => path.resolve(reviewer.report_path));
+    if (new Set(reportPaths).size !== reportPaths.length) manifestErrors.push('report_path重複');
+    if (reportPaths.some((reportPath) => path.dirname(reportPath) !== path.dirname(manifestPath))) {
+      manifestErrors.push('scratch reportがprivate sessionディレクトリ外を参照');
+    }
+    if (manifestErrors.length > 0) return failClosed(manifestErrors.join('; '));
+
+    const reports: GateReport[] = [];
+    const inputErrors: string[] = [];
+    for (const expected of manifest.reviewers) {
+      const reportPath = path.resolve(expected.report_path);
+      if (!fs.existsSync(reportPath)) {
+        inputErrors.push(`${expected.reviewer_slot}: scratch report欠落`);
+        continue;
+      }
+      let report: GateReport;
+      try {
+        report = readYamlFile<GateReport>(reportPath);
+      } catch (error) {
+        inputErrors.push(
+          `${expected.reviewer_slot}: scratch report解釈失敗 (${error instanceof Error ? error.message : String(error)})`,
+        );
+        continue;
+      }
+      const outcome = validateAgainstSchema('gate-report', report, root);
+      if (!outcome.valid) {
+        inputErrors.push(`${expected.reviewer_slot}: schema不適合 (${outcome.errors.join('; ')})`);
+        continue;
+      }
+      reports.push(report);
+      const invocation = report.gate.review_invocation;
+      if (!invocation) {
+        inputErrors.push(`${expected.reviewer_slot}: review_invocation欠落`);
+        continue;
+      }
+      if (invocation.reviewer_slot !== expected.reviewer_slot) {
+        inputErrors.push(`${expected.reviewer_slot}: reviewer_slot不一致`);
+      }
+      if (invocation.invocation_id !== expected.invocation_id) {
+        inputErrors.push(`${expected.reviewer_slot}: invocation_id不一致`);
+      }
+      if (
+        invocation.issue_id !== manifest.issue_id ||
+        invocation.gate_id !== manifest.gate_id ||
+        invocation.target_sha !== manifest.target_sha ||
+        invocation.profile !== 'strict'
+      ) {
+        inputErrors.push(`${expected.reviewer_slot}: Issue/gate/target_sha/profile結線不一致`);
+      }
+      if (report.gate.review_profile !== 'strict') inputErrors.push(`${expected.reviewer_slot}: review_profile不一致`);
+      if (report.gate.id !== manifest.gate_id || report.gate.target_sha !== manifest.target_sha) {
+        inputErrors.push(`${expected.reviewer_slot}: gate report本体のgate/target_sha結線不一致`);
+      }
+      if (invocation.status !== 'completed') {
+        inputErrors.push(`${expected.reviewer_slot}: invocation status=${invocation.status}`);
+      }
+      if (report.gate.final === 'pending' || report.gate.final === 'human_required') {
+        inputErrors.push(`${expected.reviewer_slot}: final=${report.gate.final}`);
+      }
+    }
+
+    if (reports.length === 2) {
+      if (artifactFingerprint(reports[0]) !== artifactFingerprint(reports[1])) {
+        inputErrors.push('approved_artifactsのpath/digest集合が不一致');
+      }
+      if (reports[0].gate.approved_digest !== reports[1].gate.approved_digest) {
+        inputErrors.push('approved_digestが不一致');
+      }
+    }
+    if (reports.some((report) => report.gate.final === 'human_required')) {
+      inputErrors.push('sub-verdictにhuman_requiredを含む');
+    }
+    if (inputErrors.length > 0) return failClosed(inputErrors.join('; '), reports);
+
+    const evidence = reports.map(toReviewerEvidence).filter((value): value is ReviewerEvidence => Boolean(value));
+    finalReport.gate.reviewers = evidence;
+    delete finalReport.gate.review_invocation;
+    finalReport.gate.conformance = aggregatedLens(reports, 'conformance');
+    finalReport.gate.falsification = aggregatedLens(reports, 'falsification');
+    finalReport.gate.blockers = reports.flatMap((report) => report.gate.blockers);
+    finalReport.gate.approved_artifacts = reports[0].gate.approved_artifacts;
+    finalReport.gate.approved_digest = reports[0].gate.approved_digest;
+
+    const hasReject =
+      reports.some((report) => report.gate.final === 'rejected') ||
+      reports.some((report) => report.gate.blockers.some((finding) => finding.severity === 'blocking'));
+    const bothApproved = reports.every(
+      (report) =>
+        report.gate.final === 'approved' &&
+        report.gate.conformance === 'pass' &&
+        report.gate.falsification === 'pass' &&
+        !report.gate.blockers.some((finding) => finding.severity === 'blocking'),
+    );
+    finalReport.gate.final = hasReject ? 'rejected' : bothApproved ? 'approved' : 'human_required';
+    if (finalReport.gate.final === 'human_required') {
+      finalReport.gate.blockers.push(
+        strictFinding(finalReport.gate.id, 'strict-aggregation-inconclusive', ['2件の有効な判定を最終状態へ集約できません']),
+      );
+    }
+
+    const aggregateOutcome = validateAgainstSchema('gate-report', finalReport, root);
+    if (!aggregateOutcome.valid) {
+      return failClosed(`集約後gate-reportがスキーマに適合しません: ${aggregateOutcome.errors.join('; ')}`, reports);
+    }
+    writeYamlFileAtomic(gateReportPath, finalReport);
+
+    const cleanupErrors: string[] = [];
+    for (const reviewer of manifest.reviewers) {
+      try {
+        fs.unlinkSync(reviewer.report_path);
+      } catch (error) {
+        cleanupErrors.push(`${reviewer.reviewer_slot}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (cleanupErrors.length > 0) return failClosed(`scratch report cleanup失敗: ${cleanupErrors.join('; ')}`, reports);
+    return ok(`final: ${finalReport.gate.final}`);
+  });
+}
+
 export async function publish(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -226,7 +650,7 @@ export async function publish(args: string[]): Promise<number> {
     }
     const [issueIdRaw, gateReportPath] = args;
     if (!issueIdRaw || !gateReportPath) throw new CliError('issue_id, gate_report_path はすべて必須です');
-    const { number } = parseIssueId(issueIdRaw);
+    const { issueId, number } = parseIssueId(issueIdRaw);
 
     const root = repoRoot();
     const config = loadConfig(root);
@@ -247,6 +671,36 @@ export async function publish(args: string[]): Promise<number> {
       return fail(
         `final=approved だが conformance=${report.gate.conformance} / falsification=${report.gate.falsification}（両 pass でない）ため矛盾しています`,
       );
+    }
+    if (report.gate.review_profile === 'strict' && report.gate.final === 'approved') {
+      const reviewers = report.gate.reviewers ?? [];
+      const slots = reviewers.map((reviewer) => reviewer.reviewer_slot);
+      const invocationIds = reviewers.map((reviewer) => reviewer.invocation_id);
+      const valid =
+        report.gate.issue_id === issueId &&
+        reviewers.length === 2 &&
+        ['reviewer-1', 'reviewer-2'].every((slot) => slots.filter((actual) => actual === slot).length === 1) &&
+        new Set(invocationIds).size === 2 &&
+        reviewers.every(
+          (reviewer) =>
+            reviewer.profile === 'strict' &&
+            reviewer.issue_id === issueId &&
+            reviewer.gate_id === report.gate.id &&
+            reviewer.target_sha === report.gate.target_sha &&
+            reviewer.status === 'completed' &&
+            reviewer.final === 'approved' &&
+            reviewer.conformance === 'pass' &&
+            reviewer.falsification === 'pass' &&
+            !reviewer.blockers.some((finding) => finding.severity === 'blocking'),
+        ) &&
+        reviewers.every(
+          (reviewer) =>
+            reviewer.approved_digest === report.gate.approved_digest &&
+            artifactsFingerprint(reviewer.approved_artifacts) === artifactsFingerprint(report.gate.approved_artifacts),
+        );
+      if (!valid) {
+        return fail('review_profile=strict のapproved gate-reportに独立した2件の承認証跡がありません');
+      }
     }
 
     // ローカルモードでは reviews/<gate>.yaml が正本。GitHubモードでも Check Run（信号）とは別に
@@ -380,6 +834,9 @@ export async function recordVerdict(args: string[]): Promise<number> {
     const report = readYamlFile<GateReport>(gateReportPath);
     const base = validateAgainstSchema('gate-report', report, root);
     if (!base.valid) return fail(`入力 gate-report がスキーマに適合しません: ${base.errors.join('; ')}`);
+    if (report.gate.review_profile === 'strict' && !report.gate.review_invocation) {
+      return fail('Strictの最終gate-reportへ単一verdictを直接結線できません（trusted aggregationが必要です）');
+    }
 
     let verdict: ReviewerVerdict;
     try {
@@ -414,6 +871,7 @@ export async function recordVerdict(args: string[]): Promise<number> {
     report.gate.blockers = verdict.blockers ?? [];
     if (approvedArtifacts.length > 0) report.gate.approved_artifacts = approvedArtifacts;
     if (verdict.approved_digest) report.gate.approved_digest = verdict.approved_digest;
+    if (report.gate.review_invocation) report.gate.review_invocation.status = 'completed';
 
     const outcome = validateAgainstSchema('gate-report', report, root);
     if (!outcome.valid) return fail(`結線後の gate-report がスキーマに適合しません: ${outcome.errors.join('; ')}`);
@@ -440,6 +898,7 @@ export async function markHumanRequired(args: string[]): Promise<number> {
     const root = repoRoot();
     const report = readYamlFile<GateReport>(gateReportPath);
     report.gate.final = 'human_required';
+    if (report.gate.review_invocation) report.gate.review_invocation.status = 'failed';
 
     const outcome = validateAgainstSchema('gate-report', report, root);
     if (!outcome.valid) return fail(`gate-report がスキーマに適合しません: ${outcome.errors.join('; ')}`);
@@ -508,10 +967,16 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
       printUsage(REVIEWER_PROMPT_USAGE);
       return 0;
     }
-    const [issueIdRaw, gateId, targetSha] = args;
+    const [issueIdRaw, gateId, targetSha, reviewerSlot, invocationId] = args;
     if (!issueIdRaw || !gateId || !targetSha) throw new CliError('issue_id, gate_id, target_sha はすべて必須です');
     const { number } = parseIssueId(issueIdRaw);
     validateGateId(gateId);
+    if ((reviewerSlot && !invocationId) || (!reviewerSlot && invocationId)) {
+      throw new CliError('reviewer_slot と invocation_id は同時に指定する必要があります');
+    }
+    if (reviewerSlot && reviewerSlot !== 'reviewer-1' && reviewerSlot !== 'reviewer-2') {
+      throw new CliError(`reviewer_slot は reviewer-1|reviewer-2 のいずれかである必要があります: ${reviewerSlot}`);
+    }
 
     const root = repoRoot();
     const config = loadConfig(root);
@@ -538,6 +1003,11 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
     sections.push(`- issue: ISSUE-${number}`);
     sections.push(`- gate: ${gateId}`);
     sections.push(`- target_sha: ${targetSha}`);
+    if (reviewerSlot && invocationId) {
+      sections.push(`- reviewer_slot: ${reviewerSlot}`);
+      sections.push(`- invocation_id: ${invocationId}`);
+      sections.push('- このinvocationは独立判定であり、peer reviewerの判定結果を入力・推測・再利用してはならない。');
+    }
     sections.push('');
     sections.push('## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）');
     sections.push(acIds.length > 0 ? acIds.join(', ') : '(SPEC.md から AC-ID を検出できず。conformance は inconclusive とし human_required へ倒すこと)');

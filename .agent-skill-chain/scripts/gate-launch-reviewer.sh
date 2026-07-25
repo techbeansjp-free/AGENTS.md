@@ -56,7 +56,8 @@ if [[ ! -f "$ADAPTER_FILE" ]]; then
   exit 2
 fi
 
-# アダプタを読み込み、launch_gate_reviewer を起動する。終了コードは job 分岐へそのまま伝播する。
+# アダプタを読み込み、launch_gate_reviewer を起動する。Standardは従来のdirect pathを維持し、
+# Strictだけをtrusted sessionの固定2 slotへ分岐する。
 # shellcheck source=/dev/null
 source "$ADAPTER_FILE"
 if ! declare -F launch_gate_reviewer >/dev/null; then
@@ -65,10 +66,78 @@ if ! declare -F launch_gate_reviewer >/dev/null; then
   exit 2
 fi
 
-set +e
-launch_gate_reviewer "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$REPORT_PATH" "$TARGET_SHA"
-CODE=$?
-set -e
+if [[ "$PROFILE" == "standard" ]]; then
+  set +e
+  launch_gate_reviewer "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$REPORT_PATH" "$TARGET_SHA"
+  CODE=$?
+  set -e
+else
+  set +e
+  PREPARE_OUTPUT="$(_cli gate strict-prepare "$ISSUE_ID" "$REPORT_PATH")"
+  PREPARE_CODE=$?
+  if [[ "$PREPARE_CODE" -ne 0 ]]; then
+    echo "Strict review sessionの準備に失敗しました。フェイルセーフで human_required へ倒します" >&2
+    _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
+    exit 2
+  fi
+
+  _prepared_value() {
+    local key="$1"
+    sed -n "s#^${key}: ##p" <<<"$PREPARE_OUTPUT"
+  }
+  MANIFEST_PATH="$(_prepared_value session_manifest_path)"
+  REPORT_1="$(_prepared_value reviewer-1_report_path)"
+  REPORT_2="$(_prepared_value reviewer-2_report_path)"
+  INVOCATION_1="$(_prepared_value reviewer-1_invocation_id)"
+  INVOCATION_2="$(_prepared_value reviewer-2_invocation_id)"
+  if [[ -z "$MANIFEST_PATH" || -z "$REPORT_1" || -z "$REPORT_2" || -z "$INVOCATION_1" || -z "$INVOCATION_2" ]]; then
+    echo "Strict review sessionの出力が不完全です。フェイルセーフで human_required へ倒します" >&2
+    _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
+    exit 2
+  fi
+
+  _launch_strict_slot() {
+    local slot="$1" scratch_report="$2" invocation_id="$3"
+    set +e
+    launch_gate_reviewer \
+      "$ISSUE_ID" "$GATE_ID" strict "$scratch_report" "$TARGET_SHA" "$slot" "$invocation_id"
+    local slot_code=$?
+    if [[ "$slot_code" -ne 0 ]]; then
+      _cli gate mark-human-required "$scratch_report" >/dev/null 2>&1 || true
+    fi
+    return "$slot_code"
+  }
+
+  set +e
+  _launch_strict_slot reviewer-1 "$REPORT_1" "$INVOCATION_1" &
+  PID_1=$!
+  _launch_strict_slot reviewer-2 "$REPORT_2" "$INVOCATION_2" &
+  PID_2=$!
+  wait "$PID_1"
+  CODE_1=$?
+  wait "$PID_2"
+  CODE_2=$?
+
+  AGGREGATE_OUTPUT="$(_cli gate aggregate-strict "$REPORT_PATH" "$MANIFEST_PATH")"
+  AGGREGATE_CODE=$?
+  set -e
+  if [[ "$AGGREGATE_CODE" -ne 0 ]]; then
+    echo "Strict sub-verdictのtrusted aggregationに失敗しました" >&2
+    _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
+    CODE=2
+  else
+    AGGREGATE_FINAL="$(sed -n 's/^final: //p' <<<"$AGGREGATE_OUTPUT")"
+    if [[ "$CODE_1" -ne 0 && "$CODE_1" -ne 3 ]] || [[ "$CODE_2" -ne 0 && "$CODE_2" -ne 3 ]]; then
+      CODE=2
+    elif [[ "$CODE_1" -eq 3 || "$CODE_2" -eq 3 ]]; then
+      CODE=3
+    elif [[ "$AGGREGATE_FINAL" == "human_required" ]]; then
+      CODE=2
+    else
+      CODE=0
+    fi
+  fi
+fi
 
 # 安全網（I8）: error（0でも3でもない）なのに final が pending のまま残っていたら human_required を書く。
 if [[ "$CODE" -ne 0 && "$CODE" -ne 3 ]]; then

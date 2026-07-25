@@ -15,6 +15,7 @@ properties:
     required: [id, target_sha, conformance, falsification, final, blockers, approved_digest, approved_artifacts]
     additionalProperties: false
     properties:
+      issue_id: {type: string, pattern: '^ISSUE-[0-9]+$'}
       id:
         type: string
         enum: [spec, design, implementation, validation]
@@ -46,6 +47,16 @@ properties:
           properties:
             path: {type: string}
             digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      review_profile:
+        type: string
+        enum: [standard, strict]
+      review_invocation:
+        $ref: '#/definitions/review_invocation'
+      reviewers:
+        type: array
+        maxItems: 2
+        items:
+          $ref: '#/definitions/reviewer_evidence'
 
 definitions:
   finding:
@@ -66,6 +77,54 @@ definitions:
       evidence:
         type: array
         items: {type: string}
+  review_invocation:
+    type: object
+    required: [issue_id, gate_id, target_sha, profile, reviewer_slot, invocation_id, status]
+    additionalProperties: false
+    properties:
+      issue_id: {type: string, pattern: '^ISSUE-[0-9]+$'}
+      gate_id: {type: string, enum: [spec, design, implementation, validation]}
+      target_sha: {type: string}
+      profile: {const: strict}
+      reviewer_slot: {type: string, enum: [reviewer-1, reviewer-2]}
+      invocation_id:
+        type: string
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      status: {type: string, enum: [pending, completed, failed]}
+  reviewer_evidence:
+    type: object
+    required:
+      [issue_id, gate_id, target_sha, profile, reviewer_slot, invocation_id, status,
+       conformance, falsification, final, blockers, approved_digest, approved_artifacts]
+    additionalProperties: false
+    properties:
+      issue_id: {type: string, pattern: '^ISSUE-[0-9]+$'}
+      gate_id: {type: string, enum: [spec, design, implementation, validation]}
+      target_sha: {type: string}
+      profile: {const: strict}
+      reviewer_slot: {type: string, enum: [reviewer-1, reviewer-2]}
+      invocation_id:
+        type: string
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      status: {type: string, enum: [pending, completed, failed]}
+      conformance: {type: string, enum: [pass, fail, pending]}
+      falsification: {type: string, enum: [pass, fail, pending]}
+      final: {type: string, enum: [approved, rejected, pending, human_required]}
+      blockers:
+        type: array
+        items: {$ref: '#/definitions/finding'}
+      approved_digest:
+        type: string
+        pattern: '^sha256:[0-9a-f]{64}$'
+      approved_artifacts:
+        type: array
+        items:
+          type: object
+          required: [path, digest]
+          additionalProperties: false
+          properties:
+            path: {type: string}
+            digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
 
 # --- gate-reconcile.sh 無効化ルール（A-6） ---
 # pushごとに approved_artifacts の digest を照合し、変化なしなら最新head SHAへ成功を再発行、

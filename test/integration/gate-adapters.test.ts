@@ -50,8 +50,10 @@ function installCliShim(repoDir: string): void {
 }
 
 /** issue start → SPEC.md → checkpoint → gate review を行い、pending gate-report を得る共通準備。 */
-function setupGateReview(opts: { backend?: CoordinationBackend; env?: NodeJS.ProcessEnv } = {}) {
-  const { backend = 'local', env = process.env } = opts;
+function setupGateReview(
+  opts: { backend?: CoordinationBackend; env?: NodeJS.ProcessEnv; profile?: 'standard' | 'strict' } = {},
+) {
+  const { backend = 'local', env = process.env, profile = 'standard' } = opts;
   const repo = createTmpRepo({ backend });
   installCliShim(repo.dir);
 
@@ -67,7 +69,7 @@ function setupGateReview(opts: { backend?: CoordinationBackend; env?: NodeJS.Pro
   assert.equal(checkpoint.status, 0, checkpoint.stderr);
   const targetSha = checkpoint.stdout.trim();
 
-  const review = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath, env });
+  const review = runCli(['gate', 'review', 'ISSUE-1', 'spec', profile], { cwd: worktreePath, env });
   assert.equal(review.status, 0, review.stderr);
   const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
 
@@ -177,6 +179,99 @@ test('claude launch_gate_reviewer: レビュア起動失敗は human_required �
   assert.notEqual(res.status, 0);
   assert.notEqual(res.status, 3);
   assert.equal(readFinal(reportPath), 'human_required');
+});
+
+test('Strict launcher: 固定2 slotを別invocation・別subprocessで並列起動してtrusted aggregationする (AC-1, AC-3)', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview({ profile: 'strict' });
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strict-launch-markers-'));
+  t.after(() => fs.rmSync(markerDir, { recursive: true, force: true }));
+
+  const stubVerdict =
+    '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const reviewerCommand = [
+    'mkdir -p "$STRICT_MARKER_DIR"',
+    ': > "$STRICT_MARKER_DIR/$ASC_REVIEWER_SLOT"',
+    'attempt=0',
+    'while [[ ! -f "$STRICT_MARKER_DIR/reviewer-1" || ! -f "$STRICT_MARKER_DIR/reviewer-2" ]]; do',
+    '  attempt=$((attempt + 1))',
+    '  [[ "$attempt" -lt 200 ]] || exit 4',
+    '  sleep 0.01',
+    'done',
+    'cat >/dev/null',
+    `printf '%s' '${stubVerdict}'`,
+  ].join('\n');
+  const env = envWithout([], {
+    ANTHROPIC_API_KEY: 'dummy',
+    GATE_REVIEWER_CMD: reviewerCommand,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+    STRICT_MARKER_DIR: markerDir,
+  });
+
+  const result = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(fs.existsSync(path.join(markerDir, 'reviewer-1')));
+  assert.ok(fs.existsSync(path.join(markerDir, 'reviewer-2')));
+  const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+    gate: {
+      final: string;
+      reviewers: { reviewer_slot: string; invocation_id: string; status: string; final: string }[];
+    };
+  };
+  assert.equal(report.gate.final, 'approved');
+  assert.equal(report.gate.reviewers.length, 2);
+  assert.equal(new Set(report.gate.reviewers.map((reviewer) => reviewer.invocation_id)).size, 2);
+  assert.ok(report.gate.reviewers.every((reviewer) => reviewer.status === 'completed' && reviewer.final === 'approved'));
+});
+
+test('Strict launcher: 片方の起動失敗は他方がapprovedでもhuman_requiredへ倒す (AC-2)', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview({ profile: 'strict' });
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[]}';
+  const env = envWithout([], {
+    ANTHROPIC_API_KEY: 'dummy',
+    GATE_REVIEWER_CMD:
+      `cat >/dev/null; if [[ "$ASC_REVIEWER_SLOT" == "reviewer-2" ]]; then exit 1; fi; printf '%s' '${stubVerdict}'`,
+    GATE_REVIEWER_RETRIES: '1',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const result = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
+
+  assert.notEqual(result.status, 0);
+  assert.notEqual(result.status, 3);
+  const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+    gate: { final: string; reviewers: { status: string; final: string }[] };
+  };
+  assert.equal(report.gate.final, 'human_required');
+  assert.equal(report.gate.reviewers.length, 2);
+  assert.ok(report.gate.reviewers.some((reviewer) => reviewer.status === 'failed'));
+});
+
+test('Strict launcher: human/codexの能力・認証不足を架空の代替へ倒さずhuman_requiredにする (AC-3)', async (t) => {
+  for (const adapter of ['human', 'codex'] as const) {
+    const { repo, reportPath, targetSha } = setupGateReview({ profile: 'strict' });
+    t.after(() => repo.cleanup());
+    setAdapter(repo.dir, adapter);
+    const env =
+      adapter === 'codex'
+        ? envWithout(['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'], { CODEX_AUTH_PROBE_CMD: 'false' })
+        : process.env;
+
+    const result = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
+
+    assert.equal(result.status, adapter === 'human' ? 3 : 2, `${adapter}: stderr=${result.stderr}`);
+    const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+      gate: { final: string; reviewers: { invocation_id: string; status: string }[] };
+    };
+    assert.equal(report.gate.final, 'human_required');
+    assert.equal(report.gate.reviewers.length, 2);
+    assert.equal(new Set(report.gate.reviewers.map((reviewer) => reviewer.invocation_id)).size, 2);
+    assert.ok(report.gate.reviewers.every((reviewer) => reviewer.status === 'failed'));
+  }
 });
 
 // --- T3: human launch_gate_reviewer（非同期 deferred） ---------------------------------

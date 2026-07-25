@@ -139,7 +139,7 @@ report_status() {
 # 認証情報（ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN）・実疎通確認（claude auth status）の出力は
 #   実値をログ・stdout に出さない（Issue #185 _claude_auth_ok）。
 #
-# 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
+# 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha> [reviewer_slot] [invocation_id]
 # 終了コード: 0=判定完了 / 2（!=0,!=3）=error（final=human_required 書込み後）。
 # env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、高速パス）、
 #      CLAUDE_AUTH_PROBE_CMD | CLAUDE_AUTH_PROBE_TIMEOUT_SEC（認証の実疎通フォールバック、_claude_auth_ok参照）、
@@ -147,6 +147,7 @@ report_status() {
 #      GATE_REVIEWER_TIMEOUT_SEC（既定900）、GATE_REVIEWER_RETRIES（既定3）、GATE_REVIEWER_RETRY_INTERVAL_SEC（既定30）。
 launch_gate_reviewer() {
   local issue_id="${1:-}" gate_id="${2:-}" profile="${3:-}" report_path="${4:-}" target_sha="${5:-}"
+  local reviewer_slot="${6:-}" invocation_id="${7:-}"
 
   if [[ -z "$issue_id" || -z "$gate_id" || -z "$profile" || -z "$report_path" || -z "$target_sha" ]]; then
     echo "launch_gate_reviewer: 引数 <issue_id> <gate_id> <profile> <gate_report_path> <target_sha> が必要です" >&2
@@ -161,6 +162,10 @@ launch_gate_reviewer() {
   esac
   if [[ ! -f "$report_path" ]]; then
     echo "launch_gate_reviewer: gate-report が存在しません（gate review 未実行）: $report_path" >&2
+    return 1
+  fi
+  if [[ "$profile" == "strict" && ( -z "$reviewer_slot" || -z "$invocation_id" ) ]]; then
+    echo "launch_gate_reviewer: strict は reviewer_slot と invocation_id が必要です" >&2
     return 1
   fi
 
@@ -191,7 +196,11 @@ launch_gate_reviewer() {
 
   # 判定プロンプト（ルーブリック・出力契約）を組み立てる。
   local prompt
-  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha")"; then
+  local -a prompt_args=(gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha")
+  if [[ -n "$reviewer_slot" && -n "$invocation_id" ]]; then
+    prompt_args+=("$reviewer_slot" "$invocation_id")
+  fi
+  if ! prompt="$(_asc_cli "${prompt_args[@]}")"; then
     _fail_safe "判定プロンプトの生成に失敗しました"
     return
   fi
@@ -210,9 +219,9 @@ launch_gate_reviewer() {
     verdict=""
     rc=0
     if command -v timeout >/dev/null 2>&1; then
-      verdict="$(printf '%s' "$prompt" | timeout "$timeout_sec" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+      verdict="$(printf '%s' "$prompt" | ASC_REVIEWER_SLOT="$reviewer_slot" ASC_REVIEW_INVOCATION_ID="$invocation_id" timeout "$timeout_sec" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
     else
-      verdict="$(printf '%s' "$prompt" | bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+      verdict="$(printf '%s' "$prompt" | ASC_REVIEWER_SLOT="$reviewer_slot" ASC_REVIEW_INVOCATION_ID="$invocation_id" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
     fi
     if [[ $rc -eq 0 && -n "$verdict" ]]; then
       break
