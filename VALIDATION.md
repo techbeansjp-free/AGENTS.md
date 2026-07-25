@@ -24,6 +24,7 @@ acceptance_criteria:
     evidence:
       - .gitignore
       - test/integration/self-extension-policy.test.ts
+      - test/helpers/gh-stub.ts
   - ac_id: AC-4
     verification:
       mode: automated
@@ -35,4 +36,5 @@ regression:
   evidence:
     - npm run typecheck
     - node --import tsx --test test/integration/self-extension-policy.test.ts
+    - 'GitHub backend: gh-stubでDraft PRの--draftと本文`Closes #245`を検証'
     - node bin/agents-md.js verify artifacts ISSUE-245 implementation

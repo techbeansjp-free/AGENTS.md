@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +9,7 @@ import { readYamlFile } from '../../src/lib/yaml-io.js';
 import { validateAgainstSchema } from '../../src/lib/schema.js';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+import { createGhStub } from '../helpers/gh-stub.js';
 
 const packageRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 const projectDir = path.join(packageRoot, '.agent-skill-chain', 'project');
@@ -74,4 +76,36 @@ test('self-extension lifecycle: isolated repoで成果物の作成、記録、cl
     assert.ok(fs.existsSync(path.join(repo.dir, artifact)), `close後も${artifact}をmainから復元できること`);
   }
   assert.match(git(repo.dir, ['log', '--oneline', '--all', '--', 'SPEC.md']), /record self-extension issue artifacts/);
+});
+
+test('self-extension lifecycle (github backend): Draft PR本文がIssue #245をClosesで追跡する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'self-extension-github-stub-'));
+  const stub = createGhStub(stubDir);
+  const env = stub.env(process.env);
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+  });
+
+  const start = runCli(['issue', 'start', 'ISSUE-245', 'process', 'self-extension-policy', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  for (const artifact of trackedArtifacts) {
+    fs.writeFileSync(path.join(worktreePath, artifact), `# ${artifact}\n`);
+  }
+  const checkpoint = runCli(['checkpoint', 'test: record GitHub-native self-extension artifacts'], { cwd: worktreePath, env });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+
+  const pr = runCli(['pr', 'create', 'ISSUE-245', branch], { cwd: repo.dir, env });
+  assert.equal(pr.status, 0, pr.stderr);
+
+  const calls = stub.readState().prCreateCalls ?? [];
+  assert.equal(calls.length, 1, 'GitHub-native Draft PRを1件作成すること');
+  assert.ok(calls[0].args.includes('--draft'), 'Draft PRとして作成すること');
+  assert.match(calls[0].body ?? '', /Closes #245/, 'PR本文がIssue #245をclose連携すること');
 });
