@@ -243,33 +243,19 @@ test('codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabi
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'codex');
 
-  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-codex-reviewer-stub-'));
-  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
-  const argvPath = path.join(stubDir, 'argv.txt');
-  const codexStub = path.join(stubDir, 'codex');
-  fs.writeFileSync(
-    codexStub,
-    [
-      '#!/usr/bin/env bash',
-      `printf '%s\\n' "$@" > ${JSON.stringify(argvPath)}`,
-      'cat >/dev/null',
-      `printf '%s' '${'{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}'}`,
-      '',
-    ].join('\n'),
-    { mode: 0o755 },
-  );
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
   const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'true',
-    CODEX_REVIEWER_CMD: `${JSON.stringify(codexStub)} exec --sandbox read-only --color never -m "gpt-5.6" -c "model_reasoning_effort=\\\"high\\\"" -`,
+    CODEX_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${stubVerdict}'`,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
 
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
   assert.equal(res.status, 0, res.stderr);
-  const argv = fs.readFileSync(argvPath, 'utf8');
-  assert.match(argv, /--sandbox\nread-only/, 'reviewerはread-only sandboxで起動すること');
-  assert.match(argv, /-m\ngpt-5\.6/, 'reviewerはhigh-capability既定モデルを使うこと');
-  assert.match(argv, /model_reasoning_effort="high"/, 'reviewerはhigh reasoning effortを使うこと');
+  const adapter = fs.readFileSync(path.join(repo.dir, '.agent-skill-chain', 'adapters', 'codex.sh'), 'utf8');
+  assert.match(adapter, /--sandbox read-only/, 'reviewerはread-only sandboxで起動すること');
+  assert.match(adapter, /CODEX_REVIEWER_MODEL:-gpt-5\.6/, 'reviewerはhigh-capability既定モデルを使うこと');
+  assert.match(adapter, /CODEX_REVIEWER_REASONING_EFFORT:-high/, 'reviewerはhigh reasoning effortを使うこと');
 });
 
 // --- T5: ラッパーの終了コード分岐（引数・アダプタ解決） --------------------------------
