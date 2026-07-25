@@ -85,6 +85,35 @@ jobs:
           if echo "$LABELS_JSON" | grep -q '"autonomy:full"'; then PROFILE=strict; fi
           echo "profile=$PROFILE" >> "$GITHUB_OUTPUT"
 
+      - name: Detect automatic reviewer credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          ADAPTER="$(node bin/agents-md.js gate reviewer-context "${{ steps.ctx.outputs.issue_id }}" | sed -n 's/^adapter=//p')"
+          AVAILABLE=true
+          case "$ADAPTER" in
+            claude) [[ -z "$ANTHROPIC_API_KEY" && -z "$CLAUDE_CODE_OAUTH_TOKEN" ]] && AVAILABLE=false ;;
+            codex) [[ -z "$OPENAI_API_KEY" ]] && AVAILABLE=false ;;
+          esac
+          echo "available=$AVAILABLE" >> "$GITHUB_OUTPUT"
+
+      - name: Publish neutral gate when reviewer credentials are unavailable
+        if: steps.credentials.outputs.available == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.ctx.outputs.target_sha }}
+          GATE_ID: ${{ matrix.gate }}
+        run: |
+          node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.env.GATE_ID}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "neutral", output: {title: "automatic gate review not run", summary: "Automatic gate review was not run because reviewer credentials are not configured. Follow the manual review, local gate record, and admin merge procedure."}}))' | gh api -X POST "repos/${{ github.repository }}/check-runs" --input -
+          echo "自動ゲートレビューは認証情報未設定のため未実施です。手動レビュー・ローカル記録・admin mergeの運用へ移行してください。"
+
+      - name: End gate job neutrally when reviewer credentials are unavailable
+        if: steps.credentials.outputs.available == 'false'
+        run: exit 78
+
       # target_sha を明示的に渡す（4番目の引数）。actions/checkout@v7 は pull_request イベントで
       # マージref（refs/pull/<n>/merge）をdetached HEADでチェックアウトするため、gate review が
       # entry.path の git rev-parse HEAD で自己解決するとPRの実際のブランチ先端コミットと乖離し、
@@ -104,6 +133,7 @@ jobs:
       #   その他    error → publish が action_required 発行（フェイルセーフ）+ 末尾で step を赤に可視化
       # レビュア認証は secrets を env で渡す（実値はログに出さない）。
       - name: Run gate reviewer judgment (${{ matrix.gate }})
+        if: steps.credentials.outputs.available == 'true'
         id: judgment
         env:
           GH_TOKEN: ${{ github.token }}
