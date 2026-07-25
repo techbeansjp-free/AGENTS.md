@@ -260,7 +260,7 @@ test('codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabi
   );
   const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'true',
-    CODEX_EXECUTABLE: codexStub,
+    CODEX_REVIEWER_CMD: `${JSON.stringify(codexStub)} exec --sandbox read-only --color never -m "gpt-5.6" -c "model_reasoning_effort=\\\"high\\\"" -`,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
 
