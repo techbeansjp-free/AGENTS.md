@@ -31,7 +31,8 @@ non-coreのStrictゲートでも、独立したread-onlyレビュー2件を機�
 - `review_profile: strict` の一般ゲートは、互いの内部判断を共有しない2体のread-onlyレビュアによる判定を必要とする。
 - trusted launcherはStrictごとに固定slot集合`reviewer-1`・`reviewer-2`を別invocationとして起動し、片方のsub-verdictを他方の入力から隔離する。
 - trusted aggregationは、期待slot集合、異なる一回限りの`invocation_id`、同一の`issue_id`・`gate_id`・`target_sha`・`profile: strict`、各判定の完了状態を検査する。
-- 2件とも`approved`かつblocking findingなしの場合だけ成功する。いずれかが`rejected`またはblocking findingを持つ場合は`rejected`とする。起動不能、欠落、重複、結線不一致、未完了、不正、`human_required`は最終`human_required`とし、GitHub Check Runでは`action_required`に対応させる。
+- 集約は先に入力妥当性を判定する。起動不能、欠落、重複、結線不一致、未完了、不正、またはいずれかの`human_required`があれば、他方の判定にかかわらず最終`human_required`とし、GitHub Check Runでは`action_required`に対応させる。
+- 入力妥当性を満たす2件だけを判定集約へ進め、いずれかが`rejected`またはblocking findingを持つ場合は`rejected`、2件とも`approved`かつblocking findingなしの場合だけ`approved`とする。それ以外の組合せは`human_required`とする。
 - Codex、Claude Code、humanの各adapterは、実際に提供できる起動能力だけを宣言・使用する。特定ベンダーのモデル名を他ベンダーへ類推してはならない。
 - `review_profile: standard` のレビュア数、判定順序、成功条件は変更しない。
 - Issue #271 / PR #274 が導入するcore監査専用経路とは責務を分離する。未マージ依存が必要な場合は、依存関係を追跡可能にし、依存なしに動作する変更を先に完成させる。
@@ -48,8 +49,8 @@ non-coreのStrictゲートでも、独立したread-onlyレビュー2件を機�
 #### AC-2: 不足・重複・失敗は安全側で停止する
 
 - Given: core監査に分類されないIssueが`review_profile: strict`である
-- When: sub-verdictが1件だけ、slotまたはinvocationが重複、結果が再利用、対象結線が不一致、片方が起動失敗・未完了・不正・`human_required`のいずれかである
-- Then: ゲートは成功せず`human_required`となり、証跡に原因を保持し、GitHub Check Runは`action_required`になる
+- When: sub-verdictが1件だけ、slotまたはinvocationが重複、結果が再利用、対象結線が不一致、片方が起動失敗・未完了・不正・`human_required`のいずれかである（他方が`approved`または`rejected`の場合を含む）
+- Then: 判定内容の集約より入力妥当性が優先され、ゲートは`human_required`となり、証跡に原因を保持し、GitHub Check Runは`action_required`になる
 - 検証方法見込み: `automated`
 
 #### AC-3: adapter能力差を再現可能に扱う
@@ -77,7 +78,7 @@ non-coreのStrictゲートでも、独立したread-onlyレビュー2件を機�
 
 - 制約: trusted aggregation以外のadapter出力や自己申告IDだけで成功状態を確定しない。成果物branchへのレビュア書込みを許可しない。
 - 制約: sub-verdictは今回の集約に発行された一回限りのinvocationへ結線し、過去または他対象の結果を再利用しない。
-- 完了条件: AC-1〜AC-5の証跡、正常2件、1件のみ、重複、対象不一致、片方起動失敗、片方reject、各adapter能力不足、Standard回帰の自動テスト結果を`VALIDATION.md`へ記録する。
+- 完了条件: AC-1〜AC-5の証跡、正常2件、1件のみ、重複、対象不一致、片方起動失敗、片方reject、`rejected`と`human_required`の混合、各adapter能力不足、Standard回帰の自動テスト結果を`VALIDATION.md`へ記録する。
 - 検証方法: 自動テストを主とし、AC-5のPR #274との責務境界だけを差分確認と自動回帰のhybridで検証する。
 - 未決事項: なし。
 
