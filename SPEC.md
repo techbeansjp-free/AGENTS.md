@@ -15,11 +15,10 @@ AI認証を置かずにその判定を安全にCheck Runへ記録する経路が
 
 - `recorder_actor`: GitHubへ証跡とdispatchを記録する進行役のidentity。PR authorと同一でもよい。
 - `reviewer`: read-only隔離runで判定したAIまたは人間。human reviewerがPR author本人なら独立と認めない。
-- `evidence v2`: `agent-skill-chain/gate-review-evidence/v2`。Issue/gate/profile/target SHA、expected reviewer
-  count、reviewerのrun ID・slot・adapter・model・reasoning・read-only capability、prompt digest、
-  conformance・falsification・blockers/inconclusive、approved artifact path/digest、trusted base SHA・
-  launcher digest・ephemeral clone・read-only sandbox、aggregate verdict/provenanceを必須入力とする。
-- #274はcore用のローカルreviewer起動とper-review evidence v2生成、#277は一般のStrict集約を担う。
+- `evidence v3`: `agent-skill-chain/gate-review-evidence/v3`。Issue/gate/profile/target SHA、attempt ID・
+  expected count・launcher token digest、reviewerのrun ID/slot/能力、prompt/verdict/artifact digest、
+  trusted base/launcher/ephemeral read-only実行、aggregate verdict/provenanceを必須入力とする。
+- #274はcore用のローカルreviewer起動とper-review evidence v3生成、#277は一般のStrict集約を担う。
   本Issueは集約済み最終reportを再判定せず、GitHub上でschema/provenance/digestを再検証してCheckへ写像する。
 
 ## 要求 → 要件 → 受入条件
@@ -34,8 +33,8 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 - 記録処理はdefault branchにあるtrusted workflowとtrusted codeだけを実行し、PR側コードを実行しない。
 - `repository_dispatch`の入力は既存PR番号、許可gate名、40桁の対象SHAだけとし、証跡はPR Review APIから再取得する。
 - 起動actorの実効権限をGitHub APIで解決し、`write|maintain|admin`だけを許可する。
-- PRのcurrent head、default base、Issue、canonical check名、evidence v2の全必須field、review profile、
-  reviewer数・slot・一意run、prompt、read-only隔離、verdict、成果物を再検証する。
+- PRのcurrent head/default base/Issue/check名、evidence v3、最新attempt、reviewer数・slot・一意run、
+  prompt、read-only隔離、verdict、成果物を再検証し、不完全な最新attemptから旧成功へfallbackしない。
 - 成果物digestは対象SHAのGit objectからtrusted codeが再計算し、自己申告との不一致を拒否する。
 - recorder actorはreviewerではない。同一actorでも独立AI runは許可するが、author本人のhuman review、
   重複run/slot、未登録launcher、candidate baseのlauncherは拒否する。
@@ -68,7 +67,7 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 
 #### AC-3: 権限と独立性をfail-closedで検証する
 
-- Given: actorの権限不足、evidence v2不足、重複run/slot、非read-only、author自身のhuman review、または判定矛盾がある
+- Given: actor権限不足、evidence v3/attempt不足、重複run/slot、非read-only、author自身のhuman review、または判定矛盾がある
 - When: trusted記録処理を実行する
 - Then: 非zeroで停止し、PR authorと同じactorであることだけを独立性の根拠にも拒否理由にもしない
 - 検証方法見込み: `automated`
@@ -82,7 +81,8 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 
 #### AC-5: trusted workflowを含む#274だけを監査可能にbootstrapできる
 
-- Given: repository ownerの本タスクでの明示承認、rulesetのadmin bypass許可、独立Sol/xhigh最終PASS、全非gate CI PASSがある
+- Given: owner明示承認・admin bypass許可・Sol/xhigh最終PASS・全非gate CI PASSに加え、#274最終SHAが
+  v3 evidence、Check outputの最終report/digest、protected-base materialize経路を含む
 - When: 進行役が最終固定した#274/current headだけをadmin mergeする
 - Then: 許可者・PR・SHA・verdict・CI・実行者・時刻をPRへ耐久記録し、条件不一致または再利用を拒否する
 - 検証方法見込み: `hybrid`
@@ -95,5 +95,5 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 
 ## 完了条件・未決事項
 
-AC-1〜AC-5の自動テスト、全回帰、template sync、権限最小化検査が成功し、#274の一回限りmigrationと
-以後の通常dispatchを監査可能に記録する。未決事項はない。
+AC-1〜AC-4の自動テスト・全回帰・同期・権限検査を成功させ、AC-5はowner承認と固定SHAのhybrid証跡を
+耐久記録する。以後の通常経路へmigration例外を持ち越さない。未決事項はない。
