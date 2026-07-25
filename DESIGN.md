@@ -7,25 +7,26 @@
 
 | 要件 / AC-ID | 対応する設計要素 | 完了条件 |
 |---|---|---|
-| AC-1 | TrustedGateRecorder / AttestationVerifier / ReportMaterializer | success-last、耐久report、復元 |
-| AC-2 | TrustBackendResolver / LatestCheckSelector / ImmutableContextValidator | source・SHA・replay・no-fallback拒否 |
+| AC-1 | TrustedGateRecorder / ReportLedger / AttestationVerifier / ReportMaterializer | success-last、耐久report、復元 |
+| AC-2 | TrustBackendResolver / LatestAttemptSelector / ImmutableContextValidator | source・SHA・replay・no-fallback拒否 |
 | AC-3 | #274 EvidenceVerifier / AggregatePolicy / ActorAuthorizer | v3 latest attemptと独立性 |
 | AC-4 | GateReconciler / ArtifactSetComparator | fresh checkoutで集合完全比較 |
-| AC-5 | DistributionPreflight / template同期 / ruleset renderer | 対応backendだけを原子的配備 |
-| AC-6 | BootstrapGuard | #274のPR・SHA・digest一意な一回限り記録 |
+| AC-5 | DistributionPreflight / RolloutCoordinator / ruleset renderer | versioned prepare/activate |
+| AC-6 | BootstrapLedger | #274固定keyの再開可能な二相記録 |
 
 ## 責務・境界
 
 - `TrustBackendResolver`: rulesetとGitHub APIから`dedicated_app|required_workflow`を解決する。標準Actions App単独を拒否する。
 - `ActorAuthorizer` / `ImmutableContextValidator`: dispatch actor権限とPR・Issue・base・current SHA・gateをAPIから確定する。
 - `EvidenceVerifier` / `AggregatePolicy`: #274のv3 latest-attempt検証・集約を共有する。#283はverdictを再導出しない。
-- `TrustedGateRecorder`: 専用App tokenでin_progress Checkを作り、report envelopeをattest後、最後のAPI操作で完了させる。
+- `TrustedGateRecorder`: backend固有tokenでin_progress Checkを作り、report envelopeをattest後、最後のAPI操作で完了させる。
+- `ReportLedger`: canonical reportを上限内inline保存し、超過時はPR comment chunksとCheck内manifestへ耐久保存する。
 - `AttestationVerifier`: subject digest、repo、signer workflow/ref/digest、run attempt、Check IDを暗号検証する。
-- `LatestCheckSelector`: enforcement source・name・SHA一致runの最大IDをconclusionより先に選ぶ。
-- `ReportMaterializer`: latest attested successの`output.text`だけをgate-report cacheへ原子的に復元する。
+- `LatestAttemptSelector`: exact workflowの`run_number/run_attempt`最大tupleをstatus/conclusionより先に選ぶ。
+- `ReportMaterializer`: latest attested successのinline reportまたはmanifest指定chunksをcacheへ原子的に復元する。
 - `ArtifactSetComparator` / `GateReconciler`: previous reportとcurrent期待path集合・全digestを比較し、下流を連鎖無効化する。
-- `DistributionPreflight`: attestation利用可否、App/environment/rulesetまたはRequired Workflowを全検査してから展開する。
-- `BootstrapGuard`: #274固定PR/SHA/digestの未使用を確認し、owner承認と非gate CI証跡をPR Reviewへ一度だけ記録する。
+- `RolloutCoordinator`: versioned environment/workflowをprepareし、main上のsmoke test後にrulesetをCASでactivateする。
+- `BootstrapLedger`: #274固定keyの`prepared→completed`をPR Reviewへ記録し、同一keyのmerge再開だけを許可する。
 
 ```mermaid
 flowchart LR
@@ -37,35 +38,52 @@ flowchart LR
   C --> T[report attestation]
   T --> P[postcondition]
   P --> S[success final API call]
-  S --> M[latest selector + materializer]
+  S --> M[latest attempt + materializer]
   S --> G[reconciler]
 ```
 
-## 信頼境界とプロトコル
+## backend状態遷移
 
-`dedicated_app`を現リポジトリの実装backendとする。Appは`Checks: write`と`Metadata: read`だけを持つ。
+| backend | 起動・再起動 | canonical Check | merge強制 |
+|---|---|---|---|
+| `dedicated_app` | default branch `repository_dispatch`。証跡追加後に新runをdispatch | 専用Appが作るCheck | required contextのintegration ID |
+| `required_workflow` | `pull_request_target`で不足証跡をfailure化。追加後にexact runのfailed jobsを再実行 | workflowが作るattested custom Check | org ruleset required workflowとcontextの論理積 |
+
+Required Workflowはsource repo/path/refをrulesetで固定し、Actions APIのsource SHA、PR event、head SHAも検証する。
+native required runがsuccessにならなければcustom Checkだけでmergeできない。custom Checkはrun ID/attemptを束縛し、
+再実行時もcandidate codeを実行しない。reconcileは`synchronize`の新run内でprevious headをAPIから取得する。
+
+## 専用App境界と記録プロトコル
+
+`dedicated_app`を現リポジトリの実装backendとする。Appは`Checks: write`、`Commit statuses: write`、
+`Metadata: read`だけを持つ。
 秘密鍵は固定environment `agent-skill-chain-gate`のsecretに保存し、deployment branchを`main`だけに制限する。
 recorder workflowはdefault branchの`repository_dispatch`だけでenvironmentを参照し、candidate codeをcheckout・実行しない。
-rulesetの全gate contextへApp integration IDを埋める。通常`GITHUB_TOKEN`には`checks: write`を与えない。
-
-`required_workflow`はorg/enterprise rulesetのworkflow source repo/path/refを固定し、実行時にsource SHA・PR event・
-attestation signerを再検証する。forkは両backendの追加隔離に限り、backend判定には使わない。
+ruleset source選択要件の`Commit statuses: write`も付与するがstatus発行には使わない。通常`GITHUB_TOKEN`には
+`checks: write`を与えない。setupはApp probe Check発行とruleset expected-source受理を実APIで検査する。
+forkは両backendの追加隔離に限り、backend判定には使わない。
 
 RecorderはPR/gate単位concurrency（cancelなし）で、PR番号・gate・40桁SHA以外を信頼入力にしない。
-専用App Checkをin_progressで作成後、Check IDを含むcanonical report envelopeを生成する。GitHub artifact
+選択workflow runの`run_number/run_attempt`をexternal IDへ入れたCheckをin_progressで作成し、Check IDを含むreportを生成する。GitHub artifact
 attestationを作成し、`gh attestation verify`でrepo・signer workflow・`refs/heads/main`・signer digestを固定して
 検証する。App/ruleset、current head、latest attempt、artifact再計算、attestation再読取が全て成立した後、
 approvedならsuccess、rejectedならfailure、判定不能ならaction_requiredへ更新する。success後に検査を置かない。
 
-Materializerとreconcilerは全conclusionの最大Check IDを先に選び、そのrunだけを検証する。report、evidence、
-attestation、artifactのいずれかが不正、またはlatestがsuccess以外なら旧successへ戻らない。reconcileはprevious
+Selectorはexact workflow path/eventの全status runから最大`run_number/run_attempt`を先に選び、対応Checkを
+external IDで一意化する。同時刻、in_progress、API応答順に依存しない。report、evidence、attestation、artifactの
+いずれかが不正、またはlatest run/Checkがsuccess以外なら旧successへ戻らない。reconcileはprevious
 headの検証済みpath集合をcurrent SHAの期待集合と双方向比較し、追加・削除・digest差異・取得不能を変更として扱う。
 
-## 配布・移行・関連ADR
+## report耐久化・配布・移行
 
-setup/upgradeはread-only preflight後にstagingへ展開し、同期・ruleset適用まで成功した時だけ置換する。
-既存consumerはbackend未構成なら現状を変更せず設定エラーにする。GitHub App作成自体は一回限りowner操作だが、
-環境作成・secret登録・ruleset配線・検証はsetup CLIが行う。AI credentialやrunner追加は要求しない。
+canonical UTF-8 reportは4 MiB、1 chunkは45,000 bytesを上限とする。48 KiB以下はCheckへinline保存し、超過時は
+base64 chunkをPR commentsへ保存する。Checkにはreport digest、chunk数・順序・各digestのmanifestを置き、
+manifestとreportをattestする。materializerは全chunkをdigest検証してから結合し、4 MiB超はaction_requiredにする。
+
+rolloutは`prepare→activate→retire`とする。prepareは新digest名のenvironment/secret/workflowを作るだけで旧系を
+変更せず、local staging失敗時もactive系は不変。main merge後にprobeとattestationをsmoke testし、expected
+ruleset digestを条件に単一PUTでactivateする。失敗時は旧rulesetを維持し、inert新資産は再開または削除できる。
+secretを上書きせず旧versionをretireまで保持する。backend未構成はprepare前に停止する。
 
 ```yaml
 related_adrs:
@@ -78,4 +96,5 @@ related_adrs:
 - API・attestation・App・environment・ruleset不明はsuccessや部分配備へ倒さず、Checkをaction_requiredにする。
 - final success更新の通信結果が不明なら同じrunを成功扱いせず、API再読取後に新attemptを要求する。
 - rollbackはworkflow/CLIをPRでrevertするがrequired contextを外さない。復旧まではmerge停止を維持する。
-- bootstrap used-keyは`repo/PR/SHA/digest`で一意化し、別SHA・二回目・通常PRからの呼出しを拒否する。
+- bootstrap keyは`repo/PR/SHA/digest`。`prepared`後の失敗は同一keyだけmerge APIを冪等再試行し、PRがmergedなら
+  merge SHA/timeを`completed`へ追記する。別key、completed後、通常PRからの呼出しを拒否する。
