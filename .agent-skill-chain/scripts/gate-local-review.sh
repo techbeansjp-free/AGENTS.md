@@ -70,7 +70,8 @@ fi
 COUNT=1
 [[ "$PROFILE" == "strict" ]] && COUNT=2
 for slot in $(seq 1 "$COUNT"); do
-  run_id="review-${GATE_ID}-${TARGET_SHA:0:12}-${slot}-$$"
+  run_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(12).toString("hex"))')"
+  run_id="review-${GATE_ID}-${TARGET_SHA:0:12}-${slot}-${run_nonce}"
   ASC_BASE_REF="$BASE_SHA" \
   ASC_EVIDENCE_BASE_SHA="$BASE_SHA" \
   ASC_TRUSTED_BASE_SHA="$BASE_SHA" \

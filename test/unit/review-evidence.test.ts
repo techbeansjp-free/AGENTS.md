@@ -9,16 +9,25 @@ import {
 } from '../../src/lib/review-evidence.js';
 
 const targetSha = 'a'.repeat(40);
+const baseSha = 'c'.repeat(40);
 const artifacts = [{ path: 'SPEC.md', digest: `sha256:${'b'.repeat(64)}` }];
 const promptDigest = evidencePromptDigest('canonical reviewer prompt');
+const launcherDigest = `sha256:${'d'.repeat(64)}`;
 
 function evidence(slot: 1 | 2, overrides: Partial<ReviewEvidence> = {}): ReviewEvidence {
   return {
-    schema_version: 'agent-skill-chain/gate-review-evidence/v1',
+    schema_version: 'agent-skill-chain/gate-review-evidence/v2',
     issue_id: 'ISSUE-271',
     gate: 'spec',
     profile: 'strict',
     target_sha: targetSha,
+    execution: {
+      launcher: 'agent-skill-chain/gate-local-review/v1',
+      trusted_base_sha: baseSha,
+      launcher_digest: launcherDigest,
+      isolation: 'ephemeral_clone',
+      sandbox: 'read_only',
+    },
     reviewer: {
       run_id: `review-run-${slot}`,
       slot,
@@ -66,6 +75,8 @@ function verify(reviews: GithubReviewRecord[], overrides: Record<string, unknown
     unresolvedWriterActor: false,
     expectedPromptDigest: promptDigest,
     expectedArtifacts: artifacts,
+    expectedTrustedBaseSha: baseSha,
+    expectedLauncherDigest: launcherDigest,
     coreReviewRequired: true,
     codexModel: 'gpt-5.6-sol',
     codexReasoning: 'xhigh',
@@ -86,8 +97,16 @@ test('strict: 1件不足またはslot重複はhuman_required', () => {
   assert.equal(verify([review(1, 1)], { profile: 'standard' }).final, 'human_required');
 });
 
-test('provenance: writer actor、未登録actor、actor未解決を拒否する', () => {
-  assert.equal(verify([review(1, 1, { user: { login: 'segment-writer' } }), review(2, 2)]).final, 'human_required');
+test('provenance: 同一actorのtrusted recorderをrun attestationで区別し、未登録・actor未解決は拒否する', () => {
+  const sameActor = verify(
+    [
+      review(1, 1, { user: { login: 'segment-writer' } }),
+      review(2, 2, { user: { login: 'segment-writer' } }),
+    ],
+    { trustedActors: ['segment-writer'] },
+  );
+  assert.equal(sameActor.final, 'approved');
+  assert.deepEqual(sameActor.reviewers.map((entry) => entry.actor_relation), ['same_as_writer', 'same_as_writer']);
   assert.equal(verify([review(1, 1, { user: { login: 'unknown' } }), review(2, 2)]).final, 'human_required');
   assert.equal(verify([review(1, 1), review(2, 2)], { unresolvedWriterActor: true }).final, 'human_required');
 });
@@ -98,6 +117,12 @@ test('freshness: API commit SHA、本文target、prompt、artifact digest改変�
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(stale) }), review(2, 2)]).final, 'human_required');
   const badPrompt = evidence(1, { prompt_digest: `sha256:${'d'.repeat(64)}` });
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badPrompt) }), review(2, 2)]).final, 'human_required');
+  const badExecution = evidence(1);
+  badExecution.execution.launcher_digest = `sha256:${'e'.repeat(64)}`;
+  assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badExecution) }), review(2, 2)]).final, 'human_required');
+  const badRun = evidence(1);
+  badRun.reviewer.run_id = 'run-writer-1';
+  assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badRun) }), review(2, 2)]).final, 'human_required');
   const badArtifact = evidence(1);
   badArtifact.verdict.approved_artifacts = [{ path: 'SPEC.md', digest: `sha256:${'e'.repeat(64)}` }];
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badArtifact) }), review(2, 2)]).final, 'human_required');

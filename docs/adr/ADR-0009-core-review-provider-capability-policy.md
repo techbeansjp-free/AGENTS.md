@@ -27,18 +27,18 @@ Codex はモデルと reasoning effort を明示する可搬な設定を持つ�
 - 進行役がローカルadapterへレビューを委譲する。Codex は `gpt-5.6-sol`、`xhigh`、read-only sandboxを厳密に検証する。Strict は独立2回のverdictを要求する。
 - Claude Code は実行環境が宣言する実在モデルを公式の model 指定で使い、model tier attestation、maximum reasoning attestation、実行環境固有 reasoning probe の成功を要求する。Codex 固有 slug・設定キーは使わない。
 - adapter・非対話実行・capability probeが未実装のproviderは、実行可能と推測しない。
-- GitHubモードのtrusted recorderはverdictと実行attestationを構造化PR reviewへ投稿する。GitHub Actionsは保護されたbase revisionのworkflow/verifier/policyだけを実行し、登録済みactor、PR/commit writer actor、Review API metadata、target SHA、prompt/artifact digest、reviewer run ID、Strict slot/件数を検証してgate reportとCheck Runだけを生成する。CIはproviderもPR headのコードも実行しない。
-- ローカルのadapter・prompt generator・recorderもcleanなprotected base worktreeまたはversion固定したinstalled packageから起動し、Issue worktreeが変更した実行コードを同じPRの証跡生成へ使わない。
+- GitHubモードのtrusted recorderはverdictと実行attestationを構造化PR reviewへ投稿する。このGitHub actorはAIレビュア本人ではなくCoordination Backendへの記録主体であり、PR writerと同一でもよい。GitHub Actionsは保護されたbase revisionのworkflow/verifier/policyだけを実行し、登録済みrecorder actor、PR/commit writer actorとの関係、Review API metadata、target SHA、prompt/artifact digest、reviewer run ID、Strict slot/件数を検証してgate reportとCheck Runだけを生成する。CIはproviderもPR headのコードも実行しない。
+- ローカルlauncherはprotected base SHAからephemeral cloneを作り、そのcloneでbuildしたadapter・prompt generator・recorderだけを起動する。固定launcher構成のdigest、base SHA、read-only sandbox、`review-` namespaceの一意なrun ID/slotを証跡へattestし、Issue worktreeが変更した実行コードを同じPRの証跡生成へ使わない。
 - human adapter、利用不能、不一致、未証明、strict 未満、分類不能は `human_required` へ停止する。
 
 非コア作業と model policy を持たない consumer project は、依頼者・実行環境の明示選択と既存 adapter 既定を維持する。環境変数は backend 正本の分類値と検証入力をプロセスへ渡すだけで、調整状態の正本にはしない。
 
-provider API key、ローカル認証状態のCIへの移送、self-hosted runnerは採用しない。GitHub credentialはReview APIとCheck RunというCoordination Backend操作だけに使い、model provider認証へ流用しない。worker credentialにはReview API投稿能力を与えず、trusted reviewer actorをmanifestへ登録する。最初の導入PRはcandidate verifierで自己承認せず、protected baseの既存local gate記録経路の修復後に同経路で承認する。
+provider API key、ローカル認証状態のCIへの移送、self-hosted runnerは採用しない。GitHub credentialはReview APIとCheck RunというCoordination Backend操作だけに使い、model provider認証へ流用しない。worker/reviewer roleにはReview API投稿能力を与えず、進行役のtrusted recorder actorをmanifestへ登録する。同一GitHub credentialをwriter操作と証跡記録に使う場合も、role capabilityとprotected-base実行attestationを分離する。最初の導入PRはcandidate verifierで自己承認せず、protected baseの既存local gate記録経路の修復後に同経路で承認する。
 
 ## Consequences
 
 利点は、コア作業だけを品質優先へ昇格でき、provider の異なる表現を混同せず、利用不能時に silent downgrade しないことである。利用者の既存ローカルログインを使い、CIは決定論的な検証に限定される。manifest、classifier、launcher、adapter、evidence verifier、workflow の境界をテストできる。
 
-欠点は、GitHub ActionsだけではAIレビューを開始できず、進行役がローカルadapterを起動できる環境が必要なことである。trusted recorder credentialとworker credentialの分離も必要になる。Claude Codeで最大reasoningを検証できない環境は人間判断へ止まる。またコアpathの安全側リストにより、境界付近の変更が通常より高コストになる場合がある。
+欠点は、GitHub ActionsだけではAIレビューを開始できず、進行役がローカルadapterを起動できる環境が必要なことである。actor名だけでは独立性を表せないため、protected-base launcher、実行attestation、role capabilityを維持する必要がある。Claude Codeで最大reasoningを検証できない環境は人間判断へ止まる。またコアpathの安全側リストにより、境界付近の変更が通常より高コストになる場合がある。
 
 将来 provider が検証可能な reasoning 設定を追加した場合は、能力契約を変えず adapter mapping だけを新しい ADR で更新できる。コア資産の責務境界が変わった場合は project policy の trigger と分類テストを同じ変更で更新する。

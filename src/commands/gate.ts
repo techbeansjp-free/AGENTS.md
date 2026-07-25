@@ -121,7 +121,7 @@ const VERIFY_EVIDENCE_USAGE = `
 使い方: agent-skill-chain gate verify-evidence <issue_id> <gate_id> <profile> <target_sha> <base_sha> <pr_number> <gate_report_path> [review_subject]
 
 protected baseのpolicy/verifierでGitHub PR・commit・review metadataと構造化証跡を検証・集約し、
-gate-reportへ書く。証跡不足・古いSHA・自己承認・actor未解決はhuman_requiredへ安全側停止する。
+gate-reportへ書く。証跡不足・古いSHA・実行attestation不一致・actor未解決はhuman_requiredへ安全側停止する。
 `;
 
 interface Finding {
@@ -158,6 +158,19 @@ interface ReviewerVerdict {
 
 const SUBVERDICT_VALUES = new Set(['pass', 'fail', 'pending']);
 const ABSENT_ARTIFACT_DIGEST = digestOf('agent-skill-chain:artifact-absent:v1');
+const LOCAL_REVIEW_LAUNCHER_PATHS = [
+  '.agent-skill-chain/scripts/gate-local-review.sh',
+  '.agent-skill-chain/scripts/gate-launch-reviewer.sh',
+  '.agent-skill-chain/scripts/gate-review.sh',
+  '.agent-skill-chain/adapters/claude.sh',
+  '.agent-skill-chain/adapters/codex.sh',
+  '.agent-skill-chain/adapters/human.sh',
+  '.agent-skill-chain/config/roles.yaml',
+  '.agent-skill-chain/project/manifest.yaml',
+  '.agent-skill-chain/project/MODEL_TIER_TABLE.md',
+  '.agent-skill-chain/schemas/gate-report.schema.yaml',
+  '.agent-skill-chain/schemas/project-policy.schema.yaml',
+] as const;
 
 /**
  * verdict の各観点（conformance・falsification・blockers・inconclusive）から final を機械的に導出する。
@@ -253,6 +266,15 @@ function artifactDigestAtSha(root: string, artifactPath: string, targetSha: stri
   if (shown.status === 0) return digestOf(shown.stdout);
   if (allowAbsent) return ABSENT_ARTIFACT_DIGEST;
   throw new CliError(`target SHAの必須成果物を読めません: ${artifactPath}`);
+}
+
+function localReviewLauncherDigest(root: string, trustedBaseSha: string): string {
+  const blobs = LOCAL_REVIEW_LAUNCHER_PATHS.map((launcherPath) => {
+    const shown = git(['show', `${trustedBaseSha}:${launcherPath}`], root);
+    if (shown.status !== 0) throw new CliError(`trusted baseのlauncher構成を読めません: ${launcherPath}`);
+    return { path: launcherPath, digest: digestOf(shown.stdout) };
+  });
+  return digestOf(JSON.stringify(blobs));
 }
 
 function parseGhList<T>(stdout: string): T[] {
@@ -651,6 +673,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
       gateId === 'implementation',
     );
     const promptDigest = evidencePromptDigest(buildReviewerPrompt(root, number, gateId, targetSha, baseSha));
+    const launcherDigest = localReviewLauncherDigest(root, trustedBaseSha);
     let parsedVerdict: unknown;
     try {
       parsedVerdict = JSON.parse(fs.readFileSync(0, 'utf8'));
@@ -678,11 +701,18 @@ export async function submitEvidence(args: string[]): Promise<number> {
     }
 
     const evidence: ReviewEvidence = {
-      schema_version: 'agent-skill-chain/gate-review-evidence/v1',
+      schema_version: 'agent-skill-chain/gate-review-evidence/v2',
       issue_id: issueId,
       gate: gateId,
       profile,
       target_sha: targetSha,
+      execution: {
+        launcher: 'agent-skill-chain/gate-local-review/v1',
+        trusted_base_sha: trustedBaseSha,
+        launcher_digest: launcherDigest,
+        isolation: 'ephemeral_clone',
+        sandbox: 'read_only',
+      },
       reviewer: {
         run_id: reviewerRunId,
         slot: slot as 1 | 2,
@@ -772,6 +802,7 @@ export async function verifyEvidence(args: string[]): Promise<number> {
       gateId === 'implementation',
     );
     const promptDigest = evidencePromptDigest(buildReviewerPrompt(root, number, gateId, targetSha, baseSha));
+    const launcherDigest = localReviewLauncherDigest(root, baseSha);
     const result = verifyGithubReviewEvidence({
       reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
       issueId,
@@ -783,6 +814,8 @@ export async function verifyEvidence(args: string[]): Promise<number> {
       unresolvedWriterActor,
       expectedPromptDigest: promptDigest,
       expectedArtifacts: artifacts,
+      expectedTrustedBaseSha: baseSha,
+      expectedLauncherDigest: launcherDigest,
       coreReviewRequired: policy.required,
       codexModel: policy.policy.adapters.codex.model,
       codexReasoning: policy.policy.adapters.codex.reasoning_effort,

@@ -30,7 +30,7 @@
 
 - 単体: classifier、capability、canonical digest、actor/SHA/run ID/slot、Strict集約。
 - 結合: Review API投稿→workflow相当取得→gate report→Check Run。
-- 攻撃: PR変更recorder/verifier/allowlistの不使用、branch内偽証跡、未登録actor、writer actor投稿、commit actor未解決、dismissed review、API commit ID不一致、古いSHA、prompt/artifact改変、slot重複、Strict 1件。
+- 攻撃: PR変更recorder/verifier/allowlistの不使用、branch内偽証跡、未登録actor、同一writer/recorder actorの正当なattestation、同一actorのattestation欠落・改変、commit actor未解決、dismissed review、API commit ID不一致、古いSHA、prompt/artifact/launcher改変、slot重複、Strict 1件。
 - adapter: Codex exact model/effort/read-only、Claude attestation/probe、Cursor拒否、通常選択維持。
 - distribution: legacy同期済みconsumerの修復、customized workflow競合時の全体no-op、dry-run、init、template sync、provider credential/inference依存0件。
 - 必須: build/typecheck、全test、doc/vocab/reference/ADR/secret/SAST、template sync、shell syntax。
@@ -40,7 +40,7 @@
 - design: 本DESIGN/PLAN/ADRをcommit・push後、read-only独立レビュー。
 - implementation: worker leaseでcode/test/templateをcommit・push後、別runのread-onlyレビュー。
 - validation: validation leaseで全検査を再実行し、VALIDATION.mdとログをcommit・push後、別runのread-onlyレビュー。
-- reviewerはbranchを変更せず、writerはReview API証跡を投稿しない。進行役は成果物内容を裁定しない。
+- reviewerはbranchを変更せずverdictだけを返し、writer roleはReview API証跡を投稿しない。進行役のtrusted recorderが証跡をCoordination Backendへ保存するが、成果物内容を裁定しない。
 
 ## 障害時
 

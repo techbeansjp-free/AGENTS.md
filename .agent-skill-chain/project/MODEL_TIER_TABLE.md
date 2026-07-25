@@ -22,11 +22,11 @@ Claude CodeへCodex固有slugや設定keyを渡さない。具体的Claude model
 
 ## ローカル実行とGitHub証跡
 
-AI reviewは進行役がcleanなprotected base worktreeまたはversion固定installed packageのadapterへ委譲する。Issue worktreeが変更したclassifier、prompt generator、adapter、recorderを同じPRの証跡生成へ使わない。Codex/Claude Codeはローカルの既存ログインを使い、provider credentialをCIへ移送しない。
+AI reviewは進行役がcleanなprotected base worktreeまたはversion固定installed packageのadapterへ委譲する。launcherはprotected base SHAのephemeral cloneでbuildしたclassifier、prompt generator、adapter、recorderだけを使い、Issue worktreeが変更した実行コードを同じPRの証跡生成へ使わない。Codex/Claude Codeはローカルの既存ログインを使い、provider credentialをCIへ移送しない。
 
-trusted recorderはverdict、target SHA、prompt/artifact digest、adapter能力、reviewer run ID/slotをGitHub PR reviewへ保存する。workerにはReview API投稿能力を与えない。
+trusted recorderはverdict、target SHA、prompt/artifact/launcher digest、protected base SHA、ephemeral-clone/read-only attestation、adapter能力、`review-` namespaceのreviewer run ID/slotをGitHub PR reviewへ保存する。Review API actorはAIレビュア本人ではなくCoordination Backendへの記録主体であり、writer actorと同一でもよい。worker/reviewerにはReview API投稿能力を与えない。
 
-GitHub Actionsはprotected baseのverifierでPR/commit/review API metadataと証跡を検証し、gate reportとCheck Runだけを生成する。AI、provider CLI、Codex Action、provider API credential、self-hosted runnerを使用しない。review actorが未登録、writer actor、actor未解決、SHA/digest不一致、Strict slot不足・重複、判定不能なら `action_required`。全reviewerがpass/passかつblocking無しの場合だけsuccessとする。
+GitHub Actionsはprotected baseのverifierでPR/commit/review API metadataと証跡を検証し、gate reportとCheck Runだけを生成する。AI、provider CLI、Codex Action、provider API credential、self-hosted runnerを使用しない。review actorが未登録、actor関係が未解決、実行attestation・SHA・digest不一致、Strict slot不足・重複、判定不能なら `action_required`。同一writer/recorder actorでもattestationを満たせば受理し、全reviewerがpass/passかつblocking無しの場合だけsuccessとする。
 
 ## 通常作業・配布・完了条件
 

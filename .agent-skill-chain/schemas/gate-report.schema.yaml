@@ -51,7 +51,8 @@ properties:
         description: GitHub Review API由来としてtrusted verifierが検証済みのreviewer metadata。
         items:
           type: object
-          required: [source, review_id, actor, run_id, slot, adapter, model, reasoning, prompt_digest]
+          required: [source, review_id, actor, run_id, slot, adapter, model, reasoning, prompt_digest,
+                     actor_relation, trusted_base_sha, launcher_digest, isolation, sandbox]
           additionalProperties: false
           properties:
             source: {const: github_pr_review}
@@ -63,6 +64,11 @@ properties:
             model: {type: string}
             reasoning: {type: string}
             prompt_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+            actor_relation: {type: string, enum: [same_as_writer, distinct_from_writer]}
+            trusted_base_sha: {type: string, minLength: 1}
+            launcher_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+            isolation: {const: ephemeral_clone}
+            sandbox: {const: read_only}
 
 definitions:
   finding:

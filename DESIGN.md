@@ -22,7 +22,7 @@ orchestrator
 | AC-1 | inferenceを除去したgate workflow、ローカルadapter |
 | AC-2 | manifest能力契約、model-selection classifier、adapter probe |
 | AC-3 | Review API metadata、SHA/prompt/artifact digest再検証 |
-| AC-4 | trusted actor、writer actor分離、reviewer run ID/slot、必要数集約 |
+| AC-4 | trusted recorder、protected-base実行attestation、reviewer run ID/slot、必要数集約 |
 | AC-5 | verdict envelope、gate report、reconcile |
 | AC-6 | GitHub/local backend分岐、通常モデル明示選択 |
 | AC-7 | schema、template sync、回帰テスト |
@@ -42,11 +42,11 @@ manifest の `core_review` は次を保持する。
 
 classifier は base...target 差分とbackend正本の監査区分だけを解釈する。取得不能は `required/unresolved` とし、ordinaryへ降格しない。GitHubでもconfigの明示adapterを尊重し、Codexへ暗黙固定しない。
 
-### trust rootとwriter identity
+### trust rootとactor関係
 
 GitHub Actionsは `pull_request_target` / `pull_request_review` の保護されたbase revisionにあるworkflow、classifier、policy、schema、verifierだけを実行する。PR headのコードはcheckout・build・sourceせず、対象成果物はGit objectとしてread-onlyに参照する。当該PRが変更したallowlistやverifierを、同じPRの承認へ使わない。
 
-writer actor集合はGitHub APIのPR authorと全commitのauthor/committer loginから作る。review evidenceのauthorは登録済みtrusted actorであり、かつwriter actor集合に含まれないことを要求する。証跡本文のwriter自己申告値は判定に使わない。
+writer actor集合はGitHub APIのPR authorと全commitのauthor/committer loginから作る。review evidenceのauthorはAIレビュア本人ではなく、ローカル実行結果をCoordination Backendへ記録するtrusted recorderである。同じ利用者がwriterとrecorderを担う場合は同一GitHub actorでもよい。独立性はactor名ではなく、protected base由来のlauncher digest、ephemeral clone、read-only sandbox、固有reviewer run ID/slot、target/prompt/artifact digestで機械検証する。証跡本文のwriter自己申告値は判定に使わず、APIから得たactor関係をgate reportへ記録する。
 
 ### local reviewer / trusted recorder
 
@@ -57,9 +57,9 @@ writer actor集合はGitHub APIのPR authorと全commitのauthor/committer login
 - Claude Code: 実在model、`frontier_coding` / `maximum_reasoning` attestation、reasoning probe、無書込みtool
 - Cursor: adapter・安定した非対話CLI・probeが未実装なので選択を拒否する
 
-各呼出しは orchestrator が割り当てた一意な reviewer run ID と Strict slot (`1|2`) を持つ。adapterはmodel出力を直接状態へ書かず、trusted CLIへ標準入力で渡す。CLIはcapability、slot、prompt/artifact digestを確認し、GitHubモードでは marker付きPR reviewを作る。worker roleにはReview API commandを与えない。
+各呼出しは orchestrator が暗号学的乱数で割り当てた `review-` namespaceの一意な reviewer run ID と Strict slot (`1|2`) を持つ。adapterはmodel出力を直接状態へ書かず、trusted CLIへ標準入力で返す。orchestratorのtrusted recorderはcapability、slot、prompt/artifact digestを確認し、GitHubモードでは marker付きPR reviewを作る。workerとreviewer roleにはReview API commandを与えない。
 
-local recorder自身もprotected baseをtrust rootにする。進行役はIssue worktree内のcandidateではなく、cleanなbase worktreeまたはversion固定したinstalled packageから `gate local-review` を起動する。commandはclassifier、prompt generator、adapter、recorderがbase SHA/package versionと一致することを検証し、target成果物は `git show <target_sha>:<path>` で読む。dirty・version不一致・由来不明の実行系は `human_required` とする。
+local recorder自身もprotected baseをtrust rootにする。進行役はIssue worktree内のcandidateではなく、cleanなbase worktreeまたはversion固定したinstalled packageから `gate local-review` を起動する。launcherはprotected base SHAからephemeral cloneを作り、そのclone内でbuildしたclassifier、prompt generator、adapter、recorderだけを使う。target成果物は `git show <target_sha>:<path>` で読み、固定launcher構成ファイル一覧のblob digestを証跡へattestする。dirty・version不一致・由来不明の実行系は `human_required` とする。
 
 ### evidence envelope
 
@@ -67,9 +67,10 @@ PR review本文には次を保存する。
 
 - schema version、Issue、gate、target SHA、profile
 - reviewer run ID、slot、adapter、model、reasoning/capability、read-only
+- launcher version、trusted base SHA、launcher digest、ephemeral-clone/read-only実行attestation
 - prompt digest、approved artifactsとdigest、verdict
 
-GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit actorは本文外の正本である。CIはdismissed review、未登録actor、writer actorによるreview、target SHA不一致を除外せずエラーとして扱う。PRまたはいずれかのcommitのauthor/committer loginがnull・未解決ならwriter集合を推測せず `human_required` とする。branch内のgate reportやJSONは承認入力にしない。
+GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit actorは本文外の正本である。CIはdismissed review、未登録recorder、実行attestation不一致、target SHA不一致を除外せずエラーとして扱う。PRまたはいずれかのcommitのauthor/committer loginがnull・未解決ならactor関係を推測せず `human_required` とする。branch内のgate reportやJSONは承認入力にしない。
 
 ### evidence verifier / aggregator
 
@@ -78,7 +79,7 @@ GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit act
 1. Issue/gate/profile/SHA、API `commit_id`、registered actorを検証する。
 2. promptをtarget SHAから再生成しdigestを照合する。
 3. `git show <sha>:<path>` で成果物digestを再計算する。
-4. review actorがwriter actor集合に含まれず、run ID/slotが重複しないことを確認する。
+4. protected base SHA、launcher digest、ephemeral clone、read-only sandbox、`review-` run ID namespaceを検証し、run ID/slotが重複しないことを確認する。review actorとwriter actorの関係も記録する。
 5. Standardはslot 1を1件、Strictはslot 1・2を各1件要求する。
 6. 全件pass/passかつblocking無しだけapproved、fail/blockingはrejected、不足・不一致・判定不能はhuman_requiredとする。
 
@@ -128,4 +129,4 @@ ADR-0009を「CI内model実行」から「ローカル実行・外部証跡・ba
 
 ## 完了条件
 
-全ACの単体・結合テスト、型検査、policy/schema/template sync、lint/SAST/secret scanを成功させる。独立検証はwriter-controlled recorder、未解決actor、偽造・古いSHA・自己承認・Strict不足・upgrade競合を反証する。base gateの停止は迂回せず#283依存として報告する。
+全ACの単体・結合テスト、型検査、policy/schema/template sync、lint/SAST/secret scanを成功させる。独立検証は同一actorの正当な記録、実行attestation欠落・改変、未解決actor、偽造・古いSHA・Strict不足・upgrade競合を反証する。base gateの停止は迂回せず#283依存として報告する。

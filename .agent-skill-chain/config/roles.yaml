@@ -2,8 +2,8 @@
 # 正本: AGENTS.md §役割・権限・writer lease
 #
 # 各ロールの実行系への変換は .agent-skill-chain/adapters/{claude,codex,human}.sh が担う。
-# 権限は credential / GitHub 権限分離（fine-grained PAT・GitHub App installation permission）で
-# 担保し、ツール名の一律 deny では実装しない（AGENTS.md I5）。
+# 権限はrole capability、protected-base実行attestation、必要に応じたGitHub権限分離で
+# 担保し、GitHub actor名やツール名の一律 deny だけでは実装しない（AGENTS.md I5）。
 
 schema_version: agent-skill-chain/config/v1
 
@@ -16,6 +16,7 @@ roles:
       - "`issue.state_transition`"
       - worktree.lifecycle
       - pr.merge
+      - review_evidence.publish    # protected-base trusted recorderとしてPR Review APIへ投稿
     forbidden:
       - artifact_branch.commit    # 成果物branchへのcommit禁止（I5）
       - artifact.author            # 成果物の著述・内容取り込み禁止（I5）
@@ -46,7 +47,6 @@ roles:
     capabilities:
       - worktree.read
       - review_evidence.return
-      - review.publish        # trusted recorder経由。GitHub=PR Review API、local=reviews/<gate>.yaml
     forbidden:
       - branch.commit
       - branch.push

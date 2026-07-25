@@ -18,11 +18,18 @@ export interface EvidenceVerdict {
 }
 
 export interface ReviewEvidence {
-  schema_version: 'agent-skill-chain/gate-review-evidence/v1';
+  schema_version: 'agent-skill-chain/gate-review-evidence/v2';
   issue_id: string;
   gate: 'spec' | 'design' | 'implementation' | 'validation';
   profile: 'standard' | 'strict';
   target_sha: string;
+  execution: {
+    launcher: 'agent-skill-chain/gate-local-review/v1';
+    trusted_base_sha: string;
+    launcher_digest: string;
+    isolation: 'ephemeral_clone';
+    sandbox: 'read_only';
+  };
   reviewer: {
     run_id: string;
     slot: 1 | 2;
@@ -57,6 +64,11 @@ export interface VerifiedReviewer {
   model: string;
   reasoning: string;
   prompt_digest: string;
+  actor_relation: 'same_as_writer' | 'distinct_from_writer';
+  trusted_base_sha: string;
+  launcher_digest: string;
+  isolation: 'ephemeral_clone';
+  sandbox: 'read_only';
 }
 
 export interface EvidenceVerification {
@@ -138,13 +150,20 @@ export function isEvidenceVerdict(value: unknown, digestRequired = true): value 
 
 function isEvidenceShape(value: ReviewEvidence): boolean {
   return (
-    value.schema_version === 'agent-skill-chain/gate-review-evidence/v1' &&
+    value.schema_version === 'agent-skill-chain/gate-review-evidence/v2' &&
     /^ISSUE-[0-9]+$/.test(value.issue_id) &&
     ['spec', 'design', 'implementation', 'validation'].includes(value.gate) &&
     ['standard', 'strict'].includes(value.profile) &&
     typeof value.target_sha === 'string' &&
+    !!value.execution &&
+    value.execution.launcher === 'agent-skill-chain/gate-local-review/v1' &&
+    typeof value.execution.trusted_base_sha === 'string' &&
+    /^sha256:[0-9a-f]{64}$/.test(value.execution.launcher_digest) &&
+    value.execution.isolation === 'ephemeral_clone' &&
+    value.execution.sandbox === 'read_only' &&
     !!value.reviewer &&
     typeof value.reviewer.run_id === 'string' &&
+    /^review-[A-Za-z0-9._-]+$/.test(value.reviewer.run_id) &&
     [1, 2].includes(value.reviewer.slot) &&
     ['codex', 'claude', 'human'].includes(value.reviewer.adapter) &&
     typeof value.reviewer.model === 'string' &&
@@ -172,6 +191,8 @@ export function verifyGithubReviewEvidence(options: {
   unresolvedWriterActor: boolean;
   expectedPromptDigest: string;
   expectedArtifacts: { path: string; digest: string }[];
+  expectedTrustedBaseSha: string;
+  expectedLauncherDigest: string;
   coreReviewRequired: boolean;
   codexModel: string;
   codexReasoning: string;
@@ -205,13 +226,21 @@ export function verifyGithubReviewEvidence(options: {
     const actor = review.user?.login;
     if (!actor) return fail(`review ${review.id} のactorを解決できません`);
     if (!options.trustedActors.includes(actor)) return fail(`review ${review.id} のactorはtrusted recorderではありません`);
-    if (options.writerActors.includes(actor)) return fail(`review ${review.id} はwriter actorによる自己承認です`);
     if (review.state.toUpperCase() === 'DISMISSED') return fail(`review ${review.id} はdismiss済みです`);
     if (review.commit_id !== options.targetSha || evidence.target_sha !== options.targetSha) {
       return fail(`review ${review.id} のtarget SHAが現在のPR headと一致しません`);
     }
     if (evidence.prompt_digest !== options.expectedPromptDigest) {
       return fail(`review ${review.id} のprompt digestが一致しません`);
+    }
+    if (
+      evidence.execution.trusted_base_sha !== options.expectedTrustedBaseSha ||
+      evidence.execution.launcher_digest !== options.expectedLauncherDigest ||
+      evidence.execution.launcher !== 'agent-skill-chain/gate-local-review/v1' ||
+      evidence.execution.isolation !== 'ephemeral_clone' ||
+      evidence.execution.sandbox !== 'read_only'
+    ) {
+      return fail(`review ${review.id} のprotected-base実行attestationが一致しません`);
     }
     if (!evidence.reviewer.capability.read_only) return fail(`review ${review.id} はread-onlyを証明していません`);
     if (options.coreReviewRequired) {
@@ -300,6 +329,11 @@ export function verifyGithubReviewEvidence(options: {
       model: evidence.reviewer.model,
       reasoning: evidence.reviewer.reasoning,
       prompt_digest: evidence.prompt_digest,
+      actor_relation: options.writerActors.includes(actor) ? 'same_as_writer' : 'distinct_from_writer',
+      trusted_base_sha: evidence.execution.trusted_base_sha,
+      launcher_digest: evidence.execution.launcher_digest,
+      isolation: evidence.execution.isolation,
+      sandbox: evidence.execution.sandbox,
     })),
   };
 }

@@ -9,7 +9,12 @@ import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
 import { digestOf } from '../../src/lib/digest.js';
-import { evidencePromptDigest, renderReviewEvidence, type ReviewEvidence } from '../../src/lib/review-evidence.js';
+import {
+  evidencePromptDigest,
+  parseReviewEvidence,
+  renderReviewEvidence,
+  type ReviewEvidence,
+} from '../../src/lib/review-evidence.js';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -44,43 +49,15 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   });
   assert.equal(prompt.status, 0, prompt.stderr);
   const promptDigest = evidencePromptDigest(prompt.stdout.trimEnd());
-  const makeEvidence = (slot: 1 | 2): ReviewEvidence => ({
-    schema_version: 'agent-skill-chain/gate-review-evidence/v1',
-    issue_id: 'ISSUE-271',
-    gate: 'spec',
-    profile: 'strict',
-    target_sha: targetSha,
-    reviewer: {
-      run_id: `review-integration-${slot}`,
-      slot,
-      adapter: 'codex',
-      model: 'gpt-5.6-sol',
-      reasoning: 'xhigh',
-      capability: {
-        model_tier: 'frontier_coding',
-        reasoning_tier: 'maximum_reasoning',
-        read_only: true,
-      },
-    },
-    prompt_digest: promptDigest,
-    verdict: {
-      conformance: 'pass',
-      falsification: 'pass',
-      blockers: [],
-      approved_artifacts: [artifact],
-      inconclusive: false,
-    },
-  });
-
   const state = stub.readState();
   state.pullMetadata = {
-    user: { login: 'segment-writer' },
+    user: { login: 'adachi-tatsuru' },
     head: { sha: targetSha },
     base: { sha: baseSha },
   };
   state.pullCommits = [{
-    author: { login: 'segment-writer' },
-    committer: { login: 'segment-writer' },
+    author: { login: 'adachi-tatsuru' },
+    committer: { login: 'adachi-tatsuru' },
   }];
   stub.writeState(state);
 
@@ -102,6 +79,18 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.equal(stub.readState().pullReviews?.length, 1);
 
   const stateAfterSubmit = stub.readState();
+  const submittedEvidence = parseReviewEvidence(
+    (stateAfterSubmit.pullReviews?.[0] as { body: string }).body,
+  );
+  assert.ok(submittedEvidence);
+  const makeEvidence = (slot: 1 | 2): ReviewEvidence => ({
+    ...submittedEvidence,
+    reviewer: {
+      ...submittedEvidence.reviewer,
+      run_id: `review-integration-${slot}`,
+      slot,
+    },
+  });
   stateAfterSubmit.pullReviews = [1, 2].map((slot) => ({
     id: slot,
     body: renderReviewEvidence(makeEvidence(slot as 1 | 2)),
@@ -119,10 +108,14 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.equal(verified.status, 0, verified.stderr);
   assert.match(verified.stdout, /final: approved/);
   const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
-    gate: { final: string; reviewers: unknown[] };
+    gate: { final: string; reviewers: { actor_relation: string }[] };
   };
   assert.equal(report.gate.final, 'approved');
   assert.equal(report.gate.reviewers.length, 2);
+  assert.deepEqual(report.gate.reviewers.map((reviewer) => reviewer.actor_relation), [
+    'same_as_writer',
+    'same_as_writer',
+  ]);
 
   const published = runCli(['gate', 'publish', 'ISSUE-271', reportPath], { cwd: repo.dir, env });
   assert.equal(published.status, 0, published.stderr);
@@ -137,7 +130,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
 
   const missingState = stub.readState();
   missingState.pullMetadata = {
-    user: { login: 'segment-writer' },
+    user: { login: 'adachi-tatsuru' },
     head: { sha: baseSha },
     base: { sha: baseSha },
   };
