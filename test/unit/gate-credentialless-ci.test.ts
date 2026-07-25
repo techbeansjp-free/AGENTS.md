@@ -23,8 +23,9 @@ test('gate workflow: coreは公式Codex ActionをStrict独立2回起動し、認
   assert.equal((workflow.match(/openai-api-key: \$\{\{ secrets\.OPENAI_API_KEY \}\}/g) ?? []).length, 2);
   assert.equal((workflow.match(/model: gpt-5\.6-sol/g) ?? []).length, 2);
   assert.equal((workflow.match(/effort: xhigh/g) ?? []).length, 2);
-  assert.equal((workflow.match(/sandbox: read-only/g) ?? []).length, 2);
-  assert.equal((workflow.match(/safety-strategy: read-only/g) ?? []).length, 2);
+  assert.equal((workflow.match(/permission-profile: ":read-only"/g) ?? []).length, 2);
+  assert.equal((workflow.match(/safety-strategy: drop-sudo/g) ?? []).length, 2);
+  assert.doesNotMatch(workflow, /safety-strategy: read-only/);
   assert.match(workflow, /name: Run Codex core reviewer 2[\s\S]*?steps\.ctx\.outputs\.profile == 'strict'/);
   assert.match(workflow, /gate record-verdict[\s\S]*?"\$GITHUB_WORKSPACE" "\$EXPECTED"/);
   assert.match(workflow, /if: steps\.credentials\.outputs\.available == 'true' && steps\.ctx\.outputs\.core_review_required != 'true'[\s\S]*?id: adapter_judgment/);

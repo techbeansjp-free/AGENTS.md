@@ -41,9 +41,11 @@ Codex の完全 command override は `CODEX_CORE_REVIEWER_ATTESTED=true` と固�
 
 自己拡張 project の GitHub コアレビューは Codex adapter を選び、公式 `openai/codex-action@v1` を使う。Action が Codex CLI の導入と Responses API proxy を担当する。利用者が一度だけ登録する設定は repository secret `OPENAI_API_KEY` であり、モデル名・reasoning・CLI install の repository variable は要求しない。
 
-Action には `model: gpt-5.6-sol`、`effort: xhigh`、`sandbox: read-only`、`safety-strategy: read-only` を明示する。Strict profile は同じ target SHA を別プロセスで2回レビューし、trusted CLI が2件の構造化 verdict を集約する。全件が conformance/falsification とも pass の場合だけ承認し、件数不足・不正JSON・inconclusive は `human_required`、1件でも fail または blocking finding があれば rejected とする。
+Action には `model: gpt-5.6-sol`、`effort: xhigh`、`permission-profile: ":read-only"`、`safety-strategy: drop-sudo` を明示する。read-only permission profile が Codex のファイル・network 権限を、`drop-sudo` が runner の OS 権限を縮小する。Strict profile は同じ target SHA を別プロセスで2回レビューし、trusted CLI が2件の構造化 verdict を集約する。全件が conformance/falsification とも pass の場合だけ承認し、件数不足・不正JSON・inconclusive は `human_required`、1件でも fail または blocking finding があれば rejected とする。
 
 `OPENAI_API_KEY` が未登録または Action が利用不能なら `action_required` を発行する。secret 登録後の PR push から自動レビューを再開し、継続的な人間操作を要求しない。Claude adapter を選ぶ環境では前節の Claude 固有 model/attestation/probe を使い、Codex Action の入力を混用しない。
+
+GitHub App token は repository API 用で model provider の資格情報ではないため代用しない。ChatGPT-managed `auth.json` と self-hosted runner は public repository へ持ち込まない。GitHub OIDC は、信頼済み外部 provider が Sol/xhigh 用の短期 token を発行する構成が実在する場合だけ別ポリシーとして追加できる。model/effort と独立2 verdict を証明できない GitHub automatic review は本 gate の代替にしない。
 
 ## 通常作業・完了条件・対象外
 

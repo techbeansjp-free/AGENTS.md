@@ -39,7 +39,7 @@ GitHub モードの自己拡張コアレビューは、公式 `openai/codex-acti
 - manifest 登録済みの規範だけで、コア対象パターン、明示的な監査区分、ベンダー中立能力、adapter 別実装値、失敗時挙動を判断できる。
 - コア変更は target SHA の差分から、コア監査は明示入力から判定し、いずれも strict review を要求する。
 - GitHub モードの自己拡張コアレビューは Codex adapter と公式 Codex Action を選び、Strict の reviewer 2体を独立呼出しとして機械強制する。
-- Codex adapter はコア独立レビューを `gpt-5.6-sol` / `xhigh` / read-only でのみ起動し、上書き値も一致を検証する。
+- Codex adapter はコア独立レビューを `gpt-5.6-sol` / `xhigh` / read-only permission profile でのみ起動し、上書き値も一致を検証する。GitHub Action は OS 権限も `drop-sudo` で縮小する。
 - Claude adapter は、環境が申告する実在モデル・reasoning 値に加えて `frontier_coding` / `maximum_reasoning` の能力証明を検証して起動する。固定の架空モデル名や Codex 固有値を Claude CLI へ流用しない。
 - GitHub Codex 自動レビューの利用者設定は repository secret `OPENAI_API_KEY` だけとする。未設定、必須モデル・強度・能力証明・CLI・認証の利用不能または不一致は、gate を `human_required` とし非成功で停止する。
 - 通常作業では既存 adapter 設定と依頼者・実行環境の明示的上書きを尊重する。
@@ -65,7 +65,7 @@ GitHub モードの自己拡張コアレビューは、公式 `openai/codex-acti
 
 - Given: コア独立レビューを Codex adapter で起動する
 - When: モデルと reasoning effort を解決・検証する
-- Then: GitHub では公式 Codex Action が CLI を準備し、ローカルでは Codex adapter が CLI を解決し、いずれも `gpt-5.6-sol` と `xhigh` と read-only sandbox を使う。不一致・未対応・利用不能なら `human_required` になる
+- Then: GitHub では公式 Codex Action が CLI を準備し、ローカルでは Codex adapter が CLI を解決し、いずれも `gpt-5.6-sol` と `xhigh` と read-only 権限を使う。GitHub Action は `:read-only` permission profile と `drop-sudo` を併用し、不一致・未対応・利用不能なら `human_required` になる
 - 検証方法見込み: `automated`
 
 #### AC-4: Claude は同等能力を証明しベンダー固有表現を混同しない

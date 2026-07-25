@@ -167,8 +167,8 @@ jobs:
           prompt-file: .agent-skill-chain/runtime/codex-core-review-prompt.txt
           model: gpt-5.6-sol
           effort: xhigh
-          sandbox: read-only
-          safety-strategy: read-only
+          permission-profile: ":read-only"
+          safety-strategy: drop-sudo
           output-schema: |
             {
               "type": "object",
@@ -216,8 +216,8 @@ jobs:
           prompt-file: .agent-skill-chain/runtime/codex-core-review-prompt.txt
           model: gpt-5.6-sol
           effort: xhigh
-          sandbox: read-only
-          safety-strategy: read-only
+          permission-profile: ":read-only"
+          safety-strategy: drop-sudo
           output-schema: |
             {
               "type": "object",

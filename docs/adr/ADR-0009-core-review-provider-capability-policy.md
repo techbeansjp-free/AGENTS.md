@@ -24,12 +24,14 @@ Codex はモデルと reasoning effort を明示する可搬な設定を持つ�
 
 各 adapter はベンダー中立能力を自分の実行系だけへ変換する。
 
-- GitHub の自己拡張コアレビューは Codex を選択し、公式 `openai/codex-action@v1` が CLI と API proxy を準備する。利用者入力は一度登録する repository secret `OPENAI_API_KEY` だけとする。
-- Codex は `gpt-5.6-sol`、`xhigh`、read-only sandbox を厳密に検証する。Strict は独立2回の verdict を trusted CLI が集約し、全件 pass/pass の場合だけ承認する。
+- GitHub の自己拡張コアレビューは Codex を選択し、公式 `openai/codex-action@v1` が CLI と API proxy を準備する。Codex は read-only permission profile、runner は `drop-sudo` で権限を縮小する。利用者入力は一度登録する repository secret `OPENAI_API_KEY` だけとする。
+- Codex は `gpt-5.6-sol`、`xhigh`、read-only 権限を厳密に検証する。GitHub Action は permission profile、ローカル adapter は read-only sandbox へ変換する。Strict は独立2回の verdict を trusted CLI が集約し、全件 pass/pass の場合だけ承認する。
 - Claude Code は実行環境が宣言する実在モデルを公式の model 指定で使い、model tier attestation、maximum reasoning attestation、実行環境固有 reasoning probe の成功を要求する。Codex 固有 slug・設定キーは使わない。
 - human adapter、利用不能、不一致、未証明、strict 未満、分類不能は `human_required` へ停止する。
 
 非コア作業と model policy を持たない consumer project は、依頼者・実行環境の明示選択と既存 adapter 既定を維持する。環境変数は backend 正本の分類値と検証入力をプロセスへ渡すだけで、調整状態の正本にはしない。
+
+GitHub App token は GitHub resource の権限であって model provider 認証ではないため代替にしない。public repository へ ChatGPT-managed `auth.json` を移送する方式と self-hosted runner は採用しない。GitHub OIDC は、信頼済み外部 provider が検証可能な Sol/xhigh 用短期 token を発行する構成が実在する場合だけ、別の adapter mapping として将来検討する。model/effort と独立2 verdict を機械証明できない GitHub automatic review は本 gate の代替にしない。
 
 ## Consequences
 

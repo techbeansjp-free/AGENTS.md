@@ -82,7 +82,7 @@ Claude Code へ Codex のモデル名や `model_reasoning_effort` 設定を渡�
 
 ### workflow と配布
 
-gate workflow は checkout を完全履歴にし、base ref と PR label 由来の監査区分を context / launcher へ渡す。自己拡張 project policy が GitHub コアレビューに Codex を指定した場合は、公式 `openai/codex-action@v1` を read-only sandbox / safety strategy で起動する。Action が Codex CLI の導入と Responses API proxy を担うため、利用者が一度だけ登録する入力は repository secret `OPENAI_API_KEY` だけである。
+gate workflow は checkout を完全履歴にし、base ref と PR label 由来の監査区分を context / launcher へ渡す。自己拡張 project policy が GitHub コアレビューに Codex を指定した場合は、公式 `openai/codex-action@v1` を `permission-profile: ":read-only"` と `safety-strategy: drop-sudo` で起動する。read-only sandbox だけでは runner の OS 権限を縮小しないため、permission profile と OS 権限縮小を分離して併用する。Action が Codex CLI の導入と Responses API proxy を担うため、利用者が一度だけ登録する入力は repository secret `OPENAI_API_KEY` だけである。
 
 Standard は Codex Action 1回、Strict は同じ head SHA と prompt に対する独立 Action 2回を起動する。trusted CLI は verdict 配列の個数を期待 reviewer 数と照合し、全 verdict が pass/pass の場合だけ approved、1件でも fail または blocking finding があれば rejected、欠落・不正・inconclusive は `human_required` とする。これにより既存 `reviewer_count: 2` を単なる表示値で終わらせない。
 
@@ -118,6 +118,7 @@ GitHub label とローカル state は同じ `review_subject` 意味へ正規化
 - 想定される失敗モード: base ref 不在、policy/schema 不適合、label 輸送漏れ、モデル値の不一致、`OPENAI_API_KEY` 未設定、Codex Action失敗、Strict verdict欠落、Claude reasoning probe 不在、CLI/認証/モデル利用不能、command override による検証回避。
 - 安全側挙動: 分類不能と能力未証明はすべて `human_required`。コア対象に `neutral` や `success` を発行しない。
 - command 境界: 値は既知 KEY と固定 enum だけを context から抽出する。credential や probe 出力はログへ出さない。
+- 認証代替の境界: GitHub App installation token は GitHub resource 用であり model provider 認証には使わない。ChatGPT-managed `auth.json` を public repository の runner へ移送せず、self-hosted runner も public fork のコード実行リスクがあるため採用しない。GitHub OIDC は信頼済み外部 broker/provider が実在し、Sol/xhigh の Responses API token を短期発行できる場合だけ将来候補とし、存在を仮定しない。Codex GitHub automatic review は model/effort と独立2 verdict の機械証明を提供しない限り本 gate の代替にしない。
 - ロールバック手順: manifest の `model_selection`、classifier/context 連携、adapter guard、state 追加、workflow/label を同一 PR で戻す。任意フィールドのため既存データ migration の巻き戻しは不要。
 - 影響を受ける既存機能: 自己拡張リポジトリのコア gate review と監査 label。非コア reviewer、worker model 選択、consumer project は既定で不変。
 
