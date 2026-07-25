@@ -13,14 +13,14 @@
 
 - 対象: GitHub/ローカル両 Coordination Backend の全 gate reviewer。コア変更では Strict を必須とする。
 - ローカル独立レビュー: 成果物を書けないレビュアプロセスが、ローカル CLI の既存ログインを使って verdict を返すこと。
-- 構造化証跡: Issue、gate、target SHA、prompt digest、adapter 能力、reviewer run ID、writer run ID、成果物 digest、verdict を含む GitHub PR review。
+- 構造化証跡: Issue、gate、target SHA、prompt digest、adapter 能力、reviewer run ID/slot、Coordination Backend が記録した writer run ID、成果物 digest、verdict を含む GitHub PR review。
 - 入力: Issue ID、gate、profile、target SHA、変更差分、選択 adapter、reviewer/writer run ID。
 - 出力: 検証済み gate report と Check Run、または `human_required` / `action_required`。
 - 永続先: GitHub モードは PR review と Check Run、ローカルモードは `reviews/<gate>.yaml`。branch 内の自己申告証跡は GitHub モードの承認根拠にしない。
 
 ## 要求
 
-- コア変更・コア監査は機械分類し、Strict の独立 reviewer 2体を要求する。
+- コア変更は manifest の exact path / path prefix、コア監査は GitHub の `review:core-audit` label またはローカル state の `core_audit` から機械分類し、Strict の独立 reviewer 2体を要求する。差分または正本入力を解決できなければ `human_required` とする。
 - AI は進行役がローカル adapter へ委譲する。CI は model provider を呼ばず証跡検証と Check Run 記録だけを行う。
 - reviewer は read-only、証跡の GitHub Review API 送信は trusted adapter/CLI、成果物変更は writer に限定する。
 - provider 差異は vendor-neutral capability contract と capability probe で扱い、未実装 provider の能力を捏造しない。
@@ -43,14 +43,14 @@
 
 ### AC-3: 古いSHA・改変証跡を拒否する
 
-- Given: PR review 証跡の target SHA、GitHub review の commit ID、prompt digest、成果物 digest のいずれかが現在の対象と異なる
+- Given: PR review 証跡の投稿者が登録済み trusted recorder でない、または target SHA、GitHub review の commit ID、prompt digest、成果物 digest のいずれかが現在の対象と異なる
 - When: CI の trusted CLI が証跡を検証する
 - Then: 承認を生成せず `action_required` とし、branch 内ファイルだけで証跡を代替できない
 - 検証方法: `automated`
 
 ### AC-4: 自己承認とStrict件数不足を拒否する
 
-- Given: reviewer run ID が writer run ID と一致する、reviewer run ID が重複する、または Strict の有効証跡が2件未満である
+- Given: reviewer run ID が Coordination Backend の writer run ID と一致する、reviewer run ID/slot が重複する、trusted recorder による実行 attestation がない、または Strict の有効証跡が slot 1・2 の2件揃わない
 - When: trusted CLI が証跡を集約する
 - Then: gate は approved にならず、1件でも blocking/fail があれば rejected、判定不能・不足は `human_required` になる
 - 検証方法: `automated`
@@ -79,8 +79,9 @@
 ## 制約・完了条件
 
 - I2/I5/I7/I8、1 Issue = 1 branch = 1 worktree = 1 PR、writer lease、4 checkpoint を維持する。
-- GitHub review の author/id/commit_id は API 応答を正本とし、証跡本文の自己申告値で上書きしない。
-- reviewer と writer の credential/capability は role contract で分離し、worker に review submission を与えない。
+- GitHub review の author/id/commit_id は API 応答を正本とし、author は manifest の `trusted_reviewer_actors` に一致しなければならない。証跡本文の自己申告値で上書きしない。
+- trusted recorder は、ローカル adapter の capability probe 成功、read-only 起動、reviewer run ID/slot と verdict の対応を GitHub review の投稿によって attest する。CI は未登録 actor の本文や branch 内ファイルを信頼しない。
+- reviewer と writer の credential/capability は role contract で分離し、worker に Review API と trusted recorder credential を与えない。writer run ID は Coordination Backend の worker report から検証し、本文の自己申告だけを信頼しない。
 - 証跡未到着・分類不能・capability 未証明・件数不足は成功や `neutral` にしない。
 - 全 AC の自動テスト、型検査、lint、SAST、依存関係・secret scan、template sync を実行して push する。
 
@@ -88,5 +89,5 @@
 
 - API key、self-hosted runner、CI 内 model inference の導入。
 - Cursor adapter/CLI の推測実装。将来は同じ capability contract と probe を満たす別 Issue で追加する。
-- model 出力そのものの暗号学的証明。偽造耐性は branch writer と Review API 投稿権限の credential 分離、GitHub API metadata、digest 再計算で担保する。
+- model 出力そのものの暗号学的証明。偽造耐性は trusted recorder の登録・credential 分離、GitHub API metadata、Coordination Backend の writer report、digest 再計算で担保する。
 - 未決事項はない。
