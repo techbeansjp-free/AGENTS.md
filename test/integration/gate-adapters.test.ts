@@ -78,11 +78,34 @@ function readFinal(reportPath: string): string {
   return (parse(fs.readFileSync(reportPath, 'utf8')) as { gate: { final: string; conformance: string } }).gate.final;
 }
 
-/** ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN を必ず除去した env を作る。 */
+const REVIEW_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'CLAUDE_AUTH_PROBE_CMD',
+  'CLAUDE_EXECUTABLE',
+  'CLAUDE_CORE_REVIEW_MODEL',
+  'CLAUDE_CORE_REVIEW_MODEL_TIER',
+  'CLAUDE_CORE_REVIEW_REASONING_TIER',
+  'CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD',
+  'CODEX_AUTH_PROBE_CMD',
+  'CODEX_EXECUTABLE',
+  'CODEX_REVIEWER_CMD',
+  'CODEX_REVIEWER_MODEL',
+  'CODEX_REVIEWER_REASONING_EFFORT',
+  'CODEX_CORE_REVIEWER_ATTESTED',
+  'GATE_REVIEWER_CMD',
+  'GATE_REVIEWER_RETRIES',
+  'GATE_REVIEWER_RETRY_INTERVAL_SEC',
+  'ASC_BASE_REF',
+  'ASC_REVIEW_SUBJECT',
+  'ASC_REVIEW_ADAPTER_REQUESTED',
+] as const;
+
+/** 呼出元のレビュー設定を除去し、テストが明示した値だけを加えた hermetic env を作る。 */
 function envWithout(keys: string[], extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
-  for (const k of keys) delete env[k];
-  return env;
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const k of new Set([...REVIEW_ENV_KEYS, ...keys])) delete env[k];
+  return { ...env, ...extra };
 }
 
 /** Claude CLI互換のstubを作り、受け取った引数をログへ保存してverdictを返す。 */

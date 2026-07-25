@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -13,10 +15,45 @@ interface PackEntry {
   path: string;
 }
 
+let cachedPackFiles: string[] | undefined;
+
 function npmPackDryRunFiles(): string[] {
-  const stdout = execFileSync('npm', ['pack', '--dry-run', '--json'], { cwd: packageRoot, encoding: 'utf8' });
-  const parsed = JSON.parse(stdout) as { files: PackEntry[] }[];
-  return parsed[0].files.map((f) => f.path);
+  if (cachedPackFiles) return cachedPackFiles;
+
+  // npm pack は --ignore-scripts でも prepare（tsc）を実行する。node:test の別テストが共有 bin/
+  // を実行中に再生成すると、書換え途中のCLIを読み得る。pack対象assetだけを隔離コピーし、
+  // そのコピーのprepareを除いてmanifestによる収録ファイル集合を測定する。
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-pack-test-'));
+  try {
+    for (const entry of [
+      'package.json',
+      'README.md',
+      'AGENTS.md',
+      'CLAUDE.md',
+      'docs',
+      'bin',
+      '.agent-skill-chain',
+    ]) {
+      fs.cpSync(path.join(packageRoot, entry), path.join(scratch, entry), { recursive: true });
+    }
+    const manifestPath = path.join(scratch, 'package.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    if (manifest.scripts) delete manifest.scripts.prepare;
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const stdout = execFileSync('npm', ['pack', '--dry-run', '--json'], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, npm_config_cache: path.join(scratch, '.npm-cache') },
+    });
+    const parsed = JSON.parse(stdout) as { files: PackEntry[] }[];
+    cachedPackFiles = parsed[0].files.map((f) => f.path);
+    return cachedPackFiles;
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 test('npm pack --dry-run: runtime状態・自己拡張ポリシー・保守者資産が配布物に含まれない', () => {

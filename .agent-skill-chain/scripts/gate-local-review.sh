@@ -116,3 +116,14 @@ if [[ -e "$TOKEN_FILE" ]]; then
   echo "launcher tokenが全slotで消費されませんでした" >&2
   exit 1
 fi
+
+# 全slotのevidenceがdurableなPR Reviewになった後でだけ、protected-main recorderを起動する。
+# dispatch失敗はset -eにより非0終了し、証跡未記録のまま成功扱いにはしない。
+DISPATCH_BODY="$(node -e '
+  const [prNumber, gate, targetSha] = process.argv.slice(1);
+  process.stdout.write(JSON.stringify({
+    event_type: "agent-skill-chain-gate-record",
+    client_payload: {pr_number: Number(prNumber), gate, target_sha: targetSha},
+  }));
+' "$PR_NUMBER" "$GATE_ID" "$TARGET_SHA")"
+gh api -X POST "repos/{owner}/{repo}/dispatches" --input - <<<"$DISPATCH_BODY"
