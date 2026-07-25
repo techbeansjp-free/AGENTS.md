@@ -16,7 +16,8 @@ default branchのtrusted workflowが検証し、現在PR SHAのCheck Run正本�
   prompt/verdict/artifact digest、protected-base隔離read-only実行を含むPR Review証跡。
 - `aggregate report`: latest attemptのv3証跡をtrusted aggregate policyで集約した最終report。
 - `workflow attestation`: report digestを、exact signer workflowと`refs/heads/main`へ暗号的に束縛するGitHub provenance。
-- `enforcement backend`: `fork_isolation`、integration固定の`dedicated_app`、org/enterprise `required_workflow`のいずれか。
+- `enforcement backend`: environment保護した`dedicated_app`、またはorg/enterprise `required_workflow`。
+  fork PRは追加隔離策であり、単独ではruleset enforcementにしない。
 - #274はbootstrap用v3 producer/verifier/aggregate、#277は後続で一般Strict集約を正本化する。#283は共有aggregate
   policyの出力を再判定せず、provenance・schema・digest検証、Check写像、materialize、reconcileを担う。
 
@@ -32,16 +33,15 @@ GitHub Actionsだけで調整状態を管理しつつ、AI実行はローカル�
 - shared aggregate policyだけがapproved/rejected/human_requiredを導出し、recorderはsuccess/failure/action_requiredへ写像する。
 - report fileへGitHub artifact attestationを生成し、exact signer workflow・source ref・subject digestを検証する。
   envelopeをrepo/PR/SHA/gate/attempt/workflow run+attempt/check IDへ束縛し、別Checkへのreplayを拒否する。
-- rulesetとenforcement backendをmerge-ready・materialize・reconcileの全経路で検証する。同一repoで標準
-  GitHub Actions Appだけの場合は強制不能として停止し、public repoはsecret不要のfork PRを既定にする。
+- rulesetとenforcement backendをmerge-ready・materialize・reconcileの全経路で検証する。dedicated Appの
+  private keyはdefault branch限定environmentだけへ置き、ruleset integration IDを固定する。標準Actions Appだけなら停止する。
 - Checkはin_progressで検証し、PR/gate単位concurrency下で全postcondition成立後の最後の操作だけがsuccessへ遷移する。
 - Check outputへ最終report・evidence/attestation digest・review/aggregate/artifact provenanceを機密を除いて保存する。
 - materializeはcurrent SHA/name/same-Appの全conclusion中最新runがattested successの場合だけ非正本cacheを復元する。
-- reconcileはprevious headの最新attested reportをfresh runnerへ復元し、current headのartifactと比較して
-  trusted codeが再導出したpath集合の完全一致+全digest一致時だけsuccessを再発行する。previous最新非success、
-  path追加/削除、取得不能は旧successへ戻らず当該gate以降をaction_requiredへ無効化する。
+- reconcileはprevious headのenforcement sourceに属する全conclusion中最新runを先に選び、valid attested approved時だけ
+  fresh runnerへ復元する。current期待path集合の完全一致+全digest一致時だけ再発行し、それ以外は下流も無効化する。
 - template/root workflow、CLI、init/upgrade、ruleset、テストを同期し、AI/provider credentialを要求しない。
-  Artifact Attestations非対応やprivate fork不可で他backendも無いconsumerは部分配備せず設定エラーにする。
+  Artifact Attestations非対応またはenforcement backend未構成のconsumerは部分配備せず設定エラーにする。
 - 初回trust root導入はAC-6の一回限りmigrationに限定し、通常運用へbypassを持ち越さない。
 
 ## 受入条件
@@ -69,7 +69,7 @@ GitHub Actionsだけで調整状態を管理しつつ、AI実行はローカル�
 
 ### AC-4: fresh checkoutでgateを継承・無効化できる
 
-- Given: previous headの全conclusion中最新runがattested approvedで、新しいheadがpushされた
+- Given: previous headのenforcement source全conclusion中最新runがvalid attested approvedで、新しいheadがpushされた
 - When: default-base reconcilerがprevious reportとcurrent artifactをfresh runnerで照合する
 - Then: 期待path集合と全digestが完全一致するgateだけを再発行し、変更gateと下流を無効化する
 - 検証方法見込み: `automated`
@@ -84,12 +84,12 @@ GitHub Actionsだけで調整状態を管理しつつ、AI実行はローカル�
 ### AC-6: #274だけを監査可能にbootstrapできる
 
 - Given: owner承認・admin bypass許可・Sol/xhigh最終PASS・全非gate CI PASSと、#274固定SHAにv3・
-  attested durable report・protected-base materializeがある
+  durable output・materialize・dedicated-App経路の実装があり、その固定digestをPR Reviewに記録済みである
 - When: 進行役がその#274 SHAだけをadmin mergeする
-- Then: 許可者・PR/SHA・verdict・CI・実行者・時刻を耐久記録し、条件不一致・二回目・別SHAを拒否する
+- Then: 非attestedな一回限り証跡を耐久記録して別SHA/二回目を拒否し、merge後の#283から通常attestationを使う
 - 検証方法見込み: `hybrid`
 
 ## 対象外・完了条件
 
-AIモデル実行、AI provider key、self-hosted runner、branch protectionの緩和は対象外。dedicated Appは任意backend。
+AIモデル実行、AI provider key、self-hosted runner、branch protectionの緩和は対象外。GitHub AppはCheck専用である。
 AC-1〜5の自動検証と全回帰・同期・権限検査を成功させ、AC-6のhybrid証跡を残す。未決事項はない。
