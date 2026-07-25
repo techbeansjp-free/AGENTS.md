@@ -67,9 +67,9 @@ test('detect-changed-segments: CI設定だけの変更は未開始セグメン�
   });
 });
 
-test('CIはSPECが開始されたPRだけでAC対応を検証し、配布テンプレートも一致する', () => {
+test('CIはvalidationが開始されたPRだけでAC対応を検証し、配布テンプレートも一致する', () => {
   const workflow = fs.readFileSync(ciWorkflow, 'utf8');
   assert.match(workflow, /id: segments/);
-  assert.match(workflow, /contains\(steps\.segments\.outputs\.values, 'spec'\)/);
+  assert.match(workflow, /contains\(steps\.segments\.outputs\.values, 'validation'\)/);
   assert.equal(workflow, fs.readFileSync(ciTemplate, 'utf8'));
 });

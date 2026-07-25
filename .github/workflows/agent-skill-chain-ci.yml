@@ -92,7 +92,7 @@ jobs:
           done
 
       - name: verify-ac-coverage
-        if: steps.ctx.outputs.skip_checks != 'true' && contains(steps.segments.outputs.values, 'spec')
+        if: steps.ctx.outputs.skip_checks != 'true' && contains(steps.segments.outputs.values, 'validation')
         run: ./.agent-skill-chain/ci/verify-ac-coverage.sh "${{ steps.ctx.outputs.issue_id }}"
 
       - name: verify-adr (PRで変更されたADRごと)
