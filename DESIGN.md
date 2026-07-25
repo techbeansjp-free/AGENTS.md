@@ -22,7 +22,7 @@ orchestrator
 | AC-1 | inferenceを除去したgate workflow、ローカルadapter |
 | AC-2 | manifest能力契約、model-selection classifier、adapter probe |
 | AC-3 | Review API metadata、SHA/prompt/artifact digest再検証 |
-| AC-4 | trusted actor、writer/reviewer run ID、reviewer slot、必要数集約 |
+| AC-4 | trusted actor、writer actor分離、reviewer run ID/slot、必要数集約 |
 | AC-5 | verdict envelope、gate report、reconcile |
 | AC-6 | GitHub/local backend分岐、通常モデル明示選択 |
 | AC-7 | schema、template sync、回帰テスト |
@@ -57,21 +57,23 @@ writer actor集合はGitHub APIのPR authorと全commitのauthor/committer login
 - Claude Code: 実在model、`frontier_coding` / `maximum_reasoning` attestation、reasoning probe、無書込みtool
 - Cursor: adapter・安定した非対話CLI・probeが未実装なので選択を拒否する
 
-各呼出しは orchestrator が割り当てた一意な reviewer run ID と Strict slot (`1|2`) を持つ。adapterはmodel出力を直接状態へ書かず、trusted CLIへ標準入力で渡す。CLIはcapability、run IDとwriter IDの不一致、slot、prompt/artifact digestを確認し、GitHubモードでは marker付きPR reviewを作る。worker roleにはReview API commandを与えない。
+各呼出しは orchestrator が割り当てた一意な reviewer run ID と Strict slot (`1|2`) を持つ。adapterはmodel出力を直接状態へ書かず、trusted CLIへ標準入力で渡す。CLIはcapability、slot、prompt/artifact digestを確認し、GitHubモードでは marker付きPR reviewを作る。worker roleにはReview API commandを与えない。
+
+local recorder自身もprotected baseをtrust rootにする。進行役はIssue worktree内のcandidateではなく、cleanなbase worktreeまたはversion固定したinstalled packageから `gate local-review` を起動する。commandはclassifier、prompt generator、adapter、recorderがbase SHA/package versionと一致することを検証し、target成果物は `git show <target_sha>:<path>` で読む。dirty・version不一致・由来不明の実行系は `human_required` とする。
 
 ### evidence envelope
 
 PR review本文には次を保存する。
 
 - schema version、Issue、gate、target SHA、profile
-- reviewer run ID、writer run ID、slot、adapter、model、reasoning/capability、read-only
+- reviewer run ID、slot、adapter、model、reasoning/capability、read-only
 - prompt digest、approved artifactsとdigest、verdict
 
-GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit actorは本文外の正本である。CIはdismissed review、未登録actor、writer actorによるreview、target SHA不一致を除外せずエラーとして扱う。branch内のgate reportやJSONは承認入力にしない。
+GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit actorは本文外の正本である。CIはdismissed review、未登録actor、writer actorによるreview、target SHA不一致を除外せずエラーとして扱う。PRまたはいずれかのcommitのauthor/committer loginがnull・未解決ならwriter集合を推測せず `human_required` とする。branch内のgate reportやJSONは承認入力にしない。
 
 ### evidence verifier / aggregator
 
-新しいCLI経路は Review API一覧とIssueの最新worker reportを取得し、現在のtarget SHA用scaffoldへ結線する。
+新しいCLI経路はPR・commit・Review API metadataを取得し、現在のtarget SHA用scaffoldへ結線する。
 
 1. Issue/gate/profile/SHA、API `commit_id`、registered actorを検証する。
 2. promptをtarget SHAから再生成しdigestを照合する。
@@ -87,6 +89,18 @@ GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit act
 workflowは `pull_request_target` と `pull_request_review` を契機に、base revisionのcheckout/build、PR metadataとtarget Git objectの取得、evidence import、schema検査、publishだけを行う。provider secret、Codex Action、Claude/Codex CLI、self-hosted labelを含めず、PR head由来の実行可能ファイルを実行しない。証跡が未到着なら `human_required` reportを生成して `action_required` Check Runを発行する。workflow自体は証跡不足をクラッシュとして扱わず、検証器の異常はfail-closedで可視化する。
 
 ローカルbackendは既存adapterがtrusted CLIを介して `reviews/<gate>.yaml` を生成するため、Review APIを要求しない。
+
+### 配布と既導入consumer migration
+
+配布正本 `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml` とroot展開物を同時更新する。`init` は新規consumerへ検証専用workflowを配る。
+
+`upgrade` は全書込み前に、consumerの展開済みgate workflowと、そのconsumerに既に導入済みの配布templateを比較する。
+
+- 同一ならmanaged assetとして両方を新workflowへ置換し、API credentialとCI内model起動を除去する。
+- 不一致ならlocal customization競合としてupgrade全体を無変更で停止し、installed versionも進めない。
+- 片方の欠落・読取不能もfail-closed。`--dry-run` は移行または競合だけを報告し書かない。
+
+preflightは通常のmirror loopが旧templateを上書きする前に行う。安全なlegacy修復、競合時no-op、新規init、template sync、配布元と展開物にprovider secret/Codex Action/provider CLI/self-hosted runnerが0件であることを回帰検査する。
 
 ## DDD境界と依存方向
 
@@ -104,10 +118,14 @@ workflowは `pull_request_target` と `pull_request_review` を契機に、base 
 - API/CLI/capability/分類/証跡検証の失敗はhuman_required。`neutral`や推測値を使わない。
 - rollbackは新workflow/policy/CLIを同一commitで戻す。既存レビュー証跡はPR履歴として残るが旧実装は参照しない。
 
+## trust-root bootstrap
+
+導入PRはcandidate verifierやcandidate allowlistで自己承認しない。PR #274は、#283でprotected baseの既存local gate記録経路が修復された後、そのbase経路で独立レビューとCheck Runを記録する。それまでは `human_required` のまま停止し、candidate code、admin bypass、branch内の自己申告証跡を使わない。merge後に初めて新しいbase revisionを後続PRのtrust rootとする。
+
 ## ADR
 
 ADR-0009を「CI内model実行」から「ローカル実行・外部証跡・base trust rootによるCI検証」へ改訂する。provider固有値をvendor-neutral能力へ写像し、未証明providerをfail-closedにする長期判断は維持する。
 
 ## 完了条件
 
-全ACの単体・結合テスト、型検査、policy/schema/template sync、lint/SAST/secret scanを成功させる。独立検証は偽造・古いSHA・自己承認・Strict不足を反証し、gate正本の既知停止が残る場合は迂回せず依存Issueを報告する。
+全ACの単体・結合テスト、型検査、policy/schema/template sync、lint/SAST/secret scanを成功させる。独立検証はwriter-controlled recorder、未解決actor、偽造・古いSHA・自己承認・Strict不足・upgrade競合を反証する。base gateの停止は迂回せず#283依存として報告する。
