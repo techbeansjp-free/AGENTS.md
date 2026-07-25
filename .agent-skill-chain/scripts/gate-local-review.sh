@@ -21,6 +21,13 @@ if [[ -z "$ISSUE_ID" || -z "$GATE_ID" || -z "$PROFILE" || -z "$TARGET_SHA" || -z
 fi
 case "$ADAPTER" in codex | claude | human) ;; *) echo "未登録adapterです: $ADAPTER" >&2; exit 1 ;; esac
 
+PR_SHA_INFO="$(gh api "repos/{owner}/{repo}/pulls/$PR_NUMBER" --jq '.base.sha + " " + .head.sha')"
+read -r PR_BASE_SHA PR_HEAD_SHA <<<"$PR_SHA_INFO"
+if [[ "$PR_BASE_SHA" != "$BASE_SHA" || "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
+  echo "指定SHAがGitHub PR metadataと一致しません（base=$PR_BASE_SHA, head=$PR_HEAD_SHA）" >&2
+  exit 1
+fi
+
 CURRENT_ROOT="$(git -C "$REPO_ROOT" rev-parse --show-toplevel)"
 CURRENT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 if [[ "$CURRENT_ROOT" != "$REPO_ROOT" || "$CURRENT_SHA" != "$BASE_SHA" ]]; then
@@ -32,7 +39,28 @@ if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
   exit 1
 fi
 
-REVIEW_OUTPUT="$("$SCRIPT_DIR/gate-review.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$TARGET_SHA")"
+# bin/ と node_modules/ はgitignoredであり、main worktreeのclean判定だけでは由来を証明できない。
+# GitHubが返したbase SHAを一時cloneへcheckoutし、lockfileから依存を復元してbase sourceをbuildする。
+# 以降はこの隔離clone内のCLI/adapterだけを使用し、source worktreeの生成物を実行しない。
+TRUSTED_TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-local-review.XXXXXX")"
+trap 'rm -rf -- "$TRUSTED_TMP"' EXIT
+TRUSTED_ROOT="$TRUSTED_TMP/repo"
+SOURCE_ORIGIN_URL="$(git -C "$REPO_ROOT" remote get-url origin)"
+git clone --quiet --no-checkout "$REPO_ROOT" "$TRUSTED_ROOT"
+git -C "$TRUSTED_ROOT" remote set-url origin "$SOURCE_ORIGIN_URL"
+git -C "$TRUSTED_ROOT" checkout --quiet --detach "$BASE_SHA"
+(
+  cd -- "$TRUSTED_ROOT"
+  npm ci --ignore-scripts
+  npm run build
+)
+if [[ -n "$(git -C "$TRUSTED_ROOT" status --porcelain)" ]]; then
+  echo "隔離したprotected base cloneがbuild後にdirtyです。review evidenceを投稿しません。" >&2
+  exit 1
+fi
+TRUSTED_SCRIPT_DIR="$TRUSTED_ROOT/.agent-skill-chain/scripts"
+
+REVIEW_OUTPUT="$("$TRUSTED_SCRIPT_DIR/gate-review.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$TARGET_SHA")"
 REPORT_PATH="$(sed -n 's/^gate_report_path: //p' <<<"$REVIEW_OUTPUT")"
 if [[ -z "$REPORT_PATH" ]]; then
   echo "gate-report scaffoldを生成できませんでした" >&2
@@ -50,5 +78,5 @@ for slot in $(seq 1 "$COUNT"); do
   ASC_REVIEWER_RUN_ID="$run_id" \
   ASC_REVIEWER_SLOT="$slot" \
   ASC_REVIEW_ADAPTER_REQUESTED="$ADAPTER" \
-    "$SCRIPT_DIR/gate-launch-reviewer.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$REPORT_PATH" "$TARGET_SHA"
+    "$TRUSTED_SCRIPT_DIR/gate-launch-reviewer.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$REPORT_PATH" "$TARGET_SHA"
 done

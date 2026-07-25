@@ -38,7 +38,12 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     // CLIのgit wrapperと同じく末尾改行を保持したblob内容でdigestする。
     digest: digestOf(execFileSync('git', ['show', `${targetSha}:SPEC.md`], { cwd: repo.dir, encoding: 'utf8' })),
   };
-  const promptDigest = evidencePromptDigest('ISSUE-271', 'spec', targetSha, [artifact]);
+  const prompt = runCli(['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(prompt.status, 0, prompt.stderr);
+  const promptDigest = evidencePromptDigest(prompt.stdout.trimEnd());
   const makeEvidence = (slot: 1 | 2): ReviewEvidence => ({
     schema_version: 'agent-skill-chain/gate-review-evidence/v1',
     issue_id: 'ISSUE-271',
@@ -77,14 +82,34 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     author: { login: 'segment-writer' },
     committer: { login: 'segment-writer' },
   }];
-  state.pullReviews = [1, 2].map((slot) => ({
+  stub.writeState(state);
+
+  const rawVerdict = {
+    conformance: 'pass',
+    falsification: 'pass',
+    blockers: [],
+    approved_artifacts: [{ path: 'SPEC.md' }],
+    inconclusive: false,
+  };
+  const submitted = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
+      'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+    ],
+    { cwd: repo.dir, env, input: JSON.stringify(rawVerdict) },
+  );
+  assert.equal(submitted.status, 0, submitted.stderr);
+  assert.equal(stub.readState().pullReviews?.length, 1);
+
+  const stateAfterSubmit = stub.readState();
+  stateAfterSubmit.pullReviews = [1, 2].map((slot) => ({
     id: slot,
     body: renderReviewEvidence(makeEvidence(slot as 1 | 2)),
     commit_id: targetSha,
     state: 'COMMENTED',
     user: { login: 'adachi-tatsuryu' },
   }));
-  stub.writeState(state);
+  stub.writeState(stateAfterSubmit);
 
   const reportPath = path.join(repo.dir, 'verified-gate.yaml');
   const verified = runCli(
@@ -102,4 +127,29 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const published = runCli(['gate', 'publish', 'ISSUE-271', reportPath], { cwd: repo.dir, env });
   assert.equal(published.status, 0, published.stderr);
   assert.equal((stub.readState() as unknown as { checkRuns: { conclusion: string }[] }).checkRuns[0].conclusion, 'success');
+
+  const weakProfile = runCli(
+    ['gate', 'verify-evidence', 'ISSUE-271', 'spec', 'standard', targetSha, baseSha, '274', reportPath, 'core_audit'],
+    { cwd: repo.dir, env },
+  );
+  assert.notEqual(weakProfile.status, 0);
+  assert.match(weakProfile.stderr, /Strict profile/);
+
+  const missingState = stub.readState();
+  missingState.pullMetadata = {
+    user: { login: 'segment-writer' },
+    head: { sha: baseSha },
+    base: { sha: baseSha },
+  };
+  missingState.pullReviews = [];
+  stub.writeState(missingState);
+  const missingRequired = runCli(
+    [
+      'gate', 'verify-evidence', 'ISSUE-271', 'spec', 'strict', baseSha, baseSha, '274',
+      path.join(repo.dir, 'missing-required.yaml'), 'ordinary',
+    ],
+    { cwd: repo.dir, env },
+  );
+  assert.notEqual(missingRequired.status, 0);
+  assert.match(missingRequired.stderr, /必須成果物を読めません: SPEC\.md/);
 });

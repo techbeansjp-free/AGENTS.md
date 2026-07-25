@@ -69,14 +69,8 @@ export interface EvidenceVerification {
   reason?: string;
 }
 
-export function evidencePromptDigest(
-  issueId: string,
-  gate: string,
-  targetSha: string,
-  artifacts: { path: string; digest: string }[],
-): string {
-  const ordered = [...artifacts].sort((a, b) => a.path.localeCompare(b.path));
-  return digestOf(JSON.stringify({ issue_id: issueId, gate, target_sha: targetSha, artifacts: ordered }));
+export function evidencePromptDigest(prompt: string): string {
+  return digestOf(prompt);
 }
 
 export function renderReviewEvidence(evidence: ReviewEvidence): string {
@@ -102,6 +96,46 @@ function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerific
   };
 }
 
+function isFindingShape(value: unknown): value is EvidenceFinding {
+  if (!value || typeof value !== 'object') return false;
+  const finding = value as Partial<EvidenceFinding>;
+  return (
+    ['blocking', 'warning', 'info'].includes(finding.severity ?? '') &&
+    ['specification', 'design', 'implementation', 'validation'].includes(finding.origin ?? '') &&
+    typeof finding.code === 'string' &&
+    finding.code.length > 0 &&
+    Array.isArray(finding.evidence) &&
+    finding.evidence.every((entry) => typeof entry === 'string')
+  );
+}
+
+function isArtifactShape(value: unknown, digestRequired: boolean): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const artifact = value as { path?: unknown; digest?: unknown };
+  return (
+    typeof artifact.path === 'string' &&
+    artifact.path.length > 0 &&
+    (digestRequired
+      ? typeof artifact.digest === 'string' && /^sha256:[0-9a-f]{64}$/.test(artifact.digest)
+      : artifact.digest === undefined ||
+        (typeof artifact.digest === 'string' && /^sha256:[0-9a-f]{64}$/.test(artifact.digest)))
+  );
+}
+
+export function isEvidenceVerdict(value: unknown, digestRequired = true): value is EvidenceVerdict {
+  if (!value || typeof value !== 'object') return false;
+  const verdict = value as Partial<EvidenceVerdict>;
+  return (
+    ['pass', 'fail', 'pending'].includes(verdict.conformance ?? '') &&
+    ['pass', 'fail', 'pending'].includes(verdict.falsification ?? '') &&
+    Array.isArray(verdict.blockers) &&
+    verdict.blockers.every(isFindingShape) &&
+    Array.isArray(verdict.approved_artifacts) &&
+    verdict.approved_artifacts.every((artifact) => isArtifactShape(artifact, digestRequired)) &&
+    typeof verdict.inconclusive === 'boolean'
+  );
+}
+
 function isEvidenceShape(value: ReviewEvidence): boolean {
   return (
     value.schema_version === 'agent-skill-chain/gate-review-evidence/v1' &&
@@ -113,10 +147,17 @@ function isEvidenceShape(value: ReviewEvidence): boolean {
     typeof value.reviewer.run_id === 'string' &&
     [1, 2].includes(value.reviewer.slot) &&
     ['codex', 'claude', 'human'].includes(value.reviewer.adapter) &&
+    typeof value.reviewer.model === 'string' &&
+    value.reviewer.model.length > 0 &&
+    typeof value.reviewer.reasoning === 'string' &&
+    value.reviewer.reasoning.length > 0 &&
+    !!value.reviewer.capability &&
+    typeof value.reviewer.capability.model_tier === 'string' &&
+    typeof value.reviewer.capability.reasoning_tier === 'string' &&
+    typeof value.reviewer.capability.read_only === 'boolean' &&
     typeof value.prompt_digest === 'string' &&
-    !!value.verdict &&
-    Array.isArray(value.verdict.blockers) &&
-    Array.isArray(value.verdict.approved_artifacts)
+    /^sha256:[0-9a-f]{64}$/.test(value.prompt_digest) &&
+    isEvidenceVerdict(value.verdict)
   );
 }
 
@@ -135,6 +176,9 @@ export function verifyGithubReviewEvidence(options: {
   codexModel: string;
   codexReasoning: string;
 }): EvidenceVerification {
+  if (options.coreReviewRequired && options.profile !== 'strict') {
+    return fail('コア対象にはStrict profileが必要です');
+  }
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
   }
@@ -186,6 +230,12 @@ export function verifyGithubReviewEvidence(options: {
       if (evidence.reviewer.adapter === 'human') return fail(`review ${review.id} はコアAI能力を証明できません`);
     }
     const actualByPath = new Map(evidence.verdict.approved_artifacts.map((artifact) => [artifact.path, artifact.digest]));
+    if (
+      actualByPath.size !== evidence.verdict.approved_artifacts.length ||
+      actualByPath.size !== expectedByPath.size
+    ) {
+      return fail(`review ${review.id} の成果物集合が一致しません`);
+    }
     for (const [artifactPath, digest] of expectedByPath) {
       if (actualByPath.get(artifactPath) !== digest) {
         return fail(`review ${review.id} の成果物digestが一致しません: ${artifactPath}`);

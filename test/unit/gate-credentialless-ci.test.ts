@@ -6,6 +6,7 @@ import path from 'node:path';
 const root = process.cwd();
 const workflowPath = path.join(root, '.github', 'workflows', 'agent-skill-chain-gate.yml');
 const templatePath = path.join(root, '.agent-skill-chain', 'templates', 'github', '.github', 'workflows', 'agent-skill-chain-gate.yml');
+const localHarnessPath = path.join(root, '.agent-skill-chain', 'scripts', 'gate-local-review.sh');
 
 test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck Runを発行する', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
@@ -28,4 +29,16 @@ test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck 
     'self-hosted',
   ];
   for (const token of forbidden) assert.equal(workflow.includes(token), false, `CI内AI依存を含まない: ${token}`);
+});
+
+test('local review harness: PR base SHAの隔離cloneでbase sourceをbuildしてadapterを起動する', () => {
+  const harness = fs.readFileSync(localHarnessPath, 'utf8');
+  assert.match(harness, /gh api "repos\/\{owner\}\/\{repo\}\/pulls\/\$PR_NUMBER"/);
+  assert.match(harness, /mktemp -d/);
+  assert.match(harness, /git clone --quiet --no-checkout/);
+  assert.match(harness, /checkout --quiet --detach "\$BASE_SHA"/);
+  assert.match(harness, /npm ci --ignore-scripts/);
+  assert.match(harness, /npm run build/);
+  assert.match(harness, /"\$TRUSTED_SCRIPT_DIR\/gate-launch-reviewer\.sh"/);
+  assert.doesNotMatch(harness, /"\$SCRIPT_DIR\/gate-launch-reviewer\.sh"/);
 });

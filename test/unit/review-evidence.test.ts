@@ -10,7 +10,7 @@ import {
 
 const targetSha = 'a'.repeat(40);
 const artifacts = [{ path: 'SPEC.md', digest: `sha256:${'b'.repeat(64)}` }];
-const promptDigest = evidencePromptDigest('ISSUE-271', 'spec', targetSha, artifacts);
+const promptDigest = evidencePromptDigest('canonical reviewer prompt');
 
 function evidence(slot: 1 | 2, overrides: Partial<ReviewEvidence> = {}): ReviewEvidence {
   return {
@@ -36,7 +36,7 @@ function evidence(slot: 1 | 2, overrides: Partial<ReviewEvidence> = {}): ReviewE
       conformance: 'pass',
       falsification: 'pass',
       blockers: [],
-      approved_artifacts: artifacts,
+      approved_artifacts: [...artifacts],
       inconclusive: false,
     },
     ...overrides,
@@ -83,6 +83,7 @@ test('strict: trustedな独立slot 1/2だけがapprovedになる', () => {
 test('strict: 1件不足またはslot重複はhuman_required', () => {
   assert.equal(verify([review(1, 1)]).final, 'human_required');
   assert.equal(verify([review(1, 1), review(2, 1)]).final, 'human_required');
+  assert.equal(verify([review(1, 1)], { profile: 'standard' }).final, 'human_required');
 });
 
 test('provenance: writer actor、未登録actor、actor未解決を拒否する', () => {
@@ -100,6 +101,9 @@ test('freshness: API commit SHA、本文target、prompt、artifact digest改変�
   const badArtifact = evidence(1);
   badArtifact.verdict.approved_artifacts = [{ path: 'SPEC.md', digest: `sha256:${'e'.repeat(64)}` }];
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badArtifact) }), review(2, 2)]).final, 'human_required');
+  const extraArtifact = evidence(1);
+  extraArtifact.verdict.approved_artifacts.push({ path: 'EXTRA.md', digest: `sha256:${'f'.repeat(64)}` });
+  assert.equal(verify([review(1, 1, { body: renderReviewEvidence(extraArtifact) }), review(2, 2)]).final, 'human_required');
 });
 
 test('capability: core Codex model/reasoning不一致を拒否し、blocking verdictはrejected', () => {
@@ -116,4 +120,23 @@ test('capability: core Codex model/reasoning不一致を拒否し、blocking ver
     evidence: ['反例'],
   }];
   assert.equal(verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(blocked) })]).final, 'rejected');
+});
+
+test('schema: 不正なfinding enumをpass/passに添えてもapprovedへ倒れない', () => {
+  const malformed = evidence(1) as unknown as {
+    verdict: ReviewEvidence['verdict'];
+  };
+  malformed.verdict.blockers = [{
+    severity: 'critical',
+    origin: 'implementation',
+    code: 'MALFORMED',
+    evidence: ['unknown severity'],
+  } as unknown as ReviewEvidence['verdict']['blockers'][number]];
+  assert.equal(
+    verify([
+      review(1, 1, { body: renderReviewEvidence(malformed as unknown as ReviewEvidence) }),
+      review(2, 2),
+    ]).final,
+    'human_required',
+  );
 });
