@@ -1,14 +1,18 @@
----
-id: ADR-0008
-title: npm package asset allowlist
-status: proposed
-date: 2026-07-25
-deciders:
-  - AGENTS.md maintainers
-related_adrs: []
----
+<!--
+正本: AGENTS.md の ADR・テンプレート・テスト適用性
+-->
 
-# ADR-0008: npm package asset allowlist
+# ADR
+
+```yaml
+id: ADR-0008
+status: proposed
+title: npm package asset allowlist
+tags: [npm, packaging, distribution]
+supersedes: []
+superseded-by: null
+deprecated-reason: null
+```
 
 ## Context
 
