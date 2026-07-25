@@ -74,15 +74,25 @@ jobs:
       - name: verify-template-sync
         run: ./.agent-skill-chain/ci/verify-template-sync.sh
 
-      - name: verify-artifacts (対象PRで変更されたセグメントごと)
+      - name: Detect started segments
+        id: segments
+        if: steps.ctx.outputs.skip_checks != 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          values="$(./.agent-skill-chain/scripts/detect-changed-segments.sh "$BASE_REF" | paste -sd, -)"
+          echo "values=$values" >> "$GITHUB_OUTPUT"
+
+      - name: verify-artifacts (開始済みセグメントごと)
         if: steps.ctx.outputs.skip_checks != 'true'
         run: |
-          for segment in spec design implementation validation; do
+          tr ',' '\n' <<< "${{ steps.segments.outputs.values }}" | while IFS= read -r segment; do
+            [[ -z "$segment" ]] && continue
             ./.agent-skill-chain/ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" "$segment"
           done
 
       - name: verify-ac-coverage
-        if: steps.ctx.outputs.skip_checks != 'true'
+        if: steps.ctx.outputs.skip_checks != 'true' && contains(steps.segments.outputs.values, 'spec')
         run: ./.agent-skill-chain/ci/verify-ac-coverage.sh "${{ steps.ctx.outputs.issue_id }}"
 
       - name: verify-adr (PRで変更されたADRごと)
