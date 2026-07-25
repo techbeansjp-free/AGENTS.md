@@ -71,9 +71,9 @@
 
 ### AC-7: 正本と配布物が一致する
 
-- Given: policy、schema、adapter、workflow template、展開済み workflow、テストが存在する
-- When: schema、template sync、policy、adapter、回帰検査を行う
-- Then: API key / Codex Action / CI 内 AI 実行への依存がなく、全層が同じローカルレビュー契約を表す
+- Given: policy、schema、adapter、workflow template、展開済みworkflow、または旧workflowを導入済みのconsumerが存在する
+- When: init、upgrade、template sync、policy、adapter、回帰検査を行う
+- Then: 新規・既導入consumerからAPI key / Codex Action / CI内AI実行依存が除去され、旧templateと展開物が同期済みなら安全に移行し、不一致なら何も上書きせず競合として停止する
 - 検証方法: `automated`
 
 ## 制約・完了条件
