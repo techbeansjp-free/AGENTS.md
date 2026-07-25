@@ -7,6 +7,13 @@ node_modules/
 # CLI ビルド生成物（tsconfig.json outDir）
 /bin/
 
+# GitHub-native 自己拡張の4セグメント成果物は専用branchで追跡する。
+# ここにignore規則を追加しない。明示的な再包含により、将来の広いignore規則からも保護する。
+!/SPEC.md
+!/DESIGN.md
+!/PLAN.md
+!/VALIDATION.md
+
 # スクラッチ・非追跡メモ（issueドキュメント本則の外）
 **/memo/*
 
