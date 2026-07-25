@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0010
+id: ADR-0012
 status: proposed
 title: npm pack検証を使い捨てsource snapshotへ隔離する
 tags: [testing, npm, concurrency]
@@ -23,8 +23,9 @@ productionのbuild出力先をテスト都合で変える案はpackage manifest�
 ## Decision
 
 package内容検証は、OS一時領域に作成した使い捨てsource snapshotをcwdとして、通常の
-`npm pack --dry-run --json`を実行する。snapshotからGit metadata、worktree集合、依存実体、
-共有`bin/`を除外し、依存は元の`node_modules`への固定symlinkから読ませる。
+`npm pack --dry-run --json`を実行する。snapshotからGit metadata、worktree集合、共有`bin/`を
+除外し、sourceと`node_modules`をsymlink/hardlinkではない物理copyとして配置する。
+copy時のsymlinkはdereferenceし、snapshotから元repositoryへwrite-throughするpathを残さない。
 
 `prepare`はsnapshot内に新しい`bin/`を生成する。元repositoryはread-only入力とし、probeの
 成功・失敗を問わず所有者が`finally`で一時workspaceを削除する。pack filesの判定はnpmのJSON出力を
@@ -34,7 +35,6 @@ package内容検証は、OS一時領域に作成した使い捨てsource snapsho
 
 - 並列package probe同士とCLI利用テストは生成物を共有せず、実行順に依存しない。
 - 実際のnpm lifecycle、現在sourceからのbuild、pack files算出をまとめて検証できる。
-- snapshot copyと複数buildによりテスト時間と一時disk使用量は増える。
-- `node_modules`は読取り共有であり、将来`prepare`が依存へ書く処理を導入する場合は依存も隔離する
-  新しいADRが必要になる。
+- source・依存の物理copyとbuildによりテスト時間と一時disk使用量は増える。
+- 依存を含むlifecycleの書き込みはsnapshotへ閉じ、元repositoryへwrite-throughしない。
 - 隔離処理の回帰は、lifecycle中marker、元CLI実行、失敗時cleanupの自動テストで維持する。

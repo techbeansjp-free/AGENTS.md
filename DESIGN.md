@@ -6,9 +6,9 @@
 ## 目的・入力・出力・前提
 
 目的は、npmの実際のlifecycleとpack算出を維持したまま、package検証の書き込みを使い捨て領域へ
-閉じ込めることである。入力はrepositoryのpackage source snapshotと依存モジュール、出力はnpmが
-返すpack files一覧である。テスト開始前の通常buildで共有CLIが完成しており、`prepare`は依存を
-読み取るが`node_modules`へ書き込まないことを前提とする。
+閉じ込めることである。入力はrepositoryのpackage sourceと依存モジュール、出力はnpmが返すpack
+files一覧である。テスト開始前の通常buildで共有CLIが完成し、sourceと依存を物理snapshotへ複製
+できることを前提とする。元repositoryへのsymlinkや書込み可能な共有pathは使用しない。
 
 ## 要件 → 設計要素の対応表
 
@@ -27,11 +27,10 @@
 `test/helpers/npm-pack.ts` は1回のprobeについて次だけを担う。
 
 1. OS一時directory内へ専用workspaceを作る。
-2. package rootをsnapshot copyする。ただし環境状態の`.git`・`.worktrees`、依存の
-   `node_modules`、共有生成物の`bin`はcopyしない。
-3. 読取り専用依存境界として元の`node_modules`をsnapshotへsymlinkする。
-4. snapshotをcwdとして`npm pack --dry-run --json`を通常どおり実行し、files一覧を返す。
-5. 成功・spawn失敗・JSON不正の全経路でworkspace ownerが`finally` cleanupする。
+2. package rootと`node_modules`を物理snapshot copyする。ただし環境状態の`.git`・`.worktrees`と
+   共有生成物の`bin`はcopyしない。copy時にsymlinkをdereferenceし、元rootへのwrite-throughを許可しない。
+3. snapshotをcwdとしてtimeout付きで`npm pack --dry-run --json`を通常実行し、files一覧を返す。
+4. 成功・spawn失敗・timeout・JSON不正の全経路でworkspace ownerが`finally` cleanupする。
 
 元package rootは読取り入力であり、probeへ書込みAPIを公開しない。`bin`をcopyしないため、packへ
 入るCLIはsnapshot内の`prepare`が現在のsourceから生成した実物となる。
@@ -39,26 +38,28 @@
 ### Package contract assertions
 
 `test/integration/package-files.test.ts` はprobeのfiles出力だけを受け取り、SPECの必須集合・禁止集合を
-検査する。workspace作成やnpm process管理は持たない。2つの既存package契約テストは同じhelperを
-個別に呼び、Node test runnerが並行配置しても別workspaceを所有する。
+検査する。workspace作成やnpm process管理は持たない。同一test fileの`before`で1回だけprobeし、
+2つの既存契約testが不変なfiles結果を共有する。別test file/processとは状態を共有しない。
 
 ### Controlled race fixture
 
-回帰テストは使い捨てfixture packageを作る。fixtureの`prepare`は外部markerを作成後、snapshot内の
-CLIを一時的に不正な内容へして待機し、最後に正常CLIを生成する。テストはmarkerを観測した時点で
-fixture元rootの正常CLIを起動する。probeが誤って元rootでlifecycleを動かせばCLI loadが必ず失敗し、
-隔離されていればusage・lint相当の正常結果を返す。
+回帰fixtureの`prepare`はCLIを不正化して`entered` markerを作り、`release` markerまでtimeout付きで
+待つ。親testはprobeをspawnし、`entered`をtimeout付きで待ってfixture元rootの正常CLIを検査する。
+親は成功・assert失敗・entered timeoutの全経路で`finally`により`release`を作り、probeをtimeout付きで
+joinし、未終了ならkillして回収する。子自身にも待機timeoutを持たせ、schedulerに依存するhangを防ぐ。
+probeが元rootで動けばCLI loadは必ず失敗し、snapshot内ならusage・lint相当の正常結果を返す。
 
-cleanup反例は失敗する`prepare`を持つfixtureと専用temp parentを使い、reject後に子workspaceが
-残らないことを検査する。一時path自体をproduct APIや永続状態へ保存しない。
+workspace ownerはprimary errorを保持してcleanupを試みる。cleanupも失敗した場合はworkspace pathを
+含むcleanup errorとprimary errorを`AggregateError`で返し、cleanupだけの失敗も必ず非成功にする。
+cleanup関数を注入できるtest seamでprepare失敗との複合失敗を検査し、test自身が残存pathを回収する。
 
 ## 依存関係とデータフロー
 
 ```text
 package-files assertions ─┐
 controlled race fixture ──┴→ isolated package probe → OS temp snapshot → npm pack
-                                  ↓ read-only
-                           source root / node_modules
+                                  ↑ physical copy
+                           source root + node_modules
 ```
 
 依存方向はassertionからprobe、probeから外部npmへの一方向で、productの`src/`はtest helperへ
@@ -74,10 +75,10 @@ controlled race fixture ──┴→ isolated package probe → OS temp snapshot
 
 ## 障害・セキュリティ・ロールバック
 
-- copy・symlink・npm・JSON parseの失敗は成功扱いせず、cleanup後に元のerrorを返す。
+- copy・npm・timeout・JSON parse・cleanupの失敗は成功扱いせず、複合失敗も両errorを返す。
 - `.git`と`.worktrees`をcopyしないため、別worktreeやcredential-bearing Git metadataを一時領域へ
   展開しない。commandは固定引数の`execFile`で起動し、shell文字列を解釈しない。
-- symlink対象は固定の`node_modules`だけで、fixtureに依存が無い場合は作成しない。
+- symlinkをdereferenceしたcopyを使い、依存を含む全書込み対象を元rootから物理的に分離する。
 - ロールバックはhelperと回帰テストを戻し、package-files testを元の直接probeへ戻す。ただしその場合は
   既知raceが復活するため、revert前に代替隔離策を要求する。
 - CLI本体、package manifest、公開files契約は変更しない。
