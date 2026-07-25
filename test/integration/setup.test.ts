@@ -102,7 +102,9 @@ test('setup github: target_dirへ.github同期のみを行い、AGENTS.md等の�
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
 
   // When: setup github をtarget_dir指定で単体実行する
-  const result = runCli(['setup', 'github', targetDir], { env: stub.env(process.env) });
+  const result = runCli(['setup', 'github', targetDir], {
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
 
   // Then: 成功し、.github配下が同期される
   assert.equal(result.status, 0, result.stderr);
@@ -149,7 +151,10 @@ test('setup ruleset: 初回はruleset新規作成(POST)、2回目は既存rulese
   const stub = createGhStub(scratchDir);
 
   // When: 1回目のsetup rulesetを実行する（owner/repo省略、cwdはリポジトリ内）
-  const first = runCli(['setup', 'ruleset'], { cwd: repo.dir, env: stub.env(process.env) });
+  const first = runCli(['setup', 'ruleset'], {
+    cwd: repo.dir,
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
 
   // Then: 成功し、gh-stub状態にruleset「main-protection」が1件新規作成される
   assert.equal(first.status, 0, first.stderr);
@@ -159,13 +164,41 @@ test('setup ruleset: 初回はruleset新規作成(POST)、2回目は既存rulese
   const firstId = (state.rulesets[0] as { id: number }).id;
 
   // When: 2回目のsetup rulesetを実行する
-  const second = runCli(['setup', 'ruleset'], { cwd: repo.dir, env: stub.env(process.env) });
+  const second = runCli(['setup', 'ruleset'], {
+    cwd: repo.dir,
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
 
   // Then: 既存rulesetが検出され、新規追加ではなく同一IDのまま更新される
   assert.equal(second.status, 0, second.stderr);
   state = stub.readState();
   assert.equal(state.rulesets.length, 1, '2回目は新規追加でなく既存1件が更新されること');
   assert.equal((state.rulesets[0] as { id: number }).id, firstId, '更新されたrulesetのIDが1回目と同一であること');
+  const checks = (
+    state.rulesets[0] as {
+      rules: { type: string; parameters: { required_status_checks: { context: string; integration_id?: number }[] } }[];
+    }
+  ).rules.find((rule) => rule.type === 'required_status_checks')?.parameters.required_status_checks ?? [];
+  for (const name of ['spec', 'design', 'implementation', 'validation']
+    .map((gate) => `agent-skill-chain/${gate}-gate`)) {
+    assert.equal(checks.find((check) => check.context === name)?.integration_id, 77);
+  }
+});
+
+test('setup github: 専用App未設定時は配布物・labels・rulesetを部分展開しない', (t) => {
+  const scratchDir = mkScratch('setup-github-preflight');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+  const targetDir = mkScratch('setup-github-preflight-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['setup', 'github', targetDir], { env: stub.env(process.env) });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /専用Appをrulesetへ固定できません/);
+  assert.equal(fs.existsSync(path.join(targetDir, '.github')), false);
+  assert.deepEqual(stub.readState().labels, []);
+  assert.deepEqual(stub.readState().rulesets, []);
 });
 
 function escapeRegExp(value: string): string {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  parseDedicatedAppId,
   resolveDedicatedAppBackend,
   resolveDedicatedAppBackendFromApi,
   type RepositoryRuleset,
@@ -31,6 +32,13 @@ test('mainの全gate contextが専用Appへ固定されたactive rulesetを解�
     resolveDedicatedAppBackend({ appId: 77, checkNames: CHECKS, rulesets: [ruleset({ id: 9 }), ruleset()] }),
     { kind: 'dedicated_app', appId: 77, rulesetIds: [9, 42] },
   );
+});
+
+test('専用App IDは文字列を受理し、未設定・不正・標準Actions Appを拒否する', () => {
+  assert.equal(parseDedicatedAppId('77'), 77);
+  for (const value of [undefined, '', '0', '01', '1.5', 0, 15_368]) {
+    assert.throws(() => parseDedicatedAppId(value), /専用GitHub App ID/);
+  }
 });
 
 test('標準Actions App、inactive、別App、一部context不足、main非対象を拒否する', () => {

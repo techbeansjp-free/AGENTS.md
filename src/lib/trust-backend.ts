@@ -41,6 +41,15 @@ function positiveInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
+export function parseDedicatedAppId(value: unknown): number {
+  const parsed = typeof value === 'string' && /^[1-9][0-9]*$/.test(value) ? Number(value) : value;
+  const appId = positiveInteger(parsed);
+  if (!appId || appId === GITHUB_ACTIONS_APP_ID) {
+    throw new Error('専用GitHub App IDが未設定、不正、または標準GitHub Actions Appです');
+  }
+  return appId;
+}
+
 function protectsMain(ruleset: RepositoryRuleset): boolean {
   const refName = ruleset.conditions?.ref_name;
   if (!refName || !Array.isArray(refName.include) || !Array.isArray(refName.exclude)) return false;
@@ -59,10 +68,7 @@ export function resolveDedicatedAppBackend(options: {
   checkNames: string[];
   rulesets: RepositoryRuleset[];
 }): DedicatedAppBackend {
-  const appId = positiveInteger(options.appId);
-  if (!appId || appId === GITHUB_ACTIONS_APP_ID) {
-    throw new Error('専用GitHub App IDが未設定または標準GitHub Actions Appです');
-  }
+  const appId = parseDedicatedAppId(options.appId);
   if (
     options.checkNames.length === 0 ||
     new Set(options.checkNames).size !== options.checkNames.length ||
