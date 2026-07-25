@@ -6,6 +6,7 @@ import path from 'node:path';
 // （Node は package.json が見つからない場合スクリプトを CommonJS として扱う）。
 const GH_STUB_SCRIPT = `#!/usr/bin/env node
 const fs = require('fs');
+const childProcess = require('child_process');
 
 const statePath = process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
 const args = process.argv.slice(2);
@@ -26,6 +27,29 @@ function readStdin() {
 function flag(name) {
   const i = args.indexOf(name);
   return i === -1 ? undefined : args[i + 1];
+}
+
+function git(args) {
+  childProcess.execFileSync('git', args, { cwd: process.cwd(), stdio: 'pipe' });
+}
+
+// Issue #266の結合テスト専用。merge要求を受けた瞬間に別の自動化がmainを更新した状態を、
+// 実git remoteへcommit/pushして再現する。release bumpプロセスは直後にfetchして再同期する。
+function advanceMainForBaseRace() {
+  git(['checkout', 'main']);
+  fs.appendFileSync('release-bump-base-race.txt', 'base advanced\\n');
+  git(['add', 'release-bump-base-race.txt']);
+  git(['commit', '-m', 'test: advance main during release bump merge']);
+  git(['push', 'origin', 'main']);
+}
+
+// Issue #266の結合テスト専用。実GitHubのsquash merge相当として、許可されたbump branchの
+// 内容をmainへ反映する。通常のスタブ経路は従来どおりPR状態だけを更新する。
+function applyMergedBumpPrToMain(head) {
+  git(['checkout', 'main']);
+  git(['merge', '--squash', head]);
+  git(['commit', '-m', 'chore(release): simulated merged bump']);
+  git(['push', 'origin', 'main']);
 }
 
 const [cmd, sub] = args;
@@ -175,15 +199,22 @@ if (cmd === 'pr' && sub === 'merge') {
     // 障害シナリオ検証用（DESIGN.md「PR作成後、admin mergeに失敗」の自己修復パス）:
     // PRはOPENのまま（マージ扱いにしない）で失敗を模擬する。1回消費して残数を減らす。
     state.failMergeCount -= 1;
+    if (state.advanceMainOnNextMerge) {
+      state.advanceMainOnNextMerge = false;
+      advanceMainForBaseRace();
+    }
     saveState(state);
-    process.stderr.write('gh-stub: simulated admin merge failure\\n');
+    process.stderr.write(state.failMergeMessage || 'gh-stub: simulated admin merge failure\\n');
     process.exit(1);
   }
+  let mergedHead;
   for (const key of Object.keys(state.prsByBranch || {})) {
     if (String(state.prsByBranch[key].number) === String(number)) {
       state.prsByBranch[key].state = 'MERGED';
+      mergedHead = key;
     }
   }
+  if (state.applyMergedPrToMain && mergedHead) applyMergedBumpPrToMain(mergedHead);
   saveState(state);
   process.stdout.write('https://github.com/test/repo/pull/' + number + '\\n');
   process.exit(0);
@@ -309,6 +340,9 @@ export interface GhStubState {
   defaultPrFileStats?: Record<string, { additions: number; deletions: number }>;
   mergeCalls?: { number: string; args: string[] }[];
   failMergeCount?: number;
+  failMergeMessage?: string;
+  advanceMainOnNextMerge?: boolean;
+  applyMergedPrToMain?: boolean;
   releases?: string[];
   releaseCreateCalls?: { args: string[] }[];
 }
@@ -331,6 +365,9 @@ export interface GhStub {
   /** 直後の `gh pr merge` 呼び出しを count 回だけ失敗させる（PRはOPENのまま）。
    * 「PR作成後、admin mergeに失敗」自己修復シナリオの検証用（Issue #196・#208）。 */
   failNextMerge(count?: number): void;
+  /** Issue #266: 最初のmerge要求時にmainを実際に前進させ、GitHubのbase更新競合を返す。
+   * 次の成功mergeはテスト用remoteのmainへ反映し、tag/publish後続契約まで検証可能にする。 */
+  simulateBaseBranchRaceOnNextMerge(): void;
 }
 
 /**
@@ -386,6 +423,15 @@ export function createGhStub(baseDir: string): GhStub {
     failNextMerge(count = 1): void {
       const state = this.readState();
       state.failMergeCount = count;
+      delete state.failMergeMessage;
+      this.writeState(state);
+    },
+    simulateBaseBranchRaceOnNextMerge(): void {
+      const state = this.readState();
+      state.failMergeCount = 1;
+      state.failMergeMessage = 'GraphQL: Base branch was modified. Review and try the merge again.\\n';
+      state.advanceMainOnNextMerge = true;
+      state.applyMergedPrToMain = true;
       this.writeState(state);
     },
   };
