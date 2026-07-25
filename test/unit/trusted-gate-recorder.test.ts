@@ -12,6 +12,7 @@ import {
   fetchTrustedGateApiContext,
   finalizeTrustedGateCheck,
   findCurrentTrustedGateChecks,
+  githubReviewPolicyFromLabels,
   parseTrustedGateDispatchEvent,
   parseTrustedGateWorkflow,
   selectLatestTrustedGateCheck,
@@ -36,6 +37,32 @@ const WORKFLOW: TrustedGateWorkflow = {
   run_attempt: 1,
 };
 const EXTERNAL_ID = encodeGateCheckExternalId(trustedGateExternalId(WORKFLOW, PAYLOAD));
+
+test('GitHub Issue labelsはrisk:normal単独かつfull/core無しの場合だけStandardになる', () => {
+  assert.deepEqual(
+    githubReviewPolicyFromLabels(['risk:normal', 'autonomy:gated']),
+    { profile: 'standard', reviewSubject: 'ordinary' },
+  );
+  for (const labels of [
+    ['risk:normal', 'risk:high', 'autonomy:gated'],
+    ['risk:normal', 'risk:unclassified', 'autonomy:gated'],
+    ['autonomy:gated'],
+  ]) {
+    assert.deepEqual(
+      githubReviewPolicyFromLabels(labels),
+      { profile: 'strict', reviewSubject: 'ordinary' },
+      labels.join(','),
+    );
+  }
+  assert.deepEqual(
+    githubReviewPolicyFromLabels(['risk:normal', 'autonomy:full']),
+    { profile: 'strict', reviewSubject: 'ordinary' },
+  );
+  assert.deepEqual(
+    githubReviewPolicyFromLabels(['risk:normal', 'review:core-audit']),
+    { profile: 'strict', reviewSubject: 'core_audit' },
+  );
+});
 
 test('recorder secretはdirect fetch用に退避後、子process環境から除去される', () => {
   const env: NodeJS.ProcessEnv = {

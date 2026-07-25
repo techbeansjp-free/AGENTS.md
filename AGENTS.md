@@ -60,7 +60,7 @@ Issue作成 → worktree作成 → SPECワーカーが最初のcheckpointをpush
 | セグメント作業ワーカー | 自branchへのcommit/push、Draft PR作成（SPECワーカーのみ）、Issueコメント | writer（同時1つ） |
 | ゲートレビュア | read-only + verdictをtrusted recorderへ返却 | read-only（複数並列可） |
 
-権限はrole capabilityとcredential/GitHub権限を分離して担保する。GitHub actorがwriterとrecorderで同一でも、repository default branchのprotected-base隔離launcher、GitHub credentialを持たないread-only reviewer、one-time attempt token、固有run ID/slot、SHA・prompt・artifact・launcher digest、latest attemptの集約digestを検証できる場合は同一roleと見なさない。ツール名の一律 deny はしない。lease スキーマは `.agent-skill-chain/schemas/lease.schema.yaml`、既定 `ttl_seconds: 3600` / `renewal_interval_seconds: 900`。WIP 上限は worktree 残存数ではなく有効 writer lease 数で判定（既定 `wip_limit: 3`）。
+権限はrole capabilityとcredential/GitHub principalを分離して担保する。review証跡を投稿するrecorderはwriterと異なる専用principalのfine-grained PATまたはGitHub App credentialを使い、GitHub APIから得たPR authorと全commit author/committerのいずれかがrecorder actorと一致する場合は承認しない。protected-base隔離launcher、GitHub credentialを持たないread-only reviewer、one-time attempt token、固有run ID/slot、SHA・prompt・artifact・launcher digest、latest attemptの集約digestも併せて検証する。ツール名の一律 deny はしない。lease スキーマは `.agent-skill-chain/schemas/lease.schema.yaml`、既定 `ttl_seconds: 3600` / `renewal_interval_seconds: 900`。WIP 上限は worktree 残存数ではなく有効 writer lease 数で判定（既定 `wip_limit: 3`）。
 
 ## ブランチ・worktree
 

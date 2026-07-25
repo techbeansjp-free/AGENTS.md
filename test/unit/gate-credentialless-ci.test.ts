@@ -20,7 +20,11 @@ test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck 
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /base\.ref == github\.event\.repository\.default_branch/);
-  assert.match(workflow, /review:core-audit.*PROFILE=strict/);
+  assert.match(workflow, /PROFILE=strict/);
+  assert.match(workflow, /select\(startswith\("risk:"\)\)/);
+  assert.match(workflow, /== \["risk:normal"\]/);
+  assert.match(workflow, /index\("autonomy:full"\) == null/);
+  assert.match(workflow, /index\("review:core-audit"\) == null/);
   assert.match(workflow, /gate verify-evidence/);
   assert.match(workflow, /gate-publish\.sh/);
   assert.match(workflow, /conclusion: "action_required"/);

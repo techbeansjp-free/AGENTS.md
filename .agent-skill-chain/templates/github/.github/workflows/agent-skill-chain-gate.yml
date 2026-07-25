@@ -53,12 +53,18 @@ jobs:
             echo "branchからIssue IDを解決できません: $BRANCH" >&2
             exit 1
           fi
-          PROFILE=standard
-          if ! echo "$LABELS_JSON" | grep -q '"risk:normal"'; then PROFILE=strict; fi
-          if echo "$LABELS_JSON" | grep -q '"autonomy:full"'; then PROFILE=strict; fi
-          if echo "$LABELS_JSON" | grep -q '"review:core-audit"'; then PROFILE=strict; fi
+          PROFILE=strict
+          if jq -e \
+            '([.[] | select(startswith("risk:"))] == ["risk:normal"]) and
+             (index("autonomy:full") == null) and
+             (index("review:core-audit") == null)' \
+            <<<"$LABELS_JSON" >/dev/null; then
+            PROFILE=standard
+          fi
           REVIEW_SUBJECT=ordinary
-          if echo "$LABELS_JSON" | grep -q '"review:core-audit"'; then REVIEW_SUBJECT=core_audit; fi
+          if jq -e 'index("review:core-audit") != null' <<<"$LABELS_JSON" >/dev/null; then
+            REVIEW_SUBJECT=core_audit
+          fi
           echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
           echo "target_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"

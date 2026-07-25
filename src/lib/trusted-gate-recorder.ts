@@ -127,6 +127,28 @@ export interface TrustedGateRecordState {
   attestation: TrustedGateAttestationEnvelope;
 }
 
+export interface GithubReviewPolicyContext {
+  profile: 'standard' | 'strict';
+  reviewSubject: 'ordinary' | 'core_audit';
+}
+
+/**
+ * Issue #271: GitHub label集合が通常リスクを一意に表す場合だけStandardを許可する。
+ * risk欠落・非normal・複数riskは、曖昧な状態を通常リスクと推測せずStrictへ閉じる。
+ */
+export function githubReviewPolicyFromLabels(labels: string[]): GithubReviewPolicyContext {
+  const riskLabels = labels.filter((label) => label.startsWith('risk:'));
+  const reviewSubject = labels.includes('review:core-audit') ? 'core_audit' : 'ordinary';
+  const profile =
+    riskLabels.length === 1 &&
+    riskLabels[0] === 'risk:normal' &&
+    !labels.includes('autonomy:full') &&
+    reviewSubject === 'ordinary'
+      ? 'standard'
+      : 'strict';
+  return { profile, reviewSubject };
+}
+
 function safeInteger(value: unknown, label: string): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${label}は正の安全な整数である必要があります`);
@@ -326,12 +348,7 @@ export async function fetchTrustedGateApiContext(options: {
     throw new Error('Issue API正本を解決できません');
   }
   const labels = githubIssueLabels(githubIssue);
-  const profile =
-    !labels.includes('risk:normal') ||
-    labels.includes('autonomy:full') ||
-    labels.includes('review:core-audit')
-      ? 'strict'
-      : 'standard';
+  const policy = githubReviewPolicyFromLabels(labels);
   return {
     actor: options.actor,
     payload: options.payload,
@@ -339,8 +356,8 @@ export async function fetchTrustedGateApiContext(options: {
     pullRequest,
     issueId: `ISSUE-${issueNumber}`,
     issueNumber,
-    profile,
-    reviewSubject: labels.includes('review:core-audit') ? 'core_audit' : 'ordinary',
+    profile: policy.profile,
+    reviewSubject: policy.reviewSubject,
     commits,
     reviews,
   };

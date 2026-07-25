@@ -36,6 +36,7 @@ import {
   fetchTrustedGateApiContext,
   findCurrentTrustedGateChecks,
   finalizeTrustedGateCheck,
+  githubReviewPolicyFromLabels,
   githubJsonDirect,
   parseTrustedGateCheckOutput,
   parseTrustedGateDispatchEvent,
@@ -1735,6 +1736,7 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
     const labels = githubIssue.labels
       .map((label) => typeof label === 'string' ? label : label.name ?? '')
       .filter(Boolean);
+    const policy = githubReviewPolicyFromLabels(labels);
     const context: TrustedGateApiContext = {
       actor: '',
       payload: { pr_number: prNumber, gate: gateId, target_sha: targetSha },
@@ -1742,13 +1744,8 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       pullRequest,
       issueId: issueIdRaw,
       issueNumber: Number(issueNumber),
-      profile:
-        !labels.includes('risk:normal') ||
-        labels.includes('autonomy:full') ||
-        labels.includes('review:core-audit')
-          ? 'strict'
-          : 'standard',
-      reviewSubject: labels.includes('review:core-audit') ? 'core_audit' : 'ordinary',
+      profile: policy.profile,
+      reviewSubject: policy.reviewSubject,
       commits,
       reviews,
     };
