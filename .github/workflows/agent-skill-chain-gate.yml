@@ -20,11 +20,39 @@ permissions:
   pull-requests: read
 
 jobs:
+  detect-segments:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.segments.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch for segment detection
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF" --depth=1
+
+      - name: Detect started segments
+        id: segments
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          matrix='['
+          while IFS= read -r segment; do
+            matrix+="\"$segment\","
+          done < <(./.agent-skill-chain/scripts/detect-changed-segments.sh "$BASE_REF")
+          matrix="${matrix%,}]"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   gate-review:
+    needs: detect-segments
+    if: needs.detect-segments.outputs.matrix != '[]'
     strategy:
       fail-fast: false
       matrix:
-        gate: [spec, design, implementation, validation]
+        gate: ${{ fromJSON(needs.detect-segments.outputs.matrix) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
