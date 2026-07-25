@@ -24,12 +24,12 @@ test('GitHub App JWTはRS256署名・固定iat/exp・App IDを持つ', () => {
   );
 });
 
-test('installation tokenは対象repoとchecks:writeだけへdownscopeする', async () => {
+test('installation tokenはrepository IDと専用App権限だけへdownscopeし秘密を露出しない', async () => {
   const calls: { url: string; init?: RequestInit }[] = [];
   const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     calls.push({ url, init });
-    if (url.endsWith('/repos/techbeansjp-free/AGENTS.md/installation')) {
+    if (url.endsWith('/installation')) {
       return new Response(JSON.stringify({ id: 777 }), { status: 200 });
     }
     return new Response(JSON.stringify({ token: 'installation-token', expires_at: '2026-07-25T22:00:00Z' }), {
@@ -40,6 +40,7 @@ test('installation tokenは対象repoとchecks:writeだけへdownscopeする', a
     appId: '12345',
     privateKey: PRIVATE_KEY,
     repository: 'techbeansjp-free/AGENTS.md',
+    repositoryId: 888,
     now: new Date('2026-07-25T21:00:00Z'),
     fetchImpl: fetchImpl as typeof fetch,
   });
@@ -50,12 +51,12 @@ test('installation tokenは対象repoとchecks:writeだけへdownscopeする', a
     installationId: 777,
   });
   assert.equal(calls.length, 2);
-  assert.match(String(calls[0].init?.headers && JSON.stringify(calls[0].init.headers)), /Bearer eyJ/);
   assert.deepEqual(JSON.parse(String(calls[1].init?.body)), {
-    repositories: ['AGENTS.md'],
-    permissions: { checks: 'write' },
+    repository_ids: [888],
+    permissions: { checks: 'write', statuses: 'write', metadata: 'read' },
   });
   assert.ok(!JSON.stringify(calls).includes(PRIVATE_KEY));
+  assert.ok(!JSON.stringify(calls).includes('installation-token'));
 });
 
 test('不正なApp IDとrepositoryをAPI呼出し前に拒否する', async () => {

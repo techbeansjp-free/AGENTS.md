@@ -18,6 +18,7 @@ export interface InstallationToken {
 
 export interface GithubAppAuthOptions extends GithubAppCredentials {
   repository: string;
+  repositoryId?: number;
   now?: Date;
   fetchImpl?: typeof fetch;
 }
@@ -80,13 +81,17 @@ async function githubJson<T>(
 
 /**
  * App秘密鍵は引数とメモリ内だけで扱い、子process・stdout・一時fileへ渡さない。
- * installation tokenはChecks APIだけへdownscopeし、candidate codeには返さない。
+ * installation tokenは対象repositoryと専用Appの最小権限だけへdownscopeする。
  */
 export async function createInstallationToken(options: GithubAppAuthOptions): Promise<InstallationToken> {
   validateRepository(options.repository);
   const appId = parsePositiveInteger(options.appId, 'GitHub App ID');
   const fetchImpl = options.fetchImpl ?? fetch;
   const jwt = createGithubAppJwt(options, options.now);
+  const repositoryId = options.repositoryId;
+  if (!Number.isSafeInteger(repositoryId) || Number(repositoryId) <= 0) {
+    throw new Error('GitHub repository IDを取得できませんでした');
+  }
   const installation = await githubJson<{ id?: number }>(
     fetchImpl,
     `/repos/${options.repository}/installation`,
@@ -103,8 +108,12 @@ export async function createInstallationToken(options: GithubAppAuthOptions): Pr
       method: 'POST',
       token: jwt,
       body: JSON.stringify({
-        repositories: [options.repository.split('/')[1]],
-        permissions: { checks: 'write' },
+        repository_ids: [Number(repositoryId)],
+        permissions: {
+          checks: 'write',
+          statuses: 'write',
+          metadata: 'read',
+        },
       }),
       headers: { 'Content-Type': 'application/json' },
     },

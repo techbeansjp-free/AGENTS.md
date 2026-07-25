@@ -163,6 +163,7 @@ test('lint vocab: YAMLキー・flow-sequence要素としての禁止語利用は
       'issue: 単独のYAMLキー文脈',
       '  issue: 字下げされたYAMLキー文脈',
       '- issue: リスト項目のキーとしてのYAMLキー文脈',
+      'issues: GitHub Actions公式permission key',
       // flow-sequence要素: 直前（空白を挟んでよい）が`[`または`,`、直後（同様）が`,`または`]`。
       'flow-sequence要素: inputs: [issue, wip] のように書く。',
     ].join('\n') + '\n',
