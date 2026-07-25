@@ -106,13 +106,20 @@ test("ci: verify-template-sync ステップは skip_checks を参照しない（
   );
 });
 
-test('ci: npm ci / build / test の各ステップは if 条件を持たない（常時実行）', () => {
+test('ci: npm ci / build / ログ保存付きtestの各ステップは if 条件を持たない（常時実行）', () => {
   const steps = ciSteps();
-  for (const cmd of ['npm ci', 'npm run build', 'npm test']) {
+  for (const cmd of ['npm ci', 'npm run build']) {
     const step = steps.find((s) => typeof s.run === 'string' && s.run.trim() === cmd);
     assert.ok(step, `run が '${cmd}' のステップが存在すること`);
     assert.equal((step as Step).if, undefined, `'${cmd}' ステップは if 条件を持たないこと`);
   }
+
+  const testStep = findByName(steps, 'Run npm test and save execution log');
+  assert.ok(
+    (testStep.run ?? '').includes('npm test 2>&1 | tee test-execution.log'),
+    'test step が出力を保存しながら実行すること',
+  );
+  assert.equal(testStep.if, undefined, 'ログ保存付きtest step は if 条件を持たないこと');
 });
 
 // --- ③ ctx（Derive issue_id）に Dependabot 許可リスト分岐が存在すること ---
