@@ -96,10 +96,19 @@ test('self-extension lifecycle (github backend): Draft PR本文がIssue #245をC
   const [branch, worktreePath] = start.stdout.trim().split('\n');
 
   for (const artifact of trackedArtifacts) {
+    const ignored = spawnSync('git', ['check-ignore', '--quiet', artifact], { cwd: worktreePath });
+    assert.equal(ignored.status, 1, `${artifact} はGitHub backendでもignoreされないこと`);
     fs.writeFileSync(path.join(worktreePath, artifact), `# ${artifact}\n`);
   }
   const checkpoint = runCli(['checkpoint', 'test: record GitHub-native self-extension artifacts'], { cwd: worktreePath, env });
   assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const checkpointSha = git(worktreePath, ['rev-parse', 'HEAD']).trim();
+
+  assert.equal(git(repo.dir, ['rev-parse', `origin/${branch}`]).trim(), checkpointSha, 'checkpointをremote branchへpushすること');
+  for (const artifact of trackedArtifacts) {
+    assert.equal(git(worktreePath, ['ls-tree', '--name-only', checkpointSha, '--', artifact]).trim(), artifact, `${artifact} がcheckpoint commitに記録されること`);
+    assert.equal(git(repo.dir, ['ls-tree', '--name-only', `origin/${branch}`, '--', artifact]).trim(), artifact, `${artifact} がremote branchから復元できること`);
+  }
 
   const pr = runCli(['pr', 'create', 'ISSUE-245', branch], { cwd: repo.dir, env });
   assert.equal(pr.status, 0, pr.stderr);
