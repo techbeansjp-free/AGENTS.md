@@ -1,29 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  bootstrapEvidenceDigest,
   buildBootstrapCompletedRecord,
   parseBootstrapLedgerRecord,
   renderBootstrapLedgerRecord,
   resolveBootstrapLedgerState,
   type BootstrapKey,
+  type BootstrapLedgerEntry,
+  type BootstrapPreparedEvidence,
   type BootstrapPreparedRecord,
-  type BootstrapReviewComment,
 } from '../../src/lib/bootstrap-ledger.js';
 
 const SHA = 'a'.repeat(40);
 const DIGEST = (value: string): string => `sha256:${value.repeat(64)}`;
-const KEY: BootstrapKey = {
-  repository: 'techbeansjp-free/AGENTS.md',
-  pr_number: 274,
-  target_sha: SHA,
-  review_digest: DIGEST('b'),
-};
 
 function prepared(): BootstrapPreparedRecord {
-  return {
-    schema_version: 'agent-skill-chain/bootstrap-ledger/v1',
-    state: 'prepared',
-    key: KEY,
+  const evidence: BootstrapPreparedEvidence = {
     owner_authorization: {
       review_id: 100,
       actor: 'repository-owner',
@@ -55,10 +48,23 @@ function prepared(): BootstrapPreparedRecord {
       { check_id: 202, name: 'reconcile', conclusion: 'success', target_sha: SHA },
     ],
   };
+  return {
+    schema_version: 'agent-skill-chain/bootstrap-ledger/v1',
+    state: 'prepared',
+    key: {
+      repository: 'techbeansjp-free/AGENTS.md',
+      pr_number: 274,
+      target_sha: SHA,
+      review_digest: bootstrapEvidenceDigest(evidence),
+    },
+    ...evidence,
+  };
 }
 
-function comment(id: number, record: ReturnType<typeof prepared>): BootstrapReviewComment {
-  return { id, body: renderBootstrapLedgerRecord(record), commit_id: SHA };
+const KEY: BootstrapKey = prepared().key;
+
+function comment(id: number, record: ReturnType<typeof prepared>): BootstrapLedgerEntry {
+  return { id, body: renderBootstrapLedgerRecord(record), source: 'pr_review', commit_id: SHA };
 }
 
 test('Given 固定#274証跡 When preparedをcanonical化 Then Sol/xhigh二重reviewとCIを復元する', () => {
@@ -82,7 +88,7 @@ test('Given prepared When merge後completedを記録 Then exact prepared IDへ�
   assert.deepEqual(
     resolveBootstrapLedgerState([
       comment(301, preparedRecord),
-      { id: 302, body: renderBootstrapLedgerRecord(completed), commit_id: SHA },
+      { id: 302, body: renderBootstrapLedgerRecord(completed), source: 'issue_comment' },
     ], KEY),
     {
       prepared: { review_id: 301, record: preparedRecord },
@@ -117,9 +123,16 @@ test('Given 別SHA・別PR・重複・孤児completed When resolve Then 二回�
   });
   assert.throws(
     () => resolveBootstrapLedgerState([
-      { id: 302, body: renderBootstrapLedgerRecord(completed), commit_id: SHA },
+      { id: 302, body: renderBootstrapLedgerRecord(completed), source: 'issue_comment' },
     ], KEY),
     /exact prepared/,
+  );
+  assert.throws(
+    () => resolveBootstrapLedgerState([
+      comment(301, preparedRecord),
+      { id: 302, body: renderBootstrapLedgerRecord(completed), source: 'pr_review', commit_id: SHA },
+    ], KEY),
+    /record source/,
   );
 });
 

@@ -1,3 +1,4 @@
+import { digestOf } from './digest.js';
 import { canonicalJson } from './review-evidence.js';
 
 export const BOOTSTRAP_LEDGER_MARKER = '<!-- agent-skill-chain:bootstrap-ledger/v1 -->';
@@ -40,6 +41,11 @@ export interface BootstrapPreparedRecord {
   non_gate_checks: BootstrapCheckEvidence[];
 }
 
+export type BootstrapPreparedEvidence = Pick<
+  BootstrapPreparedRecord,
+  'owner_authorization' | 'independent_reviews' | 'non_gate_checks'
+>;
+
 export interface BootstrapCompletedRecord {
   schema_version: 'agent-skill-chain/bootstrap-ledger/v1';
   state: 'completed';
@@ -53,15 +59,20 @@ export interface BootstrapCompletedRecord {
 
 export type BootstrapLedgerRecord = BootstrapPreparedRecord | BootstrapCompletedRecord;
 
-export interface BootstrapReviewComment {
+export interface BootstrapLedgerEntry {
   id: number;
   body: string;
-  commit_id: string;
+  source: 'pr_review' | 'issue_comment';
+  commit_id?: string;
 }
 
 export interface BootstrapLedgerState {
   prepared?: { review_id: number; record: BootstrapPreparedRecord };
   completed?: { review_id: number; record: BootstrapCompletedRecord };
+}
+
+export function bootstrapEvidenceDigest(evidence: BootstrapPreparedEvidence): string {
+  return digestOf(canonicalJson(evidence));
 }
 
 function exactKeys(value: object, expected: readonly string[], label: string): void {
@@ -192,6 +203,15 @@ function validatePrepared(value: Record<string, unknown>): BootstrapPreparedReco
   ) {
     throw new Error('非gate CIのCheck IDとnameは一意である必要があります');
   }
+  if (
+    key.review_digest !== bootstrapEvidenceDigest({
+      owner_authorization: value.owner_authorization as BootstrapPreparedRecord['owner_authorization'],
+      independent_reviews: value.independent_reviews as BootstrapPreparedRecord['independent_reviews'],
+      non_gate_checks: value.non_gate_checks as BootstrapPreparedRecord['non_gate_checks'],
+    })
+  ) {
+    throw new Error('bootstrap review digestがowner/review/CI証跡と一致しません');
+  }
   return value as unknown as BootstrapPreparedRecord;
 }
 
@@ -245,7 +265,7 @@ export function parseBootstrapLedgerRecord(body: string): BootstrapLedgerRecord 
 }
 
 export function resolveBootstrapLedgerState(
-  comments: BootstrapReviewComment[],
+  comments: BootstrapLedgerEntry[],
   requestedKey: BootstrapKey,
 ): BootstrapLedgerState {
   validateKey(requestedKey);
@@ -253,8 +273,12 @@ export function resolveBootstrapLedgerState(
     positiveInteger(comment.id, 'bootstrap PR Review ID');
     const record = parseBootstrapLedgerRecord(comment.body);
     if (!record) return [];
-    if (comment.commit_id !== record.key.target_sha) {
-      throw new Error('bootstrap PR Reviewのcommit_idがledger target SHAと一致しません');
+    if (
+      (record.state === 'prepared' &&
+        (comment.source !== 'pr_review' || comment.commit_id !== record.key.target_sha)) ||
+      (record.state === 'completed' && comment.source !== 'issue_comment')
+    ) {
+      throw new Error('bootstrap ledger stateが許可されたGitHub record sourceと一致しません');
     }
     if (canonicalJson(record.key) !== canonicalJson(requestedKey)) {
       throw new Error('別keyのbootstrap ledger recordが既に存在します');

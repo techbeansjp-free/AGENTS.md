@@ -21,6 +21,7 @@ import * as testing from '../commands/testing.js';
 import * as worker from '../commands/worker.js';
 import * as release from '../commands/release.js';
 import * as rootCleanup from '../commands/root-cleanup.js';
+import * as bootstrap from '../commands/bootstrap.js';
 
 export type Handler = (args: string[]) => Promise<number> | number;
 
@@ -49,6 +50,7 @@ export const routes: Record<string, Handler> = {
   'gate verify-evidence': gate.verifyEvidence,
   'gate record-trusted-check': gate.recordTrustedCheck,
   'gate materialize-check-report': gate.materializeCheckReport,
+  'gate bootstrap-ledger': bootstrap.ledger,
   'gate mark-human-required': gate.markHumanRequired,
   'gate reviewer-context': gate.reviewerContext,
   'gate reviewer-prompt': gate.reviewerPrompt,

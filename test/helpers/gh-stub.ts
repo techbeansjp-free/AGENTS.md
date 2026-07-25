@@ -309,6 +309,41 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  const permissionMatch = /\\/collaborators\\/([^/]+)\\/permission$/.exec(apiPath || '');
+  if (permissionMatch && method === 'GET') {
+    process.stdout.write(JSON.stringify({
+      permission: state.collaboratorPermissions?.[decodeURIComponent(permissionMatch[1])] || 'read',
+    }));
+    process.exit(0);
+  }
+
+  const issueCommentsMatch = /\\/issues\\/(\\d+)\\/comments(?:\\?.*)?$/.exec(apiPath || '');
+  if (issueCommentsMatch && method === 'GET') {
+    const issueNumber = issueCommentsMatch[1];
+    process.stdout.write(JSON.stringify((state.comments[issueNumber] || []).map((comment) => ({
+      id: Number(comment.id),
+      body: comment.body,
+    }))));
+    process.exit(0);
+  }
+  if (issueCommentsMatch && method === 'POST') {
+    const issueNumber = issueCommentsMatch[1];
+    const parsed = JSON.parse(body);
+    const id = state.nextId++;
+    const record = {
+      id: String(id),
+      url: 'https://github.com/test/repo/issues/' + issueNumber + '#issuecomment-' + id,
+      body: parsed.body,
+      createdAt: new Date(state.clock).toISOString(),
+    };
+    state.clock += 1000;
+    state.comments[issueNumber] = state.comments[issueNumber] || [];
+    state.comments[issueNumber].push(record);
+    saveState(state);
+    process.stdout.write(JSON.stringify({ id, body: record.body }));
+    process.exit(0);
+  }
+
   const commentDeleteMatch = /\\/issues\\/comments\\/(\\d+)$/.exec(apiPath || '');
   if (commentDeleteMatch && method === 'DELETE') {
     const id = commentDeleteMatch[1];
@@ -452,6 +487,7 @@ export interface GhStubState {
   checkRuns?: unknown[];
   repositoryId?: number;
   repositoryFullName?: string;
+  collaboratorPermissions?: Record<string, string>;
   issueMetadata?: unknown;
   issueApiLabels?: ({ name: string } | string)[];
   actionRuns?: unknown[];
