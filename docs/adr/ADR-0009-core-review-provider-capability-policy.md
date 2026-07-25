@@ -24,7 +24,8 @@ Codex はモデルと reasoning effort を明示する可搬な設定を持つ�
 
 各 adapter はベンダー中立能力を自分の実行系だけへ変換する。
 
-- Codex は `gpt-5.6-sol`、`xhigh`、read-only sandbox を厳密に検証する。
+- GitHub の自己拡張コアレビューは Codex を選択し、公式 `openai/codex-action@v1` が CLI と API proxy を準備する。利用者入力は一度登録する repository secret `OPENAI_API_KEY` だけとする。
+- Codex は `gpt-5.6-sol`、`xhigh`、read-only sandbox を厳密に検証する。Strict は独立2回の verdict を trusted CLI が集約し、全件 pass/pass の場合だけ承認する。
 - Claude Code は実行環境が宣言する実在モデルを公式の model 指定で使い、model tier attestation、maximum reasoning attestation、実行環境固有 reasoning probe の成功を要求する。Codex 固有 slug・設定キーは使わない。
 - human adapter、利用不能、不一致、未証明、strict 未満、分類不能は `human_required` へ停止する。
 
@@ -34,6 +35,6 @@ Codex はモデルと reasoning effort を明示する可搬な設定を持つ�
 
 利点は、コア作業だけを品質優先へ昇格でき、provider の異なる表現を混同せず、利用不能時に silent downgrade しないことである。manifest、classifier、launcher、adapter、workflow の境界をテストでき、旧メモだけに判断が残らない。
 
-欠点は、Claude Code で最大 reasoning を可搬な単一 flag として検証できない環境では、attestation と probe の準備が必要になることである。準備できない環境は自動承認を得られず、人間判断へ止まる。またコア path の安全側リストにより、境界付近の変更が通常より高コストな review になる場合がある。
+欠点は、GitHub 自動レビューの初回に `OPENAI_API_KEY` secret の人間による登録が必要で、Strict は API 呼出しを2回消費することである。Claude Code で最大 reasoning を可搬な単一 flag として検証できない環境では、attestation と probe の準備も必要になる。準備できない環境は自動承認を得られず、人間判断へ止まる。またコア path の安全側リストにより、境界付近の変更が通常より高コストな review になる場合がある。
 
 将来 provider が検証可能な reasoning 設定を追加した場合は、能力契約を変えず adapter mapping だけを新しい ADR で更新できる。コア資産の責務境界が変わった場合は project policy の trigger と分類テストを同じ変更で更新する。

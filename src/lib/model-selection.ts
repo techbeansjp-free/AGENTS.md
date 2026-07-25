@@ -8,6 +8,11 @@ import { defaultBranch } from './worktree.js';
 export interface CoreReviewPolicy {
   required_profile: 'strict';
   unavailable: 'human_required';
+  github_automation: {
+    adapter: 'codex';
+    action: 'openai/codex-action@v1';
+    api_key_secret: 'OPENAI_API_KEY';
+  };
   capability: {
     model_tier: 'frontier_coding';
     reasoning_tier: 'maximum_reasoning';

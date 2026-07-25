@@ -33,6 +33,11 @@ test('model selection policy: manifestのCodex固定値とClaude能力証明契�
   assert.equal(policy.adapters.codex.model, 'gpt-5.6-sol');
   assert.equal(policy.adapters.codex.reasoning_effort, 'xhigh');
   assert.equal(policy.adapters.claude.model_env, 'CLAUDE_CORE_REVIEW_MODEL');
+  assert.deepEqual(policy.github_automation, {
+    adapter: 'codex',
+    action: 'openai/codex-action@v1',
+    api_key_secret: 'OPENAI_API_KEY',
+  });
   assert.equal(policy.unavailable, 'human_required');
 });
 

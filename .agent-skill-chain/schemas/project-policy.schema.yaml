@@ -69,11 +69,19 @@ properties:
           behavior: {const: explicit_selection}
       core_review:
         type: object
-        required: [required_profile, unavailable, capability, triggers, adapters]
+        required: [required_profile, unavailable, github_automation, capability, triggers, adapters]
         additionalProperties: false
         properties:
           required_profile: {const: strict}
           unavailable: {const: human_required}
+          github_automation:
+            type: object
+            required: [adapter, action, api_key_secret]
+            additionalProperties: false
+            properties:
+              adapter: {const: codex}
+              action: {const: "openai/codex-action@v1"}
+              api_key_secret: {const: OPENAI_API_KEY}
           capability:
             type: object
             required: [model_tier, reasoning_tier]

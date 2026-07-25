@@ -37,11 +37,19 @@ Claude Code には Codex の `gpt-5.6-sol` や `model_reasoning_effort=xhigh` �
 
 Codex の完全 command override は `CODEX_CORE_REVIEWER_ATTESTED=true` と固定 model/effort の一致を必要とする。Claude の model 名が空、OpenAI 固有 slug、能力証明不足、probe 不在または失敗の場合は起動しない。
 
+## GitHub 自動レビュー
+
+自己拡張 project の GitHub コアレビューは Codex adapter を選び、公式 `openai/codex-action@v1` を使う。Action が Codex CLI の導入と Responses API proxy を担当する。利用者が一度だけ登録する設定は repository secret `OPENAI_API_KEY` であり、モデル名・reasoning・CLI install の repository variable は要求しない。
+
+Action には `model: gpt-5.6-sol`、`effort: xhigh`、`sandbox: read-only`、`safety-strategy: read-only` を明示する。Strict profile は同じ target SHA を別プロセスで2回レビューし、trusted CLI が2件の構造化 verdict を集約する。全件が conformance/falsification とも pass の場合だけ承認し、件数不足・不正JSON・inconclusive は `human_required`、1件でも fail または blocking finding があれば rejected とする。
+
+`OPENAI_API_KEY` が未登録または Action が利用不能なら `action_required` を発行する。secret 登録後の PR push から自動レビューを再開し、継続的な人間操作を要求しない。Claude adapter を選ぶ環境では前節の Claude 固有 model/attestation/probe を使い、Codex Action の入力を混用しない。
+
 ## 通常作業・完了条件・対象外
 
 コア変更でもコア監査でもない通常作業は、依頼者または実行環境の明示的なモデル・reasoning 選択と既存 adapter 既定を尊重する。consumer project に `model_selection` が無い場合も従来動作を維持する。
 
-classifier、reviewer context、launcher、adapter、workflow、policy schema、template sync の自動テストが成功し、コア利用不能経路が `success` や `neutral` にならないことを完了条件とする。
+classifier、reviewer context、launcher、adapter、公式 Codex Action、Strict verdict集約、workflow、policy schema、template sync の自動テストが成功し、コア利用不能経路が `success` や `neutral` にならないことを完了条件とする。
 
 対象外は、通常作業の一律 Sol/xhigh 化、provider 間のモデル名共有、モデル品質の文字列推測、API model migration、価格・context 制限の規定である。
 
@@ -49,4 +57,5 @@ classifier、reviewer context、launcher、adapter、workflow、policy schema、
 
 - OpenAI Codex manual: `gpt-5.6-sol` と `xhigh`、CLI の `--model` / `model_reasoning_effort`
 - OpenAI GPT-5.6 model guidance: `gpt-5.6` alias と Sol、reasoning effort
+- OpenAI Codex Action: `openai/codex-action@v1`、`OPENAI_API_KEY`、model / effort / read-only inputs
 - Anthropic Claude Code CLI reference: `--model`。provider 間で同一の reasoning flag が保証されないため本ポリシーは環境 probe を要求する

@@ -215,6 +215,72 @@ test('gate record-verdict: approved_artifacts のパスは artifact_base_dir か
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
 });
 
+test('gate record-verdict: Strictの独立2 verdictがともにpassの場合だけapprovedになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(repo.dir, scaffold());
+  const verdicts = JSON.stringify([
+    { conformance: 'pass', falsification: 'pass', blockers: [] },
+    { conformance: 'pass', falsification: 'pass', blockers: [] },
+  ]);
+  const res = runCli(['gate', 'record-verdict', reportPath, repo.dir, '2'], {
+    cwd: repo.dir,
+    input: verdicts,
+  });
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readReport(reportPath).gate.final, 'approved');
+});
+
+test('gate record-verdict: Strictの独立verdictに1件でもfailがあればrejectedになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(repo.dir, scaffold());
+  const verdicts = JSON.stringify([
+    { conformance: 'pass', falsification: 'pass', blockers: [] },
+    {
+      conformance: 'pass',
+      falsification: 'fail',
+      blockers: [
+        {
+          severity: 'blocking',
+          origin: 'implementation',
+          code: 'STRICT-COUNTEREXAMPLE',
+          evidence: ['独立レビュア2が反例を検出'],
+        },
+      ],
+    },
+  ]);
+  const res = runCli(['gate', 'record-verdict', reportPath, repo.dir, '2'], {
+    cwd: repo.dir,
+    input: verdicts,
+  });
+
+  assert.equal(res.status, 0, res.stderr);
+  const report = readReport(reportPath);
+  assert.equal(report.gate.final, 'rejected');
+  assert.equal(report.gate.falsification, 'fail');
+  assert.equal(report.gate.blockers[0].code, 'STRICT-COUNTEREXAMPLE');
+});
+
+test('gate record-verdict: Strictの独立verdictが規定件数に満たない場合は書込みを拒否する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(repo.dir, scaffold());
+  const verdicts = JSON.stringify([{ conformance: 'pass', falsification: 'pass', blockers: [] }]);
+  const res = runCli(['gate', 'record-verdict', reportPath, repo.dir, '2'], {
+    cwd: repo.dir,
+    input: verdicts,
+  });
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /expected=2, actual=1/);
+  assert.equal(readReport(reportPath).gate.final, 'pending');
+});
+
 // --- mark-human-required: フェイルセーフ書込み ----------------------------------------
 
 test('gate mark-human-required: final を human_required に倒す（sub-verdict は据え置き）', async (t) => {
@@ -265,6 +331,20 @@ test('gate reviewer-context: 明示core_auditはStrictとadapter別能力要求�
   assert.match(res.stdout, /^core_reasoning_tier=maximum_reasoning$/m);
   assert.match(res.stdout, /^codex_required_model=gpt-5\.6-sol$/m);
   assert.match(res.stdout, /^codex_required_reasoning_effort=xhigh$/m);
+});
+
+test('gate reviewer-context: GitHub core reviewは公式Codex Action経路へ固定する', async (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+
+  const res = runCli(
+    ['gate', 'reviewer-context', 'ISSUE-1', 'deadbeef', 'main', 'core_audit'],
+    { cwd: repo.dir },
+  );
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /^adapter=codex$/m);
+  assert.match(res.stdout, /^core_github_action=openai\/codex-action@v1$/m);
+  assert.match(res.stdout, /^core_github_api_key_secret=OPENAI_API_KEY$/m);
 });
 
 test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック・出力 JSON 契約を含む', async (t) => {

@@ -49,12 +49,13 @@ const RECONCILE_USAGE = `
 `;
 
 const RECORD_VERDICT_USAGE = `
-使い方: agent-skill-chain gate record-verdict <gate_report_path> [artifact_base_dir]
+使い方: agent-skill-chain gate record-verdict <gate_report_path> [artifact_base_dir] [expected_reviewer_count]
 
 pending の gate-report（gate review が生成したスキャフォールド）へ、標準入力から与えた
-レビュア verdict（JSON）を結線して判定済み gate-report を書き出す。final は verdict の
+レビュア verdict（JSON。複数レビュア時は配列）を結線して判定済み gate-report を書き出す。final は verdict の
 conformance/falsification/blockers/inconclusive から機械的に導出する（両pass かつ blocking finding
 無し→approved／いずれか fail もしくは blocking finding あり→rejected／inconclusive→human_required）。
+expected_reviewer_count を指定した場合は、独立 verdict の件数が完全一致しなければ書込みを拒否する。
 
 verdict JSON（stdin）:
   {"conformance":"pass|fail|pending","falsification":"pass|fail|pending",
@@ -142,6 +143,45 @@ function deriveFinal(verdict: ReviewerVerdict): GateReport['gate']['final'] {
   if (verdict.conformance === 'pass' && verdict.falsification === 'pass' && !hasBlocking) return 'approved';
   if (verdict.conformance === 'fail' || verdict.falsification === 'fail' || hasBlocking) return 'rejected';
   return 'human_required';
+}
+
+function aggregateSubverdict(
+  verdicts: ReviewerVerdict[],
+  key: 'conformance' | 'falsification',
+): GateReport['gate']['conformance'] {
+  const values = verdicts.map((verdict) => verdict[key] ?? 'pending');
+  if (values.includes('fail')) return 'fail';
+  if (values.every((value) => value === 'pass')) return 'pass';
+  return 'pending';
+}
+
+/**
+ * Strict profile の独立 verdict を trusted code で集約する。
+ * 1 件でも rejected なら rejected、全件 approved の場合だけ approved、
+ * それ以外（判定不能・pending）は human_required とする（I8）。
+ */
+function aggregateVerdicts(verdicts: ReviewerVerdict[]): ReviewerVerdict {
+  const finals = verdicts.map(deriveFinal);
+  const final = finals.includes('rejected')
+    ? 'rejected'
+    : finals.every((value) => value === 'approved')
+      ? 'approved'
+      : 'human_required';
+  return {
+    conformance: aggregateSubverdict(verdicts, 'conformance'),
+    falsification: aggregateSubverdict(verdicts, 'falsification'),
+    blockers: verdicts.flatMap((verdict) => verdict.blockers ?? []),
+    approved_artifacts: verdicts.flatMap((verdict) => verdict.approved_artifacts ?? []),
+    approved_digest:
+      verdicts.length > 0 &&
+      verdicts.every(
+        (verdict) => verdict.approved_digest && verdict.approved_digest === verdicts[0].approved_digest,
+      )
+        ? verdicts[0].approved_digest
+        : undefined,
+    final,
+    inconclusive: final === 'human_required',
+  };
 }
 
 function validateGateId(value: string): asserts value is Segment {
@@ -379,40 +419,68 @@ export async function recordVerdict(args: string[]): Promise<number> {
       printUsage(RECORD_VERDICT_USAGE);
       return 0;
     }
-    const [gateReportPath, artifactBaseDir] = args;
+    const [gateReportPath, artifactBaseDir, expectedReviewerCountRaw] = args;
     if (!gateReportPath) throw new CliError('gate_report_path は必須です');
     if (!fs.existsSync(gateReportPath)) throw new CliError(`gate-report が存在しません: ${gateReportPath}`);
+    let expectedReviewerCount: number | undefined;
+    if (expectedReviewerCountRaw !== undefined) {
+      expectedReviewerCount = Number(expectedReviewerCountRaw);
+      if (!Number.isInteger(expectedReviewerCount) || expectedReviewerCount < 1) {
+        throw new CliError('expected_reviewer_count は1以上の整数である必要があります');
+      }
+    }
 
     const root = repoRoot();
     const report = readYamlFile<GateReport>(gateReportPath);
     const base = validateAgainstSchema('gate-report', report, root);
     if (!base.valid) return fail(`入力 gate-report がスキーマに適合しません: ${base.errors.join('; ')}`);
 
-    let verdict: ReviewerVerdict;
+    let parsedVerdict: ReviewerVerdict | ReviewerVerdict[];
     try {
-      verdict = JSON.parse(fs.readFileSync(0, 'utf8')) as ReviewerVerdict;
+      parsedVerdict = JSON.parse(fs.readFileSync(0, 'utf8')) as ReviewerVerdict | ReviewerVerdict[];
     } catch (error) {
       return fail(`verdict JSON を解釈できません: ${error instanceof Error ? error.message : String(error)}`);
     }
 
+    const verdicts = Array.isArray(parsedVerdict) ? parsedVerdict : [parsedVerdict];
+    if (verdicts.length === 0) return fail('verdict は1件以上必要です');
+    if (expectedReviewerCount !== undefined && verdicts.length !== expectedReviewerCount) {
+      return fail(
+        `独立 reviewer verdict 件数が不足しています: expected=${expectedReviewerCount}, actual=${verdicts.length}`,
+      );
+    }
+    if (expectedReviewerCount !== undefined && !Array.isArray(parsedVerdict)) {
+      return fail('expected_reviewer_count 指定時の verdict JSON は独立 verdict の配列である必要があります');
+    }
+    const verdict = aggregateVerdicts(verdicts);
     const conformance = verdict.conformance ?? 'pending';
     const falsification = verdict.falsification ?? 'pending';
     if (!SUBVERDICT_VALUES.has(conformance) || !SUBVERDICT_VALUES.has(falsification)) {
       return fail('verdict の conformance / falsification は pass|fail|pending のいずれかである必要があります');
     }
 
-    const approvedArtifacts: { path: string; digest: string }[] = [];
+    const approvedArtifactsByPath = new Map<string, string>();
     for (const artifact of verdict.approved_artifacts ?? []) {
-      if (artifact.digest) {
-        approvedArtifacts.push({ path: artifact.path, digest: artifact.digest });
-      } else if (artifactBaseDir) {
-        approvedArtifacts.push({ path: artifact.path, digest: digestOfFile(path.join(artifactBaseDir, artifact.path)) });
+      let digest: string;
+      if (artifactBaseDir) {
+        digest = digestOfFile(path.join(artifactBaseDir, artifact.path));
+      } else if (artifact.digest) {
+        digest = artifact.digest;
       } else {
         return fail(
           `approved_artifacts '${artifact.path}' に digest が無く artifact_base_dir も指定されていないため digest を確定できません`,
         );
       }
+      const existing = approvedArtifactsByPath.get(artifact.path);
+      if (existing && existing !== digest) {
+        return fail(`approved_artifacts '${artifact.path}' の digest が独立 verdict 間で一致しません`);
+      }
+      approvedArtifactsByPath.set(artifact.path, digest);
     }
+    const approvedArtifacts = [...approvedArtifactsByPath].map(([artifactPath, digest]) => ({
+      path: artifactPath,
+      digest,
+    }));
 
     const final = deriveFinal(verdict);
     report.gate.conformance = conformance;
@@ -469,7 +537,7 @@ export async function reviewerContext(args: string[]): Promise<number> {
 
     const root = repoRoot();
     const config = loadConfig(root);
-    const adapter = config.review.adapter ?? 'claude';
+    const configuredAdapter = config.review.adapter ?? 'claude';
     const worktree = findIssueWorktree(root, config, number);
     const baseDir = worktree ? worktree.path : issueDir(root, number);
     const policyRoot = worktree ? worktree.path : root;
@@ -489,6 +557,10 @@ export async function reviewerContext(args: string[]): Promise<number> {
       reviewSubject: reviewSubject as 'ordinary' | 'core_audit' | undefined,
     });
     const policy = decision.policy;
+    const adapter =
+      decision.required && config.coordination.backend === 'github' && policy
+        ? policy.github_automation.adapter
+        : configuredAdapter;
     const policyLines = policy
       ? [
           `core_required_profile=${policy.required_profile}`,
@@ -497,6 +569,8 @@ export async function reviewerContext(args: string[]): Promise<number> {
           `codex_required_model=${policy.adapters.codex.model}`,
           `codex_required_reasoning_effort=${policy.adapters.codex.reasoning_effort}`,
           `codex_override_attestation_env=${policy.adapters.codex.override_attestation_env}`,
+          `core_github_action=${policy.github_automation.action}`,
+          `core_github_api_key_secret=${policy.github_automation.api_key_secret}`,
           `claude_model_env=${policy.adapters.claude.model_env}`,
           `claude_model_tier_env=${policy.adapters.claude.model_tier_env}`,
           `claude_reasoning_tier_env=${policy.adapters.claude.reasoning_tier_env}`,
@@ -616,7 +690,7 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
               evidence: ['根拠（ファイル・AC-ID 等）'],
             },
           ],
-          approved_artifacts: [{ path: '判定対象成果物の相対パス', digest: '省略可（アダプタが算出）' }],
+          approved_artifacts: [{ path: '判定対象成果物の相対パス（digest は trusted code が算出）' }],
           inconclusive: false,
         },
         null,

@@ -82,7 +82,13 @@ Claude Code へ Codex のモデル名や `model_reasoning_effort` 設定を渡�
 
 ### workflow と配布
 
-gate workflow は checkout を完全履歴にし、base ref と PR label 由来の監査区分を context / launcher へ渡す。認証が無い場合、コア対象だけは `action_required` Check Run を発行し、既存の通常作業経路は別 Issue の責務と衝突させない。テンプレート正本と展開済み `.github/` は同時更新する。labels 正本へ `review:core-audit` を追加する。
+gate workflow は checkout を完全履歴にし、base ref と PR label 由来の監査区分を context / launcher へ渡す。自己拡張 project policy が GitHub コアレビューに Codex を指定した場合は、公式 `openai/codex-action@v1` を read-only sandbox / safety strategy で起動する。Action が Codex CLI の導入と Responses API proxy を担うため、利用者が一度だけ登録する入力は repository secret `OPENAI_API_KEY` だけである。
+
+Standard は Codex Action 1回、Strict は同じ head SHA と prompt に対する独立 Action 2回を起動する。trusted CLI は verdict 配列の個数を期待 reviewer 数と照合し、全 verdict が pass/pass の場合だけ approved、1件でも fail または blocking finding があれば rejected、欠落・不正・inconclusive は `human_required` とする。これにより既存 `reviewer_count: 2` を単なる表示値で終わらせない。
+
+Claude が選択された GitHub/ローカル経路は既存 launcher と Claude 固有 `--model` / attestation / probe を維持し、Codex Action の model・effort 入力を流用しない。認証が無い場合、コア対象だけは `action_required` Check Run を発行し、通常作業経路は別 Issue の責務と衝突させない。テンプレート正本と展開済み `.github/` は同時更新する。labels 正本へ `review:core-audit` を追加する。
+
+workflow の credential 検査と通常 adapter 起動では、解決済み adapter に対応する provider secret だけを環境へ渡す。Claude process に `OPENAI_API_KEY`、Codex process に Anthropic credential を渡さず、provider 間の認証境界を維持する。
 
 ## 依存関係
 
@@ -90,8 +96,8 @@ gate workflow は checkout を完全履歴にし、base ref と PR label 由来�
 project policy manifest
   → model-selection classifier
   → gate reviewer-context
-  → gate-launch-reviewer
-  → selected adapter policy guard
+  → GitHub core: official Codex Action × reviewer_count → trusted verdict aggregation
+  → other paths: gate-launch-reviewer → selected adapter policy guard
   → existing read-only review lifecycle
   → gate report / Check Run
 ```
@@ -109,7 +115,7 @@ GitHub label とローカル state は同じ `review_subject` 意味へ正規化
 
 ## セキュリティ・障害・ロールバック考慮
 
-- 想定される失敗モード: base ref 不在、policy/schema 不適合、label 輸送漏れ、モデル値の不一致、Claude reasoning probe 不在、CLI/認証/モデル利用不能、command override による検証回避。
+- 想定される失敗モード: base ref 不在、policy/schema 不適合、label 輸送漏れ、モデル値の不一致、`OPENAI_API_KEY` 未設定、Codex Action失敗、Strict verdict欠落、Claude reasoning probe 不在、CLI/認証/モデル利用不能、command override による検証回避。
 - 安全側挙動: 分類不能と能力未証明はすべて `human_required`。コア対象に `neutral` や `success` を発行しない。
 - command 境界: 値は既知 KEY と固定 enum だけを context から抽出する。credential や probe 出力はログへ出さない。
 - ロールバック手順: manifest の `model_selection`、classifier/context 連携、adapter guard、state 追加、workflow/label を同一 PR で戻す。任意フィールドのため既存データ migration の巻き戻しは不要。
@@ -118,14 +124,14 @@ GitHub label とローカル state は同じ `review_subject` 意味へ正規化
 ## 完了条件・検証
 
 - manifest schema と登録文書の一致、core/non-core/audit/unresolved 分類を単体テストする。
-- reviewer context、strict 拒否、Codex exact mapping、Claude attestation/probe、通常上書き、human_required を結合テストする。
+- reviewer context、strict 拒否、Codex Action exact mapping、Strict 2-verdict集約、Claude attestation/probe、通常上書き、human_required を結合テストする。
 - workflow の core credentialless 経路が `action_required` で、テンプレートと展開先が一致することを静的検査する。
 - lint、型検査、全単体・結合テスト、SAST、依存関係・secret scan を実行する。
 
 ## 未決事項・対象外
 
 - 未決事項はない。
-- Claude の具体的モデル slug と reasoning 設定方式を本規範で固定すること、通常作業を一律高コスト化すること、provider の品質を文字列から推測すること、strict reviewer 数の既存実装変更は対象外。
+- Claude の具体的モデル slug と reasoning 設定方式を本規範で固定すること、通常作業を一律高コスト化すること、provider の品質を文字列から推測することは対象外。
 
 ## 関連ADR
 

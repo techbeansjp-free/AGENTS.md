@@ -10,6 +10,8 @@ agent-skill-chain 自身のコア規約・状態遷移・ゲート・Coordinatio
 
 本変更は、対象作業を機械的に分類し、独立レビューにベンダー中立な最上位能力を要求する。Codex ではその実装値を `gpt-5.6-sol` と `xhigh` に固定する。Claude Code では実在しないモデル名を推測せず、実行環境が申告・検証した同等級モデルと最大利用可能 reasoning のみを許可する。要求能力を証明できない場合は暗黙に降格せず `human_required` で停止する。
 
+GitHub モードの自己拡張コアレビューは、公式 `openai/codex-action@v1` が Codex CLI と Responses API proxy を準備する。利用者の継続操作は repository secret `OPENAI_API_KEY` の一度限りの登録だけとし、以後は PR push ごとに必要 reviewer 数を自動起動する。
+
 ## 対象・前提・用語
 
 - 対象: 本リポジトリの GitHub/ローカル両 Coordination Backend で起動する独立 gate reviewer。
@@ -22,7 +24,7 @@ agent-skill-chain 自身のコア規約・状態遷移・ゲート・Coordinatio
 
 ## 入力・出力
 
-- 入力: Issue ID、gate ID、review profile、target SHA、変更ファイル、監査区分、選択 adapter、adapter が使用するモデル・reasoning 設定。
+- 入力: Issue ID、gate ID、review profile、target SHA、変更ファイル、監査区分、選択 adapter、adapter が使用するモデル・reasoning 設定、GitHub 自動レビュー用 credential。
 - 出力: `core_review_required` の機械判定、adapter 別の検証済み起動設定、または `human_required` の gate 状態。
 - 永続証跡: manifest 登録済みポリシー、変更コード・テスト、gate report、Check Run またはローカル review。
 
@@ -36,9 +38,10 @@ agent-skill-chain 自身のコア規約・状態遷移・ゲート・Coordinatio
 
 - manifest 登録済みの規範だけで、コア対象パターン、明示的な監査区分、ベンダー中立能力、adapter 別実装値、失敗時挙動を判断できる。
 - コア変更は target SHA の差分から、コア監査は明示入力から判定し、いずれも strict review を要求する。
+- GitHub モードの自己拡張コアレビューは Codex adapter と公式 Codex Action を選び、Strict の reviewer 2体を独立呼出しとして機械強制する。
 - Codex adapter はコア独立レビューを `gpt-5.6-sol` / `xhigh` / read-only でのみ起動し、上書き値も一致を検証する。
 - Claude adapter は、環境が申告する実在モデル・reasoning 値に加えて `frontier_coding` / `maximum_reasoning` の能力証明を検証して起動する。固定の架空モデル名や Codex 固有値を Claude CLI へ流用しない。
-- 必須モデル・強度・能力証明・CLI・認証のいずれかが利用不能または不一致なら、gate を `human_required` とし非成功で停止する。
+- GitHub Codex 自動レビューの利用者設定は repository secret `OPENAI_API_KEY` だけとする。未設定、必須モデル・強度・能力証明・CLI・認証の利用不能または不一致は、gate を `human_required` とし非成功で停止する。
 - 通常作業では既存 adapter 設定と依頼者・実行環境の明示的上書きを尊重する。
 - 旧メモは manifest 登録済みの現行ポリシーへ更新し、設定・adapter・CI・テストを同じ変更で整合させる。
 
@@ -55,14 +58,14 @@ agent-skill-chain 自身のコア規約・状態遷移・ゲート・Coordinatio
 
 - Given: target SHA にコア資産の変更がある、または監査区分が `core_audit` と明示されている
 - When: reviewer context と launcher が入力を解決する
-- Then: `core_review_required=true` となり、standard 指定を含め strict profile 以外では起動せず `human_required` になる
+- Then: `core_review_required=true` となり、standard 指定を含め strict profile 以外では起動せず `human_required` になり、strict では独立 reviewer 2体の verdict が揃うまで承認しない
 - 検証方法見込み: `automated`
 
 #### AC-3: Codex は Sol xhigh を厳密に使用する
 
 - Given: コア独立レビューを Codex adapter で起動する
 - When: モデルと reasoning effort を解決・検証する
-- Then: `gpt-5.6-sol` と `xhigh` と read-only sandbox が使われ、不一致・未対応・利用不能なら `human_required` になる
+- Then: GitHub では公式 Codex Action が CLI を準備し、ローカルでは Codex adapter が CLI を解決し、いずれも `gpt-5.6-sol` と `xhigh` と read-only sandbox を使う。不一致・未対応・利用不能なら `human_required` になる
 - 検証方法見込み: `automated`
 
 #### AC-4: Claude は同等能力を証明しベンダー固有表現を混同しない
@@ -74,7 +77,7 @@ agent-skill-chain 自身のコア規約・状態遷移・ゲート・Coordinatio
 
 #### AC-5: 利用不能時は成功扱いせず人間判断へ止める
 
-- Given: 必須モデル、reasoning、能力証明、CLI、認証のいずれかが欠落・不一致である
+- Given: `OPENAI_API_KEY`、必須モデル、reasoning、能力証明、CLI、認証のいずれかが欠落・不一致である
 - When: CI またはローカル launcher がコア独立レビューを試みる
 - Then: gate report または Check Run が `human_required` / `action_required` となり、`success` や `neutral` では完了しない
 - 検証方法見込み: `automated`
@@ -98,6 +101,7 @@ agent-skill-chain 自身のコア規約・状態遷移・ゲート・Coordinatio
 - 1 Issue = 1 branch = 1 worktree = 1 PR、writer lease、4 checkpoint、reviewer read-only を維持する。
 - モデル選択は project policy が package/adapter 既定より優先するが、コア不変条件を上書きしない。
 - モデル可用性を推測しない。adapter が実際に表現・検証できない能力は利用不能として扱う。
+- GitHub Codex 自動レビューは OpenAI 公式 Action を使い、PR controlled input に write 権限や repository secret を直接渡さない。
 - 設定値追加が必要な場合は、ハードコード不可理由、project 差、schema、既定、後方互換、ADR 要否を設計で確定する。
 - 全 AC を自動テストへ対応させ、型検査、lint、単体・変更範囲の結合テスト、SAST、依存関係・secret scan、template sync を実行する。
 - 全変更と `VALIDATION.md` を push し、Draft PR が `Closes #271` を保持すれば完了とする。

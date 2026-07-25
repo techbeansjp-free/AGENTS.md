@@ -38,6 +38,7 @@ test('self-extension project policy: manifestで登録した実在文書だけ�
     core_review: {
       required_profile: string;
       unavailable: string;
+      github_automation: { adapter: string; action: string; api_key_secret: string };
       capability: { model_tier: string; reasoning_tier: string };
       adapters: { codex: { model: string; reasoning_effort: string }; claude: { model_env: string } };
     };
@@ -45,6 +46,11 @@ test('self-extension project policy: manifestで登録した実在文書だけ�
   assert.equal(modelSelection.ordinary.behavior, 'explicit_selection');
   assert.equal(modelSelection.core_review.required_profile, 'strict');
   assert.equal(modelSelection.core_review.unavailable, 'human_required');
+  assert.deepEqual(modelSelection.core_review.github_automation, {
+    adapter: 'codex',
+    action: 'openai/codex-action@v1',
+    api_key_secret: 'OPENAI_API_KEY',
+  });
   assert.deepEqual(modelSelection.core_review.capability, {
     model_tier: 'frontier_coding',
     reasoning_tier: 'maximum_reasoning',

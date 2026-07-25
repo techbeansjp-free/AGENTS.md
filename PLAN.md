@@ -15,9 +15,10 @@
 | 2 | 分類器 | manifest 読み込み、audit marker、Git 差分、core path、分類不能の安全側判定を実装 | AC-1, AC-2, AC-5 | #1 |
 | 3 | context と launcher | 判定結果を KEY=VALUE 化し、strict と未解決を起動前検査して adapter へ渡す | AC-2, AC-5 | #2 |
 | 4 | adapter guard | Codex exact mapping と Claude model/attestation/probe、非コア互換を実装 | AC-3, AC-4, AC-5, AC-6 | #3 |
-| 5 | GitHub 配布 | label/base/subject を workflow へ結線し、コア認証欠如を action_required 化して正本と展開先を同期 | AC-2, AC-5, AC-7 | #1, #3 |
-| 6 | 自動テスト | policy/classifier/context/launcher/adapter/workflow/回帰テストを追加・更新 | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | #1〜#5 |
-| 7 | 独立検証 | 適用性判断、全検査ログ、AC ごとの証跡を `VALIDATION.md` に記録 | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | #6 |
+| 5 | GitHub Codex 自動化 | 公式 Codex Action、`OPENAI_API_KEY`、read-only、Strict 2 reviewer と trusted verdict 集約を結線 | AC-2, AC-3, AC-5, AC-7 | #1, #3 |
+| 6 | GitHub 配布 | label/base/subject、credential欠如のaction_requiredを結線し、正本と展開先を同期 | AC-2, AC-5, AC-7 | #1, #3, #5 |
+| 7 | 自動テスト | policy/classifier/context/launcher/adapter/workflow/2-verdict集約/回帰テストを追加・更新 | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | #1〜#6 |
+| 8 | 独立検証 | 適用性判断、全検査ログ、AC ごとの証跡を `VALIDATION.md` に記録 | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | #7 |
 
 ## checkpoint と writer lease
 
@@ -33,7 +34,7 @@
 - 認証・認可: adapter の credential 検査は変更するため、認証欠如と権限境界の結合テストを実施。
 - 性能・DB・画面: 非該当。
 - デプロイ・運用: workflow と配布同期を静的・結合検査。
-- 外部連携: 実モデル API は hermetic test で起動 command と fail-safe を検査し、モデル可用性の実呼び出しは gate 実行環境へ委ねる。
+- 外部連携: hermetic test で公式 Action 入力、起動 command、2-verdict集約、fail-safe を検査する。実モデル呼出しは repository secret 登録後の gate 実行環境へ委ねる。
 - リリース単位: 全体 E2E と release rollback は本 Issue では実行せず、通常のリリース工程で行う。
 
 ## 完了条件・障害時

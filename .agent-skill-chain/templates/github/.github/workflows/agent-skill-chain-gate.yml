@@ -12,7 +12,7 @@ name: agent-skill-chain / gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -102,9 +102,9 @@ jobs:
       - name: Detect automatic reviewer credentials
         id: credentials
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ steps.ctx.outputs.adapter == 'claude' && secrets.ANTHROPIC_API_KEY || '' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ steps.ctx.outputs.adapter == 'claude' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          OPENAI_API_KEY: ${{ steps.ctx.outputs.adapter == 'codex' && secrets.OPENAI_API_KEY || '' }}
         run: |
           ADAPTER="${{ steps.ctx.outputs.adapter }}"
           AVAILABLE=true
@@ -135,42 +135,184 @@ jobs:
           node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.env.GATE_ID}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "action_required", output: {title: "core review requires human action", summary: "The required frontier-coding / maximum-reasoning reviewer is unavailable. The gate is human_required and merge remains blocked."}}))' | gh api -X POST "repos/${{ github.repository }}/check-runs" --input -
           echo "コア独立レビューの必須能力を利用できないため、human_requiredとして停止しました。"
 
-      - name: End gate job after unavailable-reviewer publication
-        if: steps.credentials.outputs.available == 'false'
-        run: exit 0
-
       # target_sha を明示的に渡す（4番目の引数）。actions/checkout@v7 は pull_request イベントで
       # マージref（refs/pull/<n>/merge）をdetached HEADでチェックアウトするため、gate review が
       # entry.path の git rev-parse HEAD で自己解決するとPRの実際のブランチ先端コミットと乖離し、
       # 発行されるCheck RunのSHAがPRのSHAと一致しなくなる（Issue #171 実地障害）。
       - name: Run gate review (${{ matrix.gate }})
         id: review
+        if: steps.credentials.outputs.available == 'true'
         run: |
           REVIEW_OUTPUT="$(./.agent-skill-chain/scripts/gate-review.sh "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.profile }}" "${{ steps.ctx.outputs.target_sha }}")"
           REPORT_PATH="$(echo "$REVIEW_OUTPUT" | sed -n 's/^gate_report_path: //p')"
           echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
 
-      # 判定ステップ（欠落していた「判定工程」）: config で選択したアダプタの launch_gate_reviewer を
-      # 起動し、pending gate-report を判定済みへ遷移させる（または deferred を表明する）。
+      # self-extension のコアレビューは公式 Codex Action を read-only で独立2回起動する。
+      # verdict はレビュアへ書込み権限を渡さず、trusted code の record-verdict が集約・記録する。
+      - name: Prepare Codex core reviewer prompt
+        if: steps.credentials.outputs.available == 'true' && steps.ctx.outputs.core_review_required == 'true' && steps.ctx.outputs.adapter == 'codex'
+        run: |
+          mkdir -p .agent-skill-chain/runtime
+          node bin/agents-md.js gate reviewer-prompt \
+            "${{ steps.ctx.outputs.issue_id }}" "${{ matrix.gate }}" "${{ steps.ctx.outputs.target_sha }}" \
+            > .agent-skill-chain/runtime/codex-core-review-prompt.txt
+
+      - name: Run Codex core reviewer 1
+        id: codex_reviewer_1
+        if: steps.credentials.outputs.available == 'true' && steps.ctx.outputs.core_review_required == 'true' && steps.ctx.outputs.adapter == 'codex'
+        continue-on-error: true
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .agent-skill-chain/runtime/codex-core-review-prompt.txt
+          model: gpt-5.6-sol
+          effort: xhigh
+          sandbox: read-only
+          safety-strategy: read-only
+          output-schema: |
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["conformance", "falsification", "blockers", "approved_artifacts", "inconclusive"],
+              "properties": {
+                "conformance": {"type": "string", "enum": ["pass", "fail", "pending"]},
+                "falsification": {"type": "string", "enum": ["pass", "fail", "pending"]},
+                "blockers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["severity", "origin", "code", "evidence"],
+                    "properties": {
+                      "severity": {"type": "string", "enum": ["blocking", "warning", "info"]},
+                      "origin": {"type": "string", "enum": ["specification", "design", "implementation", "validation"]},
+                      "code": {"type": "string"},
+                      "evidence": {"type": "array", "items": {"type": "string"}}
+                    }
+                  }
+                },
+                "approved_artifacts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["path"],
+                    "properties": {
+                      "path": {"type": "string"}
+                    }
+                  }
+                },
+                "inconclusive": {"type": "boolean"}
+              }
+            }
+
+      - name: Run Codex core reviewer 2
+        id: codex_reviewer_2
+        if: steps.credentials.outputs.available == 'true' && steps.ctx.outputs.core_review_required == 'true' && steps.ctx.outputs.adapter == 'codex' && steps.ctx.outputs.profile == 'strict'
+        continue-on-error: true
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .agent-skill-chain/runtime/codex-core-review-prompt.txt
+          model: gpt-5.6-sol
+          effort: xhigh
+          sandbox: read-only
+          safety-strategy: read-only
+          output-schema: |
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["conformance", "falsification", "blockers", "approved_artifacts", "inconclusive"],
+              "properties": {
+                "conformance": {"type": "string", "enum": ["pass", "fail", "pending"]},
+                "falsification": {"type": "string", "enum": ["pass", "fail", "pending"]},
+                "blockers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["severity", "origin", "code", "evidence"],
+                    "properties": {
+                      "severity": {"type": "string", "enum": ["blocking", "warning", "info"]},
+                      "origin": {"type": "string", "enum": ["specification", "design", "implementation", "validation"]},
+                      "code": {"type": "string"},
+                      "evidence": {"type": "array", "items": {"type": "string"}}
+                    }
+                  }
+                },
+                "approved_artifacts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["path"],
+                    "properties": {
+                      "path": {"type": "string"}
+                    }
+                  }
+                },
+                "inconclusive": {"type": "boolean"}
+              }
+            }
+
+      - name: Record Codex core reviewer verdicts
+        id: codex_judgment
+        if: always() && steps.credentials.outputs.available == 'true' && steps.ctx.outputs.core_review_required == 'true' && steps.ctx.outputs.adapter == 'codex'
+        env:
+          CODEX_VERDICT_1: ${{ steps.codex_reviewer_1.outputs.final-message }}
+          CODEX_VERDICT_2: ${{ steps.codex_reviewer_2.outputs.final-message }}
+          REVIEWER_1_OUTCOME: ${{ steps.codex_reviewer_1.outcome }}
+          REVIEWER_2_OUTCOME: ${{ steps.codex_reviewer_2.outcome }}
+          REVIEW_PROFILE: ${{ steps.ctx.outputs.profile }}
+        run: |
+          EXPECTED=1
+          REVIEWERS_AVAILABLE=true
+          if [ "$REVIEWER_1_OUTCOME" != "success" ]; then REVIEWERS_AVAILABLE=false; fi
+          if [ "$REVIEW_PROFILE" = "strict" ]; then
+            EXPECTED=2
+            if [ "$REVIEWER_2_OUTCOME" != "success" ]; then REVIEWERS_AVAILABLE=false; fi
+          fi
+
+          set +e
+          if [ "$REVIEWERS_AVAILABLE" = "true" ]; then
+            VERDICT_FILE="$RUNNER_TEMP/codex-core-review-verdicts.json"
+            node -e 'const verdicts=[JSON.parse(process.env.CODEX_VERDICT_1)]; if (process.env.REVIEW_PROFILE === "strict") verdicts.push(JSON.parse(process.env.CODEX_VERDICT_2)); process.stdout.write(JSON.stringify(verdicts));' > "$VERDICT_FILE"
+            node bin/agents-md.js gate record-verdict \
+              "${{ steps.review.outputs.report_path }}" "$GITHUB_WORKSPACE" "$EXPECTED" < "$VERDICT_FILE"
+            CODE=$?
+          else
+            node bin/agents-md.js gate mark-human-required "${{ steps.review.outputs.report_path }}"
+            CODE=1
+          fi
+          if [ "$CODE" -ne 0 ]; then
+            node bin/agents-md.js gate mark-human-required "${{ steps.review.outputs.report_path }}"
+            echo "outcome=error" >> "$GITHUB_OUTPUT"
+          else
+            echo "outcome=completed" >> "$GITHUB_OUTPUT"
+          fi
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          set -e
+
+      # コア以外は、config で選択した provider 固有アダプタの launch_gate_reviewer を使う。
       # 終了コードで後続を分岐する（絶対に崩さない不変契約・AGENTS.md I8）:
       #   0        判定完了 → verify + publish
       #   3        deferred（human 非同期）→ publish が action_required 発行・pending 拒否スキップ・job 緑
       #   その他    error → publish が action_required 発行（フェイルセーフ）+ 末尾で step を赤に可視化
       # レビュア認証は secrets を env で渡す（実値はログに出さない）。
       - name: Run gate reviewer judgment (${{ matrix.gate }})
-        if: steps.credentials.outputs.available == 'true'
-        id: judgment
+        if: steps.credentials.outputs.available == 'true' && steps.ctx.outputs.core_review_required != 'true'
+        id: adapter_judgment
         env:
           GH_TOKEN: ${{ github.token }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ steps.ctx.outputs.adapter == 'claude' && secrets.ANTHROPIC_API_KEY || '' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ steps.ctx.outputs.adapter == 'claude' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          OPENAI_API_KEY: ${{ steps.ctx.outputs.adapter == 'codex' && secrets.OPENAI_API_KEY || '' }}
           ASC_BASE_REF: origin/${{ github.base_ref }}
           ASC_REVIEW_SUBJECT: ${{ steps.ctx.outputs.review_subject }}
-          CLAUDE_CORE_REVIEW_MODEL: ${{ vars.CLAUDE_CORE_REVIEW_MODEL }}
-          CLAUDE_CORE_REVIEW_MODEL_TIER: ${{ vars.CLAUDE_CORE_REVIEW_MODEL_TIER }}
-          CLAUDE_CORE_REVIEW_REASONING_TIER: ${{ vars.CLAUDE_CORE_REVIEW_REASONING_TIER }}
-          CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD: ${{ vars.CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD }}
+          CLAUDE_CORE_REVIEW_MODEL: ${{ steps.ctx.outputs.adapter == 'claude' && vars.CLAUDE_CORE_REVIEW_MODEL || '' }}
+          CLAUDE_CORE_REVIEW_MODEL_TIER: ${{ steps.ctx.outputs.adapter == 'claude' && vars.CLAUDE_CORE_REVIEW_MODEL_TIER || '' }}
+          CLAUDE_CORE_REVIEW_REASONING_TIER: ${{ steps.ctx.outputs.adapter == 'claude' && vars.CLAUDE_CORE_REVIEW_REASONING_TIER || '' }}
+          CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD: ${{ steps.ctx.outputs.adapter == 'claude' && vars.CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD || '' }}
         run: |
           set +e
           ./.agent-skill-chain/scripts/gate-launch-reviewer.sh \
@@ -189,13 +331,13 @@ jobs:
 
       # 判定完了時のみスキーマ検証を通す（deferred/error は human_required で schema 準拠のまま publish へ）。
       - name: Verify gate report schema
-        if: steps.judgment.outputs.outcome == 'completed'
+        if: steps.codex_judgment.outputs.outcome == 'completed' || steps.adapter_judgment.outputs.outcome == 'completed'
         run: ./.agent-skill-chain/ci/verify-gate-report.sh "${{ steps.review.outputs.report_path }}"
 
       # completed/deferred/error のいずれでも publish する。final に応じ success/failure/action_required を発行し、
       # 真に未レビュー（final==pending）のみ拒否する（起動失敗を決して success にしない＝I8）。
       - name: Publish gate report
-        if: steps.judgment.outputs.outcome != ''
+        if: always() && (steps.codex_judgment.outputs.outcome != '' || steps.adapter_judgment.outputs.outcome != '')
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./.agent-skill-chain/scripts/gate-publish.sh "${{ steps.ctx.outputs.issue_id }}" "${{ steps.review.outputs.report_path }}"
@@ -203,7 +345,7 @@ jobs:
       # error（起動失敗・timeout・未構成）は publish で action_required を発行したうえで、step を赤にして
       # 可視化する（merge は action_required で停止済み。ここでの失敗は「判定が完了しなかった」ことの通知）。
       - name: Surface reviewer error
-        if: steps.judgment.outputs.outcome == 'error'
+        if: always() && (steps.codex_judgment.outputs.outcome == 'error' || steps.adapter_judgment.outputs.outcome == 'error')
         run: |
-          echo "ゲートレビュア判定が完了しませんでした（launch_gate_reviewer exit=${{ steps.judgment.outputs.code }}）。gate は action_required（merge blocked）です。" >&2
+          echo "ゲートレビュア判定が完了しませんでした（Codex Action exit=${{ steps.codex_judgment.outputs.code }}, launch_gate_reviewer exit=${{ steps.adapter_judgment.outputs.code }}）。gate は action_required（merge blocked）です。" >&2
           exit 1
