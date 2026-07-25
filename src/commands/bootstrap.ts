@@ -68,13 +68,38 @@ function api<T>(root: string, args: string[], label: string, input?: string): T 
 }
 
 function paged<T>(root: string, endpoint: string, label: string): T[] {
-  const value = api<T[] | T[][]>(
-    root,
-    [`${endpoint}${endpoint.includes('?') ? '&' : '?'}per_page=100`, '--paginate', '--slurp'],
-    label,
-  );
-  if (!Array.isArray(value)) throw new CliError(`${label}の一覧応答が配列ではありません`);
-  return value.flat() as T[];
+  const all: T[] = [];
+  const separator = endpoint.includes('?') ? '&' : '?';
+  for (let page = 1; page <= 100; page += 1) {
+    const value = api<T[]>(
+      root,
+      [`${endpoint}${separator}per_page=100&page=${page}`],
+      label,
+    );
+    if (!Array.isArray(value)) throw new CliError(`${label}の一覧応答が配列ではありません`);
+    all.push(...value);
+    if (value.length < 100) return all;
+  }
+  throw new CliError(`${label}がpagination上限を超えました`);
+}
+
+function pagedCheckRuns(root: string, targetSha: string): CheckRun[] {
+  const all: CheckRun[] = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const value = api<{ check_runs?: CheckRun[] }>(
+      root,
+      [
+        `repos/{owner}/{repo}/commits/${targetSha}/check-runs?filter=latest&per_page=100&page=${page}`,
+      ],
+      'current Check Runs',
+    );
+    if (!Array.isArray(value.check_runs)) {
+      throw new CliError('current Check Runsの一覧応答が配列ではありません');
+    }
+    all.push(...value.check_runs);
+    if (value.check_runs.length < 100) return all;
+  }
+  throw new CliError('current Check Runsがpagination上限を超えました');
 }
 
 function readPreparedRecord(recordPath: string): BootstrapPreparedRecord {
@@ -227,17 +252,7 @@ function loadGithubState(
   assertPullIdentity(pull, record, expectedState);
   const reviews = paged<GithubReviewRecord>(root, 'repos/{owner}/{repo}/pulls/274/reviews', 'PR Reviews');
   const comments = paged<IssueComment>(root, 'repos/{owner}/{repo}/issues/274/comments', 'PR conversation');
-  const checkPages = api<{ check_runs?: CheckRun[] } | { check_runs?: CheckRun[] }[]>(
-    root,
-    [
-      `repos/{owner}/{repo}/commits/${record.key.target_sha}/check-runs?filter=latest&per_page=100`,
-      '--paginate',
-      '--slurp',
-    ],
-    'current Check Runs',
-  );
-  const pages = Array.isArray(checkPages) ? checkPages : [checkPages];
-  const checkRuns = pages.flatMap((page) => page.check_runs ?? []);
+  const checkRuns = pagedCheckRuns(root, record.key.target_sha);
   const entries: BootstrapLedgerEntry[] = [
     ...reviews.map((review) => ({
       id: Number(review.id),
