@@ -110,9 +110,9 @@ jobs:
           node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.env.GATE_ID}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "neutral", output: {title: "automatic gate review not run", summary: "Automatic gate review was not run because reviewer credentials are not configured. Follow the manual review, local gate record, and admin merge procedure."}}))' | gh api -X POST "repos/${{ github.repository }}/check-runs" --input -
           echo "自動ゲートレビューは認証情報未設定のため未実施です。手動レビュー・ローカル記録・admin mergeの運用へ移行してください。"
 
-      - name: End gate job neutrally when reviewer credentials are unavailable
+      - name: End gate job successfully after neutral publication
         if: steps.credentials.outputs.available == 'false'
-        run: exit 78
+        run: exit 0
 
       # target_sha を明示的に渡す（4番目の引数）。actions/checkout@v7 は pull_request イベントで
       # マージref（refs/pull/<n>/merge）をdetached HEADでチェックアウトするため、gate review が
