@@ -260,7 +260,8 @@ test('codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabi
   );
   const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'true',
-    PATH: `${stubDir}:${process.env.PATH}`,
+    CODEX_EXECUTABLE: codexStub,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
 
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);

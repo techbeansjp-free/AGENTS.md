@@ -54,18 +54,22 @@ _codex_worker_effort() {
 
 # 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
 # env: CODEX_REVIEWER_CMD（テスト用完全上書き）、GATE_REVIEWER_CMD（後方互換上書き）、
+#      CODEX_EXECUTABLE（既定 codex。実行バイナリの明示指定）、
 #      CODEX_REVIEWER_MODEL（既定 gpt-5.6）、CODEX_REVIEWER_REASONING_EFFORT（既定 high）。
 launch_gate_reviewer() {
   local report_path="${4:-}"
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
-    if ! command -v codex >/dev/null 2>&1; then
+    local codex_executable="${CODEX_EXECUTABLE:-codex}"
+    if ! command -v "$codex_executable" >/dev/null 2>&1; then
       echo "launch_gate_reviewer: codex CLI が見つかりません。フェイルセーフで human_required へ倒します" >&2
       [[ -n "$report_path" ]] && _asc_cli gate mark-human-required "$report_path" >/dev/null || true
       return 2
     fi
     local model="${CODEX_REVIEWER_MODEL:-gpt-5.6}"
     local effort="${CODEX_REVIEWER_REASONING_EFFORT:-high}"
-    GATE_REVIEWER_CMD="codex exec --sandbox read-only --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -"
+    local quoted_executable
+    printf -v quoted_executable '%q' "$codex_executable"
+    GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -"
   elif [[ -n "${CODEX_REVIEWER_CMD:-}" ]]; then
     GATE_REVIEWER_CMD="$CODEX_REVIEWER_CMD"
   fi
