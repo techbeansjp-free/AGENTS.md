@@ -14,8 +14,8 @@
 | 5 | materializer | latest workflow tuple選択、manifest/App/attestation再検証、cache復元を実装する | AC-1, AC-2 | #4 |
 | 6 | ADR連携 | GitHubモードの`adr finalize`がcache欠落時にmaterializerを必須実行する | AC-1 | #5 |
 | 7 | fresh reconcile | previous head reportを復元し期待path集合と全digestを双方向比較する | AC-2, AC-4 | #5 |
-| 8 | prepare | versioned environment/secret/workflowとlocal stagingを旧active系を変えず作る | AC-5 | #2〜#7 |
-| 9 | activate | main smoke test後、ruleset digest CASの単一PUTで切替え、旧資産を保持する | AC-5 | #8 |
+| 8 | prepare | versioned environment/secret/workflow/disabled rulesetを旧active系を変えず作る | AC-5 | #2〜#7 |
+| 9 | activate | 新rulesetを加算active化し、実PR smoke後だけ旧rulesetをretireする | AC-5 | #8 |
 | 10 | bootstrap | #274固定keyをprepared→冪等merge/resume→completedへ二相遷移する | AC-6 | #1〜#9 |
 
 ## テスト設計
@@ -25,7 +25,7 @@
 - attestation: signer workflow/ref/digest、run attempt、Check ID、subject digestの各一点改変を全て拒否する。
 - reconcile: fresh checkoutで同一・追加・削除・改変・取得不能を検証し、下流無効化を確認する。
 - boundary: 同時刻・in_progress・out-of-order応答、48 KiB境界、chunk 1 byte超過、4 MiB超過を検証する。
-- distribution: local rename失敗、secret登録後ruleset失敗、CAS競合で旧active系とlocal byte列を維持する。
+- distribution: local rename失敗、secret/ruleset失敗、並行admin更新でも旧active enforcementを維持する。
 - required workflow: 証跡不足failure→同一run再実行→successと、custom Check単独ではmerge不可を検証する。
 - regression: local backendを維持し、AI provider key・self-hosted runner参照が配布物へ混入しないことを検査する。
 - hybrid: #274固定SHAのSol/xhigh PASS、非gate CI、owner承認、PR Review used-key、admin mergeを照合する。

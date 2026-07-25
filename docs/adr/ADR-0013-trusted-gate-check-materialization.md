@@ -37,8 +37,8 @@ materializerとreconcilerはexact workflowの`run_number/run_attempt`最大tuple
 schema、backend、attestation、chunk、evidence/artifact digestを再検証した場合だけcacheへ復元する。previous
 report継承は期待path集合の完全一致と全digest一致を要求し、旧successへfallbackしない。
 
-配布はversioned資産をinertにprepareし、main上のsmoke test後にruleset digest CASを単一activation pointとして
-切替える。旧environment/secret/rulesetは検証完了まで保持する。初回#274は固定keyをPR Review上で
+配布はversioned environment/secret/workflowとdisabled rulesetをprepareし、main smoke後に新rulesetを
+旧activeへ加算する。実PR検証後だけ旧系をretireし、失敗時も保護無しの瞬間を作らない。初回#274は固定keyを
 `prepared→completed`へ遷移し、同一keyのmerge再開だけ許可する。merge後は通常attestation以外を認めない。
 
 ## Consequences

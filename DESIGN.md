@@ -25,7 +25,7 @@
 - `LatestAttemptSelector`: exact workflowの`run_number/run_attempt`最大tupleをstatus/conclusionより先に選ぶ。
 - `ReportMaterializer`: latest attested successのinline reportまたはmanifest指定chunksをcacheへ原子的に復元する。
 - `ArtifactSetComparator` / `GateReconciler`: previous reportとcurrent期待path集合・全digestを比較し、下流を連鎖無効化する。
-- `RolloutCoordinator`: versioned environment/workflowをprepareし、main上のsmoke test後にrulesetをCASでactivateする。
+- `RolloutCoordinator`: versioned environment/workflow/rulesetをprepareし、旧rulesetを残して加算activateする。
 - `BootstrapLedger`: #274固定keyの`prepared→completed`をPR Reviewへ記録し、同一keyのmerge再開だけを許可する。
 
 ```mermaid
@@ -80,10 +80,10 @@ canonical UTF-8 reportは4 MiB、1 chunkは45,000 bytesを上限とする。48 K
 base64 chunkをPR commentsへ保存する。Checkにはreport digest、chunk数・順序・各digestのmanifestを置き、
 manifestとreportをattestする。materializerは全chunkをdigest検証してから結合し、4 MiB超はaction_requiredにする。
 
-rolloutは`prepare→activate→retire`とする。prepareは新digest名のenvironment/secret/workflowを作るだけで旧系を
-変更せず、local staging失敗時もactive系は不変。main merge後にprobeとattestationをsmoke testし、expected
-ruleset digestを条件に単一PUTでactivateする。失敗時は旧rulesetを維持し、inert新資産は再開または削除できる。
-secretを上書きせず旧versionをretireまで保持する。backend未構成はprepare前に停止する。
+rolloutは`prepare→activate→retire`とする。prepareは新digest名のenvironment/secret/workflowとdisabled
+rulesetを作り、旧系を変更しない。main merge後にprobeとattestationをsmoke testし、新rulesetだけをactiveへ
+PUTする。旧activeとの論理積で一時的に厳しくなるだけで保護を弱めない。API再読取と実PR smokeの成功後だけ
+旧rulesetをretireする。失敗・並行admin更新時は新rulesetを無効化して旧activeを維持し、secretも上書きしない。
 
 ```yaml
 related_adrs:
@@ -95,6 +95,6 @@ related_adrs:
 
 - API・attestation・App・environment・ruleset不明はsuccessや部分配備へ倒さず、Checkをaction_requiredにする。
 - final success更新の通信結果が不明なら同じrunを成功扱いせず、API再読取後に新attemptを要求する。
-- rollbackはworkflow/CLIをPRでrevertするがrequired contextを外さない。復旧まではmerge停止を維持する。
+- rollbackは新rulesetだけを無効化し、旧workflow/rulesetへ戻す。required context無しの瞬間を作らない。
 - bootstrap keyは`repo/PR/SHA/digest`。`prepared`後の失敗は同一keyだけmerge APIを冪等再試行し、PRがmergedなら
   merge SHA/timeを`completed`へ追記する。別key、completed後、通常PRからの呼出しを拒否する。
