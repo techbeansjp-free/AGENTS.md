@@ -1,0 +1,18 @@
+schema_version: agent-skill-chain/project-policy/v1
+project:
+  id: agents-md-self-extension
+  policy_version: 1
+documents:
+  common:
+    - RULES.md
+    - 自己拡張ワークフロー.md
+    - OPERATING_PRINCIPLES.md
+  roles: {}
+precedence:
+  level: project
+  overrides:
+    - package-defaults
+    - adapter-defaults
+constraints:
+  may_override_core_invariants: false
+  unregistered_documents_are_normative: false
