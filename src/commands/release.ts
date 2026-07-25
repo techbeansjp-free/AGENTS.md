@@ -98,6 +98,14 @@ function writeBumpedVersionFiles(root: string, target: string): void {
   }
 }
 
+/** bump commit へ stage する実在ファイルを返す。package-lock.json は任意のconsumer project
+ * では存在しないため、存在しない pathspec を git add へ渡して正当な release bump を失敗させない。 */
+function bumpedVersionFilePaths(root: string): string[] {
+  const files = ['package.json'];
+  if (fs.existsSync(path.join(root, 'package-lock.json'))) files.push('package-lock.json');
+  return files;
+}
+
 interface BumpPr {
   number: number;
   headRefName: string;
@@ -172,7 +180,7 @@ function rebuildBumpBranchToMain(root: string, branch: string, target: string, m
 
   writeBumpedVersionFiles(root, target);
 
-  const add = git(['add', 'package.json', 'package-lock.json'], root);
+  const add = git(['add', ...bumpedVersionFilePaths(root)], root);
   if (add.status !== 0) return `git add に失敗しました: ${add.stderr.trim()}`;
 
   const commit = git(['commit', '-m', message], root);
@@ -210,7 +218,7 @@ export async function bump(args: string[]): Promise<number> {
 
       writeBumpedVersionFiles(root, target);
 
-      const add = git(['add', 'package.json', 'package-lock.json'], root);
+      const add = git(['add', ...bumpedVersionFilePaths(root)], root);
       if (add.status !== 0) return fail(`git add に失敗しました: ${add.stderr.trim()}`);
 
       const commit = git(['commit', '-m', message], root);

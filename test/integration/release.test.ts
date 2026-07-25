@@ -457,26 +457,24 @@ test('release bump スコープ検査違反 (AC-6, 防御的ガード): 変更�
   assert.equal((stub.readState().mergeCalls ?? []).length, 0);
 });
 
-// ---- 既知の頑健性ギャップ（本検証で判明。VALIDATION.md 参照） ----
-
-test('release bump: package-lock.json が存在しないリポジトリでは git add が両ファイル同時指定のため失敗する（既知の頑健性ギャップ）', async (t) => {
+test('release bump (Issue #243, AC-2): package-lock.json が存在しないリポジトリでもpackage.jsonだけをcommit・admin mergeする', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
-  // Given: package-lock.json を同梱しないリポジトリ（writeBumpedVersionFiles 自体は
-  // fs.existsSync で存在確認するため package-lock.json を書き込まないが、
-  // bump() の `git add package.json package-lock.json` は存在有無に関わらず両方を
-  // 固定引数で指定しているため、未追跡・不在のpathspecに対し git add 自体が失敗する。
+  // Given: package-lock.json を同梱しない consumer project。
   writePackageJson(repo.dir, '0.4.0', false);
-  const { env, cleanup } = makeStub();
+  const { stub, env, cleanup } = makeStub();
   t.after(cleanup);
 
   const result = runCli(['release', 'bump', '0.4.1'], { cwd: repo.dir, env });
 
-  // Then: 現状の実装は git add の失敗により bump 全体が失敗する（package-lock.json不在の
-  // リポジトリでは自動リリースが機能しない）。この挙動を固定し、既知のギャップとして
-  // VALIDATION.md に記録する。
-  assert.notEqual(result.status, 0, 'package-lock.json 不在時は現状 git add 失敗により bump 全体が失敗する');
-  assert.match(result.stderr, /git add に失敗しました/);
+  // Then: 存在しないlockfileをpathspecに含めず、package.jsonだけでリリースが完了する。
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), '1');
+  const bumpedPkg = git(repo.dir, ['show', 'release/bump-v0.4.1:package.json']);
+  assert.equal(JSON.parse(bumpedPkg).version, '0.4.1');
+  const changedFiles = git(repo.dir, ['diff', '--name-only', 'main...release/bump-v0.4.1']).split('\n').filter(Boolean);
+  assert.deepEqual(changedFiles, ['package.json']);
+  assert.equal((stub.readState().mergeCalls ?? []).length, 1, '許可済みのpackage.jsonのみのPRはadmin mergeされること');
 });
 
 // ---- bump: git author identity未設定環境での成功・既存identityの非破壊性（Issue #198） ----
