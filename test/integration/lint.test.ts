@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -284,6 +285,39 @@ test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.age
   // 禁止語混入が無い状態を維持している前提のため、終了コード0・標準エラー出力は空になることを期待する。
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, '');
+});
+
+test('lint vocab: linked worktreeではmainでなくcurrent worktreeのdefault対象を検査する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  const linkedRoot = `${repo.dir}-linked`;
+  execFileSync('git', ['worktree', 'add', '-b', 'test/linked-lint', linkedRoot], {
+    cwd: repo.dir,
+    stdio: 'pipe',
+  });
+  t.after(() => {
+    try {
+      execFileSync('git', ['worktree', 'remove', '--force', linkedRoot], {
+        cwd: repo.dir,
+        stdio: 'pipe',
+      });
+    } catch {
+      fs.rmSync(linkedRoot, { recursive: true, force: true });
+    }
+    repo.cleanup();
+  });
+  const violationPath = path.join(
+    linkedRoot,
+    '.agent-skill-chain',
+    'scripts',
+    'linked-worktree-violation.sh',
+  );
+  fs.writeFileSync(violationPath, '# このissueを永続成果物として扱う。\n');
+
+  const result = runCli(['lint', 'vocab'], { cwd: linkedRoot });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /linked-worktree-violation\.sh:1: 禁止語 'issue'/);
+  assert.match(result.stderr, new RegExp(linkedRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('lint references: 実在する見出しへの§参照・安定ID接尾辞つき参照・バッククォート例示は違反にならない', async (t) => {

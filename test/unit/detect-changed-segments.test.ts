@@ -67,6 +67,17 @@ test('detect-changed-segments: CI設定だけの変更は未開始セグメン�
   });
 });
 
+test('detect-changed-segments: 改行を含むsrc pathもimplementationとして検出する', () => {
+  withRepository((dir) => {
+    fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'src', 'evil\nfile.ts'), 'export const value = 1;\n');
+    git(dir, ['add', '--all']);
+    git(dir, ['commit', '-m', 'add newline path']);
+
+    assert.deepEqual(detect(dir), ['implementation']);
+  });
+});
+
 test('CIはvalidationが開始されたPRだけでAC対応を検証し、配布テンプレートも一致する', () => {
   const workflow = fs.readFileSync(ciWorkflow, 'utf8');
   assert.match(workflow, /id: segments/);

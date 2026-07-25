@@ -9,6 +9,10 @@
 
 set -euo pipefail
 
+# 隔離rootはadapter自身またはCodex wrapperがこのprocess内で生成する。caller環境から同名変数を
+# 受け入れると、事前配置されたrules/設定を空workspaceへ混入できるためsource時に必ず破棄する。
+unset ASC_REVIEWER_SANITIZED_ROOT ASC_REVIEWER_ORIGINAL_HOME
+
 ADAPTER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 SCRIPTS_DIR="$ADAPTER_DIR/../scripts"
 REPO_ROOT="$(cd -- "$ADAPTER_DIR/../.." &>/dev/null && pwd)"
@@ -118,12 +122,8 @@ _asc_cli() {
 # caller HOMEを渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace以外の読取りは不要。
 _run_reviewer_sanitized() {
   local prompt="$1" reviewer_cmd="$2" timeout_sec="$3"
-  local isolated_root="${ASC_REVIEWER_SANITIZED_ROOT:-}"
-  local owns_root=false
-  if [[ -z "$isolated_root" ]]; then
-    isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-reviewer.XXXXXX")"
-    owns_root=true
-  fi
+  local isolated_root
+  isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-reviewer.XXXXXX")"
   mkdir -p "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
   chmod 700 "$isolated_root" "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
 
@@ -159,7 +159,7 @@ _run_reviewer_sanitized() {
       printf '%s' "$prompt" | "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null
     )" || rc=$?
   fi
-  [[ "$owns_root" == "true" ]] && rm -rf -- "$isolated_root"
+  rm -rf -- "$isolated_root"
   printf '%s' "$output"
   return "$rc"
 }
@@ -297,6 +297,14 @@ launch_gate_reviewer() {
   fi
 
   # レビュア実行系。コア時は公式 --model と能力証明を必須化する。通常時だけ汎用上書きを許可する。
+  local selected_model="default"
+  local selected_reasoning="explicit_selection"
+  if [[ "$core_claude_review" == "true" ]]; then
+    selected_model="$CLAUDE_CORE_REVIEW_MODEL"
+    selected_reasoning="$CLAUDE_CORE_REVIEW_REASONING_TIER"
+  elif [[ -n "${CLAUDE_REVIEWER_MODEL:-}" ]]; then
+    selected_model="$CLAUDE_REVIEWER_MODEL"
+  fi
   local reviewer_cmd="${GATE_REVIEWER_CMD:-}"
   if [[ -z "$reviewer_cmd" ]]; then
     local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
@@ -304,13 +312,7 @@ launch_gate_reviewer() {
       local quoted_executable
       printf -v quoted_executable '%q' "$claude_executable"
       reviewer_cmd="$quoted_executable -p --output-format text --allowed-tools ''"
-      local selected_model=""
-      if [[ "$core_claude_review" == "true" ]]; then
-        selected_model="$CLAUDE_CORE_REVIEW_MODEL"
-      elif [[ -n "${CLAUDE_REVIEWER_MODEL:-}" ]]; then
-        selected_model="$CLAUDE_REVIEWER_MODEL"
-      fi
-      if [[ -n "$selected_model" ]]; then
+      if [[ "$selected_model" != "default" ]]; then
         local quoted_model
         printf -v quoted_model '%q' "$selected_model"
         reviewer_cmd+=" --model $quoted_model"
@@ -323,7 +325,10 @@ launch_gate_reviewer() {
 
   # 判定プロンプト（ルーブリック・出力契約）を組み立てる。
   local prompt
-  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}")"; then
+  if ! prompt="$(
+    _asc_cli gate reviewer-prompt \
+      "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-${ASC_REVIEW_BASE_SHA:-}}"
+  )"; then
     _fail_safe "判定プロンプトの生成に失敗しました"
     return
   fi
@@ -335,27 +340,36 @@ launch_gate_reviewer() {
   base_dir="$(sed -n 's/^base_dir=//p' <<<"$reviewer_context")"
   backend="$(sed -n 's/^backend=//p' <<<"$reviewer_context")"
 
+  local reviewer_count=1
+  if [[ "$backend" == "local" && "$profile" == "strict" ]]; then
+    reviewer_count=2
+  fi
   local timeout_sec="${GATE_REVIEWER_TIMEOUT_SEC:-900}"
   local retries="${GATE_REVIEWER_RETRIES:-3}"
   local interval="${GATE_REVIEWER_RETRY_INTERVAL_SEC:-30}"
 
-  # read-only レビュア起動（プロンプトは stdin）。一時障害はリトライ、timeout は打ち切り。
-  local attempt=1 verdict rc
-  while ((attempt <= retries)); do
-    verdict=""
-    rc=0
-    verdict="$(_run_reviewer_sanitized "$prompt" "$reviewer_cmd" "$timeout_sec")" || rc=$?
-    if [[ $rc -eq 0 && -n "$verdict" ]]; then
-      break
+  # GitHub modeはprotected launcherがslotごとに本関数を起動する。local Strictだけはこの境界で
+  # 2つのfresh process/workspaceを順に起動し、全件が揃うまでgate-reportへ書かない。
+  local reviewer_index attempt verdict rc
+  local -a verdicts=()
+  for ((reviewer_index = 1; reviewer_index <= reviewer_count; reviewer_index++)); do
+    attempt=1
+    while ((attempt <= retries)); do
+      verdict=""
+      rc=0
+      verdict="$(_run_reviewer_sanitized "$prompt" "$reviewer_cmd" "$timeout_sec")" || rc=$?
+      if [[ $rc -eq 0 && -n "$verdict" ]]; then
+        break
+      fi
+      ((attempt++))
+      if ((attempt <= retries)); then sleep "$interval"; fi
+    done
+    if [[ ${rc:-1} -ne 0 || -z "${verdict:-}" ]]; then
+      _fail_safe "レビュア${reviewer_index}/${reviewer_count}の起動に失敗しました（rc=${rc:-1}, attempts=$retries）"
+      return
     fi
-    ((attempt++))
-    if ((attempt <= retries)); then sleep "$interval"; fi
+    verdicts+=("$verdict")
   done
-
-  if [[ ${rc:-1} -ne 0 || -z "${verdict:-}" ]]; then
-    _fail_safe "レビュア起動に失敗しました（rc=${rc:-1}, attempts=$retries）"
-    return
-  fi
 
   if [[ "$backend" == "github" ]]; then
     for required in ASC_EVIDENCE_BASE_SHA ASC_TRUSTED_BASE_SHA ASC_EVIDENCE_PR_NUMBER ASC_REVIEW_ATTEMPT_ID ASC_REVIEW_EXPECTED_COUNT ASC_LAUNCHER_TOKEN_FILE ASC_REVIEWER_RUN_ID ASC_REVIEWER_SLOT; do
@@ -364,9 +378,9 @@ launch_gate_reviewer() {
         return
       fi
     done
-    local evidence_model="${ASC_REVIEW_MODEL:-${CLAUDE_CORE_REVIEW_MODEL:-${CLAUDE_REVIEWER_MODEL:-default}}}"
-    local evidence_reasoning="${ASC_REVIEW_REASONING:-${CLAUDE_CORE_REVIEW_REASONING_TIER:-explicit_selection}}"
-    if ! printf '%s' "$verdict" | _asc_cli gate submit-evidence \
+    local evidence_model="$selected_model"
+    local evidence_reasoning="$selected_reasoning"
+    if ! printf '%s' "${verdicts[0]}" | _asc_cli gate submit-evidence \
       "$issue_id" "$gate_id" "$profile" "$target_sha" "$ASC_EVIDENCE_BASE_SHA" "$ASC_TRUSTED_BASE_SHA" \
       "$ASC_EVIDENCE_PR_NUMBER" "$ASC_REVIEW_ATTEMPT_ID" "$ASC_REVIEW_EXPECTED_COUNT" \
       "$ASC_REVIEWER_RUN_ID" "$ASC_REVIEWER_SLOT" \
@@ -374,9 +388,25 @@ launch_gate_reviewer() {
       _fail_safe "verdict のGitHub PR review evidence投稿に失敗しました"
       return
     fi
-  elif ! printf '%s' "$verdict" | _asc_cli gate record-verdict "$report_path" "$base_dir" >/dev/null; then
-    _fail_safe "verdict のgate-reportへの結線に失敗しました"
-    return
+  else
+    local verdict_payload
+    if ! verdict_payload="$(
+      printf '%s\0' "${verdicts[@]}" |
+        node -e '
+          const fs = require("node:fs");
+          const chunks = fs.readFileSync(0).toString("utf8").split("\0");
+          if (chunks.at(-1) === "") chunks.pop();
+          process.stdout.write(JSON.stringify(chunks.map((entry) => JSON.parse(entry))));
+        '
+    )"; then
+      _fail_safe "独立verdict配列の構築に失敗しました"
+      return
+    fi
+    if ! printf '%s' "$verdict_payload" |
+      _asc_cli gate record-verdict "$report_path" "$base_dir" "$reviewer_count" >/dev/null; then
+      _fail_safe "verdict のgate-reportへの結線に失敗しました"
+      return
+    fi
   fi
   return 0
 }

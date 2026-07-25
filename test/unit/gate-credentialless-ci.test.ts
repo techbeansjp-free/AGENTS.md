@@ -10,6 +10,7 @@ const localHarnessPath = path.join(root, '.agent-skill-chain', 'scripts', 'gate-
 const launcherPath = path.join(root, '.agent-skill-chain', 'scripts', 'gate-launch-reviewer.sh');
 const codexAdapterPath = path.join(root, '.agent-skill-chain', 'adapters', 'codex.sh');
 const claudeAdapterPath = path.join(root, '.agent-skill-chain', 'adapters', 'claude.sh');
+const gateCommandPath = path.join(root, 'src', 'commands', 'gate.ts');
 
 test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck Runを発行する', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
@@ -24,6 +25,8 @@ test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck 
   assert.match(workflow, /gate-publish\.sh/);
   assert.match(workflow, /conclusion: "action_required"/);
   assert.match(workflow, /without executing target code/);
+  assert.match(workflow, /git diff --name-only -z/);
+  assert.match(workflow, /read -r -d '' changed/);
 
   const forbidden = [
     ['OPENAI', 'API', 'KEY'].join('_'),
@@ -50,6 +53,7 @@ test('local review harness: PR base SHAの隔離cloneでbase sourceをbuildし�
   assert.match(harness, /"\$TRUSTED_SCRIPT_DIR\/gate-launch-reviewer\.sh"/);
   assert.match(harness, /launcher-token\.json/);
   assert.match(harness, /ASC_REVIEW_ATTEMPT_ID/);
+  assert.match(harness, /ASC_REVIEW_RECORDER_GITHUB_TOKEN/);
   const consumedCheck = harness.indexOf('launcher tokenが全slotで消費されませんでした');
   const dispatch = harness.indexOf('gh api -X POST "repos/{owner}/{repo}/dispatches" --input -');
   assert.ok(consumedCheck >= 0 && dispatch > consumedCheck);
@@ -66,4 +70,8 @@ test('local review harness: PR base SHAの隔離cloneでbase sourceをbuildし�
   assert.match(codex, /shell_environment_policy\.inherit/);
   assert.match(codex, /permissions\.review\.filesystem/);
   assert.doesNotMatch(launcher, /GH_TOKEN=.*launch_gate_reviewer/);
+
+  const gateCommand = fs.readFileSync(gateCommandPath, 'utf8');
+  assert.doesNotMatch(gateCommand, /--slurp/);
+  assert.match(gateCommand, /page <= 100/);
 });

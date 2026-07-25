@@ -67,10 +67,11 @@ ASC_CORE_MODEL_TIER="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_model_t
 ASC_CORE_REASONING_TIER="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_reasoning_tier=//p')"
 ASC_CODEX_REQUIRED_MODEL="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^codex_required_model=//p')"
 ASC_CODEX_REQUIRED_REASONING_EFFORT="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^codex_required_reasoning_effort=//p')"
+ASC_REVIEW_BASE_SHA="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^review_base_sha=//p')"
 ASC_REVIEW_ADAPTER="$ADAPTER"
 export ASC_CORE_REVIEW_REQUIRED ASC_CORE_REVIEW_STATUS ASC_CORE_REQUIRED_PROFILE
 export ASC_CORE_MODEL_TIER ASC_CORE_REASONING_TIER ASC_CODEX_REQUIRED_MODEL ASC_CODEX_REQUIRED_REASONING_EFFORT
-export ASC_REVIEW_ADAPTER
+export ASC_REVIEW_ADAPTER ASC_REVIEW_BASE_SHA
 
 if [[ "$ASC_CORE_REVIEW_STATUS" == "unresolved" ]]; then
   echo "コアレビュー対象の分類を完了できませんでした。フェイルセーフで human_required へ倒します" >&2

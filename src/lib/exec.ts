@@ -12,11 +12,32 @@ export interface BinaryExecResult {
   stderr: string;
 }
 
+/** `git ... -z` のNUL区切りpathを、改行や非ASCIIを保持したままUTF-8文字列へ変換する。 */
+export function decodeNullSeparatedUtf8(output: Buffer): string[] {
+  if (output.length === 0) return [];
+  if (output.at(-1) !== 0) throw new Error('NUL区切りGit出力が終端NULを持ちません');
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const entries: string[] = [];
+  let start = 0;
+  for (let index = 0; index < output.length; index += 1) {
+    if (output[index] !== 0) continue;
+    entries.push(decoder.decode(output.subarray(start, index)));
+    start = index + 1;
+  }
+  return entries;
+}
+
 // Node既定の1MiB上限だと大規模diff等（例: mainとの初回統合マージの全差分）でENOBUFSになるため拡張する。
 const MAX_BUFFER_BYTES = 256 * 1024 * 1024;
 
-export function run(command: string, args: string[], cwd?: string, input?: string): ExecResult {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8', input, maxBuffer: MAX_BUFFER_BYTES });
+export function run(
+  command: string,
+  args: string[],
+  cwd?: string,
+  input?: string,
+  env?: NodeJS.ProcessEnv,
+): ExecResult {
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8', input, env, maxBuffer: MAX_BUFFER_BYTES });
   if (result.error) {
     return { status: 127, stdout: '', stderr: String(result.error.message) };
   }
@@ -57,8 +78,8 @@ export function gitBinary(args: string[], cwd?: string): BinaryExecResult {
   return runBinary('git', args, cwd);
 }
 
-export function gh(args: string[], cwd?: string, input?: string): ExecResult {
-  return run('gh', args, cwd, input);
+export function gh(args: string[], cwd?: string, input?: string, env?: NodeJS.ProcessEnv): ExecResult {
+  return run('gh', args, cwd, input, env);
 }
 
 export function commandExists(command: string): boolean {

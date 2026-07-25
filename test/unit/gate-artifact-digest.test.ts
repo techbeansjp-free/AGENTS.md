@@ -33,3 +33,30 @@ test('artifact digestはinvalid UTF-8をlossy文字列化せずGit blobのexact 
     artifactDigestAtSha(repo.dir, 'binary-artifact.bin', secondSha),
   );
 });
+
+test('artifact digestは実在blobと欠落sentinelをdomain separationして削除を必ず検出する', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const artifactPath = path.join(repo.dir, 'collision.txt');
+
+  fs.writeFileSync(artifactPath, 'agent-skill-chain:artifact-absent:v1');
+  execFileSync('git', ['add', 'collision.txt'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: add sentinel collision bytes'], { cwd: repo.dir });
+  const presentSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+  }).trim();
+
+  fs.rmSync(artifactPath);
+  execFileSync('git', ['add', 'collision.txt'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: remove sentinel collision bytes'], { cwd: repo.dir });
+  const absentSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+  }).trim();
+
+  assert.notEqual(
+    artifactDigestAtSha(repo.dir, 'collision.txt', presentSha, true),
+    artifactDigestAtSha(repo.dir, 'collision.txt', absentSha, true),
+  );
+});

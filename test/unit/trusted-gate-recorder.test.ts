@@ -11,6 +11,7 @@ import {
   canonicalReportIsOversize,
   fetchTrustedGateApiContext,
   finalizeTrustedGateCheck,
+  findCurrentTrustedGateChecks,
   parseTrustedGateDispatchEvent,
   parseTrustedGateWorkflow,
   selectLatestTrustedGateCheck,
@@ -321,6 +322,9 @@ test('48KiB超reportはaction_requiredとなり、App PATCHが最後のHTTP操�
         expires_at: '2026-07-26T01:00:00Z',
       }), { status: 201 });
     }
+    if (url.endsWith('/check-runs/501') && init?.method === 'PATCH') {
+      return new Response('completed-with-non-json-body', { status: 200 });
+    }
     return new Response(JSON.stringify({ id: 501 }), { status: 200 });
   };
   const report = {
@@ -378,6 +382,9 @@ test('post-prepare失敗は専用App Checkをaction_requiredへterminalizeする
         expires_at: '2026-07-26T01:00:00Z',
       }), { status: 201 });
     }
+    if (url.endsWith('/check-runs/501') && init?.method === 'PATCH') {
+      return new Response('completed-with-non-json-body', { status: 200 });
+    }
     return new Response(JSON.stringify({ id: 501 }), { status: 200 });
   };
   await abortTrustedGateCheck({
@@ -395,4 +402,48 @@ test('post-prepare失敗は専用App Checkをaction_requiredへterminalizeする
   assert.equal(patch.status, 'completed');
   assert.equal(patch.conclusion, 'action_required');
   assert.equal(JSON.parse(patch.output.text).reason, 'recorder_post_prepare_failure');
+});
+
+test('state耐久化前の失敗はApp APIからcurrent runのin-progress Checkだけを回収できる', async () => {
+  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const current = checkRun({ status: 'in_progress', conclusion: null });
+  const fetchImpl = async (input: string | URL | Request): Promise<Response> => {
+    const url = String(input);
+    if (url.endsWith('/installation')) return new Response(JSON.stringify({ id: 88 }), { status: 200 });
+    if (url.endsWith('/access_tokens')) {
+      return new Response(JSON.stringify({
+        token: 'app-installation-token',
+        expires_at: '2026-07-26T01:00:00Z',
+      }), { status: 201 });
+    }
+    if (url.includes(`/commits/${SHA}/check-runs?`)) {
+      return new Response(JSON.stringify({
+        check_runs: [
+          current,
+          checkRun({ id: 502, status: 'completed', conclusion: 'success' }),
+          checkRun({ id: 503, external_id: 'wrong-run', status: 'in_progress', conclusion: null }),
+          checkRun({
+            id: 504,
+            app: { id: 9, name: 'foreign-app', slug: 'foreign-app' },
+            status: 'in_progress',
+            conclusion: null,
+          }),
+        ],
+      }), { status: 200 });
+    }
+    return new Response('not found', { status: 404 });
+  };
+
+  const recovered = await findCurrentTrustedGateChecks({
+    repository: 'techbeansjp-free/AGENTS.md',
+    repositoryId: 77,
+    credentials: { appId: '12345', privateKey: privateKeyPem },
+    checkName: current.name,
+    payload: PAYLOAD,
+    workflow: WORKFLOW,
+    fetchImpl: fetchImpl as typeof fetch,
+  });
+
+  assert.deepEqual(recovered.map((entry) => entry.id), [current.id]);
 });

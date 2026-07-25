@@ -2,7 +2,7 @@
 # 正本: AGENTS.md §役割・権限・writer lease
 #
 # 各ロールの実行系への変換は .agent-skill-chain/adapters/{claude,codex,human}.sh が担う。
-# 権限はrole capability、protected-base実行attestation、必要に応じたGitHub権限分離で
+# 権限はrole capability、protected-base実行attestation、専用recorder principalによるGitHub権限分離で
 # 担保し、GitHub actor名やツール名の一律 deny だけでは実装しない（AGENTS.md I5）。
 
 schema_version: agent-skill-chain/config/v1
@@ -16,7 +16,7 @@ roles:
       - "`issue.state_transition`"
       - worktree.lifecycle
       - pr.merge
-      - review_evidence.publish    # protected-base trusted recorderとしてPR Review APIへ投稿
+      - review_evidence.publish    # writerと別principalの専用credentialでPR Review APIへ投稿
     forbidden:
       - artifact_branch.commit    # 成果物branchへのcommit禁止（I5）
       - artifact.author            # 成果物の著述・内容取り込み禁止（I5）
@@ -39,6 +39,9 @@ roles:
     segment_overrides:
       spec:
         additional_capabilities: [pr.draft_create]   # Draft PRはSPECワーカーのみ作成
+    forbidden:
+      - review_evidence.publish
+      - review_recorder.credential
 
   # ゲートレビュア: read-only。conformance/falsificationは複数並列実行可（Strictでは専任分離）。
   gate_reviewer:
@@ -51,6 +54,8 @@ roles:
       - branch.commit
       - branch.push
       - artifact.edit
+      - review_evidence.publish
+      - review_recorder.credential
 
   # ADR finalizationワーカー: 設計ゲート承認後、進行役がadr-finalize.shを起動して割り当てる。
   # content_digestを除くライフサイクル項目（status等）のみ書込み可能（A-8）。

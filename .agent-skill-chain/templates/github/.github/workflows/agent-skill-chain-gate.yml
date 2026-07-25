@@ -73,7 +73,9 @@ jobs:
           HEAD_SHA: ${{ steps.context.outputs.target_sha }}
         run: |
           SEGMENTS=""
-          while IFS= read -r changed; do
+          CHANGED_PATHS="$RUNNER_TEMP/agent-skill-chain-changed-paths"
+          git diff --name-only -z "$BASE_SHA...$HEAD_SHA" > "$CHANGED_PATHS"
+          while IFS= read -r -d '' changed; do
             case "$changed" in
               SPEC.md) SEGMENTS="$SEGMENTS spec" ;;
               DESIGN.md|PLAN.md|docs/adr/*) SEGMENTS="$SEGMENTS design" ;;
@@ -81,7 +83,7 @@ jobs:
               src/*|test/*|package.json|package-lock.json|tsconfig.json|.agent-skill-chain/*|.github/*)
                 SEGMENTS="$SEGMENTS implementation" ;;
             esac
-          done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          done < "$CHANGED_PATHS"
           MATRIX="$(for segment in spec design implementation validation; do
             if [[ " $SEGMENTS " == *" $segment "* ]]; then echo "$segment"; fi
           done | jq -R . | jq -s -c .)"

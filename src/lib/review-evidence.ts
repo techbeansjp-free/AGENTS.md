@@ -82,7 +82,7 @@ export interface VerifiedReviewer {
   model: string;
   reasoning: string;
   prompt_digest: string;
-  actor_relation: 'same_as_writer' | 'distinct_from_writer';
+  actor_relation: 'distinct_from_writer';
   trusted_base_sha: string;
   launcher_digest: string;
   launcher_token_digest: string;
@@ -190,13 +190,22 @@ function isAcceptanceCriterionShape(value: unknown): value is AcceptanceCriterio
 export function isEvidenceVerdict(value: unknown, digestRequired = true): value is EvidenceVerdict {
   if (!value || typeof value !== 'object') return false;
   const verdict = value as Partial<EvidenceVerdict>;
+  const findingsValid = Array.isArray(verdict.blockers) && verdict.blockers.every(isFindingShape);
+  const failed = verdict.conformance === 'fail' || verdict.falsification === 'fail';
+  const hasRoutableBlockingFinding =
+    findingsValid &&
+    (verdict.blockers ?? []).some(
+      (finding) =>
+        finding.severity === 'blocking' &&
+        ['specification', 'design', 'implementation', 'validation'].includes(finding.origin),
+    );
   return (
     ['pass', 'fail', 'pending'].includes(verdict.conformance ?? '') &&
     ['pass', 'fail', 'pending'].includes(verdict.falsification ?? '') &&
     Array.isArray(verdict.acceptance_criteria) &&
     verdict.acceptance_criteria.every(isAcceptanceCriterionShape) &&
-    Array.isArray(verdict.blockers) &&
-    verdict.blockers.every(isFindingShape) &&
+    findingsValid &&
+    (!failed || hasRoutableBlockingFinding) &&
     Array.isArray(verdict.approved_artifacts) &&
     verdict.approved_artifacts.every((artifact) => isArtifactShape(artifact, digestRequired)) &&
     typeof verdict.inconclusive === 'boolean'
@@ -262,6 +271,9 @@ export function verifyGithubReviewEvidence(options: {
   }
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
+  }
+  if (options.trustedActors.some((actor) => options.writerActors.includes(actor))) {
+    return fail('trusted recorder principalがwriter actorから分離されていません');
   }
   const expectedByPath = new Map(options.expectedArtifacts.map((artifact) => [artifact.path, artifact.digest]));
   if (new Set(options.expectedAcceptanceCriteria).size !== options.expectedAcceptanceCriteria.length) {
@@ -330,6 +342,7 @@ export function verifyGithubReviewEvidence(options: {
     const { api: review, evidence, actor } = candidate;
     if (!actor) return fail(`review ${review.id} のactorを解決できません`);
     if (!options.trustedActors.includes(actor)) return fail(`review ${review.id} のactorはtrusted recorderではありません`);
+    if (options.writerActors.includes(actor)) return fail(`review ${review.id} のactorはwriterと同一です`);
     if (review.state.toUpperCase() === 'DISMISSED') return fail(`review ${review.id} はdismiss済みです`);
     if (review.commit_id !== options.targetSha) {
       return fail(`review ${review.id} のAPI commit SHAが現在のPR headと一致しません`);
@@ -470,7 +483,7 @@ export function verifyGithubReviewEvidence(options: {
       model: evidence.reviewer.model,
       reasoning: evidence.reviewer.reasoning,
       prompt_digest: evidence.prompt_digest,
-      actor_relation: options.writerActors.includes(actor) ? 'same_as_writer' : 'distinct_from_writer',
+      actor_relation: 'distinct_from_writer',
       trusted_base_sha: evidence.execution.trusted_base_sha,
       launcher_digest: evidence.execution.launcher_digest,
       launcher_token_digest: evidence.execution.launcher_token_digest,

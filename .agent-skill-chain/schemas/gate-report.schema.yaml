@@ -85,7 +85,7 @@ properties:
             model: {type: string}
             reasoning: {type: string}
             prompt_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-            actor_relation: {type: string, enum: [same_as_writer, distinct_from_writer]}
+            actor_relation: {type: string, const: distinct_from_writer}
             trusted_base_sha: {type: string, minLength: 1}
             launcher_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
             launcher_token_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}

@@ -134,7 +134,7 @@ test('retry: same-SHAの旧complete attemptを無視して最新attemptだけを
   assert.equal(validAfterMalformedHistory.final, 'approved');
 });
 
-test('provenance: 同一actorのtrusted recorderをrun attestationで区別し、未登録・actor未解決は拒否する', () => {
+test('provenance: writerと同一のrecorder principal・未登録actor・actor未解決を拒否する', () => {
   const sameActor = verify(
     [
       review(1, 1, { user: { login: 'segment-writer' } }),
@@ -142,8 +142,8 @@ test('provenance: 同一actorのtrusted recorderをrun attestationで区別し�
     ],
     { trustedActors: ['segment-writer'] },
   );
-  assert.equal(sameActor.final, 'approved');
-  assert.deepEqual(sameActor.reviewers.map((entry) => entry.actor_relation), ['same_as_writer', 'same_as_writer']);
+  assert.equal(sameActor.final, 'human_required');
+  assert.match(sameActor.reason ?? '', /writer actorから分離/);
   assert.equal(verify([review(1, 1, { user: { login: 'unknown' } }), review(2, 2)]).final, 'human_required');
   assert.equal(verify([review(1, 1), review(2, 2)], { unresolvedWriterActor: true }).final, 'human_required');
 });
@@ -188,6 +188,16 @@ test('capability: core Codex model/reasoning不一致を拒否し、blocking ver
     evidence: ['反例'],
   }];
   assert.equal(verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(blocked) })]).final, 'rejected');
+});
+
+test('routing: fail verdictにorigin付きblocking findingが無ければhuman_requiredへ倒す', () => {
+  const unroutable = evidence(2);
+  unroutable.verdict.falsification = 'fail';
+  unroutable.verdict.blockers = [];
+  assert.equal(
+    verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(unroutable) })]).final,
+    'human_required',
+  );
 });
 
 test('schema: 不正なfinding enumをpass/passに添えてもapprovedへ倒れない', () => {
@@ -249,6 +259,12 @@ test('BDD: AC別failとaggregate failが一致するとgate reportへ証跡付�
   failed.verdict.acceptance_criteria = [{
     ac_id: 'AC-1',
     conformance: 'fail',
+    evidence: ['AC-1の反例'],
+  }];
+  failed.verdict.blockers = [{
+    severity: 'blocking',
+    origin: 'specification',
+    code: 'AC-1-COUNTEREXAMPLE',
     evidence: ['AC-1の反例'],
   }];
   const result = verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(failed) })]);

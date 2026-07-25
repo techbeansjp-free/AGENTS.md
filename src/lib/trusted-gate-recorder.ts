@@ -74,7 +74,6 @@ export interface TrustedGateApiContext {
   payload: TrustedGatePayload;
   repository: TrustedGateRepository;
   pullRequest: TrustedGatePullRequest;
-  issue: TrustedGateIssue;
   issueId: string;
   issueNumber: number;
   profile: 'standard' | 'strict';
@@ -203,8 +202,10 @@ export function trustedGateRunName(payload: TrustedGatePayload): string {
   return `gate-record-${payload.pr_number}-${payload.gate}-${payload.target_sha}`;
 }
 
-function issueLabels(issue: TrustedGateIssue): string[] {
-  return issue.labels.map((label) => typeof label === 'string' ? label : label.name ?? '').filter(Boolean);
+function githubIssueLabels(githubIssue: TrustedGateIssue): string[] {
+  return githubIssue.labels
+    .map((label) => typeof label === 'string' ? label : label.name ?? '')
+    .filter(Boolean);
 }
 
 function issueNumberFromBranch(ref: string): number {
@@ -304,7 +305,7 @@ export async function fetchTrustedGateApiContext(options: {
     throw new Error('PRのcurrent headまたはrepository default baseがdispatch入力と一致しません');
   }
   const issueNumber = issueNumberFromBranch(pullRequest.head.ref);
-  const [issue, commits, reviews] = await Promise.all([
+  const [githubIssue, commits, reviews] = await Promise.all([
     githubJsonDirect<TrustedGateIssue>(fetchImpl, options.githubToken, `${repoPath}/issues/${issueNumber}`),
     githubArrayDirect<TrustedGateApiContext['commits'][number]>(
       fetchImpl,
@@ -317,10 +318,14 @@ export async function fetchTrustedGateApiContext(options: {
       `${repoPath}/pulls/${options.payload.pr_number}/reviews`,
     ),
   ]);
-  if (issue.number !== issueNumber || issue.state !== 'open' || !Array.isArray(issue.labels)) {
+  if (
+    githubIssue.number !== issueNumber ||
+    githubIssue.state !== 'open' ||
+    !Array.isArray(githubIssue.labels)
+  ) {
     throw new Error('Issue API正本を解決できません');
   }
-  const labels = issueLabels(issue);
+  const labels = githubIssueLabels(githubIssue);
   const profile =
     !labels.includes('risk:normal') ||
     labels.includes('autonomy:full') ||
@@ -332,7 +337,6 @@ export async function fetchTrustedGateApiContext(options: {
     payload: options.payload,
     repository,
     pullRequest,
-    issue,
     issueId: `ISSUE-${issueNumber}`,
     issueNumber,
     profile,
@@ -456,6 +460,29 @@ async function appCheckRequest<T>(options: {
   });
 }
 
+/** terminal Check PATCH専用。HTTP成功だけを確認し、成功更新後にresponse bodyをparseして失敗しない。 */
+async function appCheckTerminalPatch(options: {
+  repository: string;
+  repositoryId: number;
+  credentials: GithubAppCredentials;
+  path: string;
+  body: unknown;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const installation = await createInstallationToken({
+    ...options.credentials,
+    repository: options.repository,
+    repositoryId: options.repositoryId,
+    fetchImpl,
+  });
+  await githubResponse(fetchImpl, installation.token, options.path, {
+    method: 'PATCH',
+    body: JSON.stringify(options.body),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export async function createTrustedGateCheck(options: {
   repository: string;
   repositoryId: number;
@@ -513,6 +540,55 @@ export async function readTrustedGateCheck(options: {
 }
 
 /**
+ * prepareがCheck作成後・state耐久化前に失敗した場合の回収用。一時fileを信頼せず、専用App APIから
+ * current workflow run/attemptに完全一致するin-progress Checkだけを列挙する。
+ */
+export async function findCurrentTrustedGateChecks(options: {
+  repository: string;
+  repositoryId: number;
+  credentials: GithubAppCredentials;
+  checkName: string;
+  payload: TrustedGatePayload;
+  workflow: TrustedGateWorkflow;
+  fetchImpl?: typeof fetch;
+}): Promise<TrustedGateCheckRun[]> {
+  const matches = new Map<number, TrustedGateCheckRun>();
+  const externalId = trustedGateExternalId(options.workflow, options.payload);
+  for (let page = 1; page <= 100; page += 1) {
+    const response = await appCheckRequest<{ check_runs?: TrustedGateCheckRun[] }>({
+      repository: options.repository,
+      repositoryId: options.repositoryId,
+      credentials: options.credentials,
+      path:
+        `/repos/${options.repository}/commits/${options.payload.target_sha}/check-runs` +
+        `?check_name=${encodeURIComponent(options.checkName)}&filter=all&per_page=100&page=${page}`,
+      method: 'GET',
+      fetchImpl: options.fetchImpl,
+    });
+    if (!Array.isArray(response.check_runs)) {
+      throw new Error('専用App Check一覧のAPI応答が不正です');
+    }
+    for (const check of response.check_runs) {
+      try {
+        assertTrustedAppCheck({
+          check,
+          expectedAppId: safeInteger(options.credentials.appId, 'GitHub App ID'),
+          expectedName: options.checkName,
+          expectedSha: options.payload.target_sha,
+          expectedExternalId: externalId,
+          expectedStatus: 'in_progress',
+        });
+        if (check.conclusion === null) matches.set(check.id, check);
+      } catch {
+        // 同じSHA/nameにある別App・別workflow attempt・completed Checkは回収対象外。
+      }
+    }
+    if (response.check_runs.length < 100) return [...matches.values()];
+  }
+  throw new Error('専用App Check一覧のpagination上限を超えました');
+}
+
+/**
  * 呼出し側はこのPromiseの後にAPI、filesystem、subprocessのpostconditionを置いてはならない。
  * App PATCH応答のHTTP成功確認だけを行い、completed Checkの再取得はしない。
  */
@@ -544,12 +620,11 @@ export async function finalizeTrustedGateCheck(options: {
       ? 'action_required'
       : checkConclusion(options.report.gate?.final);
   const blockers = Array.isArray(options.report.gate?.blockers) ? options.report.gate.blockers : [];
-  await appCheckRequest<unknown>({
+  await appCheckTerminalPatch({
     repository: options.repository,
     repositoryId: options.repositoryId,
     credentials: options.credentials,
     path: `/repos/${options.repository}/check-runs/${safeInteger(options.checkId, 'Check ID')}`,
-    method: 'PATCH',
     body: {
       status: 'completed',
       conclusion,
@@ -583,12 +658,11 @@ export async function abortTrustedGateCheck(options: {
     check_id: options.checkId,
     gate: options.gate,
   });
-  await appCheckRequest<unknown>({
+  await appCheckTerminalPatch({
     repository: options.repository,
     repositoryId: options.repositoryId,
     credentials: options.credentials,
     path: `/repos/${options.repository}/check-runs/${safeInteger(options.checkId, 'Check ID')}`,
-    method: 'PATCH',
     body: {
       status: 'completed',
       conclusion: 'action_required',

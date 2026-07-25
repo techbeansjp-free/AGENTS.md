@@ -101,7 +101,7 @@ export async function createInstallationToken(options: GithubAppAuthOptions): Pr
     throw new Error('GitHub App installation IDを取得できませんでした');
   }
   const installationId = Number(installation.id);
-  const issued = await githubJson<{ token?: string; expires_at?: string }>(
+  const tokenResponse = await githubJson<{ token?: string; expires_at?: string }>(
     fetchImpl,
     `/app/installations/${installationId}/access_tokens`,
     {
@@ -117,8 +117,13 @@ export async function createInstallationToken(options: GithubAppAuthOptions): Pr
       headers: { 'Content-Type': 'application/json' },
     },
   );
-  if (!issued.token || !issued.expires_at || Number.isNaN(Date.parse(issued.expires_at))) {
+  if (!tokenResponse.token || !tokenResponse.expires_at || Number.isNaN(Date.parse(tokenResponse.expires_at))) {
     throw new Error('GitHub App installation token応答が不正です');
   }
-  return { token: issued.token, expiresAt: issued.expires_at, appId, installationId };
+  return {
+    token: tokenResponse.token,
+    expiresAt: tokenResponse.expires_at,
+    appId,
+    installationId,
+  };
 }

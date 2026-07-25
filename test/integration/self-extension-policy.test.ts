@@ -57,7 +57,7 @@ test('self-extension project policy: manifestで登録した実在文書だけ�
     evidence_transport: 'github_pr_review',
     ci_role: 'verify_and_publish',
     reviewer_count: 2,
-    trusted_reviewer_actors: ['adachi-tatsuru'],
+    trusted_reviewer_actors: ['agent-skill-chain-review-recorder[bot]'],
   });
   assert.deepEqual(modelSelection.core_review.capability, {
     model_tier: 'frontier_coding',

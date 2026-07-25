@@ -29,6 +29,14 @@ function flag(name) {
   const i = args.indexOf(name);
   return i === -1 ? undefined : args[i + 1];
 }
+function pageItems(apiPath, items) {
+  const query = String(apiPath || '').split('?')[1] || '';
+  const params = new URLSearchParams(query);
+  const page = Number(params.get('page') || '1');
+  const perPage = Number(params.get('per_page') || '100');
+  const start = (page - 1) * perPage;
+  return items.slice(start, start + perPage);
+}
 
 function git(args) {
   childProcess.execFileSync('git', args, { cwd: process.cwd(), stdio: 'pipe' });
@@ -298,6 +306,11 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  if (apiPath === 'user' && method === 'GET') {
+    process.stdout.write((state.apiActor || 'trusted-reviewer') + '\\n');
+    process.exit(0);
+  }
+
   if (apiPath === 'repos/{owner}/{repo}/dispatches' && method === 'POST') {
     if (state.failRepositoryDispatch) {
       process.stderr.write('gh-stub: simulated repository dispatch failure\\n');
@@ -363,12 +376,12 @@ if (cmd === 'api') {
   }
 
   if (/\\/pulls\\/\\d+\\/commits(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify(state.pullCommits || []));
+    process.stdout.write(JSON.stringify(pageItems(apiPath, state.pullCommits || [])));
     process.exit(0);
   }
 
   if (/\\/pulls\\/\\d+\\/reviews(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify(state.pullReviews || []));
+    process.stdout.write(JSON.stringify(pageItems(apiPath, state.pullReviews || [])));
     process.exit(0);
   }
 
@@ -390,12 +403,12 @@ if (cmd === 'api') {
   }
 
   if (/\\/commits\\/[^/]+\\/check-runs(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify({ check_runs: state.checkRuns || [] }));
+    process.stdout.write(JSON.stringify({ check_runs: pageItems(apiPath, state.checkRuns || []) }));
     process.exit(0);
   }
 
   if (/\\/actions\\/workflows\\/.+\\/runs(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify({ workflow_runs: state.actionRuns || [] }));
+    process.stdout.write(JSON.stringify({ workflow_runs: pageItems(apiPath, state.actionRuns || []) }));
     process.exit(0);
   }
 

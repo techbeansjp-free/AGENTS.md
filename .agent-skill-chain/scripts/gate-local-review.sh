@@ -20,6 +20,10 @@ if [[ -z "$ISSUE_ID" || -z "$GATE_ID" || -z "$PROFILE" || -z "$TARGET_SHA" || -z
   exit 1
 fi
 case "$ADAPTER" in codex | claude | human) ;; *) echo "未登録adapterです: $ADAPTER" >&2; exit 1 ;; esac
+if [[ -z "${ASC_REVIEW_RECORDER_GITHUB_TOKEN:-}" ]]; then
+  echo "専用recorder principalのGitHub tokenがありません。writer credentialでは代替できません。" >&2
+  exit 1
+fi
 
 PR_SHA_INFO="$(gh api "repos/{owner}/{repo}/pulls/$PR_NUMBER" --jq '.base.ref + " " + .base.sha + " " + .head.sha')"
 read -r PR_BASE_REF PR_BASE_SHA PR_HEAD_SHA <<<"$PR_SHA_INFO"
@@ -62,7 +66,7 @@ if [[ -n "$(git -C "$TRUSTED_ROOT" status --porcelain)" ]]; then
 fi
 TRUSTED_SCRIPT_DIR="$TRUSTED_ROOT/.agent-skill-chain/scripts"
 
-REVIEW_OUTPUT="$("$TRUSTED_SCRIPT_DIR/gate-review.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$TARGET_SHA")"
+REVIEW_OUTPUT="$("$TRUSTED_SCRIPT_DIR/gate-review.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$TARGET_SHA" "$BASE_SHA")"
 REPORT_PATH="$(sed -n 's/^gate_report_path: //p' <<<"$REVIEW_OUTPUT")"
 if [[ -z "$REPORT_PATH" ]]; then
   echo "gate-report scaffoldを生成できませんでした" >&2

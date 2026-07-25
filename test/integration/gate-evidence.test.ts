@@ -16,6 +16,7 @@ import {
   renderReviewEvidence,
   type ReviewEvidence,
 } from '../../src/lib/review-evidence.js';
+import { artifactDigestAtSha } from '../../src/commands/gate.js';
 import { encodeGateCheckExternalId } from '../../src/lib/gate-provenance.js';
 
 function git(cwd: string, args: string[]): string {
@@ -80,8 +81,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
 
   const artifact = {
     path: 'SPEC.md',
-    // CLIのgit wrapperと同じく末尾改行を保持したblob内容でdigestする。
-    digest: digestOf(execFileSync('git', ['show', `${targetSha}:SPEC.md`], { cwd: repo.dir, encoding: 'utf8' })),
+    digest: artifactDigestAtSha(repo.dir, 'SPEC.md', targetSha),
   };
   const prompt = runCli(['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha], {
     cwd: repo.dir,
@@ -97,11 +97,16 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     head: { sha: targetSha, ref: 'process/271-evidence-test' },
     base: { sha: baseSha, ref: 'main' },
   };
-  state.pullCommits = [{
+  state.pullCommits = Array.from({ length: 101 }, () => ({
     author: { login: 'adachi-tatsuru' },
     committer: { login: 'adachi-tatsuru' },
-  }];
+  }));
+  state.apiActor = 'agent-skill-chain-review-recorder[bot]';
   stub.writeState(state);
+  const recorderEnv = {
+    ...env,
+    ASC_REVIEW_RECORDER_GITHUB_TOKEN: 'dedicated-recorder-test-token',
+  };
 
   const rawVerdict = {
     conformance: 'pass',
@@ -136,7 +141,40 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   );
   assert.notEqual(directSubmit.status, 0);
   assert.match(directSubmit.stderr, /launcher token file/);
+
+  const missingRecorderToken = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+    ],
+    {
+      cwd: repo.dir,
+      env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify(rawVerdict),
+    },
+  );
+  assert.notEqual(missingRecorderToken.status, 0);
+  assert.match(missingRecorderToken.stderr, /専用recorder principalのGitHub token/);
+
+  const samePrincipalState = stub.readState();
+  samePrincipalState.apiActor = 'adachi-tatsuru';
+  stub.writeState(samePrincipalState);
+  const samePrincipal = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+    ],
+    {
+      cwd: repo.dir,
+      env: { ...recorderEnv, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify(rawVerdict),
+    },
+  );
+  assert.notEqual(samePrincipal.status, 0);
+  assert.match(samePrincipal.stderr, /writer actorと分離/);
+
   const wrongBaseState = stub.readState();
+  wrongBaseState.apiActor = 'agent-skill-chain-review-recorder[bot]';
   wrongBaseState.pullMetadata = {
     number: 274,
     state: 'open',
@@ -150,7 +188,11 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
       attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
     ],
-    { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
+    {
+      cwd: repo.dir,
+      env: { ...recorderEnv, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify(rawVerdict),
+    },
   );
   assert.notEqual(wrongBase.status, 0);
   assert.match(wrongBase.stderr, /default branch/);
@@ -167,7 +209,11 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
       attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
     ],
-    { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
+    {
+      cwd: repo.dir,
+      env: { ...recorderEnv, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify(rawVerdict),
+    },
   );
   assert.equal(submitted.status, 0, submitted.stderr);
   assert.equal(stub.readState().pullReviews?.length, 1);
@@ -176,7 +222,11 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
       attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
     ],
-    { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
+    {
+      cwd: repo.dir,
+      env: { ...recorderEnv, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify(rawVerdict),
+    },
   );
   assert.notEqual(replayedSlot.status, 0);
   assert.match(replayedSlot.stderr, /消費済み/);
@@ -199,7 +249,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     body: renderReviewEvidence(makeEvidence(slot as 1 | 2)),
     commit_id: targetSha,
     state: 'COMMENTED',
-    user: { login: 'adachi-tatsuru' },
+    user: { login: 'agent-skill-chain-review-recorder[bot]' },
   }));
   stub.writeState(stateAfterSubmit);
 
@@ -216,8 +266,8 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.equal(report.gate.final, 'approved');
   assert.equal(report.gate.reviewers.length, 2);
   assert.deepEqual(report.gate.reviewers.map((reviewer) => reviewer.actor_relation), [
-    'same_as_writer',
-    'same_as_writer',
+    'distinct_from_writer',
+    'distinct_from_writer',
   ]);
 
   const published = runCli(['gate', 'publish', 'ISSUE-271', reportPath], { cwd: repo.dir, env });

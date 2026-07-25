@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
+import { digestOf } from '../../src/lib/digest.js';
 
 // このファイルは名前が近い2つの別コマンドをまとめて検証する:
 //   1. `gate reconcile <issue_id> <target_sha>`（src/commands/gate.ts の reconcile 関数）
@@ -17,10 +17,6 @@ import { createGhStub } from '../helpers/gh-stub.js';
 //      期限切れwriter leaseを一括回収する（安全なら回収、未push/未commitが残るなら人間判断へ昇格）。
 // gate.ts の reconcile と reconcile.ts の run はどちらも「reconcile」という語を共有するが無関係な
 // 別機能である。
-
-function sha256(content: Buffer | string): string {
-  return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
-}
 
 interface GateReport {
   gate: {
@@ -76,7 +72,10 @@ function approveGate(
 
   const report = parse(fs.readFileSync(reportPath, 'utf8')) as GateReport;
   const artifactContent = fs.readFileSync(path.join(worktreePath, artifactRelPath));
-  report.gate.approved_artifacts.push({ path: artifactRelPath, digest: sha256(artifactContent) });
+  report.gate.approved_artifacts = [{
+    path: artifactRelPath,
+    digest: digestOf(artifactContent),
+  }];
   report.gate.conformance = 'pass';
   report.gate.falsification = 'pass';
   report.gate.final = 'approved';

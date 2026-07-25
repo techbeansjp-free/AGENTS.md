@@ -24,6 +24,7 @@ interface GateReport {
     target_sha: string;
     conformance: string;
     falsification: string;
+    acceptance_criteria?: { ac_id: string; conformance: string; evidence: string[] }[];
     final: string;
     blockers: { severity: string; origin: string; code: string; evidence: string[] }[];
     approved_digest: string;
@@ -279,6 +280,62 @@ test('gate record-verdict: Strictの独立verdictが規定件数に満たない�
 
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /expected=2, actual=1/);
+  assert.equal(readReport(reportPath).gate.final, 'pending');
+});
+
+test('gate record-verdict: failにorigin付きblocking findingが無ければ書込みを拒否する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const reportPath = writeReport(repo.dir, scaffold());
+  const verdict = JSON.stringify({
+    conformance: 'pass',
+    falsification: 'fail',
+    blockers: [],
+  });
+
+  const res = runCli(['gate', 'record-verdict', reportPath], {
+    cwd: repo.dir,
+    input: verdict,
+  });
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /origin付きblocking finding/);
+  assert.equal(readReport(reportPath).gate.final, 'pending');
+});
+
+test('gate record-verdict: 新scaffoldの各pass verdictはexact approved artifact集合を必須とする', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  const reportPath = writeReport(repo.dir, scaffold({
+    acceptance_criteria: [{ ac_id: 'AC-1', conformance: 'pending', evidence: ['review pending'] }],
+    approved_artifacts: [{ path: 'SPEC.md', digest: ZERO_DIGEST }],
+  }));
+  const criterion = [{ ac_id: 'AC-1', conformance: 'pass', evidence: ['SPEC.md AC-1'] }];
+  const verdicts = JSON.stringify([
+    {
+      conformance: 'pass',
+      falsification: 'pass',
+      acceptance_criteria: criterion,
+      blockers: [],
+      approved_artifacts: [{ path: 'SPEC.md' }],
+    },
+    {
+      conformance: 'pass',
+      falsification: 'pass',
+      acceptance_criteria: criterion,
+      blockers: [],
+      approved_artifacts: [],
+    },
+  ]);
+
+  const res = runCli(['gate', 'record-verdict', reportPath, repo.dir, '2'], {
+    cwd: repo.dir,
+    input: verdicts,
+  });
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /approved artifact集合/);
   assert.equal(readReport(reportPath).gate.final, 'pending');
 });
 

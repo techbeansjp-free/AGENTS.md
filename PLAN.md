@@ -30,12 +30,12 @@
 
 ## テスト
 
-- 単体: classifier、capability、canonical digest、actor/SHA/run ID/slot、Strict集約。
+- 単体: classifier、NUL/invalid UTF-8 path、capability、canonical digest、present/absent domain separation、actor/SHA/run ID/slot、Strict集約。
 - 結合: Review API投稿→workflow相当取得→gate report→Check Run。
-- 攻撃: PR変更recorder/verifier/allowlistの不使用、branch内偽証跡、未登録actor、同一writer/recorder actorの正当なattestation、GitHub credential/env/origin非継承、非default base、token無し直接submit・token再利用、same-SHA旧/new attempt、新attempt不完全、commit actor未解決、dismissed review、API commit ID不一致、古いSHA、prompt/artifact/launcher改変、slot重複、Strict 1件。
-- adapter: Codex exact model/effort/read-only、Claude attestation/probe、Cursor拒否、通常選択維持。
+- 攻撃: PR変更recorder/verifier/allowlistの不使用、branch内偽証跡、未登録actor、writer/recorder同一actor、専用recorder token欠落・AI subprocess漏洩、GitHub credential/env/origin/ambient隔離root非継承、非default base、one-time token無し直接submit・token再利用、same-SHA旧/new attempt、新attempt不完全、commit actor未解決、101件以上のAPI pagination、dismissed review、API commit ID不一致、古いSHA、prompt/artifact/launcher改変、Claude ambient model証跡改変、空/部分artifact集合、fail finding欠落、slot重複、Strict 1件。
+- adapter: Codex exact model/effort/read-only、Claude attestation/probe、local Strict 2独立process・fresh workspace、Cursor拒否、通常選択維持。
 - distribution: legacy同期済みfixtureの修復、customized workflow競合時の全体no-op、dry-run、init、template sync、provider credential/inference依存0件。任意consumerのCLI可搬性はIssue #285で追跡する。
-- recorder: payload allowlist、actor権限、App未構成、標準Actions App、stale head、Check replay、signer workflow/ref/digest、run tuple、48KiB境界、success後検査0件。
+- recorder: payload allowlist、actions readの最小権限、actor権限、App未構成、標準Actions App、stale head、Check replay、signer workflow/ref/digest、run tuple、状態書込み前回復、48KiB境界、terminal PATCH response非parse、success後検査0件。
 - 必須: build/typecheck、全test、doc/vocab/reference/ADR/secret/SAST、template sync、shell syntax。
 
 ## checkpoint・役割

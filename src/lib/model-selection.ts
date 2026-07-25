@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { git } from './exec.js';
+import { decodeNullSeparatedUtf8, git, gitBinary } from './exec.js';
 import { readYamlFile } from './yaml-io.js';
 import { validateAgainstSchema } from './schema.js';
 import { defaultBranch } from './worktree.js';
@@ -129,7 +129,7 @@ export function classifyCoreReview(
     };
   }
 
-  const diff = git(['diff', '--name-only', `${base}...${options.targetSha}`], root);
+  const diff = gitBinary(['diff', '--name-only', '-z', `${base}...${options.targetSha}`], root);
   if (diff.status !== 0) {
     return {
       required: true,
@@ -140,10 +140,18 @@ export function classifyCoreReview(
     };
   }
 
-  const changedPaths = diff.stdout
-    .split('\n')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  let changedPaths: string[];
+  try {
+    changedPaths = decodeNullSeparatedUtf8(diff.stdout);
+  } catch {
+    return {
+      required: true,
+      status: 'unresolved',
+      reason: 'classification_unavailable',
+      changed_paths: [],
+      policy,
+    };
+  }
   if (changedPaths.some((entry) => matchesCorePath(policy, entry))) {
     return { required: true, status: 'resolved', reason: 'core_path_changed', changed_paths: changedPaths, policy };
   }

@@ -14,7 +14,7 @@ import {
 } from '../lib/worktree.js';
 import { readYamlFile } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
-import { digestOfFile } from '../lib/digest.js';
+import { ARTIFACT_ABSENT_DIGEST, artifactDigestOfFile, digestOfFile } from '../lib/digest.js';
 import { git } from '../lib/exec.js';
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
@@ -195,6 +195,7 @@ const GATE_REPORT_USAGE = `
 `;
 interface GateReport {
   gate: {
+    id: string;
     conformance: string;
     falsification: string;
     final: string;
@@ -221,8 +222,16 @@ export async function gateReport(args: string[]): Promise<number> {
     for (const artifact of report.gate.approved_artifacts) {
       const abs = path.join(artifactRoot, artifact.path);
       if (!fs.existsSync(abs)) {
-        errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
-      } else if (digestOfFile(abs) !== artifact.digest) {
+        if (report.gate.id === 'implementation') {
+          if (artifact.digest !== ARTIFACT_ABSENT_DIGEST) {
+            errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
+          }
+        } else {
+          errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
+        }
+      } else if (
+        (report.gate.id === 'implementation' ? artifactDigestOfFile(abs) : digestOfFile(abs)) !== artifact.digest
+      ) {
         errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
     }

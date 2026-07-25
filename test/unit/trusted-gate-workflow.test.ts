@@ -26,6 +26,7 @@ test('trusted gate workflowはdispatch/environment/concurrency/GITHUB_TOKEN権�
   );
   assert.match(workflow, /cancel-in-progress: false/);
   for (const permission of [
+    'actions: read',
     'contents: read',
     'pull-requests: read',
     'issues: read',
@@ -62,6 +63,7 @@ test('trusted gate workflowは固定attest actionとexact gh verificationを使�
   const abort = workflow.indexOf('gate record-trusted-check abort');
   assert.ok(abort > finalize);
   assert.match(workflow.slice(finalize, abort), /if: \$\{\{ failure\(\) \}\}/);
+  assert.doesNotMatch(workflow.slice(abort), /if \[\[ -f .*trusted-gate-state/);
   assert.equal(workflow.slice(abort).includes('\n      - name:'), false);
   assert.doesNotMatch(workflow, /uses:\s+\S+@v[0-9]/);
 });

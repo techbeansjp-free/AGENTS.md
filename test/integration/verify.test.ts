@@ -2,11 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+import { digestOf } from '../../src/lib/digest.js';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -15,10 +15,6 @@ function escapeRegExp(value: string): string {
 // `verify` サブコマンド8種の結合テスト。すべて bin/agents-md.js（ビルド後の実体）に対して
 // subprocess実行する。fixtureは createTmpRepo + 実際のCLI呼び出し（issue start / gate review /
 // sync templates / checkpoint 等）で組み立て、YAMLの手書きは最小限にとどめる。
-
-function sha256(content: Buffer | string): string {
-  return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
-}
 
 // ---- verify branch-name ----
 
@@ -600,14 +596,20 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   assert.match(pending.stderr, /gate\.final が pending のままです/);
 
   // When: 承認済みに書き換え、approved_artifacts にSPEC.mdの実digestを対応付ける
-  const specDigest = sha256(fs.readFileSync(path.join(worktreePath, 'SPEC.md')));
-  const approvedText = fs
-    .readFileSync(gateReportPath, 'utf8')
-    .replace('conformance: pending', 'conformance: pass')
-    .replace('falsification: pending', 'falsification: pass')
-    .replace('final: pending', 'final: approved')
-    .replace('approved_artifacts: []', `approved_artifacts:\n    - path: SPEC.md\n      digest: ${specDigest}`);
-  fs.writeFileSync(gateReportPath, approvedText);
+  const specDigest = digestOf(fs.readFileSync(path.join(worktreePath, 'SPEC.md')));
+  const approvedReport = parse(fs.readFileSync(gateReportPath, 'utf8')) as {
+    gate: {
+      conformance: string;
+      falsification: string;
+      final: string;
+      approved_artifacts: { path: string; digest: string }[];
+    };
+  };
+  approvedReport.gate.conformance = 'pass';
+  approvedReport.gate.falsification = 'pass';
+  approvedReport.gate.final = 'approved';
+  approvedReport.gate.approved_artifacts = [{ path: 'SPEC.md', digest: specDigest }];
+  fs.writeFileSync(gateReportPath, stringify(approvedReport));
 
   // Then: 成功する
   const approved = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
@@ -642,14 +644,20 @@ test('verify gate-report (ISSUE-176 AC-4): 承認済み成果物が削除され�
   const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
 
   // Given: SPEC.mdをapproved_artifactsに対応付け、承認済みにする。
-  const specDigest = sha256(fs.readFileSync(path.join(worktreePath, 'SPEC.md')));
-  const approvedText = fs
-    .readFileSync(gateReportPath, 'utf8')
-    .replace('conformance: pending', 'conformance: pass')
-    .replace('falsification: pending', 'falsification: pass')
-    .replace('final: pending', 'final: approved')
-    .replace('approved_artifacts: []', `approved_artifacts:\n    - path: SPEC.md\n      digest: ${specDigest}`);
-  fs.writeFileSync(gateReportPath, approvedText);
+  const specDigest = digestOf(fs.readFileSync(path.join(worktreePath, 'SPEC.md')));
+  const approvedReport = parse(fs.readFileSync(gateReportPath, 'utf8')) as {
+    gate: {
+      conformance: string;
+      falsification: string;
+      final: string;
+      approved_artifacts: { path: string; digest: string }[];
+    };
+  };
+  approvedReport.gate.conformance = 'pass';
+  approvedReport.gate.falsification = 'pass';
+  approvedReport.gate.final = 'approved';
+  approvedReport.gate.approved_artifacts = [{ path: 'SPEC.md', digest: specDigest }];
+  fs.writeFileSync(gateReportPath, stringify(approvedReport));
 
   // 削除前は成功すること（regressionの前提確認）。
   const beforeDelete = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
@@ -902,7 +910,6 @@ test('verify adr (AC-8): adr finalize CLI経由の正規accepted化commitは手�
   assert.ok(reportPathMatch);
   const reportPath = reportPathMatch![1];
 
-  const sha256 = (content: Buffer) => `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
   const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
     gate: {
       conformance: string;
@@ -911,7 +918,9 @@ test('verify adr (AC-8): adr finalize CLI経由の正規accepted化commitは手�
       approved_artifacts: { path: string; digest: string }[];
     };
   };
-  report.gate.approved_artifacts.push({ path: adrRelPath, digest: sha256(fs.readFileSync(adrAbsPath)) });
+  const adrArtifact = report.gate.approved_artifacts.find((artifact) => artifact.path === adrRelPath);
+  assert.ok(adrArtifact);
+  adrArtifact.digest = digestOf(fs.readFileSync(adrAbsPath));
   report.gate.conformance = 'pass';
   report.gate.falsification = 'pass';
   report.gate.final = 'approved';

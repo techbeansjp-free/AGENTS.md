@@ -8,6 +8,7 @@ on:
     types: [agent-skill-chain-gate-record]
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
   issues: read
@@ -106,7 +107,5 @@ jobs:
           ASC_GATE_APP_ID: ${{ vars.ASC_GATE_APP_ID || secrets.ASC_GATE_APP_ID }}
           ASC_GATE_APP_PRIVATE_KEY: ${{ secrets.ASC_GATE_APP_PRIVATE_KEY }}
         run: |
-          if [[ -f "$RUNNER_TEMP/trusted-gate-state.json" ]]; then
-            node bin/agents-md.js gate record-trusted-check abort \
-              "$RUNNER_TEMP/trusted-gate-state.json"
-          fi
+          node bin/agents-md.js gate record-trusted-check abort \
+            "$RUNNER_TEMP/trusted-gate-state.json"
