@@ -4,12 +4,13 @@ import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, validateSegment, SEGMENTS, CliError, type Segment } from '../lib/issue.js';
 import { findIssueWorktree } from '../lib/worktree.js';
-import { issueDir, reviewFilePath } from '../lib/local-state.js';
-import { readYamlFile, writeYamlFileAtomic, toYamlString } from '../lib/yaml-io.js';
+import { issueDir, reviewFilePath, stateFilePath } from '../lib/local-state.js';
+import { readYamlFile, tryReadYamlFile, writeYamlFileAtomic, toYamlString } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { git, gh } from '../lib/exec.js';
 import { digestOf, digestOfFile } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
+import { classifyCoreReview } from '../lib/model-selection.js';
 
 const REVIEW_USAGE = `
 使い方: agent-skill-chain gate review <issue_id> <gate_id> <profile> [target_sha]
@@ -75,12 +76,18 @@ gate-report の final を human_required に設定して書き出す（conforman
 `;
 
 const REVIEWER_CONTEXT_USAGE = `
-使い方: agent-skill-chain gate reviewer-context <issue_id>
+使い方: agent-skill-chain gate reviewer-context <issue_id> [target_sha] [base_ref] [review_subject]
 
 判定ステップ・adapter が必要とするコンテキストを KEY=VALUE 形式で標準出力へ出す。
   adapter=<claude|codex|human>   review.adapter（未設定時 claude）
   backend=<github|local>          coordination.backend
   issue_number=<n>                issue_id から抽出した番号
+  core_review_required=<bool>     登録済みproject policyによるコアレビュー要否
+  core_review_status=<status>     resolved|unresolved
+
+target_sha/base_ref: 指定時はGit差分からコア変更を分類する。
+review_subject: ordinary|core_audit。GitHub workflowがPR labelの正本値を渡す。
+                ローカルモードで省略時はstate.yamlのreview_subjectを読む。
 `;
 
 const REVIEWER_PROMPT_USAGE = `
@@ -449,14 +456,14 @@ export async function markHumanRequired(args: string[]): Promise<number> {
   });
 }
 
-/** 判定ステップ・adapter が使う解決済みコンテキスト（adapter 名・backend・Issue 番号）を出力する。 */
+/** 判定ステップ・adapter が使う解決済みコンテキストとコアモデル要求を出力する。 */
 export async function reviewerContext(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
       printUsage(REVIEWER_CONTEXT_USAGE);
       return 0;
     }
-    const [issueIdRaw] = args;
+    const [issueIdRaw, targetSha, baseRef, reviewSubjectRaw] = args;
     if (!issueIdRaw) throw new CliError('issue_id は必須です');
     const { number } = parseIssueId(issueIdRaw);
 
@@ -465,12 +472,47 @@ export async function reviewerContext(args: string[]): Promise<number> {
     const adapter = config.review.adapter ?? 'claude';
     const worktree = findIssueWorktree(root, config, number);
     const baseDir = worktree ? worktree.path : issueDir(root, number);
+    const policyRoot = worktree ? worktree.path : root;
+
+    let reviewSubject: string | undefined = reviewSubjectRaw;
+    if (!reviewSubject && config.coordination.backend === 'local') {
+      const state = tryReadYamlFile<{ review_subject?: string }>(stateFilePath(root, number));
+      reviewSubject = state?.review_subject;
+    }
+    if (reviewSubject && reviewSubject !== 'ordinary' && reviewSubject !== 'core_audit') {
+      throw new CliError(`review_subject は ordinary|core_audit のいずれかである必要があります: ${reviewSubject}`);
+    }
+
+    const decision = classifyCoreReview(policyRoot, {
+      targetSha,
+      baseRef,
+      reviewSubject: reviewSubject as 'ordinary' | 'core_audit' | undefined,
+    });
+    const policy = decision.policy;
+    const policyLines = policy
+      ? [
+          `core_required_profile=${policy.required_profile}`,
+          `core_model_tier=${policy.capability.model_tier}`,
+          `core_reasoning_tier=${policy.capability.reasoning_tier}`,
+          `codex_required_model=${policy.adapters.codex.model}`,
+          `codex_required_reasoning_effort=${policy.adapters.codex.reasoning_effort}`,
+          `codex_override_attestation_env=${policy.adapters.codex.override_attestation_env}`,
+          `claude_model_env=${policy.adapters.claude.model_env}`,
+          `claude_model_tier_env=${policy.adapters.claude.model_tier_env}`,
+          `claude_reasoning_tier_env=${policy.adapters.claude.reasoning_tier_env}`,
+          `claude_reasoning_probe_env=${policy.adapters.claude.reasoning_probe_env}`,
+        ]
+      : [];
     return ok(
       [
         `adapter=${adapter}`,
         `backend=${config.coordination.backend}`,
         `issue_number=${number}`,
         `base_dir=${baseDir}`,
+        `core_review_required=${decision.required}`,
+        `core_review_status=${decision.status}`,
+        `core_review_reason=${decision.reason}`,
+        ...policyLines,
       ].join('\n'),
     );
   });

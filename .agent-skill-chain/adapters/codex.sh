@@ -55,18 +55,45 @@ _codex_worker_effort() {
 # 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
 # env: CODEX_REVIEWER_CMD（テスト用完全上書き）、GATE_REVIEWER_CMD（後方互換上書き）、
 #      CODEX_EXECUTABLE（既定 codex。実行バイナリの明示指定）、
-#      CODEX_REVIEWER_MODEL（既定 gpt-5.6）、CODEX_REVIEWER_REASONING_EFFORT（既定 high）。
+#      CODEX_REVIEWER_MODEL（通常既定 gpt-5.6）、CODEX_REVIEWER_REASONING_EFFORT（通常既定 high）、
+#      CODEX_CORE_REVIEWER_ATTESTED（コア時の完全command上書きがmodel/effort/read-onlyを満たす証明）。
 launch_gate_reviewer() {
   local report_path="${4:-}"
+  local core_codex_review="${ASC_CORE_REVIEW_REQUIRED:-false}"
+  local model="${CODEX_REVIEWER_MODEL:-gpt-5.6}"
+  local effort="${CODEX_REVIEWER_REASONING_EFFORT:-high}"
+
+  _codex_fail_safe() {
+    echo "launch_gate_reviewer: $1（フェイルセーフで human_required へ倒します）" >&2
+    [[ -n "$report_path" ]] && _asc_cli gate mark-human-required "$report_path" >/dev/null || true
+    return 2
+  }
+
+  if [[ "$core_codex_review" == "true" ]]; then
+    model="${CODEX_REVIEWER_MODEL:-${ASC_CODEX_REQUIRED_MODEL:-}}"
+    effort="${CODEX_REVIEWER_REASONING_EFFORT:-${ASC_CODEX_REQUIRED_REASONING_EFFORT:-}}"
+    if [[ -z "${ASC_CODEX_REQUIRED_MODEL:-}" || "$model" != "$ASC_CODEX_REQUIRED_MODEL" ]]; then
+      _codex_fail_safe "Codex core reviewer のmodelが project policy と一致しません"
+      return
+    fi
+    if [[ -z "${ASC_CODEX_REQUIRED_REASONING_EFFORT:-}" || "$effort" != "$ASC_CODEX_REQUIRED_REASONING_EFFORT" ]]; then
+      _codex_fail_safe "Codex core reviewer のreasoning effortが project policy と一致しません"
+      return
+    fi
+    if [[ -n "${CODEX_REVIEWER_CMD:-}" || -n "${GATE_REVIEWER_CMD:-}" ]]; then
+      if [[ "${CODEX_CORE_REVIEWER_ATTESTED:-}" != "true" ]]; then
+        _codex_fail_safe "Codex core reviewer の完全command上書きに必要なmodel/effort/read-only証明がありません"
+        return
+      fi
+    fi
+  fi
+
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
     if ! command -v "$codex_executable" >/dev/null 2>&1; then
-      echo "launch_gate_reviewer: codex CLI が見つかりません。フェイルセーフで human_required へ倒します" >&2
-      [[ -n "$report_path" ]] && _asc_cli gate mark-human-required "$report_path" >/dev/null || true
-      return 2
+      _codex_fail_safe "Codex CLI が見つかりません"
+      return
     fi
-    local model="${CODEX_REVIEWER_MODEL:-gpt-5.6}"
-    local effort="${CODEX_REVIEWER_REASONING_EFFORT:-high}"
     local quoted_executable
     printf -v quoted_executable '%q' "$codex_executable"
     GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -"

@@ -245,6 +245,26 @@ test('gate reviewer-context: adapter/backend/issue_number/base_dir を出力す�
   assert.match(res.stdout, /^backend=local$/m);
   assert.match(res.stdout, /^issue_number=1$/m);
   assert.match(res.stdout, /^base_dir=/m);
+  assert.match(res.stdout, /^core_review_required=false$/m);
+  assert.match(res.stdout, /^core_review_status=resolved$/m);
+});
+
+test('gate reviewer-context: 明示core_auditはStrictとadapter別能力要求を出力する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const res = runCli(
+    ['gate', 'reviewer-context', 'ISSUE-1', 'deadbeef', 'main', 'core_audit'],
+    { cwd: repo.dir },
+  );
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /^core_review_required=true$/m);
+  assert.match(res.stdout, /^core_review_status=resolved$/m);
+  assert.match(res.stdout, /^core_required_profile=strict$/m);
+  assert.match(res.stdout, /^core_model_tier=frontier_coding$/m);
+  assert.match(res.stdout, /^core_reasoning_tier=maximum_reasoning$/m);
+  assert.match(res.stdout, /^codex_required_model=gpt-5\.6-sol$/m);
+  assert.match(res.stdout, /^codex_required_reasoning_effort=xhigh$/m);
 });
 
 test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック・出力 JSON 契約を含む', async (t) => {

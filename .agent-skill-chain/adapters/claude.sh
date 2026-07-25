@@ -143,7 +143,9 @@ report_status() {
 # 終了コード: 0=判定完了 / 2（!=0,!=3）=error（final=human_required 書込み後）。
 # env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、高速パス）、
 #      CLAUDE_AUTH_PROBE_CMD | CLAUDE_AUTH_PROBE_TIMEOUT_SEC（認証の実疎通フォールバック、_claude_auth_ok参照）、
-#      GATE_REVIEWER_CMD（レビュア実行系の上書き）、
+#      GATE_REVIEWER_CMD（通常レビューの実行系上書き）、CLAUDE_REVIEWER_MODEL（通常レビューの明示model）、
+#      CLAUDE_CORE_REVIEW_MODEL / CLAUDE_CORE_REVIEW_MODEL_TIER /
+#      CLAUDE_CORE_REVIEW_REASONING_TIER / CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD（コアレビュー能力証明）、
 #      GATE_REVIEWER_TIMEOUT_SEC（既定900）、GATE_REVIEWER_RETRIES（既定3）、GATE_REVIEWER_RETRY_INTERVAL_SEC（既定30）。
 launch_gate_reviewer() {
   local issue_id="${1:-}" gate_id="${2:-}" profile="${3:-}" report_path="${4:-}" target_sha="${5:-}"
@@ -171,6 +173,42 @@ launch_gate_reviewer() {
     return 2
   }
 
+  local core_claude_review=false
+  if [[ "${ASC_CORE_REVIEW_REQUIRED:-false}" == "true" && "${ASC_REVIEW_ADAPTER:-claude}" == "claude" ]]; then
+    core_claude_review=true
+    if [[ "${CLAUDE_CORE_REVIEW_MODEL_TIER:-}" != "${ASC_CORE_MODEL_TIER:-frontier_coding}" ]]; then
+      _fail_safe "Claude core reviewer の model tier を frontier_coding と検証できません"
+      return
+    fi
+    if [[ "${CLAUDE_CORE_REVIEW_REASONING_TIER:-}" != "${ASC_CORE_REASONING_TIER:-maximum_reasoning}" ]]; then
+      _fail_safe "Claude core reviewer の reasoning tier を maximum_reasoning と検証できません"
+      return
+    fi
+    if [[ -z "${CLAUDE_CORE_REVIEW_MODEL:-}" || "${CLAUDE_CORE_REVIEW_MODEL:-}" == gpt-* ]]; then
+      _fail_safe "Claude core reviewer の実在modelが未指定、またはprovider不一致です"
+      return
+    fi
+    local reasoning_probe="${CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD:-}"
+    if [[ -z "$reasoning_probe" ]]; then
+      _fail_safe "Claude core reviewer の最大利用可能reasoningを検証するprobeが未設定です"
+      return
+    fi
+    local reasoning_probe_timeout="${CLAUDE_CORE_REVIEW_REASONING_PROBE_TIMEOUT_SEC:-20}"
+    if command -v timeout >/dev/null 2>&1; then
+      if ! timeout "$reasoning_probe_timeout" bash -c "$reasoning_probe" >/dev/null 2>&1; then
+        _fail_safe "Claude core reviewer のreasoning probeに失敗しました"
+        return
+      fi
+    elif ! bash -c "$reasoning_probe" >/dev/null 2>&1; then
+      _fail_safe "Claude core reviewer のreasoning probeに失敗しました"
+      return
+    fi
+    if [[ -n "${GATE_REVIEWER_CMD:-}" ]]; then
+      _fail_safe "コアレビューではmodel指定を検証できない汎用GATE_REVIEWER_CMD上書きを許可しません"
+      return
+    fi
+  fi
+
   # 認証（実値はログ・stdout に出さない）。env非空の高速パス→claude auth statusの実疎通フォールバック
   # の2段判定（Issue #185 _claude_auth_ok）。真に認証が欠如している場合のみフェイルセーフする。
   if ! _claude_auth_ok; then
@@ -178,13 +216,27 @@ launch_gate_reviewer() {
     return
   fi
 
-  # レビュア実行系。GATE_REVIEWER_CMD で上書き可能。既定は claude CLI headless（無ツール＝read-only）。
+  # レビュア実行系。コア時は公式 --model と能力証明を必須化する。通常時だけ汎用上書きを許可する。
   local reviewer_cmd="${GATE_REVIEWER_CMD:-}"
   if [[ -z "$reviewer_cmd" ]]; then
-    if command -v claude >/dev/null 2>&1; then
-      reviewer_cmd="claude -p --output-format text --allowed-tools ''"
+    local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
+    if command -v "$claude_executable" >/dev/null 2>&1; then
+      local quoted_executable
+      printf -v quoted_executable '%q' "$claude_executable"
+      reviewer_cmd="$quoted_executable -p --output-format text --allowed-tools ''"
+      local selected_model=""
+      if [[ "$core_claude_review" == "true" ]]; then
+        selected_model="$CLAUDE_CORE_REVIEW_MODEL"
+      elif [[ -n "${CLAUDE_REVIEWER_MODEL:-}" ]]; then
+        selected_model="$CLAUDE_REVIEWER_MODEL"
+      fi
+      if [[ -n "$selected_model" ]]; then
+        local quoted_model
+        printf -v quoted_model '%q' "$selected_model"
+        reviewer_cmd+=" --model $quoted_model"
+      fi
     else
-      _fail_safe "claude CLI が見つからず GATE_REVIEWER_CMD も未設定です"
+      _fail_safe "Claude Code CLI が見つからず利用可能な実行系も未設定です"
       return
     fi
   fi

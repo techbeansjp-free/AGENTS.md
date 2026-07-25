@@ -56,6 +56,76 @@ properties:
         const: false
       unregistered_documents_are_normative:
         const: false
+  model_selection:
+    type: object
+    required: [ordinary, core_review]
+    additionalProperties: false
+    properties:
+      ordinary:
+        type: object
+        required: [behavior]
+        additionalProperties: false
+        properties:
+          behavior: {const: explicit_selection}
+      core_review:
+        type: object
+        required: [required_profile, unavailable, capability, triggers, adapters]
+        additionalProperties: false
+        properties:
+          required_profile: {const: strict}
+          unavailable: {const: human_required}
+          capability:
+            type: object
+            required: [model_tier, reasoning_tier]
+            additionalProperties: false
+            properties:
+              model_tier: {const: frontier_coding}
+              reasoning_tier: {const: maximum_reasoning}
+          triggers:
+            type: object
+            required: [github_label, local_state_value, exact_paths, path_prefixes]
+            additionalProperties: false
+            properties:
+              github_label: {const: "review:core-audit"}
+              local_state_value: {const: core_audit}
+              exact_paths:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items: {type: string, minLength: 1}
+              path_prefixes:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items: {type: string, minLength: 1}
+          adapters:
+            type: object
+            required: [codex, claude, human]
+            additionalProperties: false
+            properties:
+              codex:
+                type: object
+                required: [model, reasoning_effort, override_attestation_env]
+                additionalProperties: false
+                properties:
+                  model: {const: gpt-5.6-sol}
+                  reasoning_effort: {const: xhigh}
+                  override_attestation_env: {const: CODEX_CORE_REVIEWER_ATTESTED}
+              claude:
+                type: object
+                required: [model_env, model_tier_env, reasoning_tier_env, reasoning_probe_env]
+                additionalProperties: false
+                properties:
+                  model_env: {const: CLAUDE_CORE_REVIEW_MODEL}
+                  model_tier_env: {const: CLAUDE_CORE_REVIEW_MODEL_TIER}
+                  reasoning_tier_env: {const: CLAUDE_CORE_REVIEW_REASONING_TIER}
+                  reasoning_probe_env: {const: CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD}
+              human:
+                type: object
+                required: [behavior]
+                additionalProperties: false
+                properties:
+                  behavior: {const: human_required}
 
 # core invariant（プロジェクトポリシーで上書き不可、違反はCIが設定エラーとして実行停止）：
 # main直接変更禁止(I4)、4セグメント・4ゲート(A-3)、reviewerの独立性・read-only(A-4)、

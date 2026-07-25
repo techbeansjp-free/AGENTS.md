@@ -56,6 +56,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -80,9 +82,21 @@ jobs:
           echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
           echo "target_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
+          REVIEW_SUBJECT=ordinary
+          if echo "$LABELS_JSON" | grep -q '"review:core-audit"'; then REVIEW_SUBJECT=core_audit; fi
+          echo "review_subject=$REVIEW_SUBJECT" >> "$GITHUB_OUTPUT"
+
+          REVIEWER_CONTEXT="$(node bin/agents-md.js gate reviewer-context \
+            "$ISSUE_ID" "$HEAD_SHA" "origin/${{ github.base_ref }}" "$REVIEW_SUBJECT")"
+          ADAPTER="$(echo "$REVIEWER_CONTEXT" | sed -n 's/^adapter=//p')"
+          CORE_REVIEW_REQUIRED="$(echo "$REVIEWER_CONTEXT" | sed -n 's/^core_review_required=//p')"
+          echo "adapter=$ADAPTER" >> "$GITHUB_OUTPUT"
+          echo "core_review_required=$CORE_REVIEW_REQUIRED" >> "$GITHUB_OUTPUT"
+
           PROFILE=standard
           if ! echo "$LABELS_JSON" | grep -q '"risk:normal"'; then PROFILE=strict; fi
           if echo "$LABELS_JSON" | grep -q '"autonomy:full"'; then PROFILE=strict; fi
+          if [ "$CORE_REVIEW_REQUIRED" = "true" ]; then PROFILE=strict; fi
           echo "profile=$PROFILE" >> "$GITHUB_OUTPUT"
 
       - name: Detect automatic reviewer credentials
@@ -92,16 +106,17 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          ADAPTER="$(node bin/agents-md.js gate reviewer-context "${{ steps.ctx.outputs.issue_id }}" | sed -n 's/^adapter=//p')"
+          ADAPTER="${{ steps.ctx.outputs.adapter }}"
           AVAILABLE=true
           case "$ADAPTER" in
             claude) [[ -z "$ANTHROPIC_API_KEY" && -z "$CLAUDE_CODE_OAUTH_TOKEN" ]] && AVAILABLE=false ;;
             codex) [[ -z "$OPENAI_API_KEY" ]] && AVAILABLE=false ;;
           esac
           echo "available=$AVAILABLE" >> "$GITHUB_OUTPUT"
+          echo "core_review_required=${{ steps.ctx.outputs.core_review_required }}" >> "$GITHUB_OUTPUT"
 
       - name: Publish neutral gate when reviewer credentials are unavailable
-        if: steps.credentials.outputs.available == 'false'
+        if: steps.credentials.outputs.available == 'false' && steps.credentials.outputs.core_review_required != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.ctx.outputs.target_sha }}
@@ -110,7 +125,17 @@ jobs:
           node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.env.GATE_ID}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "neutral", output: {title: "automatic gate review not run", summary: "Automatic gate review was not run because reviewer credentials are not configured. Follow the manual review, local gate record, and admin merge procedure."}}))' | gh api -X POST "repos/${{ github.repository }}/check-runs" --input -
           echo "自動ゲートレビューは認証情報未設定のため未実施です。手動レビュー・ローカル記録・admin mergeの運用へ移行してください。"
 
-      - name: End gate job successfully after neutral publication
+      - name: Publish action-required gate when core reviewer credentials are unavailable
+        if: steps.credentials.outputs.available == 'false' && steps.credentials.outputs.core_review_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.ctx.outputs.target_sha }}
+          GATE_ID: ${{ matrix.gate }}
+        run: |
+          node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.env.GATE_ID}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "action_required", output: {title: "core review requires human action", summary: "The required frontier-coding / maximum-reasoning reviewer is unavailable. The gate is human_required and merge remains blocked."}}))' | gh api -X POST "repos/${{ github.repository }}/check-runs" --input -
+          echo "コア独立レビューの必須能力を利用できないため、human_requiredとして停止しました。"
+
+      - name: End gate job after unavailable-reviewer publication
         if: steps.credentials.outputs.available == 'false'
         run: exit 0
 
@@ -140,6 +165,12 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ASC_BASE_REF: origin/${{ github.base_ref }}
+          ASC_REVIEW_SUBJECT: ${{ steps.ctx.outputs.review_subject }}
+          CLAUDE_CORE_REVIEW_MODEL: ${{ vars.CLAUDE_CORE_REVIEW_MODEL }}
+          CLAUDE_CORE_REVIEW_MODEL_TIER: ${{ vars.CLAUDE_CORE_REVIEW_MODEL_TIER }}
+          CLAUDE_CORE_REVIEW_REASONING_TIER: ${{ vars.CLAUDE_CORE_REVIEW_REASONING_TIER }}
+          CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD: ${{ vars.CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD }}
         run: |
           set +e
           ./.agent-skill-chain/scripts/gate-launch-reviewer.sh \

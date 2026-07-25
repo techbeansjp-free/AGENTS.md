@@ -26,12 +26,40 @@ test('self-extension project policy: manifestで登録した実在文書だけ�
   assert.deepEqual(validation, { valid: true, errors: [] });
 
   const common = ((manifest.documents as { common: string[] }).common);
-  assert.deepEqual(common, ['RULES.md', '自己拡張ワークフロー.md', 'OPERATING_PRINCIPLES.md']);
+  assert.deepEqual(common, ['RULES.md', '自己拡張ワークフロー.md', 'OPERATING_PRINCIPLES.md', 'MODEL_TIER_TABLE.md']);
   for (const document of common) {
     const content = fs.readFileSync(path.join(projectDir, document), 'utf8');
     assert.ok(content.trim().length > 0, `${document} が空ではないこと`);
     assert.doesNotMatch(content, /\.agent-skill-chain\/(?:source|runtime\/templates)|\.\.\/source/, `${document} が廃止assetを参照しないこと`);
   }
+
+  const modelSelection = (manifest.model_selection as {
+    ordinary: { behavior: string };
+    core_review: {
+      required_profile: string;
+      unavailable: string;
+      capability: { model_tier: string; reasoning_tier: string };
+      adapters: { codex: { model: string; reasoning_effort: string }; claude: { model_env: string } };
+    };
+  });
+  assert.equal(modelSelection.ordinary.behavior, 'explicit_selection');
+  assert.equal(modelSelection.core_review.required_profile, 'strict');
+  assert.equal(modelSelection.core_review.unavailable, 'human_required');
+  assert.deepEqual(modelSelection.core_review.capability, {
+    model_tier: 'frontier_coding',
+    reasoning_tier: 'maximum_reasoning',
+  });
+  assert.deepEqual(modelSelection.core_review.adapters.codex, {
+    model: 'gpt-5.6-sol',
+    reasoning_effort: 'xhigh',
+    override_attestation_env: 'CODEX_CORE_REVIEWER_ATTESTED',
+  });
+  assert.equal(modelSelection.core_review.adapters.claude.model_env, 'CLAUDE_CORE_REVIEW_MODEL');
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(projectDir, 'MODEL_TIER_TABLE.md'), 'utf8'),
+    /規範ではない|旧モデル選定メモ/,
+    '旧メモが非規範のまま残らないこと',
+  );
 });
 
 test('self-extension lifecycle: isolated repoで成果物の作成、記録、close後の復元を行える', (t) => {
