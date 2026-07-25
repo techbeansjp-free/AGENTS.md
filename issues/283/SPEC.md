@@ -15,11 +15,12 @@ AI認証を置かずにその判定を安全にCheck Runへ記録する経路が
 
 - `recorder_actor`: GitHubへ証跡とdispatchを記録する進行役のidentity。PR authorと同一でもよい。
 - `reviewer`: read-only隔離runで判定したAIまたは人間。human reviewerがPR author本人なら独立と認めない。
-- `evidence v2`: `agent-skill-chain/gate-review-evidence/v2`。Issue/gate/profile/target SHA、reviewerの
-  run ID・slot・adapter・model・reasoning・read-only capability、prompt digest、verdict、
-  trusted base SHA・launcher digest・ephemeral clone・read-only sandboxを必須入力とする。
-- #274がローカルreviewer起動・evidence v2記録・Strict集約を担い、本IssueはGitHub上の再検証と
-  Check Run発行だけを担う。入力のverdictやdigestを無条件に信用しない。
+- `evidence v2`: `agent-skill-chain/gate-review-evidence/v2`。Issue/gate/profile/target SHA、expected reviewer
+  count、reviewerのrun ID・slot・adapter・model・reasoning・read-only capability、prompt digest、
+  conformance・falsification・blockers/inconclusive、approved artifact path/digest、trusted base SHA・
+  launcher digest・ephemeral clone・read-only sandbox、aggregate verdict/provenanceを必須入力とする。
+- #274はcore用のローカルreviewer起動とper-review evidence v2生成、#277は一般のStrict集約を担う。
+  本Issueは集約済み最終reportを再判定せず、GitHub上でschema/provenance/digestを再検証してCheckへ写像する。
 
 ## 要求 → 要件 → 受入条件
 
@@ -42,9 +43,10 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 - Check Runは設定中のcanonical `agent-skill-chain/{gate}-gate`名だけを使い、`checks: write`以外は
   contents/pull-requests readに限定する。outputへevidence digest・reviewer/aggregate provenance・
   target・gate・成果物digestを機密を除いて記録する。
+- workflowのGitHub Actions App identityを、rulesetのexpected integration（未固定ならcontext-only）と照合する。
+  発行後にcurrent SHAのcanonical checkをAPIで再読取し、同一Appの最新runが期待conclusionでなければ完了しない。
 - 配布テンプレート、展開済みworkflow、init/upgrade対象、CLI・テストを同期する。
-- 初回導入の循環は、#284に限り明示承認された管理者が独立Sol/xhighレビューと全非ゲートCIの
-  証跡をPRへ残した後にadmin mergeする一回限りのmigrationで解く。以後この例外を使用しない。
+- 初回導入の循環はAC-5の一回限りmigrationで解き、通常運用へ例外を持ち越さない。
 
 ### 受入条件（Acceptance Criteria）
 
@@ -75,6 +77,13 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 - When: GitHubテンプレートが展開される
 - Then: trusted workflowと検証コードが同期され、AI/API credentialを要求しない
 - 検証方法見込み: `automated`
+
+#### AC-5: #284だけを監査可能にbootstrapできる
+
+- Given: repository ownerの本タスクでの明示承認、rulesetのadmin bypass許可、独立Sol/xhigh最終PASS、全非gate CI PASSがある
+- When: 進行役が固定した#284/current headだけをadmin mergeする
+- Then: 許可者・PR・SHA・verdict・CI・実行者・時刻をPRへ耐久記録し、条件不一致または再利用を拒否する
+- 検証方法見込み: `hybrid`
 
 ## スコープ外
 
