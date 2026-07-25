@@ -11,7 +11,14 @@
   },
   "files": [
     "bin/",
-    ".agent-skill-chain/",
+    ".agent-skill-chain/adapters/",
+    ".agent-skill-chain/ci/",
+    ".agent-skill-chain/config/",
+    ".agent-skill-chain/hooks/",
+    ".agent-skill-chain/schemas/",
+    ".agent-skill-chain/scripts/",
+    ".agent-skill-chain/standards/",
+    ".agent-skill-chain/templates/",
     "AGENTS.md",
     "CLAUDE.md",
     "docs/GLOSSARY.md"

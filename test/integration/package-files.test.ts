@@ -4,9 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
-// Issue #169 T9: package.json の files フィールド追加後、npm pack --dry-run の出力に
-// 開発用ファイル（src/*.ts・test/**/*.ts・tsconfig*.json等）が含まれず、配布必須ファイルが
-// 欠落していないことを実測確認する（02_設計§9.2、03_実装計画2.9）。
+// Issue #244: npm package の配布境界を実測し、consumer project へ導入しない運用状態・
+// 自己拡張ポリシー・保守者資産が混入しないことを確認する。
 
 const packageRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 
@@ -20,9 +19,18 @@ function npmPackDryRunFiles(): string[] {
   return parsed[0].files.map((f) => f.path);
 }
 
-test('npm pack --dry-run: 開発用ファイル（src/・test/・tsconfig）が配布物に含まれない', () => {
+test('npm pack --dry-run: runtime状態・自己拡張ポリシー・保守者資産が配布物に含まれない', () => {
   const files = npmPackDryRunFiles();
 
+  assert.ok(
+    !files.some((f) => f.startsWith('.agent-skill-chain/runtime/')),
+    '.agent-skill-chain/runtime/ 配下が含まれないこと',
+  );
+  assert.ok(
+    !files.some((f) => f.startsWith('.agent-skill-chain/project/')),
+    '.agent-skill-chain/project/ 配下が含まれないこと',
+  );
+  assert.ok(!files.includes('.agent-skill-chain/.installed_version'), '.installed_version が含まれないこと');
   assert.ok(!files.some((f) => f.startsWith('src/')), 'src/ 配下が含まれないこと');
   assert.ok(!files.some((f) => f.startsWith('test/')), 'test/ 配下が含まれないこと');
   assert.ok(!files.some((f) => f.startsWith('tsconfig')), 'tsconfig*.json が含まれないこと');
@@ -31,18 +39,24 @@ test('npm pack --dry-run: 開発用ファイル（src/・test/・tsconfig）が�
   assert.ok(!files.some((f) => f.startsWith('docs/maintainer/')), 'docs/maintainer/ が含まれないこと');
 });
 
-test('npm pack --dry-run: 配布必須ファイル（bin/・config・AGENTS.md等）は欠落していない', () => {
+test('npm pack --dry-run: init/upgrade の全配布 namespace とルート資産は欠落していない', () => {
   const files = npmPackDryRunFiles();
 
   assert.ok(files.includes('bin/agents-md.js'), 'bin/agents-md.js が含まれること');
-  assert.ok(
-    files.includes(path.join('.agent-skill-chain', 'config', 'agent-skill-chain.yaml')),
-    '.agent-skill-chain/config/agent-skill-chain.yaml が含まれること',
-  );
-  assert.ok(
-    files.includes(path.join('.agent-skill-chain', 'hooks', 'claude-pretooluse.sh')),
-    '.agent-skill-chain/hooks/claude-pretooluse.sh が含まれること（Issue #169新設アセット）',
-  );
+  const requiredAssets = [
+    ['adapters', 'claude.sh'],
+    ['ci', 'verify-ac-coverage.sh'],
+    ['config', 'agent-skill-chain.yaml'],
+    ['hooks', 'claude-pretooluse.sh'],
+    ['schemas', 'config.schema.yaml'],
+    ['scripts', 'init.sh'],
+    ['standards', 'GIT_CONVENTIONS.md'],
+    ['templates', 'issue', 'SPEC.md'],
+  ];
+  for (const asset of requiredAssets) {
+    const assetPath = path.join('.agent-skill-chain', ...asset);
+    assert.ok(files.includes(assetPath), `${assetPath} が含まれること`);
+  }
   assert.ok(files.includes('AGENTS.md'), 'AGENTS.md が含まれること');
   assert.ok(files.includes('CLAUDE.md'), 'CLAUDE.md が含まれること');
   assert.ok(files.includes(path.join('docs', 'GLOSSARY.md')), 'docs/GLOSSARY.md が含まれること');
