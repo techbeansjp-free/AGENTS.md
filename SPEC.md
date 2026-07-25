@@ -32,11 +32,23 @@ repository root で `npm pack --dry-run` を実行すると、npm の `prepare` 
 ### 要件
 
 - パッケージ検証中の lifecycle build は共有生成物を書き換えてはならない。
-- package files検査は実際のnpm pack対象を検査し、隔離によって検査精度を落としてはならない。
+- package files検査は実際のnpm pack対象を検査し、下記の収録契約を維持しなければならない。
 - 競合し得るpackage検証とCLI利用を意図的に重ねる自動回帰検証を持つ。
 - 既定並列度を維持し、個々のテストが実行順序へ依存しない。
 - 一時領域は成功時・失敗時とも後始末され、repository内へ検証用生成物を残さない。
 - 変更はpackage検証の境界へ局所化し、CLI本体の公開動作とnpm packageの内容契約を変えない。
+
+### 維持するpackage収録契約
+
+- 必須ファイル: `bin/agents-md.js`、`AGENTS.md`、`CLAUDE.md`、`docs/GLOSSARY.md`。
+- 必須namespaceと代表ファイル: `.agent-skill-chain/` 配下の
+  `adapters/claude.sh`、`ci/verify-ac-coverage.sh`、`config/agent-skill-chain.yaml`、
+  `hooks/claude-pretooluse.sh`、`schemas/config.schema.yaml`、`scripts/init.sh`、
+  `standards/GIT_CONVENTIONS.md`、`templates/issue/SPEC.md`。
+- 禁止prefix: `.agent-skill-chain/runtime/`、`.agent-skill-chain/project/`、`src/`、
+  `test/`、`tsconfig`、`docs/adr/`、`docs/maintainer/`。
+- 禁止ファイル: `.agent-skill-chain/.installed_version`、`CONTRIBUTING.md`。
+- 判定規則: `npm pack --dry-run --json` が返す実際のfiles一覧を上記集合と照合する。
 
 ### 受入条件（Acceptance Criteria）
 
@@ -51,21 +63,22 @@ repository root で `npm pack --dry-run` を実行すると、npm の `prepare` 
 
 - Given: package manifestと収録対象ファイルが用意されている
 - When: package files統合テストを実行する
-- Then: npmが算出したpack対象に必須ファイルが含まれ、禁止ファイルが含まれないことを検査する
+- Then: npmが算出したpack対象が「維持するpackage収録契約」の必須集合を全て含み、禁止集合を含まない
 - 検証方法見込み: `automated`
 
 #### AC-3: 競合条件を再現する回帰テストが安定して成功する
 
 - Given: package検証とCLI読込みを並行開始できるテスト環境がある
 - When: lifecycle buildを伴うpackage検証とCLIを利用する検査を意図的に重ねて実行する
-- Then: CLIは完全なexportを読み込み、両方の処理が成功する
+- Then: package処理中も共有 `bin/agents-md.js` のコマンドモジュールgraphが完全にloadされ、
+  `--help` が終了コード0とusageを返し、cleanな入力への `lint vocab` が終了コード0を返す
 - 検証方法見込み: `automated`
 
 #### AC-4: 全テストが既定並列度で決定的に成功する
 
 - Given: 変更後のソースと通常のNode.js test runner設定がある
-- When: 全unit・integrationテストを既定並列度で複数回実行する
-- Then: 各回が成功し、並列度1への固定や実行順制御を必要としない
+- When: 全unit・integrationテストを既定並列度で最低3回連続実行する
+- Then: 3回以上の各回が成功し、並列度1への固定や実行順制御を必要としない
 - 検証方法見込み: `automated`
 
 #### AC-5: 一時資源と既存契約を保全する
@@ -77,13 +90,11 @@ repository root で `npm pack --dry-run` を実行すると、npm の `prepare` 
 
 ## 制約・完了条件・未決事項
 
-- 制約: npmの実際のpack計算を模倣実装へ置換しない。
-- 制約: test runner全体の並列実行を無効化しない。
-- 完了条件: AC-1〜AC-5の証跡、複数回の全テスト結果、型検査結果を検証成果物へ残す。
+- 制約: npmの実際のpack計算を模倣実装へ置換せず、test runner全体の並列実行を無効化しない。
+- 完了条件: AC-1〜AC-5の証跡、3回以上の全テスト結果、型検査結果を検証成果物へ残す。
 - 未決事項: なし。
 
 ## スコープ外
 
 - npm packageの公開内容、CLIコマンド仕様、プロダクションビルド方式の変更。
-- Node.js test runner自身のスケジューラ制御。
-- #279と無関係な既存テストの整理や高速化。
+- Node.js test runner自身のスケジューラ制御、および#279と無関係な既存テストの整理や高速化。
