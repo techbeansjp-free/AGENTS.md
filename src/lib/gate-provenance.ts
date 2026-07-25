@@ -80,6 +80,33 @@ function targetSha(value: string): void {
   if (!/^[0-9a-f]{40}$/.test(value)) throw new Error('target SHAは40桁の小文字hexである必要があります');
 }
 
+function strictBase64(value: string, label: string): Buffer {
+  if (value.length === 0 || value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    throw new Error(`${label}がcanonical base64ではありません`);
+  }
+  const decoded = Buffer.from(value, 'base64');
+  if (decoded.toString('base64') !== value) throw new Error(`${label}がcanonical base64ではありません`);
+  return decoded;
+}
+
+function validateChunkDescriptor(descriptor: ReportChunkDescriptor, expectedIndex?: number): void {
+  if (
+    !Number.isSafeInteger(descriptor.index) ||
+    descriptor.index < 0 ||
+    (expectedIndex !== undefined && descriptor.index !== expectedIndex)
+  ) {
+    throw new Error('chunk indexが不正です');
+  }
+  if (
+    !Number.isSafeInteger(descriptor.bytes) ||
+    descriptor.bytes <= 0 ||
+    descriptor.bytes > REPORT_CHUNK_BYTES
+  ) {
+    throw new Error('chunk byte数が不正です');
+  }
+  sha256(descriptor.digest, 'chunk digest');
+}
+
 export function compareWorkflowAttempts(left: WorkflowAttemptRef, right: WorkflowAttemptRef): number {
   return left.runNumber === right.runNumber
     ? left.runAttempt - right.runAttempt
@@ -166,6 +193,11 @@ export function buildReportStorage(report: unknown): { manifest: ReportStorage; 
 export function renderReportChunk(checkId: number, envelopeDigest: string, chunk: ReportChunk): string {
   positiveSafeInteger(checkId, 'Check ID');
   sha256(envelopeDigest, 'attestation envelope digest');
+  validateChunkDescriptor(chunk.descriptor);
+  const value = strictBase64(chunk.body, 'report chunk body');
+  if (value.length !== chunk.descriptor.bytes || digestOf(value) !== chunk.descriptor.digest) {
+    throw new Error('report chunkがdescriptorと一致しません');
+  }
   return [
     REPORT_CHUNK_MARKER,
     `check_id: ${checkId}`,
@@ -185,7 +217,7 @@ export function parseReportChunk(body: string): { checkId: number; envelopeDiges
     new RegExp(`^${name}: (.+)$`, 'm').exec(body)?.[1];
   const encoded = /```base64\n([A-Za-z0-9+/=]+)\n```/.exec(body)?.[1];
   if (!encoded) throw new Error('report chunk bodyがありません');
-  const value = Buffer.from(encoded, 'base64');
+  const value = strictBase64(encoded, 'report chunk body');
   const checkId = Number(field('check_id'));
   const envelopeDigest = field('envelope_digest') ?? '';
   const descriptor = {
@@ -195,21 +227,29 @@ export function parseReportChunk(body: string): { checkId: number; envelopeDiges
   };
   positiveSafeInteger(checkId, 'Check ID');
   sha256(envelopeDigest, 'attestation envelope digest');
-  if (!Number.isSafeInteger(descriptor.index) || descriptor.index < 0) throw new Error('chunk indexが不正です');
-  if (descriptor.bytes !== value.length || descriptor.bytes > REPORT_CHUNK_BYTES) {
-    throw new Error('chunk byte数が不正です');
-  }
+  validateChunkDescriptor(descriptor);
+  if (descriptor.bytes !== value.length) throw new Error('chunk byte数が不正です');
   if (digestOf(value) !== descriptor.digest) throw new Error('chunk digestが一致しません');
   return { checkId, envelopeDigest, chunk: { descriptor, body: encoded } };
 }
 
 export function materializeReport(manifest: ReportStorage, chunks: ReportChunk[]): unknown {
+  if (
+    manifest.schema_version !== 'agent-skill-chain/gate-report-storage/v1' ||
+    manifest.encoding !== 'canonical-json' ||
+    (manifest.storage !== 'inline' && manifest.storage !== 'pr-comment-chunks')
+  ) {
+    throw new Error('report storage manifestのschema・encoding・storageが不正です');
+  }
   sha256(manifest.report_digest, 'report digest');
   if (!Number.isSafeInteger(manifest.report_bytes) || manifest.report_bytes < 0 || manifest.report_bytes > REPORT_MAX_BYTES) {
     throw new Error('report byte数が不正です');
   }
   if (manifest.storage === 'inline') {
     if (manifest.chunks || manifest.inline_report === undefined) throw new Error('inline manifestが不正です');
+    if (manifest.report_bytes > INLINE_REPORT_MAX_BYTES || chunks.length !== 0) {
+      throw new Error('inline reportが上限を超過しているか不要なchunkがあります');
+    }
     const canonical = canonicalJson(manifest.inline_report);
     if (Buffer.byteLength(canonical) !== manifest.report_bytes || digestOf(canonical) !== manifest.report_digest) {
       throw new Error('inline reportのsizeまたはdigestが一致しません');
@@ -219,10 +259,13 @@ export function materializeReport(manifest: ReportStorage, chunks: ReportChunk[]
   if (manifest.inline_report !== undefined || !manifest.chunks || manifest.chunks.length !== chunks.length) {
     throw new Error('chunk manifestまたはchunk件数が不正です');
   }
+  if (manifest.report_bytes <= INLINE_REPORT_MAX_BYTES || manifest.chunks.length === 0) {
+    throw new Error('chunk storageのreport byte数またはchunk件数が不正です');
+  }
   const byIndex = new Map(chunks.map((chunk) => [chunk.descriptor.index, chunk]));
   if (byIndex.size !== chunks.length) throw new Error('chunk indexが重複しています');
   const buffers = manifest.chunks.map((descriptor, expectedIndex) => {
-    if (descriptor.index !== expectedIndex) throw new Error('manifest chunk順が不正です');
+    validateChunkDescriptor(descriptor, expectedIndex);
     const chunk = byIndex.get(expectedIndex);
     if (
       !chunk ||
@@ -231,7 +274,8 @@ export function materializeReport(manifest: ReportStorage, chunks: ReportChunk[]
     ) {
       throw new Error(`chunk ${expectedIndex} がmanifestと一致しません`);
     }
-    const value = Buffer.from(chunk.body, 'base64');
+    validateChunkDescriptor(chunk.descriptor, expectedIndex);
+    const value = strictBase64(chunk.body, `chunk ${expectedIndex} body`);
     if (value.length !== descriptor.bytes || digestOf(value) !== descriptor.digest) {
       throw new Error(`chunk ${expectedIndex} の内容が不正です`);
     }

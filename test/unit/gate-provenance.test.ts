@@ -62,6 +62,18 @@ test('48 KiB以下はinlineでdigest検証してmaterializeする', () => {
   const storage = buildReportStorage(report);
   assert.equal(storage.manifest.storage, 'inline');
   assert.deepEqual(materializeReport(storage.manifest, storage.chunks), report);
+  assert.throws(
+    () => materializeReport({ ...storage.manifest, encoding: 'canonical-json-v2' as 'canonical-json' }, []),
+    /schema・encoding・storage/,
+  );
+  assert.throws(
+    () => materializeReport({ ...storage.manifest, report_bytes: INLINE_REPORT_MAX_BYTES + 1 }, []),
+    /inline reportが上限/,
+  );
+  assert.throws(() => materializeReport(storage.manifest, [{
+    descriptor: { index: 0, bytes: 1, digest: digestOf('x') },
+    body: Buffer.from('x').toString('base64'),
+  }]), /不要なchunk/);
 });
 
 test('48 KiB超は順序付きchunkへ分割し、欠落・改変・重複を拒否する', () => {
@@ -83,6 +95,17 @@ test('48 KiB超は順序付きchunkへ分割し、欠落・改変・重複を拒
     () => materializeReport(storage.manifest, [storage.chunks[0], storage.chunks[0], ...storage.chunks.slice(2)]),
     /重複/,
   );
+  assert.throws(
+    () => materializeReport(storage.manifest, [
+      { ...storage.chunks[0], body: `${storage.chunks[0].body.slice(0, -1)}!` },
+      ...storage.chunks.slice(1),
+    ]),
+    /canonical base64/,
+  );
+  assert.throws(
+    () => materializeReport({ ...storage.manifest, report_bytes: INLINE_REPORT_MAX_BYTES }, storage.chunks),
+    /chunk storage/,
+  );
 });
 
 test('chunk commentはCheck ID・envelope digest・descriptorを検証する', () => {
@@ -93,6 +116,10 @@ test('chunk commentはCheck ID・envelope digest・descriptorを検証する', (
   assert.equal(parsed.envelopeDigest, DIGEST);
   assert.deepEqual(parsed.chunk.descriptor, storage.chunks[0].descriptor);
   assert.throws(() => parseReportChunk(body.replace(storage.chunks[0].descriptor.digest, DIGEST)), /digest/);
+  assert.throws(
+    () => renderReportChunk(987, DIGEST, { ...storage.chunks[0], body: 'not-base64!' }),
+    /canonical base64/,
+  );
 });
 
 test('4 MiB超reportを作成前に拒否する', () => {
