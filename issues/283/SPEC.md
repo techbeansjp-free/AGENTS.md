@@ -45,6 +45,8 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
   target・gate・成果物digestを機密を除いて記録する。
 - workflowのGitHub Actions App identityを、rulesetのexpected integration（未固定ならcontext-only）と照合する。
   発行後にcurrent SHAのcanonical checkをAPIで再読取し、同一Appの最新runが期待conclusionでなければ完了しない。
+- Check outputに検証済み最終reportとevidence digestを耐久保存する。ローカルmaterializeはcurrent SHAの
+  latest same-App successと成果物digestを再検証したreportだけを非正本cacheとして復元し、ADR finalizationへ渡す。
 - 配布テンプレート、展開済みworkflow、init/upgrade対象、CLI・テストを同期する。
 - 初回導入の循環はAC-5の一回限りmigrationで解き、通常運用へ例外を持ち越さない。
 
@@ -53,8 +55,8 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 #### AC-1: 正常な証跡を現在SHAへ記録できる
 
 - Given: write権限を持つ記録者が、current headを対象にした独立read-onlyレビュー証跡を提出する
-- When: repository_dispatchでdefault branchのtrusted workflowが入力とGitHub上のPR状態を検証する
-- Then: canonical gate名のCheck Runが証跡判定に対応するconclusionで対象SHAへ発行され、検証済みprovenanceが残る
+- When: default branchのtrusted workflowが入力を検証し、後続の進行役がreport materializeを要求する
+- Then: canonical Checkへprovenanceが残り、latest same-App successだけが復元されADR finalizationを進められる
 - 検証方法見込み: `automated`
 
 #### AC-2: stale・対象違い・不正gateを拒否する
@@ -78,10 +80,10 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 - Then: trusted workflowと検証コードが同期され、AI/API credentialを要求しない
 - 検証方法見込み: `automated`
 
-#### AC-5: #284だけを監査可能にbootstrapできる
+#### AC-5: trusted workflowを含む#274だけを監査可能にbootstrapできる
 
 - Given: repository ownerの本タスクでの明示承認、rulesetのadmin bypass許可、独立Sol/xhigh最終PASS、全非gate CI PASSがある
-- When: 進行役が固定した#284/current headだけをadmin mergeする
+- When: 進行役が最終固定した#274/current headだけをadmin mergeする
 - Then: 許可者・PR・SHA・verdict・CI・実行者・時刻をPRへ耐久記録し、条件不一致または再利用を拒否する
 - 検証方法見込み: `hybrid`
 
@@ -93,5 +95,5 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 
 ## 完了条件・未決事項
 
-AC-1〜AC-4の自動テスト、全回帰、template sync、権限最小化検査が成功し、#284の一回限りmigrationと
+AC-1〜AC-5の自動テスト、全回帰、template sync、権限最小化検査が成功し、#274の一回限りmigrationと
 以後の通常dispatchを監査可能に記録する。未決事項はない。
