@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { repoRoot, worktreeRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
@@ -23,6 +24,31 @@ import {
   type VerifiedReviewAttempt,
   type VerifiedReviewer,
 } from '../lib/review-evidence.js';
+import {
+  assertTrustedAppCheck,
+  assertTrustedGateAttestationVerification,
+  buildTrustedGateAttestation,
+  canonicalReportIsOversize,
+  createTrustedGateCheck,
+  fetchTrustedGateApiContext,
+  finalizeTrustedGateCheck,
+  githubJsonDirect,
+  parseTrustedGateCheckOutput,
+  parseTrustedGateDispatchEvent,
+  parseTrustedGateWorkflow,
+  readTrustedGateCheck,
+  readTrustedGateRecordState,
+  selectLatestTrustedGateCheck,
+  TRUSTED_GATE_WORKFLOW_PATH,
+  trustedGateExternalId,
+  writeTrustedGateRecordState,
+  type TrustedGateActionRun,
+  type TrustedGateApiContext,
+  type TrustedGateAttestationEnvelope,
+  type TrustedGateCheckRun,
+  type TrustedGateRecordState,
+  type TrustedGateRepository,
+} from '../lib/trusted-gate-recorder.js';
 
 const REVIEW_USAGE = `
 使い方: agent-skill-chain gate review <issue_id> <gate_id> <profile> [target_sha]
@@ -129,10 +155,20 @@ gate-reportへ書く。証跡不足・古いSHA・実行attestation不一致・a
 const MATERIALIZE_CHECK_REPORT_USAGE = `
 使い方: agent-skill-chain gate materialize-check-report <issue_id> <gate_id> <target_sha> <gate_report_path>
 
-現在SHAのlatest expected-App Check Runに耐久保存されたverified gate-reportを検証し、
-noncanonicalなローカルcacheへ復元する。success・App一致・schema・artifact digest・
-review attempt provenanceの全てが一致する場合だけ書き込む。App一致は履歴選択条件であり、
-required statusのsource trustは専用App/Workflow境界が別途担保する。
+現在SHAの専用App CheckをActions workflow run_number/run_attemptへ結合し、latest runが
+completed successの場合だけattestation、report、review evidence、artifact digestを再構築して
+noncanonicalなローカルcacheへ復元する。標準Actions Appやopaque Check ID順は信頼しない。
+`;
+
+const RECORD_TRUSTED_CHECK_USAGE = `
+使い方:
+  agent-skill-chain gate record-trusted-check validate
+  agent-skill-chain gate record-trusted-check prepare <state_path> <attestation_envelope_path>
+  agent-skill-chain gate record-trusted-check finalize <state_path> <attestation_envelope_path> <verification_json_path>
+
+repository_dispatchの厳密なallowlistを検査し、protected-main verifierのgate reportを専用GitHub Appの
+in-progress Checkへ束縛する。finalizeは固定workflowのartifact attestationとcurrent API正本を
+再検証し、最後の外部操作としてだけCheckをcompletedへPATCHする。
 `;
 
 interface Finding {
@@ -142,7 +178,7 @@ interface Finding {
   evidence: string[];
 }
 
-interface GateReport {
+export interface GateReport {
   schema_version: string;
   gate: {
     id: Segment;
@@ -904,6 +940,123 @@ export async function submitEvidence(args: string[]): Promise<number> {
   });
 }
 
+function buildVerifiedGateReport(options: {
+  root: string;
+  issueId: string;
+  issueNumber: string;
+  gateId: Segment;
+  profile: 'standard' | 'strict';
+  targetSha: string;
+  baseSha: string;
+  reviewSubject?: 'ordinary' | 'core_audit';
+  repository: { default_branch?: string };
+  pullRequest: {
+    user: { login: string | null } | null;
+    head: { sha: string };
+    base: { sha: string; ref: string };
+  };
+  commits: { author: { login: string | null } | null; committer: { login: string | null } | null }[];
+  reviews: GithubReviewRecord[];
+}): { report: GateReport; reason?: string } {
+  const policy = classifyCoreReview(options.root, {
+    targetSha: options.targetSha,
+    baseRef: options.baseSha,
+    reviewSubject: options.reviewSubject,
+  });
+  if (!policy.policy) throw new CliError('登録済みreview policyがありません');
+  if (
+    policy.required &&
+    (policy.status !== 'resolved' || options.profile !== policy.policy.required_profile)
+  ) {
+    throw new CliError('コア対象には解決済み分類とStrict profileが必要です');
+  }
+  assertDefaultBranchBase(
+    options.pullRequest,
+    options.repository,
+    options.baseSha,
+    options.targetSha,
+  );
+  const writerLogins = [
+    options.pullRequest.user?.login,
+    ...options.commits.flatMap((commit) => [commit.author?.login, commit.committer?.login]),
+  ];
+  const unresolvedWriterActor = writerLogins.some((login) => !login);
+  const writerActors = [...new Set(writerLogins.filter((login): login is string => !!login))];
+  const artifacts = artifactsAtSha(
+    options.root,
+    expectedArtifactPaths(options.root, options.gateId, options.baseSha, options.targetSha),
+    options.targetSha,
+    options.gateId === 'implementation',
+  );
+  const promptDigest = evidencePromptDigest(
+    buildReviewerPrompt(
+      options.root,
+      options.issueNumber,
+      options.gateId,
+      options.targetSha,
+      options.baseSha,
+    ),
+  );
+  const launcherDigest = localReviewLauncherDigest(options.root, options.baseSha);
+  const result = verifyGithubReviewEvidence({
+    reviews: options.reviews,
+    issueId: options.issueId,
+    gate: options.gateId,
+    profile: options.profile,
+    targetSha: options.targetSha,
+    trustedActors: policy.policy.execution.trusted_reviewer_actors,
+    writerActors,
+    unresolvedWriterActor,
+    expectedPromptDigest: promptDigest,
+    expectedArtifacts: artifacts,
+    expectedTrustedBaseSha: options.baseSha,
+    expectedLauncherDigest: launcherDigest,
+    coreReviewRequired: policy.required,
+    codexModel: policy.policy.adapters.codex.model,
+    codexReasoning: policy.policy.adapters.codex.reasoning_effort,
+  });
+  const report: GateReport = {
+    schema_version: 'agent-skill-chain/gate-report/v1',
+    gate: {
+      id: options.gateId,
+      target_sha: options.targetSha,
+      conformance: result.conformance,
+      falsification: result.falsification,
+      final: result.final,
+      blockers: result.blockers,
+      approved_digest: digestOf(JSON.stringify(result.approved_artifacts)),
+      approved_artifacts: result.approved_artifacts,
+      reviewers: result.reviewers,
+      ...(result.review_attempt ? { review_attempt: result.review_attempt } : {}),
+    },
+  };
+  const validation = validateAgainstSchema('gate-report', report, options.root);
+  if (!validation.valid) {
+    throw new CliError(`検証済みgate-reportがschema不適合です: ${validation.errors.join('; ')}`);
+  }
+  return { report, reason: result.reason };
+}
+
+function buildVerifiedGateReportFromTrustedContext(
+  root: string,
+  context: TrustedGateApiContext,
+): { report: GateReport; reason?: string } {
+  return buildVerifiedGateReport({
+    root,
+    issueId: context.issueId,
+    issueNumber: String(context.issueNumber),
+    gateId: context.payload.gate,
+    profile: context.profile,
+    targetSha: context.payload.target_sha,
+    baseSha: context.pullRequest.base.sha,
+    reviewSubject: context.reviewSubject,
+    repository: context.repository,
+    pullRequest: context.pullRequest,
+    commits: context.commits,
+    reviews: context.reviews,
+  });
+}
+
 export async function verifyEvidence(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -922,18 +1075,6 @@ export async function verifyEvidence(args: string[]): Promise<number> {
     }
 
     const root = repoRoot();
-    const policy = classifyCoreReview(root, {
-      targetSha,
-      baseRef: baseSha,
-      reviewSubject: reviewSubjectRaw as 'ordinary' | 'core_audit' | undefined,
-    });
-    if (!policy.policy) throw new CliError('登録済みreview policyがありません');
-    if (
-      policy.required &&
-      (policy.status !== 'resolved' || profile !== policy.policy.required_profile)
-    ) {
-      throw new CliError('コア対象には解決済み分類とStrict profileが必要です');
-    }
     const prResponse = gh(['api', `repos/{owner}/{repo}/pulls/${prNumber}`], root);
     const repositoryResponse = gh(['api', 'repos/{owner}/{repo}'], root);
     const commitsResponse = gh(
@@ -958,59 +1099,272 @@ export async function verifyEvidence(args: string[]): Promise<number> {
       base: { sha: string; ref: string };
     };
     const repository = JSON.parse(repositoryResponse.stdout) as { default_branch?: string };
-    assertDefaultBranchBase(pr, repository, baseSha, targetSha);
     const commits = parseGhList<{
       author: { login: string | null } | null;
       committer: { login: string | null } | null;
     }>(commitsResponse.stdout);
-    const writerLogins = [pr.user?.login, ...commits.flatMap((commit) => [commit.author?.login, commit.committer?.login])];
-    const unresolvedWriterActor = writerLogins.some((login) => !login);
-    const writerActors = [...new Set(writerLogins.filter((login): login is string => !!login))];
-
-    const artifacts = artifactsAtSha(
+    const verified = buildVerifiedGateReport({
       root,
-      expectedArtifactPaths(root, gateId, baseSha, targetSha),
-      targetSha,
-      gateId === 'implementation',
-    );
-    const promptDigest = evidencePromptDigest(buildReviewerPrompt(root, number, gateId, targetSha, baseSha));
-    const launcherDigest = localReviewLauncherDigest(root, baseSha);
-    const result = verifyGithubReviewEvidence({
-      reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
       issueId,
-      gate: gateId,
+      issueNumber: number,
+      gateId,
       profile,
       targetSha,
-      trustedActors: policy.policy.execution.trusted_reviewer_actors,
-      writerActors,
-      unresolvedWriterActor,
-      expectedPromptDigest: promptDigest,
-      expectedArtifacts: artifacts,
-      expectedTrustedBaseSha: baseSha,
-      expectedLauncherDigest: launcherDigest,
-      coreReviewRequired: policy.required,
-      codexModel: policy.policy.adapters.codex.model,
-      codexReasoning: policy.policy.adapters.codex.reasoning_effort,
+      baseSha,
+      reviewSubject: reviewSubjectRaw as 'ordinary' | 'core_audit' | undefined,
+      repository,
+      pullRequest: pr,
+      commits,
+      reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
     });
-    const report: GateReport = {
-      schema_version: 'agent-skill-chain/gate-report/v1',
-      gate: {
-        id: gateId,
-        target_sha: targetSha,
-        conformance: result.conformance,
-        falsification: result.falsification,
-        final: result.final,
-        blockers: result.blockers,
-        approved_digest: digestOf(JSON.stringify(result.approved_artifacts)),
-        approved_artifacts: result.approved_artifacts,
-        reviewers: result.reviewers,
-        review_attempt: result.review_attempt,
-      },
-    };
-    const validation = validateAgainstSchema('gate-report', report, root);
-    if (!validation.valid) return fail(`検証済みgate-reportがschema不適合です: ${validation.errors.join('; ')}`);
-    writeYamlFileAtomic(reportPath, report);
-    return ok(`final: ${result.final}${result.reason ? `\nreason: ${result.reason}` : ''}`);
+    writeYamlFileAtomic(reportPath, verified.report);
+    return ok(
+      `final: ${verified.report.gate.final}${verified.reason ? `\nreason: ${verified.reason}` : ''}`,
+    );
+  });
+}
+
+function requiredEnvironment(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new CliError(`${name}が構成されていません`);
+  return value;
+}
+
+function trustedGateEventFromEnvironment(): ReturnType<typeof parseTrustedGateDispatchEvent> {
+  const eventPath = requiredEnvironment('GITHUB_EVENT_PATH');
+  let event: unknown;
+  try {
+    event = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
+  } catch {
+    throw new CliError('GITHUB_EVENT_PATHのrepository_dispatch eventを解釈できません');
+  }
+  return parseTrustedGateDispatchEvent(event);
+}
+
+export function consumeTrustedGateSecrets(
+  env: NodeJS.ProcessEnv = process.env,
+): {
+  githubToken: string;
+  credentials: { appId: string; privateKey: string };
+} {
+  const appId = env.ASC_GATE_APP_ID;
+  const privateKey = env.ASC_GATE_APP_PRIVATE_KEY;
+  const githubToken = env.GITHUB_TOKEN;
+  if (!appId) throw new CliError('ASC_GATE_APP_IDが構成されていません');
+  if (!privateKey) throw new CliError('ASC_GATE_APP_PRIVATE_KEYが構成されていません');
+  if (!githubToken) throw new CliError('GITHUB_TOKENが構成されていません');
+
+  // secretはdirect fetchの明示引数だけに閉じ込める。以後のgit/gh/npm等の子processへ
+  // process.env経由で継承させない。CLI processはphase完了後に終了するため復元もしない。
+  delete env.ASC_GATE_APP_PRIVATE_KEY;
+  delete env.GITHUB_TOKEN;
+  return {
+    githubToken,
+    credentials: { appId, privateKey },
+  };
+}
+
+function assertTrustedRecorderCheckout(root: string, workflowSha: string, targetSha: string): void {
+  const head = git(['rev-parse', 'HEAD'], root).stdout.trim();
+  if (head !== workflowSha) throw new CliError('trusted recorder checkoutがGITHUB_WORKFLOW_SHAと一致しません');
+  if (git(['status', '--porcelain', '--untracked-files=no'], root).stdout.trim()) {
+    throw new CliError('trusted recorder checkoutのtracked fileがdirtyです');
+  }
+  if (git(['rev-parse', '--verify', `${targetSha}^{commit}`], root).status !== 0) {
+    throw new CliError('dispatch target SHAのGit objectがありません');
+  }
+}
+
+function assertTrustedActionRun(
+  actionRun: TrustedGateActionRun,
+  state: TrustedGateRecordState,
+): void {
+  if (
+    actionRun.id !== state.workflow.run_id ||
+    actionRun.run_number !== state.workflow.run_number ||
+    actionRun.run_attempt !== state.workflow.run_attempt ||
+    actionRun.path !== TRUSTED_GATE_WORKFLOW_PATH ||
+    actionRun.head_sha !== state.workflow.sha ||
+    actionRun.head_branch !== 'main' ||
+    actionRun.event !== 'repository_dispatch' ||
+    actionRun.status !== 'in_progress' ||
+    actionRun.conclusion !== null
+  ) {
+    throw new CliError('Actions APIのworkflow run/attempt/source tupleがcurrent in-progress runと一致しません');
+  }
+}
+
+export async function recordTrustedCheck(args: string[]): Promise<number> {
+  return guard(async () => {
+    if (isHelp(args)) {
+      printUsage(RECORD_TRUSTED_CHECK_USAGE);
+      return 0;
+    }
+    const [phase, firstPath, secondPath] = args;
+    if (!phase || !['validate', 'prepare', 'finalize'].includes(phase)) {
+      throw new CliError('record-trusted-check phaseはvalidate|prepare|finalizeのみです');
+    }
+    const event = trustedGateEventFromEnvironment();
+    const workflow = parseTrustedGateWorkflow(process.env);
+    if (phase === 'validate') {
+      if (args.length !== 1) throw new CliError('validateに追加引数は指定できません');
+      return ok(
+        [
+          `pr_number=${event.payload.pr_number}`,
+          `gate=${event.payload.gate}`,
+          `target_sha=${event.payload.target_sha}`,
+        ].join('\n'),
+      );
+    }
+    const repository = requiredEnvironment('GITHUB_REPOSITORY');
+    const { githubToken, credentials } = consumeTrustedGateSecrets();
+    const root = repoRoot();
+    assertTrustedRecorderCheckout(root, workflow.sha, event.payload.target_sha);
+
+    if (phase === 'prepare') {
+      if (!firstPath || !secondPath || args.length !== 3) {
+        throw new CliError('prepareにはstate_pathとattestation_envelope_pathが必要です');
+      }
+      const context = await fetchTrustedGateApiContext({
+        actor: event.actor,
+        payload: event.payload,
+        repository,
+        githubToken,
+      });
+      const verified = buildVerifiedGateReportFromTrustedContext(root, context);
+      if (!verified.report.gate.review_attempt) {
+        throw new CliError(`latest v3 review attemptを検証できません${verified.reason ? `: ${verified.reason}` : ''}`);
+      }
+      const config = loadConfig(root);
+      const check = await createTrustedGateCheck({
+        repository,
+        repositoryId: context.repository.id,
+        credentials,
+        checkName: config.checks[event.payload.gate],
+        payload: event.payload,
+        workflow,
+      });
+      const attestation = buildTrustedGateAttestation({
+        repository: context.repository,
+        payload: event.payload,
+        workflow,
+        check,
+        report: verified.report,
+      });
+      const state: TrustedGateRecordState = {
+        schema_version: 'agent-skill-chain/trusted-gate-record-state/v1',
+        actor: event.actor,
+        payload: event.payload,
+        issue_id: context.issueId,
+        profile: context.profile,
+        review_subject: context.reviewSubject,
+        base_sha: context.pullRequest.base.sha,
+        workflow,
+        check,
+        report: verified.report,
+        report_oversize: canonicalReportIsOversize(verified.report),
+        attestation,
+      };
+      writeTrustedGateRecordState(firstPath, secondPath, state);
+      return ok(`state_path=${path.resolve(firstPath)}\nattestation_path=${path.resolve(secondPath)}`);
+    }
+
+    const verificationPath = args[3];
+    if (!firstPath || !secondPath || !verificationPath || args.length !== 4) {
+      throw new CliError('finalizeにはstate_path、attestation_envelope_path、verification_json_pathが必要です');
+    }
+    const state = readTrustedGateRecordState(firstPath);
+    if (
+      state.actor !== event.actor ||
+      canonicalJson(state.payload) !== canonicalJson(event.payload) ||
+      canonicalJson(state.workflow) !== canonicalJson(workflow)
+    ) {
+      throw new CliError('stateのdispatch actor/payload/workflow tupleがcurrent runと一致しません');
+    }
+    const envelopeBytes = fs.readFileSync(secondPath);
+    let envelope: TrustedGateAttestationEnvelope;
+    let verification: unknown;
+    try {
+      envelope = JSON.parse(envelopeBytes.toString('utf8')) as TrustedGateAttestationEnvelope;
+      verification = JSON.parse(fs.readFileSync(verificationPath, 'utf8'));
+    } catch {
+      throw new CliError('attestation envelopeまたはverification JSONを解釈できません');
+    }
+    if (
+      envelopeBytes.toString('utf8') !== `${canonicalJson(envelope)}\n` ||
+      canonicalJson(envelope) !== canonicalJson(state.attestation)
+    ) {
+      throw new CliError('attestation envelope bytesがprepared stateと一致しません');
+    }
+    assertTrustedGateAttestationVerification({ verification, envelopeBytes, envelope });
+
+    const context = await fetchTrustedGateApiContext({
+      actor: event.actor,
+      payload: event.payload,
+      repository,
+      githubToken,
+    });
+    const current = buildVerifiedGateReportFromTrustedContext(root, context);
+    if (
+      context.issueId !== state.issue_id ||
+      context.profile !== state.profile ||
+      context.reviewSubject !== state.review_subject ||
+      context.pullRequest.base.sha !== state.base_sha ||
+      canonicalJson(current.report) !== canonicalJson(state.report)
+    ) {
+      throw new CliError('finalize時のIssue/profile/base/evidence/artifact正本がprepared reportから変化しました');
+    }
+    const currentCheck = await readTrustedGateCheck({
+      repository,
+      repositoryId: state.attestation.repository.id,
+      credentials,
+      checkId: state.check.id,
+    });
+    const expectedExternalId = trustedGateExternalId(workflow, event.payload);
+    assertTrustedAppCheck({
+      check: currentCheck,
+      expectedAppId: Number(credentials.appId),
+      expectedName: state.check.name,
+      expectedSha: event.payload.target_sha,
+      expectedExternalId,
+      expectedStatus: 'in_progress',
+    });
+    if (currentCheck.conclusion !== null || currentCheck.id !== envelope.check.id) {
+      throw new CliError('Checkがreplayされたか既にcompletedです');
+    }
+    const currentActionRun = await githubJsonDirect<TrustedGateActionRun>(
+      fetch,
+      githubToken,
+      `/repos/${repository}/actions/runs/${workflow.run_id}`,
+    );
+    assertTrustedActionRun(currentActionRun, state);
+    const rebuiltAttestation = buildTrustedGateAttestation({
+      repository: context.repository,
+      payload: event.payload,
+      workflow,
+      check: currentCheck,
+      report: current.report,
+    });
+    if (canonicalJson(rebuiltAttestation) !== canonicalJson(envelope)) {
+      throw new CliError('attestationのrepository/report/review/check bindingを再構築できません');
+    }
+    const reportOversize = canonicalReportIsOversize(current.report);
+    if (reportOversize !== state.report_oversize) {
+      throw new CliError('canonical report size判定がprepared stateと一致しません');
+    }
+
+    // success/failure/action_requiredを確定するApp PATCHが最後の外部操作。これ以降に再取得・
+    // attestation検査・filesystem更新を追加してはならない。
+    await finalizeTrustedGateCheck({
+      repository,
+      repositoryId: state.attestation.repository.id,
+      credentials,
+      checkId: currentCheck.id,
+      report: current.report,
+      attestation: rebuiltAttestation,
+      reportOversize,
+    });
+    return 0;
   });
 }
 
@@ -1032,7 +1386,13 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       throw new CliError('materialize-check-reportはGitHub backend専用です');
     }
     const checkName = config.checks[gateId];
-    const response = gh(
+    const expectedAppIdRaw = requiredEnvironment('ASC_GATE_APP_ID');
+    if (!/^[1-9][0-9]*$/.test(expectedAppIdRaw) || !Number.isSafeInteger(Number(expectedAppIdRaw))) {
+      throw new CliError('ASC_GATE_APP_IDは正の安全な整数である必要があります');
+    }
+    const expectedAppId = Number(expectedAppIdRaw);
+    const repositoryResponse = gh(['api', 'repos/{owner}/{repo}'], root);
+    const checksResponse = gh(
       [
         'api',
         `repos/{owner}/{repo}/commits/${targetSha}/check-runs?check_name=${encodeURIComponent(checkName)}&filter=all&per_page=100`,
@@ -1041,66 +1401,181 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       ],
       root,
     );
-    if (response.status !== 0) throw new CliError('current SHAのCheck Runを取得できません');
-    type CheckRun = {
-      id?: number;
-      name?: string;
-      head_sha?: string;
-      status?: string;
-      conclusion?: string;
-      app?: { slug?: string };
-      output?: { text?: string };
-    };
-    const parsed = JSON.parse(response.stdout) as
-      | { check_runs?: CheckRun[] }
-      | { check_runs?: CheckRun[] }[];
-    const pages = Array.isArray(parsed) ? parsed : [parsed];
-    const checkRuns = pages.flatMap((page) => page.check_runs ?? []);
-    const expectedApp = process.env.ASC_TRUSTED_CHECK_APP_SLUG || 'github-actions';
-    const sameIdentity = checkRuns
-      .filter(
-        (run) =>
-          run.name === checkName &&
-          run.head_sha === targetSha &&
-          run.app?.slug === expectedApp,
-      )
-      .sort((left, right) => (right.id ?? 0) - (left.id ?? 0));
-    const latest = sameIdentity[0];
+    const actionsResponse = gh(
+      [
+        'api',
+        `repos/{owner}/{repo}/actions/workflows/${encodeURIComponent(TRUSTED_GATE_WORKFLOW_PATH)}/runs?event=repository_dispatch&branch=main&per_page=100`,
+        '--paginate',
+        '--slurp',
+      ],
+      root,
+    );
+    if (repositoryResponse.status !== 0 || checksResponse.status !== 0 || actionsResponse.status !== 0) {
+      throw new CliError('repository、Check Run、Actions runのAPI正本を取得できません');
+    }
+    const repository = JSON.parse(repositoryResponse.stdout) as TrustedGateRepository;
     if (
-      !latest ||
-      !Number.isSafeInteger(latest.id) ||
-      latest.status !== 'completed' ||
-      latest.conclusion !== 'success' ||
-      typeof latest.output?.text !== 'string'
+      !Number.isSafeInteger(repository.id) ||
+      repository.id <= 0 ||
+      !repository.full_name ||
+      repository.default_branch !== 'main'
     ) {
-      throw new CliError('latest expected-App Check Runがcompleted successであることを確認できません');
+      throw new CliError('repository identity/default branchを解決できません');
     }
-    let report: GateReport;
-    try {
-      report = JSON.parse(latest.output.text) as GateReport;
-    } catch {
-      throw new CliError('Check Run output.textのgate-reportを解釈できません');
-    }
-    const schema = validateAgainstSchema('gate-report', report, root);
-    if (!schema.valid) throw new CliError(`Check Run gate-reportがschema不適合です: ${schema.errors.join('; ')}`);
-    if (
-      report.gate.id !== gateId ||
-      report.gate.target_sha !== targetSha ||
-      report.gate.final !== 'approved' ||
-      report.gate.conformance !== 'pass' ||
-      report.gate.falsification !== 'pass' ||
-      !report.gate.review_attempt ||
-      !report.gate.reviewers ||
-      report.gate.reviewers.length !== report.gate.review_attempt.expected_count ||
-      new Set(report.gate.reviewers.map((reviewer) => reviewer.launcher_token_digest)).size !== 1
-    ) {
-      throw new CliError('Check Run gate-reportの承認状態またはreview attempt provenanceが不正です');
-    }
-    for (const artifact of report.gate.approved_artifacts) {
-      if (artifactDigestAtSha(root, artifact.path, targetSha, gateId === 'implementation') !== artifact.digest) {
-        throw new CliError(`Check Run gate-reportのartifact digestが一致しません: ${artifact.path}`);
+    const parsedChecks = JSON.parse(checksResponse.stdout) as
+      | { check_runs?: TrustedGateCheckRun[] }
+      | { check_runs?: TrustedGateCheckRun[] }[];
+    const checkPages = Array.isArray(parsedChecks) ? parsedChecks : [parsedChecks];
+    const checkRuns = checkPages.flatMap((page) => page.check_runs ?? []);
+    const potentialOutputs = checkRuns.flatMap((run) => {
+      if (
+        run.app?.id !== expectedAppId ||
+        run.app?.name === 'GitHub Actions' ||
+        run.app?.slug === 'github-actions' ||
+        run.name !== checkName ||
+        run.head_sha !== targetSha ||
+        typeof run.output?.text !== 'string'
+      ) {
+        return [];
       }
+      try {
+        return [{ run, output: parseTrustedGateCheckOutput(run.output.text) }];
+      } catch {
+        return [];
+      }
+    });
+    const prNumbers = new Set(
+      potentialOutputs.map(({ output }) => output.attestation.pr_number),
+    );
+    if (prNumbers.size !== 1) {
+      throw new CliError('専用App Check outputから対象PRを一意に解決できません');
     }
+    const prNumber = [...prNumbers][0];
+    const parsedActions = JSON.parse(actionsResponse.stdout) as
+      | { workflow_runs?: TrustedGateActionRun[] }
+      | { workflow_runs?: TrustedGateActionRun[] }[];
+    const actionPages = Array.isArray(parsedActions) ? parsedActions : [parsedActions];
+    const actionRuns = actionPages.flatMap((page) => page.workflow_runs ?? []);
+    const selected = selectLatestTrustedGateCheck({
+      actionRuns,
+      checkRuns,
+      payload: { pr_number: prNumber, gate: gateId, target_sha: targetSha },
+      expectedAppId,
+      expectedCheckName: checkName,
+    });
+    if (typeof selected.checkRun.output?.text !== 'string') {
+      throw new CliError('latest専用App Checkにoutput envelopeがありません');
+    }
+    const output = parseTrustedGateCheckOutput(selected.checkRun.output.text);
+    const report = output.report as GateReport;
+    const attestation = output.attestation;
+    const pullResponse = gh(['api', `repos/{owner}/{repo}/pulls/${prNumber}`], root);
+    const commitsResponse = gh(
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/commits?per_page=100`, '--paginate', '--slurp'],
+      root,
+    );
+    const reviewsResponse = gh(
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate', '--slurp'],
+      root,
+    );
+    const issueNumber = parseIssueId(issueIdRaw).number;
+    const issueResponse = gh(['api', `repos/{owner}/{repo}/issues/${issueNumber}`], root);
+    if (
+      pullResponse.status !== 0 ||
+      commitsResponse.status !== 0 ||
+      reviewsResponse.status !== 0 ||
+      issueResponse.status !== 0
+    ) {
+      throw new CliError('PR、Issue、commit、review evidenceのAPI正本を取得できません');
+    }
+    const pullRequest = JSON.parse(pullResponse.stdout) as TrustedGateApiContext['pullRequest'];
+    const issue = JSON.parse(issueResponse.stdout) as TrustedGateApiContext['issue'];
+    const branchIssue = /^[^/]+\/([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$/.exec(pullRequest.head.ref);
+    if (
+      pullRequest.number !== prNumber ||
+      pullRequest.state !== 'open' ||
+      pullRequest.head.sha !== targetSha ||
+      pullRequest.base.ref !== repository.default_branch ||
+      !branchIssue ||
+      branchIssue[1] !== issueNumber ||
+      issue.number !== Number(issueNumber) ||
+      issue.state !== 'open' ||
+      !Array.isArray(issue.labels)
+    ) {
+      throw new CliError('current PR head/default base/Issue identityがCheck outputと一致しません');
+    }
+    const labels = issue.labels
+      .map((label) => typeof label === 'string' ? label : label.name ?? '')
+      .filter(Boolean);
+    const context: TrustedGateApiContext = {
+      actor: '',
+      payload: { pr_number: prNumber, gate: gateId, target_sha: targetSha },
+      repository,
+      pullRequest,
+      issue,
+      issueId: issueIdRaw,
+      issueNumber: Number(issueNumber),
+      profile: !labels.includes('risk:normal') || labels.includes('autonomy:full') ? 'strict' : 'standard',
+      reviewSubject: labels.includes('review:core-audit') ? 'core_audit' : 'ordinary',
+      commits: parseGhList<TrustedGateApiContext['commits'][number]>(commitsResponse.stdout),
+      reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
+    };
+    const rebuilt = buildVerifiedGateReportFromTrustedContext(root, context).report;
+    const expectedAttestation = buildTrustedGateAttestation({
+      repository,
+      payload: context.payload,
+      workflow: {
+        path: TRUSTED_GATE_WORKFLOW_PATH,
+        ref: 'refs/heads/main',
+        sha: selected.actionRun.head_sha,
+        run_id: selected.actionRun.id,
+        run_number: selected.actionRun.run_number,
+        run_attempt: selected.actionRun.run_attempt,
+      },
+      check: selected.checkRun,
+      report: rebuilt,
+    });
+    if (
+      canonicalReportIsOversize(report) ||
+      canonicalJson(report) !== canonicalJson(rebuilt) ||
+      canonicalJson(attestation) !== canonicalJson(expectedAttestation)
+    ) {
+      throw new CliError('Check outputのreport/attestation/evidence/artifact bindingを再構築できません');
+    }
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-attestation.'));
+    const envelopePath = path.join(tempDir, 'agent-skill-chain-gate-attestation.json');
+    fs.writeFileSync(envelopePath, `${canonicalJson(attestation)}\n`, { mode: 0o600 });
+    const verifiedAttestation = gh(
+      [
+        'attestation',
+        'verify',
+        envelopePath,
+        '-R',
+        repository.full_name,
+        '--signer-workflow',
+        `${repository.full_name}/${TRUSTED_GATE_WORKFLOW_PATH}`,
+        '--source-ref',
+        'refs/heads/main',
+        '--signer-digest',
+        selected.actionRun.head_sha,
+        '--format',
+        'json',
+      ],
+      root,
+    );
+    const envelopeBytes = fs.readFileSync(envelopePath);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    if (verifiedAttestation.status !== 0) {
+      throw new CliError('trusted gate artifact attestationを検証できません');
+    }
+    let verification: unknown;
+    try {
+      verification = JSON.parse(verifiedAttestation.stdout);
+    } catch {
+      throw new CliError('gh attestation verifyのJSON出力を解釈できません');
+    }
+    assertTrustedGateAttestationVerification({ verification, envelopeBytes, envelope: attestation });
     writeYamlFileAtomic(reportPath, report);
     return ok(reportPath);
   });

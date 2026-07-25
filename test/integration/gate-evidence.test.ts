@@ -3,22 +3,58 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { parse } from 'yaml';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
 import { digestOf } from '../../src/lib/digest.js';
 import {
+  canonicalJson,
   evidencePromptDigest,
   parseReviewEvidence,
   renderReviewEvidence,
   type ReviewEvidence,
 } from '../../src/lib/review-evidence.js';
+import { encodeGateCheckExternalId } from '../../src/lib/gate-provenance.js';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 }
+
+test('local review完了dispatchはexact payloadをPOSTし、API失敗を非0へ保つ', (t) => {
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-gate-dispatch-'));
+  const stub = createGhStub(stubDir);
+  const env = stub.env(process.env);
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+
+  const payload = {
+    event_type: 'agent-skill-chain-gate-record',
+    client_payload: {
+      pr_number: 274,
+      gate: 'implementation',
+      target_sha: 'a'.repeat(40),
+    },
+  };
+  const dispatched = spawnSync(
+    'gh',
+    ['api', '-X', 'POST', 'repos/{owner}/{repo}/dispatches', '--input', '-'],
+    { env, input: JSON.stringify(payload), encoding: 'utf8' },
+  );
+  assert.equal(dispatched.status, 0, dispatched.stderr);
+  assert.deepEqual(stub.readState().repositoryDispatches, [payload]);
+
+  const failingState = stub.readState();
+  failingState.failRepositoryDispatch = true;
+  stub.writeState(failingState);
+  const failed = spawnSync(
+    'gh',
+    ['api', '-X', 'POST', 'repos/{owner}/{repo}/dispatches', '--input', '-'],
+    { env, input: JSON.stringify(payload), encoding: 'utf8' },
+  );
+  assert.notEqual(failed.status, 0);
+  assert.deepEqual(stub.readState().repositoryDispatches, [payload]);
+});
 
 test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Check Runへ結線する', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
@@ -55,8 +91,10 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const promptDigest = evidencePromptDigest(prompt.stdout.trimEnd());
   const state = stub.readState();
   state.pullMetadata = {
+    number: 274,
+    state: 'open',
     user: { login: 'adachi-tatsuru' },
-    head: { sha: targetSha },
+    head: { sha: targetSha, ref: 'process/271-evidence-test' },
     base: { sha: baseSha, ref: 'main' },
   };
   state.pullCommits = [{
@@ -99,8 +137,10 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.match(directSubmit.stderr, /launcher token file/);
   const wrongBaseState = stub.readState();
   wrongBaseState.pullMetadata = {
+    number: 274,
+    state: 'open',
     user: { login: 'adachi-tatsuru' },
-    head: { sha: targetSha },
+    head: { sha: targetSha, ref: 'process/271-evidence-test' },
     base: { sha: baseSha, ref: 'unprotected-review-base' },
   };
   stub.writeState(wrongBaseState);
@@ -114,8 +154,10 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.notEqual(wrongBase.status, 0);
   assert.match(wrongBase.stderr, /default branch/);
   wrongBaseState.pullMetadata = {
+    number: 274,
+    state: 'open',
     user: { login: 'adachi-tatsuru' },
-    head: { sha: targetSha },
+    head: { sha: targetSha, ref: 'process/271-evidence-test' },
     base: { sha: baseSha, ref: 'main' },
   };
   stub.writeState(wrongBaseState);
@@ -181,33 +223,99 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.equal(published.status, 0, published.stderr);
   assert.equal((stub.readState() as unknown as { checkRuns: { conclusion: string }[] }).checkRuns[0].conclusion, 'success');
   fs.unlinkSync(reportPath);
+  const standardActionsRejected = runCli(
+    ['gate', 'materialize-check-report', 'ISSUE-271', 'spec', targetSha, reportPath],
+    { cwd: repo.dir, env: { ...env, ASC_GATE_APP_ID: '12345' } },
+  );
+  assert.notEqual(standardActionsRejected.status, 0);
+  assert.match(standardActionsRejected.stderr, /専用App Check output/);
+
+  const durableReport = report as unknown as {
+    schema_version: string;
+    gate: {
+      review_attempt: { attempt_id: string; expected_count: number; evidence_digest: string };
+    };
+  };
+  const workflow = {
+    path: '.github/workflows/agent-skill-chain-trusted-gate.yml',
+    ref: 'refs/heads/main' as const,
+    sha: baseSha,
+    run_id: 9001,
+    run_number: 42,
+    run_attempt: 1,
+  };
+  const externalId = encodeGateCheckExternalId({
+    workflowRunId: workflow.run_id,
+    runNumber: workflow.run_number,
+    runAttempt: workflow.run_attempt,
+    prNumber: 274,
+    gate: 'spec',
+    targetSha,
+  });
+  const attestation = {
+    schema_version: 'agent-skill-chain/gate-attestation/v1',
+    repository: { id: 77, full_name: 'test/repo' },
+    pr_number: 274,
+    target_sha: targetSha,
+    gate: 'spec',
+    review_attempt: durableReport.gate.review_attempt,
+    workflow,
+    check: { id: 700, name: 'agent-skill-chain/spec-gate', app_id: 12345 },
+    report_digest: digestOf(canonicalJson(durableReport)),
+  };
+  const recorderState = stub.readState();
+  recorderState.issueMetadata = { number: 271, state: 'open', labels: [] };
+  recorderState.checkRuns = [{
+    id: 700,
+    name: 'agent-skill-chain/spec-gate',
+    head_sha: targetSha,
+    external_id: externalId,
+    status: 'completed',
+    conclusion: 'success',
+    app: { id: 12345, name: 'Agent Skill Chain Gate', slug: 'agent-skill-chain-gate' },
+    output: {
+      text: canonicalJson({
+        schema_version: 'agent-skill-chain/check-output/v1',
+        report: durableReport,
+        attestation,
+      }),
+    },
+  }];
+  recorderState.actionRuns = [{
+    id: workflow.run_id,
+    run_number: workflow.run_number,
+    run_attempt: workflow.run_attempt,
+    path: workflow.path,
+    head_sha: workflow.sha,
+    head_branch: 'main',
+    event: 'repository_dispatch',
+    display_title: `gate-record-274-spec-${targetSha}`,
+    status: 'completed',
+    conclusion: 'success',
+  }];
+  stub.writeState(recorderState);
   const materialized = runCli(
     ['gate', 'materialize-check-report', 'ISSUE-271', 'spec', targetSha, reportPath],
-    { cwd: repo.dir, env },
+    { cwd: repo.dir, env: { ...env, ASC_GATE_APP_ID: '12345' } },
   );
   assert.equal(materialized.status, 0, materialized.stderr);
   assert.equal((parse(fs.readFileSync(reportPath, 'utf8')) as { gate: { final: string } }).gate.final, 'approved');
   const stateAfterMaterialize = stub.readState();
-  const previousRun = (stateAfterMaterialize.checkRuns as {
-    name: string;
-    head_sha: string;
-    output: { text: string };
-  }[])[0];
-  stateAfterMaterialize.checkRuns?.push({
-    ...previousRun,
-    id: stateAfterMaterialize.nextId++,
+  stateAfterMaterialize.actionRuns?.push({
+    ...(stateAfterMaterialize.actionRuns[0] as Record<string, unknown>),
+    id: 9002,
+    run_attempt: 2,
     status: 'completed',
-    conclusion: 'action_required',
-    app: { slug: 'github-actions' },
+    conclusion: 'failure',
   });
   stub.writeState(stateAfterMaterialize);
   fs.unlinkSync(reportPath);
   const staleSuccess = runCli(
     ['gate', 'materialize-check-report', 'ISSUE-271', 'spec', targetSha, reportPath],
-    { cwd: repo.dir, env },
+    { cwd: repo.dir, env: { ...env, ASC_GATE_APP_ID: '12345' } },
   );
   assert.notEqual(staleSuccess.status, 0);
-  assert.match(staleSuccess.stderr, /latest expected-App Check Run/);
+  assert.match(staleSuccess.stderr, /latest trusted recorder Actions run/);
 
   const weakProfile = runCli(
     ['gate', 'verify-evidence', 'ISSUE-271', 'spec', 'standard', targetSha, baseSha, '274', reportPath, 'core_audit'],
@@ -218,8 +326,10 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
 
   const missingState = stub.readState();
   missingState.pullMetadata = {
+    number: 274,
+    state: 'open',
     user: { login: 'adachi-tatsuru' },
-    head: { sha: baseSha },
+    head: { sha: baseSha, ref: 'process/271-evidence-test' },
     base: { sha: baseSha, ref: 'main' },
   };
   missingState.pullReviews = [];

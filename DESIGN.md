@@ -8,11 +8,12 @@
 AI inference と gate 状態遷移を分離する。進行役はローカル adapter へ read-only review を委譲し、trusted recorder が verdict を GitHub PR review として保存する。GitHub Actions はモデルを起動せず、Review API から取得した証跡を trusted CLI で再検証して Check Run を発行する。
 
 ```text
-orchestrator
-  → local adapter capability probe
-  → read-only reviewer process
-  → trusted recorder → GitHub PR Review API
-  → GitHub Actions → evidence verifier → gate report → Check Run
+進行役 → local adapter capability probe → read-only reviewer process
+      → trusted recorder → GitHub PR Review API
+      → repository_dispatch → default-main evidence verifier
+                            → dedicated GitHub App in-progress Check
+                            → artifact attestation
+                            → success/failure/action_required（最後のPATCH）
 ```
 
 ## 要件と設計要素
@@ -26,6 +27,7 @@ orchestrator
 | AC-5 | verdict envelope、canonical evidence digest、Check output、cache復元、reconcile |
 | AC-6 | GitHub/local backend分岐、通常モデル明示選択 |
 | AC-7 | schema、template sync、回帰テスト |
+| AC-8 | default-main dispatch、専用App Check、run tuple attestation、success-last |
 
 ## 責務と境界
 

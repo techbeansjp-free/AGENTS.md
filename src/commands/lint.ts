@@ -265,9 +265,17 @@ function isCliSubcommandContext(line: string, run: IdentifierRun, banned: string
  * トークンのみを列挙する（ISSUE-178 DESIGN.md「A-4」）。正規表現・部分一致は持たない。 */
 const EXTERNAL_VOCAB_ALLOWLIST: readonly string[] = ['blank_issues_enabled'];
 
-function isExternalVocabAllowlisted(line: string, run: IdentifierRun): boolean {
+function isExternalVocabAllowlisted(line: string, run: IdentifierRun, ext: string): boolean {
   const runText = line.slice(run.runStart, run.runEnd);
-  return EXTERNAL_VOCAB_ALLOWLIST.includes(runText);
+  if (EXTERNAL_VOCAB_ALLOWLIST.includes(runText)) return true;
+  // GitHub Actionsが定義するGITHUB_TOKEN permission key。散文の複数形まで除外せず、
+  // 真のYAML key位置にある改名不能な外部schema語彙だけを許可する。
+  return (
+    YAML_CONTEXT_EXTENSIONS.has(ext) &&
+    runText === 'issues' &&
+    /^\s*(-\s+)?$/.test(line.slice(0, run.runStart)) &&
+    /^\s*:/.test(line.slice(run.runEnd))
+  );
 }
 
 function isIdentifierContext(line: string, start: number, end: number, banned: string, ext: string): boolean {
@@ -276,7 +284,7 @@ function isIdentifierContext(line: string, start: number, end: number, banned: s
   if (isCodeIdentifierContext(line, run, banned)) return true;
   if (YAML_CONTEXT_EXTENSIONS.has(ext) && isYamlIdentifierContext(line, run, banned)) return true;
   if (!isProseFile(ext) && isCliSubcommandContext(line, run, banned)) return true;
-  return isExternalVocabAllowlisted(line, run);
+  return isExternalVocabAllowlisted(line, run, ext);
 }
 
 /** 行中に出現する banned の全箇所を走査し、いずれもコード的参照（バッククォート・

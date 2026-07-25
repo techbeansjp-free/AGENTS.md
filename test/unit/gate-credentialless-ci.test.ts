@@ -49,6 +49,11 @@ test('local review harness: PR base SHAの隔離cloneでbase sourceをbuildし�
   assert.match(harness, /"\$TRUSTED_SCRIPT_DIR\/gate-launch-reviewer\.sh"/);
   assert.match(harness, /launcher-token\.json/);
   assert.match(harness, /ASC_REVIEW_ATTEMPT_ID/);
+  const consumedCheck = harness.indexOf('launcher tokenが全slotで消費されませんでした');
+  const dispatch = harness.indexOf('gh api -X POST "repos/{owner}/{repo}/dispatches" --input -');
+  assert.ok(consumedCheck >= 0 && dispatch > consumedCheck);
+  assert.match(harness, /event_type: "agent-skill-chain-gate-record"/);
+  assert.match(harness, /client_payload: \{pr_number: Number\(prNumber\), gate, target_sha: targetSha\}/);
   assert.doesNotMatch(harness, /"\$SCRIPT_DIR\/gate-launch-reviewer\.sh"/);
 
   const launcher = fs.readFileSync(launcherPath, 'utf8');
