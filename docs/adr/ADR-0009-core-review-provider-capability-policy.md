@@ -27,7 +27,7 @@ Codex はモデルと reasoning effort を明示する可搬な設定を持つ�
 - 進行役がローカルadapterへレビューを委譲する。Codex は `gpt-5.6-sol`、`xhigh`、read-only sandboxを厳密に検証する。Strict は独立2回のverdictを要求する。
 - Claude Code は実行環境が宣言する実在モデルを公式の model 指定で使い、model tier attestation、maximum reasoning attestation、実行環境固有 reasoning probe の成功を要求する。Codex 固有 slug・設定キーは使わない。
 - adapter・非対話実行・capability probeが未実装のproviderは、実行可能と推測しない。
-- GitHubモードのtrusted recorderはverdictと実行attestationを構造化PR reviewへ投稿する。GitHub Actionsは登録済みactor、Review API metadata、target SHA、prompt/artifact digest、writer/reviewer run ID、Strict slot/件数を検証し、gate reportとCheck Runだけを生成する。CIはproviderを呼ばない。
+- GitHubモードのtrusted recorderはverdictと実行attestationを構造化PR reviewへ投稿する。GitHub Actionsは保護されたbase revisionのworkflow/verifier/policyだけを実行し、登録済みactor、PR/commit writer actor、Review API metadata、target SHA、prompt/artifact digest、reviewer run ID、Strict slot/件数を検証してgate reportとCheck Runだけを生成する。CIはproviderもPR headのコードも実行しない。
 - human adapter、利用不能、不一致、未証明、strict 未満、分類不能は `human_required` へ停止する。
 
 非コア作業と model policy を持たない consumer project は、依頼者・実行環境の明示選択と既存 adapter 既定を維持する。環境変数は backend 正本の分類値と検証入力をプロセスへ渡すだけで、調整状態の正本にはしない。

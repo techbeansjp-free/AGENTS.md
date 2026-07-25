@@ -42,9 +42,11 @@ manifest の `core_review` は次を保持する。
 
 classifier は base...target 差分とbackend正本の監査区分だけを解釈する。取得不能は `required/unresolved` とし、ordinaryへ降格しない。GitHubでもconfigの明示adapterを尊重し、Codexへ暗黙固定しない。
 
-### worker identity
+### trust rootとwriter identity
 
-writer lease の `holder` を writer run ID とする。`launch_worker` は取得したholderをworkerへ渡し、worker reportへ保存する。GitHubモードではIssue comment、ローカルモードではreportファイルが正本である。review evidence本文だけが主張するwriter IDは信頼しない。
+GitHub Actionsは `pull_request_target` / `pull_request_review` の保護されたbase revisionにあるworkflow、classifier、policy、schema、verifierだけを実行する。PR headのコードはcheckout・build・sourceせず、対象成果物はGit objectとしてread-onlyに参照する。当該PRが変更したallowlistやverifierを、同じPRの承認へ使わない。
+
+writer actor集合はGitHub APIのPR authorと全commitのauthor/committer loginから作る。review evidenceのauthorは登録済みtrusted actorであり、かつwriter actor集合に含まれないことを要求する。証跡本文のwriter自己申告値は判定に使わない。
 
 ### local reviewer / trusted recorder
 
@@ -65,7 +67,7 @@ PR review本文には次を保存する。
 - reviewer run ID、writer run ID、slot、adapter、model、reasoning/capability、read-only
 - prompt digest、approved artifactsとdigest、verdict
 
-GitHub APIのreview `id` / `user.login` / `commit_id` / `state` は本文外の正本である。CIはdismissed review、未登録actor、target SHA不一致を除外せずエラーとして扱う。branch内のgate reportやJSONは承認入力にしない。
+GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit actorは本文外の正本である。CIはdismissed review、未登録actor、writer actorによるreview、target SHA不一致を除外せずエラーとして扱う。branch内のgate reportやJSONは承認入力にしない。
 
 ### evidence verifier / aggregator
 
@@ -74,7 +76,7 @@ GitHub APIのreview `id` / `user.login` / `commit_id` / `state` は本文外の�
 1. Issue/gate/profile/SHA、API `commit_id`、registered actorを検証する。
 2. promptをtarget SHAから再生成しdigestを照合する。
 3. `git show <sha>:<path>` で成果物digestを再計算する。
-4. reviewer run IDがwriter run IDと異なり、run ID/slotが重複しないことを確認する。
+4. review actorがwriter actor集合に含まれず、run ID/slotが重複しないことを確認する。
 5. Standardはslot 1を1件、Strictはslot 1・2を各1件要求する。
 6. 全件pass/passかつblocking無しだけapproved、fail/blockingはrejected、不足・不一致・判定不能はhuman_requiredとする。
 
@@ -82,7 +84,7 @@ GitHub APIのreview `id` / `user.login` / `commit_id` / `state` は本文外の�
 
 ### GitHub Actions
 
-workflowは `pull_request` と `pull_request_review` を契機に、checkout/build、context/scaffold、evidence import、schema検査、publishだけを行う。provider secret、Codex Action、Claude/Codex CLI、self-hosted labelを含めない。証跡が未到着なら `human_required` reportを生成して `action_required` Check Runを発行する。workflow自体は証跡不足をクラッシュとして扱わず、検証器の異常はfail-closedで可視化する。
+workflowは `pull_request_target` と `pull_request_review` を契機に、base revisionのcheckout/build、PR metadataとtarget Git objectの取得、evidence import、schema検査、publishだけを行う。provider secret、Codex Action、Claude/Codex CLI、self-hosted labelを含めず、PR head由来の実行可能ファイルを実行しない。証跡が未到着なら `human_required` reportを生成して `action_required` Check Runを発行する。workflow自体は証跡不足をクラッシュとして扱わず、検証器の異常はfail-closedで可視化する。
 
 ローカルbackendは既存adapterがtrusted CLIを介して `reviews/<gate>.yaml` を生成するため、Review APIを要求しない。
 
@@ -97,15 +99,14 @@ workflowは `pull_request` と `pull_request_review` を契機に、checkout/bui
 
 ## schema・互換性・障害
 
-- project-policy schemaへローカル実行・transport・CI責務・trusted actor・reviewer数を追加し、自己拡張manifestのversionを上げる。
+- project-policy schemaへ任意のmodel-selection契約としてローカル実行・transport・CI責務・trusted actor・reviewer数を追加し、自己拡張manifestのpolicy versionを上げる。mainの既存v1 manifestにはmodel-selection自体がなく、この追加blockは任意なのでconsumer migrationは不要である。block不在は従来の通常adapter選択、block存在時は全新フィールド必須とする。rollbackはblock除去で旧manifestへ戻せる。
 - gate-report schemaへ検証済みreviewer metadataを任意追加する。旧reportは読めるが、新しいapproved publishは必要reviewer metadataなしでは拒否する。
-- worker-reportへrun IDを任意追加し、既存reportを読めるようにする。新規review evidence検証ではrun ID必須。
 - API/CLI/capability/分類/証跡検証の失敗はhuman_required。`neutral`や推測値を使わない。
 - rollbackは新workflow/policy/CLIを同一commitで戻す。既存レビュー証跡はPR履歴として残るが旧実装は参照しない。
 
 ## ADR
 
-ADR-0009を「CI内model実行」から「ローカル実行・外部証跡・CI検証」へ改訂する。provider固有値をvendor-neutral能力へ写像し、未証明providerをfail-closedにする長期判断は維持する。
+ADR-0009を「CI内model実行」から「ローカル実行・外部証跡・base trust rootによるCI検証」へ改訂する。provider固有値をvendor-neutral能力へ写像し、未証明providerをfail-closedにする長期判断は維持する。
 
 ## 完了条件
 
