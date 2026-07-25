@@ -361,25 +361,25 @@ test('claude launch_worker (I8直接検証): target_shaが不一致（workerが�
   assert.equal(report.status, 'blocked');
 });
 
-// --- (e) codex launch_worker: 未構成fail-safe（lease取得前） ---------------------------
+// --- (e) codex launch_worker: 認証失敗はlease取得後にblockedへ倒す ----------------------
 
-test('codex launch_worker: 未構成のためlease取得を一切試みずexit 2で即fail-safeを返す（WIP枠を消費しない）', async (t) => {
+test('codex launch_worker: 認証不成立はblocked報告・lease解放・exit 2へ倒す', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerAdapter(repo.dir, 'codex');
 
-  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], process.env);
+  const env = envWithout(['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'], {
+    CODEX_AUTH_PROBE_CMD: 'false',
+  });
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
 
-  assert.notEqual(res.status, 0, 'codex未構成はexit 0にならないこと');
+  assert.notEqual(res.status, 0, '認証不成立はexit 0にならないこと');
   assert.notEqual(res.status, 3);
 
-  // lease取得を試みていないため、即座にacquireが成功すること（先着競合が一切生じていない）。
-  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: process.env });
-  assert.equal(acquire.status, 0, 'codexはlease取得を試みないため、後続のacquireが競合しないこと: ' + acquire.stderr);
-
-  // worker-reportも一切書かれていないこと（起動前のため報告対象が存在しない）。
-  const reportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reports', 'spec.yaml');
-  assert.ok(!fs.existsSync(reportPath), 'lease取得前のためworker-reportは書かれないこと');
+  const report = readWorkerReport(repo.dir, 'spec');
+  assert.equal(report.status, 'blocked');
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
+  assert.equal(acquire.status, 0, 'blocked後にleaseが解放されること: ' + acquire.stderr);
 });
 
 // --- (f) human launch_worker: 通知＋非同期deferred --------------------------------------
