@@ -1,6 +1,6 @@
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-271
-target_sha: cae74fa642ce23c2fa484186694db6532b59a9d5
+target_sha: 53171a1d7619af10fe0ca59f10bbd667c2d72ff2
 acceptance_criteria:
   - ac_id: AC-1
     verification:
@@ -73,9 +73,10 @@ acceptance_criteria:
 regression:
   executed: true
   evidence:
-    - "test-execution.log: target cae74fa642ce23c2fa484186694db6532b59a9d5, npm test 578 passed, 0 failed"
-    - "npm run typecheck: target cae74fa642ce23c2fa484186694db6532b59a9d5 passed"
+    - "test-execution.log: target 53171a1d7619af10fe0ca59f10bbd667c2d72ff2, npm test 589 passed, 0 failed"
+    - "targeted local-review/gate/adapter/verifier regression: 134 passed, 0 failed"
+    - "npm run typecheck: target 53171a1d7619af10fe0ca59f10bbd667c2d72ff2 passed"
     - "git diff --check: validation checkpoint passed"
-    - "verify-ac-coverage, verify-template-sync, lint-vocab, lint-references, verify-adr, adr-lint: passed"
+    - "shell syntax, verify-ac-coverage, verify-template-sync, verify-doc-length, lint-vocab, lint-references, verify-adr, adr-lint: passed"
     - "lint-secrets --diff origin/main: passed"
     - "npm audit --offline --audit-level=high: 0 vulnerabilities"
