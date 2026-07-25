@@ -44,8 +44,8 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
   target・gate・成果物digestを機密を除いて記録する。
 - workflowのGitHub Actions App identityを、rulesetのexpected integration（未固定ならcontext-only）と照合する。
   発行後にcurrent SHAのcanonical checkをAPIで再読取し、同一Appの最新runが期待conclusionでなければ完了しない。
-- Check outputに検証済み最終reportとevidence digestを耐久保存する。ローカルmaterializeはcurrent SHAの
-  latest same-App successと成果物digestを再検証したreportだけを非正本cacheとして復元し、ADR finalizationへ渡す。
+- Check outputに検証済み最終reportとevidence digestを耐久保存する。materializeはcurrent SHA・canonical
+  name・same-Appの全conclusion中の最新runがsuccessの場合だけ復元し、新しい非successから旧successへfallbackしない。
 - 配布テンプレート、展開済みworkflow、init/upgrade対象、CLI・テストを同期する。
 - 初回導入の循環はAC-5の一回限りmigrationで解き、通常運用へ例外を持ち越さない。
 
@@ -55,7 +55,7 @@ Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せ�
 
 - Given: write権限を持つ記録者が、current headを対象にした独立read-onlyレビュー証跡を提出する
 - When: default branchのtrusted workflowが入力を検証し、後続の進行役がreport materializeを要求する
-- Then: canonical Checkへprovenanceが残り、latest same-App successだけが復元されADR finalizationを進められる
+- Then: canonical Checkへprovenanceが残り、same-App最新runがsuccessの場合だけ復元されADR finalizationを進められる
 - 検証方法見込み: `automated`
 
 #### AC-2: stale・対象違い・不正gateを拒否する
