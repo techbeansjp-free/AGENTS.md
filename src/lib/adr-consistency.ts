@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { parse } from 'yaml';
 
 /**
  * ADR（`docs/adr/*.md`）のyamlフロントマターから抽出した構造化データ。
@@ -15,18 +16,15 @@ export interface AdrFrontmatter {
 export function parseAdrFrontmatter(text: string): AdrFrontmatter | undefined {
   const match = /```yaml\n([\s\S]*?)```/.exec(text);
   if (!match) return undefined;
-  const lines = match[1].split('\n');
-  const get = (key: string): string | undefined => {
-    const line = lines.find((l) => l.startsWith(`${key}:`));
-    return line ? line.slice(key.length + 1).trim() : undefined;
-  };
-  const id = get('id');
-  const status = get('status');
-  if (!id || !status) return undefined;
-  const supersedesRaw = get('supersedes') ?? '[]';
-  const supersedes = [...supersedesRaw.matchAll(/ADR-[0-9]+/g)].map((m) => m[0]);
-  const supersededByRaw = get('superseded-by') ?? 'null';
-  const supersededBy = supersededByRaw === 'null' ? null : supersededByRaw.replace(/^["']|["']$/g, '');
+  const data = parse(match[1]) as Record<string, unknown> | null;
+  if (!data) return undefined;
+  const id = data?.id;
+  const status = data?.status;
+  if (typeof id !== 'string' || typeof status !== 'string') return undefined;
+  const supersedes = Array.isArray(data.supersedes)
+    ? data.supersedes.filter((value): value is string => typeof value === 'string' && /^ADR-[0-9]+$/.test(value))
+    : [];
+  const supersededBy = typeof data['superseded-by'] === 'string' ? data['superseded-by'] : null;
   return { id, status, supersedes, 'superseded-by': supersededBy };
 }
 
