@@ -13,3 +13,6 @@ node_modules/
 # worktree自体（各worktree配下は独立したリポジトリとして扱われるためgit管理外。
 # 空の親ディレクトリのuntracked表示のみを防ぐ）
 .worktrees/
+
+# ローカルエディタ/ツール実行系設定（配布正本は .agent-skill-chain/ 側、展開結果は追跡不要）
+.claude/

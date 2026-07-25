@@ -1,0 +1,25 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: implementation
+  target_sha: 92468894dda894359f9144177980695a90b4dcdd
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: implementation
+      code: rebuild-git-add-lockfile-assumption
+      evidence:
+        - rebuildBumpBranchToMainはgit add package.json
+          package-lock.jsonを両ファイル同時指定するため、package-lock.json不在リポジトリでは失敗しうる。既存の新規作成経路も同一の既知ギャップを持ち、本リポジトリはlockfileを持つため回帰ではない。
+    - severity: info
+      origin: implementation
+      code: merged-branch-edge-case-out-of-scope
+      evidence:
+        - 既にmainへマージ済みで残存するbumpブランチはmerge-base不一致でdiverged=trueになりうるが、release-bump.shはresolve-versionのneed_commit判定が先行するため通常呼ばれない。既存の上流ガード設計の範囲内で実害なし。
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: src/commands/release.ts
+      digest: sha256:a9b27626b8c3d42c3c48123fa0443fbc4478925555d01d09254901f8aa1c49ae
+    - path: test/integration/release.test.ts
+      digest: sha256:8dfb3a07b88f8fe32a315e6fe10e81a975dc25886428fb0f3f05502fb3ba2e51

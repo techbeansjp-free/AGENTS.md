@@ -1,0 +1,16 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: validation
+  target_sha: a7f9c94a0a0d811382f74b6fe543e56543fe9f6f
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: validation
+      code: post-merge-hybrid-manual-verification-pending
+      evidence:
+        - "AC-1/AC-2/AC-4はhybrid検証のうちmanual部分(実際のDependabot起源PRでのCI
+          run実地確認)がマージ後の残作業として明示されている。Issue #219クローズ前に進行役が実施・確認すること。"
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts: []

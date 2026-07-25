@@ -1,0 +1,15 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: spec
+  target_sha: db49d89
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: specification
+      code: owner-placeholder-unresolved
+      evidence:
+        - <owner>の具体的コンテキスト値導出は実装段階で確定。Dependabotブランチのownerは当該repo自身と一致するため機能的リスクは小さい
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts: []

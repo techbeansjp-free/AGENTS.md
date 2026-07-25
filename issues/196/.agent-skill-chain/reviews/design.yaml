@@ -1,0 +1,22 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: design
+  target_sha: a2b4507e441b566bb9e54ee8d47c2d876426deab
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: warning
+      origin: design
+      code: approval-record-anchoring
+      evidence:
+        - 承認者は『リポジトリオーナー(人間)』という役割表記のみで具体的同定情報・承認日時が本文未記載。ADR
+          accepted遷移コミットのタイムスタンプが『いつ』を実質的に確定するため実装進行を妨げる欠陥ではないが記録として留める
+  approved_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  approved_artifacts:
+    - path: DESIGN.md
+      digest: sha256:4c73e5f708a01bc657dcc0aea65f06ae9acc0db2a6d8bf49e6691c6e8b2a1621
+    - path: PLAN.md
+      digest: sha256:0aec57c9255b7433d6d7657dcc837f0e807f753a5d23cdc90a7122b21d30ddd0
+    - path: docs/adr/ADR-0005-release-versioning-and-marketplace-retirement.md
+      digest: sha256:2053b207b669dd92f346b49db59aeae7064523ea1f36606cd792007d48606241
