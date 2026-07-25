@@ -1,62 +1,71 @@
-# DESIGN: trusted gate recordingとreport materialization
+# DESIGN: 強制可能なattested gate Check
 
 - Issue: `ISSUE-283`
 - 対応する SPEC: `SPEC.md`
 
 ## 要件 → 設計要素の対応表
 
-| 要件 / AC-ID | 対応する設計要素 | 備考 |
+| 要件 / AC-ID | 対応する設計要素 | 完了条件 |
 |---|---|---|
-| AC-1 | TrustedGateRecorder / GateCheckStore / ReportMaterializer | 記録からADR finalizationまで |
-| AC-2 | ImmutableContextValidator / ArtifactVerifier | SHA・gate・成果物をfail-closed検証 |
-| AC-3 | ActorAuthorizer / EvidenceVerifier v3 | recorder権限とreviewer独立性を分離 |
-| AC-4 | 配布workflow・同期検査 | setup/upgradeはテンプレート正本を展開 |
-| AC-5 | BootstrapGuard | #274の固定SHAだけを一回限り移行 |
+| AC-1 | TrustedGateRecorder / AttestationVerifier / ReportMaterializer | success-last、耐久report、復元 |
+| AC-2 | TrustBackendResolver / LatestCheckSelector / ImmutableContextValidator | source・SHA・replay・no-fallback拒否 |
+| AC-3 | #274 EvidenceVerifier / AggregatePolicy / ActorAuthorizer | v3 latest attemptと独立性 |
+| AC-4 | GateReconciler / ArtifactSetComparator | fresh checkoutで集合完全比較 |
+| AC-5 | DistributionPreflight / template同期 / ruleset renderer | 対応backendだけを原子的配備 |
+| AC-6 | BootstrapGuard | #274のPR・SHA・digest一意な一回限り記録 |
 
 ## 責務・境界
 
-### コンポーネント構成
+- `TrustBackendResolver`: rulesetとGitHub APIから`dedicated_app|required_workflow`を解決する。標準Actions App単独を拒否する。
+- `ActorAuthorizer` / `ImmutableContextValidator`: dispatch actor権限とPR・Issue・base・current SHA・gateをAPIから確定する。
+- `EvidenceVerifier` / `AggregatePolicy`: #274のv3 latest-attempt検証・集約を共有する。#283はverdictを再導出しない。
+- `TrustedGateRecorder`: 専用App tokenでin_progress Checkを作り、report envelopeをattest後、最後のAPI操作で完了させる。
+- `AttestationVerifier`: subject digest、repo、signer workflow/ref/digest、run attempt、Check IDを暗号検証する。
+- `LatestCheckSelector`: enforcement source・name・SHA一致runの最大IDをconclusionより先に選ぶ。
+- `ReportMaterializer`: latest attested successの`output.text`だけをgate-report cacheへ原子的に復元する。
+- `ArtifactSetComparator` / `GateReconciler`: previous reportとcurrent期待path集合・全digestを比較し、下流を連鎖無効化する。
+- `DistributionPreflight`: attestation利用可否、App/environment/rulesetまたはRequired Workflowを全検査してから展開する。
+- `BootstrapGuard`: #274固定PR/SHA/digestの未使用を確認し、owner承認と非gate CI証跡をPR Reviewへ一度だけ記録する。
 
-- `LocalEvidenceProducer`（#274）: protected baseの隔離launcherでevidence v3をPR Reviewへ記録しdispatchする。
-- `ActorAuthorizer`: dispatch actorの実効権限をGitHub APIで解決し、write以上だけを許可する。
-- `ImmutableContextValidator`: PR/current head/default base/Issue/gate/profileとdefault-branch実行SHAを照合する。
-- `EvidenceVerifier`: 最新attemptだけを選び、v3 schema・人数・slot・run・launcher・verdictを再検証する。
-- `ArtifactVerifier`: target Git objectから成果物digestを再計算する。candidate codeは実行しない。
-- `TrustedGateRecorder`: 検証済み最終reportをcanonical conclusionへ写像し、Check outputへreport/digestを保存する。
-- `GateCheckStore`: GitHub Check Run。GitHubモードの唯一のゲート正本である。
-- `ReportMaterializer`: same-App全conclusion中の最新Checkだけを読み、success時だけ非正本cacheを復元する。
-- `AdrFinalizer`: materialize済みdesign reportと現在ADR digestを照合してstatusだけを更新する。
-- `BootstrapGuard`: #274固定SHA・owner承認・Sol/xhigh PASS・非gate CI・未使用を検査し証跡を残す。
-
-### 依存関係
-
-```text
-LocalEvidenceProducer → PR Review API
-                           ↓
-repository_dispatch → ActorAuthorizer → ImmutableContextValidator
-                                      → EvidenceVerifier → ArtifactVerifier
-                                                        ↓
-                                              TrustedGateRecorder → GateCheckStore
-                                                                          ↓
-                                                     ReportMaterializer → AdrFinalizer
+```mermaid
+flowchart LR
+  L[local orchestrator] --> R[PR Review v3]
+  R --> D[default-branch dispatch]
+  D --> V[context + evidence verifier]
+  V --> A[shared aggregate]
+  A --> C[in-progress Check]
+  C --> T[report attestation]
+  T --> P[postcondition]
+  P --> S[success final API call]
+  S --> M[latest selector + materializer]
+  S --> G[reconciler]
 ```
 
-workflowは`repository_dispatch`でdefault branchの固定SHAをcheckoutする。入力はPR番号・gate・target SHAのみで、
-reportやverdictは受け取らずAPIから再取得する。PR branchのscript・action・packageを実行しない。
+## 信頼境界とプロトコル
 
-## Check記録プロトコル
+`dedicated_app`を現リポジトリの実装backendとする。Appは`Checks: write`と`Metadata: read`だけを持つ。
+秘密鍵は固定environment `agent-skill-chain-gate`のsecretに保存し、deployment branchを`main`だけに制限する。
+recorder workflowはdefault branchの`repository_dispatch`だけでenvironmentを参照し、candidate codeをcheckout・実行しない。
+rulesetの全gate contextへApp integration IDを埋める。通常`GITHUB_TOKEN`には`checks: write`を与えない。
 
-Recorderはcanonical名で`in_progress` Checkを作り、作成応答のApp identityをrulesetのintegrationと照合する。
-検証済みreport、canonical evidence digest、review attempt、artifact digestを`output.text`へJSONで保存して
-completedへ更新する。発行後にcurrent SHAのsame-App最新runを再取得し、ID・conclusion・output digestが
-一致した場合だけ完了する。不一致時は作成runを`action_required`へ更新して非zero終了する。
+`required_workflow`はorg/enterprise rulesetのworkflow source repo/path/refを固定し、実行時にsource SHA・PR event・
+attestation signerを再検証する。forkは両backendの追加隔離に限り、backend判定には使わない。
 
-Materializerはcurrent PR headとcanonical名を固定し、same-Appの全runを作成順で比較する。最新runが
-success以外なら停止し、過去successへfallbackしない。successでもreport schema・target・gate・evidence digest・
-target Git objectのartifact digestを再検証してから`reviews/<gate>.yaml`へcacheする。cacheはCheck正本の複製であり、
-単独では承認根拠にならない。
+RecorderはPR/gate単位concurrency（cancelなし）で、PR番号・gate・40桁SHA以外を信頼入力にしない。
+専用App Checkをin_progressで作成後、Check IDを含むcanonical report envelopeを生成する。GitHub artifact
+attestationを作成し、`gh attestation verify`でrepo・signer workflow・`refs/heads/main`・signer digestを固定して
+検証する。App/ruleset、current head、latest attempt、artifact再計算、attestation再読取が全て成立した後、
+approvedならsuccess、rejectedならfailure、判定不能ならaction_requiredへ更新する。success後に検査を置かない。
 
-## 関連ADR
+Materializerとreconcilerは全conclusionの最大Check IDを先に選び、そのrunだけを検証する。report、evidence、
+attestation、artifactのいずれかが不正、またはlatestがsuccess以外なら旧successへ戻らない。reconcileはprevious
+headの検証済みpath集合をcurrent SHAの期待集合と双方向比較し、追加・削除・digest差異・取得不能を変更として扱う。
+
+## 配布・移行・関連ADR
+
+setup/upgradeはread-only preflight後にstagingへ展開し、同期・ruleset適用まで成功した時だけ置換する。
+既存consumerはbackend未構成なら現状を変更せず設定エラーにする。GitHub App作成自体は一回限りowner操作だが、
+環境作成・secret登録・ruleset配線・検証はsetup CLIが行う。AI credentialやrunner追加は要求しない。
 
 ```yaml
 related_adrs:
@@ -64,11 +73,9 @@ related_adrs:
     relation: adopts
 ```
 
-ADR-0013は同一PRでproposedとして導入するため、design gateは本文を直接承認対象に含める。
-
 ## 障害・ロールバック考慮
 
-- stale SHA、不正gate、権限/API不明、v3不正、App不一致、最新非successはすべてsuccessを発行・復元しない。
-- Check更新後の再読取失敗は同じrunを`action_required`へ倒す。復旧は証跡修正後の新dispatchで行う。
-- workflowを停止する場合も既存required checkは失敗側に残り、branch protectionを緩和しない。
-- ロールバックは本変更のworkflow/CLIをPRでrevertする。bootstrap bypassの再利用は許可しない。
+- API・attestation・App・environment・ruleset不明はsuccessや部分配備へ倒さず、Checkをaction_requiredにする。
+- final success更新の通信結果が不明なら同じrunを成功扱いせず、API再読取後に新attemptを要求する。
+- rollbackはworkflow/CLIをPRでrevertするがrequired contextを外さない。復旧まではmerge停止を維持する。
+- bootstrap used-keyは`repo/PR/SHA/digest`で一意化し、別SHA・二回目・通常PRからの呼出しを拒否する。

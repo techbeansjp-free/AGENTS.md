@@ -3,8 +3,8 @@
 ```yaml
 id: ADR-0013
 status: proposed
-title: default-branch recorderがCheck正本を発行し検証済みreportを再materializeする
-tags: [gate, github-actions, check-run, provenance, bootstrap]
+title: 強制identityとworkflow attestationを満たすCheckだけをゲート正本にする
+tags: [gate, github-app, attestation, provenance, bootstrap]
 supersedes: []
 superseded-by: null
 deprecated-reason: null
@@ -12,35 +12,38 @@ deprecated-reason: null
 
 ## Context
 
-GitHubモードのゲート正本はCheck Runである。AIレビューをGitHub Actions内で実行せず、進行役がローカルの
-Codex・Claude Code等へ委譲する場合、PR Review APIの証跡をCheckへ安全に写像するtrusted codeが必要になる。
-候補branchのworkflowを実行すると、変更者が`checks: write`を使って自己承認できる。一方、Checkだけに最終判定を
-保存してrunner上のgate-reportを破棄すると、ADR finalizationが承認artifact digestを読めず循環停止する。
+ローカルCodex・Claude Code等へ委譲したレビューをGitHub required checkへ結線するには、PR Review証跡を
+trusted codeが再検証してCheck Runへ写像する必要がある。しかしrequired status checkは同名workflow、
+event、matrixを区別せず、通常のGitHub Actions App identityも全workflowで共有される。candidate workflowへ
+`checks: write`を与えるだけでは自己承認を防げない。runner上のreportだけではADR finalizationやpush後の
+reconcileをfresh checkoutから復元できず、古いsuccessへのfallbackも安全条件を破る。
 
 ## Decision
 
-外部からの記録要求は`repository_dispatch`で受け、default branchの固定SHAにあるworkflowとCLIだけを実行する。
-入力はPR番号・gate・target SHAに限定し、actor権限、PR状態、review evidence、成果物、ruleset integrationを
-GitHub APIとtarget Git objectから再取得する。candidate codeは実行しない。
+GitHubゲートは次のどちらかのenforcement backendが有効な場合だけ配備する。
 
-Check Runはcanonical名で`in_progress`作成後、作成応答のApp identityをrulesetと照合する。検証済み最終reportと
-canonical evidence digestをoutputへ保存してcompletedへ更新し、same-App最新runを再読取して一致を確認する。
-approvedだけをsuccess、rejectedをfailure、判定不能をaction_requiredへ写像する。
+- `dedicated_app`: Check専用GitHub App秘密鍵をdefault branch限定environmentへ置き、required contextの
+  ruleset integration IDをそのAppへ固定する。標準`GITHUB_TOKEN`にCheck書込み権限を与えない。
+- `required_workflow`: org/enterprise rulesetでsource repo/path/refを固定したworkflowを必須化し、
+  source SHA・PR event・signer provenanceを実行時にも検証する。
 
-ADR finalization等が構造化reportを必要とするときは、current SHA・canonical名・same-Appの全conclusion中の
-最新Checkを読み、そのrunがsuccessの場合だけoutputのreportを非正本cacheへmaterializeする。より新しい
-failure/action_requiredがあれば過去successへfallbackしない。report schema・evidence digest・artifact digestは
-復元時にも再検証する。正本はCheckのままでありcache間の同期状態を新たな正本にしない。
+default branchのrecorderはv3最新attemptを共有aggregate policyで検証し、専用identityでin_progress Checkを
+作る。Check ID、repo、PR、target SHA、gate、attempt、workflow run/attemptを含むcanonical reportをGitHub
+artifact attestationへ束縛する。全postcondition成立後の最後のAPI操作だけがsuccessへ遷移する。
 
-初回のtrust root導入は#274の最終固定SHAだけを対象とする。repository ownerの明示承認、既存rulesetのadmin
-bypass許可、独立Sol/xhigh最終PASS、全非gate CI PASS、v3 evidence・durable Check output・protected-base
-materialize経路の存在を確認し、PR/SHA/許可者/verdict/CI/実行者/時刻を記録した一回限りのadmin mergeとする。
+構造化reportはCheck `output.text`へ保存する。materializerとreconcilerはenforcement source・name・SHA一致の
+全conclusion中最大IDを先に選び、success、schema、App/ruleset、artifact attestation、evidence/artifact digestを
+再検証した場合だけ非正本cacheへ復元する。previous report継承は期待path集合の完全一致と全digest一致を要求し、
+不一致時は当該gateと下流を無効化する。旧successへfallbackしない。
+
+初回だけ#274の固定PR/SHA/digest、owner承認、Sol/xhigh PASS、非gate CIをPR Reviewへ記録してadmin mergeする。
+used-keyを一意にし、merge後は専用backendと通常attestation以外のbypassを認めない。
 
 ## Consequences
 
-- API keyやself-hosted runnerなしでローカルAIレビューとGitHub required checkを結線できる。
-- PR authorとrecorder actorが同じでも、reviewer runの独立性はv3 attempt attestationで検証できる。
-- runner一時fileが消えてもCheck outputからADR承認digestを復元でき、#270の耐久性欠陥を解消する。
-- dispatch actorにはwrite以上、workflow tokenにはchecks writeが必要だが、candidate codeへ権限を渡さない。
-- GitHub API障害やApp/ruleset不一致ではmergeが停止する。可用性よりI8のfail-closedを優先する。
-- #274の一回限りmigrationは恒久例外ではなく、別PR/SHAへ再利用できない。
+- AI provider keyとself-hosted runnerなしで、ローカルAI判定をGitHub Actions上の強制可能なゲートへ結線できる。
+- 現在のFree organizationはRequired Workflowを使えないため、専用GitHub Appの作成・installationが一度必要になる。
+- App権限はChecks書込みとMetadata読取りに限定し、candidate branchは秘密鍵へ到達できない。
+- GitHub CLIのartifact attestation検証機能とGitHub-hosted runnerを実行要件とし、非対応consumerは無変更で停止する。
+- API障害、最新非success、provenance不一致時は可用性よりfail-closedを優先する。
+- #274はbootstrap producer、#277は一般aggregate正本、#283はprovenance・Check・復元の責務を持ち、循環を作らない。
