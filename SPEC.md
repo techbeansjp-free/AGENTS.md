@@ -13,7 +13,7 @@
 ### 対象範囲
 
 - `.github/workflows/agent-skill-chain-ci.yml` の `npm test` 実行と、その実行出力を保存する GitHub Actions artifact。
-- `.agent-skill-chain/standards/` 配下にある独立検証の手動ゲートレビュー手順。
+- `.agent-skill-chain/standards/TEST_POLICY.md` に定める独立検証の手動ゲートレビュー手順。
 - 次回失敗時の Issue #236 への記録と、原因調査用フォローアップ Issue の起票手順。
 
 ### 前提・用語
@@ -38,7 +38,7 @@ CI と独立検証のどちらでも、テストが失敗したときに出力�
 
 - CI は `npm test` の標準出力・標準エラー出力を単一ログファイルに記録する。
 - テストの成否にかかわらず、CI はそのログをダウンロード可能なアーティファクトとして保存する。
-- 手動・独立検証ではテスト出力をファイルへ保存し、`.agent-skill-chain/standards/` 配下の手動ゲートレビュー手順と検証成果物にログ位置または失敗箇所の抜粋を残す。
+- 手動・独立検証ではテスト出力をファイルへ保存し、`.agent-skill-chain/standards/TEST_POLICY.md` の手動ゲートレビュー手順と検証成果物にログ位置または失敗箇所の抜粋を残す。
 
 ### 受入条件（Acceptance Criteria）
 
@@ -53,7 +53,7 @@ CI と独立検証のどちらでも、テストが失敗したときに出力�
 
 - Given: 独立検証担当者が手元で `npm test` を実行する
 - When: テスト出力を確認する
-- Then: `.agent-skill-chain/standards/` 配下の手動ゲートレビュー手順が、出力をファイルへリダイレクトして保存し、`VALIDATION.md` に保存先または失敗箇所の抜粋を記録することを明示している
+- Then: `.agent-skill-chain/standards/TEST_POLICY.md` が、独立検証で出力をファイルへリダイレクトして保存し、`VALIDATION.md` に保存先または失敗箇所の抜粋を記録する手順を明示している
 - 検証方法見込み: `manual`
 
 #### AC-3: 次回の間欠的失敗をフォローアップ可能にする
