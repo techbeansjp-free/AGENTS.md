@@ -1,99 +1,90 @@
-# SPEC: trusted workflowでローカルレビュー証跡をCheck Run正本へ記録する
+# SPEC: attested workflowでローカルレビューをCheck正本へ記録する
 
 - Issue: `ISSUE-283`
-- 作成者: `bootstrap_gate_provenance`
 - 対象ブランチ: `bugfix/283-gate-check-bootstrap`
 
 ## 目的・背景
 
-GitHubモードのゲート正本はCheck Runだが、ローカルで独立レビューを完了しても、GitHub Actions内に
-AI認証を置かずにその判定を安全にCheck Runへ記録する経路がない。このためdesign gate承認を前提に
-するADR finalizationが循環停止する。進行役がCodex・Claude Code・Cursor等へローカル委譲して得た
-構造化証跡を、default branch上のtrusted workflowが再検証して現在のPR SHAだけへ記録できるようにする。
+GitHub Actions内でAI/API keyを使わず、進行役がローカルCodex・Claude Code等へ委譲した独立レビューを
+default branchのtrusted workflowが検証し、現在PR SHAのCheck Run正本へ記録する。runner一時fileに
+依存せずADR finalizationとpush後のgate継承を復元可能にし、candidate workflowによる同名Check偽装を拒否する。
 
 ## 前提・用語・境界
 
-- `recorder_actor`: GitHubへ証跡とdispatchを記録する進行役のidentity。PR authorと同一でもよい。
-- `reviewer`: read-only隔離runで判定したAIまたは人間。human reviewerがPR author本人なら独立と認めない。
-- `evidence v3`: `agent-skill-chain/gate-review-evidence/v3`。Issue/gate/profile/target SHA、attempt ID・
-  expected count・launcher token digest、reviewerのrun ID/slot/能力、prompt/verdict/artifact digest、
-  trusted base/launcher/ephemeral read-only実行、aggregate verdict/provenanceを必須入力とする。
-- #274はcore用のローカルreviewer起動とper-review evidence v3生成、#277は一般のStrict集約を担う。
-  本Issueは集約済み最終reportを再判定せず、GitHub上でschema/provenance/digestを再検証してCheckへ写像する。
+- `recorder_actor`: GitHubへ証跡・dispatchを記録する進行役。PR authorと同一でもreviewerとは扱わない。
+- `evidence v3`: Issue/gate/profile/SHA、attempt ID・expected count・launcher token digest、run/slot/能力、
+  prompt/verdict/artifact digest、protected-base隔離read-only実行を含むPR Review証跡。
+- `aggregate report`: latest attemptのv3証跡をtrusted aggregate policyで集約した最終report。
+- `workflow attestation`: report digestを、exact signer workflowと`refs/heads/main`へ暗号的に束縛するGitHub provenance。
+- #274はbootstrap用v3 producer/verifier/aggregate、#277は後続で一般Strict集約を正本化する。#283は共有aggregate
+  policyの出力を再判定せず、provenance・schema・digest検証、Check写像、materialize、reconcileを担う。
 
-## 要求 → 要件 → 受入条件
+## 要求・要件
 
-### 要求
+GitHub Actionsだけで調整状態を管理しつつ、AI実行はローカルへ委譲し、権限・対象・証跡不整合をfail-closedにする。
 
-GitHub Actions内でAIやAPIキーを使わず、ローカルの独立レビュー結果を信頼済みの調整経路から
-Check Run正本へ記録し、権限・対象・証跡の不整合を迂回せず全PRを進行可能にする。
+- 記録はdefault branch固定SHAの`repository_dispatch` workflowだけが行い、PR codeを実行しない。
+- 入力はPR番号・許可gate・40桁target SHAだけとし、actorの`write|maintain|admin`権限と全状態をAPIから再取得する。
+- current head/default base/Issue/profile、v3最新attempt、人数/slot/run、launcher、verdict、成果物を再検証する。
+  最新attempt不完全時は旧attemptへfallbackせず、artifact digestはtarget Git objectから再計算する。
+- author本人のhuman reviewは拒否する。同一recorder actorの独立AI runはv3 attestation一致時だけ許可する。
+- shared aggregate policyだけがapproved/rejected/human_requiredを導出し、recorderはsuccess/failure/action_requiredへ写像する。
+- report fileへGitHub artifact attestationを生成し、exact signer workflow・source ref・subject digestを検証する。
+  ruleset/context/App/attestationをmerge-ready・materialize・reconcileの全経路で必須にしcandidate same-App偽装を拒否する。
+- Checkはin_progressで検証し、PR/gate単位concurrency下で全postcondition成立後の最後の操作だけがsuccessへ遷移する。
+- Check outputへ最終report・evidence/attestation digest・review/aggregate/artifact provenanceを機密を除いて保存する。
+- materializeはcurrent SHA/name/same-Appの全conclusion中最新runがattested successの場合だけ非正本cacheを復元する。
+- reconcileはprevious headの最新attested reportをfresh runnerへ復元し、current headのartifactと比較して
+  unchangedならattested successを再発行、changed/取得不能なら当該gate以降をaction_requiredへ無効化する。
+- template/root workflow、CLI、init/upgrade、ruleset、テストを同期し、AI/provider credentialを要求しない。
+- 初回trust root導入はAC-6の一回限りmigrationに限定し、通常運用へbypassを持ち越さない。
 
-### 要件
+## 受入条件
 
-- 記録処理はdefault branchにあるtrusted workflowとtrusted codeだけを実行し、PR側コードを実行しない。
-- `repository_dispatch`の入力は既存PR番号、許可gate名、40桁の対象SHAだけとし、証跡はPR Review APIから再取得する。
-- 起動actorの実効権限をGitHub APIで解決し、`write|maintain|admin`だけを許可する。
-- PRのcurrent head/default base/Issue/check名、evidence v3、最新attempt、reviewer数・slot・一意run、
-  prompt、read-only隔離、verdict、成果物を再検証し、不完全な最新attemptから旧成功へfallbackしない。
-- 成果物digestは対象SHAのGit objectからtrusted codeが再計算し、自己申告との不一致を拒否する。
-- recorder actorはreviewerではない。同一actorでも独立AI runは許可するが、author本人のhuman review、
-  重複run/slot、未登録launcher、candidate baseのlauncherは拒否する。
-- `approved`だけをsuccess、`rejected`をfailure、判定不能をaction_requiredとして記録する。
-- Check Runは設定中のcanonical `agent-skill-chain/{gate}-gate`名だけを使い、`checks: write`以外は
-  contents/pull-requests readに限定する。outputへevidence digest・reviewer/aggregate provenance・
-  target・gate・成果物digestを機密を除いて記録する。
-- workflowのGitHub Actions App identityを、rulesetのexpected integration（未固定ならcontext-only）と照合する。
-  発行後にcurrent SHAのcanonical checkをAPIで再読取し、同一Appの最新runが期待conclusionでなければ完了しない。
-- Check outputに検証済み最終reportとevidence digestを耐久保存する。materializeはcurrent SHA・canonical
-  name・same-Appの全conclusion中の最新runがsuccessの場合だけ復元し、新しい非successから旧successへfallbackしない。
-- 配布テンプレート、展開済みworkflow、init/upgrade対象、CLI・テストを同期する。
-- 初回導入の循環はAC-5の一回限りmigrationで解き、通常運用へ例外を持ち越さない。
+### AC-1: attested Checkを記録・復元できる
 
-### 受入条件（Acceptance Criteria）
-
-#### AC-1: 正常な証跡を現在SHAへ記録できる
-
-- Given: write権限を持つ記録者が、current headを対象にした独立read-onlyレビュー証跡を提出する
-- When: default branchのtrusted workflowが入力を検証し、後続の進行役がreport materializeを要求する
-- Then: canonical Checkへprovenanceが残り、same-App最新runがsuccessの場合だけ復元されADR finalizationを進められる
+- Given: write以上のrecorderがcurrent headへ完全な独立v3 evidenceを提出する
+- When: trusted workflowがaggregate reportを検証・attestし、後続がmaterializeを要求する
+- Then: successは最後に一度だけ発行され、最新runのworkflow provenance検証後だけreportを復元してADRをfinalizeできる
 - 検証方法見込み: `automated`
 
-#### AC-2: stale・対象違い・不正gateを拒否する
+### AC-2: stale・不正対象・candidate偽装を拒否する
 
-- Given: 古いSHA、別PR/Issue/default base、許可リスト外gate、または成果物digest不一致がある
-- When: trusted記録処理を実行する
-- Then: 非zeroで停止し、success Check Runを発行しない
+- Given: stale SHA、別PR/Issue/base、不正gate、digest不一致、candidate workflowのsame-App Checkがある
+- When: record・merge-ready・materializeのいずれかを実行する
+- Then: success/復元/merge許可を行わず、過去のattested successへfallbackしない
 - 検証方法見込み: `automated`
 
-#### AC-3: 権限と独立性をfail-closedで検証する
+### AC-3: 権限・独立性・attemptをfail-closed検証する
 
-- Given: actor権限不足、evidence v3/attempt不足、重複run/slot、非read-only、author自身のhuman review、または判定矛盾がある
-- When: trusted記録処理を実行する
-- Then: 非zeroで停止し、PR authorと同じactorであることだけを独立性の根拠にも拒否理由にもしない
+- Given: 権限不足、v3不足、最新attempt不完全、重複slot/run、非read-only、author本人human review、判定矛盾がある
+- When: trusted verifierが検証する
+- Then: 非zeroまたはaction_requiredとなり、recorderとAI reviewerを同一identityとして誤判定しない
 - 検証方法見込み: `automated`
 
-#### AC-4: consumerへ安全に配布・更新できる
+### AC-4: fresh checkoutでgateを継承・無効化できる
 
-- Given: 新規導入先または既存導入先がsetup/upgradeを実行する
-- When: GitHubテンプレートが展開される
-- Then: trusted workflowと検証コードが同期され、AI/API credentialを要求しない
+- Given: previous headにattested approved reportがあり、新しいheadがpushされた
+- When: default-base reconcilerがprevious reportとcurrent artifactをfresh runnerで照合する
+- Then: 不変gateだけをcurrent SHAへ再発行し、変更gateと下流を無効化する
 - 検証方法見込み: `automated`
 
-#### AC-5: trusted workflowを含む#274だけを監査可能にbootstrapできる
+### AC-5: consumerへ安全に配布・更新できる
 
-- Given: owner明示承認・admin bypass許可・Sol/xhigh最終PASS・全非gate CI PASSに加え、#274最終SHAが
-  v3 evidence、Check outputの最終report/digest、protected-base materialize経路を含む
-- When: 進行役が最終固定した#274/current headだけをadmin mergeする
-- Then: 許可者・PR・SHA・verdict・CI・実行者・時刻をPRへ耐久記録し、条件不一致または再利用を拒否する
+- Given: 新規または既存consumerがsetup/upgradeする
+- When: GitHubテンプレートを展開する
+- Then: attested workflow・ruleset・CLIが同期し、AI/API credentialを要求しない
+- 検証方法見込み: `automated`
+
+### AC-6: #274だけを監査可能にbootstrapできる
+
+- Given: owner承認・admin bypass許可・Sol/xhigh最終PASS・全非gate CI PASSと、#274固定SHAにv3・
+  attested durable report・protected-base materializeがある
+- When: 進行役がその#274 SHAだけをadmin mergeする
+- Then: 許可者・PR/SHA・verdict・CI・実行者・時刻を耐久記録し、条件不一致・二回目・別SHAを拒否する
 - 検証方法見込み: `hybrid`
 
-## スコープ外
+## 対象外・完了条件
 
-- ローカルAIレビューハーネス自体の起動・モデル選択・verdict生成・Strict集約
-- GitHub App、OpenAI/Anthropic APIキー、self-hosted runnerの導入
-- branch protectionやrequired checkの恒久的な緩和、自動的な権限昇格
-
-## 完了条件・未決事項
-
-AC-1〜AC-4の自動テスト・全回帰・同期・権限検査を成功させ、AC-5はowner承認と固定SHAのhybrid証跡を
-耐久記録する。以後の通常経路へmigration例外を持ち越さない。未決事項はない。
+AIモデル実行、GitHub App、AI provider key、self-hosted runner、branch protectionの緩和は対象外。
+AC-1〜5の自動検証と全回帰・同期・権限検査を成功させ、AC-6のhybrid証跡を残す。未決事項はない。
