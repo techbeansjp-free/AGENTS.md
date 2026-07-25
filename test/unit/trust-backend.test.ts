@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveDedicatedAppBackend, type RepositoryRuleset } from '../../src/lib/trust-backend.js';
+import {
+  resolveDedicatedAppBackend,
+  resolveDedicatedAppBackendFromApi,
+  type RepositoryRuleset,
+} from '../../src/lib/trust-backend.js';
 
 const CHECKS = ['spec', 'design', 'implementation', 'validation']
   .map((gate) => `agent-skill-chain/${gate}-gate`);
@@ -70,3 +74,46 @@ test('同名Checkがsource未固定の旧rulesetだけではtrust backendにな�
   );
 });
 
+test('API一覧はpaginationし、個別取得したruleset詳細だけでbackendを解決する', async () => {
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, rules: [] }));
+  const calls: string[] = [];
+  const backend = await resolveDedicatedAppBackendFromApi({
+    appId: 77,
+    checkNames: CHECKS,
+    reader: {
+      async list(page, perPage) {
+        calls.push(`list:${page}:${perPage}`);
+        return page === 1 ? firstPage : [{ id: 101 }];
+      },
+      async get(id) {
+        calls.push(`get:${id}`);
+        return id === 101 ? ruleset({ id }) : ruleset({ id, enforcement: 'disabled' });
+      },
+    },
+  });
+  assert.deepEqual(backend, { kind: 'dedicated_app', appId: 77, rulesetIds: [101] });
+  assert.deepEqual(calls.slice(0, 2), ['list:1:100', 'list:2:100']);
+  assert.equal(calls.filter((call) => call.startsWith('get:')).length, 101);
+});
+
+test('API rulesetの欠損・重複・詳細ID不一致をfail-closedで拒否する', async () => {
+  for (const reader of [
+    {
+      async list() { return { id: 1 }; },
+      async get() { return ruleset({ id: 1 }); },
+    },
+    {
+      async list() { return [{ id: 1 }, { id: 1 }]; },
+      async get() { return ruleset({ id: 1 }); },
+    },
+    {
+      async list() { return [{ id: 1 }]; },
+      async get() { return ruleset({ id: 2 }); },
+    },
+  ]) {
+    await assert.rejects(
+      resolveDedicatedAppBackendFromApi({ appId: 77, checkNames: CHECKS, reader }),
+      /ruleset/,
+    );
+  }
+});
