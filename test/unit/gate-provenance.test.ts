@@ -68,6 +68,10 @@ test('48 KiB以下はinlineでdigest検証してmaterializeする', () => {
     /schema・encoding・storage/,
   );
   assert.throws(
+    () => materializeReport({ ...storage.manifest, unexpected: true } as typeof storage.manifest, []),
+    /許可フィールド/,
+  );
+  assert.throws(
     () => materializeReport({ ...storage.manifest, report_bytes: INLINE_REPORT_MAX_BYTES + 1 }, []),
     /inline reportが上限/,
   );
@@ -117,6 +121,8 @@ test('chunk commentはCheck ID・envelope digest・descriptorを検証する', (
   assert.equal(parsed.envelopeDigest, DIGEST);
   assert.deepEqual(parsed.chunk.descriptor, storage.chunks[0].descriptor);
   assert.throws(() => parseReportChunk(body.replace(storage.chunks[0].descriptor.digest, DIGEST)), /digest/);
+  assert.throws(() => parseReportChunk(`${body}\nignored`), /形式/);
+  assert.throws(() => parseReportChunk(body.replace('check_id: 987', 'check_id: 0987')), /canonical形式/);
   assert.throws(
     () => renderReportChunk(987, DIGEST, { ...storage.chunks[0], body: 'not-base64!' }),
     /canonical base64/,
@@ -171,6 +177,10 @@ test('attestation envelopeは別Check・別workflow runへのreplayを拒否す�
   assert.doesNotThrow(() => validateGateAttestationEnvelope(envelope, expected));
   assert.throws(() => validateGateAttestationEnvelope(envelope, { ...expected, checkId: 988 }), /期待context/);
   assert.throws(() => validateGateAttestationEnvelope(envelope, { ...expected, runAttempt: 2 }), /期待context/);
+  assert.throws(
+    () => validateGateAttestationEnvelope({ ...envelope, unexpected: true } as GateAttestationEnvelope, expected),
+    /許可フィールド/,
+  );
   assert.throws(
     () => validateGateAttestationEnvelope(
       { ...envelope, review_attempt: { ...envelope.review_attempt, attempt_id: 'attempt-replay' } },

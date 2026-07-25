@@ -5,6 +5,7 @@ export const INLINE_REPORT_MAX_BYTES = 48 * 1024;
 export const REPORT_CHUNK_BYTES = 45_000;
 export const REPORT_MAX_BYTES = 4 * 1024 * 1024;
 export const REPORT_CHUNK_MARKER = '<!-- agent-skill-chain:gate-report-chunk/v1 -->';
+const GITHUB_COMMENT_MAX_BYTES = 65_536;
 
 export type GateId = 'spec' | 'design' | 'implementation' | 'validation';
 
@@ -83,6 +84,14 @@ function sha256(value: string, label: string): void {
 
 function targetSha(value: string): void {
   if (!/^[0-9a-f]{40}$/.test(value)) throw new Error('target SHAは40桁の小文字hexである必要があります');
+}
+
+function exactKeys(value: object, expected: readonly string[], label: string): void {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new Error(`${label}の許可フィールドは${expected.join(',')}だけです`);
+  }
 }
 
 function strictBase64(value: string, label: string): Buffer {
@@ -203,7 +212,7 @@ export function renderReportChunk(checkId: number, envelopeDigest: string, chunk
   if (value.length !== chunk.descriptor.bytes || digestOf(value) !== chunk.descriptor.digest) {
     throw new Error('report chunkがdescriptorと一致しません');
   }
-  return [
+  const rendered = [
     REPORT_CHUNK_MARKER,
     `check_id: ${checkId}`,
     `envelope_digest: ${envelopeDigest}`,
@@ -214,31 +223,57 @@ export function renderReportChunk(checkId: number, envelopeDigest: string, chunk
     chunk.body,
     '```',
   ].join('\n');
+  if (Buffer.byteLength(rendered, 'utf8') > GITHUB_COMMENT_MAX_BYTES) {
+    throw new Error('report chunk commentがGitHub上限を超えています');
+  }
+  return rendered;
 }
 
 export function parseReportChunk(body: string): { checkId: number; envelopeDigest: string; chunk: ReportChunk } {
-  if (!body.startsWith(REPORT_CHUNK_MARKER)) throw new Error('report chunk markerがありません');
-  const field = (name: string): string | undefined =>
-    new RegExp(`^${name}: (.+)$`, 'm').exec(body)?.[1];
-  const encoded = /```base64\n([A-Za-z0-9+/=]+)\n```/.exec(body)?.[1];
-  if (!encoded) throw new Error('report chunk bodyがありません');
+  if (Buffer.byteLength(body, 'utf8') > GITHUB_COMMENT_MAX_BYTES) {
+    throw new Error('report chunk commentがGitHub上限を超えています');
+  }
+  const lines = body.split('\n');
+  if (
+    lines.length !== 9 ||
+    lines[0] !== REPORT_CHUNK_MARKER ||
+    lines[6] !== '```base64' ||
+    lines[8] !== '```'
+  ) {
+    throw new Error('report chunk commentの形式が不正です');
+  }
+  const field = (line: string, name: string): string => {
+    const prefix = `${name}: `;
+    if (!line.startsWith(prefix) || line.length === prefix.length) {
+      throw new Error(`report chunk ${name}が不正です`);
+    }
+    return line.slice(prefix.length);
+  };
+  const encoded = lines[7];
   const value = strictBase64(encoded, 'report chunk body');
-  const checkId = Number(field('check_id'));
-  const envelopeDigest = field('envelope_digest') ?? '';
+  const checkId = Number(field(lines[1], 'check_id'));
+  const envelopeDigest = field(lines[2], 'envelope_digest');
   const descriptor = {
-    index: Number(field('index')),
-    bytes: Number(field('bytes')),
-    digest: field('digest') ?? '',
+    index: Number(field(lines[3], 'index')),
+    bytes: Number(field(lines[4], 'bytes')),
+    digest: field(lines[5], 'digest'),
   };
   positiveSafeInteger(checkId, 'Check ID');
   sha256(envelopeDigest, 'attestation envelope digest');
   validateChunkDescriptor(descriptor);
   if (descriptor.bytes !== value.length) throw new Error('chunk byte数が不正です');
   if (digestOf(value) !== descriptor.digest) throw new Error('chunk digestが一致しません');
-  return { checkId, envelopeDigest, chunk: { descriptor, body: encoded } };
+  const parsed = { checkId, envelopeDigest, chunk: { descriptor, body: encoded } };
+  if (renderReportChunk(checkId, envelopeDigest, parsed.chunk) !== body) {
+    throw new Error('report chunk commentがcanonical形式ではありません');
+  }
+  return parsed;
 }
 
 export function materializeReport(manifest: ReportStorage, chunks: ReportChunk[]): unknown {
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    throw new Error('report storage manifestがobjectではありません');
+  }
   if (
     manifest.schema_version !== 'agent-skill-chain/gate-report-storage/v1' ||
     manifest.encoding !== 'canonical-json' ||
@@ -251,6 +286,11 @@ export function materializeReport(manifest: ReportStorage, chunks: ReportChunk[]
     throw new Error('report byte数が不正です');
   }
   if (manifest.storage === 'inline') {
+    exactKeys(
+      manifest,
+      ['schema_version', 'encoding', 'storage', 'report_bytes', 'report_digest', 'inline_report'],
+      'inline report storage manifest',
+    );
     if (manifest.chunks || manifest.inline_report === undefined) throw new Error('inline manifestが不正です');
     if (manifest.report_bytes > INLINE_REPORT_MAX_BYTES || chunks.length !== 0) {
       throw new Error('inline reportが上限を超過しているか不要なchunkがあります');
@@ -261,6 +301,11 @@ export function materializeReport(manifest: ReportStorage, chunks: ReportChunk[]
     }
     return manifest.inline_report;
   }
+  exactKeys(
+    manifest,
+    ['schema_version', 'encoding', 'storage', 'report_bytes', 'report_digest', 'chunks'],
+    'chunk report storage manifest',
+  );
   if (manifest.inline_report !== undefined || !manifest.chunks || manifest.chunks.length !== chunks.length) {
     throw new Error('chunk manifestまたはchunk件数が不正です');
   }
@@ -344,6 +389,30 @@ export function validateGateAttestationEnvelope(
     evidenceDigest: string;
   },
 ): void {
+  exactKeys(
+    envelope,
+    [
+      'schema_version',
+      'repository',
+      'pr_number',
+      'target_sha',
+      'gate',
+      'review_attempt',
+      'workflow',
+      'check',
+      'report_digest',
+      'storage_manifest_digest',
+    ],
+    'attestation envelope',
+  );
+  exactKeys(envelope.repository, ['id', 'full_name'], 'attestation repository');
+  exactKeys(envelope.review_attempt, ['attempt_id', 'expected_count', 'evidence_digest'], 'attestation review attempt');
+  exactKeys(
+    envelope.workflow,
+    ['path', 'ref', 'sha', 'run_id', 'run_number', 'run_attempt'],
+    'attestation workflow',
+  );
+  exactKeys(envelope.check, ['id', 'name', 'app_id'], 'attestation check');
   if (envelope.schema_version !== 'agent-skill-chain/gate-attestation/v1') throw new Error('attestation schemaが不正です');
   targetSha(envelope.target_sha);
   sha256(envelope.report_digest, 'report digest');
