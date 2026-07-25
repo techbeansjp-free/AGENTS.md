@@ -107,7 +107,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     body: renderReviewEvidence(makeEvidence(slot as 1 | 2)),
     commit_id: targetSha,
     state: 'COMMENTED',
-    user: { login: 'adachi-tatsuryu' },
+    user: { login: 'adachi-tatsuru' },
   }));
   stub.writeState(stateAfterSubmit);
 

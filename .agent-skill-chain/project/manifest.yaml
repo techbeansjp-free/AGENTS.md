@@ -29,7 +29,7 @@ model_selection:
       ci_role: verify_and_publish
       reviewer_count: 2
       trusted_reviewer_actors:
-        - adachi-tatsuryu
+        - adachi-tatsuru
     capability:
       model_tier: frontier_coding
       reasoning_tier: maximum_reasoning

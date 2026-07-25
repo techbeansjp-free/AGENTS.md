@@ -38,7 +38,7 @@ test('model selection policy: manifestのCodex固定値とClaude能力証明契�
     evidence_transport: 'github_pr_review',
     ci_role: 'verify_and_publish',
     reviewer_count: 2,
-    trusted_reviewer_actors: ['adachi-tatsuryu'],
+    trusted_reviewer_actors: ['adachi-tatsuru'],
   });
   assert.equal(policy.unavailable, 'human_required');
 });
