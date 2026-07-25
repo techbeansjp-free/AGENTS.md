@@ -7,6 +7,8 @@ import { execFileSync } from 'node:child_process';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const script = path.join(repoRoot, '.agent-skill-chain', 'scripts', 'detect-changed-segments.sh');
+const ciWorkflow = path.join(repoRoot, '.github', 'workflows', 'agent-skill-chain-ci.yml');
+const ciTemplate = path.join(repoRoot, '.agent-skill-chain', 'templates', 'github', '.github', 'workflows', 'agent-skill-chain-ci.yml');
 
 function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'pipe' });
@@ -63,4 +65,11 @@ test('detect-changed-segments: CI設定だけの変更は未開始セグメン�
 
     assert.deepEqual(detect(dir), []);
   });
+});
+
+test('CIはSPECが開始されたPRだけでAC対応を検証し、配布テンプレートも一致する', () => {
+  const workflow = fs.readFileSync(ciWorkflow, 'utf8');
+  assert.match(workflow, /id: segments/);
+  assert.match(workflow, /contains\(steps\.segments\.outputs\.values, 'spec'\)/);
+  assert.equal(workflow, fs.readFileSync(ciTemplate, 'utf8'));
 });
