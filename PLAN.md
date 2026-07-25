@@ -1,46 +1,45 @@
-# PLAN: コア監査のモデル選択を Sol xhigh 必須へ更新する
+# PLAN: ローカル独立レビュー証跡方式への変更
 
 - Issue: `ISSUE-271`
-- 対応する DESIGN: `DESIGN.md`
+- 対応SPEC/DESIGN: `SPEC.md` / `DESIGN.md`
 
-## 目的・入力・出力
+## 変更単位
 
-入力は承認対象の `SPEC.md` と本 branch の既存 policy・gate・adapter・workflow 実装である。出力は、登録済み model policy、分類器、adapter guard、backend marker、配布同期、テスト、検証証跡である。各変更単位は完了後に依存先へ進み、設計要素や責務を変更する必要が生じた場合は実装を止めて DESIGN を更新する。
+| # | 変更 | 対応AC |
+|---|---|---|
+| 1 | manifest/schema/規範文書をlocal execution・trusted Review API evidenceへ更新 | AC-1, AC-2, AC-7 |
+| 2 | worker reportへlease holder由来run IDを結線 | AC-4 |
+| 3 | gate reportへ検証済みreviewer metadataを追加 | AC-3, AC-4, AC-5 |
+| 4 | trusted CLIにevidence作成・Review API送信・取得検証・集約を実装 | AC-3, AC-4, AC-5 |
+| 5 | Codex/Claude adapterをローカルevidence送信へ結線し、未登録adapterを拒否 | AC-2, AC-6 |
+| 6 | gate workflowからmodel実行・provider secretを除去しverify/publishだけにする | AC-1, AC-7 |
+| 7 | workflow templateと展開結果、ADR、role contractを同期 | AC-1, AC-2, AC-7 |
+| 8 | 攻撃経路・回帰テストと独立検証を実施 | 全AC |
 
-## 実装順序・変更単位
+## 実装順序
 
-| # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
-|---|---|---|---|---|
-| 1 | 規範と schema | manifest の構造化 model policy、登録済みモデル文書、project/state schema、監査 label を更新 | AC-1, AC-4, AC-6, AC-7 | なし |
-| 2 | 分類器 | manifest 読み込み、audit marker、Git 差分、core path、分類不能の安全側判定を実装 | AC-1, AC-2, AC-5 | #1 |
-| 3 | context と launcher | 判定結果を KEY=VALUE 化し、strict と未解決を起動前検査して adapter へ渡す | AC-2, AC-5 | #2 |
-| 4 | adapter guard | Codex exact mapping と Claude model/attestation/probe、非コア互換を実装 | AC-3, AC-4, AC-5, AC-6 | #3 |
-| 5 | GitHub Codex 自動化 | 公式 Codex Action、`OPENAI_API_KEY`、read-only、Strict 2 reviewer と trusted verdict 集約を結線 | AC-2, AC-3, AC-5, AC-7 | #1, #3 |
-| 6 | GitHub 配布 | label/base/subject、credential欠如のaction_requiredを結線し、正本と展開先を同期 | AC-2, AC-5, AC-7 | #1, #3, #5 |
-| 7 | 自動テスト | policy/classifier/context/launcher/adapter/workflow/2-verdict集約/回帰テストを追加・更新 | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | #1〜#6 |
-| 8 | 独立検証 | 適用性判断、全検査ログ、AC ごとの証跡を `VALIDATION.md` に記録 | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | #7 |
+1. schemaと型を先に追加し、旧データの読み取り互換を確認する。
+2. evidenceのcanonical化、digest、metadata検証、集約をpure functionとして実装する。
+3. GitHub API I/Oを薄いcommand境界に置き、stubで投稿・取得を検証する。
+4. adapterは既存model起動後のverdict送信先だけをbackend別に切り替える。
+5. workflowを検証専用へ縮小し、template syncを取る。
+6. API key/Codex Action/self-hosted依存の残存を静的検査する。
 
-## checkpoint と writer lease
+## テスト
 
-- design: `DESIGN.md`、`PLAN.md`、proposed ADR を commit/push。
-- implementation: policy/schema/code/workflow/test を commit/push。
-- validation: 保存済みテストログと純粋 YAML の `VALIDATION.md` を commit/push。
-- segment 切替時に現 lease を解放して次の writer lease を取得し、同時 writer を作らない。
+- 単体: classifier、capability、canonical digest、actor/SHA/run ID/slot、Strict集約。
+- 結合: Review API投稿→workflow相当取得→gate report→Check Run。
+- 攻撃: branch内偽証跡、未登録actor、dismissed review、API commit ID不一致、古いSHA、prompt/artifact改変、自己run ID、slot重複、Strict 1件。
+- adapter: Codex exact model/effort/read-only、Claude attestation/probe、Cursor拒否、通常選択維持。
+- 必須: build/typecheck、全test、doc/vocab/reference/ADR/secret/SAST、template sync、shell syntax。
 
-## テスト適用性
+## checkpoint・役割
 
-- 常時必須: lint/format、型検査、単体テスト、変更範囲の結合テスト、SAST、依存関係・secret scan。
-- API・サービス境界: 非該当。外部 API request schema は変更しない。
-- 認証・認可: adapter の credential 検査は変更するため、認証欠如と権限境界の結合テストを実施。
-- 性能・DB・画面: 非該当。
-- デプロイ・運用: workflow と配布同期を静的・結合検査。
-- 外部連携: hermetic test で公式 Action 入力、起動 command、2-verdict集約、fail-safe を検査する。実モデル呼出しは repository secret 登録後の gate 実行環境へ委ねる。
-- リリース単位: 全体 E2E と release rollback は本 Issue では実行せず、通常のリリース工程で行う。
+- design: 本DESIGN/PLAN/ADRをcommit・push後、read-only独立レビュー。
+- implementation: worker leaseでcode/test/templateをcommit・push後、別runのread-onlyレビュー。
+- validation: validation leaseで全検査を再実行し、VALIDATION.mdとログをcommit・push後、別runのread-onlyレビュー。
+- reviewerはbranchを変更せず、writerはReview API証跡を投稿しない。進行役は成果物内容を裁定しない。
 
-## 完了条件・障害時
+## 障害時
 
-全 AC の自動証跡、全必須検査成功、3つの後続 checkpoint push、Draft PR の追跡が揃えば完了する。実装中に policy と provider CLI の表現を安全に結線できない場合は弱い設定へ降格せず、`human_required` を維持したまま blocked 報告する。
-
-## 実装順序の見直しについて
-
-作業順序だけの変更は本ファイルを更新する。設計要素・責務・境界、provider mapping、backend 正本を変更する場合は DESIGN.md も更新し、設計ゲート再通過の対象にする。
+証跡authenticityをGitHub API metadataとrole credential境界へ結線できない、またはgate正本の循環停止が発生した場合、成功扱いや手動ファイル注入で迂回せず `human_required` と依存Issueを保存する。
