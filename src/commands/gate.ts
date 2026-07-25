@@ -1,15 +1,28 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { repoRoot } from '../lib/paths.js';
+import { repoRoot, worktreeRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, validateSegment, SEGMENTS, CliError, type Segment } from '../lib/issue.js';
 import { findIssueWorktree } from '../lib/worktree.js';
-import { issueDir, reviewFilePath } from '../lib/local-state.js';
-import { readYamlFile, writeYamlFileAtomic, toYamlString } from '../lib/yaml-io.js';
+import { issueDir, reviewFilePath, stateFilePath } from '../lib/local-state.js';
+import { readYamlFile, tryReadYamlFile, writeYamlFileAtomic, toYamlString } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { git, gh } from '../lib/exec.js';
 import { digestOf, digestOfFile } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
+import { classifyCoreReview } from '../lib/model-selection.js';
+import {
+  canonicalJson,
+  evidencePromptDigest,
+  isEvidenceVerdict,
+  renderReviewEvidence,
+  verifyGithubReviewEvidence,
+  type EvidenceVerdict,
+  type GithubReviewRecord,
+  type ReviewEvidence,
+  type VerifiedReviewAttempt,
+  type VerifiedReviewer,
+} from '../lib/review-evidence.js';
 
 const REVIEW_USAGE = `
 使い方: agent-skill-chain gate review <issue_id> <gate_id> <profile> [target_sha]
@@ -48,12 +61,13 @@ const RECONCILE_USAGE = `
 `;
 
 const RECORD_VERDICT_USAGE = `
-使い方: agent-skill-chain gate record-verdict <gate_report_path> [artifact_base_dir]
+使い方: agent-skill-chain gate record-verdict <gate_report_path> [artifact_base_dir] [expected_reviewer_count]
 
 pending の gate-report（gate review が生成したスキャフォールド）へ、標準入力から与えた
-レビュア verdict（JSON）を結線して判定済み gate-report を書き出す。final は verdict の
+レビュア verdict（JSON。複数レビュア時は配列）を結線して判定済み gate-report を書き出す。final は verdict の
 conformance/falsification/blockers/inconclusive から機械的に導出する（両pass かつ blocking finding
 無し→approved／いずれか fail もしくは blocking finding あり→rejected／inconclusive→human_required）。
+expected_reviewer_count を指定した場合は、独立 verdict の件数が完全一致しなければ書込みを拒否する。
 
 verdict JSON（stdin）:
   {"conformance":"pass|fail|pending","falsification":"pass|fail|pending",
@@ -75,20 +89,50 @@ gate-report の final を human_required に設定して書き出す（conforman
 `;
 
 const REVIEWER_CONTEXT_USAGE = `
-使い方: agent-skill-chain gate reviewer-context <issue_id>
+使い方: agent-skill-chain gate reviewer-context <issue_id> [target_sha] [base_ref] [review_subject] [adapter]
 
 判定ステップ・adapter が必要とするコンテキストを KEY=VALUE 形式で標準出力へ出す。
   adapter=<claude|codex|human>   review.adapter（未設定時 claude）
   backend=<github|local>          coordination.backend
   issue_number=<n>                issue_id から抽出した番号
+  core_review_required=<bool>     登録済みproject policyによるコアレビュー要否
+  core_review_status=<status>     resolved|unresolved
+
+target_sha/base_ref: 指定時はGit差分からコア変更を分類する。
+review_subject: ordinary|core_audit。GitHub workflowがPR labelの正本値を渡す。
+                ローカルモードで省略時はstate.yamlのreview_subjectを読む。
+adapter: claude|codex|human。進行役がローカルreviewerを明示選択する場合だけ指定する。
 `;
 
 const REVIEWER_PROMPT_USAGE = `
-使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha>
+使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha> [base_sha]
 
 対象セグメントの成果物・AC-ID・上流承認物を read-only で収集し、conformance（立証）/
 falsification（反証）判定プロトコルの指示（ルーブリック・出力 JSON 契約）を標準出力へ出す。
 レビュアへの入力プロンプトであり、本コマンドはファイルを読むのみ（書込みなし）。
+`;
+
+const SUBMIT_EVIDENCE_USAGE = `
+使い方: agent-skill-chain gate submit-evidence <issue_id> <gate_id> <profile> <target_sha> <base_sha> <trusted_base_sha> <pr_number> <attempt_id> <expected_count> <reviewer_run_id> <slot> <adapter> <model> <reasoning>
+
+protected base由来のローカルreviewer verdict（stdin JSON）を構造化し、GitHub PR Review APIへ
+COMMENTとして保存する。Issue worktreeのcandidate recorderからの実行、dirty base、SHA不一致は拒否する。
+`;
+
+const VERIFY_EVIDENCE_USAGE = `
+使い方: agent-skill-chain gate verify-evidence <issue_id> <gate_id> <profile> <target_sha> <base_sha> <pr_number> <gate_report_path> [review_subject]
+
+protected baseのpolicy/verifierでGitHub PR・commit・review metadataと構造化証跡を検証・集約し、
+gate-reportへ書く。証跡不足・古いSHA・実行attestation不一致・actor未解決はhuman_requiredへ安全側停止する。
+`;
+
+const MATERIALIZE_CHECK_REPORT_USAGE = `
+使い方: agent-skill-chain gate materialize-check-report <issue_id> <gate_id> <target_sha> <gate_report_path>
+
+現在SHAのlatest expected-App Check Runに耐久保存されたverified gate-reportを検証し、
+noncanonicalなローカルcacheへ復元する。success・App一致・schema・artifact digest・
+review attempt provenanceの全てが一致する場合だけ書き込む。App一致は履歴選択条件であり、
+required statusのsource trustは専用App/Workflow境界が別途担保する。
 `;
 
 interface Finding {
@@ -109,6 +153,8 @@ interface GateReport {
     blockers: Finding[];
     approved_digest: string;
     approved_artifacts: { path: string; digest: string }[];
+    reviewers?: VerifiedReviewer[];
+    review_attempt?: VerifiedReviewAttempt;
   };
 }
 
@@ -123,6 +169,33 @@ interface ReviewerVerdict {
 }
 
 const SUBVERDICT_VALUES = new Set(['pass', 'fail', 'pending']);
+const ABSENT_ARTIFACT_DIGEST = digestOf('agent-skill-chain:artifact-absent:v1');
+const LOCAL_REVIEW_LAUNCHER_PATHS = [
+  '.agent-skill-chain/scripts/gate-local-review.sh',
+  '.agent-skill-chain/scripts/gate-launch-reviewer.sh',
+  '.agent-skill-chain/scripts/gate-review.sh',
+  '.agent-skill-chain/adapters/claude.sh',
+  '.agent-skill-chain/adapters/codex.sh',
+  '.agent-skill-chain/adapters/human.sh',
+  '.agent-skill-chain/config/roles.yaml',
+  '.agent-skill-chain/project/manifest.yaml',
+  '.agent-skill-chain/project/MODEL_TIER_TABLE.md',
+  '.agent-skill-chain/schemas/gate-report.schema.yaml',
+  '.agent-skill-chain/schemas/project-policy.schema.yaml',
+] as const;
+
+interface LauncherToken {
+  schema_version: 'agent-skill-chain/launcher-token/v1';
+  attempt_id: string;
+  expected_count: 1 | 2;
+  profile: 'standard' | 'strict';
+  target_sha: string;
+  base_sha: string;
+  pr_number: string;
+  nonce: string;
+  slots: { slot: 1 | 2; run_id: string }[];
+  consumed_slots: number[];
+}
 
 /**
  * verdict の各観点（conformance・falsification・blockers・inconclusive）から final を機械的に導出する。
@@ -137,6 +210,214 @@ function deriveFinal(verdict: ReviewerVerdict): GateReport['gate']['final'] {
   return 'human_required';
 }
 
+function aggregateSubverdict(
+  verdicts: ReviewerVerdict[],
+  key: 'conformance' | 'falsification',
+): GateReport['gate']['conformance'] {
+  const values = verdicts.map((verdict) => verdict[key] ?? 'pending');
+  if (values.includes('fail')) return 'fail';
+  if (values.every((value) => value === 'pass')) return 'pass';
+  return 'pending';
+}
+
+/**
+ * Strict profile の独立 verdict を trusted code で集約する。
+ * 1 件でも rejected なら rejected、全件 approved の場合だけ approved、
+ * それ以外（判定不能・pending）は human_required とする（I8）。
+ */
+function aggregateVerdicts(verdicts: ReviewerVerdict[]): ReviewerVerdict {
+  const finals = verdicts.map(deriveFinal);
+  const final = finals.includes('rejected')
+    ? 'rejected'
+    : finals.every((value) => value === 'approved')
+      ? 'approved'
+      : 'human_required';
+  return {
+    conformance: aggregateSubverdict(verdicts, 'conformance'),
+    falsification: aggregateSubverdict(verdicts, 'falsification'),
+    blockers: verdicts.flatMap((verdict) => verdict.blockers ?? []),
+    approved_artifacts: verdicts.flatMap((verdict) => verdict.approved_artifacts ?? []),
+    approved_digest:
+      verdicts.length > 0 &&
+      verdicts.every(
+        (verdict) => verdict.approved_digest && verdict.approved_digest === verdicts[0].approved_digest,
+      )
+        ? verdicts[0].approved_digest
+        : undefined,
+    final,
+    inconclusive: final === 'human_required',
+  };
+}
+
+function changedPaths(root: string, baseSha: string, targetSha: string): string[] {
+  const result = git(['diff', '--name-only', `${baseSha}...${targetSha}`], root);
+  if (result.status !== 0) throw new CliError(`base...target差分を取得できません: ${result.stderr.trim()}`);
+  return result.stdout.split('\n').map((entry) => entry.trim()).filter(Boolean);
+}
+
+function expectedArtifactPaths(root: string, gateId: Segment, baseSha: string, targetSha: string): string[] {
+  const changed = changedPaths(root, baseSha, targetSha);
+  const candidates =
+    gateId === 'spec'
+      ? ['SPEC.md']
+      : gateId === 'design'
+        ? ['DESIGN.md', 'PLAN.md', ...changed.filter((entry) => entry.startsWith('docs/adr/'))]
+        : gateId === 'validation'
+          ? ['VALIDATION.md', ...changed.filter((entry) => entry === 'test-execution.log')]
+          : changed.filter(
+              (entry) =>
+                !['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md', 'test-execution.log'].includes(entry) &&
+                !entry.startsWith('docs/adr/'),
+            );
+  const unique = [...new Set(candidates)];
+  if (unique.length === 0) throw new CliError(`${gateId} gateの承認対象成果物がありません`);
+  return unique;
+}
+
+function artifactsAtSha(
+  root: string,
+  paths: string[],
+  targetSha: string,
+  allowAbsent: boolean,
+): { path: string; digest: string }[] {
+  return paths.map((artifactPath) => ({
+    path: artifactPath,
+    digest: artifactDigestAtSha(root, artifactPath, targetSha, allowAbsent),
+  }));
+}
+
+function artifactDigestAtSha(root: string, artifactPath: string, targetSha: string, allowAbsent = false): string {
+  const shown = git(['show', `${targetSha}:${artifactPath}`], root);
+  if (shown.status === 0) return digestOf(shown.stdout);
+  if (allowAbsent) return ABSENT_ARTIFACT_DIGEST;
+  throw new CliError(`target SHAの必須成果物を読めません: ${artifactPath}`);
+}
+
+function localReviewLauncherDigest(root: string, trustedBaseSha: string): string {
+  const blobs = LOCAL_REVIEW_LAUNCHER_PATHS.map((launcherPath) => {
+    const shown = git(['show', `${trustedBaseSha}:${launcherPath}`], root);
+    if (shown.status !== 0) throw new CliError(`trusted baseのlauncher構成を読めません: ${launcherPath}`);
+    return { path: launcherPath, digest: digestOf(shown.stdout) };
+  });
+  return digestOf(JSON.stringify(blobs));
+}
+
+function launcherTokenPayload(token: LauncherToken): Omit<LauncherToken, 'consumed_slots'> {
+  const { consumed_slots: _consumedSlots, ...payload } = token;
+  return payload;
+}
+
+function reserveLauncherTokenSlot(options: {
+  tokenPath: string;
+  attemptId: string;
+  expectedCount: number;
+  profile: 'standard' | 'strict';
+  targetSha: string;
+  baseSha: string;
+  prNumber: string;
+  reviewerRunId: string;
+  slot: number;
+}): { digest: string; finalSlot: boolean } {
+  const tokenPath = path.resolve(options.tokenPath);
+  const parent = path.dirname(tokenPath);
+  const parentStat = fs.lstatSync(parent);
+  const stat = fs.lstatSync(tokenPath);
+  const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+  if (
+    path.basename(parent).startsWith('agent-skill-chain-local-review.') === false ||
+    !parentStat.isDirectory() ||
+    (uid !== undefined && parentStat.uid !== uid) ||
+    (parentStat.mode & 0o077) !== 0 ||
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    (uid !== undefined && stat.uid !== uid) ||
+    (stat.mode & 0o777) !== 0o600
+  ) {
+    throw new CliError('launcher tokenの所有者・mode・隔離ディレクトリを検証できません');
+  }
+  let token: LauncherToken;
+  try {
+    token = JSON.parse(fs.readFileSync(tokenPath, 'utf8')) as LauncherToken;
+  } catch {
+    throw new CliError('launcher tokenを解釈できません');
+  }
+  const expectedFromProfile = options.profile === 'strict' ? 2 : 1;
+  if (
+    token.schema_version !== 'agent-skill-chain/launcher-token/v1' ||
+    token.attempt_id !== options.attemptId ||
+    token.expected_count !== options.expectedCount ||
+    token.expected_count !== expectedFromProfile ||
+    token.profile !== options.profile ||
+    token.target_sha !== options.targetSha ||
+    token.base_sha !== options.baseSha ||
+    token.pr_number !== options.prNumber ||
+    !/^attempt-[A-Za-z0-9._-]+$/.test(token.attempt_id) ||
+    !/^[0-9a-f]{48}$/.test(token.nonce) ||
+    token.slots.length !== token.expected_count ||
+    token.slots.some(
+      (entry, index) =>
+        entry.slot !== index + 1 ||
+        !/^review-[A-Za-z0-9._-]+$/.test(entry.run_id),
+    ) ||
+    token.slots[options.slot - 1]?.run_id !== options.reviewerRunId ||
+    !Array.isArray(token.consumed_slots) ||
+    token.consumed_slots.some((slot) => !Number.isInteger(slot) || slot < 1 || slot > token.expected_count) ||
+    new Set(token.consumed_slots).size !== token.consumed_slots.length ||
+    token.consumed_slots.includes(options.slot)
+  ) {
+    throw new CliError('launcher tokenがattempt/run/slot契約と一致しないか既に消費済みです');
+  }
+  const digest = digestOf(canonicalJson(launcherTokenPayload(token)));
+  token.consumed_slots.push(options.slot);
+  token.consumed_slots.sort((left, right) => left - right);
+  const descriptor = fs.openSync(
+    tokenPath,
+    fs.constants.O_WRONLY | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW,
+  );
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(token)}\n`);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  return { digest, finalSlot: token.consumed_slots.length === token.expected_count };
+}
+
+function assertDefaultBranchBase(
+  pr: { head?: { sha?: string }; base?: { sha?: string; ref?: string } },
+  repository: { default_branch?: string },
+  expectedBaseSha: string,
+  expectedHeadSha: string,
+): void {
+  if (
+    !repository.default_branch ||
+    pr.base?.ref !== repository.default_branch ||
+    pr.base.sha !== expectedBaseSha ||
+    pr.head?.sha !== expectedHeadSha
+  ) {
+    throw new CliError('PRがrepository default branchの指定base/head SHAを対象としていません');
+  }
+}
+
+function assertNoCoordinationSecretInVerdict(verdictText: string): void {
+  for (const name of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN']) {
+    const secret = process.env[name];
+    if (secret && verdictText.includes(secret)) {
+      throw new CliError(`verdictに${name}由来のcoordination credentialが含まれています`);
+    }
+  }
+  if (
+    /(?:github_pat_[A-Za-z0-9_]{20,}|gh[opsu]_[A-Za-z0-9]{20,}|https?:\/\/[^/\s:@]+:[^@\s]+@)/.test(verdictText)
+  ) {
+    throw new CliError('verdictにcredential形式またはcredential-bearing URLが含まれています');
+  }
+}
+
+function parseGhList<T>(stdout: string): T[] {
+  const parsed = JSON.parse(stdout) as T[] | T[][];
+  if (!Array.isArray(parsed)) throw new CliError('GitHub API一覧応答が配列ではありません');
+  return parsed.flat() as T[];
+}
+
 function validateGateId(value: string): asserts value is Segment {
   validateSegment(value);
 }
@@ -149,13 +430,14 @@ function publishCheckRun(
   conclusion: 'success' | 'failure' | 'action_required',
   title: string,
   summary: string,
+  text?: string,
 ): { url?: string; error?: string } {
   const body = JSON.stringify({
     name: checkName,
     head_sha: headSha,
     status: 'completed',
     conclusion,
-    output: { title, summary },
+    output: { title, summary, ...(text ? { text } : {}) },
   });
   // gh api は --input だけではPOSTにならず既定のGETのまま送信されてしまう（-f/-Fを渡した場合の
   // みPOSTへ暗黙変更される。setup.ts の rulesetStep() と同様に -X で明示する必要がある）。
@@ -273,6 +555,7 @@ export async function publish(args: string[]): Promise<number> {
       conclusion,
       `${report.gate.id} gate: ${report.gate.final}`,
       summary,
+      canonicalJson(report),
     );
     if (published.error) return fail(`Check Run 発行に失敗しました: ${published.error}`);
     return ok(published.url ?? '');
@@ -309,11 +592,10 @@ export async function reconcile(args: string[]): Promise<number> {
 
       const changed =
         downstreamInvalidated ||
-        report.gate.approved_artifacts.some((artifact) => {
-          const show = git(['show', `${targetSha}:${artifact.path}`], root);
-          if (show.status !== 0) return true; // 削除された等 = 変化あり
-          return digestOf(show.stdout) !== artifact.digest;
-        });
+        report.gate.approved_artifacts.some(
+          (artifact) =>
+            artifactDigestAtSha(root, artifact.path, targetSha, gateId === 'implementation') !== artifact.digest,
+        );
 
       if (changed) {
         report.gate.conformance = 'pending';
@@ -342,6 +624,7 @@ export async function reconcile(args: string[]): Promise<number> {
               'action_required',
               `${gateId} gate: invalidated`,
               `approved artifacts changed at ${targetSha}; ${gateId} gate must be re-reviewed`,
+              canonicalJson(report),
             )
           : publishCheckRun(
               root,
@@ -350,6 +633,7 @@ export async function reconcile(args: string[]): Promise<number> {
               'success',
               `${gateId} gate: reconciled`,
               `approved artifacts unchanged; reissued for ${targetSha}`,
+              canonicalJson(report),
             );
         if (published.error) return fail(`Check Run 再発行に失敗しました（${gateId}）: ${published.error}`);
       }
@@ -372,40 +656,68 @@ export async function recordVerdict(args: string[]): Promise<number> {
       printUsage(RECORD_VERDICT_USAGE);
       return 0;
     }
-    const [gateReportPath, artifactBaseDir] = args;
+    const [gateReportPath, artifactBaseDir, expectedReviewerCountRaw] = args;
     if (!gateReportPath) throw new CliError('gate_report_path は必須です');
     if (!fs.existsSync(gateReportPath)) throw new CliError(`gate-report が存在しません: ${gateReportPath}`);
+    let expectedReviewerCount: number | undefined;
+    if (expectedReviewerCountRaw !== undefined) {
+      expectedReviewerCount = Number(expectedReviewerCountRaw);
+      if (!Number.isInteger(expectedReviewerCount) || expectedReviewerCount < 1) {
+        throw new CliError('expected_reviewer_count は1以上の整数である必要があります');
+      }
+    }
 
     const root = repoRoot();
     const report = readYamlFile<GateReport>(gateReportPath);
     const base = validateAgainstSchema('gate-report', report, root);
     if (!base.valid) return fail(`入力 gate-report がスキーマに適合しません: ${base.errors.join('; ')}`);
 
-    let verdict: ReviewerVerdict;
+    let parsedVerdict: ReviewerVerdict | ReviewerVerdict[];
     try {
-      verdict = JSON.parse(fs.readFileSync(0, 'utf8')) as ReviewerVerdict;
+      parsedVerdict = JSON.parse(fs.readFileSync(0, 'utf8')) as ReviewerVerdict | ReviewerVerdict[];
     } catch (error) {
       return fail(`verdict JSON を解釈できません: ${error instanceof Error ? error.message : String(error)}`);
     }
 
+    const verdicts = Array.isArray(parsedVerdict) ? parsedVerdict : [parsedVerdict];
+    if (verdicts.length === 0) return fail('verdict は1件以上必要です');
+    if (expectedReviewerCount !== undefined && verdicts.length !== expectedReviewerCount) {
+      return fail(
+        `独立 reviewer verdict 件数が不足しています: expected=${expectedReviewerCount}, actual=${verdicts.length}`,
+      );
+    }
+    if (expectedReviewerCount !== undefined && !Array.isArray(parsedVerdict)) {
+      return fail('expected_reviewer_count 指定時の verdict JSON は独立 verdict の配列である必要があります');
+    }
+    const verdict = aggregateVerdicts(verdicts);
     const conformance = verdict.conformance ?? 'pending';
     const falsification = verdict.falsification ?? 'pending';
     if (!SUBVERDICT_VALUES.has(conformance) || !SUBVERDICT_VALUES.has(falsification)) {
       return fail('verdict の conformance / falsification は pass|fail|pending のいずれかである必要があります');
     }
 
-    const approvedArtifacts: { path: string; digest: string }[] = [];
+    const approvedArtifactsByPath = new Map<string, string>();
     for (const artifact of verdict.approved_artifacts ?? []) {
-      if (artifact.digest) {
-        approvedArtifacts.push({ path: artifact.path, digest: artifact.digest });
-      } else if (artifactBaseDir) {
-        approvedArtifacts.push({ path: artifact.path, digest: digestOfFile(path.join(artifactBaseDir, artifact.path)) });
+      let digest: string;
+      if (artifactBaseDir) {
+        digest = digestOfFile(path.join(artifactBaseDir, artifact.path));
+      } else if (artifact.digest) {
+        digest = artifact.digest;
       } else {
         return fail(
           `approved_artifacts '${artifact.path}' に digest が無く artifact_base_dir も指定されていないため digest を確定できません`,
         );
       }
+      const existing = approvedArtifactsByPath.get(artifact.path);
+      if (existing && existing !== digest) {
+        return fail(`approved_artifacts '${artifact.path}' の digest が独立 verdict 間で一致しません`);
+      }
+      approvedArtifactsByPath.set(artifact.path, digest);
     }
+    const approvedArtifacts = [...approvedArtifactsByPath].map(([artifactPath, digest]) => ({
+      path: artifactPath,
+      digest,
+    }));
 
     const final = deriveFinal(verdict);
     report.gate.conformance = conformance;
@@ -420,6 +732,377 @@ export async function recordVerdict(args: string[]): Promise<number> {
 
     writeYamlFileAtomic(gateReportPath, report);
     return ok(`final: ${final}`);
+  });
+}
+
+export async function submitEvidence(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(SUBMIT_EVIDENCE_USAGE);
+      return 0;
+    }
+    const [
+      issueIdRaw,
+      gateId,
+      profile,
+      targetSha,
+      baseSha,
+      trustedBaseSha,
+      prNumber,
+      attemptId,
+      expectedCountRaw,
+      reviewerRunId,
+      slotRaw,
+      adapterRaw,
+      model,
+      reasoning,
+    ] = args;
+    if (
+      !issueIdRaw ||
+      !gateId ||
+      !profile ||
+      !targetSha ||
+      !baseSha ||
+      !trustedBaseSha ||
+      !prNumber ||
+      !attemptId ||
+      !expectedCountRaw ||
+      !reviewerRunId ||
+      !slotRaw ||
+      !adapterRaw ||
+      model === undefined ||
+      reasoning === undefined
+    ) {
+      throw new CliError('submit-evidenceの引数が不足しています');
+    }
+    const { issueId, number } = parseIssueId(issueIdRaw);
+    validateGateId(gateId);
+    if (profile !== 'standard' && profile !== 'strict') throw new CliError('profileはstandard|strictのみです');
+    if (adapterRaw !== 'codex' && adapterRaw !== 'claude' && adapterRaw !== 'human') {
+      throw new CliError(`未登録adapterはevidenceを投稿できません: ${adapterRaw}`);
+    }
+    const slot = Number(slotRaw);
+    const expectedCount = Number(expectedCountRaw);
+    const expectedFromProfile = profile === 'strict' ? 2 : 1;
+    if (!Number.isInteger(slot) || slot < 1 || slot > 2) throw new CliError('slotは1|2のみです');
+    if (expectedCount !== expectedFromProfile) throw new CliError('expected_countがprofileと一致しません');
+    if (!/^attempt-[A-Za-z0-9._-]+$/.test(attemptId)) throw new CliError('attempt_id形式が不正です');
+    if (!/^review-[A-Za-z0-9._-]+$/.test(reviewerRunId)) throw new CliError('reviewer_run_id形式が不正です');
+    const launcherTokenPath = process.env.ASC_LAUNCHER_TOKEN_FILE;
+    if (!launcherTokenPath) throw new CliError('launcher token fileがありません');
+
+    const root = repoRoot();
+    const executionRoot = worktreeRoot();
+    if (executionRoot !== root) throw new CliError('Issue worktreeのcandidate recorderからevidenceを投稿できません');
+    const prResponse = gh(['api', `repos/{owner}/{repo}/pulls/${prNumber}`], root);
+    const repositoryResponse = gh(['api', 'repos/{owner}/{repo}'], root);
+    if (prResponse.status !== 0 || repositoryResponse.status !== 0) {
+      throw new CliError('PRのprotected default base/head metadataを取得できません');
+    }
+    const pr = JSON.parse(prResponse.stdout) as { head?: { sha?: string }; base?: { sha?: string; ref?: string } };
+    const repository = JSON.parse(repositoryResponse.stdout) as { default_branch?: string };
+    if (baseSha !== trustedBaseSha) throw new CliError('base SHAとtrusted base SHAが一致しません');
+    assertDefaultBranchBase(pr, repository, baseSha, targetSha);
+    const head = git(['rev-parse', 'HEAD'], root).stdout.trim();
+    if (head !== trustedBaseSha) throw new CliError('recorder HEADがtrusted base SHAと一致しません');
+    // gate-local-review.sh は起動前に untracked を含む完全な clean 状態を確認する。
+    // その後 gate-review.sh が Git 管理外の coordination scaffold を生成するため、
+    // recorder では tracked file の改変だけを再検査する。
+    if (git(['status', '--porcelain', '--untracked-files=no'], root).stdout.trim()) {
+      throw new CliError('trusted base worktreeのtracked fileがdirtyです');
+    }
+
+    const policy = classifyCoreReview(root, { targetSha, baseRef: baseSha }).policy;
+    if (!policy) throw new CliError('登録済みreview policyがありません');
+    const artifacts = artifactsAtSha(
+      root,
+      expectedArtifactPaths(root, gateId, baseSha, targetSha),
+      targetSha,
+      gateId === 'implementation',
+    );
+    const promptDigest = evidencePromptDigest(buildReviewerPrompt(root, number, gateId, targetSha, baseSha));
+    const launcherDigest = localReviewLauncherDigest(root, trustedBaseSha);
+    let parsedVerdict: unknown;
+    try {
+      const verdictText = fs.readFileSync(0, 'utf8');
+      assertNoCoordinationSecretInVerdict(verdictText);
+      parsedVerdict = JSON.parse(verdictText);
+    } catch (error) {
+      throw new CliError(`verdict JSONを解釈できません: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!isEvidenceVerdict(parsedVerdict, false)) {
+      throw new CliError('verdict JSONが必須enum・finding・inconclusive契約に適合しません');
+    }
+    const verdict: EvidenceVerdict = { ...parsedVerdict, approved_artifacts: artifacts };
+
+    const core = classifyCoreReview(root, { targetSha, baseRef: baseSha });
+    if (core.required && (core.status !== 'resolved' || profile !== 'strict')) {
+      throw new CliError('コア対象の分類またはStrict profileを確認できません');
+    }
+    if (
+      core.required &&
+      adapterRaw === 'codex' &&
+      (model !== policy.adapters.codex.model || reasoning !== policy.adapters.codex.reasoning_effort)
+    ) {
+      throw new CliError('Codex core reviewerのmodel/reasoningがpolicyと一致しません');
+    }
+    if (core.required && adapterRaw === 'claude' && process.env.ASC_CAPABILITY_PROBE_PASSED !== 'true') {
+      throw new CliError('Claude core reviewerのcapability probe成功を確認できません');
+    }
+    const launcherToken = reserveLauncherTokenSlot({
+      tokenPath: launcherTokenPath,
+      attemptId,
+      expectedCount,
+      profile,
+      targetSha,
+      baseSha,
+      prNumber,
+      reviewerRunId,
+      slot,
+    });
+
+    const evidence: ReviewEvidence = {
+      schema_version: 'agent-skill-chain/gate-review-evidence/v3',
+      issue_id: issueId,
+      gate: gateId,
+      profile,
+      target_sha: targetSha,
+      attempt_id: attemptId,
+      expected_count: expectedCount as 1 | 2,
+      execution: {
+        launcher: 'agent-skill-chain/gate-local-review/v1',
+        trusted_base_sha: trustedBaseSha,
+        launcher_digest: launcherDigest,
+        launcher_token_digest: launcherToken.digest,
+        isolation: 'ephemeral_clone',
+        sandbox: 'read_only',
+      },
+      reviewer: {
+        run_id: reviewerRunId,
+        slot: slot as 1 | 2,
+        adapter: adapterRaw,
+        model,
+        reasoning,
+        capability: {
+          model_tier: core.required ? policy.capability.model_tier : 'explicit_selection',
+          reasoning_tier: core.required ? policy.capability.reasoning_tier : 'explicit_selection',
+          read_only: true,
+        },
+      },
+      prompt_digest: promptDigest,
+      verdict,
+    };
+    const body = JSON.stringify({ body: renderReviewEvidence(evidence), event: 'COMMENT', commit_id: targetSha });
+    const submitted = gh(
+      ['api', '-X', 'POST', `repos/{owner}/{repo}/pulls/${prNumber}/reviews`, '--input', '-'],
+      root,
+      body,
+    );
+    if (submitted.status !== 0) return fail(`PR review evidence投稿に失敗しました: ${submitted.stderr.trim()}`);
+    if (launcherToken.finalSlot) fs.unlinkSync(launcherTokenPath);
+    return ok(submitted.stdout.trim());
+  });
+}
+
+export async function verifyEvidence(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(VERIFY_EVIDENCE_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, gateId, profile, targetSha, baseSha, prNumber, reportPath, reviewSubjectRaw] = args;
+    if (!issueIdRaw || !gateId || !profile || !targetSha || !baseSha || !prNumber || !reportPath) {
+      throw new CliError('verify-evidenceの引数が不足しています');
+    }
+    const { issueId, number } = parseIssueId(issueIdRaw);
+    validateGateId(gateId);
+    if (profile !== 'standard' && profile !== 'strict') throw new CliError('profileはstandard|strictのみです');
+    if (reviewSubjectRaw && reviewSubjectRaw !== 'ordinary' && reviewSubjectRaw !== 'core_audit') {
+      throw new CliError('review_subjectはordinary|core_auditのみです');
+    }
+
+    const root = repoRoot();
+    const policy = classifyCoreReview(root, {
+      targetSha,
+      baseRef: baseSha,
+      reviewSubject: reviewSubjectRaw as 'ordinary' | 'core_audit' | undefined,
+    });
+    if (!policy.policy) throw new CliError('登録済みreview policyがありません');
+    if (
+      policy.required &&
+      (policy.status !== 'resolved' || profile !== policy.policy.required_profile)
+    ) {
+      throw new CliError('コア対象には解決済み分類とStrict profileが必要です');
+    }
+    const prResponse = gh(['api', `repos/{owner}/{repo}/pulls/${prNumber}`], root);
+    const repositoryResponse = gh(['api', 'repos/{owner}/{repo}'], root);
+    const commitsResponse = gh(
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/commits?per_page=100`, '--paginate', '--slurp'],
+      root,
+    );
+    const reviewsResponse = gh(
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate', '--slurp'],
+      root,
+    );
+    if (
+      prResponse.status !== 0 ||
+      repositoryResponse.status !== 0 ||
+      commitsResponse.status !== 0 ||
+      reviewsResponse.status !== 0
+    ) {
+      throw new CliError('GitHub PR/commit/review metadataを取得できません');
+    }
+    const pr = JSON.parse(prResponse.stdout) as {
+      user: { login: string | null } | null;
+      head: { sha: string };
+      base: { sha: string; ref: string };
+    };
+    const repository = JSON.parse(repositoryResponse.stdout) as { default_branch?: string };
+    assertDefaultBranchBase(pr, repository, baseSha, targetSha);
+    const commits = parseGhList<{
+      author: { login: string | null } | null;
+      committer: { login: string | null } | null;
+    }>(commitsResponse.stdout);
+    const writerLogins = [pr.user?.login, ...commits.flatMap((commit) => [commit.author?.login, commit.committer?.login])];
+    const unresolvedWriterActor = writerLogins.some((login) => !login);
+    const writerActors = [...new Set(writerLogins.filter((login): login is string => !!login))];
+
+    const artifacts = artifactsAtSha(
+      root,
+      expectedArtifactPaths(root, gateId, baseSha, targetSha),
+      targetSha,
+      gateId === 'implementation',
+    );
+    const promptDigest = evidencePromptDigest(buildReviewerPrompt(root, number, gateId, targetSha, baseSha));
+    const launcherDigest = localReviewLauncherDigest(root, baseSha);
+    const result = verifyGithubReviewEvidence({
+      reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
+      issueId,
+      gate: gateId,
+      profile,
+      targetSha,
+      trustedActors: policy.policy.execution.trusted_reviewer_actors,
+      writerActors,
+      unresolvedWriterActor,
+      expectedPromptDigest: promptDigest,
+      expectedArtifacts: artifacts,
+      expectedTrustedBaseSha: baseSha,
+      expectedLauncherDigest: launcherDigest,
+      coreReviewRequired: policy.required,
+      codexModel: policy.policy.adapters.codex.model,
+      codexReasoning: policy.policy.adapters.codex.reasoning_effort,
+    });
+    const report: GateReport = {
+      schema_version: 'agent-skill-chain/gate-report/v1',
+      gate: {
+        id: gateId,
+        target_sha: targetSha,
+        conformance: result.conformance,
+        falsification: result.falsification,
+        final: result.final,
+        blockers: result.blockers,
+        approved_digest: digestOf(JSON.stringify(result.approved_artifacts)),
+        approved_artifacts: result.approved_artifacts,
+        reviewers: result.reviewers,
+        review_attempt: result.review_attempt,
+      },
+    };
+    const validation = validateAgainstSchema('gate-report', report, root);
+    if (!validation.valid) return fail(`検証済みgate-reportがschema不適合です: ${validation.errors.join('; ')}`);
+    writeYamlFileAtomic(reportPath, report);
+    return ok(`final: ${result.final}${result.reason ? `\nreason: ${result.reason}` : ''}`);
+  });
+}
+
+export async function materializeCheckReport(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(MATERIALIZE_CHECK_REPORT_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, gateId, targetSha, reportPath] = args;
+    if (!issueIdRaw || !gateId || !targetSha || !reportPath) {
+      throw new CliError('materialize-check-reportの引数が不足しています');
+    }
+    parseIssueId(issueIdRaw);
+    validateGateId(gateId);
+    const root = repoRoot();
+    const config = loadConfig(root);
+    if (config.coordination.backend !== 'github') {
+      throw new CliError('materialize-check-reportはGitHub backend専用です');
+    }
+    const checkName = config.checks[gateId];
+    const response = gh(
+      [
+        'api',
+        `repos/{owner}/{repo}/commits/${targetSha}/check-runs?check_name=${encodeURIComponent(checkName)}&filter=all&per_page=100`,
+        '--paginate',
+        '--slurp',
+      ],
+      root,
+    );
+    if (response.status !== 0) throw new CliError('current SHAのCheck Runを取得できません');
+    type CheckRun = {
+      id?: number;
+      name?: string;
+      head_sha?: string;
+      status?: string;
+      conclusion?: string;
+      app?: { slug?: string };
+      output?: { text?: string };
+    };
+    const parsed = JSON.parse(response.stdout) as
+      | { check_runs?: CheckRun[] }
+      | { check_runs?: CheckRun[] }[];
+    const pages = Array.isArray(parsed) ? parsed : [parsed];
+    const checkRuns = pages.flatMap((page) => page.check_runs ?? []);
+    const expectedApp = process.env.ASC_TRUSTED_CHECK_APP_SLUG || 'github-actions';
+    const sameIdentity = checkRuns
+      .filter(
+        (run) =>
+          run.name === checkName &&
+          run.head_sha === targetSha &&
+          run.app?.slug === expectedApp,
+      )
+      .sort((left, right) => (right.id ?? 0) - (left.id ?? 0));
+    const latest = sameIdentity[0];
+    if (
+      !latest ||
+      !Number.isSafeInteger(latest.id) ||
+      latest.status !== 'completed' ||
+      latest.conclusion !== 'success' ||
+      typeof latest.output?.text !== 'string'
+    ) {
+      throw new CliError('latest expected-App Check Runがcompleted successであることを確認できません');
+    }
+    let report: GateReport;
+    try {
+      report = JSON.parse(latest.output.text) as GateReport;
+    } catch {
+      throw new CliError('Check Run output.textのgate-reportを解釈できません');
+    }
+    const schema = validateAgainstSchema('gate-report', report, root);
+    if (!schema.valid) throw new CliError(`Check Run gate-reportがschema不適合です: ${schema.errors.join('; ')}`);
+    if (
+      report.gate.id !== gateId ||
+      report.gate.target_sha !== targetSha ||
+      report.gate.final !== 'approved' ||
+      report.gate.conformance !== 'pass' ||
+      report.gate.falsification !== 'pass' ||
+      !report.gate.review_attempt ||
+      !report.gate.reviewers ||
+      report.gate.reviewers.length !== report.gate.review_attempt.expected_count ||
+      new Set(report.gate.reviewers.map((reviewer) => reviewer.launcher_token_digest)).size !== 1
+    ) {
+      throw new CliError('Check Run gate-reportの承認状態またはreview attempt provenanceが不正です');
+    }
+    for (const artifact of report.gate.approved_artifacts) {
+      if (artifactDigestAtSha(root, artifact.path, targetSha, gateId === 'implementation') !== artifact.digest) {
+        throw new CliError(`Check Run gate-reportのartifact digestが一致しません: ${artifact.path}`);
+      }
+    }
+    writeYamlFileAtomic(reportPath, report);
+    return ok(reportPath);
   });
 }
 
@@ -449,28 +1132,73 @@ export async function markHumanRequired(args: string[]): Promise<number> {
   });
 }
 
-/** 判定ステップ・adapter が使う解決済みコンテキスト（adapter 名・backend・Issue 番号）を出力する。 */
+/** 判定ステップ・adapter が使う解決済みコンテキストとコアモデル要求を出力する。 */
 export async function reviewerContext(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
       printUsage(REVIEWER_CONTEXT_USAGE);
       return 0;
     }
-    const [issueIdRaw] = args;
+    const [issueIdRaw, targetSha, baseRef, reviewSubjectRaw, requestedAdapterRaw] = args;
     if (!issueIdRaw) throw new CliError('issue_id は必須です');
     const { number } = parseIssueId(issueIdRaw);
 
     const root = repoRoot();
     const config = loadConfig(root);
-    const adapter = config.review.adapter ?? 'claude';
+    const configuredAdapter = config.review.adapter ?? 'claude';
     const worktree = findIssueWorktree(root, config, number);
     const baseDir = worktree ? worktree.path : issueDir(root, number);
+    // reviewer policy/classifierはprotected base（main worktree）をtrust rootとし、Issue worktreeが
+    // 同じPRで変更したcandidate policyを自己承認に使わない。
+    const policyRoot = root;
+
+    let reviewSubject: string | undefined = reviewSubjectRaw;
+    if (!reviewSubject && config.coordination.backend === 'local') {
+      const state = tryReadYamlFile<{ review_subject?: string }>(stateFilePath(root, number));
+      reviewSubject = state?.review_subject;
+    }
+    if (reviewSubject && reviewSubject !== 'ordinary' && reviewSubject !== 'core_audit') {
+      throw new CliError(`review_subject は ordinary|core_audit のいずれかである必要があります: ${reviewSubject}`);
+    }
+
+    const decision = classifyCoreReview(policyRoot, {
+      targetSha,
+      baseRef,
+      reviewSubject: reviewSubject as 'ordinary' | 'core_audit' | undefined,
+    });
+    const policy = decision.policy;
+    if (requestedAdapterRaw && !['claude', 'codex', 'human'].includes(requestedAdapterRaw)) {
+      throw new CliError(`未登録adapterは選択できません: ${requestedAdapterRaw}`);
+    }
+    const adapter = (requestedAdapterRaw || configuredAdapter) as 'claude' | 'codex' | 'human';
+    const policyLines = policy
+      ? [
+          `core_required_profile=${policy.required_profile}`,
+          `core_model_tier=${policy.capability.model_tier}`,
+          `core_reasoning_tier=${policy.capability.reasoning_tier}`,
+          `codex_required_model=${policy.adapters.codex.model}`,
+          `codex_required_reasoning_effort=${policy.adapters.codex.reasoning_effort}`,
+          `codex_override_attestation_env=${policy.adapters.codex.override_attestation_env}`,
+          `core_reviewer_location=${policy.execution.reviewer_location}`,
+          `core_evidence_transport=${policy.execution.evidence_transport}`,
+          `core_ci_role=${policy.execution.ci_role}`,
+          `core_reviewer_count=${policy.execution.reviewer_count}`,
+          `claude_model_env=${policy.adapters.claude.model_env}`,
+          `claude_model_tier_env=${policy.adapters.claude.model_tier_env}`,
+          `claude_reasoning_tier_env=${policy.adapters.claude.reasoning_tier_env}`,
+          `claude_reasoning_probe_env=${policy.adapters.claude.reasoning_probe_env}`,
+        ]
+      : [];
     return ok(
       [
         `adapter=${adapter}`,
         `backend=${config.coordination.backend}`,
         `issue_number=${number}`,
         `base_dir=${baseDir}`,
+        `core_review_required=${decision.required}`,
+        `core_review_status=${decision.status}`,
+        `core_review_reason=${decision.reason}`,
+        ...policyLines,
       ].join('\n'),
     );
   });
@@ -498,29 +1226,16 @@ function collectAcIds(specText: string): string[] {
   return [...ids].sort((a, b) => Number(a.slice(3)) - Number(b.slice(3)));
 }
 
-/**
- * conformance/falsification 判定プロトコルのプロンプト（ルーブリック・出力契約）を組み立てる（判定プロトコル）。
- * 対象セグメントの成果物・SPEC の AC-ID を read-only で収集し、レビュアへの指示を出力する。
- */
-export async function reviewerPrompt(args: string[]): Promise<number> {
-  return guard(() => {
-    if (isHelp(args)) {
-      printUsage(REVIEWER_PROMPT_USAGE);
-      return 0;
-    }
-    const [issueIdRaw, gateId, targetSha] = args;
-    if (!issueIdRaw || !gateId || !targetSha) throw new CliError('issue_id, gate_id, target_sha はすべて必須です');
-    const { number } = parseIssueId(issueIdRaw);
-    validateGateId(gateId);
-
-    const root = repoRoot();
-    const config = loadConfig(root);
-    const worktree = findIssueWorktree(root, config, number);
-    const baseDir = worktree ? worktree.path : issueDir(root, number);
-
+function buildReviewerPrompt(
+  root: string,
+  number: string,
+  gateId: Segment,
+  targetSha: string,
+  baseSha?: string,
+): string {
     const readArtifact = (name: string): string | undefined => {
-      const p = path.join(baseDir, name);
-      return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : undefined;
+      const shown = git(['show', `${targetSha}:${name}`], root);
+      return shown.status === 0 ? shown.stdout : undefined;
     };
 
     const specText = readArtifact('SPEC.md') ?? '';
@@ -574,7 +1289,7 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
               evidence: ['根拠（ファイル・AC-ID 等）'],
             },
           ],
-          approved_artifacts: [{ path: '判定対象成果物の相対パス', digest: '省略可（アダプタが算出）' }],
+          approved_artifacts: [{ path: '判定対象成果物の相対パス（digest は trusted code が算出）' }],
           inconclusive: false,
         },
         null,
@@ -585,8 +1300,21 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
     sections.push(`- 欠落・反例が当該セグメント起因なら origin='${SEGMENT_ORIGIN[gateId]}' を第一候補とする。`);
     sections.push('');
 
+    const artifactNames = baseSha
+      ? expectedArtifactPaths(root, gateId, baseSha, targetSha)
+      : SEGMENT_ARTIFACTS[gateId];
+    if (baseSha) {
+      const diff = git(
+        ['diff', '--no-ext-diff', '--no-color', `${baseSha}...${targetSha}`, '--', ...artifactNames],
+        root,
+      );
+      if (diff.status !== 0) throw new CliError(`判定対象差分を読めません: ${diff.stderr.trim()}`);
+      sections.push('## 判定対象の差分');
+      sections.push(diff.stdout ? '```diff\n' + diff.stdout.trimEnd() + '\n```' : '(差分なし)');
+      sections.push('');
+    }
     sections.push('## 判定対象の成果物');
-    for (const name of SEGMENT_ARTIFACTS[gateId]) {
+    for (const name of artifactNames) {
       const content = readArtifact(name);
       sections.push(`### ${name}`);
       sections.push(content !== undefined ? '```\n' + content.trimEnd() + '\n```' : '(未検出)');
@@ -599,6 +1327,23 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
       sections.push('');
     }
 
-    return ok(sections.join('\n'));
+    return sections.join('\n').trimEnd();
+}
+
+/**
+ * conformance/falsification 判定プロトコルのプロンプト（ルーブリック・出力契約）を組み立てる（判定プロトコル）。
+ * 対象セグメントの成果物・SPEC の AC-ID を read-only で収集し、レビュアへの指示を出力する。
+ */
+export async function reviewerPrompt(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(REVIEWER_PROMPT_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, gateId, targetSha, baseSha] = args;
+    if (!issueIdRaw || !gateId || !targetSha) throw new CliError('issue_id, gate_id, target_sha はすべて必須です');
+    const { number } = parseIssueId(issueIdRaw);
+    validateGateId(gateId);
+    return ok(buildReviewerPrompt(repoRoot(), number, gateId, targetSha, baseSha));
   });
 }

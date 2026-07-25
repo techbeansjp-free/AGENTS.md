@@ -2,8 +2,8 @@
 # 正本: AGENTS.md §役割・権限・writer lease
 #
 # 各ロールの実行系への変換は .agent-skill-chain/adapters/{claude,codex,human}.sh が担う。
-# 権限は credential / GitHub 権限分離（fine-grained PAT・GitHub App installation permission）で
-# 担保し、ツール名の一律 deny では実装しない（AGENTS.md I5）。
+# 権限はrole capability、protected-base実行attestation、必要に応じたGitHub権限分離で
+# 担保し、GitHub actor名やツール名の一律 deny だけでは実装しない（AGENTS.md I5）。
 
 schema_version: agent-skill-chain/config/v1
 
@@ -16,6 +16,7 @@ roles:
       - "`issue.state_transition`"
       - worktree.lifecycle
       - pr.merge
+      - review_evidence.publish    # protected-base trusted recorderとしてPR Review APIへ投稿
     forbidden:
       - artifact_branch.commit    # 成果物branchへのcommit禁止（I5）
       - artifact.author            # 成果物の著述・内容取り込み禁止（I5）
@@ -45,8 +46,7 @@ roles:
     modes: [conformance, falsification]
     capabilities:
       - worktree.read
-      - check_run.publish    # GitHubモード
-      - review.publish        # ローカルモード: reviews/<gate>.yaml
+      - review_evidence.return
     forbidden:
       - branch.commit
       - branch.push
@@ -139,12 +139,12 @@ role_contracts:
 
   gate_reviewer:
     inputs: [対象セグメントの成果物一式]
-    outputs: ['.agent-skill-chain/schemas/gate-report.schema.yaml 準拠のgate report']
+    outputs: ['conformance/falsification verdict（GitHubではtrusted recorderがPR review evidenceへ変換）']
     rules:
       - conformance（立証）とfalsification（反証）の2観点を分離して判定する（Strictでは専任分離）
       - 成果物を編集しない（read-only）
     completion:
-      - gate.conformance / gate.falsification / gate.final を記録済み
+      - conformance / falsification verdict を返却済み
       - blocking findingには必ずorigin（specification|design|implementation|validation）を付与する
     forbidden: [branch.commit, branch.push, artifact.edit, 次セグメントの起動]
     unnecessary_knowledge: [次に起動されるワーカー, 全体の状態遷移図, 他レビュアの内部判断, PRをいつReadyにするか]

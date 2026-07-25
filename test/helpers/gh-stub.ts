@@ -256,6 +256,11 @@ if (cmd === 'api') {
   const body = hasInput ? readStdin() : '';
   const state = loadState();
 
+  if (apiPath === 'repos/{owner}/{repo}' && method === 'GET') {
+    process.stdout.write(JSON.stringify({ default_branch: state.defaultBranch || 'main' }));
+    process.exit(0);
+  }
+
   const commentDeleteMatch = /\\/issues\\/comments\\/(\\d+)$/.exec(apiPath || '');
   if (commentDeleteMatch && method === 'DELETE') {
     const id = commentDeleteMatch[1];
@@ -292,11 +297,49 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  const pullMatch = /\\/pulls\\/(\\d+)$/.exec(apiPath || '');
+  if (pullMatch && method === 'GET') {
+    process.stdout.write(JSON.stringify(state.pullMetadata || {}));
+    process.exit(0);
+  }
+
+  if (/\\/pulls\\/\\d+\\/commits(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
+    process.stdout.write(JSON.stringify(state.pullCommits || []));
+    process.exit(0);
+  }
+
+  if (/\\/pulls\\/\\d+\\/reviews(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
+    process.stdout.write(JSON.stringify(state.pullReviews || []));
+    process.exit(0);
+  }
+
+  if (/\\/pulls\\/\\d+\\/reviews$/.test(apiPath || '') && method === 'POST') {
+    const parsed = JSON.parse(body);
+    const id = state.nextId++;
+    const record = {
+      id,
+      body: parsed.body,
+      commit_id: parsed.commit_id,
+      state: 'COMMENTED',
+      user: { login: state.apiActor || 'trusted-reviewer' },
+    };
+    state.pullReviews = state.pullReviews || [];
+    state.pullReviews.push(record);
+    saveState(state);
+    process.stdout.write(JSON.stringify(record));
+    process.exit(0);
+  }
+
+  if (/\\/commits\\/[^/]+\\/check-runs(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
+    process.stdout.write(JSON.stringify({ check_runs: state.checkRuns || [] }));
+    process.exit(0);
+  }
+
   if (/\\/check-runs$/.test(apiPath || '') && method === 'POST') {
     const parsed = JSON.parse(body);
     const id = state.nextId++;
     state.checkRuns = state.checkRuns || [];
-    state.checkRuns.push(Object.assign({ id }, parsed));
+    state.checkRuns.push(Object.assign({ id, app: { slug: state.checkAppSlug || 'github-actions' } }, parsed));
     saveState(state);
     process.stdout.write(JSON.stringify({ id, html_url: 'https://github.com/test/repo/runs/' + id }));
     process.exit(0);
@@ -331,6 +374,13 @@ export interface GhStubState {
   prs: Record<string, unknown[]>;
   labels: string[];
   issueLabels: Record<string, string[]>;
+  apiActor?: string;
+  defaultBranch?: string;
+  checkAppSlug?: string;
+  checkRuns?: unknown[];
+  pullMetadata?: unknown;
+  pullCommits?: unknown[];
+  pullReviews?: unknown[];
   prCreateCalls?: { args: string[]; body: string | undefined }[];
   // ---- Issue #196 release bump/tag/publish・Issue #208 root-cleanup run 検証用
   //      (gh pr view/list/merge, gh release view/create) ----
@@ -387,6 +437,7 @@ export function createGhStub(baseDir: string): GhStub {
     prs: {},
     labels: [],
     issueLabels: {},
+    defaultBranch: 'main',
   };
   fs.writeFileSync(statePath, JSON.stringify(initialState));
 
