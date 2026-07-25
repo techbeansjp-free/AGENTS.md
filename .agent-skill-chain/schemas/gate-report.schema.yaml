@@ -20,7 +20,7 @@ properties:
           properties:
             reviewers: {type: array, minItems: 1}
         then:
-          required: [review_attempt]
+          required: [review_attempt, acceptance_criteria]
     properties:
       id:
         type: string
@@ -30,6 +30,20 @@ properties:
         description: ゲート承認対象のcommit SHA（A-6）。
       conformance: {type: string, enum: [pass, fail, pending]}
       falsification: {type: string, enum: [pass, fail, pending]}
+      acceptance_criteria:
+        type: array
+        description: target SPECから再抽出した全AC-IDの個別判定と証跡。
+        items:
+          type: object
+          required: [ac_id, conformance, evidence]
+          additionalProperties: false
+          properties:
+            ac_id: {type: string, pattern: '^AC-[0-9]+$'}
+            conformance: {type: string, enum: [pass, fail, pending]}
+            evidence:
+              type: array
+              minItems: 1
+              items: {type: string, minLength: 1}
       final:
         type: string
         enum: [approved, rejected, pending, human_required]
@@ -128,6 +142,8 @@ examples:
       target_sha: abc123
       conformance: pass
       falsification: pass
+      acceptance_criteria:
+        - {ac_id: 'AC-1', conformance: pass, evidence: ['automated test']}
       final: approved
       blockers: []
       approved_digest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000'

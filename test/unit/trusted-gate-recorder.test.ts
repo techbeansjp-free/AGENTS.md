@@ -6,6 +6,7 @@ import { consumeTrustedGateSecrets } from '../../src/commands/gate.js';
 import { canonicalJson } from '../../src/lib/review-evidence.js';
 import { encodeGateCheckExternalId } from '../../src/lib/gate-provenance.js';
 import {
+  abortTrustedGateCheck,
   assertTrustedGateAttestationVerification,
   canonicalReportIsOversize,
   fetchTrustedGateApiContext,
@@ -150,7 +151,7 @@ test('API正本はwrite以上actor・current head・default main base・Issue pr
     ['/repos/techbeansjp-free/AGENTS.md/issues/271', {
       number: 271,
       state: 'open',
-      labels: [{ name: 'review:core-audit' }],
+      labels: [{ name: 'risk:normal' }, { name: 'review:core-audit' }],
     }],
     ['/repos/techbeansjp-free/AGENTS.md/pulls/274/commits?per_page=100&page=1', []],
     ['/repos/techbeansjp-free/AGENTS.md/pulls/274/reviews?per_page=100&page=1', []],
@@ -361,4 +362,37 @@ test('48KiB超reportはaction_requiredとなり、App PATCHが最後のHTTP操�
   const patch = JSON.parse(String(last?.init?.body));
   assert.equal(patch.conclusion, 'action_required');
   assert.equal(JSON.parse(patch.output.text).schema_version, 'agent-skill-chain/check-output-error/v1');
+});
+
+test('post-prepare失敗は専用App Checkをaction_requiredへterminalizeする', async () => {
+  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.endsWith('/installation')) return new Response(JSON.stringify({ id: 88 }), { status: 200 });
+    if (url.endsWith('/access_tokens')) {
+      return new Response(JSON.stringify({
+        token: 'app-installation-token',
+        expires_at: '2026-07-26T01:00:00Z',
+      }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ id: 501 }), { status: 200 });
+  };
+  await abortTrustedGateCheck({
+    repository: 'techbeansjp-free/AGENTS.md',
+    repositoryId: 77,
+    credentials: { appId: '12345', privateKey: privateKeyPem },
+    checkId: 501,
+    gate: 'implementation',
+    fetchImpl: fetchImpl as typeof fetch,
+  });
+  const last = calls.at(-1);
+  assert.ok(last?.url.endsWith('/check-runs/501'));
+  assert.equal(last?.init?.method, 'PATCH');
+  const patch = JSON.parse(String(last?.init?.body));
+  assert.equal(patch.status, 'completed');
+  assert.equal(patch.conclusion, 'action_required');
+  assert.equal(JSON.parse(patch.output.text).reason, 'recorder_post_prepare_failure');
 });

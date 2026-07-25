@@ -106,6 +106,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const rawVerdict = {
     conformance: 'pass',
     falsification: 'pass',
+    acceptance_criteria: [{ ac_id: 'AC-1', conformance: 'pass', evidence: ['SPEC.md AC-1'] }],
     blockers: [],
     approved_artifacts: [{ path: 'SPEC.md' }],
     inconclusive: false,

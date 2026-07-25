@@ -9,9 +9,24 @@ export interface EvidenceFinding {
   evidence: string[];
 }
 
+export interface AcceptanceCriterionEvidence {
+  ac_id: string;
+  conformance: 'pass' | 'fail' | 'pending';
+  evidence: string[];
+}
+
+export function acceptanceCriteriaConformance(
+  criteria: AcceptanceCriterionEvidence[],
+): 'pass' | 'fail' | 'pending' {
+  if (criteria.some((criterion) => criterion.conformance === 'fail')) return 'fail';
+  if (criteria.length > 0 && criteria.every((criterion) => criterion.conformance === 'pass')) return 'pass';
+  return 'pending';
+}
+
 export interface EvidenceVerdict {
   conformance: 'pass' | 'fail' | 'pending';
   falsification: 'pass' | 'fail' | 'pending';
+  acceptance_criteria: AcceptanceCriterionEvidence[];
   blockers: EvidenceFinding[];
   approved_artifacts: { path: string; digest: string }[];
   inconclusive: boolean;
@@ -85,6 +100,7 @@ export interface EvidenceVerification {
   final: 'approved' | 'rejected' | 'human_required';
   conformance: 'pass' | 'fail' | 'pending';
   falsification: 'pass' | 'fail' | 'pending';
+  acceptance_criteria: AcceptanceCriterionEvidence[];
   blockers: EvidenceFinding[];
   approved_artifacts: { path: string; digest: string }[];
   reviewers: VerifiedReviewer[];
@@ -124,6 +140,7 @@ function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerific
     final: 'human_required',
     conformance: 'pending',
     falsification: 'pending',
+    acceptance_criteria: [],
     blockers,
     approved_artifacts: [],
     reviewers: [],
@@ -157,12 +174,27 @@ function isArtifactShape(value: unknown, digestRequired: boolean): boolean {
   );
 }
 
+function isAcceptanceCriterionShape(value: unknown): value is AcceptanceCriterionEvidence {
+  if (!value || typeof value !== 'object') return false;
+  const criterion = value as Partial<AcceptanceCriterionEvidence>;
+  return (
+    typeof criterion.ac_id === 'string' &&
+    /^AC-[0-9]+$/.test(criterion.ac_id) &&
+    ['pass', 'fail', 'pending'].includes(criterion.conformance ?? '') &&
+    Array.isArray(criterion.evidence) &&
+    criterion.evidence.length > 0 &&
+    criterion.evidence.every((entry) => typeof entry === 'string' && entry.length > 0)
+  );
+}
+
 export function isEvidenceVerdict(value: unknown, digestRequired = true): value is EvidenceVerdict {
   if (!value || typeof value !== 'object') return false;
   const verdict = value as Partial<EvidenceVerdict>;
   return (
     ['pass', 'fail', 'pending'].includes(verdict.conformance ?? '') &&
     ['pass', 'fail', 'pending'].includes(verdict.falsification ?? '') &&
+    Array.isArray(verdict.acceptance_criteria) &&
+    verdict.acceptance_criteria.every(isAcceptanceCriterionShape) &&
     Array.isArray(verdict.blockers) &&
     verdict.blockers.every(isFindingShape) &&
     Array.isArray(verdict.approved_artifacts) &&
@@ -218,6 +250,7 @@ export function verifyGithubReviewEvidence(options: {
   unresolvedWriterActor: boolean;
   expectedPromptDigest: string;
   expectedArtifacts: { path: string; digest: string }[];
+  expectedAcceptanceCriteria: string[];
   expectedTrustedBaseSha: string;
   expectedLauncherDigest: string;
   coreReviewRequired: boolean;
@@ -231,6 +264,13 @@ export function verifyGithubReviewEvidence(options: {
     return fail('PR/commitのwriter actorを完全に解決できません');
   }
   const expectedByPath = new Map(options.expectedArtifacts.map((artifact) => [artifact.path, artifact.digest]));
+  if (new Set(options.expectedAcceptanceCriteria).size !== options.expectedAcceptanceCriteria.length) {
+    return fail('target SPECのAC-ID集合が重複しています');
+  }
+  if (options.expectedAcceptanceCriteria.length === 0) {
+    return fail('target SPECからAC-IDを解決できません');
+  }
+  const expectedAcIds = new Set(options.expectedAcceptanceCriteria);
   const matching: {
     api: GithubReviewRecord;
     evidence: Partial<ReviewEvidence>;
@@ -335,6 +375,20 @@ export function verifyGithubReviewEvidence(options: {
         return fail(`review ${review.id} の成果物digestが一致しません: ${artifactPath}`);
       }
     }
+    const actualAcIds = evidence.verdict.acceptance_criteria.map((criterion) => criterion.ac_id);
+    if (
+      new Set(actualAcIds).size !== actualAcIds.length ||
+      actualAcIds.length !== expectedAcIds.size ||
+      actualAcIds.some((acId) => !expectedAcIds.has(acId))
+    ) {
+      return fail(`review ${review.id} のAC-ID集合がtarget SPECと一致しません`);
+    }
+    if (
+      evidence.verdict.conformance !==
+      acceptanceCriteriaConformance(evidence.verdict.acceptance_criteria)
+    ) {
+      return fail(`review ${review.id} のaggregate conformanceとAC別判定が矛盾しています`);
+    }
   }
 
   const expectedSlots = expectedCount === 2 ? [1, 2] : [1];
@@ -351,15 +405,35 @@ export function verifyGithubReviewEvidence(options: {
   if (tokenDigests.size !== 1) return fail('review attempt内のlauncher token digestが一致しません');
 
   const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
+  const acceptanceCriteria = options.expectedAcceptanceCriteria.map((acId) => {
+    const entries = verdicts.map(
+      (verdict) => verdict.acceptance_criteria.find((criterion) => criterion.ac_id === acId)!,
+    );
+    const conformance = entries.some((entry) => entry.conformance === 'fail')
+      ? 'fail'
+      : entries.every((entry) => entry.conformance === 'pass')
+        ? 'pass'
+        : 'pending';
+    return {
+      ac_id: acId,
+      conformance,
+      evidence: [...new Set(entries.flatMap((entry) => entry.evidence))],
+    } satisfies AcceptanceCriterionEvidence;
+  });
   const blockers = verdicts.flatMap((verdict) => verdict.blockers);
   const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
-  const rejected = verdicts.some(
-    (verdict) => verdict.conformance === 'fail' || verdict.falsification === 'fail',
-  ) || hasBlocking;
+  const rejected =
+    verdicts.some(
+      (verdict) =>
+        verdict.conformance === 'fail' ||
+        verdict.falsification === 'fail' ||
+        verdict.acceptance_criteria.some((criterion) => criterion.conformance === 'fail'),
+    ) || hasBlocking;
   const approved = verdicts.every(
     (verdict) =>
       verdict.conformance === 'pass' &&
       verdict.falsification === 'pass' &&
+      verdict.acceptance_criteria.every((criterion) => criterion.conformance === 'pass') &&
       verdict.inconclusive === false,
   ) && !hasBlocking;
   const final = rejected ? 'rejected' : approved ? 'approved' : 'human_required';
@@ -383,6 +457,7 @@ export function verifyGithubReviewEvidence(options: {
       : approved
         ? 'pass'
         : 'pending',
+    acceptance_criteria: acceptanceCriteria,
     blockers,
     approved_artifacts: options.expectedArtifacts,
     reviewers: candidates.map(({ api, evidence, actor }) => ({

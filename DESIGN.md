@@ -54,14 +54,14 @@ writer actor集合はGitHub APIのPR authorと全commitのauthor/committer login
 
 既存 `codex.sh` / `claude.sh` が同じvendor-neutral契約を実装する。
 
-- 共通: read-only、非対話実行、conformance/falsification JSON、target SHA、prompt digest、成果物digest
+- 共通: read-only、非対話実行、conformance/falsification JSON、AC-ID別判定・証跡、target SHA、prompt digest、成果物digest
 - Codex: `codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=xhigh`
 - Claude Code: 実在model、`frontier_coding` / `maximum_reasoning` attestation、reasoning probe、無書込みtool
 - Cursor: adapter・安定した非対話CLI・probeが未実装なので選択を拒否する
 
 launcher呼出しごとに暗号学的乱数の `attempt-` IDを1つ生成し、profile由来の期待件数と `review-` namespaceの一意なrun ID・Strict slot (`1|2`) を0600のone-time tokenへ固定する。adapterはmodel出力を直接状態へ書かず、trusted CLIへ標準入力で返す。orchestratorのtrusted recorderはtokenをslotごとに一度だけ消費し、capability、slot、prompt/artifact digestを確認してmarker付きPR reviewを作る。token無し・mode/owner不正・再利用・attempt不一致の直接submitは拒否する。workerとreviewer roleにはReview API commandを与えない。
 
-local recorder自身もprotected baseをtrust rootにする。進行役はIssue worktree内のcandidateではなく、cleanなbase worktreeまたはversion固定したinstalled packageから `gate local-review` を起動する。launcherはprotected base SHAからephemeral cloneを作り、credential-bearing originを削除して、そのclone内でbuildしたclassifier、prompt generator、adapter、recorderだけを使う。判定対象はprompt内へ埋め込み、AI subprocessは空workspace・空HOME・`env -i`・gh/git config無しで起動する。Claudeはtool無し、Codexはephemeral/ignore-user-config・shell env allowlist・caller HOME denyのread-only permissionを重ねる。target成果物は `git show <target_sha>:<path>` で読み、固定launcher構成ファイル一覧のblob digestを証跡へattestする。dirty・version不一致・由来不明の実行系は `human_required` とする。
+local recorder自身もprotected baseをtrust rootにする。進行役はIssue worktree内のcandidateではなく、cleanなbase worktreeまたはversion固定したinstalled packageから `gate local-review` を起動する。launcherはprotected base SHAからephemeral cloneを作り、credential-bearing originを削除して、そのclone内でbuildしたclassifier、prompt generator、adapter、recorderだけを使う。判定対象は長さ付きJSON stringの非信頼データとしてprompt内へ埋め込み、成果物内の命令やMarkdown fenceをレビュー指示として扱わせない。AI subprocessは全adapter共通の空workspaceをcurrent directoryとし、空HOME・`env -i`・gh/git config無しで起動する。Claudeはtool無し、Codexはephemeral/ignore-user-config・shell env allowlist・caller HOME denyのread-only permissionを重ねる。target成果物は `git show <target_sha>:<path>` の標準出力を文字列化せずbyte列のままhashし、固定launcher構成ファイル一覧のblob digestを証跡へattestする。dirty・version不一致・由来不明の実行系は `human_required` とする。
 
 ### evidence envelope
 
@@ -70,7 +70,7 @@ PR review本文には次を保存する。
 - schema version、Issue、gate、target SHA、profile
 - reviewer run ID、slot、adapter、model、reasoning/capability、read-only
 - attempt ID、profile由来期待件数、launcher version、trusted base SHA、launcher/token digest、ephemeral-clone/read-only実行attestation
-- prompt digest、approved artifactsとdigest、verdict
+- prompt digest、target SPECの全AC-IDに対する個別conformance・証跡、approved artifactsとdigest、verdict
 
 GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit actorは本文外の正本である。CIはdismissed review、未登録recorder、実行attestation不一致、target SHA不一致を除外せずエラーとして扱う。PRまたはいずれかのcommitのauthor/committer loginがnull・未解決ならactor関係を推測せず `human_required` とする。branch内のgate reportやJSONは承認入力にしない。
 
@@ -80,10 +80,11 @@ GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit act
 
 1. Issue/gate/profile/SHA、API `commit_id`、registered actorを検証する。
 2. promptをtarget SHAから再生成しdigestを照合する。
-3. `git show <sha>:<path>` で成果物digestを再計算する。
-4. 同じIssue/gate/profile/targetのv3証跡をattempt単位に分け、最大Review API IDを含むattemptだけをlatestとする。旧attemptは監査履歴として無視し、latest不完全時に旧completeへfallbackしない。
-5. protected base SHA、launcher/token digest、ephemeral clone、credential-scrubbed read-only sandbox、`review-` run ID namespaceを検証し、同一attemptのrun ID/slotが重複しないことを確認する。Standardはslot 1を1件、Strictはslot 1・2を各1件要求する。
-6. 全件pass/passかつblocking無しだけapproved、fail/blockingはrejected、不足・不一致・判定不能はhuman_requiredとする。
+3. `git show <sha>:<path>` のexact bytesで成果物digestを再計算する。
+4. target SPECからAC-ID集合を再抽出し、各verdictの集合が重複なしの完全一致であること、各ACに非空証跡があること、aggregate conformanceがAC別判定から一意に導出される値と一致することを検証する。
+5. 同じIssue/gate/profile/targetのv3証跡をattempt単位に分け、最大Review API IDを含むattemptだけをlatestとする。旧attemptは監査履歴として無視し、latest不完全時に旧completeへfallbackしない。
+6. protected base SHA、launcher/token digest、ephemeral clone、credential-scrubbed read-only sandbox、`review-` run ID namespaceを検証し、同一attemptのrun ID/slotが重複しないことを確認する。Standardはslot 1を1件、Strictはslot 1・2を各1件要求する。
+7. 全件pass/pass・全AC passかつblocking無しだけapproved、ACを含むfail/blockingはrejected、不足・不一致・判定不能はhuman_requiredとする。
 
 同じlatest attempt内の複数候補やslot再投稿は曖昧性として拒否する。古いSHAの証跡を最新SHAへ継承しない。gate reportにはAPI review ID/actor、検証済みreviewer metadata、attempt ID・期待件数、slot順のAPI ID/actor/commit/evidenceから算出したcanonical evidence digestを残す。
 
@@ -93,7 +94,7 @@ workflowは `pull_request_target` と `pull_request_review` を契機に、base 
 
 verified gate report全体をCheck Run `output.text`へ保存する。protected-base CLIはcurrent SHAの同一App候補を全conclusionから列挙し、最大Check Run IDを先に選び、そのlatestがsuccessの場合だけschema、approved状態、artifact digest、attempt/token provenanceを再検証してnoncanonicalなローカルcacheへ復元する。このApp一致は履歴選択の整合性条件であってsource trustの証明ではない。ローカルbackendは既存adapterがtrusted CLIを介して `reviews/<gate>.yaml` を生成するため、Review APIを要求しない。
 
-bootstrap後の通常sourceを作れる最小recorderとして、default branchの `repository_dispatch` workflowを追加する。信頼入力はPR番号・gate・40桁target SHAだけで、actor権限・default base/current head・Issue/profile・latest v3 attempt・artifactをAPIから再取得する。`GITHUB_TOKEN`にChecks writeを与えず、main限定environmentのGitHub App ID/private keyから内部HTTPだけに使う短命installation tokenを生成する。専用Appのin-progress Check IDとworkflow run tupleを含むattestation envelopeを `actions/attest` の完全SHA固定actionで署名し、exact signer workflow/ref/digestとenvelope内容を再検証する。48KiB以内のcanonical reportだけをCheck outputへ保存し、successは全検査後の最後のPATCHに限定する。
+bootstrap後の通常sourceを作れる最小recorderとして、default branchの `repository_dispatch` workflowを追加する。信頼入力はPR番号・gate・40桁target SHAだけで、actor権限・default base/current head・Issue/profile・latest v3 attempt・artifactをAPIから再取得する。workflow sourceとcheckoutは同じ `github.workflow_sha` へ固定し、queue中のmain更新による別revision実行を拒否する。`GITHUB_TOKEN`にChecks writeを与えず、main限定environmentのGitHub App ID/private keyから内部HTTPだけに使う短命installation tokenを生成する。専用Appのin-progress Check IDとworkflow run tupleを含むattestation envelopeを `actions/attest` の完全SHA固定actionで署名し、exact signer workflow/ref/digestとenvelope内容を再検証する。48KiB以内のcanonical reportだけをCheck outputへ保存し、successは全検査後の最後のPATCHに限定する。prepare後にattestation・verification・通常finalizeが失敗した場合も、同じAppが最後のPATCHで`action_required`へterminalizeし、in-progressを放置しない。
 
 ### 配布assetと既導入fixture migration
 
@@ -119,7 +120,7 @@ preflightは通常のmirror loopが旧templateを上書きする前に行う。�
 ## schema・互換性・障害
 
 - project-policy schemaへ任意のmodel-selection契約としてローカル実行・transport・CI責務・trusted actor・reviewer数を追加し、自己拡張manifestのpolicy versionを上げる。mainの既存v1 manifestにはmodel-selection自体がなく、この追加blockは任意なので既存manifestの必須migrationはない。block不在は従来の通常adapter選択、block存在時は全新フィールド必須とする。rollbackはblock除去で旧manifestへ戻せる。
-- gate-report schemaへ検証済みreviewer metadataとreview attempt provenanceを追加する。旧local reportは読めるが、GitHub Review由来reportはattempt provenanceなしでは拒否する。
+- gate-report schemaへAC-ID別判定、検証済みreviewer metadata、review attempt provenanceを追加する。新規local scaffoldはAC別配列を生成する。schema version据置の互換境界として旧local reportは読めるが、GitHub Review由来reportはAC別配列とattempt provenanceなしでは拒否する。
 - API/CLI/capability/分類/証跡検証の失敗はhuman_required。`neutral`や推測値を使わない。
 - rollbackは新workflow/policy/CLIを同一commitで戻す。既存レビュー証跡はPR履歴として残るが旧実装は参照しない。
 

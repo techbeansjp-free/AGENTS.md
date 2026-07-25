@@ -53,7 +53,7 @@ test('installation tokenはrepository IDと専用App権限だけへdownscopeし�
   assert.equal(calls.length, 2);
   assert.deepEqual(JSON.parse(String(calls[1].init?.body)), {
     repository_ids: [888],
-    permissions: { checks: 'write', statuses: 'write', metadata: 'read' },
+    permissions: { checks: 'write', metadata: 'read' },
   });
   assert.ok(!JSON.stringify(calls).includes(PRIVATE_KEY));
   assert.ok(!JSON.stringify(calls).includes('installation-token'));

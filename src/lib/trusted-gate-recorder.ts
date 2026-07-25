@@ -38,9 +38,8 @@ export interface TrustedGateWorkflow {
   run_attempt: number;
 }
 
-// #274のinline-only envelopeは#283のstorage manifest追加前のexact field集合。
-// workflow/check/report provenanceの型は共有coreを正本とし、chunk fieldだけを段階導入まで除外する。
-export type TrustedGateAttestationEnvelope = Omit<GateAttestationEnvelope, 'storage_manifest_digest'>;
+// #274は48KiB以下のinline reportだけを扱う。chunk storageは別Issueの責務とする。
+export type TrustedGateAttestationEnvelope = GateAttestationEnvelope;
 
 export interface TrustedGateCheckOutput {
   schema_version: 'agent-skill-chain/check-output/v1';
@@ -322,7 +321,12 @@ export async function fetchTrustedGateApiContext(options: {
     throw new Error('Issue API正本を解決できません');
   }
   const labels = issueLabels(issue);
-  const profile = !labels.includes('risk:normal') || labels.includes('autonomy:full') ? 'strict' : 'standard';
+  const profile =
+    !labels.includes('risk:normal') ||
+    labels.includes('autonomy:full') ||
+    labels.includes('review:core-audit')
+      ? 'strict'
+      : 'standard';
   return {
     actor: options.actor,
     payload: options.payload,
@@ -558,6 +562,41 @@ export async function finalizeTrustedGateCheck(options: {
           ? 'Canonical gate output exceeds the trusted recorder limit; merge remains blocked.'
           : `blocker_count=${blockers.length}; blocker_digest=${digestOf(canonicalJson(blockers))}`,
         text: durableText,
+      },
+    },
+    fetchImpl: options.fetchImpl,
+  });
+}
+
+/** prepare後のattestation/verification/finalize失敗をin-progressのまま残さない最後のApp PATCH。 */
+export async function abortTrustedGateCheck(options: {
+  repository: string;
+  repositoryId: number;
+  credentials: GithubAppCredentials;
+  checkId: number;
+  gate: TrustedGateId;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  const text = canonicalJson({
+    schema_version: 'agent-skill-chain/check-output-error/v1',
+    reason: 'recorder_post_prepare_failure',
+    check_id: options.checkId,
+    gate: options.gate,
+  });
+  await appCheckRequest<unknown>({
+    repository: options.repository,
+    repositoryId: options.repositoryId,
+    credentials: options.credentials,
+    path: `/repos/${options.repository}/check-runs/${safeInteger(options.checkId, 'Check ID')}`,
+    method: 'PATCH',
+    body: {
+      status: 'completed',
+      conclusion: 'action_required',
+      completed_at: new Date().toISOString(),
+      output: {
+        title: `${options.gate} gate: recorder failed`,
+        summary: 'Trusted recorder failed after creating the Check; merge remains blocked.',
+        text,
       },
     },
     fetchImpl: options.fetchImpl,

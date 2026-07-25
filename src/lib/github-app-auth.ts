@@ -111,7 +111,6 @@ export async function createInstallationToken(options: GithubAppAuthOptions): Pr
         repository_ids: [Number(repositoryId)],
         permissions: {
           checks: 'write',
-          statuses: 'write',
           metadata: 'read',
         },
       }),

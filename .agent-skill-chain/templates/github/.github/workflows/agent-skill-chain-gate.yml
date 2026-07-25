@@ -56,6 +56,7 @@ jobs:
           PROFILE=standard
           if ! echo "$LABELS_JSON" | grep -q '"risk:normal"'; then PROFILE=strict; fi
           if echo "$LABELS_JSON" | grep -q '"autonomy:full"'; then PROFILE=strict; fi
+          if echo "$LABELS_JSON" | grep -q '"review:core-audit"'; then PROFILE=strict; fi
           REVIEW_SUBJECT=ordinary
           if echo "$LABELS_JSON" | grep -q '"review:core-audit"'; then REVIEW_SUBJECT=core_audit; fi
           echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"

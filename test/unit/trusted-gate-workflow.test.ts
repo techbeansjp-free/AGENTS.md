@@ -28,7 +28,7 @@ test('trusted gate workflowはdispatch/environment/concurrency/GITHUB_TOKEN権�
   for (const permission of [
     'contents: read',
     'pull-requests: read',
-    'issues: write',
+    'issues: read',
     'attestations: write',
     'id-token: write',
     'artifact-metadata: write',
@@ -36,12 +36,15 @@ test('trusted gate workflowはdispatch/environment/concurrency/GITHUB_TOKEN権�
     assert.match(workflow, new RegExp(permission));
   }
   assert.doesNotMatch(workflow, /checks:\s*write/);
-  assert.match(workflow, /Checks write、Commit statuses write、Metadata read/);
+  assert.match(workflow, /Checks write、Metadata read/);
+  assert.doesNotMatch(workflow, /Commit statuses write/);
 });
 
-test('trusted gate workflowは固定attest actionとexact gh verificationを使いfinalizeを最終stepにする', () => {
+test('trusted gate workflowは固定attest actionとexact gh verificationを使い全経路をterminalにする', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   assert.match(workflow, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
+  assert.match(workflow, /ref: \$\{\{ github\.workflow_sha \}\}/);
+  assert.doesNotMatch(workflow, /with:\n\s+ref: refs\/heads\/main/);
   assert.match(workflow, /actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/);
   assert.match(
     workflow,
@@ -56,6 +59,9 @@ test('trusted gate workflowは固定attest actionとexact gh verificationを使�
   assert.match(workflow, /--format json/);
   const finalize = workflow.indexOf('gate record-trusted-check finalize');
   assert.ok(finalize > 0);
-  assert.equal(workflow.slice(finalize).includes('\n      - name:'), false);
+  const abort = workflow.indexOf('gate record-trusted-check abort');
+  assert.ok(abort > finalize);
+  assert.match(workflow.slice(finalize, abort), /if: \$\{\{ failure\(\) \}\}/);
+  assert.equal(workflow.slice(abort).includes('\n      - name:'), false);
   assert.doesNotMatch(workflow, /uses:\s+\S+@v[0-9]/);
 });

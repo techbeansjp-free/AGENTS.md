@@ -24,11 +24,7 @@ _codex_auth_ok() {
     fi
   fi
   local timeout_sec="${CODEX_AUTH_PROBE_TIMEOUT_SEC:-20}"
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$timeout_sec" bash -c "$probe" >/dev/null 2>&1
-  else
-    bash -c "$probe" >/dev/null 2>&1
-  fi
+  _run_provider_probe_sanitized "$probe" "$timeout_sec"
 }
 
 # 取り込んだ lifecycle が呼ぶ認証フックを Codex 用に差し替える。トークン値・probe の出力は

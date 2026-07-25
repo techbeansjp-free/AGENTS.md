@@ -48,6 +48,7 @@ function evidence(slot: 1 | 2, overrides: Partial<ReviewEvidence> = {}): ReviewE
     verdict: {
       conformance: 'pass',
       falsification: 'pass',
+      acceptance_criteria: [{ ac_id: 'AC-1', conformance: 'pass', evidence: ['SPEC.md AC-1'] }],
       blockers: [],
       approved_artifacts: [...artifacts],
       inconclusive: false,
@@ -79,6 +80,7 @@ function verify(reviews: GithubReviewRecord[], overrides: Record<string, unknown
     unresolvedWriterActor: false,
     expectedPromptDigest: promptDigest,
     expectedArtifacts: artifacts,
+    expectedAcceptanceCriteria: ['AC-1'],
     expectedTrustedBaseSha: baseSha,
     expectedLauncherDigest: launcherDigest,
     coreReviewRequired: true,
@@ -205,4 +207,55 @@ test('schema: 不正なfinding enumをpass/passに添えてもapprovedへ倒れ�
     ]).final,
     'human_required',
   );
+});
+
+test('BDD: target SPECのAC集合はmissing・extra・duplicate・aggregate矛盾をfail closedする', () => {
+  const missing = evidence(1);
+  missing.verdict.acceptance_criteria = [];
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(missing) }), review(2, 2)]).final,
+    'human_required',
+  );
+
+  const extra = evidence(1);
+  extra.verdict.acceptance_criteria.push({
+    ac_id: 'AC-2',
+    conformance: 'pass',
+    evidence: ['unexpected AC'],
+  });
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(extra) }), review(2, 2)]).final,
+    'human_required',
+  );
+
+  const duplicate = evidence(1);
+  duplicate.verdict.acceptance_criteria.push({ ...duplicate.verdict.acceptance_criteria[0] });
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(duplicate) }), review(2, 2)]).final,
+    'human_required',
+  );
+
+  const contradictory = evidence(1);
+  contradictory.verdict.acceptance_criteria[0].conformance = 'fail';
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(contradictory) }), review(2, 2)]).final,
+    'human_required',
+  );
+});
+
+test('BDD: AC別failとaggregate failが一致するとgate reportへ証跡付きでrejectedを保存する', () => {
+  const failed = evidence(2);
+  failed.verdict.conformance = 'fail';
+  failed.verdict.acceptance_criteria = [{
+    ac_id: 'AC-1',
+    conformance: 'fail',
+    evidence: ['AC-1の反例'],
+  }];
+  const result = verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(failed) })]);
+  assert.equal(result.final, 'rejected');
+  assert.deepEqual(result.acceptance_criteria, [{
+    ac_id: 'AC-1',
+    conformance: 'fail',
+    evidence: ['SPEC.md AC-1', 'AC-1の反例'],
+  }]);
 });

@@ -21,6 +21,14 @@ interface ScriptResult {
   stderr: string;
 }
 
+const PASS_VERDICT = JSON.stringify({
+  conformance: 'pass',
+  falsification: 'pass',
+  acceptance_criteria: [{ ac_id: 'AC-1', conformance: 'pass', evidence: ['SPEC.md AC-1'] }],
+  blockers: [],
+  approved_artifacts: [{ path: 'SPEC.md' }],
+});
+
 /** 起動ラッパー（gate-launch-reviewer.sh）を bash で実行し、終了コードをそのまま観測する。 */
 function runLauncher(
   repoDir: string,
@@ -128,7 +136,7 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   setAdapter(repo.dir, 'claude');
 
   // Given: pass/pass を返す stub レビュア（GATE_REVIEWER_CMD）と認証キーあり。
-  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stubVerdict = PASS_VERDICT;
   const env = envWithout([], {
     ANTHROPIC_API_KEY: 'dummy-key-not-logged',
     GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${stubVerdict}'`,
@@ -154,17 +162,25 @@ test('gate reviewer credential boundary: GitHub token・caller HOME・git/gh con
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
-  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stubVerdict = PASS_VERDICT;
   const command = [
     'cat >/dev/null',
     'test -z "${GH_TOKEN:-}"',
     'test -z "${GITHUB_TOKEN:-}"',
     'test "${GIT_CONFIG_GLOBAL:-}" = /dev/null',
     'test "${GH_CONFIG_DIR:-}" != "${CALLER_GH_CONFIG_DIR:-}"',
+    'test "$PWD" = "$ASC_REVIEWER_SANITIZED_ROOT/workspace"',
+    'test -z "$(find . -mindepth 1 -print -quit)"',
     `printf '%s' '${stubVerdict}'`,
   ].join('; ');
   const env = envWithout([], {
-    ANTHROPIC_API_KEY: 'dummy-key-not-forwarded',
+    CLAUDE_AUTH_PROBE_CMD: [
+      'test -z "${GH_TOKEN:-}"',
+      'test -z "${GITHUB_TOKEN:-}"',
+      'test "${GIT_CONFIG_GLOBAL:-}" = /dev/null',
+      'test "${GH_CONFIG_DIR:-}" != /credential-bearing/gh',
+      'test -z "$(find . -mindepth 1 -print -quit)"',
+    ].join(' && '),
     GH_TOKEN: 'ghp_credential_boundary_test_value',
     GITHUB_TOKEN: 'github-token-boundary-test',
     CALLER_GH_CONFIG_DIR: '/credential-bearing/gh',
@@ -206,7 +222,7 @@ test('claude launch_gate_reviewer: env認証情報が無くてもCLAUDE_AUTH_PRO
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
 
-  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stubVerdict = PASS_VERDICT;
   // Given: env認証情報は無いが、実疎通確認（CLAUDE_AUTH_PROBE_CMD）はexit0（認証済み）を模す。
   const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
     CLAUDE_AUTH_PROBE_CMD: 'true',
@@ -289,13 +305,20 @@ test('codex launch_gate_reviewer: 認証不成立は gate を approve せず hum
   t.after(() => repo.cleanup());
 
   setAdapter(repo.dir, 'codex');
+  const unexpectedPass = PASS_VERDICT;
   const env = envWithout([], {
-    CODEX_AUTH_PROBE_CMD: 'false',
+    CODEX_AUTH_PROBE_CMD: 'exit 97',
+    CODEX_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${unexpectedPass}'`,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
 
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
 
-  assert.notEqual(res.status, 0, '認証不成立は exit 0（完了）にならないこと');
+  assert.notEqual(
+    res.status,
+    0,
+    `認証不成立はexit 0にならないこと。stdout=${res.stdout}; stderr=${res.stderr}; final=${readFinal(reportPath)}`,
+  );
   assert.notEqual(res.status, 3);
   assert.equal(readFinal(reportPath), 'human_required');
 });
@@ -305,9 +328,18 @@ test('codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabi
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'codex');
 
-  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stubVerdict = PASS_VERDICT;
   const env = envWithout([], {
-    CODEX_AUTH_PROBE_CMD: 'true',
+    GH_TOKEN: 'ghp_codex_probe_boundary_test_value',
+    GITHUB_TOKEN: 'github-codex-probe-boundary-test',
+    GH_CONFIG_DIR: '/credential-bearing/gh',
+    CODEX_AUTH_PROBE_CMD: [
+      'test -z "${GH_TOKEN:-}"',
+      'test -z "${GITHUB_TOKEN:-}"',
+      'test "${GIT_CONFIG_GLOBAL:-}" = /dev/null',
+      'test "${GH_CONFIG_DIR:-}" != /credential-bearing/gh',
+      'test -z "$(find . -mindepth 1 -print -quit)"',
+    ].join(' && '),
     CODEX_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${stubVerdict}'`,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
@@ -344,7 +376,7 @@ test('codex core reviewer: gpt-5.6-sol/xhigh/read-onlyのattested overrideだけ
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'codex');
 
-  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stubVerdict = PASS_VERDICT;
   const env = envWithout([], {
     ASC_BASE_REF: 'main',
     ASC_REVIEW_SUBJECT: 'core_audit',
@@ -391,7 +423,7 @@ test('claude core reviewer: 実在model・能力attestation・reasoning probeを
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
 
-  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stubVerdict = PASS_VERDICT;
   const stub = createClaudeStub(worktreePath, stubVerdict);
   const env = envWithout([], {
     ASC_BASE_REF: 'main',
@@ -451,7 +483,7 @@ test('gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了�
     setAdapter(repo.dir, 'claude');
     const env = envWithout([], {
       ANTHROPIC_API_KEY: 'dummy',
-      GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '{"conformance":"pass","falsification":"pass","blockers":[]}'`,
+      GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${PASS_VERDICT}'`,
       GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
     });
     const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
@@ -470,9 +502,17 @@ test('gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了�
     const { repo, reportPath, targetSha } = setupGateReview();
     t.after(() => repo.cleanup());
     setAdapter(repo.dir, 'codex');
-    const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'false' });
+    const env = envWithout([], {
+      CODEX_AUTH_PROBE_CMD: 'exit 97',
+      CODEX_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${PASS_VERDICT}'`,
+      GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+    });
     const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
-    assert.notEqual(res.status, 0);
+    assert.notEqual(
+      res.status,
+      0,
+      `Codex認証失敗を伝播すること。stdout=${res.stdout}; stderr=${res.stderr}; final=${readFinal(reportPath)}`,
+    );
     assert.notEqual(res.status, 3);
   }
 });

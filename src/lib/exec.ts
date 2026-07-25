@@ -6,6 +6,12 @@ export interface ExecResult {
   stderr: string;
 }
 
+export interface BinaryExecResult {
+  status: number;
+  stdout: Buffer;
+  stderr: string;
+}
+
 // Node既定の1MiB上限だと大規模diff等（例: mainとの初回統合マージの全差分）でENOBUFSになるため拡張する。
 const MAX_BUFFER_BYTES = 256 * 1024 * 1024;
 
@@ -21,6 +27,19 @@ export function run(command: string, args: string[], cwd?: string, input?: strin
   };
 }
 
+/** Git object等を文字コード変換せずexact bytesで読むためのbinary subprocess境界。 */
+export function runBinary(command: string, args: string[], cwd?: string): BinaryExecResult {
+  const result = spawnSync(command, args, { cwd, encoding: null, maxBuffer: MAX_BUFFER_BYTES });
+  if (result.error) {
+    return { status: 127, stdout: Buffer.alloc(0), stderr: String(result.error.message) };
+  }
+  return {
+    status: result.status ?? 1,
+    stdout: result.stdout ?? Buffer.alloc(0),
+    stderr: (result.stderr ?? Buffer.alloc(0)).toString('utf8'),
+  };
+}
+
 /** 失敗時に stderr を含めて例外を投げる薄いラッパー。標準出力の trim 済み文字列を返す。 */
 export function runOrThrow(command: string, args: string[], cwd?: string): string {
   const result = run(command, args, cwd);
@@ -32,6 +51,10 @@ export function runOrThrow(command: string, args: string[], cwd?: string): strin
 
 export function git(args: string[], cwd?: string): ExecResult {
   return run('git', args, cwd);
+}
+
+export function gitBinary(args: string[], cwd?: string): BinaryExecResult {
+  return runBinary('git', args, cwd);
 }
 
 export function gh(args: string[], cwd?: string, input?: string): ExecResult {

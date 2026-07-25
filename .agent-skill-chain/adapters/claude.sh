@@ -33,6 +33,43 @@ REPO_ROOT="$(cd -- "$ADAPTER_DIR/../.." &>/dev/null && pwd)"
 # のため引き続き許可する。
 WORKER_ALLOWED_TOOLS_DEFAULT='Read Grep Glob Edit Write MultiEdit Bash(git add:*) Bash(git commit:*) Bash(git push:*) Bash(git status:*) Bash(git diff:*) Bash(git rev-parse:*) Bash(git log:*) Bash(git show:*) Bash(git fetch:*) Bash(git restore:*) Bash(gh pr view:*) Bash(gh pr edit:*) Bash(gh pr comment:*) Bash(gh issue comment:*) Bash(.agent-skill-chain/scripts/*) Bash(bash .agent-skill-chain/scripts/*) Bash(node bin/agents-md.js:*) Bash(npm run:*) Bash(npm test:*) Bash(npm ci:*) Bash(mkdir:*) Bash(ls:*)'
 
+# provider CLIのlogin保存先だけを渡し、認証/capability probeにもGitHub credential・caller HOME・
+# git/gh設定を継承させない。probe出力は常に破棄し、空workspaceをcurrent directoryにする。
+_run_provider_probe_sanitized() {
+  local probe="$1" timeout_sec="$2"
+  local isolated_root original_home codex_home claude_config rc=0
+  isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-probe.XXXXXX")"
+  original_home="${ASC_REVIEWER_ORIGINAL_HOME:-${HOME:-}}"
+  codex_home="${CODEX_HOME:-${original_home:+$original_home/.codex}}"
+  claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
+  mkdir -p "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
+  chmod 700 "$isolated_root" "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
+  local -a clean_env=(
+    env -i
+    "PATH=$PATH"
+    "HOME=$isolated_root/home"
+    "XDG_CONFIG_HOME=$isolated_root/xdg"
+    "GH_CONFIG_DIR=$isolated_root/xdg/gh"
+    "GIT_CONFIG_GLOBAL=/dev/null"
+    "GIT_CONFIG_SYSTEM=/dev/null"
+    "GIT_TERMINAL_PROMPT=0"
+    "TMPDIR=${TMPDIR:-/tmp}"
+    "LANG=${LANG:-C.UTF-8}"
+  )
+  [[ -n "$codex_home" && -d "$codex_home" ]] && clean_env+=("CODEX_HOME=$codex_home")
+  [[ -n "$claude_config" && -d "$claude_config" ]] && clean_env+=("CLAUDE_CONFIG_DIR=$claude_config")
+  (
+    cd -- "$isolated_root/workspace"
+    if command -v timeout >/dev/null 2>&1; then
+      timeout "$timeout_sec" "${clean_env[@]}" bash -c "$probe"
+    else
+      "${clean_env[@]}" bash -c "$probe"
+    fi
+  ) >/dev/null 2>&1 || rc=$?
+  rm -rf -- "$isolated_root"
+  return "$rc"
+}
+
 # Issue #185: launch_worker/launch_gate_reviewer 共通の認証チェック（2段化）。
 # (a) 高速パス: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN のいずれかが非空なら authed とみなす
 #     （従来どおり実値は非ログ）。
@@ -60,11 +97,7 @@ _claude_auth_ok() {
     fi
   fi
   local t="${CLAUDE_AUTH_PROBE_TIMEOUT_SEC:-20}"
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$t" bash -c "$probe" >/dev/null 2>&1
-  else
-    bash -c "$probe" >/dev/null 2>&1
-  fi
+  _run_provider_probe_sanitized "$probe" "$t"
 }
 
 # agent-skill-chain CLI を解決して実行する（.agent-skill-chain/scripts/gate-*.sh と同じ優先順位）。
@@ -116,9 +149,15 @@ _run_reviewer_sanitized() {
 
   local rc=0 output=""
   if command -v timeout >/dev/null 2>&1; then
-    output="$(printf '%s' "$prompt" | timeout "$timeout_sec" "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+    output="$(
+      cd -- "$isolated_root/workspace"
+      printf '%s' "$prompt" | timeout "$timeout_sec" "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null
+    )" || rc=$?
   else
-    output="$(printf '%s' "$prompt" | "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+    output="$(
+      cd -- "$isolated_root/workspace"
+      printf '%s' "$prompt" | "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null
+    )" || rc=$?
   fi
   [[ "$owns_root" == "true" ]] && rm -rf -- "$isolated_root"
   printf '%s' "$output"
@@ -238,12 +277,7 @@ launch_gate_reviewer() {
       return
     fi
     local reasoning_probe_timeout="${CLAUDE_CORE_REVIEW_REASONING_PROBE_TIMEOUT_SEC:-20}"
-    if command -v timeout >/dev/null 2>&1; then
-      if ! timeout "$reasoning_probe_timeout" bash -c "$reasoning_probe" >/dev/null 2>&1; then
-        _fail_safe "Claude core reviewer のreasoning probeに失敗しました"
-        return
-      fi
-    elif ! bash -c "$reasoning_probe" >/dev/null 2>&1; then
+    if ! _run_provider_probe_sanitized "$reasoning_probe" "$reasoning_probe_timeout"; then
       _fail_safe "Claude core reviewer のreasoning probeに失敗しました"
       return
     fi
