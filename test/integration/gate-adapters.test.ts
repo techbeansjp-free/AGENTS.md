@@ -220,21 +220,55 @@ test('human launch_gate_reviewer (github): gh issue comment で通知し final=h
   assert.match(comments[0].body, /awaiting-human/);
 });
 
-// --- T4: codex launch_gate_reviewer（未構成 fail-safe） --------------------------------
+// --- T4: codex launch_gate_reviewer（認証不成立 fail-safe） ------------------------------
 
-test('codex launch_gate_reviewer: 未構成は gate を approve せず final=human_required・exit≠0 を返す', async (t) => {
+test('codex launch_gate_reviewer: 認証不成立は gate を approve せず human_required・exit≠0 を返す', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
 
   setAdapter(repo.dir, 'codex');
-  // OPENAI_API_KEY を設定していても、Codex 実行系が未確定である以上 silent pass しないこと。
-  const env = envWithout([], { OPENAI_API_KEY: 'dummy' });
+  const env = envWithout(['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'], {
+    CODEX_AUTH_PROBE_CMD: 'false',
+  });
 
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
 
-  assert.notEqual(res.status, 0, 'codex 未構成は exit 0（完了）にならないこと');
+  assert.notEqual(res.status, 0, '認証不成立は exit 0（完了）にならないこと');
   assert.notEqual(res.status, 3);
   assert.equal(readFinal(reportPath), 'human_required');
+});
+
+test('codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabilityモデルを使う', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'codex');
+
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-codex-reviewer-stub-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const argvPath = path.join(stubDir, 'argv.txt');
+  const codexStub = path.join(stubDir, 'codex');
+  fs.writeFileSync(
+    codexStub,
+    [
+      '#!/usr/bin/env bash',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argvPath)}`,
+      'cat >/dev/null',
+      `printf '%s' '${'{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}'}`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvPath, 'utf8');
+  assert.match(argv, /--sandbox\nread-only/, 'reviewerはread-only sandboxで起動すること');
+  assert.match(argv, /-m\ngpt-5\.6/, 'reviewerはhigh-capability既定モデルを使うこと');
+  assert.match(argv, /model_reasoning_effort="high"/, 'reviewerはhigh reasoning effortを使うこと');
 });
 
 // --- T5: ラッパーの終了コード分岐（引数・アダプタ解決） --------------------------------
@@ -270,12 +304,13 @@ test('gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了�
     const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], process.env);
     assert.equal(res.status, 3, `deferred は exit 3。stderr=${res.stderr}`);
   }
-  // error: codex 未構成 → ≠0,≠3
+  // error: codex 認証不成立 → ≠0,≠3
   {
     const { repo, reportPath, targetSha } = setupGateReview();
     t.after(() => repo.cleanup());
     setAdapter(repo.dir, 'codex');
-    const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], process.env);
+    const env = envWithout(['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'], { CODEX_AUTH_PROBE_CMD: 'false' });
+    const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
     assert.notEqual(res.status, 0);
     assert.notEqual(res.status, 3);
   }

@@ -1,6 +1,22 @@
 # MODEL_TIER_TABLE.md — 役割→ティア対応表（本リポ固有）
 
-**責務**: サブ委譲時のモデルティア選定について、本リポジトリ固有の**役割→ティア具体対応表**と**選定手順**を正本化する。抽象原則（適用条件・ティア明記義務・品質ゲート最上位・裁量の禁止と形骸化防止）は [../source/MODEL_SELECTION.md](../source/MODEL_SELECTION.md) に置き、本ファイルはその **project 側正本**（[../source/MODEL_SELECTION.md §汎用/固有境界](../source/MODEL_SELECTION.md#汎用固有境界)）である。委譲パケットのティア根拠 1 行は、本表の該当行をそのまま引用する（[../source/MODEL_SELECTION.md §2 ティア明記義務](../source/MODEL_SELECTION.md#2-ティア明記義務)）。
+**責務**: サブ委譲時のモデルティア選定について、本リポジトリ固有の**役割→能力ティア・実行系対応表**と選定手順を正本化する。共通規則はベンダー名や個別モデル名でなく能力ティアで表し、実行系ごとのモデル名は本ファイル内の対応表に限定する。委譲パケットには、役割・能力ティア・モデル・reasoning effort と根拠を 1 行で記録する。
+
+## 共通能力ティアと Codex 対応
+
+能力ティアは全実行系で共通に使い、個別のモデル名は実行系対応としてのみ扱う。モデル名を共通規則へ埋め込まないため、提供終了・名称変更時は対応表だけを更新できる。
+
+| 能力ティア | 適用役割 | Codex の既定 | reasoning effort | 選定根拠 |
+| --- | --- | --- | --- | --- |
+| high-capability | 設計、レビュー、監査、仕様、検証 | `gpt-5.6` | high | 曖昧性、複数段階の推論、根拠照合、品質ゲートを要する。 |
+| balanced | 実装 | `gpt-5.6-terra` | medium | 設計済みの通常実装では、強いツール利用と速度・コストの均衡を優先する。チェックリスト該当時は high-capability へ上げる。 |
+| fast | 定型調査、分類、変換、書記 | `gpt-5.6-luna` | low | 完了条件が明確で、読み取り・反復・構造化処理が中心である。 |
+
+Codex adapter はこの対応を次のように適用する。gate reviewer と spec/design/validation worker は high-capability、implementation worker は balanced を使う。adapter が扱わない調査・書記は、Codex のサブエージェントを明示的に起動する際に fast を選ぶ。環境変数 `CODEX_REVIEWER_MODEL`、`CODEX_HIGH_CAPABILITY_MODEL`、`CODEX_IMPLEMENTATION_MODEL` と対応する `*_REASONING_EFFORT` は、アカウントで利用可能なモデルへ変更するための明示的な上書きであり、役割の能力ティア自体を変えない。
+
+Codex reviewer は `read-only` sandbox、worker は `workspace-write` sandbox で起動する。認証・CLI・起動・完了照合の失敗は成功扱いにせず、既存の human_required / blocked 遷移へ倒す。
+
+## Claude 対応（既存運用）
 
 本ファイルは、[../source/EFFORT_POLICY.md §汎用/固有境界](../source/EFFORT_POLICY.md#汎用固有境界)が project へ委ねる**role×effort 対応表の受け皿**も兼ねる（下記対応表の「Effort」列。詳細は [§role×effort 対応表（受け皿）](#roleeffort-対応表受け皿) を参照）。ティアと effort は別次元の軸であり混同しない（[../source/EFFORT_POLICY.md §2](../source/EFFORT_POLICY.md#2-ティア明記義務との別次元性)）。
 
