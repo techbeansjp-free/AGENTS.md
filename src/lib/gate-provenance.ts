@@ -48,6 +48,11 @@ export interface ReportChunk {
   body: string;
 }
 
+export interface ArtifactDigest {
+  path: string;
+  digest: string;
+}
+
 export interface GateAttestationEnvelope {
   schema_version: 'agent-skill-chain/gate-attestation/v1';
   repository: { id: number; full_name: string };
@@ -290,6 +295,32 @@ export function materializeReport(manifest: ReportStorage, chunks: ReportChunk[]
   return report;
 }
 
+/**
+ * 承認済み集合とcurrent SHAから再計算した期待集合を双方向比較する。
+ * 一方のsubsetだけを見ると追加・削除を見落とすため、重複も含めて完全一致以外を変更とする。
+ */
+export function artifactSetsEqual(previous: ArtifactDigest[], current: ArtifactDigest[]): boolean {
+  const normalize = (artifacts: ArtifactDigest[]): string | undefined => {
+    const byPath = new Map<string, string>();
+    for (const artifact of artifacts) {
+      if (
+        artifact.path.length === 0 ||
+        artifact.path.startsWith('/') ||
+        artifact.path.split('/').includes('..') ||
+        !/^sha256:[0-9a-f]{64}$/.test(artifact.digest) ||
+        byPath.has(artifact.path)
+      ) {
+        return undefined;
+      }
+      byPath.set(artifact.path, artifact.digest);
+    }
+    return canonicalJson([...byPath].sort(([left], [right]) => left.localeCompare(right)));
+  };
+  const left = normalize(previous);
+  const right = normalize(current);
+  return left !== undefined && right !== undefined && left === right;
+}
+
 export function validateGateAttestationEnvelope(
   envelope: GateAttestationEnvelope,
   expected: {
@@ -308,6 +339,9 @@ export function validateGateAttestationEnvelope(
     runAttempt: number;
     reportDigest: string;
     storageManifestDigest: string;
+    reviewAttemptId: string;
+    reviewerExpectedCount: number;
+    evidenceDigest: string;
   },
 ): void {
   if (envelope.schema_version !== 'agent-skill-chain/gate-attestation/v1') throw new Error('attestation schemaが不正です');
@@ -330,6 +364,9 @@ export function validateGateAttestationEnvelope(
     runAttempt: envelope.workflow.run_attempt,
     reportDigest: envelope.report_digest,
     storageManifestDigest: envelope.storage_manifest_digest,
+    reviewAttemptId: envelope.review_attempt.attempt_id,
+    reviewerExpectedCount: envelope.review_attempt.expected_count,
+    evidenceDigest: envelope.review_attempt.evidence_digest,
   });
   if (actual !== canonicalJson(expected)) throw new Error('attestation envelopeが期待contextと一致しません');
   if (envelope.workflow.ref !== 'refs/heads/main') throw new Error('attestation workflow refがmainではありません');

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   INLINE_REPORT_MAX_BYTES,
   REPORT_MAX_BYTES,
+  artifactSetsEqual,
   buildReportStorage,
   decodeGateCheckExternalId,
   encodeGateCheckExternalId,
@@ -144,6 +145,9 @@ test('attestation envelopeは別Check・別workflow runへのreplayを拒否す�
     runAttempt: 1,
     reportDigest: manifest.report_digest,
     storageManifestDigest: digestOf(canonicalJson(manifest)),
+    reviewAttemptId: 'attempt-1',
+    reviewerExpectedCount: 1,
+    evidenceDigest: DIGEST,
   };
   const envelope: GateAttestationEnvelope = {
     schema_version: 'agent-skill-chain/gate-attestation/v1',
@@ -167,4 +171,24 @@ test('attestation envelopeは別Check・別workflow runへのreplayを拒否す�
   assert.doesNotThrow(() => validateGateAttestationEnvelope(envelope, expected));
   assert.throws(() => validateGateAttestationEnvelope(envelope, { ...expected, checkId: 988 }), /期待context/);
   assert.throws(() => validateGateAttestationEnvelope(envelope, { ...expected, runAttempt: 2 }), /期待context/);
+  assert.throws(
+    () => validateGateAttestationEnvelope(
+      { ...envelope, review_attempt: { ...envelope.review_attempt, attempt_id: 'attempt-replay' } },
+      expected,
+    ),
+    /期待context/,
+  );
+});
+
+test('artifact集合は順序に依存せず、追加・削除・重複・digest差異を変更とする', () => {
+  const first = [
+    { path: 'src/a.ts', digest: DIGEST },
+    { path: 'src/b.ts', digest: `sha256:${'c'.repeat(64)}` },
+  ];
+  assert.equal(artifactSetsEqual(first, [...first].reverse()), true);
+  assert.equal(artifactSetsEqual(first, first.slice(1)), false);
+  assert.equal(artifactSetsEqual(first, [...first, { path: 'src/c.ts', digest: DIGEST }]), false);
+  assert.equal(artifactSetsEqual(first, [{ ...first[0], digest: `sha256:${'d'.repeat(64)}` }, first[1]]), false);
+  assert.equal(artifactSetsEqual(first, [first[0], first[0], first[1]]), false);
+  assert.equal(artifactSetsEqual(first, [{ path: '../escape', digest: DIGEST }, first[1]]), false);
 });
