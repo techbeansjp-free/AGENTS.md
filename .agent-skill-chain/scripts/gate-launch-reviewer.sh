@@ -49,7 +49,7 @@ fi
 # project policy を含む reviewer context を一度だけ解決する。分類不能は非コアへ推測しない。
 if ! CONTEXT_OUTPUT="$(
   _cli gate reviewer-context \
-    "$ISSUE_ID" "$TARGET_SHA" "${ASC_BASE_REF:-}" "${ASC_REVIEW_SUBJECT:-}"
+    "$ISSUE_ID" "$TARGET_SHA" "${ASC_BASE_REF:-}" "${ASC_REVIEW_SUBJECT:-}" "${ASC_REVIEW_ADAPTER_REQUESTED:-}"
 )"; then
   echo "reviewer context の解決に失敗しました。フェイルセーフで human_required へ倒します" >&2
   _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true

@@ -239,7 +239,7 @@ test('codex launch_gate_reviewer: 認証不成立は gate を approve せず hum
   t.after(() => repo.cleanup());
 
   setAdapter(repo.dir, 'codex');
-  const env = envWithout(['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'], {
+  const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'false',
   });
 
@@ -421,7 +421,7 @@ test('gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了�
     const { repo, reportPath, targetSha } = setupGateReview();
     t.after(() => repo.cleanup());
     setAdapter(repo.dir, 'codex');
-    const env = envWithout(['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'], { CODEX_AUTH_PROBE_CMD: 'false' });
+    const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'false' });
     const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
     assert.notEqual(res.status, 0);
     assert.notEqual(res.status, 3);

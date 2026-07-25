@@ -368,7 +368,7 @@ test('codex launch_worker: 認証不成立はblocked報告・lease解放・exit 
   t.after(() => repo.cleanup());
   setWorkerAdapter(repo.dir, 'codex');
 
-  const env = envWithout(['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'], {
+  const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'false',
   });
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, unsetAdapter } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
@@ -333,7 +334,7 @@ test('gate reviewer-context: 明示core_auditはStrictとadapter別能力要求�
   assert.match(res.stdout, /^codex_required_reasoning_effort=xhigh$/m);
 });
 
-test('gate reviewer-context: GitHub core reviewは公式Codex Action経路へ固定する', async (t) => {
+test('gate reviewer-context: GitHub core reviewも明示adapterを保ちCIは証跡検証専用になる', async (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   t.after(() => repo.cleanup());
 
@@ -342,21 +343,23 @@ test('gate reviewer-context: GitHub core reviewは公式Codex Action経路へ固
     { cwd: repo.dir },
   );
   assert.equal(res.status, 0, res.stderr);
-  assert.match(res.stdout, /^adapter=codex$/m);
-  assert.match(res.stdout, /^core_github_action=openai\/codex-action@v1$/m);
-  assert.match(res.stdout, /^core_github_api_key_secret=OPENAI_API_KEY$/m);
+  assert.match(res.stdout, /^adapter=claude$/m);
+  assert.match(res.stdout, /^core_reviewer_location=local$/m);
+  assert.match(res.stdout, /^core_evidence_transport=github_pr_review$/m);
+  assert.match(res.stdout, /^core_ci_role=verify_and_publish$/m);
+  assert.match(res.stdout, /^core_reviewer_count=2$/m);
 });
 
 test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック・出力 JSON 契約を含む', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
-  // worktree 無しでも issues/<n>/ 配下から成果物を収集できることを確認する。
-  const baseDir = path.join(repo.dir, 'issues', '1');
-  fs.mkdirSync(baseDir, { recursive: true });
-  fs.writeFileSync(path.join(baseDir, 'SPEC.md'), '# SPEC\n\nAC-1: 認証\nAC-2: 認可\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: 認証\nAC-2: 認可\n', 'utf8');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: add prompt target'], { cwd: repo.dir });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
 
-  const res = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', 'deadbeef'], { cwd: repo.dir });
+  const res = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
   assert.equal(res.status, 0, res.stderr);
   assert.match(res.stdout, /AC-1, AC-2/);
   assert.match(res.stdout, /conformance/);

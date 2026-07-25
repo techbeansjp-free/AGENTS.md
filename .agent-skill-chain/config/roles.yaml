@@ -45,8 +45,8 @@ roles:
     modes: [conformance, falsification]
     capabilities:
       - worktree.read
-      - check_run.publish    # GitHubモード
-      - review.publish        # ローカルモード: reviews/<gate>.yaml
+      - review_evidence.return
+      - review.publish        # trusted recorder経由。GitHub=PR Review API、local=reviews/<gate>.yaml
     forbidden:
       - branch.commit
       - branch.push
@@ -139,12 +139,12 @@ role_contracts:
 
   gate_reviewer:
     inputs: [対象セグメントの成果物一式]
-    outputs: ['.agent-skill-chain/schemas/gate-report.schema.yaml 準拠のgate report']
+    outputs: ['conformance/falsification verdict（GitHubではtrusted recorderがPR review evidenceへ変換）']
     rules:
       - conformance（立証）とfalsification（反証）の2観点を分離して判定する（Strictでは専任分離）
       - 成果物を編集しない（read-only）
     completion:
-      - gate.conformance / gate.falsification / gate.final を記録済み
+      - conformance / falsification verdict を返却済み
       - blocking findingには必ずorigin（specification|design|implementation|validation）を付与する
     forbidden: [branch.commit, branch.push, artifact.edit, 次セグメントの起動]
     unnecessary_knowledge: [次に起動されるワーカー, 全体の状態遷移図, 他レビュアの内部判断, PRをいつReadyにするか]

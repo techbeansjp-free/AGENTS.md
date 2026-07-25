@@ -8,10 +8,12 @@ import { defaultBranch } from './worktree.js';
 export interface CoreReviewPolicy {
   required_profile: 'strict';
   unavailable: 'human_required';
-  github_automation: {
-    adapter: 'codex';
-    action: 'openai/codex-action@v1';
-    api_key_secret: 'OPENAI_API_KEY';
+  execution: {
+    reviewer_location: 'local';
+    evidence_transport: 'github_pr_review';
+    ci_role: 'verify_and_publish';
+    reviewer_count: 2;
+    trusted_reviewer_actors: string[];
   };
   capability: {
     model_tier: 'frontier_coding';

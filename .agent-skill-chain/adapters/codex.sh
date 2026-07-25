@@ -15,9 +15,6 @@ eval "$(declare -f launch_gate_reviewer | sed '1s/^launch_gate_reviewer /_codex_
 eval "$(declare -f launch_worker | sed '1s/^launch_worker /_codex_worker_lifecycle /')"
 
 _codex_auth_ok() {
-  if [[ -n "${OPENAI_API_KEY:-}" || -n "${CODEX_API_KEY:-}" || -n "${CODEX_ACCESS_TOKEN:-}" ]]; then
-    return 0
-  fi
   local probe="${CODEX_AUTH_PROBE_CMD:-}"
   if [[ -z "$probe" ]]; then
     if command -v codex >/dev/null 2>&1; then
@@ -87,6 +84,9 @@ launch_gate_reviewer() {
       fi
     fi
   fi
+  ASC_REVIEW_MODEL="$model"
+  ASC_REVIEW_REASONING="$effort"
+  export ASC_REVIEW_MODEL ASC_REVIEW_REASONING
 
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"

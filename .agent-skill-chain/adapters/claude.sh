@@ -203,6 +203,8 @@ launch_gate_reviewer() {
       _fail_safe "Claude core reviewer のreasoning probeに失敗しました"
       return
     fi
+    ASC_CAPABILITY_PROBE_PASSED=true
+    export ASC_CAPABILITY_PROBE_PASSED
     if [[ -n "${GATE_REVIEWER_CMD:-}" ]]; then
       _fail_safe "コアレビューではmodel指定を検証できない汎用GATE_REVIEWER_CMD上書きを許可しません"
       return
@@ -243,14 +245,17 @@ launch_gate_reviewer() {
 
   # 判定プロンプト（ルーブリック・出力契約）を組み立てる。
   local prompt
-  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha")"; then
+  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}")"; then
     _fail_safe "判定プロンプトの生成に失敗しました"
     return
   fi
 
-  # 判定対象成果物の base_dir を解決（approved_artifacts の digest 算出に使う）。
-  local base_dir
-  base_dir="$(_asc_cli gate reviewer-context "$issue_id" | sed -n 's/^base_dir=//p')"
+  # backendと判定対象成果物のbase_dirを解決する。GitHub modeではreviewerはPR review evidenceだけを
+  # 投稿し、CIのprotected-base verifierがgate-reportへ結線する。
+  local reviewer_context base_dir backend
+  reviewer_context="$(_asc_cli gate reviewer-context "$issue_id")"
+  base_dir="$(sed -n 's/^base_dir=//p' <<<"$reviewer_context")"
+  backend="$(sed -n 's/^backend=//p' <<<"$reviewer_context")"
 
   local timeout_sec="${GATE_REVIEWER_TIMEOUT_SEC:-900}"
   local retries="${GATE_REVIEWER_RETRIES:-3}"
@@ -278,9 +283,24 @@ launch_gate_reviewer() {
     return
   fi
 
-  # verdict を gate-report へ結線（書込みは trusted CLI のみ）。
-  if ! printf '%s' "$verdict" | _asc_cli gate record-verdict "$report_path" "$base_dir" >/dev/null; then
-    _fail_safe "verdict の gate-report への結線に失敗しました"
+  if [[ "$backend" == "github" ]]; then
+    for required in ASC_EVIDENCE_BASE_SHA ASC_TRUSTED_BASE_SHA ASC_EVIDENCE_PR_NUMBER ASC_REVIEWER_RUN_ID ASC_REVIEWER_SLOT; do
+      if [[ -z "${!required:-}" ]]; then
+        _fail_safe "GitHub review evidence投稿に必要な $required がありません"
+        return
+      fi
+    done
+    local evidence_model="${ASC_REVIEW_MODEL:-${CLAUDE_CORE_REVIEW_MODEL:-${CLAUDE_REVIEWER_MODEL:-default}}}"
+    local evidence_reasoning="${ASC_REVIEW_REASONING:-${CLAUDE_CORE_REVIEW_REASONING_TIER:-explicit_selection}}"
+    if ! printf '%s' "$verdict" | _asc_cli gate submit-evidence \
+      "$issue_id" "$gate_id" "$profile" "$target_sha" "$ASC_EVIDENCE_BASE_SHA" "$ASC_TRUSTED_BASE_SHA" \
+      "$ASC_EVIDENCE_PR_NUMBER" "$ASC_REVIEWER_RUN_ID" "$ASC_REVIEWER_SLOT" \
+      "${ASC_REVIEW_ADAPTER:-claude}" "$evidence_model" "$evidence_reasoning" >/dev/null; then
+      _fail_safe "verdict のGitHub PR review evidence投稿に失敗しました"
+      return
+    fi
+  elif ! printf '%s' "$verdict" | _asc_cli gate record-verdict "$report_path" "$base_dir" >/dev/null; then
+    _fail_safe "verdict のgate-reportへの結線に失敗しました"
     return
   fi
   return 0

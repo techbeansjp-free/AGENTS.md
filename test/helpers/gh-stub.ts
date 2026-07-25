@@ -292,6 +292,39 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  const pullMatch = /\\/pulls\\/(\\d+)$/.exec(apiPath || '');
+  if (pullMatch && method === 'GET') {
+    process.stdout.write(JSON.stringify(state.pullMetadata || {}));
+    process.exit(0);
+  }
+
+  if (/\\/pulls\\/\\d+\\/commits(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
+    process.stdout.write(JSON.stringify(state.pullCommits || []));
+    process.exit(0);
+  }
+
+  if (/\\/pulls\\/\\d+\\/reviews(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
+    process.stdout.write(JSON.stringify(state.pullReviews || []));
+    process.exit(0);
+  }
+
+  if (/\\/pulls\\/\\d+\\/reviews$/.test(apiPath || '') && method === 'POST') {
+    const parsed = JSON.parse(body);
+    const id = state.nextId++;
+    const record = {
+      id,
+      body: parsed.body,
+      commit_id: parsed.commit_id,
+      state: 'COMMENTED',
+      user: { login: state.apiActor || 'trusted-reviewer' },
+    };
+    state.pullReviews = state.pullReviews || [];
+    state.pullReviews.push(record);
+    saveState(state);
+    process.stdout.write(JSON.stringify(record));
+    process.exit(0);
+  }
+
   if (/\\/check-runs$/.test(apiPath || '') && method === 'POST') {
     const parsed = JSON.parse(body);
     const id = state.nextId++;
@@ -331,6 +364,10 @@ export interface GhStubState {
   prs: Record<string, unknown[]>;
   labels: string[];
   issueLabels: Record<string, string[]>;
+  apiActor?: string;
+  pullMetadata?: unknown;
+  pullCommits?: unknown[];
+  pullReviews?: unknown[];
   prCreateCalls?: { args: string[]; body: string | undefined }[];
   // ---- Issue #196 release bump/tag/publish・Issue #208 root-cleanup run 検証用
   //      (gh pr view/list/merge, gh release view/create) ----
