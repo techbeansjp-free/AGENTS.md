@@ -415,6 +415,17 @@ test('doctor D5: 不正なstatus値のADRがあると ADR整合性 がNGにな�
   assert.match(result.stdout, /NG {2}ADR整合性: .*不正なstatus/);
 });
 
+test('doctor D5: YAML行末コメント付きの有効なstatusを正しく認識する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  writeAdrFixture(repo.dir, 'ADR-0001-a.md', 'ADR-0001', 'proposed   # lifecycle status', [], null);
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+
+  assert.match(result.stdout, /OK {2}ADR整合性/);
+});
+
 test('doctor D5: supersedes⇔superseded-byが対称であれば ADR整合性 がOKになる', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
