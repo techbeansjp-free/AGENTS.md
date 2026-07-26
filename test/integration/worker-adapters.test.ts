@@ -368,7 +368,7 @@ test('codex launch_worker: 認証不成立はblocked報告・lease解放・exit 
   t.after(() => repo.cleanup());
   setWorkerAdapter(repo.dir, 'codex');
 
-  const env = envWithout(['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'], {
+  const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'false',
   });
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
@@ -467,8 +467,7 @@ test('lease acquire (local backend): wip.limit（既定3）に達した4件目�
   assert.match(acquire4.stderr, /WIP上限/);
 
   // 1件解放すればWIP枠が空き、4件目が取得できること。
-  const token1 = /token:\s*(\S+)/.exec(acquire1.stdout)![1];
-  const release1 = runCli(['lease', 'release', 'ISSUE-1', token1], { cwd: repo.dir });
+  const release1 = runCli(['lease', 'release', 'ISSUE-1'], { cwd: repo.dir });
   assert.equal(release1.status, 0, release1.stderr);
 
   const acquire4Retry = runCli(['lease', 'acquire', 'ISSUE-4', 'spec'], { cwd: repo.dir });
@@ -516,8 +515,7 @@ test('lease acquire (github backend): 同issue内の他segmentの有効leaseは�
   assert.match(acquireDesign.stderr, /他segment/);
 
   // spec leaseを解放すればdesignが取得できること。
-  const token = /token:\s*(\S+)/.exec(acquireSpec.stdout)![1];
-  const release = runCli(['lease', 'release', 'ISSUE-9', token], { cwd: repo.dir, env });
+  const release = runCli(['lease', 'release', 'ISSUE-9'], { cwd: repo.dir, env });
   assert.equal(release.status, 0, release.stderr);
   const acquireDesignRetry = runCli(['lease', 'acquire', 'ISSUE-9', 'design'], { cwd: repo.dir, env });
   assert.equal(acquireDesignRetry.status, 0, acquireDesignRetry.stderr);

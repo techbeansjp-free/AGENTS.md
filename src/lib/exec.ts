@@ -30,8 +30,8 @@ export function runOrThrow(command: string, args: string[], cwd?: string): strin
   return result.stdout.trim();
 }
 
-export function git(args: string[], cwd?: string): ExecResult {
-  return run('git', args, cwd);
+export function git(args: string[], cwd?: string, input?: string): ExecResult {
+  return run('git', args, cwd, input);
 }
 
 export function gh(args: string[], cwd?: string, input?: string): ExecResult {

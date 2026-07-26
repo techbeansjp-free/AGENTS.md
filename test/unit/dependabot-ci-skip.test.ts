@@ -1,7 +1,7 @@
 // Issue #215: Dependabot PR で追跡系CI検査を skip_checks ガードにより回避する構造を固定化する。
 // Issue #219: 許可判定の基準を push 実行者（github.actor）から PR/ブランチの起源（実PR作成者）へ
 // 是正した構造を固定化する。本テストは、①ガードが必要な追跡系ステップに存在すること、
-// ②存在してはならないステップ（verify-template-sync・npm ci/build/test）には存在しないこと、
+// ②存在してはならないステップ（verify-template-sync・npm ci/build）には存在しないこと、
 // ③ci の判定が PR 作成者（pull_request.user.login）由来であること、④reconcile が job 条件でなく
 // step-level 3分岐（実PR作成者のAPI確認）で判定し、判定に github.actor を用いないこと、
 // ⑤本体2ファイルとテンプレート正本2ファイルが完全一致することを、
@@ -18,6 +18,10 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 const CI_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-ci.yml');
 const RECONCILE_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-reconcile.yml');
+// Issue #290: agent-skill-chain自身の自己テスト（npm test）は配布テンプレート対象外の
+// 本リポジトリ専用ファイルへ分離済み。テンプレート正本には存在しないため、CI_TEMPLATE等の
+// 完全一致検査（⑤）の対象に含めない。
+const SELF_TEST_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-self-test.yml');
 const TEMPLATE_DIR = path.join(REPO_ROOT, '.agent-skill-chain', 'templates', 'github', '.github', 'workflows');
 const CI_TEMPLATE = path.join(TEMPLATE_DIR, 'agent-skill-chain-ci.yml');
 const RECONCILE_TEMPLATE = path.join(TEMPLATE_DIR, 'agent-skill-chain-reconcile.yml');
@@ -56,6 +60,16 @@ function ciSteps(): Step[] {
   const wf = readYamlFile<CiWorkflow>(CI_BODY);
   assert.ok(Array.isArray(wf.jobs?.verify?.steps), 'jobs.verify.steps が配列であること');
   return wf.jobs.verify.steps;
+}
+
+interface SelfTestWorkflow {
+  jobs: { 'self-test': { steps: Step[] } };
+}
+
+function selfTestSteps(): Step[] {
+  const wf = readYamlFile<SelfTestWorkflow>(SELF_TEST_BODY);
+  assert.ok(Array.isArray(wf.jobs?.['self-test']?.steps), "jobs.'self-test'.steps が配列であること");
+  return wf.jobs['self-test'].steps;
 }
 
 function findByName(steps: Step[], nameSubstr: string): Step {
@@ -106,15 +120,17 @@ test("ci: verify-template-sync ステップは skip_checks を参照しない（
   );
 });
 
-test('ci: npm ci / build / ログ保存付きtestの各ステップは if 条件を持たない（常時実行）', () => {
+test('ci: npm ci / build の各ステップは if 条件を持たない（常時実行）', () => {
   const steps = ciSteps();
   for (const cmd of ['npm ci', 'npm run build']) {
     const step = steps.find((s) => typeof s.run === 'string' && s.run.trim() === cmd);
     assert.ok(step, `run が '${cmd}' のステップが存在すること`);
     assert.equal((step as Step).if, undefined, `'${cmd}' ステップは if 条件を持たないこと`);
   }
+});
 
-  const testStep = findByName(steps, 'Run npm test and save execution log');
+test('self-test: ログ保存付きtestステップは if 条件を持たない（常時実行、Issue #290で本リポジトリ専用ファイルへ分離）', () => {
+  const testStep = findByName(selfTestSteps(), 'Run npm test and save execution log');
   assert.ok(
     (testStep.run ?? '').includes('npm test 2>&1 | tee test-execution.log'),
     'test step が出力を保存しながら実行すること',

@@ -159,10 +159,17 @@ function splitIdentifierSegments(run: string): string[] {
 
 /** A-1 コード識別子文脈: snake_case/camelCase/SCREAMING_SNAKE_CASEの複合識別子の一部として
  * 禁止語が出現する場合に除外する。run長が禁止語長と等しい（単独の語そのもの）場合は対象外
- * （要件1「単独の`issue`は識別子文脈と誤認しない」）。 */
-function isCodeIdentifierContext(line: string, run: IdentifierRun, banned: string): boolean {
+ * （要件1「単独の`issue`は識別子文脈と誤認しない」）。
+ *
+ * 非散文ファイル（コード・設定・スクリプト）では、区切り文字（`_`・camelCase境界）が無い
+ * 英語の屈折形（例: `issues`・`issued`）も、runが禁止語より長い時点でASCII識別子・トークン内部の
+ * 部分文字列であり単独の禁止語出現ではないため区別なく除外する（ISSUE-283）。散文（.md）では
+ * 日本語文中に直接隣接する屈折形（例:「issuesを一覧する」）が禁止語の誤用でありうるため、
+ * この広い除外を適用せず従来通りsegment一致のみを識別子文脈として扱う。 */
+function isCodeIdentifierContext(line: string, run: IdentifierRun, banned: string, ext: string): boolean {
   const runText = line.slice(run.runStart, run.runEnd);
   if (runText.length <= banned.length) return false;
+  if (!isProseFile(ext)) return true;
   return splitIdentifierSegments(runText).some((seg) => seg.toLowerCase() === banned.toLowerCase());
 }
 
@@ -265,18 +272,26 @@ function isCliSubcommandContext(line: string, run: IdentifierRun, banned: string
  * トークンのみを列挙する（ISSUE-178 DESIGN.md「A-4」）。正規表現・部分一致は持たない。 */
 const EXTERNAL_VOCAB_ALLOWLIST: readonly string[] = ['blank_issues_enabled'];
 
-function isExternalVocabAllowlisted(line: string, run: IdentifierRun): boolean {
+function isExternalVocabAllowlisted(line: string, run: IdentifierRun, ext: string): boolean {
   const runText = line.slice(run.runStart, run.runEnd);
-  return EXTERNAL_VOCAB_ALLOWLIST.includes(runText);
+  if (EXTERNAL_VOCAB_ALLOWLIST.includes(runText)) return true;
+  // GitHub Actionsが定義するGITHUB_TOKEN permission key。散文の複数形まで除外せず、
+  // 真のYAML key位置にある改名不能な外部schema語彙だけを許可する。
+  return (
+    YAML_CONTEXT_EXTENSIONS.has(ext) &&
+    runText === 'issues' &&
+    /^\s*(-\s+)?$/.test(line.slice(0, run.runStart)) &&
+    /^\s*:/.test(line.slice(run.runEnd))
+  );
 }
 
 function isIdentifierContext(line: string, start: number, end: number, banned: string, ext: string): boolean {
   const run = identifierRunAt(line, start, end);
   if (!run) return false;
-  if (isCodeIdentifierContext(line, run, banned)) return true;
+  if (isCodeIdentifierContext(line, run, banned, ext)) return true;
   if (YAML_CONTEXT_EXTENSIONS.has(ext) && isYamlIdentifierContext(line, run, banned)) return true;
   if (!isProseFile(ext) && isCliSubcommandContext(line, run, banned)) return true;
-  return isExternalVocabAllowlisted(line, run);
+  return isExternalVocabAllowlisted(line, run, ext);
 }
 
 /** 行中に出現する banned の全箇所を走査し、いずれもコード的参照（バッククォート・

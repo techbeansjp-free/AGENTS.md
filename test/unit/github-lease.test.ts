@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import {
   renderLeaseComment,
@@ -40,7 +41,7 @@ test('renderLeaseComment: マーカーとyamlフェンスを含む本文を生�
   assert.match(body, /<!-- agent-skill-chain:lease -->/);
   assert.match(body, /```yaml\n/);
   assert.match(body, /issue_id: ISSUE-42/);
-  assert.match(body, /token: random-token/);
+  assert.doesNotMatch(body, /random-token|token:/);
 });
 
 test('acquireLeaseRef -> activeLeaseFor: 初回acquireはrefを新規作成し、読み出せること', (t) => {
@@ -55,6 +56,16 @@ test('acquireLeaseRef -> activeLeaseFor: 初回acquireはrefを新規作成し�
   assert.ok(active, '直後にactiveLeaseForで読み出せること');
   assert.equal(active!.lease.writer_lease.token, 'token-a');
   assert.equal(active!.segment, 'spec');
+  const message = execFileSync('git', ['log', '-1', '--format=%B', active!.sha], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+  });
+  assert.doesNotMatch(message, /token-a|token:/, 'commit messageへbearer tokenを保存しないこと');
+  const payload = execFileSync('git', ['show', `${active!.sha}:lease.yaml`], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+  });
+  assert.match(payload, /token: token-a/, 'tokenはlease refのpayloadだけから復元できること');
 
   // 別segmentでは一致しないこと。
   assert.equal(activeLeaseFor('42', 'design', repo.dir), undefined);

@@ -68,7 +68,7 @@ function approveGate(
 ) {
   const acquire = runCli(['lease', 'acquire', 'ISSUE-1', gateId], { cwd: repo.dir, env });
   assert.equal(acquire.status, 0, acquire.stderr);
-  const token = /token:\s*(\S+)/.exec(acquire.stdout)![1];
+  assert.doesNotMatch(acquire.stdout + acquire.stderr, /token:/);
 
   const gateReview = runCli(['gate', 'review', 'ISSUE-1', gateId, 'standard'], { cwd: worktreePath, env });
   assert.equal(gateReview.status, 0, gateReview.stderr);
@@ -85,7 +85,7 @@ function approveGate(
   const gatePublish = runCli(['gate', 'publish', 'ISSUE-1', reportPath], { cwd: repo.dir, env });
   assert.equal(gatePublish.status, 0, gatePublish.stderr);
 
-  const release = runCli(['lease', 'release', 'ISSUE-1', token], { cwd: repo.dir, env });
+  const release = runCli(['lease', 'release', 'ISSUE-1'], { cwd: repo.dir, env });
   assert.equal(release.status, 0, release.stderr);
 }
 
