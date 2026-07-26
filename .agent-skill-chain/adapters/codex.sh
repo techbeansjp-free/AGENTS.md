@@ -99,8 +99,9 @@ launch_gate_reviewer() {
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
     if ! command -v "$codex_executable" >/dev/null 2>&1; then
       _codex_fail_safe "Codex CLI が見つかりません"
+      local fail_safe_rc=$?
       rm -rf -- "$isolated_root"
-      return
+      return "$fail_safe_rc"
     fi
     local quoted_executable
     local quoted_root

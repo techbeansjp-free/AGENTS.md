@@ -291,11 +291,29 @@ test('codex launch_gate_reviewer: 認証不成立は gate を approve せず hum
   setAdapter(repo.dir, 'codex');
   const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'false',
+    CODEX_REVIEWER_CMD: 'false',
   });
 
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
 
   assert.notEqual(res.status, 0, '認証不成立は exit 0（完了）にならないこと');
+  assert.notEqual(res.status, 3);
+  assert.equal(readFinal(reportPath), 'human_required');
+});
+
+test('codex launch_gate_reviewer: Codex CLI 不在は cleanup 後も error を返す', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+
+  setAdapter(repo.dir, 'codex');
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_EXECUTABLE: '__agent_skill_chain_missing_codex__',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0, 'CLI 不在は cleanup で exit 0 に上書きされないこと');
   assert.notEqual(res.status, 3);
   assert.equal(readFinal(reportPath), 'human_required');
 });
@@ -470,7 +488,10 @@ test('gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了�
     const { repo, reportPath, targetSha } = setupGateReview();
     t.after(() => repo.cleanup());
     setAdapter(repo.dir, 'codex');
-    const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'false' });
+    const env = envWithout([], {
+      CODEX_AUTH_PROBE_CMD: 'true',
+      CODEX_EXECUTABLE: '__agent_skill_chain_missing_codex__',
+    });
     const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
     assert.notEqual(res.status, 0);
     assert.notEqual(res.status, 3);
