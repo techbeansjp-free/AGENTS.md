@@ -2,6 +2,7 @@ import path from 'node:path';
 import { readYamlFile } from './yaml-io.js';
 import { resolveAsset, repoRoot } from './paths.js';
 import { validateAgainstSchema } from './schema.js';
+import type { WorkerConfig } from './worker-selection.js';
 
 export interface AgentSkillChainConfig {
   schema_version: string;
@@ -14,9 +15,7 @@ export interface AgentSkillChainConfig {
     standard: { reviewer_count: number; modes: string[] };
     strict: { reviewer_count: number; trigger: { risk_not_normal: boolean; autonomy_full: boolean } };
   };
-  worker: {
-    adapter?: 'claude' | 'codex' | 'human';
-  };
+  worker: WorkerConfig;
   worktree: {
     root: string;
     path_pattern: string;
