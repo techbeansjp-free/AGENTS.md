@@ -1,7 +1,14 @@
-# ADR-0014: 期限切れ writer lease の再開証明と token 非表示化
+# ADR
 
-- Status: proposed
-- Issue: `ISSUE-286`
+```yaml
+id: ADR-0014
+status: proposed
+title: 期限切れ writer lease の再開証明と token 非表示化
+tags: [lease, resume, security, redaction]
+supersedes: []
+superseded-by: null
+deprecated-reason: null
+```
 
 ## Context
 
