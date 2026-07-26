@@ -1,100 +1,100 @@
 # SPEC: human gateの停止状態と復帰入口を同じtrusted sessionへ結線する
 
-- Issue: `ISSUE-278`
-- 作成者: `human_rerun_entry`
-- 対象ブランチ: `bugfix/278-human-adapter-rerun-entry`
+- Issue: `ISSUE-278` / 作成者: `human_rerun_entry` / 対象ブランチ: `bugfix/278-human-adapter-rerun-entry`
 
 ## 目的・背景
 
-GitHubモードのhuman gateは、非同期判定を待つ間required Checkを`action_required`にする。
-復帰操作は単なるworkflow再実行ではなく、停止を作ったPR head・gate・review profile・Check Runへ
-一回限りで結線されなければならない。本Issueは初回通知と判定提出をdefault branchのtrusted処理へ
-限定し、PR codeへのwrite token露出、別Checkへの承認、replay、backend二重化を防ぐ。
+GitHubモードのhuman gateは、非同期判定中もrequired Checkでmergeを停止し、停止を作ったPR head・gate・review
+profile・Check Runへ人間判定を一回限りで結線する。本Issueは入力をGitHubへ耐久化し、default branchのtrusted処理だけにCheck更新を許してstale、replay、PR codeへのwrite token露出を防ぐ。
 
 ## 前提・用語・入出力
 
-- 対象: `coordination.backend: github`、openかつsame-repositoryのPR、`review.adapter: human`。
-- human gate session: required Check Runを親とし、session ID、publisher App、PR、Issue、gate、target SHA、
-  profile、trusted CLI SHA、期待slot、状態、submission digestを保持するGitHub正準レコード。
-- 状態: `awaiting`、`consuming`、`approved`、`rejected`、`human_required`、`invalidated`。
-- 初回入力: trustedなPR event、base/head repository、PR番号、branch、head SHA、label、gate。
-- 判定入力: 親Check Run ID、session ID、slot、invocation ID、PR番号、gate、target SHA、
-  conformance/falsification、origin付きfinding。artifact path/digestは人間入力にしない。
-- 出力: 同じ親Check Run IDの`success|failure|action_required`と、actor・workflow run・slot判定を含む証跡。
-- ローカルモードの正本は従来どおり`reviews/<gate>.yaml`であり、GitHub sessionを作らない。
+- 対象は`backend=github`、openかつsame-repositoryのPR、`review.adapter=human`。local正本は変更しない。
+- 前提依存は、Issue #277の純粋Strict reducerを含むaccepted ADR-0010と、Issue #283の専用App trust
+  backendを含むaccepted ADR-0013である。未導入・未構成ならsessionを開始せず設定エラーにする。
+- `human gate session`はPRを集約ルートとし、required parent Check、slot Check、PR Review inboxで構成する。
+- parent一意keyはrepository ID、PR、target SHA、gate、required名、publisher App IDである。
+- PR Review inboxはsession/slot/invocation、判定、actor、review ID、submission digestを持つ耐久入力である。
+- slot envelopeはsession、base/target、gate/profile、slot/invocation、actor、review/workflow run/Check ID、
+  verdict、artifact集合digest、ownership nonce、処理状態を持つ。
+- 初回入力はtrusted PR event、判定入力はPR Review IDとsession識別子である。artifactは人間入力にしない。
+- 出力は同じparent Check IDの`success|failure|action_required`と、全provenanceを持つGitHub証跡である。
 
 ## 要求・要件
 
-human adapterの停止通知から判定提出までを、default branchのtrusted CLI、GitHub正準session、
-target commitのread-only Git objectという3境界へ分離する。
-
-- 初回通知はPR codeを実行せず、required Check summaryへ実在workflow名、全入力、権限を記録する。
-- session作成・提出はopen/same-repo/current head、branch、Issue、human adapter、profileを再検証する。
-- 親Checkの`external_id`と機械可読outputを一回限りCAS相当で更新し、別Checkをsuccessとして作らない。
-- Check名はdefault branch設定の`config.checks[gate]`からのみ導出する。
-- expected artifact full-setはtrusted処理がbase/target差分とsegment出力から導出し、target Git objectから
-  全digestと集合digestを計算する。空・不足・余分・重複を成功にしない。
-- Standardは1 slot、Strictは別actor・別invocationの固定2 slotをGitHub上で耐久化し、
-  一般trusted aggregationの完全一致・優先順位規則で親Checkを確定する。
-- verdict欠落、不正JSON、不正finding、`pending`、判定不能、stale session、API失敗はsuccessにしない。
-- 同じsession・submission digestのreplayは既存結果を返し、異なる再提出は新sessionなしでは拒否する。
+- #283が配備するChecks専用App、main限定environment、required contextの`integration_id`固定を必須とする。
+  通常`GITHUB_TOKEN`は`checks: none`で、専用App tokenはprotected publisher stepだけが取得する。
+- opener、submit、reconcile、既存gate publisherを同じpublisherへ置換し、parentのcreate/PATCH/sourceを
+  同一Appへ限定する。candidate処理はcustom Checkを書かず、PR Reviewからpublisherへhandoffする。
+- trusted openerはAPIでbase/targetを固定し、変更pathから`spec→design→implementation→validation`順に
+  gate集合を導出する。gateごとに決定的session keyを使い、同一keyの再実行は既存sessionを返す。
+- 同じSHA/name/Appのparentは一件だけを許す。複数、別source、設定とrulesetの不一致は選択せず停止する。
+- PR Review inboxを先に耐久化し、surviving runと定期sweeperが未処理入力を再走査する。Actions queueは
+  correctnessの正本にしない。
+- Checks PATCHをCASとは呼ばない。専用Appだけが同一保護environment・PR/gate直列化経路から書き、
+  nonce所有、API再読取、冪等retry、terminal postcondition検証で非atomic更新を収束させる。
+- Actions runがpendingまたはprocessing中に取消されても、後続runは前runのterminal状態を確認してnonceを
+  引き継ぐ。同じdigestのterminal結果はno-op、異なるdigestまたは相反結論は上書きせず新sessionを要求する。
+- gate別artifactはsegmentの抽象outputを具体pathへ分類し、base/targetのA/M/D全件をcanonical recordにする。
+  deletionはbase digestを含むtombstoneとし、path順の集合digestを保存する。
+- submit時はbase/head/profile/App/sessionとartifact recordを再導出し、保存集合と導出集合を双方向比較する。
+  欠落、余分、重複、digest差、不明path、取得不能をsuccessにしない。
+- StrictはGitHub slot envelopeを#277のI/Oなし純粋reducerへ渡す。replay・nonce・Check読書きはreducer外とし、
+  別actor・別invocationの2 approveかつbinding完全一致だけをapprovedにする。
+- 不正入力、`pending`、不足、API/queue/sweeper失敗は親を`action_required`のまま保ち、mergeを許さない。
 
 ## 受入条件
 
-### AC-1: trustedな初回通知
+### AC-1: trusted sourceと一意session
 
-- Given: GitHub human gateが開始される
-- When: trusted default-branch workflowがsessionを作る
-- Then: PR codeへwrite tokenを渡さず、親`action_required` Checkに実行可能な復帰commandと全識別子を記録する（検証: `automated`）
+- Given: human gate対象PRのbase/targetが確定している
+- When: openerを再実行する
+- Then: 固定順の各gateに同SHA/name/Appのparentが一件だけ作成または再利用される（検証: `automated`）
 
-### AC-2: 現在headと停止Checkへの結線
+### AC-2: 専用App以外はCheckを書けない
 
-- Given: 人間が判定を提出する
-- When: PRがclosed/external、head・gate・Issue・adapter・profile・session・Check IDのいずれかが不一致である
-- Then: Checkを更新せず明示エラーで停止する（検証: `automated`）
+- Given: candidate、publisher、rulesetが配備されている
+- When: 初回・提出・reconcileを実行する
+- Then: candidateの`GITHUB_TOKEN`はChecksを書かず、main限定publisher Appだけが全Checkを更新する（検証: `automated`）
 
-### AC-3: 一回限りCASと冪等性
+### AC-3: non-atomic更新を安全に再開する
 
-- Given: `awaiting` sessionがある
-- When: 同一PR/gateの提出が並行または再実行される
-- Then: 1件だけが`consuming`へ遷移し、同一digest replayはno-op、相反提出は拒否され、新Checkを作らない（検証: `automated`）
+- Given: parentまたはslotのPATCH応答不明、run取消、並行提出がある
+- When: publisherまたはsweeperが再試行する
+- Then: nonce所有と再読取で同一結果へ収束し、相反terminalを上書きしない（検証: `automated`）
 
-### AC-4: required Check名とfull-set証跡
+### AC-4: durable inboxでqueue損失を回復する
 
-- Given: 検証済みsessionとtarget commitがある
-- When: trusted処理が最終判定を発行する
-- Then: config由来の同じ親Checkだけを更新し、全期待artifactのGit object digestと集合digestを保存する（検証: `automated`）
+- Given: PR Reviewへ有効判定を記録後、dispatch/pending runが取消される
+- When: 後続triggerまたはsweeperが未処理inboxを走査する
+- Then: 判定を失わず一度だけslotへ記録する（検証: `automated`）
 
-### AC-5: 不完全・不正な判定はfail-closed
+### AC-5: artifact full-setを厳密照合する
 
-- Given: JSON欠落、不正値、`pending`、空/不一致artifact集合、判定不能、API/fetch失敗がある
-- When: 復帰workflowが処理する
-- Then: `success`を発行せず、sessionを再利用可能な成功状態へ倒さない（検証: `automated`）
+- Given: 各gateにA/M/D artifactがある
+- When: openとsubmitが集合を導出する
+- Then: tombstoneを含む同一canonical集合だけを受理し、片方向一致では承認しない（検証: `automated`）
 
-### AC-6: Strict 2-slotの正常復帰
+### AC-6: Strict reducer境界
 
-- Given: session profileがStrictである
-- When: 別actor・別invocationの2 slotが同じ対象へ判定を提出する
-- Then: 2件を耐久証跡から集約し、両方approveかつ証跡一致時だけ親Checkをsuccessにする（検証: `automated`）
+- Given: Strict sessionへ2件のslot envelopeがある
+- When: 別actor・別invocationの2 approve、重複、replay、不足、混合判定を集約する
+- Then: 純粋reducerだけが判定し、正常2件だけsuccess、他はfailureまたはaction_requiredとなる（検証: `automated`）
 
-### AC-7: backend・role境界
+### AC-7: status/conclusionとbackend境界
 
-- Given: CLIがlocal backend、または自動adapter選択で呼ばれる
-- When: human GitHub session commandが要求される
-- Then: GitHub API前に拒否し、local report、自動adapter、writer lease、成果物branchを変更しない（検証: `automated`）
+- Given: queued、processing、awaiting、approved、rejected、invalidの各状態がある
+- When: Checkへ写像する、またはlocal backendからcommandを呼ぶ
+- Then: 規定写像以外を発行せず、localではGitHub APIと成果物を変更しない（検証: `automated`）
 
 ### AC-8: 配布・監査契約
 
-- Given: workflow、human adapter、CLI、テンプレートが存在する
-- When: sessionを開始・提出・replayする
-- Then: 配布元/展開先が一致し、actor・run/session/check/slot IDを秘密値なしで再現できる（検証: `automated`）
+- Given: workflow、CLI、adapter、template、rulesetが存在する
+- When: session、replay、recoveryを実行する
+- Then: 展開元/先が一致し、actor/run/review/session/check/slot/nonceを秘密値なしで追跡できる（検証: `automated`）
 
 ## 制約・完了条件・対象外
 
-- 4ゲートとrequired Check名は変更しない。workflow権限は`contents: read`、`pull-requests: read`、
-  `checks: write`に限定し、Issue書込み権限を追加しない。
-- verdictはenv経由でstdinへ渡し、workflow式をshell本文へ展開しない。入力・Check outputは上限を設ける。
-- Strict集約規則はIssue #277由来の共通契約を再利用し、本IssueはGitHub耐久化と復帰結線だけを担う。
-- 正常、stale、external、権限、replay、並行、Strict不足/正常、artifact反例、local拒否を自動検証し、
-  全AC証跡を`VALIDATION.md`へ保存すれば完了する。
-- 対象外: 人間のレビュー内容生成、credential作成、Claude Code/Codexの自動判定実装、4ゲート変更。
+公式に存在する`concurrency.queue: max`は100件上限の補助にだけ使い、耐久性を委ねない。4ゲート名、
+人間の判定内容生成、credential作成、#277/#283の責務、local backendは変更しない。全ACの正常・反例・
+取消回復・配布同期・回帰証跡を`VALIDATION.md`へ保存して完了する。未決事項はない。

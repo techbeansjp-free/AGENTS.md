@@ -2,99 +2,96 @@
 
 - Issue: `ISSUE-278` / 対応する SPEC: `SPEC.md`
 
-## 目的・前提・依存
+## 目的・依存
 
-human gateを「trusted初回通知」「read-only人間判定」「trusted CAS発行」へ分ける。Issueを集約ルート、PRとCheck RunをGitHub backendの調整プリミティブとし、PR branchにはtoken・session書込み・CLI実行を
-許さない。Strict集約規則とsub-verdict provenanceはIssue #277の成果を先にmainへ取り込み、本設計はその純粋集約へGitHub耐久slotを渡す。依存未導入ならStrict session開始をfail-closedにする。
+human gateをGitHub PR aggregateとCheck/Reviewエンティティでモデル化し、判定耐久化、純粋集約、Check発行を分離する。
+実装開始条件は#277のI/Oなし`reduceStrict(context,envelopes)`とaccepted ADR-0010、#283のdedicated App・main限定environment・ruleset integrationとaccepted ADR-0013であり、未成立ならsession開始前にfail-closedとする。
 
 ## ACと設計要素
 
 | AC-ID | 設計要素 |
 |---|---|
-| AC-1 | Trusted session opener / Check notification |
-| AC-2 | Context and provenance validator |
-| AC-3 | Serialized Check CAS / replay guard |
-| AC-4 | Config check resolver / artifact full-set resolver |
-| AC-5 | Verdict validator / fail-closed publisher |
-| AC-6 | Durable 2-slot adapter / common Strict aggregator |
-| AC-7 | Backend and role guard |
-| AC-8 | Audit record / template contract tests |
+| AC-1 | GateSetResolver / SessionRepository |
+| AC-2 | TrustBackendGuard / DedicatedAppPublisher |
+| AC-3 | SerializedReducer / OwnershipRecovery |
+| AC-4 | ReviewInbox / RecoverySweeper |
+| AC-5 | ArtifactClassifier / ArtifactSet |
+| AC-6 | SlotEnvelopeMapper / pure Strict reducer |
+| AC-7 | CheckStateMapper / BackendGuard |
+| AC-8 | ProvenanceEnvelope / distribution tests |
 
-## GitHub正準session
+## DDD境界と正準record
 
-親はrequired名`config.checks[gate]`のCheck Runで、`external_id`にversion、session ID、状態、
-submission digestを持つ。boundedな機械可読outputにrepo/Issue/PR/gate/head/profile/adapter、
-publisher App ID、trusted CLI SHA、親Check ID、expected slot、slot Check ID・invocation ID・actor・run ID、
-expected artifact集合とdigestを保存する。全slotは親sessionを指す非required Check Runとして判定本文を
-独立保存する。GitHub外のmanifestやrunner一時fileを復帰状態の正本にしない。
+- `HumanGateSession` rootはparent ID、一意key、base/target、gate/profile、状態、集合digestを守る。`ReviewInbox`は機械marker付きPR Reviewの追記集合で、candidateはCheckを書かない。
+- `SlotEnvelope`はsession/slot/invocation、actor、review/run/Check ID、verdict/digest、nonce/stateを保持し、`ArtifactClassifier`はGit diff/objectだけからgate別recordを導出する。
+- `SessionRepository`だけが同App parent/slotを探索し、`DedicatedAppPublisher`だけがcreate/PATCHする。`SerializedReducer`はinbox/retryを担い、純粋reducerへAPI/replay状態を渡さない。
 
-```text
-parent: absent -> awaiting(action_required)
-slot:   absent -> awaiting -> consuming -> recorded
-slot:   recorded + same digest -> same result
-slot:   recorded + different digest -> reject
-parent: awaiting + slot不足 -> awaiting
-parent: awaiting + slot充足 -> consuming -> approved|rejected|human_required
-parent/slot: awaiting -> invalidated           : head/profile/adapter変更
-parent terminal + same aggregate digest -> same result; different digest -> reject
+parent keyは`repository_id/PR/target_sha/gate/check_name/publisher_app_id`、session IDはそのdigestである。同SHA/name/Appを列挙し、0件なら作成、1件ならexternal ID/bodyを照合して再利用、複数なら`action_required`で停止する。
+旧Actions App由来Checkはrequired sourceにならず、gate-publish/reconcile/opener/submitを#283 publisherへ置換するため同名required Checkのwriterは増えない。
+
+## trust・起動・liveness
+
+全candidate workflow/jobの`GITHUB_TOKEN`は`checks: none`、readは`contents`と`pull-requests`だけとする。publisher jobだけが#283のmain限定`agent-skill-chain-gate` environmentで専用App tokenを取得する。
+rulesetは各required名とApp `integration_id`を組にし、parent/slot create/PATCHとreconcileを同じAppに限る。
+
+openerはdefault branch CLIでPR APIのbase/current head SHAを固定し、diffから開始gateを`spec→design→implementation→validation`順に導出してgateごとに冪等sessionを開く。PR codeはGit objectとして読むだけである。
+humanはsession/slot/invocation入りPR Reviewを投稿する。read-only `pull_request_review` runの完了を`workflow_run`で受けるdefault-branch publisher、またはmain指定`workflow_dispatch`がdrainを起動し、publisherはAPIからReview本文・actor・PRを再取得する。
+
+PR Reviewをdurable inboxとし、未消費判定はslotの`source_review_id/submission_digest`不在で導出する。同一PR/gate publisherは`cancel-in-progress: false`と公式の`queue: max`を補助利用するが、
+100 pending超過は取消されるため正本にしない。各runは未処理ReviewをID順にdrainし、run完了triggerとdefault-branch定期sweeperも同じdrainを起動するため、dispatch/pending取消後も復旧できる。
+
+```mermaid
+flowchart LR
+  O[trusted opener] --> P[parent per gate]
+  H[human] --> R[PR Review inbox]
+  R --> V[default validator]
+  V --> W[main protected App publisher]
+  W --> S[durable slot]
+  S --> D[pure reducer]
+  D --> P
+  X[completion/sweeper] --> W
 ```
 
-## Trusted session opener
+## non-atomic PATCH・所有・状態写像
 
-専用`pull_request_target` workflowはdefault branch上のworkflowとCLI SHAを明示checkoutし、同じSHAで
-buildする。最初にbackend=github、adapter=human、open/same-repo/current head、branch→Issueを検証し、
-PR headはfetchしたGit objectとしてだけ読む。変更gateとprofileをdefault branch設定・PR labelから導出し、
-`gate human-open-session`が親/slot Checkを作る。human adapterは通知文をrenderするだけでGitHubへ書かず、Claude Code/Codexは既存の自動workflowだけを使う。
-復帰commandは親Check summaryへ2行で記録し、JSONは`VERDICT_JSON="$(jq -c . verdict.json)"`の後、
-quotedな`-f "verdict_json=${VERDICT_JSON}"`として渡す。Issue書込み権限は使わない。
+Checks PATCHは条件付き更新を提供しないためCASとは扱わない。専用Appを唯一writerとし、同じprotected publisher laneで直列化する。処理前にparent/slot/Reviewを再読し、slotへ`processing_nonce`とowner run IDを書いて再読一致を確認する。
+通信結果不明なら同nonceでpostconditionを再読し、成立済みはno-opとする。前owner runがpending/runningなら触らず、Actions APIでterminalと確認した場合だけ新nonceで引き継ぐ。
+slot記録後にaggregate digestを再読してparentを更新する。terminal同digestはno-op、異digest・逆結論は拒否し、失敗はReviewを未消費のままsweeperへ渡す。
 
-## Dispatch validatorと一回限りCAS
+| record state | Check status | conclusion |
+|---|---|---|
+| parent awaiting/reducing | `completed` | `action_required` |
+| parent approved / rejected | `completed` | `success` / `failure` |
+| parent human_required/invalidated | `completed` | `action_required` |
+| slot queued / processing | `queued` / `in_progress` | なし |
+| slot approved / rejected | `completed` | `success` / `failure` |
+| slot human_required/invalid | `completed` | `action_required` |
 
-`workflow_dispatch`はdefault branchをrefとし、親Check/session/slot/invocation、PR/gate/SHA、verdictを受ける。
-`gate human-submit`はGitHub APIを呼ぶ前にbackend=githubを要求し、default設定のadapter・Check名、実行repositoryとpublisher App ID、
-現在のPR metadata/profile/headを再導出する。同一repo-wide concurrency group
-`asc-human:<repository-id>:<pr>:<gate>`の中で親/slotを再読し、親と対象slotが`awaiting`かつ全provenance
-一致時だけslotを`consuming`へ更新する。直後に再読して所有を確認し、不一致ならsuccessを書かない。
-slot充足後だけ親を同じexpected-state手順で`consuming`へ移す。同じcanonical verdict digestのreplayは
-既存Check URLを返し、異なるdigest・消費済slotは拒否する。publisherは新しいrequired Checkを作らず
-同じ親Check IDをPATCHする。
+## artifact分類・集約
 
-## Verdict・artifact・Strict集約
+| gate抽象output | 具体path分類 |
+|---|---|
+| spec: `SPEC.md` | root `SPEC.md` |
+| design: `DESIGN.md, ADR, PLAN.md` | root `DESIGN.md`,`PLAN.md`、`docs/adr/ADR-*.md` |
+| implementation: `code, unit_test_results` | 他分類に属さない全変更path。source/test/workflow/config/schema/scriptを含む |
+| validation: acceptance/regression results | root `VALIDATION.md` |
 
-workflow inputはenvへ割り当て、`printf '%s' "$VERDICT_JSON"`でstdinへ渡す。式をshell本文へ直接展開せず、
-token・verdictをlogへ出さない。verdictは2観点とorigin付きfindingだけを受け、`pending`、未知field、
-空evidence、上限超過を拒否する。artifact full-setはsegment manifestの必須outputとbase/target差分の
-当該segment分類をunionし、正規化・sort・重複排除した非空集合とする。全blobを
-`git show <target>:<path>`で読み、各SHA-256とcanonical集合SHA-256をtrusted側で算出する。
+base→targetの各pathをA/M/Dかつ一つのgateへ分類する。recordは`path,change,base_digest?,target_digest?`で、
+Dはbase blob digestと固定`deleted` markerを持つtombstoneである。path正規化・sortしたcanonical JSONの
+SHA-256を集合digestとする。open/submit双方が同じresolverで再導出し、`saved⊆derived`かつ
+`derived⊆saved`、各record/digest一致を要求する。空、重複、未分類、取得不能は承認しない。
 
-Standardは固定1 durable slot、Strictは別slot・別invocation・別actorの2件を待ち、両slotの
-Issue/gate/SHA/profile/sessionとartifact集合が完全一致する場合だけIssue #277の共通aggregatorへ渡す。
-不足・不正・`human_required`を最優先、次にreject、両方approveだけをapproveとする。slot提出後も
-必要数未満なら親は`awaiting/action_required`を維持し、2件揃った時だけ親をterminalへCAS更新する。
-
-## Sequence・権限境界
-
-```text
-PR event -> trusted opener: default CLIでcontext/artifact/profileを導出
-trusted opener -> Checks API: 親action_required + durable slot + 復帰command
-human A -> dispatch: slot-1 verdictのみ
-dispatch -> trusted submit: provenance再検証 -> slot-1 CAS
-human B -> dispatch: slot-2 verdictのみ
-dispatch -> trusted submit: provenance再検証 -> slot-2 CAS
-trusted submit -> common aggregator: 2 slotを集約
-trusted submit -> Checks API: 同じ親Check IDをterminalへPATCH
-```
-
-レビュアはleaseなし・成果物read-only、trusted publisherだけがChecks APIへ書く。implementation workerの
-code変更には通常のwriter leaseを要求する。local backendは既存marker/reportだけを使い、本commandは
-GitHub API前に拒否する。workflow tokenはdefault branch CLI stepだけへ渡し、PR codeやhumanへ渡さない。
+#277の純粋APIはcontextとimmutable slot envelopeだけを受け、2固定slot、異actor/invocation、binding、
+artifact集合、判定優先順位を検査して`approved|rejected|human_required`と理由を返す。#278はCheck/Reviewを
+envelopeへ写像するだけで、replay選択、nonce、retry、Check状態写像はAPI外に置く。
 
 ## 障害・ロールバック・関連ADR
 
-API/fetch/build/CAS/cleanup失敗は親をsuccessにせず、CAS前なら`awaiting`、所有取得後なら
-`human_required`へ証跡付きで停止する。head/profile/adapter変更は旧sessionをinvalidatedにする。
-workflow、CLI、adapter通知、templateを同時にrollbackし、片側だけ残さない。未決事項はない。
+App/environment/ruleset、依存API、API再読取、sweeperの不明状態はsuccessにせず、旧publisherへfallbackしない。
+rollbackは新publisher/rulesetを無効化し#283の旧active enforcementを維持する。ADR-0011は本DESIGN自身の
+判断なので自己参照しない。ADR-0010/0013はaccepted後のrebaseでテンプレート規範の
+`{id: ADR-0010, relation: adopts}`、`{id: ADR-0013, relation: adopts}` objectとして追加し、design gateを再通過する。
 
 ```yaml
-related_adrs: [ADR-0011]
+related_adrs: []
 ```
