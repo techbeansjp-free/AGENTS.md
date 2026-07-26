@@ -159,10 +159,17 @@ function splitIdentifierSegments(run: string): string[] {
 
 /** A-1 コード識別子文脈: snake_case/camelCase/SCREAMING_SNAKE_CASEの複合識別子の一部として
  * 禁止語が出現する場合に除外する。run長が禁止語長と等しい（単独の語そのもの）場合は対象外
- * （要件1「単独の`issue`は識別子文脈と誤認しない」）。 */
-function isCodeIdentifierContext(line: string, run: IdentifierRun, banned: string): boolean {
+ * （要件1「単独の`issue`は識別子文脈と誤認しない」）。
+ *
+ * 非散文ファイル（コード・設定・スクリプト）では、区切り文字（`_`・camelCase境界）が無い
+ * 英語の屈折形（例: `issues`・`issued`）も、runが禁止語より長い時点でASCII識別子・トークン内部の
+ * 部分文字列であり単独の禁止語出現ではないため区別なく除外する（ISSUE-283）。散文（.md）では
+ * 日本語文中に直接隣接する屈折形（例:「issuesを一覧する」）が禁止語の誤用でありうるため、
+ * この広い除外を適用せず従来通りsegment一致のみを識別子文脈として扱う。 */
+function isCodeIdentifierContext(line: string, run: IdentifierRun, banned: string, ext: string): boolean {
   const runText = line.slice(run.runStart, run.runEnd);
   if (runText.length <= banned.length) return false;
+  if (!isProseFile(ext)) return true;
   return splitIdentifierSegments(runText).some((seg) => seg.toLowerCase() === banned.toLowerCase());
 }
 
@@ -281,7 +288,7 @@ function isExternalVocabAllowlisted(line: string, run: IdentifierRun, ext: strin
 function isIdentifierContext(line: string, start: number, end: number, banned: string, ext: string): boolean {
   const run = identifierRunAt(line, start, end);
   if (!run) return false;
-  if (isCodeIdentifierContext(line, run, banned)) return true;
+  if (isCodeIdentifierContext(line, run, banned, ext)) return true;
   if (YAML_CONTEXT_EXTENSIONS.has(ext) && isYamlIdentifierContext(line, run, banned)) return true;
   if (!isProseFile(ext) && isCliSubcommandContext(line, run, banned)) return true;
   return isExternalVocabAllowlisted(line, run, ext);

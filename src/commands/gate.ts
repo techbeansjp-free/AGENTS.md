@@ -1489,7 +1489,7 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       throw new CliError('PR、Issue、commit、review evidenceのAPI正本を取得できません');
     }
     const pullRequest = JSON.parse(pullResponse.stdout) as TrustedGateApiContext['pullRequest'];
-    const issue = JSON.parse(issueResponse.stdout) as TrustedGateApiContext['issue'];
+    const issueRecord = JSON.parse(issueResponse.stdout) as TrustedGateApiContext['issueRecord'];
     const branchIssue = /^[^/]+\/([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$/.exec(pullRequest.head.ref);
     if (
       pullRequest.number !== prNumber ||
@@ -1498,13 +1498,13 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       pullRequest.base.ref !== repository.default_branch ||
       !branchIssue ||
       branchIssue[1] !== issueNumber ||
-      issue.number !== Number(issueNumber) ||
-      issue.state !== 'open' ||
-      !Array.isArray(issue.labels)
+      issueRecord.number !== Number(issueNumber) ||
+      issueRecord.state !== 'open' ||
+      !Array.isArray(issueRecord.labels)
     ) {
       throw new CliError('current PR head/default base/Issue identityがCheck outputと一致しません');
     }
-    const labels = issue.labels
+    const labels = issueRecord.labels
       .map((label) => typeof label === 'string' ? label : label.name ?? '')
       .filter(Boolean);
     const context: TrustedGateApiContext = {
@@ -1512,7 +1512,7 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       payload: { pr_number: prNumber, gate: gateId, target_sha: targetSha },
       repository,
       pullRequest,
-      issue,
+      issueRecord,
       issueId: issueIdRaw,
       issueNumber: Number(issueNumber),
       profile: !labels.includes('risk:normal') || labels.includes('autonomy:full') ? 'strict' : 'standard',

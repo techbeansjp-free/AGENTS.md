@@ -272,6 +272,42 @@ test('lint vocab: 識別子文脈に隣接していても、散文としての�
   );
 });
 
+test('lint vocab: 非散文ファイル（.ts等）ではASCII識別子・トークン内部の部分文字列としての禁止語出現は誤検出しない（ISSUE-283）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: .ts ファイルに、区切り文字の無い英語の屈折形（issues/issued）・既存の複合識別子
+  // （issueRecord・issue_id）・真に単独のbare `issue` 識別子を混在させる。
+  const file = path.join(repo.dir, 'identifier-context.ts');
+  fs.writeFileSync(
+    file,
+    [
+      'const issued = await fetchToken(); // 許容: 過去形の屈折形',
+      'if (!issued.token) throw new Error();',
+      "const runningIssues = 'issues'; // 許容: 複数形の屈折形（引用符内も含む）",
+      'const issueRecord: IssueRecord = load(); // 許容: 既存のcamelCase複合識別子',
+      'const issue_id = issueRecord.issue_id; // 許容: 既存のsnake_case複合識別子',
+      'const issue = issueRecord; // 拒否: 単独のbare識別子',
+    ].join('\n') + '\n',
+  );
+
+  const result = runCli(['lint', 'vocab', 'identifier-context.ts'], { cwd: repo.dir });
+
+  assert.equal(result.status, 1);
+  for (const line of [1, 2, 3, 4, 5]) {
+    assert.doesNotMatch(
+      result.stderr,
+      new RegExp(`identifier-context\\.ts:${line}:`),
+      `${line}行目（issued/issues/issueRecord/issue_idの屈折形・複合識別子）は誤検出されないこと`,
+    );
+  }
+  assert.match(
+    result.stderr,
+    /identifier-context\.ts:6: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+    '6行目の単独bare issue識別子は引き続き検出されること',
+  );
+});
+
 test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.agent-skill-chain資産全体）は違反なしで終了コード0になる（ISSUE-178 AC-4: templates/config/schemas/scriptsも含めて対象）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

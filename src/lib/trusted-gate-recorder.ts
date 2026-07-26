@@ -75,7 +75,7 @@ export interface TrustedGateApiContext {
   payload: TrustedGatePayload;
   repository: TrustedGateRepository;
   pullRequest: TrustedGatePullRequest;
-  issue: TrustedGateIssue;
+  issueRecord: TrustedGateIssue;
   issueId: string;
   issueNumber: number;
   profile: 'standard' | 'strict';
@@ -204,8 +204,8 @@ export function trustedGateRunName(payload: TrustedGatePayload): string {
   return `gate-record-${payload.pr_number}-${payload.gate}-${payload.target_sha}`;
 }
 
-function issueLabels(issue: TrustedGateIssue): string[] {
-  return issue.labels.map((label) => typeof label === 'string' ? label : label.name ?? '').filter(Boolean);
+function issueLabels(issueRecord: TrustedGateIssue): string[] {
+  return issueRecord.labels.map((label) => typeof label === 'string' ? label : label.name ?? '').filter(Boolean);
 }
 
 function issueNumberFromBranch(ref: string): number {
@@ -305,7 +305,7 @@ export async function fetchTrustedGateApiContext(options: {
     throw new Error('PRのcurrent headまたはrepository default baseがdispatch入力と一致しません');
   }
   const issueNumber = issueNumberFromBranch(pullRequest.head.ref);
-  const [issue, commits, reviews] = await Promise.all([
+  const [issueRecord, commits, reviews] = await Promise.all([
     githubJsonDirect<TrustedGateIssue>(fetchImpl, options.githubToken, `${repoPath}/issues/${issueNumber}`),
     githubArrayDirect<TrustedGateApiContext['commits'][number]>(
       fetchImpl,
@@ -318,17 +318,17 @@ export async function fetchTrustedGateApiContext(options: {
       `${repoPath}/pulls/${options.payload.pr_number}/reviews`,
     ),
   ]);
-  if (issue.number !== issueNumber || issue.state !== 'open' || !Array.isArray(issue.labels)) {
+  if (issueRecord.number !== issueNumber || issueRecord.state !== 'open' || !Array.isArray(issueRecord.labels)) {
     throw new Error('Issue API正本を解決できません');
   }
-  const labels = issueLabels(issue);
+  const labels = issueLabels(issueRecord);
   const profile = !labels.includes('risk:normal') || labels.includes('autonomy:full') ? 'strict' : 'standard';
   return {
     actor: options.actor,
     payload: options.payload,
     repository,
     pullRequest,
-    issue,
+    issueRecord,
     issueId: `ISSUE-${issueNumber}`,
     issueNumber,
     profile,
