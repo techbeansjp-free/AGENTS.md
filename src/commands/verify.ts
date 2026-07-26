@@ -14,7 +14,7 @@ import {
 } from '../lib/worktree.js';
 import { readYamlFile } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
-import { digestOfFile } from '../lib/digest.js';
+import { digestOf, digestOfFile } from '../lib/digest.js';
 import { git } from '../lib/exec.js';
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
@@ -195,6 +195,7 @@ const GATE_REPORT_USAGE = `
 `;
 interface GateReport {
   gate: {
+    target_sha: string;
     conformance: string;
     falsification: string;
     final: string;
@@ -214,15 +215,16 @@ export async function gateReport(args: string[]): Promise<number> {
     if (report.gate.conformance === 'pending') errors.push('gate.conformance が pending のままです');
     if (report.gate.falsification === 'pending') errors.push('gate.falsification が pending のままです');
     if (report.gate.final === 'pending') errors.push('gate.final が pending のままです');
-    // Issue #185: approved_artifacts はgate reviewが実行された作業ツリー（ワーカー自身のworktree）
-    // 上のファイルを指すため、repoRoot()（共通/メイン作業ツリー）ではなくworktreeRoot()
-    // （現在の作業ツリー）を基点に解決する（ADR-0004）。スキーマ検証（アセット解決）はrepoRoot()のまま。
-    const artifactRoot = worktreeRoot();
+    // Issue #316: approved_artifactsはreport.gate.target_sha（PRの実際のhead SHA）が指すGit object
+    // として検証する。verify-and-publishジョブはprotected base（main）をcheckoutしPR headは
+    // working directoryへ反映されないため（PR headはGit objectとしてfetchされるのみ）、
+    // worktreeRoot()のファイルシステムを見るとSPEC.md等のIssueスコープ成果物は常に「削除されている」
+    // と誤判定される（Issue #185時点の同期的レビューフロー前提がIssue #283/#284後も残っていた）。
     for (const artifact of report.gate.approved_artifacts) {
-      const abs = path.join(artifactRoot, artifact.path);
-      if (!fs.existsSync(abs)) {
+      const shown = git(['show', `${report.gate.target_sha}:${artifact.path}`], root);
+      if (shown.status !== 0) {
         errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
-      } else if (digestOfFile(abs) !== artifact.digest) {
+      } else if (digestOf(shown.stdout) !== artifact.digest) {
         errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
     }

@@ -582,7 +582,11 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   assert.equal(start.status, 0, start.stderr);
   const [, worktreePath] = start.stdout.trim().split('\n');
 
+  // Issue #316: approved_artifactsはgate-report.yamlのtarget_sha（git rev-parse HEAD時点）が
+  // 指すGit objectとして検証されるため、SPEC.mdはgate review実行前にcommitしておく必要がある。
   fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add SPEC.md'], { cwd: worktreePath });
 
   // Given: gate review で白紙スキャフォールドを取得する（conformance/falsification/final は pending）
   const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath });
@@ -613,8 +617,11 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   const approved = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
   assert.equal(approved.status, 0, approved.stderr);
 
-  // When: 承認後にSPEC.mdの内容を書き換える（approved_artifactsのdigestは古いまま）
-  fs.appendFileSync(path.join(worktreePath, 'SPEC.md'), 'AC-2: extra\n');
+  // When: approved_artifactsのdigestが、target_sha上の実際のSPEC.md内容と一致しない（フィールド自体の
+  // 不整合。target_shaは固定commitのため、Issue #316以降は working directory 側の変更ではなく
+  // 記録されたdigestフィールドの不一致として検証する）。
+  const mismatchedText = fs.readFileSync(gateReportPath, 'utf8').replace(specDigest, `sha256:${'f'.repeat(64)}`);
+  fs.writeFileSync(gateReportPath, mismatchedText);
 
   // Then: digest不一致として失敗する
   const stale = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
@@ -622,10 +629,10 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   assert.match(stale.stderr, /approved_artifacts の digest が現在のファイル内容と一致しません: SPEC\.md/);
 });
 
-// ISSUE-176 AC-4: 承認済み成果物が削除された場合も digest 不一致として検知されること
-// （旧実装は `fs.existsSync(abs) && digestOfFile(abs) !== artifact.digest` という条件式のため、
-// existsSync が false の場合は条件全体がfalseになり検知が完全にスキップされていた）。
-test('verify gate-report (ISSUE-176 AC-4): 承認済み成果物が削除されている場合はdigest不一致として検知される', async (t) => {
+// Issue #316: verify-and-publishジョブはprotected base（main）をcheckoutしPR headをGit objectとしてのみ
+// fetchするため、working directoryのファイルシステムにapproved_artifacts対象ファイルが存在しなくても、
+// target_shaのGit object上に存在すれば検証が成功しなければならない。
+test('verify gate-report (Issue #316 AC-1): target_shaにcommit済みならworktreeのファイルシステムから削除されていても成功する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
@@ -636,12 +643,13 @@ test('verify gate-report (ISSUE-176 AC-4): 承認済み成果物が削除され�
   const [, worktreePath] = start.stdout.trim().split('\n');
 
   fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add SPEC.md'], { cwd: worktreePath });
 
   const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath });
   assert.equal(gateReview.status, 0, gateReview.stderr);
   const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
 
-  // Given: SPEC.mdをapproved_artifactsに対応付け、承認済みにする。
   const specDigest = sha256(fs.readFileSync(path.join(worktreePath, 'SPEC.md')));
   const approvedText = fs
     .readFileSync(gateReportPath, 'utf8')
@@ -651,18 +659,58 @@ test('verify gate-report (ISSUE-176 AC-4): 承認済み成果物が削除され�
     .replace('approved_artifacts: []', `approved_artifacts:\n    - path: SPEC.md\n      digest: ${specDigest}`);
   fs.writeFileSync(gateReportPath, approvedText);
 
-  // 削除前は成功すること（regressionの前提確認）。
-  const beforeDelete = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
-  assert.equal(beforeDelete.status, 0, beforeDelete.stderr);
-
-  // When: 承認後にSPEC.md自体を削除する（内容変更ではなく削除）。
+  // When: commit済みのSPEC.mdをworktreeのファイルシステムからだけ削除する
+  //（protected base checkoutにPR head成果物が存在しない状況を模す）。
   fs.unlinkSync(path.join(worktreePath, 'SPEC.md'));
 
-  // Then: 削除もdigest不一致として検知され、失敗すること（AC-4）。
-  const afterDelete = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
-  assert.equal(afterDelete.status, 1);
-  assert.match(afterDelete.stderr, /approved_artifacts のファイルが削除されています（digest不一致として扱います）: SPEC\.md/);
+  // Then: target_sha（HEAD）のGit object上には存在するため、検証は成功する。
+  const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(result.status, 0, result.stderr);
 });
+
+// Issue #316 AC-2: target_shaのGit objectにも一度も存在しないpathは、引き続き「削除されている」
+// として検知される。
+test('verify gate-report (Issue #316 AC-2): target_shaのGit objectにも存在しないpathは削除として検知される', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add SPEC.md'], { cwd: worktreePath });
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
+
+  // Given: 一度もcommitされていないpathをapproved_artifactsへ記載する。
+  const approvedText = fs
+    .readFileSync(gateReportPath, 'utf8')
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: pass')
+    .replace('final: pending', 'final: approved')
+    .replace(
+      'approved_artifacts: []',
+      `approved_artifacts:\n    - path: NEVER_COMMITTED.md\n      digest: sha256:${'0'.repeat(64)}`,
+    );
+  fs.writeFileSync(gateReportPath, approvedText);
+
+  const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /approved_artifacts のファイルが削除されています（digest不一致として扱います）: NEVER_COMMITTED\.md/);
+});
+
+// ISSUE-176 AC-4の後継（Issue #316でgit object参照へ移行）: 「検知が完全にスキップされる」という
+// 元の懸念（旧実装は `fs.existsSync(abs) && digestOfFile(abs) !== artifact.digest` という条件式のため、
+// existsSync が false の場合は条件全体がfalseになり検知漏れになっていた）は、target_shaのGit objectにも
+// 存在しないpathを「削除されている」として検知する上記「Issue #316 AC-2」テストが引き継ぐ。
+// ファイルシステムからの削除のみ（commit済みかつgit object上は存在）は、Issue #316以降は
+// 意図的に成功扱いへ変わる（上記「Issue #316 AC-1」テスト）ため、本テストは削除する。
 
 // ---- verify template-sync ----
 
