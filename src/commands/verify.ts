@@ -196,6 +196,7 @@ const GATE_REPORT_USAGE = `
 `;
 interface GateReport {
   gate: {
+    id: string;
     target_sha: string;
     conformance: string;
     falsification: string;
@@ -224,10 +225,13 @@ export async function gateReport(args: string[]): Promise<number> {
     for (const artifact of report.gate.approved_artifacts) {
       const shown = git(['show', `${report.gate.target_sha}:${artifact.path}`], root);
       if (shown.status !== 0) {
-        // Issue #316: implementation gateはtarget_shaに実在しない成果物をABSENT_ARTIFACT_DIGEST
-        // sentinelで正当に記録する（gate.tsのartifactsAtSha/artifactDigestAtSha、allowAbsent分岐）。
-        // 記載digestがこのsentinel値と一致する場合は「削除の正当な記録」として検証成功とする。
-        if (artifact.digest !== ABSENT_ARTIFACT_DIGEST) {
+        // Issue #316: implementation gate（gate.tsのallowAbsentがgateId==='implementation'の
+        // 場合のみ真であることに対応）に限り、target_shaに実在しない成果物をABSENT_ARTIFACT_DIGEST
+        // sentinelで正当に記録しうる。spec/design/validation gateでは証跡生成側がそもそも
+        // sentinel digestを持つエントリを生成し得ないため、gate.id以外では例外を適用しない
+        // （I8安全側原則。無条件に許容すると「不在の正当な記録」を偽装できてしまう）。
+        const sentinelExempt = report.gate.id === 'implementation' && artifact.digest === ABSENT_ARTIFACT_DIGEST;
+        if (!sentinelExempt) {
           errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
         }
       } else if (digestOf(shown.stdout) !== artifact.digest) {

@@ -743,6 +743,45 @@ test('verify gate-report (Issue #316 AC-5): ABSENT_ARTIFACT_DIGEST sentinelで�
   assert.equal(result.status, 0, result.stderr);
 });
 
+// Issue #316 AC-6: implementation以外のgate（spec/design/validation）では、証跡生成側がそもそも
+// sentinel digestを持つapproved_artifactsエントリを生成し得ないため、検証側でも例外を適用しない
+// （I8安全側原則。gate.id限定無しに無条件許容すると「不在の正当な記録」を偽装できてしまう）。
+test('verify gate-report (Issue #316 AC-6): implementation以外のgateではABSENT_ARTIFACT_DIGEST sentinelを許容しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add SPEC.md'], { cwd: worktreePath });
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
+
+  // Given: spec gateのgate-reportに、一度もcommitされていないpathをABSENT_ARTIFACT_DIGEST
+  // sentinel値で（本来生成され得ない形で）記録する。
+  const approvedText = fs
+    .readFileSync(gateReportPath, 'utf8')
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: pass')
+    .replace('final: pending', 'final: approved')
+    .replace(
+      'approved_artifacts: []',
+      `approved_artifacts:\n    - path: NEVER_EXISTED.md\n      digest: ${ABSENT_ARTIFACT_DIGEST}`,
+    );
+  fs.writeFileSync(gateReportPath, approvedText);
+
+  const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /approved_artifacts のファイルが削除されています（digest不一致として扱います）: NEVER_EXISTED\.md/);
+});
+
 // ISSUE-176 AC-4の後継（Issue #316でgit object参照へ移行）: 「検知が完全にスキップされる」という
 // 元の懸念（旧実装は `fs.existsSync(abs) && digestOfFile(abs) !== artifact.digest` という条件式のため、
 // existsSync が false の場合は条件全体がfalseになり検知漏れになっていた）は、target_shaのGit objectにも
