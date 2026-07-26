@@ -403,7 +403,7 @@ test('gate reviewer-context: GitHub core reviewも明示adapterを保ちCIは証
   assert.match(res.stdout, /^adapter=claude$/m);
   assert.match(res.stdout, /^core_reviewer_location=local$/m);
   assert.match(res.stdout, /^core_evidence_transport=github_pr_review$/m);
-  assert.match(res.stdout, /^core_ci_role=verify_and_publish$/m);
+  assert.match(res.stdout, /^core_ci_role=verify_only$/m);
   assert.match(res.stdout, /^core_reviewer_count=2$/m);
 });
 

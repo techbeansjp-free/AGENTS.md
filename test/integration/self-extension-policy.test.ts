@@ -55,7 +55,7 @@ test('self-extension project policy: manifestで登録した実在文書だけ�
   assert.deepEqual(modelSelection.core_review.execution, {
     reviewer_location: 'local',
     evidence_transport: 'github_pr_review',
-    ci_role: 'verify_and_publish',
+    ci_role: 'verify_only',
     reviewer_count: 2,
     trusted_reviewer_actors: ['agent-skill-chain-review-recorder[bot]'],
   });
@@ -66,7 +66,6 @@ test('self-extension project policy: manifestで登録した実在文書だけ�
   assert.deepEqual(modelSelection.core_review.adapters.codex, {
     model: 'gpt-5.6-sol',
     reasoning_effort: 'xhigh',
-    override_attestation_env: 'CODEX_CORE_REVIEWER_ATTESTED',
   });
   assert.equal(modelSelection.core_review.adapters.claude.model_env, 'CLAUDE_CORE_REVIEW_MODEL');
   assert.doesNotMatch(

@@ -1,5 +1,6 @@
 # protected baseのtrusted verifierだけを実行する。PR headはGit objectとして読み、codeを実行しない。
-# AI reviewはローカルadapterが行い、本workflowはGitHub Review API証跡の検証とCheck Run記録だけを担う。
+# AI reviewはローカルadapterが行う。Issue #283のtrusted rollout完了前は検証だけを行い、
+# このlegacy Actions workflowからcanonical gate Checkを発行しない。
 name: agent-skill-chain / gate
 
 on:
@@ -10,7 +11,6 @@ on:
 
 permissions:
   contents: read
-  checks: write
   pull-requests: read
 
 jobs:
@@ -95,7 +95,7 @@ jobs:
           done | jq -R . | jq -s -c .)"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
-  verify-and-publish:
+  verify-evidence:
     needs: detect-segments
     if: github.event.pull_request.base.ref == github.event.repository.default_branch && needs.detect-segments.outputs.matrix != '[]'
     strategy:
@@ -142,14 +142,12 @@ jobs:
           set -e
           echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
           if [ "$CODE" -ne 0 ]; then
-            node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.env.GATE_ID}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "action_required", output: {title: "gate evidence verification failed", summary: "Protected-base verifier could not validate local-review evidence; merge remains blocked."}}))' |
-              gh api -X POST "repos/${{ github.repository }}/check-runs" --input -
+            echo "Protected-base verifier could not validate local-review evidence; canonical Check publication remains stopped." >&2
             exit "$CODE"
           fi
       - name: Verify gate report schema
         run: ./.agent-skill-chain/ci/verify-gate-report.sh "${{ steps.evidence.outputs.report_path }}"
 
-      - name: Publish Check Run
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: ./.agent-skill-chain/scripts/gate-publish.sh "${{ needs.detect-segments.outputs.issue_id }}" "${{ steps.evidence.outputs.report_path }}"
+      - name: Stop before canonical Check publication
+        run: |
+          echo "Issue #283 trusted rollout is required before canonical gate Check publication."

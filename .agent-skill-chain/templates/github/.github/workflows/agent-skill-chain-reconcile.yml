@@ -1,11 +1,5 @@
-# 正本: AGENTS.md §ゲートの継承・無効化
-#
-# pushごとに、承認済み成果物digestを対象commit SHAへ照合する。変化なしなら最新SHAへ
-# 成功を再発行し、変化ありなら当該ゲートと全下流ゲートを無効化する
-# （.agent-skill-chain/scripts/gate-reconcile.sh、判定ルールは
-# .agent-skill-chain/schemas/gate-report.schema.yaml末尾を参照）。agent-skill-chain CLI
-# （src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパーであるため、検査本体の前に
-# ビルドを行う。
+# Issue #283のtrusted rollout完了前は、candidate branchのコードでgate Checkを継承・無効化しない。
+# push trigger自体は配布互換のため残すが、このworkflowは明示的な停止契約としてno-opにする。
 name: agent-skill-chain / reconcile
 
 on:
@@ -14,53 +8,11 @@ on:
 
 permissions:
   contents: read
-  checks: write
-  pull-requests: read
 
 jobs:
   reconcile:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '20'
-
-      - run: npm ci
-
-      - run: npm run build
-
-      - name: Derive issue_id
-        id: ctx
-        env:
-          BRANCH: ${{ github.ref_name }}
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          OWNER: ${{ github.repository_owner }}
+      - name: Stop legacy reconciliation until trusted rollout
         run: |
-          ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
-          if [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
-            echo "issue_id=$ISSUE_ID" >> "$GITHUB_OUTPUT"
-            echo "skip_checks=false" >> "$GITHUB_OUTPUT"
-          elif [[ "$BRANCH" == dependabot/* ]]; then
-            # Issue #219: pushイベントにはPRコンテキストが無く、push実行者(github.actor)は
-            # 人間の追加pushで変化するため、対応する開いているPRの実作成者をAPIで確認する
-            PR_AUTHOR="$(gh api "repos/$REPO/pulls?head=$OWNER:$BRANCH&state=open" --jq '.[0].user.login // empty' || true)"
-            if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
-              echo "issue_id=" >> "$GITHUB_OUTPUT"
-              echo "skip_checks=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "ブランチ '$BRANCH' は dependabot/ 形式ですが、対応する開いているPRの作成者が dependabot[bot] ではありません（実測: ${PR_AUTHOR:-なし}）。Dependabot許可リストに該当しないため照合をスキップできません" >&2
-              exit 1
-            fi
-          else
-            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（.agent-skill-chain/config/agent-skill-chain.yaml branch.pattern に非適合、かつ Dependabot許可リストにも非該当）" >&2
-            exit 1
-          fi
-
-      - name: Reconcile gates against pushed SHA
-        if: steps.ctx.outputs.skip_checks != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: ./.agent-skill-chain/scripts/gate-reconcile.sh "${{ steps.ctx.outputs.issue_id }}" "${{ github.sha }}"
+          echo "Issue #283 trusted rollout is required before canonical gate Check reconciliation."

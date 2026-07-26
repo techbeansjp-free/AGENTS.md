@@ -36,7 +36,7 @@ test('model selection policy: manifestのCodex固定値とClaude能力証明契�
   assert.deepEqual(policy.execution, {
     reviewer_location: 'local',
     evidence_transport: 'github_pr_review',
-    ci_role: 'verify_and_publish',
+    ci_role: 'verify_only',
     reviewer_count: 2,
     trusted_reviewer_actors: ['agent-skill-chain-review-recorder[bot]'],
   });

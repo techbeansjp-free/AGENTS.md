@@ -24,10 +24,10 @@ Codex はモデルと reasoning effort を明示する可搬な設定を持つ�
 
 各 adapter はベンダー中立能力を自分の実行系だけへ変換する。
 
-- 進行役がローカルadapterへレビューを委譲する。Codex は `gpt-5.6-sol`、`xhigh`、read-only sandboxを厳密に検証する。Strict は独立2回のverdictを要求する。
-- Claude Code は実行環境が宣言する実在モデルを公式の model 指定で使い、model tier attestation、maximum reasoning attestation、実行環境固有 reasoning probe の成功を要求する。Codex 固有 slug・設定キーは使わない。
+- 進行役がローカルadapterへレビューを委譲する。Codex はadapterが構成する固定argvで `gpt-5.6-sol`、`xhigh`、read-only sandboxを厳密に指定する。core reviewでは完全command上書きと自己申告booleanを検証済みと見なさず無条件拒否する。Strict は独立2回のverdictを要求する。
+- Claude Code は実行環境が宣言する実在モデルを公式の model 指定で使い、model tier attestation、maximum reasoning attestation、実行環境固有 reasoning probe の成功を要求する。tier宣言とprobe commandを管理する主体をprovider能力のtrust rootとし、モデル出力の自己申告は受理しない。汎用command上書きはcore reviewで拒否する。Codex 固有 slug・設定キーは使わない。
 - adapter・非対話実行・capability probeが未実装のproviderは、実行可能と推測しない。
-- GitHubモードのtrusted recorderはverdictと実行attestationを構造化PR reviewへ投稿する。このGitHub actorはAIレビュア本人ではなく、writer credentialから分離した専用Coordination Backend principalでなければならない。GitHub Actionsはrepository default branchの保護base revisionにあるworkflow/verifier/policyだけを実行し、登録済みrecorder actorとPR/commit writer actorの非重複、Review API metadata、target SHA、prompt/artifact digest、latest attempt、reviewer run ID、Strict slot/件数を検証してcanonical evidence digest付きgate reportとCheck Runだけを生成する。CIはproviderもPR headのコードも実行しない。
+- GitHubモードのtrusted recorderはverdictと実行attestationを構造化PR reviewへ投稿する。このGitHub actorはAIレビュア本人ではなく、writer credentialから分離した専用Coordination Backend principalでなければならない。legacy GitHub Actionsはrepository default branchの保護base revisionにあるworkflow/verifier/policyだけを実行し、登録済みrecorder actorとPR/commit writer actorの非重複、Review API metadata、target SHA、prompt/artifact digest、latest attempt、reviewer run ID、Strict slot/件数を検証するが、Checks書込み権限を持たずcanonical Checkを発行しない。専用App recorderだけがcanonical gate reportとCheckを生成する。CIはproviderもPR headのコードも実行しない。
 - GitHub Actions Appのslug一致だけではrequired statusを生成したworkflow/eventを識別できない。#274のCheck Runは固定SHAの一回限りbootstrapと耐久report整合性に限定し、通常運用のsource trustはIssue #283の専用GitHub App identityと発行権限で担保する。
 - ローカルlauncherはprotected base SHAからephemeral cloneを作り、credential-bearing remoteを除去して、そのcloneでbuildしたadapter・prompt generator・recorderだけを起動する。AI subprocessへGitHub token・gh/git config・caller HOMEを渡さず、固定launcher構成のdigest、base SHA、one-time attempt token、credential-scrubbed read-only sandbox、`review-` namespaceの一意なrun ID/slotを証跡へattestし、Issue worktreeが変更した実行コードを同じPRの証跡生成へ使わない。
 - human adapter、利用不能、不一致、未証明、strict 未満、分類不能は `human_required` へ停止する。

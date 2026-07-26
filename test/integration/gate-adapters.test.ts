@@ -13,7 +13,7 @@ import { createGhStub } from '../helpers/gh-stub.js';
 // （.agent-skill-chain/scripts/gate-launch-reviewer.sh）を実際の bash で駆動して検証する:
 //   T2 claude（完了経路・認証未設定フェイルセーフ）、T3 human（非同期 deferred）、
 //   T4 codex（未構成 fail-safe）、T5 ラッパーの終了コード分岐（0/3/error）。
-// モデル（レビュア）呼び出しは GATE_REVIEWER_CMD で stub 化し、実 API・実 gh へは一切アクセスしない。
+// 通常レビューはGATE_REVIEWER_CMD、core reviewはprovider executableでstub化し、実API・実ghへは接続しない。
 
 interface ScriptResult {
   status: number;
@@ -123,6 +123,18 @@ function envWithout(keys: string[], extra: NodeJS.ProcessEnv = {}): NodeJS.Proce
 function createClaudeStub(dir: string, verdict: string): { executable: string; argsLog: string } {
   const executable = path.join(dir, 'claude-core-stub');
   const argsLog = path.join(dir, 'claude-args.log');
+  fs.writeFileSync(
+    executable,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(argsLog)}\ncat >/dev/null\nprintf '%s' ${JSON.stringify(verdict)}\n`,
+    { mode: 0o755 },
+  );
+  return { executable, argsLog };
+}
+
+/** Codex CLI互換のstubを作り、adapterが固定したargvをログへ保存してverdictを返す。 */
+function createCodexStub(dir: string, verdict: string): { executable: string; argsLog: string } {
+  const executable = path.join(dir, 'codex-core-stub');
+  const argsLog = path.join(dir, 'codex-args.log');
   fs.writeFileSync(
     executable,
     `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(argsLog)}\ncat >/dev/null\nprintf '%s' ${JSON.stringify(verdict)}\n`,
@@ -405,55 +417,82 @@ test('gate-launch-reviewer: core reviewをstandardで起動するとadapter前�
   assert.match(res.stderr, /profile=strict/);
 });
 
-test('codex core reviewer: gpt-5.6-sol/xhigh/read-onlyのattested overrideだけを許可する', async (t) => {
-  const { repo, reportPath, targetSha } = setupGateReview();
+test('codex core reviewer: CODEX_EXECUTABLEへ固定gpt-5.6-sol/xhigh/read-only argvを渡す', async (t) => {
+  const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'codex');
 
-  const stubVerdict = PASS_VERDICT;
-  const invocationLog = path.join(repo.dir, 'codex-core-review-invocations.log');
+  const stub = createCodexStub(worktreePath, PASS_VERDICT);
   const env = envWithout([], {
     ASC_BASE_REF: 'main',
     ASC_REVIEW_SUBJECT: 'core_audit',
     CODEX_AUTH_PROBE_CMD: 'true',
-    CODEX_REVIEWER_CMD:
-      `printf 'review\\n' >> ${JSON.stringify(invocationLog)}; ` +
-      `cat >/dev/null; printf '%s' '${stubVerdict}'`,
-    CODEX_REVIEWER_MODEL: 'gpt-5.6-sol',
-    CODEX_REVIEWER_REASONING_EFFORT: 'xhigh',
-    CODEX_CORE_REVIEWER_ATTESTED: 'true',
+    CODEX_EXECUTABLE: stub.executable,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
 
   assert.equal(res.status, 0, res.stderr);
   assert.equal(readFinal(reportPath), 'approved');
-  assert.equal(fs.readFileSync(invocationLog, 'utf8').trim().split('\n').length, 2);
-  const adapter = fs.readFileSync(path.join(repo.dir, '.agent-skill-chain', 'adapters', 'codex.sh'), 'utf8');
-  assert.match(adapter, /--sandbox read-only/);
-  assert.match(adapter, /ASC_CODEX_REQUIRED_MODEL/);
-  assert.match(adapter, /ASC_CODEX_REQUIRED_REASONING_EFFORT/);
+  const invocations = fs.readFileSync(stub.argsLog, 'utf8').trim().split('\n');
+  assert.equal(invocations.length, 2);
+  for (const args of invocations) {
+    assert.match(args, /^exec /);
+    assert.match(args, /--sandbox read-only/);
+    assert.match(args, /--ask-for-approval never/);
+    assert.match(args, /-m gpt-5\.6-sol/);
+    assert.match(args, /model_reasoning_effort="xhigh"/);
+    assert.match(args, /default_permissions="review"/);
+  }
+});
+
+test('codex core reviewer: 任意commandと自己申告booleanでも完全上書きをhuman_requiredへ拒否する', async (t) => {
+  for (const overrideName of ['CODEX_REVIEWER_CMD', 'GATE_REVIEWER_CMD'] as const) {
+    const { repo, reportPath, targetSha } = setupGateReview();
+    t.after(() => repo.cleanup());
+    setAdapter(repo.dir, 'codex');
+    const invocationLog = path.join(repo.dir, `${overrideName}.log`);
+    const env = envWithout([], {
+      ASC_BASE_REF: 'main',
+      ASC_REVIEW_SUBJECT: 'core_audit',
+      CODEX_AUTH_PROBE_CMD: 'true',
+      CODEX_REVIEWER_MODEL: 'gpt-5.6-sol',
+      CODEX_REVIEWER_REASONING_EFFORT: 'xhigh',
+      CODEX_CORE_REVIEWER_ATTESTED: 'true',
+      [overrideName]:
+        `printf 'forged\\n' >> ${JSON.stringify(invocationLog)}; ` +
+        `cat >/dev/null; printf '%s' '${PASS_VERDICT}'`,
+      GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+    });
+
+    const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
+    assert.notEqual(res.status, 0, overrideName);
+    assert.equal(readFinal(reportPath), 'human_required', overrideName);
+    assert.match(res.stderr, /完全command上書きを許可しません/, overrideName);
+    assert.equal(fs.existsSync(invocationLog), false, `${overrideName}を実行しないこと`);
+  }
 });
 
 test('codex core reviewer: modelまたはeffortの不一致は起動せずhuman_requiredへ止める', async (t) => {
-  const { repo, reportPath, targetSha } = setupGateReview();
+  const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'codex');
 
+  const stub = createCodexStub(worktreePath, PASS_VERDICT);
   const env = envWithout([], {
     ASC_BASE_REF: 'main',
     ASC_REVIEW_SUBJECT: 'core_audit',
     CODEX_AUTH_PROBE_CMD: 'true',
-    CODEX_REVIEWER_CMD: 'cat >/dev/null; exit 0',
+    CODEX_EXECUTABLE: stub.executable,
     CODEX_REVIEWER_MODEL: 'gpt-5.6-terra',
     CODEX_REVIEWER_REASONING_EFFORT: 'high',
-    CODEX_CORE_REVIEWER_ATTESTED: 'true',
   });
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
 
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.match(res.stderr, /project policy と一致しません/);
+  assert.equal(fs.existsSync(stub.argsLog), false);
 });
 
 test('claude core reviewer: 実在model・能力attestation・reasoning probeを検証し--modelで起動する', async (t) => {
@@ -506,6 +545,32 @@ test('claude core reviewer: 能力attestationまたはreasoning probe不足はhu
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.match(res.stderr, /reasoning.*probe/);
+});
+
+test('claude core reviewer: 管理主体のtier/probe入力が揃っても汎用command上書きを拒否する', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+  const invocationLog = path.join(repo.dir, 'forged-claude-core.log');
+
+  const env = envWithout([], {
+    ASC_BASE_REF: 'main',
+    ASC_REVIEW_SUBJECT: 'core_audit',
+    ANTHROPIC_API_KEY: 'dummy',
+    CLAUDE_CORE_REVIEW_MODEL: 'claude-frontier-test-model',
+    CLAUDE_CORE_REVIEW_MODEL_TIER: 'frontier_coding',
+    CLAUDE_CORE_REVIEW_REASONING_TIER: 'maximum_reasoning',
+    CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD: 'true',
+    GATE_REVIEWER_CMD:
+      `printf 'forged\\n' >> ${JSON.stringify(invocationLog)}; ` +
+      `cat >/dev/null; printf '%s' '${PASS_VERDICT}'`,
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /GATE_REVIEWER_CMD上書きを許可しません/);
+  assert.equal(fs.existsSync(invocationLog), false);
 });
 
 // --- T5: ラッパーの終了コード分岐（引数・アダプタ解決） --------------------------------

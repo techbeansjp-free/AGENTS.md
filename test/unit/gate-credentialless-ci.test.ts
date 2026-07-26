@@ -12,7 +12,7 @@ const codexAdapterPath = path.join(root, '.agent-skill-chain', 'adapters', 'code
 const claudeAdapterPath = path.join(root, '.agent-skill-chain', 'adapters', 'claude.sh');
 const gateCommandPath = path.join(root, 'src', 'commands', 'gate.ts');
 
-test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck Runを発行する', () => {
+test('gate workflow: protected baseでlocal-review証跡だけを検証しcanonical Checkは発行しない', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   assert.equal(workflow, fs.readFileSync(templatePath, 'utf8'));
   assert.match(workflow, /pull_request_target:/);
@@ -26,8 +26,11 @@ test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck 
   assert.match(workflow, /index\("autonomy:full"\) == null/);
   assert.match(workflow, /index\("review:core-audit"\) == null/);
   assert.match(workflow, /gate verify-evidence/);
-  assert.match(workflow, /gate-publish\.sh/);
-  assert.match(workflow, /conclusion: "action_required"/);
+  assert.match(workflow, /verify-evidence:/);
+  assert.match(workflow, /Issue #283 trusted rollout is required/);
+  assert.doesNotMatch(workflow, /checks:\s*write/);
+  assert.doesNotMatch(workflow, /check-runs/);
+  assert.doesNotMatch(workflow, /gate-publish\.sh/);
   assert.match(workflow, /without executing target code/);
   assert.match(workflow, /git diff --name-only -z/);
   assert.match(workflow, /read -r -d '' changed/);
@@ -73,6 +76,8 @@ test('local review harness: PR base SHAの隔離cloneでbase sourceをbuildし�
   assert.match(claude, /GIT_CONFIG_GLOBAL=\/dev\/null/);
   assert.match(codex, /shell_environment_policy\.inherit/);
   assert.match(codex, /permissions\.review\.filesystem/);
+  assert.match(codex, /完全command上書きを許可しません/);
+  assert.doesNotMatch(codex, /CODEX_CORE_REVIEWER_ATTESTED/);
   assert.doesNotMatch(launcher, /GH_TOKEN=.*launch_gate_reviewer/);
 
   const gateCommand = fs.readFileSync(gateCommandPath, 'utf8');

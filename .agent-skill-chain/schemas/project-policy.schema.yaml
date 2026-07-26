@@ -81,7 +81,7 @@ properties:
             properties:
               reviewer_location: {const: local}
               evidence_transport: {const: github_pr_review}
-              ci_role: {const: verify_and_publish}
+              ci_role: {const: verify_only}
               reviewer_count: {type: integer, const: 2}
               trusted_reviewer_actors:
                 type: array
@@ -119,12 +119,11 @@ properties:
             properties:
               codex:
                 type: object
-                required: [model, reasoning_effort, override_attestation_env]
+                required: [model, reasoning_effort]
                 additionalProperties: false
                 properties:
                   model: {const: gpt-5.6-sol}
                   reasoning_effort: {const: xhigh}
-                  override_attestation_env: {const: CODEX_CORE_REVIEWER_ATTESTED}
               claude:
                 type: object
                 required: [model_env, model_tier_env, reasoning_tier_env, reasoning_probe_env]

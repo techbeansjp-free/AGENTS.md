@@ -11,7 +11,7 @@ export interface CoreReviewPolicy {
   execution: {
     reviewer_location: 'local';
     evidence_transport: 'github_pr_review';
-    ci_role: 'verify_and_publish';
+    ci_role: 'verify_only';
     reviewer_count: 2;
     trusted_reviewer_actors: string[];
   };
@@ -29,7 +29,6 @@ export interface CoreReviewPolicy {
     codex: {
       model: 'gpt-5.6-sol';
       reasoning_effort: 'xhigh';
-      override_attestation_env: 'CODEX_CORE_REVIEWER_ATTESTED';
     };
     claude: {
       model_env: 'CLAUDE_CORE_REVIEW_MODEL';

@@ -46,10 +46,10 @@ _codex_worker_effort() {
 }
 
 # 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
-# env: CODEX_REVIEWER_CMD（テスト用完全上書き）、GATE_REVIEWER_CMD（後方互換上書き）、
+# env: CODEX_REVIEWER_CMD（通常レビュー用のテスト完全上書き）、GATE_REVIEWER_CMD（通常レビューの後方互換上書き）、
 #      CODEX_EXECUTABLE（既定 codex。実行バイナリの明示指定）、
-#      CODEX_REVIEWER_MODEL（通常既定 gpt-5.6）、CODEX_REVIEWER_REASONING_EFFORT（通常既定 high）、
-#      CODEX_CORE_REVIEWER_ATTESTED（コア時の完全command上書きがmodel/effort/read-onlyを満たす証明）。
+#      CODEX_REVIEWER_MODEL（通常既定 gpt-5.6）、CODEX_REVIEWER_REASONING_EFFORT（通常既定 high）。
+# core reviewでは任意command文字列を検証不能なため、両完全上書きを無条件拒否する。
 launch_gate_reviewer() {
   local report_path="${4:-}"
   local core_codex_review="${ASC_CORE_REVIEW_REQUIRED:-false}"
@@ -63,6 +63,10 @@ launch_gate_reviewer() {
   }
 
   if [[ "$core_codex_review" == "true" ]]; then
+    if [[ -n "${CODEX_REVIEWER_CMD:-}" || -n "${GATE_REVIEWER_CMD:-}" ]]; then
+      _codex_fail_safe "Codex core reviewer では検証不能な完全command上書きを許可しません"
+      return
+    fi
     model="${CODEX_REVIEWER_MODEL:-${ASC_CODEX_REQUIRED_MODEL:-}}"
     effort="${CODEX_REVIEWER_REASONING_EFFORT:-${ASC_CODEX_REQUIRED_REASONING_EFFORT:-}}"
     if [[ -z "${ASC_CODEX_REQUIRED_MODEL:-}" || "$model" != "$ASC_CODEX_REQUIRED_MODEL" ]]; then
@@ -72,12 +76,6 @@ launch_gate_reviewer() {
     if [[ -z "${ASC_CODEX_REQUIRED_REASONING_EFFORT:-}" || "$effort" != "$ASC_CODEX_REQUIRED_REASONING_EFFORT" ]]; then
       _codex_fail_safe "Codex core reviewer のreasoning effortが project policy と一致しません"
       return
-    fi
-    if [[ -n "${CODEX_REVIEWER_CMD:-}" || -n "${GATE_REVIEWER_CMD:-}" ]]; then
-      if [[ "${CODEX_CORE_REVIEWER_ATTESTED:-}" != "true" ]]; then
-        _codex_fail_safe "Codex core reviewer の完全command上書きに必要なmodel/effort/read-only証明がありません"
-        return
-      fi
     fi
   fi
   ASC_REVIEW_MODEL="$model"

@@ -7,7 +7,7 @@
 
 コア規約・状態遷移・ゲート・Coordination Backend・配布ルールの変更または監査には、最上位能力の独立レビューが必要である。ただし、AI レビューを GitHub Actions 内で実行すると model provider の API credential または self-hosted runner を要求し、利用者が既にローカルの Codex / Claude Code へログインしている実態と一致しない。
 
-本変更では、進行役がローカルの adapter を通じて独立レビュアを起動する。GitHub Actions は AI を実行せず、GitHub Review API に保存された構造化証跡を検証し、対象 SHA の Check Run を記録する。Codex では `gpt-5.6-sol` / `xhigh`、Claude Code では実行環境が検証した同等能力を要求する。Cursor は adapter と非対話 capability probe が未実装であるため利用可能と推測しない。
+本変更では、進行役がローカルの adapter を通じて独立レビュアを起動する。legacy GitHub Actions は AI を実行せず、GitHub Review API に保存された構造化証跡の検証だけを行う。canonical Check は専用trusted recorderだけが扱い、Issue #283のtrusted rollout完了前はlegacy gate/reconcile workflowから発行しない。Codex では `gpt-5.6-sol` / `xhigh`、Claude Code では実行環境が検証した同等能力を要求する。Cursor は adapter と非対話 capability probe が未実装であるため利用可能と推測しない。
 
 ## 対象・用語・入出力
 
@@ -21,7 +21,7 @@
 ## 要求
 
 - コア変更は manifest の root exact path / 包括path prefix、コア監査は GitHub の `review:core-audit` label またはローカル state の `core_audit` から機械分類し、Strict の独立 reviewer 2体を要求する。差分pathはNUL境界で列挙し、invalid UTF-8または正本入力を解決できなければ `human_required` とする。
-- AI は進行役がローカル adapter へ委譲する。CI は model provider を呼ばず証跡検証と Check Run 記録だけを行う。
+- AI は進行役がローカル adapter へ委譲する。legacy CI は model provider を呼ばず証跡検証だけを行い、Checks書込み権限を持たない。
 - reviewer は read-only、証跡の GitHub Review API 送信はprotected-baseのtrusted recorder、成果物変更は writer に限定する。
 - provider 差異は vendor-neutral capability contract と capability probe で扱い、未実装 provider の能力を捏造しない。
 
@@ -31,7 +31,7 @@
 
 - Given: GitHub モードで gate 対象 SHA が push される
 - When: gate workflow が実行される
-- Then: OpenAI/Anthropic API credential と self-hosted runner を要求せず、GitHub Review API の証跡検証と Check Run 発行だけを行い、ローカルAI subprocessへGitHub token・gh/git credential設定を渡さない
+- Then: OpenAI/Anthropic API credential と self-hosted runner を要求せず、GitHub Review API の証跡検証だけを行う。legacy gate/reconcile workflowはcanonical Checkを発行せず、ローカルAI subprocessへGitHub token・gh/git credential設定を渡さない
 - 検証方法: `automated`
 
 ### AC-2: コア能力契約を provider ごとに検証する
@@ -90,7 +90,7 @@
 - trusted recorder は、専用principalの短命GitHub tokenで自身のAPI identityを再取得し、GitHub PRのdefault base/headと全writer actorの照合、ephemeral clone、remote除去、保護base sourceからのbuild、GitHub credentialを除いたAI環境、one-time attempt token、`review-` run ID/slot、launcher/prompt/artifact digestとverdictの対応をGitHub reviewでattestする。専用token未設定・未登録actor・writerと同一・attestation不一致・branch 内ファイルによる代替は信頼しない。
 - reviewer・writer・recorderのcapabilityはrole contractで分離し、workerとreviewerにReview API投稿能力を与えない。Review API投稿は調整状態を扱う進行役だけが行う。
 - classifier、policy、schema、verifier、workflowは保護されたbase revisionをtrust rootとして実行し、PRが変更した検証コードやactor allowlistを当該PR自身の承認には使わない。
-- GitHubのrequired statusは同一GitHub Actions App内のworkflowを識別しないため、#274は一回限りbootstrapに必要な最小専用App recorderも同梱する。rulesetへのintegration ID適用・chunk化・完全なreconcile/rolloutはIssue #283が担い、それらが有効になるまで通常PRを成功扱いにしない。
+- GitHubのrequired statusは同一GitHub Actions App内のworkflowを識別しないため、#274は一回限りbootstrapに必要な最小専用App recorderも同梱する。legacy gate workflowから`checks: write`・Check API・publishを、reconcile workflowから`checks: write`・candidate script実行を除去する。rulesetへのintegration ID適用・chunk化・完全なreconcile/rolloutはIssue #283が担い、それらが有効になるまで通常PRを成功扱いにしない。
 - 証跡未到着・分類不能・capability 未証明・件数不足は成功や `neutral` にしない。
 - 全 AC の自動テスト、型検査、lint、SAST、依存関係・secret scan、template sync を実行して push する。
 

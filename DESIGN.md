@@ -35,7 +35,7 @@ AI inference と gate 状態遷移を分離する。進行役はローカル ada
 
 manifest の `core_review` は次を保持する。
 
-- `execution: local`、`evidence_transport: github_pr_review`、`ci_role: verify_and_publish`
+- `execution: local`、`evidence_transport: github_pr_review`、`ci_role: verify_only`
 - `trusted_reviewer_actors`: writer credentialから分離した専用Review API recorder principal
 - `required_profile: strict`、`reviewer_count: 2`
 - `triggers`: `review:core-audit`、ローカルstate値、root exact paths、`.agent-skill-chain/`・`.github/`・`src/`・`test/`・永続設計文書の包括prefix
@@ -55,8 +55,8 @@ writer actor集合はGitHub APIのPR authorと全commitのauthor/committer login
 既存 `codex.sh` / `claude.sh` が同じvendor-neutral契約を実装する。
 
 - 共通: read-only、非対話実行、conformance/falsification JSON、AC-ID別判定・証跡、target SHA、prompt digest、成果物digest
-- Codex: `codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=xhigh`
-- Claude Code: 実在model、`frontier_coding` / `maximum_reasoning` attestation、reasoning probe、無書込みtool
+- Codex: adapterが組み立てる`codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=xhigh`の固定argvだけを許可する。`CODEX_REVIEWER_CMD` / `GATE_REVIEWER_CMD`による完全command上書きと自己申告booleanはcore reviewでは検証不能なので無条件拒否する
+- Claude Code: 実在model、`frontier_coding` / `maximum_reasoning` attestation、reasoning probe、無書込みtool。tier宣言とprobe commandを構成する管理主体はprovider能力を保証するtrust rootであり、モデル出力による自己申告として受理しない。管理主体が保証できない環境は`human_required`とする
 - Cursor: adapter・安定した非対話CLI・probeが未実装なので選択を拒否する
 
 launcher呼出しごとに暗号学的乱数の `attempt-` IDを1つ生成し、profile由来の期待件数と `review-` namespaceの一意なrun ID・Strict slot (`1|2`) を0600のone-time tokenへ固定する。GitHub backendは外側のprotected launcherがslotごとにadapterを起動する。ローカルbackendのStrictはadapter自身が2つの独立processを、別々のfresh workspace・fresh HOMEで起動し、両verdictが揃うまでreportを書かない。adapterはmodel出力を直接状態へ書かず、trusted CLIへ標準入力で返す。orchestratorのtrusted recorderは専用tokenでGitHub APIの自身のlogin、PR/commit writer集合を再取得し、actor分離、capability、slot、prompt/artifact digestを確認してmarker付きPR reviewを作る。専用token無し・未登録identity・writer同一・one-time token無し・mode/owner不正・再利用・attempt不一致の直接submitは拒否する。workerとreviewer roleには専用tokenとReview API commandを与えない。CLIは導入環境のGitHub CLIが自動pagination optionを備えると仮定せず、配列APIを100件単位の明示的なpage走査で全件取得する。上限到達・途中API失敗・非配列応答は部分集合で判定せず停止する。
@@ -93,7 +93,7 @@ GitHub APIのreview `id` / `user.login` / `commit_id` / `state` とPR/commit act
 
 ### GitHub Actions
 
-workflowは `pull_request_target` と `pull_request_review` を契機に、base revisionのcheckout/build、PR metadataとtarget Git objectの取得、evidence import、schema検査、publishだけを行う。provider secret、Codex Action、Claude/Codex CLI、self-hosted labelを含めず、PR head由来の実行可能ファイルを実行しない。証跡が未到着なら `human_required` reportを生成して `action_required` Check Runを発行する。workflow自体は証跡不足をクラッシュとして扱わず、検証器の異常はfail-closedで可視化する。
+legacy gate workflowは `pull_request_target` と `pull_request_review` を契機に、base revisionのcheckout/build、PR metadataとtarget Git objectの取得、evidence import、schema検査だけを行う。provider secret、Codex Action、Claude/Codex CLI、self-hosted label、Checks書込み権限を含めず、PR head由来の実行可能ファイルを実行しない。証跡不足・検証器異常はjobを失敗させ、canonical Checkを生成しない。reconcile workflowはIssue #283のtrusted rollout完了までcandidate branchをcheckout/buildせず、gate-reconcileも実行しない明示no-opとする。canonical Checkの作成・terminal更新はdefault-mainの専用App recorderだけへ集約する。
 
 verified gate report全体をCheck Run `output.text`へ保存する。protected-base CLIはcurrent SHAの同一App候補を全conclusionから列挙し、最大Check Run IDを先に選び、そのlatestがsuccessの場合だけschema、approved状態、artifact digest、attempt/token provenanceを再検証してnoncanonicalなローカルcacheへ復元する。このApp一致は履歴選択の整合性条件であってsource trustの証明ではない。ローカルbackendは既存adapterがtrusted CLIを介して `reviews/<gate>.yaml` を生成するため、Review APIを要求しない。新scaffoldだけにexact artifact集合を要求し、旧reportの読み取り互換は維持する。
 
@@ -103,7 +103,7 @@ bootstrap後の通常sourceを作れる最小recorderとして、default branch�
 
 ### 配布assetと既導入fixture migration
 
-配布正本 `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml` とroot展開物を同時更新する。`init` のfixture検証では新規対象repositoryへ検証専用workflowを配る。
+配布正本 `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml` / `agent-skill-chain-reconcile.yml` とroot展開物を同時更新する。`init` のfixture検証では新規対象repositoryへ検証専用gate workflowとrollout待ちno-op reconcileを配る。
 
 `upgrade` は全書込み前に、fixtureの展開済みgate workflowと、既に導入済みの配布templateを比較する。
 

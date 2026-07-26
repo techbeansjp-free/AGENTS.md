@@ -1890,7 +1890,6 @@ export async function reviewerContext(args: string[]): Promise<number> {
           `core_reasoning_tier=${policy.capability.reasoning_tier}`,
           `codex_required_model=${policy.adapters.codex.model}`,
           `codex_required_reasoning_effort=${policy.adapters.codex.reasoning_effort}`,
-          `codex_override_attestation_env=${policy.adapters.codex.override_attestation_env}`,
           `core_reviewer_location=${policy.execution.reviewer_location}`,
           `core_evidence_transport=${policy.execution.evidence_transport}`,
           `core_ci_role=${policy.execution.ci_role}`,
