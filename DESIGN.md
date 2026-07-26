@@ -115,7 +115,7 @@ bootstrap後の通常sourceを作れる最小recorderとして、default branch�
 
 preflightは通常のmirror loopが旧templateを上書きする前に行う。安全なlegacy修復、競合時no-op、新規init、template sync、配布元と展開物にprovider secret/Codex Action/provider CLI/self-hosted runnerが0件であることを回帰検査する。このIssueが動的に検証するのはself-repositoryのworkflow実行とasset移行までであり、任意consumerのCLI解決はIssue #285へ分離する。
 
-現行`init`/`upgrade`はActions assetをconsumerへmirrorするため、配布順序も安全性境界になる。Issue #283のtrusted rolloutを先にmerge・releaseし、その後にだけ#274をreleaseする。#274単体のpackage releaseやconsumer配布は禁止する。model policy無しordinary consumerの正式互換はIssue #287完了まで有効化しない。
+現行`init`/`upgrade`はActions assetをconsumerへmirrorするため、配布順序も安全性境界になる。#274はrelease workflowを起動せずbootstrap mergeし、直後にIssue #283をmergeする。最初のreleaseは両変更を含む状態でだけ行い、Issue #283を含まない#274単体のpackage releaseやconsumer配布は禁止する。model policy無しordinary consumerの正式互換はIssue #287完了まで有効化しない。
 
 ## DDD境界と依存方向
 

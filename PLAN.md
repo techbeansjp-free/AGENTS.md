@@ -36,7 +36,7 @@
 - 攻撃: PR変更recorder/verifier/allowlistの不使用、branch内偽証跡、未登録actor、writer/recorder同一actor、専用recorder token欠落・AI subprocess漏洩、GitHub credential/env/origin/ambient隔離root非継承、非default base、one-time token無し直接submit・token再利用、same-SHA旧/new attempt、新attempt不完全、commit actor未解決、101件以上のAPI pagination、dismissed review、API commit ID不一致、古いSHA、prompt/artifact/launcher改変、Claude ambient model証跡改変、空/部分artifact集合、fail finding欠落、slot重複、Strict 1件。
 - adapter: Codex exact model/effort/read-only固定argvとcore完全command上書き拒否、Claude管理主体trust rootのattestation/probeと完全command上書き拒否、local Strict 2独立process・fresh workspace、Cursor拒否、通常選択維持。
 - distribution: legacy同期済みfixtureの修復、customized workflow競合時の全体no-op、dry-run、init、template sync、legacy gate/reconcileのChecks書込み・Check API・candidate reconcile 0件、provider credential/inference依存0件。任意consumerのCLI可搬性はIssue #285で追跡する。
-- rollout: Issue #283を先にmerge・releaseするまで#274単体を配布しない。policy無しconsumerはGitHub trusted境界でhuman_requiredとし、正式なprovision/migration BDDはIssue #287で追跡する。
+- rollout: #274はrelease workflowを起動せずbootstrap mergeし、直後にIssue #283をmergeする。最初のreleaseは両変更を含む状態でだけ行い、Issue #283を含まない#274単体releaseは禁止する。policy無しconsumerはGitHub trusted境界でhuman_requiredとし、正式なprovision/migration BDDはIssue #287で追跡する。
 - recorder: payload allowlist、actions readの最小権限、actor権限、App未構成、標準Actions App、stale head、Check replay、signer workflow/ref/digest、run tuple、状態書込み前回復、48KiB境界、terminal PATCH response非parse、success後検査0件。
 - 必須: build/typecheck、全test、doc/vocab/reference/ADR/secret/SAST、template sync、shell syntax。
 
