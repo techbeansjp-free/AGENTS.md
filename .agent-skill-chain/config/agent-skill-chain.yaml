@@ -28,8 +28,27 @@ review:
   standard: {reviewer_count: 1, modes: [conformance, falsification]}
   strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
 
+# worker: セグメント作業ワーカー（spec/design/implementation/validation）を起動する実行系アダプタと
+# モデル選択の恒久設定（正本: AGENTS.md §設定、ADR-0015）。
+# 恒久設定の変更操作・実行主体・タイミング: 変更は本ファイルの直接編集で行う（専用の書き換え
+# コマンドは存在しない）。具体的なモデル文字列を書いてよいのは model_tiers だけであり、モデル
+# 世代の更新時はこの対応表の値だけを書き換える（segment_overrides・スキーマ・アダプタのソース
+# には書かない）。実行主体は writer lease を保持するセグメント作業ワーカーであり、当該変更を
+# 扱う Issue の実装セグメントで編集する。進行役は調整状態（Issue・ラベル・PR review証跡・
+# マージ・worktree ライフサイクル）のみを読み書きし（不変条件I5）、この設定ファイルという
+# 成果物側の資産は編集しない——対話で「実装は◯◯で」等の指示を受けた場合、進行役はその内容を
+# Issue へ記録しワーカーを起動することに限って関与する。現在の解決結果は
+# `agent-skill-chain worker context <issue_id> <segment>` で確認できる。
 worker:
-  adapter: claude                # claude | codex | human（launch_worker が起動するセグメント作業ワーカー実体）
+  adapter: claude                # claude | codex | human（segment_overridesが無いセグメントの既定。未設定時は human）
+  segment_overrides:
+    # ISSUE-307 AC-6: 実装セグメントを codex・ティアhighest_capability・reasoning effort highへ
+    # 恒久設定する。具体的なモデル文字列はここに書かない（唯一の保持場所は下記 model_tiers）。
+    implementation: {adapter: codex, model_tier: highest_capability, reasoning_effort: high}
+  model_tiers:
+    # ティア名と実行系アダプタの組から具体的なモデル文字列を与える対応表。本 Issue で具体的な
+    # モデル文字列を置く唯一の場所（ADR-0015）。モデル世代の更新はこの値の書き換えだけで完結する。
+    highest_capability: {codex: gpt-5.6-sol}
 
 worktree:
   root: .worktrees
