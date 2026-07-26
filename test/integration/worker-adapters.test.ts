@@ -626,6 +626,14 @@ test('codex.sh: アダプタのソースに具体的なモデル文字列（work
   assert.doesNotMatch(source, /gpt-5\.6-sol/, 'ティア対応表の具体的なモデル文字列をアダプタのソースへ追加していないこと');
 });
 
+test('config.schema.yaml: examplesを含め具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに置かれていない（SPEC.md制約, ADR-0015）', () => {
+  // 具体的なモデル文字列を新たに置いてよいのは .agent-skill-chain/config/agent-skill-chain.yaml の
+  // worker.model_tiers のみであり、スキーマ（examples含む）には置かない（SPEC.md 制約節）。
+  // examples は実在するモデル名ではなくプレースホルダ文字列で足りる。
+  const source = fs.readFileSync(path.join(packageRoot(), '.agent-skill-chain', 'schemas', 'config.schema.yaml'), 'utf8');
+  assert.doesNotMatch(source, /gpt-5\.6-sol/, 'config.schema.yaml（examples含む）に具体的なモデル文字列を新たに置かないこと');
+});
+
 // --- (f) human launch_worker: 通知＋非同期deferred --------------------------------------
 
 test('human launch_worker (local): マーカーを生成しexit 3・leaseは解放しない（作業継続中）', async (t) => {

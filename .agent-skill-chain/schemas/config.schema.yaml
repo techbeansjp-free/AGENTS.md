@@ -210,7 +210,7 @@ examples:
       segment_overrides:
         implementation: {adapter: codex, model_tier: highest_capability, reasoning_effort: high}
       model_tiers:
-        highest_capability: {codex: gpt-5.6-sol}
+        highest_capability: {codex: some-model-id}
     worktree:
       root: .worktrees
       path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
