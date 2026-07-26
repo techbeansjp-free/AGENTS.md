@@ -407,6 +407,19 @@ test('gate reviewer-context: GitHub core reviewも明示adapterを保ちCIは証
   assert.match(res.stdout, /^core_reviewer_count=2$/m);
 });
 
+test('gate reviewer-context: GitHub trusted policy未構成はclassifier ordinaryでも構造化human_requiredになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+  fs.rmSync(path.join(repo.dir, '.agent-skill-chain', 'project', 'manifest.yaml'));
+
+  const res = runCli(['gate', 'reviewer-context', 'ISSUE-1'], { cwd: repo.dir });
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /^core_review_required=false$/m);
+  assert.match(res.stdout, /^core_review_reason=policy_absent$/m);
+  assert.match(res.stdout, /^github_trusted_policy_status=human_required$/m);
+  assert.match(res.stdout, /^github_trusted_policy_reason=policy_absent$/m);
+});
+
 test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック・出力 JSON 契約を含む', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

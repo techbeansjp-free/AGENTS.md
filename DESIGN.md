@@ -44,6 +44,8 @@ manifest の `core_review` は次を保持する。
 
 classifier は base...target 差分とbackend正本の監査区分だけを解釈する。Git pathは `-z` のNUL境界で取得し、改行を含むpathを保持する。invalid UTF-8、終端NUL欠落、差分取得不能は `required/unresolved` とし、lossy変換やordinaryへの降格をしない。GitHubでもconfigの明示adapterを尊重し、Codexへ暗黙固定しない。
 
+model policyが無いconsumerについて、classifierは既存互換の`ordinary/policy_absent`を返す。その結果を成功可否へ直結させず、pureなGitHub trusted policy resolverがGitHub backendだけ`human_required/policy_absent`へ閉じ、reviewer contextとlauncherに構造化して渡す。local backendは従来どおりordinaryを維持する。ordinary consumerのpolicy provision・migrationを伴う正式互換はIssue #287へ分離する。
+
 ### trust rootとactor関係
 
 GitHub Actionsは `pull_request_target` / `pull_request_review` のrepository default branchにある保護base revisionのworkflow、classifier、policy、schema、verifierだけを実行する。PR headのコードはcheckout・build・sourceせず、対象成果物はGit objectとしてread-onlyに参照する。当該PRが変更したallowlistやverifierを、同じPRの承認へ使わない。PR base refがdefault branchでなければローカルlauncher・recorder・workflowの全境界で拒否する。
@@ -112,6 +114,8 @@ bootstrap後の通常sourceを作れる最小recorderとして、default branch�
 - 片方の欠落・読取不能もfail-closed。`--dry-run` は移行または競合だけを報告し書かない。
 
 preflightは通常のmirror loopが旧templateを上書きする前に行う。安全なlegacy修復、競合時no-op、新規init、template sync、配布元と展開物にprovider secret/Codex Action/provider CLI/self-hosted runnerが0件であることを回帰検査する。このIssueが動的に検証するのはself-repositoryのworkflow実行とasset移行までであり、任意consumerのCLI解決はIssue #285へ分離する。
+
+現行`init`/`upgrade`はActions assetをconsumerへmirrorするため、配布順序も安全性境界になる。Issue #283のtrusted rolloutを先にmerge・releaseし、その後にだけ#274をreleaseする。#274単体のpackage releaseやconsumer配布は禁止する。model policy無しordinary consumerの正式互換はIssue #287完了まで有効化しない。
 
 ## DDD境界と依存方向
 

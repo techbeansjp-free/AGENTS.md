@@ -57,6 +57,24 @@ export interface CoreReviewDecision {
   policy?: CoreReviewPolicy;
 }
 
+export interface GithubTrustedPolicyDecision {
+  status: 'ready' | 'human_required';
+  reason: 'policy_configured' | 'non_github_backend' | 'policy_absent';
+}
+
+/**
+ * Issue #271: classifierのconsumer互換判定とGitHub trusted境界の可否を分離する。
+ * GitHubでpolicyが無い状態はordinaryを成功可能と解釈せず、構造化human_requiredへ閉じる。
+ */
+export function resolveGithubTrustedPolicy(
+  backend: 'github' | 'local',
+  decision: CoreReviewDecision,
+): GithubTrustedPolicyDecision {
+  if (backend !== 'github') return { status: 'ready', reason: 'non_github_backend' };
+  if (!decision.policy) return { status: 'human_required', reason: 'policy_absent' };
+  return { status: 'ready', reason: 'policy_configured' };
+}
+
 /** 現在の作業コピーに登録された project policy を検証し、コアレビュー契約を返す。 */
 export function loadCoreReviewPolicy(root: string): CoreReviewPolicy | undefined {
   const manifestPath = path.join(root, '.agent-skill-chain', 'project', 'manifest.yaml');

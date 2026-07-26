@@ -62,6 +62,8 @@ ADAPTER_FILE="$ADAPTERS_DIR/${ADAPTER}.sh"
 
 ASC_CORE_REVIEW_REQUIRED="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_review_required=//p')"
 ASC_CORE_REVIEW_STATUS="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_review_status=//p')"
+ASC_GITHUB_TRUSTED_POLICY_STATUS="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^github_trusted_policy_status=//p')"
+ASC_GITHUB_TRUSTED_POLICY_REASON="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^github_trusted_policy_reason=//p')"
 ASC_CORE_REQUIRED_PROFILE="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_required_profile=//p')"
 ASC_CORE_MODEL_TIER="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_model_tier=//p')"
 ASC_CORE_REASONING_TIER="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_reasoning_tier=//p')"
@@ -70,9 +72,15 @@ ASC_CODEX_REQUIRED_REASONING_EFFORT="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 
 ASC_REVIEW_BASE_SHA="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^review_base_sha=//p')"
 ASC_REVIEW_ADAPTER="$ADAPTER"
 export ASC_CORE_REVIEW_REQUIRED ASC_CORE_REVIEW_STATUS ASC_CORE_REQUIRED_PROFILE
+export ASC_GITHUB_TRUSTED_POLICY_STATUS ASC_GITHUB_TRUSTED_POLICY_REASON
 export ASC_CORE_MODEL_TIER ASC_CORE_REASONING_TIER ASC_CODEX_REQUIRED_MODEL ASC_CODEX_REQUIRED_REASONING_EFFORT
 export ASC_REVIEW_ADAPTER ASC_REVIEW_BASE_SHA
 
+if [[ "$ASC_GITHUB_TRUSTED_POLICY_STATUS" == "human_required" ]]; then
+  echo "GitHub trusted review policyが未構成です（reason=$ASC_GITHUB_TRUSTED_POLICY_REASON）。human_requiredへ倒します" >&2
+  _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
+  exit 2
+fi
 if [[ "$ASC_CORE_REVIEW_STATUS" == "unresolved" ]]; then
   echo "コアレビュー対象の分類を完了できませんでした。フェイルセーフで human_required へ倒します" >&2
   _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true

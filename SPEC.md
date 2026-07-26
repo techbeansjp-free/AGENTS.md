@@ -91,6 +91,8 @@
 - reviewer・writer・recorderのcapabilityはrole contractで分離し、workerとreviewerにReview API投稿能力を与えない。Review API投稿は調整状態を扱う進行役だけが行う。
 - classifier、policy、schema、verifier、workflowは保護されたbase revisionをtrust rootとして実行し、PRが変更した検証コードやactor allowlistを当該PR自身の承認には使わない。
 - GitHubのrequired statusは同一GitHub Actions App内のworkflowを識別しないため、#274は一回限りbootstrapに必要な最小専用App recorderも同梱する。legacy gate workflowから`checks: write`・Check API・publishを、reconcile workflowから`checks: write`・candidate script実行を除去する。rulesetへのintegration ID適用・chunk化・完全なreconcile/rolloutはIssue #283が担い、それらが有効になるまで通常PRを成功扱いにしない。
+- classifierはmodel policyを持たないconsumerをordinaryと分類する既存互換を維持するが、GitHub trusted境界ではpolicy欠落を構造化`human_required`へ閉じる。ordinary consumerの正式なpolicy導入・移行・BDDはIssue #287で実装する。
+- 現行`init`/`upgrade`はActions assetをmirrorするため、Issue #283を先にmergeしtrusted rolloutをreleaseした後でなければ、#274単体をpackage releaseまたはconsumer配布してはならない。
 - 証跡未到着・分類不能・capability 未証明・件数不足は成功や `neutral` にしない。
 - 全 AC の自動テスト、型検査、lint、SAST、依存関係・secret scan、template sync を実行して push する。
 
@@ -99,5 +101,6 @@
 - API key、self-hosted runner、CI 内 model inference の導入。
 - Cursor adapter/CLI の推測実装。将来は同じ capability contract と probe を満たす別 Issue で追加する。
 - Node build構造を持たない、またはagent-skill-chain CLIを同じ配置に持たない任意consumerでのgate workflow実行可搬性。Issue #285でCLI解決境界とfixtureを実装する。
+- model policyを持たないordinary consumer向けのGitHub trusted policy自動構成・移行。Issue #287で実装する。
 - model 出力そのものの暗号学的証明。偽造耐性はbase trust root、writer credentialから分離した専用recorder principal、GitHub API metadata、実行attestation、digest再計算で担保する。専用recorder credentialを保持する管理主体自体はtrust rootである。
 - 未決事項はない。

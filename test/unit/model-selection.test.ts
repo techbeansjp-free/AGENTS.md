@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { classifyCoreReview, loadCoreReviewPolicy } from '../../src/lib/model-selection.js';
+import {
+  classifyCoreReview,
+  loadCoreReviewPolicy,
+  resolveGithubTrustedPolicy,
+} from '../../src/lib/model-selection.js';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 
 function git(cwd: string, args: string[]): string {
@@ -175,7 +179,7 @@ test('classifyCoreReview: base/targetを解決できない場合は非coreへ降
   assert.equal(decision.reason, 'classification_unavailable');
 });
 
-test('classifyCoreReview: model_selectionを持たないconsumer projectは従来の通常作業になる', (t) => {
+test('classifyCoreReview: classifierはordinaryだがGitHub trusted policy未構成はhuman_requiredになる', (t) => {
   const repo = createTmpRepo();
   t.after(() => repo.cleanup());
   fs.rmSync(path.join(repo.dir, '.agent-skill-chain', 'project', 'manifest.yaml'));
@@ -187,4 +191,12 @@ test('classifyCoreReview: model_selectionを持たないconsumer projectは従�
   });
   assert.equal(decision.required, false);
   assert.equal(decision.reason, 'policy_absent');
+  assert.deepEqual(
+    resolveGithubTrustedPolicy('github', decision),
+    { status: 'human_required', reason: 'policy_absent' },
+  );
+  assert.deepEqual(
+    resolveGithubTrustedPolicy('local', decision),
+    { status: 'ready', reason: 'non_github_backend' },
+  );
 });

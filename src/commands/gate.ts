@@ -11,7 +11,7 @@ import { validateAgainstSchema } from '../lib/schema.js';
 import { decodeNullSeparatedUtf8, git, gitBinary, gh } from '../lib/exec.js';
 import { ARTIFACT_ABSENT_DIGEST, artifactDigestOf, digestOf, digestOfFile } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
-import { classifyCoreReview } from '../lib/model-selection.js';
+import { classifyCoreReview, resolveGithubTrustedPolicy } from '../lib/model-selection.js';
 import {
   canonicalJson,
   acceptanceCriteriaConformance,
@@ -1878,6 +1878,7 @@ export async function reviewerContext(args: string[]): Promise<number> {
       baseRef: reviewBaseSha || baseRef || (targetSha ? 'main' : undefined),
       reviewSubject: reviewSubject as 'ordinary' | 'core_audit' | undefined,
     });
+    const trustedPolicy = resolveGithubTrustedPolicy(config.coordination.backend, decision);
     const policy = decision.policy;
     if (requestedAdapterRaw && !['claude', 'codex', 'human'].includes(requestedAdapterRaw)) {
       throw new CliError(`未登録adapterは選択できません: ${requestedAdapterRaw}`);
@@ -1910,6 +1911,8 @@ export async function reviewerContext(args: string[]): Promise<number> {
         `core_review_required=${decision.required}`,
         `core_review_status=${decision.status}`,
         `core_review_reason=${decision.reason}`,
+        `github_trusted_policy_status=${trustedPolicy.status}`,
+        `github_trusted_policy_reason=${trustedPolicy.reason}`,
         ...policyLines,
       ].join('\n'),
     );

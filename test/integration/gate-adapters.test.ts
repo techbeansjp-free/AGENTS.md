@@ -417,6 +417,30 @@ test('gate-launch-reviewer: core reviewをstandardで起動するとadapter前�
   assert.match(res.stderr, /profile=strict/);
 });
 
+test('gate-launch-reviewer: classifier ordinaryでもGitHub trusted policy未構成はadapter前にhuman_requiredへ止める', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  const configPath = path.join(repo.dir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  fs.writeFileSync(
+    configPath,
+    fs.readFileSync(configPath, 'utf8').replace('backend: local', 'backend: github'),
+  );
+  fs.rmSync(path.join(repo.dir, '.agent-skill-chain', 'project', 'manifest.yaml'));
+  const invocationLog = path.join(repo.dir, 'unexpected-policy-absent-review.log');
+  const env = envWithout([], {
+    ANTHROPIC_API_KEY: 'dummy',
+    GATE_REVIEWER_CMD:
+      `printf 'unexpected\\n' >> ${JSON.stringify(invocationLog)}; ` +
+      `cat >/dev/null; printf '%s' '${PASS_VERDICT}'`,
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /trusted review policyが未構成/);
+  assert.equal(fs.existsSync(invocationLog), false);
+});
+
 test('codex core reviewer: CODEX_EXECUTABLEへ固定gpt-5.6-sol/xhigh/read-only argvを渡す', async (t) => {
   const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
