@@ -8,7 +8,7 @@
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
 | `AC-1` | `.agent-skill-chain/standards/GATE_REVIEW_OPERATIONS.md`（新設） | 既存3標準文書と同じ配置 |
-| `AC-2` | 実PR（PR #282 / Issue #278、strict profile）での`gate-local-review.sh`実地実行 | 現在のmain基準 |
+| `AC-2` | 実PR（PR #311 / Issue #300自身、strict profile）での`gate-local-review.sh`実地実行 | Issue #303・#312込みの最新main基準。Check Run記録自体は別Issue（GitHub App未整備） |
 | `AC-3` | 既存コード（`gate-local-review.sh`・`review-evidence.ts`）の該当箇所を引用した確認記述 | 新規実装は行わない |
 
 ## 責務・境界
@@ -27,10 +27,24 @@
     → protected base worktree（main、clean）から隔離clone作成
     → gate-review.sh（scaffold生成）
     → gate-launch-reviewer.sh × 2（strict時。各slotが独立レビュアを起動）
-    → gate submit-evidence（GitHub PR Reviewへ証跡投稿）
+    → gate submit-evidence（GitHub PR Reviewへ証跡投稿）※ここまでAC-2の範囲・実地検証済み
     → repository_dispatch → trusted gate recorder workflow が Check Run を発行
+      ※GitHub App未整備（ASC_GATE_APP_ID未設定）のため現状常に失敗する。別Issueで扱う
   → verify-and-publish が証跡を検証し成功
 ```
+
+### 実地検証の実績（AC-2）
+
+PR #311（Issue #300自身、strict profile）のspec gateに対し、Issue #303・#312の修正込みの最新main（`8cb1710`）を基準として`gate-local-review.sh`を実行し、以下を確認した。
+
+- 独立2体のレビュー証跡がGitHub PR Reviewへ実際に記録された（review ID 2件、`gh api pulls/311/reviews`で確認）。
+- `gate submit-evidence`が両slotとも成功し、`launcher-token.json`の全slot消費を確認した上で`repository_dispatch`（`event_type: agent-skill-chain-gate-record`）が発行された。
+- `verify-and-publish`のCI再実行で`Verify local-review evidence`ステップが`final: rejected`（Opusレビュアが実際にSPEC.md内の複数の矛盾点を検出した結果）を返した。これは証跡が正しく検証された証跡であり、AC-2の「入力契約を満たす」を実証する（`final: human_required`ではなく実際の判定が返っている）。
+- `trusted gate recorder`ワークフロー（`repository_dispatch`受信側）は`ASC_GATE_APP_IDが構成されていません`で失敗した。これはGitHub Appインフラ未整備によるものであり、証跡生成・入力契約充足の実証には影響しない。
+
+実地検証中に2件の副次的な問題を発見・修正した。
+- レビュアCLI出力のverdict JSON解釈が、フェンス付き・前置文/後置文付きの出力を処理できない（Issue #312、修正・マージ済み）。
+- protected base worktreeとして独立cloneを使う場合、対象PRのtarget_shaが明示的にfetchされていないと`classifyCoreReview`が`unresolved`を返しhuman_requiredへ倒れる（GATE_REVIEW_OPERATIONS.mdへ運用上の注意として記載）。
 
 ## 独立性の技術的担保（AC-3の確認内容）
 
