@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { runCli } from '../helpers/cli.js';
 
 // Issue #169 T3: upgrade コマンドの結合テスト。init実行後の資産に対しミラー更新・project/不可侵性・
@@ -197,4 +198,205 @@ test('upgrade: managed集合外のextraは成功時も保持する', (t) => {
   const result = runCli(['upgrade', targetDir]);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(fs.readFileSync(unmanaged, 'utf8'), 'name: consumer extra\n');
+});
+
+for (const linkCase of [
+  { label: 'absolute symlink（同内容）', relative: false, content: 'same' },
+  { label: 'absolute symlink（異内容）', relative: false, content: 'different' },
+  { label: 'absolute symlink（壊れ）', relative: false, content: 'broken' },
+  { label: 'relative symlink（同内容）', relative: true, content: 'same' },
+  { label: 'relative symlink（異内容）', relative: true, content: 'different' },
+  { label: 'relative symlink（壊れ）', relative: true, content: 'broken' },
+] as const) {
+  test(`upgrade: managed deployed ${linkCase.label}を追従せず全体を無変更で拒否する`, (t) => {
+    const targetDir = mkScratch('upgrade-managed-symlink');
+    const outsideDir = mkScratch('upgrade-managed-symlink-outside');
+    t.after(() => {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    });
+    assert.equal(runCli(['init', targetDir]).status, 0);
+
+    const deployed = path.join(targetDir, '.github', 'workflows', 'agent-skill-chain-release.yml');
+    const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
+    const conventions = path.join(targetDir, '.agent-skill-chain', 'standards', 'GIT_CONVENTIONS.md');
+    const installedContent = fs.readFileSync(deployed);
+    const outside = path.join(outsideDir, 'linked.yml');
+    if (linkCase.content !== 'broken') {
+      fs.writeFileSync(outside, linkCase.content === 'same' ? installedContent : 'different external content\n');
+    }
+    fs.rmSync(deployed);
+    const linkTarget = linkCase.relative ? path.relative(path.dirname(deployed), outside) : outside;
+    fs.symlinkSync(linkTarget, deployed);
+    fs.writeFileSync(version, '0.0.1\n');
+    fs.appendFileSync(conventions, '\nunchanged sentinel\n');
+    const beforeConventions = fs.readFileSync(conventions);
+    const beforeOutside = linkCase.content === 'broken' ? undefined : fs.readFileSync(outside);
+
+    const result = runCli(['upgrade', targetDir]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /symlink/);
+    assert.ok(fs.lstatSync(deployed).isSymbolicLink());
+    assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+    assert.deepEqual(fs.readFileSync(conventions), beforeConventions);
+    if (beforeOutside) assert.deepEqual(fs.readFileSync(outside), beforeOutside);
+    else assert.equal(fs.existsSync(outside), false);
+  });
+}
+
+test('upgrade: managed deployed FIFOをopenせず全体を無変更で拒否する', (t) => {
+  const targetDir = mkScratch('upgrade-managed-fifo');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  const deployed = path.join(targetDir, '.github', 'workflows', 'agent-skill-chain-release.yml');
+  const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
+  const conventions = path.join(targetDir, '.agent-skill-chain', 'standards', 'GIT_CONVENTIONS.md');
+  fs.rmSync(deployed);
+  execFileSync('mkfifo', [deployed]);
+  fs.writeFileSync(version, '0.0.1\n');
+  const beforeConventions = fs.readFileSync(conventions);
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /special file/);
+  assert.ok(fs.lstatSync(deployed).isFIFO());
+  assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+  assert.deepEqual(fs.readFileSync(conventions), beforeConventions);
+});
+
+test('upgrade: managed deployed fileのdirectory置換を全体を無変更で拒否する', (t) => {
+  const targetDir = mkScratch('upgrade-managed-directory');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  const deployed = path.join(targetDir, '.github', 'workflows', 'agent-skill-chain-release.yml');
+  const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
+  const conventions = path.join(targetDir, '.agent-skill-chain', 'standards', 'GIT_CONVENTIONS.md');
+  fs.rmSync(deployed);
+  fs.mkdirSync(deployed);
+  fs.writeFileSync(version, '0.0.1\n');
+  const beforeConventions = fs.readFileSync(conventions);
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /directory/);
+  assert.ok(fs.lstatSync(deployed).isDirectory());
+  assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+  assert.deepEqual(fs.readFileSync(conventions), beforeConventions);
+});
+
+test('upgrade: managed deployed parent symlinkを追従せず外部directoryを変更しない', (t) => {
+  const targetDir = mkScratch('upgrade-managed-parent-symlink');
+  const outsideDir = mkScratch('upgrade-managed-parent-symlink-outside');
+  t.after(() => {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  const workflows = path.join(targetDir, '.github', 'workflows');
+  const outsideWorkflows = path.join(outsideDir, 'workflows');
+  fs.cpSync(workflows, outsideWorkflows, { recursive: true });
+  fs.rmSync(workflows, { recursive: true });
+  fs.symlinkSync(outsideWorkflows, workflows);
+  const outsideRelease = path.join(outsideWorkflows, 'agent-skill-chain-release.yml');
+  const beforeOutside = fs.readFileSync(outsideRelease);
+  const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
+  fs.writeFileSync(version, '0.0.1\n');
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /親.*symlink/);
+  assert.ok(fs.lstatSync(workflows).isSymbolicLink());
+  assert.deepEqual(fs.readFileSync(outsideRelease), beforeOutside);
+  assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+});
+
+test('upgrade: namespaced destination parent symlinkを全copy前に拒否し外部directoryを変更しない', (t) => {
+  const targetDir = mkScratch('upgrade-namespaced-parent-symlink');
+  const outsideDir = mkScratch('upgrade-namespaced-parent-symlink-outside');
+  t.after(() => {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  const standards = path.join(targetDir, '.agent-skill-chain', 'standards');
+  const outsideStandards = path.join(outsideDir, 'standards');
+  fs.cpSync(standards, outsideStandards, { recursive: true });
+  fs.rmSync(standards, { recursive: true });
+  fs.symlinkSync(outsideStandards, standards);
+  const outsideConventions = path.join(outsideStandards, 'GIT_CONVENTIONS.md');
+  fs.appendFileSync(outsideConventions, '\nexternal sentinel\n');
+  const beforeOutside = fs.readFileSync(outsideConventions);
+  const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
+  const rootAgents = path.join(targetDir, 'AGENTS.md');
+  fs.appendFileSync(rootAgents, '\nroot sentinel before later hazard\n');
+  const beforeRootAgents = fs.readFileSync(rootAgents);
+  fs.writeFileSync(version, '0.0.1\n');
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /mirror先.*symlink/);
+  assert.ok(fs.lstatSync(standards).isSymbolicLink());
+  assert.deepEqual(fs.readFileSync(outsideConventions), beforeOutside);
+  assert.deepEqual(fs.readFileSync(rootAgents), beforeRootAgents, '後段hazardより前のroot assetも変更されないこと');
+  assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+});
+
+for (const directoryName of ['.agent-skill-chain', '.github'] as const) {
+  test(`upgrade: ${directoryName} directory symlinkを追従せず全体を無変更で拒否する`, (t) => {
+    const targetDir = mkScratch('upgrade-root-directory-symlink');
+    const outsideDir = mkScratch('upgrade-root-directory-symlink-outside');
+    t.after(() => {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    });
+    assert.equal(runCli(['init', targetDir]).status, 0);
+    const entry = path.join(targetDir, directoryName);
+    const outsideEntry = path.join(outsideDir, directoryName);
+    fs.cpSync(entry, outsideEntry, { recursive: true });
+    fs.rmSync(entry, { recursive: true });
+    fs.symlinkSync(outsideEntry, entry);
+    const outsideSentinel = path.join(outsideEntry, 'external-sentinel.txt');
+    fs.writeFileSync(outsideSentinel, 'outside unchanged\n');
+    const rootAgents = path.join(targetDir, 'AGENTS.md');
+    fs.appendFileSync(rootAgents, '\nroot unchanged sentinel\n');
+    const beforeRootAgents = fs.readFileSync(rootAgents);
+
+    const result = runCli(['upgrade', targetDir]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /symlink/);
+    assert.ok(fs.lstatSync(entry).isSymbolicLink());
+    assert.equal(fs.readFileSync(outsideSentinel, 'utf8'), 'outside unchanged\n');
+    assert.deepEqual(fs.readFileSync(rootAgents), beforeRootAgents);
+  });
+}
+
+test('upgrade: target root自身がsymlinkなら外部targetを更新しない', (t) => {
+  const realParent = mkScratch('upgrade-target-parent-real');
+  const aliasParent = mkScratch('upgrade-target-parent-alias');
+  t.after(() => {
+    fs.rmSync(realParent, { recursive: true, force: true });
+    fs.rmSync(aliasParent, { recursive: true, force: true });
+  });
+  const realTarget = path.join(realParent, 'target');
+  assert.equal(runCli(['init', realTarget]).status, 0);
+  const aliasedTarget = path.join(aliasParent, 'linked-target');
+  fs.symlinkSync(realTarget, aliasedTarget);
+  const rootAgents = path.join(realTarget, 'AGENTS.md');
+  fs.appendFileSync(rootAgents, '\nparent symlink sentinel\n');
+  const beforeRootAgents = fs.readFileSync(rootAgents);
+  const version = path.join(realTarget, '.agent-skill-chain', '.installed_version');
+  fs.writeFileSync(version, '0.0.1\n');
+
+  const result = runCli(['upgrade', aliasedTarget]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /symlink/);
+  assert.deepEqual(fs.readFileSync(rootAgents), beforeRootAgents);
+  assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
 });

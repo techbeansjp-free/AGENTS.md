@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { copyTreeFailOnConflict, copyTreeMirror } from '../../src/lib/fs-copy.js';
 import { CliError } from '../../src/lib/issue.js';
 
@@ -176,4 +177,91 @@ test('copyTreeMirror: dryRun:true では宛先にファイルが一切作成さ�
   assert.equal(results[0]?.action, 'created');
   assert.equal(results[0]?.planned, true);
   assert.equal(fs.existsSync(path.join(dest, 'a.txt')), false);
+});
+
+test('copyTreeMirror: source symlinkは追従せず書込み前に拒否する', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  const outside = path.join(mkdtemp('fs-copy-outside-'), 'outside.txt');
+  fs.writeFileSync(outside, 'outside');
+  fs.symlinkSync(outside, path.join(src, 'linked.txt'));
+
+  assert.throws(() => copyTreeMirror(src, dest), /mirror元.*symlink/);
+  assert.deepEqual(fs.readdirSync(dest), []);
+});
+
+test('copyTreeMirror: source boundary symlinkは追従せず書込み前に拒否する', () => {
+  const sourceContainer = mkdtemp('fs-copy-source-container-');
+  const outside = mkdtemp('fs-copy-source-outside-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(outside, 'a.txt'), 'outside');
+  const linkedSource = path.join(sourceContainer, 'linked-source');
+  fs.symlinkSync(outside, linkedSource);
+
+  assert.throws(
+    () => copyTreeMirror(linkedSource, dest, { sourceBoundary: linkedSource }),
+    /mirror元.*symlink/,
+  );
+  assert.deepEqual(fs.readdirSync(dest), []);
+});
+test('copyTreeMirror: destination file symlinkは追従せず外部fileを変更しない', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  const outside = path.join(mkdtemp('fs-copy-outside-'), 'outside.txt');
+  fs.writeFileSync(path.join(src, 'a.txt'), 'new');
+  fs.writeFileSync(outside, 'outside');
+  fs.symlinkSync(outside, path.join(dest, 'a.txt'));
+
+  assert.throws(() => copyTreeMirror(src, dest), /mirror先.*symlink/);
+  assert.equal(fs.readFileSync(outside, 'utf8'), 'outside');
+});
+
+test('copyTreeMirror: destination parent symlinkは追従せず外部directoryを書き換えない', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  const outside = mkdtemp('fs-copy-outside-');
+  fs.mkdirSync(path.join(src, 'sub'));
+  fs.writeFileSync(path.join(src, 'sub', 'a.txt'), 'new');
+  fs.writeFileSync(path.join(outside, 'a.txt'), 'outside');
+  fs.symlinkSync(outside, path.join(dest, 'sub'));
+
+  assert.throws(() => copyTreeMirror(src, dest), /mirror先.*symlink/);
+  assert.equal(fs.readFileSync(path.join(outside, 'a.txt'), 'utf8'), 'outside');
+});
+
+test('copyTreeMirror: destination rootの親symlinkは追従せず外部directoryを書き換えない', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const aliasContainer = mkdtemp('fs-copy-alias-');
+  const outside = mkdtemp('fs-copy-outside-');
+  fs.writeFileSync(path.join(src, 'a.txt'), 'new');
+  fs.symlinkSync(outside, path.join(aliasContainer, 'linked-parent'));
+  const destination = path.join(aliasContainer, 'linked-parent', 'dest');
+
+  assert.throws(
+    () =>
+      copyTreeMirror(src, destination, {
+        destinationBoundary: path.join(aliasContainer, 'linked-parent'),
+      }),
+    /mirror先.*symlink/,
+  );
+  assert.equal(fs.existsSync(path.join(outside, 'dest', 'a.txt')), false);
+});
+
+test('copyTreeMirror: source FIFOはopenせず書込み前に拒否する', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  execFileSync('mkfifo', [path.join(src, 'pipe')]);
+
+  assert.throws(() => copyTreeMirror(src, dest), /mirror元.*special file/);
+  assert.deepEqual(fs.readdirSync(dest), []);
+});
+
+test('copyTreeMirror: destinationのfile位置がdirectoryなら書込み前に拒否する', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'a.txt'), 'new');
+  fs.mkdirSync(path.join(dest, 'a.txt'));
+
+  assert.throws(() => copyTreeMirror(src, dest), /mirror先.*種別不一致/);
+  assert.ok(fs.lstatSync(path.join(dest, 'a.txt')).isDirectory());
 });
