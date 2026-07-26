@@ -1,6 +1,6 @@
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-271
-target_sha: 53171a1d7619af10fe0ca59f10bbd667c2d72ff2
+target_sha: 4e854152b1c53d68f7ce22baf0169a3cc71f23a2
 acceptance_criteria:
   - ac_id: AC-1
     verification:
@@ -9,6 +9,7 @@ acceptance_criteria:
     evidence:
       - test/integration/gate-adapters.test.ts
       - test/unit/gate-credentialless-ci.test.ts
+      - test/unit/trusted-gate-recorder.test.ts
       - .github/workflows/agent-skill-chain-gate.yml
   - ac_id: AC-2
     verification:
@@ -25,6 +26,7 @@ acceptance_criteria:
     evidence:
       - test/integration/gate-evidence.test.ts
       - test/unit/review-evidence.test.ts
+      - test/unit/trusted-gate-recorder.test.ts
       - src/lib/review-evidence.ts
   - ac_id: AC-4
     verification:
@@ -57,8 +59,10 @@ acceptance_criteria:
       result: pass
     evidence:
       - test/integration/self-extension-policy.test.ts
+      - test/integration/init.test.ts
       - test/integration/upgrade.test.ts
       - test/unit/gate-credentialless-ci.test.ts
+      - test/unit/release-workflow-guard.test.ts
       - .agent-skill-chain/ci/verify-template-sync.sh
   - ac_id: AC-8
     verification:
@@ -73,10 +77,11 @@ acceptance_criteria:
 regression:
   executed: true
   evidence:
-    - "test-execution.log: target 53171a1d7619af10fe0ca59f10bbd667c2d72ff2, npm test 589 passed, 0 failed"
-    - "targeted local-review/gate/adapter/verifier regression: 134 passed, 0 failed"
-    - "npm run typecheck: target 53171a1d7619af10fe0ca59f10bbd667c2d72ff2 passed"
-    - "git diff --check: validation checkpoint passed"
-    - "shell syntax, verify-ac-coverage, verify-template-sync, verify-doc-length, lint-vocab, lint-references, verify-adr, adr-lint: passed"
-    - "lint-secrets --diff origin/main: passed"
+    - "target 4e854152b1c53d68f7ce22baf0169a3cc71f23a2 matched origin/process/271-core-audit-model-selection before validation"
+    - "test-execution.log: CI-like TMPDIR=/var/tmp npm test 590 passed, 0 failed; build included"
+    - "targeted risk/profile, arbitrary reviewer override, legacy Check provenance, policy absence, recorder separation, and release sentinel regression: 51 passed, 0 failed"
+    - "sandbox default /tmp contains an injected .git: first full run was 589/590; isolated paths rerun with CI-like TMPDIR=/var/tmp was 10/10 and full rerun was 590/590"
+    - "npm run typecheck; branch/worktree/template/artifact/AC/doc/root/vocab/reference/secret/ADR checks; shell syntax; git diff --check: passed"
     - "npm audit --offline --audit-level=high: 0 vulnerabilities"
+    - "npm pack --dry-run: 158 files, release sentinel absent and release-guard.sh present"
+    - "GitHub PR #274 head 4e854152b1c53d68f7ce22baf0169a3cc71f23a2: verify and reconcile checks completed SUCCESS"
