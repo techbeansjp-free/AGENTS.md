@@ -26,7 +26,7 @@
 - `GateReport`インターフェース（`verify.ts`内、`gate-report.schema.yaml`の`target_sha`フィールドに対応）へ`target_sha`を追加する。
 - `git show`は`repoRoot()`をcwdとして実行する（`worktreeRoot()`ではない）。schema検証（アセット解決）が既に`repoRoot()`基点であることと一致させ、成果物解決とschema解決で異なるrootを使わない。
 - `target_sha`におけるGit blob取得に失敗した場合（対象ファイルが実際にそのSHAで存在しない場合）を「削除されている」として扱い、blob取得に成功しdigestが一致しない場合を「digest不一致」として扱う、という既存の意味的な区別を維持する。
-- ただし`src/commands/gate.ts`はimplementation gateに限り、target_shaに実在しない成果物を`ABSENT_ARTIFACT_DIGEST`という固定sentinel digest（`digestOf('agent-skill-chain:artifact-absent:v1')`）で正当に記録する（`artifactsAtSha`/`artifactDigestAtSha`の`allowAbsent`分岐）。`approved_artifacts`の記載digestがこのsentinel値と一致する場合、Git blob取得の失敗は「削除の正当な記録」であり検証成功として扱う（sentinel値と不一致の場合のみ「削除されています」エラーとする）。
+- ただし`src/commands/gate.ts`はimplementation gateに限り、target_shaに実在しない成果物を`ABSENT_ARTIFACT_DIGEST`という固定sentinel digest（`digestOf('agent-skill-chain:artifact-absent:v1')`）で正当に記録する（`artifactsAtSha`/`artifactDigestAtSha`の`allowAbsent`分岐、`allowAbsent`は`gateId === 'implementation'`の場合のみ真）。この例外は`report.gate.id === 'implementation'`の場合にのみ適用する（spec/design/validation gateでは、証跡生成側がそもそもsentinel digestを持つ`approved_artifacts`エントリを生成し得ないため、検証側で無条件に許容するとI8の安全側原則に反し、本来存在しないはずの「不在の正当な記録」を偽装できてしまう）。gate.id以外の条件下でGit blob取得が失敗した場合、記載digestに関わらず「削除されている」エラーとする。
 - 既存の`verify gate-report`関連の挙動（`target_sha`以外の検証項目）は変更しない。
 - 前提条件: `target_sha`が指すcommitオブジェクトが、`verify gate-report`実行環境のローカルGit object databaseに到達可能である必要がある（shallow cloneでPR headをfetchしていない環境等では、対象ファイルが実際に存在する場合でも`git show`が失敗し「削除されています」と誤報告されうる）。`.github/workflows/agent-skill-chain-gate.yml`の`Fetch target as read-only Git object`ステップがこの前提を満たす。
 
@@ -39,11 +39,11 @@
 - Then: 「削除されています」エラーを出さず、終了コード0（他の検証項目に問題が無い場合）になる
 - 検証方法見込み: `automated`
 
-#### AC-2: target_sha上にも実在しないファイルは、sentinel digestで正当に記録されている場合を除き「削除されている」エラーになる
+#### AC-2: target_sha上にも実在しないファイルは、implementation gateでsentinel digestが正当に記録されている場合を除き「削除されている」エラーになる
 
 - Given: `target_sha`が指すGit commitにも存在しないパスを`approved_artifacts`に持つgate-report
 - When: `agent-skill-chain verify gate-report <path>` を実行する
-- Then: 記載digestが`ABSENT_ARTIFACT_DIGEST`sentinel値と一致する場合は検証成功、一致しない場合は「削除されています（digest不一致として扱います）」エラーで終了コード1以上になる
+- Then: `report.gate.id === 'implementation'`かつ記載digestが`ABSENT_ARTIFACT_DIGEST`sentinel値と一致する場合は検証成功。それ以外（gate.idがimplementation以外、またはimplementationでもsentinel値と不一致）は「削除されています（digest不一致として扱います）」エラーで終了コード1以上になる
 - 検証方法見込み: `automated`
 
 #### AC-3: target_sha上に存在するがdigestが異なる場合は「digest不一致」エラーになる
@@ -63,9 +63,16 @@
 
 #### AC-5: implementation gateのABSENT_ARTIFACT_DIGEST sentinelは正しく検証成功する
 
-- Given: implementation gateのgate-reportで、target_shaに実在しないpathを`ABSENT_ARTIFACT_DIGEST`sentinel値で記録した`approved_artifacts`エントリ
+- Given: `gate.id === 'implementation'`のgate-reportで、target_shaに実在しないpathを`ABSENT_ARTIFACT_DIGEST`sentinel値で記録した`approved_artifacts`エントリ
 - When: `agent-skill-chain verify gate-report <path>` を実行する
 - Then: 「削除されています」エラーを出さず検証成功する
+- 検証方法見込み: `automated`
+
+#### AC-6: implementation以外のgateではABSENT_ARTIFACT_DIGEST sentinelを許容しない
+
+- Given: `gate.id === 'spec'`（design/validationでも同様）のgate-reportで、target_shaに実在しないpathを`ABSENT_ARTIFACT_DIGEST`sentinel値で記録した`approved_artifacts`エントリ
+- When: `agent-skill-chain verify gate-report <path>` を実行する
+- Then: gate.idがimplementationでないため例外は適用されず、「削除されています（digest不一致として扱います）」エラーで終了コード1以上になる
 - 検証方法見込み: `automated`
 
 ## スコープ外
