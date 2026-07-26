@@ -24,8 +24,11 @@
 
 - `gateReport`の成果物存在・digest検証を、ファイルシステムの実在チェック（`fs.existsSync`）から、`git show <target_sha>:<path>`によるGit object参照へ変更する（`src/commands/gate.ts`の`artifactDigestAtSha`と同様のパターン）。
 - `GateReport`インターフェース（`verify.ts`内、`gate-report.schema.yaml`の`target_sha`フィールドに対応）へ`target_sha`を追加する。
+- `git show`は`repoRoot()`をcwdとして実行する（`worktreeRoot()`ではない）。schema検証（アセット解決）が既に`repoRoot()`基点であることと一致させ、成果物解決とschema解決で異なるrootを使わない。
 - `target_sha`におけるGit blob取得に失敗した場合（対象ファイルが実際にそのSHAで存在しない場合）を「削除されている」として扱い、blob取得に成功しdigestが一致しない場合を「digest不一致」として扱う、という既存の意味的な区別を維持する。
+- ただし`src/commands/gate.ts`はimplementation gateに限り、target_shaに実在しない成果物を`ABSENT_ARTIFACT_DIGEST`という固定sentinel digest（`digestOf('agent-skill-chain:artifact-absent:v1')`）で正当に記録する（`artifactsAtSha`/`artifactDigestAtSha`の`allowAbsent`分岐）。`approved_artifacts`の記載digestがこのsentinel値と一致する場合、Git blob取得の失敗は「削除の正当な記録」であり検証成功として扱う（sentinel値と不一致の場合のみ「削除されています」エラーとする）。
 - 既存の`verify gate-report`関連の挙動（`target_sha`以外の検証項目）は変更しない。
+- 前提条件: `target_sha`が指すcommitオブジェクトが、`verify gate-report`実行環境のローカルGit object databaseに到達可能である必要がある（shallow cloneでPR headをfetchしていない環境等では、対象ファイルが実際に存在する場合でも`git show`が失敗し「削除されています」と誤報告されうる）。`.github/workflows/agent-skill-chain-gate.yml`の`Fetch target as read-only Git object`ステップがこの前提を満たす。
 
 ### 受入条件（Acceptance Criteria）
 
@@ -36,11 +39,11 @@
 - Then: 「削除されています」エラーを出さず、終了コード0（他の検証項目に問題が無い場合）になる
 - 検証方法見込み: `automated`
 
-#### AC-2: target_sha上にも実在しないファイルは引き続き「削除されている」エラーになる
+#### AC-2: target_sha上にも実在しないファイルは、sentinel digestで正当に記録されている場合を除き「削除されている」エラーになる
 
 - Given: `target_sha`が指すGit commitにも存在しないパスを`approved_artifacts`に持つgate-report
 - When: `agent-skill-chain verify gate-report <path>` を実行する
-- Then: 「削除されています（digest不一致として扱います）」エラーで終了コード1以上になる
+- Then: 記載digestが`ABSENT_ARTIFACT_DIGEST`sentinel値と一致する場合は検証成功、一致しない場合は「削除されています（digest不一致として扱います）」エラーで終了コード1以上になる
 - 検証方法見込み: `automated`
 
 #### AC-3: target_sha上に存在するがdigestが異なる場合は「digest不一致」エラーになる
@@ -49,12 +52,20 @@
 - When: `agent-skill-chain verify gate-report <path>` を実行する
 - Then: 「digest が現在のファイル内容と一致しません」エラーで終了コード1以上になる
 - 検証方法見込み: `automated`
+- 補足（自己完結性）: `target_sha`はcommit SHAとして不変であるため、この不一致は「承認後に成果物の実内容が改ざんされた」ことを意味しない（同一target_shaのGit blobは常に同一内容である）。この検証が実際に検知するのは、`approved_artifacts`のdigestフィールド自体が、記録時点の実内容と異なる値で保存された場合（証跡生成過程の不整合・手編集等）である。
 
 #### AC-4: 既存のverify gate-report関連テストが後退しない
 
 - Given: 既存のverify gate-report統合テスト
 - When: `npm test`を実行する
 - Then: 全件成功する
+- 検証方法見込み: `automated`
+
+#### AC-5: implementation gateのABSENT_ARTIFACT_DIGEST sentinelは正しく検証成功する
+
+- Given: implementation gateのgate-reportで、target_shaに実在しないpathを`ABSENT_ARTIFACT_DIGEST`sentinel値で記録した`approved_artifacts`エントリ
+- When: `agent-skill-chain verify gate-report <path>` を実行する
+- Then: 「削除されています」エラーを出さず検証成功する
 - 検証方法見込み: `automated`
 
 ## スコープ外
