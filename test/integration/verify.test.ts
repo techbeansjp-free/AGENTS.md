@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+import { ABSENT_ARTIFACT_DIGEST } from '../../src/commands/gate.js';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -703,6 +704,43 @@ test('verify gate-report (Issue #316 AC-2): target_shaのGit objectにも存在�
   const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /approved_artifacts のファイルが削除されています（digest不一致として扱います）: NEVER_COMMITTED\.md/);
+});
+
+// Issue #316 AC-5: implementation gateはtarget_shaに実在しない成果物をABSENT_ARTIFACT_DIGEST
+// sentinelで正当に記録する（gate.tsのallowAbsent分岐）。このsentinel値と記載digestが一致する場合は
+// 「削除の正当な記録」として検証成功にならなければならない（AC-2の「削除されている」エラーとは区別）。
+test('verify gate-report (Issue #316 AC-5): ABSENT_ARTIFACT_DIGEST sentinelで記録された欠落成果物は検証成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add SPEC.md'], { cwd: worktreePath });
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'implementation', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
+
+  // Given: 一度もcommitされていないpathを、ABSENT_ARTIFACT_DIGEST sentinelで正当な欠落として記録する。
+  const approvedText = fs
+    .readFileSync(gateReportPath, 'utf8')
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: pass')
+    .replace('final: pending', 'final: approved')
+    .replace(
+      'approved_artifacts: []',
+      `approved_artifacts:\n    - path: NEVER_EXISTED.md\n      digest: ${ABSENT_ARTIFACT_DIGEST}`,
+    );
+  fs.writeFileSync(gateReportPath, approvedText);
+
+  const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 // ISSUE-176 AC-4の後継（Issue #316でgit object参照へ移行）: 「検知が完全にスキップされる」という

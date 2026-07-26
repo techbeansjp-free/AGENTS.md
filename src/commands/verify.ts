@@ -20,6 +20,7 @@ import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { ROOT_ARTIFACT_FILES } from '../lib/root-artifacts.js';
+import { ABSENT_ARTIFACT_DIGEST } from './gate.js';
 
 function violations(lines: string[]): number {
   if (lines.length === 0) return 0;
@@ -223,7 +224,12 @@ export async function gateReport(args: string[]): Promise<number> {
     for (const artifact of report.gate.approved_artifacts) {
       const shown = git(['show', `${report.gate.target_sha}:${artifact.path}`], root);
       if (shown.status !== 0) {
-        errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
+        // Issue #316: implementation gateはtarget_shaに実在しない成果物をABSENT_ARTIFACT_DIGEST
+        // sentinelで正当に記録する（gate.tsのartifactsAtSha/artifactDigestAtSha、allowAbsent分岐）。
+        // 記載digestがこのsentinel値と一致する場合は「削除の正当な記録」として検証成功とする。
+        if (artifact.digest !== ABSENT_ARTIFACT_DIGEST) {
+          errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
+        }
       } else if (digestOf(shown.stdout) !== artifact.digest) {
         errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
