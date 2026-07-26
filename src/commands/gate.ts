@@ -448,13 +448,41 @@ function assertNoCoordinationSecretInVerdict(verdictText: string): void {
   }
 }
 
-/** レビュアCLI（`claude -p`等）の出力がMarkdownコードフェンス（```json ... ``` / ``` ... ```）で
- * 囲まれている場合に中身だけを返す。囲まれていなければ入力をそのまま返す（構文的なアンラップのみ。
- * JSONとして妥当かどうかの判定は後続のJSON.parseに委ねる。Issue #303）。 */
-function stripJsonCodeFence(text: string): string {
-  const trimmed = text.trim();
-  const match = /^```(?:json)?\r?\n([\s\S]*?)\r?\n```$/.exec(trimmed);
-  return match ? match[1] : trimmed;
+/** レビュアCLI（`claude -p`等）の出力から、最初に出現する完全なJSONオブジェクト（`{`から対応する
+ * `}`まで）を中括弧の対応関係で抽出する。Markdownコードフェンス（```json ... ``` / ``` ... ```）・
+ * JSON本体の前後の説明文・tool-call試行らしきテキストのいずれが付いていても、埋め込まれたJSON本体
+ * だけを取り出せる（Issue #303のフェンス限定対応をIssue #312で一般化）。文字列リテラル内の`{`・`}`は
+ * エスケープを考慮しつつ構造としてカウントしない。対応する`{`が見つからない場合は入力をtrimして
+ * そのまま返す（JSONとして妥当かどうかの判定は後続のJSON.parseに委ねる）。 */
+function extractFirstJsonObject(text: string): string {
+  const start = text.indexOf('{');
+  if (start === -1) return text.trim();
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth++;
+    } else if (char === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return text.trim();
 }
 
 function parseGhList<T>(stdout: string): T[] {
@@ -871,7 +899,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
     try {
       const verdictText = fs.readFileSync(0, 'utf8');
       assertNoCoordinationSecretInVerdict(verdictText);
-      parsedVerdict = JSON.parse(stripJsonCodeFence(verdictText));
+      parsedVerdict = JSON.parse(extractFirstJsonObject(verdictText));
     } catch (error) {
       throw new CliError(`verdict JSONを解釈できません: ${error instanceof Error ? error.message : String(error)}`);
     }
