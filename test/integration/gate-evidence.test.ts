@@ -436,4 +436,48 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
   );
   assert.notEqual(fencedInvalid.status, 0);
   assert.match(fencedInvalid.stderr, /verdict JSONを解釈できません/);
+
+  // Issue #312 AC-3: JSON本体の前にtool-call試行らしきテキストや説明文があっても解釈できる。
+  const toolCallPrefixed = submitWithBody(
+    'review-prefix-toolcall',
+    `ReportFindings(${JSON.stringify(rawVerdict)})`,
+  );
+  assert.equal(toolCallPrefixed.status, 0, toolCallPrefixed.stderr);
+
+  const prosePrefixed = submitWithBody(
+    'review-prefix-prose',
+    `この変更を確認しました。以下がverdictです。\n${JSON.stringify(rawVerdict)}`,
+  );
+  assert.equal(prosePrefixed.status, 0, prosePrefixed.stderr);
+
+  // Issue #312 AC-4: JSON本体の後に説明文があっても解釈できる。
+  const proseSuffixed = submitWithBody(
+    'review-suffix-prose',
+    `${JSON.stringify(rawVerdict)}\n以上がverdictです。`,
+  );
+  assert.equal(proseSuffixed.status, 0, proseSuffixed.stderr);
+
+  // Issue #312 AC-5: verdict JSONの文字列リテラル内に中括弧を含んでいても、対応関係の検出が
+  // 誤動作せず全体を正しく抽出・解釈する。
+  const verdictWithBraceInLiteral = {
+    ...rawVerdict,
+    blockers: [
+      {
+        severity: 'info' as const,
+        origin: 'specification' as const,
+        code: 'literal-brace-test',
+        evidence: ['config value `{key: value}` を含む説明文'],
+      },
+    ],
+  };
+  const literalBraces = submitWithBody(
+    'review-literal-braces',
+    JSON.stringify(verdictWithBraceInLiteral),
+  );
+  assert.equal(literalBraces.status, 0, literalBraces.stderr);
+
+  // Issue #312 AC-6: 抽出候補が構文的に不正な場合は従来通りエラーのまま。
+  const proseOnly = submitWithBody('review-prose-only', 'JSONを生成できませんでした。');
+  assert.notEqual(proseOnly.status, 0);
+  assert.match(proseOnly.stderr, /verdict JSONを解釈できません/);
 });
