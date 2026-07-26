@@ -23,8 +23,9 @@ update endpointはstatus/conclusion/outputをPATCHできるが、expected versio
 
 通常workflow tokenや別integrationが同名Checkを作れるとrequired名だけでは偽装を防げない。Issue #283が
 設計するdedicated App、main限定protected environment、rulesetの`context+integration_id`固定が先に必要である。
-StrictにはIssue #277が設計する2 slot provenance集約が必要だが、現実装のfile/session操作をGitHub adapterへ
-複製してはならず、I/O・時刻・replayを持たない純粋reducer APIとして先に確定する必要がある。
+Strictには2 slot provenance集約が必要だが、これはIssue #283 / PR #284が実装した
+`src/lib/review-evidence.ts`の`verifyGithubReviewEvidence`として既にI/O・時刻・replayを持たない純粋関数の
+形でmainに実在する。現実装のfile/session操作をGitHub adapterへ複製せず、この既存関数をそのまま再利用する。
 
 公式根拠:
 https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
@@ -58,12 +59,13 @@ gateへ割り当て、残るsource/test/workflow/config/schema/scriptをimplemen
 blob digest、Dはbase digestと`deleted` markerのtombstoneを持ち、path順canonical JSONの集合digestを作る。
 submitは保存集合と再導出集合を両方向比較し、追加・欠落・重複・digest差・取得不能を承認しない。
 
-Strict adapterはdurable slotを`context,envelopes`へ写像し、ADR-0010でacceptedになる純粋reducerだけに
-最終判定を委ねる。reducerは固定2 slot、異actor/invocation、session/target/artifact一致、判定優先順位だけを
-扱う。Review選択、replay、nonce、API retry、Check status/conclusion写像は外側に置く。ADR-0010とADR-0013が
-acceptedかつ配備済みになるまでsession開始を拒否する。
+Strict adapterはdurable slotを既存`verifyGithubReviewEvidence`の入力形へ写像し、最終判定を同関数だけに
+委ねる。同関数は固定2 slot、異actor/invocation、session/target/artifact一致、判定優先順位だけを
+扱う。Review選択、replay、nonce、API retry、Check status/conclusion写像は外側に置く。同関数はADR承認とは
+独立に既にmainへ実装・テスト済みだが、ADR-0013（#283のdedicated App等の前提）がacceptedかつ配備済みに
+なるまでsession開始を拒否する。
 
-ADR-0011はこのDESIGNが記録する自己判断であり、DESIGNの`related_adrs`へ自己参照しない。ADR-0010/0013は
+ADR-0011はこのDESIGNが記録する自己判断であり、DESIGNの`related_adrs`へ自己参照しない。ADR-0013は
 accepted後にだけ、テンプレート規範の`id`/`relation: adopts` objectとしてDESIGNへ追加し再承認する。
 
 ## Consequences

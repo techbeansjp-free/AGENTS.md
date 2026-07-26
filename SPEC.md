@@ -10,8 +10,9 @@ profile・Check Runへ人間判定を一回限りで結線する。本Issueは�
 ## 前提・用語・入出力
 
 - 対象は`backend=github`、openかつsame-repositoryのPR、`review.adapter=human`。local正本は変更しない。
-- 前提依存は、Issue #277の純粋Strict reducerを含むaccepted ADR-0010と、Issue #283の専用App trust
-  backendを含むaccepted ADR-0013である。未導入・未構成ならsessionを開始せず設定エラーにする。
+- 前提依存は、Issue #283 / PR #284が実装したStrict独立2レビュア集約（`src/lib/review-evidence.ts`の
+  `verifyGithubReviewEvidence`、I/Oなし純粋関数として現在のmainに実在する）と、同PRが導入したaccepted
+  ADR-0013の専用App trust backendである。未導入・未構成ならsessionを開始せず設定エラーにする。
 - `human gate session`はPRを集約ルートとし、required parent Check、slot Check、PR Review inboxで構成する。
 - parent一意keyはrepository ID、PR、target SHA、gate、required名、publisher App IDである。
 - PR Review inboxはsession/slot/invocation、判定、actor、review ID、submission digestを持つ耐久入力である。
@@ -39,8 +40,9 @@ profile・Check Runへ人間判定を一回限りで結線する。本Issueは�
   deletionはbase digestを含むtombstoneとし、path順の集合digestを保存する。
 - submit時はbase/head/profile/App/sessionとartifact recordを再導出し、保存集合と導出集合を双方向比較する。
   欠落、余分、重複、digest差、不明path、取得不能をsuccessにしない。
-- StrictはGitHub slot envelopeを#277のI/Oなし純粋reducerへ渡す。replay・nonce・Check読書きはreducer外とし、
-  別actor・別invocationの2 approveかつbinding完全一致だけをapprovedにする。
+- Strictは既存の`verifyGithubReviewEvidence`（`src/lib/review-evidence.ts`）が要求する入力形へGitHub slot
+  envelopeを写像して渡す。replay・nonce・Check読書きは同関数の外に置き、別actor・別invocationの2 approve
+  かつbinding完全一致だけをapprovedにする（同関数の既存判定規則をそのまま踏襲する）。
 - 不正入力、`pending`、不足、API/queue/sweeper失敗は親を`action_required`のまま保ち、mergeを許さない。
 
 ## 受入条件
@@ -75,11 +77,12 @@ profile・Check Runへ人間判定を一回限りで結線する。本Issueは�
 - When: openとsubmitが集合を導出する
 - Then: tombstoneを含む同一canonical集合だけを受理し、片方向一致では承認しない（検証: `automated`）
 
-### AC-6: Strict reducer境界
+### AC-6: Strict集約境界
 
 - Given: Strict sessionへ2件のslot envelopeがある
 - When: 別actor・別invocationの2 approve、重複、replay、不足、混合判定を集約する
-- Then: 純粋reducerだけが判定し、正常2件だけsuccess、他はfailureまたはaction_requiredとなる（検証: `automated`）
+- Then: 既存の`verifyGithubReviewEvidence`（`src/lib/review-evidence.ts`）だけが最終判定し、正常2件だけ
+  success、他はfailureまたはaction_requiredとなる（検証: `automated`）
 
 ### AC-7: status/conclusionとbackend境界
 
@@ -96,5 +99,6 @@ profile・Check Runへ人間判定を一回限りで結線する。本Issueは�
 ## 制約・完了条件・対象外
 
 公式に存在する`concurrency.queue: max`は100件上限の補助にだけ使い、耐久性を委ねない。4ゲート名、
-人間の判定内容生成、credential作成、#277/#283の責務、local backendは変更しない。全ACの正常・反例・
+人間の判定内容生成、credential作成、`verifyGithubReviewEvidence`自体の判定ロジック・#283の責務、
+local backendは変更しない。全ACの正常・反例・
 取消回復・配布同期・回帰証跡を`VALIDATION.md`へ保存して完了する。未決事項はない。

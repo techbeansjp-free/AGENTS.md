@@ -5,7 +5,7 @@
 ## 目的・依存
 
 human gateをGitHub PR aggregateとCheck/Reviewエンティティでモデル化し、判定耐久化、純粋集約、Check発行を分離する。
-実装開始条件は#277のI/Oなし`reduceStrict(context,envelopes)`とaccepted ADR-0010、#283のdedicated App・main限定environment・ruleset integrationとaccepted ADR-0013であり、未成立ならsession開始前にfail-closedとする。
+実装開始条件は、Issue #283 / PR #284が実装しmainに実在するI/Oなし`verifyGithubReviewEvidence(options)`（`src/lib/review-evidence.ts`）と、同PRのdedicated App・main限定environment・ruleset integrationを規定するaccepted ADR-0013であり、未成立ならsession開始前にfail-closedとする。
 
 ## ACと設計要素
 
@@ -81,16 +81,19 @@ Dはbase blob digestと固定`deleted` markerを持つtombstoneである。path�
 SHA-256を集合digestとする。open/submit双方が同じresolverで再導出し、`saved⊆derived`かつ
 `derived⊆saved`、各record/digest一致を要求する。空、重複、未分類、取得不能は承認しない。
 
-#277の純粋APIはcontextとimmutable slot envelopeだけを受け、2固定slot、異actor/invocation、binding、
-artifact集合、判定優先順位を検査して`approved|rejected|human_required`と理由を返す。#278はCheck/Reviewを
-envelopeへ写像するだけで、replay選択、nonce、retry、Check状態写像はAPI外に置く。
+`verifyGithubReviewEvidence`はcontextとimmutable review配列だけを受け、2固定slot、異actor/invocation、
+binding、artifact集合、判定優先順位を検査して`approved|rejected|human_required`と理由を返す既存の
+I/Oなし関数である。#278はCheck/Reviewをこの関数が要求する入力形（GithubReviewRecord相当）へ写像するだけで、
+replay選択、nonce、retry、Check状態写像は同関数の外に置く。同関数の判定ロジック自体は変更しない。
 
 ## 障害・ロールバック・関連ADR
 
 App/environment/ruleset、依存API、API再読取、sweeperの不明状態はsuccessにせず、旧publisherへfallbackしない。
 rollbackは新publisher/rulesetを無効化し#283の旧active enforcementを維持する。ADR-0011は本DESIGN自身の
-判断なので自己参照しない。ADR-0010/0013はaccepted後のrebaseでテンプレート規範の
-`{id: ADR-0010, relation: adopts}`、`{id: ADR-0013, relation: adopts}` objectとして追加し、design gateを再通過する。
+判断なので自己参照しない。ADR-0013はacceptedになった時点でのrebaseでテンプレート規範の
+`{id: ADR-0013, relation: adopts}` objectとして追加し、design gateを再通過する
+（`verifyGithubReviewEvidence`はADR-0013とは別に既にmainへ実装済みのコードであり、related_adrs経由の
+参照ではなく直接のコード依存として扱う）。
 
 ```yaml
 related_adrs: []
