@@ -5,38 +5,45 @@
 
 ## 目的・入力・出力
 
-承認済みSPECとDESIGNを入力とし、隔離package probe、既存package契約の移行、決定論的race/cleanup
-回帰テスト、保存済み検証ログを出力する。各単位は同一writer leaseのもとで順に実装する。
+承認済みSPEC/DESIGN/ADRを入力とし、隔離package probe、既存収録契約の移行、決定論的な
+race/failure/timeout回帰テストを出力する。実装workerはcodeとunit test結果だけをcheckpointし、
+検証workerが全test反復の保存ログとVALIDATIONを別leaseで作る。
 
 ## 実装順序・変更単位
 
-| # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
-|---|---|---|---|---|
-| 1 | 隔離probe | source/依存の物理copy、timeout付きnpm、JSON parse、合成error、finally cleanup | AC-1, AC-2, AC-5 | なし |
-| 2 | package契約移行 | 既存2テストをasync helperへ接続し必須/禁止集合を保持 | AC-1, AC-2 | #1 |
-| 3 | race回帰 | entered/release、両側timeout、finally release、join/killで元CLI不変を検査 | AC-1, AC-3 | #1 |
-| 4 | failure回帰 | prepare失敗、cleanup失敗、複合失敗のerror/path証跡とtest側回収を検査 | AC-5 | #1 |
-| 5 | 変更範囲検証 | package統合テスト、lint統合テスト、型検査を実行 | AC-1, AC-2, AC-3, AC-5 | #1〜#4 |
-| 6 | 全体反復 | 既定`npm test`を3回以上実行しログを別ファイルへ保存 | AC-4 | #5 |
-| 7 | 独立検証 | ACごとの結果・手順・executor・evidenceをVALIDATIONへ記録 | AC-1〜AC-5 | #6 |
+| # | 変更単位 | 内容 | AC-ID |
+|---|---|---|---|
+| 1 | snapshot owner | root copyから4領域を除外し、依存を別copy、相対symlink containment検査 | AC-1, AC-5 |
+| 2 | process supervisor | cache/HOME/temp隔離、buffer上限、tree terminate→reap→cleanup | AC-1, AC-5 |
+| 3 | pack parser | npm実JSONを返すasync helperへ既存2契約testを移行 | AC-1, AC-2 |
+| 4 | bin不変BDD | relative path+bytes digestを成功・prepare失敗・timeoutの前後で比較 | AC-1, AC-5 |
+| 5 | race BDD | probe固有marker中にroot CLIのhelpとclean lintを実行 | AC-3 |
+| 6 | 障害BDD | descendant timeout、buffer超過、cleanup単独/primary複合errorを検査 | AC-5 |
+| 7 | 変更範囲検査 | package/race/failure test、lint test、build、typecheck、静的検査 | AC-1〜AC-5 |
+| 8 | 全体反復 | concurrency指定なしの`npm test`を3回以上実行 | AC-4 |
 
-## checkpoint とwriter lease
+snapshot owner完了後にprocess supervisor、その後に各BDDを実装する。各BDDは同じhelper契約を使うが
+状態を共有せず順序は入替可能である。production既定のtimeout/bufferは有限値とし、障害BDDだけ
+短い値を注入する。
 
-- design: `DESIGN.md`、`PLAN.md`、proposed ADRをcommit/pushし、read-only gateを通す。
-- ADR finalization: design承認digestを保ったまま専用leaseでstatusだけをacceptedへ更新する。
-- implementation: helperとtestだけをcommit/pushし、変更範囲・全体検査を通す。
-- validation: implementation writerと分離したleaseで検証ログと`VALIDATION.md`をcommit/pushする。
+## BDDと反証観点
 
-## テスト適用性
+- 成功/prepare失敗/timeoutの各Givenでroot `bin` manifestを採取し、When probe終了後に同じ相対path集合と
+  bytes digestを要求する。timeoutではdescendantを含むtreeがjoin済みで、temp rootが無いことも確認する。
+- 外向き・absolute・破損symlinkをfixtureへ置くとcontainment検査がnpm起動前に拒否し、内部相対linkは
+  snapshot内targetへ解決されることを確認する。
+- marker、HOME、cache、TMPDIRはprobeごとに異なり、並列probe間に共有pathがないことを確認する。
+- npm JSON欠損、buffer超過、spawn失敗、cleanup失敗を成功扱いせず、primary+cleanupは両方観測する。
+- package testとlint testへtest concurrencyやlockを追加していないことを静的に確認する。
 
-- 常時必須: 文書/語彙/参照lint、型検査、単体テスト、変更範囲の結合テスト、secret scan。
-- API・認証・DB・画面・性能・デプロイ・外部サービス: product境界を変更しないため非該当。
-- 障害系: npm process失敗時のcleanupとerror伝播を自動検査する。
-- 並行性: 二相marker、timeout、release/join/killでschedulerの偶然とhangへ依存させない。
-- リリース単位: package公開そのものは行わず、実際の`npm pack --dry-run --json`で収録契約を検査する。
+## checkpoint・適用検査
 
-## 完了条件・見直し
+- design: `DESIGN.md`、`PLAN.md`、proposed ADRをcommit/pushしread-only gateを再通過する。
+- ADR finalization: 承認digestを保った専用leaseでstatusだけをacceptedへ更新する。
+- implementation: helper/testだけをcommit/pushする。SPEC/DESIGN/PLAN/VALIDATIONは変更しない。
+- validation: 全AC、既定並列test 3回以上、build/typecheck、文書/語彙/参照lint、secret scanの
+  executor・command・result・evidenceを保存しcommit/pushする。
 
-全変更単位、AC証跡、3回以上の全テストログ、Draft PRへのcheckpointが揃えば完了する。
-作業順序だけの変更はPLANを更新する。snapshot境界、cleanup owner、package契約を変更する場合は
-DESIGNを更新し、設計ゲートを再通過する。
+API、認証、DB、画面、性能、デプロイ、外部publishはproduct境界を変えないため非該当である。
+snapshot/copy、process回収、bin manifest、package契約を変える場合はDESIGNを更新して再審査する。
+全変更単位とsegmentごとのcheckpointが揃うことを完了条件とし、未決事項はない。
