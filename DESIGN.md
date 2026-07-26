@@ -1,96 +1,100 @@
-# DESIGN: human adapterの復帰案内と実行可能なWorkflow入口を一致させる
+# DESIGN: human gateをGitHub正準sessionから一回だけ復帰させる
 
-- Issue: `ISSUE-278`
-- 対応する SPEC: `SPEC.md`
+- Issue: `ISSUE-278` / 対応する SPEC: `SPEC.md`
 
-## 目的・前提・入出力
+## 目的・前提・依存
 
-GitHubのhuman gateを、通知・手動判定・trusted発行の3責務へ分ける。入力はPR番号、gate、
-current head SHA、verdictで、出力は設定済みrequired CheckへのCheck Runである。
-workflowはdefault branch上のtrusted CLIだけを実行し、PR側のscriptを実行しない。
-GitHubの`workflow_dispatch`を起動できるwrite権限者が明示判定を送ることを前提とする。
+human gateを「trusted初回通知」「read-only人間判定」「trusted CAS発行」へ分ける。Issueを集約ルート、PRとCheck RunをGitHub backendの調整プリミティブとし、PR branchにはtoken・session書込み・CLI実行を
+許さない。Strict集約規則とsub-verdict provenanceはIssue #277の成果を先にmainへ取り込み、本設計はその純粋集約へGitHub耐久slotを渡す。依存未導入ならStrict session開始をfail-closedにする。
 
-## 要件 → 設計要素の対応表
+## ACと設計要素
 
-| 要件 / AC-ID | 対応する設計要素 | 備考 |
-|---|---|---|
-| AC-1 | Human notification / Manual gate workflow | 実在名と全入力を通知 |
-| AC-2 | Dispatch context validator | open・same-repo・current SHAを照合 |
-| AC-3 | Trusted human verdict publisher | gate→config Check名を固定対応 |
-| AC-4 | Verdict validator / existing final derivation | 不正・pendingを成功にしない |
-| AC-5 | Provider boundary / template sync tests | human以外を変更しない |
+| AC-ID | 設計要素 |
+|---|---|
+| AC-1 | Trusted session opener / Check notification |
+| AC-2 | Context and provenance validator |
+| AC-3 | Serialized Check CAS / replay guard |
+| AC-4 | Config check resolver / artifact full-set resolver |
+| AC-5 | Verdict validator / fail-closed publisher |
+| AC-6 | Durable 2-slot adapter / common Strict aggregator |
+| AC-7 | Backend and role guard |
+| AC-8 | Audit record / template contract tests |
 
-## 責務・境界
+## GitHub正準session
 
-### Human notification
-
-`.agent-skill-chain/adapters/human.sh`はread-only判定手順と復帰commandだけを通知する。
-GitHub Actionsのevent payloadからPR番号を読み、次の固定入口と必須値を表示する。
-
-```text
-gh workflow run agent-skill-chain-human-gate.yml --ref <default-branch>
-  -f pr_number=<PR> -f gate=<gate> -f target_sha=<40-hex>
-  -f verdict_json='<schemaに従うJSON>'
-```
-
-adapterはverdictやCheck Runを書かない。Claude Code/Codex adapterは既存の同期自動判定を維持する。
-event payloadが無いローカルモードでは既存markerとlocal report手順を使い、GitHub入口を装わない。
-
-### Manual gate workflow
-
-配布元と展開先へ`agent-skill-chain-human-gate.yml`を追加する。入口は
-`workflow_dispatch`だけで、権限は`contents: read`、`pull-requests: read`、
-`checks: write`とする。default branchを明示checkoutし、そこからtrusted CLIをbuildする。
-PR headは`git fetch`してデータとしてだけ読み、PR側のpackage scriptやCLIは実行しない。
-同一PR・gateのdispatchはconcurrency groupで直列化し、actorを実行証跡へ残す。
-
-### Dispatch context validator
-
-trusted CLIの`gate human-submit`はGitHub APIのPR情報と入力を照合する。
-
-- PR番号は正整数、gateは固定4値、SHAは40桁hexでなければ拒否する。
-- PRはopen、base/head repositoryは実行repositoryと同一、head SHAは入力と完全一致を要求する。
-- head branchは設定済みbranch patternへ適合し、そこからIssue IDを一意に導出する。
-- target commitがfetch済みであることを確認し、verdictのartifact pathは相対正規pathだけを許す。
-
-いずれかが不一致ならCheckを書かず非0終了する。stale dispatchが新しいheadを承認することはない。
-
-### Trusted human verdict publisher
-
-CLIはstdinのverdictを既存gate-report契約へ結線し、finalを共通規則で機械導出する。
-artifact digestは作業treeのpath joinではなく`git show <target>:<path>`から算出し、
-path traversalとPR code実行を避ける。`final=approved`だけを`success`、
-`rejected`を`failure`、`human_required`を`action_required`として発行する。
-Check名は入力にせず`config.checks[gate]`から取得する。
-
-Strictの件数・独立性は一般trusted aggregationの責務であり、本入口はその契約を呼び出す。
-単独verdictでStrictを短絡する分岐は持たず、必要件数不足なら`human_required`となる。
-
-## 依存関係
+親はrequired名`config.checks[gate]`のCheck Runで、`external_id`にversion、session ID、状態、
+submission digestを持つ。boundedな機械可読outputにrepo/Issue/PR/gate/head/profile/adapter、
+publisher App ID、trusted CLI SHA、親Check ID、expected slot、slot Check ID・invocation ID・actor・run ID、
+expected artifact集合とdigestを保存する。全slotは親sessionを指す非required Check Runとして判定本文を
+独立保存する。GitHub外のmanifestやrunner一時fileを復帰状態の正本にしない。
 
 ```text
-human adapter → GitHub comment → workflow_dispatch
-                                  ↓
-default-branch workflow → context validator → verdict aggregation → Checks API
-                              ↓ read-only
-                         PR metadata / target commit
+parent: absent -> awaiting(action_required)
+slot:   absent -> awaiting -> consuming -> recorded
+slot:   recorded + same digest -> same result
+slot:   recorded + different digest -> reject
+parent: awaiting + slot不足 -> awaiting
+parent: awaiting + slot充足 -> consuming -> approved|rejected|human_required
+parent/slot: awaiting -> invalidated           : head/profile/adapter変更
+parent terminal + same aggregate digest -> same result; different digest -> reject
 ```
 
-書込みはtrusted workflowからChecks APIへの一方向で、reviewerとPR codeへtokenを渡さない。
+## Trusted session opener
 
-## 関連ADR
+専用`pull_request_target` workflowはdefault branch上のworkflowとCLI SHAを明示checkoutし、同じSHAで
+buildする。最初にbackend=github、adapter=human、open/same-repo/current head、branch→Issueを検証し、
+PR headはfetchしたGit objectとしてだけ読む。変更gateとprofileをdefault branch設定・PR labelから導出し、
+`gate human-open-session`が親/slot Checkを作る。human adapterは通知文をrenderするだけでGitHubへ書かず、Claude Code/Codexは既存の自動workflowだけを使う。
+復帰commandは親Check summaryへ2行で記録し、JSONは`VERDICT_JSON="$(jq -c . verdict.json)"`の後、
+quotedな`-f "verdict_json=${VERDICT_JSON}"`として渡す。Issue書込み権限は使わない。
+
+## Dispatch validatorと一回限りCAS
+
+`workflow_dispatch`はdefault branchをrefとし、親Check/session/slot/invocation、PR/gate/SHA、verdictを受ける。
+`gate human-submit`はGitHub APIを呼ぶ前にbackend=githubを要求し、default設定のadapter・Check名、実行repositoryとpublisher App ID、
+現在のPR metadata/profile/headを再導出する。同一repo-wide concurrency group
+`asc-human:<repository-id>:<pr>:<gate>`の中で親/slotを再読し、親と対象slotが`awaiting`かつ全provenance
+一致時だけslotを`consuming`へ更新する。直後に再読して所有を確認し、不一致ならsuccessを書かない。
+slot充足後だけ親を同じexpected-state手順で`consuming`へ移す。同じcanonical verdict digestのreplayは
+既存Check URLを返し、異なるdigest・消費済slotは拒否する。publisherは新しいrequired Checkを作らず
+同じ親Check IDをPATCHする。
+
+## Verdict・artifact・Strict集約
+
+workflow inputはenvへ割り当て、`printf '%s' "$VERDICT_JSON"`でstdinへ渡す。式をshell本文へ直接展開せず、
+token・verdictをlogへ出さない。verdictは2観点とorigin付きfindingだけを受け、`pending`、未知field、
+空evidence、上限超過を拒否する。artifact full-setはsegment manifestの必須outputとbase/target差分の
+当該segment分類をunionし、正規化・sort・重複排除した非空集合とする。全blobを
+`git show <target>:<path>`で読み、各SHA-256とcanonical集合SHA-256をtrusted側で算出する。
+
+Standardは固定1 durable slot、Strictは別slot・別invocation・別actorの2件を待ち、両slotの
+Issue/gate/SHA/profile/sessionとartifact集合が完全一致する場合だけIssue #277の共通aggregatorへ渡す。
+不足・不正・`human_required`を最優先、次にreject、両方approveだけをapproveとする。slot提出後も
+必要数未満なら親は`awaiting/action_required`を維持し、2件揃った時だけ親をterminalへCAS更新する。
+
+## Sequence・権限境界
+
+```text
+PR event -> trusted opener: default CLIでcontext/artifact/profileを導出
+trusted opener -> Checks API: 親action_required + durable slot + 復帰command
+human A -> dispatch: slot-1 verdictのみ
+dispatch -> trusted submit: provenance再検証 -> slot-1 CAS
+human B -> dispatch: slot-2 verdictのみ
+dispatch -> trusted submit: provenance再検証 -> slot-2 CAS
+trusted submit -> common aggregator: 2 slotを集約
+trusted submit -> Checks API: 同じ親Check IDをterminalへPATCH
+```
+
+レビュアはleaseなし・成果物read-only、trusted publisherだけがChecks APIへ書く。implementation workerの
+code変更には通常のwriter leaseを要求する。local backendは既存marker/reportだけを使い、本commandは
+GitHub API前に拒否する。workflow tokenはdefault branch CLI stepだけへ渡し、PR codeやhumanへ渡さない。
+
+## 障害・ロールバック・関連ADR
+
+API/fetch/build/CAS/cleanup失敗は親をsuccessにせず、CAS前なら`awaiting`、所有取得後なら
+`human_required`へ証跡付きで停止する。head/profile/adapter変更は旧sessionをinvalidatedにする。
+workflow、CLI、adapter通知、templateを同時にrollbackし、片側だけ残さない。未決事項はない。
 
 ```yaml
-related_adrs: []
+related_adrs: [ADR-0011]
 ```
-
-## 障害・ロールバック考慮
-
-- stale/closed/external PR、不正verdict、fetch/API失敗はCheckを更新せず既存blockを維持する。
-- Checks API失敗はjob failureとして可視化し、successへ倒さない。
-- rollbackはworkflow、CLI command、human通知を同時に戻す。通知だけを残してはならない。
-- 影響範囲はhuman GitHub gateの復帰経路。Claude Code/Codex、local gate、4ゲート名は不変。
-
-## 完了条件・未決事項
-
-全ACの正常・反例テスト、権限検査、template sync、全回帰を通す。未決事項はない。

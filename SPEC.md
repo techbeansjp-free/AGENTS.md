@@ -1,4 +1,4 @@
-# SPEC: human adapterの復帰案内と実行可能なWorkflow入口を一致させる
+# SPEC: human gateの停止状態と復帰入口を同じtrusted sessionへ結線する
 
 - Issue: `ISSUE-278`
 - 作成者: `human_rerun_entry`
@@ -6,86 +6,95 @@
 
 ## 目的・背景
 
-GitHubモードのhuman gate reviewerは、判定を非同期の人間へ委ねると
-`human_required`を記録し、required Checkを`action_required`として停止する。
-現在の通知は判定後のworkflow再実行を案内するが、実在する手動起動入口と、
-どのPR head SHAをどのrequired Checkとして再評価するかの契約がない。
-本Issueは、停止後に実行できる復帰入口と自己完結した案内を提供し、
-誤ったSHAへの承認やadapterの権限拡大を防ぐ。
+GitHubモードのhuman gateは、非同期判定を待つ間required Checkを`action_required`にする。
+復帰操作は単なるworkflow再実行ではなく、停止を作ったPR head・gate・review profile・Check Runへ
+一回限りで結線されなければならない。本Issueは初回通知と判定提出をdefault branchのtrusted処理へ
+限定し、PR codeへのwrite token露出、別Checkへの承認、replay、backend二重化を防ぐ。
 
 ## 前提・用語・入出力
 
-- 前提: GitHubモードで、対象PRはopenかつ同一repository内にあり、human reviewerを選択している。
-- 「復帰入口」: write権限を持つ人間が明示起動でき、trusted処理がCheck Runを発行するGitHub Actions workflow。
-- 入力: PR番号、gate ID、40桁のtarget SHA、人間のconformance/falsification verdictとorigin付きfinding。
-- 出力: target SHAに結線された`agent-skill-chain/<gate>-gate` Check Runと、成功または安全側停止の実行記録。
-- 権限境界: 人間レビュアはread-onlyで判定を返し、Check Run書込みはtrusted workflowだけが行う。
+- 対象: `coordination.backend: github`、openかつsame-repositoryのPR、`review.adapter: human`。
+- human gate session: required Check Runを親とし、session ID、publisher App、PR、Issue、gate、target SHA、
+  profile、trusted CLI SHA、期待slot、状態、submission digestを保持するGitHub正準レコード。
+- 状態: `awaiting`、`consuming`、`approved`、`rejected`、`human_required`、`invalidated`。
+- 初回入力: trustedなPR event、base/head repository、PR番号、branch、head SHA、label、gate。
+- 判定入力: 親Check Run ID、session ID、slot、invocation ID、PR番号、gate、target SHA、
+  conformance/falsification、origin付きfinding。artifact path/digestは人間入力にしない。
+- 出力: 同じ親Check Run IDの`success|failure|action_required`と、actor・workflow run・slot判定を含む証跡。
+- ローカルモードの正本は従来どおり`reviews/<gate>.yaml`であり、GitHub sessionを作らない。
 
-## 要求 → 要件 → 受入条件
+## 要求・要件
 
-### 要求
+human adapterの停止通知から判定提出までを、default branchのtrusted CLI、GitHub正準session、
+target commitのread-only Git objectという3境界へ分離する。
 
-human adapterが`action_required`で停止した後、通知どおりの実在する操作だけで、
-対象PRの現在のhead SHAを安全に再評価できるようにする。
+- 初回通知はPR codeを実行せず、required Check summaryへ実在workflow名、全入力、権限を記録する。
+- session作成・提出はopen/same-repo/current head、branch、Issue、human adapter、profileを再検証する。
+- 親Checkの`external_id`と機械可読outputを一回限りCAS相当で更新し、別Checkをsuccessとして作らない。
+- Check名はdefault branch設定の`config.checks[gate]`からのみ導出する。
+- expected artifact full-setはtrusted処理がbase/target差分とsegment出力から導出し、target Git objectから
+  全digestと集合digestを計算する。空・不足・余分・重複を成功にしない。
+- Standardは1 slot、Strictは別actor・別invocationの固定2 slotをGitHub上で耐久化し、
+  一般trusted aggregationの完全一致・優先順位規則で親Checkを確定する。
+- verdict欠落、不正JSON、不正finding、`pending`、判定不能、stale session、API失敗はsuccessにしない。
+- 同じsession・submission digestのreplayは既存結果を返し、異なる再提出は新sessionなしでは拒否する。
 
-### 要件
+## 受入条件
 
-- 配布元と展開先の両方に、明示的な手動起動入口を持つ。
-- 復帰処理はopen PR、同一repository、現在のPR head SHA、許可されたgate IDを照合する。
-- Check名は設定済みrequired Check名から導出し、入力で任意名を指定させない。
-- verdictをschema準拠reportへtrusted処理で結線し、`pending`や不正入力を成功にしない。
-- human adapterの通知は実在するworkflow名、必須入力、対象SHA、権限要件を示す。
-- Claude Code/Codexの自動reviewer経路とhumanの非同期責務を混在させない。
+### AC-1: trustedな初回通知
 
-### 受入条件（Acceptance Criteria）
+- Given: GitHub human gateが開始される
+- When: trusted default-branch workflowがsessionを作る
+- Then: PR codeへwrite tokenを渡さず、親`action_required` Checkに実行可能な復帰commandと全識別子を記録する（検証: `automated`）
 
-#### AC-1: 実在する復帰入口を案内する
+### AC-2: 現在headと停止Checkへの結線
 
-- Given: GitHubモードのhuman gate reviewerが`action_required`で停止する
-- When: human adapterが復帰手順を通知する
-- Then: 実在する手動workflow入口、PR番号、gate ID、target SHA、verdict、必要権限が自己完結して示される
-- 検証方法見込み: `automated`
+- Given: 人間が判定を提出する
+- When: PRがclosed/external、head・gate・Issue・adapter・profile・session・Check IDのいずれかが不一致である
+- Then: Checkを更新せず明示エラーで停止する（検証: `automated`）
 
-#### AC-2: 現在のPR head SHAだけを再評価する
+### AC-3: 一回限りCASと冪等性
 
-- Given: 人間が復帰workflowを起動する
-- When: PRがclosed、別repository由来、または入力SHAが現在のPR head SHAと異なる
-- Then: Check Runを成功として発行せず、明示エラーで停止する
-- 検証方法見込み: `automated`
+- Given: `awaiting` sessionがある
+- When: 同一PR/gateの提出が並行または再実行される
+- Then: 1件だけが`consuming`へ遷移し、同一digest replayはno-op、相反提出は拒否され、新Checkを作らない（検証: `automated`）
 
-#### AC-3: required Check名とgateを固定対応させる
+### AC-4: required Check名とfull-set証跡
 
-- Given: 許可されたgate IDと検証済みtarget SHAがある
-- When: trusted workflowが人間verdictを発行する
-- Then: 設定から導出した当該gateのrequired Check名だけをtarget SHAへ発行する
-- 検証方法見込み: `automated`
+- Given: 検証済みsessionとtarget commitがある
+- When: trusted処理が最終判定を発行する
+- Then: config由来の同じ親Checkだけを更新し、全期待artifactのGit object digestと集合digestを保存する（検証: `automated`）
 
-#### AC-4: 不完全・不正なverdictはfail-closedになる
+### AC-5: 不完全・不正な判定はfail-closed
 
-- Given: verdictが欠落、不正JSON、schema不適合、`pending`、または判定不能である
-- When: 復帰workflowがverdictを処理する
-- Then: `success`を発行せず、既存の`action_required`を解除しない
-- 検証方法見込み: `automated`
+- Given: JSON欠落、不正値、`pending`、空/不一致artifact集合、判定不能、API/fetch失敗がある
+- When: 復帰workflowが処理する
+- Then: `success`を発行せず、sessionを再利用可能な成功状態へ倒さない（検証: `automated`）
 
-#### AC-5: adapter責務と配布同期を維持する
+### AC-6: Strict 2-slotの正常復帰
 
-- Given: Claude Code、Codex、humanのadapterとGitHub workflowテンプレートが存在する
-- When: 復帰入口を追加する
-- Then: humanだけが非同期復帰手順を案内し、自動adapterの起動責務は変えず、配布元と展開先が一致する
-- 検証方法見込み: `automated`
+- Given: session profileがStrictである
+- When: 別actor・別invocationの2 slotが同じ対象へ判定を提出する
+- Then: 2件を耐久証跡から集約し、両方approveかつ証跡一致時だけ親Checkをsuccessにする（検証: `automated`）
 
-## 制約・完了条件・検証
+### AC-7: backend・role境界
 
-- 4ゲート、Check名、gate-report schema、adapter選択規則は変更しない。
-- workflow権限は`contents: read`、`pull-requests: read`、`checks: write`の最小範囲とする。
-- 正常、stale SHA、closed/外部PR、不正gate、不正verdict、通知とworkflow定義の一致を自動テストする。
-- 全ACの証跡と回帰結果を`VALIDATION.md`へ記録し、配布同期検査を通過すれば完了とする。
-- 未決事項: なし。
+- Given: CLIがlocal backend、または自動adapter選択で呼ばれる
+- When: human GitHub session commandが要求される
+- Then: GitHub API前に拒否し、local report、自動adapter、writer lease、成果物branchを変更しない（検証: `automated`）
 
-## スコープ外
+### AC-8: 配布・監査契約
 
-- 人間のレビュー内容そのものの自動生成
-- GitHub利用者・token・secretの作成や権限付与
-- Claude Code/Codexの認証・モデル選択・自動reviewer実装
-- Strict profileの独立レビュア件数集約（Issue #277の責務）
-- `action_required`以外のゲート状態モデル変更
+- Given: workflow、human adapter、CLI、テンプレートが存在する
+- When: sessionを開始・提出・replayする
+- Then: 配布元/展開先が一致し、actor・run/session/check/slot IDを秘密値なしで再現できる（検証: `automated`）
+
+## 制約・完了条件・対象外
+
+- 4ゲートとrequired Check名は変更しない。workflow権限は`contents: read`、`pull-requests: read`、
+  `checks: write`に限定し、Issue書込み権限を追加しない。
+- verdictはenv経由でstdinへ渡し、workflow式をshell本文へ展開しない。入力・Check outputは上限を設ける。
+- Strict集約規則はIssue #277由来の共通契約を再利用し、本IssueはGitHub耐久化と復帰結線だけを担う。
+- 正常、stale、external、権限、replay、並行、Strict不足/正常、artifact反例、local拒否を自動検証し、
+  全AC証跡を`VALIDATION.md`へ保存すれば完了する。
+- 対象外: 人間のレビュー内容生成、credential作成、Claude Code/Codexの自動判定実装、4ゲート変更。
