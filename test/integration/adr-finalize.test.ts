@@ -98,13 +98,11 @@ test('adr finalize (local backend): design gate承認済みのADRをaccepted化�
   // Given: design segment のwriter leaseを取得し、ADRのcontent digestをdesign gateで承認済みにする。
   const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'design'], { cwd: repo.dir });
   assert.equal(acquire.status, 0, acquire.stderr);
-  const tokenMatch = /token:\s*(\S+)/.exec(acquire.stdout);
-  assert.ok(tokenMatch);
-  const token = tokenMatch![1];
+  assert.doesNotMatch(acquire.stdout + acquire.stderr, /token:/);
 
   approveDesignGateFor(repo, worktreePath, adrPath, adrRelPath);
 
-  const release = runCli(['lease', 'release', 'ISSUE-1', token], { cwd: repo.dir });
+  const release = runCli(['lease', 'release', 'ISSUE-1'], { cwd: repo.dir });
   assert.equal(release.status, 0, release.stderr);
 
   // When: adr finalize を実行する。

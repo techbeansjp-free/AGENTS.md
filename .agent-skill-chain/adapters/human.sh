@@ -36,13 +36,13 @@ acquire_lease() {
 }
 
 # 保持中の writer lease を延長する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.renewal_interval_seconds を用いる。
-# 引数: issue_id, token
+# 引数: issue_id（tokenはGit管理外credentialから暗黙に取得）
 renew_lease() {
   "$SCRIPTS_DIR/lease-renew.sh" "$@"
 }
 
 # 保持中の writer lease を解放する。
-# 引数: issue_id, token
+# 引数: issue_id（tokenはGit管理外credentialから暗黙に取得）
 release_lease() {
   "$SCRIPTS_DIR/lease-release.sh" "$@"
 }
@@ -190,14 +190,8 @@ launch_worker() {
   esac
 
   # lease取得。失敗時はまだ何も起動していないため blocked報告なしで即 return 1。
-  local lease_yaml token
-  if ! lease_yaml="$(acquire_lease "$issue_id" "$segment")"; then
+  if ! acquire_lease "$issue_id" "$segment" >/dev/null; then
     echo "launch_worker: writer lease の取得に失敗しました（wip.limit超過または既存leaseとの競合）" >&2
-    return 1
-  fi
-  token="$(sed -n 's/^[[:space:]]*token:[[:space:]]*//p' <<<"$lease_yaml" | head -n1)"
-  if [[ -z "$token" ]]; then
-    echo "launch_worker: 取得した writer lease から token を抽出できませんでした" >&2
     return 1
   fi
 
@@ -205,13 +199,13 @@ launch_worker() {
   local contract role
   if ! contract="$(_asc_cli segment start "$issue_id" "$segment")"; then
     echo "launch_worker: segment start に失敗しました（role_contract取得不可）" >&2
-    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   fi
   role="$(sed -n 's/^role:[[:space:]]*//p' <<<"$contract" | head -n1)"
   if [[ -z "$role" ]]; then
     echo "launch_worker: segment start の出力から role を抽出できませんでした" >&2
-    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   fi
 
@@ -219,7 +213,7 @@ launch_worker() {
   local ctx backend issue_number
   ctx="$(_asc_cli worker context "$issue_id")" || {
     echo "launch_worker: worker context の解決に失敗しました" >&2
-    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   }
   backend="$(sed -n 's/^backend=//p' <<<"$ctx")"
@@ -243,20 +237,19 @@ launch_worker() {
 - issue: ${issue_id}
 - segment: ${segment}
 - role: ${role}
-- lease_token: ${token}
 
 役割・入力・出力・規約（segment start の出力全文）:
 ${contract}
 
 作業手順:
   1. 上記契約に従い成果物を作成・編集する（自worktree内でのみ作業する）。
-  2. 長時間作業になる場合は 'agent-skill-chain lease renew ${issue_id} ${token}' を
+  2. 長時間作業になる場合は 'agent-skill-chain lease renew ${issue_id}' を
      renewal_interval_seconds（既定900秒）間隔で自ら呼び出すこと（怠るとTTL切れで
      reconcileが回収し人間判断へ再エスカレーションされる＝安全側だが二度手間になる）。
   3. 完了時は以下を自ら実行すること:
      - 'agent-skill-chain checkpoint "<message>"'（commit + push）${pr_step}
      - 'agent-skill-chain report status ${issue_id} ${role} ${segment} completed <target_sha>'
-     - 'agent-skill-chain lease release ${issue_id} ${token}'
+     - 'agent-skill-chain lease release ${issue_id}'
 EOF
   )"
 

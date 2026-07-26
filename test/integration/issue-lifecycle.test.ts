@@ -33,9 +33,7 @@ test('issue lifecycle (local backend): start -> lease -> segment -> gate -> chec
 
   const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: repo.dir });
   assert.equal(acquire.status, 0, acquire.stderr);
-  const tokenMatch = /token:\s*(\S+)/.exec(acquire.stdout);
-  assert.ok(tokenMatch, 'lease acquire は token を含む writer_lease YAML を出力すること');
-  const token = tokenMatch![1];
+  assert.doesNotMatch(acquire.stdout + acquire.stderr, /token:/, 'lease acquire はtokenをCLIへ出力しないこと');
 
   const acquireConflict = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: repo.dir });
   assert.equal(acquireConflict.status, 1, '有効な既存leaseと競合する再取得は失敗すること');
@@ -62,7 +60,7 @@ test('issue lifecycle (local backend): start -> lease -> segment -> gate -> chec
   const gatePublish = runCli(['gate', 'publish', 'ISSUE-1', gateReportPath], { cwd: repo.dir });
   assert.equal(gatePublish.status, 0, gatePublish.stderr);
 
-  const release = runCli(['lease', 'release', 'ISSUE-1', token], { cwd: repo.dir });
+  const release = runCli(['lease', 'release', 'ISSUE-1'], { cwd: repo.dir });
   assert.equal(release.status, 0, release.stderr);
   assert.equal(release.stdout.trim(), 'ISSUE-1');
 
