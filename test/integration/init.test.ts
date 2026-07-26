@@ -51,6 +51,21 @@ test('init: 標準資産・.agent-skill-chain名前空間（hooks含む）・.gi
   assert.equal(installedVersion.trim(), pkg.version);
 });
 
+test('init: 導入されたAGENTS.mdに実際のupgrade起動コマンド構文が記載されている（Issue #298）', (t) => {
+  const targetDir = mkScratch('init-upgrade-doc-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const agentsMd = fs.readFileSync(path.join(targetDir, 'AGENTS.md'), 'utf8');
+  assert.match(
+    agentsMd,
+    /npx github:techbeansjp-free\/AGENTS\.md upgrade/,
+    'consumerが導入後に自リポジトリ内だけでアップグレード起動コマンドを再発見できること',
+  );
+});
+
 test('init: 既存docs資産と衝突する場合は非破壊で停止し、終了コードが0以外になる', (t) => {
   const targetDir = mkScratch('init-conflict-target');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
