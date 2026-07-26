@@ -448,6 +448,15 @@ function assertNoCoordinationSecretInVerdict(verdictText: string): void {
   }
 }
 
+/** レビュアCLI（`claude -p`等）の出力がMarkdownコードフェンス（```json ... ``` / ``` ... ```）で
+ * 囲まれている場合に中身だけを返す。囲まれていなければ入力をそのまま返す（構文的なアンラップのみ。
+ * JSONとして妥当かどうかの判定は後続のJSON.parseに委ねる。Issue #303）。 */
+function stripJsonCodeFence(text: string): string {
+  const trimmed = text.trim();
+  const match = /^```(?:json)?\r?\n([\s\S]*?)\r?\n```$/.exec(trimmed);
+  return match ? match[1] : trimmed;
+}
+
 function parseGhList<T>(stdout: string): T[] {
   const parsed = JSON.parse(stdout) as T[] | T[][];
   if (!Array.isArray(parsed)) throw new CliError('GitHub API一覧応答が配列ではありません');
@@ -862,7 +871,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
     try {
       const verdictText = fs.readFileSync(0, 'utf8');
       assertNoCoordinationSecretInVerdict(verdictText);
-      parsedVerdict = JSON.parse(verdictText);
+      parsedVerdict = JSON.parse(stripJsonCodeFence(verdictText));
     } catch (error) {
       throw new CliError(`verdict JSONを解釈できません: ${error instanceof Error ? error.message : String(error)}`);
     }

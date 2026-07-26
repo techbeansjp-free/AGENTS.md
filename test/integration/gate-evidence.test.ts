@@ -344,3 +344,96 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.notEqual(missingRequired.status, 0);
   assert.match(missingRequired.stderr, /必須成果物を読めません: SPEC\.md/);
 });
+
+test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェンスで囲まれていても内部のJSONを解釈する（Issue #303）', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-evidence-fence-'));
+  const stub = createGhStub(stubDir);
+  const env = stub.env(process.env);
+  const tokenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-local-review.'));
+  fs.chmodSync(tokenDir, 0o700);
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+    fs.rmSync(tokenDir, { recursive: true, force: true });
+  });
+
+  const baseSha = git(repo.dir, ['rev-parse', 'HEAD']);
+  git(repo.dir, ['checkout', '-b', 'process/303-fence-test']);
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: evidence\n');
+  git(repo.dir, ['add', 'SPEC.md']);
+  git(repo.dir, ['commit', '-m', 'test: add evidence target']);
+  const targetSha = git(repo.dir, ['rev-parse', 'HEAD']);
+  git(repo.dir, ['checkout', 'main']);
+
+  const state = stub.readState();
+  state.pullMetadata = {
+    number: 275,
+    state: 'open',
+    user: { login: 'adachi-tatsuru' },
+    head: { sha: targetSha, ref: 'process/303-fence-test' },
+    base: { sha: baseSha, ref: 'main' },
+  };
+  state.pullCommits = [{ author: { login: 'adachi-tatsuru' }, committer: { login: 'adachi-tatsuru' } }];
+  stub.writeState(state);
+
+  const rawVerdict = {
+    conformance: 'pass',
+    falsification: 'pass',
+    blockers: [],
+    approved_artifacts: [{ path: 'SPEC.md' }],
+    inconclusive: false,
+  };
+
+  // slot毎に独立したlauncher tokenを用意し、1件ずつ standard profile（expected_count: 1）で
+  // submit-evidence を呼ぶ。目的はfence除去の可否のみの検証であり、Strictの2体集約・
+  // Check Run結線までは検証しない（それは既存の「GitHub evidence: ...」テストが担う）。
+  function submitWithBody(runId: string, body: string): ReturnType<typeof runCli> {
+    const tokenPath = path.join(tokenDir, `${runId}.json`);
+    fs.writeFileSync(tokenPath, `${JSON.stringify({
+      schema_version: 'agent-skill-chain/launcher-token/v1',
+      attempt_id: `attempt-${runId}`,
+      expected_count: 1,
+      profile: 'standard',
+      target_sha: targetSha,
+      base_sha: baseSha,
+      pr_number: '275',
+      nonce: 'f'.repeat(48),
+      slots: [{ slot: 1, run_id: runId }],
+      consumed_slots: [],
+    })}\n`, { mode: 0o600 });
+    return runCli(
+      [
+        'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'standard', targetSha, baseSha, baseSha, '275',
+        `attempt-${runId}`, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      ],
+      { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: body },
+    );
+  }
+
+  // AC-1: フェンス無しの素のJSONは従来通り解釈できる。
+  const plain = submitWithBody('review-fence-plain', JSON.stringify(rawVerdict));
+  assert.equal(plain.status, 0, plain.stderr);
+
+  // AC-2: ```json フェンス付きでも解釈できる。
+  const fencedJson = submitWithBody(
+    'review-fence-json',
+    `\`\`\`json\n${JSON.stringify(rawVerdict)}\n\`\`\`\n`,
+  );
+  assert.equal(fencedJson.status, 0, fencedJson.stderr);
+
+  // AC-3: 言語指定無しの ``` フェンスでも解釈できる。
+  const fencedPlain = submitWithBody(
+    'review-fence-bare',
+    `\`\`\`\n${JSON.stringify(rawVerdict)}\n\`\`\`\n`,
+  );
+  assert.equal(fencedPlain.status, 0, fencedPlain.stderr);
+
+  // AC-4: フェンスを除去しても不正なJSONはエラーのまま（曖昧に成功扱いにしない）。
+  const fencedInvalid = submitWithBody(
+    'review-fence-invalid',
+    '```json\n{not valid json\n```\n',
+  );
+  assert.notEqual(fencedInvalid.status, 0);
+  assert.match(fencedInvalid.stderr, /verdict JSONを解釈できません/);
+});
