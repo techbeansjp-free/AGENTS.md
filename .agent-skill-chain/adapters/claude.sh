@@ -81,6 +81,50 @@ _asc_cli() {
   fi
 }
 
+# AI reviewerへはmodel providerのローカルlogin保存先だけを渡し、GitHub credential・gh/git設定・
+# caller HOMEを渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace以外の読取りは不要。
+_run_reviewer_sanitized() {
+  local prompt="$1" reviewer_cmd="$2" timeout_sec="$3"
+  local isolated_root="${ASC_REVIEWER_SANITIZED_ROOT:-}"
+  local owns_root=false
+  if [[ -z "$isolated_root" ]]; then
+    isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-reviewer.XXXXXX")"
+    owns_root=true
+  fi
+  mkdir -p "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
+  chmod 700 "$isolated_root" "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
+
+  local original_home="${ASC_REVIEWER_ORIGINAL_HOME:-${HOME:-}}"
+  local codex_home="${CODEX_HOME:-${original_home:+$original_home/.codex}}"
+  local claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
+  local -a clean_env=(
+    env -i
+    "PATH=$PATH"
+    "HOME=$isolated_root/home"
+    "XDG_CONFIG_HOME=$isolated_root/xdg"
+    "GH_CONFIG_DIR=$isolated_root/xdg/gh"
+    "GIT_CONFIG_GLOBAL=/dev/null"
+    "GIT_CONFIG_SYSTEM=/dev/null"
+    "GIT_TERMINAL_PROMPT=0"
+    "TMPDIR=${TMPDIR:-/tmp}"
+    "LANG=${LANG:-C.UTF-8}"
+    "LC_ALL=${LC_ALL:-}"
+    "ASC_REVIEWER_SANITIZED_ROOT=$isolated_root"
+  )
+  [[ -n "$codex_home" && -d "$codex_home" ]] && clean_env+=("CODEX_HOME=$codex_home")
+  [[ -n "$claude_config" && -d "$claude_config" ]] && clean_env+=("CLAUDE_CONFIG_DIR=$claude_config")
+
+  local rc=0 output=""
+  if command -v timeout >/dev/null 2>&1; then
+    output="$(printf '%s' "$prompt" | timeout "$timeout_sec" "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+  else
+    output="$(printf '%s' "$prompt" | "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+  fi
+  [[ "$owns_root" == "true" ]] && rm -rf -- "$isolated_root"
+  printf '%s' "$output"
+  return "$rc"
+}
+
 # writer lease を取得する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる。
 # 引数: issue_id, segment
 acquire_lease() {
@@ -143,7 +187,9 @@ report_status() {
 # 終了コード: 0=判定完了 / 2（!=0,!=3）=error（final=human_required 書込み後）。
 # env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、高速パス）、
 #      CLAUDE_AUTH_PROBE_CMD | CLAUDE_AUTH_PROBE_TIMEOUT_SEC（認証の実疎通フォールバック、_claude_auth_ok参照）、
-#      GATE_REVIEWER_CMD（レビュア実行系の上書き）、
+#      GATE_REVIEWER_CMD（通常レビューの実行系上書き）、CLAUDE_REVIEWER_MODEL（通常レビューの明示model）、
+#      CLAUDE_CORE_REVIEW_MODEL / CLAUDE_CORE_REVIEW_MODEL_TIER /
+#      CLAUDE_CORE_REVIEW_REASONING_TIER / CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD（コアレビュー能力証明）、
 #      GATE_REVIEWER_TIMEOUT_SEC（既定900）、GATE_REVIEWER_RETRIES（既定3）、GATE_REVIEWER_RETRY_INTERVAL_SEC（既定30）。
 launch_gate_reviewer() {
   local issue_id="${1:-}" gate_id="${2:-}" profile="${3:-}" report_path="${4:-}" target_sha="${5:-}"
@@ -171,6 +217,44 @@ launch_gate_reviewer() {
     return 2
   }
 
+  local core_claude_review=false
+  if [[ "${ASC_CORE_REVIEW_REQUIRED:-false}" == "true" && "${ASC_REVIEW_ADAPTER:-claude}" == "claude" ]]; then
+    core_claude_review=true
+    if [[ "${CLAUDE_CORE_REVIEW_MODEL_TIER:-}" != "${ASC_CORE_MODEL_TIER:-frontier_coding}" ]]; then
+      _fail_safe "Claude core reviewer の model tier を frontier_coding と検証できません"
+      return
+    fi
+    if [[ "${CLAUDE_CORE_REVIEW_REASONING_TIER:-}" != "${ASC_CORE_REASONING_TIER:-maximum_reasoning}" ]]; then
+      _fail_safe "Claude core reviewer の reasoning tier を maximum_reasoning と検証できません"
+      return
+    fi
+    if [[ -z "${CLAUDE_CORE_REVIEW_MODEL:-}" || "${CLAUDE_CORE_REVIEW_MODEL:-}" == gpt-* ]]; then
+      _fail_safe "Claude core reviewer の実在modelが未指定、またはprovider不一致です"
+      return
+    fi
+    local reasoning_probe="${CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD:-}"
+    if [[ -z "$reasoning_probe" ]]; then
+      _fail_safe "Claude core reviewer の最大利用可能reasoningを検証するprobeが未設定です"
+      return
+    fi
+    local reasoning_probe_timeout="${CLAUDE_CORE_REVIEW_REASONING_PROBE_TIMEOUT_SEC:-20}"
+    if command -v timeout >/dev/null 2>&1; then
+      if ! timeout "$reasoning_probe_timeout" bash -c "$reasoning_probe" >/dev/null 2>&1; then
+        _fail_safe "Claude core reviewer のreasoning probeに失敗しました"
+        return
+      fi
+    elif ! bash -c "$reasoning_probe" >/dev/null 2>&1; then
+      _fail_safe "Claude core reviewer のreasoning probeに失敗しました"
+      return
+    fi
+    ASC_CAPABILITY_PROBE_PASSED=true
+    export ASC_CAPABILITY_PROBE_PASSED
+    if [[ -n "${GATE_REVIEWER_CMD:-}" ]]; then
+      _fail_safe "コアレビューではmodel指定を検証できない汎用GATE_REVIEWER_CMD上書きを許可しません"
+      return
+    fi
+  fi
+
   # 認証（実値はログ・stdout に出さない）。env非空の高速パス→claude auth statusの実疎通フォールバック
   # の2段判定（Issue #185 _claude_auth_ok）。真に認証が欠如している場合のみフェイルセーフする。
   if ! _claude_auth_ok; then
@@ -178,27 +262,44 @@ launch_gate_reviewer() {
     return
   fi
 
-  # レビュア実行系。GATE_REVIEWER_CMD で上書き可能。既定は claude CLI headless（無ツール＝read-only）。
+  # レビュア実行系。コア時は公式 --model と能力証明を必須化する。通常時だけ汎用上書きを許可する。
   local reviewer_cmd="${GATE_REVIEWER_CMD:-}"
   if [[ -z "$reviewer_cmd" ]]; then
-    if command -v claude >/dev/null 2>&1; then
-      reviewer_cmd="claude -p --output-format text --allowed-tools ''"
+    local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
+    if command -v "$claude_executable" >/dev/null 2>&1; then
+      local quoted_executable
+      printf -v quoted_executable '%q' "$claude_executable"
+      reviewer_cmd="$quoted_executable -p --output-format text --allowed-tools ''"
+      local selected_model=""
+      if [[ "$core_claude_review" == "true" ]]; then
+        selected_model="$CLAUDE_CORE_REVIEW_MODEL"
+      elif [[ -n "${CLAUDE_REVIEWER_MODEL:-}" ]]; then
+        selected_model="$CLAUDE_REVIEWER_MODEL"
+      fi
+      if [[ -n "$selected_model" ]]; then
+        local quoted_model
+        printf -v quoted_model '%q' "$selected_model"
+        reviewer_cmd+=" --model $quoted_model"
+      fi
     else
-      _fail_safe "claude CLI が見つからず GATE_REVIEWER_CMD も未設定です"
+      _fail_safe "Claude Code CLI が見つからず利用可能な実行系も未設定です"
       return
     fi
   fi
 
   # 判定プロンプト（ルーブリック・出力契約）を組み立てる。
   local prompt
-  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha")"; then
+  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}")"; then
     _fail_safe "判定プロンプトの生成に失敗しました"
     return
   fi
 
-  # 判定対象成果物の base_dir を解決（approved_artifacts の digest 算出に使う）。
-  local base_dir
-  base_dir="$(_asc_cli gate reviewer-context "$issue_id" | sed -n 's/^base_dir=//p')"
+  # backendと判定対象成果物のbase_dirを解決する。GitHub modeではreviewerはPR review evidenceだけを
+  # 投稿し、CIのprotected-base verifierがgate-reportへ結線する。
+  local reviewer_context base_dir backend
+  reviewer_context="$(_asc_cli gate reviewer-context "$issue_id")"
+  base_dir="$(sed -n 's/^base_dir=//p' <<<"$reviewer_context")"
+  backend="$(sed -n 's/^backend=//p' <<<"$reviewer_context")"
 
   local timeout_sec="${GATE_REVIEWER_TIMEOUT_SEC:-900}"
   local retries="${GATE_REVIEWER_RETRIES:-3}"
@@ -209,11 +310,7 @@ launch_gate_reviewer() {
   while ((attempt <= retries)); do
     verdict=""
     rc=0
-    if command -v timeout >/dev/null 2>&1; then
-      verdict="$(printf '%s' "$prompt" | timeout "$timeout_sec" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
-    else
-      verdict="$(printf '%s' "$prompt" | bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
-    fi
+    verdict="$(_run_reviewer_sanitized "$prompt" "$reviewer_cmd" "$timeout_sec")" || rc=$?
     if [[ $rc -eq 0 && -n "$verdict" ]]; then
       break
     fi
@@ -226,9 +323,25 @@ launch_gate_reviewer() {
     return
   fi
 
-  # verdict を gate-report へ結線（書込みは trusted CLI のみ）。
-  if ! printf '%s' "$verdict" | _asc_cli gate record-verdict "$report_path" "$base_dir" >/dev/null; then
-    _fail_safe "verdict の gate-report への結線に失敗しました"
+  if [[ "$backend" == "github" ]]; then
+    for required in ASC_EVIDENCE_BASE_SHA ASC_TRUSTED_BASE_SHA ASC_EVIDENCE_PR_NUMBER ASC_REVIEW_ATTEMPT_ID ASC_REVIEW_EXPECTED_COUNT ASC_LAUNCHER_TOKEN_FILE ASC_REVIEWER_RUN_ID ASC_REVIEWER_SLOT; do
+      if [[ -z "${!required:-}" ]]; then
+        _fail_safe "GitHub review evidence投稿に必要な $required がありません"
+        return
+      fi
+    done
+    local evidence_model="${ASC_REVIEW_MODEL:-${CLAUDE_CORE_REVIEW_MODEL:-${CLAUDE_REVIEWER_MODEL:-default}}}"
+    local evidence_reasoning="${ASC_REVIEW_REASONING:-${CLAUDE_CORE_REVIEW_REASONING_TIER:-explicit_selection}}"
+    if ! printf '%s' "$verdict" | _asc_cli gate submit-evidence \
+      "$issue_id" "$gate_id" "$profile" "$target_sha" "$ASC_EVIDENCE_BASE_SHA" "$ASC_TRUSTED_BASE_SHA" \
+      "$ASC_EVIDENCE_PR_NUMBER" "$ASC_REVIEW_ATTEMPT_ID" "$ASC_REVIEW_EXPECTED_COUNT" \
+      "$ASC_REVIEWER_RUN_ID" "$ASC_REVIEWER_SLOT" \
+      "${ASC_REVIEW_ADAPTER:-claude}" "$evidence_model" "$evidence_reasoning" >/dev/null; then
+      _fail_safe "verdict のGitHub PR review evidence投稿に失敗しました"
+      return
+    fi
+  elif ! printf '%s' "$verdict" | _asc_cli gate record-verdict "$report_path" "$base_dir" >/dev/null; then
+    _fail_safe "verdict のgate-reportへの結線に失敗しました"
     return
   fi
   return 0

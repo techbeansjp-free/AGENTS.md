@@ -14,6 +14,13 @@ properties:
     type: object
     required: [id, target_sha, conformance, falsification, final, blockers, approved_digest, approved_artifacts]
     additionalProperties: false
+    allOf:
+      - if:
+          required: [reviewers]
+          properties:
+            reviewers: {type: array, minItems: 1}
+        then:
+          required: [review_attempt]
     properties:
       id:
         type: string
@@ -46,6 +53,38 @@ properties:
           properties:
             path: {type: string}
             digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      reviewers:
+        type: array
+        description: GitHub Review API由来としてtrusted verifierが検証済みのreviewer metadata。
+        items:
+          type: object
+          required: [source, review_id, actor, run_id, slot, adapter, model, reasoning, prompt_digest,
+                     actor_relation, trusted_base_sha, launcher_digest, launcher_token_digest, isolation, sandbox]
+          additionalProperties: false
+          properties:
+            source: {const: github_pr_review}
+            review_id: {type: string, minLength: 1}
+            actor: {type: string, minLength: 1}
+            run_id: {type: string, minLength: 1}
+            slot: {type: integer, minimum: 1, maximum: 2}
+            adapter: {type: string, enum: [codex, claude, human]}
+            model: {type: string}
+            reasoning: {type: string}
+            prompt_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+            actor_relation: {type: string, enum: [same_as_writer, distinct_from_writer]}
+            trusted_base_sha: {type: string, minLength: 1}
+            launcher_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+            launcher_token_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+            isolation: {const: ephemeral_clone}
+            sandbox: {const: read_only}
+      review_attempt:
+        type: object
+        required: [attempt_id, expected_count, evidence_digest]
+        additionalProperties: false
+        properties:
+          attempt_id: {type: string, pattern: '^attempt-[A-Za-z0-9._-]+$'}
+          expected_count: {type: integer, minimum: 1, maximum: 2}
+          evidence_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
 
 definitions:
   finding:

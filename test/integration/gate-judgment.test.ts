@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, unsetAdapter } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
@@ -215,6 +216,72 @@ test('gate record-verdict: approved_artifacts のパスは artifact_base_dir か
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
 });
 
+test('gate record-verdict: Strictの独立2 verdictがともにpassの場合だけapprovedになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(repo.dir, scaffold());
+  const verdicts = JSON.stringify([
+    { conformance: 'pass', falsification: 'pass', blockers: [] },
+    { conformance: 'pass', falsification: 'pass', blockers: [] },
+  ]);
+  const res = runCli(['gate', 'record-verdict', reportPath, repo.dir, '2'], {
+    cwd: repo.dir,
+    input: verdicts,
+  });
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readReport(reportPath).gate.final, 'approved');
+});
+
+test('gate record-verdict: Strictの独立verdictに1件でもfailがあればrejectedになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(repo.dir, scaffold());
+  const verdicts = JSON.stringify([
+    { conformance: 'pass', falsification: 'pass', blockers: [] },
+    {
+      conformance: 'pass',
+      falsification: 'fail',
+      blockers: [
+        {
+          severity: 'blocking',
+          origin: 'implementation',
+          code: 'STRICT-COUNTEREXAMPLE',
+          evidence: ['独立レビュア2が反例を検出'],
+        },
+      ],
+    },
+  ]);
+  const res = runCli(['gate', 'record-verdict', reportPath, repo.dir, '2'], {
+    cwd: repo.dir,
+    input: verdicts,
+  });
+
+  assert.equal(res.status, 0, res.stderr);
+  const report = readReport(reportPath);
+  assert.equal(report.gate.final, 'rejected');
+  assert.equal(report.gate.falsification, 'fail');
+  assert.equal(report.gate.blockers[0].code, 'STRICT-COUNTEREXAMPLE');
+});
+
+test('gate record-verdict: Strictの独立verdictが規定件数に満たない場合は書込みを拒否する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(repo.dir, scaffold());
+  const verdicts = JSON.stringify([{ conformance: 'pass', falsification: 'pass', blockers: [] }]);
+  const res = runCli(['gate', 'record-verdict', reportPath, repo.dir, '2'], {
+    cwd: repo.dir,
+    input: verdicts,
+  });
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /expected=2, actual=1/);
+  assert.equal(readReport(reportPath).gate.final, 'pending');
+});
+
 // --- mark-human-required: フェイルセーフ書込み ----------------------------------------
 
 test('gate mark-human-required: final を human_required に倒す（sub-verdict は据え置き）', async (t) => {
@@ -245,18 +312,54 @@ test('gate reviewer-context: adapter/backend/issue_number/base_dir を出力す�
   assert.match(res.stdout, /^backend=local$/m);
   assert.match(res.stdout, /^issue_number=1$/m);
   assert.match(res.stdout, /^base_dir=/m);
+  assert.match(res.stdout, /^core_review_required=false$/m);
+  assert.match(res.stdout, /^core_review_status=resolved$/m);
+});
+
+test('gate reviewer-context: 明示core_auditはStrictとadapter別能力要求を出力する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const res = runCli(
+    ['gate', 'reviewer-context', 'ISSUE-1', 'deadbeef', 'main', 'core_audit'],
+    { cwd: repo.dir },
+  );
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /^core_review_required=true$/m);
+  assert.match(res.stdout, /^core_review_status=resolved$/m);
+  assert.match(res.stdout, /^core_required_profile=strict$/m);
+  assert.match(res.stdout, /^core_model_tier=frontier_coding$/m);
+  assert.match(res.stdout, /^core_reasoning_tier=maximum_reasoning$/m);
+  assert.match(res.stdout, /^codex_required_model=gpt-5\.6-sol$/m);
+  assert.match(res.stdout, /^codex_required_reasoning_effort=xhigh$/m);
+});
+
+test('gate reviewer-context: GitHub core reviewも明示adapterを保ちCIは証跡検証専用になる', async (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+
+  const res = runCli(
+    ['gate', 'reviewer-context', 'ISSUE-1', 'deadbeef', 'main', 'core_audit'],
+    { cwd: repo.dir },
+  );
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /^adapter=claude$/m);
+  assert.match(res.stdout, /^core_reviewer_location=local$/m);
+  assert.match(res.stdout, /^core_evidence_transport=github_pr_review$/m);
+  assert.match(res.stdout, /^core_ci_role=verify_and_publish$/m);
+  assert.match(res.stdout, /^core_reviewer_count=2$/m);
 });
 
 test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック・出力 JSON 契約を含む', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
-  // worktree 無しでも issues/<n>/ 配下から成果物を収集できることを確認する。
-  const baseDir = path.join(repo.dir, 'issues', '1');
-  fs.mkdirSync(baseDir, { recursive: true });
-  fs.writeFileSync(path.join(baseDir, 'SPEC.md'), '# SPEC\n\nAC-1: 認証\nAC-2: 認可\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: 認証\nAC-2: 認可\n', 'utf8');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: add prompt target'], { cwd: repo.dir });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
 
-  const res = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', 'deadbeef'], { cwd: repo.dir });
+  const res = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
   assert.equal(res.status, 0, res.stderr);
   assert.match(res.stdout, /AC-1, AC-2/);
   assert.match(res.stdout, /conformance/);

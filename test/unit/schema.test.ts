@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { validateAgainstSchema, getValidator, type SchemaName } from '../../src/lib/schema.js';
 import { readYamlFile } from '../../src/lib/yaml-io.js';
-import { resolveAsset } from '../../src/lib/paths.js';
+import { packageRoot, resolveAsset } from '../../src/lib/paths.js';
 
 const SCHEMA_NAMES: SchemaName[] = [
   'config',
@@ -71,6 +71,15 @@ test("validateAgainstSchema('state'): title/requestを持たない既存stateは
   );
   const outcome = validateAgainstSchema('state', withoutIssueBody);
   assert.deepEqual(outcome, { valid: true, errors: [] });
+});
+
+test("validateAgainstSchema('state'): review_subject=core_auditを許可し未知値を拒否する", () => {
+  const doc = loadSchemaDoc('state');
+  const coreAudit = { ...structuredClone(doc.examples[0]), review_subject: 'core_audit' };
+  assert.deepEqual(validateAgainstSchema('state', coreAudit, packageRoot()), { valid: true, errors: [] });
+
+  const invalid = { ...structuredClone(doc.examples[0]), review_subject: 'weak-review' };
+  assert.equal(validateAgainstSchema('state', invalid, packageRoot()).valid, false);
 });
 
 test('validateAgainstSchema: 実物の config/agent-skill-chain.yaml をそのまま渡すとvalidになる', () => {

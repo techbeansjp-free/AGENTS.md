@@ -6,6 +6,7 @@ import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES } from '../lib/asset-manifest.js
 import { readYamlFile } from '../lib/yaml-io.js';
 import { gh } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
+import { parseDedicatedAppId } from '../lib/trust-backend.js';
 
 const SETUP_USAGE = `
 使い方: agent-skill-chain setup [target_dir]
@@ -36,10 +37,16 @@ const LABELS_USAGE = `
 const RULESET_USAGE = `
 使い方: agent-skill-chain setup ruleset [owner/repo]
 
+環境変数:
+  ASC_GATE_APP_ID: required gate Checkを発行する専用GitHub App ID（secretではない）。
+
 出力:
   成功時: 終了コード0。適用したrulesetの内容を標準出力へ。
   失敗時: 終了コード1以上。gh api のエラーを標準エラー出力に転記。
 `;
+
+const GATE_CHECK_NAMES = ['spec', 'design', 'implementation', 'validation']
+  .map((gate) => `agent-skill-chain/${gate}-gate`);
 
 export interface GithubBundleDecision {
   /** true の場合のみ githubBundle()（GitHub固有処理）を実行する。 */
@@ -104,18 +111,9 @@ export async function setup(args: string[]): Promise<number> {
       summary.push(...results.map((r) => `${r.action}: ${r.path}`));
     }
 
-    // Issue #188 AC-1/AC-2: コピー済み config の coordination.backend を読み、github 明示時のみ
-    // GitHub固有処理を実行する。local・config不読時は安全側でスキップする。
-    const decision = decideGithubBundle(targetDir);
-    if (decision.run) {
-      const githubResult = githubBundle(targetDir);
-      if (githubResult.status !== 0) {
-        return fail(`setup github で失敗しました:\n${githubResult.message}`);
-      }
-      summary.push(githubResult.message);
-    } else {
-      summary.push(decision.message);
-    }
+    // 非推奨aliasから外部状態やconsumerの.githubを暗黙変更しない。GitHub連携は
+    // `setup github` という明示的なopt-inだけが実行する。
+    summary.push('[setup github] 未実行: 必要な場合だけ setup github を明示実行してください');
 
     return ok(summary.join('\n'));
   });
@@ -123,6 +121,10 @@ export async function setup(args: string[]): Promise<number> {
 
 function githubBundle(targetDir: string): { status: number; message: string } {
   const lines: string[] = [];
+  const rulesetPreflight = loadRenderedRuleset(targetDir, process.env);
+  if (rulesetPreflight.status !== 0) {
+    return { status: 1, message: `[setup ruleset preflight] ${rulesetPreflight.message}` };
+  }
   const syncExit = syncStep(targetDir);
   if (syncExit.status !== 0) return { status: 1, message: `[sync templates] ${syncExit.message}` };
   lines.push(`[sync templates]\n${syncExit.message}`);
@@ -131,11 +133,59 @@ function githubBundle(targetDir: string): { status: number; message: string } {
   if (labelsExit.status !== 0) return { status: 1, message: `[setup labels] ${labelsExit.message}` };
   lines.push(`[setup labels]\n${labelsExit.message}`);
 
-  const rulesetExit = rulesetStep(undefined, targetDir);
+  const rulesetExit = rulesetStep(undefined, targetDir, rulesetPreflight.body);
   if (rulesetExit.status !== 0) return { status: 1, message: `[setup ruleset] ${rulesetExit.message}` };
   lines.push(`[setup ruleset]\n${rulesetExit.message}`);
 
   return { status: 0, message: lines.join('\n') };
+}
+
+type RulesetDocument = {
+  name?: unknown;
+  rules?: {
+    type?: unknown;
+    parameters?: {
+      required_status_checks?: { context?: unknown; integration_id?: unknown }[];
+    };
+  }[];
+};
+
+export function renderRulesetWithDedicatedApp(value: unknown, appIdValue: unknown): RulesetDocument {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('ruleset templateがobjectではありません');
+  }
+  const appId = parseDedicatedAppId(appIdValue);
+  const rendered = structuredClone(value) as RulesetDocument;
+  const rules = Array.isArray(rendered.rules)
+    ? rendered.rules.filter((rule) => rule.type === 'required_status_checks')
+    : [];
+  if (rules.length !== 1 || !Array.isArray(rules[0].parameters?.required_status_checks)) {
+    throw new Error('ruleset templateのrequired_status_checks定義が一意ではありません');
+  }
+  const checks = rules[0].parameters.required_status_checks;
+  for (const name of GATE_CHECK_NAMES) {
+    const matching = checks.filter((check) => check.context === name);
+    if (matching.length !== 1) throw new Error(`ruleset templateの${name}定義が一意ではありません`);
+    matching[0].integration_id = appId;
+  }
+  return rendered;
+}
+
+function loadRenderedRuleset(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): { status: 0; body: string; ruleset: RulesetDocument } | { status: 1; message: string } {
+  try {
+    const rulesetPath = resolveAsset(path.join('templates', 'github', 'provisioning', 'rulesets', 'main.json'), cwd);
+    const source = JSON.parse(fs.readFileSync(rulesetPath, 'utf8')) as unknown;
+    const ruleset = renderRulesetWithDedicatedApp(source, env.ASC_GATE_APP_ID);
+    return { status: 0, body: `${JSON.stringify(ruleset, null, 2)}\n`, ruleset };
+  } catch (error) {
+    return {
+      status: 1,
+      message: `専用Appをrulesetへ固定できません: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
 function syncStep(targetDir: string): { status: number; message: string } {
@@ -186,9 +236,19 @@ function labelsStep(ownerRepo: string | undefined, cwd: string): { status: numbe
   return { status: 0, message: applied.join(', ') };
 }
 
-function rulesetStep(ownerRepo: string | undefined, cwd: string): { status: number; message: string } {
-  const rulesetPath = resolveAsset(path.join('templates', 'github', 'provisioning', 'rulesets', 'main.json'), cwd);
-  const ruleset = JSON.parse(fs.readFileSync(rulesetPath, 'utf8')) as { name: string };
+function rulesetStep(
+  ownerRepo: string | undefined,
+  cwd: string,
+  renderedBody?: string,
+): { status: number; message: string } {
+  const loaded = renderedBody
+    ? { status: 0 as const, body: renderedBody, ruleset: JSON.parse(renderedBody) as RulesetDocument }
+    : loadRenderedRuleset(cwd, process.env);
+  if (loaded.status !== 0) return loaded;
+  const ruleset = loaded.ruleset;
+  if (typeof ruleset.name !== 'string' || ruleset.name.length === 0) {
+    return { status: 1, message: 'ruleset templateのnameが不正です' };
+  }
   const prefix = ownerRepo ? `repos/${ownerRepo}` : 'repos/{owner}/{repo}';
 
   const list = gh(['api', `${prefix}/rulesets`], cwd);
@@ -201,10 +261,9 @@ function rulesetStep(ownerRepo: string | undefined, cwd: string): { status: numb
     // 空応答等は「未作成」として扱う。
   }
 
-  const body = fs.readFileSync(rulesetPath, 'utf8');
   const apiPath = existingId ? `${prefix}/rulesets/${existingId}` : `${prefix}/rulesets`;
   const method = existingId ? 'PUT' : 'POST';
-  const result = gh(['api', '-X', method, apiPath, '--input', '-'], cwd, body);
+  const result = gh(['api', '-X', method, apiPath, '--input', '-'], cwd, loaded.body);
   if (result.status !== 0) return { status: 1, message: `ruleset 適用に失敗しました: ${result.stderr.trim()}` };
   return { status: 0, message: result.stdout.trim() };
 }

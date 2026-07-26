@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { packageRoot, resolveAsset, ASSET_NAMESPACE } from '../lib/paths.js';
+import { packageRoot, ASSET_NAMESPACE } from '../lib/paths.js';
 import { copyTreeMirror } from '../lib/fs-copy.js';
 import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES, packageVersion } from '../lib/asset-manifest.js';
 import { readInstalledVersion, writeInstalledVersion } from '../lib/version-marker.js';
@@ -54,9 +54,9 @@ export async function upgrade(args: string[]): Promise<number> {
       summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
     }
 
-    const githubSrc = resolveAsset(path.join('templates', 'github', '.github'), targetDir);
-    const githubResults = copyTreeMirror(githubSrc, path.join(targetDir, '.github'), { dryRun });
-    summary.push(...githubResults.map((r) => `${prefix}${r.action}: ${r.path}`));
+    summary.push(
+      `${prefix}GitHub workflowは未更新です。配布templateを確認後、必要な場合だけ setup github を明示実行してください。`,
+    );
 
     if (!dryRun) {
       writeInstalledVersion(targetDir, newVersion);
