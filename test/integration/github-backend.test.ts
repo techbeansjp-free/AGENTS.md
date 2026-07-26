@@ -47,17 +47,17 @@ test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate
   );
 
   // When: lease acquire を実行する
-  // Then: writer_lease（token含む）が標準出力へ、かつIssueコメントとして書き込まれる
+  // Then: tokenを除いたwriter_leaseが標準出力・Issueコメントへ書き込まれる
   const acquire = runCli(['lease', 'acquire', 'ISSUE-9', 'spec'], { cwd: repo.dir, env });
   assert.equal(acquire.status, 0, acquire.stderr);
-  const tokenMatch = /token:\s*(\S+)/.exec(acquire.stdout);
-  assert.ok(tokenMatch, 'lease acquire は token を含む writer_lease YAML を出力すること');
-  const token = tokenMatch![1];
+  assert.doesNotMatch(acquire.stdout + acquire.stderr, /token:/, 'CLI出力へtokenを露出しないこと');
+  const firstHolder = /holder:\s*(\S+)/.exec(acquire.stdout)?.[1];
+  assert.ok(firstHolder);
 
   const commentsAfterAcquire = stub.readState().comments['9'] ?? [];
   assert.equal(commentsAfterAcquire.length, 1, 'acquireはIssueコメントを1件書き込むこと');
   assert.match(commentsAfterAcquire[0].body, /<!-- agent-skill-chain:lease -->/);
-  assert.match(commentsAfterAcquire[0].body, new RegExp(`token: ${token}`));
+  assert.doesNotMatch(commentsAfterAcquire[0].body, /token:/);
 
   // When: 有効なleaseが存在する状態で（別tokenで）再度acquireを試みる
   // Then: 競合として拒否され、コメント数は増えない（先着優先。src/commands/lease.ts の acquire()
@@ -71,19 +71,19 @@ test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate
 
   // When: releaseする
   // Then: 成功し、Issueコメントが削除される
-  const release = runCli(['lease', 'release', 'ISSUE-9', token], { cwd: repo.dir, env });
+  const release = runCli(['lease', 'release', 'ISSUE-9'], { cwd: repo.dir, env });
   assert.equal(release.status, 0, release.stderr);
   assert.equal(release.stdout.trim(), 'ISSUE-9');
   assert.equal((stub.readState().comments['9'] ?? []).length, 0, 'release後はleaseコメントが削除されること');
 
   // When: release後に再acquireする
-  // Then: 新しいtokenで成功すること（acquire→release→再acquireが通る）
+  // Then: 新しいholderで成功すること（credentialを使うacquire→release→再acquireが通る）
   const reacquire = runCli(['lease', 'acquire', 'ISSUE-9', 'spec'], { cwd: repo.dir, env });
   assert.equal(reacquire.status, 0, reacquire.stderr);
-  const token2Match = /token:\s*(\S+)/.exec(reacquire.stdout);
-  assert.ok(token2Match);
-  const token2 = token2Match![1];
-  assert.notEqual(token2, token, '再acquireは新しいtokenを発行すること');
+  assert.doesNotMatch(reacquire.stdout + reacquire.stderr, /token:/);
+  const secondHolder = /holder:\s*(\S+)/.exec(reacquire.stdout)?.[1];
+  assert.ok(secondHolder);
+  assert.notEqual(secondHolder, firstHolder, '再acquireは新しいholderを発行すること');
 
   // segment start はgithubバックエンドでも activeLeaseFor 経由で有効leaseを検出する
   const segmentStart = runCli(['segment', 'start', 'ISSUE-9', 'spec'], { cwd: repo.dir, env });
@@ -118,7 +118,7 @@ test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate
     'Check Runが1件作成されること',
   );
 
-  const release2 = runCli(['lease', 'release', 'ISSUE-9', token2], { cwd: repo.dir, env });
+  const release2 = runCli(['lease', 'release', 'ISSUE-9'], { cwd: repo.dir, env });
   assert.equal(release2.status, 0, release2.stderr);
 
   fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: サンプル\n');

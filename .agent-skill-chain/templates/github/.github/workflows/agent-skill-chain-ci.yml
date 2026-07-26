@@ -1,11 +1,11 @@
 # 正本: AGENTS.md §不変条件I1・I4・I6・I7 / §参照・コメントの陳腐化防止
 #
-# PRへのpushごとに、agent-skill-chain CLI自体のテストスイート（npm test）を実行したうえで、
-# ブランチ名・worktreeパス・テンプレート同期・用語・参照規約・ADR・成果物・AC対応の各検査
-# （.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
+# PRへのpushごとに、ブランチ名・worktreeパス・テンプレート同期・用語・参照規約・ADR・成果物・
+# AC対応の各検査（.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
 # .agent-skill-chain/scripts/adr-lint.sh）を実行する。各スクリプトは agent-skill-chain CLI
 # （src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパーであるため、検査本体の前に
-# ビルドを行う。
+# ビルドを行う。agent-skill-chain CLI自体の開発リポジトリ用テストスイート（npm test）は
+# consumer環境では意味を持たないため、本ワークフローには含めない（Issue #290）。
 name: agent-skill-chain / ci
 
 on:
@@ -30,20 +30,6 @@ jobs:
       - run: npm ci
 
       - run: npm run build
-
-      - name: Run npm test and save execution log
-        shell: bash
-        run: |
-          set -o pipefail
-          npm test 2>&1 | tee test-execution.log
-
-      - name: Upload npm test execution log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-test-execution-log
-          path: test-execution.log
-          if-no-files-found: error
 
       - name: Fetch base branch for diff-based checks
         # verify-artifacts の code 判定（git diff base...HEAD）が base を解決できるようにする。

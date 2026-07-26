@@ -13,6 +13,7 @@
 # final を書き残さなかった異常時も、本スクリプトが安全網として final=human_required を書いて error を返す
 # （＝決して approve/success へ倒さない）。
 #
+# env: ASC_BASE_REF（差分基点）、ASC_REVIEW_SUBJECT（ordinary|core_audit。Coordination Backend正本から導出）
 # 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
 
 set -uo pipefail
@@ -45,10 +46,42 @@ if [[ -z "$ISSUE_ID" || -z "$GATE_ID" || -z "$PROFILE" || -z "$REPORT_PATH" || -
   exit 1
 fi
 
-# config からアダプタを解決する（review.adapter、未設定時 claude）。
-ADAPTER="$(_cli gate reviewer-context "$ISSUE_ID" | sed -n 's/^adapter=//p')"
+# project policy を含む reviewer context を一度だけ解決する。分類不能は非コアへ推測しない。
+if ! CONTEXT_OUTPUT="$(
+  _cli gate reviewer-context \
+    "$ISSUE_ID" "$TARGET_SHA" "${ASC_BASE_REF:-}" "${ASC_REVIEW_SUBJECT:-}" "${ASC_REVIEW_ADAPTER_REQUESTED:-}"
+)"; then
+  echo "reviewer context の解決に失敗しました。フェイルセーフで human_required へ倒します" >&2
+  _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
+  exit 2
+fi
+
+ADAPTER="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^adapter=//p')"
 ADAPTER="${ADAPTER:-claude}"
 ADAPTER_FILE="$ADAPTERS_DIR/${ADAPTER}.sh"
+
+ASC_CORE_REVIEW_REQUIRED="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_review_required=//p')"
+ASC_CORE_REVIEW_STATUS="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_review_status=//p')"
+ASC_CORE_REQUIRED_PROFILE="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_required_profile=//p')"
+ASC_CORE_MODEL_TIER="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_model_tier=//p')"
+ASC_CORE_REASONING_TIER="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_reasoning_tier=//p')"
+ASC_CODEX_REQUIRED_MODEL="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^codex_required_model=//p')"
+ASC_CODEX_REQUIRED_REASONING_EFFORT="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^codex_required_reasoning_effort=//p')"
+ASC_REVIEW_ADAPTER="$ADAPTER"
+export ASC_CORE_REVIEW_REQUIRED ASC_CORE_REVIEW_STATUS ASC_CORE_REQUIRED_PROFILE
+export ASC_CORE_MODEL_TIER ASC_CORE_REASONING_TIER ASC_CODEX_REQUIRED_MODEL ASC_CODEX_REQUIRED_REASONING_EFFORT
+export ASC_REVIEW_ADAPTER
+
+if [[ "$ASC_CORE_REVIEW_STATUS" == "unresolved" ]]; then
+  echo "コアレビュー対象の分類を完了できませんでした。フェイルセーフで human_required へ倒します" >&2
+  _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
+  exit 2
+fi
+if [[ "$ASC_CORE_REVIEW_REQUIRED" == "true" && "$PROFILE" != "$ASC_CORE_REQUIRED_PROFILE" ]]; then
+  echo "コアレビューには profile=$ASC_CORE_REQUIRED_PROFILE が必要です（指定: $PROFILE）。human_required へ倒します" >&2
+  _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
+  exit 2
+fi
 
 if [[ ! -f "$ADAPTER_FILE" ]]; then
   echo "アダプタが見つかりません: $ADAPTER_FILE（review.adapter=$ADAPTER）。フェイルセーフで human_required へ倒します" >&2

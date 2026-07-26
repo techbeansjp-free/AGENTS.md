@@ -1,12 +1,13 @@
 schema_version: agent-skill-chain/project-policy/v1
 project:
   id: agents-md-self-extension
-  policy_version: 1
+  policy_version: 2
 documents:
   common:
     - RULES.md
     - 自己拡張ワークフロー.md
     - OPERATING_PRINCIPLES.md
+    - MODEL_TIER_TABLE.md
   roles: {}
 precedence:
   level: project
@@ -16,3 +17,49 @@ precedence:
 constraints:
   may_override_core_invariants: false
   unregistered_documents_are_normative: false
+model_selection:
+  ordinary:
+    behavior: explicit_selection
+  core_review:
+    required_profile: strict
+    unavailable: human_required
+    execution:
+      reviewer_location: local
+      evidence_transport: github_pr_review
+      ci_role: verify_and_publish
+      reviewer_count: 2
+      trusted_reviewer_actors:
+        - adachi-tatsuru
+    capability:
+      model_tier: frontier_coding
+      reasoning_tier: maximum_reasoning
+    triggers:
+      github_label: "review:core-audit"
+      local_state_value: core_audit
+      exact_paths:
+        - AGENTS.md
+        - package.json
+        - package-lock.json
+      path_prefixes:
+        - .agent-skill-chain/project/
+        - .agent-skill-chain/config/
+        - .agent-skill-chain/schemas/
+        - .agent-skill-chain/adapters/
+        - .agent-skill-chain/scripts/
+        - .agent-skill-chain/ci/
+        - .agent-skill-chain/templates/github/
+        - .github/
+        - src/commands/
+        - src/lib/
+    adapters:
+      codex:
+        model: gpt-5.6-sol
+        reasoning_effort: xhigh
+        override_attestation_env: CODEX_CORE_REVIEWER_ATTESTED
+      claude:
+        model_env: CLAUDE_CORE_REVIEW_MODEL
+        model_tier_env: CLAUDE_CORE_REVIEW_MODEL_TIER
+        reasoning_tier_env: CLAUDE_CORE_REVIEW_REASONING_TIER
+        reasoning_probe_env: CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD
+      human:
+        behavior: human_required

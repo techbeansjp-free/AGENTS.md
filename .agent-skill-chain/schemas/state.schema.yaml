@@ -24,6 +24,13 @@ properties:
       Issueの要求内容（本文、「何を作るか」）。複数行可。任意。Coordination Backendがローカルの
       場合に`issue start`へ--request/--request-fileを渡すと永続化される（ISSUE-183）。GitHubモード
       では未使用。
+  review_subject:
+    type: string
+    enum: [ordinary, core_audit]
+    default: ordinary
+    description: >
+      独立レビューの対象区分。core_audit はコア資産を変更せず監査する場合に明示する。
+      未設定は ordinary として後方互換にする。
   autonomy:
     type: string
     enum: [gated, full]

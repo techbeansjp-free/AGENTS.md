@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { packageRoot, resolveAsset, ASSET_NAMESPACE } from '../lib/paths.js';
-import { copyTreeFailOnConflict, copyTreeMirror } from '../lib/fs-copy.js';
+import { packageRoot, ASSET_NAMESPACE } from '../lib/paths.js';
+import { copyTreeFailOnConflict } from '../lib/fs-copy.js';
 import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES, packageVersion } from '../lib/asset-manifest.js';
 import { writeInstalledVersion } from '../lib/version-marker.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
@@ -61,13 +61,10 @@ export async function init(args: string[]): Promise<number> {
       summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
     }
 
-    const githubSrc = resolveAsset(path.join('templates', 'github', '.github'), targetDir);
-    const githubResults = copyTreeMirror(githubSrc, path.join(targetDir, '.github'), { dryRun });
-    summary.push(...githubResults.map((r) => `${prefix}${r.action}: ${r.path}`));
-
     if (!dryRun) {
       writeInstalledVersion(targetDir, packageVersion());
     }
+    summary.push('GitHub workflowは未展開です。必要な場合だけ setup github を明示実行してください。');
     summary.push(`${prefix}installed_version: ${packageVersion()}`);
 
     return ok(summary.join('\n'));

@@ -4,8 +4,6 @@ import { validateAgainstSchema } from './schema.js';
 
 const MARKER = '<!-- agent-skill-chain:lease -->';
 
-/** `git hash-object -t tree /dev/null` の固定値。全リポジトリに常に存在する空tree。 */
-const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 const REF_PREFIX = 'refs/agent-skill-chain/leases';
 
 export interface WriterLease {
@@ -24,8 +22,14 @@ export interface WriterLease {
 export interface LeaseRefEntry {
   segment: string;
   ref: string;
+  sha: string;
+  legacy: boolean;
   lease: WriterLease;
 }
+
+export type PublicWriterLease = Omit<WriterLease, 'writer_lease'> & {
+  writer_lease: Omit<WriterLease['writer_lease'], 'token'>;
+};
 
 interface GhComment {
   id: string;
@@ -43,7 +47,37 @@ interface GhComment {
  * 競合判定・token検証等いかなるロジックにも使用しない（正本はgit refのみ、二重の正本を持たない）。
  */
 export function renderLeaseComment(lease: WriterLease): string {
-  return `${MARKER}\n\`\`\`yaml\n${stringify(lease)}\`\`\`\n`;
+  return `${MARKER}\n\`\`\`yaml\n${stringify(publicLease(lease))}\`\`\`\n`;
+}
+
+/** token は lease ref の blob だけへ保存し、commit message・Issue comment・CLI表示へ渡さない。 */
+export function publicLease(lease: WriterLease): PublicWriterLease {
+  const { token: _token, ...writerLease } = lease.writer_lease;
+  return { ...lease, writer_lease: writerLease };
+}
+
+function readLeasePayload(sha: string, cwd?: string): WriterLease | undefined {
+  const payload = git(['show', `${sha}:lease.yaml`], cwd);
+  if (payload.status !== 0) return undefined;
+  try {
+    const lease = parse(payload.stdout) as WriterLease;
+    const outcome = validateAgainstSchema('lease', lease);
+    return outcome.valid ? lease : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function createLeaseCommit(lease: WriterLease, parent: string | undefined, cwd?: string): { sha?: string; stderr?: string } {
+  const blob = git(['hash-object', '-w', '--stdin'], cwd, stringify(lease));
+  if (blob.status !== 0) return { stderr: blob.stderr.trim() };
+  const tree = git(['mktree'], cwd, `100600 blob ${blob.stdout.trim()}\tlease.yaml\n`);
+  if (tree.status !== 0) return { stderr: tree.stderr.trim() };
+  const args = ['commit-tree', tree.stdout.trim()];
+  if (parent) args.push('-p', parent);
+  args.push('-m', stringify(publicLease(lease)));
+  const commit = git(args, cwd);
+  return commit.status === 0 ? { sha: commit.stdout.trim() } : { stderr: commit.stderr.trim() };
 }
 
 function leaseRefName(issueNumber: string, segment: string): string {
@@ -78,8 +112,11 @@ export function classifyPushFailure(stderr: string): 'conflict' | 'error' {
     : 'error';
 }
 
-/** refをfetchしてローカルへ複製し、先頭commitのメッセージをwriter leaseとしてparseする。 */
-function readLeaseFromRef(ref: string, cwd?: string): { sha: string; lease: WriterLease } | undefined {
+/** refをfetchしてローカルへ複製し、token非含有subjectと非表示blobからwriter leaseを復元する。 */
+function readLeaseFromRef(
+  ref: string,
+  cwd?: string,
+): { sha: string; lease: WriterLease; legacy: boolean } | undefined {
   const fetch = git(['fetch', 'origin', `+${ref}:${ref}`], cwd);
   if (fetch.status !== 0) return undefined; // ref不在（＝lease無し）または接続エラー。読み出し専用経路のため安全側でundefinedとして扱う。
   const rev = git(['rev-parse', ref], cwd);
@@ -87,11 +124,13 @@ function readLeaseFromRef(ref: string, cwd?: string): { sha: string; lease: Writ
   const sha = rev.stdout.trim();
   const log = git(['log', '-1', '--format=%B', sha], cwd);
   if (log.status !== 0) return undefined;
+  const payloadLease = readLeasePayload(sha, cwd);
+  if (payloadLease) return { sha, lease: payloadLease, legacy: false };
+  // 旧形式は期限切れreclaimまたは正当なresumeの移行だけに読み取る。raw messageを表示しない。
   try {
-    const lease = parse(log.stdout) as WriterLease;
-    const outcome = validateAgainstSchema('lease', lease);
-    if (!outcome.valid) return undefined;
-    return { sha, lease };
+    const legacyLease = parse(log.stdout) as WriterLease;
+    const outcome = validateAgainstSchema('lease', legacyLease);
+    return outcome.valid ? { sha, lease: legacyLease, legacy: true } : undefined;
   } catch {
     return undefined;
   }
@@ -117,7 +156,7 @@ export function allLeasesFor(issueNumber: string, cwd?: string): LeaseRefEntry[]
   const entries: LeaseRefEntry[] = [];
   for (const { ref, segment } of listLeaseRefNames(issueNumber, cwd)) {
     const found = readLeaseFromRef(ref, cwd);
-    if (found) entries.push({ segment, ref, lease: found.lease });
+    if (found) entries.push({ segment, ref, sha: found.sha, legacy: found.legacy, lease: found.lease });
   }
   return entries;
 }
@@ -128,7 +167,7 @@ export function activeLeaseFor(issueNumber: string, segment: string, cwd?: strin
   if (!found) return undefined;
   const now = new Date().toISOString();
   if (found.lease.writer_lease.expires_at <= now) return undefined;
-  return { segment, ref, lease: found.lease };
+  return { segment, ref, sha: found.sha, legacy: found.legacy, lease: found.lease };
 }
 
 /**
@@ -147,9 +186,9 @@ export function activeLeasesFor(issueNumber: string, cwd?: string): LeaseRefEntr
  */
 export function acquireLeaseRef(issueNumber: string, segment: string, lease: WriterLease, cwd?: string): LeaseRefPushOutcome {
   const ref = leaseRefName(issueNumber, segment);
-  const commit = git(['commit-tree', EMPTY_TREE_SHA, '-m', stringify(lease)], cwd);
-  if (commit.status !== 0) return { ok: false, reason: 'error', stderr: commit.stderr.trim() };
-  const sha = commit.stdout.trim();
+  const commit = createLeaseCommit(lease, undefined, cwd);
+  if (!commit.sha) return { ok: false, reason: 'error', stderr: commit.stderr ?? '' };
+  const sha = commit.sha;
   const push = git(['push', 'origin', `${sha}:${ref}`], cwd);
   if (push.status !== 0) return { ok: false, reason: classifyPushFailure(push.stderr), stderr: push.stderr.trim() };
   return { ok: true, sha };
@@ -160,22 +199,55 @@ export function acquireLeaseRef(issueNumber: string, segment: string, lease: Wri
  * 同じrefへforce無しでpushする。fast-forward条件（現在のref値が新commitの祖先であること）が
  * 自動的にcompare-and-setの条件として機能する。
  */
-export function renewLeaseRef(issueNumber: string, segment: string, lease: WriterLease, cwd?: string): LeaseRefPushOutcome {
+export function renewLeaseRef(
+  issueNumber: string,
+  segment: string,
+  lease: WriterLease,
+  cwd?: string,
+  expectedSha?: string,
+): LeaseRefPushOutcome {
   const ref = leaseRefName(issueNumber, segment);
   const current = readLeaseFromRef(ref, cwd);
   if (!current) return { ok: false, reason: 'conflict', stderr: 'lease ref が見つかりません（既に回収された可能性があります）' };
-  const commit = git(['commit-tree', EMPTY_TREE_SHA, '-p', current.sha, '-m', stringify(lease)], cwd);
-  if (commit.status !== 0) return { ok: false, reason: 'error', stderr: commit.stderr.trim() };
-  const sha = commit.stdout.trim();
+  if (expectedSha && current.sha !== expectedSha) {
+    return { ok: false, reason: 'conflict', stderr: 'lease ref が検査後に更新されました' };
+  }
+  const commit = createLeaseCommit(lease, current.sha, cwd);
+  if (!commit.sha) return { ok: false, reason: 'error', stderr: commit.stderr ?? '' };
+  const sha = commit.sha;
   const push = git(['push', 'origin', `${sha}:${ref}`], cwd);
   if (push.status !== 0) return { ok: false, reason: classifyPushFailure(push.stderr), stderr: push.stderr.trim() };
   return { ok: true, sha };
 }
 
-/** release: `git push origin --delete <ref>`。 */
-export function releaseLeaseRef(issueNumber: string, segment: string, cwd?: string): LeaseRefPushOutcome {
+/**
+ * resume: 検査時のref SHAを親にした新形式commitをforce無しpushする。refが検査後に変化すれば
+ * non-fast-forwardとなり、期限切れleaseを別実行者の更新へ上書きしない。
+ */
+export function resumeLeaseRef(
+  issueNumber: string,
+  segment: string,
+  expectedSha: string,
+  lease: WriterLease,
+  cwd?: string,
+): LeaseRefPushOutcome {
+  return renewLeaseRef(issueNumber, segment, lease, cwd, expectedSha);
+}
+
+/** release: 検査したref SHAをforce-with-lease条件にして削除する。 */
+export function releaseLeaseRef(
+  issueNumber: string,
+  segment: string,
+  cwd?: string,
+  expectedSha?: string,
+): LeaseRefPushOutcome {
   const ref = leaseRefName(issueNumber, segment);
-  const push = git(['push', 'origin', '--delete', ref], cwd);
+  const current = expectedSha ? undefined : readLeaseFromRef(ref, cwd);
+  const expected = expectedSha ?? current?.sha;
+  if (!expected) {
+    return { ok: false, reason: 'conflict', stderr: 'lease ref が見つかりません（既に回収された可能性があります）' };
+  }
+  const push = git(['push', `--force-with-lease=${ref}:${expected}`, 'origin', `:${ref}`], cwd);
   if (push.status !== 0) return { ok: false, reason: classifyPushFailure(push.stderr), stderr: push.stderr.trim() };
   return { ok: true, sha: '' };
 }
@@ -221,29 +293,29 @@ export function postLeaseComment(issueNumber: string, lease: WriterLease, cwd?: 
   return match[1];
 }
 
-function parseLeaseCommentToken(comment: GhComment): string | undefined {
+function parseLeaseCommentHolder(comment: GhComment): string | undefined {
   if (!comment.body.includes(MARKER)) return undefined;
   const match = /```yaml\n([\s\S]*?)```/.exec(comment.body);
   if (!match) return undefined;
   try {
-    const lease = parse(match[1]) as WriterLease;
-    return lease.writer_lease?.token;
+    const value = parse(match[1]) as { writer_lease?: { holder?: unknown } };
+    return typeof value.writer_lease?.holder === 'string' ? value.writer_lease.holder : undefined;
   } catch {
     return undefined;
   }
 }
 
 /**
- * release/renew成功後、acquire時に投稿したhuman向け可視性コメントのうち該当tokenのものを
- * best-effortで削除する。正本はgit refのみであり、この検索・削除はlease自体の成否（token検証・
- * 競合判定）には一切使わない——見つからない・削除に失敗した場合も呼び出し元の処理は継続する。
+ * release/resume成功後、acquire時に投稿したhuman向け可視性コメントのうち該当holderのものを
+ * best-effortで削除する。コメント中のlegacy tokenは読み出しも表示もせず、holderだけを比較する。
+ * 正本はgit refのみであり、見つからない・削除に失敗した場合もlease操作は継続する。
  */
-export function cleanupLeaseComment(issueNumber: string, token: string, cwd?: string): void {
+export function cleanupLeaseComment(issueNumber: string, holder: string, cwd?: string): void {
   try {
     const result = gh([`issue`, 'view', issueNumber, '--json', 'comments'], cwd);
     if (result.status !== 0) return;
     const parsed = JSON.parse(result.stdout) as { comments: GhComment[] };
-    const match = parsed.comments.find((c) => parseLeaseCommentToken(c) === token);
+    const match = parsed.comments.find((c) => parseLeaseCommentHolder(c) === holder);
     if (!match) return;
     const idMatch = /issuecomment-(\d+)/.exec(match.url);
     if (!idMatch) return;

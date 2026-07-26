@@ -25,7 +25,7 @@ function mkScratch(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agent-skill-chain-${prefix}-`));
 }
 
-test('setup: 空のtarget_dirへの初回導入が成功し、標準資産・.agent-skill-chain名前空間・.githubが実体化する', (t) => {
+test('setup: 非推奨aliasはローカル資産だけを導入し、GitHub Actions/APIを暗黙変更しない', (t) => {
   const scratchDir = mkScratch('setup-scratch');
   t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
   const stub = createGhStub(scratchDir);
@@ -37,7 +37,7 @@ test('setup: 空のtarget_dirへの初回導入が成功し、標準資産・.ag
   // When: setup を実行する
   const result = runCli(['setup', targetDir], { env: stub.env(process.env) });
 
-  // Then: 成功し、root直下資産・.agent-skill-chain名前空間配下・.githubテンプレートが作成される
+  // Then: 成功し、root直下資産・.agent-skill-chain名前空間だけが作成される
   assert.equal(result.status, 0, result.stderr);
   // Then: 非推奨警告がstderrへ出力される（Issue #169 ADR-1、戻り値・生成物は無変更のまま警告のみ追加）
   assert.match(result.stderr, /警告: setup は非推奨です。init（\+ 必要なら setup github）を使用してください。/);
@@ -46,31 +46,11 @@ test('setup: 空のtarget_dirへの初回導入が成功し、標準資産・.ag
     fs.existsSync(path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml')),
     '.agent-skill-chain/config/agent-skill-chain.yaml が作成されること',
   );
-  assert.ok(fs.existsSync(path.join(targetDir, '.github', 'CODEOWNERS')), '.github/CODEOWNERS が同期されること');
-  assert.ok(
-    fs.existsSync(path.join(targetDir, '.github', 'workflows', 'agent-skill-chain-ci.yml')),
-    '.github/workflows 配下も同期されること',
-  );
-
-  // Then: gh-stubの状態にラベルが記録されている（setup labels 段が実行された証跡）
-  // 期待件数は、コピーされたlabels.yaml自体から動的に算出する（定義数の変更に追随するため）。
-  const copiedLabelsYamlText = fs.readFileSync(
-    path.join(targetDir, '.agent-skill-chain', 'templates', 'github', 'provisioning', 'labels.yaml'),
-    'utf8',
-  );
-  const expectedLabelCount = [...copiedLabelsYamlText.matchAll(/name:\s*"([^"]+)"/g)].length;
-  assert.ok(expectedLabelCount > 0, 'テスト前提: labels.yamlからラベル名を抽出できること');
+  assert.equal(fs.existsSync(path.join(targetDir, '.github')), false, '.githubは暗黙作成しないこと');
   const state = stub.readState();
-  assert.ok(state.labels.includes('type:feature'), 'labels.yaml定義のラベルがgh-stub経由で登録されていること');
-  assert.equal(
-    state.labels.length,
-    expectedLabelCount,
-    `labels.yaml定義の全件数分が登録されていること（期待: ${expectedLabelCount}, 実際: ${state.labels.length}）`,
-  );
-
-  // Then: gh-stubの状態にrulesetも記録されている（setup ruleset段が実行された証跡）
-  assert.equal(state.rulesets.length, 1);
-  assert.equal((state.rulesets[0] as { name: string }).name, 'main-protection');
+  assert.deepEqual(state.labels, []);
+  assert.deepEqual(state.rulesets, []);
+  assert.match(result.stdout, /setup github.*未実行/);
 });
 
 test('setup: 同じtarget_dirへの2回目の実行は冪等に成功する（unchanged）', (t) => {
@@ -122,7 +102,9 @@ test('setup github: target_dirへ.github同期のみを行い、AGENTS.md等の�
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
 
   // When: setup github をtarget_dir指定で単体実行する
-  const result = runCli(['setup', 'github', targetDir], { env: stub.env(process.env) });
+  const result = runCli(['setup', 'github', targetDir], {
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
 
   // Then: 成功し、.github配下が同期される
   assert.equal(result.status, 0, result.stderr);
@@ -169,7 +151,10 @@ test('setup ruleset: 初回はruleset新規作成(POST)、2回目は既存rulese
   const stub = createGhStub(scratchDir);
 
   // When: 1回目のsetup rulesetを実行する（owner/repo省略、cwdはリポジトリ内）
-  const first = runCli(['setup', 'ruleset'], { cwd: repo.dir, env: stub.env(process.env) });
+  const first = runCli(['setup', 'ruleset'], {
+    cwd: repo.dir,
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
 
   // Then: 成功し、gh-stub状態にruleset「main-protection」が1件新規作成される
   assert.equal(first.status, 0, first.stderr);
@@ -179,13 +164,41 @@ test('setup ruleset: 初回はruleset新規作成(POST)、2回目は既存rulese
   const firstId = (state.rulesets[0] as { id: number }).id;
 
   // When: 2回目のsetup rulesetを実行する
-  const second = runCli(['setup', 'ruleset'], { cwd: repo.dir, env: stub.env(process.env) });
+  const second = runCli(['setup', 'ruleset'], {
+    cwd: repo.dir,
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
 
   // Then: 既存rulesetが検出され、新規追加ではなく同一IDのまま更新される
   assert.equal(second.status, 0, second.stderr);
   state = stub.readState();
   assert.equal(state.rulesets.length, 1, '2回目は新規追加でなく既存1件が更新されること');
   assert.equal((state.rulesets[0] as { id: number }).id, firstId, '更新されたrulesetのIDが1回目と同一であること');
+  const checks = (
+    state.rulesets[0] as {
+      rules: { type: string; parameters: { required_status_checks: { context: string; integration_id?: number }[] } }[];
+    }
+  ).rules.find((rule) => rule.type === 'required_status_checks')?.parameters.required_status_checks ?? [];
+  for (const name of ['spec', 'design', 'implementation', 'validation']
+    .map((gate) => `agent-skill-chain/${gate}-gate`)) {
+    assert.equal(checks.find((check) => check.context === name)?.integration_id, 77);
+  }
+});
+
+test('setup github: 専用App未設定時は配布物・labels・rulesetを部分展開しない', (t) => {
+  const scratchDir = mkScratch('setup-github-preflight');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+  const targetDir = mkScratch('setup-github-preflight-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['setup', 'github', targetDir], { env: stub.env(process.env) });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /専用Appをrulesetへ固定できません/);
+  assert.equal(fs.existsSync(path.join(targetDir, '.github')), false);
+  assert.deepEqual(stub.readState().labels, []);
+  assert.deepEqual(stub.readState().rulesets, []);
 });
 
 function escapeRegExp(value: string): string {

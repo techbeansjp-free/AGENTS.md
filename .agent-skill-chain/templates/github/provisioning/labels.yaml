@@ -37,3 +37,6 @@ labels:
   - name: "risk-upgrade-approved"
     color: "f9d0c4"
     description: "autonomy/riskの既定値を緩める変更を人間が明示的に承認したことを示す（AGENTS.md 不変条件I8）"
+  - name: "review:core-audit"
+    color: "b60205"
+    description: "コア資産の監査を明示し、frontier coding・maximum reasoningのStrict独立レビューを要求する"

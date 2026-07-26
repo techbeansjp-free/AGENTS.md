@@ -6,8 +6,8 @@ import { parse, stringify } from 'yaml';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 
-// `lease renew <issue_id> <token>`（src/commands/lease.ts）の結合テスト。
-// lease acquire で取得したwriter leaseのexpires_atを延長できること、tokenが一致しない場合に
+// `lease renew <issue_id> [token]`（src/commands/lease.ts）の結合テスト。
+// lease acquire がGit管理外へ保存したcredentialでexpires_atを延長できること、tokenが一致しない場合に
 // 失敗することに加え、ローカルバックエンド実装固有の仕様上の非対称性
 // （後述コメント参照）を実際の挙動としてそのまま固定する。
 //
@@ -29,11 +29,11 @@ test('lease renew: 正しいtokenでexpires_atが延長される', async (t) => 
   // Given: writer leaseを取得する。
   const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: repo.dir });
   assert.equal(acquire.status, 0, acquire.stderr);
-  const token = /token:\s*(\S+)/.exec(acquire.stdout)![1];
+  assert.doesNotMatch(acquire.stdout + acquire.stderr, /token:/);
   const originalExpiresAt = /expires_at:\s*(\S+)/.exec(acquire.stdout)![1];
 
-  // When: 正しいtokenで renew を呼ぶ。
-  const renew = runCli(['lease', 'renew', 'ISSUE-1', token], { cwd: repo.dir });
+  // When: 保存済みcredentialで renew を呼ぶ。
+  const renew = runCli(['lease', 'renew', 'ISSUE-1'], { cwd: repo.dir });
 
   // Then: 成功し、出力されたexpires_atが未来の時刻であり、lease.yaml側にも反映されていること。
   assert.equal(renew.status, 0, renew.stderr);
@@ -62,7 +62,7 @@ test('lease renew (異常系): tokenが一致しない場合は失敗する', as
 
   // Then: token不一致で失敗し、lease.yamlのexpires_atは変化しないこと。
   assert.equal(renew.status, 1);
-  assert.match(renew.stderr, /token/);
+  assert.match(renew.stderr, /credential/);
 });
 
 test(
@@ -74,7 +74,7 @@ test(
     // Given: writer leaseを取得したうえで、expires_atを直接過去日時へ書き換え「既に期限切れ」の状態を作る。
     const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: repo.dir });
     assert.equal(acquire.status, 0, acquire.stderr);
-    const token = /token:\s*(\S+)/.exec(acquire.stdout)![1];
+    assert.doesNotMatch(acquire.stdout + acquire.stderr, /token:/);
 
     const leasePath = leaseFilePathFor(repo.dir, '1');
     const lease = parse(fs.readFileSync(leasePath, 'utf8')) as WriterLease;
@@ -83,7 +83,7 @@ test(
     fs.writeFileSync(leasePath, stringify(lease), 'utf8');
 
     // When: 期限切れ状態のまま、正しいtokenで renew を呼ぶ。
-    const renew = runCli(['lease', 'renew', 'ISSUE-1', token], { cwd: repo.dir });
+    const renew = runCli(['lease', 'renew', 'ISSUE-1'], { cwd: repo.dir });
 
     // Then: バックエンド間の非対称性を解消済み（ISSUE-176）。githubバックエンドと同一の理由
     // （lease は既に期限切れです）で失敗し、expires_atは書き換えられないこと。
