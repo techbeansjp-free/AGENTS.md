@@ -12,6 +12,8 @@ Issue #283 / PR #284（マージ済み、main v0.2.20以降）は、レビュー
 
 本Issueは、この運用手順を恒久文書として確立し、少なくとも1件の実PRで実地検証し、レビュアの独立性を技術的に確認することを目的とする。
 
+**実地検証中の追加発見（AC-2改定の理由）**: PR #311での実地検証により、証跡生成自体（`gate-local-review.sh`によるレビュー証跡のGitHub PR Reviewへの記録）は実際に成功することを確認した。しかしその後段の`trusted gate recorder`ワークフロー（`agent-skill-chain-trusted-gate.yml`）は、専用GitHub Appの認証情報（`ASC_GATE_APP_ID`・`ASC_GATE_APP_PRIVATE_KEY`）がリポジトリに一度も登録されていないため、常に失敗することが判明した。これはADR-0013（未accepted）が定める配備条件（`dedicated_app`または`required_workflow`のいずれかのenforcement backendが有効な場合だけ配備する）に違反した状態であり、GitHub Appの作成・secrets登録というインフラ設定（人間の対話的操作を要する）が別途必要である。このインフラ整備自体は本Issueのスコープ外とし、AC-2は「証跡生成物がtrusted gate recorderの入力契約を満たすこと」（インフラ非依存で検証可能な範囲）へ改定する。Check Run記録の実地検証（インフラ整備後のend-to-end smoke）は別Issueへ切り出す。
+
 ## 要求 → 要件 → 受入条件
 
 ### 要求
@@ -21,7 +23,7 @@ Issue #283 / PR #284（マージ済み、main v0.2.20以降）は、レビュー
 ### 要件
 
 - `gate review`→`gate reviewer-prompt`→（実評価）→`gate submit-evidence`（`gate-local-review.sh`が内部で実行する一連）の正規手順を、誰が・いつ・どのcapability要件（`frontier_coding`/`maximum_reasoning`等）で・どのコマンドを実行するかを`.agent-skill-chain/standards/`配下の文書として明文化する。
-- 実PRのstrict profileゲート（独立2体レビュア必要）を、現在のmain（Issue #303の修正込み）を基準として実際に完走させ、trusted gate recorderが正しくCheck Runを記録することを確認する。
+- 実PRのstrict profileゲート（独立2体レビュア必要）を、現在のmain（Issue #303・#312の修正込み）を基準として実際に完走させ、証跡生成物がtrusted gate recorderの入力契約（`repository_dispatch`ペイロード）を満たすことを確認する。Check Run記録自体の実地検証はGitHub App等のインフラ整備後の別Issueで扱う。
 - レビュアの独立性（同一actorによる自己レビュー疑義の排除）が、`gate-local-review.sh`のprotected-base隔離launcher・one-time attempt token・run ID/slotの重複排除によって技術的に担保されていることを、既存コード（`src/lib/review-evidence.ts`）の該当ロジックを指し示して確認する。
 - 本Issue自身の実装（文書追加のみ、コード変更を伴わない場合）についても、可能な範囲でこの手順を適用し実地検証を兼ねる。
 
@@ -34,11 +36,11 @@ Issue #283 / PR #284（マージ済み、main v0.2.20以降）は、レビュー
 - Then: 「誰が」「いつ」「どのコマンドを」「どのcapability要件で」実行するかが、この文書単体で自己完結して読み取れる
 - 検証方法見込み: `manual`
 
-#### AC-2: 実PRでstrict profileのゲート通過を実地検証する
+#### AC-2: 実PRでstrict profileの証跡生成を実地検証し、trusted gate recorderの入力契約を満たすことを確認する
 
-- Given: 現在のmain（Issue #303の修正込み）を基準とした実PRのstrict profileゲート
+- Given: 現在のmain（Issue #303・#312の修正込み）を基準とした実PRのstrict profileゲート
 - When: 運用手順に従い `gate-local-review.sh` を実行する
-- Then: 独立2体のレビュー証跡がGitHub PR Reviewへ記録され、trusted gate recorderが対応するCheck Runへ`success`または妥当な判定（`rejected`）を記録する
+- Then: 独立2体のレビュー証跡がGitHub PR Reviewへ記録され、`repository_dispatch`のペイロード（`event_type: agent-skill-chain-gate-record`、`client_payload: {pr_number, gate, target_sha}`）が発行される。trusted gate recorderワークフロー自体がCheck Runを実際に記録できるかは、GitHub App等のインフラ整備を要するため本ACの対象外とする（別Issueで扱う）
 - 検証方法見込み: `manual`
 
 #### AC-3: レビュアの独立性が技術的に担保されていることを確認する
@@ -53,3 +55,5 @@ Issue #283 / PR #284（マージ済み、main v0.2.20以降）は、レビュー
 - trusted gate recorderの信頼モデル・attestation設計自体の再設計（ADR-0013で確定済みの判断は変更しない）。
 - 個別PR（PR #299等、本Issue以外）の手動での通過作業。
 - 通常のセグメントワーカー手順の中でレビュー証跡生成を自動起動する経路の追加（CI内でAIレビュアを実行すること自体が設計上禁止されているため、完全自動化は本Issueのスコープでは実現不能と判断する場合はその理由を明記する）。
+- GitHub Appの作成・秘密鍵生成・リポジトリへのinstall・secrets（`ASC_GATE_APP_ID`・`ASC_GATE_APP_PRIVATE_KEY`）登録（人間の対話的操作を要するインフラ設定であり、進行役のツールでは実行できない。別Issueで扱う）。
+- trusted gate recorderワークフローが実際にCheck Runを記録するend-to-end smoke検証（上記インフラ整備が前提のため別Issueで扱う）。

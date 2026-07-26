@@ -24,6 +24,11 @@ GitHubモードでtrusted gate recorder（Issue #283 / PR #284）が有効な場
 #    （リポジトリ実tipを推測で使わない）。
 git status --short   # 出力が空であること
 
+# 1.5. protected base worktree（独立clone等）にtarget_shaのcommitオブジェクトが無い場合、
+#      classifyCoreReviewのgit diff解決が失敗し「コアレビュー対象の分類を完了できませんでした」
+#      でhuman_requiredへ倒れる。対象PRのbranch/SHAが取得済みか確認し、無ければ明示fetchする。
+git fetch origin <target_sha>   # 例: git fetch origin 816dbd4...
+
 # 2. capability要件を明示してlocal reviewを起動する（strict時は独立2体が自動で起動される）。
 CLAUDE_CORE_REVIEW_MODEL_TIER=frontier_coding \
 CLAUDE_CORE_REVIEW_REASONING_TIER=maximum_reasoning \
