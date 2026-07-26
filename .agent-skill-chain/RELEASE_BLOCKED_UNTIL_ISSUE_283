@@ -1,0 +1,11 @@
+Issue #271 bootstrap release guard
+
+This source-controlled sentinel blocks every release-producing step after checkout.
+It is a temporary self-repository rollout guard, not configuration and not a schema
+input. It is intentionally outside the packaged namespaced asset entries, so init,
+setup, and upgrade do not copy it to consumers.
+
+Issue #283's trusted rollout completion commit must remove this sentinel. That same
+change must separate the self-repository release workflow from the consumer-facing
+setup github distribution set. The sentinel removal is the only release-enabling
+transition: the first permitted release must contain both Issue #271 and Issue #283.

@@ -92,7 +92,8 @@
 - classifier、policy、schema、verifier、workflowは保護されたbase revisionをtrust rootとして実行し、PRが変更した検証コードやactor allowlistを当該PR自身の承認には使わない。
 - GitHubのrequired statusは同一GitHub Actions App内のworkflowを識別しないため、#274は一回限りbootstrapに必要な最小専用App recorderも同梱する。legacy gate workflowから`checks: write`・Check API・publishを、reconcile workflowから`checks: write`・candidate script実行を除去する。rulesetへのintegration ID適用・chunk化・完全なreconcile/rolloutはIssue #283が担い、それらが有効になるまで通常PRを成功扱いにしない。
 - classifierはmodel policyを持たないconsumerをordinaryと分類する既存互換を維持するが、GitHub trusted境界ではpolicy欠落を構造化`human_required`へ閉じる。ordinary consumerの正式なpolicy導入・移行・BDDはIssue #287で実装する。
-- 現行`init`/`upgrade`はActions assetをmirrorするため、#274はrelease workflowを起動せずbootstrap mergeし、直後にIssue #283をmergeする。両変更を含む最初のreleaseだけを行い、Issue #283を含まない#274単体releaseまたはconsumer配布は禁止する。
+- #274は設定/schema入力ではないself-repository限定sentinel `.agent-skill-chain/RELEASE_BLOCKED_UNTIL_ISSUE_283` を追加する。root/template同期済みrelease workflowはcheckout直後にsentinelを検査し、存在中はnpm/build/version/bump/tag/publishの全stepを明示skipするため、#274のbootstrap mergeでworkflowが起動してもreleaseを生成しない。sentinelはpackageと`init`/`setup`/`upgrade`の名前空間配布集合に含めない。
+- Issue #283のtrusted rollout完了commitはsentinelを削除し、同時にself-repository専用release workflowをconsumer向け`setup github`配布集合から分離する。削除pushで初めてreleaseを許可し、Issue #271とIssue #283の両変更を含む最初のreleaseだけを行う。Issue #283を含まない#274単体releaseまたはconsumer配布は禁止する。
 - 証跡未到着・分類不能・capability 未証明・件数不足は成功や `neutral` にしない。
 - 全 AC の自動テスト、型検査、lint、SAST、依存関係・secret scan、template sync を実行して push する。
 

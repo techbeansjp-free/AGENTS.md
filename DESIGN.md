@@ -115,7 +115,9 @@ bootstrap後の通常sourceを作れる最小recorderとして、default branch�
 
 preflightは通常のmirror loopが旧templateを上書きする前に行う。安全なlegacy修復、競合時no-op、新規init、template sync、配布元と展開物にprovider secret/Codex Action/provider CLI/self-hosted runnerが0件であることを回帰検査する。このIssueが動的に検証するのはself-repositoryのworkflow実行とasset移行までであり、任意consumerのCLI解決はIssue #285へ分離する。
 
-現行`init`/`upgrade`はActions assetをconsumerへmirrorするため、配布順序も安全性境界になる。#274はrelease workflowを起動せずbootstrap mergeし、直後にIssue #283をmergeする。最初のreleaseは両変更を含む状態でだけ行い、Issue #283を含まない#274単体のpackage releaseやconsumer配布は禁止する。model policy無しordinary consumerの正式互換はIssue #287完了まで有効化しない。
+現行`init`/`upgrade`はActions assetをconsumerへmirrorするため、配布順序も安全性境界になる。#274は設定/schema入力ではないself-repository限定sentinel `.agent-skill-chain/RELEASE_BLOCKED_UNTIL_ISSUE_283` を追加する。root/template同期済みrelease workflowはcheckout直後のpreflightでsentinelを検査し、存在中はnpm/build/version/bump/tag/publishの全stepを同じ`release_allowed == 'true'`条件で明示skipする。sentinelはasset manifestとpackageの配布集合外なのでconsumerへコピーしない。
+
+Issue #283のtrusted rollout完了commitはsentinelを削除し、同時にself-repository専用release workflowをconsumer向け`setup github`配布集合から分離する。削除pushが初めてrelease経路を有効化するため、最初のpackage releaseはIssue #271とIssue #283の両変更を含む。Issue #283を含まない#274単体releaseやconsumer配布は禁止し、model policy無しordinary consumerの正式互換はIssue #287完了まで有効化しない。
 
 ## DDD境界と依存方向
 

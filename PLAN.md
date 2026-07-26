@@ -16,6 +16,7 @@
 | 7 | ADR、role contract、bootstrap依存を同期 | AC-1, AC-2, AC-7 |
 | 8 | default-main dispatch・専用App in-progress Check・attestation・success-last recorderを実装 | AC-3, AC-5, AC-8 |
 | 9 | 攻撃経路・互換性・回帰テストと独立検証を実施 | 全AC |
+| 10 | self-repository sentinelとrelease workflow preflightで#274単体releaseを機械停止 | AC-7 |
 
 ## 実装順序
 
@@ -36,7 +37,7 @@
 - 攻撃: PR変更recorder/verifier/allowlistの不使用、branch内偽証跡、未登録actor、writer/recorder同一actor、専用recorder token欠落・AI subprocess漏洩、GitHub credential/env/origin/ambient隔離root非継承、非default base、one-time token無し直接submit・token再利用、same-SHA旧/new attempt、新attempt不完全、commit actor未解決、101件以上のAPI pagination、dismissed review、API commit ID不一致、古いSHA、prompt/artifact/launcher改変、Claude ambient model証跡改変、空/部分artifact集合、fail finding欠落、slot重複、Strict 1件。
 - adapter: Codex exact model/effort/read-only固定argvとcore完全command上書き拒否、Claude管理主体trust rootのattestation/probeと完全command上書き拒否、local Strict 2独立process・fresh workspace、Cursor拒否、通常選択維持。
 - distribution: legacy同期済みfixtureの修復、customized workflow競合時の全体no-op、dry-run、init、template sync、legacy gate/reconcileのChecks書込み・Check API・candidate reconcile 0件、provider credential/inference依存0件。任意consumerのCLI可搬性はIssue #285で追跡する。
-- rollout: #274はrelease workflowを起動せずbootstrap mergeし、直後にIssue #283をmergeする。最初のreleaseは両変更を含む状態でだけ行い、Issue #283を含まない#274単体releaseは禁止する。policy無しconsumerはGitHub trusted境界でhuman_requiredとし、正式なprovision/migration BDDはIssue #287で追跡する。
+- rollout: self-repository限定sentinel有りではcheckout以外のnpm/build/version/bump/tag/publish実行数を0にし、sentinel無しでは従来release経路と`[skip ci]` job guardを維持する。sentinelをpackage・`init`・`setup`・`upgrade`でconsumerへ配らないことも検査する。Issue #283のtrusted rollout完了commitはsentinel削除とself-repository専用release workflowの`setup github`配布集合からの分離を同時に行い、最初のreleaseへIssue #271/#283の両変更を含める。policy無しconsumerはGitHub trusted境界でhuman_requiredとし、正式なprovision/migration BDDはIssue #287で追跡する。
 - recorder: payload allowlist、actions readの最小権限、actor権限、App未構成、標準Actions App、stale head、Check replay、signer workflow/ref/digest、run tuple、状態書込み前回復、48KiB境界、terminal PATCH response非parse、success後検査0件。
 - 必須: build/typecheck、全test、doc/vocab/reference/ADR/secret/SAST、template sync、shell syntax。
 

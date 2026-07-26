@@ -42,6 +42,11 @@ test('init: 標準資産・.agent-skill-chain名前空間（hooks含む）・.gi
     'hooks/ 名前空間もinitで導入されること',
   );
   assert.ok(fs.existsSync(path.join(targetDir, '.github', 'CODEOWNERS')));
+  assert.equal(
+    fs.existsSync(path.join(targetDir, '.agent-skill-chain', 'RELEASE_BLOCKED_UNTIL_ISSUE_283')),
+    false,
+    'self-repository限定release sentinelはconsumerへ配布されないこと',
+  );
 
   const installedVersion = fs.readFileSync(
     path.join(targetDir, '.agent-skill-chain', '.installed_version'),

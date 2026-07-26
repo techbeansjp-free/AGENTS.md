@@ -12,6 +12,12 @@
 # 恒久判断はADR-0005（accepted）に記録済み。squashコミットのメッセージを --subject で明示固定して
 # [skip ci] の生存を保証することが再帰トリガ防止（無限ループ防止）の主機構であり、concurrency と
 # bumpブランチ名へのtarget埋め込み・タグ／Releaseの存在チェックが二重発火防止を担う。
+#
+# Issue #271のbootstrap中は、checkout直後にself-repository限定sentinelを検査し、存在時は
+# npm/build/version/bump/tag/publishをすべて明示skipする。Issue #283のtrusted rollout完了commitが
+# sentinelを削除したときだけreleaseを許可し、最初のreleaseへ両Issueの変更を含める。sentinelは
+# 設定/schema入力ではなくconsumer配布対象外である。Issue #283は削除と同時に、このself-repository
+# 専用release workflowをconsumer向けsetup github配布集合から分離する。
 name: agent-skill-chain / release
 
 on:
@@ -44,20 +50,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Enforce bootstrap release guard
+        id: release_guard
+        run: ./.agent-skill-chain/scripts/release-guard.sh
+
       - uses: actions/setup-node@v7
+        if: steps.release_guard.outputs.release_allowed == 'true'
         with:
           node-version: '20'
 
       - run: npm ci
+        if: steps.release_guard.outputs.release_allowed == 'true'
 
       - run: npm run build
+        if: steps.release_guard.outputs.release_allowed == 'true'
 
       - name: Resolve target version
         id: version
+        if: steps.release_guard.outputs.release_allowed == 'true'
         run: ./.agent-skill-chain/scripts/release-resolve-version.sh >> "$GITHUB_OUTPUT"
 
       - name: Create/merge version bump PR (need_commit時のみ)
-        if: steps.version.outputs.need_commit == 'true'
+        if: steps.release_guard.outputs.release_allowed == 'true' && steps.version.outputs.need_commit == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}
         run: ./.agent-skill-chain/scripts/release-bump.sh "${{ steps.version.outputs.target }}"
@@ -67,6 +81,7 @@ jobs:
         # 対象にする（このjob自身のcheckout時点のSHAではない）。need_commit=false の場合は
         # package.jsonが既にtargetを保持しているため、このpushをトリガしたSHAをそのまま使う。
         id: ref
+        if: steps.release_guard.outputs.release_allowed == 'true'
         run: |
           if [[ "${{ steps.version.outputs.need_commit }}" == "true" ]]; then
             git fetch origin main --depth=1
@@ -76,9 +91,11 @@ jobs:
           fi
 
       - name: Create tag (冪等)
+        if: steps.release_guard.outputs.release_allowed == 'true'
         run: ./.agent-skill-chain/scripts/release-tag.sh "${{ steps.version.outputs.target }}" "${{ steps.ref.outputs.sha }}"
 
       - name: Create GitHub Release (冪等)
+        if: steps.release_guard.outputs.release_allowed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./.agent-skill-chain/scripts/release-publish.sh "${{ steps.version.outputs.target }}"
