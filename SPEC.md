@@ -22,6 +22,8 @@ commit metadata から token を排除する。
 - **resume proof**: 期限切れ lease の holder、Issue、専用 worktree、branch が同一の再開要求を
   結び付ける、トークンを表示しない検証情報。
 - **dirty worktree**: 未commit または未push の変更を持つ対象 Issue 専用 worktree。
+- **lease credential**: holder、token、Issue、segment、worktree、branch を結び付けて Git common
+  directory 配下へ owner-only 権限で保存する、Git 管理対象外の再開証明。
 - GitHub backend では ref の比較更新が排他制御の正本であり、Issue コメント・label は補助的な
   可視性に限る。
 
@@ -41,6 +43,9 @@ Git metadata、Issue コメント、CLI 出力へ残さない。
 - 新規 acquire、renew、resume、release の Git commit subject、Issue comment、成功出力、
   エラー出力に bearer token を含めない。token は lease ref の非表示 payload と、実行者が
   明示的に保護して渡す入力だけで扱う。
+- acquire は token 非含有の公開 lease だけを出力し、後続の renew、release、resume が使う
+  lease credential を Git common directory 配下へ mode `0600` で保存する。旧形式の移行時は
+  token を環境変数または互換入力で明示できるが、その値を出力しない。
 - 旧形式の token を含む lease ref は値を出力せず、再開可能なら安全な形式へ置換し、再開不可なら
   失効扱いとして明示する。
 
@@ -68,6 +73,8 @@ Git metadata、Issue コメント、CLI 出力へ残さない。
 - Given: GitHub backend で acquire、renew、resume、release を実行する
 - When: 作成した commit、Git log、Issue comment、標準出力、標準エラーを検査する
 - Then: token はいずれにも含まれず、可視情報は Issue、segment、holder、期限、状態だけを持つ
+- And: renew と release は acquire が保存した lease credential を暗黙に利用でき、token 非出力でも
+  CLI ライフサイクルを完了できる
 - 検証方法見込み: `automated`
 
 #### AC-4: 旧形式 lease を秘密を出さずに移行または失効できる

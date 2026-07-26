@@ -13,14 +13,24 @@ import {
   allLeasesFor,
   acquireLeaseRef,
   renewLeaseRef,
+  resumeLeaseRef,
   releaseLeaseRef,
   postLeaseComment,
   cleanupLeaseComment,
   countActiveWriterLeaseIssues,
   markActiveWriterLeaseLabel,
   unmarkActiveWriterLeaseLabel,
+  publicLease,
   type WriterLease,
 } from '../lib/github-lease.js';
+import {
+  credentialFor,
+  readLeaseCredential,
+  removeLeaseCredential,
+  tokensEqual,
+  writeLeaseCredential,
+} from '../lib/lease-credential.js';
+import { findIssueWorktree, hasUncommittedChanges, hasUnpushedCommits } from '../lib/worktree.js';
 import { toYamlString } from '../lib/yaml-io.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
@@ -31,24 +41,37 @@ issue_id: ISSUE-<番号> 形式のIssue ID
 segment:  spec|design|implementation|validation|adr_finalization
 
 出力:
-  成功時: 終了コード0。schemas/lease.schema.yaml準拠のwriter_lease（token含む）を標準出力へ。
+  成功時: 終了コード0。tokenを除いたwriter_leaseを標準出力へ。credentialはGit管理外へ0600で保存する。
   失敗時: 終了コード1以上。既存leaseと競合した場合はholder・expires_atを標準エラー出力へ。
 `;
 
 const RELEASE_USAGE = `
-使い方: agent-skill-chain lease release <issue_id> <token>
+使い方: agent-skill-chain lease release <issue_id> [token]
 
 出力:
   成功時: 終了コード0。解放したissue_idを標準出力へ。
-  失敗時: 終了コード1以上。token不一致等の理由を標準エラー出力へ。
+  失敗時: 終了コード1以上。credential不一致等の理由を標準エラー出力へ。
+
+token省略時はGit管理外のcredentialを使う。旧形式の移行時だけ引数または
+AGENT_SKILL_CHAIN_LEASE_TOKEN環境変数で明示できる。
 `;
 
 const RENEW_USAGE = `
-使い方: agent-skill-chain lease renew <issue_id> <token>
+使い方: agent-skill-chain lease renew <issue_id> [token]
 
 出力:
   成功時: 終了コード0。更新後のexpires_atを標準出力へ。
-  失敗時: 終了コード1以上。token不一致・lease期限切れの場合は理由を標準エラー出力へ。
+  失敗時: 終了コード1以上。credential不一致・lease期限切れの場合は理由を標準エラー出力へ。
+
+token省略時はGit管理外のcredentialを使う。旧形式の移行時だけ引数または
+AGENT_SKILL_CHAIN_LEASE_TOKEN環境変数で明示できる。
+`;
+
+const RESUME_USAGE = `
+使い方: agent-skill-chain lease resume <issue_id> <segment> [legacy_token]
+
+期限切れのGitHub writer leaseを、同一holderのcredentialと同一Issue専用dirty worktreeを
+確認した場合だけCAS更新する。legacy_tokenは旧形式移行用であり、標準出力・標準エラーへ表示しない。
 `;
 
 /**
@@ -82,6 +105,20 @@ function buildLease(issueId: string, segment: string, ttlSeconds: number): Write
       token: crypto.randomBytes(16).toString('hex'),
     },
   };
+}
+
+function resolveCredentialToken(root: string, issueNumber: string, explicit?: string): string | undefined {
+  return explicit || process.env.AGENT_SKILL_CHAIN_LEASE_TOKEN || readLeaseCredential(root, issueNumber)?.token;
+}
+
+function rememberCredential(
+  root: string,
+  config: ReturnType<typeof loadConfig>,
+  issueNumber: string,
+  lease: WriterLease,
+): void {
+  const worktree = findIssueWorktree(root, config, issueNumber);
+  writeLeaseCredential(root, credentialFor(lease, worktree));
 }
 
 export async function acquire(args: string[]): Promise<number> {
@@ -139,7 +176,8 @@ export async function acquire(args: string[]): Promise<number> {
           `WIP上限（wip.limit=${config.wip.limit}）に達しているため writer lease を取得できません（現在の有効writer lease数: ${activeCount - 1}）`,
         );
       }
-      return ok(toYamlString(lease).trim());
+      rememberCredential(root, config, number, lease);
+      return ok(toYamlString(publicLease(lease)).trim());
     }
 
     // 事前チェック（fail-fast用）: 既に有効なleaseが存在すれば、refへのpushを試みるまでもなく
@@ -191,7 +229,8 @@ export async function acquire(args: string[]): Promise<number> {
     }
     // WIP上限判定用ラベル付与（best-effort。失敗してもlease自体の取得成功を妨げない）。
     markActiveWriterLeaseLabel(number, root);
-    return ok(toYamlString(lease).trim());
+    rememberCredential(root, config, number, lease);
+    return ok(toYamlString(publicLease(lease)).trim());
   });
 }
 
@@ -201,31 +240,35 @@ export async function release(args: string[]): Promise<number> {
       printUsage(RELEASE_USAGE);
       return 0;
     }
-    const [issueIdRaw, token] = args;
-    if (!issueIdRaw || !token) throw new CliError('issue_id, token はすべて必須です');
+    const [issueIdRaw, explicitToken] = args;
+    if (!issueIdRaw) throw new CliError('issue_id は必須です');
     const { number } = parseIssueId(issueIdRaw);
 
     const root = repoRoot();
     const config = loadConfig(root);
+    const token = resolveCredentialToken(root, number, explicitToken);
+    if (!token) return fail('writer lease credential が見つかりません（human_required）');
 
     if (config.coordination.backend === 'local') {
       const existing = tryReadYamlFile<WriterLease>(leaseFilePath(root, number));
       if (!existing) return fail('解放対象の writer lease が存在しません');
-      if (existing.writer_lease.token !== token) return fail('token が一致しません');
+      if (!tokensEqual(existing.writer_lease.token, token)) return fail('writer lease credential が一致しません');
       fs.unlinkSync(leaseFilePath(root, number));
+      removeLeaseCredential(root, number);
       return ok(issueIdRaw);
     }
 
-    const held = allLeasesFor(number, root).find((c) => c.lease.writer_lease.token === token);
-    if (!held) return fail('token が一致する writer lease が見つかりません');
-    const released = releaseLeaseRef(number, held.segment, root);
+    const held = allLeasesFor(number, root).find((c) => tokensEqual(c.lease.writer_lease.token, token));
+    if (!held) return fail('writer lease credential が一致するleaseが見つかりません');
+    const released = releaseLeaseRef(number, held.segment, root, held.sha);
     if (!released.ok) {
       return fail(`writer lease ref の削除に失敗しました: ${released.stderr}`);
     }
     // best-effort: acquire時に投稿した可視性コメントの削除（lease自体の解放成否には影響しない）。
-    cleanupLeaseComment(number, token, root);
+    cleanupLeaseComment(number, held.lease.writer_lease.holder, root);
     // WIP上限判定用ラベル除去（best-effort）。
     unmarkActiveWriterLeaseLabel(number, root);
+    removeLeaseCredential(root, number);
     return ok(issueIdRaw);
   });
 }
@@ -236,19 +279,21 @@ export async function renew(args: string[]): Promise<number> {
       printUsage(RENEW_USAGE);
       return 0;
     }
-    const [issueIdRaw, token] = args;
-    if (!issueIdRaw || !token) throw new CliError('issue_id, token はすべて必須です');
+    const [issueIdRaw, explicitToken] = args;
+    if (!issueIdRaw) throw new CliError('issue_id は必須です');
     const { number } = parseIssueId(issueIdRaw);
 
     const root = repoRoot();
     const config = loadConfig(root);
+    const token = resolveCredentialToken(root, number, explicitToken);
+    if (!token) return fail('writer lease credential が見つかりません（human_required）');
     const now = new Date();
     const expiresAt = new Date(now.getTime() + config.lease.ttl_seconds * 1000).toISOString();
 
     if (config.coordination.backend === 'local') {
       const existing = tryReadYamlFile<WriterLease>(leaseFilePath(root, number));
       if (!existing) return fail('更新対象の writer lease が存在しません');
-      if (existing.writer_lease.token !== token) return fail('token が一致しません');
+      if (!tokensEqual(existing.writer_lease.token, token)) return fail('writer lease credential が一致しません');
       if (existing.writer_lease.expires_at <= now.toISOString()) {
         return fail(`lease は既に期限切れです（expires_at=${existing.writer_lease.expires_at}）`);
       }
@@ -257,8 +302,8 @@ export async function renew(args: string[]): Promise<number> {
       return ok(expiresAt);
     }
 
-    const held = allLeasesFor(number, root).find((c) => c.lease.writer_lease.token === token);
-    if (!held) return fail('token が一致する writer lease が見つかりません');
+    const held = allLeasesFor(number, root).find((c) => tokensEqual(c.lease.writer_lease.token, token));
+    if (!held) return fail('writer lease credential が一致するleaseが見つかりません');
     if (held.lease.writer_lease.expires_at <= now.toISOString()) {
       return fail(`lease は既に期限切れです（expires_at=${held.lease.writer_lease.expires_at}）`);
     }
@@ -266,7 +311,7 @@ export async function renew(args: string[]): Promise<number> {
       ...held.lease,
       writer_lease: { ...held.lease.writer_lease, expires_at: expiresAt },
     };
-    const renewed = renewLeaseRef(number, held.segment, updatedLease, root);
+    const renewed = renewLeaseRef(number, held.segment, updatedLease, root, held.sha);
     if (!renewed.ok) {
       return fail(
         renewed.reason === 'conflict'
@@ -275,5 +320,105 @@ export async function renew(args: string[]): Promise<number> {
       );
     }
     return ok(expiresAt);
+  });
+}
+
+export async function resume(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(RESUME_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, segment, legacyToken] = args;
+    if (!issueIdRaw || !segment) throw new CliError('issue_id, segment はすべて必須です');
+    const { issueId, number } = parseIssueId(issueIdRaw);
+    const root = repoRoot();
+    const config = loadConfig(root);
+    if (config.coordination.backend !== 'github') {
+      return fail('lease resume はGitHub Coordination Backendでのみ利用できます');
+    }
+
+    const existing = allLeasesFor(number, root).find((entry) => entry.segment === segment);
+    if (!existing) return fail('再開対象の writer lease が見つかりません（human_required）');
+    const now = new Date();
+    if (existing.lease.writer_lease.expires_at > now.toISOString()) {
+      return fail(
+        `writer lease は期限内です: holder=${existing.lease.writer_lease.holder}, expires_at=${existing.lease.writer_lease.expires_at}`,
+      );
+    }
+    if (
+      existing.lease.writer_lease.issue_id !== issueId ||
+      existing.lease.writer_lease.segment !== segment
+    ) {
+      return fail('writer lease のIssueまたはsegmentが一致しません（human_required）');
+    }
+
+    const credential = readLeaseCredential(root, number);
+    const token = resolveCredentialToken(root, number, legacyToken);
+    if (!token || !tokensEqual(existing.lease.writer_lease.token, token)) {
+      return fail('同一holderの writer lease credential を確認できません（human_required）');
+    }
+    if (
+      credential &&
+      (credential.issue_id !== issueId ||
+        credential.segment !== segment ||
+        credential.holder !== existing.lease.writer_lease.holder ||
+        !tokensEqual(credential.token, token))
+    ) {
+      return fail('writer lease credential のholderまたは作業識別情報が一致しません（human_required）');
+    }
+
+    const worktree = findIssueWorktree(root, config, number);
+    if (!worktree?.branch) {
+      return fail('Issue専用worktreeまたはbranchを確認できません（human_required）');
+    }
+    if (
+      credential?.worktree_path &&
+      path.resolve(credential.worktree_path) !== path.resolve(worktree.path)
+    ) {
+      return fail('writer lease credential のworktreeが一致しません（human_required）');
+    }
+    if (credential?.branch && credential.branch !== worktree.branch) {
+      return fail('writer lease credential のbranchが一致しません（human_required）');
+    }
+    const dirty =
+      hasUncommittedChanges(worktree.path) ||
+      hasUnpushedCommits(worktree.path, worktree.branch);
+    if (!dirty) {
+      return fail('Issue専用worktreeに未commitまたは未pushの変更がありません（human_required）');
+    }
+
+    const expiresAt = new Date(now.getTime() + config.lease.ttl_seconds * 1000).toISOString();
+    const resumedLease: WriterLease = {
+      schema_version: 'agent-skill-chain/lease/v1',
+      writer_lease: {
+        ...existing.lease.writer_lease,
+        acquired_at: now.toISOString(),
+        expires_at: expiresAt,
+        token: crypto.randomBytes(16).toString('hex'),
+      },
+    };
+    const validation = validateAgainstSchema('lease', resumedLease, root);
+    if (!validation.valid) {
+      return fail(`再開用leaseがスキーマに適合しません: ${validation.errors.join('; ')}`);
+    }
+    const resumed = resumeLeaseRef(number, segment, existing.sha, resumedLease, root);
+    if (!resumed.ok) {
+      return fail(
+        resumed.reason === 'conflict'
+          ? 'resumeに失敗しました（検査後にrefが更新されています、human_required）'
+          : `resume用 writer lease ref の更新に失敗しました: ${resumed.stderr}`,
+      );
+    }
+
+    rememberCredential(root, config, number, resumedLease);
+    cleanupLeaseComment(number, existing.lease.writer_lease.holder, root);
+    try {
+      postLeaseComment(number, resumedLease, root);
+    } catch {
+      // best-effort: refのCAS成功を可視性コメントの失敗で取り消さない。
+    }
+    markActiveWriterLeaseLabel(number, root);
+    return ok(toYamlString(publicLease(resumedLease)).trim());
   });
 }

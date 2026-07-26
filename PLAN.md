@@ -16,6 +16,7 @@
 ## 変更対象
 
 - `src/lib/github-lease.ts`: ref 表現、CAS、公開 DTO、legacy reader。
+- `src/lib/lease-credential.ts`: Git管理外のowner-only credential保存。
 - `src/commands/lease.ts`: resume コマンドと token 非露出 CLI 契約。
 - `src/commands/reconcile.ts`: dirty lease の安全な再開案内と legacy 回収。
 - `src/lib/cli-routes.ts`: resume の routing。

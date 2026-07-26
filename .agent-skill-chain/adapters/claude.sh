@@ -88,13 +88,13 @@ acquire_lease() {
 }
 
 # 保持中の writer lease を延長する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.renewal_interval_seconds を用いる。
-# 引数: issue_id, token
+# 引数: issue_id（tokenはGit管理外credentialから暗黙に取得）
 renew_lease() {
   "$SCRIPTS_DIR/lease-renew.sh" "$@"
 }
 
 # 保持中の writer lease を解放する。
-# 引数: issue_id, token
+# 引数: issue_id（tokenはGit管理外credentialから暗黙に取得）
 release_lease() {
   "$SCRIPTS_DIR/lease-release.sh" "$@"
 }
@@ -285,14 +285,8 @@ launch_worker() {
   # 1. lease取得。失敗時はまだ何も起動していないため blocked報告なしで即 return 1
   #    （AC-2: wip.limit超過・同issue内他segment競合・同一segment競合はいずれもここで拒否される。
   #    launch_worker自身はWIP判定・コンフリクト判定を独自に持たず lease acquire の結果を信頼する）。
-  local lease_yaml token
-  if ! lease_yaml="$(acquire_lease "$issue_id" "$segment")"; then
+  if ! acquire_lease "$issue_id" "$segment" >/dev/null; then
     echo "launch_worker: writer lease の取得に失敗しました（wip.limit超過または既存leaseとの競合）" >&2
-    return 1
-  fi
-  token="$(sed -n 's/^[[:space:]]*token:[[:space:]]*//p' <<<"$lease_yaml" | head -n1)"
-  if [[ -z "$token" ]]; then
-    echo "launch_worker: 取得した writer lease から token を抽出できませんでした" >&2
     return 1
   fi
 
@@ -301,13 +295,13 @@ launch_worker() {
   local contract role
   if ! contract="$(_asc_cli segment start "$issue_id" "$segment")"; then
     echo "launch_worker: segment start に失敗しました（role_contract取得不可）" >&2
-    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   fi
   role="$(sed -n 's/^role:[[:space:]]*//p' <<<"$contract" | head -n1)"
   if [[ -z "$role" ]]; then
     echo "launch_worker: segment start の出力から role を抽出できませんでした" >&2
-    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   fi
 
@@ -317,7 +311,7 @@ launch_worker() {
     echo "launch_worker: $reason（フェイルセーフでblockedへ倒します）" >&2
     sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
     report_status "$issue_id" "$role" "$segment" blocked "$sha" "$reason" true >/dev/null 2>&1 || true
-    release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+    release_lease "$issue_id" >/dev/null 2>&1 || true
     return 2
   }
 
@@ -375,7 +369,7 @@ launch_worker() {
     while kill -0 "$worker_pid" 2>/dev/null; do
       read -r -t "$renew_interval" _renew_wait </dev/null || true
       kill -0 "$worker_pid" 2>/dev/null || break
-      renew_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+      renew_lease "$issue_id" >/dev/null 2>&1 || true
     done
   ) &
   local renew_pid=$!
@@ -407,6 +401,6 @@ launch_worker() {
     return
   fi
 
-  release_lease "$issue_id" "$token" >/dev/null 2>&1 || true
+  release_lease "$issue_id" >/dev/null 2>&1 || true
   return 0
 }

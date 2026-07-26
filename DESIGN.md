@@ -15,6 +15,7 @@ lease acquire、renew、release、resume、reconcile と GitHub lease ref の表
 | Context | 入力 | 出力 | 責務 | 禁止 |
 |---|---|---|---|---|
 | LeaseRepository | issue、segment、holder、lease ref | 現在 lease と CAS 結果 | ref の読取り、比較更新、削除 | token を可視 Git metadata に書く |
+| CredentialStore | lease、専用 worktree、branch | owner-only credential | Git common directoryへの原子的な保存・読取り・削除 | Git管理対象やCLI出力へtokenを渡す |
 | ResumeLeasePolicy | 期限切れ lease、専用 worktree、resume proof | resumed / human_required | 同一作業の証明と安全な移譲 | 異なる holder や worktree の奪取 |
 | LeasePresentation | lease の公開可能な属性 | comment、CLI 表示 | holder、期限、状態だけを表示 | token や secret payload の直列化 |
 | Reconciler | 期限切れ lease と worktree 状態 | reclaimed / human_required | clean は回収、dirty は保護・再開案内 | dirty 変更の削除、勝手な再開 |
@@ -39,11 +40,19 @@ flowchart LR
 出力できない。resume は既存 ref の object ID を期待値とする compare-and-swap を使い、検査後に
 別作業者が更新した場合も上書きしない。
 
+`CredentialStore` は `.git` の実パスではなく Git が返す common directory を基準にするため、
+linked worktree からも同じ credential を参照できる。credential directory は mode `0700`、
+Issue ごとの YAML は mode `0600` とし、Git index・commit・push の対象外に置く。acquire は
+公開 lease のみを stdout へ返し、renew と release は credential を暗黙に読み取る。これにより
+token を可視出力へ戻さず、従来の acquire→renew/release ライフサイクルを維持する。
+
 ## データと状態遷移
 
 lease ref の commit subject は、schema version、Issue、segment、holder、取得時刻、期限、状態を
 含む token 非含有の公開 YAML とする。token は commit の tree に置く非表示 payload に保持し、
 commit subject・Issue comment・CLI では `holder` と `expires_at` だけを表示する。
+新規形式は payload を先に検証し、payload が存在しない場合だけ token 含有の旧 commit message を
+legacy reader で解釈する。raw legacy message は成功・失敗のどちらの表示にも連結しない。
 
 ```mermaid
 stateDiagram-v2
@@ -69,11 +78,16 @@ resume は `issue start` で作った worktree を `git worktree list --porcelai
 
 - ref の Issue と segment がコマンド引数に一致する。
 - resume proof の holder が ref の holder に一致する。
+- credential の token が ref payload の token と一致し、Issue と segment も一致する。
 - worktree の branch が Issue の branch 命名規約と ref の Issue に一致する。
+- credential に worktree と branch が記録されている場合、現在の実体と一致する。
 - worktree が dirty であり、reconcile が保護対象と判断する状態である。
 - ref の object ID が read 時から CAS 更新時まで変化していない。
 
 いずれかが不成立なら、ref、worktree、local branch を変更せず `human_required` を返す。
+旧形式では credential がまだ存在しないため、保護された互換入力の token と現在の Issue 専用
+worktree・branch を検査する。成功時は token をローテーションし、新形式 payload と credential
+へ一度で移行する。以後は旧 token を受理しない。
 
 ## 障害時の扱い
 
