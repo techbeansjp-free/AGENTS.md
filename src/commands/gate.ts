@@ -240,6 +240,11 @@ interface LauncherToken {
   nonce: string;
   slots: { slot: 1 | 2; run_id: string }[];
   consumed_slots: number[];
+  provider_executable?: {
+    provider: 'codex';
+    path: string;
+    digest: string;
+  };
 }
 
 /**
@@ -403,6 +408,8 @@ function reserveLauncherTokenSlot(options: {
   prNumber: string;
   reviewerRunId: string;
   slot: number;
+  providerExecutablePath?: string;
+  providerExecutableDigest?: string;
 }): { digest: string; finalSlot: boolean } {
   const tokenPath = path.resolve(options.tokenPath);
   const parent = path.dirname(tokenPath);
@@ -446,6 +453,12 @@ function reserveLauncherTokenSlot(options: {
         !/^review-[A-Za-z0-9._-]+$/.test(entry.run_id),
     ) ||
     token.slots[options.slot - 1]?.run_id !== options.reviewerRunId ||
+    (options.providerExecutablePath !== undefined &&
+      (token.provider_executable?.provider !== 'codex' ||
+        token.provider_executable.path !== options.providerExecutablePath ||
+        token.provider_executable.digest !== options.providerExecutableDigest ||
+        !path.isAbsolute(token.provider_executable.path) ||
+        !/^sha256:[0-9a-f]{64}$/.test(token.provider_executable.digest))) ||
     !Array.isArray(token.consumed_slots) ||
     token.consumed_slots.some((slot) => !Number.isInteger(slot) || slot < 1 || slot > token.expected_count) ||
     new Set(token.consumed_slots).size !== token.consumed_slots.length ||
@@ -1062,6 +1075,20 @@ export async function submitEvidence(args: string[]): Promise<number> {
     if (core.required && adapterRaw === 'claude' && process.env.ASC_CAPABILITY_PROBE_PASSED !== 'true') {
       throw new CliError('Claude core reviewerのcapability probe成功を確認できません');
     }
+    const providerExecutablePath =
+      core.required && adapterRaw === 'codex' ? process.env.ASC_CODEX_TRUSTED_EXECUTABLE : undefined;
+    const providerExecutableDigest =
+      core.required && adapterRaw === 'codex' ? process.env.ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST : undefined;
+    if (
+      core.required &&
+      adapterRaw === 'codex' &&
+      (!providerExecutablePath ||
+        !path.isAbsolute(providerExecutablePath) ||
+        !providerExecutableDigest ||
+        !/^sha256:[0-9a-f]{64}$/.test(providerExecutableDigest))
+    ) {
+      throw new CliError('Codex core reviewer実行物のlauncher由来identity/digestがありません');
+    }
     const launcherToken = reserveLauncherTokenSlot({
       tokenPath: launcherTokenPath,
       attemptId,
@@ -1072,6 +1099,8 @@ export async function submitEvidence(args: string[]): Promise<number> {
       prNumber,
       reviewerRunId,
       slot,
+      providerExecutablePath,
+      providerExecutableDigest,
     });
 
     const evidence: ReviewEvidence = {
@@ -1087,6 +1116,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
         trusted_base_sha: trustedBaseSha,
         launcher_digest: launcherDigest,
         launcher_token_digest: launcherToken.digest,
+        provider_executable_digest: providerExecutableDigest,
         isolation: 'ephemeral_clone',
         sandbox: 'read_only',
       },

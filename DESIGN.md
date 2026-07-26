@@ -65,6 +65,8 @@ launcher呼出しごとに暗号学的乱数の `attempt-` IDを1つ生成し、
 
 local recorder自身もprotected baseをtrust rootにする。進行役はIssue worktree内のcandidateではなく、cleanなbase worktreeまたはversion固定したinstalled packageから `gate local-review` を起動する。launcherはprotected base SHAからephemeral cloneを作り、credential-bearing originを削除して、そのclone内でbuildしたclassifier、prompt generator、adapter、recorderだけを使う。判定対象は長さ付きJSON stringの非信頼データとしてprompt内へ埋め込み、成果物内の命令やMarkdown fenceをレビュー指示として扱わせない。AI subprocessは全adapter共通の空workspaceをcurrent directoryとし、空HOME・`env -i`・gh/git config・専用recorder token無しで起動する。callerが隔離root用の環境変数や事前配置workspaceを注入しても無視し、adapter呼出しごとに新しい0700相当の一時rootを作成・破棄する。Claudeはtool無し、Codexはephemeral/ignore-user-config・shell env allowlist・caller HOME denyのread-only permissionを重ねる。Claude evidenceのmodel/reasoningは実際に選択・probeした値から構築し、ambient `ASC_REVIEW_MODEL` / `ASC_REVIEW_REASONING`を参照しない。
 
+core Codexのprovider実行物はcandidate cloneより前に管理PATHからabsolute realpath解決し、SHA-256と固定`codex login status`成功をprotected launcherが確定する。`CODEX_EXECUTABLE`・`CODEX_AUTH_PROBE_CMD`・完全command上書きはcoreで無条件拒否し、path/digestを0600 one-time launcher tokenへ束縛する。adapterは各実行直前にrealpathとdigestを再照合してexact pathだけをexecし、digestをReview evidenceとgate reportへ残す。protected verifierはcore Codex evidenceでdigestを必須化し、同一attempt内一致とschemaを検査する。callerが同じ形のenvだけを自己申告してもtoken・recorder principal・protected launcher attestationが無ければ承認しない。管理PATHと解決binaryは管理主体のtrust rootであり、candidateやmodel出力ではない。non-coreだけは既存overrideを維持する。
+
 target成果物は `git show <target_sha>:<path>` の標準出力を文字列化せずbyte列のままhashする。実在blobはdomain prefix付き、欠落は別domainのsentinelとしてhashし、sentinelと同じbyte列を持つ実在blobとの衝突を防ぐ。新規local scaffoldはbase...targetのNUL区切り差分からgate別の承認対象path集合を確定し、各approved verdictへ空集合や部分集合ではなく完全一致を要求する。固定launcher構成ファイル一覧のblob digestも証跡へattestする。dirty・version不一致・由来不明の実行系は `human_required` とする。
 
 ### evidence envelope
@@ -107,11 +109,11 @@ bootstrap後の通常sourceを作れる最小recorderとして、default branch�
 
 配布正本 `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml` / `agent-skill-chain-reconcile.yml` とroot展開物を同時更新する。`init` のfixture検証では新規対象repositoryへ検証専用gate workflowとrollout待ちno-op reconcileを配る。
 
-`upgrade` は全書込み前に、fixtureの展開済みgate workflowと、既に導入済みの配布templateを比較する。
+`upgrade` は全書込み前に、導入済みold template、展開済み`.github`、package new templateの全managed fileを再帰列挙して三者比較する。
 
-- 同一ならmanaged assetとして両方を新workflowへ置換し、API credentialとCI内model起動を除去する。
-- 不一致ならlocal customization競合としてupgrade全体を無変更で停止し、installed versionも進めない。
-- 片方の欠落・読取不能もfail-closed。`--dry-run` は移行または競合だけを報告し書かない。
+- oldとdeployedが同一ならmanaged assetとしてnewへ置換し、API credentialとCI内model起動を除去する。
+- old管理fileのdeployed customization、new managed filenameの既存custom collisionはupgrade全体を無変更で停止し、installed versionも進めない。
+- managed fileの欠落・読取不能もfail-closedとし、managed集合外のextraは保持する。`--dry-run`も同じpreflight後に書込み無しで予定だけを報告する。
 
 preflightは通常のmirror loopが旧templateを上書きする前に行う。安全なlegacy修復、競合時no-op、新規init、template sync、配布元と展開物にprovider secret/Codex Action/provider CLI/self-hosted runnerが0件であることを回帰検査する。このIssueが動的に検証するのはself-repositoryのworkflow実行とasset移行までであり、任意consumerのCLI解決はIssue #285へ分離する。
 

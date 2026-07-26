@@ -38,7 +38,7 @@
 
 - Given: コア変更または `core_audit` をローカル reviewer が判定する
 - When: adapter と capability probe を解決する
-- Then: Codex は `gpt-5.6-sol` / `xhigh` / read-only、Claude Code は `frontier_coding` / `maximum_reasoning` / read-only の検証済み実在設定だけを許可し、ローカルStrictでは別workspaceの独立processを2回起動する。Cursor等の未登録 adapter は `human_required` になる
+- Then: Codex は `gpt-5.6-sol` / `xhigh` / read-only、Claude Code は `frontier_coding` / `maximum_reasoning` / read-only の検証済み実在設定だけを許可し、ローカルStrictでは別workspaceの独立processを2回起動する。core Codexは管理PATHから解決したabsolute realpathとSHA-256をone-time launcher tokenへ束縛し、実行直前に再照合する。Cursor等の未登録 adapter は `human_required` になる
 - 検証方法: `automated`
 
 ### AC-3: 古いSHA・改変証跡を拒否する
@@ -73,7 +73,7 @@
 
 - Given: agent-skill-chain self-repositoryのpolicy、schema、adapter、workflow template、展開済みworkflow、または旧workflow assetを導入済みのfixtureが存在する
 - When: init、upgrade、template sync、policy、adapter、回帰検査を行う
-- Then: 配布assetからAPI key / Codex Action / CI内AI実行依存が除去され、旧templateと展開物が同期済みなら安全に移行し、不一致なら何も上書きせず競合として停止する。任意consumerでのCLI実行可搬性は完了扱いにしない
+- Then: 配布assetからAPI key / Codex Action / CI内AI実行依存が除去される。upgradeは導入済みold template・展開済み`.github`・package new templateの全managed fileをcopy前に再帰三者比較し、customization・new filename collision・欠落・判定不能が1件でもあれば全体を無変更停止し、managed集合外のextraは保持する。任意consumerでのCLI実行可搬性は完了扱いにしない
 - 検証方法: `automated`
 
 ### AC-8: bootstrap後も再利用できる専用App recorderを含む
@@ -92,7 +92,8 @@
 - classifier、policy、schema、verifier、workflowは保護されたbase revisionをtrust rootとして実行し、PRが変更した検証コードやactor allowlistを当該PR自身の承認には使わない。
 - GitHubのrequired statusは同一GitHub Actions App内のworkflowを識別しないため、#274は一回限りbootstrapに必要な最小専用App recorderも同梱する。legacy gate workflowから`checks: write`・Check API・publishを、reconcile workflowから`checks: write`・candidate script実行を除去する。rulesetへのintegration ID適用・chunk化・完全なreconcile/rolloutはIssue #283が担い、それらが有効になるまで通常PRを成功扱いにしない。
 - classifierはmodel policyを持たないconsumerをordinaryと分類する既存互換を維持するが、GitHub trusted境界ではpolicy欠落を構造化`human_required`へ閉じる。ordinary consumerの正式なpolicy導入・移行・BDDはIssue #287で実装する。
-- #274は設定/schema入力ではないself-repository限定sentinel `.agent-skill-chain/RELEASE_BLOCKED_UNTIL_ISSUE_283` を追加する。root/template同期済みrelease workflowはcheckout直後にsentinelを検査し、存在中はnpm/build/version/bump/tag/publishの全stepを明示skipするため、#274のbootstrap mergeでworkflowが起動してもreleaseを生成しない。sentinelはpackageと`init`/`setup`/`upgrade`の名前空間配布集合に含めない。
+- #274は設定/schema入力ではないself-repository限定sentinel `.agent-skill-chain/RELEASE_BLOCKED_UNTIL_ISSUE_283` を追加する。root/template同期済みrelease workflowはcheckout直後にrepository identityとsentinelを検査し、`GITHUB_REPOSITORY == techbeansjp-free/AGENTS.md`かつsentinel不在の場合だけreleaseを許可する。repository未設定・別repository・sentinel存在ではnpm/build/version/bump/tag/publishの全stepを明示skipする。sentinelはpackageと`init`/`setup`/`upgrade`の名前空間配布集合に含めない。
+- core Codexでは`CODEX_EXECUTABLE`・`CODEX_AUTH_PROBE_CMD`・完全command上書きを無条件拒否する。protected launcherがcandidate影響前の管理PATHからCodexをabsolute realpath解決してSHA-256を計算し、固定`codex login status`を実行する。path/digestを0600 one-time tokenへ束縛し、adapterは実行直前にdigestを再照合してexact pathだけを実行する。evidenceとgate reportはprovider executable digestを保存し、protected verifierはtoken由来の値とschemaを検証する。管理PATHと解決済みbinaryは管理主体のtrust rootであり、candidate・model出力・caller自己申告はtrust rootではない。通常non-coreのoverride互換は維持する。
 - Issue #283のtrusted rollout完了commitはsentinelを削除し、同時にself-repository専用release workflowをconsumer向け`setup github`配布集合から分離する。削除pushで初めてreleaseを許可し、Issue #271とIssue #283の両変更を含む最初のreleaseだけを行う。Issue #283を含まない#274単体releaseまたはconsumer配布は禁止する。
 - 証跡未到着・分類不能・capability 未証明・件数不足は成功や `neutral` にしない。
 - 全 AC の自動テスト、型検査、lint、SAST、依存関係・secret scan、template sync を実行して push する。

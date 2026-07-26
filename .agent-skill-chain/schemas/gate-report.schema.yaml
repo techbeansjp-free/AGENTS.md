@@ -89,6 +89,7 @@ properties:
             trusted_base_sha: {type: string, minLength: 1}
             launcher_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
             launcher_token_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+            provider_executable_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
             isolation: {const: ephemeral_clone}
             sandbox: {const: read_only}
       review_attempt:

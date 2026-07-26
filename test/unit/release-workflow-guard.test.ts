@@ -39,7 +39,7 @@ interface ReleaseWorkflow {
   };
 }
 
-function executeGuard(sentinelPresent: boolean): string {
+function executeGuard(repository: string | undefined, sentinelPresent: boolean): string {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-release-guard-'));
   try {
     const scriptDir = path.join(fixtureRoot, '.agent-skill-chain', 'scripts');
@@ -54,7 +54,11 @@ function executeGuard(sentinelPresent: boolean): string {
     const result = spawnSync(fixtureScript, [], {
       cwd: fixtureRoot,
       encoding: 'utf8',
-      env: { ...process.env, GITHUB_OUTPUT: outputPath },
+      env: {
+        ...process.env,
+        GITHUB_OUTPUT: outputPath,
+        GITHUB_REPOSITORY: repository,
+      },
     });
     assert.equal(result.status, 0, result.stderr);
     return fs.readFileSync(outputPath, 'utf8').trim();
@@ -63,9 +67,11 @@ function executeGuard(sentinelPresent: boolean): string {
   }
 }
 
-test('release guard: sentinel有りはreleaseを禁止し、無しは従来経路を許可する', () => {
-  assert.equal(executeGuard(true), 'release_allowed=false');
-  assert.equal(executeGuard(false), 'release_allowed=true');
+test('release guard: repository/sentinelの4象限をfail-closedに判定する', () => {
+  assert.equal(executeGuard('techbeansjp-free/AGENTS.md', false), 'release_allowed=true');
+  assert.equal(executeGuard('techbeansjp-free/AGENTS.md', true), 'release_allowed=false');
+  assert.equal(executeGuard('consumer/example', false), 'release_allowed=false');
+  assert.equal(executeGuard(undefined, false), 'release_allowed=false');
 });
 
 test('release workflow: checkout直後のguardがfalseならrelease-producing stepは0件になる', () => {

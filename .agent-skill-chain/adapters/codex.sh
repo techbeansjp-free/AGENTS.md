@@ -15,6 +15,17 @@ eval "$(declare -f launch_gate_reviewer | sed '1s/^launch_gate_reviewer /_codex_
 eval "$(declare -f launch_worker | sed '1s/^launch_worker /_codex_worker_lifecycle /')"
 
 _codex_auth_ok() {
+  if [[ "${ASC_CORE_REVIEW_REQUIRED:-false}" == "true" ]]; then
+    local trusted="${ASC_CODEX_TRUSTED_EXECUTABLE:-}"
+    local expected="${ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST:-}"
+    [[ "$trusted" == /* && "$expected" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+    [[ "$(realpath -- "$trusted")" == "$trusted" && -x "$trusted" ]] || return 1
+    [[ "sha256:$(sha256sum -- "$trusted" | awk '{print $1}')" == "$expected" ]] || return 1
+    local quoted
+    printf -v quoted '%q login status' "$trusted"
+    _run_provider_probe_sanitized "$quoted" "${CODEX_AUTH_PROBE_TIMEOUT_SEC:-20}"
+    return
+  fi
   local probe="${CODEX_AUTH_PROBE_CMD:-}"
   if [[ -z "$probe" ]]; then
     if command -v codex >/dev/null 2>&1; then
@@ -30,6 +41,28 @@ _codex_auth_ok() {
 # 取り込んだ lifecycle が呼ぶ認証フックを Codex 用に差し替える。トークン値・probe の出力は
 # 一切ログに流さない。
 _claude_auth_ok() { _codex_auth_ok; }
+
+_codex_validate_launcher_binding() {
+  local token_file="${ASC_LAUNCHER_TOKEN_FILE:-}"
+  local trusted="${ASC_CODEX_TRUSTED_EXECUTABLE:-}"
+  local expected="${ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST:-}"
+  [[ -n "$token_file" && -f "$token_file" && ! -L "$token_file" ]] || return 1
+  [[ "$(stat -c '%a' -- "$token_file" 2>/dev/null)" == "600" ]] || return 1
+  [[ "$(stat -c '%u' -- "$token_file" 2>/dev/null)" == "$(id -u)" ]] || return 1
+  local binding token_path token_digest
+  binding="$(node -e '
+    const fs = require("node:fs");
+    const token = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const provider = token.provider_executable;
+    if (!provider || provider.provider !== "codex") process.exit(1);
+    process.stdout.write(provider.path + "\n" + provider.digest);
+  ' "$token_file" 2>/dev/null)" || return 1
+  token_path="$(sed -n '1p' <<<"$binding")"
+  token_digest="$(sed -n '2p' <<<"$binding")"
+  [[ "$token_path" == "$trusted" && "$token_digest" == "$expected" ]] || return 1
+  [[ "$trusted" == /* && "$(realpath -- "$trusted" 2>/dev/null)" == "$trusted" && -x "$trusted" ]] || return 1
+  [[ "sha256:$(sha256sum -- "$trusted" 2>/dev/null | awk '{print $1}')" == "$expected" ]] || return 1
+}
 
 _codex_worker_model() {
   case "$1" in
@@ -63,8 +96,12 @@ launch_gate_reviewer() {
   }
 
   if [[ "$core_codex_review" == "true" ]]; then
-    if [[ -n "${CODEX_REVIEWER_CMD:-}" || -n "${GATE_REVIEWER_CMD:-}" ]]; then
-      _codex_fail_safe "Codex core reviewer では検証不能な完全command上書きを許可しません"
+    if [[ -n "${CODEX_REVIEWER_CMD:-}" || -n "${GATE_REVIEWER_CMD:-}" || -n "${CODEX_EXECUTABLE:-}" || -n "${CODEX_AUTH_PROBE_CMD:-}" ]]; then
+      _codex_fail_safe "Codex core reviewer ではexecutable/auth probe/完全command上書きを許可しません"
+      return
+    fi
+    if ! _codex_validate_launcher_binding; then
+      _codex_fail_safe "Codex core reviewerの0600 launcher tokenと実行物identity/digestを検証できません"
       return
     fi
     model="${CODEX_REVIEWER_MODEL:-${ASC_CODEX_REQUIRED_MODEL:-}}"
@@ -88,6 +125,14 @@ launch_gate_reviewer() {
 
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
+    if [[ "$core_codex_review" == "true" ]]; then
+      codex_executable="${ASC_CODEX_TRUSTED_EXECUTABLE:-}"
+      if [[ "$codex_executable" != /* || "$(realpath -- "$codex_executable" 2>/dev/null || true)" != "$codex_executable" ||
+            "sha256:$(sha256sum -- "$codex_executable" 2>/dev/null | awk '{print $1}')" != "${ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST:-}" ]]; then
+        _codex_fail_safe "Codex core reviewer実行物のidentity/digestがlauncher tokenと一致しません"
+        return
+      fi
+    fi
     if ! command -v "$codex_executable" >/dev/null 2>&1; then
       _codex_fail_safe "Codex CLI が見つかりません"
       return

@@ -18,32 +18,48 @@ target_dir: 更新先リポジトリのルートディレクトリ（省略時�
   失敗時（未導入）: 終了コード1以上。「先にinitを実行してください」を標準エラー出力へ。
 `;
 
-const GATE_WORKFLOW = path.join('workflows', 'agent-skill-chain-gate.yml');
-
-/**
- * 配布済みworkflowを更新する前に、consumer側の展開物が導入済みtemplateと同期していることを
- * 確認する。通常mirrorより先に実行することで、競合後に一部だけ更新された状態を作らない。
- */
-function preflightManagedGateWorkflow(targetDir: string): void {
-  const installedTemplate = path.join(
-    targetDir,
-    ASSET_NAMESPACE,
-    'templates',
-    'github',
-    '.github',
-    GATE_WORKFLOW,
-  );
-  const deployedWorkflow = path.join(targetDir, '.github', GATE_WORKFLOW);
-  if (!fs.existsSync(installedTemplate) || !fs.existsSync(deployedWorkflow)) {
-    throw new CliError(
-      `gate workflow migrationを安全に判定できません。導入済みtemplateと展開物の両方が必要です: ` +
-        `${installedTemplate} / ${deployedWorkflow}`,
-    );
+function relativeFiles(root: string): string[] {
+  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+    throw new CliError(`managed template directoryを読めません: ${root}`);
   }
-  if (!fs.readFileSync(installedTemplate).equals(fs.readFileSync(deployedWorkflow))) {
-    throw new CliError(
-      `gate workflowにlocal customization競合があるためupgradeを無変更で停止しました: ${deployedWorkflow}`,
-    );
+  const files: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(absolute);
+      else if (entry.isFile()) files.push(path.relative(root, absolute));
+      else throw new CliError(`managed assetの種別を判定できません: ${absolute}`);
+    }
+  };
+  walk(root);
+  return files.sort();
+}
+
+/** 全managed GitHub assetをold template・deployed・new templateの三者でcopy前に検査する。 */
+function preflightManagedGithubAssets(targetDir: string): void {
+  const oldRoot = path.join(targetDir, ASSET_NAMESPACE, 'templates', 'github', '.github');
+  const deployedRoot = path.join(targetDir, '.github');
+  const newRoot = path.join(packageRoot(), ASSET_NAMESPACE, 'templates', 'github', '.github');
+  const oldFiles = new Set(relativeFiles(oldRoot));
+  const newFiles = new Set(relativeFiles(newRoot));
+
+  for (const relative of [...new Set([...oldFiles, ...newFiles])].sort()) {
+    const oldPath = path.join(oldRoot, relative);
+    const deployedPath = path.join(deployedRoot, relative);
+    const newPath = path.join(newRoot, relative);
+    if (oldFiles.has(relative)) {
+      if (!fs.existsSync(deployedPath) || !fs.statSync(deployedPath).isFile()) {
+        throw new CliError(`managed assetの展開物が欠落しupgradeを判定できません: ${deployedPath}`);
+      }
+      if (!fs.readFileSync(oldPath).equals(fs.readFileSync(deployedPath))) {
+        throw new CliError(`managed assetにlocal customization競合があるためupgradeを無変更で停止しました: ${deployedPath}`);
+      }
+      if (!newFiles.has(relative)) {
+        throw new CliError(`package new templateからmanaged assetが欠落しupgradeを判定できません: ${newPath}`);
+      }
+    } else if (fs.existsSync(deployedPath)) {
+      throw new CliError(`new managed filenameが既存custom assetと衝突するためupgradeを無変更で停止しました: ${deployedPath}`);
+    }
   }
 }
 
@@ -70,7 +86,7 @@ export async function upgrade(args: string[]): Promise<number> {
 
     // Issue #271: 旧workflowのAPI credential/CI内AI依存を安全に除去する。preflightは全copyより前に
     // 行い、競合時に他アセットやinstalled_versionを部分更新しない。
-    preflightManagedGateWorkflow(targetDir);
+    preflightManagedGithubAssets(targetDir);
 
     const prefix = dryRun ? 'planned ' : '';
     const summary: string[] = [`${oldVersion} -> ${newVersion}`];

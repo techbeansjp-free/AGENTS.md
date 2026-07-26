@@ -45,6 +45,7 @@ export interface ReviewEvidence {
     trusted_base_sha: string;
     launcher_digest: string;
     launcher_token_digest: string;
+    provider_executable_digest?: string;
     isolation: 'ephemeral_clone';
     sandbox: 'read_only';
   };
@@ -86,6 +87,7 @@ export interface VerifiedReviewer {
   trusted_base_sha: string;
   launcher_digest: string;
   launcher_token_digest: string;
+  provider_executable_digest?: string;
   isolation: 'ephemeral_clone';
   sandbox: 'read_only';
 }
@@ -227,6 +229,8 @@ function isEvidenceShape(value: ReviewEvidence): boolean {
     typeof value.execution.trusted_base_sha === 'string' &&
     /^sha256:[0-9a-f]{64}$/.test(value.execution.launcher_digest) &&
     /^sha256:[0-9a-f]{64}$/.test(value.execution.launcher_token_digest) &&
+    (value.execution.provider_executable_digest === undefined ||
+      /^sha256:[0-9a-f]{64}$/.test(value.execution.provider_executable_digest)) &&
     value.execution.isolation === 'ephemeral_clone' &&
     value.execution.sandbox === 'read_only' &&
     !!value.reviewer &&
@@ -370,7 +374,9 @@ export function verifyGithubReviewEvidence(options: {
       }
       if (
         evidence.reviewer.adapter === 'codex' &&
-        (evidence.reviewer.model !== options.codexModel || evidence.reviewer.reasoning !== options.codexReasoning)
+        (evidence.reviewer.model !== options.codexModel ||
+          evidence.reviewer.reasoning !== options.codexReasoning ||
+          !evidence.execution.provider_executable_digest)
       ) {
         return fail(`review ${review.id} のCodex model/reasoningがpolicyと一致しません`);
       }
@@ -416,6 +422,12 @@ export function verifyGithubReviewEvidence(options: {
   if (expectedSlots.some((slot) => !slots.has(slot as 1 | 2))) return fail('必要なreviewer slotが揃っていません');
   const tokenDigests = new Set(candidates.map((candidate) => candidate.evidence.execution.launcher_token_digest));
   if (tokenDigests.size !== 1) return fail('review attempt内のlauncher token digestが一致しません');
+  const providerDigests = new Set(
+    candidates
+      .filter((candidate) => candidate.evidence.reviewer.adapter === 'codex')
+      .map((candidate) => candidate.evidence.execution.provider_executable_digest),
+  );
+  if (providerDigests.size > 1) return fail('review attempt内のprovider executable digestが一致しません');
 
   const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
   const acceptanceCriteria = options.expectedAcceptanceCriteria.map((acId) => {
@@ -487,6 +499,7 @@ export function verifyGithubReviewEvidence(options: {
       trusted_base_sha: evidence.execution.trusted_base_sha,
       launcher_digest: evidence.execution.launcher_digest,
       launcher_token_digest: evidence.execution.launcher_token_digest,
+      provider_executable_digest: evidence.execution.provider_executable_digest,
       isolation: evidence.execution.isolation,
       sandbox: evidence.execution.sandbox,
     })),

@@ -14,6 +14,7 @@ const artifacts = [{ path: 'SPEC.md', digest: `sha256:${'b'.repeat(64)}` }];
 const promptDigest = evidencePromptDigest('canonical reviewer prompt');
 const launcherDigest = `sha256:${'d'.repeat(64)}`;
 const launcherTokenDigest = `sha256:${'e'.repeat(64)}`;
+const providerExecutableDigest = `sha256:${'9'.repeat(64)}`;
 
 function evidence(slot: 1 | 2, overrides: Partial<ReviewEvidence> = {}): ReviewEvidence {
   return {
@@ -29,6 +30,7 @@ function evidence(slot: 1 | 2, overrides: Partial<ReviewEvidence> = {}): ReviewE
       trusted_base_sha: baseSha,
       launcher_digest: launcherDigest,
       launcher_token_digest: launcherTokenDigest,
+      provider_executable_digest: providerExecutableDigest,
       isolation: 'ephemeral_clone',
       sandbox: 'read_only',
     },
@@ -161,6 +163,18 @@ test('freshness: API commit SHA、本文target、prompt、artifact digest改変�
   mismatchedToken.execution.launcher_token_digest = `sha256:${'f'.repeat(64)}`;
   assert.equal(
     verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(mismatchedToken) })]).final,
+    'human_required',
+  );
+  const mismatchedProvider = evidence(2);
+  mismatchedProvider.execution.provider_executable_digest = `sha256:${'8'.repeat(64)}`;
+  assert.equal(
+    verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(mismatchedProvider) })]).final,
+    'human_required',
+  );
+  const missingProvider = evidence(1);
+  delete missingProvider.execution.provider_executable_digest;
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(missingProvider) }), review(2, 2)]).final,
     'human_required',
   );
   const badRun = evidence(1);

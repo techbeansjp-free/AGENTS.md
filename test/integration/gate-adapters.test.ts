@@ -110,6 +110,9 @@ const REVIEW_ENV_KEYS = [
   'ASC_REVIEW_MODEL',
   'ASC_REVIEW_REASONING',
   'ASC_REVIEW_RECORDER_GITHUB_TOKEN',
+  'ASC_CODEX_TRUSTED_EXECUTABLE',
+  'ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST',
+  'ASC_LAUNCHER_TOKEN_FILE',
 ] as const;
 
 /** 呼出元のレビュー設定を除去し、テストが明示した値だけを加えた hermetic env を作る。 */
@@ -137,10 +140,27 @@ function createCodexStub(dir: string, verdict: string): { executable: string; ar
   const argsLog = path.join(dir, 'codex-args.log');
   fs.writeFileSync(
     executable,
-    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(argsLog)}\ncat >/dev/null\nprintf '%s' ${JSON.stringify(verdict)}\n`,
+    `#!/usr/bin/env bash\nif [[ "\${1:-}" == login && "\${2:-}" == status ]]; then exit 0; fi\nprintf '%s\\n' "$*" >> ${JSON.stringify(argsLog)}\ncat >/dev/null\nprintf '%s' ${JSON.stringify(verdict)}\n`,
     { mode: 0o755 },
   );
   return { executable, argsLog };
+}
+
+function createCodexLauncherToken(
+  dir: string,
+  executable: string,
+  digest: string,
+): string {
+  const tokenPath = path.join(dir, 'launcher-token.json');
+  fs.writeFileSync(
+    tokenPath,
+    `${JSON.stringify({
+      schema_version: 'agent-skill-chain/launcher-token/v1',
+      provider_executable: { provider: 'codex', path: fs.realpathSync(executable), digest },
+    })}\n`,
+    { mode: 0o600 },
+  );
+  return tokenPath;
 }
 
 // --- T2: claude launch_gate_reviewer ---------------------------------------------------
@@ -441,17 +461,20 @@ test('gate-launch-reviewer: classifier ordinaryでもGitHub trusted policy未構
   assert.equal(fs.existsSync(invocationLog), false);
 });
 
-test('codex core reviewer: CODEX_EXECUTABLEへ固定gpt-5.6-sol/xhigh/read-only argvを渡す', async (t) => {
+test('codex core reviewer: launcher束縛済みexact executableへ固定gpt-5.6-sol/xhigh/read-only argvを渡す', async (t) => {
   const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'codex');
 
   const stub = createCodexStub(worktreePath, PASS_VERDICT);
+  const digest = `sha256:${execFileSync('sha256sum', [stub.executable], { encoding: 'utf8' }).split(/\s+/)[0]}`;
+  const tokenPath = createCodexLauncherToken(worktreePath, stub.executable, digest);
   const env = envWithout([], {
     ASC_BASE_REF: 'main',
     ASC_REVIEW_SUBJECT: 'core_audit',
-    CODEX_AUTH_PROBE_CMD: 'true',
-    CODEX_EXECUTABLE: stub.executable,
+    ASC_CODEX_TRUSTED_EXECUTABLE: fs.realpathSync(stub.executable),
+    ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST: digest,
+    ASC_LAUNCHER_TOKEN_FILE: tokenPath,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
@@ -470,8 +493,8 @@ test('codex core reviewer: CODEX_EXECUTABLEへ固定gpt-5.6-sol/xhigh/read-only 
   }
 });
 
-test('codex core reviewer: 任意commandと自己申告booleanでも完全上書きをhuman_requiredへ拒否する', async (t) => {
-  for (const overrideName of ['CODEX_REVIEWER_CMD', 'GATE_REVIEWER_CMD'] as const) {
+test('codex core reviewer: executable/auth probe/完全command上書きを無条件拒否する', async (t) => {
+  for (const overrideName of ['CODEX_REVIEWER_CMD', 'GATE_REVIEWER_CMD', 'CODEX_EXECUTABLE', 'CODEX_AUTH_PROBE_CMD'] as const) {
     const { repo, reportPath, targetSha } = setupGateReview();
     t.after(() => repo.cleanup());
     setAdapter(repo.dir, 'codex');
@@ -479,20 +502,19 @@ test('codex core reviewer: 任意commandと自己申告booleanでも完全上書
     const env = envWithout([], {
       ASC_BASE_REF: 'main',
       ASC_REVIEW_SUBJECT: 'core_audit',
-      CODEX_AUTH_PROBE_CMD: 'true',
       CODEX_REVIEWER_MODEL: 'gpt-5.6-sol',
       CODEX_REVIEWER_REASONING_EFFORT: 'xhigh',
       CODEX_CORE_REVIEWER_ATTESTED: 'true',
-      [overrideName]:
-        `printf 'forged\\n' >> ${JSON.stringify(invocationLog)}; ` +
-        `cat >/dev/null; printf '%s' '${PASS_VERDICT}'`,
+      [overrideName]: overrideName === 'CODEX_EXECUTABLE'
+        ? invocationLog
+        : `printf 'forged\\n' >> ${JSON.stringify(invocationLog)}; cat >/dev/null; printf '%s' '${PASS_VERDICT}'`,
       GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
     });
 
     const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
     assert.notEqual(res.status, 0, overrideName);
     assert.equal(readFinal(reportPath), 'human_required', overrideName);
-    assert.match(res.stderr, /完全command上書きを許可しません/, overrideName);
+    assert.match(res.stderr, /executable\/auth probe\/完全command上書きを許可しません/, overrideName);
     assert.equal(fs.existsSync(invocationLog), false, `${overrideName}を実行しないこと`);
   }
 });
@@ -503,11 +525,14 @@ test('codex core reviewer: modelまたはeffortの不一致は起動せずhuman_
   setAdapter(repo.dir, 'codex');
 
   const stub = createCodexStub(worktreePath, PASS_VERDICT);
+  const digest = `sha256:${execFileSync('sha256sum', [stub.executable], { encoding: 'utf8' }).split(/\s+/)[0]}`;
+  const tokenPath = createCodexLauncherToken(worktreePath, stub.executable, digest);
   const env = envWithout([], {
     ASC_BASE_REF: 'main',
     ASC_REVIEW_SUBJECT: 'core_audit',
-    CODEX_AUTH_PROBE_CMD: 'true',
-    CODEX_EXECUTABLE: stub.executable,
+    ASC_CODEX_TRUSTED_EXECUTABLE: fs.realpathSync(stub.executable),
+    ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST: digest,
+    ASC_LAUNCHER_TOKEN_FILE: tokenPath,
     CODEX_REVIEWER_MODEL: 'gpt-5.6-terra',
     CODEX_REVIEWER_REASONING_EFFORT: 'high',
   });
@@ -516,6 +541,51 @@ test('codex core reviewer: modelまたはeffortの不一致は起動せずhuman_
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.match(res.stderr, /project policy と一致しません/);
+  assert.equal(fs.existsSync(stub.argsLog), false);
+});
+
+test('codex core reviewer: 実行直前のdigest mismatchはstubを起動せずhuman_requiredへ止める', async (t) => {
+  const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'codex');
+  const stub = createCodexStub(worktreePath, PASS_VERDICT);
+  const tokenPath = createCodexLauncherToken(
+    worktreePath,
+    stub.executable,
+    `sha256:${'0'.repeat(64)}`,
+  );
+  const env = envWithout([], {
+    ASC_BASE_REF: 'main',
+    ASC_REVIEW_SUBJECT: 'core_audit',
+    ASC_CODEX_TRUSTED_EXECUTABLE: fs.realpathSync(stub.executable),
+    ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST: `sha256:${'0'.repeat(64)}`,
+    ASC_LAUNCHER_TOKEN_FILE: tokenPath,
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /identity\/digest/);
+  assert.equal(fs.existsSync(stub.argsLog), false);
+});
+
+test('codex core reviewer: caller自己申告path/digestだけでlauncher token無しならhuman_required', async (t) => {
+  const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'codex');
+  const stub = createCodexStub(worktreePath, PASS_VERDICT);
+  const digest = `sha256:${execFileSync('sha256sum', [stub.executable], { encoding: 'utf8' }).split(/\s+/)[0]}`;
+  const env = envWithout([], {
+    ASC_BASE_REF: 'main',
+    ASC_REVIEW_SUBJECT: 'core_audit',
+    ASC_CODEX_TRUSTED_EXECUTABLE: fs.realpathSync(stub.executable),
+    ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST: digest,
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /0600 launcher token/);
   assert.equal(fs.existsSync(stub.argsLog), false);
 });
 

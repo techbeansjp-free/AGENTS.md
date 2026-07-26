@@ -13,11 +13,12 @@
 # [skip ci] の生存を保証することが再帰トリガ防止（無限ループ防止）の主機構であり、concurrency と
 # bumpブランチ名へのtarget埋め込み・タグ／Releaseの存在チェックが二重発火防止を担う。
 #
-# Issue #271のbootstrap中は、checkout直後にself-repository限定sentinelを検査し、存在時は
-# npm/build/version/bump/tag/publishをすべて明示skipする。Issue #283のtrusted rollout完了commitが
-# sentinelを削除したときだけreleaseを許可し、最初のreleaseへ両Issueの変更を含める。sentinelは
-# 設定/schema入力ではなくconsumer配布対象外である。Issue #283は削除と同時に、このself-repository
-# 専用release workflowをconsumer向けsetup github配布集合から分離する。
+# Issue #271のbootstrap中はcheckout直後にrepository identityとself-repository限定sentinelを検査し、
+# `GITHUB_REPOSITORY == techbeansjp-free/AGENTS.md`かつsentinel不在の場合だけreleaseを許可する。
+# repository未設定・別repository・sentinel存在ではnpm/build/version/bump/tag/publishをすべて明示skipする。
+# Issue #283のtrusted rollout完了commitがsentinelを削除し、最初のreleaseへ両Issueの変更を含める。
+# sentinelは設定/schema入力ではなくconsumer配布対象外である。Issue #283は削除と同時に、この
+# self-repository専用release workflowをconsumer向けsetup github配布集合から分離する。
 name: agent-skill-chain / release
 
 on:

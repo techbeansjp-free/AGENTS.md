@@ -6,6 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+MANAGED_PATH="$PATH"
 
 ISSUE_ID="${1:-}"
 GATE_ID="${2:-}"
@@ -66,6 +67,36 @@ if [[ -n "$(git -C "$TRUSTED_ROOT" status --porcelain)" ]]; then
 fi
 TRUSTED_SCRIPT_DIR="$TRUSTED_ROOT/.agent-skill-chain/scripts"
 
+CONTEXT_OUTPUT="$(
+  node "$TRUSTED_ROOT/bin/agents-md.js" gate reviewer-context \
+    "$ISSUE_ID" "$TARGET_SHA" "$BASE_SHA" "${ASC_REVIEW_SUBJECT:-}" "$ADAPTER"
+)"
+CORE_REVIEW_REQUIRED="$(sed -n 's/^core_review_required=//p' <<<"$CONTEXT_OUTPUT")"
+CODEX_TRUSTED_PATH=""
+CODEX_TRUSTED_DIGEST=""
+if [[ "$CORE_REVIEW_REQUIRED" == "true" && "$ADAPTER" == "codex" ]]; then
+  if [[ -n "${CODEX_EXECUTABLE:-}" || -n "${CODEX_AUTH_PROBE_CMD:-}" || -n "${CODEX_REVIEWER_CMD:-}" || -n "${GATE_REVIEWER_CMD:-}" ]]; then
+    echo "Codex core reviewerではexecutable/auth probe/完全command上書きを許可しません" >&2
+    exit 1
+  fi
+  CODEX_COMMAND="$(PATH="$MANAGED_PATH" command -v codex || true)"
+  if [[ -z "$CODEX_COMMAND" ]]; then
+    echo "管理PATHからCodex実行物を解決できません" >&2
+    exit 1
+  fi
+  CODEX_TRUSTED_PATH="$(realpath -- "$CODEX_COMMAND")"
+  if [[ ! -x "$CODEX_TRUSTED_PATH" ]]; then
+    echo "管理PATHのCodex実行物が実行可能fileではありません" >&2
+    exit 1
+  fi
+  CODEX_TRUSTED_DIGEST="sha256:$(sha256sum -- "$CODEX_TRUSTED_PATH" | awk '{print $1}')"
+  if ! env -i PATH="$MANAGED_PATH" HOME="${HOME:-}" CODEX_HOME="${CODEX_HOME:-${HOME:-}/.codex}" \
+    "$CODEX_TRUSTED_PATH" login status >/dev/null 2>&1; then
+    echo "固定Codex login statusに失敗しました" >&2
+    exit 1
+  fi
+fi
+
 REVIEW_OUTPUT="$("$TRUSTED_SCRIPT_DIR/gate-review.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$TARGET_SHA" "$BASE_SHA")"
 REPORT_PATH="$(sed -n 's/^gate_report_path: //p' <<<"$REVIEW_OUTPUT")"
 if [[ -z "$REPORT_PATH" ]]; then
@@ -86,7 +117,7 @@ TOKEN_FILE="$TRUSTED_TMP/launcher-token.json"
 token_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(24).toString("hex"))')"
 node -e '
   const fs = require("node:fs");
-  const [file, attemptId, expectedCount, profile, targetSha, baseSha, prNumber, nonce, ...runIds] = process.argv.slice(1);
+  const [file, attemptId, expectedCount, profile, targetSha, baseSha, prNumber, nonce, executablePath, executableDigest, ...runIds] = process.argv.slice(1);
   const token = {
     schema_version: "agent-skill-chain/launcher-token/v1",
     attempt_id: attemptId,
@@ -99,8 +130,11 @@ node -e '
     slots: runIds.map((run_id, index) => ({slot: index + 1, run_id})),
     consumed_slots: [],
   };
+  if (executablePath || executableDigest) {
+    token.provider_executable = {provider: "codex", path: executablePath, digest: executableDigest};
+  }
   fs.writeFileSync(file, JSON.stringify(token) + "\n", {mode: 0o600, flag: "wx"});
-' "$TOKEN_FILE" "$attempt_id" "$COUNT" "$PROFILE" "$TARGET_SHA" "$BASE_SHA" "$PR_NUMBER" "$token_nonce" "${run_ids[@]}"
+' "$TOKEN_FILE" "$attempt_id" "$COUNT" "$PROFILE" "$TARGET_SHA" "$BASE_SHA" "$PR_NUMBER" "$token_nonce" "$CODEX_TRUSTED_PATH" "$CODEX_TRUSTED_DIGEST" "${run_ids[@]}"
 
 for slot in $(seq 1 "$COUNT"); do
   run_id="${run_ids[$((slot - 1))]}"
@@ -114,6 +148,8 @@ for slot in $(seq 1 "$COUNT"); do
   ASC_REVIEWER_RUN_ID="$run_id" \
   ASC_REVIEWER_SLOT="$slot" \
   ASC_REVIEW_ADAPTER_REQUESTED="$ADAPTER" \
+  ASC_CODEX_TRUSTED_EXECUTABLE="$CODEX_TRUSTED_PATH" \
+  ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST="$CODEX_TRUSTED_DIGEST" \
     "$TRUSTED_SCRIPT_DIR/gate-launch-reviewer.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$REPORT_PATH" "$TARGET_SHA"
 done
 if [[ -e "$TOKEN_FILE" ]]; then

@@ -74,7 +74,8 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const baseSha = git(repo.dir, ['rev-parse', 'HEAD']);
   git(repo.dir, ['checkout', '-b', 'process/271-evidence-test']);
   fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: evidence\n');
-  git(repo.dir, ['add', 'SPEC.md']);
+  fs.appendFileSync(path.join(repo.dir, 'AGENTS.md'), '\nIssue #271 core evidence fixture\n');
+  git(repo.dir, ['add', 'SPEC.md', 'AGENTS.md']);
   git(repo.dir, ['commit', '-m', 'test: add evidence target']);
   const targetSha = git(repo.dir, ['rev-parse', 'HEAD']);
   git(repo.dir, ['checkout', 'main']);
@@ -106,6 +107,8 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const recorderEnv = {
     ...env,
     ASC_REVIEW_RECORDER_GITHUB_TOKEN: 'dedicated-recorder-test-token',
+    ASC_CODEX_TRUSTED_EXECUTABLE: '/opt/managed/codex',
+    ASC_CODEX_TRUSTED_EXECUTABLE_DIGEST: `sha256:${'9'.repeat(64)}`,
   };
 
   const rawVerdict = {
@@ -131,6 +134,11 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
       { slot: 2, run_id: 'review-integration-submit-2' },
     ],
     consumed_slots: [],
+    provider_executable: {
+      provider: 'codex',
+      path: '/opt/managed/codex',
+      digest: `sha256:${'9'.repeat(64)}`,
+    },
   })}\n`, { mode: 0o600 });
   const directSubmit = runCli(
     [

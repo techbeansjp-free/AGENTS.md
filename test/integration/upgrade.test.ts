@@ -129,3 +129,72 @@ test('upgrade: 展開済みworkflowのlocal customization競合は全体を無�
   assert.deepEqual(fs.readFileSync(conventions), beforeConventions);
   assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
 });
+
+for (const workflow of [
+  'agent-skill-chain-reconcile.yml',
+  'agent-skill-chain-trusted-gate.yml',
+  'agent-skill-chain-release.yml',
+]) {
+  test(`upgrade: ${workflow}のlocal customizationも全体を無変更で停止する`, (t) => {
+    const targetDir = mkScratch('upgrade-managed-conflict');
+    t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+    assert.equal(runCli(['init', targetDir]).status, 0);
+    const deployed = path.join(targetDir, '.github', 'workflows', workflow);
+    const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
+    fs.appendFileSync(deployed, '\n# consumer customization\n');
+    fs.writeFileSync(version, '0.0.1\n');
+    const before = fs.readFileSync(deployed);
+
+    const result = runCli(['upgrade', targetDir]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /local customization競合/);
+    assert.deepEqual(fs.readFileSync(deployed), before);
+    assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+  });
+}
+
+test('upgrade: new managed filenameの既存custom collisionをcopy前に全体停止する', (t) => {
+  const targetDir = mkScratch('upgrade-new-managed-collision');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  const relative = path.join('workflows', 'agent-skill-chain-trusted-gate.yml');
+  const installed = path.join(targetDir, '.agent-skill-chain', 'templates', 'github', '.github', relative);
+  const deployed = path.join(targetDir, '.github', relative);
+  fs.rmSync(installed);
+  fs.writeFileSync(deployed, 'name: consumer-owned collision\n');
+  const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
+  fs.writeFileSync(version, '0.0.1\n');
+
+  const result = runCli(['upgrade', targetDir]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /new managed filename.*既存custom assetと衝突/);
+  assert.equal(fs.readFileSync(deployed, 'utf8'), 'name: consumer-owned collision\n');
+  assert.equal(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+});
+
+test('upgrade: old managed fileの展開物欠落は全体停止し、unmanaged extraは保持する', (t) => {
+  const targetDir = mkScratch('upgrade-managed-missing');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  const missing = path.join(targetDir, '.github', 'workflows', 'agent-skill-chain-release.yml');
+  const unmanaged = path.join(targetDir, '.github', 'workflows', 'consumer-extra.yml');
+  fs.rmSync(missing);
+  fs.writeFileSync(unmanaged, 'name: consumer extra\n');
+
+  const result = runCli(['upgrade', targetDir]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /展開物が欠落/);
+  assert.equal(fs.readFileSync(unmanaged, 'utf8'), 'name: consumer extra\n');
+});
+
+test('upgrade: managed集合外のextraは成功時も保持する', (t) => {
+  const targetDir = mkScratch('upgrade-unmanaged-extra');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  const unmanaged = path.join(targetDir, '.github', 'workflows', 'consumer-extra.yml');
+  fs.writeFileSync(unmanaged, 'name: consumer extra\n');
+
+  const result = runCli(['upgrade', targetDir]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.readFileSync(unmanaged, 'utf8'), 'name: consumer extra\n');
+});

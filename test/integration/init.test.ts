@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { runCli } from '../helpers/cli.js';
 
 // Issue #169 T2: init コマンドの結合テスト（bin/agents-md.js 経由でsubprocess実行）。
@@ -47,6 +48,22 @@ test('init: 標準資産・.agent-skill-chain名前空間（hooks含む）・.gi
     false,
     'self-repository限定release sentinelはconsumerへ配布されないこと',
   );
+  const outputPath = path.join(targetDir, 'release-guard-output.txt');
+  const consumerGuard = spawnSync(
+    path.join(targetDir, '.agent-skill-chain', 'scripts', 'release-guard.sh'),
+    [],
+    {
+      cwd: targetDir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GITHUB_REPOSITORY: 'consumer/example',
+        GITHUB_OUTPUT: outputPath,
+      },
+    },
+  );
+  assert.equal(consumerGuard.status, 0, consumerGuard.stderr);
+  assert.equal(fs.readFileSync(outputPath, 'utf8').trim(), 'release_allowed=false');
 
   const installedVersion = fs.readFileSync(
     path.join(targetDir, '.agent-skill-chain', '.installed_version'),
