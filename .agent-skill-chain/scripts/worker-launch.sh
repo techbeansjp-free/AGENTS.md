@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # 正本: AGENTS.md §役割・権限・writer lease / §不変条件I8 / .agent-skill-chain/config/roles.yaml adapters.* /
-#       .agent-skill-chain/config/agent-skill-chain.yaml worker.adapter
+#       .agent-skill-chain/config/agent-skill-chain.yaml worker.adapter・worker.segment_overrides・
+#       worker.model_tiers
 #
 # 進行役が segment start 後にセグメント作業ワーカー（spec/design/implementation/validation）を
-# 起動するために呼ぶ。config(worker.adapter, 既定human)で選択したアダプタの launch_worker を
-# 起動し、writer lease 取得〜起動〜解放/blocked報告の一連を委譲する（gate-launch-reviewer.sh と
-# 対称の起動ラッパー）。
+# 起動するために呼ぶ。config(worker.segment_overrides.<segment> → worker.adapter → 既定human)で
+# 選択したアダプタの launch_worker を起動し、writer lease 取得〜起動〜解放/blocked報告の一連を
+# 委譲する（gate-launch-reviewer.sh と対称の起動ラッパー）。ティア対応表からの具体モデル解決は
+# `worker context`（CLI）側で完結しており、本スクリプトはその解決結果を ASC_WORKER_MODEL /
+# ASC_WORKER_REASONING_EFFORT / ASC_WORKER_MODEL_TIER としてアダプタへ渡すだけで、ティア名から
+# 具体名を導く処理は持たない（ISSUE-307）。
 #
 # 終了コード（launch_workerの終了コードをそのまま伝播する）:
 #   0        worker完了（report_status completed済み、lease解放済み）
@@ -51,8 +55,16 @@ case "$SEGMENT" in
     ;;
 esac
 
-# config からアダプタを解決する（worker.adapter、未設定時 human）。
-ADAPTER="$(_cli worker context "$ISSUE_ID" | sed -n 's/^adapter=//p')"
+# config からアダプタ・モデル選択を解決する（segmentを渡し、worker.segment_overrides.<segment>
+# → worker.adapter → 既定human、ティア指定時はworker.model_tiersから具体モデル文字列まで解決
+# 済みで返る）。worker context 自体の失敗（設定不正・ティア解決失敗）は、まだ何も起動して
+# いない段階のエラーとして扱う（DESIGN.md §選択解決の設計）。
+if ! WORKER_CONTEXT="$(_cli worker context "$ISSUE_ID" "$SEGMENT")"; then
+  echo "worker-launch.sh: worker context の解決に失敗しました。まだ何も起動していないため error として扱います" >&2
+  exit 2
+fi
+
+ADAPTER="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^adapter=//p')"
 ADAPTER="${ADAPTER:-human}"
 ADAPTER_FILE="$ADAPTERS_DIR/${ADAPTER}.sh"
 
@@ -60,6 +72,19 @@ if [[ ! -f "$ADAPTER_FILE" ]]; then
   echo "アダプタが見つかりません: $ADAPTER_FILE（worker.adapter=$ADAPTER）。まだ何も起動していないため error として扱います" >&2
   exit 2
 fi
+
+# 解決できた値だけをベンダー中立な環境変数として export する（未解決は export しない）。
+# ASC_ 名前空間は ASC_ISSUE_ID/ASC_SEGMENT/ASC_ROLE/ASC_REVIEW_MODEL と揃え、アダプタ固有の
+# 上書き変数（CODEX_*系）とは名前空間を分ける。ASC_WORKER_MODEL は worker context が
+# worker.model_tiers から解決済みの具体的なモデル文字列であり、本スクリプト・アダプタは
+# ティア名から具体名を導く処理を持たない。ASC_WORKER_MODEL_TIER はアダプタ側の防御的検査
+# （ティア指定なのにモデル未解決の場合に黙って従来値へ落ちないための検査）にのみ用いる。
+ASC_WORKER_MODEL="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^model=//p')"
+ASC_WORKER_REASONING_EFFORT="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^reasoning_effort=//p')"
+ASC_WORKER_MODEL_TIER="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^model_tier=//p')"
+[[ -n "$ASC_WORKER_MODEL" ]] && export ASC_WORKER_MODEL
+[[ -n "$ASC_WORKER_REASONING_EFFORT" ]] && export ASC_WORKER_REASONING_EFFORT
+[[ -n "$ASC_WORKER_MODEL_TIER" ]] && export ASC_WORKER_MODEL_TIER
 
 # アダプタを読み込み、launch_worker を起動する。終了コードはそのまま呼び出し側へ伝播する。
 # shellcheck source=/dev/null
