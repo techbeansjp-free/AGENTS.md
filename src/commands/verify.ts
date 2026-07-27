@@ -14,7 +14,7 @@ import {
 } from '../lib/worktree.js';
 import { readYamlFile } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
-import { digestOf, digestOfFile } from '../lib/digest.js';
+import { digestOf } from '../lib/digest.js';
 import { git } from '../lib/exec.js';
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
