@@ -18,7 +18,7 @@ race/failure/timeout回帰テストを出力する。実装workerはcodeとunit 
 | 3 | pack parser | npm実JSONを返すasync helperへ既存2契約testを移行 | AC-1, AC-2 |
 | 4 | bin不変BDD | relative path+bytes digestを成功・prepare失敗・timeoutの前後で比較 | AC-1, AC-5 |
 | 5 | race BDD | probe固有marker中にroot CLIのhelpとclean lintを実行 | AC-3 |
-| 6 | 障害BDD | descendant timeout、buffer超過、cleanup単独/primary複合errorを検査 | AC-5 |
+| 6 | 障害BDD | descendant timeout、buffer超過、cleanup 4分岐（単独失敗・primary複合・reap不能・watchdog）を検査 | AC-5 |
 | 7 | 変更範囲検査 | package/race/failure test、lint test、build、typecheck、静的検査 | AC-1〜AC-5 |
 | 8 | 全体反復 | concurrency指定なしの`npm test`を3回以上実行 | AC-4 |
 
@@ -30,10 +30,13 @@ snapshot owner完了後にprocess supervisor、その後に各BDDを実装する
 
 - 成功/prepare失敗/timeoutの各Givenでroot `bin` manifestを採取し、When probe終了後に同じ相対path集合と
   bytes digestを要求する。timeoutではdescendantを含むtreeがjoin済みで、temp rootが無いことも確認する。
-- 外向き・absolute・破損symlinkをfixtureへ置くとcontainment検査がnpm起動前に拒否し、内部相対linkは
-  snapshot内targetへ解決されることを確認する。
+- 外向き・absolute・破損symlinkをcopy後hookでsnapshotの`node_modules`配下を含む位置へ置くと、
+  containment検査がnpm起動前に拒否し、内部相対linkはsnapshot内targetへ解決されることを確認する。
 - marker、HOME、cache、TMPDIRはprobeごとに異なり、並列probe間に共有pathがないことを確認する。
-- npm JSON欠損、buffer超過、spawn失敗、cleanup失敗を成功扱いせず、primary+cleanupは両方観測する。
+- handshakeは親のentered待ち＜子のrelease待ち＜pack上限の順序を保ち、子のentered未作成死亡・親の
+  assert失敗・早すぎるreleaseの各経路が有限時間で失敗報告またはprobe続行へ収束することを確認する。
+- npm JSON欠損、buffer超過、spawn失敗、cleanup失敗を成功扱いせず、primary成功+cleanup失敗、
+  primary失敗+cleanup失敗、reap不能による削除抑止、watchdog発火の4分岐でworkspace path付きerrorを観測する。
 - package testとlint testへtest concurrencyやlockを追加していないことを静的に確認する。
 
 ## checkpoint・適用検査

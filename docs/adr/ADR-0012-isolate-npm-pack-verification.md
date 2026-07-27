@@ -22,22 +22,41 @@ package files統合テストはnpmが算出する実際の収録内容を検証�
 
 package内容検証はOS一時rootのsource snapshotをcwdとして、通常の
 `npm pack --dry-run --json`を実行する。package rootはGit metadata、worktree、共有`bin`、
-`node_modules`を除外して一度copyし、依存は別に一度copyする。fileは物理的に分離し、内部相対symlinkは
-維持する。copy後に全linkの`realpath`がsnapshot内であることを検査し、absolute、破損、外向きlinkを拒否する。
+`node_modules`を除外して一度copyし、依存は別に一度物理copyする。元package rootへのsymlinkや書込み
+可能な共有pathは作らないため、境界はsymlinkの透過性ではなく実体の物理分離で成立する。
+
+依存treeはdereference copyにしない。自己参照linkやcycleで無限展開・実体重複を招き、pack対象の算出
+意味も変わるためである。内部相対linkはNode解決規則を保つため維持し、安全性はcontainment検査で担保する。
+検査対象は両copyの全域（`node_modules`配下を含む）、タイミングはnpmのspawn前、失敗時はpackを起動せず
+probeを拒否する。absolute・破損・snapshot外を指すlinkを拒否する。検査後にlinkを差し替えるTOCTOUは、
+snapshot pathがprobeごとに一意で他probeとも元package rootとも共有されず、snapshot完成後にその配下へ
+書き込む主体がprobeの起動したnpm childだけである以上、差し替えの主体が存在しないため成立しない。
 
 HOME、npm cache、temp、markerはprobe専用pathへ隔離する。npm childは独立process treeで起動し、
 timeoutまたはbuffer超過時はtreeを終了、有限時間でreap/joinしてからcleanupする。出力buffer、
 pack、終了grace、reap、cleanupはそれぞれ有限上限を持つ。
-primary errorとcleanup errorを失わず、cleanup単独失敗も非成功にする。
+失敗は「primary error ＞ reap不能（削除を抑止しfatal）＞ cleanup失敗」の優先順位で報告し、複数段が
+失敗した場合はworkspace絶対path、残存有無、primary error、reap error、cleanup errorの順で集約する。
+cleanup単独失敗も非成功にする。残存はOS temp配下のprobe専用workspaceに限られ、repository内へ生成物を
+残さない。
 
 隔離の証明はroot `bin`全fileの相対pathとbytes digestを成功、prepare失敗、timeoutの前後で直接比較する。
+外向き相対link・absolute link・破損linkを仕込んだsnapshotではpack起動前に拒否されることを反証側で示す。
 lifecycle中の一意markerでroot CLIのhelp/lintを重ね、timeoutではdescendantを含むtree回収を検査する。
+
+重なりのhandshakeは待ち時間を「親のentered待ち ＜ 子のrelease待ち ＜ packの上限」の順序で設計し、
+子はrelease未達時に自らprepare失敗として終了する。tree killを正常系の回収手段にしないためである。
+markerの検知はplatform差のあるfs watchではなく短間隔pollingとし、検知遅れの上限を保証する。
+entered未作成での子の死亡、親のassert失敗、早すぎるreleaseのいずれも待機を無限化せず、
+既存の「tree終了 → reap/join → cleanup」へ合流する。
 npmはdry-runでcacheも隔離されるため、共有publish lockやtest順序制御は導入しない。
 
 ## Consequences
 
 - 並列probeとCLI利用testは書込みpathを共有せず、実行順に依存しない。
 - 実際のprepare、現在sourceからのbuild、npmのpack files算出をまとめて検査できる。
-- 内部相対symlinkの解決意味を保ちつつ、rootへのwrite-throughをcontainment検査で拒否できる。
+- 内部相対symlinkの解決意味を保ちつつ、rootの共有生成物と依存treeへ到達するlinkをpack起動前に拒否できる。
+- 待ち時間の順序と自律timeoutにより、handshakeの失敗経路でもhangせず有限時間で失敗を報告できる。
+- 失敗の優先順位と集約順序が固定されるため、cleanup失敗が本来の失敗原因を隠さない。
 - copy、build、tree supervisionにより時間・一時disk・platform別process処理は増える。
 - helper/testを戻すと既知raceが復活するため、rollback前に同等の隔離策を必要とする。
