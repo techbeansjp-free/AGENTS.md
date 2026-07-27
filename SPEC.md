@@ -79,3 +79,4 @@
 
 - Issue #283/PR #284が導入したcheckout戦略（protected base = mainをcheckoutする設計）自体の変更は行わない。
 - `gate-report.yaml`のスキーマ自体の変更は行わない（`target_sha`は既にrequiredフィールドとして存在する）。
+- 既知の限界（digest計算方式の非対称性）: `gate record-verdict <report> <artifact_base_dir>`（ローカル非GitHub評価経路、`.agent-skill-chain/adapters/claude.sh`が使用）はdigestを`digestOfFile`（ファイルシステムの生バイト）で算出する。本Issueの変更後、`verify gate-report`は`digestOf(git show <target_sha>:<path>の標準出力)`（`src/lib/exec.ts`の`encoding: 'utf8'`によるテキスト復号を経由）で算出するため、バイナリ成果物やCRLF等の改行コード差異がある場合、両者のdigestが理論上一致しないことがありうる。本変更が対象とするGitHubモードの`verify-and-publish`経路（`gate submit-evidence`・`artifactDigestAtSha`もgit show経由でありverify側と対称）ではこの非対称性は生じない。`record-verdict`側のdigest計算方式変更は本Issueのスコープ外とする（別コマンドであり、既存のローカルモード運用・過去のgate-reportとの互換性検討を要するため）。
