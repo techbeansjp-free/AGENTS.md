@@ -47,8 +47,21 @@ lifecycle中の一意markerでroot CLIのhelp/lintを重ね、timeoutではdesce
 重なりのhandshakeは待ち時間を「親のentered待ち ＜ 子のrelease待ち ＜ packの上限」の順序で設計し、
 子はrelease未達時に自らprepare失敗として終了する。tree killを正常系の回収手段にしないためである。
 markerの検知はplatform差のあるfs watchではなく短間隔pollingとし、検知遅れの上限を保証する。
-entered未作成での子の死亡、親のassert失敗、早すぎるreleaseのいずれも待機を無限化せず、
-既存の「tree終了 → reap/join → cleanup」へ合流する。
+
+重なりが実際に成立したことは推定せず、親子両側のwitnessで明示的に判定する。親は「entered待ちの上限内に
+enteredを検知し、その後にroot CLIの検査を完了してからreleaseを作った」ことを、子は「entered作成直前に
+releaseが未生成であり、その後releaseを検知して正常終了した」ことをそれぞれwitnessとして残し、回帰testは
+npmの成功／失敗判定に加えて両witnessの成立をassertする。witnessの読取りはreap/join後・cleanup前に行う。
+これは、重なりが一度も成立しないまま回帰testが恒久的に成功し続ける（実質何も検証しない）状態を、
+機械的に排除するためである。
+
+entered待ちの上限が失効した時点では、子が死亡したのか生存したまま遅いのかを、child handleの終了観測
+だけで判別する。pid存在確認は再利用と権限差で誤判定するため使わない。死亡なら子の非0終了やJSON欠損が
+失敗を示す。生存したまま遅い場合は死亡と同一視せず、releaseで待機を解いたうえで「重なり不成立」を
+fixture不良として検証本体の失敗（primary error）に確定させ、その後に子が0で終了しても成功へ戻さない。
+早すぎるreleaseを見た子はdeadlock回避のため待たず続行してよいが、witnessは偽として記録し、
+npmが成功しても回帰testを失敗させる。これらの経路はいずれも待機を無限化せず、既存の
+「tree終了 → reap/join → cleanup」と失敗の優先順位へそのまま合流する。
 npmはdry-runでcacheも隔離されるため、共有publish lockやtest順序制御は導入しない。
 
 ## Consequences
@@ -57,6 +70,9 @@ npmはdry-runでcacheも隔離されるため、共有publish lockやtest順序�
 - 実際のprepare、現在sourceからのbuild、npmのpack files算出をまとめて検査できる。
 - 内部相対symlinkの解決意味を保ちつつ、rootの共有生成物と依存treeへ到達するlinkをpack起動前に拒否できる。
 - 待ち時間の順序と自律timeoutにより、handshakeの失敗経路でもhangせず有限時間で失敗を報告できる。
+- 両側witnessと生存判定により、重なりが成立しないまま回帰testが静かに成功する経路が塞がれる。
+  代償として、遅いCI環境ではfixture不良としての失敗が起こり得るため、entered待ちの上限は
+  実行環境に応じて注入で調整できる必要がある。
 - 失敗の優先順位と集約順序が固定されるため、cleanup失敗が本来の失敗原因を隠さない。
 - copy、build、tree supervisionにより時間・一時disk・platform別process処理は増える。
 - helper/testを戻すと既知raceが復活するため、rollback前に同等の隔離策を必要とする。
