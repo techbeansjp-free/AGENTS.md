@@ -14,12 +14,13 @@ import {
 } from '../lib/worktree.js';
 import { readYamlFile } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
-import { digestOfFile } from '../lib/digest.js';
+import { digestOf } from '../lib/digest.js';
 import { git } from '../lib/exec.js';
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { ROOT_ARTIFACT_FILES } from '../lib/root-artifacts.js';
+import { ABSENT_ARTIFACT_DIGEST } from './gate.js';
 
 function violations(lines: string[]): number {
   if (lines.length === 0) return 0;
@@ -195,6 +196,8 @@ const GATE_REPORT_USAGE = `
 `;
 interface GateReport {
   gate: {
+    id: string;
+    target_sha: string;
     conformance: string;
     falsification: string;
     final: string;
@@ -214,15 +217,38 @@ export async function gateReport(args: string[]): Promise<number> {
     if (report.gate.conformance === 'pending') errors.push('gate.conformance が pending のままです');
     if (report.gate.falsification === 'pending') errors.push('gate.falsification が pending のままです');
     if (report.gate.final === 'pending') errors.push('gate.final が pending のままです');
-    // Issue #185: approved_artifacts はgate reviewが実行された作業ツリー（ワーカー自身のworktree）
-    // 上のファイルを指すため、repoRoot()（共通/メイン作業ツリー）ではなくworktreeRoot()
-    // （現在の作業ツリー）を基点に解決する（ADR-0004）。スキーマ検証（アセット解決）はrepoRoot()のまま。
-    const artifactRoot = worktreeRoot();
+    // Issue #316: approved_artifactsはreport.gate.target_sha（PRの実際のhead SHA）が指すGit object
+    // として検証する。verify-and-publishジョブはprotected base（main）をcheckoutしPR headは
+    // working directoryへ反映されないため（PR headはGit objectとしてfetchされるのみ）、
+    // worktreeRoot()のファイルシステムを見るとSPEC.md等のIssueスコープ成果物は常に「削除されている」
+    // と誤判定される（Issue #185時点の同期的レビューフロー前提がIssue #283/#284後も残っていた）。
+    //
+    // Issue #316: 上記のgit showベース検証は、target_shaが正当なcommit SHAであることを暗黙の
+    // 前提にしている。target_shaが空文字列だと修飾なしのgit show <target_sha>:<path>はGitの
+    // index参照（:0:<path>）として解釈されcommit前のstage内容を誤って検証成功させ、HEAD等の
+    // ref名だとrev-parse --verifyは成功しつつも後続のgit showがrefの現在の指し先（作業ツリー・
+    // 別コミット）を参照してしまう。この前提検査でtarget_shaがcommit objectとして解決可能かつ
+    // 40桁16進数であることを要求し、いずれかに失敗したら成果物検証ループへ入らずfail-closedに
+    // 拒否する。
+    const targetSha = report.gate.target_sha;
+    const targetShaResolved = git(['rev-parse', '--verify', `${targetSha}^{commit}`], root);
+    if (targetShaResolved.status !== 0 || !/^[0-9a-f]{40}$/.test(targetSha)) {
+      errors.push(`gate.target_sha が有効なcommitとして解決できません: ${targetSha}`);
+      return violations(errors);
+    }
     for (const artifact of report.gate.approved_artifacts) {
-      const abs = path.join(artifactRoot, artifact.path);
-      if (!fs.existsSync(abs)) {
-        errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
-      } else if (digestOfFile(abs) !== artifact.digest) {
+      const shown = git(['show', `${report.gate.target_sha}:${artifact.path}`], root);
+      if (shown.status !== 0) {
+        // Issue #316: implementation gate（gate.tsのallowAbsentがgateId==='implementation'の
+        // 場合のみ真であることに対応）に限り、target_shaに実在しない成果物をABSENT_ARTIFACT_DIGEST
+        // sentinelで正当に記録しうる。spec/design/validation gateでは証跡生成側がそもそも
+        // sentinel digestを持つエントリを生成し得ないため、gate.id以外では例外を適用しない
+        // （I8安全側原則。無条件に許容すると「不在の正当な記録」を偽装できてしまう）。
+        const sentinelExempt = report.gate.id === 'implementation' && artifact.digest === ABSENT_ARTIFACT_DIGEST;
+        if (!sentinelExempt) {
+          errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
+        }
+      } else if (digestOf(shown.stdout) !== artifact.digest) {
         errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
     }
