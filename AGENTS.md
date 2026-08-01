@@ -48,7 +48,7 @@ Issue作成 → worktree作成 → SPECワーカーが最初のcheckpointをpush
 | ③実装 | コード・単体テスト結果 | implementation-gate |
 | ④独立検証 | 受入/統合/回帰テスト・PR | validation-gate |
 
-レビュープロファイル：Standard（既定、レビュア1体が conformance→falsification を順に実行）／Strict（`risk != normal` OR `autonomy == full`、専任2体）。ゲートは次のワーカーを直接起動しない——進行役がゲート状態のみを読み、次セグメント起動・`finding.origin`（`specification|design|implementation|validation`）に基づく差し戻し先決定・人間判断への昇格・マージ条件確認を行う。
+レビュープロファイル：Standard（既定、レビュア1体が conformance→falsification を順に実行）／Strict（`risk != normal` OR `autonomy == full`、専任2体）。ゲートは次のワーカーを直接起動しない——進行役がゲート状態のみを読み、次セグメント起動・`finding.origin`（`specification|design|implementation|validation`）に基づく差し戻し先決定・人間判断への昇格・マージ条件確認を行う。GitHub モードではレビュー証跡を CI 内で生成しない（AI レビュアの CI 実行は行わない）ため、進行役がローカルで証跡を生成する。その実行者・実行タイミング・コマンド・capability 要件は `.agent-skill-chain/standards/GATE_REVIEW_OPERATIONS.md` を正本とする。
 
 ## 役割・権限・writer lease
 
@@ -124,7 +124,7 @@ docs/{GLOSSARY.md, adr/, system-spec/}
 .worktrees/
 .agent-skill-chain/
   project/          # consumer project 固有ポリシー（manifest.yaml, RULES.md, roles/）
-  standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY}.md
+  standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY,GATE_REVIEW_OPERATIONS}.md
   templates/{issue/, adr/, github/}
   schemas/{config,state,gate-report,validation-report,worker-report,integration,lease,segments,project-policy}.schema.yaml
   config/{agent-skill-chain.yaml, segments.yaml, roles.yaml}

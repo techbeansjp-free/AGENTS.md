@@ -8,6 +8,7 @@
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
 | `AC-1` | `.agent-skill-chain/standards/GATE_REVIEW_OPERATIONS.md`（新設） | 既存3標準文書と同じ配置 |
+| `AC-1` | `AGENTS.md`への新設文書の登録（ディレクトリ構成の`standards/`列挙への追加＋ゲート運用本文での正本明示） | 正本文書からの参照経路が無いと発見可能性が担保されないため |
 | `AC-2` | 実PR（PR #311 / Issue #300自身、strict profile）での`gate-local-review.sh`実地実行 | Issue #303・#312込みの最新main基準。Check Run記録自体は別Issue（GitHub App未整備） |
 | `AC-3` | 既存コード（`gate-local-review.sh`・`review-evidence.ts`）の該当箇所を引用した確認記述 | 新規実装は行わない |
 
@@ -15,32 +16,45 @@
 
 ### コンポーネント構成
 
-- `.agent-skill-chain/standards/GATE_REVIEW_OPERATIONS.md`: 「誰が」「いつ」「どのコマンドを」「どのcapability要件で」実行するかを自己完結して記載する新規運用手順文書。既存の`TEST_POLICY.md`と同じ階層・同じ役割（AGENTS.mdが参照する規範文書）とする。
+- `.agent-skill-chain/standards/GATE_REVIEW_OPERATIONS.md`: 「誰が」「いつ」「どのコマンドを」「どのcapability要件で」実行するかを自己完結して記載する新規運用手順文書。既存の`GIT_CONVENTIONS.md`・`TEST_POLICY.md`・`SECURITY_POLICY.md`と同じ`.agent-skill-chain/standards/`配下に置き、同じ役割（AGENTS.mdが正本として指す規範文書）を与える。
+- `AGENTS.md`（既存、本Issueで改定）: 上記の「同じ役割」は配置だけでは成立しない。改定前のAGENTS.mdはディレクトリ構成で`standards/`配下を`GIT_CONVENTIONS`・`TEST_POLICY`・`SECURITY_POLICY`の3件のみ列挙しており、新設文書はリポジトリ内のどの正本文書からも参照されない状態だった。この状態ではAC-1が求める「個人の記憶に依存しない発見可能性」が担保されない。したがって本Issueでは、(a) ディレクトリ構成の`standards/`列挙へ`GATE_REVIEW_OPERATIONS`を追加し、(b) ゲート運用を述べる本文へ「GitHubモードではレビュー証跡をCI内で生成せず進行役がローカルで生成する。その実行者・実行タイミング・コマンド・capability要件は`GATE_REVIEW_OPERATIONS.md`を正本とする」旨を追記する。AGENTS.mdは`.agent-skill-chain/ci/verify-doc-length.sh`により150行上限で機械検査されるため、追記は既存行内への追加に留め、行数を増やさない（改定後も144行）。
 - 完全自動化（CI内でのAIレビュア実行）は`.agent-skill-chain/project/MODEL_TIER_TABLE.md`が既に明示的に禁止している（「GitHub Actionsは...AI、provider CLI、Codex Action、provider API credential、self-hosted runnerを使用しない」）。この制約は本Issueのスコープでは変更しない。したがって完全自動化ではなく、**進行役が明示的に実行する手順を文書化する**ことが本Issueの現実的な到達点である。
 
 ### 依存関係
 
 ```text
 新規PR push
-  → CI（verify-and-publish）が証跡なしで human_required
+  → CI（verify-and-publish）が証跡なしで human_required（マージ不可のまま停止）
   → 進行役が GATE_REVIEW_OPERATIONS.md の手順に従い gate-local-review.sh を実行
     → protected base worktree（main、clean）から隔離clone作成
     → gate-review.sh（scaffold生成）
     → gate-launch-reviewer.sh × 2（strict時。各slotが独立レビュアを起動）
-    → gate submit-evidence（GitHub PR Reviewへ証跡投稿）※ここまでAC-2の範囲・実地検証済み
-    → repository_dispatch → trusted gate recorder workflow が Check Run を発行
-      ※GitHub App未整備（ASC_GATE_APP_ID未設定）のため現状常に失敗する。別Issueで扱う
-  → verify-and-publish が証跡を検証し成功
+    → gate submit-evidence（GitHub PR Reviewへ証跡投稿）
+    → repository_dispatch（event_type: agent-skill-chain-gate-record）を発行
+    ※ここまでがAC-2の対象範囲であり、PR #311で実地到達を確認済み
+  → 以降は独立した2経路へ分岐する（片方の失敗が他方を止めない）
+    ├─ 経路A（現状稼働）: CI再実行時の verify-and-publish が投稿済み証跡を検証し、
+    │    approved なら Check Run 成功、rejected / human_required なら失敗を publish する
+    │    → 実地検証での到達点は rejected（証跡が正しく解釈された結果であり、
+    │      入力契約充足の直接証跡。経路Aは終端まで到達している）
+    └─ 経路B（現状未到達）: repository_dispatch を受けた trusted gate recorder が
+         専用GitHub App の資格情報で Check Run を発行する
+         → ASC_GATE_APP_ID / ASC_GATE_APP_PRIVATE_KEY 未登録のため常に失敗する。
+           GitHub App の作成・登録は人間の対話的操作を要するため別Issueで扱う
+  → マージ条件としてのゲート成功（不変条件I2が要求する専用App/Workflow由来の
+    Check Run 成功）は経路Bの完了を要するため、経路B未整備の現状では到達しない
 ```
+
+図の終端が「ゲート成功」ではなく「経路Bが未整備のため未到達」で止まることは、本Issueの到達点を意図的に表している。本Issueが担保するのは経路Aの終端到達（証跡が生成され、検証ロジックに正しく解釈されること）までであり、経路Bの終端到達はスコープ外である。
 
 ### 実地検証の実績（AC-2）
 
 PR #311（Issue #300自身、strict profile）のspec gateに対し、Issue #303・#312の修正込みの最新main（`8cb1710`）を基準として`gate-local-review.sh`を実行し、以下を確認した。
 
 - 独立2体のレビュー証跡がGitHub PR Reviewへ実際に記録された（review ID 2件、`gh api pulls/311/reviews`で確認）。
-- `gate submit-evidence`が両slotとも成功し、`launcher-token.json`の全slot消費を確認した上で`repository_dispatch`（`event_type: agent-skill-chain-gate-record`）が発行された。
-- `verify-and-publish`のCI再実行で`Verify local-review evidence`ステップが`final: rejected`（Opusレビュアが実際にSPEC.md内の複数の矛盾点を検出した結果）を返した。これは証跡が正しく検証された証跡であり、AC-2の「入力契約を満たす」を実証する（`final: human_required`ではなく実際の判定が返っている）。
-- `trusted gate recorder`ワークフロー（`repository_dispatch`受信側）は`ASC_GATE_APP_IDが構成されていません`で失敗した。これはGitHub Appインフラ未整備によるものであり、証跡生成・入力契約充足の実証には影響しない。
+- `gate submit-evidence`が両slotとも成功し、`launcher-token.json`の全slot消費を確認した上で`repository_dispatch`（`event_type: agent-skill-chain-gate-record`）が発行された（受信側ワークフローのrunが`gate-record-311-spec-816dbd4...`というrun-nameで実際に起動していることが、ペイロード内容を含む発行の証跡である）。
+- 上記の依存関係図の経路Aについて: `verify-and-publish`のCI再実行で`Verify local-review evidence`ステップが`final: rejected`（Opusレビュアが実際にSPEC.md内の複数の矛盾点を検出した結果）を返した。これは証跡が正しく検証された証跡であり、AC-2の「入力契約を満たす」を実証する（`final: human_required`ではなく実際の判定が返っている）。経路Aは終端まで到達している。
+- 上記の依存関係図の経路Bについて: `trusted gate recorder`ワークフロー（`repository_dispatch`受信側）は`ASC_GATE_APP_IDが構成されていません`で失敗した。これはGitHub Appインフラ未整備によるものであり、経路Aで実証済みの証跡生成・入力契約充足には影響しない。経路Bの終端（専用App由来のCheck Run発行）は現状未到達であり、本Issueのスコープ外である。
 
 実地検証中に2件の副次的な問題を発見・修正した。
 - レビュアCLI出力のverdict JSON解釈が、フェンス付き・前置文/後置文付きの出力を処理できない（Issue #312、修正・マージ済み）。
