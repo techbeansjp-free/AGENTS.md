@@ -12,6 +12,7 @@
 | `AC-3`（manifest.yaml不在時の後方互換） | `loadProjectPolicyDocuments` の存在チェック、`src/commands/segment.ts` の呼び出し側 | `fs.existsSync` がfalseなら空配列を返し、`start()` 側で出力へ何も追加しない |
 | `AC-4`（スキーマ不正時のfail-safe） | `loadProjectPolicyDocuments` 内の `validateAgainstSchema` 呼び出し | 既存の `loadCoreReviewPolicy`（`src/lib/model-selection.ts`）と同一パターンでスキーマ不正時に例外を投げる |
 | `AC-5`（既存動作への非破壊） | `test/unit/segment.test.ts`（既存）・`test/integration/self-extension-policy.test.ts`（既存） | 新規回帰テストを追加し、既存テストは変更しない |
+| `AC-6`（登録文書の実体欠落時のfail-safe） | `loadProjectPolicyDocuments` 内の `fs.readFileSync` 呼び出し、`src/commands/segment.ts` の `start()` を包む `guard()`（`src/lib/cli-io.ts`） | 登録パスに対応する実ファイルが存在しない・読み取れない場合、`fs.readFileSync` が例外を送出する。`loadProjectPolicyDocuments` はこれを独自に捕捉せず、`start()` を呼び出す `guard()` が任意の例外を捕捉して非0終了コードへ正規化する既存の共通パスをそのまま用いる。AC-4（スキーマ不正時のfail-safe）とは独立した契約だが、fail-safeの実現手段（`loadProjectPolicyDocuments` からの例外送出＋`guard()` による捕捉）は共通である |
 
 ## 責務・境界
 
