@@ -1,4 +1,4 @@
-// 正本: AGENTS.md §設定 / SPEC.md AC-1・AC-2・AC-3・AC-9 / DESIGN.md §選択解決の設計
+// 正本: AGENTS.md §設定 / SPEC.md AC-1・AC-2・AC-3・AC-9
 //
 // セグメント作業ワーカー(spec/design/implementation/validation)を起動する際の
 // adapter・model_tier・reasoning_effort・具体的なモデル文字列を、config とセグメント名だけから
