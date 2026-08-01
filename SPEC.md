@@ -20,21 +20,23 @@ AGENTS.md「プロジェクト固有ポリシー」節は「進行役は `manife
 
 - manifest.yamlが存在するプロジェクトでは、`segment start <issue_id> <segment>` の出力に `documents.common` の各文書内容が含まれる。
 - `documents.roles.<segment>` にそのセグメント向けの文書が登録されていれば、その内容も含まれる。
+- `documents.common`／`documents.roles.<segment>` に登録する文書パスは、`.agent-skill-chain/project/` ディレクトリを基点とした相対パスとして解決する。
 - manifest.yaml自体が存在しない（project固有ポリシー未導入の）consumer projectでは、従来どおり `role_contract` のみが出力される（後方互換）。
 - manifest.yamlが存在するがスキーマに適合しない場合は、サイレントに無視せずエラーとして扱う（I8: 迷ったら安全側）。
+- `documents.common`／`documents.roles.<segment>` に登録されたパスに対応する実ファイルが存在しない、または読み取れない場合も、サイレントにスキップせずエラーとして扱う（I8: 迷ったら安全側。登録済み規範文書が配布されないままワーカーが起動する事態を防ぐ）。
 
 ### 受入条件（Acceptance Criteria）
 
 #### AC-1: documents.commonの配布
 
-- Given: `.agent-skill-chain/project/manifest.yaml` が存在し、`documents.common` に1件以上の文書パスが登録されている。
+- Given: `.agent-skill-chain/project/manifest.yaml` が存在し、`documents.common` に1件以上の文書パスが登録されている。各パスは `.agent-skill-chain/project/` ディレクトリを基点とした相対パスであり、対応する実ファイルが同ディレクトリ配下に存在し読み取り可能である（例: `documents.common` に `RULES.md` と登録されていれば、実体は `.agent-skill-chain/project/RULES.md` に存在する）。
 - When: `agent-skill-chain segment start <issue_id> <segment>` を実行する。
 - Then: 標準出力に、`documents.common` に列挙された各ファイルの内容が含まれる。
 - 検証方法見込み: `automated`
 
 #### AC-2: documents.roles.<segment>の配布
 
-- Given: `.agent-skill-chain/project/manifest.yaml` の `documents.roles.<segment>` に、当該セグメント向けの文書パスが1件以上登録されている。
+- Given: `.agent-skill-chain/project/manifest.yaml` の `documents.roles.<segment>` に、当該セグメント向けの文書パスが1件以上登録されている。パスは `.agent-skill-chain/project/` ディレクトリを基点とした相対パスであり、対応する実ファイルが存在し読み取り可能である。
 - When: `agent-skill-chain segment start <issue_id> <segment>` を実行する。
 - Then: 標準出力に、その文書の内容が含まれる。他セグメント向けに登録された文書（例: `documents.roles.spec` のみに登録された文書）は、`implementation` セグメント起動時の出力には含まれない。
 - 検証方法見込み: `automated`
@@ -60,8 +62,16 @@ AGENTS.md「プロジェクト固有ポリシー」節は「進行役は `manife
 - Then: `self-extension-policy` 関連テスト・`schema` 関連テスト・その他既存テストが全て成功し続ける。
 - 検証方法見込み: `automated`
 
+#### AC-6: 登録文書の実体欠落時のfail-safe
+
+- Given: `.agent-skill-chain/project/manifest.yaml` の `documents.common` または `documents.roles.<segment>` に、文書パスが登録されているが、`.agent-skill-chain/project/` を基点として解決した実ファイルが存在しない、または読み取れない。
+- When: `agent-skill-chain segment start <issue_id> <segment>` を実行する。
+- Then: エラーを返し、終了コードは非0になる（サイレントにスキップして起動を続けない。AC-4のmanifest.yamlスキーマ不正時のfail-safeとは独立した契約であり、manifest.yaml自体はスキーマに適合しているが登録文書の実体が欠落しているケースを対象とする）。
+- 検証方法見込み: `automated`
+
 ## スコープ外
 
 - `.agent-skill-chain/project/manifest.yaml` のスキーマ（`project-policy.schema.yaml`）自体の変更。
 - ゲートレビュア（`launch_gate_reviewer`）へのproject policy配布（別Issueで扱う）。
-- 対話セッション（Claude Code CLI等での直接チャット）における実装委譲の運用（`.agent-skill-chain/project/roles/implementation.md` で別途定義済み、本Issueの対象外）。
+- 対話セッション（Claude Code CLI等での直接チャット）における実装委譲の運用。`documents.roles.<segment>` の実データは、本Issue対応時点で `.agent-skill-chain/project/manifest.yaml` に0件登録（`roles: {}`）であり、`.agent-skill-chain/project/roles/` ディレクトリ自体も存在しない。セグメントロール別の追加ポリシー文書をmanifest.yamlへ登録すること自体は、本Issueの対象外（配布経路の是正のみを扱う）とし、別Issueで扱う。
+- 標準出力への埋め込み形式（区切り・出典ラベル・`role_contract`との順序）、およびAGENTS.mdが定める優先順位（不変条件＞プロジェクトポリシー＞標準規約・既定値）をワーカーへ明示的に伝達する仕組み。本Issueは `documents.common`／`documents.roles.<segment>` に登録された文書が一切配布されていなかった不具合（配布の有無）の是正のみを対象とし、標準出力の構造（`role:` セクション・`issue:` セクション・`role_contracts` の後ろへ区切りなく文書内容を追記する現行の連結順序）自体の変更は行わない。
