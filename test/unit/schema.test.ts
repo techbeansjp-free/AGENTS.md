@@ -89,6 +89,145 @@ test('validateAgainstSchema: 実物の config/agent-skill-chain.yaml をその�
   assert.deepEqual(outcome, { valid: true, errors: [] });
 });
 
+// ISSUE-307 SPEC.md AC-4, AC-5: config スキーマの worker.segment_overrides・worker.model_tiers が
+// 新旧両形式を許容し、未知のアダプタ名・未知のティア名・未知のセグメント名・未知のキーを拒否する
+// こと。ティア対応表のモデル値は固定値ではなく通常の文字列として検証されること。
+//
+// このリポジトリ自身をdogfooding worktree（.worktrees/配下）から実行する場合、
+// resolveAsset()の既定root（repoRoot()）はcommon .gitディレクトリ経由でメイン作業ツリーへ
+// 解決される（ADR-0004）ため、素の loadSchemaDoc('config')/validateAgainstSchema('config', x)
+// はこのworktreeでの変更を反映しない。ここでは他のテスト（stateのcore_auditテスト）と同様に
+// packageRoot()（このモジュールが実際に実行されている場所＝このworktree）を明示的なrootとして
+// 渡し、このworktreeで変更したスキーマ定義を確実に対象にする。
+function loadConfigSchemaDoc(): SchemaDoc {
+  const filePath = resolveAsset(path.join('schemas', 'config.schema.yaml'), packageRoot());
+  return readYamlFile<SchemaDoc>(filePath);
+}
+function validateConfig(data: unknown) {
+  return validateAgainstSchema('config', data, packageRoot());
+}
+
+test("validateAgainstSchema('config') (AC-4): examples[1]（segment_overrides・model_tiersを含む新形式）はvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  assert.ok(doc.examples.length >= 2, 'config.schema.yaml のexamplesに新形式（segment_overrides・model_tiers）が無い');
+  const outcome = validateConfig(doc.examples[1]);
+  assert.deepEqual(outcome, { valid: true, errors: [] });
+});
+
+test("validateAgainstSchema('config') (AC-4): worker.adapterのみのスカラー旧形式（examples[0]）は引き続きvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const oldWorker = (doc.examples[0] as { worker: Record<string, unknown> }).worker;
+  assert.ok(!('segment_overrides' in oldWorker) && !('model_tiers' in oldWorker));
+  const outcome = validateConfig(doc.examples[0]);
+  assert.deepEqual(outcome, { valid: true, errors: [] });
+});
+
+test("validateAgainstSchema('config') (AC-4): ティア対応表のモデル値を別の文字列へ変更してもスキーマ変更無しでvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const changed = structuredClone(doc.examples[1]) as { worker: { model_tiers: Record<string, Record<string, string>> } };
+  changed.worker.model_tiers.highest_capability.codex = 'gpt-9.9-future-model';
+  const outcome = validateConfig(changed);
+  assert.deepEqual(outcome, { valid: true, errors: [] });
+});
+
+test("validateAgainstSchema('config') (AC-4): 未知のadapter名を持つsegment_overridesはinvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+  broken.worker.segment_overrides.implementation = { adapter: 'gpt5' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): 未知のmodel_tier名はinvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+  broken.worker.segment_overrides.implementation = { adapter: 'codex', model_tier: 'super_ultra' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): 未知のreasoning_effort名はinvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+  broken.worker.segment_overrides.implementation = { adapter: 'codex', reasoning_effort: 'ultra' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): 未知のセグメント名（4セグメント以外）はinvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+  broken.worker.segment_overrides.review = { adapter: 'codex' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): segment_overrides内の未知キーはinvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+  broken.worker.segment_overrides.implementation = { adapter: 'codex', unexpected_field: 'nope' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): model_tierを持つがadapterがcodexでない組合せはinvalidになる（黙って無視されない）", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+  broken.worker.segment_overrides.implementation = { adapter: 'claude', model_tier: 'highest_capability' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): reasoning_effortを持つがadapter未指定の組合せはinvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+  broken.worker.segment_overrides.implementation = { reasoning_effort: 'high' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): model_tiersの未知のティア名はinvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { model_tiers: Record<string, unknown> } };
+  broken.worker.model_tiers.super_ultra = { codex: 'x' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): model_tiersの未知のアダプタキーはinvalidになる（claude用モデルを本Issueで追加しない）", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { model_tiers: Record<string, Record<string, unknown>> } };
+  broken.worker.model_tiers.highest_capability.claude = 'some-claude-model';
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): model_tiersのティアエントリにcodexキーが無い場合はinvalidになる（必須）", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = structuredClone(doc.examples[1]) as { worker: { model_tiers: Record<string, unknown> } };
+  broken.worker.model_tiers.highest_capability = {};
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (AC-4): model_tier・reasoning_effortとadapter: codexの組合せはvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const ok = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+  ok.worker.segment_overrides.validation = { adapter: 'codex', model_tier: 'highest_capability', reasoning_effort: 'xhigh' };
+  const outcome = validateConfig(ok);
+  assert.deepEqual(outcome, { valid: true, errors: [] });
+});
+
 test('validateAgainstSchema: 明らかに型が異なるデータ（配列でなく文字列）はinvalidになる', () => {
   const outcome = validateAgainstSchema('config', 'not-an-object');
   assert.equal(outcome.valid, false);

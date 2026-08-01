@@ -5,9 +5,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
-import { createTmpRepo, setWorkerAdapter, FIXED_TIMESTAMP, type CoordinationBackend } from '../helpers/tmp-repo.js';
+import {
+  createTmpRepo,
+  setWorkerAdapter,
+  removeWorkerSegmentOverrides,
+  removeWorkerModelTiers,
+  setWorkerSegmentOverride,
+  FIXED_TIMESTAMP,
+  type CoordinationBackend,
+} from '../helpers/tmp-repo.js';
 import { runCli, binPath } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
+import { packageRoot } from '../../src/lib/paths.js';
 
 // #166 launch_worker（セグメント作業ワーカー起動）の adapter 層 + 起動ラッパー
 // （.agent-skill-chain/scripts/worker-launch.sh）を実際の bash で駆動して検証する:
@@ -18,8 +27,10 @@ import { createGhStub } from '../helpers/gh-stub.js';
 //   (e) codex 未構成 -> lease取得前にexit 2、leaseは一切取得されない
 //   (f) human (local/github) -> exit 3・lease解放しない・通知内容
 //   (g) lease acquireのwip.limit事前チェック・issue内他segmentコンフリクト検査（AC-2/AC-8）
+//   (h) セグメント別 adapter・ティア対応表からの具体モデル解決（ISSUE-307 AC-1, AC-2, AC-3, AC-6, AC-9）
 //
-// モデル（ワーカー実行系）呼び出しは WORKER_CMD で stub 化し、実 API・実 gh へは一切アクセスしない。
+// モデル（ワーカー実行系）呼び出しは WORKER_CMD/codex stub で stub 化し、実 API・実 gh へは
+// 一切アクセスしない。
 
 interface ScriptResult {
   status: number;
@@ -52,6 +63,58 @@ function runWorkerLauncher(worktreePath: string, args: string[], env: NodeJS.Pro
       stderr: e.stderr?.toString() ?? '',
     };
   }
+}
+
+/**
+ * codex.sh を直接 source して launch_worker を呼ぶ（起動ラッパー・CLI（worker context）を経由
+ * しない）。ISSUE-307 AC-9 の防御的検査（ASC_WORKER_MODEL_TIERはあるがASC_WORKER_MODELが無い
+ * 場合にblockedへ倒す）は、正規経路（worker context がティア解決失敗を lease 取得前のエラーと
+ * して返す）では再現できないため、この経路でのみ検証できる（DESIGN.md §起動ラッパーから
+ * アダプタへの伝達）。
+ */
+function runCodexLaunchWorkerDirect(worktreePath: string, args: string[], env: NodeJS.ProcessEnv): ScriptResult {
+  const adapterPath = path.join(worktreePath, '.agent-skill-chain', 'adapters', 'codex.sh');
+  const script = 'set -uo pipefail; source "$1"; shift; set +e; launch_worker "$@"';
+  try {
+    const stdout = execFileSync('bash', ['-c', script, '_', adapterPath, ...args], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+      env,
+    });
+    return { status: 0, stdout, stderr: '' };
+  } catch (error) {
+    const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    return {
+      status: typeof e.status === 'number' ? e.status : 1,
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+    };
+  }
+}
+
+/**
+ * PATH 上に「codex」という名の stub 実行系を用意する。受け取った引数を argv キャプチャ
+ * ファイルへ記録したうえで、成果物 commit+push+report completed まで行う
+ * （claude stub と同じ最小契約）。
+ */
+function installCodexStub(t: { after(fn: () => void): void }): { stubDir: string; argvCapturePath: string } {
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-codex-stub-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const argvCapturePath = path.join(stubDir, 'argv.txt');
+  const codexStub = path.join(stubDir, 'codex');
+  fs.writeFileSync(
+    codexStub,
+    [
+      '#!/usr/bin/env bash',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
+      'cat >/dev/null',
+      `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: codex stub output")`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  return { stubDir, argvCapturePath };
 }
 
 /**
@@ -380,6 +443,195 @@ test('codex launch_worker: 認証不成立はblocked報告・lease解放・exit 
   assert.equal(report.status, 'blocked');
   const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
   assert.equal(acquire.status, 0, 'blocked後にleaseが解放されること: ' + acquire.stderr);
+});
+
+// --- (h) セグメント別 adapter・ティア対応表からの具体モデル解決（ISSUE-307） --------------
+
+test('codex launch_worker (validation, 任意セグメントへのsegment_overrides追加): worker.adapterがclaudeのままでも指定セグメントだけcodexへ解決される（AC-1の汎用性）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  // 本物のconfigはimplementationのみを上書きするが、AC-1は「セグメント別上書き」自体は
+  // 4セグメントいずれにも適用できる汎用の仕組みであることを要求する。ここではvalidation
+  // セグメントへ上書きを追加し、他セグメント（worker.adapter=claude据え置き）に影響しないことを
+  // 併せて確認する。
+  setWorkerSegmentOverride(repo.dir, 'validation', { adapter: 'codex' });
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', PATH: `${stubDir}:${process.env.PATH}` });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'validation'], env);
+  assert.equal(res.status, 0, res.stderr);
+  assert.ok(fs.existsSync(argvCapturePath), 'validationセグメントはcodex stubを起動すること');
+
+  const ctx = runCli(['worker', 'context', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
+  assert.equal(ctx.status, 0, ctx.stderr);
+  assert.match(ctx.stdout, /^adapter=claude$/m, '上書きの無いspecはworker.adapter=claudeのまま影響を受けないこと');
+});
+
+test('codex launch_worker (implementation, 本リポジトリ既定config): worker.model_tiers.highest_capability.codexの具体モデル文字列とreasoning effort=highがcodex起動コマンドへ反映される（AC-2, AC-6, AC-9）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  // worker.adapterはclaudeのまま変更しない。本物のリポジトリのconfigが持つ
+  // worker.segment_overrides.implementation（adapter: codex, model_tier: highest_capability,
+  // reasoning_effort: high）とworker.model_tiers.highest_capability.codex（gpt-5.6-sol）だけで
+  // implementationセグメントが解決されることを確認する。
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', PATH: `${stubDir}:${process.env.PATH}` });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+  assert.match(argv, /gpt-5\.6-sol/, 'worker.model_tiersから解決した具体的なモデル文字列が反映されること（AC-9）');
+  assert.match(argv, /model_reasoning_effort="high"/, 'reasoning_effort=highが起動コマンドへ反映されること');
+});
+
+test('codex launch_worker (spec, ティア未指定): 個別上書き・設定由来の値がいずれも無い場合は従来のフォールバック（gpt-5.6/high）が維持される（AC-3）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'codex');
+  // specにはsegment_overridesが無い（本物のconfigはimplementationのみ上書きする）ため、
+  // worker.adapter=codexへ解決されるが、model_tier/reasoning_effortは未解決のまま。
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', PATH: `${stubDir}:${process.env.PATH}` });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+  assert.match(argv, /^gpt-5\.6$/m, 'ティア未指定時は従来のフォールバックモデル（非implementation: gpt-5.6）が維持されること');
+  assert.match(argv, /model_reasoning_effort="high"/, 'ティア未指定時は従来のフォールバックeffort（非implementation: high）が維持されること');
+});
+
+test('codex launch_worker (implementation, セグメント別上書き・ティア対応表を持たない既存設定): 従来のフォールバック（gpt-5.6-terra/medium）が維持される（AC-3, 後方互換）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  removeWorkerSegmentOverrides(repo.dir);
+  removeWorkerModelTiers(repo.dir);
+  setWorkerAdapter(repo.dir, 'codex');
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', PATH: `${stubDir}:${process.env.PATH}` });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+  assert.match(argv, /^gpt-5\.6-terra$/m, 'segment_overrides/model_tiers無しの既存設定はISSUE-307適用前と同一モデルに解決されること');
+  assert.match(argv, /model_reasoning_effort="medium"/, 'segment_overrides/model_tiers無しの既存設定はISSUE-307適用前と同一effortに解決されること');
+});
+
+test('codex launch_worker: 個別上書き環境変数（CODEX_IMPLEMENTATION_MODEL/CODEX_IMPLEMENTATION_REASONING_EFFORT）は設定由来の解決済み値より優先される（AC-2）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  // 本物のconfigのimplementation上書き（highest_capability/high、具体モデルgpt-5.6-sol）が
+  // 既に存在する状態で、個別上書き環境変数がなお優先されることを確認する。
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    PATH: `${stubDir}:${process.env.PATH}`,
+    CODEX_IMPLEMENTATION_MODEL: 'override-model',
+    CODEX_IMPLEMENTATION_REASONING_EFFORT: 'xhigh',
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+  assert.match(argv, /override-model/, '個別上書き環境変数が設定由来の解決済みモデルより優先されること');
+  assert.match(argv, /model_reasoning_effort="xhigh"/, '個別上書き環境変数が設定由来のreasoning effortより優先されること');
+  assert.doesNotMatch(argv, /gpt-5\.6-sol/, '設定由来の値が個別上書きに敗れ反映されないこと');
+});
+
+test('codex launch_worker: CODEX_WORKER_CMD完全上書きは設定由来のモデル解決そのものを行わせない（AC-2, 既存優先順位の回帰確認）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  // codexバイナリをPATHへ一切置かず、CODEX_WORKER_CMDだけで完走できることを確認する
+  // （完全上書きが最優先であり、モデル解決（codexコマンドの存在確認含む）を経由しないこと）。
+
+  const workerCmd = [
+    'cat >/dev/null',
+    `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: full override")`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+  ].join(' && ');
+  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', CODEX_WORKER_CMD: workerCmd });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const report = readWorkerReport(repo.dir, 'implementation');
+  assert.equal(report.status, 'completed');
+});
+
+test('worker-launch.sh (AC-2, AC-9): ティア指定はあるがworker.model_tiersを引けない場合、lease取得前のエラーとして扱われ何も起動しない', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  removeWorkerModelTiers(repo.dir);
+  // segment_overrides.implementation（model_tier: highest_capability）は残るが、対応表だけが
+  // 無い状態にする。worker context 自体がこの時点でエラーになるため、worker-launch.sh は
+  // アダプタ選択にすら進まず、lease取得前のエラー（exit 2）として返す（DESIGN.md）。
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', PATH: `${stubDir}:${process.env.PATH}` });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.notEqual(res.status, 0, 'ティア解決失敗はexit 0にならないこと');
+  assert.notEqual(res.status, 3);
+  assert.match(res.stderr, /worker context の解決に失敗しました/);
+  assert.ok(!fs.existsSync(argvCapturePath), 'codexコマンド自体は起動されないこと（推測で起動しない）');
+
+  const reportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reports', 'implementation.yaml');
+  assert.ok(!fs.existsSync(reportPath), 'lease取得前の失敗のためblocked reportは書かれないこと（DESIGN.md）');
+
+  // lease取得前に失敗しているため、leaseは一切取得されておらず即座に新規取得できる。
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'implementation'], { cwd: worktreePath, env });
+  assert.equal(acquire.status, 0, 'lease取得前のエラーのためleaseは未取得のままであること: ' + acquire.stderr);
+});
+
+test('codex launch_worker (直接呼び出し, ASC_WORKER_MODEL_TIERはあるがASC_WORKER_MODELが届かない場合): 推測せず既存のblockedフェイルセーフへ倒す（AC-9防御層）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'codex');
+  // 正規経路（config → worker context → worker-launch.sh）ではこの状態（ティア名はあるが
+  // 解決済みモデルが無い）には至らない（worker contextの時点でエラーになるため）。ここでは
+  // worker-launch.sh・CLI解決を経由せず codex.sh の launch_worker を直接呼び、
+  // ASC_WORKER_MODEL_TIERだけを直接注入した場合の防御層のみを検証する。
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    PATH: `${stubDir}:${process.env.PATH}`,
+    ASC_WORKER_MODEL_TIER: 'highest_capability',
+  });
+
+  const res = runCodexLaunchWorkerDirect(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.notEqual(res.status, 0, 'モデル未到達はexit 0にならないこと');
+  assert.notEqual(res.status, 3);
+  assert.match(res.stderr, /解決済みモデル（ASC_WORKER_MODEL）が届いていません/, '理由が日本語で標準エラーへ出ること');
+  assert.ok(!fs.existsSync(argvCapturePath), 'codexコマンド自体は起動されないこと（推測で起動しない）');
+
+  const report = readWorkerReport(repo.dir, 'implementation');
+  assert.equal(report.status, 'blocked');
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'implementation'], { cwd: worktreePath, env });
+  assert.equal(reacquire.status, 0, 'blocked後にleaseが解放されること: ' + reacquire.stderr);
+});
+
+test('codex.sh: アダプタのソースに具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに追加されていない（AC-9, DESIGN.md）', () => {
+  const source = fs.readFileSync(path.join(packageRoot(), '.agent-skill-chain', 'adapters', 'codex.sh'), 'utf8');
+  assert.doesNotMatch(source, /gpt-5\.6-sol/, 'ティア対応表の具体的なモデル文字列をアダプタのソースへ追加していないこと');
+});
+
+test('config.schema.yaml: examplesを含め具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに置かれていない（SPEC.md制約, ADR-0015）', () => {
+  // 具体的なモデル文字列を新たに置いてよいのは .agent-skill-chain/config/agent-skill-chain.yaml の
+  // worker.model_tiers のみであり、スキーマ（examples含む）には置かない（SPEC.md 制約節）。
+  // examples は実在するモデル名ではなくプレースホルダ文字列で足りる。
+  const source = fs.readFileSync(path.join(packageRoot(), '.agent-skill-chain', 'schemas', 'config.schema.yaml'), 'utf8');
+  assert.doesNotMatch(source, /gpt-5\.6-sol/, 'config.schema.yaml（examples含む）に具体的なモデル文字列を新たに置かないこと');
 });
 
 // --- (f) human launch_worker: 通知＋非同期deferred --------------------------------------

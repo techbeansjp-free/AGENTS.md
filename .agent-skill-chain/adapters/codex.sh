@@ -35,18 +35,48 @@ _codex_auth_ok() {
 # 一切ログに流さない。
 _claude_auth_ok() { _codex_auth_ok; }
 
+# モデル決定順序（ISSUE-307 / ADR-0015、テスト用完全上書き CODEX_WORKER_CMD・WORKER_CMD は
+# launch_worker 側で最優先判定済み）:
+#   (1) アダプタ固有の個別上書き環境変数（CODEX_IMPLEMENTATION_MODEL / CODEX_HIGH_CAPABILITY_MODEL）
+#   (2) 設定由来の解決済み値（ASC_WORKER_MODEL。worker.model_tiers からの解決は worker context
+#       （CLI）側で完結しており、本アダプタはティア名から具体名を導く処理を持たない）
+#   (3) 従来のフォールバック（implementation: gpt-5.6-terra、それ以外: gpt-5.6）
+# 各層を明示的に評価する（個別上書きの既定値展開と設定由来の値を同一式に混在させない）。
 _codex_worker_model() {
-  case "$1" in
-    implementation) printf '%s\n' "${CODEX_IMPLEMENTATION_MODEL:-gpt-5.6-terra}" ;;
-    *) printf '%s\n' "${CODEX_HIGH_CAPABILITY_MODEL:-gpt-5.6}" ;;
-  esac
+  local segment="$1" override_var fallback
+  if [[ "$segment" == "implementation" ]]; then
+    override_var="${CODEX_IMPLEMENTATION_MODEL:-}"
+    fallback='gpt-5.6-terra'
+  else
+    override_var="${CODEX_HIGH_CAPABILITY_MODEL:-}"
+    fallback='gpt-5.6'
+  fi
+  if [[ -n "$override_var" ]]; then
+    printf '%s\n' "$override_var"
+  elif [[ -n "${ASC_WORKER_MODEL:-}" ]]; then
+    printf '%s\n' "$ASC_WORKER_MODEL"
+  else
+    printf '%s\n' "$fallback"
+  fi
 }
 
+# reasoning effort 決定順序は model と同一の3層（個別上書き→設定由来→従来フォールバック）。
 _codex_worker_effort() {
-  case "$1" in
-    implementation) printf '%s\n' "${CODEX_IMPLEMENTATION_REASONING_EFFORT:-medium}" ;;
-    *) printf '%s\n' "${CODEX_HIGH_CAPABILITY_REASONING_EFFORT:-high}" ;;
-  esac
+  local segment="$1" override_var fallback
+  if [[ "$segment" == "implementation" ]]; then
+    override_var="${CODEX_IMPLEMENTATION_REASONING_EFFORT:-}"
+    fallback='medium'
+  else
+    override_var="${CODEX_HIGH_CAPABILITY_REASONING_EFFORT:-}"
+    fallback='high'
+  fi
+  if [[ -n "$override_var" ]]; then
+    printf '%s\n' "$override_var"
+  elif [[ -n "${ASC_WORKER_REASONING_EFFORT:-}" ]]; then
+    printf '%s\n' "$ASC_WORKER_REASONING_EFFORT"
+  else
+    printf '%s\n' "$fallback"
+  fi
 }
 
 # 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
@@ -124,13 +154,22 @@ launch_gate_reviewer() {
 }
 
 # 引数: <issue_id> <segment>
-# env: CODEX_WORKER_CMD（テスト用完全上書き）、WORKER_CMD（後方互換上書き）、
-#      CODEX_HIGH_CAPABILITY_MODEL / CODEX_HIGH_CAPABILITY_REASONING_EFFORT、
-#      CODEX_IMPLEMENTATION_MODEL / CODEX_IMPLEMENTATION_REASONING_EFFORT。
+# env: CODEX_WORKER_CMD（テスト用完全上書き、最優先）、WORKER_CMD（後方互換上書き）、
+#      CODEX_IMPLEMENTATION_MODEL / CODEX_HIGH_CAPABILITY_MODEL（個別上書き）、
+#      CODEX_IMPLEMENTATION_REASONING_EFFORT / CODEX_HIGH_CAPABILITY_REASONING_EFFORT（個別上書き）、
+#      ASC_WORKER_MODEL / ASC_WORKER_REASONING_EFFORT（worker-launch.sh が worker.model_tiers から
+#      解決済みの値として export する、ISSUE-307）、ASC_WORKER_MODEL_TIER（同、防御的検査専用）。
 launch_worker() {
   local segment="${2:-}"
   if [[ -z "${CODEX_WORKER_CMD:-}" && -z "${WORKER_CMD:-}" ]]; then
-    if command -v codex >/dev/null 2>&1; then
+    # 防御的検査（ADR-0015）: ティア名が指定されているのに解決済みモデルが届いていない場合、
+    # 従来フォールバックへ黙って落ちず blocked へ倒す。正規経路（worker-launch.sh 経由）では
+    # worker context がティア解決失敗を lease 取得前のエラーとして返すためこの状態に至らないが、
+    # 本アダプタが単独で呼ばれた場合の「ティアを指定したのに別のモデルで走る」事故を防ぐ。
+    if [[ -n "${ASC_WORKER_MODEL_TIER:-}" && -z "${ASC_WORKER_MODEL:-}" ]]; then
+      echo "launch_worker: モデルティア（ASC_WORKER_MODEL_TIER=${ASC_WORKER_MODEL_TIER}）が指定されているのに解決済みモデル（ASC_WORKER_MODEL）が届いていません。推測せずblockedへ倒します" >&2
+      WORKER_CMD='false'
+    elif command -v codex >/dev/null 2>&1; then
       local model effort
       model="$(_codex_worker_model "$segment")"
       effort="$(_codex_worker_effort "$segment")"
