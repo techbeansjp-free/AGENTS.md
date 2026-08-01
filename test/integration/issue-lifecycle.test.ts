@@ -42,6 +42,7 @@ test('issue lifecycle (local backend): start -> lease -> segment -> gate -> chec
   const segmentStart = runCli(['segment', 'start', 'ISSUE-1', 'spec'], { cwd: repo.dir });
   assert.equal(segmentStart.status, 0, segmentStart.stderr);
   assert.match(segmentStart.stdout, /role: spec_worker/);
+  assert.match(segmentStart.stdout, /自己拡張の project rules/);
 
   const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath });
   assert.equal(gateReview.status, 0, gateReview.stderr);

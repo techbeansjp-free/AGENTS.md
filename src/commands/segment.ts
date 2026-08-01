@@ -5,6 +5,7 @@ import { leaseFilePath, stateFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile, toYamlString } from '../lib/yaml-io.js';
 import { activeLeaseFor, type WriterLease } from '../lib/github-lease.js';
 import { loadRoles } from '../lib/roles.js';
+import { loadProjectPolicyDocuments } from '../lib/project-policy.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const USAGE = `
@@ -93,6 +94,7 @@ export async function start(args: string[]): Promise<number> {
     const parts = [`role: ${role}`];
     if (issueBlock) parts.push(issueBlock);
     parts.push(toYamlString(contract).trim());
+    parts.push(...loadProjectPolicyDocuments(root, segment));
     return ok(parts.join('\n'));
   });
 }
