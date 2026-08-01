@@ -60,8 +60,9 @@ blob digest、Dはbase digestと`deleted` markerのtombstoneを持ち、path順c
 submitは保存集合と再導出集合を両方向比較し、追加・欠落・重複・digest差・取得不能を承認しない。
 
 Strict adapterはdurable slotを既存`verifyGithubReviewEvidence`の入力形へ写像し、最終判定を同関数だけに
-委ねる。同関数は固定2 slot、異actor/invocation、session/target/artifact一致、判定優先順位だけを
-扱う。Review選択、replay、nonce、API retry、Check status/conclusion写像は外側に置く。同関数はADR承認とは
+委ねる。同関数は最新attemptの固定slot数、`run_id`・`slot`の非重複と必要slot集合、全slot一致の
+`launcher_token_digest`、session/target/artifact一致、判定優先順位だけを扱う。actorはtrusted recorder
+許可集合への所属としてのみ検査し、actorの人格差は承認条件にしない。Review選択、replay、nonce、API retry、Check status/conclusion写像は外側に置く。同関数はADR承認とは
 独立に既にmainへ実装・テスト済みだが、ADR-0013（#283のdedicated App等の前提）がacceptedかつ配備済みに
 なるまでsession開始を拒否する。
 

@@ -7,9 +7,11 @@
 
 承認済みSPEC/DESIGN/ADRを入力とし、durable Review inbox、gate別session、専用App単一publisher、
 artifact集合、nonce recovery、Strict slot adapter、配布同期と自動テストを出力する。実装前に
-`verifyGithubReviewEvidence`（#283 / PR #284由来、mainへ取り込み済み）の実在とテスト成功、および
-ADR-0013のacceptedを確認する。依存未成立時は実装を開始せず、類似reducerの新規実装、別App、
-旧publisher fallbackを作らない。
+`verifyGithubReviewEvidence`（#283 / PR #284由来、mainへ取り込み済み）の実在とテスト成功を確認する。
+ADR-0013は現在`status: proposed`であり、そのaccepted化とtrust backendの実配備は本Issueの対象外である。
+実装と検証はGitHub API stub・fixture・workflow定義検査で進め、trust backend未成立時にsessionを開始せず
+設定エラーで停止するfail-closed経路を実装に含める。実環境での有効化はADR-0013 accepted・配備後に行い、
+類似reducerの新規実装、別App、旧publisher fallbackを作らない。
 
 ## 実装順序
 
@@ -41,7 +43,7 @@ ADR-0013のacceptedを確認する。依存未成立時は実装を開始せず�
 | pending 101件相当 | queue超過 | Actions取消に依存せずdurable inboxから全Reviewをdrainする | AC-4 |
 | gate別A/M/D | derive/submit | tombstoneを含む保存集合と再導出集合が双方向一致する | AC-5 |
 | path欠落/余分/重複/未分類/digest差 | submit | successを発行しない | AC-5 |
-| Strict別actor/invocation 2 approve | reduce | `verifyGithubReviewEvidence`がapprovedを返しparent successへ写像する | AC-6 |
+| Strict独立2 slot（`run_id`・`slot`非重複、token digest一致）のapprove | reduce | `verifyGithubReviewEvidence`がapprovedを返しparent successへ写像する | AC-6 |
 | Strict不足/重複/replay/混合 | reduce | 同関数外でreplay拒否し、同関数はfailure/action_requiredを返す | AC-6 |
 | 各domain状態 | publish | status/conclusion表どおりでawaitingはmergeを停止する | AC-7 |
 | local backend | open/submit | GitHub API、local report、成果物を変更しない | AC-7 |

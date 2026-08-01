@@ -5,7 +5,7 @@
 ## 目的・依存
 
 human gateをGitHub PR aggregateとCheck/Reviewエンティティでモデル化し、判定耐久化、純粋集約、Check発行を分離する。
-実装開始条件は、Issue #283 / PR #284が実装しmainに実在するI/Oなし`verifyGithubReviewEvidence(options)`（`src/lib/review-evidence.ts`）と、同PRのdedicated App・main限定environment・ruleset integrationを規定するaccepted ADR-0013であり、未成立ならsession開始前にfail-closedとする。
+実装開始条件は、Issue #283 / PR #284が実装しmainに実在するI/Oなし`verifyGithubReviewEvidence(options)`（`src/lib/review-evidence.ts`）と、dedicated App・main限定environment・ruleset integrationを規定するADR-0013がacceptedかつ実配備済みであることの二つである。ADR-0013は現在`status: proposed`であり、accepted化と実配備はIssue #283系列の責務で本Issueの対象外とする。未成立の環境ではsession開始前にfail-closedとし、機能は無効のままとする。
 
 ## ACと設計要素
 
@@ -81,10 +81,14 @@ Dはbase blob digestと固定`deleted` markerを持つtombstoneである。path�
 SHA-256を集合digestとする。open/submit双方が同じresolverで再導出し、`saved⊆derived`かつ
 `derived⊆saved`、各record/digest一致を要求する。空、重複、未分類、取得不能は承認しない。
 
-`verifyGithubReviewEvidence`はcontextとimmutable review配列だけを受け、2固定slot、異actor/invocation、
-binding、artifact集合、判定優先順位を検査して`approved|rejected|human_required`と理由を返す既存の
+`verifyGithubReviewEvidence`はcontextとimmutable review配列だけを受け、最新attemptの固定slot数、
+`run_id`・`slot`の非重複と必要slot集合の充足、全slot一致の`launcher_token_digest`、binding、artifact集合、
+判定優先順位を検査して`approved|rejected|human_required`と理由を返す既存の
 I/Oなし関数である。#278はCheck/Reviewをこの関数が要求する入力形（GithubReviewRecord相当）へ写像するだけで、
 replay選択、nonce、retry、Check状態写像は同関数の外に置く。同関数の判定ロジック自体は変更しない。
+同関数はactorをtrusted recorder許可集合への所属としてのみ検査し、2件のactorが別人格であることは承認条件に
+しない。`actor_relation`は証跡として記録するだけで判定へ寄与しないため、#278も人格差をapprovedの条件に
+用いない。
 
 ## 障害・ロールバック・関連ADR
 
