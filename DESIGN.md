@@ -11,7 +11,7 @@
 | `AC-2` | 是正方針A／是正方針B（設計判断の温存確認） | 除去後も設計判断がコメント本文に残ることを設計要素として明示する |
 | `AC-3` | 変更範囲の限定（コメントのみ、ロジック不変） | ソースの実行内容を変更しないことを設計上の制約とする |
 | `AC-4` | 是正方針B（`worker-selection.ts`）の全面適用（ファイル冒頭の`正本:`宣言行／`ModelTierTable`型のJSDocコメント／`resolveWorkerSelection`直前docstring末尾／`resolveModelForTier`直前docstring末尾の計4箇所）＋回帰防止テストの拡張 | 是正方針Bはファイル冒頭の`正本:`宣言行の `DESIGN.md §選択解決の設計`／SPEC.mdの受入条件番号（1番・2番・3番・9番）の列挙 部分の削除に加え、`ModelTierTable`型のJSDocコメントの「本 Issue」文言・`SPEC.md スコープ外` 参照の書き換え、`resolveWorkerSelection`直前・`resolveModelForTier`直前それぞれのdocstring末尾の受入条件番号単独括弧書き（`SPEC.md ` 接頭辞なし）の削除を含む。4箇所とも「Issue完了後に破棄される `SPEC.md`／`DESIGN.md` への陳腐化参照」という同一根拠に基づく同一是正方針内の作業として扱う。回帰防止テスト（`test/unit/worker-selection-reference.test.ts`）の恒久検査への拡張、および機械検証コマンドの空振り成功対策（下記「機械検証手段」参照）も本ACに対応する設計要素とする |
-| `AC-5` | 回帰防止テスト自体の自己検証（in-memory文字列に対する自己検証テストケースの追加） | `test/unit/worker-selection-reference.test.ts` へ、実ファイルを書き換えずin-memory文字列のみを用いて既存2正規表現（`/AC-[0-9]+/`・`/本 ?Issue/`）の検知能力を検証する新規テストケースを追加する（下記「回帰防止テストの拡張設計」参照） |
+| `AC-5` | 回帰防止テスト自体の自己検証（複数独立fixtureに対する自己検証テストケース＋定義箇所数の`grep -c`検証） | `test/unit/worker-selection-reference.test.ts` へ、実ファイルを書き換えずin-memory文字列のみを用いて既存2正規表現（`/AC-[0-9]+/`・`/本 ?Issue/`）の検知能力を検証する新規テストケースを追加する。単一実例による空振り成功（vacuous pass）を防ぐため桁数違い・空白有無違いの複数独立fixtureへ拡張し、定数定義箇所数はAC-5 Then(b)の`grep -c`コマンド2件で検証する（下記「AC-5 Then(b) の機械検証コマンド」「回帰防止テストの拡張設計」参照） |
 
 ## 責務・境界
 
@@ -85,6 +85,19 @@ git show 4618b590fb35c739b49182672d5446b1cf57ba42:src/lib/worker-selection.ts | 
 
 そのため、AC-4本来のコマンドが持つパス引数の妥当性（対象ファイルが実在することの検証）については、一時的なshellコマンドでの検証を諦め、恒久的な安全網の役割を `test/unit/worker-selection-reference.test.ts` に委ねるという設計判断を採る。同テストは `fs.readFileSync(path.join(repositoryRoot, 'src/lib/worker-selection.ts'), 'utf8')` によって対象ファイルを読み込むため、対象ファイルが不在であれば `readFileSync` が例外を投げてテスト自体が red になる。これにより、パス誤記・ファイル移動によって検査対象が読めなくなる事態は、AC-4の一時的な検証コマンドではなく、恒久的に実行され続ける自動テストの例外送出によって代替的に検知される。
 
+#### AC-5 Then(b) の機械検証コマンド
+
+strict design-gateレビューにて「SPEC.mdのAC-5 Then(b)が定義する2つの `grep -c` コマンドが、DESIGN.md・PLAN.mdのどこにも転記・配線されておらず、`automated` と定めた検証方法が実質 `manual` へ格下げされている」という指摘を受け、本節を新設する。
+
+SPEC.mdのAC-5 Then(b)は、共有正規表現定数 `ACCEPTANCE_CRITERIA_ID_PATTERN`・`SELF_REFERENTIAL_ISSUE_PATTERN` それぞれの定義箇所（`<定数名> = /.../` という代入式）が `test/unit/worker-selection-reference.test.ts` 内に1箇所のみ存在することを、次の2つの `grep -c` コマンドで検証すると一意に定めている。
+
+```
+grep -c 'ACCEPTANCE_CRITERIA_ID_PATTERN = /' test/unit/worker-selection-reference.test.ts
+grep -c 'SELF_REFERENTIAL_ISSUE_PATTERN = /' test/unit/worker-selection-reference.test.ts
+```
+
+いずれのコマンドも出力が `1` であることをもって成功とする。`grep -c` はパターンに一致した行数を返すため、この2コマンドは各定数の代入式がファイル内で複数箇所に分裂して定義されていないこと（リテラルの二重管理が無いこと）を検証する。出力が `2` 以上であれば定義が複数箇所に分裂しており、「回帰防止テストの拡張設計」で述べる vacuous pass のリスク（一方の定義だけが将来書き換えられて検知力を失っても他方が誤ってマッチし続け、AC-4の恒久検査とAC-5の自己検証テストケースが同一の正規表現定数を確実に共有しているとは保証できなくなる）が生じうる状態を示す。出力が `0` であれば定数が未定義であり、この場合はAC-5の自己検証テストケース自体が定数を参照できず実行時エラーとなるため、他の自動テスト（`npm test`）の失敗として別途検知される。この2コマンドはSPEC.mdが検証コマンドとして一意に固定しているため、コマンド文字列自体は変更しない。
+
 #### 回帰防止テストの拡張設計
 
 `test/unit/worker-selection-reference.test.ts` は現状 `assert.doesNotMatch(contents, /DESIGN\.md §/, ...)` のみを検査しており、上記4箇所のうち `DESIGN.md §` パターンに一致する記述（ファイル冒頭の`正本:`宣言行の `DESIGN.md §選択解決の設計` 部分）しか恒久検知できない。実装セグメントでは、`src/lib/worker-selection.ts` と `worker-launch.sh` の双方を読み込み `DESIGN.md §` パターンを検査する既存の共通 `for` ループとは別に、`worker-selection.ts` の内容のみを対象とする独立したテストケースとして、次の2パターンをそれぞれ個別の `test()` ブロックで追加する（`worker-launch.sh` は `AC-[0-9]+`／`本 ?Issue` パターンの検査対象ではないため、共通走査ループに混在させない設計とする）。
@@ -101,6 +114,23 @@ git show 4618b590fb35c739b49182672d5446b1cf57ba42:src/lib/worker-selection.ts | 
 具体的には、ファイル冒頭で2つの正規表現定数 `ACCEPTANCE_CRITERIA_ID_PATTERN = /AC-[0-9]+/`・`SELF_REFERENTIAL_ISSUE_PATTERN = /本 ?Issue/` を定義し、AC-4の恒久検査2件（上記2アサーション）とAC-5の自己検証テストケースの双方がこの同一定数を参照する（正規表現リテラルを複製しない）。AC-5の自己検証テストケースは、実ファイルを一切読み取らず、テスト内で明示的に構成した合成汚染文字列リテラル（受入条件ID形式の文字列例〔`AC-` という接頭辞に数字を続けた形式であり具体的な数字は問わない〕と「本Issue」という文言例〔例：`本 Issue のスコープ外`〕の両方を含む、意図的に汚染させたin-memory文字列）を用意し、この合成文字列に対して上記2つの共有正規表現定数が `assert.match` でマッチすることを検証する。実ファイルへの参照・書き戻しは一切行わない（CI上で安全に自動実行できるようにするための設計上の制約）。
 
 この「正規表現定数を共有し、独立した複製を持たない」設計により、将来 `ACCEPTANCE_CRITERIA_ID_PATTERN`・`SELF_REFERENTIAL_ISSUE_PATTERN` の書き方が誤って壊れ検知力を失った場合、AC-4側の恒久検査とAC-5側の自己検証テストケースが同時に、かつ整合して失敗する。仮にAC-5側が独立した複製の正規表現を保持していたら、その複製だけが誤ってマッチし続け自己検証テストケースがgreenのまま維持されてしまい、AC-4側の劣化に気付けなくなる（vacuous pass）。定数を共有することでこの事態を防ぐ。
+
+**AC-5対応（追加）: 単一実例に起因する正規表現の縮退が空振り成功（vacuous pass）する問題**。strict design-gateレビューにて、実装済みの自己検証テストケースが合成汚染文字列として単一の実例（受入条件ID形式については数字1桁の `AC-9` という1種のみ、自己参照Issue文言については空白ありの「本 Issue」という1種のみ）しか用いていないことへの指摘を受け、本項を新設する。
+
+単一実例のみでは次の失敗経路が生じる。将来 `ACCEPTANCE_CRITERIA_ID_PATTERN` が誤って `/AC-9/` のような特定の数字専用パターンへ縮退した場合、AC-4の恒久検査（是正済みの実ファイル `src/lib/worker-selection.ts` には元々 `AC-9` という文字列が存在しないため `assert.doesNotMatch` は縮退の前後で変わらずgreenのまま）・AC-5の自己検証テストケース（単一fixtureが `AC-9` そのものであるため、縮退後のパターンに対しても引き続きマッチしgreenのまま）のいずれもこの検知力喪失に気付かず通過し続ける。同様に `SELF_REFERENTIAL_ISSUE_PATTERN` が `/本 Issue/`（空白必須）へ縮退した場合、「本Issue」（空白無し）という表記に対する検知力喪失を、空白ありの単一fixtureだけでは検出できない。
+
+この失敗経路への対策として、自己検証テストケースの合成汚染文字列を単一の実例ではなく複数の独立したfixtureへ拡張する設計に変更する。
+
+- 受入条件ID形式（`ACCEPTANCE_CRITERIA_ID_PATTERN` 用）: 桁数の異なる複数の具体値（例：1桁の `AC-9`、2桁の `AC-42`、3桁の `AC-777` など、実在の受入条件番号〔AC-1〜AC-5〕と紛れない任意の数字を持つ複数のfixture文字列）を用意し、それぞれ独立に `assert.match` でマッチすることを検証する。
+- 自己参照Issue文言（`SELF_REFERENTIAL_ISSUE_PATTERN` 用）: 空白ありパターン（「本 Issue」）・空白無しパターン（「本Issue」）の両方を独立したfixture文字列として用意し、それぞれ独立に `assert.match` でマッチすることを検証する。
+
+各fixtureに対する `assert.match` は、それぞれ独立したアサーションとして実行する（複数のfixtureを結合した単一の文字列に対する単一アサーションへまとめない）。1つの結合文字列にまとめた場合、一部の実例だけにマッチする縮退した正規表現でも結合文字列全体には引き続きマッチしてしまい、他の実例に対する検知力喪失を見逃すため、fixtureごとの独立性を設計上の制約とする。
+
+**実装への申し送り**：この複数fixture方式への拡張は、`test/unit/worker-selection-reference.test.ts` のAC-5自己検証テストケースの実装内容（現状は単一fixtureの合成文字列に対する2アサーションのみ）を、上記の複数独立fixture・複数独立アサーション構成へ拡張する変更を要する。この変更自体はimplementationセグメントで実施する。本節はその設計要素を定めるのみであり、当該テストファイルの実際の編集はここでは行わない。
+
+**AC-5対応（追加）: 自己検証fixtureと別Issue #332の一掃対象との偶然の一致**。実装済みの自己検証テストケースが用いる合成汚染文字列の実例（`'// 正本: AGENTS.md §設定 / SPEC.md AC-9'`）は、SPEC.mdのスコープ外節が挙げる別Issue #332（`test/` 配下に残存する `SPEC.md AC-...` 形式の陳腐化参照コメントの一掃を扱う）の一掃対象と、偶然同じ表記形式をしている。Issue #332側の機械的な一掃処理が本テストファイルの走査対象範囲まで及んだ場合、当該fixtureが意図的な合成テストデータであることを認識されず誤って書き換え・削除されると、AC-5の自己検証テストケースが検知対象を失い意味を成さなくなるリスクがある。
+
+対策として、合成汚染文字列を定義する箇所（上記の複数fixture化後は各fixtureそれぞれ）の直前に、これが意図的な合成テストデータであり実際の陳腐化参照ではないこと、Issue #332の一掃対象から除外されるべきことを明示するコードコメントを付す設計とする（例：`// 意図的な合成fixture。実際の陳腐化参照ではなくAC-5自己検証専用のテストデータであり、Issue #332の一掃対象から除外する。`）。この設計要素の実際のコード反映もimplementationセグメントで行う。
 
 ### 変更範囲の限定
 
