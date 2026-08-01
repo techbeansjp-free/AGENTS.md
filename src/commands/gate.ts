@@ -205,7 +205,7 @@ interface ReviewerVerdict {
 }
 
 const SUBVERDICT_VALUES = new Set(['pass', 'fail', 'pending']);
-const ABSENT_ARTIFACT_DIGEST = digestOf('agent-skill-chain:artifact-absent:v1');
+export const ABSENT_ARTIFACT_DIGEST = digestOf('agent-skill-chain:artifact-absent:v1');
 const LOCAL_REVIEW_LAUNCHER_PATHS = [
   '.agent-skill-chain/scripts/gate-local-review.sh',
   '.agent-skill-chain/scripts/gate-launch-reviewer.sh',
