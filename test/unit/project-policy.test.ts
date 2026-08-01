@@ -89,3 +89,20 @@ test('loadProjectPolicyDocuments: スキーマに適合しないmanifestはエ�
 
   assert.throws(() => loadProjectPolicyDocuments(root, 'spec'), /スキーマに適合しません/);
 });
+
+test('loadProjectPolicyDocuments: documents.commonに登録された文書の実体が無い場合はエラーにする', (t) => {
+  const root = createPolicyRoot(t);
+  // 'missing.md' は登録するが、実体ファイルは作成しない（AC-6）。
+  writeManifest(root, { common: ['missing.md'], roles: {} });
+
+  assert.throws(() => loadProjectPolicyDocuments(root, 'spec'), /ENOENT/);
+});
+
+test('loadProjectPolicyDocuments: documents.roles.<segment>に登録された文書の実体が無い場合はエラーにする', (t) => {
+  const root = createPolicyRoot(t);
+  writePolicyDocument(root, 'common.md', 'common policy');
+  // 'roles/implementation.md' は登録するが、実体ファイルは作成しない（AC-6）。
+  writeManifest(root, { common: ['common.md'], roles: { implementation: ['roles/implementation.md'] } });
+
+  assert.throws(() => loadProjectPolicyDocuments(root, 'implementation'), /ENOENT/);
+});
