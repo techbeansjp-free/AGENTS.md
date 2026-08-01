@@ -60,6 +60,24 @@ properties:
     additionalProperties: false
     properties:
       adapter: {type: string, enum: [claude, codex, human]}
+      segment_overrides:
+        type: object
+        additionalProperties: false
+        properties:
+          spec: {$ref: '#/definitions/worker_segment_override'}
+          design: {$ref: '#/definitions/worker_segment_override'}
+          implementation: {$ref: '#/definitions/worker_segment_override'}
+          validation: {$ref: '#/definitions/worker_segment_override'}
+      model_tiers:
+        type: object
+        additionalProperties: false
+        properties:
+          highest_capability:
+            type: object
+            required: [codex]
+            additionalProperties: false
+            properties:
+              codex: {type: string, minLength: 1}
   worktree:
     type: object
     required: [root, path_pattern, timestamp, slug_max_length, immutable_path]
@@ -128,6 +146,27 @@ properties:
       implementation: {type: string}
       validation: {type: string}
 
+definitions:
+  # worker.segment_overrides.<segment> の値。model_tier・reasoning_effort はこれらを解釈しない
+  # アダプタ（claude・human）と組み合わせても黙って無視されないよう、指定時は adapter: codex を
+  # 必須とする（ADR-0015）。具体的なモデル文字列はここには置かない（唯一の保持場所は
+  # worker.model_tiers であり、その値からの解決は CLI 側で完結する）。
+  worker_segment_override:
+    type: object
+    additionalProperties: false
+    properties:
+      adapter: {type: string, enum: [claude, codex, human]}
+      model_tier: {type: string, enum: [highest_capability]}
+      reasoning_effort: {type: string, enum: [medium, high, xhigh]}
+    if:
+      anyOf:
+        - required: [model_tier]
+        - required: [reasoning_effort]
+    then:
+      required: [adapter]
+      properties:
+        adapter: {const: codex}
+
 examples:
   - schema_version: agent-skill-chain/config/v1
     coordination: {backend: github}
@@ -138,6 +177,40 @@ examples:
       standard: {reviewer_count: 1, modes: [conformance, falsification]}
       strict: {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
     worker: {adapter: human}
+    worktree:
+      root: .worktrees
+      path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
+      timestamp: {source: issue_created_at, format: "%Y%m%d_%H%M%S", timezone: Asia/Tokyo}
+      slug_max_length: 48
+      immutable_path: true
+    branch: {pattern: "{type}/{issue_id}-{slug}"}
+    issue: {allowed_types: [feature, bugfix, hotfix, refactor, docs, process]}
+    wip: {limit: 3, count_by: active_writer_lease}
+    lease: {ttl_seconds: 3600, renewal_interval_seconds: 900}
+    bdd: {profile: standard}
+    templates: {github_source: .agent-skill-chain/templates/github/.github, github_target: .github, verify_sync: true}
+    checks:
+      spec: agent-skill-chain/spec-gate
+      design: agent-skill-chain/design-gate
+      implementation: agent-skill-chain/implementation-gate
+      validation: agent-skill-chain/validation-gate
+  # セグメント別上書き・ティア対応表（新形式）。実装セグメントだけ codex・highest_capability
+  # ティア・reasoning effort high を使い、他セグメントは worker.adapter（既定 claude）のまま
+  # 据え置く例。具体的なモデル文字列が現れるのは worker.model_tiers のみである。
+  - schema_version: agent-skill-chain/config/v1
+    coordination: {backend: github}
+    durability: {backend: remote}
+    autonomy: {default: gated}
+    risk: {default: unclassified}
+    review:
+      standard: {reviewer_count: 1, modes: [conformance, falsification]}
+      strict: {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
+    worker:
+      adapter: claude
+      segment_overrides:
+        implementation: {adapter: codex, model_tier: highest_capability, reasoning_effort: high}
+      model_tiers:
+        highest_capability: {codex: some-model-id}
     worktree:
       root: .worktrees
       path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
