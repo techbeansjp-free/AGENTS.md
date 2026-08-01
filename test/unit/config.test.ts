@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { loadConfig } from '../../src/lib/config.js';
+import { packageRoot } from '../../src/lib/paths.js';
 
 test('loadConfig: 実物の .agent-skill-chain/config/agent-skill-chain.yaml を読み込み主要フィールドを検証する', () => {
   const config = loadConfig();
@@ -23,6 +24,27 @@ test('loadConfig: 実物の .agent-skill-chain/config/agent-skill-chain.yaml を
   assert.equal(config.bdd.profile, 'standard');
   assert.equal(config.templates.verify_sync, true);
   assert.equal(config.checks.spec, 'agent-skill-chain/spec-gate');
+});
+
+// ISSUE-307 SPEC.md AC-6: 本リポジトリの .agent-skill-chain/config/agent-skill-chain.yaml は
+// 実装セグメントを codex・highest_capability・high に恒久設定しており、具体的なモデル文字列
+// （gpt-5.6-sol）が現れるのは worker.model_tiers のみである。dogfooding worktree からの実行では
+// 既定root（repoRoot()）が common .git 経由でメイン作業ツリーへ解決される（ADR-0004）ため、
+// このworktreeでの変更を確実に対象にするには packageRoot()（このモジュールが実行されている
+// 場所）を明示的に渡す（test/unit/schema.test.ts の同種テストと同じ回避策）。
+test('loadConfig (AC-6): worker.segment_overrides.implementation が codex/highest_capability/high に恒久設定され、worker.model_tiersのみに具体的なモデル文字列を持つ', () => {
+  const config = loadConfig(packageRoot());
+  assert.equal(config.worker.adapter, 'claude');
+  assert.deepEqual(config.worker.segment_overrides?.implementation, {
+    adapter: 'codex',
+    model_tier: 'highest_capability',
+    reasoning_effort: 'high',
+  });
+  assert.equal(config.worker.model_tiers?.highest_capability?.codex, 'gpt-5.6-sol');
+
+  const raw = fs.readFileSync(path.join(packageRoot(), '.agent-skill-chain', 'config', 'agent-skill-chain.yaml'), 'utf8');
+  const modelOccurrences = raw.match(/gpt-5\.6-sol/g) ?? [];
+  assert.equal(modelOccurrences.length, 1, '具体的なモデル文字列が現れるのはworker.model_tiersの1箇所のみであること');
 });
 
 test('loadConfig: スキーマ不適合の config は例外を投げる', () => {
