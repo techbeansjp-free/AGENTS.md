@@ -38,6 +38,7 @@ AGENTS.mdは、規範文書・ソースコードコメント中のセクショ�
   - `ModelTierTable`型のJSDocコメント内の、許容アダプタキーに関する記述にある「本 Issue で許容するアダプタキーは `codex` のみ（SPEC.md スコープ外: ...）」という一文は、`SPEC.md` へのスコープ参照を除去する。加えて、「本 Issue」という文言は Issue #307 完了後は別の Issue（現時点では本 Issue #325）を指してしまい誤読を招くため、Issue番号に依存しない書き方（例：「現時点で許容するアダプタキーは `codex` のみ」等、恒久的に成立する表現）へ是正することを是正対象に含める。
   - `resolveWorkerSelection`直前のdocstring内、adapter解決順序を説明する一文の末尾の括弧書き、および`resolveModelForTier`直前のdocstring内、ティア対応表からモデル文字列を得る処理を説明する一文の末尾の括弧書き（いずれも受入条件番号のみを列挙する単独記法）を除去する。
   - これらの参照は `lint-references.sh` の `§` パターン検出では捕捉されない箇所を含むが、AGENTS.md「参照・コメントの陳腐化防止」節が定める「ソースコードコメントの追跡識別子として認めるのは Issue ID のみであり、要求ID・ADR ID・テストIDの対応はソースコメントではなく別途のtraceability情報で管理する」という規約に抵触する陳腐化参照であり、本 Issue の是正対象に含める。
+  - 上記規約根拠（AGENTS.md「参照・コメントの陳腐化防止」節）自体は本リポジトリ全体に適用される一般規約であり、`.agent-skill-chain/scripts/worker-launch.sh`・`src/lib/worker-selection.ts` の2ファイル以外にも同種の陳腐化参照（`AC-<数字>`形式・「本Issue」文言）を含む箇所が存在する（詳細は本節後段「スコープ外」を参照）。しかし本 Issue がこの規約根拠に基づき是正するのは上記2ファイル内の、本節で列挙した特定箇所のみである。他の箇所への同規約の適用（是正の要否判断・実施）は本 Issue のスコープ外であり、規約の一般性そのものから他箇所の是正義務が本 Issue に自動的に生じるわけではない。
 - 除去にあたり、当該コメントが元々説明していた設計判断・意味的内容を失わない。参照先の見出し・受入条件に書かれていた契約の要旨がコメント本文に既に記載されていない場合は、その場に書き下す。
 - コメント修正はコードの実行内容（ロジック・振る舞い）を一切変更しない。
 - 回帰防止のため、本Issueの作業中に新規作成する回帰防止テストファイル `test/unit/worker-selection-reference.test.ts`（`.agent-skill-chain/scripts/worker-launch.sh`・`src/lib/worker-selection.ts` の2ファイルに対する禁止参照パターン `DESIGN\.md §` の不在検査を含む）に、`src/lib/worker-selection.ts` 全体から受入条件ID形式の参照および「本Issue」文言が残存しないことを恒久的に機械検証するテストケースを含める（実装セグメントで実施。詳細は本節後段の受入条件のうち、陳腐化参照の除去を検証する項の実装への申し送り段落、およびそれに続くテスト自己検証を扱う項に記載する）。
@@ -106,6 +107,8 @@ strict design-gateレビューにて「本ACの当初案は、実ファイル `s
 
 ## スコープ外
 
+- 本 Issue の是正対象は `.agent-skill-chain/scripts/worker-launch.sh` と `src/lib/worker-selection.ts` の2ファイルに限定する。
+- AGENTS.md「参照・コメントの陳腐化防止」節が禁止する同種の陳腐化参照（`AC-<数字>`形式のコメント・「本Issue」「本 Issue」という自己参照的文言）は、`lint-references.sh` の走査対象内（AGENTS.md・`docs/GLOSSARY.md`・`.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}/`・`src/`・`.github/workflows/`）に属する他のファイルにも存在する。具体的には `.agent-skill-chain/config/agent-skill-chain.yaml`（`正本:` 宣言行および「本 Issue で具体的な」という記述）、`src/commands/doctor.ts`・`src/commands/setup.ts`・`src/commands/verify.ts`（「本Issue #200の...」を含む）・`src/commands/segment.ts`・`src/commands/lease.ts`、`src/lib/adr-finalize-guard.ts`・`src/lib/release-version.ts` に、Issue番号を伴う `AC-<数字>` 形式の記述や自己参照的文言が確認されている。本 Issue はこれらの存在を認識しているが、その是正（要否判断・実施の両方）は本 Issue のスコープ外とし、`test/` 配下の同種参照を Issue #332 へ委譲したのと同じ扱いで、別途起票する後続 Issue で一括対応する。
 - `.agent-skill-chain/scripts/worker-launch.sh`・`src/lib/worker-selection.ts` の禁止参照以外の記述内容・ロジックの変更。
 - `lint-references.sh`（CLI の `lint references` 実装）自体の判定ロジックの変更。
 - Issue 単位の `SPEC.md`／`DESIGN.md`／`PLAN.md` が Issue 完了後に破棄される運用そのものの見直し（本 Issue はこの運用を前提として、ソースコメント側を是正する）。
