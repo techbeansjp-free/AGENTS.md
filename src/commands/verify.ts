@@ -222,6 +222,20 @@ export async function gateReport(args: string[]): Promise<number> {
     // working directoryへ反映されないため（PR headはGit objectとしてfetchされるのみ）、
     // worktreeRoot()のファイルシステムを見るとSPEC.md等のIssueスコープ成果物は常に「削除されている」
     // と誤判定される（Issue #185時点の同期的レビューフロー前提がIssue #283/#284後も残っていた）。
+    //
+    // Issue #316: 上記のgit showベース検証は、target_shaが正当なcommit SHAであることを暗黙の
+    // 前提にしている。target_shaが空文字列だと修飾なしのgit show <target_sha>:<path>はGitの
+    // index参照（:0:<path>）として解釈されcommit前のstage内容を誤って検証成功させ、HEAD等の
+    // ref名だとrev-parse --verifyは成功しつつも後続のgit showがrefの現在の指し先（作業ツリー・
+    // 別コミット）を参照してしまう。この前提検査でtarget_shaがcommit objectとして解決可能かつ
+    // 40桁16進数であることを要求し、いずれかに失敗したら成果物検証ループへ入らずfail-closedに
+    // 拒否する。
+    const targetSha = report.gate.target_sha;
+    const targetShaResolved = git(['rev-parse', '--verify', `${targetSha}^{commit}`], root);
+    if (targetShaResolved.status !== 0 || !/^[0-9a-f]{40}$/.test(targetSha)) {
+      errors.push(`gate.target_sha が有効なcommitとして解決できません: ${targetSha}`);
+      return violations(errors);
+    }
     for (const artifact of report.gate.approved_artifacts) {
       const shown = git(['show', `${report.gate.target_sha}:${artifact.path}`], root);
       if (shown.status !== 0) {
