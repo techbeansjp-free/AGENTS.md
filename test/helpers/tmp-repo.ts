@@ -136,13 +136,86 @@ export function setWorkerAdapter(repoDir: string, adapter: ReviewAdapter): void 
 }
 
 /**
+ * worker.segment_overrides ブロック全体を config から取り除く（ISSUE-307）。
+ * 本物のリポジトリの既定 config は worker.segment_overrides.implementation を持つため、
+ * 「セグメント別上書きを持たない既存の設定ファイル」（後方互換, SPEC.md AC-3）をテストで
+ * 再現するために使う。
+ */
+export function removeWorkerSegmentOverrides(repoDir: string): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/ {2}segment_overrides:\n(?: {4}.*\n)*/, '');
+  if (/segment_overrides:/.test(patched)) {
+    throw new Error('worker.segment_overrides ブロックを削除できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
+  }
+  fs.writeFileSync(configPath, patched);
+}
+
+/**
+ * worker.model_tiers ブロック全体を config から取り除く（ISSUE-307）。
+ * 「ティア対応表を持たない既存の設定ファイル」（後方互換, SPEC.md AC-3）をテストで再現し、
+ * かつ「ティア指定はあるが対応表を引けない」解決失敗（AC-2）を再現するために使う。
+ */
+export function removeWorkerModelTiers(repoDir: string): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/ {2}model_tiers:\n(?: {4}.*\n)*/, '');
+  if (/model_tiers:/.test(patched)) {
+    throw new Error('worker.model_tiers ブロックを削除できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
+  }
+  fs.writeFileSync(configPath, patched);
+}
+
+/**
+ * worker.segment_overrides.<segment> を1件追加する（ISSUE-307）。segment_overrides ブロックが
+ * 既に存在する場合はその直下に追記し、存在しない場合は worker.adapter 行の直後に新設する。
+ */
+export function setWorkerSegmentOverride(
+  repoDir: string,
+  segment: 'spec' | 'design' | 'implementation' | 'validation',
+  override: { adapter?: ReviewAdapter; model_tier?: string; reasoning_effort?: string },
+): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const flow = `{${Object.entries(override)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ')}}`;
+  const line = `    ${segment}: ${flow}\n`;
+
+  let patched: string;
+  if (/ {2}segment_overrides:\n/.test(text)) {
+    patched = text.replace(/( {2}segment_overrides:\n)/, `$1${line}`);
+  } else {
+    patched = text.replace(/(worker:\n {2}adapter: \w+.*\n)/, `$1  segment_overrides:\n${line}`);
+  }
+  if (patched === text) {
+    throw new Error(
+      `worker.segment_overrides.${segment} を追加できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）`,
+    );
+  }
+  fs.writeFileSync(configPath, patched);
+}
+
+/**
  * worker.adapter 行そのものを config から取り除く（schema上 worker.adapter は任意項目）。
  * CLI 側の既定値フォールバック（未設定時 human）を検証するために使う。
  */
 export function unsetWorkerAdapter(repoDir: string): void {
   const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
   const text = fs.readFileSync(configPath, 'utf8');
-  const patched = text.replace(/(worker:\n)(\s*adapter: \w+.*\n)/, '$1');
+  let patched = text.replace(/(worker:\n)(\s*adapter: \w+.*\n)/, '$1');
+
+  // worker: 直下に他のキー（segment_overrides・model_tiers等、ISSUE-307）が一切残らない場合、
+  // "worker:\n" のままだとYAML上 null になり、スキーマの type:object 検証に通らない
+  // （additionalProperties:false と require:[] は object を前提とする）。ISSUE-307で
+  // removeWorkerSegmentOverrides/removeWorkerModelTiersと組み合わせて呼ぶ場合に必要になる。
+  const lines = patched.split('\n');
+  const workerIdx = lines.findIndex((l) => l === 'worker:');
+  if (workerIdx !== -1 && !/^\s+\S/.test(lines[workerIdx + 1] ?? '')) {
+    lines[workerIdx] = 'worker: {}';
+    patched = lines.join('\n');
+  }
+
   fs.writeFileSync(configPath, patched);
 
   const after = fs.readFileSync(configPath, 'utf8');
