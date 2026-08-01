@@ -26,7 +26,8 @@ ADR-0013は現在`status: proposed`であり、そのaccepted化とtrust backend
 | 7 | ownership recovery | 直列lane、nonce、取消run確認、postcondition retry、sweeper drain | AC-3, AC-4 | #6 |
 | 8 | Strict seam | durable envelopeを既存`verifyGithubReviewEvidence`の入力形へ写像しreplayを外部化 | AC-6 | #5〜#7 |
 | 9 | workflow/配布 | candidate checks write廃止、`checks:none`、`workflow_run`→protected publisher、root/template同期 | AC-2, AC-8 | #6〜#8 |
-| 10 | 検証 | unit/integration/security/distribution/full regression証跡を保存 | 全AC | #1〜#9 |
+| 10 | 復帰入口 | 実在入口の解決、PR番号/対象SHAの入力受理とhead照合、通知本文への一意結線、乖離・遷移テスト | AC-9, AC-10 | #4, #9 |
+| 11 | 検証 | unit/integration/security/distribution/full regression証跡を保存 | 全AC | #1〜#10 |
 
 ## BDD conformance・falsification
 
@@ -45,6 +46,12 @@ ADR-0013は現在`status: proposed`であり、そのaccepted化とtrust backend
 | path欠落/余分/重複/未分類/digest差 | submit | successを発行しない | AC-5 |
 | Strict独立2 slot（`run_id`・`slot`非重複、token digest一致）のapprove | reduce | `verifyGithubReviewEvidence`がapprovedを返しparent successへ写像する | AC-6 |
 | Strict不足/重複/replay/混合 | reduce | 同関数外でreplay拒否し、同関数はfailure/action_requiredを返す | AC-6 |
+| コア分類でhuman証跡2 approve | reduce | 能力証明不能として承認せず`human_required`のままparentをaction_requiredに保つ | AC-6 |
+| writer actor未解決/0件 | reduce | 判定へ進まず`human_required`とし、写像側でactor集合を補完しない | AC-6 |
+| deferral状態の案内入口 | 案内の対象PR/対象SHAで起動 | 当該SHAのrequired Checkが再評価へ入りaction_requiredからterminalへ遷移する | AC-9 |
+| 案内SHAとPR headの不一致 | 同じ入口を起動 | 再評価を開始せず不一致理由で停止しsuccessへ倒さない | AC-9 |
+| 通知本文とworkflow定義 | 乖離検査 | 実在しない入口・不足入力・required名不一致を検出して失敗する | AC-9 |
+| trust backend未配備 | 復帰入口を起動 | sessionを開始せず設定エラーで停止し、deferral状態のaction_requiredを維持する | AC-9, AC-10 |
 | 各domain状態 | publish | status/conclusion表どおりでawaitingはmergeを停止する | AC-7 |
 | local backend | open/submit | GitHub API、local report、成果物を変更しない | AC-7 |
 | template/root/ruleset | sync・probe | byte一致、integration ID一致、旧publisher write不在となる | AC-8 |
@@ -55,7 +62,14 @@ ADR-0013は現在`status: proposed`であり、そのaccepted化とtrust backend
   `verifyGithubReviewEvidence`写像seam。
 - integration: gh stubでApp source、0/1/2 parent、Review drain、PATCH不明、run取消、sweeper、相反terminalを検査。
 - workflow: main限定environment、App tokenのpublisher step限定、candidate/reconcileの`checks:none`、
-  PR code非実行、`queue: max`構文、secret/verdict非出力を検査する。
+  PR code非実行、`queue: max`構文、secret/verdict非出力を検査する。復帰入口については、案内された入口が
+  workflow定義に実在すること、PR番号と対象SHAを入力として受理すること、通知本文とworkflow定義の入口識別子・
+  required名が一致することを検査する。
+- rerun: gh stubで案内どおりの起動を再現し、対象SHAのrequired Checkが`action_required`からterminalへ遷移
+  すること、head不一致では再評価を開始せず停止すること、trust backend未成立ではfail-closed停止に至り
+  `action_required`が維持されることを検査する。
+- core分類: `coreReviewRequired`真のfixtureでhuman証跡2 approveが`human_required`のまま停止すること、
+  非コア分類でのみ成功系へ到達することをreducer写像seamで検査する。
 - artifact: gateごとのA/M/D、削除、renameのD+A、空、追加/欠落、target変更、集合順をfixtureで反証する。
 - distribution: template sync、setup/upgrade、ruleset `context+integration_id`、dedicated App probeを検査する。
 - regression: Standard、自動adapter、local gate、ADR finalize、gate reconcile、全既存テストを維持する。

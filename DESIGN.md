@@ -19,6 +19,8 @@ human gateをGitHub PR aggregateとCheck/Reviewエンティティでモデル化
 | AC-6 | SlotEnvelopeMapper / pure Strict reducer |
 | AC-7 | CheckStateMapper / BackendGuard |
 | AC-8 | ProvenanceEnvelope / distribution tests |
+| AC-9 | HumanDeferralNotice / RerunEntryContract |
+| AC-10 | TrustBackendGuard（session開始前のfail-closed停止） |
 
 ## DDD境界と正準record
 
@@ -36,6 +38,8 @@ rulesetは各required名とApp `integration_id`を組にし、parent/slot create
 
 openerはdefault branch CLIでPR APIのbase/current head SHAを固定し、diffから開始gateを`spec→design→implementation→validation`順に導出してgateごとに冪等sessionを開く。PR codeはGit objectとして読むだけである。
 humanはsession/slot/invocation入りPR Reviewを投稿する。read-only `pull_request_review` runの完了を`workflow_run`で受けるdefault-branch publisher、またはmain指定`workflow_dispatch`がdrainを起動し、publisherはAPIからReview本文・actor・PRを再取得する。
+
+`HumanDeferralNotice`はhuman adapterのdeferred（`final=human_required`＋通知＋終了コード3）時に、`RerunEntryContract`が解決した入口識別子・対象PR番号・対象SHA・required check名・権限境界だけを本文へ埋める。`RerunEntryContract`は候補入口をworkflow定義から列挙し、(1) 当該定義に実在する、(2) PR番号とSHAを入力として受理する、(3) 起動が当該SHAのgate再評価を開始する、の三条件を満たすものだけを案内対象とする。起動時はPR APIのcurrent headと案内SHAを照合し、不一致なら再評価を開始せず不一致理由で停止する。案内本文とworkflow定義の入口識別子・required名は同一のresolverから導出し、乖離を自動テストで検出する。trust backendが未成立の環境では、この起動は`TrustBackendGuard`のfail-closed停止へ収束し、deferral状態の`action_required`は維持される。
 
 PR Reviewをdurable inboxとし、未消費判定はslotの`source_review_id/submission_digest`不在で導出する。同一PR/gate publisherは`cancel-in-progress: false`と公式の`queue: max`を補助利用するが、
 100 pending超過は取消されるため正本にしない。各runは未処理ReviewをID順にdrainし、run完了triggerとdefault-branch定期sweeperも同じdrainを起動するため、dispatch/pending取消後も復旧できる。
@@ -89,6 +93,11 @@ replay選択、nonce、retry、Check状態写像は同関数の外に置く。�
 同関数はactorをtrusted recorder許可集合への所属としてのみ検査し、2件のactorが別人格であることは承認条件に
 しない。`actor_relation`は証跡として記録するだけで判定へ寄与しないため、#278も人格差をapprovedの条件に
 用いない。
+同関数はさらに、writer actorが未解決または0件のとき、およびコア分類（`coreReviewRequired`真）でprofileが
+Strictでない・`model_tier=frontier_coding`／`reasoning_tier=maximum_reasoning`を証明できない・
+`adapter=human`である証跡があるときに`human_required`を返す。`SlotEnvelopeMapper`はこの停止を正常終局として
+写像し、能力値やactor集合を補完・迂回しない。したがってhuman gateの`success`到達は非コア分類のgateに限られ、
+コア分類のgateではparentが`action_required`のまま維持される。
 
 ## 障害・ロールバック・関連ADR
 
