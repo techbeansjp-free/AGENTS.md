@@ -46,12 +46,14 @@ PR #311（Issue #300自身、strict profile）のspec gateに対し、Issue #303
 - レビュアCLI出力のverdict JSON解釈が、フェンス付き・前置文/後置文付きの出力を処理できない（Issue #312、修正・マージ済み）。
 - protected base worktreeとして独立cloneを使う場合、対象PRのtarget_shaが明示的にfetchされていないと`classifyCoreReview`が`unresolved`を返しhuman_requiredへ倒れる（GATE_REVIEW_OPERATIONS.mdへ運用上の注意として記載）。
 
-## 独立性の技術的担保（AC-3の確認内容）
+## 技術的独立性の担保（AC-3の確認内容）
+
+ここで言う技術的独立性とは「2件の証跡が別`run_id`・別`slot`を持ち、かつ同一のone-time launcher token（`launcher_token_digest`）に由来すること」であり、2件を投稿したGitHub actorが別人格であることではない。正常系は単一のprotected-base隔離セッションがslot 1・slot 2を連続実行する経路であり、同一actorによる実行である。
 
 - `gate-local-review.sh`は実行前に`CURRENT_ROOT`・`CURRENT_SHA`がprotected base（main、指定base_sha）と一致し、かつcleanであることを検査する（候補ブランチのコードを証跡生成に使わせない）。
 - 隔離clone（`TRUSTED_TMP`配下）は`git clone --no-checkout` + `checkout --detach $BASE_SHA` + `remote remove origin`でcredential-bearing remoteを持たない状態にしてからbuildする。
-- `launcher-token.json`（`mode 0600`、`wx`フラグで排他生成）が各slotの`run_id`を事前に固定し、`consumed_slots`で一度使った slotの再利用を防ぐ。
-- `src/lib/review-evidence.ts`の`verifyGithubReviewEvidence`が、`runIds`・`slots`の`Set`重複検査（`runIds.size !== candidates.length`）で真に独立した2件であることを検証する。同一actorでも`launcher_digest`・`trusted_base_sha`・`prompt_digest`の一致を要求するため、証跡を後から偽装することはできない。
+- `launcher-token.json`（`mode 0600`、`wx`フラグで排他生成）が各slotの`run_id`を事前に固定し、`consumed_slots`で一度使った slotの再利用を防ぐ。全slotが消費されずtokenファイルが残った場合、launcherは非0で終了し`repository_dispatch`を発行しない。
+- `src/lib/review-evidence.ts`の`verifyGithubReviewEvidence`が、`runIds`・`slots`の`Set`重複検査と必要slot集合の充足検査、および全証跡の`launcher_token_digest`が単一値であること（`tokenDigests.size !== 1`なら失敗）を検証する。actor側の検査は`trustedActors`所属の認可チェックのみであり、2件でactorが異なることは要求しない。`actor_relation`は`reviewers`へ記録するだけで判定には使わない。加えて`launcher_digest`・`trusted_base_sha`・`prompt_digest`・成果物digestの一致を全証跡へ要求するため、証跡を後から偽装することはできない。
 
 ## 関連ADR
 

@@ -43,25 +43,29 @@ acceptance_criteria:
     verification:
       mode: manual
       result: pass
-      reason: "独立性の技術的担保は既存コードの静的な読解による確認であり、既存のsubmit-evidence関連テストが間接的にカバーする"
+      reason: "技術的独立性の担保は既存コードの静的な読解による確認であり、既存のsubmit-evidence関連テストが間接的にカバーする"
       procedure: |
+        技術的独立性の定義（別run_id・別slot・同一launcher token。actorの同一性は判定要素ではない）に照らし、
         gate-local-review.sh・review-evidence.tsの該当箇所を読み、以下を確認した。
         1. protected base worktreeのCURRENT_ROOT/CURRENT_SHAがbase_shaと一致しcleanであることを実行前に検査する
            （候補ブランチの実行コードを証跡生成に使わせない）。
         2. 隔離cloneはgit clone --no-checkout + checkout --detach + remote remove originでcredential-bearing
            remoteを持たない状態にしてからbuildする。
         3. launcher-token.json（mode 0600、wxフラグで排他生成）が各slotのrun_idを事前固定し、consumed_slotsで
-           再利用を防ぐ。
-        4. verifyGithubReviewEvidence（review-evidence.ts）がrunIds/slotsのSet重複検査で真に独立した2件で
-           あることを検証し、launcher_digest/trusted_base_sha/prompt_digestの一致を要求するため証跡の後から
-           の偽装ができないことを確認した。
-        AC-2の実地検証（PR #311）で実際に2件の異なるrun_id/slotを持つ証跡が生成されたことも、この設計が
-        実際に機能していることの裏付けとなる。
+           再利用を防ぐ。全slotが消費されない場合はlauncherが非0終了しrepository_dispatchを発行しない。
+        4. verifyGithubReviewEvidence（review-evidence.ts）がrunIds/slotsのSet重複検査・必要slot集合の充足検査・
+           全証跡のlauncher_token_digestが単一値であることの検査を行い、launcher_digest/trusted_base_sha/
+           prompt_digest/成果物digestの一致も全証跡へ要求するため、証跡の後からの偽装ができないことを確認した。
+        5. actorに関する検査はtrustedActors所属の認可チェックのみであり、2件でactorが異なることは要求されない。
+           actor_relation（same_as_writer/distinct_from_writer）はreviewersへ記録されるのみで、
+           approved/rejected/human_requiredの判定ロジックから参照されないことをコード上で確認した。
+        AC-2の実地検証（PR #311）で、単一のlauncher実行から異なるrun_id/slotを持ち同一launcher_token_digestを
+        共有する証跡2件が実際に生成されたことも、この設計が実際に機能していることの裏付けとなる。
       executor: "implementation_worker（進行役セッション）"
     evidence:
       - ".agent-skill-chain/scripts/gate-local-review.sh"
       - "src/lib/review-evidence.ts（verifyGithubReviewEvidence関数）"
-      - "DESIGN.md「独立性の技術的担保（AC-3の確認内容）」節"
+      - "DESIGN.md「技術的独立性の担保（AC-3の確認内容）」節"
 
 regression:
   executed: true
