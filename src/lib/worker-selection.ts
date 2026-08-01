@@ -1,4 +1,4 @@
-// 正本: AGENTS.md §設定 / SPEC.md AC-1・AC-2・AC-3・AC-9 / DESIGN.md §選択解決の設計
+// 正本: AGENTS.md §設定
 //
 // セグメント作業ワーカー(spec/design/implementation/validation)を起動する際の
 // adapter・model_tier・reasoning_effort・具体的なモデル文字列を、config とセグメント名だけから
@@ -23,8 +23,8 @@ export interface WorkerSegmentOverride {
 
 /**
  * ティア対応表（`worker.model_tiers`）。ティア名をキーとし、値は実行系アダプタ名をキーとする
- * 具体的なモデル文字列の集合。本 Issue で許容するアダプタキーは `codex` のみ（SPEC.md スコープ外:
- * claude/human 用モデルの追加）。
+ * 具体的なモデル文字列の集合。現時点で対応するアダプタキーは `codex` のみであり、claude/human 用の
+ * モデル対応表は未定義である。
  */
 export type ModelTierTable = Partial<Record<ModelTier, { codex?: string }>>;
 
@@ -49,7 +49,7 @@ export function isWorkerSegment(value: string): value is WorkerSegment {
 
 /**
  * adapter は「セグメント別上書き → worker.adapter（スカラー、4セグメント共通の既定値）→ human
- * （最終フォールバック）」の順で解決する（AC-1, AC-3）。model_tier・reasoning_effort は
+ * （最終フォールバック）」の順で解決する。model_tier・reasoning_effort は
  * セグメント別上書きにのみ存在しうる値であり、無指定の場合はキー自体を含めない
  * （呼び出し側・アダプタが「未解決」と「空文字での上書き」を区別できるようにするため）。
  * 具体的なモデル文字列はここでは扱わない（resolveModelForTier が別途ティア対応表から解決する）。
@@ -67,7 +67,7 @@ export type ModelResolution = { ok: true; model: string } | { ok: false; reason:
 
 /**
  * ティア対応表（`worker.model_tiers`）を引き、ティア名とアダプタ名の組から具体的なモデル文字列を
- * 得る（AC-2, AC-9）。対応表そのものが無い・当該ティアのエントリが無い・当該アダプタ用のモデルが
+ * 得る。対応表そのものが無い・当該ティアのエントリが無い・当該アダプタ用のモデルが
  * 無い、のいずれの場合も値を推測せず解決失敗として返す（呼び出し側が既存のフェイルセーフへ倒す）。
  */
 export function resolveModelForTier(config: { worker: WorkerConfig }, tier: ModelTier, adapter: WorkerAdapter): ModelResolution {
