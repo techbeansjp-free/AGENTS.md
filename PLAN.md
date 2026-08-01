@@ -55,6 +55,10 @@ snapshot owner完了後にprocess supervisor、その後に各BDDを実装する
   reap不能・cleanup失敗より先頭へ報告する。
 - npm JSON欠損、buffer超過、spawn失敗、cleanup失敗を成功扱いせず、primary成功+cleanup失敗、
   primary失敗+cleanup失敗、reap不能による削除抑止、watchdog発火の4分岐でworkspace path付きerrorを観測する。
+  reap不能の分岐は、AC-5の後始末要件に対する意図的な例外的除外であることを踏まえ、(a) OS temp配下の
+  probe専用workspace自体は意図的に削除されず残存すること、(b) それでもrepository内には検証用生成物が
+  一切残らないこと、の両方を同一fixtureで確認する。(a)だけを見て「後始末できていない」と誤判定せず、
+  (b)だけを見て「reap不能時も削除されている」と誤判定しないよう、両方を独立にassertする。
 - package testとlint testへtest concurrencyやlockを追加していないことを静的に確認する。
 
 ## checkpoint・適用検査

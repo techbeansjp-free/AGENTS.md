@@ -69,9 +69,21 @@ fatalとして扱う（後続のcleanup失敗より重い）。削除を抑止�
 省略しない——workspaceが残るためwitness fileは読める状態にあり、読めない場合も後述のfail-closedで
 「偽」に確定するため、reap不能がwitness判定を隠すことはない。複数段が失敗した場合は`AggregateError`とし、含める情報と
 順序をworkspaceの絶対path、残存有無、primary error、reap error、cleanup errorの順で固定する。
-cleanup単独失敗も成功扱いしない。cleanup失敗時と削除抑止時に残るのはOS temp配下のprobe専用workspace
+cleanup単独失敗も成功扱いしない。
+
+reap不能時の削除抑止は、AC-5が要求する「一時作業領域は後始末され...副作用が残らない」という後始末
+要件そのものに対する例外的除外事項である。生存中のchildが使用中の領域を削除処理と競合させると、
+child側のファイルI/Oが破損しうる、またはchildがcrashしうるため、この設計は削除を安全側に倒し、
+後始末より生存childの整合性を優先する。この除外はAC-5がその後始末要件によって守ろうとしている意図
+（CLI公開動作・package収録契約・repository状態へ副作用を残さないこと）を損なわない。削除を抑止した
+場合でもrepository内への書込みは一切発生せず、残存するのはOS temp配下のprobe専用workspace（source
+snapshotのcopyと`node_modules`のcopy）だけであり、それ自体はCLIの公開動作にもnpm packageの収録契約
+にも影響しないためである。cleanup失敗時と削除抑止時に残るのはOS temp配下のprobe専用workspace
 だけであり、repository内へ検証用生成物を残さないという要件と両立する。workspace絶対path付きのerrorは
-必ずtest出力へ現れ、保存されるtest logが残存の所在と原因を示す証跡になる（AC-5）。
+必ずtest出力へ現れ、保存されるtest logが残存の所在と原因を示す証跡になる（AC-5）。reap不能が繰り返し
+発生する運用では、削除されないworkspaceがOS temp配下に蓄積し得る。これはOS temp領域自体の運用（定期
+的な外部clean等）に属する既知のtrade-offであり、本設計が保証する不変条件（repository内非残存・AC-5の
+意図の保全）の範囲外として受け入れる。
 
 ## Assertions と回帰fixture
 

@@ -96,5 +96,11 @@ npmはdry-runでcacheも隔離されるため、共有publish lockやtest順序�
 - 子側witnessのfail-closedにより、witness fileのI/O障害は成功ではなく失敗へ倒れる。稀なI/O障害が
   race BDDの偽陽性失敗を生みうるが、silent passを許すより安全側である。
 - 失敗の優先順位と集約順序が固定されるため、cleanup失敗が本来の失敗原因を隠さない。
+- reap不能時は生存childとの削除競合を避けるため削除自体を意図的に抑止し、workspaceをOS temp配下に
+  残したまま報告する。これは「一時作業領域は後始末される」という要求に対する例外的除外であり、
+  repository内への書込みは一切発生しないため、この要求が守ろうとしているCLI公開動作・package収録契約・
+  repository状態への副作用防止という意図は損なわれない。代償として、reap不能が繰り返される運用では
+  OS temp配下に未削除workspaceが蓄積し得る。これはOS temp領域自体の定期的な外部cleanで吸収すべき
+  trade-offとして受け入れる。
 - copy、build、tree supervisionにより時間・一時disk・platform別process処理は増える。
 - helper/testを戻すと既知raceが復活するため、rollback前に同等の隔離策を必要とする。
