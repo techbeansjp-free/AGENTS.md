@@ -58,7 +58,7 @@ esac
 # config からアダプタ・モデル選択を解決する（segmentを渡し、worker.segment_overrides.<segment>
 # → worker.adapter → 既定human、ティア指定時はworker.model_tiersから具体モデル文字列まで解決
 # 済みで返る）。worker context 自体の失敗（設定不正・ティア解決失敗）は、まだ何も起動して
-# いない段階のエラーとして扱う（DESIGN.md §選択解決の設計）。
+# いない段階のエラーとして扱う。
 if ! WORKER_CONTEXT="$(_cli worker context "$ISSUE_ID" "$SEGMENT")"; then
   echo "worker-launch.sh: worker context の解決に失敗しました。まだ何も起動していないため error として扱います" >&2
   exit 2
