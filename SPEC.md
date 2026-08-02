@@ -37,11 +37,11 @@
 - Then: 当該gateの`verify-and-publish`ジョブはFAILUREではなくSUCCESSで終了し、`agent-skill-chain/<gate>-gate`という名前のCheck Runがconclusion=action_requiredで対象SHAへ発行される
 - 検証方法見込み: `automated`
 
-#### AC-2: レビュー失敗（rejected）は引き続きジョブ・Check Runとも失敗を表現する
+#### AC-2: レビュー失敗（rejected）はCheck Runのconclusion=failureとして引き続き表現される
 
 - Given: あるgateのレビューが完了し、`gate.final`がrejected（またはconformance/falsificationいずれかがfail、blockersが存在）である
 - When: `verify-and-publish`ジョブが起動する
-- Then: ジョブはFAILUREで終了し、`agent-skill-chain/<gate>-gate`のCheck Runはconclusion=failureで発行される（pending救済分岐によってこの失敗表現が損なわれない）
+- Then: `gate publish`（`src/commands/gate.ts`の`publish()`）はrejectedの場合もexit 0を返すため`verify-and-publish`ジョブ自体はSUCCESSで終了するが、`agent-skill-chain/<gate>-gate`という名前のCheck Runはconclusion=failureとして対象SHAへ発行される（pending救済分岐によってこのCheck Run発行結果が損なわれない）。マージ可否の実効的な制御はrequired status checkとして設定された当該Check Runが担い、ジョブ自体のSUCCESS/FAILUREには依存しない
 - 検証方法見込み: `automated`
 
 #### AC-3: pending以外のgate-report不合格（スキーマ違反・digest不一致・target_sha不正）は引き続きジョブを失敗させる
