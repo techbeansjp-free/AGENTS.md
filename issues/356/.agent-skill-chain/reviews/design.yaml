@@ -1,0 +1,58 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: design
+  target_sha: 65b77315ae00fd798ef576067ecb6876ea06e2f9
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: design
+      code: fake-stub-circular-verification
+      evidence:
+        - "DESIGN.md 障害・ロールバック考慮: 「fakeなcodex実行ファイルが実際のcodex CLIの引数受理仕様と乖離する」"
+        - AC-2/AC-3 の automated 検証は fake stub 経由であり、approval_policy キー名の正しさ自体は
+          ADR-0016 Context の一回限りの実機検証にのみ依拠する（CI では再検証されない）
+  approved_digest: sha256:a9ea566420389b8bb0d7e588a6af799b075acba9c1e5225561e739f210355535
+  approved_artifacts:
+    - path: DESIGN.md
+      digest: sha256:c17f5fab2202624ce4d6d0d221ba486e5514b1bdb9e446ba7a42fd4818b94f87
+    - path: PLAN.md
+      digest: sha256:e1846688050dab4b68f25206a2ea788e79ba756cdbd16c9e7b24b3f7a72a1fa5
+    - path: docs/adr/ADR-0016-codex-exec-unsupported-flag-as-config-override.md
+      digest: sha256:f0f6ad5910dd5fefbb345a3bb88d585b97e2ba5cee1ae2f5190bba67116b7c6b
+  reviewers:
+    - source: github_pr_review
+      review_id: "4840025858"
+      actor: adachi-tatsuru
+      run_id: review-design-65b77315ae00-1-5925c5dfeefc8ff398382ba1
+      slot: 1
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:1ed7b683f4e324046b10bc63bbb0e19614e43d001d23f62e9b1cbb1fe37f6f05
+      actor_relation: same_as_writer
+      trusted_base_sha: dab4baa8a0821ef281f19e2b4a61d64cf04008c3
+      launcher_digest: sha256:80e4354ba1a5bca0c7a0bc8b6d5bbdc9f2e5b80193450b749dad846081db1387
+      launcher_token_digest: sha256:50827cc8268316682ae90a91fc94564963baa4e03c6c3c84bf7a8ffef30a8f7b
+      isolation: ephemeral_clone
+      sandbox: read_only
+    - source: github_pr_review
+      review_id: "4840028052"
+      actor: adachi-tatsuru
+      run_id: review-design-65b77315ae00-2-a6482b1c954d23354406c2ba
+      slot: 2
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:1ed7b683f4e324046b10bc63bbb0e19614e43d001d23f62e9b1cbb1fe37f6f05
+      actor_relation: same_as_writer
+      trusted_base_sha: dab4baa8a0821ef281f19e2b4a61d64cf04008c3
+      launcher_digest: sha256:80e4354ba1a5bca0c7a0bc8b6d5bbdc9f2e5b80193450b749dad846081db1387
+      launcher_token_digest: sha256:50827cc8268316682ae90a91fc94564963baa4e03c6c3c84bf7a8ffef30a8f7b
+      isolation: ephemeral_clone
+      sandbox: read_only
+  review_attempt:
+    attempt_id: attempt-design-65b77315ae00-bcd168262cca1f3b0373157a
+    expected_count: 2
+    evidence_digest: sha256:b3523da19e8f4b93c9bd9321d13c32d9965f8568596d90e13418279b70b7f99d
