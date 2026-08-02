@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { parse } from 'yaml';
 
 const root = process.cwd();
 const workflowPath = path.join(root, '.github', 'workflows', 'agent-skill-chain-gate.yml');
@@ -14,6 +15,9 @@ const claudeAdapterPath = path.join(root, '.agent-skill-chain', 'adapters', 'cla
 test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck Runを発行する', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   assert.equal(workflow, fs.readFileSync(templatePath, 'utf8'));
+  const parsed = parse(workflow) as { jobs?: Record<string, unknown> };
+  assert.ok(parsed.jobs?.['detect-segments']);
+  assert.ok(parsed.jobs?.['verify-and-publish']);
   assert.match(workflow, /pull_request_target:/);
   assert.match(workflow, /pull_request_review:/);
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
@@ -23,6 +27,14 @@ test('gate workflow: protected baseでlocal-review証跡だけを検証しCheck 
   assert.match(workflow, /gate-publish\.sh/);
   assert.match(workflow, /conclusion: "action_required"/);
   assert.match(workflow, /without executing target code/);
+  assert.match(workflow, /id: schema/);
+  assert.match(workflow, /if \[ "\$CODE" -eq 2 \]; then/);
+  assert.match(workflow, /echo "pending=true" >> "\$GITHUB_OUTPUT"/);
+  assert.match(workflow, /if: steps\.schema\.outputs\.pending != 'true'/);
+  assert.match(workflow, /ACTOR: \$\{\{ github\.event\.pull_request\.user\.login \}\}/);
+  assert.match(workflow, /"\$ACTOR" == "dependabot\[bot\]" && "\$BRANCH" == dependabot\/\*/);
+  assert.match(workflow, /if: steps\.context\.outputs\.skip_checks != 'true'/);
+  assert.match(workflow, /matrix: \$\{\{ steps\.segments\.outputs\.matrix \|\| '\[\]' \}\}/);
 
   const forbidden = [
     ['OPENAI', 'API', 'KEY'].join('_'),

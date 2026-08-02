@@ -192,7 +192,7 @@ export async function artifacts(args: string[]): Promise<number> {
 const GATE_REPORT_USAGE = `
 使い方: agent-skill-chain verify gate-report <gate_report_path>
 
-出力: 0=スキーマ適合かつconformance・falsification記録済み、1=違反・未実装
+出力: 0=スキーマ適合かつ判定確定、1=違反・未実装、2=pendingのみ（違反ではない）
 `;
 interface GateReport {
   gate: {
@@ -213,10 +213,13 @@ export async function gateReport(args: string[]): Promise<number> {
     const root = repoRoot();
     const report = readYamlFile<GateReport>(reportPath);
     const outcome = validateAgainstSchema('gate-report', report, root);
-    const errors = [...outcome.errors];
-    if (report.gate.conformance === 'pending') errors.push('gate.conformance が pending のままです');
-    if (report.gate.falsification === 'pending') errors.push('gate.falsification が pending のままです');
-    if (report.gate.final === 'pending') errors.push('gate.final が pending のままです');
+    const otherErrors = [...outcome.errors];
+    const pendingErrors: string[] = [];
+    if (report.gate.final === 'pending') {
+      if (report.gate.conformance === 'pending') pendingErrors.push('gate.conformance が pending のままです');
+      if (report.gate.falsification === 'pending') pendingErrors.push('gate.falsification が pending のままです');
+      pendingErrors.push('gate.final が pending のままです');
+    }
     // Issue #316: approved_artifactsはreport.gate.target_sha（PRの実際のhead SHA）が指すGit object
     // として検証する。verify-and-publishジョブはprotected base（main）をcheckoutしPR headは
     // working directoryへ反映されないため（PR headはGit objectとしてfetchされるのみ）、
@@ -233,8 +236,8 @@ export async function gateReport(args: string[]): Promise<number> {
     const targetSha = report.gate.target_sha;
     const targetShaResolved = git(['rev-parse', '--verify', `${targetSha}^{commit}`], root);
     if (targetShaResolved.status !== 0 || !/^[0-9a-f]{40}$/.test(targetSha)) {
-      errors.push(`gate.target_sha が有効なcommitとして解決できません: ${targetSha}`);
-      return violations(errors);
+      otherErrors.push(`gate.target_sha が有効なcommitとして解決できません: ${targetSha}`);
+      return violations([...otherErrors, ...pendingErrors]);
     }
     for (const artifact of report.gate.approved_artifacts) {
       const shown = git(['show', `${report.gate.target_sha}:${artifact.path}`], root);
@@ -246,13 +249,18 @@ export async function gateReport(args: string[]): Promise<number> {
         // （I8安全側原則。無条件に許容すると「不在の正当な記録」を偽装できてしまう）。
         const sentinelExempt = report.gate.id === 'implementation' && artifact.digest === ABSENT_ARTIFACT_DIGEST;
         if (!sentinelExempt) {
-          errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
+          otherErrors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
         }
       } else if (digestOf(shown.stdout) !== artifact.digest) {
-        errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
+        otherErrors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
     }
-    return violations(errors);
+    if (otherErrors.length > 0) return violations([...otherErrors, ...pendingErrors]);
+    if (pendingErrors.length > 0) {
+      process.stderr.write(`${pendingErrors.join('\n')}\n`);
+      return 2;
+    }
+    return 0;
   });
 }
 

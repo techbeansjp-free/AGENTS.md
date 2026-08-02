@@ -573,7 +573,7 @@ test('verify artifacts: 対象ファイルを一度もcommitしていない未�
 
 // ---- verify gate-report ----
 
-test('verify gate-report: スキーマ適合・digest一致のgate-reportは成功し、pending/digest不一致は失敗する', async (t) => {
+test('verify gate-report: スキーマ適合・digest一致のgate-reportは成功し、pendingは専用終了コード、digest不一致は失敗になる', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
@@ -597,9 +597,9 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   const gateReportPath = gateReportPathMatch![1];
 
   // When: pendingのまま検証する
-  // Then: conformance/falsification/final すべてがpendingのまま、として失敗する
+  // Then: conformance/falsification/final すべてがpendingのまま、として専用終了コード2になる
   const pending = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
-  assert.equal(pending.status, 1);
+  assert.equal(pending.status, 2);
   assert.match(pending.stderr, /gate\.conformance が pending のままです/);
   assert.match(pending.stderr, /gate\.falsification が pending のままです/);
   assert.match(pending.stderr, /gate\.final が pending のままです/);
@@ -618,13 +618,28 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   const approved = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
   assert.equal(approved.status, 0, approved.stderr);
 
+  // When: finalはrejectedで確定しているが、conformanceはpendingのまま、falsificationはfailである
+  const rejectedText = approvedText
+    .replace('conformance: pass', 'conformance: pending')
+    .replace('falsification: pass', 'falsification: fail')
+    .replace('final: approved', 'final: rejected');
+  fs.writeFileSync(gateReportPath, rejectedText);
+
+  // Then: finalを権威ある判定としてpending専用終了コードへ倒さず、後続publishへ進める
+  const rejected = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(rejected.status, 0, rejected.stderr);
+
   // When: approved_artifactsのdigestが、target_sha上の実際のSPEC.md内容と一致しない（フィールド自体の
   // 不整合。target_shaは固定commitのため、Issue #316以降は working directory 側の変更ではなく
   // 記録されたdigestフィールドの不一致として検証する）。
-  const mismatchedText = fs.readFileSync(gateReportPath, 'utf8').replace(specDigest, `sha256:${'f'.repeat(64)}`);
+  const mismatchedText = approvedText
+    .replace('conformance: pass', 'conformance: pending')
+    .replace('falsification: pass', 'falsification: pending')
+    .replace('final: approved', 'final: pending')
+    .replace(specDigest, `sha256:${'f'.repeat(64)}`);
   fs.writeFileSync(gateReportPath, mismatchedText);
 
-  // Then: digest不一致として失敗する
+  // Then: pendingも併存するが、digest不一致を優先して終了コード1で失敗する
   const stale = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
   assert.equal(stale.status, 1);
   assert.match(stale.stderr, /approved_artifacts の digest が現在のファイル内容と一致しません: SPEC\.md/);
