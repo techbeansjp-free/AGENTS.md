@@ -24,7 +24,7 @@
 
 ### 要件
 
-- `gate.conformance`・`gate.falsification`・`gate.final`のいずれかがpending（実運用上は`gate verify-evidence`が返す`gate.final === 'human_required'`が唯一の実際の駆動値であり、リテラル`pending`は`gate review`が生成する白紙スキャフォールドに対する安全側の備えとして判定基準に残す）であり、かつ`approved_artifacts`のdigest不一致・`target_sha`不正等の非pending違反が一切存在しない場合に限り、ジョブは既存の「evidence失敗」分岐と同様に`agent-skill-chain/<gate>-gate`という名前でaction_requiredのCheck Runを対象SHA（`target_sha`）へ発行したうえで、ジョブ自体はexit 0（成功）として終了する。この際、後続の`Publish Check Run`ステップ（`gate publish`）はskipし、二重のCheck Run発行、および`gate publish`がfinal=pendingのgate-reportを拒否して非0終了することによるジョブFAILUREを防ぐ。
+- `gate.final`という単一の権威あるフィールドの値が`pending`または`human_required`である場合にのみ、救済分岐を発動する（実運用上は`gate verify-evidence`が返す`human_required`が唯一の実際の駆動値であり、リテラル`pending`は`gate review`が生成する白紙スキャフォールドに対する安全側の備えとして判定基準に残す。`gate.conformance`・`gate.falsification`が個別にpendingのまま提出されていても、`gate.final`が確定値（approved/rejected）であれば救済分岐は発動しない）。加えて`approved_artifacts`のdigest不一致・`target_sha`不正等の非pending違反が一切存在しない場合に限り、ジョブは既存の「evidence失敗」分岐と同様に`agent-skill-chain/<gate>-gate`という名前でaction_requiredのCheck Runを対象SHA（`target_sha`）へ発行したうえで、ジョブ自体はexit 0（成功）として終了する。この際、後続の`Publish Check Run`ステップ（`gate publish`）はskipする。`gate publish`がgate-reportを拒否して非0終了するのはリテラル`final=pending`の場合のみであり、実運用上到達する`final=human_required`では`gate publish`自体はaction_requiredのCheck Runを発行して正常終了（exit 0）するため、skipしなければ救済分岐が発行済みの同一Check Runの二重発行を招き、リテラル`final=pending`の場合はジョブがFAILUREへ倒れる。skipはこの両方を防ぐ。
 - pendingと非pending違反（スキーマ違反、approved_artifactsのdigest不一致、target_sha不正等）が同一gate-report内で併存する場合は、非pending違反を優先してジョブをFAILUREとする（pending救済は非pending違反が皆無の場合にのみ適用するfail-closed設計とし、AGENTS.md I8「既定は常に安全側」を満たす）。
 - pending以外の理由（スキーマ違反、approved_artifactsのdigest不一致、target_sha不正等）でgate-reportが不合格の場合は、従来どおりジョブをFAILUREとし、マージ阻害を継続する（regressionなし）。
 - レビューが実際に失敗（final=rejected、conformance/falsificationいずれかがfail、blockersが存在）した場合、`gate publish`はfinal=rejectedであってもexit 0を返す既存動作を変更しない。ジョブ自体はSUCCESSのまま、`agent-skill-chain/<gate>-gate`Check Runのみがconclusion=failureとして失敗を表現し続ける（本Issueによる変更対象ではなく、従来から一貫してジョブ自体をFAILUREにしていない。マージ可否の実効的な制御はrequired statusとして設定された当該Check Runが担う）。
@@ -37,7 +37,7 @@
 
 - Given: あるIssueのPRで、いずれかのゲート（spec/design/implementation/validation）がまだレビュー未完了であり、`gate verify-evidence`が生成したgate-reportの`gate.final`が`pending`または`human_required`である（`gate.conformance`・`gate.falsification`のいずれかもpendingを伴う）。かつ、`approved_artifacts`のdigest不一致・`target_sha`不正等の非pending違反は一切存在しない
 - When: そのPRへpush（またはPR synchronize等）が発生し、`agent-skill-chain-gate.yml`の`verify-and-publish`ジョブが起動する
-- Then: `Verify gate report schema`ステップは専用終了コード2を返し、当該ステップ自身が`agent-skill-chain/<gate>-gate`という名前のCheck Runをconclusion=action_requiredで対象SHAへ発行したうえで、ステップ自体はexit 0として終了する。後続の`Publish Check Run`ステップは、`Verify gate report schema`ステップの出力（pending検出フラグ）を条件にskipされ、`gate publish`は呼び出されない（`gate publish`はfinal=pendingのgate-reportを拒否し非0終了する実装であり、skipしなければジョブがFAILUREへ倒れ、かつ同一Check Runの二重発行を招くため）。結果として`verify-and-publish`ジョブ自体はFAILUREではなくSUCCESSで終了する
+- Then: `Verify gate report schema`ステップは専用終了コード2を返し、当該ステップ自身が`agent-skill-chain/<gate>-gate`という名前のCheck Runをconclusion=action_requiredで対象SHAへ発行したうえで、ステップ自体はexit 0として終了する。後続の`Publish Check Run`ステップは、`Verify gate report schema`ステップの出力（pending検出フラグ）を条件にskipされ、`gate publish`は呼び出されない（`gate publish`がgate-reportを拒否し非0終了するのはリテラル`final=pending`の場合のみであり、実運用上到達する`final=human_required`では`gate publish`自体は正常終了するが、skipしなければ同一Check Runの二重発行を招き、リテラル`final=pending`の場合はジョブがFAILUREへ倒れるため）。結果として`verify-and-publish`ジョブ自体はFAILUREではなくSUCCESSで終了する
 - 検証方法見込み: `hybrid`（`Verify gate report schema`ステップが呼び出す`verify gate-report`の終了コード2判定・出力メッセージはCLIレベルの自動テストで検証可能。`Publish Check Run`ステップのskip、実際のジョブ結論・Check Run発行自体は`agent-skill-chain-gate.yml`が`pull_request_target`トリガであり本PR自身の変更が本PR自身のCI実行には適用されないため、本PR内では自動検証できずAC-7の手動確認に委ねる）
 
 #### AC-2: レビュー失敗（rejected）はCheck Runのconclusion=failureとして引き続き表現され、ジョブ自体はSUCCESSのまま変化しない
@@ -49,7 +49,7 @@
 
 #### AC-3: pending以外のgate-report不合格は、pendingが同時に検出されている場合でも優先されジョブを失敗させる
 
-- Given: gate-reportがスキーマに非適合、approved_artifactsのdigestが現在のファイル内容と一致しない、またはtarget_shaが有効なcommitとして解決できない（`verify gate-report`の非pending違反に該当する）。この違反は、`gate.conformance`・`gate.falsification`・`gate.final`のいずれかが同時にpending/human_requiredである場合を含む（併存ケース）
+- Given: gate-reportがスキーマに非適合、approved_artifactsのdigestが現在のファイル内容と一致しない、またはtarget_shaが有効なcommitとして解決できない（`verify gate-report`の非pending違反に該当する）。この違反は、`gate.final`が同時に`pending`または`human_required`である場合（`gate.conformance`・`gate.falsification`が個別にpendingのまま提出されている場合を含む）を含む（併存ケース）
 - When: `verify-and-publish`ジョブが起動する
 - Then: `verify gate-report`は非pending違反が1件以上存在する場合、pending違反の有無に関わらず終了コード1（違反）を返す。すなわちpending救済（AC-1のexit 0分岐）は非pending違反が0件の場合にのみ適用され、非pending違反が1件でも併存する場合は優先してジョブをFAILUREとする（AGENTS.md I8「既定は常に安全側」に基づくfail-closed）。pending救済分岐の追加によってこれらの検査がバイパスされない
 - 検証方法見込み: `automated`（非pending違反とpending違反の優先順位判定はCLIレベルの単体・統合テストで完全に検証可能であり、GitHub Actionsの実行を必要としない）
