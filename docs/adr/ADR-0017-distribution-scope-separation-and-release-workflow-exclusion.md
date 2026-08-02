@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0016
+id: ADR-0017
 status: proposed
 title: 配布テンプレートと本体専用ファイルの分離基準を確立し、agent-skill-chain-release.ymlを配布物から除外する
 tags: [distribution, github-actions, release, template-sync, security]

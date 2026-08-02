@@ -5,16 +5,16 @@
 
 ## 実装順序・変更単位
 
-DESIGN.mdのD0（ADR-0016、`docs/adr/ADR-0016-distribution-scope-separation-and-release-workflow-exclusion.md`）は本設計セグメントで作成済みであり、以下は実装セグメントが行う変更単位である。AC-6（分離基準の文書化）はD0で既に充足済みのため、実装セグメントでの追加変更単位を要しない（VALIDATION.mdでADR-0016の存在・内容を確認するのみ）。
+DESIGN.mdのD0（ADR-0017、`docs/adr/ADR-0017-distribution-scope-separation-and-release-workflow-exclusion.md`）は本設計セグメントで作成済みであり、以下は実装セグメントが行う変更単位である。AC-6（分離基準の文書化）はD0で既に充足済みのため、実装セグメントでの追加変更単位を要しない（VALIDATION.mdでADR-0017の存在・内容を確認するのみ）。
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
 | 1 | `agent-skill-chain-release.yml`のテンプレート除外 | `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml`を`git rm`で削除する（DESIGN.md D1）。他の配布テンプレート（`agent-skill-chain-root-cleanup.yml`含む）には触れない。 | `AC-1, AC-2` | なし |
-| 2 | 本体`agent-skill-chain-release.yml`のヘッダコメント更新 | `.github/workflows/agent-skill-chain-release.yml`の先頭コメントに、本ファイルが配布物ではなく本体専用の直接管理ファイルである旨とADR-0016を追記する（DESIGN.md D2）。`agent-skill-chain-self-test.yml`のヘッダコメントの書きぶりに倣う。トリガ・ステップ・env・スクリプト参照は一切変更しない。 | `AC-3` | `#1` |
+| 2 | 本体`agent-skill-chain-release.yml`のヘッダコメント更新 | `.github/workflows/agent-skill-chain-release.yml`の先頭コメントに、本ファイルが配布物ではなく本体専用の直接管理ファイルである旨とADR-0017を追記する（DESIGN.md D2）。`agent-skill-chain-self-test.yml`のヘッダコメントの書きぶりに倣う。トリガ・ステップ・env・スクリプト参照は一切変更しない。 | `AC-3` | `#1` |
 | 3 | 配布不在・本体存在の単体テスト追加 | (a) `.agent-skill-chain/templates/github/.github/workflows/`配下に`agent-skill-chain-release.yml`が存在しないことを検査するテスト、(b) `.github/workflows/agent-skill-chain-release.yml`が存在し、既存ジョブ名`release`・トリガ`push: branches: [main]`・`secrets.RELEASE_MAIN_PAT`参照ステップが保持されていることを検査するテストを`test/unit/`に追加する。 | `AC-1, AC-2, AC-3` | `#1, #2` |
 | 4 | `verify-template-sync`回帰テスト追加 | `computeTemplateSyncDiffs`（または`verify template-sync`CLI）に対し、配布元テンプレートに存在せず展開先（`.github/`）にのみ存在するファイルが未同期差分として報告されないことを確認する回帰テストを`test/integration/verify.test.ts`（または同等の既存テストファイル）へ追加する。DESIGN.md D3で「無変更」と判断したロジックの前提を、将来の実装変更から保護するテストであり、`src/lib/template-sync.ts`自体は変更しない。 | `AC-4` | `#1` |
 | 5 | `SECURITY_POLICY.md`追記 | `.agent-skill-chain/standards/SECURITY_POLICY.md`へ、`agent-skill-chain-root-cleanup.yml`が要求する`secrets.RELEASE_MAIN_PAT`の目的・未設定時の挙動（admin merge手順が認証エラーで失敗するが、`main.json`のrequired status checksに含まれないためPRマージ可否には影響しない）・対処方法（PATを登録して有効化する／無視してよい）を追記する（DESIGN.md D5）。`agent-skill-chain-root-cleanup.yml`自体（ワークフロー内容・シークレット名）は変更しない。 | `AC-5` | なし |
-| 6 | 実機検証・VALIDATION.md記録 | `node bin/agents-md.js init <tmpdir>`相当を新規一時ディレクトリへ実機実行し、展開された`.github/workflows/`一覧に`agent-skill-chain-release.yml`が含まれないこと、`agent-skill-chain-root-cleanup.yml`は含まれることを目視確認する。あわせてADR-0016の内容・`SECURITY_POLICY.md`追記内容がconsumer視点で自己完結して理解できるかを確認し、`VALIDATION.md`へ証跡として記録する。 | `AC-7` | `#1, #2, #5` |
+| 6 | 実機検証・VALIDATION.md記録 | `node bin/agents-md.js init <tmpdir>`相当を新規一時ディレクトリへ実機実行し、展開された`.github/workflows/`一覧に`agent-skill-chain-release.yml`が含まれないこと、`agent-skill-chain-root-cleanup.yml`は含まれることを目視確認する。あわせてADR-0017の内容・`SECURITY_POLICY.md`追記内容がconsumer視点で自己完結して理解できるかを確認し、`VALIDATION.md`へ証跡として記録する。 | `AC-7` | `#1, #2, #5` |
 | 7 | 本体リリース自動化のregression確認 | `#2`のコメント変更後、`release-resolve-version.sh`/`release-bump.sh`/`release-tag.sh`/`release-publish.sh`の既存単体テストが全てpassすることを確認する（静的側面）。動的側面（実際のmainへの対象pathへのpushでの`agent-skill-chain / release`実行）は、本Issueのマージそのものが`AGENTS.md`・`.agent-skill-chain/**`を変更するpushに該当するため、マージ後の実行結果を観測し`VALIDATION.md`（`hybrid`、`executor`: 進行役または独立検証担当）に記録する。 | `AC-3` | `#2` |
 
 ## テスト適用性（`.agent-skill-chain/standards/TEST_POLICY.md`準拠）
