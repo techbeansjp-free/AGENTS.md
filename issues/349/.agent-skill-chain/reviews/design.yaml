@@ -1,0 +1,51 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: design
+  target_sha: 5fc30faba067cffb168ce7876d2120c860053df8
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers: []
+  approved_digest: sha256:f1757b5b216f7dd3700da82fcd46b2c52f352621060ad4a2817e312bcc76dcbb
+  approved_artifacts:
+    - path: DESIGN.md
+      digest: sha256:01cbca471a1149fc81c8b1595dfd42670e9ea36f986309f40f29cec2d74eec5a
+    - path: PLAN.md
+      digest: sha256:82601219b8d9763eca05a42618383ebff58567eb02e7cef95909de1c42f11d29
+    - path: docs/adr/ADR-0018-gate-report-pending-as-action-required.md
+      digest: sha256:e82d58f474fd59c86be585a2a5ad94845f8e92ac569244691aa3919d0de316f3
+  reviewers:
+    - source: github_pr_review
+      review_id: "4837273964"
+      actor: adachi-tatsuru
+      run_id: review-design-5fc30faba067-1-bc499984c596b75fbe35e40b
+      slot: 1
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:382e41b9b1affe3f23dd2239515e825013f19e60a6657ee98ed304501e77c913
+      actor_relation: same_as_writer
+      trusted_base_sha: 74d0873666e5e0a4ff6152641ab4087c11e6a94a
+      launcher_digest: sha256:80e4354ba1a5bca0c7a0bc8b6d5bbdc9f2e5b80193450b749dad846081db1387
+      launcher_token_digest: sha256:f400e5c4322f1d9975812e6403c321cb900d226e29d3713b83e41feff9680134
+      isolation: ephemeral_clone
+      sandbox: read_only
+    - source: github_pr_review
+      review_id: "4837285857"
+      actor: adachi-tatsuru
+      run_id: review-design-5fc30faba067-2-3546339d87c6ccce9bdefd95
+      slot: 2
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:382e41b9b1affe3f23dd2239515e825013f19e60a6657ee98ed304501e77c913
+      actor_relation: same_as_writer
+      trusted_base_sha: 74d0873666e5e0a4ff6152641ab4087c11e6a94a
+      launcher_digest: sha256:80e4354ba1a5bca0c7a0bc8b6d5bbdc9f2e5b80193450b749dad846081db1387
+      launcher_token_digest: sha256:f400e5c4322f1d9975812e6403c321cb900d226e29d3713b83e41feff9680134
+      isolation: ephemeral_clone
+      sandbox: read_only
+  review_attempt:
+    attempt_id: attempt-design-5fc30faba067-b763e12ae826be382991d03e
+    expected_count: 2
+    evidence_digest: sha256:0bc2146c5a43827360557337c6078d26ee8556b82c0c7cf40ffb1e44b2a99516
