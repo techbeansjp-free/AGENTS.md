@@ -10,9 +10,9 @@
 
 ## 前提
 
-- SPEC.md記載の実機検証により、`codex exec --strict-config -c approval_policy=\"never\" ...` は未知キー拒否モード下でもエラーなく受理され、セッションヘッダーに `approval: never` と反映されることが確認済みである。
+- `codex exec --strict-config -c approval_policy=\"never\" ...` は未知キー拒否モード下でもエラーなく受理され、セッションヘッダーに `approval: never` と反映されることを実機検証で確認済みである（検証手順・結果はADR-0016のContextに一次記録がある）。
 - `codex exec --help` には `--ask-for-approval` が存在せず、`-s/--sandbox`・`-c/--config <key=value>` は存在する。`--ask-for-approval`（`-a`）はルートの `codex` コマンドの `--help` にのみ存在する。
-- `GATE_REVIEWER_CMD` は `codex.sh` の `launch_gate_reviewer` 内で、`CODEX_REVIEWER_CMD`・`GATE_REVIEWER_CMD` のいずれもテスト用完全上書きとして与えられていない場合にのみ、既定コマンドラインとして組み立てられる（`codex.sh:128`以降の分岐）。この分岐が本Issueの変更対象である。
+- `GATE_REVIEWER_CMD` は `codex.sh` の `launch_gate_reviewer` 内で、`CODEX_REVIEWER_CMD`・`GATE_REVIEWER_CMD` のいずれもテスト用完全上書きとして与えられていない場合にのみ、既定コマンドラインとして組み立てられる（`launch_gate_reviewer`内の`GATE_REVIEWER_CMD`組み立て箇所のうち、テスト用完全上書きが無い場合の分岐）。この分岐が本Issueの変更対象である。
 - 同じ組み立て箇所には既に `-c 'shell_environment_policy.inherit="none"'` 等、複数の `-c key=value` 形式のconfig override が同一エスケープ規約（シングルクォート内で値をダブルクォートする）で並んでおり、今回追加する指定もこの規約に合わせる。
 - `_codex_fail_safe`（認証不成立・CLI不在の検知）、core reviewer時のmodel/effort一致検査、`_codex_gate_lifecycle` へのlifecycle委譲は、`GATE_REVIEWER_CMD` の中身に依存しない別処理であり、本Issueの変更の影響を受けない。
 
@@ -66,7 +66,7 @@ ADR-0016は本Issueの設計セグメントで `status: proposed` として作�
 想定される失敗モード:
 
 - `approval_policy` のconfigキー名が将来のcodex CLIバージョンで変更される: 本Issueのスコープ外（SPEC.md「スコープ外」に明記）。発生した場合は同じ「`-c key=value`への置換」パターンを踏襲する別Issueとして扱う。
-- fakeなcodex実行ファイルが実際のcodex CLIの引数受理仕様と乖離する: 回帰テストが偽陽性で成功する可能性があるが、SPEC.md記載の実機検証結果（`--strict-config`付きでの受理確認）に基づいてfakeバイナリの拒否/受理条件を定義するため、乖離を最小化する。乖離が疑われる場合は実機での再検証が必要になる旨をテストコードのコメントとして残す。
+- fakeなcodex実行ファイルが実際のcodex CLIの引数受理仕様と乖離する: 回帰テストが偽陽性で成功する可能性があるが、ADR-0016のContextに記録した実機検証結果（`--strict-config`付きでの受理確認）に基づいてfakeバイナリの拒否/受理条件を定義するため、乖離を最小化する。乖離が疑われる場合は実機での再検証が必要になる旨をテストコードのコメントとして残す。
 - `-c` の値エスケープを誤り、`approval_policy` 以外のキーとして解釈される、またはシェル構文エラーになる: 既存の隣接する `-c` 指定と全く同じクォート規約（シングルクォート内でキー全体、値をダブルクォート）を踏襲することで回避する。回帰テストが組み立てられた文字列中の該当箇所を直接検証する。
 
 ロールバック手順:
