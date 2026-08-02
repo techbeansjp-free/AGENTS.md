@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0018
-status: accepted
+status: superseded
 title: gate-reportがpendingであることを、verify-and-publishジョブの失敗ではなくaction_required Check Runとして表現する
 tags: [ci, gate, check-run]
 supersedes: []
