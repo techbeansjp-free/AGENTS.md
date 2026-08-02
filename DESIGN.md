@@ -8,12 +8,13 @@
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
 | `AC-1`（未確定ゲートでSUCCESS化+確定・未確定の区別表現） | D1: `verify.ts gateReport()` の exit code分離、D2: `agent-skill-chain-gate.yml` の `Verify gate report schema` ステップ改修＋`Publish Check Run`ステップのリテラルpending時skip | D1は`final=human_required`（実運用で到達する唯一の未確定値、確定値として扱う）を非pending違反が無ければexit 0で通過させ、D2の`Publish Check Run`ステップ（`gate publish`）がblockers・final実値・gate-report本文を含む詳細なaction_required Check Runを発行してジョブをSUCCESSで完了させる。リテラル`final=pending`（白紙スキャフォールド、実運用では到達しない）の場合のみD1がexit 2を返し、D2が`Verify gate report schema`ステップで汎用action_required Check Runを発行したうえで、後続`Publish Check Run`ステップ（`gate publish`が`final=pending`を拒否し非0終了する）を同一ジョブ内のstep output経由でskipし、ジョブ全体をSUCCESSで完了させる |
-| `AC-2`（rejectedは引き続き失敗表現） | D1、D6: `src/commands/gate.ts`の`checkRunConclusionForFinal()`新設（`publish()`と`reconcile()`のunchanged分岐が共通のfinal→conclusion導出を用いる是正） | `gate.final`が確定値（approved/rejected/human_required）であれば（`conformance`/`falsification`が個別にpendingのまま提出されていても）従来通りexit 0で後続の`gate publish`へ進み、D6により`rejected`は`failure`のCheck Runとして発行される（`publish()`の拒否条件・分岐構造自体は変更せず、既存インライン三項演算子をD6の関数呼び出しへ置き換えたのみ） |
+| `AC-2`（rejectedは引き続き失敗表現） | D1、D6: `src/commands/gate.ts`の`checkRunConclusionForFinal()`新設（`publish()`側のconclusion導出をこの共通関数へ置き換える是正） | `gate.final`が確定値（approved/rejected/human_required）であれば（`conformance`/`falsification`が個別にpendingのまま提出されていても）従来通りexit 0で後続の`gate publish`へ進み、D6により`rejected`は`failure`のCheck Runとして発行される（`publish()`の拒否条件・分岐構造自体は変更せず、既存インライン三項演算子をD6の関数呼び出しへ置き換えたのみで、発行されるconclusionの値もpublish()経路では変わらない）。`reconcile()`側のconclusion導出（D6のもう一方の呼び出し元）はAC-8が扱う別の要求であり、本ACの対象外 |
 | `AC-3`（pending以外の不合格は引き続きジョブ失敗） | D1 | schema違反・digest不一致・target_sha不正は「pending以外の理由」として無条件にexit 1を維持する |
 | `AC-4`（dependabotでdetect-segments skip） | D3: `detect-segments`ジョブへのdependabotスキップ分岐追加 | `agent-skill-chain-ci.yml`と同型のPR作成者判定を移植する |
-| `AC-5`（抽出不能ブランチは引き続き拒否） | D3 | 既存のelse節（exit 1）をそのまま維持する |
+| `AC-5`（抽出不能ブランチは引き続き拒否） | D3 | 既存のelse節（exit 1）をそのまま維持する。判定基準は`branch.pattern`ではなくsedによる`ISSUE_ID`抽出可否であり、既存のelse節のロジック自体を変更しないという設計判断はこの実際の判定基準に対して行うものである |
 | `AC-6`（配布テンプレート同期） | D4: `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml`へのD2・D3同期 | `verify-template-sync`検査の対象 |
 | `AC-7`（実機確認） | D5: 実機検証手順（VALIDATION.mdでmanual実行） | 設計要素ではなく、D1〜D4マージ後の運用確認事項 |
+| `AC-8`（`gate reconcile`のunchanged分岐はdigest不変性のみを根拠にsuccessへ昇格しない） | D6: `checkRunConclusionForFinal()`（`reconcile()`のunchanged分岐側の呼び出し） | `reconcile()`のunchanged分岐が発行するconclusionを、無条件`'success'`固定から、直前に永続化された`report.gate.final`をこの共通関数へ渡して導出した値へ置き換える是正（blocking finding: human-required-publish-clobbers-reconciled-gateへの対応）。`test/integration/reconcile.test.ts`のunchanged分岐テストが検証する |
 
 ## 責務・境界
 

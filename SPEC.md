@@ -29,6 +29,7 @@
 - pendingと非pending違反（スキーマ違反、approved_artifactsのdigest不一致、target_sha不正等）が同一gate-report内で併存する場合は、非pending違反を優先してジョブをFAILUREとする（pending救済は非pending違反が皆無の場合にのみ適用するfail-closed設計とし、AGENTS.md I8「既定は常に安全側」を満たす）。
 - pending以外の理由（スキーマ違反、approved_artifactsのdigest不一致、target_sha不正等）でgate-reportが不合格の場合は、従来どおりジョブをFAILUREとし、マージ阻害を継続する（regressionなし）。
 - レビューが実際に失敗（final=rejected、conformance/falsificationいずれかがfail、blockersが存在）した場合、`gate publish`はfinal=rejectedであってもexit 0を返す既存動作を変更しない。ジョブ自体はSUCCESSのまま、`agent-skill-chain/<gate>-gate`Check Runのみがconclusion=failureとして失敗を表現し続ける（本Issueによる変更対象ではなく、従来から一貫してジョブ自体をFAILUREにしていない。マージ可否の実効的な制御はrequired statusとして設定された当該Check Runが担う）。
+- `gate reconcile`（`src/commands/gate.ts`の`reconcile()`）が「承認済み成果物のdigestが新SHAでも不変（unchanged）」と判定してCheck Runを再発行する際、そのconclusionは承認済み成果物のdigest不変性のみを根拠に無条件で`success`としてはならない。承認済み成果物のdigestが変化していないことは、そのgateが以前approvedだったことを意味しない（例えば直前に永続化されたgate-reportの`gate.final`が`human_required`や`rejected`である状態のまま、当該gateの成果物には触れないpushが来た場合を含む）。unchangedと判定したgateのconclusionは、直前に永続化された`reviews/<gate>.yaml`の`gate.final`の実際の値から導出しなければならない（`final=approved`のときのみ`success`、`final=rejected`のときは`failure`、`final=human_required`（実運用に加え、リテラル`pending`の場合も含む）のときは`action_required`）。これにより、未確定・却下のままのgateが、成果物が変化していないというだけの理由でmerge可能な`success`へ誤って昇格する経路（fail-openなCheck Run上書き）を塞ぐ。
 - `.github/workflows/agent-skill-chain-gate.yml`のIssue ID抽出ロジックへ、`agent-skill-chain-ci.yml`と同型（`pull_request_target`イベントのpayloadからPRのactor・head branch名を直接判定する方式。API照会を要する`agent-skill-chain-reconcile.yml`方式は`pull_request_target`では不要なため採らない）のdependabot/自動化ブランチskip分岐を追加する。対応するPRのhead branchが`dependabot/`で始まりPR作成者（`user.login`）が`dependabot[bot]`である場合、`detect-segments`のissue_id抽出をskipしてジョブをexit 1にしないだけでなく、`matrix`出力を空配列とし後続`verify-and-publish`ジョブ自体も起動させない（新規Check Runの発行なし。`agent-skill-chain-ci.yml`のskip_checks出力が後続全ステップを抑止するのと同型の、skipとdownstream抑止が対になった設計とする）。
 - 配布テンプレート`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml`にも同じ修正を同期し、`verify-template-sync`検査をgreenに保つ。
 
@@ -45,7 +46,7 @@
 
 - Given: あるgateのレビューが完了し、`gate.final`がrejected（またはconformance/falsificationいずれかがfail、blockersが存在）である。gate-reportはスキーマに適合し、approved_artifactsのdigestもtarget_shaも正当である（非pending違反は存在しない）
 - When: `verify-and-publish`ジョブが起動する
-- Then: `Verify gate report schema`ステップは終了コード0を返す（`final`が確定値（approved/rejected/human_required）の場合、`gate.conformance`・`gate.falsification`が個別にpendingのまま提出されていても、`gate.final`という単一の権威あるフィールドのみを判定基準としチェックしない）。後続の`Publish Check Run`ステップはskipされず実行され、`gate publish`（`src/commands/gate.ts`の`publish()`）はfinal=rejectedの場合もexit 0を返すため`verify-and-publish`ジョブ自体はSUCCESSで終了するが、`agent-skill-chain/<gate>-gate`という名前のCheck Runは`checkRunConclusionForFinal()`により導出されたconclusion=failureとして対象SHAへ発行される。この挙動は本Issueによる変更対象ではなく、既存動作のまま変化しない（regressionなし）。マージ可否の実効的な制御はrequired status checkとして設定された当該Check Runが担い、ジョブ自体のSUCCESS/FAILUREには依存しない
+- Then: `Verify gate report schema`ステップは終了コード0を返す（`final`が確定値（approved/rejected/human_required）の場合、`gate.conformance`・`gate.falsification`が個別にpendingのまま提出されていても、`gate.final`という単一の権威あるフィールドのみを判定基準としチェックしない）。後続の`Publish Check Run`ステップはskipされず実行され、`gate publish`（`src/commands/gate.ts`の`publish()`）はfinal=rejectedの場合もexit 0を返すため`verify-and-publish`ジョブ自体はSUCCESSで終了するが、`agent-skill-chain/<gate>-gate`という名前のCheck Runは`checkRunConclusionForFinal()`により導出されたconclusion=failureとして対象SHAへ発行される。この`gate publish`経由の挙動（`verify-and-publish`ジョブがgate-reportを直接publishする経路のconclusion導出）自体は本Issueによる変更対象ではなく、既存動作のまま変化しない（regressionなし）。マージ可否の実効的な制御はrequired status checkとして設定された当該Check Runが担い、ジョブ自体のSUCCESS/FAILUREには依存しない（`gate reconcile`が同じgateを後から再発行する経路のconclusion導出はAC-8が扱う別の要求であり、本ACの「変化しない」はその経路には及ばない）
 - 検証方法見込み: `hybrid`（`gate publish`のfinal=rejected時の終了コード・`checkRunConclusionForFinal()`の導出結果はCLIレベルの自動テストで検証可能。実際のGitHub Check Run発行・ジョブ結論はAC-1と同じ理由によりAC-7の手動確認に委ねる）
 
 #### AC-3: pending以外のgate-report不合格は、pendingが同時に検出されている場合でも優先されジョブを失敗させる
@@ -64,7 +65,7 @@
 
 #### AC-5: dependabot以外の抽出不能ブランチは引き続き拒否される
 
-- Given: ブランチ名が`.agent-skill-chain/config/agent-skill-chain.yaml`のbranch.patternに適合せず、かつAC-4のdependabot許可条件（`dependabot/`で始まるhead branchかつ`user.login`が`dependabot[bot]`）にも該当しない
+- Given: `Resolve immutable context`ステップが`BRANCH`（`github.event.pull_request.head.ref`）から`ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"`により抽出した`ISSUE_ID`が、正規表現`^ISSUE-[0-9]+$`に適合しない（sedの後方参照が`/`区切りの先頭セグメント直後の数字を捕捉できず、`ISSUE-`に元の`BRANCH`文字列全体がそのまま連結される等）。かつAC-4のdependabot許可条件（`dependabot/`で始まるhead branchかつ`user.login`が`dependabot[bot]`）にも該当しない。この判定基準は`.agent-skill-chain/config/agent-skill-chain.yaml`の`branch.pattern`（`{type}/{issue_id}-{slug}`。`type`は`issue.allowed_types`列挙、`slug`は`[a-z0-9-]`長さ上限付きという、`src/lib/worktree.ts`の`branchNameRegex()`が使うより厳密な正規表現）とは別物であり、sedによる抽出可否のみで判定される。例えば`wip/123-foo`のような`branch.pattern`非適合のブランチ名でも、sed抽出自体は`ISSUE-123`に成功し本ACのGivenを満たさない（＝本ACの拒否対象にはならない）
 - When: `detect-segments`ジョブが起動する
 - Then: `Resolve immutable context`ステップは従来どおり非0で終了し、日本語の理由をエラー出力する（誤ってすべての抽出失敗を無条件skipに倒さない）
 - 検証方法見込み: `hybrid`（分岐ロジック自体はAC-4と同様ローカル実行で自動検証可能。実際のジョブ失敗の確認はAC-7の手動確認に委ねる）
@@ -82,6 +83,13 @@
 - When: 実装時点でオープンだったIssue駆動PR（#345等、レビュー未確定（`final=human_required`）のゲートを持つもの）の`verify-and-publish`を再実行または新規pushで再評価する。あわせて、dependabotが作成した既存のオープンPR（存在する場合）を確認する
 - Then: 未確定ゲートを含む当該PRの`verify-and-publish`がSUCCESS（対応するCheck Runは`gate publish`が発行したaction_required——title `<gate> gate: human_required`・blockers・gate-report本文付き——であり、`Publish Check Run`ステップが実行され、Check Runの発行が1回のみで二重発行が起きていないことをジョブログで確認する）になることを目視確認できる。rejected/failしたgateが存在すれば、そのgateのCheck Runがconclusion=failureのまま維持され、ジョブ自体はSUCCESSであることも確認する。dependabot PRについては`detect-segments`が失敗せず、`verify-and-publish`が起動しない（新規Check Runが発行されない）ことを確認する
 - 検証方法見込み: `manual`
+
+#### AC-8: `gate reconcile`のunchanged分岐は、承認済み成果物のdigest不変性のみを根拠に無条件でsuccessを再発行しない
+
+- Given: あるgateについて`reviews/<gate>.yaml`に永続化された直前のgate-reportの`gate.final`が`human_required`または`rejected`である（レビュー未確定、またはレビュー完了済みで却下）。新しいpushによる`gate reconcile`実行時、当該gateの`approved_artifacts`に記録された各pathのdigestが、新しいtarget_shaにおける実際のファイル内容のdigestと完全に一致する（＝当該gateの成果物は承認判定時点から変化していない）
+- When: `gate reconcile <issue_id> <target_sha>`（`src/commands/gate.ts`の`reconcile()`）を実行する
+- Then: `reconcile()`は当該gateを「unchanged」分岐として扱い、`reviews/<gate>.yaml`の`target_sha`のみを新SHAへ更新して再永続化する。GitHubモードでは`agent-skill-chain/<gate>-gate`Check Runを新target_shaへ再発行するが、そのconclusionは無条件`success`ではなく、直前に永続化された`gate.final`の実際の値から`checkRunConclusionForFinal()`により導出する（`final=approved`のときのみ`success`、`final=rejected`のときは`failure`、`final=human_required`（実運用に加えリテラル`pending`の場合も含む）のときは`action_required`）。承認済み成果物のdigestが不変であることは、そのgateが以前approvedだったことを意味せず、unchanged判定はconclusionをsuccessへ昇格させる根拠にならない
+- 検証方法見込み: `automated`（`reconcile()`のunchanged分岐におけるconclusion導出は`test/integration/reconcile.test.ts`のCLIレベル統合テストで検証可能であり、GitHub Actionsの実行を必要としない）
 
 ## スコープ外
 
