@@ -73,7 +73,7 @@ worktree: .worktrees/<YYYYMMDD_HHMMSS>-<type>-<issue-id>-<slug>/   (timestamp = 
 
 ## ゲートの継承・無効化
 
-Check Run は commit SHA に紐づく。verified gate reportとreview evidence digestはCheck Run outputへ耐久保存し、I2の専用App/Workflowとして許可されたsource identityのlatest successだけからnoncanonical cacheを復元する。同じGitHub Actions Appであることだけをsource trustの証明にしてはならない。`.agent-skill-chain/scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行、変化ありなら当該ゲートと全下流ゲートを無効化する（対応表は `.agent-skill-chain/schemas/gate-report.schema.yaml` 添付コメント参照）。
+Check Run は commit SHA に紐づく。verified gate reportとreview evidence digestはCheck Run outputへ耐久保存し、I2の専用App/Workflowとして許可されたsource identityのlatest successだけからnoncanonical cacheを復元する。同じGitHub Actions Appであることだけをsource trustの証明にしてはならない。`.agent-skill-chain/scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら、直前に永続化された `gate.final` の値から導出した conclusion（`approved` のときのみ `success`、`rejected` は `failure`、`human_required`・`pending` は `action_required`。digest不変は当該ゲートが approved だったことを意味せず、無条件の success 再発行はしない）を最新 SHA へ再発行し、変化ありなら当該ゲートと全下流ゲートを無効化する（対応表は `.agent-skill-chain/schemas/gate-report.schema.yaml` 添付コメント参照）。
 
 ## ADR・テンプレート・テスト適用性
 

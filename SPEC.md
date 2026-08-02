@@ -30,6 +30,7 @@
 - pending以外の理由（スキーマ違反、approved_artifactsのdigest不一致、target_sha不正等）でgate-reportが不合格の場合は、従来どおりジョブをFAILUREとし、マージ阻害を継続する（regressionなし）。
 - レビューが実際に失敗（final=rejected、conformance/falsificationいずれかがfail、blockersが存在）した場合、`gate publish`はfinal=rejectedであってもexit 0を返す既存動作を変更しない。ジョブ自体はSUCCESSのまま、`agent-skill-chain/<gate>-gate`Check Runのみがconclusion=failureとして失敗を表現し続ける（本Issueによる変更対象ではなく、従来から一貫してジョブ自体をFAILUREにしていない。マージ可否の実効的な制御はrequired statusとして設定された当該Check Runが担う）。
 - `gate reconcile`（`src/commands/gate.ts`の`reconcile()`）が「承認済み成果物のdigestが新SHAでも不変（unchanged）」と判定してCheck Runを再発行する際、そのconclusionは承認済み成果物のdigest不変性のみを根拠に無条件で`success`としてはならない。承認済み成果物のdigestが変化していないことは、そのgateが以前approvedだったことを意味しない（例えば直前に永続化されたgate-reportの`gate.final`が`human_required`や`rejected`である状態のまま、当該gateの成果物には触れないpushが来た場合を含む）。unchangedと判定したgateのconclusionは、直前に永続化された`reviews/<gate>.yaml`の`gate.final`の実際の値から導出しなければならない（`final=approved`のときのみ`success`、`final=rejected`のときは`failure`、`final=human_required`（実運用に加え、リテラル`pending`の場合も含む）のときは`action_required`）。これにより、未確定・却下のままのgateが、成果物が変化していないというだけの理由でmerge可能な`success`へ誤って昇格する経路（fail-openなCheck Run上書き）を塞ぐ。
+- AGENTS.md「ゲートの継承・無効化」節は、本システムの正本（憲法）でありながら「`.agent-skill-chain/scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行」という、上記のconclusion導出是正（無条件`success`再発行の禁止）以前の挙動をそのまま記述しており、是正後の実装と矛盾する状態のまま放置されている。正本が実装と矛盾したまま残ることは許容しないため、当該記述を「変化なしなら、直前に永続化された`gate.final`の値（`approved`のみ`success`、`rejected`は`failure`、`human_required`・`pending`は`action_required`）から導出したconclusionを再発行する」という趣旨へ修正する。AGENTS.mdの他の節・不変条件I1〜I8・4セグメント構造・文書量上限（150行、`.agent-skill-chain/ci/verify-doc-length.sh`で検査）は変更しない。
 - `.github/workflows/agent-skill-chain-gate.yml`のIssue ID抽出ロジックへ、`agent-skill-chain-ci.yml`と同型（`pull_request_target`イベントのpayloadからPRのactor・head branch名を直接判定する方式。API照会を要する`agent-skill-chain-reconcile.yml`方式は`pull_request_target`では不要なため採らない）のdependabot/自動化ブランチskip分岐を追加する。対応するPRのhead branchが`dependabot/`で始まりPR作成者（`user.login`）が`dependabot[bot]`である場合、`detect-segments`のissue_id抽出をskipしてジョブをexit 1にしないだけでなく、`matrix`出力を空配列とし後続`verify-and-publish`ジョブ自体も起動させない（新規Check Runの発行なし。`agent-skill-chain-ci.yml`のskip_checks出力が後続全ステップを抑止するのと同型の、skipとdownstream抑止が対になった設計とする）。
 - 配布テンプレート`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-gate.yml`にも同じ修正を同期し、`verify-template-sync`検査をgreenに保つ。
 
@@ -97,6 +98,13 @@
 - When: `verify-and-publish`ジョブが起動し`Verify gate report schema`ステップ（`verify gate-report`、`gateReport()`）が実行される
 - Then: `gateReport()`はこの矛盾を「`final`が確定値であればconformance/falsificationの個別pendingをチェックしない」という免除の対象外とし、非pending違反（otherErrors）として計上し終了コード1を返す。これにより`Publish Check Run`ステップ（`gate publish`）の矛盾拒否ガードへ到達する前に検出され、Check Runが一つも発行されないままジョブがFAILUREになる経路（本Issueが解消しようとした失敗モードと同型の状態がこの入力パターンで再現する経路）を避ける。ジョブ自体がFAILUREになる点は他の一般的な非pending違反（スキーマ違反・digest不一致等、AC-3）と同型の扱いであり、本Issueが変更対象とする「`final=pending`の白紙スキャフォールド」「`final=human_required`の未確定状態」という*正常な*未確定状態とは異なる、*本当に壊れている*gate-reportのケースである（Check Runが発行できないままジョブが落ちる点は救済せず、他の一般的な違反ケースと同様に扱う。本Issueが新たに解決する範囲ではない）。`final=rejected`側の同種チェック（rejectedはconformance/falsificationのいずれかがfailのはず、というチェック）は意図的に対象外とする。standard profile（レビュア1体がconformance→falsificationを順に実行）でfalsification='fail'（blocking finding付き）を提出しつつconformanceの網羅チェックを完了させずpendingのまま提出することは現実的に起こり得る組み合わせであり（`gate-report.schema.yaml`上も正当、`publish()`側にもrejectedの矛盾を拒否するガードは存在しない）、これを矛盾として拒否すると正当な状態を誤って壊すため対象としない
 - 検証方法見込み: `automated`（`gateReport()`の矛盾検出・終了コード判定は`test/integration/verify.test.ts`のCLIレベル統合テストで検証可能であり、GitHub Actionsの実行を必要としない）
+
+#### AC-10: AGENTS.md「ゲートの継承・無効化」節の記述が、AC-8のconclusion導出是正と整合する
+
+- Given: AGENTS.md「ゲートの継承・無効化」節が、`gate reconcile`のunchanged分岐について記述している
+- When: 当該節の本文を確認する
+- Then: 「変化なしなら最新SHAへ成功を再発行」という無条件`success`再発行を意味する記述は存在せず、変化なしの場合のconclusionは直前に永続化された`gate.final`の値（`approved`のみ`success`、`rejected`は`failure`、`human_required`・`pending`は`action_required`）から導出される旨が明記されている。AGENTS.mdの他の不変条件I1〜I8・4セグメント構造・行数上限（150行）は変更されていない
+- 検証方法見込み: `manual`（AGENTS.md本文の記述内容確認。`.agent-skill-chain/ci/verify-doc-length.sh`は行数のみを機械検査するため文言の正確性はレビュアの目視確認に委ねる）
 
 ## スコープ外
 
