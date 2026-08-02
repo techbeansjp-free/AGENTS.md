@@ -24,6 +24,7 @@ AGENTS.md「プロジェクト固有ポリシー」節は「進行役は `manife
 - manifest.yaml自体が存在しない（project固有ポリシー未導入の）consumer projectでは、従来どおり `role_contract` のみが出力される（後方互換）。
 - manifest.yamlが存在するがスキーマに適合しない場合は、サイレントに無視せずエラーとして扱う（I8: 迷ったら安全側）。
 - `documents.common`／`documents.roles.<segment>` に登録されたパスに対応する実ファイルが存在しない、または読み取れない場合も、サイレントにスキップせずエラーとして扱う（I8: 迷ったら安全側。登録済み規範文書が配布されないままワーカーが起動する事態を防ぐ）。
+- パス解決は「実ファイルの存否・可読性」だけでなく「解決結果がどこを指すか」自体を保護対象とする。`documents.common`／`documents.roles.<segment>` の各パスは、`../` 等による上位ディレクトリ脱出・絶対パス指定・`.agent-skill-chain/project/` ディレクトリ外を指すsymlink経由のいずれによっても、`.agent-skill-chain/project/` ディレクトリ配下の外側を解決結果として指してはならない（I8: 既定は常に安全側。`role_contract`起動プロンプトの出力は `.agent-skill-chain/adapters/human.sh` の `launch_worker` がGitHub Issueコメントへ転記する経路を持つため、範囲外パスの解決結果をサイレントに配布すると任意ファイル内容の公開漏洩に直結する）。
 
 ### 受入条件（Acceptance Criteria）
 
@@ -67,6 +68,13 @@ AGENTS.md「プロジェクト固有ポリシー」節は「進行役は `manife
 - Given: `.agent-skill-chain/project/manifest.yaml` の `documents.common` または `documents.roles.<segment>` に、文書パスが登録されているが、`.agent-skill-chain/project/` を基点として解決した実ファイルが存在しない、または読み取れない。
 - When: `agent-skill-chain segment start <issue_id> <segment>` を実行する。
 - Then: エラーを返し、終了コードは非0になる（サイレントにスキップして起動を続けない。AC-4のmanifest.yamlスキーマ不正時のfail-safeとは独立した契約であり、manifest.yaml自体はスキーマに適合しているが登録文書の実体が欠落しているケースを対象とする）。
+- 検証方法見込み: `automated`
+
+#### AC-7: 登録パスの解決範囲逸脱時のfail-safe
+
+- Given: `.agent-skill-chain/project/manifest.yaml` の `documents.common` または `documents.roles.<segment>` に登録された文書パスが、`.agent-skill-chain/project/` ディレクトリを基点として解決した結果、以下のいずれかにより同ディレクトリ配下の外側を指す：(a) `../` 等の相対パス表記による上位ディレクトリ脱出（例: `../../.env`）、(b) 絶対パス指定（例: `/etc/passwd`）、(c) `.agent-skill-chain/project/` ディレクトリ配下に置かれたsymlinkだが、リンク先の実体が同ディレクトリ配下の外側にある。いずれのケースも、リンク先・解決先のファイル自体は実在し読み取り可能でありうる（AC-6の「実ファイルが存在しない・読み取れない」ケースとは独立の契約）。
+- When: `agent-skill-chain segment start <issue_id> <segment>` を実行する。
+- Then: 当該パスの内容を標準出力へ含めず（サイレントな配布を禁止し）、エラーを返し、終了コードは非0になる。すなわち「解決先が実在し読み取り可能である」ことは配布を正当化しない。
 - 検証方法見込み: `automated`
 
 ## スコープ外
