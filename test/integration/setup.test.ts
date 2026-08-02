@@ -115,6 +115,25 @@ test('setup github: target_dirへ.github同期のみを行い、AGENTS.md等の�
   assert.ok(!fs.existsSync(path.join(targetDir, '.agent-skill-chain')), 'setup githubは.agent-skill-chain名前空間をコピーしないこと');
 });
 
+test('setup github: consumerへ本体専用release workflowを配布しない', (t) => {
+  const scratchDir = mkScratch('setup-github-release-exclusion-scratch');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+
+  const targetDir = mkScratch('setup-github-release-exclusion-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['setup', 'github', targetDir], {
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    fs.existsSync(path.join(targetDir, '.github', 'workflows', 'agent-skill-chain-release.yml')),
+    false,
+  );
+});
+
 test('setup labels: cwdのリポジトリに対しlabels.yaml定義の全ラベルが適用される', (t) => {
   const repo = createTmpRepo();
   t.after(() => repo.cleanup());

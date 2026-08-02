@@ -32,3 +32,9 @@
 ## Coordination Backend の正本は一方のみ
 
 調整状態（Issue・ブランチ・PR・ゲート状態等）の正本は、GitHub モードまたはローカルモードのいずれか一方のみであり、二重化しない（`AGENTS.md` I6）。複数の Coordination Backend 間で同一 Issue の状態を同期する設計は採用しない——「どちらが正しいか」という二重正本問題を再生産するためである。GitHub モードでは Issue・PR・ブランチ・Check Run が正本、ローカルモードでは `state.yaml`（Issue 毎、Git 管理下）が正本となる。
+
+## root-cleanup の任意PAT
+
+`agent-skill-chain-root-cleanup.yml` は、main 直下へ残った `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を短命ブランチ上で削除し、PRをadmin mergeするために `secrets.RELEASE_MAIN_PAT` を使用する。この名前は既存の認証情報を再利用するための互換名であり、consumerがroot-cleanupを有効化する場合は、対象リポジトリでadmin mergeできるPATを同名のGitHub Actions secretとして登録する。
+
+secretが未設定の場合、root-cleanupのadmin merge手順は認証エラーで失敗し、対象ファイルの自動削除は完了しない。ただしroot-cleanupは配布rulesetのrequired status checksに含まれないため、この失敗は通常のPRのマージ可否には影響しない。root-cleanupを利用するconsumerはPATを登録し、利用しないconsumerはこの任意ジョブの失敗を無視してよい。

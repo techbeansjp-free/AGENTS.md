@@ -1,5 +1,9 @@
 # 正本: AGENTS.md §不変条件I4 / ADR-0005
 #
+# 本リポジトリ（agent-skill-chain自身の開発・配布ライフサイクル）専用のリリース
+# ワークフローである。consumer向け配布テンプレートには含めず、本体で直接管理する
+# （Issue #344、ADR-0017）。
+#
 # mainへのリリース対象変更（配布物・その生成元。paths参照）を契機に、package.json の version
 # を自動bumpし、gitタグ・GitHub Releaseを人手なしで生成し続ける（Issue #196）。バージョン解決器
 # （release resolve-version）・bumpブランチ・PR作成／admin merge器（release bump）・タガー

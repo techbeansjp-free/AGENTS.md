@@ -3,8 +3,8 @@
 # mainへのpush（[skip ci]を含まないもの）を契機に、repoRoot直下へ恒久混入したIssueセグメント
 # 成果物ファイル（SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md）を検出し、短命ブランチ
 # chore/root-cleanup-* 上でのgit rmコミット・PR作成・スコープ検査を経てadmin mergeでmainへ
-# 反映する（root-cleanup run、Issue #208）。既存のリリース自動化（agent-skill-chain-release.yml）
-# と同一の secrets.RELEASE_MAIN_PAT・admin mergeパターンを再利用し、新規credentialは追加しない
+# 反映する（root-cleanup run、Issue #208）。本体リポジトリが別途保有するリリース自動化と
+# 同一の secrets.RELEASE_MAIN_PAT・admin mergeパターンを再利用し、新規credentialは追加しない
 # （ADR-0007）。squashコミットのメッセージを --subject で明示固定して '[skip ci]' の生存を保証する
 # ことが再帰トリガ防止（無限ループ防止）の主機構であり、concurrency が二重発火を防止する。
 name: agent-skill-chain / root-cleanup

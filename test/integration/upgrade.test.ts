@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
 
 // Issue #169 T3: upgrade コマンドの結合テスト。init実行後の資産に対しミラー更新・project/不可侵性・
@@ -128,4 +129,26 @@ test('upgrade: 展開済みworkflowのlocal customizationを保持して標準as
   assert.deepEqual(fs.readFileSync(deployed), beforeDeployed);
   assert.doesNotMatch(fs.readFileSync(conventions, 'utf8'), /custom standard before failed upgrade/);
   assert.notEqual(fs.readFileSync(version, 'utf8'), '0.0.1\n');
+});
+
+test('upgrade後のsetup github再実行でも本体専用release workflowを新規配布しない', (t) => {
+  const scratchDir = mkScratch('upgrade-release-exclusion-scratch');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+  const githubEnv = stub.env({ ...process.env, ASC_GATE_APP_ID: '77' });
+
+  const targetDir = mkScratch('upgrade-release-exclusion-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  const firstSetup = runCli(['setup', 'github', targetDir], { env: githubEnv });
+  assert.equal(firstSetup.status, 0, firstSetup.stderr);
+  const deployedRelease = path.join(targetDir, '.github', 'workflows', 'agent-skill-chain-release.yml');
+  assert.equal(fs.existsSync(deployedRelease), false);
+
+  const upgrade = runCli(['upgrade', targetDir]);
+  assert.equal(upgrade.status, 0, upgrade.stderr);
+  const secondSetup = runCli(['setup', 'github', targetDir], { env: githubEnv });
+  assert.equal(secondSetup.status, 0, secondSetup.stderr);
+  assert.equal(fs.existsSync(deployedRelease), false);
 });
