@@ -74,9 +74,15 @@ writer権限を持つ者が、pushするブランチの内容を改変するだ�
 - Then: reconcile相当の処理が実際に判定対象とするtarget_sha・issue_idは、GitHub Actionsランタイムが提供する、pushされたブランチの内容物からは導出不可能な構造化イベントフィールド（採用するトリガー種別に応じて`workflow_run`イベントの`head_sha`・`head_branch`、または`pull_request_target`イベントの`pull_request.head.sha`・`pull_request.head.ref`・`pull_request.number`等）にのみ基づいて導出され、pushされたブランチの内容物（コミットメッセージ・ファイル内容・環境変数等）からは導出されない。したがって攻撃者は判定対象そのものを差し替えることができず、AC-1・AC-5が保証する保護を「別の対象を判定させる」ことで迂回できない
 - 検証方法見込み: `hybrid`（判定対象識別子の入力元が、採用するトリガー種別に応じたGitHub Actionsランタイム提供の構造化イベントフィールドのみであり、pushされたブランチ内容物からの入力経路が存在しないことの静的検査は自動化できるが、実際の攻撃ブランチによる対象偽装不能性の最終確認は隔離環境での確認を要する）
 
+## 未決事項
+
+- **隔離環境での最終確認待ち（AC-1・AC-5・AC-6）**: AC-1（判定ロジック自体の偽装耐性）・AC-5（承認済み基準データの改ざん耐性）・AC-6（判定対象識別子の偽装耐性）はいずれも検証方法見込みを `hybrid` としている。信頼境界の静的な構成検査（トリガー種別・checkout ref指定・判定ロジックの入力元等）は自動化できるが、実際に攻撃者が制御するブランチ内容（判定ロジックの改変・承認済み基準データの改ざん・判定対象識別子の差し替え）によってCheck Runの偽造が不可能であることの最終確認は、実装完了後の独立検証（validation）セグメントで隔離環境上の実機確認を要する。具体的な検証手順・実行環境・合否判定基準は `VALIDATION.md` で確定する。
+- **AC-6のref/branch値自体の真正性検証（ac6-ref-name-spoofing-gap）**: AC-6は判定対象識別子（target_sha・issue_id）の出所を、GitHub Actionsランタイムが提供する構造化イベントフィールド（`pull_request.head.ref`・`workflow_run.head_branch`等）に限定することを要求する。これによりコミットメッセージ・ファイル内容・環境変数等を経由した識別子の差し替えは防げるが、これら構造化フィールドの値自体（ブランチ名文字列）は、当該ブランチ・PRを作成する主体が任意に設定できる値である。現行の `.agent-skill-chain/ci/verify-branch-name.sh` はブランチ命名規則（`<type>/<issue-id>-<slug>` 形式）の構文検査のみを行い、その `<issue-id>` が実在するIssueと正しく対応していること自体（例: 他Issueの番号を騙るブランチ名でのブランチ・PR作成）の真正性検証は行わない。この制約は本Issueが新たに導入するものではなく、既存のissue-id・ブランチ対応関係検証の仕組み全体に及ぶ構造的な既存ギャップであるため、本Issueの対応範囲には含めず（スコープ外節参照）、別Issueでの検討課題として記録する。
+
 ## スコープ外
 
 - `docs/adr/ADR-0013-trusted-gate-check-materialization.md`（`status: proposed`、未承認）が提案する専用GitHub App／Required Workflowによる強制enforcement backend全体の導入。本Issueはpushトリガーのワークフロー自己参照という個別の脆弱性の解消に限定する。
 - `.github/workflows/agent-skill-chain-gate.yml`（PR gate本体）自体の変更。既に安全な信頼モデルを実装済みのため、参照パターンとしてのみ扱い変更対象としない。
 - dependabotの許可条件そのもの（許可対象の範囲・ラベル等）の仕様変更。既存の許可判定の意図を維持することのみを要件とし、判定条件の拡張・縮小は対象外。
 - Check Run発行の実行主体を専用GitHub Appへ切り替える等、GITHUB_TOKEN以外のcredentialモデルへの変更。
+- ブランチ名・PR head refの文字列値自体が実在するIssueと正しく対応していることの真正性検証（ac6-ref-name-spoofing-gap、前節「未決事項」参照）の導入。AC-6は判定対象識別子の出所をGitHub提供の構造化フィールドに限定することのみを要件とし、当該フィールド値自体の真正性検証は別Issueの検討課題とする。
