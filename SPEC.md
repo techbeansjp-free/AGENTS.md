@@ -31,15 +31,15 @@
 #### AC-1: consumerプロジェクトへの新規配布物からrelease.ymlが除外される
 
 - Given: `.agent-skill-chain/templates/github/.github/workflows/`から`agent-skill-chain-release.yml`が除外されている状態
-- When: 任意のconsumerプロジェクト相当のディレクトリに対し`node bin/agents-md.js init <target_dir>`（またはビルド後CLIの`init`）を実行する
+- When: 任意のconsumerプロジェクト相当のディレクトリに対し`node bin/agents-md.js setup github <target_dir>`（またはビルド後CLIの`setup github`。配布元テンプレート`.agent-skill-chain/templates/github/.github/`を実際に`<target_dir>/.github/`へ展開する処理。`init`/`upgrade`は`.github/`自体を一切生成・更新しないため対象コマンドにならない）を実行する
 - Then: 展開された`<target_dir>/.github/workflows/`に`agent-skill-chain-release.yml`が含まれない
 - 検証方法見込み: `automated`
 
-#### AC-2: 既存consumerへの`upgrade`実行でもrelease.ymlが新規配布されない
+#### AC-2: 既存consumerへの`upgrade`＋`setup github`再実行でもrelease.ymlが新規配布されない
 
-- Given: `.agent-skill-chain/templates/github/.github/workflows/`から`agent-skill-chain-release.yml`が除外されている状態
-- When: `agent-skill-chain-release.yml`を持たない既存consumerプロジェクト相当のディレクトリに対し`upgrade`を実行する
-- Then: `upgrade`後も`<target_dir>/.github/workflows/agent-skill-chain-release.yml`が作成されない
+- Given: `.agent-skill-chain/templates/github/.github/workflows/`から`agent-skill-chain-release.yml`が除外されている状態。かつ、`init`後に`setup github`を一度実行済みで`agent-skill-chain-release.yml`を持たない既存consumerプロジェクト相当のディレクトリが存在する
+- When: 当該既存consumerディレクトリに対し`upgrade`（正本アセットのバージョン更新。`.github/`自体は更新しない）を実行したのち、`setup github`（`.github/`をテンプレート最新版へ再同期する処理）を実行する
+- Then: `upgrade`・`setup github`実行後も`<target_dir>/.github/workflows/agent-skill-chain-release.yml`が作成されない
 - 検証方法見込み: `automated`
 
 #### AC-3: 本体リポジトリ自身のリリース自動化にregressionが無い
@@ -73,7 +73,7 @@
 #### AC-7: 実機確認で配布物に本体専用ワークフローが含まれないことが目視確認される
 
 - Given: 本Issueの実装が完了した状態のブランチ
-- When: `node bin/agents-md.js init <tmpdir>`相当を新規一時ディレクトリに対して実機実行する
+- When: `node bin/agents-md.js setup github <tmpdir>`相当を新規一時ディレクトリに対して実機実行する（`init`単独では`.github/`自体が生成されないため確認対象そのものが存在せず、`.github/`を実際に展開する`setup github`の実行が必要）
 - Then: 展開された`.github/workflows/`一覧に`agent-skill-chain-release.yml`が含まれないことを目視確認できる。あわせて`agent-skill-chain-root-cleanup.yml`は含まれ、そのシークレット依存に関する情報がAC-5の反映内容に沿って確認できる
 - 検証方法見込み: `manual`
 

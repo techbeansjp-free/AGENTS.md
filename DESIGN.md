@@ -7,13 +7,13 @@
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| `AC-1`（新規配布物からの除外） | D1: `agent-skill-chain-release.yml`のテンプレート側削除 | `.agent-skill-chain/templates/github/.github/workflows/`から削除するのみで、`init`は元々source存在ファイルのみをコピーするため自動的に満たされる |
-| `AC-2`（upgradeでも新規配布されない） | D1 | `upgrade`/`setup github`が使う`copyTreeMirror`はsource側の走査のみで動作するため、D1のみで満たされる（D4で回帰検証） |
+| `AC-1`（新規配布物からの除外） | D1: `agent-skill-chain-release.yml`のテンプレート側削除 | `init`/`upgrade`は`.github/`自体を一切コピー対象にしない（`NAMESPACED_ENTRIES`定数に`.github`を含まない。`init`は「GitHub workflowは未展開です」と明示出力する）ため、AC-1を実質的に検証できるのは`.github/`を実際に展開する`setup github`（内部で`templates/github/.github`を`copyTreeMirror`する）のみである。テンプレート側の物理削除により、`setup github`が展開する`.github/workflows/`にも当該ファイルは含まれなくなる |
+| `AC-2`（既存consumerへの`setup github`再実行でも新規配布されない） | D1 | `upgrade`は`.agent-skill-chain/`配下の正本アセットのみを更新し`.github/`には触れない。`.github/`を実際に更新するのは`setup github`のみであり、これが使う`copyTreeMirror`はsource（テンプレート）側の走査のみで動作するため、D1（テンプレート側削除）のみで満たされる（D4で回帰検証） |
 | `AC-3`（本体自身のリリースにregression無し） | D2: 本体`.github/workflows/agent-skill-chain-release.yml`のコメント更新（内容ロジック無変更） | ステップ・トリガ・スクリプト参照は一切変更しない。コメントにIssue #344の由来と配布除外方針を追記するのみ |
 | `AC-4`（verify-template-syncが正しく合否判定） | D3: `computeTemplateSyncDiffs`は無変更（根拠を本書に明記） | 一方向（配布元→展開先）検査であるため、配布元に存在しないファイルは元々検査対象外。既存の`agent-skill-chain-self-test.yml`（Issue #290）が同型の前例として実証済み |
 | `AC-5`（root-cleanup.ymlのシークレット依存への方針） | D5: `SECURITY_POLICY.md`への追記（ドキュメント化のみ、`root-cleanup.yml`自体は無変更） | ADR-0017 Decision参照。改名はADR-0007全文再掲を要するため見送り、ドキュメント化のみで対処 |
 | `AC-6`（分離基準の文書化） | D0: ADR-0017（本Issueの`related_adrs`ではなく本文中の言及で参照。proposed状態のため） | 分離基準をADR内に自己完結して記載（AGENTS.md本文は変更しない） |
-| `AC-7`（実機確認） | D4: 実機検証手順（VALIDATION.mdでmanual実行） | `node bin/agents-md.js init <tmpdir>`相当を実行し`.github/workflows/`一覧を目視確認する独立検証タスク |
+| `AC-7`（実機確認） | D4: 実機検証手順（VALIDATION.mdでmanual実行） | `node bin/agents-md.js setup github <tmpdir>`相当を実行し`.github/workflows/`一覧を目視確認する独立検証タスク（`init`単独では`.github/`自体が生成されないため確認対象にならない） |
 
 ## 責務・境界
 
@@ -23,7 +23,7 @@
 - **D1: 配布元テンプレートからの`agent-skill-chain-release.yml`削除**（対象: `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml`）: ファイルを削除するのみ。責務: 配布物の内容を決定する唯一の正本（ディレクトリツリーそのもの）を変更する。設定ファイルによるallowlist/denylist機構は存在しない（`.agent-skill-chain/config/agent-skill-chain.yaml`の`templates.github_source`はディレクトリパスのみを保持し、除外リストの概念を持たない）ため、物理削除が唯一かつ最小の変更手段である。
 - **D2: 本体`.github/workflows/agent-skill-chain-release.yml`のヘッダコメント更新**: 既存の`agent-skill-chain-self-test.yml`ヘッダコメント（Issue #290由来、「配布テンプレートには含めない」の明記パターン）に倣い、本ファイルが配布物ではなく本体専用の直接管理ファイルである旨と、ADR-0017を由来として追記する。ステップ・トリガ・環境変数・スクリプト参照は一切変更しない（AC-3のregression防止）。
 - **D3: `verify-template-sync`（`src/lib/template-sync.ts`の`computeTemplateSyncDiffs`）は無変更**: 実装調査の結果、本関数は配布元（`templates/github/.github`）の全ファイルを走査し、展開先（`.github/`）に「存在するか」「内容一致するか」のみを検査する一方向ロジックであり、展開先にのみ存在するファイル（配布元に無いファイル）を差分として報告するコードパスを持たない。したがって`agent-skill-chain-release.yml`を配布元から削除しても、本体側の`.github/workflows/agent-skill-chain-release.yml`は「配布元に存在しないファイル」として検査対象外になるだけで、誤検知（未同期エラー）は発生しない。この挙動は`agent-skill-chain-self-test.yml`（Issue #290で同じ構造を先行適用済み）が現にCI green であり続けていることで実証済みである。責務境界: 本コンポーネントを変更対象に含めないことで、無関係な検査ロジックへの改変リスクをゼロにする。
-- **D4: 回帰テスト・実機検証**: (a) `.agent-skill-chain/templates/github/.github/workflows/`配下に`agent-skill-chain-release.yml`が存在しないことを検査する単体テスト、(b) 本体`.github/workflows/agent-skill-chain-release.yml`が存在し既存のステップ構成を保持していることを検査する単体テスト（AC-3の静的側面）、(c) `computeTemplateSyncDiffs`（またはCLI経由の`verify template-sync`）が「展開先にのみ存在し配布元に無いファイル」を差分として報告しないことを確認する回帰テスト（D3の設計意図を将来の実装変更から保護するためのテスト、AC-4）、(d) `node bin/agents-md.js init <tmpdir>`実機実行による目視確認（AC-7、VALIDATION.mdに記録）。PLAN.mdで変更単位として具体化する。
+- **D4: 回帰テスト・実機検証**: (a) `.agent-skill-chain/templates/github/.github/workflows/`配下に`agent-skill-chain-release.yml`が存在しないことを検査する単体テスト、(b) 本体`.github/workflows/agent-skill-chain-release.yml`が存在し既存のステップ構成を保持していることを検査する単体テスト（AC-3の静的側面）、(c) `computeTemplateSyncDiffs`（またはCLI経由の`verify template-sync`）が「展開先にのみ存在し配布元に無いファイル」を差分として報告しないことを確認する回帰テスト（D3の設計意図を将来の実装変更から保護するためのテスト、AC-4）、(d) `node bin/agents-md.js setup github <tmpdir>`実機実行（`.github/`を実際に展開する処理。`init`単独は`.github/`自体を生成しないため対象にならない）による目視確認（AC-7、VALIDATION.mdに記録）。PLAN.mdで変更単位として具体化する。
 - **D5: `SECURITY_POLICY.md`追記**（`.agent-skill-chain/standards/SECURITY_POLICY.md`、配布物）: `agent-skill-chain-root-cleanup.yml`が要求する`secrets.RELEASE_MAIN_PAT`について、(1) 何のためのシークレットか、(2) 未設定時に何が起きるか（admin merge手順が認証エラーで失敗するが、root-cleanupはrequired status checkに含まれないためPRマージ可否には影響しない）、(3) どう対処すべきか（PATを登録して機能を有効化する／無視してよい）を自己完結して記載する。責務境界: `agent-skill-chain-root-cleanup.yml`自体（ワークフロー内容・シークレット名）は一切変更しない（ADR-0017 Decision参照、SPEC.md AC-5の「ドキュメント化」選択肢のみを採用）。
 
 ### 依存関係
