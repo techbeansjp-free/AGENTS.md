@@ -22,7 +22,7 @@
 
 - `agent-skill-chain-release.yml`を配布元テンプレート（`.agent-skill-chain/templates/github/.github/workflows/`）から除外し、本体リポジトリの`.github/workflows/`でのみ直接管理する。
 - `verify-template-sync.sh`（および内部実装である`verify template-sync`サブコマンド）の同期検査を、この除外方針のもとでも正しく機能する形に対応させる。
-- `agent-skill-chain-root-cleanup.yml`が依存する`secrets.RELEASE_MAIN_PAT`という本体専用シークレット名への依存について、対応方針（改名・ドキュメント化・fail-safe明記のいずれか、または組み合わせ）を決定し反映する。
+- `agent-skill-chain-root-cleanup.yml`が依存する`secrets.RELEASE_MAIN_PAT`という本体専用シークレット名への対応方針は、改名を採用せずドキュメント化のみで反映する（理由: 改名すると`verify-template-sync`の同期検査によりconsumer側`.github/workflows/agent-skill-chain-root-cleanup.yml`と本体側の同ファイルの双方が同時改名を強制され、GitHub側でのsecret再登録手順が用意されないまま本体リポジトリ自身の`agent-skill-chain-root-cleanup` runが壊れるregressionリスクがあるため）。
 - 配布テンプレートに含めてよいファイルと本体専用として除外すべきファイルを見分けるための分離基準（「agent-skill-chain本体の開発・配布ライフサイクル運用」 vs 「Issue駆動ガバナンスとしてconsumerも必要とする汎用機能」）を、成果物内に自己完結して文書化する。
 - 本体リポジトリ自身の`agent-skill-chain / release`ワークフローの動作（バージョンbump・タグ・GitHub Release作成）に regression が生じないことを確認する。
 
@@ -30,15 +30,15 @@
 
 #### AC-1: consumerプロジェクトへの新規配布物からrelease.ymlが除外される
 
-- Given: `.agent-skill-chain/templates/github/.github/workflows/`から`agent-skill-chain-release.yml`が除外されている状態
-- When: 任意のconsumerプロジェクト相当のディレクトリに対し`node bin/agents-md.js setup github <target_dir>`（またはビルド後CLIの`setup github`。配布元テンプレート`.agent-skill-chain/templates/github/.github/`を実際に`<target_dir>/.github/`へ展開する処理。`init`/`upgrade`は`.github/`自体を一切生成・更新しないため対象コマンドにならない）を実行する
+- Given: `.agent-skill-chain/templates/github/.github/workflows/`から`agent-skill-chain-release.yml`が除外されている状態。かつ、対象consumerプロジェクト相当のディレクトリのローカル`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/`配下に`agent-skill-chain-release.yml`が存在しない（本Issue適用後に新規`init`したディレクトリである場合、または当該ファイルをローカルに一切保持していない場合。既に`init`/`upgrade`を実行済みで当該ファイルをローカルにstaleなテンプレートとして保持している既存consumerは、この限定に該当せずAC-1の対象外——スコープ外「既知の限界」参照）
+- When: 当該consumerプロジェクト相当のディレクトリに対し`node bin/agents-md.js setup github <target_dir>`（またはビルド後CLIの`setup github`。配布元テンプレート`.agent-skill-chain/templates/github/.github/`を実際に`<target_dir>/.github/`へ展開する処理。`init`/`upgrade`は`.github/`自体を一切生成・更新しないため対象コマンドにならない）を実行する
 - Then: 展開された`<target_dir>/.github/workflows/`に`agent-skill-chain-release.yml`が含まれない
 - 検証方法見込み: `automated`
 
 #### AC-2: staleなrelease.ymlテンプレートを保持していないconsumerへの`upgrade`＋`setup github`再実行ではrelease.ymlが新規配布されない
 
 - Given: `.agent-skill-chain/templates/github/.github/workflows/`から`agent-skill-chain-release.yml`が除外されている状態。かつ、対象consumerプロジェクト相当のディレクトリのローカル`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/`配下に`agent-skill-chain-release.yml`が存在しない（本Issue適用後に新規`init`した場合、または当該ファイルをローカルから既に手動削除済みの場合。`resolveAsset`は`<target_dir>/.agent-skill-chain/`配下のローカルコピーをパッケージ同梱版より優先して解決するため、ローカルにstaleな当該ファイルが残っていないことがこのACの前提条件になる）
-- When: 当該consumerディレクトリに対し`upgrade`（正本アセットのバージョン更新。`copyTreeFailOnConflict`により追加・一致確認のみ行い、配布元から削除されたファイルをconsumer側から追従削除はしない。`.github/`自体は更新しない）を実行したのち、`setup github`（`resolveAsset('templates/github/.github', targetDir)`で解決したテンプレートを`copyTreeMirror`で`.github/`へ再同期する処理）を実行する
+- When: 当該consumerディレクトリに対し`upgrade`（正本アセットのバージョン更新。`copyTreeMirror`はsrc側（配布元テンプレート）をwalkし既存ファイルを内容に関わらず無条件に上書きするが、dest側にのみ存在し配布元に存在しないファイルを削除する処理は一切含まないため、配布元から削除されたファイルをconsumer側から追従削除はしない。`.github/`自体は更新しない）を実行したのち、`setup github`（`resolveAsset('templates/github/.github', targetDir)`で解決したテンプレートを`copyTreeMirror`で`.github/`へ再同期する処理）を実行する
 - Then: `upgrade`・`setup github`実行後も`<target_dir>/.github/workflows/agent-skill-chain-release.yml`が作成されない
 - 検証方法見込み: `automated`
 
@@ -79,7 +79,7 @@
 
 ## スコープ外
 
-- 既に`init`/`upgrade`を実行済みで`agent-skill-chain-release.yml`を保持しているconsumerプロジェクトから、当該ファイルを能動的に削除する仕組み（`upgrade`コマンドへの「配布元から削除されたファイルを追従削除する」機能追加）は対象外とする。Issueの完了条件は今後の誤配布防止を求めるものであり、既存配布先への遡及的クリーンアップは別Issueで扱う。**既知の限界**: この設計上の帰結として、既に`agent-skill-chain-release.yml`をローカルの`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/`配下に保持している既存consumerが、本Issue適用後に`upgrade`（`copyTreeFailOnConflict`のため当該staleファイルを削除しない）に続けて`setup github`を実行すると、`resolveAsset`がパッケージ同梱版より当該ローカルstaleコピーを優先して解決するため、`copyTreeMirror`により当該ファイルが再び`.github/workflows/agent-skill-chain-release.yml`として展開されてしまう（誤配布の再発）。これは能動的削除の仕組みを対象外とした本節の決定の直接の帰結であり、当該consumerが手動で`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml`（ローカルテンプレート）を削除するだけでは解消されない。`copyTreeMirror`（`setup github`が用いる展開処理）はsrc側（配布元テンプレート）をwalkしてdestへコピーするのみで、dest側にのみ存在するファイルを削除する処理を一切含まないため、当該consumerが既に`setup github`まで実行済みで`<target_dir>/.github/workflows/agent-skill-chain-release.yml`（実際に発火しうるアクティブなCIワークフロー本体）が実体化済みの場合、ローカルテンプレートを削除しただけではこの実体化済みファイル自体は残存し続け、以降のpushで発火しうる状態が解消されない。したがって当該consumerは、ローカルテンプレートの削除に加え、既に実体化済みの`.github/workflows/agent-skill-chain-release.yml`自体も`.github/workflows/`配下から手動削除する必要がある。AC-2はこの既存stale保持consumerを対象範囲に含まない。
+- 既に`init`/`upgrade`を実行済みで`agent-skill-chain-release.yml`を保持しているconsumerプロジェクトから、当該ファイルを能動的に削除する仕組み（`upgrade`コマンドへの「配布元から削除されたファイルを追従削除する」機能追加）は対象外とする。Issueの完了条件は今後の誤配布防止を求めるものであり、既存配布先への遡及的クリーンアップは別Issueで扱う。**既知の限界**: この設計上の帰結として、既に`agent-skill-chain-release.yml`をローカルの`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/`配下に保持している既存consumerが、本Issue適用後に`upgrade`（`copyTreeMirror`はsrc側をwalkしてdestへコピーするのみで、dest側にのみ存在するファイルを削除する処理を一切含まないため当該staleファイルを削除しない）に続けて`setup github`を実行すると、`resolveAsset`がパッケージ同梱版より当該ローカルstaleコピーを優先して解決するため、`copyTreeMirror`により当該ファイルが再び`.github/workflows/agent-skill-chain-release.yml`として展開されてしまう（誤配布の再発）。これは能動的削除の仕組みを対象外とした本節の決定の直接の帰結であり、当該consumerが手動で`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml`（ローカルテンプレート）を削除するだけでは解消されない。`copyTreeMirror`（`setup github`が用いる展開処理）はsrc側（配布元テンプレート）をwalkしてdestへコピーするのみで、dest側にのみ存在するファイルを削除する処理を一切含まないため、当該consumerが既に`setup github`まで実行済みで`<target_dir>/.github/workflows/agent-skill-chain-release.yml`（実際に発火しうるアクティブなCIワークフロー本体）が実体化済みの場合、ローカルテンプレートを削除しただけではこの実体化済みファイル自体は残存し続け、以降のpushで発火しうる状態が解消されない。したがって当該consumerは、ローカルテンプレートの削除に加え、既に実体化済みの`.github/workflows/agent-skill-chain-release.yml`自体も`.github/workflows/`配下から手動削除する必要がある。AC-2はこの既存stale保持consumerを対象範囲に含まない。
 - `agent-skill-chain-root-cleanup.yml`自体を配布対象から外すこと（配布継続の是非の見直し）は対象外とする。Issue本文はI4に基づく汎用機能として配布自体は妥当と明記しており、対象はシークレット依存の扱いのみである。
 - marketplace/apm配布経路の再設計・復活は対象外とする（ADR-0005で既に廃止済みであり、本Issueとは無関係）。
 - AGENTS.md本文の大規模な構成変更・不変条件の追加は対象外とする。分離基準の明記は既存の「GitHub配布・マルチAI対応」節の範囲内、または新規/既存ADRへの記載で完結させる。
