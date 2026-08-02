@@ -83,4 +83,4 @@
 - `agent-skill-chain-root-cleanup.yml`自体を配布対象から外すこと（配布継続の是非の見直し）は対象外とする。Issue本文はI4に基づく汎用機能として配布自体は妥当と明記しており、対象はシークレット依存の扱いのみである。
 - marketplace/apm配布経路の再設計・復活は対象外とする（ADR-0005で既に廃止済みであり、本Issueとは無関係）。
 - AGENTS.md本文の大規模な構成変更・不変条件の追加は対象外とする。分離基準の明記は既存の「GitHub配布・マルチAI対応」節の範囲内、または新規/既存ADRへの記載で完結させる。
-- `.agent-skill-chain/templates/github/.github/workflows/`配下の`agent-skill-chain-release.yml`以外のワークフロー（`agent-skill-chain-root-cleanup.yml`を含む）の内容変更（シークレット名以外）は対象外とする。
+- `.agent-skill-chain/templates/github/.github/workflows/`配下の`agent-skill-chain-release.yml`以外のワークフロー（`agent-skill-chain-root-cleanup.yml`を含む）のジョブ定義・トリガー・ステップ構成・`permissions`の変更は対象外とする。ただし次の2点は対象内とする：(1) AC-5が要求する`secrets.RELEASE_MAIN_PAT`という名称自体への方針反映、(2) AC-1による`agent-skill-chain-release.yml`除外の不可避な帰結として、`agent-skill-chain-root-cleanup.yml`ヘッダコメントが同ファイルをファイル名で名指ししている箇所（除外後は配布物内に存在しないファイルを指す記述になる）を、ファイル名に依存しない表現へ書き換えること。この2点以外の内容変更は引き続き対象外とする。
