@@ -43,7 +43,7 @@ D1はD2からのみ呼び出され、D3はD1と独立（detect-segmentsジョブ
 related_adrs: []
 ```
 
-`accepted`のADRの中に本設計と直接関連するものは無い。本Issueで新設する`docs/adr/ADR-0018-gate-report-pending-as-action-required.md`（status: proposed）はこの設計を確定させるADRであり、同一設計セグメントの主成果物であるため`related_adrs:`には計上しない。
+`accepted`のADRの中に本設計と直接関連するものは無い。本Issueで新設する`docs/adr/ADR-0018-gate-report-pending-as-action-required.md`（status: proposed）はこの設計を確定させるADRであり、同一設計セグメントの主成果物であるため`related_adrs:`には計上しない。なお、strictレビュアの指摘（ADR-0018のDecision文言が`human_required`駆動の事実・Publish Check Runのskip条件・`gate reconcile()`のconclusion導出是正に言及していない件）を受け、`docs/adr/ADR-0019-gate-report-human-required-driven-pending-handling.md`（status: proposed、`supersedes: [ADR-0018]`）を同一Issue・同一設計セグメントの成果物として追加した。ADR-0019はADR-0018を置き換える後継ADRであるため、DESIGN.md読者はADR-0018単独ではなくADR-0019も併せて参照する必要がある。ADR-0019も同じ理由（本Issueの設計セグメントの主成果物）で`related_adrs:`には計上しない。
 
 ## 障害・ロールバック考慮
 
