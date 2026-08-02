@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0016
-status: proposed
+status: accepted
 title: codex execサブコマンドが受理しないCLIフラグは-c config overrideへ置換する
 tags: [adapter, codex, gate-reviewer, compatibility]
 supersedes: []
