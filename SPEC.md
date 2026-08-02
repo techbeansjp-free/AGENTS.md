@@ -58,7 +58,7 @@
 
 #### AC-5: `agent-skill-chain-root-cleanup.yml`のシークレット依存についてドキュメント化のみで方針が反映されている（改名は不採用）
 
-- Given: `agent-skill-chain-root-cleanup.yml`が配布対象（consumerも利用する汎用機能）として残り、`secrets.RELEASE_MAIN_PAT`という名称は変更しない（ADR-0017 Decisionで確定した唯一の採用方針。改名は本Issueでは採用しない：改名するとconsumer側の`.github/workflows/agent-skill-chain-root-cleanup.yml`と本体側の同ファイルの双方が`verify-template-sync`の同期検査により同時改名を強制され、GitHub側でのsecret再登録手順が用意されないまま本体リポジトリ自身の`agent-skill-chain-root-cleanup` runが壊れるregressionリスクがあるため）
+- Given: `agent-skill-chain-root-cleanup.yml`が配布対象（consumerも利用する汎用機能）として残り、`secrets.RELEASE_MAIN_PAT`という名称は変更しない（本Issueの設計セグメントで起票されるADR〔本判断の記録専用に起票される〕で確定する唯一の採用方針。改名は本Issueでは採用しない：改名するとconsumer側の`.github/workflows/agent-skill-chain-root-cleanup.yml`と本体側の同ファイルの双方が`verify-template-sync`の同期検査により同時改名を強制され、GitHub側でのsecret再登録手順が用意されないまま本体リポジトリ自身の`agent-skill-chain-root-cleanup` runが壊れるregressionリスクがあるため）
 - When: consumerプロジェクトが`init`後に`setup github`を実行済みで`.github/workflows/agent-skill-chain-root-cleanup.yml`が実体化されており（`init`単独では`.github/`自体が生成されないため当該ワークフローは発火しうる状態にならない。`setup github`実行によりconsumer自身のアクティブなCIとして実体化して初めて発火しうる状態になる）、追加のシークレット設定を行わずに当該ワークフローをmainへのpushで発火させる
 - Then: `.agent-skill-chain/standards/SECURITY_POLICY.md`（配布物、`init`/`upgrade`でconsumerへ展開される）に`secrets.RELEASE_MAIN_PAT`の要求内容・未設定時の挙動・対処方法がドキュメント化されて反映されており、少なくとも「シークレット未設定時に何が起きるか・どう対処すべきか」がconsumer側から自己完結して理解できる
 - 検証方法見込み: `manual`
@@ -76,6 +76,13 @@
 - When: `node bin/agents-md.js setup github <tmpdir>`相当を新規一時ディレクトリに対して実機実行する（`init`単独では`.github/`自体が生成されないため確認対象そのものが存在せず、`.github/`を実際に展開する`setup github`の実行が必要）
 - Then: 展開された`.github/workflows/`一覧に`agent-skill-chain-release.yml`が含まれないことを目視確認できる。あわせて`agent-skill-chain-root-cleanup.yml`は含まれ、そのシークレット依存に関する情報がAC-5の反映内容に沿って確認できる
 - 検証方法見込み: `manual`
+
+#### AC-8: `agent-skill-chain-root-cleanup.yml`ヘッダコメントがファイル名に依存しない表現へ書き換えられている
+
+- Given: 本Issueの実装によりAC-1が要求する`agent-skill-chain-release.yml`の配布物からの除外が反映された状態（スコープ外節が対象内と定める例外(2)への対応）
+- When: `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-root-cleanup.yml`のヘッダコメントを確認する（`grep -n "agent-skill-chain-release.yml" .agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-root-cleanup.yml`で機械的に確認できる）
+- Then: ヘッダコメント中に`agent-skill-chain-release.yml`というファイル名への直接言及が含まれない（grepが0件を返す）。ジョブ定義・トリガー・ステップ構成・`permissions`・シークレット名は無変更のまま、コメント文言のみがファイル名非依存の表現に置き換わっていることを確認する
+- 検証方法見込み: `automated`
 
 ## スコープ外
 
