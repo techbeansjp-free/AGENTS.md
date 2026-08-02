@@ -31,6 +31,8 @@ deprecated-reason: null
 
 **`agent-skill-chain-root-cleanup.yml`のシークレット依存**: `secrets.RELEASE_MAIN_PAT`という名称は変更しない。この名称はADR-0007のDecision本文（accepted、本文は書き換え不可）に明記されており、改名するにはADR-0007をsupersedeする新ADRでその全文を再掲する必要がある。root-cleanupはconsumer側の任意機能（`main.json`のrequired status checksに含まれず、未設定でもPRマージ可否に影響しない）であり、改名によって得られる明確化の便益は、ADR-0007全文再掲という手続き上のコストに見合わない。代わりに、当該シークレットの要求内容・未設定時の挙動・対処方法を`.agent-skill-chain/standards/SECURITY_POLICY.md`（配布物、consumerへ`init`/`upgrade`で展開される）へ追記し、ドキュメント化のみでconsumer側の自己完結した理解を担保する。
 
+加えて、`agent-skill-chain-root-cleanup.yml`のヘッダコメントは現状、シークレット再利用の由来として`agent-skill-chain-release.yml`をファイル名で名指ししている。上記の配布除外決定により、このファイルは今後すべてのconsumer配布物から消えるため、当該コメントを放置すると「配布物内に存在しないファイルを名指しする記述」が恒久的に残り、consumer側の自己完結した理解を損なう。ジョブ定義・トリガー・シークレット名・ステップ構成・`permissions`は一切変更せず、当該コメント中の`agent-skill-chain-release.yml`への名指し参照のみをファイル名に依存しない表現へ書き換える。これはSPEC.mdが定める「root-cleanup.ymlの内容変更（シークレット名以外）は対象外」の対象外条項が想定する運用ロジックの改変には該当しない、release.yml削除決定自体の不可避的な帰結である。
+
 ## Consequences
 
 - `agent-skill-chain-release.yml`が今後の`init`/`upgrade`/`setup github`実行では一切配布されなくなり、consumerプロジェクトのCIへ本体専用のバージョンbump・タグ・GitHub Release作成ロジックが混入する実害が再発しなくなる。
@@ -38,3 +40,4 @@ deprecated-reason: null
 - `verify-template-sync`・`computeTemplateSyncDiffs`のロジックは無変更のため、既存の同期検査の回帰リスクを負わない。本体リポジトリ自身の`agent-skill-chain / release`ワークフローも`.github/workflows/`に存在し続けるため、本体自身のリリース自動化に変更はない。
 - 既に`init`/`upgrade`を実行済みで`agent-skill-chain-release.yml`を保有しているconsumerプロジェクトからの遡及的な削除は行わない（Issue #344 SPEC.mdのスコープ外）。当該consumerは本ADR適用後も手動で削除するまで当該ファイルを保持し続ける。
 - `secrets.RELEASE_MAIN_PAT`という名称を`agent-skill-chain-root-cleanup.yml`に残したままにするため、名称単体からは「本体専用のように見えるがconsumerも独自にこの名前でPATを登録すればroot-cleanup機能を有効化できる」という誤解が完全には解消されない。この残余の分かりにくさは`SECURITY_POLICY.md`への追記で緩和するが、将来consumerからの実際の混乱報告が蓄積した場合は、ADR-0007をsupersedeする改名ADRを別途起票する余地を残す。
+- `agent-skill-chain-root-cleanup.yml`ヘッダコメント中の`agent-skill-chain-release.yml`への名指し参照を書き換えることで、配布後のconsumerが当該コメントを読んでも存在しないファイルを参照する記述に遭遇しなくなる。ジョブ定義・トリガー・シークレット名・ステップ構成は無変更のため、この修正自体が新たな回帰リスクを持ち込むことはない。
