@@ -232,6 +232,39 @@ export async function gateReport(args: string[]): Promise<number> {
       if (report.gate.falsification === 'pending') pendingErrors.push('gate.falsification が pending のままです');
       pendingErrors.push('gate.final が pending のままです');
     }
+    // Issue #349 spec-gate指摘（publish-approved-consistency-guard-unhandled）: final が確定値の場合
+    // conformance/falsification の個別pendingをチェックしない、という上記の免除は「final の値と
+    // conformance/falsification の実値が整合している」場合に限る。final='approved' は
+    // conformance/falsification が両方 pass の場合にのみ成立するという定義（src/commands/gate.ts の
+    // deriveFinal()）を`gate publish`側の`publish()`が既に矛盾ガード（final=approved だが
+    // 両pass でない場合を拒否）として検査しているが、`gateReport()`はこの矛盾を素通りさせていた。
+    // 素通りしたgate-reportは`Verify gate report schema`ステップをexit 0で通過し、後続の
+    // `Publish Check Run`ステップで`publish()`の矛盾ガードにより非0終了する。このステップには
+    // pending救済分岐のような action_required Check Run 発行の救済分岐が無いため、Check Runが
+    // 一つも発行されないままジョブがFAILUREになる——Issue #349が解消しようとした失敗モードそのもの
+    // がこの入力パターンで再現してしまう。ここで検出しotherErrors（非pending違反、exit 1）へ
+    // 計上することで、`publish()`の矛盾ガードへ到達する前に検出し、他の一般的なスキーマ違反と
+    // 同型の扱い（ジョブFAILURE。ただしこれはIssue #349が変更対象とする「pending/human_requiredの
+    // 正常な未確定状態」とは異なる「本当に壊れているgate-report」のケースである）にする。
+    //
+    // final='rejected' 側の同種チェック（rejectedはconformance/falsificationのいずれかがfailの
+    // はず）は意図的に追加しない: standard profile（レビュア1体）でfalsification='fail'
+    // （blocking finding付き）を提出しつつconformanceの網羅チェックを完了させずpendingのまま
+    // 提出することは現実的に起こり得る（DESIGN.md記載の設計判断、design-gate指摘:
+    // pending-fast-path-swallows-rejectedへの是正で確定済み）。この組み合わせは
+    // `gate-report.schema.yaml`上も正当（conformance/falsification/finalの整合を強制する
+    // クロスフィールド制約は無い）であり、`publish()`側にもrejectedの矛盾を拒否するガードは
+    // 存在しない（rejectedはfinal=approvedと異なりexit 0で正常publishされる）。ここでrejectedの
+    // 矛盾チェックを追加すると、publish()側に対応する失敗モードが無いにもかかわらず、この
+    // 正当な組み合わせを誤ってexit 1にしてしまい、Issue #349と同型の新規regressionを生む。
+    if (
+      report.gate.final === 'approved' &&
+      !(report.gate.conformance === 'pass' && report.gate.falsification === 'pass')
+    ) {
+      otherErrors.push(
+        `gate.final が approved なのに gate.conformance=${report.gate.conformance} / gate.falsification=${report.gate.falsification}（両 pass でない）ため矛盾しています`,
+      );
+    }
     // Issue #316: approved_artifactsはreport.gate.target_sha（PRの実際のhead SHA）が指すGit object
     // として検証する。verify-and-publishジョブはprotected base（main）をcheckoutしPR headは
     // working directoryへ反映されないため（PR headはGit objectとしてfetchされるのみ）、

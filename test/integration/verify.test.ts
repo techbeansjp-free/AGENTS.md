@@ -695,6 +695,58 @@ test('verify gate-report (Issue #349): final=human_requiredは確定値として
   assert.match(withViolation.stderr, /approved_artifacts の digest が現在のファイル内容と一致しません: SPEC\.md/);
 });
 
+// Issue #349 spec-gate指摘（publish-approved-consistency-guard-unhandled）: final='approved'なのに
+// conformance/falsificationが両passでない、という`gate publish`側の既存矛盾ガードが本来拒否すべき
+// 「本当に壊れているgate-report」を、`gateReport()`自身が非pending違反（otherErrors）として検出し、
+// `Publish Check Run`ステップの矛盾ガードへ到達する前にexit 1で拒否できることを検証する。
+test('verify gate-report (Issue #349): final=approvedだがconformance/falsificationが両passでないと矛盾としてexit 1になる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add SPEC.md'], { cwd: worktreePath });
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
+
+  // Given: finalのみapprovedへ書き換え、conformance/falsificationは白紙スキャフォールドのまま
+  // pending（`gate publish`の矛盾ガードが本来拒否すべき、真に壊れているgate-report）
+  const contradictoryText = fs.readFileSync(gateReportPath, 'utf8').replace('final: pending', 'final: approved');
+  fs.writeFileSync(gateReportPath, contradictoryText);
+
+  // Then: gateReport()自身がこの矛盾を検出し、非pending違反として終了コード1で拒否する
+  // （publish()の矛盾ガードへ到達する前に検出することで、Check Runが一つも発行されないまま
+  // ジョブがFAILUREになる経路を避ける。exit 1自体は他の一般的なスキーマ違反と同型の扱い）
+  const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /gate\.final が approved なのに gate\.conformance=pending \/ gate\.falsification=pending（両 pass でない）ため矛盾しています/,
+  );
+
+  // When: conformanceのみpassでfalsificationはfailのまま（片方だけpassでも矛盾）
+  const partialPassText = contradictoryText
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: fail');
+  fs.writeFileSync(gateReportPath, partialPassText);
+
+  // Then: 同様に終了コード1で拒否される
+  const partialResult = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(partialResult.status, 1);
+  assert.match(
+    partialResult.stderr,
+    /gate\.final が approved なのに gate\.conformance=pass \/ gate\.falsification=fail（両 pass でない）ため矛盾しています/,
+  );
+});
+
 // Issue #316: verify-and-publishジョブはprotected base（main）をcheckoutしPR headをGit objectとしてのみ
 // fetchするため、working directoryのファイルシステムにapproved_artifacts対象ファイルが存在しなくても、
 // target_shaのGit object上に存在すれば検証が成功しなければならない。
