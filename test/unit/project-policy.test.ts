@@ -106,3 +106,77 @@ test('loadProjectPolicyDocuments: documents.roles.<segment>に登録された文
 
   assert.throws(() => loadProjectPolicyDocuments(root, 'implementation'), /ENOENT/);
 });
+
+test('loadProjectPolicyDocuments: manifest.yamlが権限拒否で読み取れない場合はENOENTへ吸収せず例外を伝播する（AC-4(c)）', (t) => {
+  const root = createPolicyRoot(t);
+  writePolicyDocument(root, 'common.md', 'common policy');
+  writeManifest(root, { common: ['common.md'], roles: {} });
+  const manifestPath = path.join(root, '.agent-skill-chain', 'project', 'manifest.yaml');
+  fs.chmodSync(manifestPath, 0o000);
+  try {
+    assert.throws(() => loadProjectPolicyDocuments(root, 'spec'), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.notEqual((error as NodeJS.ErrnoException).code, 'ENOENT');
+      return true;
+    });
+  } finally {
+    // createPolicyRoot の t.after（rmSync）より先にパーミッションを戻す
+    // （0o000のまま残すとrmSyncより先にこのfinallyが同期実行されるため通常は問題ないが、
+    // 念のためrmSync自体が失敗しないよう復元する）。
+    fs.chmodSync(manifestPath, 0o644);
+  }
+});
+
+test('loadProjectPolicyDocuments: "../"による上位ディレクトリ脱出は拒否する（AC-7）', (t) => {
+  const root = createPolicyRoot(t);
+  fs.writeFileSync(path.join(root, 'outside.md'), 'outside secret', 'utf8');
+  writeManifest(root, { common: ['../../outside.md'], roles: {} });
+
+  assert.throws(() => loadProjectPolicyDocuments(root, 'spec'), /範囲外/);
+});
+
+test('loadProjectPolicyDocuments: 絶対パス指定は拒否する（AC-7、封じ込め境界内を指す場合も含む）', (t) => {
+  const root = createPolicyRoot(t);
+  writePolicyDocument(root, 'common.md', 'common policy');
+  const absolutePath = path.join(root, '.agent-skill-chain', 'project', 'common.md');
+  writeManifest(root, { common: [JSON.stringify(absolutePath)], roles: {} });
+
+  assert.throws(() => loadProjectPolicyDocuments(root, 'spec'), /相対パスである必要があります/);
+});
+
+test('loadProjectPolicyDocuments: symlinkによる範囲外脱出は拒否する（AC-7）', (t) => {
+  const root = createPolicyRoot(t);
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-outside-'));
+  t.after(() => fs.rmSync(outsideDir, { recursive: true, force: true }));
+  const outsideFile = path.join(outsideDir, 'secret.md');
+  fs.writeFileSync(outsideFile, 'outside via symlink', 'utf8');
+  const projectDir = path.join(root, '.agent-skill-chain', 'project');
+  fs.symlinkSync(outsideFile, path.join(projectDir, 'escape.md'));
+  writeManifest(root, { common: ['escape.md'], roles: {} });
+
+  assert.throws(() => loadProjectPolicyDocuments(root, 'spec'), /範囲外/);
+});
+
+test('loadProjectPolicyDocuments: ネストした配下パスは正当に読み込める', (t) => {
+  const root = createPolicyRoot(t);
+  writePolicyDocument(root, 'sub/dir/doc.md', 'nested policy');
+  writeManifest(root, { common: ['sub/dir/doc.md'], roles: {} });
+
+  assert.deepEqual(loadProjectPolicyDocuments(root, 'spec'), ['nested policy']);
+});
+
+test('loadProjectPolicyDocuments: documents.commonとdocuments.roles.<segment>の双方に同一文書が登録されていても1回のみ読み込む（AC-8）', (t) => {
+  const root = createPolicyRoot(t);
+  writePolicyDocument(root, 'common.md', 'common policy');
+  writeManifest(root, { common: ['common.md'], roles: { spec: ['common.md'] } });
+
+  assert.deepEqual(loadProjectPolicyDocuments(root, 'spec'), ['common policy']);
+});
+
+test('loadProjectPolicyDocuments: 同一リスト内で表記違いの重複登録があっても1回のみ読み込む（AC-8）', (t) => {
+  const root = createPolicyRoot(t);
+  writePolicyDocument(root, 'common.md', 'common policy');
+  writeManifest(root, { common: ['common.md', 'roles/../common.md'], roles: {} });
+
+  assert.deepEqual(loadProjectPolicyDocuments(root, 'spec'), ['common policy']);
+});
