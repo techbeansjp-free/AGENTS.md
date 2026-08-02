@@ -645,6 +645,46 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   assert.match(stale.stderr, /approved_artifacts の digest が現在のファイル内容と一致しません: SPEC\.md/);
 });
 
+// Issue #349 blocking finding（human-required-publish-clobbers-reconciled-gate同根の
+// implementation-gate指摘: exit-code-2-branch-unreachable-in-ci）: `gate verify-evidence`
+// （src/commands/gate.tsのverifyGithubReviewEvidence()）は実運用上final='pending'を一切
+// 返さず、「レビュー未了・未確定」を表明する実際の値はfinal='human_required'（conformance/
+// falsificationともpending）である。gateReport()のpending判定基準がfinal==='pending'のみ
+// だった場合、このケースはpendingErrorsに一切計上されずexit 0となり、agent-skill-chain-gate.yml
+// が意図しない経路で`gate publish`まで到達してしまう。final==='human_required'もexit code 2
+// （専用終了コード、違反ではない）として扱われることを検証する。
+test('verify gate-report (Issue #349): final=human_requiredはpendingと同様に専用終了コード2になる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add SPEC.md'], { cwd: worktreePath });
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'spec', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
+
+  // Given: verifyGithubReviewEvidence()が実際に返しうる「レビュー未了・未確定」状態
+  // （conformance/falsificationともpending、finalはhuman_required。approved_artifactsは
+  // 空のままでよい——fail()経路はapproved_artifactsを検証対象にしない）。
+  const humanRequiredText = fs.readFileSync(gateReportPath, 'utf8').replace('final: pending', 'final: human_required');
+  fs.writeFileSync(gateReportPath, humanRequiredText);
+
+  // When/Then: pendingと同じ専用終了コード2になり、違反として扱われない
+  const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /gate\.conformance が pending のままです/);
+  assert.match(result.stderr, /gate\.falsification が pending のままです/);
+  assert.match(result.stderr, /gate\.final が human_required（レビュー未確定）のままです/);
+});
+
 // Issue #316: verify-and-publishジョブはprotected base（main）をcheckoutしPR headをGit objectとしてのみ
 // fetchするため、working directoryのファイルシステムにapproved_artifacts対象ファイルが存在しなくても、
 // target_shaのGit object上に存在すれば検証が成功しなければならない。

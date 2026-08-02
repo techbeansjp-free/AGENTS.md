@@ -150,6 +150,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GATE_ID: ${{ matrix.gate }}
           HEAD_SHA: ${{ needs.detect-segments.outputs.target_sha }}
+        # exit code 2 は「gate.finalがpendingまたはhuman_required（レビュー未確定）」を表す
+        # （verify.tsのgateReport()参照）。gate verify-evidenceが実際に生成するfinalは
+        # approved/rejected/human_requiredのいずれかであり、human_requiredがこの経路で
+        # 到達する「レビュー未了」の実際の値である（Issue #349）。
         run: |
           set +e
           ./.agent-skill-chain/ci/verify-gate-report.sh "${{ steps.evidence.outputs.report_path }}"

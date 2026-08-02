@@ -225,6 +225,53 @@ function expireLease(repoDir: string, issueNumber: string): void {
   fs.writeFileSync(leasePath, stringify(lease), 'utf8');
 }
 
+// Issue #349 blocking finding（human-required-publish-clobbers-reconciled-gate）: reconcileの
+// unchanged分岐（承認済みapproved_artifactsのdigestが新SHAでも不変な場合）は、修正前は
+// conclusionを無条件で'success'に固定していた。永続化済みのgate-reportがまだ確定していない
+// （final='human_required'）状態のまま対象ファイルが変化していないpushが来た場合、無条件'success'は
+// 未確定gateをmergeブロックしない状態へ誤って昇格させてしまう。unchanged分岐でも
+// report.gate.finalに整合したconclusion（human_required→action_required）が再発行されることを
+// 検証する。
+test('gate reconcile (github backend): 永続化済みgate-reportがhuman_requiredのまま無変更commitへreconcileしてもsuccessへ昇格しない', async (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const { repo, sha1 } = setupApprovedSpecAndDesignGates({ backend: 'github', env });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  // Given: spec gateは承認済み（final=approved）だが、design gateは「レビュー未了・未確定」
+  // （gate verify-evidenceが実際に返しうるfinal=human_required、conformance/falsificationとも
+  // pending）のまま永続化されている、という想定を作る（reviews/<gate>.yamlを直接書き換える）。
+  const designReportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'design.yaml');
+  const designReport = parse(fs.readFileSync(designReportPath, 'utf8')) as GateReport;
+  designReport.gate.conformance = 'pending';
+  designReport.gate.falsification = 'pending';
+  designReport.gate.final = 'human_required';
+  fs.writeFileSync(designReportPath, stringify(designReport), 'utf8');
+
+  // When: 承認時と同じsha1（＝成果物が変化していないcommit）を対象に gate reconcile を呼ぶ。
+  const reconcile = runCli(['gate', 'reconcile', 'ISSUE-1', sha1], { cwd: repo.dir, env });
+
+  // Then: 両ゲートともreissuedされる（成果物自体は変化していないため）が、Check Runの
+  // conclusionはreport.gate.finalに整合する必要がある: spec（final=approved）は'success'、
+  // design（final=human_required）は無条件'success'へ昇格せず'action_required'のまま維持される。
+  assert.equal(reconcile.status, 0, reconcile.stderr);
+  assert.match(reconcile.stdout, /reissued: spec, design/);
+  assert.match(reconcile.stdout, /invalidated: \(none\)/);
+
+  const checkRuns = (stub.readState() as unknown as { checkRuns?: CheckRunRecord[] }).checkRuns ?? [];
+  const reconcileRuns = checkRuns.slice(2);
+  assert.deepEqual(
+    reconcileRuns.map((r) => r.conclusion),
+    ['success', 'action_required'],
+  );
+  assert.deepEqual(
+    reconcileRuns.map((r) => r.head_sha),
+    [sha1, sha1],
+  );
+});
+
 test('reconcile (トップレベル): worktreeが無い期限切れleaseはreclaimedされ、lease.yamlが削除される', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

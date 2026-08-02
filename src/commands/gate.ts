@@ -495,6 +495,18 @@ function validateGateId(value: string): asserts value is Segment {
   validateSegment(value);
 }
 
+/**
+ * gate publish / gate reconcile 共通の final → Check Run conclusion 変換。
+ * approved のみ success、rejected のみ failure、それ以外（human_required・pending）は
+ * action_required とする。「無変更なので前回の判定を維持する」場面（reconcile の unchanged 分岐）で
+ * この関数を経由せず conclusion を 'success' に固定すると、まだ human_required（未確定）や
+ * rejected の gate を merge 可能な success へ誤って昇格させてしまう（Issue #349 blocking finding:
+ * human-required-publish-clobbers-reconciled-gate）。
+ */
+function checkRunConclusionForFinal(final: GateReport['gate']['final']): 'success' | 'failure' | 'action_required' {
+  return final === 'approved' ? 'success' : final === 'rejected' ? 'failure' : 'action_required';
+}
+
 /** gate publish / gate reconcile 共通の Check Run 発行処理。 */
 function publishCheckRun(
   root: string,
@@ -617,8 +629,7 @@ export async function publish(args: string[]): Promise<number> {
     }
 
     const checkName = config.checks[report.gate.id];
-    const conclusion =
-      report.gate.final === 'approved' ? 'success' : report.gate.final === 'rejected' ? 'failure' : 'action_required';
+    const conclusion = checkRunConclusionForFinal(report.gate.final);
     const summary =
       report.gate.blockers.length === 0 ? 'no blockers' : `blockers: ${JSON.stringify(report.gate.blockers)}`;
     const published = publishCheckRun(
@@ -687,6 +698,15 @@ export async function reconcile(args: string[]): Promise<number> {
       // Check Runが調整状態の正本（Coordination Backend が GitHub の場合の唯一の正本）のため、
       // 新しいtarget_shaに対して再発行または無効化のCheck Runを明示的に発行し直す必要がある
       // （発行しないと新SHAにrequired status checkが一切存在せず、merge判定が永久にpending留まりになる）。
+      //
+      // Issue #349: unchanged分岐のconclusionは無条件'success'ではなく、承認済みgate-report自体が
+      // 保持しているreport.gate.finalから導出する（checkRunConclusionForFinal、publish()と共通）。
+      // approved_artifactsのdigestが不変であることは「レビュー当時の成果物から変化していない」こと
+      // しか意味せず、そのgateがapprovedだったことを意味しない。human_required（レビュー未確定）や
+      // rejectedのままpush（かつ当該gateの成果物には触れない差分）が来た場合に無条件'success'を
+      // 発行すると、gate.yml側のverify-and-publishジョブが同一SHAへ発行したaction_required/failureの
+      // Check Runを、実行順序次第でreconcileが上書きしてしまうrace conditionになる
+      // （blocking finding: human-required-publish-clobbers-reconciled-gate）。
       if (config.coordination.backend === 'github') {
         const checkName = config.checks[gateId];
         const published = changed
@@ -703,9 +723,9 @@ export async function reconcile(args: string[]): Promise<number> {
               root,
               checkName,
               targetSha,
-              'success',
+              checkRunConclusionForFinal(report.gate.final),
               `${gateId} gate: reconciled`,
-              `approved artifacts unchanged; reissued for ${targetSha}`,
+              `approved artifacts unchanged; reissued for ${targetSha} (final: ${report.gate.final})`,
               canonicalJson(report),
             );
         if (published.error) return fail(`Check Run 再発行に失敗しました（${gateId}）: ${published.error}`);
