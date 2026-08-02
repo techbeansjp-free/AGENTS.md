@@ -59,7 +59,7 @@
 #### AC-5: `agent-skill-chain-root-cleanup.yml`のシークレット依存についてドキュメント化のみで方針が反映されている（改名は不採用）
 
 - Given: `agent-skill-chain-root-cleanup.yml`が配布対象（consumerも利用する汎用機能）として残り、`secrets.RELEASE_MAIN_PAT`という名称は変更しない（ADR-0017 Decisionで確定した唯一の採用方針。改名は本Issueでは採用しない：改名するとconsumer側の`.github/workflows/agent-skill-chain-root-cleanup.yml`と本体側の同ファイルの双方が`verify-template-sync`の同期検査により同時改名を強制され、GitHub側でのsecret再登録手順が用意されないまま本体リポジトリ自身の`agent-skill-chain-root-cleanup` runが壊れるregressionリスクがあるため）
-- When: consumerプロジェクトが`init`直後、追加のシークレット設定を行わずに当該ワークフローをmainへのpushで発火させる
+- When: consumerプロジェクトが`init`後に`setup github`を実行済みで`.github/workflows/agent-skill-chain-root-cleanup.yml`が実体化されており（`init`単独では`.github/`自体が生成されないため当該ワークフローは発火しうる状態にならない。`setup github`実行によりconsumer自身のアクティブなCIとして実体化して初めて発火しうる状態になる）、追加のシークレット設定を行わずに当該ワークフローをmainへのpushで発火させる
 - Then: `.agent-skill-chain/standards/SECURITY_POLICY.md`（配布物、`init`/`upgrade`でconsumerへ展開される）に`secrets.RELEASE_MAIN_PAT`の要求内容・未設定時の挙動・対処方法がドキュメント化されて反映されており、少なくとも「シークレット未設定時に何が起きるか・どう対処すべきか」がconsumer側から自己完結して理解できる
 - 検証方法見込み: `manual`
 
@@ -79,7 +79,7 @@
 
 ## スコープ外
 
-- 既に`init`/`upgrade`を実行済みで`agent-skill-chain-release.yml`を保持しているconsumerプロジェクトから、当該ファイルを能動的に削除する仕組み（`upgrade`コマンドへの「配布元から削除されたファイルを追従削除する」機能追加）は対象外とする。Issueの完了条件は今後の誤配布防止を求めるものであり、既存配布先への遡及的クリーンアップは別Issueで扱う。**既知の限界**: この設計上の帰結として、既に`agent-skill-chain-release.yml`をローカルの`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/`配下に保持している既存consumerが、本Issue適用後に`upgrade`（`copyTreeFailOnConflict`のため当該staleファイルを削除しない）に続けて`setup github`を実行すると、`resolveAsset`がパッケージ同梱版より当該ローカルstaleコピーを優先して解決するため、`copyTreeMirror`により当該ファイルが再び`.github/workflows/agent-skill-chain-release.yml`として展開されてしまう（誤配布の再発）。これは能動的削除の仕組みを対象外とした本節の決定の直接の帰結であり、当該consumerが手動で`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml`を削除するまで解消されない。AC-2はこの既存stale保持consumerを対象範囲に含まない。
+- 既に`init`/`upgrade`を実行済みで`agent-skill-chain-release.yml`を保持しているconsumerプロジェクトから、当該ファイルを能動的に削除する仕組み（`upgrade`コマンドへの「配布元から削除されたファイルを追従削除する」機能追加）は対象外とする。Issueの完了条件は今後の誤配布防止を求めるものであり、既存配布先への遡及的クリーンアップは別Issueで扱う。**既知の限界**: この設計上の帰結として、既に`agent-skill-chain-release.yml`をローカルの`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/`配下に保持している既存consumerが、本Issue適用後に`upgrade`（`copyTreeFailOnConflict`のため当該staleファイルを削除しない）に続けて`setup github`を実行すると、`resolveAsset`がパッケージ同梱版より当該ローカルstaleコピーを優先して解決するため、`copyTreeMirror`により当該ファイルが再び`.github/workflows/agent-skill-chain-release.yml`として展開されてしまう（誤配布の再発）。これは能動的削除の仕組みを対象外とした本節の決定の直接の帰結であり、当該consumerが手動で`<target_dir>/.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml`（ローカルテンプレート）を削除するだけでは解消されない。`copyTreeMirror`（`setup github`が用いる展開処理）はsrc側（配布元テンプレート）をwalkしてdestへコピーするのみで、dest側にのみ存在するファイルを削除する処理を一切含まないため、当該consumerが既に`setup github`まで実行済みで`<target_dir>/.github/workflows/agent-skill-chain-release.yml`（実際に発火しうるアクティブなCIワークフロー本体）が実体化済みの場合、ローカルテンプレートを削除しただけではこの実体化済みファイル自体は残存し続け、以降のpushで発火しうる状態が解消されない。したがって当該consumerは、ローカルテンプレートの削除に加え、既に実体化済みの`.github/workflows/agent-skill-chain-release.yml`自体も`.github/workflows/`配下から手動削除する必要がある。AC-2はこの既存stale保持consumerを対象範囲に含まない。
 - `agent-skill-chain-root-cleanup.yml`自体を配布対象から外すこと（配布継続の是非の見直し）は対象外とする。Issue本文はI4に基づく汎用機能として配布自体は妥当と明記しており、対象はシークレット依存の扱いのみである。
 - marketplace/apm配布経路の再設計・復活は対象外とする（ADR-0005で既に廃止済みであり、本Issueとは無関係）。
 - AGENTS.md本文の大規模な構成変更・不変条件の追加は対象外とする。分離基準の明記は既存の「GitHub配布・マルチAI対応」節の範囲内、または新規/既存ADRへの記載で完結させる。
