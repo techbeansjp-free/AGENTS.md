@@ -6,9 +6,9 @@
 
 ## 目的・背景
 
-`agent-skill-chain-release.yml`（配布元正本: `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml`）は、agent-skill-chain本体（techbeansjp-free/AGENTS.md）自身のnpmパッケージ配布リリース自動化（`package.json`のバージョン自動bump・gitタグ作成・GitHub Release作成。由来: Issue #196、ADR-0005）専用のワークフローである。にもかかわらず`.agent-skill-chain/templates/github/.github/`配下（配布元テンプレート）に置かれているため、`init`/`upgrade`実行時にあらゆるconsumerプロジェクトへそのまま展開される。
+`agent-skill-chain-release.yml`（配布元正本: `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-release.yml`）は、agent-skill-chain本体（techbeansjp-free/AGENTS.md）自身のnpmパッケージ配布リリース自動化（`package.json`のバージョン自動bump・gitタグ作成・GitHub Release作成。由来: Issue #196、ADR-0005）専用のワークフローである。にもかかわらず`.agent-skill-chain/templates/github/.github/`配下（配布元テンプレート）に置かれているため、誤配布の実害は次の2段階の因果経路で発生する。第1段階: `init`/`upgrade`実行時、配布元テンプレート一式の一部として当該ファイルがconsumerプロジェクトの`.agent-skill-chain/templates/github/.github/workflows/`配下（consumer側`.agent-skill-chain/`名前空間内。`init`/`upgrade`は`.github/`自体を一切生成・更新しない）へ非活性なテンプレート実体として複製される。この時点ではCIとして発火する場所（`.github/workflows/`）に存在しないため実害は生じない。第2段階: `setup github`（配布元テンプレート`.agent-skill-chain/templates/github/.github/`を`<target_dir>/.github/`へミラー展開する処理。`init`直後の標準導入手順の一部として実行される場合と、既存consumerに対し`upgrade`後に単独で明示実行される場合がある）を実行すると、当該ファイルがconsumer自身のアクティブなCIワークフローとして`<target_dir>/.github/workflows/agent-skill-chain-release.yml`に実体化し、以降のpushで発火しうる状態になる。
 
-2026-08-02、ユーザーが別プロジェクトへ本ツールを`init`/`upgrade`して実機検証した結果、当該ワークフローがconsumerのCIへ混入することを確認した（実害報告）。このワークフローは`src/**`・`.agent-skill-chain/**`・`AGENTS.md`・`package.json`等、consumerプロジェクトでも日常的に変更されるパスをトリガーに持ち、発火するとconsumer自身の`package.json`のversionを自動bumpし、gitタグ・GitHub Releaseをconsumer側リポジトリ上に無人で作成しようとする。`release-resolve-version.sh`/`release-bump.sh`/`release-tag.sh`/`release-publish.sh`はいずれも「解決したバージョンを対象にbump・tag・releaseする」汎用ロジックであり、対象パッケージがagent-skill-chain自身かconsumerかを区別しない。加えて本ワークフローは`permissions: contents: write`かつ`secrets.RELEASE_MAIN_PAT`（techbeansjp-free/AGENTS.md自身のadmin merge権限を持つ専用PAT）を要求する。secret未設定のconsumerでは当該ステップが失敗しCIが恒常的に赤くなり、仮に同名PATを誤って用意した場合はconsumer自身の`package.json`が意図せず自動bumpされ、無関係なgitタグ・GitHub Releaseが乱立する。
+2026-08-02、ユーザーが別プロジェクトへ本ツールを`init`後`setup github`まで実行する標準導入手順で実機検証した結果、当該ワークフローがconsumerのアクティブなCIへ混入し発火しうる状態になることを確認した（実害報告）。このワークフローは`src/**`・`.agent-skill-chain/**`・`AGENTS.md`・`package.json`等、consumerプロジェクトでも日常的に変更されるパスをトリガーに持ち、発火するとconsumer自身の`package.json`のversionを自動bumpし、gitタグ・GitHub Releaseをconsumer側リポジトリ上に無人で作成しようとする。`release-resolve-version.sh`/`release-bump.sh`/`release-tag.sh`/`release-publish.sh`はいずれも「解決したバージョンを対象にbump・tag・releaseする」汎用ロジックであり、対象パッケージがagent-skill-chain自身かconsumerかを区別しない。加えて本ワークフローは`permissions: contents: write`かつ`secrets.RELEASE_MAIN_PAT`（techbeansjp-free/AGENTS.md自身のadmin merge権限を持つ専用PAT）を要求する。secret未設定のconsumerでは当該ステップが失敗しCIが恒常的に赤くなり、仮に同名PATを誤って用意した場合はconsumer自身の`package.json`が意図せず自動bumpされ、無関係なgitタグ・GitHub Releaseが乱立する。
 
 これは「agent-skill-chain本体固有の設定」と「consumerへ配布すべき汎用ガバナンス機能」の責務分離が崩れているケースであり、過去の`docs/GLOSSARY.md`直書きリーク（[[project_claude-md-dogfooding-leak-fix]]）・Issue #290（配布CIへの自己テストジョブ混入）と同種の再発だが、対象がCIワークフロー本体である点でより実害が大きい。本Issueはこの誤配布を止め、再発を防ぐ分離基準を確定することを目的とする。
 
@@ -16,7 +16,7 @@
 
 ### 要求
 
-リポジトリ管理者（ユーザー）は、consumerプロジェクトへの`init`/`upgrade`によって、agent-skill-chain本体専用のリリース自動化ワークフローが誤配布され、consumer側でCI失敗または意図しないバージョンbump・タグ・GitHub Release作成という実害が発生する状態を解消することを求めている。
+リポジトリ管理者（ユーザー）は、consumerプロジェクトへの`init`/`upgrade`、および`setup github`（`.github/`への実展開を担う処理。`init`直後の標準導入手順の一部として実行される場合と、`upgrade`後に単独で明示実行される場合がある）によって、agent-skill-chain本体専用のリリース自動化ワークフローが誤配布され、consumer側でCI失敗または意図しないバージョンbump・タグ・GitHub Release作成という実害が発生する状態を解消することを求めている。
 
 ### 要件
 
