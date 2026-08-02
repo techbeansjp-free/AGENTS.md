@@ -1,7 +1,7 @@
 # SPEC: project固有ポリシー(manifest.yaml登録文書)がsegment start経由でワーカーへ配布されない
 
 - Issue: `ISSUE-326`
-- 作成者: `orchestrator`
+- 作成者: `spec_worker`
 - 対象ブランチ: `bugfix/326-segment-start-policy-dist`
 
 ## 目的・背景
@@ -25,6 +25,9 @@ AGENTS.md「プロジェクト固有ポリシー」節は「進行役は `manife
 - manifest.yamlが存在するがスキーマに適合しない場合は、サイレントに無視せずエラーとして扱う（I8: 迷ったら安全側）。
 - `documents.common`／`documents.roles.<segment>` に登録されたパスに対応する実ファイルが存在しない、または読み取れない場合も、サイレントにスキップせずエラーとして扱う（I8: 迷ったら安全側。登録済み規範文書が配布されないままワーカーが起動する事態を防ぐ）。
 - パス解決は「実ファイルの存否・可読性」だけでなく「解決結果がどこを指すか」自体を保護対象とする。`documents.common`／`documents.roles.<segment>` の各パスは、`../` 等による上位ディレクトリ脱出・絶対パス指定・`.agent-skill-chain/project/` ディレクトリ外を指すsymlink経由のいずれによっても、`.agent-skill-chain/project/` ディレクトリ配下の外側を解決結果として指してはならない（I8: 既定は常に安全側。`role_contract`起動プロンプトの出力は `.agent-skill-chain/adapters/human.sh` の `launch_worker` がGitHub Issueコメントへ転記する経路を持つため、範囲外パスの解決結果をサイレントに配布すると任意ファイル内容の公開漏洩に直結する）。
+- 同一の実ファイルパスが `documents.common` と `documents.roles.<segment>` の双方に登録されている場合、その内容は出力へ1回のみ含める（重複配布はしない）。
+- 本要求は既存の後方互換契約（AC-3）を manifest.yaml が存在しない場合に限定する。manifest.yamlが存在し `documents.common`／`documents.roles.<segment>` に登録済みの文書実体が欠落している既存 consumer project では、本Issue対応後は `segment start` がAC-6により必ず非0で失敗するようになる（従来は project 固有ポリシーが配布されないまま無害に起動していた）。これは意図した非互換変更であり、I8（迷ったら安全側）を優先する。
+- `documents.common`／`documents.roles.<segment>` に登録する文書の内容は、`.agent-skill-chain/adapters/{claude,human}.sh` が `segment start` の標準出力を `^role:`／`^issue:` を含む行頭アンカーパターンで解析する既存の解析契約に依存する。登録文書の内容がこれらのパターンに一致する行を含む場合、既存の解析結果に影響しうる。本Issueは出力への区切り・出典ラベルの追加を対象外とするため（後述スコープ外節）、この依存関係の是正は行わない。project 固有ポリシー文書を追加する consumer project は、この既知の制約を踏まえて文書内容を作成する必要がある。
 
 ### 受入条件（Acceptance Criteria）
 
@@ -46,14 +49,14 @@ AGENTS.md「プロジェクト固有ポリシー」節は「進行役は `manife
 
 - Given: `.agent-skill-chain/project/manifest.yaml` が存在しない。
 - When: `agent-skill-chain segment start <issue_id> <segment>` を実行する。
-- Then: 現行と同じ出力（`role:` ＋ `issue:`（あれば）＋ `role_contracts` のみ）を返し、エラーにならない。
+- Then: 現行と同じ出力（`role: <role>` 行 ＋ `issue:`（あれば）＋ `.agent-skill-chain/config/roles.yaml` の `role_contracts.<role>` が持つフィールド（`inputs`／`outputs`／`rules`／`completion`／`forbidden` 等）をそのままYAMLとして連結したもの。`role_contracts` という名前のキーで包まれることはない）を返し、エラーにならない。
 - 検証方法見込み: `automated`
 
-#### AC-4: manifest.yamlスキーマ不正時のfail-safe
+#### AC-4: manifest.yaml読み込み不能・スキーマ不正時のfail-safe
 
-- Given: `.agent-skill-chain/project/manifest.yaml` が存在するが、`project-policy` スキーマに適合しない（例: 必須フィールド欠落）。
+- Given: `.agent-skill-chain/project/manifest.yaml` が存在するが、以下のいずれかに該当する：(a) `project-policy` スキーマに適合しない（例: 必須フィールド欠落）、(b) YAMLとして構文解析できない、(c) ファイル権限等により読み取れない。
 - When: `agent-skill-chain segment start <issue_id> <segment>` を実行する。
-- Then: エラーを返し、終了コードは非0になる（サイレントに無視して起動を続けない）。
+- Then: いずれの場合もエラーを返し、終了コードは非0になる（`.agent-skill-chain/project/manifest.yaml` が存在しないケース＝AC-3の後方互換経路へ吸収してはならない。サイレントに無視して起動を続けない）。
 - 検証方法見込み: `automated`
 
 #### AC-5: 既存動作への非破壊
@@ -67,7 +70,7 @@ AGENTS.md「プロジェクト固有ポリシー」節は「進行役は `manife
 
 - Given: `.agent-skill-chain/project/manifest.yaml` の `documents.common` または `documents.roles.<segment>` に、文書パスが登録されているが、`.agent-skill-chain/project/` を基点として解決した実ファイルが存在しない、または読み取れない。
 - When: `agent-skill-chain segment start <issue_id> <segment>` を実行する。
-- Then: エラーを返し、終了コードは非0になる（サイレントにスキップして起動を続けない。AC-4のmanifest.yamlスキーマ不正時のfail-safeとは独立した契約であり、manifest.yaml自体はスキーマに適合しているが登録文書の実体が欠落しているケースを対象とする）。
+- Then: 標準出力へ何も出力せず（当該パスより先に読み込み済みの他の登録文書の内容を含め、部分的な出力も行わない）、エラーを返し、終了コードは非0になる（サイレントにスキップして起動を続けない。AC-4のmanifest.yamlスキーマ不正時のfail-safeとは独立した契約であり、manifest.yaml自体はスキーマに適合しているが登録文書の実体が欠落しているケースを対象とする）。
 - 検証方法見込み: `automated`
 
 #### AC-7: 登録パスの解決範囲逸脱時のfail-safe
