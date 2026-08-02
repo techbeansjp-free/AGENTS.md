@@ -180,3 +180,38 @@ test('loadProjectPolicyDocuments: 同一リスト内で表記違いの重複登�
 
   assert.deepEqual(loadProjectPolicyDocuments(root, 'spec'), ['common policy']);
 });
+
+test('loadProjectPolicyDocuments: 実ファイルとそれを指すsymlinkエイリアスの双方が登録されていても1回のみ読み込む（AC-8）', (t) => {
+  const root = createPolicyRoot(t);
+  writePolicyDocument(root, 'RULES.md', 'rules policy');
+  const projectDir = path.join(root, '.agent-skill-chain', 'project');
+  // 封じ込め境界内のsymlinkエイリアス。実体は同一のRULES.mdを指す。
+  fs.symlinkSync(path.join(projectDir, 'RULES.md'), path.join(projectDir, 'alias.md'));
+  writeManifest(root, { common: ['RULES.md', 'alias.md'], roles: {} });
+
+  assert.deepEqual(loadProjectPolicyDocuments(root, 'spec'), ['rules policy']);
+});
+
+test('loadProjectPolicyDocuments: 同一リスト内に完全同一パスが2重登録されていても1回のみ読み込む（AC-8）', (t) => {
+  const root = createPolicyRoot(t);
+  writePolicyDocument(root, 'RULES.md', 'rules policy');
+  writeManifest(root, { common: ['RULES.md', 'RULES.md'], roles: {} });
+
+  assert.deepEqual(loadProjectPolicyDocuments(root, 'spec'), ['rules policy']);
+});
+
+test('loadProjectPolicyDocuments: manifest.yamlが構文的に不正なYAMLの場合は捕捉せず例外を伝播する（AC-4(b)）', (t) => {
+  const root = createPolicyRoot(t);
+  fs.writeFileSync(
+    path.join(root, '.agent-skill-chain', 'project', 'manifest.yaml'),
+    'documents:\n  common: [unclosed\n',
+    'utf8',
+  );
+
+  assert.throws(() => loadProjectPolicyDocuments(root, 'spec'), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    // ENOENT後方互換経路（空配列フォールバック）へ吸収されず、構文エラーとして送出されること。
+    assert.notEqual((error as NodeJS.ErrnoException).code, 'ENOENT');
+    return true;
+  });
+});
