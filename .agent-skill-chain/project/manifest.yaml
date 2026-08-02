@@ -8,9 +8,8 @@ documents:
     - 自己拡張ワークフロー.md
     - OPERATING_PRINCIPLES.md
     - MODEL_TIER_TABLE.md
-  roles:
-    implementation:
-      - roles/implementation.md
+    - roles/implementation.md
+  roles: {}
 precedence:
   level: project
   overrides:
