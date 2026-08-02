@@ -2,8 +2,11 @@
 # 正本: AGENTS.md §不変条件I2（セグメントゲート）・§ゲートの継承・無効化 / .agent-skill-chain/schemas/gate-report.schema.yaml
 #
 # gate-report が .agent-skill-chain/schemas/gate-report.schema.yaml（schema_version:
-# agent-skill-chain/gate-report/v1）に適合し、gate.conformance と gate.falsification の
-# 両方（立証・反証の2観点）が記録されているかを検査する。gate.id は
+# agent-skill-chain/gate-report/v1）に適合し、target_sha・approved_artifacts の digest が
+# 正当であるかを検査する。判定の確定は gate.final（単一の権威あるフィールド）のみで判断し、
+# final が確定値（approved/rejected/human_required）のときは gate.conformance・
+# gate.falsification の個別 pending を検査しない。final がリテラル pending（gate review の
+# 白紙スキャフォールド）の場合のみ専用終了コード2を返す（Issue #349）。gate.id は
 # spec|design|implementation|validation のいずれか、blockers の各要素は
 # origin（specification|design|implementation|validation）を必須とする。
 #

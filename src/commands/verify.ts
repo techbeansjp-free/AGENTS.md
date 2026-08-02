@@ -192,7 +192,8 @@ export async function artifacts(args: string[]): Promise<number> {
 const GATE_REPORT_USAGE = `
 使い方: agent-skill-chain verify gate-report <gate_report_path>
 
-出力: 0=スキーマ適合かつ判定確定、1=違反・未実装、2=pendingまたはhuman_required（未確定、違反ではない）
+出力: 0=スキーマ適合かつfinal確定（approved/rejected/human_required）、1=違反・未実装、
+      2=final=pending（gate reviewの白紙スキャフォールド。未レビューであり違反ではない）
 `;
 interface GateReport {
   gate: {
@@ -215,22 +216,21 @@ export async function gateReport(args: string[]): Promise<number> {
     const outcome = validateAgainstSchema('gate-report', report, root);
     const otherErrors = [...outcome.errors];
     const pendingErrors: string[] = [];
-    // Issue #349 blocking finding: `gate verify-evidence`（src/commands/gate.ts の
-    // verifyGithubReviewEvidence()）は実運用上 final='pending' を一切返さない
-    // （fail()経路・確定計算経路とも 'approved'|'rejected'|'human_required' のいずれかにしかならない）。
-    // 「まだレビュー未了・未確定」を実際に表明する値は human_required であり、pending は
-    // `gate review`が生成する白紙スキャフォールド（このコマンドが検証する現実の入力には現れない）
-    // にのみ残る値である。final を唯一の権威あるフィールドとする前回是正済みの原則
-    // （design-gate指摘: pending-fast-path-swallows-rejected）は維持しつつ、判定基準を
-    // pending・human_requiredの両方へ広げる。
-    if (report.gate.final === 'pending' || report.gate.final === 'human_required') {
+    // Issue #349: pendingErrors（exit 2の救済分岐）へ計上するのはリテラル final='pending' のみ。
+    // pending は `gate review` が生成する白紙スキャフォールドにのみ存在する値であり、実運用で
+    // gate-report を生成する唯一の経路である `gate verify-evidence`（src/commands/gate.ts の
+    // verifyGithubReviewEvidence()）は 'approved'|'rejected'|'human_required' しか返さないため、
+    // この分岐は理論上の安全側フォールバックである。human_required は「レビュー完了・判定不能で
+    // 人間判断が必要」という確定値（gate-report.schema.yaml の final 定義）であり、`gate publish`
+    // が拒否せず blockers・reviewers・final 実値を含む詳細な action_required Check Run を発行
+    // できるため、ここでは違反にも pending にも計上せず exit 0 で通過させる（design-gate指摘:
+    // human-required-collapsed-into-pending-check-run への是正）。final を唯一の権威ある
+    // フィールドとする原則（design-gate指摘: pending-fast-path-swallows-rejected）は維持し、
+    // final が確定値のときは conformance/falsification の個別 pending をチェックしない。
+    if (report.gate.final === 'pending') {
       if (report.gate.conformance === 'pending') pendingErrors.push('gate.conformance が pending のままです');
       if (report.gate.falsification === 'pending') pendingErrors.push('gate.falsification が pending のままです');
-      pendingErrors.push(
-        report.gate.final === 'pending'
-          ? 'gate.final が pending のままです'
-          : `gate.final が ${report.gate.final}（レビュー未確定）のままです`,
-      );
+      pendingErrors.push('gate.final が pending のままです');
     }
     // Issue #316: approved_artifactsはreport.gate.target_sha（PRの実際のhead SHA）が指すGit object
     // として検証する。verify-and-publishジョブはprotected base（main）をcheckoutしPR headは

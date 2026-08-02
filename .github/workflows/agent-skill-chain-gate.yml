@@ -150,10 +150,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GATE_ID: ${{ matrix.gate }}
           HEAD_SHA: ${{ needs.detect-segments.outputs.target_sha }}
-        # exit code 2 は「gate.finalがpendingまたはhuman_required（レビュー未確定）」を表す
-        # （verify.tsのgateReport()参照）。gate verify-evidenceが実際に生成するfinalは
-        # approved/rejected/human_requiredのいずれかであり、human_requiredがこの経路で
-        # 到達する「レビュー未了」の実際の値である（Issue #349）。
+        # exit code 2 は「gate.finalがリテラルpending（gate reviewが生成する白紙スキャフォールド）」
+        # のみを表す（verify.tsのgateReport()参照）。gate verify-evidenceが実際に生成するfinalは
+        # approved/rejected/human_requiredのいずれかでpendingを返す経路が無いため、この救済分岐は
+        # 実運用では到達しない理論上の安全側フォールバックである。human_required（レビュー完了・
+        # 判定不能で人間判断が必要）はexit 0で通過し、後続のPublish Check Runステップ（gate publish）
+        # がblockers・final実値を含む詳細なaction_required Check Runを発行する（Issue #349）。
         run: |
           set +e
           ./.agent-skill-chain/ci/verify-gate-report.sh "${{ steps.evidence.outputs.report_path }}"

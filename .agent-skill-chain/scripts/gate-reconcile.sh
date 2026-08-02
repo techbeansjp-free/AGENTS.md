@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # 正本: AGENTS.md §ゲートの継承・無効化 / .agent-skill-chain/schemas/gate-report.schema.yaml 無効化ルール
 #
-# pushごとにapproved_artifactsのdigestを照合し、変化なしなら最新SHAへ成功を再発行、
-# 変化ありなら当該ゲートと全下流ゲートを無効化する
-# （対応表は.agent-skill-chain/schemas/gate-report.schema.yaml末尾の無効化ルールを参照）。
+# pushごとにapproved_artifactsのdigestを照合する。変化なしなら最新SHAへ、gate-reportが保持する
+# finalから導出したconclusion（approvedのみsuccess、rejectedはfailure、human_required・pendingは
+# action_required）でCheck Runを再発行し、変化ありなら当該ゲートと全下流ゲートを無効化する
+# （digest不変はゲートがapprovedだったことを意味しないため無条件のsuccess再発行はしない。
+# 対応表は.agent-skill-chain/schemas/gate-report.schema.yaml末尾の無効化ルールを参照）。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
 # `gate reconcile` サブコマンドへの薄いラッパーである（使い方は `gate reconcile -h` 参照）。

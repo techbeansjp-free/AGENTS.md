@@ -107,8 +107,13 @@ definitions:
         items: {type: string}
 
 # --- gate-reconcile.sh 無効化ルール（A-6） ---
-# pushごとに approved_artifacts の digest を照合し、変化なしなら最新head SHAへ成功を再発行、
-# 変化ありなら当該ゲートと全下流ゲートを無効化して再レビューを要求する。
+# pushごとに approved_artifacts の digest を照合する。変化なしなら最新head SHAへ、gate-reportが
+# 保持する final から導出した conclusion（approved のみ success、rejected は failure、
+# human_required・pending は action_required。src/commands/gate.ts の
+# checkRunConclusionForFinal()、publish() と共通）で Check Run を再発行し、
+# 変化ありなら当該ゲートと全下流ゲートを無効化して再レビューを要求する
+# （digest不変は「レビュー当時の成果物から変化していない」ことのみを意味し、
+# 当該ゲートが approved だったことを意味しないため、無条件の success 再発行はしない。Issue #349）。
 #
 # 変更対象                          | 無効化するゲート
 # ---------------------------------|---------------------------------------

@@ -645,15 +645,15 @@ test('verify gate-report: スキーマ適合・digest一致のgate-reportは成�
   assert.match(stale.stderr, /approved_artifacts の digest が現在のファイル内容と一致しません: SPEC\.md/);
 });
 
-// Issue #349 blocking finding（human-required-publish-clobbers-reconciled-gate同根の
-// implementation-gate指摘: exit-code-2-branch-unreachable-in-ci）: `gate verify-evidence`
-// （src/commands/gate.tsのverifyGithubReviewEvidence()）は実運用上final='pending'を一切
-// 返さず、「レビュー未了・未確定」を表明する実際の値はfinal='human_required'（conformance/
-// falsificationともpending）である。gateReport()のpending判定基準がfinal==='pending'のみ
-// だった場合、このケースはpendingErrorsに一切計上されずexit 0となり、agent-skill-chain-gate.yml
-// が意図しない経路で`gate publish`まで到達してしまう。final==='human_required'もexit code 2
-// （専用終了コード、違反ではない）として扱われることを検証する。
-test('verify gate-report (Issue #349): final=human_requiredはpendingと同様に専用終了コード2になる', async (t) => {
+// Issue #349 design-gate指摘（human-required-collapsed-into-pending-check-run）:
+// `human_required`は「レビュー完了・判定不能で人間判断が必要」な確定値（gate-report.schema.yaml
+// のfinal定義）であり、リテラルpending（レビュー未了の白紙スキャフォールド）とは意味が異なる。
+// `gate publish`はリテラルfinal=pendingのみを拒否し、human_requiredはexit 0で詳細情報付き
+// action_required Check Runを発行できるため、verify gate-reportはhuman_requiredをexit 2の
+// 救済分岐（Publish Check Runがskipされ詳細発行が失われる）へ倒さず、非pending違反が無ければ
+// exit 0で通過させて通常のgate publish経路に乗せる。conformance/falsificationが個別にpending
+// のままでも、finalが確定値である以上チェックしない（finalが単一の権威あるフィールド）。
+test('verify gate-report (Issue #349): final=human_requiredは確定値としてexit 0で通過しgate publish経路へ進む', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
@@ -671,18 +671,28 @@ test('verify gate-report (Issue #349): final=human_requiredはpendingと同様�
   assert.equal(gateReview.status, 0, gateReview.stderr);
   const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
 
-  // Given: verifyGithubReviewEvidence()が実際に返しうる「レビュー未了・未確定」状態
+  // Given: verifyGithubReviewEvidence()が実際に返しうる「レビュー未確定」状態
   // （conformance/falsificationともpending、finalはhuman_required。approved_artifactsは
   // 空のままでよい——fail()経路はapproved_artifactsを検証対象にしない）。
   const humanRequiredText = fs.readFileSync(gateReportPath, 'utf8').replace('final: pending', 'final: human_required');
   fs.writeFileSync(gateReportPath, humanRequiredText);
 
-  // When/Then: pendingと同じ専用終了コード2になり、違反として扱われない
+  // When/Then: 違反にもpendingにも計上されずexit 0（後続のgate publishがhuman_requiredの
+  // 詳細情報付きaction_required Check Runを発行する経路へ進む）
   const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /gate\.conformance が pending のままです/);
-  assert.match(result.stderr, /gate\.falsification が pending のままです/);
-  assert.match(result.stderr, /gate\.final が human_required（レビュー未確定）のままです/);
+  assert.equal(result.status, 0, result.stderr);
+
+  // When: human_requiredに加えてapproved_artifactsのdigest不一致（非pending違反）が併存する
+  const mismatchedText = humanRequiredText.replace(
+    'approved_artifacts: []',
+    `approved_artifacts:\n    - path: SPEC.md\n      digest: sha256:${'f'.repeat(64)}`,
+  );
+  fs.writeFileSync(gateReportPath, mismatchedText);
+
+  // Then: finalがhuman_requiredでも非pending違反は素通りせず終了コード1で失敗する（fail-closed）
+  const withViolation = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+  assert.equal(withViolation.status, 1);
+  assert.match(withViolation.stderr, /approved_artifacts の digest が現在のファイル内容と一致しません: SPEC\.md/);
 });
 
 // Issue #316: verify-and-publishジョブはprotected base（main）をcheckoutしPR headをGit objectとしてのみ
