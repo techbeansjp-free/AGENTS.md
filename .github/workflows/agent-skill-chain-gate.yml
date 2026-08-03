@@ -44,17 +44,29 @@ jobs:
         id: context
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
         run: |
           ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
-          APPLICABLE=true
-          if ! [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
-            echo "branchがIssueベース命名規則に一致しないため、agent-skill-chainゲートの対象外として扱います: $BRANCH"
+          if [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
+            APPLICABLE=true
+          elif [[ "$BRANCH" == dependabot/* ]]; then
+            if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
+              APPLICABLE=false
+              ISSUE_ID=""
+            else
+              echo "ブランチ '$BRANCH' は dependabot/ 形式ですが、PR作成者が dependabot[bot] ではありません（実測: ${PR_AUTHOR:-なし}）。Dependabot許可リストに該当しないため照合をスキップできません" >&2
+              exit 1
+            fi
+          elif [[ "$BRANCH" == chore/root-cleanup-* ]]; then
             APPLICABLE=false
             ISSUE_ID=""
+          else
+            echo "branchからIssue IDを解決できません（Dependabot/root-cleanup許可リストにも非該当）: $BRANCH" >&2
+            exit 1
           fi
           echo "applicable=$APPLICABLE" >> "$GITHUB_OUTPUT"
           PROFILE=standard
