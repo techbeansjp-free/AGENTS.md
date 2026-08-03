@@ -19,7 +19,11 @@
 
 ## 目的・背景
 
-`.agent-skill-chain/scripts/cleanup.sh`（agent-skill-chain CLIの`cleanup`サブコマンドへの薄いラッパー）は、対応するPR/Integration Recordが完了済み（merged/closed）であり、writer lease不在・未commit/未push差分が無いことを検査した上でworktreeを削除する機能を持つ。しかし、この検査・削除を自動的に呼び出す仕組みは存在しない。PRがマージ（またはclose）された後、誰かが該当Issue IDを覚えていて手動で`cleanup`を実行しない限り、`.worktrees/`配下のディレクトリは無期限に放置され続ける。
+`.agent-skill-chain/scripts/cleanup.sh`（agent-skill-chain CLIの`cleanup`サブコマンドへの薄いラッパー）は、対応するPR/Integration Recordが完了済み（merged/closed）であり、writer lease不在・未commit/未push差分が無いことを検査した上でworktreeを削除する機能を持つ。この「merged/closedのみを完了済みとみなす」削除実行条件は`cleanup.sh`自身の既存の判定ロジックであり、本Issueはこれを変更しない（詳細はスコープ外を参照）。
+
+本Issueが追加するのは、この`cleanup.sh`自身の削除実行条件とは別レイヤの、doctorによる警告検知条件である。この警告検知条件は、`cleanup.sh`自身の削除実行条件（merged/closedのみ）よりも広い状態集合を対象とし、merged/closedに加えて`closed_without_merge`（却下・放棄。前提・用語を参照）に対応する残存worktreeも検知・警告の対象とする（詳細は要件・AC-1を参照）。closed_without_mergeの場合も、対応するPR/branchの作業サイクルとしては終了しており、worktreeが放置され続けるという実害は merged/closed の場合と同様に生じるためである。
+
+しかし、`cleanup.sh`自体を自動的に呼び出す仕組みは存在しない。PRがマージ（またはclose。closed_without_mergeを含む）された後、誰かが該当Issue IDを覚えていて手動で`cleanup`を実行しない限り、`.worktrees/`配下のディレクトリは無期限に放置され続ける。
 
 **実害report 1**：別の消費者プロジェクトで、PRマージ後にworktreeディレクトリが放置される事象が2026-08-02に報告された。エージェントが手動でcleanup実行を提案・委譲する形で対応したが、根本的な自動化は存在しなかった。
 
