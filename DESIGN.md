@@ -40,7 +40,7 @@ design-gate strictレビューにて、AC-2の「意図的に大量のオブジ�
 本節が定めるテストは、新規ファイル`test/integration/gate-reviewer-prompt-determinism.test.ts`に実装する（既存の`test/integration/gate-judgment.test.ts`はAC-1・AC-4の単一clone内検証を扱うファイルであり、本節が要する複数clone・大量オブジェクト投入という異なるセットアップ責務を混在させないため、新規ファイルへ分離する）。
 
 - `git`の`core.abbrev=auto`は、実行時にリポジトリが保持する総オブジェクト数から一意性を確保できると推定される最小桁数を算出し、必要であれば実際の衝突検査によりさらに桁数を伸長する。したがって`core.abbrev`を明示設定せずとも、総オブジェクト数を十分大きくするだけで一意性伸長を実際に発生させることができ、SPEC.md AC-2のGiven条件（「意図的に大量のオブジェクトを追加投入して……実際に発生する状態を再現したclone」）をそのまま満たせる。
-- 回帰テスト用cloneでは、一意な内容を持つ大量のblobオブジェクトを機械的に生成・登録する（例: `git hash-object -w --stdin`をループ実行、または`git fast-import`によるバッチ投入）。必要個数は固定の決め打ちにせず、テスト実行時に「そのcloneで`git rev-parse --short`等が返す既定abbrev桁数が、オブジェクト追加前のベースラインcloneの桁数を上回っていること」を事前条件アサーションとして確認し、満たすまで投入数を増やす。これによりgitバージョン間のヒューリスティック差異に依存せず、一意性伸長の実発生を毎回機械的に保証する。
+- 回帰テスト用cloneでは、一意な内容を持つ大量のblobオブジェクトを機械的に生成・登録する（例: `git hash-object -w --stdin`をループ実行、または`git fast-import`によるバッチ投入）。必要個数は固定の決め打ちにせず、テスト実行時に「そのcloneで`git rev-parse --short`等が返す既定abbrev桁数が、オブジェクト追加前のベースラインcloneの桁数を上回っていること」を事前条件アサーションとして確認し、満たすまで投入数を増やす。これによりgitバージョン間のヒューリスティック差異に依存せず、一意性伸長の実発生を毎回機械的に保証する。ただし無限ループを避けるため投入数に上限（例: 20,000個）を設け、上限に達しても伸長条件を満たさない場合はテストを失敗として扱う（実行環境のgitヒューリスティック異常を早期に検知するため）。
 - 一意性伸長が実発生した上記cloneと、追加投入を行っていないベースラインcloneの双方で`--full-index`追加後の`buildReviewerPrompt()`を実行し、出力バイト列が完全一致することを検証する。これによりAC-1が要求する「`--abbrev`の自動伸長機構に一切依存しない」ことを、SPEC.md AC-2のGiven条件どおりの条件下で直接証明する。
 - 上記に加え、`core.abbrev`を明示的に異なる値（例: `7`・`12`）に固定したcloneでも出力が一致することを補助的に検証し、`--full-index`が`core.abbrev`の設定値そのものにも左右されないことを確認する。この補助検証は主検証（実オブジェクト数由来の一意性伸長）を代替するものではない。
 
@@ -48,8 +48,8 @@ design-gate strictレビューにて、AC-2の「意図的に大量のオブジ�
 
 AC-4は「修正前後で同一の入力を与えたとき、hash桁数表記を除き他の内容が修正前と同一」であることを求めるが、本fix適用後のリポジトリには「修正前」のコードが存在しないため、実行時に修正前後を再現して比較することはできない。これを解決するため、golden snapshotをリポジトリへ固定コミットする方式を採る。
 
-- 固定入力（`issue_number`・`gate_id`・`target_sha`・`base_sha`を固定した最小fixtureリポジトリ、`test/fixtures/`配下に既存の類似fixture方式があればそれに合わせて配置）に対して、本Issueの実装変更単位#1（`--full-index`追加）適用**前**の`buildReviewerPrompt()`を1回実行した出力を、`test/fixtures/gate-reviewer-prompt-golden.txt`としてリポジトリに固定コミットする。このgoldenファイルは以降再生成しない固定値として扱う。
-- 新規テスト（`test/integration/gate-judgment.test.ts`へ追加）では、変更単位#1適用後の`buildReviewerPrompt()`出力に対し、「判定対象の差分」セクション内のhash桁数表記行（`index <hash>..<hash>`等）のみを正規表現で除去・正規化したうえで、goldenファイルの同一箇所を同じ正規化にかけた文字列と完全一致することを検証する。これにより「diff区間のhash桁数表記を除き修正前と同一」というAC-4の条件を、実際に修正前のコードを再実行することなく機械的に証明する。
+- golden snapshot生成は、コード変更を一切含まない独立した変更単位として、`--full-index`追加（PLAN.md変更単位#2）より**前**に着手する最初の変更単位（PLAN.md変更単位#1）に位置づける。`buildReviewerPrompt()`（`src/commands/gate.ts`）がまだ`--full-index`引数を含まない現状のコード状態のまま、固定入力（`issue_number`・`gate_id`・`target_sha`・`base_sha`を固定した最小fixtureリポジトリ、`test/fixtures/`配下に既存の類似fixture方式があればそれに合わせて配置）に対して`buildReviewerPrompt()`を1回実行し、その出力を`test/fixtures/gate-reviewer-prompt-golden.txt`としてリポジトリに固定コミットする。この変更単位を`--full-index`追加より先に完了・コミットしておくことで、「修正前」コードを事後的に復元する手段を用意する必要なく、その出力を確実に捕捉できる。このgoldenファイルは以降再生成しない固定値として扱う。
+- 新規テスト（`test/integration/gate-judgment.test.ts`へ追加、実装はPLAN.md変更単位#3で行う）では、`--full-index`追加（変更単位#2）適用後の`buildReviewerPrompt()`出力に対し、「判定対象の差分」セクション内のhash桁数表記行（`index <hash>..<hash>`等）のみを正規表現で除去・正規化したうえで、goldenファイルの同一箇所を同じ正規化にかけた文字列と完全一致することを検証する。これにより「diff区間のhash桁数表記を除き修正前と同一」というAC-4の条件を、実際に修正前のコードを再実行することなく機械的に証明する。
 - goldenファイル自体が意図せず陳腐化しないよう、goldenファイル生成に用いた固定入力（fixtureリポジトリの内容・`target_sha`・`base_sha`）をテストコード内にコメントではなくアサーション対象の定数として明記し、fixture側が変更された場合はgoldenファイルとの不一致としてテストが失敗する構成にする。
 
 ## 関連ADR
