@@ -2,8 +2,8 @@
 // Issue #219: 許可判定の基準を push 実行者（github.actor）から PR/ブランチの起源（実PR作成者）へ
 // 是正した構造を固定化する。本テストは、①ガードが必要な追跡系ステップに存在すること、
 // ②存在してはならないステップ（verify-template-sync・npm ci/build）には存在しないこと、
-// ③ci の判定が PR 作成者（pull_request.user.login）由来であること、④reconcile が job 条件でなく
-// step-level 3分岐（実PR作成者のAPI確認）で判定し、判定に github.actor を用いないこと、
+// ③ci の判定が PR 作成者（pull_request.user.login）由来であること、④reconcile が
+// pull_request_targetの構造化PRコンテキストで判定し、github.actorやPR検索APIを用いないこと、
 // ⑤本体2ファイルとテンプレート正本2ファイルが完全一致することを、
 // ワークフローYAMLの実体を直接パースして検証する。
 import { test } from 'node:test';
@@ -52,6 +52,7 @@ interface CiWorkflow {
 }
 
 interface ReconcileWorkflow {
+  on?: { pull_request_target?: { types?: string[] } };
   permissions?: Record<string, string>;
   jobs: { reconcile: { if?: string; steps: Step[] } };
 }
@@ -163,28 +164,35 @@ test('ci: Derive issue_id の env.ACTOR は PR 作成者（pull_request.user.log
   assert.ok(!nonCommentContent(CI_BODY).includes('github.actor'), 'ci.yml が github.actor を一切参照しないこと');
 });
 
-// --- ④ reconcile: step-level 3分岐で実PR作成者を確認し、判定に github.actor を用いないこと ---
+// --- ④ reconcile: 構造化PRコンテキストで実PR作成者を確認し、github.actorを用いないこと ---
 
 function reconcileWf(): ReconcileWorkflow {
   return readYamlFile<ReconcileWorkflow>(RECONCILE_BODY);
 }
 
-test('reconcile: jobs.reconcile に job-level if の早期スキップが存在しない', () => {
-  assert.equal(reconcileWf().jobs?.reconcile?.if, undefined, 'jobs.reconcile.if が存在しないこと');
+test('reconcile: pull_request_target synchronize と default branch 条件を使う', () => {
+  const workflow = reconcileWf();
+  assert.deepEqual(workflow.on?.pull_request_target?.types, ['synchronize']);
+  assert.equal(
+    workflow.jobs.reconcile.if,
+    'github.event.pull_request.base.ref == github.event.repository.default_branch',
+  );
 });
 
-test('reconcile: Derive issue_id が3分岐で実PR作成者を gh api で確認し dependabot[bot] と比較する', () => {
+test('reconcile: Derive issue_id が構造化PRコンテキストでDependabotを判定する', () => {
   const steps = reconcileWf().jobs.reconcile.steps;
   const ctx = steps.find((s) => s.id === 'ctx');
   assert.ok(ctx, "id 'ctx' のステップ（Derive issue_id）が存在すること");
   const run = (ctx as Step).run ?? '';
+  assert.equal(ctx.env?.BRANCH, '${{ github.event.pull_request.head.ref }}');
+  assert.equal(ctx.env?.PR_AUTHOR, '${{ github.event.pull_request.user.login }}');
   assert.ok(run.includes('skip_checks=false'), '第1分岐: branch.pattern 一致で skip_checks=false を出力すること');
   assert.ok(run.includes('dependabot/*'), '第2分岐: dependabot/ 始まりのブランチを判定すること');
-  assert.ok(run.includes('pulls?head='), '第2分岐: 対応する開いているPRを head ブランチで検索すること');
-  assert.ok(run.includes('.[0].user.login // empty'), '第2分岐: PR作成者 login を抽出すること');
   assert.ok(run.includes('dependabot[bot]'), '第2分岐: PR作成者を dependabot[bot] と比較すること');
   assert.ok(run.includes('skip_checks=true'), '第2分岐: 一致時のみ skip_checks=true を出力すること');
+  assert.ok(run.includes('chore/root-cleanup-*'), 'root-cleanupブランチを明示的にskipすること');
   assert.ok(run.includes('exit 1'), '不一致/empty・非該当ブランチで exit 1 すること');
+  assert.ok(!run.includes('gh api'), 'PR作成者の判定にAPI検索を使わないこと');
   assert.ok(!nonCommentContent(RECONCILE_BODY).includes('github.actor'), 'reconcile.yml が github.actor を一切参照しないこと');
 });
 
@@ -198,8 +206,20 @@ test("reconcile: 照合ステップに skip_checks ガードの if が付与さ�
   );
 });
 
-test("reconcile: permissions に pull-requests: read が含まれる（PR検索APIに必要）", () => {
-  assert.equal(reconcileWf().permissions?.['pull-requests'], 'read');
+test('reconcile: 必要な4権限だけを宣言する', () => {
+  assert.deepEqual(reconcileWf().permissions, {
+    contents: 'read',
+    checks: 'write',
+    'pull-requests': 'read',
+    actions: 'read',
+  });
+});
+
+test('reconcile: 対象SHAとPR番号は構造化PRコンテキストから渡す', () => {
+  const step = findByName(reconcileWf().jobs.reconcile.steps, 'Reconcile gates');
+  assert.ok(step.run?.includes('${{ github.event.pull_request.head.sha }}'));
+  assert.ok(step.run?.includes('${{ github.event.pull_request.number }}'));
+  assert.ok(!step.run?.includes('${{ github.sha }}'));
 });
 
 // --- ⑤ 本体2ファイルとテンプレート正本2ファイルの完全一致（verify-template-sync とは独立に固定化）---

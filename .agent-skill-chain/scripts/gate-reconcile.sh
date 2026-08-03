@@ -6,7 +6,8 @@
 # （対応表は.agent-skill-chain/schemas/gate-report.schema.yaml末尾の無効化ルールを参照）。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
-# `gate reconcile` サブコマンドへの薄いラッパーである（使い方は `gate reconcile -h` 参照）。
+# `gate reconcile <issue_id> <target_sha> [pr_number]` サブコマンドへの薄いラッパーである
+# （使い方は `gate reconcile -h` 参照）。
 
 set -euo pipefail
 

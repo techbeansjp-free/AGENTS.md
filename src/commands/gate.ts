@@ -79,7 +79,7 @@ const PUBLISH_USAGE = `
 `;
 
 const RECONCILE_USAGE = `
-使い方: agent-skill-chain gate reconcile <issue_id> <target_sha>
+使い方: agent-skill-chain gate reconcile <issue_id> <target_sha> [pr_number]
 
 出力:
   成功時: 終了コード0。再発行または無効化したゲートIDの一覧を標準出力へ。
@@ -193,6 +193,16 @@ export interface GateReport {
     review_attempt?: VerifiedReviewAttempt;
   };
 }
+
+type ApprovedArtifact = GateReport['gate']['approved_artifacts'][number];
+type ApprovedBaseline =
+  | { found: true; approvedArtifacts: ApprovedArtifact[] }
+  | { found: false };
+
+const TRUSTED_WORKFLOW_EVENTS: Readonly<Record<string, readonly string[]>> = {
+  '.github/workflows/agent-skill-chain-gate.yml': ['pull_request_target', 'pull_request_review'],
+  '.github/workflows/agent-skill-chain-reconcile.yml': ['pull_request_target'],
+};
 
 interface ReviewerVerdict {
   conformance?: 'pass' | 'fail' | 'pending';
@@ -635,14 +645,137 @@ export async function publish(args: string[]): Promise<number> {
   });
 }
 
+function parseCheckRuns(stdout: string): {
+  id?: number;
+  conclusion?: string | null;
+  check_suite?: { id?: number } | null;
+  output?: { text?: string | null } | null;
+}[] {
+  const parsed = JSON.parse(stdout) as
+    | { check_runs?: unknown[] }
+    | { check_runs?: unknown[] }[];
+  const pages = Array.isArray(parsed) ? parsed : [parsed];
+  return pages.flatMap((page) => (Array.isArray(page.check_runs) ? page.check_runs : [])) as {
+    id?: number;
+    conclusion?: string | null;
+    check_suite?: { id?: number } | null;
+    output?: { text?: string | null } | null;
+  }[];
+}
+
+function parseWorkflowRuns(stdout: string): { path?: string; event?: string }[] {
+  const parsed = JSON.parse(stdout) as
+    | { workflow_runs?: unknown[] }
+    | { workflow_runs?: unknown[] }[];
+  const pages = Array.isArray(parsed) ? parsed : [parsed];
+  return pages.flatMap((page) => (Array.isArray(page.workflow_runs) ? page.workflow_runs : [])) as {
+    path?: string;
+    event?: string;
+  }[];
+}
+
+function parseApprovedArtifacts(text: string, root: string): ApprovedArtifact[] | undefined {
+  try {
+    const report = JSON.parse(text) as GateReport;
+    const validation = validateAgainstSchema('gate-report', report, root);
+    if (!validation.valid) return undefined;
+    return report.gate.approved_artifacts;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveApprovedBaseline(
+  root: string,
+  gateId: Segment,
+  targetSha: string,
+  checkName: string,
+  prNumber?: string,
+): ApprovedBaseline {
+  let resolvedPrNumber = prNumber;
+  if (!resolvedPrNumber) {
+    const pullsResponse = gh(
+      ['api', `repos/{owner}/{repo}/commits/${targetSha}/pulls?per_page=100`, '--paginate', '--slurp'],
+      root,
+    );
+    if (pullsResponse.status !== 0) {
+      throw new CliError(`対象SHAに対応するPRを取得できません（${gateId}）: ${pullsResponse.stderr.trim()}`);
+    }
+    const pulls = parseGhList<{ number?: number }>(pullsResponse.stdout);
+    const number = pulls.find((pull) => Number.isSafeInteger(pull.number) && Number(pull.number) > 0)?.number;
+    if (!number) return { found: false };
+    resolvedPrNumber = String(number);
+  }
+
+  const commitsResponse = gh(
+    ['api', `repos/{owner}/{repo}/pulls/${resolvedPrNumber}/commits?per_page=100`, '--paginate', '--slurp'],
+    root,
+  );
+  if (commitsResponse.status !== 0) {
+    throw new CliError(`PRコミット履歴を取得できません（${gateId}）: ${commitsResponse.stderr.trim()}`);
+  }
+  const commits = parseGhList<{ sha?: string }>(commitsResponse.stdout);
+  const targetIndex = commits.findIndex((commit) => commit.sha === targetSha);
+  if (targetIndex < 0) {
+    throw new CliError(`target_shaがPRコミット履歴に存在しません（${gateId}）: ${targetSha}`);
+  }
+
+  for (const commit of commits.slice(0, targetIndex).reverse()) {
+    if (!commit.sha) continue;
+    const checksResponse = gh(
+      [
+        'api',
+        `repos/{owner}/{repo}/commits/${commit.sha}/check-runs?check_name=${encodeURIComponent(checkName)}&filter=all&per_page=100`,
+        '--paginate',
+        '--slurp',
+      ],
+      root,
+    );
+    if (checksResponse.status !== 0) {
+      throw new CliError(`Check Run履歴を取得できません（${gateId}）: ${checksResponse.stderr.trim()}`);
+    }
+
+    const successfulChecks = parseCheckRuns(checksResponse.stdout)
+      .filter((check) => check.conclusion === 'success')
+      .sort((left, right) => (right.id ?? 0) - (left.id ?? 0));
+    for (const candidate of successfulChecks) {
+      const checkSuiteId = candidate.check_suite?.id;
+      if (!Number.isSafeInteger(checkSuiteId) || Number(checkSuiteId) <= 0) continue;
+      const actionsResponse = gh(
+        [
+          'api',
+          `repos/{owner}/{repo}/actions/runs?check_suite_id=${checkSuiteId}&head_sha=${encodeURIComponent(commit.sha)}&per_page=100`,
+          '--paginate',
+          '--slurp',
+        ],
+        root,
+      );
+      if (actionsResponse.status !== 0) {
+        throw new CliError(`Check Run発行元を取得できません（${gateId}）: ${actionsResponse.stderr.trim()}`);
+      }
+      const trustedSource = parseWorkflowRuns(actionsResponse.stdout).some((run) => {
+        const allowedEvents = run.path ? TRUSTED_WORKFLOW_EVENTS[run.path] : undefined;
+        return Boolean(allowedEvents && run.event && allowedEvents.includes(run.event));
+      });
+      if (!trustedSource || typeof candidate.output?.text !== 'string') continue;
+      const approvedArtifacts = parseApprovedArtifacts(candidate.output.text, root);
+      if (approvedArtifacts) return { found: true, approvedArtifacts };
+    }
+  }
+  return { found: false };
+}
+
 export async function reconcile(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
       printUsage(RECONCILE_USAGE);
       return 0;
     }
-    const [issueIdRaw, targetSha] = args;
+    const [issueIdRaw, targetSha, prNumber] = args;
     if (!issueIdRaw || !targetSha) throw new CliError('issue_id, target_sha はすべて必須です');
+    if (prNumber && (!/^[1-9][0-9]*$/.test(prNumber) || !Number.isSafeInteger(Number(prNumber)))) {
+      throw new CliError(`pr_numberは正の安全な整数である必要があります: '${prNumber}'`);
+    }
     const { number } = parseIssueId(issueIdRaw);
 
     const root = repoRoot();
@@ -663,9 +796,15 @@ export async function reconcile(args: string[]): Promise<number> {
         continue; // このゲートは未レビュー・未発行
       }
 
+      const baseline =
+        config.coordination.backend === 'github'
+          ? resolveApprovedBaseline(root, gateId, targetSha, config.checks[gateId], prNumber)
+          : { found: true as const, approvedArtifacts: report.gate.approved_artifacts };
+      if (!baseline.found) continue;
+
       const changed =
         downstreamInvalidated ||
-        report.gate.approved_artifacts.some(
+        baseline.approvedArtifacts.some(
           (artifact) =>
             artifactDigestAtSha(root, artifact.path, targetSha, gateId === 'implementation') !== artifact.digest,
         );
@@ -679,6 +818,9 @@ export async function reconcile(args: string[]): Promise<number> {
         downstreamInvalidated = true;
       } else {
         report.gate.target_sha = targetSha;
+        if (config.coordination.backend === 'github') {
+          report.gate.approved_artifacts = baseline.approvedArtifacts;
+        }
         writeYamlFileAtomic(reportPath, report);
         refreshed.push(gateId);
       }

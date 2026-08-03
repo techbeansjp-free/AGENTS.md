@@ -288,6 +288,13 @@ if (cmd === 'api') {
   const hasInput = args.includes('--input');
   const body = hasInput ? readStdin() : '';
   const state = loadState();
+  state.apiCalls = state.apiCalls || [];
+  state.apiCalls.push({ method, path: apiPath });
+  saveState(state);
+  if ((state.failApiPaths || []).some((fragment) => apiPath.includes(fragment))) {
+    process.stderr.write('gh-stub: simulated api failure: ' + method + ' ' + apiPath + '\\n');
+    process.exit(1);
+  }
 
   if (apiPath === 'repos/{owner}/{repo}' && method === 'GET') {
     process.stdout.write(JSON.stringify({
@@ -402,6 +409,11 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  if (/\\/commits\\/[^/]+\\/pulls(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
+    process.stdout.write(JSON.stringify(state.commitPulls || []));
+    process.exit(0);
+  }
+
   if (/\\/pulls\\/\\d+\\/reviews(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
     process.stdout.write(JSON.stringify(state.pullReviews || []));
     process.exit(0);
@@ -424,8 +436,26 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
-  if (/\\/commits\\/[^/]+\\/check-runs(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify({ check_runs: state.checkRuns || [] }));
+  const commitChecksMatch = /\\/commits\\/([^/]+)\\/check-runs(?:\\?(.*))?$/.exec(apiPath || '');
+  if (commitChecksMatch && method === 'GET') {
+    const params = new URLSearchParams(commitChecksMatch[2] || '');
+    const checkName = params.get('check_name');
+    const headSha = decodeURIComponent(commitChecksMatch[1]);
+    const checkRuns = (state.checkRuns || []).filter((check) =>
+      (!checkName || check.name === checkName) && check.head_sha === headSha,
+    );
+    process.stdout.write(JSON.stringify({ check_runs: checkRuns }));
+    process.exit(0);
+  }
+
+  if (/\\/actions\\/runs(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
+    const params = new URLSearchParams((apiPath.split('?')[1] || ''));
+    const checkSuiteId = params.get('check_suite_id');
+    const headSha = params.get('head_sha');
+    const actionRuns = (state.actionRuns || []).filter((run) =>
+      (!checkSuiteId || String(run.check_suite_id) === checkSuiteId) && (!headSha || run.head_sha === headSha),
+    );
+    process.stdout.write(JSON.stringify({ workflow_runs: actionRuns }));
     process.exit(0);
   }
 
@@ -437,15 +467,26 @@ if (cmd === 'api') {
   if (/\\/check-runs$/.test(apiPath || '') && method === 'POST') {
     const parsed = JSON.parse(body);
     const id = state.nextId++;
+    const checkSuiteId = state.nextCheckSuiteId || 1000;
+    state.nextCheckSuiteId = checkSuiteId + 1;
     state.checkRuns = state.checkRuns || [];
     state.checkRuns.push(Object.assign({
       id,
+      check_suite: { id: checkSuiteId },
       app: state.checkApp || {
         id: 15368,
         name: 'GitHub Actions',
         slug: state.checkAppSlug || 'github-actions',
       },
     }, parsed));
+    state.actionRuns = state.actionRuns || [];
+    state.actionRuns.push({
+      id: state.nextId++,
+      check_suite_id: checkSuiteId,
+      head_sha: parsed.head_sha,
+      path: state.publishedCheckWorkflowPath || '.github/workflows/agent-skill-chain-gate.yml',
+      event: state.publishedCheckWorkflowEvent || 'pull_request_target',
+    });
     saveState(state);
     process.stdout.write(JSON.stringify({ id, html_url: 'https://github.com/test/repo/runs/' + id }));
     process.exit(0);
@@ -498,7 +539,13 @@ export interface GhStubState {
   failAttestationVerify?: boolean;
   pullMetadata?: unknown;
   pullCommits?: unknown[];
+  commitPulls?: unknown[];
   pullReviews?: unknown[];
+  nextCheckSuiteId?: number;
+  publishedCheckWorkflowPath?: string;
+  publishedCheckWorkflowEvent?: string;
+  failApiPaths?: string[];
+  apiCalls?: { method: string; path: string }[];
   prCreateCalls?: { args: string[]; body: string | undefined }[];
   // ---- Issue #196 release bump/tag/publish・Issue #208 root-cleanup run 検証用
   //      (gh pr view/list/merge, gh release view/create) ----
