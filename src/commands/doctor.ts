@@ -53,6 +53,60 @@ export function checkAdrConsistency(root: string): Check {
   };
 }
 
+interface LabelDef {
+  name: string;
+  color: string;
+  description: string;
+}
+
+/**
+ * Issue #272: 配布元の正本 `templates/github/provisioning/labels.yaml` で定義された全ラベルが
+ * 実リポジトリ（`gh label list`）に存在するかを検査する。色・説明の差分も報告する
+ * （テンプレート正本と実配備GitHub設定が乖離しても検出できなかった構造的ギャップを埋める）。
+ * 呼び出し側で `gh` の導入・認証確認済みであることを前提とする。
+ */
+export function checkGithubLabelsSync(root: string): Check {
+  const label = 'GitHub labels同期';
+  try {
+    const labelsPath = resolveAsset(path.join('templates', 'github', 'provisioning', 'labels.yaml'), root);
+    const defined = readYamlFile<{ labels: LabelDef[] }>(labelsPath).labels;
+    const list = exec('gh', ['label', 'list', '--json', 'name,color,description', '--limit', '200'], root);
+    if (list.status !== 0) {
+      return { label, ok: false, reason: `gh label list に失敗しました: ${list.stderr.trim()}` };
+    }
+    const actual = JSON.parse(list.stdout) as LabelDef[];
+    const byName = new Map(actual.map((l) => [l.name, l]));
+    const missing: string[] = [];
+    const diffs: string[] = [];
+    for (const def of defined) {
+      const found = byName.get(def.name);
+      if (!found) {
+        missing.push(def.name);
+        continue;
+      }
+      const fieldDiffs: string[] = [];
+      if (found.color.toLowerCase() !== def.color.toLowerCase()) {
+        fieldDiffs.push(`color: ${found.color} != ${def.color}`);
+      }
+      if (found.description !== def.description) {
+        fieldDiffs.push(`description: "${found.description}" != "${def.description}"`);
+      }
+      if (fieldDiffs.length > 0) diffs.push(`${def.name} (${fieldDiffs.join(', ')})`);
+    }
+    const problems = [
+      ...(missing.length > 0 ? [`不足: ${missing.join(', ')}`] : []),
+      ...(diffs.length > 0 ? [`差分: ${diffs.join('; ')}`] : []),
+    ];
+    return {
+      label,
+      ok: problems.length === 0,
+      reason: problems.length === 0 ? undefined : `${problems.join(' / ')}（setup labels で解消できます）`,
+    };
+  } catch (error) {
+    return { label, ok: false, reason: (error as Error).message };
+  }
+}
+
 export async function run(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -117,6 +171,13 @@ export async function run(args: string[]): Promise<number> {
               ok: auth.status === 0,
               reason: auth.status === 0 ? undefined : auth.stderr.trim() || 'gh 未認証',
             });
+
+            // Issue #272: 配布元の正本 labels.yaml と実リポジトリのラベルが乖離しても
+            // 検出できなかった（type:bugfix 等が無く gh issue create が失敗する）ギャップを埋める。
+            // gh未導入・未認証時は上記チェックで既にNG報告済みのため、二重報告を避けここではスキップする。
+            if (auth.status === 0) {
+              checks.push(checkGithubLabelsSync(root));
+            }
           }
         }
 
