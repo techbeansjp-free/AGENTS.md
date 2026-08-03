@@ -27,7 +27,7 @@ jobs:
       review_subject: ${{ steps.context.outputs.review_subject }}
     steps:
       - name: Checkout protected base trust root
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
@@ -104,7 +104,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout protected base trust root
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.detect-segments.outputs.base_sha }}
           fetch-depth: 0
