@@ -382,6 +382,42 @@ test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック
   assert.match(res.stdout, /read-only/);
 });
 
+test('gate reviewer-prompt: SPEC.md が未埋め込みファイルを名指しで言及しても、その内容を埋め込まず検証不能制約を明示する（Issue #318 回帰）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // spec gate は SPEC.md のみを埋め込む（SEGMENT_ARTIFACTS['spec']）。SPEC.md 本文が
+  // 具体的な既存テストファイル名を名指しで言及しても、そのファイル自体はプロンプトへ
+  // 埋め込まれない。レビュアがこの未埋め込みファイルの内容を推測・創作して
+  // blocking finding の証跡を捏造した実例（Issue #316 PR #317）の再発防止テスト。
+  const referencedTestPath = 'test/unit/existing-feature.test.ts';
+  const referencedTestContent =
+    "import { test } from 'node:test';\ntest('existing behavior that SPEC.md references', () => {});\n";
+  fs.mkdirSync(path.join(repo.dir, 'test/unit'), { recursive: true });
+  fs.writeFileSync(path.join(repo.dir, referencedTestPath), referencedTestContent, 'utf8');
+  fs.writeFileSync(
+    path.join(repo.dir, 'SPEC.md'),
+    `# SPEC\n\nAC-1: 既存動作を維持する\n\n既存の ${referencedTestPath} が回帰しないことを確認する。\n`,
+    'utf8',
+  );
+  execFileSync('git', ['add', 'SPEC.md', referencedTestPath], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: add spec referencing unembedded file'], { cwd: repo.dir });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+
+  const res = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
+  assert.equal(res.status, 0, res.stderr);
+
+  // 制約セクション: 未埋め込みファイルの内容を推測・創作してはならない旨が明示されていること。
+  assert.match(res.stdout, /埋め込まれていない参照ファイルの扱い/);
+  assert.match(res.stdout, /検証不能/);
+  assert.match(res.stdout, /推測.*創作|創作.*推測/);
+  assert.match(res.stdout, /固く禁じる/);
+
+  // SPEC.md はファイル名を言及するが、参照先ファイルの実内容そのものは埋め込まれないこと。
+  assert.match(res.stdout, new RegExp(referencedTestPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(res.stdout, /existing behavior that SPEC\.md references/);
+});
+
 test('gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以外は修正前goldenと一致する', (t) => {
   const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-reviewer-prompt-golden-'));
   t.after(() => fs.rmSync(repoDir, { recursive: true, force: true }));
