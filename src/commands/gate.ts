@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import { repoRoot, worktreeRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, validateSegment, SEGMENTS, CliError, type Segment } from '../lib/issue.js';
@@ -765,6 +766,27 @@ function resolveApprovedBaseline(
   return { found: false };
 }
 
+function readReconcileReport(
+  root: string,
+  issueNumber: string,
+  gateId: Segment,
+  targetSha: string,
+  githubBackend: boolean,
+): GateReport | undefined {
+  const reportPath = reviewFilePath(root, issueNumber, gateId);
+  try {
+    if (!githubBackend) return readYamlFile<GateReport>(reportPath);
+
+    const relativeReportPath = path.relative(root, reportPath).split(path.sep).join('/');
+    const targetRef = `refs/agent-skill-chain/targets/${targetSha}`;
+    const shown = git(['show', `${targetRef}:${relativeReportPath}`], root);
+    if (shown.status !== 0) return undefined;
+    return parseYaml(shown.stdout) as GateReport;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function reconcile(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -786,18 +808,15 @@ export async function reconcile(args: string[]): Promise<number> {
     const refreshed: string[] = [];
     const invalidated: string[] = [];
     let downstreamInvalidated = false;
+    const githubBackend = config.coordination.backend === 'github';
 
     for (const gateId of SEGMENTS) {
       const reportPath = reviewFilePath(root, number, gateId);
-      let report: GateReport;
-      try {
-        report = readYamlFile<GateReport>(reportPath);
-      } catch {
-        continue; // このゲートは未レビュー・未発行
-      }
+      const report = readReconcileReport(root, number, gateId, targetSha, githubBackend);
+      if (!report) continue; // このゲートは未レビュー・未発行
 
       const baseline =
-        config.coordination.backend === 'github'
+        githubBackend
           ? resolveApprovedBaseline(root, gateId, targetSha, config.checks[gateId], prNumber)
           : { found: true as const, approvedArtifacts: report.gate.approved_artifacts };
       if (!baseline.found) continue;
@@ -818,7 +837,7 @@ export async function reconcile(args: string[]): Promise<number> {
         downstreamInvalidated = true;
       } else {
         report.gate.target_sha = targetSha;
-        if (config.coordination.backend === 'github') {
+        if (githubBackend) {
           report.gate.approved_artifacts = baseline.approvedArtifacts;
         }
         writeYamlFileAtomic(reportPath, report);
@@ -829,7 +848,7 @@ export async function reconcile(args: string[]): Promise<number> {
       // Check Runが調整状態の正本（Coordination Backend が GitHub の場合の唯一の正本）のため、
       // 新しいtarget_shaに対して再発行または無効化のCheck Runを明示的に発行し直す必要がある
       // （発行しないと新SHAにrequired status checkが一切存在せず、merge判定が永久にpending留まりになる）。
-      if (config.coordination.backend === 'github') {
+      if (githubBackend) {
         const checkName = config.checks[gateId];
         const published = changed
           ? publishCheckRun(

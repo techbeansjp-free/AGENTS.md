@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
@@ -55,6 +56,17 @@ function setupApprovedSpecAndDesignGates(opts: { backend?: 'local' | 'github'; e
 
   approveGate(repo, worktreePath, 'spec', 'SPEC.md', env);
   approveGate(repo, worktreePath, 'design', 'DESIGN.md', env);
+
+  if (backend === 'github') {
+    for (const gateId of ['spec', 'design']) {
+      const source = reviewPath(repo.dir, gateId);
+      const destination = reviewPath(worktreePath, gateId);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(source, destination);
+    }
+    const checkpointReports = runCli(['checkpoint', 'test: trusted recorder reports'], { cwd: worktreePath, env });
+    assert.equal(checkpointReports.status, 0, checkpointReports.stderr);
+  }
 
   return { repo, worktreePath, sha1 };
 }
@@ -155,11 +167,16 @@ function checkpointUnrelatedChange(worktreePath: string, env: NodeJS.ProcessEnv,
   return checkpoint.stdout.trim();
 }
 
-function seedPullCommits(stub: ReturnType<typeof createGhStub>, commits: string[]): void {
+function seedPullCommits(stub: ReturnType<typeof createGhStub>, commits: string[], repoDir: string): void {
   const state = stub.readState();
   state.pullCommits = commits.map((sha) => ({ sha }));
   state.commitPulls = [{ number: 1 }];
   stub.writeState(state);
+  const targetSha = commits.at(-1)!;
+  execFileSync('git', ['update-ref', `refs/agent-skill-chain/targets/${targetSha}`, targetSha], {
+    cwd: repoDir,
+    stdio: 'pipe',
+  });
 }
 
 function checkRuns(stub: ReturnType<typeof createGhStub>): CheckRunRecord[] {
@@ -199,7 +216,8 @@ test('gate reconcile (github backend): 過去のtrusted baselineから成果物�
   });
 
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'approved artifacts unchanged');
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
+  fs.rmSync(path.dirname(reviewPath(repo.dir, 'spec')), { recursive: true, force: true });
   const reconcile = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
 
   // Then: 以前は「local バックエンドのみ対応」で必ず失敗していたが、githubモードでも成功し、
@@ -236,14 +254,14 @@ test('gate reconcile (github backend): 成果物とlocal review digestを同時�
   // Given: spec/design gateが共に承認済みの状態から、SPEC.md（spec gateのapproved_artifacts）を
   // 変更して新しいcommitを作る。
   fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: 変更後のサンプル\n', 'utf8');
-  const checkpoint = runCli(['checkpoint', 'wip: SPEC変更'], { cwd: worktreePath, env });
-  assert.equal(checkpoint.status, 0, checkpoint.stderr);
-  const sha2 = checkpoint.stdout.trim();
-  seedPullCommits(stub, [sha1, sha2]);
-  const specReportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'spec.yaml');
+  const specReportPath = reviewPath(worktreePath, 'spec');
   const tamperedReport = parse(fs.readFileSync(specReportPath, 'utf8')) as GateReport;
   tamperedReport.gate.approved_artifacts[0].digest = sha256(fs.readFileSync(path.join(worktreePath, 'SPEC.md')));
   fs.writeFileSync(specReportPath, stringify(tamperedReport), 'utf8');
+  const checkpoint = runCli(['checkpoint', 'wip: SPEC変更'], { cwd: worktreePath, env });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const sha2 = checkpoint.stdout.trim();
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
 
   // When: 変更後のsha2を対象に gate reconcile を呼ぶ。
   const reconcile = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
@@ -274,7 +292,7 @@ test('gate reconcile (github backend): success baseline不在時はCheck Runもl
     cleanup();
   });
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'no approved baseline');
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
   const state = stub.readState();
   state.checkRuns = [];
   state.actionRuns = [];
@@ -290,6 +308,30 @@ test('gate reconcile (github backend): success baseline不在時はCheck Runもl
   assert.equal(fs.readFileSync(reviewPath(repo.dir, 'spec'), 'utf8'), before);
 });
 
+test('gate reconcile (github backend): target ref不在時はbase側reportへfallbackせず照合をskipする', async (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const { repo, worktreePath, sha1 } = setupApprovedSpecAndDesignGates({ backend: 'github', env });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  const sha2 = checkpointUnrelatedChange(worktreePath, env, 'missing target ref');
+  const state = stub.readState();
+  state.pullCommits = [sha1, sha2].map((sha) => ({ sha }));
+  state.commitPulls = [{ number: 1 }];
+  stub.writeState(state);
+  const before = fs.readFileSync(reviewPath(repo.dir, 'spec'), 'utf8');
+  const beforeCount = checkRuns(stub).length;
+
+  const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /reissued: \(none\)/);
+  assert.match(result.stdout, /invalidated: \(none\)/);
+  assert.equal(checkRuns(stub).length, beforeCount);
+  assert.equal(fs.readFileSync(reviewPath(repo.dir, 'spec'), 'utf8'), before);
+});
+
 test('gate reconcile (github backend): Check Run API失敗はbaseline不在扱いにせずコマンドを失敗させる', async (t) => {
   const { stub, env, cleanup } = makeGhStub();
   const { repo, worktreePath, sha1 } = setupApprovedSpecAndDesignGates({ backend: 'github', env });
@@ -298,7 +340,7 @@ test('gate reconcile (github backend): Check Run API失敗はbaseline不在扱�
     cleanup();
   });
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'api failure');
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
   const state = stub.readState();
   state.failApiPaths = ['/check-runs?'];
   stub.writeState(state);
@@ -319,7 +361,7 @@ test('gate reconcile (github backend): untrusted workflow pathの最新候補を
   });
   addForgedSpecCheck(stub, sha1, '.github/workflows/evil.yml', 'push');
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'untrusted path');
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
 
   const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
 
@@ -337,7 +379,7 @@ test('gate reconcile (github backend): trusted pathでも旧push eventの最新�
   });
   addForgedSpecCheck(stub, sha1, '.github/workflows/agent-skill-chain-reconcile.yml', 'push');
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'untrusted event');
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
 
   const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
 
@@ -354,7 +396,7 @@ test('gate reconcile (github backend): pr_number省略時はtarget_shaからPR�
     cleanup();
   });
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'fallback pr lookup');
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
 
   const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2], { cwd: repo.dir, env });
 
@@ -366,6 +408,19 @@ test('gate reconcile (github backend): 下流baseline不在をskipしてもdowns
   const { stub, env, cleanup } = makeGhStub();
   const { repo, worktreePath, sha1 } = setupApprovedSpecAndDesignGates({ backend: 'github', env });
   approveGate(repo, worktreePath, 'implementation', 'DESIGN.md', env);
+  // setupApprovedSpecAndDesignGatesはbackend:'github'の場合、返り値のsha1コミット後に
+  // 「trusted recorder reports」コミットを追加でpushしている（spec/design報告ファイルの
+  // worktreeへの複製）。上記approveGateはこの追加コミット（sha1の子）を対象にimplementation-gate
+  // Check Runを発行するため、sha1だけをPRコミット一覧へ渡すとそのCheck Runが一覧に含まれず
+  // 見つからない。spec/design-gateのCheck Runはsha1自身に対して発行済みのため、sha1と
+  // このimplementation-gate発行対象コミットの両方をPRコミット一覧へ含める必要がある。
+  const sha1WithImplementation = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+  }).trim();
+  const implementationReport = reviewPath(worktreePath, 'implementation');
+  fs.mkdirSync(path.dirname(implementationReport), { recursive: true });
+  fs.copyFileSync(reviewPath(repo.dir, 'implementation'), implementationReport);
   t.after(() => {
     repo.cleanup();
     cleanup();
@@ -382,7 +437,7 @@ test('gate reconcile (github backend): 下流baseline不在をskipしてもdowns
   const checkpoint = runCli(['checkpoint', 'test: downstream invalidation'], { cwd: worktreePath, env });
   assert.equal(checkpoint.status, 0, checkpoint.stderr);
   const sha2 = checkpoint.stdout.trim();
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha1WithImplementation, sha2], repo.dir);
   const beforeCount = checkRuns(stub).length;
 
   const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
@@ -407,13 +462,13 @@ test('gate reconcile (github backend): success再発行はlocal改ざん値で�
   });
   const futureContent = '# SPEC\n\nAC-1: future unreviewed content\n';
   const futureDigest = sha256(futureContent);
-  const specReportPath = reviewPath(repo.dir, 'spec');
+  const specReportPath = reviewPath(worktreePath, 'spec');
   const localReport = parse(fs.readFileSync(specReportPath, 'utf8')) as GateReport;
   const trustedDigest = localReport.gate.approved_artifacts[0].digest;
   localReport.gate.approved_artifacts[0].digest = futureDigest;
   fs.writeFileSync(specReportPath, stringify(localReport), 'utf8');
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'first poisoning push');
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
   let state = stub.readState();
   state.publishedCheckWorkflowPath = '.github/workflows/agent-skill-chain-reconcile.yml';
   state.publishedCheckWorkflowEvent = 'pull_request_target';
@@ -430,7 +485,7 @@ test('gate reconcile (github backend): success再発行はlocal改ざん値で�
   const checkpoint = runCli(['checkpoint', 'test: second poisoning push'], { cwd: worktreePath, env });
   assert.equal(checkpoint.status, 0, checkpoint.stderr);
   const sha3 = checkpoint.stdout.trim();
-  seedPullCommits(stub, [sha1, sha2, sha3]);
+  seedPullCommits(stub, [sha1, sha2, sha3], repo.dir);
   const second = runCli(['gate', 'reconcile', 'ISSUE-1', sha3, '1'], { cwd: repo.dir, env });
   assert.equal(second.status, 0, second.stderr);
   assert.match(second.stdout, /invalidated: spec/);
@@ -452,7 +507,7 @@ test('gate reconcile (github backend): gate workflowのpull_request_review発行
   specAction.event = 'pull_request_review';
   stub.writeState(state);
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'review event baseline');
-  seedPullCommits(stub, [sha1, sha2]);
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
 
   const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
 
