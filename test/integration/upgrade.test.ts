@@ -91,17 +91,17 @@ test('upgrade: 配布templateは更新するが、展開済みlegacy workflowは
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
   assert.equal(runCli(['init', targetDir]).status, 0);
 
-  const relative = path.join('workflows', 'agent-skill-chain-gate.yml');
+  const relative = path.join('workflows', 'agent-skill-chain-ci.yml');
   const installedTemplate = path.join(targetDir, '.agent-skill-chain', 'templates', 'github', '.github', relative);
   const deployed = path.join(targetDir, '.github', relative);
-  const legacy = 'name: legacy gate\n# in-ci model invocation\n';
+  const legacy = 'name: legacy ci\n# in-ci model invocation\n';
   fs.writeFileSync(installedTemplate, legacy);
   fs.mkdirSync(path.dirname(deployed), { recursive: true });
   fs.writeFileSync(deployed, legacy);
 
   const result = runCli(['upgrade', targetDir]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(fs.readFileSync(installedTemplate, 'utf8'), /gate verify-evidence/);
+  assert.match(fs.readFileSync(installedTemplate, 'utf8'), /agent-skill-chain \/ ci/);
   assert.equal(fs.readFileSync(deployed, 'utf8'), legacy);
   assert.match(result.stdout, /GitHub workflowは未更新/);
 });
@@ -111,13 +111,13 @@ test('upgrade: 展開済みworkflowのlocal customizationを保持して標準as
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
   assert.equal(runCli(['init', targetDir]).status, 0);
 
-  const relative = path.join('workflows', 'agent-skill-chain-gate.yml');
+  const relative = path.join('workflows', 'agent-skill-chain-ci.yml');
   const installedTemplate = path.join(targetDir, '.agent-skill-chain', 'templates', 'github', '.github', relative);
   const deployed = path.join(targetDir, '.github', relative);
   const conventions = path.join(targetDir, '.agent-skill-chain', 'standards', 'GIT_CONVENTIONS.md');
   const version = path.join(targetDir, '.agent-skill-chain', '.installed_version');
   fs.mkdirSync(path.dirname(deployed), { recursive: true });
-  fs.writeFileSync(deployed, 'name: consumer gate\n');
+  fs.writeFileSync(deployed, 'name: consumer ci\n');
   fs.appendFileSync(deployed, '\n# consumer customization\n');
   fs.appendFileSync(conventions, '\ncustom standard before failed upgrade\n');
   fs.writeFileSync(version, '0.0.1\n');
