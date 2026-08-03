@@ -33,6 +33,7 @@ PRがmerged/closedになった後、対応するworktreeディレクトリが放
 - `doctor`実行時、各worktreeについて対応するPR/Integration Recordの状態を確認し、merged/closedであるにもかかわらず対応するworktreeが存在する場合、それを検知して警告として出力すること。
 - 上記警告には、cleanup対象となるworktreeを一意に特定できる識別子（Issue ID等）を含み、対象が複数件存在する場合は全件を列挙すること。
 - 対応するPR/Integration Recordがまだopen（未merge・未close）であるworktreeは、cleanup対象警告に含めないこと。
+- 対応するPR/Integration Recordの状態（merged/closed/open）をCoordination Backendから判定できない場合、当該worktreeをcleanup対象として断定的に警告しないこと。かつ、doctorの出力には当該worktreeが「判定不能」である旨を、cleanup対象警告とは区別可能な形で明示すること。Coordination Backendへの問い合わせが系統的に失敗し複数件のworktreeで判定不能となっている場合は、その劣化状態自体も出力上で判別可能であること（判定不能を無警告のまま埋没させない）。
 - 進行役（人間またはエージェント）がマージ操作を行った際に、worktree放置を防ぐための標準手順が存在すること。手順は、進行役向け手順への明記、またはマージ操作への自動連鎖のいずれか（もしくは組み合わせ）でよく、具体的な採用方式は設計セグメントで判断する。
 - 解決策はローカル環境（進行役のツール・運用フロー）のみで完結すること。GitHub Actions側での自動削除には依存しない。
 - ブランチ（ローカル/リモート）の削除自動化は本Issueの要件に含まない。
@@ -53,11 +54,11 @@ PRがmerged/closedになった後、対応するworktreeディレクトリが放
 - Then: 当該worktreeはAC-1の警告対象一覧に含まれない
 - 検証方法見込み: `automated`
 
-#### AC-3: PR/Integration Recordの状態を判定できない場合は誤って警告しない
+#### AC-3: PR/Integration Recordの状態を判定できない場合は誤って警告せず、判定不能である旨を明示する
 
-- Given: あるworktreeについて、対応するPR/Integration Recordの状態（merged/closed/open）をCoordination Backendから判定できない（例：API到達不能、対応Issueが特定できない等）
+- Given: あるworktreeについて、対応するPR/Integration Recordの状態（merged/closed/open）をCoordination Backendから判定できない（例：API到達不能、認証切れ、対応Issueが特定できない等）
 - When: `doctor`コマンドを実行する
-- Then: 当該worktreeはcleanup対象として断定的に警告されない（判定不能である旨を示す扱いとし、cleanup対象と同一視しない）
+- Then: 当該worktreeはcleanup対象として断定的に警告されない。かつ、doctorの出力には、当該worktreeが「判定不能」である旨と、対象を特定できる識別子（Issue ID等）が、AC-1のcleanup対象警告とは区別可能な形で明示される。判定不能が複数件のworktreeにわたって発生している場合（Coordination Backendへの問い合わせが系統的に失敗している状態を示唆する）、その旨も出力上で判別可能である
 - 検証方法見込み: `automated`
 
 #### AC-4: マージ操作時にworktree放置を防ぐ標準手順が存在する
