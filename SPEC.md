@@ -36,7 +36,7 @@ writer権限を持つ者が、pushするブランチの内容を改変するだ�
 
 - Given: 任意のissueブランチへのwriter lease／push権限を持つ者が存在する
 - When: 当該ブランチ上で、reconcileの判定ロジック（ワークフロー定義・CLIソース・`gate reconcile` の実装・digest計算部分のいずれか）を「常にsuccessを返す」よう改変してpushする
-- Then: そのpushをトリガーに実行されるreconcile相当の処理は、改変された判定ロジックを読み込み・ビルド・実行することなく、保護されたベースブランチ（trusted）由来の判定ロジックのみに基づいて `agent-skill-chain/{spec,design,implementation,validation}-gate` の成否を決定する（したがって改変内容だけでは成功発行を偽造できない）
+- Then: そのpushをトリガーに実行されるreconcile相当の処理は、改変された判定ロジックを読み込み・ビルド・実行することなく、保護されたベースブランチ（trusted）由来の判定ロジックのみに基づいて `agent-skill-chain/{spec,design,implementation,validation}-gate` の成否を決定する（したがって改変内容だけでは成功発行を偽造できない）。（ただし、`agent-skill-chain-reconcile.yml`・`agent-skill-chain-gate.yml`のいずれとも無関係な新規ワークフローファイルを攻撃者が追加し、そのワークフロー自身が独自に`checks: write`権限を宣言してCheck Runを直接発行する経路は、本Issueのスコープでは対象外とし、未決事項に記録した既知の限界（new-arbitrary-workflow-file-forgery-gap）として扱う。この経路の解消にはrulesetの`integration_id`による専用GitHub App強制（ADR-0013、本Issueのスコープ外）を要する）
 - 検証方法見込み: `hybrid`（信頼境界の静的な構成検査は自動化できるが、実際の攻撃ブランチによる偽造不能性の最終確認は隔離環境での確認を要する）
 
 #### AC-2: 既存の正規フロー（reconcileによる照合・再発行・無効化判定）が引き続き機能する
@@ -64,7 +64,7 @@ writer権限を持つ者が、pushするブランチの内容を改変するだ�
 
 - Given: 任意のissueブランチへのwriter lease／push権限を持つ者が存在し、当該ブランチには成果物（例: `SPEC.md`）と、対応するレビュー証跡（承認済み成果物digest・承認済み成果物一覧を記録した、当該ブランチへコミット可能なファイル。例: `issues/<id>/.agent-skill-chain/reviews/<gate>.yaml`）が存在する
 - When: 判定ロジック自体は改変せず、(1) 成果物の内容を実際のレビュー未了の内容へ書き換え、かつ (2) 同一push内で当該レビュー証跡ファイルの承認済みdigest・承認済み成果物一覧を、書き換え後の成果物内容から計算されるdigestと一致するよう書き換えてpushする
-- Then: そのpushをトリガーに実行されるreconcile相当の処理は、pushされたブランチ上のレビュー証跡ファイルに記録された承認済みdigest・承認済み成果物一覧を承認済み基準として信頼せず、GitHub Check Run発行履歴（正本）等のwriterが改変不能な情報源とのみ照合する。その結果、実際にはレビュー未了である当該変更を「変化なし」とは判定せず、成功を再発行しない（当該ゲートは無効化される、または既存の失敗・未成功状態が維持される）
+- Then: そのpushをトリガーに実行されるreconcile相当の処理は、pushされたブランチ上のレビュー証跡ファイルに記録された承認済みdigest・承認済み成果物一覧を承認済み基準として信頼せず、GitHub Check Run発行履歴（正本）等のwriterが改変不能な情報源とのみ照合する。その結果、実際にはレビュー未了である当該変更を「変化なし」とは判定せず、成功を再発行しない（当該ゲートは無効化される、または既存の失敗・未成功状態が維持される）。（ただし、発行済みのCheck Run自体の`output.text`を、当該リポジトリで`checks: write`権限を持つ別のワークフローが同一App identityのもと事後的にChecks APIのPATCHで書き換える経路自体の防止は、本Issueのスコープでは対象外とし、未決事項に記録した既知の限界（check-run-output-patch-poisoning-gap）として扱う。この経路の解消にはrulesetの`integration_id`による専用GitHub App強制（ADR-0013、本Issueのスコープ外）を要する）
 - 検証方法見込み: `hybrid`（レビュー証跡ファイルが判定に用いられないことの静的検査は自動化できるが、実際の攻撃ブランチによる偽造不能性の最終確認は隔離環境での確認を要する）
 
 #### AC-6: 判定対象識別子（target_sha・issue_id）自体の出所がGitHub提供の構造化フィールドに限定される
