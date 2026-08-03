@@ -22,7 +22,7 @@ jobs:
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
     concurrency:
-      group: root-cleanup
+      group: main-mutator
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7.0.1

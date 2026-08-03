@@ -6,6 +6,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+import { createGhStub } from '../helpers/gh-stub.js';
+import { readYamlFile } from '../../src/lib/yaml-io.js';
 
 // Issue #169 T8: doctor拡張（init導入済み・enforce配線状態の情報表示）の結合テスト。
 // いずれも情報表示のみであり、未導入・非配線であってもdoctor自体の成否判定には影響しない。
@@ -358,6 +360,91 @@ test('doctor D3 (github backend): writer lease失効 検査自体が実行され
 
   const result = runCli(['doctor'], { cwd: repo.dir });
   assert.doesNotMatch(result.stdout, /writer lease失効/);
+});
+
+// ---- Issue #272: GitHub labels同期 ----
+// 配布元の正本 labels.yaml と実リポジトリのラベルが乖離しても検出できなかった（type:bugfix 等が
+// 無く gh issue create が失敗する）構造的ギャップを埋める検査。
+
+function mkScratchDir(prefix: string): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), `agent-skill-chain-${prefix}-`));
+}
+
+function readLabelDefs(repoDir: string): { name: string; color: string; description: string }[] {
+  const labelsPath = path.join(repoDir, '.agent-skill-chain', 'templates', 'github', 'provisioning', 'labels.yaml');
+  return readYamlFile<{ labels: { name: string; color: string; description: string }[] }>(labelsPath).labels;
+}
+
+test('doctor: labels.yaml定義の全ラベルが実リポジトリに存在し内容も一致すれば GitHub labels同期 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+  const scratchDir = mkScratchDir('doctor-labels-ok');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+
+  stub.seedLabels(readLabelDefs(repo.dir));
+
+  const result = runCli(['doctor'], { cwd: repo.dir, env: stub.env(process.env) });
+  assert.match(result.stdout, /OK {2}GitHub labels同期/);
+});
+
+test('doctor: labels.yaml定義の一部ラベルが実リポジトリに存在しないと GitHub labels同期 がNGになり不足ラベル名を列挙する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+  const scratchDir = mkScratchDir('doctor-labels-missing');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+
+  // Given: 実リポジトリには GitHub初期ラベル（bug等）のみが存在し、type:bugfix等のカスタムラベルが無い
+  stub.seedLabels([{ name: 'bug', color: 'd73a4a', description: "Something isn't working" }]);
+
+  const result = runCli(['doctor'], { cwd: repo.dir, env: stub.env(process.env) });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}GitHub labels同期: .*不足: .*type:bugfix/);
+  assert.match(result.stdout, /setup labels/);
+});
+
+test('doctor: 実リポジトリのラベルがlabels.yaml定義と色・説明が異なると GitHub labels同期 がNGになり差分を報告する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+  const scratchDir = mkScratchDir('doctor-labels-diff');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+
+  const defs = readLabelDefs(repo.dir);
+  const drifted = defs.map((def) =>
+    def.name === 'type:bugfix' ? { ...def, color: 'ffffff', description: '改変された説明' } : def,
+  );
+  stub.seedLabels(drifted);
+
+  const result = runCli(['doctor'], { cwd: repo.dir, env: stub.env(process.env) });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}GitHub labels同期: .*差分: .*type:bugfix/);
+});
+
+test('doctor: gh未認証の場合は GitHub labels同期 検査自体がスキップされる（gh auth statusのNGのみ報告される）', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+  const scratchDir = mkScratchDir('doctor-labels-unauth');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+  // gh-stubは `gh auth status` に対し常に0を返すため、意図的に別コマンドへ差し替えて未認証を模擬する。
+  fs.writeFileSync(path.join(stub.binDir, 'gh'), '#!/usr/bin/env bash\nif [ "$1" = "auth" ]; then exit 1; fi\nexit 1\n', {
+    mode: 0o755,
+  });
+
+  const result = runCli(['doctor'], { cwd: repo.dir, env: stub.env(process.env) });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}gh auth status/);
+  assert.doesNotMatch(result.stdout, /GitHub labels同期/);
+});
+
+test('doctor: coordination.backendがlocalの場合は GitHub labels同期 検査自体が実行されない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.doesNotMatch(result.stdout, /GitHub labels同期/);
 });
 
 // ---- D4: AC-ID重複 ----

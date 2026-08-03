@@ -69,8 +69,8 @@ function runWorkerLauncher(worktreePath: string, args: string[], env: NodeJS.Pro
  * codex.sh を直接 source して launch_worker を呼ぶ（起動ラッパー・CLI（worker context）を経由
  * しない）。ISSUE-307 AC-9 の防御的検査（ASC_WORKER_MODEL_TIERはあるがASC_WORKER_MODELが無い
  * 場合にblockedへ倒す）は、正規経路（worker context がティア解決失敗を lease 取得前のエラーと
- * して返す）では再現できないため、この経路でのみ検証できる（DESIGN.md §起動ラッパーから
- * アダプタへの伝達）。
+ * して返す）では再現できないため、起動ラッパーからアダプタへの伝達に関わるこの経路でのみ
+ * 検証できる。
  */
 function runCodexLaunchWorkerDirect(worktreePath: string, args: string[], env: NodeJS.ProcessEnv): ScriptResult {
   const adapterPath = path.join(worktreePath, '.agent-skill-chain', 'adapters', 'codex.sh');

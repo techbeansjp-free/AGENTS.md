@@ -1,6 +1,6 @@
 {
   "name": "agent-skill-chain",
-  "version": "0.2.36",
+  "version": "0.2.40",
   "description": "Coordination Backend（GitHub Issue/PR/Check Run、またはローカルGit管理下状態）を正本とする、ソフトウェア開発ワークフロー規律のためのagentic constitution + CLIパッケージ。",
   "type": "module",
   "engines": {
