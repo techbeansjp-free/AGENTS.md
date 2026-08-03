@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0020
-status: proposed
+status: accepted
 title: gate reviewer-prompt の差分index行をclone非依存の決定的表現にするため--full-indexを採用する
 tags: [gate, reproducibility, review-evidence]
 supersedes: []
