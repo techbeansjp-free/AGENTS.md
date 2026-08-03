@@ -55,3 +55,14 @@ worktree を直接 `rm -rf` で削除してはならない。削除は必ず `.a
 4. 対応する PR / Integration Record が完了済み（`merged` または `closed`）であること
 
 すべての条件を満たした場合にのみ、`git worktree remove` を実行し、続けて `git worktree prune` で参照を整理する。いずれかの条件を満たさない場合は削除を中断し、理由を報告する。
+
+## PR マージと main worktree の同期
+
+進行役が PR をマージする際は、`gh pr merge` を直接呼び出すのではなく、`agent-skill-chain pr merge`（`.agent-skill-chain/scripts/pr-merge.sh` はその薄いラッパー）を使うこと。使い方・オプション（`--squash` / `--admin` / `--delete-branch` 等）は `gh pr merge` と同一で、そのまま透過的に渡せる。
+
+理由: `gh pr merge` はマージするだけで、進行役の main worktree（default branch をチェックアウトしている共通作業ツリー）のローカルブランチを更新しない。短時間に複数 PR を連続マージすると、ローカル `main` が古いまま取り残され、以下 2 つの実害が発生する。
+
+1. 後続 PR の CI（例: `git fetch origin "$BASE_REF" --depth=1` を使う検査）が stale な base に対して「no merge base」等で恒久的に失敗する。
+2. 進行役自身が古いビルド済み `bin/agents-md.js` のまま `doctor` 等を実行し、誤った（古い）判定結果を得る。
+
+`agent-skill-chain pr merge` は `gh pr merge` 成功後に、main worktree に対して `git fetch origin <default-branch>` と fast-forward マージ（`git pull --ff-only` 相当）を自動実行し、この乖離を都度解消する。main worktree が default branch をチェックアウトしていない・fast-forward 不能なコンフリクトがある等で同期に失敗した場合は、マージ結果自体は巻き戻さず、非 0 終了コードと日本語のエラーメッセージで手動対応を促す。
