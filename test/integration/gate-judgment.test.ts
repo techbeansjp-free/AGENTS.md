@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, unsetAdapter } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
@@ -16,6 +17,20 @@ import { createGhStub } from '../helpers/gh-stub.js';
 //   - reviewer-context / reviewer-prompt（判定ステップ・アダプタ・判定プロトコルの入力）
 
 const ZERO_DIGEST = `sha256:${'0'.repeat(64)}`;
+const GOLDEN_PROMPT_PATH = fileURLToPath(new URL('../fixtures/gate-reviewer-prompt-golden.txt', import.meta.url));
+const GOLDEN_PROMPT_TARGET_SHA = '5518ddbf398e86558f01d1dfb0e596b014fa3810';
+const GOLDEN_FIXTURE_BASE_SHA = '5a9f3f234fd221cdec49b7885462b27746599b02';
+const GOLDEN_FIXTURE_TARGET_SHA = '82241c97d5b973d30b2bdbe8a16f03e3699393ae';
+
+function normalizeDiffIndexHashes(prompt: string): string {
+  return prompt.replace(/^index [0-9a-f]+\.\.[0-9a-f]+(?= |$)/gm, 'index <old>..<new>');
+}
+
+function promptDiffSection(prompt: string): string {
+  const match = prompt.match(/## 判定対象の差分\n```diff\n([\s\S]*?)\n```/);
+  assert.ok(match, '判定対象の差分セクションが存在すること');
+  return match[1];
+}
 
 interface GateReport {
   schema_version: string;
@@ -366,4 +381,65 @@ test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック
   assert.match(res.stdout, /falsification/);
   assert.match(res.stdout, /origin/);
   assert.match(res.stdout, /read-only/);
+});
+
+test('gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以外は修正前goldenと一致する', (t) => {
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-reviewer-prompt-golden-'));
+  t.after(() => fs.rmSync(repoDir, { recursive: true, force: true }));
+  execFileSync('git', ['init', '--initial-branch=main', '--object-format=sha1'], { cwd: repoDir, stdio: 'pipe' });
+  execFileSync('git', ['config', 'user.name', 'agent-skill-chain test'], { cwd: repoDir });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir });
+
+  const baseEnv = {
+    ...process.env,
+    GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z',
+    GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z',
+  };
+  execFileSync('git', ['commit', '--allow-empty', '-m', 'test: golden base'], {
+    cwd: repoDir,
+    env: baseEnv,
+    stdio: 'pipe',
+  });
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+  assert.equal(baseSha, GOLDEN_FIXTURE_BASE_SHA);
+
+  fs.writeFileSync(path.join(repoDir, 'SPEC.md'), '# SPEC\n\nAC-1: deterministic prompt\n', 'utf8');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: repoDir });
+  execFileSync('git', ['commit', '-m', 'test: golden target'], {
+    cwd: repoDir,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_DATE: '2000-01-01T00:00:01Z',
+      GIT_COMMITTER_DATE: '2000-01-01T00:00:01Z',
+    },
+    stdio: 'pipe',
+  });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+  assert.equal(targetSha, GOLDEN_FIXTURE_TARGET_SHA);
+
+  const result = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-369', 'spec', targetSha, baseSha],
+    { cwd: repoDir },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const prompt = result.stdout.trimEnd();
+  assert.match(prompt, new RegExp(`^- target_sha: ${targetSha}$`, 'm'));
+
+  const diffSection = promptDiffSection(prompt);
+  const indexLines = diffSection.match(/^index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?$/gm) ?? [];
+  assert.ok(indexLines.length > 0, 'diff区間にindex行が存在すること');
+  for (const line of indexLines) {
+    const match = line.match(/^index ([0-9a-f]+)\.\.([0-9a-f]+)(?: [0-7]{6})?$/);
+    assert.ok(match);
+    assert.ok(match[1].length === 40 || match[1].length === 64, `old hashが完全長であること: ${line}`);
+    assert.equal(match[2].length, match[1].length, `new hashが完全長であること: ${line}`);
+  }
+
+  const golden = fs.readFileSync(GOLDEN_PROMPT_PATH, 'utf8').trimEnd();
+  assert.match(golden, new RegExp(`^- target_sha: ${GOLDEN_PROMPT_TARGET_SHA}$`, 'm'));
+  const promptWithGoldenTarget = prompt.replace(
+    `- target_sha: ${targetSha}`,
+    `- target_sha: ${GOLDEN_PROMPT_TARGET_SHA}`,
+  );
+  assert.equal(normalizeDiffIndexHashes(promptWithGoldenTarget), normalizeDiffIndexHashes(golden));
 });
