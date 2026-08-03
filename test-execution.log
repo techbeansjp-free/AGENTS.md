@@ -1,0 +1,3579 @@
+
+> agent-skill-chain@0.2.27 pretest
+> npm run build
+
+
+> agent-skill-chain@0.2.27 build
+> tsc
+
+
+> agent-skill-chain@0.2.27 test
+> node --import tsx --test $(find test/unit test/integration -name '*.test.ts')
+
+TAP version 13
+# Subtest: adr finalize (local backend): design gate承認済みのADRをaccepted化しcommitする
+ok 1 - adr finalize (local backend): design gate承認済みのADRをaccepted化しcommitする
+  ---
+  duration_ms: 5206.69027
+  ...
+# Subtest: adr finalize (異常系): design gateをpublishする前に呼ぶと失敗する
+ok 2 - adr finalize (異常系): design gateをpublishする前に呼ぶと失敗する
+  ---
+  duration_ms: 2022.659189
+  ...
+# Subtest: adr finalize (異常系): 承認後にADR本文を書き換えdigestを不一致にすると失敗する
+ok 3 - adr finalize (異常系): 承認後にADR本文を書き換えdigestを不一致にすると失敗する
+  ---
+  duration_ms: 3384.055429
+  ...
+# Subtest: adr finalize (異常系): 既にaccepted状態のADRへfinalizeすると失敗する
+ok 4 - adr finalize (異常系): 既にaccepted状態のADRへfinalizeすると失敗する
+  ---
+  duration_ms: 3564.375859
+  ...
+# Subtest: bootstrap ledger: API正本のowner/Sol xhigh/CIをprepared→merged completedへ一度だけ遷移する
+ok 5 - bootstrap ledger: API正本のowner/Sol xhigh/CIをprepared→merged completedへ一度だけ遷移する
+  ---
+  duration_ms: 3720.934789
+  ...
+# Subtest: ADR-2の核心: 非Bashツール（Agent）は常にexit 0で通過する
+ok 6 - ADR-2の核心: 非Bashツール（Agent）は常にexit 0で通過する
+  ---
+  duration_ms: 106.770108
+  ...
+# Subtest: 非Bashツール（Task）も常にexit 0で通過する
+ok 7 - 非Bashツール（Task）も常にexit 0で通過する
+  ---
+  duration_ms: 93.712508
+  ...
+# Subtest: cleanupを経由しないgit worktree remove直接実行はexit 2で拒否される
+ok 8 - cleanupを経由しないgit worktree remove直接実行はexit 2で拒否される
+  ---
+  duration_ms: 131.061092
+  ...
+# Subtest: agent-skill-chain cleanup経由のコマンドはexit 0で通過する
+ok 9 - agent-skill-chain cleanup経由のコマンドはexit 0で通過する
+  ---
+  duration_ms: 111.047303
+  ...
+# Subtest: 命名規約に違反するブランチ作成（git checkout -b）はexit 2で拒否される
+ok 10 - 命名規約に違反するブランチ作成（git checkout -b）はexit 2で拒否される
+  ---
+  duration_ms: 100.269778
+  ...
+# Subtest: 命名規約に適合するブランチ作成（git checkout -b）はexit 0で通過する
+ok 11 - 命名規約に適合するブランチ作成（git checkout -b）はexit 0で通過する
+  ---
+  duration_ms: 140.442404
+  ...
+# Subtest: ADR-4: agent-skill-chain enforce off 自体はいずれの拒否パターンにも一致せずexit 0で通過する
+ok 12 - ADR-4: agent-skill-chain enforce off 自体はいずれの拒否パターンにも一致せずexit 0で通過する
+  ---
+  duration_ms: 174.635988
+  ...
+# Subtest: 無関係な通常のBashコマンドはexit 0で通過する（fail-open）
+ok 13 - 無関係な通常のBashコマンドはexit 0で通過する（fail-open）
+  ---
+  duration_ms: 140.517218
+  ...
+# Subtest: tool_inputにcommandが無い場合はexit 0で通過する
+ok 14 - tool_inputにcommandが無い場合はexit 0で通過する
+  ---
+  duration_ms: 96.129553
+  ...
+# Subtest: 不正なJSON入力に対してもfail-openでexit 0になる
+ok 15 - 不正なJSON入力に対してもfail-openでexit 0になる
+  ---
+  duration_ms: 82.719754
+  ...
+# Subtest: git switch -c での命名規約違反ブランチもexit 2で拒否される
+ok 16 - git switch -c での命名規約違反ブランチもexit 2で拒否される
+  ---
+  duration_ms: 136.24559
+  ...
+# Subtest: プロジェクト側のallowed_typesを読み取り、type未定義のブランチ名は拒否される
+ok 17 - プロジェクト側のallowed_typesを読み取り、type未定義のブランチ名は拒否される
+  ---
+  duration_ms: 213.913669
+  ...
+# Subtest: 引数無し・-h・--help: トップレベル使用方法が出力され終了コード0であること
+ok 18 - 引数無し・-h・--help: トップレベル使用方法が出力され終了コード0であること
+  ---
+  duration_ms: 1635.605023
+  ...
+# Subtest: 未知のコマンド: 終了コード1、標準エラーに理由、使用方法も併記されること
+ok 19 - 未知のコマンド: 終了コード1、標準エラーに理由、使用方法も併記されること
+  ---
+  duration_ms: 1074.43133
+  ...
+# Subtest: 1トークンのみの未知コマンド: 終了コード1、標準エラーに理由が出ること
+ok 20 - 1トークンのみの未知コマンド: 終了コード1、標準エラーに理由が出ること
+  ---
+  duration_ms: 836.117247
+  ...
+# Subtest: 2トークンルーティング: issue start / lease acquire / gate review / verify branch-name が対応ハンドラへ振り分けられること
+ok 21 - 2トークンルーティング: issue start / lease acquire / gate review / verify branch-name が対応ハンドラへ振り分けられること
+  ---
+  duration_ms: 2088.556608
+  ...
+# Subtest: 1トークンルーティング: checkpoint / cleanup / doctor / reconcile / setup が対応ハンドラへ振り分けられること
+ok 22 - 1トークンルーティング: checkpoint / cleanup / doctor / reconcile / setup が対応ハンドラへ振り分けられること
+  ---
+  duration_ms: 3282.283656
+  ...
+# Subtest: 各コマンドの -h/--help は終了コード0でUSAGE文字列を出すこと（代表例）
+ok 23 - 各コマンドの -h/--help は終了コード0でUSAGE文字列を出すこと（代表例）
+  ---
+  duration_ms: 5790.307943
+  ...
+# Subtest: doctor: initを実行していないtarget_dirでも、他の必須チェックがOKなら終了コードは0のままで、init未導入が情報表示される
+ok 24 - doctor: initを実行していないtarget_dirでも、他の必須チェックがOKなら終了コードは0のままで、init未導入が情報表示される
+  ---
+  duration_ms: 1725.693886
+  ...
+# Subtest: doctor: init実行後は導入済みバージョンが情報表示される
+ok 25 - doctor: init実行後は導入済みバージョンが情報表示される
+  ---
+  duration_ms: 2831.679791
+  ...
+# Subtest: doctor: enforce on実行後はenforceの配線状態がONと表示される
+ok 26 - doctor: enforce on実行後はenforceの配線状態がONと表示される
+  ---
+  duration_ms: 2959.911332
+  ...
+# Subtest: doctor: worktree.path_patternに適合しないworktreeが存在すると worktree命名規約 がNGになる
+ok 27 - doctor: worktree.path_patternに適合しないworktreeが存在すると worktree命名規約 がNGになる
+  ---
+  duration_ms: 1793.527813
+  ...
+# Subtest: doctor: worktreeがすべて規約に適合する（追加worktree無し）場合は worktree命名規約 がOKになる
+ok 28 - doctor: worktreeがすべて規約に適合する（追加worktree無し）場合は worktree命名規約 がOKになる
+  ---
+  duration_ms: 1435.160121
+  ...
+# Subtest: doctor: main worktreeに未commit差分があると main worktreeのclean状態 がNGになる
+ok 29 - doctor: main worktreeに未commit差分があると main worktreeのclean状態 がNGになる
+  ---
+  duration_ms: 1478.58573
+  ...
+# Subtest: doctor: main worktreeがclean（commit済み）であれば main worktreeのclean状態 がOKになる
+ok 30 - doctor: main worktreeがclean（commit済み）であれば main worktreeのclean状態 がOKになる
+  ---
+  duration_ms: 1774.67526
+  ...
+# Subtest: doctor: .github/がtemplates/github/.github/と同期していないと template-sync がNGになる
+ok 31 - doctor: .github/がtemplates/github/.github/と同期していないと template-sync がNGになる
+  ---
+  duration_ms: 1665.463203
+  ...
+# Subtest: doctor: sync templates後に.github/を改変すると template-sync がNGになり、改変前はOKになる
+ok 32 - doctor: sync templates後に.github/を改変すると template-sync がNGになり、改変前はOKになる
+  ---
+  duration_ms: 3645.217942
+  ...
+# Subtest: doctor: schemas/*.yamlにYAML構文エラーがあると schemas構文妥当性 がNGになる
+ok 33 - doctor: schemas/*.yamlにYAML構文エラーがあると schemas構文妥当性 がNGになる
+  ---
+  duration_ms: 1075.474814
+  ...
+# Subtest: doctor: schemasがすべて構文妥当なら schemas構文妥当性 がOKになる
+ok 34 - doctor: schemasがすべて構文妥当なら schemas構文妥当性 がOKになる
+  ---
+  duration_ms: 1507.076702
+  ...
+# Subtest: doctor: 追加4項目すべてが正常な状態であれば全項目OK・終了コード0になる
+ok 35 - doctor: 追加4項目すべてが正常な状態であれば全項目OK・終了コード0になる
+  ---
+  duration_ms: 2590.548508
+  ...
+# Subtest: doctor D1: worktreeのcheckoutブランチがbranch.patternに適合しないと branch名規約 がNGになる
+ok 36 - doctor D1: worktreeのcheckoutブランチがbranch.patternに適合しないと branch名規約 がNGになる
+  ---
+  duration_ms: 1866.420948
+  ...
+# Subtest: doctor D1: 追加worktreeが無ければ branch名規約 がOKになる
+ok 37 - doctor D1: 追加worktreeが無ければ branch名規約 がOKになる
+  ---
+  duration_ms: 1554.300662
+  ...
+# Subtest: doctor D2: durability.backend=remoteでoriginへ疎通できないと Durability Backend疎通 がNGになる
+ok 38 - doctor D2: durability.backend=remoteでoriginへ疎通できないと Durability Backend疎通 がNGになる
+  ---
+  duration_ms: 1792.955257
+  ...
+# Subtest: doctor D2: durability.backend=remoteでoriginへ疎通できれば Durability Backend疎通 がOKになる
+ok 39 - doctor D2: durability.backend=remoteでoriginへ疎通できれば Durability Backend疎通 がOKになる
+  ---
+  duration_ms: 1784.313985
+  ...
+# Subtest: doctor D2: durability.backend=local_mirrorでミラー先(origin)が存在しないと Durability Backend疎通 がNGになる
+ok 40 - doctor D2: durability.backend=local_mirrorでミラー先(origin)が存在しないと Durability Backend疎通 がNGになる
+  ---
+  duration_ms: 1571.870006
+  ...
+# Subtest: doctor D2: durability.backend=local_mirrorでミラー先(origin)が実在すれば Durability Backend疎通 がOKになる
+ok 41 - doctor D2: durability.backend=local_mirrorでミラー先(origin)が実在すれば Durability Backend疎通 がOKになる
+  ---
+  duration_ms: 1795.747182
+  ...
+# Subtest: doctor D3 (local backend): 失効済みのwriter leaseが残っていると writer lease失効 がNGになる
+ok 42 - doctor D3 (local backend): 失効済みのwriter leaseが残っていると writer lease失効 がNGになる
+  ---
+  duration_ms: 2361.795788
+  ...
+# Subtest: doctor D3 (local backend): leaseが存在しなければ writer lease失効 がOKになる
+ok 43 - doctor D3 (local backend): leaseが存在しなければ writer lease失効 がOKになる
+  ---
+  duration_ms: 1454.127295
+  ...
+# Subtest: doctor D3 (github backend): writer lease失効 検査自体が実行されない（github backendのgit-ref leaseは対象外）
+ok 44 - doctor D3 (github backend): writer lease失効 検査自体が実行されない（github backendのgit-ref leaseは対象外）
+  ---
+  duration_ms: 3199.065458
+  ...
+# Subtest: doctor D4: worktree内SPEC.mdでAC-IDが重複していると AC-ID重複 がNGになる
+ok 45 - doctor D4: worktree内SPEC.mdでAC-IDが重複していると AC-ID重複 がNGになる
+  ---
+  duration_ms: 2034.204285
+  ...
+# Subtest: doctor D4: worktree内SPEC.mdのAC-IDが重複していなければ AC-ID重複 がOKになる
+ok 46 - doctor D4: worktree内SPEC.mdのAC-IDが重複していなければ AC-ID重複 がOKになる
+  ---
+  duration_ms: 2234.137218
+  ...
+# Subtest: doctor D5: supersedes⇔superseded-byが非対称だと ADR整合性 がNGになる
+ok 47 - doctor D5: supersedes⇔superseded-byが非対称だと ADR整合性 がNGになる
+  ---
+  duration_ms: 1547.75443
+  ...
+# Subtest: doctor D5: 不正なstatus値のADRがあると ADR整合性 がNGになる
+ok 48 - doctor D5: 不正なstatus値のADRがあると ADR整合性 がNGになる
+  ---
+  duration_ms: 1812.047161
+  ...
+# Subtest: doctor D5: YAML行末コメント付きの有効なstatusを正しく認識する
+ok 49 - doctor D5: YAML行末コメント付きの有効なstatusを正しく認識する
+  ---
+  duration_ms: 1368.859644
+  ...
+# Subtest: doctor D5: supersedes⇔superseded-byが対称であれば ADR整合性 がOKになる
+ok 50 - doctor D5: supersedes⇔superseded-byが対称であれば ADR整合性 がOKになる
+  ---
+  duration_ms: 1642.662832
+  ...
+# Subtest: doctor D5: docs/adr/が存在しなければ ADR整合性 がOKになる
+ok 51 - doctor D5: docs/adr/が存在しなければ ADR整合性 がOKになる
+  ---
+  duration_ms: 1743.301261
+  ...
+# Subtest: enforce on: hooks.PreToolUseにエントリが追加され、既存のpermissions.deny等の無関係フィールドは変更されない
+ok 52 - enforce on: hooks.PreToolUseにエントリが追加され、既存のpermissions.deny等の無関係フィールドは変更されない
+  ---
+  duration_ms: 771.663079
+  ...
+# Subtest: enforce on: 2回連続実行してもPreToolUseエントリが重複しない（idempotent）
+ok 53 - enforce on: 2回連続実行してもPreToolUseエントリが重複しない（idempotent）
+  ---
+  duration_ms: 1445.251864
+  ...
+# Subtest: enforce off: 配線済みエントリのみを除去し、他のhooksイベント・フィールドは温存する
+ok 54 - enforce off: 配線済みエントリのみを除去し、他のhooksイベント・フィールドは温存する
+  ---
+  duration_ms: 1641.378822
+  ...
+# Subtest: enforce off: 未配線状態に対しても冪等にエラーなく成功する
+ok 55 - enforce off: 未配線状態に対しても冪等にエラーなく成功する
+  ---
+  duration_ms: 1012.472703
+  ...
+# Subtest: enforce: on/off以外の第一引数は使い方を表示し終了コード1を返す
+ok 56 - enforce: on/off以外の第一引数は使い方を表示し終了コード1を返す
+  ---
+  duration_ms: 1033.616176
+  ...
+# Subtest: enforce on: .claude/settings.jsonのJSON解析に失敗する場合は理由を返しファイルを変更しない
+ok 57 - enforce on: .claude/settings.jsonのJSON解析に失敗する場合は理由を返しファイルを変更しない
+  ---
+  duration_ms: 1312.43431
+  ...
+# launch_gate_reviewer: 認証情報が未設定かつ実疎通確認にも失敗しました（env未設定・claude auth status失敗/不在）（フェイルセーフで human_required へ倒します）
+# launch_gate_reviewer: レビュア起動に失敗しました（rc=1, attempts=2）（フェイルセーフで human_required へ倒します）
+# launch_gate_reviewer: 認証情報が未設定かつ実疎通確認にも失敗しました（env未設定・claude auth status失敗/不在）（フェイルセーフで human_required へ倒します）
+# launch_gate_reviewer: Codex CLI が見つかりません（フェイルセーフで human_required へ倒します）
+# コアレビューには profile=strict が必要です（指定: standard）。human_required へ倒します
+# launch_gate_reviewer: Codex core reviewer のmodelが project policy と一致しません（フェイルセーフで human_required へ倒します）
+# launch_gate_reviewer: Claude core reviewer の最大利用可能reasoningを検証するprobeが未設定です（フェイルセーフで human_required へ倒します）
+# 使い方: gate-launch-reviewer.sh <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
+# launch_gate_reviewer: Codex CLI が見つかりません（フェイルセーフで human_required へ倒します）
+# Subtest: claude launch_gate_reviewer: read-only レビュアの verdict を gate-report へ結線し exit 0（final=approved）
+ok 58 - claude launch_gate_reviewer: read-only レビュアの verdict を gate-report へ結線し exit 0（final=approved）
+  ---
+  duration_ms: 6795.759889
+  ...
+# Subtest: gate reviewer credential boundary: GitHub token・caller HOME・git/gh configをAI subprocessへ継承しない
+ok 59 - gate reviewer credential boundary: GitHub token・caller HOME・git/gh configをAI subprocessへ継承しない
+  ---
+  duration_ms: 5540.707765
+  ...
+# Subtest: claude launch_gate_reviewer: 認証未設定かつ実疎通確認も失敗する場合は安全側（human_required）へ倒し exit が 0 でも 3 でもない（真の認証欠如、regressionなし）
+ok 60 - claude launch_gate_reviewer: 認証未設定かつ実疎通確認も失敗する場合は安全側（human_required）へ倒し exit が 0 でも 3 でもない（真の認証欠如、regressionなし）
+  ---
+  duration_ms: 5508.621685
+  ...
+# Subtest: claude launch_gate_reviewer: env認証情報が無くてもCLAUDE_AUTH_PROBE_CMDの実疎通確認が成功すれば認証欠如と誤判定せず起動処理へ進む（AC-4）
+ok 61 - claude launch_gate_reviewer: env認証情報が無くてもCLAUDE_AUTH_PROBE_CMDの実疎通確認が成功すれば認証欠如と誤判定せず起動処理へ進む（AC-4）
+  ---
+  duration_ms: 6426.689249
+  ...
+# Subtest: claude launch_gate_reviewer: レビュア起動失敗は human_required へ倒す（silent pass しない）
+ok 62 - claude launch_gate_reviewer: レビュア起動失敗は human_required へ倒す（silent pass しない）
+  ---
+  duration_ms: 6188.851628
+  ...
+# Subtest: human launch_gate_reviewer (local): マーカーを生成し final=human_required・exit 3 を返す
+ok 63 - human launch_gate_reviewer (local): マーカーを生成し final=human_required・exit 3 を返す
+  ---
+  duration_ms: 4926.254644
+  ...
+# Subtest: human launch_gate_reviewer (github): gh issue comment で通知し final=human_required・exit 3 を返す
+ok 64 - human launch_gate_reviewer (github): gh issue comment で通知し final=human_required・exit 3 を返す
+  ---
+  duration_ms: 5638.714052
+  ...
+# Subtest: codex launch_gate_reviewer: 認証不成立は gate を approve せず human_required・exit≠0 を返す
+ok 65 - codex launch_gate_reviewer: 認証不成立は gate を approve せず human_required・exit≠0 を返す
+  ---
+  duration_ms: 5160.178215
+  ...
+# Subtest: codex launch_gate_reviewer: Codex CLI 不在は cleanup 後も error を返す
+ok 66 - codex launch_gate_reviewer: Codex CLI 不在は cleanup 後も error を返す
+  ---
+  duration_ms: 5622.379471
+  ...
+# Subtest: codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabilityモデルを使う
+ok 67 - codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabilityモデルを使う
+  ---
+  duration_ms: 6224.615882
+  ...
+# Subtest: gate-launch-reviewer: core reviewをstandardで起動するとadapter前にhuman_requiredへ止める
+ok 68 - gate-launch-reviewer: core reviewをstandardで起動するとadapter前にhuman_requiredへ止める
+  ---
+  duration_ms: 4352.335806
+  ...
+# Subtest: codex core reviewer: gpt-5.6-sol/xhigh/read-onlyのattested overrideだけを許可する
+ok 69 - codex core reviewer: gpt-5.6-sol/xhigh/read-onlyのattested overrideだけを許可する
+  ---
+  duration_ms: 6411.266765
+  ...
+# Subtest: codex core reviewer: modelまたはeffortの不一致は起動せずhuman_requiredへ止める
+ok 70 - codex core reviewer: modelまたはeffortの不一致は起動せずhuman_requiredへ止める
+  ---
+  duration_ms: 5303.565923
+  ...
+# Subtest: claude core reviewer: 実在model・能力attestation・reasoning probeを検証し--modelで起動する
+ok 71 - claude core reviewer: 実在model・能力attestation・reasoning probeを検証し--modelで起動する
+  ---
+  duration_ms: 7851.143208
+  ...
+# Subtest: claude core reviewer: 能力attestationまたはreasoning probe不足はhuman_requiredへ止める
+ok 72 - claude core reviewer: 能力attestationまたはreasoning probe不足はhuman_requiredへ止める
+  ---
+  duration_ms: 4548.609932
+  ...
+# Subtest: gate-launch-reviewer.sh: 引数不足は exit 1（使い方エラー）
+ok 73 - gate-launch-reviewer.sh: 引数不足は exit 1（使い方エラー）
+  ---
+  duration_ms: 2720.055414
+  ...
+# Subtest: gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了コードをそのまま伝播する
+ok 74 - gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了コードをそのまま伝播する
+  ---
+  duration_ms: 14981.343421
+  ...
+# Switched to a new branch 'process/271-evidence-test'
+# Switched to branch 'main'
+# Switched to a new branch 'process/369-clone-roundtrip'
+# Switched to branch 'main'
+# Switched to a new branch 'process/303-fence-test'
+# Switched to branch 'main'
+# Subtest: local review完了dispatchはexact payloadをPOSTし、API失敗を非0へ保つ
+ok 75 - local review完了dispatchはexact payloadをPOSTし、API失敗を非0へ保つ
+  ---
+  duration_ms: 194.527337
+  ...
+# Subtest: GitHub evidence: Review API由来のStrict 2件を検証してsuccess Check Runへ結線する
+ok 76 - GitHub evidence: Review API由来のStrict 2件を検証してsuccess Check Runへ結線する
+  ---
+  duration_ms: 12664.860388
+  ...
+# Subtest: gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁数が異なっても往復に成功する
+ok 77 - gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁数が異なっても往復に成功する
+  ---
+  duration_ms: 7182.293654
+  ...
+# Subtest: gate submit-evidence: レビュアCLI出力がMarkdownコードフェンスで囲まれていても内部のJSONを解釈する（Issue \#303）
+ok 78 - gate submit-evidence: レビュアCLI出力がMarkdownコードフェンスで囲まれていても内部のJSONを解釈する（Issue \#303）
+  ---
+  duration_ms: 10960.948122
+  ...
+# Subtest: gate publish: final=pending（真に未レビュー）は拒否される
+ok 79 - gate publish: final=pending（真に未レビュー）は拒否される
+  ---
+  duration_ms: 1440.672797
+  ...
+# Subtest: gate publish: human_required は sub-verdict が pending でも拒否されず action_required を発行する
+ok 80 - gate publish: human_required は sub-verdict が pending でも拒否されず action_required を発行する
+  ---
+  duration_ms: 1716.697081
+  ...
+# Subtest: gate publish: final=approved だが falsification=fail は矛盾として拒否される
+ok 81 - gate publish: final=approved だが falsification=fail は矛盾として拒否される
+  ---
+  duration_ms: 1296.984493
+  ...
+# Subtest: gate publish: final=rejected は failure、approved(両pass) は success を発行する
+ok 82 - gate publish: final=rejected は failure、approved(両pass) は success を発行する
+  ---
+  duration_ms: 2619.671442
+  ...
+# Subtest: gate record-verdict: pass/pass の verdict は final=approved で結線される
+ok 83 - gate record-verdict: pass/pass の verdict は final=approved で結線される
+  ---
+  duration_ms: 1111.700729
+  ...
+# Subtest: gate record-verdict: blocking finding を含む verdict は final=rejected で origin が保持される
+ok 84 - gate record-verdict: blocking finding を含む verdict は final=rejected で origin が保持される
+  ---
+  duration_ms: 1008.287198
+  ...
+# Subtest: gate record-verdict: inconclusive の verdict は silent pass せず final=human_required になる
+ok 85 - gate record-verdict: inconclusive の verdict は silent pass せず final=human_required になる
+  ---
+  duration_ms: 1029.668891
+  ...
+# Subtest: gate record-verdict: approved_artifacts のパスは artifact_base_dir から digest を算出して記録する
+ok 86 - gate record-verdict: approved_artifacts のパスは artifact_base_dir から digest を算出して記録する
+  ---
+  duration_ms: 1701.115951
+  ...
+# Subtest: gate record-verdict: Strictの独立2 verdictがともにpassの場合だけapprovedになる
+ok 87 - gate record-verdict: Strictの独立2 verdictがともにpassの場合だけapprovedになる
+  ---
+  duration_ms: 1086.1263
+  ...
+# Subtest: gate record-verdict: Strictの独立verdictに1件でもfailがあればrejectedになる
+ok 88 - gate record-verdict: Strictの独立verdictに1件でもfailがあればrejectedになる
+  ---
+  duration_ms: 1174.469402
+  ...
+# Subtest: gate record-verdict: Strictの独立verdictが規定件数に満たない場合は書込みを拒否する
+ok 89 - gate record-verdict: Strictの独立verdictが規定件数に満たない場合は書込みを拒否する
+  ---
+  duration_ms: 1102.038702
+  ...
+# Subtest: gate mark-human-required: final を human_required に倒す（sub-verdict は据え置き）
+ok 90 - gate mark-human-required: final を human_required に倒す（sub-verdict は据え置き）
+  ---
+  duration_ms: 1355.238223
+  ...
+# Subtest: gate reviewer-context: adapter/backend/issue_number/base_dir を出力する（既定 adapter=claude）
+ok 91 - gate reviewer-context: adapter/backend/issue_number/base_dir を出力する（既定 adapter=claude）
+  ---
+  duration_ms: 1411.366199
+  ...
+# Subtest: gate reviewer-context: 明示core_auditはStrictとadapter別能力要求を出力する
+ok 92 - gate reviewer-context: 明示core_auditはStrictとadapter別能力要求を出力する
+  ---
+  duration_ms: 1421.07686
+  ...
+# Subtest: gate reviewer-context: GitHub core reviewも明示adapterを保ちCIは証跡検証専用になる
+ok 93 - gate reviewer-context: GitHub core reviewも明示adapterを保ちCIは証跡検証専用になる
+  ---
+  duration_ms: 1599.740001
+  ...
+# Subtest: gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック・出力 JSON 契約を含む
+ok 94 - gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック・出力 JSON 契約を含む
+  ---
+  duration_ms: 1032.5909
+  ...
+# Subtest: gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以外は修正前goldenと一致する
+ok 95 - gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以外は修正前goldenと一致する
+  ---
+  duration_ms: 453.042649
+  ...
+# Subtest: gate reviewer-prompt: auto abbrevが実際に伸長したcloneでも出力とdigestが完全一致する
+ok 96 - gate reviewer-prompt: auto abbrevが実際に伸長したcloneでも出力とdigestが完全一致する
+  ---
+  duration_ms: 3783.077436
+  ...
+# Subtest: gate reviewer-prompt: core.abbrev=7・12・未設定のcloneで出力とdigestが完全一致する
+ok 97 - gate reviewer-prompt: core.abbrev=7・12・未設定のcloneで出力とdigestが完全一致する
+  ---
+  duration_ms: 1553.137099
+  ...
+# Subtest: issue lifecycle (github backend): lease acquire/release/re-acquire -> gate publish(Check Run) -> pr create -> cleanup
+ok 98 - issue lifecycle (github backend): lease acquire/release/re-acquire -> gate publish(Check Run) -> pr create -> cleanup
+  ---
+  duration_ms: 13048.66985
+  ...
+# Subtest: issue resume (github backend): PRが見つからない場合とgh pr listの結果を含む場合
+ok 99 - issue resume (github backend): PRが見つからない場合とgh pr listの結果を含む場合
+  ---
+  duration_ms: 3246.298747
+  ...
+# Subtest: pr create (github backend): SPEC.mdのみが存在する場合、変更概要・理由・成果物リンクが自動充填され、影響範囲・ロールバック方針はプレースホルダのまま残る
+ok 100 - pr create (github backend): SPEC.mdのみが存在する場合、変更概要・理由・成果物リンクが自動充填され、影響範囲・ロールバック方針はプレースホルダのまま残る
+  ---
+  duration_ms: 3263.271776
+  ...
+# Subtest: pr create (github backend): DESIGN.mdも存在する場合、影響範囲・ロールバック方針も自動充填される
+ok 101 - pr create (github backend): DESIGN.mdも存在する場合、影響範囲・ロールバック方針も自動充填される
+  ---
+  duration_ms: 2881.314027
+  ...
+# Subtest: pr create (github backend): PRテンプレートが読めない場合はIssue \#174着手前と同一のCloses \#<id>のみの本文にフォールバックする
+ok 102 - pr create (github backend): PRテンプレートが読めない場合はIssue \#174着手前と同一のCloses \#<id>のみの本文にフォールバックする
+  ---
+  duration_ms: 2105.661305
+  ...
+# Subtest: init --dry-run: 実ファイルは一切作成されず、作成予定一覧のみが標準出力に表示される
+ok 103 - init --dry-run: 実ファイルは一切作成されず、作成予定一覧のみが標準出力に表示される
+  ---
+  duration_ms: 449.43073
+  ...
+# Subtest: init: 標準資産・.agent-skill-chain名前空間だけを実体化し、GitHub Actionsは展開しない
+ok 104 - init: 標準資産・.agent-skill-chain名前空間だけを実体化し、GitHub Actionsは展開しない
+  ---
+  duration_ms: 433.871429
+  ...
+# Subtest: init: 導入されたAGENTS.mdに実際のupgrade起動コマンド構文が記載されている（Issue \#298）
+ok 105 - init: 導入されたAGENTS.mdに実際のupgrade起動コマンド構文が記載されている（Issue \#298）
+  ---
+  duration_ms: 450.824612
+  ...
+# Subtest: init: 既存docs資産と衝突する場合は非破壊で停止し、終了コードが0以外になる
+ok 106 - init: 既存docs資産と衝突する場合は非破壊で停止し、終了コードが0以外になる
+  ---
+  duration_ms: 396.619695
+  ...
+# Subtest: init: 既存docs資産と衝突する場合、衝突より前に処理される他のファイルも一切書き込まれない（部分適用しない）
+ok 107 - init: 既存docs資産と衝突する場合、衝突より前に処理される他のファイルも一切書き込まれない（部分適用しない）
+  ---
+  duration_ms: 570.436401
+  ...
+# Subtest: init: 同一target_dirへの2回目の実行は冪等に成功する（unchanged）
+ok 108 - init: 同一target_dirへの2回目の実行は冪等に成功する（unchanged）
+  ---
+  duration_ms: 1104.024409
+  ...
+# Subtest: issue lifecycle (local backend): start -> lease -> segment -> gate -> checkpoint -> pr -> cleanup
+ok 109 - issue lifecycle (local backend): start -> lease -> segment -> gate -> checkpoint -> pr -> cleanup
+  ---
+  duration_ms: 11417.777286
+  ...
+# Subtest: issue start (local backend): --title/--request-fileを渡すとstate.yamlへ永続化され、segment startのプロンプトへ供給される（ISSUE-183 AC-4/AC-5）
+ok 110 - issue start (local backend): --title/--request-fileを渡すとstate.yamlへ永続化され、segment startのプロンプトへ供給される（ISSUE-183 AC-4/AC-5）
+  ---
+  duration_ms: 4556.670673
+  ...
+# Subtest: issue start (local backend): --title/--requestを指定しない従来どおりの起票は引き続き成功し、state.yamlはtitle/requestを持たない（後方互換、ISSUE-183 AC-4）
+ok 111 - issue start (local backend): --title/--requestを指定しない従来どおりの起票は引き続き成功し、state.yamlはtitle/requestを持たない（後方互換、ISSUE-183 AC-4）
+  ---
+  duration_ms: 2794.839972
+  ...
+# Subtest: issue start (local backend): --requestと--request-fileを同時指定するとエラーになる（ISSUE-183）
+ok 112 - issue start (local backend): --requestと--request-fileを同時指定するとエラーになる（ISSUE-183）
+  ---
+  duration_ms: 826.329323
+  ...
+# Subtest: gate review (CI単一checkout): .worktrees/ レイアウト無しでも、現在のブランチがissue_idに一致すればrootを対象に動作する
+ok 113 - gate review (CI単一checkout): .worktrees/ レイアウト無しでも、現在のブランチがissue_idに一致すればrootを対象に動作する
+  ---
+  duration_ms: 1375.123253
+  ...
+# Subtest: gate review: target_shaを明示指定した場合、entry.pathの実際のHEADと異なっていてもそれが採用されること（Issue \#171: CIのdetached HEAD対応）
+ok 114 - gate review: target_shaを明示指定した場合、entry.pathの実際のHEADと異なっていてもそれが採用されること（Issue \#171: CIのdetached HEAD対応）
+  ---
+  duration_ms: 1406.107424
+  ...
+# Subtest: doctor (local backend): git/リポジトリ/configの検査がすべてOKになる
+ok 115 - doctor (local backend): git/リポジトリ/configの検査がすべてOKになる
+  ---
+  duration_ms: 1938.429954
+  ...
+# Subtest: lease acquire 並行実行 (AC-2, ローカルバックエンド): N並行acquireのうち成功は常に1件のみ
+ok 116 - lease acquire 並行実行 (AC-2, ローカルバックエンド): N並行acquireのうち成功は常に1件のみ
+  ---
+  duration_ms: 2872.815109
+  ...
+# Subtest: lease acquire 並行実行 (AC-1, GitHubバックエンド): N並行acquireのうち成功は常に1件のみ
+ok 117 - lease acquire 並行実行 (AC-1, GitHubバックエンド): N並行acquireのうち成功は常に1件のみ
+  ---
+  duration_ms: 3066.895332
+  ...
+# Subtest: lease renew: 正しいtokenでexpires_atが延長される
+ok 118 - lease renew: 正しいtokenでexpires_atが延長される
+  ---
+  duration_ms: 2118.610594
+  ...
+# Subtest: lease renew (異常系): tokenが一致しない場合は失敗する
+ok 119 - lease renew (異常系): tokenが一致しない場合は失敗する
+  ---
+  duration_ms: 1778.182617
+  ...
+# Subtest: lease renew (ISSUE-176 AC-6): ローカルバックエンドも期限切れ後はtokenが一致してもrenewを拒否する
+ok 120 - lease renew (ISSUE-176 AC-6): ローカルバックエンドも期限切れ後はtokenが一致してもrenewを拒否する
+  ---
+  duration_ms: 1829.86515
+  ...
+# Subtest: lease resume: 同一holderのcredentialとdirty worktreeだけをCAS更新し、tokenを全表示経路から除外する
+ok 121 - lease resume: 同一holderのcredentialとdirty worktreeだけをCAS更新し、tokenを全表示経路から除外する
+  ---
+  duration_ms: 4437.623288
+  ...
+# Subtest: lease resume: holder・Issue・segment・worktree・branchの各不一致はrefとdirty worktreeを変更しない
+ok 122 - lease resume: holder・Issue・segment・worktree・branchの各不一致はrefとdirty worktreeを変更しない
+  ---
+  duration_ms: 6404.210211
+  ...
+# Subtest: lease resume: tokenをsubjectに含むlegacy leaseを非表示payloadへ移行し、旧tokenを失効させる
+ok 123 - lease resume: tokenをsubjectに含むlegacy leaseを非表示payloadへ移行し、旧tokenを失効させる
+  ---
+  duration_ms: 2831.849203
+  ...
+# Subtest: lint secrets <path>: ダミーAWSアクセスキー形式の文字列を含むファイルを検知し、終了コード1・該当行を報告する（ISSUE-178 AC-8）
+ok 124 - lint secrets <path>: ダミーAWSアクセスキー形式の文字列を含むファイルを検知し、終了コード1・該当行を報告する（ISSUE-178 AC-8）
+  ---
+  duration_ms: 869.68636
+  ...
+# Subtest: lint secrets <path>: PEM秘密鍵ヘッダ（ヘッダ行のみ、鍵本体は含まない）も検知する
+ok 125 - lint secrets <path>: PEM秘密鍵ヘッダ（ヘッダ行のみ、鍵本体は含まない）も検知する
+  ---
+  duration_ms: 733.992457
+  ...
+# Subtest: lint secrets <path>: secretパターンを含まない通常のファイルは終了コード0になる（ISSUE-178 AC-9）
+ok 126 - lint secrets <path>: secretパターンを含まない通常のファイルは終了コード0になる（ISSUE-178 AC-9）
+  ---
+  duration_ms: 856.598492
+  ...
+# Subtest: lint secrets: 検査対象パスが1つも指定されていない場合はエラーになる（--diffでもない場合）
+ok 127 - lint secrets: 検査対象パスが1つも指定されていない場合はエラーになる（--diffでもない場合）
+  ---
+  duration_ms: 765.987983
+  ...
+# Subtest: lint secrets --diff: base-refの指定が無い場合はエラーになる
+ok 128 - lint secrets --diff: base-refの指定が無い場合はエラーになる
+  ---
+  duration_ms: 956.901905
+  ...
+# Subtest: lint secrets --diff: PRで追加されたダミーAWSアクセスキー形式の行を検知し、終了コード1で失敗する（ISSUE-178 AC-8）
+ok 129 - lint secrets --diff: PRで追加されたダミーAWSアクセスキー形式の行を検知し、終了コード1で失敗する（ISSUE-178 AC-8）
+  ---
+  duration_ms: 855.344367
+  ...
+# Subtest: lint secrets --diff: secretパターンを含まない通常の差分では誤検知せず終了コード0になる（ISSUE-178 AC-9）
+ok 130 - lint secrets --diff: secretパターンを含まない通常の差分では誤検知せず終了コード0になる（ISSUE-178 AC-9）
+  ---
+  duration_ms: 861.906651
+  ...
+# Subtest: lint secrets -h: 使い方を表示し終了コード0になる
+ok 131 - lint secrets -h: 使い方を表示し終了コード0になる
+  ---
+  duration_ms: 781.936099
+  ...
+# Subtest: lint vocab: 禁止語を含まないファイルは終了コード0、禁止語を含むファイルは終了コード1で箇所を報告する
+ok 132 - lint vocab: 禁止語を含まないファイルは終了コード0、禁止語を含むファイルは終了コード1で箇所を報告する
+  ---
+  duration_ms: 1229.807699
+  ...
+# Subtest: lint vocab: バッククォートのコードスパン・<placeholder>・スラッシュ区切りのパスリテラル内の禁止語は違反にならない（散文の誤用は引き続き検出される）
+ok 133 - lint vocab: バッククォートのコードスパン・<placeholder>・スラッシュ区切りのパスリテラル内の禁止語は違反にならない（散文の誤用は引き続き検出される）
+  ---
+  duration_ms: 992.786037
+  ...
+# Subtest: lint vocab: 禁止語自体がパス形式の文字列（.agent-skill-chain/source）の場合は、バッククォートやパスリテラル文脈でも除外せず検出する
+ok 134 - lint vocab: 禁止語自体がパス形式の文字列（.agent-skill-chain/source）の場合は、バッククォートやパスリテラル文脈でも除外せず検出する
+  ---
+  duration_ms: 1048.287602
+  ...
+# Subtest: lint vocab: 識別子文脈（コード識別子・外部語彙許可リスト）としての禁止語利用は全ファイル種別で誤検出されない（Issue \#187 ADR-1: 拡張子に依らず共通で維持）
+ok 135 - lint vocab: 識別子文脈（コード識別子・外部語彙許可リスト）としての禁止語利用は全ファイル種別で誤検出されない（Issue \#187 ADR-1: 拡張子に依らず共通で維持）
+  ---
+  duration_ms: 1158.535217
+  ...
+# Subtest: lint vocab: YAMLキー・flow-sequence要素としての禁止語利用は .yaml/.yml でのみ誤検出されない（Issue \#187 ADR-1: YAML文脈は真のYAMLファイルに限定適用）
+ok 136 - lint vocab: YAMLキー・flow-sequence要素としての禁止語利用は .yaml/.yml でのみ誤検出されない（Issue \#187 ADR-1: YAML文脈は真のYAMLファイルに限定適用）
+  ---
+  duration_ms: 804.411499
+  ...
+# Subtest: lint vocab: CLIサブコマンド文脈としての禁止語利用は散文（.md）以外でのみ誤検出されない（Issue \#187 ADR-1: CLIサブコマンド文脈は非.mdに限定適用）
+ok 137 - lint vocab: CLIサブコマンド文脈としての禁止語利用は散文（.md）以外でのみ誤検出されない（Issue \#187 ADR-1: CLIサブコマンド文脈は非.mdに限定適用）
+  ---
+  duration_ms: 907.191336
+  ...
+# Subtest: lint vocab: 散文（.md）中でYAMLキー風・CLIサブコマンド動詞と偶然共起する禁止語混入は、識別子文脈と誤判定せず違反として検出される（Issue \#187 SC-3・Issue \#178 finding-1 回帰）
+ok 138 - lint vocab: 散文（.md）中でYAMLキー風・CLIサブコマンド動詞と偶然共起する禁止語混入は、識別子文脈と誤判定せず違反として検出される（Issue \#187 SC-3・Issue \#178 finding-1 回帰）
+  ---
+  duration_ms: 860.801861
+  ...
+# Subtest: lint vocab: 識別子文脈に隣接していても、散文としての禁止語混入は引き続き検出される（regressionなし、ISSUE-178 AC-2）
+ok 139 - lint vocab: 識別子文脈に隣接していても、散文としての禁止語混入は引き続き検出される（regressionなし、ISSUE-178 AC-2）
+  ---
+  duration_ms: 996.469048
+  ...
+# Subtest: lint vocab: 非散文ファイル（.ts等）ではASCII識別子・トークン内部の部分文字列としての禁止語出現は誤検出しない（ISSUE-283）
+ok 140 - lint vocab: 非散文ファイル（.ts等）ではASCII識別子・トークン内部の部分文字列としての禁止語出現は誤検出しない（ISSUE-283）
+  ---
+  duration_ms: 935.673543
+  ...
+# Subtest: lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.agent-skill-chain資産全体）は違反なしで終了コード0になる（ISSUE-178 AC-4: templates/config/schemas/scriptsも含めて対象）
+ok 141 - lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.agent-skill-chain資産全体）は違反なしで終了コード0になる（ISSUE-178 AC-4: templates/config/schemas/scriptsも含めて対象）
+  ---
+  duration_ms: 1004.558686
+  ...
+# Subtest: lint references: 実在する見出しへの§参照・安定ID接尾辞つき参照・バッククォート例示は違反にならない
+ok 142 - lint references: 実在する見出しへの§参照・安定ID接尾辞つき参照・バッククォート例示は違反にならない
+  ---
+  duration_ms: 897.083132
+  ...
+# Subtest: lint references: 見出しに解決できない§参照と素のfile:line参照は違反として検出される
+ok 143 - lint references: 見出しに解決できない§参照と素のfile:line参照は違反として検出される
+  ---
+  duration_ms: 1006.47145
+  ...
+# Subtest: lint references: path省略時のデフォルト対象は本体 .github/workflows/ を含み、そこに置かれた解決不能な§参照を検出する（Issue \#221: 実デプロイ済みワークフローYAMLが走査対象から漏れていた検出漏れの回帰テスト）
+ok 144 - lint references: path省略時のデフォルト対象は本体 .github/workflows/ を含み、そこに置かれた解決不能な§参照を検出する（Issue \#221: 実デプロイ済みワークフローYAMLが走査対象から漏れていた検出漏れの回帰テスト）
+  ---
+  duration_ms: 976.181404
+  ...
+# Subtest: lint adr check: 実物 docs/adr/ は違反0で通る
+ok 145 - lint adr check: 実物 docs/adr/ は違反0で通る
+  ---
+  duration_ms: 666.590122
+  ...
+# Subtest: lint adr check: supersedes/superseded-byの非対称は違反として検出され、対称に直せば違反なしになる
+ok 146 - lint adr check: supersedes/superseded-byの非対称は違反として検出され、対称に直せば違反なしになる
+  ---
+  duration_ms: 1808.693064
+  ...
+# Subtest: lint adr check: check以外のサブコマンドはエラーになる
+ok 147 - lint adr check: check以外のサブコマンドはエラーになる
+  ---
+  duration_ms: 1558.721918
+  ...
+# npm notice
+# npm notice New major version of npm available! 10.8.2 -> 12.0.2
+# npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.2
+# npm notice To update run: npm install -g npm@12.0.2
+# npm notice
+# Subtest: npm pack --dry-run: runtime状態・自己拡張ポリシー・保守者資産が配布物に含まれない
+ok 148 - npm pack --dry-run: runtime状態・自己拡張ポリシー・保守者資産が配布物に含まれない
+  ---
+  duration_ms: 2430.725261
+  ...
+# Subtest: npm pack --dry-run: init/upgrade の全配布 namespace とルート資産は欠落していない
+ok 149 - npm pack --dry-run: init/upgrade の全配布 namespace とルート資産は欠落していない
+  ---
+  duration_ms: 0.62411
+  ...
+# Subtest: segment start (CLI): documents.commonと自セグメント分のdocuments.roles.<segment>の内容が標準出力に含まれ、終了コード0で成功する（AC-1/AC-2）
+ok 150 - segment start (CLI): documents.commonと自セグメント分のdocuments.roles.<segment>の内容が標準出力に含まれ、終了コード0で成功する（AC-1/AC-2）
+  ---
+  duration_ms: 3094.300434
+  ...
+# Subtest: segment start (CLI): 登録パスが範囲外脱出（../）を含む場合、標準出力へ何も出力せず（部分出力も無い）終了コードが非0になる（AC-7）
+ok 151 - segment start (CLI): 登録パスが範囲外脱出（../）を含む場合、標準出力へ何も出力せず（部分出力も無い）終了コードが非0になる（AC-7）
+  ---
+  duration_ms: 2964.284727
+  ...
+# Subtest: segment start (CLI): 登録パスに対応する実ファイルが存在しない場合、標準出力へ何も出力せず（部分出力も無い）終了コードが非0になる（AC-6）
+ok 152 - segment start (CLI): 登録パスに対応する実ファイルが存在しない場合、標準出力へ何も出力せず（部分出力も無い）終了コードが非0になる（AC-6）
+  ---
+  duration_ms: 3333.680625
+  ...
+# Subtest: gate reconcile: 成果物が変化していないcommitへは両ゲートともreissuedされる
+ok 153 - gate reconcile: 成果物が変化していないcommitへは両ゲートともreissuedされる
+  ---
+  duration_ms: 11079.859099
+  ...
+# Subtest: gate reconcile: spec成果物の変更commitを渡すとspec/design双方がinvalidatedされる
+ok 154 - gate reconcile: spec成果物の変更commitを渡すとspec/design双方がinvalidatedされる
+  ---
+  duration_ms: 13111.616559
+  ...
+# Subtest: gate reconcile (github backend): 成果物が変化していないcommitへは両ゲートとも成功Check Runが再発行される
+ok 155 - gate reconcile (github backend): 成果物が変化していないcommitへは両ゲートとも成功Check Runが再発行される
+  ---
+  duration_ms: 11922.850178
+  ...
+# Subtest: gate reconcile (github backend): spec成果物の変更commitを渡すとspec/design双方でaction_required Check Runが発行される
+ok 156 - gate reconcile (github backend): spec成果物の変更commitを渡すとspec/design双方でaction_required Check Runが発行される
+  ---
+  duration_ms: 12183.8013
+  ...
+# Subtest: reconcile (トップレベル): worktreeが無い期限切れleaseはreclaimedされ、lease.yamlが削除される
+ok 157 - reconcile (トップレベル): worktreeが無い期限切れleaseはreclaimedされ、lease.yamlが削除される
+  ---
+  duration_ms: 2356.80384
+  ...
+# Subtest: reconcile (トップレベル): worktreeに未commitの変更が残る期限切れleaseはescalatedされ回収されない
+ok 158 - reconcile (トップレベル): worktreeに未commitの変更が残る期限切れleaseはescalatedされ回収されない
+  ---
+  duration_ms: 3184.060514
+  ...
+# To /tmp/agent-skill-chain-remote-uf1dJt
+#    9d5965d..b13bf58  main -> main
+# To /tmp/agent-skill-chain-remote-CKl1qg
+#    391644e..e3c6f33  main -> main
+# To /tmp/agent-skill-chain-remote-9s4NTC
+#    505dc50..d5d6ff0  main -> main
+# To /tmp/agent-skill-chain-remote-N5rnXm
+#    24f52d2..887945e  main -> main
+# To /tmp/agent-skill-chain-remote-0p38Gq
+#    78f2f53..7f48f74  main -> main
+# To /tmp/agent-skill-chain-remote-bCSkJL
+#    bf058c9..377338d  main -> main
+# To /tmp/agent-skill-chain-remote-4BqV94
+#    41f0bd3..bfe1053  main -> main
+# To /tmp/agent-skill-chain-remote-urmPCg
+#    175babb..8e06ba7  main -> main
+# Switched to branch 'main'
+# To /tmp/agent-skill-chain-remote-urmPCg
+#    8e06ba7..227ca79  main -> main
+# To /tmp/agent-skill-chain-remote-sBIzcc
+#    1ca0198..b814c36  main -> main
+# To /tmp/agent-skill-chain-remote-pKzikt
+#    1c8ddea..0e84a58  main -> main
+# To /tmp/agent-skill-chain-remote-suJScV
+#    291f957..7015277  main -> main
+# To /tmp/agent-skill-chain-remote-3aEsRb
+#    7d5cf73..a1c278e  main -> main
+# To /tmp/agent-skill-chain-remote-qMlO8p
+#    8cb46a4..a9b2c95  main -> main
+# To /tmp/agent-skill-chain-remote-FMoK0k
+#    7abe6aa..6278c28  main -> main
+# To /tmp/agent-skill-chain-remote-vlEntN
+#    1caf36e..2daf89e  main -> main
+# Subtest: release resolve-version (AC-1): 実リポジトリの package.json・git tag からCLI出力形式で target/need_commit を決定する
+ok 159 - release resolve-version (AC-1): 実リポジトリの package.json・git tag からCLI出力形式で target/need_commit を決定する
+  ---
+  duration_ms: 3527.236636
+  ...
+# Subtest: release tag (AC-2, AC-4, AC-7): 未存在なら新規タグを作成・pushし、既存なら冪等スキップし重複作成しない
+ok 160 - release tag (AC-2, AC-4, AC-7): 未存在なら新規タグを作成・pushし、既存なら冪等スキップし重複作成しない
+  ---
+  duration_ms: 3418.09891
+  ...
+# Subtest: release tag (AC-1, Issue \#204): git tagger identityが未設定の環境でもrelease tagに成功する
+ok 161 - release tag (AC-1, Issue \#204): git tagger identityが未設定の環境でもrelease tagに成功する
+  ---
+  duration_ms: 1596.306467
+  ...
+# Subtest: release tag (AC-3, Issue \#204): 既存git identityを上書き・破壊しない
+ok 162 - release tag (AC-3, Issue \#204): 既存git identityを上書き・破壊しない
+  ---
+  duration_ms: 1529.543715
+  ...
+# Subtest: release publish (AC-3, AC-4, AC-7): 未存在ならGitHub Releaseを作成し、既存なら冪等スキップし重複作成しない
+ok 163 - release publish (AC-3, AC-4, AC-7): 未存在ならGitHub Releaseを作成し、既存なら冪等スキップし重複作成しない
+  ---
+  duration_ms: 2012.035551
+  ...
+# Subtest: release publish (Issue \#226 AC-1, AC-2): semver・旧日時形式タグ混在環境で --generate-notes と直前semverタグの --notes-start-tag を指定する
+ok 164 - release publish (Issue \#226 AC-1, AC-2): semver・旧日時形式タグ混在環境で --generate-notes と直前semverタグの --notes-start-tag を指定する
+  ---
+  duration_ms: 1410.035505
+  ...
+# Subtest: release publish (Issue \#226 AC-3): target未満のsemverタグが存在しない場合は --notes-start-tag を付けず成功する
+ok 165 - release publish (Issue \#226 AC-3): target未満のsemverタグが存在しない場合は --notes-start-tag を付けず成功する
+  ---
+  duration_ms: 1204.402123
+  ...
+# Subtest: release tag+publish 連続二重発火 (AC-7): 同一 target への2回の全処理実行でも成果物は高々1件
+ok 166 - release tag+publish 連続二重発火 (AC-7): 同一 target への2回の全処理実行でも成果物は高々1件
+  ---
+  duration_ms: 2857.795808
+  ...
+# Subtest: release bump (AC-1, AC-6): package.jsonをtargetへ書換え、release/bump-v<target>ブランチをPR経由でskip-ci件名によりadmin mergeする
+ok 167 - release bump (AC-1, AC-6): package.jsonをtargetへ書換え、release/bump-v<target>ブランチをPR経由でskip-ci件名によりadmin mergeする
+  ---
+  duration_ms: 1777.171299
+  ...
+# Subtest: release bump 自己修復 (DESIGN.md「PR作成後、admin mergeに失敗」シナリオ): 1回目のadmin merge失敗後、2回目runは既存ブランチ・PRを再利用し重複作成せず再試行に成功する
+ok 168 - release bump 自己修復 (DESIGN.md「PR作成後、admin mergeに失敗」シナリオ): 1回目のadmin merge失敗後、2回目runは既存ブランチ・PRを再利用し重複作成せず再試行に成功する
+  ---
+  duration_ms: 2645.707343
+  ...
+# Subtest: release bump base乖離あり (Issue \#228 AC-1, AC-3): 既存bumpブランチのbaseが古いmain基準のとき、現行main基準の正しい差分へ作り直してマージする
+ok 169 - release bump base乖離あり (Issue \#228 AC-1, AC-3): 既存bumpブランチのbaseが古いmain基準のとき、現行main基準の正しい差分へ作り直してマージする
+  ---
+  duration_ms: 2675.212372
+  ...
+# Subtest: release bump base乖離なし (Issue \#228 AC-2): 既存bumpブランチのbaseが現行mainと一致するときは再生成・force pushを行わずマージ再試行のみ
+ok 170 - release bump base乖離なし (Issue \#228 AC-2): 既存bumpブランチのbaseが現行mainと一致するときは再生成・force pushを行わずマージ再試行のみ
+  ---
+  duration_ms: 2641.111458
+  ...
+# Subtest: release bump (Issue \#266): PR作成直後のbase更新競合を現行mainへ再同期して同一PRを一度だけ再試行し、tag/publish後続処理を継続する
+ok 171 - release bump (Issue \#266): PR作成直後のbase更新競合を現行mainへ再同期して同一PRを一度だけ再試行し、tag/publish後続処理を継続する
+  ---
+  duration_ms: 3122.374124
+  ...
+# Subtest: release bump (Issue \#266): base更新競合後の再試行merge失敗はhuman_requiredで停止し、追加再試行しない
+ok 172 - release bump (Issue \#266): base更新競合後の再試行merge失敗はhuman_requiredで停止し、追加再試行しない
+  ---
+  duration_ms: 2719.178833
+  ...
+# Subtest: release bump スコープ検査違反 (AC-6, 防御的ガード): 変更ファイルがpackage.json/package-lock.json以外を含むPRは自動admin mergeせずhuman_requiredで停止する
+ok 173 - release bump スコープ検査違反 (AC-6, 防御的ガード): 変更ファイルがpackage.json/package-lock.json以外を含むPRは自動admin mergeせずhuman_requiredで停止する
+  ---
+  duration_ms: 1536.20758
+  ...
+# Subtest: release bump (Issue \#243, AC-2): package-lock.json が存在しないリポジトリでもpackage.jsonだけをcommit・admin mergeする
+ok 174 - release bump (Issue \#243, AC-2): package-lock.json が存在しないリポジトリでもpackage.jsonだけをcommit・admin mergeする
+  ---
+  duration_ms: 1646.574209
+  ...
+# Subtest: release bump (AC-1, Issue \#198): git author identityが未設定の環境でもbumpコミットに成功する
+ok 175 - release bump (AC-1, Issue \#198): git author identityが未設定の環境でもbumpコミットに成功する
+  ---
+  duration_ms: 1840.30378
+  ...
+# Subtest: release bump (AC-4, Issue \#198): 既存git author identityを上書き・破壊しない
+ok 176 - release bump (AC-4, Issue \#198): 既存git author identityを上書き・破壊しない
+  ---
+  duration_ms: 1668.456744
+  ...
+# Subtest: report status (local backend): completedはissues/<n>/.agent-skill-chain/reports/<segment>.yamlへ書き込まれる
+ok 177 - report status (local backend): completedはissues/<n>/.agent-skill-chain/reports/<segment>.yamlへ書き込まれる
+  ---
+  duration_ms: 3315.56133
+  ...
+# Subtest: report status (local backend): blockedはblocked_reason必須。省略時は推測で補完せず拒否する
+ok 178 - report status (local backend): blockedはblocked_reason必須。省略時は推測で補完せず拒否する
+  ---
+  duration_ms: 2465.361993
+  ...
+# Subtest: report status: statusがcompleted|blocked以外は使い方エラーとして拒否する
+ok 179 - report status: statusがcompleted|blocked以外は使い方エラーとして拒否する
+  ---
+  duration_ms: 1435.218752
+  ...
+# Subtest: report status (local backend, AC-3): worktree内から実行したreportがメイン作業ツリー側から同一実体として読める（worktree分裂の解消）
+ok 180 - report status (local backend, AC-3): worktree内から実行したreportがメイン作業ツリー側から同一実体として読める（worktree分裂の解消）
+  ---
+  duration_ms: 3299.723019
+  ...
+# Subtest: report status (github backend): Issueコメントとして固定スキーマのworker reportを投稿する
+ok 181 - report status (github backend): Issueコメントとして固定スキーマのworker reportを投稿する
+  ---
+  duration_ms: 1600.605083
+  ...
+# To /tmp/agent-skill-chain-remote-WqB60Q
+#    fd561ac..829ff00  main -> main
+# To /tmp/agent-skill-chain-remote-WqB60Q
+#    829ff00..9f302dd  main -> main
+# To /tmp/agent-skill-chain-remote-FaURbp
+#    bf058c9..976de85  main -> main
+# To /tmp/agent-skill-chain-remote-3PvKUc
+#    9e501b4..05319c3  main -> main
+# To /tmp/agent-skill-chain-remote-stXISM
+#    0a5bb99..c6f3514  main -> main
+# To /tmp/agent-skill-chain-remote-K89R11
+#    a24f10d..b3a5ccd  main -> main
+# From /tmp/agent-skill-chain-remote-K89R11
+#  * branch            main       -> FETCH_HEAD
+# Switched to and reset branch 'main'
+# warning: adding embedded git repository: .worktrees/20260101_000000-feature-1-sample-one
+# hint: You've added another git repository inside your current repository.
+# hint: Clones of the outer repository will not contain the contents of
+# hint: the embedded repository and will not know how to obtain it.
+# hint: If you meant to add a submodule, use:
+# hint: 
+# hint: \\tgit submodule add <url> .worktrees/20260101_000000-feature-1-sample-one
+# hint: 
+# hint: If you added this path by mistake, you can remove it from the
+# hint: index with:
+# hint: 
+# hint: \\tgit rm --cached .worktrees/20260101_000000-feature-1-sample-one
+# hint: 
+# hint: See "git help submodule" for more information.
+# warning: adding embedded git repository: .worktrees/20260101_000000-feature-2-sample-two
+# To /tmp/agent-skill-chain-remote-2wtSp2
+#    1ca0198..a21195b  main -> main
+# Subtest: root-cleanup run: 対象4ファイルが0件のときno-opになり、PR作成・admin mergeを一切行わない
+ok 182 - root-cleanup run: 対象4ファイルが0件のときno-opになり、PR作成・admin mergeを一切行わない
+  ---
+  duration_ms: 960.743157
+  ...
+# Subtest: root-cleanup run: 対象ファイルが1件以上のとき、該当ファイルのみを短命ブランチで削除しPRをadmin mergeする（無関係ファイルは削除しない）
+ok 183 - root-cleanup run: 対象ファイルが1件以上のとき、該当ファイルのみを短命ブランチで削除しPRをadmin mergeする（無関係ファイルは削除しない）
+  ---
+  duration_ms: 1695.318652
+  ...
+# Subtest: root-cleanup run: 対象4ファイルすべてが存在する場合はすべて削除対象になる
+ok 184 - root-cleanup run: 対象4ファイルすべてが存在する場合はすべて削除対象になる
+  ---
+  duration_ms: 1762.564604
+  ...
+# Subtest: root-cleanup run スコープ検査違反（想定外パス混入）: 変更ファイルが対象4ファイル以外を含むPRは自動admin mergeせずhuman_requiredで停止する
+ok 185 - root-cleanup run スコープ検査違反（想定外パス混入）: 変更ファイルが対象4ファイル以外を含むPRは自動admin mergeせずhuman_requiredで停止する
+  ---
+  duration_ms: 1681.91568
+  ...
+# Subtest: root-cleanup run スコープ検査違反（削除以外の変更混入）: additions>0のファイルを含むPRは自動admin mergeせずhuman_requiredで停止する
+ok 186 - root-cleanup run スコープ検査違反（削除以外の変更混入）: additions>0のファイルを含むPRは自動admin mergeせずhuman_requiredで停止する
+  ---
+  duration_ms: 1598.915214
+  ...
+# Subtest: root-cleanup run 自己修復: 1回目のadmin merge失敗後、次runは既存のOPEN cleanup PRを再利用し重複作成せず再試行に成功する
+ok 187 - root-cleanup run 自己修復: 1回目のadmin merge失敗後、次runは既存のOPEN cleanup PRを再利用し重複作成せず再試行に成功する
+  ---
+  duration_ms: 2324.979353
+  ...
+# Subtest: root-cleanup run (AC-3): 並行する他Issueのworktree・ブランチのファイル内容・commit履歴は実行前後で一切変化しない
+ok 188 - root-cleanup run (AC-3): 並行する他Issueのworktree・ブランチのファイル内容・commit履歴は実行前後で一切変化しない
+  ---
+  duration_ms: 6323.226752
+  ...
+# To /tmp/agent-skill-chain-remote-hvRVAG
+#    f28f597..43e7d28  main -> main
+# To /tmp/agent-skill-chain-remote-hvRVAG
+#    43e7d28..1a43abc  main -> main
+# Subtest: self-extension project policy: manifestで登録した実在文書だけを規範として定義する
+ok 189 - self-extension project policy: manifestで登録した実在文書だけを規範として定義する
+  ---
+  duration_ms: 430.859872
+  ...
+# Subtest: self-extension lifecycle: isolated repoで成果物の作成、記録、close後の復元を行える
+ok 190 - self-extension lifecycle: isolated repoで成果物の作成、記録、close後の復元を行える
+  ---
+  duration_ms: 3171.186004
+  ...
+# Subtest: self-extension lifecycle (github backend): Draft PR本文がIssue \#245をClosesで追跡する
+ok 191 - self-extension lifecycle (github backend): Draft PR本文がIssue \#245をClosesで追跡する
+  ---
+  duration_ms: 3154.514168
+  ...
+# Subtest: setup: 非推奨aliasはローカル資産だけを導入し、GitHub Actions/APIを暗黙変更しない
+ok 192 - setup: 非推奨aliasはローカル資産だけを導入し、GitHub Actions/APIを暗黙変更しない
+  ---
+  duration_ms: 435.771601
+  ...
+# Subtest: setup: 同じtarget_dirへの2回目の実行は冪等に成功する（unchanged）
+ok 193 - setup: 同じtarget_dirへの2回目の実行は冪等に成功する（unchanged）
+  ---
+  duration_ms: 1021.553796
+  ...
+# Subtest: setup: target_dirに既存の異なる内容のAGENTS.mdがあると導入を中断しCliErrorを返す
+ok 194 - setup: target_dirに既存の異なる内容のAGENTS.mdがあると導入を中断しCliErrorを返す
+  ---
+  duration_ms: 549.412209
+  ...
+# Subtest: setup github: target_dirへ.github同期のみを行い、AGENTS.md等の標準資産はコピーしない
+ok 195 - setup github: target_dirへ.github同期のみを行い、AGENTS.md等の標準資産はコピーしない
+  ---
+  duration_ms: 1822.09924
+  ...
+# Subtest: setup labels: cwdのリポジトリに対しlabels.yaml定義の全ラベルが適用される
+ok 196 - setup labels: cwdのリポジトリに対しlabels.yaml定義の全ラベルが適用される
+  ---
+  duration_ms: 2371.066319
+  ...
+# Subtest: setup ruleset: 初回はruleset新規作成(POST)、2回目は既存ruleset検出後に更新(PUT)する
+ok 197 - setup ruleset: 初回はruleset新規作成(POST)、2回目は既存ruleset検出後に更新(PUT)する
+  ---
+  duration_ms: 2216.225435
+  ...
+# Subtest: setup github: 専用App未設定時は配布物・labels・rulesetを部分展開しない
+ok 198 - setup github: 専用App未設定時は配布物・labels・rulesetを部分展開しない
+  ---
+  duration_ms: 589.70256
+  ...
+# Subtest: sync templates: 空のtarget_dirへ実行するとファイルが作成される（gh不要）
+ok 199 - sync templates: 空のtarget_dirへ実行するとファイルが作成される（gh不要）
+  ---
+  duration_ms: 1141.026101
+  ...
+# Subtest: sync templates: 既に一部異なる内容で存在するファイルは上書き（overwritten）される
+ok 200 - sync templates: 既に一部異なる内容で存在するファイルは上書き（overwritten）される
+  ---
+  duration_ms: 1429.143948
+  ...
+# Subtest: sync templates: cwdが非gitディレクトリでもtarget_dirを明示指定すれば成功する
+ok 201 - sync templates: cwdが非gitディレクトリでもtarget_dirを明示指定すれば成功する
+  ---
+  duration_ms: 544.108512
+  ...
+# Subtest: test run: package.jsonが無ければ明確な理由で失敗する
+ok 202 - test run: package.jsonが無ければ明確な理由で失敗する
+  ---
+  duration_ms: 335.809569
+  ...
+# Subtest: test run: package.jsonにscripts.testが無ければ明確な理由で失敗する
+ok 203 - test run: package.jsonにscripts.testが無ければ明確な理由で失敗する
+  ---
+  duration_ms: 396.628679
+  ...
+# Subtest: test run: scripts.testが成功すれば終了コード0
+ok 204 - test run: scripts.testが成功すれば終了コード0
+  ---
+  duration_ms: 1291.322352
+  ...
+# Subtest: test run: scripts.testが失敗すればnpm testの終了コードを反映して失敗する
+ok 205 - test run: scripts.testが失敗すればnpm testの終了コードを反映して失敗する
+  ---
+  duration_ms: 967.722087
+  ...
+# Subtest: uninstall: gitリポジトリでないディレクトリに対してはエラー終了する（削除しない）
+ok 206 - uninstall: gitリポジトリでないディレクトリに対してはエラー終了する（削除しない）
+  ---
+  duration_ms: 904.36657
+  ...
+# Subtest: uninstall: 未commitの変更がある場合は安全側で停止し、削除されない
+ok 207 - uninstall: 未commitの変更がある場合は安全側で停止し、削除されない
+  ---
+  duration_ms: 1253.027885
+  ...
+# Subtest: uninstall: 残存worktreeがある場合は安全側で停止し、削除されない
+ok 208 - uninstall: 残存worktreeがある場合は安全側で停止し、削除されない
+  ---
+  duration_ms: 1236.920365
+  ...
+# Subtest: uninstall: 安全確認を通過した場合、project/を除く導入資産が削除され、project/は保持される
+ok 209 - uninstall: 安全確認を通過した場合、project/を除く導入資産が削除され、project/は保持される
+  ---
+  duration_ms: 1810.632593
+  ...
+# Subtest: uninstall: 実行後は.installed_versionも削除され、doctorが「未導入」と正しく表示する
+ok 210 - uninstall: 実行後は.installed_versionも削除され、doctorが「未導入」と正しく表示する
+  ---
+  duration_ms: 3461.865077
+  ...
+# Subtest: uninstall: --force オプションは提供されない（未知フラグとして使い方表示・成功しない）
+ok 211 - uninstall: --force オプションは提供されない（未知フラグとして使い方表示・成功しない）
+  ---
+  duration_ms: 1022.267805
+  ...
+# Subtest: upgrade: .installed_version不在（未導入）の場合はエラー終了する
+ok 212 - upgrade: .installed_version不在（未導入）の場合はエラー終了する
+  ---
+  duration_ms: 609.449298
+  ...
+# Subtest: upgrade --dry-run: 実ファイルへは一切書き込まない
+ok 213 - upgrade --dry-run: 実ファイルへは一切書き込まない
+  ---
+  duration_ms: 875.452183
+  ...
+# Subtest: upgrade: .agent-skill-chain/project/配下のカスタム内容は変更されず、標準アセットはパッケージ同梱版へ上書きされる
+ok 214 - upgrade: .agent-skill-chain/project/配下のカスタム内容は変更されず、標準アセットはパッケージ同梱版へ上書きされる
+  ---
+  duration_ms: 1215.654839
+  ...
+# Subtest: upgrade: .installed_versionが現行パッケージバージョンへ更新される
+ok 215 - upgrade: .installed_versionが現行パッケージバージョンへ更新される
+  ---
+  duration_ms: 823.995326
+  ...
+# Subtest: upgrade: 配布templateは更新するが、展開済みlegacy workflowは暗黙変更しない
+ok 216 - upgrade: 配布templateは更新するが、展開済みlegacy workflowは暗黙変更しない
+  ---
+  duration_ms: 919.896466
+  ...
+# Subtest: upgrade: 展開済みworkflowのlocal customizationを保持して標準assetだけ更新する
+ok 217 - upgrade: 展開済みworkflowのlocal customizationを保持して標準assetだけ更新する
+  ---
+  duration_ms: 959.063112
+  ...
+# Subtest: verify branch-name: 明示引数で pattern 適合・違反を判定できる
+ok 218 - verify branch-name: 明示引数で pattern 適合・違反を判定できる
+  ---
+  duration_ms: 2242.41502
+  ...
+# Subtest: verify branch-name: 引数省略時は現在のHEADブランチを対象にする
+ok 219 - verify branch-name: 引数省略時は現在のHEADブランチを対象にする
+  ---
+  duration_ms: 2891.874707
+  ...
+# Subtest: verify branch-name: 引数省略・detached HEAD状態でもGITHUB_HEAD_REFが設定されていればそのブランチ名で判定する
+ok 220 - verify branch-name: 引数省略・detached HEAD状態でもGITHUB_HEAD_REFが設定されていればそのブランチ名で判定する
+  ---
+  duration_ms: 2178.614343
+  ...
+# Subtest: verify branch-name: 引数省略・detached HEAD状態でGITHUB_HEAD_REFが未設定なら解決不能として明確なエラーになる
+ok 221 - verify branch-name: 引数省略・detached HEAD状態でGITHUB_HEAD_REFが未設定なら解決不能として明確なエラーになる
+  ---
+  duration_ms: 2547.026909
+  ...
+# Subtest: verify branch-name: issue.allowed_typesにchoreを追加後、chore/162-agent-skill-chain-bootstrapが終了コード0になる
+ok 222 - verify branch-name: issue.allowed_typesにchoreを追加後、chore/162-agent-skill-chain-bootstrapが終了コード0になる
+  ---
+  duration_ms: 1499.424534
+  ...
+# Subtest: verify branch-name: chore追加後も既存許容typeは成功し、許容外typeは引き続き失敗する
+ok 223 - verify branch-name: chore追加後も既存許容typeは成功し、許容外typeは引き続き失敗する
+  ---
+  duration_ms: 7090.332629
+  ...
+# Subtest: verify worktree-path: 明示引数で path_pattern 適合・違反を判定できる
+ok 224 - verify worktree-path: 明示引数で path_pattern 適合・違反を判定できる
+  ---
+  duration_ms: 3503.861285
+  ...
+# Subtest: verify worktree-path: 引数省略時は主worktreeを除外し、issue用worktreeのみを対象にする
+ok 225 - verify worktree-path: 引数省略時は主worktreeを除外し、issue用worktreeのみを対象にする
+  ---
+  duration_ms: 2189.837167
+  ...
+# Subtest: verify worktree-path: 引数省略時でも、issue用worktreeが規約違反なら検出する
+ok 226 - verify worktree-path: 引数省略時でも、issue用worktreeが規約違反なら検出する
+  ---
+  duration_ms: 3588.117284
+  ...
+# Subtest: verify doc-length: 既定fixtureは全対象ファイルが上限以内で成功する
+ok 227 - verify doc-length: 既定fixtureは全対象ファイルが上限以内で成功する
+  ---
+  duration_ms: 933.504965
+  ...
+# Subtest: verify doc-length: AGENTS.mdの行数超過を検出する
+ok 228 - verify doc-length: AGENTS.mdの行数超過を検出する
+  ---
+  duration_ms: 943.755276
+  ...
+# Subtest: verify doc-length: templates配下ファイルの行数超過を検出する
+ok 229 - verify doc-length: templates配下ファイルの行数超過を検出する
+  ---
+  duration_ms: 881.663846
+  ...
+# Subtest: verify artifacts: spec segmentはSPEC.mdの有無で成否が切り替わる
+ok 230 - verify artifacts: spec segmentはSPEC.mdの有無で成否が切り替わる
+  ---
+  duration_ms: 2970.789035
+  ...
+# Subtest: verify artifacts: design segmentはDESIGN.md/ADR/PLAN.mdすべて揃って初めて成功する
+ok 231 - verify artifacts: design segmentはDESIGN.md/ADR/PLAN.mdすべて揃って初めて成功する
+  ---
+  duration_ms: 2723.388122
+  ...
+# Subtest: verify artifacts: implementation segmentはdefaultBranchとのtestディレクトリ差分を要求し、VALIDATION.mdには依存しない
+ok 232 - verify artifacts: implementation segmentはdefaultBranchとのtestディレクトリ差分を要求し、VALIDATION.mdには依存しない
+  ---
+  duration_ms: 3739.636325
+  ...
+# Subtest: verify artifacts: AC-1 codeとtest/差分が揃えばVALIDATION.mdを作成せずにunit_test_resultsが充足される
+ok 233 - verify artifacts: AC-1 codeとtest/差分が揃えばVALIDATION.mdを作成せずにunit_test_resultsが充足される
+  ---
+  duration_ms: 3830.79349
+  ...
+# Subtest: verify artifacts: 単一checkout（CI相当）でbaseブランチ未フェッチだとcode判定が失敗し、base branch fetch後は成功する
+ok 234 - verify artifacts: 単一checkout（CI相当）でbaseブランチ未フェッチだとcode判定が失敗し、base branch fetch後は成功する
+  ---
+  duration_ms: 2912.413742
+  ...
+# Subtest: verify artifacts: validation segmentはVALIDATION.mdの有無で成否が切り替わり、不正segmentやissue不在はエラーになる
+ok 235 - verify artifacts: validation segmentはVALIDATION.mdの有無で成否が切り替わり、不正segmentやissue不在はエラーになる
+  ---
+  duration_ms: 4393.472657
+  ...
+# Subtest: verify artifacts: SPEC.md/DESIGN.md/PLAN.mdをcommit後に削除しても、履歴上の実績によりspec/designセグメントは成功する
+ok 236 - verify artifacts: SPEC.md/DESIGN.md/PLAN.mdをcommit後に削除しても、履歴上の実績によりspec/designセグメントは成功する
+  ---
+  duration_ms: 5012.692039
+  ...
+# Subtest: verify artifacts: VALIDATION.mdをcommit後に削除しても、履歴上の実績によりvalidationセグメントは成功する
+ok 237 - verify artifacts: VALIDATION.mdをcommit後に削除しても、履歴上の実績によりvalidationセグメントは成功する
+  ---
+  duration_ms: 3486.293524
+  ...
+# Subtest: verify artifacts: 対象ファイルを一度もcommitしていない未着手segmentは、無関係なcommitが存在しても引き続き失敗する
+ok 238 - verify artifacts: 対象ファイルを一度もcommitしていない未着手segmentは、無関係なcommitが存在しても引き続き失敗する
+  ---
+  duration_ms: 3856.616327
+  ...
+# Subtest: verify gate-report: スキーマ適合・digest一致のgate-reportは成功し、pending/digest不一致は失敗する
+ok 239 - verify gate-report: スキーマ適合・digest一致のgate-reportは成功し、pending/digest不一致は失敗する
+  ---
+  duration_ms: 4226.798153
+  ...
+# Subtest: verify gate-report (Issue \#316 AC-1): target_shaにcommit済みならworktreeのファイルシステムから削除されていても成功する
+ok 240 - verify gate-report (Issue \#316 AC-1): target_shaにcommit済みならworktreeのファイルシステムから削除されていても成功する
+  ---
+  duration_ms: 3151.912843
+  ...
+# Subtest: verify gate-report (Issue \#316 AC-2): target_shaのGit objectにも存在しないpathは削除として検知される
+ok 241 - verify gate-report (Issue \#316 AC-2): target_shaのGit objectにも存在しないpathは削除として検知される
+  ---
+  duration_ms: 2706.830865
+  ...
+# Subtest: verify gate-report (Issue \#316 AC-5): ABSENT_ARTIFACT_DIGEST sentinelで記録された欠落成果物は検証成功する
+ok 242 - verify gate-report (Issue \#316 AC-5): ABSENT_ARTIFACT_DIGEST sentinelで記録された欠落成果物は検証成功する
+  ---
+  duration_ms: 3016.577686
+  ...
+# Subtest: verify gate-report (Issue \#316 AC-6): implementation以外のgateではABSENT_ARTIFACT_DIGEST sentinelを許容しない
+ok 243 - verify gate-report (Issue \#316 AC-6): implementation以外のgateではABSENT_ARTIFACT_DIGEST sentinelを許容しない
+  ---
+  duration_ms: 2781.262896
+  ...
+# Subtest: verify gate-report (Issue \#316 前提条件): target_shaが空文字列の場合はfail-closedに拒否される
+ok 244 - verify gate-report (Issue \#316 前提条件): target_shaが空文字列の場合はfail-closedに拒否される
+  ---
+  duration_ms: 3447.898539
+  ...
+# Subtest: verify gate-report (Issue \#316 前提条件): target_shaがHEAD等の解決可能なref名の場合はfail-closedに拒否される
+ok 245 - verify gate-report (Issue \#316 前提条件): target_shaがHEAD等の解決可能なref名の場合はfail-closedに拒否される
+  ---
+  duration_ms: 3266.832563
+  ...
+# Subtest: verify gate-report (Issue \#316 前提条件): target_shaが存在しない無効な文字列の場合はfail-closedに拒否される
+ok 246 - verify gate-report (Issue \#316 前提条件): target_shaが存在しない無効な文字列の場合はfail-closedに拒否される
+  ---
+  duration_ms: 3029.644009
+  ...
+# Subtest: verify template-sync: 未同期・同期後の一致・再改変による差分検出をすべて確認する
+ok 247 - verify template-sync: 未同期・同期後の一致・再改変による差分検出をすべて確認する
+  ---
+  duration_ms: 2528.547125
+  ...
+# Subtest: verify root-clean: root直下に対象4ファイルが無ければ成功し、存在すればすべて列挙して失敗する
+ok 248 - verify root-clean: root直下に対象4ファイルが無ければ成功し、存在すればすべて列挙して失敗する
+  ---
+  duration_ms: 1363.499497
+  ...
+# Subtest: verify root-clean: 対象4ファイルのうち一部のみが存在する場合はその分のみを報告する
+ok 249 - verify root-clean: 対象4ファイルのうち一部のみが存在する場合はその分のみを報告する
+  ---
+  duration_ms: 1206.368911
+  ...
+# Subtest: verify adr: 実物ADR（ADR-0001）は違反0で成功する
+ok 250 - verify adr: 実物ADR（ADR-0001）は違反0で成功する
+  ---
+  duration_ms: 362.96374
+  ...
+# Subtest: verify adr: フロントマター欠落・必須セクション欠落・不正statusを検出する
+ok 251 - verify adr: フロントマター欠落・必須セクション欠落・不正statusを検出する
+  ---
+  duration_ms: 761.686464
+  ...
+# Subtest: verify adr (AC-7): commitメッセージがfinalize手順の固定形式と異なるとacceptedへの遷移を手順逸脱として検出する
+ok 252 - verify adr (AC-7): commitメッセージがfinalize手順の固定形式と異なるとacceptedへの遷移を手順逸脱として検出する
+  ---
+  duration_ms: 2023.428417
+  ...
+# Subtest: verify adr (AC-7): status変更commitが他ファイルも変更していると手順逸脱として検出する
+ok 253 - verify adr (AC-7): status変更commitが他ファイルも変更していると手順逸脱として検出する
+  ---
+  duration_ms: 1755.981027
+  ...
+# Subtest: verify adr (AC-7): status変更commitが本文（Decision等）も書き換えていると手順逸脱として検出する
+ok 254 - verify adr (AC-7): status変更commitが本文（Decision等）も書き換えていると手順逸脱として検出する
+  ---
+  duration_ms: 1572.418249
+  ...
+# Subtest: verify adr (AC-8): adr finalize CLI経由の正規accepted化commitは手順逸脱として誤検知しない
+ok 255 - verify adr (AC-8): adr finalize CLI経由の正規accepted化commitは手順逸脱として誤検知しない
+  ---
+  duration_ms: 3791.518864
+  ...
+# Subtest: verify ac-coverage: SPEC.mdとVALIDATION.mdが完全対応していれば成功する
+ok 256 - verify ac-coverage: SPEC.mdとVALIDATION.mdが完全対応していれば成功する
+  ---
+  duration_ms: 1667.11947
+  ...
+# Subtest: verify ac-coverage: 孤児AC・孤児テスト参照・evidence空をそれぞれ検出する
+ok 257 - verify ac-coverage: 孤児AC・孤児テスト参照・evidence空をそれぞれ検出する
+  ---
+  duration_ms: 2721.236561
+  ...
+# Subtest: checkpoint: detached HEAD状態でもGITHUB_HEAD_REFが設定されていればそのブランチへpushする
+ok 258 - checkpoint: detached HEAD状態でもGITHUB_HEAD_REFが設定されていればそのブランチへpushする
+  ---
+  duration_ms: 1867.737569
+  ...
+# Subtest: checkpoint: detached HEAD状態でGITHUB_HEAD_REFが未設定なら解決不能として明確なエラーになる
+ok 259 - checkpoint: detached HEAD状態でGITHUB_HEAD_REFが未設定なら解決不能として明確なエラーになる
+  ---
+  duration_ms: 1789.69029
+  ...
+# launch_worker: worker起動が失敗またはtimeoutしました（rc=1, timeout=1800s）（フェイルセーフでblockedへ倒します）
+# launch_worker: 認証情報が未設定かつ実疎通確認にも失敗しました（env未設定・claude auth status失敗/不在）（フェイルセーフでblockedへ倒します）
+# ISSUE-1 の segment 'spec' に worker report がありません
+# launch_worker: worker完了後の report status を確認できませんでした（未報告の可能性）（フェイルセーフでblockedへ倒します）
+# launch_worker: worker完了を確認できませんでした（報告status=completed, 報告target_sha=deadbeefdeadbeef, 現在HEAD=8bec088b53ffa84e644961636214e107c4b0244c）（フェイルセーフでblockedへ倒します）
+# launch_worker: 認証情報が未設定かつ実疎通確認にも失敗しました（env未設定・claude auth status失敗/不在）（フェイルセーフでblockedへ倒します）
+# モデルティア対応表にティア highest_capability のエントリがありません（worker.model_tiers.highest_capability が未定義です）
+# worker-launch.sh: worker context の解決に失敗しました。まだ何も起動していないため error として扱います
+# launch_worker: モデルティア（ASC_WORKER_MODEL_TIER=highest_capability）が指定されているのに解決済みモデル（ASC_WORKER_MODEL）が届いていません。推測せずblockedへ倒します
+# launch_worker: worker起動が失敗またはtimeoutしました（rc=1, timeout=1800s）（フェイルセーフでblockedへ倒します）
+# Subtest: claude launch_worker: WORKER_CMDが成果物commit+push+report completedまで行った場合、exit 0でlease解放・完了確認される
+ok 260 - claude launch_worker: WORKER_CMDが成果物commit+push+report completedまで行った場合、exit 0でlease解放・完了確認される
+  ---
+  duration_ms: 8110.061402
+  ...
+# Subtest: claude launch_worker: WORKER_CMD未指定時の既定起動はclaude CLIを--allowed-toolsで起動し、bypassPermissions/acceptEditsを含まない（ISSUE-183 AC-1/AC-2）
+ok 261 - claude launch_worker: WORKER_CMD未指定時の既定起動はclaude CLIを--allowed-toolsで起動し、bypassPermissions/acceptEditsを含まない（ISSUE-183 AC-1/AC-2）
+  ---
+  duration_ms: 8518.563168
+  ...
+# Subtest: claude launch_worker: WORKER_ALLOWED_TOOLS envで既定allowlistを完全上書きできる（ISSUE-183）
+ok 262 - claude launch_worker: WORKER_ALLOWED_TOOLS envで既定allowlistを完全上書きできる（ISSUE-183）
+  ---
+  duration_ms: 7772.877822
+  ...
+# Subtest: claude launch_worker: WORKER_CMD起動失敗はblocked報告(human_escalation_requested=true)+lease解放+非0非3で返す（silent passしない）
+ok 263 - claude launch_worker: WORKER_CMD起動失敗はblocked報告(human_escalation_requested=true)+lease解放+非0非3で返す（silent passしない）
+  ---
+  duration_ms: 6271.669111
+  ...
+# Subtest: claude launch_worker: 認証未設定（ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN無し）かつ実疎通確認も失敗する場合はblocked+lease解放+非0非3で返す（真の認証欠如、regressionなし）
+ok 264 - claude launch_worker: 認証未設定（ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN無し）かつ実疎通確認も失敗する場合はblocked+lease解放+非0非3で返す（真の認証欠如、regressionなし）
+  ---
+  duration_ms: 6269.38484
+  ...
+# Subtest: claude launch_worker: env認証情報が無くてもCLAUDE_AUTH_PROBE_CMDの実疎通確認が成功すれば認証欠如と誤判定せず起動処理へ進む（AC-4）
+ok 265 - claude launch_worker: env認証情報が無くてもCLAUDE_AUTH_PROBE_CMDの実疎通確認が成功すれば認証欠如と誤判定せず起動処理へ進む（AC-4）
+  ---
+  duration_ms: 7516.965343
+  ...
+# Subtest: claude launch_worker (I8直接検証): WORKER_CMDがexit 0でも完了を報告しなければ「完了を騙る」ケースとしてblocked扱いにする（silent passしない）
+ok 266 - claude launch_worker (I8直接検証): WORKER_CMDがexit 0でも完了を報告しなければ「完了を騙る」ケースとしてblocked扱いにする（silent passしない）
+  ---
+  duration_ms: 7157.913863
+  ...
+# Subtest: claude launch_worker (I8直接検証): target_shaが不一致（workerが古いSHAを騙って報告）の場合もblocked扱いにする
+ok 267 - claude launch_worker (I8直接検証): target_shaが不一致（workerが古いSHAを騙って報告）の場合もblocked扱いにする
+  ---
+  duration_ms: 7705.953916
+  ...
+# Subtest: codex launch_worker: 認証不成立はblocked報告・lease解放・exit 2へ倒す
+ok 268 - codex launch_worker: 認証不成立はblocked報告・lease解放・exit 2へ倒す
+  ---
+  duration_ms: 6440.835563
+  ...
+# Subtest: codex launch_worker (validation, 任意セグメントへのsegment_overrides追加): worker.adapterがclaudeのままでも指定セグメントだけcodexへ解決される（AC-1の汎用性）
+ok 269 - codex launch_worker (validation, 任意セグメントへのsegment_overrides追加): worker.adapterがclaudeのままでも指定セグメントだけcodexへ解決される（AC-1の汎用性）
+  ---
+  duration_ms: 7124.017141
+  ...
+# Subtest: codex launch_worker (implementation, 本リポジトリ既定config): worker.model_tiers.highest_capability.codexの具体モデル文字列とreasoning effort=highがcodex起動コマンドへ反映される（AC-2, AC-6, AC-9）
+ok 270 - codex launch_worker (implementation, 本リポジトリ既定config): worker.model_tiers.highest_capability.codexの具体モデル文字列とreasoning effort=highがcodex起動コマンドへ反映される（AC-2, AC-6, AC-9）
+  ---
+  duration_ms: 7761.260806
+  ...
+# Subtest: codex launch_worker (spec, ティア未指定): 個別上書き・設定由来の値がいずれも無い場合は従来のフォールバック（gpt-5.6/high）が維持される（AC-3）
+ok 271 - codex launch_worker (spec, ティア未指定): 個別上書き・設定由来の値がいずれも無い場合は従来のフォールバック（gpt-5.6/high）が維持される（AC-3）
+  ---
+  duration_ms: 6902.556579
+  ...
+# Subtest: codex launch_worker (implementation, セグメント別上書き・ティア対応表を持たない既存設定): 従来のフォールバック（gpt-5.6-terra/medium）が維持される（AC-3, 後方互換）
+ok 272 - codex launch_worker (implementation, セグメント別上書き・ティア対応表を持たない既存設定): 従来のフォールバック（gpt-5.6-terra/medium）が維持される（AC-3, 後方互換）
+  ---
+  duration_ms: 6291.284732
+  ...
+# Subtest: codex launch_worker: 個別上書き環境変数（CODEX_IMPLEMENTATION_MODEL/CODEX_IMPLEMENTATION_REASONING_EFFORT）は設定由来の解決済み値より優先される（AC-2）
+ok 273 - codex launch_worker: 個別上書き環境変数（CODEX_IMPLEMENTATION_MODEL/CODEX_IMPLEMENTATION_REASONING_EFFORT）は設定由来の解決済み値より優先される（AC-2）
+  ---
+  duration_ms: 5503.783396
+  ...
+# Subtest: codex launch_worker: CODEX_WORKER_CMD完全上書きは設定由来のモデル解決そのものを行わせない（AC-2, 既存優先順位の回帰確認）
+ok 274 - codex launch_worker: CODEX_WORKER_CMD完全上書きは設定由来のモデル解決そのものを行わせない（AC-2, 既存優先順位の回帰確認）
+  ---
+  duration_ms: 5894.407871
+  ...
+# Subtest: worker-launch.sh (AC-2, AC-9): ティア指定はあるがworker.model_tiersを引けない場合、lease取得前のエラーとして扱われ何も起動しない
+ok 275 - worker-launch.sh (AC-2, AC-9): ティア指定はあるがworker.model_tiersを引けない場合、lease取得前のエラーとして扱われ何も起動しない
+  ---
+  duration_ms: 2580.702584
+  ...
+# Subtest: codex launch_worker (直接呼び出し, ASC_WORKER_MODEL_TIERはあるがASC_WORKER_MODELが届かない場合): 推測せず既存のblockedフェイルセーフへ倒す（AC-9防御層）
+ok 276 - codex launch_worker (直接呼び出し, ASC_WORKER_MODEL_TIERはあるがASC_WORKER_MODELが届かない場合): 推測せず既存のblockedフェイルセーフへ倒す（AC-9防御層）
+  ---
+  duration_ms: 3672.997693
+  ...
+# Subtest: codex.sh: アダプタのソースに具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに追加されていない（AC-9, DESIGN.md）
+ok 277 - codex.sh: アダプタのソースに具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに追加されていない（AC-9, DESIGN.md）
+  ---
+  duration_ms: 0.523507
+  ...
+# Subtest: config.schema.yaml: examplesを含め具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに置かれていない（SPEC.md制約, ADR-0015）
+ok 278 - config.schema.yaml: examplesを含め具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに置かれていない（SPEC.md制約, ADR-0015）
+  ---
+  duration_ms: 0.337665
+  ...
+# Subtest: human launch_worker (local): マーカーを生成しexit 3・leaseは解放しない（作業継続中）
+ok 279 - human launch_worker (local): マーカーを生成しexit 3・leaseは解放しない（作業継続中）
+  ---
+  duration_ms: 4291.45059
+  ...
+# Subtest: human launch_worker (local, design segment): Draft PR作成手順は案内されないこと（specのみの非対称性）
+ok 280 - human launch_worker (local, design segment): Draft PR作成手順は案内されないこと（specのみの非対称性）
+  ---
+  duration_ms: 3681.10521
+  ...
+# Subtest: human launch_worker (github): gh issue commentで通知しexit 3・ラベル付与・leaseは解放しない
+ok 281 - human launch_worker (github): gh issue commentで通知しexit 3・ラベル付与・leaseは解放しない
+  ---
+  duration_ms: 4763.329445
+  ...
+# Subtest: lease acquire (local backend): wip.limit（既定3）に達した4件目の取得は拒否される
+ok 282 - lease acquire (local backend): wip.limit（既定3）に達した4件目の取得は拒否される
+  ---
+  duration_ms: 3651.027328
+  ...
+# Subtest: lease acquire (github backend): writer-lease:activeラベル数によるwip.limit事前チェックが機能する
+ok 283 - lease acquire (github backend): writer-lease:activeラベル数によるwip.limit事前チェックが機能する
+  ---
+  duration_ms: 3224.455769
+  ...
+# Subtest: lease acquire (github backend): 同issue内の他segmentの有効leaseはコンフリクトとして拒否される（AC-2）
+ok 284 - lease acquire (github backend): 同issue内の他segmentの有効leaseはコンフリクトとして拒否される（AC-2）
+  ---
+  duration_ms: 3071.944662
+  ...
+# Subtest: lease acquire (local backend): 同issue内の他segmentコンフリクトは既存の1ファイル/issue構造により既に拒否される
+ok 285 - lease acquire (local backend): 同issue内の他segmentコンフリクトは既存の1ファイル/issue構造により既に拒否される
+  ---
+  duration_ms: 1336.300974
+  ...
+# Subtest: worker context <issue_id> implementation (AC-1, AC-2, AC-6): 本リポジトリ既定configでadapter=codex/model_tier/model/reasoning_effortが解決される
+ok 286 - worker context <issue_id> implementation (AC-1, AC-2, AC-6): 本リポジトリ既定configでadapter=codex/model_tier/model/reasoning_effortが解決される
+  ---
+  duration_ms: 1542.416607
+  ...
+# Subtest: worker context <issue_id> spec/design/validation (AC-1): 上書きの無いセグメントはworker.adapter（claude）のままでmodel_tier/model/reasoning_effort行が出ない
+ok 287 - worker context <issue_id> spec/design/validation (AC-1): 上書きの無いセグメントはworker.adapter（claude）のままでmodel_tier/model/reasoning_effort行が出ない
+  ---
+  duration_ms: 3102.079242
+  ...
+# Subtest: worker context <issue_id> (segmentを省略): 従来互換の3行のみを返す（AC-3後方互換）
+ok 288 - worker context <issue_id> (segmentを省略): 従来互換の3行のみを返す（AC-3後方互換）
+  ---
+  duration_ms: 1381.815843
+  ...
+# Subtest: worker context <issue_id> <不正なsegment名>: 日本語の理由付きで失敗する（推測して既定値へ倒さない）
+ok 289 - worker context <issue_id> <不正なsegment名>: 日本語の理由付きで失敗する（推測して既定値へ倒さない）
+  ---
+  duration_ms: 1440.372999
+  ...
+# Subtest: worker context (AC-3): セグメント別上書き・ティア対応表を持たない既存設定はworker.adapterがそのまま全セグメントへ解決される
+ok 290 - worker context (AC-3): セグメント別上書き・ティア対応表を持たない既存設定はworker.adapterがそのまま全セグメントへ解決される
+  ---
+  duration_ms: 4122.4776
+  ...
+# Subtest: worker context (AC-3): worker.adapterも未設定の場合はhumanへフォールバックする
+ok 291 - worker context (AC-3): worker.adapterも未設定の場合はhumanへフォールバックする
+  ---
+  duration_ms: 2084.343723
+  ...
+# Subtest: worker context (AC-2, AC-9): model_tierが指定されているのにworker.model_tiersが無い場合は推測せずエラーで終了する
+ok 292 - worker context (AC-2, AC-9): model_tierが指定されているのにworker.model_tiersが無い場合は推測せずエラーで終了する
+  ---
+  duration_ms: 1056.737423
+  ...
+# Subtest: worker context -h (AC-7): 恒久設定の変更操作・実行主体・タイミング・現在値の確認手段が記載される
+ok 293 - worker context -h (AC-7): 恒久設定の変更操作・実行主体・タイミング・現在値の確認手段が記載される
+  ---
+  duration_ms: 983.89458
+  ...
+# Subtest: Given 固定\#274証跡 When preparedをcanonical化 Then Sol/xhigh二重reviewとCIを復元する
+ok 294 - Given 固定\#274証跡 When preparedをcanonical化 Then Sol/xhigh二重reviewとCIを復元する
+  ---
+  duration_ms: 11.558121
+  ...
+# Subtest: Given prepared When merge後completedを記録 Then exact prepared IDへ結線し再開状態を復元する
+ok 295 - Given prepared When merge後completedを記録 Then exact prepared IDへ結線し再開状態を復元する
+  ---
+  duration_ms: 6.284751
+  ...
+# Subtest: Given 別SHA・別PR・重複・孤児completed When resolve Then 二回目bootstrapを拒否する
+ok 296 - Given 別SHA・別PR・重複・孤児completed When resolve Then 二回目bootstrapを拒否する
+  ---
+  duration_ms: 6.373533
+  ...
+# Subtest: Given 不正review/CI/marker When parse Then fail-closedで拒否する
+ok 297 - Given 不正review/CI/marker When parse Then fail-closedで拒否する
+  ---
+  duration_ms: 0.933911
+  ...
+# Subtest: readSettings: ファイル不在時は空オブジェクトを返す
+ok 298 - readSettings: ファイル不在時は空オブジェクトを返す
+  ---
+  duration_ms: 4.389801
+  ...
+# Subtest: readSettings: 不正なJSONは例外を投げる
+ok 299 - readSettings: 不正なJSONは例外を投げる
+  ---
+  duration_ms: 2.181659
+  ...
+# Subtest: addPreToolUseHook: 2回連続適用してもエントリが重複しない（idempotent）
+ok 300 - addPreToolUseHook: 2回連続適用してもエントリが重複しない（idempotent）
+  ---
+  duration_ms: 0.658005
+  ...
+# Subtest: addPreToolUseHook: 既存のpermissions.deny等の無関係なフィールドを変更しない
+ok 301 - addPreToolUseHook: 既存のpermissions.deny等の無関係なフィールドを変更しない
+  ---
+  duration_ms: 0.68484
+  ...
+# Subtest: addPreToolUseHook: 既存の他のhooksイベント(SomeOtherEvent等)を温存する
+ok 302 - addPreToolUseHook: 既存の他のhooksイベント(SomeOtherEvent等)を温存する
+  ---
+  duration_ms: 0.658554
+  ...
+# Subtest: removePreToolUseHook: 対象commandPathのエントリのみを除去し、無関係な既存エントリは温存する
+ok 303 - removePreToolUseHook: 対象commandPathのエントリのみを除去し、無関係な既存エントリは温存する
+  ---
+  duration_ms: 0.429676
+  ...
+# Subtest: removePreToolUseHook: 除去後にPreToolUseが空になればキー自体を削除する
+ok 304 - removePreToolUseHook: 除去後にPreToolUseが空になればキー自体を削除する
+  ---
+  duration_ms: 0.338693
+  ...
+# Subtest: removePreToolUseHook: 未配線のsettingsに対しても例外を投げず、そのまま返す（冪等）
+ok 305 - removePreToolUseHook: 未配線のsettingsに対しても例外を投げず、そのまま返す（冪等）
+  ---
+  duration_ms: 0.852935
+  ...
+# Subtest: isPreToolUseHookWired: 配線済み/未配線を正しく判定する
+ok 306 - isPreToolUseHookWired: 配線済み/未配線を正しく判定する
+  ---
+  duration_ms: 5.186297
+  ...
+# Subtest: writeSettings → readSettings: ラウンドトリップで内容を復元し、親ディレクトリも自動作成する
+ok 307 - writeSettings → readSettings: ラウンドトリップで内容を復元し、親ディレクトリも自動作成する
+  ---
+  duration_ms: 2.471596
+  ...
+# Subtest: printUsage: 前後の空白をtrimして改行付きでstdoutへ書き出す
+ok 308 - printUsage: 前後の空白をtrimして改行付きでstdoutへ書き出す
+  ---
+  duration_ms: 4.76466
+  ...
+# Subtest: printUsage: 戻り値は無い（void）
+ok 309 - printUsage: 戻り値は無い（void）
+  ---
+  duration_ms: 1.287433
+  ...
+# Subtest: fail: stderrへメッセージを書き出し1を返す
+ok 310 - fail: stderrへメッセージを書き出し1を返す
+  ---
+  duration_ms: 4.367049
+  ...
+# Subtest: ok: メッセージ指定時はstdoutへ書き出し0を返す
+ok 311 - ok: メッセージ指定時はstdoutへ書き出し0を返す
+  ---
+  duration_ms: 1.674309
+  ...
+# Subtest: ok: メッセージ未指定時はstdoutへ何も書き出さず0を返す
+ok 312 - ok: メッセージ未指定時はstdoutへ何も書き出さず0を返す
+  ---
+  duration_ms: 1.209985
+  ...
+# Subtest: isHelp: -h を先頭に含む場合はtrue
+ok 313 - isHelp: -h を先頭に含む場合はtrue
+  ---
+  duration_ms: 0.518399
+  ...
+# Subtest: isHelp: --help を先頭に含む場合はtrue
+ok 314 - isHelp: --help を先頭に含む場合はtrue
+  ---
+  duration_ms: 2.215799
+  ...
+# Subtest: isHelp: 先頭以外に-h/--helpがあってもfalse
+ok 315 - isHelp: 先頭以外に-h/--helpがあってもfalse
+  ---
+  duration_ms: 0.52647
+  ...
+# Subtest: isHelp: 空配列やヘルプ以外の引数ではfalse
+ok 316 - isHelp: 空配列やヘルプ以外の引数ではfalse
+  ---
+  duration_ms: 1.739152
+  ...
+# Subtest: guard: 正常終了時はfn()の戻り値をそのまま返す（stderr出力なし）
+ok 317 - guard: 正常終了時はfn()の戻り値をそのまま返す（stderr出力なし）
+  ---
+  duration_ms: 2.508053
+  ...
+# Subtest: guard: Promiseを返すfnも正しく解決する
+ok 318 - guard: Promiseを返すfnも正しく解決する
+  ---
+  duration_ms: 16.158206
+  ...
+# Subtest: guard: CliErrorを投げた場合はfail()相当（stderr+1）で正規化する
+ok 319 - guard: CliErrorを投げた場合はfail()相当（stderr+1）で正規化する
+  ---
+  duration_ms: 11.840382
+  ...
+# Subtest: guard: 通常のErrorを投げた場合は「予期しないエラー: 」を前置してstderr+1で返す
+ok 320 - guard: 通常のErrorを投げた場合は「予期しないエラー: 」を前置してstderr+1で返す
+  ---
+  duration_ms: 2.843807
+  ...
+# Subtest: guard: Error以外の値（文字列）をthrowした場合もString化してstderrへ出力する
+ok 321 - guard: Error以外の値（文字列）をthrowした場合もString化してstderrへ出力する
+  ---
+  duration_ms: 23.6261
+  ...
+# Subtest: guard: 非同期関数内でCliErrorを投げた場合も正しく捕捉する
+ok 322 - guard: 非同期関数内でCliErrorを投げた場合も正しく捕捉する
+  ---
+  duration_ms: 1.20152
+  ...
+# Subtest: loadConfig: 実物の .agent-skill-chain/config/agent-skill-chain.yaml を読み込み主要フィールドを検証する
+ok 323 - loadConfig: 実物の .agent-skill-chain/config/agent-skill-chain.yaml を読み込み主要フィールドを検証する
+  ---
+  duration_ms: 378.265576
+  ...
+# Subtest: loadConfig (AC-6): worker.segment_overrides.implementation が codex/highest_capability/high に恒久設定され、worker.model_tiersのみに具体的なモデル文字列を持つ
+ok 324 - loadConfig (AC-6): worker.segment_overrides.implementation が codex/highest_capability/high に恒久設定され、worker.model_tiersのみに具体的なモデル文字列を持つ
+  ---
+  duration_ms: 177.583541
+  ...
+# Subtest: loadConfig: スキーマ不適合の config は例外を投げる
+ok 325 - loadConfig: スキーマ不適合の config は例外を投げる
+  ---
+  duration_ms: 239.463327
+  ...
+# Subtest: ci実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false
+ok 326 - ci実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false
+  ---
+  duration_ms: 49.027528
+  ...
+# Subtest: ci実行(b): Dependabot が開いた直後の PR は skip_checks=true
+ok 327 - ci実行(b): Dependabot が開いた直後の PR は skip_checks=true
+  ---
+  duration_ms: 27.631196
+  ...
+# Subtest: ci実行(c): Dependabot PR へ人間が追加 push しても skip_checks=true（push実行者に非依存）
+ok 328 - ci実行(c): Dependabot PR へ人間が追加 push しても skip_checks=true（push実行者に非依存）
+  ---
+  duration_ms: 45.969868
+  ...
+# Subtest: ci実行(d): 人間が dependabot/ ブランチ名を偽装した PR は exit 1 で拒否される
+ok 329 - ci実行(d): 人間が dependabot/ ブランチ名を偽装した PR は exit 1 で拒否される
+  ---
+  duration_ms: 40.572452
+  ...
+# Subtest: ci実行(e): branch.pattern と衝突する dependabot/223-fake は第1分岐で通常検査される
+ok 330 - ci実行(e): branch.pattern と衝突する dependabot/223-fake は第1分岐で通常検査される
+  ---
+  duration_ms: 52.485096
+  ...
+# Subtest: reconcile実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false
+ok 331 - reconcile実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false
+  ---
+  duration_ms: 22.25616
+  ...
+# Subtest: reconcile実行(b)(c): 実PR作成者が dependabot[bot] なら push 実行者に関係なく skip_checks=true
+ok 332 - reconcile実行(b)(c): 実PR作成者が dependabot[bot] なら push 実行者に関係なく skip_checks=true
+  ---
+  duration_ms: 22.950551
+  ...
+# Subtest: reconcile実行(d): 偽装ブランチは対応PRなし（empty）で exit 1
+ok 333 - reconcile実行(d): 偽装ブランチは対応PRなし（empty）で exit 1
+  ---
+  duration_ms: 30.695863
+  ...
+# Subtest: reconcile実行(d): 偽装ブランチは PR 作成者が人間でも exit 1
+ok 334 - reconcile実行(d): 偽装ブランチは PR 作成者が人間でも exit 1
+  ---
+  duration_ms: 36.830712
+  ...
+# Subtest: reconcile実行(f): gh api が非0終了する API 障害時は skip されず安全側の exit 1
+ok 335 - reconcile実行(f): gh api が非0終了する API 障害時は skip されず安全側の exit 1
+  ---
+  duration_ms: 24.799874
+  ...
+# Subtest: reconcile実行(e): branch.pattern と衝突する dependabot/223-fake は第1分岐で通常照合される
+ok 336 - reconcile実行(e): branch.pattern と衝突する dependabot/223-fake は第1分岐で通常照合される
+  ---
+  duration_ms: 14.465445
+  ...
+# Subtest: ci: 'verify-branch-name' ステップは skip_checks ガードを if 条件に含む
+ok 337 - ci: 'verify-branch-name' ステップは skip_checks ガードを if 条件に含む
+  ---
+  duration_ms: 25.579952
+  ...
+# Subtest: ci: 'verify-worktree-path' ステップは skip_checks ガードを if 条件に含む
+ok 338 - ci: 'verify-worktree-path' ステップは skip_checks ガードを if 条件に含む
+  ---
+  duration_ms: 15.092464
+  ...
+# Subtest: ci: 'verify-artifacts' ステップは skip_checks ガードを if 条件に含む
+ok 339 - ci: 'verify-artifacts' ステップは skip_checks ガードを if 条件に含む
+  ---
+  duration_ms: 31.45319
+  ...
+# Subtest: ci: 'verify-ac-coverage' ステップは skip_checks ガードを if 条件に含む
+ok 340 - ci: 'verify-ac-coverage' ステップは skip_checks ガードを if 条件に含む
+  ---
+  duration_ms: 42.215413
+  ...
+# Subtest: ci: 'verify-adr' ステップは skip_checks ガードを if 条件に含む
+ok 341 - ci: 'verify-adr' ステップは skip_checks ガードを if 条件に含む
+  ---
+  duration_ms: 10.883359
+  ...
+# Subtest: ci: 'lint-vocab' ステップは skip_checks ガードを if 条件に含む
+ok 342 - ci: 'lint-vocab' ステップは skip_checks ガードを if 条件に含む
+  ---
+  duration_ms: 9.862745
+  ...
+# Subtest: ci: 'lint-references' ステップは skip_checks ガードを if 条件に含む
+ok 343 - ci: 'lint-references' ステップは skip_checks ガードを if 条件に含む
+  ---
+  duration_ms: 14.944943
+  ...
+# Subtest: ci: 'adr-lint' ステップは skip_checks ガードを if 条件に含む
+ok 344 - ci: 'adr-lint' ステップは skip_checks ガードを if 条件に含む
+  ---
+  duration_ms: 10.277813
+  ...
+# Subtest: ci: lint-secrets ステップは base_ref 条件に加えて skip_checks ガードを含む
+ok 345 - ci: lint-secrets ステップは base_ref 条件に加えて skip_checks ガードを含む
+  ---
+  duration_ms: 6.951564
+  ...
+# Subtest: ci: verify-template-sync ステップは skip_checks を参照しない（Dependabot時も挙動不変）
+ok 346 - ci: verify-template-sync ステップは skip_checks を参照しない（Dependabot時も挙動不変）
+  ---
+  duration_ms: 11.618186
+  ...
+# Subtest: ci: npm ci / build の各ステップは if 条件を持たない（常時実行）
+ok 347 - ci: npm ci / build の各ステップは if 条件を持たない（常時実行）
+  ---
+  duration_ms: 5.703591
+  ...
+# Subtest: self-test: ログ保存付きtestステップは if 条件を持たない（常時実行、Issue \#290で本リポジトリ専用ファイルへ分離）
+ok 348 - self-test: ログ保存付きtestステップは if 条件を持たない（常時実行、Issue \#290で本リポジトリ専用ファイルへ分離）
+  ---
+  duration_ms: 3.535623
+  ...
+# Subtest: ci: Derive issue_id ステップは Dependabot 許可リストで skip_checks=true を出力する
+ok 349 - ci: Derive issue_id ステップは Dependabot 許可リストで skip_checks=true を出力する
+  ---
+  duration_ms: 11.24153
+  ...
+# Subtest: ci: Derive issue_id の env.ACTOR は PR 作成者（pull_request.user.login）由来であり github.actor を参照しない
+ok 350 - ci: Derive issue_id の env.ACTOR は PR 作成者（pull_request.user.login）由来であり github.actor を参照しない
+  ---
+  duration_ms: 9.64851
+  ...
+# Subtest: reconcile: jobs.reconcile に job-level if の早期スキップが存在しない
+ok 351 - reconcile: jobs.reconcile に job-level if の早期スキップが存在しない
+  ---
+  duration_ms: 4.630348
+  ...
+# Subtest: reconcile: Derive issue_id が3分岐で実PR作成者を gh api で確認し dependabot[bot] と比較する
+ok 352 - reconcile: Derive issue_id が3分岐で実PR作成者を gh api で確認し dependabot[bot] と比較する
+  ---
+  duration_ms: 2.562941
+  ...
+# Subtest: reconcile: 照合ステップに skip_checks ガードの if が付与されている
+ok 353 - reconcile: 照合ステップに skip_checks ガードの if が付与されている
+  ---
+  duration_ms: 2.067224
+  ...
+# Subtest: reconcile: permissions に pull-requests: read が含まれる（PR検索APIに必要）
+ok 354 - reconcile: permissions に pull-requests: read が含まれる（PR検索APIに必要）
+  ---
+  duration_ms: 2.094836
+  ...
+# Subtest: 本体 agent-skill-chain-ci.yml とテンプレート正本が完全一致する
+ok 355 - 本体 agent-skill-chain-ci.yml とテンプレート正本が完全一致する
+  ---
+  duration_ms: 0.552775
+  ...
+# Subtest: 本体 agent-skill-chain-reconcile.yml とテンプレート正本が完全一致する
+ok 356 - 本体 agent-skill-chain-reconcile.yml とテンプレート正本が完全一致する
+  ---
+  duration_ms: 0.293769
+  ...
+# Subtest: detect-changed-segments: 成果物と実装の差分から開始済みセグメントだけを固定順で返す
+ok 357 - detect-changed-segments: 成果物と実装の差分から開始済みセグメントだけを固定順で返す
+  ---
+  duration_ms: 167.463591
+  ...
+# Subtest: detect-changed-segments: CI設定だけの変更は未開始セグメントを作らない
+ok 358 - detect-changed-segments: CI設定だけの変更は未開始セグメントを作らない
+  ---
+  duration_ms: 125.812711
+  ...
+# Subtest: CIはvalidationが開始されたPRだけでAC対応を検証し、配布テンプレートも一致する
+ok 359 - CIはvalidationが開始されたPRだけでAC対応を検証し、配布テンプレートも一致する
+  ---
+  duration_ms: 0.861535
+  ...
+# Subtest: digestOf: 既知の入力（空文字列）に対して既知のSHA256ハッシュを返す
+ok 360 - digestOf: 既知の入力（空文字列）に対して既知のSHA256ハッシュを返す
+  ---
+  duration_ms: 1.817001
+  ...
+# Subtest: digestOf: 文字列入力に対してsha256:プレフィックス付きのハッシュを返す
+ok 361 - digestOf: 文字列入力に対してsha256:プレフィックス付きのハッシュを返す
+  ---
+  duration_ms: 0.320889
+  ...
+# Subtest: digestOf: Buffer入力でも文字列入力と同じ結果になる
+ok 362 - digestOf: Buffer入力でも文字列入力と同じ結果になる
+  ---
+  duration_ms: 0.26166
+  ...
+# Subtest: digestOf: 決定論的である（同一入力は常に同一出力）
+ok 363 - digestOf: 決定論的である（同一入力は常に同一出力）
+  ---
+  duration_ms: 0.314391
+  ...
+# Subtest: digestOf: 異なる入力は異なるハッシュになる
+ok 364 - digestOf: 異なる入力は異なるハッシュになる
+  ---
+  duration_ms: 0.382448
+  ...
+# Subtest: digestOfFile: 一時ファイルの内容から正しいダイジェストを計算する
+ok 365 - digestOfFile: 一時ファイルの内容から正しいダイジェストを計算する
+  ---
+  duration_ms: 4.718421
+  ...
+# Subtest: digestOfFile: 存在しないファイルを指定すると例外を投げる
+ok 366 - digestOfFile: 存在しないファイルを指定すると例外を投げる
+  ---
+  duration_ms: 2.493654
+  ...
+# Subtest: digestOfFile: バイナリ内容でも正しく計算される
+ok 367 - digestOfFile: バイナリ内容でも正しく計算される
+  ---
+  duration_ms: 1.952666
+  ...
+# Subtest: isValidDigest: digestOfの出力を有効と判定する
+ok 368 - isValidDigest: digestOfの出力を有効と判定する
+  ---
+  duration_ms: 0.62548
+  ...
+# Subtest: isValidDigest: プレフィックスが無い場合は無効
+ok 369 - isValidDigest: プレフィックスが無い場合は無効
+  ---
+  duration_ms: 0.48398
+  ...
+# Subtest: isValidDigest: 大文字16進を含む場合は無効（小文字のみ許容）
+ok 370 - isValidDigest: 大文字16進を含む場合は無効（小文字のみ許容）
+  ---
+  duration_ms: 0.325733
+  ...
+# Subtest: isValidDigest: 長さが不足するハッシュは無効
+ok 371 - isValidDigest: 長さが不足するハッシュは無効
+  ---
+  duration_ms: 0.257885
+  ...
+# Subtest: isValidDigest: 長さが超過するハッシュは無効
+ok 372 - isValidDigest: 長さが超過するハッシュは無効
+  ---
+  duration_ms: 0.269117
+  ...
+# Subtest: isValidDigest: 完全に不正な文字列は無効
+ok 373 - isValidDigest: 完全に不正な文字列は無効
+  ---
+  duration_ms: 0.50585
+  ...
+# Subtest: isValidDigest: 16進以外の文字を含む場合は無効
+ok 374 - isValidDigest: 16進以外の文字を含む場合は無効
+  ---
+  duration_ms: 0.297351
+  ...
+# Subtest: inline v2 outputをcanonical保存しattestation bindingから復元する
+ok 375 - inline v2 outputをcanonical保存しattestation bindingから復元する
+  ---
+  duration_ms: 14.810977
+  ...
+# Subtest: inline reportは別Checkのchunkを無視し同一Checkの余分なchunkを拒否する
+ok 376 - inline reportは別Checkのchunkを無視し同一Checkの余分なchunkを拒否する
+  ---
+  duration_ms: 18.323369
+  ...
+# Subtest: 48KiB超reportをCheck manifestとCheck/envelope固定commentから復元する
+ok 377 - 48KiB超reportをCheck manifestとCheck/envelope固定commentから復元する
+  ---
+  duration_ms: 22.061806
+  ...
+# Subtest: 別Check replay、manifest改変、曖昧chunk commentをfail-closed拒否する
+ok 378 - 別Check replay、manifest改変、曖昧chunk commentをfail-closed拒否する
+  ---
+  duration_ms: 8.014112
+  ...
+# Subtest: run: 実在するコマンドは status:0 で標準出力を返す
+ok 379 - run: 実在するコマンドは status:0 で標準出力を返す
+  ---
+  duration_ms: 32.098664
+  ...
+# Subtest: run: 存在しないコマンドは status:127 で stderr にエラー理由を含む
+ok 380 - run: 存在しないコマンドは status:127 で stderr にエラー理由を含む
+  ---
+  duration_ms: 228.929346
+  ...
+# Subtest: runOrThrow: 成功時は trim された stdout を返す
+ok 381 - runOrThrow: 成功時は trim された stdout を返す
+  ---
+  duration_ms: 45.894373
+  ...
+# Subtest: runOrThrow: 失敗時は理由を含む例外を投げる
+ok 382 - runOrThrow: 失敗時は理由を含む例外を投げる
+  ---
+  duration_ms: 10.213266
+  ...
+# Subtest: git: gitラッパーは git 実体へ委譲する
+ok 383 - git: gitラッパーは git 実体へ委譲する
+  ---
+  duration_ms: 8.92317
+  ...
+# Subtest: commandExists: 実在するコマンドは true、存在しないコマンドは false
+ok 384 - commandExists: 実在するコマンドは true、存在しないコマンドは false
+  ---
+  duration_ms: 196.319626
+  ...
+# Subtest: gh: PATH注入したスタブ gh に対して auth status が status:0 になる
+ok 385 - gh: PATH注入したスタブ gh に対して auth status が status:0 になる
+  ---
+  duration_ms: 144.331352
+  ...
+# Subtest: copyTreeFailOnConflict: 新規ファイルは created として作成される
+ok 386 - copyTreeFailOnConflict: 新規ファイルは created として作成される
+  ---
+  duration_ms: 3.281556
+  ...
+# Subtest: copyTreeFailOnConflict: 内容が同一の既存ファイルは unchanged になり上書きされない
+ok 387 - copyTreeFailOnConflict: 内容が同一の既存ファイルは unchanged になり上書きされない
+  ---
+  duration_ms: 1.793658
+  ...
+# Subtest: copyTreeFailOnConflict: 内容が異なる既存ファイルがあると CliError を投げ、既存ファイルは変更されない
+ok 388 - copyTreeFailOnConflict: 内容が異なる既存ファイルがあると CliError を投げ、既存ファイルは変更されない
+  ---
+  duration_ms: 2.35131
+  ...
+# Subtest: copyTreeFailOnConflict: ネストしたディレクトリ構造を再帰的にコピーする
+ok 389 - copyTreeFailOnConflict: ネストしたディレクトリ構造を再帰的にコピーする
+  ---
+  duration_ms: 5.309376
+  ...
+# Subtest: copyTreeFailOnConflict: src が存在しない場合は何もせず空配列を返す
+ok 390 - copyTreeFailOnConflict: src が存在しない場合は何もせず空配列を返す
+  ---
+  duration_ms: 2.021008
+  ...
+# Subtest: copyTreeMirror: 新規ファイルは created になる
+ok 391 - copyTreeMirror: 新規ファイルは created になる
+  ---
+  duration_ms: 1.78878
+  ...
+# Subtest: copyTreeMirror: 既存ファイルは内容の異同に関わらず常に上書きされ overwritten になる
+ok 392 - copyTreeMirror: 既存ファイルは内容の異同に関わらず常に上書きされ overwritten になる
+  ---
+  duration_ms: 4.102723
+  ...
+# Subtest: copyTreeMirror: 既存ファイルと内容が同一でも overwritten として扱われる（常に上書き）
+ok 393 - copyTreeMirror: 既存ファイルと内容が同一でも overwritten として扱われる（常に上書き）
+  ---
+  duration_ms: 2.4131
+  ...
+# Subtest: copyTreeMirror: ネストしたディレクトリ構造を再帰的にミラーコピーする
+ok 394 - copyTreeMirror: ネストしたディレクトリ構造を再帰的にミラーコピーする
+  ---
+  duration_ms: 3.636783
+  ...
+# Subtest: copyTreeFailOnConflict: dryRun:true では宛先にファイルが一切作成されない
+ok 395 - copyTreeFailOnConflict: dryRun:true では宛先にファイルが一切作成されない
+  ---
+  duration_ms: 1.737123
+  ...
+# Subtest: copyTreeFailOnConflict: dryRun:true でも内容が異なる既存ファイルへの衝突は検知されCliErrorを投げる
+ok 396 - copyTreeFailOnConflict: dryRun:true でも内容が異なる既存ファイルへの衝突は検知されCliErrorを投げる
+  ---
+  duration_ms: 1.722949
+  ...
+# Subtest: copyTreeFailOnConflict: dryRun:true・内容が同一な既存ファイルは unchanged (planned) になる
+ok 397 - copyTreeFailOnConflict: dryRun:true・内容が同一な既存ファイルは unchanged (planned) になる
+  ---
+  duration_ms: 1.497822
+  ...
+# Subtest: copyTreeMirror: dryRun:true では宛先にファイルが一切作成されない
+ok 398 - copyTreeMirror: dryRun:true では宛先にファイルが一切作成されない
+  ---
+  duration_ms: 1.013599
+  ...
+# Subtest: gate workflow: protected baseでlocal-review証跡だけを検証しCheck Runを発行する
+ok 399 - gate workflow: protected baseでlocal-review証跡だけを検証しCheck Runを発行する
+  ---
+  duration_ms: 4.672876
+  ...
+# Subtest: local review harness: PR base SHAの隔離cloneでbase sourceをbuildしてadapterを起動する
+ok 400 - local review harness: PR base SHAの隔離cloneでbase sourceをbuildしてadapterを起動する
+  ---
+  duration_ms: 1.249786
+  ...
+# Subtest: latest attemptは配列順・時刻・conclusionでなくrun tuple最大を選ぶ
+ok 401 - latest attemptは配列順・時刻・conclusionでなくrun tuple最大を選ぶ
+  ---
+  duration_ms: 1.554954
+  ...
+# Subtest: Check external IDはworkflow tuple・PR・gate・SHAを可逆に束縛する
+ok 402 - Check external IDはworkflow tuple・PR・gate・SHAを可逆に束縛する
+  ---
+  duration_ms: 2.555343
+  ...
+# Subtest: 48 KiB以下はinlineでdigest検証してmaterializeする
+ok 403 - 48 KiB以下はinlineでdigest検証してmaterializeする
+  ---
+  duration_ms: 4.211631
+  ...
+# Subtest: 48 KiB超は順序付きchunkへ分割し、欠落・改変・重複を拒否する
+ok 404 - 48 KiB超は順序付きchunkへ分割し、欠落・改変・重複を拒否する
+  ---
+  duration_ms: 12.319026
+  ...
+# Subtest: chunk commentはCheck ID・envelope digest・descriptorを検証する
+ok 405 - chunk commentはCheck ID・envelope digest・descriptorを検証する
+  ---
+  duration_ms: 7.899986
+  ...
+# Subtest: 4 MiB超reportを作成前に拒否する
+ok 406 - 4 MiB超reportを作成前に拒否する
+  ---
+  duration_ms: 46.735084
+  ...
+# Subtest: attestation envelopeは別Check・別workflow runへのreplayを拒否する
+ok 407 - attestation envelopeは別Check・別workflow runへのreplayを拒否する
+  ---
+  duration_ms: 2.12333
+  ...
+# Subtest: artifact集合は順序に依存せず、追加・削除・重複・digest差異を変更とする
+ok 408 - artifact集合は順序に依存せず、追加・削除・重複・digest差異を変更とする
+  ---
+  duration_ms: 17.838787
+  ...
+# Subtest: GitHub App JWTはRS256署名・固定iat/exp・App IDを持つ
+ok 409 - GitHub App JWTはRS256署名・固定iat/exp・App IDを持つ
+  ---
+  duration_ms: 10.946518
+  ...
+# Subtest: installation tokenはrepository IDと専用App権限だけへdownscopeし秘密を露出しない
+ok 410 - installation tokenはrepository IDと専用App権限だけへdownscopeし秘密を露出しない
+  ---
+  duration_ms: 40.331134
+  ...
+# Subtest: 不正なApp IDとrepositoryをAPI呼出し前に拒否する
+ok 411 - 不正なApp IDとrepositoryをAPI呼出し前に拒否する
+  ---
+  duration_ms: 1.265205
+  ...
+# Subtest: renderLeaseComment: マーカーとyamlフェンスを含む本文を生成する（純粋関数）
+ok 412 - renderLeaseComment: マーカーとyamlフェンスを含む本文を生成する（純粋関数）
+  ---
+  duration_ms: 35.593196
+  ...
+# Subtest: acquireLeaseRef -> activeLeaseFor: 初回acquireはrefを新規作成し、読み出せること
+ok 413 - acquireLeaseRef -> activeLeaseFor: 初回acquireはrefを新規作成し、読み出せること
+  ---
+  duration_ms: 919.892335
+  ...
+# Subtest: acquireLeaseRef: 既存refがある状態での再acquireはconflictとして拒否される（真の二重取得防止）
+ok 414 - acquireLeaseRef: 既存refがある状態での再acquireはconflictとして拒否される（真の二重取得防止）
+  ---
+  duration_ms: 760.768306
+  ...
+# Subtest: activeLeaseFor: 期限切れのleaseは除外される
+ok 415 - activeLeaseFor: 期限切れのleaseは除外される
+  ---
+  duration_ms: 653.133082
+  ...
+# Subtest: activeLeasesFor/allLeasesFor: segmentを問わず全leaseを列挙し、期限内外を判別できる
+ok 416 - activeLeasesFor/allLeasesFor: segmentを問わず全leaseを列挙し、期限内外を判別できる
+  ---
+  duration_ms: 1077.29483
+  ...
+# Subtest: renewLeaseRef: 現在のref先頭を親とするrenewは成功し、expires_atが更新される
+ok 417 - renewLeaseRef: 現在のref先頭を親とするrenewは成功し、expires_atが更新される
+  ---
+  duration_ms: 1048.577376
+  ...
+# Subtest: renewLeaseRef: refが存在しない場合はconflictとして失敗する
+ok 418 - renewLeaseRef: refが存在しない場合はconflictとして失敗する
+  ---
+  duration_ms: 639.856862
+  ...
+# Subtest: renewLeaseRef: 古いparent（stale）を基にした renew は非fast-forwardでconflictになる（TOCTOU耐性）
+ok 419 - renewLeaseRef: 古いparent（stale）を基にした renew は非fast-forwardでconflictになる（TOCTOU耐性）
+  ---
+  duration_ms: 1027.458792
+  ...
+# Subtest: classifyPushFailure: 非fast-forward拒否（renewのstale parent時）はconflictに分類される
+ok 420 - classifyPushFailure: 非fast-forward拒否（renewのstale parent時）はconflictに分類される
+  ---
+  duration_ms: 1.963641
+  ...
+# Subtest: classifyPushFailure: 真に同時のref新規作成race（サーバ側ref lock競合）もconflictに分類される（実測確認済みの別系統文言）
+ok 421 - classifyPushFailure: 真に同時のref新規作成race（サーバ側ref lock競合）もconflictに分類される（実測確認済みの別系統文言）
+  ---
+  duration_ms: 5.003733
+  ...
+# Subtest: classifyPushFailure: 上記いずれにも一致しない失敗（認証・接続エラー等）はerrorに分類される
+ok 422 - classifyPushFailure: 上記いずれにも一致しない失敗（認証・接続エラー等）はerrorに分類される
+  ---
+  duration_ms: 0.731325
+  ...
+# Subtest: releaseLeaseRef: refを削除し、以後activeLeaseForはundefinedを返し、再acquireが成功する
+ok 423 - releaseLeaseRef: refを削除し、以後activeLeaseForはundefinedを返し、再acquireが成功する
+  ---
+  duration_ms: 997.624554
+  ...
+# Subtest: parseForbiddenTerms: 実物のdocs/GLOSSARY.mdを解析しても例外を投げず配列を返す
+ok 424 - parseForbiddenTerms: 実物のdocs/GLOSSARY.mdを解析しても例外を投げず配列を返す
+  ---
+  duration_ms: 3.70475
+  ...
+# Subtest: parseForbiddenTerms: 表が無いファイルでは空配列を返す（例外を投げない）
+ok 425 - parseForbiddenTerms: 表が無いファイルでは空配列を返す（例外を投げない）
+  ---
+  duration_ms: 4.674222
+  ...
+# Subtest: parseForbiddenTerms: 禁止同義語が空のセルの行は何も抽出しない
+ok 426 - parseForbiddenTerms: 禁止同義語が空のセルの行は何も抽出しない
+  ---
+  duration_ms: 2.313419
+  ...
+# Subtest: parseForbiddenTerms: 実物GLOSSARY.mdから禁止語エントリを抽出できる
+ok 427 - parseForbiddenTerms: 実物GLOSSARY.mdから禁止語エントリを抽出できる
+  ---
+  duration_ms: 0.702362
+  ...
+# Subtest: parseForbiddenTerms: 実物GLOSSARY.mdの既知エントリを含む
+ok 428 - parseForbiddenTerms: 実物GLOSSARY.mdの既知エントリを含む
+  ---
+  duration_ms: 1.157456
+  ...
+# Subtest: parseForbiddenTerms: 実物GLOSSARY.mdの括弧注釈は取り除かれる
+ok 429 - parseForbiddenTerms: 実物GLOSSARY.mdの括弧注釈は取り除かれる
+  ---
+  duration_ms: 0.793989
+  ...
+# Subtest: parseForbiddenTerms: 実物GLOSSARY.mdで他の用語と完全一致する禁止語は除外される
+ok 430 - parseForbiddenTerms: 実物GLOSSARY.mdで他の用語と完全一致する禁止語は除外される
+  ---
+  duration_ms: 0.900071
+  ...
+# Subtest: parseForbiddenTerms: 実物GLOSSARY.mdのバッククォート付きセルは除去される
+ok 431 - parseForbiddenTerms: 実物GLOSSARY.mdのバッククォート付きセルは除去される
+  ---
+  duration_ms: 1.009917
+  ...
+# Subtest: parseForbiddenTerms: 1行に複数の禁止語がある場合は全て抽出される
+ok 432 - parseForbiddenTerms: 1行に複数の禁止語がある場合は全て抽出される
+  ---
+  duration_ms: 6.449324
+  ...
+# Subtest: parseForbiddenTerms: 括弧注釈付きの禁止語は注釈を除いて抽出される
+ok 433 - parseForbiddenTerms: 括弧注釈付きの禁止語は注釈を除いて抽出される
+  ---
+  duration_ms: 1.49296
+  ...
+# Subtest: parseForbiddenTerms: 他の用語と完全一致する禁止語は除外される（衝突ケース）
+ok 434 - parseForbiddenTerms: 他の用語と完全一致する禁止語は除外される（衝突ケース）
+  ---
+  duration_ms: 1.843078
+  ...
+# Subtest: parseForbiddenTerms: バッククォートで囲まれた用語・禁止語を正しく除去する
+ok 435 - parseForbiddenTerms: バッククォートで囲まれた用語・禁止語を正しく除去する
+  ---
+  duration_ms: 3.956602
+  ...
+# Subtest: parseForbiddenTerms: 表以外の行（見出し・説明文）は無視される
+ok 436 - parseForbiddenTerms: 表以外の行（見出し・説明文）は無視される
+  ---
+  duration_ms: 1.595518
+  ...
+# Subtest: CliError: name が CliError であり Error のインスタンスである
+ok 437 - CliError: name が CliError であり Error のインスタンスである
+  ---
+  duration_ms: 1.718732
+  ...
+# Subtest: parseIssueId: 正常な ISSUE-<番号> を解析する
+ok 438 - parseIssueId: 正常な ISSUE-<番号> を解析する
+  ---
+  duration_ms: 1.243875
+  ...
+# Subtest: parseIssueId: 番号0は許容される（ISSUE-0）
+ok 439 - parseIssueId: 番号0は許容される（ISSUE-0）
+  ---
+  duration_ms: 0.601971
+  ...
+# Subtest: parseIssueId: 先頭ゼロ付きの番号も許容される（ISSUE-01）
+ok 440 - parseIssueId: 先頭ゼロ付きの番号も許容される（ISSUE-01）
+  ---
+  duration_ms: 0.375164
+  ...
+# Subtest: parseIssueId: 桁数が多い番号も許容される
+ok 441 - parseIssueId: 桁数が多い番号も許容される
+  ---
+  duration_ms: 0.562266
+  ...
+# Subtest: parseIssueId: 数字以外の番号部分は CliError
+ok 442 - parseIssueId: 数字以外の番号部分は CliError
+  ---
+  duration_ms: 0.765367
+  ...
+# Subtest: parseIssueId: 小文字の issue- は拒否される（大文字小文字を区別）
+ok 443 - parseIssueId: 小文字の issue- は拒否される（大文字小文字を区別）
+  ---
+  duration_ms: 0.329844
+  ...
+# Subtest: parseIssueId: 番号が無い場合は拒否される
+ok 444 - parseIssueId: 番号が無い場合は拒否される
+  ---
+  duration_ms: 0.452333
+  ...
+# Subtest: parseIssueId: 末尾に余分な文字がある場合は拒否される（完全一致）
+ok 445 - parseIssueId: 末尾に余分な文字がある場合は拒否される（完全一致）
+  ---
+  duration_ms: 0.506761
+  ...
+# Subtest: parseIssueId: 空文字列は拒否される
+ok 446 - parseIssueId: 空文字列は拒否される
+  ---
+  duration_ms: 0.555186
+  ...
+# Subtest: parseIssueId: プレフィックスが無い場合は拒否される
+ok 447 - parseIssueId: プレフィックスが無い場合は拒否される
+  ---
+  duration_ms: 0.387303
+  ...
+# Subtest: parseAdrId: 正常な ADR-<番号> を解析する
+ok 448 - parseAdrId: 正常な ADR-<番号> を解析する
+  ---
+  duration_ms: 0.415137
+  ...
+# Subtest: parseAdrId: 数字以外は CliError
+ok 449 - parseAdrId: 数字以外は CliError
+  ---
+  duration_ms: 0.478316
+  ...
+# Subtest: parseAdrId: プレフィックス違いは拒否される
+ok 450 - parseAdrId: プレフィックス違いは拒否される
+  ---
+  duration_ms: 0.426971
+  ...
+# Subtest: validateAcId: 正常な AC-<番号> は例外を投げない
+ok 451 - validateAcId: 正常な AC-<番号> は例外を投げない
+  ---
+  duration_ms: 5.165437
+  ...
+# Subtest: validateAcId: 番号が無い場合は CliError
+ok 452 - validateAcId: 番号が無い場合は CliError
+  ---
+  duration_ms: 0.362817
+  ...
+# Subtest: validateAcId: 小文字プレフィックスは拒否される
+ok 453 - validateAcId: 小文字プレフィックスは拒否される
+  ---
+  duration_ms: 0.417193
+  ...
+# Subtest: validateAcId: 数字以外を含む場合は拒否される
+ok 454 - validateAcId: 数字以外を含む場合は拒否される
+  ---
+  duration_ms: 0.396473
+  ...
+# Subtest: validateSlug: 小文字英数字とハイフンのみのslugは許容される
+ok 455 - validateSlug: 小文字英数字とハイフンのみのslugは許容される
+  ---
+  duration_ms: 0.458025
+  ...
+# Subtest: validateSlug: 先頭ハイフンは拒否される
+ok 456 - validateSlug: 先頭ハイフンは拒否される
+  ---
+  duration_ms: 0.363576
+  ...
+# Subtest: validateSlug: 末尾ハイフンは拒否される
+ok 457 - validateSlug: 末尾ハイフンは拒否される
+  ---
+  duration_ms: 0.349
+  ...
+# Subtest: validateSlug: 連続ハイフンは拒否される
+ok 458 - validateSlug: 連続ハイフンは拒否される
+  ---
+  duration_ms: 0.252154
+  ...
+# Subtest: validateSlug: 大文字を含む場合は拒否される
+ok 459 - validateSlug: 大文字を含む場合は拒否される
+  ---
+  duration_ms: 0.213705
+  ...
+# Subtest: validateSlug: 空白や記号を含む場合は拒否される
+ok 460 - validateSlug: 空白や記号を含む場合は拒否される
+  ---
+  duration_ms: 0.231675
+  ...
+# Subtest: validateSlug: 空文字列は拒否される
+ok 461 - validateSlug: 空文字列は拒否される
+  ---
+  duration_ms: 1.214426
+  ...
+# Subtest: validateSlug: 最大長を超えるslugは拒否される
+ok 462 - validateSlug: 最大長を超えるslugは拒否される
+  ---
+  duration_ms: 0.386968
+  ...
+# Subtest: validateSlug: 最大長と同じ長さのslugは許容される
+ok 463 - validateSlug: 最大長と同じ長さのslugは許容される
+  ---
+  duration_ms: 0.232876
+  ...
+# Subtest: validateType: 許可リストに含まれる値は例外を投げない
+ok 464 - validateType: 許可リストに含まれる値は例外を投げない
+  ---
+  duration_ms: 0.349562
+  ...
+# Subtest: validateType: 許可リストに含まれない値は CliError（許可リストをメッセージに含む）
+ok 465 - validateType: 許可リストに含まれない値は CliError（許可リストをメッセージに含む）
+  ---
+  duration_ms: 0.350261
+  ...
+# Subtest: validateType: 空の許可リストでは常に拒否される
+ok 466 - validateType: 空の許可リストでは常に拒否される
+  ---
+  duration_ms: 0.244359
+  ...
+# Subtest: validateSegment: SEGMENTS に含まれる値は例外を投げない
+ok 467 - validateSegment: SEGMENTS に含まれる値は例外を投げない
+  ---
+  duration_ms: 0.291529
+  ...
+# Subtest: validateSegment: SEGMENTS に含まれない値は CliError
+ok 468 - validateSegment: SEGMENTS に含まれない値は CliError
+  ---
+  duration_ms: 0.305595
+  ...
+# Subtest: validateSegment: エラーメッセージに許容セグメント一覧を含む
+ok 469 - validateSegment: エラーメッセージに許容セグメント一覧を含む
+  ---
+  duration_ms: 0.422147
+  ...
+# Subtest: SEGMENTS: 4区分がこの順で定義されている
+ok 470 - SEGMENTS: 4区分がこの順で定義されている
+  ---
+  duration_ms: 0.258121
+  ...
+# Subtest: issueDir: root/issues/<番号> を返す
+ok 471 - issueDir: root/issues/<番号> を返す
+  ---
+  duration_ms: 1.710489
+  ...
+# Subtest: stateFilePath: issueDir配下の .agent-skill-chain/state.yaml を返す
+ok 472 - stateFilePath: issueDir配下の .agent-skill-chain/state.yaml を返す
+  ---
+  duration_ms: 3.701718
+  ...
+# Subtest: leaseFilePath: issueDir配下の .agent-skill-chain/lease.yaml を返す
+ok 473 - leaseFilePath: issueDir配下の .agent-skill-chain/lease.yaml を返す
+  ---
+  duration_ms: 0.441071
+  ...
+# Subtest: integrationFilePath: issueDir配下の .agent-skill-chain/integration.yaml を返す
+ok 474 - integrationFilePath: issueDir配下の .agent-skill-chain/integration.yaml を返す
+  ---
+  duration_ms: 0.271199
+  ...
+# Subtest: reviewFilePath: issueDir配下の .agent-skill-chain/reviews/<gateId>.yaml を返す
+ok 475 - reviewFilePath: issueDir配下の .agent-skill-chain/reviews/<gateId>.yaml を返す
+  ---
+  duration_ms: 0.418289
+  ...
+# Subtest: reviewFilePath: gateIdが異なれば異なるファイル名になる
+ok 476 - reviewFilePath: gateIdが異なれば異なるファイル名になる
+  ---
+  duration_ms: 0.321139
+  ...
+# Subtest: issueNumberが異なれば全パスが異なるディレクトリに解決される
+ok 477 - issueNumberが異なれば全パスが異なるディレクトリに解決される
+  ---
+  duration_ms: 0.229713
+  ...
+# Subtest: 全パス関数の出力は issueDir 配下（プレフィックス一致）である
+ok 478 - 全パス関数の出力は issueDir 配下（プレフィックス一致）である
+  ---
+  duration_ms: 0.645439
+  ...
+# Switched to a new branch 'process/1-core-change'
+# Switched to a new branch 'docs/1-ordinary-change'
+# Subtest: model selection policy: manifestのCodex固定値とClaude能力証明契約を読み込む
+ok 479 - model selection policy: manifestのCodex固定値とClaude能力証明契約を読み込む
+  ---
+  duration_ms: 855.282795
+  ...
+# Subtest: classifyCoreReview: manifestのcore path差分をrequiredとして分類する
+ok 480 - classifyCoreReview: manifestのcore path差分をrequiredとして分類する
+  ---
+  duration_ms: 746.479115
+  ...
+# Subtest: classifyCoreReview: 非core差分は通常作業として明示選択を維持する
+ok 481 - classifyCoreReview: 非core差分は通常作業として明示選択を維持する
+  ---
+  duration_ms: 785.295021
+  ...
+# Subtest: classifyCoreReview: 明示core_auditはコード差分無しでもrequiredになる
+ok 482 - classifyCoreReview: 明示core_auditはコード差分無しでもrequiredになる
+  ---
+  duration_ms: 515.19847
+  ...
+# Subtest: classifyCoreReview: base/targetを解決できない場合は非coreへ降格せずunresolvedになる
+ok 483 - classifyCoreReview: base/targetを解決できない場合は非coreへ降格せずunresolvedになる
+  ---
+  duration_ms: 600.67966
+  ...
+# Subtest: classifyCoreReview: model_selectionを持たないconsumer projectは従来の通常作業になる
+ok 484 - classifyCoreReview: model_selectionを持たないconsumer projectは従来の通常作業になる
+  ---
+  duration_ms: 522.765418
+  ...
+# Subtest: packageRoot: このworktree自身のルートを返す（package.jsonが存在する）
+ok 485 - packageRoot: このworktree自身のルートを返す（package.jsonが存在する）
+  ---
+  duration_ms: 1.779061
+  ...
+# Subtest: repoRoot: .git を含む祖先ディレクトリを、深い階層から呼んでも正しく返す（通常リポジトリ・regressionなし、AC-2）
+ok 486 - repoRoot: .git を含む祖先ディレクトリを、深い階層から呼んでも正しく返す（通常リポジトリ・regressionなし、AC-2）
+  ---
+  duration_ms: 3.113995
+  ...
+# Subtest: repoRoot: 起点ディレクトリ自身が .git を持つ場合はそのまま返す（通常リポジトリ・regressionなし、AC-2）
+ok 487 - repoRoot: 起点ディレクトリ自身が .git を持つ場合はそのまま返す（通常リポジトリ・regressionなし、AC-2）
+  ---
+  duration_ms: 1.760849
+  ...
+# Subtest: repoRoot: .git がどこにも見つからない場合は例外を投げる（AC-2）
+not ok 488 - repoRoot: .git がどこにも見つからない場合は例外を投げる（AC-2）
+  ---
+  duration_ms: 8.25944
+  location: '/home/adachi/projects/AGENTS.md/.worktrees/20260803_164817-bugfix-369-gate-reviewer-prompt-abbrev-digest-mismatch/test/unit/paths.test.ts:1:1697'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (/home/adachi/projects/AGENTS.md/.worktrees/20260803_164817-bugfix-369-gate-reviewer-prompt-abbrev-digest-mismatch/test/unit/paths.test.ts:46:10)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: repoRoot: linked worktree内から呼ぶとメイン作業ツリールートを返す（AC-1: worktree分裂の解消）
+ok 489 - repoRoot: linked worktree内から呼ぶとメイン作業ツリールートを返す（AC-1: worktree分裂の解消）
+  ---
+  duration_ms: 164.046229
+  ...
+# Subtest: repoRoot: メイン作業ツリーから呼んだ場合はそれ自身を返す（AC-1の前提: 両者が同一値を指すこと）
+ok 490 - repoRoot: メイン作業ツリーから呼んだ場合はそれ自身を返す（AC-1の前提: 両者が同一値を指すこと）
+  ---
+  duration_ms: 123.725348
+  ...
+# Subtest: worktreeRoot: 現在いる作業ツリー自身のルートを返す（linked worktree内ではworktree自身、メインではメイン自身）
+ok 491 - worktreeRoot: 現在いる作業ツリー自身のルートを返す（linked worktree内ではworktree自身、メインではメイン自身）
+  ---
+  duration_ms: 154.96785
+  ...
+# Subtest: resolveAsset: root/.agent-skill-chain/<relativePath> が存在すればそちらを優先する
+ok 492 - resolveAsset: root/.agent-skill-chain/<relativePath> が存在すればそちらを優先する
+  ---
+  duration_ms: 2.029734
+  ...
+# Subtest: resolveAsset: rootに無ければ packageRoot() 側のアセットへフォールバックする
+ok 493 - resolveAsset: rootに無ければ packageRoot() 側のアセットへフォールバックする
+  ---
+  duration_ms: 1.796394
+  ...
+# Subtest: resolveAsset: rootにもpackageRootにも無ければ例外を投げる
+ok 494 - resolveAsset: rootにもpackageRootにも無ければ例外を投げる
+  ---
+  duration_ms: 2.590327
+  ...
+# Subtest: expandPattern: すべての変数を展開する
+ok 495 - expandPattern: すべての変数を展開する
+  ---
+  duration_ms: 1.675836
+  ...
+# Subtest: expandPattern: 未指定の変数があると例外を投げる
+ok 496 - expandPattern: 未指定の変数があると例外を投げる
+  ---
+  duration_ms: 0.778252
+  ...
+# Subtest: expandPattern: 変数を含まないパターンはそのまま返す
+ok 497 - expandPattern: 変数を含まないパターンはそのまま返す
+  ---
+  duration_ms: 0.349098
+  ...
+# Subtest: loadProjectPolicyDocuments: manifest.yamlがないconsumer projectでは空配列を返す
+ok 498 - loadProjectPolicyDocuments: manifest.yamlがないconsumer projectでは空配列を返す
+  ---
+  duration_ms: 10.194699
+  ...
+# Subtest: loadProjectPolicyDocuments: documents.commonの登録文書を読み込む
+ok 499 - loadProjectPolicyDocuments: documents.commonの登録文書を読み込む
+  ---
+  duration_ms: 225.254283
+  ...
+# Subtest: loadProjectPolicyDocuments: 要求segmentのrole文書だけを追加する
+ok 500 - loadProjectPolicyDocuments: 要求segmentのrole文書だけを追加する
+  ---
+  duration_ms: 112.508302
+  ...
+# Subtest: loadProjectPolicyDocuments: スキーマに適合しないmanifestはエラーにする
+ok 501 - loadProjectPolicyDocuments: スキーマに適合しないmanifestはエラーにする
+  ---
+  duration_ms: 142.357722
+  ...
+# Subtest: loadProjectPolicyDocuments: documents.commonに登録された文書の実体が無い場合はエラーにする
+ok 502 - loadProjectPolicyDocuments: documents.commonに登録された文書の実体が無い場合はエラーにする
+  ---
+  duration_ms: 84.519975
+  ...
+# Subtest: loadProjectPolicyDocuments: documents.roles.<segment>に登録された文書の実体が無い場合はエラーにする
+ok 503 - loadProjectPolicyDocuments: documents.roles.<segment>に登録された文書の実体が無い場合はエラーにする
+  ---
+  duration_ms: 74.738306
+  ...
+# Subtest: loadProjectPolicyDocuments: manifest.yamlが権限拒否で読み取れない場合はENOENTへ吸収せず例外を伝播する（AC-4(c)）
+ok 504 - loadProjectPolicyDocuments: manifest.yamlが権限拒否で読み取れない場合はENOENTへ吸収せず例外を伝播する（AC-4(c)）
+  ---
+  duration_ms: 8.0812
+  ...
+# Subtest: loadProjectPolicyDocuments: "../"による上位ディレクトリ脱出は拒否する（AC-7）
+ok 505 - loadProjectPolicyDocuments: "../"による上位ディレクトリ脱出は拒否する（AC-7）
+  ---
+  duration_ms: 48.957266
+  ...
+# Subtest: loadProjectPolicyDocuments: 絶対パス指定は拒否する（AC-7、封じ込め境界内を指す場合も含む）
+ok 506 - loadProjectPolicyDocuments: 絶対パス指定は拒否する（AC-7、封じ込め境界内を指す場合も含む）
+  ---
+  duration_ms: 48.508874
+  ...
+# Subtest: loadProjectPolicyDocuments: symlinkによる範囲外脱出は拒否する（AC-7）
+ok 507 - loadProjectPolicyDocuments: symlinkによる範囲外脱出は拒否する（AC-7）
+  ---
+  duration_ms: 43.075523
+  ...
+# Subtest: loadProjectPolicyDocuments: ネストした配下パスは正当に読み込める
+ok 508 - loadProjectPolicyDocuments: ネストした配下パスは正当に読み込める
+  ---
+  duration_ms: 52.796564
+  ...
+# Subtest: loadProjectPolicyDocuments: documents.commonとdocuments.roles.<segment>の双方に同一文書が登録されていても1回のみ読み込む（AC-8）
+ok 509 - loadProjectPolicyDocuments: documents.commonとdocuments.roles.<segment>の双方に同一文書が登録されていても1回のみ読み込む（AC-8）
+  ---
+  duration_ms: 51.832154
+  ...
+# Subtest: loadProjectPolicyDocuments: 同一リスト内で表記違いの重複登録があっても1回のみ読み込む（AC-8）
+ok 510 - loadProjectPolicyDocuments: 同一リスト内で表記違いの重複登録があっても1回のみ読み込む（AC-8）
+  ---
+  duration_ms: 43.932171
+  ...
+# Subtest: loadProjectPolicyDocuments: 実ファイルとそれを指すsymlinkエイリアスの双方が登録されていても1回のみ読み込む（AC-8）
+ok 511 - loadProjectPolicyDocuments: 実ファイルとそれを指すsymlinkエイリアスの双方が登録されていても1回のみ読み込む（AC-8）
+  ---
+  duration_ms: 60.403376
+  ...
+# Subtest: loadProjectPolicyDocuments: 同一リスト内に完全同一パスが2重登録されていても1回のみ読み込む（AC-8）
+ok 512 - loadProjectPolicyDocuments: 同一リスト内に完全同一パスが2重登録されていても1回のみ読み込む（AC-8）
+  ---
+  duration_ms: 56.737256
+  ...
+# Subtest: loadProjectPolicyDocuments: manifest.yamlが構文的に不正なYAMLの場合は捕捉せず例外を伝播する（AC-4(b)）
+ok 513 - loadProjectPolicyDocuments: manifest.yamlが構文的に不正なYAMLの場合は捕捉せず例外を伝播する（AC-4(b)）
+  ---
+  duration_ms: 4.313223
+  ...
+# Subtest: latestSemverTag: SEMVER_TAG_RE に一致するタグのみを対象に最大版数を返す
+ok 514 - latestSemverTag: SEMVER_TAG_RE に一致するタグのみを対象に最大版数を返す
+  ---
+  duration_ms: 1.821149
+  ...
+# Subtest: latestSemverTag: 旧日時形式タグ（v20260720.060726等）は非一致として除外される（ADR-0005）
+ok 515 - latestSemverTag: 旧日時形式タグ（v20260720.060726等）は非一致として除外される（ADR-0005）
+  ---
+  duration_ms: 0.288813
+  ...
+# Subtest: latestSemverTag: 一致タグが1件も無ければ undefined を返す
+ok 516 - latestSemverTag: 一致タグが1件も無ければ undefined を返す
+  ---
+  duration_ms: 0.185103
+  ...
+# Subtest: latestSemverTag: 桁数の異なる版数を文字列比較ではなく数値として比較する（v0.2.9 < v0.2.10）
+ok 517 - latestSemverTag: 桁数の異なる版数を文字列比較ではなく数値として比較する（v0.2.9 < v0.2.10）
+  ---
+  duration_ms: 0.238117
+  ...
+# Subtest: latestSemverTag: メジャー・マイナーの桁も数値として比較する
+ok 518 - latestSemverTag: メジャー・マイナーの桁も数値として比較する
+  ---
+  duration_ms: 0.309646
+  ...
+# Subtest: previousSemverTag: target未満で最大のsemverタグをタグ名（v付き）で返す
+ok 519 - previousSemverTag: target未満で最大のsemverタグをタグ名（v付き）で返す
+  ---
+  duration_ms: 0.657977
+  ...
+# Subtest: previousSemverTag: 旧日時形式タグ（v20260720.060726等）は起点候補から除外される（ADR-0005: 新旧版数体系をまたいだ比較をしない）
+ok 520 - previousSemverTag: 旧日時形式タグ（v20260720.060726等）は起点候補から除外される（ADR-0005: 新旧版数体系をまたいだ比較をしない）
+  ---
+  duration_ms: 0.328414
+  ...
+# Subtest: previousSemverTag: target自身およびtarget以上のタグは起点候補から除外される
+ok 521 - previousSemverTag: target自身およびtarget以上のタグは起点候補から除外される
+  ---
+  duration_ms: 0.312347
+  ...
+# Subtest: previousSemverTag: target未満のsemverタグが1件も無ければ undefined を返す（AC-3: 初回リリース等）
+ok 522 - previousSemverTag: target未満のsemverタグが1件も無ければ undefined を返す（AC-3: 初回リリース等）
+  ---
+  duration_ms: 0.38353
+  ...
+# Subtest: previousSemverTag: 桁数の異なる版数を文字列比較ではなく数値として比較する（v0.2.9 < v0.2.10）
+ok 523 - previousSemverTag: 桁数の異なる版数を文字列比較ではなく数値として比較する（v0.2.9 < v0.2.10）
+  ---
+  duration_ms: 0.513151
+  ...
+# Subtest: previousSemverTag: 不正なtarget（semver形式でない）は例外を投げる
+ok 524 - previousSemverTag: 不正なtarget（semver形式でない）は例外を投げる
+  ---
+  duration_ms: 0.608806
+  ...
+# Subtest: resolveVersion: 一致タグが1件も無い場合、pkgVersionをseedとしてpatch加算する（初回run、DESIGN.md記載の v0.2.0→v0.2.1 と同型）
+ok 525 - resolveVersion: 一致タグが1件も無い場合、pkgVersionをseedとしてpatch加算する（初回run、DESIGN.md記載の v0.2.0→v0.2.1 と同型）
+  ---
+  duration_ms: 1.497248
+  ...
+# Subtest: resolveVersion: 旧日時形式タグのみが存在する場合も初回run扱い（seed=pkgVersion）になる
+ok 526 - resolveVersion: 旧日時形式タグのみが存在する場合も初回run扱い（seed=pkgVersion）になる
+  ---
+  duration_ms: 5.178509
+  ...
+# Subtest: resolveVersion: 既存タグがpkgVersion以上の場合、既存タグの最大版数からpatch加算する
+ok 527 - resolveVersion: 既存タグがpkgVersion以上の場合、既存タグの最大版数からpatch加算する
+  ---
+  duration_ms: 0.616037
+  ...
+# Subtest: resolveVersion: pkgVersionと既存タグ最大版数が等しい場合もpatch加算する（needCommit=true）
+ok 528 - resolveVersion: pkgVersionと既存タグ最大版数が等しい場合もpatch加算する（needCommit=true）
+  ---
+  duration_ms: 0.472252
+  ...
+# Subtest: resolveVersion: patch加算は桁上げを伴っても数値として正しく計算される
+ok 529 - resolveVersion: patch加算は桁上げを伴っても数値として正しく計算される
+  ---
+  duration_ms: 0.665421
+  ...
+# Subtest: resolveVersion: pkgVersionが既存タグ最大版数より大きい場合、pkgVersionをtargetとして尊重しneedCommit=falseにする（人手のminor/major先行bump）
+ok 530 - resolveVersion: pkgVersionが既存タグ最大版数より大きい場合、pkgVersionをtargetとして尊重しneedCommit=falseにする（人手のminor/major先行bump）
+  ---
+  duration_ms: 0.513345
+  ...
+# Subtest: resolveVersion: 生成されるtargetは常にlatestより大きい（後退禁止ガード、複数ケース横断）
+ok 531 - resolveVersion: 生成されるtargetは常にlatestより大きい（後退禁止ガード、複数ケース横断）
+  ---
+  duration_ms: 1.314732
+  ...
+# Subtest: resolveVersion: 不正なpkgVersion（semver形式でない）は例外を投げる
+ok 532 - resolveVersion: 不正なpkgVersion（semver形式でない）は例外を投げる
+  ---
+  duration_ms: 0.419604
+  ...
+# Subtest: SEMVER_TAG_RE: v<major>.<minor>.<patch> のみに一致する
+ok 533 - SEMVER_TAG_RE: v<major>.<minor>.<patch> のみに一致する
+  ---
+  duration_ms: 0.673399
+  ...
+# Subtest: RELEASE_BUMP_BRANCH_RE: release/bump-v<semver> 形式のみに一致する（admin merge直前のスコープ検査で使用）
+ok 534 - RELEASE_BUMP_BRANCH_RE: release/bump-v<semver> 形式のみに一致する（admin merge直前のスコープ検査で使用）
+  ---
+  duration_ms: 0.486713
+  ...
+# Subtest: strict: trustedな独立slot 1/2だけがapprovedになる
+ok 535 - strict: trustedな独立slot 1/2だけがapprovedになる
+  ---
+  duration_ms: 4.782077
+  ...
+# Subtest: strict: 1件不足またはslot重複はhuman_required
+ok 536 - strict: 1件不足またはslot重複はhuman_required
+  ---
+  duration_ms: 1.229107
+  ...
+# Subtest: retry: same-SHAの旧complete attemptを無視して最新attemptだけを採用し、最新不完全時はfallbackしない
+ok 537 - retry: same-SHAの旧complete attemptを無視して最新attemptだけを採用し、最新不完全時はfallbackしない
+  ---
+  duration_ms: 4.388292
+  ...
+# Subtest: provenance: 同一actorのtrusted recorderをrun attestationで区別し、未登録・actor未解決は拒否する
+ok 538 - provenance: 同一actorのtrusted recorderをrun attestationで区別し、未登録・actor未解決は拒否する
+  ---
+  duration_ms: 1.399888
+  ...
+# Subtest: freshness: API commit SHA、本文target、prompt、artifact digest改変を拒否する
+ok 539 - freshness: API commit SHA、本文target、prompt、artifact digest改変を拒否する
+  ---
+  duration_ms: 5.59211
+  ...
+# Subtest: capability: core Codex model/reasoning不一致を拒否し、blocking verdictはrejected
+ok 540 - capability: core Codex model/reasoning不一致を拒否し、blocking verdictはrejected
+  ---
+  duration_ms: 4.264527
+  ...
+# Subtest: schema: 不正なfinding enumをpass/passに添えてもapprovedへ倒れない
+ok 541 - schema: 不正なfinding enumをpass/passに添えてもapprovedへ倒れない
+  ---
+  duration_ms: 0.640852
+  ...
+# Subtest: loadRoles: 実物の .agent-skill-chain/config/roles.yaml を読み込む
+ok 542 - loadRoles: 実物の .agent-skill-chain/config/roles.yaml を読み込む
+  ---
+  duration_ms: 57.946232
+  ...
+# Subtest: loadRoles: role_contracts に全必須ロールが存在する
+ok 543 - loadRoles: role_contracts に全必須ロールが存在する
+  ---
+  duration_ms: 33.437704
+  ...
+# Subtest: loadRoles: 各 role_contract は inputs/outputs/rules/completion/forbidden を持つ
+ok 544 - loadRoles: 各 role_contract は inputs/outputs/rules/completion/forbidden を持つ
+  ---
+  duration_ms: 37.806287
+  ...
+# Subtest: loadRoles: adapters に claude/codex/human が定義されている
+ok 545 - loadRoles: adapters に claude/codex/human が定義されている
+  ---
+  duration_ms: 29.625613
+  ...
+# Subtest: defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}, src/）。lint referencesの見出し解決に必要な完全な一覧（Issue \#187: src/ を対象へ追加。bin/ はビルド生成物のため対象外＝ADR-2）
+ok 546 - defaultLiveFileRoots: このworktreeの実在パスのみを返す（AGENTS.md, docs/GLOSSARY.md, .agent-skill-chain/{standards,templates,config,schemas,scripts,ci}, src/）。lint referencesの見出し解決に必要な完全な一覧（Issue \#187: src/ を対象へ追加。bin/ はビルド生成物のため対象外＝ADR-2）
+  ---
+  duration_ms: 15.867528
+  ...
+# Subtest: defaultVocabFileRoots: lint vocabのデフォルト対象。docs/GLOSSARY.mdは自己言及のため恒久除外し、AGENTS.md・.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}・src/（defaultLiveFileRootsと同一集合）を返す（識別子文脈スキャナ実装によりtemplates/config/schemas/scriptsの一時除外を撤廃済み。Issue \#187: src/ を追加）
+ok 547 - defaultVocabFileRoots: lint vocabのデフォルト対象。docs/GLOSSARY.mdは自己言及のため恒久除外し、AGENTS.md・.agent-skill-chain/{standards,templates,config,schemas,scripts,ci}・src/（defaultLiveFileRootsと同一集合）を返す（識別子文脈スキャナ実装によりtemplates/config/schemas/scriptsの一時除外を撤廃済み。Issue \#187: src/ を追加）
+  ---
+  duration_ms: 10.100714
+  ...
+# Subtest: defaultVocabFileRoots: 存在しないパスは除外される
+ok 548 - defaultVocabFileRoots: 存在しないパスは除外される
+  ---
+  duration_ms: 1.904584
+  ...
+# Subtest: defaultLiveFileRoots: 存在しないパスは除外される
+ok 549 - defaultLiveFileRoots: 存在しないパスは除外される
+  ---
+  duration_ms: 1.199065
+  ...
+# Subtest: defaultLiveFileRoots: 一部のみ存在する場合は存在するものだけ返す
+ok 550 - defaultLiveFileRoots: 一部のみ存在する場合は存在するものだけ返す
+  ---
+  duration_ms: 3.979109
+  ...
+# Subtest: defaultReferenceFileRoots: このworktreeの実在パス（defaultLiveFileRootsの全パス + .github/workflows）を返す（Issue \#221: 実デプロイ済みワークフローYAMLを走査対象へ含める）
+ok 551 - defaultReferenceFileRoots: このworktreeの実在パス（defaultLiveFileRootsの全パス + .github/workflows）を返す（Issue \#221: 実デプロイ済みワークフローYAMLを走査対象へ含める）
+  ---
+  duration_ms: 9.071627
+  ...
+# Subtest: defaultReferenceFileRoots: .github/workflows が存在しない環境では除外され、defaultLiveFileRootsと同一集合に縮退する
+ok 552 - defaultReferenceFileRoots: .github/workflows が存在しない環境では除外され、defaultLiveFileRootsと同一集合に縮退する
+  ---
+  duration_ms: 1.800574
+  ...
+# Subtest: defaultReferenceFileRoots: .github/workflows が存在する環境では末尾に追加される
+ok 553 - defaultReferenceFileRoots: .github/workflows が存在する環境では末尾に追加される
+  ---
+  duration_ms: 2.545589
+  ...
+# Subtest: walkTextFiles: 対象拡張子（.md/.yaml/.yml/.sh/.json/.ts）のファイルのみを再帰的に収集する
+ok 554 - walkTextFiles: 対象拡張子（.md/.yaml/.yml/.sh/.json/.ts）のファイルのみを再帰的に収集する
+  ---
+  duration_ms: 5.113867
+  ...
+# Subtest: walkTextFiles: 存在しないエントリパスは無視され例外を投げない
+ok 555 - walkTextFiles: 存在しないエントリパスは無視され例外を投げない
+  ---
+  duration_ms: 2.009354
+  ...
+# Subtest: walkTextFiles: 単一ファイルをエントリに渡した場合、対象拡張子ならそのまま返す
+ok 556 - walkTextFiles: 単一ファイルをエントリに渡した場合、対象拡張子ならそのまま返す
+  ---
+  duration_ms: 1.616186
+  ...
+# Subtest: walkTextFiles: 単一ファイルが対象外拡張子なら空配列を返す
+ok 557 - walkTextFiles: 単一ファイルが対象外拡張子なら空配列を返す
+  ---
+  duration_ms: 1.471558
+  ...
+# Subtest: walkTextFiles: 空配列を渡すと空配列を返す
+ok 558 - walkTextFiles: 空配列を渡すと空配列を返す
+  ---
+  duration_ms: 0.403334
+  ...
+# Subtest: validateAgainstSchema('config'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 559 - validateAgainstSchema('config'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 291.64686
+  ...
+# Subtest: validateAgainstSchema('config'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 560 - validateAgainstSchema('config'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 95.929389
+  ...
+# Subtest: validateAgainstSchema('state'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 561 - validateAgainstSchema('state'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 110.619387
+  ...
+# Subtest: validateAgainstSchema('state'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 562 - validateAgainstSchema('state'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 21.773918
+  ...
+# Subtest: validateAgainstSchema('gate-report'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 563 - validateAgainstSchema('gate-report'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 136.984591
+  ...
+# Subtest: validateAgainstSchema('gate-report'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 564 - validateAgainstSchema('gate-report'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 38.33102
+  ...
+# Subtest: validateAgainstSchema('validation-report'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 565 - validateAgainstSchema('validation-report'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 74.031182
+  ...
+# Subtest: validateAgainstSchema('validation-report'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 566 - validateAgainstSchema('validation-report'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 20.521013
+  ...
+# Subtest: validateAgainstSchema('worker-report'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 567 - validateAgainstSchema('worker-report'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 65.349169
+  ...
+# Subtest: validateAgainstSchema('worker-report'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 568 - validateAgainstSchema('worker-report'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 32.614203
+  ...
+# Subtest: validateAgainstSchema('integration'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 569 - validateAgainstSchema('integration'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 93.095102
+  ...
+# Subtest: validateAgainstSchema('integration'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 570 - validateAgainstSchema('integration'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 20.652869
+  ...
+# Subtest: validateAgainstSchema('lease'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 571 - validateAgainstSchema('lease'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 37.91321
+  ...
+# Subtest: validateAgainstSchema('lease'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 572 - validateAgainstSchema('lease'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 23.426425
+  ...
+# Subtest: validateAgainstSchema('segments'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 573 - validateAgainstSchema('segments'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 44.413474
+  ...
+# Subtest: validateAgainstSchema('segments'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 574 - validateAgainstSchema('segments'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 17.722768
+  ...
+# Subtest: validateAgainstSchema('project-policy'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+ok 575 - validateAgainstSchema('project-policy'): スキーマ同梱のexamples[0]（正しいデータ）はvalidになる
+  ---
+  duration_ms: 124.697262
+  ...
+# Subtest: validateAgainstSchema('project-policy'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+ok 576 - validateAgainstSchema('project-policy'): 必須フィールド欠落データはinvalidになりエラーメッセージを含む
+  ---
+  duration_ms: 19.701478
+  ...
+# Subtest: validateAgainstSchema('state'): title/requestを含むstateは検証を通過する（ISSUE-183 AC-3）
+ok 577 - validateAgainstSchema('state'): title/requestを含むstateは検証を通過する（ISSUE-183 AC-3）
+  ---
+  duration_ms: 69.020836
+  ...
+# Subtest: validateAgainstSchema('state'): title/requestを持たない既存stateは引き続き検証を通過する（後方互換、ISSUE-183 AC-3）
+ok 578 - validateAgainstSchema('state'): title/requestを持たない既存stateは引き続き検証を通過する（後方互換、ISSUE-183 AC-3）
+  ---
+  duration_ms: 43.621006
+  ...
+# Subtest: validateAgainstSchema('state'): review_subject=core_auditを許可し未知値を拒否する
+ok 579 - validateAgainstSchema('state'): review_subject=core_auditを許可し未知値を拒否する
+  ---
+  duration_ms: 107.542622
+  ...
+# Subtest: validateAgainstSchema: 実物の config/agent-skill-chain.yaml をそのまま渡すとvalidになる
+ok 580 - validateAgainstSchema: 実物の config/agent-skill-chain.yaml をそのまま渡すとvalidになる
+  ---
+  duration_ms: 62.584184
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): examples[1]（segment_overrides・model_tiersを含む新形式）はvalidになる
+ok 581 - validateAgainstSchema('config') (AC-4): examples[1]（segment_overrides・model_tiersを含む新形式）はvalidになる
+  ---
+  duration_ms: 173.974267
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): worker.adapterのみのスカラー旧形式（examples[0]）は引き続きvalidになる
+ok 582 - validateAgainstSchema('config') (AC-4): worker.adapterのみのスカラー旧形式（examples[0]）は引き続きvalidになる
+  ---
+  duration_ms: 40.009358
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): ティア対応表のモデル値を別の文字列へ変更してもスキーマ変更無しでvalidになる
+ok 583 - validateAgainstSchema('config') (AC-4): ティア対応表のモデル値を別の文字列へ変更してもスキーマ変更無しでvalidになる
+  ---
+  duration_ms: 25.862428
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): 未知のadapter名を持つsegment_overridesはinvalidになる
+ok 584 - validateAgainstSchema('config') (AC-4): 未知のadapter名を持つsegment_overridesはinvalidになる
+  ---
+  duration_ms: 40.035735
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): 未知のmodel_tier名はinvalidになる
+ok 585 - validateAgainstSchema('config') (AC-4): 未知のmodel_tier名はinvalidになる
+  ---
+  duration_ms: 33.235293
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): 未知のreasoning_effort名はinvalidになる
+ok 586 - validateAgainstSchema('config') (AC-4): 未知のreasoning_effort名はinvalidになる
+  ---
+  duration_ms: 38.171258
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): 未知のセグメント名（4セグメント以外）はinvalidになる
+ok 587 - validateAgainstSchema('config') (AC-4): 未知のセグメント名（4セグメント以外）はinvalidになる
+  ---
+  duration_ms: 25.991313
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): segment_overrides内の未知キーはinvalidになる
+ok 588 - validateAgainstSchema('config') (AC-4): segment_overrides内の未知キーはinvalidになる
+  ---
+  duration_ms: 15.500734
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): model_tierを持つがadapterがcodexでない組合せはinvalidになる（黙って無視されない）
+ok 589 - validateAgainstSchema('config') (AC-4): model_tierを持つがadapterがcodexでない組合せはinvalidになる（黙って無視されない）
+  ---
+  duration_ms: 42.56096
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): reasoning_effortを持つがadapter未指定の組合せはinvalidになる
+ok 590 - validateAgainstSchema('config') (AC-4): reasoning_effortを持つがadapter未指定の組合せはinvalidになる
+  ---
+  duration_ms: 41.378926
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): model_tiersの未知のティア名はinvalidになる
+ok 591 - validateAgainstSchema('config') (AC-4): model_tiersの未知のティア名はinvalidになる
+  ---
+  duration_ms: 16.397357
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): model_tiersの未知のアダプタキーはinvalidになる（claude用モデルを本Issueで追加しない）
+ok 592 - validateAgainstSchema('config') (AC-4): model_tiersの未知のアダプタキーはinvalidになる（claude用モデルを本Issueで追加しない）
+  ---
+  duration_ms: 13.113156
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): model_tiersのティアエントリにcodexキーが無い場合はinvalidになる（必須）
+ok 593 - validateAgainstSchema('config') (AC-4): model_tiersのティアエントリにcodexキーが無い場合はinvalidになる（必須）
+  ---
+  duration_ms: 41.219535
+  ...
+# Subtest: validateAgainstSchema('config') (AC-4): model_tier・reasoning_effortとadapter: codexの組合せはvalidになる
+ok 594 - validateAgainstSchema('config') (AC-4): model_tier・reasoning_effortとadapter: codexの組合せはvalidになる
+  ---
+  duration_ms: 36.322162
+  ...
+# Subtest: validateAgainstSchema: 明らかに型が異なるデータ（配列でなく文字列）はinvalidになる
+ok 595 - validateAgainstSchema: 明らかに型が異なるデータ（配列でなく文字列）はinvalidになる
+  ---
+  duration_ms: 0.309112
+  ...
+# Subtest: validateAgainstSchema: additionalProperties禁止のスキーマに未知フィールドを足すとinvalidになる
+ok 596 - validateAgainstSchema: additionalProperties禁止のスキーマに未知フィールドを足すとinvalidになる
+  ---
+  duration_ms: 11.279488
+  ...
+# Subtest: getValidator: 同名・同rootの呼び出しは同一のvalidator関数を返す（コンパイル結果がキャッシュされる）
+ok 597 - getValidator: 同名・同rootの呼び出しは同一のvalidator関数を返す（コンパイル結果がキャッシュされる）
+  ---
+  duration_ms: 0.367691
+  ...
+# Subtest: getValidator: 有効なデータに対しvalidatorを直接呼ぶとtrueを返す
+ok 598 - getValidator: 有効なデータに対しvalidatorを直接呼ぶとtrueを返す
+  ---
+  duration_ms: 11.548951
+  ...
+# Subtest: loadSegments: root省略時、実物の config/segments.yaml を読み込み4セグメントを返す
+ok 599 - loadSegments: root省略時、実物の config/segments.yaml を読み込み4セグメントを返す
+  ---
+  duration_ms: 146.811979
+  ...
+# Subtest: loadSegments: 明示的な root（このworktreeのrepoRoot）でも同じ内容を返す
+ok 600 - loadSegments: 明示的な root（このworktreeのrepoRoot）でも同じ内容を返す
+  ---
+  duration_ms: 16.272149
+  ...
+# Subtest: segmentDefinition: 各segment idについて定義（outputs, next）を返す
+ok 601 - segmentDefinition: 各segment idについて定義（outputs, next）を返す
+  ---
+  duration_ms: 83.170909
+  ...
+# Subtest: segmentDefinition: segments.yamlに定義されたnextの連鎖が spec→design→implementation→validation→completed である
+ok 602 - segmentDefinition: segments.yamlに定義されたnextの連鎖が spec→design→implementation→validation→completed である
+  ---
+  duration_ms: 66.422787
+  ...
+# Subtest: segmentDefinition: 未定義のsegment idを渡すと例外を投げる
+ok 603 - segmentDefinition: 未定義のsegment idを渡すと例外を投げる
+  ---
+  duration_ms: 17.637959
+  ...
+# Subtest: 四つのgate Checkだけを専用App sourceへ固定する
+ok 604 - 四つのgate Checkだけを専用App sourceへ固定する
+  ---
+  duration_ms: 3.744508
+  ...
+# Subtest: 専用App未設定、Actions App、gate context欠損・重複を拒否する
+ok 605 - 専用App未設定、Actions App、gate context欠損・重複を拒否する
+  ---
+  duration_ms: 1.003768
+  ...
+# Subtest: decideGithubBundle: coordination.backend が github なら run: true を返す（AC-2）
+ok 606 - decideGithubBundle: coordination.backend が github なら run: true を返す（AC-2）
+  ---
+  duration_ms: 24.92498
+  ...
+# Subtest: decideGithubBundle: coordination.backend が local なら run: false・スキップ理由を返す（AC-1）
+ok 607 - decideGithubBundle: coordination.backend が local なら run: false・スキップ理由を返す（AC-1）
+  ---
+  duration_ms: 7.145225
+  ...
+# Subtest: decideGithubBundle: config/agent-skill-chain.yaml が存在しない場合は安全側でrun: falseを返す（AC-1）
+ok 608 - decideGithubBundle: config/agent-skill-chain.yaml が存在しない場合は安全側でrun: falseを返す（AC-1）
+  ---
+  duration_ms: 1.790811
+  ...
+# Subtest: decideGithubBundle: configがYAML構文として不正な場合も安全側でrun: falseを返す（AC-1）
+ok 609 - decideGithubBundle: configがYAML構文として不正な場合も安全側でrun: falseを返す（AC-1）
+  ---
+  duration_ms: 5.170076
+  ...
+# Subtest: decideGithubBundle: coordination.backend が未設定（フィールド自体が無い）場合もrun: falseを返す（AC-1）
+ok 610 - decideGithubBundle: coordination.backend が未設定（フィールド自体が無い）場合もrun: falseを返す（AC-1）
+  ---
+  duration_ms: 5.19569
+  ...
+# Subtest: CIはnpm testの完全ログを失敗終了を保ったまま常時artifactへ保存する
+ok 611 - CIはnpm testの完全ログを失敗終了を保ったまま常時artifactへ保存する
+  ---
+  duration_ms: 2.03919
+  ...
+# Subtest: 独立検証の手順は保存ログ、失敗記録、フォローアップの必須項目を定める
+ok 612 - 独立検証の手順は保存ログ、失敗記録、フォローアップの必須項目を定める
+  ---
+  duration_ms: 0.609169
+  ...
+# Subtest: formatToRegex: config実物の形式 %Y%m%d_%H%M%S に一致する文字列を許容する
+ok 613 - formatToRegex: config実物の形式 %Y%m%d_%H%M%S に一致する文字列を許容する
+  ---
+  duration_ms: 2.975407
+  ...
+# Subtest: formatToRegex: %Y%m%d_%H%M%S は桁数が異なる文字列を拒否する
+ok 614 - formatToRegex: %Y%m%d_%H%M%S は桁数が異なる文字列を拒否する
+  ---
+  duration_ms: 4.797524
+  ...
+# Subtest: formatToRegex: 全トークンが数字以外だと一致しない
+ok 615 - formatToRegex: 全トークンが数字以外だと一致しない
+  ---
+  duration_ms: 0.645194
+  ...
+# Subtest: formatToRegex: 単一トークンのみのフォーマット
+ok 616 - formatToRegex: 単一トークンのみのフォーマット
+  ---
+  duration_ms: 0.709217
+  ...
+# Subtest: formatToRegex: リテラル文字（ドット）を含むフォーマットはエスケープされる
+ok 617 - formatToRegex: リテラル文字（ドット）を含むフォーマットはエスケープされる
+  ---
+  duration_ms: 0.349337
+  ...
+# Subtest: formatToRegex: 正規表現特殊文字を含むリテラルが全てエスケープされる
+ok 618 - formatToRegex: 正規表現特殊文字を含むリテラルが全てエスケープされる
+  ---
+  duration_ms: 0.319834
+  ...
+# Subtest: formatToRegex: トークンを含まない純粋なリテラルはそのまま一致する
+ok 619 - formatToRegex: トークンを含まない純粋なリテラルはそのまま一致する
+  ---
+  duration_ms: 0.429125
+  ...
+# Subtest: formatToRegex: 空文字列フォーマットは空文字列のみに一致する
+ok 620 - formatToRegex: 空文字列フォーマットは空文字列のみに一致する
+  ---
+  duration_ms: 0.281945
+  ...
+# Subtest: formatToRegex: 前後にリテラルを伴うトークン組み合わせ
+ok 621 - formatToRegex: 前後にリテラルを伴うトークン組み合わせ
+  ---
+  duration_ms: 1.089915
+  ...
+# Subtest: formatToRegex: アンカーにより部分一致ではなく完全一致のみを許容する
+ok 622 - formatToRegex: アンカーにより部分一致ではなく完全一致のみを許容する
+  ---
+  duration_ms: 0.817183
+  ...
+# Subtest: formatToRegex: 未知のトークン風文字列（%が単独）はリテラルとして扱われる
+ok 623 - formatToRegex: 未知のトークン風文字列（%が単独）はリテラルとして扱われる
+  ---
+  duration_ms: 0.622305
+  ...
+# Subtest: formatToRegex: 同じトークンを複数回含むフォーマット
+ok 624 - formatToRegex: 同じトークンを複数回含むフォーマット
+  ---
+  duration_ms: 0.429811
+  ...
+# Subtest: mainの全gate contextが専用Appへ固定されたactive rulesetを解決する
+ok 625 - mainの全gate contextが専用Appへ固定されたactive rulesetを解決する
+  ---
+  duration_ms: 2.437924
+  ...
+# Subtest: 専用App IDは文字列を受理し、未設定・不正・標準Actions Appを拒否する
+ok 626 - 専用App IDは文字列を受理し、未設定・不正・標準Actions Appを拒否する
+  ---
+  duration_ms: 0.98578
+  ...
+# Subtest: 標準Actions App、inactive、別App、一部context不足、main非対象を拒否する
+ok 627 - 標準Actions App、inactive、別App、一部context不足、main非対象を拒否する
+  ---
+  duration_ms: 0.635334
+  ...
+# Subtest: 同名Checkがsource未固定の旧rulesetだけではtrust backendにならない
+ok 628 - 同名Checkがsource未固定の旧rulesetだけではtrust backendにならない
+  ---
+  duration_ms: 0.490207
+  ...
+# Subtest: API一覧はpaginationし、個別取得したruleset詳細だけでbackendを解決する
+ok 629 - API一覧はpaginationし、個別取得したruleset詳細だけでbackendを解決する
+  ---
+  duration_ms: 6.309249
+  ...
+# Subtest: API rulesetの欠損・重複・詳細ID不一致をfail-closedで拒否する
+ok 630 - API rulesetの欠損・重複・詳細ID不一致をfail-closedで拒否する
+  ---
+  duration_ms: 4.245156
+  ...
+# Subtest: recorder secretはdirect fetch用に退避後、子process環境から除去される
+ok 631 - recorder secretはdirect fetch用に退避後、子process環境から除去される
+  ---
+  duration_ms: 69.362713
+  ...
+# Subtest: dispatch payloadはpr_number integer・gate enum・40hex SHAだけを許可する
+ok 632 - dispatch payloadはpr_number integer・gate enum・40hex SHAだけを許可する
+  ---
+  duration_ms: 1.491207
+  ...
+# Subtest: workflow identityはexact path・refs/heads/main・workflow SHA/run tupleへ固定する
+ok 633 - workflow identityはexact path・refs/heads/main・workflow SHA/run tupleへ固定する
+  ---
+  duration_ms: 0.724742
+  ...
+# Subtest: API正本はwrite以上actor・current head・default main base・Issue profileを再取得する
+ok 634 - API正本はwrite以上actor・current head・default main base・Issue profileを再取得する
+  ---
+  duration_ms: 79.799483
+  ...
+# Subtest: materializer selectorはActions run tupleを先に最大化しfailureへ旧success fallbackしない
+ok 635 - materializer selectorはActions run tupleを先に最大化しfailureへ旧success fallbackしない
+  ---
+  duration_ms: 2.544237
+  ...
+# Subtest: 標準GitHub Actions Appの同名success Checkは専用sourceとして拒否する
+ok 636 - 標準GitHub Actions Appの同名success Checkは専用sourceとして拒否する
+  ---
+  duration_ms: 0.756121
+  ...
+# Subtest: attestation certificateはsubject digestとexact workflow run/attemptを再検証する
+ok 637 - attestation certificateはsubject digestとexact workflow run/attemptを再検証する
+  ---
+  duration_ms: 1.34853
+  ...
+# Subtest: 48KiB超reportはaction_requiredとなり、App PATCHが最後のHTTP操作になる
+ok 638 - 48KiB超reportはaction_requiredとなり、App PATCHが最後のHTTP操作になる
+  ---
+  duration_ms: 281.465707
+  ...
+# Subtest: trusted gate workflowはdispatch/environment/concurrency/GITHUB_TOKEN権限を最小固定する
+ok 639 - trusted gate workflowはdispatch/environment/concurrency/GITHUB_TOKEN権限を最小固定する
+  ---
+  duration_ms: 2.418826
+  ...
+# Subtest: trusted gate workflowは固定attest actionとexact gh verificationを使いfinalizeを最終stepにする
+ok 640 - trusted gate workflowは固定attest actionとexact gh verificationを使いfinalizeを最終stepにする
+  ---
+  duration_ms: 0.868268
+  ...
+# Subtest: readInstalledVersion: .installed_version が存在しない場合 undefined を返す
+ok 641 - readInstalledVersion: .installed_version が存在しない場合 undefined を返す
+  ---
+  duration_ms: 7.066986
+  ...
+# Subtest: writeInstalledVersion → readInstalledVersion: ラウンドトリップで元のバージョン文字列を復元する
+ok 642 - writeInstalledVersion → readInstalledVersion: ラウンドトリップで元のバージョン文字列を復元する
+  ---
+  duration_ms: 5.19756
+  ...
+# Subtest: writeInstalledVersion: 親ディレクトリ（.agent-skill-chain/）が無くても自動作成する
+ok 643 - writeInstalledVersion: 親ディレクトリ（.agent-skill-chain/）が無くても自動作成する
+  ---
+  duration_ms: 2.051535
+  ...
+# Subtest: writeInstalledVersion: 既存の記録は新しいバージョンで上書きされる
+ok 644 - writeInstalledVersion: 既存の記録は新しいバージョンで上書きされる
+  ---
+  duration_ms: 2.737423
+  ...
+# Subtest: ISSUE-325 AC-1/AC-4: worker選択のコメントに禁止された設計書参照がない
+ok 645 - ISSUE-325 AC-1/AC-4: worker選択のコメントに禁止された設計書参照がない
+  ---
+  duration_ms: 6.9295
+  ...
+# Subtest: ISSUE-325 AC-4: worker-selection.ts に破棄されたSPEC.mdの受入条件ID参照が残存しない
+ok 646 - ISSUE-325 AC-4: worker-selection.ts に破棄されたSPEC.mdの受入条件ID参照が残存しない
+  ---
+  duration_ms: 4.9861
+  ...
+# Subtest: ISSUE-325 AC-4: worker-selection.ts に自己参照的な「本Issue」文言が残存しない
+ok 647 - ISSUE-325 AC-4: worker-selection.ts に自己参照的な「本Issue」文言が残存しない
+  ---
+  duration_ms: 0.58889
+  ...
+# Subtest: ISSUE-325 AC-5: 回帰防止テストの正規表現が陳腐化パターン混入を実際に検知できることを自己検証する
+ok 648 - ISSUE-325 AC-5: 回帰防止テストの正規表現が陳腐化パターン混入を実際に検知できることを自己検証する
+  ---
+  duration_ms: 0.318951
+  ...
+# Subtest: resolveWorkerSelection (AC-1): セグメント別上書きのadapterが最優先で解決される
+ok 649 - resolveWorkerSelection (AC-1): セグメント別上書きのadapterが最優先で解決される
+  ---
+  duration_ms: 2.550614
+  ...
+# Subtest: resolveWorkerSelection (AC-1): 上書きの無いセグメントはworker.adapter（スカラー）へフォールバックする
+ok 650 - resolveWorkerSelection (AC-1): 上書きの無いセグメントはworker.adapter（スカラー）へフォールバックする
+  ---
+  duration_ms: 0.499891
+  ...
+# Subtest: resolveWorkerSelection (AC-3): セグメント別上書きを持たないスカラーのみの設定は全セグメントでスカラー値に解決される
+ok 651 - resolveWorkerSelection (AC-3): セグメント別上書きを持たないスカラーのみの設定は全セグメントでスカラー値に解決される
+  ---
+  duration_ms: 0.377542
+  ...
+# Subtest: resolveWorkerSelection (AC-3): worker.adapterも未設定の場合は最終フォールバックのhumanになる
+ok 652 - resolveWorkerSelection (AC-3): worker.adapterも未設定の場合は最終フォールバックのhumanになる
+  ---
+  duration_ms: 0.503735
+  ...
+# Subtest: resolveWorkerSelection: model_tier/reasoning_effortは上書きが無い場合キー自体を含めない（未解決を空文字にしない）
+ok 653 - resolveWorkerSelection: model_tier/reasoning_effortは上書きが無い場合キー自体を含めない（未解決を空文字にしない）
+  ---
+  duration_ms: 0.448897
+  ...
+# Subtest: resolveWorkerSelection: 上書きのadapterがscalarと異なっても上書きが優先される（AC-1双方向）
+ok 654 - resolveWorkerSelection: 上書きのadapterがscalarと異なっても上書きが優先される（AC-1双方向）
+  ---
+  duration_ms: 0.268237
+  ...
+# Subtest: isWorkerSegment: 4セグメントのみを真として扱う
+ok 655 - isWorkerSegment: 4セグメントのみを真として扱う
+  ---
+  duration_ms: 0.665032
+  ...
+# Subtest: resolveModelForTier (AC-2, AC-9): worker.model_tiers.<tier>.<adapter>から具体的なモデル文字列を解決する
+ok 656 - resolveModelForTier (AC-2, AC-9): worker.model_tiers.<tier>.<adapter>から具体的なモデル文字列を解決する
+  ---
+  duration_ms: 0.496227
+  ...
+# Subtest: resolveModelForTier: 対応表そのものが無い場合は解決失敗として返す（推測しない）
+ok 657 - resolveModelForTier: 対応表そのものが無い場合は解決失敗として返す（推測しない）
+  ---
+  duration_ms: 0.858307
+  ...
+# Subtest: resolveModelForTier: 当該ティアのエントリが無い場合は解決失敗として返す
+ok 658 - resolveModelForTier: 当該ティアのエントリが無い場合は解決失敗として返す
+  ---
+  duration_ms: 0.697474
+  ...
+# Subtest: resolveModelForTier: 当該アダプタ用のモデルが無い場合は解決失敗として返す（未知のアダプタへ推測しない）
+ok 659 - resolveModelForTier: 当該アダプタ用のモデルが無い場合は解決失敗として返す（未知のアダプタへ推測しない）
+  ---
+  duration_ms: 0.73877
+  ...
+# Subtest: resolveModelForTier: adapterがcodex以外の場合は常に解決失敗になる（本Issueでclaude/human用モデルを追加しない）
+ok 660 - resolveModelForTier: adapterがcodex以外の場合は常に解決失敗になる（本Issueでclaude/human用モデルを追加しない）
+  ---
+  duration_ms: 0.461497
+  ...
+# Subtest: listWorktrees: 初期状態ではメインworktree1件のみをbranch:mainで列挙する
+ok 661 - listWorktrees: 初期状態ではメインworktree1件のみをbranch:mainで列挙する
+  ---
+  duration_ms: 517.905109
+  ...
+# Subtest: listWorktrees: git worktree add で作った実物のworktreeを列挙する
+ok 662 - listWorktrees: git worktree add で作った実物のworktreeを列挙する
+  ---
+  duration_ms: 659.717953
+  ...
+# Subtest: hasUncommittedChanges: 変更前はfalse、ファイル追加後はtrueになる
+ok 663 - hasUncommittedChanges: 変更前はfalse、ファイル追加後はtrueになる
+  ---
+  duration_ms: 676.297469
+  ...
+# Subtest: defaultBranch: mainを返す
+ok 664 - defaultBranch: mainを返す
+  ---
+  duration_ms: 507.368631
+  ...
+# Subtest: defaultBranch: origin/HEAD未設定・main/masterのローカルref不在でもGITHUB_BASE_REFが設定済みならそれを返す
+ok 665 - defaultBranch: origin/HEAD未設定・main/masterのローカルref不在でもGITHUB_BASE_REFが設定済みならそれを返す
+  ---
+  duration_ms: 776.632545
+  ...
+# Subtest: defaultBranch: origin/HEAD未設定・main/masterのローカルref不在かつGITHUB_BASE_REFも未設定ならエラーになる
+ok 666 - defaultBranch: origin/HEAD未設定・main/masterのローカルref不在かつGITHUB_BASE_REFも未設定ならエラーになる
+  ---
+  duration_ms: 710.492132
+  ...
+# Subtest: defaultBranch: GITHUB_BASE_REFのブランチが未フェッチのローカルrefでは解決不能でも、fetch後にorigin/<base>が解決可能になればそれを優先して返す（CI fetchステップ後を再現）
+ok 667 - defaultBranch: GITHUB_BASE_REFのブランチが未フェッチのローカルrefでは解決不能でも、fetch後にorigin/<base>が解決可能になればそれを優先して返す（CI fetchステップ後を再現）
+  ---
+  duration_ms: 938.672921
+  ...
+# Subtest: hasUnpushedCommits: push前はtrue、git push -u origin後はfalseになる
+ok 668 - hasUnpushedCommits: push前はtrue、git push -u origin後はfalseになる
+  ---
+  duration_ms: 772.63532
+  ...
+# Subtest: hasUnpushedCommits: squashマージ後にリモートブランチが削除されupstreamがgone状態になっても、内容がdefault branchへ統合済みならfalseになる
+ok 669 - hasUnpushedCommits: squashマージ後にリモートブランチが削除されupstreamがgone状態になっても、内容がdefault branchへ統合済みならfalseになる
+  ---
+  duration_ms: 927.651796
+  ...
+# Subtest: hasUnpushedCommits: upstreamがgone状態でもdefault branchへ未統合の内容が残っていればtrueのままになる
+ok 670 - hasUnpushedCommits: upstreamがgone状態でもdefault branchへ未統合の内容が残っていればtrueのままになる
+  ---
+  duration_ms: 1058.324016
+  ...
+# Subtest: findIssueWorktree: worktree.path_patternに沿ったworktreeをissue番号から見つける
+ok 671 - findIssueWorktree: worktree.path_patternに沿ったworktreeをissue番号から見つける
+  ---
+  duration_ms: 1011.368582
+  ...
+# Subtest: findIssueWorktree: .worktrees型レイアウトが無い単一checkout状態でも、現在のブランチがissue_idに一致すればrootをentryとして返す（CI actions/checkoutフォールバック）
+ok 672 - findIssueWorktree: .worktrees型レイアウトが無い単一checkout状態でも、現在のブランチがissue_idに一致すればrootをentryとして返す（CI actions/checkoutフォールバック）
+  ---
+  duration_ms: 680.2288
+  ...
+# Subtest: findIssueWorktree: 単一checkout状態で現在のブランチがissue_idに一致しない場合はundefinedのまま
+ok 673 - findIssueWorktree: 単一checkout状態で現在のブランチがissue_idに一致しない場合はundefinedのまま
+  ---
+  duration_ms: 1179.515989
+  ...
+# Subtest: findIssueWorktree: detached HEAD状態でもGITHUB_HEAD_REFがissue_idに一致すればrootをentryとして返す
+ok 674 - findIssueWorktree: detached HEAD状態でもGITHUB_HEAD_REFがissue_idに一致すればrootをentryとして返す
+  ---
+  duration_ms: 1166.377109
+  ...
+# Subtest: findIssueWorktree: detached HEAD状態でGITHUB_HEAD_REFが対象issueと一致しない場合はundefinedのまま
+ok 675 - findIssueWorktree: detached HEAD状態でGITHUB_HEAD_REFが対象issueと一致しない場合はundefinedのまま
+  ---
+  duration_ms: 774.232227
+  ...
+# Subtest: findIssueWorktree: detached HEADかつGITHUB_HEAD_REF未設定でも単一checkoutエントリならissueNumberを信頼してrootを返す
+ok 676 - findIssueWorktree: detached HEADかつGITHUB_HEAD_REF未設定でも単一checkoutエントリならissueNumberを信頼してrootを返す
+  ---
+  duration_ms: 959.859756
+  ...
+# Subtest: resolveCurrentBranch/resolveCurrentBranchInfo: 通常チェックアウトでは実ブランチ名を返しdetached=falseになる
+ok 677 - resolveCurrentBranch/resolveCurrentBranchInfo: 通常チェックアウトでは実ブランチ名を返しdetached=falseになる
+  ---
+  duration_ms: 571.215237
+  ...
+# Subtest: resolveCurrentBranch/resolveCurrentBranchInfo: detached HEADかつGITHUB_HEAD_REF設定済みならそのブランチ名を返しdetached=trueになる
+ok 678 - resolveCurrentBranch/resolveCurrentBranchInfo: detached HEADかつGITHUB_HEAD_REF設定済みならそのブランチ名を返しdetached=trueになる
+  ---
+  duration_ms: 573.932199
+  ...
+# Subtest: resolveCurrentBranch/resolveCurrentBranchInfo: detached HEADかつGITHUB_HEAD_REF未設定ならbranchはundefinedのままdetached=trueになる
+ok 679 - resolveCurrentBranch/resolveCurrentBranchInfo: detached HEADかつGITHUB_HEAD_REF未設定ならbranchはundefinedのままdetached=trueになる
+  ---
+  duration_ms: 535.882442
+  ...
+# Subtest: worktreePathRegex: path_patternに沿った形式のみ許容する
+ok 680 - worktreePathRegex: path_patternに沿った形式のみ許容する
+  ---
+  duration_ms: 637.834639
+  ...
+# Subtest: branchNameRegex: branch.patternに沿った形式のみ許容する
+ok 681 - branchNameRegex: branch.patternに沿った形式のみ許容する
+  ---
+  duration_ms: 759.211129
+  ...
+# Subtest: writeYamlFileAtomic → readYamlFile: ラウンドトリップで元データを復元する
+ok 682 - writeYamlFileAtomic → readYamlFile: ラウンドトリップで元データを復元する
+  ---
+  duration_ms: 42.144194
+  ...
+# Subtest: writeYamlFileAtomic: 存在しない親ディレクトリ（ネスト）を自動作成する
+ok 683 - writeYamlFileAtomic: 存在しない親ディレクトリ（ネスト）を自動作成する
+  ---
+  duration_ms: 6.251602
+  ...
+# Subtest: writeYamlFileAtomic: tmpファイルを残さず最終ファイルのみが残る
+ok 684 - writeYamlFileAtomic: tmpファイルを残さず最終ファイルのみが残る
+  ---
+  duration_ms: 1.973104
+  ...
+# Subtest: tryReadYamlFile: 存在しないファイルは undefined を返す
+ok 685 - tryReadYamlFile: 存在しないファイルは undefined を返す
+  ---
+  duration_ms: 0.907273
+  ...
+# Subtest: tryReadYamlFile: 存在するファイルは readYamlFile と同じ結果を返す
+ok 686 - tryReadYamlFile: 存在するファイルは readYamlFile と同じ結果を返す
+  ---
+  duration_ms: 3.046706
+  ...
+# Subtest: readYamlFile: 存在しないファイルは例外を投げる
+ok 687 - readYamlFile: 存在しないファイルは例外を投げる
+  ---
+  duration_ms: 1.525239
+  ...
+# Subtest: toYamlString: オブジェクトをYAML文字列へ変換し、readYamlFileで復元できる
+ok 688 - toYamlString: オブジェクトをYAML文字列へ変換し、readYamlFileで復元できる
+  ---
+  duration_ms: 4.19832
+  ...
+1..688
+# tests 688
+# suites 0
+# pass 687
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 321597.266727
+TESTRUN_EXIT_CODE=1

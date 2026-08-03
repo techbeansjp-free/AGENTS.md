@@ -42,7 +42,7 @@ acceptance_criteria:
 regression:
   executed: true
   evidence:
-    - "npm test（test/unit + test/integration 全件）— 全件成功（実行日時: 2026-08-03、実行環境: ローカルworktree）"
+    - "npm test（test/unit + test/integration 全件、688件）— 687件pass・1件failで再実行済み。failしたtest/unit/paths.test.ts:1 'repoRoot: .git がどこにも見つからない場合は例外を投げる（AC-2）'は本Issueの変更（buildReviewerPrompt --full-index化）と無関係な既知の環境依存flaky（worktree配下では祖先ディレクトリに.gitが存在するため前提条件が成立しない）。実行日時: 2026-08-03、実行環境: ローカルworktree。全出力を test-execution.log としてcommitし証跡を耐久化。"
     - "node --import tsx --test test/integration/gate-judgment.test.ts test/integration/gate-reviewer-prompt-determinism.test.ts test/integration/gate-evidence.test.ts — 23件全pass（duration_ms 17876）、AC-1〜AC-4関連テストを含む"
     - "npm run build（tsc） — エラーなし"
     - "agent-skill-chain verify doc-length — pass（AGENTS.md 150行・各テンプレート100行の文書量上限を維持）"
