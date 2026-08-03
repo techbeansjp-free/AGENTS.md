@@ -7,10 +7,10 @@
 ## 前提・用語
 
 - **Coordination Backend**：AGENTS.mdが定義する、調整状態の正本を保持する基盤。GitHubモード（正本はIssue・PR・branch・Check Run）とローカルモード（正本は`state.yaml`）の2種があり、いずれか一方のみを用いる。
-- **PR/Integration Record**：対応Issueの統合状態を表す実体を指す本書内の呼称。GitHubモードでは当該Issueに対応するPull Requestを指す。ローカルモードでは`state.yaml`上に記録される当該Issueの統合状態（本書ではこれを「Integration Record」と呼ぶ）を指す。以下、本書で「PR/Integration Record」と書く箇所は、実行モードに応じてどちらか一方を指すものとする。
+- **PR/Integration Record**：対応Issueの統合状態を表す実体を指す本書内の呼称。GitHubモードでは当該Issueに対応するPull Requestを指す。ローカルモードでは`issues/<id>/.agent-skill-chain/integration.yaml`（`integrationFilePath()`が指すファイル）に記録される当該Issueの統合状態（本書ではこれを「Integration Record」と呼ぶ）を指す。以下、本書で「PR/Integration Record」と書く箇所は、実行モードに応じてどちらか一方を指すものとする。`state.yaml`（`stateFilePath()`が指すファイル）はIssue全体の調整状態（segment・gate・autonomy・risk等）を保持する別ファイルであり、統合状態（draft/ready_for_review/merged/closed）は保持しない。Integration Recordの実体ではない。
 - **PR/Integration Recordの状態**：以下4種類のいずれかを取る。
-  - `open`：未完了。GitHubモードではPRがopen。ローカルモードでは`state.yaml`上の統合状態が未完了。
-  - `merged`/`closed`：完了済み。GitHubモードではPRがmerged、またはIssueがclosed。ローカルモードでは`state.yaml`上の統合状態が完了（マージ相当）、またはIssueがclosed。
+  - `open`：未完了。GitHubモードではPRがopen。ローカルモードでは`integration.yaml`上の統合状態が`draft`または`ready_for_review`。
+  - `merged`/`closed`：完了済み。GitHubモードではPRがmerged、またはIssueがclosed。ローカルモードでは`integration.yaml`上の統合状態が`merged`または`closed`、またはIssueがclosed。
   - `未作成`：対応Issueは特定できるが、対応するPR/Integration Recordがまだ存在しない（例：SPECワーカーがDraft PR作成前にworktreeを作成し最初のcheckpointをpushした直後）。これは判定不能ではなく決定可能な状態であり、cleanup対象（`merged`/`closed`）にも該当しない。
   - `判定不能`：Coordination Backendへの問い合わせ自体が失敗する（例：API到達不能、認証切れ）等の理由で、上記いずれの状態であるかを機械的に判定できない。
 
@@ -52,7 +52,7 @@ PRがmerged/closedになった後、対応するworktreeディレクトリが放
 
 #### AC-1: merged/closed済みPRに対応する残存worktreeをdoctorが検知し警告する
 
-- Given: あるIssueについて、対応するPR/Integration Recordの状態が`merged`/`closed`（GitHubモードでは対応するPRがmerged、またはIssueがcloseされている。ローカルモードでは対応するIntegration Record（`state.yaml`）の統合状態が完了（マージ相当）またはIssueがcloseされている）であり、かつ対応するworktreeディレクトリが`.worktrees/`配下に残存している
+- Given: あるIssueについて、対応するPR/Integration Recordの状態が`merged`/`closed`（GitHubモードでは対応するPRがmerged、またはIssueがcloseされている。ローカルモードでは対応するIntegration Record（`integration.yaml`）の統合状態が`merged`または`closed`、またはIssueがcloseされている）であり、かつ対応するworktreeディレクトリが`.worktrees/`配下に残存している
 - When: `doctor`コマンドを実行する
 - Then: 出力に、当該worktreeがcleanup対象である旨の警告と、対象を特定できる識別子（Issue ID等）が含まれる。対象が複数件ある場合は全件が列挙される
 - 検証方法見込み: `hybrid`（自動テストに加え、意図的に放置状態を模した実環境で本リポジトリ自身に対し`doctor`を実行し、期待通りの警告が出力されることを実測確認する）
@@ -73,7 +73,7 @@ PRがmerged/closedになった後、対応するworktreeディレクトリが放
 
 #### AC-4: マージ操作時にworktree放置を防ぐ標準手順が存在する
 
-- Given: 進行役が、writer lease不在・未commit/未push差分無しの条件を満たすIssueのPR/Integration Recordをマージする（GitHubモードでは当該IssueのPRをマージする。ローカルモードでは対応するIntegration Record（`state.yaml`）を完了状態（マージ相当）に遷移させる操作を行う）
+- Given: 進行役が、writer lease不在・未commit/未push差分無しの条件を満たすIssueのPR/Integration Recordをマージする（GitHubモードでは当該IssueのPRをマージする。ローカルモードでは対応するIntegration Record（`integration.yaml`）のstatusを`merged`（または`closed`）へ遷移させる操作を行う）
 - When: マージ操作が完了する
 - Then: 当該Issueのworktreeに対しcleanupが実行されることにより、放置状態が発生しない。実現手段は(a)マージ操作への自動連鎖、または(b)進行役向け手順への明記のいずれか（もしくは組み合わせ）でよいが、(b)を選ぶ場合であっても、AC-1〜AC-3が定めるdoctorによる機械的検知は当該手順の有無にかかわらず常に並行して機能し続けることを必須条件とする。標準手順の文書化のみをもって機械的検知の代替とすることは許容しない——放置は最終的にdoctor実行時に必ず検知されることが、唯一の実効的な安全網である
 - 検証方法見込み: `manual`（標準手順の文書内容、または自動連鎖の実装がAGENTS.mdもしくは進行役向け手順の記述と整合していることに加え、AC-1〜AC-3のdoctor機械的検知が無効化・迂回されていないことをレビューで確認する）
