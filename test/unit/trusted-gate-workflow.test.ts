@@ -45,7 +45,7 @@ test('trusted gate workflowは固定attest actionとexact gh verificationを使�
   assert.match(workflow, /actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/);
   assert.match(
     workflow,
-    /actions\/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6/,
+    /actions\/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d/,
   );
   assert.match(
     workflow,
