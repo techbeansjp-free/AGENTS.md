@@ -140,7 +140,7 @@ launch_gate_reviewer() {
     printf -v quoted_root '%q' "$isolated_root/workspace"
     denied_home="${original_home//\\/\\\\}"
     denied_home="${denied_home//\"/\\\"}"
-    GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --ask-for-approval never --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -C $quoted_root --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"$denied_home\"=\"deny\"}' -"
+    GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -C $quoted_root --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'approval_policy=\"never\"' -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"$denied_home\"=\"deny\"}' -"
   elif [[ -n "${CODEX_REVIEWER_CMD:-}" ]]; then
     GATE_REVIEWER_CMD="$CODEX_REVIEWER_CMD"
   fi

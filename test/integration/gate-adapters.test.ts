@@ -13,7 +13,8 @@ import { createGhStub } from '../helpers/gh-stub.js';
 // （.agent-skill-chain/scripts/gate-launch-reviewer.sh）を実際の bash で駆動して検証する:
 //   T2 claude（完了経路・認証未設定フェイルセーフ）、T3 human（非同期 deferred）、
 //   T4 codex（未構成 fail-safe）、T5 ラッパーの終了コード分岐（0/3/error）。
-// モデル（レビュア）呼び出しは GATE_REVIEWER_CMD で stub 化し、実 API・実 gh へは一切アクセスしない。
+// モデル（レビュア）呼び出しは GATE_REVIEWER_CMD または fake CLI で stub 化し、実 API・実 gh へは
+// 一切アクセスしない。
 
 interface ScriptResult {
   status: number;
@@ -115,6 +116,34 @@ function createClaudeStub(dir: string, verdict: string): { executable: string; a
   fs.writeFileSync(
     executable,
     `#!/usr/bin/env bash\nprintf '%s\\n' "$*" > ${JSON.stringify(argsLog)}\ncat >/dev/null\nprintf '%s' ${JSON.stringify(verdict)}\n`,
+    { mode: 0o755 },
+  );
+  return { executable, argsLog };
+}
+
+/**
+ * codex exec互換のstubを作る。対象CLIの仕様と乖離が疑われる場合は実機で引数受理を再検証する。
+ * 未対応の--ask-for-approvalを拒否し、approval_policy="never"のconfig overrideだけを受理する。
+ */
+function createCodexStub(dir: string, verdict: string): { executable: string; argsLog: string } {
+  const executable = path.join(dir, 'codex-exec-stub');
+  const argsLog = path.join(dir, 'codex-args.log');
+  fs.writeFileSync(
+    executable,
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argsLog)}`,
+      'approval_policy_found=false',
+      'for arg in "$@"; do',
+      '  [[ "$arg" != "--ask-for-approval" ]] || exit 64',
+      '  [[ "$arg" != \'approval_policy="never"\' ]] || approval_policy_found=true',
+      'done',
+      '[[ "$approval_policy_found" == "true" ]] || exit 65',
+      'cat >/dev/null',
+      `printf '%s' ${JSON.stringify(verdict)}`,
+      '',
+    ].join('\n'),
     { mode: 0o755 },
   );
   return { executable, argsLog };
@@ -316,6 +345,32 @@ test('codex launch_gate_reviewer: Codex CLI 不在は cleanup 後も error を�
   assert.notEqual(res.status, 0, 'CLI 不在は cleanup で exit 0 に上書きされないこと');
   assert.notEqual(res.status, 3);
   assert.equal(readFinal(reportPath), 'human_required');
+});
+
+test('codex launch_gate_reviewer: exec未対応フラグを使わずapproval_policy=neverで既定起動する', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-exec-stub-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stub = createCodexStub(stubDir, stubVerdict);
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_EXECUTABLE: stub.executable,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+  const argv = fs.readFileSync(stub.argsLog, 'utf8');
+  assert.doesNotMatch(argv, /^--ask-for-approval$/m);
+  assert.match(argv, /^approval_policy="never"$/m);
 });
 
 test('codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabilityモデルを使う', async (t) => {
