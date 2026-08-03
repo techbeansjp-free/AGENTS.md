@@ -49,10 +49,13 @@ jobs:
           LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
         run: |
           ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
+          APPLICABLE=true
           if ! [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
-            echo "branchからIssue IDを解決できません: $BRANCH" >&2
-            exit 1
+            echo "branchがIssueベース命名規則に一致しないため、agent-skill-chainゲートの対象外として扱います: $BRANCH"
+            APPLICABLE=false
+            ISSUE_ID=""
           fi
+          echo "applicable=$APPLICABLE" >> "$GITHUB_OUTPUT"
           PROFILE=standard
           if ! echo "$LABELS_JSON" | grep -q '"risk:normal"'; then PROFILE=strict; fi
           if echo "$LABELS_JSON" | grep -q '"autonomy:full"'; then PROFILE=strict; fi
@@ -70,7 +73,12 @@ jobs:
         env:
           BASE_SHA: ${{ steps.context.outputs.base_sha }}
           HEAD_SHA: ${{ steps.context.outputs.target_sha }}
+          APPLICABLE: ${{ steps.context.outputs.applicable }}
         run: |
+          if [[ "$APPLICABLE" != "true" ]]; then
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           SEGMENTS=""
           while IFS= read -r changed; do
             case "$changed" in
