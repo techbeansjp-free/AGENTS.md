@@ -41,7 +41,7 @@ test('trusted gate workflowはdispatch/environment/concurrency/GITHUB_TOKEN権�
 
 test('trusted gate workflowは固定attest actionとexact gh verificationを使いfinalizeを最終stepにする', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
-  assert.match(workflow, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
+  assert.match(workflow, /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/);
   assert.match(workflow, /actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/);
   assert.match(
     workflow,

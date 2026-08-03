@@ -64,7 +64,7 @@ test('reconcile workflowはprotected baseをcheckoutしPR headをread-only objec
     'github.event.pull_request.base.ref == github.event.repository.default_branch',
   );
   const checkout = stepNamed('Checkout protected base trust root');
-  assert.equal(checkout.uses, 'actions/checkout@v7');
+  assert.equal(checkout.uses, 'actions/checkout@v7.0.1');
   assert.equal(checkout.with?.ref, '${{ github.event.pull_request.base.sha }}');
   assert.equal(checkout.with?.['fetch-depth'], 0);
   assert.equal(checkout.with?.['persist-credentials'], false);
