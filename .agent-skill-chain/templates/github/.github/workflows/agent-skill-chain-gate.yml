@@ -26,6 +26,7 @@ jobs:
       profile: ${{ steps.context.outputs.profile }}
       review_subject: ${{ steps.context.outputs.review_subject }}
       applicable: ${{ steps.context.outputs.applicable }}
+      dependabot_trusted: ${{ steps.context.outputs.dependabot_trusted }}
     steps:
       - name: Checkout protected base trust root
         uses: actions/checkout@v7
@@ -51,24 +52,23 @@ jobs:
           LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
         run: |
           ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
+          DEPENDABOT_TRUSTED=false
           if [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
             APPLICABLE=true
-          elif [[ "$BRANCH" == dependabot/* ]]; then
-            if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
-              APPLICABLE=false
-              ISSUE_ID=""
-            else
-              echo "ブランチ '$BRANCH' は dependabot/ 形式ですが、PR作成者が dependabot[bot] ではありません（実測: ${PR_AUTHOR:-なし}）。Dependabot許可リストに該当しないため照合をスキップできません" >&2
-              exit 1
-            fi
-          elif [[ "$BRANCH" == chore/root-cleanup-* ]]; then
+          else
             APPLICABLE=false
             ISSUE_ID=""
-          else
-            echo "branchからIssue IDを解決できません（Dependabot/root-cleanup許可リストにも非該当）: $BRANCH" >&2
-            exit 1
+            if [[ "$BRANCH" == dependabot/* ]]; then
+              if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
+                DEPENDABOT_TRUSTED=true
+              else
+                echo "ブランチ '$BRANCH' は dependabot/ 形式ですが、PR作成者が dependabot[bot] ではありません（実測: ${PR_AUTHOR:-なし}）。dependabot許可リストに該当しないため照合をスキップできません" >&2
+                exit 1
+              fi
+            fi
           fi
           echo "applicable=$APPLICABLE" >> "$GITHUB_OUTPUT"
+          echo "dependabot_trusted=$DEPENDABOT_TRUSTED" >> "$GITHUB_OUTPUT"
           PROFILE=standard
           if ! echo "$LABELS_JSON" | grep -q '"risk:normal"'; then PROFILE=strict; fi
           if echo "$LABELS_JSON" | grep -q '"autonomy:full"'; then PROFILE=strict; fi
@@ -167,8 +167,13 @@ jobs:
         run: ./.agent-skill-chain/scripts/gate-publish.sh "${{ needs.detect-segments.outputs.issue_id }}" "${{ steps.evidence.outputs.report_path }}"
 
   mark-not-applicable:
+    # 対象はdependabot[bot]作成者検証済みのdependabot/*ブランチのみに限定する。
+    # root-cleanup/release-bump等の他の非Issueブランチはadmin mergeでrequired
+    # statusを迂回する既存フローのため、ここでの無条件success付与は不要かつ
+    # fork PRのbranch名偽装で必須ゲートを無審査success化する攻撃面になる
+    # （ISSUE-374 strictレビュー指摘: root-cleanup-allowlist-fail-open）。
     needs: detect-segments
-    if: github.event.pull_request.base.ref == github.event.repository.default_branch && needs.detect-segments.outputs.applicable != 'true'
+    if: github.event.pull_request.base.ref == github.event.repository.default_branch && needs.detect-segments.outputs.dependabot_trusted == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Publish gate Check Runs as not applicable
@@ -177,6 +182,6 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           for gate in spec design implementation validation; do
-            node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.argv[1]}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "success", output: {title: "gate not applicable", summary: "Issueベースの命名規則に一致しないブランチのためagent-skill-chainゲートの対象外。"}}))' "$gate" |
+            node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.argv[1]}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "success", output: {title: "gate not applicable", summary: "dependabot[bot]作成者検証済みの依存更新PRのためagent-skill-chainゲートの対象外。"}}))' "$gate" |
               gh api -X POST "repos/${{ github.repository }}/check-runs" --input -
           done
