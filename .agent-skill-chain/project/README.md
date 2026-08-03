@@ -10,4 +10,4 @@
 2. `documents.common` の順に文書を読む。
 3. role 固有文書が登録されていれば、その role の文書だけを追加で読む。
 
-本リポジトリでは `RULES.md`、`自己拡張ワークフロー.md`、`OPERATING_PRINCIPLES.md` が common 文書である。`MODEL_TIER_TABLE.md` と `COVERAGE_EXCEPTIONS.md` は旧運用の参考記録であり、manifest に登録しない。
+common 文書の一覧は本 README では再掲せず、`manifest.yaml` の `documents.common` を正とする（二重管理による陳腐化を避けるため）。`COVERAGE_EXCEPTIONS.md` は旧運用の参考記録であり、`documents.common` に登録しない。
