@@ -9,7 +9,7 @@ function mkdtemp(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-// Issue #169 T1: .agent-skill-chain/.installed_version の読み書き（02_設計§4データ設計）
+// Issue #169 T1: .agent-skill-chain/.installed_version の読み書き（データ設計）
 
 test('readInstalledVersion: .installed_version が存在しない場合 undefined を返す', () => {
   const root = mkdtemp('version-marker-');

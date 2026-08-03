@@ -125,7 +125,7 @@ test('copyTreeMirror: ネストしたディレクトリ構造を再帰的にミ�
   assert.ok(results.every((r) => r.action === 'created'));
 });
 
-// Issue #169 T1: dry-run 対応（02_設計§2.5 ADR / 03_実装計画 2.1.3）
+// Issue #169 T1: dry-run 対応（ADR判断事項）
 
 test('copyTreeFailOnConflict: dryRun:true では宛先にファイルが一切作成されない', () => {
   const src = mkdtemp('fs-copy-src-');
