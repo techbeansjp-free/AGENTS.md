@@ -871,6 +871,25 @@ test('verify template-sync: 未同期・同期後の一致・再改変による�
   assert.match(afterEdit.stderr, /未同期（差分あり）: CODEOWNERS/);
 });
 
+test('verify template-sync: 展開先だけに存在する本体専用ファイルは差分として報告しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const sync = runCli(['sync', 'templates', repo.dir], { cwd: repo.dir });
+  assert.equal(sync.status, 0, sync.stderr);
+
+  const repositoryOnlyWorkflow = path.join(
+    repo.dir,
+    '.github',
+    'workflows',
+    'agent-skill-chain-release.yml',
+  );
+  fs.writeFileSync(repositoryOnlyWorkflow, 'name: repository-only release\n');
+
+  const result = runCli(['verify', 'template-sync', repo.dir], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 // ---- verify root-clean（Issue #208） ----
 
 test('verify root-clean: root直下に対象4ファイルが無ければ成功し、存在すればすべて列挙して失敗する', async (t) => {
