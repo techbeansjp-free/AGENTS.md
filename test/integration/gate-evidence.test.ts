@@ -18,8 +18,35 @@ import {
 } from '../../src/lib/review-evidence.js';
 import { encodeGateCheckExternalId } from '../../src/lib/gate-provenance.js';
 
+const MAX_INJECTED_OBJECTS = 20_000;
+const OBJECT_BATCH_SIZE = 1_000;
+
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+}
+
+function gitObjectCount(cwd: string): number {
+  const fields = new Map(
+    git(cwd, ['count-objects', '-v'])
+      .split('\n')
+      .map((line) => line.split(': ', 2) as [string, string]),
+  );
+  return Number(fields.get('count') ?? 0) + Number(fields.get('in-pack') ?? 0);
+}
+
+function injectBlobBatch(repoDir: string, start: number, count: number): void {
+  const records: string[] = [];
+  for (let index = start; index < start + count; index += 1) {
+    const body = `gate-evidence-object-${index}\n`;
+    records.push(`blob\ndata ${Buffer.byteLength(body)}\n${body}`);
+  }
+  const imported = spawnSync('git', ['fast-import', '--quiet'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+    input: records.join(''),
+  });
+  if (imported.error) throw imported.error;
+  assert.equal(imported.status, 0, imported.stderr);
 }
 
 test('local review完了dispatchはexact payloadをPOSTし、API失敗を非0へ保つ', (t) => {
@@ -343,6 +370,127 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   );
   assert.notEqual(missingRequired.status, 0);
   assert.match(missingRequired.stderr, /必須成果物を読めません: SPEC\.md/);
+});
+
+test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁数が異なっても往復に成功する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-evidence-clone-roundtrip-'));
+  const generationDir = path.join(root, 'generation');
+  const verificationDir = path.join(root, 'verification');
+  const stubDir = path.join(root, 'gh-stub');
+  const stub = createGhStub(stubDir);
+  const env = stub.env(process.env);
+  const tokenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-local-review.'));
+  fs.chmodSync(tokenDir, 0o700);
+  const tokenPath = path.join(tokenDir, 'launcher-token.json');
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(tokenDir, { recursive: true, force: true });
+  });
+
+  const baseSha = git(repo.dir, ['rev-parse', 'HEAD']);
+  git(repo.dir, ['checkout', '-b', 'process/369-clone-roundtrip']);
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: clone-independent evidence\n');
+  git(repo.dir, ['add', 'SPEC.md']);
+  git(repo.dir, ['commit', '-m', 'test: add clone roundtrip target']);
+  const targetSha = git(repo.dir, ['rev-parse', 'HEAD']);
+  git(repo.dir, ['checkout', 'main']);
+
+  execFileSync('git', ['clone', '--quiet', '--no-local', repo.dir, generationDir], { stdio: 'pipe' });
+  execFileSync('git', ['clone', '--quiet', '--no-local', repo.dir, verificationDir], { stdio: 'pipe' });
+
+  const generationAbbrevLength = git(generationDir, ['rev-parse', '--short', targetSha]).length;
+  let verificationAbbrevLength = generationAbbrevLength;
+  let injectedObjects = 0;
+  while (verificationAbbrevLength <= generationAbbrevLength && injectedObjects < MAX_INJECTED_OBJECTS) {
+    const batchSize = Math.min(OBJECT_BATCH_SIZE, MAX_INJECTED_OBJECTS - injectedObjects);
+    injectBlobBatch(verificationDir, injectedObjects, batchSize);
+    injectedObjects += batchSize;
+    verificationAbbrevLength = git(verificationDir, ['rev-parse', '--short', targetSha]).length;
+  }
+
+  assert.ok(
+    verificationAbbrevLength > generationAbbrevLength,
+    `${MAX_INJECTED_OBJECTS}個以内のblob投入で検証cloneのauto abbrevが生成cloneより伸長すること ` +
+      `(generation=${generationAbbrevLength}, verification=${verificationAbbrevLength})`,
+  );
+  assert.ok(gitObjectCount(verificationDir) > gitObjectCount(generationDir));
+
+  const generatedPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-369', 'spec', targetSha, baseSha],
+    { cwd: generationDir, env },
+  );
+  assert.equal(generatedPrompt.status, 0, generatedPrompt.stderr);
+  const generatedPromptDigest = evidencePromptDigest(generatedPrompt.stdout.trimEnd());
+
+  const state = stub.readState();
+  state.pullMetadata = {
+    number: 369,
+    state: 'open',
+    user: { login: 'adachi-tatsuru' },
+    head: { sha: targetSha, ref: 'process/369-clone-roundtrip' },
+    base: { sha: baseSha, ref: 'main' },
+  };
+  state.pullCommits = [{
+    author: { login: 'adachi-tatsuru' },
+    committer: { login: 'adachi-tatsuru' },
+  }];
+  state.apiActor = 'adachi-tatsuru';
+  stub.writeState(state);
+
+  const attemptId = 'attempt-clone-roundtrip-1';
+  const reviewerRunId = 'review-clone-roundtrip-1';
+  fs.writeFileSync(tokenPath, `${JSON.stringify({
+    schema_version: 'agent-skill-chain/launcher-token/v1',
+    attempt_id: attemptId,
+    expected_count: 1,
+    profile: 'standard',
+    target_sha: targetSha,
+    base_sha: baseSha,
+    pr_number: '369',
+    nonce: 'c'.repeat(48),
+    slots: [{ slot: 1, run_id: reviewerRunId }],
+    consumed_slots: [],
+  })}\n`, { mode: 0o600 });
+  const verdict = {
+    conformance: 'pass',
+    falsification: 'pass',
+    blockers: [],
+    approved_artifacts: [{ path: 'SPEC.md' }],
+    inconclusive: false,
+  };
+  const submitted = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-369', 'spec', 'standard', targetSha, baseSha, baseSha, '369',
+      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+    ],
+    {
+      cwd: generationDir,
+      env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify(verdict),
+    },
+  );
+  assert.equal(submitted.status, 0, submitted.stderr);
+  const submittedReview = stub.readState().pullReviews?.[0] as { body: string } | undefined;
+  assert.ok(submittedReview);
+  const submittedEvidence = parseReviewEvidence(submittedReview.body);
+  assert.ok(submittedEvidence);
+  assert.equal(submittedEvidence.prompt_digest, generatedPromptDigest);
+
+  const reportPath = path.join(verificationDir, 'verified-clone-roundtrip.yaml');
+  const verified = runCli(
+    [
+      'gate', 'verify-evidence', 'ISSUE-369', 'spec', 'standard', targetSha, baseSha, '369',
+      reportPath, 'ordinary',
+    ],
+    { cwd: verificationDir, env },
+  );
+  assert.equal(verified.status, 0, verified.stderr);
+  assert.doesNotMatch(verified.stderr, /prompt digestが一致しません/);
+  assert.match(verified.stdout, /final: approved/);
+  assert.equal((parse(fs.readFileSync(reportPath, 'utf8')) as { gate: { final: string } }).gate.final, 'approved');
+  fs.unlinkSync(reportPath);
 });
 
 test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェンスで囲まれていても内部のJSONを解釈する（Issue #303）', (t) => {
