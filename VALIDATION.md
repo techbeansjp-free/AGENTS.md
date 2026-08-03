@@ -4,7 +4,7 @@
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-369
-target_sha: 5ae5d5b4bf204cda45a502783c79d4213ff1941c
+target_sha: 8d2dae3a798026d184a81a030c2b371073cb5622
 
 acceptance_criteria:
   - ac_id: AC-1
@@ -47,26 +47,4 @@ regression:
     - "npm run build（tsc） — エラーなし"
     - "npm run typecheck（tsc --noEmit -p tsconfig.test.json） — エラーなし（test/配下の型検査を含む）"
     - "agent-skill-chain verify doc-length — pass（AGENTS.md 150行・各テンプレート100行の文書量上限を維持）"
-
-test_applicability:
-  - category: "API・サービス境界"
-    applicable: false
-    reason: "本Issueの変更はGitHub Actionsワークフロー内で実行されるgit diffコマンドライン引数の変更のみであり、HTTPサービス境界・APIエンドポイントの追加/変更を伴わない"
-  - category: "認証・認可・秘密情報"
-    applicable: false
-    reason: "認証情報・secretの取り扱いに変更なし。--full-indexはgit blob内容のhash表現形式のみに影響する"
-  - category: "性能"
-    applicable: false
-    reason: "--full-indexはdiff出力中のhash桁数を伸長するのみで、計算量・実行時間へ実質的な影響を与えない（AC-1〜AC-3のテストで実測差分なしを確認済み）"
-  - category: "DBマイグレーション"
-    applicable: false
-    reason: "データベーススキーマ・永続化データへの変更を伴わない"
-  - category: "後方互換性"
-    applicable: true
-    reason: "AC-1・AC-4でgolden snapshotとの完全一致（ルーブリック文言・AC-ID一覧・出力JSON契約・成果物本文が不変）を検証済み"
-  - category: "secretスキャン"
-    applicable: true
-    reason: "CI（agent-skill-chain / ci）が機械的に実行。本PRの変更差分に新規secretの混入なし"
-  - category: "依存関係スキャン"
-    applicable: true
-    reason: "CI（agent-skill-chain / ci）が機械的に実行。本Issueはpackage.json/package-lock.jsonを変更しない"
+    - "テスト適用性判断: 本Issueの変更はGitHub Actionsワークフロー内で実行されるgit diffのコマンドライン引数追加のみであり、API・サービス境界／認証・認可・秘密情報／性能／DBマイグレーションのいずれにも該当しない。後方互換性（AC-1・AC-4のgolden一致）・secretスキャン・依存関係スキャン（いずれもCIのagent-skill-chain / ciが機械的に実行、本Issueはpackage.json/package-lock.jsonを変更しない）は該当し、CI実行結果が証跡となる。"
