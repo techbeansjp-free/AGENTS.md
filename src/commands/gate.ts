@@ -1929,6 +1929,17 @@ function buildReviewerPrompt(
     sections.push(`- gate: ${gateId}`);
     sections.push(`- target_sha: ${targetSha}`);
     sections.push('');
+    sections.push('## 埋め込まれていない参照ファイルの扱い（ハルシネーション防止）');
+    sections.push(
+      'あなたには read-only ツールを含むいかなるツール呼び出しも許可されていない。' +
+        '実際の内容を検証できるのは本プロンプト内に文字列として展開済みのセクション（判定対象の差分・判定対象の成果物・上流の承認済み成果物）のみである。' +
+        '成果物本文が具体的なファイルパス（既存テストファイル名・実装ファイル名等）を名指しで言及していても、' +
+        'そのファイルが上記セクションに展開されていない限り内容は一切不明であり、あなたの学習知識や推測で内容を補ってはならない。' +
+        '埋め込まれていないファイルについて、具体的なコード引用・関数名・assertion 内容等を伴う証跡を推測・創作し、' +
+        'それを blockers[].evidence として提示することを固く禁じる。' +
+        '当該ファイルの記述が判定に不可欠な場合は、その部分は検証不能である旨を明記した上で conformance または falsification を pending とし、inconclusive:true を返すこと。',
+    );
+    sections.push('');
     sections.push('## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）');
     sections.push(acIds.length > 0 ? acIds.join(', ') : '(SPEC.md から AC-ID を検出できず。conformance は inconclusive とし human_required へ倒すこと)');
     sections.push('');
