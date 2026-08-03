@@ -23,19 +23,19 @@ deprecated-reason: null
 
 (b)は、指定した固定桁数`N`でもcloneの総オブジェクト数次第では一意性確保のためgitがさらに桁数を伸長し得る（`--abbrev`の「最低保証桁数」という意味論上、`N`は下限に過ぎず上限にはならない）ため、根本解決にならない。
 
-また、Issue #369のspec-gate strictレビューにおいて、AC-2が要求する「意図的に大量のオブジェクトを追加投入して省略hashの一意性伸長が実際に発生する状態を再現したclone」について、必要オブジェクト数・生成方法が未指定であり、実際に`core.abbrev=auto`の自動伸長を自然発生させるテストfixtureの構築コストが高い可能性がある旨の非blocking指摘（`ac2-test-fixture-feasibility`）を受けた。
+また、Issue #369のspec-gate strictレビューにおいて、AC-2が要求する「意図的に大量のオブジェクトを追加投入して省略hashの一意性伸長が実際に発生する状態を再現したclone」について、必要オブジェクト数・生成方法が未指定であり、実際に`core.abbrev=auto`の自動伸長を自然発生させるテストfixtureの構築コストが高い可能性がある旨の非blocking指摘（`ac2-test-fixture-feasibility`）を受けた。この指摘を受けて設計初版では`core.abbrev`の明示設定のみで代替する方式を採用したが、これはSPEC.md承認済みのAC-2 Given条件を、SPEC.mdの再改定・spec-gate再承認を経ずに縮小するものであり、design-gate strictレビューでblocking指摘（`ac2-scope-narrowed-without-spec-regate`）を受けた。
 
 ## Decision
 
 `buildReviewerPrompt()`内の判定対象差分を生成する`git diff`呼び出しに`--full-index`を追加し、index行のhash桁数をcore.abbrevの値に一切依存しない完全長へ固定する（案(a)を採用）。
 
-回帰テストにおけるAC-2の検証は、`core.abbrev`を明示的に異なる値（例: `7`・`12`・未設定＝auto）に設定した複数clone環境を用意し、`buildReviewerPrompt()`の出力が全clone間で完全一致することを確認する方式で構築する。総オブジェクト数の差は`core.abbrev=auto`時の自動伸長を左右する一因に過ぎず、根本原因は「実行時に有効となるabbrev桁数がclone毎のローカルなgit状態に依存する」ことそのものであるため、`core.abbrev`の明示設定はこの根本メカニズムを決定的かつCI実行時間内に代理検証する手段として妥当である。これに加え、可能な範囲で総オブジェクト数を実際に大きく変えたclone（新規clone vs 追加blob投入clone）でも出力一致を補助的に検証する。
+回帰テストにおけるAC-2の検証は、SPEC.mdのGiven条件をそのまま満たす手段を主検証とする。`git`の`core.abbrev=auto`は、実行時にリポジトリが保持する総オブジェクト数から一意性を確保できると推定される最小桁数を算出し、必要であれば実際の衝突検査によりさらに桁数を伸長する仕組みであるため、`core.abbrev`を明示設定せずとも一意な内容のblobオブジェクトを十分な数だけ機械的に追加投入すれば、一意性伸長を実際に発生させられる。回帰テストでは投入数を固定の決め打ちにせず、「そのcloneの既定abbrev桁数がベースラインcloneを上回っていること」をテスト実行時の事前条件アサーションとして確認し、満たすまで投入数を増やす方式を採る。これによりgitバージョン間のヒューリスティック差異に依存せず、SPEC.md AC-2の前提を毎回機械的に満たせる。これに加え、`core.abbrev`を明示的に異なる値（例: `7`・`12`）に固定した複数cloneでも出力一致を補助的に検証し、`--full-index`が`core.abbrev`の設定値そのものにも左右されないことを確認する。
 
 ## Consequences
 
-- 利点: `prompt_digest`の決定性が回復し、review evidenceを生成したcloneと検証するcloneが異なっても`gate verify-evidence`が成功するようになる。将来のgit実装変更（`core.abbrev=auto`の既定ロジック変更等）の影響を受けない。
+- 利点: `prompt_digest`の決定性が回復し、review evidenceを生成したcloneと検証するcloneが異なっても`gate verify-evidence`が成功するようになる。将来のgit実装変更（`core.abbrev=auto`の既定ロジック変更等）の影響を受けない。回帰テストがSPEC.md AC-2のGiven条件（一意性伸長の実発生）をそのまま満たすため、SPEC.mdの再改定・spec-gate再承認を要さない。
 - 欠点・フォローアップ: 本fixのマージ前に生成・記録された既存のreview evidence（例: Issue #351／PR #357の既失敗ラウンド）は、fix適用後にプロンプトのバイト列が変わるため`prompt_digest`が再一致することはなく、当該Issueは`gate reviewer-prompt`の再実行・レビュア再判定・`gate submit-evidence`の再提出が別途必要になる（Issue #369のSPEC.mdスコープ外節が明示するとおり本Issueの対応範囲には含めない、運用上の申し送り事項）。
-- テストで`core.abbrev`の明示設定を一意性伸長の代理指標として用いる判断は、実オブジェクト数由来の自然発生ケースを完全に再現するものではない。将来的に、実運用規模に近い総オブジェクト数から自然に`core.abbrev=auto`の伸長が発生するケースを追加検証する余地を残す。
+- 一意性伸長を実発生させるために必要なオブジェクト投入数はgitバージョン・実装ヒューリスティックに依存するため、CI実行時間が将来的なgit実装変更により増減し得る。事前条件アサーションで実発生を都度確認する方式のため誤検証にはならないが、投入数増加によるテスト実行時間の悪化を監視対象として残す。
 
 ---
 
