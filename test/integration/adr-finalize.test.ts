@@ -2,18 +2,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+import { artifactDigestOf } from '../../src/lib/digest.js';
 
 // `adr finalize <issue_id> <adr_id>`（src/commands/adr.ts）の結合テスト。
 // design gateで承認された ADR の `status: proposed` を `status: accepted` へ書き換え、
 // commit（可能ならpush）する一連のフローと、承認前提が崩れている場合の異常系を検証する。
 
-/** src/lib/digest.ts の digestOf と同一アルゴリズム（sha256:<hex>）を自前計算する。 */
+/** src/lib/digest.ts の artifactDigestOf と同一アルゴリズム（ドメイン分離済みsha256:<hex>）で
+ * 実在成果物の内容digestを自前計算する（Issue #309）。 */
 function sha256(content: Buffer): string {
-  return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
+  return artifactDigestOf(content);
 }
 
 /** .agent-skill-chain/templates/adr/ADR.md の構造に沿った最小限のADR本文。コメント無しの

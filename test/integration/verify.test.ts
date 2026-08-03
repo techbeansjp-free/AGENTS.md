@@ -2,12 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { ABSENT_ARTIFACT_DIGEST } from '../../src/commands/gate.js';
+import { artifactDigestOf } from '../../src/lib/digest.js';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -17,8 +17,10 @@ function escapeRegExp(value: string): string {
 // subprocess実行する。fixtureは createTmpRepo + 実際のCLI呼び出し（issue start / gate review /
 // sync templates / checkpoint 等）で組み立て、YAMLの手書きは最小限にとどめる。
 
+// Issue #309: 実在する成果物の内容 digest は artifactDigestOf（ドメイン分離済み）で計算される。
+// gate.ts/verify.ts と同一の関数を用いることで、テストのfixture構築と本番コードの期待値を一致させる。
 function sha256(content: Buffer | string): string {
-  return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
+  return artifactDigestOf(content);
 }
 
 // ---- verify branch-name ----
@@ -1099,7 +1101,6 @@ test('verify adr (AC-8): adr finalize CLI経由の正規accepted化commitは手�
   assert.ok(reportPathMatch);
   const reportPath = reportPathMatch![1];
 
-  const sha256 = (content: Buffer) => `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
   const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
     gate: {
       conformance: string;

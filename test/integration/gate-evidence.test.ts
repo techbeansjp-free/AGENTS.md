@@ -8,7 +8,7 @@ import { parse } from 'yaml';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
-import { digestOf } from '../../src/lib/digest.js';
+import { digestOf, artifactDigestOf } from '../../src/lib/digest.js';
 import {
   canonicalJson,
   evidencePromptDigest,
@@ -108,7 +108,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const artifact = {
     path: 'SPEC.md',
     // CLIのgit wrapperと同じく末尾改行を保持したblob内容でdigestする。
-    digest: digestOf(execFileSync('git', ['show', `${targetSha}:SPEC.md`], { cwd: repo.dir, encoding: 'utf8' })),
+    digest: artifactDigestOf(execFileSync('git', ['show', `${targetSha}:SPEC.md`], { cwd: repo.dir, encoding: 'utf8' })),
   };
   const prompt = runCli(['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha], {
     cwd: repo.dir,

@@ -6,7 +6,7 @@ import { parseIssueId, parseAdrId, CliError } from '../lib/issue.js';
 import { findIssueWorktree } from '../lib/worktree.js';
 import { reviewFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile } from '../lib/yaml-io.js';
-import { digestOf } from '../lib/digest.js';
+import { artifactDigestOf } from '../lib/digest.js';
 import { git } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
@@ -59,7 +59,7 @@ export async function finalize(args: string[]): Promise<number> {
       throw new CliError(`design gate-report の approved_artifacts に ${adrRelPath} が記録されていません`);
     }
 
-    const currentDigest = digestOf(fs.readFileSync(adrPath));
+    const currentDigest = artifactDigestOf(fs.readFileSync(adrPath));
     if (currentDigest !== approved.digest) {
       return fail(
         `content digest が design gate 承認時と一致しません（承認時: ${approved.digest}, 現在: ${currentDigest}）`,

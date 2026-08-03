@@ -14,7 +14,7 @@ import {
 } from '../lib/worktree.js';
 import { readYamlFile } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
-import { digestOf } from '../lib/digest.js';
+import { artifactDigestOf } from '../lib/digest.js';
 import { git } from '../lib/exec.js';
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
@@ -248,7 +248,7 @@ export async function gateReport(args: string[]): Promise<number> {
         if (!sentinelExempt) {
           errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
         }
-      } else if (digestOf(shown.stdout) !== artifact.digest) {
+      } else if (artifactDigestOf(shown.stdout) !== artifact.digest) {
         errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
     }
