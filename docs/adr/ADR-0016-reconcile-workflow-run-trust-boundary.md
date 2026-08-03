@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0016
-status: proposed
+status: accepted
 title: reconcileのpush自己参照信頼境界をpull_request_target方式で解消する
 tags: [security, ci, trust-boundary, github-actions, gate]
 supersedes: []
