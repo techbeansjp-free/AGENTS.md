@@ -8,12 +8,14 @@
 
 - **Coordination Backend**：AGENTS.mdが定義する、調整状態の正本を保持する基盤。GitHubモード（正本はIssue・PR・branch・Check Run）とローカルモード（正本は`state.yaml`）の2種があり、いずれか一方のみを用いる。
 - **PR/Integration Record**：対応Issueの統合状態を表す実体を指す本書内の呼称。GitHubモードでは当該Issueに対応するPull Requestを指す。ローカルモードでは`issues/<id>/.agent-skill-chain/integration.yaml`（`integrationFilePath()`が指すファイル）に記録される当該Issueの統合状態（本書ではこれを「Integration Record」と呼ぶ）を指す。以下、本書で「PR/Integration Record」と書く箇所は、実行モードに応じてどちらか一方を指すものとする。`state.yaml`（`stateFilePath()`が指すファイル）はIssue全体の調整状態（segment・gate・autonomy・risk等）を保持する別ファイルであり、統合状態（draft/ready_for_review/merged/closed）は保持しない。Integration Recordの実体ではない。
+- **worktreeとPR/Integration Recordの対応関係**：worktreeはbranch単位で存在し、PR/Integration RecordはIssue単位で存在するため、1つのIssueが時系列で複数のPR/branch/worktreeを持つ場合がありうる（例：`closed_without_merge`後に新しいPR/branch/worktreeで作業が継続される場合）。doctorは各worktreeを、Issue番号のみによってではなく、そのworktreeが対応するbranch名から一意に定まる特定のPR/Integration Recordと照合する。branch名からPR/Integration Recordを特定する具体的な照合ロジックは設計セグメントで確定する。
 - **PR/Integration Recordの状態**：以下5種類のいずれかを取る。
   - `open`：未完了。GitHubモードではPRがopen。ローカルモードでは`integration.yaml`上の統合状態が`draft`または`ready_for_review`。
   - `merged`/`closed`：完了済み。GitHubモードではPRがmerged、またはIssue自体がclosed（PRがmerge済みか否かを問わない）。ローカルモードでは`integration.yaml`上の統合状態が`merged`、または`state.yaml`上のIssue状態がclosed（Integration Recordの統合状態を問わない）。
   - `closed_without_merge`（却下・放棄）：PRがmergeされずにcloseされたが、対応するIssue自体はopenのまま。GitHubモードでは対応するPRがmerge無しでclosedであり、かつ対応するIssueがopen。ローカルモードでは`integration.yaml`上の統合状態が`closed`であり、かつ`state.yaml`上のIssue状態がopen。この状態は、対応するIssueが将来的に別の新しいPRで作業継続されるか否かにかかわらず、当該worktreeが紐づく特定のbranch/PRの作業サイクルとしては終了している——AGENTS.md I4（1 Issue = 1 branch = 1 worktree = 1 PR）により、Issueが継続する場合は新しいbranch/worktree/PRが用いられ、既存worktreeが再利用されることはないため。
   - `未作成`：対応Issueは特定できるが、Coordination Backendへの問い合わせ自体は成功し、その応答により対応するPR/Integration Recordがまだ存在しないと判定できる（例：GitHubモードでは、Issue番号に対応するPRを検索するAPI呼び出しが正常応答し該当PRが0件と判明した場合。ローカルモードでは`integrationFilePath()`が指すファイルが存在しないとファイルシステムが正常に応答した場合。いずれも典型例は、SPECワーカーがDraft PR作成前にworktreeを作成し最初のcheckpointをpushした直後）。これは判定不能ではなく決定可能な状態であり、cleanup対象（`merged`/`closed`/`closed_without_merge`）にも該当しない。
   - `判定不能`：Coordination Backendへの問い合わせ自体が失敗する（例：API到達不能、認証切れ、タイムアウト、ローカルモードでは`state.yaml`または`integration.yaml`自体の読み取り失敗）ことにより、上記いずれの状態であるかを機械的に判定できない。`未作成`との違いは、問い合わせが正常に完了し「対象が存在しない」という結果を得られたか（`未作成`）、問い合わせ自体が完了しなかったか（`判定不能`）にある。
+  - **状態判定の優先順位**：`未作成`と`merged`/`closed`の定義が部分的に重複して見える場合（例：対応するPR/Integration Recordはまだ存在しないが、対応するIssue自体は何らかの理由で既にcloseされている）、Issue自体がcloseされていることを常に優先し`merged`/`closed`として扱う。`未作成`が成立するのは、対応するIssueがopenのままで、かつ対応するPR/Integration Recordがまだ存在しない場合に限る。
 
 ## 目的・背景
 
@@ -100,3 +102,4 @@ PRがmerged/closedになった後、対応するworktreeディレクトリが放
 - 要件で述べた「標準手順」の具体的な実現方式（doctorへの検査追加は必須、それに加えて進行役手順への明記のみとするか、マージCLIとの自動連鎖まで行うかの判断）は設計セグメントで確定する。
 - AC-3の「判定不能」とAC-4の「未作成」を区別するための具体的な仕組み（GitHubモードではPR検索APIの「正常応答・0件」と「呼び出し自体の失敗」の判別方法、ローカルモードではファイル不存在と読み取りエラーの判別方法）は設計セグメントで確定する。
 - AC-1が定める`closed_without_merge`（却下・放棄）状態の具体的な判定方法（GitHubモードではPRのstate/merged_at、ローカルモードでは`integration.yaml`の`status`と`state.yaml`のIssue状態の組み合わせをどう照会するか）は設計セグメントで確定する。
+- `closed_without_merge`判定に必要な2種のクエリ（PR状態取得・Issue状態取得）のうち一方のみが失敗した場合の扱い（判定不能として扱うか、取得できた方の情報のみで判定するか等）は設計セグメントで確定する。
