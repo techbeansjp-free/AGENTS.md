@@ -10,7 +10,7 @@ import { issueDir, reviewFilePath, stateFilePath } from '../lib/local-state.js';
 import { readYamlFile, tryReadYamlFile, writeYamlFileAtomic, toYamlString } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { git, gh } from '../lib/exec.js';
-import { digestOf, digestOfFile } from '../lib/digest.js';
+import { digestOf, artifactDigestOf, artifactDigestOfFile, ARTIFACT_ABSENT_DIGEST } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { classifyCoreReview } from '../lib/model-selection.js';
 import {
@@ -216,7 +216,9 @@ interface ReviewerVerdict {
 }
 
 const SUBVERDICT_VALUES = new Set(['pass', 'fail', 'pending']);
-export const ABSENT_ARTIFACT_DIGEST = digestOf('agent-skill-chain:artifact-absent:v1');
+// Issue #309: 実在する成果物の内容 digest（artifactDigestOf/artifactDigestOfFile）とは
+// 別ドメインから導出された sentinel のため、実在ファイルの内容といかなる場合も衝突しない。
+export const ABSENT_ARTIFACT_DIGEST = ARTIFACT_ABSENT_DIGEST;
 const LOCAL_REVIEW_LAUNCHER_PATHS = [
   '.agent-skill-chain/scripts/gate-local-review.sh',
   '.agent-skill-chain/scripts/gate-launch-reviewer.sh',
@@ -335,7 +337,7 @@ function artifactsAtSha(
 
 function artifactDigestAtSha(root: string, artifactPath: string, targetSha: string, allowAbsent = false): string {
   const shown = git(['show', `${targetSha}:${artifactPath}`], root);
-  if (shown.status === 0) return digestOf(shown.stdout);
+  if (shown.status === 0) return artifactDigestOf(shown.stdout);
   if (allowAbsent) return ABSENT_ARTIFACT_DIGEST;
   throw new CliError(`target SHAの必須成果物を読めません: ${artifactPath}`);
 }
@@ -934,7 +936,7 @@ export async function recordVerdict(args: string[]): Promise<number> {
     for (const artifact of verdict.approved_artifacts ?? []) {
       let digest: string;
       if (artifactBaseDir) {
-        digest = digestOfFile(path.join(artifactBaseDir, artifact.path));
+        digest = artifactDigestOfFile(path.join(artifactBaseDir, artifact.path));
       } else if (artifact.digest) {
         digest = artifact.digest;
       } else {

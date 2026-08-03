@@ -4,7 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { digestOf, digestOfFile, isValidDigest } from '../../src/lib/digest.js';
+import {
+  digestOf,
+  digestOfFile,
+  isValidDigest,
+  artifactDigestOf,
+  artifactDigestOfFile,
+  ARTIFACT_ABSENT_DIGEST,
+} from '../../src/lib/digest.js';
 
 test('digestOf: 既知の入力（空文字列）に対して既知のSHA256ハッシュを返す', () => {
   // sha256('') は不変の既知値
@@ -102,4 +109,76 @@ test('isValidDigest: 16進以外の文字を含む場合は無効', () => {
   const hex = crypto.createHash('sha256').update('x').digest('hex');
   const tampered = 'g' + hex.slice(1); // 'g' は16進として不正
   assert.equal(isValidDigest(`sha256:${tampered}`), false);
+});
+
+// Issue #309: 実在成果物の内容用 digest（artifactDigestOf/artifactDigestOfFile）と、成果物欠落を
+// 表す sentinel（ARTIFACT_ABSENT_DIGEST）は、同一のハッシュ空間（プレフィックス無しの digestOf）を
+// 共有すると、成果物の実内容が偶然 sentinel の元文字列と一致した場合に衝突しうる。
+// ドメイン分離により、入力に関わらず衝突しないことを検証する。
+
+test('artifactDigestOf: sha256:プレフィックス付きの有効なdigest形式を返す', () => {
+  assert.equal(isValidDigest(artifactDigestOf('SPEC.mdの内容')), true);
+});
+
+test('artifactDigestOf: 決定論的である（同一入力は常に同一出力）', () => {
+  const content = '同じ成果物の内容';
+  assert.equal(artifactDigestOf(content), artifactDigestOf(content));
+});
+
+test('artifactDigestOf: 異なる入力は異なるハッシュになる', () => {
+  assert.notEqual(artifactDigestOf('a'), artifactDigestOf('b'));
+});
+
+test('artifactDigestOf: Buffer入力でも文字列入力と同じ結果になる', () => {
+  const content = 'agent-skill-chain artifact digest test';
+  assert.equal(artifactDigestOf(content), artifactDigestOf(Buffer.from(content, 'utf8')));
+});
+
+test('artifactDigestOf: ドメイン分離prefixにより、同一内容でもdigestOfの結果とは異なる', () => {
+  const content = 'SPEC.mdの内容';
+  assert.notEqual(artifactDigestOf(content), digestOf(content));
+});
+
+test('artifactDigestOfFile: ファイル内容から artifactDigestOf と同じ digest を計算する', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'digest-test-'));
+  try {
+    const filePath = path.join(dir, 'ARTIFACT.md');
+    const content = '# 成果物\n本文\n';
+    fs.writeFileSync(filePath, content, 'utf8');
+    assert.equal(artifactDigestOfFile(filePath), artifactDigestOf(content));
+    assert.notEqual(artifactDigestOfFile(filePath), digestOfFile(filePath));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('artifactDigestOfFile: 存在しないファイルを指定すると例外を投げる', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'digest-test-'));
+  try {
+    const missing = path.join(dir, 'does-not-exist.md');
+    assert.throws(() => artifactDigestOfFile(missing));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ARTIFACT_ABSENT_DIGEST: sha256:プレフィックス付きの有効なdigest形式である', () => {
+  assert.equal(isValidDigest(ARTIFACT_ABSENT_DIGEST), true);
+});
+
+test('ARTIFACT_ABSENT_DIGEST: 成果物内容が旧sentinel文字列そのものである場合でも、実際には異なるdigestになる（Issue #309）', () => {
+  // 旧実装は ABSENT_ARTIFACT_DIGEST = digestOf('agent-skill-chain:artifact-absent:v1') であり、
+  // 成果物の実内容がバイト単位でこの文字列と一致すると digest が衝突しうる不備があった。
+  const legacySentinelString = 'agent-skill-chain:artifact-absent:v1';
+  assert.notEqual(artifactDigestOf(legacySentinelString), ARTIFACT_ABSENT_DIGEST);
+});
+
+test('ARTIFACT_ABSENT_DIGEST: 空文字列や任意の内容のartifactDigestOfとも衝突しない', () => {
+  assert.notEqual(artifactDigestOf(''), ARTIFACT_ABSENT_DIGEST);
+  assert.notEqual(artifactDigestOf('agent-skill-chain:artifact-present:v1'), ARTIFACT_ABSENT_DIGEST);
+  assert.notEqual(artifactDigestOf('any artifact content'), ARTIFACT_ABSENT_DIGEST);
+});
+
+test('ARTIFACT_ABSENT_DIGEST: 決定論的である（複数回評価しても同一値）', () => {
+  assert.equal(ARTIFACT_ABSENT_DIGEST, ARTIFACT_ABSENT_DIGEST);
 });
