@@ -1,0 +1,188 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: implementation
+  target_sha: 839ea0c0fe13fd190553ed4af0b0aa8b7046cd1c
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: warning
+      origin: implementation
+      code: reconcile-report-source-deviates-from-design
+      evidence:
+        - "src/commands/gate.ts: 新規 readReconcileReport() は GitHub モード時に
+          gate-report を作業ツリーの reviewFilePath ではなく `git show
+          refs/agent-skill-chain/targets/<target_sha>:issues/<n>/.agent-skill-c\
+          hain/reviews/<gate>.yaml` から読む（commit
+          839ea0c「reconcile()のgate-report初期読み込みをPR head参照経由へ是正」）"
+        - DESIGN.md「コンポーネント構成」および「障害・ロールバック考慮」失敗モード8は、一貫して『ローカル
+          report（reviewFilePath から読み込んだ、writer が改変可能なオブジェクト）』とのみ記述し、PR head の
+          git object から取得する経路を一切記述していない。PLAN.md 変更単位#2 も同様
+        - 取得元の意味論（＝issueブランチにコミット済みの writer 改変可能なファイル）と信頼特性（approved_artifacts
+          のみ trusted baseline で上書き）は保存されており、pull_request_target 化で checkout が
+          base へ変わった以上この適応は機能上必須。したがって AC-2 を満たすための正しい是正だが、承認済み
+          DESIGN.md/PLAN.md が実装と乖離したまま残る（AGENTS.md
+          I1「現在有効な決定を指し続ける」、PLAN.md『設計要素・責務・境界を変更する場合は DESIGN.md 更新が必要』）
+        - DESIGN.md の記述どおり（base checkout 上の reviewFilePath）に実装した場合、in-flight な
+          issue の reviews/<gate>.yaml は main に存在せず全ゲートが skip され reconcile が完全な
+          no-op になる。すなわち承認済み設計自体が単体では実装不能であり、DESIGN.md 側の追記・是正が必要
+    - severity: warning
+      origin: design
+      code: force-push-rebase-destroys-all-gate-baselines
+      evidence:
+        - "src/commands/gate.ts resolveApprovedBaseline(): baseline 候補は `GET
+          pulls/{pr}/commits` が返す target_sha より前のコミット上の success Check Run のみ。PR
+          を rebase / force-push すると承認時のコミットが PR コミット一覧から消え、全ゲートが found:false →
+          skip となり、新 head SHA にはいずれの gate Check Run も発行されない（required status
+          check が不在となりマージ不能、再レビューが必要）"
+        - PLAN.md 変更単位#7 は移行手順として『`git merge origin/main`（または
+          rebase）』を明示的に許容しており、rebase を選ぶと当該時点で開いている全 PR の 4 ゲート baseline
+          が一括で失われる
+        - DESIGN.md「障害・ロールバック考慮」失敗モード1〜8にこの経路の記述がない。fail-safe
+          方向（成功偽造には倒れない）だが、AC-2 が要求する『変化なしなら最新SHAへ成功再発行』は rebase 後に成立しないため、移行手順を
+          merge 限定にするか失敗モードとして明記すべき
+    - severity: warning
+      origin: implementation
+      code: silent-noop-when-target-ref-absent
+      evidence:
+        - "src/commands/gate.ts readReconcileReport(): GitHub モードで
+          refs/agent-skill-chain/targets/<sha> が存在しない場合（ワークフロー外からの手動実行、fetch
+          前、force-push によるオブジェクト消失等）に catch で undefined を返し、全ゲートが黙って skip され
+          `reissued: (none) / invalidated: (none)` で exit 0 になる"
+        - test/integration/reconcile.test.ts『target
+          ref不在時はbase側reportへfallbackせず照合をskipする』がこの挙動を仕様として固定しているが、判定不能と『照合の結果変化なし』が出力上区別できない（I8
+          の silent pass 回避の観点では、診断メッセージまたは stderr 警告が望ましい）。成功 Check Run
+          は発行されないため安全側ではある
+    - severity: info
+      origin: implementation
+      code: spec-gate-report-not-committed-on-branch
+      evidence:
+        - target_sha 839ea0c のツリーには
+          issues/342/.agent-skill-chain/reviews/design.yaml のみが存在し spec.yaml
+          が無い（既存の issues/196〜228 はいずれも4件全てコミット済み）
+        - 本実装では readReconcileReport() が PR head 上の当該ファイルを見つけられない場合そのゲートを skip
+          するため、以後の push で agent-skill-chain/spec-gate の success が最新 head SHA
+          へ再発行されず、required status check 不在によりマージ不能になる。実装の欠陥ではないが、本 Issue
+          のブランチ運用として spec gate-report のコミットが必要
+    - severity: warning
+      origin: implementation
+      code: republished-report-body-still-head-derived
+      evidence:
+        - "src/commands/gate.ts reconcile(): success再発行分岐は
+          report.gate.approved_artifacts のみを baseline.approvedArtifacts で上書きし、同じ
+          report の approved_digest / reviewers / review_attempt / final /
+          conformance / falsification / blockers は readReconcileReport が PR
+          head（refs/agent-skill-chain/targets/<sha>）から読んだ攻撃者制御値のまま
+          canonicalJson(report) として conclusion=success の Check Run output.text
+          へ耐久保存される"
+        - "src/commands/gate.ts: approved_digest は本来
+          digestOf(JSON.stringify(approved_artifacts))（verify-evidence
+          側で算出）であるため、上書き後は approved_artifacts と整合しない値が残る"
+        - "非blocking判定の根拠: 当該 output.text を再消費するのは
+          resolveApprovedBaseline（approved_artifacts のみ参照）と
+          selectLatestTrustedGateCheck（app.slug==='github-actions'
+          を明示的に除外）だけであり、現行コードで当該フィールドを信頼する消費者は存在しない。AC-5 の Then
+          も『承認済みdigest・承認済み成果物一覧』に限定して要求しているため conformance は成立する"
+        - AC-5
+    - severity: warning
+      origin: implementation
+      code: head-report-schema-unvalidated-aborts-remaining-gates
+      evidence:
+        - "src/commands/gate.ts readReconcileReport(): GitHubモードは
+          parseYaml(shown.stdout) as GateReport をスキーマ検証なしで返す。try/catch は YAML
+          構文エラーのみを吸収する"
+        - "反例: PR head の issues/<n>/.agent-skill-chain/reviews/design.yaml を
+          `foo: bar` にすると report は truthy だが report.gate が undefined。DESIGN.md
+          変更で changed=true になった時点で report.gate.conformance='pending' が TypeError
+          を投げ、guard() が『予期しないエラー』として reconcile 全体を非0終了させる"
+        - この時点で先行する spec ゲートの success Check Run
+          は既に発行済みであり、design/implementation/validation の action_required 発行（AC-2
+          の下流無効化）は実行されないまま終了する
+        - "非blocking判定の根拠: 新SHAに当該ゲートの Check Run が一切存在しない状態になるため required status
+          check は満たされずマージはブロックされる（fail-closed）。特権獲得・偽造成功には至らず、影響は自PRの自傷に限られる"
+        - AC-2
+    - severity: info
+      origin: implementation
+      code: source-identity-check-depends-solely-on-server-side-filter
+      evidence:
+        - "src/commands/gate.ts resolveApprovedBaseline():
+          parseWorkflowRuns(...).some(run => allowedEvents.includes(run.event))
+          は、応答が候補の check_suite に属する run のみであることを GET
+          actions/runs?check_suite_id=... のサーバ側フィルタに全面依存し、返却された run が候補の
+          check_suite.id と一致することをクライアント側で再検証しない"
+        - test/helpers/gh-stub.ts は check_suite_id / head_sha
+          フィルタを忠実に実装しているため、当該フィルタが将来無視・退行した場合（同一commitに存在する gate.yml 由来の trusted
+          run が常に混入し .some() が恒真化する）を検出するテストが存在しない
+        - "非blocking判定の根拠: check_suite_id は当該エンドポイントの文書化済みパラメータであり、DESIGN.md
+          に実APIでの実測確認記録がある"
+        - AC-1, AC-5
+    - severity: info
+      origin: implementation
+      code: baseline-candidate-not-bound-to-current-issue
+      evidence:
+        - "src/commands/gate.ts resolveApprovedBaseline(): 候補の絞り込みは
+          config.checks[gateId]（Check Run名。Issue非依存）と PR コミット一覧のみで、採用した
+          output.text の gate.id・対象Issueが現在の issue_id と一致することを検証しない"
+        - 他Issueのブランチを自ブランチへマージするなどして、trusted な success Check Run
+          を持つ他Issue由来のcommitを自PRのコミット一覧へ取り込むと、その承認済み基準が baseline として採用されうる
+        - "非blocking判定の根拠:
+          成功再発行に至るのは成果物のdigestがバイト単位で他Issueの承認済み内容と一致する場合に限られ、不一致時は
+          invalidated（安全側）になる。Check Run名がIssue単位でない点は本Issue以前からの既存構造"
+        - AC-5
+  approved_digest: sha256:d395c74235b97dc46e1e16a6a54534f0a76bad333e46c71fe1f55c1980f41ef1
+  approved_artifacts:
+    - path: .agent-skill-chain/scripts/gate-reconcile.sh
+      digest: sha256:aabf3c5ef63a9f22af2af2ecf651342f9c5b0fe4435d25f4dedd72c722caf8f5
+    - path: .agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-reconcile.yml
+      digest: sha256:e27f1b03bdcbb02e431bdd3b69721055f4add8f6022c75e488c1d65b341eb86c
+    - path: .github/workflows/agent-skill-chain-reconcile.yml
+      digest: sha256:e27f1b03bdcbb02e431bdd3b69721055f4add8f6022c75e488c1d65b341eb86c
+    - path: issues/342/.agent-skill-chain/reviews/design.yaml
+      digest: sha256:a67abadade20f8f4c386e30f19f2ea0ee39e416e10c4a4cc550673ed65398ddc
+    - path: src/commands/gate.ts
+      digest: sha256:d6053bc798cd78c83d18d4c882f5456cd734ed9167df69892cce43f67de946d3
+    - path: test/helpers/gh-stub.ts
+      digest: sha256:9d7a2d6cfef854907f7fb4c304eb75a582b195210a67a508add0911f37386661
+    - path: test/integration/reconcile.test.ts
+      digest: sha256:6bae8e6e2e94dc9edd1d5ab6ca79dc29cff240128634e35e7e57feb258e65727
+    - path: test/unit/dependabot-ci-skip-exec.test.ts
+      digest: sha256:18f3621057ac6456aeb5158e3ca2f88675945adcec93141e531e9302b9a0ec4d
+    - path: test/unit/dependabot-ci-skip.test.ts
+      digest: sha256:86d2b4ceabd0af099d02c9569bc53625048b79141a73f263363a09a72aac052d
+    - path: test/unit/reconcile-workflow-trust.test.ts
+      digest: sha256:277269ee54503ec8da43024b56d39378392ab168b7c3bfb850ecfe5a3a787554
+  reviewers:
+    - source: github_pr_review
+      review_id: "4841008651"
+      actor: adachi-tatsuru
+      run_id: review-implementation-839ea0c0fe13-1-f2bf716881d82a3dd01dbdfe
+      slot: 1
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:f087065fb073e6af4b9c39a05ed3e98d6cc4a46476d5f847b6bc3c45b38cef94
+      actor_relation: same_as_writer
+      trusted_base_sha: 74d0873666e5e0a4ff6152641ab4087c11e6a94a
+      launcher_digest: sha256:80e4354ba1a5bca0c7a0bc8b6d5bbdc9f2e5b80193450b749dad846081db1387
+      launcher_token_digest: sha256:3ff11aca081162c7cfafe9037081e757350cbc832204510cb3c9e53c66868cf9
+      isolation: ephemeral_clone
+      sandbox: read_only
+    - source: github_pr_review
+      review_id: "4841072041"
+      actor: adachi-tatsuru
+      run_id: review-implementation-839ea0c0fe13-2-9bc7401b53aa3c6b2c6081dc
+      slot: 2
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:f087065fb073e6af4b9c39a05ed3e98d6cc4a46476d5f847b6bc3c45b38cef94
+      actor_relation: same_as_writer
+      trusted_base_sha: 74d0873666e5e0a4ff6152641ab4087c11e6a94a
+      launcher_digest: sha256:80e4354ba1a5bca0c7a0bc8b6d5bbdc9f2e5b80193450b749dad846081db1387
+      launcher_token_digest: sha256:3ff11aca081162c7cfafe9037081e757350cbc832204510cb3c9e53c66868cf9
+      isolation: ephemeral_clone
+      sandbox: read_only
+  review_attempt:
+    attempt_id: attempt-implementation-839ea0c0fe13-2b4e3ef5ef47646686fa7734
+    expected_count: 2
+    evidence_digest: sha256:7a7e3a83abc21b44cd73e15f4d9fcb3c8af645c207acce0a532ebc2b4f4450f1

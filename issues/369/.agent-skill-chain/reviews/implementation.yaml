@@ -1,0 +1,128 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: implementation
+  target_sha: 9b15167f15c0ca993c2218b80df4bcefe2270b35
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: implementation
+      code: abbrev-inflation-loop-depends-on-absent-global-core-abbrev
+      evidence:
+        - test/integration/gate-reviewer-prompt-determinism.test.ts の前提条件アサーションは
+          `git config --local --get core.abbrev` の非設定のみを確認する（commit 9b15167 で
+          `--get` から `--local --get` へ変更）。global/system スコープに core.abbrev
+          が設定された実行環境では、blob をいくら投入しても既定 abbrev
+          桁数が伸長せず、MAX_INJECTED_OBJECTS=20_000 まで投入したうえでテストが失敗する（AC-2 主検証・AC-3
+          往復テストの双方）
+        - test/integration/gate-evidence.test.ts の AC-3
+          往復テストも同一の伸長ループ（MAX_INJECTED_OBJECTS=20_000 /
+          OBJECT_BATCH_SIZE=1_000）に依存する
+        - git の auto abbrev は概算オブジェクト数から
+          ceil((msb(count)+1)/2)（下限7）で決まるため、7→8桁への伸長には約16,384オブジェクトを要し、上限20,000との余裕は約22%しかない。fixture
+          基底リポジトリ（createTmpRepo）のオブジェクト数増加や git ヒューリスティック変更で前提条件が満たせなくなり得る
+        - いずれも silent pass ではなく明示的失敗（メッセージに baseline/inflated 桁数を含む）へ倒れるため I8
+          安全側は保たれており blocking としない
+    - severity: info
+      origin: implementation
+      code: ac4-golden-covers-spec-gate-single-artifact-only
+      evidence:
+        - AC-4 の golden
+          比較（test/integration/gate-judgment.test.ts、test/fixtures/gate-reviewer-prompt-golden.txt）は
+          gate=spec・新規追加 SPEC.md 1件という単一形状のみを対象とする
+        - spec 以外のゲートでのみ出力される「## 上流の承認済み成果物（整合検査用）」節、および複数成果物・削除/モード変更を含む差分形状は
+          golden 比較の対象外である
+        - 変更が git diff 引数1箇所に閉じており他セクション生成コードが無変更であること、および既存の reviewer-prompt
+          テスト群が継続 pass することから AC-4 は充足していると判断し blocking としない
+    - severity: warning
+      origin: implementation
+      code: determinism-precondition-guard-narrowed-to-local-scope
+      evidence:
+        - test/integration/gate-reviewer-prompt-determinism.test.ts の事前条件アサーションが
+          `git config --local --get core.abbrev` の非設定のみを確認する（target_sha 9b15167
+          で `--local` へ縮小された）
+        - global/system scope に `core.abbrev=<固定桁数>` が設定された実行環境では `git rev-parse
+          --short` の桁数が固定されるため、inflated clone の abbrev がベースラインを上回るという AC-2
+          主検証の前提（一意性伸長の実発生）が原理的に成立せず、MAX_INJECTED_OBJECTS=20,000 個の blob 投入後に
+          `assert.ok(inflatedAbbrevLength > baselineAbbrevLength)` で失敗する
+        - 同種の環境依存は test/integration/gate-judgment.test.ts の
+          GOLDEN_FIXTURE_BASE_SHA/GOLDEN_FIXTURE_TARGET_SHA
+          固定アサーションにも存在する（commit 生成時に `commit.gpgsign` 等の ambient git config を
+          `-c` 等で無効化していないため、署名有効環境では commit object が変化し SHA 一致アサーションが破綻する）
+        - いずれも安全側（silent pass ではなくテスト失敗）へ倒れるため blocking とはしないが、AC-2
+          の主検証が環境設定次第で到達不能になる点は再現性リスクとして残る
+    - severity: info
+      origin: implementation
+      code: golden-snapshot-edited-after-fix-commit
+      evidence:
+        - DESIGN.md「AC-4テスト構築方針（golden snapshot）」は golden を `--full-index`
+          適用前に固定コミットし『以降再生成しない固定値として扱う』と定めるが、test/fixtures/gate-reviewer-prompt-golden.txt
+          は fix 適用（5ac07a8）後の 9b15167 で `- target_sha:` 行が 5518ddbf… → 82241c97…
+          へ手編集されている
+        - レビュアが修正前コード（--full-index 除去状態）を pinned fixture（base=5a9f3f23…,
+          target=82241c97…）に対して実行し生成した出力と、9b15167 の golden ファイルを byte
+          単位比較（cmp）した結果は完全一致であり、編集後の golden は修正前挙動の真正な捕捉として成立している。したがって AC-4
+          の証跡妥当性は損なわれていない
+        - ただし『再生成しない』という設計上の不変条件からの逸脱理由と真正性の根拠が commit message
+          にのみ存在し、DESIGN.md/PLAN.md 等の成果物内に自己完結して記載されていない（追跡可能性上の情報指摘）
+    - severity: info
+      origin: implementation
+      code: blob-injection-helper-duplicated-across-test-files
+      evidence:
+        - test/integration/gate-reviewer-prompt-determinism.test.ts と
+          test/integration/gate-evidence.test.ts が MAX_INJECTED_OBJECTS /
+          OBJECT_BATCH_SIZE / injectBlobBatch() / オブジェクト数集計ヘルパをほぼ同一実装で重複保持している
+        - 一方のみが将来修正された場合に AC-2 側と AC-3 側で一意性伸長条件の再現手段が乖離し得る（現時点では両者とも実測で伸長発生を
+          assert しているため機能上の欠陥は無い）
+  approved_digest: sha256:affc90b554855d1d63a53c03b03cf11782643e2c798500d5e0e60db9831b0136
+  approved_artifacts:
+    - path: issues/369/.agent-skill-chain/reviews/design.yaml
+      digest: sha256:9573cf96111b15e409e486eaca699c54372858fc5d060ede001c6294c29a77c7
+    - path: issues/369/.agent-skill-chain/reviews/spec.yaml
+      digest: sha256:0cf6cbf4767df6f0289e02357f632e76a68dd00c0db0947b594a2dad091542e9
+    - path: src/commands/gate.ts
+      digest: sha256:d682fd106eb3467a2cddf1890c8a4ad49231c56d274540e3077ff42a36cfe533
+    - path: test/fixtures/gate-reviewer-prompt-golden.txt
+      digest: sha256:663646a77044c101b744db091f548c91777be403adb941e6e65e220019ddc35b
+    - path: test/integration/gate-evidence.test.ts
+      digest: sha256:faa5dbd382315825d432611af05ebb5e0081ce1eb689be030d65a083f0e671d3
+    - path: test/integration/gate-judgment.test.ts
+      digest: sha256:07a3a74a18ccfe18236e01617058474aa5e54a810574d3d723451b76293704bd
+    - path: test/integration/gate-reviewer-prompt-determinism.test.ts
+      digest: sha256:3713c811df83aa2101b07cf2d8b5275f1d77dec7a0dd6811ad9e487b69881cab
+  reviewers:
+    - source: github_pr_review
+      review_id: "4843519801"
+      actor: adachi-tatsuru
+      run_id: review-implementation-9b15167f15c0-1-817878925f648ab843ef6072
+      slot: 1
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:6dd2dead0f760e7214571ef7e9720a6f7930e6fb53c8025013192dd5618a3383
+      actor_relation: same_as_writer
+      trusted_base_sha: 2e8f5d9e1706a5ee8610e1b610fd316e15deb5b5
+      launcher_digest: sha256:d5eaf86af6c22778a0137d65153bb9ce656bf535d4586fa3b6d27cc5abb3b652
+      launcher_token_digest: sha256:4d01141bd42495cd3b2a57adc964843c3a07c932976fd25707402efb4649b4de
+      isolation: ephemeral_clone
+      sandbox: read_only
+    - source: github_pr_review
+      review_id: "4843724987"
+      actor: adachi-tatsuru
+      run_id: review-implementation-9b15167f15c0-2-8b8786ad9a96252e78f922a1
+      slot: 2
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:6dd2dead0f760e7214571ef7e9720a6f7930e6fb53c8025013192dd5618a3383
+      actor_relation: same_as_writer
+      trusted_base_sha: 2e8f5d9e1706a5ee8610e1b610fd316e15deb5b5
+      launcher_digest: sha256:d5eaf86af6c22778a0137d65153bb9ce656bf535d4586fa3b6d27cc5abb3b652
+      launcher_token_digest: sha256:4d01141bd42495cd3b2a57adc964843c3a07c932976fd25707402efb4649b4de
+      isolation: ephemeral_clone
+      sandbox: read_only
+  review_attempt:
+    attempt_id: attempt-implementation-9b15167f15c0-5f76e8b88104f109ac811296
+    expected_count: 2
+    evidence_digest: sha256:26cb2689bb68708cdfb113e9b872ae6003584722f4d5a56b9b5a1c55f0770f81

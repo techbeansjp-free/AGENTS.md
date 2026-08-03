@@ -119,14 +119,60 @@ export function resolveCurrentBranch(root: string): string | undefined {
   return resolveCurrentBranchInfo(root)?.branch;
 }
 
+/**
+ * Issue #361: GitHubの「Squash and merge」はマージ後にリモートブランチを自動削除する。
+ * この状態で（削除操作自体や後続の `git fetch --prune` により）ローカルのremote-tracking
+ * ブランチ（`refs/remotes/origin/<branch>`）も失われると、`branch.<name>.remote`/`.merge`の
+ * config自体は残ったままなので `<branch>@{upstream}` は「gone」状態になり
+ * `git rev-parse --abbrev-ref <branch>@{upstream}` が非ゼロ終了する。これは
+ * 「一度もpushしていない」場合と区別できないため、upstream解決不能を即「未push」と断定せず、
+ * ブランチの内容が既にdefault branchへ実質的に統合済みかどうかを判定してから安全側判定を行う。
+ */
 export function hasUnpushedCommits(worktreePath: string, branch: string): boolean {
   const upstream = git(['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], worktreePath);
-  if (upstream.status !== 0) {
-    // upstream 未設定 = push実績なしとみなす（安全側）。
-    return true;
+  if (upstream.status === 0) {
+    const ahead = git(['rev-list', '--count', `${upstream.stdout.trim()}..${branch}`], worktreePath);
+    return ahead.status === 0 && Number.parseInt(ahead.stdout.trim() || '0', 10) > 0;
   }
-  const ahead = git(['rev-list', '--count', `${upstream.stdout.trim()}..${branch}`], worktreePath);
-  return ahead.status === 0 && Number.parseInt(ahead.stdout.trim() || '0', 10) > 0;
+  // upstream解決不能（未push、またはIssue #361のgone状態）。
+  // default branchへ統合済みと判定できた場合のみpush実績ありとみなし、それ以外は安全側でtrue。
+  return !isIntegratedIntoDefaultBranch(worktreePath, branch);
+}
+
+/**
+ * Issue #361: ブランチ`branch`の内容が、`worktreePath`の default branch へ既に統合済みかどうかを
+ * 判定する。
+ *
+ * 1. 通常マージ・fast-forward・rebase-mergeは祖先関係（`git merge-base --is-ancestor`）で
+ *    検出できる。
+ * 2. squashマージはdefault branch側に新しいコミットハッシュを作るため祖先関係にならない。
+ *    その代わり、分岐後にdefault branch側で他の変更が入っていなければ、squashコミットの
+ *    tree（作業ツリーの内容そのもの）はブランチ先端のtreeと完全に一致する。そこでブランチ先端の
+ *    tree hashが、default branchの履歴中いずれかのコミットのtree hashと一致するかで判定する。
+ * 3. default branchが特定できない、または上記いずれの判定も成立しない場合は統合未済とみなす
+ *    （安全側）。
+ */
+function isIntegratedIntoDefaultBranch(worktreePath: string, branch: string): boolean {
+  let base: string;
+  try {
+    base = defaultBranch(worktreePath);
+  } catch {
+    return false;
+  }
+
+  const ancestor = git(['merge-base', '--is-ancestor', branch, base], worktreePath);
+  if (ancestor.status === 0) return true;
+
+  const branchTree = git(['rev-parse', `${branch}^{tree}`], worktreePath);
+  if (branchTree.status !== 0) return false;
+  const targetTree = branchTree.stdout.trim();
+
+  const baseTrees = git(['log', base, '--format=%T'], worktreePath);
+  if (baseTrees.status !== 0) return false;
+  return baseTrees.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .includes(targetTree);
 }
 
 /**

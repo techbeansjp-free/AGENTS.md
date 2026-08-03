@@ -1,13 +1,14 @@
 schema_version: agent-skill-chain/project-policy/v1
 project:
   id: agents-md-self-extension
-  policy_version: 2
+  policy_version: 3
 documents:
   common:
     - RULES.md
     - 自己拡張ワークフロー.md
     - OPERATING_PRINCIPLES.md
     - MODEL_TIER_TABLE.md
+    - roles/implementation.md
   roles: {}
 precedence:
   level: project

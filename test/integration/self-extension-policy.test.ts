@@ -26,7 +26,7 @@ test('self-extension project policy: manifestで登録した実在文書だけ�
   assert.deepEqual(validation, { valid: true, errors: [] });
 
   const common = ((manifest.documents as { common: string[] }).common);
-  assert.deepEqual(common, ['RULES.md', '自己拡張ワークフロー.md', 'OPERATING_PRINCIPLES.md', 'MODEL_TIER_TABLE.md']);
+  assert.deepEqual(common, ['RULES.md', '自己拡張ワークフロー.md', 'OPERATING_PRINCIPLES.md', 'MODEL_TIER_TABLE.md', 'roles/implementation.md']);
   for (const document of common) {
     const content = fs.readFileSync(path.join(projectDir, document), 'utf8');
     assert.ok(content.trim().length > 0, `${document} が空ではないこと`);

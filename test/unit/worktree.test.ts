@@ -212,6 +212,90 @@ test('hasUnpushedCommits: push前はtrue、git push -u origin後はfalseにな�
   assert.equal(hasUnpushedCommits(worktreePath, branch), false, 'push後はaheadが0でfalse');
 });
 
+// Issue #361: GitHubの「Squash and merge」でPRをマージすると、マージ後にリモートブランチが
+// 自動削除される。この状態を実際のgit操作（push→squashマージ→リモートブランチ削除）で再現し、
+// squashマージ済みにもかかわらず旧実装が「未push」と誤判定していたことの回帰を防ぐ。
+
+test('hasUnpushedCommits: squashマージ後にリモートブランチが削除されupstreamがgone状態になっても、内容がdefault branchへ統合済みならfalseになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/42-sample-slug';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-42-sample-slug`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+
+  fs.writeFileSync(path.join(worktreePath, 'NEW_FILE.md'), '# new\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add NEW_FILE.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  // 前提: push直後はupstreamが解決可能で、hasUnpushedCommitsはfalse（ahead=0）
+  assert.equal(hasUnpushedCommits(worktreePath, branch), false, '前提: push直後はfalse');
+
+  // GitHubの「Squash and merge」相当の操作をmain側で再現する。
+  gitIn(repo.dir, ['checkout', 'main']);
+  gitIn(repo.dir, ['merge', '--squash', branch]);
+  gitIn(repo.dir, ['commit', '-m', `feat: add NEW_FILE.md (squash #${branch})`]);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+
+  // GitHubのブランチ自動削除相当。この操作自体でローカルのremote-trackingブランチ
+  // （refs/remotes/origin/<branch>）も失われ、branch@{upstream}がgone状態になる。
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  // 前提: upstreamが解決不能（gone）になっていること
+  assert.equal(
+    gitOk(worktreePath, ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`]),
+    false,
+    '前提: リモートブランチ削除後はbranch@{upstream}が解決不能であること',
+  );
+
+  // merge-base --is-ancestorではsquashマージを検出できないこと自体も前提として確認する
+  // （祖先関係にならない。tree hash比較フォールバックが必須であることを裏付けるための前提確認）。
+  assert.equal(
+    gitOk(worktreePath, ['merge-base', '--is-ancestor', branch, 'main']),
+    false,
+    '前提: squashマージは祖先関係にならないこと',
+  );
+
+  assert.equal(
+    hasUnpushedCommits(worktreePath, branch),
+    false,
+    'squashマージで内容が統合済みならupstream goneでもfalseになること',
+  );
+});
+
+test('hasUnpushedCommits: upstreamがgone状態でもdefault branchへ未統合の内容が残っていればtrueのままになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/42-sample-slug';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-42-sample-slug`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+
+  fs.writeFileSync(path.join(worktreePath, 'FIRST.md'), '# first\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add FIRST.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  // FIRST.md分だけsquashマージしてリモートブランチを削除する（gone状態を作る）。
+  gitIn(repo.dir, ['checkout', 'main']);
+  gitIn(repo.dir, ['merge', '--squash', branch]);
+  gitIn(repo.dir, ['commit', '-m', 'feat: add FIRST.md (squash)']);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  // マージされていない2つ目のコミットをブランチへ積む（default branchへ未統合）。
+  fs.writeFileSync(path.join(worktreePath, 'SECOND.md'), '# second\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add SECOND.md']);
+
+  assert.equal(
+    hasUnpushedCommits(worktreePath, branch),
+    true,
+    '未統合の内容が残る場合はupstream goneでも安全側でtrueのままであること',
+  );
+});
+
 test('findIssueWorktree: worktree.path_patternに沿ったworktreeをissue番号から見つける', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
