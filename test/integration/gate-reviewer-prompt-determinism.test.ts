@@ -93,8 +93,8 @@ test('gate reviewer-prompt: auto abbrevが実際に伸長したcloneでも出力
   cloneRepo(sourceDir, baselineDir);
   cloneRepo(sourceDir, inflatedDir);
 
-  assert.equal(spawnSync('git', ['config', '--get', 'core.abbrev'], { cwd: baselineDir }).status, 1);
-  assert.equal(spawnSync('git', ['config', '--get', 'core.abbrev'], { cwd: inflatedDir }).status, 1);
+  assert.equal(spawnSync('git', ['config', '--local', '--get', 'core.abbrev'], { cwd: baselineDir }).status, 1);
+  assert.equal(spawnSync('git', ['config', '--local', '--get', 'core.abbrev'], { cwd: inflatedDir }).status, 1);
   const baselineAbbrevLength = defaultAbbrevLength(baselineDir, targetSha);
   let inflatedAbbrevLength = baselineAbbrevLength;
   let injectedObjects = 0;

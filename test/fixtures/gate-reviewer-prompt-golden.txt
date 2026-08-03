@@ -4,7 +4,7 @@
 
 - issue: ISSUE-369
 - gate: spec
-- target_sha: 5518ddbf398e86558f01d1dfb0e596b014fa3810
+- target_sha: 82241c97d5b973d30b2bdbe8a16f03e3699393ae
 
 ## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）
 AC-1

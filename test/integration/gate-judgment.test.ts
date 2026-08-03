@@ -18,7 +18,6 @@ import { createGhStub } from '../helpers/gh-stub.js';
 
 const ZERO_DIGEST = `sha256:${'0'.repeat(64)}`;
 const GOLDEN_PROMPT_PATH = fileURLToPath(new URL('../fixtures/gate-reviewer-prompt-golden.txt', import.meta.url));
-const GOLDEN_PROMPT_TARGET_SHA = '5518ddbf398e86558f01d1dfb0e596b014fa3810';
 const GOLDEN_FIXTURE_BASE_SHA = '5a9f3f234fd221cdec49b7885462b27746599b02';
 const GOLDEN_FIXTURE_TARGET_SHA = '82241c97d5b973d30b2bdbe8a16f03e3699393ae';
 
@@ -436,10 +435,6 @@ test('gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以�
   }
 
   const golden = fs.readFileSync(GOLDEN_PROMPT_PATH, 'utf8').trimEnd();
-  assert.match(golden, new RegExp(`^- target_sha: ${GOLDEN_PROMPT_TARGET_SHA}$`, 'm'));
-  const promptWithGoldenTarget = prompt.replace(
-    `- target_sha: ${targetSha}`,
-    `- target_sha: ${GOLDEN_PROMPT_TARGET_SHA}`,
-  );
-  assert.equal(normalizeDiffIndexHashes(promptWithGoldenTarget), normalizeDiffIndexHashes(golden));
+  assert.match(golden, new RegExp(`^- target_sha: ${GOLDEN_FIXTURE_TARGET_SHA}$`, 'm'));
+  assert.equal(normalizeDiffIndexHashes(prompt), normalizeDiffIndexHashes(golden));
 });

@@ -18,6 +18,9 @@ import {
 } from '../../src/lib/review-evidence.js';
 import { encodeGateCheckExternalId } from '../../src/lib/gate-provenance.js';
 
+const MAX_INJECTED_OBJECTS = 20_000;
+const OBJECT_BATCH_SIZE = 1_000;
+
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 }
@@ -29,6 +32,21 @@ function gitObjectCount(cwd: string): number {
       .map((line) => line.split(': ', 2) as [string, string]),
   );
   return Number(fields.get('count') ?? 0) + Number(fields.get('in-pack') ?? 0);
+}
+
+function injectBlobBatch(repoDir: string, start: number, count: number): void {
+  const records: string[] = [];
+  for (let index = start; index < start + count; index += 1) {
+    const body = `gate-evidence-object-${index}\n`;
+    records.push(`blob\ndata ${Buffer.byteLength(body)}\n${body}`);
+  }
+  const imported = spawnSync('git', ['fast-import', '--quiet'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+    input: records.join(''),
+  });
+  if (imported.error) throw imported.error;
+  assert.equal(imported.status, 0, imported.stderr);
 }
 
 test('local review完了dispatchはexact payloadをPOSTし、API失敗を非0へ保つ', (t) => {
@@ -354,7 +372,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.match(missingRequired.stderr, /必須成果物を読めません: SPEC\.md/);
 });
 
-test('gate evidence: reviewer-prompt生成cloneと検証cloneのオブジェクト数が異なっても往復に成功する', (t) => {
+test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁数が異なっても往復に成功する', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-evidence-clone-roundtrip-'));
   const generationDir = path.join(root, 'generation');
@@ -381,11 +399,22 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのオブジェク�
 
   execFileSync('git', ['clone', '--quiet', '--no-local', repo.dir, generationDir], { stdio: 'pipe' });
   execFileSync('git', ['clone', '--quiet', '--no-local', repo.dir, verificationDir], { stdio: 'pipe' });
-  execFileSync('git', ['hash-object', '-w', '--stdin'], {
-    cwd: verificationDir,
-    encoding: 'utf8',
-    input: 'verification-clone-only-object\n',
-  });
+
+  const generationAbbrevLength = git(generationDir, ['rev-parse', '--short', targetSha]).length;
+  let verificationAbbrevLength = generationAbbrevLength;
+  let injectedObjects = 0;
+  while (verificationAbbrevLength <= generationAbbrevLength && injectedObjects < MAX_INJECTED_OBJECTS) {
+    const batchSize = Math.min(OBJECT_BATCH_SIZE, MAX_INJECTED_OBJECTS - injectedObjects);
+    injectBlobBatch(verificationDir, injectedObjects, batchSize);
+    injectedObjects += batchSize;
+    verificationAbbrevLength = git(verificationDir, ['rev-parse', '--short', targetSha]).length;
+  }
+
+  assert.ok(
+    verificationAbbrevLength > generationAbbrevLength,
+    `${MAX_INJECTED_OBJECTS}個以内のblob投入で検証cloneのauto abbrevが生成cloneより伸長すること ` +
+      `(generation=${generationAbbrevLength}, verification=${verificationAbbrevLength})`,
+  );
   assert.ok(gitObjectCount(verificationDir) > gitObjectCount(generationDir));
 
   const generatedPrompt = runCli(
