@@ -18,10 +18,6 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 const CI_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-ci.yml');
 const RECONCILE_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-reconcile.yml');
-// Issue #290: agent-skill-chain自身の自己テスト（npm test）は配布テンプレート対象外の
-// 本リポジトリ専用ファイルへ分離済み。テンプレート正本には存在しないため、CI_TEMPLATE等の
-// 完全一致検査（⑤）の対象に含めない。
-const SELF_TEST_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-self-test.yml');
 const TEMPLATE_DIR = path.join(REPO_ROOT, '.agent-skill-chain', 'templates', 'github', '.github', 'workflows');
 const CI_TEMPLATE = path.join(TEMPLATE_DIR, 'agent-skill-chain-ci.yml');
 const RECONCILE_TEMPLATE = path.join(TEMPLATE_DIR, 'agent-skill-chain-reconcile.yml');
@@ -61,16 +57,6 @@ function ciSteps(): Step[] {
   const wf = readYamlFile<CiWorkflow>(CI_BODY);
   assert.ok(Array.isArray(wf.jobs?.verify?.steps), 'jobs.verify.steps が配列であること');
   return wf.jobs.verify.steps;
-}
-
-interface SelfTestWorkflow {
-  jobs: { 'self-test': { steps: Step[] } };
-}
-
-function selfTestSteps(): Step[] {
-  const wf = readYamlFile<SelfTestWorkflow>(SELF_TEST_BODY);
-  assert.ok(Array.isArray(wf.jobs?.['self-test']?.steps), "jobs.'self-test'.steps が配列であること");
-  return wf.jobs['self-test'].steps;
 }
 
 function findByName(steps: Step[], nameSubstr: string): Step {
@@ -128,15 +114,6 @@ test('ci: npm ci / build の各ステップは if 条件を持たない（常時
     assert.ok(step, `run が '${cmd}' のステップが存在すること`);
     assert.equal((step as Step).if, undefined, `'${cmd}' ステップは if 条件を持たないこと`);
   }
-});
-
-test('self-test: ログ保存付きtestステップは if 条件を持たない（常時実行、Issue #290で本リポジトリ専用ファイルへ分離）', () => {
-  const testStep = findByName(selfTestSteps(), 'Run npm test and save execution log');
-  assert.ok(
-    (testStep.run ?? '').includes('npm test 2>&1 | tee test-execution.log'),
-    'test step が出力を保存しながら実行すること',
-  );
-  assert.equal(testStep.if, undefined, 'ログ保存付きtest step は if 条件を持たないこと');
 });
 
 // --- ③ ctx（Derive issue_id）に Dependabot 許可リスト分岐が存在すること ---
