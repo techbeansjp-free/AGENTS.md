@@ -2,10 +2,8 @@
 // Issue #219: 許可判定の基準を push 実行者（github.actor）から PR/ブランチの起源（実PR作成者）へ
 // 是正した構造を固定化する。本テストは、①ガードが必要な追跡系ステップに存在すること、
 // ②存在してはならないステップ（verify-template-sync・npm ci/build）には存在しないこと、
-// ③ci の判定が PR 作成者（pull_request.user.login）由来であること、④reconcile が
-// pull_request_targetの構造化PRコンテキストで判定し、github.actorやPR検索APIを用いないこと、
-// ⑤本体2ファイルとテンプレート正本2ファイルが完全一致することを、
-// ワークフローYAMLの実体を直接パースして検証する。
+// ③ci の判定が PR 作成者（pull_request.user.login）由来であること、④本体ファイルと
+// テンプレート正本ファイルが完全一致することを、ワークフローYAMLの実体を直接パースして検証する。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -17,10 +15,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 const CI_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-ci.yml');
-const RECONCILE_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-reconcile.yml');
 const TEMPLATE_DIR = path.join(REPO_ROOT, '.agent-skill-chain', 'templates', 'github', '.github', 'workflows');
 const CI_TEMPLATE = path.join(TEMPLATE_DIR, 'agent-skill-chain-ci.yml');
-const RECONCILE_TEMPLATE = path.join(TEMPLATE_DIR, 'agent-skill-chain-reconcile.yml');
 
 const SKIP_GUARD = "steps.ctx.outputs.skip_checks != 'true'";
 
@@ -45,12 +41,6 @@ interface Step {
 
 interface CiWorkflow {
   jobs: { verify: { steps: Step[] } };
-}
-
-interface ReconcileWorkflow {
-  on?: { pull_request_target?: { types?: string[] } };
-  permissions?: Record<string, string>;
-  jobs: { reconcile: { if?: string; steps: Step[] } };
 }
 
 function ciSteps(): Step[] {
@@ -141,70 +131,8 @@ test('ci: Derive issue_id の env.ACTOR は PR 作成者（pull_request.user.log
   assert.ok(!nonCommentContent(CI_BODY).includes('github.actor'), 'ci.yml が github.actor を一切参照しないこと');
 });
 
-// --- ④ reconcile: 構造化PRコンテキストで実PR作成者を確認し、github.actorを用いないこと ---
-
-function reconcileWf(): ReconcileWorkflow {
-  return readYamlFile<ReconcileWorkflow>(RECONCILE_BODY);
-}
-
-test('reconcile: pull_request_target synchronize と default branch 条件を使う', () => {
-  const workflow = reconcileWf();
-  assert.deepEqual(workflow.on?.pull_request_target?.types, ['synchronize']);
-  assert.equal(
-    workflow.jobs.reconcile.if,
-    'github.event.pull_request.base.ref == github.event.repository.default_branch',
-  );
-});
-
-test('reconcile: Derive issue_id が構造化PRコンテキストでDependabotを判定する', () => {
-  const steps = reconcileWf().jobs.reconcile.steps;
-  const ctx = steps.find((s) => s.id === 'ctx');
-  assert.ok(ctx, "id 'ctx' のステップ（Derive issue_id）が存在すること");
-  const run = (ctx as Step).run ?? '';
-  assert.equal(ctx.env?.BRANCH, '${{ github.event.pull_request.head.ref }}');
-  assert.equal(ctx.env?.PR_AUTHOR, '${{ github.event.pull_request.user.login }}');
-  assert.ok(run.includes('skip_checks=false'), '第1分岐: branch.pattern 一致で skip_checks=false を出力すること');
-  assert.ok(run.includes('dependabot/*'), '第2分岐: dependabot/ 始まりのブランチを判定すること');
-  assert.ok(run.includes('dependabot[bot]'), '第2分岐: PR作成者を dependabot[bot] と比較すること');
-  assert.ok(run.includes('skip_checks=true'), '第2分岐: 一致時のみ skip_checks=true を出力すること');
-  assert.ok(run.includes('chore/root-cleanup-*'), 'root-cleanupブランチを明示的にskipすること');
-  assert.ok(run.includes('exit 1'), '不一致/empty・非該当ブランチで exit 1 すること');
-  assert.ok(!run.includes('gh api'), 'PR作成者の判定にAPI検索を使わないこと');
-  assert.ok(!nonCommentContent(RECONCILE_BODY).includes('github.actor'), 'reconcile.yml が github.actor を一切参照しないこと');
-});
-
-test("reconcile: 照合ステップに skip_checks ガードの if が付与されている", () => {
-  const steps = reconcileWf().jobs.reconcile.steps;
-  const step = steps.find((s) => typeof s.name === 'string' && s.name.includes('Reconcile gates'));
-  assert.ok(step, "name に 'Reconcile gates' を含むステップが存在すること");
-  assert.ok(
-    ((step as Step).if ?? '').includes(SKIP_GUARD),
-    `照合ステップの if 条件に "${SKIP_GUARD}" が含まれること（実際: ${(step as Step).if}）`,
-  );
-});
-
-test('reconcile: 必要な4権限だけを宣言する', () => {
-  assert.deepEqual(reconcileWf().permissions, {
-    contents: 'read',
-    checks: 'write',
-    'pull-requests': 'read',
-    actions: 'read',
-  });
-});
-
-test('reconcile: 対象SHAとPR番号は構造化PRコンテキストから渡す', () => {
-  const step = findByName(reconcileWf().jobs.reconcile.steps, 'Reconcile gates');
-  assert.ok(step.run?.includes('${{ github.event.pull_request.head.sha }}'));
-  assert.ok(step.run?.includes('${{ github.event.pull_request.number }}'));
-  assert.ok(!step.run?.includes('${{ github.sha }}'));
-});
-
-// --- ⑤ 本体2ファイルとテンプレート正本2ファイルの完全一致（verify-template-sync とは独立に固定化）---
+// --- ④ 本体ファイルとテンプレート正本ファイルの完全一致（verify-template-sync とは独立に固定化）---
 
 test('本体 agent-skill-chain-ci.yml とテンプレート正本が完全一致する', () => {
   assert.equal(fs.readFileSync(CI_BODY, 'utf8'), fs.readFileSync(CI_TEMPLATE, 'utf8'));
-});
-
-test('本体 agent-skill-chain-reconcile.yml とテンプレート正本が完全一致する', () => {
-  assert.equal(fs.readFileSync(RECONCILE_BODY, 'utf8'), fs.readFileSync(RECONCILE_TEMPLATE, 'utf8'));
 });

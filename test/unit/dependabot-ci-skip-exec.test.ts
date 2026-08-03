@@ -5,6 +5,7 @@
 // env 由来を github.actor へ戻す退行はシナリオ(c)の失敗として検出される。
 // ci workflowのgh apiはPATH上のモックgh（GH_MOCK_AUTHORを返す）で置換する。
 // GH_MOCK_EXIT を非0に設定するとモック gh はレート制限等の API 障害を模擬して非0終了する。
+// (reconcile workflow は削除されたため、reconcile向けの実行検証は本ファイルから除去済み)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -17,7 +18,6 @@ import { readYamlFile } from '../../src/lib/yaml-io.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CI_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-ci.yml');
-const RECONCILE_BODY = path.join(REPO_ROOT, '.github', 'workflows', 'agent-skill-chain-reconcile.yml');
 
 interface Step {
   id?: string;
@@ -131,49 +131,4 @@ test('ci実行(e): branch.pattern と衝突する dependabot/223-fake は第1分
     assert.equal(r.outputs.issue_id, 'ISSUE-223');
     assert.equal(r.outputs.skip_checks, 'false');
   }
-});
-
-// --- reconcile.yml: Derive issue_id ---
-
-function runReconcile(branch: string, prAuthor: string): RunResult {
-  const step = ctxStep(RECONCILE_BODY, 'reconcile');
-  return runStep(step.run as string, { BRANCH: branch, PR_AUTHOR: prAuthor }, '');
-}
-
-test('reconcile実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false', () => {
-  const r = runReconcile('bugfix/219-dependabot-actor-check-pr-author', '');
-  assert.equal(r.status, 0);
-  assert.equal(r.outputs.issue_id, 'ISSUE-219');
-  assert.equal(r.outputs.skip_checks, 'false');
-});
-
-test('reconcile実行(b)(c): 実PR作成者が dependabot[bot] なら push 実行者に関係なく skip_checks=true', () => {
-  const r = runReconcile('dependabot/npm_and_yarn/typescript-5.5.4', DEPENDABOT);
-  assert.equal(r.status, 0, `exit=0 であること（stderr: ${r.stderr}）`);
-  assert.equal(r.outputs.skip_checks, 'true');
-});
-
-test('reconcile実行(d): 偽装ブランチは対応PRなし（empty）で exit 1', () => {
-  const r = runReconcile('dependabot/npm_and_yarn/fake', '');
-  assert.equal(r.status, 1);
-  assert.ok(r.stderr.includes('dependabot[bot]'), '拒否理由に判定基準が含まれること');
-});
-
-test('reconcile実行(d): 偽装ブランチは PR 作成者が人間でも exit 1', () => {
-  const r = runReconcile('dependabot/npm_and_yarn/fake', 'impostor-human');
-  assert.equal(r.status, 1);
-});
-
-test('reconcile実行(f): root-cleanupブランチは照合をskipする', () => {
-  const r = runReconcile('chore/root-cleanup-123456', 'github-actions[bot]');
-  assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.outputs.skip_checks, 'true');
-  assert.equal(r.outputs.issue_id, '');
-});
-
-test('reconcile実行(e): branch.pattern と衝突する dependabot/223-fake は第1分岐で通常照合される', () => {
-  const r = runReconcile('dependabot/223-fake', '');
-  assert.equal(r.status, 0);
-  assert.equal(r.outputs.issue_id, 'ISSUE-223');
-  assert.equal(r.outputs.skip_checks, 'false');
 });
