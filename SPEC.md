@@ -35,18 +35,18 @@ Issue #351（PR #357）のspec-gate strictレビューでは、同一の `(numbe
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: reviewer-prompt の差分セクションが固定長hashを用いる
+#### AC-1: reviewer-prompt の差分セクションが省略なしの固定長full hash digestを用いる
 
 - Given: 判定対象の `(issue_number, gate_id, target_sha, base_sha)` が与えられている
 - When: `gate reviewer-prompt` を実行する
-- Then: 出力される「判定対象の差分」セクション内の全ての `index <old>..<new>` 行が、実行環境（cloneの総オブジェクト数）に関わらず一定の桁数のhashを用いる
+- Then: 出力される「判定対象の差分」セクション内の全ての `index <old>..<new>` 行が、gitの`--abbrev`が持つ「リポジトリ内での一意性確保のために桁数を自動的に伸長する」機構に一切依存しない、省略しない完全な桁数のfull hex digest（`--full-index`相当。使用するハッシュアルゴリズムがSHA-1なら40桁、SHA-256なら64桁の完全な16進数表現）を用いる。固定7桁・固定8桁のような「一定の桁数」の省略hashを採用する実装は、cloneの総オブジェクト数によっては当該固定桁数でも一意性確保のためgitがさらに桁数を伸長し得るため、本ACを満たさない。
 - 検証方法見込み: `automated`
 
-#### AC-2: 総オブジェクト数が異なる複数cloneでの reviewer-prompt 出力が完全一致する
+#### AC-2: 総オブジェクト数が異なり、かつ省略hashの一意性伸長が実際に発生し得る条件を含む複数clone環境でのreviewer-prompt出力が完全一致する
 
-- Given: 同一の `(issue_number, gate_id, target_sha, base_sha)` に対応する内容を持つが、総オブジェクト数が大きく異なる（例: 新規cloneと、複数ラウンドのfetchを蓄積したclone）2つ以上のclone環境が用意されている
+- Given: 同一の `(issue_number, gate_id, target_sha, base_sha)` に対応する内容を持つが、総オブジェクト数が大きく異なる（例: 新規cloneと、複数ラウンドのfetchを蓄積したclone、および意図的に大量のオブジェクトを追加投入して省略hashの一意性伸長が実際に発生する状態を再現したclone）2つ以上のclone環境が用意されている
 - When: 各clone環境でそれぞれ独立に `gate reviewer-prompt` を実行する
-- Then: 得られる出力バイト列が全clone間で完全に一致し、`evidencePromptDigest()` によるdigestも完全に一致する
+- Then: 得られる出力バイト列が全clone間で完全に一致し、`evidencePromptDigest()` によるdigestも完全に一致する。加えて、出力中の全ての `index <old>..<new>` 行がAC-1の定義する省略しない完全な桁数のfull hex digestであり、それに満たない桁数の省略hash表記が一切出現しないことを、テキストパターン照合により機械的に検証する
 - 検証方法見込み: `automated`
 
 #### AC-3: 生成clone・検証cloneが異なる場合でも gate submit-evidence → gate verify-evidence の往復が成功する
