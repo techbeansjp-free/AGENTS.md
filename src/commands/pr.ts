@@ -3,11 +3,11 @@ import path from 'node:path';
 import { repoRoot, resolveAsset } from '../lib/paths.js';
 import { loadConfig, type AgentSkillChainConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
-import { defaultBranch, findIssueWorktree } from '../lib/worktree.js';
+import { defaultBranch, findIssueWorktree, resolveCurrentBranch } from '../lib/worktree.js';
 import { integrationFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
-import { gh } from '../lib/exec.js';
+import { gh, git } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const USAGE = `
@@ -18,6 +18,28 @@ branch: Draft PR / Integration Recordの対象ブランチ名
 出力:
   成功時: 終了コード0。作成したPR URLまたはIntegration Recordパスを標準出力へ。
   失敗時: 終了コード1以上。理由を標準エラー出力へ。
+`;
+
+const MERGE_USAGE = `
+使い方: agent-skill-chain pr merge <gh pr merge に渡す引数...>
+
+引数はすべて \`gh pr merge\` へ透過的に渡す（--squash・--admin・--delete-branch等、
+既存のマージ方式・オプションをそのまま利用できる）。
+
+マージ成功後、main worktree（repoRoot()が指す共通作業ツリー。default branchを
+チェックアウトしている前提）のローカルブランチを origin/<default-branch> へ
+fast-forward同期する（'git fetch origin <default-branch>' + 'git merge --ff-only'相当）。
+これは、進行役が短時間に複数PRを連続マージした際、ローカルmainが古いまま残り
+（1）後続PRのCIがbase branchをfetchできず恒久失敗する、（2）進行役自身が古いビルド済み
+bin/agents-md.jsのままdoctor等を実行し誤った判定結果を得る、という2つの実害を防ぐため。
+
+出力:
+  マージ自体が失敗した場合: gh pr merge の終了コード・標準エラー出力をそのまま返す
+  （ローカル同期は実行しない）。
+  マージは成功したがローカル同期に失敗した場合（main worktreeがdefault branch以外を
+  チェックアウトしている・fast-forward不能なコンフリクトがある等）: 終了コード1以上。
+  マージ結果自体は巻き戻さず、日本語のエラーメッセージで手動同期を促す。
+  すべて成功した場合: 終了コード0。
 `;
 
 interface IntegrationRecord {
@@ -166,5 +188,73 @@ export async function create(args: string[]): Promise<number> {
     );
     if (result.status !== 0) return fail(`gh pr create に失敗しました: ${result.stderr.trim()}`);
     return ok(result.stdout.trim());
+  });
+}
+
+/**
+ * マージ成功後、main worktree（`repoRoot()` が指す共通作業ツリー）のローカル default branch を
+ * `origin/<default-branch>` へ fast-forward 同期する。
+ *
+ * default branch が main worktree で現在チェックアウトされていない場合、`git fetch` の
+ * refspec 経由の直接更新（checkout不要な同期）は「チェックアウト中のブランチは他ブランチからの
+ * refspec更新を拒否する」gitの安全策とは別の問題として、そもそも「進行役のmain worktreeが
+ * defaultブランチ上にある」という前提（本Issueが解決しようとしている実害の発生条件そのもの）が
+ * 崩れていることを意味するため、暗黙に切り替えず明示エラーで停止し人間判断へ委ねる。
+ */
+function syncMainWorktree(root: string): number {
+  let base: string;
+  try {
+    base = defaultBranch(root);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return fail(
+      `PRのマージ自体は成功しましたが、同期先のdefault branchを特定できませんでした: ${message}。` +
+        `${root} にて手動で同期してください。`,
+    );
+  }
+
+  const currentBranch = resolveCurrentBranch(root);
+  if (currentBranch !== base) {
+    return fail(
+      `PRのマージ自体は成功しましたが、main worktree（${root}）が default branch（${base}）を` +
+        `チェックアウトしていない（現在: ${currentBranch ?? '不明'}）ため、ローカル同期を行いませんでした。` +
+        `手動で ${root} にて ${base} へ切り替えたうえで 'git pull --ff-only' を実行してください。`,
+    );
+  }
+
+  const fetchResult = git(['fetch', 'origin', base], root);
+  if (fetchResult.status !== 0) {
+    return fail(
+      `PRのマージ自体は成功しましたが、'git fetch origin ${base}' に失敗しました: ` +
+        `${fetchResult.stderr.trim()}。${root} にて手動で同期してください。`,
+    );
+  }
+
+  const mergeResult = git(['merge', '--ff-only', `origin/${base}`], root);
+  if (mergeResult.status !== 0) {
+    return fail(
+      `PRのマージ自体は成功しましたが、main worktree（${root}）の ${base} を ` +
+        `origin/${base} へ fast-forward 同期できませんでした: ${mergeResult.stderr.trim()}。` +
+        `コンフリクト等が疑われます。${root} にて手動で対応してください。`,
+    );
+  }
+
+  return ok(`main worktree（${root}）の ${base} を origin/${base} へ同期しました。`);
+}
+
+export async function merge(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(MERGE_USAGE);
+      return 0;
+    }
+
+    const root = repoRoot();
+    const result = gh(['pr', 'merge', ...args], root);
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    if (result.status !== 0) return result.status;
+
+    return syncMainWorktree(root);
   });
 }
