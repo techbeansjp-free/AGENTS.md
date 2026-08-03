@@ -4,7 +4,7 @@
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-369
-target_sha: 8d2dae3a798026d184a81a030c2b371073cb5622
+target_sha: d66c8f14800c1af71f861dcf5584fe90e2976f86
 
 acceptance_criteria:
   - ac_id: AC-1
@@ -42,7 +42,7 @@ acceptance_criteria:
 regression:
   executed: true
   evidence:
-    - "npm test（test/unit + test/integration 全件、688件）— 687件pass・1件fail、2回連続で同一結果を再現の上で確定した。failしたtest/unit/paths.test.ts:39 'repoRoot: .git がどこにも見つからない場合は例外を投げる（AC-2）'は本Issueの変更（buildReviewerPrompt --full-index化）と無関係。当該テストはfs.mkdtempSync(os.tmpdir())配下にfixtureを作りrepoRoot()を呼ぶため、worktreeの祖先ディレクトリは走査経路に含まれない（旧記載の『worktree配下では祖先ディレクトリに.gitが存在するため』は誤りであり、strictレビューの指摘により訂正）。repoRoot(orphan)を本ホストで直接実行し原因を確定: os.tmpdir()が返す/tmpの直下に空の.gitディレクトリ（drwxr-xr-x、中身なし、mtime 2026-08-03 13:17、本Issueおよびagent-skill-chainのいずれのコードにも由来しない共有ホスト側の残留物）が実在し、repoRoot()の祖先探索がorphan→/tmpまで遡った時点でこれを検出して例外を投げずに'/tmp'を返す。テストは『os.tmpdir()がgitリポジトリ外である』という、共有ホストでは常に成立するとは限らない前提に依存しており、本Issueの変更ともtest/unit/paths.test.ts自体の内容とも無関係な、ホスト環境固有の既存flakyである。実行日時: 2026-08-03、実行環境: ローカルworktree。全出力を test-execution.log としてcommitし証跡を耐久化。"
+    - "npm test（test/unit + test/integration 全件、688件）— 687件pass・1件fail、2回連続で同一結果を再現の上で確定した。failしたtest/unit/paths.test.ts:39 'repoRoot: .git がどこにも見つからない場合は例外を投げる（AC-2）'は本Issueの変更（buildReviewerPrompt --full-index化）と無関係。当該テストはfs.mkdtempSync(os.tmpdir())配下にfixtureを作りrepoRoot()を呼ぶため、worktreeの祖先ディレクトリは走査経路に含まれない（旧記載の『worktree配下では祖先ディレクトリに.gitが存在するため』は誤りであり、strictレビューの指摘により訂正）。repoRoot(orphan)を本ホストで直接実行し原因を確定: os.tmpdir()が返す/tmpの直下に空の.gitディレクトリ（drwxr-xr-x、中身なし、mtime 2026-08-03 13:17、本Issueおよびagent-skill-chainのいずれのコードにも由来しない共有ホスト側の残留物）が実在し、repoRoot()の祖先探索がorphan→/tmpまで遡った時点でこれを検出して例外を投げずに'/tmp'を返す。テストは『os.tmpdir()がgitリポジトリ外である』という、共有ホストでは常に成立するとは限らない前提に依存しており、本Issueの変更ともtest/unit/paths.test.ts自体の内容とも無関係な、ホスト環境固有の既存flakyである。実行日時: 2026-08-03、実行環境: ローカルworktree。ADR-0006（専用テスト実行ログファイルの新設を却下する判断）に従い、実行ログファイル自体はcommitせず本記述を自己完結した証跡とする。"
     - "node --import tsx --test test/integration/gate-judgment.test.ts test/integration/gate-reviewer-prompt-determinism.test.ts test/integration/gate-evidence.test.ts — 23件全pass（duration_ms 17876）、AC-1〜AC-4関連テストを含む"
     - "npm run build（tsc） — エラーなし"
     - "npm run typecheck（tsc --noEmit -p tsconfig.test.json） — エラーなし（test/配下の型検査を含む）"
