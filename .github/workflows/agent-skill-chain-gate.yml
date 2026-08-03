@@ -25,6 +25,7 @@ jobs:
       pr_number: ${{ steps.context.outputs.pr_number }}
       profile: ${{ steps.context.outputs.profile }}
       review_subject: ${{ steps.context.outputs.review_subject }}
+      applicable: ${{ steps.context.outputs.applicable }}
     steps:
       - name: Checkout protected base trust root
         uses: actions/checkout@v7
@@ -144,3 +145,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./.agent-skill-chain/scripts/gate-publish.sh "${{ needs.detect-segments.outputs.issue_id }}" "${{ steps.evidence.outputs.report_path }}"
+
+  mark-not-applicable:
+    needs: detect-segments
+    if: github.event.pull_request.base.ref == github.event.repository.default_branch && needs.detect-segments.outputs.applicable != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish gate Check Runs as not applicable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for gate in spec design implementation validation; do
+            node -e 'console.log(JSON.stringify({name: `agent-skill-chain/${process.argv[1]}-gate`, head_sha: process.env.HEAD_SHA, status: "completed", conclusion: "success", output: {title: "gate not applicable", summary: "Issueベースの命名規則に一致しないブランチのためagent-skill-chainゲートの対象外。"}}))' "$gate" |
+              gh api -X POST "repos/${{ github.repository }}/check-runs" --input -
+          done
