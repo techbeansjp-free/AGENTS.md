@@ -1978,7 +1978,7 @@ function buildReviewerPrompt(
       : SEGMENT_ARTIFACTS[gateId];
     if (baseSha) {
       const diff = git(
-        ['diff', '--no-ext-diff', '--no-color', `${baseSha}...${targetSha}`, '--', ...artifactNames],
+        ['diff', '--no-ext-diff', '--no-color', '--full-index', `${baseSha}...${targetSha}`, '--', ...artifactNames],
         root,
       );
       if (diff.status !== 0) throw new CliError(`判定対象差分を読めません: ${diff.stderr.trim()}`);

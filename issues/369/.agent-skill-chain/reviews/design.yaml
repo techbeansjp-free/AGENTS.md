@@ -1,0 +1,73 @@
+schema_version: agent-skill-chain/gate-report/v1
+gate:
+  id: design
+  target_sha: 2a7f185ff6dbfc9003634051b2e412030b20e17a
+  conformance: pass
+  falsification: pass
+  final: approved
+  blockers:
+    - severity: info
+      origin: design
+      code: ac2-abbrev-pattern-check-implicit-across-files
+      evidence:
+        - SPEC.md AC-2
+          Then節は「出力バイト列の完全一致」と「index行が省略しない完全長digestであり省略hashが一切出現しないことのテキストパターン照合」の両方を要求する
+        - "PLAN.md
+          #4（AC-2対応、test/integration/gate-reviewer-prompt-determinism.test.ts）の\
+          記述は出力バイト列の完全一致とevidencePromptDigest一致のみを明記し、省略hashの非出現パターン照合はPLAN.md
+          #3（AC-1,AC-4対応、test/integration/gate-judgment.test.ts、別ファイル・別fixture）\
+          にのみ明記されている"
+        - 両者が同一のtarget_sha/base_sha/成果物を用いる保証がPLAN.md/DESIGN.md本文に明示されていないため、AC-2のGiven条件（意図的に大量投入したclone）そのものに対するパターン照合が明示的にトレースできない（バイト完全一致からの推移的成立は可能だが、成果物内に自己完結して明記されていない）
+    - severity: info
+      origin: design
+      code: rollback-narrative-ignores-dependent-test-commits
+      evidence:
+        - "DESIGN.md §障害・ロールバック考慮: 「変更が buildReviewerPrompt() 内の git diff
+          呼び出し引数1箇所への --full-index
+          追加のみに閉じているため、当該commitをrevertするだけで修正前の挙動へ完全に戻せる」"
+        - PLAN.md
+          変更単位#3〜#5は#2（--full-index追加）に依存し、追加される回帰テスト（省略hash不在の検証・golden比較・複数clone一致検証）は--full-index適用後の挙動を前提とする
+        - 単体（#2）のみをrevertし#3〜#5のテストcommitを残した場合、これらのテストは修正前の挙動と矛盾し失敗する。ロールバック手順が「当該commit」単数形で記述されており、依存するテストcommit群も合わせてrevertする必要がある旨の記載が無い
+  approved_digest: sha256:dbc3ac9962d29e8512a6b096bcf93514e3b858f20db6ce919a66872f25f59ee8
+  approved_artifacts:
+    - path: DESIGN.md
+      digest: sha256:938939e4cce7c0abe4f5fdbc7898eaf0c63ae5c74c00e0f722d9e847fb17a1cb
+    - path: PLAN.md
+      digest: sha256:d40d182a6f51c5055b575ae919dc7eaebfae486e91deba677f5604c8a93405a6
+    - path: docs/adr/ADR-0020-gate-reviewer-prompt-full-index-determinism.md
+      digest: sha256:6bc9c8fd5d7d577916746b9f29a7b89ed1615dca4a97113e769e33d02c94620d
+  reviewers:
+    - source: github_pr_review
+      review_id: "4842441873"
+      actor: adachi-tatsuru
+      run_id: review-design-2a7f185ff6db-1-c278251d29fa10d996aa90b4
+      slot: 1
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:fba7b458a1ec3e84861ae9ba6b357328c3cff39441cebf5ce2e7386234c7f6ab
+      actor_relation: same_as_writer
+      trusted_base_sha: 2e8f5d9e1706a5ee8610e1b610fd316e15deb5b5
+      launcher_digest: sha256:d5eaf86af6c22778a0137d65153bb9ce656bf535d4586fa3b6d27cc5abb3b652
+      launcher_token_digest: sha256:fa5691753740e7b6c7566e95f98d10c0366753c35dea973011cbdbec0faa17d3
+      isolation: ephemeral_clone
+      sandbox: read_only
+    - source: github_pr_review
+      review_id: "4842453471"
+      actor: adachi-tatsuru
+      run_id: review-design-2a7f185ff6db-2-fa99fb4675d2c9e5dfebba81
+      slot: 2
+      adapter: claude
+      model: claude-opus-5
+      reasoning: maximum_reasoning
+      prompt_digest: sha256:fba7b458a1ec3e84861ae9ba6b357328c3cff39441cebf5ce2e7386234c7f6ab
+      actor_relation: same_as_writer
+      trusted_base_sha: 2e8f5d9e1706a5ee8610e1b610fd316e15deb5b5
+      launcher_digest: sha256:d5eaf86af6c22778a0137d65153bb9ce656bf535d4586fa3b6d27cc5abb3b652
+      launcher_token_digest: sha256:fa5691753740e7b6c7566e95f98d10c0366753c35dea973011cbdbec0faa17d3
+      isolation: ephemeral_clone
+      sandbox: read_only
+  review_attempt:
+    attempt_id: attempt-design-2a7f185ff6db-0c8815e99b0cc59a233d2c37
+    expected_count: 2
+    evidence_digest: sha256:e68e22d91b11b7d5f8713222150162b0257e634b8bb4bdd3b56b6894cfa84925
