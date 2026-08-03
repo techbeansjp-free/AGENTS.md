@@ -10,6 +10,7 @@
 - 4 成果物は各セグメントの checkpoint で commit・push する。GitHub Issue 本文と PR 本文の `Closes #<id>` は調整状態の恒久証跡であり、作業メモの代替ではない。
 - `.agent-skill-chain/project/manifest.yaml` に登録されていない project 文書は規範として読まない。追加・削除時は manifest と検証を同じ変更で更新する。
 - 作業固有の一時メモ、ローカル依存、生成済み CLI は Git で追跡しない。`.gitignore` が無視対象の唯一の判断基準である。
+- PR作成後は、必ずCI（Check Run・ワークフロー実行結果）にエラーが無いかを確認する。エラーがあれば原因を特定し、修正して再pushするか、対応不能な場合はユーザーへ報告する。CI結果を未確認のままレビュー依頼・マージ判断へ進めない。
 
 ## 対象外
 
