@@ -61,11 +61,30 @@ if (cmd === 'auth' && sub === 'status') {
 
 if (cmd === 'label' && sub === 'create') {
   const name = args[2];
+  const color = flag('--color');
+  const description = flag('--description');
   const state = loadState();
   state.labels = state.labels || [];
-  state.labels.push(name);
+  if (!state.labels.includes(name)) state.labels.push(name);
+  state.labelDetails = state.labelDetails || {};
+  state.labelDetails[name] = { color: color || 'ededed', description: description || '' };
   saveState(state);
   process.stdout.write(name + '\\n');
+  process.exit(0);
+}
+
+// Issue #272: doctor の「GitHub labels同期」検査が使う gh label list --json name,color,description。
+// 実GitHubへは一切アクセスせず、これまでに label create で記録済みの状態のみを返す。
+if (cmd === 'label' && sub === 'list') {
+  const state = loadState();
+  const names = state.labels || [];
+  const details = state.labelDetails || {};
+  const result = names.map((name) => ({
+    name,
+    color: details[name]?.color || 'ededed',
+    description: details[name]?.description || '',
+  }));
+  process.stdout.write(JSON.stringify(result));
   process.exit(0);
 }
 
@@ -520,6 +539,7 @@ export interface GhStubState {
   rulesets: unknown[];
   prs: Record<string, unknown[]>;
   labels: string[];
+  labelDetails?: Record<string, { color: string; description: string }>;
   issueLabels: Record<string, string[]>;
   apiActor?: string;
   defaultBranch?: string;
@@ -569,6 +589,10 @@ export interface GhStub {
   readState(): GhStubState;
   writeState(state: GhStubState): void;
   seedPrList(branch: string, prs: unknown[]): void;
+  /** doctor の「GitHub labels同期」検査（`gh label list`）向けに、実リポジトリに存在するラベルを
+   * 直接投入する（Issue #272）。`label create` を経由せず、既存ラベルが定義と食い違う状態や、
+   * 定義の一部が欠けている状態を直接再現するために使う。 */
+  seedLabels(labels: { name: string; color: string; description: string }[]): void;
   /** `gh pr create` で新規登録される PR の files 一覧（パスのみ）の既定値を上書きする
    * （release bump・root-cleanup run のスコープ検査違反シナリオを再現するために使う。
    * Issue #196・#208）。各ファイルの additions/deletions は既定で削除のみ（0/1）になる。 */
@@ -624,6 +648,12 @@ export function createGhStub(baseDir: string): GhStub {
     seedPrList(branch: string, prs: unknown[]): void {
       const state = this.readState();
       state.prs[branch] = prs;
+      this.writeState(state);
+    },
+    seedLabels(labels: { name: string; color: string; description: string }[]): void {
+      const state = this.readState();
+      state.labels = labels.map((l) => l.name);
+      state.labelDetails = Object.fromEntries(labels.map((l) => [l.name, { color: l.color, description: l.description }]));
       this.writeState(state);
     },
     setDefaultPrFiles(files: string[]): void {
