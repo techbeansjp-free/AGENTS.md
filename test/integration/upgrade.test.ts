@@ -199,6 +199,31 @@ test('upgrade: .claude/settings.jsonに旧hookパスへの参照が残ってい�
   assert.match(result.stdout, /settings\.json.*旧hookパスへの参照/);
 });
 
+test('upgrade: .claude/skills/配下の旧skill-chain方式への参照を警告する', (t) => {
+  const targetDir = mkScratch('upgrade-legacy-skill-content');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const skillFile = path.join(targetDir, '.claude', 'skills', 'agent', 'SKILL.md');
+  const readmeFile = path.join(targetDir, '.claude', 'skills', 'requirements', 'README.md');
+  fs.mkdirSync(path.dirname(skillFile), { recursive: true });
+  fs.mkdirSync(path.dirname(readmeFile), { recursive: true });
+  fs.writeFileSync(skillFile, '# legacy agent\n.agent-skill-chain/source/boot/CORE.mdを読み込む\n');
+  fs.writeFileSync(readmeFile, '# legacy requirements\n00_要求定義.mdを生成する\n');
+  const skillBefore = fs.readFileSync(skillFile);
+  const readmeBefore = fs.readFileSync(readmeFile);
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /警告: 再設計以前の旧世代アセットが検知されました/);
+  assert.match(result.stdout, /\.claude\/skills\/agent\/SKILL\.md/);
+  assert.match(result.stdout, /\.claude\/skills\/requirements\/README\.md/);
+  assert.match(result.stdout, /現行方式に沿った内容へ書き換えるか削除するか/);
+  assert.deepEqual(fs.readFileSync(skillFile), skillBefore, '検知時にSKILL.mdを書き換えないこと');
+  assert.deepEqual(fs.readFileSync(readmeFile), readmeBefore, '検知時にREADME.mdを書き換えないこと');
+});
+
 test('upgrade: 現行方式のenforce onで配線済みの場合は旧世代警告を出さない', (t) => {
   const targetDir = mkScratch('upgrade-current-enforce');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
