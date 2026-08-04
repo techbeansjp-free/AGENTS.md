@@ -1,8 +1,8 @@
 <!--
 正本: AGENTS.md §4セグメント・4ゲート / §成果物の自己完結性
 1 Issue = 1 ブランチ = 1 worktree = 1 PR。このPRのheadブランチへ、spec/design/implementation/validation
-の各セグメントワーカーが順にcommit/pushする。ゲート状態は Check Run で自動検証されるため、
-このテンプレートで自己申告する必要はない。
+の各セグメントワーカーが順にcommit/pushする。セグメントゲートはGitHubモードではガイドラインであり
+自動CI強制は無い（AGENTS.md I2）。実施要否は進行役が判断するため、このテンプレートでの自己申告は不要。
 -->
 
 ## Issue
