@@ -10,10 +10,27 @@ import { readSettings } from './claude-settings.js';
 export const LEGACY_SOURCE_DIR = path.join('.agent-skill-chain', 'source');
 export const LEGACY_HOOK_FILE = path.join('.claude', 'hooks', 'PreToolUse.sh');
 
+const LEGACY_SKILLS_DIR = path.join('.claude', 'skills');
+const LEGACY_SKILL_CONTENT_MARKERS = [
+  '00_要求定義',
+  '01_要件定義',
+  '02_設計',
+  '03_実装計画',
+  '04_review',
+  '.agent-skill-chain/source',
+  'skills/agent/run_command',
+  'workflow.db',
+] as const;
+const LEGACY_SKILL_CONTENT_FILES = ['README.md', 'SKILL.md'] as const;
+
 /** 現行方式のhook配線先（`enforce on` が書き込む相対パス）。`enforce.ts` の `HOOK_RELATIVE_PATH` と同じ値。 */
 const CURRENT_HOOK_RELATIVE_PATH = path.join('.agent-skill-chain', 'hooks', 'claude-pretooluse.sh');
 
-export type LegacyAssetKind = 'source-dir' | 'standalone-hook-file' | 'stale-settings-reference';
+export type LegacyAssetKind =
+  | 'source-dir'
+  | 'standalone-hook-file'
+  | 'stale-settings-reference'
+  | 'stale-skill-content';
 
 export interface LegacyAssetFinding {
   kind: LegacyAssetKind;
@@ -27,6 +44,7 @@ export interface LegacyAssetFinding {
  * - `.claude/hooks/PreToolUse.sh`: 単体ファイルとして配布されていた旧hook本体。
  * - `.claude/settings.json` の `hooks.PreToolUse`: `.claude/hooks/` 配下を指す旧エントリ
  *   （現行方式は `.agent-skill-chain/hooks/claude-pretooluse.sh` を指す）。
+ * - `.claude/skills/<skill>/{SKILL.md,README.md}`: 廃止済み成果物名または旧世代パスへの参照を含むskill文書。
  * 検知のみを行い、削除・変更は一切行わない（非破壊）。
  */
 export function detectLegacyAssets(targetDir: string): LegacyAssetFinding[] {
@@ -76,6 +94,37 @@ export function detectLegacyAssets(targetDir: string): LegacyAssetFinding[] {
     // settings.json自体の解析エラーはupgradeの本責務外（enforce等が別途エラーとして扱う）。ここでは無視する。
   }
 
+  const skillsDir = path.join(targetDir, LEGACY_SKILLS_DIR);
+  let skillDirectories: fs.Dirent[] = [];
+  try {
+    skillDirectories = fs
+      .readdirSync(skillsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    // skillsディレクトリが存在しない・読み取れない場合は従来どおりfindingを追加しない。
+  }
+
+  for (const skillDirectory of skillDirectories) {
+    for (const fileName of LEGACY_SKILL_CONTENT_FILES) {
+      const relativePath = path.join(LEGACY_SKILLS_DIR, skillDirectory.name, fileName);
+      const absolutePath = path.join(targetDir, relativePath);
+      let content: string;
+      try {
+        if (!fs.lstatSync(absolutePath).isFile()) continue;
+        content = fs.readFileSync(absolutePath, 'utf8');
+      } catch {
+        continue;
+      }
+      if (!LEGACY_SKILL_CONTENT_MARKERS.some((marker) => content.includes(marker))) continue;
+      findings.push({
+        kind: 'stale-skill-content',
+        relativePath,
+        message: `${relativePath} は廃止済みの旧skill-chain方式への参照を含みます。`,
+      });
+    }
+  }
+
   return findings;
 }
 
@@ -89,6 +138,7 @@ export function formatLegacyAssetWarning(findings: LegacyAssetFinding[]): string
     `  1. ${LEGACY_SOURCE_DIR}/ の内容を確認し、現行方式（AGENTS.md/.agent-skill-chain/config/ 駆動）で不要であれば削除する。`,
     `  2. ${LEGACY_HOOK_FILE} の内容を確認し、現行hookへ移行済みであれば削除する。`,
     "  3. .claude/settings.json の hooks.PreToolUse から旧hookエントリ（.claude/hooks/ 配下を指すもの）を除去し、'agent-skill-chain enforce on' を実行して新hook（.agent-skill-chain/hooks/claude-pretooluse.sh）へ配線し直す。",
+    '  4. .claude/skills/ 配下の該当ファイルを確認し、現行方式に沿った内容へ書き換えるか削除するかをプロジェクト側で判断する。',
     '  旧hookと新hookが同時配線されたままだと、両方が実行され矛盾した拒否判定が発生するおそれがあります。',
   ];
   return lines.join('\n');
