@@ -124,7 +124,7 @@ docs/{GLOSSARY.md, adr/, system-spec/}
 .worktrees/
 .agent-skill-chain/
   project/          # consumer project 固有ポリシー（manifest.yaml, RULES.md, roles/）
-  standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY}.md
+  standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY,CODEX_BACKGROUND_TASK_POLICY}.md
   templates/{issue/, adr/, github/}
   schemas/{config,state,gate-report,validation-report,worker-report,integration,lease,segments,project-policy}.schema.yaml
   config/{agent-skill-chain.yaml, segments.yaml, roles.yaml}
