@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createTmpRepo } from '../helpers/tmp-repo.js';
+import { createTmpRepo, removeMergeAutonomous, setMergeAutonomous } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 
@@ -57,6 +57,8 @@ function addIssueWorktree(repoDir: string, branch: string): string {
 test('pr merge (AC): gh pr merge 成功後、cwdがissue worktreeでもmain worktreeをorigin/mainへfast-forward同期する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
+  // Issue #427: このテストは自動マージが明示的に許可された状況（merge.autonomous: true）を検証する。
+  setMergeAutonomous(repo.dir, true);
   const { stub, env, cleanup } = makeStub();
   t.after(cleanup);
 
@@ -90,6 +92,8 @@ test('pr merge (AC): gh pr merge 成功後、cwdがissue worktreeでもmain work
 test('pr merge (AC): gh pr merge が失敗した場合、main worktreeの同期は実行されず非0で終了する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
+  // Issue #427: このテストは自動マージが明示的に許可された状況（merge.autonomous: true）を検証する。
+  setMergeAutonomous(repo.dir, true);
   const { stub, env, cleanup } = makeStub();
   t.after(cleanup);
 
@@ -118,4 +122,49 @@ test('pr merge (AC): gh pr merge が失敗した場合、main worktreeの同期�
   const localMainShaAfter = git(repo.dir, ['rev-parse', 'main']);
   assert.equal(localMainShaAfter, localMainShaBefore, 'マージ失敗時はローカルmainが変化しないはず');
   assert.ok(!fs.existsSync(path.join(repo.dir, 'should-not-sync.txt')));
+});
+
+// Issue #427: 進行役によるPR自動マージは既定（merge.autonomous 未設定）で無効であり、
+// `gh pr merge` を一切実行せず日本語エラーで非0終了することを固定化する。
+test('pr merge (AC): merge.autonomousが未設定（既定）の場合、gh pr mergeを実行せず日本語エラーで非0終了する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  // 本物のリポジトリ自身の config は dogfooding のため merge.autonomous: true を持つ
+  // （開発リポジトリでは自走的マージ運用を明示承認済み）。「未設定＝既定 false」を検証する
+  // ため、fixture からその値を明示的に外す。
+  removeMergeAutonomous(repo.dir);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/427-example-default');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  const localMainShaBefore = git(repo.dir, ['rev-parse', 'main']);
+
+  const result = runCli(['pr', 'merge', '1', '--squash', '--admin'], { cwd: issueWorktree, env });
+
+  assert.notEqual(result.status, 0, 'merge.autonomousが未設定なら非0で終了するはず');
+  assert.match(result.stderr, /人間/, '人間への確認を促す日本語メッセージを含むはず');
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length ?? 0, 0, 'gh pr mergeは一切実行されていないはず');
+
+  const localMainShaAfter = git(repo.dir, ['rev-parse', 'main']);
+  assert.equal(localMainShaAfter, localMainShaBefore, 'マージ自体を実行していないためローカルmainも変化しないはず');
+});
+
+test('pr merge (AC): merge.autonomousをfalseに明示設定した場合も、gh pr mergeを実行せず非0終了する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, false);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/427-example-explicit-false');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  const result = runCli(['pr', 'merge', '1'], { cwd: issueWorktree, env });
+
+  assert.notEqual(result.status, 0);
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length ?? 0, 0, 'gh pr mergeは一切実行されていないはず');
 });

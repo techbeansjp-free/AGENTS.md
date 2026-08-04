@@ -247,3 +247,77 @@ export function unsetWorkerAdapter(repoDir: string): void {
     throw new Error('worker.adapter 行を削除できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
   }
 }
+
+/**
+ * merge.autonomous（Issue #427）を書き換える。本物のリポジトリの config は dogfooding のため
+ * `merge: {autonomous: true}` を持つ（進行役による自走的マージ運用を明示承認済みの開発環境の
+ * ため）。「未設定＝既定 false」を検証するテストは removeMergeAutonomous と組み合わせて使う。
+ */
+export function setMergeAutonomous(repoDir: string, autonomous: boolean): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const block = `merge:\n  autonomous: ${autonomous}\n`;
+  const patched = /^merge:\n(?: {2}.*\n)*/m.test(text)
+    ? text.replace(/^merge:\n(?: {2}.*\n)*/m, block)
+    : `${text}\n${block}`;
+  fs.writeFileSync(configPath, patched);
+
+  const after = fs.readFileSync(configPath, 'utf8');
+  if (!new RegExp(`merge:\\n\\s*autonomous: ${autonomous}\\b`).test(after)) {
+    throw new Error(`merge.autonomous を ${autonomous} へ書き換えられませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）`);
+  }
+}
+
+/**
+ * merge ブロック全体を config から取り除く（schema上 merge は任意項目）。CLI 側の既定値
+ * フォールバック（未設定時 false 相当＝マージ自体を拒否）を、本物のリポジトリ側の dogfooding
+ * 設定値（`merge.autonomous: true`）に依存せず検証するために使う。
+ */
+export function removeMergeAutonomous(repoDir: string): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/^merge:\n(?: {2}.*\n)*/m, '');
+  if (/^merge:/m.test(patched)) {
+    throw new Error('merge ブロックを削除できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
+  }
+  fs.writeFileSync(configPath, patched);
+}
+
+/**
+ * human_confirmation.before_implementation（Issue #427）を書き換える。本物のリポジトリの
+ * config は dogfooding のため `human_confirmation: {before_implementation: false}` を持つ
+ * （merge.autonomous と同じ精神で、進行役による自走的な実装セグメント着手を明示承認済みの
+ * 開発環境のため）。「未設定＝既定 true（人間確認を要求）」を検証するテストは
+ * removeHumanConfirmationBeforeImplementation と組み合わせて使う。
+ */
+export function setHumanConfirmationBeforeImplementation(repoDir: string, required: boolean): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const block = `human_confirmation:\n  before_implementation: ${required}\n`;
+  const patched = /^human_confirmation:\n(?: {2}.*\n)*/m.test(text)
+    ? text.replace(/^human_confirmation:\n(?: {2}.*\n)*/m, block)
+    : `${text}\n${block}`;
+  fs.writeFileSync(configPath, patched);
+
+  const after = fs.readFileSync(configPath, 'utf8');
+  if (!new RegExp(`human_confirmation:\\n\\s*before_implementation: ${required}\\b`).test(after)) {
+    throw new Error(
+      `human_confirmation.before_implementation を ${required} へ書き換えられませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）`,
+    );
+  }
+}
+
+/**
+ * human_confirmation ブロック全体を config から取り除く（schema上 human_confirmation は
+ * 任意項目）。CLI側の既定値フォールバック（未設定時 before_implementation: true 相当＝
+ * 人間確認を要求）を、本物のリポジトリ側の dogfooding 設定値に依存せず検証するために使う。
+ */
+export function removeHumanConfirmationBeforeImplementation(repoDir: string): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(/^human_confirmation:\n(?: {2}.*\n)*/m, '');
+  if (/^human_confirmation:/m.test(patched)) {
+    throw new Error('human_confirmation ブロックを削除できませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
+  }
+  fs.writeFileSync(configPath, patched);
+}

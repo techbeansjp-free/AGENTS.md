@@ -139,6 +139,25 @@ properties:
       target: {type: string, enum: [issue_body, pr_body, both]}
       # GitHub の Issue/PR 本文上限は 65536 文字。既定 60000 はその安全側の値。
       max_body_chars: {type: integer, minimum: 1, maximum: 65536}
+  # merge（Issue #427）は後方互換な任意項目として追加する。top-level の required には含めず、
+  # 本セクションを持たない既存の設定ファイルはこれまでどおり妥当なものとして扱う（未設定＝無効、
+  # つまり進行役による `pr merge` コマンド自体の自動マージは既定で拒否される）。
+  # `autonomy: gated | full`（レビュー厳格度の制御）とは独立した別軸（マージ実行主体の制御）。
+  merge:
+    type: object
+    required: [autonomous]
+    additionalProperties: false
+    properties:
+      autonomous: {type: boolean}
+  # human_confirmation（Issue #427）も同様に後方互換な任意項目とする。本セクションを持たない
+  # 既存の設定ファイルは「実装セグメント着手前に人間確認を要求する」既定のまま妥当とする
+  # （未設定＝before_implementation: true相当）。
+  human_confirmation:
+    type: object
+    required: [before_implementation]
+    additionalProperties: false
+    properties:
+      before_implementation: {type: boolean}
   templates:
     type: object
     required: [github_source, github_target, verify_sync]
@@ -200,6 +219,8 @@ examples:
     lease: {ttl_seconds: 3600, renewal_interval_seconds: 900}
     bdd: {profile: standard}
     issue_sync: {enabled: false, target: issue_body, max_body_chars: 60000}
+    merge: {autonomous: false}
+    human_confirmation: {before_implementation: true}
     templates: {github_source: .agent-skill-chain/templates/github/.github, github_target: .github, verify_sync: true}
     checks:
       spec: agent-skill-chain/spec-gate

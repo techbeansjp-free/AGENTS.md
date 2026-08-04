@@ -5,7 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
-import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
+import {
+  createTmpRepo,
+  FIXED_TIMESTAMP,
+  removeHumanConfirmationBeforeImplementation,
+  setHumanConfirmationBeforeImplementation,
+} from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 
 // coordination.backend: local での中核フロー（issue start → lease acquire → segment start →
@@ -246,6 +251,58 @@ test('gate review: target_shaを明示指定した場合、entry.pathの実際�
     new RegExp(`target_sha: ${mergeCommitSha}`),
     'entry.pathの実際のHEAD（detached HEADのマージコミット相当）が採用されないこと',
   );
+});
+
+// Issue #427: 実装セグメント着手（segment start <issue_id> implementation）は既定で人間の
+// 明示的な確認を要求し、role_contractを返す前（writer lease検査より先）に拒否する。
+test('segment start (実装セグメント, Issue #427): human_confirmation.before_implementationが未設定（既定）の場合、writer lease取得前に人間確認を要求し拒否する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  // 本物のリポジトリ自身の config は dogfooding のため human_confirmation.before_implementation:
+  // false を持つ（自走的な実装セグメント着手を明示承認済みの開発環境のため）。「未設定＝既定
+  // true（人間確認を要求）」を検証するため、fixture からその値を明示的に外す。
+  removeHumanConfirmationBeforeImplementation(repo.dir);
+
+  const start = runCli(['issue', 'start', 'ISSUE-5', 'feature', 'sample-feature-5', FIXED_TIMESTAMP], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+
+  // lease未取得の状態でも、人間確認ゲートの方が先に評価され拒否されること。
+  const segmentStart = runCli(['segment', 'start', 'ISSUE-5', 'implementation'], { cwd: repo.dir });
+  assert.notEqual(segmentStart.status, 0);
+  assert.match(segmentStart.stderr, /人間レビューが必要です/);
+  assert.doesNotMatch(segmentStart.stderr, /writer lease/, 'lease未取得エラーより先に人間確認ゲートで停止すること');
+});
+
+test('segment start (実装セグメント, Issue #427): human_confirmation.before_implementationをfalseに明示設定した場合、従来どおりrole_contractを返す', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setHumanConfirmationBeforeImplementation(repo.dir, false);
+
+  const start = runCli(['issue', 'start', 'ISSUE-6', 'feature', 'sample-feature-6', FIXED_TIMESTAMP], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-6', 'implementation'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  const segmentStart = runCli(['segment', 'start', 'ISSUE-6', 'implementation'], { cwd: repo.dir });
+  assert.equal(segmentStart.status, 0, segmentStart.stderr);
+  assert.match(segmentStart.stdout, /role: implementation_worker/);
+});
+
+test('segment start (spec, Issue #427): human_confirmation.before_implementationが未設定でも対象外セグメントには影響しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  removeHumanConfirmationBeforeImplementation(repo.dir);
+
+  const start = runCli(['issue', 'start', 'ISSUE-7', 'feature', 'sample-feature-7', FIXED_TIMESTAMP], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-7', 'spec'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  const segmentStart = runCli(['segment', 'start', 'ISSUE-7', 'spec'], { cwd: repo.dir });
+  assert.equal(segmentStart.status, 0, segmentStart.stderr);
+  assert.match(segmentStart.stdout, /role: spec_worker/);
 });
 
 test('doctor (local backend): git/リポジトリ/configの検査がすべてOKになる', async (t) => {

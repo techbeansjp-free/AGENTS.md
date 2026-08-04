@@ -35,6 +35,16 @@ export interface AgentSkillChainConfig {
   // ADR-0021。本セクション自体を持たない既存の設定ファイルを妥当なまま受け入れるため任意項目にする
   // （未設定は無効と同義）。target・max_body_chars も省略時は CLI 側の既定へフォールバックする。
   issue_sync?: { enabled: boolean; target?: `issue_body` | `pr_body` | `both`; max_body_chars?: number };
+  // Issue #427。進行役（AIエージェント）が `pr merge` コマンド自体でPRマージを実行してよいかの
+  // opt-in。既定は未設定＝無効（`autonomy: gated | full` とは独立の別軸、混同しない）。
+  // 本セクションを持たない既存の設定ファイルを妥当なまま受け入れるため任意項目にする。
+  merge?: { autonomous: boolean };
+  // Issue #427。`merge.autonomous` と同じ精神の独立した opt-in で、実装セグメント着手前
+  // （`segment start <issue_id> implementation`）に人間の明示的な確認を要求するかを制御する。
+  // 既定は未設定＝要求する（true相当）。`merge.autonomous`（既定false＝要求する）とは
+  // 真偽の極性が逆であることに注意（本フィールドは「確認要否」、`merge.autonomous`は
+  // 「自動実行の許可」を表す）。`autonomy: gated | full` とは独立の別軸、混同しない。
+  human_confirmation?: { before_implementation: boolean };
   templates: { github_source: string; github_target: string; verify_sync: boolean };
   checks: { spec: string; design: string; implementation: string; validation: string };
 }
