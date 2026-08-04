@@ -59,8 +59,8 @@ export async function upgrade(args: string[]): Promise<number> {
       `${prefix}GitHub workflowは未更新です。配布templateを確認後、必要な場合だけ setup github を明示実行してください。`,
     );
 
-    // Issue #352: 再設計以前の旧世代アセット（.agent-skill-chain/source/・単体ファイルの
-    // .claude/hooks/PreToolUse.sh・settings.jsonの旧hook参照）は現行upgradeの同期対象ではなく、
+    // Issue #352: 再設計以前の旧世代アセット（LEGACY_SOURCE_DIRが指す旧sourceディレクトリ・
+    // 単体ファイルの.claude/hooks/PreToolUse.sh・settings.jsonの旧hook参照）は現行upgradeの同期対象ではなく、
     // 検知しなければサイレントに残留し新旧enforcementが矛盾する（AGENTS.md I8: 既定は安全側）。
     const legacyFindings = detectLegacyAssets(targetDir);
     const legacyWarning = formatLegacyAssetWarning(legacyFindings);

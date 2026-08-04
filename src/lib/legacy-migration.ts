@@ -23,7 +23,7 @@ export interface LegacyAssetFinding {
 
 /**
  * 再設計以前の旧世代アセットを検知する（Issue #352）。
- * - `.agent-skill-chain/source/`: 旧`boot/CORE.md`等一式が残留したディレクトリ。
+ * - `LEGACY_SOURCE_DIR`（`.agent-skill-chain/` 配下の旧`source`ディレクトリ）: 旧`boot/CORE.md`等一式が残留したディレクトリ。
  * - `.claude/hooks/PreToolUse.sh`: 単体ファイルとして配布されていた旧hook本体。
  * - `.claude/settings.json` の `hooks.PreToolUse`: `.claude/hooks/` 配下を指す旧エントリ
  *   （現行方式は `.agent-skill-chain/hooks/claude-pretooluse.sh` を指す）。
