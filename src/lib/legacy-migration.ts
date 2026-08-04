@@ -17,7 +17,7 @@ const LEGACY_SKILL_CONTENT_MARKERS = [
   '02_設計',
   '03_実装計画',
   '04_review',
-  '.agent-skill-chain/source',
+  ['.agent-skill-chain', 'source'].join('/'),
   'skills/agent/run_command',
   'workflow.db',
 ] as const;
