@@ -49,7 +49,7 @@ export async function init(args: string[]): Promise<number> {
     // （Issue #169 F1: 逐次書込みだと衝突検出前のエントリが既にディスクへ書かれてしまう不備の是正）。
     if (!dryRun) {
       for (const { src, dest } of conflictCheckedEntries) {
-        copyTreeFailOnConflict(src, dest, { dryRun: true });
+        copyTreeFailOnConflict(src, dest, { dryRun: true, root: targetDir });
       }
     }
 
@@ -57,7 +57,7 @@ export async function init(args: string[]): Promise<number> {
     const summary: string[] = [];
 
     for (const { src, dest } of conflictCheckedEntries) {
-      const results = copyTreeFailOnConflict(src, dest, { dryRun });
+      const results = copyTreeFailOnConflict(src, dest, { dryRun, root: targetDir });
       summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
     }
 

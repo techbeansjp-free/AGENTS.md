@@ -44,13 +44,13 @@ export async function upgrade(args: string[]): Promise<number> {
     for (const entry of ROOT_LEVEL_ENTRIES) {
       const src = path.join(packageRoot(), entry);
       if (!fs.existsSync(src)) continue;
-      const results = copyTreeMirror(src, path.join(targetDir, entry), { dryRun });
+      const results = copyTreeMirror(src, path.join(targetDir, entry), { dryRun, root: targetDir });
       summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
     }
     for (const entry of NAMESPACED_ENTRIES) {
       const src = path.join(packageRoot(), ASSET_NAMESPACE, entry);
       if (!fs.existsSync(src)) continue;
-      const results = copyTreeMirror(src, path.join(targetDir, ASSET_NAMESPACE, entry), { dryRun });
+      const results = copyTreeMirror(src, path.join(targetDir, ASSET_NAMESPACE, entry), { dryRun, root: targetDir });
       summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
     }
 

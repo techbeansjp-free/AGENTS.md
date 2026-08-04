@@ -101,13 +101,13 @@ export async function setup(args: string[]): Promise<number> {
     for (const entry of ROOT_LEVEL_ENTRIES) {
       const src = path.join(packageRoot(), entry);
       if (!fs.existsSync(src)) continue;
-      const results = copyTreeFailOnConflict(src, path.join(targetDir, entry));
+      const results = copyTreeFailOnConflict(src, path.join(targetDir, entry), { root: targetDir });
       summary.push(...results.map((r) => `${r.action}: ${r.path}`));
     }
     for (const entry of NAMESPACED_ENTRIES) {
       const src = path.join(packageRoot(), ASSET_NAMESPACE, entry);
       if (!fs.existsSync(src)) continue;
-      const results = copyTreeFailOnConflict(src, path.join(targetDir, ASSET_NAMESPACE, entry));
+      const results = copyTreeFailOnConflict(src, path.join(targetDir, ASSET_NAMESPACE, entry), { root: targetDir });
       summary.push(...results.map((r) => `${r.action}: ${r.path}`));
     }
 
@@ -192,7 +192,7 @@ function syncStep(targetDir: string): { status: number; message: string } {
   const source = resolveAsset(path.join('templates', 'github', '.github'), targetDir);
   const dest = path.join(targetDir, '.github');
   try {
-    const results = copyTreeMirror(source, dest);
+    const results = copyTreeMirror(source, dest, { root: targetDir });
     return { status: 0, message: results.map((r) => `${r.action}: ${r.path}`).join('\n') || '(同期対象なし)' };
   } catch (error) {
     return { status: 1, message: error instanceof Error ? error.message : String(error) };
