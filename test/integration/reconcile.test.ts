@@ -9,6 +9,7 @@ import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { artifactDigestOf } from '../../src/lib/digest.js';
+import { reviewFilePath as productionReviewFilePath } from '../../src/lib/local-state.js';
 
 // このファイルは名前が近い2つの別コマンドをまとめて検証する:
 //   1. `gate reconcile <issue_id> <target_sha>`（src/commands/gate.ts の reconcile 関数）
@@ -61,7 +62,11 @@ function setupApprovedSpecAndDesignGates(opts: { backend?: 'local' | 'github'; e
 
   if (backend === 'github') {
     for (const gateId of ['spec', 'design']) {
-      const source = reviewPath(repo.dir, gateId);
+      // Issue #399: GitHubモードの `gate publish` はroot直下 `issues/` を汚染しないよう
+      // os.tmpdir() 配下（`reviewFilePath(..., 'github')`）へ書くよう変更済み。コピー元は
+      // その実際の書込み先を参照する。コピー先（worktree内）は `readReconcileReport` が
+      // git-showで読む相対パス規約（root相対、`reviewPath` ヘルパー）に合わせたままにする。
+      const source = productionReviewFilePath(repo.dir, '1', gateId, 'github');
       const destination = reviewPath(worktreePath, gateId);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.copyFileSync(source, destination);
@@ -189,6 +194,14 @@ function reviewPath(repoDir: string, gateId: string): string {
   return path.join(repoDir, 'issues', '1', '.agent-skill-chain', 'reviews', `${gateId}.yaml`);
 }
 
+/** Issue #399: GitHubモードで `gate publish`/`gate reconcile` が実際にローカル併記する場所
+ * （os.tmpdir() 配下）。`repo.dir` 自体（メイン作業ツリー）を基点に読み書きする箇所でのみ使う
+ * （worktree内へ複製したコピーは `readReconcileReport` のgit-show相対パス規約に合わせるため
+ * `reviewPath` のまま変えない）。 */
+function githubReviewPath(repoDir: string, gateId: string): string {
+  return productionReviewFilePath(repoDir, '1', gateId, 'github');
+}
+
 function addForgedSpecCheck(
   stub: ReturnType<typeof createGhStub>,
   approvedSha: string,
@@ -219,7 +232,7 @@ test('gate reconcile (github backend): 過去のtrusted baselineから成果物�
 
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'approved artifacts unchanged');
   seedPullCommits(stub, [sha1, sha2], repo.dir);
-  fs.rmSync(path.dirname(reviewPath(repo.dir, 'spec')), { recursive: true, force: true });
+  fs.rmSync(path.dirname(githubReviewPath(repo.dir, 'spec')), { recursive: true, force: true });
   const reconcile = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
 
   // Then: 以前は「local バックエンドのみ対応」で必ず失敗していたが、githubモードでも成功し、
@@ -299,7 +312,7 @@ test('gate reconcile (github backend): success baseline不在時はCheck Runもl
   state.checkRuns = [];
   state.actionRuns = [];
   stub.writeState(state);
-  const before = fs.readFileSync(reviewPath(repo.dir, 'spec'), 'utf8');
+  const before = fs.readFileSync(githubReviewPath(repo.dir, 'spec'), 'utf8');
 
   const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
 
@@ -307,7 +320,7 @@ test('gate reconcile (github backend): success baseline不在時はCheck Runもl
   assert.match(result.stdout, /reissued: \(none\)/);
   assert.match(result.stdout, /invalidated: \(none\)/);
   assert.equal(checkRuns(stub).length, 0);
-  assert.equal(fs.readFileSync(reviewPath(repo.dir, 'spec'), 'utf8'), before);
+  assert.equal(fs.readFileSync(githubReviewPath(repo.dir, 'spec'), 'utf8'), before);
 });
 
 test('gate reconcile (github backend): target ref不在時はbase側reportへfallbackせず照合をskipする', async (t) => {
@@ -322,7 +335,7 @@ test('gate reconcile (github backend): target ref不在時はbase側reportへfal
   state.pullCommits = [sha1, sha2].map((sha) => ({ sha }));
   state.commitPulls = [{ number: 1 }];
   stub.writeState(state);
-  const before = fs.readFileSync(reviewPath(repo.dir, 'spec'), 'utf8');
+  const before = fs.readFileSync(githubReviewPath(repo.dir, 'spec'), 'utf8');
   const beforeCount = checkRuns(stub).length;
 
   const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
@@ -331,7 +344,7 @@ test('gate reconcile (github backend): target ref不在時はbase側reportへfal
   assert.match(result.stdout, /reissued: \(none\)/);
   assert.match(result.stdout, /invalidated: \(none\)/);
   assert.equal(checkRuns(stub).length, beforeCount);
-  assert.equal(fs.readFileSync(reviewPath(repo.dir, 'spec'), 'utf8'), before);
+  assert.equal(fs.readFileSync(githubReviewPath(repo.dir, 'spec'), 'utf8'), before);
 });
 
 test('gate reconcile (github backend): Check Run API失敗はbaseline不在扱いにせずコマンドを失敗させる', async (t) => {
@@ -422,7 +435,8 @@ test('gate reconcile (github backend): 下流baseline不在をskipしてもdowns
   }).trim();
   const implementationReport = reviewPath(worktreePath, 'implementation');
   fs.mkdirSync(path.dirname(implementationReport), { recursive: true });
-  fs.copyFileSync(reviewPath(repo.dir, 'implementation'), implementationReport);
+  // Issue #399: コピー元は `gate publish`（GitHubモード）の実際の書込み先（os.tmpdir() 配下）。
+  fs.copyFileSync(productionReviewFilePath(repo.dir, '1', 'implementation', 'github'), implementationReport);
   t.after(() => {
     repo.cleanup();
     cleanup();
@@ -434,7 +448,7 @@ test('gate reconcile (github backend): 下流baseline不在をskipしてもdowns
     (run) => (run as { check_suite_id?: number }).check_suite_id !== designRun.check_suite.id,
   );
   stub.writeState(state);
-  const designBefore = fs.readFileSync(reviewPath(repo.dir, 'design'), 'utf8');
+  const designBefore = fs.readFileSync(githubReviewPath(repo.dir, 'design'), 'utf8');
   fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: downstream invalidation\n', 'utf8');
   const checkpoint = runCli(['checkpoint', 'test: downstream invalidation'], { cwd: worktreePath, env });
   assert.equal(checkpoint.status, 0, checkpoint.stderr);
@@ -446,7 +460,7 @@ test('gate reconcile (github backend): 下流baseline不在をskipしてもdowns
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /invalidated: spec, implementation/);
-  assert.equal(fs.readFileSync(reviewPath(repo.dir, 'design'), 'utf8'), designBefore);
+  assert.equal(fs.readFileSync(githubReviewPath(repo.dir, 'design'), 'utf8'), designBefore);
   const published = checkRuns(stub).slice(beforeCount);
   assert.deepEqual(published.map((run) => run.name), [
     'agent-skill-chain/spec-gate',
