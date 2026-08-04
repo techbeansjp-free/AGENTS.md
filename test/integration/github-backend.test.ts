@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
@@ -24,6 +25,25 @@ interface CheckRunRecord {
   name: string;
   head_sha: string;
   conclusion: string;
+}
+
+function prepareReviewStatusSegment(t: { after(callback: () => void): void }, issueNumber: number) {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  const branch = `bugfix/${issueNumber}-review-status`;
+  execFileSync('git', ['checkout', '-b', branch], { cwd: repo.dir, stdio: 'pipe' });
+  stub.seedOpenPr({ number: issueNumber + 1000, headRefName: branch, body: '' });
+  const acquire = runCli(['lease', 'acquire', `ISSUE-${issueNumber}`, 'spec'], { cwd: repo.dir, env });
+  assert.equal(acquire.status, 0, acquire.stderr);
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  return { repo, stub, env, prNumber: issueNumber + 1000 };
+}
+
+function latestCommitTime(repoDir: string): string {
+  return execFileSync('git', ['log', '-1', '--format=%cI', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
 }
 
 test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate publish(Check Run) -> pr create -> cleanup', async (t) => {
@@ -145,6 +165,69 @@ test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate
   assert.equal(cleanupAfterMerge.status, 0, cleanupAfterMerge.stderr);
   assert.equal(cleanupAfterMerge.stdout.trim(), worktreePath);
   assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
+});
+
+test('segment start (github backend): CHANGES_REQUESTEDレビューをrole contractへ同梱する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 440);
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'CHANGES_REQUESTED',
+      author: { login: 'reviewer' },
+      body: 'null時のフォールバックを追加してください',
+      submittedAt: '2099-01-01T00:00:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-440', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^review_status:/m);
+  assert.match(result.stdout, /state: CHANGES_REQUESTED/);
+  assert.match(result.stdout, /null時のフォールバックを追加してください/);
+});
+
+test('segment start (github backend): 直近commit後のPR/Issueコメントをrole contractへ同梱する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 441);
+  const createdAt = new Date(Date.parse(latestCommitTime(repo.dir)) + 1000).toISOString();
+  stub.seedPrComments(prNumber, [
+    { author: { login: 'maintainer' }, body: 'PR側の修正依頼です', createdAt },
+  ]);
+  const state = stub.readState();
+  state.comments['441'] = [
+    ...(state.comments['441'] ?? []),
+    { id: 'feedback-1', url: 'https://example.test/issues/441', body: 'Issue側の修正依頼です', createdAt },
+  ];
+  stub.writeState(state);
+
+  const result = runCli(['segment', 'start', 'ISSUE-441', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /source: pr/);
+  assert.match(result.stdout, /PR側の修正依頼です/);
+  assert.match(result.stdout, /source: issue/);
+  assert.match(result.stdout, /Issue側の修正依頼です/);
+});
+
+test('segment start (github backend): APPROVEDで未対応コメント無しならreview_statusを誤検出しない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 442);
+  stub.seedPrReviews(prNumber, [{ state: 'APPROVED', author: { login: 'reviewer' }, body: 'approved' }]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-442', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /^review_status:/m);
+  assert.match(result.stdout, /作業再開時は対象Issue\/PRの最新レビュー・コメント/);
+});
+
+test('segment start (github backend): review取得失敗をdetection failedとして同梱し起動を継続する', (t) => {
+  const { repo, stub, env } = prepareReviewStatusSegment(t, 443);
+  const state = stub.readState();
+  state.failPrReviewStatusView = true;
+  stub.writeState(state);
+
+  const result = runCli(['segment', 'start', 'ISSUE-443', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^review_status:/m);
+  assert.match(result.stdout, /detection: failed/);
+  assert.match(result.stdout, /simulated review status view failure/);
+  assert.match(result.stdout, /作業再開時は対象Issue\/PRの最新レビュー・コメント/);
 });
 
 test('issue resume (github backend): PRが見つからない場合とgh pr listの結果を含む場合', async (t) => {

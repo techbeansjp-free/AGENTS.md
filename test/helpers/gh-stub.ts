@@ -258,7 +258,7 @@ if (cmd === 'pr' && sub === 'edit') {
 if (cmd === 'pr' && sub === 'view') {
   // release bump・root-cleanup run の findOpenPrByHead が
   // 'gh pr view <branch> --json number,state,headRefName,files' として呼ぶ
-  // （常にbranch名で問い合わせる、PR番号ではない）。
+  // ほか、worker resumeのreview status取得はPR番号で問い合わせる。
   const key = args[2];
   const state = loadState();
   // Issue #354 issue-sync は PR 番号 + '--json body' で本文だけを読む（ブランチ名では引かない）。
@@ -270,19 +270,25 @@ if (cmd === 'pr' && sub === 'view') {
     process.stdout.write(JSON.stringify(payload));
     process.exit(0);
   }
-  const pr = (state.prsByBranch || {})[key];
+  const pr =
+    (state.prsByBranch || {})[key] ||
+    Object.values(state.prsByBranch || {}).find((candidate) => String(candidate.number) === String(key));
   if (!pr) {
     process.stderr.write('gh-stub: no PR found for ' + key + '\\n');
     process.exit(1);
   }
-  process.stdout.write(
-    JSON.stringify({
-      number: pr.number,
-      state: pr.state,
-      headRefName: pr.headRefName,
-      files: pr.files,
-    }),
-  );
+  if (state.failPrReviewStatusView && (viewFields.includes('latestReviews') || viewFields.includes('comments'))) {
+    process.stderr.write('gh-stub: simulated review status view failure\\n');
+    process.exit(1);
+  }
+  const payload = {};
+  if (viewFields.includes('number')) payload.number = pr.number;
+  if (viewFields.includes('state')) payload.state = pr.state;
+  if (viewFields.includes('headRefName')) payload.headRefName = pr.headRefName;
+  if (viewFields.includes('files')) payload.files = pr.files;
+  if (viewFields.includes('latestReviews')) payload.latestReviews = pr.latestReviews || [];
+  if (viewFields.includes('comments')) payload.comments = pr.comments || [];
+  process.stdout.write(JSON.stringify(payload));
   process.exit(0);
 }
 
@@ -606,6 +612,8 @@ export interface GhStubBumpPr {
   state: string;
   headRefName: string;
   files: GhStubPrFile[];
+  latestReviews?: unknown[];
+  comments?: unknown[];
 }
 
 export interface GhStubState {
@@ -643,6 +651,7 @@ export interface GhStubState {
   failApiPaths?: string[];
   apiCalls?: { method: string; path: string }[];
   prCreateCalls?: { args: string[]; body: string | undefined }[];
+  failPrReviewStatusView?: boolean;
   // ---- Issue #196 release bump/tag/publish・Issue #208 root-cleanup run 検証用
   //      (gh pr view/list/merge, gh release view/create) ----
   prsByBranch?: Record<string, GhStubBumpPr>;
@@ -672,6 +681,8 @@ export interface GhStub {
   readState(): GhStubState;
   writeState(state: GhStubState): void;
   seedPrList(branch: string, prs: unknown[]): void;
+  seedPrReviews(prNumber: number, reviews: unknown[]): void;
+  seedPrComments(prNumber: number, comments: unknown[]): void;
   /** doctor の「GitHub labels同期」検査（`gh label list`）向けに、実リポジトリに存在するラベルを
    * 直接投入する（Issue #272）。`label create` を経由せず、既存ラベルが定義と食い違う状態や、
    * 定義の一部が欠けている状態を直接再現するために使う。 */
@@ -741,6 +752,20 @@ export function createGhStub(baseDir: string): GhStub {
     seedPrList(branch: string, prs: unknown[]): void {
       const state = this.readState();
       state.prs[branch] = prs;
+      this.writeState(state);
+    },
+    seedPrReviews(prNumber: number, reviews: unknown[]): void {
+      const state = this.readState();
+      const pr = Object.values(state.prsByBranch ?? {}).find((candidate) => candidate.number === prNumber);
+      if (!pr) throw new Error(`gh-stub: PR #${prNumber} が登録されていません`);
+      pr.latestReviews = reviews;
+      this.writeState(state);
+    },
+    seedPrComments(prNumber: number, comments: unknown[]): void {
+      const state = this.readState();
+      const pr = Object.values(state.prsByBranch ?? {}).find((candidate) => candidate.number === prNumber);
+      if (!pr) throw new Error(`gh-stub: PR #${prNumber} が登録されていません`);
+      pr.comments = comments;
       this.writeState(state);
     },
     seedLabels(labels: { name: string; color: string; description: string }[]): void {

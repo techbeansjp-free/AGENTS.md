@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import {
   createTmpRepo,
   FIXED_TIMESTAMP,
@@ -12,6 +12,7 @@ import {
   setHumanConfirmationBeforeImplementation,
 } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+import { reviewFilePath } from '../../src/lib/local-state.js';
 
 // coordination.backend: local での中核フロー（issue start → lease acquire → segment start →
 // gate review/publish → checkpoint → pr create → cleanup）を素通しで検証する。
@@ -327,6 +328,41 @@ test('segment start (spec, Issue #427): human_confirmation.before_implementation
   const segmentStart = runCli(['segment', 'start', 'ISSUE-7', 'spec'], { cwd: repo.dir });
   assert.equal(segmentStart.status, 0, segmentStart.stderr);
   assert.match(segmentStart.stdout, /role: spec_worker/);
+});
+
+test('segment start (local backend): gate reportのblocking findingがある場合だけreview_statusへ同梱する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-446', 'bugfix', 'local-review-status', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-446', 'design'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  const reportPath = reviewFilePath(repo.dir, '446', 'design');
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.writeFileSync(
+    reportPath,
+    stringify({
+      gate: {
+        blockers: [{ severity: 'blocking', origin: 'design', code: 'AC-3', evidence: ['コメント検出が未結線'] }],
+      },
+    }),
+  );
+
+  const withBlocker = runCli(['segment', 'start', 'ISSUE-446', 'design'], { cwd: repo.dir });
+  assert.equal(withBlocker.status, 0, withBlocker.stderr);
+  assert.match(withBlocker.stdout, /^review_status:/m);
+  assert.match(withBlocker.stdout, /mode: local/);
+  assert.match(withBlocker.stdout, /origin: design/);
+  assert.match(withBlocker.stdout, /コメント検出が未結線/);
+
+  fs.writeFileSync(reportPath, stringify({ gate: { blockers: [] } }));
+  const withoutBlocker = runCli(['segment', 'start', 'ISSUE-446', 'design'], { cwd: repo.dir });
+  assert.equal(withoutBlocker.status, 0, withoutBlocker.stderr);
+  assert.doesNotMatch(withoutBlocker.stdout, /^review_status:/m);
 });
 
 test('doctor (local backend): git/リポジトリ/configの検査がすべてOKになる', async (t) => {
