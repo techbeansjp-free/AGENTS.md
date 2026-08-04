@@ -25,7 +25,7 @@ export async function templates(args: string[]): Promise<number> {
     const source = resolveAsset(path.join('templates', 'github', '.github'), targetDir);
     const dest = path.join(targetDir, '.github');
 
-    const results = copyTreeMirror(source, dest);
+    const results = copyTreeMirror(source, dest, { root: targetDir });
     return ok(results.map((r) => `${r.action}: ${r.path}`).join('\n') || '(同期対象なし)');
   });
 }
