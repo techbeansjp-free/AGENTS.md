@@ -131,6 +131,86 @@ test('upgrade: 展開済みworkflowのlocal customizationを保持して標準as
   assert.notEqual(fs.readFileSync(version, 'utf8'), '0.0.1\n');
 });
 
+// Issue #352: 再設計以前（Issue #157〜#188, PR #191）の旧世代アセットが残留した状態を模し、
+// upgradeが検知・警告することを確認する（サイレント残留の禁止 = AGENTS.md I8）。
+
+test('upgrade: 旧世代の.agent-skill-chain/source/が残留している場合は警告する', (t) => {
+  const targetDir = mkScratch('upgrade-legacy-source');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const legacySourceDir = path.join(targetDir, '.agent-skill-chain', 'source', 'boot');
+  fs.mkdirSync(legacySourceDir, { recursive: true });
+  fs.writeFileSync(path.join(legacySourceDir, 'CORE.md'), '# legacy core\n');
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /警告: 再設計以前の旧世代アセットが検知されました/);
+  assert.match(result.stdout, /\.agent-skill-chain\/source\//);
+  // 検知のみで削除はしない（非破壊）
+  assert.equal(fs.existsSync(path.join(legacySourceDir, 'CORE.md')), true);
+});
+
+test('upgrade: 単体ファイルの旧.claude/hooks/PreToolUse.shが残留している場合は警告する', (t) => {
+  const targetDir = mkScratch('upgrade-legacy-hook-file');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const legacyHookDir = path.join(targetDir, '.claude', 'hooks');
+  fs.mkdirSync(legacyHookDir, { recursive: true });
+  fs.writeFileSync(path.join(legacyHookDir, 'PreToolUse.sh'), '#!/bin/sh\n# legacy hook\n');
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /警告: 再設計以前の旧世代アセットが検知されました/);
+  assert.match(result.stdout, /\.claude\/hooks\/PreToolUse\.sh/);
+  // 検知のみで削除はしない（非破壊）
+  assert.equal(fs.existsSync(path.join(legacyHookDir, 'PreToolUse.sh')), true);
+});
+
+test('upgrade: .claude/settings.jsonに旧hookパスへの参照が残っている場合は警告する', (t) => {
+  const targetDir = mkScratch('upgrade-legacy-settings-ref');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const settingsDir = path.join(targetDir, '.claude');
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify(
+      {
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [{ type: 'command', command: '.claude/hooks/PreToolUse.sh' }] },
+          ],
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /警告: 再設計以前の旧世代アセットが検知されました/);
+  assert.match(result.stdout, /settings\.json.*旧hookパスへの参照/);
+});
+
+test('upgrade: 現行方式のenforce onで配線済みの場合は旧世代警告を出さない', (t) => {
+  const targetDir = mkScratch('upgrade-current-enforce');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+  assert.equal(runCli(['enforce', 'on', targetDir]).status, 0);
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /警告: 再設計以前の旧世代アセットが検知されました/);
+});
+
 test('upgrade後のsetup github再実行でも本体専用release workflowを新規配布しない', (t) => {
   const scratchDir = mkScratch('upgrade-release-exclusion-scratch');
   t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
