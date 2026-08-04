@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0025
-status: proposed
+status: accepted
 title: resumeしたセグメント作業ワーカーへの既存レビューフィードバック検出は「reviewer毎の最新state」と「直近commit以降のコメント」を機械的基準とする
 tags: [worker-resume, review-status, github-backend, i5-progression-role-purity]
 supersedes: []
