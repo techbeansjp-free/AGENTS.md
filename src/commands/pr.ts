@@ -26,6 +26,9 @@ const MERGE_USAGE = `
 引数はすべて \`gh pr merge\` へ透過的に渡す（--squash・--admin・--delete-branch等、
 既存のマージ方式・オプションをそのまま利用できる）。
 
+\`.agent-skill-chain/config/agent-skill-chain.yaml\` の \`merge.autonomous\` が true
+（明示opt-in）でない限り、実際のマージは実行せず日本語メッセージで停止する（既定 false）。
+
 マージ成功後、main worktree（repoRoot()が指す共通作業ツリー。default branchを
 チェックアウトしている前提）のローカルブランチを origin/<default-branch> へ
 fast-forward同期する（'git fetch origin <default-branch>' + 'git merge --ff-only'相当）。
@@ -250,6 +253,17 @@ export async function merge(args: string[]): Promise<number> {
     }
 
     const root = repoRoot();
+    const config = loadConfig(root);
+    if (config.merge?.autonomous !== true) {
+      return fail(
+        [
+          '進行役によるPRマージは、人間の明示的な確認を得てから実行するのが既定です。このPRをマージしてよいか、まず人間に確認してください。',
+          '人間がこの場でマージを承認した場合は、`gh pr merge` を直接実行するか、そのマージを代行して構いません（本コマンド自体は依然として拒否しますが、`gh pr merge` を直接呼ぶことは制限しません）。',
+          '複数PRにわたる自走的なマージ運用が既に人間から許可されている場合は、`.agent-skill-chain/config/agent-skill-chain.yaml` の `merge.autonomous: true` を設定することで、以後このコマンド自体でもマージできるようになります。',
+        ].join('\n'),
+      );
+    }
+
     const result = gh(['pr', 'merge', ...args], root);
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);

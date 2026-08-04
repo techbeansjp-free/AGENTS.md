@@ -58,6 +58,30 @@ npx github:techbeansjp-free/AGENTS.md uninstall [target_dir] [--dry-run]  # 安�
 
 初期値は配備先の `.agent-skill-chain/config/agent-skill-chain.yaml`。`coordination.backend`（`github` | `local`）でバックエンドを切り替える。プロジェクト固有の追加ルールは `.agent-skill-chain/project/`（`manifest.yaml` + `RULES.md`）に置く。詳細は [AGENTS.md §設定](AGENTS.md) および [AGENTS.md §プロジェクト固有ポリシー](AGENTS.md)。
 
+### 自走・承認ポリシー
+
+既定では、次の2箇所で人間の明示的な確認を要求する。
+
+- 実装セグメントの着手（`segment start <issue_id> implementation`、`.agent-skill-chain/scripts/worker-launch.sh` 経由の全アダプタが対象）
+- PRマージの実行（`agent-skill-chain pr merge`）
+
+いずれも、確認を得ずに実行しようとすると日本語のエラーメッセージで停止する。運用上の経路は2つある。
+
+1. **その場限りの許可**: セッション中に人間が「自走して」等、明示的にその作業の続行を指示した場合、エージェントは設定ファイルを書き換えずにその場の許可として従ってよい。
+2. **恒久的な自走への opt-in**: 複数 Issue・複数 PR にわたり毎回の確認を省略したい場合のみ、`.agent-skill-chain/config/agent-skill-chain.yaml` の該当フラグを明示的に変更する。
+
+```yaml
+# 実装セグメント着手前の人間確認を省略する（既定 true＝要求する）
+human_confirmation:
+  before_implementation: false
+
+# PRマージ（agent-skill-chain pr merge コマンド自体）の自動実行を許可する（既定 false＝拒否する）
+merge:
+  autonomous: true
+```
+
+設計根拠（`autonomy: gated | full` との違い、安全側ラチェットI8等）は [AGENTS.md](AGENTS.md) を参照。
+
 ## 開発に参加する
 
 このリポジトリ自身の開発（CLI 本体の実装・テスト）については [CONTRIBUTING.md](CONTRIBUTING.md) を参照。

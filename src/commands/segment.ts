@@ -14,9 +14,13 @@ const USAGE = `
 issue_id: ISSUE-<番号> 形式のIssue ID
 segment:  spec|design|implementation|validation
 
+segment が implementation の場合、\`.agent-skill-chain/config/agent-skill-chain.yaml\` の
+\`human_confirmation.before_implementation\` が明示的に false でない限り（既定 true）、
+role_contractを返す前に日本語メッセージで停止する。
+
 出力:
   成功時: 終了コード0。起動したワーカーの役割名・role_contractを標準出力へ。
-  失敗時: 終了コード1以上。writer lease未取得等の理由を標準エラー出力へ。
+  失敗時: 終了コード1以上。writer lease未取得・人間確認未取得（implementationのみ）等の理由を標準エラー出力へ。
 `;
 
 const SEGMENT_TO_ROLE: Record<string, string> = {
@@ -65,6 +69,19 @@ export async function start(args: string[]): Promise<number> {
     const root = repoRoot();
     const config = loadConfig(root);
     const now = new Date().toISOString();
+
+    // Issue #427: 実装セグメントの着手は既定で人間の明示的な確認を要求する（`merge.autonomous`と
+    // 同じ精神の独立した opt-in、`autonomy: gated | full` とは別軸）。role_contractを返す前に
+    // 早期リターンで停止する。spec/design/validationセグメントはこのゲートの対象外。
+    if (segment === 'implementation' && config.human_confirmation?.before_implementation !== false) {
+      return fail(
+        [
+          '実装セグメントの着手には人間レビューが必要です。設計内容（DESIGN.md/PLAN.md）についてまず人間に確認を取ってください。',
+          '人間がこの場で着手を承認した場合は、このコマンドを呼ばず直接ワーカーを起動して構いません。',
+          '複数Issueにわたる自走的な運用が既に人間から許可されている場合は、`.agent-skill-chain/config/agent-skill-chain.yaml` の `human_confirmation.before_implementation: false` を設定してください。',
+        ].join('\n'),
+      );
+    }
 
     const hasActiveLease =
       config.coordination.backend === 'local'

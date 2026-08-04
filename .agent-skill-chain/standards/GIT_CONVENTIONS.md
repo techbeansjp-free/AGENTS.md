@@ -66,3 +66,16 @@ worktree を直接 `rm -rf` で削除してはならない。削除は必ず `.a
 2. 進行役自身が古いビルド済み `bin/agents-md.js` のまま `doctor` 等を実行し、誤った（古い）判定結果を得る。
 
 `agent-skill-chain pr merge` は `gh pr merge` 成功後に、main worktree に対して `git fetch origin <default-branch>` と fast-forward マージ（`git pull --ff-only` 相当）を自動実行し、この乖離を都度解消する。main worktree が default branch をチェックアウトしていない・fast-forward 不能なコンフリクトがある等で同期に失敗した場合は、マージ結果自体は巻き戻さず、非 0 終了コードと日本語のエラーメッセージで手動対応を促す。
+
+## PRマージの実行主体（`merge.autonomous`）
+
+`agent-skill-chain pr merge` コマンド自体によるPRマージの既定は、人間の明示的な確認を経ることである。`.agent-skill-chain/config/agent-skill-chain.yaml` の `merge.autonomous` が `true`（明示的な opt-in）でない限り、`pr merge` は実際の `gh pr merge` 実行を一切行わず、日本語のエラーメッセージで停止する。このメッセージは「設定変更が必須」を意味するのではなく、次の2つの経路のいずれかを進行役へ促すものである。
+
+1. その場で人間にこのPRをマージしてよいか確認する。人間が承認すれば、`gh pr merge` を人間が直接実行するか、進行役が代行してよい（`pr merge` コマンド自体は拒否したままでよく、`gh pr merge` を直接呼ぶことは制限しない）。
+2. 複数PRにわたる自走的なマージ運用が既に人間から包括的に許可されている場合は、`merge.autonomous: true` を設定することで、以後 `pr merge` コマンド自体でもマージできるようにする。
+
+`autonomy: gated | full`（レビュー厳格度の制御、AGENTS.md §不変条件I8）とは完全に独立した別軸であり、混同しない。`merge.autonomous` はマージ実行主体（誰が `gh pr merge` を呼ぶか）だけを制御する。
+
+## 実装セグメント着手の人間確認（`human_confirmation.before_implementation`）
+
+`merge.autonomous` と同じ精神の独立した opt-in で、`segment start <issue_id> implementation`（`.agent-skill-chain/scripts/worker-launch.sh` 経由の全アダプタが対象）による実装セグメント着手を制御する。`.agent-skill-chain/config/agent-skill-chain.yaml` の `human_confirmation.before_implementation` が明示的に `false` でない限り（既定は未設定＝要求する）、role_contract を返す前に日本語のエラーメッセージで停止し、経路は「PRマージの実行主体」節の1・2と同型（その場で人間へ確認する、または包括的な許可が既にある場合は設定へ明示する）。真偽の極性が `merge.autonomous` と逆であることに注意（本フィールドは「確認要否」、`merge.autonomous` は「自動実行の許可」）。spec/design/validation セグメントはこのゲートの対象外。設定方法の実用リファレンスは README.md の「自走・承認ポリシー」節。

@@ -17,7 +17,7 @@
 | I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR review証跡・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | role capability・credential分離、protected-base実行attestation、main worktree clean チェック、ワーカー報告固定スキーマ（`.agent-skill-chain/schemas/worker-report.schema.yaml`） |
 | I6 正準モデル | 調整状態は選択された Coordination Backend のプリミティブにのみ存在し、GitHub Flow 標準語彙で記述する。複数の Coordination Backend 間で同一 Issue の状態を同期しない | GitHub モード：`.agent-skill-chain/scripts/lint-vocab.sh` + Check Run 正本。ローカルモード：`state.yaml` が正本 |
 | I7 仕様⇔検証の追跡 | 全 AC-ID は最低1つの検証方法(`automated\|manual\|hybrid`)と証跡に対応する。承認後の AC 変更はゲート再通過を強制する | `.agent-skill-chain/ci/verify-ac-coverage.sh`、SPEC 差分検知によるゲート無効化（A-6 相当） |
-| I8 安全側ラチェット | autonomy の降格は自動、昇格は人間の明示行為のみ。既定は `autonomy:gated`。`risk != normal`（`unclassified` 含む）OR `autonomy == full` → `review_profile: strict` | Actions の状態遷移規則（昇格 workflow が存在しないことを含め検査） |
+| I8 安全側ラチェット | autonomy の降格は自動、昇格は人間の明示行為のみ。既定は `autonomy:gated`。`risk != normal`（`unclassified` 含む）OR `autonomy == full` → `review_profile: strict` | Actions の状態遷移規則（昇格 workflow が存在しないことを含め検査）。実装着手前・PRマージ前の人間確認は `autonomy` と独立の別軸設定（`human_confirmation.before_implementation`・`merge.autonomous`、既定は確認要求）で別途検査 |
 
 ## Coordination Backend
 
