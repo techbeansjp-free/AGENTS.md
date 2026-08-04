@@ -1128,6 +1128,178 @@ test('verify adr (AC-8): adr finalize CLI経由の正規accepted化commitは手�
   assert.equal(result.status, 0, result.stderr);
 });
 
+// ---- verify spec-bdd（Issue #273） ----
+
+function specBddFixture(overrides: { given?: string; when?: string; then?: string; verification?: string; summary?: string } = {}): string {
+  return [
+    '# SPEC: サンプル',
+    '',
+    `#### AC-1: ${overrides.summary ?? 'ログイン成功時にダッシュボードへ遷移する'}`,
+    '',
+    `- Given: ${overrides.given ?? 'ユーザーが有効な認証情報を持つ'}`,
+    `- When: ${overrides.when ?? 'ログインフォームを送信する'}`,
+    `- Then: ${overrides.then ?? 'ダッシュボード画面へ遷移する'}`,
+    `- 検証方法見込み: ${overrides.verification ?? '\`automated\`'}`,
+    '',
+  ].join('\n');
+}
+
+test('verify spec-bdd: Given/When/Then/検証方法見込みが実内容で埋まっていれば成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given/When: 全フィールドが実内容で埋まったSPEC.md
+  const specPath = path.join(repo.dir, 'SPEC.md');
+  fs.writeFileSync(specPath, specBddFixture());
+
+  // Then: 成功する
+  const result = runCli(['verify', 'spec-bdd', specPath], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('verify spec-bdd: テンプレートのプレースホルダがGiven/When/Then/検証方法見込みに残っていると検出する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: SPEC.mdテンプレート自体（<...>プレースホルダが未置換のまま）
+  const specPath = path.join(repo.dir, 'SPEC.md');
+  fs.copyFileSync(path.join(repo.dir, '.agent-skill-chain', 'templates', 'issue', 'SPEC.md'), specPath);
+
+  // When/Then: AC-1・AC-2それぞれのGiven/When/Then/検証方法見込み・要約すべてがプレースホルダとして検出される
+  const result = runCli(['verify', 'spec-bdd', specPath], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /AC-1 の要約がプレースホルダのまま/);
+  assert.match(result.stderr, /AC-1 の Given が未記入またはプレースホルダのままです/);
+  assert.match(result.stderr, /AC-1 の When が未記入またはプレースホルダのままです/);
+  assert.match(result.stderr, /AC-1 の Then が未記入またはプレースホルダのままです/);
+  assert.match(result.stderr, /AC-1 の検証方法見込みが未記入またはプレースホルダのままです/);
+  assert.match(result.stderr, /AC-2 の要約がプレースホルダのまま/);
+});
+
+test('verify spec-bdd: 検証方法見込みがautomated|manual|hybrid以外だと検出する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const specPath = path.join(repo.dir, 'SPEC.md');
+  fs.writeFileSync(specPath, specBddFixture({ verification: '`unknown-mode`' }));
+
+  const result = runCli(['verify', 'spec-bdd', specPath], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /検証方法見込みは automated\|manual\|hybrid のいずれかである必要があります/);
+});
+
+test('verify spec-bdd: AC-IDが1つも無いSPEC.mdはエラーになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const specPath = path.join(repo.dir, 'SPEC.md');
+  fs.writeFileSync(specPath, '# SPEC: サンプル\n\n本文のみでAC-IDが無い。\n');
+
+  const result = runCli(['verify', 'spec-bdd', specPath], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /AC-ID（#### AC-N: \.\.\.）が1つも見つかりません/);
+});
+
+test('verify spec-bdd: 存在しないパスを指定するとエラーになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['verify', 'spec-bdd', path.join(repo.dir, 'NOT_FOUND.md')], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /が見つかりません/);
+});
+
+// ---- verify design-diagram（Issue #273） ----
+
+test('verify design-diagram: 判断が不要で根拠が記載されていれば図が無くても成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const designPath = path.join(repo.dir, 'DESIGN.md');
+  fs.writeFileSync(
+    designPath,
+    [
+      '# DESIGN: サンプル',
+      '',
+      '### 図示要否の判断',
+      '',
+      '- 判断: `不要`',
+      '- 根拠: 依存関係は1件のみ、状態遷移なし、責務境界も1つのみのため図示は不要と判断した。',
+      '',
+    ].join('\n'),
+  );
+
+  const result = runCli(['verify', 'design-diagram', designPath], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('verify design-diagram: 判断が要でもmermaidフェンスが無いと検出する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const designPath = path.join(repo.dir, 'DESIGN.md');
+  fs.writeFileSync(
+    designPath,
+    ['# DESIGN: サンプル', '', '### 図示要否の判断', '', '- 判断: `要`', '- 根拠: 依存関係が4件あるため図示が必要。', ''].join('\n'),
+  );
+
+  const result = runCli(['verify', 'design-diagram', designPath], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /mermaid コードフェンス/);
+});
+
+test('verify design-diagram: 判断が要でmermaidフェンスがあれば成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const designPath = path.join(repo.dir, 'DESIGN.md');
+  fs.writeFileSync(
+    designPath,
+    [
+      '# DESIGN: サンプル',
+      '',
+      '### 図示要否の判断',
+      '',
+      '- 判断: `要`',
+      '- 根拠: 依存関係が4件あるため図示が必要。',
+      '',
+      '```mermaid',
+      'graph LR',
+      '  A --> B',
+      '```',
+      '',
+    ].join('\n'),
+  );
+
+  const result = runCli(['verify', 'design-diagram', designPath], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('verify design-diagram: テンプレート自体（プレースホルダ未置換）は判断・根拠の両方を検出する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const designPath = path.join(repo.dir, 'DESIGN.md');
+  fs.copyFileSync(path.join(repo.dir, '.agent-skill-chain', 'templates', 'issue', 'DESIGN.md'), designPath);
+
+  const result = runCli(['verify', 'design-diagram', designPath], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /図示要否の判断（要\|不要）が未記入またはプレースホルダのままです/);
+  assert.match(result.stderr, /図示要否の根拠が未記入またはプレースホルダのままです/);
+});
+
+test('verify design-diagram: 「### 図示要否の判断」セクション自体が無いと検出する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const designPath = path.join(repo.dir, 'DESIGN.md');
+  fs.writeFileSync(designPath, '# DESIGN: サンプル\n\n本文のみでセクションが無い。\n');
+
+  const result = runCli(['verify', 'design-diagram', designPath], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /'### 図示要否の判断' セクションが見つかりません/);
+});
+
 // ---- verify ac-coverage ----
 
 test('verify ac-coverage: SPEC.mdとVALIDATION.mdが完全対応していれば成功する', async (t) => {
