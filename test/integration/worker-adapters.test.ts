@@ -783,3 +783,70 @@ test('lease acquire (local backend): 同issue内の他segmentコンフリクト�
   const acquireDesign = runCli(['lease', 'acquire', 'ISSUE-1', 'design'], { cwd: repo.dir });
   assert.equal(acquireDesign.status, 1, '1 Issueにつき同時1つのwriter leaseのみ許可されるため拒否されること');
 });
+
+// --- Issue #364 (1) codex workspace-write サンドボックスと共通 .git ------------------------
+
+test('codex launch_worker: linked worktreeの共通.gitディレクトリを追加の書込みrootとして渡し、push用の名前解決も許可する（Issue #364）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'codex');
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', PATH: `${stubDir}:${process.env.PATH}` });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(res.status, 0, res.stderr);
+
+  // worktree の .git は共通 .git を指すファイルにすぎず、commit が実際に書く実体は cwd の外に
+  // ある。その絶対パスが書込み root として渡らないと worker は index.lock を作れず I3 を満たせない。
+  const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+  }).trim();
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+
+  assert.ok(
+    argv.includes(`sandbox_workspace_write.writable_roots=["${commonDir}"]`),
+    `共通.gitディレクトリが書込みrootとして渡されること (argv=${argv})`,
+  );
+  assert.ok(
+    argv.includes('sandbox_workspace_write.network_access=true'),
+    `git pushの名前解決が遮断されないこと (argv=${argv})`,
+  );
+  assert.ok(argv.includes('workspace-write'), 'sandboxはworkspace-writeのままであること（緩和はrootの追加に限る）');
+  assert.ok(
+    !argv.includes('danger-full-access') && !argv.includes('--dangerously-bypass-approvals-and-sandbox'),
+    'サンドボックス自体を無効化する緩和を行わないこと',
+  );
+});
+
+// --- Issue #364 (2) $var 直後の非ASCII文字による変数名の取り込み --------------------------
+
+test('shellスクリプト全体: $var の直後に非ASCII文字を置かない（単バイトlocaleで変数名へ取り込まれ set -u 致命エラーになる。Issue #364）', () => {
+  // 例: "$reason（フェイルセーフ…" は LC_CTYPE が単バイトlocale（ja_JP.eucJP 等）のとき
+  // bash の識別子走査（isalnum）が先頭バイト 0xEF を英数字とみなし、未定義の変数名
+  // "reason\xef" として展開しようとする。set -u 配下では致命エラーとなり、シェルは
+  // その場で exit 1 する——I8 のフェイルセーフ経路自身が blocked 報告・lease 解放へ
+  // 到達できずに落ちるため、${var} と明示的に区切る。
+  const roots = ['.agent-skill-chain'];
+  const offenders: string[] = [];
+  const pattern = /\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]/;
+
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith('.sh')) {
+        fs.readFileSync(full, 'utf8')
+          .split('\n')
+          .forEach((line, i) => {
+            if (pattern.test(line)) offenders.push(`${path.relative(packageRoot(), full)}:${i + 1}: ${line.trim()}`);
+          });
+      }
+    }
+  };
+  for (const root of roots) walk(path.join(packageRoot(), root));
+
+  assert.deepEqual(offenders, [], `\$var の直後は ${'${var}'} と明示区切りにすること:\n${offenders.join('\n')}`);
+});

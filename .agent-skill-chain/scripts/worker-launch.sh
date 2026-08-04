@@ -69,7 +69,7 @@ ADAPTER="${ADAPTER:-human}"
 ADAPTER_FILE="$ADAPTERS_DIR/${ADAPTER}.sh"
 
 if [[ ! -f "$ADAPTER_FILE" ]]; then
-  echo "アダプタが見つかりません: $ADAPTER_FILE（worker.adapter=$ADAPTER）。まだ何も起動していないため error として扱います" >&2
+  echo "アダプタが見つかりません: ${ADAPTER_FILE}（worker.adapter=${ADAPTER}）。まだ何も起動していないため error として扱います" >&2
   exit 2
 fi
 
