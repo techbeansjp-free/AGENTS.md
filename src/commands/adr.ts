@@ -50,7 +50,9 @@ export async function finalize(args: string[]): Promise<number> {
     const adrPath = path.join(adrDir, candidates[0]);
     const adrRelPath = path.relative(entry.path, adrPath);
 
-    const designGate = tryReadYamlFile<GateReport>(reviewFilePath(root, number, 'design'));
+    const designGate = tryReadYamlFile<GateReport>(
+      reviewFilePath(root, number, 'design', config.coordination.backend),
+    );
     if (!designGate) {
       throw new CliError(`design gate の gate-report が見つかりません（先に design gate を publish してください）`);
     }
