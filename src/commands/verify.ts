@@ -20,6 +20,7 @@ import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { ROOT_ARTIFACT_FILES } from '../lib/root-artifacts.js';
+import { QUICK_EXEMPT_OUTPUTS, quickBlockedNotice, resolveQuickMode } from '../lib/quick-mode.js';
 import { ABSENT_ARTIFACT_DIGEST } from './gate.js';
 
 function violations(lines: string[]): number {
@@ -112,6 +113,12 @@ export async function docLength(args: string[]): Promise<number> {
 const ARTIFACTS_USAGE = `
 使い方: agent-skill-chain verify artifacts <issue_id> <segment>
 
+quick（軽量な変更）の Issue は SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md の存在要求を免除する。
+指定方法は GitHub モードでは Issue ラベル 'size:quick'、ローカルモードでは state.yaml の
+'size: quick'（既定 standard）。ただし risk が normal 以外の場合、または変更差分に
+docs/adr/・.agent-skill-chain/config/segments.yaml・AGENTS.md・.agent-skill-chain/schemas/ が
+含まれる場合は免除せず、理由を標準エラー出力へ示したうえで通常どおり成果物を要求する。
+
 出力: 0=当該セグメントの必須成果物は全て存在、1=欠落・不正segment・スタブ未実装
 `;
 // Issue #200: 「現在存在するか」だけでは、成果物ファイル自体を意図的に削除するIssue
@@ -183,7 +190,15 @@ export async function artifacts(args: string[]): Promise<number> {
     const def = loadSegments(root).segments.find((s) => s.id === segment);
     if (!def) return fail(`config/segments.yaml に segment '${segment}' が定義されていません`);
 
-    const missing = def.outputs.filter((output) => !checkOutputExists(entry.path, output));
+    // Issue #425: quick の判定入力はラベル/state.yaml のみで、免除対象である成果物ファイルには
+    // 一切依存しない（成果物の中にシグナルを置くと免除が原理的に発動しない循環になるため）。
+    const quick = resolveQuickMode(root, entry.path, number, config.coordination.backend);
+    if (quick.requested && !quick.exempt) {
+      process.stderr.write(`${quickBlockedNotice(quick)}\n`);
+    }
+    const outputs = quick.exempt ? def.outputs.filter((output) => !QUICK_EXEMPT_OUTPUTS.includes(output)) : def.outputs;
+
+    const missing = outputs.filter((output) => !checkOutputExists(entry.path, output));
     return violations(missing.map((o) => `segment '${segment}' の必須成果物が欠落しています: ${o}`));
   });
 }

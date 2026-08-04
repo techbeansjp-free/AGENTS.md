@@ -25,6 +25,11 @@ options（すべて任意。coordination.backend: local の場合のみ state.ya
   --title <str>          Issueのタイトル（state.yaml の title フィールドへ永続化）
   --request <str>        Issueの要求内容（本文）
   --request-file <path>  Issueの要求内容をファイルから読み込む（--request と同時指定不可）
+  --size <quick|standard> 変更規模（既定 standard）。quick は SPEC.md/DESIGN.md/PLAN.md/
+                         VALIDATION.md の存在要求を免除する（ISSUE-425）。免除は
+                         risk が normal かつ、変更差分に docs/adr/・
+                         .agent-skill-chain/config/segments.yaml・AGENTS.md・
+                         .agent-skill-chain/schemas/ を含まない場合のみ適用される。
 
 出力:
   成功時: 終了コード0。生成したブランチ名・worktreeパスを標準出力へ。
@@ -50,11 +55,13 @@ function parseStartArgs(args: string[]): {
   title?: string;
   request?: string;
   requestFile?: string;
+  size?: string;
 } {
   const positional: string[] = [];
   let title: string | undefined;
   let request: string | undefined;
   let requestFile: string | undefined;
+  let size: string | undefined;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--title') {
@@ -63,11 +70,13 @@ function parseStartArgs(args: string[]): {
       request = args[++i];
     } else if (arg === '--request-file') {
       requestFile = args[++i];
+    } else if (arg === '--size') {
+      size = args[++i];
     } else {
       positional.push(arg);
     }
   }
-  return { positional, title, request, requestFile };
+  return { positional, title, request, requestFile, size };
 }
 
 export async function start(args: string[]): Promise<number> {
@@ -76,13 +85,16 @@ export async function start(args: string[]): Promise<number> {
       printUsage(START_USAGE);
       return 0;
     }
-    const { positional, title, request, requestFile } = parseStartArgs(args);
+    const { positional, title, request, requestFile, size } = parseStartArgs(args);
     const [issueIdRaw, type, slug, issueCreatedAt] = positional;
     if (!issueIdRaw || !type || !slug || !issueCreatedAt) {
       throw new CliError('issue_id, type, slug, issue_created_at はすべて必須です');
     }
     if (request !== undefined && requestFile !== undefined) {
       throw new CliError('--request と --request-file は同時に指定できません');
+    }
+    if (size !== undefined && size !== 'quick' && size !== 'standard') {
+      throw new CliError(`--size は quick|standard のいずれかである必要があります: '${size}'`);
     }
     let resolvedRequest = request;
     if (requestFile !== undefined) {
@@ -137,6 +149,9 @@ export async function start(args: string[]): Promise<number> {
         id: issueIdRaw,
         ...(title !== undefined ? { title } : {}),
         ...(resolvedRequest !== undefined ? { request: resolvedRequest } : {}),
+        // ISSUE-425: 未指定時はフィールド自体を書かない（スキーマ既定の standard と同義）。
+        // 既存の state.yaml をそのまま妥当に保つための後方互換。
+        ...(size !== undefined ? { size } : {}),
         autonomy: config.autonomy.default,
         risk: config.risk.default,
         review_profile: reviewProfile,
