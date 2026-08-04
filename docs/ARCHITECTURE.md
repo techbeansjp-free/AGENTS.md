@@ -57,7 +57,7 @@ flowchart TD
 
 補足: 「手動ゲートレビュー」ノードはセグメントごとに任意実行できる（4回まで）。ゲート判定は必須ではないため、実行しないままマージへ進む経路も存在する。ゲートを実行した場合、`gate-reconcile.sh` が以後のpushで承認済み成果物のdigestを照合し、変化があれば当該ゲートと下流ゲートを無効化する（状態遷移図を参照）。
 
-補足: 「人間確認済みか」の2つの判定ノード（実装セグメント着手前・PRマージ前）は、いずれも既定で人間確認を要求する（`ImplGate`・`MergeGate` の「いいえ（既定）」経路）。人間がセッション中にその場で許可した場合はその1回限りの遂行として先へ進んでよく、`.agent-skill-chain/config/agent-skill-chain.yaml` の設定は変更しない。複数Issue・複数PRにわたり確認を省略したい場合のみ、`human_confirmation.before_implementation: false` / `merge.autonomous: true` を明示設定する（README.md §自走・承認ポリシー参照）。
+補足: 「人間確認済みか」の2つの判定ノード（実装セグメント着手前・PRマージ前）は、いずれも既定で人間確認を要求する（`ImplGate`・`MergeGate` の「いいえ（既定）」経路）。人間がセッション中にその場で許可した場合はその1回限りの遂行として先へ進んでよく、`.agent-skill-chain/config/agent-skill-chain.yaml` の設定は変更しない。複数Issue・複数PRにわたり確認を省略したい場合のみ、`human_confirmation.before_implementation: false` / `merge.autonomous: true` を明示設定する（README.md の「自走・承認ポリシー」節参照）。
 
 ## 2. シーケンス図
 
