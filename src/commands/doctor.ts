@@ -10,7 +10,7 @@ import { isHelp, printUsage, guard } from '../lib/cli-io.js';
 import { listWorktrees, worktreePathRegex, branchNameRegex, hasUncommittedChanges } from '../lib/worktree.js';
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { readYamlFile, tryReadYamlFile } from '../lib/yaml-io.js';
-import { leaseFilePath } from '../lib/local-state.js';
+import { leaseFilePath, LOCAL_STATE_ROOT_DIR_NAME } from '../lib/local-state.js';
 import type { WriterLease } from '../lib/github-lease.js';
 import { collectAdrRecords, checkAdrSymmetry } from '../lib/adr-consistency.js';
 
@@ -107,6 +107,37 @@ export function checkGithubLabelsSync(root: string): Check {
   }
 }
 
+/**
+ * Issue #399: coordination.backend: github のプロジェクトで、ローカルCoordination Backend専用の
+ * Issue毎データ配置（`src/lib/local-state.ts` の `issueDir()`。root直下 `issues/`）がgit管理下に
+ * 存在しないかを検査する。GitHubモードの調整状態の正本はCheck Runのみであり（I6）、このディレクトリが
+ * 追跡されている状態はAGENTS.md「ディレクトリ構成」節が列挙しないroot直下パスへの二重正本化を意味する
+ * （過去にPR #238で実際に発生し、`issues/<番号>/.agent-skill-chain/reviews/*.yaml` 等15件分が
+ * 恒久的にcommitされていた）。
+ */
+export function checkTrackedLocalStateAtRoot(root: string): Check {
+  const label = 'root直下のcoordination状態追跡';
+  try {
+    const tracked = git(['ls-files', '--', `${LOCAL_STATE_ROOT_DIR_NAME}/`], root);
+    if (tracked.status !== 0) {
+      return { label, ok: false, reason: `git ls-files に失敗しました: ${tracked.stderr.trim()}` };
+    }
+    const files = tracked.stdout.split('\n').filter((line) => line.trim().length > 0);
+    return {
+      label,
+      ok: files.length === 0,
+      reason:
+        files.length === 0
+          ? undefined
+          : `GitHubモードなのに ${LOCAL_STATE_ROOT_DIR_NAME}/ 配下がgit管理下です（${files.length}件、例: ${files
+              .slice(0, 5)
+              .join(', ')}）。git rm -r ${LOCAL_STATE_ROOT_DIR_NAME}/ で解消できます`,
+    };
+  } catch (error) {
+    return { label, ok: false, reason: (error as Error).message };
+  }
+}
+
 export async function run(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -162,6 +193,8 @@ export async function run(args: string[]): Promise<number> {
         }
 
         if (config.coordination.backend === 'github') {
+          checks.push(checkTrackedLocalStateAtRoot(root));
+
           const ghOk = commandExists('gh');
           checks.push({ label: 'gh CLI', ok: ghOk, reason: ghOk ? undefined : 'gh コマンドが見つかりません' });
           if (ghOk) {

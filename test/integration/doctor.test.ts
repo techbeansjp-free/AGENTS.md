@@ -531,3 +531,42 @@ test('doctor D5: docs/adr/が存在しなければ ADR整合性 がOKになる',
   const result = runCli(['doctor'], { cwd: repo.dir });
   assert.match(result.stdout, /OK {2}ADR整合性/);
 });
+
+// ---- Issue #399: root直下のcoordination状態追跡 ----
+// coordination.backend: github のプロジェクトで、ローカルCoordination Backend専用のIssue毎データ
+// 配置（root直下 `issues/`）がgit管理下に紛れ込んでいないかを検査する（過去にPR #238で実際に
+// `issues/<番号>/.agent-skill-chain/reviews/*.yaml` がgit管理下へ誤commitされた事故の再発検知）。
+
+test('doctor: coordination.backend=github でroot直下issues/がgit管理下に無ければ root直下のcoordination状態追跡 がOKになる', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.match(result.stdout, /OK {2}root直下のcoordination状態追跡/);
+});
+
+test('doctor: coordination.backend=github でroot直下issues/配下がgit管理下にあると root直下のcoordination状態追跡 がNGになり対象ファイルを列挙する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+
+  // Given: PR #238のような事故を模擬し、ローカルCoordination Backend専用のgate-reportをroot直下へ
+  // git管理下として誤って追加する
+  const reviewPath = path.join(repo.dir, 'issues', '399', '.agent-skill-chain', 'reviews', 'design.yaml');
+  fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
+  fs.writeFileSync(reviewPath, 'gate:\n  id: design\n');
+  execFileSync('git', ['add', 'issues/399/.agent-skill-chain/reviews/design.yaml'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'chore: 事故を模擬したcommit'], { cwd: repo.dir, stdio: 'pipe' });
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}root直下のcoordination状態追跡: .*issues\/399\/\.agent-skill-chain\/reviews\/design\.yaml/);
+  assert.match(result.stdout, /git rm -r issues\//);
+});
+
+test('doctor: coordination.backendがlocalの場合は root直下のcoordination状態追跡 検査自体が実行されない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const result = runCli(['doctor'], { cwd: repo.dir });
+  assert.doesNotMatch(result.stdout, /root直下のcoordination状態追跡/);
+});

@@ -578,7 +578,7 @@ export async function review(args: string[]): Promise<number> {
     const outcome = validateAgainstSchema('gate-report', scaffold, root);
     if (!outcome.valid) return fail(`スキャフォールド生成に失敗しました: ${outcome.errors.join('; ')}`);
 
-    const reportPath = reviewFilePath(root, number, gateId);
+    const reportPath = reviewFilePath(root, number, gateId, config.coordination.backend);
     writeYamlFileAtomic(reportPath, scaffold);
 
     const reviewerCount = config.review[profile].reviewer_count;
@@ -618,11 +618,12 @@ export async function publish(args: string[]): Promise<number> {
     }
 
     // ローカルモードでは reviews/<gate>.yaml が正本。GitHubモードでも Check Run（信号）とは別に
-    // 同じ構造化レコードを issues/<n>/.agent-skill-chain/reviews/<gate>.yaml へ併記する。
-    // gate-report.schema.yaml 準拠の approved_artifacts.digest は Check Run の title/summary には
-    // 収まらず、後続コマンド（adr finalize 等）が Coordination Backend を問わず参照できる場所が
-    // 必要なため。
-    const dest = reviewFilePath(root, number, report.gate.id);
+    // 同じ構造化レコードを一時記録する。gate-report.schema.yaml 準拠の approved_artifacts.digest は
+    // Check Run の title/summary には収まらず、後続コマンド（adr finalize 等）が Coordination
+    // Backend を問わず参照できる場所が必要なため。GitHubモードではこの一時記録先はリポジトリ
+    // 作業ツリー内（root直下 `issues/`）ではなく os.tmpdir() 配下（Issue #399。過去にPR #238で
+    // このパスがgit管理下へ誤commitされた実例がある）。
+    const dest = reviewFilePath(root, number, report.gate.id, config.coordination.backend);
     writeYamlFileAtomic(dest, report);
 
     if (config.coordination.backend === 'local') {
@@ -813,7 +814,13 @@ export async function reconcile(args: string[]): Promise<number> {
     const githubBackend = config.coordination.backend === 'github';
 
     for (const gateId of SEGMENTS) {
-      const reportPath = reviewFilePath(root, number, gateId);
+      // Issue #399: 書込み先（このgateIdのreconcile結果をローカルへ併記する場所）は
+      // `gate review`/`gate publish` と同じ規約でbackendに応じて分岐させる（GitHubモードは
+      // os.tmpdir() 配下、root直下 `issues/` は使わない）。`readReconcileReport` がGitHubモードで
+      // 読むのはこの実際の書込み先ではなくgit ref（PR head の read-only git object）内の
+      // ローカル規約（root相対）の仮想パスであり、両者は独立している（`readReconcileReport`
+      // 自身の実装を参照）。
+      const reportPath = reviewFilePath(root, number, gateId, config.coordination.backend);
       const report = readReconcileReport(root, number, gateId, targetSha, githubBackend);
       if (!report) continue; // このゲートは未レビュー・未発行
 
@@ -1822,7 +1829,7 @@ export async function reviewerContext(args: string[]): Promise<number> {
     const config = loadConfig(root);
     const configuredAdapter = config.review.adapter ?? 'claude';
     const worktree = findIssueWorktree(root, config, number);
-    const baseDir = worktree ? worktree.path : issueDir(root, number);
+    const baseDir = worktree ? worktree.path : issueDir(root, number, config.coordination.backend);
     // reviewer policy/classifierはprotected base（main worktree）をtrust rootとし、Issue worktreeが
     // 同じPRで変更したcandidate policyを自己承認に使わない。
     const policyRoot = root;
