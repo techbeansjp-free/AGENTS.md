@@ -1,7 +1,8 @@
 # 正本: AGENTS.md §不変条件I1・I4・I6・I7 / §参照・コメントの陳腐化防止
 #
 # PRへのpushごとに、ブランチ名・worktreeパス・テンプレート同期・用語・参照規約・ADR・成果物・
-# AC対応の各検査（.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
+# SPEC.mdのBDD記載充足・DESIGN.mdの図示要否判断記載・AC対応の各検査
+# （.agent-skill-chain/ci/verify-*.sh・.agent-skill-chain/scripts/lint-*.sh・
 # .agent-skill-chain/scripts/adr-lint.sh）を実行する。各スクリプトは agent-skill-chain CLI
 # （src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパーであるため、検査本体の前に
 # ビルドを行う。agent-skill-chain CLI自体の開発リポジトリ用テストスイート（npm test）は
@@ -88,6 +89,20 @@ jobs:
             [[ -z "$segment" ]] && continue
             ./.agent-skill-chain/ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" "$segment"
           done
+
+      - name: verify-spec-bdd
+        if: steps.ctx.outputs.skip_checks != 'true' && contains(steps.segments.outputs.values, 'spec')
+        run: |
+          if [[ -f SPEC.md ]]; then
+            ./.agent-skill-chain/ci/verify-spec-bdd.sh SPEC.md
+          fi
+
+      - name: verify-design-diagram
+        if: steps.ctx.outputs.skip_checks != 'true' && contains(steps.segments.outputs.values, 'design')
+        run: |
+          if [[ -f DESIGN.md ]]; then
+            ./.agent-skill-chain/ci/verify-design-diagram.sh DESIGN.md
+          fi
 
       - name: verify-ac-coverage
         if: steps.ctx.outputs.skip_checks != 'true' && contains(steps.segments.outputs.values, 'validation')

@@ -76,6 +76,8 @@ export const routes: Record<string, Handler> = {
   'verify artifacts': verify.artifacts,
   'verify branch-name': verify.branchName,
   'verify doc-length': verify.docLength,
+  'verify spec-bdd': verify.specBdd,
+  'verify design-diagram': verify.designDiagram,
   'verify gate-report': verify.gateReport,
   'verify root-clean': verify.rootClean,
   'verify template-sync': verify.templateSync,

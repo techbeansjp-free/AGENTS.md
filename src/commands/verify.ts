@@ -337,6 +337,131 @@ export async function adr(args: string[]): Promise<number> {
   });
 }
 
+// ---- markdown見出しセクション分割（spec-bdd・design-diagram共通） ----
+//
+// `#{1,6} ` で始まる行を見出しとして、見出し行自体とそれに続く本文行（次の見出し行の直前まで）を
+// 1セクションとして返す。見出しの前に本文が無い場合（ファイル先頭）は heading: '' のセクションに
+// 集約される（呼び出し側は空heading セクションを無視する）。
+interface MdSection {
+  heading: string;
+  body: string[];
+}
+function splitMdSections(text: string): MdSection[] {
+  const sections: MdSection[] = [{ heading: '', body: [] }];
+  for (const line of text.split('\n')) {
+    if (/^#{1,6}\s/.test(line)) {
+      sections.push({ heading: line, body: [] });
+    } else {
+      sections[sections.length - 1].body.push(line);
+    }
+  }
+  return sections;
+}
+
+// `<...>` 形式の未置換プレースホルダ（templates/issue/*.md が使う実際の記法）。
+const UNFILLED_PLACEHOLDER_RE = /<[^<>\n]*>/;
+
+// ---- spec-bdd ----
+const SPEC_BDD_USAGE = `
+使い方: agent-skill-chain verify spec-bdd <spec_md_path>
+
+SPEC.md の各 AC-ID（#### AC-N: ...）について、Given/When/Then/検証方法見込みが
+テンプレートのプレースホルダ（<...>）のまま残っていないか、値が空でないかを検査する。
+検証方法見込みは automated|manual|hybrid のいずれか（バッククォート囲み可）であることも検査する。
+
+出力: 0=全AC-IDのBDD記載が充足、1=プレースホルダ残存・空欄・AC-ID自体の不在
+`;
+function extractField(body: string[], label: string): string | undefined {
+  const re = new RegExp(`^-\\s*${label}:\\s*(.*)$`);
+  for (const line of body) {
+    const m = re.exec(line.trim());
+    if (m) return m[1].trim();
+  }
+  return undefined;
+}
+export async function specBdd(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) return printUsage(SPEC_BDD_USAGE), 0;
+    const [specPath] = args;
+    if (!specPath) throw new CliError('spec_md_path は必須です');
+    if (!fs.existsSync(specPath)) return fail(`${specPath} が見つかりません`);
+    const text = fs.readFileSync(specPath, 'utf8');
+    const sections = splitMdSections(text);
+    const acSections = sections
+      .map((s) => ({ ...s, match: /^####\s+(AC-[0-9]+):\s*(.*)$/.exec(s.heading) }))
+      .filter((s): s is MdSection & { match: RegExpExecArray } => s.match !== null);
+
+    const errors: string[] = [];
+    if (acSections.length === 0) {
+      errors.push(`${specPath}: AC-ID（#### AC-N: ...）が1つも見つかりません`);
+      return violations(errors);
+    }
+    for (const section of acSections) {
+      const id = section.match[1];
+      const summary = section.match[2];
+      if (!summary.trim() || UNFILLED_PLACEHOLDER_RE.test(summary)) {
+        errors.push(`${specPath}: ${id} の要約がプレースホルダのまま、または空です`);
+      }
+      for (const label of ['Given', 'When', 'Then']) {
+        const value = extractField(section.body, label);
+        if (value === undefined || !value || UNFILLED_PLACEHOLDER_RE.test(value)) {
+          errors.push(`${specPath}: ${id} の ${label} が未記入またはプレースホルダのままです`);
+        }
+      }
+      const verification = extractField(section.body, '検証方法見込み');
+      if (verification === undefined || !verification || UNFILLED_PLACEHOLDER_RE.test(verification)) {
+        errors.push(`${specPath}: ${id} の検証方法見込みが未記入またはプレースホルダのままです`);
+      } else if (!/^`?(automated|manual|hybrid)`?$/.test(verification)) {
+        errors.push(`${specPath}: ${id} の検証方法見込みは automated|manual|hybrid のいずれかである必要があります: ${verification}`);
+      }
+    }
+    return violations(errors);
+  });
+}
+
+// ---- design-diagram ----
+const DESIGN_DIAGRAM_USAGE = `
+使い方: agent-skill-chain verify design-diagram <design_md_path>
+
+DESIGN.md に「### 図示要否の判断」セクションが存在し、判断（要|不要）と根拠が
+プレースホルダのまま残らず記載されているかを検査する。判断が「要」の場合は
+本文中に少なくとも1つの mermaid コードフェンス（\`\`\`mermaid）が存在することも検査する。
+判断自体の妥当性（本当に図が必要か）は人間判断の対象であり本検査は判定しない。
+
+出力: 0=判断根拠が充足（要の場合は図も存在）、1=セクション不在・判断/根拠が未記入
+`;
+export async function designDiagram(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) return printUsage(DESIGN_DIAGRAM_USAGE), 0;
+    const [designPath] = args;
+    if (!designPath) throw new CliError('design_md_path は必須です');
+    if (!fs.existsSync(designPath)) return fail(`${designPath} が見つかりません`);
+    const text = fs.readFileSync(designPath, 'utf8');
+    const sections = splitMdSections(text);
+    const section = sections.find((s) => /^###\s+図示要否の判断\s*$/.test(s.heading.trimEnd()));
+
+    const errors: string[] = [];
+    if (!section) {
+      errors.push(`${designPath}: '### 図示要否の判断' セクションが見つかりません`);
+      return violations(errors);
+    }
+    const decision = extractField(section.body, '判断')?.replace(/`/g, '').trim();
+    if (decision === undefined || decision === '' || UNFILLED_PLACEHOLDER_RE.test(decision)) {
+      errors.push(`${designPath}: 図示要否の判断（要|不要）が未記入またはプレースホルダのままです`);
+    } else if (!['要', '不要'].includes(decision)) {
+      errors.push(`${designPath}: 図示要否の判断は '要' または '不要' である必要があります: ${decision}`);
+    }
+    const reason = extractField(section.body, '根拠');
+    if (reason === undefined || !reason || UNFILLED_PLACEHOLDER_RE.test(reason)) {
+      errors.push(`${designPath}: 図示要否の根拠が未記入またはプレースホルダのままです`);
+    }
+    if (decision === '要' && !/```mermaid/.test(text)) {
+      errors.push(`${designPath}: 判断が '要' ですが mermaid コードフェンス（\`\`\`mermaid）が見つかりません`);
+    }
+    return violations(errors);
+  });
+}
+
 // ---- ac-coverage ----
 const AC_COVERAGE_USAGE = `
 使い方: agent-skill-chain verify ac-coverage <issue_id>

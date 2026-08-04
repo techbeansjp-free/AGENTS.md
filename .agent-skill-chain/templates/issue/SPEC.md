@@ -29,7 +29,7 @@
 
 ### 受入条件（Acceptance Criteria）
 
-各 AC には、散文形式の Given/When/Then による受け入れシナリオを添える（構造化マーカーの強制は `bdd.profile: strict` の場合のみ。`.agent-skill-chain/config/agent-skill-chain.yaml` 参照）。
+各 AC には、散文形式の Given/When/Then による受け入れシナリオを添える（構造化マーカーの強制は `bdd.profile: strict` の場合のみ。`.agent-skill-chain/config/agent-skill-chain.yaml` 参照）。以下の `<...>` は全て実内容に置き換える。空欄・プレースホルダ残存は `verify spec-bdd`（`.agent-skill-chain/ci/verify-spec-bdd.sh`）が機械検査し、spec-gate通過を妨げる。検証方法見込みは `automated`・`manual`・`hybrid` のいずれか1語で記す。
 
 #### AC-1: <受入条件の要約>
 
