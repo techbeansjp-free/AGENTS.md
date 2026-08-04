@@ -13,6 +13,7 @@ import { git, gh } from '../lib/exec.js';
 import { digestOf, artifactDigestOf, artifactDigestOfFile, ARTIFACT_ABSENT_DIGEST } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { classifyCoreReview } from '../lib/model-selection.js';
+import { syncGateArtifacts } from '../lib/issue-sync.js';
 import {
   canonicalJson,
   evidencePromptDigest,
@@ -645,6 +646,16 @@ export async function publish(args: string[]): Promise<number> {
       canonicalJson(report),
     );
     if (published.error) return fail(`Check Run 発行に失敗しました: ${published.error}`);
+
+    // ADR-0021: 転記はゲート判定の正本ではなく正本からの一方向の導出であるため、失敗しても
+    // publish 自体は成功のままとし理由だけを警告として出す（可用性優先）。
+    try {
+      const notes = syncGateArtifacts({ root, issueNumber: number, config, targetSha: report.gate.target_sha });
+      for (const note of notes) process.stderr.write(`issue-sync: ${note}\n`);
+    } catch (error) {
+      process.stderr.write(`issue-sync: 転記中に予期しないエラーが発生しました: ${String(error)}\n`);
+    }
+
     return ok(published.url ?? '');
   });
 }

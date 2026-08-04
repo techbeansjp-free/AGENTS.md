@@ -34,6 +34,32 @@ function git(args) {
   childProcess.execFileSync('git', args, { cwd: process.cwd(), stdio: 'pipe' });
 }
 
+// Issue #354 issue-sync のマーカー区間。本体（src/lib/issue-sync.ts）と同一文字列でなければ
+// 区間置換・競合検知の模擬が成立しないため、値を変える場合は両方を揃える。
+const SYNC_BEGIN = '<!-- agent-skill-chain:issue-sync:begin (do not edit manually) -->';
+const SYNC_END = '<!-- agent-skill-chain:issue-sync:end -->';
+
+// Issue #354: 本文読み取りのたびに別プロセスがマーカー区間を書き換えた状態を再現する。
+// bodyRaceRemaining が残っている間、読み手には読み取り時点の本文を返しつつ、保存済み本文を
+// 次回以降別内容へ差し替える（読み直し比較による競合検知が発火する条件そのもの）。
+function readBodyWithRace(state, storeKey, key) {
+  state[storeKey] = state[storeKey] || {};
+  const body = state[storeKey][key] || '';
+  if ((state.bodyRaceRemaining || 0) > 0) {
+    state.bodyRaceRemaining -= 1;
+    state.bodyRaceSeq = (state.bodyRaceSeq || 0) + 1;
+    const block = SYNC_BEGIN + '\\nconcurrent write #' + state.bodyRaceSeq + '\\n' + SYNC_END;
+    const start = body.indexOf(SYNC_BEGIN);
+    const end = body.indexOf(SYNC_END);
+    state[storeKey][key] =
+      start === -1 || end === -1
+        ? (body ? body + '\\n\\n' + block + '\\n' : block + '\\n')
+        : body.slice(0, start) + block + body.slice(end + SYNC_END.length);
+    saveState(state);
+  }
+  return body;
+}
+
 // Issue #266の結合テスト専用。merge要求を受けた瞬間に別の自動化がmainを更新した状態を、
 // 実git remoteへcommit/pushして再現する。release bumpプロセスは直後にfetchして再同期する。
 function advanceMainForBaseRace() {
@@ -109,8 +135,12 @@ if (cmd === 'issue' && sub === 'comment') {
 if (cmd === 'issue' && sub === 'view') {
   const issueNumber = args[2];
   const state = loadState();
-  const comments = state.comments[issueNumber] || [];
-  process.stdout.write(JSON.stringify({ comments }));
+  const fields = (flag('--json') || 'comments').split(',');
+  const payload = {};
+  if (fields.includes('comments')) payload.comments = state.comments[issueNumber] || [];
+  if (fields.includes('number')) payload.number = Number(issueNumber);
+  if (fields.includes('body')) payload.body = readBodyWithRace(state, 'issueBodies', issueNumber);
+  process.stdout.write(JSON.stringify(payload));
   process.exit(0);
 }
 
@@ -118,7 +148,13 @@ if (cmd === 'issue' && sub === 'edit') {
   const issueNumber = args[2];
   const addLabel = flag('--add-label');
   const removeLabel = flag('--remove-label');
+  const bodyFile = flag('--body-file');
   const state = loadState();
+  if (bodyFile) {
+    state.issueBodies = state.issueBodies || {};
+    state.issueBodies[issueNumber] = fs.readFileSync(bodyFile, 'utf8');
+    state.issueEditBodyCalls = (state.issueEditBodyCalls || []).concat([{ number: issueNumber }]);
+  }
   state.issueLabels = state.issueLabels || {};
   state.issueLabels[issueNumber] = state.issueLabels[issueNumber] || [];
   if (addLabel && !state.issueLabels[issueNumber].includes(addLabel)) {
@@ -183,8 +219,34 @@ if (cmd === 'pr' && sub === 'list') {
   }
   // root-cleanup run が既存のcleanup PRをブランチ名パターンで探すために使う
   // 'gh pr list --state open --json number,headRefName' 相当（headを指定しない全件列挙）。
+  // Issue #354 issue-sync は同じ列挙に body を加えて要求するため、--json の指定フィールドだけを
+  // 返す（既存呼び出しの出力は従来と同一のまま）。
+  const fields = (flag('--json') || 'number,headRefName').split(',');
   const all = Object.values(state.prsByBranch || {}).filter((pr) => pr.state === 'OPEN');
-  process.stdout.write(JSON.stringify(all.map((pr) => ({ number: pr.number, headRefName: pr.headRefName }))));
+  process.stdout.write(
+    JSON.stringify(
+      all.map((pr) => {
+        const record = {};
+        if (fields.includes('number')) record.number = pr.number;
+        if (fields.includes('headRefName')) record.headRefName = pr.headRefName;
+        if (fields.includes('body')) record.body = (state.prBodies || {})[String(pr.number)] || '';
+        return record;
+      }),
+    ),
+  );
+  process.exit(0);
+}
+
+if (cmd === 'pr' && sub === 'edit') {
+  const prNumber = args[2];
+  const bodyFile = flag('--body-file');
+  const state = loadState();
+  if (bodyFile) {
+    state.prBodies = state.prBodies || {};
+    state.prBodies[prNumber] = fs.readFileSync(bodyFile, 'utf8');
+    state.prEditBodyCalls = (state.prEditBodyCalls || []).concat([{ number: prNumber }]);
+  }
+  saveState(state);
   process.exit(0);
 }
 
@@ -194,6 +256,15 @@ if (cmd === 'pr' && sub === 'view') {
   // （常にbranch名で問い合わせる、PR番号ではない）。
   const key = args[2];
   const state = loadState();
+  // Issue #354 issue-sync は PR 番号 + '--json body' で本文だけを読む（ブランチ名では引かない）。
+  const viewFields = (flag('--json') || '').split(',');
+  if (viewFields.includes('body')) {
+    const payload = {};
+    if (viewFields.includes('number')) payload.number = Number(key);
+    payload.body = readBodyWithRace(state, 'prBodies', key);
+    process.stdout.write(JSON.stringify(payload));
+    process.exit(0);
+  }
   const pr = (state.prsByBranch || {})[key];
   if (!pr) {
     process.stderr.write('gh-stub: no PR found for ' + key + '\\n');
@@ -580,6 +651,13 @@ export interface GhStubState {
   applyMergedPrToMain?: boolean;
   releases?: string[];
   releaseCreateCalls?: { args: string[] }[];
+  // ---- Issue #354 issue-sync 検証用（gh issue/pr view --json body・edit --body-file） ----
+  issueBodies?: Record<string, string>;
+  prBodies?: Record<string, string>;
+  issueEditBodyCalls?: { number: string }[];
+  prEditBodyCalls?: { number: string }[];
+  bodyRaceRemaining?: number;
+  bodyRaceSeq?: number;
 }
 
 export interface GhStub {
@@ -607,6 +685,13 @@ export interface GhStub {
   /** Issue #266: 最初のmerge要求時にmainを実際に前進させ、GitHubのbase更新競合を返す。
    * 次の成功mergeはテスト用remoteのmainへ反映し、tag/publish後続契約まで検証可能にする。 */
   simulateBaseBranchRaceOnNextMerge(): void;
+  /** Issue #354: `gh issue view <n> --json body` が返す本文を直接投入する。 */
+  seedIssueBody(issueNumber: string, body: string): void;
+  /** Issue #354: `gh pr list --state open` が返す open PR を1件投入する（本文つき）。 */
+  seedOpenPr(pr: { number: number; headRefName: string; body: string }): void;
+  /** Issue #354: 本文読み取り count 回ぶん、読み取り直後に別プロセスがマーカー区間を
+   * 書き換えた状態を再現する（読み直し比較による競合検知の発火条件）。 */
+  simulateConcurrentBodyWrites(count: number): void;
 }
 
 /**
@@ -678,6 +763,25 @@ export function createGhStub(baseDir: string): GhStub {
       state.failMergeMessage = 'GraphQL: Base branch was modified. Review and try the merge again.\\n';
       state.advanceMainOnNextMerge = true;
       state.applyMergedPrToMain = true;
+      this.writeState(state);
+    },
+    seedIssueBody(issueNumber: string, body: string): void {
+      const state = this.readState();
+      state.issueBodies = { ...(state.issueBodies ?? {}), [issueNumber]: body };
+      this.writeState(state);
+    },
+    seedOpenPr(pr: { number: number; headRefName: string; body: string }): void {
+      const state = this.readState();
+      state.prsByBranch = {
+        ...(state.prsByBranch ?? {}),
+        [pr.headRefName]: { number: pr.number, state: 'OPEN', headRefName: pr.headRefName, files: [] },
+      };
+      state.prBodies = { ...(state.prBodies ?? {}), [String(pr.number)]: pr.body };
+      this.writeState(state);
+    },
+    simulateConcurrentBodyWrites(count: number): void {
+      const state = this.readState();
+      state.bodyRaceRemaining = count;
       this.writeState(state);
     },
   };

@@ -32,6 +32,9 @@ export interface AgentSkillChainConfig {
   wip: { limit: number; count_by: string };
   lease: { ttl_seconds: number; renewal_interval_seconds: number };
   bdd: { profile: 'standard' | 'strict' };
+  // ADR-0021。本セクション自体を持たない既存の設定ファイルを妥当なまま受け入れるため任意項目にする
+  // （未設定は無効と同義）。target・max_body_chars も省略時は CLI 側の既定へフォールバックする。
+  issue_sync?: { enabled: boolean; target?: `issue_body` | `pr_body` | `both`; max_body_chars?: number };
   templates: { github_source: string; github_target: string; verify_sync: boolean };
   checks: { spec: string; design: string; implementation: string; validation: string };
 }
