@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0022
+id: ADR-0023
 status: proposed
 title: agent-skill-chainをClaude Codeスキルとして提供する実現可能性——規範知識のオンデマンド化と強制層の分離
 tags: [claude-code, skills, hooks, distribution, feasibility, adoption]
