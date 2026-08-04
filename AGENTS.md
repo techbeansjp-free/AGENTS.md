@@ -11,7 +11,7 @@
 | # | 不変条件 | 検査手段 |
 |---|---|---|
 | I1 追跡可能性 | 全変更は Issue に紐づき、要求→設計(ADR)→実装→レビューの証跡が追跡可能な形で残り、現在有効な決定を指し続ける。証跡の所在は、GitHub モードかつ `issue_sync` 有効時は Issue/PR 本文（成果物内容の正本）＋Check Run、それ以外（ローカルモード・`issue_sync` 無効）は Git 履歴（ADR-0021） | PR に Issue 参照必須、成果物存在チェック、`.agent-skill-chain/scripts/adr-lint.sh check`（CI） |
-| I2 セグメントゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する | GitHub モード：Check Run の成功状態（required status を専用 App/Workflow に限定）。ローカルモード：`reviews/<gate>.yaml` + `.agent-skill-chain/schemas/gate-report.schema.yaml` |
+| I2 セグメントゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する。**ローカルモードでは不変条件。GitHub モードは自動CI強制が無いためガイドライン**（実施要否は進行役が判断） | ローカルモード：`reviews/<gate>.yaml` + `.agent-skill-chain/schemas/gate-report.schema.yaml`（機械的に検査可能）。GitHub モード：機械的な自動強制なし。`.agent-skill-chain/scripts/gate-*.sh`（`gate review`・`gate publish`等）で進行役が任意実行できる手動レビューは引き続き利用可能 |
 | I3 耐久性 | 作業状態は常に完全復元可能で、頭の中にしか無い状態を作らない。復元元は、GitHub モードかつ `issue_sync` 有効時は Issue/PR 本文＋Check Run（GitHub 側の永続化）を含み、それ以外（ローカルモード・`issue_sync` 無効）は Git（remote push 済み）（ADR-0021） | セグメント完了ごとの commit+push、`.agent-skill-chain/scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
 | I4 分離 | 1 Issue = 1 ブランチ = 1 worktree = 1 PR。main への変更は PR 経由のみ | branch protection、`.agent-skill-chain/ci/verify-branch-name.sh`・`.agent-skill-chain/ci/verify-worktree-path.sh` |
 | I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR review証跡・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | role capability・credential分離、protected-base実行attestation、main worktree clean チェック、ワーカー報告固定スキーマ（`.agent-skill-chain/schemas/worker-report.schema.yaml`） |
@@ -25,7 +25,7 @@
 
 | モード | 調整状態の正本 | ゲートの正本 | 成果物内容の正本 |
 |---|---|---|---|
-| GitHub モード | Issue・PR・branch・Check Run | GitHub Check Run（`agent-skill-chain/{spec,design,implementation,validation}-gate`） | `issue_sync` 有効時は Issue/PR 本文（Git は同期元・版管理基盤）。既定（無効）では Git 管理下ファイル |
+| GitHub モード | Issue・PR・branch・Check Run | ガイドライン（自動強制なし、I2）。`.agent-skill-chain/scripts/gate-*.sh` で進行役が手動発行した場合はCheck Run（`agent-skill-chain/{spec,design,implementation,validation}-gate`）が結果を保持 | `issue_sync` 有効時は Issue/PR 本文（Git は同期元・版管理基盤）。既定（無効）では Git 管理下ファイル |
 | ローカルモード | `state.yaml`（Issue 毎、Git 管理下） | `reviews/<gate>.yaml`（Git 管理下） | Git 管理下ファイル（`SPEC.md` 等） |
 
 共通の状態モデル（フィールド・enum）は `.agent-skill-chain/schemas/state.schema.yaml` が定義する。`issue_sync`（既定 `enabled: false`、ADR-0021）を有効化した GitHub モードでは、ゲート通過ごとに成果物全文とゲート状態を Issue/PR 本文の固定マーカー区間へ一方向転記し、マーカー外の人間記述部分は変更しない。転記結果をゲート判定の入力として読み戻すことはしない。
@@ -73,7 +73,7 @@ worktree: .worktrees/<YYYYMMDD_HHMMSS>-<type>-<issue-id>-<slug>/   (timestamp = 
 
 ## ゲートの継承・無効化
 
-Check Run は commit SHA に紐づく。verified gate reportとreview evidence digestはCheck Run outputへ耐久保存し、I2の専用App/Workflowとして許可されたsource identityのlatest successだけからnoncanonical cacheを復元する。同じGitHub Actions Appであることだけをsource trustの証明にしてはならない。`.agent-skill-chain/scripts/gate-reconcile.sh` が push ごとに承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行、変化ありなら当該ゲートと全下流ゲートを無効化する（対応表は `.agent-skill-chain/schemas/gate-report.schema.yaml` 添付コメント参照）。
+ローカルモードでは `.agent-skill-chain/scripts/gate-reconcile.sh` が承認済み成果物 digest を照合し、変化なしなら最新 SHA へ成功を再発行、変化ありなら当該ゲートと全下流ゲートを `reviews/<gate>.yaml` 上で無効化する（対応表は `.agent-skill-chain/schemas/gate-report.schema.yaml` 添付コメント参照）。GitHub モードでは I2 がガイドラインであり自動強制が無いため、push ごとの自動照合は行わない——進行役が任意のタイミングで同スクリプトを実行し、Check Run（`agent-skill-chain/<gate>-gate`）へ結果を手動発行・再照合できる。
 
 ## ADR・テンプレート・テスト適用性
 
