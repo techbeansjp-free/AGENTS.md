@@ -32,7 +32,12 @@ flowchart TD
     DraftPR --> SpecRelease["writer lease解放<br/>進行役へ完了報告"]
 
     SpecRelease --> NextSeg{"次セグメント<br/>design → implementation → validation"}
-    NextSeg --> SegLaunch["進行役: worker-launch.sh で該当ワーカー起動<br/>（writer lease取得）"]
+    NextSeg --> ImplCheck{"segment==<br/>implementation?"}
+    ImplCheck -- いいえ --> SegLaunch
+    ImplCheck -- はい --> ImplGate{"人間確認済みか<br/>（セッション許可 or<br/>human_confirmation.<br/>before_implementation=false）"}
+    ImplGate -- いいえ（既定） --> ImplBlocked["segment start拒否<br/>（日本語エラーで停止、<br/>人間へ確認を促す）"]
+    ImplBlocked --> NextSeg
+    ImplGate -- はい --> SegLaunch["進行役: worker-launch.sh で該当ワーカー起動<br/>（writer lease取得）"]
     SegLaunch --> SegWork["ワーカー: 同一PRのheadブランチへ<br/>commit + push<br/>（design: DESIGN.md/PLAN.md/ADR<br/>implementation: コード+単体テスト<br/>validation: 受入/回帰テスト+VALIDATION.md）"]
     SegWork --> SegRelease["writer lease解放<br/>進行役へ完了報告"]
 
@@ -42,12 +47,17 @@ flowchart TD
     ManualGate -- 実行しない --> MoreSeg
     MoreSeg -- いいえ --> NextSeg
     MoreSeg -- はい --> ReadyForReview["進行役: Draft → Ready for Review"]
-    ReadyForReview --> Merge["進行役: pr merge"]
+    ReadyForReview --> MergeGate{"人間確認済みか<br/>（セッション許可 or<br/>merge.autonomous=true）"}
+    MergeGate -- いいえ（既定） --> MergeBlocked["pr merge拒否<br/>（日本語エラーで停止、<br/>人間へ確認を促す）"]
+    MergeBlocked --> ReadyForReview
+    MergeGate -- はい --> Merge["進行役: pr merge"]
     Merge --> SyncMain["main worktreeを<br/>origin/(default branch)へ<br/>fast-forward同期"]
     SyncMain --> End([完了])
 ```
 
 補足: 「手動ゲートレビュー」ノードはセグメントごとに任意実行できる（4回まで）。ゲート判定は必須ではないため、実行しないままマージへ進む経路も存在する。ゲートを実行した場合、`gate-reconcile.sh` が以後のpushで承認済み成果物のdigestを照合し、変化があれば当該ゲートと下流ゲートを無効化する（状態遷移図を参照）。
+
+補足: 「人間確認済みか」の2つの判定ノード（実装セグメント着手前・PRマージ前）は、いずれも既定で人間確認を要求する（`ImplGate`・`MergeGate` の「いいえ（既定）」経路）。人間がセッション中にその場で許可した場合はその1回限りの遂行として先へ進んでよく、`.agent-skill-chain/config/agent-skill-chain.yaml` の設定は変更しない。複数Issue・複数PRにわたり確認を省略したい場合のみ、`human_confirmation.before_implementation: false` / `merge.autonomous: true` を明示設定する（README.md §自走・承認ポリシー参照）。
 
 ## 2. シーケンス図
 

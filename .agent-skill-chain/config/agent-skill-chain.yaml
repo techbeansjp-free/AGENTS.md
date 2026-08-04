@@ -89,6 +89,23 @@ issue_sync:
   target: issue_body           # issue_body | pr_body | both
   max_body_chars: 60000        # GitHub の本文上限 65536 に対する安全側の既定値
 
+# merge: 進行役（AIエージェント）が `agent-skill-chain pr merge` コマンド自体でPRマージを
+# 実行してよいかの opt-in（Issue #427）。既定は false（未設定含む）であり、consumer
+# プロジェクトでは人間の明示的なマージを既定とする。本リポジトリ（techbeansjp-free/AGENTS.md
+# 自身）は、ユーザーが進行役による自走的マージ運用を明示承認済みの開発環境であるため true。
+# `autonomy: gated | full`（レビュー厳格度の制御）とは独立した別軸であり、混同しない。
+merge:
+  autonomous: true
+
+# human_confirmation: 実装セグメント着手前（`segment start <issue_id> implementation`）に人間の
+# 明示的な確認を要求するかの opt-in（Issue #427、`merge.autonomous` と同じ精神の独立した設定）。
+# 既定は before_implementation: true 相当（未設定含む）であり、consumer プロジェクトでは着手前に
+# 人間確認を要求する。本リポジトリは merge.autonomous と同様に自走的な実装セグメント起動を
+# 明示承認済みの開発環境であるため false（＝人間確認を省略する）。真偽の極性が merge.autonomous
+# と逆であることに注意（本フィールドは「確認要否」、merge.autonomous は「自動実行の許可」）。
+human_confirmation:
+  before_implementation: false
+
 templates:
   github_source: .agent-skill-chain/templates/github/.github
   github_target: .github
