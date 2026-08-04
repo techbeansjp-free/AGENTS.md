@@ -10,9 +10,9 @@
 
 | # | 不変条件 | 検査手段 |
 |---|---|---|
-| I1 追跡可能性 | 全変更は Issue に紐づき、要求→設計(ADR)→実装→レビューの証跡が Git 履歴に残り、現在有効な決定を指し続ける | PR に Issue 参照必須、成果物存在チェック、`.agent-skill-chain/scripts/adr-lint.sh check`（CI） |
+| I1 追跡可能性 | 全変更は Issue に紐づき、要求→設計(ADR)→実装→レビューの証跡が追跡可能な形で残り、現在有効な決定を指し続ける。証跡の所在は、GitHub モードかつ `issue_sync` 有効時は Issue/PR 本文（成果物内容の正本）＋Check Run、それ以外（ローカルモード・`issue_sync` 無効）は Git 履歴（ADR-0021） | PR に Issue 参照必須、成果物存在チェック、`.agent-skill-chain/scripts/adr-lint.sh check`（CI） |
 | I2 セグメントゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する | GitHub モード：Check Run の成功状態（required status を専用 App/Workflow に限定）。ローカルモード：`reviews/<gate>.yaml` + `.agent-skill-chain/schemas/gate-report.schema.yaml` |
-| I3 耐久性 | 作業状態は常に Git（remote push 済み）から完全復元可能。頭の中にしか無い状態を作らない | セグメント完了ごとの commit+push、`.agent-skill-chain/scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
+| I3 耐久性 | 作業状態は常に完全復元可能で、頭の中にしか無い状態を作らない。復元元は、GitHub モードかつ `issue_sync` 有効時は Issue/PR 本文＋Check Run（GitHub 側の永続化）を含み、それ以外（ローカルモード・`issue_sync` 無効）は Git（remote push 済み）（ADR-0021） | セグメント完了ごとの commit+push、`.agent-skill-chain/scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
 | I4 分離 | 1 Issue = 1 ブランチ = 1 worktree = 1 PR。main への変更は PR 経由のみ | branch protection、`.agent-skill-chain/ci/verify-branch-name.sh`・`.agent-skill-chain/ci/verify-worktree-path.sh` |
 | I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR review証跡・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | role capability・credential分離、protected-base実行attestation、main worktree clean チェック、ワーカー報告固定スキーマ（`.agent-skill-chain/schemas/worker-report.schema.yaml`） |
 | I6 正準モデル | 調整状態は選択された Coordination Backend のプリミティブにのみ存在し、GitHub Flow 標準語彙で記述する。複数の Coordination Backend 間で同一 Issue の状態を同期しない | GitHub モード：`.agent-skill-chain/scripts/lint-vocab.sh` + Check Run 正本。ローカルモード：`state.yaml` が正本 |
@@ -23,12 +23,12 @@
 
 正本は必ずどちらか一方であり、二重化しない。
 
-| モード | 調整状態の正本 | ゲートの正本 |
-|---|---|---|
-| GitHub モード | Issue・PR・branch・Check Run | GitHub Check Run（`agent-skill-chain/{spec,design,implementation,validation}-gate`） |
-| ローカルモード | `state.yaml`（Issue 毎、Git 管理下） | `reviews/<gate>.yaml`（Git 管理下） |
+| モード | 調整状態の正本 | ゲートの正本 | 成果物内容の正本 |
+|---|---|---|---|
+| GitHub モード | Issue・PR・branch・Check Run | GitHub Check Run（`agent-skill-chain/{spec,design,implementation,validation}-gate`） | `issue_sync` 有効時は Issue/PR 本文（Git は同期元・版管理基盤）。既定（無効）では Git 管理下ファイル |
+| ローカルモード | `state.yaml`（Issue 毎、Git 管理下） | `reviews/<gate>.yaml`（Git 管理下） | Git 管理下ファイル（`SPEC.md` 等） |
 
-共通の状態モデル（フィールド・enum）は `.agent-skill-chain/schemas/state.schema.yaml` が定義する。
+共通の状態モデル（フィールド・enum）は `.agent-skill-chain/schemas/state.schema.yaml` が定義する。`issue_sync`（既定 `enabled: false`、ADR-0021）を有効化した GitHub モードでは、ゲート通過ごとに成果物全文とゲート状態を Issue/PR 本文の固定マーカー区間へ一方向転記し、マーカー外の人間記述部分は変更しない。転記結果をゲート判定の入力として読み戻すことはしない。
 
 ## 4 セグメント・4 ゲート
 

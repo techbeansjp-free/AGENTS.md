@@ -128,6 +128,17 @@ properties:
     required: [profile]
     additionalProperties: false
     properties: {profile: {type: string, enum: [standard, strict]}}
+  # issue_sync（ADR-0021）は後方互換な任意項目として追加する。top-level の required には含めず、
+  # 本セクションを持たない既存の設定ファイルはこれまでどおり妥当なものとして扱う（未設定＝無効）。
+  issue_sync:
+    type: object
+    required: [enabled]
+    additionalProperties: false
+    properties:
+      enabled: {type: boolean}
+      target: {type: string, enum: [issue_body, pr_body, both]}
+      # GitHub の Issue/PR 本文上限は 65536 文字。既定 60000 はその安全側の値。
+      max_body_chars: {type: integer, minimum: 1, maximum: 65536}
   templates:
     type: object
     required: [github_source, github_target, verify_sync]
@@ -188,6 +199,7 @@ examples:
     wip: {limit: 3, count_by: active_writer_lease}
     lease: {ttl_seconds: 3600, renewal_interval_seconds: 900}
     bdd: {profile: standard}
+    issue_sync: {enabled: false, target: issue_body, max_body_chars: 60000}
     templates: {github_source: .agent-skill-chain/templates/github/.github, github_target: .github, verify_sync: true}
     checks:
       spec: agent-skill-chain/spec-gate

@@ -100,6 +100,30 @@ export function setAdapter(repoDir: string, adapter: ReviewAdapter): void {
 }
 
 /**
+ * issue_sync ブロック（ADR-0021）を書き換える。既定 config は `enabled: false` を持つため、
+ * オプトイン有効時の挙動・転記先・本文上限を差し替えるために使う（Issue #354）。
+ */
+export function setIssueSync(
+  repoDir: string,
+  options: { enabled: boolean; target?: 'issue_body' | 'pr_body' | 'both'; maxBodyChars?: number },
+): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const block =
+    [
+      'issue_sync:',
+      `  enabled: ${options.enabled}`,
+      `  target: ${options.target ?? 'issue_body'}`,
+      `  max_body_chars: ${options.maxBodyChars ?? 60000}`,
+    ].join('\n') + '\n';
+  const patched = text.replace(/^issue_sync:\n(?: {2}.*\n)*/m, block);
+  if (patched === text) {
+    throw new Error('issue_sync ブロックを書き換えられませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）');
+  }
+  fs.writeFileSync(configPath, patched);
+}
+
+/**
  * review.adapter 行そのものを config から取り除く（schema上 review.adapter は任意項目）。
  * CLI 側の既定値フォールバック（未設定時 claude）を、本物のリポジトリ側の現在値に依存せず検証するために使う。
  *
