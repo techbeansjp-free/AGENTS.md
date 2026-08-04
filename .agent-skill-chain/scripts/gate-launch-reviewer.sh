@@ -78,13 +78,13 @@ if [[ "$ASC_CORE_REVIEW_STATUS" == "unresolved" ]]; then
   exit 2
 fi
 if [[ "$ASC_CORE_REVIEW_REQUIRED" == "true" && "$PROFILE" != "$ASC_CORE_REQUIRED_PROFILE" ]]; then
-  echo "コアレビューには profile=$ASC_CORE_REQUIRED_PROFILE が必要です（指定: $PROFILE）。human_required へ倒します" >&2
+  echo "コアレビューには profile=$ASC_CORE_REQUIRED_PROFILE が必要です（指定: ${PROFILE}）。human_required へ倒します" >&2
   _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
   exit 2
 fi
 
 if [[ ! -f "$ADAPTER_FILE" ]]; then
-  echo "アダプタが見つかりません: $ADAPTER_FILE（review.adapter=$ADAPTER）。フェイルセーフで human_required へ倒します" >&2
+  echo "アダプタが見つかりません: ${ADAPTER_FILE}（review.adapter=${ADAPTER}）。フェイルセーフで human_required へ倒します" >&2
   _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
   exit 2
 fi

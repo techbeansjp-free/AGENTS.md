@@ -25,14 +25,14 @@ PR_SHA_INFO="$(gh api "repos/{owner}/{repo}/pulls/$PR_NUMBER" --jq '.base.ref + 
 read -r PR_BASE_REF PR_BASE_SHA PR_HEAD_SHA <<<"$PR_SHA_INFO"
 DEFAULT_BRANCH="$(gh api "repos/{owner}/{repo}" --jq '.default_branch')"
 if [[ -z "$DEFAULT_BRANCH" || "$PR_BASE_REF" != "$DEFAULT_BRANCH" || "$PR_BASE_SHA" != "$BASE_SHA" || "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
-  echo "指定baseがrepository default branchまたはGitHub PR metadataと一致しません（ref=$PR_BASE_REF, default=$DEFAULT_BRANCH, base=$PR_BASE_SHA, head=$PR_HEAD_SHA）" >&2
+  echo "指定baseがrepository default branchまたはGitHub PR metadataと一致しません（ref=$PR_BASE_REF, default=$DEFAULT_BRANCH, base=$PR_BASE_SHA, head=${PR_HEAD_SHA}）" >&2
   exit 1
 fi
 
 CURRENT_ROOT="$(git -C "$REPO_ROOT" rev-parse --show-toplevel)"
 CURRENT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 if [[ "$CURRENT_ROOT" != "$REPO_ROOT" || "$CURRENT_SHA" != "$BASE_SHA" ]]; then
-  echo "protected base worktree/SHAから実行してください（root=$CURRENT_ROOT, HEAD=$CURRENT_SHA, expected=$BASE_SHA）" >&2
+  echo "protected base worktree/SHAから実行してください（root=$CURRENT_ROOT, HEAD=$CURRENT_SHA, expected=${BASE_SHA}）" >&2
   exit 1
 fi
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
