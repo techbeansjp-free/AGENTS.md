@@ -87,7 +87,7 @@ interface GhLabelsPayload {
 }
 
 function readSignalFromGitHub(root: string, issueNumber: string): SizeSignal {
-  const view = gh(['issue', 'view', issueNumber, '--json', 'labels'], root);
+  const view = gh([`issue`, 'view', issueNumber, '--json', 'labels'], root);
   // gh 未認証・ネットワーク不通・Issue 不在などは安全側（standard）へ倒す。quick は
   // 明示的なオプトインでのみ成立し、シグナルを読めない状況で自動適用してはならない。
   if (view.status !== 0) return { size: 'standard', risk: 'unclassified' };
