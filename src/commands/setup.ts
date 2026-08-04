@@ -209,9 +209,31 @@ function repoFlag(ownerRepo?: string): string[] {
   return ownerRepo ? ['--repo', ownerRepo] : [];
 }
 
+/** GitHub Labels API の description 上限（文字数）。超過すると `gh label create` が HTTP 422 で失敗する。 */
+export const GITHUB_LABEL_DESCRIPTION_MAX_LENGTH = 100;
+
+/**
+ * Issue #439: labels.yaml の description が GitHub Labels API の上限（100文字）を超えていないか
+ * を、実際に `gh label create` を呼ぶ前に機械検査する。超過を検出したら該当ラベル名・実文字数を
+ * 含む日本語メッセージを返し、labelsStep はどのラベルも適用せずに失敗する（一部だけ適用された
+ * 中途半端な状態を避けるため）。
+ */
+export function validateLabelDescriptions(labels: LabelDef[]): string | undefined {
+  const violations = labels.filter((label) => label.description.length > GITHUB_LABEL_DESCRIPTION_MAX_LENGTH);
+  if (violations.length === 0) return undefined;
+  return violations
+    .map(
+      (label) =>
+        `ラベル '${label.name}' の description が ${label.description.length} 文字あり、GitHub Labels API の上限（${GITHUB_LABEL_DESCRIPTION_MAX_LENGTH} 文字）を超えています`,
+    )
+    .join('\n');
+}
+
 function labelsStep(ownerRepo: string | undefined, cwd: string): { status: number; message: string } {
   const labelsPath = resolveAsset(path.join('templates', 'github', 'provisioning', 'labels.yaml'), cwd);
   const doc = readYamlFile<{ labels: LabelDef[] }>(labelsPath);
+  const lengthViolation = validateLabelDescriptions(doc.labels);
+  if (lengthViolation) return { status: 1, message: lengthViolation };
   const applied: string[] = [];
   for (const label of doc.labels) {
     const result = gh(
