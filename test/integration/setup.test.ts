@@ -162,6 +162,32 @@ test('setup labels: cwdのリポジトリに対しlabels.yaml定義の全ラベ�
   }
 });
 
+// Issue #439: labels.yaml のいずれかの description が GitHub Labels API の上限（100文字）を
+// 超えている場合、実際に GitHub へ問い合わせる（HTTP 422）前に検出して失敗することを実測する
+// （gh-stub は実APIのバリデーションを再現しないため、setup labels 側の機械検査が唯一の防御線）。
+test('setup labels: descriptionが100文字を超えるラベルがあれば、gh呼び出し前に失敗しどのラベルも適用しない', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const scratchDir = mkScratch('setup-labels-overlength-scratch');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+
+  const labelsYamlPath = path.join(repo.dir, '.agent-skill-chain', 'templates', 'github', 'provisioning', 'labels.yaml');
+  const overLongDescription = 'あ'.repeat(101);
+  fs.writeFileSync(
+    labelsYamlPath,
+    `labels:\n  - name: "size:quick"\n    color: "d4c5f9"\n    description: "${overLongDescription}"\n`,
+  );
+
+  const result = runCli(['setup', 'labels'], { cwd: repo.dir, env: stub.env(process.env) });
+
+  assert.notEqual(result.status, 0, '上限超過時は失敗すること');
+  assert.match(result.stderr, /size:quick/);
+  assert.match(result.stderr, /101/);
+  assert.match(result.stderr, /100/);
+  assert.deepEqual(stub.readState().labels, [], 'どのラベルもGitHub側へ適用されないこと');
+});
+
 test('setup ruleset: 初回はruleset新規作成(POST)、2回目は既存ruleset検出後に更新(PUT)する', (t) => {
   const repo = createTmpRepo();
   t.after(() => repo.cleanup());

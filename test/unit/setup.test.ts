@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { decideGithubBundle } from '../../src/commands/setup.js';
+import { decideGithubBundle, validateLabelDescriptions, GITHUB_LABEL_DESCRIPTION_MAX_LENGTH } from '../../src/commands/setup.js';
 
 // Issue #188 AC-1/AC-2: decideGithubBundle（純関数）が coordination.backend を正しく判定することを
 // 単体テストで実測する。setup() 本体の資産コピー・githubBundle() 実行とは独立して検証できる
@@ -68,4 +68,32 @@ test('decideGithubBundle: coordination.backend が未設定（フィールド自
   const decision = decideGithubBundle(targetDir);
   assert.equal(decision.run, false);
   assert.match(decision.message, /不明/);
+});
+
+// Issue #439: GitHub Labels API の description 上限（100文字）超過を、実際に `gh label create` を
+// 呼ぶ前に検出できることを実測する。gh-stub は実APIのバリデーションを再現しないため、この単体
+// テストが超過検出の唯一の実測箇所になる（DESIGN.md参照）。
+test('validateLabelDescriptions: 全descriptionが上限以内なら undefined を返す', () => {
+  const violation = validateLabelDescriptions([
+    { name: 'type:bugfix', color: 'd73a4a', description: 'a'.repeat(GITHUB_LABEL_DESCRIPTION_MAX_LENGTH) },
+  ]);
+  assert.equal(violation, undefined);
+});
+
+test('validateLabelDescriptions: 上限を1文字でも超えるdescriptionがあれば、ラベル名と実文字数を含む日本語メッセージを返す', () => {
+  const violation = validateLabelDescriptions([
+    { name: 'size:quick', color: 'd4c5f9', description: 'a'.repeat(GITHUB_LABEL_DESCRIPTION_MAX_LENGTH + 1) },
+  ]);
+  assert.match(violation ?? '', /size:quick/);
+  assert.match(violation ?? '', new RegExp(String(GITHUB_LABEL_DESCRIPTION_MAX_LENGTH + 1)));
+  assert.match(violation ?? '', new RegExp(String(GITHUB_LABEL_DESCRIPTION_MAX_LENGTH)));
+});
+
+test('validateLabelDescriptions: 複数ラベルが超過している場合は全件を1つのメッセージへ含める', () => {
+  const violation = validateLabelDescriptions([
+    { name: 'a', color: '000000', description: 'x'.repeat(GITHUB_LABEL_DESCRIPTION_MAX_LENGTH + 5) },
+    { name: 'b', color: '000000', description: 'y'.repeat(GITHUB_LABEL_DESCRIPTION_MAX_LENGTH + 10) },
+  ]);
+  assert.match(violation ?? '', /a/);
+  assert.match(violation ?? '', /b/);
 });
