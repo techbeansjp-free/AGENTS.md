@@ -17,6 +17,12 @@ node_modules/
 # スクラッチ・非追跡メモ（issueドキュメント本則の外）
 **/memo/*
 
+# ローカルCoordination Backend用のIssue毎データ配置（src/lib/local-state.ts issueDir()）。
+# AGENTS.md「ディレクトリ構成」節はroot直下にこのディレクトリを含めておらず、本リポジトリは
+# coordination.backend: github で運用するためroot直下には作られないはずだが、手動レビュー
+# ツール実行時の事故的生成に備えた保険としてignoreする（Issue #399）。
+/issues/
+
 # worktree自体（各worktree配下は独立したリポジトリとして扱われるためgit管理外。
 # 空の親ディレクトリのuntracked表示のみを防ぐ）
 .worktrees/
