@@ -48,6 +48,8 @@ Issue作成 → worktree作成 → SPECワーカーが最初のcheckpointをpush
 | ③実装 | コード・単体テスト結果 | implementation-gate |
 | ④独立検証 | 受入/統合/回帰テスト・PR | validation-gate |
 
+quick（GitHub モードは Issue ラベル `size:quick`、ローカルモードは `state.yaml` の `size: quick`。既定は standard、進行役の明示的オプトインのみで成立し自動昇格しない）の Issue は `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` の作成義務を免除する。シグナルは免除対象の成果物に一切依存しない場所にのみ置く。ただし risk が `normal` 以外、または変更差分に `docs/adr/`・`.agent-skill-chain/config/segments.yaml`・`AGENTS.md`・`.agent-skill-chain/schemas/` を含む場合は免除せず通常フローを強制する（`.agent-skill-chain/ci/verify-artifacts.sh`、ADR-0022）。
+
 レビュープロファイル：Standard（既定、レビュア1体が conformance→falsification を順に実行）／Strict（`risk != normal` OR `autonomy == full`、専任2体）。ゲートは次のワーカーを直接起動しない——進行役がゲート状態のみを読み、次セグメント起動・`finding.origin`（`specification|design|implementation|validation`）に基づく差し戻し先決定・人間判断への昇格・マージ条件確認を行う。
 
 ## 役割・権限・writer lease

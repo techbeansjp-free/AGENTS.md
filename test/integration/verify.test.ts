@@ -1,11 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
+import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
+import { stateFilePath } from '../../src/lib/local-state.js';
 import { ABSENT_ARTIFACT_DIGEST } from '../../src/commands/gate.js';
 import { artifactDigestOf } from '../../src/lib/digest.js';
 
@@ -571,6 +574,217 @@ test('verify artifacts: 対象ファイルを一度もcommitしていない未�
   assert.equal(validation.status, 1);
   assert.match(validation.stderr, /欠落しています: acceptance_test_results/);
   assert.match(validation.stderr, /欠落しています: regression_test_results/);
+});
+
+// ---- Issue #425: quick（size:quick）の成果物免除とガードレール ----
+//
+// 免除シグナルは、免除対象の成果物（SPEC.md等）に一切依存しない場所にしか置かない。
+// 過去の別方式では要求定義ファイルのfrontmatterにシグナルを置いた結果、「ファイルを作らない
+// ためのモード」を成立させるのにそのファイルが必要という循環定義になり発動不能だった。
+// 以下のテストはすべて、成果物ファイルを1つも作らない状態から出発する。
+
+const QUICK_BLOCKED_NOTICE_RE = /quick（size:quick）が指定されていますが、次の理由により quick 適用対象外/;
+
+function patchState(repoDir: string, issueNumber: string, patch: Record<string, unknown>): void {
+  const statePath = stateFilePath(repoDir, issueNumber);
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(statePath, stringify({ ...state, ...patch }));
+}
+
+test('verify artifacts: ローカルモードの size: quick はSPEC/DESIGN/PLAN/VALIDATIONの存在要求を免除する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: worktree作成時点（成果物を1つも作る前）に size: quick を記録する。risk は quick の
+  // 前提である normal にする（config既定は unclassified）。
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP, '--size', 'quick'], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  patchState(repo.dir, '1', { risk: 'normal' });
+
+  // Then: SPEC.md・VALIDATION.md が存在せず履歴上の実績も無いまま spec/validation が成功する
+  assert.equal(fs.existsSync(path.join(worktreePath, 'SPEC.md')), false);
+  assert.equal(fs.existsSync(path.join(worktreePath, 'VALIDATION.md')), false);
+  const spec = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(spec.status, 0, spec.stderr);
+  const validation = runCli(['verify', 'artifacts', 'ISSUE-1', 'validation'], { cwd: repo.dir });
+  assert.equal(validation.status, 0, validation.stderr);
+
+  // Then: design では DESIGN.md・PLAN.md は免除されるが、ADR（docs/adr/配下に.mdが1つ以上ある
+  // というリポジトリ水準の検査であり4成果物ファイルのいずれでもない）は免除対象外のまま残る
+  const design = runCli(['verify', 'artifacts', 'ISSUE-1', 'design'], { cwd: repo.dir });
+  assert.equal(design.status, 1);
+  assert.doesNotMatch(design.stderr, /欠落しています: DESIGN\.md/);
+  assert.doesNotMatch(design.stderr, /欠落しています: PLAN\.md/);
+  assert.match(design.stderr, /欠落しています: ADR/);
+
+  // Then: 免除が成立している間は「quick適用対象外」通知を出さない
+  assert.doesNotMatch(spec.stderr, QUICK_BLOCKED_NOTICE_RE);
+});
+
+test('verify artifacts: size 未設定（既定）では現行どおり成果物の存在を要求し、quick通知も出さない（後方互換）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+
+  // Given: state.yaml は size フィールド自体を持たない（既存のstate.yamlと同一形状）
+  const state = parse(fs.readFileSync(stateFilePath(repo.dir, '1'), 'utf8')) as Record<string, unknown>;
+  assert.ok(!('size' in state), '--size未指定ではsizeフィールドを持たないこと');
+
+  // Then: risk を normal にしても挙動は現行のまま（欠落で失敗、quick通知なし）
+  patchState(repo.dir, '1', { risk: 'normal' });
+  const spec = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(spec.status, 1);
+  assert.match(spec.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+  assert.doesNotMatch(spec.stderr, QUICK_BLOCKED_NOTICE_RE);
+});
+
+test('verify artifacts: size: quick でも risk が normal 以外なら免除せず通常フローを強制する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP, '--size', 'quick'], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+
+  // Given: config既定の risk: unclassified のまま（安全側の既定）
+  const unclassified = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(unclassified.status, 1);
+  assert.match(unclassified.stderr, QUICK_BLOCKED_NOTICE_RE);
+  assert.match(unclassified.stderr, /risk が normal ではありません（現在: unclassified）/);
+  assert.match(unclassified.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+
+  // Given: risk: high
+  patchState(repo.dir, '1', { risk: 'high' });
+  const high = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(high.status, 1);
+  assert.match(high.stderr, /risk が normal ではありません（現在: high）/);
+  assert.match(high.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+});
+
+test('verify artifacts: size: quick でもADR差分・自己参照的な差分を含むと免除せず通常フローを強制する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP, '--size', 'quick'], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  patchState(repo.dir, '1', { risk: 'normal' });
+
+  // Given: ガードレール対象の差分が無い状態では免除される（各ケースの前提の健全性チェック）
+  assert.equal(runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir }).status, 0);
+
+  const cases: { path: string; content: string; reason: RegExp }[] = [
+    { path: path.join('docs', 'adr', 'ADR-0099-sample.md'), content: '# ADR\n', reason: /docs\/adr\/ 配下/ },
+    {
+      path: path.join('.agent-skill-chain', 'config', 'segments.yaml'),
+      content: '# tampered\n',
+      reason: /config\/segments\.yaml/,
+    },
+    { path: 'AGENTS.md', content: '# tampered\n', reason: /AGENTS\.md（不変条件の正本）/ },
+    {
+      path: path.join('.agent-skill-chain', 'schemas', 'state.schema.yaml'),
+      content: '# tampered\n',
+      reason: /schemas\/ 配下/,
+    },
+  ];
+
+  for (const testCase of cases) {
+    const absolute = path.join(worktreePath, testCase.path);
+    const existed = fs.existsSync(absolute);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, testCase.content);
+
+    // When/Then: quick指定・risk normal でもガードレール抵触により通常どおり成果物を要求する
+    const result = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+    assert.equal(result.status, 1, `${testCase.path} でガードレールが発動すること`);
+    assert.match(result.stderr, QUICK_BLOCKED_NOTICE_RE);
+    assert.match(result.stderr, testCase.reason);
+    assert.match(result.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+
+    // 次のケースへ影響しないよう差分を元に戻す（追跡済みファイルはcheckout、新規は削除）
+    if (existed) {
+      execFileSync('git', ['checkout', '--', testCase.path], { cwd: worktreePath, stdio: 'pipe' });
+    } else {
+      fs.rmSync(absolute);
+    }
+  }
+
+  // Then: すべて復元した後は再び免除が成立する
+  assert.equal(runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir }).status, 0);
+});
+
+test('verify artifacts: GitHubモードは size:quick ラベルで免除し、risk:high・risk未付与ではガードレールが発動する', async (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-quick-gh-'));
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+  const env = stub.env(process.env);
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  assert.equal(fs.existsSync(path.join(worktreePath, 'SPEC.md')), false);
+
+  // Given: size:quick と risk:normal がIssueへ付与されている（成果物には一切依存しない）
+  stub.seedIssueLabels('1', ['type:feature', 'risk:normal', 'size:quick']);
+  const quick = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
+  assert.equal(quick.status, 0, quick.stderr);
+  const quickValidation = runCli(['verify', 'artifacts', 'ISSUE-1', 'validation'], { cwd: repo.dir, env });
+  assert.equal(quickValidation.status, 0, quickValidation.stderr);
+
+  // Given: risk:high が付与されている
+  stub.seedIssueLabels('1', ['type:feature', 'risk:high', 'size:quick']);
+  const high = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
+  assert.equal(high.status, 1);
+  assert.match(high.stderr, /risk が normal ではありません（現在: high）/);
+
+  // Given: riskラベルが1つも付与されていない（未分類扱い＝安全側）
+  stub.seedIssueLabels('1', ['type:feature', 'size:quick']);
+  const unlabeled = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
+  assert.equal(unlabeled.status, 1);
+  assert.match(unlabeled.stderr, /risk が normal ではありません（現在: unclassified）/);
+
+  // Given: size:quick が付与されていない（既定）→ 現行どおりの挙動、quick通知も出さない
+  stub.seedIssueLabels('1', ['type:feature', 'risk:normal']);
+  const standard = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
+  assert.equal(standard.status, 1);
+  assert.match(standard.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+  assert.doesNotMatch(standard.stderr, QUICK_BLOCKED_NOTICE_RE);
+});
+
+test('verify artifacts: GitHubモードでラベルを読めない場合は quick を適用せず現行どおり成果物を要求する', async (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+
+  // Given: gh が常に失敗する（未認証・リポジトリ解決不能等）状況をPATH注入で再現する
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-quick-ghfail-'));
+  t.after(() => fs.rmSync(binDir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(binDir, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  const env = { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}` };
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(start.status, 0, start.stderr);
+
+  // Then: シグナルを読み取れないため standard として扱い、従来どおり欠落で失敗する
+  const spec = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
+  assert.equal(spec.status, 1);
+  assert.match(spec.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+  assert.doesNotMatch(spec.stderr, QUICK_BLOCKED_NOTICE_RE);
 });
 
 // ---- verify gate-report ----

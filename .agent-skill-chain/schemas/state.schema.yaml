@@ -24,6 +24,17 @@ properties:
       Issueの要求内容（本文、「何を作るか」）。複数行可。任意。Coordination Backendがローカルの
       場合に`issue start`へ--request/--request-fileを渡すと永続化される（ISSUE-183）。GitHubモード
       では未使用。
+  size:
+    type: string
+    enum: [quick, standard]
+    default: standard
+    description: >
+      変更規模。quick は SPEC.md・DESIGN.md・PLAN.md・VALIDATION.md の存在要求を免除する
+      （ISSUE-425）。ローカルモードにおける quick シグナルの唯一の正本であり、`issue start`へ
+      --size quick を渡すと worktree 作成時点（＝いかなる成果物の作成よりも前）に記録される。
+      免除は risk が normal かつ、変更差分に docs/adr/・
+      .agent-skill-chain/config/segments.yaml・AGENTS.md・.agent-skill-chain/schemas/ を
+      含まない場合のみ適用される。未設定は standard として後方互換にする。
   review_subject:
     type: string
     enum: [ordinary, core_audit]

@@ -140,6 +140,11 @@ if (cmd === 'issue' && sub === 'view') {
   if (fields.includes('comments')) payload.comments = state.comments[issueNumber] || [];
   if (fields.includes('number')) payload.number = Number(issueNumber);
   if (fields.includes('body')) payload.body = readBodyWithRace(state, 'issueBodies', issueNumber);
+  // Issue #425: quick モード判定は 'gh issue view <n> --json labels' でラベルを読む。
+  // 実GitHub同様、labels は {name: ...} オブジェクトの配列として返す。
+  if (fields.includes('labels')) {
+    payload.labels = ((state.issueLabels || {})[issueNumber] || []).map((name) => ({ name }));
+  }
   process.stdout.write(JSON.stringify(payload));
   process.exit(0);
 }
@@ -687,6 +692,9 @@ export interface GhStub {
   simulateBaseBranchRaceOnNextMerge(): void;
   /** Issue #354: `gh issue view <n> --json body` が返す本文を直接投入する。 */
   seedIssueBody(issueNumber: string, body: string): void;
+  /** Issue #425: `gh issue view <n> --json labels` が返すラベル一覧を直接投入する
+   * （`issue edit --add-label` を経由せず、任意のラベル状態を再現するために使う）。 */
+  seedIssueLabels(issueNumber: string, labels: string[]): void;
   /** Issue #354: `gh pr list --state open` が返す open PR を1件投入する（本文つき）。 */
   seedOpenPr(pr: { number: number; headRefName: string; body: string }): void;
   /** Issue #354: 本文読み取り count 回ぶん、読み取り直後に別プロセスがマーカー区間を
@@ -768,6 +776,11 @@ export function createGhStub(baseDir: string): GhStub {
     seedIssueBody(issueNumber: string, body: string): void {
       const state = this.readState();
       state.issueBodies = { ...(state.issueBodies ?? {}), [issueNumber]: body };
+      this.writeState(state);
+    },
+    seedIssueLabels(issueNumber: string, labels: string[]): void {
+      const state = this.readState();
+      state.issueLabels = { ...(state.issueLabels ?? {}), [issueNumber]: labels };
       this.writeState(state);
     },
     seedOpenPr(pr: { number: number; headRefName: string; body: string }): void {

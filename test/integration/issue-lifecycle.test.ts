@@ -162,6 +162,30 @@ test('issue start (local backend): --title/--requestを指定しない従来ど�
   assert.doesNotMatch(segmentStart.stdout, /^issue:/m, 'title/requestが無いstateではissue:ブロックを同梱しないこと');
 });
 
+test('issue start (local backend): --size quick はstate.yamlへ永続化され、不正値はエラーになる（ISSUE-425）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given/When: worktree作成時点（成果物を1つも作る前）に --size quick を指定する
+  const start = runCli(['issue', 'start', 'ISSUE-5', 'feature', 'sample-feature-5', FIXED_TIMESTAMP, '--size', 'quick'], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+
+  // Then: state.yaml へ size: quick が記録される（SPEC.md等の成果物には一切依存しない）
+  const statePath = path.join(repo.dir, 'issues', '5', '.agent-skill-chain', 'state.yaml');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  assert.equal(state.size, 'quick');
+
+  // When/Then: quick|standard 以外の値は起票時点で拒否する
+  const invalid = runCli(
+    ['issue', 'start', 'ISSUE-6', 'feature', 'sample-feature-6', FIXED_TIMESTAMP, '--size', 'tiny'],
+    { cwd: repo.dir },
+  );
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stderr, /--size は quick\|standard のいずれかである必要があります/);
+});
+
 test('issue start (local backend): --requestと--request-fileを同時指定するとエラーになる（ISSUE-183）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
