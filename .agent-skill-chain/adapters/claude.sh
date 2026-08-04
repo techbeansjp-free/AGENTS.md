@@ -319,7 +319,7 @@ launch_gate_reviewer() {
   done
 
   if [[ ${rc:-1} -ne 0 || -z "${verdict:-}" ]]; then
-    _fail_safe "レビュア起動に失敗しました（rc=${rc:-1}, attempts=$retries）"
+    _fail_safe "レビュア起動に失敗しました（rc=${rc:-1}, attempts=${retries}）"
     return
   fi
 
@@ -421,7 +421,7 @@ launch_worker() {
   # 3. 起動後のフェイルセーフ（I8）: blocked報告 + lease解放 + 非0非3で返す共通処理。
   _fail_blocked() {
     local reason="$1" sha
-    echo "launch_worker: $reason（フェイルセーフでblockedへ倒します）" >&2
+    echo "launch_worker: ${reason}（フェイルセーフでblockedへ倒します）" >&2
     sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
     report_status "$issue_id" "$role" "$segment" blocked "$sha" "$reason" true >/dev/null 2>&1 || true
     release_lease "$issue_id" >/dev/null 2>&1 || true
