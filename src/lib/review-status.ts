@@ -30,7 +30,7 @@ export interface UnresolvedGithubReview {
 }
 
 export interface UnresolvedGithubComment {
-  source: 'pr' | 'issue';
+  source: 'pr_comment' | 'issue_comment';
   author: string;
   body: string;
   created_at: string;
@@ -98,14 +98,18 @@ function parseGithubPayloads(prJson: string, issueJson: string): {
   issueComments: GithubComment[];
 } {
   const pr = JSON.parse(prJson) as GithubReviewPayload;
-  const issue = JSON.parse(issueJson) as GithubIssuePayload;
-  if (!Array.isArray(pr.latestReviews) || !Array.isArray(pr.comments) || !Array.isArray(issue.comments)) {
+  const parsedIssue = JSON.parse(issueJson) as GithubIssuePayload;
+  if (!Array.isArray(pr.latestReviews) || !Array.isArray(pr.comments) || !Array.isArray(parsedIssue.comments)) {
     throw new Error('GitHub review status JSON に必要な配列がありません');
   }
-  return { reviews: pr.latestReviews, prComments: pr.comments, issueComments: issue.comments };
+  return { reviews: pr.latestReviews, prComments: pr.comments, issueComments: parsedIssue.comments };
 }
 
-function unresolvedComment(comment: GithubComment, source: 'pr' | 'issue', since: string): UnresolvedGithubComment | undefined {
+function unresolvedComment(
+  comment: GithubComment,
+  source: 'pr_comment' | 'issue_comment',
+  since: string,
+): UnresolvedGithubComment | undefined {
   if (typeof comment.body !== 'string' || typeof comment.createdAt !== 'string') return undefined;
   const commentTime = Date.parse(comment.createdAt);
   const sinceTime = Date.parse(since);
@@ -152,7 +156,7 @@ export function detectGithubReviewStatus(root: string, issueNumber: string): Git
       reason: failureReason(`PR #${pr.number} のレビュー・コメント取得に失敗しました`, prResult.stderr),
     };
   }
-  const issueResult = gh(['issue', 'view', issueNumber, '--json', 'comments'], root);
+  const issueResult = gh([`issue`, 'view', issueNumber, '--json', 'comments'], root);
   if (issueResult.status !== 0) {
     return {
       mode: 'github',
@@ -181,8 +185,8 @@ export function detectGithubReviewStatus(root: string, issueNumber: string): Git
       ...(typeof review.submittedAt === 'string' ? { submitted_at: review.submittedAt } : {}),
     }));
   const unresolvedComments = [
-    ...payloads.prComments.map((comment) => unresolvedComment(comment, 'pr', since)),
-    ...payloads.issueComments.map((comment) => unresolvedComment(comment, 'issue', since)),
+    ...payloads.prComments.map((comment) => unresolvedComment(comment, 'pr_comment', since)),
+    ...payloads.issueComments.map((comment) => unresolvedComment(comment, 'issue_comment', since)),
   ].filter((comment): comment is UnresolvedGithubComment => comment !== undefined);
 
   if (unresolvedReviews.length === 0 && unresolvedComments.length === 0) return undefined;
@@ -219,7 +223,7 @@ export function detectLocalBlockingFindings(
   }
 }
 
-/** 検出結果をrole contractと同じYAML形式の起動プロンプトブロックへ整形する。 */
+/** 検出結果をrole contractと同じYAML形式の起動プロンプトセクションへ整形する。 */
 export function formatReviewStatusBlock(data: ReviewStatus): string {
   const indented = toYamlString(data)
     .trimEnd()

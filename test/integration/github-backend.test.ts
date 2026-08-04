@@ -200,9 +200,9 @@ test('segment start (github backend): 直近commit後のPR/Issueコメントをr
 
   const result = runCli(['segment', 'start', 'ISSUE-441', 'spec'], { cwd: repo.dir, env });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /source: pr/);
+  assert.match(result.stdout, /source: pr_comment/);
   assert.match(result.stdout, /PR側の修正依頼です/);
-  assert.match(result.stdout, /source: issue/);
+  assert.match(result.stdout, /source: issue_comment/);
   assert.match(result.stdout, /Issue側の修正依頼です/);
 });
 

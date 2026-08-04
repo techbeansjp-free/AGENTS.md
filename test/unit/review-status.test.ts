@@ -71,8 +71,8 @@ test('detectGithubReviewStatus: CHANGES_REQUESTEDと直近commit後のPR/Issue�
   assert.deepEqual(
     result.unresolved_comments.map((comment) => [comment.source, comment.body]),
     [
-      ['pr', 'PR側の修正依頼'],
-      ['issue', 'Issue側の修正依頼'],
+      ['pr_comment', 'PR側の修正依頼'],
+      ['issue_comment', 'Issue側の修正依頼'],
     ],
   );
   assert.match(formatReviewStatusBlock(result), /^review_status:\n {2}mode: github/m);
