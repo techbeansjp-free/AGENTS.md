@@ -27,23 +27,25 @@ interface CheckRunRecord {
   conclusion: string;
 }
 
-function prepareReviewStatusSegment(t: { after(callback: () => void): void }, issueNumber: number) {
+function prepareReviewStatusSegment(
+  t: { after(callback: () => void): void },
+  issueNumber: number,
+  options: { seedPr?: boolean } = {},
+) {
   const repo = createTmpRepo({ backend: 'github' });
   const { stub, env, cleanup } = makeStub();
   const branch = `bugfix/${issueNumber}-review-status`;
   execFileSync('git', ['checkout', '-b', branch], { cwd: repo.dir, stdio: 'pipe' });
-  stub.seedOpenPr({ number: issueNumber + 1000, headRefName: branch, body: '' });
+  if (options.seedPr !== false) {
+    stub.seedOpenPr({ number: issueNumber + 1000, headRefName: branch, body: '' });
+  }
   const acquire = runCli(['lease', 'acquire', `ISSUE-${issueNumber}`, 'spec'], { cwd: repo.dir, env });
   assert.equal(acquire.status, 0, acquire.stderr);
   t.after(() => {
     repo.cleanup();
     cleanup();
   });
-  return { repo, stub, env, prNumber: issueNumber + 1000 };
-}
-
-function latestCommitTime(repoDir: string): string {
-  return execFileSync('git', ['log', '-1', '--format=%cI', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+  return { repo, stub, env, branch, prNumber: issueNumber + 1000 };
 }
 
 test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate publish(Check Run) -> pr create -> cleanup', async (t) => {
@@ -185,9 +187,9 @@ test('segment start (github backend): CHANGES_REQUESTEDレビューをrole contr
   assert.match(result.stdout, /null時のフォールバックを追加してください/);
 });
 
-test('segment start (github backend): 直近commit後のPR/Issueコメントをrole contractへ同梱する', (t) => {
+test('segment start (github backend): 時刻カットオフ無しでPR/Issueコメントをrole contractへ同梱する', (t) => {
   const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 441);
-  const createdAt = new Date(Date.parse(latestCommitTime(repo.dir)) + 1000).toISOString();
+  const createdAt = '2000-01-01T00:00:00Z';
   stub.seedPrComments(prNumber, [
     { author: { login: 'maintainer' }, body: 'PR側の修正依頼です', createdAt },
   ]);
@@ -216,18 +218,87 @@ test('segment start (github backend): APPROVEDで未対応コメント無しな�
   assert.match(result.stdout, /作業再開時は対象Issue\/PRの最新レビュー・コメント/);
 });
 
-test('segment start (github backend): review取得失敗をdetection failedとして同梱し起動を継続する', (t) => {
-  const { repo, stub, env } = prepareReviewStatusSegment(t, 443);
-  const state = stub.readState();
-  state.failPrReviewStatusView = true;
-  stub.writeState(state);
+test('segment start (github backend): Issue側とPR側の取得が両方失敗してもdetection failedを同梱し起動を継続する', (t) => {
+  const { repo, stub, env, branch } = prepareReviewStatusSegment(t, 443);
+  stub.seedIssueViewFailure('443', { stderr: 'issue API unavailable\n' });
+  stub.seedPrViewFailure(branch, { stderr: 'review API unavailable\n' });
 
   const result = runCli(['segment', 'start', 'ISSUE-443', 'spec'], { cwd: repo.dir, env });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /^review_status:/m);
   assert.match(result.stdout, /detection: failed/);
-  assert.match(result.stdout, /simulated review status view failure/);
+  assert.match(result.stdout, /issue API unavailable/);
+  assert.match(result.stdout, /review API unavailable/);
   assert.match(result.stdout, /作業再開時は対象Issue\/PRの最新レビュー・コメント/);
+});
+
+test('segment start (github backend): Draft PR作成前でもIssueコメントをrole contractへ同梱する', (t) => {
+  const { repo, stub, env } = prepareReviewStatusSegment(t, 444, { seedPr: false });
+  const state = stub.readState();
+  state.comments['444'] = [
+    ...(state.comments['444'] ?? []),
+    {
+      id: 'feedback-before-pr',
+      url: 'https://example.test/issues/444',
+      body: 'Draft PR作成前の修正依頼です',
+      createdAt: '2000-01-01T00:00:00Z',
+    },
+  ];
+  stub.writeState(state);
+
+  const result = runCli(['segment', 'start', 'ISSUE-444', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /source: issue_comment/);
+  assert.match(result.stdout, /Draft PR作成前の修正依頼です/);
+  assert.doesNotMatch(result.stdout, /partial_failures:/);
+});
+
+test('segment start (github backend): PR側だけ取得失敗してもIssueコメントとpartial failureを同梱する', (t) => {
+  const { repo, stub, env, branch } = prepareReviewStatusSegment(t, 445);
+  stub.seedPrViewFailure(branch, { stderr: 'authentication required\n' });
+  const state = stub.readState();
+  state.comments['445'] = [
+    ...(state.comments['445'] ?? []),
+    {
+      id: 'feedback-partial',
+      url: 'https://example.test/issues/445',
+      body: '取得済みのIssue側修正依頼です',
+      createdAt: '2000-01-01T00:00:00Z',
+    },
+  ];
+  stub.writeState(state);
+
+  const result = runCli(['segment', 'start', 'ISSUE-445', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /取得済みのIssue側修正依頼です/);
+  assert.match(result.stdout, /partial_failures:/);
+  assert.match(result.stdout, /side: pr/);
+  assert.match(result.stdout, /authentication\s+required/);
+});
+
+test('segment start (github backend): 対象Issueと不一致のbranchではPR取得せずIssueコメントと失敗通知を同梱する', (t) => {
+  const { repo, stub, env } = prepareReviewStatusSegment(t, 446);
+  execFileSync('git', ['checkout', '-b', 'bugfix/999-unrelated'], { cwd: repo.dir, stdio: 'pipe' });
+  const state = stub.readState();
+  state.comments['446'] = [
+    ...(state.comments['446'] ?? []),
+    {
+      id: 'feedback-correct-issue',
+      url: 'https://example.test/issues/446',
+      body: '対象Issue側の修正依頼です',
+      createdAt: '2000-01-01T00:00:00Z',
+    },
+  ];
+  stub.writeState(state);
+  const prViewCallsBefore = stub.readState().prViewCalls?.length ?? 0;
+
+  const result = runCli(['segment', 'start', 'ISSUE-446', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /対象Issue側の修正依頼です/);
+  assert.match(result.stdout, /partial_failures:/);
+  assert.match(result.stdout, /side: pr/);
+  assert.match(result.stdout, /一致しません/);
+  assert.equal(stub.readState().prViewCalls?.length ?? 0, prViewCallsBefore);
 });
 
 test('issue resume (github backend): PRが見つからない場合とgh pr listの結果を含む場合', async (t) => {

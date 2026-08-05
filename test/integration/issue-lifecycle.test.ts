@@ -365,6 +365,102 @@ test('segment start (local backend): gate reportのblocking findingがある場�
   assert.doesNotMatch(withoutBlocker.stdout, /^review_status:/m);
 });
 
+test('segment start (local backend): 他segmentのgate reportに記録されたorigin一致のblocking findingをcross-segment差し戻しで検出する（ADR-0026）', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-447', 'bugfix', 'cross-segment-review-status', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-447', 'spec'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  // implementationゲートが origin: specification のblocking findingを検出し、
+  // 進行役がspecセグメントへ差し戻したケースを模擬する。
+  const implementationReportPath = reviewFilePath(repo.dir, '447', 'implementation');
+  fs.mkdirSync(path.dirname(implementationReportPath), { recursive: true });
+  fs.writeFileSync(
+    implementationReportPath,
+    stringify({
+      gate: {
+        blockers: [
+          { severity: 'blocking', origin: 'specification', code: 'SPEC-GAP', evidence: ['SPECの要求が不明確'] },
+        ],
+      },
+    }),
+  );
+
+  const result = runCli(['segment', 'start', 'ISSUE-447', 'spec'], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^review_status:/m);
+  assert.match(result.stdout, /mode: local/);
+  assert.match(result.stdout, /origin: specification/);
+  assert.match(result.stdout, /source_segment: implementation/);
+  assert.match(result.stdout, /SPECの要求が不明確/);
+});
+
+test('segment start (local backend): 一部gate report破損でも検出済みfindingとread failureを同梱する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-448', 'bugfix', 'partial-local-review-status', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-448', 'spec'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  const designReportPath = reviewFilePath(repo.dir, '448', 'design');
+  fs.mkdirSync(path.dirname(designReportPath), { recursive: true });
+  fs.writeFileSync(designReportPath, 'gate: [\n');
+  const implementationReportPath = reviewFilePath(repo.dir, '448', 'implementation');
+  fs.writeFileSync(
+    implementationReportPath,
+    stringify({
+      gate: {
+        blockers: [
+          { severity: 'blocking', origin: 'specification', code: 'SPEC-PARTIAL', evidence: ['取得済みfinding'] },
+        ],
+      },
+    }),
+  );
+
+  const result = runCli(['segment', 'start', 'ISSUE-448', 'spec'], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /detection: succeeded/);
+  assert.match(result.stdout, /code: SPEC-PARTIAL/);
+  assert.match(result.stdout, /source_segment: implementation/);
+  assert.match(result.stdout, /local_read_failures:/);
+  assert.match(result.stdout, /segment: design/);
+});
+
+test('segment start (local backend): 全segmentのgate report破損時はdetection failedを同梱して起動を継続する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-449', 'bugfix', 'failed-local-review-status', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-449', 'design'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  for (const segment of ['spec', 'design', 'implementation', 'validation']) {
+    const reportPath = reviewFilePath(repo.dir, '449', segment);
+    fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+    fs.writeFileSync(reportPath, 'gate: [\n');
+  }
+
+  const result = runCli(['segment', 'start', 'ISSUE-449', 'design'], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^review_status:/m);
+  assert.match(result.stdout, /mode: local/);
+  assert.match(result.stdout, /detection: failed/);
+  assert.match(result.stdout, /spec:/);
+  assert.match(result.stdout, /validation:/);
+});
+
 test('doctor (local backend): git/リポジトリ/configの検査がすべてOKになる', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
