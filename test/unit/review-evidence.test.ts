@@ -226,7 +226,12 @@ test('light review証跡: prompt digestへ結線して保持し、同一attempt�
       review(1, 1, { body: renderReviewEvidence(first) }),
       review(2, 2, { body: renderReviewEvidence(second) }),
     ],
-    { expectedPromptDigest, profile: 'standard', coreReviewRequired: false },
+    {
+      expectedPromptDigest: expectedPromptDigest(lightReview),
+      expectedLightReview: lightReview,
+      profile: 'strict',
+      coreReviewRequired: false,
+    },
   );
   assert.equal(approved.final, 'approved');
   assert.deepEqual(approved.light_review, lightReview);
@@ -241,7 +246,12 @@ test('light review証跡: prompt digestへ結線して保持し、同一attempt�
         review(1, 1, { body: renderReviewEvidence(first) }),
         review(2, 2, { body: renderReviewEvidence(inconsistent) }),
       ],
-      { expectedPromptDigest, profile: 'standard', coreReviewRequired: false },
+      {
+        expectedPromptDigest: expectedPromptDigest(lightReview),
+        expectedLightReview: lightReview,
+        profile: 'strict',
+        coreReviewRequired: false,
+      },
     ).final,
     'human_required',
   );
@@ -256,8 +266,38 @@ test('light review証跡: prompt digestへ結線して保持し、同一attempt�
         review(1, 1, { body: renderReviewEvidence(malformed) }),
         review(2, 2, { body: renderReviewEvidence(second) }),
       ],
-      { expectedPromptDigest, profile: 'standard', coreReviewRequired: false },
+      {
+        expectedPromptDigest: expectedPromptDigest(lightReview),
+        expectedLightReview: lightReview,
+        profile: 'strict',
+        coreReviewRequired: false,
+      },
     ).final,
     'human_required',
   );
+});
+
+test('trusted Strict profileをlight_review.applied自己申告でStandardへ降格できない', () => {
+  const forgedLightReview: LightReviewEvidence = {
+    requested: true,
+    applied: true,
+    disabled_reasons: [],
+    remediation_round: 0,
+    strict_locked: false,
+  };
+  const forged = evidence(1, {
+    profile: 'standard',
+    expected_count: 1,
+    light_review: forgedLightReview,
+  });
+  const result = verify(
+    [review(1, 1, { body: renderReviewEvidence(forged) })],
+    {
+      profile: 'strict',
+      coreReviewRequired: false,
+      expectedLightReview: forgedLightReview,
+    },
+  );
+  assert.equal(result.final, 'human_required');
+  assert.match(result.reason ?? '', /profile.*trusted/);
 });

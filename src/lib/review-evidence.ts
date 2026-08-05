@@ -242,7 +242,8 @@ export function verifyGithubReviewEvidence(options: {
   trustedActors: string[];
   writerActors: string[];
   unresolvedWriterActor: boolean;
-  expectedPromptDigest: string | ((lightReview?: LightReviewEvidence) => string);
+  expectedPromptDigest: string;
+  expectedLightReview?: LightReviewEvidence;
   expectedArtifacts: { path: string; digest: string }[];
   expectedTrustedBaseSha: string;
   expectedLauncherDigest: string;
@@ -291,15 +292,14 @@ export function verifyGithubReviewEvidence(options: {
     return fail(`review ${latest.api.id} のevidence形式が不正です`);
   }
   const latestEvidence = latest.evidence as ReviewEvidence;
-  const effectiveProfile = latestEvidence.light_review?.strict_locked
-    ? 'strict'
-    : latestEvidence.light_review?.applied
-      ? 'standard'
-      : options.profile;
-  if (latestEvidence.profile !== effectiveProfile) {
-    return fail(`最新review attemptのprofileがlight_review証跡と一致しません: ${latestEvidence.attempt_id}`);
+  const expectedLightReview = canonicalJson(options.expectedLightReview ?? null);
+  if (canonicalJson(latestEvidence.light_review ?? null) !== expectedLightReview) {
+    return fail(`最新review attemptのlight_reviewがtrusted再評価値と一致しません: ${latestEvidence.attempt_id}`);
   }
-  if (options.coreReviewRequired && effectiveProfile !== 'strict') {
+  if (latestEvidence.profile !== options.profile) {
+    return fail(`最新review attemptのprofileがtrusted profileと一致しません: ${latestEvidence.attempt_id}`);
+  }
+  if (options.coreReviewRequired && options.profile !== 'strict') {
     return fail('コア対象にはStrict profileが必要です');
   }
   const selected = matching.filter((candidate) => candidate.evidence.attempt_id === latestEvidence.attempt_id);
@@ -314,7 +314,7 @@ export function verifyGithubReviewEvidence(options: {
     actor: api.user?.login ?? '',
   }));
 
-  const expectedCount = effectiveProfile === 'strict' ? 2 : 1;
+  const expectedCount = options.profile === 'strict' ? 2 : 1;
   if (latestEvidence.expected_count !== expectedCount) {
     return fail(`最新review attemptのexpected_countがprofileと一致しません: ${latestEvidence.attempt_id}`);
   }
@@ -327,13 +327,12 @@ export function verifyGithubReviewEvidence(options: {
     if (review.commit_id !== options.targetSha) {
       return fail(`review ${review.id} のAPI commit SHAが現在のPR headと一致しません`);
     }
-    if (evidence.profile !== effectiveProfile) return fail(`review ${review.id} のprofileが一致しません`);
+    if (evidence.profile !== options.profile) return fail(`review ${review.id} のprofileが一致しません`);
     if (evidence.expected_count !== expectedCount) return fail(`review ${review.id} のexpected_countが一致しません`);
-    const expectedPromptDigest =
-      typeof options.expectedPromptDigest === 'function'
-        ? options.expectedPromptDigest(evidence.light_review)
-        : options.expectedPromptDigest;
-    if (evidence.prompt_digest !== expectedPromptDigest) {
+    if (canonicalJson(evidence.light_review ?? null) !== expectedLightReview) {
+      return fail(`review ${review.id} のlight_reviewがtrusted再評価値と一致しません`);
+    }
+    if (evidence.prompt_digest !== options.expectedPromptDigest) {
       return fail(`review ${review.id} のprompt digestが一致しません`);
     }
     if (
@@ -442,7 +441,7 @@ export function verifyGithubReviewEvidence(options: {
       isolation: evidence.execution.isolation,
       sandbox: evidence.execution.sandbox,
     })),
-    ...(latestEvidence.light_review ? { light_review: latestEvidence.light_review } : {}),
+    ...(options.expectedLightReview ? { light_review: options.expectedLightReview } : {}),
     review_attempt: {
       attempt_id: latestEvidence.attempt_id,
       expected_count: expectedCount,

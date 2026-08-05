@@ -161,6 +161,19 @@ test('resolveLightReview: strict_lockedは差分復帰・ラベル除去後も�
   assert.equal(requested.applied, false);
   assert.deepEqual(requested.disabled_reasons, ['過去のラウンドで軽量プロファイルがStrictへ確定済みのため']);
 
+  const verifiedCurrentRound = withGhStub(stub, () => resolveLightReview({
+    root: repo.dir,
+    worktreePath: repo.dir,
+    issueNumber: '449',
+    gateId: 'implementation',
+    backend: 'github',
+    targetSha: git(repo.dir, ['rev-parse', 'HEAD']),
+    baseRef: 'main',
+    advanceRemediationRound: false,
+  }));
+  assert.equal(verifiedCurrentRound.remediation_round, 1);
+  assert.equal(verifiedCurrentRound.strict_locked, true);
+
   stub.seedIssueLabels('449', ['risk:normal', 'autonomy:gated']);
   const removed = withGhStub(stub, () => resolve(repo.dir));
   assert.equal(removed.requested, false);

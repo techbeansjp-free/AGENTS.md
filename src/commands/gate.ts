@@ -28,7 +28,6 @@ import {
   verifyGithubReviewEvidence,
   type EvidenceVerdict,
   type GithubReviewRecord,
-  type LightReviewEvidence,
   type ReviewEvidence,
   type VerifiedReviewAttempt,
   type VerifiedReviewer,
@@ -1241,26 +1240,41 @@ function buildVerifiedGateReport(options: {
     options.gateId === 'implementation',
   );
   const launcherDigest = localReviewLauncherDigest(options.root, options.baseSha);
+  const lightReviewPath = reviewFilePath(options.root, options.issueNumber, options.gateId, 'github');
+  const hasTrustedLightReview = tryReadYamlFile<GateReport>(lightReviewPath)?.gate.light_review !== undefined;
+  const trustedLightReview = resolveLightReview({
+    root: options.root,
+    worktreePath: options.root,
+    issueNumber: options.issueNumber,
+    gateId: options.gateId,
+    backend: 'github',
+    targetSha: options.targetSha,
+    baseRef: options.baseSha,
+    advanceRemediationRound: false,
+  });
+  const effectiveProfile =
+    options.profile === 'strict' || trustedLightReview.strict_locked ? 'strict' : 'standard';
+  const expectedLightReview = hasTrustedLightReview ? trustedLightReview : undefined;
   const result = verifyGithubReviewEvidence({
     reviews: options.reviews,
     issueId: options.issueId,
     gate: options.gateId,
-    profile: options.profile,
+    profile: effectiveProfile,
     targetSha: options.targetSha,
     trustedActors: policy.policy.execution.trusted_reviewer_actors,
     writerActors,
     unresolvedWriterActor,
-    expectedPromptDigest: (lightReview?: LightReviewEvidence) =>
-      evidencePromptDigest(
-        buildReviewerPrompt(
-          options.root,
-          options.issueNumber,
-          options.gateId,
-          options.targetSha,
-          options.baseSha,
-          lightReview ?? null,
-        ),
+    expectedPromptDigest: evidencePromptDigest(
+      buildReviewerPrompt(
+        options.root,
+        options.issueNumber,
+        options.gateId,
+        options.targetSha,
+        options.baseSha,
+        expectedLightReview ?? null,
       ),
+    ),
+    expectedLightReview,
     expectedArtifacts: artifacts,
     expectedTrustedBaseSha: options.baseSha,
     expectedLauncherDigest: launcherDigest,
@@ -1781,7 +1795,13 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       commits: parseGhList<TrustedGateApiContext['commits'][number]>(commitsResponse.stdout),
       reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
     };
-    const rebuilt = buildVerifiedGateReportFromTrustedContext(root, context).report;
+    const rebuiltResult = buildVerifiedGateReportFromTrustedContext(root, context);
+    if (!rebuiltResult.report.gate.review_attempt) {
+      throw new CliError(
+        `Check outputのreview evidenceを再構築できません${rebuiltResult.reason ? `: ${rebuiltResult.reason}` : ''}`,
+      );
+    }
+    const rebuilt = rebuiltResult.report;
     const expectedAttestation = buildTrustedGateAttestation({
       repository,
       payload: context.payload,

@@ -154,11 +154,16 @@ export interface ResolveLightReviewOptions {
   backend: CoordinationBackend;
   targetSha: string;
   baseRef?: string;
+  /** evidence検証では既存scaffoldを当該ラウンドとして再評価し、roundを進めない。 */
+  advanceRemediationRound?: boolean;
 }
 
 /** 軽量シグナル、3層ガードレール、人間付与確認、一方向ラチェットを合成する。 */
 export function resolveLightReview(options: ResolveLightReviewOptions): LightReviewDecision {
   const previous = previousLightReview(options.root, options.issueNumber, options.gateId, options.backend);
+  const remediationRound = options.advanceRemediationRound === false
+    ? Math.max(0, previous.remediationRound - 1)
+    : previous.remediationRound;
   const signal =
     options.backend === 'github'
       ? readGithubSignal(options.root, options.issueNumber)
@@ -169,7 +174,7 @@ export function resolveLightReview(options: ResolveLightReviewOptions): LightRev
       requested: false,
       applied: false,
       disabled_reasons: previous.strictLocked ? ['過去のラウンドで軽量プロファイルがStrictへ確定済みのため'] : [],
-      remediation_round: previous.remediationRound,
+      remediation_round: remediationRound,
       strict_locked: previous.strictLocked,
     };
   }
@@ -209,7 +214,7 @@ export function resolveLightReview(options: ResolveLightReviewOptions): LightRev
     requested: true,
     applied: !strictLocked && grantorConfirmed,
     disabled_reasons: disabledReasons,
-    remediation_round: previous.remediationRound,
+    remediation_round: remediationRound,
     strict_locked: strictLocked,
   };
 }
