@@ -17,6 +17,14 @@ export interface EvidenceVerdict {
   inconclusive: boolean;
 }
 
+export interface LightReviewEvidence {
+  requested: boolean;
+  applied: boolean;
+  disabled_reasons: string[];
+  remediation_round: number;
+  strict_locked: boolean;
+}
+
 export interface ReviewEvidence {
   schema_version: 'agent-skill-chain/gate-review-evidence/v3';
   issue_id: string;
@@ -46,6 +54,7 @@ export interface ReviewEvidence {
     };
   };
   prompt_digest: string;
+  light_review?: LightReviewEvidence;
   verdict: EvidenceVerdict;
 }
 
@@ -89,6 +98,7 @@ export interface EvidenceVerification {
   approved_artifacts: { path: string; digest: string }[];
   reviewers: VerifiedReviewer[];
   review_attempt?: VerifiedReviewAttempt;
+  light_review?: LightReviewEvidence;
   reason?: string;
 }
 
@@ -157,6 +167,21 @@ function isArtifactShape(value: unknown, digestRequired: boolean): boolean {
   );
 }
 
+function isLightReviewShape(value: unknown): value is LightReviewEvidence {
+  if (!value || typeof value !== 'object') return false;
+  const light = value as Partial<LightReviewEvidence>;
+  return (
+    typeof light.requested === 'boolean' &&
+    typeof light.applied === 'boolean' &&
+    Array.isArray(light.disabled_reasons) &&
+    light.disabled_reasons.every((reason) => typeof reason === 'string') &&
+    typeof light.remediation_round === 'number' &&
+    Number.isInteger(light.remediation_round) &&
+    light.remediation_round >= 0 &&
+    typeof light.strict_locked === 'boolean'
+  );
+}
+
 export function isEvidenceVerdict(value: unknown, digestRequired = true): value is EvidenceVerdict {
   if (!value || typeof value !== 'object') return false;
   const verdict = value as Partial<EvidenceVerdict>;
@@ -203,6 +228,7 @@ function isEvidenceShape(value: ReviewEvidence): boolean {
     typeof value.reviewer.capability.read_only === 'boolean' &&
     typeof value.prompt_digest === 'string' &&
     /^sha256:[0-9a-f]{64}$/.test(value.prompt_digest) &&
+    (value.light_review === undefined || isLightReviewShape(value.light_review)) &&
     isEvidenceVerdict(value.verdict)
   );
 }
@@ -217,6 +243,7 @@ export function verifyGithubReviewEvidence(options: {
   writerActors: string[];
   unresolvedWriterActor: boolean;
   expectedPromptDigest: string;
+  expectedLightReview?: LightReviewEvidence;
   expectedArtifacts: { path: string; digest: string }[];
   expectedTrustedBaseSha: string;
   expectedLauncherDigest: string;
@@ -224,9 +251,6 @@ export function verifyGithubReviewEvidence(options: {
   codexModel: string;
   codexReasoning: string;
 }): EvidenceVerification {
-  if (options.coreReviewRequired && options.profile !== 'strict') {
-    return fail('コア対象にはStrict profileが必要です');
-  }
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
   }
@@ -247,13 +271,12 @@ export function verifyGithubReviewEvidence(options: {
     }
     if (!parsed || typeof parsed !== 'object') continue;
     const routed = parsed as Partial<ReviewEvidence>;
-    // 過去schemaと別Issue/gate/profile/targetの監査履歴は候補にしない。同一targetのv3だけを
-    // 最新attempt選択へ進めるため、same-SHA retry時も旧attemptを履歴として保持できる。
+    // 過去schemaと別Issue/gate/targetの監査履歴は候補にしない。同一targetのv3だけを
+    // 最新attempt選択へ進め、profile遷移後に旧profileへfallbackできないようにする。
     if (routed.schema_version !== 'agent-skill-chain/gate-review-evidence/v3') continue;
     if (
       routed.issue_id !== options.issueId ||
       routed.gate !== options.gate ||
-      routed.profile !== options.profile ||
       routed.target_sha !== options.targetSha
     ) {
       continue;
@@ -269,6 +292,16 @@ export function verifyGithubReviewEvidence(options: {
     return fail(`review ${latest.api.id} のevidence形式が不正です`);
   }
   const latestEvidence = latest.evidence as ReviewEvidence;
+  const expectedLightReview = canonicalJson(options.expectedLightReview ?? null);
+  if (canonicalJson(latestEvidence.light_review ?? null) !== expectedLightReview) {
+    return fail(`最新review attemptのlight_reviewがtrusted再評価値と一致しません: ${latestEvidence.attempt_id}`);
+  }
+  if (latestEvidence.profile !== options.profile) {
+    return fail(`最新review attemptのprofileがtrusted profileと一致しません: ${latestEvidence.attempt_id}`);
+  }
+  if (options.coreReviewRequired && options.profile !== 'strict') {
+    return fail('コア対象にはStrict profileが必要です');
+  }
   const selected = matching.filter((candidate) => candidate.evidence.attempt_id === latestEvidence.attempt_id);
   for (const candidate of selected) {
     if (!isEvidenceShape(candidate.evidence as ReviewEvidence)) {
@@ -294,7 +327,11 @@ export function verifyGithubReviewEvidence(options: {
     if (review.commit_id !== options.targetSha) {
       return fail(`review ${review.id} のAPI commit SHAが現在のPR headと一致しません`);
     }
+    if (evidence.profile !== options.profile) return fail(`review ${review.id} のprofileが一致しません`);
     if (evidence.expected_count !== expectedCount) return fail(`review ${review.id} のexpected_countが一致しません`);
+    if (canonicalJson(evidence.light_review ?? null) !== expectedLightReview) {
+      return fail(`review ${review.id} のlight_reviewがtrusted再評価値と一致しません`);
+    }
     if (evidence.prompt_digest !== options.expectedPromptDigest) {
       return fail(`review ${review.id} のprompt digestが一致しません`);
     }
@@ -349,6 +386,8 @@ export function verifyGithubReviewEvidence(options: {
   if (expectedSlots.some((slot) => !slots.has(slot as 1 | 2))) return fail('必要なreviewer slotが揃っていません');
   const tokenDigests = new Set(candidates.map((candidate) => candidate.evidence.execution.launcher_token_digest));
   if (tokenDigests.size !== 1) return fail('review attempt内のlauncher token digestが一致しません');
+  const lightReviews = new Set(candidates.map((candidate) => canonicalJson(candidate.evidence.light_review ?? null)));
+  if (lightReviews.size !== 1) return fail('review attempt内のlight_review証跡が一致しません');
 
   const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
   const blockers = verdicts.flatMap((verdict) => verdict.blockers);
@@ -402,6 +441,7 @@ export function verifyGithubReviewEvidence(options: {
       isolation: evidence.execution.isolation,
       sandbox: evidence.execution.sandbox,
     })),
+    ...(options.expectedLightReview ? { light_review: options.expectedLightReview } : {}),
     review_attempt: {
       attempt_id: latestEvidence.attempt_id,
       expected_count: expectedCount,

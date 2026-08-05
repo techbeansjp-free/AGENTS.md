@@ -13,6 +13,12 @@ import { git, gh } from '../lib/exec.js';
 import { digestOf, artifactDigestOf, artifactDigestOfFile, ARTIFACT_ABSENT_DIGEST } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { classifyCoreReview } from '../lib/model-selection.js';
+import { resolveReviewProfile } from '../lib/review-profile.js';
+import {
+  LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS,
+  resolveLightReview,
+  type LightReviewDecision,
+} from '../lib/review-light.js';
 import { syncGateArtifacts } from '../lib/issue-sync.js';
 import {
   canonicalJson,
@@ -193,6 +199,7 @@ export interface GateReport {
     approved_artifacts: { path: string; digest: string }[];
     reviewers?: VerifiedReviewer[];
     review_attempt?: VerifiedReviewAttempt;
+    light_review?: LightReviewDecision;
   };
 }
 
@@ -563,6 +570,16 @@ export async function review(args: string[]): Promise<number> {
     const targetSha = targetShaArg || git(['rev-parse', 'HEAD'], entry.path).stdout.trim();
     if (!targetSha) throw new CliError('target_sha を取得できませんでした');
 
+    const lightReview = resolveLightReview({
+      root,
+      worktreePath: entry.path,
+      issueNumber: number,
+      gateId,
+      backend: config.coordination.backend,
+      targetSha,
+    });
+    const effectiveProfile = lightReview.strict_locked ? 'strict' : lightReview.applied ? 'standard' : profile;
+
     const scaffold: GateReport = {
       schema_version: 'agent-skill-chain/gate-report/v1',
       gate: {
@@ -574,6 +591,7 @@ export async function review(args: string[]): Promise<number> {
         blockers: [],
         approved_digest: `sha256:${'0'.repeat(64)}`,
         approved_artifacts: [],
+        light_review: lightReview,
       },
     };
     const outcome = validateAgainstSchema('gate-report', scaffold, root);
@@ -582,8 +600,10 @@ export async function review(args: string[]): Promise<number> {
     const reportPath = reviewFilePath(root, number, gateId, config.coordination.backend);
     writeYamlFileAtomic(reportPath, scaffold);
 
-    const reviewerCount = config.review[profile].reviewer_count;
-    return ok(`gate_report_path: ${reportPath}\nreviewer_count: ${reviewerCount}`);
+    const reviewerCount = config.review[effectiveProfile].reviewer_count;
+    return ok(
+      `gate_report_path: ${reportPath}\nreviewer_count: ${reviewerCount}\nreview_profile: ${effectiveProfile}`,
+    );
   });
 }
 
@@ -973,6 +993,12 @@ export async function recordVerdict(args: string[]): Promise<number> {
       digest,
     }));
 
+    const hasBlocking = (verdict.blockers ?? []).some((finding) => finding.severity === 'blocking');
+    const lightReviewCutoffReached =
+      report.gate.light_review?.applied === true &&
+      report.gate.light_review.remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS &&
+      (hasBlocking || conformance === 'fail' || falsification === 'fail');
+    if (lightReviewCutoffReached) verdict.inconclusive = true;
     const final = deriveFinal(verdict);
     report.gate.conformance = conformance;
     report.gate.falsification = falsification;
@@ -1074,7 +1100,13 @@ export async function submitEvidence(args: string[]): Promise<number> {
       targetSha,
       gateId === 'implementation',
     );
-    const promptDigest = evidencePromptDigest(buildReviewerPrompt(root, number, gateId, targetSha, baseSha));
+    const config = loadConfig(root);
+    const lightReview = tryReadYamlFile<GateReport>(
+      reviewFilePath(root, number, gateId, config.coordination.backend),
+    )?.gate.light_review;
+    const promptDigest = evidencePromptDigest(
+      buildReviewerPrompt(root, number, gateId, targetSha, baseSha, lightReview ?? null),
+    );
     const launcherDigest = localReviewLauncherDigest(root, trustedBaseSha);
     let parsedVerdict: unknown;
     try {
@@ -1144,6 +1176,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
         },
       },
       prompt_digest: promptDigest,
+      ...(lightReview ? { light_review: lightReview } : {}),
       verdict,
     };
     const body = JSON.stringify({ body: renderReviewEvidence(evidence), event: 'COMMENT', commit_id: targetSha });
@@ -1206,26 +1239,42 @@ function buildVerifiedGateReport(options: {
     options.targetSha,
     options.gateId === 'implementation',
   );
-  const promptDigest = evidencePromptDigest(
-    buildReviewerPrompt(
-      options.root,
-      options.issueNumber,
-      options.gateId,
-      options.targetSha,
-      options.baseSha,
-    ),
-  );
   const launcherDigest = localReviewLauncherDigest(options.root, options.baseSha);
+  const lightReviewPath = reviewFilePath(options.root, options.issueNumber, options.gateId, 'github');
+  const hasTrustedLightReview = tryReadYamlFile<GateReport>(lightReviewPath)?.gate.light_review !== undefined;
+  const trustedLightReview = resolveLightReview({
+    root: options.root,
+    worktreePath: options.root,
+    issueNumber: options.issueNumber,
+    gateId: options.gateId,
+    backend: 'github',
+    targetSha: options.targetSha,
+    baseRef: options.baseSha,
+    advanceRemediationRound: false,
+  });
+  const effectiveProfile =
+    options.profile === 'strict' || trustedLightReview.strict_locked ? 'strict' : 'standard';
+  const expectedLightReview = hasTrustedLightReview ? trustedLightReview : undefined;
   const result = verifyGithubReviewEvidence({
     reviews: options.reviews,
     issueId: options.issueId,
     gate: options.gateId,
-    profile: options.profile,
+    profile: effectiveProfile,
     targetSha: options.targetSha,
     trustedActors: policy.policy.execution.trusted_reviewer_actors,
     writerActors,
     unresolvedWriterActor,
-    expectedPromptDigest: promptDigest,
+    expectedPromptDigest: evidencePromptDigest(
+      buildReviewerPrompt(
+        options.root,
+        options.issueNumber,
+        options.gateId,
+        options.targetSha,
+        options.baseSha,
+        expectedLightReview ?? null,
+      ),
+    ),
+    expectedLightReview,
     expectedArtifacts: artifacts,
     expectedTrustedBaseSha: options.baseSha,
     expectedLauncherDigest: launcherDigest,
@@ -1246,6 +1295,7 @@ function buildVerifiedGateReport(options: {
       approved_artifacts: result.approved_artifacts,
       reviewers: result.reviewers,
       ...(result.review_attempt ? { review_attempt: result.review_attempt } : {}),
+      ...(result.light_review ? { light_review: result.light_review } : {}),
     },
   };
   const validation = validateAgainstSchema('gate-report', report, options.root);
@@ -1733,12 +1783,25 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       issueRecord,
       issueId: issueIdRaw,
       issueNumber: Number(issueNumber),
-      profile: !labels.includes('risk:normal') || labels.includes('autonomy:full') ? 'strict' : 'standard',
+      profile: resolveReviewProfile(
+        labels.includes('risk:high')
+          ? 'high'
+          : labels.includes('risk:normal')
+            ? 'normal'
+            : 'unclassified',
+        labels.includes('autonomy:full') ? 'full' : 'gated',
+      ),
       reviewSubject: labels.includes('review:core-audit') ? 'core_audit' : 'ordinary',
       commits: parseGhList<TrustedGateApiContext['commits'][number]>(commitsResponse.stdout),
       reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
     };
-    const rebuilt = buildVerifiedGateReportFromTrustedContext(root, context).report;
+    const rebuiltResult = buildVerifiedGateReportFromTrustedContext(root, context);
+    if (!rebuiltResult.report.gate.review_attempt) {
+      throw new CliError(
+        `Check outputのreview evidenceを再構築できません${rebuiltResult.reason ? `: ${rebuiltResult.reason}` : ''}`,
+      );
+    }
+    const rebuilt = rebuiltResult.report;
     const expectedAttestation = buildTrustedGateAttestation({
       repository,
       payload: context.payload,
@@ -1925,6 +1988,7 @@ function buildReviewerPrompt(
   gateId: Segment,
   targetSha: string,
   baseSha?: string,
+  lightReviewOverride?: LightReviewDecision | null,
 ): string {
     const readArtifact = (name: string): string | undefined => {
       const shown = git(['show', `${targetSha}:${name}`], root);
@@ -1972,6 +2036,18 @@ function buildReviewerPrompt(
       '- 反例（未処理エッジ・矛盾・危険な既定・未テストの失敗経路・spec⇔実装乖離）を能動的に 1 件以上探索する。' +
         'blocking な反例が 1 件でもあれば falsification=fail とし origin 付き blocking finding を付与する。',
     );
+    const lightReview =
+      lightReviewOverride === undefined
+        ? tryReadYamlFile<GateReport>(
+            reviewFilePath(root, number, gateId, loadConfig(root).coordination.backend),
+          )?.gate.light_review
+        : lightReviewOverride ?? undefined;
+    if (lightReview?.applied === true) {
+      sections.push('## Lightプロファイル追加ルーブリック');
+      sections.push('- AC-ID未達の指摘は常にblockingとし、warning以下へ格下げしない。');
+      sections.push('- セキュリティ・データ喪失・互換性破壊・AGENTS.md不変条件違反はblockingへ昇格する。');
+      sections.push('- 上記以外のwarning・infoは記録するが、後続対応を必須としない。');
+    }
     sections.push('## final の扱い');
     sections.push(
       `- final はアダプタが verdict から機械的に導出する（両 pass かつ blocking 無し→approved／いずれか fail もしくは blocking→rejected）。` +

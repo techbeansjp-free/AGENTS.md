@@ -64,10 +64,16 @@ TRUSTED_SCRIPT_DIR="$TRUSTED_ROOT/.agent-skill-chain/scripts"
 
 REVIEW_OUTPUT="$("$TRUSTED_SCRIPT_DIR/gate-review.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$TARGET_SHA")"
 REPORT_PATH="$(sed -n 's/^gate_report_path: //p' <<<"$REVIEW_OUTPUT")"
+EFFECTIVE_PROFILE="$(sed -n 's/^review_profile: //p' <<<"$REVIEW_OUTPUT")"
 if [[ -z "$REPORT_PATH" ]]; then
   echo "gate-report scaffoldを生成できませんでした" >&2
   exit 1
 fi
+if [[ "$EFFECTIVE_PROFILE" != "standard" && "$EFFECTIVE_PROFILE" != "strict" ]]; then
+  echo "gate reviewの実効レビュープロファイルを解決できませんでした" >&2
+  exit 1
+fi
+PROFILE="$EFFECTIVE_PROFILE"
 
 COUNT=1
 [[ "$PROFILE" == "strict" ]] && COUNT=2

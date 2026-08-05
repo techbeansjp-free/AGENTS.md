@@ -1,7 +1,7 @@
-import { git, gh } from './exec.js';
-import { defaultBranch } from './worktree.js';
+import { gh } from './exec.js';
 import { stateFilePath, type CoordinationBackend } from './local-state.js';
 import { tryReadYamlFile } from './yaml-io.js';
+import { changedPaths, GUARDRAIL_PATHS } from './self-reference-guardrail.js';
 
 /**
  * quick モード（軽量な変更向けの成果物免除）の判定。
@@ -34,27 +34,6 @@ export const QUICK_EXEMPT_OUTPUTS: readonly string[] = [
   'PLAN.md',
   'acceptance_test_results',
   'regression_test_results',
-];
-
-/**
- * quick を取り消すガードレール対象パス。いずれかが変更差分に含まれる場合、quick が
- * 指定されていても免除を適用しない。
- *
- * - `docs/adr/`: ADR を要する判断は「詳細に設計するほどでもない変更」ではない。
- * - `.agent-skill-chain/config/segments.yaml`・`AGENTS.md`・`.agent-skill-chain/schemas/`:
- *   免除の判定規則自体を定める資産であり、quick で自身の規律を緩める自己参照的な悪用を防ぐ。
- */
-const GUARDRAIL_PATHS: { test: (p: string) => boolean; reason: string }[] = [
-  { test: (p) => p.startsWith('docs/adr/'), reason: '変更差分に docs/adr/ 配下（ADRを要する変更）が含まれます' },
-  {
-    test: (p) => p === '.agent-skill-chain/config/segments.yaml',
-    reason: '変更差分に .agent-skill-chain/config/segments.yaml（セグメント定義）が含まれます',
-  },
-  { test: (p) => p === 'AGENTS.md', reason: '変更差分に AGENTS.md（不変条件の正本）が含まれます' },
-  {
-    test: (p) => p.startsWith('.agent-skill-chain/schemas/'),
-    reason: '変更差分に .agent-skill-chain/schemas/ 配下（スキーマ定義）が含まれます',
-  },
 ];
 
 export type IssueSize = 'quick' | 'standard';
@@ -114,50 +93,6 @@ function readSignalFromLocalState(root: string, issueNumber: string): SizeSignal
   const risk: IssueRisk =
     state.risk === 'normal' || state.risk === 'high' || state.risk === 'unclassified' ? state.risk : 'unclassified';
   return { size: state.size === 'quick' ? 'quick' : 'standard', risk };
-}
-
-/** `git status --porcelain` の1行からパスを取り出す（rename は変更前後の両方を対象にする）。 */
-function pathsFromPorcelainLine(line: string): string[] {
-  const body = line.slice(3);
-  const parts = body.includes(' -> ') ? body.split(' -> ') : [body];
-  return parts.map((p) => p.trim().replace(/^"(.*)"$/, '$1')).filter((p) => p.length > 0);
-}
-
-interface ChangedPaths {
-  paths: string[];
-  /** 差分を機械的に解決できたか。解決不能なら quick を適用してはならない（安全側）。 */
-  resolvable: boolean;
-}
-
-/**
- * base ブランチとの三点差分（当該ブランチが持ち込んだ変更）に加え、未コミットの作業ツリー変更も
- * 対象にする。commit 前の状態でも同じ判定になり、「commit しなければガードレールを回避できる」
- * 抜け道も塞げるため。
- */
-function changedPaths(worktreePath: string): ChangedPaths {
-  const paths: string[] = [];
-  let resolvable = true;
-  try {
-    const base = defaultBranch(worktreePath);
-    const diff = git(['diff', '--name-only', `${base}...HEAD`], worktreePath);
-    if (diff.status !== 0) {
-      resolvable = false;
-    } else {
-      paths.push(...diff.stdout.split('\n').map((l) => l.trim()).filter((l) => l.length > 0));
-    }
-  } catch {
-    resolvable = false;
-  }
-  const status = git(['status', '--porcelain', '--untracked-files=all'], worktreePath);
-  if (status.status !== 0) {
-    resolvable = false;
-  } else {
-    for (const line of status.stdout.split('\n')) {
-      if (line.trim().length === 0) continue;
-      paths.push(...pathsFromPorcelainLine(line));
-    }
-  }
-  return { paths, resolvable };
 }
 
 /**

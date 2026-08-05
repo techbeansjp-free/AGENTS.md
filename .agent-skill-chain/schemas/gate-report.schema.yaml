@@ -85,6 +85,22 @@ properties:
           attempt_id: {type: string, pattern: '^attempt-[A-Za-z0-9._-]+$'}
           expected_count: {type: integer, minimum: 1, maximum: 2}
           evidence_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      light_review:
+        type: object
+        description: >
+          軽量レビュープロファイルのラウンド単位証跡。strict_locked は一度 true に
+          なったら、当該 Issue/PR のゲートライフサイクル中 false へ戻さない一方向
+          ラチェットとして扱う。
+        required: [requested, applied, disabled_reasons, remediation_round, strict_locked]
+        additionalProperties: false
+        properties:
+          requested: {type: boolean}
+          applied: {type: boolean}
+          disabled_reasons:
+            type: array
+            items: {type: string}
+          remediation_round: {type: integer, minimum: 0}
+          strict_locked: {type: boolean}
 
 definitions:
   finding:

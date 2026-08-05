@@ -42,6 +42,13 @@ properties:
     description: >
       独立レビューの対象区分。core_audit はコア資産を変更せず監査する場合に明示する。
       未設定は ordinary として後方互換にする。
+  review_intensity:
+    type: string
+    enum: [light, full]
+    default: full
+    description: >
+      ゲートレビューの軽量化を人間が明示する独立シグナル。light は安全側の
+      ガードレールをすべて通過した場合だけ適用し、未設定は full として後方互換にする。
   autonomy:
     type: string
     enum: [gated, full]
