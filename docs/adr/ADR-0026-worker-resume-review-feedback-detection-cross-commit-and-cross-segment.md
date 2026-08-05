@@ -23,6 +23,8 @@ ADR-0025（Issue #446、本ADRと同一Issue）は、resumeされたセグメン
 
 2026-08-05、本ADR初版（コメント時刻カットオフ廃止・ローカル全segment走査の2点のみを決定）に対する design-gate（strict、独立2レビュア）が、いずれも `falsification: fail` で次のblocking findingを検出した。(i) DESIGN.mdが「時刻カットオフを廃止した」と決定しながら、依存関係・mermaid・コンポーネント責務の記述にcommit時刻取得（`git log -1`）を入力源として残しており、決定と設計要素が同一成果物内で矛盾していた。(ii) GitHubモードで対象branchにOPENなPRがまだ無い場合（例: spec segmentのDraft PR作成前）、Issueコメントの取得自体が行われず、本Issueが解消対象とする「resumeしたworkerがフィードバックを一切参照しない」失敗モードがこのケースで再現し得た。(iii) ローカルモードのgate report読み込みに使う関数名・失敗意味論がDESIGN.md内で2箇所で食い違っていた。(iv) `resolveCurrentBranch()` の失敗（detached HEAD等）の扱いが未定義だった。本ADRはこれらを是正し、Decisionへ反映する。
 
+2026-08-05、上記是正を反映したDESIGN.md（Issue側／PR側の分離を導入した版）に対する design-gate（strict、独立2レビュア）が再度実行され、両レビュアが独立に次の実質的に同一の欠陥を指摘した（一方は`blocking`、他方は`warning`）: `PARTIAL_FAILURE_DISCARDS_DETECTED_FEEDBACK`／`PARTIAL_SUCCESS_DISCARDED_ON_ONE_SIDE_FAILURE`。「Issue側／PR側の分離」の合成規則が「いずれかが失敗すれば`detection: 'failed'`」とのみ規定しており、他方の経路で実際に検出済みの`unresolved_reviews`/`unresolved_comments`を保持するか破棄するかを規定していなかった。反例: PR側でレビュアが`CHANGES_REQUESTED`を出した状態で、Issue側`gh issue view`が一時的なレートリミットで失敗した場合、実際に検出できていた未対応レビューがプロンプトから消え、workerは`detection: 'failed'`の一文だけを受け取る。これは本Issue自身が解消対象とする「resumeしたworkerがレビューフィードバックを一切参照しない」失敗モードを、この合成ロジック自身が部分障害時に再導入していることを意味する。本ADRはこの合成規則を是正し、Decisionへ反映する（ADR本文はまだ`status: proposed`であり、design-gate承認前のためDecision本文の修正は本ADRの改版として許容される。承認後の変更が必要になった場合は別ADRで`supersedes`する）。
+
 検討した選択肢（(a)コメント判定について）:
 
 1. **since基準を維持する（ADR-0025のまま）**: 既知の取りこぼしを引き続き受け入れる。本Issueの目的（resumeしたworkerが既存レビューフィードバックを確実に確認する）そのものを損なう既知の欠陥を放置することになり、implementation-gateの指摘と正面から矛盾するため不採用。
@@ -41,6 +43,11 @@ ADR-0025（Issue #446、本ADRと同一Issue）は、resumeされたセグメン
 2. **PR解決を先に試み、失敗時のみIssueコメントを個別取得するフォールバックにする**: PR解決の成否によって呼び出し回数・経路が変わり、`gh`呼び出しが2通りの組み合わせ（PR有り時はissue呼び出しを省略する等）になり得るため、失敗経路の網羅がテストしにくくなる。
 3. **Issue側とPR側を常に独立した経路として実行し、結果を合成する（採用）**: Issue側は`resolveCurrentBranch`・PR解決の成否に関わらず常に`gh issue view`を1回呼ぶ。PR側は解決できた場合のみ実行する。呼び出し回数は「PR解決成功時2回（issue view + pr view）、失敗・未作成時1回（issue viewのみ）」で決定的であり、経路が分岐しないためテストしやすい。`gh`呼び出しが従来より最大1回（Issue側）増えるが、Issueコメント取得は元々AC-3の要求に含まれていたものであり新規のAPI負荷ではない。
 
+検討した選択肢（(d) Issue側／PR側の一方のみが失敗した場合の合成方針について、design-gate指摘（`PARTIAL_FAILURE_DISCARDS_DETECTED_FEEDBACK`／`PARTIAL_SUCCESS_DISCARDED_ON_ONE_SIDE_FAILURE`）を受けて追加）:
+
+1. **一方でも失敗すれば全体を`detection: 'failed'`とする（初版の決定のまま）**: 実装・出力型が単純だが、他方の経路で実際に検出済みの未対応レビュー・コメントまで一律で破棄することになる。反例: PR側で`CHANGES_REQUESTED`が検出できていても、Issue側の一時的なレートリミットだけで、その検出結果ごと消えてプロンプトには`detection: 'failed'`の一文しか残らない。本Issue自身が解消対象とする失敗モード（resumeしたworkerがフィードバックを一切参照しない）を合成ロジックが部分障害時に再現するため不採用。
+2. **成功した側の検出結果を保持し、失敗した側を`partial_failures`として付加する（採用）**: 出力型は`detection: 'succeeded'`に`partial_failures`（非空の場合のみ）を加える形になり、両方失敗時のみ`detection: 'failed'`を返す。型がやや複雑になるが、成功側の検出結果を破棄しないためAC-2/AC-3の要求（検出漏れしない）とAC-5の要求（失敗を隠さない）を同時に満たせる唯一の案である。
+
 ## Decision
 
 resumeされたセグメント作業ワーカーへ同梱する「未対応の既存レビューフィードバック」の判定基準を、ADR-0025の決定を置き換えて次のとおり確定する。
@@ -50,17 +57,20 @@ resumeされたセグメント作業ワーカーへ同梱する「未対応の�
 - **Issue側とPR側の検出を分離する**: GitHubモードではIssueは常にPRより先に存在する（Draft PRはspec workerが最初のcheckpointをpushした後にしか作られない）。「PRが解決できなければIssueコメントの検出も行わない」という一体化した設計では、Draft PR作成前に投稿されたIssueコメントへのフィードバックが検出できず、本Issueが解消対象とする失敗モードがこのケースで再現する。したがって、Issue側コメント検出（`gh issue view --json comments`）とPR側検出（`resolveCurrentBranch` → `findOpenPrByHead` → `gh pr view --json latestReviews,comments`）を独立した経路として実行し、結果を合成する。Issue側は常に実行し、PR側は解決できた場合のみ実行する。
 - **branch解決失敗はPR未作成と区別する**: `resolveCurrentBranch()` が失敗する場合（detached HEAD等）、PR側を「PR未作成」（0件・非失敗）として扱うと、実際には存在するかもしれないPR側のレビュー・コメントを「無し」と偽装する（AC-5違反）ため区別し、PR側を明示的な `detection: 'failed'` として扱う。
 - **`findOpenPrByHead()` が `undefined` を返す場合はPR未作成として扱う**: 同関数は「PRが存在しない」場合と「`gh pr view` 呼び出し自体の失敗」を区別しない既存実装であり、release bump・root-cleanup run等の既存呼び出し元へ影響する変更を避けるため本ADRでは変更しない。この既知の区別不能性を受け入れ、`undefined` は一律「PR未作成」（PR側0件）として扱う。影響範囲はPR側の検出に限られ、Issue側コメントの検出（上記）は独立して機能し続けるため、本Issueが解消対象とする失敗モードへの実質的な影響は限定的と判断する。
-- **検出処理自体が失敗した場合**（Issue側の`gh`呼び出し失敗・JSON解釈失敗、またはPR側のbranch解決失敗・`gh`呼び出し失敗・JSON解釈失敗）は、ADR-0025の決定を維持する。検出結果を「未対応が無い」として扱わず、`detection: 'failed'` として明示的にプロンプトへ含める。
+- **検出処理自体が失敗した場合**（Issue側の`gh`呼び出し失敗・JSON解釈失敗、またはPR側のbranch解決失敗・`gh`呼び出し失敗・JSON解釈失敗）: Issue側・PR側それぞれを「成功（0件以上のデータを実際に取得できた。PR側の『PR未作成』も非失敗の成功として扱う）」「失敗」に正規化したうえで、次のとおり合成する（ADR-0025の決定を置き換える）。
+  - 両方失敗した場合のみ、検出結果を「未対応が無い」として扱わず`detection: 'failed'`（両側の失敗理由を含む`reason`）として明示的にプロンプトへ含める。
+  - 一方が成功・他方が失敗した場合は、`detection: 'succeeded'`とし、成功した側で実際に検出済みの未対応レビュー・コメント（0件でもよい）をそのまま保持したうえで、失敗した側の理由を`partial_failures`として付加する。他方の一時的な障害を理由に、既に検出できていたフィードバックを破棄してはならない——これは本Issue自身が解消対象とする失敗モード（resumeしたworkerがフィードバックを一切参照しない）を合成ロジック自身が部分障害時に再導入することを防ぐための決定である。
 - **ローカルモードのgate report走査**: 起動対象segment（差し戻し先）と同名のgate reportだけでなく、`spec`/`design`/`implementation`/`validation` 全segmentのgate report（`reviews/<segment>.yaml`）を走査し、`gate.blockers` のうち `origin` が起動対象segmentに対応する値（`spec`→`specification`、それ以外は同名）と一致する `severity: blocking` のfindingのみを収集する。
 - **ローカルモードのgate report読み込み失敗時**: `tryReadYamlFile()`（`src/lib/yaml-io.ts`、既存・変更なし）を用いる。同関数は「ファイル不存在」時は例外を投げず`undefined`を返し、「ファイルは存在するがYAML解釈に失敗」した場合は例外を投げる既存挙動を持つ。前者（ファイル不存在）はそのsegmentにgate report自体が無い正常系として「0件」で継続し、後者（YAML解釈失敗）のみをsegment単位で捕捉し失敗として扱う。1つでもYAML解釈に失敗したsegmentがあれば、GitHubモードの`detection: 'failed'`と対称に、ローカルモードでも `detection: 'failed'` として明示する（ADR-0025では「blocker無し」と区別せずundefinedを返す設計だったが、AGENTS.md I8（安全側ラチェット）に照らし、検出失敗と検出結果ゼロを区別しない状態は是正する）。
 
 ## Consequences
 
-- 利点: コメント判定の時刻カットオフ廃止により、「未対応フィードバックが無関係なcommitの存在によって不可視化される」という、本Issue #446自身が解決対象とする失敗モードと同型の取りこぼしが原理的に発生しなくなる。ローカルモードの全segment走査により、AGENTS.mdが定めるorigin基準の差し戻し機構が実際に機能するようになる。Issue側／PR側の検出分離により、Draft PR作成前でも進行役の修正依頼コメントが検出可能になり、AC-3の要求範囲が実装可能になる。
+- 利点: コメント判定の時刻カットオフ廃止により、「未対応フィードバックが無関係なcommitの存在によって不可視化される」という、本Issue #446自身が解決対象とする失敗モードと同型の取りこぼしが原理的に発生しなくなる。ローカルモードの全segment走査により、AGENTS.mdが定めるorigin基準の差し戻し機構が実際に機能するようになる。Issue側／PR側の検出分離により、Draft PR作成前でも進行役の修正依頼コメントが検出可能になり、AC-3の要求範囲が実装可能になる。Issue側・PR側の一方のみが失敗した場合に成功側の検出結果を保持する合成規則により、一時的な`gh`API障害が、既に検出できていた未対応フィードバックを不可視化する（本Issueが解決対象とする失敗モードと同型の退行）ことを防ぐ。
 - 欠点・limitation:
   - コメント判定は時刻カットオフを廃止したことで、既に別の手段で実質的に対応済みの過去コメントも、そのPRが存在する限り毎回のresumeで再掲され続ける（過検出）。内容がそのままプロンプトに含まれるため、worker・進行役が既知の対応済みコメントと判断して読み飛ばせることを前提とする。プロンプト肥大化のトリミング戦略はSPEC.mdスコープ外節のとおり引き続き別Issue対応とする。
   - ローカルモードの全segment走査は、対象Issueのsegment数（最大4ファイル）分のファイル読み込みが増えるが、いずれも小さいYAMLファイルでありパフォーマンス上の懸念は無い。
   - `findOpenPrByHead()` の既存の区別不能性（「PR未作成」と「`gh pr view`呼び出し失敗」を同一の`undefined`で返す）を本ADRでは是正しない。したがって、PR側で一時的な`gh`障害が発生した場合、実際には存在するPRのレビュー・コメントが「PR未作成」として静かに0件扱いされる可能性が残る。Issue側の検出は独立して機能するため影響は限定的だが、完全に解消されているわけではない。
+  - 出力の型が`detection: 'succeeded' | 'failed'`の二値から、`partial_failures`という付加フィールドを持つ形へ複雑化する。worker（プロンプトの読み手）は「検出結果が存在するが一部の経路は失敗している」という中間状態を理解する必要がある。
 - follow-up: 過検出が実運用で許容できないほど頻発する場合、コメント単位の既読管理（新規永続状態の導入）を別Issueで検討する余地がある（本ADRの選択肢3を参照）。`findOpenPrByHead()` の区別不能性が実運用で問題化した場合、戻り値をエラー区別可能な形へ変更する対応を別Issueで検討する余地がある。
 
 ---
