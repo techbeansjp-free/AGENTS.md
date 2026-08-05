@@ -124,6 +124,12 @@ deprecated-reason: null
   対応は本ADRのスコープでは行わない。
 - 欠点: 付与主体の人間性検証（Decision 6）はローカルモードで構造的に確認手段を持たないため、ローカルモードの
   Issueでは軽量プロファイルが`applied=true`になることが現状ない。速度上の利益はGitHubモード限定になる。
+- 欠点: ローカルモードで`review:light`（`review_intensity: light`）が要求され、かつ差分がself-reference-
+  guardrail対象パス（`docs/adr/`等、Decision 2(c)）に触れた場合、`strict_locked`は確定しStrict固定が
+  当該Issueのゲートライフサイクル中永続する一方、上記の理由でローカルモードでは`grantorConfirmed`が常に
+  `false`であるため軽量プロファイルの恩恵（`applied=true`）は一度も得られない——ペナルティ（Strict固定）
+  のみが作用し便益は生じない非対称な帰結になる。ガードレール対象パスへの変更にStrictを要求するという設計
+  意図自体は安全側であり正しいため、ロジック変更は行わない。
 - 欠点: GitHubモードの付与主体検証（`actor.type === 'User'`）は、個人アクセストークンを用いた自動化スクリプト
   がhuman identityを借用した場合を区別できない。これは本リポジトリの既存コード（review-evidence.ts等）にも
   共通する、GitHub Identityを信頼の代理指標とする設計全体の既知の限界であり、本ADRのスコープでは追加対策を
