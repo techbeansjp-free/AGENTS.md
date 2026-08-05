@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0029
-status: proposed
+status: accepted
 title: worker-launch.shが呼び出し元のcwd・スクリプトパスに依存せず対象issueのworktreeを自己解決し再実行する
 tags: [worktree, worker-launch, writer-lease, adapters]
 supersedes: []
