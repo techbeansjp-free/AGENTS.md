@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0030
-status: proposed
+status: accepted
 title: worker-launch.shのsegment worker起動をAgent tool経由へ切り替える方式——lease/segment start/dispatch/verifyの4段分割
 tags: [worker-launch, agent-tool, subagent-visibility, writer-lease, durability, claude-code]
 supersedes: []
