@@ -8,9 +8,9 @@
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
 | 要求（credential不要の正規CLI回収経路） | `lease reclaim` コマンド（`src/commands/lease.ts` の `reclaim()`） | GitHub Coordination Backend限定。ローカルモードは `lease acquire` 自身が期限切れ既存ファイルを検出し回収・再試行する既存経路（`src/commands/lease.ts` の `acquire()` ローカル分岐）を既に持つため対象外（下記「依存関係」参照）。 |
-| AC-1（期限切れleaseを回収できる） | `reclaim()`：`allLeasesFor` による対象lease取得 → 期限切れ検査 → `--confirm` 検査 → `releaseLeaseRef` 呼び出し | 既存 `releaseLeaseRef`（`src/lib/github-lease.ts`）をそのまま再利用する。新規のref削除ロジックは作らない。 |
-| AC-2（期限内leaseは回収できない） | `reclaim()` 内の `expires_at > now` 検査（`releaseLeaseRef` 呼び出し前に早期return） | `lease resume` の期限検査（`resume()` 内、既存実装）と同じ比較方式に揃える。 |
-| AC-3（確認オプションなしでは回収しない） | `reclaim()` 冒頭の `--confirm` フラグ検査 | `upgrade` コマンドの `--dry-run`（`args.includes('--flag')`、`src/commands/upgrade.ts`）と同じ引数解析パターンを踏襲する。 |
+| AC-1（期限切れleaseを回収できる） | `reclaim()`：`--confirm` 検査 → `allLeasesFor` による対象lease取得 → 期限切れ検査 → `releaseLeaseRef` 呼び出し | 既存 `releaseLeaseRef`（`src/lib/github-lease.ts`）をそのまま再利用する。新規のref削除ロジックは作らない。処理順序はmermaid図・状態遷移図・PLAN.md #2 の実装手順と一致させ、`--confirm` 検査を先頭に置く（AC-3行参照）。 |
+| AC-2（期限内leaseは回収できない） | `reclaim()` 内の `expires_at > now` 検査（`releaseLeaseRef` 呼び出し前に早期return） | `lease resume` の期限検査（`resume()` 内、既存実装）と同じ比較方式に揃える。この検査に到達する時点で `--confirm` 検査（AC-3）は既に通過済みである。 |
+| AC-3（確認オプションなしでは回収しない） | `reclaim()` 冒頭の `--confirm` フラグ検査。検査失敗時は標準エラー出力へ固定メッセージ「`--confirm` オプションを付けて再実行してください」を表示してから終了コード1以上で終了する | `upgrade` コマンドの `--dry-run`（`args.includes('--flag')`、`src/commands/upgrade.ts`）と同じ引数解析パターンを踏襲する。メッセージ文言は `RECLAIM_USAGE` とは別の専用文字列として `reclaim()` 内に定数化する（SPEC.md AC-3 Then節が要求する「再実行を促すメッセージ」に対応）。 |
 | AC-4（回収証跡がCoordination Backendに記録される） | `postLeaseReclaimComment()`（新規、`src/lib/github-lease.ts`） | 既存 `postLeaseComment`／`cleanupLeaseComment` とは別マーカー・別関数にする（可視性コメントの削除対象に監査コメントが巻き込まれないようにするため）。 |
 | AC-5（検査後にrefが更新された場合は回収せず安全側で停止する） | 既存 `releaseLeaseRef` の `force-with-lease=<ref>:<expectedSha>` 削除（`src/lib/github-lease.ts`、変更なし） | `reclaim()` は検査時に読んだ `sha` を `expectedSha` としてそのまま渡すだけで、ADR-0002のCAS保証をそのまま継承する。 |
 | AC-6（回収後は新規lease取得が可能になる） | 既存 `acquireLeaseRef`（`src/lib/github-lease.ts`、変更なし） | ref削除により非fast-forward拒否の前提が消えるため、既存 `lease acquire` の実装を変更せずに満たされる。 |
@@ -90,7 +90,7 @@ related_adrs:
 ## 障害・ロールバック考慮
 
 - 想定される失敗モード:
-  - (a) `--confirm` なしで実行: 何も変更されず終了コード1以上（AC-3）。
+  - (a) `--confirm` なしで実行: 何も変更されず、標準エラー出力へ固定メッセージ「`--confirm` オプションを付けて再実行してください」を表示した上で終了コード1以上（AC-3）。
   - (b) 対象leaseが期限内: 何も変更されず終了コード1以上（AC-2）。
   - (c) 期限切れ検査後、削除実行までの間に対象holderが `lease resume`／`lease renew` に成功しrefを更新した: `releaseLeaseRef` のforce-with-lease条件不一致によりref削除が拒否され、ref状態は更新後の値のまま保持される。終了コード1以上（AC-5）。
   - (d) ref削除（`releaseLeaseRef`）は成功したが、直後の `postLeaseReclaimComment`（gh issue comment 投稿）がネットワーク障害・権限不足等で失敗する: ref状態は正しく回収済み（AC-6を満たす）だが監査証跡が残らないため、コマンドは終了コード1以上を返し、標準エラー出力に「ref削除は成功したが監査コメント投稿に失敗した」旨と手動での `gh issue comment` 実行を促すメッセージを表示する。ref削除の巻き戻しは行わない（削除自体は正当な回収であり、取り消すとAC-6の状態を壊すため）。
