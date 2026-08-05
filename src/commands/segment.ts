@@ -1,4 +1,4 @@
-import { repoRoot } from '../lib/paths.js';
+import { repoRoot, worktreeRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, validateSegment, CliError } from '../lib/issue.js';
 import { leaseFilePath, stateFilePath } from '../lib/local-state.js';
@@ -113,10 +113,18 @@ export async function start(args: string[]): Promise<number> {
       issueBlock = buildIssueBlock(issueIdRaw, state);
     }
 
-    const reviewStatus =
-      config.coordination.backend === 'local'
-        ? detectLocalBlockingFindings(root, number, segment)
-        : detectGithubReviewStatus(root, number);
+    let reviewStatus;
+    if (config.coordination.backend === 'local') {
+      reviewStatus = detectLocalBlockingFindings(root, number, segment);
+    } else {
+      let githubRoot = root;
+      try {
+        githubRoot = worktreeRoot();
+      } catch {
+        // Issue #446: 検出用root解決の失敗でworker起動全体を止めず、PR側の部分障害として表面化させる。
+      }
+      reviewStatus = detectGithubReviewStatus(githubRoot, number);
+    }
 
     const parts = [`role: ${role}`];
     if (issueBlock) parts.push(issueBlock);

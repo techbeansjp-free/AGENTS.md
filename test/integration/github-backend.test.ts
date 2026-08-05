@@ -301,6 +301,97 @@ test('segment start (github backend): 対象Issueと不一致のbranchではPR�
   assert.equal(stub.readState().prViewCalls?.length ?? 0, prViewCallsBefore);
 });
 
+test('segment start (github backend): CLOSED PRのレビュー履歴・補足本文・インラインコメントを同梱する', (t) => {
+  const { repo, stub, env, branch, prNumber } = prepareReviewStatusSegment(t, 447, { seedPr: false });
+  stub.seedOpenPr({ number: prNumber, headRefName: branch, body: '', state: 'CLOSED' });
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'CHANGES_REQUESTED',
+      author: { login: 'reviewer' },
+      body: 'closed PR blocking',
+      submittedAt: '2026-08-05T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'reviewer' },
+      body: '追加指摘1',
+      submittedAt: '2026-08-05T00:01:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'reviewer' },
+      body: '追加指摘2',
+      submittedAt: '2026-08-05T00:02:00Z',
+    },
+  ]);
+  stub.seedPrReviewThreadComments(prNumber, [
+    {
+      user: { login: 'inline-reviewer' },
+      body: '差分行の指摘',
+      created_at: '2026-08-05T00:03:00Z',
+      html_url: 'https://example.test/pull/1447#discussion_r1',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-447', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /closed PR blocking/);
+  assert.match(result.stdout, /comment_bodies:/);
+  assert.match(result.stdout, /追加指摘1/);
+  assert.match(result.stdout, /追加指摘2/);
+  assert.match(result.stdout, /source: review_thread_comment/);
+  assert.match(result.stdout, /差分行の指摘/);
+});
+
+test('segment start (github backend): インラインコメント取得だけ失敗してもPRレビューを保持する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 448);
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'CHANGES_REQUESTED',
+      author: { login: 'reviewer' },
+      body: '取得済みレビューを保持',
+      submittedAt: '2026-08-05T00:00:00Z',
+    },
+  ]);
+  stub.seedPrReviewThreadCommentsFailure(prNumber, { stderr: 'inline API unavailable\n' });
+
+  const result = runCli(['segment', 'start', 'ISSUE-448', 'spec'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /取得済みレビューを保持/);
+  assert.match(result.stdout, /side: pr_review_thread_comments/);
+  assert.match(result.stdout, /inline API unavailable/);
+  assert.doesNotMatch(result.stdout, /detection: failed/);
+});
+
+test('segment start (github backend): linked worktree自身のbranchでPR側レビューを解決する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  const branch = 'bugfix/449-linked-worktree-review-status';
+  const linkedWorktree = path.join(repo.dir, '.worktrees', 'linked-review-status');
+  fs.mkdirSync(path.dirname(linkedWorktree), { recursive: true });
+  execFileSync('git', ['worktree', 'add', '-b', branch, linkedWorktree], { cwd: repo.dir, stdio: 'pipe' });
+  stub.seedOpenPr({ number: 1449, headRefName: branch, body: '' });
+  stub.seedPrReviews(1449, [
+    {
+      state: 'CHANGES_REQUESTED',
+      author: { login: 'reviewer' },
+      body: 'linked worktree review',
+      submittedAt: '2026-08-05T00:00:00Z',
+    },
+  ]);
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-449', 'spec'], { cwd: linkedWorktree, env });
+  assert.equal(acquire.status, 0, acquire.stderr);
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  const result = runCli(['segment', 'start', 'ISSUE-449', 'spec'], { cwd: linkedWorktree, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /linked worktree review/);
+  assert.doesNotMatch(result.stdout, /ブランチ命名規則.*一致しません/);
+});
+
 test('issue resume (github backend): PRが見つからない場合とgh pr listの結果を含む場合', async (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   const { stub, env, cleanup } = makeStub();

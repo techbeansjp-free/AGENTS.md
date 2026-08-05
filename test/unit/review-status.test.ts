@@ -83,6 +83,112 @@ test('detectGithubReviewStatus: CHANGES_REQUESTEDと定型marker以外の全PR/I
   );
 });
 
+test('detectGithubReviewStatus: CLOSED/MERGEDでも取得済みレビューとコメントを破棄しない', (t) => {
+  for (const [index, state] of (['CLOSED', 'MERGED'] as const).entries()) {
+    const issueNumber = String(58 + index);
+    const { repo, stub, branch } = githubFixture(t, issueNumber);
+    stub.seedOpenPr({ number: 80 + index, headRefName: branch, body: '', state });
+    stub.seedPrReviews(80 + index, [
+      {
+        state: 'CHANGES_REQUESTED',
+        author: { login: 'reviewer' },
+        body: `${state} review`,
+        submittedAt: '2026-08-05T00:00:00Z',
+      },
+    ]);
+    stub.seedPrComments(80 + index, [
+      { author: { login: 'maintainer' }, body: `${state} comment`, createdAt: '2026-08-05T00:01:00Z' },
+    ]);
+
+    const result = detectGithubReviewStatus(repo.dir, issueNumber);
+    assert.ok(result && result.detection === 'succeeded');
+    assert.deepEqual(result.unresolved_reviews.map((review) => review.body), [`${state} review`]);
+    assert.deepEqual(result.unresolved_comments.map((comment) => comment.body), [`${state} comment`]);
+  }
+});
+
+test('detectGithubReviewStatus: 未対応reviewerのCHANGES_REQUESTED後のCOMMENTED本文を全件時系列順で保持する', (t) => {
+  const { repo, stub, branch } = githubFixture(t, '60');
+  stub.seedOpenPr({ number: 82, headRefName: branch, body: '' });
+  stub.seedPrReviews(82, [
+    { state: 'COMMENTED', author: { login: 'reviewer' }, body: 'before', submittedAt: '2026-08-05T00:00:00Z' },
+    { state: 'CHANGES_REQUESTED', author: { login: 'reviewer' }, body: 'blocking', submittedAt: '2026-08-05T00:01:00Z' },
+    { state: 'COMMENTED', author: { login: 'reviewer' }, body: 'third', submittedAt: '2026-08-05T00:04:00Z' },
+    { state: 'COMMENTED', author: { login: 'reviewer' }, body: 'first', submittedAt: '2026-08-05T00:02:00Z' },
+    { state: 'COMMENTED', author: { login: 'reviewer' }, body: 'second', submittedAt: '2026-08-05T00:03:00Z' },
+  ]);
+
+  const result = detectGithubReviewStatus(repo.dir, '60');
+  assert.ok(result && result.detection === 'succeeded');
+  assert.equal(result.unresolved_reviews[0].body, 'blocking');
+  assert.deepEqual(result.unresolved_reviews[0].comment_bodies, ['first', 'second', 'third']);
+});
+
+test('detectGithubReviewStatus: APPROVEDは変更要求を解除しCOMMENTEDだけのreviewerを未対応にしない', (t) => {
+  const { repo, stub, branch } = githubFixture(t, '61');
+  stub.seedOpenPr({ number: 83, headRefName: branch, body: '' });
+  stub.seedPrReviews(83, [
+    { state: 'CHANGES_REQUESTED', author: { login: 'resolved' }, body: 'old', submittedAt: '2026-08-05T00:00:00Z' },
+    { state: 'COMMENTED', author: { login: 'resolved' }, body: 'middle', submittedAt: '2026-08-05T00:01:00Z' },
+    { state: 'APPROVED', author: { login: 'resolved' }, body: 'ok', submittedAt: '2026-08-05T00:02:00Z' },
+    { state: 'COMMENTED', author: { login: 'comments-only' }, body: 'note', submittedAt: '2026-08-05T00:03:00Z' },
+  ]);
+
+  assert.equal(detectGithubReviewStatus(repo.dir, '61'), undefined);
+});
+
+test('detectGithubReviewStatus: 混在履歴では最新の判定提出を使い後続COMMENTEDを補足する', (t) => {
+  const { repo, stub, branch } = githubFixture(t, '62');
+  stub.seedOpenPr({ number: 84, headRefName: branch, body: '' });
+  stub.seedPrReviews(84, [
+    { state: 'CHANGES_REQUESTED', author: { login: 'reviewer' }, body: 'old blocking', submittedAt: '2026-08-05T00:00:00Z' },
+    { state: 'COMMENTED', author: { login: 'reviewer' }, body: 'old supplement', submittedAt: '2026-08-05T00:01:00Z' },
+    { state: 'CHANGES_REQUESTED', author: { login: 'reviewer' }, body: 'latest blocking', submittedAt: '2026-08-05T00:02:00Z' },
+    { state: 'COMMENTED', author: { login: 'reviewer' }, body: 'latest supplement', submittedAt: '2026-08-05T00:03:00Z' },
+  ]);
+
+  const result = detectGithubReviewStatus(repo.dir, '62');
+  assert.ok(result && result.detection === 'succeeded');
+  assert.equal(result.unresolved_reviews[0].body, 'latest blocking');
+  assert.deepEqual(result.unresolved_reviews[0].comment_bodies, ['latest supplement']);
+});
+
+test('detectGithubReviewStatus: インラインレビューコメントをpaginationして統合する', (t) => {
+  const { repo, stub, branch } = githubFixture(t, '63');
+  stub.seedOpenPr({ number: 85, headRefName: branch, body: '' });
+  stub.seedPrReviewThreadComments(85, Array.from({ length: 101 }, (_, index) => ({
+    user: { login: `reviewer-${index}` },
+    body: `inline-${index}`,
+    created_at: `2026-08-05T00:${String(index % 60).padStart(2, '0')}:00Z`,
+    html_url: `https://example.test/pull/85#discussion_r${index}`,
+  })));
+
+  const result = detectGithubReviewStatus(repo.dir, '63');
+  assert.ok(result && result.detection === 'succeeded');
+  assert.equal(result.unresolved_comments.length, 101);
+  assert.equal(result.unresolved_comments[0].source, 'review_thread_comment');
+  assert.equal(result.unresolved_comments[100].body, 'inline-100');
+  assert.equal(
+    stub.readState().apiCalls?.filter((call) => call.path.includes('/pulls/85/comments')).length,
+    2,
+  );
+});
+
+test('detectGithubReviewStatus: インラインコメント取得失敗でもPRレビューを保持して部分障害を通知する', (t) => {
+  const { repo, stub, branch } = githubFixture(t, '64');
+  stub.seedOpenPr({ number: 86, headRefName: branch, body: '' });
+  stub.seedPrReviews(86, [
+    { state: 'CHANGES_REQUESTED', author: { login: 'reviewer' }, body: 'keep me', submittedAt: '2026-08-05T00:00:00Z' },
+  ]);
+  stub.seedPrReviewThreadCommentsFailure(86, { stderr: 'inline API unavailable\n' });
+
+  const result = detectGithubReviewStatus(repo.dir, '64');
+  assert.ok(result && result.detection === 'succeeded');
+  assert.deepEqual(result.unresolved_reviews.map((review) => review.body), ['keep me']);
+  assert.deepEqual(result.partial_failures?.map((failure) => failure.side), ['pr_review_thread_comments']);
+  assert.match(result.partial_failures?.[0].reason ?? '', /inline API unavailable/);
+});
+
 test('detectGithubReviewStatus: 両側成功かつAPPROVEDのみでコメント無しならundefinedを返す', (t) => {
   const { repo, stub, branch } = githubFixture(t, '45');
   stub.seedOpenPr({ number: 72, headRefName: branch, body: '' });

@@ -24,11 +24,18 @@ interface GithubComment {
   url?: string;
 }
 
+interface GithubReviewThreadComment {
+  user?: GithubActor;
+  body?: string;
+  created_at?: string;
+  html_url?: string;
+}
+
 interface GithubPrPayload {
   number?: number;
   state?: string;
   headRefName?: string;
-  latestReviews?: GithubReview[];
+  reviews?: GithubReview[];
   comments?: GithubComment[];
 }
 
@@ -41,10 +48,11 @@ export interface UnresolvedGithubReview {
   state: 'CHANGES_REQUESTED';
   body: string;
   submitted_at?: string;
+  comment_bodies?: string[];
 }
 
 export interface UnresolvedGithubComment {
-  source: 'pr_comment' | 'issue_comment';
+  source: 'pr_comment' | 'issue_comment' | 'review_thread_comment';
   author: string;
   body: string;
   created_at: string;
@@ -52,7 +60,7 @@ export interface UnresolvedGithubComment {
 }
 
 export interface GithubPartialFailure {
-  side: typeof GITHUB_ISSUE_SIDE | 'pr';
+  side: typeof GITHUB_ISSUE_SIDE | 'pr' | 'pr_review_thread_comments';
   reason: string;
 }
 
@@ -119,6 +127,7 @@ interface SuccessfulPrDetection {
   prNumber?: number;
   reviews: UnresolvedGithubReview[];
   comments: UnresolvedGithubComment[];
+  reviewThreadCommentFailure?: string;
 }
 
 interface FailedSideDetection {
@@ -148,7 +157,7 @@ function isAutomationMarker(body: string): boolean {
 
 function unresolvedComment(
   comment: GithubComment,
-  source: 'pr_comment' | 'issue_comment',
+  source: 'pr_comment' | 'issue_comment' | 'review_thread_comment',
 ): UnresolvedGithubComment | undefined {
   if (typeof comment.body !== 'string' || typeof comment.createdAt !== 'string') return undefined;
   if (isAutomationMarker(comment.body)) return undefined;
@@ -161,13 +170,89 @@ function unresolvedComment(
   };
 }
 
-function unresolvedReview(review: GithubReview): UnresolvedGithubReview | undefined {
-  if (review.state !== 'CHANGES_REQUESTED') return undefined;
+function unresolvedReviews(reviews: GithubReview[]): UnresolvedGithubReview[] {
+  const byAuthor = new Map<string, { review: GithubReview; index: number }[]>();
+  reviews.forEach((review, index) => {
+    const author = review.author?.login ?? 'unknown';
+    const entries = byAuthor.get(author) ?? [];
+    entries.push({ review, index });
+    byAuthor.set(author, entries);
+  });
+
+  const unresolved: UnresolvedGithubReview[] = [];
+  for (const [author, entries] of byAuthor) {
+    const decisions = entries
+      .filter(({ review }) => review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED')
+      .sort(compareReviewEntries);
+    const latest = decisions.at(-1);
+    if (!latest || latest.review.state !== 'CHANGES_REQUESTED') continue;
+
+    const commentBodies = entries
+      .filter(({ review }) => review.state === 'COMMENTED')
+      .filter((entry) => compareReviewEntries(entry, latest) > 0)
+      .sort(compareReviewEntries)
+      .map(({ review }) => review.body)
+      .filter((body): body is string => typeof body === 'string');
+    unresolved.push({
+      author,
+      state: 'CHANGES_REQUESTED',
+      body: typeof latest.review.body === 'string' ? latest.review.body : '',
+      ...(typeof latest.review.submittedAt === 'string' ? { submitted_at: latest.review.submittedAt } : {}),
+      ...(commentBodies.length > 0 ? { comment_bodies: commentBodies } : {}),
+    });
+  }
+  return unresolved;
+}
+
+function compareReviewEntries(
+  left: { review: GithubReview; index: number },
+  right: { review: GithubReview; index: number },
+): number {
+  const leftTime = typeof left.review.submittedAt === 'string' ? left.review.submittedAt : '';
+  const rightTime = typeof right.review.submittedAt === 'string' ? right.review.submittedAt : '';
+  return leftTime.localeCompare(rightTime) || left.index - right.index;
+}
+
+function detectReviewThreadComments(
+  root: string,
+  prNumber: number,
+): { comments: UnresolvedGithubComment[]; failure?: string } {
+  const comments: UnresolvedGithubComment[] = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const result = gh(
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/comments?per_page=100&page=${page}`],
+      root,
+    );
+    if (result.status !== 0) {
+      return {
+        comments,
+        failure: failureReason(`PR #${prNumber} のインラインレビューコメント取得に失敗しました`, result.stderr),
+      };
+    }
+    try {
+      const payload = JSON.parse(result.stdout) as GithubReviewThreadComment[];
+      if (!Array.isArray(payload)) throw new Error('コメント一覧が配列ではありません');
+      comments.push(
+        ...payload
+          .map((comment) => unresolvedComment({
+            author: comment.user,
+            body: comment.body,
+            createdAt: comment.created_at,
+            url: comment.html_url,
+          }, 'review_thread_comment'))
+          .filter((comment): comment is UnresolvedGithubComment => comment !== undefined),
+      );
+      if (payload.length < 100) return { comments };
+    } catch (error) {
+      return {
+        comments,
+        failure: `PR #${prNumber} のインラインレビューコメントJSON解釈に失敗しました: ${errorReason(error)}`,
+      };
+    }
+  }
   return {
-    author: review.author?.login ?? 'unknown',
-    state: 'CHANGES_REQUESTED',
-    body: typeof review.body === 'string' ? review.body : '',
-    ...(typeof review.submittedAt === 'string' ? { submitted_at: review.submittedAt } : {}),
+    comments,
+    failure: `PR #${prNumber} のインラインレビューコメントがpagination上限を超えました`,
   };
 }
 
@@ -212,7 +297,7 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
   }
 
   const result = gh(
-    ['pr', 'view', branch, '--json', 'number,state,headRefName,latestReviews,comments'],
+    ['pr', 'view', branch, '--json', 'number,state,headRefName,reviews,comments'],
     root,
   );
   if (result.status !== 0) {
@@ -231,21 +316,23 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
       typeof payload.number !== 'number' ||
       typeof payload.state !== 'string' ||
       typeof payload.headRefName !== 'string' ||
-      !Array.isArray(payload.latestReviews) ||
+      !Array.isArray(payload.reviews) ||
       !Array.isArray(payload.comments)
     ) {
-      throw new Error('number/state/headRefName/latestReviews/commentsが不正です');
+      throw new Error('number/state/headRefName/reviews/commentsが不正です');
     }
-    if (payload.state !== 'OPEN') return { succeeded: true, reviews: [], comments: [] };
+    const reviewThreadResult = detectReviewThreadComments(root, payload.number);
     return {
       succeeded: true,
       prNumber: payload.number,
-      reviews: payload.latestReviews
-        .map(unresolvedReview)
-        .filter((review): review is UnresolvedGithubReview => review !== undefined),
-      comments: payload.comments
-        .map((comment) => unresolvedComment(comment, 'pr_comment'))
-        .filter((comment): comment is UnresolvedGithubComment => comment !== undefined),
+      reviews: unresolvedReviews(payload.reviews),
+      comments: [
+        ...payload.comments
+          .map((comment) => unresolvedComment(comment, 'pr_comment'))
+          .filter((comment): comment is UnresolvedGithubComment => comment !== undefined),
+        ...reviewThreadResult.comments,
+      ],
+      ...(reviewThreadResult.failure ? { reviewThreadCommentFailure: reviewThreadResult.failure } : {}),
     };
   } catch (error) {
     return {
@@ -279,6 +366,12 @@ export function detectGithubReviewStatus(
   const partialFailures: GithubPartialFailure[] = [];
   if (!issueResult.succeeded) partialFailures.push({ side: GITHUB_ISSUE_SIDE, reason: issueResult.reason });
   if (!prResult.succeeded) partialFailures.push({ side: 'pr', reason: prResult.reason });
+  if (prResult.succeeded && prResult.reviewThreadCommentFailure) {
+    partialFailures.push({
+      side: 'pr_review_thread_comments',
+      reason: prResult.reviewThreadCommentFailure,
+    });
+  }
 
   if (unresolvedReviews.length === 0 && unresolvedComments.length === 0 && partialFailures.length === 0) {
     return undefined;
