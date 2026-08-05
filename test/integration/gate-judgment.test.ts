@@ -42,6 +42,13 @@ interface GateReport {
     blockers: { severity: string; origin: string; code: string; evidence: string[] }[];
     approved_digest: string;
     approved_artifacts: { path: string; digest: string }[];
+    light_review?: {
+      requested: boolean;
+      applied: boolean;
+      disabled_reasons: string[];
+      remediation_round: number;
+      strict_locked: boolean;
+    };
   };
 }
 
@@ -206,6 +213,76 @@ test('gate record-verdict: inconclusive の verdict は silent pass せず final
 
   assert.equal(res.status, 0, res.stderr);
   assert.equal(readReport(reportPath).gate.final, 'human_required');
+});
+
+test('gate record-verdict: lightの再レビュー上限でblockingが残ればhuman_requiredへ打ち切る', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(
+    repo.dir,
+    scaffold({
+      light_review: {
+        requested: true,
+        applied: true,
+        disabled_reasons: [],
+        remediation_round: 1,
+        strict_locked: false,
+      },
+    }),
+  );
+  const verdict = JSON.stringify({
+    conformance: 'fail',
+    falsification: 'pass',
+    blockers: [{ severity: 'blocking', origin: 'specification', code: 'AC-1', evidence: ['未達'] }],
+  });
+  const res = runCli(['gate', 'record-verdict', reportPath], { cwd: repo.dir, input: verdict });
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readReport(reportPath).gate.final, 'human_required');
+});
+
+test('gate record-verdict: light未適用または初回ラウンドには専用打ち切りを適用しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const blocking = JSON.stringify({
+    conformance: 'fail',
+    falsification: 'pass',
+    blockers: [{ severity: 'blocking', origin: 'specification', code: 'AC-1', evidence: ['未達'] }],
+  });
+
+  const initial = writeReport(
+    repo.dir,
+    scaffold({
+      light_review: {
+        requested: true,
+        applied: true,
+        disabled_reasons: [],
+        remediation_round: 0,
+        strict_locked: false,
+      },
+    }),
+  );
+  assert.equal(runCli(['gate', 'record-verdict', initial], { cwd: repo.dir, input: blocking }).status, 0);
+  assert.equal(readReport(initial).gate.final, 'rejected');
+
+  const notApplied = path.join(repo.dir, 'not-applied.yaml');
+  fs.writeFileSync(
+    notApplied,
+    stringify(
+      scaffold({
+        light_review: {
+          requested: true,
+          applied: false,
+          disabled_reasons: ['Strict'],
+          remediation_round: 1,
+          strict_locked: true,
+        },
+      }),
+    ),
+  );
+  assert.equal(runCli(['gate', 'record-verdict', notApplied], { cwd: repo.dir, input: blocking }).status, 0);
+  assert.equal(readReport(notApplied).gate.final, 'rejected');
 });
 
 test('gate record-verdict: approved_artifacts のパスは artifact_base_dir から digest を算出して記録する', async (t) => {
@@ -380,6 +457,97 @@ test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック
   assert.match(res.stdout, /falsification/);
   assert.match(res.stdout, /origin/);
   assert.match(res.stdout, /read-only/);
+});
+
+test('gate reviewer-prompt: light適用時だけ追加のseverityルーブリックを出力する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: add prompt target'], { cwd: repo.dir });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const reportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'spec.yaml');
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.writeFileSync(
+    reportPath,
+    stringify(
+      scaffold({
+        light_review: {
+          requested: true,
+          applied: true,
+          disabled_reasons: [],
+          remediation_round: 0,
+          strict_locked: false,
+        },
+      }),
+    ),
+  );
+
+  const applied = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.match(applied.stdout, /Lightプロファイル追加ルーブリック/);
+  assert.match(applied.stdout, /AC-ID未達の指摘は常にblocking/);
+  assert.match(applied.stdout, /セキュリティ・データ喪失・互換性破壊/);
+
+  const report = readReport(reportPath);
+  report.gate.light_review!.applied = false;
+  fs.writeFileSync(reportPath, stringify(report));
+  const disabled = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
+  assert.equal(disabled.status, 0, disabled.stderr);
+  assert.doesNotMatch(disabled.stdout, /Lightプロファイル追加ルーブリック/);
+});
+
+test('gate review: remediationごとに再評価しStrict固定を差分復帰・ラベル除去後も維持する', (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  execFileSync('git', ['checkout', '-b', 'feature/449-review-light-test'], { cwd: repo.dir });
+  stub.seedIssueLabels('449', ['review:light', 'risk:normal', 'autonomy:gated']);
+  stub.seedIssueEvents('449', [
+    {
+      event: 'labeled',
+      created_at: '2026-08-05T00:00:00Z',
+      label: { name: 'review:light' },
+      actor: { type: 'User' },
+    },
+  ]);
+  const head = () => execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+
+  const first = runCli(['gate', 'review', 'ISSUE-449', 'implementation', 'standard', head()], { cwd: repo.dir, env });
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /review_profile: standard/);
+  assert.match(first.stdout, /reviewer_count: 1/);
+
+  fs.mkdirSync(path.join(repo.dir, 'docs', 'adr'), { recursive: true });
+  fs.writeFileSync(path.join(repo.dir, 'docs', 'adr', 'ADR-test.md'), '# test\n');
+  execFileSync('git', ['add', 'docs/adr/ADR-test.md'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: add guardrail path'], { cwd: repo.dir });
+  const escalated = runCli(['gate', 'review', 'ISSUE-449', 'implementation', 'standard', head()], { cwd: repo.dir, env });
+  assert.equal(escalated.status, 0, escalated.stderr);
+  assert.match(escalated.stdout, /review_profile: strict/);
+  assert.match(escalated.stdout, /reviewer_count: 2/);
+
+  fs.rmSync(path.join(repo.dir, 'docs', 'adr', 'ADR-test.md'));
+  execFileSync('git', ['add', '-A'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: remove guardrail path'], { cwd: repo.dir });
+  const restored = runCli(['gate', 'review', 'ISSUE-449', 'implementation', 'standard', head()], { cwd: repo.dir, env });
+  assert.equal(restored.status, 0, restored.stderr);
+  assert.match(restored.stdout, /review_profile: strict/);
+
+  stub.seedIssueLabels('449', ['risk:normal', 'autonomy:gated']);
+  const removed = runCli(['gate', 'review', 'ISSUE-449', 'implementation', 'standard', head()], { cwd: repo.dir, env });
+  assert.equal(removed.status, 0, removed.stderr);
+  assert.match(removed.stdout, /review_profile: strict/);
+  const reportPath = /^gate_report_path: (.+)$/m.exec(removed.stdout)?.[1];
+  assert.ok(reportPath);
+  const report = readReport(reportPath);
+  assert.equal(report.gate.light_review?.requested, false);
+  assert.equal(report.gate.light_review?.applied, false);
+  assert.equal(report.gate.light_review?.strict_locked, true);
+  assert.equal(report.gate.light_review?.remediation_round, 3);
 });
 
 test('gate reviewer-prompt: SPEC.md が未埋め込みファイルを名指しで言及しても、その内容を埋め込まず検証不能制約を明示する（Issue #318 回帰）', async (t) => {

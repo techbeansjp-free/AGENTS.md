@@ -82,6 +82,38 @@ test("validateAgainstSchema('state'): review_subject=core_auditを許可し未�
   assert.equal(validateAgainstSchema('state', invalid, packageRoot()).valid, false);
 });
 
+test("validateAgainstSchema('state'): review_intensityは任意でlight/fullを許可し未知値を拒否する", () => {
+  const doc = loadSchemaDoc('state');
+  for (const reviewIntensity of ['light', 'full']) {
+    const state = { ...structuredClone(doc.examples[0]), review_intensity: reviewIntensity };
+    assert.deepEqual(validateAgainstSchema('state', state, packageRoot()), { valid: true, errors: [] });
+  }
+
+  const invalid = { ...structuredClone(doc.examples[0]), review_intensity: 'minimal' };
+  assert.equal(validateAgainstSchema('state', invalid, packageRoot()).valid, false);
+  assert.deepEqual(validateAgainstSchema('state', structuredClone(doc.examples[0]), packageRoot()), {
+    valid: true,
+    errors: [],
+  });
+});
+
+test("validateAgainstSchema('gate-report'): light_reviewは完全な任意証跡だけを許可する", () => {
+  const doc = loadSchemaDoc('gate-report');
+  const report = structuredClone(doc.examples[0]) as { gate: Record<string, unknown> };
+  report.gate.light_review = {
+    requested: true,
+    applied: true,
+    disabled_reasons: [],
+    remediation_round: 0,
+    strict_locked: false,
+  };
+  assert.deepEqual(validateAgainstSchema('gate-report', report, packageRoot()), { valid: true, errors: [] });
+
+  const invalid = structuredClone(report) as { gate: { light_review: Record<string, unknown> } };
+  delete invalid.gate.light_review.strict_locked;
+  assert.equal(validateAgainstSchema('gate-report', invalid, packageRoot()).valid, false);
+});
+
 test('validateAgainstSchema: 実物の config/agent-skill-chain.yaml をそのまま渡すとvalidになる', () => {
   const configPath = resolveAsset(path.join('config', 'agent-skill-chain.yaml'));
   const config = readYamlFile(configPath);

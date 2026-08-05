@@ -5,6 +5,7 @@ import {
   renderReviewEvidence,
   verifyGithubReviewEvidence,
   type GithubReviewRecord,
+  type LightReviewEvidence,
   type ReviewEvidence,
 } from '../../src/lib/review-evidence.js';
 
@@ -203,6 +204,60 @@ test('schema: 不正なfinding enumをpass/passに添えてもapprovedへ倒れ�
       review(1, 1, { body: renderReviewEvidence(malformed as unknown as ReviewEvidence) }),
       review(2, 2),
     ]).final,
+    'human_required',
+  );
+});
+
+test('light review証跡: prompt digestへ結線して保持し、同一attempt内の不一致を拒否する', () => {
+  const lightReview: LightReviewEvidence = {
+    requested: true,
+    applied: false,
+    disabled_reasons: ['変更差分がcore_reviewの対象パスに該当します'],
+    remediation_round: 1,
+    strict_locked: true,
+  };
+  const lightPromptDigest = evidencePromptDigest(`canonical reviewer prompt:${JSON.stringify(lightReview)}`);
+  const first = evidence(1, { light_review: lightReview, prompt_digest: lightPromptDigest });
+  const second = evidence(2, { light_review: lightReview, prompt_digest: lightPromptDigest });
+  const expectedPromptDigest = (actual?: LightReviewEvidence) =>
+    evidencePromptDigest(`canonical reviewer prompt:${JSON.stringify(actual)}`);
+  const approved = verify(
+    [
+      review(1, 1, { body: renderReviewEvidence(first) }),
+      review(2, 2, { body: renderReviewEvidence(second) }),
+    ],
+    { expectedPromptDigest, profile: 'standard', coreReviewRequired: false },
+  );
+  assert.equal(approved.final, 'approved');
+  assert.deepEqual(approved.light_review, lightReview);
+
+  const inconsistent = evidence(2, {
+    light_review: { ...lightReview, remediation_round: 2 },
+    prompt_digest: expectedPromptDigest({ ...lightReview, remediation_round: 2 }),
+  });
+  assert.equal(
+    verify(
+      [
+        review(1, 1, { body: renderReviewEvidence(first) }),
+        review(2, 2, { body: renderReviewEvidence(inconsistent) }),
+      ],
+      { expectedPromptDigest, profile: 'standard', coreReviewRequired: false },
+    ).final,
+    'human_required',
+  );
+
+  const malformed = evidence(1, {
+    light_review: { ...lightReview, remediation_round: -1 },
+    prompt_digest: lightPromptDigest,
+  });
+  assert.equal(
+    verify(
+      [
+        review(1, 1, { body: renderReviewEvidence(malformed) }),
+        review(2, 2, { body: renderReviewEvidence(second) }),
+      ],
+      { expectedPromptDigest, profile: 'standard', coreReviewRequired: false },
+    ).final,
     'human_required',
   );
 });

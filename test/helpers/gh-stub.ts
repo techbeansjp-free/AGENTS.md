@@ -474,6 +474,19 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  const issueEventsMatch = /\\/issues\\/(\\d+)\\/events$/.exec(apiPath || '');
+  if (issueEventsMatch && method === 'GET') {
+    const issueNumber = issueEventsMatch[1];
+    const failure = (state.issueEventFailures || {})[issueNumber];
+    if (failure) {
+      process.stderr.write(failure);
+      process.exit(1);
+    }
+    const events = (state.issueEvents || {})[issueNumber] || [];
+    process.stdout.write(args.includes('--slurp') ? JSON.stringify([events]) : JSON.stringify(events));
+    process.exit(0);
+  }
+
   const commentDeleteMatch = /\\/issues\\/comments\\/(\\d+)$/.exec(apiPath || '');
   if (commentDeleteMatch && method === 'DELETE') {
     const id = commentDeleteMatch[1];
@@ -664,6 +677,8 @@ export interface GhStubState {
   labels: string[];
   labelDetails?: Record<string, { color: string; description: string }>;
   issueLabels: Record<string, string[]>;
+  issueEvents?: Record<string, unknown[]>;
+  issueEventFailures?: Record<string, string>;
   apiActor?: string;
   defaultBranch?: string;
   checkAppSlug?: string;
@@ -731,6 +746,8 @@ export interface GhStub {
   seedPrReviewThreadComments(prNumber: number, comments: unknown[]): void;
   seedPrReviewThreadCommentsFailure(prNumber: number, failure: { stderr: string }): void;
   seedIssueViewFailure(issueNumber: string, failure: { stderr: string }): void;
+  seedIssueEvents(issueNumber: string, events: unknown[]): void;
+  seedIssueEventsFailure(issueNumber: string, stderr: string): void;
   seedIssueCommentFailure(issueNumber: string, failure: { stderr: string }): void;
   seedPrViewFailure(branch: string, failure: { stderr: string }): void;
   /** doctor の「GitHub labels同期」検査（`gh label list`）向けに、実リポジトリに存在するラベルを
@@ -887,6 +904,16 @@ export function createGhStub(baseDir: string): GhStub {
     seedIssueLabels(issueNumber: string, labels: string[]): void {
       const state = this.readState();
       state.issueLabels = { ...(state.issueLabels ?? {}), [issueNumber]: labels };
+      this.writeState(state);
+    },
+    seedIssueEvents(issueNumber: string, events: unknown[]): void {
+      const state = this.readState();
+      state.issueEvents = { ...(state.issueEvents ?? {}), [issueNumber]: events };
+      this.writeState(state);
+    },
+    seedIssueEventsFailure(issueNumber: string, stderr: string): void {
+      const state = this.readState();
+      state.issueEventFailures = { ...(state.issueEventFailures ?? {}), [issueNumber]: stderr };
       this.writeState(state);
     },
     seedOpenPr(pr: { number: number; headRefName: string; body: string; state?: 'OPEN' | 'CLOSED' | 'MERGED' }): void {
