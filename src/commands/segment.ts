@@ -1,4 +1,4 @@
-import { repoRoot } from '../lib/paths.js';
+import { repoRoot, worktreeRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, validateSegment, CliError } from '../lib/issue.js';
 import { leaseFilePath, stateFilePath } from '../lib/local-state.js';
@@ -6,6 +6,11 @@ import { tryReadYamlFile, toYamlString } from '../lib/yaml-io.js';
 import { activeLeaseFor, type WriterLease } from '../lib/github-lease.js';
 import { loadRoles } from '../lib/roles.js';
 import { loadProjectPolicyDocuments } from '../lib/project-policy.js';
+import {
+  detectGithubReviewStatus,
+  detectLocalBlockingFindings,
+  formatReviewStatusBlock,
+} from '../lib/review-status.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const USAGE = `
@@ -108,8 +113,22 @@ export async function start(args: string[]): Promise<number> {
       issueBlock = buildIssueBlock(issueIdRaw, state);
     }
 
+    let reviewStatus;
+    if (config.coordination.backend === 'local') {
+      reviewStatus = detectLocalBlockingFindings(root, number, segment);
+    } else {
+      let githubRoot = root;
+      try {
+        githubRoot = worktreeRoot();
+      } catch {
+        // Issue #446: 検出用root解決の失敗でworker起動全体を止めず、PR側の部分障害として表面化させる。
+      }
+      reviewStatus = detectGithubReviewStatus(githubRoot, number);
+    }
+
     const parts = [`role: ${role}`];
     if (issueBlock) parts.push(issueBlock);
+    if (reviewStatus) parts.push(formatReviewStatusBlock(reviewStatus));
     parts.push(toYamlString(contract).trim());
     parts.push(...loadProjectPolicyDocuments(root, segment));
     return ok(parts.join('\n'));
