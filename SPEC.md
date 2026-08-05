@@ -1,89 +1,74 @@
-# SPEC: bugfix: 期限切れ+credential紛失writer leaseを人間が回収するための正規CLI経路が無い
+# SPEC: bugfix: worker-launchが対象issueの専用worktreeへcdせず、複数worktree並存時に対象を特定できない
 
-- Issue: `ISSUE-441`
+- Issue: `ISSUE-442`
 - 作成者: `spec_worker`
-- 対象ブランチ: `bugfix/441-lease-reclaim-cli`
+- 対象ブランチ: `bugfix/442-worker-launch-worktree-cd`
 
 ## 目的・背景
 
-Issue #286（クローズ済み、ADR-0014）で「同一Issue・同一worktree・同一holder runの期限切れlease」の安全な再開（resume）は実装済みである。`lease resume` は同一holder credentialかつ同一worktreeがdirtyであることを検査した上でのみ、object ID比較更新でrefを移譲する。検査が一致しない場合（他holder、credential紛失、worktree不一致等）は、意図的に自動移譲せず `human_required` として停止する設計になっている。
+進行役が `.agent-skill-chain/scripts/worker-launch.sh`（issue_id・segment名を引数に指定）でセグメント作業ワーカーを起動する際、起動系（`worker-launch.sh` および `.agent-skill-chain/adapters/claude.sh` の `launch_worker`）は、対象issue専用のworktreeパスをissue_idから解決してcdする処理を持たない。`REPO_ROOT` は自身の `BASH_SOURCE`（呼び出しに使われたスクリプトファイルのパス）から解決されるだけであり、`segment start` が返すrole_contract（`.agent-skill-chain/config/roles.yaml` の静的な内容）にも対象worktreeパスやissue番号は含まれない（GitHubモードでは `issueBlock` すら付与されない）。結果として、ワーカープロセスの実行コンテキストは「呼び出し元のプロセスがたまたまどのディレクトリにいたか」に依存し、対象issueのworktreeへの到達は暗黙の前提でしかない。
 
-しかし、この `human_required` に倒れた後、**人間（進行役）が実際に当該leaseを回収するための正規CLIコマンドが存在しない**。既存の `lease acquire` はrefが既に存在する限り（期限切れでも）non-fast-forwardとして拒否し、`lease resume` はcredential一致が前提で別workerへの引き継ぎには使えず、`lease release` もcredential一致（またはtoken入力）を要求するため元workerのcredentialファイル（`.git/agent-skill-chain/lease-credentials/<issue>.yaml`）が既に失われている場合は実行不能である。
+2026-08-04、本リポジトリ自身でIssue #437のimplementationセグメントworkerを起動した際、main worktree（複数issueのworktreeが見える場所）でworkerが起動し、対象を一意特定できずに変更を一切加えず終了する事象が実際に発生した。このとき同一リポジトリ内にIssue #437用worktreeと、着手保留中のIssue #429用worktreeが並存していた。
 
-2026-08-04、本リポジトリ自身でIssue #437のimplementationセグメントworkerを再起動しようとした際にこの状況へ実際に遭遇し、進行役は `git push origin --delete refs/agent-skill-chain/leases/<issue>-<segment>` という低レベルなgit操作を手動で行うしかなかった。これは本来ツールが抽象化すべき調整状態（coordination state）への直接操作であり、事故時の安全弁としては粗すぎ、誰が・いつ・なぜ回収したかの証跡も残らない。
+2026-08-05、本Issueの調査過程で、進行役自身がIssue #446のdesign workerをmain worktree直下から `worker-launch.sh` の絶対パス経由で起動した際に同種の事象が再現した。ワーカーはSPEC.md等を発見できず「対象を一意に特定できない」として`blocked`終了し、さらに `launch_worker` の完了確認処理（`.agent-skill-chain/adapters/claude.sh`）がworker報告の `target_sha` と突合する「現在HEAD」を、実行プロセスのcwd起点で `git rev-parse HEAD` により取得していたため、報告された `target_sha` が対象issueブランチのHEADと一致せず（実行環境のHEADがmainのHEADになっていた）フェイルセーフが誤発動した。worktree配下のスクリプトコピーへ切り替えて起動し直したところ正常に対象を特定できた。単一issueのworktreeしか存在しない状況では気づかれにくい潜在バグであり、複数issueが並行進行中の運用では頻発しうる。
 
-本Issueは、`human_required` 状態からの正規の人間向け回収経路をCLIコマンドとして新設し、期限切れであることの機械的な確認と回収証跡の記録を伴った安全なlease ref削除・再取得可能化を実現する。
+なお、Issue #446で発見・修正済みの根本原因（`src/commands/segment.ts` の `repoRoot()` がlinked worktreeを常にmain worktreeへ正規化する設計により、TypeScript側のブランチ解決がmainへ誤解決していた問題）とは発生機構が異なる。本Issueが対象とするのは、シェルレベルの起動系（`worker-launch.sh`・`launch_worker`）が対象worktreeを解決・cdせず、かつ完了確認の「現在HEAD」検査も対象worktree基準になっていない問題である。症状（対象を取り違える／特定できない）は同型だが、修正対象のコードレイヤーが異なる。
 
 ## 要求 → 要件 → 受入条件
 
 ### 要求
 
-進行役は、`human_required` へ倒れた期限切れwriter leaseを、低レベルなgit ref操作に頼らずCLI経由で安全に回収できなければならない。回収操作は誰が・いつ・どのIssue/segmentを回収したかの証跡を残さなければならない。
+進行役が `worker-launch.sh`（issue_id・segment名を引数に指定）をどのカレントディレクトリ・どの呼び出し経路（絶対パス経由を含む）から実行しても、起動されるセグメント作業ワーカーのプロセスは必ず対象issue専用のworktreeを操作対象として動作しなければならない。複数のissue用worktreeが同時に存在する状況でも、対象issueを取り違えたり、対象を特定できずに誤ってblocked終了したりしてはならない。
 
 ### 要件
 
-- 対象leaseが実際に期限切れ（`expires_at <= 現在時刻`）であることを検査してから削除を実行すること。期限内のleaseは回収を拒否すること。
-- 回収操作の呼び出しが進行役の操作であること（対象leaseのwriter credentialを保有・提示する操作ではないこと）をコマンドの用途・出力上区別できること（AGENTS.md I5：進行役は成果物branchへのcommit禁止、調整状態のみを扱う）。
-- 回収は明示的なオプトイン操作であること（誤操作防止のため、確認フラグなしの実行では回収しないこと）。
-- 回収操作の証跡（誰が・いつ・どのIssue/segmentのleaseを・どのholderから回収したか）をIssueコメント等、Coordination Backend上の記録として残すこと。
-- 回収後、当該Issue/segmentに対して新たなwriter leaseを `lease acquire` で取得可能な状態になること。
-- 回収対象のref検査からref削除までの間に当該leaseが更新された場合（対象workerがresume/renewに成功した場合等）、回収を行わず安全側で停止すること。
+- 起動系は、呼び出し元のカレントディレクトリや自身のスクリプトパス（`BASH_SOURCE`）に依存せず、issue_idから対象issue専用のworktreeパスを一意に解決すること。
+- 起動されるワーカープロセスの実行コンテキスト（ファイルの読み書き対象、commit/push対象branch）は、解決された対象issue専用worktreeと一致すること。
+- 対象issueのworktreeが一意に解決できない場合（該当worktreeが存在しない、命名規則上複数該当する等）は、ワーカーを起動する前に安全側で停止し、0以外の終了コードでエラーを報告すること（正常起動やlease取得成功を装ってはならない。AGENTS.md I8）。
+- 複数のissue用worktreeが並存する状態でも、上記の解決・起動が対象issueを取り違えないこと。
+- ワーカー完了確認（`launch_worker` が行う、worker報告の `target_sha` と「現在HEAD」の突合）は、対象issue専用worktreeのHEADを基準に行うこと。呼び出し元プロセスのカレントディレクトリがたまたま指していた別worktreeのHEADと誤って比較し、正当な完了報告をフェイルセーフ誤発動で拒否してはならない。
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: 期限切れleaseを進行役が回収できる
+#### AC-1: 単一worktree環境で対象issue専用worktreeへ向けて起動される
 
-- Given: 対象Issue・segmentに `expires_at` が現在時刻より過去のwriter leaseが存在する
-- When: 進行役が回収コマンドを明示的な確認オプション付きで実行する
-- Then: 対象leaseのrefが削除され、コマンドは終了コード0で成功を報告する
+- Given: 対象issue用のworktreeが1つだけ存在する
+- When: 進行役が任意のカレントディレクトリから `worker-launch.sh`（対象issueのissue_id・segment名を指定）を実行する
+- Then: 起動されたワーカーは対象issue専用worktree内のファイル（SPEC.md等）を読み書き対象として動作し、対象issueのbranchへcommit/pushする
 - 検証方法見込み: `automated`
 
-#### AC-2: 期限内のleaseは回収できない
+#### AC-2: 複数worktree並存環境でも対象issueを取り違えない
 
-- Given: 対象Issue・segmentに `expires_at` が現在時刻より未来のwriter leaseが存在する
-- When: 進行役が回収コマンドを実行する
-- Then: 回収は実行されず、refは変更されないままコマンドは終了コード1以上で失敗を報告する
+- Given: 対象issue用worktreeと、少なくとも1つの別issue用worktreeが同時に存在する（本Issue起票時に実際に発生した状況と同型）
+- When: 進行役がmain worktreeのカレントディレクトリから、またはmain worktree配下の絶対パス指定で `worker-launch.sh`（対象issueのissue_id・segment名を指定）を実行する
+- Then: 起動されたワーカーは対象issueのworktreeを一意に特定し、他issue用worktreeの内容と混同せずに対象issue専用worktree内で動作する
 - 検証方法見込み: `automated`
 
-#### AC-3: 確認オプションなしでは回収されない
+#### AC-3: 呼び出し元のスクリプトパス・カレントディレクトリに依存せず対象worktreeが解決される
 
-- Given: 対象Issue・segmentに期限切れのwriter leaseが存在する
-- When: 進行役が明示的な確認オプションを付けずに回収コマンドを実行する
-- Then: 回収は実行されず、refは変更されないままコマンドは終了コード1以上で失敗を報告し、確認オプションを付けて再実行するよう促すメッセージを表示する
+- Given: 進行役が対象issue専用worktree以外の場所（main worktreeの絶対パス経由等）から `worker-launch.sh` を呼び出す
+- When: `worker-launch.sh` が対象issueのworktreeを解決する
+- Then: 解決結果は、呼び出しに使ったスクリプトパスやカレントディレクトリに関わらず、issue_idから一意に導かれる対象issue専用worktreeと一致する
 - 検証方法見込み: `automated`
 
-#### AC-4: 回収証跡がCoordination Backendに記録される
+#### AC-4: 対象worktreeが一意に解決できない場合は起動前に安全側で停止する
 
-- Given: 期限切れleaseの回収がAC-1の手順で成功する
-- When: 回収完了後にIssueのコメント履歴を確認する
-- Then: 回収を行った主体・回収日時・対象Issue/segment・回収前のholderを含むコメントが追加されている
+- Given: issue_idに対応するworktreeが存在しない、または命名規則上複数該当し一意に解決できない
+- When: 進行役が `worker-launch.sh`（存在しない、または一意に定まらないissue_idを指定）を実行する
+- Then: ワーカーは起動されず、コマンドは0以外の終了コードでエラーを報告する。この時点でwriter leaseがまだ取得されていない場合は取得も行わない
 - 検証方法見込み: `automated`
 
-#### AC-5: 検査後にrefが更新された場合は回収せず安全側で停止する
+#### AC-5: ワーカー完了確認が対象worktree基準のHEADで行われる
 
-- Given: 回収コマンドが対象leaseの期限切れを検査した直後に、対象leaseのholderが `lease resume` 等でrefを更新する
-- When: 回収コマンドが検査済みSHAを条件にref削除を試みる
-- Then: 削除は拒否され、更新後のrefはそのまま残り、コマンドは終了コード1以上で失敗を報告する
-- 検証方法見込み: `automated`
-
-#### AC-6: 回収後は新規lease取得が可能になる
-
-- Given: AC-1の手順で対象Issue・segmentのleaseが回収済みである
-- When: 任意のworkerが同一Issue・segmentに対して `lease acquire` を実行する
-- Then: 既存refとの競合なく新規writer leaseが取得できる
-- 検証方法見込み: `automated`
-
-#### AC-7: writer credentialを保有していない回収操作でも成立する
-
-- Given: 対象leaseの元workerが作成したcredentialファイル（`.git/agent-skill-chain/lease-credentials/` 配下、対象Issue名を含むファイル名）が存在しない、または元workerのholder識別情報と一致しない
-- When: 進行役が回収コマンドを実行する
-- Then: writer credentialの一致検査を経ずに、期限切れ検査と確認オプションのみを条件として回収が成立する
+- Given: ワーカーが対象issue専用worktree内で作業を完了し、checkpointをpush済みである
+- When: `launch_worker` が完了確認のため、worker報告の `target_sha` と「現在HEAD」を突合する
+- Then: 突合対象の「現在HEAD」は対象issue専用worktreeのHEADであり、他のworktree（呼び出し元プロセスのカレントディレクトリがたまたま指していたworktree等）のHEADと誤って比較されず、正当な完了報告が誤ってblocked扱いされない
 - 検証方法見込み: `automated`
 
 ## スコープ外
 
-- 期限内のdirty leaseを他workerへ強制移譲する機能（Issue #286・ADR-0014で意図的に `human_required` としている挙動を変更すること）。
-- `lease resume`・`lease release`・`lease acquire` 既存コマンドの検査ロジック自体の変更。
-- reconcileワークフロー（自動照合）による期限切れleaseの自動回収。本Issueが新設するのは人間（進行役）が明示的に実行するコマンドであり、自動化は対象外。
-- Issue #442（worker-launch worktree特定不備）で指摘されている、worker-launchが対象worktreeを特定できない問題への対応。
-- 回収コマンドの呼び出し主体が真に進行役であることをcredential・権限分離の仕組みで機械的に強制する実装（role capability・credential分離自体の再設計）。現時点ではコマンドの用途上の区別（AC-1〜AC-7）に留める。
+- Issue #446（resumeしたworkerがPR/Issueレビューフィードバックを参照せず静的checklistで完了自己判定する問題）。既にPR #447で対応・マージ済み。
+- Issue #441（期限切れ+credential紛失writer leaseを人間が回収するための正規CLI経路）。既にPR #445で対応・マージ済み。
+- `src/commands/segment.ts` 等TypeScript側の `repoRoot()`/`worktreeRoot()` 使い分け（Issue #446のPR #447 commit `8a689557`で対応済み）の再修正。本Issueが対象とするのはシェルレベルの起動系（`worker-launch.sh`・`.agent-skill-chain/adapters/claude.sh` の `launch_worker`）における対象worktree解決・完了確認である。
+- role_contract（`.agent-skill-chain/config/roles.yaml`）自体の内容再設計（GitHubモードで `issueBlock` 相当の情報を一律追加するかどうか等）。対象worktreeの解決・起動コンテキストの一致・完了確認という振る舞い要件さえ満たせば、実現手段（cd、role_contractへの情報埋め込み、その他）の選択は設計セグメントの裁量とする。
+- read-onlyのゲートレビュア起動経路（`launch_gate_reviewer` 等）における同種の対象特定問題。read-onlyレビュアはclone・target_shaベースの別機構で動作しており、本Issueが対象とする書込み系ワーカーのworktree特定問題とは分離する。設計・実装セグメントで同種の `repoRoot`/`worktreeRoot` 誤用が他の呼び出し箇所に潜んでいないか横断的に確認することは妨げないが、本SPECの受入条件はworker-launch経路に限定する。
