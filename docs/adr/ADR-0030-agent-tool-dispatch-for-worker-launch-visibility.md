@@ -35,6 +35,8 @@ SPEC.mdはこの両立可否をdesign segmentでの技術検証事項として�
 
 当初はサブエージェントへの指示をClaude CodeのReadツール経由としていたが、Readツールは既定で先頭2000行までしか読み込まず行番号プレフィックスも付与するため、2000行超過時の分割読み込み手順を定型文へ追加してもLLMの指示追従性に完全性の担保を委ねることになりAC-4を機械的に保証できないと判断した（design-gate round5指摘）。このため定型文の指示を「ReadツールでなくBashツールで`cat <contract.mdの絶対パス>`を実行し、その標準出力全体を一切要約・改変せず動作契約として厳密に実行せよ」へ切り替えた。`cat`は行数制限も行番号プレフィックスも持たない決定的なコマンドであり、分割読み込み・行番号除去のいずれの手順も不要になる。あわせて`_dispatch_via_agent_tool()`は標準出力へcontract.mdのSHA256ダイジェストと行数（`CONTRACT_SHA256=`/`CONTRACT_LINES=`行、いずれもcontractの内容に非依存の固定運用メタデータでありI5に抵触しない）を出力するとともに、同じ値を一時ディレクトリ内の`contract.sha256`ファイルへ永続化する。監査証跡は出力するだけで終わらせず、`worker-launch-verify.sh`が一時ディレクトリ削除前に`contract.md`の`sha256sum`を再計算し`contract.sha256`の記録値と実際に照合する（design-gate round7指摘contract-sha256-audit-trail-unconsumedへの対応）。不一致は完全性違反として即座に`blocked`扱いとし、`contract.sha256`不在時（想定外の運用）は照合をスキップして後続処理へ進む。
 
+上記はcontract本文の往路（進行役→worker）のみを扱う。復路（Agent tool呼び出しの戻り値＝workerサブエージェントの最終応答テキストが進行役の生成コンテキストへ読み込まれること）は別の論点であり、現行のheadless subprocess方式ではサブプロセスの標準出力を呼び出し元シェルが単に破棄する（`wait`は終了コードのみを見る）ため構造的に生じないが、Agent tool呼び出しではサブエージェントの最終応答が呼び出し元LLM（進行役）のコンテキストへ必ず現れるため、この性質が失われる（design-gate round9指摘agent-tool-return-value-context-leakへの対応）。対応として、定型文へ「作業完了後の最終応答は、既存の`report_status`が使う固定スキーマ（完了状態・target_sha、`.agent-skill-chain/schemas/worker-report.schema.yaml`）相当の最小限のステータス要約——完了状態・target_sha・簡潔な1文要約——のみとし、成果物本文・diff・引用等の実質的内容を一切含めてはならない」という制約を追加する。これは既存workerロールが既に持つ`report_status`という構造化された完了報告の概念と対称的な制約であり新規の概念発明ではないが、`cat`方式（往路）と異なりツール制限やスキーマ強制のような構造的強制ではなく指示ベースに留まる。workerが指示に反し最終応答へ実質的内容を含めてしまう可能性は、`Read`ツール残存（Decision 4参照）と同種の既知の残存リスクとして受容する。既存のworker完了確認（`worker-launch-verify.sh`による`report latest`とHEAD SHA照合）はこの最終応答テキストとは独立した別経路（git commit・`report_status` CLI呼び出し）で行われるため、本リスクが顕在化してもこの完了確認経路自体は損なわれない。
+
 **3. I3の両立は「新しい独立性を作る」のではなく「既存の耐久性安全網に委ねる」ことで成立させる。ただし待機中のlease renewalには専用の独立デーモンを設ける。**
 
 Agent tool経由のworker実行は進行役セッションの生存に本質的に紐づく。この独立性の喪失自体は解消しない。その代わり、(a) Agent tool呼び出しを`run_in_background: false`で行うことを必須化し、現行の`wait "$worker_pid"`と同じ「進行役のターンが正常終了する＝workerも完了している」というブロッキング的性質を保つ。(b) 進行役セッションが異常終了した場合の回復は、新方式専用の仕組みを新設せず、既存のwriter lease TTL失効・ADR-0024（credentialなしreclaim）・`issue-resume.sh`という既存の安全網にそのまま委ねる。これは新方式で失敗が「発生し得る頻度」を増やすが、失敗から回復する「手段の種類」を増やさない、という設計判断である。この受容自体が、要件8がこの新方式を既定無効のopt-inとする理由の一部である。
@@ -56,6 +58,7 @@ design-gate round4の指摘を受け、進行役自身がこのセッション�
 - 進行役セッションの生存にworker実行が紐づくという、headless subprocess方式には無かった性質を新たに受け入れる。この性質はopt-inを有効化したプロジェクト・Issueにのみ影響し、既存の耐久性安全網（lease TTL・reclaim・resume）の範囲内で回復可能である。
 - Bashコマンド単位のツール許可制御という多重防御の1層が、新方式では利用できない。将来的な緩和（例: フックによる補完）は本Issueのスコープ外とし、必要であれば別Issueで扱う。
 - role_contract本文を保持する一時ディレクトリ・lease renewal専用の独立デーモンプロセスという、headless subprocess方式には無かった実行時アーティファクトが増える。いずれもworktree外・Git非追跡・上限付き生存期間（`ASC_DISPATCH_MAX_WAIT_SEC`）であり、`worker-launch-verify.sh`が正常経路で回収する。回収漏れが起きても既存のTTL失効安全網でカバーされ、成果物やcredentialの漏えいには繋がらない。
+- Agent tool呼び出しの戻り値（workerサブエージェントの最終応答テキスト）は進行役の生成コンテキストへ必ず読み込まれる。定型文で最小限のステータス要約に限定する指示を課すが、これは指示ベースの制約であり構造的強制ではない既知の残存リスクである（`Read`ツール残存と同種）。
 - AGENTS.md「役割・権限・writer lease」節のactor分離メカニズム（protected-base隔離launcher・one-time attempt token等）はread-onlyレビュア（`_run_reviewer_sanitized()`）専用であり、writer（segment worker）と進行役の間には現行のheadless subprocess方式でも実装されていない（`launch_worker()`はpush権限のため呼び出し元credentialをそのまま継承する）。本ADRの方式はこの分離を新たに失わせるものではなく、既存モデルが元々持っていなかった性質の継続である。
 - 本ADRは技術検証の結果を記録するものであり、`DESIGN.md`・`PLAN.md`と対を成す。実装は本Issueの実装segmentで行う。
 
