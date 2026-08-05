@@ -45,7 +45,13 @@ export interface AgentSkillChainConfig {
   // 真偽の極性が逆であることに注意（本フィールドは「確認要否」、`merge.autonomous`は
   // 「自動実行の許可」を表す）。`autonomy: gated | full` とは独立の別軸、混同しない。
   human_confirmation?: { before_implementation: boolean };
-  templates: { github_source: string; github_target: string; verify_sync: boolean };
+  templates: {
+    github_source: string;
+    github_target: string;
+    claude_agents_source?: string;
+    claude_agents_target?: string;
+    verify_sync: boolean;
+  };
   checks: { spec: string; design: string; implementation: string; validation: string };
 }
 

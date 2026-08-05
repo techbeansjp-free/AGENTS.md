@@ -67,6 +67,16 @@ _claude_auth_ok() {
   fi
 }
 
+# Issue #448: Agent tool dispatchを許可できるClaude Code CLIセッションかを安全側に判定する。
+# テスト用overrideは既知の値claude_code_cliだけを真とし、それ以外は判定不能を含めて偽へ倒す。
+_orchestrator_is_claude_code_cli_session() {
+  if [[ -n "${ASC_ORCHESTRATOR_SESSION_OVERRIDE:-}" ]]; then
+    [[ "$ASC_ORCHESTRATOR_SESSION_OVERRIDE" == "claude_code_cli" ]]
+    return
+  fi
+  [[ "${CLAUDECODE:-}" == "1" ]]
+}
+
 # agent-skill-chain CLI を解決して実行する（.agent-skill-chain/scripts/gate-*.sh と同じ優先順位）。
 _asc_cli() {
   if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
@@ -371,9 +381,128 @@ launch_gate_reviewer() {
 # リトライは部分書込みの上に二重に作業させる・二重commitを生む実害がある。1回の起動失敗は
 # 即座に人間判断（blocked）へ委ねる（I8: 迷ったら安全側）。
 #
+# Agent tool dispatch中にwriter leaseを更新する独立デーモン。第2引数の一時ディレクトリは
+# 起動コマンドラインへそのまま残り、verify側がPID再利用を検知する識別子になる。
+_dispatch_lease_renew_daemon() {
+  local issue_id="$1" dispatch_temp_dir="$2" renew_interval="$3" max_wait="$4"
+  local started=$SECONDS elapsed remaining wait_sec wait_pid=""
+
+  # /dev/nullへのreadはEOFで即時復帰するため待機には使えない。sleepを明示的な子として保持し、
+  # verifyからSIGTERMを受けたときは子も停止してrenewal_interval分の孤児待機を残さない。
+  trap '
+    if [[ -n "$wait_pid" ]]; then
+      kill "$wait_pid" >/dev/null 2>&1 || true
+      wait "$wait_pid" 2>/dev/null || true
+    fi
+    exit 0
+  ' TERM INT HUP
+
+  while (( SECONDS - started < max_wait )); do
+    elapsed=$((SECONDS - started))
+    remaining=$((max_wait - elapsed))
+    wait_sec="$renew_interval"
+    (( wait_sec > remaining )) && wait_sec="$remaining"
+    sleep "$wait_sec" &
+    wait_pid=$!
+    wait "$wait_pid" || return 0
+    wait_pid=""
+    (( SECONDS - started >= max_wait )) && break
+    renew_lease "$issue_id" >/dev/null 2>&1 || true
+  done
+}
+
+# Agent tool呼び出しが必要な場合の前半処理。contract本文は一時ファイルだけへ書き、標準出力には
+# 固定の運用指示と不透明な監査メタデータだけを返す。worker完了後の照合・lease解放は
+# worker-launch-verify.shが別のBash呼び出しで行う。
+_dispatch_via_agent_tool() {
+  local issue_id="$1" segment="$2"
+
+  if ! acquire_lease "$issue_id" "$segment" >/dev/null; then
+    echo "launch_worker: writer lease の取得に失敗しました（wip.limit超過または既存leaseとの競合）" >&2
+    return 1
+  fi
+
+  local contract role
+  if ! contract="$(_asc_cli segment start "$issue_id" "$segment")"; then
+    echo "launch_worker: segment start に失敗しました（role_contract取得不可）" >&2
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
+  role="$(sed -n 's/^role:[[:space:]]*//p' <<<"$contract" | head -n1)"
+  if [[ -z "$role" ]]; then
+    echo "launch_worker: segment start の出力から role を抽出できませんでした" >&2
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  local renew_interval="${WORKER_RENEW_INTERVAL_SEC:-900}"
+  local max_wait="${ASC_DISPATCH_MAX_WAIT_SEC:-14400}"
+  if [[ ! "$renew_interval" =~ ^[1-9][0-9]*$ || ! "$max_wait" =~ ^[1-9][0-9]*$ ]]; then
+    echo "launch_worker: dispatch lease更新間隔と最大待機時間は正の整数である必要があります" >&2
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
+  if ! command -v setsid >/dev/null 2>&1; then
+    echo "launch_worker: Agent tool dispatchに必要なsetsidが見つかりません" >&2
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  local temp_base="${TMPDIR:-/tmp}"
+  if [[ "$temp_base" != /* ]]; then
+    if ! temp_base="$(cd -- "$temp_base" 2>/dev/null && pwd)"; then
+      echo "launch_worker: TMPDIRを絶対パスへ解決できませんでした" >&2
+      release_lease "$issue_id" >/dev/null 2>&1 || true
+      return 1
+    fi
+  fi
+
+  local dispatch_temp_dir contract_file contract_sha contract_lines
+  if ! dispatch_temp_dir="$(mktemp -d "$temp_base/agent-skill-chain-worker-dispatch.XXXXXX")"; then
+    echo "launch_worker: dispatch用一時ディレクトリを作成できませんでした" >&2
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
+  chmod 700 "$dispatch_temp_dir"
+  contract_file="$dispatch_temp_dir/contract.md"
+  printf '%s' "$contract" >"$contract_file"
+  chmod 600 "$contract_file"
+  contract_sha="$(sha256sum "$contract_file" | awk '{print $1}')"
+  contract_lines="$(wc -l <"$contract_file" | tr -d '[:space:]')"
+  printf 'CONTRACT_SHA256=%s\nCONTRACT_LINES=%s\n' "$contract_sha" "$contract_lines" \
+    >"$dispatch_temp_dir/contract.sha256"
+  chmod 600 "$dispatch_temp_dir/contract.sha256"
+
+  setsid bash -c \
+    'source "$1"; _dispatch_lease_renew_daemon "$2" "$3" "$4" "$5"' \
+    _ "$ADAPTER_DIR/claude.sh" "$issue_id" "$dispatch_temp_dir" "$renew_interval" "$max_wait" \
+    </dev/null >/dev/null 2>&1 &
+  local renew_pid=$!
+  printf '%s\n' "$renew_pid" >"$dispatch_temp_dir/renew.pid"
+  chmod 600 "$dispatch_temp_dir/renew.pid"
+  disown "$renew_pid" 2>/dev/null || true
+
+  local contract_file_quoted dispatch_temp_dir_quoted
+  printf -v contract_file_quoted '%q' "$contract_file"
+  printf -v dispatch_temp_dir_quoted '%q' "$dispatch_temp_dir"
+
+  printf '%s\n' \
+    'AGENT_TOOL_DISPATCH_REQUIRED' \
+    'subagent_type: agent-skill-chain-worker' \
+    'run_in_background: false' \
+    "prompt: 指定ファイルをBashツールで cat -- ${contract_file_quoted} として読み、その標準出力全体を一切要約・改変せず動作契約として厳密に実行する。作業完了後の最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
+    "完了後に .agent-skill-chain/scripts/worker-launch-verify.sh ${issue_id} ${dispatch_temp_dir_quoted} をBashツールで実行する。" \
+    "ISSUE_ID=${issue_id}" \
+    "DISPATCH_TEMP_DIR=${dispatch_temp_dir}" \
+    "CONTRACT_SHA256=${contract_sha}" \
+    "CONTRACT_LINES=${contract_lines}"
+  return 4
+}
+
 # 引数: <issue_id> <segment>
 # 終了コード: 0=worker完了 / 2（!=0,!=3）=error（blocked報告・lease解放済み）/
-#             1=引数・lease取得前のエラー（lease未取得または解放済み、report未発行）。
+#             1=引数・lease取得前のエラー（lease未取得または解放済み、report未発行）/
+#             4=dispatch_required（lease保持中、進行役によるAgent tool呼び出し待ち）。
 # env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、高速パス、実値非ログ出力）、
 #      CLAUDE_AUTH_PROBE_CMD | CLAUDE_AUTH_PROBE_TIMEOUT_SEC（認証の実疎通フォールバック、_claude_auth_ok参照）、
 #      WORKER_CMD（起動系上書き。テストではecho等のモックコマンドに完全差し替え可能）、
@@ -394,6 +523,11 @@ launch_worker() {
       return 1
       ;;
   esac
+
+  if [[ "${ASC_AGENT_TOOL_DISPATCH:-false}" == "true" ]] && _orchestrator_is_claude_code_cli_session; then
+    _dispatch_via_agent_tool "$issue_id" "$segment"
+    return
+  fi
 
   # 1. lease取得。失敗時はまだ何も起動していないため blocked報告なしで即 return 1
   #    （AC-2: wip.limit超過・同issue内他segment競合・同一segment競合はいずれもここで拒否される。

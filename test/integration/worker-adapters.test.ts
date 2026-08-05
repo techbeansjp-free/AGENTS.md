@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 import {
   createTmpRepo,
   setWorkerAdapter,
+  setWorkerAgentToolDispatch,
   removeWorkerSegmentOverrides,
   removeWorkerModelTiers,
   setWorkerSegmentOverride,
@@ -70,6 +72,21 @@ function runWorkerLauncherFrom(scriptRoot: string, cwd: string, args: string[], 
   }
 }
 
+function runWorkerVerifier(scriptRoot: string, cwd: string, args: string[], env: NodeJS.ProcessEnv): ScriptResult {
+  const script = path.join(scriptRoot, '.agent-skill-chain', 'scripts', 'worker-launch-verify.sh');
+  try {
+    const stdout = execFileSync('bash', [script, ...args], { cwd, encoding: 'utf8', env });
+    return { status: 0, stdout, stderr: '' };
+  } catch (error) {
+    const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    return {
+      status: typeof e.status === 'number' ? e.status : 1,
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+    };
+  }
+}
+
 /**
  * codex.sh を直接 source して launch_worker を呼ぶ（起動ラッパー・CLI（worker context）を経由
  * しない）。ISSUE-307 AC-9 の防御的検査（ASC_WORKER_MODEL_TIERはあるがASC_WORKER_MODELが無い
@@ -95,6 +112,13 @@ function runCodexLaunchWorkerDirect(worktreePath: string, args: string[], env: N
       stderr: e.stderr?.toString() ?? '',
     };
   }
+}
+
+function detectClaudeCodeSession(env: NodeJS.ProcessEnv): boolean {
+  const adapterPath = path.join(packageRoot(), '.agent-skill-chain', 'adapters', 'claude.sh');
+  const script = 'source "$1"; if _orchestrator_is_claude_code_cli_session; then printf true; else printf false; fi';
+  const stdout = execFileSync('bash', ['-c', script, '_', adapterPath], { encoding: 'utf8', env });
+  return stdout === 'true';
 }
 
 /**
@@ -167,6 +191,218 @@ function readWorkerReport(repoDir: string, segment: string): WorkerReport {
   return parse(fs.readFileSync(reportPath, 'utf8')) as WorkerReport;
 }
 
+function createVerifyFixture(
+  t: { after(fn: () => void): void },
+  shaFile: 'match' | 'mismatch' | 'absent' = 'match',
+) {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  const dispatchTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-worker-dispatch.'));
+  t.after(() => fs.rmSync(dispatchTempDir, { recursive: true, force: true }));
+  const contract = 'role: spec_worker\n';
+  fs.writeFileSync(path.join(dispatchTempDir, 'contract.md'), contract);
+  if (shaFile !== 'absent') {
+    const sha = shaFile === 'match' ? createHash('sha256').update(contract).digest('hex') : '0'.repeat(64);
+    fs.writeFileSync(path.join(dispatchTempDir, 'contract.sha256'), `CONTRACT_SHA256=${sha}\nCONTRACT_LINES=1\n`);
+  }
+
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head], {
+    cwd: worktreePath,
+  });
+  assert.equal(report.status, 0, report.stderr);
+  const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
+  return { repo, worktreePath, dispatchTempDir, leasePath };
+}
+
+test('Claude Codeセッション判定 (ISSUE-448 AC-7): CLAUDECODE未設定はfalseへ倒す', () => {
+  assert.equal(detectClaudeCodeSession(envWithout(['CLAUDECODE', 'ASC_ORCHESTRATOR_SESSION_OVERRIDE'])), false);
+});
+
+test('Claude Codeセッション判定 (ISSUE-448 AC-7): CLAUDECODE=1だけをtrueとする', () => {
+  assert.equal(
+    detectClaudeCodeSession(envWithout(['ASC_ORCHESTRATOR_SESSION_OVERRIDE'], { CLAUDECODE: '1' })),
+    true,
+  );
+});
+
+test('Claude Codeセッション判定 (ISSUE-448 AC-7): CLAUDECODEのその他の値はfalseへ倒す', () => {
+  assert.equal(
+    detectClaudeCodeSession(envWithout(['ASC_ORCHESTRATOR_SESSION_OVERRIDE'], { CLAUDECODE: 'true' })),
+    false,
+  );
+});
+
+test('Claude Codeセッション判定 (ISSUE-448 AC-7): 明示overrideは既知のclaude_code_cliだけをtrueとする', () => {
+  assert.equal(
+    detectClaudeCodeSession(
+      envWithout(['CLAUDECODE'], { ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli' }),
+    ),
+    true,
+  );
+  assert.equal(
+    detectClaudeCodeSession(envWithout(['CLAUDECODE'], { ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'unknown' })),
+    false,
+  );
+});
+
+test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定時はcontract本文を出さずexit 4で監査メタデータを返す', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, result.stderr);
+  assert.match(result.stdout, /^AGENT_TOOL_DISPATCH_REQUIRED$/m);
+  assert.match(result.stdout, /^subagent_type: agent-skill-chain-worker$/m);
+  assert.match(result.stdout, /^run_in_background: false$/m);
+  assert.doesNotMatch(result.stdout, /^role:/m, 'contract本文を進行役の標準出力へ含めないこと');
+
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  const expectedSha = /^CONTRACT_SHA256=([0-9a-f]{64})$/m.exec(result.stdout)?.[1];
+  const expectedLines = /^CONTRACT_LINES=(\d+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  assert.ok(expectedSha);
+  assert.ok(expectedLines);
+  t.after(() => {
+    if (dispatchTempDir && fs.existsSync(path.join(dispatchTempDir, 'renew.pid'))) {
+      const pid = Number(fs.readFileSync(path.join(dispatchTempDir, 'renew.pid'), 'utf8').trim());
+      if (Number.isInteger(pid)) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // verify済みならデーモンは既に終了している。
+        }
+      }
+    }
+    if (dispatchTempDir) fs.rmSync(dispatchTempDir, { recursive: true, force: true });
+  });
+
+  const contractPath = path.join(dispatchTempDir, 'contract.md');
+  const contract = fs.readFileSync(contractPath);
+  assert.match(contract.toString('utf8'), /^role: spec_worker/m);
+  assert.equal(createHash('sha256').update(contract).digest('hex'), expectedSha);
+  assert.equal(String(contract.toString('utf8').split('\n').length - 1), expectedLines);
+
+  const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
+  const leaseBeforeRenewInterval = fs.readFileSync(leasePath, 'utf8');
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(
+    fs.readFileSync(leasePath, 'utf8'),
+    leaseBeforeRenewInterval,
+    'renewal_interval到達前にrenewデーモンがlease更新を連打しないこと',
+  );
+
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head], {
+    cwd: worktreePath,
+    env,
+  });
+  assert.equal(report.status, 0, report.stderr);
+  const verified = runWorkerVerifier(repo.dir, repo.dir, ['ISSUE-1', dispatchTempDir], env);
+  assert.equal(verified.status, 0, verified.stderr);
+  assert.equal(fs.existsSync(dispatchTempDir), false, 'verify完了後にdispatch一時ディレクトリを削除すること');
+
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
+  assert.equal(reacquire.status, 0, 'verifyがleaseを解放済みであること: ' + reacquire.stderr);
+});
+
+test('worker-launch-verify (ISSUE-448 AC-3): renew停止を確認してからleaseを解放する', async (t) => {
+  const fixture = createVerifyFixture(t);
+  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-renew-marker-'));
+  t.after(() => fs.rmSync(markerDir, { recursive: true, force: true }));
+  const marker = path.join(markerDir, 'renew-stopped.txt');
+  const daemon = spawn(
+    'bash',
+    [
+      '-c',
+      'trap \'if [[ -f "$2" ]]; then echo lease_present >"$3"; else echo lease_missing >"$3"; fi; exit 0\' TERM; while :; do sleep 0.1; done',
+      '_',
+      fixture.dispatchTempDir,
+      fixture.leasePath,
+      marker,
+    ],
+    { stdio: 'ignore' },
+  );
+  t.after(() => daemon.kill('SIGKILL'));
+  assert.ok(daemon.pid);
+  fs.writeFileSync(path.join(fixture.dispatchTempDir, 'renew.pid'), `${daemon.pid}\n`);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.readFileSync(marker, 'utf8').trim(), 'lease_present', 'daemon終了時点ではleaseが残っていること');
+  assert.equal(fs.existsSync(fixture.leasePath), false, 'daemon終了確認後にleaseが解放されること');
+});
+
+test('worker-launch-verify (ISSUE-448 AC-3): PID再利用を検知した場合は無関係プロセスをkillしない', async (t) => {
+  const fixture = createVerifyFixture(t);
+  const unrelated = spawn('bash', ['-c', 'sleep 30', 'unrelated-process'], { stdio: 'ignore' });
+  t.after(() => unrelated.kill('SIGKILL'));
+  assert.ok(unrelated.pid);
+  fs.writeFileSync(path.join(fixture.dispatchTempDir, 'renew.pid'), `${unrelated.pid}\n`);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(unrelated.exitCode, null, 'cmdlineにdispatch一時パスを含まないプロセスは生存すること');
+});
+
+test('worker-launch-verify (ISSUE-448 AC-3): renew.pid不在でもkillを試みず正常にreport照合へ進む', (t) => {
+  const fixture = createVerifyFixture(t);
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('worker-launch-verify (ISSUE-448 AC-4): contract.sha256不在時は照合をスキップしてreport照合へ進む', (t) => {
+  const fixture = createVerifyFixture(t, 'absent');
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('worker-launch-verify (ISSUE-448 AC-3/AC-4): contract監査値不一致はreport completedでもblocked＋lease解放へ倒す', (t) => {
+  const fixture = createVerifyFixture(t, 'mismatch');
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /SHA256または行数/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false, '完全性違反でもleaseを解放すること');
+});
+
 // --- (a) claude launch_worker: 成功経路 --------------------------------------------------
 
 test('claude launch_worker: WORKER_CMDが成果物commit+push+report completedまで行った場合、exit 0でlease解放・完了確認される', async (t) => {
@@ -186,6 +422,7 @@ test('claude launch_worker: WORKER_CMDが成果物commit+push+report completed�
   const env = envWithout([], {
     ANTHROPIC_API_KEY: 'dummy-key-not-logged',
     WORKER_CMD: workerCmd,
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
   });
 
   // When: worker-launch.sh 経由で launch_worker を実行する。

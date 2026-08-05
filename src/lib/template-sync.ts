@@ -1,6 +1,40 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveAsset } from './paths.js';
+import { loadConfig } from './config.js';
+import { packageRoot } from './paths.js';
+
+export interface TemplateMapping {
+  id: 'github' | 'claude_agents';
+  source: string;
+  dest: string;
+}
+
+function resolveConfiguredSource(targetRoot: string, configuredPath: string): string {
+  const inTarget = path.resolve(targetRoot, configuredPath);
+  if (fs.existsSync(inTarget)) return inTarget;
+  const inPackage = path.resolve(packageRoot(), configuredPath);
+  if (fs.existsSync(inPackage)) return inPackage;
+  throw new Error(`template配布元が見つかりません: ${configuredPath}`);
+}
+
+/** configの配布元・展開先を、未導入先ではパッケージ同梱既定へフォールバックして解決する。 */
+export function resolveTemplateMappings(targetRoot: string): TemplateMapping[] {
+  const config = loadConfig(targetRoot);
+  const claudeSource = config.templates.claude_agents_source ?? '.agent-skill-chain/templates/claude/agents';
+  const claudeTarget = config.templates.claude_agents_target ?? '.claude/agents';
+  return [
+    {
+      id: 'github',
+      source: resolveConfiguredSource(targetRoot, config.templates.github_source),
+      dest: path.resolve(targetRoot, config.templates.github_target),
+    },
+    {
+      id: 'claude_agents',
+      source: resolveConfiguredSource(targetRoot, claudeSource),
+      dest: path.resolve(targetRoot, claudeTarget),
+    },
+  ];
+}
 
 function listFilesRecursive(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -14,26 +48,30 @@ function listFilesRecursive(dir: string): string[] {
 }
 
 /**
- * `.agent-skill-chain/templates/github/.github/`（配布元の正本）と `targetRoot` 配下の
- * `.github/`（展開先）の同期状態を検査し、差分（欠落・内容不一致）の説明文一覧を返す。
+ * GitHub templateとClaude custom agent templateの配布元・展開先について、同期状態を検査し、
+ * 差分（欠落・内容不一致）の説明文一覧を返す。
  * 差分が無ければ空配列を返す。`verify.ts` の `verify template-sync` と `doctor.ts` の
  * template-sync検査の両方から呼ばれる共有実装（DRY）。
  */
 export function computeTemplateSyncDiffs(targetRoot: string): string[] {
-  const source = resolveAsset(path.join('templates', 'github', '.github'), targetRoot);
-  const dest = path.join(targetRoot, '.github');
-
-  const sourceFiles = listFilesRecursive(source).map((p) => path.relative(source, p));
-  const destFiles = new Set(listFilesRecursive(dest).map((p) => path.relative(dest, p)));
-
   const diffs: string[] = [];
-  for (const rel of sourceFiles) {
-    if (!destFiles.has(rel)) {
-      diffs.push(`未同期（欠落）: ${rel}`);
-      continue;
-    }
-    if (!fs.readFileSync(path.join(source, rel)).equals(fs.readFileSync(path.join(dest, rel)))) {
-      diffs.push(`未同期（差分あり）: ${rel}`);
+  const packageSourceTree = path.resolve(targetRoot) === path.resolve(packageRoot());
+  for (const mapping of resolveTemplateMappings(targetRoot)) {
+    // パッケージ自身では .claude/ はローカル実行系の生成物としてGit管理外であり、clean checkoutには
+    // 展開先が存在しない。配布元templateはGit管理・package同梱検査の対象なので、source tree自身に限り
+    // 未展開を許容する。consumerではinit/upgrade後の削除・不整合を従来どおり欠落として検出する。
+    const sourceFiles = listFilesRecursive(mapping.source).map((p) => path.relative(mapping.source, p));
+    const destFiles = new Set(listFilesRecursive(mapping.dest).map((p) => path.relative(mapping.dest, p)));
+    if (mapping.id === 'claude_agents' && packageSourceTree && destFiles.size === 0) continue;
+    for (const rel of sourceFiles) {
+      const displayPath = mapping.id === 'github' ? rel : path.join('.claude', 'agents', rel);
+      if (!destFiles.has(rel)) {
+        diffs.push(`未同期（欠落）: ${displayPath}`);
+        continue;
+      }
+      if (!fs.readFileSync(path.join(mapping.source, rel)).equals(fs.readFileSync(path.join(mapping.dest, rel)))) {
+        diffs.push(`未同期（差分あり）: ${displayPath}`);
+      }
     }
   }
   return diffs;

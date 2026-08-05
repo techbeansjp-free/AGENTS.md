@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 正本: AGENTS.md §役割・権限・writer lease / §不変条件I8 / .agent-skill-chain/config/roles.yaml adapters.* /
 #       .agent-skill-chain/config/agent-skill-chain.yaml worker.adapter・worker.segment_overrides・
-#       worker.model_tiers
+#       worker.model_tiers・worker.agent_tool_dispatch
 #
 # 進行役が segment start 後にセグメント作業ワーカー（spec/design/implementation/validation）を
 # 起動するために呼ぶ。config(worker.segment_overrides.<segment> → worker.adapter → 既定human)で
@@ -14,6 +14,7 @@
 # 終了コード（launch_workerの終了コードをそのまま伝播する）:
 #   0        worker完了（report_status completed済み、lease解放済み）
 #   3        deferred（human adapterのみ。正常系。lease は保持継続、人間の非同期作業待ち）
+#   4        dispatch_required（claude adapterのみ。lease保持継続、Agent tool呼び出し待ち）
 #   その他    error（フェイルセーフ。lease解放済み・report_status blocked済み、要人間確認）
 #
 # I8 安全側ラチェット: adapter未解決・launch_worker未定義は「まだ何も起動していない」ため
@@ -106,9 +107,12 @@ fi
 ASC_WORKER_MODEL="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^model=//p')"
 ASC_WORKER_REASONING_EFFORT="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^reasoning_effort=//p')"
 ASC_WORKER_MODEL_TIER="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^model_tier=//p')"
+ASC_AGENT_TOOL_DISPATCH="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^agent_tool_dispatch=//p')"
+ASC_AGENT_TOOL_DISPATCH="${ASC_AGENT_TOOL_DISPATCH:-false}"
 [[ -n "$ASC_WORKER_MODEL" ]] && export ASC_WORKER_MODEL
 [[ -n "$ASC_WORKER_REASONING_EFFORT" ]] && export ASC_WORKER_REASONING_EFFORT
 [[ -n "$ASC_WORKER_MODEL_TIER" ]] && export ASC_WORKER_MODEL_TIER
+export ASC_AGENT_TOOL_DISPATCH
 
 # アダプタを読み込み、launch_worker を起動する。終了コードはそのまま呼び出し側へ伝播する。
 # shellcheck source=/dev/null

@@ -49,6 +49,9 @@ test('upgrade: .agent-skill-chain/project/配下のカスタム内容は変更�
   const conventionsPath = path.join(targetDir, '.agent-skill-chain', 'standards', 'GIT_CONVENTIONS.md');
   const originalContent = fs.readFileSync(conventionsPath, 'utf8');
   fs.appendFileSync(conventionsPath, '\ncustom local edit that must be overwritten\n');
+  const workerAgentPath = path.join(targetDir, '.claude', 'agents', 'agent-skill-chain-worker.md');
+  const originalWorkerAgent = fs.readFileSync(workerAgentPath, 'utf8');
+  fs.writeFileSync(workerAgentPath, 'customized worker agent\n');
 
   const projectDir = path.join(targetDir, '.agent-skill-chain', 'project');
   fs.mkdirSync(projectDir, { recursive: true });
@@ -62,6 +65,11 @@ test('upgrade: .agent-skill-chain/project/配下のカスタム内容は変更�
     fs.readFileSync(conventionsPath, 'utf8'),
     originalContent,
     '標準アセットはパッケージ同梱版の内容へ上書きされること',
+  );
+  assert.equal(
+    fs.readFileSync(workerAgentPath, 'utf8'),
+    originalWorkerAgent,
+    '展開済みClaude custom subagent種別も配布templateへ同期されること',
   );
   assert.equal(
     fs.readFileSync(path.join(projectDir, 'RULES.md'), 'utf8'),

@@ -6,6 +6,7 @@ import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES, packageVersion } from '../lib/a
 import { readInstalledVersion, writeInstalledVersion } from '../lib/version-marker.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { detectLegacyAssets, formatLegacyAssetWarning } from '../lib/legacy-migration.js';
+import { resolveTemplateMappings } from '../lib/template-sync.js';
 
 const USAGE = `
 使い方: agent-skill-chain upgrade [target_dir] [--dry-run]
@@ -52,6 +53,11 @@ export async function upgrade(args: string[]): Promise<number> {
       const src = path.join(packageRoot(), ASSET_NAMESPACE, entry);
       if (!fs.existsSync(src)) continue;
       const results = copyTreeMirror(src, path.join(targetDir, ASSET_NAMESPACE, entry), { dryRun, root: targetDir });
+      summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
+    }
+    const claudeAgents = resolveTemplateMappings(targetDir).find((mapping) => mapping.id === 'claude_agents');
+    if (claudeAgents) {
+      const results = copyTreeMirror(claudeAgents.source, claudeAgents.dest, { dryRun, root: targetDir });
       summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
     }
 
