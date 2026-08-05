@@ -2,11 +2,11 @@
 
 ```yaml
 id: ADR-0026
-status: accepted
+status: superseded
 title: resumeしたセグメント作業ワーカーへの既存レビューフィードバック検出は、commit跨ぎのコメント除外を行わずローカルモードは全segmentのgate reportをorigin基準で走査する
 tags: [worker-resume, review-status, github-backend, local-backend, i5-progression-role-purity]
 supersedes: [ADR-0025]
-superseded-by: null
+superseded-by: ADR-0027
 deprecated-reason: null
 ```
 
