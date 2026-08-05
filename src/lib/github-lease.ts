@@ -3,6 +3,7 @@ import { git, gh } from './exec.js';
 import { validateAgainstSchema } from './schema.js';
 
 const MARKER = '<!-- agent-skill-chain:lease -->';
+const RECLAIM_MARKER = '<!-- agent-skill-chain:lease-reclaim -->';
 
 const REF_PREFIX = 'refs/agent-skill-chain/leases';
 
@@ -285,6 +286,35 @@ export function unmarkActiveWriterLeaseLabel(issueNumber: string, cwd?: string):
 /** acquire成功後にhuman向け可視性のためbest-effortで投稿するIssueコメント。失敗しても呼び出し元は無視してよい。 */
 export function postLeaseComment(issueNumber: string, lease: WriterLease, cwd?: string): string {
   const result = gh([`issue`, 'comment', issueNumber, '--body', renderLeaseComment(lease)], cwd);
+  if (result.status !== 0) {
+    throw new Error(`gh issue comment に失敗しました: ${result.stderr.trim()}`);
+  }
+  const match = /issuecomment-(\d+)/.exec(result.stdout.trim());
+  if (!match) throw new Error(`投稿したコメントのIDを特定できません: ${result.stdout.trim()}`);
+  return match[1];
+}
+
+/** credentialを含まない期限切れlease回収の監査証跡をIssueコメントへ投稿する。 */
+export function postLeaseReclaimComment(
+  issueNumber: string,
+  actor: string,
+  holder: string,
+  segment: string,
+  cwd?: string,
+): string {
+  const reclaimedAt = new Date().toISOString();
+  const body = [
+    RECLAIM_MARKER,
+    'writer lease を回収しました。',
+    '',
+    `- actor: ${actor}`,
+    `- reclaimed_at: ${reclaimedAt}`,
+    `- issue: ISSUE-${issueNumber}`,
+    `- segment: ${segment}`,
+    `- previous_holder: ${holder}`,
+    '',
+  ].join('\n');
+  const result = gh([`issue`, 'comment', issueNumber, '--body', body], cwd);
   if (result.status !== 0) {
     throw new Error(`gh issue comment に失敗しました: ${result.stderr.trim()}`);
   }

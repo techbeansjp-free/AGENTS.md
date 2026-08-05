@@ -16,6 +16,7 @@ import {
   resumeLeaseRef,
   releaseLeaseRef,
   postLeaseComment,
+  postLeaseReclaimComment,
   cleanupLeaseComment,
   countActiveWriterLeaseIssues,
   markActiveWriterLeaseLabel,
@@ -31,6 +32,7 @@ import {
   writeLeaseCredential,
 } from '../lib/lease-credential.js';
 import { findIssueWorktree, hasUncommittedChanges, hasUnpushedCommits } from '../lib/worktree.js';
+import { git } from '../lib/exec.js';
 import { toYamlString } from '../lib/yaml-io.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
@@ -74,6 +76,13 @@ const RESUME_USAGE = `
 確認した場合だけCAS更新する。legacy_tokenは旧形式移行用であり、標準出力・標準エラーへ表示しない。
 `;
 
+const RECLAIM_USAGE = `
+使い方: agent-skill-chain lease reclaim <issue_id> <segment> --confirm [--actor <value>]
+
+期限切れのGitHub writer leaseを、credential不要の人間向け回収経路で削除する。
+回収には --confirm が必須で、成功後はIssueへ監査コメントを投稿する。
+`;
+
 /**
  * WIP上限（wip.limit、既定3、有効writer lease数で判定）用: ローカルモードで全 Issue を横断し
  * `issues` 配下の各 Issue の lease.yaml のうち expires_at > now の件数を数える。
@@ -89,6 +98,12 @@ function countLocalActiveWriterLeases(root: string): number {
     if (lease && lease.writer_lease.expires_at > now) count++;
   }
   return count;
+}
+
+function unmarkActiveWriterLeaseLabelIfUnused(issueNumber: string, root: string): void {
+  if (activeLeasesFor(issueNumber, root).length === 0) {
+    unmarkActiveWriterLeaseLabel(issueNumber, root);
+  }
 }
 
 function buildLease(issueId: string, segment: string, ttlSeconds: number): WriterLease {
@@ -266,8 +281,8 @@ export async function release(args: string[]): Promise<number> {
     }
     // best-effort: acquire時に投稿した可視性コメントの削除（lease自体の解放成否には影響しない）。
     cleanupLeaseComment(number, held.lease.writer_lease.holder, root);
-    // WIP上限判定用ラベル除去（best-effort）。
-    unmarkActiveWriterLeaseLabel(number, root);
+    // 他segmentの有効leaseが残る場合はIssue単位のactiveラベルを維持する。
+    unmarkActiveWriterLeaseLabelIfUnused(number, root);
     removeLeaseCredential(root, number);
     return ok(issueIdRaw);
   });
@@ -420,5 +435,69 @@ export async function resume(args: string[]): Promise<number> {
     }
     markActiveWriterLeaseLabel(number, root);
     return ok(toYamlString(publicLease(resumedLease)).trim());
+  });
+}
+
+export async function reclaim(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(RECLAIM_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, segment] = args;
+    if (!issueIdRaw || !segment) throw new CliError('issue_id, segment はすべて必須です');
+    const { number } = parseIssueId(issueIdRaw);
+    const root = repoRoot();
+    const config = loadConfig(root);
+    if (config.coordination.backend !== 'github') {
+      return fail('lease reclaim はGitHub Coordination Backendでのみ利用できます');
+    }
+    if (!args.includes('--confirm')) {
+      return fail('`--confirm` オプションを付けて再実行してください');
+    }
+
+    const existing = allLeasesFor(number, root).find((entry) => entry.segment === segment);
+    if (!existing) {
+      return fail('対象の writer lease が見つかりません（既に回収済み、または issue_id/segment 指定誤りの可能性があります）');
+    }
+    const now = new Date().toISOString();
+    if (existing.lease.writer_lease.expires_at > now) {
+      return fail(
+        `writer lease は期限内です: holder=${existing.lease.writer_lease.holder}, expires_at=${existing.lease.writer_lease.expires_at}`,
+      );
+    }
+
+    const released = releaseLeaseRef(number, segment, root, existing.sha);
+    if (!released.ok) {
+      return fail(
+        released.reason === 'conflict'
+          ? '回収に失敗しました（検査後にrefが更新されています）'
+          : `writer lease ref の削除に失敗しました: ${released.stderr}`,
+      );
+    }
+
+    // ref削除後は、releaseと同じく有効leaseの可視性情報もbest-effortで片付ける。
+    cleanupLeaseComment(number, existing.lease.writer_lease.holder, root);
+    unmarkActiveWriterLeaseLabelIfUnused(number, root);
+
+    const actorFlagIndex = args.indexOf('--actor');
+    const explicitActor = actorFlagIndex === -1 ? undefined : args[actorFlagIndex + 1];
+    const configuredActor = git(['config', 'user.name'], root);
+    const actor =
+      (explicitActor && !explicitActor.startsWith('--') ? explicitActor : undefined) ||
+      (configuredActor.status === 0 ? configuredActor.stdout.trim() : '') ||
+      'unknown-operator';
+
+    try {
+      postLeaseReclaimComment(number, actor, existing.lease.writer_lease.holder, segment, root);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return fail(
+        `ref削除は成功したが監査コメント投稿に失敗しました。手動で gh issue comment を実行してください: ${detail}`,
+      );
+    }
+    return ok(
+      `writer lease を回収しました: issue_id=${issueIdRaw}, segment=${segment}, previous_holder=${existing.lease.writer_lease.holder}`,
+    );
   });
 }

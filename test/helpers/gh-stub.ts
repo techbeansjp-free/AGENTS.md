@@ -118,6 +118,11 @@ if (cmd === 'issue' && sub === 'comment') {
   const issueNumber = args[2];
   const body = flag('--body') ?? '';
   const state = loadState();
+  const issueCommentFailure = (state.issueCommentFailures || {})[issueNumber];
+  if (issueCommentFailure) {
+    process.stderr.write(issueCommentFailure);
+    process.exit(1);
+  }
   const id = state.nextId++;
   state.comments[issueNumber] = state.comments[issueNumber] || [];
   state.comments[issueNumber].push({
@@ -687,6 +692,7 @@ export interface GhStubState {
   prCreateCalls?: { args: string[]; body: string | undefined }[];
   failPrReviewStatusView?: boolean;
   issueViewFailures?: Record<string, string>;
+  issueCommentFailures?: Record<string, string>;
   prViewFailures?: Record<string, string>;
   prViewCalls?: { key: string; fields: string[] }[];
   prReviewThreadComments?: Record<string, unknown[]>;
@@ -725,6 +731,7 @@ export interface GhStub {
   seedPrReviewThreadComments(prNumber: number, comments: unknown[]): void;
   seedPrReviewThreadCommentsFailure(prNumber: number, failure: { stderr: string }): void;
   seedIssueViewFailure(issueNumber: string, failure: { stderr: string }): void;
+  seedIssueCommentFailure(issueNumber: string, failure: { stderr: string }): void;
   seedPrViewFailure(branch: string, failure: { stderr: string }): void;
   /** doctor の「GitHub labels同期」検査（`gh label list`）向けに、実リポジトリに存在するラベルを
    * 直接投入する（Issue #272）。`label create` を経由せず、既存ラベルが定義と食い違う状態や、
@@ -830,6 +837,11 @@ export function createGhStub(baseDir: string): GhStub {
     seedIssueViewFailure(issueNumber: string, failure: { stderr: string }): void {
       const state = this.readState();
       state.issueViewFailures = { ...(state.issueViewFailures ?? {}), [issueNumber]: failure.stderr };
+      this.writeState(state);
+    },
+    seedIssueCommentFailure(issueNumber: string, failure: { stderr: string }): void {
+      const state = this.readState();
+      state.issueCommentFailures = { ...(state.issueCommentFailures ?? {}), [issueNumber]: failure.stderr };
       this.writeState(state);
     },
     seedPrViewFailure(branch: string, failure: { stderr: string }): void {
