@@ -25,15 +25,19 @@ SPEC.mdはこの両立可否をdesign segmentでの技術検証事項として�
 
 **1. Bashスクリプト単体ではAgent tool呼び出しを起動できないため、起動フローを「lease取得・contract取得（script）→Agent tool呼び出し（進行役自身の判断・操作）→完了確認・lease解放（script）」の3段に分割する。**
 
-現行の`launch_worker()`はlease取得からサブプロセスのwait・完了確認・lease解放までを1回のBashツール呼び出し内で完結させている。しかしAgent toolを呼び出す主体は進行役を駆動するLLM自身であり、シェルスクリプトからその呼び出しを代理発行することはできない。したがって新方式では、`_dispatch_via_agent_tool()`（`claude.sh`新設）がlease取得とrole_contract取得までを行い、role_contract本文と進行役向けのdispatch手順を標準出力へ書いて新規exit code `4`（"dispatch_required"）で復帰する。leaseはここでは解放しない。進行役はこの出力を受けて自らAgent toolを呼び出し（`subagent_type: "agent-skill-chain-worker"`、`prompt`にcontract本文をそのまま、`run_in_background: false`）、呼び出しが完了した後に新規スクリプト`worker-launch-verify.sh`を実行して完了確認とlease解放を行う。
+現行の`launch_worker()`はlease取得からサブプロセスのwait・完了確認・lease解放までを1回のBashツール呼び出し内で完結させている。しかしAgent toolを呼び出す主体は進行役を駆動するLLM自身であり、シェルスクリプトからその呼び出しを代理発行することはできない。したがって新方式では、`_dispatch_via_agent_tool()`（`claude.sh`新設）がlease取得とrole_contract取得までを行い、role_contractを一時ディレクトリ内のファイル（`contract.md`）へ書き出したうえで、そのファイルパスと固定・短文のdispatch指示テンプレートのみを標準出力へ書いて新規exit code `4`（"dispatch_required"）で復帰する（role_contract本文そのものは標準出力へ一切書かない。理由はDecision 2参照）。leaseはここでは解放しない。進行役はこの出力を受けて自らAgent toolを呼び出し（`subagent_type: "agent-skill-chain-worker"`、`prompt`に定型文＋contractファイルの絶対パスのみ、`run_in_background: false`）、呼び出しが完了した後に新規スクリプト`worker-launch-verify.sh`を実行して完了確認とlease解放を行う。
 
-**2. I5の両立は「輸送経路の変更であって著述主体の変更ではない」ことにより成立させる。**
+**2. I5の両立は「輸送経路の変更であって著述主体の変更ではない」ことに加え、「role_contract本文が進行役自身の生成コンテキストへ一度も入らない」ことで成立させる。**
 
-現行方式でも進行役はrole_contract全文をstdin経由で「読まずに」中継しているに過ぎず、実際の成果物編集・commit・push・完了報告はサブプロセス内で走るワーカー自身が既存の`checkpoint.sh`（writer lease credential経由）・`report-status.sh`を呼び出して行う。新方式は`prompt`引数を輸送経路として使うだけで、この構造を変えない。進行役側が行うのは、contract本文を一切加工せずAgent toolへ渡すことと、完了確認スクリプトを起動することの2点であり、これはいずれも「調整状態の読み書き」（Agent tool呼び出しというコマンド操作、lease/report確認というコマンド操作）であって「成果物の著述」ではない。dispatch payloadのうちcontract本文以外の部分（`subagent_type`・待機手順等）は進行役が生成する運用メタデータであり、成果物の内容そのものではないため、これも同じ区分で扱う。
+当初案（role_contract本文をBashツールの標準出力へ書き、進行役がそれをそのままAgent toolの`prompt`引数として再送出する）はdesign-gate round1で反証された。現行方式が真に安全である根拠は「著述主体・commit主体が変わらない」ことだけではなく、より根本的には`launch_worker()`が`contract="$(_asc_cli segment start ...)"`で取得したcontractを`printf '%s' "$contract" >"$prompt_file"`で一時ファイルへ書き出し`bash -c "$worker_cmd" <"$prompt_file"`とファイルリダイレクトで渡す、という一連の操作が単一のBashツール呼び出し内でシェルプロセス自身により完結し、進行役LLMが実際に生成するコマンド文字列にcontractの内容が一切現れないことにある。Bashツールの標準出力として一度LLMの生成コンテキストへ読み込まれた内容を、そのまま次のツールコール引数として再送出する行為は、たとえ「加工しない」という指示があっても、この不変条件（LLMの生成過程にcontract全文を通過させない）を破る。
 
-**3. I3の両立は「新しい独立性を作る」のではなく「既存の耐久性安全網に委ねる」ことで成立させる。**
+採用した設計はこの性質をAgent tool経由でも再現する：`_dispatch_via_agent_tool()`はcontract本文を`mktemp -d`で作った一時ディレクトリ（worktree外・Git非追跡・`chmod 700`）内のファイルへ書き出すのみで標準出力へは一切書かず、進行役へはcontractの内容に一切依存しない固定・短文のdispatch指示テンプレートとファイルパスだけを返す。Agent toolの`prompt`引数として進行役が実際に生成するのはこの定型文＋パスのみであり、これは「調整状態の読み書き」（Agent tool呼び出しというコマンド操作）に留まる。role_contract本文は、Agent tool呼び出しで起動されたサブエージェント自身が自分のRead tool呼び出しでファイルから直接読み込む。進行役の生成コンテキストにcontract本文が入ることは一度も無く、実際の成果物編集・commit・push・完了報告は従来通りサブエージェント自身が既存の`checkpoint.sh`（writer lease credential経由）・`report-status.sh`を呼び出して行う。この設計は同時にAC-4（role_contract全文が加工・要約・追記なく伝わること）についても、進行役LLMが長大な本文をツールコール引数として再生成する必要があった当初案より頑健である（サブエージェントがファイルをバイト単位で読み込むため、生成過程での省略・言い換えのリスクが構造的に存在しない）。
+
+**3. I3の両立は「新しい独立性を作る」のではなく「既存の耐久性安全網に委ねる」ことで成立させる。ただし待機中のlease renewalには専用の独立デーモンを設ける。**
 
 Agent tool経由のworker実行は進行役セッションの生存に本質的に紐づく。この独立性の喪失自体は解消しない。その代わり、(a) Agent tool呼び出しを`run_in_background: false`で行うことを必須化し、現行の`wait "$worker_pid"`と同じ「進行役のターンが正常終了する＝workerも完了している」というブロッキング的性質を保つ。(b) 進行役セッションが異常終了した場合の回復は、新方式専用の仕組みを新設せず、既存のwriter lease TTL失効・ADR-0024（credentialなしreclaim）・`issue-resume.sh`という既存の安全網にそのまま委ねる。これは新方式で失敗が「発生し得る頻度」を増やすが、失敗から回復する「手段の種類」を増やさない、という設計判断である。この受容自体が、要件8がこの新方式を既定無効のopt-inとする理由の一部である。
+
+現行方式のlease renewal（サブプロセス生存中`renewal_interval_seconds`ごとに`renew_lease`を呼ぶ処理）は`launch_worker()`内の1回のBashツール呼び出しに閉じたバックグラウンドサブシェルとして実装されているが、新方式ではAgent tool呼び出しによるブロッキング待機がそのBashツール呼び出しの外側（進行役の別ターン）で起きるため、同じ実装では待機期間をカバーできない。そこで`_dispatch_via_agent_tool()`は、同じrenewループ本体を`setsid`で切り離した独立デーモンプロセス（`_dispatch_lease_renew_daemon()`）として起動し、起動元のBashツール呼び出し終了後も生存させる。デーモンは新規env`ASC_DISPATCH_MAX_WAIT_SEC`（既定7200秒）を超えたら自己終了し、無期限延命は行わない——進行役がAgent tool呼び出しを行わず放置した場合や、呼び出し中に進行役セッションが異常終了した場合も、最終的には(b)と同じ既存のTTL失効・reclaim・resumeの安全網に委ねられる（検知までの時間が延びるだけで、回復手段の種類は増えない）。`worker-launch-verify.sh`はcontractファイルと同じ一時ディレクトリのPIDファイルを読み取れればデーモンを`kill`してからディレクトリごと削除する。
 
 **4. ツール許可範囲の粒度低下を受容し、既定off・限定的なツール一覧で緩和する。**
 
@@ -45,6 +49,7 @@ Agent tool経由のworker実行は進行役セッションの生存に本質的�
 - 起動フローが1回のスクリプト呼び出しから「script→進行役操作→script」の3段構成に変わるため、進行役側の手順（Agent tool呼び出し方法・完了後の確認スクリプト実行）が新たな運用知識として必要になる。この手順は`.agent-skill-chain/standards/`に正本を置き、dispatch payload自体にも要旨を都度含める。
 - 進行役セッションの生存にworker実行が紐づくという、headless subprocess方式には無かった性質を新たに受け入れる。この性質はopt-inを有効化したプロジェクト・Issueにのみ影響し、既存の耐久性安全網（lease TTL・reclaim・resume）の範囲内で回復可能である。
 - Bashコマンド単位のツール許可制御という多重防御の1層が、新方式では利用できない。将来的な緩和（例: フックによる補完）は本Issueのスコープ外とし、必要であれば別Issueで扱う。
+- role_contract本文を保持する一時ディレクトリ・lease renewal専用の独立デーモンプロセスという、headless subprocess方式には無かった実行時アーティファクトが増える。いずれもworktree外・Git非追跡・上限付き生存期間（`ASC_DISPATCH_MAX_WAIT_SEC`）であり、`worker-launch-verify.sh`が正常経路で回収する。回収漏れが起きても既存のTTL失効安全網でカバーされ、成果物やcredentialの漏えいには繋がらない。
 - 本ADRは技術検証の結果を記録するものであり、`DESIGN.md`・`PLAN.md`と対を成す。実装は本Issueの実装segmentで行う。
 
 ---
