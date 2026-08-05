@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0028
-status: proposed
+status: accepted
 title: resumeしたセグメント作業ワーカーへの既存レビューフィードバック検出は、PRのstateによらず取得済みのレビュー・コメントを保持し、未対応と確定したreviewerの最新COMMENTED本文を補足として同梱する
 tags: [worker-resume, review-status, github-backend, i8-safety-ratchet]
 supersedes: [ADR-0027]
