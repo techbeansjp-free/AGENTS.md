@@ -23,6 +23,11 @@ ADR-0027（Issue #446、本ADRと同一Issue）は、resumeされたセグメン
 
 なお同レビューが挙げたPLAN.md/SPEC.md未展開起因の指摘（`PLAN_NOT_FULLY_EMBEDDED`等）は、レビュー実行環境のプロンプト構築（`gate.ts`の`buildReviewerPrompt()`）が生成するプロンプトのサイズに起因する既知の制約であり、本ADRの対象外とする（本Issue #446のdesign-gate審査で過去にも複数回観測済みの、プロンプト切断に起因する既知パターン）。また同レビューが挙げた`ADR0027_ARTIFACT_NOT_IN_DIFF`（ADR-0027の実在未確認）は、当該レビュー実行後にADR-0027が`accepted`へ遷移し実在が確定したため解消済み、`DOC_LENGTH_LIMIT_UNVERIFIED`（`.agent-skill-chain/ci/verify-doc-length.sh`のIssue成果物への適用有無）は`src/commands/verify.ts`の`docLength()`実装を直接確認した結果、対象は`AGENTS.md`と`.agent-skill-chain/templates/{issue,adr}/*.md`のテンプレート本体のみであり、Issue成果物として複製・記入済みの`DESIGN.md`/ADR個別ファイルは対象外であることを確認済みである。`PR_SIDE_MAY_ALWAYS_FAIL_IF_CWD_IS_PROTECTED_BASE`（`_asc_cli`起動時のcwdがprotected baseだと常にbranch解決が失敗する懸念）は、`.agent-skill-chain/adapters/claude.sh`・`.agent-skill-chain/scripts/worker-launch.sh`のREPO_ROOT解決が`BASH_SOURCE`基準でありcwdに依存しないことをコード確認済みで、対象worktree外から起動された場合にREPO_ROOTが誤ったworktreeへ解決される既知の別欠陥（本Issueとは別に追跡）に起因するものであり、本ADRの対象外とする。`MARKER_PREFIX_POSITION_ASSUMED`/`MARKER_POSITION_INVARIANT_UNSTATED`（定型marker除外がコメント本文先頭を前提とする不変条件の未明記）はDESIGN.mdの文言強化で対応し、ADRのDecision変更を要しないため本ADRの対象外とする。
 
+2026-08-05、上記是正を反映した版（`2cbcf8ce`）に対するdesign-gate round10（strict、独立2レビュア）が実施され、両レビュアが一致して次の実装上のblocking findingを検出し、加えて本ADR初版のDESIGN.md「対象外」節記述に事実誤認を指摘した。
+
+3. `INLINE_COMMENT_FETCH_FAILURE_DISCARDS_FETCHED_PR_REVIEWS`（blocking）: 上記「PRのstateによる分岐の撤廃」の決定により、`gh pr view`成功時点で`reviews`（`CHANGES_REQUESTED`を含み得る）・PR会話コメントは既に取得済みになる。しかし続く`gh api .../pulls/<pr番号>/comments`（インラインレビューコメント取得）が非ゼロ終了・JSON解釈失敗した場合、本ADR初版のDecisionは「新しい失敗カテゴリを追加せず、PR側検出全体を失敗として扱う」としており、この時点で既に取得済みの`reviews`・PR会話コメントまで丸ごと破棄していた。反例: reviewerが`CHANGES_REQUESTED`を提出済み→resume時`gh pr view`成功（レビュー取得済み）→直後の`gh api .../pulls/comments`がレートリミット等で失敗→PR側全体が失敗扱いとなり、既に取得済みの`CHANGES_REQUESTED`レビュー本文がworkerへ一切提示されない。これは本ADR自身が「Issue側／PR側の分離」合成規則で確立した「一方の経路の失敗を理由に他方で検出済みのフィードバックを破棄しない」原則を、PR側内部の2段呼び出し（`gh pr view` → インラインコメント取得）に対してだけ適用していなかった非対称な欠陥である。
+4. `PR_SIDE_DETECTION_ALWAYS_FAILS_UNDER_PROTECTED_BASE_LAUNCHER`（記述訂正、Decision変更を伴わない）: DESIGN.md「対象外」節が「`REPO_ROOT`は`BASH_SOURCE`基準で解決されるためcwdに関わらず変わらない」ことを根拠に本懸念を限定的なケースとしていたが、これは`worker-launch.sh`（bash）が`bin/agents-md.js`の所在特定に使う`REPO_ROOT`と、`resolveCurrentBranch()`が実際に依存する`src/lib/paths.ts`の`repoRoot()`（`process.cwd()`起点で`.git`を遡る、無関係な別の解決ロジック）を混同していた。本ADRのDecision自体（branch解決失敗・不一致の扱い）に変更は無いが、DESIGN.mdの記述誤りとして別途是正する。
+
 検討した選択肢（(a) PRのstate扱いについて）:
 
 1. **`state !== 'OPEN'`を「PR未作成」と同一視する（ADR-0027のまま）**: 上記1.の欠陥をそのまま残す。不採用。
@@ -35,30 +40,38 @@ ADR-0027（Issue #446、本ADRと同一Issue）は、resumeされたセグメン
 2. **`COMMENTED`提出も時系列比較の対象に含め、`CHANGES_REQUESTED`の解除とみなす**: ADR-0027が既に却下した選択肢（GitHub上`COMMENTED`は`CHANGES_REQUESTED`を解除しない）を再導入することになり、未対応レビューの見失いという本Issueの主要な失敗モードを再発させるため不採用。
 3. **「未対応」と確定したreviewerに限り、その`CHANGES_REQUESTED`提出より後に提出された最新の`COMMENTED`本文を補足情報として追加同梱する（採用）**: reviewerが「未対応」か否かの判定基準（選択肢2の時系列比較ロジック）自体は変更せず、既に未対応と確定した後にのみ、当該reviewerの最新の追加コメントを失わせない。判定基準への影響が無いため、ADR-0027が確立した判定基準の正しさ（`LATEST-REVIEWS-MASKS-CHANGES-REQUESTED`是正）を損なわない。
 
+検討した選択肢（(c) インラインレビューコメント取得失敗の扱いについて、design-gate round10指摘`INLINE_COMMENT_FETCH_FAILURE_DISCARDS_FETCHED_PR_REVIEWS`を受けて追加）:
+
+1. **現状維持、新しい失敗カテゴリを追加せずPR側検出全体を失敗として扱う（本ADR初版のまま）**: 上記3.の欠陥をそのまま残す。不採用。
+2. **`gh pr view`と`gh api .../pulls/comments`をまとめて1つの失敗単位のまま、リトライやキャッシュを追加する**: 失敗時の情報破棄という根本問題を解決せず、リトライ回数・タイムアウト等の新たな設計判断を追加するだけで本Issueのスコープ（検出漏れの防止）を超えるため不採用。
+3. **`gh pr view`（`reviews`・PR会話コメント取得）とインラインレビューコメント取得を独立した成否単位として扱い、後者のみの失敗は前者の検出結果を破棄せず`partial_failures`へ`side: 'pr_review_thread_comments'`として個別に表明する（採用）**: 「Issue側／PR側の分離」で確立した「一方の失敗を理由に他方の検出済み結果を破棄しない」原則を、PR側内部の2段呼び出しにもそのまま適用する。`gh pr view`自体が失敗した場合（branch解決失敗・不一致・`gh pr view`非ゼロ終了等）は従来どおりPR側全体を失敗として扱う——本選択肢が変更するのは「`gh pr view`は成功したがインラインコメント取得のみ失敗した」場合に限る。
+
 ## Decision
 
 resumeされたセグメント作業ワーカーへ同梱する「未対応の既存レビューフィードバック」の判定基準を、ADR-0027の決定を置き換えて次のとおり確定する（ADR-0027から変更の無い項目も、成果物の自己完結性のため本ADRへ完全に再掲する）。
 
 - **レビュー（ADR-0027から変更なし）**: `gh pr view <branch> --json number,state,headRefName,reviews,comments`（`latestReviews`ではなく全レビュー提出履歴を返す`reviews`を用いる）を取得する。reviewerごとに、`state`が`APPROVED`または`CHANGES_REQUESTED`である提出のみを対象に`submittedAt`昇順で最新の1件を求める（`COMMENTED`提出はこの時系列比較の対象から除外し無視する）。この最新提出が`CHANGES_REQUESTED`であるreviewerのみを「未対応」とみなし、そのreviewerの当該レビュー本文を未対応として扱う。
 - **未対応reviewerの補足コメント本文（新設、2026-08-05、design-gate finding `LATEST_COMMENTED_REVIEW_BODY_DROPPED_FOR_UNRESOLVED_REVIEWER`是正）**: 上記により「未対応」と確定したreviewerについて、同reviewerの提出履歴のうち`state === 'COMMENTED'`かつ`submittedAt`が当該`CHANGES_REQUESTED`提出より新しいものが1件以上あれば、そのうち最新の1件の本文を、未対応レビューのフィールド（`latest_comment_body`、任意項目）として同一エントリへ追加する。この追加は「未対応」の判定基準（上記レビュー項）そのものを変更しない——`COMMENTED`提出のみを行ったreviewer（`CHANGES_REQUESTED`を一度も提出していない、またはその後`APPROVED`を提出したreviewer）を新たに未対応とすることはない。該当する`COMMENTED`提出が無ければ`latest_comment_body`は含めない。
-- **インラインレビューコメント（review thread comment、ADR-0027から変更なし）**: PR側の検出（branch解決成功・対象Issue紐づけ検証・`gh pr view`成功）ができた場合に限り、続けて`gh api repos/{owner}/{repo}/pulls/<pr番号>/comments`（REST API）を呼び、差分行に紐づくインラインレビューコメントを取得する。返る各要素の本文・投稿者・作成時刻を、PR会話コメント・Issueコメントと同じ「定型marker除外・時刻カットオフ無し」基準で未対応コメントへ統合する（`source: 'review_thread_comment'`で区別）。このAPI呼び出しが失敗した場合（非ゼロ終了・JSON解釈失敗）は、新しい失敗カテゴリを追加せず、PR側検出全体を失敗として扱う。
+- **インラインレビューコメント（review thread comment、2026-08-05再改定、design-gate round10 blocking finding `INLINE_COMMENT_FETCH_FAILURE_DISCARDS_FETCHED_PR_REVIEWS`是正）**: PR側の検出（branch解決成功・対象Issue紐づけ検証・`gh pr view`成功）ができた場合に限り、続けて`gh api repos/{owner}/{repo}/pulls/<pr番号>/comments`（REST API）を呼び、差分行に紐づくインラインレビューコメントを取得する。返る各要素の本文・投稿者・作成時刻を、PR会話コメント・Issueコメントと同じ「定型marker除外・時刻カットオフ無し」基準で未対応コメントへ統合する（`source: 'review_thread_comment'`で区別）。このAPI呼び出しが失敗した場合（非ゼロ終了・JSON解釈失敗）は、直前に成功している`gh pr view`の検出結果（`reviews`・PR会話コメント）を破棄しない——PR側全体を失敗として扱う設計（ADR-0027時点の決定）を撤廃し、`gh pr view`で取得済みの`reviews`・PR会話コメントはそのまま検出結果として保持したうえで、インラインレビューコメント取得の失敗のみを独立した部分障害として`partial_failures`へ`{ side: 'pr_review_thread_comments', reason }`を付加する。`gh pr view`自体の失敗（branch解決失敗・対象Issue不一致・`gh pr view`非ゼロ終了・JSON解釈失敗）は、この変更後も従来どおりPR側全体（`side: 'pr'`）の失敗として扱う——本改定が変更するのは「`gh pr view`は成功し、続くインラインコメント取得のみが失敗した」場合に限る。
 - **PRのstateによる分岐の撤廃（変更、2026-08-05、design-gate finding `CLOSED_PR_FEEDBACK_SILENTLY_DISCARDED`是正）**: `gh pr view <branch>`が成功した場合、PRの`state`（`OPEN`/`CLOSED`/`MERGED`のいずれか）に関わらず、取得したレビュー・PR会話コメント・インラインレビューコメントを上記の基準でそのまま処理する。「PR未作成（PR側0件・非失敗）」として扱うのは、`gh pr view`が非ゼロ終了し`stderr`が`gh` CLIの固定文言`no pull requests found`に一致する場合のみとする。stateは判定に一切用いない。
 - **単純コメント（Issue・PR双方、ADR-0027から変更なし）**: 対象ブランチの最新commit時刻による時刻カットオフを行わない。コメント本文が定型marker（`<!-- agent-skill-chain:` で始まる行）で始まらない限り、作成時刻に関わらず常に「未対応」として扱う。`git` 呼び出し（commit時刻取得）は判定・出力のいずれからも用いない。
 - **Issue側とPR側の検出を分離する（ADR-0027から変更なし）**: Issue側コメント検出（`gh issue view --json comments`）とPR側検出（`resolveCurrentBranch` → branch命名規則検証 → `gh pr view --json number,state,headRefName,reviews,comments` → PR側インラインレビューコメント取得）を独立した経路として実行し、結果を合成する。Issue側は常に実行し、PR側は解決できた場合のみ実行する。
 - **branch解決失敗はPR未作成と区別する（ADR-0027から変更なし）**: `resolveCurrentBranch()` が失敗する場合（detached HEAD等）、PR側を明示的な `detection: 'failed'` として扱う。
 - **PR側の解決は`findOpenPrByHead()`を経由せず、`review-status.ts`が`gh pr view <branch>`を直接1回呼ぶ（ADR-0027から変更なし）**: 終了コードが非ゼロで、かつstderrが`gh` CLIの固定文言`no pull requests found`に一致する場合のみ「PR未作成（成功・0件）」として扱う。それ以外の非ゼロ終了・JSON解釈失敗は「失敗」として扱う。
 - **PR側で解決したbranch・PRが対象Issueに紐づくものであることを検証する（ADR-0027から変更なし）**: `resolveCurrentBranch()`が返すbranch名を、`gh pr view <branch>`呼び出しより前に、ブランチ命名規則（`<type>/<issue-id>-<slug>`）へ照らし対象issueNumberと一致するか（正規表現 `^[^/]+/${issueNumber}-`）を検証する。一致しない場合はbranch解決失敗と同じ明示的な失敗として扱う。
-- **検出処理自体が失敗した場合の合成規則（ADR-0027から変更なし）**: Issue側・PR側それぞれを「成功」「失敗」に正規化したうえで合成する。両方失敗した場合のみ`detection: 'failed'`（両側の失敗理由を含む`reason`）とする。一方が成功・他方が失敗した場合は`detection: 'succeeded'`とし、成功した側で実際に検出済みの未対応レビュー・コメント（0件でもよい）をそのまま保持したうえで、失敗した側の理由を`partial_failures`として付加する。
+- **検出処理自体が失敗した場合の合成規則（ADR-0027から変更なし）**: Issue側・PR側（`gh pr view`自体の成否）それぞれを「成功」「失敗」に正規化したうえで合成する。両方失敗した場合のみ`detection: 'failed'`（両側の失敗理由を含む`reason`）とする。一方が成功・他方が失敗した場合は`detection: 'succeeded'`とし、成功した側で実際に検出済みの未対応レビュー・コメント（0件でもよい）をそのまま保持したうえで、失敗した側の理由を`partial_failures`として付加する。
+- **インラインレビューコメント取得失敗は独立した第3の障害軸として扱う（新設、2026-08-05再改定、design-gate round10 blocking finding `INLINE_COMMENT_FETCH_FAILURE_DISCARDS_FETCHED_PR_REVIEWS`是正）**: 上記の「Issue側／PR側」合成はあくまで`gh pr view`自体の成否（branch解決失敗・対象Issue不一致・`gh pr view`非ゼロ終了・JSON解釈失敗）を対象とする。`gh pr view`が成功した場合に限り試行される続くインラインレビューコメント取得（`gh api .../pulls/comments`）の失敗は、この合成に混ぜ込まずPR側全体を失敗へ倒さない。`gh pr view`で取得済みの`reviews`・PR会話コメントは検出結果として保持したまま、`partial_failures`へ`{ side: 'pr_review_thread_comments', reason }`を独立に追加する（既存の`side: 'issue' | 'pr'`と共存し得る配列要素であり、`partial_failures`は最大3要素になり得る）。この障害軸は`gh pr view`自体が失敗した場合（そもそもインラインコメント取得を試行しない）には出現しない。
 - **ローカルモードのgate report走査・読み込み失敗時（ADR-0027から変更なし）**: `spec`/`design`/`implementation`/`validation` 全segmentのgate reportを走査し、`origin`一致の`blocking` findingのみを収集する。ファイル不存在は0件で継続、YAML解釈失敗のみをsegment単位で捕捉し失敗として扱う。全4segmentの読み込みがすべて失敗した場合のみ`detection: 'failed'`とする。
 
 ## Consequences
 
-- 利点: PRのstateを判定から排除したことで、closed/mergedなPRに実在するレビュー・コメントを「PR未作成」と偽装しなくなり、AC-5（区別できない/取得できないものを『無し』と同一視しない）がPR側検出のあらゆる分岐で一貫する。未対応reviewerの最新`COMMENTED`本文を補足として同梱することで、「未対応」の判定基準（ADR-0027、`COMMENTED`提出を時系列比較対象から除外する設計）を維持したまま、当該reviewerが実際に書いた最新の指摘内容を取りこぼさなくなる。
+- 利点: PRのstateを判定から排除したことで、closed/mergedなPRに実在するレビュー・コメントを「PR未作成」と偽装しなくなり、AC-5（区別できない/取得できないものを『無し』と同一視しない）がPR側検出のあらゆる分岐で一貫する。未対応reviewerの最新`COMMENTED`本文を補足として同梱することで、「未対応」の判定基準（ADR-0027、`COMMENTED`提出を時系列比較対象から除外する設計）を維持したまま、当該reviewerが実際に書いた最新の指摘内容を取りこぼさなくなる。インラインレビューコメント取得失敗を独立した障害軸として切り出したことで、`gh pr view`で既に取得済みの`reviews`・PR会話コメント（`CHANGES_REQUESTED`を含み得る）が、インラインコメント取得という後続のサブ経路の一時的な障害だけを理由に破棄されなくなる。
 - 欠点・limitation:
   - closed/mergedなPRのレビュー・コメントも毎回のresumeで再掲され続ける（過検出）。既存の「時刻カットオフ廃止のトレードオフ」（ADR-0026）と同種であり、見せすぎる方が安全側というAGENTS.md I8の判断に合致する。
   - `latest_comment_body`はreviewerが実際に`CHANGES_REQUESTED`後に`COMMENTED`を追加した場合のみ付与される任意項目であり、reviewerがレビュー本文を使わずIssue/PR会話コメントで補足指摘を行った場合は本項の対象外（単純コメント側の判定基準でカバーされる）。
   - dismissされたレビューの扱い（ADR-0027の既知の限界）は本ADRでも変更しない。
-- follow-up: `_asc_cli`起動時のcwd・REPO_ROOT解決の妥当性（本ADR対象外と確定した`PR_SIDE_MAY_ALWAYS_FAIL_IF_CWD_IS_PROTECTED_BASE`）は、別途追跡されているworker-launch起動経路の欠陥修正Issueで扱う。
+  - `partial_failures`は`side: 'issue' | 'pr' | 'pr_review_thread_comments'`の最大3要素を持ち得る配列となり、出力の型・読み手（worker）の理解負担がさらに増す。
+- follow-up: `resolveCurrentBranch()`が依存する`repoRoot()`（`src/lib/paths.ts`、`process.cwd()`起点で`.git`を遡って解決する）は、`worker-launch.sh`（bash）が`bin/agents-md.js`の所在特定に使う`REPO_ROOT`（`BASH_SOURCE`基準）とは無関係な別の解決ロジックであり、呼び出しプロセスのcwdに依存する。この依存自体の解消（呼び出し元での明示的なworktree cdの徹底、または`repoRoot()`側でのworktree自動解決）は本ADR・本Issueのスコープ外として別途追跡する。
 
 ---
 
