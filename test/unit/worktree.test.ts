@@ -391,6 +391,33 @@ test('resolveIssueWorktreeExactlyOne: prunableな同issueエントリは候補�
   if (result.status === 'found') assert.equal(path.resolve(result.worktree.path), path.resolve(active));
 });
 
+test('resolveIssueWorktreeExactlyOne: prunableエントリ併存時はCI単一checkoutフォールバックを発火させない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+  const stale = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-99-stale-slug`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', 'feature/99-stale-slug', stale, 'main']);
+  fs.rmSync(stale, { recursive: true, force: true });
+
+  const sha = gitRev(repo.dir);
+  gitIn(repo.dir, ['checkout', '--detach', sha]);
+  const originalHeadRef = process.env.GITHUB_HEAD_REF;
+  delete process.env.GITHUB_HEAD_REF;
+  t.after(() => {
+    if (originalHeadRef !== undefined) process.env.GITHUB_HEAD_REF = originalHeadRef;
+  });
+
+  const entries = listWorktrees(repo.dir);
+  assert.equal(entries.length, 2, '前提: rootとprunableな管理エントリが列挙されること');
+  assert.equal(
+    entries.find((entry) => path.resolve(entry.path) === path.resolve(stale))?.prunable,
+    true,
+    '前提: 実体を削除したworktreeがprunableであること',
+  );
+
+  assert.deepEqual(resolveIssueWorktreeExactlyOne(repo.dir, config, '42'), { status: 'not_found' });
+});
+
 test('findIssueWorktree: .worktrees型レイアウトが無い単一checkout状態でも、現在のブランチがissue_idに一致すればrootをentryとして返す（CI actions/checkoutフォールバック）', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

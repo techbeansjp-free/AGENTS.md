@@ -264,8 +264,8 @@ export function findIssueWorktree(
 /**
  * Issue番号に対応する実在worktreeを一意に解決する。既存の `findIssueWorktree` は最初の
  * path-pattern一致を返す互換挙動を維持する一方、worker起動経路では複数一致を明示的に拒否する。
- * `prunable` は既に実体を失った管理エントリなので候補へ数えず、branch名一致・CI単一checkoutの
- * フォールバックだけを既存実装と共有する。
+ * `prunable` は既に実体を失った管理エントリなので候補へ数えない。ただしCI単一checkoutの判定は
+ * 管理エントリが実際に1件だけの場合へ限定するため、フォールバックには未加工の一覧を渡す。
  */
 export function resolveIssueWorktreeExactlyOne(
   root: string,
@@ -283,12 +283,7 @@ export function resolveIssueWorktreeExactlyOne(
     return { status: 'found', worktree: candidates[0] };
   }
 
-  const fallback = findIssueWorktreeFallback(
-    root,
-    config,
-    issueNumber,
-    entries.filter((entry) => !entry.prunable),
-  );
+  const fallback = findIssueWorktreeFallback(root, config, issueNumber, entries);
   return fallback ? { status: 'found', worktree: fallback } : { status: 'not_found' };
 }
 
