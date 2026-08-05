@@ -16,7 +16,7 @@
 | 要件7・AC-6、要件8・AC-7 | `gate reviewer-prompt` のlight向けルーブリック追記（hybrid検証） | severityはレビュア判定のため機械的完全検証はしない設計判断（下記「未検証で許容する範囲」） |
 | 要件9・AC-9 | `resolveLightReview()` の付与主体未確認時フォールバック | `size:quick`の`gh`未認証時フォールバック（`quick-mode.ts`の`readSignalFromGitHub`が`gh`未認証・API到達不能を検知した際に非適用へ倒す処理）と同型 |
 | 要件10・AC-11 | `resolveLightReview()` の入力を「ラベル／state.yamlフィールド／変更差分パス集合」のみに限定 | 成果物内容を読まない。要件4のパス集合参照は差分パスのみで内容非依存のため抵触しない |
-| 要件11・AC-10 | `.agent-skill-chain/schemas/gate-report.schema.yaml` に追加する `gate.light_review` プロパティ | `requested`・`applied`・`disabled_reasons`・`remediation_round` |
+| 要件11・AC-10 | `.agent-skill-chain/schemas/gate-report.schema.yaml` に追加する `gate.light_review` プロパティ | `requested`・`applied`・`disabled_reasons`・`remediation_round`・`strict_locked` |
 | 要件12・AC-1 | `light_review` はgate-report/state.yamlどちらも既存必須項目に追加しない任意プロパティ | 未指定時は`resolveLightReview()`が`requested=false`を返し既存経路を素通り |
 | 要件13・AC-13 | 変更なし（既存の`human_confirmation.before_implementation`・`merge.autonomous`実装に一切触れない） | 新規コード・スキーマ変更が対象外設定を参照/変更しないことを設計レベルで保証 |
 | ラベル定義 | `.agent-skill-chain/templates/github/provisioning/labels.yaml` に `review:light` 追加 | `setup-labels.sh`経由で反映 |
@@ -28,9 +28,9 @@
 
 - `src/lib/review-profile.ts`（新規）: risk/autonomyラベルまたは`state.yaml`から`standard | strict`を導出する唯一の実装。既存 `gate.ts` 内の1箇所のインライン式（trusted-gate再構築コンテキスト）をこの関数呼び出しへ置換し、I8ロジックの実装箇所を1つに集約する。
 - `src/lib/self-reference-guardrail.ts`（新規、`quick-mode.ts`から抽出）: ADR-0022が定義する自己参照ガードレール対象パス（`docs/adr/`・`.agent-skill-chain/config/segments.yaml`・`AGENTS.md`・`.agent-skill-chain/schemas/`）の判定と、base差分＋作業ツリー差分を合成する`changedPaths()`を提供する。`quick-mode.ts`と`review-light.ts`の両方から利用され、パス集合の二重管理を避ける。
-- `src/lib/review-light.ts`（新規）: `review:light`ラベル／`review_intensity`フィールドの読み取り、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`の3判定を合成した`resolveLightReview()`、および直前ラウンドの`gate-report`（`reviewFilePath()`が指す既存のスクラッチ／コミット済みファイル）から`remediation_round`を導出するロジックを持つ。`quick-mode.ts`と同じ「シグナル未読取・差分未解決は非適用」という安全側フォールバック方針を踏襲する。`resolveLightReview()`は`gate review`が新しいラウンドのスキャフォールドを生成するたびに毎回呼び出され、結果をキャッシュしない（下記「remediationループ中の再評価とエスカレーション」参照）。
+- `src/lib/review-light.ts`（新規）: `review:light`ラベル／`review_intensity`フィールドの読み取り、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`の3判定を合成した`resolveLightReview()`、および直前ラウンドの`gate-report`（`reviewFilePath()`が指す既存のスクラッチ／コミット済みファイル）から`remediation_round`と`light_review.strict_locked`（一方向ラチェット、下記「remediationループ中の再評価とエスカレーション」参照）を読み取るロジックを持つ。`quick-mode.ts`と同じ「シグナル未読取・差分未解決は非適用」という安全側フォールバック方針を踏襲する。3層ガードレールの判定自体は`gate review`が新しいラウンドのスキャフォールドを生成するたびに毎回ステートレスに再計算するが、`applied`の最終値は当該再計算結果と直前ラウンドから継承した`strict_locked`のANDで決まるため、`strict_locked=true`が一度確定すると`applied`は以降のラウンドで`true`に戻らない。
 - `src/commands/gate.ts`（既存、拡張）: `gate review`スキャフォールド生成時に`resolveLightReview()`の結果を`gate.light_review`へ埋め込み、`record-verdict`で`light_review.applied && remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS && (hasBlocking || fail)`のとき`inconclusive`を強制してから既存の`deriveFinal()`へ渡す。
-- `.agent-skill-chain/schemas/gate-report.schema.yaml`（既存、拡張）: `gate.light_review`（任意プロパティ）を追加。
+- `.agent-skill-chain/schemas/gate-report.schema.yaml`（既存、拡張）: `gate.light_review`（任意プロパティ：`requested`・`applied`・`disabled_reasons`・`remediation_round`・`strict_locked`）を追加。`strict_locked`は一度`true`になったら当該Issue/PRのゲートライフサイクル中`false`へ戻らない一方向ラチェットである。
 - `.agent-skill-chain/schemas/state.schema.yaml`（既存、拡張）: `review_intensity: light | full`（既定`full`）を追加。既存必須項目（`required`配列）は変更しない。
 - `.agent-skill-chain/templates/github/provisioning/labels.yaml`（既存、拡張）: `review:light`ラベル定義を追加。
 - `gate reviewer-prompt`（既存コマンドの出力テキスト、拡張）: `light_review.applied === true`のときのみ、AC未達＝常時blocking／セキュリティ・データ喪失・互換性破壊・不変条件違反＝自動blocking昇格／その他のwarning以下は対応必須としない、という3行のルーブリックを追記する。
@@ -67,8 +67,8 @@ related_adrs:
 
 - 想定される失敗モード1: `review-light.ts`の実装不備により、Strict強制条件（要件2〜4）に該当するにもかかわらず`applied=true`を返す。
   - 対応: `resolveLightReview()`は3判定（`resolveReviewProfile`・`classifyCoreReview`・self-reference-guardrail）のいずれかがStrict相当を示した場合に`applied=false`を返す論理積として実装し、単体テストで3条件それぞれの単独該当ケースを網羅する。仮に見落としがあっても、`record-verdict`はAC-6/AC-7（AC未達・不変条件違反等の自動blocking昇格）を独立して適用するため、軽量プロファイルの誤適用が直ちに承認漏れへ波及しない多層防御になる。
-- 想定される失敗モード2: `remediation_round`のスクラッチ格納先（GitHubモードでは`os.tmpdir()`配下、Issue #399の既存方針を踏襲）が失われる（別マシン・別セッション・tmpdir clear）。
-  - 対応: 直前ラウンドの記録を読めない場合は`remediation_round = 0`から再開する。これは打ち切りまでの許容ラウンド数が実質1回分増えるだけであり、AC-6/AC-7のblocking自動昇格・AC-9の付与主体未確認フォールバックには一切影響しない。速度上の利益が一時的に目減りするだけで安全性は損なわれない（許容するトレードオフとして`docs/adr/ADR-0031-...`に明記する）。
+- 想定される失敗モード2: `remediation_round`・`strict_locked`のスクラッチ格納先（GitHubモードでは`os.tmpdir()`配下、Issue #399の既存方針を踏襲）が失われる（別マシン・別セッション・tmpdir clear）。
+  - 対応: 直前ラウンドの記録を読めない場合は`remediation_round = 0`・`strict_locked = false`から再開する。`remediation_round`側は打ち切りまでの許容ラウンド数が実質1回分増えるだけであり、AC-6/AC-7のblocking自動昇格・AC-9の付与主体未確認フォールバックには一切影響しない。`strict_locked`側は、スクラッチ喪失時点で当該ラウンドの3層ガードレール判定が再度ステートレスに評価されるため、その時点の差分・ラベルが実際にStrict相当のままであれば同ラウンドで`strict_locked=true`へ再度確定し実害は生じない。喪失かつ差分がガードレール非該当へ戻っている場合に限りラチェットが意図せずリセットされうるが、これはローカルモード（Git管理下`reviews/<gate>.yaml`で永続化されI3保証対象）では発生せず、GitHubモードのベストエフォート格納の既知の限界としてADR-0031に明記し許容する（速度上の利益が目減りするだけで、AC-6/AC-7の独立した自動blocking昇格という多層防御は維持される）。
 - 想定される失敗モード3: `resolveLightReview()`のcore_review／guardrail判定が差分取得エラー等で`unresolved`を返す。
   - 対応: `classifyCoreReview()`は既存実装が`unresolved`時に`required: true`を返す（安全側）ため、そのまま`applied=false`に反映される。`self-reference-guardrail`側も`changedPaths()`が差分未解決を示す場合は`quick-mode.ts`と同じ規約で非適用に倒す。
 - ロールバック手順: `light_review`はgate-report/state.yamlいずれも任意プロパティであり、`review:light`ラベル・`review_intensity`フィールドを一切付与しなければ既存の判定経路（AC-1で保証）へ完全に戻る。ロールバックは本変更のrevertのみで足り、既存Issueへのマイグレーションは不要。
@@ -76,16 +76,19 @@ related_adrs:
 
 ## remediationループ中の再評価とエスカレーション
 
-`review:light`が一度`applied=true`となった後でも、blocking finding対応の再レビュー（remediationラウンド）へ進むたびに、`gate review`が3層ガードレール（要件2〜4、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`）を都度再評価する。前ラウンドの`applied`値をキャッシュ・継承しない。
+`review:light`が一度`applied=true`となった後でも、blocking finding対応の再レビュー（remediationラウンド）へ進むたびに、`gate review`が3層ガードレール（要件2〜4、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`）を都度**ステートレスに**再評価する。この「今ラウンドの差分・ラベル状態から見て3層ガードレールに該当するか」という生の判定結果自体はキャッシュ・継承しない（`resolveLightReview()`は呼び出しの都度、最新の入力のみから再計算する）。
+
+しかし、その生の判定結果を最終的な`applied`・`review_profile`へ反映する際は、`gate.light_review.strict_locked`という**一方向ラチェット**を介する。ラチェットにより、一度Strictへエスカレーションした後のラウンドで差分やラベルがガードレール非該当側へ戻っても、`applied`は`true`に復帰せず`review_profile`は`strict`のまま維持される（AGENTS.md I8「危険信号による降格は自動、昇格は人間の明示行為のみ」の安全側ラチェット原則を、light→Strictの遷移にも適用する）。
 
 - **再評価のタイミング**: `gate review`が各remediationラウンドのレビュー用スキャフォールドを生成する時点（＝そのラウンドのレビュアへプロンプトを渡す直前）で`resolveLightReview()`を呼び出す。record-verdict時点では再評価しない（record-verdictはそのラウンド開始時に確定した`light_review`の値をそのまま参照する）。
-- **新たに該当した場合の遷移**: 前ラウンドでは非該当だった3層ガードレールのいずれかに新たなラウンドで該当した場合、そのラウンドの`gate.light_review.applied`を`false`に更新し、同じラウンドの`gate.review_profile`（Standard/Strict判定結果を格納する既存フィールド）を`strict`へ切り替える。これ以降のラウンドは専任2名によるStrictレビューを要求する。切り替えは即時（そのラウンドから）であり、猶予ラウンドを設けない。
+- **`strict_locked`の算出**: `resolveLightReview()`は次の2値のORで当該ラウンドの`strict_locked`を確定する。(1) 直前ラウンドの`gate-report`（`reviewFilePath()`経由、`remediation_round`と同じ読み取り元）から読み取った`light_review.strict_locked`（記録が無ければ`false`）。(2) 当該ラウンドの3層ガードレール判定（要件2〜4）が新規にStrict相当を示したかどうかのステートレスな結果。一度でも`true`が確定したラウンド以降、直前ラウンド由来の`(1)`が常に`true`を返すため、`strict_locked`は当該Issue/PRのゲートライフサイクル中`false`へ戻らない。
+- **`applied`・`review_profile`の確定**: 当該ラウンドの`gate.light_review.applied`は`requested && !strict_locked`で確定する。`strict_locked=true`のラウンドでは、`gate.review_profile`（Standard/Strict判定結果を格納する既存フィールド）を`resolveReviewProfile()`の結果に関わらず`strict`へ固定し、専任2名によるStrictレビューを要求する。新たに`strict_locked=true`が確定したラウンドから即座に適用し、猶予ラウンドを設けない。
 - **直前ラウンド（light時）の1体レビュー結果の扱い**: 昇格前ラウンドの1体レビュー結果は、そのラウンドのgate-reportに証跡としてそのまま残すが、昇格後のStrictレビューの合否判定入力としては再利用しない。Strictレビューは常に専任2名が最初からconformance/falsificationを実施する（既存Strictの通常運用と同一であり、light由来の特別な引き継ぎ処理は設けない）。
-- **`remediation_round`の扱い**: エスカレーション時もカウンタはリセットせず、直前ラウンドの値をそのまま+1して継続する（下記「`remediation_round`の確定タイミングと初期値」参照）。エスカレーション後は`light_review.applied=false`のため、要件6（AC-8）の打ち切り強制条件（`light_review.applied && remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS`）が評価対象から外れ、Strictの既存の反復運用（打ち切りラウンド数の上限なし、Issue #446のような複数ラウンドを許容する既存運用）へそのまま合流する。新しい打ち切りロジックをStrict側に追加しない。
+- **`remediation_round`の扱い**: エスカレーション時もカウンタはリセットせず、直前ラウンドの値をそのまま+1して継続する（下記「`remediation_round`の確定タイミングと初期値」参照）。エスカレーション後は`light_review.applied=false`が`strict_locked`により恒久的に固定されるため、要件6（AC-8）の打ち切り強制条件（`light_review.applied && remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS`）は以降のラウンドで評価対象から外れたまま戻らず、Strictの既存の反復運用（打ち切りラウンド数の上限なし、Issue #446のような複数ラウンドを許容する既存運用）へそのまま合流する。新しい打ち切りロジックをStrict側に追加しない。
 
 ### `remediation_round`の確定タイミングと初期値
 
-`remediation_round`は0始まりとする。`gate review`がラウンドのスキャフォールドを生成する時点で、直前ラウンドの`gate-report`（`reviewFilePath()`経由）から読み取った値に+1して当該ラウンドの値を確定する。直前ラウンドの記録が存在しない場合（そのIssueの初回レビュー、またはスクラッチ喪失時）は0として確定する。`record-verdict`はこの値を読み取るのみで変更しない。
+`remediation_round`は0始まりとする。`gate review`がラウンドのスキャフォールドを生成する時点で、直前ラウンドの`gate-report`（`reviewFilePath()`経由）から読み取った値に+1して当該ラウンドの値を確定する。直前ラウンドの記録が存在しない場合（そのIssueの初回レビュー、またはスクラッチ喪失時）は0として確定する。`record-verdict`はこの値を読み取るのみで変更しない。`light_review.strict_locked`も同じ直前ラウンドの`gate-report`読み取り処理の一部として同時に取得する（別経路・別タイミングでの読み取りは行わない）。
 
 この定義により、ADR-0031が定める「初回レビュー（`remediation_round=0`）＋修正後の再レビュー1回（`remediation_round=1`）＝合計2回」という数値意図と、要件6（AC-8）の打ち切り条件`remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS（=1）`が整合する（`remediation_round=1`のラウンドでなおblockingが残る場合に打ち切りが発動する）。
 
