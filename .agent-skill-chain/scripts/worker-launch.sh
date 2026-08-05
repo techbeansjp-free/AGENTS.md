@@ -64,6 +64,30 @@ if ! WORKER_CONTEXT="$(_cli worker context "$ISSUE_ID" "$SEGMENT")"; then
   exit 2
 fi
 
+WORKTREE_PATH="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^worktree_path=//p')"
+if [[ -z "$WORKTREE_PATH" ]]; then
+  echo "worker-launch.sh: 対象Issueのworktreeを一意に解決できませんでした: ${ISSUE_ID}。writer lease取得前に停止します" >&2
+  exit 2
+fi
+
+if [[ ! "$REPO_ROOT" -ef "$WORKTREE_PATH" ]]; then
+  if [[ "${ASC_WORKER_LAUNCH_REEXEC:-0}" == "1" ]]; then
+    echo "worker-launch.sh: 対象worktreeへ再実行後も実行位置が一致しません: ${WORKTREE_PATH}。writer lease取得前に停止します" >&2
+    exit 2
+  fi
+  TARGET_LAUNCHER="$WORKTREE_PATH/.agent-skill-chain/scripts/worker-launch.sh"
+  if [[ ! -f "$TARGET_LAUNCHER" ]]; then
+    echo "worker-launch.sh: 対象worktree内の起動スクリプトが見つかりません: ${TARGET_LAUNCHER}。writer lease取得前に停止します" >&2
+    exit 2
+  fi
+  if ! cd -- "$WORKTREE_PATH"; then
+    echo "worker-launch.sh: 対象worktreeへ移動できません: ${WORKTREE_PATH}。writer lease取得前に停止します" >&2
+    exit 2
+  fi
+  export ASC_WORKER_LAUNCH_REEXEC=1
+  exec bash "$TARGET_LAUNCHER" "$ISSUE_ID" "$SEGMENT"
+fi
+
 ADAPTER="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^adapter=//p')"
 ADAPTER="${ADAPTER:-human}"
 ADAPTER_FILE="$ADAPTERS_DIR/${ADAPTER}.sh"

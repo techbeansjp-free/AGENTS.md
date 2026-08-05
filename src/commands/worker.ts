@@ -3,6 +3,7 @@ import { loadConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { isWorkerSegment, resolveWorkerSelection, resolveModelForTier } from '../lib/worker-selection.js';
+import { resolveIssueWorktreeExactlyOne } from '../lib/worktree.js';
 
 const CONTEXT_USAGE = `
 使い方: agent-skill-chain worker context <issue_id> [segment]
@@ -12,6 +13,7 @@ KEY=VALUE 形式で標準出力へ出す。
   adapter=<claude|codex|human>          セグメント別上書き→worker.adapter→human の順で解決
   backend=<github|local>                coordination.backend
   issue_number=<n>                      issue_id から抽出した番号
+  worktree_path=<絶対パス>              対象worktreeを一意に解決できた場合のみ出力
   model_tier=<highest_capability>       セグメント別上書きに指定がある場合のみ出力
   model=<具体的なモデル文字列>          model_tierが指定されている場合、worker.model_tiers
                                          を引いて解決した値
@@ -60,6 +62,8 @@ export async function context(args: string[]): Promise<number> {
 
     const selection = resolveWorkerSelection(config, segmentRaw);
     const lines = [`adapter=${selection.adapter}`, `backend=${config.coordination.backend}`, `issue_number=${number}`];
+    const worktree = resolveIssueWorktreeExactlyOne(root, config, number);
+    if (worktree.status === 'found') lines.push(`worktree_path=${worktree.worktree.path}`);
     if (selection.model_tier) {
       lines.push(`model_tier=${selection.model_tier}`);
       const resolution = resolveModelForTier(config, selection.model_tier, selection.adapter);
