@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0031
-status: proposed   # proposed | accepted | superseded | deprecated
+status: accepted
 title: review:light軽量レビュープロファイルの独立シグナル化と打ち切りラウンド数
 tags: [process, gate, review-profile, guardrail]
 supersedes: []
