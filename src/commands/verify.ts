@@ -275,7 +275,7 @@ export async function gateReport(args: string[]): Promise<number> {
 const TEMPLATE_SYNC_USAGE = `
 使い方: agent-skill-chain verify template-sync [repo_root]
 
-出力: 0=.github/は同期済み、1=未同期・スタブ未実装
+出力: 0=.github/と.claude/agents/は同期済み、1=未同期・スタブ未実装
 `;
 export async function templateSync(args: string[]): Promise<number> {
   return guard(() => {

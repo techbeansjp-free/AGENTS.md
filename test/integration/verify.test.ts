@@ -1069,6 +1069,7 @@ test('verify template-sync: 未同期・同期後の一致・再改変による�
   const before = runCli(['verify', 'template-sync', repo.dir], { cwd: repo.dir });
   assert.equal(before.status, 1);
   assert.match(before.stderr, /未同期（欠落）: CODEOWNERS/);
+  assert.match(before.stderr, /未同期（欠落）: \.claude\/agents\/agent-skill-chain-worker\.md/);
 
   // When: sync templates で同期する
   const sync = runCli(['sync', 'templates', repo.dir], { cwd: repo.dir });

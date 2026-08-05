@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 正本: AGENTS.md §GitHub配布・マルチAI対応 / .agent-skill-chain/config/agent-skill-chain.yaml の
-#       templates.github_source・templates.github_target・templates.verify_sync
+#       templates.github_source・templates.github_target・templates.claude_agents_source・
+#       templates.claude_agents_target・templates.verify_sync
 #
-# .agent-skill-chain/templates/github/.github/（配布元の正本）と対象リポジトリの .github/（展開結果）が
-# 同期しているかを検査する。
+# GitHub templateとClaude custom agent templateが各展開先と同期しているかを検査する。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
 # `verify template-sync` サブコマンドへの薄いラッパーである（使い方は `verify template-sync -h` 参照）。

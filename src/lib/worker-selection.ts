@@ -31,12 +31,14 @@ export type ModelTierTable = Partial<Record<ModelTier, { codex?: string }>>;
 /** config.ts の AgentSkillChainConfig['worker'] の型。 */
 export interface WorkerConfig {
   adapter?: WorkerAdapter;
+  agent_tool_dispatch?: { enabled: boolean };
   segment_overrides?: Partial<Record<WorkerSegment, WorkerSegmentOverride>>;
   model_tiers?: ModelTierTable;
 }
 
 export interface WorkerSelection {
   adapter: WorkerAdapter;
+  agentToolDispatch: boolean;
   model_tier?: ModelTier;
   reasoning_effort?: ReasoningEffort;
 }
@@ -57,7 +59,10 @@ export function isWorkerSegment(value: string): value is WorkerSegment {
 export function resolveWorkerSelection(config: { worker: WorkerConfig }, segment: WorkerSegment): WorkerSelection {
   const override = config.worker.segment_overrides?.[segment];
   const adapter = override?.adapter ?? config.worker.adapter ?? 'human';
-  const selection: WorkerSelection = { adapter };
+  const selection: WorkerSelection = {
+    adapter,
+    agentToolDispatch: config.worker.agent_tool_dispatch?.enabled === true,
+  };
   if (override?.model_tier) selection.model_tier = override.model_tier;
   if (override?.reasoning_effort) selection.reasoning_effort = override.reasoning_effort;
   return selection;

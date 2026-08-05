@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createTmpRepo,
   setWorkerAdapter,
+  setWorkerAgentToolDispatch,
   unsetWorkerAdapter,
   removeWorkerSegmentOverrides,
   removeWorkerModelTiers,
@@ -24,6 +25,7 @@ test('worker context: issue start済みならissue_number直後にworktree_path�
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       'adapter=claude',
+      'agent_tool_dispatch=false',
       'backend=local',
       'issue_number=442',
       `worktree_path=${worktreePath}`,
@@ -39,7 +41,12 @@ test('worker context: issue start未実行ならworktree_pathを出力しない�
     const result = runCli(['worker', 'context', 'ISSUE-442', 'spec'], { cwd: repo.dir });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.stdout.trim().split('\n'), ['adapter=claude', 'backend=local', 'issue_number=442']);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      'adapter=claude',
+      'agent_tool_dispatch=false',
+      'backend=local',
+      'issue_number=442',
+    ]);
   } finally {
     repo.cleanup();
   }
@@ -59,6 +66,7 @@ test('worker context <issue_id> implementation (AC-1, AC-2, AC-6): 本リポジ�
     const lines = result.stdout.trim().split('\n');
     assert.deepEqual(lines, [
       'adapter=codex',
+      'agent_tool_dispatch=false',
       'backend=local',
       'issue_number=307',
       'model_tier=highest_capability',
@@ -77,19 +85,40 @@ test('worker context <issue_id> spec/design/validation (AC-1): 上書きの無�
       const result = runCli(['worker', 'context', 'ISSUE-307', segment], { cwd: repo.dir });
       assert.equal(result.status, 0, result.stderr);
       const lines = result.stdout.trim().split('\n');
-      assert.deepEqual(lines, ['adapter=claude', 'backend=local', 'issue_number=307'], `segment=${segment}`);
+      assert.deepEqual(
+        lines,
+        ['adapter=claude', 'agent_tool_dispatch=false', 'backend=local', 'issue_number=307'],
+        `segment=${segment}`,
+      );
     }
   } finally {
     repo.cleanup();
   }
 });
 
-test('worker context <issue_id> (segmentを省略): 従来互換の3行のみを返す（AC-3後方互換）', () => {
+test('worker context <issue_id> (segmentを省略): agent_tool_dispatchを含む4行を返す（ISSUE-448 AC-8）', () => {
   const repo = createTmpRepo();
   try {
     const result = runCli(['worker', 'context', 'ISSUE-307'], { cwd: repo.dir });
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.stdout.trim().split('\n'), ['adapter=claude', 'backend=local', 'issue_number=307']);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      'adapter=claude',
+      'agent_tool_dispatch=false',
+      'backend=local',
+      'issue_number=307',
+    ]);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('worker context (ISSUE-448 AC-8): 明示opt-inをagent_tool_dispatch=trueとして常に出力する', () => {
+  const repo = createTmpRepo();
+  try {
+    setWorkerAgentToolDispatch(repo.dir, true);
+    const result = runCli(['worker', 'context', 'ISSUE-448', 'spec'], { cwd: repo.dir });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^agent_tool_dispatch=true$/m);
   } finally {
     repo.cleanup();
   }
@@ -115,7 +144,11 @@ test('worker context (AC-3): セグメント別上書き・ティア対応表を
     for (const segment of ['spec', 'design', 'implementation', 'validation']) {
       const result = runCli(['worker', 'context', 'ISSUE-1', segment], { cwd: repo.dir });
       assert.equal(result.status, 0, result.stderr);
-      assert.deepEqual(result.stdout.trim().split('\n'), ['adapter=codex', 'backend=local', 'issue_number=1'], `segment=${segment}`);
+      assert.deepEqual(
+        result.stdout.trim().split('\n'),
+        ['adapter=codex', 'agent_tool_dispatch=false', 'backend=local', 'issue_number=1'],
+        `segment=${segment}`,
+      );
     }
   } finally {
     repo.cleanup();
@@ -130,7 +163,12 @@ test('worker context (AC-3): worker.adapterも未設定の場合はhumanへフ�
     unsetWorkerAdapter(repo.dir);
     const result = runCli(['worker', 'context', 'ISSUE-1', 'spec'], { cwd: repo.dir });
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.stdout.trim().split('\n'), ['adapter=human', 'backend=local', 'issue_number=1']);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      'adapter=human',
+      'agent_tool_dispatch=false',
+      'backend=local',
+      'issue_number=1',
+    ]);
   } finally {
     repo.cleanup();
   }

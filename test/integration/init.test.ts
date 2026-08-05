@@ -26,7 +26,7 @@ test('init --dry-run: 実ファイルは一切作成されず、作成予定一�
   assert.equal(fs.existsSync(targetDir), false, 'target_dir自体が作成されないこと');
 });
 
-test('init: 標準資産・.agent-skill-chain名前空間だけを実体化し、GitHub Actionsは展開しない', (t) => {
+test('init: 標準資産・Claude worker agentを実体化し、GitHub Actionsは展開しない', (t) => {
   const targetDir = mkScratch('init-target');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
 
@@ -42,6 +42,11 @@ test('init: 標準資産・.agent-skill-chain名前空間だけを実体化し�
     'hooks/ 名前空間もinitで導入されること',
   );
   assert.equal(fs.existsSync(path.join(targetDir, '.github')), false);
+  const workerAgent = path.join(targetDir, '.claude', 'agents', 'agent-skill-chain-worker.md');
+  assert.ok(fs.existsSync(workerAgent), 'Claude custom subagent種別をinit時に展開すること');
+  const workerAgentText = fs.readFileSync(workerAgent, 'utf8');
+  assert.match(workerAgentText, /tools: Read, Grep, Glob, Edit, Write, MultiEdit, Bash/);
+  assert.doesNotMatch(workerAgentText, /tools:.*\bAgent\b/, '再帰dispatch可能なAgent toolを許可しないこと');
   assert.match(result.stdout, /GitHub workflowは未展開/);
 
   const installedVersion = fs.readFileSync(

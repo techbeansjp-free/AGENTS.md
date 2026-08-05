@@ -11,6 +11,7 @@ const CONTEXT_USAGE = `
 launch_worker 起動ラッパー（worker-launch.sh）・アダプタが必要とするコンテキストを
 KEY=VALUE 形式で標準出力へ出す。
   adapter=<claude|codex|human>          セグメント別上書き→worker.adapter→human の順で解決
+  agent_tool_dispatch=<true|false>      worker.agent_tool_dispatch.enabled（未設定時false）
   backend=<github|local>                coordination.backend
   issue_number=<n>                      issue_id から抽出した番号
   worktree_path=<絶対パス>              対象worktreeを一意に解決できた場合のみ出力
@@ -19,8 +20,8 @@ KEY=VALUE 形式で標準出力へ出す。
                                          を引いて解決した値
   reasoning_effort=<medium|high|xhigh>  セグメント別上書きに指定がある場合のみ出力
 
-segment（spec|design|implementation|validation）を省略した場合は adapter・backend・
-issue_number の3行のみを返す（従来互換）。segment を指定すると、そのセグメントに
+segment（spec|design|implementation|validation）を省略した場合も agent_tool_dispatch を含む
+4行を返す。segment を指定すると、そのセグメントに
 適用される worker.segment_overrides.<segment> の値を解決結果へ反映する。model_tier が
 指定されているのに worker.model_tiers から具体的なモデル文字列を解決できない場合
 （対応表が無い・当該ティアのエントリが無い・当該アダプタ用のモデルが無い）は、値を
@@ -53,7 +54,15 @@ export async function context(args: string[]): Promise<number> {
 
     if (!segmentRaw) {
       const adapter = config.worker.adapter ?? 'human';
-      return ok([`adapter=${adapter}`, `backend=${config.coordination.backend}`, `issue_number=${number}`].join('\n'));
+      const agentToolDispatch = config.worker.agent_tool_dispatch?.enabled === true;
+      return ok(
+        [
+          `adapter=${adapter}`,
+          `agent_tool_dispatch=${agentToolDispatch}`,
+          `backend=${config.coordination.backend}`,
+          `issue_number=${number}`,
+        ].join('\n'),
+      );
     }
 
     if (!isWorkerSegment(segmentRaw)) {
@@ -61,7 +70,12 @@ export async function context(args: string[]): Promise<number> {
     }
 
     const selection = resolveWorkerSelection(config, segmentRaw);
-    const lines = [`adapter=${selection.adapter}`, `backend=${config.coordination.backend}`, `issue_number=${number}`];
+    const lines = [
+      `adapter=${selection.adapter}`,
+      `agent_tool_dispatch=${selection.agentToolDispatch}`,
+      `backend=${config.coordination.backend}`,
+      `issue_number=${number}`,
+    ];
     const worktree = resolveIssueWorktreeExactlyOne(root, config, number);
     if (worktree.status === 'found') lines.push(`worktree_path=${worktree.worktree.path}`);
     if (selection.model_tier) {

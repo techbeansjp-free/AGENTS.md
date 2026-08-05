@@ -30,6 +30,10 @@ test('sync templates: 空のtarget_dirへ実行するとファイルが作成さ
     fs.existsSync(path.join(targetDir, '.github', 'workflows', 'agent-skill-chain-ci.yml')),
     '.github/workflows 配下も作成されること',
   );
+  assert.ok(
+    fs.existsSync(path.join(targetDir, '.claude', 'agents', 'agent-skill-chain-worker.md')),
+    'Claude custom subagent種別も同期されること',
+  );
   assert.match(result.stdout, /^created: /m);
 });
 

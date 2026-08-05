@@ -5,6 +5,7 @@ import { copyTreeFailOnConflict } from '../lib/fs-copy.js';
 import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES, packageVersion } from '../lib/asset-manifest.js';
 import { writeInstalledVersion } from '../lib/version-marker.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
+import { resolveTemplateMappings } from '../lib/template-sync.js';
 
 const USAGE = `
 使い方: agent-skill-chain init [target_dir] [--dry-run]
@@ -43,6 +44,8 @@ export async function init(args: string[]): Promise<number> {
       if (!fs.existsSync(src)) continue;
       conflictCheckedEntries.push({ src, dest: path.join(targetDir, ASSET_NAMESPACE, entry) });
     }
+    const claudeAgents = resolveTemplateMappings(targetDir).find((mapping) => mapping.id === 'claude_agents');
+    if (claudeAgents) conflictCheckedEntries.push({ src: claudeAgents.source, dest: claudeAgents.dest });
 
     // 衝突検出時は他ファイルへの書込みも一切行わない（部分適用しない）。
     // そのため、実書き込みの前に全対象を dryRun:true で先読み検査する

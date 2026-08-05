@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # 正本: AGENTS.md §GitHub配布・マルチAI対応 / .agent-skill-chain/config/agent-skill-chain.yaml templates.*
 #
-# .agent-skill-chain/templates/github/.github/（配布元の正本）を対象リポジトリの .github/ へ同期する。
-# .agent-skill-chain/config/agent-skill-chain.yaml の templates.github_source / templates.github_target /
-# templates.verify_sync を参照する。
+# GitHub templateとClaude custom agent templateを、設定された対象ディレクトリへ同期する。
+# .agent-skill-chain/config/agent-skill-chain.yaml の templates.* を参照する。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
 # `sync templates` サブコマンドへの薄いラッパーである（使い方は `sync templates -h` 参照）。

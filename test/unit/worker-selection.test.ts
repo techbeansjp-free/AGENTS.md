@@ -23,6 +23,7 @@ test('resolveWorkerSelection (AC-1): セグメント別上書きのadapterが最
 
   assert.deepEqual(resolveWorkerSelection(config, 'implementation'), {
     adapter: 'codex',
+    agentToolDispatch: false,
     model_tier: 'highest_capability',
     reasoning_effort: 'high',
   });
@@ -35,7 +36,7 @@ test('resolveWorkerSelection (AC-1): 上書きの無いセグメントはworker.
   });
 
   for (const segment of ['spec', 'design', 'validation'] as const) {
-    assert.deepEqual(resolveWorkerSelection(config, segment), { adapter: 'claude' });
+    assert.deepEqual(resolveWorkerSelection(config, segment), { adapter: 'claude', agentToolDispatch: false });
   }
 });
 
@@ -43,21 +44,21 @@ test('resolveWorkerSelection (AC-3): セグメント別上書きを持たない�
   const config = worker({ adapter: 'codex' });
 
   for (const segment of ['spec', 'design', 'implementation', 'validation'] as const) {
-    assert.deepEqual(resolveWorkerSelection(config, segment), { adapter: 'codex' });
+    assert.deepEqual(resolveWorkerSelection(config, segment), { adapter: 'codex', agentToolDispatch: false });
   }
 });
 
 test('resolveWorkerSelection (AC-3): worker.adapterも未設定の場合は最終フォールバックのhumanになる', () => {
   const config = worker({});
 
-  assert.deepEqual(resolveWorkerSelection(config, 'spec'), { adapter: 'human' });
+  assert.deepEqual(resolveWorkerSelection(config, 'spec'), { adapter: 'human', agentToolDispatch: false });
 });
 
 test('resolveWorkerSelection: model_tier/reasoning_effortは上書きが無い場合キー自体を含めない（未解決を空文字にしない）', () => {
   const config = worker({ adapter: 'codex', segment_overrides: { implementation: { adapter: 'codex' } } });
 
   const selection = resolveWorkerSelection(config, 'implementation');
-  assert.deepEqual(selection, { adapter: 'codex' });
+  assert.deepEqual(selection, { adapter: 'codex', agentToolDispatch: false });
   assert.ok(!('model_tier' in selection));
   assert.ok(!('reasoning_effort' in selection));
 });
@@ -68,8 +69,26 @@ test('resolveWorkerSelection: 上書きのadapterがscalarと異なっても上�
     segment_overrides: { validation: { adapter: 'claude' } },
   });
 
-  assert.deepEqual(resolveWorkerSelection(config, 'validation'), { adapter: 'claude' });
-  assert.deepEqual(resolveWorkerSelection(config, 'spec'), { adapter: 'human' });
+  assert.deepEqual(resolveWorkerSelection(config, 'validation'), { adapter: 'claude', agentToolDispatch: false });
+  assert.deepEqual(resolveWorkerSelection(config, 'spec'), { adapter: 'human', agentToolDispatch: false });
+});
+
+test('resolveWorkerSelection (ISSUE-448 AC-8): agent_tool_dispatch未設定はfalseへ安全側フォールバックする', () => {
+  assert.equal(resolveWorkerSelection(worker({ adapter: 'claude' }), 'spec').agentToolDispatch, false);
+});
+
+test('resolveWorkerSelection (ISSUE-448 AC-8): agent_tool_dispatch.enabled=falseをfalseとして解決する', () => {
+  assert.equal(
+    resolveWorkerSelection(worker({ adapter: 'claude', agent_tool_dispatch: { enabled: false } }), 'spec').agentToolDispatch,
+    false,
+  );
+});
+
+test('resolveWorkerSelection (ISSUE-448 AC-8): agent_tool_dispatch.enabled=trueをtrueとして解決する', () => {
+  assert.equal(
+    resolveWorkerSelection(worker({ adapter: 'claude', agent_tool_dispatch: { enabled: true } }), 'spec').agentToolDispatch,
+    true,
+  );
 });
 
 test('isWorkerSegment: 4セグメントのみを真として扱う', () => {

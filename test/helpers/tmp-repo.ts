@@ -159,6 +159,20 @@ export function setWorkerAdapter(repoDir: string, adapter: ReviewAdapter): void 
   }
 }
 
+/** worker.agent_tool_dispatch.enabledを明示的に切り替える（Issue #448）。 */
+export function setWorkerAgentToolDispatch(repoDir: string, enabled: boolean): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const patched = text.replace(
+    /( {2}agent_tool_dispatch:\n {4}enabled: )(?:true|false)/,
+    `$1${enabled}`,
+  );
+  if (patched === text && !new RegExp(`agent_tool_dispatch:\\n\\s*enabled: ${enabled}\\b`).test(text)) {
+    throw new Error('worker.agent_tool_dispatch.enabledを書き換えられませんでした');
+  }
+  fs.writeFileSync(configPath, patched);
+}
+
 /**
  * worker.segment_overrides ブロック全体を config から取り除く（ISSUE-307）。
  * 本物のリポジトリの既定 config は worker.segment_overrides.implementation を持つため、
