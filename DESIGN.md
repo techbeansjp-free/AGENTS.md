@@ -29,6 +29,8 @@ design segmentでの検証結果を先に要約する。以降の設計要素は
 
 **新規に判明したリスク（ツール許可範囲の粗さ）**: `--allowed-tools`によるBashコマンド単位の許可制御（`WORKER_ALLOWED_TOOLS_DEFAULT`）は、Claude CodeのAgent tool・カスタムsubagent種別の`tools:`定義がツール単位（Read/Edit/Bash等）でしか制御できないため、同じ粒度で再現できない。この差分は下記 §カスタムsubagent種別 で扱い、ADRのConsequencesに明記する。
 
+**新規に判明したリスク（worker-identity-attestation-gap、design-gate round3指摘への対応）**: AGENTS.md「役割・権限・writer lease」節が列挙する`protected-base隔離launcher・one-time attempt token・固有run ID/slot・launcher digest`等のactor分離メカニズムは、Agent tool dispatch方式では進行役セッションと同一credential・同一プロセス内でworker subagentが動くため失われるのではないか、という懸念がある。`.agent-skill-chain/adapters/claude.sh`を確認した結果、これらの分離メカニズムは**read-onlyレビュア（`launch_gate_reviewer`が呼ぶ`_run_reviewer_sanitized()`、`claude.sh:84`「AI reviewerへはmodel providerのローカルlogin保存先だけを渡し、GitHub credential・gh/git設定・caller HOMEを渡さない」）専用**であり、writer役割（`launch_worker()`が起動するsegment worker）には現行のheadless subprocess方式でも同種の分離が実装されていない。`launch_worker()`は`WORKER_ALLOWED_TOOLS_DEFAULT`に`Bash(git push:*)`等のpush権限を含めて渡しており、workerが呼び出し元環境のgh/git credentialをそのまま継承する設計である——writerはpush等の書込み権限を必要とするため、read-onlyレビュアと異なりcredential隔離が構造的に成立しない。したがって、AGENTS.md「役割・権限・writer lease」節のactor分離メカニズムは**GitHub actorがwriterとrecorderで同一の場合に両者を別roleとみなすための手段**であり、writer（segment worker）と進行役の間のactor分離を保証するものではない。Agent tool dispatch方式は、read-onlyレビュアのcredential隔離（`_run_reviewer_sanitized()`）には一切変更を加えないため、この論点においては新方式固有の後退（regression）を生まない——既存モデルが元々持っていなかった分離を、新方式でも引き続き持たないというだけである。
+
 ## 要件 → 設計要素の対応表
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |

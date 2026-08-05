@@ -50,6 +50,7 @@ Agent tool経由のworker実行は進行役セッションの生存に本質的�
 - 進行役セッションの生存にworker実行が紐づくという、headless subprocess方式には無かった性質を新たに受け入れる。この性質はopt-inを有効化したプロジェクト・Issueにのみ影響し、既存の耐久性安全網（lease TTL・reclaim・resume）の範囲内で回復可能である。
 - Bashコマンド単位のツール許可制御という多重防御の1層が、新方式では利用できない。将来的な緩和（例: フックによる補完）は本Issueのスコープ外とし、必要であれば別Issueで扱う。
 - role_contract本文を保持する一時ディレクトリ・lease renewal専用の独立デーモンプロセスという、headless subprocess方式には無かった実行時アーティファクトが増える。いずれもworktree外・Git非追跡・上限付き生存期間（`ASC_DISPATCH_MAX_WAIT_SEC`）であり、`worker-launch-verify.sh`が正常経路で回収する。回収漏れが起きても既存のTTL失効安全網でカバーされ、成果物やcredentialの漏えいには繋がらない。
+- AGENTS.md「役割・権限・writer lease」節のactor分離メカニズム（protected-base隔離launcher・one-time attempt token等）はread-onlyレビュア（`_run_reviewer_sanitized()`）専用であり、writer（segment worker）と進行役の間には現行のheadless subprocess方式でも実装されていない（`launch_worker()`はpush権限のため呼び出し元credentialをそのまま継承する）。本ADRの方式はこの分離を新たに失わせるものではなく、既存モデルが元々持っていなかった性質の継続である（詳細はDESIGN.md「新規に判明したリスク（worker-identity-attestation-gap）」参照）。
 - 本ADRは技術検証の結果を記録するものであり、`DESIGN.md`・`PLAN.md`と対を成す。実装は本Issueの実装segmentで行う。
 
 ---
