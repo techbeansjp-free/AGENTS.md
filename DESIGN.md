@@ -12,9 +12,9 @@
 | 要件3・AC-4 | `src/lib/review-profile.ts`（新規抽出）の `resolveReviewProfile()` を `resolveLightReview()` が参照 | 既存I8ロジック（risk/autonomy）の唯一の実装箇所に統一 |
 | 要件4・AC-5 | `src/lib/self-reference-guardrail.ts`（新規抽出、`quick-mode.ts` の `GUARDRAIL_PATHS`/`changedPaths` を移設） | ADR-0022と同一パス集合を`quick-mode.ts`・`review-light.ts`が共有し重複させない |
 | 要件5 | `resolveLightReview()` の `applied` 判定、`gate reviewer-prompt` の light向けルーブリック追記 | Strict強制条件（要件2〜4）に該当しない限りStandard相当の1体レビュー |
-| 要件6・AC-8 | `gate.ts` の `record-verdict` に追加する打ち切り強制ロジック、`light_review.remediation_round` | `deriveFinal()` 既存の `inconclusive → human_required` 経路を再利用 |
+| 要件6・AC-8 | `gate.ts` の `record-verdict` に追加する打ち切り強制ロジック、`light_review.remediation_round`、`gate review` によるラウンド毎のガードレール再評価とStrictエスカレーション | `deriveFinal()` 既存の `inconclusive → human_required` 経路を再利用。詳細は「remediationループ中の再評価とエスカレーション」参照 |
 | 要件7・AC-6、要件8・AC-7 | `gate reviewer-prompt` のlight向けルーブリック追記（hybrid検証） | severityはレビュア判定のため機械的完全検証はしない設計判断（下記「未検証で許容する範囲」） |
-| 要件9・AC-9 | `resolveLightReview()` の付与主体未確認時フォールバック | `size:quick`の`gh`未認証時フォールバック（`quick-mode.ts:89-104`相当）と同型 |
+| 要件9・AC-9 | `resolveLightReview()` の付与主体未確認時フォールバック | `size:quick`の`gh`未認証時フォールバック（`quick-mode.ts`の`readSignalFromGitHub`が`gh`未認証・API到達不能を検知した際に非適用へ倒す処理）と同型 |
 | 要件10・AC-11 | `resolveLightReview()` の入力を「ラベル／state.yamlフィールド／変更差分パス集合」のみに限定 | 成果物内容を読まない。要件4のパス集合参照は差分パスのみで内容非依存のため抵触しない |
 | 要件11・AC-10 | `.agent-skill-chain/schemas/gate-report.schema.yaml` に追加する `gate.light_review` プロパティ | `requested`・`applied`・`disabled_reasons`・`remediation_round` |
 | 要件12・AC-1 | `light_review` はgate-report/state.yamlどちらも既存必須項目に追加しない任意プロパティ | 未指定時は`resolveLightReview()`が`requested=false`を返し既存経路を素通り |
@@ -28,8 +28,8 @@
 
 - `src/lib/review-profile.ts`（新規）: risk/autonomyラベルまたは`state.yaml`から`standard | strict`を導出する唯一の実装。既存 `gate.ts` 内の1箇所のインライン式（trusted-gate再構築コンテキスト）をこの関数呼び出しへ置換し、I8ロジックの実装箇所を1つに集約する。
 - `src/lib/self-reference-guardrail.ts`（新規、`quick-mode.ts`から抽出）: ADR-0022が定義する自己参照ガードレール対象パス（`docs/adr/`・`.agent-skill-chain/config/segments.yaml`・`AGENTS.md`・`.agent-skill-chain/schemas/`）の判定と、base差分＋作業ツリー差分を合成する`changedPaths()`を提供する。`quick-mode.ts`と`review-light.ts`の両方から利用され、パス集合の二重管理を避ける。
-- `src/lib/review-light.ts`（新規）: `review:light`ラベル／`review_intensity`フィールドの読み取り、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`の3判定を合成した`resolveLightReview()`、および直前ラウンドの`gate-report`（`reviewFilePath()`が指す既存のスクラッチ／コミット済みファイル）から`remediation_round`を導出するロジックを持つ。`quick-mode.ts`と同じ「シグナル未読取・差分未解決は非適用」という安全側フォールバック方針を踏襲する。
-- `src/commands/gate.ts`（既存、拡張）: `gate review`スキャフォールド生成時に`resolveLightReview()`の結果を`gate.light_review`へ埋め込み、`record-verdict`で`light_review.applied && remediation_round > LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS && (hasBlocking || fail)`のとき`inconclusive`を強制してから既存の`deriveFinal()`へ渡す。
+- `src/lib/review-light.ts`（新規）: `review:light`ラベル／`review_intensity`フィールドの読み取り、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`の3判定を合成した`resolveLightReview()`、および直前ラウンドの`gate-report`（`reviewFilePath()`が指す既存のスクラッチ／コミット済みファイル）から`remediation_round`を導出するロジックを持つ。`quick-mode.ts`と同じ「シグナル未読取・差分未解決は非適用」という安全側フォールバック方針を踏襲する。`resolveLightReview()`は`gate review`が新しいラウンドのスキャフォールドを生成するたびに毎回呼び出され、結果をキャッシュしない（下記「remediationループ中の再評価とエスカレーション」参照）。
+- `src/commands/gate.ts`（既存、拡張）: `gate review`スキャフォールド生成時に`resolveLightReview()`の結果を`gate.light_review`へ埋め込み、`record-verdict`で`light_review.applied && remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS && (hasBlocking || fail)`のとき`inconclusive`を強制してから既存の`deriveFinal()`へ渡す。
 - `.agent-skill-chain/schemas/gate-report.schema.yaml`（既存、拡張）: `gate.light_review`（任意プロパティ）を追加。
 - `.agent-skill-chain/schemas/state.schema.yaml`（既存、拡張）: `review_intensity: light | full`（既定`full`）を追加。既存必須項目（`required`配列）は変更しない。
 - `.agent-skill-chain/templates/github/provisioning/labels.yaml`（既存、拡張）: `review:light`ラベル定義を追加。
@@ -72,7 +72,22 @@ related_adrs:
 - 想定される失敗モード3: `resolveLightReview()`のcore_review／guardrail判定が差分取得エラー等で`unresolved`を返す。
   - 対応: `classifyCoreReview()`は既存実装が`unresolved`時に`required: true`を返す（安全側）ため、そのまま`applied=false`に反映される。`self-reference-guardrail`側も`changedPaths()`が差分未解決を示す場合は`quick-mode.ts`と同じ規約で非適用に倒す。
 - ロールバック手順: `light_review`はgate-report/state.yamlいずれも任意プロパティであり、`review:light`ラベル・`review_intensity`フィールドを一切付与しなければ既存の判定経路（AC-1で保証）へ完全に戻る。ロールバックは本変更のrevertのみで足り、既存Issueへのマイグレーションは不要。
-- 影響を受ける既存機能: `gate.ts`の`materialize-check-report`パス（1736行付近の`profile`算出インライン式）を`resolveReviewProfile()`呼び出しへ置換するため、当該関数の単体テストで既存のrisk/autonomy判定結果が変化しないことを回帰確認する。
+- 影響を受ける既存機能: `gate.ts`の`materialize-check-report`コマンドが行うprofile算出処理（trusted-gate再構築コンテキストでrisk/autonomyラベルから`standard | strict`を導出するインライン式）を`resolveReviewProfile()`呼び出しへ置換するため、当該関数の単体テストで既存のrisk/autonomy判定結果が変化しないことを回帰確認する。
+
+## remediationループ中の再評価とエスカレーション
+
+`review:light`が一度`applied=true`となった後でも、blocking finding対応の再レビュー（remediationラウンド）へ進むたびに、`gate review`が3層ガードレール（要件2〜4、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`）を都度再評価する。前ラウンドの`applied`値をキャッシュ・継承しない。
+
+- **再評価のタイミング**: `gate review`が各remediationラウンドのレビュー用スキャフォールドを生成する時点（＝そのラウンドのレビュアへプロンプトを渡す直前）で`resolveLightReview()`を呼び出す。record-verdict時点では再評価しない（record-verdictはそのラウンド開始時に確定した`light_review`の値をそのまま参照する）。
+- **新たに該当した場合の遷移**: 前ラウンドでは非該当だった3層ガードレールのいずれかに新たなラウンドで該当した場合、そのラウンドの`gate.light_review.applied`を`false`に更新し、同じラウンドの`gate.review_profile`（Standard/Strict判定結果を格納する既存フィールド）を`strict`へ切り替える。これ以降のラウンドは専任2名によるStrictレビューを要求する。切り替えは即時（そのラウンドから）であり、猶予ラウンドを設けない。
+- **直前ラウンド（light時）の1体レビュー結果の扱い**: 昇格前ラウンドの1体レビュー結果は、そのラウンドのgate-reportに証跡としてそのまま残すが、昇格後のStrictレビューの合否判定入力としては再利用しない。Strictレビューは常に専任2名が最初からconformance/falsificationを実施する（既存Strictの通常運用と同一であり、light由来の特別な引き継ぎ処理は設けない）。
+- **`remediation_round`の扱い**: エスカレーション時もカウンタはリセットせず、直前ラウンドの値をそのまま+1して継続する（下記「`remediation_round`の確定タイミングと初期値」参照）。エスカレーション後は`light_review.applied=false`のため、要件6（AC-8）の打ち切り強制条件（`light_review.applied && remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS`）が評価対象から外れ、Strictの既存の反復運用（打ち切りラウンド数の上限なし、Issue #446のような複数ラウンドを許容する既存運用）へそのまま合流する。新しい打ち切りロジックをStrict側に追加しない。
+
+### `remediation_round`の確定タイミングと初期値
+
+`remediation_round`は0始まりとする。`gate review`がラウンドのスキャフォールドを生成する時点で、直前ラウンドの`gate-report`（`reviewFilePath()`経由）から読み取った値に+1して当該ラウンドの値を確定する。直前ラウンドの記録が存在しない場合（そのIssueの初回レビュー、またはスクラッチ喪失時）は0として確定する。`record-verdict`はこの値を読み取るのみで変更しない。
+
+この定義により、ADR-0031が定める「初回レビュー（`remediation_round=0`）＋修正後の再レビュー1回（`remediation_round=1`）＝合計2回」という数値意図と、要件6（AC-8）の打ち切り条件`remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS（=1）`が整合する（`remediation_round=1`のラウンドでなおblockingが残る場合に打ち切りが発動する）。
 
 ## 未検証で許容する範囲（設計判断）
 

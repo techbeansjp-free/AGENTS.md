@@ -49,9 +49,14 @@ deprecated-reason: null
    `.agent-skill-chain/config/segments.yaml`・`AGENTS.md`・`.agent-skill-chain/schemas/`のいずれかを含む
    （ADR-0022と同一のパス集合を`src/lib/self-reference-guardrail.ts`として共有・再利用する独立条件。(b)の
    `core_review.triggers`設定が将来縮小されても本条件単独で安全側を維持する）。3層すべてが「無効化のみ」に
-   作用する片方向のガードレールであり、軽量プロファイルがこれらを上書きする経路は存在しない。
+   作用する片方向のガードレールであり、軽量プロファイルがこれらを上書きする経路は存在しない。この3層判定は
+   remediationラウンド（blocking finding対応の再レビュー）ごとに毎回再評価し、前ラウンドの判定結果をキャッシュ・
+   継承しない。前ラウンドでは非該当だった条件に新たなラウンドで該当した場合、そのラウンドから即座にStrict
+   （専任2名によるconformance/falsificationの最初からの実施）へ切り替える。昇格前ラウンドの1体レビュー結果は
+   証跡として保持するが、Strictレビューの合否判定入力としては再利用しない。
 3. **打ち切りラウンド数**: 軽量プロファイルが適用されたゲートの、blocking finding解消のための再レビューは
-   **最大1ラウンド**（初回レビュー＋修正後の再レビュー1回＝合計2回）までとする。2回目のレビューでも
+   **最大1ラウンド**（初回レビュー＝`remediation_round=0`＋修正後の再レビュー1回＝`remediation_round=1`、
+   合計2回）までとする。`remediation_round=1`のラウンド（2回目のレビュー）でも
    blocking findingが残る場合、当該ラウンドの`record-verdict`は`inconclusive`を強制し、既存の`deriveFinal()`
    ロジック（`inconclusive === true → human_required`）をそのまま経由して`human_required`を記録する。新しい
    最終判定ロジックを追加せず、既存の安全側収束経路を再利用する。数値「1」は、本Issue自身のspec-gate
