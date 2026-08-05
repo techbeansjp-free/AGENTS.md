@@ -4,6 +4,8 @@ import { reviewFilePath } from './local-state.js';
 import { resolveCurrentBranch } from './worktree.js';
 import { toYamlString, tryReadYamlFile } from './yaml-io.js';
 
+const GITHUB_ISSUE_SIDE = `issue` as const;
+
 interface GithubActor {
   login?: string;
 }
@@ -50,7 +52,7 @@ export interface UnresolvedGithubComment {
 }
 
 export interface GithubPartialFailure {
-  side: 'issue' | 'pr';
+  side: typeof GITHUB_ISSUE_SIDE | 'pr';
   reason: string;
 }
 
@@ -170,7 +172,7 @@ function unresolvedReview(review: GithubReview): UnresolvedGithubReview | undefi
 }
 
 function detectGithubIssueSide(root: string, issueNumber: string): SuccessfulIssueDetection | FailedSideDetection {
-  const result = gh(['issue', 'view', issueNumber, '--json', 'comments'], root);
+  const result = gh([GITHUB_ISSUE_SIDE, 'view', issueNumber, '--json', 'comments'], root);
   if (result.status !== 0) {
     return {
       succeeded: false,
@@ -265,7 +267,7 @@ export function detectGithubReviewStatus(
     return {
       mode: 'github',
       detection: 'failed',
-      reason: `issue側: ${issueResult.reason}; pr側: ${prResult.reason}`,
+      reason: `${GITHUB_ISSUE_SIDE}側: ${issueResult.reason}; pr側: ${prResult.reason}`,
     };
   }
 
@@ -275,7 +277,7 @@ export function detectGithubReviewStatus(
     ...(issueResult.succeeded ? issueResult.comments : []),
   ];
   const partialFailures: GithubPartialFailure[] = [];
-  if (!issueResult.succeeded) partialFailures.push({ side: 'issue', reason: issueResult.reason });
+  if (!issueResult.succeeded) partialFailures.push({ side: GITHUB_ISSUE_SIDE, reason: issueResult.reason });
   if (!prResult.succeeded) partialFailures.push({ side: 'pr', reason: prResult.reason });
 
   if (unresolvedReviews.length === 0 && unresolvedComments.length === 0 && partialFailures.length === 0) {
