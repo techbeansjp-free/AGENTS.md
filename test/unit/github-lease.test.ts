@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
+import { createGhStub } from '../helpers/gh-stub.js';
 import {
   renderLeaseComment,
   activeLeaseFor,
@@ -11,6 +15,7 @@ import {
   renewLeaseRef,
   releaseLeaseRef,
   classifyPushFailure,
+  postLeaseReclaimComment,
   type WriterLease,
 } from '../../src/lib/github-lease.js';
 
@@ -42,6 +47,31 @@ test('renderLeaseComment: マーカーとyamlフェンスを含む本文を生�
   assert.match(body, /```yaml\n/);
   assert.match(body, /issue_id: ISSUE-42/);
   assert.doesNotMatch(body, /random-token|token:/);
+});
+
+test('postLeaseReclaimComment: tokenを含まない回収監査コメントを投稿する', (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-reclaim-comment-'));
+  const stub = createGhStub(scratch);
+  const previousPath = process.env.PATH;
+  const previousState = process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
+  Object.assign(process.env, stub.env(process.env));
+  t.after(() => {
+    process.env.PATH = previousPath;
+    if (previousState === undefined) delete process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
+    else process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE = previousState;
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+
+  const id = postLeaseReclaimComment('42', 'release-manager', 'run-456', 'implementation');
+  assert.equal(id, '1');
+  const body = stub.readState().comments['42'][0].body;
+  assert.match(body, /<!-- agent-skill-chain:lease-reclaim -->/);
+  assert.match(body, /actor: release-manager/);
+  assert.match(body, /reclaimed_at: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+  assert.match(body, /issue: ISSUE-42/);
+  assert.match(body, /segment: implementation/);
+  assert.match(body, /previous_holder: run-456/);
+  assert.doesNotMatch(body, /random-token|token:|credential/i);
 });
 
 test('acquireLeaseRef -> activeLeaseFor: 初回acquireはrefを新規作成し、読み出せること', (t) => {
