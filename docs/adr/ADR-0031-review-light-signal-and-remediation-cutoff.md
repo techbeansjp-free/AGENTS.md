@@ -43,11 +43,18 @@ deprecated-reason: null
 1. **独立シグナル**: GitHubモードのIssueラベル`review:light`、ローカルモードの`state.yaml`の`review_intensity:
    light | full`（既定`full`、未設定は後方互換でfullとして解決）を新設する。`size:quick`とは別モジュール
    （`src/lib/quick-mode.ts`と`src/lib/review-light.ts`）・別フィールドで実装し、一方の判定が他方に影響しない。
-2. **Strict優先の3層ガードレール**: 本ガードレールは`review:light`が要求されている（`requested=true`）Issue/PR
-   にのみ作用する。`requested=false`のIssue/PR（`review:light`が一度も要求されていない既存Issue含む）では
-   3層ガードレールの評価自体を行わず、`gate.review_profile`（Standard/Strict判定を格納する既存フィールド）は
-   既存の`resolveReviewProfile()`（I8ロジック）のみで確定し続け、本ADRの決定によって一切変化しない（要件12・
-   AC-1、後方互換の担保）。`requested=true`の場合、軽量プロファイルは次のいずれかに該当する場合、常に無効化
+2. **Strict優先の3層ガードレール**: 本ガードレールの生の判定（3層のいずれかへの新規該当性の計算）は
+   `review:light`が要求されている（`requested=true`）Issue/PRにのみ作用する。ただし、直前ラウンドの
+   `gate-report`から読み取る`strict_locked`永続値（`persistedStrictLocked`）の参照と`gate.review_profile`
+   への反映は、`requested`の現在値と**独立に**毎ラウンド行う。一度でも`strict_locked=true`が確定した
+   Issue/PRでは、その後`review:light`ラベルを外す・`review_intensity`を`full`へ戻す等で`requested=false`
+   へ変化しても、`gate.review_profile`のStrict固定は解除されない（**ratchet-bypass-via-label-removal対策**
+   ——軽量シグナルはセグメント作業ワーカーが操作可能な調整状態プリミティブであり、ラベル除去だけでStrict
+   要件を回避できる経路をI8の安全側ラチェット原則に基づき塞ぐ）。一度も`review:light`が要求されたことが
+   なく、かつ`strict_locked`も一度も`true`になったことがない（`persistedStrictLocked=false`）Issue/PR
+   （既存Issueを含む）では、`gate.review_profile`は既存の`resolveReviewProfile()`（I8ロジック）のみで
+   確定し続け、本ADRの決定によって一切変化しない（要件12・AC-1、後方互換の担保はこの条件下でのみ成立する）。
+   `requested=true`の場合、軽量プロファイルは次のいずれかに該当する場合、常に無効化
    されStrictが強制される。(a) 既存I8ロジック（`risk != normal` OR `autonomy == full`）、(b) `model_selection.core_review`の
    既存トリガー（ラベル・状態値・`exact_paths`・`path_prefixes`）、(c) 変更差分が`docs/adr/`・
    `.agent-skill-chain/config/segments.yaml`・`AGENTS.md`・`.agent-skill-chain/schemas/`のいずれかを含む
