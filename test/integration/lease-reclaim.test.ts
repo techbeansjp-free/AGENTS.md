@@ -253,6 +253,67 @@ test('lease reclaim: activeラベルと可視性コメントを除去しWIP枠�
   assert.equal(activeLabelCount(stub), 3);
 });
 
+test('lease reclaim: 同一Issueの別segmentに有効leaseが残る場合はactiveラベルを維持する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  const expired = acquireAndExpire(repo.dir, env, '62', 'implementation');
+  const acquiredDesign = runCli(['lease', 'acquire', 'ISSUE-62', 'design'], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(acquiredDesign.status, 0, acquiredDesign.stderr);
+  const activeDesign = allLeasesFor('62', repo.dir).find((entry) => entry.segment === 'design');
+  assert.ok(activeDesign);
+
+  const reclaimed = runCli(['lease', 'reclaim', 'ISSUE-62', 'implementation', '--confirm'], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(reclaimed.status, 0, reclaimed.stderr);
+  assert.deepEqual(allLeasesFor('62', repo.dir).map((entry) => entry.segment), ['design']);
+  assert.equal(activeLabelCount(stub), 1);
+  assert.ok((stub.readState().issueLabels['62'] ?? []).includes('writer-lease:active'));
+  const comments = stub.readState().comments['62'] ?? [];
+  const leaseComments = comments.filter((comment) =>
+    comment.body.includes('<!-- agent-skill-chain:lease -->'),
+  );
+  assert.equal(
+    leaseComments.some((comment) => comment.body.includes(expired.lease.writer_lease.holder)),
+    false,
+  );
+  assert.ok(
+    leaseComments.some((comment) => comment.body.includes(activeDesign.lease.writer_lease.holder)),
+  );
+});
+
+test('lease release: 同一Issueの別segmentに有効leaseが残る場合はactiveラベルを維持する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  const expired = acquireAndExpire(repo.dir, env, '63', 'implementation');
+  const acquiredValidation = runCli(['lease', 'acquire', 'ISSUE-63', 'validation'], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(acquiredValidation.status, 0, acquiredValidation.stderr);
+
+  const released = runCli(
+    ['lease', 'release', 'ISSUE-63', expired.lease.writer_lease.token],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(released.status, 0, released.stderr);
+  assert.deepEqual(allLeasesFor('63', repo.dir).map((entry) => entry.segment), ['validation']);
+  assert.equal(activeLabelCount(stub), 1);
+  assert.ok((stub.readState().issueLabels['63'] ?? []).includes('writer-lease:active'));
+});
+
 test('lease reclaim: writer credentialが無くても回収でき、credentialを作成しない（AC-7）', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   const { env, cleanup } = makeStub();

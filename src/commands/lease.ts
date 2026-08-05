@@ -100,6 +100,12 @@ function countLocalActiveWriterLeases(root: string): number {
   return count;
 }
 
+function unmarkActiveWriterLeaseLabelIfUnused(issueNumber: string, root: string): void {
+  if (activeLeasesFor(issueNumber, root).length === 0) {
+    unmarkActiveWriterLeaseLabel(issueNumber, root);
+  }
+}
+
 function buildLease(issueId: string, segment: string, ttlSeconds: number): WriterLease {
   const now = new Date();
   const expires = new Date(now.getTime() + ttlSeconds * 1000);
@@ -275,8 +281,8 @@ export async function release(args: string[]): Promise<number> {
     }
     // best-effort: acquire時に投稿した可視性コメントの削除（lease自体の解放成否には影響しない）。
     cleanupLeaseComment(number, held.lease.writer_lease.holder, root);
-    // WIP上限判定用ラベル除去（best-effort）。
-    unmarkActiveWriterLeaseLabel(number, root);
+    // 他segmentの有効leaseが残る場合はIssue単位のactiveラベルを維持する。
+    unmarkActiveWriterLeaseLabelIfUnused(number, root);
     removeLeaseCredential(root, number);
     return ok(issueIdRaw);
   });
@@ -472,7 +478,7 @@ export async function reclaim(args: string[]): Promise<number> {
 
     // ref削除後は、releaseと同じく有効leaseの可視性情報もbest-effortで片付ける。
     cleanupLeaseComment(number, existing.lease.writer_lease.holder, root);
-    unmarkActiveWriterLeaseLabel(number, root);
+    unmarkActiveWriterLeaseLabelIfUnused(number, root);
 
     const actorFlagIndex = args.indexOf('--actor');
     const explicitActor = actorFlagIndex === -1 ? undefined : args[actorFlagIndex + 1];
