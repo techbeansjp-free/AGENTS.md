@@ -2,11 +2,11 @@
 
 ```yaml
 id: ADR-0027
-status: accepted
+status: superseded
 title: resumeしたセグメント作業ワーカーへの既存レビューフィードバック検出は、reviewer毎の最新提出のみを見る`latestReviews`ではなく全レビュー履歴を、PR会話コメントに加えインラインレビューコメントも対象とする
 tags: [worker-resume, review-status, github-backend, i5-progression-role-purity]
 supersedes: [ADR-0026]
-superseded-by: null
+superseded-by: ADR-0028
 deprecated-reason: null
 ```
 
