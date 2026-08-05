@@ -14,7 +14,7 @@
 | 要件5 | `resolveLightReview()` の `applied` 判定、`gate reviewer-prompt` の light向けルーブリック追記 | Strict強制条件（要件2〜4）に該当しない限りStandard相当の1体レビュー |
 | 要件6・AC-8 | `gate.ts` の `record-verdict` に追加する打ち切り強制ロジック、`light_review.remediation_round`、`gate review` によるラウンド毎のガードレール再評価とStrictエスカレーション | `deriveFinal()` 既存の `inconclusive → human_required` 経路を再利用。詳細は「remediationループ中の再評価とエスカレーション」参照 |
 | 要件7・AC-6、要件8・AC-7 | `gate reviewer-prompt` のlight向けルーブリック追記（hybrid検証） | severityはレビュア判定のため機械的完全検証はしない設計判断（下記「未検証で許容する範囲」） |
-| 要件9・AC-9 | `resolveLightReview()` の付与主体未確認時フォールバック | `size:quick`の`gh`未認証時フォールバック（`quick-mode.ts`の`readSignalFromGitHub`が`gh`未認証・API到達不能を検知した際に非適用へ倒す処理）と同型 |
+| 要件9・AC-9 | `src/lib/review-light.ts` の `verifyGrantorIsHuman()` | GitHubモード: Events API（`gh api .../issues/{number}/events`）の直近`labeled`イベントの`actor.type`が`'User'`かを判定。ローカルモード: 確認手段が構造的に存在しないため常に`grantorConfirmed=false`。詳細は「軽量シグナル付与主体の人間性検証」節 |
 | 要件10・AC-11 | `resolveLightReview()` の入力を「ラベル／state.yamlフィールド／変更差分パス集合」のみに限定 | 成果物内容を読まない。要件4のパス集合参照は差分パスのみで内容非依存のため抵触しない |
 | 要件11・AC-10 | `.agent-skill-chain/schemas/gate-report.schema.yaml` に追加する `gate.light_review` プロパティ | `requested`・`applied`・`disabled_reasons`・`remediation_round`・`strict_locked` |
 | 要件12・AC-1 | `light_review` はgate-report/state.yamlどちらも既存必須項目に追加しない任意プロパティ | 未指定時は`resolveLightReview()`が`requested=false`を返し既存経路を素通り |
@@ -28,9 +28,9 @@
 
 - `src/lib/review-profile.ts`（新規）: risk/autonomyラベルまたは`state.yaml`から`standard | strict`を導出する唯一の実装。既存 `gate.ts` 内の1箇所のインライン式（trusted-gate再構築コンテキスト）をこの関数呼び出しへ置換し、I8ロジックの実装箇所を1つに集約する。
 - `src/lib/self-reference-guardrail.ts`（新規、`quick-mode.ts`から抽出）: ADR-0022が定義する自己参照ガードレール対象パス（`docs/adr/`・`.agent-skill-chain/config/segments.yaml`・`AGENTS.md`・`.agent-skill-chain/schemas/`）の判定と、base差分＋作業ツリー差分を合成する`changedPaths()`を提供する。`quick-mode.ts`と`review-light.ts`の両方から利用され、パス集合の二重管理を避ける。
-- `src/lib/review-light.ts`（新規）: `review:light`ラベル／`review_intensity`フィールドの読み取り、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`の3判定を合成した`resolveLightReview()`、および直前ラウンドの`gate-report`（`reviewFilePath()`が指す既存のスクラッチ／コミット済みファイル）から`remediation_round`と`light_review.strict_locked`（一方向ラチェット、下記「remediationループ中の再評価とエスカレーション」参照）を読み取るロジックを持つ。`quick-mode.ts`と同じ「シグナル未読取・差分未解決は非適用」という安全側フォールバック方針を踏襲する。3層ガードレールの判定自体は`gate review`が新しいラウンドのスキャフォールドを生成するたびに毎回ステートレスに再計算するが、`applied`の最終値は`requested && !strict_locked`（`requested`はラベル／フィールドによる軽量レビュー要求の有無、`strict_locked`は直前ラウンドから継承した一方向ラチェット）で決まるため、`strict_locked=true`が一度確定すると`applied`は以降のラウンドで`true`に戻らない。
+- `src/lib/review-light.ts`（新規）: `review:light`ラベル／`review_intensity`フィールドの読み取り、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`の3判定を合成した`resolveLightReview()`、および直前ラウンドの`gate-report`（`reviewFilePath()`が指す既存のスクラッチ／コミット済みファイル）から`remediation_round`と`light_review.strict_locked`（一方向ラチェット、下記「remediationループ中の再評価とエスカレーション」参照）を読み取るロジックを持つ。`quick-mode.ts`と同じ「シグナル未読取・差分未解決は非適用」という安全側フォールバック方針を踏襲する。3層ガードレールの判定自体は、`requested=true`（軽量レビュー要求あり）のIssue/PRに限り`gate review`が新しいラウンドのスキャフォールドを生成するたびに毎回ステートレスに再計算する。`requested=false`のIssue/PRでは判定自体を行わず、`gate.review_profile`（既存のStandard/Strict判定結果フィールド）には一切影響しない。`requested=true`の場合、`applied`の最終値は`requested && !strict_locked && grantorConfirmed`（`strict_locked`は直前ラウンドから継承した一方向ラチェット、`grantorConfirmed`は要件9・AC-9が要求する付与主体の人間性検証`verifyGrantorIsHuman()`の結果、下記「軽量シグナル付与主体の人間性検証」参照）で決まる。`strict_locked=true`が一度確定すると`applied`は以降のラウンドで`true`に戻らない（一方向ラチェット）。`grantorConfirmed`は`strict_locked`とは異なりラチェットせず、`resolveLightReview()`の呼び出しの都度、その時点の最新の`labeled`イベントから再判定する（毎ラウンド再評価する独立条件）。
 - `src/commands/gate.ts`（既存、拡張）: `gate review`スキャフォールド生成時に`resolveLightReview()`の結果を`gate.light_review`へ埋め込み、`record-verdict`で`light_review.applied && remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS && (hasBlocking || fail)`のとき`inconclusive`を強制してから既存の`deriveFinal()`へ渡す。
-- `.agent-skill-chain/schemas/gate-report.schema.yaml`（既存、拡張）: `gate.light_review`（任意プロパティ：`requested`・`applied`・`disabled_reasons`・`remediation_round`・`strict_locked`）を追加。`strict_locked`は一度`true`になったら当該Issue/PRのゲートライフサイクル中`false`へ戻らない一方向ラチェットである。
+- `.agent-skill-chain/schemas/gate-report.schema.yaml`（既存、拡張）: `gate.light_review`（任意プロパティ：`requested`・`applied`・`disabled_reasons`・`remediation_round`・`strict_locked`）を追加。`strict_locked`は一度`true`になったら当該Issue/PRのゲートライフサイクル中`false`へ戻らない一方向ラチェットである。`disabled_reasons`は`requested=true`かつ`applied=false`のときにのみ非空になる文字列配列で、`resolveLightReview()`が`applied=false`と判定した根拠（3層ガードレール該当時は`quick-mode.ts`の`GUARDRAIL_PATHS`と同型の日本語理由文字列、`grantorConfirmed=false`時は「軽量シグナルの付与主体を人間と確認できませんでした」）をそのまま列挙する。`requested=false`または`applied=true`のときは常に空配列。
 - `.agent-skill-chain/schemas/state.schema.yaml`（既存、拡張）: `review_intensity: light | full`（既定`full`）を追加。既存必須項目（`required`配列）は変更しない。
 - `.agent-skill-chain/templates/github/provisioning/labels.yaml`（既存、拡張）: `review:light`ラベル定義を追加。
 - `gate reviewer-prompt`（既存コマンドの出力テキスト、拡張）: `light_review.applied === true`のときのみ、AC未達＝常時blocking／セキュリティ・データ喪失・互換性破壊・不変条件違反＝自動blocking昇格／その他のwarning以下は対応必須としない、という3行のルーブリックを追記する。
@@ -43,6 +43,7 @@ graph TD
   RL --> RP["review-profile.ts (resolveReviewProfile: risk/autonomy)"]
   RL --> MS["model-selection.ts (classifyCoreReview: 既存・変更なし)"]
   RL --> GR["self-reference-guardrail.ts (changedPaths + ADR-0022パス集合)"]
+  RL --> Grantor["verifyGrantorIsHuman (GitHub Events API actor.type / ローカルは常に未確認)"]
   RL --> GateReview["gate.ts: gate review (スキャフォールドへ light_review 埋め込み)"]
   GateReview --> RecordVerdict["gate.ts: record-verdict (remediation_round 打ち切り判定 → deriveFinal)"]
   RecordVerdict --> Report["gate-report.schema.yaml (gate.light_review) / reviews/<gate>.yaml・PR review証跡"]
@@ -71,18 +72,22 @@ related_adrs:
   - 対応: 直前ラウンドの記録を読めない場合は`remediation_round = 0`・`strict_locked = false`から再開する。`remediation_round`側は打ち切りまでの許容ラウンド数が実質1回分増えるだけであり、AC-6/AC-7のblocking自動昇格・AC-9の付与主体未確認フォールバックには一切影響しない。`strict_locked`側は、スクラッチ喪失時点で当該ラウンドの3層ガードレール判定が再度ステートレスに評価されるため、その時点の差分・ラベルが実際にStrict相当のままであれば同ラウンドで`strict_locked=true`へ再度確定し実害は生じない。喪失かつ差分がガードレール非該当へ戻っている場合に限りラチェットが意図せずリセットされうるが、これはローカルモード（Git管理下`reviews/<gate>.yaml`で永続化されI3保証対象）では発生せず、GitHubモードのベストエフォート格納の既知の限界としてADR-0031に明記し許容する（速度上の利益が目減りするだけで、AC-6/AC-7の独立した自動blocking昇格という多層防御は維持される）。
 - 想定される失敗モード3: `resolveLightReview()`のcore_review／guardrail判定が差分取得エラー等で`unresolved`を返す。
   - 対応: `classifyCoreReview()`は既存実装が`unresolved`時に`required: true`を返す（安全側）ため、そのまま`applied=false`に反映される。`self-reference-guardrail`側も`changedPaths()`が差分未解決を示す場合は`quick-mode.ts`と同じ規約で非適用に倒す。
+- 想定される失敗モード4: `verifyGrantorIsHuman()`の実装不備により、付与主体を人間と確認できない（または確認手段が無い）にもかかわらず`grantorConfirmed=true`を返す。
+  - 対応: `verifyGrantorIsHuman()`は「該当イベント特定・`actor.type`解決・`'User'`一致」の3条件すべてを満たした場合に限り`true`を返す設計とし、`gh api`失敗・イベント未特定・フィールド欠損・想定外の値はいずれも`false`（安全側）に倒すよう単体テストで網羅する。ローカルモードは実装上`grantorConfirmed`を判定ロジックに依らず常に`false`の定数として返すため、この失敗モード自体が発生しない。
 - ロールバック手順: `light_review`はgate-report/state.yamlいずれも任意プロパティであり、`review:light`ラベル・`review_intensity`フィールドを一切付与しなければ既存の判定経路（AC-1で保証）へ完全に戻る。ロールバックは本変更のrevertのみで足り、既存Issueへのマイグレーションは不要。
 - 影響を受ける既存機能: `gate.ts`の`materialize-check-report`コマンドが行うprofile算出処理（trusted-gate再構築コンテキストでrisk/autonomyラベルから`standard | strict`を導出するインライン式）を`resolveReviewProfile()`呼び出しへ置換するため、当該関数の単体テストで既存のrisk/autonomy判定結果が変化しないことを回帰確認する。
 
 ## remediationループ中の再評価とエスカレーション
 
-`review:light`が一度`applied=true`となった後でも、blocking finding対応の再レビュー（remediationラウンド）へ進むたびに、`gate review`が3層ガードレール（要件2〜4、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`）を都度**ステートレスに**再評価する。この「今ラウンドの差分・ラベル状態から見て3層ガードレールに該当するか」という生の判定結果自体はキャッシュ・継承しない（`resolveLightReview()`は呼び出しの都度、最新の入力のみから再計算する）。
+`review:light`が要求されている（`requested=true`）Issue/PRに**限り**、一度`applied=true`となった後でも、blocking finding対応の再レビュー（remediationラウンド）へ進むたびに、`gate review`が3層ガードレール（要件2〜4、`resolveReviewProfile()`・`classifyCoreReview()`・`self-reference-guardrail`）を都度**ステートレスに**再評価する。この「今ラウンドの差分・ラベル状態から見て3層ガードレールに該当するか」という生の判定結果自体はキャッシュ・継承しない（`resolveLightReview()`は呼び出しの都度、最新の入力のみから再計算する）。
 
-しかし、その生の判定結果を最終的な`applied`・`review_profile`へ反映する際は、`gate.light_review.strict_locked`という**一方向ラチェット**を介する。ラチェットにより、一度Strictへエスカレーションした後のラウンドで差分やラベルがガードレール非該当側へ戻っても、`applied`は`true`に復帰せず`review_profile`は`strict`のまま維持される（AGENTS.md I8「危険信号による降格は自動、昇格は人間の明示行為のみ」の安全側ラチェット原則を、light→Strictの遷移にも適用する）。
+`requested=false`のIssue/PR（`review:light`が一度も要求されていない）では、この3層ガードレール判定・`strict_locked`の算出・`gate.review_profile`の上書きのいずれも一切行わない。`gate.review_profile`は既存の`resolveReviewProfile()`（I8ロジック）のみで確定し、本設計導入前と完全に同じ値になる（要件12・AC-1、後方互換）。以下の`strict_locked`・`applied`・`review_profile`に関する記述は、断りが無い限り`requested=true`の場合の挙動である。
+
+しかし（`requested=true`の場合）、その生の判定結果を最終的な`applied`・`review_profile`へ反映する際は、`gate.light_review.strict_locked`という**一方向ラチェット**を介する。ラチェットにより、一度Strictへエスカレーションした後のラウンドで差分やラベルがガードレール非該当側へ戻っても、`applied`は`true`に復帰せず`review_profile`は`strict`のまま維持される（AGENTS.md I8「危険信号による降格は自動、昇格は人間の明示行為のみ」の安全側ラチェット原則を、light→Strictの遷移にも適用する）。
 
 - **再評価のタイミング**: `gate review`が各remediationラウンドのレビュー用スキャフォールドを生成する時点（＝そのラウンドのレビュアへプロンプトを渡す直前）で`resolveLightReview()`を呼び出す。record-verdict時点では再評価しない（record-verdictはそのラウンド開始時に確定した`light_review`の値をそのまま参照する）。
-- **`strict_locked`の算出**: `resolveLightReview()`は次の2値のORで当該ラウンドの`strict_locked`を確定する。(1) 直前ラウンドの`gate-report`（`reviewFilePath()`経由、`remediation_round`と同じ読み取り元）から読み取った`light_review.strict_locked`（記録が無ければ`false`）。(2) 当該ラウンドの3層ガードレール判定（要件2〜4）が新規にStrict相当を示したかどうかのステートレスな結果。一度でも`true`が確定したラウンド以降、直前ラウンド由来の`(1)`が常に`true`を返すため、`strict_locked`は当該Issue/PRのゲートライフサイクル中`false`へ戻らない。
-- **`applied`・`review_profile`の確定**: 当該ラウンドの`gate.light_review.applied`は`requested && !strict_locked`で確定する。`strict_locked=true`のラウンドでは、`gate.review_profile`（Standard/Strict判定結果を格納する既存フィールド）を`resolveReviewProfile()`の結果に関わらず`strict`へ固定し、専任2名によるStrictレビューを要求する。新たに`strict_locked=true`が確定したラウンドから即座に適用し、猶予ラウンドを設けない。
+- **`strict_locked`の算出（`requested=true`のときのみ）**: `resolveLightReview()`は`requested=true`のときに限り、次の2値のORで当該ラウンドの`strict_locked`を確定する。(1) 直前ラウンドの`gate-report`（`reviewFilePath()`経由、`remediation_round`と同じ読み取り元）から読み取った`light_review.strict_locked`（記録が無ければ`false`）。(2) 当該ラウンドの3層ガードレール判定（要件2〜4）が新規にStrict相当を示したかどうかのステートレスな結果。一度でも`true`が確定したラウンド以降、直前ラウンド由来の`(1)`が常に`true`を返すため、`strict_locked`は当該Issue/PRのゲートライフサイクル中`false`へ戻らない。`requested=false`のときは3層ガードレール自体を評価せず、`strict_locked`は常に`false`（未使用値）として扱う。
+- **`applied`・`review_profile`の確定**: 当該ラウンドの`gate.light_review.applied`は`requested && !strict_locked && grantorConfirmed`で確定する（`requested=false`のときは`strict_locked`が常に`false`・`grantorConfirmed`は未評価のためこの式は`false`に単純化され、後段の`review_profile`上書きも発生しない）。`review_profile`の上書き可否は`strict_locked`のみで判定し（`grantorConfirmed=false`はStrict強制ではなく軽量プロファイルの単純な非適用のため、`review_profile`には影響しない）。`requested=true`かつ`strict_locked=true`のラウンドに**限り**、`gate.review_profile`（Standard/Strict判定結果を格納する既存フィールド）を`resolveReviewProfile()`の結果に関わらず`strict`へ固定し、専任2名によるStrictレビューを要求する。`requested=false`のIssue/PRでは、本設計のいかなる新規ロジックも`gate.review_profile`へ書き込まない——同フィールドは`resolveReviewProfile()`の結果のみで確定し続ける。新たに`strict_locked=true`が確定したラウンドから即座に適用し、猶予ラウンドを設けない。
 - **直前ラウンド（light時）の1体レビュー結果の扱い**: 昇格前ラウンドの1体レビュー結果は、そのラウンドのgate-reportに証跡としてそのまま残すが、昇格後のStrictレビューの合否判定入力としては再利用しない。Strictレビューは常に専任2名が最初からconformance/falsificationを実施する（既存Strictの通常運用と同一であり、light由来の特別な引き継ぎ処理は設けない）。
 - **`remediation_round`の扱い**: エスカレーション時もカウンタはリセットせず、直前ラウンドの値をそのまま+1して継続する（下記「`remediation_round`の確定タイミングと初期値」参照）。エスカレーション後は`light_review.applied=false`が`strict_locked`により恒久的に固定されるため、要件6（AC-8）の打ち切り強制条件（`light_review.applied && remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS`）は以降のラウンドで評価対象から外れたまま戻らず、Strictの既存の反復運用（打ち切りラウンド数の上限なし、Issue #446のような複数ラウンドを許容する既存運用）へそのまま合流する。新しい打ち切りロジックをStrict側に追加しない。
 
@@ -91,6 +96,30 @@ related_adrs:
 `remediation_round`は0始まりとする。`gate review`がラウンドのスキャフォールドを生成する時点で、直前ラウンドの`gate-report`（`reviewFilePath()`経由）から読み取った値に+1して当該ラウンドの値を確定する。直前ラウンドの記録が存在しない場合（そのIssueの初回レビュー、またはスクラッチ喪失時）は0として確定する。`record-verdict`はこの値を読み取るのみで変更しない。`light_review.strict_locked`も同じ直前ラウンドの`gate-report`読み取り処理の一部として同時に取得する（別経路・別タイミングでの読み取りは行わない）。
 
 この定義により、ADR-0031が定める「初回レビュー（`remediation_round=0`）＋修正後の再レビュー1回（`remediation_round=1`）＝合計2回」という数値意図と、要件6（AC-8）の打ち切り条件`remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS（=1）`が整合する（`remediation_round=1`のラウンドでなおblockingが残る場合に打ち切りが発動する）。
+
+## 軽量シグナル付与主体の人間性検証（要件9・AC-9）
+
+SPEC.mdの要件9・AC-9が要求する「軽量シグナルの付与主体が人間であることの確認」を、`src/lib/review-light.ts`の`verifyGrantorIsHuman()`がGitHubモード・ローカルモードそれぞれで次の具体的な技術方式により判定する。この判定は`requested=true`が確定したIssue/PRについてのみ実行し、`applied`算出の入力（`grantorConfirmed`）として使う。3層ガードレール（要件2〜4）の`strict_locked`ラチェットとは独立した、毎ラウンド再評価する別条件であり、`strict_locked`へは反映しない（要件9はStrict強制ではなく軽量プロファイル自体の非適用を要求するため）。
+
+### GitHubモード: Events APIによるactor種別判定
+
+`review:light`ラベルが現在付与されている（`requested=true`）Issueについて、GitHub REST issue events API（`gh api repos/{owner}/{repo}/issues/{number}/events --paginate`）を呼び出し、`event === 'labeled' && label.name === LIGHT_REVIEW_LABEL`に一致するイベントのうち`created_at`が最も新しいものを1件特定する。当該イベントの`actor.type`が`'User'`であれば人間による付与と確認し（`grantorConfirmed = true`）、`'Bot'`（GitHub Appのbotアカウント、`github-actions[bot]`等）であれば未確認として扱う（`grantorConfirmed = false`）。
+
+次のいずれかに該当する場合も未確認として扱い、要件9のフォールバック（軽量プロファイル非適用、既存I8ロジックのStandard/Strictを適用）へ倒す。
+
+- `gh api`呼び出しが失敗する（未認証・ネットワーク不通・ページネーション中断・レート制限等）
+- レスポンスの`actor`または`actor.type`を解決できない（欠損・想定外の形式）
+- 該当する`labeled`イベントが1件も見つからない（ラベル付与の記録を追跡できない）
+
+`grantorConfirmed = false`の場合、`resolveLightReview()`は`applied = false`を返し、`disabled_reasons`へ「軽量シグナルの付与主体を人間と確認できませんでした」を追加する。
+
+既知の限界: GitHub REST APIの`actor.type`は、個人アクセストークン（PAT）を用いて自動化スクリプトから付与された場合でも`'User'`と判定される（スクリプトが人間のGitHub identityを借用するケースを区別できない）。これは本リポジトリの既存コード（`src/lib/review-evidence.ts`の`trustedActors`照合、`src/lib/trusted-gate-recorder.ts`のcollaborator permission確認）にも共通する、GitHub Identityを信頼の代理指標として扱う設計全体の既知の限界であり、本Issueのスコープでは追加対策を導入しない。
+
+### ローカルモード: 確認手段が構造的に存在しない
+
+ローカルモードの`state.yaml.review_intensity`フィールドは、Git管理下ファイルへの直接編集または`issue start`等のCLI実行により書き込まれる。GitHubモードのEvents APIに相当する「フィールドを設定したactorの種別」を記録する仕組みは存在せず、Gitのcommit author（氏名・メールアドレス）は人間が対話的に入力したか、エージェントが同一のGit identityの下でコマンドを実行したかを区別できない。したがって`verifyGrantorIsHuman()`は、ローカルモードでは`grantorConfirmed`を常に`false`として返す（要件9が明示的に許容する「確認手段自体が存在しない場合」に該当する安全側フォールバック）。
+
+この結果、現時点の設計ではローカルモードにおいて軽量シグナルは`requested=true`にはなり得ても`applied`が`true`になることはなく、軽量プロファイルの速度上の利益はGitHubモード限定となる。これはADR-0031のConsequencesに将来のフォローアップ課題として記録する。ローカルモード向けの確認手段（署名付きコミット必須化・対話的確認プロンプトの導入等）を追加する場合は、本設計のスコープ外の別Issue・別ADRで扱う。
 
 ## 未検証で許容する範囲（設計判断）
 

@@ -43,8 +43,12 @@ deprecated-reason: null
 1. **独立シグナル**: GitHubモードのIssueラベル`review:light`、ローカルモードの`state.yaml`の`review_intensity:
    light | full`（既定`full`、未設定は後方互換でfullとして解決）を新設する。`size:quick`とは別モジュール
    （`src/lib/quick-mode.ts`と`src/lib/review-light.ts`）・別フィールドで実装し、一方の判定が他方に影響しない。
-2. **Strict優先の3層ガードレール**: 軽量プロファイルは次のいずれかに該当する場合、常に無効化されStrictが強制
-   される。(a) 既存I8ロジック（`risk != normal` OR `autonomy == full`）、(b) `model_selection.core_review`の
+2. **Strict優先の3層ガードレール**: 本ガードレールは`review:light`が要求されている（`requested=true`）Issue/PR
+   にのみ作用する。`requested=false`のIssue/PR（`review:light`が一度も要求されていない既存Issue含む）では
+   3層ガードレールの評価自体を行わず、`gate.review_profile`（Standard/Strict判定を格納する既存フィールド）は
+   既存の`resolveReviewProfile()`（I8ロジック）のみで確定し続け、本ADRの決定によって一切変化しない（要件12・
+   AC-1、後方互換の担保）。`requested=true`の場合、軽量プロファイルは次のいずれかに該当する場合、常に無効化
+   されStrictが強制される。(a) 既存I8ロジック（`risk != normal` OR `autonomy == full`）、(b) `model_selection.core_review`の
    既存トリガー（ラベル・状態値・`exact_paths`・`path_prefixes`）、(c) 変更差分が`docs/adr/`・
    `.agent-skill-chain/config/segments.yaml`・`AGENTS.md`・`.agent-skill-chain/schemas/`のいずれかを含む
    （ADR-0022と同一のパス集合を`src/lib/self-reference-guardrail.ts`として共有・再利用する独立条件。(b)の
@@ -84,6 +88,14 @@ deprecated-reason: null
    でのみ実現し、`code`・`evidence`のテキストからキーワード等で機械的にseverityを書き換える機構は設けない。
    誤検知・見落としの双方でテキスト照合が不適切であり、SPEC.mdも当該AC-6/AC-7の検証方法見込みを`hybrid`と
    明示しているため、レビュアの判定を最終的な正とする設計が妥当と判断する。
+6. **付与主体の人間性検証（SPEC.md要件9・AC-9）**: GitHubモードでは、GitHub REST issue events API
+   （`gh api repos/{owner}/{repo}/issues/{number}/events`）で`review:light`ラベルの直近`labeled`イベントを
+   特定し、その`actor.type`が`'User'`のときのみ人間による付与と確認する（`'Bot'`・イベント未特定・API呼び出し
+   失敗はすべて未確認として扱う）。ローカルモードは、フィールドを設定したactorの種別を記録する仕組みが構造的
+   に存在しない（Gitのcommit authorは人間の対話操作とエージェント操作を区別できない）ため、`grantorConfirmed`
+   を常に`false`として扱う。付与主体が未確認の場合は要件9のとおり軽量プロファイルを適用せず、既存のI8ロジック
+   に基づく通常プロファイルへ倒す。この設計判断の帰結として、軽量プロファイルの速度上の利益は当面GitHubモード
+   限定になる（Consequences参照）。ローカルモード向けの確認手段を追加する場合は別ADRで扱う。
 
 ## Consequences
 
@@ -97,6 +109,12 @@ deprecated-reason: null
   恒久化するにはGitHub Coordination Backend向けの構造化された証跡ストアが必要になり、本ADRのスコープ外とする。
 - 欠点: 打ち切りラウンド数「1」は実測に基づく仮の値であり、Strictで許容されている反復回数との比較のみを根拠に
   設計時点で確定した。運用実績が蓄積した段階で見直しが必要になる可能性がある。
+- 欠点: 付与主体の人間性検証（Decision 6）はローカルモードで構造的に確認手段を持たないため、ローカルモードの
+  Issueでは軽量プロファイルが`applied=true`になることが現状ない。速度上の利益はGitHubモード限定になる。
+- 欠点: GitHubモードの付与主体検証（`actor.type === 'User'`）は、個人アクセストークンを用いた自動化スクリプト
+  がhuman identityを借用した場合を区別できない。これは本リポジトリの既存コード（review-evidence.ts等）にも
+  共通する、GitHub Identityを信頼の代理指標とする設計全体の既知の限界であり、本ADRのスコープでは追加対策を
+  導入しない。
 - フォローアップ: `review:light`ラベルは`setup-labels.sh`によるGitHub Labels APIへの適用を行うまで実体として
   存在しない。適用前は`review:light`を付与しても効果を持たず、`resolveLightReview()`は`requested: false`として
   安全側に解決される。
