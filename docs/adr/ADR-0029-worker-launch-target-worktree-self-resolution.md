@@ -27,7 +27,7 @@ deprecated-reason: null
 
 `worker-launch.sh`を、対象issueのworktreeを自己解決し、必要なら対象worktree自身のコピーへ`cd`＋`exec`で処理を委譲する単一の制御点とする。
 
-- `src/lib/worktree.ts`に`resolveIssueWorktreeExactlyOne(root, config, issueNumber)`を新設する。`listWorktrees`の全件を対象issueのworktree命名パターンでフィルタし、1件のみなら`found`、0件なら既存`findIssueWorktree`のbranch名一致・CI単一checkoutフォールバックへ委譲し、2件以上なら候補パスを列挙した`ambiguous`を返す。既存`findIssueWorktree`自体の挙動・呼び出し元は変更しない。
+- `src/lib/worktree.ts`に`resolveIssueWorktreeExactlyOne(root, config, issueNumber)`を新設する。`listWorktrees`の全件を対象issueのworktree命名パターンでフィルタし、2件以上なら候補パスを列挙した`ambiguous`、1件のみなら`found`を返す。0件なら既存`findIssueWorktree`のbranch名一致・CI単一checkoutフォールバックへ委譲し、その戻り値をそのまま変換する（1件のworktreeエントリが返れば`found`、`undefined`が返れば`not_found`）。フォールバックのbranch名一致は呼び出し元の現在worktree1本のブランチのみを判定対象にし、CI単一checkout信頼は`listWorktrees`のエントリが厳密に1件の場合のみ発火する設計であるため、いずれも複数候補を返すことができず、フォールバック委譲後に`ambiguous`へ変換されることはない。既存`findIssueWorktree`自体の挙動・呼び出し元は変更しない。
 - `agent-skill-chain worker context <issue_id> <segment>`は、`found`の場合のみ`worktree_path=<絶対パス>`行を追加出力する。`not_found`/`ambiguous`は行を出さずコマンド自体は既存どおり成功する（segment省略経路・既存の他呼び出し元は無改修）。
 - `worker-launch.sh`は`worker context`呼び出し直後に`worktree_path=`を検査する。空ならlease取得前にexit 2で安全側停止する。値があり自身の`REPO_ROOT`と一致しなければ、対象worktree内の`.agent-skill-chain/scripts/worker-launch.sh`へ`cd`＋`exec`で委譲する（環境変数による一回限りの再帰ガード付き）。
 
