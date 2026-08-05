@@ -136,6 +136,11 @@ if (cmd === 'issue' && sub === 'view') {
   const issueNumber = args[2];
   const state = loadState();
   const fields = (flag('--json') || 'comments').split(',');
+  const issueViewFailure = (state.issueViewFailures || {})[issueNumber];
+  if (issueViewFailure && fields.includes('comments')) {
+    process.stderr.write(issueViewFailure);
+    process.exit(1);
+  }
   const payload = {};
   if (fields.includes('comments')) payload.comments = state.comments[issueNumber] || [];
   if (fields.includes('number')) payload.number = Number(issueNumber);
@@ -258,11 +263,13 @@ if (cmd === 'pr' && sub === 'edit') {
 if (cmd === 'pr' && sub === 'view') {
   // release bump・root-cleanup run の findOpenPrByHead が
   // 'gh pr view <branch> --json number,state,headRefName,files' として呼ぶ
-  // （常にbranch名で問い合わせる、PR番号ではない）。
+  // ほか、worker resumeのreview status取得はPR番号で問い合わせる。
   const key = args[2];
   const state = loadState();
   // Issue #354 issue-sync は PR 番号 + '--json body' で本文だけを読む（ブランチ名では引かない）。
   const viewFields = (flag('--json') || '').split(',');
+  state.prViewCalls = (state.prViewCalls || []).concat([{ key, fields: viewFields }]);
+  saveState(state);
   if (viewFields.includes('body')) {
     const payload = {};
     if (viewFields.includes('number')) payload.number = Number(key);
@@ -270,19 +277,35 @@ if (cmd === 'pr' && sub === 'view') {
     process.stdout.write(JSON.stringify(payload));
     process.exit(0);
   }
-  const pr = (state.prsByBranch || {})[key];
-  if (!pr) {
-    process.stderr.write('gh-stub: no PR found for ' + key + '\\n');
+  const pr =
+    (state.prsByBranch || {})[key] ||
+    Object.values(state.prsByBranch || {}).find((candidate) => String(candidate.number) === String(key));
+  const prViewFailure = (state.prViewFailures || {})[key];
+  if (prViewFailure && (viewFields.includes('reviews') || viewFields.includes('latestReviews') || viewFields.includes('comments'))) {
+    process.stderr.write(prViewFailure);
     process.exit(1);
   }
-  process.stdout.write(
-    JSON.stringify({
-      number: pr.number,
-      state: pr.state,
-      headRefName: pr.headRefName,
-      files: pr.files,
-    }),
-  );
+  if (!pr) {
+    process.stderr.write(
+      viewFields.includes('reviews') || viewFields.includes('latestReviews') || viewFields.includes('comments')
+        ? 'no pull requests found for branch "' + key + '"\\n'
+        : 'gh-stub: no PR found for ' + key + '\\n',
+    );
+    process.exit(1);
+  }
+  if (state.failPrReviewStatusView && (viewFields.includes('reviews') || viewFields.includes('latestReviews') || viewFields.includes('comments'))) {
+    process.stderr.write('gh-stub: simulated review status view failure\\n');
+    process.exit(1);
+  }
+  const payload = {};
+  if (viewFields.includes('number')) payload.number = pr.number;
+  if (viewFields.includes('state')) payload.state = pr.state;
+  if (viewFields.includes('headRefName')) payload.headRefName = pr.headRefName;
+  if (viewFields.includes('files')) payload.files = pr.files;
+  if (viewFields.includes('latestReviews')) payload.latestReviews = pr.latestReviews || [];
+  if (viewFields.includes('reviews')) payload.reviews = pr.reviews || [];
+  if (viewFields.includes('comments')) payload.comments = pr.comments || [];
+  process.stdout.write(JSON.stringify(payload));
   process.exit(0);
 }
 
@@ -504,6 +527,22 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  const pullCommentsMatch = /\\/pulls\\/(\\d+)\\/comments(?:\\?(.*))?$/.exec(apiPath || '');
+  if (pullCommentsMatch && method === 'GET') {
+    const prNumber = pullCommentsMatch[1];
+    const failure = (state.prReviewThreadCommentFailures || {})[prNumber];
+    if (failure) {
+      process.stderr.write(failure);
+      process.exit(1);
+    }
+    const params = new URLSearchParams(pullCommentsMatch[2] || '');
+    const page = Number(params.get('page') || '1');
+    const perPage = Number(params.get('per_page') || '100');
+    const comments = (state.prReviewThreadComments || {})[prNumber] || [];
+    process.stdout.write(JSON.stringify(comments.slice((page - 1) * perPage, page * perPage)));
+    process.exit(0);
+  }
+
   if (/\\/commits\\/[^/]+\\/pulls(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
     process.stdout.write(JSON.stringify(state.commitPulls || []));
     process.exit(0);
@@ -606,6 +645,9 @@ export interface GhStubBumpPr {
   state: string;
   headRefName: string;
   files: GhStubPrFile[];
+  latestReviews?: unknown[];
+  reviews?: unknown[];
+  comments?: unknown[];
 }
 
 export interface GhStubState {
@@ -643,6 +685,12 @@ export interface GhStubState {
   failApiPaths?: string[];
   apiCalls?: { method: string; path: string }[];
   prCreateCalls?: { args: string[]; body: string | undefined }[];
+  failPrReviewStatusView?: boolean;
+  issueViewFailures?: Record<string, string>;
+  prViewFailures?: Record<string, string>;
+  prViewCalls?: { key: string; fields: string[] }[];
+  prReviewThreadComments?: Record<string, unknown[]>;
+  prReviewThreadCommentFailures?: Record<string, string>;
   // ---- Issue #196 release bump/tag/publish・Issue #208 root-cleanup run 検証用
   //      (gh pr view/list/merge, gh release view/create) ----
   prsByBranch?: Record<string, GhStubBumpPr>;
@@ -672,6 +720,12 @@ export interface GhStub {
   readState(): GhStubState;
   writeState(state: GhStubState): void;
   seedPrList(branch: string, prs: unknown[]): void;
+  seedPrReviews(prNumber: number, reviews: unknown[]): void;
+  seedPrComments(prNumber: number, comments: unknown[]): void;
+  seedPrReviewThreadComments(prNumber: number, comments: unknown[]): void;
+  seedPrReviewThreadCommentsFailure(prNumber: number, failure: { stderr: string }): void;
+  seedIssueViewFailure(issueNumber: string, failure: { stderr: string }): void;
+  seedPrViewFailure(branch: string, failure: { stderr: string }): void;
   /** doctor の「GitHub labels同期」検査（`gh label list`）向けに、実リポジトリに存在するラベルを
    * 直接投入する（Issue #272）。`label create` を経由せず、既存ラベルが定義と食い違う状態や、
    * 定義の一部が欠けている状態を直接再現するために使う。 */
@@ -696,7 +750,7 @@ export interface GhStub {
    * （`issue edit --add-label` を経由せず、任意のラベル状態を再現するために使う）。 */
   seedIssueLabels(issueNumber: string, labels: string[]): void;
   /** Issue #354: `gh pr list --state open` が返す open PR を1件投入する（本文つき）。 */
-  seedOpenPr(pr: { number: number; headRefName: string; body: string }): void;
+  seedOpenPr(pr: { number: number; headRefName: string; body: string; state?: 'OPEN' | 'CLOSED' | 'MERGED' }): void;
   /** Issue #354: 本文読み取り count 回ぶん、読み取り直後に別プロセスがマーカー区間を
    * 書き換えた状態を再現する（読み直し比較による競合検知の発火条件）。 */
   simulateConcurrentBodyWrites(count: number): void;
@@ -743,6 +797,46 @@ export function createGhStub(baseDir: string): GhStub {
       state.prs[branch] = prs;
       this.writeState(state);
     },
+    seedPrReviews(prNumber: number, reviews: unknown[]): void {
+      const state = this.readState();
+      const pr = Object.values(state.prsByBranch ?? {}).find((candidate) => candidate.number === prNumber);
+      if (!pr) throw new Error(`gh-stub: PR #${prNumber} が登録されていません`);
+      pr.reviews = reviews;
+      this.writeState(state);
+    },
+    seedPrComments(prNumber: number, comments: unknown[]): void {
+      const state = this.readState();
+      const pr = Object.values(state.prsByBranch ?? {}).find((candidate) => candidate.number === prNumber);
+      if (!pr) throw new Error(`gh-stub: PR #${prNumber} が登録されていません`);
+      pr.comments = comments;
+      this.writeState(state);
+    },
+    seedPrReviewThreadComments(prNumber: number, comments: unknown[]): void {
+      const state = this.readState();
+      state.prReviewThreadComments = {
+        ...(state.prReviewThreadComments ?? {}),
+        [String(prNumber)]: comments,
+      };
+      this.writeState(state);
+    },
+    seedPrReviewThreadCommentsFailure(prNumber: number, failure: { stderr: string }): void {
+      const state = this.readState();
+      state.prReviewThreadCommentFailures = {
+        ...(state.prReviewThreadCommentFailures ?? {}),
+        [String(prNumber)]: failure.stderr,
+      };
+      this.writeState(state);
+    },
+    seedIssueViewFailure(issueNumber: string, failure: { stderr: string }): void {
+      const state = this.readState();
+      state.issueViewFailures = { ...(state.issueViewFailures ?? {}), [issueNumber]: failure.stderr };
+      this.writeState(state);
+    },
+    seedPrViewFailure(branch: string, failure: { stderr: string }): void {
+      const state = this.readState();
+      state.prViewFailures = { ...(state.prViewFailures ?? {}), [branch]: failure.stderr };
+      this.writeState(state);
+    },
     seedLabels(labels: { name: string; color: string; description: string }[]): void {
       const state = this.readState();
       state.labels = labels.map((l) => l.name);
@@ -783,11 +877,11 @@ export function createGhStub(baseDir: string): GhStub {
       state.issueLabels = { ...(state.issueLabels ?? {}), [issueNumber]: labels };
       this.writeState(state);
     },
-    seedOpenPr(pr: { number: number; headRefName: string; body: string }): void {
+    seedOpenPr(pr: { number: number; headRefName: string; body: string; state?: 'OPEN' | 'CLOSED' | 'MERGED' }): void {
       const state = this.readState();
       state.prsByBranch = {
         ...(state.prsByBranch ?? {}),
-        [pr.headRefName]: { number: pr.number, state: 'OPEN', headRefName: pr.headRefName, files: [] },
+        [pr.headRefName]: { number: pr.number, state: pr.state ?? 'OPEN', headRefName: pr.headRefName, files: [] },
       };
       state.prBodies = { ...(state.prBodies ?? {}), [String(pr.number)]: pr.body };
       this.writeState(state);
