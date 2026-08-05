@@ -18,19 +18,20 @@
 
 ### 要件
 
-- 要件1: 進行役がClaude Code CLIセッションであり、かつ対象segmentの `worker.adapter` が `claude` である場合、`worker-launch.sh` の呼び出し結果として起動されるsegment workerは、進行役セッション自身が発行するAgent tool呼び出しとしてサブエージェントツリーに登録される形で起動されなければならない。
+- 要件1: 進行役がClaude Code CLIセッションであり、対象segmentの `worker.adapter` が `claude` であり、かつ新方式のopt-in設定（`.agent-skill-chain/config/agent-skill-chain.yaml` の新規項目、既定値は無効）が明示的に有効化されている場合に限り、`worker-launch.sh` の呼び出し結果として起動されるsegment workerは、進行役セッション自身が発行するAgent tool呼び出しとしてサブエージェントツリーに登録される形で起動されなければならない。
 - 要件2: 進行役がClaude Code CLIセッションでない場合（human運用・CI・cron等、非対話の呼び出し元を含む）は、現行の headless subprocess 起動（またはhuman adapterの deferred 応答）へフォールバックし、既存の動作を変更してはならない（AGENTS.md「GitHub配布・マルチAI対応」のvendor中立性を維持する）。
 - 要件3: 起動方式の変更後も、`launch_worker()` が既に備えるフェイルセーフの順序と規律——(a) writer lease取得→(b) `segment start` によるrole_contract取得→(c) worker起動→(d) 完了確認（`report status` がcompletedかつ `target_sha` がpush済みHEADと一致）→(e) lease解放、および起動失敗・timeout・完了未確認時に必ずblocked報告（`report_status ... blocked`）とlease解放を行い非0非3の終了コードで返す規律（AGENTS.md I8）——を、起動方式が変わっても同一の意味で維持しなければならない。
 - 要件4: 起動方式の変更後も、segment workerへ渡されるプロンプトは `segment start` が返すrole_contract全文（AGENTS.md「役割・権限・writer lease」で定める唯一の正規契約伝達経路）のみとし、進行役はワーカーに渡す内容を加工・要約・追記してはならない（AGENTS.md I5 進行役の純粋性）。
 - 要件5: 起動方式の変更後も、segment workerが作成するcommitは、既存のwriter lease取得・`checkpoint.sh`（agent-skill-chain CLI `checkpoint` サブコマンド）経由のcommit作成という正規経路をそのまま経由しなければならない。起動主体をシェルスクリプトの独立サブプロセスから進行役のAgent tool呼び出しへ切り替えたことを理由に、commitの作成者情報・attestationが変化してはならない。
 - 要件6: 既存のCLIモックテスト境界（`WORKER_CMD` によるテスト用の起動コマンド差し替え）は、起動方式の変更後も引き続き機能しなければならない。
 - 要件7: 進行役がClaude Code CLIセッションであるか否かを実行時に判定できない場合（判定手段自体が失敗する、判定結果が不定である等）、新方式（Agent tool経由起動）を有効にする条件が成立したとはみなさず、既存の headless subprocess 起動（要件2）へフォールバックしなければならない。判定不能を新方式の動作条件として扱ってはならない（AGENTS.md I8 安全側ラチェット：降格は自動、昇格は判定成功という明示的な確認が取れた場合のみ）。
+- 要件8: 要件1が定める3条件（進行役がClaude Code CLIセッションである／対象segmentの `worker.adapter` が `claude` である／新方式のopt-in設定が有効化されている）のうち、いずれか一つでも満たされない場合は新方式を適用してはならず、要件2と同一の既存の headless subprocess 起動（またはhuman adapterの deferred 応答）へフォールバックしなければならない。新方式のopt-in設定の既定値は無効であり、進行役がClaude Code CLIセッションであり対象segmentのadapterが `claude` であっても、opt-inが明示的に有効化されていない限り新方式は適用されない（AGENTS.md冒頭「速度は人間の明示的なオプトイン、危険信号による降格は自動である」、I8「autonomyの降格は自動、昇格は人間の明示行為のみ」）。opt-in設定を有効化してよいのは、未決事項1（AC-1とAGENTS.md I5の両立可否）・未決事項2（AGENTS.md I3耐久性との関係）がdesign segmentでの技術検証により解消されたと人間が判断した場合に限る。
 
 ### 受入条件（Acceptance Criteria）
 
 #### AC-1: Claude Codeセッションからの起動はサブエージェントツリーに表示される
 
-- Given: 進行役がClaude Code CLIセッションであり、対象Issueの対象segmentの `worker.adapter` が `claude` に解決される。
+- Given: 進行役がClaude Code CLIセッションであり、対象Issueの対象segmentの `worker.adapter` が `claude` に解決され、かつ新方式のopt-in設定（`.agent-skill-chain/config/agent-skill-chain.yaml` の新規項目）が明示的に有効化されている。
 - When: 進行役が `worker-launch.sh` をissue_id・segment引数付きで実行する。
 - Then: 起動されるsegment workerは、進行役セッションのサブエージェントツリー上に他のAgent tool委譲と同様の1エントリとして表示され、実行中の状態・経過時間・トークン消費量がそのビュー上で確認できる。
 - 検証方法見込み: `hybrid`
@@ -77,13 +78,20 @@
 - Then: 新方式（Agent tool経由起動）は使用されず、要件2と同一の既存の headless subprocess 起動（またはhuman adapterの deferred 応答）が実行され、起動方式・終了コード・完了確認手順に変化が無い。
 - 検証方法見込み: `automated`
 
+#### AC-8: opt-in設定が既定値（無効）のままの場合は新方式を適用しない
+
+- Given: 進行役がClaude Code CLIセッションであり、対象Issueの対象segmentの `worker.adapter` が `claude` に解決されるが、新方式のopt-in設定（`.agent-skill-chain/config/agent-skill-chain.yaml` の新規項目）が既定値（無効）のまま、明示的に有効化されていない。
+- When: `worker-launch.sh` をissue_id・segment引数付きで実行する。
+- Then: 進行役がClaude Code CLIセッションでありadapterが `claude` であるにもかかわらず新方式は適用されず、要件2と同一の既存の headless subprocess 起動がそのまま実行され、起動方式・終了コード・完了確認手順に変化が無い。
+- 検証方法見込み: `automated`
+
 ## 未決事項
 
 ### 1. AC-1とAGENTS.md I5（進行役の純粋性）の両立方法
 
 要件1は、進行役セッション自身が発行するAgent tool呼び出しとしてsegment workerを起動することを求める。一方、AGENTS.md I5は、進行役が読み書きするのは調整状態のみであり、成果物の著述・内容の取り込みを行わず、writer lease対象外であることを不変条件として定める。過去に汎用Agent委譲でartifactを直接書かせた結果、commit作成者欄attestationが不正となりI5違反として検出された実例がある（Issue #326）。
 
-一案として、Agent tool経由で起動されるsegment workerを、進行役とは別の役割アイデンティティ（spec_worker/design_worker等）として動作するサブエージェントと位置づけ、実際のgit commit/pushは要件5の通り既存の `checkpoint.sh` 経由でwriter lease credentialを用いて行う——起動主体が独立シェルプロセスからAgent tool呼び出しへ変わっても、内容の著述・commit実行の主体はサブエージェント自身であり進行役自身ではない、という区別を維持する——という方向性が考えられる。この整理がClaude CodeのAgent tool実行モデル上で技術的に成立するか（サブエージェントの出力が進行役の文脈へ混入しないか、role capability分離がAgent tool呼び出し単位で維持できるか等）は本SPEC段階では未検証であり、design segmentでの技術検証・確定を要求する。この検証の帰結次第では、要件1・AC-1自体の実現可能性判断（設計不可の場合のフォールバック要否を含む）に影響しうる。
+一案として、Agent tool経由で起動されるsegment workerを、進行役とは別の役割アイデンティティ（spec_worker/design_worker等）として動作するサブエージェントと位置づけ、実際のgit commit/pushは要件5の通り既存の `checkpoint.sh` 経由でwriter lease credentialを用いて行う——起動主体が独立シェルプロセスからAgent tool呼び出しへ変わっても、内容の著述・commit実行の主体はサブエージェント自身であり進行役自身ではない、という区別を維持する——という方向性が考えられる。この整理がClaude CodeのAgent tool実行モデル上で技術的に成立するか（サブエージェントの出力が進行役の文脈へ混入しないか、role capability分離がAgent tool呼び出し単位で維持できるか等）は本SPEC段階では未検証であり、design segmentでの技術検証・確定を要求する。この検証の帰結次第では、要件1・AC-1自体の実現可能性判断（設計不可の場合のフォールバック要否を含む）に影響しうる。この未検証リスクを抱えたまま新方式を既定で有効化しないよう、要件8・AC-8は新方式の適用条件にopt-in設定（既定値は無効）を追加し、当該opt-inは本未決事項の解消をdesign segmentで確認できた場合にのみ人間が有効化することを求めている。
 
 ### 2. 進行役セッションとworker生存期間の結合（AGENTS.md I3 耐久性との関係）
 
