@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0024
-status: proposed
+status: accepted
 title: 期限切れwriter leaseの人間向けCLI回収はcredential不要・期限検査+明示confirm+監査コメントで安全側を担保する
 tags: [lease, reclaim, security, human-recovery]
 supersedes: []
