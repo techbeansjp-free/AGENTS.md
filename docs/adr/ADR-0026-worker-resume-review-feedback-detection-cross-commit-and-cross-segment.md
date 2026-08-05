@@ -34,6 +34,8 @@ ADR-0025（Issue #446、本ADRと同一Issue）は、resumeされたセグメン
 
 3. `PR_RESOLUTION_NOT_BOUND_TO_TARGET_ISSUE`: PR側は`resolveCurrentBranch()`が返す現在のbranch名だけを鍵に`gh pr view <branch>`を呼ぶ設計であり、解決されたbranch・PRが対象Issue（`detectGithubReviewStatus(root, issueNumber)`の`issueNumber`引数）に紐づくものであることを検証する手順が設計要素に一切無かった。反例1（誤検出、AC-4/AGENTS.md I4違反）: `segment start`が対象Issueとは異なるbranch（`main`や他Issueの`feature/441-...`）へcheckoutされたworktreeで実行されると、そのbranchのPRのレビュー・コメントが対象Issueへの「対応が必要な既存レビュー」として誤ってworkerプロンプトへ同梱される（AGENTS.md I4「1 Issue = 1 ブランチ = 1 worktree = 1 PR」の前提崩れを検出できない）。反例2（握りつぶし、AC-2/AC-3/AC-5違反）: 同じ状況で`gh pr view <branch>`が`no pull requests found`で失敗した場合（例: 対象branchが`main`）、「PR未作成＝非失敗・成功・0件」に分類され、対象Issueの実際のPRに存在するかもしれない未対応レビュー・コメントが警告なしに「無い」として握りつぶされる。branch解決自体の成否では検出できない失敗モードのため、本ADRはこれを是正する。
 
+2026-08-05、PR側のIssue紐づけ検証を反映した版（`23ed2457`）に対するdesign-gate（strict、独立2レビュア）が再度実行され、両レビュアともプロンプト展開の一部truncationにより`inconclusive: true`（SPEC.md本文・ADR本文の一部が展開されず検証不能）となったが、展開済みテキストのみから確認できる範囲で、レビュア1が`DESIGN_DANGLING_SCOPE_SECTION`（blocking、DESIGN.mdが自身に存在しない「スコープ外節」を複数箇所で参照し、成果物の自己完結性を欠く）を、レビュア2が`LOCAL_FINDING_PROVENANCE_LOST`（warning、ローカルモードの出力構造がcross-segmentで収集した各findingの由来ゲートを区別せず、差し戻し先workerがどのゲートを再実行すべきか判断できない）を検出した。前者はDESIGN.mdへ「対象外」節を新設し既存のあいまいな参照を是正する編集上の対応で足り、Decision（判定基準そのもの）の変更を伴わない。後者はローカルモードの出力データ構造にフィールドを追加する必要があり、本ADRのDecisionに影響するため、以下に選択肢を追加する。
+
 検討した選択肢（(a)コメント判定について）:
 
 1. **since基準を維持する（ADR-0025のまま）**: 既知の取りこぼしを引き続き受け入れる。本Issueの目的（resumeしたworkerが既存レビューフィードバックを確実に確認する）そのものを損なう既知の欠陥を放置することになり、implementation-gateの指摘と正面から矛盾するため不採用。
@@ -74,6 +76,11 @@ ADR-0025（Issue #446、本ADRと同一Issue）は、resumeされたセグメン
 2. **`gh-open-pr.ts`や`worktree.ts`側にIssue紐づけ検証層を追加する**: 検証ロジックを`review-status.ts`外の既存モジュールへ持ち込むと、それらモジュールの既存呼び出し元（release bump・root-cleanup run等）にも影響が及ぶ可能性があり、本Issueのスコープ（resumeしたworkerのレビューフィードバック検出）を超えるため不採用。
 3. **`review-status.ts`内で、`resolveCurrentBranch()`が返すbranch名をAGENTS.mdのブランチ命名規則（`<type>/<issue-id>-<slug>`）に照らし、対象issueNumberと一致するか（正規表現 `^[^/]+/${issueNumber}-`）を`gh pr view`呼び出し前に検証する（採用）**: 既存モジュール（`worktree.ts`・`gh-open-pr.ts`）への変更を伴わず、`review-status.ts`が既に持つ`issueNumber`引数のみで判定できる。`gh pr view`呼び出し前に検証することで、無関係なIssueのPRへのAPI呼び出し自体を避けられる。不一致の場合はbranch解決失敗と同じ「明示的な失敗」経路へ合流させるため、既存の合成規則（Issue側／PR側の分離）をそのまま再利用でき、新たな出力型の分岐を追加する必要が無い。
 
+検討した選択肢（(h) ローカルモードで収集する各blocking findingの由来ゲートを区別するかについて、design-gate指摘`LOCAL_FINDING_PROVENANCE_LOST`を受けて追加）:
+
+1. **由来ゲートを区別しない（初版の決定のまま）**: `unresolved_blocking_findings`の各要素は起動対象segmentと同じ単一の`gate`フィールドの下に並び、実際にどのgate reportから収集されたかは出力に現れない。差し戻し先workerが是正後にどのgateの再実行を進行役へ依頼すべきか、finding本文の自然文記述のみから推測する必要があり、AGENTS.md I1（追跡可能性）の観点で機械的な追跡性が弱い。不採用。
+2. **各findingに由来segment名を`source_segment`として付加する（採用）**: `detectLocalBlockingFindings()`が`spec`/`design`/`implementation`/`validation`のどのgate reportからfindingを収集したかは走査時点で既知の情報であり、追加のAPI呼び出し・ファイル読み込みを伴わずに各finding要素へ付加できる。差し戻し先workerは`source_segment`を見て是正後にどのgateの再実行が必要かを機械的に判断できる。
+
 ## Decision
 
 resumeされたセグメント作業ワーカーへ同梱する「未対応の既存レビューフィードバック」の判定基準を、ADR-0025の決定を置き換えて次のとおり確定する。
@@ -87,13 +94,14 @@ resumeされたセグメント作業ワーカーへ同梱する「未対応の�
 - **検出処理自体が失敗した場合**（Issue側の`gh`呼び出し失敗・JSON解釈失敗、またはPR側のbranch解決失敗・branchの対象Issue不一致・`gh`呼び出し失敗・JSON解釈失敗）: Issue側・PR側それぞれを「成功（0件以上のデータを実際に取得できた。PR側の『PR未作成』も非失敗の成功として扱う）」「失敗」に正規化したうえで、次のとおり合成する（ADR-0025の決定を置き換える）。
   - 両方失敗した場合のみ、検出結果を「未対応が無い」として扱わず`detection: 'failed'`（両側の失敗理由を含む`reason`）として明示的にプロンプトへ含める。
   - 一方が成功・他方が失敗した場合は、`detection: 'succeeded'`とし、成功した側で実際に検出済みの未対応レビュー・コメント（0件でもよい）をそのまま保持したうえで、失敗した側の理由を`partial_failures`として付加する。他方の一時的な障害を理由に、既に検出できていたフィードバックを破棄してはならない——これは本Issue自身が解消対象とする失敗モード（resumeしたworkerがフィードバックを一切参照しない）を合成ロジック自身が部分障害時に再導入することを防ぐための決定である。
-- **ローカルモードのgate report走査**: 起動対象segment（差し戻し先）と同名のgate reportだけでなく、`spec`/`design`/`implementation`/`validation` 全segmentのgate report（`reviews/<segment>.yaml`）を走査し、`gate.blockers` のうち `origin` が起動対象segmentに対応する値（`spec`→`specification`、それ以外は同名）と一致する `severity: blocking` のfindingのみを収集する。
+- **ローカルモードのgate report走査**: 起動対象segment（差し戻し先）と同名のgate reportだけでなく、`spec`/`design`/`implementation`/`validation` 全segmentのgate report（`reviews/<segment>.yaml`）を走査し、`gate.blockers` のうち `origin` が起動対象segmentに対応する値（`spec`→`specification`、それ以外は同名）と一致する `severity: blocking` のfindingのみを収集する。収集した各findingには、由来元のgate reportのsegment名を`source_segment`として付加する（design-gate指摘`LOCAL_FINDING_PROVENANCE_LOST`是正）。
 - **ローカルモードのgate report読み込み失敗時**: `tryReadYamlFile()`（`src/lib/yaml-io.ts`、既存・変更なし）を用いる。同関数は「ファイル不存在」時は例外を投げず`undefined`を返し、「ファイルは存在するがYAML解釈に失敗」した場合は例外を投げる既存挙動を持つ。前者（ファイル不存在）はそのsegmentにgate report自体が無い正常系として「0件」で継続し、後者（YAML解釈失敗）のみをsegment単位で捕捉し失敗として扱う。読み込みに成功したsegment（ファイル不存在による0件を含む）から収集した`origin`一致のblocking findingは、他のsegmentの読み込みが失敗していても保持する（2026-08-05再改定、design-gate指摘`LOCAL_MODE_PARTIAL_FAILURE_DISCARDS_DETECTED_FINDINGS`。GitHub側の「Issue側／PR側の一方のみが失敗した場合の合成方針」と対称にする）。`spec`/`design`/`implementation`/`validation`の全4segmentの読み込みがすべて失敗した場合のみ`detection: 'failed'`とする。1segmentでも読み込みに成功していれば`detection: 'succeeded'`とし、収集済みのblocking finding（0件でもよい）をそのまま保持したうえで、読み込みに失敗したsegment名・理由を`local_read_failures`（非空の場合のみ付加するフィールド）として明示する。ADR-0025では「blocker無し」と区別せずundefinedを返す設計だったが、AGENTS.md I8（安全側ラチェット）に照らし、検出失敗と検出結果ゼロを区別しない状態、および部分障害時に既に検出済みの情報を破棄する状態はいずれも是正する。
 
 ## Consequences
 
-- 利点: コメント判定の時刻カットオフ廃止により、「未対応フィードバックが無関係なcommitの存在によって不可視化される」という、本Issue #446自身が解決対象とする失敗モードと同型の取りこぼしが原理的に発生しなくなる。ローカルモードの全segment走査により、AGENTS.mdが定めるorigin基準の差し戻し機構が実際に機能するようになる。Issue側／PR側の検出分離により、Draft PR作成前でも進行役の修正依頼コメントが検出可能になり、AC-3の要求範囲が実装可能になる。Issue側・PR側の一方のみが失敗した場合に成功側の検出結果を保持する合成規則、およびそれと対称なローカルモードの全segment走査における部分障害合成規則により、一時的な障害が、既に検出できていた未対応フィードバックを不可視化する（本Issueが解決対象とする失敗モードと同型の退行）ことをGitHub・ローカル両モードで防ぐ。`findOpenPrByHead()`を経由しない直接`gh pr view`呼び出しへの変更により、PR側の一時的な障害を「PR未作成」として握りつぶす経路も解消し、GitHub API呼び出し回数もPR解決成功時2回から1回へ削減される。branchが対象Issueに紐づくものであることの検証により、AGENTS.md I4（1 Issue = 1 ブランチ = 1 worktree = 1 PR）の前提が崩れた状態（誤ったworktree・branchでの`segment start`実行）を、無関係なIssueのレビュー・コメントを誤って同梱する、または対象Issueの実際の未対応フィードバックを握りつぶす、のいずれの方向にも倒さず明示的な失敗として検出できるようになる。
+- 利点: コメント判定の時刻カットオフ廃止により、「未対応フィードバックが無関係なcommitの存在によって不可視化される」という、本Issue #446自身が解決対象とする失敗モードと同型の取りこぼしが原理的に発生しなくなる。ローカルモードの全segment走査により、AGENTS.mdが定めるorigin基準の差し戻し機構が実際に機能するようになる。Issue側／PR側の検出分離により、Draft PR作成前でも進行役の修正依頼コメントが検出可能になり、AC-3の要求範囲が実装可能になる。Issue側・PR側の一方のみが失敗した場合に成功側の検出結果を保持する合成規則、およびそれと対称なローカルモードの全segment走査における部分障害合成規則により、一時的な障害が、既に検出できていた未対応フィードバックを不可視化する（本Issueが解決対象とする失敗モードと同型の退行）ことをGitHub・ローカル両モードで防ぐ。`findOpenPrByHead()`を経由しない直接`gh pr view`呼び出しへの変更により、PR側の一時的な障害を「PR未作成」として握りつぶす経路も解消し、GitHub API呼び出し回数もPR解決成功時2回から1回へ削減される。branchが対象Issueに紐づくものであることの検証により、AGENTS.md I4（1 Issue = 1 ブランチ = 1 worktree = 1 PR）の前提が崩れた状態（誤ったworktree・branchでの`segment start`実行）を、無関係なIssueのレビュー・コメントを誤って同梱する、または対象Issueの実際の未対応フィードバックを握りつぶす、のいずれの方向にも倒さず明示的な失敗として検出できるようになる。ローカルモードで収集する各findingに`source_segment`を付加することで、差し戻し先workerが是正後に再実行を依頼すべきゲートを機械的に特定できるようになる（AGENTS.md I1 追跡可能性）。
 - 欠点・limitation:
+  - ローカルモードのcross-segment走査は、由来元のゲートが再実行され`reviews/<segment>.yaml`が更新されるまでの間、是正済みのfindingが`source_segment`付きのまま次回resumeで繰り返し検出され続ける（過検出）。コメント側の時刻カットオフ廃止トレードオフと同様の性質（見せすぎる方が安全側）であり、AC-6の要求とは競合しない（AGENTS.md I8）。
   - コメント判定は時刻カットオフを廃止したことで、既に別の手段で実質的に対応済みの過去コメントも、そのPRが存在する限り毎回のresumeで再掲され続ける（過検出）。内容がそのままプロンプトに含まれるため、worker・進行役が既知の対応済みコメントと判断して読み飛ばせることを前提とする。プロンプト肥大化のトリミング戦略はSPEC.mdスコープ外節のとおり引き続き別Issue対応とする。
   - ローカルモードの全segment走査は、対象Issueのsegment数（最大4ファイル）分のファイル読み込みが増えるが、いずれも小さいYAMLファイルでありパフォーマンス上の懸念は無い。
   - PR側の「PR未作成」判定は`gh` CLIが出力するstderrの固定文言`no pull requests found`への一致に依存する。将来の`gh` CLIバージョンでこの文言が変更された場合、実際にはPRが単に存在しないだけのケースが「失敗」側へ倒れる（stderr不一致→失敗扱い）が、これは安全側（AC-5）であり、逆方向（実際の失敗を「PR未作成」として握りつぶす）より許容できる。
