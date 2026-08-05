@@ -25,7 +25,7 @@ SPEC.mdはこの両立可否をdesign segmentでの技術検証事項として�
 
 **1. Bashスクリプト単体ではAgent tool呼び出しを起動できないため、起動フローを「lease取得・contract取得（script）→Agent tool呼び出し（進行役自身の判断・操作）→完了確認・lease解放（script）」の3段に分割する。**
 
-現行の`launch_worker()`はlease取得からサブプロセスのwait・完了確認・lease解放までを1回のBashツール呼び出し内で完結させている。しかしAgent toolを呼び出す主体は進行役を駆動するLLM自身であり、シェルスクリプトからその呼び出しを代理発行することはできない。したがって新方式では、`_dispatch_via_agent_tool()`（`claude.sh`新設）がlease取得とrole_contract取得までを行い、role_contractを一時ディレクトリ内のファイル（`contract.md`）へ書き出したうえで、そのファイルパスと固定・短文のdispatch指示テンプレート、および一時ディレクトリ自体の絶対パス（`DISPATCH_TEMP_DIR=<path>`行）を標準出力へ書いて新規exit code `4`（"dispatch_required"）で復帰する（role_contract本文そのものは標準出力へ一切書かない。理由はDecision 2参照）。leaseはここでは解放しない。進行役はこの出力を受けて自らAgent toolを呼び出し（`subagent_type: "agent-skill-chain-worker"`、`prompt`に定型文＋contractファイルの絶対パスのみ、`run_in_background: false`）、呼び出しが完了した後に`DISPATCH_TEMP_DIR=`行の値を第1位置引数として新規スクリプト`worker-launch-verify.sh`を実行し完了確認とlease解放を行う（一時ディレクトリのパスはこの引数経由でのみ受け渡され、標準出力の再利用以外の暗黙の共有は行わない）。
+現行の`launch_worker()`はlease取得からサブプロセスのwait・完了確認・lease解放までを1回のBashツール呼び出し内で完結させている。しかしAgent toolを呼び出す主体は進行役を駆動するLLM自身であり、シェルスクリプトからその呼び出しを代理発行することはできない。したがって新方式では、`_dispatch_via_agent_tool()`（`claude.sh`新設）がlease取得とrole_contract取得までを行い、role_contractを一時ディレクトリ内のファイル（`contract.md`）へ書き出したうえで、そのファイルパスと固定・短文のdispatch指示テンプレート、呼び出し元のissue_id（`ISSUE_ID=<issue_id>`行）、および一時ディレクトリ自体の絶対パス（`DISPATCH_TEMP_DIR=<path>`行）を標準出力へ書いて新規exit code `4`（"dispatch_required"）で復帰する（role_contract本文そのものは標準出力へ一切書かない。理由はDecision 2参照）。leaseはここでは解放しない。進行役はこの出力を受けて自らAgent toolを呼び出し（`subagent_type: "agent-skill-chain-worker"`、`prompt`に定型文＋contractファイルの絶対パスのみ、`run_in_background: false`）、呼び出しが完了した後に`ISSUE_ID=`行・`DISPATCH_TEMP_DIR=`行の値を第1・第2位置引数として新規スクリプト`worker-launch-verify.sh`を実行し完了確認とlease解放を行う（issue_idはworker-launch.shと同じworktree自己解決ロジック（ADR-0029）の入力および`report latest`/`release_lease`呼び出しに必須であり、一時ディレクトリのパスだけからは導出できないため独立した引数として渡す。両値はこの引数経由でのみ受け渡され、標準出力の再利用以外の暗黙の共有は行わない）。
 
 **2. I5の両立は「輸送経路の変更であって著述主体の変更ではない」ことに加え、「role_contract本文が進行役自身の生成コンテキストへ一度も入らない」ことで成立させる。**
 
@@ -43,7 +43,7 @@ Agent tool経由のworker実行は進行役セッションの生存に本質的�
 
 **4. ツール許可範囲の粒度低下を受容し、既定off・限定的なツール一覧で緩和する。**
 
-現行の`--allowed-tools`はBashコマンド単位（例: `Bash(git commit:*)`）の許可制御を提供するが、Claude Codeのカスタムsubagent種別（`.claude/agents/*.md`の`tools:`フロントマター）はツール単位（`Bash`全体の可否等）でしか制御できない。同じ粒度の多重防御は再現できないため、新設するカスタムsubagent種別`agent-skill-chain-worker`では、少なくとも`Agent`（無制限な再帰dispatchの防止）・`ExitPlanMode`・`NotebookEdit`・`WebFetch`・`WebSearch`・`Artifact`を明示的に除外し、ワーカーの正規責務範囲に含まれるツールのみ（`Read, Grep, Glob, Edit, Write, MultiEdit, Bash`）を許可する。Bashコマンド単位の防御層が1つ減ることは既知のリスクとして受容し、要件8の既定無効（opt-in）がこのリスクの実害露出を限定する。
+現行の`--allowed-tools`はBashコマンド単位（例: `Bash(git commit:*)`）の許可制御を提供するが、Claude Codeのカスタムsubagent種別（`.claude/agents/*.md`の`tools:`フロントマター）はツール単位（`Bash`全体の可否等）でしか制御できない。同じ粒度の多重防御は再現できないため、新設するカスタムsubagent種別`agent-skill-chain-worker`では、少なくとも`Agent`（無制限な再帰dispatchの防止）・`ExitPlanMode`・`NotebookEdit`・`WebFetch`・`WebSearch`・`Artifact`を明示的に除外し、ワーカーの正規責務範囲に含まれるツールのみ（`Read, Grep, Glob, Edit, Write, MultiEdit, Bash`）を許可する。`Read`除外（Decision 2が採用した`cat`方式の完全性担保をツール制限でも構造的に強制する案）を検討したが、(a) workerはSPEC.md・accepted ADR・標準規約等、contract.md以外の既存成果物を`inputs`として読む正規責務を持つ、(b) Claude CodeのEditツールは同一会話内での対象ファイルへの先行Read呼び出しを前提とするため`Read`除外はworkerの成果物編集機能自体を破壊する、の2点により`Read`は除外できないと判断した（DESIGN.md「コンポーネント構成」カスタムsubagent種別説明に同一の論拠を記載）。したがってAC-4のcontract.md初期読み込みの完全性担保は、`cat`使用の定型指示とDecision 2記載のSHA256監査証跡の2層に留まり、workerが指示に反し`Read`でcontract.mdを読み込む残存リスクを既知の限界として受容する。Bashコマンド単位の防御層が1つ減ることは既知のリスクとして受容し、要件8の既定無効（opt-in）がこのリスクの実害露出を限定する。
 
 **5. 上記1〜4が前提とする実行時特性は、進行役セッションでの直接実地検証によって裏付けられている。**
 
