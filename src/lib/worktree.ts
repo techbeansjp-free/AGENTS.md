@@ -10,7 +10,13 @@ export interface WorktreeEntry {
   branch?: string;
   bare?: boolean;
   detached?: boolean;
+  prunable?: boolean;
 }
+
+export type IssueWorktreeResolution =
+  | { status: 'found'; worktree: WorktreeEntry }
+  | { status: 'not_found' }
+  | { status: 'ambiguous'; candidatePaths: string[] };
 
 /**
  * worktree の正本は `git worktree list --porcelain` であり、.worktrees/ 配下の
@@ -35,6 +41,8 @@ export function listWorktrees(repoRoot: string): WorktreeEntry[] {
       if (current) current.bare = true;
     } else if (line === 'detached') {
       if (current) current.detached = true;
+    } else if (line.startsWith('prunable')) {
+      if (current) current.prunable = true;
     }
   }
   if (current?.path) entries.push(current as WorktreeEntry);
@@ -176,7 +184,8 @@ function isIntegratedIntoDefaultBranch(worktreePath: string, branch: string): bo
 }
 
 /**
- * config/agent-skill-chain.yaml の worktree.path_pattern に Issue番号を埋め込んだ正規表現で
+ * Issue worktree解決の共有実装。config/agent-skill-chain.yaml の worktree.path_pattern に
+ * Issue番号を埋め込んだ正規表現で
  * `git worktree list --porcelain` の実体を照合する（standards/GIT_CONVENTIONS.md が定める
  * worktreeの正本の定義）。
  *
@@ -198,11 +207,7 @@ function isIntegratedIntoDefaultBranch(worktreePath: string, branch: string): bo
  *    環境に限られる）。ブランチ名が判明していて単に一致しない場合（issueNumberの取り違え等）まで
  *    無条件で信頼すると誤爆の危険があるため対象外とする。
  */
-export function findIssueWorktree(
-  root: string,
-  config: AgentSkillChainConfig,
-  issueNumber: string,
-): WorktreeEntry | undefined {
+function issueWorktreePathRegex(config: AgentSkillChainConfig, issueNumber: string): RegExp {
   const timestampSource = formatToRegex(config.worktree.timestamp.format).source.replace(/^\^|\$$/g, '');
   const patternSource = expandPattern(config.worktree.path_pattern, {
     issue_created_at: timestampSource,
@@ -210,11 +215,15 @@ export function findIssueWorktree(
     issue_id: issueNumber,
     slug: '[a-z0-9-]+',
   });
-  const pathRegex = new RegExp(`^${patternSource}/?$`);
-  const entries = listWorktrees(root);
-  const found = entries.find((w) => pathRegex.test(path.basename(w.path)));
-  if (found) return found;
+  return new RegExp(`^${patternSource}/?$`);
+}
 
+function findIssueWorktreeFallback(
+  root: string,
+  config: AgentSkillChainConfig,
+  issueNumber: string,
+  entries: WorktreeEntry[],
+): WorktreeEntry | undefined {
   const branchPatternSource = expandPattern(config.branch.pattern, {
     type: '[a-z]+',
     issue_id: issueNumber,
@@ -238,6 +247,44 @@ export function findIssueWorktree(
   }
 
   return undefined;
+}
+
+export function findIssueWorktree(
+  root: string,
+  config: AgentSkillChainConfig,
+  issueNumber: string,
+): WorktreeEntry | undefined {
+  const pathRegex = issueWorktreePathRegex(config, issueNumber);
+  const entries = listWorktrees(root);
+  const found = entries.find((w) => pathRegex.test(path.basename(w.path)));
+  if (found) return found;
+  return findIssueWorktreeFallback(root, config, issueNumber, entries);
+}
+
+/**
+ * Issue番号に対応する実在worktreeを一意に解決する。既存の `findIssueWorktree` は最初の
+ * path-pattern一致を返す互換挙動を維持する一方、worker起動経路では複数一致を明示的に拒否する。
+ * `prunable` は既に実体を失った管理エントリなので候補へ数えない。ただしCI単一checkoutの判定は
+ * 管理エントリが実際に1件だけの場合へ限定するため、フォールバックには未加工の一覧を渡す。
+ */
+export function resolveIssueWorktreeExactlyOne(
+  root: string,
+  config: AgentSkillChainConfig,
+  issueNumber: string,
+): IssueWorktreeResolution {
+  const pathRegex = issueWorktreePathRegex(config, issueNumber);
+  const entries = listWorktrees(root);
+  const candidates = entries.filter((entry) => !entry.prunable && pathRegex.test(path.basename(entry.path)));
+
+  if (candidates.length > 1) {
+    return { status: 'ambiguous', candidatePaths: candidates.map((entry) => entry.path) };
+  }
+  if (candidates.length === 1) {
+    return { status: 'found', worktree: candidates[0] };
+  }
+
+  const fallback = findIssueWorktreeFallback(root, config, issueNumber, entries);
+  return fallback ? { status: 'found', worktree: fallback } : { status: 'not_found' };
 }
 
 /** 特定Issue番号に限定しない、worktree.path_pattern汎用の検証用正規表現。ci/verify-worktree-path.sh用。 */

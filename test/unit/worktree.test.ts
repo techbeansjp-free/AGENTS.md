@@ -11,6 +11,7 @@ import {
   defaultBranch,
   hasUnpushedCommits,
   findIssueWorktree,
+  resolveIssueWorktreeExactlyOne,
   worktreePathRegex,
   branchNameRegex,
   resolveCurrentBranch,
@@ -314,6 +315,107 @@ test('findIssueWorktree: worktree.path_patternに沿ったworktreeをissue番号
 
   const notFound = findIssueWorktree(repo.dir, config, '12345');
   assert.equal(notFound, undefined, '存在しないissue番号はundefined');
+});
+
+test('resolveIssueWorktreeExactlyOne: 命名パターンに一致するworktreeが1件ならfoundを返す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-42-sample-slug`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', 'feature/42-sample-slug', worktreePath, 'main']);
+
+  const result = resolveIssueWorktreeExactlyOne(repo.dir, config, '42');
+
+  assert.equal(result.status, 'found');
+  if (result.status === 'found') assert.equal(path.resolve(result.worktree.path), path.resolve(worktreePath));
+});
+
+test('resolveIssueWorktreeExactlyOne: 命名パターン0件でも現在branchが一致すればフォールバックをfoundへ変換する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+  gitIn(repo.dir, ['checkout', '-b', 'feature/42-ci-checkout']);
+
+  const result = resolveIssueWorktreeExactlyOne(repo.dir, config, '42');
+
+  assert.equal(result.status, 'found');
+  if (result.status === 'found') assert.equal(path.resolve(result.worktree.path), path.resolve(repo.dir));
+});
+
+test('resolveIssueWorktreeExactlyOne: 命名パターンもbranchフォールバックも一致しなければnot_foundを返す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+
+  assert.deepEqual(resolveIssueWorktreeExactlyOne(repo.dir, config, '42'), { status: 'not_found' });
+});
+
+test('resolveIssueWorktreeExactlyOne: 同一issueのworktreeが2件なら候補パス付きambiguousを返す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+  const first = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-42-first-slug`);
+  const second = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-bugfix-42-second-slug`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', 'feature/42-first-slug', first, 'main']);
+  gitIn(repo.dir, ['worktree', 'add', '-b', 'bugfix/42-second-slug', second, 'main']);
+
+  const result = resolveIssueWorktreeExactlyOne(repo.dir, config, '42');
+
+  assert.equal(result.status, 'ambiguous');
+  if (result.status === 'ambiguous') {
+    assert.deepEqual(
+      result.candidatePaths.map((candidate) => path.resolve(candidate)).sort(),
+      [first, second].map((candidate) => path.resolve(candidate)).sort(),
+    );
+  }
+});
+
+test('resolveIssueWorktreeExactlyOne: prunableな同issueエントリは候補から除外する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+  const active = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-42-active-slug`);
+  const stale = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-bugfix-42-stale-slug`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', 'feature/42-active-slug', active, 'main']);
+  gitIn(repo.dir, ['worktree', 'add', '-b', 'bugfix/42-stale-slug', stale, 'main']);
+  fs.rmSync(stale, { recursive: true, force: true });
+  assert.equal(
+    listWorktrees(repo.dir).find((entry) => path.resolve(entry.path) === path.resolve(stale))?.prunable,
+    true,
+    '前提: 削除したworktreeがprunableとして列挙されること',
+  );
+
+  const result = resolveIssueWorktreeExactlyOne(repo.dir, config, '42');
+
+  assert.equal(result.status, 'found');
+  if (result.status === 'found') assert.equal(path.resolve(result.worktree.path), path.resolve(active));
+});
+
+test('resolveIssueWorktreeExactlyOne: prunableエントリ併存時はCI単一checkoutフォールバックを発火させない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const config = loadConfig(repo.dir);
+  const stale = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-99-stale-slug`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', 'feature/99-stale-slug', stale, 'main']);
+  fs.rmSync(stale, { recursive: true, force: true });
+
+  const sha = gitRev(repo.dir);
+  gitIn(repo.dir, ['checkout', '--detach', sha]);
+  const originalHeadRef = process.env.GITHUB_HEAD_REF;
+  delete process.env.GITHUB_HEAD_REF;
+  t.after(() => {
+    if (originalHeadRef !== undefined) process.env.GITHUB_HEAD_REF = originalHeadRef;
+  });
+
+  const entries = listWorktrees(repo.dir);
+  assert.equal(entries.length, 2, '前提: rootとprunableな管理エントリが列挙されること');
+  assert.equal(
+    entries.find((entry) => path.resolve(entry.path) === path.resolve(stale))?.prunable,
+    true,
+    '前提: 実体を削除したworktreeがprunableであること',
+  );
+
+  assert.deepEqual(resolveIssueWorktreeExactlyOne(repo.dir, config, '42'), { status: 'not_found' });
 });
 
 test('findIssueWorktree: .worktrees型レイアウトが無い単一checkout状態でも、現在のブランチがissue_idに一致すればrootをentryとして返す（CI actions/checkoutフォールバック）', (t) => {

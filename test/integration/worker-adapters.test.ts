@@ -51,9 +51,14 @@ interface WorkerReport {
 
 /** 起動ラッパー（worker-launch.sh）を bash で実行し、終了コードをそのまま観測する。 */
 function runWorkerLauncher(worktreePath: string, args: string[], env: NodeJS.ProcessEnv): ScriptResult {
-  const script = path.join(worktreePath, '.agent-skill-chain', 'scripts', 'worker-launch.sh');
+  return runWorkerLauncherFrom(worktreePath, worktreePath, args, env);
+}
+
+/** 呼び出すscriptの所在とcwdを分離し、対象worktree外からの絶対パス起動を再現する。 */
+function runWorkerLauncherFrom(scriptRoot: string, cwd: string, args: string[], env: NodeJS.ProcessEnv): ScriptResult {
+  const script = path.join(scriptRoot, '.agent-skill-chain', 'scripts', 'worker-launch.sh');
   try {
-    const stdout = execFileSync('bash', [script, ...args], { cwd: worktreePath, encoding: 'utf8', env });
+    const stdout = execFileSync('bash', [script, ...args], { cwd, encoding: 'utf8', env });
     return { status: 0, stdout, stderr: '' };
   } catch (error) {
     const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
@@ -199,6 +204,66 @@ test('claude launch_worker: WORKER_CMDが成果物commit+push+report completed�
   const receivedContract = fs.readFileSync('/tmp/worker-received-contract.txt', 'utf8');
   assert.match(receivedContract, /^role: spec_worker/);
   fs.rmSync('/tmp/worker-received-contract.txt', { force: true });
+});
+
+test('worker-launch.sh: 複数issue worktree並存下でmainの絶対パスから起動しても対象worktreeへ再実行し、そのHEADで完了確認する（ISSUE-442 AC-1, AC-2, AC-3, AC-5）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+
+  const other = runCli(['issue', 'start', 'ISSUE-2', 'bugfix', 'other-worktree', FIXED_TIMESTAMP], { cwd: repo.dir });
+  assert.equal(other.status, 0, other.stderr);
+  const [, otherWorktreePath] = other.stdout.trim().split('\n');
+  installCliShim(otherWorktreePath);
+
+  fs.writeFileSync(path.join(repo.dir, 'MAIN_ONLY.md'), '# main only\n');
+  execFileSync('git', ['add', 'MAIN_ONLY.md'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: diverge main head'], { cwd: repo.dir, stdio: 'pipe' });
+  const mainHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const targetHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  assert.notEqual(mainHead, targetHead, '前提: 呼び出し元mainと対象worktreeのHEADが異なること');
+
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-worker-cwd-'));
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const cwdCapture = path.join(scratchDir, 'cwd.txt');
+  const workerCmd = [
+    'cat >/dev/null',
+    `pwd > ${JSON.stringify(cwdCapture)}`,
+    'echo "target output" > WORKER_OUTPUT.md',
+    `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: target worktree output")`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+  ].join(' && ');
+  const env = envWithout([], { ANTHROPIC_API_KEY: 'dummy-key-not-logged', WORKER_CMD: workerCmd });
+
+  const result = runWorkerLauncherFrom(repo.dir, repo.dir, ['ISSUE-1', 'spec'], env);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(path.resolve(fs.readFileSync(cwdCapture, 'utf8').trim()), path.resolve(worktreePath));
+  assert.ok(fs.existsSync(path.join(worktreePath, 'WORKER_OUTPUT.md')), '対象worktreeだけに成果物が作られること');
+  assert.equal(fs.existsSync(path.join(repo.dir, 'WORKER_OUTPUT.md')), false, 'mainへ成果物を誤作成しないこと');
+  assert.equal(fs.existsSync(path.join(otherWorktreePath, 'WORKER_OUTPUT.md')), false, '別issue worktreeへ成果物を誤作成しないこと');
+  assert.equal(readWorkerReport(repo.dir, 'spec').status, 'completed', '対象worktreeのHEAD基準でcompletedになること');
+});
+
+test('worker-launch.sh: 同一issueのworktreeが複数ならlease取得前にexit 2で停止する（ISSUE-442 AC-4）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  const duplicatePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-bugfix-1-duplicate-worktree`);
+  execFileSync('git', ['worktree', 'add', '-b', 'bugfix/1-duplicate-worktree', duplicatePath, 'main'], {
+    cwd: repo.dir,
+    stdio: 'pipe',
+  });
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-worker-not-started-'));
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const workerCapture = path.join(scratchDir, 'started');
+  const env = envWithout([], { WORKER_CMD: `touch ${JSON.stringify(workerCapture)}` });
+
+  const result = runWorkerLauncherFrom(repo.dir, repo.dir, ['ISSUE-1', 'spec'], env);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /対象Issueのworktreeを一意に解決できませんでした/);
+  assert.equal(fs.existsSync(workerCapture), false, 'ワーカープロセスは起動されないこと');
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
+  assert.equal(acquire.status, 0, '停止時点ではlease未取得であること: ' + acquire.stderr);
 });
 
 // --- (h) 既定WORKER_CMD（未指定時）: --allowed-toolsによる責務スコープallowlist ------------
@@ -602,7 +667,7 @@ test('codex launch_worker (直接呼び出し, ASC_WORKER_MODEL_TIERはあるが
   // ASC_WORKER_MODEL_TIERだけを直接注入した場合の防御層のみを検証する。
 
   const { stubDir, argvCapturePath } = installCodexStub(t);
-  const env = envWithout([], {
+  const env = envWithout(['ASC_WORKER_MODEL', 'ASC_WORKER_REASONING_EFFORT'], {
     CODEX_AUTH_PROBE_CMD: 'true',
     PATH: `${stubDir}:${process.env.PATH}`,
     ASC_WORKER_MODEL_TIER: 'highest_capability',

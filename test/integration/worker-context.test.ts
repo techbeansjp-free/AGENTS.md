@@ -6,8 +6,44 @@ import {
   unsetWorkerAdapter,
   removeWorkerSegmentOverrides,
   removeWorkerModelTiers,
+  FIXED_TIMESTAMP,
 } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+
+test('worker context: issue start済みならissue_number直後にworktree_pathを出力する（ISSUE-442 AC-1）', () => {
+  const repo = createTmpRepo();
+  try {
+    const started = runCli(['issue', 'start', 'ISSUE-442', 'bugfix', 'worker-launch-worktree-cd', FIXED_TIMESTAMP], {
+      cwd: repo.dir,
+    });
+    assert.equal(started.status, 0, started.stderr);
+    const [, worktreePath] = started.stdout.trim().split('\n');
+
+    const result = runCli(['worker', 'context', 'ISSUE-442', 'spec'], { cwd: repo.dir });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      'adapter=claude',
+      'backend=local',
+      'issue_number=442',
+      `worktree_path=${worktreePath}`,
+    ]);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('worker context: issue start未実行ならworktree_pathを出力しない（ISSUE-442 AC-4）', () => {
+  const repo = createTmpRepo();
+  try {
+    const result = runCli(['worker', 'context', 'ISSUE-442', 'spec'], { cwd: repo.dir });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.stdout.trim().split('\n'), ['adapter=claude', 'backend=local', 'issue_number=442']);
+  } finally {
+    repo.cleanup();
+  }
+});
 
 // ISSUE-307 SPEC.md AC-1, AC-2, AC-3, AC-7: `agent-skill-chain worker context <issue_id> [segment]`
 // の CLI 出力そのものを検証する（選択解決・ティア解決ロジック自体は
