@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   allLeasesFor,
-  releaseLeaseRef,
   renewLeaseRef,
   type WriterLease,
 } from '../../src/lib/github-lease.js';
@@ -22,6 +22,12 @@ function makeStub() {
     env: stub.env(process.env),
     cleanup: () => fs.rmSync(scratch, { recursive: true, force: true }),
   };
+}
+
+function activeLabelCount(stub: ReturnType<typeof createGhStub>): number {
+  return Object.values(stub.readState().issueLabels).filter((labels) =>
+    labels.includes('writer-lease:active'),
+  ).length;
 }
 
 function acquireAndExpire(
@@ -130,7 +136,7 @@ test('lease reclaim: actor・日時・Issue・segment・旧holderを監査コメ
 
 test('lease reclaim: 検査時SHAよりrefが進んだ場合はCAS削除を拒否する（AC-5）', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
-  const { env, cleanup } = makeStub();
+  const { stub, env, cleanup } = makeStub();
   t.after(() => {
     repo.cleanup();
     cleanup();
@@ -150,10 +156,101 @@ test('lease reclaim: 検査時SHAよりrefが進んだ場合はCAS削除を拒�
   assert.notEqual(updated.sha, stale.sha);
   assert.equal(updated.lease.writer_lease.expires_at, stale.lease.writer_lease.expires_at);
 
-  const released = releaseLeaseRef('55', 'implementation', repo.dir, stale.sha);
-  assert.equal(released.ok, false);
-  if (!released.ok) assert.equal(released.reason, 'conflict');
+  const ref = 'refs/agent-skill-chain/leases/55-implementation';
+  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+  execFileSync(realGit, ['--git-dir', repo.remoteDir, 'update-ref', ref, stale.sha, updated.sha]);
+
+  const markerPath = path.join(path.dirname(stub.binDir), 'git-proxy-triggered');
+  const gitProxyPath = path.join(stub.binDir, 'git');
+  fs.writeFileSync(
+    gitProxyPath,
+    `#!/usr/bin/env node
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+if (args[0] === 'push' && args.some((arg) => arg.startsWith('--force-with-lease=${ref}:'))) {
+  const advanced = spawnSync(${JSON.stringify(realGit)}, [
+    '--git-dir',
+    ${JSON.stringify(repo.remoteDir)},
+    'update-ref',
+    ${JSON.stringify(ref)},
+    ${JSON.stringify(updated.sha)},
+    ${JSON.stringify(stale.sha)},
+  ], { encoding: 'utf8' });
+  if (advanced.status !== 0) {
+    process.stderr.write(advanced.stderr || 'git proxy: ref更新に失敗しました\\n');
+    process.exit(advanced.status || 1);
+  }
+  fs.writeFileSync(${JSON.stringify(markerPath)}, 'triggered');
+}
+const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit' });
+process.exit(result.status === null ? 1 : result.status);
+`,
+    { mode: 0o755 },
+  );
+  const raceEnv = { ...env, PATH: `${stub.binDir}${path.delimiter}${env.PATH}` };
+
+  const reclaimed = runCli(['lease', 'reclaim', 'ISSUE-55', 'implementation', '--confirm'], {
+    cwd: repo.dir,
+    env: raceEnv,
+  });
+  assert.equal(reclaimed.status, 1);
+  assert.match(reclaimed.stderr, /回収に失敗しました（検査後にrefが更新されています）/);
+  assert.equal(fs.existsSync(markerPath), true, 'CLIの削除push直前に競合更新が実行されること');
   assert.equal(allLeasesFor('55', repo.dir)[0]?.sha, updated.sha);
+});
+
+test('lease reclaim: activeラベルと可視性コメントを除去しWIP枠を解放する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  for (const issueNumber of ['58', '59', '60']) {
+    acquireAndExpire(repo.dir, env, issueNumber);
+  }
+  assert.equal(activeLabelCount(stub), 3);
+  assert.ok((stub.readState().issueLabels['58'] ?? []).includes('writer-lease:active'));
+  assert.ok(
+    (stub.readState().comments['58'] ?? []).some((comment) =>
+      comment.body.includes('<!-- agent-skill-chain:lease -->'),
+    ),
+  );
+
+  const blocked = runCli(['lease', 'acquire', 'ISSUE-61', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(blocked.status, 1);
+  assert.match(blocked.stderr, /WIP上限/);
+
+  const reclaimed = runCli(['lease', 'reclaim', 'ISSUE-58', 'implementation', '--confirm'], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(reclaimed.status, 0, reclaimed.stderr);
+  const stateAfterReclaim = stub.readState();
+  assert.equal(activeLabelCount(stub), 2);
+  assert.equal(
+    (stateAfterReclaim.issueLabels['58'] ?? []).includes('writer-lease:active'),
+    false,
+  );
+  assert.equal(
+    (stateAfterReclaim.comments['58'] ?? []).some((comment) =>
+      comment.body.includes('<!-- agent-skill-chain:lease -->'),
+    ),
+    false,
+  );
+  assert.ok(
+    (stateAfterReclaim.comments['58'] ?? []).some((comment) =>
+      comment.body.includes('<!-- agent-skill-chain:lease-reclaim -->'),
+    ),
+  );
+
+  const acquiredAfterReclaim = runCli(['lease', 'acquire', 'ISSUE-61', 'implementation'], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(acquiredAfterReclaim.status, 0, acquiredAfterReclaim.stderr);
+  assert.equal(activeLabelCount(stub), 3);
 });
 
 test('lease reclaim: writer credentialが無くても回収でき、credentialを作成しない（AC-7）', (t) => {

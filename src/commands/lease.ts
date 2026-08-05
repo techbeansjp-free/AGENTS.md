@@ -470,6 +470,10 @@ export async function reclaim(args: string[]): Promise<number> {
       );
     }
 
+    // ref削除後は、releaseと同じく有効leaseの可視性情報もbest-effortで片付ける。
+    cleanupLeaseComment(number, existing.lease.writer_lease.holder, root);
+    unmarkActiveWriterLeaseLabel(number, root);
+
     const actorFlagIndex = args.indexOf('--actor');
     const explicitActor = actorFlagIndex === -1 ? undefined : args[actorFlagIndex + 1];
     const configuredActor = git(['config', 'user.name'], root);
