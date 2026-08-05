@@ -30,6 +30,10 @@ ADR-0025（Issue #446、本ADRと同一Issue）は、resumeされたセグメン
 1. `LOCAL_MODE_PARTIAL_FAILURE_DISCARDS_DETECTED_FINDINGS`: ローカルモードの「ローカルモードのgate report読み込み失敗時」の決定は「1つでもYAML解釈に失敗したsegmentがあればdetection:'failed'」とのみ規定しており、GitHub側で直前に是正したばかりの「成功した経路の検出結果を保持する」という部分障害合成規則が、ローカルモードの全segment走査には反映されていなかった。反例: `reviews/implementation.yaml`が正常に読め`origin: implementation`のblocking findingが記録されている一方、`reviews/spec.yaml`が壊れたYAMLの場合、現行の決定では検出済みのfindingごと`detection: 'failed'`一文に置き換わる。GitHub側とローカル側とで対称な決定にすると自ら明記していながら、実際には非対称なままだった。
 2. `PR_RESOLUTION_FAILURE_SILENTLY_TREATED_AS_NO_PR`: 「`findOpenPrByHead()`が`undefined`を返す場合はPR未作成として扱う」という決定は、branch解決失敗について直前に確定した「区別できない失敗を『無し』と同一視しない」という原則（AC-5）と矛盾する。`findOpenPrByHead()`の`undefined`は「PRがまだ存在しない（正常系）」と「`gh pr view`呼び出し自体が失敗した（異常系）」を区別しないため、Issue側コメントが0件の状態でPR側に一時的な`gh`障害が起きると、実在するかもしれない`CHANGES_REQUESTED`や未対応コメントが「PR未作成」として静かに0件扱いされ、本Issueが解消対象とする失敗モードが再現し得る。同一クラスの指摘が2ラウンド連続で発生したため、本ADRはこの決定を先送りせずここで是正する。
 
+2026-08-05、PR側の直接`gh pr view`呼び出しへ是正した版（`691e63a8`）に対する design-gate（strict、独立2レビュア）が再度実行され、1名がblocking findingを検出した（もう1名はwarningのみ）。
+
+3. `PR_RESOLUTION_NOT_BOUND_TO_TARGET_ISSUE`: PR側は`resolveCurrentBranch()`が返す現在のbranch名だけを鍵に`gh pr view <branch>`を呼ぶ設計であり、解決されたbranch・PRが対象Issue（`detectGithubReviewStatus(root, issueNumber)`の`issueNumber`引数）に紐づくものであることを検証する手順が設計要素に一切無かった。反例1（誤検出、AC-4/AGENTS.md I4違反）: `segment start`が対象Issueとは異なるbranch（`main`や他Issueの`feature/441-...`）へcheckoutされたworktreeで実行されると、そのbranchのPRのレビュー・コメントが対象Issueへの「対応が必要な既存レビュー」として誤ってworkerプロンプトへ同梱される（AGENTS.md I4「1 Issue = 1 ブランチ = 1 worktree = 1 PR」の前提崩れを検出できない）。反例2（握りつぶし、AC-2/AC-3/AC-5違反）: 同じ状況で`gh pr view <branch>`が`no pull requests found`で失敗した場合（例: 対象branchが`main`）、「PR未作成＝非失敗・成功・0件」に分類され、対象Issueの実際のPRに存在するかもしれない未対応レビュー・コメントが警告なしに「無い」として握りつぶされる。branch解決自体の成否では検出できない失敗モードのため、本ADRはこれを是正する。
+
 検討した選択肢（(a)コメント判定について）:
 
 1. **since基準を維持する（ADR-0025のまま）**: 既知の取りこぼしを引き続き受け入れる。本Issueの目的（resumeしたworkerが既存レビューフィードバックを確実に確認する）そのものを損なう既知の欠陥を放置することになり、implementation-gateの指摘と正面から矛盾するため不採用。
@@ -64,6 +68,12 @@ ADR-0025（Issue #446、本ADRと同一Issue）は、resumeされたセグメン
 2. **`gh-open-pr.ts`の`findOpenPrByHead()`自体の戻り値をエラー区別可能な形（例: 判別可能なunion型）へ変更する**: release bump（Issue #196）・root-cleanup run（Issue #208）という既存呼び出し元が`OpenPr | undefined`という現行の戻り値契約に依存しており、契約変更はこれらの既存呼び出し元の変更・再検証を伴う。本Issueのスコープ（resumeしたworkerのレビューフィードバック検出）を超えて無関係な既存機能への影響を広げるため不採用。
 3. **`review-status.ts`のPR側検出は`findOpenPrByHead()`を経由せず、`gh pr view <branch> --json number,state,headRefName,latestReviews,comments`を直接1回呼び、終了コード・stderr・JSONを自前で解釈する（採用）**: `gh-open-pr.ts`・その既存呼び出し元には一切手を加えない。`gh pr view <branch>`がbranchに対応するPRを解決できない場合、`gh` CLIは終了コード非ゼロかつstderrに`no pull requests found`を含む既知の固定文言を出力する（他の失敗要因、例: 認証切れ・ネットワーク障害・レートリミットのstderrはこの文言を含まない）。この文言に一致する場合のみ「PR未作成（成功・0件）」とし、一致しない非ゼロ終了・JSON解釈失敗はすべて「失敗」として扱う。`gh` CLIの将来のメッセージ文言変更により誤って「失敗」側へ倒れたとしても、それは安全側（AC-5が優先する「わからないものは隠さない」）であり、逆に「未作成」側の誤判定（実際の失敗を隠す）より許容できる。既存の`gh pr view --json latestReviews,comments`呼び出し（設計上PR解決成功後に別途行っていたもの）をこの1回の呼び出しへ統合できるため、GitHub API呼び出し回数も従来設計（成功時2回）から1回へ減る。
 
+検討した選択肢（(g) PR側で解決したbranch・PRが対象Issueに紐づくことの検証について、design-gate指摘`PR_RESOLUTION_NOT_BOUND_TO_TARGET_ISSUE`を受けて追加）:
+
+1. **検証を行わない（初版の決定のまま）**: `resolveCurrentBranch()`が非空を返せば対象Issueのbranchであるとみなす。1 Issue = 1 branch = 1 worktreeであることは運用上の前提だが、この前提が崩れた状態（進行役の`cd`誤り等）を検出する機構が無く、design-gateの指摘と正面から矛盾するため不採用。
+2. **`gh-open-pr.ts`や`worktree.ts`側にIssue紐づけ検証層を追加する**: 検証ロジックを`review-status.ts`外の既存モジュールへ持ち込むと、それらモジュールの既存呼び出し元（release bump・root-cleanup run等）にも影響が及ぶ可能性があり、本Issueのスコープ（resumeしたworkerのレビューフィードバック検出）を超えるため不採用。
+3. **`review-status.ts`内で、`resolveCurrentBranch()`が返すbranch名をAGENTS.mdのブランチ命名規則（`<type>/<issue-id>-<slug>`）に照らし、対象issueNumberと一致するか（正規表現 `^[^/]+/${issueNumber}-`）を`gh pr view`呼び出し前に検証する（採用）**: 既存モジュール（`worktree.ts`・`gh-open-pr.ts`）への変更を伴わず、`review-status.ts`が既に持つ`issueNumber`引数のみで判定できる。`gh pr view`呼び出し前に検証することで、無関係なIssueのPRへのAPI呼び出し自体を避けられる。不一致の場合はbranch解決失敗と同じ「明示的な失敗」経路へ合流させるため、既存の合成規則（Issue側／PR側の分離）をそのまま再利用でき、新たな出力型の分岐を追加する必要が無い。
+
 ## Decision
 
 resumeされたセグメント作業ワーカーへ同梱する「未対応の既存レビューフィードバック」の判定基準を、ADR-0025の決定を置き換えて次のとおり確定する。
@@ -73,7 +83,8 @@ resumeされたセグメント作業ワーカーへ同梱する「未対応の�
 - **Issue側とPR側の検出を分離する**: GitHubモードではIssueは常にPRより先に存在する（Draft PRはspec workerが最初のcheckpointをpushした後にしか作られない）。「PRが解決できなければIssueコメントの検出も行わない」という一体化した設計では、Draft PR作成前に投稿されたIssueコメントへのフィードバックが検出できず、本Issueが解消対象とする失敗モードがこのケースで再現する。したがって、Issue側コメント検出（`gh issue view --json comments`）とPR側検出（`resolveCurrentBranch` → `findOpenPrByHead` → `gh pr view --json latestReviews,comments`）を独立した経路として実行し、結果を合成する。Issue側は常に実行し、PR側は解決できた場合のみ実行する。
 - **branch解決失敗はPR未作成と区別する**: `resolveCurrentBranch()` が失敗する場合（detached HEAD等）、PR側を「PR未作成」（0件・非失敗）として扱うと、実際には存在するかもしれないPR側のレビュー・コメントを「無し」と偽装する（AC-5違反）ため区別し、PR側を明示的な `detection: 'failed'` として扱う。
 - **PR側の解決は`findOpenPrByHead()`を経由せず、`review-status.ts`が`gh pr view <branch> --json number,state,headRefName,latestReviews,comments`を直接1回呼ぶ**（2026-08-05再改定、design-gate指摘`PR_RESOLUTION_FAILURE_SILENTLY_TREATED_AS_NO_PR`）: `gh-open-pr.ts`の`findOpenPrByHead()`・その既存呼び出し元（release bump・root-cleanup run）は変更しない。終了コードが非ゼロで、かつstderrが`gh` CLIの固定文言`no pull requests found`に一致する場合のみ「PR未作成（成功・0件、branch解決成功時のPR側の正常系）」として扱う。それ以外の非ゼロ終了（認証切れ・ネットワーク障害・レートリミット等）およびJSON解釈失敗は「失敗」として扱う。state が `OPEN` でない場合（closed/merged）は既存の`findOpenPrByHead()`と同じ扱い（PR側0件、非失敗）とする。branch解決失敗の扱い（直前の決定）と同じ「区別できない失敗を『無し』と同一視しない」原則を、PR解決失敗にも一貫して適用する。
-- **検出処理自体が失敗した場合**（Issue側の`gh`呼び出し失敗・JSON解釈失敗、またはPR側のbranch解決失敗・`gh`呼び出し失敗・JSON解釈失敗）: Issue側・PR側それぞれを「成功（0件以上のデータを実際に取得できた。PR側の『PR未作成』も非失敗の成功として扱う）」「失敗」に正規化したうえで、次のとおり合成する（ADR-0025の決定を置き換える）。
+- **PR側で解決したbranch・PRが対象Issueに紐づくものであることを検証する**（新設、2026-08-05再改定、design-gate指摘`PR_RESOLUTION_NOT_BOUND_TO_TARGET_ISSUE`）: `resolveCurrentBranch()`が返すbranch名を、`gh pr view <branch>`呼び出しより前に、AGENTS.mdのブランチ命名規則（`<type>/<issue-id>-<slug>`）へ照らし対象issueNumberと一致するか（正規表現 `^[^/]+/${issueNumber}-`）を検証する。一致しない場合は「PR未作成」とは扱わず、branch解決失敗と同じ明示的な失敗（理由に不一致であることを明記）として扱う。`resolveCurrentBranch()`が非空を返すこと自体は「対象Issueのbranchである」ことを保証しないため、branch解決の成否とは別に検証する。
+- **検出処理自体が失敗した場合**（Issue側の`gh`呼び出し失敗・JSON解釈失敗、またはPR側のbranch解決失敗・branchの対象Issue不一致・`gh`呼び出し失敗・JSON解釈失敗）: Issue側・PR側それぞれを「成功（0件以上のデータを実際に取得できた。PR側の『PR未作成』も非失敗の成功として扱う）」「失敗」に正規化したうえで、次のとおり合成する（ADR-0025の決定を置き換える）。
   - 両方失敗した場合のみ、検出結果を「未対応が無い」として扱わず`detection: 'failed'`（両側の失敗理由を含む`reason`）として明示的にプロンプトへ含める。
   - 一方が成功・他方が失敗した場合は、`detection: 'succeeded'`とし、成功した側で実際に検出済みの未対応レビュー・コメント（0件でもよい）をそのまま保持したうえで、失敗した側の理由を`partial_failures`として付加する。他方の一時的な障害を理由に、既に検出できていたフィードバックを破棄してはならない——これは本Issue自身が解消対象とする失敗モード（resumeしたworkerがフィードバックを一切参照しない）を合成ロジック自身が部分障害時に再導入することを防ぐための決定である。
 - **ローカルモードのgate report走査**: 起動対象segment（差し戻し先）と同名のgate reportだけでなく、`spec`/`design`/`implementation`/`validation` 全segmentのgate report（`reviews/<segment>.yaml`）を走査し、`gate.blockers` のうち `origin` が起動対象segmentに対応する値（`spec`→`specification`、それ以外は同名）と一致する `severity: blocking` のfindingのみを収集する。
@@ -81,12 +92,13 @@ resumeされたセグメント作業ワーカーへ同梱する「未対応の�
 
 ## Consequences
 
-- 利点: コメント判定の時刻カットオフ廃止により、「未対応フィードバックが無関係なcommitの存在によって不可視化される」という、本Issue #446自身が解決対象とする失敗モードと同型の取りこぼしが原理的に発生しなくなる。ローカルモードの全segment走査により、AGENTS.mdが定めるorigin基準の差し戻し機構が実際に機能するようになる。Issue側／PR側の検出分離により、Draft PR作成前でも進行役の修正依頼コメントが検出可能になり、AC-3の要求範囲が実装可能になる。Issue側・PR側の一方のみが失敗した場合に成功側の検出結果を保持する合成規則、およびそれと対称なローカルモードの全segment走査における部分障害合成規則により、一時的な障害が、既に検出できていた未対応フィードバックを不可視化する（本Issueが解決対象とする失敗モードと同型の退行）ことをGitHub・ローカル両モードで防ぐ。`findOpenPrByHead()`を経由しない直接`gh pr view`呼び出しへの変更により、PR側の一時的な障害を「PR未作成」として握りつぶす経路も解消し、GitHub API呼び出し回数もPR解決成功時2回から1回へ削減される。
+- 利点: コメント判定の時刻カットオフ廃止により、「未対応フィードバックが無関係なcommitの存在によって不可視化される」という、本Issue #446自身が解決対象とする失敗モードと同型の取りこぼしが原理的に発生しなくなる。ローカルモードの全segment走査により、AGENTS.mdが定めるorigin基準の差し戻し機構が実際に機能するようになる。Issue側／PR側の検出分離により、Draft PR作成前でも進行役の修正依頼コメントが検出可能になり、AC-3の要求範囲が実装可能になる。Issue側・PR側の一方のみが失敗した場合に成功側の検出結果を保持する合成規則、およびそれと対称なローカルモードの全segment走査における部分障害合成規則により、一時的な障害が、既に検出できていた未対応フィードバックを不可視化する（本Issueが解決対象とする失敗モードと同型の退行）ことをGitHub・ローカル両モードで防ぐ。`findOpenPrByHead()`を経由しない直接`gh pr view`呼び出しへの変更により、PR側の一時的な障害を「PR未作成」として握りつぶす経路も解消し、GitHub API呼び出し回数もPR解決成功時2回から1回へ削減される。branchが対象Issueに紐づくものであることの検証により、AGENTS.md I4（1 Issue = 1 ブランチ = 1 worktree = 1 PR）の前提が崩れた状態（誤ったworktree・branchでの`segment start`実行）を、無関係なIssueのレビュー・コメントを誤って同梱する、または対象Issueの実際の未対応フィードバックを握りつぶす、のいずれの方向にも倒さず明示的な失敗として検出できるようになる。
 - 欠点・limitation:
   - コメント判定は時刻カットオフを廃止したことで、既に別の手段で実質的に対応済みの過去コメントも、そのPRが存在する限り毎回のresumeで再掲され続ける（過検出）。内容がそのままプロンプトに含まれるため、worker・進行役が既知の対応済みコメントと判断して読み飛ばせることを前提とする。プロンプト肥大化のトリミング戦略はSPEC.mdスコープ外節のとおり引き続き別Issue対応とする。
   - ローカルモードの全segment走査は、対象Issueのsegment数（最大4ファイル）分のファイル読み込みが増えるが、いずれも小さいYAMLファイルでありパフォーマンス上の懸念は無い。
   - PR側の「PR未作成」判定は`gh` CLIが出力するstderrの固定文言`no pull requests found`への一致に依存する。将来の`gh` CLIバージョンでこの文言が変更された場合、実際にはPRが単に存在しないだけのケースが「失敗」側へ倒れる（stderr不一致→失敗扱い）が、これは安全側（AC-5）であり、逆方向（実際の失敗を「PR未作成」として握りつぶす）より許容できる。
   - 出力の型が`detection: 'succeeded' | 'failed'`の二値から、`partial_failures`（GitHubモード）・`local_read_failures`（ローカルモード）という付加フィールドを持つ形へ複雑化する。worker（プロンプトの読み手）は「検出結果が存在するが一部の経路は失敗している」という中間状態を理解する必要がある。
+  - branchが対象Issueに紐づくものであることの検証は、AGENTS.mdのブランチ命名規則（`<type>/<issue-id>-<slug>`）への正規表現一致にのみ依存する。将来ブランチ命名規則自体が変更された場合、本検証も追随して変更する必要がある。
 - follow-up: 過検出が実運用で許容できないほど頻発する場合、コメント単位の既読管理（新規永続状態の導入）を別Issueで検討する余地がある（本ADRの選択肢3を参照）。`gh` CLIの`no pull requests found`文言が実運用で一致しなくなった場合、`gh-open-pr.ts`側の戻り値契約自体を変更する対応（本ADR選択肢(f)-2）を別Issueで検討する余地がある。
 
 ---
