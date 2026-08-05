@@ -51,9 +51,11 @@ cli-routes.ts → src/commands/lease.ts: reclaim（ルート登録のみ、片�
 ```mermaid
 graph TD
   A["進行役: lease-reclaim.sh / lease reclaim CLI"] --> B["reclaim(): 引数解析・GitHub backend限定チェック"]
-  B --> C["github-lease.ts: allLeasesFor(issue, segment)"]
-  C --> D{"expires_at <= now かつ --confirm あり?"}
-  D -->|No| E["fail: 終了コード1以上（AC-2/AC-3）"]
+  B --> B2{"--confirm あり?"}
+  B2 -->|No| E1["fail: 終了コード1以上（AC-3）"]
+  B2 -->|Yes| C["github-lease.ts: allLeasesFor(issue, segment)"]
+  C --> D{"expires_at <= now?"}
+  D -->|No| E2["fail: 終了コード1以上（AC-2）"]
   D -->|Yes| F["github-lease.ts: releaseLeaseRef(expectedSha=検査時sha)"]
   F -->|conflict: 検査後にref更新| G["fail: 終了コード1以上（AC-5）"]
   F -->|ok| H["github-lease.ts: postLeaseReclaimComment(actor, holder, issue, segment)"]
