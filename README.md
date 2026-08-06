@@ -56,7 +56,7 @@ npx github:techbeansjp-free/AGENTS.md uninstall [target_dir] [--dry-run]  # 安�
 
 ## 設定
 
-初期値は配備先の `.agent-skill-chain/config/agent-skill-chain.yaml`。`coordination.backend`（`github` | `local`）でバックエンドを切り替える。プロジェクト固有の追加ルールは `.agent-skill-chain/project/`（`manifest.yaml` + `RULES.md`）に置く。詳細は [AGENTS.md §設定](AGENTS.md) および [AGENTS.md §プロジェクト固有ポリシー](AGENTS.md)。
+初期値は配備先の `.agent-skill-chain/config/agent-skill-chain.yaml`。`coordination.backend`（`github` | `local`）でバックエンドを切り替える。プロジェクト固有の追加ルールは `.agent-skill-chain/project/`（`manifest.yaml` + `RULES.md`）に置く。全設定項目の既定値・取りうる値・影響は [docs/CONFIGURATION.md](docs/CONFIGURATION.md) に一覧化している。詳細な規約は [AGENTS.md §設定](AGENTS.md) および [AGENTS.md §プロジェクト固有ポリシー](AGENTS.md)。
 
 ### 自走・承認ポリシー
 
