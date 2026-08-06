@@ -25,7 +25,7 @@
 
 - `worker-launch.sh` / `.agent-skill-chain/scripts/worker-launch.sh`: worker context 解決・アダプタ選択（既存、無変更）。
 - `.agent-skill-chain/adapters/codex.sh: launch_worker`: `CODEX_WORKER_CMD`（テスト用完全上書き）が明示された場合のみそれを `WORKER_CMD` へ複写する薄いラッパーへ縮小する。role_contract のサイズ判定・起動コマンド組み立ての責務を持たない。
-- `.agent-skill-chain/adapters/codex.sh: _worker_default_cmd`（新規、`claude.sh` 側の同名関数を上書き）: `WORKER_CMD`/`CODEX_WORKER_CMD` がいずれも未指定のときだけ呼ばれる。role_contract のバイトサイズが閾値を超えるかどうかで、Codex CLI へ prompt を渡す経路（stdin 末尾 `-` / 位置引数）を選ぶ。model・reasoning effort・sandbox opts の解決（既存の `_codex_worker_model`/`_codex_worker_effort`/`_codex_worker_sandbox_opts`、いずれも無変更）は分岐の前に一度だけ行い、両分岐で共有する。旧 `launch_worker` が保持していた「`ASC_WORKER_MODEL_TIER` はあるが `ASC_WORKER_MODEL` が届かない場合の防御チェック」と「`codex` コマンド不在時のフォールバック」もこの関数へ移す。
+- `.agent-skill-chain/adapters/codex.sh: _worker_default_cmd`（新規、`claude.sh` 側の同名関数を上書き）: `WORKER_CMD`/`CODEX_WORKER_CMD` がいずれも未指定のときだけ呼ばれる。role_contract のバイトサイズが閾値を超えるかどうかで、Codex CLI へ prompt を渡す経路（stdin 末尾 `-` / 位置引数）を選ぶ。位置引数経路を選んだ場合は、組み立てるコマンド文字列の末尾に `</dev/null` を付与し、`codex exec` 呼び出し自体の stdin を明示的に断つ（決定3。呼び出し元 `bash -c "$worker_cmd" <"$prompt_file"` が渡す外側の fd0 をこの redirect が上書きするため、位置引数を渡しても Codex CLI が prompt_file の内容を `<stdin>` ブロックとして追加で読み込むことはない）。model・reasoning effort・sandbox opts の解決（既存の `_codex_worker_model`/`_codex_worker_effort`/`_codex_worker_sandbox_opts`、いずれも無変更）は分岐の前に一度だけ行い、両分岐で共有する。旧 `launch_worker` が保持していた「`ASC_WORKER_MODEL_TIER` はあるが `ASC_WORKER_MODEL` が届かない場合の防御チェック」と「`codex` コマンド不在時のフォールバック」もこの関数へ移す。
 - `.agent-skill-chain/adapters/claude.sh: launch_worker`: 「`WORKER_CMD` 未指定時の既定起動コマンド組み立て」というインライン処理を `_worker_default_cmd` 関数呼び出しへ置き換える（呼び出しタイミング＝role_contract 取得後、認証チェック後という既存の順序は変えない）。Claude adapter 自身は `_worker_default_cmd` を上書きしないため、Claude Code CLI 起動時の既定動作（`--allowed-tools` 付き headless 起動）はビット単位で不変。
 - `.agent-skill-chain/adapters/claude.sh: _worker_default_cmd`（新規、既定実装）: 引数 `<segment> <contract>` を受け取るが `contract` は使わない（Claude adapter は本不具合の対象外、SPEC.md「スコープ外」）。`claude` CLI が見つからない場合は非0を返し、呼び出し元が blocked へ倒す。
 - Codex CLI（`codex exec`）: 外部実行系。stdin 経由（末尾 `-`）または位置引数 `[PROMPT]` 経由のいずれかで prompt を受理する（後者は上流の仕様として存在する前提。実機での成立確認は PLAN.md 変更単位5・AC-5 hybrid 検証で行う）。
@@ -40,7 +40,7 @@ graph LR
   HOOK -->|既定実装| CDEF["claude.sh: _worker_default_cmd（claude CLI起動）"]
   HOOK -->|codex.shが上書き| KDEF["codex.sh: _worker_default_cmd（サイズ判定）"]
   KDEF -->|閾値以下| STDIN["stdin経由（末尾 -）"]
-  KDEF -->|閾値超過| ARGV["位置引数経由（--contract quoted）"]
+  KDEF -->|閾値超過| ARGV["位置引数経由（-- contract quoted、末尾に </dev/null 付与）"]
   STDIN --> CODEXCLI["codex exec"]
   ARGV --> CODEXCLI
 ```
@@ -71,9 +71,15 @@ graph LR
 
 **却下案（config スキーマへ項目追加する）**: 却下理由は、AGENTS.md「設定」節が定める項目追加手順（①ハードコード不可の理由→②プロジェクト単位で変わる必要性→③スキーマ更新→④既定値定義→⑤migration定義→⑥必要ならADR）に対し、本値は上流 Codex CLI 側の未公開の実装詳細に対する技術的回避策のマージンであり、プロジェクトごとに恒常的に変える性質の値ではない。既存の `CODEX_*` 系「個別上書き環境変数」と同じ扱い（テスト・一時的な微調整のための上書き口）で要件を満たせるため、スキーマ変更のコストに見合わない。
 
-### 決定3: 位置引数経由では role_contract をシェルエスケープ済みの単一 argv 要素として埋め込み、stdin リダイレクト自体は変更しない
+### 決定3: 位置引数経由では role_contract をシェルエスケープ済みの単一 argv 要素として埋め込み、かつコマンド文字列内で `codex exec` 呼び出し自体の stdin を明示的に `/dev/null` へ redirect する
 
-**採用案**: `codex.sh: _worker_default_cmd` は、閾値超過時に `printf -v quoted_contract '%q' "$contract"` で role_contract をシェルエスケープし、`codex exec ... -- "$quoted_contract"` の形（`-`（stdin指示）の代わりに `-- <位置引数>`）でコマンド文字列を組み立てる。呼び出し元（`claude.sh: launch_worker`）が行う `bash -c "$worker_cmd" <"$prompt_file"` というプロセス起動自体（prompt_file を stdin へ redirect する部分）は変更しない。位置引数経由の場合、起動された `codex exec` は stdin を読まない（`-` を渡さないため）ので、redirect された prompt_file の中身は単に無視される。
+**採用案**: `codex.sh: _worker_default_cmd` は、閾値超過時に `printf -v quoted_contract '%q' "$contract"` で role_contract をシェルエスケープし、`codex exec ... -- "$quoted_contract" </dev/null` の形（`-`（stdin指示）の代わりに `-- <位置引数>` を渡し、かつコマンド文字列の末尾に `</dev/null` を付与）でコマンド文字列を組み立てる。
+
+**背景（設計判断の根拠）**: 当初案は「位置引数 `[PROMPT]` を渡せば Codex CLI は stdin を読まない」という前提に立っていたが、implementation segment での実機検証により、Codex CLI（`codex exec`）は位置引数が与えられていても、stdin が別ソース（パイプ・ファイルリダイレクト等）へ接続されたままだとそれを追加で `<stdin>` ブロックとして読み込んでしまう（位置引数だけを見て stdin を無視するわけではない）ことが判明した。そのため、当初案のまま `bash -c "$worker_cmd" <"$prompt_file"` の外側 redirect を変更せずに位置引数だけを渡すと、role_contract 全文が依然として stdin 経由でも読み込まれ、境界破損の影響を受け続けてしまい要件1を満たさない。
+
+呼び出し元（`claude.sh: launch_worker`）が行う `bash -c "$worker_cmd" <"$prompt_file"` というプロセス起動自体（外側の fd0 を prompt_file へ redirect する部分）は変更しない。その代わり、bash では `bash -c` へ渡すコマンド文字列内で個別コマンドに付与した redirect が、外側から継承した fd0 を当該コマンドの実行時にのみ上書きする（`bash -c 'cat </dev/null' <file` は `file` の内容を読まない、という挙動で確認済み）。この性質を利用し、位置引数経由の分岐でだけ `codex exec` 呼び出し自体に `</dev/null` を付与することで、呼び出し元（claude.sh）を変更せず、Codex 固有ロジックを `codex.sh` 内に閉じたまま（決定1の責務境界を保ったまま）、当該 `codex exec` プロセスへの stdin 供給を確実に断つ。stdin 経由分岐（閾値以下）は従来どおり `-` を渡し `</dev/null` を付与しないため、AC-2（退行なし）は影響を受けない。
+
+**却下案（呼び出し元 `claude.sh: launch_worker` 側で redirect 先を動的に切り替える）**: 却下理由は、redirect 先の切り替え判断（閾値超過か否か）は role_contract サイズに依存する Codex 固有の判断であり、これを共通 lifecycle（`claude.sh`）側へ持ち込むと、決定1で確立した責務境界（Codex 固有ロジックは `codex.sh` 内の `_worker_default_cmd` 上書きにのみ存在する）に反する。`_worker_default_cmd` が返すコマンド文字列自体に redirect を埋め込むことで、呼び出し元を変更せずに責務境界を保ったまま実現できる。
 
 **却下案（`$(cat)` でその場の stdin から読み取り閾値判定してから再度パイプする、worker_cmd 内で完結させる案）**: 却下理由は、bash のコマンド置換 `$(...)` は末尾の改行をすべて除去する仕様のため、role_contract の末尾に空行が含まれる場合にバイト列が変化し、AC-2（既存のstdin経由起動の完全な退行なし）を壊すリスクがある。`%q` によるエスケープはシェル変数の内容をそのまま再構成する（末尾改行を含め欠落・改変が無い）ため、この問題が生じない。
 
@@ -94,6 +100,6 @@ related_adrs:
 
 - 想定される失敗モード1: `_worker_default_cmd`（codex.sh 上書き）が非0を返す場合（`codex` コマンド不在、`ASC_WORKER_MODEL_TIER` 防御チェック抵触、`CODEX_STDIN_SAFE_THRESHOLD_BYTES` が正の整数でない等）。`claude.sh: launch_worker` は既存の `_fail_blocked`（blocked報告 + lease解放 + 非0非3で返す、I8）へ倒す。lease は既に取得済み・contract は既に取得済みの時点での失敗であり、この順序・fail-safe動作は既存の「起動後のフェイルセーフ」パスと同一（新規の失敗モードを追加しない）。
 - 想定される失敗モード2: 位置引数経由で埋め込んだ role_contract が ARG_MAX（Linux では通常 2MB 前後）を超え `bash -c` 自体の起動が失敗する。この場合 `wait "$worker_pid"; rc=$?` が非0を返し、既存の「worker起動が失敗またはtimeoutしました」blocked フェイルセーフへ倒れる（サイレントパスしない、I8）。role_contract は通常数十〜数百KB程度であり、ARG_MAX に対し十分な余裕がある想定だが、将来 role_contract が極端に肥大化した場合の対処（分割送信等）は本 Issue のスコープ外とし、実際に発生した場合は別 Issue として扱う。
-- 想定される失敗モード3: 位置引数経由で Codex CLI が想定どおり動作しない（例: `--` 以降の位置引数を `[PROMPT]` として受理しない、または stdin が接続されたままだと想定外の挙動をする）。この場合 AC-5（hybrid 検証、PLAN.md 変更単位5）で実機確認時に判明し、DESIGN.md の決定3（コマンド形）を再検討したうえで design-gate を再通過させる（AGENTS.md「ゲートの継承・無効化」）。
+- 想定される失敗モード3: 位置引数経由で Codex CLI が想定どおり動作しない（例: `--` 以降の位置引数を `[PROMPT]` として受理しない）。なお「位置引数を渡していても stdin が接続されたままだと追加で `<stdin>` ブロックとして読み込んでしまう」という当初未知だった挙動は、implementation segment の実機検証で判明済みであり、決定3（コマンド文字列末尾への `</dev/null` 付与によるstdin明示的無効化）で対応済みである。この対応後もなお未知の非互換（例: `--` 以降を `[PROMPT]` として受理しない）が残る場合は、AC-5（hybrid 検証、PLAN.md 変更単位5）で実機確認時に判明し、DESIGN.md の決定3（コマンド形）を再検討したうえで design-gate を再通過させる（AGENTS.md「ゲートの継承・無効化」）。
 - ロールバック手順: 本 Issue の変更は `codex.sh`/`claude.sh` の関数境界の追加・置き換えのみであり、`CODEX_WORKER_CMD` による完全上書き経路（AC-4、既存かつ本 Issue でも維持）を使えば新規ロジックを経由せず従来のコマンドをそのまま指定できる。PR を revert すれば `_worker_default_cmd` 抽出前の状態（stdin経由のみ）に完全に戻る。
 - 影響を受ける既存機能: `.agent-skill-chain/adapters/codex.sh`・`.agent-skill-chain/adapters/claude.sh` の `launch_worker` 経由のセグメントワーカー起動（spec/design/implementation/validation 全セグメント、SPEC.md 要件1）。`launch_gate_reviewer`（ゲートレビュア起動）は本 Issue のスコープ外（SPEC.md「スコープ外」）であり変更しない。
