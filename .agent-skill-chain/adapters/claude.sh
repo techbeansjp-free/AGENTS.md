@@ -499,6 +499,21 @@ _dispatch_via_agent_tool() {
   return 4
 }
 
+# WORKER_CMD 未指定時の既定起動コマンドを返す。Codex adapter は同名関数を再定義し、
+# 取り込んだ共通 lifecycle から動的束縛で Codex 固有のコマンド組み立てへ差し替える。
+# 引数: <segment> <contract>
+_worker_default_cmd() {
+  local _segment="${1:-}" _contract="${2:-}"
+  : "$_segment" "$_contract"
+
+  if ! command -v claude >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local worker_allowed_tools="${WORKER_ALLOWED_TOOLS:-$WORKER_ALLOWED_TOOLS_DEFAULT}"
+  printf 'claude -p --output-format text --allowed-tools "%s"\n' "$worker_allowed_tools"
+}
+
 # 引数: <issue_id> <segment>
 # 終了コード: 0=worker完了 / 2（!=0,!=3）=error（blocked報告・lease解放済み）/
 #             1=引数・lease取得前のエラー（lease未取得または解放済み、report未発行）/
@@ -578,11 +593,8 @@ launch_worker() {
   # ようにする（DESIGN.md（ISSUE-183）「採用案 候補A」）。
   local worker_cmd="${WORKER_CMD:-}"
   if [[ -z "$worker_cmd" ]]; then
-    if command -v claude >/dev/null 2>&1; then
-      local worker_allowed_tools="${WORKER_ALLOWED_TOOLS:-$WORKER_ALLOWED_TOOLS_DEFAULT}"
-      worker_cmd="claude -p --output-format text --allowed-tools \"$worker_allowed_tools\""
-    else
-      _fail_blocked "claude CLI が見つからず WORKER_CMD も未設定です"
+    if ! worker_cmd="$(_worker_default_cmd "$segment" "$contract")"; then
+      _fail_blocked "worker既定起動コマンドを組み立てられず WORKER_CMD も未設定です"
       return
     fi
   fi

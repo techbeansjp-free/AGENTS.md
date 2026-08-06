@@ -122,28 +122,33 @@ function detectClaudeCodeSession(env: NodeJS.ProcessEnv): boolean {
 }
 
 /**
- * PATH 上に「codex」という名の stub 実行系を用意する。受け取った引数を argv キャプチャ
- * ファイルへ記録したうえで、成果物 commit+push+report completed まで行う
+ * PATH 上に「codex」という名の stub 実行系を用意する。受け取った引数と stdin を別々の
+ * キャプチャファイルへ記録したうえで、成果物 commit+push+report completed まで行う
  * （claude stub と同じ最小契約）。
  */
-function installCodexStub(t: { after(fn: () => void): void }): { stubDir: string; argvCapturePath: string } {
+function installCodexStub(t: { after(fn: () => void): void }): {
+  stubDir: string;
+  argvCapturePath: string;
+  stdinCapturePath: string;
+} {
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-codex-stub-'));
   t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
   const argvCapturePath = path.join(stubDir, 'argv.txt');
+  const stdinCapturePath = path.join(stubDir, 'stdin.txt');
   const codexStub = path.join(stubDir, 'codex');
   fs.writeFileSync(
     codexStub,
     [
       '#!/usr/bin/env bash',
       `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
-      'cat >/dev/null',
+      `cat > ${JSON.stringify(stdinCapturePath)}`,
       `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: codex stub output")`,
       `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
       '',
     ].join('\n'),
     { mode: 0o755 },
   );
-  return { stubDir, argvCapturePath };
+  return { stubDir, argvCapturePath, stdinCapturePath };
 }
 
 /**
@@ -747,6 +752,82 @@ test('codex launch_worker: 認証不成立はblocked報告・lease解放・exit 
   assert.equal(acquire.status, 0, 'blocked後にleaseが解放されること: ' + acquire.stderr);
 });
 
+// --- ISSUE-462: role_contract サイズに応じた Codex prompt 伝達経路 ----------------------
+
+test('codex launch_worker: role_contractが安全閾値を超える場合は位置引数で全文を渡し、外側redirectがあってもstdinを空にする（ISSUE-462 AC-1/AC-3）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+
+  const { stubDir, argvCapturePath, stdinCapturePath } = installCodexStub(t);
+  const env = envWithout(['WORKER_CMD', 'CODEX_WORKER_CMD'], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_STDIN_SAFE_THRESHOLD_BYTES: '1',
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+  const stdin = fs.readFileSync(stdinCapturePath, 'utf8');
+  assert.match(argv, /\n--\nrole: implementation_worker\n/, 'role_contract全文が単一の位置引数として復元されること');
+  assert.match(
+    argv,
+    /forbidden:\n  - SPEC\.md\/DESIGN\.md\/PLAN\.mdの編集/,
+    'role_contract後半の日本語を含む禁止事項まで欠落・破損なく位置引数へ渡すこと',
+  );
+  assert.equal(stdin, '', 'コマンド内の</dev/nullが外側のprompt_file redirectを上書きすること');
+  assert.match(argv, /gpt-5\.6-sol/, '位置引数経路でも解決済みmodelが維持されること');
+  assert.match(argv, /model_reasoning_effort="high"/, '位置引数経路でもreasoning effortが維持されること');
+  assert.match(argv, /sandbox_workspace_write\.network_access=true/, '位置引数経路でもsandbox設定が維持されること');
+});
+
+test('codex launch_worker: role_contractが安全閾値以下の場合は従来どおり末尾-とstdinで渡す（ISSUE-462 AC-2）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'codex');
+
+  const { stubDir, argvCapturePath, stdinCapturePath } = installCodexStub(t);
+  const env = envWithout(['WORKER_CMD', 'CODEX_WORKER_CMD'], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_STDIN_SAFE_THRESHOLD_BYTES: '9999999',
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+  const stdin = fs.readFileSync(stdinCapturePath, 'utf8');
+  assert.match(argv, /\n-\n$/, '従来どおりcodex execの末尾にstdin指示を渡すこと');
+  assert.doesNotMatch(argv, /\n--\nrole:/, 'role_contractをargvへ重複して含めないこと');
+  assert.match(stdin, /^role: spec_worker\n/, 'role_contract全文を従来どおりstdinへ渡すこと');
+});
+
+test('codex launch_worker: 安全閾値が正の整数でない場合は推測せずblockedへ倒してleaseを解放する（ISSUE-462）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'codex');
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const env = envWithout(['WORKER_CMD', 'CODEX_WORKER_CMD'], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_STDIN_SAFE_THRESHOLD_BYTES: 'invalid',
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  assert.notEqual(res.status, 0);
+  assert.notEqual(res.status, 3);
+  assert.match(res.stderr, /CODEX_STDIN_SAFE_THRESHOLD_BYTES は正の整数/);
+  assert.ok(!fs.existsSync(argvCapturePath), '不正な閾値ではcodexコマンドを起動しないこと');
+  const report = readWorkerReport(repo.dir, 'spec');
+  assert.equal(report.status, 'blocked');
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
+  assert.equal(reacquire.status, 0, 'blocked後にleaseが解放されること: ' + reacquire.stderr);
+});
+
 // --- (h) セグメント別 adapter・ティア対応表からの具体モデル解決（ISSUE-307） --------------
 
 test('codex launch_worker (validation, 任意セグメントへのsegment_overrides追加): worker.adapterがclaudeのままでも指定セグメントだけcodexへ解決される（AC-1の汎用性）', async (t) => {
@@ -848,7 +929,7 @@ test('codex launch_worker: 個別上書き環境変数（CODEX_IMPLEMENTATION_MO
   assert.doesNotMatch(argv, /gpt-5\.6-sol/, '設定由来の値が個別上書きに敗れ反映されないこと');
 });
 
-test('codex launch_worker: CODEX_WORKER_CMD完全上書きは設定由来のモデル解決そのものを行わせない（AC-2, 既存優先順位の回帰確認）', async (t) => {
+test('codex launch_worker: CODEX_WORKER_CMD完全上書きは設定由来のモデル・閾値解決そのものを行わせない（AC-2, ISSUE-462 AC-4）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   // codexバイナリをPATHへ一切置かず、CODEX_WORKER_CMDだけで完走できることを確認する
@@ -859,7 +940,33 @@ test('codex launch_worker: CODEX_WORKER_CMD完全上書きは設定由来のモ�
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: full override")`,
     `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
   ].join(' && ');
-  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', CODEX_WORKER_CMD: workerCmd });
+  const env = envWithout(['WORKER_CMD'], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_WORKER_CMD: workerCmd,
+    CODEX_STDIN_SAFE_THRESHOLD_BYTES: 'invalid',
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const report = readWorkerReport(repo.dir, 'implementation');
+  assert.equal(report.status, 'completed');
+});
+
+test('codex launch_worker: WORKER_CMD完全上書きも閾値判定より優先される（ISSUE-462 AC-4）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+
+  const workerCmd = [
+    'cat >/dev/null',
+    `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: generic full override")`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+  ].join(' && ');
+  const env = envWithout(['CODEX_WORKER_CMD'], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    WORKER_CMD: workerCmd,
+    CODEX_STDIN_SAFE_THRESHOLD_BYTES: 'invalid',
+  });
 
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
 

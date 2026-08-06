@@ -186,6 +186,41 @@ _codex_worker_sandbox_opts() {
   printf '%s-c sandbox_workspace_write.network_access=true' "$opts"
 }
 
+# role_contract が Codex CLI の stdin UTF-8 境界破損に対する安全閾値を超える場合は、
+# prompt を位置引数へ移し、外側の prompt_file redirect を /dev/null で明示的に上書きする。
+# 引数: <segment> <contract>
+_worker_default_cmd() {
+  local segment="${1:-}" contract="${2:-}"
+  local threshold="${CODEX_STDIN_SAFE_THRESHOLD_BYTES:-32768}"
+
+  if [[ ! "$threshold" =~ ^[1-9][0-9]*$ ]]; then
+    echo "_worker_default_cmd: CODEX_STDIN_SAFE_THRESHOLD_BYTES は正の整数である必要があります" >&2
+    return 1
+  fi
+  if [[ -n "${ASC_WORKER_MODEL_TIER:-}" && -z "${ASC_WORKER_MODEL:-}" ]]; then
+    echo "_worker_default_cmd: モデルティア（ASC_WORKER_MODEL_TIER=${ASC_WORKER_MODEL_TIER}）が指定されているのに解決済みモデル（ASC_WORKER_MODEL）が届いていません" >&2
+    return 1
+  fi
+  if ! command -v codex >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local model effort sandbox_opts base contract_bytes quoted_contract
+  model="$(_codex_worker_model "$segment")"
+  effort="$(_codex_worker_effort "$segment")"
+  sandbox_opts="$(_codex_worker_sandbox_opts)"
+  base="codex exec --sandbox workspace-write $sandbox_opts --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\""
+  contract_bytes="$(printf '%s' "$contract" | wc -c)"
+  contract_bytes="${contract_bytes//[[:space:]]/}"
+
+  if ((contract_bytes > threshold)); then
+    printf -v quoted_contract '%q' "$contract"
+    printf '%s -- %s </dev/null\n' "$base" "$quoted_contract"
+  else
+    printf '%s -\n' "$base"
+  fi
+}
+
 # 引数: <issue_id> <segment>
 # env: CODEX_WORKER_CMD（テスト用完全上書き、最優先）、WORKER_CMD（後方互換上書き）、
 #      CODEX_IMPLEMENTATION_MODEL / CODEX_HIGH_CAPABILITY_MODEL（個別上書き）、
@@ -193,27 +228,7 @@ _codex_worker_sandbox_opts() {
 #      ASC_WORKER_MODEL / ASC_WORKER_REASONING_EFFORT（worker-launch.sh が worker.model_tiers から
 #      解決済みの値として export する、ISSUE-307）、ASC_WORKER_MODEL_TIER（同、防御的検査専用）。
 launch_worker() {
-  local segment="${2:-}"
-  if [[ -z "${CODEX_WORKER_CMD:-}" && -z "${WORKER_CMD:-}" ]]; then
-    # 防御的検査（ADR-0015）: ティア名が指定されているのに解決済みモデルが届いていない場合、
-    # 従来フォールバックへ黙って落ちず blocked へ倒す。正規経路（worker-launch.sh 経由）では
-    # worker context がティア解決失敗を lease 取得前のエラーとして返すためこの状態に至らないが、
-    # 本アダプタが単独で呼ばれた場合の「ティアを指定したのに別のモデルで走る」事故を防ぐ。
-    if [[ -n "${ASC_WORKER_MODEL_TIER:-}" && -z "${ASC_WORKER_MODEL:-}" ]]; then
-      echo "launch_worker: モデルティア（ASC_WORKER_MODEL_TIER=${ASC_WORKER_MODEL_TIER}）が指定されているのに解決済みモデル（ASC_WORKER_MODEL）が届いていません。推測せずblockedへ倒します" >&2
-      WORKER_CMD='false'
-    elif command -v codex >/dev/null 2>&1; then
-      local model effort
-      model="$(_codex_worker_model "$segment")"
-      effort="$(_codex_worker_effort "$segment")"
-      local sandbox_opts
-      sandbox_opts="$(_codex_worker_sandbox_opts)"
-      WORKER_CMD="codex exec --sandbox workspace-write $sandbox_opts --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -"
-    else
-      # lifecycle に lease の取得後で blocked/report/release を一元処理させる。
-      WORKER_CMD='false'
-    fi
-  elif [[ -n "${CODEX_WORKER_CMD:-}" ]]; then
+  if [[ -n "${CODEX_WORKER_CMD:-}" ]]; then
     WORKER_CMD="$CODEX_WORKER_CMD"
   fi
   set +e
