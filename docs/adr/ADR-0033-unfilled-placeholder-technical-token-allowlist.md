@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0032
+id: ADR-0033
 status: proposed
 title: 未置換プレースホルダ判定における技術トークン許容リストによる誤検出解消
 tags: [verify, spec-gate, design-gate, bdd, false-positive]

@@ -42,7 +42,7 @@ designDiagram() → hasUnfilledPlaceholder() → TECHNICAL_TOKEN_RE
 
 ```yaml
 related_adrs:
-  - id: ADR-0032
+  - id: ADR-0033
     relation: adopts
 ```
 
