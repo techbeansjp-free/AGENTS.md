@@ -374,7 +374,15 @@ function splitMdSections(text: string): MdSection[] {
 }
 
 // `<...>` 形式の未置換プレースホルダ（templates/issue/*.md が使う実際の記法）。
-const UNFILLED_PLACEHOLDER_RE = /<[^<>\n]*>/;
+const UNFILLED_PLACEHOLDER_RE = /<([^<>\n]*)>/g;
+const TECHNICAL_TOKEN_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+function hasUnfilledPlaceholder(value: string): boolean {
+  for (const match of value.matchAll(UNFILLED_PLACEHOLDER_RE)) {
+    if (!TECHNICAL_TOKEN_RE.test(match[1])) return true;
+  }
+  return false;
+}
 
 // ---- spec-bdd ----
 const SPEC_BDD_USAGE = `
@@ -414,17 +422,17 @@ export async function specBdd(args: string[]): Promise<number> {
     for (const section of acSections) {
       const id = section.match[1];
       const summary = section.match[2];
-      if (!summary.trim() || UNFILLED_PLACEHOLDER_RE.test(summary)) {
+      if (!summary.trim() || hasUnfilledPlaceholder(summary)) {
         errors.push(`${specPath}: ${id} の要約がプレースホルダのまま、または空です`);
       }
       for (const label of ['Given', 'When', 'Then']) {
         const value = extractField(section.body, label);
-        if (value === undefined || !value || UNFILLED_PLACEHOLDER_RE.test(value)) {
+        if (value === undefined || !value || hasUnfilledPlaceholder(value)) {
           errors.push(`${specPath}: ${id} の ${label} が未記入またはプレースホルダのままです`);
         }
       }
       const verification = extractField(section.body, '検証方法見込み');
-      if (verification === undefined || !verification || UNFILLED_PLACEHOLDER_RE.test(verification)) {
+      if (verification === undefined || !verification || hasUnfilledPlaceholder(verification)) {
         errors.push(`${specPath}: ${id} の検証方法見込みが未記入またはプレースホルダのままです`);
       } else if (!/^`?(automated|manual|hybrid)`?$/.test(verification)) {
         errors.push(`${specPath}: ${id} の検証方法見込みは automated|manual|hybrid のいずれかである必要があります: ${verification}`);
@@ -461,13 +469,13 @@ export async function designDiagram(args: string[]): Promise<number> {
       return violations(errors);
     }
     const decision = extractField(section.body, '判断')?.replace(/`/g, '').trim();
-    if (decision === undefined || decision === '' || UNFILLED_PLACEHOLDER_RE.test(decision)) {
+    if (decision === undefined || decision === '' || hasUnfilledPlaceholder(decision)) {
       errors.push(`${designPath}: 図示要否の判断（要|不要）が未記入またはプレースホルダのままです`);
     } else if (!['要', '不要'].includes(decision)) {
       errors.push(`${designPath}: 図示要否の判断は '要' または '不要' である必要があります: ${decision}`);
     }
     const reason = extractField(section.body, '根拠');
-    if (reason === undefined || !reason || UNFILLED_PLACEHOLDER_RE.test(reason)) {
+    if (reason === undefined || !reason || hasUnfilledPlaceholder(reason)) {
       errors.push(`${designPath}: 図示要否の根拠が未記入またはプレースホルダのままです`);
     }
     if (decision === '要' && !/```mermaid/.test(text)) {
