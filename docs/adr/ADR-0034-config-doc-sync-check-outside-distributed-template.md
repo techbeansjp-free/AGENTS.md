@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0024
+id: ADR-0034
 status: proposed
 title: 設定リファレンス(docs/CONFIGURATION.md)の陳腐化検知チェックを配布テンプレート外の本リポジトリ専用ワークフローとして新設する
 tags: [distribution, ci, documentation, config]

@@ -15,7 +15,7 @@
 | `AC-5`（README.mdリンク） | README.md「## 設定」節への1文追加 | |
 | `AC-6`（内容一致） | `docs/CONFIGURATION.md` 執筆規律 | 着手時点の実ファイル（`.agent-skill-chain/config/agent-skill-chain.yaml`・`.agent-skill-chain/schemas/config.schema.yaml`）を一次情報として記述する（本DESIGN.md作成時点で両ファイルを読了済み） |
 | `AC-7`（機械検査新設） | `verify config-doc-sync` CLIサブコマンド／`.agent-skill-chain/ci/verify-config-doc-sync.sh`／`.github/workflows/agent-skill-chain-config-doc-sync.yml` | |
-| `AC-8`（配布されない） | 上記CI検査を配布テンプレート外（`.github/workflows/` 直下の本リポジトリ専用ファイル）として新設する配置決定 | ADR-0024の主題 |
+| `AC-8`（配布されない） | 上記CI検査を配布テンプレート外（`.github/workflows/` 直下の本リポジトリ専用ファイル）として新設する配置決定 | ADR-0034の主題 |
 | `AC-9`（vocab/references lint） | 全設計要素の執筆規律 | `docs/CONFIGURATION.md`・README.mdはlint走査対象外（`defaultLiveFileRoots`不含）。`src/**`・`.agent-skill-chain/ci/**`・`.github/workflows/**`が対象、禁止語・§参照・file:line参照を避ける |
 
 ## 責務・境界
