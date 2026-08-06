@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0035
-status: proposed
+status: accepted
 title: worker.agent_tool_dispatch.enabledの既定値をfalseからtrueへ反転する
 tags: [worker-launch, agent-tool, config-default, subagent-visibility]
 supersedes: []
