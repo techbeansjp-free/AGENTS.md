@@ -6,11 +6,11 @@
 
 ## 目的・背景
 
-`.agent-skill-chain/scripts/verify-spec-bdd.sh`（`src/commands/verify.ts` の `specBdd()`）は、SPEC.md の各 AC-ID（`#### AC-N: ...`）について、要約・Given・When・Then・検証方法見込みの各フィールドが `.agent-skill-chain/templates/issue/SPEC.md` のテンプレートプレースホルダ（`<...>` 形式）のまま未置換で残っていないかを検査する。判定には共有正規表現 `UNFILLED_PLACEHOLDER_RE = /<[^<>\n]*>/`（`src/commands/verify.ts:377`）を使い、フィールド値のどこかに `<...>` 部分文字列が1つでも含まれれば未置換プレースホルダとみなす。
+`.agent-skill-chain/scripts/verify-spec-bdd.sh`（`src/commands/verify.ts` の `specBdd()` 関数）は、SPEC.md の各 AC-ID（`#### AC-N: ...`）について、要約・Given・When・Then・検証方法見込みの各フィールドが `.agent-skill-chain/templates/issue/SPEC.md` のテンプレートプレースホルダ（`<...>` 形式）のまま未置換で残っていないかを検査する。判定には共有正規表現 `UNFILLED_PLACEHOLDER_RE = /<[^<>\n]*>/` を使い、フィールド値のどこかに `<...>` 部分文字列が1つでも含まれれば未置換プレースホルダとみなす。
 
 この判定は、フィールド値が実内容で埋まっていても、その本文中に AGENTS.md 自身や本テンプレートが一般的に使う「パス変数表記」（例: `reviews/<gate>.yaml` の `<gate>`、`.worktrees/<YYYYMMDD_HHMMSS>-...` の `<YYYYMMDD_HHMMSS>`）が1箇所でも含まれるだけで誤って一致してしまう。実際に、Issue #449（`review:light` 軽量レビュープロファイル導入）の SPEC.md AC-10 の Then は「ゲート証跡（ローカルモード: `reviews/<gate>.yaml`、GitHubモード: ...）に...」という実内容の記述であり、テンプレートプレースホルダは一切残っていなかったが、`<gate>.yaml` という正当なパス変数表記が含まれていたことにより `verify spec-bdd` が「AC-10 の Then が未記入またはプレースホルダのままです」と誤検出した。この誤検出により、PR #460（Issue #449）は SPEC.md 初回commit以降、全commitで一貫して `verify` ジョブが恒久的にfailし続け、`gh pr merge --admin` によるブランチ保護の回避でしかマージできなかった（2026-08-05〜06、`gh run list --branch feature/449-review-light-profile` で確認済み）。
 
-SPEC.md は承認後の編集が原則不可であり（AGENTS.md I2、承認後のAC変更はゲート再通過を強制する）、一度この誤検出に該当すると当該Issueのライフサイクル終了までCIをgreenにできない。同一の共有正規表現 `UNFILLED_PLACEHOLDER_RE` は `verify design-diagram`（DESIGN.md の「図示要否の判断」セクションの判断・根拠フィールド、`src/commands/verify.ts:464`, `:470`）でも使われており、同種の誤検出リスクを構造的に共有している。本Issueは、この誤検出を解消しつつ、実際に未置換のまま残っているテンプレートプレースホルダの検出能力（真陽性）を一切損なわないことを要求する。
+SPEC.md は承認後の編集が原則不可であり（AGENTS.md I2、承認後のAC変更はゲート再通過を強制する）、一度この誤検出に該当すると当該Issueのライフサイクル終了までCIをgreenにできない。同一の共有正規表現 `UNFILLED_PLACEHOLDER_RE` は `verify design-diagram`（`designDiagram()` 関数、DESIGN.md の「図示要否の判断」セクションの判断・根拠フィールドを検査する）でも使われており、同種の誤検出リスクを構造的に共有している。本Issueは、この誤検出を解消しつつ、実際に未置換のまま残っているテンプレートプレースホルダの検出能力（真陽性）を一切損なわないことを要求する。
 
 ## 要求 → 要件 → 受入条件
 
