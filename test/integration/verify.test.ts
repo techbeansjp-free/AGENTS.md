@@ -1372,6 +1372,32 @@ test('verify spec-bdd: Given/When/Then/検証方法見込みが実内容で埋�
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('verify spec-bdd: Thenの正当なパス変数表記はプレースホルダとして検出しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const specPath = path.join(repo.dir, 'SPEC.md');
+  fs.writeFileSync(
+    specPath,
+    specBddFixture({ then: 'ゲート証跡を `reviews/<gate>.yaml` に記録し、次のセグメントから参照できる' }),
+  );
+
+  const result = runCli(['verify', 'spec-bdd', specPath], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('verify spec-bdd: 実内容中に説明的プレースホルダが残っていると検出する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const specPath = path.join(repo.dir, 'SPEC.md');
+  fs.writeFileSync(specPath, specBddFixture({ then: 'ログイン後、`<期待される結果>` へ遷移する' }));
+
+  const result = runCli(['verify', 'spec-bdd', specPath], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /AC-1 の Then が未記入またはプレースホルダのままです/);
+});
+
 test('verify spec-bdd: テンプレートのプレースホルダがGiven/When/Then/検証方法見込みに残っていると検出する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -1440,6 +1466,28 @@ test('verify design-diagram: 判断が不要で根拠が記載されていれば
       '',
       '- 判断: `不要`',
       '- 根拠: 依存関係は1件のみ、状態遷移なし、責務境界も1つのみのため図示は不要と判断した。',
+      '',
+    ].join('\n'),
+  );
+
+  const result = runCli(['verify', 'design-diagram', designPath], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('verify design-diagram: 根拠の正当なパス変数表記はプレースホルダとして検出しない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const designPath = path.join(repo.dir, 'DESIGN.md');
+  fs.writeFileSync(
+    designPath,
+    [
+      '# DESIGN: サンプル',
+      '',
+      '### 図示要否の判断',
+      '',
+      '- 判断: `不要`',
+      '- 根拠: `reviews/<gate>.yaml` への一方向の書き込みだけであり、状態遷移も無いため図示は不要と判断した。',
       '',
     ].join('\n'),
   );
