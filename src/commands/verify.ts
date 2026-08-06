@@ -109,6 +109,41 @@ export async function docLength(args: string[]): Promise<number> {
   });
 }
 
+// ---- config-doc-sync ----
+const CONFIG_DOC_SYNC_USAGE = `
+使い方: agent-skill-chain verify config-doc-sync
+
+出力: 0=設定スキーマの全トップレベル項目が文書化済み、1=欠落または読込失敗
+`;
+export async function configDocSync(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) return printUsage(CONFIG_DOC_SYNC_USAGE), 0;
+    const root = worktreeRoot();
+    const schemaPath = resolveAsset(path.join('schemas', 'config.schema.yaml'), root);
+    const documentPath = path.join(root, 'docs', 'CONFIGURATION.md');
+    if (!fs.existsSync(documentPath)) {
+      throw new CliError(`設定リファレンスが見つかりません: ${documentPath}`);
+    }
+
+    const schema = readYamlFile<{ properties?: Record<string, unknown> }>(schemaPath);
+    if (!schema.properties || typeof schema.properties !== 'object' || Array.isArray(schema.properties)) {
+      throw new CliError(`設定スキーマの properties を読み取れません: ${schemaPath}`);
+    }
+
+    const documentedKeys = new Set<string>();
+    const headingPattern = /^###\s+`([^`]+)`\s*$/;
+    for (const line of fs.readFileSync(documentPath, 'utf8').split(/\r?\n/)) {
+      const match = headingPattern.exec(line);
+      if (match) documentedKeys.add(match[1]);
+    }
+
+    const missingKeys = Object.keys(schema.properties)
+      .filter((key) => key !== 'schema_version' && !documentedKeys.has(key))
+      .sort();
+    return violations(missingKeys.map((key) => `設定リファレンスに見出しがありません: ${key}`));
+  });
+}
+
 // ---- artifacts ----
 const ARTIFACTS_USAGE = `
 使い方: agent-skill-chain verify artifacts <issue_id> <segment>

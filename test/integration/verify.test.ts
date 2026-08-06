@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
@@ -11,6 +12,8 @@ import { runCli } from '../helpers/cli.js';
 import { stateFilePath } from '../../src/lib/local-state.js';
 import { ABSENT_ARTIFACT_DIGEST } from '../../src/commands/gate.js';
 import { artifactDigestOf } from '../../src/lib/digest.js';
+
+const packageRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -261,6 +264,78 @@ test('verify doc-length: templates配下ファイルの行数超過を検出す�
   const result = runCli(['verify', 'doc-length'], { cwd: repo.dir });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /templates[/\\]issue[/\\]SPEC\.md: 201行（上限100行を超過）/);
+});
+
+// ---- verify config-doc-sync ----
+
+function configSchemaKeys(repoDir: string): string[] {
+  const schemaPath = path.join(repoDir, '.agent-skill-chain', 'schemas', 'config.schema.yaml');
+  const schema = parse(fs.readFileSync(schemaPath, 'utf8')) as { properties: Record<string, unknown> };
+  return Object.keys(schema.properties).filter((key) => key !== 'schema_version');
+}
+
+function writeConfigReference(repoDir: string, keys: string[]): void {
+  const content = ['# Configuration', '', ...keys.flatMap((key) => [`### \`${key}\``, '', '説明。', ''])].join('\n');
+  fs.writeFileSync(path.join(repoDir, 'docs', 'CONFIGURATION.md'), content);
+}
+
+test('verify config-doc-sync: スキーマの全トップレベル項目と見出しが一致すれば成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  writeConfigReference(repo.dir, configSchemaKeys(repo.dir));
+
+  const result = runCli(['verify', 'config-doc-sync'], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('verify config-doc-sync: スキーマ側にのみ存在するトップレベル項目を報告して失敗する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  writeConfigReference(repo.dir, configSchemaKeys(repo.dir));
+  const schemaPath = path.join(repo.dir, '.agent-skill-chain', 'schemas', 'config.schema.yaml');
+  const schema = parse(fs.readFileSync(schemaPath, 'utf8')) as { properties: Record<string, unknown> };
+  schema.properties.future_setting = { type: 'object' };
+  fs.writeFileSync(schemaPath, stringify(schema));
+
+  const result = runCli(['verify', 'config-doc-sync'], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /設定リファレンスに見出しがありません: future_setting/);
+});
+
+test('verify config-doc-sync: バッククォートを欠く見出しは未記載として失敗する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  writeConfigReference(repo.dir, configSchemaKeys(repo.dir));
+  const documentPath = path.join(repo.dir, 'docs', 'CONFIGURATION.md');
+  const malformed = fs.readFileSync(documentPath, 'utf8').replace('### `risk`', '### risk');
+  fs.writeFileSync(documentPath, malformed);
+
+  const result = runCli(['verify', 'config-doc-sync'], { cwd: repo.dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /設定リファレンスに見出しがありません: risk/);
+});
+
+test('verify config-doc-sync: workflowとその呼出しはconsumer向けテンプレートに存在しない', async () => {
+  const workflowName = 'agent-skill-chain-config-doc-sync.yml';
+  const repositoryWorkflow = path.join(packageRoot, '.github', 'workflows', workflowName);
+  const consumerWorkflowDir = path.join(
+    packageRoot,
+    '.agent-skill-chain',
+    'templates',
+    'github',
+    '.github',
+    'workflows',
+  );
+  const consumerWorkflows = fs.readdirSync(consumerWorkflowDir).map((name) =>
+    fs.readFileSync(path.join(consumerWorkflowDir, name), 'utf8'),
+  );
+
+  assert.equal(fs.existsSync(repositoryWorkflow), true);
+  assert.equal(fs.existsSync(path.join(consumerWorkflowDir, workflowName)), false);
+  assert.equal(consumerWorkflows.some((content) => content.includes('config-doc-sync')), false);
 });
 
 // ---- verify artifacts ----
