@@ -35,7 +35,7 @@ test('loadConfig: 実物の .agent-skill-chain/config/agent-skill-chain.yaml を
 test('loadConfig (AC-6): worker.segment_overrides.implementation が codex/highest_capability/high に恒久設定され、worker.model_tiersのみに具体的なモデル文字列を持つ', () => {
   const config = loadConfig(packageRoot());
   assert.equal(config.worker.adapter, 'claude');
-  assert.equal(config.worker.agent_tool_dispatch?.enabled, false);
+  assert.equal(config.worker.agent_tool_dispatch?.enabled, true);
   assert.equal(config.templates.claude_agents_source, '.agent-skill-chain/templates/claude/agents');
   assert.equal(config.templates.claude_agents_target, '.claude/agents');
   assert.deepEqual(config.worker.segment_overrides?.implementation, {

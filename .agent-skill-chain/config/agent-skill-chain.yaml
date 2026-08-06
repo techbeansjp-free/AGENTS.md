@@ -41,10 +41,10 @@ review:
 # `agent-skill-chain worker context <issue_id> <segment>` で確認できる。
 worker:
   adapter: claude                # claude | codex | human（segment_overridesが無いセグメントの既定。未設定時は human）
-  # Agent tool経由の起動は、進行役セッションとの生存期間結合など既知の制約を伴うため既定off。
-  # 人間が明示的に有効化し、かつClaude Code CLIセッション・claude adapterの条件が揃った場合のみ使う。
+  # Agent tool経由の起動は、進行役セッションとの生存期間結合など既知の制約を伴う。
+  # Claude Code CLIセッション・claude adapterの条件が揃った場合に使い、明示的なfalseで無効化できる。
   agent_tool_dispatch:
-    enabled: false
+    enabled: true
   segment_overrides:
     # ISSUE-307 AC-6: 実装セグメントを codex・ティアhighest_capability・reasoning effort highへ
     # 恒久設定する。具体的なモデル文字列はここに書かない（唯一の保持場所は下記 model_tiers）。
