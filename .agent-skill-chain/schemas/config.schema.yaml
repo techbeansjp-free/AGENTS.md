@@ -214,7 +214,7 @@ examples:
     review:
       standard: {reviewer_count: 1, modes: [conformance, falsification]}
       strict: {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
-    worker: {adapter: human, agent_tool_dispatch: {enabled: false}}
+    worker: {adapter: human, agent_tool_dispatch: {enabled: true}}
     worktree:
       root: .worktrees
       path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
@@ -248,7 +248,7 @@ examples:
       strict: {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
     worker:
       adapter: claude
-      agent_tool_dispatch: {enabled: false}
+      agent_tool_dispatch: {enabled: true}
       segment_overrides:
         implementation: {adapter: codex, model_tier: highest_capability, reasoning_effort: high}
       model_tiers:

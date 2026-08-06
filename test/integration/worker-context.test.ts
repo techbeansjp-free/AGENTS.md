@@ -25,7 +25,7 @@ test('worker context: issue start済みならissue_number直後にworktree_path�
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       'adapter=claude',
-      'agent_tool_dispatch=false',
+      'agent_tool_dispatch=true',
       'backend=local',
       'issue_number=442',
       `worktree_path=${worktreePath}`,
@@ -43,7 +43,7 @@ test('worker context: issue start未実行ならworktree_pathを出力しない�
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       'adapter=claude',
-      'agent_tool_dispatch=false',
+      'agent_tool_dispatch=true',
       'backend=local',
       'issue_number=442',
     ]);
@@ -66,7 +66,7 @@ test('worker context <issue_id> implementation (AC-1, AC-2, AC-6): 本リポジ�
     const lines = result.stdout.trim().split('\n');
     assert.deepEqual(lines, [
       'adapter=codex',
-      'agent_tool_dispatch=false',
+      'agent_tool_dispatch=true',
       'backend=local',
       'issue_number=307',
       'model_tier=highest_capability',
@@ -87,7 +87,7 @@ test('worker context <issue_id> spec/design/validation (AC-1): 上書きの無�
       const lines = result.stdout.trim().split('\n');
       assert.deepEqual(
         lines,
-        ['adapter=claude', 'agent_tool_dispatch=false', 'backend=local', 'issue_number=307'],
+        ['adapter=claude', 'agent_tool_dispatch=true', 'backend=local', 'issue_number=307'],
         `segment=${segment}`,
       );
     }
@@ -103,7 +103,7 @@ test('worker context <issue_id> (segmentを省略): agent_tool_dispatchを含む
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       'adapter=claude',
-      'agent_tool_dispatch=false',
+      'agent_tool_dispatch=true',
       'backend=local',
       'issue_number=307',
     ]);
@@ -119,6 +119,18 @@ test('worker context (ISSUE-448 AC-8): 明示opt-inをagent_tool_dispatch=true�
     const result = runCli(['worker', 'context', 'ISSUE-448', 'spec'], { cwd: repo.dir });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /^agent_tool_dispatch=true$/m);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('worker context (ISSUE-470 AC-4): 明示opt-outをagent_tool_dispatch=falseとして常に出力する', () => {
+  const repo = createTmpRepo();
+  try {
+    setWorkerAgentToolDispatch(repo.dir, false);
+    const result = runCli(['worker', 'context', 'ISSUE-470', 'spec'], { cwd: repo.dir });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^agent_tool_dispatch=false$/m);
   } finally {
     repo.cleanup();
   }
@@ -146,7 +158,7 @@ test('worker context (AC-3): セグメント別上書き・ティア対応表を
       assert.equal(result.status, 0, result.stderr);
       assert.deepEqual(
         result.stdout.trim().split('\n'),
-        ['adapter=codex', 'agent_tool_dispatch=false', 'backend=local', 'issue_number=1'],
+        ['adapter=codex', 'agent_tool_dispatch=true', 'backend=local', 'issue_number=1'],
         `segment=${segment}`,
       );
     }
@@ -165,7 +177,7 @@ test('worker context (AC-3): worker.adapterも未設定の場合はhumanへフ�
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       'adapter=human',
-      'agent_tool_dispatch=false',
+      'agent_tool_dispatch=true',
       'backend=local',
       'issue_number=1',
     ]);

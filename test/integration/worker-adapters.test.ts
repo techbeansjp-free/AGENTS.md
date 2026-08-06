@@ -181,9 +181,14 @@ function setupWorkerIssue(opts: { backend?: CoordinationBackend; env?: NodeJS.Pr
   return { repo, worktreePath };
 }
 
-/** ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN を必ず除去した env を作る。 */
+/** 呼出元workerの実行時状態を除去し、テストが明示した状態だけを持つenvを作る。 */
 function envWithout(keys: string[], extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('ASC_')) delete env[key];
+  }
+  delete env.CLAUDECODE;
+  Object.assign(env, extra);
   for (const k of keys) delete env[k];
   return env;
 }
@@ -410,10 +415,11 @@ test('worker-launch-verify (ISSUE-448 AC-3/AC-4): contract監査値不一致はr
 
 // --- (a) claude launch_worker: 成功経路 --------------------------------------------------
 
-test('claude launch_worker: WORKER_CMDが成果物commit+push+report completedまで行った場合、exit 0でlease解放・完了確認される', async (t) => {
+test('claude launch_worker (ISSUE-470 AC-4): 明示opt-out時にWORKER_CMDが成果物commit+push+report completedまで行った場合、exit 0でlease解放・完了確認される', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, false);
 
   // Given: role_contractを標準入力で受け取り、成果物をcommit+pushし、その場で
   // report status completedを自ら発行するWORKER_CMD stub。

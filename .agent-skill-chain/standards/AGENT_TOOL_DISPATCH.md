@@ -2,14 +2,14 @@
 
 ## 目的・対象
 
-本手順は、Claude Code CLIセッションの進行役が、`claude` adapterのsegment workerを同一セッションのサブエージェントツリーで可視化して実行する場合に適用する。新方式は`worker.agent_tool_dispatch.enabled: true`を人間が明示した場合だけ利用し、既定値`false`では従来のheadless subprocess起動を維持する。
+本手順は、Claude Code CLIセッションの進行役が、`claude` adapterのsegment workerを同一セッションのサブエージェントツリーで可視化して実行する場合に適用する。新方式は`worker.agent_tool_dispatch.enabled: true`を既定値として利用する。明示的に`false`を設定した場合は、引き続き従来のheadless subprocess起動を維持する。
 
 ## 前提・用語
 
 - dispatch: `worker-launch.sh`がworkerプロセスを直接起動せず、Agent tool呼び出しに必要な固定メタデータを返す状態。
 - dispatch一時ディレクトリ: `contract.md`、`contract.sha256`、`renew.pid`を保持するworktree外の`chmod 700`ディレクトリ。
 - 入力はIssue IDとsegment名、出力はdispatch指示または既存起動方式の完了結果である。
-- Claude Code CLIセッション判定、`claude` adapter、明示opt-inの3条件が一つでも欠ける場合は本手順を使わない。
+- Claude Code CLIセッション判定、`claude` adapter、`worker.agent_tool_dispatch.enabled: true`の3条件が一つでも欠ける場合は本手順を使わない。
 
 ## 実行手順
 
