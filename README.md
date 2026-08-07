@@ -1,6 +1,6 @@
 # agent-skill-chain
 
-Coordination Backend（GitHub の Issue・PR・Check Run、またはローカルの Git 管理下状態）を正本とする、ソフトウェア開発ワークフロー規律のための agentic constitution + CLI パッケージ。思想・不変条件・全ルールの正本は [AGENTS.md](AGENTS.md)。本 README は導入・CLI 操作の手引きに徹し、規律の内容は重複記載しない。実際の動作フロー・シーケンス・コンポーネント構成・状態遷移を図で見たい場合は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照。
+Coordination Backend（GitHub の Issue・PR・Check Run、またはローカルの Git 管理下状態）を正本とする、ソフトウェア開発ワークフロー規律のための agentic constitution + CLI パッケージ。思想・不変条件・全ルールの正本は [AGENTS.md](AGENTS.md)。本 README は導入・CLI 操作の手引きに徹し、規律の内容は重複記載しない。実際の動作フロー・シーケンス・コンポーネント構成・状態遷移を図で見たい場合は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、用語・定義・禁止同義語の一覧は [docs/GLOSSARY.md](docs/GLOSSARY.md)、AI が関わる CI/CD がどこを目指すかの構想は [docs/AI_CI_CD_VISION.md](docs/AI_CI_CD_VISION.md) を参照。
 
 ## インストール・導入
 
