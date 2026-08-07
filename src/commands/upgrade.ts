@@ -1,12 +1,9 @@
 import path from 'node:path';
-import fs from 'node:fs';
-import { packageRoot, ASSET_NAMESPACE } from '../lib/paths.js';
 import { copyTreeMirror } from '../lib/fs-copy.js';
-import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES, packageVersion } from '../lib/asset-manifest.js';
+import { collectManagedAssetMappings, packageVersion } from '../lib/asset-manifest.js';
 import { readInstalledVersion, writeInstalledVersion } from '../lib/version-marker.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { detectLegacyAssets, formatLegacyAssetWarning } from '../lib/legacy-migration.js';
-import { resolveTemplateMappings } from '../lib/template-sync.js';
 import { digestOfFile } from '../lib/digest.js';
 import {
   readOwnershipRecord,
@@ -80,19 +77,12 @@ export async function upgrade(args: string[]): Promise<number> {
       }
     }
 
-    for (const entry of ROOT_LEVEL_ENTRIES) {
-      const src = path.join(packageRoot(), entry);
-      if (!fs.existsSync(src)) continue;
-      trackCopyResults(copyTreeMirror(src, path.join(targetDir, entry), { dryRun, root: targetDir }));
-    }
-    for (const entry of NAMESPACED_ENTRIES) {
-      const src = path.join(packageRoot(), ASSET_NAMESPACE, entry);
-      if (!fs.existsSync(src)) continue;
-      trackCopyResults(copyTreeMirror(src, path.join(targetDir, ASSET_NAMESPACE, entry), { dryRun, root: targetDir }));
-    }
-    const claudeAgents = resolveTemplateMappings(targetDir).find((mapping) => mapping.id === 'claude_agents');
-    if (claudeAgents) {
-      trackCopyResults(copyTreeMirror(claudeAgents.source, claudeAgents.dest, { dryRun, root: targetDir }));
+    // Issue #492: `init`が所有権記録へ書き込むキー集合と同一の走査ロジック
+    // （`collectManagedAssetMappings`）から導出する。2箇所の独立ループの乖離により、削除候補判定の
+    // 基準となる現行配布ファイル集合が誤る（黙って乖離しうる）リスクを構造的に排除する
+    // （手動implementation-gateレビュー指摘: stale-delete-scope-invariant-untested）。
+    for (const { src, dest } of collectManagedAssetMappings(targetDir)) {
+      trackCopyResults(copyTreeMirror(src, dest, { dryRun, root: targetDir }));
     }
 
     // Issue #492: 配布元で廃止されたファイルの削除候補判定・（非dry-runなら）削除実行。

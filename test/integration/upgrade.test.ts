@@ -485,31 +485,49 @@ test('upgrade: 現行配布元に無改変のまま存続するファイルは�
 
   // 導入先で一切変更しない = 現行配布元と内容が完全一致したまま複数回のupgradeを経る、
   // 本機能の主要シナリオ（無改変で存続する配布ファイル）を模す。
-  const conventionsRelative = '.agent-skill-chain/standards/GIT_CONVENTIONS.md';
-  const conventionsPath = path.join(targetDir, ...conventionsRelative.split('/'));
-  const originalContent = fs.readFileSync(conventionsPath, 'utf8');
-  assert.equal(
-    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, conventionsRelative),
-    true,
-    'init直後の所有権記録に対象ファイルが含まれていること（前提条件）',
-  );
+  //
+  // `init`が所有権記録へ書き込むキー集合と`upgrade`が現行配布ファイルとして認識する集合は
+  // `collectManagedAssetMappings`（ROOT_LEVEL_ENTRIES・NAMESPACED_ENTRIES・claude_agents
+  // テンプレートマッピングの3ソース統合）という単一実装から導出される（Issue #492
+  // 手動implementation-gateレビュー指摘: stale-delete-scope-invariant-untested）。3ソースの
+  // いずれか一方だけを将来リファクタリングして乖離させても検知できるよう、3ソース由来のファイルを
+  // それぞれ最低1件ずつ検証する。
+  const targets: Array<{ relative: string; label: string }> = [
+    { relative: 'AGENTS.md', label: 'ROOT_LEVEL_ENTRIES由来（AGENTS.md）' },
+    { relative: '.agent-skill-chain/standards/GIT_CONVENTIONS.md', label: 'NAMESPACED_ENTRIES由来（standards/GIT_CONVENTIONS.md）' },
+    { relative: '.claude/agents/agent-skill-chain-worker.md', label: 'claude_agentsテンプレートマッピング由来（agent-skill-chain-worker.md）' },
+  ];
+
+  const before = targets.map(({ relative, label }) => {
+    const absolutePath = path.join(targetDir, ...relative.split('/'));
+    assert.equal(fs.existsSync(absolutePath), true, `${label}: init直後にファイルが存在すること（前提条件）`);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, relative),
+      true,
+      `${label}: init直後の所有権記録に対象ファイルが含まれていること（前提条件）`,
+    );
+    return { relative, label, absolutePath, content: fs.readFileSync(absolutePath, 'utf8') };
+  });
 
   const result = runCli(['upgrade', targetDir]);
-
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(fs.existsSync(conventionsPath), true, '無改変のまま配布元に存在し続けるファイルは削除されないこと');
-  assert.equal(fs.readFileSync(conventionsPath, 'utf8'), originalContent, '内容も変化しないこと');
+
+  const recordAfter = readOwnershipRecordFile(targetDir);
+  for (const { relative, label, absolutePath, content } of before) {
+    assert.equal(fs.existsSync(absolutePath), true, `${label}: 無改変のまま配布元に存在し続けるファイルは削除されないこと`);
+    assert.equal(fs.readFileSync(absolutePath, 'utf8'), content, `${label}: 内容も変化しないこと`);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(recordAfter.files, relative),
+      true,
+      `${label}: upgrade後もtrackCopyResultsがcopyTreeMirrorの返すresultsから無改変エントリを正しくcurrentKeysへ` +
+        '含め、所有権記録にエントリが残り続けること（この回帰テストが崩れる=無改変配布ファイル全件が誤って' +
+        'ContentMatchと分類され一括削除される経路が復活したことを意味する）',
+    );
+  }
   assert.doesNotMatch(
     result.stdout,
     /GIT_CONVENTIONS\.md.*削除/,
     '削除・削除しない理由のいずれも提示されないこと（削除候補にすら挙がらないこと）',
-  );
-  assert.equal(
-    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, conventionsRelative),
-    true,
-    'upgrade後もtrackCopyResultsがcopyTreeMirrorの返すresultsから無改変エントリを正しくcurrentKeysへ含め、' +
-      '所有権記録にエントリが残り続けること（この回帰テストが崩れる=無改変配布ファイル全件が誤ってContentMatchと' +
-      '分類され一括削除される経路が復活したことを意味する）',
   );
 });
 
