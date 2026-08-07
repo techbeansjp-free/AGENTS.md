@@ -192,11 +192,33 @@ function commentMarkerFor(ext: string): string | undefined {
   return undefined;
 }
 
+/** Issue #487: 引用符付き文字列の外側にある最初の単一行コメント開始記号を返す。 */
+function findUnquotedCommentMarkerIndex(line: string, marker: string): number {
+  let quote: "'" | '"' | undefined;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (quote !== undefined) {
+      if (char === '\\') {
+        i++;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+    } else if (char === "'" || char === '"') {
+      quote = char;
+    } else if (line.startsWith(marker, i)) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
 /** Issue #484: 禁止語が単一行コメント開始以降にあるかを判定する。 */
 function isInSingleLineComment(line: string, pos: number, ext: string): boolean {
   const marker = commentMarkerFor(ext);
   if (marker === undefined) return false;
-  const markerPos = line.indexOf(marker);
+  const markerPos = findUnquotedCommentMarkerIndex(line, marker);
   return markerPos !== -1 && markerPos < pos;
 }
 

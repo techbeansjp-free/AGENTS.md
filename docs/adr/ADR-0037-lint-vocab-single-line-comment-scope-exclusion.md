@@ -2,11 +2,11 @@
 
 ```yaml
 id: ADR-0037
-status: proposed
+status: superseded
 title: lint-vocabにおける単一引用符コード値リテラル文脈は非散文ファイルの単一行コメント部分に適用しない
 tags: [lint-vocab, false-negative, comment-scope]
 supersedes: [ADR-0036]
-superseded-by: null
+superseded-by: ADR-0038
 deprecated-reason: null
 ```
 

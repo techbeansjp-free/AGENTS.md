@@ -250,6 +250,56 @@ test('lint vocab: 非散文ファイルの単一行コメント中にある禁�
   }
 });
 
+test('lint vocab: 文字列リテラル内のコメント記号を無視し、実コメントだけをコメント開始と判定する（Issue #487 AC-1〜AC-4）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const cleanCases = [
+    {
+      name: 'comment-marker-in-string.ts',
+      line: "const cfg = { url: 'https://example.com', tags: ['issue', 'other'] };",
+    },
+    {
+      name: 'comment-marker-after-escaped-quote.ts',
+      line: `const cfg = { label: "quoted \\\" // text", tags: ['issue', 'other'] };`,
+    },
+    {
+      name: 'comment-marker-in-string.sh',
+      line: "url='https://example.com/#fragment'; values=('issue')",
+    },
+    {
+      name: 'comment-marker-in-string.yaml',
+      line: `metadata: { url: "https://example.com/#fragment", tags: ['issue'] }`,
+    },
+    {
+      name: 'comment-marker-in-string.yml',
+      line: `metadata: { url: "https://example.com/#fragment", tags: ['issue'] }`,
+    },
+  ];
+
+  for (const { name, line } of cleanCases) {
+    fs.writeFileSync(path.join(repo.dir, name), `${line}\n`);
+    const result = runCli(['lint', 'vocab', name], { cwd: repo.dir });
+
+    assert.equal(result.status, 0, `${name}: ${result.stderr}`);
+    assert.equal(result.stderr, '', name);
+  }
+
+  const mixedName = 'quoted-literal-before-comment.ts';
+  fs.writeFileSync(
+    path.join(repo.dir, mixedName),
+    "const values = ['issue']; // deprecated values: ('issue', 'legacy')\n",
+  );
+  const mixed = runCli(['lint', 'vocab', mixedName], { cwd: repo.dir });
+
+  assert.equal(mixed.status, 1, mixed.stderr);
+  assert.match(
+    mixed.stderr,
+    /quoted-literal-before-comment\.ts:1: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+  );
+  assert.equal(mixed.stderr.trim().split('\n').length, 1, '実コメント中の禁止語だけが報告されること');
+});
+
 test('lint vocab: 単一引用符の禁止語を含む散文はコード値リテラル文脈として除外されない（Issue #469 AC-3）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
