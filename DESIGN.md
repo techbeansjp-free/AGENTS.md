@@ -170,6 +170,17 @@ profile:
 
 ### 設計要素5: 配布マッピング拡張
 
+`.agent-skill-chain/schemas/config.schema.yaml` の `templates` オブジェクトの `properties` へ、既存の `claude_agents_source`/`claude_agents_target`（`required` 配列には含まれない任意プロパティ、`type: string`、スキーマ上の既定値記載なし——既定値は `resolveTemplateMappings` 呼び出し側のコード中の `??` フォールバックが担う）と同じ形式で次の2フィールドを追加する（`templates.required: [github_source, github_target, verify_sync]` は変更しない——`claude_agents_source`/`claude_agents_target` と同様に任意項目とする）。
+
+```yaml
+templates:
+  properties:
+    claude_skills_source: {type: string}
+    claude_skills_target: {type: string}
+```
+
+`.agent-skill-chain/config/agent-skill-chain.yaml` および `.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`（設計要素4）の `templates` セクションには、`claude_agents_source`/`claude_agents_target` と同様にこの2フィールドを明示値として追加しない（既存の `claude_agents_source`/`claude_agents_target` がどちらの設定ファイルにも明示記載されておらず、コード側 `?? '既定パス'` フォールバックのみに依存している既存パターンを維持するため）。これにより本Issueのconfig設定ファイル側の変更は設計要素3が定める `profile` 追加のみで足り、`templates` セクションへの追加記載は不要となる。
+
 `src/lib/template-sync.ts` の `TemplateMapping['id']` に `'claude_skills'` を追加し、`resolveTemplateMappings` へ次のマッピングを追加する。
 
 ```ts
