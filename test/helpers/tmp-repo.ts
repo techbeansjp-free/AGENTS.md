@@ -283,6 +283,28 @@ export function setMergeAutonomous(repoDir: string, autonomous: boolean): void {
 }
 
 /**
+ * merge.autonomous: true を維持したまま merge.auto_update_branch（Issue #493）を明示設定する。
+ * pr merge のbase branch最新性チェックが対象PRをbehindと判定した際の自動最新化オプトインを
+ * テストで制御するために使う（既定は未設定＝false相当で最新化を試みず中断する）。
+ */
+export function setMergeAutoUpdateBranch(repoDir: string, enabled: boolean): void {
+  const configPath = path.join(repoDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const text = fs.readFileSync(configPath, 'utf8');
+  const block = `merge:\n  autonomous: true\n  auto_update_branch: ${enabled}\n`;
+  const patched = /^merge:\n(?: {2}.*\n)*/m.test(text)
+    ? text.replace(/^merge:\n(?: {2}.*\n)*/m, block)
+    : `${text}\n${block}`;
+  fs.writeFileSync(configPath, patched);
+
+  const after = fs.readFileSync(configPath, 'utf8');
+  if (!new RegExp(`merge:\\n\\s*autonomous: true\\n\\s*auto_update_branch: ${enabled}\\b`).test(after)) {
+    throw new Error(
+      `merge.auto_update_branch を ${enabled} へ書き換えられませんでした（config/agent-skill-chain.yaml の書式が変わった可能性）`,
+    );
+  }
+}
+
+/**
  * merge ブロック全体を config から取り除く（schema上 merge は任意項目）。CLI 側の既定値
  * フォールバック（未設定時 false 相当＝マージ自体を拒否）を、本物のリポジトリ側の dogfooding
  * 設定値（`merge.autonomous: true`）に依存せず検証するために使う。

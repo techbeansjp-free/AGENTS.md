@@ -38,7 +38,10 @@ export interface AgentSkillChainConfig {
   // Issue #427。進行役（AIエージェント）が `pr merge` コマンド自体でPRマージを実行してよいかの
   // opt-in。既定は未設定＝無効（`autonomy: gated | full` とは独立の別軸、混同しない）。
   // 本セクションを持たない既存の設定ファイルを妥当なまま受け入れるため任意項目にする。
-  merge?: { autonomous: boolean };
+  // auto_update_branch（Issue #493）は、対象PRがbase branchに対して最新でない（behind）と
+  // 判明した場合に `gh api -X PUT .../update-branch` による自動最新化を試みてよいかの opt-in。
+  // 既定は未設定＝無効（最新化を試みず日本語エラーで中断する安全側の既定挙動）。
+  merge?: { autonomous: boolean; auto_update_branch?: boolean };
   // Issue #427。`merge.autonomous` と同じ精神の独立した opt-in で、実装セグメント着手前
   // （`segment start <issue_id> implementation`）に人間の明示的な確認を要求するかを制御する。
   // 既定は未設定＝要求する（true相当）。`merge.autonomous`（既定false＝要求する）とは

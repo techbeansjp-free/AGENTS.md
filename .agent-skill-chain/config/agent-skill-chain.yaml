@@ -98,6 +98,11 @@ issue_sync:
 # プロジェクトでは人間の明示的なマージを既定とする。本リポジトリ（techbeansjp-free/AGENTS.md
 # 自身）は、ユーザーが進行役による自走的マージ運用を明示承認済みの開発環境であるため true。
 # `autonomy: gated | full`（レビュー厳格度の制御）とは独立した別軸であり、混同しない。
+# auto_update_branch（Issue #493）: 対象PRのhead branchがbase branchに対して最新でない
+# （behind）と判明した場合に、`gh api -X PUT .../update-branch` による自動最新化を試みてよいかの
+# opt-in。既定は未設定＝false（最新化を試みず日本語エラーで中断する安全側の既定挙動）。本項目は
+# 明示的にオプトインしない限り true にしない（要件2）。本リポジトリでも現時点では未設定のまま
+# （behind時は日本語エラーで中断し人間判断へ委ねる）とする。
 merge:
   autonomous: true
 

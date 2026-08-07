@@ -9,6 +9,7 @@ import { tryReadYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { gh, git } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
+import { resolveMergeTarget, checkFreshness, attemptUpdateBranch, MergeFailureClassifier } from '../lib/pr-freshness.js';
 
 const USAGE = `
 使い方: agent-skill-chain pr create <issue_id> <branch>
@@ -28,6 +29,14 @@ const MERGE_USAGE = `
 
 \`.agent-skill-chain/config/agent-skill-chain.yaml\` の \`merge.autonomous\` が true
 （明示opt-in）でない限り、実際のマージは実行せず日本語メッセージで停止する（既定 false）。
+
+\`gh pr merge\` 実行前に、対象PRのhead branchがbase branch（既定ではmain）の最新コミットに
+対して最新（behind=0）かどうかを必ず確認する（--admin 等のオプションでも迂回できない）。
+最新でない場合、\`merge.auto_update_branch: true\`（既定 false）を明示設定していなければ
+最新化を試みず日本語エラーメッセージで中断する。true設定時は update-branch API による
+最新化を試み、コンフリクト等で完了できない場合も中断する。対象PRの識別は引数からの明示指定、
+または指定が無い場合はcwdの現在ブランチに紐づくPRの暗黙解決に委ねる。いずれの方法でも
+対象PRを特定できない場合や最新性確認自体が失敗した場合も、マージを実行せず中断する。
 
 マージ成功後、main worktree（repoRoot()が指す共通作業ツリー。default branchを
 チェックアウトしている前提）のローカルブランチを origin/<default-branch> へ
@@ -264,10 +273,75 @@ export async function merge(args: string[]): Promise<number> {
       );
     }
 
+    // Issue #493: --admin 等のオプションでも迂回できない、gh pr merge 実行前の必須最新性チェック。
+    const { target, repoOverride } = resolveMergeTarget(args, root);
+    if (target === undefined) {
+      return fail(
+        '対象PRを特定できませんでした。引数にPR番号・URL・ブランチのいずれも含まれておらず、' +
+          'cwdの現在ブランチに紐づくPRの暗黙解決にも失敗しました。PR番号を明示するか、' +
+          '対象PRのブランチ上で実行してください。',
+      );
+    }
+
+    let preMergeBaseSha: string | undefined;
+    const initial = checkFreshness(root, target, repoOverride);
+    if (initial.status === 'check_failed') {
+      return fail(
+        `対象PR（${target}）の最新性確認自体が失敗しました（GitHub APIエラー等）。マージを実行せず中断します。`,
+      );
+    }
+    if (initial.status === 'behind') {
+      if (config.merge?.auto_update_branch !== true) {
+        return fail(
+          [
+            `対象PR（${target}）のhead branchがbase branchの最新コミットに対して最新ではありません（behind）。`,
+            'このままではマージを実行しません。対象PRブランチをbase branchへ追随させたうえで再実行するか、',
+            '`.agent-skill-chain/config/agent-skill-chain.yaml` の `merge.auto_update_branch: true` で',
+            '自動最新化を明示的に有効化してください（既定は無効です）。',
+          ].join('\n'),
+        );
+      }
+      const update = attemptUpdateBranch(root, target, repoOverride);
+      if (update.status === 'not_applicable') {
+        return fail(`対象PR（${target}）が処理中にクローズ・マージされたため最新化を中断しました。`);
+      }
+      if (update.status !== 'updated') {
+        return fail(
+          `対象PR（${target}）の自動最新化に失敗しました（コンフリクト、またはポーリング上限到達まで反映されませんでした）。` +
+            'マージを実行せず中断します。手動で対象PRブランチを最新化してください。',
+        );
+      }
+      preMergeBaseSha = update.baseSha;
+    } else {
+      // 'fresh' または 'not_applicable'（対象PRが既にOPENでない等、既存の gh pr merge 挙動に委ねる）。
+      preMergeBaseSha = initial.baseSha;
+    }
+
     const result = gh(['pr', 'merge', ...args], root);
     if (result.stdout) process.stdout.write(result.stdout);
+    if (result.status !== 0) {
+      if (result.stderr) process.stderr.write(result.stderr);
+      if (MergeFailureClassifier.classifyMergeFailure(result.stderr) === 'ambiguous') {
+        process.stderr.write(
+          '対象PRの最新性チェックを通過した後にマージ自体が失敗しました。確認からマージ実行までの間に' +
+            '別のマージが成立した可能性（TOCTOU競合）を含め、原因を確認してください。\n',
+        );
+      }
+      return result.status;
+    }
     if (result.stderr) process.stderr.write(result.stderr);
-    if (result.status !== 0) return result.status;
+
+    // 確認通過後のベストエフォート事後検知（ADR-0039 Decision 6）。検知不能時は無警告で
+    // 正常終了し、この検知の成否は終了コードに一切影響しない。
+    if (preMergeBaseSha !== undefined) {
+      const post = checkFreshness(root, target, repoOverride, { allowUnknownBackoff: false });
+      if (post.baseSha !== undefined && post.baseSha !== preMergeBaseSha) {
+        process.stderr.write(
+          'マージは成立しましたが、確認時点以降にbaseへ新しいコミットが追加されていた可能性があります。' +
+            '念のため内容を確認してください。\n',
+        );
+      }
+    }
 
     return syncMainWorktree(root);
   });

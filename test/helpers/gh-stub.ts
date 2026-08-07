@@ -269,12 +269,43 @@ if (cmd === 'pr' && sub === 'view') {
   // release bump・root-cleanup run の findOpenPrByHead が
   // 'gh pr view <branch> --json number,state,headRefName,files' として呼ぶ
   // ほか、worker resumeのreview status取得はPR番号で問い合わせる。
-  const key = args[2];
+  // Issue #493: 対象識別子省略時（rawKeyがフラグから始まる、または未指定）は
+  // pr-freshness.ts の resolveMergeTarget() フォールバック（cwdの現在ブランチに紐づくPRの
+  // 暗黙解決）と同じ呼び出し形（'gh pr view --json number' [--repo <repo>]）を模擬する。
+  const rawKey = args[2];
+  const hasExplicitKey = rawKey !== undefined && !rawKey.startsWith('-');
+  const key = hasExplicitKey ? rawKey : undefined;
   const state = loadState();
   // Issue #354 issue-sync は PR 番号 + '--json body' で本文だけを読む（ブランチ名では引かない）。
   const viewFields = (flag('--json') || '').split(',');
-  state.prViewCalls = (state.prViewCalls || []).concat([{ key, fields: viewFields }]);
+  const repoFlagIndex = args.indexOf('--repo') !== -1 ? args.indexOf('--repo') : args.indexOf('-R');
+  const repoOverride = repoFlagIndex !== -1 ? args[repoFlagIndex + 1] : undefined;
+  state.prViewCalls = (state.prViewCalls || []).concat([{ key: key ?? '(implicit)', fields: viewFields, repo: repoOverride }]);
   saveState(state);
+
+  if (!hasExplicitKey) {
+    // resolveMergeTarget() のcwdベース暗黙解決フォールバック（対象識別子を伴わない呼び出し）。
+    if (state.failImplicitPrResolution) {
+      process.stderr.write('gh-stub: no pull requests found for current branch\\n');
+      process.exit(1);
+    }
+    let branch;
+    try {
+      branch = childProcess
+        .execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: process.cwd(), encoding: 'utf8' })
+        .trim();
+    } catch {
+      branch = undefined;
+    }
+    const pr = branch ? (state.prsByBranch || {})[branch] : undefined;
+    if (!pr) {
+      process.stderr.write('gh-stub: no pull requests found for current branch "' + (branch || '') + '"\\n');
+      process.exit(1);
+    }
+    process.stdout.write(JSON.stringify({ number: pr.number }));
+    process.exit(0);
+  }
+
   if (viewFields.includes('body')) {
     const payload = {};
     if (viewFields.includes('number')) payload.number = Number(key);
@@ -285,6 +316,50 @@ if (cmd === 'pr' && sub === 'view') {
   const pr =
     (state.prsByBranch || {})[key] ||
     Object.values(state.prsByBranch || {}).find((candidate) => String(candidate.number) === String(key));
+
+  // Issue #493: pr-freshness.ts の checkFreshness() が問い合わせる mergeStateStatus/baseRefOid。
+  // 事前登録（gh pr create・seedOpenPr）が無いPR番号（例: 既存テストの 'gh pr merge 1' 直接指定）
+  // でも、AC-5（既存挙動からの回帰なし）を満たすため既定でfresh相当を返す。テストが
+  // seedPrFreshnessQueue() で明示制御した場合はそれを優先する。
+  if (viewFields.includes('mergeStateStatus') || viewFields.includes('baseRefOid')) {
+    const freshnessViewFailure = (state.prViewFailures || {})[key];
+    if (freshnessViewFailure) {
+      process.stderr.write(freshnessViewFailure);
+      process.exit(1);
+    }
+    const queues = state.prFreshnessQueues || {};
+    const queue = queues[key];
+    const counts = (state.prFreshnessCallCounts = state.prFreshnessCallCounts || {});
+    const payload = {};
+    let prState = pr ? pr.state : 'OPEN';
+    let mergeStateStatus = 'CLEAN';
+    let baseRefOid = state.defaultBaseRefOid || 'default-base-sha';
+    if (queue && queue.length > 0) {
+      const idx = Math.min(counts[key] || 0, queue.length - 1);
+      counts[key] = (counts[key] || 0) + 1;
+      const entry = queue[idx];
+      if (entry.fail) {
+        saveState(state);
+        process.stderr.write('gh-stub: simulated freshness check failure (queued)\\n');
+        process.exit(1);
+      }
+      if (entry.state !== undefined) prState = entry.state;
+      if (entry.mergeStateStatus !== undefined) mergeStateStatus = entry.mergeStateStatus;
+      if (entry.baseRefOid !== undefined) baseRefOid = entry.baseRefOid;
+      saveState(state);
+    } else if (pr && pr.mergeStateStatus !== undefined) {
+      mergeStateStatus = pr.mergeStateStatus;
+    }
+    if (viewFields.includes('number')) payload.number = pr ? pr.number : Number(key);
+    if (viewFields.includes('state')) payload.state = prState;
+    if (viewFields.includes('headRefName')) payload.headRefName = pr ? pr.headRefName : undefined;
+    if (viewFields.includes('baseRefName')) payload.baseRefName = 'main';
+    if (viewFields.includes('mergeStateStatus')) payload.mergeStateStatus = mergeStateStatus;
+    if (viewFields.includes('baseRefOid')) payload.baseRefOid = baseRefOid;
+    process.stdout.write(JSON.stringify(payload));
+    process.exit(0);
+  }
+
   const prViewFailure = (state.prViewFailures || {})[key];
   if (prViewFailure && (viewFields.includes('reviews') || viewFields.includes('latestReviews') || viewFields.includes('comments'))) {
     process.stderr.write(prViewFailure);
@@ -513,6 +588,24 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  // Issue #493: pr-freshness.ts の attemptUpdateBranch() が呼ぶ
+  // 'gh api -X PUT repos/<repo>/pulls/{n}/update-branch'（<repo>は ':owner/:repo' プレースホルダ、
+  // または -R/--repo 由来の実値のいずれか）。<repo> 部分にスラッシュを含むため、
+  // '/pulls/(\\d+)/update-branch' までの後方一致で repo 全体を捕捉する。
+  const updateBranchMatch = /^repos\\/(.+)\\/pulls\\/(\\d+)\\/update-branch$/.exec(apiPath || '');
+  if (updateBranchMatch && method === 'PUT') {
+    const repo = updateBranchMatch[1];
+    const prNumber = updateBranchMatch[2];
+    state.updateBranchCalls = state.updateBranchCalls || [];
+    state.updateBranchCalls.push({ repo, prNumber });
+    saveState(state);
+    if ((state.updateBranchFailures || {})[prNumber]) {
+      process.stderr.write('gh-stub: simulated update-branch failure\\n');
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
   const rulesetUpdateMatch = /\\/rulesets\\/(\\d+)$/.exec(apiPath || '');
   if (rulesetUpdateMatch && method === 'PUT') {
     const id = Number(rulesetUpdateMatch[1]);
@@ -666,6 +759,19 @@ export interface GhStubBumpPr {
   latestReviews?: unknown[];
   reviews?: unknown[];
   comments?: unknown[];
+  mergeStateStatus?: string;
+}
+
+/** Issue #493: `checkFreshness()` の `gh pr view` 問い合わせ1回ぶんの応答を制御するエントリ。
+ * `state`/`mergeStateStatus`/`baseRefOid` は省略したフィールドをそのPRの既定値（またはfresh相当）
+ * のまま維持する。 */
+export interface GhStubFreshnessEntry {
+  state?: 'OPEN' | 'MERGED' | 'CLOSED';
+  mergeStateStatus?: string;
+  baseRefOid?: string;
+  /** trueの場合、このエントリを消費する呼び出し自体を `gh pr view` 失敗として模擬する
+   * （マージ成立後のベストエフォート事後確認のみを失敗させる等、呼び出し単位の制御に使う）。 */
+  fail?: boolean;
 }
 
 export interface GhStubState {
@@ -709,7 +815,7 @@ export interface GhStubState {
   issueViewFailures?: Record<string, string>;
   issueCommentFailures?: Record<string, string>;
   prViewFailures?: Record<string, string>;
-  prViewCalls?: { key: string; fields: string[] }[];
+  prViewCalls?: { key: string; fields: string[]; repo?: string }[];
   prReviewThreadComments?: Record<string, unknown[]>;
   prReviewThreadCommentFailures?: Record<string, string>;
   // ---- Issue #196 release bump/tag/publish・Issue #208 root-cleanup run 検証用
@@ -732,6 +838,19 @@ export interface GhStubState {
   prEditBodyCalls?: { number: string }[];
   bodyRaceRemaining?: number;
   bodyRaceSeq?: number;
+  // ---- Issue #493 pr merge base freshness 検証用 ----
+  /** PR番号ごとの `gh pr view <target> --json ...mergeStateStatus,baseRefOid...` 応答キュー。
+   * 呼び出しのたび先頭から1件ずつ消費し、末尾到達後は最後のエントリを維持する。未設定の場合は
+   * 既定でfresh相当（state: OPEN, mergeStateStatus: CLEAN）を返す（AC-5の回帰防止）。 */
+  prFreshnessQueues?: Record<string, GhStubFreshnessEntry[]>;
+  prFreshnessCallCounts?: Record<string, number>;
+  defaultBaseRefOid?: string;
+  /** `resolveMergeTarget()` のcwdベース暗黙解決フォールバック（'gh pr view --json number'）を
+   * 強制失敗させる。 */
+  failImplicitPrResolution?: boolean;
+  updateBranchCalls?: { repo: string; prNumber: string }[];
+  /** PR番号ごとに `gh api -X PUT .../update-branch` 呼び出し自体を失敗させる。 */
+  updateBranchFailures?: Record<string, boolean>;
 }
 
 export interface GhStub {
@@ -778,6 +897,16 @@ export interface GhStub {
   /** Issue #354: 本文読み取り count 回ぶん、読み取り直後に別プロセスがマーカー区間を
    * 書き換えた状態を再現する（読み直し比較による競合検知の発火条件）。 */
   simulateConcurrentBodyWrites(count: number): void;
+  /** Issue #493: `checkFreshness()` が対象PR番号へ問い合わせるたびに先頭から1件ずつ消費する
+   * 応答キューを設定する（末尾到達後は最後のエントリを維持）。BEHIND→CLEANの複数回ポーリング、
+   * ポーリング中に対象PRがOPENでなくなるケース等を再現するために使う。 */
+  seedPrFreshnessQueue(prNumber: number, queue: GhStubFreshnessEntry[]): void;
+  /** Issue #493: `resolveMergeTarget()` のcwdベース暗黙解決フォールバック
+   * （'gh pr view --json number'、対象識別子省略時）を強制失敗させる。 */
+  failImplicitPrResolution(): void;
+  /** Issue #493: 指定PR番号への `gh api -X PUT .../update-branch` 呼び出し自体を失敗させる
+   * （コンフリクト等でAPI呼び出しそのものが非0終了する状況を再現する）。 */
+  failUpdateBranch(prNumber: number): void;
 }
 
 /**
@@ -928,6 +1057,22 @@ export function createGhStub(baseDir: string): GhStub {
     simulateConcurrentBodyWrites(count: number): void {
       const state = this.readState();
       state.bodyRaceRemaining = count;
+      this.writeState(state);
+    },
+    seedPrFreshnessQueue(prNumber: number, queue: GhStubFreshnessEntry[]): void {
+      const state = this.readState();
+      state.prFreshnessQueues = { ...(state.prFreshnessQueues ?? {}), [String(prNumber)]: queue };
+      state.prFreshnessCallCounts = { ...(state.prFreshnessCallCounts ?? {}), [String(prNumber)]: 0 };
+      this.writeState(state);
+    },
+    failImplicitPrResolution(): void {
+      const state = this.readState();
+      state.failImplicitPrResolution = true;
+      this.writeState(state);
+    },
+    failUpdateBranch(prNumber: number): void {
+      const state = this.readState();
+      state.updateBranchFailures = { ...(state.updateBranchFailures ?? {}), [String(prNumber)]: true };
       this.writeState(state);
     },
   };

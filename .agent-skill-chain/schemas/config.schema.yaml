@@ -149,12 +149,16 @@ properties:
   # 本セクションを持たない既存の設定ファイルはこれまでどおり妥当なものとして扱う（未設定＝無効、
   # つまり進行役による `pr merge` コマンド自体の自動マージは既定で拒否される）。
   # `autonomy: gated | full`（レビュー厳格度の制御）とは独立した別軸（マージ実行主体の制御）。
+  # auto_update_branch（Issue #493）も後方互換な任意項目。既存YAMLに存在しなくても false相当
+  # （最新化を試みず中断する既定の安全側挙動）として扱う。加算のみの変更のため required は
+  # autonomous のままで、schema_version（agent-skill-chain/config/v1）は据え置く（migration不要）。
   merge:
     type: object
     required: [autonomous]
     additionalProperties: false
     properties:
       autonomous: {type: boolean}
+      auto_update_branch: {type: boolean}
   # human_confirmation（Issue #427）も同様に後方互換な任意項目とする。本セクションを持たない
   # 既存の設定ファイルは「実装セグメント着手前に人間確認を要求する」既定のまま妥当とする
   # （未設定＝before_implementation: true相当）。
