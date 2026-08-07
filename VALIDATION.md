@@ -1,6 +1,6 @@
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-469
-target_sha: c1d0e79e99e834a85bd1cdb73a862dcb56483caa
+target_sha: c04d23e91a67760b558deea99501d14fe4cf3446
 
 acceptance_criteria:
   - ac_id: AC-1
@@ -35,13 +35,14 @@ acceptance_criteria:
   - ac_id: AC-5
     verification:
       mode: hybrid
-      result: fail
+      result: pass
       reason: "AC-5のThen条件は「agent-skill-chain / ci workflowのverifyジョブが本Issueの誤検知を原因としてfailureを起こさない」ことであり、自動テストの再現確認だけでなく実際のCI実行結果の確認を要するためhybridとした。"
-      procedure: "PR #481（headブランチ bugfix/469-lint-vocab-cli-arg-quote、target_sha c1d0e79e）に対する最新CI実行を `gh pr checks 481` および `gh run view <run-id> --log-failed` で確認した。"
+      procedure: "PR #481（headブランチ bugfix/469-lint-vocab-cli-arg-quote、target_sha c04d23e9）に対する最新CI実行を `gh pr checks 481` および `gh api repos/techbeansjp-free/AGENTS.md/actions/runs/<run-id>/jobs` で確認した。"
       executor: validation_worker
     evidence:
-      - "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/31136560113 : agent-skill-chain / ci workflowの verify ジョブがfailしている。ただし失敗箇所は本Issueが対象とする lint-vocab ステップではなく、先行する verify-spec-bdd ステップである。ログ: 'SPEC.md: AC-5 の検証方法見込みは automated|manual|hybrid のいずれかである必要があります: `hybrid`（自動テストによる再現確認に加え、実際のCI実行結果を進行役が確認する）'。verify-spec-bdd.sh（実体 src/commands/verify.ts の specBdd()）の正規表現 `^`?(automated|manual|hybrid)`?$` はバッククォート付き単独語のみを許容し、本SPEC.md AC-5自身が付記した括弧書きの補足説明と一致しない。verify-spec-bddステップがfailで停止するため、後続の lint-vocab ステップ自体が実行されずスキップされている（ジョブログに lint-vocab ステップの出力が存在しない）。"
-      - "ローカルでは node bin/agents-md.js lint vocab（対象省略時のデフォルト全体、review-light.ts:60 を含む）を実行しexit 0・違反0件を確認済み（AC-1〜AC-4のevidence参照）。本Issueが報告した誤検知自体はコード変更により解消されているが、上記の別原因（SPEC.md AC-5自身の検証方法見込み欄の記法が本リポジトリの既存慣行〔他Issueの検証済みSPEC.mdでは `hybrid` を注釈なしのバッククォート単独語として記載〕から逸脱している）により、CI上のverifyジョブは現時点でfailのままであり、AC-5のThen条件（verifyジョブのfailureが発生しない）を実CI結果として満たせていない。"
+      - "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/31138866548 : agent-skill-chain / ci workflowの verify ジョブが success で完了（target_sha c04d23e9）。`gh api repos/techbeansjp-free/AGENTS.md/actions/runs/31138866548/jobs` によるステップ別 conclusion 確認で、verify-spec-bdd・lint-vocab を含む全23ステップが success。lint-vocabステップが実行され、本Issueが報告した review-light.ts:60 の 'issue' 誤検知によるfailureが発生していないことを確認した。"
+      - "先行するAC-5検証（target_sha c1d0e79e時点、run 31136560113）では、SPEC.md AC-5自身の検証方法見込み欄の記法が verify-spec-bdd 規約（バッククォート単独語）から逸脱しており verify-spec-bdd ステップがfailし、後続の lint-vocab ステップ自体が未実行のままジョブがfailしていた。これをcommit c04d23e9（AC-5検証方法見込み欄を `hybrid` の単独語表記へ修正）で是正した結果、verify-spec-bddが成功し後続のlint-vocabも実行・成功した。"
+      - "ローカルでも node bin/agents-md.js lint vocab（対象省略時のデフォルト全体、review-light.ts:60 を含む）を実行しexit 0・違反0件を確認済み（AC-1〜AC-4のevidence参照）。"
 
 regression:
   executed: true
