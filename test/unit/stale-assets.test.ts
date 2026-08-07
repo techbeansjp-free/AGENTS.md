@@ -11,6 +11,15 @@ function mkdtemp(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+/**
+ * rootユーザーで実行されるとDAC権限チェックがバイパスされ、chmodによる読み取り・削除失敗の
+ * 誘発が成立せずテストがfalse failureになるため、権限操作に依存するテストはrootで実行された
+ * 場合スキップする（Issue #492 手動implementation-gateレビュー指摘）。
+ */
+function isRunningAsRoot(): boolean {
+  return typeof process.getuid === 'function' && process.getuid() === 0;
+}
+
 // Issue #492: 削除候補差分計算（要件3・AC-4・AC-5・AC-9）。
 
 test('computeCandidateKeys: 直前記録が無ければ候補は0件', () => {
@@ -41,6 +50,10 @@ test('classifyCandidate: ファイルが物理的に存在しない場合はAbse
 });
 
 test('classifyCandidate: 読み取り自体がENOENT以外の理由で失敗する場合はUnreadable（要件8・AC-10）', (t) => {
+  if (isRunningAsRoot()) {
+    t.skip('rootユーザーでは権限チェックがバイパスされるため');
+    return;
+  }
   const root = mkdtemp('stale-assets-');
   const filePath = path.join(root, 'locked.md');
   fs.writeFileSync(filePath, 'secret');
@@ -131,6 +144,10 @@ test('resolveStaleAssets: 内容が変更されたファイルは削除されず
 });
 
 test('resolveStaleAssets: 読み取り不能なファイルは削除されず警告され、次回記録に保持される（AC-10）', (t) => {
+  if (isRunningAsRoot()) {
+    t.skip('rootユーザーでは権限チェックがバイパスされるため');
+    return;
+  }
   const root = mkdtemp('stale-assets-');
   const filePath = path.join(root, 'locked.md');
   fs.writeFileSync(filePath, 'secret');
@@ -159,6 +176,10 @@ test('resolveStaleAssets: 物理的に既に存在しないファイルはエラ
 });
 
 test('resolveStaleAssets: 削除操作自体が失敗した場合は異常終了対象になり、次回記録に保持される（AC-7）', (t) => {
+  if (isRunningAsRoot()) {
+    t.skip('rootユーザーでは権限チェックがバイパスされるため');
+    return;
+  }
   const root = mkdtemp('stale-assets-');
   const lockedDir = path.join(root, 'locked-dir');
   fs.mkdirSync(lockedDir);
@@ -180,6 +201,10 @@ test('resolveStaleAssets: 削除操作自体が失敗した場合は異常終了
 });
 
 test('resolveStaleAssets: 複数候補中1件のみ削除失敗しても、他の正常な削除結果は隠されない（AC-11）', (t) => {
+  if (isRunningAsRoot()) {
+    t.skip('rootユーザーでは権限チェックがバイパスされるため');
+    return;
+  }
   const root = mkdtemp('stale-assets-');
   const lockedDir = path.join(root, 'locked-dir');
   fs.mkdirSync(lockedDir);

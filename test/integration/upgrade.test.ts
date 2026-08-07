@@ -14,6 +14,15 @@ function mkScratch(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agent-skill-chain-${prefix}-`));
 }
 
+/**
+ * rootユーザーで実行されるとDAC権限チェックがバイパスされ、chmodによる読み取り・削除失敗の
+ * 誘発が成立せずテストがfalse failureになるため、権限操作に依存するテストはrootで実行された
+ * 場合スキップする（Issue #492 手動implementation-gateレビュー指摘）。
+ */
+function isRunningAsRoot(): boolean {
+  return typeof process.getuid === 'function' && process.getuid() === 0;
+}
+
 // Issue #492: upgradeが配布元で廃止されたファイルを検知・削除する所有権記録の受入シナリオ（AC-1〜AC-11）。
 
 function digestOf(content: string): string {
@@ -389,6 +398,10 @@ test('upgrade --dry-run: 削除予定一覧は非dry-run実行時の削除結果
 });
 
 test('upgrade: 削除に失敗した場合は異常終了し失敗ファイルを明示するが、他の正常な更新結果は隠されない（AC-7・AC-11）', (t) => {
+  if (isRunningAsRoot()) {
+    t.skip('rootユーザーでは権限チェックがバイパスされるため');
+    return;
+  }
   const targetDir = mkScratch('upgrade-delete-failure');
   const lockedDir = path.join(targetDir, '.agent-skill-chain', 'config');
   t.after(() => {
@@ -466,6 +479,10 @@ test('upgrade: 配布元に依然として存在するファイルは削除候�
 });
 
 test('upgrade: 削除候補判定のための読み取り自体が失敗した場合は削除せず警告し、異常終了しない（AC-10）', (t) => {
+  if (isRunningAsRoot()) {
+    t.skip('rootユーザーでは権限チェックがバイパスされるため');
+    return;
+  }
   const targetDir = mkScratch('upgrade-stale-unreadable');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
   assert.equal(runCli(['init', targetDir]).status, 0);
@@ -485,4 +502,28 @@ test('upgrade: 削除候補判定のための読み取り自体が失敗した�
     true,
     '再試行のため所有権記録に保持されること',
   );
+});
+
+test('upgrade: 所有権記録自体が破損している場合は削除候補判定・記録更新の両方をスキップし、記録ファイルを上書きしない（手動implementation-gateレビュー指摘）', (t) => {
+  const targetDir = mkScratch('upgrade-ownership-record-corrupt');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const corruptContent = '{ this is not valid JSON';
+  fs.writeFileSync(ownershipRecordPath(targetDir), corruptContent);
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /所有権記録.*が破損しているため、今回は削除候補の判定・記録更新の両方をスキップしました。記録ファイルを手動で確認・修正するか削除してから再実行してください。/,
+  );
+  assert.equal(
+    fs.readFileSync(ownershipRecordPath(targetDir), 'utf8'),
+    corruptContent,
+    '破損した記録ファイルは上書きされず、そのまま残ること（過去の所有ファイル一覧の永久喪失を防ぐ）',
+  );
+  // upgrade本来の通常のファイルコピー・更新処理は従来通り実行されること。
+  assert.match(result.stdout, /^\d+\.\d+\.\d+ -> \d+\.\d+\.\d+$/m);
 });

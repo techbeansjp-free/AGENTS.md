@@ -8,7 +8,13 @@ import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { detectLegacyAssets, formatLegacyAssetWarning } from '../lib/legacy-migration.js';
 import { resolveTemplateMappings } from '../lib/template-sync.js';
 import { digestOfFile } from '../lib/digest.js';
-import { readOwnershipRecord, writeOwnershipRecord, toOwnershipKey, fromOwnershipKey } from '../lib/ownership-record.js';
+import {
+  readOwnershipRecord,
+  writeOwnershipRecord,
+  toOwnershipKey,
+  fromOwnershipKey,
+  ownershipRecordPath,
+} from '../lib/ownership-record.js';
 import { resolveStaleAssets, type StaleAssetOutcome } from '../lib/stale-assets.js';
 import type { CopyResult } from '../lib/fs-copy.js';
 
@@ -49,8 +55,15 @@ export async function upgrade(args: string[]): Promise<number> {
 
     // Issue #492: 削除候補判定の入力となる、直前の所有権記録を読み取る。読み取り不能・破損時は
     // 例外を投げず「記録なし」として扱われ、警告のみ提示される（安全側、AGENTS.md I8）。
+    // 記録が破損している場合、過去に記録されていたファイル一覧を今回の書き込みで失うと以後
+    // 二度と削除候補として検出できなくなるため、削除候補判定だけでなく記録の書き込みも
+    // 今回はスキップする（手動implementation-gateレビュー指摘: corrupt-record-silently-overwritten）。
     const { record: previousOwnershipRecord, warning: ownershipRecordWarning } = readOwnershipRecord(targetDir);
-    if (ownershipRecordWarning) summary.push(ownershipRecordWarning);
+    if (ownershipRecordWarning) {
+      summary.push(
+        `所有権記録（${ownershipRecordPath(targetDir)}）が破損しているため、今回は削除候補の判定・記録更新の両方をスキップしました。記録ファイルを手動で確認・修正するか削除してから再実行してください。`,
+      );
+    }
 
     // 今回コピー対象になる現行配布元のファイルパス集合（削除候補差分計算の入力）。dry-run時も
     // 常に同一の集合が得られる（`copyTreeMirror` はdry-run有無に関わらず同じ計画を返すため）。
@@ -109,7 +122,11 @@ export async function upgrade(args: string[]): Promise<number> {
       writeInstalledVersion(targetDir, newVersion);
       // Issue #492: 削除失敗の有無に関わらず、処理完了後に所有権記録を更新する
       // （削除に成功したエントリのみ除去、失敗・読み取り不能エントリは再試行のため保持）。
-      writeOwnershipRecord(targetDir, { version: newVersion, files: staleResult.nextFiles ?? currentFiles });
+      // ただし記録自体が破損していた場合は書き込まない（上記コメント参照）。破損した記録ファイルを
+      // 「現行配布ファイルのみ」の記録で上書きすると、過去の所有ファイル一覧が永久に失われるため。
+      if (!ownershipRecordWarning) {
+        writeOwnershipRecord(targetDir, { version: newVersion, files: staleResult.nextFiles ?? currentFiles });
+      }
     }
 
     if (staleResult.hasDeleteFailure) {

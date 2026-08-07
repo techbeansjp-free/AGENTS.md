@@ -82,7 +82,11 @@ export function classifyCandidate(absolutePath: string, expectedDigest: string):
   return digestOf(content) === expectedDigest ? 'ContentMatch' : 'ContentChanged';
 }
 
-/** `Unreadable`・`TypeChanged`・`ContentChanged` はいずれも同一文言（要件3・要件8。DESIGN.md参照）。 */
+/**
+ * `Unreadable` には読み取り失敗専用の `unreadableMessage`、`TypeChanged`・`ContentChanged` には
+ * 内容変更検出専用の `changedMessage` を割り当てる（要件3・要件8がそれぞれ異なる警告文言を
+ * 要求するため。DESIGN.md参照）。
+ */
 function unreadableMessage(displayPath: string): string {
   return `削除候補の判定のための読み取りに失敗したため削除しませんでした: ${displayPath}`;
 }

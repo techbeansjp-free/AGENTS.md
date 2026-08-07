@@ -46,7 +46,12 @@ export function fromOwnershipKey(root: string, key: string): string {
  */
 export function isWithinRoot(root: string, key: string): boolean {
   const relative = path.relative(root, fromOwnershipKey(root, key));
-  return relative !== '' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+  return (
+    relative !== '' &&
+    relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
 }
 
 function isValidRecordShape(value: unknown): value is OwnershipRecord {

@@ -111,3 +111,8 @@ test('isWithinRoot: root外を指す破損・改ざんキーはfalseと判定さ
   assert.equal(isWithinRoot(root, '../outside.txt'), false);
   assert.equal(isWithinRoot(root, '../../etc/passwd'), false);
 });
+
+test('isWithinRoot: キーがちょうど".."（rootの直接の親ディレクトリ自体）の場合はfalseと判定される', () => {
+  const root = path.join(path.sep, 'tmp', 'target');
+  assert.equal(isWithinRoot(root, '..'), false);
+});
