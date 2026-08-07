@@ -1,18 +1,19 @@
-# PLAN: lint-vocab: gh CLIサブコマンド引数リテラル'issue'を禁止語として誤検知し全PR CIが恒久赤化する
+# PLAN: lint-vocab: isQuotedLiteralContextが非散文ファイルのコメント中の禁止語誤用まで誤って除外する
 
-- Issue: `ISSUE-469`
+- Issue: `ISSUE-484`
 - 対応する DESIGN: `DESIGN.md`
 
 ## 実装順序・変更単位
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | `isQuotedLiteralContext()` の新設 | `src/commands/lint.ts` に、禁止語と完全一致する識別子runが単一引用符で直接囲まれ、直前直後（空白を挟んでよい）が配列要素・関数呼び出し引数の構文境界（`[`/`(`/`,` と `]`/`)`/`,`）であることを判定する関数を追加する。既存の `prevNonSpaceChar`/`nextNonSpaceChar` を再利用する。既存関数（`isCodeIdentifierContext`・`isYamlIdentifierContext`・`isCliSubcommandContext`・`isExternalVocabAllowlisted`）は変更しない | `AC-1, AC-2` | なし |
-| 2 | `isIdentifierContext()` への統合 | `isIdentifierContext()` に `!isProseFile(ext) && isQuotedLiteralContext(...)` の分岐を1行追加する（既存の `isCliSubcommandContext` 呼び出しと同じ `!isProseFile(ext)` ガード方式）。判定順序上、既存4分岐の後に追加し、既存分岐の挙動・優先順位を変更しない | `AC-1, AC-2, AC-3` | `#1` |
-| 3 | 回帰テスト追加（誤検知解消・一般ケース） | `test/integration/lint.test.ts` に、(a) `review-light.ts:60` 相当の `.ts` ファイル中 `gh(['issue', 'view', ...], root)` 形式の行が誤検出されないケース、(b) 配列要素・関数呼び出し引数のそれぞれで単一引用符の禁止語リテラルが単独トークンとして出現する一般ケース（複数箇所）が誤検出されないケースを追加する | `AC-1, AC-2` | `#1, #2` |
-| 4 | 回帰テスト追加（散文の非退行） | `test/integration/lint.test.ts` に、`.md` 中で単一引用符により禁止語を囲んだ表記を含む散文誤用が引き続き検出されることを確認するケースを追加する（要件2・要件3の固定） | `AC-3` | `#1, #2` |
-| 5 | 既存テストスイート全体実行 | `npm test`（または該当テストランナー）で `test/integration/lint.test.ts` の既存ケース（識別子文脈・YAML文脈・CLIサブコマンド文脈・屈折形・外部語彙許可リスト等）が全て現行の期待結果のまま成功することを確認する | `AC-4` | `#1, #2, #3, #4` |
-| 6 | `lint vocab` 実機実行によるCI回復確認 | `node bin/agents-md.js lint vocab`（ビルド後）をリポジトリ全体に対して実行し、`src/lib/review-light.ts:60` の誤検知が解消され、他に新規違反が発生していない（終了コード0）ことを確認する。PRマージ後、main・既存オープンPRの `agent-skill-chain / ci` workflow `verify` ジョブの実行結果を進行役が確認する | `AC-5` | `#1, #2, #3, #4, #5` |
+| 1 | `commentMarkerFor(ext)` の新設 | `src/commands/lint.ts` に、拡張子ごとの単一行コメント開始記号を返す純関数を追加する。`.ts` → `'//'`、`.sh`/`.yaml`/`.yml` → `'#'`、それ以外（`.md`・`.json`）→ `undefined`。既存関数は変更しない | `AC-1, AC-2` | なし |
+| 2 | `isInSingleLineComment(line, pos, ext)` の新設 | `commentMarkerFor(ext)` の戻り値が `undefined` でない場合に限り、その記号が `line.indexOf` で `pos` 未満の位置に出現するかどうかを判定する純関数を追加する | `AC-1, AC-2` | `#1` |
+| 3 | `isQuotedLiteralContext` への `ext` 引数追加とコメントガード統合 | 関数シグネチャに `ext: string` を追加し、冒頭で `isInSingleLineComment(line, run.runStart, ext)` が真であれば `false` を返すガードを追加する。既存の単一引用符＋配列要素/関数呼び出し引数の構文境界判定（禁止語と完全一致する識別子runであること、直前直後が `'`、その外側が構文境界であること）は一切変更しない。呼び出し元 `isIdentifierContext()` の当該1行の呼び出しに `ext` 引数を追加する | `AC-1, AC-2, AC-3` | `#1, #2` |
+| 4 | 回帰テスト追加（コメント中禁止語検出） | `test/integration/lint.test.ts` に、(a) `.ts` ファイルの `//` 行コメント中に配列要素と同じ構文境界で単一引用符に囲まれた禁止語一致リテラルが出現するケースが検出されること、(b) `.sh`/`.yaml` ファイルの `#` 行コメント中の同様ケースが検出されることを確認するテストケースを追加する | `AC-1, AC-2` | `#3` |
+| 5 | 回帰テスト追加（非退行確認） | 同ファイルに、`src/lib/review-light.ts:60` 相当の、コメントではない実コード行（配列要素・関数呼び出し引数）が引き続き誤検出されないことを確認するケース、および既存の全ケース（コード識別子文脈・YAML識別子文脈・CLIサブコマンド文脈・散文中の禁止語誤用・屈折形・外部語彙許可リスト・Issue #469 が追加したコード値リテラル文脈のケースを含む）が現行の期待結果のまま成功することを確認するケースを追加する | `AC-3, AC-4` | `#3, #4` |
+| 6 | 既存テストスイート全体実行 | `npm test`（または該当テストランナー、`npx tsx --test test/integration/lint.test.ts` 等）で `test/integration/lint.test.ts` の全ケースが成功することを確認する | `AC-4` | `#1, #2, #3, #4, #5` |
+| 7 | `lint vocab` 実機実行によるリポジトリ全体差分確認 | ビルド後 `node bin/agents-md.js lint vocab`（対象省略時のデフォルト全体）をリポジトリ全体に対して実行し、本Issueが意図した新規検出（非散文ファイルのコメント中の禁止語）以外に、既存の生きたファイル群で新規の誤検知・見逃しが発生していないことを確認する | `AC-5` | `#1, #2, #3, #4, #5, #6` |
 
 ## 実装順序の見直しについて
 

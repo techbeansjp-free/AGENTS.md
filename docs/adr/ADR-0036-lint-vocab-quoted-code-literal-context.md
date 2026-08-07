@@ -2,11 +2,11 @@
 
 ```yaml
 id: ADR-0036
-status: proposed
+status: superseded
 title: lint-vocabにおける単一引用符コード値リテラル文脈の追加
 tags: [lint-vocab, false-positive, ci]
 supersedes: []
-superseded-by: null
+superseded-by: ADR-0037
 deprecated-reason: null
 ```
 
