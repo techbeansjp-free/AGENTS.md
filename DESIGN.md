@@ -8,11 +8,45 @@
 - Issue: `ISSUE-503`
 - 対応する SPEC: `SPEC.md`
 
-## 対象範囲・前提・用語・入力・出力（DESIGN固有の補足）
+## 対象範囲・前提・用語・入力・出力
 
-- 対象範囲・前提・用語・入力・出力は `SPEC.md` の同名節を継承し、本DESIGNはこれを変更しない（SPEC.mdの承認済み内容は変更禁止）。本節は設計判断を行う上でDESIGN固有に必要な補足のみを記す。
-- **core_review該当の明記**: 本Issueの変更差分は `.agent-skill-chain/project/manifest.yaml` の `model_selection.core_review.triggers.exact_paths`（`AGENTS.md`）および `path_prefixes`（`.agent-skill-chain/config/`・`.agent-skill-chain/schemas/`）に該当する。したがって本Issueのdesign-gateは `review_profile: strict`（専任2レビュア、`frontier_coding`・`maximum_reasoning`）が自動的に必須になる（AGENTS.md I8、`.agent-skill-chain/project/manifest.yaml`）。新設する `.agent-skill-chain/templates/claude/skills/` 配下は現行manifestの `path_prefixes` に`.agent-skill-chain/templates/github/` は含むが `.agent-skill-chain/templates/claude/` は含まないため単独では該当しないが、上記2つの該当により本Issue全体は既にstrict対象である。
+### 対象範囲
+
+本DESIGNの対象は、ADR-0023（本Issue起票時点 `status: proposed`）のDecision 1〜5（強制層は現状維持、規範層をAGENTS.md本体〔事実と常時規則〕とSKILL.md群〔手続き〕へ分割、SKILL.mdはセグメント・役割粒度で分割し単一の巨大スキルにしない、軽量プロファイルという新規導入形態を`init`に追加、配布形式は配布元正本アセット配下のスキルテンプレート）を、`agent-skill-chain`（npm CLI）本体の配布物として実現するための設計判断である。対象は新規に `init` を実行する導入と、導入済みプロジェクトへの `upgrade` によるスキルテンプレート同期（要件3）であり、既存導入済みプロジェクトのプロファイル切替（`profile` フィールドの値を `standard`⇔`lightweight` で変更する手順）は対象外とする。consumer projectが `.agent-skill-chain/project/` に置く固有ポリシーは配布対象外のため本DESIGNの対象外とする。
+
+### 前提
+
+- ADR-0023（`status: proposed`）が示したDecisionを前提として実装可能な設計へ具体化する。ADR自体の `accepted` への遷移は本design-gateでのADR承認時に確定し、本DESIGNの成立はADR承認を妨げない。
+- 実行環境としてClaude Codeスキル機構（`SKILL.md` フロントマター、Discovery→Activation→Executionの段階的ロード）が利用可能であることを前提とする。
 - **既存実装コードの参照**: 本DESIGNは実装コードを新規に作成しないが、設計要素の実現可能性を現行実装（`src/lib/asset-manifest.ts`・`src/lib/template-sync.ts`・`src/lib/fs-copy.ts`・`src/commands/init.ts`・`src/commands/upgrade.ts`・`src/lib/legacy-migration.ts`・`.agent-skill-chain/schemas/config.schema.yaml`・`docs/CONFIGURATION.md`）の現状構造に基づいて具体化する。
+- **core_review該当の明記**: 本Issueの変更差分は `.agent-skill-chain/project/manifest.yaml` の `model_selection.core_review.triggers.exact_paths`（`AGENTS.md`）および `path_prefixes`（`.agent-skill-chain/config/`・`.agent-skill-chain/schemas/`）に該当する。したがって本Issueのdesign-gateは `review_profile: strict`（専任2レビュア、`frontier_coding`・`maximum_reasoning`）が自動的に必須になる（AGENTS.md I8、`.agent-skill-chain/project/manifest.yaml`）。新設する `.agent-skill-chain/templates/claude/skills/` 配下は現行manifestの `path_prefixes` に`.agent-skill-chain/templates/github/` は含むが `.agent-skill-chain/templates/claude/` は含まないため単独では該当しないが、上記2つの該当により本Issue全体は既にstrict対象である。
+
+### 用語
+
+- **軽量プロファイル**: `init` 実行時に選択できる導入形態の一つ。`CLAUDE.md` から `@AGENTS.md` への常時importを行わず、`coordination.backend: local` を既定にし、`setup github`・`enforce on` に相当する強制層を適用しない。既定プロファイルと同様に `.claude/skills/` 配下へスキル群を配置する。軽量プロファイルかどうかを機械的に判定する唯一の正本は、生成される `.agent-skill-chain/config/agent-skill-chain.yaml` の新規フィールド `profile` の値が `lightweight` であることであり、`coordination.backend: local` の値のみからは判定しない（既定プロファイルのまま利用者が手動で `coordination.backend: local` を選んだ通常のローカルモードと値として区別できないため）。
+- **既定プロファイル（常時規律モデル）**: `init` のプロファイル未指定時の既定動作。`CLAUDE.md` が `@AGENTS.md` を常時importし、`.claude/skills/` 配下へスキル群を配置する。`setup github`・`enforce on` は利用者が別途明示実行する任意コマンドとして提供される（既存動作通り）。生成される `.agent-skill-chain/config/agent-skill-chain.yaml` の `profile` フィールドは既定で `standard` になる。
+- **強制層**: PreToolUse hook配線（`enforce on`）およびGitHub branch ruleset・label適用（`setup github`）など、規律からの逸脱を機械的に阻止する仕組み。
+- **規範層**: `AGENTS.md` 本体および `SKILL.md` 群が記述する、それ自体は機械強制を伴わない規範・手続き知識。
+- **手続き**: ゲート審査の進め方・worktree操作手順・ADRライフサイクル操作手順・成果物テンプレート記入手順など、実行順序や具体的操作を伴う記述。SKILL.mdへ切り出す対象。
+- **事実と常時規則**: 状態や作業段階に依存せず常に成立する規範であり、`AGENTS.md` 本体に残す対象。判定基準は「特定の操作を段階的に実行する手順（何をどの順で行うか、どのコマンドをどう呼ぶか等のステップバイステップの説明）」であれば `SKILL.md` へ移す対象（「手続き」）とし、それ以外（不変条件・恒久的な事実・常に成立する制約・原則・用語の正本参照等）は `AGENTS.md` 本体に残す対象とする、というものである。
+
+### 入力
+
+- `init` コマンドが受け取るプロファイル指定オプション（設計要素6で `--profile=lightweight` / `--profile=standard` として確定する）。
+- 導入先の対象ディレクトリのパス。
+- 対象ディレクトリの既存ファイル状態（`.claude/skills/` 配下等、軽量プロファイル導入対象ファイルとの内容衝突検知に用いる）。
+
+### 出力
+
+- 生成される `AGENTS.md`（事実と常時規則に限定・150行以内、プロファイルを問わず引き続きroot直下へ生成・配置する正本ファイルとして存置する）・`CLAUDE.md`（軽量プロファイルでは `@AGENTS.md` の常時import記述を含まない）。
+- `.claude/skills/` 配下に複製される5つの `SKILL.md`（設計要素2、Issue起票とworktree開始・セグメント作業・ゲート審査・PR作成とマージ・後片付けの各役割に対応、プロファイルを問わず常に配置）。
+- 生成される `.agent-skill-chain/config/agent-skill-chain.yaml`（`coordination.backend`、および軽量プロファイルかどうかを機械的に判定する唯一の正本となる新規フィールド `profile`〔値は `lightweight` または `standard`、既定 `standard`〕を含む、設計要素3）。
+- 更新される `docs/GLOSSARY.md`（「軽量プロファイル」・「既定プロファイル」の用語行を3列形式で追加、追加後も20行以内を維持）・`docs/CONFIGURATION.md`（設計要素8）。
+- 標準出力メッセージ（軽量プロファイル選択時、機械的阻止が無い旨を明示する日本語メッセージ、設計要素6）。
+- 衝突検知時のエラーメッセージ（衝突ファイルパスと理由を含む日本語、終了コード1以上）。
+- スキル説明文の文字数集計結果を記録する成果物（設計要素9）。
+
+（本節「対象範囲・前提・用語・入力・出力」の内容は `SPEC.md` の「目的・背景」「前提」「用語」「入力」「出力」節に基づく。SPEC.mdの承認済み内容は変更しない。）
 
 ## 要件 → 設計要素の対応表
 
@@ -105,7 +139,7 @@ graph TD
 | 4 | `pr-merge` | PR作成とマージ（Draft PR自体の作成は`segment-work`の①条件分岐が担い、本スキルはDraft→Ready for Review化とauto-mergeまたは人間マージを担う。名称は要件2・AC-2の呼称に合わせるが、実際のDraft PR新規作成手順との重複を避けるため対象範囲をこのとおり明記する） | `.agent-skill-chain/scripts/pr-create.sh`（Ready化）、CI結果確認手順 |
 | 5 | `cleanup` | 後片付け | `.agent-skill-chain/scripts/cleanup.sh`、writer lease不在・未commit/未push無し・PR完了済みの検査順序（設計要素1「ブランチ・worktree」節から転記する削除前チェック順） |
 
-各 `SKILL.md` のYAMLフロントマターは少なくとも `name`・`description`・`when_to_use` を持つ（Claude Codeスキル機構のDiscovery段階で読み込まれる情報、ADR-0023調査1(a)）。本文は自己完結性の原則（AGENTS.md §成果物の自己完結性）に従い、目的・対象範囲・前提・用語・入力・出力・要求または判断内容（手続きの場合は手順そのもの）・制約・完了条件・検証方法・未決事項・対象外を内部に記載する。他のSKILL.mdやAGENTS.mdへの意味の委譲（「詳細はAGENTS.md参照」等の記述のみで済ませること）は禁止する——実行に必要な手順本体は各SKILL.md内に完結して書く。500行以内（Claude Code公式推奨、ADR-0023調査1(h)）を目安の制約とするが、本Issueは新たな機械的行数上限をCIへ追加しない（AGENTS.md 150行・テンプレート100行の既存 `verify doc-length` はAGENTS.md本体と `templates/issue/*.md`・`templates/adr/ADR.md` のみを対象とし、本Issoneはこの対象集合を拡張しない——不要な機能追加を避けるため）。
+各 `SKILL.md` のYAMLフロントマターは少なくとも `name`・`description`・`when_to_use` を持つ（Claude Codeスキル機構のDiscovery段階で読み込まれる情報、ADR-0023調査1(a)）。本文は自己完結性の原則（AGENTS.md §成果物の自己完結性）に従い、目的・対象範囲・前提・用語・入力・出力・要求または判断内容（手続きの場合は手順そのもの）・制約・完了条件・検証方法・未決事項・対象外を内部に記載する。他のSKILL.mdやAGENTS.mdへの意味の委譲（「詳細はAGENTS.md参照」等の記述のみで済ませること）は禁止する——実行に必要な手順本体は各SKILL.md内に完結して書く。500行以内（Claude Code公式推奨、ADR-0023調査1(h)）を目安の制約とするが、本Issueは新たな機械的行数上限をCIへ追加しない（AGENTS.md 150行・テンプレート100行の既存 `verify doc-length` はAGENTS.md本体と `templates/issue/*.md`・`templates/adr/ADR.md` のみを対象とし、本Issueはこの対象集合を拡張しない——不要な機能追加を避けるため）。
 
 `segment-work` スキルは要件2の設計判断に従い①②③④の4セグメント共通の手続き（writer lease取得→`worker-launch.sh`起動→checkpoint push→ゲートレビュー依頼）を土台とし、①要求・要件セグメントのときのみ「初回checkpoint push直後にDraft PR作成」という追加ステップを条件分岐として記載する。この統合は異種手続き（起票・ゲート審査・PR操作・後片付け）を1つに詰め込むものではなく単一種類の手続きの繰り返しであるため、要件2が禁じる「単一の巨大スキル化」に抵触しない（SPEC.md要件2の判断をそのまま踏襲する）。
 
@@ -175,9 +209,9 @@ profile:
 
 ### 設計要素7: upgrade拡張
 
-`src/commands/upgrade.ts` に、`config/agent-skill-chain.yaml` の `profile` フィールドのみを対象とする保存・復元ロジックを追加する（他の全フィールドは既存どおり `copyTreeMirror` によって配布元の値へ復元される、本Issoneが変更しない既存の挙動——「スコープ外」節・forbidden制約により、本Issueの対象は新設フィールド `profile` の保存のみとする）。
+`src/commands/upgrade.ts` に、`config/agent-skill-chain.yaml` の `profile` フィールドのみを対象とする保存・復元ロジックを追加する（他の全フィールドは既存どおり `copyTreeMirror` によって配布元の値へ復元される、本Issueが変更しない既存の挙動——「スコープ外」節・forbidden制約により、本Issueの対象は新設フィールド `profile` の保存のみとする）。
 
-1. 既存の `collectManagedAssetMappings` 呼び出し前に、対象の現在の `agent-skill-chain.yaml` を読み既存 `profile` 値を取得する（`loadConfig` 相当、ファイル欠落・パース不能・フィールド欠落時は `standard` として扱う——スキーマ後方互換ルールと同一）。
+1. 既存の `collectManagedAssetMappings` 呼び出し前に、対象の現在の `agent-skill-chain.yaml` を読み既存 `profile` 値を取得する（`loadConfig` 相当、ファイル欠落・パース不能・フィールド欠落時は `standard` として扱う——スキーマ後方互換ルールと同一）。**このフォールバックが発生した場合**（すなわち既存ファイルが存在するにもかかわらず読み取り・パース・フィールド抽出のいずれかに失敗した場合。ファイルが最初から存在しない新規導入相当のケースは対象外とし警告を出さない）、標準エラー出力へ次の趣旨の日本語警告メッセージを出す。「既存の `agent-skill-chain.yaml` から `profile` 設定を読み取れなかったため、既定値 `standard` として扱います。既に `profile: lightweight` を選択している場合は、`upgrade` 完了後に対象ファイルの `profile` フィールドを確認してください。」これにより、`profile: lightweight` 選択済みプロジェクトで設定ファイルが破損・欠落した場合に `profile` が黙って `standard` へ反転する事態を利用者が検知できるようにする（ファイルが最初から存在しない新規導入時は `standard` が正しい既定であり警告対象ではない——両者は「対象ファイルが存在するか」で機械的に区別する）。
 2. `collectManagedAssetMappings(targetDir, preservedProfile)`（設計要素5）を呼び出す。これにより、`config` エントリの `agent-skill-chain.yaml` 側マッピングのsrcが、保存済み `profile` に対応するテンプレート（既定プロファイル済みなら `packageRoot()/.agent-skill-chain/config/agent-skill-chain.yaml`、軽量プロファイル済みなら `packageRoot()/.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`）に解決される。これにより「`profile` フィールド自体の値はupgradeで変更しない」（要件3・AC-3）を、既存の `copyTreeMirror` 全体コピー機構をそのまま使いながら満たす（`profile` だけを個別にパッチする特殊処理を新設しない——配布元選択の時点でprofileが確定しているため）。
 3. `.claude/skills/`（設計要素5の `claude_skills` マッピング）は他の管理対象と同じく無条件にミラー同期される（要件3が求める「プロファイルを問わず同期」）。
 
@@ -214,6 +248,6 @@ related_adrs:
   1. 軽量プロファイル用 `CLAUDE.md`（設計要素4）に誤って `@AGENTS.md` importが残存し、AC-4が回帰する。
   2. `upgrade`（設計要素7）の `profile` 保存・復元ロジックに不備があり、軽量プロファイル済みプロジェクトの `profile` 値が `upgrade` で `standard` に戻ってしまい、AC-3・AC-7の判定基準（`profile` フィールドが唯一の正本）が崩れる。
   3. `collectManagedAssetMappings` のprofile対応分解（設計要素5）により、`config` ディレクトリの走査ロジックが `init`/`upgrade` で乖離し、Issue #492が是正した「所有権記録キー集合と削除候補判定基準の一致」が再び崩れる。
-  4. 新設の `.claude/skills/` パスが、既存の `LEGACY_SKILLS_DIR`（`src/lib/legacy-migration.ts`、旧世代skill-chain方式の残留検知が走査する同一パス）と衝突し、誤検知または検知漏れが起きる。
+  4. 新設の `.claude/skills/` パスが、既存の `LEGACY_SKILLS_DIR`（`src/lib/legacy-migration.ts`、旧世代skill-chain方式の残留検知が走査するパス）と衝突し、誤検知または検知漏れが起きる。実際に `src/lib/legacy-migration.ts` を確認したところ、`LEGACY_SKILLS_DIR` は `path.join('.claude', 'skills')` であり、その値は本Issueが新設する配布先ディレクトリと物理的に完全一致する文字列 `.claude/skills` である。すなわち `detectLegacyAssets` は新設SKILL.md群も走査対象ディレクトリに含める。
 - ロールバック手順: 本Issueの変更は既存ファイルの破壊的変更を伴わない加算的変更（新規ファイル追加・スキーマへのoptionalフィールド追加・`collectManagedAssetMappings`の引数追加とconfig分解ロジック追加）である。問題発覚時はPRをrevertすれば配布元テンプレートは旧状態に戻る。`schema_version` を更新しないため、既にこのIssueの成果物をpushしただけでconsumer側の`upgrade`が壊れることはない（configの`profile`は後方互換のoptionalフィールドであり、旧スキーマの設定ファイルは本Issue適用後も引き続き妥当）。
-- 影響を受ける既存機能: `init`/`upgrade`の`collectManagedAssetMappings`呼び出し（引数追加は省略可能なオプション引数とし、呼び出し元を全て更新することで後方互換の破壊を避ける）、`computeTemplateSyncDiffs`（`claude_skills`分岐追加）、`docs/CONFIGURATION.md`（`verify config-doc-sync`が新規項目の見出し欠落を検査するため、実装セグメントは本DESIGNが指定する見出し追加を確実に行う必要がある）。上記失敗モード4は、新設SKILL.md群のファイル名・内容が `LEGACY_SKILL_CONTENT_MARKERS`（`00_要求定義`等の旧世代トークン）を含まない限り発生しない——本DESIGNが指定するSKILL.md内容はこれらのトークンを使用しないため設計上回避される。実装セグメントはコミット前に新設SKILL.md本文へこれらのトークン文字列が含まれないことを確認する。
+- 影響を受ける既存機能: `init`/`upgrade`の`collectManagedAssetMappings`呼び出し（引数追加は省略可能なオプション引数とし、呼び出し元を全て更新することで後方互換の破壊を避ける）、`computeTemplateSyncDiffs`（`claude_skills`分岐追加）、`docs/CONFIGURATION.md`（`verify config-doc-sync`が新規項目の見出し欠落を検査するため、実装セグメントは本DESIGNが指定する見出し追加を確実に行う必要がある）。上記失敗モード4のうち物理パスの一致（`.claude/skills`）自体は確認済みの事実であり回避できないが、`detectLegacyAssets` の実際の判定条件は `LEGACY_SKILL_CONTENT_MARKERS`（`00_要求定義`等の旧世代トークン）をファイル内容が含むかどうかのみであり、パスが一致すること自体では finding を発生させない。したがって上記失敗モード4（誤検知）は、新設SKILL.md群のファイル名・内容がこれらのトークンを含まない限り発生しない——本DESIGNが指定するSKILL.md内容はこれらのトークンを使用しないため設計上回避される。実装セグメントはコミット前に新設SKILL.md本文へこれらのトークン文字列が含まれないことを確認する。
