@@ -227,6 +227,29 @@ test('lint vocab: 単一引用符の禁止語リテラルは非散文コード�
   assert.equal(result.stderr, '');
 });
 
+test('lint vocab: 非散文ファイルの単一行コメント中にある禁止語リテラルを検出する（Issue #484 AC-1・AC-2）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const cases = [
+    { name: 'quoted-literal-comment.ts', line: "const value = 1; // deprecated values: ('issue', 'legacy')" },
+    { name: 'quoted-literal-comment.sh', line: "# deprecated values: ('issue', 'legacy')" },
+    { name: 'quoted-literal-comment.yaml', line: "# deprecated values: ('issue', 'legacy')" },
+    { name: 'quoted-literal-comment.yml', line: "# deprecated values: ('issue', 'legacy')" },
+  ];
+
+  for (const { name, line } of cases) {
+    fs.writeFileSync(path.join(repo.dir, name), `${line}\n`);
+    const result = runCli(['lint', 'vocab', name], { cwd: repo.dir });
+
+    assert.equal(result.status, 1, `${name}: ${result.stderr}`);
+    assert.match(
+      result.stderr,
+      new RegExp(`${name.replace('.', '\\.')}:1: 禁止語 'issue' が見つかりました（'成果物' を使用してください）`),
+    );
+  }
+});
+
 test('lint vocab: 単一引用符の禁止語を含む散文はコード値リテラル文脈として除外されない（Issue #469 AC-3）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
