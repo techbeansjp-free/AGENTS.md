@@ -19,7 +19,7 @@ Issue #428（調査専用）の成果である `docs/adr/ADR-0023-agent-skill-ch
 
 ## 前提
 
-- 本Issueの対象は新規に `init` を実行する導入のみであり、既存導入済みプロジェクトを軽量プロファイルへ移行する手順は対象外とする。
+- 本Issueの対象は新規に `init` を実行する導入と、導入済みプロジェクトへの `upgrade` によるスキルテンプレート同期（要件3）であり、既存導入済みプロジェクトのプロファイル切替（`profile` フィールドの値を `standard`⇔`lightweight` で変更する手順）は対象外とする。
 - 対象は `agent-skill-chain`（npm CLI）本体の配布物であり、consumer projectが `.agent-skill-chain/project/` に置く固有ポリシーは配布対象外のため本SPECの対象外とする。
 - ADR-0023（`status: proposed`）が示したDecisionを前提として実装可能な受入条件へ具体化する。ADR自体の `accepted` への遷移は設計ゲート（design-gate）でのADR承認時に確定し、本SPECの成立はADR承認を妨げない。
 - 実行環境としてClaude Codeスキル機構（`SKILL.md` フロントマター、Discovery→Activation→Executionの段階的ロード）が利用可能であることを前提とする。
@@ -31,7 +31,7 @@ Issue #428（調査専用）の成果である `docs/adr/ADR-0023-agent-skill-ch
 - **強制層**: PreToolUse hook配線（`enforce on`）およびGitHub branch ruleset・label適用（`setup github`）など、規律からの逸脱を機械的に阻止する仕組み。
 - **規範層**: `AGENTS.md` 本体および `SKILL.md` 群が記述する、それ自体は機械強制を伴わない規範・手続き知識。
 - **手続き**: ゲート審査の進め方・worktree操作手順・ADRライフサイクル操作手順・成果物テンプレート記入手順など、実行順序や具体的操作を伴う記述。SKILL.mdへ切り出す対象。
-- **事実と常時規則**: 状態や作業段階に依存せず常に成立する規範であり、`AGENTS.md` 本体に残す対象。`AGENTS.md` 本体に残す内容と `SKILL.md` へ移す内容は、次の判定基準（テスト可能なルール）によって区別する——ある記述が「特定の操作を段階的に実行する手順（何をどの順で行うか、どのコマンドをどう呼ぶか等のステップバイステップの説明）」であれば `SKILL.md` へ移す対象（「手続き」）とし、それ以外（不変条件・恒久的な事実・常に成立する制約・原則・用語の正本参照等、実行手順を伴わない記述）は `AGENTS.md` 本体に残す対象とする。この判定基準の適用例として、(a) 不変条件的事実（不変条件I1〜I8・4セグメントと4ゲートの対応・Coordination Backendの選択肢・writer leaseの基本規則〔lease種別・WIP上限等の恒久値〕・用語の正本参照・「ブランチ・worktree」節が定めるブランチ名/worktreeパスの命名規約パターン）、(b) 常時適用される原則・制約（成果物の自己完結性の原則、参照・コメントの陳腐化防止の原則、ディレクトリ構成の制約〔root直下許可リスト。要件10により`.claude/`を追加する〕、設定値の優先順位、プロジェクト固有ポリシーの優先順位、`docs/system-spec/`の役割定義、GitHub配布における正本ディレクトリの所在、「ゲートの継承・無効化」節が説明する`gate-reconcile.sh`の恒常的な挙動）が挙げられる。これらは判定基準の適用例であり、現行`AGENTS.md`本体の全節・全段落を本SPEC内で事前に(a)(b)へ排他的・網羅的に分類し尽くすことは主張しない。
+- **事実と常時規則**: 状態や作業段階に依存せず常に成立する規範であり、`AGENTS.md` 本体に残す対象。`AGENTS.md` 本体に残す内容と `SKILL.md` へ移す内容は、次の判定基準（テスト可能なルール）によって区別する——ある記述が「特定の操作を段階的に実行する手順（何をどの順で行うか、どのコマンドをどう呼ぶか等のステップバイステップの説明）」であれば `SKILL.md` へ移す対象（「手続き」）とし、それ以外（不変条件・恒久的な事実・常に成立する制約・原則・用語の正本参照等、実行手順を伴わない記述）は `AGENTS.md` 本体に残す対象とする。この判定基準の適用例として、(a) 不変条件的事実（不変条件I1〜I8・4セグメントと4ゲートの対応・Coordination Backendの選択肢・writer leaseの基本規則〔lease種別・WIP上限等の恒久値〕・用語の正本参照・「ブランチ・worktree」節が定めるブランチ名/worktreeパスの命名規約パターン）、(b) 常時適用される原則・制約（成果物の自己完結性の原則、参照・コメントの陳腐化防止の原則、ディレクトリ構成の制約〔root直下許可リスト。要件10により`.claude/`を追加する〕、プロジェクト固有ポリシーの優先順位、`docs/system-spec/`の役割定義、GitHub配布における正本ディレクトリの所在、「ゲートの継承・無効化」節が説明する`gate-reconcile.sh`の恒常的な挙動）が挙げられる。これらは判定基準の適用例であり、現行`AGENTS.md`本体の全節・全段落を本SPEC内で事前に(a)(b)へ排他的・網羅的に分類し尽くすことは主張しない。
 
 この判定基準に基づく現行`AGENTS.md`本体の各節・各段落の具体的な帰属先（残す/移す/両方に分割する等）の確定は、本Issueの設計セグメント（`DESIGN.md`）が行う設計判断とする。AC-1はこの判定基準への適合を検証する。
 
@@ -43,8 +43,8 @@ Issue #428（調査専用）の成果である `docs/adr/ADR-0023-agent-skill-ch
 
 ## 出力
 
-- 生成される `AGENTS.md`（事実と常時規則に限定・150行以内）・`CLAUDE.md`。
-- `.claude/skills/` 配下に複製される `SKILL.md` 群（Issue起票とworktree開始・セグメント作業・ゲート審査・PR作成とマージ・後片付けの各役割に対応、プロファイルを問わず常に配置）。
+- 生成される `AGENTS.md`（事実と常時規則に限定・150行以内、プロファイルを問わず引き続きroot直下へ生成・配置する正本ファイルとして存置する）・`CLAUDE.md`（軽量プロファイルでは `@AGENTS.md` の常時import記述を含まない。要件4参照）。
+- `.claude/skills/` 配下に複製される `SKILL.md` 群（Issue起票とworktree開始・セグメント作業・ゲート審査・PR作成とマージ・後片付けの各役割に対応、プロファイルを問わず常に配置）。既存の `.claude/agents/` 配下テンプレート（配布元 `.agent-skill-chain/templates/claude/agents/` → 対象 `.claude/agents/`、`verify_sync: true`）と同じ配布パターンに従い、`init` 実行時の新規配置に加え、`upgrade` 実行時も配布元テンプレートとの同期を行う（`profile` フィールド自体の値は `upgrade` では変更しない）。
 - 生成される `.agent-skill-chain/config/agent-skill-chain.yaml`（`coordination.backend`、および軽量プロファイルかどうかを機械的に判定する唯一の正本となる新規フィールド `profile`〔値は `lightweight` または `standard`、既定 `standard`〕を含む）。
 - 更新される `docs/GLOSSARY.md`（「軽量プロファイル」・「既定プロファイル」の用語行を3列形式で追加、追加後も20行以内を維持）。
 - 標準出力メッセージ（軽量プロファイル選択時、機械的阻止が無い旨を明示する日本語メッセージ）。
@@ -62,11 +62,11 @@ Issue #428（調査専用）の成果である `docs/adr/ADR-0023-agent-skill-ch
 
 1. `AGENTS.md` 本体に残す内容と `SKILL.md` へ移す内容は、用語節が定める判定基準——記述が「特定の操作を段階的に実行する手順（手続き）」であれば `SKILL.md` へ移し、それ以外（不変条件・恒久的な事実・常に成立する制約・原則・用語の正本参照等）は `AGENTS.md` 本体に残す——によって区別する。`AGENTS.md` 本体はこの判定基準を満たす記述のみで構成し、150行の文書量上限（`.agent-skill-chain/ci/verify-doc-length.sh`）内へ収める。この判定基準を現行`AGENTS.md`本体の各節・各段落へ具体的にどう適用し、どの節を`AGENTS.md`本体に残し、どの節を`SKILL.md`へ移す（または両方に分割する）かの確定は、本Issueの設計セグメント（`DESIGN.md`）が行う設計判断とする。
 2. ゲート審査の進め方・worktree操作手順・ADRライフサイクルの操作手順・成果物テンプレートの記入手順等の「手続き」を、配布元の正本アセット配下（`.agent-skill-chain/templates/claude/skills/` 等）に置く複数の `SKILL.md`（セグメント・役割対応、単一の巨大スキルにしない）へ切り出す。各 `SKILL.md` は自己完結性の原則（AGENTS.md §成果物の自己完結性）に従い、目的・対象範囲・前提・用語・入力・出力・要求または判断内容・制約・完了条件・検証方法・未決事項・対象外を内部に記載し、参照だけで意味を委譲しない。①要求・要件・②設計・③実装・④独立検証の4セグメントは、いずれもwriter lease取得→`worker-launch.sh`起動→ゲートレビューという共通の操作手続きを土台とするため、これらを「セグメント作業」という単一スキルへ統合する。ただし①セグメントのみ、`worker-launch.sh`起動後の初回checkpoint push直後にDraft PR作成（`pr create`コマンド呼び出し）という追加ステップが発生するため、同スキル内でセグメント種別に応じた条件分岐として記載する。この統合は重複記述を避けるための粒度選択であり、要件2が禁じる「単一の巨大スキル化」とは、本来性質の異なる複数の独立した手続き群（起票・ゲート審査・PR操作・後片付け等）を1つのスキルへ無差別に詰め込むことを指す。「セグメント作業」はゲート審査・PR操作・後片付け等の異種手続きを含まない単一種類の手続き（①のみ条件分岐でDraft PR作成を含む）の繰り返しであるため、この禁止の対象外である。この粒度分けはADR-0023（`status: proposed`）が推奨案の細目として自らIssue起票とworktree開始・セグメント作業・ゲート審査・PR作成とマージ・後片付けの5分割を例示していることとも整合する。
-3. `.claude/skills/` 配下へのスキル群（要件2の複製）の配置は、軽量プロファイル限定ではなく、プロファイルを問わず全ての `init` 実行で行う。
-4. `init` に軽量プロファイルを選択できるオプションを追加する。選択時は次を満たす: (i) `CLAUDE.md` へ `@AGENTS.md` の常時importを行わない、(ii) `coordination.backend: local` を既定にする、(iii) `setup github`・`enforce on` に相当する強制層の適用を実行しない、(iv) 生成される `.agent-skill-chain/config/agent-skill-chain.yaml` へ新規フィールド `profile`（値は `lightweight` または `standard`、既定 `standard`）を書き込み、軽量プロファイル選択時は `profile: lightweight`、既定プロファイル選択時（未指定を含む）は `profile: standard` とする。この `profile` フィールドが「軽量プロファイルかどうか」を機械的に判定する唯一の正本である。`coordination.backend: local` の値のみでは、既定プロファイルのまま利用者が手動で `coordination.backend: local` を選択した通常のローカルモードと、軽量プロファイルとを値として区別できないため、AC-7が要求するI2の降格条件判定には `profile` フィールドを用いる。
+3. `.claude/skills/` 配下へのスキル群（要件2の複製）の配置・同期は、軽量プロファイル限定ではなく、プロファイルを問わず、既存の `.claude/agents/` 配下テンプレート（配布元 `.agent-skill-chain/templates/claude/agents/` → 対象 `.claude/agents/`、`.agent-skill-chain/config/agent-skill-chain.yaml` の `templates:` 節が定める `verify_sync: true`）と同じ配布パターンに従う。すなわち `init` 実行時に新規配置し、`upgrade` 実行時にも配布元テンプレートとの同期を行う。既に標準プロファイルで導入済みの既存プロジェクトも、`upgrade` 実行によって新設の `.claude/skills/` 配下スキル群を受け取る。ただし `profile` フィールド（要件4）自体の値は `upgrade` 実行によって変更しない——プロファイルの切替（`standard`⇔`lightweight`）自体は本Issueのスコープ外のままであり、要件3が求めるのは確定済みprofileを維持したままの `.claude/skills/` 配下ファイル内容の同期のみである。具体的な設定フィールド名（例: `claude_skills_source`/`claude_skills_target`）は設計セグメントが決定してよい。
+4. `init` に軽量プロファイルを選択できるオプションを追加する。選択時は次を満たす: (i) `CLAUDE.md` へ `@AGENTS.md` の常時importを行わない（ただし `AGENTS.md` ファイル自体はプロファイルを問わず引き続きroot直下へ生成・配置し、オンデマンド参照・スキル経由参照の対象として存置する。ファイル自体の生成を省略するものではない）、(ii) `coordination.backend: local` を既定にする、(iii) `setup github`・`enforce on` に相当する強制層の適用を実行しない、(iv) 生成される `.agent-skill-chain/config/agent-skill-chain.yaml` へ新規フィールド `profile`（値は `lightweight` または `standard`、既定 `standard`）を書き込み、軽量プロファイル選択時は `profile: lightweight`、既定プロファイル選択時（未指定を含む）は `profile: standard` とする。この `profile` フィールドが「軽量プロファイルかどうか」を機械的に判定する唯一の正本である。`coordination.backend: local` の値のみでは、既定プロファイルのまま利用者が手動で `coordination.backend: local` を選択した通常のローカルモードと、軽量プロファイルとを値として区別できないため、AC-7が要求するI2の降格条件判定には `profile` フィールドを用いる。
 5. 軽量プロファイルを選択した場合、逸脱の機械的阻止が無いことを利用者へ明示するメッセージを `init` の標準出力へ表示する。
 6. プロファイル未指定時（既定プロファイル）の `init` 動作のうち、`CLAUDE.md` の常時import・既存の配置ファイル・衝突時非破壊エラー方針は変更しない。ただし要件3による `.claude/skills/` 配置は既定プロファイルにも新規に適用される。
-7. 軽量プロファイルにおける不変条件I2（セグメントゲート）の扱いを、機械的に判定可能な形で文書化する。現行のI2不変条件セルはCoordination Backendのモード軸（ローカル／GitHub）のみに基づき降格条件（ガイドライン化）を定めているため、軽量プロファイルという追加のプロファイル軸を、既存のGitHubモードと同格の降格トリガーとして統合する形で改める（詳細はAC-7）。不変条件I3（耐久性）については、現行セルが定める「復元元」の区分（ローカルモード・`issue_sync`無効時はGit〔remote push済み〕、それ以外〔GitHubモードかつ`issue_sync`有効〕はIssue/PR本文）が、軽量プロファイル（`coordination.backend: local` を既定とする）にもそのまま適用できるため、I3セル自体への追記・変更は不要とする。現行のI3セルには不変条件／ガイドラインという降格区分自体が存在せず、これを新設することは要件7自身が意図する「既存パターンの統合」の範囲を超え、かつ「スコープ外」節が定める不変条件表の大幅改定禁止規定と抵触するためである（詳細はAC-7）。
+7. 軽量プロファイルにおける不変条件I2（セグメントゲート）の扱いを、機械的に判定可能な形で文書化する。現行のI2不変条件セルはCoordination Backendのモード軸（ローカル／GitHub）のみに基づき降格条件（ガイドライン化）を定めている。これに対し軽量プロファイルは、強制層（PreToolUse hook・GitHub branch ruleset）を導入しないだけでなく、セグメントゲートの機械的検査・記録機構（ローカルモードでI2を不変条件たらしめている `reviews/<gate>.yaml` および `.agent-skill-chain/schemas/gate-report.schema.yaml` による機械検査）も導入しない設計方針であるため、`profile: lightweight` の場合はCoordination Backendの値（local/github）に関わらずI2をガイドラインとして扱うという、既存のモード軸とは独立したプロファイル軸の降格条件を新たに追加する（詳細はAC-7）。このプロファイル軸の追加はGitHubモードの非強制性の根拠を軽量プロファイルへ類推適用するものではなく、軽量プロファイル自体が機械的検査・記録機構を持たないという独立した直接の根拠に基づく。不変条件I3（耐久性）については、現行セルが定める「復元元」の区分（ローカルモード・`issue_sync`無効時はGit〔remote push済み〕、それ以外〔GitHubモードかつ`issue_sync`有効〕はIssue/PR本文）が、軽量プロファイル（`coordination.backend: local` を既定とする）にもそのまま適用できるため、I3セル自体への追記・変更は不要とする。現行のI3セルには不変条件／ガイドラインという降格区分自体が存在せず、これを新設することは要件7自身が意図する「既存パターンの統合」の範囲を超え、かつ「スコープ外」節が定める不変条件表の大幅改定禁止規定と抵触するためである（詳細はAC-7）。
 8. AC-2で切り出したスキル群について、各 `SKILL.md` の `description` と `when_to_use`（存在する場合）が占める文字数を集計する手順を用意する。利用するadapter・モデルにより文脈長は異なり本Issueでは特定モデルの文脈長数値を断定しないため、絶対比率の算出そのものは目的とせず、スキルごとの文字数・合計文字数という生データを実測・記録し、将来任意のモデル文脈長を分母として比率を計算できるようにすることを目的とする。
 9. 軽量プロファイル追加後も `init` の衝突時非破壊方針（既存ファイルを上書きしない・日本語理由付きエラーで停止する）を維持し、衝突検知は実ファイル書き込み開始前に全対象パスへ対して行う（pre-flight方式）。この方針はプロファイルを問わず適用する。
 10. `AGENTS.md` の「ディレクトリ構成」節が定めるroot直下許可リスト（現行: `AGENTS.md`・`CLAUDE.md`・`README.md`・`docs/`・`.github/`・`.worktrees/`）へ `.claude/` を追加する。要件3が要求する `.claude/skills/` 配置は、この追加が無ければ当該許可リストと正面から抵触するため、リスト自体は削除せず維持したまま `.claude/` を追加する形で整合させる。Claude Codeのスキル機構が `.claude/skills/` という固定パスを要求することによる技術的制約であり、選択の余地は無い。
@@ -88,18 +88,18 @@ Issue #428（調査専用）の成果である `docs/adr/ADR-0023-agent-skill-ch
 - Then: Issue起票とworktree開始・セグメント作業・ゲート審査・PR作成とマージ・後片付けのそれぞれに対応する `SKILL.md`（YAMLフロントマター＋本文）が存在し、各ファイルが単独で目的・対象範囲・前提・用語・入力・出力・要求または判断内容・制約・完了条件・検証方法・未決事項・対象外を記載する自己完結した内容になっており、`AGENTS.md` 側の該当手続き記述と重複しない（`AGENTS.md` 側は削除済みであること）。このうち「セグメント作業」に対応する `SKILL.md` は①要求・要件・②設計・③実装・④独立検証の4セグメント全ての手続きを扱い、①セグメントのみ`worker-launch.sh`起動後の初回checkpoint push直後にDraft PR作成が発生する旨を条件分岐として記載する
 - 検証方法見込み: `automated`
 
-#### AC-3: スキル配置がプロファイルを問わず全てのinit実行で行われる
+#### AC-3: スキル配置がプロファイルを問わず全てのinit実行およびupgrade実行で行われる
 
-- Given: 未導入のリポジトリ
-- When: `init` を（a）プロファイル未指定（既定プロファイル）、（b）軽量プロファイル指定、のそれぞれで実行する
-- Then: いずれの場合も `.claude/skills/` 配下にAC-2のスキル群が複製され、かつ生成される `.agent-skill-chain/config/agent-skill-chain.yaml` の `profile` フィールドが（a）では `standard`、（b）では `lightweight` になる
+- Given: (a) 未導入のリポジトリ、(b) 既に `init` 済みで、配布元テンプレート（`.agent-skill-chain/templates/claude/skills/` 等）側のスキル内容が導入後に更新されている導入済みリポジトリ（既定プロファイル・軽量プロファイルいずれの場合も含む）
+- When: (a)に対して `init` を（a-1）プロファイル未指定（既定プロファイル）、（a-2）軽量プロファイル指定、のそれぞれで実行し、(b)に対して `upgrade` を実行する
+- Then: `init` ではいずれのプロファイルでも `.claude/skills/` 配下にAC-2のスキル群が新規に複製され、かつ生成される `.agent-skill-chain/config/agent-skill-chain.yaml` の `profile` フィールドが（a-1）では `standard`、（a-2）では `lightweight` になる。`upgrade` では、導入済みリポジトリの `profile` フィールドの値（`standard` または `lightweight`）を変更せず維持したまま、`.claude/skills/` 配下のファイル内容が配布元テンプレートの最新内容へ同期される（既存の `.claude/agents/` 配下テンプレートに対する `upgrade` の同期動作と同じパターン）
 - 検証方法見込み: `automated`
 
 #### AC-4: 軽量プロファイル選択時に固有の3点が満たされる
 
 - Given: 未導入のリポジトリ
 - When: `init` を軽量プロファイル指定で実行する
-- Then: 生成される `CLAUDE.md` に `@AGENTS.md` の常時import記述が含まれず、生成される `.agent-skill-chain/config/agent-skill-chain.yaml` の `coordination.backend` が `local` になり、`setup github` に相当するGitHub API呼び出し（ruleset・label適用）と `enforce on` に相当するhook配線が実行されない
+- Then: `AGENTS.md` ファイル自体はプロファイルを問わずroot直下に生成・配置され、生成される `CLAUDE.md` に `@AGENTS.md` の常時import記述が含まれず、生成される `.agent-skill-chain/config/agent-skill-chain.yaml` の `coordination.backend` が `local` になり、`setup github` に相当するGitHub API呼び出し（ruleset・label適用）と `enforce on` に相当するhook配線が実行されない
 - 検証方法見込み: `automated`
 
 #### AC-5: 軽量プロファイル選択時に機械的阻止が無いことが明示される
@@ -120,7 +120,7 @@ Issue #428（調査専用）の成果である `docs/adr/ADR-0023-agent-skill-ch
 
 - Given: 軽量プロファイルで導入されたリポジトリ（`coordination.backend: local`、強制層未導入）
 - When: 当該リポジトリの `AGENTS.md` の不変条件表I2・I3セルを確認する
-- Then: I2の降格条件が、Coordination Backendのモード軸（ローカル／GitHub）とプロファイル軸（既定／軽量）を統合したルール（「ローカルモードかつ軽量プロファイルでない場合は不変条件。GitHubモード、または軽量プロファイルの場合はガイドライン」）として、既存の不変条件表I2セルへの最小限の追記で明記されており、軽量プロファイルが強制層を持たない点でGitHubモードの非強制性と同じ性質を持つという統合根拠も記載され、`.agent-skill-chain/ci/verify-doc-length.sh` の行数上限を超えない。ここでいう「軽量プロファイルかどうか」は、個々のリポジトリの `.agent-skill-chain/config/agent-skill-chain.yaml` の `profile` フィールド（要件4）が `lightweight` であることによって機械的に判定され、`coordination.backend: local` の値のみからは判定しない（既定プロファイルのまま手動で `coordination.backend: local` を選んだ通常のローカルモードと値として区別できないため）。この判定手段が要件4・「出力」節に明記されている。I3セルは変更されておらず、現行の「復元元」区分（ローカルモード・`issue_sync`無効時はGit、それ以外はIssue/PR本文）が軽量プロファイルにもそのまま適用される旨が本SPEC内（要件7）に明記されている。また、AGENTS.md本体I2セルへ新規導入される「軽量プロファイル」という用語が `docs/GLOSSARY.md` へ用語行として追加されており（要件11・AC-10）、`AGENTS.md`用語節が定める「用語集の正本はdocs/GLOSSARY.md」という原則に適合している
+- Then: I2の降格条件が、Coordination Backendのモード軸（ローカル／GitHub）とプロファイル軸（既定／軽量）という2つの独立した軸によるルール（「ローカルモードかつ軽量プロファイルでない場合は不変条件。GitHubモード、または軽量プロファイルの場合はガイドライン」）として、既存の不変条件表I2セルへの最小限の追記で明記されている。プロファイル軸の降格根拠は、GitHubモードの非強制性への類推ではなく、軽量プロファイルが強制層（hook・ruleset）に加え、セグメントゲートの機械的検査・記録機構（`reviews/<gate>.yaml` 等、ローカルCoordination Backend使用時に本来I2を不変条件たらしめている仕組み）も導入しない設計方針であるという、プロファイル軸固有の直接的根拠として独立に記載されており、既存のモード軸の根拠（GitHubモードにおける自動CI強制の不在）を流用・類推するものではない。この追記は `.agent-skill-chain/ci/verify-doc-length.sh` の行数上限を超えない。ここでいう「軽量プロファイルかどうか」は、個々のリポジトリの `.agent-skill-chain/config/agent-skill-chain.yaml` の `profile` フィールド（要件4）が `lightweight` であることによって機械的に判定され、`coordination.backend: local` の値のみからは判定しない（既定プロファイルのまま手動で `coordination.backend: local` を選んだ通常のローカルモードと値として区別できないため）。この判定手段が要件4・「出力」節に明記されている。I3セルは変更されておらず、現行の「復元元」区分（ローカルモード・`issue_sync`無効時はGit、それ以外はIssue/PR本文）が軽量プロファイルにもそのまま適用される旨が本SPEC内（要件7）に明記されている。また、AGENTS.md本体I2セルへ新規導入される「軽量プロファイル」という用語が `docs/GLOSSARY.md` へ用語行として追加されており（要件11・AC-10）、`AGENTS.md`用語節が定める「用語集の正本はdocs/GLOSSARY.md」という原則に適合している
 - 検証方法見込み: `manual`
 
 #### AC-8: スキル一覧の説明文の文字数を実測・記録する手順が用意される
@@ -154,10 +154,12 @@ spec-gate strictレビュー5回目の指摘反映では、規範層の線引き
 
 spec-gate strictレビュー6回目の指摘反映では次の2点を是正した。第一に、要件2が「セグメント作業」スキルの対象を②設計・③実装・④独立検証の3セグメントに限定し①要求・要件（spec）セグメントを明示的に除外していたため、AC-2が列挙する5スキルのいずれにも①specセグメントのworker手続き（writer lease取得→`worker-launch.sh`起動→checkpoint push→Draft PR作成）が帰属しない空白が生じていた。これを是正し、要件2の対象を①②③④の全4セグメントへ拡張したうえで、①セグメントのみDraft PR作成という追加ステップが発生する点を同スキル内の条件分岐として記載する旨を明記し、AC-2のThenにも「セグメント作業」スキルが4セグメント全ての手続き（①のみDraft PR作成を含む）を扱うことを反映した。第二に、要件11の`docs/GLOSSARY.md`現状行数に関する断定的な記述（是正着手時点の具体的行数）を、検証不能な数値の断定を避け「最終的な適合はAC-10の自動検査で担保する」という趣旨の表現へ弱めた。
 
+spec-gate strictレビュー7回目の指摘反映では次の4点を是正した。第一に、要件3が`.claude/skills/`配下スキル群の配置を`init`実行時のみに限定し、既に標準プロファイルで導入済みの既存プロジェクトが`upgrade`実行時に新設スキル群を受け取れるかどうかに一切言及していなかったため、既存の`.claude/agents/`配下テンプレート（`.agent-skill-chain/config/agent-skill-chain.yaml`の`templates:`節が定める`claude_agents_source`/`claude_agents_target`/`verify_sync: true`という確立済みの配布・同期パターン）と同じパターンに従い、`init`実行時の新規配置に加え`upgrade`実行時にも配布元テンプレートとの同期を行う旨を前提・要件3・「出力」節・スコープ外へ明記し、AC-3を`upgrade`実行時の同期検証を含む形へ拡張した。ただし`profile`フィールド自体の値は`upgrade`では変更せず、プロファイル切替（`standard`⇔`lightweight`）自体は引き続きスコープ外であることも明記し、「upgradeでのプロファイル変更非対応」と「upgradeでのスキルテンプレート同期は行う」が両立する記述とした。第二に、要件7・AC-7が軽量プロファイルにおけるI2降格根拠として「軽量プロファイルが強制層を持たない点でGitHubモードの非強制性と同じ性質を持つ」という類推を用いていたが、SPEC自身の用語節が定義する「強制層」（PreToolUse hook・GitHub branch ruleset、実行時にツール呼び出しを機械的に阻止する仕組み）と、現行I2セルが指す「GitHubモードにおける自動CI強制（セグメントゲート専用のCheck Run／自動CI検証）の不在」は別個の異なる機構であり、両者を同じ性質と主張するこの類推は不正確だったため、これを削除し、軽量プロファイルは強制層に加えセグメントゲートの機械的検査・記録機構（`reviews/<gate>.yaml`等、ローカルCoordination Backend使用時に本来I2を不変条件たらしめている仕組み）も導入しない設計方針であるという、モード軸とは独立したプロファイル軸固有の直接的根拠へ置き換えた。第三に、要件4が`init`のみを主語とし、軽量プロファイルで`AGENTS.md`ファイル自体を生成・配置するか否かに触れていなかったため、`AGENTS.md`ファイル自体はプロファイルを問わず引き続きroot直下へ生成・配置され、軽量プロファイルで省略するのは`CLAUDE.md`側の`@AGENTS.md`常時import記述のみである旨を「出力」節・要件4・AC-4へ明記した。第四に、用語節(b)の例示「設定値の優先順位」が現行AGENTS.mdの「## 設定」節（項目追加手順①〜⑥のみを規定）には対応せず、実際に優先順位を規定するのは別節「## プロジェクト固有ポリシー」（同節の例示「プロジェクト固有ポリシーの優先順位」として既に挙げられている）であったため、対応しない重複例示「設定値の優先順位」を削除した。
+
 ## スコープ外
 
 - プラグイン化・marketplace公開（ADR-0023 Decision 5が後続判断としている事項）。
-- 既存導入済みプロジェクトを軽量プロファイルへ移行する手順、および `upgrade` コマンドでのプロファイル変更対応。本Issueは新規導入時の軽量プロファイル選択のみを対象とする。
+- 既存導入済みプロジェクトのプロファイルを切り替える手順（`upgrade` コマンドで `profile` フィールドの値を `standard`⇔`lightweight` へ変更する対応）。本Issueは新規導入時の軽量プロファイル選択（`init` 時点でのprofile確定）のみを対象とし、確定済みprofileの値自体を `upgrade` が変更することはない。ただし、要件3が定める `.claude/skills/` 配下スキル群の配布元テンプレートとの同期は、既存の `.claude/agents/` と同じパターンに従い `upgrade` 実行時にも行う（この同期はprofileの値を変更するものではなくスコープ内）。
 - 不変条件I2の恒久的なガイドライン降格の是非そのものの一般的な議論、および `AGENTS.md` 本体の不変条件表の大幅な改定。本Issueで行うのはAC-7が定める軽量プロファイル文脈でのI2セルへの最小限の追記のみとする。I3セルは変更しない（既存の「復元元」区分の記述が軽量プロファイルにもそのまま適用できるため、対応不要である旨のみAC-7に明記する）。
 - スキルフロントマターへのhook同梱によるプラグイン経由の強制層再統合（ADR-0023調査1(g)が示す将来オプション、後続判断）。
 - Cursor等、現時点でCLI検証（capability probe）が未実装のadapterへのスキル配布対応拡張。
