@@ -185,6 +185,19 @@ function nextNonSpaceChar(line: string, pos: number): string | undefined {
   return i < line.length ? line[i] : undefined;
 }
 
+/** Issue #469: 単一引用符で囲まれたコード値リテラル文脈。runが禁止語そのもので、
+ * 配列要素または関数呼び出し引数の構文境界にある場合に限り除外する。 */
+function isQuotedLiteralContext(line: string, run: IdentifierRun, banned: string): boolean {
+  const runText = line.slice(run.runStart, run.runEnd);
+  if (runText.length !== banned.length) return false;
+
+  if (line[run.runStart - 1] !== "'" || line[run.runEnd] !== "'") return false;
+
+  const before = prevNonSpaceChar(line, run.runStart - 1);
+  const after = nextNonSpaceChar(line, run.runEnd + 1);
+  return (before === '[' || before === '(' || before === ',') && (after === ']' || after === ')' || after === ',');
+}
+
 /** A-2 YAML識別子文脈（キー構文＋flow-sequence要素）: runが禁止語そのもの（複合でない）の
  * 場合に限り判定する。 */
 function isYamlIdentifierContext(line: string, run: IdentifierRun, banned: string): boolean {
@@ -291,6 +304,7 @@ function isIdentifierContext(line: string, start: number, end: number, banned: s
   if (isCodeIdentifierContext(line, run, banned, ext)) return true;
   if (YAML_CONTEXT_EXTENSIONS.has(ext) && isYamlIdentifierContext(line, run, banned)) return true;
   if (!isProseFile(ext) && isCliSubcommandContext(line, run, banned)) return true;
+  if (!isProseFile(ext) && isQuotedLiteralContext(line, run, banned)) return true;
   return isExternalVocabAllowlisted(line, run, ext);
 }
 
