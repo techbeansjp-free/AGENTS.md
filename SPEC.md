@@ -68,7 +68,7 @@ src/lib/review-light.ts:60: 禁止語 'issue' が見つかりました（'成果
 - Given: 本Issueの修正を含むPRがマージされた状態のmain
 - When: main上、または本Issue修正をベースとする新規PR上で `agent-skill-chain / ci` workflowが実行される
 - Then: 本Issueが報告した `lint vocab` の誤検知（`review-light.ts:60` の `'issue'`）を原因とする `verify` ジョブのfailureが発生しない
-- 検証方法見込み: `hybrid`（自動テストによる再現確認に加え、実際のCI実行結果を進行役が確認する）
+- 検証方法見込み: `hybrid`
 
 ## スコープ外
 
