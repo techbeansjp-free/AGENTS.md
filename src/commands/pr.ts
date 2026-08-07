@@ -9,6 +9,7 @@ import { tryReadYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { gh, git } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
+import { resolveMergeTarget, checkFreshness, attemptUpdateBranch, MergeFailureClassifier } from '../lib/pr-freshness.js';
 
 const USAGE = `
 使い方: agent-skill-chain pr create <issue_id> <branch>
@@ -28,6 +29,17 @@ const MERGE_USAGE = `
 
 \`.agent-skill-chain/config/agent-skill-chain.yaml\` の \`merge.autonomous\` が true
 （明示opt-in）でない限り、実際のマージは実行せず日本語メッセージで停止する（既定 false）。
+
+\`gh pr merge\` 実行前に、対象PRのhead branchがbase branch（既定ではmain）の最新コミットに
+対して最新（behind=0）かどうかを必ず確認する（--admin 等のオプションでも迂回できない）。
+最新でない場合、\`merge.auto_update_branch: true\`（既定 false）を明示設定していなければ
+最新化を試みず日本語エラーメッセージで中断する。true設定時は update-branch API による
+最新化を試み、コンフリクト等で完了できない場合も中断する。対象PRの識別は引数からの明示指定、
+または指定が無い場合の暗黙解決に委ねる。暗黙解決はrepoRoot()（進行役が操作するmain
+worktree。default branchをチェックアウトしている前提）の現在ブランチに紐づくPRを対象と
+する——Issue worktree上で本コマンドを実行した場合でも、対象PRの解決基準はmain worktree
+であり、そのIssue worktree自身の現在ブランチではない。いずれの方法でも対象PRを特定
+できない場合や最新性確認自体が失敗した場合も、マージを実行せず中断する。
 
 マージ成功後、main worktree（repoRoot()が指す共通作業ツリー。default branchを
 チェックアウトしている前提）のローカルブランチを origin/<default-branch> へ
@@ -264,10 +276,91 @@ export async function merge(args: string[]): Promise<number> {
       );
     }
 
+    // Issue #493: --admin 等のオプションでも迂回できない、gh pr merge 実行前の必須最新性チェック。
+    const { target, repoOverride } = resolveMergeTarget(args, root);
+    if (target === undefined) {
+      return fail(
+        '対象PRを特定できませんでした。引数にPR番号・URL・ブランチのいずれも含まれておらず、' +
+          'cwdの現在ブランチに紐づくPRの暗黙解決にも失敗しました。PR番号を明示するか、' +
+          '対象PRのブランチ上で実行してください。',
+      );
+    }
+
+    const initial = checkFreshness(root, target, repoOverride);
+    if (initial.status === 'check_failed') {
+      return fail(
+        `対象PR（${target}）の最新性確認自体が失敗しました（GitHub APIエラー等）。マージを実行せず中断します。`,
+      );
+    }
+    // Issue #493実装ゲート3回目是正: attemptUpdateBranch()側のnot_applicable（ポーリング中に
+    // 対象PRがOPENでなくなった場合）には専用メッセージがあるのに対し、この初回判定側
+    // （対象PRが最初からOPENでない場合）には無く一貫性を欠いていた
+    // （not-applicable-status-unhandled-in-merge）。ここで扱わなくても後続のgh pr merge自体が
+    // 同じ理由で失敗しその終了コード・標準エラー出力がそのまま返るため安全側だが、原因を
+    // 早期かつ一貫した日本語メッセージで伝えるためここで明示的に扱う。
+    if (initial.status === 'not_applicable') {
+      return fail(
+        `対象PR（${target}）が既にクローズ・マージ済みのため最新性確認を行えません。マージを実行せず中断します。`,
+      );
+    }
+    if (initial.status === 'behind') {
+      if (config.merge?.auto_update_branch !== true) {
+        return fail(
+          [
+            `対象PR（${target}）のhead branchがbase branchの最新コミットに対して最新ではありません（behind）。`,
+            'このままではマージを実行しません。対象PRブランチをbase branchへ追随させたうえで再実行するか、',
+            '`.agent-skill-chain/config/agent-skill-chain.yaml` の `merge.auto_update_branch: true` で',
+            '自動最新化を明示的に有効化してください（既定は無効です）。',
+          ].join('\n'),
+        );
+      }
+      // Issue #493実装ゲート是正: update-branch REST APIは数値PR番号のパスセグメントを要求する。
+      // `target`（PR番号／URL／ブランチ名のいずれもあり得る）をそのまま渡すと、対象識別子が
+      // 数値のPR番号でない場合に不正なAPIパスとなり常に失敗するため、`checkFreshness()` が
+      // `gh pr view` から取得した実際のPR番号（`initial.prNumber`）へ正規化してから渡す
+      // （findings update-branch-target-not-pr-number / update-branch-non-numeric-target）。
+      if (initial.prNumber === undefined) {
+        return fail(
+          `対象PR（${target}）のPR番号を特定できなかったため、自動最新化を実行できません。マージを実行せず中断します。`,
+        );
+      }
+      // Issue #493実装ゲート2回目是正: `repoOverride`（`-R`由来のヒント値）ではなく、
+      // `checkFreshness()` が `gh pr view` の応答から導出した対象PRの実際の所属リポジトリ
+      // （`initial.repo`）を使う。fork由来PRやcwdの既定リポジトリと異なるリポジトリを指す
+      // PR URLを対象指定した場合でも、常に正しいリポジトリへupdate-branchを呼ぶため。
+      const update = attemptUpdateBranch(root, initial.prNumber, initial.repo);
+      if (update.status === 'not_applicable') {
+        return fail(`対象PR（${target}）が処理中にクローズ・マージされたため最新化を中断しました。`);
+      }
+      if (update.status !== 'updated') {
+        return fail(
+          `対象PR（${target}）の自動最新化に失敗しました（コンフリクト、またはポーリング上限到達まで反映されませんでした）。` +
+            'マージを実行せず中断します。手動で対象PRブランチを最新化してください。',
+        );
+      }
+    }
+
     const result = gh(['pr', 'merge', ...args], root);
     if (result.stdout) process.stdout.write(result.stdout);
+    if (result.status !== 0) {
+      if (result.stderr) process.stderr.write(result.stderr);
+      if (MergeFailureClassifier.classifyMergeFailure(result.stderr) === 'ambiguous') {
+        process.stderr.write(
+          '対象PRの最新性チェックを通過した後にマージ自体が失敗しました。確認からマージ実行までの間に' +
+            '別のマージが成立した可能性（TOCTOU競合）を含め、原因を確認してください。\n',
+        );
+      }
+      return result.status;
+    }
     if (result.stderr) process.stderr.write(result.stderr);
-    if (result.status !== 0) return result.status;
+
+    // Issue #493実装ゲート是正: 確認通過後のベストエフォート事後検知は撤去した。コンフリクトの
+    // 無い通常の成功マージであっても、マージ自体がbase branchの先端を必ず前進させるため、単純な
+    // 事後baseRefOid比較では正常なマージのたびに誤検知（狼少年化）が発生する欠陥があった。
+    // マージ成立後に生成された実コミットの親SHAまで遡って比較する代替も検討したが、マージ手法
+    // （マージコミット／squash／rebase）ごとに親構造が異なり実装・検証コストが高い一方、この
+    // 検知はいずれもベストエフォート（最新性保証自体は担わない付加的な観測性強化）であったため、
+    // 多段防御は「fresh判定からgh pr merge呼び出しまでの間隔最小化」のみで構成する。
 
     return syncMainWorktree(root);
   });
