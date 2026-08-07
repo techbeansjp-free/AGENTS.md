@@ -60,7 +60,7 @@
 | 要件6・AC-6 | 設計要素6（init拡張・既定分岐は現行動作を維持） | 既定プロファイルの分岐は現行 `CLAUDE.md`・`ROOT_LEVEL_ENTRIES` を変更しない |
 | 要件7・AC-7 | 設計要素1（I2セル改定）・設計要素3（`profile`が判定正本） | 「非強制性の類推」を用いない直接根拠で記述する |
 | 要件8・AC-8 | 設計要素9（説明文字数集計） | レポートファイル形式で記録する |
-| 要件9・AC-9 | 設計要素6（init拡張・標準出力メッセージ） | AC-5と同一設計要素 |
+| 要件9・AC-9 | 設計要素6のうち処理順序3（既存pre-flight方式の維持） | AC-9は衝突時非破壊方針（pre-flight維持）を指し、AC-5（標準出力メッセージ）とは別内容 |
 | 要件10・AC-1 | 設計要素1（root直下許可リストへ `.claude/` 追加） | 行数増加を伴わない改定 |
 | 要件11・AC-10 | 設計要素8（GLOSSARY.md・CONFIGURATION.md更新） | 20行以内を維持する具体案を示す |
 
@@ -210,7 +210,7 @@ templates:
 1. 選択された `profile` を確定する。
 2. `collectManagedAssetMappings(targetDir, profile)`（設計要素5）で対象マッピングを取得する。
 3. 既存のpre-flight方式（要件9・AC-9、`copyTreeFailOnConflict(..., { dryRun: true })` による全対象の事前検査）をそのまま適用する——設計要素5の拡張によりマッピング対象集合が増える（`.claude/skills/` 配下・`agent-skill-chain.yaml` の分解後エントリ）だけであり、pre-flight方式自体（実書き込み前の全対象検査、1件でも衝突があれば1件も書き込まない）は変更しない。
-4. 実書き込み後、`profile === 'lightweight'` の場合は標準出力へ次の趣旨の日本語メッセージを追加する（要件5・AC-5、要件9で言及される「機械的阻止が無いことの明示」と同一メッセージ）:
+4. 実書き込み後、`profile === 'lightweight'` の場合は標準出力へ次の趣旨の日本語メッセージを追加する（要件5・AC-5）:
 
    > 軽量プロファイルで導入しました。PreToolUse hook（`enforce on`）・GitHub branch ruleset（`setup github`）などの強制層は導入されていません。本パッケージが定める規律（不変条件・4セグメント運用等）からの逸脱を機械的に阻止する手段は現状ありません。
 
@@ -222,7 +222,12 @@ templates:
 
 `src/commands/upgrade.ts` に、`config/agent-skill-chain.yaml` の `profile` フィールドのみを対象とする保存・復元ロジックを追加する（他の全フィールドは既存どおり `copyTreeMirror` によって配布元の値へ復元される、本Issueが変更しない既存の挙動——「スコープ外」節・forbidden制約により、本Issueの対象は新設フィールド `profile` の保存のみとする）。
 
-1. 既存の `collectManagedAssetMappings` 呼び出し前に、対象の現在の `agent-skill-chain.yaml` を読み既存 `profile` 値を取得する（`loadConfig` 相当、ファイル欠落・パース不能・フィールド欠落時は `standard` として扱う——スキーマ後方互換ルールと同一）。**このフォールバックが発生した場合**（すなわち既存ファイルが存在するにもかかわらず読み取り・パース・フィールド抽出のいずれかに失敗した場合。ファイルが最初から存在しない新規導入相当のケースは対象外とし警告を出さない）、標準エラー出力へ次の趣旨の日本語警告メッセージを出す。「既存の `agent-skill-chain.yaml` から `profile` 設定を読み取れなかったため、既定値 `standard` として扱います。既に `profile: lightweight` を選択している場合は、`upgrade` 完了後に対象ファイルの `profile` フィールドを確認してください。」これにより、`profile: lightweight` 選択済みプロジェクトで設定ファイルが破損・欠落した場合に `profile` が黙って `standard` へ反転する事態を利用者が検知できるようにする（ファイルが最初から存在しない新規導入時は `standard` が正しい既定であり警告対象ではない——両者は「対象ファイルが存在するか」で機械的に区別する）。
+1. 既存の `collectManagedAssetMappings` 呼び出し前に、対象の現在の `agent-skill-chain.yaml` を読み既存 `profile` 値を取得する（`loadConfig` 相当）。取得結果は次の3ケースに機械的に区別し、いずれの場合も最終的な値は `standard` にフォールバックするが、警告発火の要否はケースにより異なる。
+   - **ケースA（ファイルが存在しない）**: 新規導入相当であり `standard` が正しい既定値である。警告は出さない。
+   - **ケースB（ファイルは存在するが `profile` フィールドが単純に存在しない）**: 本機能導入前から存在するレガシー設定ファイルという正常な後方互換ケースであり（設計要素3の後方互換ルールそのもの）、`standard` として扱う想定内の挙動である。警告は出さない。
+   - **ケースC（異常値）**: ファイルは存在するがパース不能、または `profile` フィールドは存在するがその値が `standard`・`lightweight` のいずれでもない不正な値である場合。破損・手動編集ミス等の異常ケースであり、`standard` へフォールバックしたうえで標準エラー出力へ次の趣旨の日本語警告メッセージを出す。「既存の `agent-skill-chain.yaml` の `profile` 設定を読み取れなかった（または不正な値だった）ため、既定値 `standard` として扱います。既に `profile: lightweight` を選択している場合は、`upgrade` 完了後に対象ファイルの `profile` フィールドを確認してください。」
+
+   これにより、`profile: lightweight` 選択済みプロジェクトで設定ファイルが破損した場合（ケースC）に `profile` が黙って `standard` へ反転する事態を利用者が検知できるようにする一方、`profile` フィールドを持たない大多数の既存標準プロファイルプロジェクト（ケースB）が `upgrade` のたびに誤った警告を受け取ることを防ぐ。ケースA・B・Cの区別は「対象ファイルが存在するか」「`profile` フィールドが存在するか」「値が既知enumか」という機械的な条件のみで行う。
 2. `collectManagedAssetMappings(targetDir, preservedProfile)`（設計要素5）を呼び出す。これにより、`config` エントリの `agent-skill-chain.yaml` 側マッピングのsrcが、保存済み `profile` に対応するテンプレート（既定プロファイル済みなら `packageRoot()/.agent-skill-chain/config/agent-skill-chain.yaml`、軽量プロファイル済みなら `packageRoot()/.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`）に解決される。これにより「`profile` フィールド自体の値はupgradeで変更しない」（要件3・AC-3）を、既存の `copyTreeMirror` 全体コピー機構をそのまま使いながら満たす（`profile` だけを個別にパッチする特殊処理を新設しない——配布元選択の時点でprofileが確定しているため）。
 3. `.claude/skills/`（設計要素5の `claude_skills` マッピング）は他の管理対象と同じく無条件にミラー同期される（要件3が求める「プロファイルを問わず同期」）。
 
