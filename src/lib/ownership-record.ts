@@ -93,6 +93,25 @@ export function readOwnershipRecord(root: string): OwnershipRecordReadResult {
 }
 
 /**
+ * 今回書き込む所有権エントリ（`current`、現行配布元からコピーしたファイル）と、既存の所有権記録
+ * （`previous`）に残っていたが `current` には含まれないエントリ（＝過去に `upgrade` の削除候補判定で
+ * `content-changed`・`unreadable`・`delete-failed` として保持=retainedされていたファイル等）とを
+ * マージする。`current` に同一キーがあれば `current` 側の値を優先する。
+ *
+ * `init` が既存記録の有無を確認せず現行配布元のみで上書きすると、`upgrade` が保護のため保持していた
+ * retainedエントリが `init` 再実行で消失し、以後そのファイルは永久に削除候補として検出されなくなる
+ * （手動implementation-gateレビュー指摘: init-rerun-drops-prior-ownership-entries /
+ * init-overwrites-retained-ownership-entries）。`upgrade.ts` は `resolveStaleAssets` が同種のマージを
+ * 行うため個別対応は不要だが、`init.ts` はこの関数を使い同じ保護を行う。
+ */
+export function mergeRetainedOwnershipFiles(
+  previous: OwnershipRecord | undefined,
+  current: Record<string, string>,
+): Record<string, string> {
+  return { ...(previous?.files ?? {}), ...current };
+}
+
+/**
  * 所有権記録をアトミックに書き込む（tmpファイル書込み+rename、`yaml-io.ts` の
  * `writeYamlFileAtomic` と同じ原子性パターンをJSONへ適用する）。
  */

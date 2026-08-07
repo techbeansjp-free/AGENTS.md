@@ -7,7 +7,13 @@ import { writeInstalledVersion } from '../lib/version-marker.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { resolveTemplateMappings } from '../lib/template-sync.js';
 import { digestOfFile } from '../lib/digest.js';
-import { toOwnershipKey, writeOwnershipRecord } from '../lib/ownership-record.js';
+import {
+  toOwnershipKey,
+  readOwnershipRecord,
+  writeOwnershipRecord,
+  mergeRetainedOwnershipFiles,
+  ownershipRecordPath,
+} from '../lib/ownership-record.js';
 
 const USAGE = `
 使い方: agent-skill-chain init [target_dir] [--dry-run]
@@ -74,8 +80,22 @@ export async function init(args: string[]): Promise<number> {
 
     if (!dryRun) {
       writeInstalledVersion(targetDir, packageVersion());
-      // Issue #492: 初回導入時点の所有権記録を新規作成する（直前の記録は存在しないため削除候補計算は行わない）。
-      writeOwnershipRecord(targetDir, { version: packageVersion(), files: ownedFiles });
+      // Issue #492: 初回導入時点は既存記録が無いため、そのまま現行配布ファイルの一覧を書き込む。
+      // 2回目以降の実行（同一target_dirへの再init）では、既存記録に残っていたretainedエントリ
+      // （upgradeが保護目的で保持していた、現行配布元には無いファイル等）を消失させないよう
+      // マージしてから書き込む。既存記録が破損している場合はupgrade.tsと同様に上書きをスキップし
+      // 警告する（手動implementation-gateレビュー指摘）。
+      const { record: previousOwnershipRecord, warning: ownershipRecordWarning } = readOwnershipRecord(targetDir);
+      if (ownershipRecordWarning) {
+        summary.push(
+          `所有権記録（${ownershipRecordPath(targetDir)}）が破損しているため、今回は記録の更新をスキップしました。記録ファイルを手動で確認・修正するか削除してから再実行してください。`,
+        );
+      } else {
+        writeOwnershipRecord(targetDir, {
+          version: packageVersion(),
+          files: mergeRetainedOwnershipFiles(previousOwnershipRecord, ownedFiles),
+        });
+      }
     }
     summary.push('GitHub workflowは未展開です。必要な場合だけ setup github を明示実行してください。');
     summary.push(`${prefix}installed_version: ${packageVersion()}`);

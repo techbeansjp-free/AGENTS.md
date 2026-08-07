@@ -478,6 +478,41 @@ test('upgrade: 配布元に依然として存在するファイルは削除候�
   );
 });
 
+test('upgrade: 現行配布元に無改変のまま存続するファイルは削除候補にならず、更新後も所有権記録に残り続ける（手動implementation-gateレビュー指摘: unchanged-asset-survival-untested）', (t) => {
+  const targetDir = mkScratch('upgrade-unchanged-survival');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  // 導入先で一切変更しない = 現行配布元と内容が完全一致したまま複数回のupgradeを経る、
+  // 本機能の主要シナリオ（無改変で存続する配布ファイル）を模す。
+  const conventionsRelative = '.agent-skill-chain/standards/GIT_CONVENTIONS.md';
+  const conventionsPath = path.join(targetDir, ...conventionsRelative.split('/'));
+  const originalContent = fs.readFileSync(conventionsPath, 'utf8');
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, conventionsRelative),
+    true,
+    'init直後の所有権記録に対象ファイルが含まれていること（前提条件）',
+  );
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(conventionsPath), true, '無改変のまま配布元に存在し続けるファイルは削除されないこと');
+  assert.equal(fs.readFileSync(conventionsPath, 'utf8'), originalContent, '内容も変化しないこと');
+  assert.doesNotMatch(
+    result.stdout,
+    /GIT_CONVENTIONS\.md.*削除/,
+    '削除・削除しない理由のいずれも提示されないこと（削除候補にすら挙がらないこと）',
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, conventionsRelative),
+    true,
+    'upgrade後もtrackCopyResultsがcopyTreeMirrorの返すresultsから無改変エントリを正しくcurrentKeysへ含め、' +
+      '所有権記録にエントリが残り続けること（この回帰テストが崩れる=無改変配布ファイル全件が誤ってContentMatchと' +
+      '分類され一括削除される経路が復活したことを意味する）',
+  );
+});
+
 test('upgrade: 削除候補判定のための読み取り自体が失敗した場合は削除せず警告し、異常終了しない（AC-10）', (t) => {
   if (isRunningAsRoot()) {
     t.skip('rootユーザーでは権限チェックがバイパスされるため');

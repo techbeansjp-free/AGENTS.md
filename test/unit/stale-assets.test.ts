@@ -23,22 +23,42 @@ function isRunningAsRoot(): boolean {
 // Issue #492: 削除候補差分計算（要件3・AC-4・AC-5・AC-9）。
 
 test('computeCandidateKeys: 直前記録が無ければ候補は0件', () => {
-  assert.deepEqual(computeCandidateKeys(undefined, new Set()), []);
+  const root = mkdtemp('stale-assets-');
+  assert.deepEqual(computeCandidateKeys(root, undefined, new Set()), []);
 });
 
 test('computeCandidateKeys: 現行配布元に無い記録済みファイルのみ候補になる（AC-9: 現存ファイルは対象外）', () => {
+  const root = mkdtemp('stale-assets-');
   const previous: OwnershipRecord = { version: '0.1.0', files: { 'stale.md': 'sha256:a', 'kept.md': 'sha256:b' } };
-  const candidates = computeCandidateKeys(previous, new Set(['kept.md']));
+  const candidates = computeCandidateKeys(root, previous, new Set(['kept.md']));
   assert.deepEqual(candidates, ['stale.md']);
 });
 
 test('computeCandidateKeys: .agent-skill-chain/project/配下は候補から除外される（AC-5 防御的除外）', () => {
+  const root = mkdtemp('stale-assets-');
   const previous: OwnershipRecord = {
     version: '0.1.0',
     files: { '.agent-skill-chain/project/RULES.md': 'sha256:a', 'stale.md': 'sha256:b' },
   };
-  const candidates = computeCandidateKeys(previous, new Set());
+  const candidates = computeCandidateKeys(root, previous, new Set());
   assert.deepEqual(candidates, ['stale.md']);
+});
+
+test('computeCandidateKeys: 正規化後にproject/配下を指す改ざん・散乱キーも候補から除外される（手動implementation-gateレビュー指摘: protected-prefix-not-normalized）', () => {
+  const root = mkdtemp('stale-assets-');
+  const previous: OwnershipRecord = {
+    version: '0.1.0',
+    files: {
+      '.agent-skill-chain/standards/../project/RULES.md': 'sha256:a',
+      'stale.md': 'sha256:b',
+    },
+  };
+  const candidates = computeCandidateKeys(root, previous, new Set());
+  assert.deepEqual(
+    candidates,
+    ['stale.md'],
+    '生キー文字列がPROTECTED_KEY_PREFIXで始まらなくても、正規化後にproject/配下を指すキーは除外されること',
+  );
 });
 
 // Issue #492: 候補ファイルの分類（AC-2・AC-3・AC-8・AC-10、DESIGN.md状態遷移）。

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { digestOf } from './digest.js';
 import { fromOwnershipKey, isWithinRoot, type OwnershipRecord } from './ownership-record.js';
 
@@ -7,7 +8,20 @@ import { fromOwnershipKey, isWithinRoot, type OwnershipRecord } from './ownershi
  * `NAMESPACED_ENTRIES`（`asset-manifest.ts`）が `project` を含まないため通常は候補集合に
  * 現れないが、本モジュール内でもパスprefix一致による防御的除外を行う（Issue #492 DESIGN.md 二重防御）。
  */
-const PROTECTED_KEY_PREFIX = '.agent-skill-chain/project/';
+const PROTECTED_RELATIVE_SEGMENTS = ['.agent-skill-chain', 'project'];
+
+/**
+ * `key` が `fromOwnershipKey` で正規化した絶対パス上で `.agent-skill-chain/project/` 配下を
+ * 指すかを判定する。生キー文字列への `startsWith` だけでは `'.agent-skill-chain/x/../project/…'`
+ * のような改ざん・破損キーが判定をすり抜けるため、`resolveStaleAssets` が実削除に使うのと
+ * 同じ正規化経路（`fromOwnershipKey` → `path.relative`）を通してから判定する
+ * （手動implementation-gateレビュー指摘: protected-prefix-not-normalized）。
+ */
+function isProtectedKey(root: string, key: string): boolean {
+  const relative = path.relative(root, fromOwnershipKey(root, key));
+  const segments = relative.split(path.sep);
+  return PROTECTED_RELATIVE_SEGMENTS.every((segment, index) => segments[index] === segment);
+}
 
 /** 候補ファイルを実ファイルシステムに対して分類した結果（Issue #492 DESIGN.md 状態遷移）。 */
 export type StaleCandidateStatus = 'Absent' | 'Unreadable' | 'TypeChanged' | 'ContentMatch' | 'ContentChanged';
@@ -45,15 +59,18 @@ function messageOf(error: unknown): string {
 /**
  * 直前の所有権記録エントリ集合と、今回コピー対象になる現行配布元のファイルパス集合との差分から
  * 削除候補集合を求める純関数（要件3: (a)(b) を満たすファイルのみが対象）。
+ *
+ * @param root 導入先リポジトリのルート（絶対パス）。`project/` 除外判定の正規化に使う。
  */
 export function computeCandidateKeys(
+  root: string,
   previous: OwnershipRecord | undefined,
   currentKeys: ReadonlySet<string>,
 ): string[] {
   if (!previous) return [];
   return Object.keys(previous.files)
     .filter((key) => !currentKeys.has(key))
-    .filter((key) => !key.startsWith(PROTECTED_KEY_PREFIX));
+    .filter((key) => !isProtectedKey(root, key));
 }
 
 /**
@@ -128,7 +145,7 @@ export function resolveStaleAssets(
   currentFiles: Record<string, string> | undefined,
   dryRun: boolean,
 ): ResolveStaleAssetsResult {
-  const candidateKeys = computeCandidateKeys(previous, currentKeys).sort();
+  const candidateKeys = computeCandidateKeys(root, previous, currentKeys).sort();
   const outcomes: StaleAssetOutcome[] = [];
   const retained: Record<string, string> = {};
   let hasDeleteFailure = false;
