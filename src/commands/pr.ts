@@ -283,7 +283,6 @@ export async function merge(args: string[]): Promise<number> {
       );
     }
 
-    let preMergeBaseSha: string | undefined;
     const initial = checkFreshness(root, target, repoOverride);
     if (initial.status === 'check_failed') {
       return fail(
@@ -301,7 +300,17 @@ export async function merge(args: string[]): Promise<number> {
           ].join('\n'),
         );
       }
-      const update = attemptUpdateBranch(root, target, repoOverride);
+      // Issue #493実装ゲート是正: update-branch REST APIは数値PR番号のパスセグメントを要求する。
+      // `target`（PR番号／URL／ブランチ名のいずれもあり得る）をそのまま渡すと、対象識別子が
+      // 数値のPR番号でない場合に不正なAPIパスとなり常に失敗するため、`checkFreshness()` が
+      // `gh pr view` から取得した実際のPR番号（`initial.prNumber`）へ正規化してから渡す
+      // （findings update-branch-target-not-pr-number / update-branch-non-numeric-target）。
+      if (initial.prNumber === undefined) {
+        return fail(
+          `対象PR（${target}）のPR番号を特定できなかったため、自動最新化を実行できません。マージを実行せず中断します。`,
+        );
+      }
+      const update = attemptUpdateBranch(root, initial.prNumber, repoOverride);
       if (update.status === 'not_applicable') {
         return fail(`対象PR（${target}）が処理中にクローズ・マージされたため最新化を中断しました。`);
       }
@@ -311,10 +320,6 @@ export async function merge(args: string[]): Promise<number> {
             'マージを実行せず中断します。手動で対象PRブランチを最新化してください。',
         );
       }
-      preMergeBaseSha = update.baseSha;
-    } else {
-      // 'fresh' または 'not_applicable'（対象PRが既にOPENでない等、既存の gh pr merge 挙動に委ねる）。
-      preMergeBaseSha = initial.baseSha;
     }
 
     const result = gh(['pr', 'merge', ...args], root);
@@ -331,17 +336,14 @@ export async function merge(args: string[]): Promise<number> {
     }
     if (result.stderr) process.stderr.write(result.stderr);
 
-    // 確認通過後のベストエフォート事後検知（ADR-0039 Decision 6）。検知不能時は無警告で
-    // 正常終了し、この検知の成否は終了コードに一切影響しない。
-    if (preMergeBaseSha !== undefined) {
-      const post = checkFreshness(root, target, repoOverride, { allowUnknownBackoff: false });
-      if (post.baseSha !== undefined && post.baseSha !== preMergeBaseSha) {
-        process.stderr.write(
-          'マージは成立しましたが、確認時点以降にbaseへ新しいコミットが追加されていた可能性があります。' +
-            '念のため内容を確認してください。\n',
-        );
-      }
-    }
+    // Issue #493実装ゲート是正: 確認通過後のベストエフォート事後検知（旧ADR-0039 Decision 6）は
+    // 撤去した。コンフリクトの無い通常の成功マージであっても、マージ自体がbase branchの先端を
+    // 必ず前進させるため、単純な事後baseRefOid比較では正常なマージのたびに誤検知（狼少年化）が
+    // 発生する欠陥があった（findings post-merge-toctou-false-positive）。マージ成立後に生成された
+    // 実コミットの親SHAまで遡って比較する代替も検討したが、マージ手法（マージコミット／squash／
+    // rebase）ごとに親構造が異なり実装・検証コストが高い一方、この検知はいずれもベストエフォート
+    // （要件1・AC-1自体の保証は担わない付加的な観測性強化）であったため、多段防御は
+    // 「fresh判定からgh pr merge呼び出しまでの間隔最小化」のみで構成する。
 
     return syncMainWorktree(root);
   });

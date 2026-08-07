@@ -9,6 +9,10 @@ import { gh } from './exec.js';
 export interface FreshnessResult {
   status: 'fresh' | 'behind' | 'check_failed' | 'not_applicable';
   baseSha?: string;
+  // Issue #493実装ゲート是正: update-branch等、数値PR番号を要求するREST APIへ対象識別子
+  // （PR番号／URL／ブランチのいずれか）をそのまま渡すと不正なパスになるため、`gh pr view`
+  // が返す実際のPR番号を呼び出し元（merge()）が正規化に使えるよう引き継ぐ。
+  prNumber?: string;
 }
 
 export interface UpdateResult {
@@ -138,12 +142,41 @@ function queryPrView(root: string, target: string, repo?: string): GhPrViewPaylo
   }
 }
 
+interface GhCompareResult {
+  status?: string;
+  behind_by?: number;
+}
+
 /**
- * 対象PRのhead/base最新性を `mergeStateStatus` で判定する（ADR-0039 Decision 2）。
- * `repo` は `resolveMergeTarget()` が返す `repoOverride` を呼び出し元がそのまま渡す値であり、
- * ここでは値の妥当性検証・加工を行わず `--repo` フラグとして `gh` へ引き継ぐだけの伝播に限定する。
+ * `gh api repos/<repo>/compare/<base>...<head>`（GitHub REST APIのcompareエンドポイント）を呼ぶ。
+ * `repo` 未指定時は `attemptUpdateBranch()` と同じ `:owner/:repo` プレースホルダ構文
+ * （cwdの既定repoのgit remoteから暗黙解決する `gh` CLI標準の書式）を使う。
+ */
+function queryCompare(root: string, repo: string | undefined, base: string, head: string): GhCompareResult | undefined {
+  const repoSegment = repo ? repo : ':owner/:repo';
+  const result = gh(['api', `repos/${repoSegment}/compare/${base}...${head}`], root);
+  if (result.status !== 0) return undefined;
+  try {
+    return JSON.parse(result.stdout) as GhCompareResult;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 対象PRのhead/base最新性を判定する。`repo` は `resolveMergeTarget()` が返す `repoOverride` を
+ * 呼び出し元がそのまま渡す値であり、ここでは値の妥当性検証・加工を行わず `--repo` フラグとして
+ * `gh` へ引き継ぐだけの伝播に限定する。
  * `options.allowUnknownBackoff`（既定 `true`）が `false` の場合は `UNKNOWN` でもバックオフせず、
  * 1回の問い合わせ結果のみで判定する（`attemptUpdateBranch()` 内部ポーリング用）。
+ *
+ * Issue #493実装ゲート是正: `mergeStateStatus` はbase branch側のruleset設定
+ * （「Require branches to be up to date before merging」等）が有効な場合にのみ `BEHIND` を返す
+ * GitHub仕様であり、無効な場合は実際にbehindでも `CLEAN`/`UNSTABLE`/`BLOCKED` 等 `BEHIND` 以外の
+ * 値が返り得る。これを判定の唯一の根拠にすると、要件1・AC-1が要求する保証（behindなPRはそのまま
+ * マージされない）自体が無効化されるため、実際のahead/behindは `gh api compare` で独立に検証し、
+ * `mergeStateStatus` はUNKNOWN解決待ちのポーリング制御にのみ補助的に用いる
+ * （findings merge-state-status-masks-behind / behind-detection-contract-mismatch）。
  */
 export function checkFreshness(
   root: string,
@@ -166,11 +199,17 @@ export function checkFreshness(
   }
 
   const baseSha = payload.baseRefOid;
+  const prNumber = typeof payload.number === 'number' ? String(payload.number) : undefined;
 
-  if (payload.state !== 'OPEN') return { status: 'not_applicable', baseSha };
-  if (payload.mergeStateStatus === 'UNKNOWN') return { status: 'check_failed', baseSha };
-  if (payload.mergeStateStatus === 'BEHIND') return { status: 'behind', baseSha };
-  return { status: 'fresh', baseSha };
+  if (payload.state !== 'OPEN') return { status: 'not_applicable', baseSha, prNumber };
+  if (payload.mergeStateStatus === 'UNKNOWN') return { status: 'check_failed', baseSha, prNumber };
+
+  if (!payload.baseRefName || !payload.headRefName) return { status: 'check_failed', baseSha, prNumber };
+  const compare = queryCompare(root, repo, payload.baseRefName, payload.headRefName);
+  if (!compare) return { status: 'check_failed', baseSha, prNumber };
+  const isBehind = compare.status === 'behind' || (typeof compare.behind_by === 'number' && compare.behind_by > 0);
+  if (isBehind) return { status: 'behind', baseSha, prNumber };
+  return { status: 'fresh', baseSha, prNumber };
 }
 
 /**

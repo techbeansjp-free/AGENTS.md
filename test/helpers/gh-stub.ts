@@ -327,16 +327,23 @@ if (cmd === 'pr' && sub === 'view') {
       process.stderr.write(freshnessViewFailure);
       process.exit(1);
     }
+    // Issue #493実装ゲート是正: 対象識別子（key）がPR番号でなくブランチ名／URLの場合でも
+    // prFreshnessQueues/freshnessCompareはPR番号で一貫して引けるよう、pr登録があれば
+    // PR番号へ正規化したキーを使う（無ければ従来どおりkey自体をキーにする）。
+    const resolvedKey = pr ? String(pr.number) : key;
     const queues = state.prFreshnessQueues || {};
-    const queue = queues[key];
+    const queue = queues[resolvedKey];
     const counts = (state.prFreshnessCallCounts = state.prFreshnessCallCounts || {});
     const payload = {};
     let prState = pr ? pr.state : 'OPEN';
     let mergeStateStatus = 'CLEAN';
     let baseRefOid = state.defaultBaseRefOid || 'default-base-sha';
+    let compareStatus;
+    let compareBehindBy;
+    let compareFail = false;
     if (queue && queue.length > 0) {
-      const idx = Math.min(counts[key] || 0, queue.length - 1);
-      counts[key] = (counts[key] || 0) + 1;
+      const idx = Math.min(counts[resolvedKey] || 0, queue.length - 1);
+      counts[resolvedKey] = (counts[resolvedKey] || 0) + 1;
       const entry = queue[idx];
       if (entry.fail) {
         saveState(state);
@@ -346,13 +353,30 @@ if (cmd === 'pr' && sub === 'view') {
       if (entry.state !== undefined) prState = entry.state;
       if (entry.mergeStateStatus !== undefined) mergeStateStatus = entry.mergeStateStatus;
       if (entry.baseRefOid !== undefined) baseRefOid = entry.baseRefOid;
-      saveState(state);
+      compareStatus = entry.compareStatus;
+      compareBehindBy = entry.compareBehindBy;
+      compareFail = !!entry.compareFail;
     } else if (pr && pr.mergeStateStatus !== undefined) {
       mergeStateStatus = pr.mergeStateStatus;
     }
+    // compareStatus/compareBehindByの明示指定が無い場合は、mergeStateStatus由来の既定値
+    // （BEHINDならbehind、それ以外はidentical）を使う（既存テスト・AC-5回帰防止のための
+    // 後方互換動作。反例〔mergeStateStatusはCLEAN等だが実際にはbehind〕はテストが
+    // compareStatus/compareBehindByを明示指定することで再現する）。
+    if (compareStatus === undefined && typeof compareBehindBy !== 'number') {
+      compareStatus = mergeStateStatus === 'BEHIND' ? 'behind' : 'identical';
+      compareBehindBy = mergeStateStatus === 'BEHIND' ? 1 : 0;
+    }
+    state.freshnessCompare = state.freshnessCompare || {};
+    state.freshnessCompare[resolvedKey] = { compareStatus, compareBehindBy, compareFail };
+    saveState(state);
     if (viewFields.includes('number')) payload.number = pr ? pr.number : Number(key);
     if (viewFields.includes('state')) payload.state = prState;
-    if (viewFields.includes('headRefName')) payload.headRefName = pr ? pr.headRefName : undefined;
+    // 実PR登録が無い対象（AC-1等、numericな仮PR番号のみをseedPrFreshnessQueueで指定するテスト）
+    // でも headRefName/baseRefName は常に返す（実GitHubのgh pr viewは常にこれらを返すため）。
+    // compare API呼び出し（下記 'gh api .../compare/...'）がこの値からresolvedKeyを逆引きできる
+    // よう、pr未登録時は 'stub-head-<resolvedKey>' という規約付き値を使う。
+    if (viewFields.includes('headRefName')) payload.headRefName = pr ? pr.headRefName : 'stub-head-' + resolvedKey;
     if (viewFields.includes('baseRefName')) payload.baseRefName = 'main';
     if (viewFields.includes('mergeStateStatus')) payload.mergeStateStatus = mergeStateStatus;
     if (viewFields.includes('baseRefOid')) payload.baseRefOid = baseRefOid;
@@ -588,6 +612,36 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  // Issue #493実装ゲート是正: pr-freshness.ts の checkFreshness() が呼ぶ
+  // 'gh api repos/<repo>/compare/<base>...<head>'（GitHub REST APIのcompareエンドポイント）。
+  // 実GitHubのcompare APIはブランチ名のみをキーとするが、本スタブは直前の 'gh pr view'
+  // （mergeStateStatus/baseRefOid問い合わせ）が freshnessCompare へ保存した解決結果を、
+  // headRef（'gh pr create'/seedOpenPr登録済みブランチ名、または未登録PR向けの
+  // 'stub-head-<PR番号>' 規約値のいずれか）から逆引きして返す。
+  const compareMatch = /^repos\\/(.+)\\/compare\\/(.+)$/.exec(apiPath || '');
+  if (compareMatch && method === 'GET') {
+    const rest = compareMatch[2];
+    const sepIndex = rest.indexOf('...');
+    const headRef = sepIndex === -1 ? rest : rest.slice(sepIndex + 3);
+    const stubHeadMatch = /^stub-head-(.+)$/.exec(headRef);
+    let compareKey;
+    if (stubHeadMatch) {
+      compareKey = stubHeadMatch[1];
+    } else {
+      const matchedPr = Object.values(state.prsByBranch || {}).find((candidate) => candidate.headRefName === headRef);
+      compareKey = matchedPr ? String(matchedPr.number) : undefined;
+    }
+    const resolved = (compareKey && (state.freshnessCompare || {})[compareKey]) || {};
+    if (resolved.compareFail) {
+      process.stderr.write('gh-stub: simulated compare api failure\\n');
+      process.exit(1);
+    }
+    const status = resolved.compareStatus !== undefined ? resolved.compareStatus : 'identical';
+    const behindBy = typeof resolved.compareBehindBy === 'number' ? resolved.compareBehindBy : 0;
+    process.stdout.write(JSON.stringify({ status, behind_by: behindBy }));
+    process.exit(0);
+  }
+
   // Issue #493: pr-freshness.ts の attemptUpdateBranch() が呼ぶ
   // 'gh api -X PUT repos/<repo>/pulls/{n}/update-branch'（<repo>は ':owner/:repo' プレースホルダ、
   // または -R/--repo 由来の実値のいずれか）。<repo> 部分にスラッシュを含むため、
@@ -764,14 +818,24 @@ export interface GhStubBumpPr {
 
 /** Issue #493: `checkFreshness()` の `gh pr view` 問い合わせ1回ぶんの応答を制御するエントリ。
  * `state`/`mergeStateStatus`/`baseRefOid` は省略したフィールドをそのPRの既定値（またはfresh相当）
- * のまま維持する。 */
+ * のまま維持する。
+ * Issue #493実装ゲート是正: `compareStatus`/`compareBehindBy` は同じ問い合わせに対応する
+ * `gh api .../compare/<base>...<head>` 応答（`checkFreshness()` が最新性判定の唯一の根拠とする側）
+ * を独立に制御する。省略した場合は `mergeStateStatus` 由来の既定値（`BEHIND` なら `behind`、
+ * それ以外は `identical`）を使う（既存テスト・AC-5回帰防止）。`mergeStateStatus` を `CLEAN`/`BLOCKED`
+ * 等にしたまま `compareStatus: 'behind'` を明示することで、「`mergeStateStatus` はBEHIND以外だが
+ * 実際にはbehind」という反例（findings merge-state-status-masks-behind）を再現できる。 */
 export interface GhStubFreshnessEntry {
   state?: 'OPEN' | 'MERGED' | 'CLOSED';
   mergeStateStatus?: string;
   baseRefOid?: string;
+  compareStatus?: 'identical' | 'ahead' | 'behind' | 'diverged';
+  compareBehindBy?: number;
   /** trueの場合、このエントリを消費する呼び出し自体を `gh pr view` 失敗として模擬する
    * （マージ成立後のベストエフォート事後確認のみを失敗させる等、呼び出し単位の制御に使う）。 */
   fail?: boolean;
+  /** trueの場合、同じ問い合わせに対応する `gh api .../compare/...` 呼び出し自体を失敗として模擬する。 */
+  compareFail?: boolean;
 }
 
 export interface GhStubState {
@@ -845,6 +909,10 @@ export interface GhStubState {
   prFreshnessQueues?: Record<string, GhStubFreshnessEntry[]>;
   prFreshnessCallCounts?: Record<string, number>;
   defaultBaseRefOid?: string;
+  /** Issue #493実装ゲート是正: 直前の `gh pr view`（mergeStateStatus/baseRefOid問い合わせ）が
+   * 解決した `compareStatus`/`compareBehindBy`/`compareFail` を、PR番号（正規化済みキー）ごとに
+   * 引き継ぐ。後続の `gh api .../compare/...` 呼び出しがheadRef経由でこのキーを逆引きして読む。 */
+  freshnessCompare?: Record<string, { compareStatus?: string; compareBehindBy?: number; compareFail?: boolean }>;
   /** `resolveMergeTarget()` のcwdベース暗黙解決フォールバック（'gh pr view --json number'）を
    * 強制失敗させる。 */
   failImplicitPrResolution?: boolean;

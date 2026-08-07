@@ -202,6 +202,72 @@ test('pr merge (AC-1/AC-3): behindな対象PRは --admin を指定しても自�
   assert.equal(state.mergeCalls?.length ?? 0, 0, 'gh pr mergeは一切実行されていないはず');
 });
 
+// Issue #493実装ゲート是正（blocking: merge-state-status-masks-behind /
+// behind-detection-contract-mismatch）: mergeStateStatusはbase branch側のrulesetで
+// 「Require branches to be up to date」等が有効な場合にのみBEHINDを返す仕様であり、無効な
+// 環境ではBEHIND以外（CLEAN/UNSTABLE/BLOCKED等）が実際にbehindでも返り得る。この反例を
+// 再現し、mergeStateStatusのみに依存する実装では見逃されていたことを固定回帰させる。
+test('pr merge (Issue #493 blocking是正): mergeStateStatusがCLEANでも実際にはbehind（compare API）なら中断する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-behind-mask-clean');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  // mergeStateStatus自体はCLEAN（rulesetのup-to-date必須設定が無い環境の実際の応答を模擬）だが、
+  // compare APIは独立にbehindを返す反例。
+  stub.seedPrFreshnessQueue(60, [{ mergeStateStatus: 'CLEAN', compareStatus: 'behind', compareBehindBy: 3 }]);
+
+  const result = runCli(['pr', 'merge', '60', '--admin'], { cwd: issueWorktree, env });
+
+  assert.notEqual(result.status, 0, 'mergeStateStatusがCLEANでもcompare APIがbehindを示す限りマージを実行しないはず');
+  assert.match(result.stderr, /最新ではありません/);
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length ?? 0, 0, 'gh pr mergeは一切実行されていないはず');
+});
+
+test('pr merge (Issue #493 blocking是正): mergeStateStatusがBLOCKEDでも実際にはbehind（compare API）なら中断する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-behind-mask-blocked');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  stub.seedPrFreshnessQueue(61, [{ mergeStateStatus: 'BLOCKED', compareStatus: 'behind', compareBehindBy: 1 }]);
+
+  const result = runCli(['pr', 'merge', '61', '--admin'], { cwd: issueWorktree, env });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /最新ではありません/);
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length ?? 0, 0, 'gh pr mergeは一切実行されていないはず');
+});
+
+test('pr merge (Issue #493 blocking是正・回帰防止): mergeStateStatusがCLEANでcompare APIもidenticalならfreshとしてマージする', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-behind-mask-fresh');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  stub.seedPrFreshnessQueue(62, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
+
+  const result = runCli(['pr', 'merge', '62', '--admin'], { cwd: issueWorktree, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length, 1);
+});
+
 test('pr merge (AC-2): auto_update_branch有効時、update-branch API自体が失敗すれば中断する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -421,41 +487,66 @@ test('pr merge (設計上の確認事項): -R/--repoが対象識別子と同時�
   assert.deepEqual(state.mergeCalls?.[0]?.args, ['pr', 'merge', '50', '-R', 'owner/other-repo', '--admin']);
 });
 
-test('pr merge (設計上の確認事項): マージ成功後、確認時点からbaseが進行していれば警告のみ出し正常終了する', async (t) => {
+// Issue #493実装ゲート是正（blocking: update-branch-target-not-pr-number /
+// update-branch-non-numeric-target）: 対象識別子がPR番号でない場合（ブランチ名／URL）でも、
+// update-branch APIは`checkFreshness()`が`gh pr view`から取得した実際のPR番号へ正規化した
+// うえで呼ばれること（生の対象識別子をそのままAPIパスへ使わないこと）を検証する。
+test('pr merge (Issue #493 blocking是正): 対象識別子がブランチ名でもupdate-branch APIは正規化されたPR番号で呼ばれる', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
-  setMergeAutonomous(repo.dir, true);
+  setMergeAutoUpdateBranch(repo.dir, true);
   const { stub, env, cleanup } = makeStub();
   t.after(cleanup);
 
-  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-post-merge-warn');
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-target-normalize');
   t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
 
-  stub.seedPrFreshnessQueue(51, [
-    { mergeStateStatus: 'CLEAN', baseRefOid: 'sha-before-51' }, // merge()の確認時点
-    { mergeStateStatus: 'CLEAN', baseRefOid: 'sha-after-51' }, // マージ成立後の事後確認
+  stub.seedOpenPr({ number: 81, headRefName: 'feature/target-branch', body: 'body' });
+  stub.seedPrFreshnessQueue(81, [
+    { mergeStateStatus: 'BEHIND' },
+    { mergeStateStatus: 'CLEAN', baseRefOid: 'sha-fresh-81' },
   ]);
 
-  const result = runCli(['pr', 'merge', '51'], { cwd: issueWorktree, env });
+  const result = runCli(['pr', 'merge', 'feature/target-branch', '--squash'], { cwd: issueWorktree, env });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stderr, /新しいコミットが追加されていた可能性/);
+  const state = stub.readState();
+  assert.equal(state.updateBranchCalls?.length, 1);
+  assert.equal(
+    state.updateBranchCalls?.[0]?.prNumber,
+    '81',
+    'ブランチ名がそのままAPIパスへ使われるのではなく、正規化されたPR番号で呼ばれるはず',
+  );
+  // gh pr merge へ渡す引数自体は正規化せず、対象識別子をそのまま透過するはず。
+  assert.deepEqual(state.mergeCalls?.[0]?.args, ['pr', 'merge', 'feature/target-branch', '--squash']);
 });
 
-test('pr merge (設計上の確認事項): マージ成功後の事後確認が失敗しても警告を出さず正常終了する', async (t) => {
+// Issue #493実装ゲート是正（warning: post-merge-toctou-false-positive /
+// post-merge-basesha-comparison-unreliable）: マージ成立後のベストエフォート事後検知は、
+// コンフリクトの無い通常の成功マージでも必ずbaseが前進するため常に誤検知（狼少年化）する
+// 欠陥があったため撤去した（DESIGN.md・ADR-0039参照）。競合の無い通常の成功マージでは
+// 警告が出力されず、かつマージ成立後に追加のfreshness確認自体が発生しない
+// （窓の最小化のみで対応する設計へ変更）ことを検証する。
+test('pr merge (Issue #493 warning是正): 事後検知は撤去済みのため、通常の成功マージでは追加のfreshness確認も警告も発生しない', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
   setMergeAutonomous(repo.dir, true);
   const { stub, env, cleanup } = makeStub();
   t.after(cleanup);
 
-  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-post-merge-check-fail');
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-post-merge-removed');
   t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
 
-  // 1回目（merge()の確認）は成功、2回目（マージ成立後の事後確認）はgh pr view失敗を模擬する。
-  stub.seedPrFreshnessQueue(52, [{ mergeStateStatus: 'CLEAN', baseRefOid: 'sha-52' }, { fail: true }]);
+  stub.seedPrFreshnessQueue(53, [{ mergeStateStatus: 'CLEAN' }]);
 
-  const result = runCli(['pr', 'merge', '52'], { cwd: issueWorktree, env });
+  const result = runCli(['pr', 'merge', '53'], { cwd: issueWorktree, env });
+
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stderr, /新しいコミットが追加されていた可能性/);
+  const state = stub.readState();
+  assert.equal(
+    state.prFreshnessCallCounts?.['53'],
+    1,
+    'マージ成立後の追加freshness確認（gh pr view）は発生しないはず（事後検知の撤去、窓の最小化のみで対応）',
+  );
 });

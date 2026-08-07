@@ -1,10 +1,82 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveMergeTarget, MergeFailureClassifier } from '../../src/lib/pr-freshness.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { resolveMergeTarget, MergeFailureClassifier, checkFreshness } from '../../src/lib/pr-freshness.js';
+import { createGhStub } from '../helpers/gh-stub.js';
 
 // resolveMergeTarget() の args 解析（`gh` 呼び出しを要さない、対象識別子が args から直接
 // 見つかるケース）のみを対象とする単体テスト。cwdベースの暗黙解決フォールバック（`gh pr view`
 // 呼び出しを要する）は test/integration/pr-merge.test.ts のAC-4/AC-5が gh-stub 経由で検証する。
+
+/**
+ * `checkFreshness()` は内部で `gh`（`exec.ts` の `gh()`）を呼ぶため、`gh` CLI を
+ * `test/helpers/gh-stub.ts` のスタブへ差し替えて直接呼び出す。`exec.ts` の `run()` は
+ * `spawnSync` に明示的な `env` を渡さず既定で `process.env` を継承するため、テスト実行中の
+ * `process.env.PATH`/`AGENT_SKILL_CHAIN_GH_STUB_STATE` を一時的に書き換えて注入し、
+ * テスト終了時に必ず元へ戻す。
+ */
+function withGhStub(run: (stub: ReturnType<typeof createGhStub>) => void): void {
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-pr-freshness-unit-'));
+  const stub = createGhStub(scratchDir);
+  const originalPath = process.env.PATH;
+  const originalStateVar = process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
+  const env = stub.env(process.env);
+  process.env.PATH = env.PATH;
+  process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE = env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
+  try {
+    run(stub);
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    if (originalStateVar === undefined) delete process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
+    else process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE = originalStateVar;
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+  }
+}
+
+// Issue #493実装ゲート是正（blocking: merge-state-status-masks-behind /
+// behind-detection-contract-mismatch）: mergeStateStatusはbase branch側のrulesetが
+// 「Require branches to be up to date」等を有効にしている場合にのみBEHINDを返す仕様であり、
+// 無効な環境では実際にbehindでもCLEAN/BLOCKED等が返り得る。この反例を直接 checkFreshness() へ
+// 与え、compare APIの判定が優先されることを固定回帰させる。
+test('checkFreshness: mergeStateStatusがCLEANでも実際にbehind（compare API）ならbehindと判定する', () => {
+  withGhStub((stub) => {
+    stub.seedPrFreshnessQueue(70, [{ mergeStateStatus: 'CLEAN', compareStatus: 'behind', compareBehindBy: 2 }]);
+    const result = checkFreshness(process.cwd(), '70', undefined, { allowUnknownBackoff: false });
+    assert.equal(result.status, 'behind');
+  });
+});
+
+test('checkFreshness: mergeStateStatusがBLOCKEDでも実際にbehind（compare API）ならbehindと判定する', () => {
+  withGhStub((stub) => {
+    stub.seedPrFreshnessQueue(71, [{ mergeStateStatus: 'BLOCKED', compareStatus: 'behind', compareBehindBy: 1 }]);
+    const result = checkFreshness(process.cwd(), '71', undefined, { allowUnknownBackoff: false });
+    assert.equal(result.status, 'behind');
+  });
+});
+
+test('checkFreshness: mergeStateStatusがCLEANでcompare APIもidenticalならfreshと判定する（回帰防止）', () => {
+  withGhStub((stub) => {
+    stub.seedPrFreshnessQueue(72, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
+    const result = checkFreshness(process.cwd(), '72', undefined, { allowUnknownBackoff: false });
+    assert.equal(result.status, 'fresh');
+  });
+});
+
+// Issue #493実装ゲート是正（blocking: update-branch-target-not-pr-number /
+// update-branch-non-numeric-target）: 対象識別子がブランチ名でも、FreshnessResult.prNumber には
+// `gh pr view` が返す実際の数値PR番号が正規化されて入ることを検証する。
+test('checkFreshness: targetがブランチ名でもprNumber（正規化された数値PR番号）を返す', () => {
+  withGhStub((stub) => {
+    stub.seedOpenPr({ number: 82, headRefName: 'feature/unit-target-branch', body: 'body' });
+    const result = checkFreshness(process.cwd(), 'feature/unit-target-branch', undefined, {
+      allowUnknownBackoff: false,
+    });
+    assert.equal(result.prNumber, '82');
+  });
+});
 
 test('resolveMergeTarget: 対象識別子（PR番号）がargsの先頭にあれば直接抽出する', () => {
   const result = resolveMergeTarget(['123', '--squash', '--admin'], '/repo');
