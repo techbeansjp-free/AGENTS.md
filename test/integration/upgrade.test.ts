@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
 
@@ -11,6 +12,34 @@ import { runCli } from '../helpers/cli.js';
 
 function mkScratch(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agent-skill-chain-${prefix}-`));
+}
+
+// Issue #492: upgradeが配布元で廃止されたファイルを検知・削除する所有権記録の受入シナリオ（AC-1〜AC-11）。
+
+function digestOf(content: string): string {
+  return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
+}
+
+function ownershipRecordPath(targetDir: string): string {
+  return path.join(targetDir, '.agent-skill-chain', '.owned-files.json');
+}
+
+function readOwnershipRecordFile(targetDir: string): { version: string; files: Record<string, string> } {
+  return JSON.parse(fs.readFileSync(ownershipRecordPath(targetDir), 'utf8')) as {
+    version: string;
+    files: Record<string, string>;
+  };
+}
+
+/** 直前バージョンで書き込まれていたが現行配布元では廃止済み、という状況を模す。 */
+function injectStaleOwnedFile(targetDir: string, relativePath: string, content: string): string {
+  const absolutePath = path.join(targetDir, ...relativePath.split('/'));
+  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+  fs.writeFileSync(absolutePath, content);
+  const record = readOwnershipRecordFile(targetDir);
+  record.files[relativePath] = digestOf(content);
+  fs.writeFileSync(ownershipRecordPath(targetDir), JSON.stringify(record, null, 2));
+  return absolutePath;
 }
 
 test('upgrade: .installed_version不在（未導入）の場合はエラー終了する', (t) => {
@@ -264,4 +293,196 @@ test('upgrade後のsetup github再実行でも本体専用release workflowを新
   const secondSetup = runCli(['setup', 'github', targetDir], { env: githubEnv });
   assert.equal(secondSetup.status, 0, secondSetup.stderr);
   assert.equal(fs.existsSync(deployedRelease), false);
+});
+
+test('upgrade: 配布元で廃止され導入先で未改変のファイルは削除され、更新結果一覧に含まれる（AC-2）', (t) => {
+  const targetDir = mkScratch('upgrade-stale-deleted');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const staleRelative = '.agent-skill-chain/standards/OLD_REMOVED_STANDARD.md';
+  const stalePath = injectStaleOwnedFile(targetDir, staleRelative, '# 廃止済み標準\n');
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(stalePath), false, '廃止ファイルが削除されること');
+  assert.match(result.stdout, /^deleted: .*OLD_REMOVED_STANDARD\.md$/m);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, staleRelative),
+    false,
+    '削除成功エントリは次回所有権記録から除去されること',
+  );
+});
+
+test('upgrade: 導入先で内容が変更されたファイルは削除されず、dry-run有無を問わず同一の警告になる（AC-3）', (t) => {
+  const targetDir = mkScratch('upgrade-stale-changed');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const staleRelative = '.agent-skill-chain/standards/OLD_REMOVED_STANDARD.md';
+  const stalePath = injectStaleOwnedFile(targetDir, staleRelative, '# original\n');
+  fs.writeFileSync(stalePath, '# edited by user\n');
+
+  const dryRunResult = runCli(['upgrade', targetDir, '--dry-run']);
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(dryRunResult.status, 0, dryRunResult.stderr);
+  assert.equal(result.status, 0, result.stderr);
+  const warningRe = /配布元で廃止されたが導入先で変更が検出されたため削除しませんでした: .*OLD_REMOVED_STANDARD\.md$/m;
+  const dryRunWarning = dryRunResult.stdout.match(warningRe)?.[0];
+  const realWarning = result.stdout.match(warningRe)?.[0];
+  assert.ok(dryRunWarning, 'dry-run実行でも変更検出の警告が出ること');
+  assert.equal(dryRunWarning, realWarning, '警告文言はdry-run有無で同一であること');
+  assert.equal(fs.existsSync(stalePath), true, '変更されたファイルは削除されないこと');
+  assert.equal(fs.readFileSync(stalePath, 'utf8'), '# edited by user\n');
+});
+
+test('upgrade: 所有権記録に無いファイルは削除候補にならず、通常のファイルと区別されない（AC-4）', (t) => {
+  const targetDir = mkScratch('upgrade-no-record-file');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const untrackedPath = path.join(targetDir, '.agent-skill-chain', 'standards', 'USER_OWN_FILE.md');
+  fs.writeFileSync(untrackedPath, '# 利用者が独自に配置したファイル\n');
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(untrackedPath), true, '記録に無いファイルは削除されないこと');
+  assert.doesNotMatch(result.stdout, /USER_OWN_FILE\.md/, '削除も削除しない理由の提示も発生しないこと');
+});
+
+test('upgrade: .agent-skill-chain/project/配下は所有権記録に含まれていても削除候補にならない（AC-5）', (t) => {
+  const targetDir = mkScratch('upgrade-project-protected');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const projectRelative = '.agent-skill-chain/project/RULES.md';
+  const projectFile = injectStaleOwnedFile(targetDir, projectRelative, 'カスタムルール\n');
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(projectFile), true, 'project/配下は削除されないこと');
+  assert.equal(fs.readFileSync(projectFile, 'utf8'), 'カスタムルール\n');
+  assert.doesNotMatch(result.stdout, /RULES\.md/, '削除候補として提示すらされないこと');
+});
+
+test('upgrade --dry-run: 削除予定一覧は非dry-run実行時の削除結果一覧と同一パス集合になる（AC-6）', (t) => {
+  const targetDir = mkScratch('upgrade-dry-run-set-parity');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const staleRelative = '.agent-skill-chain/standards/OLD_REMOVED_STANDARD.md';
+  const stalePath = injectStaleOwnedFile(targetDir, staleRelative, '# old\n');
+
+  const dryRunResult = runCli(['upgrade', targetDir, '--dry-run']);
+  assert.equal(dryRunResult.status, 0, dryRunResult.stderr);
+  assert.match(dryRunResult.stdout, /^planned deleted: .*OLD_REMOVED_STANDARD\.md$/m);
+  assert.equal(fs.existsSync(stalePath), true, 'dry-runでは実削除されないこと');
+
+  const result = runCli(['upgrade', targetDir]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^deleted: .*OLD_REMOVED_STANDARD\.md$/m);
+  assert.equal(fs.existsSync(stalePath), false);
+});
+
+test('upgrade: 削除に失敗した場合は異常終了し失敗ファイルを明示するが、他の正常な更新結果は隠されない（AC-7・AC-11）', (t) => {
+  const targetDir = mkScratch('upgrade-delete-failure');
+  const lockedDir = path.join(targetDir, '.agent-skill-chain', 'config');
+  t.after(() => {
+    fs.chmodSync(lockedDir, 0o755);
+    fs.rmSync(targetDir, { recursive: true, force: true });
+  });
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const staleRelative = '.agent-skill-chain/config/OLD_REMOVED_STANDARD.md';
+  const stalePath = injectStaleOwnedFile(targetDir, staleRelative, '# old\n');
+  const conventionsPath = path.join(targetDir, '.agent-skill-chain', 'standards', 'GIT_CONVENTIONS.md');
+  fs.appendFileSync(conventionsPath, '\ncustom edit that will be overwritten\n');
+
+  fs.chmodSync(lockedDir, 0o555);
+
+  const result = runCli(['upgrade', targetDir]);
+  fs.chmodSync(lockedDir, 0o755);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ファイルの削除に失敗しました/);
+  assert.match(result.stderr, /OLD_REMOVED_STANDARD\.md/);
+  assert.equal(fs.existsSync(stalePath), true, '削除に失敗したファイルは残ること');
+  assert.match(result.stdout, /^\d+\.\d+\.\d+ -> \d+\.\d+\.\d+$/m, '削除失敗時も他の正常な更新結果が標準出力から隠されないこと');
+  assert.match(result.stdout, /^overwritten: .*GIT_CONVENTIONS\.md$/m, '削除失敗と無関係な正常更新結果も出力に含まれること');
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, staleRelative),
+    true,
+    '削除失敗エントリは次回再試行のため所有権記録に保持されること',
+  );
+});
+
+test('upgrade: 削除候補ファイルが既に物理的に存在しない場合はエラーにも警告にもならず、次回記録から除去される（AC-8）', (t) => {
+  const targetDir = mkScratch('upgrade-stale-absent');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const staleRelative = '.agent-skill-chain/standards/OLD_REMOVED_STANDARD.md';
+  const record = readOwnershipRecordFile(targetDir);
+  record.files[staleRelative] = digestOf('whatever the last written content was');
+  fs.writeFileSync(ownershipRecordPath(targetDir), JSON.stringify(record, null, 2));
+  // ファイル自体は用意しない（利用者による事前削除・移動等を模す）。
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /OLD_REMOVED_STANDARD\.md/, 'エラーにも警告にもならないこと');
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, staleRelative),
+    false,
+    '目的状態達成済みとして次回記録から除去されること',
+  );
+});
+
+test('upgrade: 配布元に依然として存在するファイルは削除候補にならず通常の上書き更新に従う（AC-9）', (t) => {
+  const targetDir = mkScratch('upgrade-still-current');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const conventionsPath = path.join(targetDir, '.agent-skill-chain', 'standards', 'GIT_CONVENTIONS.md');
+  fs.appendFileSync(conventionsPath, '\ncustom local edit\n');
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^overwritten: .*GIT_CONVENTIONS\.md$/m, '既存の通常の上書き更新のみが適用されること');
+  assert.doesNotMatch(
+    result.stdout,
+    /GIT_CONVENTIONS\.md.*削除/,
+    '現行配布元に存在し続けるファイルには削除・削除しない理由のいずれも提示されないこと',
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, '.agent-skill-chain/standards/GIT_CONVENTIONS.md'),
+    true,
+  );
+});
+
+test('upgrade: 削除候補判定のための読み取り自体が失敗した場合は削除せず警告し、異常終了しない（AC-10）', (t) => {
+  const targetDir = mkScratch('upgrade-stale-unreadable');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const staleRelative = '.agent-skill-chain/standards/OLD_REMOVED_STANDARD.md';
+  const stalePath = injectStaleOwnedFile(targetDir, staleRelative, '# old\n');
+  // chmod復元は行わない: 親ディレクトリ(standards/)の書込権限は変更していないため、
+  // rmSync(recursive)によるcleanup（t.after）はファイル自体の権限に関わらず成功する。
+  fs.chmodSync(stalePath, 0o000);
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /削除候補の判定のための読み取りに失敗したため削除しませんでした: .*OLD_REMOVED_STANDARD\.md/);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(readOwnershipRecordFile(targetDir).files, staleRelative),
+    true,
+    '再試行のため所有権記録に保持されること',
+  );
 });

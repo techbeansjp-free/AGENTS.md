@@ -6,6 +6,8 @@ import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES, packageVersion } from '../lib/a
 import { writeInstalledVersion } from '../lib/version-marker.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { resolveTemplateMappings } from '../lib/template-sync.js';
+import { digestOfFile } from '../lib/digest.js';
+import { toOwnershipKey, writeOwnershipRecord } from '../lib/ownership-record.js';
 
 const USAGE = `
 使い方: agent-skill-chain init [target_dir] [--dry-run]
@@ -58,14 +60,22 @@ export async function init(args: string[]): Promise<number> {
 
     const prefix = dryRun ? 'planned ' : '';
     const summary: string[] = [];
+    const ownedFiles: Record<string, string> = {};
 
     for (const { src, dest } of conflictCheckedEntries) {
       const results = copyTreeFailOnConflict(src, dest, { dryRun, root: targetDir });
       summary.push(...results.map((r) => `${prefix}${r.action}: ${r.path}`));
+      if (!dryRun) {
+        for (const r of results) {
+          ownedFiles[toOwnershipKey(targetDir, r.path)] = digestOfFile(r.path);
+        }
+      }
     }
 
     if (!dryRun) {
       writeInstalledVersion(targetDir, packageVersion());
+      // Issue #492: 初回導入時点の所有権記録を新規作成する（直前の記録は存在しないため削除候補計算は行わない）。
+      writeOwnershipRecord(targetDir, { version: packageVersion(), files: ownedFiles });
     }
     summary.push('GitHub workflowは未展開です。必要な場合だけ setup github を明示実行してください。');
     summary.push(`${prefix}installed_version: ${packageVersion()}`);
