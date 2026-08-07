@@ -185,9 +185,26 @@ function nextNonSpaceChar(line: string, pos: number): string | undefined {
   return i < line.length ? line[i] : undefined;
 }
 
+/** Issue #484: 拡張子に対応する単一行コメント開始記号。 */
+function commentMarkerFor(ext: string): string | undefined {
+  if (ext === '.ts') return '//';
+  if (ext === '.sh' || ext === '.yaml' || ext === '.yml') return '#';
+  return undefined;
+}
+
+/** Issue #484: 禁止語が単一行コメント開始以降にあるかを判定する。 */
+function isInSingleLineComment(line: string, pos: number, ext: string): boolean {
+  const marker = commentMarkerFor(ext);
+  if (marker === undefined) return false;
+  const markerPos = line.indexOf(marker);
+  return markerPos !== -1 && markerPos < pos;
+}
+
 /** Issue #469: 単一引用符で囲まれたコード値リテラル文脈。runが禁止語そのもので、
  * 配列要素または関数呼び出し引数の構文境界にある場合に限り除外する。 */
-function isQuotedLiteralContext(line: string, run: IdentifierRun, banned: string): boolean {
+function isQuotedLiteralContext(line: string, run: IdentifierRun, banned: string, ext: string): boolean {
+  if (isInSingleLineComment(line, run.runStart, ext)) return false;
+
   const runText = line.slice(run.runStart, run.runEnd);
   if (runText.length !== banned.length) return false;
 
@@ -304,7 +321,7 @@ function isIdentifierContext(line: string, start: number, end: number, banned: s
   if (isCodeIdentifierContext(line, run, banned, ext)) return true;
   if (YAML_CONTEXT_EXTENSIONS.has(ext) && isYamlIdentifierContext(line, run, banned)) return true;
   if (!isProseFile(ext) && isCliSubcommandContext(line, run, banned)) return true;
-  if (!isProseFile(ext) && isQuotedLiteralContext(line, run, banned)) return true;
+  if (!isProseFile(ext) && isQuotedLiteralContext(line, run, banned, ext)) return true;
   return isExternalVocabAllowlisted(line, run, ext);
 }
 
