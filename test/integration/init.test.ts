@@ -114,6 +114,36 @@ test('init: 既存docs資産と衝突する場合、衝突より前に処理さ�
   );
 });
 
+test('init: 所有権記録(.owned-files.json)が新規作成され、書き込んだファイル一覧を復元できる（Issue #492 AC-1）', (t) => {
+  const targetDir = mkScratch('init-ownership-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const recordPath = path.join(targetDir, '.agent-skill-chain', '.owned-files.json');
+  assert.ok(fs.existsSync(recordPath));
+  const record = JSON.parse(fs.readFileSync(recordPath, 'utf8')) as {
+    version: string;
+    files: Record<string, string>;
+  };
+  assert.ok(Object.prototype.hasOwnProperty.call(record.files, 'AGENTS.md'));
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(record.files, '.agent-skill-chain/config/agent-skill-chain.yaml'),
+  );
+  assert.match(record.files['AGENTS.md'] ?? '', /^sha256:[0-9a-f]{64}$/);
+});
+
+test('init --dry-run: 所有権記録は作成されない', (t) => {
+  const targetDir = mkScratch('init-ownership-dry-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir, '--dry-run']);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(path.join(targetDir, '.agent-skill-chain', '.owned-files.json')), false);
+});
+
 test('init: 同一target_dirへの2回目の実行は冪等に成功する（unchanged）', (t) => {
   const targetDir = mkScratch('init-idempotent-target');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
@@ -124,4 +154,28 @@ test('init: 同一target_dirへの2回目の実行は冪等に成功する（unc
   const second = runCli(['init', targetDir]);
   assert.equal(second.status, 0, second.stderr);
   assert.match(second.stdout, /unchanged: /);
+});
+
+test('init: 既存所有権記録にretainedとして残っていたエントリは、再実行後も消失しない（手動implementation-gateレビュー指摘: init-rerun-drops-prior-ownership-entries）', (t) => {
+  const targetDir = mkScratch('init-retains-prior-ownership');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  // upgradeが「配布元で廃止されたが導入先で変更が検出された」等の理由でretained保持していた
+  // 状況を模す: 現行配布元には存在しないファイルのエントリを所有権記録へ直接追加する。
+  const recordPath = path.join(targetDir, '.agent-skill-chain', '.owned-files.json');
+  const record = JSON.parse(fs.readFileSync(recordPath, 'utf8')) as { version: string; files: Record<string, string> };
+  const retainedKey = '.agent-skill-chain/standards/RETIRED_STANDARD_STILL_EDITED_BY_USER.md';
+  record.files[retainedKey] = `sha256:${'0'.repeat(64)}`;
+  fs.writeFileSync(recordPath, JSON.stringify(record, null, 2));
+
+  const second = runCli(['init', targetDir]);
+  assert.equal(second.status, 0, second.stderr);
+
+  const afterRecord = JSON.parse(fs.readFileSync(recordPath, 'utf8')) as { files: Record<string, string> };
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(afterRecord.files, retainedKey),
+    true,
+    '過去にretainedとして保持されていたエントリが2回目のinit実行で失われないこと',
+  );
 });
