@@ -143,7 +143,12 @@ interface GhPrViewPayload {
   baseRefOid?: string;
   url?: string;
   isCrossRepository?: boolean;
-  headRepositoryOwner?: string;
+  // Issue #493実装ゲート3回目是正: `gh pr view --json headRepositoryOwner` の実際の応答は
+  // 文字列ではなくオブジェクト（例: `{"id":"O_...","login":"owner"}`）である。誤って文字列型
+  // で宣言しテンプレートリテラルへ直接埋め込むと`"[object Object]:<branch>"`という壊れた値に
+  // なり、まさにfork（クロスリポジトリ）由来PRのcompare呼び出しが常に失敗する
+  // （head-repository-owner-type-mismatch）。
+  headRepositoryOwner?: { login: string };
 }
 
 function queryPrView(root: string, target: string, repo?: string): GhPrViewPayload | undefined {
@@ -241,8 +246,8 @@ export function checkFreshness(
     return { status: 'check_failed', baseSha, prNumber };
   }
   const headArg =
-    payload.isCrossRepository && payload.headRepositoryOwner
-      ? `${payload.headRepositoryOwner}:${payload.headRefName}`
+    payload.isCrossRepository && payload.headRepositoryOwner?.login
+      ? `${payload.headRepositoryOwner.login}:${payload.headRefName}`
       : payload.headRefName;
   const compare = queryCompare(root, actualRepo, payload.baseRefName, headArg);
   if (!compare) return { status: 'check_failed', baseSha, prNumber, repo: actualRepo };

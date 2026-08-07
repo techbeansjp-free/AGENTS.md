@@ -35,8 +35,11 @@ const MERGE_USAGE = `
 最新でない場合、\`merge.auto_update_branch: true\`（既定 false）を明示設定していなければ
 最新化を試みず日本語エラーメッセージで中断する。true設定時は update-branch API による
 最新化を試み、コンフリクト等で完了できない場合も中断する。対象PRの識別は引数からの明示指定、
-または指定が無い場合はcwdの現在ブランチに紐づくPRの暗黙解決に委ねる。いずれの方法でも
-対象PRを特定できない場合や最新性確認自体が失敗した場合も、マージを実行せず中断する。
+または指定が無い場合の暗黙解決に委ねる。暗黙解決はrepoRoot()（進行役が操作するmain
+worktree。default branchをチェックアウトしている前提）の現在ブランチに紐づくPRを対象と
+する——Issue worktree上で本コマンドを実行した場合でも、対象PRの解決基準はmain worktree
+であり、そのIssue worktree自身の現在ブランチではない。いずれの方法でも対象PRを特定
+できない場合や最新性確認自体が失敗した場合も、マージを実行せず中断する。
 
 マージ成功後、main worktree（repoRoot()が指す共通作業ツリー。default branchを
 チェックアウトしている前提）のローカルブランチを origin/<default-branch> へ
@@ -287,6 +290,17 @@ export async function merge(args: string[]): Promise<number> {
     if (initial.status === 'check_failed') {
       return fail(
         `対象PR（${target}）の最新性確認自体が失敗しました（GitHub APIエラー等）。マージを実行せず中断します。`,
+      );
+    }
+    // Issue #493実装ゲート3回目是正: attemptUpdateBranch()側のnot_applicable（ポーリング中に
+    // 対象PRがOPENでなくなった場合）には専用メッセージがあるのに対し、この初回判定側
+    // （対象PRが最初からOPENでない場合）には無く一貫性を欠いていた
+    // （not-applicable-status-unhandled-in-merge）。ここで扱わなくても後続のgh pr merge自体が
+    // 同じ理由で失敗しその終了コード・標準エラー出力がそのまま返るため安全側だが、原因を
+    // 早期かつ一貫した日本語メッセージで伝えるためここで明示的に扱う。
+    if (initial.status === 'not_applicable') {
+      return fail(
+        `対象PR（${target}）が既にクローズ・マージ済みのため最新性確認を行えません。マージを実行せず中断します。`,
       );
     }
     if (initial.status === 'behind') {

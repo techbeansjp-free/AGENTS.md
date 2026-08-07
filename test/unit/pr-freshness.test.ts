@@ -130,7 +130,7 @@ test('checkFreshness: compare API呼び出し自体が失敗した場合はcheck
 // 固定回帰させる。
 test('checkFreshness: fork由来PR（isCrossRepository）はcompareのhead引数をowner:branch形式で修飾する', () => {
   withGhStub((stub) => {
-    stub.seedPrCrossRepoInfo(94, { isCrossRepository: true, headRepositoryOwner: 'fork-owner' });
+    stub.seedPrCrossRepoInfo(94, { isCrossRepository: true, headRepositoryOwner: { login: 'fork-owner' } });
     stub.seedPrFreshnessQueue(94, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
     const result = checkFreshness(process.cwd(), '94', undefined, { allowUnknownBackoff: false });
     assert.equal(result.status, 'fresh');

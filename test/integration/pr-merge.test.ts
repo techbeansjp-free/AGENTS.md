@@ -607,7 +607,7 @@ test('pr merge (Issue #493実装ゲート2回目是正): fork由来PR（isCrossR
   const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-fork-pr-compare');
   t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
 
-  stub.seedPrCrossRepoInfo(97, { isCrossRepository: true, headRepositoryOwner: 'fork-owner' });
+  stub.seedPrCrossRepoInfo(97, { isCrossRepository: true, headRepositoryOwner: { login: 'fork-owner' } });
   stub.seedPrFreshnessQueue(97, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
 
   const result = runCli(['pr', 'merge', '97', '--admin'], { cwd: issueWorktree, env });
@@ -666,4 +666,28 @@ test('pr merge (Issue #493実装ゲート2回目是正): -R無しでPR URL（cwd
     state.mergeCalls?.[0]?.args,
     ['pr', 'merge', 'https://github.com/other-owner/other-repo/pull/98', '--squash'],
   );
+});
+
+// Issue #493実装ゲート3回目是正（info: not-applicable-status-unhandled-in-merge）: 初回の
+// checkFreshness()結果がnot_applicable（対象PRが既にOPENでない）の場合、attemptUpdateBranch()側
+// のnot_applicableには専用の日本語メッセージがあるのに対し、初回判定側には無く一貫性を欠いて
+// いた。専用メッセージで中断し、gh pr mergeへフォールスルーしないことを固定回帰させる。
+test('pr merge (Issue #493実装ゲート3回目是正): 初回の最新性確認で対象PRが既にOPENでない場合は専用メッセージで中断する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-initial-not-applicable');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  stub.seedPrFreshnessQueue(99, [{ state: 'MERGED' }]);
+
+  const result = runCli(['pr', 'merge', '99', '--admin'], { cwd: issueWorktree, env });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /既にクローズ・マージ済みのため最新性確認を行えません/);
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length ?? 0, 0, 'gh pr mergeは一切実行されていないはず');
 });

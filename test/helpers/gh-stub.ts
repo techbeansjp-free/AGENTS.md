@@ -952,7 +952,7 @@ export interface GhStubState {
    * `url`/`isCrossRepository`/`headRepositoryOwner` の明示投入値。fork由来PR・cwdの既定
    * リポジトリと異なるリポジトリのPRを再現するために使う。未設定時は既定リポジトリ・
    * 非fork（`isCrossRepository: false`）として扱う。 */
-  prCrossRepoInfo?: Record<string, { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: string }>;
+  prCrossRepoInfo?: Record<string, { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: { login: string } }>;
   /** `gh api repos/<repo>/compare/<base>...<head>` 呼び出しごとの repo セグメント・head引数の記録
    * （fork PRのhead修飾・対象リポジトリの検証に使う）。 */
   compareRepoCalls?: { repo: string; head: string }[];
@@ -1017,7 +1017,7 @@ export interface GhStub {
    * リポジトリと異なるリポジトリのPRを再現するために使う）。 */
   seedPrCrossRepoInfo(
     prNumber: number,
-    info: { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: string },
+    info: { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: { login: string } },
   ): void;
 }
 
@@ -1189,7 +1189,7 @@ export function createGhStub(baseDir: string): GhStub {
     },
     seedPrCrossRepoInfo(
       prNumber: number,
-      info: { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: string },
+      info: { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: { login: string } },
     ): void {
       const state = this.readState();
       state.prCrossRepoInfo = { ...(state.prCrossRepoInfo ?? {}), [String(prNumber)]: info };
