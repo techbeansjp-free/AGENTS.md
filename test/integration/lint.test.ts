@@ -201,6 +201,51 @@ test('lint vocab: CLIサブコマンド文脈としての禁止語利用は散�
   assert.equal(result.stderr, '');
 });
 
+test('lint vocab: 単一引用符の禁止語リテラルは非散文コードの配列要素・関数引数で誤検出されない（Issue #469 AC-1・AC-2）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 実際の混入箇所と同じgh引数配列、および空白を含む一般的な配列要素・関数引数に、
+  // 禁止語「issue」と完全一致する単一引用符リテラルを複数配置する。
+  const file = path.join(repo.dir, 'quoted-literal-context.ts');
+  fs.writeFileSync(
+    file,
+    [
+      "gh(['issue', 'view', issueNumber, '--json', 'labels'], root);",
+      "const values = [ first, 'issue' , last ];",
+      "invoke( first, 'issue' , last );",
+      "const onlyValue = ['issue'];",
+      "invokeOnly('issue');",
+    ].join('\n') + '\n',
+  );
+
+  // When: 非散文のTypeScriptファイルを対象にlint vocabを実行する。
+  const result = runCli(['lint', 'vocab', 'quoted-literal-context.ts'], { cwd: repo.dir });
+
+  // Then: すべてコード値リテラル文脈として扱われ、違反は報告されない。
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+});
+
+test('lint vocab: 単一引用符の禁止語を含む散文はコード値リテラル文脈として除外されない（Issue #469 AC-3）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 配列・関数引数と同じ境界に見える単一引用符表記を.mdの散文中に配置する。
+  const file = path.join(repo.dir, 'quoted-literal-prose.md');
+  fs.writeFileSync(file, "散文中の例: ['issue'] と ('issue') は禁止語の誤用である。\n");
+
+  // When: 散文ファイルを対象にlint vocabを実行する。
+  const result = runCli(['lint', 'vocab', 'quoted-literal-prose.md'], { cwd: repo.dir });
+
+  // Then: 非散文限定の除外は適用されず、当該行が違反として報告される。
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /quoted-literal-prose\.md:1: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+  );
+});
+
 test('lint vocab: 散文（.md）中でYAMLキー風・CLIサブコマンド動詞と偶然共起する禁止語混入は、識別子文脈と誤判定せず違反として検出される（Issue #187 SC-3・Issue #178 finding-1 回帰）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
