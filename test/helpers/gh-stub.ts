@@ -274,7 +274,14 @@ if (cmd === 'pr' && sub === 'view') {
   // 暗黙解決）と同じ呼び出し形（'gh pr view --json number' [--repo <repo>]）を模擬する。
   const rawKey = args[2];
   const hasExplicitKey = rawKey !== undefined && !rawKey.startsWith('-');
-  const key = hasExplicitKey ? rawKey : undefined;
+  // Issue #493実装ゲート2回目是正: 対象識別子がPR URL（実GitHubの'gh pr view'が受け付ける
+  // 'https://github.com/<owner>/<repo>/pull/<n>'形式）の場合、実際のghはURL自体からリポジトリ・
+  // PR番号を解決する。本スタブも同じ入力を受け取れるよう、URL形式ならPR番号部分を抽出して
+  // 以降のPR登録参照キーとして使う（登録がcwdの既定リポジトリと異なるリポジトリのPRであっても
+  // 参照できるようにするため）。
+  const urlMatch = /^https:\\/\\/github\\.com\\/([^/]+\\/[^/]+)\\/pull\\/(\\d+)/.exec(rawKey || '');
+  const urlOwnerRepo = urlMatch ? urlMatch[1] : undefined;
+  const key = hasExplicitKey ? (urlMatch ? urlMatch[2] : rawKey) : undefined;
   const state = loadState();
   // Issue #354 issue-sync は PR 番号 + '--json body' で本文だけを読む（ブランチ名では引かない）。
   const viewFields = (flag('--json') || '').split(',');
@@ -380,6 +387,19 @@ if (cmd === 'pr' && sub === 'view') {
     if (viewFields.includes('baseRefName')) payload.baseRefName = 'main';
     if (viewFields.includes('mergeStateStatus')) payload.mergeStateStatus = mergeStateStatus;
     if (viewFields.includes('baseRefOid')) payload.baseRefOid = baseRefOid;
+    // Issue #493実装ゲート2回目是正: pr-freshness.ts の checkFreshness() が対象PRの実際の
+    // 所属リポジトリを導出するために追加取得する url/isCrossRepository/headRepositoryOwner。
+    // 優先順位は (1) 対象識別子自体がPR URLだった場合はそのURLの owner/repo（実ghの挙動）、
+    // (2) seedPrCrossRepoInfo() で明示投入した値、(3) --repo/-R フラグ指定値（実ghは
+    // '--repo owner/repo <番号>' で指定リポジトリ内のPRとして解決するため、返るurlもその
+    // リポジトリを反映する）、(4) 既定リポジトリ、の順。
+    const crossInfo = (state.prCrossRepoInfo || {})[resolvedKey] || {};
+    const repoFullName = urlOwnerRepo || crossInfo.repoFullName || repoOverride || state.repositoryFullName || 'test/repo';
+    const prNumberForUrl = pr ? pr.number : Number(key);
+    const outputUrl = crossInfo.url || 'https://github.com/' + repoFullName + '/pull/' + prNumberForUrl;
+    if (viewFields.includes('url')) payload.url = outputUrl;
+    if (viewFields.includes('isCrossRepository')) payload.isCrossRepository = !!crossInfo.isCrossRepository;
+    if (viewFields.includes('headRepositoryOwner')) payload.headRepositoryOwner = crossInfo.headRepositoryOwner;
     process.stdout.write(JSON.stringify(payload));
     process.exit(0);
   }
@@ -620,17 +640,26 @@ if (cmd === 'api') {
   // 'stub-head-<PR番号>' 規約値のいずれか）から逆引きして返す。
   const compareMatch = /^repos\\/(.+)\\/compare\\/(.+)$/.exec(apiPath || '');
   if (compareMatch && method === 'GET') {
+    const compareRepo = compareMatch[1];
     const rest = compareMatch[2];
     const sepIndex = rest.indexOf('...');
     const headRef = sepIndex === -1 ? rest : rest.slice(sepIndex + 3);
-    const stubHeadMatch = /^stub-head-(.+)$/.exec(headRef);
+    // git のブランチ名に ':' は使えないため、含まれていれば fork PR 向けの
+    // '<owner>:<branch>' 修飾形式とみなし、比較・逆引きの対象は branch部分のみとする
+    // （<owner>部分自体はrepos/<repo>/...のrepoセグメントに現れる実際のリポジトリ検証のみに使う）。
+    const qualifiedMatch = /^([^:]+):(.+)$/.exec(headRef);
+    const headBranch = qualifiedMatch ? qualifiedMatch[2] : headRef;
+    const stubHeadMatch = /^stub-head-(.+)$/.exec(headBranch);
     let compareKey;
     if (stubHeadMatch) {
       compareKey = stubHeadMatch[1];
     } else {
-      const matchedPr = Object.values(state.prsByBranch || {}).find((candidate) => candidate.headRefName === headRef);
+      const matchedPr = Object.values(state.prsByBranch || {}).find((candidate) => candidate.headRefName === headBranch);
       compareKey = matchedPr ? String(matchedPr.number) : undefined;
     }
+    state.compareRepoCalls = state.compareRepoCalls || [];
+    state.compareRepoCalls.push({ repo: compareRepo, head: headRef });
+    saveState(state);
     const resolved = (compareKey && (state.freshnessCompare || {})[compareKey]) || {};
     if (resolved.compareFail) {
       process.stderr.write('gh-stub: simulated compare api failure\\n');
@@ -919,6 +948,14 @@ export interface GhStubState {
   updateBranchCalls?: { repo: string; prNumber: string }[];
   /** PR番号ごとに `gh api -X PUT .../update-branch` 呼び出し自体を失敗させる。 */
   updateBranchFailures?: Record<string, boolean>;
+  /** Issue #493実装ゲート2回目是正: PR番号（正規化済みキー）ごとの、`gh pr view` が返す
+   * `url`/`isCrossRepository`/`headRepositoryOwner` の明示投入値。fork由来PR・cwdの既定
+   * リポジトリと異なるリポジトリのPRを再現するために使う。未設定時は既定リポジトリ・
+   * 非fork（`isCrossRepository: false`）として扱う。 */
+  prCrossRepoInfo?: Record<string, { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: string }>;
+  /** `gh api repos/<repo>/compare/<base>...<head>` 呼び出しごとの repo セグメント・head引数の記録
+   * （fork PRのhead修飾・対象リポジトリの検証に使う）。 */
+  compareRepoCalls?: { repo: string; head: string }[];
 }
 
 export interface GhStub {
@@ -975,6 +1012,13 @@ export interface GhStub {
   /** Issue #493: 指定PR番号への `gh api -X PUT .../update-branch` 呼び出し自体を失敗させる
    * （コンフリクト等でAPI呼び出しそのものが非0終了する状況を再現する）。 */
   failUpdateBranch(prNumber: number): void;
+  /** Issue #493実装ゲート2回目是正: 指定PR番号への `gh pr view` が返す
+   * `url`/`isCrossRepository`/`headRepositoryOwner` を明示投入する（fork由来PR、cwdの既定
+   * リポジトリと異なるリポジトリのPRを再現するために使う）。 */
+  seedPrCrossRepoInfo(
+    prNumber: number,
+    info: { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: string },
+  ): void;
 }
 
 /**
@@ -1141,6 +1185,14 @@ export function createGhStub(baseDir: string): GhStub {
     failUpdateBranch(prNumber: number): void {
       const state = this.readState();
       state.updateBranchFailures = { ...(state.updateBranchFailures ?? {}), [String(prNumber)]: true };
+      this.writeState(state);
+    },
+    seedPrCrossRepoInfo(
+      prNumber: number,
+      info: { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: string },
+    ): void {
+      const state = this.readState();
+      state.prCrossRepoInfo = { ...(state.prCrossRepoInfo ?? {}), [String(prNumber)]: info };
       this.writeState(state);
     },
   };

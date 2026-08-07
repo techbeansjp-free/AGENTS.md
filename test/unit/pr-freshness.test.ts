@@ -78,6 +78,105 @@ test('checkFreshness: targetがブランチ名でもprNumber（正規化され�
   });
 });
 
+/** バックオフ用の環境変数を一時的に短縮値へ差し替えて `run` を実行する。 */
+function withShortBackoff(run: () => void): void {
+  const original = process.env.AGENT_SKILL_CHAIN_TEST_UNKNOWN_BACKOFF_DELAYS_MS;
+  process.env.AGENT_SKILL_CHAIN_TEST_UNKNOWN_BACKOFF_DELAYS_MS = '1,1,1';
+  try {
+    run();
+  } finally {
+    if (original === undefined) delete process.env.AGENT_SKILL_CHAIN_TEST_UNKNOWN_BACKOFF_DELAYS_MS;
+    else process.env.AGENT_SKILL_CHAIN_TEST_UNKNOWN_BACKOFF_DELAYS_MS = original;
+  }
+}
+
+// Issue #493実装ゲート2回目是正（warning: unknown-merge-state-aborts-merge）: バックオフ枯渇後も
+// mergeStateStatusがUNKNOWNのままだと、compare APIを呼ばずcheck_failedを返していた。
+// mergeStateStatusは判定の根拠ではなくUNKNOWN解決待ちのポーリング制御にのみ使うため、バックオフ後
+// 解決しなくてもcompare API呼び出しへ進み、その結果で判定すべきという反例を固定回帰させる。
+test('checkFreshness: バックオフ後もmergeStateStatusがUNKNOWNのままならcompare API結果でfreshと判定する', () => {
+  withShortBackoff(() => {
+    withGhStub((stub) => {
+      stub.seedPrFreshnessQueue(91, [{ mergeStateStatus: 'UNKNOWN', compareStatus: 'identical', compareBehindBy: 0 }]);
+      const result = checkFreshness(process.cwd(), '91', undefined, { allowUnknownBackoff: true });
+      assert.equal(result.status, 'fresh');
+    });
+  });
+});
+
+test('checkFreshness: バックオフ後もmergeStateStatusがUNKNOWNのままcompare APIがbehindを返せばbehindと判定する', () => {
+  withShortBackoff(() => {
+    withGhStub((stub) => {
+      stub.seedPrFreshnessQueue(92, [{ mergeStateStatus: 'UNKNOWN', compareStatus: 'behind', compareBehindBy: 4 }]);
+      const result = checkFreshness(process.cwd(), '92', undefined, { allowUnknownBackoff: true });
+      assert.equal(result.status, 'behind');
+    });
+  });
+});
+
+test('checkFreshness: compare API呼び出し自体が失敗した場合はcheck_failedのままとする', () => {
+  withShortBackoff(() => {
+    withGhStub((stub) => {
+      stub.seedPrFreshnessQueue(93, [{ mergeStateStatus: 'UNKNOWN', compareFail: true }]);
+      const result = checkFreshness(process.cwd(), '93', undefined, { allowUnknownBackoff: true });
+      assert.equal(result.status, 'check_failed');
+    });
+  });
+});
+
+// Issue #493実装ゲート2回目是正（blocking: fork-pr-compare-head-ref-unqualified）: fork（別リポジトリ）
+// 由来のPRでは、compare APIのhead側を`<owner>:<branch>`形式で修飾しなければ誤ったブランチ同士の
+// 比較・404になる。isCrossRepository/headRepositoryOwnerを与えた場合にheadが正しく修飾されることを
+// 固定回帰させる。
+test('checkFreshness: fork由来PR（isCrossRepository）はcompareのhead引数をowner:branch形式で修飾する', () => {
+  withGhStub((stub) => {
+    stub.seedPrCrossRepoInfo(94, { isCrossRepository: true, headRepositoryOwner: 'fork-owner' });
+    stub.seedPrFreshnessQueue(94, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
+    const result = checkFreshness(process.cwd(), '94', undefined, { allowUnknownBackoff: false });
+    assert.equal(result.status, 'fresh');
+    const state = stub.readState();
+    const compareCall = (state.compareRepoCalls ?? []).find((call) => call.head.startsWith('fork-owner:'));
+    assert.ok(compareCall, 'compare呼び出しのheadがowner:branch形式で修飾されているはず');
+    assert.equal(compareCall?.head, 'fork-owner:stub-head-94');
+    assert.equal(compareCall?.repo, 'test/repo', 'base側は対象PR自身のリポジトリのまま（修飾不要）');
+  });
+});
+
+test('checkFreshness: isCrossRepositoryがfalse（同一リポジトリ）ならheadを修飾しない（回帰防止）', () => {
+  withGhStub((stub) => {
+    stub.seedPrCrossRepoInfo(95, { isCrossRepository: false });
+    stub.seedPrFreshnessQueue(95, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
+    checkFreshness(process.cwd(), '95', undefined, { allowUnknownBackoff: false });
+    const state = stub.readState();
+    const compareCall = (state.compareRepoCalls ?? []).find((call) => call.head === 'stub-head-95');
+    assert.ok(compareCall, 'headは修飾されずそのままのブランチ名のはず');
+  });
+});
+
+// Issue #493実装ゲート2回目是正（blocking: repo-resolution-inconsistent-between-pr-view-and-api）:
+// -R無しでPR URL（cwdの既定リポジトリと異なるリポジトリ）を対象指定した場合、compareが
+// cwdの既定リポジトリ（本スタブの既定 'test/repo'）ではなく、gh pr viewの応答（url）から
+// 導出した実際のリポジトリへ呼ばれることを固定回帰させる。
+test('checkFreshness: 対象識別子がPR URL（cwdの既定リポジトリと異なるリポジトリ）でもURL由来のリポジトリでcompareする', () => {
+  withGhStub((stub) => {
+    stub.seedPrFreshnessQueue(96, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
+    const result = checkFreshness(
+      process.cwd(),
+      'https://github.com/other-owner/other-repo/pull/96',
+      undefined,
+      { allowUnknownBackoff: false },
+    );
+    assert.equal(result.status, 'fresh');
+    assert.equal(result.repo, 'other-owner/other-repo');
+    assert.equal(result.prNumber, '96');
+    const state = stub.readState();
+    const compareCall = (state.compareRepoCalls ?? []).find((call) => call.repo === 'other-owner/other-repo');
+    assert.ok(compareCall, 'compareはURL由来の実際のリポジトリへ呼ばれるはず（cwdの既定リポジトリではない）');
+    const wrongRepoCall = (state.compareRepoCalls ?? []).find((call) => call.repo === 'test/repo');
+    assert.equal(wrongRepoCall, undefined, 'cwdの既定リポジトリへは一切呼ばれないはず');
+  });
+});
+
 test('resolveMergeTarget: 対象識別子（PR番号）がargsの先頭にあれば直接抽出する', () => {
   const result = resolveMergeTarget(['123', '--squash', '--admin'], '/repo');
   assert.equal(result.target, '123');
@@ -118,6 +217,29 @@ test('resolveMergeTarget: -R/--repoは対象識別子が直接見つかる場合
   const result = resolveMergeTarget(['123', '-R', 'owner/other-repo', '--admin'], '/repo');
   assert.equal(result.target, '123');
   assert.equal(result.repoOverride, 'owner/other-repo');
+});
+
+// Issue #493実装ゲート2回目是正（warning: repo-shorthand-attached-value-missed）: ghは
+// `-R` について値密着の短縮形式（`-Rowner/repo`）も受け付けるが、`=`区切り・フラグ単独＋次要素の
+// 2形式しか認識していなかった。この反例を固定回帰させる。
+test('resolveMergeTarget: -R値密着形式（-Rowner/repo）でもrepoOverrideを検出する', () => {
+  const result = resolveMergeTarget(['123', '-Rowner/repo', '--admin'], '/repo');
+  assert.equal(result.target, '123');
+  assert.equal(result.repoOverride, 'owner/repo');
+});
+
+test('resolveMergeTarget: -R値密着形式は対象識別子より前にあっても検出する', () => {
+  const result = resolveMergeTarget(['-Rowner/other', '456'], '/repo');
+  assert.equal(result.target, '456');
+  assert.equal(result.repoOverride, 'owner/other');
+});
+
+test('resolveMergeTarget: --repo（長いオプション名）は値密着形式を認識しない（=区切りのみ許容）', () => {
+  // `--repoowner/repo` のような長いオプション名の値密着は gh の慣例に無いため、
+  // 対象識別子として誤認識されないことのみ確認する（repoOverrideには反映されない）。
+  const result = resolveMergeTarget(['--repoowner/repo', '789'], '/repo');
+  assert.equal(result.target, '789');
+  assert.equal(result.repoOverride, undefined);
 });
 
 test('MergeFailureClassifier.classifyMergeFailure: 権限不足は unrelated', () => {

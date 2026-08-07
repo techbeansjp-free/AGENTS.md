@@ -11,7 +11,7 @@ import { createGhStub } from '../helpers/gh-stub.js';
 // Issue #493（pr merge のbase branch最新性チェック）の受入検証。ポーリング（checkFreshness の
 // UNKNOWNバックオフ・attemptUpdateBranch の update-branch 反映待ち）を実時間で待つと
 // テストが極端に遅くなるため、本番既定値（3秒間隔・最大10回等）とは別に、テスト実行時のみ
-// 短縮したポーリング間隔・バックオフを環境変数で注入する（src/lib/pr-freshness.ts 参照）。
+// 短縮したポーリング間隔・バックオフを環境変数で注入する。
 const FAST_POLL_ENV = {
   AGENT_SKILL_CHAIN_TEST_UPDATE_BRANCH_POLL_INTERVAL_MS: '5',
   AGENT_SKILL_CHAIN_TEST_UPDATE_BRANCH_POLL_MAX_ATTEMPTS: '4',
@@ -387,11 +387,10 @@ test('pr merge (AC-5): 対象識別子省略時、cwdベースの暗黙解決が
   t.after(cleanup);
 
   // repoRoot() は linked worktree からでも常にmain worktreeへ解決される（coordination状態の
-  // 基点をworktree間で統一する設計、src/lib/paths.ts参照）ため、resolveMergeTarget()の
-  // フォールバック（`cwd=root`）・`gh(['pr','merge',...args], root)`・
-  // syncMainWorktree()（default branchをチェックアウトしている前提）は、いずれも実行時cwdでは
-  // なくmain worktree（repo.dir）自身が今チェックアウトしているブランチを参照する（既存の
-  // syncMainWorktree()の前提と一貫させた設計、DESIGN.md「resolveMergeTarget()」参照）。
+  // 基点をworktree間で統一する設計）ため、resolveMergeTarget()のフォールバック（`cwd=root`）・
+  // `gh(['pr','merge',...args], root)`・syncMainWorktree()（default branchをチェックアウトして
+  // いる前提）は、いずれも実行時cwdではなくmain worktree（repo.dir）自身が今チェックアウトして
+  // いるブランチを参照する（既存のsyncMainWorktree()の前提と一貫させた設計）。
   // repo.dir はdefault branch（main）をチェックアウトしたままにする必要がある（syncMainWorktree
   // の前提）ため、このテストではPRのheadRefNameとして 'main' を登録し、cwdベースの暗黙解決が
   // 'main'に紐づくPRを見つけられることのみを検証する（stub上の割当であり、実際のGitHub PRの
@@ -408,6 +407,39 @@ test('pr merge (AC-5): 対象識別子省略時、cwdベースの暗黙解決が
   assert.deepEqual(state.mergeCalls?.[0]?.args, ['pr', 'merge', '--squash', '--admin']);
   const implicitCall = state.prViewCalls?.find((call) => call.key === '(implicit)');
   assert.ok(implicitCall, 'cwdベースの暗黙解決フォールバックが呼ばれているはず');
+});
+
+// Issue #493実装ゲート2回目是正（warning: unknown-merge-state-aborts-merge）: バックオフ枯渇後も
+// mergeStateStatusがUNKNOWNのままだと、compare APIを一切呼ばずcheck_failedとして中断していた。
+// mergeStateStatusはUNKNOWN解決待ちのポーリング制御にのみ使う補助的な値であり、最新性判定自体は
+// compare APIの結果で行うべきという設計に基づき、CLI経路でもcompare結果でマージへ進むことを検証する。
+test('pr merge (Issue #493実装ゲート2回目是正): バックオフ後もmergeStateStatusがUNKNOWNのままでもcompare API結果でマージへ進む', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-unknown-mergestate');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  // mergeStateStatusは常にUNKNOWN（バックオフ上限まで解決しない）が、compare APIはidenticalを返す。
+  stub.seedPrFreshnessQueue(99, [{ mergeStateStatus: 'UNKNOWN', compareStatus: 'identical', compareBehindBy: 0 }]);
+
+  const result = runCli(['pr', 'merge', '99'], { cwd: issueWorktree, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  const state = stub.readState();
+  assert.equal(
+    state.mergeCalls?.length,
+    1,
+    'mergeStateStatusがUNKNOWNのままでもcompare API結果（identical）でfreshと判定しマージへ進むはず',
+  );
+  // FAST_POLL_ENVのバックオフ（'5,5,5' = 3回）を全消費してから判定していることも確認する。
+  assert.ok(
+    (state.prFreshnessCallCounts?.['99'] ?? 0) >= 4,
+    'バックオフ全消費（初回+3回）後に判定しているはず',
+  );
 });
 
 test('pr merge (AC-6): 最新性と無関係な失敗（権限不足）は既存のgh pr merge出力をそのまま維持する', async (t) => {
@@ -458,7 +490,12 @@ test('pr merge (AC-7): 確認通過後のTOCTOU競合でgh pr mergeが失敗し�
   assert.match(result.stderr, /TOCTOU競合/);
 });
 
-test('pr merge (設計上の確認事項): -R/--repoが対象識別子と同時に指定された場合、checkFreshness/attemptUpdateBranchへ一貫して伝播する', async (t) => {
+// Issue #493実装ゲート2回目是正: -R/--repoは`gh pr view`呼び出し自体への`--repo`ヒントとしてのみ
+// 使われ、compare・update-branchの根拠にはならない（`checkFreshness()`がPR自身の応答から導出した
+// 実際のリポジトリを使う）。-Rが対象PRの実際のリポジトリと一致する場合は、結果として
+// compare・update-branchも同じリポジトリへ一貫して呼ばれることを検証する（-R不一致時に誤った
+// リポジトリへ作用しないことは別テストで検証する）。
+test('pr merge (設計上の確認事項): -R/--repoが対象PRの実際のリポジトリと一致する場合、checkFreshness/attemptUpdateBranchへ一貫して伝播する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
   setMergeAutoUpdateBranch(repo.dir, true);
@@ -468,6 +505,8 @@ test('pr merge (設計上の確認事項): -R/--repoが対象識別子と同時�
   const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-repo-override');
   t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
 
+  // -R で指定するリポジトリが対象PRの実際の所属リポジトリと一致する状況を再現する。
+  stub.seedPrCrossRepoInfo(50, { repoFullName: 'owner/other-repo' });
   stub.seedPrFreshnessQueue(50, [
     { mergeStateStatus: 'BEHIND' },
     { mergeStateStatus: 'CLEAN', baseRefOid: 'sha-fresh-50' },
@@ -480,10 +519,14 @@ test('pr merge (設計上の確認事項): -R/--repoが対象識別子と同時�
   const targetedViewCalls = (state.prViewCalls ?? []).filter((call) => call.key === '50');
   assert.ok(targetedViewCalls.length >= 1);
   for (const call of targetedViewCalls) {
-    assert.equal(call.repo, 'owner/other-repo');
+    assert.equal(call.repo, 'owner/other-repo', '-Rはgh pr view呼び出し自体への--repoヒントとして伝播するはず');
   }
   assert.equal(state.updateBranchCalls?.length, 1);
-  assert.equal(state.updateBranchCalls?.[0]?.repo, 'owner/other-repo');
+  assert.equal(
+    state.updateBranchCalls?.[0]?.repo,
+    'owner/other-repo',
+    'update-branchはgh pr viewの応答から導出した実際のリポジトリへ呼ばれるはず',
+  );
   assert.deepEqual(state.mergeCalls?.[0]?.args, ['pr', 'merge', '50', '-R', 'owner/other-repo', '--admin']);
 });
 
@@ -521,12 +564,10 @@ test('pr merge (Issue #493 blocking是正): 対象識別子がブランチ名で
   assert.deepEqual(state.mergeCalls?.[0]?.args, ['pr', 'merge', 'feature/target-branch', '--squash']);
 });
 
-// Issue #493実装ゲート是正（warning: post-merge-toctou-false-positive /
-// post-merge-basesha-comparison-unreliable）: マージ成立後のベストエフォート事後検知は、
-// コンフリクトの無い通常の成功マージでも必ずbaseが前進するため常に誤検知（狼少年化）する
-// 欠陥があったため撤去した（DESIGN.md・ADR-0039参照）。競合の無い通常の成功マージでは
-// 警告が出力されず、かつマージ成立後に追加のfreshness確認自体が発生しない
-// （窓の最小化のみで対応する設計へ変更）ことを検証する。
+// Issue #493実装ゲート是正: マージ成立後のベストエフォート事後検知は、コンフリクトの無い
+// 通常の成功マージでも必ずbaseが前進するため常に誤検知（狼少年化）する欠陥があったため撤去した。
+// 競合の無い通常の成功マージでは警告が出力されず、かつマージ成立後に追加のfreshness確認自体が
+// 発生しない（窓の最小化のみで対応する設計へ変更）ことを検証する。
 test('pr merge (Issue #493 warning是正): 事後検知は撤去済みのため、通常の成功マージでは追加のfreshness確認も警告も発生しない', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -548,5 +589,81 @@ test('pr merge (Issue #493 warning是正): 事後検知は撤去済みのため�
     state.prFreshnessCallCounts?.['53'],
     1,
     'マージ成立後の追加freshness確認（gh pr view）は発生しないはず（事後検知の撤去、窓の最小化のみで対応）',
+  );
+});
+
+// Issue #493実装ゲート2回目是正（blocking: compare-head-ref-not-owner-qualified /
+// fork-pr-compare-head-ref-unqualified）: fork（別リポジトリ）由来のPRでは、compare APIの
+// head側を`<owner>:<branch>`形式で修飾しなければ誤ったブランチ同士の比較・404になる。
+// CLI経路（`agent-skill-chain pr merge`）を通して、isCrossRepositoryなPRのcompare呼び出しが
+// 正しく修飾されることを検証する。
+test('pr merge (Issue #493実装ゲート2回目是正): fork由来PR（isCrossRepository）はCLI経由でもcompareのheadをowner:branch形式で修飾する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-fork-pr-compare');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  stub.seedPrCrossRepoInfo(97, { isCrossRepository: true, headRepositoryOwner: 'fork-owner' });
+  stub.seedPrFreshnessQueue(97, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
+
+  const result = runCli(['pr', 'merge', '97', '--admin'], { cwd: issueWorktree, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length, 1);
+  const compareCall = (state.compareRepoCalls ?? []).find((call) => call.head.startsWith('fork-owner:'));
+  assert.ok(compareCall, 'compare呼び出しのheadがowner:branch形式で修飾されているはず');
+  assert.equal(compareCall?.head, 'fork-owner:stub-head-97');
+});
+
+// Issue #493実装ゲート2回目是正（blocking: repo-resolution-inconsistent-between-pr-view-and-api）:
+// `-R`無しでPR URL（cwdの既定リポジトリと異なるリポジトリを指すURL）を対象指定した場合、
+// 状態取得（`gh pr view`）は正しいPRから行われる一方、compare・update-branchがcwdの既定
+// リポジトリに対して実行される反例を固定回帰させる。compare・update-branchが
+// PR URL由来の実際のリポジトリへ呼ばれ、cwdの既定リポジトリへは一切呼ばれないことを検証する。
+test('pr merge (Issue #493実装ゲート2回目是正): -R無しでPR URL（cwdの既定リポジトリと異なるリポジトリ）を対象指定した場合、compare・update-branchはURL由来のリポジトリに対して呼ばれる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutoUpdateBranch(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/493-url-repo-mismatch');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  stub.seedPrFreshnessQueue(98, [
+    { mergeStateStatus: 'BEHIND' },
+    { mergeStateStatus: 'CLEAN', baseRefOid: 'sha-fresh-98' },
+  ]);
+
+  const result = runCli(
+    ['pr', 'merge', 'https://github.com/other-owner/other-repo/pull/98', '--squash'],
+    { cwd: issueWorktree, env },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  const state = stub.readState();
+  assert.equal(state.updateBranchCalls?.length, 1);
+  assert.equal(
+    state.updateBranchCalls?.[0]?.repo,
+    'other-owner/other-repo',
+    'update-branchはPR URL由来の実際のリポジトリへ呼ばれるはず（cwdの既定リポジトリではない）',
+  );
+  const compareCalls = state.compareRepoCalls ?? [];
+  assert.ok(compareCalls.length > 0, 'compareが呼ばれているはず');
+  for (const call of compareCalls) {
+    assert.equal(
+      call.repo,
+      'other-owner/other-repo',
+      'compareもPR URL由来の実際のリポジトリへ呼ばれるはず（cwdの既定リポジトリではない）',
+    );
+  }
+  assert.deepEqual(
+    state.mergeCalls?.[0]?.args,
+    ['pr', 'merge', 'https://github.com/other-owner/other-repo/pull/98', '--squash'],
   );
 });

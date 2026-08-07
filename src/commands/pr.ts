@@ -310,7 +310,11 @@ export async function merge(args: string[]): Promise<number> {
           `対象PR（${target}）のPR番号を特定できなかったため、自動最新化を実行できません。マージを実行せず中断します。`,
         );
       }
-      const update = attemptUpdateBranch(root, initial.prNumber, repoOverride);
+      // Issue #493実装ゲート2回目是正: `repoOverride`（`-R`由来のヒント値）ではなく、
+      // `checkFreshness()` が `gh pr view` の応答から導出した対象PRの実際の所属リポジトリ
+      // （`initial.repo`）を使う。fork由来PRやcwdの既定リポジトリと異なるリポジトリを指す
+      // PR URLを対象指定した場合でも、常に正しいリポジトリへupdate-branchを呼ぶため。
+      const update = attemptUpdateBranch(root, initial.prNumber, initial.repo);
       if (update.status === 'not_applicable') {
         return fail(`対象PR（${target}）が処理中にクローズ・マージされたため最新化を中断しました。`);
       }
@@ -336,14 +340,13 @@ export async function merge(args: string[]): Promise<number> {
     }
     if (result.stderr) process.stderr.write(result.stderr);
 
-    // Issue #493実装ゲート是正: 確認通過後のベストエフォート事後検知（旧ADR-0039 Decision 6）は
-    // 撤去した。コンフリクトの無い通常の成功マージであっても、マージ自体がbase branchの先端を
-    // 必ず前進させるため、単純な事後baseRefOid比較では正常なマージのたびに誤検知（狼少年化）が
-    // 発生する欠陥があった（findings post-merge-toctou-false-positive）。マージ成立後に生成された
-    // 実コミットの親SHAまで遡って比較する代替も検討したが、マージ手法（マージコミット／squash／
-    // rebase）ごとに親構造が異なり実装・検証コストが高い一方、この検知はいずれもベストエフォート
-    // （要件1・AC-1自体の保証は担わない付加的な観測性強化）であったため、多段防御は
-    // 「fresh判定からgh pr merge呼び出しまでの間隔最小化」のみで構成する。
+    // Issue #493実装ゲート是正: 確認通過後のベストエフォート事後検知は撤去した。コンフリクトの
+    // 無い通常の成功マージであっても、マージ自体がbase branchの先端を必ず前進させるため、単純な
+    // 事後baseRefOid比較では正常なマージのたびに誤検知（狼少年化）が発生する欠陥があった。
+    // マージ成立後に生成された実コミットの親SHAまで遡って比較する代替も検討したが、マージ手法
+    // （マージコミット／squash／rebase）ごとに親構造が異なり実装・検証コストが高い一方、この
+    // 検知はいずれもベストエフォート（最新性保証自体は担わない付加的な観測性強化）であったため、
+    // 多段防御は「fresh判定からgh pr merge呼び出しまでの間隔最小化」のみで構成する。
 
     return syncMainWorktree(root);
   });
