@@ -1,80 +1,82 @@
-# SPEC: lint-vocab: gh CLIサブコマンド引数リテラル'issue'を禁止語として誤検知し全PR CIが恒久赤化する
+# SPEC: lint-vocab: isQuotedLiteralContextが非散文ファイルのコメント中の禁止語誤用まで誤って除外する
 
-- Issue: `ISSUE-469`
+- Issue: `ISSUE-484`
 - 作成者: `spec_worker`
-- 対象ブランチ: `bugfix/469-lint-vocab-cli-arg-quote`
+- 対象ブランチ: `bugfix/484-lint-vocab-comment-suppress`
 
 ## 目的・背景
 
-`.agent-skill-chain/scripts/lint-vocab.sh`（`agent-skill-chain lint vocab`、実体は `src/commands/lint.ts` の `vocab()`）は、規範文書・コメント中の散文表記における禁止語（`docs/GLOSSARY.md` が定義する、旧システム名称・「issue」小文字表記等）の混入を機械検査する。検査対象を「生きたファイル」（`.agent-skill-chain/`・`src/`・`docs/` 等）とし、コード識別子文脈・YAML識別子文脈・CLIサブコマンド文脈・外部語彙許可リストという4種の除外判定（`isCodeLikeReference` / `isIdentifierContext` 系関数群、Issue #178・#187 で導入）により、コード上の正当な識別子・キー・サブコマンド利用と散文中の誤用とを区別している。
+`.agent-skill-chain/scripts/lint-vocab.sh`（`agent-skill-chain lint vocab`、実体は `src/commands/lint.ts` の `vocab()`）は、規範文書・コメント中の散文表記における禁止語（`docs/GLOSSARY.md` が定義する、旧システム名称・「issue」小文字表記等）の混入を機械検査する。Issue #469（PR #481）で追加した `isQuotedLiteralContext()` は、単一引用符（`'`）で囲まれた禁止語一致の文字列リテラルが、直前直後（空白を挟んでよい）で配列要素・関数呼び出し引数の構文境界（`[`/`(`/`,` と `]`/`)`/`,`）に囲まれている場合に、コード上の正当な値リテラルとして検査対象から除外する。
 
-`src/lib/review-light.ts:60` の `gh(['issue', 'view', issueNumber, '--json', 'labels'], root)`（`gh issue view` サブコマンド呼び出しの引数配列、PR #460／Issue #449 でmainへ混入）は、配列要素 `'issue'`（単一引用符で囲まれた、禁止語と完全一致する単独の文字列リテラル）を含む。この箇所は既存の4種の除外判定のいずれにも該当せず、`lint vocab` が禁止語違反として誤検知する。
+この判定は行内容だけを見る純粋に構文的な境界判定であり、その行が実際のコード（配列要素・関数呼び出し引数）なのか、`//`（`.ts` 等）・`#`（`.sh`/`.yaml`/`.yml` 等）で始まる単一行コメント（散文相当）なのかを区別していない。このため、非散文ファイル（`.ts`・`.sh`・`.yaml` 等）中のコメントで、禁止語を括弧・カンマで囲んだ表記（例: 廃止語彙の説明・一覧）が、実際のコード値リテラルと誤って同一視され、禁止語検査から漏れる。
 
 ```
-$ node bin/agents-md.js lint vocab
-src/lib/review-light.ts:60: 禁止語 'issue' が見つかりました（'成果物' を使用してください）
+$ cat /tmp/lint-repro/sample2.ts
+// deprecated values: ('issue', 'legacy')
+function foo(a, b) {}
+
+$ node bin/agents-md.js lint vocab /tmp/lint-repro/sample2.ts
+（何も出力されず終了コード0。'issue' が禁止語として検出されない）
 ```
 
-この誤検知は2026-08-06時点でmain上に混入したまま解消されておらず、`agent-skill-chain / ci` workflowの `verify` ジョブがmain・全オープンPR（本Issueと無関係な変更を含む）で恒久的にfailし続けている。現状は個々のPRを `gh pr merge --admin` でブランチ保護をバイパスしてマージする運用回避で凌いでいるが、CIがlintの意味のある結果を示さなくなっており、自身の変更内容の正当性を機械的に確認できない状態が続いている。
-
-これはIssue #461（`verify-spec-bdd` のプレースホルダ誤検知）と同種の、「lintツールが規範文書用の検査ルールで正当なコード記法・API引数を誤検知する」再発パターンである。
+同じ内容が `.md`（散文ファイル）であれば `isProseFile` により `isQuotedLiteralContext` 自体が適用されず正しく検出される。非散文ファイルのコメント行という、Issue #469 導入時点でどの除外判定にも意図的に含まれていなかった盲点である。Issue #469 / PR #481 マージ後、Codexによるstop-time reviewが「`isQuotedLiteralContext` が、コード値リテラルに限定されず、非散文ファイルのコメント中の禁止語も抑制してしまう」設計意図とのズレを検出したことで発見された。
 
 ## 要求 → 要件 → 受入条件
 
 ### 要求
 
-進行役（adachi-tatsuru）からの要求: `gh(['issue', 'view', ...])` のような、単一引用符で囲まれた禁止語と完全一致する文字列リテラルがコード上の配列要素・関数引数として単独で使われる箇所を `lint vocab` が誤検知しないようにし、main・全PRのCIを恒久赤化状態から回復させたい。修正は既存の散文誤用検出・識別子文脈判定の精度を後退させない形で行う。
+進行役（adachi-tatsuru）からの要求: 非散文ファイル（`.ts`・`.sh`・`.yaml`/`.yml` 等）の単一行コメント（`//`・`#`）中に、配列要素・関数呼び出し引数と同じ構文境界（`[`/`(`/`,` と `]`/`)`/`,`）で単一引用符に囲まれた禁止語一致リテラルが出現する場合、`lint vocab` はこれを引き続き禁止語違反として検出できるようにしたい。修正は、Issue #469 が解消した実際のコード値リテラル（`src/lib/review-light.ts:60` 等、コメントではない行）に対する誤検知抑制の効果、および既存の識別子文脈判定・散文誤用検出の精度を後退させない形で行う。
 
 ### 要件
 
-- 要件1: 非散文ファイル（`.md` 以外の、コード・設定・スクリプト等の「生きたファイル」）において、禁止語と完全一致する文字列が単一引用符（`'`）で囲まれ、かつ配列要素・関数呼び出し引数等のプログラムコード上の値として単独のトークンで出現する場合、`lint vocab` はこれを禁止語違反として検出しない。
-- 要件2: 要件1の除外は、既存のダブルクォート（`"`）境界判定・コード識別子文脈・YAML識別子文脈・CLIサブコマンド文脈（`cliVerbs()` ホワイトリストに基づく判定）・外部語彙許可リストのいずれの既存動作にも退行を生じさせない。特に、散文（`.md`）中の禁止語誤用、複合識別子でない単独のbare識別子（例: 変数名がちょうど禁止語と一致する場合）、区切り文字の無い屈折形の扱いなど、既存テスト（`test/integration/lint.test.ts`）が固定している挙動は全て現状のまま維持する。
-- 要件3: 要件1の除外は、`src/lib/review-light.ts:60` の実際の混入箇所を含め、一般化された規則（個別ファイル・個別行のハードコード例外ではない）として機能する。
-- 要件4: 修正後、mainブランチおよび既存オープンPRの `agent-skill-chain / ci` workflowの `verify` ジョブが、本Issueが報告した誤検知を原因とするfailureを起こさなくなる。
-- 要件5: 対応は自動化されたテストで再現・検証可能な形にする（`test/integration/lint.test.ts` 等に、修正前は失敗し修正後は成功する回帰テストケースを追加できること）。
+- 要件1: 非散文ファイル（`.md` 以外）において、単一引用符で囲まれた禁止語一致の文字列リテラルが `//`（`.ts` 等）または `#`（`.sh`・`.yaml`・`.yml` 等）で始まる単一行コメント部分に位置する場合、`isQuotedLiteralContext` によるコード値リテラル除外を適用しない。この場合の禁止語出現は、他のいずれの既存除外判定（コード識別子文脈・YAML識別子文脈・CLIサブコマンド文脈・外部語彙許可リスト・バッククォート/プレースホルダ/パストークン）にも該当しない限り、通常の散文誤用として検出する。
+- 要件2: 要件1の対象は単一行コメント（`//`・`#`）に限る。`/* ... */` 等、複数行にまたがるコメント構文の一般的な解析は要件に含めない。
+- 要件3: 要件1の判定は、コメント記号出現以降の行内容を一律に「コメント部分」として扱う一般規則として機能する（個別ファイル・個別行のハードコード例外ではない）。
+- 要件4: 要件1の変更は、`isQuotedLiteralContext` 以外の既存識別子文脈判定関数（コード識別子文脈・YAML識別子文脈・CLIサブコマンド文脈・外部語彙許可リスト）の実装・判定順序・戻り値を変更しない。
+- 要件5: 要件1の変更は、`src/lib/review-light.ts:60` の `gh(['issue', 'view', issueNumber, '--json', 'labels'], root)` のような、コメントではない実際のコード上の配列要素・関数呼び出し引数に対する `isQuotedLiteralContext` の既存の除外効果（Issue #469 が解消した誤検知）を退行させない。
+- 要件6: 対応は自動化されたテストで再現・検証可能な形にする（`test/integration/lint.test.ts` 等に、修正前は失敗し修正後は成功する回帰テストケースを追加できること）。
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: review-light.ts:60の実際の混入箇所が誤検知されなくなる
+#### AC-1: `.ts` ファイルの行コメント中の禁止語が検出されるようになる
 
-- Given: `src/lib/review-light.ts` の60行目に `gh(['issue', 'view', issueNumber, '--json', 'labels'], root)` が存在する
-- When: `agent-skill-chain lint vocab`（`.agent-skill-chain/scripts/lint-vocab.sh` 経由、または対象を `src/lib/review-light.ts` に絞った直接実行）を実行する
-- Then: 当該行が禁止語 `'issue'` の違反として報告されない
+- Given: `.ts` ファイルに `// deprecated values: ('issue', 'legacy')` のような、`//` で始まる単一行コメント中に単一引用符で囲まれた禁止語一致リテラル（配列要素と同じ構文境界に囲まれている）が存在する
+- When: `agent-skill-chain lint vocab`（`.agent-skill-chain/scripts/lint-vocab.sh` 経由、または当該ファイルに絞った直接実行）を実行する
+- Then: 当該行が禁止語 `'issue'` の違反として報告される（終了コード1以上）
 - 検証方法見込み: `automated`
 
-#### AC-2: 単一引用符で囲まれた単独の禁止語リテラルが非散文コード中の配列・関数引数として使われる一般ケースで誤検知しない
+#### AC-2: `.sh`/`.yaml`/`.yml` ファイルの `#` 行コメント中の禁止語が検出されるようになる
 
-- Given: `.ts` 等の非散文ファイルに、単一引用符で囲まれた禁止語のみから構成される文字列リテラルが、カンマ区切りの配列要素または関数呼び出し引数として単独のトークンで出現する行が複数（`review-light.ts:60` 以外の新規ケースを含む）ある
+- Given: `.sh` または `.yaml`/`.yml` ファイルに、`#` で始まる単一行コメント中に単一引用符で囲まれた禁止語一致リテラル（配列要素・関数呼び出し引数と同じ構文境界に囲まれている）が存在する
 - When: `lint vocab` を実行する
-- Then: いずれの箇所も違反として検出されない
+- Then: 当該行が禁止語違反として報告される
 - 検証方法見込み: `automated`
 
-#### AC-3: 散文（.md）中の禁止語誤用は引き続き検出される（退行なし）
+#### AC-3: コメントではない実コード中のコード値リテラル除外は退行しない（Issue #469 AC-1の維持）
 
-- Given: `.md` ファイル中に、単一引用符で禁止語を囲んだ表記を含め、禁止語が散文中の誤用として出現する行がある（既存の `test/integration/lint.test.ts` が定義するケースと同等の内容）
+- Given: `src/lib/review-light.ts` の60行目に `gh(['issue', 'view', issueNumber, '--json', 'labels'], root)` が存在する（コメント行ではない）
 - When: `lint vocab` を実行する
-- Then: 修正前と同様に違反として検出される
+- Then: 当該行は引き続き禁止語 `'issue'` の違反として報告されない
 - 検証方法見込み: `automated`
 
-#### AC-4: 既存の識別子文脈・YAML文脈・CLIサブコマンド文脈・屈折形・外部語彙許可リストの判定結果に変化がない（regressionなし）
+#### AC-4: 既存の識別子文脈・YAML文脈・CLIサブコマンド文脈・屈折形・外部語彙許可リスト・散文誤用検出の判定結果に変化がない（regressionなし）
 
-- Given: `test/integration/lint.test.ts` が既に定義している全ケース（コード識別子文脈、YAML識別子文脈、CLIサブコマンド文脈、散文中の偶然の共起、屈折形、外部語彙許可リスト等）
+- Given: `test/integration/lint.test.ts` が既に定義している全ケース（コード識別子文脈、YAML識別子文脈、CLIサブコマンド文脈、散文中の禁止語誤用、屈折形、外部語彙許可リスト、Issue #469 が追加したコード値リテラル文脈のケースを含む）
 - When: 修正後の `lint vocab` を実行する
 - Then: 全ケースが現行の期待結果（既存のassertion）と一致し、既存テストが全て成功する
 - 検証方法見込み: `automated`
 
-#### AC-5: main・新規PRのCI（agent-skill-chain / ci workflowのverifyジョブ）が本誤検知を原因として失敗しなくなる
+#### AC-5: リポジトリ全体に対する実行で、本Issueが意図しない新規の誤検知・見逃しを生じさせない
 
-- Given: 本Issueの修正を含むPRがマージされた状態のmain
-- When: main上、または本Issue修正をベースとする新規PR上で `agent-skill-chain / ci` workflowが実行される
-- Then: 本Issueが報告した `lint vocab` の誤検知（`review-light.ts:60` の `'issue'`）を原因とする `verify` ジョブのfailureが発生しない
+- Given: 本Issueの修正を適用した `lint vocab` の実装
+- When: `node bin/agents-md.js lint vocab`（対象省略時のデフォルト全体）をリポジトリ全体に対して実行する
+- Then: 本Issueが解消する意図した検出漏れ（非散文ファイルのコメント中の禁止語）以外に、既存の生きたファイル群で新規の違反・既存動作からの変化が生じない
 - 検証方法見込み: `hybrid`
 
 ## スコープ外
 
-- `src/lib/review-light.ts` 自体のロジック変更。`gh(['issue', 'view', ...])` という `gh issue view` 呼び出し自体は正当な実装であり、変更対象ではない。
+- `/* ... */` 等、複数行にまたがるコメント構文の一般的な解析。本Issueが対象とするのは単一行コメント（`//`・`#`）に限る。
+- `isQuotedLiteralContext` 以外の既存識別子文脈判定関数（コード識別子文脈・YAML識別子文脈・CLIサブコマンド文脈・外部語彙許可リスト）の判定ロジック自体の変更・再設計。
 - `docs/GLOSSARY.md` が定義する禁止語一覧・禁止語自体の定義の変更。
-- 既存のダブルクォート境界判定・CLIサブコマンド動詞ホワイトリスト（`cliVerbs()`、agent-skill-chain自身のCLIルートから導出）の仕組み自体の再設計。要件2が求めるのはこれらの既存動作の維持であり、置き換えではない。
-- `gh` CLI固有の全サブコマンド・全引数を網羅する個別ホワイトリストの整備。本Issueが対応するのは引用符付き単独文字列リテラルという構文パターンの一般的な認識であり、外部CLIツールごとの語彙整備ではない。
+- 文字列リテラル内部に偶然 `//` や `#` を含むが実際にはコメント開始ではないケース（例: URL文字列 `'https://example.com'` を含むコード行）を区別する、コメント検出の一般的な字句解析の高度化。本Issueは単一行コメント記号の有無に基づく判定を求めるにとどめる。
 - `lint references`・`lint adr`・`lint secrets` 等、`lint vocab` 以外のサブコマンドの検査ロジック変更。
-- 現状運用されている `gh pr merge --admin` によるブランチ保護バイパス運用そのものの廃止判断（本Issueの修正によりCIが正常化すれば、当該運用回避が不要になることが期待されるが、運用手順自体の変更は別途の判断とする）。
