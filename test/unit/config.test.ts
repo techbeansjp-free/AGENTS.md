@@ -50,6 +50,34 @@ test('loadConfig (AC-6): worker.segment_overrides.implementation が codex/highe
   assert.equal(modelOccurrences.length, 1, '具体的なモデル文字列が現れるのはworker.model_tiersの1箇所のみであること');
 });
 
+// ADR-0023（Issue #503）AC-4/AC-7: 本リポジトリ自身は既定プロファイル（profile: standard）。
+test('loadConfig (ADR-0023): 本リポジトリ自身の profile は standard、templates.claude_skills_source/target は既定パスへフォールバックする', () => {
+  const config = loadConfig(packageRoot());
+  assert.equal(config.profile, 'standard');
+  assert.equal(config.templates.claude_skills_source, undefined);
+  assert.equal(config.templates.claude_skills_target, undefined);
+});
+
+// ADR-0023（Issue #503）: 軽量プロファイル用テンプレート自体もconfig schemaへ適合すること。
+test('loadConfig (ADR-0023): .agent-skill-chain/templates/lightweight/agent-skill-chain.yaml はスキーマに適合し profile: lightweight を持つ', () => {
+  const lightweightConfigPath = path.join(
+    packageRoot(),
+    '.agent-skill-chain',
+    'templates',
+    'lightweight',
+    'agent-skill-chain.yaml',
+  );
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'load-config-lightweight-test-'));
+  fs.writeFileSync(path.join(tmp, '.git'), '');
+  const configDir = path.join(tmp, '.agent-skill-chain', 'config');
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.copyFileSync(lightweightConfigPath, path.join(configDir, 'agent-skill-chain.yaml'));
+
+  const config = loadConfig(tmp);
+  assert.equal(config.profile, 'lightweight');
+  assert.equal(config.coordination.backend, 'local');
+});
+
 test('loadConfig: スキーマ不適合の config は例外を投げる', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'load-config-test-'));
   fs.writeFileSync(path.join(tmp, '.git'), '');

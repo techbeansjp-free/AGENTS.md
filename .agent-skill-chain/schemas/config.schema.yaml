@@ -168,6 +168,12 @@ properties:
     additionalProperties: false
     properties:
       before_implementation: {type: boolean}
+  # profile（ADR-0023）は後方互換な任意項目として追加する。top-level の required には含めず、
+  # 本フィールドを持たない既存の設定ファイルはこれまでどおり妥当なものとして扱う（未設定は
+  # standard相当）。軽量プロファイルかどうかを機械的に判定する唯一の正本。
+  profile:
+    type: string
+    enum: [standard, lightweight]
   templates:
     type: object
     required: [github_source, github_target, verify_sync]
@@ -177,6 +183,8 @@ properties:
       github_target: {type: string}
       claude_agents_source: {type: string}
       claude_agents_target: {type: string}
+      claude_skills_source: {type: string}
+      claude_skills_target: {type: string}
       verify_sync: {type: boolean}
   checks:
     type: object

@@ -14,3 +14,5 @@
 | 進行役 | Issue作成・状態遷移・worktree管理・マージのみを行う役 | orchestrator（英語表記のみでの言い換え）、オーケストレーター |
 | Task | セッション内の揮発的作業単位（永続化禁止） | Issue、タスク管理（永続化含意） |
 | agent-skill-chain | 本 npm パッケージ・CLI（`AGENTS.md` が正本） | Fable システム、skill chain、command chain、`.agent-skill-chain/source` |
+| 軽量プロファイル | `init` 実行時に選択できる導入形態。`profile: lightweight`。`CLAUDE.md`常時import・強制層（`setup github`・`enforce on`）・セグメントゲート機械的検査機構を導入しない | ライトプロファイル、lightweightモード（英語表記のみでの言い換え） |
+| 既定プロファイル | `init` 未指定時の既定導入形態。`profile: standard`。`CLAUDE.md` が `@AGENTS.md` を常時importする常時規律モデル | 標準モード、standardプロファイル（英語表記のみでの言い換え） |

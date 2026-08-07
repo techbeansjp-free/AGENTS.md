@@ -5,6 +5,7 @@ import { collectManagedAssetMappings, packageVersion } from '../lib/asset-manife
 import { writeInstalledVersion } from '../lib/version-marker.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { digestOfFile } from '../lib/digest.js';
+import { CliError } from '../lib/issue.js';
 import {
   toOwnershipKey,
   readOwnershipRecord,
@@ -14,15 +15,29 @@ import {
 } from '../lib/ownership-record.js';
 
 const USAGE = `
-使い方: agent-skill-chain init [target_dir] [--dry-run]
+使い方: agent-skill-chain init [target_dir] [--dry-run] [--profile=standard|lightweight]
 
 target_dir: 導入先リポジトリのルートディレクトリ（省略時はカレントディレクトリ）。
 --dry-run:  実ファイルを書き込まず、作成予定のファイル一覧のみを標準出力へ表示する。
+--profile:  standard（既定、常時規律モデル）| lightweight（軽量プロファイル、ADR-0023）。
+            lightweight は CLAUDE.md への @AGENTS.md 常時importを行わず、
+            coordination.backend: local を既定にし、強制層（setup github・enforce on）を
+            適用しない。逸脱の機械的阻止が無いことを標準出力へ明示する。
 
 出力:
   成功時: 終了コード0。作成したファイル一覧（またはdry-run時は作成予定一覧）を標準出力へ。
   失敗時（既存ファイルと内容衝突）: 終了コード1以上。衝突ファイルパスと理由を標準エラー出力へ。
 `;
+
+const PROFILE_FLAG_PATTERN = /^--profile=(.+)$/;
+
+function parseProfile(args: string[]): 'standard' | 'lightweight' {
+  const match = args.map((a) => PROFILE_FLAG_PATTERN.exec(a)).find((m): m is RegExpExecArray => m !== null);
+  if (!match) return 'standard';
+  const value = match[1];
+  if (value === 'standard' || value === 'lightweight') return value;
+  throw new CliError(`--profile は standard または lightweight のいずれかである必要があります: ${value}`);
+}
 
 /**
  * setup（bare）が持つローカルファイル操作部分（gh API呼び出しを伴わない部分）を吸収した新設
@@ -35,14 +50,17 @@ export async function init(args: string[]): Promise<number> {
       return 0;
     }
     const dryRun = args.includes('--dry-run');
-    const positional = args.find((a) => a !== '--dry-run');
+    const profile = parseProfile(args);
+    const positional = args.find((a) => a !== '--dry-run' && !PROFILE_FLAG_PATTERN.test(a));
     const targetDir = positional ? path.resolve(positional) : process.cwd();
     if (!dryRun) fs.mkdirSync(targetDir, { recursive: true });
 
     // Issue #492: `upgrade`が削除候補判定の基準集合として認識するファイル集合と同一の走査ロジック
     // （`collectManagedAssetMappings`）から導出する。2箇所の独立ループの乖離により削除候補判定が
     // 誤るリスクを構造的に排除する（手動implementation-gateレビュー指摘: stale-delete-scope-invariant-untested）。
-    const conflictCheckedEntries = collectManagedAssetMappings(targetDir);
+    // Issue #503（ADR-0023）: profileにより CLAUDE.md・config/agent-skill-chain.yaml の配布元が
+    // 切り替わる以外、対象集合の拡大（.claude/skills/ の追加）はプロファイルを問わず適用される。
+    const conflictCheckedEntries = collectManagedAssetMappings(targetDir, profile);
 
     // 衝突検出時は他ファイルへの書込みも一切行わない（部分適用しない）。
     // そのため、実書き込みの前に全対象を dryRun:true で先読み検査する
@@ -88,6 +106,12 @@ export async function init(args: string[]): Promise<number> {
     }
     summary.push('GitHub workflowは未展開です。必要な場合だけ setup github を明示実行してください。');
     summary.push(`${prefix}installed_version: ${packageVersion()}`);
+    if (profile === 'lightweight') {
+      // 要件5・AC-5: 逸脱の機械的阻止が無いことを明示する（設計要素6）。
+      summary.push(
+        '軽量プロファイルで導入しました。PreToolUse hook（enforce on）・GitHub branch ruleset（setup github）などの強制層は導入されていません。本パッケージが定める規律（不変条件・4セグメント運用等）からの逸脱を機械的に阻止する手段は現状ありません。',
+      );
+    }
 
     return ok(summary.join('\n'));
   });

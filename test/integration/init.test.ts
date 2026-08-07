@@ -156,6 +156,97 @@ test('init: 同一target_dirへの2回目の実行は冪等に成功する（unc
   assert.match(second.stdout, /unchanged: /);
 });
 
+// ADR-0023（Issue #503）AC-2/AC-3: プロファイルを問わず.claude/skills/配下に5スキルが配置される。
+test('init: プロファイル未指定（既定）でも.claude/skills/配下に5つのSKILL.mdが配置され、profile: standardになる（AC-2, AC-3, AC-4）', (t) => {
+  const targetDir = mkScratch('init-skills-standard');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir]);
+  assert.equal(result.status, 0, result.stderr);
+
+  for (const skill of ['issue-start', 'segment-work', 'gate-review', 'pr-merge', 'cleanup']) {
+    const skillPath = path.join(targetDir, '.claude', 'skills', skill, 'SKILL.md');
+    assert.ok(fs.existsSync(skillPath), `${skill}/SKILL.md が配置されること`);
+    const text = fs.readFileSync(skillPath, 'utf8');
+    assert.match(text, /^name: /m);
+    assert.match(text, /^description: /m);
+    assert.match(text, /^when_to_use: /m);
+  }
+  assert.ok(
+    fs.existsSync(path.join(targetDir, '.claude', 'skills', 'DESCRIPTION_BUDGET.md')),
+    'DESCRIPTION_BUDGET.mdも同期されること',
+  );
+
+  const configText = fs.readFileSync(
+    path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml'),
+    'utf8',
+  );
+  assert.match(configText, /^profile: standard/m);
+
+  const claudeMd = fs.readFileSync(path.join(targetDir, 'CLAUDE.md'), 'utf8');
+  assert.match(claudeMd, /@AGENTS\.md/, '既定プロファイルはCLAUDE.mdの@AGENTS.md常時importを維持すること（AC-6）');
+  assert.doesNotMatch(result.stdout, /軽量プロファイルで導入しました/);
+});
+
+test('init --profile=lightweight: CLAUDE.mdが@AGENTS.md importを含まず、coordination.backend: local・profile: lightweightになり、機械的阻止が無い旨のメッセージが出る（AC-4, AC-5）', (t) => {
+  const targetDir = mkScratch('init-lightweight');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir, '--profile=lightweight']);
+  assert.equal(result.status, 0, result.stderr);
+
+  assert.ok(fs.existsSync(path.join(targetDir, 'AGENTS.md')), 'AGENTS.md自体は軽量プロファイルでも生成されること');
+  const claudeMd = fs.readFileSync(path.join(targetDir, 'CLAUDE.md'), 'utf8');
+  assert.doesNotMatch(claudeMd, /@AGENTS\.md/, '軽量プロファイルは@AGENTS.md常時importを含まないこと');
+
+  const configText = fs.readFileSync(
+    path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml'),
+    'utf8',
+  );
+  assert.match(configText, /^profile: lightweight/m);
+  assert.match(configText, /backend: local/);
+
+  for (const skill of ['issue-start', 'segment-work', 'gate-review', 'pr-merge', 'cleanup']) {
+    assert.ok(
+      fs.existsSync(path.join(targetDir, '.claude', 'skills', skill, 'SKILL.md')),
+      `軽量プロファイルでも${skill}/SKILL.mdが配置されること`,
+    );
+  }
+
+  assert.match(
+    result.stdout,
+    /機械的に阻止する手段は現状ありません/,
+    '逸脱の機械的阻止が無い旨を標準出力へ明示すること（AC-5）',
+  );
+});
+
+test('init --profile=不正な値: エラー終了する', (t) => {
+  const targetDir = path.join(mkScratch('init-invalid-profile-parent'), 'target');
+  t.after(() => fs.rmSync(path.dirname(targetDir), { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir, '--profile=turbo']);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--profile は standard または lightweight/);
+  assert.equal(fs.existsSync(targetDir), false, '不正なprofile指定時は何も書き込まれないこと');
+});
+
+test('init --profile=lightweight: 既存の.claude/skillsと内容衝突する場合はpre-flightで停止し、プロファイルを問わず非破壊方針を維持する（AC-9）', (t) => {
+  const targetDir = mkScratch('init-lightweight-conflict');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(targetDir, '.claude', 'skills', 'issue-start'), { recursive: true });
+  fs.writeFileSync(
+    path.join(targetDir, '.claude', 'skills', 'issue-start', 'SKILL.md'),
+    '# 別内容のSKILL.md（衝突させるため）\n',
+  );
+
+  const result = runCli(['init', targetDir, '--profile=lightweight']);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /導入先に既存の異なる内容のファイルがあるため展開を中断しました/);
+  assert.equal(fs.existsSync(path.join(targetDir, 'AGENTS.md')), false, '衝突時は他ファイルも一切書き込まれないこと');
+});
+
 test('init: 既存所有権記録にretainedとして残っていたエントリは、再実行後も消失しない（手動implementation-gateレビュー指摘: init-rerun-drops-prior-ownership-entries）', (t) => {
   const targetDir = mkScratch('init-retains-prior-ownership');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));

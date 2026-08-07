@@ -11,6 +11,8 @@
 
 schema_version: agent-skill-chain/config/v1
 
+profile: standard            # standard | lightweight（既定プロファイル。ADR-0023）
+
 coordination:
   backend: github            # github | local
 

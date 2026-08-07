@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { detectLegacyAssets, formatLegacyAssetWarning } from '../../src/lib/legacy-migration.js';
 
 function mkScratch(t: TestContext): string {
@@ -64,6 +65,32 @@ test('detectLegacyAssets: 現行方式のskill文書と対象外ファイルはf
   fs.writeFileSync(nestedPath, '00_要求定義\n');
 
   assert.deepEqual(detectLegacyAssets(targetDir), []);
+});
+
+// ADR-0023（Issue #503）障害・ロールバック考慮 失敗モード4: 新設の.claude/skills/配下5スキルは
+// LEGACY_SKILLS_DIRと物理パスが完全一致するが、旧世代トークンを含まないため誤検知しないこと。
+test('detectLegacyAssets: ADR-0023新設の.agent-skill-chain/templates/claude/skills/配下5スキルは旧世代トークンを含まず誤検知しない', () => {
+  const skillsSourceDir = path.resolve(
+    fileURLToPath(new URL('.', import.meta.url)),
+    '..',
+    '..',
+    '.agent-skill-chain',
+    'templates',
+    'claude',
+    'skills',
+  );
+  const skillDirs = fs
+    .readdirSync(skillsSourceDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
+  assert.deepEqual(skillDirs.sort(), ['cleanup', 'gate-review', 'issue-start', 'pr-merge', 'segment-work']);
+
+  for (const skillDir of skillDirs) {
+    const content = fs.readFileSync(path.join(skillsSourceDir, skillDir, 'SKILL.md'), 'utf8');
+    for (const marker of staleMarkers) {
+      assert.ok(!content.includes(marker), `${skillDir}/SKILL.md が旧世代トークン「${marker}」を含まないこと`);
+    }
+  }
 });
 
 test('formatLegacyAssetWarning: 旧skill文書のfindingとプロジェクト側の推奨対応を整形する', () => {

@@ -11,7 +11,7 @@
 | # | 不変条件 | 検査手段 |
 |---|---|---|
 | I1 追跡可能性 | 全変更は Issue に紐づき、要求→設計(ADR)→実装→レビューの証跡が追跡可能な形で残り、現在有効な決定を指し続ける。証跡の所在は、GitHub モードかつ `issue_sync` 有効時は Issue/PR 本文（成果物内容の正本）＋Check Run、それ以外（ローカルモード・`issue_sync` 無効）は Git 履歴（ADR-0021） | PR に Issue 参照必須、成果物存在チェック、`.agent-skill-chain/scripts/adr-lint.sh check`（CI） |
-| I2 セグメントゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する。**ローカルモードでは不変条件。GitHub モードは自動CI強制が無いためガイドライン**（実施要否は進行役が判断） | ローカルモード：`reviews/<gate>.yaml` + `.agent-skill-chain/schemas/gate-report.schema.yaml`（機械的に検査可能）。GitHub モード：機械的な自動強制なし。`.agent-skill-chain/scripts/gate-*.sh`（`gate review`・`gate publish`等）で進行役が任意実行できる手動レビューは引き続き利用可能 |
+| I2 セグメントゲート | 4 セグメント（①要求・要件 ②設計・実装計画 ③実装 ④独立検証）それぞれの完了時に、立証(conformance)+反証(falsification) の2観点レビューでゲートを通過する。**ローカルモードかつ `profile: lightweight` でない場合は不変条件。GitHub モード、または `profile: lightweight` の場合はガイドライン**（実施要否は進行役が判断）。GitHubモードがガイドラインになる根拠は自動CI強制の不在。`profile: lightweight` がガイドラインになる根拠は、強制層に加えセグメントゲートの機械的検査・記録機構（`reviews/<gate>.yaml` 等）も導入しない設計方針であること自体（モード軸とは独立）。`profile` の値は `.agent-skill-chain/config/agent-skill-chain.yaml` の `profile` フィールドでのみ機械的に判定する | ローカルモード：`reviews/<gate>.yaml` + `.agent-skill-chain/schemas/gate-report.schema.yaml`（機械的に検査可能）。GitHub モード：機械的な自動強制なし。`.agent-skill-chain/scripts/gate-*.sh`（`gate review`・`gate publish`等）で進行役が任意実行できる手動レビューは引き続き利用可能 |
 | I3 耐久性 | 作業状態は常に完全復元可能で、頭の中にしか無い状態を作らない。復元元は、GitHub モードかつ `issue_sync` 有効時は Issue/PR 本文＋Check Run（GitHub 側の永続化）を含み、それ以外（ローカルモード・`issue_sync` 無効）は Git（remote push 済み）（ADR-0021） | セグメント完了ごとの commit+push、`.agent-skill-chain/scripts/issue-resume.sh`、`durability.backend` 未設定環境では完全自走を拒否 |
 | I4 分離 | 1 Issue = 1 ブランチ = 1 worktree = 1 PR。main への変更は PR 経由のみ | branch protection、`.agent-skill-chain/ci/verify-branch-name.sh`・`.agent-skill-chain/ci/verify-worktree-path.sh` |
 | I5 進行役の純粋性 | 進行役が読み書きするのは調整状態（Issue・ラベル・PR review証跡・マージ・worktree ライフサイクル）のみ。成果物の著述・内容の取り込みは行わない | role capability・credential分離、protected-base実行attestation、main worktree clean チェック、ワーカー報告固定スキーマ（`.agent-skill-chain/schemas/worker-report.schema.yaml`） |
@@ -33,13 +33,6 @@
 ## 4 セグメント・4 ゲート
 
 固定4セグメント（`.agent-skill-chain/config/segments.yaml`）。追加・変更は破壊的変更とし ADR + 本ファイル改定 + `schema_version` 更新 + migration を要する。
-
-```
-Issue作成 → worktree作成 → SPECワーカーが最初のcheckpointをpush
-→ SPECワーカーがDraft PRを作成（Closes #<id>）
-→ 設計・実装・独立検証ワーカーが同一PRのheadブランチへcommit/push
-→ 検証ゲート通過後、Draft→Ready for Review → auto-mergeまたは人間マージ
-```
 
 | セグメント | 主成果物 | ゲート |
 |---|---|---|
@@ -111,7 +104,7 @@ Issue をまたいで永続する、システムの外部から観測できる�
 
 ## 設定
 
-初期値は `.agent-skill-chain/config/agent-skill-chain.yaml`（`schema_version: agent-skill-chain/config/v1`）が確定させる。項目追加は「①ハードコード不可の理由→②プロジェクト単位で変わる必要性→③スキーマ更新→④既定値定義→⑤migration定義→⑥必要ならADR」の手順を必須とする。スキーマ名前空間は `agent-skill-chain/{config,segments,state,gate-report,validation-report,worker-report,lease,integration,project-policy}/v1` に階層化する。
+初期値は `.agent-skill-chain/config/agent-skill-chain.yaml`（`schema_version: agent-skill-chain/config/v1`）が確定させる。項目追加はハードコード不可の理由・プロジェクト単位で変わる必要性の正当化を経て、スキーマ更新・既定値定義・migration定義（必要ならADR）を要する。スキーマ名前空間は `agent-skill-chain/{config,segments,state,gate-report,validation-report,worker-report,lease,integration,project-policy}/v1` に階層化する。
 
 ## プロジェクト固有ポリシー
 
@@ -139,7 +132,7 @@ docs/{GLOSSARY.md, adr/, system-spec/}
         verify-ac-coverage, verify-gate-report, verify-artifacts, verify-adr)
 ```
 
-root直下は AGENTS.md・CLAUDE.md・README.md・`docs/`・`.github/`・`.worktrees/` のみ（人間・他ツールとの衝突を避けるため）。それ以外の正本アセット一式は `.agent-skill-chain/` 配下に名前空間化する。`docs/` を対象外とするのは、`.agent-skill-chain/` 配下に置くと GLOSSARY.md・ADR が対象リポジトリ既存の `docs/` 資産と混ざらず安全な一方、`setup` が対象リポジトリ側の `docs/` と衝突しうるため——衝突時は非破壊のため上書きせず、日本語の理由付きエラーで停止する（`.agent-skill-chain/scripts/setup.sh` 実装）。
+root直下は AGENTS.md・CLAUDE.md・README.md・`docs/`・`.github/`・`.worktrees/`・`.claude/` のみ（人間・他ツールとの衝突を避けるため）。それ以外の正本アセット一式は `.agent-skill-chain/` 配下に名前空間化する。`docs/` を対象外とするのは、`.agent-skill-chain/` 配下に置くと GLOSSARY.md・ADR が対象リポジトリ既存の `docs/` 資産と混ざらず安全な一方、`setup` が対象リポジトリ側の `docs/` と衝突しうるため——衝突時は非破壊のため上書きせず、日本語の理由付きエラーで停止する（`.agent-skill-chain/scripts/setup.sh` 実装）。
 
 ## 用語
 

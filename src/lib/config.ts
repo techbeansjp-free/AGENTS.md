@@ -6,6 +6,9 @@ import type { WorkerConfig } from './worker-selection.js';
 
 export interface AgentSkillChainConfig {
   schema_version: string;
+  // ADR-0023。軽量プロファイルかどうかを機械的に判定する唯一の正本。後方互換な任意項目であり、
+  // 本フィールドを持たない既存の設定ファイルは standard として扱う（未設定＝standard相当）。
+  profile?: 'standard' | 'lightweight';
   coordination: { backend: 'github' | 'local' };
   durability: { backend: 'remote' | 'local_mirror' };
   autonomy: { default: 'gated' | 'full' };
@@ -53,6 +56,9 @@ export interface AgentSkillChainConfig {
     github_target: string;
     claude_agents_source?: string;
     claude_agents_target?: string;
+    // ADR-0023。claude_agents_source/claude_agents_targetと同形式の任意項目（Issue #503）。
+    claude_skills_source?: string;
+    claude_skills_target?: string;
     verify_sync: boolean;
   };
   checks: { spec: string; design: string; implementation: string; validation: string };

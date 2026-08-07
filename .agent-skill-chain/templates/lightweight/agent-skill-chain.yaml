@@ -1,0 +1,66 @@
+# agent-skill-chain 設定初期値（軽量プロファイル、profile: lightweight）
+# 正本: AGENTS.md §設定、docs/adr/ADR-0023-agent-skill-chain-as-skill-feasibility.md
+#
+# 軽量プロファイル選択時（`init --profile=lightweight`）に配布される既定値。
+# 常時規律モデル（既定プロファイル）向けの `.agent-skill-chain/config/agent-skill-chain.yaml` とは
+# 別ファイルであり、本リポジトリ自身の運用に特化した値（`worker.segment_overrides.implementation`
+# のcodex指定・`merge.autonomous: true`等）は継承しない。コンシューマの手動運用を前提とした
+# 妥当な既定値のみを持つ。
+
+schema_version: agent-skill-chain/config/v1
+
+profile: lightweight            # 軽量プロファイルかどうかを機械的に判定する唯一の正本
+
+coordination:
+  backend: local                # 軽量プロファイルの既定はlocal（github | local）
+
+durability:
+  backend: local_mirror          # remote | local_mirror
+
+autonomy:
+  default: gated                 # gated | full
+
+risk:
+  default: unclassified          # unclassified | normal | high
+
+review:
+  standard: {reviewer_count: 1, modes: [conformance, falsification]}
+  strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
+
+worker:
+  adapter: human                 # claude | codex | human（軽量プロファイルはコンシューマの手動運用が既定）
+
+worktree:
+  root: .worktrees
+  path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
+  timestamp: {source: issue_created_at, format: "%Y%m%d_%H%M%S", timezone: Asia/Tokyo}
+  slug_max_length: 48
+  immutable_path: true
+
+branch:
+  pattern: "{type}/{issue_id}-{slug}"
+
+issue:
+  allowed_types: [feature, bugfix, hotfix, refactor, docs, process, chore]
+
+wip:
+  limit: 3
+  count_by: active_writer_lease
+
+lease:
+  ttl_seconds: 3600
+  renewal_interval_seconds: 900
+
+bdd:
+  profile: standard              # standard | strict
+
+templates:
+  github_source: .agent-skill-chain/templates/github/.github
+  github_target: .github
+  verify_sync: true
+
+checks:
+  spec: agent-skill-chain/spec-gate
+  design: agent-skill-chain/design-gate
+  implementation: agent-skill-chain/implementation-gate
+  validation: agent-skill-chain/validation-gate
