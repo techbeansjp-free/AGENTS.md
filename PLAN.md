@@ -1,0 +1,20 @@
+# PLAN: pr merge が base branch の最新性を保証せず、--admin 常用運用が strict_required_status_checks_policy を事実上バイパスする
+
+- Issue: `ISSUE-493`
+- 対応する DESIGN: `DESIGN.md`
+
+## 実装順序・変更単位
+
+| # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
+|---|---|---|---|---|
+| 1 | config スキーマ・型定義への `merge.auto_update_branch` 追加 | `.agent-skill-chain/schemas/config.schema.yaml` の `merge` オブジェクトへ任意項目 `auto_update_branch: boolean` を追加（`required` は `autonomous` のみのまま維持し後方互換を保つ）。`src/lib/config.ts` の `AgentSkillChainConfig['merge']` 型・`.agent-skill-chain/config/agent-skill-chain.yaml` の日本語コメントを更新する | AC-1（既定挙動の根拠） | なし |
+| 2 | `src/lib/pr-freshness.ts` 新設（対象PR解決・最新性チェック） | `resolveMergeTarget()`・`checkFreshness()`（`gh pr view --json ...mergeStateStatus` 呼び出し、`UNKNOWN` ポーリング、`gh pr view` 失敗検知）を実装する | AC-1, AC-3, AC-4 | #1 |
+| 3 | `src/lib/pr-freshness.ts` へ最新化ロジック追加 | `attemptUpdateBranch()`（`gh api -X PUT .../pulls/{n}/update-branch` + 再確認）を実装する。`config.merge.auto_update_branch` が true の場合のみ `merge()` から呼ばれる | AC-2 | #2 |
+| 4 | `src/lib/pr-freshness.ts` へ失敗分類器追加 | `classifyMergeFailure(stderr)` を実装する。既知の「明らかに無関係」パターン（権限不足・既にマージ済み・既にクローズ済み等を示す `gh` の標準エラー文言）のみを許可 list 化し、それ以外は `ambiguous` を返す | AC-6, AC-7 | なし |
+| 5 | `src/commands/pr.ts` の `merge()` 統合 | `merge.autonomous` 確認の後・`gh(['pr','merge',...args])` 呼び出しの前に `resolveMergeTarget()` → `checkFreshness()`（必要なら `attemptUpdateBranch()`）を呼び、`behind`/`check_failed`/最新化失敗時は日本語エラーメッセージで中断する。`gh pr merge` 失敗時は `classifyMergeFailure()` の結果に応じてメッセージを補完する。`MERGE_USAGE` の説明文を更新する | AC-1〜AC-7 | #2, #3, #4 |
+| 6 | `test/helpers/gh-stub.ts` 拡張 | `gh pr view` の `mergeStateStatus`・`baseRefName` フィールド返却、`state` を明示制御するテスト用フラグ、`gh api -X PUT .../update-branch` の成功/失敗を制御するスタブ状態を追加する | AC-1〜AC-7（テスト実行の前提） | なし |
+| 7 | `test/integration/pr-merge.test.ts` へ受入テスト追加 | AC-1（behind時は既定で中断）・AC-2（最新化失敗で中断）・AC-3（`--admin`付きでも迂回不可）・AC-4（チェック失敗で中断）・AC-5（fresh時は既存挙動を維持）・AC-6（明らかに無関係な失敗は既存出力を維持）・AC-7（TOCTOU疑いは日本語メッセージ付きで非0終了）の各ケースを追加する | AC-1〜AC-7 | #5, #6 |
+
+## 実装順序の見直しについて
+
+実装中に作業順序（上記の変更単位の並び）のみを見直す場合は、本ファイルのみを更新すればよい。設計要素・責務・境界そのものを変更する場合は、DESIGN.md の更新（および設計ゲートの再通過）が必要になる点に注意する。
