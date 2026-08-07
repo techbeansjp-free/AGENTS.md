@@ -20,11 +20,15 @@ GitHub ruleset側で `strict_required_status_checks_policy: true` を設定し�
 
 複数PRが並行してマージされる本リポジトリの実運用では、base branchに対して古いPRブランチがマージされると、直後のコンフリクト・後続PRのCI失敗・mainの一時的な不整合を招く。`--admin` 常用運用がある限り、GitHub ruleset側の設定だけでは実害を防げず、CLIツール側（`pr merge` コマンド）でのチェックが唯一の実効的な防御線になる。本Issueは、この防御線を `pr merge` コマンド自体に追加することを目的とする。
 
+なお、この防御線は「最新性の確認」と「`gh pr merge` の実行」という2段階の処理で構成されるため、確認から実行までの間に別セッションが `main` へ新規マージを行うと、確認時点では最新だった対象PRが実行時点では最新でなくなる TOCTOU（Time-of-check to time-of-use）競合が理論上残る。GitHub APIには「最新性確認とマージ実行を単一の不可分操作にする」手段が無いため、この競合を完全に排除することはできない。本Issueが規定する「保証」は、この残存リスクを許容したうえでの多段防御（確認→最新化→再確認、および実行結果の安全側検知）を意味する。残存リスクの扱いは「未決事項」に明記する。
+
 ## 要求 → 要件 → 受入条件
 
 ### 要求
 
 進行役が `agent-skill-chain pr merge` を実行してPRをマージする際、対象PRのhead branchがbase branch（`main`）の最新コミットに対して最新でない状態のままマージが成立しないことを保証してほしい。`--admin` 引数の有無に関わらず、この保証は維持されなければならない。
+
+ここでいう「保証」は、確認・最新化・再確認・実行結果検知の各段階を組み合わせたベストエフォート的な多段防御を指す。GitHub API側に最新性確認とマージ実行を単一の不可分操作にする手段が存在しない以上、確認から `gh pr merge` 実行までの間隔に発生する残存リスク（TOCTOU競合、「未決事項」参照）を技術的に完全排除することまでは求めない。その代わり、当該残存リスクが顕在化してマージが実行された場合には、これを検知できないまま見過ごさず安全側エラーとして扱うことを要求する（要件7・AC-7）。
 
 ### 要件
 
@@ -34,6 +38,7 @@ GitHub ruleset側で `strict_required_status_checks_policy: true` を設定し�
 - 要件4: このチェックは `--admin` を含むどの `gh pr merge` オプションが渡された場合でも迂回できない。`--admin` はGitHubブランチ保護のstatus check必須化をバイパスするための引数であり、本チェックはCLIツール側で独立に強制する。
 - 要件5: 最新性の確認処理自体が失敗した場合（GitHub APIエラー等）、マージを実行せず日本語エラーメッセージで停止する。
 - 要件6: 対象PRのhead branchが確認時点（または最新化後）でbase branchに対して最新である場合は、既存の `gh pr merge` 呼び出しおよびマージ成功後の `syncMainWorktree()` によるローカルmain同期処理を、本Issue対応前と同一の挙動で実行する（回帰させない）。
+- 要件7: 最新性確認（要件1）から `gh pr merge` 実行までの間隔に発生するTOCTOU競合（「未決事項」参照）を技術的に完全排除することは求めないが、この競合により確認通過後の `gh pr merge` 自体がGitHub側で失敗した場合（例: マージ実行時点でのコンフリクト・必須チェック未達等）、その失敗を検知し、マージが成立しなかったことを示す終了コード1以上・日本語エラーメッセージで停止しなければならない。確認通過後の `gh pr merge` 失敗を成功として扱ってはならない。
 
 ### 受入条件（Acceptance Criteria）
 
@@ -78,6 +83,25 @@ GitHub ruleset側で `strict_required_status_checks_policy: true` を設定し�
 - When: `agent-skill-chain pr merge`（対象PR番号とオプション引数を伴う）を実行する
 - Then: `gh pr merge` の終了コード・標準エラー出力がそのまま返され、`syncMainWorktree()` は呼び出されない（本Issue対応前の既存挙動を維持する）
 - 検証方法見込み: `automated`
+
+#### AC-7: 確認通過後にTOCTOU競合でマージが失敗した場合も安全側エラーとして扱う
+
+- Given: 最新性チェックを通過した（behind=0と確認された、または最新化後に再確認済みの）PRに対して、確認から `gh pr merge` 実行までの間に別のマージが `main` へ成立し、その結果 `gh pr merge` 自体がGitHub側で失敗する
+- When: `agent-skill-chain pr merge`（対象PR番号とオプション引数を伴う）を実行する
+- Then: `gh pr merge` の失敗が検知され、終了コード1以上・日本語エラーメッセージで停止する。この失敗は成功として扱われず、`syncMainWorktree()` は呼び出されない
+- 検証方法見込み: `automated`
+
+## 用語
+
+- **head branch / base branch**: GitHub PRにおいて、マージ元のブランチ（変更を含む側）を head branch、マージ先のブランチ（本Issueでは `main`）を base branch と呼ぶ。
+- **ahead/behind**: あるブランチが基準ブランチに対して、基準ブランチに存在せず自身にだけ存在するコミット数を ahead、自身に存在せず基準ブランチにだけ存在するコミット数を behind と呼ぶ。本SPECでの「最新（behind=0）」は、対象PRのhead branchがbase branchの最新コミットに対してbehind=0であることを指す。
+- **strict_required_status_checks_policy**: GitHub ruleset（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json` 等）における、PRのhead branchがbase branchの最新コミットに対して必須status checkを通過済みであることをマージ条件として要求する設定。head branchがbehind状態のままではマージを許可しない。
+- **TOCTOU（Time-of-check to time-of-use）競合**: 状態を確認した時点（time-of-check）と、その確認結果に基づき操作を実行する時点（time-of-use）の間に状態が変化し、確認結果と実行時点の実際の状態が食い違う競合状態。本SPECでは、最新性確認と `gh pr merge` 実行の間に別セッションが `main` へ新規マージすることで発生し得る。
+
+## 未決事項
+
+- 「目的・背景」および「要求」に記載の通り、最新性確認と `gh pr merge` 実行は不可分な単一操作にできないため、確認から実行までの間隔に発生するTOCTOU競合を技術的に完全に排除することはできない。本SPECはこの残存リスクを許容したうえで、(1) 確認から実行までの間隔を要求として明示的に規定しない範囲で実装が可能な限り短くすること、(2) 競合が顕在化して `gh pr merge` が失敗した場合はこれを安全側エラーとして検知すること（要件7・AC-7）、の2点を多段防御として要求する。base branchへの書き込みを確認から実行完了まで単一操作として不可分化する仕組みはGitHub API側に存在せず、本Issueのスコープでは採用しない。
+- 確認から実行までの間隔をどこまで短縮するか（例: 確認直後に即座に `gh pr merge` を呼ぶ、リトライ回数の上限を設けるか等）の具体的な実現方法は、要求としての結論を出さず設計セグメントで確定する。
 
 ## スコープ外
 
