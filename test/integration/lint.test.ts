@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { walkTextFiles } from '../../src/lib/scan.js';
+import { isInSingleLineComment } from '../../src/commands/lint.js';
 
 // lint vocab / lint references / lint adr check の3サブコマンドを、bin/agents-md.js（ビルド後の
 // 実体）に対する subprocess 実行で検証する。createTmpRepo は .agent-skill-chain/ 資産一式
@@ -566,40 +568,112 @@ test('lint references: 実物リポジトリのデフォルト対象（src/ を�
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('src/配下: 禁止された見出し位置参照文字列（<文書名>.md<助詞・記号>設計要素<N>等・宙吊りの手順<N>番号参照）を含まない（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止）', () => {
+// 文書名（.md拡張子を持つ語）に、助詞・記号を挟んでもよい形で「設計要素」「手順」等の
+// 見出し的な語＋番号（半角・全角）が続くパターンを広く捕捉する。過度な一般語誤検知を避けるため、
+// 「見出し的な語＋番号」への着地を要求する。
+const headingRefPattern = /\.md\s*(?:の|または|／|\/|-|:|：)?\s*(?:設計要素|手順)\s*[0-9０-９]/g;
+// 文書名を伴わない「手順N」単独の宙吊り参照（直後に数字が続く「手順N」形式に限定し、
+// 「手順」という単語の他の正当な使用法を誤検知しないようにする）。
+const danglingStepRefPattern = /手順[0-9０-９]/g;
+
+interface CommentReferenceViolation {
+  relPath: string;
+  lineNo: number;
+  label: string;
+  matched: string;
+}
+
+/**
+ * Issue #510: root配下の対象ファイル（walkTextFiles収集）について、禁止された見出し位置参照
+ * 文字列（headingRefPattern・danglingStepRefPattern）が**ソースコードコメント内**に出現する
+ * 箇所のみを収集する。AGENTS.md「参照・コメントの陳腐化防止」が禁止するのはソースコードコメント
+ * における見出し位置参照であり、コメント以外（文字列リテラル・実行時に利用者へ表示される
+ * メッセージ等）での同じ文字列出現は規約違反ではないため、各マッチ位置が単一行コメント内かどうかを
+ * `src/commands/lint.ts` が既に持つ `isInSingleLineComment`（`commentMarkerFor`・
+ * `findUnquotedCommentMarkerIndex` を内部で使用）で判定し、コメント外のマッチは除外する。
+ * 複数行コメント（`/* ... *\/`）内での違反は本判定の対象外（`isInSingleLineComment` 自体が
+ * 単一行コメントのみを扱うため）。
+ */
+function findCommentReferenceViolations(root: string, files: string[]): CommentReferenceViolation[] {
+  const violations: CommentReferenceViolation[] = [];
+  for (const file of files) {
+    const content = fs.readFileSync(file, 'utf8');
+    const relPath = path.relative(root, file);
+    const ext = path.extname(file);
+    const lines = content.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      for (const [pattern, label] of [
+        [headingRefPattern, '見出し位置参照文字列'],
+        [danglingStepRefPattern, '宙吊りの手順番号参照'],
+      ] as const) {
+        pattern.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(line)) !== null) {
+          if (isInSingleLineComment(line, match.index, ext)) {
+            violations.push({ relPath, lineNo: i + 1, label, matched: match[0] });
+          }
+          if (match[0].length === 0) pattern.lastIndex++;
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+test('src/配下: 禁止された見出し位置参照文字列（<文書名>.md<助詞・記号>設計要素<N>等・宙吊りの手順<N>番号参照）をソースコードコメントに含まない（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止、Issue #510: 検査対象をコメント部分のみへ限定）', () => {
   // Given/When: このリポジトリ自身の src/ 配下の全対象ファイル（walkTextFiles が収集する
-  // .md/.yaml/.yml/.sh/.json/.ts）を直接読み取る。src/commands/upgrade.ts 単体ではなく
-  // src/ 全体を対象にすることで、同種の混入が他ファイルへ再発しても検出できるようにする。
+  // .md/.yaml/.yml/.sh/.json/.ts）を対象に、コメント部分のみへ検査範囲を絞ってスキャンする。
+  // src/commands/upgrade.ts 単体ではなく src/ 全体を対象にすることで、同種の混入が他ファイルへ
+  // 再発しても検出できるようにする。
   //
   // 注記: `lint references` の禁止参照検出パターン（見出し形式・file.ext:行番号形式の2種のみ）は、
   // 文書名（`.md`拡張子）の直後に助詞・記号を挟んでもよい形で「設計要素」「手順」等の見出し的な語
   // ＋数字が続く形式や、対応する番号付きリストの定義を伴わずに残存する番号のみの宙吊り参照を検出できない
   // （検出パターン自体の拡張は本テストのスコープ外）。そのため `lint references` の終了コードに
-  // 依存せず、かつて混入していた具体的な違反パターンがファイル内容に存在しないことを直接assertする。
+  // 依存せず、かつて混入していた具体的な違反パターンがコメント内に存在しないことを直接assertする。
   const srcRoot = path.join(realRepoRoot, 'src');
   const files = walkTextFiles([srcRoot]);
   assert.ok(files.length > 0, 'src/ 配下の対象ファイルが1件以上存在すること');
 
-  // 文書名（.md拡張子を持つ語）に、助詞・記号を挟んでもよい形で「設計要素」「手順」等の
-  // 見出し的な語＋番号（半角・全角）が続くパターンを広く捕捉する。過度な一般語誤検知を避けるため、
-  // 「見出し的な語＋番号」への着地を要求する。
-  const headingRefPattern = /\.md\s*(?:の|または|／|\/|-|:|：)?\s*(?:設計要素|手順)\s*[0-9０-９]/;
-  // 文書名を伴わない「手順N」単独の宙吊り参照（直後に数字が続く「手順N」形式に限定し、
-  // 「手順」という単語の他の正当な使用法を誤検知しないようにする）。
-  const danglingStepRefPattern = /手順[0-9０-９]/;
+  const violations = findCommentReferenceViolations(realRepoRoot, files);
 
-  for (const file of files) {
-    const content = fs.readFileSync(file, 'utf8');
-    const relPath = path.relative(realRepoRoot, file);
+  // Then: 「<文書名>.md<助詞・記号>設計要素<N>」等の見出し位置参照文字列、および「手順」＋数字
+  // という番号付き手順への宙吊り参照のいずれも、コメント内に残存していない
+  // （Issue #507で `DESIGN.md 設計要素7` → `Issue #503` 等へ、「手順1」「手順2」→処理内容を
+  // 直接説明する自己完結した文言へ是正済み）。
+  assert.deepEqual(
+    violations,
+    [],
+    violations
+      .map((v) => `${v.relPath}:${v.lineNo} のコメントに${v.label}が残存している: ${JSON.stringify(v.matched)}`)
+      .join('\n'),
+  );
+});
 
-    // Then: 「<文書名>.md<助詞・記号>設計要素<N>」等の見出し位置参照文字列を含まない
-    // （Issue #507で `DESIGN.md 設計要素7` → `Issue #503` 等へ是正済み）。
-    assert.doesNotMatch(content, headingRefPattern, `${relPath} に見出し位置参照文字列が残存している`);
+test('src/配下: コメント以外（文字列リテラル等）の「手順1」等の文字列は誤検知しない（Issue #510回帰防止）', () => {
+  // Given: 「手順1」を含むが、コメントではなく文字列リテラル（実行時に利用者へ表示されうる
+  // 案内メッセージを模したもの）としてのみ出現する合成ファイルと、
+  // 同じ文字列を単一行コメント内に含む合成ファイルを用意する。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-comment-scope-'));
+  try {
+    const nonCommentFile = path.join(tmpRoot, 'non-comment.ts');
+    fs.writeFileSync(nonCommentFile, "export const guide = '手順1: 対象ディレクトリを確認してください';\n");
 
-    // Then: 「手順」＋数字という番号付き手順への宙吊り参照も含まない
-    // （Issue #507是正ラウンド2で「手順1」「手順2」→処理内容を直接説明する
-    // 自己完結した文言へ是正済み）。
-    assert.doesNotMatch(content, danglingStepRefPattern, `${relPath} に宙吊りの手順番号参照が残存している`);
+    const commentFile = path.join(tmpRoot, 'comment.ts');
+    fs.writeFileSync(commentFile, '// DESIGN.md 設計要素7を参照。手順1を実行する。\nexport const noop = true;\n');
+
+    // When/Then: 文字列リテラルのみに出現する場合は違反として検出しない。
+    const nonCommentViolations = findCommentReferenceViolations(tmpRoot, [nonCommentFile]);
+    assert.deepEqual(nonCommentViolations, [], 'コメント外の「手順1」を誤って検出している');
+
+    // When/Then: 単一行コメント内に出現する場合は違反として検出する
+    // （検出ロジック自体がコメント判定を素通ししていないことの確認）。
+    const commentViolations = findCommentReferenceViolations(tmpRoot, [commentFile]);
+    assert.ok(commentViolations.length > 0, 'コメント内の見出し位置参照文字列を検出できていない');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
 
