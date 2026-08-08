@@ -84,7 +84,7 @@
 
 - 設計要素1・2は独立した文書改定（相互に参照しない実体だが、設計要素1から除去した手続き記述の内容は設計要素2へ転記する）。
 - 設計要素5は設計要素2・3・4を配布元として参照する。
-- 設計要素6・7は設計要素3・5に依存する。
+- 設計要素6は設計要素3・5に依存する。設計要素7は設計要素3・5に加え、ケースC(ii)（パース不能時の復旧）で設計要素4の安全側既定テンプレートを直接参照するため設計要素4にも依存する。
 - 設計要素8は設計要素3の値を記述対象とする（独立更新、依存先からの読み取りはドキュメントとして行うのみ）。
 - 設計要素9は設計要素2に依存する（生成済みSKILL.mdの内容を読む）。
 
@@ -97,6 +97,7 @@ graph TD
   D2 --> D5
   D5 --> D6["設計要素6: init拡張"]
   D5 --> D7["設計要素7: upgrade拡張"]
+  D4 --> D7
   D3 --> D6
   D3 --> D7
   D3 --> D8["設計要素8: GLOSSARY.md/CONFIGURATION.md"]
@@ -106,7 +107,7 @@ graph TD
 ### 図示要否の判断
 
 - 判断: `要`
-- 根拠: 責務境界となるコンポーネントが9個（3つ以上）、依存関係が11本（3つ以上）存在するため、図示要否の基準に該当する。上記Mermaid `graph TD` で依存の向きを示した。
+- 根拠: 責務境界となるコンポーネントが9個（3つ以上）、依存関係が12本（3つ以上）存在するため、図示要否の基準に該当する。上記Mermaid `graph TD` で依存の向きを示した。
 
 ## 設計要素ごとの詳細
 
@@ -203,7 +204,11 @@ templates:
 - `NAMESPACED_ENTRIES` ループ: `config` エントリのみディレクトリ単位コピーを行わず、ファイル単位へ分解する——`roles.yaml`・`segments.yaml` は従来どおり `packageRoot()/.agent-skill-chain/config/` から、`agent-skill-chain.yaml` は `profile === 'lightweight'` のとき `packageRoot()/.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml` から、それ以外は従来どおり `packageRoot()/.agent-skill-chain/config/agent-skill-chain.yaml` からマッピングする（他の `standards`・`templates`・`schemas`・`adapters`・`scripts`・`ci`・`hooks` は従来どおりディレクトリ単位のまま変更しない）。
 - `resolveTemplateMappings` の呼び出しから `claude_agents` に加え `claude_skills` のマッピングを追加する（プロファイルに関係なく常に追加——要件3が「プロファイルを問わず」配置を求めるため）。
 
-反証観点（既存所有権記録・削除候補判定の整合性）: `init`（`writeOwnershipRecord`）と `upgrade`（`resolveStaleAssets`）は同一の `collectManagedAssetMappings` を呼ぶ構造（Issue #492由来）を維持するため、`config` のファイル単位分解後もこの一致は保たれる。ただし `upgrade` は導入時に選んだprofileを維持する必要があるため（要件3）、`upgrade.ts` は呼び出し時に対象の既存 `profile` 値（後述、設計要素7）を渡す。所有権記録の粒度変更（`config` のファイル単位分解）と、config配下ディレクトリの列挙がコード上ハードコードである点の実質的なリスクは、実装セグメントで追加した自動回帰テスト（`test/unit/config.test.ts`・`test/integration/upgrade.test.ts` 等、`profile` 分岐を含めnpm test全件pass）でカバーされている。
+反証観点（既存所有権記録・削除候補判定の整合性）: `init`（`writeOwnershipRecord`）と `upgrade`（`resolveStaleAssets`）は同一の `collectManagedAssetMappings` を呼ぶ構造（Issue #492由来）を維持するため、`config` のファイル単位分解後もこの一致は保たれる。ただし `upgrade` は導入時に選んだprofileを維持する必要があるため（要件3）、`upgrade.ts` は呼び出し時に対象の既存 `profile` 値（後述、設計要素7）を渡す。所有権記録の粒度変更（`config` のファイル単位分解）と、config配下ディレクトリの列挙がコード上ハードコードである点の実質的なリスクについては、実装セグメントにおいて対応する自動回帰テスト（`test/unit/config.test.ts`・`test/integration/upgrade.test.ts` 等、`profile` 分岐を含めnpm test全件pass）を追加すること。design-gate通過時点では実装セグメントは未着手であり、この回帰テストはまだ存在しない。
+
+**移行方針（既存所有権記録との互換性）**: 本Issue適用前から `init`/`upgrade` 済みの既存プロジェクトが持つ所有権記録（`.owned-files.json`）との互換性について、実際のコード（`init.ts`・`upgrade.ts` の `ownedFiles[toOwnershipKey(...)] = digestOfFile(r.path)`）を確認したところ、記録上のキーは `collectManagedAssetMappings` が返す `mappings` 配列のエントリ単位ではなく、`copyTreeFailOnConflict`/`copyTreeMirror` が実際に書き込んだ個々のファイルパスから導出される。したがって `config` ディレクトリは本Issue適用前から一貫してファイル単位（`config/roles.yaml`・`config/segments.yaml`・`config/agent-skill-chain.yaml`）で記録されており、本Issueが導入する `agent-skill-chain.yaml` の配布元切替（profile対応）は記録上のキー形式そのものを変更しない。また `resolveStaleAssets`（`classifyCandidate`）は候補パスが通常ファイルでない場合を `TypeChanged` として削除せず `content-changed` で保持する安全側分岐を既に持つため、仮にキー粒度が異なる旧記録が混在しても即座に削除候補として処理されることはない（Issue #492由来の既存の安全側動作、本Issueは変更しない）。
+
+このコード確認結果を踏まえてもなお、設計上の要求として「新旧キー形式が混在する所有権記録に対して、新形式移行時に誤って削除候補と判定しない」ことを明示的に定める。具体的な移行ロジックの詳細（新旧キー混在状態を模した所有権記録を入力とし、`resolveStaleAssets` が実在する管理対象ファイルを削除候補と誤判定しないことを検証する回帰テストの構成を含む）は、実装セグメントが `src/lib/asset-manifest.ts`・`resolveStaleAssets` の実装と共に決定してよい。
 
 ### 設計要素6: init拡張
 
@@ -224,18 +229,30 @@ templates:
 
 ### 設計要素7: upgrade拡張
 
-`src/commands/upgrade.ts` に、`config/agent-skill-chain.yaml` の `profile` フィールドのみを対象とする保存・復元ロジックを追加する（他の全フィールドは既存どおり `copyTreeMirror` によって配布元の値へ復元される、本Issueが変更しない既存の挙動——「スコープ外」節・forbidden制約により、本Issueの対象は新設フィールド `profile` の保存のみとする）。
+`src/commands/upgrade.ts` に、`config/agent-skill-chain.yaml` の復元ロジックを追加する。`agent-skill-chain.yaml` エントリの最終的な内容の決定方法は、既存 `profile` 値の判定結果（ケースA・B・C、後述）によって次のとおり分岐する。
 
-1. 既存の `collectManagedAssetMappings` 呼び出し前に、対象の現在の `agent-skill-chain.yaml` を読み既存 `profile` 値を取得する（`loadConfig` 相当）。取得結果は次の3ケースに機械的に区別し、いずれの場合も最終的な値は `standard` にフォールバックするが、警告発火の要否はケースにより異なる。
+- **ケースA・B（正常系。`profile` を正常に判定できた、または未設定でstandardとみなせる）**: 判定した `profile` に対応する配布元テンプレート全体を、既存の `collectManagedAssetMappings`（設計要素5）による配布元選択＋既存の `copyTreeMirror` で復元する（`profile` 以外のフィールドも配布元の最新値へ復元される。これは本Issue範囲外の既存の `upgrade` 挙動そのままであり変更しない）。`.claude/skills/`（設計要素5の `claude_skills` マッピング）を含む他の全エントリも同じ一般ミラー処理で同期される（要件3が求める「プロファイルを問わず同期」）。
+- **ケースC（異常系。`profile` を正常に判定できない）**: 判定不能な状態からの復旧であり、一般ミラー処理（`preservedProfile` に基づく配布元選択）をこのファイルにだけ適用せず、後述の専用ロジックが書き込んだ内容を最終結果とする（本Issueが新設する範囲）。
+
+1. 既存の `collectManagedAssetMappings` 呼び出し前に、対象の現在の `agent-skill-chain.yaml` を読み既存 `profile` 値を取得する（`loadConfig` 相当）。取得結果は次の3ケースに機械的に区別し、いずれの場合も最終的な `profile` は `standard` にフォールバックするが、警告発火の要否・復旧処理の内容はケースにより異なる。
    - **ケースA（ファイルが存在しない）**: 新規導入相当であり `standard` が正しい既定値である。警告は出さない。
    - **ケースB（ファイルは存在するが `profile` フィールドが単純に存在しない）**: 本機能導入前から存在するレガシー設定ファイルという正常な後方互換ケースであり（設計要素3の後方互換ルールそのもの）、`standard` として扱う想定内の挙動である。警告は出さない。
-   - **ケースC（異常値）**: ファイルは存在するがパース不能、または `profile` フィールドは存在するがその値が `standard`・`lightweight` のいずれでもない不正な値である場合。破損・手動編集ミス等の異常ケースであり、`standard` へフォールバックしたうえで標準エラー出力へ次の趣旨の日本語警告メッセージを出す。「既存の `agent-skill-chain.yaml` の `profile` 設定を読み取れなかった（または不正な値だった）ため、既定値 `standard` として扱います。既に `profile: lightweight` を選択している場合は、`upgrade` 完了後に対象ファイルの `profile` フィールドを確認してください。」ケースCの復旧処理は対象ファイルの状態に応じて2通りに分かれる。(i) ファイル自体はYAMLとしてパース可能だが `profile` フィールドの値のみが既知enum外の不正値である場合、`profile` フィールドのみをその場修復し、他の全フィールド（`templates.*` 等）は既存の値を保持する。(ii) ファイル自体がYAMLとしてパース不能、またはパース結果がオブジェクトでない場合、`profile` フィールド単位の部分修復ができないため、対象ファイル全体をパッケージ同梱の標準プロファイル既定config（`.agent-skill-chain/config/agent-skill-chain.yaml`——本リポジトリ自身が使う `worker.segment_overrides.implementation: codex`・`merge.autonomous: true` 等の常時規律モデル固有設定を含む、通常の配布用既定ファイルそのもの）で置換する。(ii)では `profile` だけでなく他の全フィールドも標準既定値へ戻るが、これは意図された既知の制約である（パース不能なファイルからは元の設定意図をフィールド単位で復元できないため）。`profile` と他フィールドが常に一貫してstandardへ揃うため、「`profile` だけstandardになり他フィールドは軽量プロファイル既定値のまま残る」という危険な不整合は生じない。
+   - **ケースC（異常値）**: ファイルは存在するがパース不能、または `profile` フィールドは存在するがその値が `standard`・`lightweight` のいずれでもない不正な値である場合。破損・手動編集ミス等の異常ケースであり、最終的な `profile` は `standard` へフォールバックしたうえで標準エラー出力へ次の趣旨の日本語警告メッセージを出す。「既存の `agent-skill-chain.yaml` の設定を読み取れなかった（または `profile` の値が不正だった）ため、`profile` を含む設定内容を安全側の既定値へ戻しました。既に `profile: lightweight` を選択している場合は、`upgrade` 完了後に対象ファイルの内容を確認してください。」
+
+   **ケースCの復旧処理（最終結果を直接書き込む。一般ミラー処理には委ねない）**は、対象ファイルの状態に応じて次の2通りの専用ロジックで行い、その書き込み結果をそのまま最終内容とする（AGENTS.md I8「安全側ラチェット」——復元不能な場合はより安全側の値を採用する原則を、`profile` フィールドだけでなく復旧される他フィールドの値にも一貫して適用する）。
+
+   (i) ファイル自体はYAMLとしてパース可能だが `profile` フィールドの値のみが既知enum外の不正値である場合、`profile` フィールドのみをその場 `standard` へ修復し、他の全フィールド（`templates.*` 等）は既存の値をそのまま保持する（部分修復。他フィールドは異常値ではなく利用者が意図的に設定した値である可能性が高く、`profile` 単体の異常だけで巻き戻す理由が無いため）。
+
+   (ii) ファイル自体がYAMLとしてパース不能、またはパース結果がオブジェクトでない場合、`profile` フィールド単位の部分修復ができない。この場合、対象ファイル全体を**パッケージ同梱の標準プロファイル既定config（`.agent-skill-chain/config/agent-skill-chain.yaml`。本リポジトリ自身が使う `worker.segment_overrides.implementation: codex`・`merge.autonomous: true` 等の常時規律モデル固有の危険な自動化設定を含む）では置換しない**。代わりに、設計要素4が新設する軽量プロファイル向けの安全な既定テンプレート（`.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`——`merge` 節・`worker.segment_overrides` 等の危険な自動化設定を持たない、コンシューマの手動運用を前提とした安全な既定値のみのファイル）の内容で対象ファイル全体を置換したうえで、書き込む内容の `profile` フィールドのみを `standard`（本ケースの最終フォールバック値、上記警告文言と整合）へ明示的に上書きする（同テンプレート自体は `profile: lightweight` を持つため、そのままでは本ケースのフォールバック方針と矛盾するための上書きである）。これにより、パース不能という「元の設定意図を復元できない」状態からの復旧が、危険な自動化設定を一切含まない安全側の値のみで構成されるようになり、軽量プロファイル利用者の設定破損が `merge.autonomous: true` 等の黙った有効化につながる経路（AGENTS.md I8違反）を断つ。
+
+   (i)(ii)いずれの場合も、復旧後の `profile` は必ず `standard` に揃う——(i)は他フィールドを保持したまま `profile` だけを訂正し、(ii)は安全な既定テンプレート全体を採用したうえで `profile` を明示的に `standard` へ揃えるため、両ケースとも「`profile` だけstandardになり他フィールドは軽量プロファイル既定値のまま残る」という危険な不整合を生じさせない。
 
    これにより、`profile: lightweight` 選択済みプロジェクトで設定ファイルが破損した場合（ケースC）に `profile` が黙って `standard` へ反転する事態を利用者が検知できるようにする一方、`profile` フィールドを持たない大多数の既存標準プロファイルプロジェクト（ケースB）が `upgrade` のたびに誤った警告を受け取ることを防ぐ。ケースA・B・Cの区別は「対象ファイルが存在するか」「`profile` フィールドが存在するか」「値が既知enumか」という機械的な条件のみで行う。
-2. `collectManagedAssetMappings(targetDir, preservedProfile)`（設計要素5）を呼び出す。これにより、`config` エントリの `agent-skill-chain.yaml` 側マッピングのsrcが、保存済み `profile` に対応するテンプレート（既定プロファイル済みなら `packageRoot()/.agent-skill-chain/config/agent-skill-chain.yaml`、軽量プロファイル済みなら `packageRoot()/.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`）に解決される。これにより「`profile` フィールド自体の値はupgradeで変更しない」（要件3・AC-3）を、既存の `copyTreeMirror` 全体コピー機構をそのまま使いながら満たす（`profile` だけを個別にパッチする特殊処理を新設しない——配布元選択の時点でprofileが確定しているため）。
-3. `.claude/skills/`（設計要素5の `claude_skills` マッピング）は他の管理対象と同じく無条件にミラー同期される（要件3が求める「プロファイルを問わず同期」）。
 
-反証観点（フィールド混入時の一貫性）: 軽量プロファイル済みプロジェクトが `upgrade` を実行すると、`agent-skill-chain.yaml` 全体が `.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`（設計要素4）の最新内容で上書きされる。これは他フィールドについても既存の「upgradeは配布元の最新値へ復元する」という仕様（本Issue範囲外、GIT_CONVENTIONS.md等で既に確認済みの既存挙動）と一貫しており、`profile` だけを特別扱いしているわけではない——`profile` に対応する配布元ファイルの「選択」だけが本Issueの新設ロジックである。
+2. `collectManagedAssetMappings(targetDir, preservedProfile)`（設計要素5）を呼び出し、返る `ManagedAssetMapping[]` を一般ミラー処理（`copyTreeMirror`）へ渡す。**ケースA・Bでは**、この一覧をそのまま使う——`config` エントリの `agent-skill-chain.yaml` 側マッピングのsrcが、保存済み `profile` に対応するテンプレート（`standard` なら `packageRoot()/.agent-skill-chain/config/agent-skill-chain.yaml`、`lightweight` なら `packageRoot()/.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`）に解決され、既存の `copyTreeMirror` 全体コピー機構がそのまま「`profile` フィールド自体の値はupgradeで変更しない」（要件3・AC-3）を満たす。**ケースCでは**、この一覧から `dest` が対象 `agent-skill-chain.yaml` の絶対パスに一致するエントリを1件除外してから一般ミラー処理へ渡す（`collectManagedAssetMappings` 自体のシグネチャや他エントリの解決ロジックは変更しない——`upgrade.ts` 側での結果配列に対する追加フィルタのみで足りる）。この除外により、直前の手順1でケースCの専用ロジックが直接書き込んだ最終内容が、一般ミラー処理によって `preservedProfile='standard'` 由来の（危険な設定を含みうる）配布元既定configで上書きされることを防ぐ。この除外を行わない場合、手順1の復旧処理（(i)(ii)）は直後の一般ミラー処理で即座に上書きされ意味を失う——これが本Issue是正前の設計・実装が抱えていた欠陥（design-gate 1巡目・2巡目レビュー指摘の根本原因）であり、本是正はこの上書きの発生源そのものを断つ。
+3. `.claude/skills/`（設計要素5の `claude_skills` マッピング）はケースA・B・Cいずれの場合も他の管理対象と同じく無条件にミラー同期される（要件3が求める「プロファイルを問わず同期」、ケースCの除外対象は `agent-skill-chain.yaml` エントリ1件のみ）。
+
+反証観点（フィールド混入時の一貫性）: 軽量プロファイル済みプロジェクトが正常系（ケースB相当、`profile: lightweight` を正しく読み取れた場合）で `upgrade` を実行すると、`agent-skill-chain.yaml` 全体が `.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`（設計要素4）の最新内容で上書きされる。これは他フィールドについても既存の「upgradeは配布元の最新値へ復元する」という仕様（本Issue範囲外、GIT_CONVENTIONS.md等で既に確認済みの既存挙動）と一貫しており、`profile` だけを特別扱いしているわけではない——`profile` に対応する配布元ファイルの「選択」だけが本Issueの新設ロジックである。この一般ミラー機構をそのまま使わないのはケースCのみであり、その理由は「`profile` が判定不能で、`preservedProfile='standard'` が実際の意図を反映した値ではなく単なるフォールバック値に過ぎないため、`standard` 用の配布元テンプレート（危険な自動化設定を含みうる）をそのまま復元先として採用してはならない」という前述の安全側の理由による。
 
 ### 設計要素8: 用語・設定ドキュメント更新
 
