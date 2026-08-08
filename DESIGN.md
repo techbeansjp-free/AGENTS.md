@@ -76,7 +76,7 @@
 - `設計要素6: init拡張`（`src/commands/init.ts`）: `--profile` オプション解析、pre-flight衝突検知の対象拡張、`profile` フィールドの生成先ファイルへの反映、標準出力メッセージ。
 - `設計要素7: upgrade拡張`（`src/commands/upgrade.ts`）: `.claude/skills/` 同期を含む既存ミラー同期を維持しつつ、`agent-skill-chain.yaml` の `profile` フィールド値のみをupgrade前後で保存・復元する。
 - `設計要素8: 用語・設定ドキュメント`（`docs/GLOSSARY.md`・`docs/CONFIGURATION.md`）: 「軽量プロファイル」「既定プロファイル」の用語行、および `profile` 設定項目の設定リファレンス見出し（`verify config-doc-sync` が要求）。
-- `設計要素9: スキル説明文字数集計`（`.agent-skill-chain/scripts/skill-description-budget.sh` + `.agent-skill-chain/templates/claude/skills/DESCRIPTION_BUDGET.md`）: 設計要素2の各 `description`・`when_to_use` 文字数を実測し記録するスクリプトと、その出力を書き込んだレポートファイル。
+- `設計要素9: スキル説明文字数集計`（`.agent-skill-chain/scripts/skill-description-budget.sh` + `.agent-skill-chain/templates/claude/DESCRIPTION_BUDGET.md`）: 設計要素2の各 `description`・`when_to_use` 文字数を実測し記録するスクリプトと、その出力を書き込んだレポートファイル。レポートファイルは `claude_skills` 配布マッピング（設計要素5、source: `.agent-skill-chain/templates/claude/skills/`）の source ディレクトリの**外側**、`.agent-skill-chain/templates/claude/` 直下に置く——スキル本体ではない内部向け計測記録がコンシューマの `.claude/skills/` へ配布されることを避けるため。
 
 反証観点（責務集中の回避）: 「profileという1つの値」を判定正本とする設計要素3以外のどの設計要素も、profileの意味を独自に再定義しない（設計要素5〜7は設計要素3の値を読むだけで、判定ロジックを重複実装しない）。SKILL.md（設計要素2）は手続きの正本を持つが実処理を持たず、CLI本体（既存資産、変更対象外）の呼び出し手順書に徹する。
 
@@ -119,13 +119,15 @@ graph TD
 
 上記以外の節（不変条件表・Coordination Backend・役割・権限・writer lease・ブランチ・worktree・ゲートの継承・無効化・ADR・テンプレート・テスト適用性・成果物の自己完結性・参照・コメントの陳腐化防止・`docs/system-spec/`・GitHub配布・マルチAI対応・プロジェクト固有ポリシー・ディレクトリ構成・用語）は、判定基準に照らし「不変条件・恒久的な事実・常に成立する制約・原則・用語の正本参照」に該当するため、本体に残す。理由: いずれも「何を」「いつ」「なぜ」を定める事実・制約の記述であり、「どのコマンドをどの順で呼ぶか」という実行手順を含まない（例: 「ゲートの継承・無効化」節は `gate-reconcile.sh` が恒常的に行う挙動の記述であり、利用者が手で実行する手順ではない。「ブランチ・worktree」節のブランチ名/worktreeパス命名規約パターンはI4の機械的検証が直接参照する固定パターンであり、これらはSPEC.md用語節が既に(a)(b)の適用例として挙げている）。
 
-このほか、要件10に基づき「ディレクトリ構成」節の root直下許可リストへ `.claude/` を追加する（既存の1行「root直下は AGENTS.md・CLAUDE.md・README.md・`docs/`・`.github/`・`.worktrees/` のみ」を「...`.worktrees/`・`.claude/` のみ」へ改める。1行内の追記であり物理行数は増えない）。
+「ブランチ・worktree」節にはこのほか「削除は `cleanup.sh` 経由のみ（writer lease不在・未commit/未push無し・PR完了済みを検査後 `git worktree remove` → `prune`）」という削除前チェック順の記述が同一段落内に存在する。この一文単独は「どの順で検査するか」を述べる点で判定基準の「ステップバイステップの説明」に部分的に該当しうるが、次の理由により本体からは除去せず存置する: (i) この記述は利用者が手で実行する手順ではなく、`cleanup.sh` 自体が内部的に恒常的に行う挙動の圧縮された要約であり、「ゲートの継承・無効化」節の `gate-reconcile.sh` の扱いと同じ性質を持つ、(ii) 同一段落内でI4の機械的検証根拠（ブランチ名/worktreeパス命名規約パターン）と一体になっており、分割除去しても行数上の実益がない、(iii) `cleanup` コマンド経由以外の直接削除を禁じるという制約（`enforce on` が拒否する）そのものは常時成立する規則であり除去対象の「4セグメント全体の操作順序」「設定項目追加手順」とは性質が異なる。この判定に伴い、設計要素2 `cleanup` スキルの「対応する手続き」欄が本節の記述を参照する関係は「AGENTS.md本体からの除去を伴う転記」ではなく、「AGENTS.md本体に事実として残したまま、`cleanup` SKILL.mdが自己完結性の原則に従い同じ検査順序を実行手順として重複して記載する」という関係に修正する（設計要素2の当該記述もこの関係に合わせて修正する）。
+
+このほか、要件10に基づき「ディレクトリ構成」節の root直下許可リストへ `.claude/` を追加する（既存の1行「root直下は AGENTS.md・CLAUDE.md・README.md・`docs/`・`.github/`・`.worktrees/` のみ」を「...`.worktrees/`・`.claude/` のみ」へ改める。1行内の追記であり物理行数は増えない）。同節冒頭のASCIIディレクトリツリーのコードブロックにも、`.github/` 行の直後へ `.claude/            # .agent-skill-chain/templates/claude/ の展開結果` の1行を追加し、散文の許可リストとコードブロックの内容を一致させる（1行追加のため物理行数は+1）。
 
 要件7・AC-7に基づき、不変条件表I2セルへ次の趣旨の文言を追記する（既存1セル内への追記であり、これも物理行数を増やさない）。「GitHubモードの非強制性への類推」を用いず、プロファイル軸固有の直接根拠（強制層に加えセグメントゲートの機械的検査・記録機構も導入しない設計方針）を独立に記載する:
 
 > **ローカルモードかつ `profile: lightweight` でない場合は不変条件。GitHub モード、または `profile: lightweight` の場合はガイドライン**（実施要否は進行役が判断）。GitHub モードがガイドラインになる根拠は自動CI強制の不在（既存）。`profile: lightweight` がガイドラインになる根拠は、強制層（PreToolUse hook・GitHub branch ruleset）に加え、セグメントゲートの機械的検査・記録機構（`reviews/<gate>.yaml` 等）も導入しない設計方針であることそのもの（新設、モード軸とは独立）。`profile` の値は `.agent-skill-chain/config/agent-skill-chain.yaml` の `profile` フィールド（設計要素3）でのみ機械的に判定する。
 
-**行数見積り**: 着手時点146行。除去（ASCIIフロー図ブロック約7行、設定手順パラグラフの圧縮約1〜2行）により約8〜9行減、追加（root許可リスト・I2セルは同一行内追記のため実質0行、`.claude/` 追加自体も同一行）。したがって改定後は150行以内に収まる見込みであり、最終確認はAC-1のとおり `.agent-skill-chain/ci/verify-doc-length.sh`（自動）で行う。
+**行数見積り**: 着手時点146行。除去（ASCIIフロー図ブロック約7行、設定手順パラグラフの圧縮約1〜2行）により約8〜9行減、追加（root許可リスト・I2セルは同一行内追記のため実質0行、`.claude/` 追加自体も同一行、ディレクトリツリーコードブロックへの1行追加分のみ+1行）。したがって改定後は150行以内に収まる見込みであり、最終確認はAC-1のとおり `.agent-skill-chain/ci/verify-doc-length.sh`（自動）で行う。
 
 ### 設計要素2: 5つのSKILL.md
 
@@ -135,13 +137,15 @@ graph TD
 |---|---|---|---|
 | 1 | `issue-start` | Issue起票とworktree開始 | `.agent-skill-chain/scripts/issue-start.sh`、ブランチ・worktree命名規約 |
 | 2 | `segment-work` | セグメント作業（①要求・要件／②設計・実装計画／③実装／④独立検証の4セグメント全て、①のみDraft PR作成を条件分岐で含む） | `.agent-skill-chain/scripts/segment-start.sh`、writer lease取得手順、①のみ `.agent-skill-chain/scripts/pr-create.sh` 呼び出し、設定項目追加手順（①〜⑥、設計要素1から転記） |
-| 3 | `gate-review` | ゲート審査 | `.agent-skill-chain/scripts/gate-*.sh`（`gate review`・`gate publish`等）、conformance/falsification 2観点の進め方 |
+| 3 | `gate-review` | ゲート審査（design-gate承認後、ADRを伴うIssueに限り、ADRライフサイクル操作〔`docs/adr/`配下ADRの`status: proposed→accepted`遷移、`adr finalize`相当のCLI呼び出し〕をfinalization手続きとして後続で扱う） | `.agent-skill-chain/scripts/gate-*.sh`（`gate review`・`gate publish`等）、conformance/falsification 2観点の進め方、design-gate承認時の`adr finalize`呼び出し手順 |
 | 4 | `pr-merge` | PR作成とマージ（Draft PR自体の作成は`segment-work`の①条件分岐が担い、本スキルはDraft→Ready for Review化とauto-mergeまたは人間マージを担う。名称は要件2・AC-2の呼称に合わせるが、実際のDraft PR新規作成手順との重複を避けるため対象範囲をこのとおり明記する） | `.agent-skill-chain/scripts/pr-create.sh`（Ready化）、CI結果確認手順 |
-| 5 | `cleanup` | 後片付け | `.agent-skill-chain/scripts/cleanup.sh`、writer lease不在・未commit/未push無し・PR完了済みの検査順序（設計要素1「ブランチ・worktree」節から転記する削除前チェック順） |
+| 5 | `cleanup` | 後片付け | `.agent-skill-chain/scripts/cleanup.sh`、writer lease不在・未commit/未push無し・PR完了済みの検査順序（AGENTS.md本体「ブランチ・worktree」節に事実として残る同一の検査順序を、`cleanup` SKILL.mdが実行手順として自己完結的に重複記載する。設計要素1参照） |
 
 各 `SKILL.md` のYAMLフロントマターは少なくとも `name`・`description`・`when_to_use` を持つ（Claude Codeスキル機構のDiscovery段階で読み込まれる情報、ADR-0023調査1(a)）。本文は自己完結性の原則（AGENTS.md §成果物の自己完結性）に従い、目的・対象範囲・前提・用語・入力・出力・要求または判断内容（手続きの場合は手順そのもの）・制約・完了条件・検証方法・未決事項・対象外を内部に記載する。他のSKILL.mdやAGENTS.mdへの意味の委譲（「詳細はAGENTS.md参照」等の記述のみで済ませること）は禁止する——実行に必要な手順本体は各SKILL.md内に完結して書く。500行以内（Claude Code公式推奨、ADR-0023調査1(h)）を目安の制約とするが、本Issueは新たな機械的行数上限をCIへ追加しない（AGENTS.md 150行・テンプレート100行の既存 `verify doc-length` はAGENTS.md本体と `templates/issue/*.md`・`templates/adr/ADR.md` のみを対象とし、本Issueはこの対象集合を拡張しない——不要な機能追加を避けるため）。
 
 `segment-work` スキルは要件2の設計判断に従い①②③④の4セグメント共通の手続き（writer lease取得→`worker-launch.sh`起動→checkpoint push→ゲートレビュー依頼）を土台とし、①要求・要件セグメントのときのみ「初回checkpoint push直後にDraft PR作成」という追加ステップを条件分岐として記載する。この統合は異種手続き（起票・ゲート審査・PR操作・後片付け）を1つに詰め込むものではなく単一種類の手続きの繰り返しであるため、要件2が禁じる「単一の巨大スキル化」に抵触しない（SPEC.md要件2の判断をそのまま踏襲する）。
+
+**ADRライフサイクル操作手順の割当**: SPEC.md §用語「手続き」は「ADRライフサイクル操作手順」をSKILL.mdへ切り出す対象の一例として明示する。本DESIGNはこれを `gate-review` スキルへ割り当てる（AGENTS.md「ADR・テンプレート・テスト適用性」節が定める `proposed → accepted` の遷移は「設計ゲート承認時」に発生するため、design-gate承認の判定と同じ手続きの中で扱うのが自然であり、`segment-work` の設計セグメント固有の条件分岐として割り当てる代替案よりも、承認判定という単一のトリガーに手続きを一本化できる）。この割当はSPEC.md要件2の「セグメント作業スキルの範囲」（①②③④の4セグメント共通手続きへの統合、異種手続きを混在させない）を変更しない——ADR finalizationは特定セグメントの成果物作成手続きではなく、design-gate承認という判定行為に付随する手続きであるため、`segment-work`ではなく`gate-review`の担当範囲（ゲート審査・判定記録）に自然に属し、要件2が定めるセグメント作業スキルの対象（4セグメント共通の成果物作成手続き）を拡張しない。
 
 ### 設計要素3: config schemaの `profile` フィールド
 
@@ -164,7 +168,7 @@ profile:
 新設ディレクトリ `.agent-skill-chain/templates/lightweight/` に次の2ファイルを置く。
 
 - `CLAUDE.md`: `@AGENTS.md` の常時import記述を含まない内容（例: 見出し・「応答は日本語とする。」等の非import記述のみを残し、`AGENTS.md` はroot直下に存置されオンデマンド参照・スキル経由参照の対象であることを示す短い注記を含める）。AC-4が検査する「`@AGENTS.md` の常時import記述が含まれない」を満たす。
-- `agent-skill-chain.yaml`: `profile: lightweight`、`coordination.backend: local`、その他のフィールドは `.agent-skill-chain/schemas/config.schema.yaml` の必須項目を満たす軽量プロファイル向けの妥当な既定値（本リポジトリ自身の常時規律モデル固有設定は継承しない。`worker.adapter: human`、`review.adapter` は省略可、`durability.backend: local_mirror` 等、コンシューマの手動運用を前提とした値とする）。`templates.claude_skills_source`/`claude_skills_target`（設計要素5）を含め、`templates.verify_sync: true` は既定プロファイルと同じ値を用いる。
+- `agent-skill-chain.yaml`: `profile: lightweight`、`coordination.backend: local`、その他のフィールドは `.agent-skill-chain/schemas/config.schema.yaml` の必須項目を満たす軽量プロファイル向けの妥当な既定値（本リポジトリ自身の常時規律モデル固有設定は継承しない。`worker.adapter: human`、`review.adapter` は省略可、`durability.backend: local_mirror` 等、コンシューマの手動運用を前提とした値とする）。`templates.verify_sync: true` は既定プロファイルと同じ値を明示する。`templates.claude_skills_source`/`claude_skills_target`（設計要素5）はこのファイルへ明示値を追加しない——設計要素5が定めるとおり、`claude_agents_source`/`claude_agents_target` と同じ既存パターン（コード側の `??` フォールバック既定値のみに依存し、設定ファイルへは明示記載しない）に倣うため。両フィールドを省略しても、コード側フォールバックにより既定プロファイルと同じ実効パスへ解決される。
 
 このディレクトリは `NAMESPACED_ENTRIES`（`src/lib/asset-manifest.ts`）には追加しない——`config`・`CLAUDE.md` それぞれの通常のprofile非依存コピー経路とは別に、設計要素5・6が明示的にこの2ファイルを参照する専用ソースとして扱う。
 
@@ -199,7 +203,7 @@ templates:
 - `NAMESPACED_ENTRIES` ループ: `config` エントリのみディレクトリ単位コピーを行わず、ファイル単位へ分解する——`roles.yaml`・`segments.yaml` は従来どおり `packageRoot()/.agent-skill-chain/config/` から、`agent-skill-chain.yaml` は `profile === 'lightweight'` のとき `packageRoot()/.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml` から、それ以外は従来どおり `packageRoot()/.agent-skill-chain/config/agent-skill-chain.yaml` からマッピングする（他の `standards`・`templates`・`schemas`・`adapters`・`scripts`・`ci`・`hooks` は従来どおりディレクトリ単位のまま変更しない）。
 - `resolveTemplateMappings` の呼び出しから `claude_agents` に加え `claude_skills` のマッピングを追加する（プロファイルに関係なく常に追加——要件3が「プロファイルを問わず」配置を求めるため）。
 
-反証観点（既存所有権記録・削除候補判定の整合性）: `init`（`writeOwnershipRecord`）と `upgrade`（`resolveStaleAssets`）は同一の `collectManagedAssetMappings` を呼ぶ構造（Issue #492由来）を維持するため、`config` のファイル単位分解後もこの一致は保たれる。ただし `upgrade` は導入時に選んだprofileを維持する必要があるため（要件3）、`upgrade.ts` は呼び出し時に対象の既存 `profile` 値（後述、設計要素7）を渡す。
+反証観点（既存所有権記録・削除候補判定の整合性）: `init`（`writeOwnershipRecord`）と `upgrade`（`resolveStaleAssets`）は同一の `collectManagedAssetMappings` を呼ぶ構造（Issue #492由来）を維持するため、`config` のファイル単位分解後もこの一致は保たれる。ただし `upgrade` は導入時に選んだprofileを維持する必要があるため（要件3）、`upgrade.ts` は呼び出し時に対象の既存 `profile` 値（後述、設計要素7）を渡す。所有権記録の粒度変更（`config` のファイル単位分解）と、config配下ディレクトリの列挙がコード上ハードコードである点の実質的なリスクは、実装セグメントで追加した自動回帰テスト（`test/unit/config.test.ts`・`test/integration/upgrade.test.ts` 等、`profile` 分岐を含めnpm test全件pass）でカバーされている。
 
 ### 設計要素6: init拡張
 
@@ -225,7 +229,7 @@ templates:
 1. 既存の `collectManagedAssetMappings` 呼び出し前に、対象の現在の `agent-skill-chain.yaml` を読み既存 `profile` 値を取得する（`loadConfig` 相当）。取得結果は次の3ケースに機械的に区別し、いずれの場合も最終的な値は `standard` にフォールバックするが、警告発火の要否はケースにより異なる。
    - **ケースA（ファイルが存在しない）**: 新規導入相当であり `standard` が正しい既定値である。警告は出さない。
    - **ケースB（ファイルは存在するが `profile` フィールドが単純に存在しない）**: 本機能導入前から存在するレガシー設定ファイルという正常な後方互換ケースであり（設計要素3の後方互換ルールそのもの）、`standard` として扱う想定内の挙動である。警告は出さない。
-   - **ケースC（異常値）**: ファイルは存在するがパース不能、または `profile` フィールドは存在するがその値が `standard`・`lightweight` のいずれでもない不正な値である場合。破損・手動編集ミス等の異常ケースであり、`standard` へフォールバックしたうえで標準エラー出力へ次の趣旨の日本語警告メッセージを出す。「既存の `agent-skill-chain.yaml` の `profile` 設定を読み取れなかった（または不正な値だった）ため、既定値 `standard` として扱います。既に `profile: lightweight` を選択している場合は、`upgrade` 完了後に対象ファイルの `profile` フィールドを確認してください。」
+   - **ケースC（異常値）**: ファイルは存在するがパース不能、または `profile` フィールドは存在するがその値が `standard`・`lightweight` のいずれでもない不正な値である場合。破損・手動編集ミス等の異常ケースであり、`standard` へフォールバックしたうえで標準エラー出力へ次の趣旨の日本語警告メッセージを出す。「既存の `agent-skill-chain.yaml` の `profile` 設定を読み取れなかった（または不正な値だった）ため、既定値 `standard` として扱います。既に `profile: lightweight` を選択している場合は、`upgrade` 完了後に対象ファイルの `profile` フィールドを確認してください。」ケースCの復旧処理は対象ファイルの状態に応じて2通りに分かれる。(i) ファイル自体はYAMLとしてパース可能だが `profile` フィールドの値のみが既知enum外の不正値である場合、`profile` フィールドのみをその場修復し、他の全フィールド（`templates.*` 等）は既存の値を保持する。(ii) ファイル自体がYAMLとしてパース不能、またはパース結果がオブジェクトでない場合、`profile` フィールド単位の部分修復ができないため、対象ファイル全体をパッケージ同梱の標準プロファイル既定config（`.agent-skill-chain/config/agent-skill-chain.yaml`——本リポジトリ自身が使う `worker.segment_overrides.implementation: codex`・`merge.autonomous: true` 等の常時規律モデル固有設定を含む、通常の配布用既定ファイルそのもの）で置換する。(ii)では `profile` だけでなく他の全フィールドも標準既定値へ戻るが、これは意図された既知の制約である（パース不能なファイルからは元の設定意図をフィールド単位で復元できないため）。`profile` と他フィールドが常に一貫してstandardへ揃うため、「`profile` だけstandardになり他フィールドは軽量プロファイル既定値のまま残る」という危険な不整合は生じない。
 
    これにより、`profile: lightweight` 選択済みプロジェクトで設定ファイルが破損した場合（ケースC）に `profile` が黙って `standard` へ反転する事態を利用者が検知できるようにする一方、`profile` フィールドを持たない大多数の既存標準プロファイルプロジェクト（ケースB）が `upgrade` のたびに誤った警告を受け取ることを防ぐ。ケースA・B・Cの区別は「対象ファイルが存在するか」「`profile` フィールドが存在するか」「値が既知enumか」という機械的な条件のみで行う。
 2. `collectManagedAssetMappings(targetDir, preservedProfile)`（設計要素5）を呼び出す。これにより、`config` エントリの `agent-skill-chain.yaml` 側マッピングのsrcが、保存済み `profile` に対応するテンプレート（既定プロファイル済みなら `packageRoot()/.agent-skill-chain/config/agent-skill-chain.yaml`、軽量プロファイル済みなら `packageRoot()/.agent-skill-chain/templates/lightweight/agent-skill-chain.yaml`）に解決される。これにより「`profile` フィールド自体の値はupgradeで変更しない」（要件3・AC-3）を、既存の `copyTreeMirror` 全体コピー機構をそのまま使いながら満たす（`profile` だけを個別にパッチする特殊処理を新設しない——配布元選択の時点でprofileが確定しているため）。
@@ -246,7 +250,9 @@ templates:
 
 ### 設計要素9: スキル説明文字数集計
 
-`.agent-skill-chain/scripts/skill-description-budget.sh` を新設する。`.agent-skill-chain/templates/claude/skills/*/SKILL.md` を走査し、各ファイルのYAMLフロントマターから `description`・`when_to_use`（存在する場合）を抽出し文字数を数え、スキルごとの内訳と合計を標準出力へ出す（grepできる形式、AGENTS.mdの前文が定めるUNIX哲学に合わせる）。実行結果を `.agent-skill-chain/templates/claude/skills/DESCRIPTION_BUDGET.md`（スキルごとの文字数・合計文字数の生データの表）として実装セグメントでコミットする。特定モデルの文脈長数値やその分母を用いた比率計算は行わない（SPEC.md要件8のとおり、生データの実測・記録のみを目的とする）。
+`.agent-skill-chain/scripts/skill-description-budget.sh` を新設する。`.agent-skill-chain/templates/claude/skills/*/SKILL.md` を走査し、各ファイルのYAMLフロントマターから `description`・`when_to_use`（存在する場合）を抽出し文字数を数え、スキルごとの内訳と合計を標準出力へ出す（grepできる形式、AGENTS.mdの前文が定めるUNIX哲学に合わせる）。実行結果を `.agent-skill-chain/templates/claude/DESCRIPTION_BUDGET.md`（スキルごとの文字数・合計文字数の生データの表）として実装セグメントでコミットする。特定モデルの文脈長数値やその分母を用いた比率計算は行わない（SPEC.md要件8のとおり、生データの実測・記録のみを目的とする）。
+
+**配置先（設計要素5との整合）**: 出力先は `.agent-skill-chain/templates/claude/skills/` の**外側**（親ディレクトリ直下）とする。設計要素5が定める `claude_skills` 配布マッピングの source は `.agent-skill-chain/templates/claude/skills/` 配下に限定されるため、この配置により `DESCRIPTION_BUDGET.md` は `init`/`upgrade` のいずれでもコンシューマの `.claude/skills/` へ複製されない。本ファイルはスキルそのものではなく、5つの `SKILL.md`（設計要素2）の計測結果を記録する内部向けレポートであり、コンシューマへ配布すべき対象ではないため、この配置は意図した設計判断である。
 
 ## 関連ADR
 
