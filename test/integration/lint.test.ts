@@ -474,6 +474,62 @@ test('lint vocab: 非散文ファイル（.ts等）ではASCII識別子・トー
   );
 });
 
+test('lint vocab: カタカナのみの禁止語がより長い別のカタカナ複合語に埋め込まれている場合は誤検出しない。禁止語単体での出現は引き続き検出される（Issue #525）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: docs/GLOSSARY.md 上で「writer lease」の禁止同義語と定義されている「ロック」を、
+  // (a) 無関係な別のカタカナ複合語「ブロック」の内部に部分文字列として含む行、
+  // (b) 禁止語単体としてそのまま出現する行の両方を用意する。
+  const file = path.join(repo.dir, 'katakana-compound.md');
+  fs.writeFileSync(
+    file,
+    [
+      'JSDocのブロックコメント内かどうかを判定する。', // 「ブロック」内の「ロック」は誤検出しないこと
+      'writer leaseはロックを取得してから作業する。', // 「ロック」単体は引き続き検出されること
+    ].join('\n') + '\n',
+  );
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'katakana-compound.md'], { cwd: repo.dir });
+
+  // Then: 終了コード1（2行目のみが違反として報告される）。1行目の「ブロック」内の「ロック」は
+  // より長い連続カタカナ列に埋め込まれているため対象外になる。
+  assert.equal(result.status, 1);
+  assert.doesNotMatch(
+    result.stderr,
+    /katakana-compound\.md:1:/,
+    '「ブロック」に埋め込まれた「ロック」は誤検出されないこと',
+  );
+  assert.match(
+    result.stderr,
+    /katakana-compound\.md:2: 禁止語 'ロック' が見つかりました（'writer lease' を使用してください）/,
+    'カタカナ単体での禁止語出現は引き続き検出されること',
+  );
+});
+
+test('lint vocab: 中黒（・）で区切られたカタカナ複合語は中黒を境界として分割され、区切られた片方が禁止語単体と一致する場合は検出される（Issue #525 レビュー指摘の回帰）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 「ロック・スター」は中黒で区切られた別々のカタカナ複合語であり、「ロック」は
+  // 「スター」に埋め込まれた部分文字列ではなく禁止語単体としての出現である。
+  const file = path.join(repo.dir, 'katakana-nakaguro.md');
+  fs.writeFileSync(file, 'writer leaseはロック・スターのように取得する。\n');
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'katakana-nakaguro.md'], { cwd: repo.dir });
+
+  // Then: 中黒をrunの境界として扱うため「ロック」は「スター」と連結されたより長いrunに
+  // 埋め込まれているとは判定されず、禁止語単体の出現として検出される。
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /katakana-nakaguro\.md:1: 禁止語 'ロック' が見つかりました（'writer lease' を使用してください）/,
+    '中黒で区切られた「ロック・スター」内の「ロック」は禁止語単体として検出されること',
+  );
+});
+
 test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.agent-skill-chain資産全体）は違反なしで終了コード0になる（ISSUE-178 AC-4: templates/config/schemas/scriptsも含めて対象）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
