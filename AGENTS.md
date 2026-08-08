@@ -1,6 +1,6 @@
 # AGENTS.md — agent-skill-chain 憲法
 
-> 本ファイルが正本。CLAUDE.md 等の他ランタイム設定ファイルは `@AGENTS.md` インポートのみを行う。
+> 本ファイルが正本。CLAUDE.md 等の他ランタイム設定ファイルは、既定プロファイルでは `@AGENTS.md` インポートのみを行う。軽量プロファイル（`profile: lightweight`）では、事実と常時規則を本ファイル・手続きを `.claude/skills/` 配下の SKILL.md 群という形で別途配布し、CLAUDE.md からの `@AGENTS.md` 常時importは行わない。
 
 本システムはソフトウェア開発の管理そのものをドメインとする。状態は選択した Coordination Backend（GitHub の Issue・ブランチ・PR・Check Run、またはローカルの Git 管理下状態ファイル）だけに存在し、Issue を集約ルート、GitHub Flow 標準語彙をユビキタス言語とし、すべての強制は commit・Check Run・マージというイベントへの反応として実装する（DDD）。仕様の受け入れ基準は一意な ID で検証証跡と機械的に結線され、承認後の仕様変更はゲート再通過を自動要求する——文書は書いて終わる散文ではなく、検証され続ける契約である（BDD）。作業は 1 Issue = 1 ブランチ = 1 worktree = 1 PR の小さなバッチで 4 セグメントを通じ並行に流れ、セグメントごとの push により失敗は常に安価に巻き戻せる。可逆だから安全であり、安全だから速い。改善はふりかえり専用の儀式ではなく通常の Issue として自システムの規律の下で処理される（アジャイル）。各スクリプトはちょうど 1 つの状態遷移だけを行い、検査は grep できる形で書き、疑わしい機能は追加しない（UNIX）。既定は常に安全側であり、速度は人間の明示的なオプトイン、危険信号による降格は自動である。
 
@@ -26,7 +26,7 @@
 | モード | 調整状態の正本 | ゲートの正本 | 成果物内容の正本 |
 |---|---|---|---|
 | GitHub モード | Issue・PR・branch・Check Run | ガイドライン（自動強制なし、I2）。`.agent-skill-chain/scripts/gate-*.sh` で進行役が手動発行した場合はCheck Run（`agent-skill-chain/{spec,design,implementation,validation}-gate`）が結果を保持 | `issue_sync` 有効時は Issue/PR 本文（Git は同期元・版管理基盤）。既定（無効）では Git 管理下ファイル |
-| ローカルモード | `state.yaml`（Issue 毎、Git 管理下） | `reviews/<gate>.yaml`（Git 管理下） | Git 管理下ファイル（`SPEC.md` 等） |
+| ローカルモード | `state.yaml`（Issue 毎、Git 管理下） | `reviews/<gate>.yaml`（Git 管理下。`profile: lightweight` の場合はI2参照——ガイドラインでありこの機構自体を導入しない） | Git 管理下ファイル（`SPEC.md` 等） |
 
 共通の状態モデル（フィールド・enum）は `.agent-skill-chain/schemas/state.schema.yaml` が定義する。`issue_sync`（既定 `enabled: false`、ADR-0021）を有効化した GitHub モードでは、ゲート通過ごとに成果物全文とゲート状態を Issue/PR 本文の固定マーカー区間へ一方向転記し、マーカー外の人間記述部分は変更しない。転記結果をゲート判定の入力として読み戻すことはしない。
 
@@ -72,7 +72,7 @@ worktree: .worktrees/<YYYYMMDD_HHMMSS>-<type>-<issue-id>-<slug>/   (timestamp = 
 
 ## ADR・テンプレート・テスト適用性
 
-ADR は `proposed → accepted`（設計ゲート承認時、finalization ワーカーが writer lease 取得の上 status のみ更新）→ `superseded/deprecated` のライフサイクルを取り、`docs/adr/` に保存する。テンプレート正本は `.agent-skill-chain/templates/`（`.agent-skill-chain/templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`、`.agent-skill-chain/templates/adr/ADR.md`、`.agent-skill-chain/templates/github/.github/...`）。AC ごとの検証方法・適用すべきテスト種別（常時必須／変更種別ごと／リリース単位）は `.agent-skill-chain/standards/TEST_POLICY.md` を正本とする。文書量は AGENTS.md 150 行・各テンプレート 100 行を上限とし、`.agent-skill-chain/ci/verify-doc-length.sh` がCIで検査する。
+ADR は `proposed → accepted`（設計ゲート承認時、finalization ワーカーが writer lease 取得の上 status のみ更新）→ `superseded/deprecated` のライフサイクルを取り、`docs/adr/` に保存する。テンプレート正本は `.agent-skill-chain/templates/`（`.agent-skill-chain/templates/issue/{SPEC,DESIGN,PLAN,VALIDATION}.md`、`.agent-skill-chain/templates/adr/ADR.md`、`.agent-skill-chain/templates/github/.github/...`、`.agent-skill-chain/templates/claude/skills/`〔`profile: default` 用スキル群〕、`.agent-skill-chain/templates/lightweight/`〔`profile: lightweight` 用 `CLAUDE.md`・設定既定値〕）。AC ごとの検証方法・適用すべきテスト種別（常時必須／変更種別ごと／リリース単位）は `.agent-skill-chain/standards/TEST_POLICY.md` を正本とする。文書量は AGENTS.md 150 行・各テンプレート 100 行を上限とし、`.agent-skill-chain/ci/verify-doc-length.sh` がCIで検査する。
 
 ## 成果物の自己完結性
 
@@ -121,7 +121,7 @@ docs/{GLOSSARY.md, adr/, system-spec/}
 .agent-skill-chain/
   project/          # consumer project 固有ポリシー（manifest.yaml, RULES.md, roles/）
   standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY,CODEX_BACKGROUND_TASK_POLICY}.md
-  templates/{issue/, adr/, github/}
+  templates/{issue/, adr/, github/, claude/, lightweight/}
   schemas/{config,state,gate-report,validation-report,worker-report,integration,lease,segments,project-policy}.schema.yaml
   config/{agent-skill-chain.yaml, segments.yaml, roles.yaml}
   adapters/{claude,codex,human}.sh

@@ -2,9 +2,8 @@
 
 `.agent-skill-chain/scripts/skill-description-budget.sh` の実行結果（生データ）。各 `SKILL.md` の
 YAMLフロントマターにおける `description`・`when_to_use` の文字数と、その合計を示す。特定モデルの
-文脈長数値やその分母を用いた比率計算はここでは行わない（ADR-0023実装Issueの要件8）。任意のモデル
-文脈長を分母として比率を計算する場合は、下表の `total_chars` 合計をそのモデルの文脈長予算（既定で
-モデル文脈長の1%等）で割って比較する。
+文脈長数値やその分母を用いた比率計算はここでは行わない（ADR-0023実装Issueの要件8）。本ファイルは
+生データ（文字数の実測値）の記録のみに徹し、比率算定の分母規定は持たない。
 
 | skill | description_chars | when_to_use_chars | total_chars |
 |---|---|---|---|
