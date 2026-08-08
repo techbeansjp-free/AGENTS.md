@@ -622,6 +622,19 @@ interface CommentReferenceViolation {
  * `inBlockComment`・`lineIsBlockComment`とも常に`false`のまま）、かつ`.ts`ファイル内でも
  * `/*`の位置が同じ行の単一行コメント開始位置（`findUnquotedCommentMarkerIndex(line, '//')`）
  * より前にある場合のみ真のブロックコメント開始として扱う。
+ *
+ * Issue #513・是正: ブロックコメント判定は上記までのみだと行単位の単一boolean
+ * （`lineIsBlockComment`）で表現されており、同一行で開いて閉じるブロックコメント
+ * （例: `const x = 1; /* note *\/ const y = '手順1';`）の場合、`*\/`より後ろにある
+ * 正当なコード部分まで行全体が誤ってコメント扱いされる偽陽性があった。是正として、
+ * 行全体に対するbooleanではなく、その行で実際にブロックコメントが及ぶ文字位置の区間
+ * （開始オフセット・終了オフセットの半開区間）を`blockCommentRange`として計算し、各
+ * マッチ位置（`match.index`）がその区間内にあるかどうかで判定する。前の行から継続中
+ * （`inBlockComment`）の場合は区間の開始を行頭（位置0）とする。同一行内に対応する`*\/`が
+ * 見つかった場合は区間をその終了位置までに限定し、それより後ろの文字位置は区間外
+ * （通常のコード）として扱う。`*\/`が同一行に見つからない場合は区間を行末まで延ばし、
+ * 状態を次行へ持ち越す（現行の挙動と同じ）。同一行に複数のブロックコメントが存在する
+ * ケースへの対応は本Issueのスコープ外であり、区間は1行につき最大1つのみを扱う。
  */
 function findCommentReferenceViolations(root: string, files: string[]): CommentReferenceViolation[] {
   const violations: CommentReferenceViolation[] = [];
@@ -634,18 +647,30 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
     let inBlockComment = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      let lineIsBlockComment = false;
+      // その行で実際にブロックコメントが及ぶ文字位置の半開区間 [start, end)。
+      // 区間が存在しない行（ブロックコメントを含まない行）は null。
+      let blockCommentRange: [number, number] | null = null;
 
       if (ext === '.ts') {
         if (inBlockComment) {
-          lineIsBlockComment = true;
-          if (line.includes('*/')) inBlockComment = false;
+          const closeIndex = line.indexOf('*/');
+          if (closeIndex === -1) {
+            blockCommentRange = [0, line.length];
+          } else {
+            blockCommentRange = [0, closeIndex + 2];
+            inBlockComment = false;
+          }
         } else {
           const openIndex = findUnquotedCommentMarkerIndex(line, '/*');
           const singleLineIndex = findUnquotedCommentMarkerIndex(line, '//');
           if (openIndex !== -1 && (singleLineIndex === -1 || openIndex < singleLineIndex)) {
-            lineIsBlockComment = true;
-            if (line.indexOf('*/', openIndex + 2) === -1) inBlockComment = true;
+            const closeIndex = line.indexOf('*/', openIndex + 2);
+            if (closeIndex === -1) {
+              blockCommentRange = [openIndex, line.length];
+              inBlockComment = true;
+            } else {
+              blockCommentRange = [openIndex, closeIndex + 2];
+            }
           }
         }
       }
@@ -657,7 +682,9 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
         pattern.lastIndex = 0;
         let match: RegExpExecArray | null;
         while ((match = pattern.exec(line)) !== null) {
-          if (lineIsBlockComment || isInSingleLineComment(line, match.index, ext)) {
+          const isInBlockCommentRange =
+            blockCommentRange !== null && match.index >= blockCommentRange[0] && match.index < blockCommentRange[1];
+          if (isInBlockCommentRange || isInSingleLineComment(line, match.index, ext)) {
             violations.push({ relPath, lineNo: i + 1, label, matched: match[0] });
           }
           if (match[0].length === 0) pattern.lastIndex++;
@@ -888,6 +915,36 @@ test('src/配下: .tsファイル内の単一行コメント本文中に現れ�
       violations
         .map((v) => `${v.relPath}:${v.lineNo} を誤ってコメント扱いし違反検出している: ${JSON.stringify(v.matched)}`)
         .join('\n'),
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: 同一行で開いて閉じるブロックコメントの後に続く正当なコードを誤ってコメント扱いしない（Issue #513: 同一行完結ブロックコメント後方コード誤検知の回帰防止）', () => {
+  // Given: 1行内で開いて閉じるブロックコメント（`/* 手順1参照 */`）の後ろに、コメントではない
+  // 正当なコード（「手順2」を含む文字列リテラル）が続く行を含む合成ファイルを用意する。
+  // 是正前の実装は行全体に対する単一boolean（`lineIsBlockComment`）でブロックコメント判定を
+  // 行っていたため、`*/`より後ろにある正当なコード部分（`手順2`を含む文字列リテラル）まで
+  // 誤ってコメント扱いされ違反として検出されていた。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-inline-block-comment-scope-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'inline-block-comment.ts');
+    fs.writeFileSync(
+      tsFile,
+      ["const x = 1; /* 手順1参照 */ const y = '手順2: 通常のコードです';"].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: ブロックコメント区間内（`/* 手順1参照 */`）の「手順1」は違反として検出されるが、
+    // `*/`より後ろの文字列リテラル中の「手順2」はコメント外の正当なコードであり検出されない。
+    assert.equal(violations.length, 1, `検出件数が想定と異なる: ${JSON.stringify(violations)}`);
+    assert.equal(violations[0].matched, '手順1', 'ブロックコメント区間内の「手順1」を検出できていない');
+    assert.ok(
+      !violations.some((v) => v.matched === '手順2'),
+      '*/より後ろの正当なコード中の「手順2」を誤ってコメント扱いし検出している',
     );
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
