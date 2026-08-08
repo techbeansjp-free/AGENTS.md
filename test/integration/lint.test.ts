@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { walkTextFiles } from '../../src/lib/scan.js';
-import { isInSingleLineComment, findUnquotedCommentMarkerIndex } from '../../src/commands/lint.js';
+import { commentMarkerFor } from '../../src/commands/lint.js';
 
 // lint vocab / lint references / lint adr check の3サブコマンドを、bin/agents-md.js（ビルド後の
 // 実体）に対する subprocess 実行で検証する。createTmpRepo は .agent-skill-chain/ 資産一式
@@ -590,7 +590,8 @@ interface CommentReferenceViolation {
  * における見出し位置参照であり、コメント以外（文字列リテラル・実行時に利用者へ表示される
  * メッセージ等）での同じ文字列出現は規約違反ではないため、各マッチ位置が単一行コメント内かどうかを
  * `src/commands/lint.ts` が既に持つ `isInSingleLineComment`（`commentMarkerFor`・
- * `findUnquotedCommentMarkerIndex` を内部で使用）で判定し、コメント外のマッチは除外する。
+ * `findUnquotedCommentMarkerIndex` を内部で使用）と同種のロジックで判定し、コメント外のマッチは
+ * 除外する（Issue #517・是正後は本ファイル内のバッククォート追跡版ヘルパーを使う。後述）。
  *
  * 手動implementation-gate strictレビュー指摘（両レビュア共通）: `isInSingleLineComment` は
  * 単一行コメント記号（`.ts`なら`//`）のみを扱う設計であり、複数行ブロックコメント
@@ -641,7 +642,45 @@ interface CommentReferenceViolation {
  * 探すループへ変更し、見つかるたびに区間を配列へ追加する。前の行からの継続・行末までの
  * 延長・次行への持ち越しという既存の挙動はそのまま維持する。マッチ位置の判定は区間配列の
  * いずれかに含まれるかどうかで行う。
+ *
+ * Issue #517・是正: ブロックコメント開始判定・単一行コメント開始判定はどちらも
+ * `src/commands/lint.ts`の`findUnquotedCommentMarkerIndex`（単一引用符・二重引用符のみを
+ * 引用符として追跡）を再利用していたため、`.ts`ファイル内のテンプレートリテラル
+ * （バッククォート文字列）に含まれる`/* ... *\/`風・`//`風の部分文字列を、引用符の外側と
+ * 誤判定していた。`src/commands/lint.ts`本体は変更せず、本ファイル内でのみバッククォートも
+ * 引用符として追跡するテスト専用ヘルパー（`findUnquotedMarkerIndexTrackingBacktick`・
+ * `isInSingleLineCommentTrackingBacktick`）を実装し、両判定をこちらへ置き換える。複数行に
+ * またがるテンプレートリテラルへの完全対応・正規表現リテラル内`/*`風文字列への対応は対象外
+ * とする（単一行で完結するテンプレートリテラルのみを扱う）。
  */
+function findUnquotedMarkerIndexTrackingBacktick(line: string, marker: string): number {
+  let quote: "'" | '"' | '`' | undefined;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (quote !== undefined) {
+      if (char === '\\') {
+        i++;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+    } else if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+    } else if (line.startsWith(marker, i)) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+function isInSingleLineCommentTrackingBacktick(line: string, pos: number, ext: string): boolean {
+  const marker = commentMarkerFor(ext);
+  if (marker === undefined) return false;
+  const markerPos = findUnquotedMarkerIndexTrackingBacktick(line, marker);
+  return markerPos !== -1 && markerPos < pos;
+}
+
 function findCommentReferenceViolations(root: string, files: string[]): CommentReferenceViolation[] {
   const violations: CommentReferenceViolation[] = [];
   for (const file of files) {
@@ -674,8 +713,8 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
         // 継続中でなかった場合は、その続きの位置からさらに次の`/*`を探すループへ進む。
         while (!inBlockComment) {
           const rest = line.slice(searchFrom);
-          const openIndexInRest = findUnquotedCommentMarkerIndex(rest, '/*');
-          const singleLineIndexInRest = findUnquotedCommentMarkerIndex(rest, '//');
+          const openIndexInRest = findUnquotedMarkerIndexTrackingBacktick(rest, '/*');
+          const singleLineIndexInRest = findUnquotedMarkerIndexTrackingBacktick(rest, '//');
           if (openIndexInRest === -1 || (singleLineIndexInRest !== -1 && singleLineIndexInRest < openIndexInRest)) {
             break;
           }
@@ -701,7 +740,7 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
           const isInBlockCommentRange = blockCommentRanges.some(
             ([start, end]) => match!.index >= start && match!.index < end,
           );
-          if (isInBlockCommentRange || isInSingleLineComment(line, match.index, ext)) {
+          if (isInBlockCommentRange || isInSingleLineCommentTrackingBacktick(line, match.index, ext)) {
             violations.push({ relPath, lineNo: i + 1, label, matched: match[0] });
           }
           if (match[0].length === 0) pattern.lastIndex++;
@@ -997,6 +1036,55 @@ test('src/配下: 同一行に2つのブロックコメントが存在する場�
       dangling.some((v) => v.matched === '手順2'),
       '2つ目のブロックコメント内の「手順2」を検出できていない（Issue #515の検知漏れ）',
     );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: .tsファイル内の単一行で完結するテンプレートリテラル中の"/* ... */"風文字列をブロックコメント開始と誤検知せず、後続の正当なコードも誤検知しない（Issue #517: バッククォートを引用符として追跡しないことに起因する誤検知の回帰テスト）', () => {
+  // Given: 単一行で完結するテンプレートリテラル（`` `例: /* コメント風 */ という記法` ``）を含む行の
+  // 後に、コメントではない正当なコード（「手順1」を含む文字列リテラル）が続く合成ファイルを用意する。
+  // バッククォートを引用符として追跡しない実装では、テンプレートリテラル内の`/*`が引用符の外側と
+  // 誤判定されうる。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-template-literal-scope-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'template-literal.ts');
+    fs.writeFileSync(
+      tsFile,
+      ['const s = `例: /* コメント風 */ という記法`;', "const y = '手順1: 通常のコードです';"].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: テンプレートリテラル内の`/* ... */`風文字列はブロックコメント開始と誤判定されず、
+    // 後続の正当なコード中の「手順1」も違反として検出されない。
+    assert.equal(violations.length, 0, `誤検知が発生している: ${JSON.stringify(violations)}`);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: .tsファイル内の単一行で完結するテンプレートリテラルに対応する"*/"が同一行に無い場合でも、以降の行へ誤ってブロックコメント状態を持ち越さない（Issue #517: バッククォート非追跡に起因する複数行への誤伝播の回帰テスト）', () => {
+  // Given: テンプレートリテラル自体は単一行で開いて閉じるが、内容に対応する`*/`を伴わない`/*`風の
+  // 部分文字列（例: グロブ的表記）を含む行の後に、コメントではない正当なコード（「手順1」を含む
+  // 文字列リテラル）が続く合成ファイルを用意する。バッククォートを引用符として追跡しない実装では、
+  // この`/*`が引用符の外側の未終了ブロックコメント開始と誤判定され、状態が次行へ持ち越されて
+  // 後続の正当な行全体が誤ってコメント扱いされる。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-template-literal-unclosed-scope-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'template-literal-unclosed.ts');
+    fs.writeFileSync(
+      tsFile,
+      ['const s = `例: /* という記法`;', "const y = '手順1: 通常のコードです';"].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: 1行目のテンプレートリテラル内の`/*`はブロックコメント開始と誤判定されず、2行目の
+    // 正当なコード中の「手順1」もブロックコメント状態の誤伝播により違反として検出されない。
+    assert.equal(violations.length, 0, `誤検知が発生している（複数行への誤伝播）: ${JSON.stringify(violations)}`);
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
