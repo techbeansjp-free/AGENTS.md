@@ -556,6 +556,17 @@ test('lint references: path省略時のデフォルト対象は本体 .github/wo
   );
 });
 
+test('lint references: 実物リポジトリのデフォルト対象（src/ を含む）は違反0で通る（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止）', async () => {
+  // Given/When: このリポジトリ自身に対して path 引数を省略し、デフォルト対象
+  // （defaultReferenceFileRoots、src/ を含む）で lint references を実行する。
+  const result = runCli(['lint', 'references'], { cwd: realRepoRoot });
+
+  // Then: 違反なしで終了コード0。かつて src/commands/upgrade.ts のコメントに
+  // 「DESIGN.md 設計要素7」という禁止された見出し位置参照が混入していた（Issue #507で是正）が、
+  // このテストは同種の違反が src/ 配下へ再混入した場合に検出する。
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test('lint adr check: 実物 docs/adr/ は違反0で通る', async () => {
   // Given/When: このリポジトリ自身の docs/adr/（現時点では ADR-0001 のみ、supersedes: []・
   // superseded-by: null で自己完結）に対して lint adr check を実行する
