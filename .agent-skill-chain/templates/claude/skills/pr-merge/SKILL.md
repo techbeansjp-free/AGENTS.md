@@ -6,8 +6,6 @@ when_to_use: Use when validation-gate has passed and the Draft PR created by the
 
 # pr-merge
 
-# pr-merge
-
 ## 目的
 
 ④独立検証セグメントのゲート通過後、①セグメントで作成済みのDraft PRをReady for Reviewへ遷移させ、CI結果を確認したうえでマージする。Draft PR自体の新規作成は `segment-work` スキルの①条件分岐が担うため、本スキルはReady化以降のみを対象とする。

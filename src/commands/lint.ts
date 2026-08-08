@@ -361,6 +361,11 @@ function expandToKebabToken(line: string, run: IdentifierRun): string {
 /** 行頭がYAMLキー構文（`key: `、`key:`の直後に値が続く形）であるかを判定する。 */
 const YAML_KEY_PREFIX_RE = /^[A-Za-z_][\w-]*:\s*/;
 
+/** 値全体が空白を含まない単一のケバブケース識別子（例: `issue-start`）と完全一致するかを判定する。
+ * `description:`・`when_to_use:` のような自由記述（散文）フィールドは複数語・空白を含むため
+ * この正規表現に一致せず、識別子文脈の除外対象から外れる。 */
+const KEBAB_IDENTIFIER_VALUE_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
 /**
  * Markdownファイル（SKILL.md等）先頭のYAMLフロントマターにおける、キーの値側のケバブケース
  * 識別子文脈。フロントマターの`name:`フィールド等でディレクトリ名と一致させるためkebab-case識別子
@@ -368,8 +373,11 @@ const YAML_KEY_PREFIX_RE = /^[A-Za-z_][\w-]*:\s*/;
  * （手動implementation-gateレビュー指摘: skill-name-frontmatter-mismatch の是正で顕在化）。
  * `isYamlIdentifierContext`（.yaml/.yml限定・キー自体が禁止語と完全一致する場合のみを扱う）とは
  * 対象が異なるため独立実装する: 本関数は「値」側のケバブケース複合語のセグメント一致を扱う。
- * `inFrontmatter`（行が先頭`---`〜`---`ブロック内かどうか）とYAMLキー構文の両方を満たす場合のみ
- * 適用し、frontmatter中の自由記述（散文）行やMarkdown本文まで無条件に除外しないようにする。 */
+ * `inFrontmatter`（行が先頭`---`〜`---`ブロック内かどうか）とYAMLキー構文の両方に加え、値全体が
+ * 単一のケバブケース識別子（`KEBAB_IDENTIFIER_VALUE_RE`）である場合のみ適用する。`description:`・
+ * `when_to_use:` のような自由記述（散文）フィールドの値はこの条件を満たさないため対象外のままとなり、
+ * 散文中のハイフン複合語に含まれる禁止語は引き続き検出される（手動implementation-gateレビュー指摘:
+ * lint-frontmatter-exemption-too-broad の是正）。 */
 function isMarkdownFrontmatterValueContext(
   line: string,
   run: IdentifierRun,
@@ -378,7 +386,10 @@ function isMarkdownFrontmatterValueContext(
   inFrontmatter: boolean,
 ): boolean {
   if (ext !== '.md' || !inFrontmatter) return false;
-  if (!YAML_KEY_PREFIX_RE.test(line)) return false;
+  const keyMatch = YAML_KEY_PREFIX_RE.exec(line);
+  if (!keyMatch) return false;
+  const value = line.slice(keyMatch[0].length).trim();
+  if (!KEBAB_IDENTIFIER_VALUE_RE.test(value)) return false;
   const token = expandToKebabToken(line, run);
   if (token.length <= banned.length || !token.includes('-')) return false;
   return token

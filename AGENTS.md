@@ -117,6 +117,7 @@ AGENTS.md  CLAUDE.md  README.md
 docs/{GLOSSARY.md, adr/, system-spec/}
 .github/            # .agent-skill-chain/templates/github/.github/ の展開結果
 .worktrees/
+.claude/            # .agent-skill-chain/templates/claude/ の展開結果
 .agent-skill-chain/
   project/          # consumer project 固有ポリシー（manifest.yaml, RULES.md, roles/）
   standards/{GIT_CONVENTIONS,TEST_POLICY,SECURITY_POLICY,CODEX_BACKGROUND_TASK_POLICY}.md
