@@ -652,22 +652,80 @@ interface CommentReferenceViolation {
  * `isInSingleLineCommentTrackingBacktick`）を実装し、両判定をこちらへ置き換える。複数行に
  * またがるテンプレートリテラルへの完全対応・正規表現リテラル内`/*`風文字列への対応は対象外
  * とする（単一行で完結するテンプレートリテラルのみを扱う）。
+ *
+ * Issue #519・是正: Issue #517の是正はバッククォートで囲まれた範囲全体（`${...}`補間式の
+ * 内部を含む）を無条件に「引用符の内側（文字列）」として扱っていたため、補間式の内部に実在する
+ * コメント（例: `` `結果: ${/* 注記 *\/ value}` ``）を誤って文字列扱いし、検査から見逃していた
+ * （偽陰性）。是正として、バッククォート文字列走査中に`${`が現れたら「補間式（実際のコード）」
+ * の内部に入ったとみなし、通常のコード走査（引用符・マーカーを認識する走査）へ切り替える状態を
+ * スタックで管理する。補間式内部でオブジェクトリテラル等により`{`が現れる場合は深さを追跡し、
+ * 最も外側の`${`に対応する`}`が見つかった時点でバッククォート文字列の走査へ戻る。補間式の内部で
+ * 新たな引用符・バッククォート文字列が始まった場合もスタックへ積み、通常のコードと同様に
+ * ネストして扱う。複数行にまたがる補間式への完全対応は対象外とする（単一行で完結する`${...}`
+ * のみを扱う）。
  */
 function findUnquotedMarkerIndexTrackingBacktick(line: string, marker: string): number {
-  let quote: "'" | '"' | '`' | undefined;
+  type QuoteFrame = { kind: 'quote'; char: "'" | '"' };
+  type BacktickStringFrame = { kind: 'backtick-string' };
+  type InterpolationFrame = { kind: 'interpolation'; braceDepth: number };
+  type Frame = QuoteFrame | BacktickStringFrame | InterpolationFrame;
+
+  const stack: Frame[] = [];
 
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    if (quote !== undefined) {
+    const top: Frame | undefined = stack[stack.length - 1];
+
+    // top が無い（トップレベル）、または補間式の内部は「実際のコード」として走査する。
+    if (top === undefined || top.kind === 'interpolation') {
+      if (char === "'" || char === '"') {
+        stack.push({ kind: 'quote', char });
+        continue;
+      }
+      if (char === '`') {
+        stack.push({ kind: 'backtick-string' });
+        continue;
+      }
+      if (top !== undefined && top.kind === 'interpolation') {
+        if (char === '{') {
+          top.braceDepth++;
+          continue;
+        }
+        if (char === '}') {
+          if (top.braceDepth === 0) {
+            stack.pop();
+          } else {
+            top.braceDepth--;
+          }
+          continue;
+        }
+      }
+      if (line.startsWith(marker, i)) {
+        return i;
+      }
+      continue;
+    }
+
+    // top が引用符（'・"）の内部：エスケープを考慮し、対応する引用符で閉じるまでマーカー
+    // 判定は行わない。
+    if (top.kind === 'quote') {
       if (char === '\\') {
         i++;
-      } else if (char === quote) {
-        quote = undefined;
+      } else if (char === top.char) {
+        stack.pop();
       }
-    } else if (char === "'" || char === '"' || char === '`') {
-      quote = char;
-    } else if (line.startsWith(marker, i)) {
-      return i;
+      continue;
+    }
+
+    // top がバッククォート文字列の内部（補間式の外側の通常の文字列部分）：`${`が現れたら
+    // 補間式（コード）へ入る。それ以外はマーカー判定を行わない。
+    if (char === '\\') {
+      i++;
+    } else if (char === '`') {
+      stack.pop();
+    } else if (char === '$' && line[i + 1] === '{') {
+      stack.push({ kind: 'interpolation', braceDepth: 0 });
+      i++;
     }
   }
 
@@ -1085,6 +1143,86 @@ test('src/配下: .tsファイル内の単一行で完結するテンプレー�
     // Then: 1行目のテンプレートリテラル内の`/*`はブロックコメント開始と誤判定されず、2行目の
     // 正当なコード中の「手順1」もブロックコメント状態の誤伝播により違反として検出されない。
     assert.equal(violations.length, 0, `誤検知が発生している（複数行への誤伝播）: ${JSON.stringify(violations)}`);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: テンプレートリテラルの"${...}"補間式内部にある実在のブロックコメント中の見出し位置参照文字列を検出する（Issue #519: 補間式を無条件に文字列扱いすることに起因する検知漏れの回帰テスト）', () => {
+  // Given: 単一行のテンプレートリテラルであり、その`${...}`補間式の内部に実在するブロック
+  // コメント（`/* DESIGN.md 設計要素7 */`）を含む行を用意する。Issue #517までの是正は
+  // バッククォートで囲まれた範囲全体（補間式の内部を含む）を無条件に文字列扱いしていたため、
+  // このコメント内の禁止参照文字列を検査から見逃していた。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-template-interpolation-comment-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'template-interpolation-comment.ts');
+    fs.writeFileSync(
+      tsFile,
+      ["const s = `結果: ${/* DESIGN.md 設計要素7 */ value}`;"].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: 補間式内部のブロックコメント中にある見出し位置参照文字列が違反として検出される。
+    assert.equal(violations.length, 1, `検出件数が想定と異なる: ${JSON.stringify(violations)}`);
+    assert.equal(violations[0].label, '見出し位置参照文字列');
+    assert.equal(violations[0].matched, '.md 設計要素7');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: テンプレートリテラルの"${...}"補間式外側（通常の文字列部分）にある禁止参照文字列風の内容は引き続き違反として検出しない（Issue #519回帰防止: 補間式検知の追加が既存の非検出範囲を後退させないことの確認）', () => {
+  // Given: 単一行のテンプレートリテラルであり、`${...}`補間式の内部には実在するコメントが無く
+  // （評価される式の値のみ）、補間式の外側（通常の文字列部分）に禁止参照文字列風の内容
+  // （「手順1」）を含む行を用意する。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-template-interpolation-outside-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'template-interpolation-outside.ts');
+    fs.writeFileSync(tsFile, ['const s = `手順1: ${value} を実行する`;'].join('\n') + '\n');
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: 補間式外側の通常の文字列部分にある「手順1」はコメントではないため検出されない
+    // （Issue #517の是正内容を後退させない）。補間式の内部にはコメントも禁止参照文字列も
+    // 存在しないため、そちらからの誤検出も発生しない。
+    assert.deepEqual(
+      violations,
+      [],
+      violations
+        .map((v) => `${v.relPath}:${v.lineNo} を誤って検出している: ${JSON.stringify(v.matched)}`)
+        .join('\n'),
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: テンプレートリテラルの"${...}"補間式の外側と内部のコメントが同一行に混在する場合、内部のコメント中の違反のみ検出し外側の文字列部分は検出しない（Issue #519: 補間式境界判定の複合回帰テスト）', () => {
+  // Given: 補間式の外側（通常の文字列部分）に禁止参照文字列風の内容（「手順2」）を含み、
+  // かつ補間式の内部に実在するブロックコメント（禁止参照文字列「手順1」を含む）も含む、
+  // 単一行のテンプレートリテラルを用意する。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-template-interpolation-mixed-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'template-interpolation-mixed.ts');
+    fs.writeFileSync(
+      tsFile,
+      ["const s = `手順2: ${/* 手順1参照 */ value} を実行する`;"].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: 補間式内部のブロックコメント中の「手順1」のみ検出され、補間式外側の通常の
+    // 文字列部分にある「手順2」は検出されない。
+    assert.equal(violations.length, 1, `検出件数が想定と異なる: ${JSON.stringify(violations)}`);
+    assert.equal(violations[0].matched, '手順1', '補間式内部のコメント中の「手順1」を検出できていない');
+    assert.ok(
+      !violations.some((v) => v.matched === '手順2'),
+      '補間式外側の通常の文字列部分にある「手順2」を誤って検出している',
+    );
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
