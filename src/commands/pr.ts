@@ -311,6 +311,7 @@ export async function merge(args: string[]): Promise<number> {
             'このままではマージを実行しません。対象PRブランチをbase branchへ追随させたうえで再実行するか、',
             '`.agent-skill-chain/config/agent-skill-chain.yaml` の `merge.auto_update_branch: true` で',
             '自動最新化を明示的に有効化してください（既定は無効です）。',
+            '進行役がこの設定を有効化する、または update-branch API を直接呼び出すことは、ローカルでコミットを作成せず GitHub 側でサーバーサイドのマージ／調整状態操作を行うため、I5 違反ではありません。',
           ].join('\n'),
         );
       }
