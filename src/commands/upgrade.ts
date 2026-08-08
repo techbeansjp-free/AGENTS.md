@@ -211,8 +211,8 @@ export async function upgrade(args: string[]): Promise<number> {
     // `preservedProfile`は実際の意図を反映しない単なるフォールバック値（'standard'）に過ぎない。
     // これを`collectManagedAssetMappings`へそのまま渡すと`agent-skill-chain.yaml`エントリのsrcは
     // 標準プロファイル既定config（危険な自動化設定を含みうる）に解決されるため、直前の
-    // `profileRepair`実行（ケースC(ii)の復旧処理）で書き込んだ安全な復旧結果を一般ミラー処理で
-    // 即座に上書きしてしまう。これを防ぐため、
+    // `profileRepair`実行（`profile`値の判定不能・不正からの復旧処理）で書き込んだ安全な復旧結果を
+    // 一般ミラー処理で即座に上書きしてしまう。これを防ぐため、
     // `agent-skill-chain.yaml`エントリのみ一般ミラー処理（`copyTreeMirror`の呼び出し）から除外する。
     // この除外は`copyTreeMirror`呼び出しに限定し、所有権記録の書き込み・削除候補判定には影響させない
     // （下記で`agent-skill-chain.yaml`エントリもcurrentKeys/currentFilesへ通常どおり追加するため）。
@@ -224,10 +224,10 @@ export async function upgrade(args: string[]): Promise<number> {
     // （手動implementation-gateレビュー指摘: stale-delete-scope-invariant-untested）。
     for (const { src, dest } of collectManagedAssetMappings(targetDir, preservedProfile, configOverride)) {
       if (profileRepair && dest === recoveredConfigDest) {
-        // 一般ミラー処理へは渡さず、`profileRepair`によるケースC(ii)の復旧結果をそのまま
-        // 最終内容として扱う（`agent-skill-chain.yaml`エントリを一般ミラー処理から除外する
-        // 上記の分岐）。所有権記録・削除候補判定上は引き続き通常どおり管理対象として扱う
-        // （Issue #503）。
+        // 一般ミラー処理へは渡さず、`profileRepair`が設定されている（＝`profile`値の判定不能・
+        // 不正からの復旧が発生した）いずれのケースでも、その復旧結果をそのまま最終内容として扱う
+        // （`agent-skill-chain.yaml`エントリを一般ミラー処理から除外する上記の分岐）。
+        // 所有権記録・削除候補判定上は引き続き通常どおり管理対象として扱う（Issue #503）。
         const key = toOwnershipKey(targetDir, dest);
         currentKeys.add(key);
         if (!dryRun) currentFiles[key] = digestOfFile(dest);
