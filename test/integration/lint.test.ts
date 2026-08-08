@@ -556,15 +556,29 @@ test('lint references: path省略時のデフォルト対象は本体 .github/wo
   );
 });
 
-test('lint references: 実物リポジトリのデフォルト対象（src/ を含む）は違反0で通る（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止）', async () => {
+test('lint references: 実物リポジトリのデフォルト対象（src/ を含む）は違反0で通る', async () => {
   // Given/When: このリポジトリ自身に対して path 引数を省略し、デフォルト対象
   // （defaultReferenceFileRoots、src/ を含む）で lint references を実行する。
   const result = runCli(['lint', 'references'], { cwd: realRepoRoot });
 
-  // Then: 違反なしで終了コード0。かつて src/commands/upgrade.ts のコメントに
-  // 「DESIGN.md 設計要素7」という禁止された見出し位置参照が混入していた（Issue #507で是正）が、
-  // このテストは同種の違反が src/ 配下へ再混入した場合に検出する。
+  // Then: 違反なしで終了コード0。
   assert.equal(result.status, 0, result.stderr);
+});
+
+test('src/commands/upgrade.ts: 禁止された見出し位置参照文字列（DESIGN.md 設計要素<N>）を含まない（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止）', () => {
+  // Given/When: このリポジトリ自身の src/commands/upgrade.ts の内容を直接読み取る。
+  //
+  // 注記: `lint references` の禁止参照検出パターン（§見出し形式・file.ext:行番号形式の2種のみ）は
+  // 「DESIGN.md 設計要素7」のような「文書名＋見出し名（節記号・行番号なし）」形式を検出できない
+  // （検出パターン自体の拡張は本テストのスコープ外）。そのため `lint references` の終了コードに
+  // 依存せず、かつて混入していた具体的な違反パターン文字列がファイル内容に存在しないことを
+  // 直接assertする。
+  const upgradeTsPath = path.join(realRepoRoot, 'src', 'commands', 'upgrade.ts');
+  const content = fs.readFileSync(upgradeTsPath, 'utf8');
+
+  // Then: 「DESIGN.md 設計要素」という見出し位置参照文字列を含まない
+  // （Issue #507で `DESIGN.md 設計要素7` → `Issue #503` 等へ是正済み）。
+  assert.doesNotMatch(content, /DESIGN\.md\s*設計要素/);
 });
 
 test('lint adr check: 実物 docs/adr/ は違反0で通る', async () => {
