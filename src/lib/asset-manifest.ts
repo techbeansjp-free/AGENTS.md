@@ -32,6 +32,14 @@ export interface ManagedAssetMapping {
 const LIGHTWEIGHT_CONFIG_SOURCE = path.join('.agent-skill-chain', 'templates', 'lightweight', 'agent-skill-chain.yaml');
 /** `CLAUDE.md` の配布元候補（軽量プロファイル用の別テンプレート）。 */
 const LIGHTWEIGHT_CLAUDE_MD_SOURCE = path.join('.agent-skill-chain', 'templates', 'lightweight', 'CLAUDE.md');
+/**
+ * `.agent-skill-chain/config/agent-skill-chain.yaml` の配布元候補（標準プロファイル用の中立
+ * テンプレート、ISSUE-522）。`packageRoot()` 直下の実ファイル（このリポジトリ自身が運用に使う
+ * dogfooding設定）を配布元にせず、consumer project向けの中立既定値のみを持つ本テンプレートを使う。
+ */
+const STANDARD_CONFIG_SOURCE = path.join('.agent-skill-chain', 'templates', 'standard', 'agent-skill-chain.yaml');
+/** `CLAUDE.md` の配布元候補（標準プロファイル用の中立テンプレート、ISSUE-522）。 */
+const STANDARD_CLAUDE_MD_SOURCE = path.join('.agent-skill-chain', 'templates', 'standard', 'CLAUDE.md');
 
 /**
  * `ROOT_LEVEL_ENTRIES`・`NAMESPACED_ENTRIES`・`claude_agents`/`claude_skills` テンプレートマッピングの
@@ -41,8 +49,11 @@ const LIGHTWEIGHT_CLAUDE_MD_SOURCE = path.join('.agent-skill-chain', 'templates'
  * 指摘: stale-delete-scope-invariant-untested。2つの独立ループが将来乖離すると、乖離分の現行配布
  * ファイルが誤って削除候補と分類されうる）。
  *
- * `profile`（ADR-0023、Issue #503）: `lightweight` の場合、`CLAUDE.md`・`config`（`agent-skill-chain.yaml`
- * のみ）の配布元を軽量プロファイル専用テンプレートへ切り替える。省略時は `standard`（現行動作）。
+ * `profile`（ADR-0023、Issue #503。standard分岐はISSUE-522）: `CLAUDE.md`・`config`
+ * （`agent-skill-chain.yaml`のみ）の配布元を、値に応じたプロファイル専用テンプレートへ切り替える。
+ * `lightweight`は軽量プロファイル専用テンプレート、`standard`（省略時の既定）は標準プロファイル用の
+ * 中立テンプレートを使う。いずれも`packageRoot()`直下の実ファイル（このリポジトリ自身が運用に
+ * 使うdogfooding設定）を直接の配布元にしない。
  *
  * `overrideConfig`（Issue #503 手動implementation-gateレビュー指摘の派生修正）: 対象ディレクトリの
  * configファイルが破損・不正値を含み、かつ書き換えられない（`upgrade --dry-run`）場合に、
@@ -57,10 +68,14 @@ export function collectManagedAssetMappings(
   const mappings: ManagedAssetMapping[] = [];
   for (const entry of ROOT_LEVEL_ENTRIES) {
     const isClaudeMd = entry === 'CLAUDE.md';
-    const src =
-      isClaudeMd && profile === 'lightweight'
-        ? path.join(packageRoot(), LIGHTWEIGHT_CLAUDE_MD_SOURCE)
-        : path.join(packageRoot(), entry);
+    let src = path.join(packageRoot(), entry);
+    if (isClaudeMd && profile === 'lightweight') {
+      src = path.join(packageRoot(), LIGHTWEIGHT_CLAUDE_MD_SOURCE);
+    } else if (isClaudeMd && profile === 'standard') {
+      // ISSUE-522: standardはpackageRoot()直下の実ファイル（このリポジトリ自身のdogfooding用
+      // CLAUDE.md、`応答は日本語とする。`等を含む）ではなく中立テンプレートを配布元にする。
+      src = path.join(packageRoot(), STANDARD_CLAUDE_MD_SOURCE);
+    }
     if (!fs.existsSync(src)) continue;
     mappings.push({ src, dest: path.join(targetDir, entry) });
   }
@@ -77,10 +92,16 @@ export function collectManagedAssetMappings(
         .filter((d) => d.isFile())
         .map((d) => d.name);
       for (const fileName of configFileNames) {
-        const configFileSrc =
-          fileName === 'agent-skill-chain.yaml' && profile === 'lightweight'
-            ? path.join(packageRoot(), LIGHTWEIGHT_CONFIG_SOURCE)
-            : path.join(configDir, fileName);
+        const isConfigYaml = fileName === 'agent-skill-chain.yaml';
+        let configFileSrc = path.join(configDir, fileName);
+        if (isConfigYaml && profile === 'lightweight') {
+          configFileSrc = path.join(packageRoot(), LIGHTWEIGHT_CONFIG_SOURCE);
+        } else if (isConfigYaml && profile === 'standard') {
+          // ISSUE-522: standardはconfigDir直下の実ファイル（このリポジトリ自身のdogfooding用
+          // agent-skill-chain.yaml、merge.autonomous: true等を含む）ではなく中立テンプレートを
+          // 配布元にする。
+          configFileSrc = path.join(packageRoot(), STANDARD_CONFIG_SOURCE);
+        }
         if (!fs.existsSync(configFileSrc)) continue;
         mappings.push({ src: configFileSrc, dest: path.join(targetDir, ASSET_NAMESPACE, entry, fileName) });
       }
