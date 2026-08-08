@@ -198,6 +198,10 @@ test('pr merge (AC-1/AC-3): behindな対象PRは --admin を指定しても自�
 
   assert.notEqual(result.status, 0, '--adminを指定してもbehindのままではマージを実行しないはず');
   assert.match(result.stderr, /最新ではありません/);
+  assert.match(
+    result.stderr,
+    /進行役がこの設定を有効化する、または update-branch API を直接呼び出すことは、ローカルでコミットを作成せず GitHub 側でサーバーサイドのマージ／調整状態操作を行うため、I5 違反ではありません。/,
+  );
   const state = stub.readState();
   assert.equal(state.mergeCalls?.length ?? 0, 0, 'gh pr mergeは一切実行されていないはず');
 });
