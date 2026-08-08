@@ -619,10 +619,54 @@ test('upgrade: agent-skill-chain.yamlがパース不能（ケースC）の場合
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     result.stdout,
-    /既存の agent-skill-chain\.yaml の profile 設定を読み取れなかった（または不正な値だった）ため、既定値 standard として扱います/,
+    /既存の agent-skill-chain\.yaml の設定を読み取れなかった（または profile の値が不正だった）ため、profile を含む設定内容を安全側の既定値へ戻しました/,
     'ケースCでは警告を出すこと',
   );
   assert.match(fs.readFileSync(configPath, 'utf8'), /^profile: standard/m);
+});
+
+// ISSUE-503 design-gate是正（安全性blocking）: パース不能な既存configの復旧は、危険な自動化設定
+// （`merge.autonomous: true`等、本リポジトリ自身が使う標準プロファイル既定configが持つ値）を
+// 一切含まない軽量プロファイル既定テンプレート由来の内容のみで行うこと（DESIGN.md 設計要素7
+// 手順1(ii)）。一般ミラー処理（`preservedProfile='standard'`由来の標準既定config）によって
+// この安全な復旧結果が即座に上書きされないこと（DESIGN.md 設計要素7 手順2の除外）も併せて検証する。
+test('upgrade: agent-skill-chain.yamlがパース不能（ケースC(ii)）の復旧結果にmerge.autonomous等の危険な自動化設定が含まれないこと（安全性回帰テスト）', (t) => {
+  const targetDir = mkScratch('upgrade-profile-case-c-safe-recovery');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir, '--profile=lightweight']).status, 0);
+
+  const configPath = path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  fs.writeFileSync(configPath, '{ this is not: valid: yaml::::');
+
+  const result = runCli(['upgrade', targetDir]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const recovered = fs.readFileSync(configPath, 'utf8');
+  assert.match(recovered, /^profile: standard/m, 'profileフィールド自体はこのケースの最終フォールバック値standardへ揃えること');
+  assert.doesNotMatch(
+    recovered,
+    /autonomous:\s*true/,
+    '復旧結果に危険な自動化設定（merge.autonomous: true）が含まれてはならない',
+  );
+  assert.doesNotMatch(
+    recovered,
+    /segment_overrides/,
+    '復旧結果に本リポジトリ固有の常時規律モデル向け設定（worker.segment_overrides等）が含まれてはならない',
+  );
+
+  const lightweightTemplate = fs.readFileSync(
+    path.join('.agent-skill-chain', 'templates', 'lightweight', 'agent-skill-chain.yaml'),
+    'utf8',
+  );
+  assert.match(
+    recovered,
+    /backend: local_mirror/,
+    '復旧結果は軽量プロファイル既定テンプレート由来の安全な値（profile以外）をそのまま持つこと',
+  );
+  assert.ok(
+    lightweightTemplate.includes('backend: local_mirror'),
+    '前提: 軽量プロファイルテンプレート自体がbackend: local_mirrorを持つこと',
+  );
 });
 
 test('upgrade --dry-run: agent-skill-chain.yamlがパース不能（ケースC）でも対象ファイルを一切書き換えない（手動implementation-gateレビュー指摘: upgrade-dry-run-writes-target-config/file）', (t) => {
@@ -639,7 +683,7 @@ test('upgrade --dry-run: agent-skill-chain.yamlがパース不能（ケースC�
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     result.stdout,
-    /既存の agent-skill-chain\.yaml の profile 設定を読み取れなかった（または不正な値だった）ため、既定値 standard として扱います/,
+    /既存の agent-skill-chain\.yaml の設定を読み取れなかった（または profile の値が不正だった）ため、profile を含む設定内容を安全側の既定値へ戻しました/,
     'dry-runでも警告メッセージ自体は算出・表示されること',
   );
   assert.equal(
@@ -663,7 +707,7 @@ test('upgrade --dry-run: agent-skill-chain.yamlのprofileが既知enum外の不�
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     result.stdout,
-    /既存の agent-skill-chain\.yaml の profile 設定を読み取れなかった（または不正な値だった）ため、既定値 standard として扱います/,
+    /既存の agent-skill-chain\.yaml の設定を読み取れなかった（または profile の値が不正だった）ため、profile を含む設定内容を安全側の既定値へ戻しました/,
   );
   assert.equal(
     fs.readFileSync(configPath, 'utf8'),
@@ -685,7 +729,7 @@ test('upgrade: profileフィールドの値が既知enum外（ケースC）の�
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     result.stdout,
-    /既存の agent-skill-chain\.yaml の profile 設定を読み取れなかった（または不正な値だった）ため、既定値 standard として扱います/,
+    /既存の agent-skill-chain\.yaml の設定を読み取れなかった（または profile の値が不正だった）ため、profile を含む設定内容を安全側の既定値へ戻しました/,
   );
   assert.match(fs.readFileSync(configPath, 'utf8'), /^profile: standard/m);
 });

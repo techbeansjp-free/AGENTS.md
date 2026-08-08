@@ -56,19 +56,20 @@ function resolvePreservedProfile(targetDir: string): ProfileResolution {
   try {
     parsed = readYamlFile(configPath);
   } catch {
-    // ケースC（パース不能）: 対象ファイルの内容を行単位で修復することはできないため、
-    // 決定済みの standard に対応する配布元既定値をそのまま使う。非dry-run時は`repair`が
-    // これを対象ファイルへ書き込み、後続処理（`collectManagedAssetMappings` 経由の
-    // `loadConfig(targetDir)`）が対象を読み取れるようにする（この内容は直後の通常コピー処理
-    // でどのみち上書きされる一時的な足場に過ぎない）。dry-run時は`repair`を呼ばない代わりに
+    // ケースC(ii)（パース不能）: 対象ファイルの内容を行単位で修復することはできないため、
+    // 危険な自動化設定を含みうるパッケージ同梱の標準プロファイル既定configではなく、
+    // 軽量プロファイル向けの安全な既定テンプレート（`merge.autonomous`等を持たない）を
+    // 唯一の復旧ソースとして使う（DESIGN.md 設計要素7 手順1(ii)、AGENTS.md I8）。非dry-run時は
+    // `repair`がこれを対象ファイルへ書き込み、後続処理（`collectManagedAssetMappings` 経由の
+    // `loadConfig(targetDir)`）が対象を読み取れるようにする。dry-run時は`repair`を呼ばない代わりに
     // `correctedConfig`をそのまま`collectManagedAssetMappings`へ渡し、対象ファイルを書き換えずに
     // 同じ内容で後続のtemplate解決を成立させる。
-    const defaultConfig = readPackageDefaultConfig();
+    const safeConfig = readSafeRecoveryConfig();
     return {
       profile: 'standard',
       warning: PROFILE_UNREADABLE_WARNING,
-      repair: () => repairUnreadableConfig(configPath),
-      correctedConfig: defaultConfig,
+      repair: () => repairUnreadableConfig(configPath, safeConfig),
+      correctedConfig: safeConfig,
     };
   }
   const rawProfile = (parsed as { profile?: unknown } | null | undefined)?.profile;
@@ -91,31 +92,42 @@ function resolvePreservedProfile(targetDir: string): ProfileResolution {
       correctedConfig: corrected,
     };
   }
-  const defaultConfig = readPackageDefaultConfig();
+  // ケースC(ii)（パース結果がオブジェクトでない）: 上記try/catchと同じ安全側の復旧ソースを使う。
+  const safeConfig = readSafeRecoveryConfig();
   return {
     profile: 'standard',
     warning: PROFILE_UNREADABLE_WARNING,
-    repair: () => repairUnreadableConfig(configPath),
-    correctedConfig: defaultConfig,
+    repair: () => repairUnreadableConfig(configPath, safeConfig),
+    correctedConfig: safeConfig,
   };
 }
 
-function defaultConfigPath(): string {
-  return path.join(packageRoot(), '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+function lightweightTemplateConfigPath(): string {
+  return path.join(packageRoot(), '.agent-skill-chain', 'templates', 'lightweight', 'agent-skill-chain.yaml');
 }
 
-/** パッケージ同梱の既定（profile: standard）configをパース済みオブジェクトとして返す。 */
-function readPackageDefaultConfig(): unknown {
-  return readYamlFile(defaultConfigPath());
+/**
+ * ケースC(ii)（パース不能、またはパース結果がオブジェクトでない）の復旧に使う安全な既定内容を返す。
+ * 軽量プロファイル向けテンプレート（`merge.autonomous`等の危険な自動化設定を持たない）の内容を
+ * そのまま採用したうえで、`profile`フィールドのみを本ケースの最終フォールバック値`standard`へ
+ * 明示的に上書きする（テンプレート自体は`profile: lightweight`を持つため、DESIGN.md 設計要素7
+ * 手順1(ii)）。
+ */
+function readSafeRecoveryConfig(): Record<string, unknown> {
+  const parsed = readYamlFile(lightweightTemplateConfigPath());
+  return { ...(parsed as Record<string, unknown>), profile: 'standard' };
 }
 
-/** 対象の config/agent-skill-chain.yaml を、パッケージ同梱の既定（profile: standard）内容で置き換える。 */
-function repairUnreadableConfig(configPath: string): void {
-  fs.copyFileSync(defaultConfigPath(), configPath);
+/**
+ * 対象の config/agent-skill-chain.yaml を、`readSafeRecoveryConfig`が返す安全な内容
+ * （軽量プロファイル既定テンプレート由来、`profile`のみstandardへ上書き済み）で置き換える。
+ */
+function repairUnreadableConfig(configPath: string, safeConfig: Record<string, unknown>): void {
+  writeYamlFileAtomic(configPath, safeConfig);
 }
 
 const PROFILE_UNREADABLE_WARNING =
-  '既存の agent-skill-chain.yaml の profile 設定を読み取れなかった（または不正な値だった）ため、既定値 standard として扱います。既に profile: lightweight を選択している場合は、upgrade 完了後に対象ファイルの profile フィールドを確認してください。';
+  '既存の agent-skill-chain.yaml の設定を読み取れなかった（または profile の値が不正だった）ため、profile を含む設定内容を安全側の既定値へ戻しました。既に profile: lightweight を選択している場合は、upgrade 完了後に対象ファイルの内容を確認してください。';
 
 const USAGE = `
 使い方: agent-skill-chain upgrade [target_dir] [--dry-run]
@@ -195,11 +207,30 @@ export async function upgrade(args: string[]): Promise<number> {
     // 対象ファイルを書き換えずに後続のtemplate解決だけを成立させる。
     const configOverride = dryRun ? (correctedConfig as AgentSkillChainConfig | undefined) : undefined;
 
+    // DESIGN.md 設計要素7 手順2: ケースC（`profileRepair`が存在＝profile判定不能からの復旧）では、
+    // `preservedProfile`は実際の意図を反映しない単なるフォールバック値（'standard'）に過ぎない。
+    // これを`collectManagedAssetMappings`へそのまま渡すと`agent-skill-chain.yaml`エントリのsrcは
+    // 標準プロファイル既定config（危険な自動化設定を含みうる）に解決されるため、直前の手順1で
+    // 書き込んだ安全な復旧結果を一般ミラー処理で即座に上書きしてしまう。これを防ぐため、
+    // `agent-skill-chain.yaml`エントリのみ一般ミラー処理（`copyTreeMirror`の呼び出し）から除外する。
+    // この除外は`copyTreeMirror`呼び出しに限定し、所有権記録の書き込み・削除候補判定には影響させない
+    // （下記で`agent-skill-chain.yaml`エントリもcurrentKeys/currentFilesへ通常どおり追加するため）。
+    const recoveredConfigDest = path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+
     // Issue #492: `init`が所有権記録へ書き込むキー集合と同一の走査ロジック
     // （`collectManagedAssetMappings`）から導出する。2箇所の独立ループの乖離により、削除候補判定の
     // 基準となる現行配布ファイル集合が誤る（黙って乖離しうる）リスクを構造的に排除する
     // （手動implementation-gateレビュー指摘: stale-delete-scope-invariant-untested）。
     for (const { src, dest } of collectManagedAssetMappings(targetDir, preservedProfile, configOverride)) {
+      if (profileRepair && dest === recoveredConfigDest) {
+        // 一般ミラー処理へは渡さず、手順1の復旧結果をそのまま最終内容として扱う。所有権記録・
+        // 削除候補判定上は引き続き通常どおり管理対象として扱う（DESIGN.md 設計要素7 手順2）。
+        const key = toOwnershipKey(targetDir, dest);
+        currentKeys.add(key);
+        if (!dryRun) currentFiles[key] = digestOfFile(dest);
+        summary.push(`${prefix}${dryRun ? 'planned-repaired' : 'repaired'}: ${dest}`);
+        continue;
+      }
       trackCopyResults(copyTreeMirror(src, dest, { dryRun, root: targetDir }));
     }
 
