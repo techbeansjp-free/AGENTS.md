@@ -22,7 +22,7 @@ import type { CopyResult } from '../lib/fs-copy.js';
 type Profile = 'standard' | 'lightweight';
 
 /**
- * DESIGN.md 設計要素7: `agent-skill-chain.yaml` の `profile` 値のみをupgrade前後で保存・復元する。
+ * Issue #503: `agent-skill-chain.yaml` の `profile` 値のみをupgrade前後で保存・復元する。
  * 3ケースを機械的に区別する（対象ファイルが存在するか／`profile`フィールドが存在するか／
  * 値が既知enumか、の3条件のみで判定する）。
  *   ケースA（ファイル不在）        : 新規導入相当。standardが正しい既定値。警告なし。
@@ -59,7 +59,7 @@ function resolvePreservedProfile(targetDir: string): ProfileResolution {
     // ケースC(ii)（パース不能）: 対象ファイルの内容を行単位で修復することはできないため、
     // 危険な自動化設定を含みうるパッケージ同梱の標準プロファイル既定configではなく、
     // 軽量プロファイル向けの安全な既定テンプレート（`merge.autonomous`等を持たない）を
-    // 唯一の復旧ソースとして使う（DESIGN.md 設計要素7 手順1(ii)、AGENTS.md I8）。非dry-run時は
+    // 唯一の復旧ソースとして使う（Issue #503、AGENTS.md I8）。非dry-run時は
     // `repair`がこれを対象ファイルへ書き込み、後続処理（`collectManagedAssetMappings` 経由の
     // `loadConfig(targetDir)`）が対象を読み取れるようにする。dry-run時は`repair`を呼ばない代わりに
     // `correctedConfig`をそのまま`collectManagedAssetMappings`へ渡し、対象ファイルを書き換えずに
@@ -110,8 +110,8 @@ function lightweightTemplateConfigPath(): string {
  * ケースC(ii)（パース不能、またはパース結果がオブジェクトでない）の復旧に使う安全な既定内容を返す。
  * 軽量プロファイル向けテンプレート（`merge.autonomous`等の危険な自動化設定を持たない）の内容を
  * そのまま採用したうえで、`profile`フィールドのみを本ケースの最終フォールバック値`standard`へ
- * 明示的に上書きする（テンプレート自体は`profile: lightweight`を持つため、DESIGN.md 設計要素7
- * 手順1(ii)）。
+ * 明示的に上書きする（テンプレート自体は`profile: lightweight`を持つため、そのままでは本ケースの
+ * 最終フォールバック値と矛盾する。Issue #503）。
  */
 function readSafeRecoveryConfig(): Record<string, unknown> {
   const parsed = readYamlFile(lightweightTemplateConfigPath());
@@ -191,7 +191,7 @@ export async function upgrade(args: string[]): Promise<number> {
       }
     }
 
-    // Issue #503（ADR-0023）設計要素7: 既存の`profile`値を保存し、`collectManagedAssetMappings`へ
+    // Issue #503（ADR-0023）: 既存の`profile`値を保存し、`collectManagedAssetMappings`へ
     // そのまま渡す。これにより`config`エントリの配布元（`agent-skill-chain.yaml`）が保存済み
     // profileに対応するテンプレートへ解決され、`profile`フィールド自体の値はupgradeで変更しない
     // （要件3・AC-3）。
@@ -207,7 +207,7 @@ export async function upgrade(args: string[]): Promise<number> {
     // 対象ファイルを書き換えずに後続のtemplate解決だけを成立させる。
     const configOverride = dryRun ? (correctedConfig as AgentSkillChainConfig | undefined) : undefined;
 
-    // DESIGN.md 設計要素7 手順2: ケースC（`profileRepair`が存在＝profile判定不能からの復旧）では、
+    // Issue #503: ケースC（`profileRepair`が存在＝profile判定不能からの復旧）では、
     // `preservedProfile`は実際の意図を反映しない単なるフォールバック値（'standard'）に過ぎない。
     // これを`collectManagedAssetMappings`へそのまま渡すと`agent-skill-chain.yaml`エントリのsrcは
     // 標準プロファイル既定config（危険な自動化設定を含みうる）に解決されるため、直前の手順1で
@@ -224,7 +224,7 @@ export async function upgrade(args: string[]): Promise<number> {
     for (const { src, dest } of collectManagedAssetMappings(targetDir, preservedProfile, configOverride)) {
       if (profileRepair && dest === recoveredConfigDest) {
         // 一般ミラー処理へは渡さず、手順1の復旧結果をそのまま最終内容として扱う。所有権記録・
-        // 削除候補判定上は引き続き通常どおり管理対象として扱う（DESIGN.md 設計要素7 手順2）。
+        // 削除候補判定上は引き続き通常どおり管理対象として扱う（Issue #503）。
         const key = toOwnershipKey(targetDir, dest);
         currentKeys.add(key);
         if (!dryRun) currentFiles[key] = digestOfFile(dest);
