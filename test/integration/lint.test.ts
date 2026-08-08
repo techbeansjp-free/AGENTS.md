@@ -591,8 +591,15 @@ interface CommentReferenceViolation {
  * メッセージ等）での同じ文字列出現は規約違反ではないため、各マッチ位置が単一行コメント内かどうかを
  * `src/commands/lint.ts` が既に持つ `isInSingleLineComment`（`commentMarkerFor`・
  * `findUnquotedCommentMarkerIndex` を内部で使用）で判定し、コメント外のマッチは除外する。
- * 複数行コメント（`/* ... *\/`）内での違反は本判定の対象外（`isInSingleLineComment` 自体が
- * 単一行コメントのみを扱うため）。
+ *
+ * 手動implementation-gate strictレビュー指摘（両レビュア共通）: `isInSingleLineComment` は
+ * 単一行コメント記号（`.ts`なら`//`）のみを扱う設計であり、複数行ブロックコメント
+ * （`/* ... *\/` 形式。JSDocスタイルの `/** ... *\/` と、その継続行である ` * ...` を含む）は
+ * 単一行コメント記号が行内に現れないため常に対象外になり、本テストの検知漏れになっていた
+ * （このテストが防ごうとしていた元の違反自体がJSDocブロックコメント内にあった）。
+ * `src/commands/lint.ts` 側の本番関数はスコープを変更せず、本関数側でのみ複数行ブロック
+ * コメントの追跡状態（前の行で開始し閉じていなければ次の行もブロックコメント内）を保持し、
+ * ブロックコメント内にある行は行全体を検査対象として扱う。
  */
 function findCommentReferenceViolations(root: string, files: string[]): CommentReferenceViolation[] {
   const violations: CommentReferenceViolation[] = [];
@@ -602,8 +609,22 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
     const ext = path.extname(file);
     const lines = content.split('\n');
 
+    let inBlockComment = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+      let lineIsBlockComment = false;
+
+      if (inBlockComment) {
+        lineIsBlockComment = true;
+        if (line.includes('*/')) inBlockComment = false;
+      } else {
+        const openIndex = line.indexOf('/*');
+        if (openIndex !== -1) {
+          lineIsBlockComment = true;
+          if (line.indexOf('*/', openIndex + 2) === -1) inBlockComment = true;
+        }
+      }
+
       for (const [pattern, label] of [
         [headingRefPattern, '見出し位置参照文字列'],
         [danglingStepRefPattern, '宙吊りの手順番号参照'],
@@ -611,7 +632,7 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
         pattern.lastIndex = 0;
         let match: RegExpExecArray | null;
         while ((match = pattern.exec(line)) !== null) {
-          if (isInSingleLineComment(line, match.index, ext)) {
+          if (lineIsBlockComment || isInSingleLineComment(line, match.index, ext)) {
             violations.push({ relPath, lineNo: i + 1, label, matched: match[0] });
           }
           if (match[0].length === 0) pattern.lastIndex++;
@@ -672,6 +693,46 @@ test('src/配下: コメント以外（文字列リテラル等）の「手順1�
     // （検出ロジック自体がコメント判定を素通ししていないことの確認）。
     const commentViolations = findCommentReferenceViolations(tmpRoot, [commentFile]);
     assert.ok(commentViolations.length > 0, 'コメント内の見出し位置参照文字列を検出できていない');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: JSDocスタイルの複数行ブロックコメント内にある見出し位置参照文字列を検出する（手動implementation-gateレビュー指摘: block-comment-blind-spot 是正の回帰テスト）', () => {
+  // Given: `isInSingleLineComment` は単一行コメント記号（.tsなら`//`）のみを扱う設計であり、
+  // 複数行ブロックコメント（`/** ... */`形式、継続行が` * `で始まる形式）には該当記号が行内に
+  // 現れないため素通りしてしまう。本Issue系列（#507）が実際に是正した元の違反は、まさにこの
+  // JSDocブロックコメント内にあった。開始行(`/**`)・継続行(` * ...`)・終了行(` */`)のそれぞれに
+  // 見出し位置参照文字列・宙吊りの手順番号参照を含む合成ファイルを用意する。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-block-comment-scope-'));
+  try {
+    const blockCommentFile = path.join(tmpRoot, 'block-comment.ts');
+    fs.writeFileSync(
+      blockCommentFile,
+      [
+        '/**',
+        ' * DESIGN.md 設計要素7: 対象の保存・復元方針を説明する。',
+        ' * 続けて手順1を実行し、手順2で検証する。',
+        ' */',
+        'export const noop = true;',
+      ].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [blockCommentFile]);
+
+    // Then: ブロックコメント内の見出し位置参照文字列（2行目）・宙吊りの手順番号参照
+    // （3行目、手順1・手順2の2件）がいずれも検出される。
+    assert.ok(
+      violations.some((v) => v.lineNo === 2 && v.label === '見出し位置参照文字列'),
+      'JSDocブロックコメント開始直後の継続行にある見出し位置参照文字列を検出できていない',
+    );
+    const danglingStepViolations = violations.filter((v) => v.lineNo === 3 && v.label === '宙吊りの手順番号参照');
+    assert.equal(
+      danglingStepViolations.length,
+      2,
+      'JSDocブロックコメント継続行にある2件の宙吊りの手順番号参照（手順1・手順2）を検出できていない',
+    );
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
