@@ -565,20 +565,27 @@ test('lint references: 実物リポジトリのデフォルト対象（src/ を�
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('src/commands/upgrade.ts: 禁止された見出し位置参照文字列（DESIGN.md 設計要素<N>）を含まない（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止）', () => {
+test('src/commands/upgrade.ts: 禁止された見出し位置参照文字列（DESIGN.md 設計要素<N>・宙吊りの手順<N>番号参照）を含まない（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止）', () => {
   // Given/When: このリポジトリ自身の src/commands/upgrade.ts の内容を直接読み取る。
   //
   // 注記: `lint references` の禁止参照検出パターン（§見出し形式・file.ext:行番号形式の2種のみ）は
-  // 「DESIGN.md 設計要素7」のような「文書名＋見出し名（節記号・行番号なし）」形式を検出できない
-  // （検出パターン自体の拡張は本テストのスコープ外）。そのため `lint references` の終了コードに
-  // 依存せず、かつて混入していた具体的な違反パターン文字列がファイル内容に存在しないことを
-  // 直接assertする。
+  // 「DESIGN.md 設計要素7」のような「文書名＋見出し名（節記号・行番号なし）」形式や、対応する
+  // 番号付きリストの定義を伴わずに残存する「手順1」「手順2」のような番号のみの宙吊り参照を
+  // 検出できない（検出パターン自体の拡張は本テストのスコープ外）。そのため `lint references` の
+  // 終了コードに依存せず、かつて混入していた具体的な違反パターン文字列がファイル内容に
+  // 存在しないことを直接assertする。
   const upgradeTsPath = path.join(realRepoRoot, 'src', 'commands', 'upgrade.ts');
   const content = fs.readFileSync(upgradeTsPath, 'utf8');
 
   // Then: 「DESIGN.md 設計要素」という見出し位置参照文字列を含まない
   // （Issue #507で `DESIGN.md 設計要素7` → `Issue #503` 等へ是正済み）。
   assert.doesNotMatch(content, /DESIGN\.md\s*設計要素/);
+
+  // Then: 「手順」＋数字（半角・全角）という番号付き手順への宙吊り参照も含まない
+  // （直後に数字が続く「手順N」形式に限定し、本ファイル中の正当な「手順」という単語の
+  // 他の使用法を誤検知しないようにする。Issue #507是正ラウンド2で
+  // 「手順1」「手順2」→処理内容を直接説明する自己完結した文言へ是正済み）。
+  assert.doesNotMatch(content, /手順[0-9０-９]/);
 });
 
 test('lint adr check: 実物 docs/adr/ は違反0で通る', async () => {
