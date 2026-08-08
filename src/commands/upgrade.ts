@@ -143,7 +143,7 @@ target_dir: 更新先リポジトリのルートディレクトリ（省略時�
 /**
  * init済みプロジェクトの正本アセット（.agent-skill-chain/project/を除く）を現行パッケージ
  * バージョンへミラー更新する。NAMESPACED_ENTRIES定数にprojectを含めないことで、
- * project/への不可侵性を構造的に保証する（ADR-1関連）。
+ * project/への不可侵性を構造的に保証する。
  */
 export async function upgrade(args: string[]): Promise<number> {
   return guard(() => {
@@ -191,10 +191,9 @@ export async function upgrade(args: string[]): Promise<number> {
       }
     }
 
-    // Issue #503（ADR-0023）: 既存の`profile`値を保存し、`collectManagedAssetMappings`へ
+    // Issue #503: 既存の`profile`値を保存し、`collectManagedAssetMappings`へ
     // そのまま渡す。これにより`config`エントリの配布元（`agent-skill-chain.yaml`）が保存済み
-    // profileに対応するテンプレートへ解決され、`profile`フィールド自体の値はupgradeで変更しない
-    // （要件3・AC-3）。
+    // profileに対応するテンプレートへ解決され、`profile`フィールド自体の値はupgradeで変更しない。
     const { profile: preservedProfile, warning: profileWarning, repair: profileRepair, correctedConfig } =
       resolvePreservedProfile(targetDir);
     if (profileWarning) summary.push(profileWarning);
@@ -272,7 +271,7 @@ export async function upgrade(args: string[]): Promise<number> {
     }
 
     if (staleResult.hasDeleteFailure) {
-      // Issue #492 要件6・要件11: 成功した全結果を含むsummaryを先に出力してから異常終了する
+      // Issue #492: 成功した全結果を含むsummaryを先に出力してから異常終了する
       // （既存の ok()/fail() の単純な二者択一ではなく、両方の出力を順に行う）。
       process.stdout.write(`${summary.join('\n')}\n`);
       const failedPaths = staleResult.outcomes
