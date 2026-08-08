@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { walkTextFiles } from '../../src/lib/scan.js';
+import { isInSingleLineComment, findUnquotedCommentMarkerIndex } from '../../src/commands/lint.js';
 
 // lint vocab / lint references / lint adr check の3サブコマンドを、bin/agents-md.js（ビルド後の
 // 実体）に対する subprocess 実行で検証する。createTmpRepo は .agent-skill-chain/ 資産一式
@@ -566,40 +568,329 @@ test('lint references: 実物リポジトリのデフォルト対象（src/ を�
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('src/配下: 禁止された見出し位置参照文字列（<文書名>.md<助詞・記号>設計要素<N>等・宙吊りの手順<N>番号参照）を含まない（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止）', () => {
+// 文書名（.md拡張子を持つ語）に、助詞・記号を挟んでもよい形で「設計要素」「手順」等の
+// 見出し的な語＋番号（半角・全角）が続くパターンを広く捕捉する。過度な一般語誤検知を避けるため、
+// 「見出し的な語＋番号」への着地を要求する。
+const headingRefPattern = /\.md\s*(?:の|または|／|\/|-|:|：)?\s*(?:設計要素|手順)\s*[0-9０-９]/g;
+// 文書名を伴わない「手順N」単独の宙吊り参照（直後に数字が続く「手順N」形式に限定し、
+// 「手順」という単語の他の正当な使用法を誤検知しないようにする）。
+const danglingStepRefPattern = /手順[0-9０-９]/g;
+
+interface CommentReferenceViolation {
+  relPath: string;
+  lineNo: number;
+  label: string;
+  matched: string;
+}
+
+/**
+ * Issue #510: root配下の対象ファイル（walkTextFiles収集）について、禁止された見出し位置参照
+ * 文字列（headingRefPattern・danglingStepRefPattern）が**ソースコードコメント内**に出現する
+ * 箇所のみを収集する。AGENTS.md「参照・コメントの陳腐化防止」が禁止するのはソースコードコメント
+ * における見出し位置参照であり、コメント以外（文字列リテラル・実行時に利用者へ表示される
+ * メッセージ等）での同じ文字列出現は規約違反ではないため、各マッチ位置が単一行コメント内かどうかを
+ * `src/commands/lint.ts` が既に持つ `isInSingleLineComment`（`commentMarkerFor`・
+ * `findUnquotedCommentMarkerIndex` を内部で使用）で判定し、コメント外のマッチは除外する。
+ *
+ * 手動implementation-gate strictレビュー指摘（両レビュア共通）: `isInSingleLineComment` は
+ * 単一行コメント記号（`.ts`なら`//`）のみを扱う設計であり、複数行ブロックコメント
+ * （`/* ... *\/` 形式。JSDocスタイルの `/** ... *\/` と、その継続行である ` * ...` を含む）は
+ * 単一行コメント記号が行内に現れないため常に対象外になり、本テストの検知漏れになっていた
+ * （このテストが防ごうとしていた元の違反自体がJSDocブロックコメント内にあった）。
+ * `src/commands/lint.ts` 側の本番関数はスコープを変更せず、本関数側でのみ複数行ブロック
+ * コメントの追跡状態（前の行で開始し閉じていなければ次の行もブロックコメント内）を保持し、
+ * ブロックコメント内にある行は行全体を検査対象として扱う。
+ *
+ * 手動implementation-gate strictレビュー2回目・指摘（block-comment-detection-latches-on-
+ * string-literal）: ブロックコメント開始判定は文字列リテラル内の`/*`部分文字列（globパターン
+ * 等）にも反応してしまい、対応する`*\/`が同一行に無い場合はそれ以降の行全体を誤ってコメント扱い
+ * する偽陽性があった。開始判定は`src/commands/lint.ts`の`findUnquotedCommentMarkerIndex`
+ * （引用符の外側にある最初のマーカー位置を返す）を用いて、引用符の外側にある`/*`のみを開始と
+ * 認める。終了判定（`*\/`検出）はブロックコメント継続行では対象行全体が既にコメント本文であり
+ * 実際の文字列リテラルは存在しないため、引用符追跡を適用すると逆にコメント本文中の引用符文字を
+ * 誤ってクオート開始と解釈しかねない。そのため終了判定は単純な部分文字列検索のまま維持する。
+ *
+ * 手動implementation-gate strictレビュー3回目・指摘（両レビュア共通、根本原因は同一）:
+ * 引用符の外側判定だけでは以下2種の偽陽性が残っていた。(1) `/* ... *\/`が実際にブロック
+ * コメント構文として成立するのは本リポジトリでは`.ts`ファイルのみだが、拡張子を見ずに全
+ * ファイル種別へ一律適用していたため、`.sh`（`cp "$src"/* "$dst"/`）・`.yaml`（`path/*`）・
+ * `.md`（`**\/*.ts`のような散文中のglob表記）内の、コメント構文ではない単なるglob・パス
+ * 断片の`/*`まで誤ってブロックコメント開始と判定していた。(2) `.ts`ファイルであっても、
+ * `// 対象は src/*.ts のみ`のような単一行コメント本文中に`/*`という部分文字列が現れると、
+ * これも引用符の外側にあるため誤ってブロックコメント開始と判定していた。是正として、
+ * ブロックコメントの状態機械自体を`ext === '.ts'`のときのみ起動し（`.ts`以外は
+ * `inBlockComment`・`lineIsBlockComment`とも常に`false`のまま）、かつ`.ts`ファイル内でも
+ * `/*`の位置が同じ行の単一行コメント開始位置（`findUnquotedCommentMarkerIndex(line, '//')`）
+ * より前にある場合のみ真のブロックコメント開始として扱う。
+ */
+function findCommentReferenceViolations(root: string, files: string[]): CommentReferenceViolation[] {
+  const violations: CommentReferenceViolation[] = [];
+  for (const file of files) {
+    const content = fs.readFileSync(file, 'utf8');
+    const relPath = path.relative(root, file);
+    const ext = path.extname(file);
+    const lines = content.split('\n');
+
+    let inBlockComment = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      let lineIsBlockComment = false;
+
+      if (ext === '.ts') {
+        if (inBlockComment) {
+          lineIsBlockComment = true;
+          if (line.includes('*/')) inBlockComment = false;
+        } else {
+          const openIndex = findUnquotedCommentMarkerIndex(line, '/*');
+          const singleLineIndex = findUnquotedCommentMarkerIndex(line, '//');
+          if (openIndex !== -1 && (singleLineIndex === -1 || openIndex < singleLineIndex)) {
+            lineIsBlockComment = true;
+            if (line.indexOf('*/', openIndex + 2) === -1) inBlockComment = true;
+          }
+        }
+      }
+
+      for (const [pattern, label] of [
+        [headingRefPattern, '見出し位置参照文字列'],
+        [danglingStepRefPattern, '宙吊りの手順番号参照'],
+      ] as const) {
+        pattern.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(line)) !== null) {
+          if (lineIsBlockComment || isInSingleLineComment(line, match.index, ext)) {
+            violations.push({ relPath, lineNo: i + 1, label, matched: match[0] });
+          }
+          if (match[0].length === 0) pattern.lastIndex++;
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+test('src/配下: 禁止された見出し位置参照文字列（<文書名>.md<助詞・記号>設計要素<N>等・宙吊りの手順<N>番号参照）をソースコードコメントに含まない（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止、Issue #510: 検査対象をコメント部分のみへ限定）', () => {
   // Given/When: このリポジトリ自身の src/ 配下の全対象ファイル（walkTextFiles が収集する
-  // .md/.yaml/.yml/.sh/.json/.ts）を直接読み取る。src/commands/upgrade.ts 単体ではなく
-  // src/ 全体を対象にすることで、同種の混入が他ファイルへ再発しても検出できるようにする。
+  // .md/.yaml/.yml/.sh/.json/.ts）を対象に、コメント部分のみへ検査範囲を絞ってスキャンする。
+  // src/commands/upgrade.ts 単体ではなく src/ 全体を対象にすることで、同種の混入が他ファイルへ
+  // 再発しても検出できるようにする。
   //
   // 注記: `lint references` の禁止参照検出パターン（見出し形式・file.ext:行番号形式の2種のみ）は、
   // 文書名（`.md`拡張子）の直後に助詞・記号を挟んでもよい形で「設計要素」「手順」等の見出し的な語
   // ＋数字が続く形式や、対応する番号付きリストの定義を伴わずに残存する番号のみの宙吊り参照を検出できない
   // （検出パターン自体の拡張は本テストのスコープ外）。そのため `lint references` の終了コードに
-  // 依存せず、かつて混入していた具体的な違反パターンがファイル内容に存在しないことを直接assertする。
+  // 依存せず、かつて混入していた具体的な違反パターンがコメント内に存在しないことを直接assertする。
   const srcRoot = path.join(realRepoRoot, 'src');
   const files = walkTextFiles([srcRoot]);
   assert.ok(files.length > 0, 'src/ 配下の対象ファイルが1件以上存在すること');
 
-  // 文書名（.md拡張子を持つ語）に、助詞・記号を挟んでもよい形で「設計要素」「手順」等の
-  // 見出し的な語＋番号（半角・全角）が続くパターンを広く捕捉する。過度な一般語誤検知を避けるため、
-  // 「見出し的な語＋番号」への着地を要求する。
-  const headingRefPattern = /\.md\s*(?:の|または|／|\/|-|:|：)?\s*(?:設計要素|手順)\s*[0-9０-９]/;
-  // 文書名を伴わない「手順N」単独の宙吊り参照（直後に数字が続く「手順N」形式に限定し、
-  // 「手順」という単語の他の正当な使用法を誤検知しないようにする）。
-  const danglingStepRefPattern = /手順[0-9０-９]/;
+  const violations = findCommentReferenceViolations(realRepoRoot, files);
 
-  for (const file of files) {
-    const content = fs.readFileSync(file, 'utf8');
-    const relPath = path.relative(realRepoRoot, file);
+  // Then: 「<文書名>.md<助詞・記号>設計要素<N>」等の見出し位置参照文字列、および「手順」＋数字
+  // という番号付き手順への宙吊り参照のいずれも、コメント内に残存していない
+  // （Issue #507で `DESIGN.md 設計要素7` → `Issue #503` 等へ、「手順1」「手順2」→処理内容を
+  // 直接説明する自己完結した文言へ是正済み）。
+  assert.deepEqual(
+    violations,
+    [],
+    violations
+      .map((v) => `${v.relPath}:${v.lineNo} のコメントに${v.label}が残存している: ${JSON.stringify(v.matched)}`)
+      .join('\n'),
+  );
+});
 
-    // Then: 「<文書名>.md<助詞・記号>設計要素<N>」等の見出し位置参照文字列を含まない
-    // （Issue #507で `DESIGN.md 設計要素7` → `Issue #503` 等へ是正済み）。
-    assert.doesNotMatch(content, headingRefPattern, `${relPath} に見出し位置参照文字列が残存している`);
+test('src/配下: コメント以外（文字列リテラル等）の「手順1」等の文字列は誤検知しない（Issue #510回帰防止）', () => {
+  // Given: 「手順1」を含むが、コメントではなく文字列リテラル（実行時に利用者へ表示されうる
+  // 案内メッセージを模したもの）としてのみ出現する合成ファイルと、
+  // 同じ文字列を単一行コメント内に含む合成ファイルを用意する。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-comment-scope-'));
+  try {
+    const nonCommentFile = path.join(tmpRoot, 'non-comment.ts');
+    fs.writeFileSync(nonCommentFile, "export const guide = '手順1: 対象ディレクトリを確認してください';\n");
 
-    // Then: 「手順」＋数字という番号付き手順への宙吊り参照も含まない
-    // （Issue #507是正ラウンド2で「手順1」「手順2」→処理内容を直接説明する
-    // 自己完結した文言へ是正済み）。
-    assert.doesNotMatch(content, danglingStepRefPattern, `${relPath} に宙吊りの手順番号参照が残存している`);
+    const commentFile = path.join(tmpRoot, 'comment.ts');
+    fs.writeFileSync(commentFile, '// DESIGN.md 設計要素7を参照。手順1を実行する。\nexport const noop = true;\n');
+
+    // When/Then: 文字列リテラルのみに出現する場合は違反として検出しない。
+    const nonCommentViolations = findCommentReferenceViolations(tmpRoot, [nonCommentFile]);
+    assert.deepEqual(nonCommentViolations, [], 'コメント外の「手順1」を誤って検出している');
+
+    // When/Then: 単一行コメント内に出現する場合は違反として検出する
+    // （検出ロジック自体がコメント判定を素通ししていないことの確認）。
+    const commentViolations = findCommentReferenceViolations(tmpRoot, [commentFile]);
+    assert.ok(commentViolations.length > 0, 'コメント内の見出し位置参照文字列を検出できていない');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: JSDocスタイルの複数行ブロックコメント内にある見出し位置参照文字列を検出する（手動implementation-gateレビュー指摘: block-comment-blind-spot 是正の回帰テスト）', () => {
+  // Given: `isInSingleLineComment` は単一行コメント記号（.tsなら`//`）のみを扱う設計であり、
+  // 複数行ブロックコメント（`/** ... */`形式、継続行が` * `で始まる形式）には該当記号が行内に
+  // 現れないため素通りしてしまう。本Issue系列（#507）が実際に是正した元の違反は、まさにこの
+  // JSDocブロックコメント内にあった。開始行(`/**`)・継続行(` * ...`)・終了行(` */`)のそれぞれに
+  // 見出し位置参照文字列・宙吊りの手順番号参照を含む合成ファイルを用意する。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-block-comment-scope-'));
+  try {
+    const blockCommentFile = path.join(tmpRoot, 'block-comment.ts');
+    fs.writeFileSync(
+      blockCommentFile,
+      [
+        '/**',
+        ' * DESIGN.md 設計要素7: 対象の保存・復元方針を説明する。',
+        ' * 続けて手順1を実行し、手順2で検証する。',
+        ' */',
+        'export const noop = true;',
+      ].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [blockCommentFile]);
+
+    // Then: ブロックコメント内の見出し位置参照文字列（2行目）・宙吊りの手順番号参照
+    // （3行目、手順1・手順2の2件）がいずれも検出される。
+    assert.ok(
+      violations.some((v) => v.lineNo === 2 && v.label === '見出し位置参照文字列'),
+      'JSDocブロックコメント開始直後の継続行にある見出し位置参照文字列を検出できていない',
+    );
+    const danglingStepViolations = violations.filter((v) => v.lineNo === 3 && v.label === '宙吊りの手順番号参照');
+    assert.equal(
+      danglingStepViolations.length,
+      2,
+      'JSDocブロックコメント継続行にある2件の宙吊りの手順番号参照（手順1・手順2）を検出できていない',
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: globパターン等、文字列リテラル内の"/*"部分文字列をブロックコメント開始と誤検知しない（手動implementation-gateレビュー2回目指摘: block-comment-detection-latches-on-string-literal 是正の回帰テスト）', () => {
+  // Given: 実際のブロックコメントは無いが、1行目がglobパターンの文字列リテラル（`'**/*.ts'`）を
+  // 含み、その部分文字列`/*`が引用符を考慮しない実装ではブロックコメント開始と誤判定されうる。
+  // 誤判定された場合、対応する`*/`が同一行に無いため`inBlockComment`がtrueのまま維持され、
+  // 2行目以降のコード（コメントではない文字列リテラル中の「手順1」を含む）が丸ごと
+  // 「行全体がコメント」として扱われ、誤って違反報告される。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-glob-literal-scope-'));
+  try {
+    const globLiteralFile = path.join(tmpRoot, 'glob-literal.ts');
+    fs.writeFileSync(
+      globLiteralFile,
+      [
+        "const pattern = '**/*.ts';",
+        "export const guide = '手順1: 対象ディレクトリを確認してください';",
+      ].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [globLiteralFile]);
+
+    // Then: 実際のブロックコメントが存在しないため、2行目の文字列リテラル中の「手順1」は
+    // コメント扱いされず違反として検出されない。
+    assert.deepEqual(
+      violations,
+      [],
+      violations
+        .map((v) => `${v.relPath}:${v.lineNo} を誤ってコメント扱いし違反検出している: ${JSON.stringify(v.matched)}`)
+        .join('\n'),
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: .shファイル内のglob・パス断片としての"/*"をブロックコメント開始と誤検知しない（手動implementation-gateレビュー3回目指摘: block-comment-open-detection-ignores-extension 是正の回帰テスト）', () => {
+  // Given: `/* ... */`がブロックコメント構文として成立するのは本リポジトリでは.tsファイルのみ
+  // であり、.shファイル中の`cp "$src"/* "$dst"/`のような`/*`はコメントではなく単なるglob・
+  // パス断片である。拡張子を見ずに一律適用する実装では、対応する`*/`が同一行に無いため
+  // それ以降の行全体が誤ってコメント扱いされ、後続の正当な行（「手順1」を含む）が誤検出される。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-shell-glob-scope-'));
+  try {
+    const shellFile = path.join(tmpRoot, 'copy.sh');
+    fs.writeFileSync(
+      shellFile,
+      ['#!/bin/sh', 'cp "$src"/* "$dst"/', 'echo "手順1: コピー完了を確認してください"'].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [shellFile]);
+
+    // Then: .shファイルにブロックコメント構文は存在しないため、3行目の「手順1」を含む文字列は
+    // コメント扱いされず違反として検出されない。
+    assert.deepEqual(
+      violations,
+      [],
+      violations
+        .map((v) => `${v.relPath}:${v.lineNo} を誤ってコメント扱いし違反検出している: ${JSON.stringify(v.matched)}`)
+        .join('\n'),
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: .mdファイル内の散文中のglob表記としての"/*"をブロックコメント開始と誤検知しない（手動implementation-gateレビュー3回目指摘: block-comment-open-detection-ignores-extension 是正の回帰テスト）', () => {
+  // Given: .mdファイルにもブロックコメント構文（/* ... */）は存在しない。
+  // `対象は **/*.ts です`のような散文中のglob表記の`/*`部分文字列を拡張子を見ずに一律適用する
+  // 実装では誤ってブロックコメント開始と判定し、対応する`*/`が同一行に無いため後続の行全体
+  // （「手順1」を含む正当な行）が誤ってコメント扱いされ違反検出される。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-md-glob-scope-'));
+  try {
+    const mdFile = path.join(tmpRoot, 'guide.md');
+    fs.writeFileSync(
+      mdFile,
+      ['対象は **/*.ts です。', '手順1: 対象ディレクトリを確認してください。'].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [mdFile]);
+
+    // Then: .mdファイルにブロックコメント構文は存在しないため、2行目の「手順1」を含む文字列は
+    // コメント扱いされず違反として検出されない
+    // （commentMarkerForが.mdをundefinedとして扱う既存の単一行コメント判定でも元々検出されない）。
+    assert.deepEqual(
+      violations,
+      [],
+      violations
+        .map((v) => `${v.relPath}:${v.lineNo} を誤ってコメント扱いし違反検出している: ${JSON.stringify(v.matched)}`)
+        .join('\n'),
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: .tsファイル内の単一行コメント本文中に現れる"/*"をブロックコメント開始と誤検知しない（手動implementation-gateレビュー3回目指摘: block-comment-open-latches-on-single-line-comment 是正の回帰テスト）', () => {
+  // Given: `// 対象は src/*.ts のみ`のような単一行コメント本文中に`/*`という部分文字列が
+  // 現れると、`/*`の位置が単一行コメント開始（`//`）位置より後ろにあるにもかかわらず、単一行
+  // コメント記号との前後関係を見ない実装では誤ってブロックコメント開始と判定してしまう。
+  // 誤判定された場合、対応する`*/`が同一行に無いため後続の行全体（コメント外の正当な
+  // 「手順1」を含む行）が誤ってコメント扱いされ違反検出される。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-line-comment-glob-scope-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'line-comment-glob.ts');
+    fs.writeFileSync(
+      tsFile,
+      [
+        '// 対象は src/*.ts のみ',
+        "export const guide = '手順1: 対象ディレクトリを確認してください';",
+      ].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: 実際のブロックコメントは存在しないため、2行目の文字列リテラル中の「手順1」は
+    // コメント扱いされず違反として検出されない
+    // （1行目自体は単一行コメントであり見出し位置参照・宙吊りの手順番号参照パターンに
+    // 一致する文字列を含まないため、1行目由来の違反も発生しない）。
+    assert.deepEqual(
+      violations,
+      [],
+      violations
+        .map((v) => `${v.relPath}:${v.lineNo} を誤ってコメント扱いし違反検出している: ${JSON.stringify(v.matched)}`)
+        .join('\n'),
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
 

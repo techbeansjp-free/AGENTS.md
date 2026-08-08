@@ -192,15 +192,18 @@ function nextNonSpaceChar(line: string, pos: number): string | undefined {
   return i < line.length ? line[i] : undefined;
 }
 
-/** Issue #484: 拡張子に対応する単一行コメント開始記号。 */
-function commentMarkerFor(ext: string): string | undefined {
+/** Issue #484: 拡張子に対応する単一行コメント開始記号。
+ * Issue #510: test/integration/lint.test.tsの回帰テストがコメント部分のみを検査対象へ絞り込む
+ * ためexportし、コメント判定ロジックの重複実装を避ける。 */
+export function commentMarkerFor(ext: string): string | undefined {
   if (ext === '.ts') return '//';
   if (ext === '.sh' || ext === '.yaml' || ext === '.yml') return '#';
   return undefined;
 }
 
-/** Issue #487: 引用符付き文字列の外側にある最初の単一行コメント開始記号を返す。 */
-function findUnquotedCommentMarkerIndex(line: string, marker: string): number {
+/** Issue #487: 引用符付き文字列の外側にある最初の単一行コメント開始記号を返す。
+ * Issue #510: test/integration/lint.test.tsの回帰テストから再利用するためexportする。 */
+export function findUnquotedCommentMarkerIndex(line: string, marker: string): number {
   let quote: "'" | '"' | undefined;
 
   for (let i = 0; i < line.length; i++) {
@@ -221,8 +224,9 @@ function findUnquotedCommentMarkerIndex(line: string, marker: string): number {
   return -1;
 }
 
-/** Issue #484: 禁止語が単一行コメント開始以降にあるかを判定する。 */
-function isInSingleLineComment(line: string, pos: number, ext: string): boolean {
+/** Issue #484: 禁止語が単一行コメント開始以降にあるかを判定する。
+ * Issue #510: test/integration/lint.test.tsの回帰テストから再利用するためexportする。 */
+export function isInSingleLineComment(line: string, pos: number, ext: string): boolean {
   const marker = commentMarkerFor(ext);
   if (marker === undefined) return false;
   const markerPos = findUnquotedCommentMarkerIndex(line, marker);
