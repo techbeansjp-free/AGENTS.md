@@ -648,47 +648,118 @@ interface CommentReferenceViolation {
  * 引用符として追跡）を再利用していたため、`.ts`ファイル内のテンプレートリテラル
  * （バッククォート文字列）に含まれる`/* ... *\/`風・`//`風の部分文字列を、引用符の外側と
  * 誤判定していた。`src/commands/lint.ts`本体は変更せず、本ファイル内でのみバッククォートも
- * 引用符として追跡するテスト専用ヘルパー（`findUnquotedMarkerIndexTrackingBacktick`・
- * `isInSingleLineCommentTrackingBacktick`）を実装し、両判定をこちらへ置き換える。複数行に
+ * 引用符として追跡するテスト専用ロジックを実装し、両判定をこちらへ置き換える。複数行に
  * またがるテンプレートリテラルへの完全対応・正規表現リテラル内`/*`風文字列への対応は対象外
  * とする（単一行で完結するテンプレートリテラルのみを扱う）。
  *
- * Issue #519・是正: Issue #517の是正はバッククォートで囲まれた範囲全体（`${...}`補間式の
- * 内部を含む）を無条件に「引用符の内側（文字列）」として扱っていたため、補間式の内部に実在する
- * コメント（例: `` `結果: ${/* 注記 *\/ value}` ``）を誤って文字列扱いし、検査から見逃していた
- * （偽陰性）。是正として、バッククォート文字列走査中に`${`が現れたら「補間式（実際のコード）」
- * の内部に入ったとみなし、通常のコード走査（引用符・マーカーを認識する走査）へ切り替える状態を
- * スタックで管理する。補間式内部でオブジェクトリテラル等により`{`が現れる場合は深さを追跡し、
- * 最も外側の`${`に対応する`}`が見つかった時点でバッククォート文字列の走査へ戻る。補間式の内部で
- * 新たな引用符・バッククォート文字列が始まった場合もスタックへ積み、通常のコードと同様に
- * ネストして扱う。複数行にまたがる補間式への完全対応は対象外とする（単一行で完結する`${...}`
- * のみを扱う）。
+ * Issue #519（当初是正）: バッククォートで囲まれた範囲全体（`${...}`補間式の内部を含む）を
+ * 無条件に「引用符の内側（文字列）」として扱っていたため、補間式の内部に実在するコメント
+ * （例: `` `結果: ${/* 注記 *\/ value}` ``）を誤って文字列扱いし、検査から見逃していた
+ * （偽陰性）。補間式内部を実際のコードとして扱う状態管理を導入した。
+ *
+ * Issue #519・手動implementation-gate strictレビュー指摘（rest-slice-backtick-
+ * misinterpretation-swallows-later-comment）・根本是正: 当初のIssue #519是正は、1行内に複数の
+ * ブロックコメント区間を探す際、1つ目の区間が確定するたびに`line.slice(searchFrom)`で部分文字列
+ * を切り出し、バッククォート追跡ヘルパーを**空のスタックから**再走査していた。このため、行の前半
+ * で開いたテンプレートリテラルが`searchFrom`より後でまだ閉じていない場合、2回目以降の走査は
+ * その閉じバッククォートを「新しいテンプレートリテラルの開始」と誤認し、以降にある実在の
+ * ブロックコメント（例: `` `${/*c*\/ a}` /* outer comment *\/; ``の`outer comment`）を検知
+ * できない退行があった。根本原因は「部分文字列を切り出して状態をリセットして再走査する」という
+ * 構造自体にあるため、部分パッチではなく、1行につき位置0から行末まで**状態を一度もリセットせず
+ * 単一パスで走査する**`scanLineForCommentRanges`へ設計を変更した。引用符・バッククォート
+ * 文字列・補間式・ブロックコメントの状態はすべて同一の走査ループの中で一貫して更新され続ける。
+ * 従来の複数の小さなヘルパー（`findUnquotedMarkerIndexTrackingBacktick`・
+ * `isInSingleLineCommentTrackingBacktick`）はこの単一パス関数へ統合し、重複ロジックを排除した。
  */
-function findUnquotedMarkerIndexTrackingBacktick(line: string, marker: string): number {
+
+interface LineCommentScanResult {
+  /** その行で実際にブロックコメントが及ぶ文字位置の半開区間 [start, end) の配列。
+   * 1行に複数のブロックコメントが存在しうるため配列化する（区間が無い行は空配列）。 */
+  blockCommentRanges: Array<[number, number]>;
+  /** 単一行コメント（`//`・`#`）が開始する文字位置。見つからなければnull。 */
+  singleLineCommentStart: number | null;
+  /** 行末時点でまだブロックコメントの内部にあるか（次行へ持ち越す状態）。 */
+  endsInsideBlockComment: boolean;
+}
+
+/**
+ * Issue #519根本是正: 1行を位置0から行末まで、状態（引用符・バッククォート文字列・補間式・
+ * ブロックコメント）を一度もリセットせず単一パスで走査し、ブロックコメント区間の配列と単一行
+ * コメントの開始位置を求める。`inBlockCommentAtStart`は前の行から継続中のブロックコメント状態
+ * （`.ts`のみ意味を持つ）。ブロックコメント構文（`/* ... *\/`）は`.ts`ファイルのみで認識する
+ * （`.sh`・`.yaml`・`.yml`・`.md`等ではglob・パス断片・散文中の`/*`をコメントと誤認しない）。
+ * 単一行コメント記号は`commentMarkerFor`（`.ts`は`//`、`.sh`/`.yaml`/`.yml`は`#`、それ以外は
+ * 無し）に従う。トップレベル（コード）位置、および`${...}`補間式の内部（ネストする`{}`の深さを
+ * 追跡）は「実際のコード」として扱い、そこでのみブロックコメント・単一行コメントの開始を認識する。
+ * 単一引用符・二重引用符・バッククォート文字列の内部はいずれもエスケープ（`\`）を考慮し、対応する
+ * 終端文字が現れるまでコメント判定を行わない。複数行にまたがるテンプレートリテラル・複数行に
+ * またがる補間式・正規表現リテラル内の`/*`風文字列への完全対応は対象外とする。
+ */
+function scanLineForCommentRanges(
+  line: string,
+  ext: string,
+  inBlockCommentAtStart: boolean,
+): LineCommentScanResult {
   type QuoteFrame = { kind: 'quote'; char: "'" | '"' };
   type BacktickStringFrame = { kind: 'backtick-string' };
   type InterpolationFrame = { kind: 'interpolation'; braceDepth: number };
   type Frame = QuoteFrame | BacktickStringFrame | InterpolationFrame;
 
   const stack: Frame[] = [];
+  const blockCommentRanges: Array<[number, number]> = [];
+  const singleLineMarker = commentMarkerFor(ext);
+  const blockCommentSupported = ext === '.ts';
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+  let inBlockComment = inBlockCommentAtStart && blockCommentSupported;
+  let blockCommentStart = inBlockComment ? 0 : -1;
+  let singleLineCommentStart: number | null = null;
+
+  let i = 0;
+  while (i < line.length) {
+    if (inBlockComment) {
+      if (line.startsWith('*/', i)) {
+        blockCommentRanges.push([blockCommentStart, i + 2]);
+        inBlockComment = false;
+        blockCommentStart = -1;
+        i += 2;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
     const top: Frame | undefined = stack[stack.length - 1];
 
-    // top が無い（トップレベル）、または補間式の内部は「実際のコード」として走査する。
+    // top が無い（トップレベル）、または補間式の内部は「実際のコード」として走査し、
+    // ここでのみブロックコメント・単一行コメントの開始を認識する。
     if (top === undefined || top.kind === 'interpolation') {
+      if (singleLineMarker !== undefined && line.startsWith(singleLineMarker, i)) {
+        singleLineCommentStart = i;
+        break;
+      }
+      if (blockCommentSupported && line.startsWith('/*', i)) {
+        inBlockComment = true;
+        blockCommentStart = i;
+        i += 2;
+        continue;
+      }
+      const char = line[i];
       if (char === "'" || char === '"') {
         stack.push({ kind: 'quote', char });
+        i++;
         continue;
       }
       if (char === '`') {
         stack.push({ kind: 'backtick-string' });
+        i++;
         continue;
       }
-      if (top !== undefined && top.kind === 'interpolation') {
+      if (top !== undefined) {
+        // top.kind === 'interpolation'：補間式内部のオブジェクトリテラル等による`{`・`}`の
+        // ネスト深さを追跡し、最も外側の`${`に対応する`}`でのみ補間式を抜ける。
         if (char === '{') {
           top.braceDepth++;
+          i++;
           continue;
         }
         if (char === '}') {
@@ -697,46 +768,52 @@ function findUnquotedMarkerIndexTrackingBacktick(line: string, marker: string): 
           } else {
             top.braceDepth--;
           }
+          i++;
           continue;
         }
       }
-      if (line.startsWith(marker, i)) {
-        return i;
-      }
+      i++;
       continue;
     }
 
-    // top が引用符（'・"）の内部：エスケープを考慮し、対応する引用符で閉じるまでマーカー
+    // top が引用符（'・"）の内部：エスケープを考慮し、対応する引用符で閉じるまでコメント
     // 判定は行わない。
     if (top.kind === 'quote') {
-      if (char === '\\') {
-        i++;
-      } else if (char === top.char) {
+      if (line[i] === '\\') {
+        i += 2;
+        continue;
+      }
+      if (line[i] === top.char) {
         stack.pop();
       }
+      i++;
       continue;
     }
 
     // top がバッククォート文字列の内部（補間式の外側の通常の文字列部分）：`${`が現れたら
-    // 補間式（コード）へ入る。それ以外はマーカー判定を行わない。
-    if (char === '\\') {
-      i++;
-    } else if (char === '`') {
-      stack.pop();
-    } else if (char === '$' && line[i + 1] === '{') {
-      stack.push({ kind: 'interpolation', braceDepth: 0 });
-      i++;
+    // 補間式（コード）へ入る。それ以外はコメント判定を行わない。
+    if (line[i] === '\\') {
+      i += 2;
+      continue;
     }
+    if (line[i] === '`') {
+      stack.pop();
+      i++;
+      continue;
+    }
+    if (line[i] === '$' && line[i + 1] === '{') {
+      stack.push({ kind: 'interpolation', braceDepth: 0 });
+      i += 2;
+      continue;
+    }
+    i++;
   }
 
-  return -1;
-}
+  if (inBlockComment) {
+    blockCommentRanges.push([blockCommentStart, line.length]);
+  }
 
-function isInSingleLineCommentTrackingBacktick(line: string, pos: number, ext: string): boolean {
-  const marker = commentMarkerFor(ext);
-  if (marker === undefined) return false;
-  const markerPos = findUnquotedMarkerIndexTrackingBacktick(line, marker);
-  return markerPos !== -1 && markerPos < pos;
+  return { blockCommentRanges, singleLineCommentStart, endsInsideBlockComment: inBlockComment };
 }
 
 function findCommentReferenceViolations(root: string, files: string[]): CommentReferenceViolation[] {
@@ -750,43 +827,12 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
     let inBlockComment = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      // その行で実際にブロックコメントが及ぶ文字位置の半開区間 [start, end) の配列。
-      // 1行に複数のブロックコメントが存在しうるため配列化する（区間が無い行は空配列）。
-      const blockCommentRanges: Array<[number, number]> = [];
-
-      if (ext === '.ts') {
-        let searchFrom = 0;
-        if (inBlockComment) {
-          const closeIndex = line.indexOf('*/');
-          if (closeIndex === -1) {
-            blockCommentRanges.push([0, line.length]);
-          } else {
-            blockCommentRanges.push([0, closeIndex + 2]);
-            inBlockComment = false;
-            searchFrom = closeIndex + 2;
-          }
-        }
-
-        // 前の行から継続中のブロックコメントが同一行内で閉じた場合、またはそもそも
-        // 継続中でなかった場合は、その続きの位置からさらに次の`/*`を探すループへ進む。
-        while (!inBlockComment) {
-          const rest = line.slice(searchFrom);
-          const openIndexInRest = findUnquotedMarkerIndexTrackingBacktick(rest, '/*');
-          const singleLineIndexInRest = findUnquotedMarkerIndexTrackingBacktick(rest, '//');
-          if (openIndexInRest === -1 || (singleLineIndexInRest !== -1 && singleLineIndexInRest < openIndexInRest)) {
-            break;
-          }
-          const openIndex = searchFrom + openIndexInRest;
-          const closeIndex = line.indexOf('*/', openIndex + 2);
-          if (closeIndex === -1) {
-            blockCommentRanges.push([openIndex, line.length]);
-            inBlockComment = true;
-            break;
-          }
-          blockCommentRanges.push([openIndex, closeIndex + 2]);
-          searchFrom = closeIndex + 2;
-        }
-      }
+      const { blockCommentRanges, singleLineCommentStart, endsInsideBlockComment } = scanLineForCommentRanges(
+        line,
+        ext,
+        inBlockComment,
+      );
+      inBlockComment = endsInsideBlockComment;
 
       for (const [pattern, label] of [
         [headingRefPattern, '見出し位置参照文字列'],
@@ -798,7 +844,9 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
           const isInBlockCommentRange = blockCommentRanges.some(
             ([start, end]) => match!.index >= start && match!.index < end,
           );
-          if (isInBlockCommentRange || isInSingleLineCommentTrackingBacktick(line, match.index, ext)) {
+          const isInSingleLineComment =
+            singleLineCommentStart !== null && singleLineCommentStart < match.index;
+          if (isInBlockCommentRange || isInSingleLineComment) {
             violations.push({ relPath, lineNo: i + 1, label, matched: match[0] });
           }
           if (match[0].length === 0) pattern.lastIndex++;
@@ -1222,6 +1270,43 @@ test('src/配下: テンプレートリテラルの"${...}"補間式の外側と
     assert.ok(
       !violations.some((v) => v.matched === '手順2'),
       '補間式外側の通常の文字列部分にある「手順2」を誤って検出している',
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: テンプレートリテラルの補間式内部のブロックコメントの後ろ、同一行のテンプレートリテラル外側にある実在のブロックコメントも検出する（Issue #519・手動implementation-gate strictレビュー指摘 rest-slice-backtick-misinterpretation-swallows-later-comment 是正の回帰テスト）', () => {
+  // Given: レビュアが手動トレースで確認した具体的な反例。テンプレートリテラルの`${...}`補間式
+  // 内部に実在するブロックコメント（`/* 手順1参照 */`）があり、そのテンプレートリテラルを
+  // 閉じるバッククォートの直後、通常のコード部分にもう1つ独立したブロックコメント
+  // （`/* 手順2参照 */`）が続く行を用意する。部分文字列を切り出して状態をリセットして
+  // 再走査する設計（是正前）では、1つ目のブロックコメント区間確定後の`searchFrom`が
+  // テンプレートリテラルを閉じるバッククォートの直前に位置し、そこから空のスタックで
+  // 再走査するとその閉じバッククォートを「新しいテンプレートリテラルの開始」と誤認し、
+  // 以降にある2つ目の実在のブロックコメントを検知できない（検知漏れ）退行があった。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-rest-slice-backtick-scope-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'rest-slice-backtick.ts');
+    fs.writeFileSync(
+      tsFile,
+      ['const x = `${/* 手順1参照 */ a}` /* 手順2参照 */;'].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: 補間式内部のブロックコメント中の「手順1」・テンプレートリテラルの外側にある
+    // 実在のブロックコメント中の「手順2」の両方が検出される。
+    const dangling = violations.filter((v) => v.label === '宙吊りの手順番号参照');
+    assert.equal(dangling.length, 2, `検出件数が想定と異なる: ${JSON.stringify(violations)}`);
+    assert.ok(
+      dangling.some((v) => v.matched === '手順1'),
+      '補間式内部のブロックコメント中の「手順1」を検出できていない',
+    );
+    assert.ok(
+      dangling.some((v) => v.matched === '手順2'),
+      'テンプレートリテラル外側にある実在のブロックコメント中の「手順2」を検出できていない（rest-slice-backtick-misinterpretation-swallows-later-commentの検知漏れ）',
     );
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
