@@ -123,6 +123,13 @@
 - **影響**: implementation セグメント開始前に人間の明示確認を要求するかを制御する。値の極性は `merge.autonomous` と逆である。
 - **詳細**: [AGENTS.md の不変条件 I8「安全側ラチェット」](../AGENTS.md#不変条件-i1i8)
 
+### `profile`
+
+- **既定値**: `standard`
+- **取りうる値**: `standard | lightweight`。
+- **影響**: 軽量プロファイルかどうかを機械的に判定する唯一の正本。`init` 実行時にのみ確定し、`upgrade` では変更されない。`lightweight` は `CLAUDE.md` の `@AGENTS.md` 常時import・強制層（`setup github`・`enforce on`）を適用せず、`coordination.backend: local` を既定にする。`coordination.backend` とは独立した軸であり、既定プロファイルのまま手動で `coordination.backend: local` を選んだ通常のローカルモードとは値として区別される。
+- **詳細**: [docs/adr/ADR-0023-agent-skill-chain-as-skill-feasibility.md](adr/ADR-0023-agent-skill-chain-as-skill-feasibility.md)、[AGENTS.md の不変条件 I2「セグメントゲート」](../AGENTS.md#不変条件-i1i8)
+
 ### `templates`
 
 - **既定値**: `github_source: .agent-skill-chain/templates/github/.github`、`github_target: .github`、`verify_sync: true`
@@ -144,6 +151,7 @@
 | 設定軸 | 決めること | 他軸との組み合わせ |
 |---|---|---|
 | `coordination.backend` | 調整状態とゲート証跡の正本 | `issue_sync` は `github` のときだけ有効。`local` では常に無効 |
+| `profile` | `init` 時の導入形態（既定 `standard` / 軽量 `lightweight`） | `coordination.backend` とは独立の別軸。`lightweight` は `init` 時に `coordination.backend: local` を既定にするが、両者は別フィールドであり値として区別される |
 | `risk.default` × `autonomy.default` | reviewer profile | `risk != normal` または `autonomy == full` なら Strict。それ以外だけ Standard |
 | Light review シグナル | Standard より軽量なレビューの明示要求 | `review` 設定とは独立。人間による要求を確認でき、I8・core review・自己参照変更のガードレールに該当しない場合だけ適用 |
 | `human_confirmation.before_implementation` | implementation 着手前の人間確認 | `autonomy` とは独立。`autonomy: full` でも値が未設定または `true` なら確認が必要 |

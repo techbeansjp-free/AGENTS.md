@@ -260,6 +260,35 @@ test("validateAgainstSchema('config') (AC-4): model_tier・reasoning_effortとad
   assert.deepEqual(outcome, { valid: true, errors: [] });
 });
 
+// ADR-0023（Issue #503）AC-4/AC-7: profile（軽量プロファイルかどうかを機械的に判定する唯一の正本）。
+test("validateAgainstSchema('config') (ADR-0023): profile: lightweight を持つconfigはvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const withProfile = { ...structuredClone(doc.examples[0]), profile: 'lightweight' };
+  assert.deepEqual(validateConfig(withProfile), { valid: true, errors: [] });
+});
+
+test("validateAgainstSchema('config') (ADR-0023): profileを持たないconfigは引き続きvalidになる（後方互換）", () => {
+  const doc = loadConfigSchemaDoc();
+  assert.ok(!('profile' in (doc.examples[0] as Record<string, unknown>)));
+  assert.deepEqual(validateConfig(doc.examples[0]), { valid: true, errors: [] });
+});
+
+test("validateAgainstSchema('config') (ADR-0023): profileが既知enum外の値だとinvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const broken = { ...structuredClone(doc.examples[0]), profile: 'ultra-light' };
+  const outcome = validateConfig(broken);
+  assert.equal(outcome.valid, false);
+  assert.ok(outcome.errors.length > 0);
+});
+
+test("validateAgainstSchema('config') (ADR-0023): templates.claude_skills_source/claude_skills_targetを持つconfigはvalidになる", () => {
+  const doc = loadConfigSchemaDoc();
+  const withSkillsTemplate = structuredClone(doc.examples[0]) as { templates: Record<string, unknown> };
+  withSkillsTemplate.templates.claude_skills_source = '.agent-skill-chain/templates/claude/skills';
+  withSkillsTemplate.templates.claude_skills_target = '.claude/skills';
+  assert.deepEqual(validateConfig(withSkillsTemplate), { valid: true, errors: [] });
+});
+
 test('validateAgainstSchema: 明らかに型が異なるデータ（配列でなく文字列）はinvalidになる', () => {
   const outcome = validateAgainstSchema('config', 'not-an-object');
   assert.equal(outcome.valid, false);

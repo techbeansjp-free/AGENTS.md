@@ -89,6 +89,15 @@ test(
   },
 );
 
+// ADR-0023（Issue #503）要件11・AC-10: 「軽量プロファイル」「既定プロファイル」の用語行を追加し、
+// 全体20行以内を維持する。
+test('docs/GLOSSARY.md (ADR-0023 AC-10): 「軽量プロファイル」「既定プロファイル」の用語行が追加され、全体20行以内を維持する', () => {
+  const lines = fs.readFileSync(REAL_GLOSSARY_PATH, 'utf8').split(/\r?\n/).filter((l) => l.length > 0);
+  assert.ok(lines.length <= 20, `docs/GLOSSARY.md は20行以内であること（現在${lines.length}行）`);
+  assert.ok(lines.some((l) => l.includes('| 軽量プロファイル |')), '「軽量プロファイル」の用語行が存在すること');
+  assert.ok(lines.some((l) => l.includes('| 既定プロファイル |')), '「既定プロファイル」の用語行が存在すること');
+});
+
 test(
   'parseForbiddenTerms: 実物GLOSSARY.mdで他の用語と完全一致する禁止語は除外される',
   () => {

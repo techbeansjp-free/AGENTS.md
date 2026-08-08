@@ -149,6 +149,51 @@ test('lint vocab: 識別子文脈（コード識別子・外部語彙許可リ�
   assert.equal(result.stderr, '');
 });
 
+test('lint vocab: SKILL.mdフロントマターの識別子文脈除外は値全体が単一のケバブケース識別子の場合のみに限定され、description/when_to_use等の自由記述フィールドのハイフン複合語に含まれる禁止語は引き続き検出される（手動implementation-gateレビュー指摘: lint-frontmatter-exemption-too-broad 是正の回帰テスト）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: SKILL.md相当のフロントマターに、(a) 値全体が単一のケバブケース識別子である
+  // name: フィールド（禁止語issueを含む）と、(b) 値が空白を含む自由記述（散文）である
+  // description:・when_to_use: フィールド（ハイフン複合語issue-drivenとして禁止語issueを含む）
+  // を用意する。
+  const file = path.join(repo.dir, 'skill-frontmatter.md');
+  fs.writeFileSync(
+    file,
+    [
+      '---',
+      'name: issue-start',
+      'description: Handle an issue-driven workflow for starting new work.',
+      'when_to_use: Use for issue-driven onboarding scenarios.',
+      '---',
+      '',
+      '# issue-start',
+    ].join('\n') + '\n',
+  );
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'skill-frontmatter.md'], { cwd: repo.dir });
+
+  // Then: name:（単一のケバブケース識別子値）は引き続き除外され、description:・when_to_use:
+  // （自由記述の値に含まれるハイフン複合語）は識別子文脈と誤認されず引き続き検出される。
+  assert.equal(result.status, 1, result.stderr);
+  assert.doesNotMatch(
+    result.stderr,
+    /skill-frontmatter\.md:2:/,
+    '2行目（name: issue-start、単一のケバブケース識別子値）は引き続き除外されること',
+  );
+  assert.match(
+    result.stderr,
+    /skill-frontmatter\.md:3: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+    '3行目（description:の自由記述の値内のissue-driven）は散文として引き続き検出されること',
+  );
+  assert.match(
+    result.stderr,
+    /skill-frontmatter\.md:4: 禁止語 'issue' が見つかりました（'成果物' を使用してください）/,
+    '4行目（when_to_use:の自由記述の値内のissue-driven）は散文として引き続き検出されること',
+  );
+});
+
 test('lint vocab: YAMLキー・flow-sequence要素としての禁止語利用は .yaml/.yml でのみ誤検出されない（Issue #187 ADR-1: YAML文脈は真のYAMLファイルに限定適用）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
