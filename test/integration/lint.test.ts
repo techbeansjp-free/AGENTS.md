@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
+import { walkTextFiles } from '../../src/lib/scan.js';
 
 // lint vocab / lint references / lint adr check の3サブコマンドを、bin/agents-md.js（ビルド後の
 // 実体）に対する subprocess 実行で検証する。createTmpRepo は .agent-skill-chain/ 資産一式
@@ -411,7 +412,7 @@ test('lint vocab: 識別子文脈に隣接していても、散文としての�
       // 2行目: 単独の散文誤用のみ。
       'このissueの内容を確認してください。',
       // 3行目: 複合境界が無い「issues」（複数形）は識別子文脈のいずれにも該当せず、
-      // 散文誤用として引き続き検出対象に残る（DESIGN.md「A-1」の明示的な非除外例）。
+      // 散文誤用として引き続き検出対象に残る（複数形化のみでは識別子文脈の境界とみなさない、という仕様の意図的な非除外例）。
       'issuesを一覧するコマンドがある。',
     ].join('\n') + '\n',
   );
@@ -554,6 +555,52 @@ test('lint references: path省略時のデフォルト対象は本体 .github/wo
     result.stderr,
     /sample\.yml:1: 禁止参照 '§存在しない見出し'（見出しテキストで解決できないセクション番号参照）/,
   );
+});
+
+test('lint references: 実物リポジトリのデフォルト対象（src/ を含む）は違反0で通る', async () => {
+  // Given/When: このリポジトリ自身に対して path 引数を省略し、デフォルト対象
+  // （defaultReferenceFileRoots、src/ を含む）で lint references を実行する。
+  const result = runCli(['lint', 'references'], { cwd: realRepoRoot });
+
+  // Then: 違反なしで終了コード0。
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('src/配下: 禁止された見出し位置参照文字列（<文書名>.md<助詞・記号>設計要素<N>等・宙吊りの手順<N>番号参照）を含まない（Issue #507: ソースコードコメントへの見出し位置参照混入の回帰防止）', () => {
+  // Given/When: このリポジトリ自身の src/ 配下の全対象ファイル（walkTextFiles が収集する
+  // .md/.yaml/.yml/.sh/.json/.ts）を直接読み取る。src/commands/upgrade.ts 単体ではなく
+  // src/ 全体を対象にすることで、同種の混入が他ファイルへ再発しても検出できるようにする。
+  //
+  // 注記: `lint references` の禁止参照検出パターン（見出し形式・file.ext:行番号形式の2種のみ）は、
+  // 文書名（`.md`拡張子）の直後に助詞・記号を挟んでもよい形で「設計要素」「手順」等の見出し的な語
+  // ＋数字が続く形式や、対応する番号付きリストの定義を伴わずに残存する番号のみの宙吊り参照を検出できない
+  // （検出パターン自体の拡張は本テストのスコープ外）。そのため `lint references` の終了コードに
+  // 依存せず、かつて混入していた具体的な違反パターンがファイル内容に存在しないことを直接assertする。
+  const srcRoot = path.join(realRepoRoot, 'src');
+  const files = walkTextFiles([srcRoot]);
+  assert.ok(files.length > 0, 'src/ 配下の対象ファイルが1件以上存在すること');
+
+  // 文書名（.md拡張子を持つ語）に、助詞・記号を挟んでもよい形で「設計要素」「手順」等の
+  // 見出し的な語＋番号（半角・全角）が続くパターンを広く捕捉する。過度な一般語誤検知を避けるため、
+  // 「見出し的な語＋番号」への着地を要求する。
+  const headingRefPattern = /\.md\s*(?:の|または|／|\/|-|:|：)?\s*(?:設計要素|手順)\s*[0-9０-９]/;
+  // 文書名を伴わない「手順N」単独の宙吊り参照（直後に数字が続く「手順N」形式に限定し、
+  // 「手順」という単語の他の正当な使用法を誤検知しないようにする）。
+  const danglingStepRefPattern = /手順[0-9０-９]/;
+
+  for (const file of files) {
+    const content = fs.readFileSync(file, 'utf8');
+    const relPath = path.relative(realRepoRoot, file);
+
+    // Then: 「<文書名>.md<助詞・記号>設計要素<N>」等の見出し位置参照文字列を含まない
+    // （Issue #507で `DESIGN.md 設計要素7` → `Issue #503` 等へ是正済み）。
+    assert.doesNotMatch(content, headingRefPattern, `${relPath} に見出し位置参照文字列が残存している`);
+
+    // Then: 「手順」＋数字という番号付き手順への宙吊り参照も含まない
+    // （Issue #507是正ラウンド2で「手順1」「手順2」→処理内容を直接説明する
+    // 自己完結した文言へ是正済み）。
+    assert.doesNotMatch(content, danglingStepRefPattern, `${relPath} に宙吊りの手順番号参照が残存している`);
+  }
 });
 
 test('lint adr check: 実物 docs/adr/ は違反0で通る', async () => {
