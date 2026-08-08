@@ -190,6 +190,46 @@ test('init: プロファイル未指定（既定）でも.claude/skills/配下�
   assert.doesNotMatch(result.stdout, /軽量プロファイルで導入しました/);
 });
 
+// ISSUE-522: profile: standard（既定）で導入したconsumer projectに、このリポジトリ自身の
+// dogfooding専用設定（config・CLAUDE.mdとも）が混入しないことの回帰テスト。
+test('init --profile=standard（既定含む）: config/agent-skill-chain.yaml・CLAUDE.mdに本リポジトリ自身のdogfooding専用設定が混入しないこと（ISSUE-522）', (t) => {
+  const targetDir = mkScratch('init-standard-no-dogfooding-leak');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const configText = fs.readFileSync(
+    path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml'),
+    'utf8',
+  );
+  assert.match(configText, /^profile: standard/m);
+  assert.doesNotMatch(
+    configText,
+    /autonomous:\s*true/,
+    'このリポジトリ限定のmerge.autonomous: trueが混入してはならない',
+  );
+  assert.doesNotMatch(
+    configText,
+    /before_implementation:\s*false/,
+    'このリポジトリ限定のhuman_confirmation.before_implementation: falseが混入してはならない',
+  );
+  assert.doesNotMatch(
+    configText,
+    /segment_overrides/,
+    'このリポジトリ限定のworker.segment_overrides（codex固定）が混入してはならない',
+  );
+  assert.doesNotMatch(configText, /ISSUE-307/, 'このリポジトリ自身のIssue番号コメントが混入してはならない');
+
+  const claudeMd = fs.readFileSync(path.join(targetDir, 'CLAUDE.md'), 'utf8');
+  assert.match(claudeMd, /@AGENTS\.md/, '既定プロファイルのCLAUDE.mdは@AGENTS.md常時importを維持すること');
+  assert.doesNotMatch(
+    claudeMd,
+    /応答は日本語とする/,
+    'このリポジトリ開発チーム固有の応答言語指定が混入してはならない',
+  );
+});
+
 test('init --profile=lightweight: CLAUDE.mdが@AGENTS.md importを含まず、coordination.backend: local・profile: lightweightになり、機械的阻止が無い旨のメッセージが出る（AC-4, AC-5）', (t) => {
   const targetDir = mkScratch('init-lightweight');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));

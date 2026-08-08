@@ -1,0 +1,77 @@
+# agent-skill-chain 設定初期値（標準プロファイル、profile: standard）
+# 正本: AGENTS.md §設定
+#
+# `init`/`upgrade`（`--profile` 省略時を含む既定プロファイル）が配布する中立既定値（ISSUE-522）。
+# 本ファイルは `techbeansjp-free/AGENTS.md` 自身が実運用で使う
+# `.agent-skill-chain/config/agent-skill-chain.yaml`（dogfooding用、自走的マージ運用の明示許可・
+# 実装セグメント着手前の人間確認省略・実装セグメント作業ワーカーのアダプタ／モデルティア恒久固定・
+# このリポジトリ自身のIssue番号コメント等、このリポジトリ限定の値を持つ）とは別ファイルであり、
+# それらの値を一切継承しない。consumer project の手動運用を前提とした妥当な既定値のみを持つ。
+
+schema_version: agent-skill-chain/config/v1
+
+profile: standard             # 標準プロファイルかどうかを機械的に判定する唯一の正本
+
+coordination:
+  backend: github               # github | local
+
+durability:
+  backend: remote                # remote | local_mirror
+
+autonomy:
+  default: gated                 # gated | full
+
+risk:
+  default: unclassified          # unclassified | normal | high
+
+review:
+  adapter: claude                 # claude | codex | human
+  standard: {reviewer_count: 1, modes: [conformance, falsification]}
+  strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
+
+worker:
+  adapter: claude                 # claude | codex | human（セグメント別の個別上書きが無い場合の既定）
+  agent_tool_dispatch:
+    enabled: true
+
+worktree:
+  root: .worktrees
+  path_pattern: "{issue_created_at}-{type}-{issue_id}-{slug}"
+  timestamp: {source: issue_created_at, format: "%Y%m%d_%H%M%S", timezone: Asia/Tokyo}
+  slug_max_length: 48
+  immutable_path: true
+
+branch:
+  pattern: "{type}/{issue_id}-{slug}"
+
+issue:
+  allowed_types: [feature, bugfix, hotfix, refactor, docs, process, chore]
+
+wip:
+  limit: 3
+  count_by: active_writer_lease
+
+lease:
+  ttl_seconds: 3600
+  renewal_interval_seconds: 900
+
+bdd:
+  profile: standard              # standard | strict
+
+issue_sync:
+  enabled: false                 # true にするとゲート通過時に Issue/PR 本文へ全文転記する
+  target: issue_body             # issue_body | pr_body | both
+  max_body_chars: 60000
+
+templates:
+  github_source: .agent-skill-chain/templates/github/.github
+  github_target: .github
+  claude_agents_source: .agent-skill-chain/templates/claude/agents
+  claude_agents_target: .claude/agents
+  verify_sync: true
+
+checks:
+  spec: agent-skill-chain/spec-gate
+  design: agent-skill-chain/design-gate
+  implementation: agent-skill-chain/implementation-gate
+  validation: agent-skill-chain/validation-gate
