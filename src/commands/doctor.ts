@@ -11,7 +11,7 @@ import { listWorktrees, worktreePathRegex, branchNameRegex, hasUncommittedChange
 import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { readYamlFile, tryReadYamlFile } from '../lib/yaml-io.js';
 import { leaseFilePath, LOCAL_STATE_ROOT_DIR_NAME } from '../lib/local-state.js';
-import type { WriterLease } from '../lib/github-lease.js';
+import { listAllLeaseRefNames, type WriterLease } from '../lib/github-lease.js';
 import { collectAdrRecords, checkAdrSymmetry } from '../lib/adr-consistency.js';
 
 const USAGE = `
@@ -101,6 +101,41 @@ export function checkGithubLabelsSync(root: string): Check {
       label,
       ok: problems.length === 0,
       reason: problems.length === 0 ? undefined : `${problems.join(' / ')}（setup labels で解消できます）`,
+    };
+  } catch (error) {
+    return { label, ok: false, reason: (error as Error).message };
+  }
+}
+
+/**
+ * Issue #528: close済みIssueのwriter lease refが残存していないかを検査する。
+ * ref一覧とIssue状態を読むだけで、lease回収・Issue更新・ref削除は一切行わない。
+ * 呼び出し側でGitHub Coordination Backendかつgh認証済みであることを確認済みとする。
+ */
+export function checkClosedIssueWriterLeases(root: string): Check {
+  const label = 'close済みIssueのwriter lease';
+  try {
+    const segmentsByIssue = new Map<string, string[]>();
+    for (const entry of listAllLeaseRefNames(root)) {
+      const segments = segmentsByIssue.get(entry.issueNumber) ?? [];
+      segments.push(entry.segment);
+      segmentsByIssue.set(entry.issueNumber, segments);
+    }
+
+    const orphaned: string[] = [];
+    for (const [issueNumber, segments] of segmentsByIssue) {
+      const view = exec('gh', ['issue', 'view', issueNumber, '--json', 'state'], root);
+      if (view.status !== 0) {
+        return { label, ok: false, reason: `gh issue view #${issueNumber} に失敗しました: ${view.stderr.trim()}` };
+      }
+      const { state } = JSON.parse(view.stdout) as { state: string };
+      if (state === 'CLOSED') orphaned.push(`ISSUE-${issueNumber} (${segments.join(', ')})`);
+    }
+
+    return {
+      label,
+      ok: orphaned.length === 0,
+      reason: orphaned.length === 0 ? undefined : `close済みIssueにwriter leaseが残っています: ${orphaned.join(', ')}`,
     };
   } catch (error) {
     return { label, ok: false, reason: (error as Error).message };
@@ -210,6 +245,7 @@ export async function run(args: string[]): Promise<number> {
             // gh未導入・未認証時は上記チェックで既にNG報告済みのため、二重報告を避けここではスキップする。
             if (auth.status === 0) {
               checks.push(checkGithubLabelsSync(root));
+              checks.push(checkClosedIssueWriterLeases(root));
             }
           }
         }

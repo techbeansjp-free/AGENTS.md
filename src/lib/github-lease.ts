@@ -28,6 +28,13 @@ export interface LeaseRefEntry {
   lease: WriterLease;
 }
 
+/** git remote上のwriter lease ref名から復元したIssue番号とsegment。 */
+export interface LeaseRefName {
+  issueNumber: string;
+  segment: string;
+  ref: string;
+}
+
 export type PublicWriterLease = Omit<WriterLease, 'writer_lease'> & {
   writer_lease: Omit<WriterLease['writer_lease'], 'token'>;
 };
@@ -149,6 +156,25 @@ function listLeaseRefNames(issueNumber: string, cwd?: string): { ref: string; se
       const tab = line.indexOf('\t');
       const ref = line.slice(tab + 1).trim();
       return { ref, segment: ref.slice(prefix.length) };
+    });
+}
+
+/**
+ * 全Issueのwriter lease refを列挙する。lease payloadは取得せず、ref名からIssue番号とsegmentだけを読む。
+ * 不正な命名のrefはwriter leaseとして扱えないため除外する。
+ */
+export function listAllLeaseRefNames(cwd?: string): LeaseRefName[] {
+  const result = git(['ls-remote', 'origin', `${REF_PREFIX}/*`], cwd);
+  if (result.status !== 0) return [];
+  return result.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const tab = line.indexOf('\t');
+      const ref = line.slice(tab + 1).trim();
+      const match = new RegExp(`^${REF_PREFIX}/(\\d+)-(.+)$`).exec(ref);
+      return match ? [{ issueNumber: match[1], segment: match[2], ref }] : [];
     });
 }
 
