@@ -98,7 +98,45 @@ function isCodeLikeReference(
   if (containedIn(BACKTICK_SPAN_RE)) return true;
   if (containedIn(PLACEHOLDER_SPAN_RE)) return true;
   if (containedInPathToken(line, start, end)) return true;
+  if (isKatakanaCompoundContext(line, start, end, banned)) return true;
   return isIdentifierContext(line, start, end, banned, ext, inFrontmatter);
+}
+
+// ---- カタカナ複合語文脈判定（Issue #525） ----
+//
+// `identifierRunAt`/`isCodeIdentifierContext` はASCII識別子文字（英数字・`_`）のみを対象とする
+// ため、禁止語がカタカナのみで構成される場合（例:「ロック」）には一切適用されず、無関係な
+// 別のカタカナ複合語（例:「ブロック」）内部への偶然の部分文字列一致まで散文の誤用として
+// 誤検出していた。ASCII識別子文脈判定とは独立に、カタカナ連続runベースで同種の除外を行う。
+
+/** Unicode カタカナブロック（゠-ヿ、U+30A0〜U+30FF）。長音符ー（U+30FC）を含む。 */
+const KATAKANA_CHAR_RE = /[゠-ヿ]/;
+
+function isKatakanaOnly(value: string): boolean {
+  return value.length > 0 && [...value].every((ch) => KATAKANA_CHAR_RE.test(ch));
+}
+
+/** [start, end) を含む最大の連続カタカナrunを返す。[start, end) のいずれかの文字がカタカナで
+ * なければ undefined。 */
+function katakanaRunAt(line: string, start: number, end: number): IdentifierRun | undefined {
+  for (let i = start; i < end; i++) {
+    if (!KATAKANA_CHAR_RE.test(line[i])) return undefined;
+  }
+  let runStart = start;
+  while (runStart > 0 && KATAKANA_CHAR_RE.test(line[runStart - 1])) runStart--;
+  let runEnd = end;
+  while (runEnd < line.length && KATAKANA_CHAR_RE.test(line[runEnd])) runEnd++;
+  return { runStart, runEnd };
+}
+
+/** 禁止語がカタカナのみで構成される場合に限り適用する。禁止語を含む最大連続カタカナ列が
+ * 禁止語自体より長ければ（＝より長い別の単語に埋め込まれている）除外する。長さが一致する
+ * 場合（禁止語単体としての出現）は除外しない（既存の検出を後退させない）。 */
+function isKatakanaCompoundContext(line: string, start: number, end: number, banned: string): boolean {
+  if (!isKatakanaOnly(banned)) return false;
+  const run = katakanaRunAt(line, start, end);
+  if (!run) return false;
+  return run.runEnd - run.runStart > banned.length;
 }
 
 function containedInPathToken(line: string, start: number, end: number): boolean {
