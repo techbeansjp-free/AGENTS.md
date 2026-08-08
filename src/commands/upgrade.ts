@@ -8,6 +8,7 @@ import { detectLegacyAssets, formatLegacyAssetWarning } from '../lib/legacy-migr
 import { digestOfFile } from '../lib/digest.js';
 import { readYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
 import { packageRoot } from '../lib/paths.js';
+import type { AgentSkillChainConfig } from '../lib/config.js';
 import {
   readOwnershipRecord,
   writeOwnershipRecord,
@@ -28,7 +29,25 @@ type Profile = 'standard' | 'lightweight';
  *   ケースB（profileフィールド欠落）: 本機能導入前からの正常な後方互換ケース。警告なし。
  *   ケースC（パース不能・不正値）  : 異常ケース。standardへフォールバックし警告する。
  */
-function resolvePreservedProfile(targetDir: string): { profile: Profile; warning?: string } {
+/**
+ * `resolvePreservedProfile`の戻り値。`repair`は「対象ファイルへ実際に書き込む処理」を
+ * 遅延させたクロージャであり、呼び出し側が`dryRun`のときは一切呼び出さないことで、
+ * dry-runが対象ファイルへ書き込まないことを構造的に保証する
+ * （手動implementation-gateレビュー指摘: upgrade-dry-run-writes-target-config/file）。
+ * `correctedConfig`は`repair`が書き込む内容と同一のin-memoryオブジェクトであり、dry-run時に
+ * 対象ファイルを書き換えずに`collectManagedAssetMappings`（`claude_agents`/`claude_skills`
+ * テンプレート解決）へそのまま渡すことで、書き換えていない破損ファイルを再読み込みして
+ * クラッシュすることを避ける（同レビュー指摘の派生修正）。ケースA/Bでは対象ファイルが
+ * 既に正常であるため両方ともundefined。
+ */
+type ProfileResolution = {
+  profile: Profile;
+  warning?: string;
+  repair?: () => void;
+  correctedConfig?: unknown;
+};
+
+function resolvePreservedProfile(targetDir: string): ProfileResolution {
   const configPath = path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
   if (!fs.existsSync(configPath)) {
     return { profile: 'standard' }; // ケースA
@@ -38,12 +57,19 @@ function resolvePreservedProfile(targetDir: string): { profile: Profile; warning
     parsed = readYamlFile(configPath);
   } catch {
     // ケースC（パース不能）: 対象ファイルの内容を行単位で修復することはできないため、
-    // 後続処理（`collectManagedAssetMappings` 経由の `loadConfig(targetDir)`）が対象を
-    // 読み取れるよう、決定済みの standard に対応する配布元既定値でその場修復する。
-    // この内容は直後の通常コピー処理（`config` エントリのミラーコピー）でどのみち上書きされる
-    // ため、ここでの書き込みは「読み取り可能にするための一時的な足場」に過ぎない。
-    repairUnreadableConfig(configPath);
-    return { profile: 'standard', warning: PROFILE_UNREADABLE_WARNING };
+    // 決定済みの standard に対応する配布元既定値をそのまま使う。非dry-run時は`repair`が
+    // これを対象ファイルへ書き込み、後続処理（`collectManagedAssetMappings` 経由の
+    // `loadConfig(targetDir)`）が対象を読み取れるようにする（この内容は直後の通常コピー処理
+    // でどのみち上書きされる一時的な足場に過ぎない）。dry-run時は`repair`を呼ばない代わりに
+    // `correctedConfig`をそのまま`collectManagedAssetMappings`へ渡し、対象ファイルを書き換えずに
+    // 同じ内容で後続のtemplate解決を成立させる。
+    const defaultConfig = readPackageDefaultConfig();
+    return {
+      profile: 'standard',
+      warning: PROFILE_UNREADABLE_WARNING,
+      repair: () => repairUnreadableConfig(configPath),
+      correctedConfig: defaultConfig,
+    };
   }
   const rawProfile = (parsed as { profile?: unknown } | null | undefined)?.profile;
   if (rawProfile === undefined) {
@@ -53,20 +79,39 @@ function resolvePreservedProfile(targetDir: string): { profile: Profile; warning
     return { profile: rawProfile };
   }
   // ケースC（不正値）: `profile` フィールドのみをその場修復する（他フィールドは変更しない）。
-  // これも直後のミラーコピーで上書きされる一時的な足場であり、他フィールドを保持する意味は
-  // 「後続の`loadConfig`が同一ファイルの他フィールド〔`templates.*`等〕を読めること」のみにある。
+  // 非dry-run時は直後のミラーコピーで上書きされる一時的な足場であり、他フィールドを保持する
+  // 意味は「後続の`loadConfig`が同一ファイルの他フィールド〔`templates.*`等〕を読めること」の
+  // みにある。dry-run時は同じ内容を`correctedConfig`としてそのまま後続処理へ渡す。
   if (parsed !== null && typeof parsed === 'object') {
-    writeYamlFileAtomic(configPath, { ...(parsed as Record<string, unknown>), profile: 'standard' });
-  } else {
-    repairUnreadableConfig(configPath);
+    const corrected = { ...(parsed as Record<string, unknown>), profile: 'standard' };
+    return {
+      profile: 'standard',
+      warning: PROFILE_UNREADABLE_WARNING,
+      repair: () => writeYamlFileAtomic(configPath, corrected),
+      correctedConfig: corrected,
+    };
   }
-  return { profile: 'standard', warning: PROFILE_UNREADABLE_WARNING };
+  const defaultConfig = readPackageDefaultConfig();
+  return {
+    profile: 'standard',
+    warning: PROFILE_UNREADABLE_WARNING,
+    repair: () => repairUnreadableConfig(configPath),
+    correctedConfig: defaultConfig,
+  };
+}
+
+function defaultConfigPath(): string {
+  return path.join(packageRoot(), '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+}
+
+/** パッケージ同梱の既定（profile: standard）configをパース済みオブジェクトとして返す。 */
+function readPackageDefaultConfig(): unknown {
+  return readYamlFile(defaultConfigPath());
 }
 
 /** 対象の config/agent-skill-chain.yaml を、パッケージ同梱の既定（profile: standard）内容で置き換える。 */
 function repairUnreadableConfig(configPath: string): void {
-  const defaultSource = path.join(packageRoot(), '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
-  fs.copyFileSync(defaultSource, configPath);
+  fs.copyFileSync(defaultConfigPath(), configPath);
 }
 
 const PROFILE_UNREADABLE_WARNING =
@@ -138,14 +183,23 @@ export async function upgrade(args: string[]): Promise<number> {
     // そのまま渡す。これにより`config`エントリの配布元（`agent-skill-chain.yaml`）が保存済み
     // profileに対応するテンプレートへ解決され、`profile`フィールド自体の値はupgradeで変更しない
     // （要件3・AC-3）。
-    const { profile: preservedProfile, warning: profileWarning } = resolvePreservedProfile(targetDir);
+    const { profile: preservedProfile, warning: profileWarning, repair: profileRepair, correctedConfig } =
+      resolvePreservedProfile(targetDir);
     if (profileWarning) summary.push(profileWarning);
+    // dry-run時は対象ファイルへ一切書き込まない（実ファイルを書き込まず一覧のみを表示する、
+    // というUSAGE契約を守るため）。
+    if (!dryRun && profileRepair) profileRepair();
+    // dry-run時に対象configが破損・不正値のままだと、後続の`collectManagedAssetMappings`が
+    // 同一ファイルを再読み込みして例外を投げる（対象ファイルを書き換えていないため）。
+    // `correctedConfig`（`repair`が書き込む内容と同一のin-memoryオブジェクト）をそのまま渡すことで、
+    // 対象ファイルを書き換えずに後続のtemplate解決だけを成立させる。
+    const configOverride = dryRun ? (correctedConfig as AgentSkillChainConfig | undefined) : undefined;
 
     // Issue #492: `init`が所有権記録へ書き込むキー集合と同一の走査ロジック
     // （`collectManagedAssetMappings`）から導出する。2箇所の独立ループの乖離により、削除候補判定の
     // 基準となる現行配布ファイル集合が誤る（黙って乖離しうる）リスクを構造的に排除する
     // （手動implementation-gateレビュー指摘: stale-delete-scope-invariant-untested）。
-    for (const { src, dest } of collectManagedAssetMappings(targetDir, preservedProfile)) {
+    for (const { src, dest } of collectManagedAssetMappings(targetDir, preservedProfile, configOverride)) {
       trackCopyResults(copyTreeMirror(src, dest, { dryRun, root: targetDir }));
     }
 

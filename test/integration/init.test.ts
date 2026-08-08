@@ -172,9 +172,11 @@ test('init: プロファイル未指定（既定）でも.claude/skills/配下�
     assert.match(text, /^description: /m);
     assert.match(text, /^when_to_use: /m);
   }
-  assert.ok(
+  assert.equal(
     fs.existsSync(path.join(targetDir, '.claude', 'skills', 'DESCRIPTION_BUDGET.md')),
-    'DESCRIPTION_BUDGET.mdも同期されること',
+    false,
+    'DESCRIPTION_BUDGET.mdはスキルではない開発者向けメタデータのため.claude/skills/へ配布されないこと' +
+      '（手動implementation-gateレビュー指摘: non-skill-doc-distributed-into-claude-skills）',
   );
 
   const configText = fs.readFileSync(
@@ -229,6 +231,27 @@ test('init --profile=不正な値: エラー終了する', (t) => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /--profile は standard または lightweight/);
   assert.equal(fs.existsSync(targetDir), false, '不正なprofile指定時は何も書き込まれないこと');
+});
+
+test('init --profile lightweight（スペース区切り・target_dir省略）: "--profile"自体がpositional引数(導入先ディレクトリ)と誤解釈されずエラー終了する（手動implementation-gateレビュー指摘: init-profile-flag-parsing-edge）', (t) => {
+  const cwd = mkScratch('init-profile-space-separated-cwd');
+  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
+
+  const result = runCli(['init', '--profile', 'lightweight'], { cwd });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--profile は --profile=<値>.*の形式で指定してください/);
+  assert.equal(fs.existsSync(path.join(cwd, '--profile')), false, '"--profile"という名前のディレクトリが作成されないこと');
+});
+
+test('init --profile（値なし・単体）: positional引数と誤解釈せずエラー終了する（手動implementation-gateレビュー指摘: init-profile-flag-parsing-edge）', (t) => {
+  const targetDir = mkScratch('init-profile-bare-flag');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir, '--profile']);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--profile は --profile=<値>.*の形式で指定してください/);
 });
 
 test('init --profile=lightweight: 既存の.claude/skillsと内容衝突する場合はpre-flightで停止し、プロファイルを問わず非破壊方針を維持する（AC-9）', (t) => {

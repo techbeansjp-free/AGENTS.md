@@ -66,7 +66,24 @@ export interface AgentSkillChainConfig {
 
 let cached: { root: string; config: AgentSkillChainConfig } | undefined;
 
-export function loadConfig(root: string = repoRoot()): AgentSkillChainConfig {
+/**
+ * `overrideConfig` を指定した場合、対象ディレクトリのファイルを一切読み取らず、渡されたオブジェクト
+ * をそのままスキーマ検証してから返す（ディスクへの読み取り・キャッシュ更新も行わない）。
+ * `upgrade --dry-run` が、破損・不正値を含む対象configファイルを書き換えずに（読み取り専用のまま）、
+ * 既に算出済みの「修復後相当」のconfig内容だけを後続のtemplate解決へ渡すために使う
+ * （手動implementation-gateレビュー指摘: upgrade-dry-run-writes-target-config/file の派生修正）。
+ */
+export function loadConfig(root: string = repoRoot(), overrideConfig?: unknown): AgentSkillChainConfig {
+  if (overrideConfig !== undefined) {
+    const outcome = validateAgainstSchema('config', overrideConfig, root);
+    if (!outcome.valid) {
+      throw new Error(
+        `config/agent-skill-chain.yaml がスキーマ（agent-skill-chain/config/v1）に適合しません:\n` +
+          outcome.errors.map((e) => `  - ${e}`).join('\n'),
+      );
+    }
+    return overrideConfig as AgentSkillChainConfig;
+  }
   if (cached && cached.root === root) return cached.config;
   const configPath = resolveAsset(path.join('config', 'agent-skill-chain.yaml'), root);
   const config = readYamlFile<AgentSkillChainConfig>(configPath);

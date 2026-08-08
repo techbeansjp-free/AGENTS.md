@@ -1,5 +1,5 @@
 ---
-name: Issue-start
+name: issue-start
 description: Create the GitHub Issue (or local state.yaml), the dedicated branch, and the dedicated git worktree that agent-skill-chain requires before any segment work begins.
 when_to_use: Use when the user asks to start work on a new agent-skill-chain Issue, or when a new feature/bugfix/hotfix/refactor/docs/process/chore unit of work needs its own branch and worktree before SPEC.md can be written.
 ---

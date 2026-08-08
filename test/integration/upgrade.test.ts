@@ -625,6 +625,53 @@ test('upgrade: agent-skill-chain.yamlがパース不能（ケースC）の場合
   assert.match(fs.readFileSync(configPath, 'utf8'), /^profile: standard/m);
 });
 
+test('upgrade --dry-run: agent-skill-chain.yamlがパース不能（ケースC）でも対象ファイルを一切書き換えない（手動implementation-gateレビュー指摘: upgrade-dry-run-writes-target-config/file）', (t) => {
+  const targetDir = mkScratch('upgrade-profile-dry-run-unparseable');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir, '--profile=lightweight']).status, 0);
+
+  const configPath = path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const corrupt = '{ this is not: valid: yaml::::';
+  fs.writeFileSync(configPath, corrupt);
+
+  const result = runCli(['upgrade', targetDir, '--dry-run']);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /既存の agent-skill-chain\.yaml の profile 設定を読み取れなかった（または不正な値だった）ため、既定値 standard として扱います/,
+    'dry-runでも警告メッセージ自体は算出・表示されること',
+  );
+  assert.equal(
+    fs.readFileSync(configPath, 'utf8'),
+    corrupt,
+    'dry-runでは影響確認のための実行自体が確認対象を破壊してはならない（対象ファイルは一切変更されないこと）',
+  );
+});
+
+test('upgrade --dry-run: agent-skill-chain.yamlのprofileが既知enum外の不正値（ケースC）でも対象ファイルを一切書き換えない（手動implementation-gateレビュー指摘: upgrade-dry-run-writes-target-config/file）', (t) => {
+  const targetDir = mkScratch('upgrade-profile-dry-run-invalid-enum');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  assert.equal(runCli(['init', targetDir]).status, 0);
+
+  const configPath = path.join(targetDir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const withBadProfile = fs.readFileSync(configPath, 'utf8').replace(/^profile:.*$/m, 'profile: turbo');
+  fs.writeFileSync(configPath, withBadProfile);
+
+  const result = runCli(['upgrade', targetDir, '--dry-run']);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /既存の agent-skill-chain\.yaml の profile 設定を読み取れなかった（または不正な値だった）ため、既定値 standard として扱います/,
+  );
+  assert.equal(
+    fs.readFileSync(configPath, 'utf8'),
+    withBadProfile,
+    'dry-runでは不正なprofile値を含むファイルであっても一切書き換えないこと',
+  );
+});
+
 test('upgrade: profileフィールドの値が既知enum外（ケースC）の場合は警告してprofile: standardへフォールバックする', (t) => {
   const targetDir = mkScratch('upgrade-profile-case-c-invalid-enum');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));

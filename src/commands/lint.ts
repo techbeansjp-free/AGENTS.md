@@ -77,7 +77,14 @@ const PATH_TOKEN_RE = /[\w.{}\-,/]+/g;
  * 「パス風に見えるから誤検出」なのではなく、禁止されているパス文字列そのものであるため、
  * バッククォートや `/` の有無に関わらず常に検出しなければならない（除外すると禁止語自体が
  * 検査不能になってしまう）。 */
-function isCodeLikeReference(line: string, start: number, length: number, banned: string, ext: string): boolean {
+function isCodeLikeReference(
+  line: string,
+  start: number,
+  length: number,
+  banned: string,
+  ext: string,
+  inFrontmatter: boolean,
+): boolean {
   if (banned.includes('/')) return false;
   const end = start + length;
   const containedIn = (re: RegExp): boolean => {
@@ -91,7 +98,7 @@ function isCodeLikeReference(line: string, start: number, length: number, banned
   if (containedIn(BACKTICK_SPAN_RE)) return true;
   if (containedIn(PLACEHOLDER_SPAN_RE)) return true;
   if (containedInPathToken(line, start, end)) return true;
-  return isIdentifierContext(line, start, end, banned, ext);
+  return isIdentifierContext(line, start, end, banned, ext, inFrontmatter);
 }
 
 function containedInPathToken(line: string, start: number, end: number): boolean {
@@ -337,13 +344,64 @@ function isExternalVocabAllowlisted(line: string, run: IdentifierRun, ext: strin
   );
 }
 
-function isIdentifierContext(line: string, start: number, end: number, banned: string, ext: string): boolean {
+/** ハイフンを含む識別子文字集合（ケバブケーストークン境界の拡張用）。`IDENT_CHAR_RE` は
+ * ハイフンを含まないため、`identifierRunAt` が返す run はハイフンで分断された最初のセグメント
+ * （例: `issue-start` の `issue` 部分のみ）に留まる。 */
+const KEBAB_CHAR_RE = /[A-Za-z0-9_-]/;
+
+/** run の左右をハイフン区切りの識別子文字へ拡張し、ケバブケースの完全なトークンを返す。 */
+function expandToKebabToken(line: string, run: IdentifierRun): string {
+  let start = run.runStart;
+  while (start > 0 && KEBAB_CHAR_RE.test(line[start - 1])) start--;
+  let end = run.runEnd;
+  while (end < line.length && KEBAB_CHAR_RE.test(line[end])) end++;
+  return line.slice(start, end);
+}
+
+/** 行頭がYAMLキー構文（`key: `、`key:`の直後に値が続く形）であるかを判定する。 */
+const YAML_KEY_PREFIX_RE = /^[A-Za-z_][\w-]*:\s*/;
+
+/**
+ * Markdownファイル（SKILL.md等）先頭のYAMLフロントマターにおける、キーの値側のケバブケース
+ * 識別子文脈。フロントマターの`name:`フィールド等でディレクトリ名と一致させるためkebab-case識別子
+ * （例: `issue-start`）を値に持つ場合、`issue`のようなセグメントが単独の禁止語と誤認される
+ * （手動implementation-gateレビュー指摘: skill-name-frontmatter-mismatch の是正で顕在化）。
+ * `isYamlIdentifierContext`（.yaml/.yml限定・キー自体が禁止語と完全一致する場合のみを扱う）とは
+ * 対象が異なるため独立実装する: 本関数は「値」側のケバブケース複合語のセグメント一致を扱う。
+ * `inFrontmatter`（行が先頭`---`〜`---`ブロック内かどうか）とYAMLキー構文の両方を満たす場合のみ
+ * 適用し、frontmatter中の自由記述（散文）行やMarkdown本文まで無条件に除外しないようにする。 */
+function isMarkdownFrontmatterValueContext(
+  line: string,
+  run: IdentifierRun,
+  banned: string,
+  ext: string,
+  inFrontmatter: boolean,
+): boolean {
+  if (ext !== '.md' || !inFrontmatter) return false;
+  if (!YAML_KEY_PREFIX_RE.test(line)) return false;
+  const token = expandToKebabToken(line, run);
+  if (token.length <= banned.length || !token.includes('-')) return false;
+  return token
+    .split(/[-_]/)
+    .flatMap((seg) => seg.split(/(?<=[a-z0-9])(?=[A-Z])/))
+    .some((seg) => seg.toLowerCase() === banned.toLowerCase());
+}
+
+function isIdentifierContext(
+  line: string,
+  start: number,
+  end: number,
+  banned: string,
+  ext: string,
+  inFrontmatter: boolean,
+): boolean {
   const run = identifierRunAt(line, start, end);
   if (!run) return false;
   if (isCodeIdentifierContext(line, run, banned, ext)) return true;
   if (YAML_CONTEXT_EXTENSIONS.has(ext) && isYamlIdentifierContext(line, run, banned)) return true;
   if (!isProseFile(ext) && isCliSubcommandContext(line, run, banned)) return true;
   if (!isProseFile(ext) && isQuotedLiteralContext(line, run, banned, ext)) return true;
+  if (isMarkdownFrontmatterValueContext(line, run, banned, ext, inFrontmatter)) return true;
   return isExternalVocabAllowlisted(line, run, ext);
 }
 
@@ -351,14 +409,29 @@ function isIdentifierContext(line: string, start: number, end: number, banned: s
  * プレースホルダ・パス風トークン）に包含されない箇所が1つでもあれば、散文の誤用として検出する。
  * `ext` は当該ファイルの拡張子（例: '.md'）。Issue #187 ADR-1: YAML/CLIサブコマンド識別子文脈の
  * 適用可否をファイル種別でディスパッチするために isCodeLikeReference へ伝播する。 */
-function hasProseViolation(line: string, banned: string, ext: string): boolean {
+function hasProseViolation(line: string, banned: string, ext: string, inFrontmatter: boolean): boolean {
   let searchFrom = 0;
   while (true) {
     const idx = line.indexOf(banned, searchFrom);
     if (idx === -1) return false;
-    if (!isCodeLikeReference(line, idx, banned.length, banned, ext)) return true;
+    if (!isCodeLikeReference(line, idx, banned.length, banned, ext, inFrontmatter)) return true;
     searchFrom = idx + banned.length;
   }
+}
+
+/** 先頭が`---`単独行で始まり、その次に現れる`---`単独行までの間（境界のdelimiter行自体は含まない）を
+ * Markdownのフロントマターブロックとみなし、その範囲内にある0-basedの行indexの集合を返す。
+ * 先頭行が`---`でない、または閉じ側の`---`が見つからない場合は空集合（フロントマター無し）。 */
+function computeFrontmatterLineIndices(lines: string[]): Set<number> {
+  const indices = new Set<number>();
+  if (lines[0]?.trim() !== '---') return indices;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i]?.trim() === '---') return indices;
+    indices.add(i);
+  }
+  // 閉じ側の`---`が見つからなかった場合はフロントマターが未確定であり、識別子文脈の
+  // 適用対象を誤って広げないよう空集合を返す。
+  return new Set<number>();
 }
 
 export async function vocab(args: string[]): Promise<number> {
@@ -376,9 +449,10 @@ export async function vocab(args: string[]): Promise<number> {
     for (const file of files) {
       const ext = path.extname(file);
       const lines = fs.readFileSync(file, 'utf8').split('\n');
+      const frontmatterLines = ext === '.md' ? computeFrontmatterLineIndices(lines) : new Set<number>();
       lines.forEach((line, index) => {
         for (const { banned, correctTerm } of forbidden) {
-          if (hasProseViolation(line, banned, ext)) {
+          if (hasProseViolation(line, banned, ext, frontmatterLines.has(index))) {
             violations.push(`${file}:${index + 1}: 禁止語 '${banned}' が見つかりました（'${correctTerm}' を使用してください）`);
           }
         }

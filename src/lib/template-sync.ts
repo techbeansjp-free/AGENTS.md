@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadConfig } from './config.js';
+import { loadConfig, type AgentSkillChainConfig } from './config.js';
 import { packageRoot } from './paths.js';
 
 export interface TemplateMapping {
@@ -17,9 +17,13 @@ function resolveConfiguredSource(targetRoot: string, configuredPath: string): st
   throw new Error(`template配布元が見つかりません: ${configuredPath}`);
 }
 
-/** configの配布元・展開先を、未導入先ではパッケージ同梱既定へフォールバックして解決する。 */
-export function resolveTemplateMappings(targetRoot: string): TemplateMapping[] {
-  const config = loadConfig(targetRoot);
+/**
+ * configの配布元・展開先を、未導入先ではパッケージ同梱既定へフォールバックして解決する。
+ * `overrideConfig` を渡した場合は対象ディレクトリのconfigファイルを読み取らずそれを使う
+ * （`upgrade --dry-run` が破損configを書き換えずに解決するための経路。`loadConfig` 参照）。
+ */
+export function resolveTemplateMappings(targetRoot: string, overrideConfig?: AgentSkillChainConfig): TemplateMapping[] {
+  const config = loadConfig(targetRoot, overrideConfig);
   const claudeAgentsSource = config.templates.claude_agents_source ?? '.agent-skill-chain/templates/claude/agents';
   const claudeAgentsTarget = config.templates.claude_agents_target ?? '.claude/agents';
   // ADR-0023（Issue #503）: claude_agentsと同形式の任意設定・既定パスフォールバック。

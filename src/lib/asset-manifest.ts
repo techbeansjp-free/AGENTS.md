@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { packageRoot, ASSET_NAMESPACE } from './paths.js';
 import { resolveTemplateMappings } from './template-sync.js';
+import type { AgentSkillChainConfig } from './config.js';
 
 /**
  * root直下に残す物のみ（AGENTS.md のディレクトリ構成定義）。他は .agent-skill-chain/ 配下へ。
@@ -42,10 +43,16 @@ const LIGHTWEIGHT_CLAUDE_MD_SOURCE = path.join('.agent-skill-chain', 'templates'
  *
  * `profile`（ADR-0023、Issue #503）: `lightweight` の場合、`CLAUDE.md`・`config`（`agent-skill-chain.yaml`
  * のみ）の配布元を軽量プロファイル専用テンプレートへ切り替える。省略時は `standard`（現行動作）。
+ *
+ * `overrideConfig`（Issue #503 手動implementation-gateレビュー指摘の派生修正）: 対象ディレクトリの
+ * configファイルが破損・不正値を含み、かつ書き換えられない（`upgrade --dry-run`）場合に、
+ * 呼び出し側が算出済みの「修復後相当」のconfig内容をそのまま `claude_agents`/`claude_skills`
+ * テンプレート解決へ渡すための経路。省略時は対象ディレクトリの実ファイルを読む（従来動作）。
  */
 export function collectManagedAssetMappings(
   targetDir: string,
   profile: 'standard' | 'lightweight' = 'standard',
+  overrideConfig?: AgentSkillChainConfig,
 ): ManagedAssetMapping[] {
   const mappings: ManagedAssetMapping[] = [];
   for (const entry of ROOT_LEVEL_ENTRIES) {
@@ -81,7 +88,7 @@ export function collectManagedAssetMappings(
     }
     mappings.push({ src, dest: path.join(targetDir, ASSET_NAMESPACE, entry) });
   }
-  const templateMappings = resolveTemplateMappings(targetDir);
+  const templateMappings = resolveTemplateMappings(targetDir, overrideConfig);
   for (const id of ['claude_agents', 'claude_skills'] as const) {
     const mapping = templateMappings.find((m) => m.id === id);
     if (mapping) mappings.push({ src: mapping.source, dest: mapping.dest });

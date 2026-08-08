@@ -31,6 +31,20 @@ target_dir: 導入先リポジトリのルートディレクトリ（省略時�
 
 const PROFILE_FLAG_PATTERN = /^--profile=(.+)$/;
 
+/**
+ * `--profile`で始まるが`--profile=<値>`の形式に一致しない引数（`--profile`単体、
+ * `--profile=`（値なし）、`--profile lightweight`のスペース区切り形式の`--profile`部分）を
+ * 検出する。これを素通りさせるとpositional引数（導入先ディレクトリ）として誤解釈され、
+ * `--profile`という文字列自体がディレクトリ名として`path.resolve`されてしまう
+ * （手動implementation-gateレビュー指摘: init-profile-flag-parsing-edge）。
+ */
+function assertNoMalformedProfileFlag(args: string[]): void {
+  const malformed = args.find((a) => a.startsWith('--profile') && !PROFILE_FLAG_PATTERN.test(a));
+  if (malformed !== undefined) {
+    throw new CliError('--profile は --profile=<値>（例: --profile=lightweight）の形式で指定してください。');
+  }
+}
+
 function parseProfile(args: string[]): 'standard' | 'lightweight' {
   const match = args.map((a) => PROFILE_FLAG_PATTERN.exec(a)).find((m): m is RegExpExecArray => m !== null);
   if (!match) return 'standard';
@@ -49,6 +63,7 @@ export async function init(args: string[]): Promise<number> {
       printUsage(USAGE);
       return 0;
     }
+    assertNoMalformedProfileFlag(args);
     const dryRun = args.includes('--dry-run');
     const profile = parseProfile(args);
     const positional = args.find((a) => a !== '--dry-run' && !PROFILE_FLAG_PATTERN.test(a));
