@@ -508,6 +508,28 @@ test('lint vocab: カタカナのみの禁止語がより長い別のカタカ�
   );
 });
 
+test('lint vocab: 中黒（・）で区切られたカタカナ複合語は中黒を境界として分割され、区切られた片方が禁止語単体と一致する場合は検出される（Issue #525 レビュー指摘の回帰）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 「ロック・スター」は中黒で区切られた別々のカタカナ複合語であり、「ロック」は
+  // 「スター」に埋め込まれた部分文字列ではなく禁止語単体としての出現である。
+  const file = path.join(repo.dir, 'katakana-nakaguro.md');
+  fs.writeFileSync(file, 'writer leaseはロック・スターのように取得する。\n');
+
+  // When: このファイルを対象に lint vocab を実行する
+  const result = runCli(['lint', 'vocab', 'katakana-nakaguro.md'], { cwd: repo.dir });
+
+  // Then: 中黒をrunの境界として扱うため「ロック」は「スター」と連結されたより長いrunに
+  // 埋め込まれているとは判定されず、禁止語単体の出現として検出される。
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /katakana-nakaguro\.md:1: 禁止語 'ロック' が見つかりました（'writer lease' を使用してください）/,
+    '中黒で区切られた「ロック・スター」内の「ロック」は禁止語単体として検出されること',
+  );
+});
+
 test('lint vocab: path引数省略時のデフォルト対象（AGENTS.md・.agent-skill-chain資産全体）は違反なしで終了コード0になる（ISSUE-178 AC-4: templates/config/schemas/scriptsも含めて対象）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

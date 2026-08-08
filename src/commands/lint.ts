@@ -105,12 +105,16 @@ function isCodeLikeReference(
 // ---- カタカナ複合語文脈判定（Issue #525） ----
 //
 // `identifierRunAt`/`isCodeIdentifierContext` はASCII識別子文字（英数字・`_`）のみを対象とする
-// ため、禁止語がカタカナのみで構成される場合（例:「ロック」）には一切適用されず、無関係な
+// ため、禁止語がカタカナのみで構成される場合（例: `ロック`）には一切適用されず、無関係な
 // 別のカタカナ複合語（例:「ブロック」）内部への偶然の部分文字列一致まで散文の誤用として
 // 誤検出していた。ASCII識別子文脈判定とは独立に、カタカナ連続runベースで同種の除外を行う。
 
-/** Unicode カタカナブロック（゠-ヿ、U+30A0〜U+30FF）。長音符ー（U+30FC）を含む。 */
-const KATAKANA_CHAR_RE = /[゠-ヿ]/;
+/** Unicode カタカナブロック（゠-ヿ、U+30A0〜U+30FF）のうち、中黒・（U+30FB）を除く。
+ * 長音符ー（U+30FC）は含む。中黒はカタカナ複合語同士を区切る区切り文字（例: `ロック・スター`の
+ * `ロック`と`スター`）であり、runの一部に含めるとrunが区切り文字を跨いで連結され、
+ * 区切られた片方の禁止語単体出現（例: `ロック`）まで「より長いrunに埋め込まれている」と
+ * 誤判定して見逃してしまう（Issue #525 レビュー指摘）。 */
+const KATAKANA_CHAR_RE = /[゠-ヺー-ヿ]/;
 
 function isKatakanaOnly(value: string): boolean {
   return value.length > 0 && [...value].every((ch) => KATAKANA_CHAR_RE.test(ch));
