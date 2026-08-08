@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { walkTextFiles } from '../../src/lib/scan.js';
-import { isInSingleLineComment } from '../../src/commands/lint.js';
+import { isInSingleLineComment, findUnquotedCommentMarkerIndex } from '../../src/commands/lint.js';
 
 // lint vocab / lint references / lint adr check の3サブコマンドを、bin/agents-md.js（ビルド後の
 // 実体）に対する subprocess 実行で検証する。createTmpRepo は .agent-skill-chain/ 資産一式
@@ -600,6 +600,15 @@ interface CommentReferenceViolation {
  * `src/commands/lint.ts` 側の本番関数はスコープを変更せず、本関数側でのみ複数行ブロック
  * コメントの追跡状態（前の行で開始し閉じていなければ次の行もブロックコメント内）を保持し、
  * ブロックコメント内にある行は行全体を検査対象として扱う。
+ *
+ * 手動implementation-gate strictレビュー2回目・指摘（block-comment-detection-latches-on-
+ * string-literal）: ブロックコメント開始判定は文字列リテラル内の`/*`部分文字列（globパターン
+ * 等）にも反応してしまい、対応する`*\/`が同一行に無い場合はそれ以降の行全体を誤ってコメント扱い
+ * する偽陽性があった。開始判定は`src/commands/lint.ts`の`findUnquotedCommentMarkerIndex`
+ * （引用符の外側にある最初のマーカー位置を返す）を用いて、引用符の外側にある`/*`のみを開始と
+ * 認める。終了判定（`*\/`検出）はブロックコメント継続行では対象行全体が既にコメント本文であり
+ * 実際の文字列リテラルは存在しないため、引用符追跡を適用すると逆にコメント本文中の引用符文字を
+ * 誤ってクオート開始と解釈しかねない。そのため終了判定は単純な部分文字列検索のまま維持する。
  */
 function findCommentReferenceViolations(root: string, files: string[]): CommentReferenceViolation[] {
   const violations: CommentReferenceViolation[] = [];
@@ -618,7 +627,7 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
         lineIsBlockComment = true;
         if (line.includes('*/')) inBlockComment = false;
       } else {
-        const openIndex = line.indexOf('/*');
+        const openIndex = findUnquotedCommentMarkerIndex(line, '/*');
         if (openIndex !== -1) {
           lineIsBlockComment = true;
           if (line.indexOf('*/', openIndex + 2) === -1) inBlockComment = true;
@@ -732,6 +741,40 @@ test('src/配下: JSDocスタイルの複数行ブロックコメント内にあ
       danglingStepViolations.length,
       2,
       'JSDocブロックコメント継続行にある2件の宙吊りの手順番号参照（手順1・手順2）を検出できていない',
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: globパターン等、文字列リテラル内の"/*"部分文字列をブロックコメント開始と誤検知しない（手動implementation-gateレビュー2回目指摘: block-comment-detection-latches-on-string-literal 是正の回帰テスト）', () => {
+  // Given: 実際のブロックコメントは無いが、1行目がglobパターンの文字列リテラル（`'**/*.ts'`）を
+  // 含み、その部分文字列`/*`が引用符を考慮しない実装ではブロックコメント開始と誤判定されうる。
+  // 誤判定された場合、対応する`*/`が同一行に無いため`inBlockComment`がtrueのまま維持され、
+  // 2行目以降のコード（コメントではない文字列リテラル中の「手順1」を含む）が丸ごと
+  // 「行全体がコメント」として扱われ、誤って違反報告される。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-glob-literal-scope-'));
+  try {
+    const globLiteralFile = path.join(tmpRoot, 'glob-literal.ts');
+    fs.writeFileSync(
+      globLiteralFile,
+      [
+        "const pattern = '**/*.ts';",
+        "export const guide = '手順1: 対象ディレクトリを確認してください';",
+      ].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [globLiteralFile]);
+
+    // Then: 実際のブロックコメントが存在しないため、2行目の文字列リテラル中の「手順1」は
+    // コメント扱いされず違反として検出されない。
+    assert.deepEqual(
+      violations,
+      [],
+      violations
+        .map((v) => `${v.relPath}:${v.lineNo} を誤ってコメント扱いし違反検出している: ${JSON.stringify(v.matched)}`)
+        .join('\n'),
     );
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
