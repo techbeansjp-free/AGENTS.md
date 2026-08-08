@@ -628,13 +628,19 @@ interface CommentReferenceViolation {
  * （例: `const x = 1; /* note *\/ const y = '手順1';`）の場合、`*\/`より後ろにある
  * 正当なコード部分まで行全体が誤ってコメント扱いされる偽陽性があった。是正として、
  * 行全体に対するbooleanではなく、その行で実際にブロックコメントが及ぶ文字位置の区間
- * （開始オフセット・終了オフセットの半開区間）を`blockCommentRange`として計算し、各
- * マッチ位置（`match.index`）がその区間内にあるかどうかで判定する。前の行から継続中
- * （`inBlockComment`）の場合は区間の開始を行頭（位置0）とする。同一行内に対応する`*\/`が
- * 見つかった場合は区間をその終了位置までに限定し、それより後ろの文字位置は区間外
- * （通常のコード）として扱う。`*\/`が同一行に見つからない場合は区間を行末まで延ばし、
- * 状態を次行へ持ち越す（現行の挙動と同じ）。同一行に複数のブロックコメントが存在する
- * ケースへの対応は本Issueのスコープ外であり、区間は1行につき最大1つのみを扱う。
+ * （開始オフセット・終了オフセットの半開区間）を計算し、各マッチ位置（`match.index`）が
+ * その区間内にあるかどうかで判定する。前の行から継続中（`inBlockComment`）の場合は区間の
+ * 開始を行頭（位置0）とする。同一行内に対応する`*\/`が見つかった場合は区間をその終了位置
+ * までに限定し、それより後ろの文字位置は区間外（通常のコード）として扱う。`*\/`が同一行に
+ * 見つからない場合は区間を行末まで延ばし、状態を次行へ持ち越す（現行の挙動と同じ）。
+ *
+ * Issue #515・是正: 区間は1行につき単一の`blockCommentRange`ではなく、複数存在しうる
+ * 区間の配列`blockCommentRanges`として一般化する。1つ目の`/*`区間（同一行内で閉じた場合は
+ * その終了位置、前の行から継続中で閉じなかった場合は行末）が確定した直後の位置から、
+ * さらに同じ行の続きに対して次の`/*`（単一行コメントより前・引用符の外側にあるもの）を
+ * 探すループへ変更し、見つかるたびに区間を配列へ追加する。前の行からの継続・行末までの
+ * 延長・次行への持ち越しという既存の挙動はそのまま維持する。マッチ位置の判定は区間配列の
+ * いずれかに含まれるかどうかで行う。
  */
 function findCommentReferenceViolations(root: string, files: string[]): CommentReferenceViolation[] {
   const violations: CommentReferenceViolation[] = [];
@@ -647,31 +653,41 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
     let inBlockComment = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      // その行で実際にブロックコメントが及ぶ文字位置の半開区間 [start, end)。
-      // 区間が存在しない行（ブロックコメントを含まない行）は null。
-      let blockCommentRange: [number, number] | null = null;
+      // その行で実際にブロックコメントが及ぶ文字位置の半開区間 [start, end) の配列。
+      // 1行に複数のブロックコメントが存在しうるため配列化する（区間が無い行は空配列）。
+      const blockCommentRanges: Array<[number, number]> = [];
 
       if (ext === '.ts') {
+        let searchFrom = 0;
         if (inBlockComment) {
           const closeIndex = line.indexOf('*/');
           if (closeIndex === -1) {
-            blockCommentRange = [0, line.length];
+            blockCommentRanges.push([0, line.length]);
           } else {
-            blockCommentRange = [0, closeIndex + 2];
+            blockCommentRanges.push([0, closeIndex + 2]);
             inBlockComment = false;
+            searchFrom = closeIndex + 2;
           }
-        } else {
-          const openIndex = findUnquotedCommentMarkerIndex(line, '/*');
-          const singleLineIndex = findUnquotedCommentMarkerIndex(line, '//');
-          if (openIndex !== -1 && (singleLineIndex === -1 || openIndex < singleLineIndex)) {
-            const closeIndex = line.indexOf('*/', openIndex + 2);
-            if (closeIndex === -1) {
-              blockCommentRange = [openIndex, line.length];
-              inBlockComment = true;
-            } else {
-              blockCommentRange = [openIndex, closeIndex + 2];
-            }
+        }
+
+        // 前の行から継続中のブロックコメントが同一行内で閉じた場合、またはそもそも
+        // 継続中でなかった場合は、その続きの位置からさらに次の`/*`を探すループへ進む。
+        while (!inBlockComment) {
+          const rest = line.slice(searchFrom);
+          const openIndexInRest = findUnquotedCommentMarkerIndex(rest, '/*');
+          const singleLineIndexInRest = findUnquotedCommentMarkerIndex(rest, '//');
+          if (openIndexInRest === -1 || (singleLineIndexInRest !== -1 && singleLineIndexInRest < openIndexInRest)) {
+            break;
           }
+          const openIndex = searchFrom + openIndexInRest;
+          const closeIndex = line.indexOf('*/', openIndex + 2);
+          if (closeIndex === -1) {
+            blockCommentRanges.push([openIndex, line.length]);
+            inBlockComment = true;
+            break;
+          }
+          blockCommentRanges.push([openIndex, closeIndex + 2]);
+          searchFrom = closeIndex + 2;
         }
       }
 
@@ -682,8 +698,9 @@ function findCommentReferenceViolations(root: string, files: string[]): CommentR
         pattern.lastIndex = 0;
         let match: RegExpExecArray | null;
         while ((match = pattern.exec(line)) !== null) {
-          const isInBlockCommentRange =
-            blockCommentRange !== null && match.index >= blockCommentRange[0] && match.index < blockCommentRange[1];
+          const isInBlockCommentRange = blockCommentRanges.some(
+            ([start, end]) => match!.index >= start && match!.index < end,
+          );
           if (isInBlockCommentRange || isInSingleLineComment(line, match.index, ext)) {
             violations.push({ relPath, lineNo: i + 1, label, matched: match[0] });
           }
@@ -945,6 +962,40 @@ test('src/配下: 同一行で開いて閉じるブロックコメントの後�
     assert.ok(
       !violations.some((v) => v.matched === '手順2'),
       '*/より後ろの正当なコード中の「手順2」を誤ってコメント扱いし検出している',
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('src/配下: 同一行に2つのブロックコメントが存在する場合、両方のブロックコメント内の違反を検出する（Issue #515: 1行につき最大1区間のみだった設計を複数区間の配列へ一般化する回帰テスト）', () => {
+  // Given: 同一行に2つの独立したブロックコメント（`/* 手順1参照 */`・`/* 手順2参照 */`）が
+  // 存在し、間に通常のコードを挟む合成ファイルを用意する。是正前の実装は1行につき最大1つの
+  // 区間（`blockCommentRange`）しか計算しないため、2つ目のブロックコメント内の「手順2」は
+  // 検査対象に含まれず検知漏れになっていた。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-multi-block-comment-scope-'));
+  try {
+    const tsFile = path.join(tmpRoot, 'multi-block-comment.ts');
+    fs.writeFileSync(
+      tsFile,
+      ["/* 手順1参照 */ const x = 1; /* 手順2参照 */"].join('\n') + '\n',
+    );
+
+    // When: 合成ファイルを対象に検査する
+    const violations = findCommentReferenceViolations(tmpRoot, [tsFile]);
+
+    // Then: 1つ目・2つ目のブロックコメントそれぞれの内側にある「手順1」「手順2」の両方が
+    // 検出される。間に挟まる通常のコード（`const x = 1;`）はいずれのパターンにも一致しないため
+    // 検出には影響しない。
+    const dangling = violations.filter((v) => v.label === '宙吊りの手順番号参照');
+    assert.equal(dangling.length, 2, `検出件数が想定と異なる: ${JSON.stringify(violations)}`);
+    assert.ok(
+      dangling.some((v) => v.matched === '手順1'),
+      '1つ目のブロックコメント内の「手順1」を検出できていない',
+    );
+    assert.ok(
+      dangling.some((v) => v.matched === '手順2'),
+      '2つ目のブロックコメント内の「手順2」を検出できていない（Issue #515の検知漏れ）',
     );
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
