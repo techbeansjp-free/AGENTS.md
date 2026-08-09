@@ -116,7 +116,11 @@ export function checkClosedIssueWriterLeases(root: string): Check {
   const label = 'close済みIssueのwriter lease';
   try {
     const segmentsByIssue = new Map<string, string[]>();
-    for (const entry of listAllLeaseRefNames(root)) {
+    const listed = listAllLeaseRefNames(root);
+    if (!listed.ok) {
+      return { label, ok: false, reason: `git ls-remote に失敗しました: ${listed.stderr || '詳細不明'}` };
+    }
+    for (const entry of listed.refs) {
       const segments = segmentsByIssue.get(entry.issueNumber) ?? [];
       segments.push(entry.segment);
       segmentsByIssue.set(entry.issueNumber, segments);

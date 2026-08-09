@@ -35,6 +35,11 @@ export interface LeaseRefName {
   ref: string;
 }
 
+/** 全writer lease ref一覧の取得結果。空配列は取得成功かつleaseが存在しないことを表す。 */
+export type ListAllLeaseRefNamesOutcome =
+  | { ok: true; refs: LeaseRefName[] }
+  | { ok: false; stderr: string };
+
 export type PublicWriterLease = Omit<WriterLease, 'writer_lease'> & {
   writer_lease: Omit<WriterLease['writer_lease'], 'token'>;
 };
@@ -163,10 +168,10 @@ function listLeaseRefNames(issueNumber: string, cwd?: string): { ref: string; se
  * 全Issueのwriter lease refを列挙する。lease payloadは取得せず、ref名からIssue番号とsegmentだけを読む。
  * 不正な命名のrefはwriter leaseとして扱えないため除外する。
  */
-export function listAllLeaseRefNames(cwd?: string): LeaseRefName[] {
+export function listAllLeaseRefNames(cwd?: string): ListAllLeaseRefNamesOutcome {
   const result = git(['ls-remote', 'origin', `${REF_PREFIX}/*`], cwd);
-  if (result.status !== 0) return [];
-  return result.stdout
+  if (result.status !== 0) return { ok: false, stderr: result.stderr.trim() };
+  const refs = result.stdout
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
@@ -176,6 +181,7 @@ export function listAllLeaseRefNames(cwd?: string): LeaseRefName[] {
       const match = new RegExp(`^${REF_PREFIX}/(\\d+)-(.+)$`).exec(ref);
       return match ? [{ issueNumber: match[1], segment: match[2], ref }] : [];
     });
+  return { ok: true, refs };
 }
 
 /** 有効期限に関わらず、指定Issueの全segmentのwriter leaseをgit refから読み出す。 */

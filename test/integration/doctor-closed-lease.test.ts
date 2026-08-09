@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -94,4 +95,17 @@ test('doctor: GitHub modeでopen Issueのwriter leaseだけならOKになる', (
 
   const result = runCli(['doctor'], { cwd: repo.dir, env: stub.env });
   assert.match(result.stdout, /OK {2}close済みIssueのwriter lease/);
+});
+
+test('doctor: writer lease ref一覧の取得に失敗した場合はNGになる', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => repo.cleanup());
+  const stub = doctorGhStub(process.env, 'OPEN', labelDefs(repo.dir));
+  t.after(() => stub.cleanup());
+  const unavailableRemote = path.join(repo.dir, 'missing-remote');
+  execFileSync('git', ['remote', 'set-url', 'origin', unavailableRemote], { cwd: repo.dir });
+
+  const result = runCli(['doctor'], { cwd: repo.dir, env: stub.env });
+  assert.equal(result.status >= 1, true);
+  assert.match(result.stdout, /NG {2}close済みIssueのwriter lease: git ls-remote に失敗しました:/);
 });
