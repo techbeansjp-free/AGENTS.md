@@ -665,16 +665,19 @@ export async function publish(args: string[]): Promise<number> {
       summary,
       canonicalJson(report),
     );
-    if (published.error) return fail(`Check Run 発行に失敗しました: ${published.error}`);
 
-    // ADR-0021: 転記はゲート判定の正本ではなく正本からの一方向の導出であるため、失敗しても
-    // publish 自体は成功のままとし理由だけを警告として出す（可用性優先）。
+    // ISSUE-593: 個人アカウント認証ではpublishCheckRun()が常に失敗するため、その成否より前に
+    // syncGateArtifacts()呼び出しを判定・早期returnしてしまうと、issue_syncが道連れで実行されなく
+    // なる。転記はゲート判定の正本ではなく正本からの一方向の導出（ADR-0021）であり、Check Run発行
+    // の成否に依存させず必ず独立して試行する。
     try {
       const notes = syncGateArtifacts({ root, issueNumber: number, config, targetSha: report.gate.target_sha });
       for (const note of notes) process.stderr.write(`issue-sync: ${note}\n`);
     } catch (error) {
       process.stderr.write(`issue-sync: 転記中に予期しないエラーが発生しました: ${String(error)}\n`);
     }
+
+    if (published.error) return fail(`Check Run 発行に失敗しました: ${published.error}`);
 
     return ok(published.url ?? '');
   });

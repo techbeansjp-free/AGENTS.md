@@ -26,10 +26,6 @@
       "parameters": {
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
-          { "context": "agent-skill-chain/spec-gate" },
-          { "context": "agent-skill-chain/design-gate" },
-          { "context": "agent-skill-chain/implementation-gate" },
-          { "context": "agent-skill-chain/validation-gate" },
           { "context": "verify" }
         ]
       }

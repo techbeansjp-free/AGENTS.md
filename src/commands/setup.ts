@@ -44,7 +44,11 @@ const RULESET_USAGE = `
 
 環境変数:
   ASC_GATE_APP_ID: required gate Checkを発行する専用GitHub App ID（secretではない）。
-                    未作成の場合の作成・installation手順は docs/ASC_GATE_APP_ID_RUNBOOK.md 参照。
+                    テンプレートのrequired_status_checksにgate Check context（
+                    agent-skill-chain/{spec,design,implementation,validation}-gate）が
+                    1件も存在しない場合（既定の配布テンプレート）は不要。1件以上存在する
+                    場合のみ必須。未作成の場合の作成・installation手順は
+                    docs/ASC_GATE_APP_ID_RUNBOOK.md 参照。
 
 出力:
   成功時: 終了コード0。適用したrulesetの内容を標準出力へ。
@@ -174,7 +178,6 @@ export function renderRulesetWithDedicatedApp(value: unknown, appIdValue: unknow
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('ruleset templateがobjectではありません');
   }
-  const appId = parseDedicatedAppId(appIdValue);
   const rendered = structuredClone(value) as RulesetDocument;
   const rules = Array.isArray(rendered.rules)
     ? rendered.rules.filter((rule) => rule.type === 'required_status_checks')
@@ -183,6 +186,17 @@ export function renderRulesetWithDedicatedApp(value: unknown, appIdValue: unknow
     throw new Error('ruleset templateのrequired_status_checks定義が一意ではありません');
   }
   const checks = rules[0].parameters.required_status_checks;
+
+  // ISSUE-593: 配布テンプレートの既定はgate check contextを1件も含まない（発行元workflowが
+  // 存在しないため）。この場合はASC_GATE_APP_IDを要求せずテンプレートをそのまま返す。手元の
+  // テンプレート複製にgate check contextを再度加えた利用者（専用App運用を選ぶ場合）のみ、
+  // 従来どおりASC_GATE_APP_ID必須・4件一意性検証・integration_id結線を適用する。
+  const presentGateChecks = GATE_CHECK_NAMES.filter((name) => checks.some((check) => check.context === name));
+  if (presentGateChecks.length === 0) {
+    return rendered;
+  }
+
+  const appId = parseDedicatedAppId(appIdValue);
   for (const name of GATE_CHECK_NAMES) {
     const matching = checks.filter((check) => check.context === name);
     if (matching.length !== 1) throw new Error(`ruleset templateの${name}定義が一意ではありません`);

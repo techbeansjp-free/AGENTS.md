@@ -190,6 +190,22 @@ test('issue-sync: 書込み直前の競合を検知したらリトライのの�
   assert.ok(issueBody(fixture.stub).includes('concurrent write #'), '別プロセスの書込みが残っていること');
 });
 
+test('gate publish (ISSUE-593): Check Run発行が失敗してもissue-syncは独立して試行され、失敗理由と転記結果の両方が出力に含まれる', async (t) => {
+  const fixture = setupRepo(t, { issueSync: { enabled: true, target: 'issue_body' } });
+  fixture.stub.failCheckRunPost('gh-stub: simulated check-run failure (personal account token)');
+
+  const published = publishApprovedGate(fixture);
+  assert.equal(published.status, 1, '個人アカウント認証相当のCheck Run発行失敗はpublish失敗として伝播すること');
+  assert.match(published.stderr, /Check Run 発行に失敗しました/);
+
+  const body = issueBody(fixture.stub);
+  assert.ok(body.startsWith(HUMAN_BODY), 'マーカー外の人間記述部分が先頭にそのまま残ること');
+  assert.ok(
+    body.includes(SYNC_BEGIN_MARKER) && body.includes('AC-1: 成果物全文をIssue本文へ転記する'),
+    'Check Run発行失敗とは独立してissue-syncのIssue本文転記が実行されること',
+  );
+});
+
 test('issue-sync: 本文上限を超える場合は全文ではなく Git 側参照の案内文へ切り替える', async (t) => {
   const bulkyLine = 'この行は本文上限超過を再現するための繰り返し行である。\n';
   const fixture = setupRepo(t, {
