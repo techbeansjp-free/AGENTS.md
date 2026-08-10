@@ -85,29 +85,35 @@ test('defaultLiveFileRoots: 一部のみ存在する場合は存在するもの�
   });
 });
 
-test('defaultReferenceFileRoots: このworktreeの実在パス（defaultLiveFileRootsの全パス + .github/workflows）を返す（Issue #221: 実デプロイ済みワークフローYAMLを走査対象へ含める）', () => {
+test('defaultReferenceFileRoots: このworktreeの実在パス（defaultLiveFileRootsの全パス + .github）を返す（Issue #547: workflows限定から.github/配下全体へ拡張し、pull_request_template.md・ISSUE_TEMPLATE/・SECURITY.md等の非workflowファイルも含める）', () => {
   const root = worktreeRoot();
   const result = defaultReferenceFileRoots(root);
-  const workflowsPath = path.join(root, '.github', 'workflows');
-  assert.equal(fs.existsSync(workflowsPath), true, `${workflowsPath} が存在しない前提が崩れている`);
-  assert.deepEqual(result, [...defaultLiveFileRoots(root), workflowsPath]);
+  const githubPath = path.join(root, '.github');
+  assert.equal(fs.existsSync(githubPath), true, `${githubPath} が存在しない前提が崩れている`);
+  assert.deepEqual(result, [...defaultLiveFileRoots(root), githubPath]);
 });
 
-test('defaultReferenceFileRoots: .github/workflows が存在しない環境では除外され、defaultLiveFileRootsと同一集合に縮退する', () => {
+test('defaultReferenceFileRoots: .github が存在しない環境では除外され、defaultLiveFileRootsと同一集合に縮退する', () => {
   withTmpDir((dir) => {
     fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# agents\n');
     const result = defaultReferenceFileRoots(dir);
     assert.deepEqual(result, defaultLiveFileRoots(dir));
-    assert.ok(!result.includes(path.join(dir, '.github', 'workflows')));
+    assert.ok(!result.includes(path.join(dir, '.github')));
   });
 });
 
-test('defaultReferenceFileRoots: .github/workflows が存在する環境では末尾に追加される', () => {
+test('defaultReferenceFileRoots: .github が存在する環境では末尾に追加され、workflows以外の直下ファイル（pull_request_template.md等）も走査対象に含まれる（Issue #547）', () => {
   withTmpDir((dir) => {
     fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# agents\n');
     fs.mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.github', 'pull_request_template.md'), '# pr template\n');
     const result = defaultReferenceFileRoots(dir);
-    assert.deepEqual(result, [...defaultLiveFileRoots(dir), path.join(dir, '.github', 'workflows')]);
+    assert.deepEqual(result, [...defaultLiveFileRoots(dir), path.join(dir, '.github')]);
+    const files = walkTextFiles(result);
+    assert.ok(
+      files.includes(path.join(dir, '.github', 'pull_request_template.md')),
+      '.github/workflows 以外の直下ファイルも既定スキャン対象へ含まれること',
+    );
   });
 });
 

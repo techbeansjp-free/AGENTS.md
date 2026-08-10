@@ -35,12 +35,17 @@ export function defaultVocabFileRoots(repoRoot: string): string[] {
   return defaultLiveFileRoots(repoRoot).filter((p) => !excluded.has(p));
 }
 
-/** lint references のデフォルト対象。defaultLiveFileRoots に本体 `.github/workflows/` を加える。
- * 実際に GitHub Actions として実行される、走査対象から漏れていた「生きたファイル」であるため
- * （Issue #221）。vocab 検査への意図しない波及を避けるため defaultLiveFileRoots・
- * defaultVocabFileRoots 自体は変更せず、references 専用にルート集合を拡張する。 */
+/** lint references のデフォルト対象。defaultLiveFileRoots に本体 `.github/` ディレクトリ全体を
+ * 加える。当初は実際に GitHub Actions として実行される `.github/workflows/` のみを対象としていた
+ * （Issue #221）が、`.github/pull_request_template.md`・`.github/ISSUE_TEMPLATE/`・
+ * `.github/SECURITY.md` 等の非workflowファイルも実際にGitHub上で使われる「生きたファイル」であり
+ * 走査対象から漏れていたため、`.github/` 配下全体へ拡張した（Issue #547）。配布テンプレート正本側
+ * （`.agent-skill-chain/templates/github/.github/` 配下）は、defaultLiveFileRoots がすでに
+ * `.agent-skill-chain/templates/` を丸ごと対象に含んでいるため、この関数での追加は不要。
+ * vocab 検査への意図しない波及を避けるため defaultLiveFileRoots・defaultVocabFileRoots 自体は
+ * 変更せず、references 専用にルート集合を拡張する。 */
 export function defaultReferenceFileRoots(repoRoot: string): string[] {
-  const roots = [...defaultLiveFileRoots(repoRoot), path.join(repoRoot, '.github', 'workflows')];
+  const roots = [...defaultLiveFileRoots(repoRoot), path.join(repoRoot, '.github')];
   return roots.filter((p) => fs.existsSync(p));
 }
 
