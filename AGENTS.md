@@ -100,7 +100,7 @@ Issue をまたいで永続する、システムの外部から観測できる�
 
 ## GitHub配布・マルチAI対応
 
-`.agent-skill-chain/templates/github/.github/` を配布元の正本とし、対象リポジトリの `.github/` はその展開結果（`.agent-skill-chain/scripts/verify-template-sync.sh` で同期検査）。ラベル・ruleset は GitHub API 経由のみで適用（`.agent-skill-chain/templates/github/provisioning/labels.yaml` → `.agent-skill-chain/scripts/setup-labels.sh`、`.agent-skill-chain/templates/github/provisioning/rulesets/main.json` → `.agent-skill-chain/scripts/setup-ruleset.sh`）。作業エージェントの実体はベンダー中立の role contract（`.agent-skill-chain/config/roles.yaml`）を正本とし、`.agent-skill-chain/adapters/{claude,codex,human}.sh` が実行系へ変換する。導入後の更新は `npx github:techbeansjp-free/AGENTS.md upgrade [target_dir] [--dry-run]`（版固定時は `#<tag-or-branch>` を付与）で行う。
+`.agent-skill-chain/templates/github/.github/` を配布元の正本とし、対象リポジトリの `.github/` はその展開結果（`.agent-skill-chain/ci/verify-template-sync.sh` で同期検査）。ラベル・ruleset は GitHub API 経由のみで適用（`.agent-skill-chain/templates/github/provisioning/labels.yaml` → `.agent-skill-chain/scripts/setup-labels.sh`、`.agent-skill-chain/templates/github/provisioning/rulesets/main.json` → `.agent-skill-chain/scripts/setup-ruleset.sh`）。作業エージェントの実体はベンダー中立の role contract（`.agent-skill-chain/config/roles.yaml`）を正本とし、`.agent-skill-chain/adapters/{claude,codex,human}.sh` が実行系へ変換する。導入後の更新は `npx github:techbeansjp-free/AGENTS.md upgrade [target_dir] [--dry-run]`（版固定時は `#<tag-or-branch>` を付与）で行う。
 
 ## 設定
 
