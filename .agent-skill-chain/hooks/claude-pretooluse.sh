@@ -59,16 +59,59 @@ if [[ -z "$COMMAND" ]]; then
 fi
 
 # 拒否パターン1: cleanupを経由しない git worktree remove の直接実行。
-if [[ "$COMMAND" == *"git worktree remove"* ]] && [[ "$COMMAND" != *"cleanup"* ]]; then
-  echo "拒否: git worktree remove の直接実行は禁止されています。agent-skill-chain cleanup <issue_id> を使用してください。" >&2
-  exit 2
+# Issue #552: 「コマンド中のどこかに文字列cleanupが含まれるか」という部分文字列一致は
+# `git worktree remove <path>; echo cleanup` のような連結コマンドで回避できてしまうため
+# 使わない。コマンド全体（末尾の空白のみ許容）が `agent-skill-chain cleanup` または
+# `cleanup.sh` の呼び出しそのものであることを構造的に確認できた場合のみ許可する
+# （`;`・`&`・`|` によるコマンド連結が伴う時点でこの構造には一致しない）。
+if [[ "$COMMAND" == *"git worktree remove"* ]]; then
+  IS_CLEANUP_INVOCATION=0
+  if [[ "$COMMAND" =~ ^[[:space:]]*(npx[[:space:]]+[^[:space:]]+[[:space:]]+)?agent-skill-chain[[:space:]]+cleanup([[:space:]][^\;\&\|]*)?[[:space:]]*$ ]]; then
+    IS_CLEANUP_INVOCATION=1
+  elif [[ "$COMMAND" =~ ^[[:space:]]*(bash[[:space:]]+)?([^[:space:]]*/)?cleanup\.sh([[:space:]][^\;\&\|]*)?[[:space:]]*$ ]]; then
+    IS_CLEANUP_INVOCATION=1
+  fi
+  if [[ "$IS_CLEANUP_INVOCATION" -ne 1 ]]; then
+    echo "拒否: git worktree remove の直接実行は禁止されています。agent-skill-chain cleanup <issue_id> を使用してください。" >&2
+    exit 2
+  fi
 fi
 
-# 拒否パターン2: 命名規約に違反するブランチ作成（git branch <name> 作成形 /
-# git checkout -b|-B <name> / git switch -c|-C <name>）。
+# 拒否パターン2: 命名規約に違反するブランチ作成・rename先（git branch <name> 作成形 /
+# git checkout -b|-B <name> / git switch -c|-C <name> /
+# git branch -m|-M|-c|-C [<old>] <new> のrename・copy先<new>）。
+# Issue #552: git branch -d|-D（削除）は対象がこれから作成されるブランチ名ではないため、
+# 検証対象にしない（削除操作の誤検証防止）。
 BRANCH_NAME=""
-if [[ "$COMMAND" =~ git[[:space:]]+branch[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*([^-[:space:]][^[:space:]]*) ]]; then
-  BRANCH_NAME="${BASH_REMATCH[2]}"
+if [[ "$COMMAND" =~ git[[:space:]]+branch([[:space:]]+[^\;\&\|]*)? ]]; then
+  BRANCH_ARGS="${BASH_REMATCH[1]:-}"
+  IS_DELETE=0
+  IS_RENAME_OR_COPY=0
+  BRANCH_POSITIONALS=()
+  for token in $BRANCH_ARGS; do
+    case "$token" in
+      -d|-D|--delete)
+        IS_DELETE=1
+        ;;
+      -m|-M|--move|-c|-C|--copy)
+        IS_RENAME_OR_COPY=1
+        ;;
+      -*)
+        ;;
+      *)
+        BRANCH_POSITIONALS+=("$token")
+        ;;
+    esac
+  done
+  if [[ "$IS_DELETE" -eq 0 ]]; then
+    if [[ "$IS_RENAME_OR_COPY" -eq 1 ]]; then
+      if [[ ${#BRANCH_POSITIONALS[@]} -gt 0 ]]; then
+        BRANCH_NAME="${BRANCH_POSITIONALS[$(( ${#BRANCH_POSITIONALS[@]} - 1 ))]}"
+      fi
+    elif [[ ${#BRANCH_POSITIONALS[@]} -gt 0 ]]; then
+      BRANCH_NAME="${BRANCH_POSITIONALS[0]}"
+    fi
+  fi
 elif [[ "$COMMAND" =~ git[[:space:]]+checkout[[:space:]]+-[bB][[:space:]]+([^[:space:]]+) ]]; then
   BRANCH_NAME="${BASH_REMATCH[1]}"
 elif [[ "$COMMAND" =~ git[[:space:]]+switch[[:space:]]+-[cC][[:space:]]+([^[:space:]]+) ]]; then
