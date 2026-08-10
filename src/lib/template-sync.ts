@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { parse } from 'yaml';
 import { loadConfig, type AgentSkillChainConfig } from './config.js';
 import { packageRoot } from './paths.js';
 
@@ -49,6 +50,21 @@ export function resolveTemplateMappings(targetRoot: string, overrideConfig?: Age
   ];
 }
 
+/**
+ * `mapping.source` に対する seed-only マニフェスト（`<source>.seed-only.yaml`、配布元ディレクトリの
+ * 兄弟ファイルなので配布元ツリーの一部として展開先へコピーされない）を読み、初回配置後の内容乖離を
+ * 許容するファイルの相対パス集合を返す。マニフェストが無ければ空集合（従来どおり完全一致必須）。
+ * ISSUE-574: CODEOWNERS・dependabot.yml等、プロジェクトごとに正当にカスタマイズされうるファイルを、
+ * ワークフロー本体等の完全一致必須ファイルと区別するための仕組み。
+ */
+function loadSeedOnlyPaths(source: string): Set<string> {
+  const manifestPath = `${source}.seed-only.yaml`;
+  if (!fs.existsSync(manifestPath)) return new Set();
+  const parsed = parse(fs.readFileSync(manifestPath, 'utf8')) as { paths?: unknown } | null;
+  const rawPaths = Array.isArray(parsed?.paths) ? parsed.paths : [];
+  return new Set(rawPaths.filter((p): p is string => typeof p === 'string'));
+}
+
 function listFilesRecursive(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   const out: string[] = [];
@@ -82,6 +98,7 @@ export function computeTemplateSyncDiffs(targetRoot: string): string[] {
     const sourceFiles = listFilesRecursive(mapping.source).map((p) => path.relative(mapping.source, p));
     const destFiles = new Set(listFilesRecursive(mapping.dest).map((p) => path.relative(mapping.dest, p)));
     if (mapping.id !== 'github' && packageSourceTree && destFiles.size === 0) continue;
+    const seedOnly = loadSeedOnlyPaths(mapping.source);
     for (const rel of sourceFiles) {
       const claudeSegment = CLAUDE_NAMESPACE_DISPLAY_SEGMENT[mapping.id];
       const displayPath = claudeSegment ? path.join('.claude', claudeSegment, rel) : rel;
@@ -89,6 +106,9 @@ export function computeTemplateSyncDiffs(targetRoot: string): string[] {
         diffs.push(`未同期（欠落）: ${displayPath}`);
         continue;
       }
+      // seed-only: 初回配置の存在は保証するが、以降の内容カスタマイズ（例: CODEOWNERSの
+      // プレースホルダー書き換え）は正当な乖離として許容し、完全一致検査の対象から外す。
+      if (seedOnly.has(rel)) continue;
       if (!fs.readFileSync(path.join(mapping.source, rel)).equals(fs.readFileSync(path.join(mapping.dest, rel)))) {
         diffs.push(`未同期（差分あり）: ${displayPath}`);
       }

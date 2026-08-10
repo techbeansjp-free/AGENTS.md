@@ -143,3 +143,18 @@ test('各コマンドの -h/--help は終了コード0でUSAGE文字列を出す
     repo.cleanup();
   }
 });
+
+// ISSUE-537: setup ruleset のUSAGEへ ASC_GATE_APP_ID 未作成時の作成・installation手順runbookへの
+// 参照を追記したため、実際の -h 出力にその参照が含まれることを実測する。
+test('setup ruleset -h: ASC_GATE_APP_IDの説明にASC_GATE_APP_ID_RUNBOOK.mdへの参照を含むこと', () => {
+  const repo = createTmpRepo({ backend: 'local' });
+  try {
+    const result = runCli(['setup', 'ruleset', '-h'], { cwd: repo.dir });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /使い方: agent-skill-chain setup ruleset/);
+    assert.match(result.stdout, /ASC_GATE_APP_ID/);
+    assert.match(result.stdout, /docs\/ASC_GATE_APP_ID_RUNBOOK\.md/);
+  } finally {
+    repo.cleanup();
+  }
+});

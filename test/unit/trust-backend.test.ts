@@ -41,6 +41,14 @@ test('専用App IDは文字列を受理し、未設定・不正・標準Actions 
   }
 });
 
+// ISSUE-537: 拒否時のエラーメッセージへ、専用App作成・installation手順を記したrunbookへの
+// 参照を含めたため、その文言が実際にエラーメッセージへ含まれることを実測する。
+test('専用App ID拒否時のエラーメッセージはASC_GATE_APP_ID_RUNBOOK.mdへの参照を含む', () => {
+  for (const value of [undefined, 15_368]) {
+    assert.throws(() => parseDedicatedAppId(value), /docs\/ASC_GATE_APP_ID_RUNBOOK\.md/);
+  }
+});
+
 test('標準Actions App、inactive、別App、一部context不足、main非対象を拒否する', () => {
   assert.throws(
     () => resolveDedicatedAppBackend({ appId: 15_368, checkNames: CHECKS, rulesets: [ruleset()] }),

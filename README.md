@@ -24,6 +24,8 @@ npx github:techbeansjp-free/AGENTS.md setup labels [owner/repo]    # ラベル�
 npx github:techbeansjp-free/AGENTS.md setup ruleset [owner/repo]   # rulesetのみ
 ```
 
+`setup ruleset`（`setup github` からの実行を含む）は環境変数 `ASC_GATE_APP_ID`（required gate Checkを発行する専用GitHub App ID、secretではない）を要求する。専用GitHub Appを未作成の場合の作成・installation手順は [docs/ASC_GATE_APP_ID_RUNBOOK.md](docs/ASC_GATE_APP_ID_RUNBOOK.md) を参照。
+
 導入後の更新・撤去には `upgrade`/`uninstall` を使う。
 
 ```bash

@@ -39,6 +39,7 @@ const RULESET_USAGE = `
 
 環境変数:
   ASC_GATE_APP_ID: required gate Checkを発行する専用GitHub App ID（secretではない）。
+                    未作成の場合の作成・installation手順は docs/ASC_GATE_APP_ID_RUNBOOK.md 参照。
 
 出力:
   成功時: 終了コード0。適用したrulesetの内容を標準出力へ。

@@ -98,6 +98,33 @@ is_ancestor_of_self() {
   return 1
 }
 
+# Issue #551: 数値オプション（--min-elapsed-seconds等）はこの後bashの算術評価
+# コンテキスト（(( etimes >= min_elapsed && ... ))）へそのまま渡る。算術評価は
+# 変数値に含まれる `$(...)` 形式のコマンド置換を実行しうるため、算術評価へ渡す前に
+# 非負の十進整数のみであることを検証し、不正な場合は使い方エラーで拒否する。
+require_uint() {
+  local sub="$1" opt="$2" value="$3"
+  if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+    echo "$sub: $opt には非負の整数を指定してください（実際の値: ${value}）" >&2
+    usage >&2
+    exit 2
+  fi
+}
+
+# Issue #551: --before/--after/--ps-output で指定したファイルが存在しない・読めない
+# 場合、grepの「不一致」（終了コード1、空結果として正常系）と区別せず「候補なし」を
+# 誤って返してしまう既知の不具合を防ぐため、内容を処理する前にファイルの存在・可読性を
+# 検証する。値が空文字列（未指定）の場合は検証をスキップする（実機の`ps`を使う等の
+# 意図的な省略と区別するため）。
+require_readable_file() {
+  local sub="$1" opt="$2" file="$3"
+  if [[ -n "$file" && ! -r "$file" ]]; then
+    echo "$sub: $opt に指定されたファイルが存在しないか読み取れません: $file" >&2
+    usage >&2
+    exit 2
+  fi
+}
+
 cmd_check() {
   local pattern="$DEFAULT_PATTERN" min_elapsed=600 max_cpu=1 ps_output="" target_cwd="" cwd_map=""
   while [[ $# -gt 0 ]]; do
@@ -112,6 +139,9 @@ cmd_check() {
       *) echo "check: 不明な引数: $1" >&2; usage >&2; exit 2 ;;
     esac
   done
+  require_uint check --min-elapsed-seconds "$min_elapsed"
+  require_uint check --max-cpu-seconds "$max_cpu"
+  require_readable_file check --ps-output "$ps_output"
   [[ -n "$target_cwd" ]] && target_cwd="$(readlink -f "$target_cwd" 2>/dev/null || echo "$target_cwd")"
 
   local found=0
@@ -150,11 +180,15 @@ cmd_compare() {
       *) echo "compare: 不明な引数: $1" >&2; usage >&2; exit 2 ;;
     esac
   done
+  require_uint compare --min-elapsed-delta "$min_elapsed_delta"
+  require_uint compare --max-cpu-delta "$max_cpu_delta"
   if [[ -z "$before" || -z "$after" ]]; then
     echo "compare: --before と --after は必須" >&2
     usage >&2
     exit 2
   fi
+  require_readable_file compare --before "$before"
+  require_readable_file compare --after "$after"
   [[ -n "$target_cwd" ]] && target_cwd="$(readlink -f "$target_cwd" 2>/dev/null || echo "$target_cwd")"
 
   local tmp_before tmp_after
@@ -217,6 +251,7 @@ cmd_kill() {
     usage >&2
     exit 2
   fi
+  require_readable_file kill --ps-output "$ps_output"
   target_cwd="$(readlink -f "$target_cwd" 2>/dev/null || echo "$target_cwd")"
 
   declare -A pid_allow=()
