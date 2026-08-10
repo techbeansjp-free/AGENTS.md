@@ -388,7 +388,7 @@ test('worker-launch-verify (ISSUE-448 AC-3): renew.pid不在でもkillを試み�
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('worker-launch-verify (ISSUE-448 AC-4): contract.sha256不在時は照合をスキップしてreport照合へ進む', (t) => {
+test('worker-launch-verify (ISSUE-549 AC-1): contract.sha256不在はreport completedでもblocked＋lease解放へ倒す', (t) => {
   const fixture = createVerifyFixture(t, 'absent');
   const result = runWorkerVerifier(
     fixture.worktreePath,
@@ -396,7 +396,10 @@ test('worker-launch-verify (ISSUE-448 AC-4): contract.sha256不在時は照合�
     ['ISSUE-1', fixture.dispatchTempDir],
     process.env,
   );
-  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /contract\.sha256が存在しません/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false, 'contract.sha256欠落でもleaseを解放すること');
 });
 
 test('worker-launch-verify (ISSUE-448 AC-3/AC-4): contract監査値不一致はreport completedでもblocked＋lease解放へ倒す', (t) => {
