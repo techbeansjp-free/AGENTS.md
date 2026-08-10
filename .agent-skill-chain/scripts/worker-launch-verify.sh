@@ -142,7 +142,9 @@ case "$SEGMENT" in
 esac
 
 INTEGRITY_ERROR=""
-if [[ -f "$DISPATCH_TEMP_DIR/contract.sha256" ]]; then
+if [[ ! -f "$DISPATCH_TEMP_DIR/contract.sha256" ]]; then
+  INTEGRITY_ERROR="contract.sha256が存在しません（dispatch時の監査証跡が欠落しています）"
+else
   EXPECTED_SHA="$(sed -n 's/^CONTRACT_SHA256=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   EXPECTED_LINES="$(sed -n 's/^CONTRACT_LINES=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   ACTUAL_SHA="$(sha256sum "$CONTRACT_FILE" | awk '{print $1}')"
