@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCli } from '../helpers/cli.js';
+import { validateAgainstSchema } from '../../src/lib/schema.js';
+import { readYamlFile } from '../../src/lib/yaml-io.js';
 
 // Issue #169 T2: init コマンドの結合テスト（bin/agents-md.js 経由でsubprocess実行）。
 // GitHub API（labels/ruleset）には触れないため、gh-stubは不要。
@@ -337,4 +339,73 @@ test('init: 既存所有権記録にretainedとして残っていたエントリ
     true,
     '過去にretainedとして保持されていたエントリが2回目のinit実行で失われないこと',
   );
+});
+
+// ISSUE-586 AC-1・AC-2: initが新規に.agent-skill-chain/project/の作り方を具体的な導線として提供する。
+test('init: 新規導入時に.agent-skill-chain/project/manifest.yaml・RULES.mdが自動生成され、案内メッセージが出力される（ISSUE-586 AC-1）', (t) => {
+  const targetDir = mkScratch('init-project-policy-scaffold');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const manifestPath = path.join(targetDir, '.agent-skill-chain', 'project', 'manifest.yaml');
+  const rulesPath = path.join(targetDir, '.agent-skill-chain', 'project', 'RULES.md');
+  assert.ok(fs.existsSync(manifestPath), '.agent-skill-chain/project/manifest.yamlが生成されること');
+  assert.ok(fs.existsSync(rulesPath), '.agent-skill-chain/project/RULES.mdが生成されること');
+  assert.match(
+    result.stdout,
+    /docs\/PROJECT_POLICY\.md/,
+    '案内メッセージがdocs\\/PROJECT_POLICY.mdへの参照を含むこと',
+  );
+  assert.match(
+    result.stdout,
+    /project-policy\.schema\.yaml/,
+    '案内メッセージがスキーマパスへの参照を含むこと',
+  );
+});
+
+test('init: 生成された.agent-skill-chain/project/manifest.yamlはproject-policy.schema.yamlの必須フィールドを満たす（ISSUE-586 AC-2）', (t) => {
+  const targetDir = mkScratch('init-project-policy-schema-valid');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const manifest = readYamlFile<Record<string, unknown>>(
+    path.join(targetDir, '.agent-skill-chain', 'project', 'manifest.yaml'),
+  );
+  const outcome = validateAgainstSchema('project-policy', manifest, targetDir);
+  assert.equal(outcome.valid, true, outcome.errors.join('; '));
+});
+
+test('init --dry-run: .agent-skill-chain/project/配下は一切作成されない（ISSUE-586）', (t) => {
+  const targetDir = mkScratch('init-project-policy-dry-run');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const result = runCli(['init', targetDir, '--dry-run']);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(path.join(targetDir, '.agent-skill-chain', 'project')), false);
+});
+
+test('init: 既に.agent-skill-chain/project/manifest.yamlが存在する状態で再実行しても、既存のRULES.md・manifest.yamlの内容を変更しない（ISSUE-586 要件6・AC-6）', (t) => {
+  const targetDir = mkScratch('init-project-policy-rerun-noop');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  const first = runCli(['init', targetDir]);
+  assert.equal(first.status, 0, first.stderr);
+
+  const manifestPath = path.join(targetDir, '.agent-skill-chain', 'project', 'manifest.yaml');
+  const rulesPath = path.join(targetDir, '.agent-skill-chain', 'project', 'RULES.md');
+  const customManifest = fs.readFileSync(manifestPath, 'utf8').replace(/policy_version: 1/, 'policy_version: 7');
+  const customRules = '# consumer project独自のRULES.md\n';
+  fs.writeFileSync(manifestPath, customManifest);
+  fs.writeFileSync(rulesPath, customRules);
+
+  const second = runCli(['init', targetDir]);
+
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(fs.readFileSync(manifestPath, 'utf8'), customManifest, 'manifest.yamlの独自内容が変更されないこと');
+  assert.equal(fs.readFileSync(rulesPath, 'utf8'), customRules, 'RULES.mdの独自内容が変更されないこと');
+  assert.match(second.stdout, /unchanged:.*manifest\.yaml/);
 });
