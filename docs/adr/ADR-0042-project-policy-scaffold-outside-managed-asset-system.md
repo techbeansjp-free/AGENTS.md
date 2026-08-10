@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0041
+id: ADR-0042
 status: proposed   # proposed | accepted | superseded | deprecated
 title: project固有ポリシーの雛形生成はNAMESPACED_ENTRIES非対象の独立scaffoldとしてinitに実装する
 tags: [init, project-policy, safety]
