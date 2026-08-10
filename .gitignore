@@ -1,6 +1,10 @@
 # macOS
 .DS_Store
 
+# エディタが自動生成するVSCodeマルチルートワークスペース設定ファイル
+# （root直下許可リスト外のためroot直下への残留を防ぐ、Issue #556）
+*.code-workspace
+
 # Node 依存（lockfileから npm ci で再現するため追跡不要）
 node_modules/
 
