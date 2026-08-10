@@ -30,6 +30,20 @@ test('四つのgate Checkだけを専用App sourceへ固定する', () => {
   assert.notDeepEqual(rendered, source, '入力templateを破壊しないこと');
 });
 
+test('ISSUE-593: gate Checkを1件も含まないtemplateはASC_GATE_APP_ID未設定でも完走し、入力と同一内容を返す', () => {
+  const source = {
+    name: 'main-protection',
+    rules: [{
+      type: 'required_status_checks',
+      parameters: {
+        required_status_checks: [{ context: 'verify' }],
+      },
+    }],
+  };
+  const rendered = renderRulesetWithDedicatedApp(source, undefined);
+  assert.deepEqual(rendered, source);
+});
+
 test('専用App未設定、Actions App、gate context欠損・重複を拒否する', () => {
   assert.throws(() => renderRulesetWithDedicatedApp(template(), undefined), /専用GitHub App ID/);
   assert.throws(() => renderRulesetWithDedicatedApp(template(), 15_368), /標準GitHub Actions App/);

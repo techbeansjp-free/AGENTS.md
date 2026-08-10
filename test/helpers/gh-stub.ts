@@ -820,6 +820,10 @@ if (cmd === 'api') {
   }
 
   if (/\\/check-runs$/.test(apiPath || '') && method === 'POST') {
+    if (state.failCheckRunPost) {
+      process.stderr.write(state.failCheckRunPost + '\\n');
+      process.exit(1);
+    }
     const parsed = JSON.parse(body);
     const id = state.nextId++;
     const checkSuiteId = state.nextCheckSuiteId || 1000;
@@ -985,6 +989,9 @@ export interface GhStubState {
   /** `gh api repos/<repo>/compare/<base>...<head>` 呼び出しごとの repo セグメント・head引数の記録
    * （fork PRのhead修飾・対象リポジトリの検証に使う）。 */
   compareRepoCalls?: { repo: string; head: string }[];
+  /** ISSUE-593: `gh api -X POST .../check-runs` を強制失敗させる（個人アカウント認証による
+   * Check Run発行不能を再現し、失敗時もsyncGateArtifacts()が独立して試行されることを検証する）。 */
+  failCheckRunPost?: string;
 }
 
 export interface GhStub {
@@ -1048,6 +1055,9 @@ export interface GhStub {
     prNumber: number,
     info: { repoFullName?: string; url?: string; isCrossRepository?: boolean; headRepositoryOwner?: { login: string } },
   ): void;
+  /** ISSUE-593: 以後の `gh api -X POST .../check-runs` を強制失敗させる（個人アカウント認証による
+   * Check Run発行不能を再現する）。 */
+  failCheckRunPost(stderr: string): void;
 }
 
 /**
@@ -1222,6 +1232,11 @@ export function createGhStub(baseDir: string): GhStub {
     ): void {
       const state = this.readState();
       state.prCrossRepoInfo = { ...(state.prCrossRepoInfo ?? {}), [String(prNumber)]: info };
+      this.writeState(state);
+    },
+    failCheckRunPost(stderr: string): void {
+      const state = this.readState();
+      state.failCheckRunPost = stderr;
       this.writeState(state);
     },
   };

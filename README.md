@@ -24,7 +24,7 @@ npx github:techbeansjp-free/AGENTS.md setup labels [owner/repo]    # ラベル�
 npx github:techbeansjp-free/AGENTS.md setup ruleset [owner/repo]   # rulesetのみ
 ```
 
-`setup ruleset`（`setup github` からの実行を含む）は環境変数 `ASC_GATE_APP_ID`（required gate Checkを発行する専用GitHub App ID、secretではない）を要求する。専用GitHub Appを未作成の場合の作成・installation手順は [docs/ASC_GATE_APP_ID_RUNBOOK.md](docs/ASC_GATE_APP_ID_RUNBOOK.md) を参照。
+`setup ruleset`（`setup github` からの実行を含む）は既定の配布テンプレートに対しては環境変数 `ASC_GATE_APP_ID` を要求しない（`required_status_checks` は `verify` のみで、gate Checkを含まないため）。`gate publish` はCheck Runを発行可能なCI workflowが現状このリポジトリにも配布テンプレートにも存在せず、進行役が任意実行する記録専用ツールであり、branch rulesetのrequired statusには現状寄与しない。手元のテンプレート複製へrequired gate Check（`agent-skill-chain/{spec,design,implementation,validation}-gate`）を再度加えて専用GitHub Appによる完全運用を選ぶ場合の作成・installation手順は [docs/ASC_GATE_APP_ID_RUNBOOK.md](docs/ASC_GATE_APP_ID_RUNBOOK.md) を参照。
 
 導入後の更新・撤去には `upgrade`/`uninstall` を使う。
 
