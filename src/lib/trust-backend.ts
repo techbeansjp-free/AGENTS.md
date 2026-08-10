@@ -45,7 +45,9 @@ export function parseDedicatedAppId(value: unknown): number {
   const parsed = typeof value === 'string' && /^[1-9][0-9]*$/.test(value) ? Number(value) : value;
   const appId = positiveInteger(parsed);
   if (!appId || appId === GITHUB_ACTIONS_APP_ID) {
-    throw new Error('専用GitHub App IDが未設定、不正、または標準GitHub Actions Appです');
+    throw new Error(
+      '専用GitHub App IDが未設定、不正、または標準GitHub Actions Appです（作成・installation手順は docs/ASC_GATE_APP_ID_RUNBOOK.md 参照）',
+    );
   }
   return appId;
 }

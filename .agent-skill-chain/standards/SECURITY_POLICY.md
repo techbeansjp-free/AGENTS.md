@@ -33,6 +33,10 @@
 
 調整状態（Issue・ブランチ・PR・ゲート状態等）の正本は、GitHub モードまたはローカルモードのいずれか一方のみであり、二重化しない（`AGENTS.md` I6）。複数の Coordination Backend 間で同一 Issue の状態を同期する設計は採用しない——「どちらが正しいか」という二重正本問題を再生産するためである。GitHub モードでは Issue・PR・ブランチ・Check Run が正本、ローカルモードでは `state.yaml`（Issue 毎、Git 管理下）が正本となる。
 
+## 専用GitHub App（`ASC_GATE_APP_ID`）
+
+`agent-skill-chain setup ruleset` は、required gate Check（`agent-skill-chain/{spec,design,implementation,validation}-gate`）の発行元を標準GitHub Actions Appから分離するため、環境変数 `ASC_GATE_APP_ID`（secretではない、専用GitHub AppのApp ID）を要求する。未作成の場合の作成・installation・App ID確認・環境変数設定の手順は `docs/ASC_GATE_APP_ID_RUNBOOK.md` を参照。専用GitHub Appへ与える権限はChecks（Read and write）とMetadata（Read-only、GitHub Appの既定必須権限）に限定し、branch rulesetの変更権限自体はこのAppではなく `setup ruleset` を実行する側の既存認証情報が担う。
+
 ## root-cleanup の任意PAT
 
 `agent-skill-chain-root-cleanup.yml` は、main 直下へ残った `SPEC.md`・`DESIGN.md`・`PLAN.md`・`VALIDATION.md` を短命ブランチ上で削除し、PRをadmin mergeするために `secrets.RELEASE_MAIN_PAT` を使用する。この名前は既存の認証情報を再利用するための互換名であり、consumerがroot-cleanupを有効化する場合は、対象リポジトリでadmin mergeできるPATを同名のGitHub Actions secretとして登録する。
