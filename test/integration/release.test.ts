@@ -491,6 +491,20 @@ test('release bump (Issue #266): base更新競合後の再試行merge失敗はhu
   assert.match(result.stderr, /admin merge再試行に失敗/);
   assert.equal((stub.readState().prCreateCalls ?? []).length, 1, '再試行失敗でもPRを重複作成しないこと');
   assert.equal((stub.readState().mergeCalls ?? []).length, 2, 'admin mergeは初回と一度だけの再試行に限ること');
+
+  // Then（Issue #554 AC-1・AC-2）: human_requiredへ倒れた対象PRへ理由コメントと識別可能な
+  // ラベルが付与され、失敗したCIジョブログ以外に痕跡が残らない状態を解消する。
+  const finalState = stub.readState();
+  const prNumber = '1';
+  const comments = finalState.comments[prNumber] ?? [];
+  assert.equal(comments.length, 1, '対象PRへ理由コメントが1件投稿されること');
+  assert.match(comments[0].body, /human_required/);
+  assert.match(comments[0].body, /admin merge再試行に失敗/);
+  assert.deepEqual(
+    finalState.prLabels?.[prNumber],
+    ['release:human_required'],
+    '対象PRへ識別可能なラベルが付与されること',
+  );
 });
 
 test('release bump スコープ検査違反 (AC-6, 防御的ガード): 変更ファイルがpackage.json/package-lock.json以外を含むPRは自動admin mergeせずhuman_requiredで停止する', async (t) => {
@@ -510,8 +524,22 @@ test('release bump スコープ検査違反 (AC-6, 防御的ガード): 変更�
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /human_required/);
   assert.match(result.stderr, /src\/unexpected\.ts/);
-  // Then: merge呼び出し自体が一切発生していないこと（副作用未発生のまま安全側停止）
+  // Then: merge呼び出し自体が一切発生していないこと（副作用未発生のまま安全側停止、AC-3）
   assert.equal((stub.readState().mergeCalls ?? []).length, 0);
+
+  // Then（Issue #554 AC-1・AC-2）: この分岐（スコープ検査違反）でも対象PRへ理由コメントと
+  // 識別可能なラベルが付与されること。
+  const finalState = stub.readState();
+  const prNumber = '1';
+  const comments = finalState.comments[prNumber] ?? [];
+  assert.equal(comments.length, 1, '対象PRへ理由コメントが1件投稿されること');
+  assert.match(comments[0].body, /human_required/);
+  assert.match(comments[0].body, /src\/unexpected\.ts/);
+  assert.deepEqual(
+    finalState.prLabels?.[prNumber],
+    ['release:human_required'],
+    '対象PRへ識別可能なラベルが付与されること',
+  );
 });
 
 test('release bump (Issue #243, AC-2): package-lock.json が存在しないリポジトリでもpackage.jsonだけをcommit・admin mergeする', async (t) => {
