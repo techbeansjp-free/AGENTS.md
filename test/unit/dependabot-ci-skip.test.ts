@@ -1,9 +1,11 @@
 // Issue #215: Dependabot PR で追跡系CI検査を skip_checks ガードにより回避する構造を固定化する。
 // Issue #219: 許可判定の基準を push 実行者（github.actor）から PR/ブランチの起源（実PR作成者）へ
 // 是正した構造を固定化する。本テストは、①ガードが必要な追跡系ステップに存在すること、
-// ②存在してはならないステップ（verify-template-sync・npm ci/build）には存在しないこと、
+// ②存在してはならないステップ（verify-template-sync）には skip_checks が存在しないこと、
 // ③ci の判定が PR 作成者（pull_request.user.login）由来であること、④本体ファイルと
 // テンプレート正本ファイルが完全一致することを、ワークフローYAMLの実体を直接パースして検証する。
+// Issue #536: npm ci / npm run build は consumerの技術構成（package.json・lockfile・build
+// scriptの有無）に応じた個別の if 条件（Detect npm build prerequisitesステップの出力）を持つ。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -97,13 +99,28 @@ test("ci: verify-template-sync ステップは skip_checks を参照しない（
   );
 });
 
-test('ci: npm ci / build の各ステップは if 条件を持たない（常時実行）', () => {
-  const steps = ciSteps();
-  for (const cmd of ['npm ci', 'npm run build']) {
-    const step = steps.find((s) => typeof s.run === 'string' && s.run.trim() === cmd);
-    assert.ok(step, `run が '${cmd}' のステップが存在すること`);
-    assert.equal((step as Step).if, undefined, `'${cmd}' ステップは if 条件を持たないこと`);
-  }
+test('ci: Detect npm build prerequisites ステップが npm ci/build 双方の判定を出力する', () => {
+  const step = findByName(ciSteps(), 'Detect npm build prerequisites');
+  const run = step.run ?? '';
+  assert.ok(run.includes('ci=true') && run.includes('ci=false'), 'ci 判定の出力分岐を持つこと');
+  assert.ok(run.includes('build=true') && run.includes('build=false'), 'build 判定の出力分岐を持つこと');
+  assert.ok(run.includes('package.json'), 'package.json の存在を検査すること');
+  assert.ok(
+    run.includes('package-lock.json') && run.includes('npm-shrinkwrap.json'),
+    'lockfile（package-lock.json または npm-shrinkwrap.json）の存在を検査すること',
+  );
+});
+
+test('ci: npm ci ステップは Detect npm build prerequisites の ci 出力を if 条件に持つ', () => {
+  const step = findByName(ciSteps(), 'npm ci');
+  assert.equal(step.run?.trim(), 'npm ci');
+  assert.equal(step.if, "steps.npm-prereq.outputs.ci == 'true'");
+});
+
+test('ci: npm run build ステップは Detect npm build prerequisites の build 出力を if 条件に持つ', () => {
+  const step = findByName(ciSteps(), 'npm run build');
+  assert.equal(step.run?.trim(), 'npm run build');
+  assert.equal(step.if, "steps.npm-prereq.outputs.build == 'true'");
 });
 
 // --- ③ ctx（Derive issue_id）に Dependabot 許可リスト分岐が存在すること ---

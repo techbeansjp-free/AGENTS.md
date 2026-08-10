@@ -7,6 +7,10 @@
 # （src/agents-md.ts、ビルド後 bin/agents-md.js）への薄いラッパーであるため、検査本体の前に
 # ビルドを行う。agent-skill-chain CLI自体の開発リポジトリ用テストスイート（npm test）は
 # consumer環境では意味を持たないため、本ワークフローには含めない（Issue #290）。
+# npm ci / npm run build は、それらを要する構成（package.json + lockfile、build script）を
+# consumerが実際に持つ場合だけ実行する。agent-skill-chain自身の開発リポジトリはconsumerの
+# 一種として両方を満たすため従来どおり実行され、package.json/lockfile/build scriptを持たない
+# consumerでは無条件失敗しない（Issue #536）。
 name: agent-skill-chain / ci
 
 on:
@@ -28,9 +32,27 @@ jobs:
         with:
           node-version: '20'
 
-      - run: npm ci
+      - name: Detect npm build prerequisites
+        id: npm-prereq
+        run: |
+          if [[ -f package.json && ( -f package-lock.json || -f npm-shrinkwrap.json ) ]]; then
+            echo "ci=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ci=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f package.json ]] && node -e "process.exit((require('./package.json').scripts || {}).build ? 0 : 1)" 2>/dev/null; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - run: npm run build
+      - name: npm ci
+        if: steps.npm-prereq.outputs.ci == 'true'
+        run: npm ci
+
+      - name: npm run build
+        if: steps.npm-prereq.outputs.build == 'true'
+        run: npm run build
 
       - name: Fetch base branch for diff-based checks
         # verify-artifacts の code 判定（git diff base...HEAD）が base を解決できるようにする。
