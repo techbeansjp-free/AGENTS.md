@@ -81,8 +81,8 @@ function issueBody(stub: GhStub): string {
   return (stub.readState().issueBodies ?? {})[ISSUE_NUMBER] ?? '';
 }
 
-test('issue-sync: 既定（issue_sync.enabled: false）では Issue 本文が一切変更されない', async (t) => {
-  const fixture = setupRepo(t);
+test('issue-sync: 明示的に issue_sync.enabled: false を設定した場合は Issue 本文が一切変更されない', async (t) => {
+  const fixture = setupRepo(t, { issueSync: { enabled: false } });
 
   const published = publishApprovedGate(fixture);
   assert.equal(published.status, 0, published.stderr);
@@ -91,6 +91,18 @@ test('issue-sync: 既定（issue_sync.enabled: false）では Issue 本文が一
   assert.equal(issueBody(fixture.stub), HUMAN_BODY, '本文は投入時のまま保持されること');
   assert.equal(state.issueEditBodyCalls, undefined, '本文の書込みが一度も呼ばれないこと');
   assert.doesNotMatch(published.stderr, /issue-sync/);
+});
+
+test('issue-sync: 設定ファイルを一切上書きしない場合、実際の既定値（enabled: true）でマーカー区間へ転記される（ISSUE-567）', async (t) => {
+  const fixture = setupRepo(t);
+
+  const published = publishApprovedGate(fixture);
+  assert.equal(published.status, 0, published.stderr);
+
+  const body = issueBody(fixture.stub);
+  assert.ok(body.startsWith(HUMAN_BODY), 'マーカー外の人間記述部分が先頭にそのまま残ること');
+  assert.ok(body.includes(SYNC_BEGIN_MARKER) && body.includes(SYNC_END_MARKER), 'マーカー区間が存在すること');
+  assert.ok(body.includes('AC-1: 成果物全文をIssue本文へ転記する'), 'SPEC.md の全文が既定値のまま転記されること');
 });
 
 test('issue-sync: 有効時はマーカー区間へ成果物全文が書かれ、マーカー外の人間記述は保持される', async (t) => {

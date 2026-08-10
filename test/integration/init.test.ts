@@ -220,6 +220,11 @@ test('init --profile=standard（既定含む）: config/agent-skill-chain.yaml�
     'このリポジトリ限定のworker.segment_overrides（codex固定）が混入してはならない',
   );
   assert.doesNotMatch(configText, /ISSUE-307/, 'このリポジトリ自身のIssue番号コメントが混入してはならない');
+  assert.match(
+    configText,
+    /issue_sync:\n {2}enabled: true/,
+    'GitHubモード向け配布テンプレートのissue_sync.enabledは既定でtrueであること（ISSUE-567 AC-2）',
+  );
 
   const claudeMd = fs.readFileSync(path.join(targetDir, 'CLAUDE.md'), 'utf8');
   assert.match(claudeMd, /@AGENTS\.md/, '既定プロファイルのCLAUDE.mdは@AGENTS.md常時importを維持すること');

@@ -100,8 +100,8 @@ export function setAdapter(repoDir: string, adapter: ReviewAdapter): void {
 }
 
 /**
- * issue_sync ブロック（ADR-0021）を書き換える。既定 config は `enabled: false` を持つため、
- * オプトイン有効時の挙動・転記先・本文上限を差し替えるために使う（Issue #354）。
+ * issue_sync ブロック（ADR-0021）を書き換える。既定 config は `enabled: true` を持つため
+ * （ISSUE-567）、明示的な無効化（オプトアウト）や転記先・本文上限を差し替えるために使う（Issue #354）。
  */
 export function setIssueSync(
   repoDir: string,

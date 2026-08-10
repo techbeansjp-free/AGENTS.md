@@ -59,7 +59,7 @@ bdd:
   profile: standard              # standard | strict
 
 issue_sync:
-  enabled: false                 # true にするとゲート通過時に Issue/PR 本文へ全文転記する
+  enabled: true                  # false にするとゲート通過時のIssue/PR本文への全文転記を無効化する
   target: issue_body             # issue_body | pr_body | both
   max_body_chars: 60000
 
