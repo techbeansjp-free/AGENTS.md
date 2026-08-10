@@ -758,6 +758,107 @@ test('codex launch_worker: 認証不成立はblocked報告・lease解放・exit 
   assert.equal(acquire.status, 0, 'blocked後にleaseが解放されること: ' + acquire.stderr);
 });
 
+// --- ISSUE-550: _worker_default_cmd がlaunch_gate_reviewerと非対称にCODEX_EXECUTABLE/
+//     CLAUDE_EXECUTABLEを無視していた不具合の回帰防止 -------------------------------------
+
+test('codex launch_worker: PATH上にcodexという名の実行系が無くてもCODEX_EXECUTABLEで指定した実行系を使う（ISSUE-550 AC-1）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'codex');
+
+  // Given: PATH検索に依存せず、CODEX_EXECUTABLEが直接絶対パスで指す「codexという名ではない」
+  // 実行系。launch_gate_reviewerと同じ解決順序（${CODEX_EXECUTABLE:-codex}）であれば
+  // command -vもコマンド組み立てもこの実行系を使うはず。
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-codex-exe-override-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const argvCapturePath = path.join(stubDir, 'argv.txt');
+  const customExecutable = path.join(stubDir, 'custom-codex-runtime');
+  fs.writeFileSync(
+    customExecutable,
+    [
+      '#!/usr/bin/env bash',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
+      'cat >/dev/null',
+      `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: CODEX_EXECUTABLE override output")`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+
+  const env = envWithout(['WORKER_CMD', 'CODEX_WORKER_CMD'], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_EXECUTABLE: customExecutable,
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.ok(fs.existsSync(argvCapturePath), 'CODEX_EXECUTABLEで指定した実行系が起動されること');
+  const report = readWorkerReport(repo.dir, 'spec');
+  assert.equal(report.status, 'completed');
+});
+
+test('claude launch_worker: PATH上にclaudeという名の実行系が無くてもCLAUDE_EXECUTABLEで指定した実行系を使う（ISSUE-550 AC-1）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-claude-exe-override-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const argvCapturePath = path.join(stubDir, 'argv.txt');
+  const customExecutable = path.join(stubDir, 'custom-claude-runtime');
+  fs.writeFileSync(
+    customExecutable,
+    [
+      '#!/usr/bin/env bash',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
+      'cat >/dev/null',
+      `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: CLAUDE_EXECUTABLE override output")`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+
+  const env = envWithout(['WORKER_CMD'], {
+    ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+    CLAUDE_EXECUTABLE: customExecutable,
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.ok(fs.existsSync(argvCapturePath), 'CLAUDE_EXECUTABLEで指定した実行系が起動されること');
+  const argv = fs.readFileSync(argvCapturePath, 'utf8');
+  assert.match(argv, /--allowed-tools/, '既定allowlist組み立てはCLAUDE_EXECUTABLE指定時も維持されること');
+  const report = readWorkerReport(repo.dir, 'spec');
+  assert.equal(report.status, 'completed');
+});
+
+test('codex/claude launch_worker: 実行系上書き未設定でPATH上にも存在しない場合はCODEX_EXECUTABLE/CLAUDE_EXECUTABLE導入前と同じくblockedへ倒す（ISSUE-550 AC-2, regression防止）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'codex');
+
+  // Given: CODEX_EXECUTABLE自体を実在しない名前に固定する。envを無指定にせず明示的に「見つからない」
+  // 状態を作ることで、実行機にたまたま実在のcodex/claudeがPATH上にあっても既存の失敗系
+  // （return 1 -> blocked）が変化しないことを確認する。
+  const env = envWithout(['WORKER_CMD', 'CODEX_WORKER_CMD'], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_EXECUTABLE: '__agent_skill_chain_missing_codex_550__',
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  assert.notEqual(res.status, 0, '実行系が見つからない場合はexit 0にならないこと');
+  assert.notEqual(res.status, 3);
+  const report = readWorkerReport(repo.dir, 'spec');
+  assert.equal(report.status, 'blocked');
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
+  assert.equal(acquire.status, 0, 'blocked後にleaseが解放されること: ' + acquire.stderr);
+});
+
 // --- ISSUE-462: role_contract サイズに応じた Codex prompt 伝達経路 ----------------------
 
 test('codex launch_worker: role_contractが安全閾値を超える場合は位置引数で全文を渡し、外側redirectがあってもstdinを空にする（ISSUE-462 AC-1/AC-3）', async (t) => {
