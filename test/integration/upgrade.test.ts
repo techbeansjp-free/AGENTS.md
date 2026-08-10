@@ -116,6 +116,31 @@ test('upgrade: .agent-skill-chain/project/配下のカスタム内容は変更�
   );
 });
 
+// ISSUE-586 AC-3: initが新規に生成するようになった.agent-skill-chain/project/manifest.yaml・
+// RULES.mdについて、upgradeが既存の不可侵の不変条件を維持し続けることの回帰確認。
+test('upgrade: initが自動生成したproject/manifest.yaml・RULES.mdを独自の値へ書き換えても、upgrade実行後も変更されない（ISSUE-586 AC-3）', (t) => {
+  const targetDir = mkScratch('upgrade-project-scaffold-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+  const init = runCli(['init', targetDir]);
+  assert.equal(init.status, 0, init.stderr);
+
+  const manifestPath = path.join(targetDir, '.agent-skill-chain', 'project', 'manifest.yaml');
+  const rulesPath = path.join(targetDir, '.agent-skill-chain', 'project', 'RULES.md');
+  assert.ok(fs.existsSync(manifestPath), 'initがmanifest.yamlを自動生成していること（前提）');
+  assert.ok(fs.existsSync(rulesPath), 'initがRULES.mdを自動生成していること（前提）');
+
+  const customManifest = fs.readFileSync(manifestPath, 'utf8').replace(/policy_version: 1/, 'policy_version: 42');
+  const customRules = '# 独自のプロジェクト規約\n\n変更してはいけない内容\n';
+  fs.writeFileSync(manifestPath, customManifest);
+  fs.writeFileSync(rulesPath, customRules);
+
+  const result = runCli(['upgrade', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.readFileSync(manifestPath, 'utf8'), customManifest, 'manifest.yamlの独自内容が変更されないこと');
+  assert.equal(fs.readFileSync(rulesPath, 'utf8'), customRules, 'RULES.mdの独自内容が変更されないこと');
+});
+
 test('upgrade: .installed_versionが現行パッケージバージョンへ更新される', (t) => {
   const targetDir = mkScratch('upgrade-version-target');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
@@ -375,7 +400,14 @@ test('upgrade: .agent-skill-chain/project/配下は所有権記録に含まれ�
   assert.equal(result.status, 0, result.stderr);
   assert.equal(fs.existsSync(projectFile), true, 'project/配下は削除されないこと');
   assert.equal(fs.readFileSync(projectFile, 'utf8'), 'カスタムルール\n');
-  assert.doesNotMatch(result.stdout, /RULES\.md/, '削除候補として提示すらされないこと');
+  // ISSUE-586: `.agent-skill-chain/templates/project-policy/RULES.md`（テンプレート資産自体、
+  // 通常どおりupgradeでミラー同期される）と同じベース名を持つため、ベース名一致ではなく
+  // 保護対象の相対パスそのものが出現しないことを検査する。
+  assert.doesNotMatch(
+    result.stdout,
+    /\.agent-skill-chain\/project\/RULES\.md/,
+    '.agent-skill-chain/project/配下は削除候補として提示すらされないこと',
+  );
 });
 
 test('upgrade --dry-run: 削除予定一覧は非dry-run実行時の削除結果一覧と同一パス集合になる（AC-6）', (t) => {

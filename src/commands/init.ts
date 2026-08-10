@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { copyTreeFailOnConflict } from '../lib/fs-copy.js';
 import { collectManagedAssetMappings, packageVersion } from '../lib/asset-manifest.js';
 import { writeInstalledVersion } from '../lib/version-marker.js';
+import { scaffoldProjectPolicy } from '../lib/project-policy-scaffold.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { digestOfFile } from '../lib/digest.js';
 import { CliError } from '../lib/issue.js';
@@ -119,6 +120,24 @@ export async function init(args: string[]): Promise<number> {
         });
       }
     }
+
+    // ISSUE-586 要件1・要件6・AC-1・AC-6: 既存の管理対象アセット複製処理の後段で1回だけ呼び出す。
+    // `.agent-skill-chain/project/manifest.yaml` が既存の場合は完全no-opであり、生成したファイルは
+    // 所有権記録へ一切登録しない（upgrade/uninstallの`.agent-skill-chain/project/`不可侵・保持を
+    // 構造的に維持するため、AC-3・AC-4）。
+    const scaffoldResult = scaffoldProjectPolicy(targetDir, { dryRun });
+    if (scaffoldResult.action === 'created') {
+      summary.push(`${prefix}created: ${path.join('.agent-skill-chain', 'project', 'RULES.md')}`);
+      summary.push(`${prefix}created: ${path.join('.agent-skill-chain', 'project', 'manifest.yaml')}`);
+    } else {
+      summary.push(`unchanged: ${path.join('.agent-skill-chain', 'project', 'manifest.yaml')}（既存のため変更しませんでした）`);
+    }
+    // ISSUE-586 要件5・AC-5: 実行結果に関わらず案内文言を必ず追加する。
+    summary.push(
+      '.agent-skill-chain/project/ の書き方は docs/PROJECT_POLICY.md（最小具体例）と ' +
+        '.agent-skill-chain/schemas/project-policy.schema.yaml（必須フィールドの正本）を参照してください。',
+    );
+
     summary.push('GitHub workflowは未展開です。必要な場合だけ setup github を明示実行してください。');
     summary.push(`${prefix}installed_version: ${packageVersion()}`);
     if (profile === 'lightweight') {
