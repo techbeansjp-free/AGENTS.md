@@ -85,6 +85,50 @@ test('git switch -c での命名規約違反ブランチもexit 2で拒否され
   assert.equal(result.status, 2);
 });
 
+test('Issue #552 AC-1: git branch -d main（削除）は誤検証されずexit 0で通過する', () => {
+  const result = runHook({ tool_name: 'Bash', tool_input: { command: 'git branch -d main' } });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('Issue #552 AC-1: git branch -d <命名規約に一致しないブランチ名>（削除）もexit 0で通過する', () => {
+  const result = runHook({ tool_name: 'Bash', tool_input: { command: 'git branch -d bad-name' } });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('Issue #552 AC-2: git branch -m <old> <new>のrename先<new>が命名規約違反ならexit 2で拒否される', () => {
+  const result = runHook({
+    tool_name: 'Bash',
+    tool_input: { command: 'git branch -m feature/47-test main' },
+  });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /命名規約/);
+});
+
+test('Issue #552 AC-2回帰確認: rename先<new>が命名規約に適合すればexit 0で通過する', () => {
+  const result = runHook({
+    tool_name: 'Bash',
+    tool_input: { command: 'git branch -m feature/47-test feature/48-ok' },
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('Issue #552 AC-3: git worktree remove <path>; echo cleanup は部分文字列一致で回避できずexit 2で拒否される', () => {
+  const result = runHook({
+    tool_name: 'Bash',
+    tool_input: { command: 'git worktree remove .worktrees/foo; echo cleanup' },
+  });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /git worktree remove の直接実行は禁止されています/);
+});
+
+test('Issue #552 AC-4回帰確認: cleanup.shへの直接呼び出しはexit 0で通過する', () => {
+  const result = runHook({
+    tool_name: 'Bash',
+    tool_input: { command: 'bash .agent-skill-chain/scripts/cleanup.sh ISSUE-1' },
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test('プロジェクト側のallowed_typesを読み取り、type未定義のブランチ名は拒否される', () => {
   const targetDir = mkScratch('pretooluse-config');
   try {
