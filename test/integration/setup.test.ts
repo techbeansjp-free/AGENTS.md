@@ -246,6 +246,78 @@ test('setup github: 専用App未設定時は配布物・labels・rulesetを部�
   assert.deepEqual(stub.readState().rulesets, []);
 });
 
+// ISSUE-538 AC-1/AC-3: setup github --dry-run は実書込みを行わず変更予定一覧のみを表示し、
+// GitHub API（setup labels/setup ruleset）を呼び出さない。
+
+test('setup github --dry-run: .github/への実書込みを一切行わず、setup labels/setup rulesetも呼ばない', (t) => {
+  const scratchDir = mkScratch('setup-github-dry-run-scratch');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+
+  const targetDir = mkScratch('setup-github-dry-run-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  // Given: 1回目の setup github で.githubを実体化しておく（gh-stubへlabels/rulesetも記録される）
+  const first = runCli(['setup', 'github', targetDir], {
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
+  assert.equal(first.status, 0, first.stderr);
+  const codeownersPath = path.join(targetDir, '.github', 'CODEOWNERS');
+  fs.writeFileSync(codeownersPath, '# 意図的に書き換えた別内容\n');
+  const stateBeforeDryRun = stub.readState();
+
+  // When: ASC_GATE_APP_ID を未設定のまま --dry-run で setup github を実行する
+  // （--dry-run は setup labels/setup ruleset を呼ばないため、これらが要求する前提の未設定でも
+  // 成功することを合わせて確認する）
+  const result = runCli(['setup', 'github', targetDir, '--dry-run'], { env: stub.env(process.env) });
+
+  // Then: 終了コード0で、変更予定一覧とスキップ通知が標準出力に表示される
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /planned overwritten: /);
+  assert.match(result.stdout, /setup labels[\s\S]*--dry-run のためスキップしました/);
+  assert.match(result.stdout, /setup ruleset[\s\S]*--dry-run のためスキップしました/);
+
+  // Then: .githubへは一切書込みが行われない
+  assert.equal(fs.readFileSync(codeownersPath, 'utf8'), '# 意図的に書き換えた別内容\n');
+
+  // Then: GitHub API（labels/ruleset）は一切追加呼び出しされず、1回目実行時点の状態から変化しない
+  assert.deepEqual(stub.readState(), stateBeforeDryRun);
+});
+
+test('setup github --help / -h: --dry-run フラグの説明が含まれる', (t) => {
+  const help = runCli(['setup', 'github', '--help'], { env: process.env });
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /--dry-run/);
+
+  const h = runCli(['setup', 'github', '-h'], { env: process.env });
+  assert.equal(h.status, 0, h.stderr);
+  assert.match(h.stdout, /--dry-run/);
+});
+
+// ISSUE-538 AC-4/AC-5: setup github でも大文字小文字のみ異なる既存ファイルとの衝突が検知される。
+
+test('setup github: 大文字小文字のみ異なる既存ファイルがあると検知され、既存ファイルは無警告で上書きされない', (t) => {
+  const scratchDir = mkScratch('setup-github-case-collision-scratch');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+  const targetDir = mkScratch('setup-github-case-collision-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  fs.mkdirSync(path.join(targetDir, '.github'), { recursive: true });
+  const existingPath = path.join(targetDir, '.github', 'PULL_REQUEST_TEMPLATE.md');
+  fs.writeFileSync(existingPath, '# consumerが独自にカスタマイズした内容\n');
+
+  const result = runCli(['setup', 'github', targetDir], {
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /大文字小文字/);
+  assert.equal(fs.readFileSync(existingPath, 'utf8'), '# consumerが独自にカスタマイズした内容\n');
+  assert.deepEqual(stub.readState().labels, [], '衝突検知で中断した場合、labelsも適用されないこと');
+  assert.deepEqual(stub.readState().rulesets, [], '衝突検知で中断した場合、rulesetも適用されないこと');
+});
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
