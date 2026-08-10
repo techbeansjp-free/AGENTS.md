@@ -311,6 +311,39 @@ test('human launch_gate_reviewer (github): gh issue comment で通知し final=h
   assert.match(comments[0].body, /awaiting-human/);
 });
 
+// --- ISSUE-548: 未登録adapter値のallowlist検査 -----------------------------------------
+
+test('gate-launch-reviewer.sh: reviewer-contextが返すadapterが未登録値の場合はsourceせずhuman_required・error終了する', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+
+  // reviewer-context出力を偽装し、adapters/配下を逸脱するadapter値を返す不正・旧版CLIを模擬する。
+  const fakeCliDir = path.join(repo.dir, 'bin');
+  fs.mkdirSync(fakeCliDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(fakeCliDir, 'agents-md.js'),
+    [
+      "const argv = process.argv.slice(2);",
+      "if (argv[0] === 'gate' && argv[1] === 'reviewer-context') {",
+      "  process.stdout.write(['adapter=../../../tmp/malicious', 'core_review_required=false', 'core_review_status=ok'].join('\\n') + '\\n');",
+      "  process.exit(0);",
+      "} else if (argv[0] === 'gate' && argv[1] === 'mark-human-required') {",
+      "  process.exit(0);",
+      "} else {",
+      "  process.exit(1);",
+      "}",
+    ].join('\n'),
+    'utf8',
+  );
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], envWithout([]));
+
+  assert.notEqual(res.status, 0, 'source前に検査で止まりexit 0にならないこと');
+  assert.notEqual(res.status, 3, 'deferredではなくerrorとして扱われること');
+  assert.match(res.stderr, /未登録adapterです/);
+  assert.doesNotMatch(res.stderr, /launch_gate_reviewer が定義されていません/, 'sourceまで到達しないこと');
+});
+
 // --- T4: codex launch_gate_reviewer（認証不成立 fail-safe） ------------------------------
 
 test('codex launch_gate_reviewer: 認証不成立は gate を approve せず human_required・exit≠0 を返す', async (t) => {
