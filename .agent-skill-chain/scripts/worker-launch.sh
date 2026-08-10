@@ -91,6 +91,13 @@ fi
 
 ADAPTER="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^adapter=//p')"
 ADAPTER="${ADAPTER:-human}"
+case "$ADAPTER" in
+codex | claude | human) ;;
+*)
+  echo "未登録adapterです: ${ADAPTER}（worker.adapter）。まだ何も起動していないため error として扱います" >&2
+  exit 2
+  ;;
+esac
 ADAPTER_FILE="$ADAPTERS_DIR/${ADAPTER}.sh"
 
 if [[ ! -f "$ADAPTER_FILE" ]]; then

@@ -58,6 +58,14 @@ fi
 
 ADAPTER="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^adapter=//p')"
 ADAPTER="${ADAPTER:-claude}"
+case "$ADAPTER" in
+codex | claude | human) ;;
+*)
+  echo "未登録adapterです: ${ADAPTER}（review.adapter）。フェイルセーフで human_required へ倒します" >&2
+  _cli gate mark-human-required "$REPORT_PATH" >/dev/null 2>&1 || true
+  exit 2
+  ;;
+esac
 ADAPTER_FILE="$ADAPTERS_DIR/${ADAPTER}.sh"
 
 ASC_CORE_REVIEW_REQUIRED="$(printf '%s\n' "$CONTEXT_OUTPUT" | sed -n 's/^core_review_required=//p')"

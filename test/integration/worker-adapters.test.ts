@@ -737,6 +737,42 @@ test('claude launch_worker (I8直接検証): target_shaが不一致（workerが�
   assert.equal(report.status, 'blocked');
 });
 
+// --- ISSUE-548: 未登録adapter値のallowlist検査 -----------------------------------------
+
+test('worker-launch.sh: worker contextが返すadapterが未登録値の場合はsourceせずlease取得前にerror終了する', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+
+  // worker context出力を偽装し、adapters/配下を逸脱するadapter値を返す不正・旧版CLIを模擬する。
+  const fakeCliDir = path.join(worktreePath, 'bin');
+  fs.mkdirSync(fakeCliDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(fakeCliDir, 'agents-md.js'),
+    [
+      "const argv = process.argv.slice(2);",
+      "if (argv[0] === 'worker' && argv[1] === 'context') {",
+      `  process.stdout.write(['worktree_path=' + ${JSON.stringify(worktreePath)}, 'adapter=../../../tmp/malicious'].join('\\n') + '\\n');`,
+      "  process.exit(0);",
+      "} else {",
+      "  process.exit(1);",
+      "}",
+    ].join('\n'),
+    'utf8',
+  );
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], envWithout([]));
+
+  assert.notEqual(res.status, 0, 'source前に検査で止まりexit 0にならないこと');
+  assert.notEqual(res.status, 3);
+  assert.notEqual(res.status, 4);
+  assert.match(res.stderr, /未登録adapterです/);
+  assert.doesNotMatch(res.stderr, /launch_worker が定義されていません/, 'sourceまで到達しないこと');
+
+  // lease取得前のエラーのため、lease acquireは競合なく成功すること。
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(acquire.status, 0, 'leaseが一切取得されていないこと: ' + acquire.stderr);
+});
+
 // --- (e) codex launch_worker: 認証失敗はlease取得後にblockedへ倒す ----------------------
 
 test('codex launch_worker: 認証不成立はblocked報告・lease解放・exit 2へ倒す', async (t) => {
