@@ -1,0 +1,31 @@
+# 正本: AGENTS.md §プロジェクト固有ポリシー
+# このファイルは `agent-skill-chain init` が `.agent-skill-chain/project/manifest.yaml` として
+# 一度だけ生成する雛形である（既に manifest.yaml が存在する場合は再生成しない）。
+# `.agent-skill-chain/schemas/project-policy.schema.yaml` の必須フィールドを過不足なく満たす。
+# `__PROJECT_ID__` は生成時に導入先ディレクトリ名へ自動的に置換される（手動編集して構わない）。
+schema_version: agent-skill-chain/project-policy/v1
+project:
+  # プロジェクトを識別する任意の文字列。生成後に自由に書き換えてよい。
+  id: __PROJECT_ID__
+  # manifest.yaml 自体の版番号。内容を変更するたびに +1 することを推奨する（必須の整数値）。
+  policy_version: 1
+documents:
+  # 全 role 共通で読ませる文書のパス一覧（manifest.yaml と同じディレクトリ基点の相対パス）。
+  # 登録した文書のみが規範として扱われる（未登録文書はCIが無視する）。
+  common:
+    - RULES.md
+  # role 固有の追加文書が必要な場合のみ、spec/design/implementation/validation の各キーへ
+  # パスの配列を追加する。不要な role のキーは省略してよい。
+  roles: {}
+precedence:
+  # このスキーマが表す優先順位レベル。固定値。
+  level: project
+  # プロジェクトポリシーが上書きしてよい既定値の種類。
+  overrides:
+    - package-defaults
+    - adapter-defaults
+constraints:
+  # agent-skill-chain の不変条件（I1〜I8等）はプロジェクトポリシーで上書きできない。固定値 false。
+  may_override_core_invariants: false
+  # 未登録の文書を規範として扱わない。固定値 false。
+  unregistered_documents_are_normative: false
