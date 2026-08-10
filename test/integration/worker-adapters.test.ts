@@ -388,7 +388,7 @@ test('worker-launch-verify (ISSUE-448 AC-3): renew.pid不在でもkillを試み�
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('worker-launch-verify (ISSUE-448 AC-4): contract.sha256不在時は照合をスキップしてreport照合へ進む', (t) => {
+test('worker-launch-verify (ISSUE-549 AC-1): contract.sha256不在はreport completedでもblocked＋lease解放へ倒す', (t) => {
   const fixture = createVerifyFixture(t, 'absent');
   const result = runWorkerVerifier(
     fixture.worktreePath,
@@ -396,7 +396,10 @@ test('worker-launch-verify (ISSUE-448 AC-4): contract.sha256不在時は照合�
     ['ISSUE-1', fixture.dispatchTempDir],
     process.env,
   );
-  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /contract\.sha256が存在しません/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false, 'contract.sha256欠落でもleaseを解放すること');
 });
 
 test('worker-launch-verify (ISSUE-448 AC-3/AC-4): contract監査値不一致はreport completedでもblocked＋lease解放へ倒す', (t) => {
@@ -735,6 +738,42 @@ test('claude launch_worker (I8直接検証): target_shaが不一致（workerが�
   // launch_worker自身は不一致を検出した結果を新たなblocked reportとして上書きする。
   const report = readWorkerReport(repo.dir, 'spec');
   assert.equal(report.status, 'blocked');
+});
+
+// --- ISSUE-548: 未登録adapter値のallowlist検査 -----------------------------------------
+
+test('worker-launch.sh: worker contextが返すadapterが未登録値の場合はsourceせずlease取得前にerror終了する', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+
+  // worker context出力を偽装し、adapters/配下を逸脱するadapter値を返す不正・旧版CLIを模擬する。
+  const fakeCliDir = path.join(worktreePath, 'bin');
+  fs.mkdirSync(fakeCliDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(fakeCliDir, 'agents-md.js'),
+    [
+      "const argv = process.argv.slice(2);",
+      "if (argv[0] === 'worker' && argv[1] === 'context') {",
+      `  process.stdout.write(['worktree_path=' + ${JSON.stringify(worktreePath)}, 'adapter=../../../tmp/malicious'].join('\\n') + '\\n');`,
+      "  process.exit(0);",
+      "} else {",
+      "  process.exit(1);",
+      "}",
+    ].join('\n'),
+    'utf8',
+  );
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], envWithout([]));
+
+  assert.notEqual(res.status, 0, 'source前に検査で止まりexit 0にならないこと');
+  assert.notEqual(res.status, 3);
+  assert.notEqual(res.status, 4);
+  assert.match(res.stderr, /未登録adapterです/);
+  assert.doesNotMatch(res.stderr, /launch_worker が定義されていません/, 'sourceまで到達しないこと');
+
+  // lease取得前のエラーのため、lease acquireは競合なく成功すること。
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(acquire.status, 0, 'leaseが一切取得されていないこと: ' + acquire.stderr);
 });
 
 // --- (e) codex launch_worker: 認証失敗はlease取得後にblockedへ倒す ----------------------

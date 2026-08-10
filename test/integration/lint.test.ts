@@ -615,6 +615,32 @@ test('lint references: path省略時のデフォルト対象は本体 .github/wo
   );
 });
 
+test('lint references: path省略時のデフォルト対象は .github/pull_request_template.md 等のworkflows以外の.github直下ファイルも含み、そこに置かれた解決不能な§参照を検出する（Issue #547: defaultReferenceFileRootsがworkflows限定だったため.github/pull_request_template.md等が走査対象から漏れていた検出漏れの回帰テスト）', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 実デプロイされる .github/pull_request_template.md を模した、見出しに解決できない
+  // §参照を混入させたファイルを追加する（workflows/ ではなく .github/ 直下に置く点が
+  // 対象拡張前の検出漏れを再現する）。
+  const githubDir = path.join(repo.dir, '.github');
+  fs.mkdirSync(githubDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(githubDir, 'pull_request_template.md'),
+    '<!-- 正本: AGENTS.md §存在しない見出し -->\n## Issue\n',
+  );
+
+  // When: path引数を省略し、デフォルト対象（defaultReferenceFileRoots）で lint references を実行する
+  const result = runCli(['lint', 'references'], { cwd: repo.dir });
+
+  // Then: 終了コード1、.github/pull_request_template.md の禁止参照が報告される（対象拡張前は
+  // .github/workflows/ のみが走査対象だったため、この違反は検出されなかった）
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /pull_request_template\.md:1: 禁止参照 '§存在しない見出し'（見出しテキストで解決できないセクション番号参照）/,
+  );
+});
+
 test('lint references: 実物リポジトリのデフォルト対象（src/ を含む）は違反0で通る', async () => {
   // Given/When: このリポジトリ自身に対して path 引数を省略し、デフォルト対象
   // （defaultReferenceFileRoots、src/ を含む）で lint references を実行する。
