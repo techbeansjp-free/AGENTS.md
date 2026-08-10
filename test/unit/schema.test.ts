@@ -289,6 +289,13 @@ test("validateAgainstSchema('config') (ADR-0023): templates.claude_skills_source
   assert.deepEqual(validateConfig(withSkillsTemplate), { valid: true, errors: [] });
 });
 
+test("validateAgainstSchema('config') (ISSUE-567 AC-3): examples[0]のissue_sync.enabledは新しい既定値trueと整合する", () => {
+  const doc = loadConfigSchemaDoc();
+  const example = doc.examples[0] as { issue_sync: { enabled: boolean } };
+  assert.equal(example.issue_sync.enabled, true);
+  assert.deepEqual(validateConfig(doc.examples[0]), { valid: true, errors: [] });
+});
+
 test('validateAgainstSchema: 明らかに型が異なるデータ（配列でなく文字列）はinvalidになる', () => {
   const outcome = validateAgainstSchema('config', 'not-an-object');
   assert.equal(outcome.valid, false);
