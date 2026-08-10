@@ -21,7 +21,7 @@
 - `RulesetRenderer`（`src/commands/setup.ts`）: `RulesetTemplate`を読み込み、`ASC_GATE_APP_ID`が指すApp IDを条件付きで`required_status_checks`へ結線し、GitHub Rulesets APIへ適用する（`loadRenderedRuleset`→`rulesetStep`）。
 - `GatePublishCommand`（`src/commands/gate.ts` の `publish()`）: gate-reportをCheck Runへ発行し、成否に関わらずIssue/PR本文への成果物転記（`syncGateArtifacts()`、`src/lib/issue-sync.ts`）を独立して試行する。
 - `OperationalConstraintDocs`（`docs/ASC_GATE_APP_ID_RUNBOOK.md`・`README.md`）: `RulesetRenderer`の挙動変化と`gate publish`の現状の運用制約を利用者へ伝える。
-- `ADR-0041`: 上記の決定（drift是正・専用App binding条件化・sync独立化）の理由を記録する。
+- `ADR-0044`: 上記の決定（drift是正・専用App binding条件化・sync独立化）の理由を記録する。
 
 ### 依存関係
 
@@ -33,16 +33,16 @@ graph LR
   GatePublishCommand -->|Issue/PR本文転記| GitHubAPI
   RulesetRenderer -.->|挙動変化を記述| OperationalConstraintDocs
   GatePublishCommand -.->|挙動変化を記述| OperationalConstraintDocs
-  ADR0041[ADR-0041] -.->|決定を記録| RulesetRenderer
-  ADR0041 -.->|決定を記録| RulesetTemplate
+  ADR0044[ADR-0044] -.->|決定を記録| RulesetRenderer
+  ADR0044 -.->|決定を記録| RulesetTemplate
 ```
 
-`RulesetTemplate`と`GatePublishCommand`は互いに依存しない独立した2系統（ruleset適用系統／Check Run発行・転記系統）であり、循環依存は無い。`OperationalConstraintDocs`と`ADR-0041`はいずれも他コンポーネントの実行時挙動には影響せず、記述のみを行う。
+`RulesetTemplate`と`GatePublishCommand`は互いに依存しない独立した2系統（ruleset適用系統／Check Run発行・転記系統）であり、循環依存は無い。`OperationalConstraintDocs`と`ADR-0044`はいずれも他コンポーネントの実行時挙動には影響せず、記述のみを行う。
 
 ### 図示要否の判断
 
 - 判断: `要`
-- 根拠: 責務境界（`RulesetTemplate`・`RulesetRenderer`・`GatePublishCommand`・`OperationalConstraintDocs`・`ADR-0041`）が3つ以上存在するため、上記Mermaid図で依存関係を明示した。
+- 根拠: 責務境界（`RulesetTemplate`・`RulesetRenderer`・`GatePublishCommand`・`OperationalConstraintDocs`・`ADR-0044`）が3つ以上存在するため、上記Mermaid図で依存関係を明示した。
 
 ## RulesetRendererの条件付き専用App binding（AC-2/AC-4の核心）
 

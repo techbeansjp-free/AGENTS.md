@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0041
+id: ADR-0044
 status: proposed
 title: 配布rulesetテンプレートのdrift是正と専用App bindingの条件化
 tags: [gate, ruleset, github-app, distribution, issue-sync]
