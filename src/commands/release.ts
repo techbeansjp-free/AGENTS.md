@@ -125,6 +125,39 @@ function findOpenBumpPr(root: string, branch: string): BumpPr | undefined {
 const BUMP_PR_ALLOWED_FILES = new Set(['package.json', 'package-lock.json']);
 const BASE_BRANCH_MODIFIED_RE = /base branch was modified/i;
 
+// Issue #554: admin merge競合の再試行が最終的にhuman_requiredへ倒れても、失敗したCIジョブログ
+// 以外に対象PR上へ痕跡が一切残らず、進行役が能動的にワークフロー実行を確認しない限り
+// 「安全側で意図的に停止した」のか「見落とされている放置PR」なのか区別できない問題への対応。
+const RELEASE_HUMAN_REQUIRED_LABEL = 'release:human_required';
+
+/** human_required停止直前に対象PRへ理由コメント・識別ラベルを付与する（Issue #554 AC-1・AC-2）。
+ * 通知そのものの成否は既存の再試行・安全側停止の判定・戻り値に一切影響させない
+ * （AC-3）: gh呼び出し失敗はここで握りつぶし、呼び出し元は常にfail(reason)の結果をそのまま返す。 */
+function notifyHumanRequired(root: string, prNumber: number, reason: string): void {
+  gh(
+    [
+      'label',
+      'create',
+      RELEASE_HUMAN_REQUIRED_LABEL,
+      '--color',
+      'b60205',
+      '--description',
+      'リリース自動化が安全側停止し人間の対応を待っている',
+    ],
+    root,
+  );
+  gh(['pr', 'edit', String(prNumber), '--add-label', RELEASE_HUMAN_REQUIRED_LABEL], root);
+  gh(['pr', 'comment', String(prNumber), '--body', reason], root);
+}
+
+/** human_requiredとしてfail()する直前に、判明している対象PR番号があれば通知する（AC-1・AC-2）。
+ * PR番号が解決できない場合（例: 再試行中にPRを再解決できず終了する経路）は通知をスキップし、
+ * 理由文字列のみを返す（silent failさせず、fail()自体は必ず実行される）。 */
+function failHumanRequired(root: string, prNumber: number | undefined, reason: string): number {
+  if (prNumber !== undefined) notifyHumanRequired(root, prNumber, reason);
+  return fail(reason);
+}
+
 /** admin merge直前のスコープ検査（ADR-0005）: (a) head が release/bump-v* に一致し、
  * (b) 変更ファイル集合が package.json（±package-lock.json）のみであることを機械検査する。
  * いずれか不成立、または変更ファイルが0件（想定外の空PR）の場合はエラー文言を返す
@@ -242,7 +275,9 @@ export async function bump(args: string[]): Promise<number> {
       if (divergence.error) return fail(divergence.error);
       if (divergence.diverged) {
         const rebuildError = rebuildBumpBranchToMain(root, branch, target, message);
-        if (rebuildError) return fail(rebuildError);
+        if (rebuildError) {
+          return failHumanRequired(root, findOpenBumpPr(root, branch)?.number, rebuildError);
+        }
       }
     }
 
@@ -265,7 +300,7 @@ export async function bump(args: string[]): Promise<number> {
 
     const scopeError = checkBumpPrScope(pr, branch);
     if (scopeError) {
-      return fail(`human_required: 自動admin mergeを行わず停止します（${scopeError}）`);
+      return failHumanRequired(root, pr.number, `human_required: 自動admin mergeを行わず停止します（${scopeError}）`);
     }
 
     const merge = gh(
@@ -284,11 +319,19 @@ export async function bump(args: string[]): Promise<number> {
 
     const retryPrBeforeRebuild = findOpenBumpPr(root, branch);
     if (!retryPrBeforeRebuild) {
-      return fail('human_required: base更新競合後にOPENのbump PRを再解決できないため自動再試行を停止します');
+      return failHumanRequired(
+        root,
+        pr.number,
+        'human_required: base更新競合後にOPENのbump PRを再解決できないため自動再試行を停止します',
+      );
     }
     const retryScopeError = checkBumpPrScope(retryPrBeforeRebuild, branch);
     if (retryScopeError) {
-      return fail(`human_required: base更新競合後の再同期前に自動admin mergeを停止します（${retryScopeError}）`);
+      return failHumanRequired(
+        root,
+        retryPrBeforeRebuild.number,
+        `human_required: base更新競合後の再同期前に自動admin mergeを停止します（${retryScopeError}）`,
+      );
     }
 
     // detectBumpBaseDivergence はoriginを更新する唯一の既存経路であり、ここでは乖離の真偽に
@@ -296,20 +339,36 @@ export async function bump(args: string[]): Promise<number> {
     // 再試行は一度で打ち切りhuman_requiredへ移行する。
     const refresh = detectBumpBaseDivergence(root, branch);
     if (refresh.error) {
-      return fail(`human_required: base更新競合後に現行mainを取得できないため自動再試行を停止します（${refresh.error}）`);
+      return failHumanRequired(
+        root,
+        retryPrBeforeRebuild.number,
+        `human_required: base更新競合後に現行mainを取得できないため自動再試行を停止します（${refresh.error}）`,
+      );
     }
     const rebuildError = rebuildBumpBranchToMain(root, branch, target, message);
     if (rebuildError) {
-      return fail(`human_required: base更新競合後の現行main基準への再同期に失敗しました（${rebuildError}）`);
+      return failHumanRequired(
+        root,
+        retryPrBeforeRebuild.number,
+        `human_required: base更新競合後の現行main基準への再同期に失敗しました（${rebuildError}）`,
+      );
     }
 
     const retryPr = findOpenBumpPr(root, branch);
     if (!retryPr) {
-      return fail('human_required: base更新競合後に再構築済みbump PRを再解決できないため自動再試行を停止します');
+      return failHumanRequired(
+        root,
+        retryPrBeforeRebuild.number,
+        'human_required: base更新競合後に再構築済みbump PRを再解決できないため自動再試行を停止します',
+      );
     }
     const rebuiltScopeError = checkBumpPrScope(retryPr, branch);
     if (rebuiltScopeError) {
-      return fail(`human_required: base更新競合後の再同期後に自動admin mergeを停止します（${rebuiltScopeError}）`);
+      return failHumanRequired(
+        root,
+        retryPr.number,
+        `human_required: base更新競合後の再同期後に自動admin mergeを停止します（${rebuiltScopeError}）`,
+      );
     }
 
     const retryMerge = gh(
@@ -317,7 +376,11 @@ export async function bump(args: string[]): Promise<number> {
       root,
     );
     if (retryMerge.status !== 0) {
-      return fail(`human_required: base更新競合後のadmin merge再試行に失敗しました（${retryMerge.stderr.trim()}）`);
+      return failHumanRequired(
+        root,
+        retryPr.number,
+        `human_required: base更新競合後のadmin merge再試行に失敗しました（${retryMerge.stderr.trim()}）`,
+      );
     }
 
     return ok(String(retryPr.number));

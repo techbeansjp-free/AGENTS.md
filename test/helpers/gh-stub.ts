@@ -255,13 +255,40 @@ if (cmd === 'pr' && sub === 'list') {
 if (cmd === 'pr' && sub === 'edit') {
   const prNumber = args[2];
   const bodyFile = flag('--body-file');
+  const addLabel = flag('--add-label');
   const state = loadState();
   if (bodyFile) {
     state.prBodies = state.prBodies || {};
     state.prBodies[prNumber] = fs.readFileSync(bodyFile, 'utf8');
     state.prEditBodyCalls = (state.prEditBodyCalls || []).concat([{ number: prNumber }]);
   }
+  if (addLabel) {
+    state.prLabels = state.prLabels || {};
+    state.prLabels[prNumber] = state.prLabels[prNumber] || [];
+    if (!state.prLabels[prNumber].includes(addLabel)) state.prLabels[prNumber].push(addLabel);
+  }
   saveState(state);
+  process.exit(0);
+}
+
+// Issue #554: release automation の human_required 通知（対象PRへの理由コメント）。
+// PR番号とIssue番号は同一リポジトリ内で番号空間を共有するため、'gh issue comment' と同じ
+// comments ストレージ（PR番号キー）を再利用する。
+if (cmd === 'pr' && sub === 'comment') {
+  const prNumber = args[2];
+  const body = flag('--body') ?? '';
+  const state = loadState();
+  const id = state.nextId++;
+  state.comments[prNumber] = state.comments[prNumber] || [];
+  state.comments[prNumber].push({
+    id: String(id),
+    url: 'https://github.com/test/repo/pull/' + prNumber + '#issuecomment-' + id,
+    body,
+    createdAt: new Date(state.clock).toISOString(),
+  });
+  state.clock += 1000;
+  saveState(state);
+  process.stdout.write('https://github.com/test/repo/pull/' + prNumber + '#issuecomment-' + id + '\\n');
   process.exit(0);
 }
 
@@ -911,6 +938,8 @@ export interface GhStubState {
   prViewCalls?: { key: string; fields: string[]; repo?: string }[];
   prReviewThreadComments?: Record<string, unknown[]>;
   prReviewThreadCommentFailures?: Record<string, string>;
+  /** Issue #554: `gh pr edit <n> --add-label <label>` で付与されたラベルをPR番号ごとに記録する。 */
+  prLabels?: Record<string, string[]>;
   // ---- Issue #196 release bump/tag/publish・Issue #208 root-cleanup run 検証用
   //      (gh pr view/list/merge, gh release view/create) ----
   prsByBranch?: Record<string, GhStubBumpPr>;
