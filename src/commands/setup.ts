@@ -128,7 +128,7 @@ export async function setup(args: string[]): Promise<number> {
 function githubBundle(targetDir: string, dryRun = false): { status: number; message: string } {
   const lines: string[] = [];
 
-  // ISSUE-538 AC-1: --dry-run は「一切の外部書込みを行わない」という一貫した意味を持つため、
+  // ISSUE-538: --dry-run は「一切の外部書込みを行わない」という一貫した意味を持つため、
   // setup-labels・setup-ruleset（GitHub APIへの書込み）はそもそも呼び出さない。両者の前段でのみ
   // 使う rulesetPreflight（ASC_GATE_APP_ID の解決）も、書込み自体を行わないdry-run時は不要なため
   // 呼び出さない（未設定でも --dry-run が失敗しない）。
@@ -214,7 +214,7 @@ function syncStep(targetDir: string, options: { dryRun?: boolean } = {}): { stat
   const dest = path.join(targetDir, '.github');
   const prefix = dryRun ? 'planned ' : '';
   try {
-    // ISSUE-538 AC-4/AC-5: 大文字小文字のみ異なる既存ファイルとの衝突検知は dryRun の値に関わらず
+    // ISSUE-538: 大文字小文字のみ異なる既存ファイルとの衝突検知は dryRun の値に関わらず
     // 常に有効にする（衝突検知は計画段階で行われ、dryRunでも実書込み無しに同じ結果になる）。
     const results = copyTreeMirror(source, dest, { root: targetDir, dryRun, detectCaseCollision: true });
     return {

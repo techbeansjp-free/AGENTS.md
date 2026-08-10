@@ -246,7 +246,7 @@ test('setup github: 専用App未設定時は配布物・labels・rulesetを部�
   assert.deepEqual(stub.readState().rulesets, []);
 });
 
-// ISSUE-538 AC-1/AC-3: setup github --dry-run は実書込みを行わず変更予定一覧のみを表示し、
+// ISSUE-538: setup github --dry-run は実書込みを行わず変更予定一覧のみを表示し、
 // GitHub API（setup labels/setup ruleset）を呼び出さない。
 
 test('setup github --dry-run: .github/への実書込みを一切行わず、setup labels/setup rulesetも呼ばない', (t) => {
@@ -294,7 +294,7 @@ test('setup github --help / -h: --dry-run フラグの説明が含まれる', (t
   assert.match(h.stdout, /--dry-run/);
 });
 
-// ISSUE-538 AC-4/AC-5: setup github でも大文字小文字のみ異なる既存ファイルとの衝突が検知される。
+// ISSUE-538: setup github でも大文字小文字のみ異なる既存ファイルとの衝突が検知される。
 
 test('setup github: 大文字小文字のみ異なる既存ファイルがあると検知され、既存ファイルは無警告で上書きされない', (t) => {
   const scratchDir = mkScratch('setup-github-case-collision-scratch');

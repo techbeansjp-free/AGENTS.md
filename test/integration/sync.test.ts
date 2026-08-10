@@ -78,7 +78,7 @@ test('sync templates: cwdが非gitディレクトリでもtarget_dirを明示指
   assert.ok(fs.existsSync(path.join(targetDir, '.github', 'CODEOWNERS')));
 });
 
-// ISSUE-538 AC-2/AC-3/AC-5: sync templates --dry-run は実書込みを行わず変更予定一覧のみを表示する。
+// ISSUE-538: sync templates --dry-run は実書込みを行わず変更予定一覧のみを表示する。
 
 test('sync templates --dry-run: 実書込みを一切行わず、変更予定一覧を終了コード0で表示する', (t) => {
   const repo = createTmpRepo();
@@ -116,7 +116,7 @@ test('sync templates --help / -h: --dry-run フラグの説明が含まれる', 
   assert.match(h.stdout, /--dry-run/);
 });
 
-// ISSUE-538 AC-4/AC-5/AC-6: 大文字小文字のみ異なる既存ファイルとの衝突検知。
+// ISSUE-538: 大文字小文字のみ異なる既存ファイルとの衝突検知。
 
 test('sync templates: 大文字小文字のみ異なる既存ファイルがあると検知され、既存ファイルは無警告で上書きされない', (t) => {
   const repo = createTmpRepo();
@@ -179,6 +179,39 @@ test('sync templates: 大文字小文字含め完全一致する既存ファイ�
   // Then: 従来どおり配布元の内容で上書きされ、大文字小文字衝突検知は発火しない（回帰無し）
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, new RegExp(`overwritten: ${escapeRegExp(path.join(targetDir, '.github', 'pull_request_template.md'))}`));
+});
+
+// ISSUE-538: sync templates が同期する .github/・.claude/agents/・.claude/skills/ の3マッピングは
+// 順番に copyTreeMirror を呼び出す。後段のマッピング（.claude/skills/）で大文字小文字衝突を検知した
+// 場合に、既に処理済みの先行マッピング（.github/・.claude/agents/）へ一切書込みが行われていない
+// （部分適用が残らない）ことを確認する回帰テスト。
+
+test('sync templates: 後段マッピング（.claude/skills/）の大文字小文字衝突検知時、先行マッピング（.github/・.claude/agents/）は一切書込まれない', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const targetDir = mkScratch('sync-cross-mapping-fail-closed-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  // Given: 最終マッピングである .claude/skills/cleanup/SKILL.md と大文字小文字のみ異なる
+  // 既存カスタムファイル .claude/skills/cleanup/skill.md を先置きし、.github/・.claude/agents/は
+  // 未展開（初回同期前）の状態にする
+  const skillDir = path.join(targetDir, '.claude', 'skills', 'cleanup');
+  fs.mkdirSync(skillDir, { recursive: true });
+  const existingPath = path.join(skillDir, 'skill.md');
+  fs.writeFileSync(existingPath, '# consumerが独自にカスタマイズした内容\n');
+
+  // When: --dry-run を付けずに sync templates を実行する
+  const result = runCli(['sync', 'templates', targetDir], { cwd: repo.dir, env: process.env });
+
+  // Then: 大文字小文字衝突が検知され、終了コード0以外で失敗する
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /大文字小文字/);
+  // Then: 既存ファイルは無警告のまま失われない
+  assert.equal(fs.readFileSync(existingPath, 'utf8'), '# consumerが独自にカスタマイズした内容\n');
+  // Then: 後段マッピングの衝突検知より前に処理される先行マッピング（.github/・.claude/agents/）は
+  // 部分適用されず、一切のファイル・ディレクトリが作成されない（fail-closed）
+  assert.equal(fs.existsSync(path.join(targetDir, '.github')), false, '.github/ が作成されていないこと');
+  assert.equal(fs.existsSync(path.join(targetDir, '.claude', 'agents')), false, '.claude/agents/ が作成されていないこと');
 });
 
 function escapeRegExp(value: string): string {
