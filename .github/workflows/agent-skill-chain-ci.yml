@@ -10,7 +10,10 @@
 # npm ci / npm run build は、それらを要する構成（package.json + lockfile、build script）を
 # consumerが実際に持つ場合だけ実行する。agent-skill-chain自身の開発リポジトリはconsumerの
 # 一種として両方を満たすため従来どおり実行され、package.json/lockfile/build scriptを持たない
-# consumerでは無条件失敗しない（Issue #536）。
+# consumerでは無条件失敗しない（Issue #536）。npm ci/buildをスキップしても、各検査スクリプトが
+# 解決に使う3経路（bin/agents-md.js・node_modules/.bin/agent-skill-chain・PATH上の
+# agent-skill-chain）のいずれかを「Ensure agent-skill-chain CLI」ステップが保証するため、
+# CLI未検出という別のエラーへ失敗ポイントが移動することはない（Issue #536）。
 name: agent-skill-chain / ci
 
 on:
@@ -53,6 +56,25 @@ jobs:
       - name: npm run build
         if: steps.npm-prereq.outputs.build == 'true'
         run: npm run build
+
+      - name: Ensure agent-skill-chain CLI
+        # Issue #536: npm ci/npm run buildをスキップすると、後続の各 verify-*.sh・lint-*.sh・
+        # adr-lint.sh が解決に使う3経路（bin/agents-md.js・node_modules/.bin/agent-skill-chain・
+        # PATH上のagent-skill-chain）のいずれも用意されないまま次のステップへ進み、「CLIが見つから
+        # ない」という別のエラーで失敗ポイントが移動するだけになる。3経路のいずれかで既に解決できる
+        # 場合（build script実行済みのagent-skill-chain自身のリポジトリを含む）は何もせず、
+        # いずれでも解決できないnon-Node consumerの場合にのみnpm install -gで導入する。
+        run: |
+          if [[ -f bin/agents-md.js ]]; then
+            echo "agent-skill-chain CLI: bin/agents-md.js を使用します（追加インストール不要）"
+          elif [[ -x node_modules/.bin/agent-skill-chain ]]; then
+            echo "agent-skill-chain CLI: node_modules/.bin/agent-skill-chain を使用します（追加インストール不要）"
+          elif command -v agent-skill-chain >/dev/null 2>&1; then
+            echo "agent-skill-chain CLI: PATH上の agent-skill-chain を使用します（追加インストール不要）"
+          else
+            echo "agent-skill-chain CLI が3経路（bin/agents-md.js・node_modules/.bin/agent-skill-chain・PATH）のいずれでも見つからないため、npm install -g agent-skill-chain@latest で導入します"
+            npm install -g agent-skill-chain@latest
+          fi
 
       - name: Fetch base branch for diff-based checks
         # verify-artifacts の code 判定（git diff base...HEAD）が base を解決できるようにする。
