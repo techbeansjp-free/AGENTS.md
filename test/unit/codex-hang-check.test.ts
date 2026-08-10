@@ -149,3 +149,104 @@ test('codex-hang-check compare: pattern一致プロセスがbefore/afterいず�
     assert.match(result.stdout, /ハング確定なし/);
   });
 });
+
+// Issue #551 AC-1: 数値オプションへ `$(...)` 形式のコマンド置換を渡した場合、bashの算術評価
+// ((...)) へ到達する前にexit 2で拒否され、埋め込んだコマンドが実行されないこと。
+test('codex-hang-check check: --min-elapsed-seconds へのコマンド置換injectionはexit 2で拒否され実行されない', () => {
+  withTempDir((dir) => {
+    const psFile = path.join(dir, 'ps.txt');
+    const marker = path.join(dir, 'pwned');
+    fs.writeFileSync(psFile, '  PID ELAPSED    TIME COMMAND\n99001     650       0 codex app-server --a\n');
+
+    const result = run(['check', '--ps-output', psFile, '--min-elapsed-seconds', `$(touch ${marker})`]);
+    assert.equal(result.status, 2);
+    assert.equal(fs.existsSync(marker), false, 'injectionされたコマンドが実行され marker ファイルが作られてはならない');
+  });
+});
+
+test('codex-hang-check check: --max-cpu-seconds に非数値を渡すとexit 2で拒否される', () => {
+  withTempDir((dir) => {
+    const psFile = path.join(dir, 'ps.txt');
+    fs.writeFileSync(psFile, '  PID ELAPSED    TIME COMMAND\n99001     650       0 codex app-server --a\n');
+    const result = run(['check', '--ps-output', psFile, '--max-cpu-seconds', 'abc']);
+    assert.equal(result.status, 2);
+  });
+});
+
+test('codex-hang-check compare: --min-elapsed-delta へのコマンド置換injectionはexit 2で拒否され実行されない', () => {
+  withTempDir((dir) => {
+    const before = path.join(dir, 'before.txt');
+    const after = path.join(dir, 'after.txt');
+    const marker = path.join(dir, 'pwned');
+    const noMatch = '  PID ELAPSED    TIME COMMAND\n99999      10       2 some-unrelated-daemon --x\n';
+    fs.writeFileSync(before, noMatch);
+    fs.writeFileSync(after, noMatch);
+
+    const result = run(['compare', '--before', before, '--after', after, '--min-elapsed-delta', `$(touch ${marker})`]);
+    assert.equal(result.status, 2);
+    assert.equal(fs.existsSync(marker), false, 'injectionされたコマンドが実行され marker ファイルが作られてはならない');
+  });
+});
+
+test('codex-hang-check compare: --max-cpu-delta に負の数を渡すとexit 2で拒否される', () => {
+  withTempDir((dir) => {
+    const before = path.join(dir, 'before.txt');
+    const after = path.join(dir, 'after.txt');
+    const noMatch = '  PID ELAPSED    TIME COMMAND\n99999      10       2 some-unrelated-daemon --x\n';
+    fs.writeFileSync(before, noMatch);
+    fs.writeFileSync(after, noMatch);
+    const result = run(['compare', '--before', before, '--after', after, '--max-cpu-delta', '-1']);
+    assert.equal(result.status, 2);
+  });
+});
+
+// Issue #551 AC-2: 読めない入力ファイルは、grepの「不一致」（空結果の正常系）と区別し
+// 「候補なし/確定なし」の正常終了ではなくエラー終了(exit 2)とすること。
+test('codex-hang-check compare: 存在しない --before ファイルは「ハング確定なし」を誤って返さずexit 2で終了する', () => {
+  withTempDir((dir) => {
+    const before = path.join(dir, 'no-such-before.txt');
+    const after = path.join(dir, 'after.txt');
+    fs.writeFileSync(after, '  PID ELAPSED    TIME COMMAND\n99999      10       2 some-unrelated-daemon --x\n');
+
+    const result = run(['compare', '--before', before, '--after', after]);
+    assert.equal(result.status, 2);
+    assert.doesNotMatch(result.stdout, /ハング確定なし/);
+  });
+});
+
+test('codex-hang-check compare: 存在しない --after ファイルは「ハング確定なし」を誤って返さずexit 2で終了する', () => {
+  withTempDir((dir) => {
+    const before = path.join(dir, 'before.txt');
+    const after = path.join(dir, 'no-such-after.txt');
+    fs.writeFileSync(before, '  PID ELAPSED    TIME COMMAND\n99999      10       2 some-unrelated-daemon --x\n');
+
+    const result = run(['compare', '--before', before, '--after', after]);
+    assert.equal(result.status, 2);
+    assert.doesNotMatch(result.stdout, /ハング確定なし/);
+  });
+});
+
+test('codex-hang-check check: 存在しない --ps-output ファイルは「ハング候補なし」を誤って返さずexit 2で終了する', () => {
+  const result = run(['check', '--ps-output', '/no/such/path/ps.txt']);
+  assert.equal(result.status, 2);
+  assert.doesNotMatch(result.stdout, /ハング候補なし/);
+});
+
+test('codex-hang-check kill: 存在しない --ps-output ファイルは「対象無し」を誤って返さずexit 2で終了する', () => {
+  const result = run(['kill', '--cwd', '/work/target-worktree', '--ps-output', '/no/such/path/ps.txt', '--dry-run']);
+  assert.equal(result.status, 2);
+});
+
+// Issue #551 AC-3: 既存の正常系（有効な数値オプション、実在するファイル）に回帰が無いこと。
+test('codex-hang-check check: 有効な数値オプションと実在するファイルでは従来通り検知できる（回帰確認）', () => {
+  withTempDir((dir) => {
+    const psFile = path.join(dir, 'ps.txt');
+    fs.writeFileSync(
+      psFile,
+      ['  PID ELAPSED    TIME COMMAND', '99001     500       0 codex app-server --a'].join('\n') + '\n',
+    );
+    const result = run(['check', '--ps-output', psFile, '--min-elapsed-seconds', '500', '--max-cpu-seconds', '0']);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /HANG候補 pid=99001/);
+  });
+});
