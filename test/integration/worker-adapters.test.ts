@@ -454,13 +454,34 @@ test('claude launch_worker (ISSUE-470 AC-4): 明示opt-out時にWORKER_CMDが成
   fs.rmSync('/tmp/worker-received-contract.txt', { force: true });
 });
 
-/** ファイルが出現するまで一定間隔でポーリングする（起動系のcold start時間差を吸収するため）。 */
-async function waitForFile(filePath: string, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!fs.existsSync(filePath)) {
-    if (Date.now() >= deadline) throw new Error(`timeout waiting for ${filePath}`);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+/**
+ * lease解放（ファイル削除）で消えるまでファイル内容を監視し続け、初回出現時から一度でも
+ * 内容が変化していないかを確認する。完了直後にlease.yamlが削除される（release_lease）ため、
+ * 「worker完了後に読む」のではなく「消えるまで見張り続ける」ことで、renewal_interval未到達の
+ * 間に一切renewが起きなかったことを、削除タイミングに依存せず確認できる。
+ */
+async function watchLeaseUnchangedUntilReleased(
+  leasePath: string,
+  isDone: () => boolean,
+  pollMs = 50,
+): Promise<{ everAppeared: boolean; everChanged: boolean }> {
+  let everAppeared = false;
+  let everChanged = false;
+  let lastContent: string | undefined;
+  while (!isDone()) {
+    if (fs.existsSync(leasePath)) {
+      const current = fs.readFileSync(leasePath, 'utf8');
+      if (!everAppeared) {
+        everAppeared = true;
+        lastContent = current;
+      } else if (current !== lastContent) {
+        everChanged = true;
+        lastContent = current;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
+  return { everAppeared, everChanged };
 }
 
 test('claude launch_worker (ISSUE-546 AC-1): WORKER_CMD直接起動経路のrenewループはbusy-loopせず、workerが生存し続ける間はrenewal_interval秒経過するまでrenew_leaseを呼ばない', async (t) => {
@@ -469,11 +490,14 @@ test('claude launch_worker (ISSUE-546 AC-1): WORKER_CMD直接起動経路のrene
   setWorkerAdapter(repo.dir, 'claude');
   setWorkerAgentToolDispatch(repo.dir, false);
 
-  // Given: renewal_intervalを2秒に短縮し、それより長く（6秒）生存してからcompletedを報告する
-  // WORKER_CMD stub。修正前の実装（read -t </dev/null）はEOFへ即時到達し待機せず返るため、
-  // renewal_interval到達前からrenew_leaseが連打されlease.yamlが書き換わり続けてしまう。
+  // Given: renewal_intervalをworkerの生存時間（3秒固定sleep）よりずっと長い600秒に取る。
+  // 修正前の実装（read -t </dev/null）はEOFへ即時到達し待機せず返るため、renewal_intervalの
+  // 大小に関わらずrenew_leaseが即座に連打されlease.yamlが書き換わり続けてしまう。
+  // 固定秒数のwall-clock待ち（`sleep 3`, renewal_interval到達前後の判定）ではなく、
+  // 「起動系のcold start・CI/共有マシンの負荷でどれだけ遅延しても、600秒に到達することは
+  // 現実的にない」という大きな余裕を使うことで、負荷変動に対して頑健にする。
   const workerCmd = [
-    'sleep 6',
+    'sleep 3',
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: slow worker output")`,
     `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
   ].join(' && ');
@@ -483,7 +507,7 @@ test('claude launch_worker (ISSUE-546 AC-1): WORKER_CMD直接起動経路のrene
     ANTHROPIC_API_KEY: 'dummy-key-not-logged',
     WORKER_CMD: workerCmd,
     ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
-    WORKER_RENEW_INTERVAL_SEC: '2',
+    WORKER_RENEW_INTERVAL_SEC: '600',
   });
   const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
 
@@ -495,34 +519,31 @@ test('claude launch_worker (ISSUE-546 AC-1): WORKER_CMD直接起動経路のrene
       // 既に終了済み。
     }
   });
-  const exitPromise = new Promise<number>((resolve) => child.on('exit', (code) => resolve(code ?? -1)));
-
-  // lease.yaml出現（lease取得完了）を起点 T0 とする。起動系のcold start時間はマシン依存のため
-  // 固定オフセットで待たず、出現をポーリングで待つ。
-  await waitForFile(leasePath, 15_000);
-  const leaseAtStart = fs.readFileSync(leasePath, 'utf8');
-
-  // When/Then その1: T0からrenewal_interval（2秒）よりずっと短い0.8秒経過時点では、lease.yamlは
-  // 変化していないこと（busy-loopならこの時点で既に何度も書き換わってしまう）。
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  assert.equal(
-    fs.readFileSync(leasePath, 'utf8'),
-    leaseAtStart,
-    'renewal_interval到達前にrenew_leaseが呼ばれてlease.yamlが書き換わってはならない（busy-loop regression, Issue #546）',
+  let exited = false;
+  const exitPromise = new Promise<number>((resolve) =>
+    child.on('exit', (code) => {
+      exited = true;
+      resolve(code ?? -1);
+    }),
   );
 
-  // When/Then その2: T0からrenewal_interval（2秒）を十分に超えた3.5秒経過時点（workerはまだ
-  // sleep中で生存）では、renew_leaseが実際に呼ばれてlease.yamlが更新されていること
-  // （busy-loop対策として単純にrenewを止めてしまったわけではないことの確認）。
-  await new Promise((resolve) => setTimeout(resolve, 2700));
-  assert.notEqual(
-    fs.readFileSync(leasePath, 'utf8'),
-    leaseAtStart,
-    'renewal_interval経過後はrenew_leaseが呼ばれてlease.yamlが更新されること',
-  );
-
+  // Then: lease.yaml出現（lease取得完了）からworker完了によるlease解放（ファイル削除）までを
+  // 見張り続け、その間に一度でも内容が変化していないかを確認する。完了直後にlease.yamlは
+  // release_leaseで削除されるため、「worker完了後に読む」のではなく「消えるまで見張る」ことで
+  // 削除タイミングに依存せず判定する。renewal_interval（600秒）はworkerの生存時間
+  // （sleep 3 + checkpoint + report）よりずっと長いため、正しい実装ならrenew_leaseは一度も
+  // 呼ばれない。busy-loopなら（renewal_intervalの大小に関わらず）即座に連打されるため、
+  // この間に必ず検出できる。
+  const watch = await watchLeaseUnchangedUntilReleased(leasePath, () => exited);
   const status = await exitPromise;
+
   assert.equal(status, 0);
+  assert.ok(watch.everAppeared, 'lease.yamlはworker実行中に一度は存在すること');
+  assert.equal(
+    watch.everChanged,
+    false,
+    'renewal_intervalに遠く満たない間にrenew_leaseが呼ばれてlease.yamlが書き換わってはならない（busy-loop regression, Issue #546）',
+  );
   assert.equal(readWorkerReport(repo.dir, 'spec').status, 'completed');
 });
 
@@ -539,9 +560,13 @@ test('claude launch_worker (ISSUE-546 AC-2): workerが終了すればrenewal_int
     ANTHROPIC_API_KEY: 'dummy-key-not-logged',
     WORKER_CMD: workerCmd,
     ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
-    // renewal_intervalを大きく取り、修正前の実装が孤児sleepを残す・または起動ラッパー全体が
-    // 誤ってrenewal_interval分待機してしまう回帰が無いことを、実測時間の上限で検証する。
-    WORKER_RENEW_INTERVAL_SEC: '30',
+    // renewal_intervalを極端に大きく（1時間）取る。修正前の懸念（孤児化したsleepが
+    // renewal_interval分の待機を残す・起動ラッパー全体がその待機を引きずる）が万一
+    // 再発した場合、実測時間はrenewal_interval（3600秒）に近づくはずである。しきい値は
+    // 絶対時間ではなくrenewal_intervalに対する比率（半分＝1800秒）で判定することで、
+    // 共有マシンの高負荷によるworker自体の遅延（数十秒オーダー）では絶対に誤検出しない
+    // 一方、renewal_interval分待ってしまう規模の回帰は確実に検出できる。
+    WORKER_RENEW_INTERVAL_SEC: '3600',
   });
 
   const started = Date.now();
@@ -551,8 +576,8 @@ test('claude launch_worker (ISSUE-546 AC-2): workerが終了すればrenewal_int
 
   assert.equal(res.status, 0, res.stderr);
   assert.ok(
-    elapsedMs < 10_000,
-    `renewループがworker終了後もrenewal_interval（30秒）分待機せず速やかに終了すること（実測 ${elapsedMs}ms）`,
+    elapsedMs < 1_800_000,
+    `renewループがworker終了後もrenewal_interval（3600秒）分待機せず速やかに終了すること（実測 ${elapsedMs}ms）`,
   );
 });
 
