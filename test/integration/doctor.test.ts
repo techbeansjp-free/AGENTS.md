@@ -148,13 +148,15 @@ test('doctor: sync templates後に.github/を改変すると template-sync がNG
   const before = runCli(['doctor'], { cwd: repo.dir });
   assert.match(before.stdout, /OK {2}template-sync/);
 
-  // When: 同期済みファイルの内容を改変してから再度doctorを実行する
-  fs.appendFileSync(path.join(repo.dir, '.github', 'CODEOWNERS'), '\n# modified\n');
+  // When: 同期済みファイル（seed-only指定されていない完全一致必須ファイル）の内容を改変してから
+  // 再度doctorを実行する（ISSUE-574: CODEOWNERSはseed-only指定によりプレースホルダー書き換え等の
+  // カスタマイズが正当な乖離として許容されるため、この検証には使えない）
+  fs.appendFileSync(path.join(repo.dir, '.github', 'SECURITY.md'), '\n# modified\n');
   const after = runCli(['doctor'], { cwd: repo.dir });
 
   // Then: template-syncがNGになる（AC-3）
   assert.equal(after.status >= 1, true);
-  assert.match(after.stdout, /NG {2}template-sync: .*未同期（差分あり）: CODEOWNERS/);
+  assert.match(after.stdout, /NG {2}template-sync: .*未同期（差分あり）: SECURITY\.md/);
 });
 
 test('doctor: schemas/*.yamlにYAML構文エラーがあると schemas構文妥当性 がNGになる', (t) => {
