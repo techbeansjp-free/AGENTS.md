@@ -514,12 +514,17 @@ _worker_default_cmd() {
   local _segment="${1:-}" _contract="${2:-}"
   : "$_segment" "$_contract"
 
-  if ! command -v claude >/dev/null 2>&1; then
+  # launch_gate_reviewer と同じ解決順序（Issue #550: ここだけ claude 固定参照だと
+  # CLAUDE_EXECUTABLE のみでPATH上に claude が無い環境で worker だけ非対称に blocked へ倒れる）。
+  local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
+  if ! command -v "$claude_executable" >/dev/null 2>&1; then
     return 1
   fi
 
   local worker_allowed_tools="${WORKER_ALLOWED_TOOLS:-$WORKER_ALLOWED_TOOLS_DEFAULT}"
-  printf 'claude -p --output-format text --allowed-tools "%s"\n' "$worker_allowed_tools"
+  local quoted_executable
+  printf -v quoted_executable '%q' "$claude_executable"
+  printf '%s -p --output-format text --allowed-tools "%s"\n' "$quoted_executable" "$worker_allowed_tools"
 }
 
 # 引数: <issue_id> <segment>
@@ -628,13 +633,24 @@ launch_worker() {
   worker_pid=$!
 
   # renewループ: サブプロセス生存中のみ renewal_interval_seconds ごとに renew_lease を呼ぶ。
-  # 待機には sleep（外部コマンド）ではなく read -t（bashビルトイン）を使う: サブシェル自体へ
-  # SIGTERM（後述のkill "$renew_pid"）を送った際、外部コマンドとしてforkされたsleepは
-  # シグナルを受け取らず孤児プロセスとして生き残り得るが、ビルトインのread -tはサブシェル
-  # プロセス自身の実行なのでSIGTERMで即座に中断される（stdinは干渉を避けるため/dev/nullへ）。
+  # 待機は sleep を明示的な子プロセスとして起動し wait で待つ（_dispatch_lease_renew_daemon と
+  # 同じパターン）。/dev/nullへリダイレクトした read -t はEOFへ即時到達し待機せず返るため、
+  # renewal_interval分の待機が働かずbusy-loop化してしまい使えない（Issue #546）。SIGTERM
+  # （後述のkill "$renew_pid"）受信時は子のsleepも停止させ、孤児プロセスを残さない。
   (
+    trap '
+      if [[ -n "$renew_wait_pid" ]]; then
+        kill "$renew_wait_pid" >/dev/null 2>&1 || true
+        wait "$renew_wait_pid" 2>/dev/null || true
+      fi
+      exit 0
+    ' TERM INT HUP
+    renew_wait_pid=""
     while kill -0 "$worker_pid" 2>/dev/null; do
-      read -r -t "$renew_interval" _renew_wait </dev/null || true
+      sleep "$renew_interval" &
+      renew_wait_pid=$!
+      wait "$renew_wait_pid" || break
+      renew_wait_pid=""
       kill -0 "$worker_pid" 2>/dev/null || break
       renew_lease "$issue_id" >/dev/null 2>&1 || true
     done
