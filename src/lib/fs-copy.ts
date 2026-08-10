@@ -19,6 +19,15 @@ export interface CopyOptions {
    */
   root?: string;
   /**
+   * 既定 `false`。`true` の場合、`CopyPlan.addFile` が展開先ディレクトリの実エントリ名一覧
+   * （`fs.readdirSync`）を大文字小文字を無視して比較し、配布元ファイル名と大文字小文字のみが
+   * 異なる既存エントリを検知する（ISSUE-538）。検知した場合は計画段階（`applyPlan` 呼出し前）で
+   * `CliError` を送出し、`dryRun` の値に関わらず実書込みを一切行わない。ホストのファイルシステムが
+   * 大文字小文字を区別するか否かに関わらず同一の検知結果になるよう、パス解決（`lstatSync`）ではなく
+   * 実エントリ名の直接比較で判定する。
+   */
+  detectCaseCollision?: boolean;
+  /**
    * @internal
    * 検査後置換（TOCTOU）に対する防御を自動検証するための注入点。検査完了後・書込み開始前に呼ばれる。
    */
@@ -94,6 +103,28 @@ function lstatOrNull(target: string): fs.BigIntStats | null {
     if (code === 'ENOENT' || code === 'ENOTDIR') return null;
     throw error;
   }
+}
+
+/** ディレクトリの実エントリ名一覧。存在しない・ディレクトリでない場合は空扱い。 */
+function readDirEntriesOrEmpty(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch (error) {
+    const code = errnoOf(error);
+    if (code === 'ENOENT' || code === 'ENOTDIR') return [];
+    throw error;
+  }
+}
+
+/**
+ * ISSUE-538: 展開先の実エントリ名一覧から、配布元ファイル名と大文字小文字のみが異なる（完全一致
+ * ではない）既存エントリを探す。`lstatSync` によるパス解決に頼らないため、ホストのファイルシステムが
+ * 大文字小文字を区別するか否かに関わらず同一の結果になる。
+ */
+function findCaseCollision(parent: string, destBasename: string): string | undefined {
+  return readDirEntriesOrEmpty(parent).find(
+    (name) => name !== destBasename && name.toLowerCase() === destBasename.toLowerCase(),
+  );
 }
 
 type Origin = 'source' | 'dest';
@@ -212,7 +243,10 @@ class CopyPlan {
   readonly steps: CopyStep[] = [];
   private readonly plannedDirs = new Set<string>();
 
-  constructor(private readonly policy: CopyPolicy) {}
+  constructor(
+    private readonly policy: CopyPolicy,
+    private readonly detectCaseCollision: boolean = false,
+  ) {}
 
   /** ディレクトリを検査し、必要なら作成予定として積む。symlinkと種別違いはここで停止する。 */
   addDir(dest: string, display: string, boundary: boolean): void {
@@ -233,6 +267,15 @@ class CopyPlan {
 
   addFile(src: string, srcStat: fs.BigIntStats, dest: string, display: string): void {
     const parent = path.dirname(dest);
+    if (this.detectCaseCollision) {
+      const collision = findCaseCollision(parent, path.basename(dest));
+      if (collision) {
+        throw new CliError(
+          `導入先に大文字小文字のみが異なる既存ファイルがあるため展開を中断しました: ${display}` +
+            `（既存エントリ: ${path.join(path.dirname(display), collision)}。意図した置換であれば手動で確認・解消してから再実行してください）`,
+        );
+      }
+    }
     const parentStat = lstatOrNull(parent);
     const destStat = lstatOrNull(dest);
     const srcIdentity = identityOf(srcStat);
@@ -354,7 +397,7 @@ function applyPlan(steps: CopyStep[]): void {
 }
 
 function copyTree(src: string, dest: string, options: CopyOptions, policy: CopyPolicy): CopyResult[] {
-  const { dryRun = false } = options;
+  const { dryRun = false, detectCaseCollision = false } = options;
   noFollowFlag();
   const srcRoot = path.resolve(src);
   const srcStat = lstatOrNull(srcRoot);
@@ -367,7 +410,7 @@ function copyTree(src: string, dest: string, options: CopyOptions, policy: CopyP
     );
   }
 
-  const plan = new CopyPlan(policy);
+  const plan = new CopyPlan(policy, detectCaseCollision);
   plan.addDir(boundary, boundaryDisplay, true);
   // 信頼境界から配布先までの中間componentも、symlinkを追従しないことをここで確定させる。
   let currentDest = boundary;

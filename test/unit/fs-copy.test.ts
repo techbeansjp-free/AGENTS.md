@@ -627,6 +627,83 @@ test('copyTreeMirror: 配布先の親componentがsymlinkのとき停止する', 
   assert.equal(snapshot(outside), before);
 });
 
+// ISSUE-538: detectCaseCollision（既定false）。true時のみ、展開先の実エントリ名一覧を
+// 大文字小文字を無視して比較し、配布元ファイル名と大文字小文字のみが異なる既存エントリを検知する。
+
+test('detectCaseCollision:true・大文字小文字のみ異なる既存ファイルがあると CliError で中断し、既存ファイルは変更されない', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'pull_request_template.md'), 'new-content');
+  fs.writeFileSync(path.join(dest, 'PULL_REQUEST_TEMPLATE.md'), 'existing-custom-content');
+
+  assert.throws(
+    () => copyTreeMirror(src, dest, { detectCaseCollision: true }),
+    (error: unknown) => error instanceof CliError && error.message.includes('大文字小文字'),
+  );
+  assert.equal(fs.existsSync(path.join(dest, 'pull_request_template.md')), false, '新規パスでのファイルは作られないこと');
+  assert.equal(
+    fs.readFileSync(path.join(dest, 'PULL_REQUEST_TEMPLATE.md'), 'utf8'),
+    'existing-custom-content',
+    '既存ファイルの内容は変更されないこと',
+  );
+});
+
+test('detectCaseCollision:true・dryRun:trueでも実書込み無しに同じ衝突検知結果になる', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'pull_request_template.md'), 'new-content');
+  fs.writeFileSync(path.join(dest, 'PULL_REQUEST_TEMPLATE.md'), 'existing-custom-content');
+
+  assert.throws(
+    () => copyTreeMirror(src, dest, { detectCaseCollision: true, dryRun: true }),
+    (error: unknown) => error instanceof CliError && error.message.includes('大文字小文字'),
+  );
+  assert.equal(
+    fs.readFileSync(path.join(dest, 'PULL_REQUEST_TEMPLATE.md'), 'utf8'),
+    'existing-custom-content',
+    '既存ファイルの内容は変更されないこと',
+  );
+});
+
+test('detectCaseCollision:true・完全一致（大文字小文字含む）の既存ファイルは従来どおり上書きされ、衝突検知は発火しない', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'PULL_REQUEST_TEMPLATE.md'), 'new-content');
+  fs.writeFileSync(path.join(dest, 'PULL_REQUEST_TEMPLATE.md'), 'old-content');
+
+  const results = copyTreeMirror(src, dest, { detectCaseCollision: true });
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0]?.action, 'overwritten');
+  assert.equal(fs.readFileSync(path.join(dest, 'PULL_REQUEST_TEMPLATE.md'), 'utf8'), 'new-content');
+});
+
+test('detectCaseCollision:true・展開先に同名エントリが無い場合は検知が発火せず通常どおり作成される', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'a.txt'), 'hello');
+
+  const results = copyTreeMirror(src, dest, { detectCaseCollision: true });
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0]?.action, 'created');
+  assert.equal(fs.readFileSync(path.join(dest, 'a.txt'), 'utf8'), 'hello');
+});
+
+test('detectCaseCollision省略時（既定false）は大文字小文字のみ異なる既存ファイルがあっても検知されない（回帰防止）', () => {
+  const src = mkdtemp('fs-copy-src-');
+  const dest = mkdtemp('fs-copy-dest-');
+  fs.writeFileSync(path.join(src, 'pull_request_template.md'), 'new-content');
+  fs.writeFileSync(path.join(dest, 'PULL_REQUEST_TEMPLATE.md'), 'existing-custom-content');
+
+  // detectCaseCollision を渡さない呼び出し（upgrade.ts 等の既存呼び出しと同条件）は、
+  // ホストのファイルシステムの大文字小文字区別可否に応じた既存挙動のまま変化しない。
+  const results = copyTreeMirror(src, dest);
+
+  assert.equal(results.length, 1);
+  assert.equal(fs.existsSync(path.join(dest, 'pull_request_template.md')), true);
+});
+
 test('copyTreeMirror: 配布元にsymlinkがあるとき停止する', () => {
   const src = mkdtemp('fs-copy-src-');
   const root = mkdtemp('fs-copy-root-');

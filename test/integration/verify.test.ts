@@ -1684,7 +1684,10 @@ test('verify ac-coverage: SPEC.mdとVALIDATION.mdが完全対応していれば�
   const [, worktreePath] = start.stdout.trim().split('\n');
 
   // Given: SPEC.mdにAC-1・AC-2を定義し、VALIDATION.mdで両方に検証方法・証跡を対応付ける
-  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: サンプル\nAC-2: 別のサンプル\n');
+  fs.writeFileSync(
+    path.join(worktreePath, 'SPEC.md'),
+    '# SPEC\n\n#### AC-1: サンプル\n\n本文\n\n#### AC-2: 別のサンプル\n\n本文\n',
+  );
   fs.writeFileSync(
     path.join(worktreePath, 'VALIDATION.md'),
     [
@@ -1718,7 +1721,10 @@ test('verify ac-coverage: 孤児AC・孤児テスト参照・evidence空をそ�
   const [, worktreePath] = start.stdout.trim().split('\n');
 
   // Given: SPEC.mdはAC-1・AC-2を定義するが、VALIDATION.mdはAC-1しか対応しない（AC-2は孤児AC）
-  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: サンプル\nAC-2: 別のサンプル\n');
+  fs.writeFileSync(
+    path.join(worktreePath, 'SPEC.md'),
+    '# SPEC\n\n#### AC-1: サンプル\n\n本文\n\n#### AC-2: 別のサンプル\n\n本文\n',
+  );
   fs.writeFileSync(
     path.join(worktreePath, 'VALIDATION.md'),
     [
@@ -1764,6 +1770,53 @@ test('verify ac-coverage: 孤児AC・孤児テスト参照・evidence空をそ�
   assert.equal(orphanRefAndEmptyEvidence.status, 1);
   assert.match(orphanRefAndEmptyEvidence.stderr, /孤児テスト参照: AC-3 は SPEC\.md に存在しません/);
   assert.match(orphanRefAndEmptyEvidence.stderr, /AC-1: evidence が空です/);
+});
+
+// ISSUE-538: SPEC.mdテンプレート本文中の「AC を追加する場合は AC-N, AC-M ... と連番で追加する」
+// という追記用コメント等、`#### AC-N: ...` 見出し以外の場所に出現する `AC-N` 文字列は、
+// 正規のAC-ID宣言ではないため孤児AC判定の対象に含めてはならない（specBddと同一の抽出基準）。
+test('verify ac-coverage: SPEC.md本文中の見出し以外のAC-N言及（追記コメント等）は孤児AC判定の対象に含めない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  // Given: 実在するAC-IDはAC-1のみだが、本文末尾に次の追加候補として AC-2・AC-3 に言及する
+  // 見出し以外のコメント（テンプレート由来）が残っている
+  fs.writeFileSync(
+    path.join(worktreePath, 'SPEC.md'),
+    [
+      '# SPEC',
+      '',
+      '#### AC-1: サンプル',
+      '',
+      '本文',
+      '',
+      '<!-- AC を追加する場合は AC-2, AC-3 ... と連番で追加する -->',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(worktreePath, 'VALIDATION.md'),
+    [
+      'schema_version: agent-skill-chain/validation-report/v1',
+      'issue_id: ISSUE-1',
+      'target_sha: abc123',
+      'acceptance_criteria:',
+      '  - ac_id: AC-1',
+      '    verification: {mode: automated, result: pass}',
+      "    evidence: ['test/ac1.spec.ts']",
+      '',
+    ].join('\n'),
+  );
+
+  // When/Then: AC-2・AC-3は見出しではないコメント言及に過ぎないため孤児ACとして検出されず成功する
+  const result = runCli(['verify', 'ac-coverage', 'ISSUE-1'], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 // ---- checkpoint（detached HEAD） ----

@@ -19,10 +19,15 @@ target_dir: 導入先リポジトリのルートディレクトリ（省略時�
 `;
 
 const GITHUB_USAGE = `
-使い方: agent-skill-chain setup github [target_dir]
+使い方: agent-skill-chain setup github [target_dir] [--dry-run]
+
+target_dir: 導入先リポジトリのルートディレクトリ（省略時はカレントディレクトリ）。
+--dry-run:  .github/ への実書込みを一切行わず、sync-templatesの変更予定一覧のみを標準出力へ
+            表示する。setup-labels・setup-ruleset（GitHub APIへの書込み）は実行しない。
 
 出力:
-  成功時: 終了コード0。sync-templates・setup-labels・setup-ruleset の実行結果を標準出力へ。
+  成功時: 終了コード0。sync-templates・setup-labels・setup-ruleset の実行結果
+          （--dry-run時はsync-templatesの変更予定一覧とスキップ通知）を標準出力へ。
   失敗時: 終了コード1以上。どの下位処理で失敗したかを標準エラー出力に明示。
 `;
 
@@ -120,8 +125,22 @@ export async function setup(args: string[]): Promise<number> {
   });
 }
 
-function githubBundle(targetDir: string): { status: number; message: string } {
+function githubBundle(targetDir: string, dryRun = false): { status: number; message: string } {
   const lines: string[] = [];
+
+  // ISSUE-538: --dry-run は「一切の外部書込みを行わない」という一貫した意味を持つため、
+  // setup-labels・setup-ruleset（GitHub APIへの書込み）はそもそも呼び出さない。両者の前段でのみ
+  // 使う rulesetPreflight（ASC_GATE_APP_ID の解決）も、書込み自体を行わないdry-run時は不要なため
+  // 呼び出さない（未設定でも --dry-run が失敗しない）。
+  if (dryRun) {
+    const syncExit = syncStep(targetDir, { dryRun: true });
+    if (syncExit.status !== 0) return { status: 1, message: `[sync templates] ${syncExit.message}` };
+    lines.push(`[sync templates]\n${syncExit.message}`);
+    lines.push('[setup labels]\n--dry-run のためスキップしました（GitHub APIへの書込みは行いません）');
+    lines.push('[setup ruleset]\n--dry-run のためスキップしました（GitHub APIへの書込みは行いません）');
+    return { status: 0, message: lines.join('\n') };
+  }
+
   const rulesetPreflight = loadRenderedRuleset(targetDir, process.env);
   if (rulesetPreflight.status !== 0) {
     return { status: 1, message: `[setup ruleset preflight] ${rulesetPreflight.message}` };
@@ -189,12 +208,19 @@ function loadRenderedRuleset(
   }
 }
 
-function syncStep(targetDir: string): { status: number; message: string } {
+function syncStep(targetDir: string, options: { dryRun?: boolean } = {}): { status: number; message: string } {
+  const { dryRun = false } = options;
   const source = resolveAsset(path.join('templates', 'github', '.github'), targetDir);
   const dest = path.join(targetDir, '.github');
+  const prefix = dryRun ? 'planned ' : '';
   try {
-    const results = copyTreeMirror(source, dest, { root: targetDir });
-    return { status: 0, message: results.map((r) => `${r.action}: ${r.path}`).join('\n') || '(同期対象なし)' };
+    // ISSUE-538: 大文字小文字のみ異なる既存ファイルとの衝突検知は dryRun の値に関わらず
+    // 常に有効にする（衝突検知は計画段階で行われ、dryRunでも実書込み無しに同じ結果になる）。
+    const results = copyTreeMirror(source, dest, { root: targetDir, dryRun, detectCaseCollision: true });
+    return {
+      status: 0,
+      message: results.map((r) => `${prefix}${r.action}: ${r.path}`).join('\n') || '(同期対象なし)',
+    };
   } catch (error) {
     return { status: 1, message: error instanceof Error ? error.message : String(error) };
   }
@@ -297,8 +323,10 @@ export async function github(args: string[]): Promise<number> {
       printUsage(GITHUB_USAGE);
       return 0;
     }
-    const targetDir = args[0] ? path.resolve(args[0]) : process.cwd();
-    const result = githubBundle(targetDir);
+    const dryRun = args.includes('--dry-run');
+    const positional = args.find((a) => a !== '--dry-run');
+    const targetDir = positional ? path.resolve(positional) : process.cwd();
+    const result = githubBundle(targetDir, dryRun);
     if (result.status !== 0) return fail(result.message);
     return ok(result.message);
   });
