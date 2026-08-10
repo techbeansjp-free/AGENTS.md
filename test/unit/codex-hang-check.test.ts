@@ -133,3 +133,19 @@ test('codex-hang-check kill: --cwd 省略時は使い方エラー（無関係セ
   const result = run(['kill', '--dry-run']);
   assert.equal(result.status, 2);
 });
+
+// Issue #542 AC-1: pattern一致プロセスがbefore/afterいずれにも1件も無い場合、set -euo pipefail下の
+// grep非ゼロ終了によりハング判定ロジックへ到達する前に打ち切られ「ハング確定あり」と誤検知しないこと。
+test('codex-hang-check compare: pattern一致プロセスがbefore/afterいずれにも無ければ誤検知せず終了コード0', () => {
+  withTempDir((dir) => {
+    const before = path.join(dir, 'before.txt');
+    const after = path.join(dir, 'after.txt');
+    const noMatch = '  PID ELAPSED    TIME COMMAND\n99999      10       2 some-unrelated-daemon --x\n';
+    fs.writeFileSync(before, noMatch);
+    fs.writeFileSync(after, noMatch);
+
+    const result = run(['compare', '--before', before, '--after', after]);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /ハング確定なし/);
+  });
+});

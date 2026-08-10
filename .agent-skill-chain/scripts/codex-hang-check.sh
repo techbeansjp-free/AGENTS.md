@@ -163,8 +163,13 @@ cmd_compare() {
   # `exit` はプロセスを直ちに終了させ関数のRETURNトラップを経由しないため、EXITトラップで
   # 一時ファイルを回収する（このサブコマンド内でしかmktempを使わないため他処理と競合しない）。
   trap 'rm -f "$tmp_before" "$tmp_after"' EXIT
-  grep -E "$pattern" "$before" | grep -v grep | normalize_ps | sort -k1,1n > "$tmp_before"
-  grep -E "$pattern" "$after" | grep -v grep | normalize_ps | sort -k1,1n > "$tmp_after"
+  # Issue #542: 対象パターンに1件も一致しない（＝監視対象自体が無い、最も一般的で健全な状態）
+  # 場合、grepは終了コード1を返す。set -euo pipefail下ではこれがパイプライン全体を非ゼロ終了
+  # させ、本来のハング判定ロジックに到達する前にスクリプトが打ち切られ「ハング確定なし」を
+  # 「ハング確定あり」と誤検知する。grepの不一致は空結果の正常系として扱い、実際のハング検知
+  # 時の比較ロジック・終了コード契約（下記found変数によるexit 0/1）は変更しない。
+  { grep -E "$pattern" "$before" || true; } | { grep -v grep || true; } | normalize_ps | sort -k1,1n > "$tmp_before"
+  { grep -E "$pattern" "$after" || true; } | { grep -v grep || true; } | normalize_ps | sort -k1,1n > "$tmp_after"
 
   local found=0
   while read -r pid et1 ct1 cmd; do
