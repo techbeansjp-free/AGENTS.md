@@ -238,7 +238,7 @@ examples:
     wip: {limit: 3, count_by: active_writer_lease}
     lease: {ttl_seconds: 3600, renewal_interval_seconds: 900}
     bdd: {profile: standard}
-    issue_sync: {enabled: false, target: issue_body, max_body_chars: 60000}
+    issue_sync: {enabled: true, target: issue_body, max_body_chars: 60000}
     merge: {autonomous: false}
     human_confirmation: {before_implementation: true}
     templates: {github_source: .agent-skill-chain/templates/github/.github, github_target: .github, claude_agents_source: .agent-skill-chain/templates/claude/agents, claude_agents_target: .claude/agents, verify_sync: true}

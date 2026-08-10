@@ -104,9 +104,9 @@
 
 ### `issue_sync`
 
-- **既定値**: `enabled: false`、`target: issue_body`、`max_body_chars: 60000`。項目全体の未設定時も無効である。
+- **既定値**: GitHubモード向けに配布・生成される設定（`init` の標準プロファイル・本リポジトリ自身の恒久設定）では `enabled: true`、`target: issue_body`、`max_body_chars: 60000`。項目全体の未設定時は無効（`false` 相当）として扱う後方互換を維持する（ISSUE-567より前に `init` した既存プロジェクトは明示値のまま変更されない）。
 - **取りうる値**: `enabled` は真偽値、`target` は `issue_body | pr_body | both`、`max_body_chars` は1〜65536の整数。
-- **影響**: GitHub モードのゲート通過時に、成果物全文とゲート状態を Issue/PR 本文の固定マーカー区間へ一方向転記するかを制御する。ローカルモードでは常に無効として扱う。
+- **影響**: GitHub モードのゲート通過時に、成果物全文とゲート状態を Issue/PR 本文の固定マーカー区間へ一方向転記するかを制御する。明示的に `enabled: false` を設定すればオプトアウトできる。ローカルモードでは常に無効として扱う。
 - **詳細**: [ADR-0021: GitHub Issue sync と成果物内容の正本](adr/ADR-0021-github-issue-sync-full-text-content-canonical.md)
 
 ### `merge`

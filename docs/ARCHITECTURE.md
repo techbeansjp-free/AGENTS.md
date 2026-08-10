@@ -288,7 +288,7 @@ classDiagram
     StateSchema --> GateReportSchema : state.gateはgate-reportのconformance/falsificationのみを<br/>簡略反映した部分集合（構造は同一でない）
 ```
 
-補足: GitHubモードの成果物（`SPEC.md`等）内容の正本はGit管理下ファイルであり、`issue_sync.enabled: true`（既定false、`ADR-0021`）を明示したプロジェクトに限り、ゲート通過ごとにIssue/PR本文の固定マーカー区間へ内容を一方向転記する（転記結果をゲート判定の入力として読み戻すことはしない）。
+補足: GitHubモードの成果物（`SPEC.md`等）内容の正本はGit管理下ファイルであり、`issue_sync.enabled: true`（GitHubモード向け配布・生成設定では既定、明示的な`false`でオプトアウト可能、`ADR-0021`・`ISSUE-567`）が実効するプロジェクトに限り、ゲート通過ごとにIssue/PR本文の固定マーカー区間へ内容を一方向転記する（転記結果をゲート判定の入力として読み戻すことはしない）。
 
 ## 未決事項・対象外
 

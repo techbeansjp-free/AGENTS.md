@@ -25,10 +25,10 @@
 
 | モード | 調整状態の正本 | ゲートの正本 | 成果物内容の正本 |
 |---|---|---|---|
-| GitHub モード | Issue・PR・branch・Check Run | ガイドライン（自動強制なし、I2）。`.agent-skill-chain/scripts/gate-*.sh` で進行役が手動発行した場合はCheck Run（`agent-skill-chain/{spec,design,implementation,validation}-gate`）が結果を保持 | `issue_sync` 有効時は Issue/PR 本文（Git は同期元・版管理基盤）。既定（無効）では Git 管理下ファイル |
+| GitHub モード | Issue・PR・branch・Check Run | ガイドライン（自動強制なし、I2）。`.agent-skill-chain/scripts/gate-*.sh` で進行役が手動発行した場合はCheck Run（`agent-skill-chain/{spec,design,implementation,validation}-gate`）が結果を保持 | `issue_sync` 有効時は Issue/PR 本文（Git は同期元・版管理基盤）。GitHubモード向け配布・生成設定では既定で有効。明示的に無効化した場合は Git 管理下ファイル |
 | ローカルモード | `state.yaml`（Issue 毎、Git 管理下） | `reviews/<gate>.yaml`（Git 管理下。`profile: lightweight` の場合はI2参照——ガイドラインでありこの機構自体を導入しない） | Git 管理下ファイル（`SPEC.md` 等） |
 
-共通の状態モデル（フィールド・enum）は `.agent-skill-chain/schemas/state.schema.yaml` が定義する。`issue_sync`（既定 `enabled: false`、ADR-0021）を有効化した GitHub モードでは、ゲート通過ごとに成果物全文とゲート状態を Issue/PR 本文の固定マーカー区間へ一方向転記し、マーカー外の人間記述部分は変更しない。転記結果をゲート判定の入力として読み戻すことはしない。
+共通の状態モデル（フィールド・enum）は `.agent-skill-chain/schemas/state.schema.yaml` が定義する。`issue_sync`（GitHubモード向け配布・生成設定では既定 `enabled: true`。明示的な `false` でオプトアウト可能、ADR-0021・ISSUE-567）が有効な GitHub モードでは、ゲート通過ごとに成果物全文とゲート状態を Issue/PR 本文の固定マーカー区間へ一方向転記し、マーカー外の人間記述部分は変更しない。転記結果をゲート判定の入力として読み戻すことはしない。
 
 ## 4 セグメント・4 ゲート
 
