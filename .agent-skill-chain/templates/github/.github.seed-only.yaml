@@ -1,0 +1,8 @@
+# ISSUE-574: `.github/` 配下のうち、初回配置後にプロジェクト固有の理由で正当に内容が
+# 乖離してよいファイルの一覧（`computeTemplateSyncDiffs` が内容の完全一致を要求しない対象）。
+# ここに列挙したファイルも、`init`/`sync templates`/`setup github` による初回配置と、
+# 展開先からの完全な削除の検出（「未同期（欠落）」）は従来どおり行う。
+# パスは配布元 `.github/` ディレクトリからの相対パスで記述する。
+paths:
+  - CODEOWNERS
+  - dependabot.yml
