@@ -506,12 +506,17 @@ _worker_default_cmd() {
   local _segment="${1:-}" _contract="${2:-}"
   : "$_segment" "$_contract"
 
-  if ! command -v claude >/dev/null 2>&1; then
+  # launch_gate_reviewer と同じ解決順序（Issue #550: ここだけ claude 固定参照だと
+  # CLAUDE_EXECUTABLE のみでPATH上に claude が無い環境で worker だけ非対称に blocked へ倒れる）。
+  local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
+  if ! command -v "$claude_executable" >/dev/null 2>&1; then
     return 1
   fi
 
   local worker_allowed_tools="${WORKER_ALLOWED_TOOLS:-$WORKER_ALLOWED_TOOLS_DEFAULT}"
-  printf 'claude -p --output-format text --allowed-tools "%s"\n' "$worker_allowed_tools"
+  local quoted_executable
+  printf -v quoted_executable '%q' "$claude_executable"
+  printf '%s -p --output-format text --allowed-tools "%s"\n' "$quoted_executable" "$worker_allowed_tools"
 }
 
 # 引数: <issue_id> <segment>

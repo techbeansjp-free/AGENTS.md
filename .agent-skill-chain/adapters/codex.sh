@@ -201,15 +201,19 @@ _worker_default_cmd() {
     echo "_worker_default_cmd: モデルティア（ASC_WORKER_MODEL_TIER=${ASC_WORKER_MODEL_TIER}）が指定されているのに解決済みモデル（ASC_WORKER_MODEL）が届いていません" >&2
     return 1
   fi
-  if ! command -v codex >/dev/null 2>&1; then
+  # launch_gate_reviewer と同じ解決順序（Issue #550: ここだけ codex 固定参照だと
+  # CODEX_EXECUTABLE のみでPATH上に codex が無い環境で worker だけ非対称に blocked へ倒れる）。
+  local codex_executable="${CODEX_EXECUTABLE:-codex}"
+  if ! command -v "$codex_executable" >/dev/null 2>&1; then
     return 1
   fi
 
-  local model effort sandbox_opts base contract_bytes quoted_contract
+  local model effort sandbox_opts base contract_bytes quoted_contract quoted_executable
   model="$(_codex_worker_model "$segment")"
   effort="$(_codex_worker_effort "$segment")"
   sandbox_opts="$(_codex_worker_sandbox_opts)"
-  base="codex exec --sandbox workspace-write $sandbox_opts --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\""
+  printf -v quoted_executable '%q' "$codex_executable"
+  base="$quoted_executable exec --sandbox workspace-write $sandbox_opts --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\""
   contract_bytes="$(printf '%s' "$contract" | wc -c)"
   contract_bytes="${contract_bytes//[[:space:]]/}"
 
