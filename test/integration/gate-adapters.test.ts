@@ -270,6 +270,84 @@ test('claude launch_gate_reviewer: レビュア起動失敗は human_required �
   assert.equal(readFinal(reportPath), 'human_required');
 });
 
+// --- ISSUE-562: 隔離サブプロセスへのANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN引き継ぎ ----
+
+test('claude launch_gate_reviewer: 呼び出し元のANTHROPIC_API_KEYを隔離サブプロセスへ引き継ぐ（AC-1）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  // Given: 隔離サブプロセス内でANTHROPIC_API_KEYの値そのものを検査するコマンド
+  // （_claude_auth_ok()の高速パスは呼び出し元プロセスで判定済みのため、ここでは
+  // 実際に起動される隔離env -iサブプロセス側に値が渡っているかだけを確認する）。
+  const command = [
+    'cat >/dev/null',
+    'test "${ANTHROPIC_API_KEY:-}" = "issue562-forwarded-key"',
+    'printf \'%s\' \'{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}\'',
+  ].join('; ');
+  const env = envWithout([], {
+    ANTHROPIC_API_KEY: 'issue562-forwarded-key',
+    GATE_REVIEWER_CMD: command,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+});
+
+test('claude launch_gate_reviewer: 呼び出し元のCLAUDE_CODE_OAUTH_TOKENを隔離サブプロセスへ引き継ぐ（AC-1）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const command = [
+    'cat >/dev/null',
+    'test "${CLAUDE_CODE_OAUTH_TOKEN:-}" = "issue562-forwarded-oauth-token"',
+    'test -z "${ANTHROPIC_API_KEY:-}"',
+    'printf \'%s\' \'{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}\'',
+  ].join('; ');
+  const env = envWithout(['ANTHROPIC_API_KEY'], {
+    CLAUDE_CODE_OAUTH_TOKEN: 'issue562-forwarded-oauth-token',
+    GATE_REVIEWER_CMD: command,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+});
+
+test('claude launch_gate_reviewer: いずれのトークンも未設定でも既存のCLAUDE_CONFIG_DIRファイルベース認証引き継ぎ挙動は変化しない（AC-2）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const fakeClaudeConfig = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-config-issue562-'));
+  t.after(() => fs.rmSync(fakeClaudeConfig, { recursive: true, force: true }));
+
+  const command = [
+    'cat >/dev/null',
+    'test -z "${ANTHROPIC_API_KEY:-}"',
+    'test -z "${CLAUDE_CODE_OAUTH_TOKEN:-}"',
+    `test "\${CLAUDE_CONFIG_DIR:-}" = ${JSON.stringify(fakeClaudeConfig)}`,
+    'printf \'%s\' \'{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}\'',
+  ].join('; ');
+  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    CLAUDE_CONFIG_DIR: fakeClaudeConfig,
+    GATE_REVIEWER_CMD: command,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+});
+
 // --- T3: human launch_gate_reviewer（非同期 deferred） ---------------------------------
 
 test('human launch_gate_reviewer (local): マーカーを生成し final=human_required・exit 3 を返す', async (t) => {

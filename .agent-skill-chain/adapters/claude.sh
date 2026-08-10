@@ -91,8 +91,11 @@ _asc_cli() {
   fi
 }
 
-# AI reviewerへはmodel providerのローカルlogin保存先だけを渡し、GitHub credential・gh/git設定・
-# caller HOMEを渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace以外の読取りは不要。
+# AI reviewerへはmodel providerのローカルlogin保存先（およびISSUE-562: 呼び出し元環境の
+# ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN。_claude_auth_ok()の高速パス判定と一貫させ、
+# ファイル・Keychainいずれの認証方式にも依存させないため）だけを渡し、GitHub credential・
+# gh/git設定・caller HOMEを渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace以外の
+# 読取りは不要。実値はログ・stdout/stderrに出さない（Issue #185 _claude_auth_ok と同じ非ログ方針）。
 _run_reviewer_sanitized() {
   local prompt="$1" reviewer_cmd="$2" timeout_sec="$3"
   local isolated_root="${ASC_REVIEWER_SANITIZED_ROOT:-}"
@@ -123,6 +126,11 @@ _run_reviewer_sanitized() {
   )
   [[ -n "$codex_home" && -d "$codex_home" ]] && clean_env+=("CODEX_HOME=$codex_home")
   [[ -n "$claude_config" && -d "$claude_config" ]] && clean_env+=("CLAUDE_CONFIG_DIR=$claude_config")
+  # ISSUE-562: _claude_auth_ok() の高速パス（env非空判定）と一貫させ、呼び出し元環境の
+  # トークンが設定されている場合は隔離サブプロセスへもそのまま引き継ぐ。Keychain等
+  # ファイル外認証（CLAUDE_CONFIG_DIR転送では再現不可）でもレビュアを起動できるようにする。
+  [[ -n "${ANTHROPIC_API_KEY:-}" ]] && clean_env+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+  [[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]] && clean_env+=("CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN")
 
   local rc=0 output=""
   if command -v timeout >/dev/null 2>&1; then
