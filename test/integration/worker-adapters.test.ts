@@ -454,6 +454,108 @@ test('claude launch_worker (ISSUE-470 AC-4): 明示opt-out時にWORKER_CMDが成
   fs.rmSync('/tmp/worker-received-contract.txt', { force: true });
 });
 
+/** ファイルが出現するまで一定間隔でポーリングする（起動系のcold start時間差を吸収するため）。 */
+async function waitForFile(filePath: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!fs.existsSync(filePath)) {
+    if (Date.now() >= deadline) throw new Error(`timeout waiting for ${filePath}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+test('claude launch_worker (ISSUE-546 AC-1): WORKER_CMD直接起動経路のrenewループはbusy-loopせず、workerが生存し続ける間はrenewal_interval秒経過するまでrenew_leaseを呼ばない', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, false);
+
+  // Given: renewal_intervalを2秒に短縮し、それより長く（6秒）生存してからcompletedを報告する
+  // WORKER_CMD stub。修正前の実装（read -t </dev/null）はEOFへ即時到達し待機せず返るため、
+  // renewal_interval到達前からrenew_leaseが連打されlease.yamlが書き換わり続けてしまう。
+  const workerCmd = [
+    'sleep 6',
+    `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: slow worker output")`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+  ].join(' && ');
+
+  const script = path.join(worktreePath, '.agent-skill-chain', 'scripts', 'worker-launch.sh');
+  const env = envWithout([], {
+    ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+    WORKER_CMD: workerCmd,
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    WORKER_RENEW_INTERVAL_SEC: '2',
+  });
+  const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
+
+  const child = spawn('bash', [script, 'ISSUE-1', 'spec'], { cwd: worktreePath, env, stdio: 'ignore' });
+  t.after(() => {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      // 既に終了済み。
+    }
+  });
+  const exitPromise = new Promise<number>((resolve) => child.on('exit', (code) => resolve(code ?? -1)));
+
+  // lease.yaml出現（lease取得完了）を起点 T0 とする。起動系のcold start時間はマシン依存のため
+  // 固定オフセットで待たず、出現をポーリングで待つ。
+  await waitForFile(leasePath, 15_000);
+  const leaseAtStart = fs.readFileSync(leasePath, 'utf8');
+
+  // When/Then その1: T0からrenewal_interval（2秒）よりずっと短い0.8秒経過時点では、lease.yamlは
+  // 変化していないこと（busy-loopならこの時点で既に何度も書き換わってしまう）。
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  assert.equal(
+    fs.readFileSync(leasePath, 'utf8'),
+    leaseAtStart,
+    'renewal_interval到達前にrenew_leaseが呼ばれてlease.yamlが書き換わってはならない（busy-loop regression, Issue #546）',
+  );
+
+  // When/Then その2: T0からrenewal_interval（2秒）を十分に超えた3.5秒経過時点（workerはまだ
+  // sleep中で生存）では、renew_leaseが実際に呼ばれてlease.yamlが更新されていること
+  // （busy-loop対策として単純にrenewを止めてしまったわけではないことの確認）。
+  await new Promise((resolve) => setTimeout(resolve, 2700));
+  assert.notEqual(
+    fs.readFileSync(leasePath, 'utf8'),
+    leaseAtStart,
+    'renewal_interval経過後はrenew_leaseが呼ばれてlease.yamlが更新されること',
+  );
+
+  const status = await exitPromise;
+  assert.equal(status, 0);
+  assert.equal(readWorkerReport(repo.dir, 'spec').status, 'completed');
+});
+
+test('claude launch_worker (ISSUE-546 AC-2): workerが終了すればrenewal_intervalの経過を待たずrenewループも速やかに終了する', () => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, false);
+  const workerCmd = [
+    'sleep 0.2',
+    `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: quick worker output")`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+  ].join(' && ');
+  const env = envWithout([], {
+    ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+    WORKER_CMD: workerCmd,
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    // renewal_intervalを大きく取り、修正前の実装が孤児sleepを残す・または起動ラッパー全体が
+    // 誤ってrenewal_interval分待機してしまう回帰が無いことを、実測時間の上限で検証する。
+    WORKER_RENEW_INTERVAL_SEC: '30',
+  });
+
+  const started = Date.now();
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  const elapsedMs = Date.now() - started;
+  repo.cleanup();
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.ok(
+    elapsedMs < 10_000,
+    `renewループがworker終了後もrenewal_interval（30秒）分待機せず速やかに終了すること（実測 ${elapsedMs}ms）`,
+  );
+});
+
 test('worker-launch.sh: 複数issue worktree並存下でmainの絶対パスから起動しても対象worktreeへ再実行し、そのHEADで完了確認する（ISSUE-442 AC-1, AC-2, AC-3, AC-5）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
