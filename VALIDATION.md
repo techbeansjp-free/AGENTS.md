@@ -40,7 +40,7 @@ acceptance_criteria:
       result: pass
     evidence:
       - "test/unit/fs-copy.test.ts: 'detectCaseCollision:true・dryRun:trueでも実書込み無しに同じ衝突検知結果になる'"
-      - "test/integration/sync.test.ts: 'sync templates --dry-run: 大文字小文字衝突は実書込み無しに検知される'"
+      - "test/integration/sync.test.ts: 'sync templates --dry-run: 大文字小文字衝突は実書込み無しに検知される'（result.stderrへ検知結果が表示されることをassert.match(result.stderr, /大文字小文字/)で確認。SPEC.md要件7・AC-5の標準エラー出力契約に一致）"
 
   - ac_id: AC-6
     verification:
