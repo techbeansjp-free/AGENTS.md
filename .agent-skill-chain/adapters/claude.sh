@@ -443,6 +443,33 @@ _dispatch_via_agent_tool() {
     return 1
   fi
 
+  # ASC_WORKER_ADAPTER（worker-launch.sh がworker.segment_overrides.<segment>.adapter →
+  # worker.adapter → 既定humanから解決した値をexport、ISSUE-609）を読み、adapter別に固定
+  # Claude subagentディスパッチ以外の経路へ分岐させる。claude（既定）は既存動作を変更しない
+  # （AC-2、回帰無し）。codexはこの時点で_worker_default_cmdを呼び、失敗（codex CLI不在等）
+  # した場合はフェイルセーフとしてlease解放のうえ即座にエラー返却する——固定Claude subagentへ
+  # 無条件フォールバックすると「設定と実際の実行系が気づかれずに乖離する」という本Issueの
+  # 根本原因を再発させるため（DESIGN.md「障害・ロールバック考慮」）。human・未知値はAgent tool
+  # dispatchがAIによる人間判断の自動代替を行わないための防御的フェイルセーフであり、
+  # human.sh は本来 claude.sh を source しないため通常この分岐へは到達しない（AC-3）。
+  local worker_adapter="${ASC_WORKER_ADAPTER:-claude}"
+  local codex_cmd=""
+  case "$worker_adapter" in
+  claude) ;;
+  codex)
+    if ! codex_cmd="$(_worker_default_cmd "$segment" "$contract")"; then
+      echo "launch_worker: Codex起動コマンドを組み立てられませんでした（codex CLI不在等）。固定Claude subagentへのフォールバックは行いません" >&2
+      release_lease "$issue_id" >/dev/null 2>&1 || true
+      return 1
+    fi
+    ;;
+  *)
+    echo "launch_worker: adapter=${worker_adapter} はAgent tool dispatch経由でAIを自動起動しません（人間判断の自動代替を避けるフェイルセーフ）" >&2
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+    ;;
+  esac
+
   local renew_interval="${WORKER_RENEW_INTERVAL_SEC:-900}"
   local max_wait="${ASC_DISPATCH_MAX_WAIT_SEC:-14400}"
   if [[ ! "$renew_interval" =~ ^[1-9][0-9]*$ || ! "$max_wait" =~ ^[1-9][0-9]*$ ]]; then
@@ -493,6 +520,30 @@ _dispatch_via_agent_tool() {
   local contract_file_quoted dispatch_temp_dir_quoted
   printf -v contract_file_quoted '%q' "$contract_file"
   printf -v dispatch_temp_dir_quoted '%q' "$dispatch_temp_dir"
+
+  if [[ "$worker_adapter" == "codex" ]]; then
+    # _worker_default_cmd（codex.sh版、動的束縛）は元々 stdin（末尾が単独の `-`）または
+    # 位置引数埋め込み（末尾が`</dev/null`、閾値超過時）のいずれかを返す（ISSUE-462）。
+    # stdin形は非dispatch経路ではrole_contract全文をプロセスのstdinへ直接パイプするが、
+    # dispatchではBashツールが実行するコマンド文字列として一度標準出力へ埋め込まれるため、
+    # stdin元をディスク上のcontract_fileへ明示的に差し替える（位置引数埋め込み形は既に
+    # contractを自己完結して含み `</dev/null` で閉じているため変更不要）。
+    if [[ "$codex_cmd" == *" -" ]]; then
+      codex_cmd="${codex_cmd% -} < ${contract_file_quoted}"
+    fi
+    printf '%s\n' \
+      'AGENT_TOOL_DISPATCH_REQUIRED' \
+      'dispatch_mode: bash_direct' \
+      'run_in_background: false' \
+      "prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、次のコマンドをBashツールで直接実行する: ${codex_cmd}" \
+      "完了後に .agent-skill-chain/scripts/worker-launch-verify.sh ${issue_id} ${dispatch_temp_dir_quoted} をBashツールで実行する。" \
+      "ISSUE_ID=${issue_id}" \
+      "DISPATCH_TEMP_DIR=${dispatch_temp_dir}" \
+      "CONTRACT_SHA256=${contract_sha}" \
+      "CONTRACT_LINES=${contract_lines}" \
+      "CODEX_CMD=${codex_cmd}"
+    return 4
+  fi
 
   printf '%s\n' \
     'AGENT_TOOL_DISPATCH_REQUIRED' \
