@@ -8,6 +8,11 @@ import { gh } from './exec.js';
 
 export interface FreshnessResult {
   status: 'fresh' | 'behind' | 'check_failed' | 'not_applicable';
+  // Issue #615: `gh pr view --json` は base branch側のコミットSHAを返すフィールドを持たない
+  // （`baseRefOid` は存在しない。実際に利用可能な集合は queryPrView() のコメント参照）。
+  // このため base branch の現在のコミットSHAは、`checkFreshness()` が呼ぶ compare API
+  // （`queryCompare()`）の応答（`base_commit.sha`）から取得する。compare呼び出し前に確定して
+  // 返す早期リターン（`not_applicable`／`check_failed`）では取得できないため undefined のまま返す。
   baseSha?: string;
   // Issue #493実装ゲート是正: update-branch等、数値PR番号を要求するREST APIへ対象識別子
   // （PR番号／URL／ブランチのいずれか）をそのまま渡すと不正なパスになるため、`gh pr view`
@@ -140,7 +145,6 @@ interface GhPrViewPayload {
   baseRefName?: string;
   headRefName?: string;
   mergeStateStatus?: string;
-  baseRefOid?: string;
   url?: string;
   isCrossRepository?: boolean;
   // Issue #493実装ゲート3回目是正: `gh pr view --json headRepositoryOwner` の実際の応答は
@@ -151,12 +155,16 @@ interface GhPrViewPayload {
   headRepositoryOwner?: { login: string };
 }
 
+// Issue #615: `gh pr view --json` が実際に受理するフィールド集合には base branch側の
+// コミットSHAを返すものが無い（`baseRefOid` は存在しないフィールドで、指定すると
+// `gh pr view` 自体が非ゼロ終了し以降の全判定が常に `check_failed` になる）。ここで要求する
+// フィールドは全て実際の `gh pr view --json` が受理する集合に含まれるもののみに限定する。
 function queryPrView(root: string, target: string, repo?: string): GhPrViewPayload | undefined {
   const args = ['pr', 'view', target];
   if (repo) args.push('--repo', repo);
   args.push(
     '--json',
-    'number,state,baseRefName,headRefName,mergeStateStatus,baseRefOid,url,isCrossRepository,headRepositoryOwner',
+    'number,state,baseRefName,headRefName,mergeStateStatus,url,isCrossRepository,headRepositoryOwner',
   );
   const result = gh(args, root);
   if (result.status !== 0) return undefined;
@@ -182,6 +190,9 @@ function deriveRepoFromUrl(url: string | undefined): string | undefined {
 interface GhCompareResult {
   status?: string;
   behind_by?: number;
+  // Issue #615: base branchの現在のコミットSHA。`gh pr view --json` には同等フィールドが
+  // 無いため、compareエンドポイントが解決した値をそのままFreshnessResult.baseShaとして使う。
+  base_commit?: { sha?: string };
 }
 
 /** `gh api repos/<repo>/compare/<base>...<head>`（GitHub REST APIのcompareエンドポイント）を呼ぶ。 */
@@ -231,26 +242,28 @@ export function checkFreshness(
     if (!payload) return { status: 'check_failed' };
   }
 
-  const baseSha = payload.baseRefOid;
   const prNumber = typeof payload.number === 'number' ? String(payload.number) : undefined;
   const actualRepo = deriveRepoFromUrl(payload.url);
 
-  if (payload.state !== 'OPEN') return { status: 'not_applicable', baseSha, prNumber, repo: actualRepo };
+  // Issue #615: compare呼び出し前に確定する早期リターンでは、base branchのコミットSHAを
+  // 追加の生存API呼び出し無しに取得する手段が無いため baseSha は付与しない（undefinedのまま）。
+  if (payload.state !== 'OPEN') return { status: 'not_applicable', prNumber, repo: actualRepo };
 
   if (!payload.baseRefName || !payload.headRefName) {
-    return { status: 'check_failed', baseSha, prNumber, repo: actualRepo };
+    return { status: 'check_failed', prNumber, repo: actualRepo };
   }
   if (!actualRepo) {
     // 実際の所属リポジトリを特定できない場合、compareをどのリポジトリに対して呼ぶべきか
     // 安全に決定できないため、これ以上進めず失敗として扱う。
-    return { status: 'check_failed', baseSha, prNumber };
+    return { status: 'check_failed', prNumber };
   }
   const headArg =
     payload.isCrossRepository && payload.headRepositoryOwner?.login
       ? `${payload.headRepositoryOwner.login}:${payload.headRefName}`
       : payload.headRefName;
   const compare = queryCompare(root, actualRepo, payload.baseRefName, headArg);
-  if (!compare) return { status: 'check_failed', baseSha, prNumber, repo: actualRepo };
+  if (!compare) return { status: 'check_failed', prNumber, repo: actualRepo };
+  const baseSha = compare.base_commit?.sha;
   const isBehind = compare.status === 'behind' || (typeof compare.behind_by === 'number' && compare.behind_by > 0);
   if (isBehind) return { status: 'behind', baseSha, prNumber, repo: actualRepo };
   return { status: 'fresh', baseSha, prNumber, repo: actualRepo };

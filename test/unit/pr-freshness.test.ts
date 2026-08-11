@@ -177,6 +177,41 @@ test('checkFreshness: 対象識別子がPR URL（cwdの既定リポジトリと�
   });
 });
 
+// Issue #615: 実際の `gh pr view --json` は `baseRefOid` フィールドを受理せず、指定すると
+// `gh pr view` 自体が非ゼロ終了するため `checkFreshness()` が常に `check_failed` を返していた
+// （gh-stub は実 `gh` CLI と異なり未知フィールドでも常に成功していたため、この既存の単体・結合
+// テストでは検出できなかった）。この反例を、`gh pr view` へ実際に渡されたフィールド一覧
+// （gh-stub の `prViewCalls[].fields`）を直接検査することで固定回帰させる。
+test('checkFreshness: gh pr viewへ渡す--jsonフィールドにbaseRefOid（実gh CLIに存在しないフィールド）を含めない', () => {
+  withGhStub((stub) => {
+    stub.seedPrFreshnessQueue(73, [{ mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0 }]);
+    const result = checkFreshness(process.cwd(), '73', undefined, { allowUnknownBackoff: false });
+    assert.equal(result.status, 'fresh');
+    const state = stub.readState();
+    const viewCalls = (state.prViewCalls ?? []).filter((call) => call.key === '73');
+    assert.ok(viewCalls.length >= 1, 'gh pr viewが呼ばれているはず');
+    for (const call of viewCalls) {
+      assert.ok(
+        !call.fields.includes('baseRefOid'),
+        `gh pr view --json に存在しないフィールド baseRefOid を含めてはならない: ${call.fields.join(',')}`,
+      );
+    }
+  });
+});
+
+// Issue #615: base branchの現在のコミットSHA（FreshnessResult.baseSha）は `gh pr view` の応答
+// ではなく、compare API応答（`base_commit.sha`）から取得することを固定回帰させる。
+test('checkFreshness: baseShaはcompare APIの応答（base_commit.sha）から取得される', () => {
+  withGhStub((stub) => {
+    stub.seedPrFreshnessQueue(74, [
+      { mergeStateStatus: 'CLEAN', compareStatus: 'identical', compareBehindBy: 0, baseRefOid: 'sha-from-compare-74' },
+    ]);
+    const result = checkFreshness(process.cwd(), '74', undefined, { allowUnknownBackoff: false });
+    assert.equal(result.status, 'fresh');
+    assert.equal(result.baseSha, 'sha-from-compare-74');
+  });
+});
+
 test('resolveMergeTarget: 対象識別子（PR番号）がargsの先頭にあれば直接抽出する', () => {
   const result = resolveMergeTarget(['123', '--squash', '--admin'], '/repo');
   assert.equal(result.target, '123');

@@ -391,11 +391,15 @@ if (cmd === 'pr' && sub === 'view') {
     (state.prsByBranch || {})[key] ||
     Object.values(state.prsByBranch || {}).find((candidate) => String(candidate.number) === String(key));
 
-  // Issue #493: pr-freshness.ts の checkFreshness() が問い合わせる mergeStateStatus/baseRefOid。
+  // Issue #493: pr-freshness.ts の checkFreshness() が問い合わせる mergeStateStatus。
   // 事前登録（gh pr create・seedOpenPr）が無いPR番号（例: 既存テストの 'gh pr merge 1' 直接指定）
   // でも、AC-5（既存挙動からの回帰なし）を満たすため既定でfresh相当を返す。テストが
   // seedPrFreshnessQueue() で明示制御した場合はそれを優先する。
-  if (viewFields.includes('mergeStateStatus') || viewFields.includes('baseRefOid')) {
+  // Issue #615: 'baseRefOid' は実際の 'gh pr view --json' には存在しないフィールドのため、本番
+  // コードはもう要求しない（viewFieldsに含まれ得ない）。この分岐条件自体はmergeStateStatusの
+  // 判定だけで足りるが、seedPrFreshnessQueue()経由のentry.baseRefOid（base branchのコミット
+  // SHA、compare API応答のbase_commit.shaとして使う）は引き続きここで解決する。
+  if (viewFields.includes('mergeStateStatus')) {
     const freshnessViewFailure = (state.prViewFailures || {})[key];
     if (freshnessViewFailure) {
       process.stderr.write(freshnessViewFailure);
@@ -441,8 +445,11 @@ if (cmd === 'pr' && sub === 'view') {
       compareStatus = mergeStateStatus === 'BEHIND' ? 'behind' : 'identical';
       compareBehindBy = mergeStateStatus === 'BEHIND' ? 1 : 0;
     }
+    // Issue #615: baseRefOid（seedPrFreshnessQueue()経由でテストが指定するbase branchのコミット
+    // SHA）は 'gh pr view --json' の応答フィールドとしては存在しないため payload には含めず、
+    // 実GitHubのcompare APIが返す base_commit.sha として freshnessCompare 経由でのみ渡す。
     state.freshnessCompare = state.freshnessCompare || {};
-    state.freshnessCompare[resolvedKey] = { compareStatus, compareBehindBy, compareFail };
+    state.freshnessCompare[resolvedKey] = { compareStatus, compareBehindBy, compareFail, baseRefOid };
     saveState(state);
     if (viewFields.includes('number')) payload.number = pr ? pr.number : Number(key);
     if (viewFields.includes('state')) payload.state = prState;
@@ -453,7 +460,6 @@ if (cmd === 'pr' && sub === 'view') {
     if (viewFields.includes('headRefName')) payload.headRefName = pr ? pr.headRefName : 'stub-head-' + resolvedKey;
     if (viewFields.includes('baseRefName')) payload.baseRefName = 'main';
     if (viewFields.includes('mergeStateStatus')) payload.mergeStateStatus = mergeStateStatus;
-    if (viewFields.includes('baseRefOid')) payload.baseRefOid = baseRefOid;
     // Issue #493実装ゲート2回目是正: pr-freshness.ts の checkFreshness() が対象PRの実際の
     // 所属リポジトリを導出するために追加取得する url/isCrossRepository/headRepositoryOwner。
     // 優先順位は (1) 対象識別子自体がPR URLだった場合はそのURLの owner/repo（実ghの挙動）、
@@ -707,7 +713,7 @@ if (cmd === 'api') {
   // Issue #493実装ゲート是正: pr-freshness.ts の checkFreshness() が呼ぶ
   // 'gh api repos/<repo>/compare/<base>...<head>'（GitHub REST APIのcompareエンドポイント）。
   // 実GitHubのcompare APIはブランチ名のみをキーとするが、本スタブは直前の 'gh pr view'
-  // （mergeStateStatus/baseRefOid問い合わせ）が freshnessCompare へ保存した解決結果を、
+  // （mergeStateStatus問い合わせ）が freshnessCompare へ保存した解決結果を、
   // headRef（'gh pr create'/seedOpenPr登録済みブランチ名、または未登録PR向けの
   // 'stub-head-<PR番号>' 規約値のいずれか）から逆引きして返す。
   const compareMatch = /^repos\\/(.+)\\/compare\\/(.+)$/.exec(apiPath || '');
@@ -739,7 +745,12 @@ if (cmd === 'api') {
     }
     const status = resolved.compareStatus !== undefined ? resolved.compareStatus : 'identical';
     const behindBy = typeof resolved.compareBehindBy === 'number' ? resolved.compareBehindBy : 0;
-    process.stdout.write(JSON.stringify({ status, behind_by: behindBy }));
+    // Issue #615: 実GitHubのcompare APIは解決済みbase branchのコミットSHAを base_commit.sha
+    // として返す。checkFreshness() はこれを FreshnessResult.baseSha の唯一の取得源として使う。
+    const baseCommitSha = resolved.baseRefOid || state.defaultBaseRefOid || 'default-base-sha';
+    process.stdout.write(
+      JSON.stringify({ status, behind_by: behindBy, base_commit: { sha: baseCommitSha } }),
+    );
     process.exit(0);
   }
 
@@ -1018,16 +1029,22 @@ export interface GhStubState {
   bodyRaceRemaining?: number;
   bodyRaceSeq?: number;
   // ---- Issue #493 pr merge base freshness 検証用 ----
-  /** PR番号ごとの `gh pr view <target> --json ...mergeStateStatus,baseRefOid...` 応答キュー。
+  /** PR番号ごとの `gh pr view <target> --json ...mergeStateStatus...` 応答キュー。
    * 呼び出しのたび先頭から1件ずつ消費し、末尾到達後は最後のエントリを維持する。未設定の場合は
-   * 既定でfresh相当（state: OPEN, mergeStateStatus: CLEAN）を返す（AC-5の回帰防止）。 */
+   * 既定でfresh相当（state: OPEN, mergeStateStatus: CLEAN）を返す（AC-5の回帰防止）。
+   * `baseRefOid`（各エントリの base branch コミットSHA）は Issue #615 是正後、`gh pr view` の
+   * 応答フィールドではなく compare API 応答（`base_commit.sha`）としてのみ経由する。 */
   prFreshnessQueues?: Record<string, GhStubFreshnessEntry[]>;
   prFreshnessCallCounts?: Record<string, number>;
   defaultBaseRefOid?: string;
-  /** Issue #493実装ゲート是正: 直前の `gh pr view`（mergeStateStatus/baseRefOid問い合わせ）が
-   * 解決した `compareStatus`/`compareBehindBy`/`compareFail` を、PR番号（正規化済みキー）ごとに
-   * 引き継ぐ。後続の `gh api .../compare/...` 呼び出しがheadRef経由でこのキーを逆引きして読む。 */
-  freshnessCompare?: Record<string, { compareStatus?: string; compareBehindBy?: number; compareFail?: boolean }>;
+  /** Issue #493実装ゲート是正: 直前の `gh pr view`（mergeStateStatus問い合わせ）が解決した
+   * `compareStatus`/`compareBehindBy`/`compareFail`/`baseRefOid`（Issue #615: compare API応答の
+   * `base_commit.sha`として使う）を、PR番号（正規化済みキー）ごとに引き継ぐ。後続の
+   * `gh api .../compare/...` 呼び出しがheadRef経由でこのキーを逆引きして読む。 */
+  freshnessCompare?: Record<
+    string,
+    { compareStatus?: string; compareBehindBy?: number; compareFail?: boolean; baseRefOid?: string }
+  >;
   /** `resolveMergeTarget()` のcwdベース暗黙解決フォールバック（'gh pr view --json number'）を
    * 強制失敗させる。 */
   failImplicitPrResolution?: boolean;
