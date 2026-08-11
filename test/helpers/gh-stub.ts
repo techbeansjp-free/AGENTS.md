@@ -79,6 +79,35 @@ function applyMergedBumpPrToMain(head) {
   git(['push', 'origin', 'main']);
 }
 
+// ISSUE-619 design-gate再通過分: root-cleanup run自身が作成したクリーンアップPR
+// （chore/root-cleanup-*）のadmin mergeをシミュレートする際は、実GitHubのsquash merge同様に
+// origin側のbase branch参照そのものを前進させる（ローカルのworking tree/チェックアウトには
+// 一切触れない、applyMergedBumpPrToMainとは異なりcheckout/mergeをローカルで行わない）。
+// root-cleanup run自身のsyncBaseBranchAfterAdminMergeがその後のgit fetch + merge --ff-onlyで
+// ローカルへ反映することを、実git remoteに対して検証可能にするための最小シミュレーション。
+const ROOT_CLEANUP_BRANCH_RE = /^chore\\/root-cleanup-[0-9]{8}T[0-9]{6}Z$/;
+function applyRootCleanupMergeToOriginBase(head, base) {
+  let remoteDir;
+  try {
+    remoteDir = childProcess.execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: process.cwd(), encoding: 'utf8' }).trim();
+  } catch {
+    return;
+  }
+  let headSha;
+  try {
+    headSha = childProcess
+      .execFileSync('git', ['rev-parse', 'refs/remotes/origin/' + head], { cwd: process.cwd(), encoding: 'utf8' })
+      .trim();
+  } catch {
+    return;
+  }
+  try {
+    childProcess.execFileSync('git', ['--git-dir', remoteDir, 'update-ref', 'refs/heads/' + base, headSha], { stdio: 'pipe' });
+  } catch {
+    // best-effortシミュレーションのため、失敗してもadmin merge自体の応答は変えない
+  }
+}
+
 const [cmd, sub] = args;
 
 if (cmd === 'auth' && sub === 'status') {
@@ -217,6 +246,9 @@ if (cmd === 'pr' && sub === 'create') {
       number,
       state: 'OPEN',
       headRefName: head,
+      // ISSUE-619 design-gate再通過分: applyRootCleanupMergeToOriginBaseがadmin merge時に
+      // どのbase branchを前進させるかを解決するために保持する。
+      baseRefName: flag('--base') || 'main',
       // additions/deletions は root-cleanup run のスコープ検査（削除のみで構成されているか）が
       // 参照する。既定は「削除のみ」（additions:0）とし、release bump 側は現状これらの値を
       // 見ないため既定値のままで従来どおり動作する。
@@ -486,13 +518,18 @@ if (cmd === 'pr' && sub === 'merge') {
     process.exit(1);
   }
   let mergedHead;
+  let mergedBase;
   for (const key of Object.keys(state.prsByBranch || {})) {
     if (String(state.prsByBranch[key].number) === String(number)) {
       state.prsByBranch[key].state = 'MERGED';
       mergedHead = key;
+      mergedBase = state.prsByBranch[key].baseRefName;
     }
   }
   if (state.applyMergedPrToMain && mergedHead) applyMergedBumpPrToMain(mergedHead);
+  if (mergedHead && ROOT_CLEANUP_BRANCH_RE.test(mergedHead)) {
+    applyRootCleanupMergeToOriginBase(mergedHead, mergedBase || 'main');
+  }
   saveState(state);
   process.stdout.write('https://github.com/test/repo/pull/' + number + '\\n');
   process.exit(0);
@@ -882,6 +919,9 @@ export interface GhStubBumpPr {
   reviews?: unknown[];
   comments?: unknown[];
   mergeStateStatus?: string;
+  /** ISSUE-619 design-gate再通過分: applyRootCleanupMergeToOriginBaseがadmin merge時に
+   * どのbase branchを前進させるかを解決するために保持する。 */
+  baseRefName?: string;
 }
 
 /** Issue #493: `checkFreshness()` の `gh pr view` 問い合わせ1回ぶんの応答を制御するエントリ。

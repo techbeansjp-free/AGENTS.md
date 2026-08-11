@@ -120,9 +120,12 @@ test('root-cleanup run: 対象ファイルが1件以上のとき、該当ファ�
   assert.equal(currentBranch(repo.dir), 'main', '完了後、mainへ戻っていること（一時ブランチのまま取り残されないこと）');
 
   // Then（該当ファイルのみ削除される。PLAN.md/VALIDATION.mdは元々存在しないため対象外）。
-  // ISSUE-619の復元によりローカルのチェックアウトはmain（削除前の状態）へ戻るため、削除自体の
-  // 検証はpushされた一時ブランチの内容（実際にgit rmしてcommitした対象）で行う。
+  // ISSUE-619 design-gate再通過分（syncBaseBranchAfterAdminMerge）: admin merge成功後、現在の
+  // チェックアウトがbase（main）と一致するため、ローカルmainがadmin merge結果へfast-forward
+  // 追従し、repo.dir直下からも削除対象ファイルが直接確認できるようになる。
   assert.equal(fs.existsSync(path.join(repo.dir, 'UNRELATED.md')), true, '無関係なファイルは削除されないこと');
+  assert.equal(fs.existsSync(path.join(repo.dir, 'SPEC.md')), false, 'admin merge後のfast-forward追従によりSPEC.mdもrepo.dir直下から消えていること');
+  assert.equal(fs.existsSync(path.join(repo.dir, 'DESIGN.md')), false, 'admin merge後のfast-forward追従によりDESIGN.mdもrepo.dir直下から消えていること');
 
   // Then: 短命ブランチ chore/root-cleanup-* がheadとしてPR作成され、mainへpushされていること
   const prCalls = stub.readState().prCreateCalls ?? [];
@@ -156,14 +159,16 @@ test('root-cleanup run: 対象4ファイルすべてが存在する場合はす�
   const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
   assert.equal(result.status, 0, result.stderr);
 
-  // ISSUE-619の復元によりローカルのチェックアウトはmain（削除前の状態）へ戻るため、削除自体の
-  // 検証はpushされた一時ブランチの内容で行う。
+  // ISSUE-619 design-gate再通過分（syncBaseBranchAfterAdminMerge）: admin merge成功後、
+  // ローカルmainがfast-forward追従するため、pushされた一時ブランチの内容に加え、
+  // repo.dir直下（mainチェックアウト中のworktree自体）でも直接削除を確認できる。
   const prCalls = stub.readState().prCreateCalls ?? [];
   assert.equal(prCalls.length, 1);
   const headBranch = extractHeadBranch(prCalls[0].args);
   assert.ok(headBranch);
   for (const file of ['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md']) {
     assert.equal(remoteBranchHasFile(repo.remoteDir, headBranch!, file), false, `${file} が削除されていること`);
+    assert.equal(fs.existsSync(path.join(repo.dir, file)), false, `${file} がrepo.dir直下からも削除されていること`);
   }
 });
 
@@ -398,6 +403,36 @@ test('root-cleanup run (ISSUE-619 AC-2): main以外のブランチをチェッ�
   // ISSUE-619の復元によりローカルのチェックアウトはfeature/other-branch（削除前の状態）へ戻るため、
   // 削除自体の検証はpushされた一時ブランチの内容で行う。
   assert.equal(remoteBranchHasFile(repo.remoteDir, headBranch!, 'SPEC.md'), false, 'pushされた一時ブランチではSPEC.mdが削除されていること');
+});
+
+// ---- ISSUE-619 design-gate再通過分（PLAN #16）: syncBaseBranchAfterAdminMerge の非適用確認 ----
+
+test('root-cleanup run (design-gate再通過, PLAN #16): baseと異なるブランチをチェックアウト中は、admin merge成功後もfetch/ff-only同期を試みない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  git(repo.dir, ['checkout', '-b', 'feature/other-branch']);
+  git(repo.dir, ['push', '-u', 'origin', 'feature/other-branch']);
+  writeStrayArtifacts(repo.dir, ['SPEC.md']);
+  stub.setDefaultPrFiles(['SPEC.md']);
+  assert.equal(currentBranch(repo.dir), 'feature/other-branch');
+
+  const localMainShaBefore = git(repo.dir, ['rev-parse', 'refs/heads/main']);
+  const featureBranchShaBefore = git(repo.dir, ['rev-parse', 'HEAD']);
+
+  const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(currentBranch(repo.dir), 'feature/other-branch', '完了後、実行前と同じブランチへ戻っていること（sync対象外のため復元先のまま）');
+
+  // Then: 現在のチェックアウト（feature/other-branch）はbase（main）と一致しないため
+  // syncBaseBranchAfterAdminMergeは何もしない。ローカルmain参照・feature/other-branch自体の
+  // 内容・commit履歴はrun前後で一切変化しない。
+  const localMainShaAfter = git(repo.dir, ['rev-parse', 'refs/heads/main']);
+  assert.equal(localMainShaAfter, localMainShaBefore, 'ローカルmain参照はfast-forward追従されないこと（現在のチェックアウトがbaseと不一致のため）');
+  const featureBranchShaAfter = git(repo.dir, ['rev-parse', 'HEAD']);
+  assert.equal(featureBranchShaAfter, featureBranchShaBefore, 'feature/other-branch自体のcommit履歴は変化しないこと');
 });
 
 test('root-cleanup run (ISSUE-619 AC-5): commit・push成功後にPR作成が失敗した場合も、エラー終了しつつチェックアウト状態が実行前へ戻る', async (t) => {
