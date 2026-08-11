@@ -1437,6 +1437,56 @@ test('verify adr (AC-8): adr finalize CLI経由の正規accepted化commitは手�
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('verify adr: finalize経由でacceptedになった後にファイル名とidを変更（git mv）しても手順逸脱として誤検知しない（ISSUE-539）', async (t) => {
+  const { repo, worktreePath, adrRelPath } = setupCommittedProposedAdr();
+  t.after(() => repo.cleanup());
+
+  // Given: AC-8と同一の正規finalize経路でacceptedへ遷移させる。
+  const adrAbsPath = path.join(worktreePath, adrRelPath);
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'design', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const reportPathMatch = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout);
+  assert.ok(reportPathMatch);
+  const reportPath = reportPathMatch![1];
+
+  const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+    gate: {
+      conformance: string;
+      falsification: string;
+      final: string;
+      approved_artifacts: { path: string; digest: string }[];
+    };
+  };
+  report.gate.approved_artifacts.push({ path: adrRelPath, digest: sha256(fs.readFileSync(adrAbsPath)) });
+  report.gate.conformance = 'pass';
+  report.gate.falsification = 'pass';
+  report.gate.final = 'approved';
+  fs.writeFileSync(reportPath, stringify(report), 'utf8');
+
+  const gatePublish = runCli(['gate', 'publish', 'ISSUE-1', reportPath], { cwd: repo.dir });
+  assert.equal(gatePublish.status, 0, gatePublish.stderr);
+
+  const finalize = runCli(['adr', 'finalize', 'ISSUE-1', 'ADR-0001'], { cwd: repo.dir });
+  assert.equal(finalize.status, 0, finalize.stderr);
+
+  // Given: accepted化後、ID重複是正のような一度限りの機械的補正として、statusは変更せず
+  // ファイル名とframtmatterのid:のみを別commitでgit mvする（ISSUE-539の再採番と同型）。
+  const renamedRelPath = path.join('docs', 'adr', 'ADR-0099-sample.md');
+  const renamedAbsPath = path.join(worktreePath, renamedRelPath);
+  const renamedText = fs.readFileSync(adrAbsPath, 'utf8').replace('id: ADR-0001', 'id: ADR-0099');
+  gitIn(worktreePath, ['mv', adrRelPath, renamedRelPath]);
+  fs.writeFileSync(renamedAbsPath, renamedText);
+  gitIn(worktreePath, ['add', renamedRelPath]);
+  gitIn(worktreePath, ['commit', '-m', 'chore: ADR-0001をADR-0099へ再採番']);
+
+  // When: リネーム後のパスで verify adr を実行する
+  const result = runCli(['verify', 'adr', renamedRelPath], { cwd: worktreePath });
+
+  // Then: リネーム前のfinalize commitが遷移commitとして正しく追跡され、手順逸脱として誤検知されない
+  // （リネームで現在のパスと異なる過去のファイルパスでも `git show` の内容取得に失敗しない）。
+  assert.equal(result.status, 0, result.stderr);
+});
+
 // ---- verify spec-bdd（Issue #273） ----
 
 function specBddFixture(overrides: { given?: string; when?: string; then?: string; verification?: string; summary?: string } = {}): string {

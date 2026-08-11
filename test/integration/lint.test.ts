@@ -1453,6 +1453,42 @@ test('lint adr check: supersedes/superseded-byの非対称は違反として検�
   assert.equal(symmetric.status, 0, symmetric.stderr);
 });
 
+test('lint adr check: 同一idを持つ複数ファイルは違反として検出され、重複を解消すると違反なしになる', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  // Given: 自作の docs/adr/ に、同一 id: ADR-0001 を持つファイルを2つ作る（supersedes/superseded-by は
+  // 空・null のまま、非対称検査とは独立に重複検出だけを問う）。
+  const adrDir = path.join(repo.dir, 'docs', 'adr');
+  fs.mkdirSync(adrDir, { recursive: true });
+  const dup1Path = path.join(adrDir, 'ADR-0001-a.md');
+  const dup2Path = path.join(adrDir, 'ADR-0001-b.md');
+  const adrText = (id: string) =>
+    ['# ADR', '', '```yaml', `id: ${id}`, 'status: accepted', 'supersedes: []', 'superseded-by: null', '```', ''].join(
+      '\n',
+    );
+  fs.writeFileSync(dup1Path, adrText('ADR-0001'));
+  fs.writeFileSync(dup2Path, adrText('ADR-0001'));
+
+  // When: 重複したidの状態で lint adr check を実行する
+  const duplicated = runCli(['lint', 'adr', 'check'], { cwd: repo.dir });
+
+  // Then: 終了コード1、重複ADR IDと該当ファイル名2件がエラー出力に含まれる
+  assert.equal(duplicated.status, 1);
+  assert.match(duplicated.stderr, /重複ADR ID 'ADR-0001'/);
+  assert.match(duplicated.stderr, /ADR-0001-a\.md/);
+  assert.match(duplicated.stderr, /ADR-0001-b\.md/);
+
+  // Given: 片方のファイルのidを一意な値へ変更し、重複を解消する
+  fs.writeFileSync(dup2Path, adrText('ADR-0002'));
+
+  // When: 重複解消後に再度 lint adr check を実行する
+  const resolved = runCli(['lint', 'adr', 'check'], { cwd: repo.dir });
+
+  // Then: 違反なしで終了コード0
+  assert.equal(resolved.status, 0, resolved.stderr);
+});
+
 test('lint adr check: check以外のサブコマンドはエラーになる', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

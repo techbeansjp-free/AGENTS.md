@@ -28,16 +28,59 @@ export function parseAdrFrontmatter(text: string): AdrFrontmatter | undefined {
   return { id, status, supersedes, 'superseded-by': supersededBy };
 }
 
-/** `docs/adr/` 配下の全ADRファイルをid索引のMapとして読み込む。ディレクトリが無ければ空Map。 */
-export function collectAdrRecords(root: string): Map<string, AdrFrontmatter> {
+/** `docs/adr/` 配下のADR1件分のfrontmatterと、それを読み取ったファイル名の組。 */
+export interface AdrFileRecord {
+  file: string;
+  frontmatter: AdrFrontmatter;
+}
+
+/**
+ * `docs/adr/` 配下の全ADRファイルを、id での重複排除をせずに列挙する。ディレクトリが無ければ空配列。
+ * `checkAdrIdUniqueness()` の入力として使う（`collectAdrRecords()` の `Map` は id 重複時に後勝ちで
+ * 上書きし重複自体を握りつぶすため、重複検出には使えない）。
+ */
+export function collectAdrFileRecords(root: string): AdrFileRecord[] {
   const adrDir = path.join(root, 'docs', 'adr');
   const files = fs.existsSync(adrDir) ? fs.readdirSync(adrDir).filter((f) => f.endsWith('.md')) : [];
-  const byId = new Map<string, AdrFrontmatter>();
+  const records: AdrFileRecord[] = [];
   for (const file of files) {
-    const fm = parseAdrFrontmatter(fs.readFileSync(path.join(adrDir, file), 'utf8'));
-    if (fm) byId.set(fm.id, fm);
+    const frontmatter = parseAdrFrontmatter(fs.readFileSync(path.join(adrDir, file), 'utf8'));
+    if (frontmatter) records.push({ file, frontmatter });
+  }
+  return records;
+}
+
+/** `docs/adr/` 配下の全ADRファイルをid索引のMapとして読み込む。ディレクトリが無ければ空Map。 */
+export function collectAdrRecords(root: string): Map<string, AdrFrontmatter> {
+  const byId = new Map<string, AdrFrontmatter>();
+  for (const { frontmatter } of collectAdrFileRecords(root)) {
+    byId.set(frontmatter.id, frontmatter);
   }
   return byId;
+}
+
+/**
+ * `docs/adr/` 配下で同一 `id:` を持つファイルが2件以上存在する場合、id ごとに1件の違反メッセージを
+ * 生成する（`重複ADR ID '<id>': <file1>, <file2>, ...` 形式）。`checkAdrSymmetry()` とは独立に、
+ * `lint adr check` の出力配列へ結合される。
+ */
+export function checkAdrIdUniqueness(records: AdrFileRecord[]): string[] {
+  const filesById = new Map<string, string[]>();
+  for (const { file, frontmatter } of records) {
+    const files = filesById.get(frontmatter.id);
+    if (files) {
+      files.push(file);
+    } else {
+      filesById.set(frontmatter.id, [file]);
+    }
+  }
+  const violations: string[] = [];
+  for (const [id, files] of filesById) {
+    if (files.length > 1) {
+      violations.push(`重複ADR ID '${id}': ${files.join(', ')}`);
+    }
+  }
+  return violations;
 }
 
 /**
