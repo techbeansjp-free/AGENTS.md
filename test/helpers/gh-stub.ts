@@ -617,11 +617,16 @@ if (cmd === 'api') {
   }
 
   if (apiPath === 'repos/{owner}/{repo}' && method === 'GET') {
-    process.stdout.write(JSON.stringify({
+    const repository = {
       id: state.repositoryId || 77,
       full_name: state.repositoryFullName || 'test/repo',
       default_branch: state.defaultBranch || 'main',
-    }));
+    };
+    if (flag('--jq') === '.default_branch') {
+      process.stdout.write(repository.default_branch + '\\n');
+    } else {
+      process.stdout.write(JSON.stringify(repository));
+    }
     process.exit(0);
   }
 
@@ -784,7 +789,12 @@ if (cmd === 'api') {
 
   const pullMatch = /\\/pulls\\/(\\d+)$/.exec(apiPath || '');
   if (pullMatch && method === 'GET') {
-    process.stdout.write(JSON.stringify(state.pullMetadata || {}));
+    const pull = state.pullMetadata || {};
+    if (flag('--jq') === '.base.ref + " " + .base.sha + " " + .head.sha') {
+      process.stdout.write([pull.base && pull.base.ref, pull.base && pull.base.sha, pull.head && pull.head.sha].join(' ') + '\\n');
+    } else {
+      process.stdout.write(JSON.stringify(pull));
+    }
     process.exit(0);
   }
 
