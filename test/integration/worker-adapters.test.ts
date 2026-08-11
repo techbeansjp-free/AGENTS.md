@@ -163,11 +163,13 @@ function installCodexDispatchStub(t: { after(fn: () => void): void }): {
   stubDir: string;
   argvCapturePath: string;
   stdinCapturePath: string;
+  cwdCapturePath: string;
 } {
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-codex-dispatch-stub-'));
   t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
   const argvCapturePath = path.join(stubDir, 'argv.txt');
   const stdinCapturePath = path.join(stubDir, 'stdin.txt');
+  const cwdCapturePath = path.join(stubDir, 'cwd.txt');
   const codexStub = path.join(stubDir, 'codex');
   fs.writeFileSync(
     codexStub,
@@ -175,12 +177,13 @@ function installCodexDispatchStub(t: { after(fn: () => void): void }): {
       '#!/usr/bin/env bash',
       `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
       `cat > ${JSON.stringify(stdinCapturePath)}`,
+      `pwd -P > ${JSON.stringify(cwdCapturePath)}`,
       'exit 0',
       '',
     ].join('\n'),
     { mode: 0o755 },
   );
-  return { stubDir, argvCapturePath, stdinCapturePath };
+  return { stubDir, argvCapturePath, stdinCapturePath, cwdCapturePath };
 }
 
 /**
@@ -358,13 +361,13 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定
   assert.equal(reacquire.status, 0, 'verifyがleaseを解放済みであること: ' + reacquire.stderr);
 });
 
-test('Agent tool dispatch (ISSUE-609 AC-1): adapter: codexのセグメントはsubagent_typeへ委譲せず、Codexコマンドの直接実行指示をexit 4で返し、実行すると実際にCodex（設定model・reasoning effort）が起動する', async (t) => {
+test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1): Codexコマンドは対象worktreeへのcdから始まり、別cwdから実行しても対象worktree内でCodexを起動する', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerSegmentOverride(repo.dir, 'spec', { adapter: 'codex' });
   setWorkerAgentToolDispatch(repo.dir, true);
 
-  const { stubDir, argvCapturePath } = installCodexDispatchStub(t);
+  const { stubDir, argvCapturePath, cwdCapturePath } = installCodexDispatchStub(t);
   const env = envWithout(['CLAUDECODE'], {
     ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
     ASC_DISPATCH_MAX_WAIT_SEC: '60',
@@ -388,7 +391,13 @@ test('Agent tool dispatch (ISSUE-609 AC-1): adapter: codexのセグメントはs
   const codexCmd = /^CODEX_CMD=(.+)$/m.exec(result.stdout)?.[1];
   assert.ok(dispatchTempDir);
   assert.ok(codexCmd, 'Codexコマンドの直接実行指示が出力に含まれること');
-  assert.match(codexCmd!, /codex exec/, 'codex execコマンドを指すこと');
+  assert.match(codexCmd!, /^cd \/.* && codex exec/, '絶対パスの対象worktreeへのcdから始まること');
+  assert.ok(
+    result.stdout.includes(
+      `prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、次のコマンドをBashツールで直接実行する: ${codexCmd}`,
+    ),
+    'promptにもCODEX_CMDと同じworktree固定済みコマンドを含むこと',
+  );
   assert.match(codexCmd!, /-m "gpt-5\.6"/, 'ティア未指定spec segmentは従来のフォールバックモデルを反映すること');
   assert.match(
     codexCmd!,
@@ -412,10 +421,16 @@ test('Agent tool dispatch (ISSUE-609 AC-1): adapter: codexのセグメントはs
 
   // When: 進行役が指示どおりCodexコマンドをBashツールで直接実行する（stubDirを含むPATHを明示的に
   // 引き継ぎ、PATH上の実codex CLIへ誤って到達しないようにする）。
-  execFileSync('bash', ['-c', codexCmd!], { cwd: worktreePath, encoding: 'utf8', env });
+  execFileSync('bash', ['-c', codexCmd!], { cwd: repo.dir, encoding: 'utf8', env });
 
-  // Then: 実際にCodex（stub）が起動され、渡されたcontractがそのstdin経由で届いている。
+  // Then: main worktree相当の別cwdから実行してもCodex（stub）は対象Issue worktree内で起動され、
+  // 渡されたcontractがそのstdin経由で届いている。
   assert.ok(fs.existsSync(argvCapturePath), 'adapter: codexのdispatch指示を実行するとCodex実行系が起動すること');
+  assert.equal(
+    fs.readFileSync(cwdCapturePath, 'utf8').trim(),
+    fs.realpathSync(worktreePath),
+    'Codex実行時のcwdが対象Issue worktreeに固定されること',
+  );
 
   // 実際のAI worker（Codex）はcontract本文だけを頼りに完了確認まで自律的に行うが、ここではその
   // 振る舞いを模して呼び出し側がcheckpoint+report completedを代行する（既存のISSUE-448 AC-1/AC-4/
