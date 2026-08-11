@@ -39,31 +39,31 @@ lint.ts adr() → adr-consistency.ts collectAdrRecords(records) → checkAdrSymm
 
 ## 既存重複7ファイルの再採番マッピング
 
-`docs/adr/` の現存する最大番号は `ADR-0047`（`ADR-0047-dependabot-yml-removal-from-distribution-template.md`）。重複7ファイルを、未使用の `ADR-0048`〜`ADR-0054` へ、以下の対応で再採番する（採番順序はファイル名のアルファベット順、恣意的な優劣判断を避けるため重複グループ内の全ファイルを対象とする）。
+`docs/adr/` の現存する最大番号は `ADR-0047`（`ADR-0047-dependabot-yml-removal-from-distribution-template.md`）。重複7ファイルを、未使用の `ADR-0049`〜`ADR-0055` へ、以下の対応で再採番する（採番順序はファイル名のアルファベット順、恣意的な優劣判断を避けるため重複グループ内の全ファイルを対象とする）。
 
 | 現ファイル名 | 現 `id:` | 現 `status:` | 新ファイル名 | 新 `id:` |
 |---|---|---|---|---|
-| `ADR-0008-npm-package-asset-allowlist.md` | `ADR-0008` | `proposed` | `ADR-0048-npm-package-asset-allowlist.md` | `ADR-0048` |
-| `ADR-0008-test-execution-log-preservation.md` | `ADR-0008` | `proposed` | `ADR-0049-test-execution-log-preservation.md` | `ADR-0049` |
-| `ADR-0016-codex-exec-unsupported-flag-as-config-override.md` | `ADR-0016` | `accepted` | `ADR-0050-codex-exec-unsupported-flag-as-config-override.md` | `ADR-0050` |
-| `ADR-0016-reconcile-workflow-run-trust-boundary.md` | `ADR-0016` | `accepted` | `ADR-0051-reconcile-workflow-run-trust-boundary.md` | `ADR-0051` |
-| `ADR-0016-worktree-cleanup-detection-over-merge-chaining.md` | `ADR-0016` | `proposed` | `ADR-0052-worktree-cleanup-detection-over-merge-chaining.md` | `ADR-0052` |
-| `ADR-0039-pr-merge-freshness-check-mergestatestatus-optin-update.md` | `ADR-0039` | `proposed` | `ADR-0053-pr-merge-freshness-check-mergestatestatus-optin-update.md` | `ADR-0053` |
-| `ADR-0039-upgrade-stale-file-ownership-record.md` | `ADR-0039` | `proposed` | `ADR-0054-upgrade-stale-file-ownership-record.md` | `ADR-0054` |
+| `ADR-0008-npm-package-asset-allowlist.md` | `ADR-0008` | `proposed` | `ADR-0049-npm-package-asset-allowlist.md` | `ADR-0049` |
+| `ADR-0008-test-execution-log-preservation.md` | `ADR-0008` | `proposed` | `ADR-0050-test-execution-log-preservation.md` | `ADR-0050` |
+| `ADR-0016-codex-exec-unsupported-flag-as-config-override.md` | `ADR-0016` | `accepted` | `ADR-0051-codex-exec-unsupported-flag-as-config-override.md` | `ADR-0051` |
+| `ADR-0016-reconcile-workflow-run-trust-boundary.md` | `ADR-0016` | `accepted` | `ADR-0052-reconcile-workflow-run-trust-boundary.md` | `ADR-0052` |
+| `ADR-0016-worktree-cleanup-detection-over-merge-chaining.md` | `ADR-0016` | `proposed` | `ADR-0053-worktree-cleanup-detection-over-merge-chaining.md` | `ADR-0053` |
+| `ADR-0039-pr-merge-freshness-check-mergestatestatus-optin-update.md` | `ADR-0039` | `proposed` | `ADR-0054-pr-merge-freshness-check-mergestatestatus-optin-update.md` | `ADR-0054` |
+| `ADR-0039-upgrade-stale-file-ownership-record.md` | `ADR-0039` | `proposed` | `ADR-0055-upgrade-stale-file-ownership-record.md` | `ADR-0055` |
 
-各ファイルの再採番は、frontmatter内の `id:` フィールドと、ファイル名中のADR番号の両方を新番号へ揃える（ファイル本文中の見出し・自然文言及に旧番号があれば同時に更新するが、対象7ファイルの本文中に自己参照的な番号表記が無いことを実装時に確認する）。`accepted` の2件（新 `ADR-0050`・`ADR-0051`）についても、`id` は「accepted 後不変」の対象だが、本再採番は通常の内容変更ではなく既存の重複という不整合状態そのものを是正する一度限りの機械的補正であり、ADR自体（本Issueで新規作成する `ADR-0055`）がこの補正の決定・根拠を記録する。
+各ファイルの再採番は、frontmatter内の `id:` フィールドと、ファイル名中のADR番号の両方を新番号へ揃える（ファイル本文中の見出し・自然文言及に旧番号があれば同時に更新するが、対象7ファイルの本文中に自己参照的な番号表記が無いことを実装時に確認する）。`accepted` の2件（新 `ADR-0051`・`ADR-0052`）についても、`id` は「accepted 後不変」の対象だが、本再採番は通常の内容変更ではなく既存の重複という不整合状態そのものを是正する一度限りの機械的補正であり、ADR自体（本Issueで新規作成する `ADR-0056`）がこの補正の決定・根拠を記録する。
 
 ## 参照影響調査
 
 再採番対象7ファイル間、および他ADRの `related_adrs:`（構造化フィールド）から対象7ファイルの `id` への参照は、リポジトリ全体を走査した結果0件だった（対象7ファイル自身の `supersedes`/`superseded-by` もすべて空/`null`）。したがって構造化参照の断線は発生しない。
 
-一方、`docs/adr/` 内の自然文および `docs/` 配下のバレテキストで、ADR番号を直接記載している箇所が4件見つかった。いずれも `ADR-0016-reconcile-workflow-run-trust-boundary.md`（新 `ADR-0051`）のDecision節が言及する `dedicated_app`/`required_workflow` enforcement backend の説明を指しており（他の2つの `ADR-0016` ファイルにはこの語が出現しない）、再採番後は `ADR-0051` へ更新する。
+一方、`docs/adr/` 内の自然文および `docs/` 配下のバレテキストで、ADR番号を直接記載している箇所が4件見つかった。いずれも `ADR-0016-reconcile-workflow-run-trust-boundary.md`（新 `ADR-0052`）のDecision節が言及する `dedicated_app`/`required_workflow` enforcement backend の説明を指しており（他の2つの `ADR-0016` ファイルにはこの語が出現しない）、再採番後は `ADR-0052` へ更新する。
 
 | ファイル | 現在の記載 | 更新後 |
 |---|---|---|
-| `docs/adr/ADR-0044-ruleset-template-drift-and-dedicated-app-binding-condition.md`（Consequences節、2箇所） | `ADR-0016のDecision節が言及するdedicated_app backend` | `ADR-0051のDecision節が言及するdedicated_app backend` |
-| `docs/adr/ADR-0044-ruleset-template-drift-and-dedicated-app-binding-condition.md`（対象外節、1箇所） | `ADR-0016が言及するdedicated_app/required_workflowbackend` | `ADR-0051が言及するdedicated_app/required_workflowbackend` |
-| `docs/ASC_GATE_APP_ID_RUNBOOK.md` | `ADR-0016が言及する dedicated_app/required_workflow backend` | `ADR-0051が言及する dedicated_app/required_workflow backend` |
+| `docs/adr/ADR-0044-ruleset-template-drift-and-dedicated-app-binding-condition.md`（Consequences節、2箇所） | `ADR-0016のDecision節が言及するdedicated_app backend` | `ADR-0052のDecision節が言及するdedicated_app backend` |
+| `docs/adr/ADR-0044-ruleset-template-drift-and-dedicated-app-binding-condition.md`（対象外節、1箇所） | `ADR-0016が言及するdedicated_app/required_workflowbackend` | `ADR-0052が言及するdedicated_app/required_workflowbackend` |
+| `docs/ASC_GATE_APP_ID_RUNBOOK.md` | `ADR-0016が言及する dedicated_app/required_workflow backend` | `ADR-0052が言及する dedicated_app/required_workflow backend` |
 
 `src/`・`.agent-skill-chain/`（`// Issue #123` 形式のコメントを除く）配下には `ADR-0016`・`ADR-0008`・`ADR-0039` へのハードコード参照は存在しない（実装時に同一のgrep条件で再確認し、AC-4の検証手順に含める）。
 
@@ -71,21 +71,21 @@ lint.ts adr() → adr-consistency.ts collectAdrRecords(records) → checkAdrSymm
 
 ```yaml
 related_adrs:
-  - id: ADR-0055
+  - id: ADR-0056
     relation: adopts
 ```
 
-`ADR-0055`（本Issueで新規作成、`status: proposed`）は本設計が採用する決定（ID一意性検査の追加方式・既存重複7件の再採番方針）そのものを記録する。他の既存 `accepted` ADR で本設計の判断に直接影響するものは無い（`docs/adr/ADR-0007-stray-root-artifact-post-merge-cleanup.md` は本Issueの重複発生経路とは無関係な別のroot直下成果物クリーンアップの決定であり、参照の対象としない）。`ADR-0055` は `status: proposed` のため、`adr-lint.sh check` の stale参照検査（`accepted` の ADR のみ許可）が本フィールドを走査対象にした場合は `accepted` 遷移後に整合する（現時点の `collectAdrRecords()`/`checkAdrSymmetry()` は `docs/adr/*.md` のみを走査対象とし `DESIGN.md` の `related_adrs:` は走査対象外であるため、本記載は現状のCIを妨げない）。
+`ADR-0056`（本Issueで新規作成、`status: proposed`）は本設計が採用する決定（ID一意性検査の追加方式・既存重複7件の再採番方針）そのものを記録する。他の既存 `accepted` ADR で本設計の判断に直接影響するものは無い（`docs/adr/ADR-0007-stray-root-artifact-post-merge-cleanup.md` は本Issueの重複発生経路とは無関係な別のroot直下成果物クリーンアップの決定であり、参照の対象としない）。`ADR-0056` は `status: proposed` のため、`adr-lint.sh check` の stale参照検査（`accepted` の ADR のみ許可）が本フィールドを走査対象にした場合は `accepted` 遷移後に整合する（現時点の `collectAdrRecords()`/`checkAdrSymmetry()` は `docs/adr/*.md` のみを走査対象とし `DESIGN.md` の `related_adrs:` は走査対象外であるため、本記載は現状のCIを妨げない）。
 
 ## 検出アルゴリズムの設計判断
 
-`lint adr check` はPRごとのCI（`pull_request` トリガ、`strict_required_status_checks_policy: true` によりマージ前にPRブランチがbaseへ追従済みであることを要求）でのみ実行され、main への push 契機のCIジョブは存在しない（既存踏襲、変更しない）。したがって本検査は「同一PR内で2件以上の重複ADRを追加した場合」と「先行PRがmainへマージ済みの状態にPRブランチが追従した後で後続PRのCIが走る場合」の両方を検出できるが、2つのPRが互いの変更を知らないまま並行してmainへマージされる極めて狭い window（strict policyがbaseへの追従を要求するため、通常はこのwindowは各PRのマージ直前に解消される）は本検査単体では防げない。この残余リスクへの対処（mainへのpush契機の追加検査ジョブ新設、ADR番号の予約制など）は本Issueのスコープ外とし、`ADR-0055`のConsequences節にフォローアップとして記録する。
+`lint adr check` はPRごとのCI（`pull_request` トリガ、`strict_required_status_checks_policy: true` によりマージ前にPRブランチがbaseへ追従済みであることを要求）でのみ実行され、main への push 契機のCIジョブは存在しない（既存踏襲、変更しない）。したがって本検査は「同一PR内で2件以上の重複ADRを追加した場合」と「先行PRがmainへマージ済みの状態にPRブランチが追従した後で後続PRのCIが走る場合」の両方を検出できるが、2つのPRが互いの変更を知らないまま並行してmainへマージされる極めて狭い window（strict policyがbaseへの追従を要求するため、通常はこのwindowは各PRのマージ直前に解消される）は本検査単体では防げない。この残余リスクへの対処（mainへのpush契機の追加検査ジョブ新設、ADR番号の予約制など）は本Issueのスコープ外とし、`ADR-0056`のConsequences節にフォローアップとして記録する。
 
 ## 障害・ロールバック考慮
 
 - 想定される失敗モード:
   - `checkAdrIdUniqueness()` の実装不備により誤検出（false positive）が発生し、重複していない正常な `docs/adr/` に対して `lint adr check` が失敗する。
   - 再採番作業（③実装セグメント）でファイル名変更と `id:` フィールド変更の一方のみを行い、ファイル名とfrontmatterの `id` が不一致になる。
-  - `docs/adr/ADR-0044-...md`・`docs/ASC_GATE_APP_ID_RUNBOOK.md` のバレテキスト参照更新を漏らし、`ADR-0051` へ改名した後も旧番号 `ADR-0016` を指したままになる。
+  - `docs/adr/ADR-0044-...md`・`docs/ASC_GATE_APP_ID_RUNBOOK.md` のバレテキスト参照更新を漏らし、`ADR-0052` へ改名した後も旧番号 `ADR-0016` を指したままになる。
 - ロールバック手順: 本Issueの全変更は単一PR・単一commit群としてsquash mergeされる。問題が判明した場合は当該PRのmergeコミットを `git revert` すれば、`adr-consistency.ts`/`lint.ts` の変更とファイル名・frontmatter変更の両方が一括で巻き戻る（他Issueのファイルには触れないため副作用は無い）。
 - 影響を受ける既存機能: `lint adr check`（CI `adr-lint` ステップ）の挙動のみ。`verify adr <adr_path>`（単一ファイル構造検査）・`adr finalize`（status遷移）・`gate-reconcile.sh`（`approved_artifacts` digest照合）はいずれも `docs/adr/` のファイル一覧やIDの重複検査に依存しておらず、本変更の影響を受けない。

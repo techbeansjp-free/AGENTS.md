@@ -6,7 +6,7 @@
 # ADR
 
 ```yaml
-id: ADR-0055
+id: ADR-0056
 status: proposed
 title: docs/adr/のADR ID一意性をlint adr checkで機械検査し、既存重複7件を再採番する
 tags: [adr, lint, ci, traceability]
@@ -27,13 +27,13 @@ deprecated-reason: null
 
 検出範囲は既存のCI実行契機（PRごと、`strict_required_status_checks_policy: true` によりマージ前にbaseへの追従を要求）に限定し、main への push 契機の新規CIジョブ・ADR番号の中央予約システムは導入しない。理由は次のとおり：(a) 既存の `strict_required_status_checks_policy` により、通常の運用ではPRのマージ直前に最新のmain状態へ追従することが要求されるため、同一番号を持つ2つのPRが互いを知らないまま両方ともマージされる window は実務上小さい、(b) push契機の新規自動化を追加するには `.github/workflows/agent-skill-chain-reconcile.yml` 等の既存パターン（`docs/adr/ADR-0007-stray-root-artifact-post-merge-cleanup.md` が同種の判断で検討・採用したmain post-merge cleanup自動化）と同水準の設計判断（admin bypass要否・トリガ条件の機械検査可能性）を要する重い変更であり、本Issueが解決対象とする「検出されない」という欠陥（受動的な機械検査の欠如）とは別種の「防止する」という欠陥への対処であり、スコープが異なる。
 
-既存の重複7ファイルは、`docs/adr/` の現存最大番号（`ADR-0047`）に続く未使用番号 `ADR-0048`〜`ADR-0054` へ、重複グループ内の全ファイルを対象に再採番する（`DESIGN.md` の対応表）。一部のファイルのみを残し他を採番し直す案は、`accepted`/`proposed` の混在するグループ（`ADR-0016`）でどちらを「正」とするかの恣意的な優劣判断を要するため採用せず、7ファイル全てを新番号へ揃えることで判断基準を単純化する。再採番に伴い、`docs/adr/ADR-0044-...md`・`docs/ASC_GATE_APP_ID_RUNBOOK.md` に存在する `ADR-0016`（`ADR-0016-reconcile-workflow-run-trust-boundary.md` を指すもの、新番号 `ADR-0051`）へのバレテキスト直接参照4件を更新する。対象7ファイル間・他ADRからの構造化参照（`related_adrs:`/`supersedes`/`superseded-by`）はいずれも0件であり、断線しない。
+既存の重複7ファイルは、`docs/adr/` の現存最大番号（`ADR-0047`）に続く未使用番号 `ADR-0049`〜`ADR-0055` へ、重複グループ内の全ファイルを対象に再採番する（`DESIGN.md` の対応表）。一部のファイルのみを残し他を採番し直す案は、`accepted`/`proposed` の混在するグループ（`ADR-0016`）でどちらを「正」とするかの恣意的な優劣判断を要するため採用せず、7ファイル全てを新番号へ揃えることで判断基準を単純化する。再採番に伴い、`docs/adr/ADR-0044-...md`・`docs/ASC_GATE_APP_ID_RUNBOOK.md` に存在する `ADR-0016`（`ADR-0016-reconcile-workflow-run-trust-boundary.md` を指すもの、新番号 `ADR-0052`）へのバレテキスト直接参照4件を更新する。対象7ファイル間・他ADRからの構造化参照（`related_adrs:`/`supersedes`/`superseded-by`）はいずれも0件であり、断線しない。
 
 ## Consequences
 
 - 利点: `docs/adr/` の `id` 一意性が `lint adr check`（CI含む）で機械的に保証される。既存の重複7件が解消され、ADR番号を介した参照・由来提示の対象が一意に定まる。
 - 欠点・フォローアップ: 2つのPRが互いの変更を知らないまま並行してmainへマージされる極めて狭い window（`strict_required_status_checks_policy` により通常は各PRのマージ直前に解消される）は、本決定の検出範囲では防げない残余リスクとして残る。将来この window が実害を伴う頻度で顕在化した場合は、main への push 契機の追加検査ジョブ、またはADR番号の予約制導入を、それぞれ独立したADR＋Issueとして再検討する。
-- `accepted` 状態のADR2件（新 `ADR-0050`・`ADR-0051`）の `id` を変更することは、通常は「accepted 後の不変項目」（`.agent-skill-chain/templates/adr/ADR.md`）への抵触に見えるが、本決定はこれを例外として扱う。対象は「重複という不整合状態そのものの是正」という一度限りの機械的補正であり、Context/Decision/Consequences の実質的な内容変更を一切伴わない。この例外の適用範囲は本ADRが記録する当該7ファイルの再採番作業に限定し、以後の `accepted` ADRの `id` 変更一般を許容するものではない。
+- `accepted` 状態のADR2件（新 `ADR-0051`・`ADR-0052`）の `id` を変更することは、通常は「accepted 後の不変項目」（`.agent-skill-chain/templates/adr/ADR.md`）への抵触に見えるが、本決定はこれを例外として扱う。対象は「重複という不整合状態そのものの是正」という一度限りの機械的補正であり、Context/Decision/Consequences の実質的な内容変更を一切伴わない。この例外の適用範囲は本ADRが記録する当該7ファイルの再採番作業に限定し、以後の `accepted` ADRの `id` 変更一般を許容するものではない。
 
 ---
 
