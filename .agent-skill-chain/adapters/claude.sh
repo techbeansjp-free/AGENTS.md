@@ -453,7 +453,7 @@ _dispatch_via_agent_tool() {
   # dispatchがAIによる人間判断の自動代替を行わないための防御的フェイルセーフであり、
   # human.sh は本来 claude.sh を source しないため通常この分岐へは到達しない（AC-3）。
   local worker_adapter="${ASC_WORKER_ADAPTER:-claude}"
-  local codex_cmd=""
+  local codex_cmd="" codex_worktree_root="" codex_worktree_root_quoted=""
   case "$worker_adapter" in
   claude) ;;
   codex)
@@ -462,6 +462,16 @@ _dispatch_via_agent_tool() {
       release_lease "$issue_id" >/dev/null 2>&1 || true
       return 1
     fi
+    # Issue #647: dispatch指示は後から別cwdで実行されるため、生成時の対象worktreeを
+    # コマンド自体へ固定する。物理絶対パスをshell quoteし、空白等を含むパスも安全に扱う。
+    if ! codex_worktree_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+      ! codex_worktree_root="$(cd -- "$codex_worktree_root" 2>/dev/null && pwd -P)" ||
+      [[ "$codex_worktree_root" != /* ]]; then
+      echo "launch_worker: Codex dispatch対象のworktree rootを絶対パスへ解決できませんでした" >&2
+      release_lease "$issue_id" >/dev/null 2>&1 || true
+      return 1
+    fi
+    printf -v codex_worktree_root_quoted '%q' "$codex_worktree_root"
     ;;
   *)
     echo "launch_worker: adapter=${worker_adapter} はAgent tool dispatch経由でAIを自動起動しません（人間判断の自動代替を避けるフェイルセーフ）" >&2
@@ -531,6 +541,7 @@ _dispatch_via_agent_tool() {
     if [[ "$codex_cmd" == *" -" ]]; then
       codex_cmd="${codex_cmd% -} < ${contract_file_quoted}"
     fi
+    codex_cmd="cd ${codex_worktree_root_quoted} && ${codex_cmd}"
     printf '%s\n' \
       'AGENT_TOOL_DISPATCH_REQUIRED' \
       'dispatch_mode: bash_direct' \
