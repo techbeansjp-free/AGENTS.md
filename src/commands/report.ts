@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { parse, stringify } from 'yaml';
 import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
@@ -33,7 +34,7 @@ target_shaが押し済みHEADと一致するか」を確認するために使う
 完了を騙る場合でもsilent passせず安全側に倒す判定の材料）。
 
 出力:
-  成功時: 終了コード0。status=<completed|blocked>\\ntarget_sha=<sha> を標準出力へ。
+  成功時: 終了コード0。status=<completed|blocked>\\ntarget_sha=<sha>\\ncreated_at=<UTC ISO8601> を標準出力へ。
   失敗時: 終了コード1以上（報告が1件も無い場合を含む）。
 `;
 
@@ -116,9 +117,11 @@ export async function latest(args: string[]): Promise<number> {
     const config = loadConfig(root);
 
     if (config.coordination.backend === 'local') {
-      const report = tryReadYamlFile<WorkerReport>(reportFilePath(root, number, segment));
+      const reportPath = reportFilePath(root, number, segment);
+      const report = tryReadYamlFile<WorkerReport>(reportPath);
       if (!report) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
-      return ok(`status=${report.status}\ntarget_sha=${report.target_sha}`);
+      const createdAt = fs.statSync(reportPath).mtime.toISOString();
+      return ok(`status=${report.status}\ntarget_sha=${report.target_sha}\ncreated_at=${createdAt}`);
     }
 
     const result = gh([`issue`, 'view', number, '--json', 'comments'], root);
@@ -139,6 +142,6 @@ export async function latest(args: string[]): Promise<number> {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const last = reports[reports.length - 1];
     if (!last) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
-    return ok(`status=${last.report.status}\ntarget_sha=${last.report.target_sha}`);
+    return ok(`status=${last.report.status}\ntarget_sha=${last.report.target_sha}\ncreated_at=${last.createdAt}`);
   });
 }

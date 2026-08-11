@@ -147,10 +147,14 @@ if [[ ! -f "$DISPATCH_TEMP_DIR/contract.sha256" ]]; then
 else
   EXPECTED_SHA="$(sed -n 's/^CONTRACT_SHA256=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   EXPECTED_LINES="$(sed -n 's/^CONTRACT_LINES=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
+  DISPATCH_STARTED_AT="$(sed -n 's/^DISPATCH_STARTED_AT=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   ACTUAL_SHA="$(sha256sum "$CONTRACT_FILE" | awk '{print $1}')"
   ACTUAL_LINES="$(wc -l <"$CONTRACT_FILE" | tr -d '[:space:]')"
   if [[ -z "$EXPECTED_SHA" || -z "$EXPECTED_LINES" || "$ACTUAL_SHA" != "$EXPECTED_SHA" || "$ACTUAL_LINES" != "$EXPECTED_LINES" ]]; then
     INTEGRITY_ERROR="contract.mdのSHA256または行数がdispatch時の監査証跡と一致しません"
+  elif [[ ! "$DISPATCH_STARTED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{3})?Z$ ]] ||
+    ! date -u -d "$DISPATCH_STARTED_AT" +%s >/dev/null 2>&1; then
+    INTEGRITY_ERROR="contract.sha256のDISPATCH_STARTED_ATが欠落またはUTC ISO8601形式ではありません"
   fi
 fi
 
@@ -161,17 +165,9 @@ if [[ -n "$INTEGRITY_ERROR" ]]; then
   exit $?
 fi
 
-LATEST=""
-if ! LATEST="$(_asc_cli report latest "$ISSUE_ID" "$SEGMENT")"; then
-  _fail_blocked "worker完了後の report status を確認できませんでした（未報告の可能性）"
-  exit $?
-fi
-REPORTED_STATUS="$(sed -n 's/^status=//p' <<<"$LATEST")"
-REPORTED_SHA="$(sed -n 's/^target_sha=//p' <<<"$LATEST")"
-CURRENT_SHA="$(git rev-parse HEAD 2>/dev/null || echo '')"
-
-if [[ "$REPORTED_STATUS" != "completed" || -z "$REPORTED_SHA" || "$REPORTED_SHA" != "$CURRENT_SHA" ]]; then
-  _fail_blocked "worker完了を確認できませんでした（報告status=${REPORTED_STATUS:-無し}, 報告target_sha=${REPORTED_SHA:-無し}, 現在HEAD=${CURRENT_SHA:-無し}）"
+COMPLETION_REASON=""
+if ! COMPLETION_REASON="$(_verify_worker_completion_report "$ISSUE_ID" "$ROLE" "$SEGMENT" "$DISPATCH_STARTED_AT")"; then
+  _fail_blocked "$COMPLETION_REASON"
   exit $?
 fi
 

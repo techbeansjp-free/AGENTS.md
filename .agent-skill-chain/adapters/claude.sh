@@ -419,6 +419,42 @@ _dispatch_lease_renew_daemon() {
   done
 }
 
+# 今回のworker起動サイクルに属する完了報告だけを検証する。
+# 成功時は無出力で0、不合格時は呼び出し側がblocked_reasonへ使う理由をstdoutへ出して1を返す。
+_verify_worker_completion_report() {
+  local issue_id="$1" role="$2" segment="$3" started_at="$4"
+  local latest reported_status reported_sha reported_created_at current_sha started_epoch reported_epoch
+  : "$role"
+
+  if ! latest="$(_asc_cli report latest "$issue_id" "$segment")"; then
+    printf '%s\n' 'workerがreportを投稿していません（契約不履行の可能性）'
+    return 1
+  fi
+
+  reported_status="$(sed -n 's/^status=//p' <<<"$latest")"
+  reported_sha="$(sed -n 's/^target_sha=//p' <<<"$latest")"
+  reported_created_at="$(sed -n 's/^created_at=//p' <<<"$latest")"
+
+  if ! started_epoch="$(date -u -d "$started_at" +%s%3N 2>/dev/null)" ||
+    ! reported_epoch="$(date -u -d "$reported_created_at" +%s%3N 2>/dev/null)"; then
+    printf '%s\n' 'workerのreport鮮度を確認できませんでした（created_atまたは比較基準時刻が不正です）'
+    return 1
+  fi
+  if ((reported_epoch < started_epoch)); then
+    printf '%s\n' 'workerがreportを投稿していません（契約不履行の可能性、dispatch開始前の報告のみ検出）'
+    return 1
+  fi
+
+  current_sha="$(git rev-parse HEAD 2>/dev/null || echo '')"
+  if [[ "$reported_status" != "completed" || -z "$reported_sha" || "$reported_sha" != "$current_sha" ]]; then
+    printf 'worker完了を確認できませんでした（報告status=%s, 報告target_sha=%s, 現在HEAD=%s）\n' \
+      "${reported_status:-無し}" "${reported_sha:-無し}" "${current_sha:-無し}"
+    return 1
+  fi
+
+  return 0
+}
+
 # Agent tool呼び出しが必要な場合の前半処理。contract本文は一時ファイルだけへ書き、標準出力には
 # 固定の運用指示と不透明な監査メタデータだけを返す。worker完了後の照合・lease解放は
 # worker-launch-verify.shが別のBash呼び出しで行う。
@@ -502,19 +538,21 @@ _dispatch_via_agent_tool() {
     fi
   fi
 
-  local dispatch_temp_dir contract_file contract_sha contract_lines
+  local dispatch_temp_dir dispatch_started_at contract_file contract_sha contract_lines
   if ! dispatch_temp_dir="$(mktemp -d "$temp_base/agent-skill-chain-worker-dispatch.XXXXXX")"; then
     echo "launch_worker: dispatch用一時ディレクトリを作成できませんでした" >&2
     release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   fi
+  dispatch_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
   chmod 700 "$dispatch_temp_dir"
   contract_file="$dispatch_temp_dir/contract.md"
   printf '%s' "$contract" >"$contract_file"
   chmod 600 "$contract_file"
   contract_sha="$(sha256sum "$contract_file" | awk '{print $1}')"
   contract_lines="$(wc -l <"$contract_file" | tr -d '[:space:]')"
-  printf 'CONTRACT_SHA256=%s\nCONTRACT_LINES=%s\n' "$contract_sha" "$contract_lines" \
+  printf 'CONTRACT_SHA256=%s\nCONTRACT_LINES=%s\nDISPATCH_STARTED_AT=%s\n' \
+    "$contract_sha" "$contract_lines" "$dispatch_started_at" \
     >"$dispatch_temp_dir/contract.sha256"
   chmod 600 "$dispatch_temp_dir/contract.sha256"
 
@@ -546,7 +584,7 @@ _dispatch_via_agent_tool() {
       'AGENT_TOOL_DISPATCH_REQUIRED' \
       'dispatch_mode: bash_direct' \
       'run_in_background: false' \
-      "prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、次のコマンドをBashツールで直接実行する: ${codex_cmd}" \
+      "prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、次のコマンドをBashツールで直接実行する: ${codex_cmd}。workerは成果物をcommit・pushした後、contractに記載されたreport-status.shによるcompleted投稿を実行してから最終応答する。最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
       "完了後に .agent-skill-chain/scripts/worker-launch-verify.sh ${issue_id} ${dispatch_temp_dir_quoted} をBashツールで実行する。" \
       "ISSUE_ID=${issue_id}" \
       "DISPATCH_TEMP_DIR=${dispatch_temp_dir}" \
@@ -560,7 +598,7 @@ _dispatch_via_agent_tool() {
     'AGENT_TOOL_DISPATCH_REQUIRED' \
     'subagent_type: agent-skill-chain-worker' \
     'run_in_background: false' \
-    "prompt: 指定ファイルをBashツールで cat -- ${contract_file_quoted} として読み、その標準出力全体を一切要約・改変せず動作契約として厳密に実行する。作業完了後の最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
+    "prompt: 指定ファイルをBashツールで cat -- ${contract_file_quoted} として読み、その標準出力全体を一切要約・改変せず動作契約として厳密に実行する。workerは成果物をcommit・pushした後、contractに記載されたreport-status.shによるcompleted投稿を実行してから最終応答する。作業完了後の最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
     "完了後に .agent-skill-chain/scripts/worker-launch-verify.sh ${issue_id} ${dispatch_temp_dir_quoted} をBashツールで実行する。" \
     "ISSUE_ID=${issue_id}" \
     "DISPATCH_TEMP_DIR=${dispatch_temp_dir}" \
@@ -684,7 +722,8 @@ launch_worker() {
   prompt_file="$(mktemp)"
   printf '%s' "$contract" >"$prompt_file"
 
-  local worker_pid rc
+  local worker_pid worker_started_at rc
+  worker_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
   if command -v timeout >/dev/null 2>&1; then
     ASC_ISSUE_ID="$issue_id" ASC_SEGMENT="$segment" ASC_ROLE="$role" \
       timeout "$timeout_sec" bash -c "$worker_cmd" <"$prompt_file" &
@@ -730,19 +769,10 @@ launch_worker() {
     return
   fi
 
-  # 完了確認（I8: 完了を騙るケースの安全側判定）: report-status直近レコードのstatus・target_shaを
-  # 実際のpush済みHEADと突合する。サブプロセスの終了コード0だけでは信頼しない。
-  local latest reported_status reported_sha current_sha
-  if ! latest="$(_asc_cli report latest "$issue_id" "$segment")"; then
-    _fail_blocked "worker完了後の report status を確認できませんでした（未報告の可能性）"
-    return
-  fi
-  reported_status="$(sed -n 's/^status=//p' <<<"$latest")"
-  reported_sha="$(sed -n 's/^target_sha=//p' <<<"$latest")"
-  current_sha="$(git rev-parse HEAD 2>/dev/null || echo '')"
-
-  if [[ "$reported_status" != "completed" || -z "$reported_sha" || "$reported_sha" != "$current_sha" ]]; then
-    _fail_blocked "worker完了を確認できませんでした（報告status=${reported_status:-無し}, 報告target_sha=${reported_sha:-無し}, 現在HEAD=${current_sha:-無し}）"
+  # サブプロセスの終了コード0だけでは信頼せず、今回の起動以降に投稿された完了報告を検証する。
+  local completion_reason
+  if ! completion_reason="$(_verify_worker_completion_report "$issue_id" "$role" "$segment" "$worker_started_at")"; then
+    _fail_blocked "$completion_reason"
     return
   fi
 

@@ -121,6 +121,44 @@ function detectClaudeCodeSession(env: NodeJS.ProcessEnv): boolean {
   return stdout === 'true';
 }
 
+function runCompletionReportVerifier(
+  worktreePath: string,
+  latest: string,
+  latestStatus: number,
+  startedAt: string,
+): ScriptResult {
+  const adapterPath = path.join(worktreePath, '.agent-skill-chain', 'adapters', 'claude.sh');
+  const script = [
+    'source "$1"',
+    '_asc_cli() { printf \'%s\' "$ASC_TEST_LATEST"; return "$ASC_TEST_LATEST_STATUS"; }',
+    'set +e',
+    'reason="$(_verify_worker_completion_report ISSUE-1 spec_worker spec "$ASC_TEST_STARTED_AT")"',
+    'rc=$?',
+    'printf \'RC=%s\\nREASON=%s\\n\' "$rc" "$reason"',
+    'exit "$rc"',
+  ].join('; ');
+  const env = envWithout([], {
+    ASC_TEST_LATEST: latest,
+    ASC_TEST_LATEST_STATUS: String(latestStatus),
+    ASC_TEST_STARTED_AT: startedAt,
+  });
+  try {
+    const stdout = execFileSync('bash', ['-c', script, '_', adapterPath], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+      env,
+    });
+    return { status: 0, stdout, stderr: '' };
+  } catch (error) {
+    const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    return {
+      status: typeof e.status === 'number' ? e.status : 1,
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+    };
+  }
+}
+
 /**
  * PATH 上に「codex」という名の stub 実行系を用意する。受け取った引数と stdin を別々の
  * キャプチャファイルへ記録したうえで、成果物 commit+push+report completed まで行う
@@ -238,7 +276,8 @@ function readWorkerReport(repoDir: string, segment: string): WorkerReport {
 
 function createVerifyFixture(
   t: { after(fn: () => void): void },
-  shaFile: 'match' | 'mismatch' | 'absent' = 'match',
+  shaFile: 'match' | 'mismatch' | 'missing-start' | 'absent' = 'match',
+  dispatchStartedAt = '1970-01-01T00:00:00Z',
 ) {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
@@ -250,8 +289,12 @@ function createVerifyFixture(
   const contract = 'role: spec_worker\n';
   fs.writeFileSync(path.join(dispatchTempDir, 'contract.md'), contract);
   if (shaFile !== 'absent') {
-    const sha = shaFile === 'match' ? createHash('sha256').update(contract).digest('hex') : '0'.repeat(64);
-    fs.writeFileSync(path.join(dispatchTempDir, 'contract.sha256'), `CONTRACT_SHA256=${sha}\nCONTRACT_LINES=1\n`);
+    const startedAtLine = shaFile === 'missing-start' ? '' : `DISPATCH_STARTED_AT=${dispatchStartedAt}\n`;
+    const effectiveSha = shaFile === 'mismatch' ? '0'.repeat(64) : createHash('sha256').update(contract).digest('hex');
+    fs.writeFileSync(
+      path.join(dispatchTempDir, 'contract.sha256'),
+      `CONTRACT_SHA256=${effectiveSha}\nCONTRACT_LINES=1\n${startedAtLine}`,
+    );
   }
 
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
@@ -294,6 +337,47 @@ test('Claude Codeセッション判定 (ISSUE-448 AC-7): 明示overrideは既知
   );
 });
 
+test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報告・今回の不一致を分離し、今回の一致だけを通す', (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const startedAt = '2026-08-12T01:02:03Z';
+
+  const missing = runCompletionReportVerifier(worktreePath, '', 1, startedAt);
+  assert.equal(missing.status, 1);
+  assert.match(missing.stdout, /workerがreportを投稿していません（契約不履行の可能性）/);
+
+  const stale = runCompletionReportVerifier(
+    worktreePath,
+    `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:02.999Z\n`,
+    0,
+    startedAt,
+  );
+  assert.equal(stale.status, 1);
+  assert.match(stale.stdout, /dispatch開始前の報告のみ検出/);
+  assert.doesNotMatch(stale.stdout, /報告target_sha=/);
+
+  const mismatch = runCompletionReportVerifier(
+    worktreePath,
+    'status=completed\ntarget_sha=old-sha\ncreated_at=2026-08-12T01:02:04Z\n',
+    0,
+    startedAt,
+  );
+  assert.equal(mismatch.status, 1);
+  assert.match(mismatch.stdout, /報告target_sha=old-sha/);
+  assert.match(mismatch.stdout, new RegExp(`現在HEAD=${head}`));
+
+  const completed = runCompletionReportVerifier(
+    worktreePath,
+    `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.999Z\n`,
+    0,
+    startedAt,
+  );
+  assert.equal(completed.status, 0, completed.stdout + completed.stderr);
+  assert.match(completed.stdout, /^RC=0$/m);
+  assert.match(completed.stdout, /^REASON=$/m);
+});
+
 test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定時はcontract本文を出さずexit 4で監査メタデータを返す', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
@@ -334,9 +418,13 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定
 
   const contractPath = path.join(dispatchTempDir, 'contract.md');
   const contract = fs.readFileSync(contractPath);
+  const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
   assert.match(contract.toString('utf8'), /^role: spec_worker/m);
   assert.equal(createHash('sha256').update(contract).digest('hex'), expectedSha);
   assert.equal(String(contract.toString('utf8').split('\n').length - 1), expectedLines);
+  assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
+  assert.match(result.stdout, /成果物をcommit・pushした後.*report-status\.sh.*completed投稿を実行してから最終応答する/);
+  assert.match(result.stdout, /最終応答は完了状態・target_sha・簡潔な1文要約のみに限定/);
 
   const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
   const leaseBeforeRenewInterval = fs.readFileSync(leasePath, 'utf8');
@@ -391,6 +479,10 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1): Codexコマン�
   const codexCmd = /^CODEX_CMD=(.+)$/m.exec(result.stdout)?.[1];
   assert.ok(dispatchTempDir);
   assert.ok(codexCmd, 'Codexコマンドの直接実行指示が出力に含まれること');
+  const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
+  assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
+  assert.match(result.stdout, /成果物をcommit・pushした後.*report-status\.sh.*completed投稿を実行してから最終応答する/);
+  assert.match(result.stdout, /最終応答は完了状態・target_sha・簡潔な1文要約のみに限定/);
   assert.match(codexCmd!, /^cd \/.* && codex exec/, '絶対パスの対象worktreeへのcdから始まること');
   assert.ok(
     result.stdout.includes(
@@ -638,6 +730,36 @@ test('worker-launch-verify (ISSUE-448 AC-3/AC-4): contract監査値不一致はr
   assert.match(result.stderr, /SHA256または行数/);
   assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
   assert.equal(fs.existsSync(fixture.leasePath), false, '完全性違反でもleaseを解放すること');
+});
+
+test('worker-launch-verify (ISSUE-642 AC-4): DISPATCH_STARTED_AT欠落は監査証跡不備としてblockedへ倒す', (t) => {
+  const fixture = createVerifyFixture(t, 'missing-start');
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /DISPATCH_STARTED_ATが欠落またはUTC ISO8601形式ではありません/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false);
+});
+
+test('worker-launch-verify (ISSUE-642 AC-4/AC-5): dispatch開始前のcompleted報告を採用せず契約不履行としてblockedへ倒す', (t) => {
+  const fixture = createVerifyFixture(t, 'match', '2099-01-01T00:00:00Z');
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /workerがreportを投稿していません/);
+  assert.match(result.stderr, /dispatch開始前の報告のみ検出/);
+  assert.doesNotMatch(result.stderr, /報告target_sha=/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false);
 });
 
 // --- (a) claude launch_worker: 成功経路 --------------------------------------------------
