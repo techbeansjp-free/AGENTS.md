@@ -440,6 +440,10 @@ _verify_worker_completion_report() {
     printf '%s\n' 'workerのreport鮮度を確認できませんでした（created_atまたは比較基準時刻が不正です）'
     return 1
   fi
+  # Issue #658: GitHubのcreatedAtは秒精度なので、その秒内の投稿順序は確定できない。
+  if [[ "$reported_created_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    reported_epoch=$((reported_epoch + 999))
+  fi
   if ((reported_epoch < started_epoch)); then
     printf '%s\n' 'workerがreportを投稿していません（契約不履行の可能性、dispatch開始前の報告のみ検出）'
     return 1
