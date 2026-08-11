@@ -42,6 +42,39 @@ function extractHeadBranch(args: string[]): string | undefined {
   return i === -1 ? undefined : args[i + 1];
 }
 
+function currentBranch(repoDir: string): string {
+  return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+}
+
+/** ISSUE-619 AC（復元失敗時のfail-closed）検証用: `git push` 完了直後（=
+ * performCleanupBranch内のpush成功後、restoreCheckoutState呼び出し前）に、ローカルの
+ * branchToDelete参照とその remote-tracking 参照を両方消し、`git checkout <branchToDelete>` が
+ * どのrefにも解決できず実際に失敗する状況を再現する（ローカル参照のみを消すと、git checkoutは
+ * リモート追跡ブランチから新規ローカルブランチを暗黙作成するフォールバックで復元に成功してしまう
+ * ため、両方を消す必要がある）。 */
+function installPrePushHookDeletingBranch(repoDir: string, branchToDelete: string): void {
+  const hooksDir = path.join(repoDir, '.git', 'hooks');
+  fs.mkdirSync(hooksDir, { recursive: true });
+  const hookPath = path.join(hooksDir, 'pre-push');
+  fs.writeFileSync(
+    hookPath,
+    `#!/bin/sh\ngit branch -D ${branchToDelete} || true\ngit update-ref -d refs/remotes/origin/${branchToDelete} || true\nexit 0\n`,
+    { mode: 0o755 },
+  );
+}
+
+/** 指定refから見た pushed cleanup branch上でのファイル存在有無を確認する（ISSUE-619: 復元により
+ * ローカルのチェックアウトは実行前の状態＝削除前へ戻るため、実際の削除自体はpushされた一時
+ * ブランチの内容で検証する）。 */
+function remoteBranchHasFile(remoteDir: string, ref: string, file: string): boolean {
+  try {
+    execFileSync('git', ['--git-dir', remoteDir, 'cat-file', '-e', `${ref}:${file}`], { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ---- (a) 0件no-op ----
 
 test('root-cleanup run: 対象4ファイルが0件のときno-opになり、PR作成・admin mergeを一切行わない', async (t) => {
@@ -50,11 +83,14 @@ test('root-cleanup run: 対象4ファイルが0件のときno-opになり、PR�
   const { stub, env, cleanup } = makeStub();
   t.after(cleanup);
 
+  const branchBefore = currentBranch(repo.dir);
   const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /no-op/);
   assert.equal((stub.readState().prCreateCalls ?? []).length, 0);
   assert.equal((stub.readState().mergeCalls ?? []).length, 0);
+  // ISSUE-619 AC-3: no-opでは新規ブランチ作成・チェックアウト切り替えが一切発生しないこと
+  assert.equal(currentBranch(repo.dir), branchBefore, 'no-opではチェックアウト状態が変化しないこと');
 });
 
 // ---- (b) 1件以上時の削除対象限定・admin merge ----
@@ -75,13 +111,17 @@ test('root-cleanup run: 対象ファイルが1件以上のとき、該当ファ�
   // と同様の方式）。ここではroot-cleanup runが実際に削除する対象と一致させる。
   stub.setDefaultPrFiles(['SPEC.md', 'DESIGN.md']);
 
+  // ISSUE-619 AC-1・AC-6: mainをチェックアウト中に実行し、成功時の既存の標準出力形式
+  // （PR番号）・終了コードに回帰が無いこと、かつ完了後にmainへ戻っていることを確認する。
+  assert.equal(currentBranch(repo.dir), 'main');
   const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout.trim(), /^\d+$/, 'マージしたPR番号を標準出力へ返すこと');
+  assert.equal(currentBranch(repo.dir), 'main', '完了後、mainへ戻っていること（一時ブランチのまま取り残されないこと）');
 
-  // Then（該当ファイルのみ削除される。PLAN.md/VALIDATION.mdは元々存在しないため対象外）
-  assert.equal(fs.existsSync(path.join(repo.dir, 'SPEC.md')), false);
-  assert.equal(fs.existsSync(path.join(repo.dir, 'DESIGN.md')), false);
+  // Then（該当ファイルのみ削除される。PLAN.md/VALIDATION.mdは元々存在しないため対象外）。
+  // ISSUE-619の復元によりローカルのチェックアウトはmain（削除前の状態）へ戻るため、削除自体の
+  // 検証はpushされた一時ブランチの内容（実際にgit rmしてcommitした対象）で行う。
   assert.equal(fs.existsSync(path.join(repo.dir, 'UNRELATED.md')), true, '無関係なファイルは削除されないこと');
 
   // Then: 短命ブランチ chore/root-cleanup-* がheadとしてPR作成され、mainへpushされていること
@@ -92,6 +132,8 @@ test('root-cleanup run: 対象ファイルが1件以上のとき、該当ファ�
   assert.match(prCalls[0].args.join(' '), /--base main/);
   const remoteBranches = git(repo.dir, ['ls-remote', '--heads', 'origin', headBranch!]);
   assert.match(remoteBranches, new RegExp(`refs/heads/${headBranch}`));
+  assert.equal(remoteBranchHasFile(repo.remoteDir, headBranch!, 'SPEC.md'), false, 'pushされた一時ブランチではSPEC.mdが削除されていること');
+  assert.equal(remoteBranchHasFile(repo.remoteDir, headBranch!, 'DESIGN.md'), false, 'pushされた一時ブランチではDESIGN.mdが削除されていること');
 
   // Then（squash既定メッセージ設定に依存せず --subject で固定文言・[skip ci]を明示する）
   const mergeCalls = stub.readState().mergeCalls ?? [];
@@ -114,8 +156,14 @@ test('root-cleanup run: 対象4ファイルすべてが存在する場合はす�
   const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
   assert.equal(result.status, 0, result.stderr);
 
+  // ISSUE-619の復元によりローカルのチェックアウトはmain（削除前の状態）へ戻るため、削除自体の
+  // 検証はpushされた一時ブランチの内容で行う。
+  const prCalls = stub.readState().prCreateCalls ?? [];
+  assert.equal(prCalls.length, 1);
+  const headBranch = extractHeadBranch(prCalls[0].args);
+  assert.ok(headBranch);
   for (const file of ['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md']) {
-    assert.equal(fs.existsSync(path.join(repo.dir, file)), false, `${file} が削除されていること`);
+    assert.equal(remoteBranchHasFile(repo.remoteDir, headBranch!, file), false, `${file} が削除されていること`);
   }
 });
 
@@ -251,8 +299,12 @@ test('root-cleanup run 自己修復: 1回目のadmin merge失敗後、次runは�
   git(repo.dir, ['checkout', '-B', 'main', 'origin/main']);
   assert.equal(fs.existsSync(path.join(repo.dir, 'VALIDATION.md')), true, '前提: originのmainはまだ削除前であること');
 
+  // ISSUE-619 AC-4: 既存のOPEN cleanup PRを再利用する2回目のrunは、このコマンド呼び出し自身は
+  // 一度もチェックアウト切り替えを行わない（existingBranch && pr の再利用経路）。
+  const branchBeforeSecond = currentBranch(repo.dir);
   const second = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
   assert.equal(second.status, 0, second.stderr);
+  assert.equal(currentBranch(repo.dir), branchBeforeSecond, '既存OPENブランチ・PR再利用時はチェックアウト状態が変化しないこと');
 
   const prCalls = stub.readState().prCreateCalls ?? [];
   assert.equal(prCalls.length, 1, 'gh pr create は重複実行されないこと（既存OPEN PRの検出による再利用）');
@@ -297,7 +349,12 @@ test('root-cleanup run (AC-3): 並行する他Issueのworktree・ブランチの
   stub.setDefaultPrFiles(['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md']);
   const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(fs.existsSync(path.join(repo.dir, 'SPEC.md')), false, '前提: root直下は削除されていること');
+  // ISSUE-619の復元によりローカルのチェックアウトはmain（削除前の状態）へ戻るため、削除自体の
+  // 検証はpushされた一時ブランチの内容で行う。
+  const prCallsForCleanup = stub.readState().prCreateCalls ?? [];
+  const cleanupHeadBranch = extractHeadBranch(prCallsForCleanup[0]?.args ?? []);
+  assert.ok(cleanupHeadBranch);
+  assert.equal(remoteBranchHasFile(repo.remoteDir, cleanupHeadBranch!, 'SPEC.md'), false, '前提: pushされた一時ブランチではSPEC.mdが削除されていること');
 
   // Then: 他Issueのworktree内ファイル内容・HEAD SHAはbyte-for-byte・SHA一致で不変
   const after1 = snapshot(worktree1, 'SPEC.md');
@@ -310,6 +367,82 @@ test('root-cleanup run (AC-3): 並行する他Issueのworktree・ブランチの
   assert.equal(worktreePathCheck.status, 0, worktreePathCheck.stderr);
   const artifactsCheck1 = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir });
   assert.equal(artifactsCheck1.status, 0, artifactsCheck1.stderr);
+});
+
+// ---- ISSUE-619: 永続main worktreeから直接実行した場合のチェックアウト状態復元 ----
+
+test('root-cleanup run (ISSUE-619 AC-2): main以外のブランチをチェックアウト中に実行した場合、完了後に元のブランチへ戻る', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  git(repo.dir, ['checkout', '-b', 'feature/other-branch']);
+  git(repo.dir, ['push', '-u', 'origin', 'feature/other-branch']);
+  writeStrayArtifacts(repo.dir, ['SPEC.md']);
+  stub.setDefaultPrFiles(['SPEC.md']);
+  assert.equal(currentBranch(repo.dir), 'feature/other-branch');
+
+  const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout.trim(), /^\d+$/, 'マージしたPR番号を標準出力へ返すこと');
+
+  assert.equal(currentBranch(repo.dir), 'feature/other-branch', '完了後、実行前と同じブランチへ戻っていること');
+
+  // PR base には（現在チェックアウト中のブランチではなく）実際のdefault branch(main)が使われること
+  const prCalls = stub.readState().prCreateCalls ?? [];
+  assert.equal(prCalls.length, 1);
+  assert.match(prCalls[0].args.join(' '), /--base main\b/);
+  const headBranch = extractHeadBranch(prCalls[0].args);
+  assert.ok(headBranch);
+  // ISSUE-619の復元によりローカルのチェックアウトはfeature/other-branch（削除前の状態）へ戻るため、
+  // 削除自体の検証はpushされた一時ブランチの内容で行う。
+  assert.equal(remoteBranchHasFile(repo.remoteDir, headBranch!, 'SPEC.md'), false, 'pushされた一時ブランチではSPEC.mdが削除されていること');
+});
+
+test('root-cleanup run (ISSUE-619 AC-5): commit・push成功後にPR作成が失敗した場合も、エラー終了しつつチェックアウト状態が実行前へ戻る', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  writeStrayArtifacts(repo.dir, ['SPEC.md']);
+  stub.failNextPrCreate(1, 'gh-stub: simulated pr create failure (ISSUE-619 AC-5)\n');
+  assert.equal(currentBranch(repo.dir), 'main');
+
+  const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /gh pr create に失敗しました/);
+  assert.equal(currentBranch(repo.dir), 'main', 'PR作成失敗後もmainへ復元されていること');
+  assert.equal((stub.readState().mergeCalls ?? []).length, 0, 'PR作成前に失敗しているためadmin mergeへは進まないこと');
+
+  // fail-closedで終了する前に、削除対象ファイル自体はmain上に復元済み（cleanupブランチ側の
+  // git rmはmainへ影響しない）であること
+  assert.equal(fs.existsSync(path.join(repo.dir, 'SPEC.md')), true);
+});
+
+test('root-cleanup run (ISSUE-619): チェックアウト状態の復元自体が失敗した場合、スコープ検査・admin mergeを実行せずエラー終了する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  writeStrayArtifacts(repo.dir, ['SPEC.md']);
+  stub.setDefaultPrFiles(['SPEC.md']);
+
+  // Given: commit・push自体は成功するが、push完了直後（復元試行の前）に復元先ブランチ(main)の
+  // ローカル参照が失われる状況を再現する（例: worktreeに競合するuntracked/変更内容が生じた等と
+  // 同種の「復元先の参照が実行中に消失した」失敗モード）。
+  installPrePushHookDeletingBranch(repo.dir, 'main');
+
+  const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /復元/, '復元に失敗した旨を含めること');
+  assert.match(result.stderr, /main/, '復元先のブランチ名を含めること');
+  assert.equal((stub.readState().prCreateCalls ?? []).length, 1, '前提: PR作成自体は成功していること（復元失敗のみを再現するため）');
+  assert.equal((stub.readState().mergeCalls ?? []).length, 0, '復元失敗時はスコープ検査・admin mergeへ進まないこと');
 });
 
 // ---- verify root-clean（AC-4）はこの新設サブコマンド自身の合否検証であり、

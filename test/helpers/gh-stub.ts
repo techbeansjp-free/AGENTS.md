@@ -195,6 +195,14 @@ if (cmd === 'pr' && sub === 'create') {
   const state = loadState();
   state.prCreateCalls = state.prCreateCalls || [];
   state.prCreateCalls.push({ args, body: flag('--body') });
+  // ISSUE-619: AC-5（commit・push・PR作成等の途中でコマンドが異常終了した場合の
+  // チェックアウト復元）検証用。failMergeCount/failMergeMessageと同型。
+  if ((state.failPrCreateCount || 0) > 0) {
+    state.failPrCreateCount -= 1;
+    saveState(state);
+    process.stderr.write(state.failPrCreateMessage || 'gh-stub: simulated pr create failure\\n');
+    process.exit(1);
+  }
   const head = flag('--head');
   if (head) {
     // findOpenPrByHead（release bump・root-cleanup runが共有）が直後に
@@ -953,6 +961,11 @@ export interface GhStubState {
   mergeCalls?: { number: string; args: string[] }[];
   failMergeCount?: number;
   failMergeMessage?: string;
+  /** ISSUE-619: 直後の `gh pr create` 呼び出しを count 回だけ失敗させる（PR未作成のまま）。
+   * root-cleanup run のAC-5（一時ブランチへのチェックアウト切り替え後・PR作成前後の失敗時も
+   * チェックアウト状態が復元されること）の検証用。failMergeCount/failMergeMessageと同型。 */
+  failPrCreateCount?: number;
+  failPrCreateMessage?: string;
   advanceMainOnNextMerge?: boolean;
   applyMergedPrToMain?: boolean;
   releases?: string[];
@@ -1025,6 +1038,10 @@ export interface GhStub {
   /** 直後の `gh pr merge` 呼び出しを count 回だけ失敗させる（PRはOPENのまま）。
    * 「PR作成後、admin mergeに失敗」自己修復シナリオの検証用（Issue #196・#208）。 */
   failNextMerge(count?: number): void;
+  /** ISSUE-619: 直後の `gh pr create` 呼び出しを count 回だけ失敗させる（PR未作成のまま）。
+   * root-cleanup run AC-5（一時ブランチへのチェックアウト切り替え後、PR作成前後の失敗時にも
+   * チェックアウト状態が実行前へ復元されること）の検証用。 */
+  failNextPrCreate(count?: number, message?: string): void;
   /** Issue #266: 最初のmerge要求時にmainを実際に前進させ、GitHubのbase更新競合を返す。
    * 次の成功mergeはテスト用remoteのmainへ反映し、tag/publish後続契約まで検証可能にする。 */
   simulateBaseBranchRaceOnNextMerge(): void;
@@ -1166,6 +1183,13 @@ export function createGhStub(baseDir: string): GhStub {
       const state = this.readState();
       state.failMergeCount = count;
       delete state.failMergeMessage;
+      this.writeState(state);
+    },
+    failNextPrCreate(count = 1, message?: string): void {
+      const state = this.readState();
+      state.failPrCreateCount = count;
+      if (message === undefined) delete state.failPrCreateMessage;
+      else state.failPrCreateMessage = message;
       this.writeState(state);
     },
     simulateBaseBranchRaceOnNextMerge(): void {
