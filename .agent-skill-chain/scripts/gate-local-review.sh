@@ -30,9 +30,17 @@ if [[ -z "$DEFAULT_BRANCH" || "$PR_BASE_REF" != "$DEFAULT_BRANCH" || "$PR_BASE_S
 fi
 
 CURRENT_ROOT="$(git -C "$REPO_ROOT" rev-parse --show-toplevel)"
-CURRENT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
-if [[ "$CURRENT_ROOT" != "$REPO_ROOT" || "$CURRENT_SHA" != "$BASE_SHA" ]]; then
-  echo "protected base worktree/SHAから実行してください（root=$CURRENT_ROOT, HEAD=$CURRENT_SHA, expected=${BASE_SHA}）" >&2
+if [[ "$CURRENT_ROOT" != "$REPO_ROOT" ]]; then
+  echo "protected base worktreeのrootが一致しません（resolved=$CURRENT_ROOT, configured=$REPO_ROOT）" >&2
+  exit 1
+fi
+CURRENT_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD || true)"
+if [[ "$CURRENT_BRANCH" != "$DEFAULT_BRANCH" ]]; then
+  echo "repository default branchのworktreeから実行してください（current=${CURRENT_BRANCH:-detached}, default=$DEFAULT_BRANCH）" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$BASE_SHA" HEAD; then
+  echo "指定base_shaはrepository default branchから到達不能です（base_sha=$BASE_SHA, branch=$DEFAULT_BRANCH）" >&2
   exit 1
 fi
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
