@@ -54,7 +54,7 @@ dependabot-ci-skip判定 → （依存なし、変更対象外）
 
 ```yaml
 related_adrs:
-  - id: ADR-0045
+  - id: ADR-0047
     relation: adopts
 ```
 

@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0045
+id: ADR-0047
 status: proposed
 title: 配布テンプレートからのdependabot.yml完全削除（config化・opt-out化ではなく）
 tags: [distribution, template-sync, dependabot]
