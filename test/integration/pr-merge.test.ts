@@ -65,6 +65,28 @@ function addIssueWorktree(repoDir: string, branch: string): string {
   return wtPath;
 }
 
+/**
+ * ISSUE-590: `repo` とは別クローンから origin/main へ、root直下混入ファイル（Issueセグメント
+ * 成果物相当）を独立に追加する。GitHub上でのPRマージ（このテストが検証する `pr merge` 呼び出し
+ * 自体とは無関係な、以前のIssueのマージ等）によって既に root 直下へ混入している状態を再現する。
+ */
+function advanceOriginMainWithStrayArtifacts(repo: { dir: string; remoteDir: string }, files: string[]): void {
+  const scratchClone = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-merge-stray-'));
+  try {
+    execFileSync('git', ['clone', repo.remoteDir, scratchClone], { stdio: 'pipe' });
+    git(scratchClone, ['config', 'user.email', 'test@example.com']);
+    git(scratchClone, ['config', 'user.name', 'agent-skill-chain test']);
+    for (const file of files) {
+      fs.writeFileSync(path.join(scratchClone, file), `# ${file}\n\nstray root artifact\n`);
+    }
+    git(scratchClone, ['add', '-A']);
+    git(scratchClone, ['commit', '-m', 'chore: simulate merged issue segment artifacts at repo root']);
+    git(scratchClone, ['push', 'origin', 'main']);
+  } finally {
+    fs.rmSync(scratchClone, { recursive: true, force: true });
+  }
+}
+
 test('pr merge (AC): gh pr merge 成功後、cwdがissue worktreeでもmain worktreeをorigin/mainへfast-forward同期する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -694,4 +716,93 @@ test('pr merge (Issue #493実装ゲート3回目是正): 初回の最新性確�
   assert.match(result.stderr, /既にクローズ・マージ済みのため最新性確認を行えません/);
   const state = stub.readState();
   assert.equal(state.mergeCalls?.length ?? 0, 0, 'gh pr mergeは一切実行されていないはず');
+});
+
+// ISSUE-590（root直下混入マージ前予防ゲート、ADR-0046）AC-3: `pr merge` 成功・main worktree同期
+// 成功後、既存の `root-cleanup run`（Issue #208、無変更のまま再利用）を同一プロセス内で自動的に
+// 連鎖呼び出しし、repoRoot直下に残存するIssueセグメント成果物を追加の手動操作なしに削除する。
+
+test('pr merge (ISSUE-590 AC-3): マージ・同期成功後、root直下混入ファイルをroot-cleanup runが自動検出・削除する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/590-ac3-cleanup-chain');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  // Given: issueブランチ自体は無関係（削除commitを一切持たない）で、GitHub側で今回のPRマージに
+  // よりrepoRoot直下へroot直下混入ファイルが持ち込まれた状況を独立に再現する。
+  advanceOriginMainWithStrayArtifacts(repo, ['SPEC.md', 'DESIGN.md']);
+  stub.setDefaultPrFiles(['SPEC.md', 'DESIGN.md']);
+  const issueBranchShaBefore = git(issueWorktree, ['rev-parse', 'HEAD']);
+
+  // When
+  const result = runCli(['pr', 'merge', '70', '--squash', '--admin'], { cwd: issueWorktree, env });
+
+  // Then: pr merge自体は成功する
+  assert.equal(result.status, 0, result.stderr);
+
+  // Then: main worktree（repoRoot）直下から対象ファイルが自動的に削除されている
+  assert.equal(fs.existsSync(path.join(repo.dir, 'SPEC.md')), false);
+  assert.equal(fs.existsSync(path.join(repo.dir, 'DESIGN.md')), false);
+
+  // Then: gh pr merge が2回呼ばれている（対象PR自体のマージ1回 + root-cleanup runのadmin merge1回）
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length, 2);
+  assert.deepEqual(state.mergeCalls?.[0]?.args, ['pr', 'merge', '70', '--squash', '--admin']);
+  assert.equal((state.prCreateCalls ?? []).length, 1, 'root-cleanup run自身のクリーンアップPRが1回作成されること');
+
+  // Then: issueブランチ自体には削除commitが一切追加されていない（HEADのSHAが不変）
+  const issueBranchShaAfter = git(issueWorktree, ['rev-parse', 'HEAD']);
+  assert.equal(issueBranchShaAfter, issueBranchShaBefore, 'issueブランチ自体は変更されないはず');
+});
+
+test('pr merge (ISSUE-590 AC-4 関連): root直下混入ファイルが無い場合、root-cleanup runはno-opで成功しPR作成・追加mergeを行わない', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/590-ac4-noop');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  const result = runCli(['pr', 'merge', '71', '--admin'], { cwd: issueWorktree, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length, 1, '対象PR自体のマージのみが行われ、root-cleanup run側の追加mergeは発生しないはず');
+  assert.equal((state.prCreateCalls ?? []).length, 0, 'root-cleanup run側のPR作成は発生しないはず');
+});
+
+test('pr merge (ISSUE-590 AC-3 失敗時): root-cleanup runがhuman_requiredで失敗しても、マージ自体は巻き戻さず非0終了で追加確認を促す', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setMergeAutonomous(repo.dir, true);
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  const issueWorktree = addIssueWorktree(repo.dir, 'feature/590-ac3-cleanup-scope-violation');
+  t.after(() => fs.rmSync(issueWorktree, { recursive: true, force: true }));
+
+  advanceOriginMainWithStrayArtifacts(repo, ['SPEC.md']);
+  // root-cleanup run自身が作成するクリーンアップPRの変更ファイル集合に、想定外のファイルを
+  // 含めることでスコープ検査違反（human_required）を決定論的に誘発する。
+  stub.setDefaultPrFiles(['SPEC.md', 'src/unexpected.ts']);
+
+  const result = runCli(['pr', 'merge', '72', '--admin'], { cwd: issueWorktree, env });
+
+  // Then: root-cleanup run自体はhuman_requiredで失敗するため pr merge 全体も非0終了する
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /root-cleanup/);
+  // Then: マージ自体（対象PRのgh pr merge呼び出し）は既に成功しているため巻き戻されない
+  const state = stub.readState();
+  assert.equal(state.mergeCalls?.length, 1, '対象PR自体のマージは成功済みのまま、追加のadmin mergeは実行されないはず');
+  // Then: main（origin/main）自体には削除commitが一切land していない（root-cleanup run内部の
+  // git checkout -b がmain worktreeの作業ツリーを短命branchへ切り替えるため、working directory
+  // 上のファイル有無ではなく main ref 自体の内容で検証する）。
+  const specOnMain = git(repo.dir, ['show', 'main:SPEC.md']);
+  assert.match(specOnMain, /stray root artifact/);
 });

@@ -10,6 +10,7 @@ import { validateAgainstSchema } from '../lib/schema.js';
 import { gh, git } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { resolveMergeTarget, checkFreshness, attemptUpdateBranch, MergeFailureClassifier } from '../lib/pr-freshness.js';
+import * as rootCleanup from './root-cleanup.js';
 
 const USAGE = `
 使い方: agent-skill-chain pr create <issue_id> <branch>
@@ -48,12 +49,24 @@ fast-forward同期する（'git fetch origin <default-branch>' + 'git merge --ff
 （1）後続PRのCIがbase branchをfetchできず恒久失敗する、（2）進行役自身が古いビルド済み
 bin/agents-md.jsのままdoctor等を実行し誤った判定結果を得る、という2つの実害を防ぐため。
 
+マージ成功・ローカル同期成功後、同一プロセス内で既存の \`root-cleanup run\`（Issue #208、
+ADR-0007）を呼び出し、repoRoot直下に残存するIssueセグメント成果物（SPEC.md/DESIGN.md/
+PLAN.md/VALIDATION.md）を検出時のみ自動で検出・削除する（ISSUE-590、ADR-0046）。この
+クリーンアップはIssueブランチ自体へは一切commitを追加しない。agent-skill-chain-ci.yml の
+必須check「verify-root-clean (merge-ready)」は、draftでないPRのrepoRoot直下に対象4ファイルが
+存在する限り常に失敗する設計であるため、validation-gateまで正常に完了したPRであっても
+\`pr merge\` の呼び出しには \`--admin\`（必須checkのbypass）を明示する必要がある。
+
 出力:
   マージ自体が失敗した場合: gh pr merge の終了コード・標準エラー出力をそのまま返す
-  （ローカル同期は実行しない）。
+  （ローカル同期・root-cleanup runは実行しない）。
   マージは成功したがローカル同期に失敗した場合（main worktreeがdefault branch以外を
   チェックアウトしている・fast-forward不能なコンフリクトがある等）: 終了コード1以上。
-  マージ結果自体は巻き戻さず、日本語のエラーメッセージで手動同期を促す。
+  マージ結果自体は巻き戻さず、日本語のエラーメッセージで手動同期を促す（root-cleanup runは
+  実行しない）。
+  マージ・ローカル同期には成功したがroot-cleanup runが失敗した場合（human_required等）:
+  終了コード1以上。マージ結果自体は巻き戻さず、日本語のエラーメッセージで追加確認を促す。
+  既存の非同期root-cleanup workflow（push to main契機）が保険として独立に後追い検出・修復する。
   すべて成功した場合: 終了コード0。
 `;
 
@@ -258,7 +271,7 @@ function syncMainWorktree(root: string): number {
 }
 
 export async function merge(args: string[]): Promise<number> {
-  return guard(() => {
+  return guard(async () => {
     if (isHelp(args)) {
       printUsage(MERGE_USAGE);
       return 0;
@@ -363,6 +376,24 @@ export async function merge(args: string[]): Promise<number> {
     // 検知はいずれもベストエフォート（最新性保証自体は担わない付加的な観測性強化）であったため、
     // 多段防御は「fresh判定からgh pr merge呼び出しまでの間隔最小化」のみで構成する。
 
-    return syncMainWorktree(root);
+    const syncStatus = syncMainWorktree(root);
+    if (syncStatus !== 0) return syncStatus;
+
+    // ISSUE-590/ADR-0046: マージ・ローカル同期成功後、既存のroot-cleanup run（Issue #208、
+    // 無変更のまま再利用）を同一プロセス内で呼び出し、repoRoot直下に残存するIssueセグメント
+    // 成果物を検出時のみ自動削除する。Issueブランチ自体へは削除commitを追加しない（run()の
+    // 既存動作）。run()が非0を返した場合（human_required等）も、マージ自体は既に成功済みで
+    // あり取り消さない。既存の非同期root-cleanup workflow（push to main契機、不変）が保険として
+    // 独立に後追い検出・修復するため、ここでの失敗はAC-3・AC-5の実効性を損なわない。
+    const cleanupStatus = await rootCleanup.run([]);
+    if (cleanupStatus !== 0) {
+      return fail(
+        'PRのマージとmain worktreeの同期には成功しましたが、root直下混入ファイルの自動クリーンアップ' +
+          '（root-cleanup run）に失敗しました。上記の出力を確認し、必要な追加対応を行ってください。' +
+          '既存の非同期 root-cleanup workflow（push to main契機）が保険として独立に後追いで検出・修復するため、' +
+          'マージ結果自体は巻き戻りません。',
+      );
+    }
+    return 0;
   });
 }

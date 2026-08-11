@@ -114,6 +114,17 @@ jobs:
         if: steps.ctx.outputs.skip_checks != 'true'
         run: ./.agent-skill-chain/ci/verify-worktree-path.sh
 
+      - name: verify-root-clean (merge-ready)
+        # ISSUE-590: マージ準備完了状態（Draftではない）のPRについて、repoRoot直下に対象4ファイル
+        # （SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md）が残存していないかを既存の
+        # .agent-skill-chain/ci/verify-root-clean.sh（verify root-clean CLI、Issue #208で導入済み・
+        # 無変更のまま再利用）で検査する。Issueブランチへ削除commitを追加できない制約上、
+        # validation-gateまで正常に完了したPRでもこの検査は常に失敗する設計であり（ADR-0046）、
+        # マージには `--admin` によるbypassを要求する。Draft中はroot直下に対象ファイルが存在する
+        # ことが正常な中間状態であるため、draft == false のときのみ実行する。
+        if: steps.ctx.outputs.skip_checks != 'true' && github.event.pull_request.draft == false
+        run: ./.agent-skill-chain/ci/verify-root-clean.sh
+
       - name: verify-template-sync
         run: ./.agent-skill-chain/ci/verify-template-sync.sh
 

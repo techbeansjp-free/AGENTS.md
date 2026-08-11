@@ -43,6 +43,7 @@ export const routes: Record<string, Handler> = {
   'lease renew': lease.renew,
   'lease resume': lease.resume,
   'lease reclaim': lease.reclaim,
+  'lease status': lease.status,
   'segment start': segment.start,
   'gate review': gate.review,
   'gate publish': gate.publish,
