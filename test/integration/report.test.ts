@@ -8,7 +8,8 @@ import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 
-// `report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason]`
+// `report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason]
+// [human_escalation_requested] [dispatch_token]`
 // （src/commands/report.ts）を検証する。作業ワーカーが完了・blocked時に固定スキーマ
 // （worker-report.schema.yaml）で進行役へ報告するコマンド。
 
@@ -19,6 +20,7 @@ interface WorkerReport {
   segment: string;
   status: string;
   target_sha: string;
+  dispatch_token?: string;
   blocked_reason?: string;
 }
 
@@ -42,6 +44,25 @@ test('report status (local backend): completedはissues/<n>/.agent-skill-chain/r
   assert.equal(report.status, 'completed');
   assert.equal(report.target_sha, 'abc123');
   assert.equal(report.blocked_reason, undefined);
+  assert.equal(report.dispatch_token, undefined, 'dispatch_token未指定の既存呼び出しは引き続き有効であること');
+});
+
+test('report status/latest (ISSUE-661 AC-3/AC-8, local backend): dispatch_tokenを欠落・改変なく保存して出力する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const dispatchToken = 'agent-skill-chain-worker-dispatch.local123';
+
+  const result = runCli(
+    ['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', 'abc123', '', '', dispatchToken],
+    { cwd: repo.dir },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  const report = parse(fs.readFileSync(result.stdout.trim(), 'utf8')) as WorkerReport;
+  assert.equal(report.dispatch_token, dispatchToken);
+  const latest = runCli(['report', 'latest', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(latest.status, 0, latest.stderr);
+  assert.ok(latest.stdout.split('\n').includes(`dispatch_token=${dispatchToken}`));
 });
 
 test('report status (local backend): blockedはblocked_reason必須。省略時は推測で補完せず拒否する', async (t) => {
@@ -132,10 +153,11 @@ test('report status (github backend): Issueコメントとして固定スキー�
     fs.rmSync(scratchDir, { recursive: true, force: true });
   });
 
-  const result = runCli(['report', 'status', 'ISSUE-2', 'validation_worker', 'validation', 'completed', 'aaa111'], {
-    cwd: repo.dir,
-    env,
-  });
+  const dispatchToken = 'agent-skill-chain-worker-dispatch.github123';
+  const result = runCli(
+    ['report', 'status', 'ISSUE-2', 'validation_worker', 'validation', 'completed', 'aaa111', '', '', dispatchToken],
+    { cwd: repo.dir, env },
+  );
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout.trim(), /issuecomment-\d+/);
 
@@ -143,10 +165,12 @@ test('report status (github backend): Issueコメントとして固定スキー�
   assert.equal(comments.length, 1);
   assert.match(comments[0].body, /<!-- agent-skill-chain:worker-report -->/);
   assert.match(comments[0].body, /status: completed/);
+  assert.match(comments[0].body, new RegExp(`dispatch_token: ${dispatchToken}`));
 
   const latest = runCli(['report', 'latest', 'ISSUE-2', 'validation'], { cwd: repo.dir, env });
   assert.equal(latest.status, 0, latest.stderr);
   assert.match(latest.stdout, /status=completed/);
   assert.match(latest.stdout, /target_sha=aaa111/);
   assert.ok(latest.stdout.split('\n').includes(`created_at=${comments[0].createdAt}`));
+  assert.ok(latest.stdout.split('\n').includes(`dispatch_token=${dispatchToken}`));
 });

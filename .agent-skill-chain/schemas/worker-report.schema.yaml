@@ -26,6 +26,9 @@ properties:
   target_sha:
     type: string
     description: 報告時点のcommit SHA（push済み）。
+  dispatch_token:
+    type: string
+    description: "workerへ配達されたdispatchサイクル固有の識別子。report-status.sh呼出し時に末尾の追加引数として渡された値をそのまま保持する。"
   artifacts:
     type: array
     items: {type: string}
