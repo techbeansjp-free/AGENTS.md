@@ -1,6 +1,5 @@
 <!--
-正本: AGENTS.md §4セグメント・4ゲート
-このファイルは Issue 毎に複製して使う雛形である（セグメント: design、成果物: DESIGN.md（PLAN.md は別ファイル）、ゲート: design-gate）。
+このファイルはAGENTS.mdが定める4セグメント・4ゲートの規約に基づく雛形であり、Issue毎に複製して使う（セグメント: design、成果物: DESIGN.md（PLAN.md は別ファイル）、ゲート: design-gate）。
 <...> のプレースホルダを実際の内容に置き換えて記入すること。
 -->
 

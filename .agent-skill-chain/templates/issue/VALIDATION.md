@@ -1,4 +1,4 @@
-# 正本: AGENTS.md §不変条件I7
+# 由来: AGENTS.mdが定める不変条件I7（仕様⇔検証の追跡）の規約に基づく雛形である。
 #
 # このファイルは Issue 毎に複製して使う雛形である（セグメント: validation、ゲート: validation-gate）。
 # フィールドは .agent-skill-chain/schemas/validation-report.schema.yaml
