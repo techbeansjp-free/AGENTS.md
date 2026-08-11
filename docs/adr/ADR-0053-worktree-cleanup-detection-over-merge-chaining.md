@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0016
+id: ADR-0053
 status: proposed
 title: マージ済みworktree放置は、マージ操作へのCLI自動連鎖ではなくdoctor検知＋手順明記で解消する
 tags: [worktree, doctor, cleanup, git-conventions]

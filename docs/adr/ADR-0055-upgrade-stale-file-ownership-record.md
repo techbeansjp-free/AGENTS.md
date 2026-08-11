@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0039
+id: ADR-0055
 status: proposed
 title: upgradeが配布元廃止ファイルを検知・削除するための所有権記録の導入
 tags: [upgrade, stale-file, ownership-record, safety]
