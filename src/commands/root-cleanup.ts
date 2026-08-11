@@ -7,6 +7,7 @@ import { ensureGitIdentity } from '../lib/git-identity.js';
 import { findOpenPrByHead, type OpenPr } from '../lib/gh-open-pr.js';
 import { ROOT_ARTIFACT_FILES } from '../lib/root-artifacts.js';
 import { defaultBranch } from '../lib/worktree.js';
+import { captureCheckoutState, restoreCheckoutState } from '../lib/checkout-state.js';
 
 /**
  * main post-merge cleanup自動化（Issue #208、ADR-0007）: squash mergeのたびにmainリポジトリ
@@ -74,6 +75,71 @@ function checkRootCleanupPrScope(pr: OpenPr, expectedBranch: string): string | u
   return undefined;
 }
 
+/**
+ * ISSUE-619: `!pr` 経路（既存のOPENな一時ブランチ・PRが無い場合）のローカルgit操作・PR作成を
+ * 1関数に閉じ込める。マージ判断・スコープ検査には一切関与しない（`run()` のみが調停する）。
+ * チェックアウトの切り替え（`git checkout -b`）を伴う処理をこの関数内に閉じ込めることで、
+ * `run()` 側がこの関数呼び出し前後で確実にチェックアウト状態を記録・復元できるようにする。
+ */
+function performCleanupBranch(root: string, branch: string, stray: string[]): { pr: OpenPr } | { error: string } {
+  const base = defaultBranch(root);
+
+  const checkout = git(['checkout', '-b', branch], root);
+  if (checkout.status !== 0) return { error: `git checkout -b に失敗しました: ${checkout.stderr.trim()}` };
+
+  const identityError = ensureGitIdentity(root);
+  if (identityError) return { error: identityError };
+
+  const rm = git(['rm', ...stray], root);
+  if (rm.status !== 0) return { error: `git rm に失敗しました: ${rm.stderr.trim()}` };
+
+  const commit = git(['commit', '-m', ROOT_CLEANUP_COMMIT_MESSAGE], root);
+  if (commit.status !== 0) return { error: `git commit に失敗しました: ${commit.stderr.trim()}` };
+
+  const push = git(['push', 'origin', branch], root);
+  if (push.status !== 0) return { error: `git push に失敗しました: ${push.stderr.trim()}` };
+
+  const title = `chore: remove stray root-level issue segment artifacts`;
+  const body = [
+    '機械生成のroot直下混入解消PR（Issue #208 root-cleanup runが生成）。',
+    '',
+    '以下のファイルはIssueセグメント成果物であり、mainルート直下に恒久残存すべきではないため削除する:',
+    ...stray.map((f) => `- \`${f}\``),
+    '',
+    'SPEC/DESIGN/PLAN/VALIDATIONを伴わない、承認済みの本Issue design-gate決定（ADR-0007）の機械的執行。',
+  ].join('\n');
+  const create = gh(['pr', 'create', '--head', branch, '--base', base, '--title', title, '--body', body], root);
+  if (create.status !== 0) return { error: `gh pr create に失敗しました: ${create.stderr.trim()}` };
+
+  const pr = findOpenPrByHead(root, branch);
+  if (!pr) return { error: 'gh pr create 後にPRを解決できませんでした' };
+  return { pr };
+}
+
+/**
+ * ISSUE-619 design-gate再通過分: `gh pr merge --admin` 成功直後、現在のチェックアウトが
+ * `base`（今回のPRのマージ先＝defaultBranch(root)）と一致する場合のみ、admin merge自身が
+ * 前進させた origin 側の `base` 先端へローカル内容を追随させる（fetch + --ff-only merge）。
+ * detached HEAD、または `base` 以外のブランチへ滞在・復元している場合は何もしない
+ * （CIランナー経路は通常detached HEADのため非該当のまま、既存の
+ * `.github/workflows/agent-skill-chain-root-cleanup.yml` の同期ステップが引き続き担う）。
+ * マージ判断・スコープ検査・`performCleanupBranch` には一切関与しない。
+ */
+function syncBaseBranchAfterAdminMerge(root: string, base: string): string | undefined {
+  const state = captureCheckoutState(root);
+  if (state.kind !== 'branch' || state.name !== base) return undefined;
+
+  const fetch = git(['fetch', 'origin', base], root);
+  if (fetch.status !== 0) {
+    return `admin merge成功後の '${base}' 追従に失敗しました（git fetch origin ${base}）: ${fetch.stderr.trim()}。'${root}' で手動対応してください。`;
+  }
+  const merge = git(['merge', '--ff-only', `origin/${base}`], root);
+  if (merge.status !== 0) {
+    return `admin merge成功後の '${base}' 追従に失敗しました（git merge --ff-only origin/${base}）: ${merge.stderr.trim()}。'${root}' で手動対応してください。`;
+  }
+  return undefined;
+}
+
 const RUN_USAGE = `
 使い方: agent-skill-chain root-cleanup run
 
@@ -113,37 +179,15 @@ export async function run(args: string[]): Promise<number> {
     }
 
     if (!pr) {
-      const base = defaultBranch(root);
-
-      const checkout = git(['checkout', '-b', branch], root);
-      if (checkout.status !== 0) return fail(`git checkout -b に失敗しました: ${checkout.stderr.trim()}`);
-
-      const identityError = ensureGitIdentity(root);
-      if (identityError) return fail(identityError);
-
-      const rm = git(['rm', ...stray], root);
-      if (rm.status !== 0) return fail(`git rm に失敗しました: ${rm.stderr.trim()}`);
-
-      const commit = git(['commit', '-m', ROOT_CLEANUP_COMMIT_MESSAGE], root);
-      if (commit.status !== 0) return fail(`git commit に失敗しました: ${commit.stderr.trim()}`);
-
-      const push = git(['push', 'origin', branch], root);
-      if (push.status !== 0) return fail(`git push に失敗しました: ${push.stderr.trim()}`);
-
-      const title = `chore: remove stray root-level issue segment artifacts`;
-      const body = [
-        '機械生成のroot直下混入解消PR（Issue #208 root-cleanup runが生成）。',
-        '',
-        '以下のファイルはIssueセグメント成果物であり、mainルート直下に恒久残存すべきではないため削除する:',
-        ...stray.map((f) => `- \`${f}\``),
-        '',
-        'SPEC/DESIGN/PLAN/VALIDATIONを伴わない、承認済みの本Issue design-gate決定（ADR-0007）の機械的執行。',
-      ].join('\n');
-      const create = gh(['pr', 'create', '--head', branch, '--base', base, '--title', title, '--body', body], root);
-      if (create.status !== 0) return fail(`gh pr create に失敗しました: ${create.stderr.trim()}`);
-
-      pr = findOpenPrByHead(root, branch);
-      if (!pr) return fail('gh pr create 後にPRを解決できませんでした');
+      // ISSUE-619: 一時ブランチへのチェックアウト切り替え（performCleanupBranch内）前に
+      // 実行前の実際のチェックアウト状態を記録し、performCleanupBranchの成否によらず
+      // 直後に必ず復元する（fail-closed: 復元失敗時はスコープ検査・admin mergeへ進まない）。
+      const initialState = captureCheckoutState(root);
+      const cleanupResult = performCleanupBranch(root, branch, stray);
+      const restoreError = restoreCheckoutState(root, initialState);
+      if (restoreError) return fail(restoreError);
+      if ('error' in cleanupResult) return fail(cleanupResult.error);
+      pr = cleanupResult.pr;
     }
 
     const scopeError = checkRootCleanupPrScope(pr, branch);
@@ -156,6 +200,11 @@ export async function run(args: string[]): Promise<number> {
       root,
     );
     if (merge.status !== 0) return fail(`gh pr merge --admin に失敗しました: ${merge.stderr.trim()}`);
+
+    // ISSUE-619 design-gate再通過分: admin merge自体は既に成立済みのため、以降の同期失敗では
+    // それを取り消さずfail-closedでエラー終了する（restoreCheckoutState失敗時と同一方針）。
+    const syncError = syncBaseBranchAfterAdminMerge(root, defaultBranch(root));
+    if (syncError) return fail(syncError);
 
     return ok(String(pr.number));
   });

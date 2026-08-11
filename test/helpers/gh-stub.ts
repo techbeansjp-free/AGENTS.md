@@ -79,6 +79,35 @@ function applyMergedBumpPrToMain(head) {
   git(['push', 'origin', 'main']);
 }
 
+// ISSUE-619 design-gate再通過分: root-cleanup run自身が作成したクリーンアップPR
+// （chore/root-cleanup-*）のadmin mergeをシミュレートする際は、実GitHubのsquash merge同様に
+// origin側のbase branch参照そのものを前進させる（ローカルのworking tree/チェックアウトには
+// 一切触れない、applyMergedBumpPrToMainとは異なりcheckout/mergeをローカルで行わない）。
+// root-cleanup run自身のsyncBaseBranchAfterAdminMergeがその後のgit fetch + merge --ff-onlyで
+// ローカルへ反映することを、実git remoteに対して検証可能にするための最小シミュレーション。
+const ROOT_CLEANUP_BRANCH_RE = /^chore\\/root-cleanup-[0-9]{8}T[0-9]{6}Z$/;
+function applyRootCleanupMergeToOriginBase(head, base) {
+  let remoteDir;
+  try {
+    remoteDir = childProcess.execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: process.cwd(), encoding: 'utf8' }).trim();
+  } catch {
+    return;
+  }
+  let headSha;
+  try {
+    headSha = childProcess
+      .execFileSync('git', ['rev-parse', 'refs/remotes/origin/' + head], { cwd: process.cwd(), encoding: 'utf8' })
+      .trim();
+  } catch {
+    return;
+  }
+  try {
+    childProcess.execFileSync('git', ['--git-dir', remoteDir, 'update-ref', 'refs/heads/' + base, headSha], { stdio: 'pipe' });
+  } catch {
+    // best-effortシミュレーションのため、失敗してもadmin merge自体の応答は変えない
+  }
+}
+
 const [cmd, sub] = args;
 
 if (cmd === 'auth' && sub === 'status') {
@@ -195,6 +224,14 @@ if (cmd === 'pr' && sub === 'create') {
   const state = loadState();
   state.prCreateCalls = state.prCreateCalls || [];
   state.prCreateCalls.push({ args, body: flag('--body') });
+  // ISSUE-619: AC-5（commit・push・PR作成等の途中でコマンドが異常終了した場合の
+  // チェックアウト復元）検証用。failMergeCount/failMergeMessageと同型。
+  if ((state.failPrCreateCount || 0) > 0) {
+    state.failPrCreateCount -= 1;
+    saveState(state);
+    process.stderr.write(state.failPrCreateMessage || 'gh-stub: simulated pr create failure\\n');
+    process.exit(1);
+  }
   const head = flag('--head');
   if (head) {
     // findOpenPrByHead（release bump・root-cleanup runが共有）が直後に
@@ -209,6 +246,9 @@ if (cmd === 'pr' && sub === 'create') {
       number,
       state: 'OPEN',
       headRefName: head,
+      // ISSUE-619 design-gate再通過分: applyRootCleanupMergeToOriginBaseがadmin merge時に
+      // どのbase branchを前進させるかを解決するために保持する。
+      baseRefName: flag('--base') || 'main',
       // additions/deletions は root-cleanup run のスコープ検査（削除のみで構成されているか）が
       // 参照する。既定は「削除のみ」（additions:0）とし、release bump 側は現状これらの値を
       // 見ないため既定値のままで従来どおり動作する。
@@ -478,13 +518,18 @@ if (cmd === 'pr' && sub === 'merge') {
     process.exit(1);
   }
   let mergedHead;
+  let mergedBase;
   for (const key of Object.keys(state.prsByBranch || {})) {
     if (String(state.prsByBranch[key].number) === String(number)) {
       state.prsByBranch[key].state = 'MERGED';
       mergedHead = key;
+      mergedBase = state.prsByBranch[key].baseRefName;
     }
   }
   if (state.applyMergedPrToMain && mergedHead) applyMergedBumpPrToMain(mergedHead);
+  if (mergedHead && ROOT_CLEANUP_BRANCH_RE.test(mergedHead)) {
+    applyRootCleanupMergeToOriginBase(mergedHead, mergedBase || 'main');
+  }
   saveState(state);
   process.stdout.write('https://github.com/test/repo/pull/' + number + '\\n');
   process.exit(0);
@@ -874,6 +919,9 @@ export interface GhStubBumpPr {
   reviews?: unknown[];
   comments?: unknown[];
   mergeStateStatus?: string;
+  /** ISSUE-619 design-gate再通過分: applyRootCleanupMergeToOriginBaseがadmin merge時に
+   * どのbase branchを前進させるかを解決するために保持する。 */
+  baseRefName?: string;
 }
 
 /** Issue #493: `checkFreshness()` の `gh pr view` 問い合わせ1回ぶんの応答を制御するエントリ。
@@ -953,6 +1001,11 @@ export interface GhStubState {
   mergeCalls?: { number: string; args: string[] }[];
   failMergeCount?: number;
   failMergeMessage?: string;
+  /** ISSUE-619: 直後の `gh pr create` 呼び出しを count 回だけ失敗させる（PR未作成のまま）。
+   * root-cleanup run のAC-5（一時ブランチへのチェックアウト切り替え後・PR作成前後の失敗時も
+   * チェックアウト状態が復元されること）の検証用。failMergeCount/failMergeMessageと同型。 */
+  failPrCreateCount?: number;
+  failPrCreateMessage?: string;
   advanceMainOnNextMerge?: boolean;
   applyMergedPrToMain?: boolean;
   releases?: string[];
@@ -1025,6 +1078,10 @@ export interface GhStub {
   /** 直後の `gh pr merge` 呼び出しを count 回だけ失敗させる（PRはOPENのまま）。
    * 「PR作成後、admin mergeに失敗」自己修復シナリオの検証用（Issue #196・#208）。 */
   failNextMerge(count?: number): void;
+  /** ISSUE-619: 直後の `gh pr create` 呼び出しを count 回だけ失敗させる（PR未作成のまま）。
+   * root-cleanup run AC-5（一時ブランチへのチェックアウト切り替え後、PR作成前後の失敗時にも
+   * チェックアウト状態が実行前へ復元されること）の検証用。 */
+  failNextPrCreate(count?: number, message?: string): void;
   /** Issue #266: 最初のmerge要求時にmainを実際に前進させ、GitHubのbase更新競合を返す。
    * 次の成功mergeはテスト用remoteのmainへ反映し、tag/publish後続契約まで検証可能にする。 */
   simulateBaseBranchRaceOnNextMerge(): void;
@@ -1166,6 +1223,13 @@ export function createGhStub(baseDir: string): GhStub {
       const state = this.readState();
       state.failMergeCount = count;
       delete state.failMergeMessage;
+      this.writeState(state);
+    },
+    failNextPrCreate(count = 1, message?: string): void {
+      const state = this.readState();
+      state.failPrCreateCount = count;
+      if (message === undefined) delete state.failPrCreateMessage;
+      else state.failPrCreateMessage = message;
       this.writeState(state);
     },
     simulateBaseBranchRaceOnNextMerge(): void {
