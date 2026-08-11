@@ -92,10 +92,14 @@ function runStep(run: string, env: Record<string, string>, mockGhAuthor?: string
 
 // --- ci.yml: Derive issue_id ---
 
-function runCi(branch: string, pusher: string, prAuthor: string): RunResult {
+function runCi(branch: string, pusher: string, prAuthor: string, actorPermission?: string): RunResult {
   const step = ctxStep(CI_BODY, 'verify');
   const actor = resolveActor(step.env?.ACTOR, pusher, prAuthor);
-  return runStep(step.run as string, { BRANCH: branch, ACTOR: actor });
+  return runStep(
+    step.run as string,
+    { BRANCH: branch, ACTOR: actor, REPOSITORY: 'test/repo', GH_TOKEN: 'test-token' },
+    actorPermission,
+  );
 }
 
 test('ci実行(a): 通常Issueブランチは issue_id 抽出・skip_checks=false', () => {
@@ -131,4 +135,42 @@ test('ci実行(e): branch.pattern と衝突する dependabot/223-fake は第1分
     assert.equal(r.outputs.issue_id, 'ISSUE-223');
     assert.equal(r.outputs.skip_checks, 'false');
   }
+});
+
+test('ci実行(f): adminが作成した機械生成root-cleanup PRは skip_checks=true', () => {
+  const r = runCi('chore/root-cleanup-20260811T121848Z', HUMAN, HUMAN, 'admin');
+  assert.equal(r.status, 0, `exit=0 であること（stderr: ${r.stderr}）`);
+  assert.equal(r.outputs.issue_id, '');
+  assert.equal(r.outputs.skip_checks, 'true');
+});
+
+test('ci実行(g): adminでない人間がroot-cleanupブランチ名を偽装したPRは exit 1 で拒否される', () => {
+  const r = runCi('chore/root-cleanup-20260811T121848Z', HUMAN, HUMAN, 'write');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /admin権限を持たない/);
+});
+
+test('ci実行(h): root-cleanupの類似ブランチはadmin作成でも exit 1 で拒否される', () => {
+  const malformed = [
+    'chore/root-cleanup-',
+    'chore/root-cleanup-manual',
+    'chore/root-cleanup-20260811T121848Z-extra',
+    'feature/root-cleanup-20260811T121848Z',
+  ];
+  for (const branch of malformed) {
+    const r = runCi(branch, HUMAN, HUMAN, 'admin');
+    assert.equal(r.status, 1, `${branch} は拒否されること`);
+  }
+});
+
+test('ci実行(i): root-cleanup PR作成者の権限API確認が失敗した場合は exit 1 で安全側に停止する', () => {
+  const step = ctxStep(CI_BODY, 'verify');
+  const actor = resolveActor(step.env?.ACTOR, HUMAN, HUMAN);
+  const r = runStep(
+    step.run as string,
+    { BRANCH: 'chore/root-cleanup-20260811T121848Z', ACTOR: actor, REPOSITORY: 'test/repo', GH_TOKEN: 'test-token', GH_MOCK_EXIT: '1' },
+    'admin',
+  );
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /リポジトリ権限を確認できません/);
 });

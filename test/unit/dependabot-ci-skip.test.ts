@@ -164,6 +164,18 @@ test('ci: Derive issue_id ステップは Dependabot 許可リストで skip_che
   assert.ok(run.includes('skip_checks=false'), 'ctx が通常Issueブランチで skip_checks=false を出力すること');
 });
 
+test('ci: Derive issue_id ステップは厳密なroot-cleanupブランチとadminのPR作成者だけを許可する', () => {
+  const steps = ciSteps();
+  const ctx = steps.find((s) => s.id === 'ctx');
+  assert.ok(ctx, "id 'ctx' のステップ（Derive issue_id）が存在すること");
+  const run = (ctx as Step).run ?? '';
+  assert.ok(run.includes('^chore/root-cleanup-[0-9]{8}T[0-9]{6}Z$'), 'root-cleanup生成ブランチの厳密な形式を判定すること');
+  assert.ok(run.includes('collaborators/$ACTOR/permission'), 'PR作成者のリポジトリ権限をGitHub APIで確認すること');
+  assert.ok(run.includes('"$ACTOR_PERMISSION" != "admin"'), 'admin以外のPR作成者をfail-closedで拒否すること');
+  assert.equal((ctx as Step).env?.GH_TOKEN, '${{ github.token }}');
+  assert.equal((ctx as Step).env?.REPOSITORY, '${{ github.repository }}');
+});
+
 test('ci: Derive issue_id の env.ACTOR は PR 作成者（pull_request.user.login）由来であり github.actor を参照しない', () => {
   const steps = ciSteps();
   const ctx = steps.find((s) => s.id === 'ctx');

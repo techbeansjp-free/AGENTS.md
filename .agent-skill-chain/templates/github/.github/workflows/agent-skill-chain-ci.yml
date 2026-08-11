@@ -93,6 +93,8 @@ jobs:
           BRANCH: ${{ github.head_ref }}
           # Issue #219: 追加pushで変化するgithub.actorではなく、PRの起源（PR作成者）で判定する
           ACTOR: ${{ github.event.pull_request.user.login }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           ISSUE_ID="ISSUE-$(echo "$BRANCH" | sed -E 's#^[^/]+/([0-9]+)-.*#\1#')"
           if [[ "$ISSUE_ID" =~ ^ISSUE-[0-9]+$ ]]; then
@@ -101,8 +103,19 @@ jobs:
           elif [[ "$ACTOR" == "dependabot[bot]" && "$BRANCH" == dependabot/* ]]; then
             echo "issue_id=" >> "$GITHUB_OUTPUT"
             echo "skip_checks=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$BRANCH" =~ ^chore/root-cleanup-[0-9]{8}T[0-9]{6}Z$ ]]; then
+            if ! ACTOR_PERMISSION="$(gh api "repos/$REPOSITORY/collaborators/$ACTOR/permission" --jq '.permission')"; then
+              echo "root-cleanup PR作成者 '$ACTOR' のリポジトリ権限を確認できません" >&2
+              exit 1
+            fi
+            if [[ "$ACTOR_PERMISSION" != "admin" ]]; then
+              echo "root-cleanup PR作成者 '$ACTOR' はadmin権限を持たないため許可しません" >&2
+              exit 1
+            fi
+            echo "issue_id=" >> "$GITHUB_OUTPUT"
+            echo "skip_checks=true" >> "$GITHUB_OUTPUT"
           else
-            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（.agent-skill-chain/config/agent-skill-chain.yaml branch.pattern に非適合、かつ Dependabot許可リストにも非該当）" >&2
+            echo "ブランチ名 '$BRANCH' から issue_id を抽出できません（.agent-skill-chain/config/agent-skill-chain.yaml branch.pattern に非適合、かつ Dependabot/root-cleanup許可リストにも非該当）" >&2
             exit 1
           fi
 
