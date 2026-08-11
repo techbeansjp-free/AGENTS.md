@@ -111,6 +111,10 @@ fi
 # worker.model_tiers から解決済みの具体的なモデル文字列であり、本スクリプト・アダプタは
 # ティア名から具体名を導く処理を持たない。ASC_WORKER_MODEL_TIER はアダプタ側の防御的検査
 # （ティア指定なのにモデル未解決の場合に黙って従来値へ落ちないための検査）にのみ用いる。
+# ASC_WORKER_ADAPTER は本スクリプトが既に解決済みの ${ADAPTER}（worker.segment_overrides.<segment>.adapter
+# → worker.adapter → 既定human）をそのまま渡すだけであり（ASC_REVIEW_ADAPTERと対称のパターン、
+# ISSUE-609）、adapter名から挙動を分岐させる判断自体は下流（claude.sh の _dispatch_via_agent_tool 等）
+# に委ねる。
 ASC_WORKER_MODEL="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^model=//p')"
 ASC_WORKER_REASONING_EFFORT="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^reasoning_effort=//p')"
 ASC_WORKER_MODEL_TIER="$(printf '%s\n' "$WORKER_CONTEXT" | sed -n 's/^model_tier=//p')"
@@ -120,6 +124,8 @@ ASC_AGENT_TOOL_DISPATCH="${ASC_AGENT_TOOL_DISPATCH:-false}"
 [[ -n "$ASC_WORKER_REASONING_EFFORT" ]] && export ASC_WORKER_REASONING_EFFORT
 [[ -n "$ASC_WORKER_MODEL_TIER" ]] && export ASC_WORKER_MODEL_TIER
 export ASC_AGENT_TOOL_DISPATCH
+ASC_WORKER_ADAPTER="$ADAPTER"
+export ASC_WORKER_ADAPTER
 
 # アダプタを読み込み、launch_worker を起動する。終了コードはそのまま呼び出し側へ伝播する。
 # shellcheck source=/dev/null
