@@ -330,6 +330,42 @@ test('segment start (spec, Issue #427): human_confirmation.before_implementation
   assert.match(segmentStart.stdout, /role: spec_worker/);
 });
 
+test('segment start (ISSUE-642 AC-1/AC-6): 全4ロールのcontract末尾に既存条件を保った完了報告手順を付加する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setHumanConfirmationBeforeImplementation(repo.dir, false);
+
+  const start = runCli(['issue', 'start', 'ISSUE-642', 'bugfix', 'worker-completion-report', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+
+  const cases = [
+    { segment: 'spec', role: 'spec_worker', existingCompletion: 'Draft PRを作成済み' },
+    { segment: 'design', role: 'design_worker', existingCompletion: 'commit + push済み' },
+    { segment: 'implementation', role: 'implementation_worker', existingCompletion: 'commit + push済み' },
+    { segment: 'validation', role: 'validation_worker', existingCompletion: 'commit + push済み' },
+  ];
+
+  for (const entry of cases) {
+    const acquire = runCli(['lease', 'acquire', 'ISSUE-642', entry.segment], { cwd: repo.dir });
+    assert.equal(acquire.status, 0, acquire.stderr);
+
+    const segmentStart = runCli(['segment', 'start', 'ISSUE-642', entry.segment], { cwd: repo.dir });
+    assert.equal(segmentStart.status, 0, segmentStart.stderr);
+    assert.equal(segmentStart.stdout.split('\n')[0], `role: ${entry.role}`, '先頭のrole抽出契約を維持すること');
+    assert.match(segmentStart.stdout, new RegExp(entry.existingCompletion.replace(/[+]/g, '\\+')));
+    assert.match(segmentStart.stdout, /worker_completion_report:/);
+    assert.match(
+      segmentStart.stdout,
+      new RegExp(`report-status\\.sh ISSUE-642 ${entry.role} ${entry.segment} completed`),
+    );
+
+    const release = runCli(['lease', 'release', 'ISSUE-642'], { cwd: repo.dir });
+    assert.equal(release.status, 0, release.stderr);
+  }
+});
+
 test('segment start (local backend): gate reportのblocking findingがある場合だけreview_statusへ同梱する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

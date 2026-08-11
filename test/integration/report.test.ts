@@ -118,6 +118,8 @@ test('report status (local backend, AC-3): worktree内から実行したreport�
   assert.equal(latest.status, 0, latest.stderr);
   assert.match(latest.stdout, /status=completed/);
   assert.match(latest.stdout, /target_sha=deadbeef00000000/);
+  const reportMtime = fs.statSync(expectedDest).mtime.toISOString();
+  assert.ok(latest.stdout.split('\n').includes(`created_at=${reportMtime}`));
 });
 
 test('report status (github backend): Issueコメントとして固定スキーマのworker reportを投稿する', async (t) => {
@@ -141,4 +143,10 @@ test('report status (github backend): Issueコメントとして固定スキー�
   assert.equal(comments.length, 1);
   assert.match(comments[0].body, /<!-- agent-skill-chain:worker-report -->/);
   assert.match(comments[0].body, /status: completed/);
+
+  const latest = runCli(['report', 'latest', 'ISSUE-2', 'validation'], { cwd: repo.dir, env });
+  assert.equal(latest.status, 0, latest.stderr);
+  assert.match(latest.stdout, /status=completed/);
+  assert.match(latest.stdout, /target_sha=aaa111/);
+  assert.ok(latest.stdout.split('\n').includes(`created_at=${comments[0].createdAt}`));
 });

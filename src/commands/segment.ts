@@ -60,6 +60,14 @@ function buildIssueBlock(issueIdRaw: string, state: LocalStateIssueFields | unde
   return `issue:\n${indented}`;
 }
 
+function buildCompletionReportBlock(issueId: string, role: string, segment: string): string {
+  return [
+    'worker_completion_report:',
+    '  instruction: 成果物をcommit・pushした後、最終応答の前に次のコマンドで完了状態を進行役へ報告する',
+    `  command: .agent-skill-chain/scripts/report-status.sh ${issueId} ${role} ${segment} completed "$(git rev-parse HEAD)"`,
+  ].join('\n');
+}
+
 export async function start(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -130,6 +138,7 @@ export async function start(args: string[]): Promise<number> {
     if (issueBlock) parts.push(issueBlock);
     if (reviewStatus) parts.push(formatReviewStatusBlock(reviewStatus));
     parts.push(toYamlString(contract).trim());
+    parts.push(buildCompletionReportBlock(issueIdRaw, role, segment));
     parts.push(...loadProjectPolicyDocuments(root, segment));
     return ok(parts.join('\n'));
   });
