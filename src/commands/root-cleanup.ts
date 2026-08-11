@@ -6,6 +6,7 @@ import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { ensureGitIdentity } from '../lib/git-identity.js';
 import { findOpenPrByHead, type OpenPr } from '../lib/gh-open-pr.js';
 import { ROOT_ARTIFACT_FILES } from '../lib/root-artifacts.js';
+import { defaultBranch } from '../lib/worktree.js';
 
 /**
  * main post-merge cleanup自動化（Issue #208、ADR-0007）: squash mergeのたびにmainリポジトリ
@@ -112,6 +113,8 @@ export async function run(args: string[]): Promise<number> {
     }
 
     if (!pr) {
+      const base = defaultBranch(root);
+
       const checkout = git(['checkout', '-b', branch], root);
       if (checkout.status !== 0) return fail(`git checkout -b に失敗しました: ${checkout.stderr.trim()}`);
 
@@ -127,7 +130,6 @@ export async function run(args: string[]): Promise<number> {
       const push = git(['push', 'origin', branch], root);
       if (push.status !== 0) return fail(`git push に失敗しました: ${push.stderr.trim()}`);
 
-      const base = 'main';
       const title = `chore: remove stray root-level issue segment artifacts`;
       const body = [
         '機械生成のroot直下混入解消PR（Issue #208 root-cleanup runが生成）。',

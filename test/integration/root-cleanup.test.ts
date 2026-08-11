@@ -25,15 +25,16 @@ function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 }
 
-/** repoRoot直下（repoDir自身）に対象ファイルを作成し、mainへcommit・pushする（「squash mergeの
- * たびに前Issueの成果物がmainルート直下へ恒久混入する」状態の再現）。 */
+/** repoRoot直下（repoDir自身）に対象ファイルを作成し、現在チェックアウト中のブランチ（既定は
+ * main、default branchがmain以外のテストではそのブランチ）へcommit・pushする（「squash mergeの
+ * たびに前Issueの成果物がdefault branchルート直下へ恒久混入する」状態の再現）。 */
 function writeStrayArtifacts(repoDir: string, files: string[]): void {
   for (const file of files) {
     fs.writeFileSync(path.join(repoDir, file), `# ${file}\n\nstray root artifact\n`);
   }
   git(repoDir, ['add', '-A']);
   git(repoDir, ['commit', '-m', 'chore: simulate merged issue segment artifacts at repo root']);
-  git(repoDir, ['push', 'origin', 'main']);
+  git(repoDir, ['push', 'origin', 'HEAD']);
 }
 
 function extractHeadBranch(args: string[]): string | undefined {
@@ -116,6 +117,73 @@ test('root-cleanup run: 対象4ファイルすべてが存在する場合はす�
   for (const file of ['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md']) {
     assert.equal(fs.existsSync(path.join(repo.dir, file)), false, `${file} が削除されていること`);
   }
+});
+
+// ---- default branch解決（ISSUE-588、AC-1・AC-3） ----
+
+test('root-cleanup run (ISSUE-588 AC-1): default branchがmain以外(develop)のリポジトリでも、PRのbaseに実際のdefault branch名が使われ成功する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  // Given: 対象リポジトリのdefault branchをdevelopへ切り替える（'main'という名前のブランチ自体を
+  // ローカル・リモート双方から無くす）
+  git(repo.dir, ['checkout', '-b', 'develop']);
+  git(repo.dir, ['push', 'origin', 'develop']);
+  git(repo.remoteDir, ['symbolic-ref', 'HEAD', 'refs/heads/develop']);
+  git(repo.dir, ['push', 'origin', '--delete', 'main']);
+  git(repo.dir, ['branch', '-D', 'main']);
+  git(repo.dir, ['remote', 'set-head', 'origin', '-a']);
+
+  writeStrayArtifacts(repo.dir, ['SPEC.md']);
+  stub.setDefaultPrFiles(['SPEC.md']);
+
+  const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout.trim(), /^\d+$/, 'マージしたPR番号を標準出力へ返すこと');
+
+  const prCalls = stub.readState().prCreateCalls ?? [];
+  assert.equal(prCalls.length, 1);
+  assert.match(prCalls[0].args.join(' '), /--base develop\b/, 'PR baseに実際のdefault branch名(develop)が使われること');
+  assert.doesNotMatch(
+    prCalls[0].args.join(' '),
+    /--base main\b/,
+    "'main'固定文字列がbaseとして渡されないこと",
+  );
+});
+
+test('root-cleanup run (ISSUE-588 AC-3): default branchを機械的に特定できない場合、PR作成を試みる前に原因を含むエラーで失敗する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const { stub, env, cleanup } = makeStub();
+  t.after(cleanup);
+
+  writeStrayArtifacts(repo.dir, ['SPEC.md']);
+  stub.setDefaultPrFiles(['SPEC.md']);
+
+  // Given: origin/HEADのsymbolic-refが未設定（createTmpRepoはcloneではなくinit+push構築のため
+  // 元々未設定）かつ、main/masterブランチが共に不在の状態を作る
+  git(repo.dir, ['checkout', '-b', 'tmp-hold']);
+  git(repo.dir, ['branch', '-D', 'main']);
+  let originHeadResolved = true;
+  try {
+    execFileSync('git', ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD'], { cwd: repo.dir, stdio: 'pipe' });
+  } catch {
+    originHeadResolved = false;
+  }
+  assert.equal(originHeadResolved, false, '前提: origin/HEADのsymbolic-refが未設定であること');
+
+  // GITHUB_BASE_REFの解決フォールバックに依存せず「特定不能」を再現するため明示的に未設定化する
+  const envWithoutGithubBaseRef: NodeJS.ProcessEnv = { ...env };
+  delete envWithoutGithubBaseRef.GITHUB_BASE_REF;
+
+  const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env: envWithoutGithubBaseRef });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /デフォルトブランチを特定できません/);
+  assert.equal((stub.readState().prCreateCalls ?? []).length, 0, 'PR作成を試みる前に失敗していること');
+  assert.equal((stub.readState().mergeCalls ?? []).length, 0);
 });
 
 // ---- (c) スコープ検査違反時のhuman_required ----
