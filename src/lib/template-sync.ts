@@ -54,7 +54,7 @@ export function resolveTemplateMappings(targetRoot: string, overrideConfig?: Age
  * `mapping.source` に対する seed-only マニフェスト（`<source>.seed-only.yaml`、配布元ディレクトリの
  * 兄弟ファイルなので配布元ツリーの一部として展開先へコピーされない）を読み、初回配置後の内容乖離を
  * 許容するファイルの相対パス集合を返す。マニフェストが無ければ空集合（従来どおり完全一致必須）。
- * ISSUE-574: CODEOWNERS・dependabot.yml等、プロジェクトごとに正当にカスタマイズされうるファイルを、
+ * ISSUE-574: CODEOWNERS等、プロジェクトごとに正当にカスタマイズされうるファイルを、
  * ワークフロー本体等の完全一致必須ファイルと区別するための仕組み。
  */
 function loadSeedOnlyPaths(source: string): Set<string> {

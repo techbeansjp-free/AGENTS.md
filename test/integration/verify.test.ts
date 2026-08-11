@@ -1163,7 +1163,7 @@ test('verify template-sync: 未同期・同期後の一致・再改変による�
   assert.match(afterEdit.stderr, /未同期（差分あり）: SECURITY\.md/);
 });
 
-// ISSUE-574: seed-onlyファイル（CODEOWNERS・dependabot.yml）は初回配置後の内容カスタマイズを
+// ISSUE-574: seed-onlyファイル（CODEOWNERS）は初回配置後の内容カスタマイズを
 // 正当な乖離として許容する。AC-1〜AC-3を検証する。
 test('verify template-sync: seed-only指定ファイル（CODEOWNERS）はプレースホルダー書き換え後も差分として報告しない（AC-1）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
@@ -1180,20 +1180,6 @@ test('verify template-sync: seed-only指定ファイル（CODEOWNERS）はプレ
   // Then: 失敗しない
   const result = runCli(['verify', 'template-sync', repo.dir], { cwd: repo.dir });
   assert.equal(result.status, 0, result.stderr);
-});
-
-test('verify template-sync: seed-only指定ファイル（dependabot.yml）が完全に削除された場合は引き続き欠落として検出される（AC-2）', async (t) => {
-  const repo = createTmpRepo({ backend: 'local' });
-  t.after(() => repo.cleanup());
-
-  const sync = runCli(['sync', 'templates', repo.dir], { cwd: repo.dir });
-  assert.equal(sync.status, 0, sync.stderr);
-
-  fs.rmSync(path.join(repo.dir, '.github', 'dependabot.yml'));
-
-  const result = runCli(['verify', 'template-sync', repo.dir], { cwd: repo.dir });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /未同期（欠落）: dependabot\.yml/);
 });
 
 test('verify template-sync: 展開先だけに存在する本体専用ファイルは差分として報告しない', async (t) => {

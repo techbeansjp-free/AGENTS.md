@@ -5,4 +5,3 @@
 # パスは配布元 `.github/` ディレクトリからの相対パスで記述する。
 paths:
   - CODEOWNERS
-  - dependabot.yml
