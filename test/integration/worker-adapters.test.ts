@@ -486,7 +486,7 @@ test('Agent tool dispatch (ISSUE-661 AC-1): 別dispatchサイクルは一致し�
   }
 });
 
-test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定時はcontract本文を出さずexit 4で監査メタデータを返す', async (t) => {
+test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8, ISSUE-665 AC-1/AC-2/AC-4): Claude向けcontractへdispatchトークンを埋め込み監査メタデータを返す', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerAdapter(repo.dir, 'claude');
@@ -529,6 +529,12 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定
   const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
   const dispatchToken = /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
   assert.match(contract.toString('utf8'), /^role: spec_worker/m);
+  assert.match(contract.toString('utf8'), /^worker_completion_dispatch:$/m);
+  assert.match(contract.toString('utf8'), new RegExp(`^  dispatch_token: ${dispatchToken}$`, 'm'));
+  assert.match(
+    contract.toString('utf8'),
+    new RegExp(`report-status\\.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatchToken}`),
+  );
   assert.equal(createHash('sha256').update(contract).digest('hex'), expectedSha);
   assert.equal(String(contract.toString('utf8').split('\n').length - 1), expectedLines);
   assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
@@ -561,18 +567,19 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定
   assert.equal(reacquire.status, 0, 'verifyがleaseを解放済みであること: ' + reacquire.stderr);
 });
 
-test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1): Codexコマンドは対象worktreeへのcdから始まり、別cwdから実行しても対象worktree内でCodexを起動する', async (t) => {
+test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1, ISSUE-665 AC-1/AC-2/AC-4): Codex向けcontractへdispatchトークンを埋め込み対象worktreeで起動する', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerSegmentOverride(repo.dir, 'spec', { adapter: 'codex' });
   setWorkerAgentToolDispatch(repo.dir, true);
 
-  const { stubDir, argvCapturePath, cwdCapturePath } = installCodexDispatchStub(t);
+  const { stubDir, argvCapturePath, stdinCapturePath, cwdCapturePath } = installCodexDispatchStub(t);
   const env = envWithout(['CLAUDECODE'], {
     ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
     ASC_DISPATCH_MAX_WAIT_SEC: '60',
     WORKER_RENEW_INTERVAL_SEC: '30',
     CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_STDIN_SAFE_THRESHOLD_BYTES: '1',
     PATH: `${stubDir}:${process.env.PATH}`,
   });
 
@@ -589,10 +596,23 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1): Codexコマン�
 
   const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
   const codexCmd = /^CODEX_CMD=(.+)$/m.exec(result.stdout)?.[1];
+  const expectedSha = /^CONTRACT_SHA256=([0-9a-f]{64})$/m.exec(result.stdout)?.[1];
+  const expectedLines = /^CONTRACT_LINES=(\d+)$/m.exec(result.stdout)?.[1];
   assert.ok(dispatchTempDir);
   assert.ok(codexCmd, 'Codexコマンドの直接実行指示が出力に含まれること');
+  assert.ok(expectedSha);
+  assert.ok(expectedLines);
+  const contract = fs.readFileSync(path.join(dispatchTempDir, 'contract.md'));
   const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
   const dispatchToken = /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
+  assert.match(contract.toString('utf8'), /^worker_completion_dispatch:$/m);
+  assert.match(contract.toString('utf8'), new RegExp(`^  dispatch_token: ${dispatchToken}$`, 'm'));
+  assert.match(
+    contract.toString('utf8'),
+    new RegExp(`report-status\\.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatchToken}`),
+  );
+  assert.equal(createHash('sha256').update(contract).digest('hex'), expectedSha);
+  assert.equal(String(contract.toString('utf8').split('\n').length - 1), expectedLines);
   assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
   assert.equal(dispatchToken, path.basename(dispatchTempDir));
   assert.match(result.stdout, /成果物をcommit・pushした後.*report-status\.sh.*completed投稿を実行してから最終応答する/);
@@ -638,6 +658,10 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1): Codexコマン�
     fs.realpathSync(worktreePath),
     'Codex実行時のcwdが対象Issue worktreeに固定されること',
   );
+  const codexArgv = fs.readFileSync(argvCapturePath, 'utf8');
+  assert.match(codexArgv, /^worker_completion_dispatch:$/m, '位置引数経路にも追記済みcontractを渡すこと');
+  assert.match(codexArgv, new RegExp(`^  dispatch_token: ${dispatchToken}$`, 'm'));
+  assert.equal(fs.readFileSync(stdinCapturePath, 'utf8'), '', '位置引数経路はstdinへcontractを重複して渡さないこと');
 
   // 実際のAI worker（Codex）はcontract本文だけを頼りに完了確認まで自律的に行うが、ここではその
   // 振る舞いを模して呼び出し側がcheckpoint+report completedを代行する（既存のISSUE-448 AC-1/AC-4/
@@ -916,7 +940,7 @@ test('worker-launch-verify (ISSUE-661 AC-5/AC-6): 同一HEADの過去サイク�
 
 // --- (a) claude launch_worker: 成功経路 --------------------------------------------------
 
-test('claude launch_worker (ISSUE-470 AC-4): 明示opt-out時にWORKER_CMDが成果物commit+push+report completedまで行った場合、exit 0でlease解放・完了確認される', async (t) => {
+test('claude launch_worker (ISSUE-470 AC-4, ISSUE-665 AC-3): 明示opt-out時のheadless contractにもdispatchトークンを埋め込み既存動作を維持する', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerAdapter(repo.dir, 'claude');
