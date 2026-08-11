@@ -15,6 +15,8 @@ import {
   renewLeaseRef,
   releaseLeaseRef,
   classifyPushFailure,
+  classifyLeaseState,
+  checkGithubLeaseBackendReachable,
   postLeaseReclaimComment,
   type WriterLease,
 } from '../../src/lib/github-lease.js';
@@ -253,4 +255,62 @@ test('releaseLeaseRef: refを削除し、以後activeLeaseForはundefinedを返�
 
   const reacquired = acquireLeaseRef('14', 'spec', makeLease({ token: 'token-reacquired' }), repo.dir);
   assert.equal(reacquired.ok, true, 'release後は同一segmentへの再acquireが成功すること');
+});
+
+// ISSUE-602: `lease status` が使う純粋な分類関数・接続確認関数。
+
+test('classifyLeaseState: writer_leaseが無い場合はnot_foundを返す（AC-3）', () => {
+  const result = classifyLeaseState(undefined);
+  assert.deepEqual(result, { status: 'not_found' });
+});
+
+test('classifyLeaseState: expires_atが未来ならactiveと残り秒数（正）を返す（AC-1）', () => {
+  const now = new Date('2026-08-11T00:00:00.000Z');
+  const lease = makeLease({
+    segment: 'implementation',
+    holder: 'run-abc',
+    acquired_at: '2026-08-10T23:00:00.000Z',
+    expires_at: '2026-08-11T01:00:00.000Z',
+  }).writer_lease;
+  const result = classifyLeaseState(lease, now);
+  assert.equal(result.status, 'active');
+  assert.equal(result.segment, 'implementation');
+  assert.equal(result.holder, 'run-abc');
+  assert.equal(result.acquired_at, '2026-08-10T23:00:00.000Z');
+  assert.equal(result.expires_at, '2026-08-11T01:00:00.000Z');
+  assert.equal(result.remaining_seconds, 3600);
+});
+
+test('classifyLeaseState: expires_atが現在時刻以前ならexpiredと負の残り秒数を返す（AC-3）', () => {
+  const now = new Date('2026-08-11T00:00:00.000Z');
+  const lease = makeLease({
+    expires_at: '2026-08-10T23:00:00.000Z',
+  }).writer_lease;
+  const result = classifyLeaseState(lease, now);
+  assert.equal(result.status, 'expired');
+  assert.equal(result.remaining_seconds, -3600);
+});
+
+test('classifyLeaseState: expires_atが現在時刻と厳密に等しい場合もexpiredとして扱う（境界値）', () => {
+  const now = new Date('2026-08-11T00:00:00.000Z');
+  const lease = makeLease({ expires_at: now.toISOString() }).writer_lease;
+  assert.equal(classifyLeaseState(lease, now).status, 'expired');
+});
+
+test('checkGithubLeaseBackendReachable: origin remoteへ到達できる場合はokを返す（AC-3）', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const result = checkGithubLeaseBackendReachable(repo.dir);
+  assert.equal(result.ok, true);
+});
+
+test('checkGithubLeaseBackendReachable: origin remoteへ到達できない場合はstderrと共にng（コマンド自体の異常終了用、AC-3）', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  execFileSync('git', ['remote', 'set-url', 'origin', '/nonexistent/agent-skill-chain-remote-does-not-exist'], {
+    cwd: repo.dir,
+  });
+  const result = checkGithubLeaseBackendReachable(repo.dir);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.ok(result.stderr.length > 0);
 });

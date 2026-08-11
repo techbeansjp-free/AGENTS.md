@@ -184,6 +184,52 @@ export function listAllLeaseRefNames(cwd?: string): ListAllLeaseRefNamesOutcome 
   return { ok: true, refs };
 }
 
+export type LeaseStateStatus = 'not_found' | 'expired' | 'active';
+
+/** `lease status`（読み取り専用コマンド）が返す、正本の値のみに基づく分類結果。 */
+export interface LeaseStateSummary {
+  status: LeaseStateStatus;
+  segment?: string;
+  holder?: string;
+  acquired_at?: string;
+  expires_at?: string;
+  remaining_seconds?: number;
+}
+
+/**
+ * 正本（GitHubモードのgit ref、ローカルモードのlease.yaml）から読み出した writer_lease と
+ * 現在時刻から、`not_found`／`expired`／`active` の3値と有効期限までの残り秒数（負値は超過秒数）を
+ * 導出する純粋関数。GitHub・ローカル両モードの `lease status` から共通利用する（ISSUE-602）。
+ */
+export function classifyLeaseState(
+  writerLease: WriterLease['writer_lease'] | undefined,
+  now: Date = new Date(),
+): LeaseStateSummary {
+  if (!writerLease) return { status: 'not_found' };
+  const nowIso = now.toISOString();
+  const remainingSeconds = Math.floor((new Date(writerLease.expires_at).getTime() - now.getTime()) / 1000);
+  return {
+    status: writerLease.expires_at > nowIso ? 'active' : 'expired',
+    segment: writerLease.segment,
+    holder: writerLease.holder,
+    acquired_at: writerLease.acquired_at,
+    expires_at: writerLease.expires_at,
+    remaining_seconds: remainingSeconds,
+  };
+}
+
+/**
+ * `lease status`（GitHubモード）専用の接続確認。`git ls-remote origin`（refパターン指定無し）は、
+ * 対象refが存在しない場合でも到達できていれば終了コード0・空出力を返すため、「lease未取得（ref無し）」
+ * と「正本（origin）への到達自体に失敗」を区別できる（doctorコマンドの既存の到達性判定と同じ
+ * `git ls-remote origin` 呼び出しパターンを踏襲。ISSUE-602 DESIGN.md 失敗モード3対応）。
+ */
+export function checkGithubLeaseBackendReachable(cwd?: string): { ok: true } | { ok: false; stderr: string } {
+  const result = git(['ls-remote', 'origin'], cwd);
+  if (result.status !== 0) return { ok: false, stderr: result.stderr.trim() || '詳細不明' };
+  return { ok: true };
+}
+
 /** 有効期限に関わらず、指定Issueの全segmentのwriter leaseをgit refから読み出す。 */
 export function allLeasesFor(issueNumber: string, cwd?: string): LeaseRefEntry[] {
   const entries: LeaseRefEntry[] = [];

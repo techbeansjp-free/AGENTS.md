@@ -22,7 +22,10 @@ import {
   markActiveWriterLeaseLabel,
   unmarkActiveWriterLeaseLabel,
   publicLease,
+  classifyLeaseState,
+  checkGithubLeaseBackendReachable,
   type WriterLease,
+  type LeaseStateSummary,
 } from '../lib/github-lease.js';
 import {
   credentialFor,
@@ -81,6 +84,25 @@ const RECLAIM_USAGE = `
 
 期限切れのGitHub writer leaseを、credential不要の人間向け回収経路で削除する。
 回収には --confirm が必須で、成功後はIssueへ監査コメントを投稿する。
+`;
+
+const STATUS_USAGE = `
+使い方: agent-skill-chain lease status <issue_id> [segment] [--json]
+
+読み取り専用でCoordination Backendの正本（GitHubモード: git ref、ローカルモード: lease.yaml）から
+現在のwriter lease状態を取得する。lease acquire/renew/release/resume/reclaim等の状態変更・
+Issueコメント投稿・credentialの読み書きは一切行わない。
+
+segmentを省略した場合は対象Issueの有効なwriter lease全件を対象とする（無ければ not_found 1件）。
+
+出力:
+  既定: 人間可読な要約（status・segment・holder・acquired_at・expires_at・remaining_seconds）を
+        標準出力へ、対象1件ごとに空行区切りで表示する。
+  --json: 同一情報を配列の構造化データとして標準出力へ返す。
+  終了コード0: 正本への読み取りアクセス自体は成功（status=not_found・expired の場合を含む）。
+  終了コード1以上: issue_id形式誤り、GitHub Coordination Backendへの接続失敗等のコマンド自体の異常終了。
+
+status値: not_found（lease未取得）｜expired（取得済みだが期限切れ）｜active（有効）
 `;
 
 /**
@@ -499,5 +521,61 @@ export async function reclaim(args: string[]): Promise<number> {
     return ok(
       `writer lease を回収しました: issue_id=${issueIdRaw}, segment=${segment}, previous_holder=${existing.lease.writer_lease.holder}`,
     );
+  });
+}
+
+function formatLeaseStateSummary(summary: LeaseStateSummary): string {
+  const lines = [`status: ${summary.status}`];
+  if (summary.segment !== undefined) lines.push(`segment: ${summary.segment}`);
+  if (summary.holder !== undefined) lines.push(`holder: ${summary.holder}`);
+  if (summary.acquired_at !== undefined) lines.push(`acquired_at: ${summary.acquired_at}`);
+  if (summary.expires_at !== undefined) lines.push(`expires_at: ${summary.expires_at}`);
+  if (summary.remaining_seconds !== undefined) lines.push(`remaining_seconds: ${summary.remaining_seconds}`);
+  return lines.join('\n');
+}
+
+function emitLeaseStatus(summaries: LeaseStateSummary[], jsonFlag: boolean): number {
+  if (jsonFlag) return ok(JSON.stringify(summaries));
+  return ok(summaries.map(formatLeaseStateSummary).join('\n\n'));
+}
+
+export async function status(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(STATUS_USAGE);
+      return 0;
+    }
+    const jsonFlag = args.includes('--json');
+    const [issueIdRaw, segment] = args.filter((arg) => arg !== '--json');
+    if (!issueIdRaw) throw new CliError('issue_id は必須です');
+    const { number } = parseIssueId(issueIdRaw);
+
+    const root = repoRoot();
+    const config = loadConfig(root);
+
+    // 読み取り専用: writer lease credentialの読み書き・Issueコメント投稿・ラベル操作を一切行わない
+    // （AC-6）。既存の書込み系関数（acquireLeaseRef・renewLeaseRef・postLeaseComment等）は呼ばない。
+    if (config.coordination.backend === 'local') {
+      const lease = tryReadYamlFile<WriterLease>(leaseFilePath(root, number));
+      const matched =
+        lease && (!segment || lease.writer_lease.segment === segment) ? lease.writer_lease : undefined;
+      return emitLeaseStatus([classifyLeaseState(matched)], jsonFlag);
+    }
+
+    const reachable = checkGithubLeaseBackendReachable(root);
+    if (!reachable.ok) {
+      return fail(`Coordination Backend（GitHub git ref）への接続に失敗しました: ${reachable.stderr}`);
+    }
+
+    if (segment) {
+      const entry = allLeasesFor(number, root).find((e) => e.segment === segment);
+      return emitLeaseStatus([classifyLeaseState(entry?.lease.writer_lease)], jsonFlag);
+    }
+    const active = activeLeasesFor(number, root);
+    const summaries =
+      active.length > 0
+        ? active.map((e) => classifyLeaseState(e.lease.writer_lease))
+        : [classifyLeaseState(undefined)];
+    return emitLeaseStatus(summaries, jsonFlag);
   });
 }
