@@ -84,7 +84,14 @@ function checkRootCleanupPrScope(pr: OpenPr, expectedBranch: string): string | u
 function performCleanupBranch(root: string, branch: string, stray: string[]): { pr: OpenPr } | { error: string } {
   const base = defaultBranch(root);
 
-  const checkout = git(['checkout', '-b', branch], root);
+  // ISSUE-628: 現在チェックアウト中のHEAD（main以外の作業ブランチのこともある）を起点にせず、
+  // 常に base（defaultBranch）の最新（origin/<base>）から短命ブランチを作る。そうしないと、
+  // main以外のブランチをチェックアウト中に実行した場合、そのブランチのmain未反映コミットが
+  // 短命ブランチへ巻き込まれてpushされてしまう。
+  const fetch = git(['fetch', 'origin', base], root);
+  if (fetch.status !== 0) return { error: `git fetch origin ${base} に失敗しました: ${fetch.stderr.trim()}` };
+
+  const checkout = git(['checkout', '-b', branch, `origin/${base}`], root);
   if (checkout.status !== 0) return { error: `git checkout -b に失敗しました: ${checkout.stderr.trim()}` };
 
   const identityError = ensureGitIdentity(root);
@@ -145,7 +152,8 @@ const RUN_USAGE = `
 
 repoRoot直下の SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md（Issueセグメント成果物、コード内
 リテラル4件、設定化しない）の存在を検出する。0件ならno-opで終了する。1件以上あれば、
-現在のmain先端から短命ブランチ chore/root-cleanup-<UTC timestamp> を作成し、該当ファイルのみを
+現在チェックアウト中のブランチに関わらず常に origin 側の default branch 最新（origin/<base>）
+から短命ブランチ chore/root-cleanup-<UTC timestamp> を作成し、該当ファイルのみを
 git rm して固定メッセージでcommit・push、PRを作成し、'gh pr merge --admin --squash --subject' で
 mainへマージする。マージ直前に head ブランチ名・変更内容（削除のみで構成されているか）の
 スコープ検査を行い、逸脱時は自動admin mergeを行わず human_required として停止する（ADR-0007）。

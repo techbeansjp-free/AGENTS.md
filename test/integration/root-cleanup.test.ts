@@ -75,6 +75,16 @@ function remoteBranchHasFile(remoteDir: string, ref: string, file: string): bool
   }
 }
 
+/** ISSUE-628: pushされた短命ブランチが `from` からどのファイルを変更しているかを実際のgit差分
+ * （bare remote上）から取得する。gh-stubの `setDefaultPrFiles` 固定値ではなく、実際に push された
+ * 内容そのものを検証するために使う。 */
+function remoteDiffFiles(remoteDir: string, from: string, to: string): string[] {
+  const out = execFileSync('git', ['--git-dir', remoteDir, 'diff', '--name-only', `${from}..${to}`], {
+    encoding: 'utf8',
+  }).trim();
+  return out === '' ? [] : out.split('\n');
+}
+
 // ---- (a) 0件no-op ----
 
 test('root-cleanup run: 対象4ファイルが0件のときno-opになり、PR作成・admin mergeを一切行わない', async (t) => {
@@ -376,16 +386,28 @@ test('root-cleanup run (AC-3): 並行する他Issueのworktree・ブランチの
 
 // ---- ISSUE-619: 永続main worktreeから直接実行した場合のチェックアウト状態復元 ----
 
-test('root-cleanup run (ISSUE-619 AC-2): main以外のブランチをチェックアウト中に実行した場合、完了後に元のブランチへ戻る', async (t) => {
+test('root-cleanup run (ISSUE-619 AC-2 / ISSUE-628強化): main以外のブランチをチェックアウト中に実行した場合、完了後に元のブランチへ戻り、そのブランチ固有の未反映コミットは短命ブランチへ巻き込まれない', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
   const { stub, env, cleanup } = makeStub();
   t.after(cleanup);
 
-  git(repo.dir, ['checkout', '-b', 'feature/other-branch']);
-  git(repo.dir, ['push', '-u', 'origin', 'feature/other-branch']);
+  // Given: mainへstray artifactが混入済み（実際のsquash mergeによる混入相当）
   writeStrayArtifacts(repo.dir, ['SPEC.md']);
   stub.setDefaultPrFiles(['SPEC.md']);
+  const mainShaAtBranchPoint = git(repo.dir, ['rev-parse', 'main']);
+
+  // Given: mainから分岐したfeature/other-branchをチェックアウト中で、mainへ未反映の独自コミット
+  // （分岐後の追加コミット）を持つ状態を作る（ISSUE-628: このコミットが短命ブランチへ巻き込まれる
+  // 実害を、スタブの固定値ではなく実際のgit差分から検証できるようにするための強化）。
+  git(repo.dir, ['checkout', '-b', 'feature/other-branch']);
+  fs.writeFileSync(
+    path.join(repo.dir, 'FEATURE_ONLY.md'),
+    '# feature-only change\n\nmainには存在しない、このブランチ固有の未反映コミット。\n',
+  );
+  git(repo.dir, ['add', '-A']);
+  git(repo.dir, ['commit', '-m', 'feat: add feature-branch-only file (must not leak into root-cleanup branch)']);
+  git(repo.dir, ['push', '-u', 'origin', 'feature/other-branch']);
   assert.equal(currentBranch(repo.dir), 'feature/other-branch');
 
   const result = runCli(['root-cleanup', 'run'], { cwd: repo.dir, env });
@@ -403,6 +425,19 @@ test('root-cleanup run (ISSUE-619 AC-2): main以外のブランチをチェッ�
   // ISSUE-619の復元によりローカルのチェックアウトはfeature/other-branch（削除前の状態）へ戻るため、
   // 削除自体の検証はpushされた一時ブランチの内容で行う。
   assert.equal(remoteBranchHasFile(repo.remoteDir, headBranch!, 'SPEC.md'), false, 'pushされた一時ブランチではSPEC.mdが削除されていること');
+
+  // Then（ISSUE-628）: 短命ブランチはmainの分岐点（stray artifact混入直後）から作成されており、
+  // feature/other-branch固有のコミット内容を一切引き継いでいないことを、実際のgit操作から検証する。
+  const headParent = execFileSync('git', ['--git-dir', repo.remoteDir, 'rev-parse', `${headBranch}^`], {
+    encoding: 'utf8',
+  }).trim();
+  assert.equal(
+    headParent,
+    mainShaAtBranchPoint,
+    '短命ブランチはfeature/other-branchのHEADではなく、origin側のmain最新から分岐していること',
+  );
+  const diffFiles = remoteDiffFiles(repo.remoteDir, mainShaAtBranchPoint, headBranch!);
+  assert.deepEqual(diffFiles, ['SPEC.md'], '短命ブランチの変更内容はSPEC.mdの削除のみで、feature/other-branch固有のFEATURE_ONLY.mdを含まないこと');
 });
 
 // ---- ISSUE-619 design-gate再通過分（PLAN #16）: syncBaseBranchAfterAdminMerge の非適用確認 ----
@@ -413,10 +448,10 @@ test('root-cleanup run (design-gate再通過, PLAN #16): baseと異なるブラ�
   const { stub, env, cleanup } = makeStub();
   t.after(cleanup);
 
-  git(repo.dir, ['checkout', '-b', 'feature/other-branch']);
-  git(repo.dir, ['push', '-u', 'origin', 'feature/other-branch']);
   writeStrayArtifacts(repo.dir, ['SPEC.md']);
   stub.setDefaultPrFiles(['SPEC.md']);
+  git(repo.dir, ['checkout', '-b', 'feature/other-branch']);
+  git(repo.dir, ['push', '-u', 'origin', 'feature/other-branch']);
   assert.equal(currentBranch(repo.dir), 'feature/other-branch');
 
   const localMainShaBefore = git(repo.dir, ['rev-parse', 'refs/heads/main']);
