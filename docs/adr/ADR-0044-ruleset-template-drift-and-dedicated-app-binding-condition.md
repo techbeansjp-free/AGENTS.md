@@ -23,8 +23,8 @@ Issue #386は同時に、このリポジトリ自身に適用中のbranch rulese
 検討した代替案:
 
 - **配布テンプレートJSONのみを更新し、`renderRulesetWithDedicatedApp()`は無変更のまま残す**: 単純だが、上記の通り`setup ruleset`／`setup github`が常に失敗する新規回帰を生む。ISSUE-593のAC-2（標準導入経路でPRがマージ可能であること）・AC-4（テンプレートJSONをそのまま用いる経路の維持）の両方に反するため不採用。
-- **`renderRulesetWithDedicatedApp()`とその呼び出し（`GATE_CHECK_NAMES`・`ASC_GATE_APP_ID`関連コード）自体を削除する**: 専用GitHub Appによる`integration_id`限定binding機構（ADR-0016のDecision節が言及する`dedicated_app`backend、ADR-0013が扱う強制identity）を将来再度活性化する経路を完全に断つことになる。ISSUE-593のスコープ外事項として明示的に除外されている「専用GitHub Appのinstallation tokenを用いたgate publishの完全運用の実装」を、実装ではなく解体という形で先取りしてしまうため不採用。
-- **`renderRulesetWithDedicatedApp()`を、`required_status_checks`内にgate check contextが1件以上存在する場合のみ既存の検証・binding処理を適用し、1件も存在しない場合はテンプレートをそのまま返すよう条件化する（採用）**: 既定の配布テンプレート（4件を含まない）に対しては`ASC_GATE_APP_ID`非依存で`setup ruleset`／`setup github`が完走し、ISSUE-593のAC-2・AC-4を満たす。専用GitHub Appを既に導入し、手元のテンプレート複製へ4件のgate check contextを維持しているconsumer（ADR-0016のDecision節が触れる`dedicated_app`backendを選ぶ利用者）の経路には影響しない。将来の専用App運用手続き（ADR-0016が「未実施」と記録する運用ギャップ）が実施されればそのまま機能する状態を保つ。
+- **`renderRulesetWithDedicatedApp()`とその呼び出し（`GATE_CHECK_NAMES`・`ASC_GATE_APP_ID`関連コード）自体を削除する**: 専用GitHub Appによる`integration_id`限定binding機構（ADR-0052のDecision節が言及する`dedicated_app`backend、ADR-0013が扱う強制identity）を将来再度活性化する経路を完全に断つことになる。ISSUE-593のスコープ外事項として明示的に除外されている「専用GitHub Appのinstallation tokenを用いたgate publishの完全運用の実装」を、実装ではなく解体という形で先取りしてしまうため不採用。
+- **`renderRulesetWithDedicatedApp()`を、`required_status_checks`内にgate check contextが1件以上存在する場合のみ既存の検証・binding処理を適用し、1件も存在しない場合はテンプレートをそのまま返すよう条件化する（採用）**: 既定の配布テンプレート（4件を含まない）に対しては`ASC_GATE_APP_ID`非依存で`setup ruleset`／`setup github`が完走し、ISSUE-593のAC-2・AC-4を満たす。専用GitHub Appを既に導入し、手元のテンプレート複製へ4件のgate check contextを維持しているconsumer（ADR-0052のDecision節が触れる`dedicated_app`backendを選ぶ利用者）の経路には影響しない。将来の専用App運用手続き（ADR-0052が「未実施」と記録する運用ギャップ）が実施されればそのまま機能する状態を保つ。
 - **`gate publish`のCheck Run発行と成果物転記を、それぞれ独立した2つのCLIサブコマンドへ分離する**: I/F変更が大きく、既存の呼び出し元（進行役の手動実行手順）を書き換える必要がある。`syncGateArtifacts()`をCheck Run発行成否と独立した`try/catch`で呼び出し順序を入れ替えるだけで同じ効果（転記の独立試行）を得られるため、より小さい変更で足りるこちらを不採用とし、呼び出し順序の変更のみを採用する。
 
 ## Decision
@@ -38,6 +38,6 @@ Issue #386は同時に、このリポジトリ自身に適用中のbranch rulese
 
 - 標準導入経路（`init` → `setup github`）を辿るconsumerプロジェクトは、`ASC_GATE_APP_ID`を設定せずとも`setup ruleset`が完走し、`gate publish`を一度も成功させられない状態でも通常のPRがマージ可能になる（ISSUE-593 AC-1・AC-2）。
 - `gate publish`実行時、Check Run発行が失敗してもIssue/PR本文への成果物転記が独立して試行され、`issue_sync`（ADR-0021・ISSUE-567）が実質的に機能する（AC-3）。
-- 専用GitHub Appを既に導入し、手元のテンプレート複製へ4件のgate check contextを維持しているconsumerの経路（ADR-0016のDecision節が言及する`dedicated_app`backend）には影響しない。
+- 専用GitHub Appを既に導入し、手元のテンプレート複製へ4件のgate check contextを維持しているconsumerの経路（ADR-0052のDecision節が言及する`dedicated_app`backend）には影響しない。
 - `docs/ASC_GATE_APP_ID_RUNBOOK.md`は、既定の配布テンプレートに対しては手順自体が不要になる。同runbookが必要になるのは、利用者が意図的にgate check contextをテンプレート複製へ再度加える場合に限られる（AC-5）。
-- 専用GitHub Appのinstallation tokenを用いた`gate publish`の完全運用（ADR-0016が言及する`dedicated_app`/`required_workflow`backend、ADR-0013「強制identityとworkflow attestationを満たすCheckだけをゲート正本にする」、`status: proposed`）の実装・活性化自体は本ADRの対象外のまま残る。将来これを実施する場合、`renderRulesetWithDedicatedApp()`の条件分岐（Decision 2）はそのままで、手元のテンプレート複製へgate check contextを追加するだけで機能する設計になっている。
+- 専用GitHub Appのinstallation tokenを用いた`gate publish`の完全運用（ADR-0052が言及する`dedicated_app`/`required_workflow`backend、ADR-0013「強制identityとworkflow attestationを満たすCheckだけをゲート正本にする」、`status: proposed`）の実装・活性化自体は本ADRの対象外のまま残る。将来これを実施する場合、`renderRulesetWithDedicatedApp()`の条件分岐（Decision 2）はそのままで、手元のテンプレート複製へgate check contextを追加するだけで機能する設計になっている。

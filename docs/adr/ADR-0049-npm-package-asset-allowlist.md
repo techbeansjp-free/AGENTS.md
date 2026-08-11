@@ -5,7 +5,7 @@
 # ADR
 
 ```yaml
-id: ADR-0008
+id: ADR-0049
 status: proposed
 title: npm package asset allowlist
 tags: [npm, packaging, distribution]

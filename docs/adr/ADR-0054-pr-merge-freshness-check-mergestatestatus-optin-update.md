@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0039
+id: ADR-0054
 status: proposed
 title: pr merge のPRブランチ最新性チェックはGitHubのmergeStateStatus判定とオプトイン最新化で行う
 tags: [pr-merge, branch-protection, toctou]

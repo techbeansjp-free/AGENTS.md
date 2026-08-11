@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0008
+id: ADR-0050
 status: proposed
 title: テスト実行ログを常時保存する
 tags: [ci, observability, test]

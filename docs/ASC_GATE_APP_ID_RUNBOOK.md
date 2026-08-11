@@ -4,7 +4,7 @@
 
 `agent-skill-chain setup ruleset`（`setup github` から内部的に実行される場合を含む）の既定の配布テンプレート（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`）は `required_status_checks` に `verify` のみを含み、`agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれも含まない。この既定経路では `ASC_GATE_APP_ID` は不要であり、`setup ruleset` は未設定のままでも完走する（ISSUE-593。理由: gate Checkを発行可能なCI workflowがこのリポジトリにも配布テンプレートにも存在せず、required gate Checkにしてしまうと誰も発行できないstatusでPRが恒久的にマージ不能になるため）。
 
-本ドキュメントが必要になるのは、手元のテンプレート複製へ `agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれかを `required_status_checks` へ再度加え、専用GitHub Appによる `gate publish` の完全運用（ADR-0016が言及する `dedicated_app`/`required_workflow` backend）を選ぶ場合に限る。対象は、その運用を選ぶ対象リポジトリの管理者である。
+本ドキュメントが必要になるのは、手元のテンプレート複製へ `agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれかを `required_status_checks` へ再度加え、専用GitHub Appによる `gate publish` の完全運用（ADR-0052が言及する `dedicated_app`/`required_workflow` backend）を選ぶ場合に限る。対象は、その運用を選ぶ対象リポジトリの管理者である。
 
 本ドキュメントの内容だけで、専用GitHub Appの新規作成から `ASC_GATE_APP_ID` への設定までを完了できる。他の成果物（README.md・AGENTS.md・ADR・ソースコード等）を参照する必要はない。
 

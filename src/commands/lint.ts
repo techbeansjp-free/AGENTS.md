@@ -6,7 +6,7 @@ import { defaultLiveFileRoots, defaultReferenceFileRoots, defaultVocabFileRoots,
 import { parseForbiddenTerms } from '../lib/glossary.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { routes } from '../lib/cli-routes.js';
-import { collectAdrRecords, checkAdrSymmetry } from '../lib/adr-consistency.js';
+import { collectAdrRecords, checkAdrSymmetry, collectAdrFileRecords, checkAdrIdUniqueness } from '../lib/adr-consistency.js';
 
 const VOCAB_USAGE = `
 使い方: agent-skill-chain lint vocab [path...]
@@ -613,8 +613,9 @@ export async function adr(args: string[]): Promise<number> {
     }
 
     const root = repoRoot();
+    const fileRecords = collectAdrFileRecords(root);
     const byId = collectAdrRecords(root);
-    const violations = checkAdrSymmetry(byId);
+    const violations = [...checkAdrIdUniqueness(fileRecords), ...checkAdrSymmetry(byId)];
 
     if (violations.length > 0) {
       process.stderr.write(`${violations.join('\n')}\n`);
