@@ -19,6 +19,17 @@ else
   exit 1
 fi
 
+# Use a temp file instead of process substitution so that `set -e` catches
+# `git diff` failures (process substitution exit codes are invisible to
+# `set -e` per bash semantics).
+tmpfile="$(mktemp)"
+trap 'rm -f "$tmpfile"' EXIT
+
+if ! git diff --name-only "$BASE_REV...HEAD" >"$tmpfile"; then
+  echo "git diff failed for $BASE_REV...HEAD" >&2
+  exit 1
+fi
+
 declare -A selected=()
 while IFS= read -r changed; do
   case "$changed" in
@@ -27,7 +38,7 @@ while IFS= read -r changed; do
     VALIDATION.md) selected[validation]=1 ;;
     src/*|test/*|package.json|package-lock.json|tsconfig.json) selected[implementation]=1 ;;
   esac
-done < <(git diff --name-only "$BASE_REV...HEAD")
+done < "$tmpfile"
 
 for segment in spec design implementation validation; do
   if [[ -n "${selected[$segment]:-}" ]]; then

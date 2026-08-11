@@ -85,7 +85,7 @@ jobs:
         if: github.base_ref != ''
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: git fetch origin "$BASE_REF" --depth=1
+        run: git fetch origin "$BASE_REF"
 
       - name: Derive issue_id
         id: ctx
@@ -157,7 +157,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin "$BASE_REF" --depth=1
+          git fetch origin "$BASE_REF"
           CHANGED_ADRS="$(git diff --name-only "origin/$BASE_REF"...HEAD -- 'docs/adr/*.md')"
           for adr_path in $CHANGED_ADRS; do
             ./.agent-skill-chain/ci/verify-adr.sh "$adr_path"
@@ -175,7 +175,7 @@ jobs:
         if: github.base_ref != '' && steps.ctx.outputs.skip_checks != 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: git fetch origin "$BASE_REF" --depth=1
+        run: git fetch origin "$BASE_REF"
 
       - name: lint-secrets (PRで追加された行のみ)
         if: github.base_ref != '' && steps.ctx.outputs.skip_checks != 'true'
