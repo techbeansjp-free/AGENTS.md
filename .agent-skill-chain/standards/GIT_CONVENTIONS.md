@@ -67,6 +67,8 @@ worktree を直接 `rm -rf` で削除してはならない。削除は必ず `.a
 
 `agent-skill-chain pr merge` は `gh pr merge` 成功後に、main worktree に対して `git fetch origin <default-branch>` と fast-forward マージ（`git pull --ff-only` 相当）を自動実行し、この乖離を都度解消する。main worktree が default branch をチェックアウトしていない・fast-forward 不能なコンフリクトがある等で同期に失敗した場合は、マージ結果自体は巻き戻さず、非 0 終了コードと日本語のエラーメッセージで手動対応を促す。
 
+さらに、ローカル同期の成功後、既存の `root-cleanup run`（Issue #208）を同一プロセス内で呼び出し、repoRoot 直下に残存する Issue セグメント成果物（`SPEC.md`/`DESIGN.md`/`PLAN.md`/`VALIDATION.md`）を検出時のみ自動削除する（ISSUE-590、ADR-0046）。`agent-skill-chain-ci.yml` の必須check「verify-root-clean (merge-ready)」は、draft ではない PR の repoRoot 直下にこれら4ファイルが存在する限り常に失敗する設計であるため、validation-gate まで正常に完了した PR であっても `pr merge` の呼び出しには `--admin`（必須checkのbypass）を明示する必要がある。
+
 ## PRマージの実行主体（`merge.autonomous`）
 
 `agent-skill-chain pr merge` コマンド自体によるPRマージの既定は、人間の明示的な確認を経ることである。`.agent-skill-chain/config/agent-skill-chain.yaml` の `merge.autonomous` が `true`（明示的な opt-in）でない限り、`pr merge` は実際の `gh pr merge` 実行を一切行わず、日本語のエラーメッセージで停止する。このメッセージは「設定変更が必須」を意味するのではなく、次の2つの経路のいずれかを進行役へ促すものである。

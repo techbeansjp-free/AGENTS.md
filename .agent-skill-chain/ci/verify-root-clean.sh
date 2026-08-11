@@ -2,7 +2,10 @@
 # 正本: AGENTS.md §ディレクトリ構成 / ADR-0007
 #
 # repoRoot直下に SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md（Issueセグメント成果物）が
-# 残存していないことのみを確認する（root-cleanup run の事後確認、Issue #208）。
+# 残存していないことのみを確認する。root-cleanup run の事後確認（Issue #208）に加え、
+# agent-skill-chain-ci.yml の verify ジョブが「verify-root-clean (merge-ready)」ステップとして
+# マージ準備完了状態（draft == false）のPRに対する事前ゲートからも同一ロジックのまま呼び出す
+# （ISSUE-590、ADR-0046）。呼び出し元が増えても本スクリプト自体の動作・出力仕様は変更しない。
 #
 # 本スクリプトは agent-skill-chain CLI（src/agents-md.ts、ビルド後 bin/agents-md.js）の
 # `verify root-clean` サブコマンドへの薄いラッパーである（使い方は `verify root-clean -h` 参照）。

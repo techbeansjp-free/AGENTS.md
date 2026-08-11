@@ -327,7 +327,9 @@ const ROOT_CLEAN_USAGE = `
 repoRoot直下に SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md（Issueセグメント成果物）が
 残存していないことのみを確認する単純な存在チェック（Issue #208）。checkOutputExists()/
 wasEverAddedOrModified()・segments.yamlには一切関与しない、独立した構造検査。
-root-cleanup run（main post-merge cleanup自動化）の事後確認として使う。
+root-cleanup run（main post-merge cleanup自動化）の事後確認、および
+agent-skill-chain-ci.yml の「verify-root-clean (merge-ready)」ステップ（マージ準備完了状態の
+PRに対する事前ゲート、ISSUE-590・ADR-0046）の両方から同一ロジックのまま呼ばれる。
 
 出力: 0=対象4ファイルすべて不在、1=いずれか残存
 `;
