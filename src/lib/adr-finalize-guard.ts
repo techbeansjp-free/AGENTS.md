@@ -20,16 +20,18 @@ const ID_RE = /^id:\s*(\S+)/m;
  * ISSUE-539: ADR-0051（旧 ADR-0016-codex-exec-unsupported-flag-as-config-override.md）・
  * ADR-0052（旧 ADR-0016-reconcile-workflow-run-trust-boundary.md）は、ADR ID重複是正のための
  * 再採番（frontmatter `id:` とファイル名の変更のみ、status は accepted のまま不変）で
- * git mv された。両ファイルの真の accepted化commit（dfb6493dd8、リネーム前の旧ファイル名で
- * 追跡）は、ADR-0002 と同型の理由（squash merge運用によるhistory復元不能）で本チェック導入
- * 以前から手順逸脱の形になっており、リネーム前の旧ファイル名でも本チェックは同一の逸脱を検出する
- * （ISSUE-539のVALIDATION.mdで確認・記録済み・修正しない判断）。リネーム自体はこの既存の
+ * git mv された。両ファイルの真の accepted化commit（リネーム前の旧ファイル名で `git log --follow`
+ * により追跡。7872dbe7・f27f5f44、いずれもsquash mergeされたPR単位の1commitで、ADRファイル単体の
+ * finalizeではなく実装コード等を含む複数ファイルの変更として追加されている）は、ADR-0002と同型の
+ * 理由（squash merge運用によりADRファイル単体でのfinalize commitが個別に存在しない）で本チェック
+ * 導入以前から手順逸脱の形になっており、リネーム前の旧ファイル名でも本チェックは同一の逸脱を検出
+ * する（ISSUE-539のVALIDATION.mdで確認・記録済み・修正しない判断）。リネーム自体はこの既存の
  * 逸脱状態を新たに作るものではないため、リネーム後のファイル名でも同じ既知例外として扱う。
  */
 const KNOWN_FINALIZE_DEVIATIONS: ReadonlySet<string> = new Set([
   'docs/adr/ADR-0002-github-lease-git-ref-cas.md:1c21269a40da4f342d076e176bca075e92ead95f',
-  'docs/adr/ADR-0051-codex-exec-unsupported-flag-as-config-override.md:dfb6493dd85d9efefcfea1cafca1476be40ef22e',
-  'docs/adr/ADR-0052-reconcile-workflow-run-trust-boundary.md:dfb6493dd85d9efefcfea1cafca1476be40ef22e',
+  'docs/adr/ADR-0051-codex-exec-unsupported-flag-as-config-override.md:7872dbe7a4e09b987c4107eaed61ab0b70da96ec',
+  'docs/adr/ADR-0052-reconcile-workflow-run-trust-boundary.md:f27f5f44af8b183b17fcf5ba2352df34b6cf9d6f',
 ]);
 
 function extractFrontmatter(text: string): string | undefined {
