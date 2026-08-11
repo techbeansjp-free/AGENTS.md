@@ -78,6 +78,142 @@ test('sync templates: cwdが非gitディレクトリでもtarget_dirを明示指
   assert.ok(fs.existsSync(path.join(targetDir, '.github', 'CODEOWNERS')));
 });
 
+// ISSUE-538: sync templates --dry-run は実書込みを行わず変更予定一覧のみを表示する。
+
+test('sync templates --dry-run: 実書込みを一切行わず、変更予定一覧を終了コード0で表示する', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const targetDir = mkScratch('sync-dry-run-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  // Given: 配布元と一部異なる既存の.github/CODEOWNERSを持つ導入済み状態
+  const first = runCli(['sync', 'templates', targetDir], { cwd: repo.dir, env: process.env });
+  assert.equal(first.status, 0, first.stderr);
+  const codeownersPath = path.join(targetDir, '.github', 'CODEOWNERS');
+  const originalContent = fs.readFileSync(codeownersPath, 'utf8');
+  fs.writeFileSync(codeownersPath, '# 意図的に書き換えた別内容\n');
+  const beforeMtime = fs.statSync(codeownersPath).mtimeMs;
+
+  // When: --dry-run を付けて sync templates を実行する
+  const result = runCli(['sync', 'templates', targetDir, '--dry-run'], { cwd: repo.dir, env: process.env });
+
+  // Then: 終了コード0で、変更予定一覧が標準出力へ表示される
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /planned overwritten: /);
+  // Then: 展開先のファイルシステムには一切書込みが行われない（内容・mtimeとも不変）
+  assert.equal(fs.readFileSync(codeownersPath, 'utf8'), '# 意図的に書き換えた別内容\n', 'dry-runでは既存ファイルが上書きされないこと');
+  assert.equal(fs.statSync(codeownersPath).mtimeMs, beforeMtime, 'dry-runではファイルへの書込みが発生しないこと');
+  assert.notEqual(originalContent, '# 意図的に書き換えた別内容\n');
+});
+
+test('sync templates --help / -h: --dry-run フラグの説明が含まれる', (t) => {
+  const help = runCli(['sync', 'templates', '--help'], { env: process.env });
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /--dry-run/);
+
+  const h = runCli(['sync', 'templates', '-h'], { env: process.env });
+  assert.equal(h.status, 0, h.stderr);
+  assert.match(h.stdout, /--dry-run/);
+});
+
+// ISSUE-538: 大文字小文字のみ異なる既存ファイルとの衝突検知。
+
+test('sync templates: 大文字小文字のみ異なる既存ファイルがあると検知され、既存ファイルは無警告で上書きされない', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const targetDir = mkScratch('sync-case-collision-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  // Given: 配布元の展開先パス .github/pull_request_template.md と大文字小文字のみ異なる
+  // 既存カスタムファイル .github/PULL_REQUEST_TEMPLATE.md を先置きする
+  fs.mkdirSync(path.join(targetDir, '.github'), { recursive: true });
+  const existingPath = path.join(targetDir, '.github', 'PULL_REQUEST_TEMPLATE.md');
+  fs.writeFileSync(existingPath, '# consumerが独自にカスタマイズした内容\n');
+
+  // When: --dry-run を付けずに sync templates を実行する
+  const result = runCli(['sync', 'templates', targetDir], { cwd: repo.dir, env: process.env });
+
+  // Then: 検知され、終了コード0以外・大文字小文字に言及したエラーが標準エラー出力に明示される
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /大文字小文字/);
+  // Then: 既存ファイルは無警告のまま失われない
+  assert.equal(fs.readFileSync(existingPath, 'utf8'), '# consumerが独自にカスタマイズした内容\n');
+});
+
+test('sync templates --dry-run: 大文字小文字衝突は実書込み無しに検知される', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const targetDir = mkScratch('sync-case-collision-dry-run-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  fs.mkdirSync(path.join(targetDir, '.github'), { recursive: true });
+  const existingPath = path.join(targetDir, '.github', 'PULL_REQUEST_TEMPLATE.md');
+  fs.writeFileSync(existingPath, '# consumerが独自にカスタマイズした内容\n');
+
+  const result = runCli(['sync', 'templates', targetDir, '--dry-run'], { cwd: repo.dir, env: process.env });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /大文字小文字/);
+  assert.equal(fs.readFileSync(existingPath, 'utf8'), '# consumerが独自にカスタマイズした内容\n');
+  assert.equal(
+    fs.existsSync(path.join(targetDir, '.github', 'pull_request_template.md')) &&
+      fs.readFileSync(path.join(targetDir, '.github', 'pull_request_template.md'), 'utf8') !==
+        '# consumerが独自にカスタマイズした内容\n',
+    false,
+    'dry-runでは配布元パスへも一切書込みが発生しないこと',
+  );
+});
+
+test('sync templates: 大文字小文字含め完全一致する既存ファイルへの既存動作（無条件上書き）は変更しない', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const targetDir = mkScratch('sync-exact-match-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  // Given: 配布元と大文字小文字含め完全一致するパスに、異なる内容の既存ファイルを先置きする
+  fs.mkdirSync(path.join(targetDir, '.github'), { recursive: true });
+  fs.writeFileSync(path.join(targetDir, '.github', 'pull_request_template.md'), '# 別内容（完全一致パス）\n');
+
+  const result = runCli(['sync', 'templates', targetDir], { cwd: repo.dir, env: process.env });
+
+  // Then: 従来どおり配布元の内容で上書きされ、大文字小文字衝突検知は発火しない（回帰無し）
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, new RegExp(`overwritten: ${escapeRegExp(path.join(targetDir, '.github', 'pull_request_template.md'))}`));
+});
+
+// ISSUE-538: sync templates が同期する .github/・.claude/agents/・.claude/skills/ の3マッピングは
+// 順番に copyTreeMirror を呼び出す。後段のマッピング（.claude/skills/）で大文字小文字衝突を検知した
+// 場合に、既に処理済みの先行マッピング（.github/・.claude/agents/）へ一切書込みが行われていない
+// （部分適用が残らない）ことを確認する回帰テスト。
+
+test('sync templates: 後段マッピング（.claude/skills/）の大文字小文字衝突検知時、先行マッピング（.github/・.claude/agents/）は一切書込まれない', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const targetDir = mkScratch('sync-cross-mapping-fail-closed-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  // Given: 最終マッピングである .claude/skills/cleanup/SKILL.md と大文字小文字のみ異なる
+  // 既存カスタムファイル .claude/skills/cleanup/skill.md を先置きし、.github/・.claude/agents/は
+  // 未展開（初回同期前）の状態にする
+  const skillDir = path.join(targetDir, '.claude', 'skills', 'cleanup');
+  fs.mkdirSync(skillDir, { recursive: true });
+  const existingPath = path.join(skillDir, 'skill.md');
+  fs.writeFileSync(existingPath, '# consumerが独自にカスタマイズした内容\n');
+
+  // When: --dry-run を付けずに sync templates を実行する
+  const result = runCli(['sync', 'templates', targetDir], { cwd: repo.dir, env: process.env });
+
+  // Then: 大文字小文字衝突が検知され、終了コード0以外で失敗する
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /大文字小文字/);
+  // Then: 既存ファイルは無警告のまま失われない
+  assert.equal(fs.readFileSync(existingPath, 'utf8'), '# consumerが独自にカスタマイズした内容\n');
+  // Then: 後段マッピングの衝突検知より前に処理される先行マッピング（.github/・.claude/agents/）は
+  // 部分適用されず、一切のファイル・ディレクトリが作成されない（fail-closed）
+  assert.equal(fs.existsSync(path.join(targetDir, '.github')), false, '.github/ が作成されていないこと');
+  assert.equal(fs.existsSync(path.join(targetDir, '.claude', 'agents')), false, '.claude/agents/ が作成されていないこと');
+});
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

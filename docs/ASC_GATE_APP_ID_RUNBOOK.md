@@ -2,7 +2,9 @@
 
 ## 目的・対象範囲
 
-本ドキュメントは、`agent-skill-chain setup ruleset`（`setup github` から内部的に実行される場合を含む）が要求する環境変数 `ASC_GATE_APP_ID` を用意するための運用手順（runbook）である。対象は、required gate Check（`agent-skill-chain/{spec,design,implementation,validation}-gate`）を発行する専用GitHub Appを、まだ作成・installationしていない対象リポジトリの管理者である。
+`agent-skill-chain setup ruleset`（`setup github` から内部的に実行される場合を含む）の既定の配布テンプレート（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`）は `required_status_checks` に `verify` のみを含み、`agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれも含まない。この既定経路では `ASC_GATE_APP_ID` は不要であり、`setup ruleset` は未設定のままでも完走する（ISSUE-593。理由: gate Checkを発行可能なCI workflowがこのリポジトリにも配布テンプレートにも存在せず、required gate Checkにしてしまうと誰も発行できないstatusでPRが恒久的にマージ不能になるため）。
+
+本ドキュメントが必要になるのは、手元のテンプレート複製へ `agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれかを `required_status_checks` へ再度加え、専用GitHub Appによる `gate publish` の完全運用（ADR-0016が言及する `dedicated_app`/`required_workflow` backend）を選ぶ場合に限る。対象は、その運用を選ぶ対象リポジトリの管理者である。
 
 本ドキュメントの内容だけで、専用GitHub Appの新規作成から `ASC_GATE_APP_ID` への設定までを完了できる。他の成果物（README.md・AGENTS.md・ADR・ソースコード等）を参照する必要はない。
 
@@ -52,7 +54,9 @@ npx github:techbeansjp-free/AGENTS.md setup ruleset [owner/repo]
 
 ### 5. 設定の確認
 
-`setup ruleset` が正常終了（終了コード0）し、標準出力に適用したrulesetの内容（`required_status_checks` の各 `context` に対応する `integration_id` が手順3のApp IDと一致すること）が表示されれば、設定は完了している。`ASC_GATE_APP_ID` が未設定・不正・標準GitHub Actions AppのIDの場合は、`setup ruleset` はrulesetを適用せずエラー終了する。
+`setup ruleset` が正常終了（終了コード0）し、標準出力に適用したrulesetの内容（`required_status_checks` の各 `context` に対応する `integration_id` が手順3のApp IDと一致すること）が表示されれば、設定は完了している。`required_status_checks` にgate check contextが1件以上存在する場合のみ、`ASC_GATE_APP_ID` が未設定・不正・標準GitHub Actions AppのIDだと `setup ruleset` はrulesetを適用せずエラー終了する（gate check contextを1件も含まない既定テンプレートに対しては、この検証自体が発生しない）。
+
+`gate publish` 自体は、Check Runを発行可能なCI workflowが現状このリポジトリにも配布テンプレートにも存在しないため、進行役が任意実行する記録専用ツールであり、rulesetのrequired statusには現状寄与しない。専用App運用（本手順）を完了しても、その発行元workflowを別途用意しない限りCheck Runは発行されない。
 
 ## 制約
 

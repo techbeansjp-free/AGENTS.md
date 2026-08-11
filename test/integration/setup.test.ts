@@ -188,18 +188,15 @@ test('setup labels: descriptionが100文字を超えるラベルがあれば、g
   assert.deepEqual(stub.readState().labels, [], 'どのラベルもGitHub側へ適用されないこと');
 });
 
-test('setup ruleset: 初回はruleset新規作成(POST)、2回目は既存ruleset検出後に更新(PUT)する', (t) => {
+test('setup ruleset (ISSUE-593): 既定テンプレートはASC_GATE_APP_ID未設定でも初回POST・2回目PUTが完走し、gate check contextを含まない', (t) => {
   const repo = createTmpRepo();
   t.after(() => repo.cleanup());
   const scratchDir = mkScratch('setup-ruleset-scratch');
   t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
   const stub = createGhStub(scratchDir);
 
-  // When: 1回目のsetup rulesetを実行する（owner/repo省略、cwdはリポジトリ内）
-  const first = runCli(['setup', 'ruleset'], {
-    cwd: repo.dir,
-    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
-  });
+  // When: 1回目のsetup rulesetを実行する（owner/repo省略、cwdはリポジトリ内、ASC_GATE_APP_ID未設定）
+  const first = runCli(['setup', 'ruleset'], { cwd: repo.dir, env: stub.env(process.env) });
 
   // Then: 成功し、gh-stub状態にruleset「main-protection」が1件新規作成される
   assert.equal(first.status, 0, first.stderr);
@@ -208,11 +205,8 @@ test('setup ruleset: 初回はruleset新規作成(POST)、2回目は既存rulese
   assert.equal((state.rulesets[0] as { name: string; id: number }).name, 'main-protection');
   const firstId = (state.rulesets[0] as { id: number }).id;
 
-  // When: 2回目のsetup rulesetを実行する
-  const second = runCli(['setup', 'ruleset'], {
-    cwd: repo.dir,
-    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
-  });
+  // When: 2回目のsetup rulesetを実行する（引き続きASC_GATE_APP_ID未設定）
+  const second = runCli(['setup', 'ruleset'], { cwd: repo.dir, env: stub.env(process.env) });
 
   // Then: 既存rulesetが検出され、新規追加ではなく同一IDのまま更新される
   assert.equal(second.status, 0, second.stderr);
@@ -224,13 +218,10 @@ test('setup ruleset: 初回はruleset新規作成(POST)、2回目は既存rulese
       rules: { type: string; parameters: { required_status_checks: { context: string; integration_id?: number }[] } }[];
     }
   ).rules.find((rule) => rule.type === 'required_status_checks')?.parameters.required_status_checks ?? [];
-  for (const name of ['spec', 'design', 'implementation', 'validation']
-    .map((gate) => `agent-skill-chain/${gate}-gate`)) {
-    assert.equal(checks.find((check) => check.context === name)?.integration_id, 77);
-  }
+  assert.deepEqual(checks, [{ context: 'verify' }], '既定テンプレートはverifyのみでgate check contextを含まないこと');
 });
 
-test('setup github: 専用App未設定時は配布物・labels・rulesetを部分展開しない', (t) => {
+test('setup github (ISSUE-593): 既定テンプレートはgate check contextを含まないためASC_GATE_APP_ID未設定でも完走する', (t) => {
   const scratchDir = mkScratch('setup-github-preflight');
   t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
   const stub = createGhStub(scratchDir);
@@ -239,11 +230,122 @@ test('setup github: 専用App未設定時は配布物・labels・rulesetを部�
 
   const result = runCli(['setup', 'github', targetDir], { env: stub.env(process.env) });
 
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(fs.existsSync(path.join(targetDir, '.github')));
+  const rulesets = stub.readState().rulesets as {
+    rules: { type: string; parameters: { required_status_checks: { context: string }[] } }[];
+  }[];
+  assert.equal(rulesets.length, 1);
+  const checks =
+    rulesets[0].rules.find((rule) => rule.type === 'required_status_checks')?.parameters.required_status_checks ?? [];
+  assert.deepEqual(checks, [{ context: 'verify' }]);
+});
+
+test('setup github (ISSUE-593): 手元のテンプレート複製へgate check contextを再度加えた場合はASC_GATE_APP_ID未設定だと従来どおり失敗する', (t) => {
+  const scratchDir = mkScratch('setup-github-preflight-custom');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+  const targetDir = mkScratch('setup-github-preflight-custom-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  // Given: 導入先へ .agent-skill-chain を先に展開し、rulesetテンプレート複製へgate check contextを
+  // 再度加える（専用GitHub App運用を選ぶconsumerの手元カスタマイズを再現する）。
+  const initResult = runCli(['init', targetDir], { env: process.env });
+  assert.equal(initResult.status, 0, initResult.stderr);
+  const rulesetPath = path.join(
+    targetDir,
+    '.agent-skill-chain',
+    'templates',
+    'github',
+    'provisioning',
+    'rulesets',
+    'main.json',
+  );
+  const rulesetJson = JSON.parse(fs.readFileSync(rulesetPath, 'utf8')) as {
+    rules: { type: string; parameters?: { required_status_checks?: { context: string }[] } }[];
+  };
+  const requiredStatusChecksRule = rulesetJson.rules.find((rule) => rule.type === 'required_status_checks');
+  requiredStatusChecksRule?.parameters?.required_status_checks?.push({ context: 'agent-skill-chain/spec-gate' });
+  fs.writeFileSync(rulesetPath, JSON.stringify(rulesetJson, null, 2));
+
+  const result = runCli(['setup', 'github', targetDir], { env: stub.env(process.env) });
+
   assert.equal(result.status, 1);
   assert.match(result.stderr, /専用Appをrulesetへ固定できません/);
-  assert.equal(fs.existsSync(path.join(targetDir, '.github')), false);
   assert.deepEqual(stub.readState().labels, []);
   assert.deepEqual(stub.readState().rulesets, []);
+});
+
+// ISSUE-538: setup github --dry-run は実書込みを行わず変更予定一覧のみを表示し、
+// GitHub API（setup labels/setup ruleset）を呼び出さない。
+
+test('setup github --dry-run: .github/への実書込みを一切行わず、setup labels/setup rulesetも呼ばない', (t) => {
+  const scratchDir = mkScratch('setup-github-dry-run-scratch');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+
+  const targetDir = mkScratch('setup-github-dry-run-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  // Given: 1回目の setup github で.githubを実体化しておく（gh-stubへlabels/rulesetも記録される）
+  const first = runCli(['setup', 'github', targetDir], {
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
+  assert.equal(first.status, 0, first.stderr);
+  const codeownersPath = path.join(targetDir, '.github', 'CODEOWNERS');
+  fs.writeFileSync(codeownersPath, '# 意図的に書き換えた別内容\n');
+  const stateBeforeDryRun = stub.readState();
+
+  // When: ASC_GATE_APP_ID を未設定のまま --dry-run で setup github を実行する
+  // （--dry-run は setup labels/setup ruleset を呼ばないため、これらが要求する前提の未設定でも
+  // 成功することを合わせて確認する）
+  const result = runCli(['setup', 'github', targetDir, '--dry-run'], { env: stub.env(process.env) });
+
+  // Then: 終了コード0で、変更予定一覧とスキップ通知が標準出力に表示される
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /planned overwritten: /);
+  assert.match(result.stdout, /setup labels[\s\S]*--dry-run のためスキップしました/);
+  assert.match(result.stdout, /setup ruleset[\s\S]*--dry-run のためスキップしました/);
+
+  // Then: .githubへは一切書込みが行われない
+  assert.equal(fs.readFileSync(codeownersPath, 'utf8'), '# 意図的に書き換えた別内容\n');
+
+  // Then: GitHub API（labels/ruleset）は一切追加呼び出しされず、1回目実行時点の状態から変化しない
+  assert.deepEqual(stub.readState(), stateBeforeDryRun);
+});
+
+test('setup github --help / -h: --dry-run フラグの説明が含まれる', (t) => {
+  const help = runCli(['setup', 'github', '--help'], { env: process.env });
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /--dry-run/);
+
+  const h = runCli(['setup', 'github', '-h'], { env: process.env });
+  assert.equal(h.status, 0, h.stderr);
+  assert.match(h.stdout, /--dry-run/);
+});
+
+// ISSUE-538: setup github でも大文字小文字のみ異なる既存ファイルとの衝突が検知される。
+
+test('setup github: 大文字小文字のみ異なる既存ファイルがあると検知され、既存ファイルは無警告で上書きされない', (t) => {
+  const scratchDir = mkScratch('setup-github-case-collision-scratch');
+  t.after(() => fs.rmSync(scratchDir, { recursive: true, force: true }));
+  const stub = createGhStub(scratchDir);
+  const targetDir = mkScratch('setup-github-case-collision-target');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  fs.mkdirSync(path.join(targetDir, '.github'), { recursive: true });
+  const existingPath = path.join(targetDir, '.github', 'PULL_REQUEST_TEMPLATE.md');
+  fs.writeFileSync(existingPath, '# consumerが独自にカスタマイズした内容\n');
+
+  const result = runCli(['setup', 'github', targetDir], {
+    env: stub.env({ ...process.env, ASC_GATE_APP_ID: '77' }),
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /大文字小文字/);
+  assert.equal(fs.readFileSync(existingPath, 'utf8'), '# consumerが独自にカスタマイズした内容\n');
+  assert.deepEqual(stub.readState().labels, [], '衝突検知で中断した場合、labelsも適用されないこと');
+  assert.deepEqual(stub.readState().rulesets, [], '衝突検知で中断した場合、rulesetも適用されないこと');
 });
 
 function escapeRegExp(value: string): string {

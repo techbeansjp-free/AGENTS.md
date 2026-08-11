@@ -437,6 +437,21 @@ function extractField(body: string[], label: string): string | undefined {
   }
   return undefined;
 }
+
+// ISSUE-538: SPEC.md本文中の任意の位置（テンプレートのコメント文言・散文中の言及等）に出現する
+// `AC-N` という文字列すべてを対象にすると、`#### AC-N: ...` という正規のAC-ID宣言ではない箇所
+// （例: 「AC を追加する場合は AC-7, AC-8 ... と連番で追加する」という追記用コメント）まで
+// 実在するAC-IDと誤認識し、孤児AC判定を誤検出させる。AC-ID宣言の唯一の正規表現は
+// `#### AC-N: ...` 見出しであるため（specBdd と同一の判定基準）、この見出しからのみ抽出する。
+function extractSpecAcIds(specText: string): Set<string> {
+  const ids = new Set<string>();
+  for (const section of splitMdSections(specText)) {
+    const match = /^####\s+(AC-[0-9]+):/.exec(section.heading);
+    if (match) ids.add(match[1]);
+  }
+  return ids;
+}
+
 export async function specBdd(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) return printUsage(SPEC_BDD_USAGE), 0;
@@ -546,7 +561,7 @@ export async function acCoverage(args: string[]): Promise<number> {
     if (!fs.existsSync(specPath)) return fail(`SPEC.md が見つかりません: ${specPath}`);
     if (!fs.existsSync(validationPath)) return fail(`VALIDATION.md が見つかりません: ${validationPath}`);
 
-    const specAcIds = new Set([...fs.readFileSync(specPath, 'utf8').matchAll(/\bAC-[0-9]+\b/g)].map((m) => m[0]));
+    const specAcIds = extractSpecAcIds(fs.readFileSync(specPath, 'utf8'));
     const report = readYamlFile<ValidationReport>(validationPath);
     const outcome = validateAgainstSchema('validation-report', report, root);
     const errors = [...outcome.errors];

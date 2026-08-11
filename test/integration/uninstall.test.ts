@@ -103,6 +103,30 @@ test('uninstall: 安全確認を通過した場合、project/を除く導入資�
   assert.ok(fs.existsSync(path.join(projectDir, 'RULES.md')), 'project/RULES.mdは削除されず残ること');
 });
 
+// ISSUE-586 AC-4: initが新規に生成するようになった.agent-skill-chain/project/manifest.yaml・
+// RULES.mdについて、uninstallが既存の保持の不変条件を維持し続けることの回帰確認。
+test('uninstall: initが自動生成したproject/manifest.yaml・RULES.mdは、uninstall実行後も削除されず保持される（ISSUE-586 AC-4）', (t) => {
+  const targetDir = initGitRepoWithInit('uninstall-project-scaffold');
+  t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
+
+  const manifestPath = path.join(targetDir, '.agent-skill-chain', 'project', 'manifest.yaml');
+  const rulesPath = path.join(targetDir, '.agent-skill-chain', 'project', 'RULES.md');
+  assert.ok(fs.existsSync(manifestPath), 'initがmanifest.yamlを自動生成していること（前提）');
+  assert.ok(fs.existsSync(rulesPath), 'initがRULES.mdを自動生成していること（前提）');
+  const manifestContent = fs.readFileSync(manifestPath, 'utf8');
+  const rulesContent = fs.readFileSync(rulesPath, 'utf8');
+
+  git(targetDir, ['add', '-A']);
+  git(targetDir, ['commit', '-q', '-m', 'chore: init']);
+
+  const result = runCli(['uninstall', targetDir]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(path.join(targetDir, 'AGENTS.md')), false, 'AGENTS.mdが削除されること（前提の確認）');
+  assert.equal(fs.readFileSync(manifestPath, 'utf8'), manifestContent, 'manifest.yamlの内容が変更されず保持されること');
+  assert.equal(fs.readFileSync(rulesPath, 'utf8'), rulesContent, 'RULES.mdの内容が変更されず保持されること');
+});
+
 test('uninstall: 実行後は.installed_versionも削除され、doctorが「未導入」と正しく表示する', (t) => {
   const targetDir = initGitRepoWithInit('uninstall-version-marker');
   t.after(() => fs.rmSync(targetDir, { recursive: true, force: true }));
