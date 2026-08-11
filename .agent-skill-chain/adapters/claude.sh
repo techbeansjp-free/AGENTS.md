@@ -504,11 +504,6 @@ _dispatch_via_agent_tool() {
   case "$worker_adapter" in
   claude) ;;
   codex)
-    if ! codex_cmd="$(_worker_default_cmd "$segment" "$contract")"; then
-      echo "launch_worker: Codex起動コマンドを組み立てられませんでした（codex CLI不在等）。固定Claude subagentへのフォールバックは行いません" >&2
-      release_lease "$issue_id" >/dev/null 2>&1 || true
-      return 1
-    fi
     # Issue #647: dispatch指示は後から別cwdで実行されるため、生成時の対象worktreeを
     # コマンド自体へ固定する。物理絶対パスをshell quoteし、空白等を含むパスも安全に扱う。
     if ! codex_worktree_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
@@ -558,6 +553,23 @@ _dispatch_via_agent_tool() {
   dispatch_token="$(basename -- "$dispatch_temp_dir")"
   dispatch_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
   chmod 700 "$dispatch_temp_dir"
+  # Issue #665: contract.md自体を厳密に実行するworkerへdispatchトークンを確実に渡す。
+  # 監査digestは、この追記後のcontract_fileから算出する。
+  contract+=$'\nworker_completion_dispatch:\n'
+  contract+="  dispatch_token: ${dispatch_token}"
+  contract+=$'\n'
+  contract+="  instruction: 成果物をcommit・pushした後のcompleted投稿では、既存の5引数に空文字2つとdispatchトークンを追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} の形で実行する。"
+  contract+=$'\n'
+
+  # Codexの安全閾値超過時はcontractを位置引数へ埋め込むため、トークン追記後にコマンドを
+  # 組み立て、contract_fileを読む通常経路と同じ自己完結した契約を渡す。
+  if [[ "$worker_adapter" == "codex" ]] && ! codex_cmd="$(_worker_default_cmd "$segment" "$contract")"; then
+    echo "launch_worker: Codex起動コマンドを組み立てられませんでした（codex CLI不在等）。固定Claude subagentへのフォールバックは行いません" >&2
+    rm -rf -- "$dispatch_temp_dir"
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
+
   contract_file="$dispatch_temp_dir/contract.md"
   printf '%s' "$contract" >"$contract_file"
   chmod 600 "$contract_file"
