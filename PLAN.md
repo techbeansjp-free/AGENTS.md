@@ -7,7 +7,7 @@
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | `ADR-0045 作成` | `docs/adr/ADR-0045-pre-merge-root-artifact-prevention-gate.md` を `status: proposed` で作成し、DESIGN.mdの決定内容（コンポーネントA〜D、`--admin`必須化のトレードオフ）を記録する | `AC-1, AC-3` | なし |
+| 1 | `ADR-0046 作成` | `docs/adr/ADR-0046-pre-merge-root-artifact-prevention-gate.md` を `status: proposed` で作成し、DESIGN.mdの決定内容（コンポーネントA〜D、`--admin`必須化のトレードオフ）を記録する | `AC-1, AC-3` | なし |
 | 2 | `CIステップ追加（コンポーネントA）` | `.github/workflows/agent-skill-chain-ci.yml` の `verify` ジョブへ `verify-root-clean (merge-ready)` ステップを追加する。`run: ./.agent-skill-chain/ci/verify-root-clean.sh`、条件 `if: steps.ctx.outputs.skip_checks != 'true' && github.event.pull_request.draft == false`。既存の `.agent-skill-chain/ci/verify-root-clean.sh`／CLI `verify root-clean` は無変更のまま再利用する | `AC-1, AC-2` | `#1` |
 | 3 | `verify-root-clean.sh / verify.ts のコメント更新` | 「post-merge事後確認専用」と限定していた既存コメント（ヘッダ・`ROOT_CLEAN_USAGE`）を、事前ゲート（コンポーネントA）からも呼ばれる旨を含めて更新する。動作・出力仕様は変更しない | `AC-1` | `#2` |
 | 4 | `pr merge の自動クリーンアップ連鎖（コンポーネントB）` | `src/commands/pr.ts` の `merge()` を拡張し、`gh pr merge` 成功・`syncMainWorktree()` 完了後に `root-cleanup.ts` の `run()` を同一プロセス内で呼び出す。`run()` が非ゼロを返した場合はマージ成功を維持しつつ、追加確認が必要な旨を非ゼロ終了コード・日本語メッセージで報告する（`syncMainWorktree()` の既存失敗時メッセージパターンを踏襲） | `AC-3` | `#2` |

@@ -1,7 +1,7 @@
 # ADR
 
 ```yaml
-id: ADR-0045
+id: ADR-0046
 status: proposed
 title: Issueセグメント成果物のroot直下混入をマージ前に予防する、常時失敗設計の必須CI checkと自動クリーンアップ連鎖
 tags: [root-cleanup, ci-gate, pr-merge]
