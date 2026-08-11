@@ -378,6 +378,47 @@ test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報
   assert.match(completed.stdout, /^REASON=$/m);
 });
 
+test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だけ終端へ補正しローカルのミリ秒精度を保つ', (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const startedAt = '2026-08-12T01:02:03.847Z';
+
+  const githubSameSecond = runCompletionReportVerifier(
+    worktreePath,
+    `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03Z\n`,
+    0,
+    startedAt,
+  );
+  assert.equal(githubSameSecond.status, 0, githubSameSecond.stdout + githubSameSecond.stderr);
+
+  const githubEarlierSecond = runCompletionReportVerifier(
+    worktreePath,
+    `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:02Z\n`,
+    0,
+    startedAt,
+  );
+  assert.equal(githubEarlierSecond.status, 1);
+  assert.match(githubEarlierSecond.stdout, /dispatch開始前の報告のみ検出/);
+
+  const localEarlierMillisecond = runCompletionReportVerifier(
+    worktreePath,
+    `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.846Z\n`,
+    0,
+    startedAt,
+  );
+  assert.equal(localEarlierMillisecond.status, 1);
+  assert.match(localEarlierMillisecond.stdout, /dispatch開始前の報告のみ検出/);
+
+  const localLaterMillisecond = runCompletionReportVerifier(
+    worktreePath,
+    `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.848Z\n`,
+    0,
+    startedAt,
+  );
+  assert.equal(localLaterMillisecond.status, 0, localLaterMillisecond.stdout + localLaterMillisecond.stderr);
+});
+
 test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定時はcontract本文を出さずexit 4で監査メタデータを返す', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
