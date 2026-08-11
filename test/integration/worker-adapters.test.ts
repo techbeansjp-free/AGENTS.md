@@ -47,6 +47,7 @@ interface WorkerReport {
   segment: string;
   status: 'completed' | 'blocked';
   target_sha: string;
+  dispatch_token?: string;
   blocked_reason?: string;
   human_escalation_requested?: boolean;
 }
@@ -126,21 +127,27 @@ function runCompletionReportVerifier(
   latest: string,
   latestStatus: number,
   startedAt: string,
+  expectedDispatchToken = 'agent-skill-chain-worker-dispatch.current',
 ): ScriptResult {
   const adapterPath = path.join(worktreePath, '.agent-skill-chain', 'adapters', 'claude.sh');
   const script = [
     'source "$1"',
     '_asc_cli() { printf \'%s\' "$ASC_TEST_LATEST"; return "$ASC_TEST_LATEST_STATUS"; }',
     'set +e',
-    'reason="$(_verify_worker_completion_report ISSUE-1 spec_worker spec "$ASC_TEST_STARTED_AT")"',
+    'reason="$(_verify_worker_completion_report ISSUE-1 spec_worker spec "$ASC_TEST_STARTED_AT" "$ASC_TEST_DISPATCH_TOKEN")"',
     'rc=$?',
     'printf \'RC=%s\\nREASON=%s\\n\' "$rc" "$reason"',
     'exit "$rc"',
   ].join('; ');
+  const latestWithToken =
+    latestStatus === 0 && !latest.includes('\ndispatch_token=')
+      ? `${latest.replace(/\n?$/, '\n')}dispatch_token=${expectedDispatchToken}\n`
+      : latest;
   const env = envWithout([], {
-    ASC_TEST_LATEST: latest,
+    ASC_TEST_LATEST: latestWithToken,
     ASC_TEST_LATEST_STATUS: String(latestStatus),
     ASC_TEST_STARTED_AT: startedAt,
+    ASC_TEST_DISPATCH_TOKEN: expectedDispatchToken,
   });
   try {
     const stdout = execFileSync('bash', ['-c', script, '_', adapterPath], {
@@ -181,7 +188,7 @@ function installCodexStub(t: { after(fn: () => void): void }): {
       `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
       `cat > ${JSON.stringify(stdinCapturePath)}`,
       `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: codex stub output")`,
-      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
       '',
     ].join('\n'),
     { mode: 0o755 },
@@ -276,7 +283,7 @@ function readWorkerReport(repoDir: string, segment: string): WorkerReport {
 
 function createVerifyFixture(
   t: { after(fn: () => void): void },
-  shaFile: 'match' | 'mismatch' | 'missing-start' | 'absent' = 'match',
+  shaFile: 'match' | 'mismatch' | 'missing-start' | 'missing-token' | 'absent' = 'match',
   dispatchStartedAt = '1970-01-01T00:00:00Z',
 ) {
   const { repo, worktreePath } = setupWorkerIssue();
@@ -285,25 +292,27 @@ function createVerifyFixture(
   assert.equal(acquire.status, 0, acquire.stderr);
 
   const dispatchTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-worker-dispatch.'));
+  const dispatchToken = path.basename(dispatchTempDir);
   t.after(() => fs.rmSync(dispatchTempDir, { recursive: true, force: true }));
   const contract = 'role: spec_worker\n';
   fs.writeFileSync(path.join(dispatchTempDir, 'contract.md'), contract);
   if (shaFile !== 'absent') {
     const startedAtLine = shaFile === 'missing-start' ? '' : `DISPATCH_STARTED_AT=${dispatchStartedAt}\n`;
+    const dispatchTokenLine = shaFile === 'missing-token' ? '' : `DISPATCH_TOKEN=${dispatchToken}\n`;
     const effectiveSha = shaFile === 'mismatch' ? '0'.repeat(64) : createHash('sha256').update(contract).digest('hex');
     fs.writeFileSync(
       path.join(dispatchTempDir, 'contract.sha256'),
-      `CONTRACT_SHA256=${effectiveSha}\nCONTRACT_LINES=1\n${startedAtLine}`,
+      `CONTRACT_SHA256=${effectiveSha}\nCONTRACT_LINES=1\n${startedAtLine}${dispatchTokenLine}`,
     );
   }
 
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
-  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head], {
+  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head, '', '', dispatchToken], {
     cwd: worktreePath,
   });
   assert.equal(report.status, 0, report.stderr);
   const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
-  return { repo, worktreePath, dispatchTempDir, leasePath };
+  return { repo, worktreePath, dispatchTempDir, dispatchToken, leasePath };
 }
 
 test('Claude Codeセッション判定 (ISSUE-448 AC-7): CLAUDECODE未設定はfalseへ倒す', () => {
@@ -376,6 +385,25 @@ test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報
   assert.equal(completed.status, 0, completed.stdout + completed.stderr);
   assert.match(completed.stdout, /^RC=0$/m);
   assert.match(completed.stdout, /^REASON=$/m);
+
+  const tokenMismatch = runCompletionReportVerifier(
+    worktreePath,
+    `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.999Z\ndispatch_token=agent-skill-chain-worker-dispatch.previous\n`,
+    0,
+    startedAt,
+  );
+  assert.equal(tokenMismatch.status, 1);
+  assert.match(tokenMismatch.stdout, /dispatchトークン不一致/);
+  assert.match(tokenMismatch.stdout, /過去サイクルの報告の可能性/);
+
+  const tokenMissing = runCompletionReportVerifier(
+    worktreePath,
+    `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.999Z\ndispatch_token=\n`,
+    0,
+    startedAt,
+  );
+  assert.equal(tokenMissing.status, 1);
+  assert.match(tokenMissing.stdout, /dispatchトークン不一致/);
 });
 
 test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だけ終端へ補正しローカルのミリ秒精度を保つ', (t) => {
@@ -419,6 +447,45 @@ test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だ
   assert.equal(localLaterMillisecond.status, 0, localLaterMillisecond.stdout + localLaterMillisecond.stderr);
 });
 
+test('Agent tool dispatch (ISSUE-661 AC-1): 別dispatchサイクルは一致しないトークンを発行する', (t) => {
+  const first = setupWorkerIssue();
+  const second = setupWorkerIssue();
+  t.after(() => first.repo.cleanup());
+  t.after(() => second.repo.cleanup());
+  for (const fixture of [first, second]) {
+    setWorkerAdapter(fixture.repo.dir, 'claude');
+    setWorkerAgentToolDispatch(fixture.repo.dir, true);
+  }
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+  });
+
+  const results = [first, second].map((fixture) => runWorkerLauncher(fixture.worktreePath, ['ISSUE-1', 'spec'], env));
+  for (const result of results) assert.equal(result.status, 4, result.stderr);
+  const dispatchDirs = results.map((result) => /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1]);
+  assert.ok(dispatchDirs[0]);
+  assert.ok(dispatchDirs[1]);
+  const tokens = dispatchDirs.map((dir) => {
+    const audit = fs.readFileSync(path.join(dir!, 'contract.sha256'), 'utf8');
+    return /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
+  });
+  assert.ok(tokens[0]);
+  assert.ok(tokens[1]);
+  assert.notEqual(tokens[0], tokens[1]);
+
+  for (const [index, fixture] of [first, second].entries()) {
+    const verified = runWorkerVerifier(
+      fixture.worktreePath,
+      fixture.worktreePath,
+      ['ISSUE-1', dispatchDirs[index]!],
+      env,
+    );
+    assert.equal(verified.status, 2, 'report未投稿の後始末はblockedになること');
+  }
+});
+
 test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定時はcontract本文を出さずexit 4で監査メタデータを返す', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
@@ -460,11 +527,15 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定
   const contractPath = path.join(dispatchTempDir, 'contract.md');
   const contract = fs.readFileSync(contractPath);
   const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
+  const dispatchToken = /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
   assert.match(contract.toString('utf8'), /^role: spec_worker/m);
   assert.equal(createHash('sha256').update(contract).digest('hex'), expectedSha);
   assert.equal(String(contract.toString('utf8').split('\n').length - 1), expectedLines);
   assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
+  assert.equal(dispatchToken, path.basename(dispatchTempDir));
   assert.match(result.stdout, /成果物をcommit・pushした後.*report-status\.sh.*completed投稿を実行してから最終応答する/);
+  assert.match(result.stdout, new RegExp(`今回のdispatchトークンは ${dispatchToken}`));
+  assert.match(result.stdout, new RegExp(`completed <push済みHEAD> '' '' ${dispatchToken}`));
   assert.match(result.stdout, /最終応答は完了状態・target_sha・簡潔な1文要約のみに限定/);
 
   const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
@@ -477,7 +548,7 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8): opt-in＋Claude Code判定
   );
 
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
-  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head], {
+  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head, '', '', dispatchToken!], {
     cwd: worktreePath,
     env,
   });
@@ -521,8 +592,11 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1): Codexコマン�
   assert.ok(dispatchTempDir);
   assert.ok(codexCmd, 'Codexコマンドの直接実行指示が出力に含まれること');
   const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
+  const dispatchToken = /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
   assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
+  assert.equal(dispatchToken, path.basename(dispatchTempDir));
   assert.match(result.stdout, /成果物をcommit・pushした後.*report-status\.sh.*completed投稿を実行してから最終応答する/);
+  assert.match(result.stdout, new RegExp(`今回のdispatchトークンは ${dispatchToken}`));
   assert.match(result.stdout, /最終応答は完了状態・target_sha・簡潔な1文要約のみに限定/);
   assert.match(codexCmd!, /^cd \/.* && codex exec/, '絶対パスの対象worktreeへのcdから始まること');
   assert.ok(
@@ -569,7 +643,7 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1): Codexコマン�
   // 振る舞いを模して呼び出し側がcheckpoint+report completedを代行する（既存のISSUE-448 AC-1/AC-4/
   // AC-8ディスパッチテストと同じ検証境界）。
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
-  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head], {
+  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head, '', '', dispatchToken!], {
     cwd: worktreePath,
     env,
   });
@@ -648,6 +722,9 @@ test('worker-launch (ISSUE-609 AC-4): 本リポジトリ自身の恒久設定(im
   const codexCmd = /^CODEX_CMD=(.+)$/m.exec(result.stdout)?.[1];
   assert.ok(dispatchTempDir);
   assert.ok(codexCmd);
+  const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
+  const dispatchToken = /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
+  assert.equal(dispatchToken, path.basename(dispatchTempDir));
   assert.match(codexCmd!, /gpt-5\.6-sol/, 'worker.model_tiers.highest_capability.codexの具体モデルが反映されること');
   assert.match(
     codexCmd!,
@@ -674,7 +751,7 @@ test('worker-launch (ISSUE-609 AC-4): 本リポジトリ自身の恒久設定(im
 
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
   const report = runCli(
-    ['report', 'status', 'ISSUE-1', 'implementation_worker', 'implementation', 'completed', head],
+    ['report', 'status', 'ISSUE-1', 'implementation_worker', 'implementation', 'completed', head, '', '', dispatchToken!],
     { cwd: worktreePath, env },
   );
   assert.equal(report.status, 0, report.stderr);
@@ -787,6 +864,20 @@ test('worker-launch-verify (ISSUE-642 AC-4): DISPATCH_STARTED_AT欠落は監査�
   assert.equal(fs.existsSync(fixture.leasePath), false);
 });
 
+test('worker-launch-verify (ISSUE-661 AC-6): DISPATCH_TOKEN欠落は監査証跡不備としてblockedへ倒す', (t) => {
+  const fixture = createVerifyFixture(t, 'missing-token');
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /DISPATCH_TOKENが欠落しています/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false);
+});
+
 test('worker-launch-verify (ISSUE-642 AC-4/AC-5): dispatch開始前のcompleted報告を採用せず契約不履行としてblockedへ倒す', (t) => {
   const fixture = createVerifyFixture(t, 'match', '2099-01-01T00:00:00Z');
   const result = runWorkerVerifier(
@@ -799,6 +890,26 @@ test('worker-launch-verify (ISSUE-642 AC-4/AC-5): dispatch開始前のcompleted�
   assert.match(result.stderr, /workerがreportを投稿していません/);
   assert.match(result.stderr, /dispatch開始前の報告のみ検出/);
   assert.doesNotMatch(result.stderr, /報告target_sha=/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false);
+});
+
+test('worker-launch-verify (ISSUE-661 AC-5/AC-6): 同一HEADの過去サイクルcompleted報告をトークン不一致でblockedへ倒す', (t) => {
+  const fixture = createVerifyFixture(t);
+  const auditPath = path.join(fixture.dispatchTempDir, 'contract.sha256');
+  const audit = fs.readFileSync(auditPath, 'utf8');
+  fs.writeFileSync(auditPath, audit.replace(`DISPATCH_TOKEN=${fixture.dispatchToken}`, 'DISPATCH_TOKEN=next-dispatch-cycle'));
+
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /dispatchトークン不一致/);
+  assert.match(result.stderr, /過去サイクルの報告の可能性/);
   assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
   assert.equal(fs.existsSync(fixture.leasePath), false);
 });
@@ -817,7 +928,7 @@ test('claude launch_worker (ISSUE-470 AC-4): 明示opt-out時にWORKER_CMDが成
     'cat >/tmp/worker-received-contract.txt',
     'echo "worker output" > WORKER_OUTPUT.md',
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: spec worker output")`,
-    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
   ].join(' && ');
 
   const env = envWithout([], {
@@ -834,6 +945,7 @@ test('claude launch_worker (ISSUE-470 AC-4): 明示opt-out時にWORKER_CMDが成
   assert.ok(fs.existsSync(path.join(worktreePath, 'WORKER_OUTPUT.md')));
   const report = readWorkerReport(repo.dir, 'spec');
   assert.equal(report.status, 'completed');
+  assert.match(report.dispatch_token ?? '', /^agent-skill-chain-worker-dispatch\./);
 
   const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
   assert.equal(reacquire.status, 0, 'lease解放済みのため再取得できること: ' + reacquire.stderr);
@@ -841,6 +953,9 @@ test('claude launch_worker (ISSUE-470 AC-4): 明示opt-out時にWORKER_CMDが成
   // role_contract全文（stdin経由）がworkerへ渡っていること（AC-3）。
   const receivedContract = fs.readFileSync('/tmp/worker-received-contract.txt', 'utf8');
   assert.match(receivedContract, /^role: spec_worker/);
+  assert.match(receivedContract, /^worker_completion_dispatch:$/m);
+  assert.match(receivedContract, new RegExp(`^  dispatch_token: ${report.dispatch_token}$`, 'm'));
+  assert.match(receivedContract, /report-status\.sh <issue_id> <role> <segment> completed <push済みHEAD> '' ''/);
   fs.rmSync('/tmp/worker-received-contract.txt', { force: true });
 });
 
@@ -889,7 +1004,7 @@ test('claude launch_worker (ISSUE-546 AC-1): WORKER_CMD直接起動経路のrene
   const workerCmd = [
     'sleep 3',
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: slow worker output")`,
-    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
   ].join(' && ');
 
   const script = path.join(worktreePath, '.agent-skill-chain', 'scripts', 'worker-launch.sh');
@@ -944,7 +1059,7 @@ test('claude launch_worker (ISSUE-546 AC-2): workerが終了すればrenewal_int
   const workerCmd = [
     'sleep 0.2',
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: quick worker output")`,
-    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
   ].join(' && ');
   const env = envWithout([], {
     ANTHROPIC_API_KEY: 'dummy-key-not-logged',
@@ -995,7 +1110,7 @@ test('worker-launch.sh: 複数issue worktree並存下でmainの絶対パスか�
     `pwd > ${JSON.stringify(cwdCapture)}`,
     'echo "target output" > WORKER_OUTPUT.md',
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: target worktree output")`,
-    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
   ].join(' && ');
   const env = envWithout([], { ANTHROPIC_API_KEY: 'dummy-key-not-logged', WORKER_CMD: workerCmd });
 
@@ -1055,7 +1170,7 @@ test('claude launch_worker: WORKER_CMD未指定時の既定起動はclaude CLI�
       'cat >/dev/null',
       'echo "worker output" > WORKER_OUTPUT.md',
       `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: default worker_cmd output")`,
-      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
       '',
     ].join('\n'),
     { mode: 0o755 },
@@ -1106,7 +1221,7 @@ test('claude launch_worker: WORKER_ALLOWED_TOOLS envで既定allowlistを完全�
       `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
       'cat >/dev/null',
       `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: override allowlist")`,
-      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
       '',
     ].join('\n'),
     { mode: 0o755 },
@@ -1185,7 +1300,7 @@ test('claude launch_worker: env認証情報が無くてもCLAUDE_AUTH_PROBE_CMD�
   const workerCmd = [
     'cat >/dev/null',
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: auth probe success")`,
-    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
   ].join(' && ');
 
   // Given: env認証情報は無いが、実疎通確認（CLAUDE_AUTH_PROBE_CMD）はexit0（認証済み）を模す。
@@ -1239,7 +1354,7 @@ test('claude launch_worker (I8直接検証): target_shaが不一致（workerが�
   // Given: commit+pushはせず、でたらめなtarget_shaでcompletedを報告するWORKER_CMD stub。
   const workerCmd = [
     'cat >/dev/null',
-    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed deadbeefdeadbeef`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed deadbeefdeadbeef "" "" "$ASC_DISPATCH_TOKEN"`,
   ].join(' && ');
 
   const env = envWithout([], { ANTHROPIC_API_KEY: 'dummy-key', WORKER_CMD: workerCmd });
@@ -1333,7 +1448,7 @@ test('codex launch_worker: PATH上にcodexという名の実行系が無くて�
       `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
       'cat >/dev/null',
       `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: CODEX_EXECUTABLE override output")`,
-      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
       '',
     ].join('\n'),
     { mode: 0o755 },
@@ -1368,7 +1483,7 @@ test('claude launch_worker: PATH上にclaudeという名の実行系が無くて
       `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
       'cat >/dev/null',
       `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: CLAUDE_EXECUTABLE override output")`,
-      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
       '',
     ].join('\n'),
     { mode: 0o755 },
@@ -1598,7 +1713,7 @@ test('codex launch_worker: CODEX_WORKER_CMD完全上書きは設定由来のモ�
   const workerCmd = [
     'cat >/dev/null',
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: full override")`,
-    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
   ].join(' && ');
   const env = envWithout(['WORKER_CMD'], {
     CODEX_AUTH_PROBE_CMD: 'true',
@@ -1620,7 +1735,7 @@ test('codex launch_worker: WORKER_CMD完全上書きも閾値判定より優先�
   const workerCmd = [
     'cat >/dev/null',
     `SHA=$(node ${JSON.stringify(binPath)} checkpoint "wip: generic full override")`,
-    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA"`,
+    `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
   ].join(' && ');
   const env = envWithout(['CODEX_WORKER_CMD'], {
     CODEX_AUTH_PROBE_CMD: 'true',

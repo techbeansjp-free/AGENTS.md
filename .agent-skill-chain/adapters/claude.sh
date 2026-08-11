@@ -422,8 +422,9 @@ _dispatch_lease_renew_daemon() {
 # 今回のworker起動サイクルに属する完了報告だけを検証する。
 # 成功時は無出力で0、不合格時は呼び出し側がblocked_reasonへ使う理由をstdoutへ出して1を返す。
 _verify_worker_completion_report() {
-  local issue_id="$1" role="$2" segment="$3" started_at="$4"
-  local latest reported_status reported_sha reported_created_at current_sha started_epoch reported_epoch
+  local issue_id="$1" role="$2" segment="$3" started_at="$4" expected_dispatch_token="$5"
+  local latest reported_status reported_sha reported_created_at reported_dispatch_token
+  local current_sha started_epoch reported_epoch
   : "$role"
 
   if ! latest="$(_asc_cli report latest "$issue_id" "$segment")"; then
@@ -434,6 +435,7 @@ _verify_worker_completion_report() {
   reported_status="$(sed -n 's/^status=//p' <<<"$latest")"
   reported_sha="$(sed -n 's/^target_sha=//p' <<<"$latest")"
   reported_created_at="$(sed -n 's/^created_at=//p' <<<"$latest")"
+  reported_dispatch_token="$(sed -n 's/^dispatch_token=//p' <<<"$latest")"
 
   if ! started_epoch="$(date -u -d "$started_at" +%s%3N 2>/dev/null)" ||
     ! reported_epoch="$(date -u -d "$reported_created_at" +%s%3N 2>/dev/null)"; then
@@ -453,6 +455,11 @@ _verify_worker_completion_report() {
   if [[ "$reported_status" != "completed" || -z "$reported_sha" || "$reported_sha" != "$current_sha" ]]; then
     printf 'worker完了を確認できませんでした（報告status=%s, 報告target_sha=%s, 現在HEAD=%s）\n' \
       "${reported_status:-無し}" "${reported_sha:-無し}" "${current_sha:-無し}"
+    return 1
+  fi
+
+  if [[ -z "$expected_dispatch_token" || "$reported_dispatch_token" != "$expected_dispatch_token" ]]; then
+    printf '%s\n' 'workerの報告が今回のdispatchサイクルに由来すると確認できませんでした（dispatchトークン不一致、過去サイクルの報告の可能性）'
     return 1
   fi
 
@@ -542,12 +549,13 @@ _dispatch_via_agent_tool() {
     fi
   fi
 
-  local dispatch_temp_dir dispatch_started_at contract_file contract_sha contract_lines
+  local dispatch_temp_dir dispatch_token dispatch_started_at contract_file contract_sha contract_lines
   if ! dispatch_temp_dir="$(mktemp -d "$temp_base/agent-skill-chain-worker-dispatch.XXXXXX")"; then
     echo "launch_worker: dispatch用一時ディレクトリを作成できませんでした" >&2
     release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   fi
+  dispatch_token="$(basename -- "$dispatch_temp_dir")"
   dispatch_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
   chmod 700 "$dispatch_temp_dir"
   contract_file="$dispatch_temp_dir/contract.md"
@@ -555,8 +563,8 @@ _dispatch_via_agent_tool() {
   chmod 600 "$contract_file"
   contract_sha="$(sha256sum "$contract_file" | awk '{print $1}')"
   contract_lines="$(wc -l <"$contract_file" | tr -d '[:space:]')"
-  printf 'CONTRACT_SHA256=%s\nCONTRACT_LINES=%s\nDISPATCH_STARTED_AT=%s\n' \
-    "$contract_sha" "$contract_lines" "$dispatch_started_at" \
+  printf 'CONTRACT_SHA256=%s\nCONTRACT_LINES=%s\nDISPATCH_STARTED_AT=%s\nDISPATCH_TOKEN=%s\n' \
+    "$contract_sha" "$contract_lines" "$dispatch_started_at" "$dispatch_token" \
     >"$dispatch_temp_dir/contract.sha256"
   chmod 600 "$dispatch_temp_dir/contract.sha256"
 
@@ -588,7 +596,7 @@ _dispatch_via_agent_tool() {
       'AGENT_TOOL_DISPATCH_REQUIRED' \
       'dispatch_mode: bash_direct' \
       'run_in_background: false' \
-      "prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、次のコマンドをBashツールで直接実行する: ${codex_cmd}。workerは成果物をcommit・pushした後、contractに記載されたreport-status.shによるcompleted投稿を実行してから最終応答する。最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
+      "prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、次のコマンドをBashツールで直接実行する: ${codex_cmd}。workerは成果物をcommit・pushした後、contractに記載されたreport-status.shによるcompleted投稿を実行してから最終応答する。今回のdispatchトークンは ${dispatch_token}。completed投稿では既存の5引数に空文字2つとdispatchトークンを追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} の形で実行する。最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
       "完了後に .agent-skill-chain/scripts/worker-launch-verify.sh ${issue_id} ${dispatch_temp_dir_quoted} をBashツールで実行する。" \
       "ISSUE_ID=${issue_id}" \
       "DISPATCH_TEMP_DIR=${dispatch_temp_dir}" \
@@ -602,7 +610,7 @@ _dispatch_via_agent_tool() {
     'AGENT_TOOL_DISPATCH_REQUIRED' \
     'subagent_type: agent-skill-chain-worker' \
     'run_in_background: false' \
-    "prompt: 指定ファイルをBashツールで cat -- ${contract_file_quoted} として読み、その標準出力全体を一切要約・改変せず動作契約として厳密に実行する。workerは成果物をcommit・pushした後、contractに記載されたreport-status.shによるcompleted投稿を実行してから最終応答する。作業完了後の最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
+    "prompt: 指定ファイルをBashツールで cat -- ${contract_file_quoted} として読み、その標準出力全体を一切要約・改変せず動作契約として厳密に実行する。workerは成果物をcommit・pushした後、contractに記載されたreport-status.shによるcompleted投稿を実行してから最終応答する。今回のdispatchトークンは ${dispatch_token}。completed投稿では既存の5引数に空文字2つとdispatchトークンを追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} の形で実行する。作業完了後の最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
     "完了後に .agent-skill-chain/scripts/worker-launch-verify.sh ${issue_id} ${dispatch_temp_dir_quoted} をBashツールで実行する。" \
     "ISSUE_ID=${issue_id}" \
     "DISPATCH_TEMP_DIR=${dispatch_temp_dir}" \
@@ -701,6 +709,19 @@ launch_worker() {
     return
   fi
 
+  local dispatch_token_path dispatch_token worker_started_at
+  if ! dispatch_token_path="$(mktemp -u "${TMPDIR:-/tmp}/agent-skill-chain-worker-dispatch.XXXXXX")"; then
+    _fail_blocked "dispatchトークンを生成できませんでした"
+    return
+  fi
+  dispatch_token="$(basename -- "$dispatch_token_path")"
+  worker_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
+  contract+=$'\nworker_completion_dispatch:\n'
+  contract+="  dispatch_token: ${dispatch_token}"
+  contract+=$'\n'
+  contract+="  instruction: 成果物をcommit・pushした後のcompleted投稿では、既存の5引数に空文字2つとdispatchトークンを追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} の形で実行する。"
+  contract+=$'\n'
+
   # 起動系。WORKER_CMD で上書き可能（テスト用モック境界）。既定は claude CLI headless を
   # --allowed-tools（責務スコープ allowlist、WORKER_ALLOWED_TOOLS）で起動する。無制限自動承認
   # （--permission-mode bypassPermissions）・編集のみ自動承認（acceptEdits、Bashは都度承認＝
@@ -720,19 +741,18 @@ launch_worker() {
   local renew_interval="${WORKER_RENEW_INTERVAL_SEC:-900}"
 
   # role_contract全文をプロンプトとしてstdin経由で渡す（唯一の正規契約伝達経路。AC-3）。
-  # ASC_ISSUE_ID/ASC_SEGMENT/ASC_ROLE は worker_cmd 実装（テスト用stub含む）の便宜のためのenvであり、
+  # ASC_ISSUE_ID/ASC_SEGMENT/ASC_ROLE/ASC_DISPATCH_TOKEN は worker_cmd 実装（テスト用stub含む）の便宜のためのenvであり、
   # 契約の内容自体はstdinのrole_contractに完全に含まれる。
   local prompt_file
   prompt_file="$(mktemp)"
   printf '%s' "$contract" >"$prompt_file"
 
-  local worker_pid worker_started_at rc
-  worker_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
+  local worker_pid rc
   if command -v timeout >/dev/null 2>&1; then
-    ASC_ISSUE_ID="$issue_id" ASC_SEGMENT="$segment" ASC_ROLE="$role" \
+    ASC_ISSUE_ID="$issue_id" ASC_SEGMENT="$segment" ASC_ROLE="$role" ASC_DISPATCH_TOKEN="$dispatch_token" \
       timeout "$timeout_sec" bash -c "$worker_cmd" <"$prompt_file" &
   else
-    ASC_ISSUE_ID="$issue_id" ASC_SEGMENT="$segment" ASC_ROLE="$role" \
+    ASC_ISSUE_ID="$issue_id" ASC_SEGMENT="$segment" ASC_ROLE="$role" ASC_DISPATCH_TOKEN="$dispatch_token" \
       bash -c "$worker_cmd" <"$prompt_file" &
   fi
   worker_pid=$!
@@ -775,7 +795,7 @@ launch_worker() {
 
   # サブプロセスの終了コード0だけでは信頼せず、今回の起動以降に投稿された完了報告を検証する。
   local completion_reason
-  if ! completion_reason="$(_verify_worker_completion_report "$issue_id" "$role" "$segment" "$worker_started_at")"; then
+  if ! completion_reason="$(_verify_worker_completion_report "$issue_id" "$role" "$segment" "$worker_started_at" "$dispatch_token")"; then
     _fail_blocked "$completion_reason"
     return
   fi

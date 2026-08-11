@@ -7,7 +7,7 @@
 ## 前提・用語
 
 - dispatch: `worker-launch.sh`がworkerプロセスを直接起動せず、Agent tool呼び出しまたはBash直接実行に必要な固定メタデータを返す状態。
-- dispatch一時ディレクトリ: `contract.md`、`contract.sha256`、`renew.pid`を保持するworktree外の`chmod 700`ディレクトリ。`contract.sha256`はcontractのSHA256・行数に加え、今回サイクルの鮮度基準となるUTC ISO8601形式の`DISPATCH_STARTED_AT`を保持する。
+- dispatch一時ディレクトリ: `contract.md`、`contract.sha256`、`renew.pid`を保持するworktree外の`chmod 700`ディレクトリ。`contract.sha256`はcontractのSHA256・行数に加え、今回サイクルの鮮度基準となるUTC ISO8601形式の`DISPATCH_STARTED_AT`と、今回サイクル固有の`DISPATCH_TOKEN`を保持する。
 - 入力はIssue IDとsegment名、出力はdispatch指示または既存起動方式の完了結果である。
 - Claude Code CLIセッション判定、解決済みadapterが`claude`または`codex`、`worker.agent_tool_dispatch.enabled: true`の3条件が一つでも欠ける場合は本手順を使わない。
 
@@ -15,10 +15,10 @@
 
 1. `.agent-skill-chain/scripts/worker-launch.sh <issue_id> <segment>`を実行する。
 2. 終了コード`4`と`AGENT_TOOL_DISPATCH_REQUIRED`・`subagent_type: agent-skill-chain-worker`を受け取った場合、出力された固定プレフィックス行`ISSUE_ID=`、`DISPATCH_TEMP_DIR=`、`CONTRACT_SHA256=`、`CONTRACT_LINES=`を保持する。contract本文は標準出力へ現れない。
-3. Agent toolを`subagent_type: agent-skill-chain-worker`、`run_in_background: false`で1回呼び出す。promptにはworker-launch出力の定型文と`contract.md`の絶対パスだけを渡す。
+3. Agent toolを`subagent_type: agent-skill-chain-worker`、`run_in_background: false`で1回呼び出す。promptにはworker-launch出力の定型文、`contract.md`の絶対パス、今回のdispatchトークンとcompleted reportの追加引数指示だけを渡す。
 4. サブエージェントは指定された`contract.md`をReadツールではなくBashツールの`cat`で読み、標準出力全体を要約・改変せず動作契約として実行する。別のAgentへ再委譲しない。`segment start`が全worker contractへ付加する`worker_completion_report`には、成果物をcommit・pushした後に実行する`report-status.sh <issue_id> <role> <segment> completed <push済みHEAD>`が具体値入りで記載される。
-5. サブエージェントは成果物をcommit・pushし、contractの指示どおりcompleted reportを投稿してから最終応答する。最終応答は完了状態、target SHA、簡潔な1文要約だけに限定し、成果物本文、diff、引用を含めない。
-6. Agent tool完了後、`.agent-skill-chain/scripts/worker-launch-verify.sh <ISSUE_IDの値> <DISPATCH_TEMP_DIRの値>`を実行する。verifyはrenewデーモン停止、contractのSHA256・行数・`DISPATCH_STARTED_AT`照合、今回サイクルのworker reportとHEAD SHAの照合、lease解放を行う。
+5. サブエージェントは成果物をcommit・pushし、contractとpromptの指示どおり今回のdispatchトークンを含むcompleted reportを投稿してから最終応答する。最終応答は完了状態、target SHA、簡潔な1文要約だけに限定し、成果物本文、diff、引用を含めない。
+6. Agent tool完了後、`.agent-skill-chain/scripts/worker-launch-verify.sh <ISSUE_IDの値> <DISPATCH_TEMP_DIRの値>`を実行する。verifyはrenewデーモン停止、contractのSHA256・行数・`DISPATCH_STARTED_AT`・`DISPATCH_TOKEN`照合、今回サイクルのworker reportとHEAD SHA・dispatchトークンの照合、lease解放を行う。
 
 ## 実行手順（adapter: codex）
 
@@ -38,7 +38,7 @@
 
 - dispatch後にAgent tool・Bash直接実行またはverifyを実行できない場合、推測で完了扱いにしない。renewデーモンは最大待機時間で停止し、その後はwriter lease TTL、reclaim、resumeの既存回復経路に委ねる。
 - `ASC_DISPATCH_MAX_WAIT_SEC`既定14400秒を超える正常な実行時間はサポート対象外である。
-- `contract.md`の監査値不一致、`DISPATCH_STARTED_AT`の欠落・形式不正、worker report未報告、status不一致、target SHA不一致はすべてblockedとする。
+- `contract.md`の監査値不一致、`DISPATCH_STARTED_AT`の欠落・形式不正、`DISPATCH_TOKEN`の欠落、worker report未報告、status不一致、target SHA不一致、dispatchトークン不一致はすべてblockedとする。
 - dispatch開始前の古いreportしか存在しない場合、そのreportのstatusやtarget SHAを今回サイクルの値として診断しない。「workerがreportを投稿していない（契約不履行の可能性、dispatch開始前の報告のみ検出）」としてblockedにする。今回サイクルのreportが存在する場合だけstatus・target SHA・現在HEADの具体的な不一致を診断する。
 - 解決済みadapterが`human`または未知の値の場合、Agent tool dispatchはlease解放のうえエラーを返し、AIによる自動代替は行わない。`human.sh`は本来`claude.sh`を`source`しないため、通常この経路には到達しない防御的フェイルセーフである。
 - 未決事項はない。gate reviewer起動（`launch_gate_reviewer`）のAgent tool可視化は対象外である。

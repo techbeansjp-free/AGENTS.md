@@ -10,7 +10,7 @@ import { gh } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const USAGE = `
-使い方: agent-skill-chain report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason] [human_escalation_requested]
+使い方: agent-skill-chain report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason] [human_escalation_requested] [dispatch_token]
 
 role:     spec_worker|design_worker|implementation_worker|validation_worker|adr_finalization_worker
 segment:  spec|design|implementation|validation|adr_finalization
@@ -19,6 +19,7 @@ blocked_reason: status=blocked の場合必須（推測で補完せず、明確�
 human_escalation_requested: 省略可（既定false）。'true' を指定すると、起動失敗・timeout・
   完了を騙るケース等、進行役への人間エスカレーションを要する blocked であることを明示する
   （AGENTS.md 不変条件I8。launch_worker等のアダプタが使う）。
+dispatch_token: 省略可。workerへ配達されたdispatchサイクル固有の識別子をそのまま指定する。
 
 出力:
   成功時: 終了コード0。発行先（Issueコメントurlまたはreportファイルパス）を標準出力へ。
@@ -34,7 +35,7 @@ target_shaが押し済みHEADと一致するか」を確認するために使う
 完了を騙る場合でもsilent passせず安全側に倒す判定の材料）。
 
 出力:
-  成功時: 終了コード0。status=<completed|blocked>\\ntarget_sha=<sha>\\ncreated_at=<UTC ISO8601> を標準出力へ。
+  成功時: 終了コード0。status=<completed|blocked>\\ntarget_sha=<sha>\\ncreated_at=<UTC ISO8601>\\ndispatch_token=<値または空文字> を標準出力へ。
   失敗時: 終了コード1以上（報告が1件も無い場合を含む）。
 `;
 
@@ -47,6 +48,7 @@ interface WorkerReport {
   segment: string;
   status: 'completed' | 'blocked';
   target_sha: string;
+  dispatch_token?: string;
   blocked_reason?: string;
   human_escalation_requested?: boolean;
 }
@@ -57,7 +59,7 @@ export async function status(args: string[]): Promise<number> {
       printUsage(USAGE);
       return 0;
     }
-    const [issueIdRaw, role, segment, statusValue, targetSha, blockedReason, humanEscalationRaw] = args;
+    const [issueIdRaw, role, segment, statusValue, targetSha, blockedReason, humanEscalationRaw, dispatchToken] = args;
     if (!issueIdRaw || !role || !segment || !statusValue || !targetSha) {
       throw new CliError('issue_id, role, segment, status, target_sha はすべて必須です');
     }
@@ -79,6 +81,7 @@ export async function status(args: string[]): Promise<number> {
       segment,
       status: statusValue,
       target_sha: targetSha,
+      ...(dispatchToken ? { dispatch_token: dispatchToken } : {}),
       ...(blockedReason ? { blocked_reason: blockedReason } : {}),
       ...(humanEscalationRaw === 'true' ? { human_escalation_requested: true } : {}),
     };
@@ -121,7 +124,9 @@ export async function latest(args: string[]): Promise<number> {
       const report = tryReadYamlFile<WorkerReport>(reportPath);
       if (!report) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
       const createdAt = fs.statSync(reportPath).mtime.toISOString();
-      return ok(`status=${report.status}\ntarget_sha=${report.target_sha}\ncreated_at=${createdAt}`);
+      return ok(
+        `status=${report.status}\ntarget_sha=${report.target_sha}\ncreated_at=${createdAt}\ndispatch_token=${report.dispatch_token ?? ''}`,
+      );
     }
 
     const result = gh([`issue`, 'view', number, '--json', 'comments'], root);
@@ -142,6 +147,8 @@ export async function latest(args: string[]): Promise<number> {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const last = reports[reports.length - 1];
     if (!last) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
-    return ok(`status=${last.report.status}\ntarget_sha=${last.report.target_sha}\ncreated_at=${last.createdAt}`);
+    return ok(
+      `status=${last.report.status}\ntarget_sha=${last.report.target_sha}\ncreated_at=${last.createdAt}\ndispatch_token=${last.report.dispatch_token ?? ''}`,
+    );
   });
 }
