@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import {
   createTmpRepo,
   setWorkerAdapter,
@@ -319,9 +319,17 @@ function createVerifyFixture(
   }
 
   const reportArgs = ['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head, '', '', dispatchToken];
-  if (noChangeReason !== undefined) reportArgs.push('true', noChangeReason);
+  if (noChangeReason !== undefined && noChangeReason !== '') reportArgs.push('true', noChangeReason);
   const report = runCli(reportArgs, { cwd: worktreePath });
   assert.equal(report.status, 0, report.stderr);
+  if (noChangeReason === '') {
+    // report statusは空白だけの理由を拒否するため、旧版・外部経路由来のreportを直接再現し、
+    // report latestから完了検証までの安全側判定も独立に維持されることを確認する。
+    const historicalReport = parse(fs.readFileSync(report.stdout.trim(), 'utf8')) as WorkerReport;
+    historicalReport.no_change = true;
+    historicalReport.no_change_reason = ' \t\u3000\n';
+    fs.writeFileSync(report.stdout.trim(), stringify(historicalReport));
+  }
   const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
   return { repo, worktreePath, dispatchTempDir, dispatchToken, leasePath };
 }
@@ -1035,7 +1043,7 @@ test('worker-launch-verify (ISSUE-644 AC-1): 着手時SHAと同じ無宣言compl
   assert.equal(fs.existsSync(fixture.leasePath), false);
 });
 
-test('worker-launch-verify (ISSUE-644 AC-3): 無変更宣言があっても理由が空ならblockedへ倒す', (t) => {
+test('worker-launch-verify (ISSUE-644 AC-3): 無変更宣言があっても理由が空白だけならblockedへ倒す', (t) => {
   const fixture = createVerifyFixture(t, 'match', '1970-01-01T00:00:00Z', 'head', '');
   const result = runWorkerVerifier(
     fixture.worktreePath,

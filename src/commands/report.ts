@@ -43,6 +43,10 @@ target_shaが押し済みHEADと一致するか」を確認するために使う
 
 const MARKER = '<!-- agent-skill-chain:worker-report -->';
 
+function hasNonWhitespaceText(value: string | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 interface WorkerReport {
   schema_version: string;
   issue_id: string;
@@ -84,6 +88,9 @@ export async function status(args: string[]): Promise<number> {
     if (statusValue === 'blocked' && !blockedReason) {
       throw new CliError('status=blocked の場合 blocked_reason は必須です（推測で補完しない）');
     }
+    if (noChangeRaw === 'true' && !hasNonWhitespaceText(noChangeReason)) {
+      throw new CliError('no_change=true の場合 no_change_reason は空白以外の文字を含む必要があります');
+    }
     const { issueId, number } = parseIssueId(issueIdRaw);
 
     const root = repoRoot();
@@ -98,7 +105,7 @@ export async function status(args: string[]): Promise<number> {
       target_sha: targetSha,
       ...(dispatchToken ? { dispatch_token: dispatchToken } : {}),
       ...(noChangeRaw !== undefined ? { no_change: noChangeRaw === 'true' } : {}),
-      ...(noChangeReason ? { no_change_reason: noChangeReason } : {}),
+      ...(hasNonWhitespaceText(noChangeReason) ? { no_change_reason: noChangeReason } : {}),
       ...(blockedReason ? { blocked_reason: blockedReason } : {}),
       ...(humanEscalationRaw === 'true' ? { human_escalation_requested: true } : {}),
     };
@@ -142,7 +149,7 @@ export async function latest(args: string[]): Promise<number> {
       if (!report) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
       const createdAt = fs.statSync(reportPath).mtime.toISOString();
       return ok(
-        `status=${report.status}\ntarget_sha=${report.target_sha}\ncreated_at=${createdAt}\ndispatch_token=${report.dispatch_token ?? ''}\nno_change=${report.no_change === true}\nno_change_reason_present=${!!report.no_change_reason}`,
+        `status=${report.status}\ntarget_sha=${report.target_sha}\ncreated_at=${createdAt}\ndispatch_token=${report.dispatch_token ?? ''}\nno_change=${report.no_change === true}\nno_change_reason_present=${hasNonWhitespaceText(report.no_change_reason)}`,
       );
     }
 
@@ -165,7 +172,7 @@ export async function latest(args: string[]): Promise<number> {
     const last = reports[reports.length - 1];
     if (!last) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
     return ok(
-      `status=${last.report.status}\ntarget_sha=${last.report.target_sha}\ncreated_at=${last.createdAt}\ndispatch_token=${last.report.dispatch_token ?? ''}\nno_change=${last.report.no_change === true}\nno_change_reason_present=${!!last.report.no_change_reason}`,
+      `status=${last.report.status}\ntarget_sha=${last.report.target_sha}\ncreated_at=${last.createdAt}\ndispatch_token=${last.report.dispatch_token ?? ''}\nno_change=${last.report.no_change === true}\nno_change_reason_present=${hasNonWhitespaceText(last.report.no_change_reason)}`,
     );
   });
 }
