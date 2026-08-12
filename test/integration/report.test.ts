@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 
 // `report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason]
-// [human_escalation_requested] [dispatch_token]`
+// [human_escalation_requested] [dispatch_token] [no_change] [no_change_reason]`
 // （src/commands/report.ts）を検証する。作業ワーカーが完了・blocked時に固定スキーマ
 // （worker-report.schema.yaml）で進行役へ報告するコマンド。
 
@@ -21,6 +21,8 @@ interface WorkerReport {
   status: string;
   target_sha: string;
   dispatch_token?: string;
+  no_change?: boolean;
+  no_change_reason?: string;
   blocked_reason?: string;
 }
 
@@ -45,6 +47,89 @@ test('report status (local backend): completedはissues/<n>/.agent-skill-chain/r
   assert.equal(report.target_sha, 'abc123');
   assert.equal(report.blocked_reason, undefined);
   assert.equal(report.dispatch_token, undefined, 'dispatch_token未指定の既存呼び出しは引き続き有効であること');
+  assert.equal(report.no_change, undefined, 'no_change未指定の既存呼び出しはoptionalのまま保存されること');
+});
+
+test('report status/latest (ISSUE-644 AC-2/AC-3/AC-6): 無変更宣言を保存し、latestは理由の有無だけを返す', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const reason = '既存成果物が要件を満たすため\n追加変更は不要';
+
+  const result = runCli(
+    [
+      'report',
+      'status',
+      'ISSUE-1',
+      'spec_worker',
+      'spec',
+      'completed',
+      'abc123',
+      '',
+      '',
+      'agent-skill-chain-worker-dispatch.local123',
+      'true',
+      reason,
+    ],
+    { cwd: repo.dir },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  const report = parse(fs.readFileSync(result.stdout.trim(), 'utf8')) as WorkerReport;
+  assert.equal(report.no_change, true);
+  assert.equal(report.no_change_reason, reason);
+
+  const latest = runCli(['report', 'latest', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(latest.status, 0, latest.stderr);
+  assert.ok(latest.stdout.split('\n').includes('no_change=true'));
+  assert.ok(latest.stdout.split('\n').includes('no_change_reason_present=true'));
+  assert.doesNotMatch(latest.stdout, /既存成果物|追加変更/, '理由の生テキストはKEY=VALUE出力へ含めないこと');
+});
+
+test('report status/latest (ISSUE-644 AC-3): 空白だけの無変更理由は保存せず、理由なしとして扱う', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  for (const reason of ['   ', '\u3000\u3000']) {
+    const rejected = runCli(
+      [
+        'report',
+        'status',
+        'ISSUE-1',
+        'spec_worker',
+        'spec',
+        'completed',
+        'abc123',
+        '',
+        '',
+        'agent-skill-chain-worker-dispatch.local123',
+        'true',
+        reason,
+      ],
+      { cwd: repo.dir },
+    );
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /no_change_reason は空白以外の文字を含む必要があります/);
+  }
+  const expectedReportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reports', 'spec.yaml');
+  assert.equal(fs.existsSync(expectedReportPath), false, '拒否した空白だけの理由をreportへ保存しないこと');
+
+  const accepted = runCli(
+    ['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', 'abc123'],
+    { cwd: repo.dir },
+  );
+  assert.equal(accepted.status, 0, accepted.stderr);
+
+  const reportPath = accepted.stdout.trim();
+  assert.equal(path.resolve(reportPath), expectedReportPath);
+  const historicalReport = parse(fs.readFileSync(reportPath, 'utf8')) as WorkerReport;
+  historicalReport.no_change = true;
+  historicalReport.no_change_reason = ' \t\u3000\n';
+  fs.writeFileSync(reportPath, stringify(historicalReport));
+
+  const latest = runCli(['report', 'latest', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(latest.status, 0, latest.stderr);
+  assert.ok(latest.stdout.split('\n').includes('no_change=true'));
+  assert.ok(latest.stdout.split('\n').includes('no_change_reason_present=false'));
 });
 
 test('report status/latest (ISSUE-661 AC-3/AC-8, local backend): dispatch_tokenを欠落・改変なく保存して出力する', async (t) => {
@@ -173,4 +258,28 @@ test('report status (github backend): Issueコメントとして固定スキー�
   assert.match(latest.stdout, /target_sha=aaa111/);
   assert.ok(latest.stdout.split('\n').includes(`created_at=${comments[0].createdAt}`));
   assert.ok(latest.stdout.split('\n').includes(`dispatch_token=${dispatchToken}`));
+
+  const state = stub.readState();
+  const whitespaceOnlyReport: WorkerReport = {
+    schema_version: 'agent-skill-chain/worker-report/v1',
+    issue_id: 'ISSUE-2',
+    role: 'validation_worker',
+    segment: 'validation',
+    status: 'completed',
+    target_sha: 'aaa111',
+    no_change: true,
+    no_change_reason: '\u3000',
+  };
+  state.comments['2'].push({
+    id: 'whitespace-only-reason',
+    url: 'https://github.com/test/repo/issues/2#issuecomment-whitespace-only-reason',
+    body: `<!-- agent-skill-chain:worker-report -->\n\`\`\`yaml\n${stringify(whitespaceOnlyReport)}\`\`\`\n`,
+    createdAt: new Date(Date.parse(comments[0].createdAt) + 1000).toISOString(),
+  });
+  stub.writeState(state);
+
+  const latestWhitespaceOnly = runCli(['report', 'latest', 'ISSUE-2', 'validation'], { cwd: repo.dir, env });
+  assert.equal(latestWhitespaceOnly.status, 0, latestWhitespaceOnly.stderr);
+  assert.ok(latestWhitespaceOnly.stdout.split('\n').includes('no_change=true'));
+  assert.ok(latestWhitespaceOnly.stdout.split('\n').includes('no_change_reason_present=false'));
 });

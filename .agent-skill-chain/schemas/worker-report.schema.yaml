@@ -29,6 +29,13 @@ properties:
   dispatch_token:
     type: string
     description: "workerへ配達されたdispatchサイクル固有の識別子。report-status.sh呼出し時に末尾の追加引数として渡された値をそのまま保持する。"
+  no_change:
+    type: boolean
+    default: false
+    description: dispatch開始後にcommitを追加せず完了したことをworkerが明示するoptionalフラグ。
+  no_change_reason:
+    type: string
+    description: no_change=trueの場合に、変更不要と判断した具体的理由を記録するoptionalフィールド。
   artifacts:
     type: array
     items: {type: string}

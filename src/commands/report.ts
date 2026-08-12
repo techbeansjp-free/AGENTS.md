@@ -10,7 +10,7 @@ import { gh } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const USAGE = `
-使い方: agent-skill-chain report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason] [human_escalation_requested] [dispatch_token]
+使い方: agent-skill-chain report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason] [human_escalation_requested] [dispatch_token] [no_change] [no_change_reason]
 
 role:     spec_worker|design_worker|implementation_worker|validation_worker|adr_finalization_worker
 segment:  spec|design|implementation|validation|adr_finalization
@@ -20,6 +20,8 @@ human_escalation_requested: 省略可（既定false）。'true' を指定する�
   完了を騙るケース等、進行役への人間エスカレーションを要する blocked であることを明示する
   （AGENTS.md 不変条件I8。launch_worker等のアダプタが使う）。
 dispatch_token: 省略可。workerへ配達されたdispatchサイクル固有の識別子をそのまま指定する。
+no_change: 省略可（既定false）。変更が無い場合のみ9番目の引数へ'true'を指定する。
+no_change_reason: 省略可。no_change=trueの場合に、変更不要と判断した具体的理由を指定する。
 
 出力:
   成功時: 終了コード0。発行先（Issueコメントurlまたはreportファイルパス）を標準出力へ。
@@ -35,11 +37,15 @@ target_shaが押し済みHEADと一致するか」を確認するために使う
 完了を騙る場合でもsilent passせず安全側に倒す判定の材料）。
 
 出力:
-  成功時: 終了コード0。status=<completed|blocked>\\ntarget_sha=<sha>\\ncreated_at=<UTC ISO8601>\\ndispatch_token=<値または空文字> を標準出力へ。
+  成功時: 終了コード0。status=<completed|blocked>\\ntarget_sha=<sha>\\ncreated_at=<UTC ISO8601>\\ndispatch_token=<値または空文字>\\nno_change=<true|false>\\nno_change_reason_present=<true|false> を標準出力へ。
   失敗時: 終了コード1以上（報告が1件も無い場合を含む）。
 `;
 
 const MARKER = '<!-- agent-skill-chain:worker-report -->';
+
+function hasNonWhitespaceText(value: string | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
 
 interface WorkerReport {
   schema_version: string;
@@ -49,6 +55,8 @@ interface WorkerReport {
   status: 'completed' | 'blocked';
   target_sha: string;
   dispatch_token?: string;
+  no_change?: boolean;
+  no_change_reason?: string;
   blocked_reason?: string;
   human_escalation_requested?: boolean;
 }
@@ -59,7 +67,18 @@ export async function status(args: string[]): Promise<number> {
       printUsage(USAGE);
       return 0;
     }
-    const [issueIdRaw, role, segment, statusValue, targetSha, blockedReason, humanEscalationRaw, dispatchToken] = args;
+    const [
+      issueIdRaw,
+      role,
+      segment,
+      statusValue,
+      targetSha,
+      blockedReason,
+      humanEscalationRaw,
+      dispatchToken,
+      noChangeRaw,
+      noChangeReason,
+    ] = args;
     if (!issueIdRaw || !role || !segment || !statusValue || !targetSha) {
       throw new CliError('issue_id, role, segment, status, target_sha はすべて必須です');
     }
@@ -68,6 +87,9 @@ export async function status(args: string[]): Promise<number> {
     }
     if (statusValue === 'blocked' && !blockedReason) {
       throw new CliError('status=blocked の場合 blocked_reason は必須です（推測で補完しない）');
+    }
+    if (noChangeRaw === 'true' && !hasNonWhitespaceText(noChangeReason)) {
+      throw new CliError('no_change=true の場合 no_change_reason は空白以外の文字を含む必要があります');
     }
     const { issueId, number } = parseIssueId(issueIdRaw);
 
@@ -82,6 +104,8 @@ export async function status(args: string[]): Promise<number> {
       status: statusValue,
       target_sha: targetSha,
       ...(dispatchToken ? { dispatch_token: dispatchToken } : {}),
+      ...(noChangeRaw !== undefined ? { no_change: noChangeRaw === 'true' } : {}),
+      ...(hasNonWhitespaceText(noChangeReason) ? { no_change_reason: noChangeReason } : {}),
       ...(blockedReason ? { blocked_reason: blockedReason } : {}),
       ...(humanEscalationRaw === 'true' ? { human_escalation_requested: true } : {}),
     };
@@ -125,7 +149,7 @@ export async function latest(args: string[]): Promise<number> {
       if (!report) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
       const createdAt = fs.statSync(reportPath).mtime.toISOString();
       return ok(
-        `status=${report.status}\ntarget_sha=${report.target_sha}\ncreated_at=${createdAt}\ndispatch_token=${report.dispatch_token ?? ''}`,
+        `status=${report.status}\ntarget_sha=${report.target_sha}\ncreated_at=${createdAt}\ndispatch_token=${report.dispatch_token ?? ''}\nno_change=${report.no_change === true}\nno_change_reason_present=${hasNonWhitespaceText(report.no_change_reason)}`,
       );
     }
 
@@ -148,7 +172,7 @@ export async function latest(args: string[]): Promise<number> {
     const last = reports[reports.length - 1];
     if (!last) return fail(`ISSUE-${number} の segment '${segment}' に worker report がありません`);
     return ok(
-      `status=${last.report.status}\ntarget_sha=${last.report.target_sha}\ncreated_at=${last.createdAt}\ndispatch_token=${last.report.dispatch_token ?? ''}`,
+      `status=${last.report.status}\ntarget_sha=${last.report.target_sha}\ncreated_at=${last.createdAt}\ndispatch_token=${last.report.dispatch_token ?? ''}\nno_change=${last.report.no_change === true}\nno_change_reason_present=${hasNonWhitespaceText(last.report.no_change_reason)}`,
     );
   });
 }
