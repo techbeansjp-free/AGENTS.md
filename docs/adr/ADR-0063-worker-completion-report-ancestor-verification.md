@@ -95,7 +95,7 @@ Issue #644（ADR-0062）で追加した無変更completed検出は、`_verify_wo
 - リポジトリが浅いclone（`git clone --depth=`）である環境では、`started_sha` が実際には祖先で
   あっても history が切り詰められているために `git merge-base --is-ancestor` が誤って `1`
   （不成立）を返し、正当な完了報告を誤ってblockedにする可能性がある。本Issueが対象とするworktree
-  （`git worktree add` で作成された作業ディレクトリ）は通常フルhistoryを持つmain clone由来のため、
+  （`git worktree add` で作成されたworktree）は通常フルhistoryを持つmain clone由来のため、
   通常運用でこの事象は発生しない想定だが、浅いcloneでの運用は本Issueのスコープ外の既知の限界として
   ここに記録する。必要になれば別Issueで扱う。
 - 検出したrollback・履歴書き換えを自動修復する機構は設けない（SPEC.mdのスコープ外）。安全側で

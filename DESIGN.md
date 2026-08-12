@@ -66,6 +66,6 @@ ADR-0060（worker completion reportの契約とdispatch鮮度）・ADR-0061（di
 
 - 想定される失敗モード:
   - `git merge-base --is-ancestor` 自体が予期しない形（リポジトリ破損等）で異常終了する場合も、終了コードが `0` 以外である限り安全側（blocked）へ倒れるため、個別の異常処理分岐を追加する必要はない（要件3・AC-4の判定不能ケースに包含される）。
-  - リポジトリが浅いclone（`git clone --depth=`）である環境では、`started_sha` が実際には祖先であっても history が切り詰められているために `git merge-base --is-ancestor` が誤って `1`（不成立）を返し、正当な完了報告を誤ってblockedにする可能性がある。本Issueが対象とするworktree（`git worktree add` で作成された作業ディレクトリ）は通常フルhistoryを持つmain clone由来のため、通常運用でこの事象は発生しない想定だが、浅いcloneでの運用は本Issueのスコープ外の既知の限界としてADRのConsequencesに記録する。
+  - リポジトリが浅いclone（`git clone --depth=`）である環境では、`started_sha` が実際には祖先であっても history が切り詰められているために `git merge-base --is-ancestor` が誤って `1`（不成立）を返し、正当な完了報告を誤ってblockedにする可能性がある。本Issueが対象とするworktree（`git worktree add` で作成されたworktree）は通常フルhistoryを持つmain clone由来のため、通常運用でこの事象は発生しない想定だが、浅いcloneでの運用は本Issueのスコープ外の既知の限界としてADRのConsequencesに記録する。
 - ロールバック手順: 変更は `_verify_worker_completion_report` 内に追加する `else` ブロック1箇所に閉じている。既存の分岐（無変更completed判定・鮮度チェック・dispatchトークン一致チェック・`started_sha` 形式検査）、呼び出し元2経路のコード、`worker-report.schema.yaml`、`report status`/`report latest` CLIの引数はいずれも変更しないため、問題が発覚した場合は追加した `else` ブロックのみをrevertすれば、本Issue適用前の「祖先関係を検証しない」旧来動作へ即座に戻せる。
 - 影響を受ける既存機能: worker完了確認全般（`launch_worker` 直接起動経路・`worker-launch-verify.sh` 経由のAgent tool dispatch経路の両方。両者が同一の `_verify_worker_completion_report` を共有するため）。既存の正当な「`started_sha` の上に1つ以上commitを積んで完了」フローは、祖先関係が成立する限り影響を受けない（AC-3、回帰なし）。`reported_sha == started_sha`（無変更completed、ISSUE-644/ADR-0062）の既存フローは本ブロックの対象外であり無影響（AC-5）。
