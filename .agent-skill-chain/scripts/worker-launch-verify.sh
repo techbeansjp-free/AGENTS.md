@@ -149,6 +149,7 @@ else
   EXPECTED_LINES="$(sed -n 's/^CONTRACT_LINES=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   DISPATCH_STARTED_AT="$(sed -n 's/^DISPATCH_STARTED_AT=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   DISPATCH_TOKEN="$(sed -n 's/^DISPATCH_TOKEN=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
+  STARTED_SHA="$(sed -n 's/^STARTED_SHA=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   ACTUAL_SHA="$(sha256sum "$CONTRACT_FILE" | awk '{print $1}')"
   ACTUAL_LINES="$(wc -l <"$CONTRACT_FILE" | tr -d '[:space:]')"
   if [[ -z "$EXPECTED_SHA" || -z "$EXPECTED_LINES" || "$ACTUAL_SHA" != "$EXPECTED_SHA" || "$ACTUAL_LINES" != "$EXPECTED_LINES" ]]; then
@@ -158,6 +159,8 @@ else
     INTEGRITY_ERROR="contract.sha256のDISPATCH_STARTED_ATが欠落またはUTC ISO8601形式ではありません"
   elif [[ -z "$DISPATCH_TOKEN" ]]; then
     INTEGRITY_ERROR="contract.sha256のDISPATCH_TOKENが欠落しています"
+  elif [[ ! "$STARTED_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    INTEGRITY_ERROR="contract.sha256のSTARTED_SHAが欠落または40桁16進数形式ではありません"
   fi
 fi
 
@@ -169,7 +172,7 @@ if [[ -n "$INTEGRITY_ERROR" ]]; then
 fi
 
 COMPLETION_REASON=""
-if ! COMPLETION_REASON="$(_verify_worker_completion_report "$ISSUE_ID" "$ROLE" "$SEGMENT" "$DISPATCH_STARTED_AT" "$DISPATCH_TOKEN")"; then
+if ! COMPLETION_REASON="$(_verify_worker_completion_report "$ISSUE_ID" "$ROLE" "$SEGMENT" "$DISPATCH_STARTED_AT" "$DISPATCH_TOKEN" "$STARTED_SHA")"; then
   _fail_blocked "$COMPLETION_REASON"
   exit $?
 fi

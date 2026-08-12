@@ -9,7 +9,7 @@ import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 
 // `report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason]
-// [human_escalation_requested] [dispatch_token]`
+// [human_escalation_requested] [dispatch_token] [no_change] [no_change_reason]`
 // （src/commands/report.ts）を検証する。作業ワーカーが完了・blocked時に固定スキーマ
 // （worker-report.schema.yaml）で進行役へ報告するコマンド。
 
@@ -21,6 +21,8 @@ interface WorkerReport {
   status: string;
   target_sha: string;
   dispatch_token?: string;
+  no_change?: boolean;
+  no_change_reason?: string;
   blocked_reason?: string;
 }
 
@@ -45,6 +47,42 @@ test('report status (local backend): completedはissues/<n>/.agent-skill-chain/r
   assert.equal(report.target_sha, 'abc123');
   assert.equal(report.blocked_reason, undefined);
   assert.equal(report.dispatch_token, undefined, 'dispatch_token未指定の既存呼び出しは引き続き有効であること');
+  assert.equal(report.no_change, undefined, 'no_change未指定の既存呼び出しはoptionalのまま保存されること');
+});
+
+test('report status/latest (ISSUE-644 AC-2/AC-3/AC-6): 無変更宣言を保存し、latestは理由の有無だけを返す', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const reason = '既存成果物が要件を満たすため\n追加変更は不要';
+
+  const result = runCli(
+    [
+      'report',
+      'status',
+      'ISSUE-1',
+      'spec_worker',
+      'spec',
+      'completed',
+      'abc123',
+      '',
+      '',
+      'agent-skill-chain-worker-dispatch.local123',
+      'true',
+      reason,
+    ],
+    { cwd: repo.dir },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  const report = parse(fs.readFileSync(result.stdout.trim(), 'utf8')) as WorkerReport;
+  assert.equal(report.no_change, true);
+  assert.equal(report.no_change_reason, reason);
+
+  const latest = runCli(['report', 'latest', 'ISSUE-1', 'spec'], { cwd: repo.dir });
+  assert.equal(latest.status, 0, latest.stderr);
+  assert.ok(latest.stdout.split('\n').includes('no_change=true'));
+  assert.ok(latest.stdout.split('\n').includes('no_change_reason_present=true'));
+  assert.doesNotMatch(latest.stdout, /既存成果物|追加変更/, '理由の生テキストはKEY=VALUE出力へ含めないこと');
 });
 
 test('report status/latest (ISSUE-661 AC-3/AC-8, local backend): dispatch_tokenを欠落・改変なく保存して出力する', async (t) => {

@@ -48,6 +48,8 @@ interface WorkerReport {
   status: 'completed' | 'blocked';
   target_sha: string;
   dispatch_token?: string;
+  no_change?: boolean;
+  no_change_reason?: string;
   blocked_reason?: string;
   human_escalation_requested?: boolean;
 }
@@ -128,13 +130,14 @@ function runCompletionReportVerifier(
   latestStatus: number,
   startedAt: string,
   expectedDispatchToken = 'agent-skill-chain-worker-dispatch.current',
+  startedSha = '0'.repeat(40),
 ): ScriptResult {
   const adapterPath = path.join(worktreePath, '.agent-skill-chain', 'adapters', 'claude.sh');
   const script = [
     'source "$1"',
     '_asc_cli() { printf \'%s\' "$ASC_TEST_LATEST"; return "$ASC_TEST_LATEST_STATUS"; }',
     'set +e',
-    'reason="$(_verify_worker_completion_report ISSUE-1 spec_worker spec "$ASC_TEST_STARTED_AT" "$ASC_TEST_DISPATCH_TOKEN")"',
+    'reason="$(_verify_worker_completion_report ISSUE-1 spec_worker spec "$ASC_TEST_STARTED_AT" "$ASC_TEST_DISPATCH_TOKEN" "$ASC_TEST_STARTED_SHA")"',
     'rc=$?',
     'printf \'RC=%s\\nREASON=%s\\n\' "$rc" "$reason"',
     'exit "$rc"',
@@ -148,6 +151,7 @@ function runCompletionReportVerifier(
     ASC_TEST_LATEST_STATUS: String(latestStatus),
     ASC_TEST_STARTED_AT: startedAt,
     ASC_TEST_DISPATCH_TOKEN: expectedDispatchToken,
+    ASC_TEST_STARTED_SHA: startedSha,
   });
   try {
     const stdout = execFileSync('bash', ['-c', script, '_', adapterPath], {
@@ -283,8 +287,10 @@ function readWorkerReport(repoDir: string, segment: string): WorkerReport {
 
 function createVerifyFixture(
   t: { after(fn: () => void): void },
-  shaFile: 'match' | 'mismatch' | 'missing-start' | 'missing-token' | 'absent' = 'match',
+  shaFile: 'match' | 'mismatch' | 'missing-start' | 'missing-token' | 'missing-started-sha' | 'invalid-started-sha' | 'absent' = 'match',
   dispatchStartedAt = '1970-01-01T00:00:00Z',
+  startedShaMode: 'different' | 'head' = 'different',
+  noChangeReason?: string,
 ) {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
@@ -296,20 +302,25 @@ function createVerifyFixture(
   t.after(() => fs.rmSync(dispatchTempDir, { recursive: true, force: true }));
   const contract = 'role: spec_worker\n';
   fs.writeFileSync(path.join(dispatchTempDir, 'contract.md'), contract);
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
   if (shaFile !== 'absent') {
     const startedAtLine = shaFile === 'missing-start' ? '' : `DISPATCH_STARTED_AT=${dispatchStartedAt}\n`;
     const dispatchTokenLine = shaFile === 'missing-token' ? '' : `DISPATCH_TOKEN=${dispatchToken}\n`;
+    const startedSha = startedShaMode === 'head' ? head : '0'.repeat(40);
+    const startedShaLine =
+      shaFile === 'missing-started-sha'
+        ? ''
+        : `STARTED_SHA=${shaFile === 'invalid-started-sha' ? 'invalid' : startedSha}\n`;
     const effectiveSha = shaFile === 'mismatch' ? '0'.repeat(64) : createHash('sha256').update(contract).digest('hex');
     fs.writeFileSync(
       path.join(dispatchTempDir, 'contract.sha256'),
-      `CONTRACT_SHA256=${effectiveSha}\nCONTRACT_LINES=1\n${startedAtLine}${dispatchTokenLine}`,
+      `CONTRACT_SHA256=${effectiveSha}\nCONTRACT_LINES=1\n${startedAtLine}${dispatchTokenLine}${startedShaLine}`,
     );
   }
 
-  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
-  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head, '', '', dispatchToken], {
-    cwd: worktreePath,
-  });
+  const reportArgs = ['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head, '', '', dispatchToken];
+  if (noChangeReason !== undefined) reportArgs.push('true', noChangeReason);
+  const report = runCli(reportArgs, { cwd: worktreePath });
   assert.equal(report.status, 0, report.stderr);
   const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
   return { repo, worktreePath, dispatchTempDir, dispatchToken, leasePath };
@@ -404,6 +415,52 @@ test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報
   );
   assert.equal(tokenMissing.status, 1);
   assert.match(tokenMissing.stdout, /dispatchトークン不一致/);
+});
+
+test('完了報告共通判定 (ISSUE-644 AC-1〜AC-5): 着手時SHAと同じcompletedは明示的な無変更理由がある場合だけ通す', (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const startedAt = '2026-08-12T01:02:03Z';
+  const baseLatest = `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:04Z\n`;
+
+  const undeclared = runCompletionReportVerifier(worktreePath, baseLatest, 0, startedAt, undefined, head);
+  assert.equal(undeclared.status, 1);
+  assert.match(undeclared.stdout, /commitが追加されておらず、無変更完了も明示されていません/);
+
+  const missingReason = runCompletionReportVerifier(
+    worktreePath,
+    `${baseLatest}no_change=true\nno_change_reason_present=false\n`,
+    0,
+    startedAt,
+    undefined,
+    head,
+  );
+  assert.equal(missingReason.status, 1);
+  assert.match(missingReason.stdout, /具体的理由がありません/);
+
+  const declared = runCompletionReportVerifier(
+    worktreePath,
+    `${baseLatest}no_change=true\nno_change_reason_present=true\n`,
+    0,
+    startedAt,
+    undefined,
+    head,
+  );
+  assert.equal(declared.status, 0, declared.stdout + declared.stderr);
+
+  for (const invalidStartedSha of ['', 'invalid']) {
+    const invalid = runCompletionReportVerifier(
+      worktreePath,
+      `${baseLatest}no_change=true\nno_change_reason_present=true\n`,
+      0,
+      startedAt,
+      undefined,
+      invalidStartedSha,
+    );
+    assert.equal(invalid.status, 1);
+    assert.match(invalid.stdout, /着手時SHAが欠落または不正形式/);
+  }
 });
 
 test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だけ終端へ補正しローカルのミリ秒精度を保つ', (t) => {
@@ -535,13 +592,16 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8, ISSUE-665 AC-1/AC-2/AC-4): 
     contract.toString('utf8'),
     new RegExp(`report-status\\.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatchToken}`),
   );
+  assert.match(contract.toString('utf8'), new RegExp(`${dispatchToken} true '<具体的理由>'`));
   assert.equal(createHash('sha256').update(contract).digest('hex'), expectedSha);
   assert.equal(String(contract.toString('utf8').split('\n').length - 1), expectedLines);
   assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
+  assert.match(audit, /^STARTED_SHA=[0-9a-f]{40}$/m);
   assert.equal(dispatchToken, path.basename(dispatchTempDir));
   assert.match(result.stdout, /成果物をcommit・pushした後.*report-status\.sh.*completed投稿を実行してから最終応答する/);
   assert.match(result.stdout, new RegExp(`今回のdispatchトークンは ${dispatchToken}`));
   assert.match(result.stdout, new RegExp(`completed <push済みHEAD> '' '' ${dispatchToken}`));
+  assert.match(result.stdout, new RegExp(`${dispatchToken} true '<具体的理由>'`));
   assert.match(result.stdout, /最終応答は完了状態・target_sha・簡潔な1文要約のみに限定/);
 
   const leasePath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'lease.yaml');
@@ -554,10 +614,24 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8, ISSUE-665 AC-1/AC-2/AC-4): 
   );
 
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
-  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head, '', '', dispatchToken!], {
-    cwd: worktreePath,
-    env,
-  });
+  assert.match(audit, new RegExp(`^STARTED_SHA=${head}$`, 'm'));
+  const report = runCli(
+    [
+      'report',
+      'status',
+      'ISSUE-1',
+      'spec_worker',
+      'spec',
+      'completed',
+      head,
+      '',
+      '',
+      dispatchToken!,
+      'true',
+      'dispatch経路の契約検証のみで成果物変更は不要',
+    ],
+    { cwd: worktreePath, env },
+  );
   assert.equal(report.status, 0, report.stderr);
   const verified = runWorkerVerifier(repo.dir, repo.dir, ['ISSUE-1', dispatchTempDir], env);
   assert.equal(verified.status, 0, verified.stderr);
@@ -611,9 +685,11 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1, ISSUE-665 AC-1/A
     contract.toString('utf8'),
     new RegExp(`report-status\\.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatchToken}`),
   );
+  assert.match(contract.toString('utf8'), new RegExp(`${dispatchToken} true '<具体的理由>'`));
   assert.equal(createHash('sha256').update(contract).digest('hex'), expectedSha);
   assert.equal(String(contract.toString('utf8').split('\n').length - 1), expectedLines);
   assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
+  assert.match(audit, /^STARTED_SHA=[0-9a-f]{40}$/m);
   assert.equal(dispatchToken, path.basename(dispatchTempDir));
   assert.match(result.stdout, /成果物をcommit・pushした後.*report-status\.sh.*completed投稿を実行してから最終応答する/);
   assert.match(result.stdout, new RegExp(`今回のdispatchトークンは ${dispatchToken}`));
@@ -667,10 +743,24 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1, ISSUE-665 AC-1/A
   // 振る舞いを模して呼び出し側がcheckpoint+report completedを代行する（既存のISSUE-448 AC-1/AC-4/
   // AC-8ディスパッチテストと同じ検証境界）。
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
-  const report = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'completed', head, '', '', dispatchToken!], {
-    cwd: worktreePath,
-    env,
-  });
+  assert.match(audit, new RegExp(`^STARTED_SHA=${head}$`, 'm'));
+  const report = runCli(
+    [
+      'report',
+      'status',
+      'ISSUE-1',
+      'spec_worker',
+      'spec',
+      'completed',
+      head,
+      '',
+      '',
+      dispatchToken!,
+      'true',
+      'dispatch経路の契約検証のみで成果物変更は不要',
+    ],
+    { cwd: worktreePath, env },
+  );
   assert.equal(report.status, 0, report.stderr);
 
   const verified = runWorkerVerifier(repo.dir, repo.dir, ['ISSUE-1', dispatchTempDir!], env);
@@ -775,7 +865,20 @@ test('worker-launch (ISSUE-609 AC-4): 本リポジトリ自身の恒久設定(im
 
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
   const report = runCli(
-    ['report', 'status', 'ISSUE-1', 'implementation_worker', 'implementation', 'completed', head, '', '', dispatchToken!],
+    [
+      'report',
+      'status',
+      'ISSUE-1',
+      'implementation_worker',
+      'implementation',
+      'completed',
+      head,
+      '',
+      '',
+      dispatchToken!,
+      'true',
+      'dispatch経路のadapter選択検証のみで成果物変更は不要',
+    ],
     { cwd: worktreePath, env },
   );
   assert.equal(report.status, 0, report.stderr);
@@ -899,6 +1002,63 @@ test('worker-launch-verify (ISSUE-661 AC-6): DISPATCH_TOKEN欠落は監査証跡
   assert.equal(result.status, 2);
   assert.match(result.stderr, /DISPATCH_TOKENが欠落しています/);
   assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false);
+});
+
+for (const shaFile of ['missing-started-sha', 'invalid-started-sha'] as const) {
+  test(`worker-launch-verify (ISSUE-644 AC-5): ${shaFile}は監査証跡不備としてblockedへ倒す`, (t) => {
+    const fixture = createVerifyFixture(t, shaFile);
+    const result = runWorkerVerifier(
+      fixture.worktreePath,
+      fixture.worktreePath,
+      ['ISSUE-1', fixture.dispatchTempDir],
+      process.env,
+    );
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /STARTED_SHAが欠落または40桁16進数形式ではありません/);
+    assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+    assert.equal(fs.existsSync(fixture.leasePath), false);
+  });
+}
+
+test('worker-launch-verify (ISSUE-644 AC-1): 着手時SHAと同じ無宣言completedはblockedへ倒す', (t) => {
+  const fixture = createVerifyFixture(t, 'match', '1970-01-01T00:00:00Z', 'head');
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /commitが追加されておらず、無変更完了も明示されていません/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false);
+});
+
+test('worker-launch-verify (ISSUE-644 AC-3): 無変更宣言があっても理由が空ならblockedへ倒す', (t) => {
+  const fixture = createVerifyFixture(t, 'match', '1970-01-01T00:00:00Z', 'head', '');
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /具体的理由がありません/);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
+  assert.equal(fs.existsSync(fixture.leasePath), false);
+});
+
+test('worker-launch-verify (ISSUE-644 AC-2): 無変更宣言と具体的理由があれば通過する', (t) => {
+  const fixture = createVerifyFixture(t, 'match', '1970-01-01T00:00:00Z', 'head', '既存成果物が要件を満たすため');
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    process.env,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'completed');
   assert.equal(fs.existsSync(fixture.leasePath), false);
 });
 
