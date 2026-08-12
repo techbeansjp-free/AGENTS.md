@@ -265,6 +265,16 @@ function setupWorkerIssue(opts: { backend?: CoordinationBackend; env?: NodeJS.Pr
   return { repo, worktreePath };
 }
 
+function advanceWorkerHead(worktreePath: string): { startedSha: string; head: string } {
+  const startedSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  execFileSync('git', ['commit', '--allow-empty', '-m', 'test: add worker output'], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+  });
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  return { startedSha, head };
+}
+
 /** 呼出元workerの実行時状態を除去し、テストが明示した状態だけを持つenvを作る。 */
 function envWithout(keys: string[], extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
@@ -289,13 +299,30 @@ function createVerifyFixture(
   t: { after(fn: () => void): void },
   shaFile: 'match' | 'mismatch' | 'missing-start' | 'missing-token' | 'missing-started-sha' | 'invalid-started-sha' | 'absent' = 'match',
   dispatchStartedAt = '1970-01-01T00:00:00Z',
-  startedShaMode: 'different' | 'head' = 'different',
+  startedShaMode: 'different' | 'head' | 'unrelated' | 'missing-object' = 'different',
   noChangeReason?: string,
 ) {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   const acquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath });
   assert.equal(acquire.status, 0, acquire.stderr);
+
+  const initialHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  let startedSha = initialHead;
+  if (startedShaMode === 'different') {
+    execFileSync('git', ['commit', '--allow-empty', '-m', 'test: add worker output'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+    });
+  } else if (startedShaMode === 'unrelated') {
+    const tree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+    startedSha = execFileSync('git', ['commit-tree', tree, '-m', 'test: unrelated worker start'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim();
+  } else if (startedShaMode === 'missing-object') {
+    startedSha = '0'.repeat(40);
+  }
 
   const dispatchTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-worker-dispatch.'));
   const dispatchToken = path.basename(dispatchTempDir);
@@ -306,7 +333,6 @@ function createVerifyFixture(
   if (shaFile !== 'absent') {
     const startedAtLine = shaFile === 'missing-start' ? '' : `DISPATCH_STARTED_AT=${dispatchStartedAt}\n`;
     const dispatchTokenLine = shaFile === 'missing-token' ? '' : `DISPATCH_TOKEN=${dispatchToken}\n`;
-    const startedSha = startedShaMode === 'head' ? head : '0'.repeat(40);
     const startedShaLine =
       shaFile === 'missing-started-sha'
         ? ''
@@ -368,7 +394,7 @@ test('Claude Codeセッション判定 (ISSUE-448 AC-7): 明示overrideは既知
 test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報告・今回の不一致を分離し、今回の一致だけを通す', (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const { startedSha, head } = advanceWorkerHead(worktreePath);
   const startedAt = '2026-08-12T01:02:03Z';
 
   const missing = runCompletionReportVerifier(worktreePath, '', 1, startedAt);
@@ -380,6 +406,8 @@ test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報
     `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:02.999Z\n`,
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(stale.status, 1);
   assert.match(stale.stdout, /dispatch開始前の報告のみ検出/);
@@ -390,6 +418,8 @@ test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報
     'status=completed\ntarget_sha=old-sha\ncreated_at=2026-08-12T01:02:04Z\n',
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(mismatch.status, 1);
   assert.match(mismatch.stdout, /報告target_sha=old-sha/);
@@ -400,6 +430,8 @@ test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報
     `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.999Z\n`,
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(completed.status, 0, completed.stdout + completed.stderr);
   assert.match(completed.stdout, /^RC=0$/m);
@@ -410,6 +442,8 @@ test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報
     `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.999Z\ndispatch_token=agent-skill-chain-worker-dispatch.previous\n`,
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(tokenMismatch.status, 1);
   assert.match(tokenMismatch.stdout, /dispatchトークン不一致/);
@@ -420,6 +454,8 @@ test('完了報告共通判定 (ISSUE-642 AC-3/AC-4/AC-5): 未報告・古い報
     `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.999Z\ndispatch_token=\n`,
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(tokenMissing.status, 1);
   assert.match(tokenMissing.stdout, /dispatchトークン不一致/);
@@ -471,10 +507,55 @@ test('完了報告共通判定 (ISSUE-644 AC-1〜AC-5): 着手時SHAと同じcom
   }
 });
 
+test('完了報告祖先判定 (ISSUE-671 AC-1〜AC-4): 子孫だけを通し、別系統と判定不能は理由を分けて拒否する', (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  const { startedSha, head } = advanceWorkerHead(worktreePath);
+  const latest = `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:04Z\n`;
+
+  const descendant = runCompletionReportVerifier(
+    worktreePath,
+    latest,
+    0,
+    '2026-08-12T01:02:03Z',
+    undefined,
+    startedSha,
+  );
+  assert.equal(descendant.status, 0, descendant.stdout + descendant.stderr);
+
+  const tree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const unrelatedSha = execFileSync('git', ['commit-tree', tree, '-m', 'test: unrelated history'], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+  }).trim();
+  const unrelated = runCompletionReportVerifier(
+    worktreePath,
+    latest,
+    0,
+    '2026-08-12T01:02:03Z',
+    undefined,
+    unrelatedSha,
+  );
+  assert.equal(unrelated.status, 1);
+  assert.match(unrelated.stdout, /祖先ではありません/);
+  assert.match(unrelated.stdout, /rollback・履歴書き換えの可能性/);
+
+  const unavailable = runCompletionReportVerifier(
+    worktreePath,
+    latest,
+    0,
+    '2026-08-12T01:02:03Z',
+    undefined,
+    '0'.repeat(40),
+  );
+  assert.equal(unavailable.status, 1);
+  assert.match(unavailable.stdout, /祖先関係を判定できませんでした/);
+});
+
 test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だけ終端へ補正しローカルのミリ秒精度を保つ', (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
-  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const { startedSha, head } = advanceWorkerHead(worktreePath);
   const startedAt = '2026-08-12T01:02:03.847Z';
 
   const githubSameSecond = runCompletionReportVerifier(
@@ -482,6 +563,8 @@ test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だ
     `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03Z\n`,
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(githubSameSecond.status, 0, githubSameSecond.stdout + githubSameSecond.stderr);
 
@@ -490,6 +573,8 @@ test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だ
     `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:02Z\n`,
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(githubEarlierSecond.status, 1);
   assert.match(githubEarlierSecond.stdout, /dispatch開始前の報告のみ検出/);
@@ -499,6 +584,8 @@ test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だ
     `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.846Z\n`,
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(localEarlierMillisecond.status, 1);
   assert.match(localEarlierMillisecond.stdout, /dispatch開始前の報告のみ検出/);
@@ -508,6 +595,8 @@ test('完了報告鮮度判定 (ISSUE-658 AC-1/AC-2/AC-3): GitHubの秒精度だ
     `status=completed\ntarget_sha=${head}\ncreated_at=2026-08-12T01:02:03.848Z\n`,
     0,
     startedAt,
+    undefined,
+    startedSha,
   );
   assert.equal(localLaterMillisecond.status, 0, localLaterMillisecond.stdout + localLaterMillisecond.stderr);
 });
@@ -1069,6 +1158,27 @@ test('worker-launch-verify (ISSUE-644 AC-2): 無変更宣言と具体的理由�
   assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'completed');
   assert.equal(fs.existsSync(fixture.leasePath), false);
 });
+
+for (const [startedShaMode, expectedReason] of [
+  ['unrelated', /祖先ではありません（rollback・履歴書き換えの可能性）/],
+  ['missing-object', /祖先関係を判定できませんでした/],
+] as const) {
+  test(`worker-launch-verify (ISSUE-671 AC-1/AC-2/AC-4): ${startedShaMode}はblocked＋lease解放へ倒す`, (t) => {
+    const fixture = createVerifyFixture(t, 'match', '1970-01-01T00:00:00Z', startedShaMode);
+    const result = runWorkerVerifier(
+      fixture.worktreePath,
+      fixture.worktreePath,
+      ['ISSUE-1', fixture.dispatchTempDir],
+      process.env,
+    );
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, expectedReason);
+    const blocked = readWorkerReport(fixture.repo.dir, 'spec');
+    assert.equal(blocked.status, 'blocked');
+    assert.equal(blocked.human_escalation_requested, true);
+    assert.equal(fs.existsSync(fixture.leasePath), false);
+  });
+}
 
 test('worker-launch-verify (ISSUE-642 AC-4/AC-5): dispatch開始前のcompleted報告を採用せず契約不履行としてblockedへ倒す', (t) => {
   const fixture = createVerifyFixture(t, 'match', '2099-01-01T00:00:00Z');
