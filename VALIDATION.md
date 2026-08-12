@@ -6,7 +6,7 @@
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-671
-target_sha: 1167a10391f029ddd4271efac37e2d1bcb149124
+target_sha: e9bfe7bc4ab96d50a90181a9802bbeccad70a051
 
 acceptance_criteria:
   - ac_id: AC-1
@@ -66,12 +66,6 @@ regression:
     - ".agent-skill-chain/scripts/lint-references.sh SPEC.md DESIGN.md PLAN.md
       docs/adr/ADR-0063-worker-completion-report-ancestor-verification.md （陳腐化しうる参照の検査、成功）"
     - ".agent-skill-chain/ci/verify-adr.sh docs/adr/ADR-0063-worker-completion-report-ancestor-verification.md （ADR形式検査、成功）"
-    - "既知の懸案（AC非対応・自動passにはしていない）: .agent-skill-chain/scripts/lint-vocab.sh
-      SPEC.md DESIGN.md PLAN.md docs/adr/ADR-0063-worker-completion-report-ancestor-verification.md
-      を実行すると、DESIGN.md:69 と ADR-0063:98 に禁止語『作業ディレクトリ』（正: worktree、
-      docs/GLOSSARY.md）の混入が検出される（exit 1）。lint-vocab.shのCI既定対象
-      （defaultVocabFileRoots）はSPEC/DESIGN/PLAN/docs/adr/を含まないためPRのCheck Run
-      『lint-vocab』はこの混入を検出せず成功しているが、本Issueの成果物として事実を記録する。
-      本Issueのvalidation workerはSPEC.md/DESIGN.md/PLAN.mdの編集を禁じられており（contract.md
-      forbidden）、この語法問題はAC-1〜AC-5のいずれにも対応しない設計文書の用字選択に閉じるため
-      修正を行わず、進行役への引き継ぎ事項として記録するに留めた"
+    - ".agent-skill-chain/scripts/lint-vocab.sh SPEC.md DESIGN.md PLAN.md
+      docs/adr/ADR-0063-worker-completion-report-ancestor-verification.md
+      （禁止語検査、成功。exit 0）"
