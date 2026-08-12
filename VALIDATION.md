@@ -6,7 +6,7 @@
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-644
-target_sha: 540e74f36f0b53fa7d33e2fa9cbabd44b9db816c
+target_sha: 28b6132a8e54151ed013120effe57e80d075e227
 
 acceptance_criteria:
   - ac_id: AC-1
@@ -33,7 +33,9 @@ acceptance_criteria:
       result: pass
     evidence:
       - "test/integration/worker-adapters.test.ts::完了報告共通判定 (ISSUE-644 AC-1〜AC-5)（missingReasonケース: no_change=true・no_change_reason_present=falseのcompletedがRC=1・『具体的理由がありません』になることを検証）"
-      - "test/integration/worker-adapters.test.ts::worker-launch-verify (ISSUE-644 AC-3): 無変更宣言があっても理由が空ならblockedへ倒す（理由を空文字で報告した場合にworker-launch-verify.sh経由でblockedへ倒れることを実地検証）"
+      - "test/integration/worker-adapters.test.ts::worker-launch-verify (ISSUE-644 AC-3): 無変更宣言があっても理由が空白だけならblockedへ倒す（report statusが空白だけの理由を拒否するため、旧版・外部経路由来のreportを直接再現してworker-launch-verify.sh経由でblockedへ倒れることを実地検証）"
+      - "test/integration/report.test.ts::report status/latest (ISSUE-644 AC-3): 空白だけの無変更理由は保存せず、理由なしとして扱う（半角・全角空白のno_change_reasonをreport statusがRC=1『no_change_reason は空白以外の文字を含む必要があります』で拒否しreportへ保存しないこと、および空白だけの理由を持つ既存reportをreport latestがno_change_reason_present=falseとして扱うことをlocal backendで検証）"
+      - "test/integration/report.test.ts::report status (github backend): Issueコメントとして固定スキーマのworker reportを投稿する（Issueコメント経由で保存された全角空白のみのno_change_reasonも、report latestがno_change_reason_present=falseとして扱うことを検証）"
 
   - ac_id: AC-4
     verification:
@@ -65,13 +67,14 @@ regression:
   executed: true
   evidence:
     - "npm run build (tsc, 成功)"
-    - "npx tsx --test test/integration/report.test.ts test/integration/worker-adapters.test.ts
-      （node --testランナー。73 tests, 73 pass, 0 fail, 0 cancelled, 0 skipped,
-      duration_ms 451524.001878 で全件成功。本Issue固有の新規テスト（ISSUE-644 AC-1〜AC-6
-      ラベル付きテスト）と、本Issueが変更した_verify_worker_completion_report・
-      worker-launch-verify.sh・report.ts（status/latest）に依存する既存テスト群
+    - "npm test（package.jsonのtestスクリプト。node --importでtsxを読み込むnode --testランナーで
+      test/unitとtest/integration配下の全*.test.tsを実行。1181 tests, 1181 pass, 0 fail,
+      0 cancelled, 0 skipped, duration_ms 915686.661006 で全件成功。本Issue固有の新規テスト
+      （ISSUE-644 AC-1〜AC-6ラベル付きテスト、および空白のみのno_change_reasonを拒否する新規テスト）と、
+      本Issueが変更した_verify_worker_completion_report・worker-launch-verify.sh・
+      report.ts（status/latest）に依存する既存テスト群
       （ISSUE-448/ISSUE-462/ISSUE-470/ISSUE-609/ISSUE-642/ISSUE-647/ISSUE-658/ISSUE-661/ISSUE-665
-      系列を含む）の両方が回帰なく成功することを確認した"
+      系列を含む）を含め、リポジトリ全体の回帰が無いことを確認した"
     - ".agent-skill-chain/ci/verify-doc-length.sh （SPEC.md/DESIGN.md/PLAN.md/ADR-0062の文書量制約検査、成功）"
     - ".agent-skill-chain/scripts/lint-vocab.sh SPEC.md DESIGN.md PLAN.md
       docs/adr/ADR-0062-worker-completion-nochange-detection-via-started-sha.md （禁止語混入検査、成功）"
