@@ -474,6 +474,17 @@ _verify_worker_completion_report() {
       printf '%s\n' '無変更完了が宣言されていますが、変更不要と判断した具体的理由がありません'
       return 1
     fi
+  else
+    local ancestor_rc=0
+    git merge-base --is-ancestor "$started_sha" "$reported_sha" 2>/dev/null || ancestor_rc=$?
+    if [[ "$ancestor_rc" -eq 1 ]]; then
+      printf '%s\n' 'dispatch開始時点のHEADが報告target_shaの祖先ではありません（rollback・履歴書き換えの可能性）'
+      return 1
+    fi
+    if [[ "$ancestor_rc" -ne 0 ]]; then
+      printf '%s\n' 'dispatch開始時点のHEADと報告target_shaの祖先関係を判定できませんでした'
+      return 1
+    fi
   fi
 
   if [[ -z "$expected_dispatch_token" || "$reported_dispatch_token" != "$expected_dispatch_token" ]]; then
