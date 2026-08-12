@@ -51,8 +51,11 @@ grep確認でのみ異常を発見できた。
 ## Decision
 
 `.agent-skill-chain/schemas/worker-report.schema.yaml`へ`no_change`（boolean、既定false、optional）
-と`no_change_reason`（string、optional）の2フィールドを追加する。両方optionalとし、既存の
-completed report（両フィールド無し）との後方互換性を保つ。
+と`no_change_reason`（string、optional）の2フィールドを追加する。両方optionalとし、`target_sha`が
+着手時SHAと異なる（1コミット以上積まれている）既存のcompleted report（両フィールド無し）との
+後方互換性を保つ。`target_sha == 着手時SHA`（無変更）の既存reportは、この後方互換性の対象外であり、
+下記の判定3.の通り無変更フラグと理由が無ければblockedとなる——これは本Issueが検出対象とする
+実害パターンそのものである。
 
 dispatch開始時点のHEAD（着手時SHA）を記録する経路を、worker起動系統ごとに設ける。Agent tool
 dispatch経路（`_dispatch_via_agent_tool`）は、Issue #665で導入済みの監査証跡ファイル
