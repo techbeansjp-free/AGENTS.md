@@ -35,6 +35,8 @@ npx github:techbeansjp-free/AGENTS.md uninstall [target_dir] [--dry-run]  # 安�
 
 `setup`（引数なし）はローカル資産だけを導入する非推奨エイリアスとして残置している（実行時にstderrへ非推奨警告を出す）。`setup` と `upgrade` は `.github/` を暗黙変更しない。GitHub連携の追加・更新は `setup github` だけが行う。GitHub Issue/PR/Check Run を使わないローカルモード（`coordination.backend: local`）では `init` のみで導入が完結する。
 
+導入済みの `.agent-skill-chain/scripts/`・`ci/`・`adapters/` にあるCLIラッパーは、3つの探索先で `agent-skill-chain` CLIを解決できない場合、`npm install -g agent-skill-chain@latest` を自動試行する。標準入力と標準エラー出力が端末につながる対話環境では実行前に確認し、非対話環境では確認なしで試行する。グローバルnpm環境を変更したくない場合は、実行前に `AGENT_SKILL_CHAIN_AUTO_INSTALL=0` を設定する。無効化される値は厳密に `0` だけであり、未設定・空文字列・`false`・`no` を含むその他の値では既定どおり自動導入を試行する。
+
 `enforce on`/`enforce off` は `.claude/settings.json` へ PreToolUse hook を配線/非配線する。配線されるhookは `tool_name=="Bash"` のコマンド文字列のみを検査し、`git worktree remove` の直接実行と命名規約違反のブランチ作成のみを拒否する狭い安全網であり、Agent/Task 等の非Bashツール呼び出しは対象外（拒否されない）。詳細・設計根拠は [AGENTS.md §不変条件](AGENTS.md) を参照。
 
 ## CLI コマンド一覧

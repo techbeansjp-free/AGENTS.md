@@ -141,8 +141,16 @@ interface EnsureCliResult {
 function runEnsureCliStep(setup: (dir: string, mockBinDir: string) => void): EnsureCliResult {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue536-ensure-cli-'));
   const mockBinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue536-mockbin-'));
+  const globalPrefix = path.join(mockBinDir, 'global');
+  const globalBinDir = path.join(globalPrefix, 'bin');
   const npmLog = path.join(mockBinDir, 'npm.invocations.log');
   try {
+    const sharedDir = path.join(dir, '.agent-skill-chain', 'scripts');
+    fs.mkdirSync(sharedDir, { recursive: true });
+    fs.copyFileSync(
+      path.join(REPO_ROOT, '.agent-skill-chain', 'scripts', 'cli-resolve.sh'),
+      path.join(sharedDir, 'cli-resolve.sh'),
+    );
     setup(dir, mockBinDir);
 
     const npmMock = path.join(mockBinDir, 'npm');
@@ -151,6 +159,10 @@ function runEnsureCliStep(setup: (dir: string, mockBinDir: string) => void): Ens
       [
         '#!/usr/bin/env bash',
         `echo "$@" >> "${npmLog}"`,
+        'if [[ "$1" == "prefix" && "$2" == "-g" ]]; then',
+        `  printf '%s\\n' "${globalPrefix}"`,
+        '  exit 0',
+        'fi',
         'if [[ "$1" == "install" && "$2" == "-g" ]]; then',
         `  printf '#!/usr/bin/env bash\\necho mock-agent-skill-chain\\n' > "${mockBinDir}/agent-skill-chain"`,
         `  chmod +x "${mockBinDir}/agent-skill-chain"`,
@@ -165,7 +177,7 @@ function runEnsureCliStep(setup: (dir: string, mockBinDir: string) => void): Ens
     fs.writeFileSync(script, ensureCliStepRun());
     const res = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', script], {
       cwd: dir,
-      env: { PATH: `${mockBinDir}:${process.env.PATH ?? ''}` },
+      env: { PATH: `${globalBinDir}:${mockBinDir}:${process.env.PATH ?? ''}` },
       encoding: 'utf8',
     });
     const npmArgs = fs.existsSync(npmLog) ? fs.readFileSync(npmLog, 'utf8').trim().split('\n').filter(Boolean) : [];
@@ -220,7 +232,11 @@ test('Ensure CLI: 非Node consumer（package.json・3経路いずれも無い）
     // 何も用意しない = package.jsonすら無いnon-Node consumerを模す
   });
   assert.equal(result.status, 0, `ステップは成功終了すること（stderr: ${result.stderr}）`);
-  assert.deepEqual(result.npmArgs, ['install -g agent-skill-chain@latest'], 'npm install -g agent-skill-chain@latest が呼ばれること');
+  assert.deepEqual(
+    result.npmArgs,
+    ['install -g agent-skill-chain@latest', 'prefix -g'],
+    '自動導入後にグローバルprefixを取得して再解決すること',
+  );
   assert.ok(
     result.pathHasCli,
     'フォールバック導入後、verify-branch-name.sh等と同じ command -v agent-skill-chain 判定でCLIが見つかること（＝CLI未検出エラーへ失敗ポイントが移動しないこと）',
