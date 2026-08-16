@@ -366,6 +366,117 @@ test('segment start (github backend): COMMENTEDのgate evidenceにあるblocking
   assert.match(result.stdout, /source_segment: spec/);
 });
 
+test('segment start (github backend): local HEADと異なるPR head SHAのblocking evidenceを同梱する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 700);
+  const localHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const prHeadSha = 'f'.repeat(40);
+  assert.notEqual(localHead, prHeadSha);
+  const state = stub.readState();
+  const pr = Object.values(state.prsByBranch ?? {}).find((candidate) => candidate.number === prNumber);
+  assert.ok(pr);
+  pr.headRefOid = prHeadSha;
+  stub.writeState(state);
+  stub.seedPrReviews(prNumber, [{
+    state: 'COMMENTED',
+    author: { login: 'adachi-tatsuru' },
+    body: gateEvidence({
+      issueId: 'ISSUE-700',
+      gate: 'spec',
+      targetSha: prHeadSha,
+      attemptId: 'attempt-700-pr-head',
+      blockers: [{
+        severity: 'blocking',
+        origin: 'specification',
+        code: 'PR-HEAD-BLOCKER',
+        evidence: ['PR headを対象とする最新findingです'],
+      }],
+    }),
+    submittedAt: '2026-08-15T00:00:00Z',
+  }]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-700', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /PR-HEAD-BLOCKER/);
+  assert.match(result.stdout, /PR headを対象とする最新findingです/);
+  assert.doesNotMatch(result.stdout, /gate_review_target_sha/);
+});
+
+test('segment start (github backend): PR head SHAを取得できない場合はlocal HEADへfallbackしない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 701);
+  const localHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const state = stub.readState();
+  const pr = Object.values(state.prsByBranch ?? {}).find((candidate) => candidate.number === prNumber);
+  assert.ok(pr);
+  pr.headRefOid = null;
+  stub.writeState(state);
+  stub.seedPrReviews(prNumber, [{
+    state: 'COMMENTED',
+    author: { login: 'adachi-tatsuru' },
+    body: gateEvidence({
+      issueId: 'ISSUE-701',
+      gate: 'spec',
+      targetSha: localHead,
+      attemptId: 'attempt-701-local-head',
+      blockers: [{
+        severity: 'blocking',
+        origin: 'specification',
+        code: 'LOCAL-HEAD-BLOCKER',
+        evidence: ['local HEADへfallbackした場合だけ現れるfindingです'],
+      }],
+    }),
+    submittedAt: '2026-08-15T00:00:00Z',
+  }]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-701', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /LOCAL-HEAD-BLOCKER/);
+  assert.match(result.stdout, /GATE_REVIEW_TARGET_SHA_UNVERIFIED/);
+  assert.match(result.stdout, /side: gate_review_target_sha/);
+  assert.match(result.stdout, /head SHAを取得できません/);
+});
+
+test('segment start (github backend): trusted actorの解釈不能evidenceを部分障害と未確定blockerとして同梱する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 702);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-702',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-702-conclusive-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'MALFORMED-PREVIOUS-BLOCKER',
+          evidence: ['解釈不能evidenceより前に確認されたfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: '<!-- agent-skill-chain:gate-review-evidence -->\n```json\n{ invalid json\n```\n',
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-702', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /GATE_REVIEW_EVIDENCE_MALFORMED/);
+  assert.match(result.stdout, /MALFORMED-PREVIOUS-BLOCKER/);
+  assert.match(result.stdout, /解釈不能evidenceより前に確認されたfindingです/);
+  assert.match(result.stdout, /trusted actorのゲートレビューevidenceを解釈できません/);
+  assert.match(result.stdout, /side: gate_review_evidence/);
+  assert.match(result.stdout, /partial_failures:/);
+});
+
 test('segment start (github backend): 未登録actorのgate evidenceをrole contractへ同梱しない', (t) => {
   const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 681);
   const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();

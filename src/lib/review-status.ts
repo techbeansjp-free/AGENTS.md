@@ -1,4 +1,4 @@
-import { gh, git } from './exec.js';
+import { gh } from './exec.js';
 import { SEGMENTS, type Segment } from './issue.js';
 import { reviewFilePath } from './local-state.js';
 import {
@@ -43,6 +43,7 @@ interface GithubPrPayload {
   number?: number;
   state?: string;
   headRefName?: string;
+  headRefOid?: string;
   reviews?: GithubReview[];
   comments?: GithubComment[];
 }
@@ -68,7 +69,13 @@ export interface UnresolvedGithubComment {
 }
 
 export interface GithubPartialFailure {
-  side: typeof GITHUB_ISSUE_SIDE | 'pr' | 'pr_review_thread_comments' | 'gate_review_trust_policy';
+  side:
+    | typeof GITHUB_ISSUE_SIDE
+    | 'pr'
+    | 'pr_review_thread_comments'
+    | 'gate_review_trust_policy'
+    | 'gate_review_target_sha'
+    | 'gate_review_evidence';
   reason: string;
 }
 
@@ -143,6 +150,8 @@ interface SuccessfulPrDetection {
   comments: UnresolvedGithubComment[];
   reviewThreadCommentFailure?: string;
   gateReviewTrustPolicyFailure?: string;
+  gateReviewTargetShaFailure?: string;
+  gateReviewEvidenceFailure?: string;
 }
 
 interface FailedSideDetection {
@@ -222,6 +231,7 @@ function unresolvedReviews(reviews: GithubReview[]): UnresolvedGithubReview[] {
 interface GithubGateFindingDetection {
   findings: GithubGateFinding[];
   trustPolicyFailure?: string;
+  evidenceFailure?: string;
 }
 
 function unresolvedGateFindings(
@@ -232,7 +242,7 @@ function unresolvedGateFindings(
   targetSha: string | undefined,
 ): GithubGateFindingDetection {
   const targetOrigin = segment ? SEGMENT_TO_ORIGIN[segment as Segment] : undefined;
-  if (!targetOrigin || !targetSha) return { findings: [] };
+  if (!targetOrigin) return { findings: [] };
 
   let trustedActors: Set<string> | undefined;
   let trustPolicyFailure: string | undefined;
@@ -249,6 +259,7 @@ function unresolvedGateFindings(
   }
 
   const candidates: { evidence: ReviewEvidence; entry: { review: GithubReview; index: number } }[] = [];
+  const malformedEntries: { entry: { review: GithubReview; index: number }; reason: string }[] = [];
   reviews.forEach((review, index) => {
     if (
       review.state === 'DISMISSED' ||
@@ -269,9 +280,9 @@ function unresolvedGateFindings(
       ) {
         candidates.push({ evidence, entry: { review, index } });
       }
-    } catch {
-      // 構造化evidenceの完全な検証とCheck Run発行はtrusted recorderが担う。
-      // worker promptでは解釈不能なreviewをblocking findingとして推測しない。
+    } catch (error) {
+      // Issue #680: 解釈不能な証跡を黙って落とすと、古い判定を確定結果として誤採用する。
+      malformedEntries.push({ entry: { review, index }, reason: errorReason(error) });
     }
   });
 
@@ -298,11 +309,34 @@ function unresolvedGateFindings(
     const author = entry.review.author?.login;
     return typeof author === 'string' && trustedActors.has(author);
   });
+  const trustedMalformedEntries = malformedEntries.filter(({ entry }) => {
+    const author = entry.review.author?.login;
+    return typeof author === 'string' && trustedActors.has(author);
+  });
 
   const findings: GithubGateFinding[] = [];
+  if (!targetSha) {
+    if (reviews.some((review) => (
+      review.state !== 'DISMISSED' &&
+      typeof review.body === 'string' &&
+      review.body.includes(REVIEW_EVIDENCE_MARKER) &&
+      typeof review.author?.login === 'string' &&
+      trustedActors.has(review.author.login)
+    ))) {
+      findings.push({
+        severity: 'blocking',
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_TARGET_SHA_UNVERIFIED',
+        evidence: ['PR head SHAを取得できないため、ゲートレビューevidenceの対象を検証できません'],
+        source_segment: segment as Segment,
+      });
+    }
+    return { findings };
+  }
+
+  let evidenceFailure: string | undefined;
   for (const sourceSegment of SEGMENTS) {
     const forGate = matching.filter(({ evidence }) => evidence.gate === sourceSegment);
-    if (forGate.length === 0) continue;
 
     const byAttempt = new Map<string, typeof forGate>();
     for (const candidate of forGate) {
@@ -345,6 +379,24 @@ function unresolvedGateFindings(
       if (!latest) return candidate;
       return compareReviewEntries(latestEntry(candidate).entry, latestEntry(latest).entry) > 0 ? candidate : latest;
     }, undefined);
+    const activeMalformedEntries = sourceSegment === segment
+      ? trustedMalformedEntries.filter(({ entry }) => (
+          !latestConclusiveAttempt ||
+          compareReviewEntries(entry, latestEntry(latestConclusiveAttempt).entry) > 0
+        ))
+      : [];
+    if (activeMalformedEntries.length > 0) {
+      evidenceFailure = 'trusted actorのゲートレビューevidenceを解釈できません';
+      findings.push({
+        severity: 'blocking',
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_EVIDENCE_MALFORMED',
+        evidence: activeMalformedEntries.map(({ entry, reason }) => (
+          `${entry.review.author?.login ?? 'unknown'}のゲートレビューevidenceを解釈できません: ${reason}`
+        )),
+        source_segment: sourceSegment,
+      });
+    }
     const activeIncompleteAttempts = attempts
       .filter((entries) => !completeAttempts.includes(entries))
       .filter((entries) => (
@@ -405,7 +457,7 @@ function unresolvedGateFindings(
       }
     }
   }
-  return { findings };
+  return { findings, ...(evidenceFailure ? { evidenceFailure } : {}) };
 }
 
 function compareReviewEntries(
@@ -505,7 +557,7 @@ function detectGithubPrSide(
   }
 
   const result = gh(
-    ['pr', 'view', branch, '--json', 'number,state,headRefName,reviews,comments'],
+    ['pr', 'view', branch, '--json', 'number,state,headRefName,headRefOid,reviews,comments'],
     root,
   );
   if (result.status !== 0) {
@@ -530,13 +582,15 @@ function detectGithubPrSide(
       throw new Error('number/state/headRefName/reviews/commentsが不正です');
     }
     const reviewThreadResult = detectReviewThreadComments(root, payload.number);
-    const head = git(['rev-parse', 'HEAD'], root);
+    const targetSha = typeof payload.headRefOid === 'string' && payload.headRefOid.length > 0
+      ? payload.headRefOid
+      : undefined;
     const gateFindingResult = unresolvedGateFindings(
       root,
       payload.reviews,
       issueNumber,
       segment,
-      head.status === 0 ? head.stdout.trim() : undefined,
+      targetSha,
     );
     return {
       succeeded: true,
@@ -552,6 +606,12 @@ function detectGithubPrSide(
       ...(reviewThreadResult.failure ? { reviewThreadCommentFailure: reviewThreadResult.failure } : {}),
       ...(gateFindingResult.trustPolicyFailure
         ? { gateReviewTrustPolicyFailure: gateFindingResult.trustPolicyFailure }
+        : {}),
+      ...(!targetSha
+        ? { gateReviewTargetShaFailure: `PR #${payload.number} のhead SHAを取得できません` }
+        : {}),
+      ...(gateFindingResult.evidenceFailure
+        ? { gateReviewEvidenceFailure: gateFindingResult.evidenceFailure }
         : {}),
     };
   } catch (error) {
@@ -598,6 +658,18 @@ export function detectGithubReviewStatus(
     partialFailures.push({
       side: 'gate_review_trust_policy',
       reason: prResult.gateReviewTrustPolicyFailure,
+    });
+  }
+  if (prResult.succeeded && prResult.gateReviewTargetShaFailure) {
+    partialFailures.push({
+      side: 'gate_review_target_sha',
+      reason: prResult.gateReviewTargetShaFailure,
+    });
+  }
+  if (prResult.succeeded && prResult.gateReviewEvidenceFailure) {
+    partialFailures.push({
+      side: 'gate_review_evidence',
+      reason: prResult.gateReviewEvidenceFailure,
     });
   }
 

@@ -504,6 +504,15 @@ if (cmd === 'pr' && sub === 'view') {
   if (viewFields.includes('number')) payload.number = pr.number;
   if (viewFields.includes('state')) payload.state = pr.state;
   if (viewFields.includes('headRefName')) payload.headRefName = pr.headRefName;
+  if (viewFields.includes('headRefOid')) {
+    if (Object.prototype.hasOwnProperty.call(pr, 'headRefOid')) {
+      if (typeof pr.headRefOid === 'string') payload.headRefOid = pr.headRefOid;
+    } else {
+      payload.headRefOid = childProcess.execFileSync(
+        'git', ['rev-parse', 'HEAD'], { cwd: process.cwd(), encoding: 'utf8' },
+      ).trim();
+    }
+  }
   if (viewFields.includes('files')) payload.files = pr.files;
   if (viewFields.includes('latestReviews')) payload.latestReviews = pr.latestReviews || [];
   if (viewFields.includes('reviews')) payload.reviews = pr.reviews || [];
@@ -963,6 +972,7 @@ export interface GhStubBumpPr {
   number: number;
   state: string;
   headRefName: string;
+  headRefOid?: string | null;
   files: GhStubPrFile[];
   latestReviews?: unknown[];
   reviews?: unknown[];
@@ -1151,7 +1161,13 @@ export interface GhStub {
    * （`issue edit --add-label` を経由せず、任意のラベル状態を再現するために使う）。 */
   seedIssueLabels(issueNumber: string, labels: string[]): void;
   /** Issue #354: `gh pr list --state open` が返す open PR を1件投入する（本文つき）。 */
-  seedOpenPr(pr: { number: number; headRefName: string; body: string; state?: 'OPEN' | 'CLOSED' | 'MERGED' }): void;
+  seedOpenPr(pr: {
+    number: number;
+    headRefName: string;
+    headRefOid?: string | null;
+    body: string;
+    state?: 'OPEN' | 'CLOSED' | 'MERGED';
+  }): void;
   /** Issue #354: 本文読み取り count 回ぶん、読み取り直後に別プロセスがマーカー区間を
    * 書き換えた状態を再現する（読み直し比較による競合検知の発火条件）。 */
   simulateConcurrentBodyWrites(count: number): void;
@@ -1330,11 +1346,23 @@ export function createGhStub(baseDir: string): GhStub {
       state.issueEventFailures = { ...(state.issueEventFailures ?? {}), [issueNumber]: stderr };
       this.writeState(state);
     },
-    seedOpenPr(pr: { number: number; headRefName: string; body: string; state?: 'OPEN' | 'CLOSED' | 'MERGED' }): void {
+    seedOpenPr(pr: {
+      number: number;
+      headRefName: string;
+      headRefOid?: string | null;
+      body: string;
+      state?: 'OPEN' | 'CLOSED' | 'MERGED';
+    }): void {
       const state = this.readState();
       state.prsByBranch = {
         ...(state.prsByBranch ?? {}),
-        [pr.headRefName]: { number: pr.number, state: pr.state ?? 'OPEN', headRefName: pr.headRefName, files: [] },
+        [pr.headRefName]: {
+          number: pr.number,
+          state: pr.state ?? 'OPEN',
+          headRefName: pr.headRefName,
+          ...(pr.headRefOid !== undefined ? { headRefOid: pr.headRefOid } : {}),
+          files: [],
+        },
       };
       state.prBodies = { ...(state.prBodies ?? {}), [String(pr.number)]: pr.body };
       this.writeState(state);
