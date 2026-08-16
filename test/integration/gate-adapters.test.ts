@@ -208,6 +208,11 @@ test('gate reviewer credential boundary: GitHub token・git/gh configをAI subpr
 });
 
 test('claude launch_gate_reviewer: macOS Keychainログインでは認証probeとreviewerが同じHOMEを使う（Issue #691）', async (t) => {
+  if (process.platform !== 'darwin') {
+    t.skip('macOS固有のKeychain経路は実macOSで検証する');
+    return;
+  }
+
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
@@ -231,7 +236,9 @@ test('claude launch_gate_reviewer: macOS Keychainログインでは認証probe�
     ].join('\n'),
     { mode: 0o755 },
   );
-  fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Darwin\\n\'\n', { mode: 0o755 });
+  // Issue #691: 実装は固定パスのOS情報を使うため、このPATH stubはmacOS分岐を作らない。
+  // 逆の値を返しても実macOSではcaller HOMEを維持できることを検証する。
+  fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Linux\\n\'\n', { mode: 0o755 });
 
   const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
     PATH: `${stubDir}:${process.env.PATH}`,
@@ -245,7 +252,12 @@ test('claude launch_gate_reviewer: macOS Keychainログインでは認証probe�
   assert.equal(readFinal(reportPath), 'approved');
 });
 
-test('claude launch_gate_reviewer: macOS以外ではcaller HOMEを隔離HOMEへ置換する', async (t) => {
+test('claude launch_gate_reviewer: macOS以外ではPATH上のunameがDarwinを返してもcaller HOMEを隔離する（Issue #691）', async (t) => {
+  if (process.platform === 'darwin') {
+    t.skip('非macOSの隔離経路は非macOSで検証する');
+    return;
+  }
+
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
@@ -255,7 +267,7 @@ test('claude launch_gate_reviewer: macOS以外ではcaller HOMEを隔離HOMEへ�
   t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
   t.after(() => fs.rmSync(isolatedRoot, { recursive: true, force: true }));
   const unameStub = path.join(stubDir, 'uname');
-  fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Linux\\n\'\n', { mode: 0o755 });
+  fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Darwin\\n\'\n', { mode: 0o755 });
   const expectedReviewerHome = path.join(isolatedRoot, 'home');
   const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
   const command = [

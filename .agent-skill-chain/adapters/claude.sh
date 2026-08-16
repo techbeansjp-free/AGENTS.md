@@ -120,10 +120,10 @@ _run_reviewer_sanitized() {
   local codex_home="${CODEX_HOME:-${original_home:+$original_home/.codex}}"
   local claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
   local reviewer_home="$isolated_root/home"
-  # Issue #691: Claude CodeのmacOSログインはKeychainを使い、CLAUDE_CONFIG_DIRによる
-  # credential保存先の変更はLinux/Windowsに限られる。macOSでは認証済みCLIと同じ
-  # login HOMEを維持し、XDG・Git・GitHubの設定は引き続き隔離する。
-  if [[ -n "$original_home" && "$(uname -s 2>/dev/null)" == "Darwin" ]]; then
+  # Issue #691: Claude CodeのmacOSログインはKeychainを使うため認証済みCLIと同じHOMEを維持する。
+  # OS判定はcallerが変更できるPATHを参照せず、固定されたシステムbinaryだけを使う。
+  # XDG・Git・GitHubの設定は引き続き隔離する。
+  if [[ -n "$original_home" && -x /usr/bin/uname && "$(/usr/bin/uname -s 2>/dev/null)" == "Darwin" ]]; then
     reviewer_home="$original_home"
   fi
   local -a clean_env=(
