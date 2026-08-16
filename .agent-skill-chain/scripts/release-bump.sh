@@ -12,18 +12,23 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
-
-if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
-  CLI=(node "$REPO_ROOT/bin/agents-md.js")
-elif [[ -x "$REPO_ROOT/node_modules/.bin/agent-skill-chain" ]]; then
-  CLI=("$REPO_ROOT/node_modules/.bin/agent-skill-chain")
-elif command -v agent-skill-chain >/dev/null 2>&1; then
-  CLI=(agent-skill-chain)
-else
-  echo "agent-skill-chain CLI が見つかりません（bin/agents-md.js 未ビルド、node_modules/.bin/agent-skill-chain 不在、PATH上にも無し）。'npm run build' を実行するか agent-skill-chain を導入してください。" >&2
+# >>> agent-skill-chain CLI resolver preamble >>>
+_ASC_WRAPPER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+_ASC_CLI_RESOLVE_PATH="$_ASC_WRAPPER_DIR/../scripts/cli-resolve.sh"
+if [[ ! -r "$_ASC_CLI_RESOLVE_PATH" ]]; then
+  echo "agent-skill-chain CLI の共有実装を解決できません（探索パス: ${_ASC_CLI_RESOLVE_PATH}）。" >&2
   exit 1
 fi
+if ! source "$_ASC_CLI_RESOLVE_PATH"; then
+  echo "agent-skill-chain CLI の共有実装を読み込めません（探索パス: ${_ASC_CLI_RESOLVE_PATH}）。" >&2
+  exit 1
+fi
+if ! declare -F asc_resolve_cli >/dev/null; then
+  echo "agent-skill-chain CLI の共有実装に公開関数がありません（探索パス: ${_ASC_CLI_RESOLVE_PATH}）。" >&2
+  exit 1
+fi
+# <<< agent-skill-chain CLI resolver preamble <<<
 
-exec "${CLI[@]}" release bump "$@"
+asc_resolve_cli || exit $?
+
+exec "${ASC_CLI[@]}" release bump "$@"

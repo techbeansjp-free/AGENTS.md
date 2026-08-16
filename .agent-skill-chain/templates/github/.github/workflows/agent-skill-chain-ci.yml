@@ -58,22 +58,17 @@ jobs:
         run: npm run build
 
       - name: Ensure agent-skill-chain CLI
-        # Issue #536: npm ci/npm run buildをスキップすると、後続の各 verify-*.sh・lint-*.sh・
-        # adr-lint.sh が解決に使う3経路（bin/agents-md.js・node_modules/.bin/agent-skill-chain・
-        # PATH上のagent-skill-chain）のいずれも用意されないまま次のステップへ進み、「CLIが見つから
-        # ない」という別のエラーで失敗ポイントが移動するだけになる。3経路のいずれかで既に解決できる
-        # 場合（build script実行済みのagent-skill-chain自身のリポジトリを含む）は何もせず、
-        # いずれでも解決できないnon-Node consumerの場合にのみnpm install -gで導入する。
+        # Issue #677: ローカル用ラッパーと同じ共有実装を使い、CLI解決・自動導入の変更が
+        # CIワークフローだけへ横展開されない状態の再発を防ぐ。
         run: |
-          if [[ -f bin/agents-md.js ]]; then
+          source .agent-skill-chain/scripts/cli-resolve.sh
+          asc_resolve_cli
+          if [[ ${#ASC_CLI[@]} -eq 2 && ${ASC_CLI[0]} == node ]]; then
             echo "agent-skill-chain CLI: bin/agents-md.js を使用します（追加インストール不要）"
-          elif [[ -x node_modules/.bin/agent-skill-chain ]]; then
+          elif [[ ${ASC_CLI[0]} == "$PWD/node_modules/.bin/agent-skill-chain" ]]; then
             echo "agent-skill-chain CLI: node_modules/.bin/agent-skill-chain を使用します（追加インストール不要）"
-          elif command -v agent-skill-chain >/dev/null 2>&1; then
-            echo "agent-skill-chain CLI: PATH上の agent-skill-chain を使用します（追加インストール不要）"
           else
-            echo "agent-skill-chain CLI が3経路（bin/agents-md.js・node_modules/.bin/agent-skill-chain・PATH）のいずれでも見つからないため、npm install -g agent-skill-chain@latest で導入します"
-            npm install -g agent-skill-chain@latest
+            echo "agent-skill-chain CLI: PATH上の agent-skill-chain を使用します"
           fi
 
       - name: Fetch base branch for diff-based checks

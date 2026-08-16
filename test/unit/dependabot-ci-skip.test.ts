@@ -142,13 +142,12 @@ test('ci: Ensure agent-skill-chain CLI ステップは skip_checks でガード�
   assert.equal(step.if, undefined, "'Ensure agent-skill-chain CLI' に if 条件が存在しないこと（常に実行）");
 });
 
-test('ci: Ensure agent-skill-chain CLI ステップは3経路の検出後、いずれも無い場合のみ npm install -g でフォールバック導入する', () => {
+test('ci: Ensure agent-skill-chain CLI ステップはローカル用ラッパーと同じ共有実装へ統一される', () => {
   const step = findByName(ciSteps(), 'Ensure agent-skill-chain CLI');
   const run = step.run ?? '';
-  assert.ok(run.includes('bin/agents-md.js'), 'bin/agents-md.js の存在を検出すること');
-  assert.ok(run.includes('node_modules/.bin/agent-skill-chain'), 'node_modules/.bin/agent-skill-chain の存在を検出すること');
-  assert.ok(run.includes('command -v agent-skill-chain'), 'PATH上のagent-skill-chainの存在を検出すること');
-  assert.ok(run.includes('npm install -g agent-skill-chain@latest'), '未検出時のフォールバックにnpm install -g agent-skill-chain@latestを持つこと');
+  assert.ok(run.includes('source .agent-skill-chain/scripts/cli-resolve.sh'), '共有実装をsourceすること');
+  assert.ok(run.includes('asc_resolve_cli'), '共有実装の公開関数を呼ぶこと');
+  assert.ok(!run.includes('npm install -g'), 'ワークフロー内へ自動導入ロジックを重複させないこと');
 });
 
 // --- ③ ctx（Derive issue_id）に Dependabot 許可リスト分岐が存在すること ---

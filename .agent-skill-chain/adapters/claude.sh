@@ -13,6 +13,23 @@ ADAPTER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 SCRIPTS_DIR="$ADAPTER_DIR/../scripts"
 REPO_ROOT="$(cd -- "$ADAPTER_DIR/../.." &>/dev/null && pwd)"
 
+# >>> agent-skill-chain CLI resolver preamble >>>
+_ASC_WRAPPER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+_ASC_CLI_RESOLVE_PATH="$_ASC_WRAPPER_DIR/../scripts/cli-resolve.sh"
+if [[ ! -r "$_ASC_CLI_RESOLVE_PATH" ]]; then
+  echo "agent-skill-chain CLI の共有実装を解決できません（探索パス: ${_ASC_CLI_RESOLVE_PATH}）。" >&2
+  return 1
+fi
+if ! source "$_ASC_CLI_RESOLVE_PATH"; then
+  echo "agent-skill-chain CLI の共有実装を読み込めません（探索パス: ${_ASC_CLI_RESOLVE_PATH}）。" >&2
+  return 1
+fi
+if ! declare -F asc_resolve_cli >/dev/null; then
+  echo "agent-skill-chain CLI の共有実装に公開関数がありません（探索パス: ${_ASC_CLI_RESOLVE_PATH}）。" >&2
+  return 1
+fi
+# <<< agent-skill-chain CLI resolver preamble <<<
+
 # launch_worker の既定起動系（WORKER_CMD 未指定時）が claude CLI へ渡す --allowed-tools の既定値
 # （ワーカーの正規責務範囲——自worktree内ファイル編集、自branchへのcommit/push、Draft PR作成
 # （specセグメントのみ想定）、テスト実行、report/lease/checkpoint 各スクリプト実行——
@@ -79,16 +96,8 @@ _orchestrator_is_claude_code_cli_session() {
 
 # agent-skill-chain CLI を解決して実行する（.agent-skill-chain/scripts/gate-*.sh と同じ優先順位）。
 _asc_cli() {
-  if [[ -f "$REPO_ROOT/bin/agents-md.js" ]]; then
-    node "$REPO_ROOT/bin/agents-md.js" "$@"
-  elif [[ -x "$REPO_ROOT/node_modules/.bin/agent-skill-chain" ]]; then
-    "$REPO_ROOT/node_modules/.bin/agent-skill-chain" "$@"
-  elif command -v agent-skill-chain >/dev/null 2>&1; then
-    agent-skill-chain "$@"
-  else
-    echo "agent-skill-chain CLI が見つかりません（bin/agents-md.js 未ビルド、node_modules/.bin/agent-skill-chain 不在、PATH上にも無し）。" >&2
-    return 1
-  fi
+  asc_resolve_cli || return $?
+  "${ASC_CLI[@]}" "$@"
 }
 
 # AI reviewerへはmodel providerのローカルlogin保存先（およびISSUE-562: 呼び出し元環境の
