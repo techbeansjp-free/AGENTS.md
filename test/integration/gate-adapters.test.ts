@@ -97,6 +97,7 @@ const REVIEW_ENV_KEYS = [
   'GATE_REVIEWER_CMD',
   'GATE_REVIEWER_RETRIES',
   'GATE_REVIEWER_RETRY_INTERVAL_SEC',
+  'ASC_REVIEWER_SANITIZED_ROOT',
   'ASC_BASE_REF',
   'ASC_REVIEW_SUBJECT',
   'ASC_REVIEW_ADAPTER_REQUESTED',
@@ -179,7 +180,7 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
 });
 
-test('gate reviewer credential boundary: GitHub token・caller HOME・git/gh configをAI subprocessへ継承しない', async (t) => {
+test('gate reviewer credential boundary: GitHub token・git/gh configをAI subprocessへ継承しない', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
@@ -202,6 +203,75 @@ test('gate reviewer credential boundary: GitHub token・caller HOME・git/gh con
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+});
+
+test('claude launch_gate_reviewer: macOS Keychainログインでは認証probeとreviewerが同じHOMEを使う（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-keychain-issue691-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const claudeStub = path.join(stubDir, 'claude');
+  const unameStub = path.join(stubDir, 'uname');
+  const expectedHome = process.env.HOME!;
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  fs.writeFileSync(
+    claudeStub,
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      `test "\${HOME:-}" = ${JSON.stringify(expectedHome)}`,
+      'if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then exit 0; fi',
+      'cat >/dev/null',
+      `printf '%s' ${JSON.stringify(stubVerdict)}`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Darwin\\n\'\n', { mode: 0o755 });
+
+  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
+    PATH: `${stubDir}:${process.env.PATH}`,
+    CLAUDE_EXECUTABLE: claudeStub,
+    CLAUDE_AUTH_PROBE_CMD: `${JSON.stringify(claudeStub)} auth status`,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+});
+
+test('claude launch_gate_reviewer: macOS以外ではcaller HOMEを隔離HOMEへ置換する', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-home-isolation-'));
+  const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-reviewer-root-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(isolatedRoot, { recursive: true, force: true }));
+  const unameStub = path.join(stubDir, 'uname');
+  fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Linux\\n\'\n', { mode: 0o755 });
+  const expectedReviewerHome = path.join(isolatedRoot, 'home');
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const command = [
+    'cat >/dev/null',
+    `test "\${HOME:-}" = ${JSON.stringify(expectedReviewerHome)}`,
+    `printf '%s' ${JSON.stringify(stubVerdict)}`,
+  ].join('; ');
+  const env = envWithout([], {
+    PATH: `${stubDir}:${process.env.PATH}`,
+    ANTHROPIC_API_KEY: 'dummy-key',
+    ASC_REVIEWER_SANITIZED_ROOT: isolatedRoot,
+    GATE_REVIEWER_CMD: command,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
   assert.equal(res.status, 0, res.stderr);
   assert.equal(readFinal(reportPath), 'approved');
 });
