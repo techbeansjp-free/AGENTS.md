@@ -100,6 +100,49 @@ _asc_cli() {
   "${ASC_CLI[@]}" "$@"
 }
 
+# Issue #691: env shebangが必要とするruntimeを解決できるよう、選択済みCLIの実体ディレクトリだけを
+# 固定PATHへ追加する。caller HOMEとIssue worktreeの実体配下は隔離境界を動かせるため追加しない。
+_reviewer_sanitized_path() {
+  local sanitized_path='/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+  local review_adapter="${ASC_REVIEW_ADAPTER:-claude}" executable cli_path cli_dir
+  if [[ "$review_adapter" == "codex" ]]; then
+    executable="${CODEX_EXECUTABLE:-codex}"
+  else
+    executable="${CLAUDE_EXECUTABLE:-claude}"
+  fi
+  cli_path="$(command -v "$executable" 2>/dev/null || true)"
+  if [[ "$cli_path" != /* ]]; then
+    printf '%s\n' "$sanitized_path"
+    return
+  fi
+
+  cli_dir="${cli_path%/*}"
+  [[ -n "$cli_dir" ]] || cli_dir='/'
+  cli_dir="$(cd -- "$cli_dir" >/dev/null 2>&1 && pwd -P)" || {
+    printf '%s\n' "$sanitized_path"
+    return
+  }
+
+  local original_home_dir='' repo_dir=''
+  if [[ -n "${HOME:-}" && -d "$HOME" ]]; then
+    original_home_dir="$(cd -- "$HOME" >/dev/null 2>&1 && pwd -P)" || original_home_dir=''
+  fi
+  if [[ -d "$REPO_ROOT" ]]; then
+    repo_dir="$(cd -- "$REPO_ROOT" >/dev/null 2>&1 && pwd -P)" || repo_dir=''
+  fi
+  local excluded=false
+  if [[ -n "$original_home_dir" && ( "$cli_dir" == "$original_home_dir" || "$cli_dir" == "$original_home_dir/"* ) ]]; then
+    excluded=true
+  fi
+  if [[ -n "$repo_dir" && ( "$cli_dir" == "$repo_dir" || "$cli_dir" == "$repo_dir/"* ) ]]; then
+    excluded=true
+  fi
+  if [[ "$excluded" == "false" && ":$sanitized_path:" != *":$cli_dir:"* ]]; then
+    sanitized_path+=":$cli_dir"
+  fi
+  printf '%s\n' "$sanitized_path"
+}
+
 # AI reviewerへは隔離領域へ複製したmodel providerのログインファイルと、呼び出し元環境の
 # ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKENだけを渡す。GitHub credential・gh/git設定・caller HOME・
 # callerのprovider設定ディレクトリは渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace
@@ -119,6 +162,8 @@ _run_reviewer_sanitized() {
   local staged_codex_home="$isolated_root/auth/codex"
   local staged_claude_config="$isolated_root/auth/claude"
   local review_adapter="${ASC_REVIEW_ADAPTER:-claude}"
+  local sanitized_path
+  sanitized_path="$(_reviewer_sanitized_path)"
   # Issue #691: 設定ディレクトリ全体やsymlinkを持ち込むとcaller HOMEや任意パスへの読取り経路に
   # なるため、認証に必要な既知の通常ファイルだけを隔離領域へ複製する。
   if [[ "$review_adapter" == "codex" && -n "$codex_home" && -f "$codex_home/auth.json" && ! -L "$codex_home/auth.json" ]]; then
@@ -131,7 +176,7 @@ _run_reviewer_sanitized() {
   fi
   local -a clean_env=(
     /usr/bin/env -i
-    "PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    "PATH=$sanitized_path"
     "HOME=$isolated_root/home"
     "XDG_CONFIG_HOME=$isolated_root/xdg"
     "GH_CONFIG_DIR=$isolated_root/xdg/gh"
@@ -152,14 +197,34 @@ _run_reviewer_sanitized() {
     [[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]] && clean_env+=("CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN")
   fi
 
-  local rc=0 output=""
-  if [[ -x /usr/bin/timeout ]]; then
-    output="$(cd -- "$isolated_root/workspace" && printf '%s' "$prompt" | /usr/bin/timeout "$timeout_sec" "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
-  elif [[ -x /bin/timeout ]]; then
-    output="$(cd -- "$isolated_root/workspace" && printf '%s' "$prompt" | /bin/timeout "$timeout_sec" "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
-  else
-    output="$(cd -- "$isolated_root/workspace" && printf '%s' "$prompt" | "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+  local prompt_file="$isolated_root/prompt" output_file="$isolated_root/output"
+  local timeout_marker="$isolated_root/timed-out" reviewer_pid watchdog_pid rc=0 output=""
+  printf '%s' "$prompt" >"$prompt_file"
+  (
+    cd -- "$isolated_root/workspace" &&
+      exec "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" <"$prompt_file" >"$output_file" 2>/dev/null
+  ) &
+  reviewer_pid=$!
+  # Issue #691: 外部timeoutが無い環境で無制限実行へ降格しないよう、常設のshell watchdogで打ち切る。
+  (
+    timer_pid=''
+    trap '[[ -z "$timer_pid" ]] || kill -TERM "$timer_pid" 2>/dev/null || true; exit 0' TERM
+    /bin/sleep "$timeout_sec" 2>/dev/null &
+    timer_pid=$!
+    wait "$timer_pid" 2>/dev/null || exit 0
+    : >"$timeout_marker"
+    kill -TERM "$reviewer_pid" 2>/dev/null || true
+  ) &
+  watchdog_pid=$!
+  wait "$reviewer_pid" || rc=$?
+  if kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
   fi
+  wait "$watchdog_pid" 2>/dev/null || true
+  if [[ -f "$timeout_marker" ]]; then
+    rc=124
+  fi
+  [[ ! -f "$output_file" ]] || output="$(<"$output_file")"
   /bin/rm -rf -- "$isolated_root"
   printf '%s' "$output"
   return "$rc"

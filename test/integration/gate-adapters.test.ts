@@ -100,6 +100,7 @@ const REVIEW_ENV_KEYS = [
   'GATE_REVIEWER_CMD',
   'GATE_REVIEWER_RETRIES',
   'GATE_REVIEWER_RETRY_INTERVAL_SEC',
+  'GATE_REVIEWER_TIMEOUT_SEC',
   'ASC_REVIEWER_ORIGINAL_HOME',
   'ASC_REVIEWER_SANITIZED_ROOT',
   'ASC_BASE_REF',
@@ -190,6 +191,54 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
 });
 
+test('claude launch_gate_reviewer: 非標準ディレクトリのCLIとenv shebang runtimeを隔離PATHで起動できる（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-runtime-issue691-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(runtimeDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'claude');
+
+  const runtimeName = `issue691-runtime-${process.pid}-${Date.now()}`;
+  const runtime = path.join(runtimeDir, runtimeName);
+  const executable = path.join(runtimeDir, 'claude-nonstandard');
+  const runtimeLog = path.join(runtimeDir, 'runtime.log');
+  const pathLog = path.join(runtimeDir, 'path.log');
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  fs.writeFileSync(
+    runtime,
+    `#!/bin/bash\nprintf 'runtime\\n' >> ${JSON.stringify(runtimeLog)}\nexec /bin/bash "$@"\n`,
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(
+    executable,
+    [
+      `#!/usr/bin/env ${runtimeName}`,
+      'set -euo pipefail',
+      `printf '%s\\n' "$PATH" >> ${JSON.stringify(pathLog)}`,
+      'if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then exit 0; fi',
+      'cat >/dev/null',
+      `printf '%s' ${JSON.stringify(stubVerdict)}`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  const env = envWithout([], {
+    CLAUDE_EXECUTABLE: executable,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+  assert.equal(fs.readFileSync(runtimeLog, 'utf8').trim().split('\n').length, 2, '認証probeとreviewerの双方がenv shebang runtimeを使うこと');
+  for (const reviewerPath of fs.readFileSync(pathLog, 'utf8').trim().split('\n')) {
+    assert.equal(reviewerPath, `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${runtimeDir}`);
+  }
+});
+
 test('gate reviewer credential boundary: caller HOME・Issue worktree・GitHub token・git/gh configをAI subprocessへ継承しない', async (t) => {
   const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
@@ -201,10 +250,12 @@ test('gate reviewer credential boundary: caller HOME・Issue worktree・GitHub t
   t.after(() => fs.rmSync(observationDir, { recursive: true, force: true }));
   const envLog = path.join(observationDir, 'env.log');
   const cwdLog = path.join(observationDir, 'cwd.log');
+  const worktreeCli = path.join(worktreePath, 'claude-worktree-stub');
   fs.mkdirSync(path.join(callerHome, '.claude'), { recursive: true });
   fs.mkdirSync(path.join(callerHome, '.codex'), { recursive: true });
   fs.writeFileSync(path.join(callerHome, '.claude', '.credentials.json'), '{"test":true}\n', 'utf8');
   fs.writeFileSync(path.join(callerHome, '.codex', 'auth.json'), '{"test":true}\n', 'utf8');
+  fs.writeFileSync(worktreeCli, '#!/bin/bash\nexit 0\n', { mode: 0o755 });
   const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
   const command = [
     'cat >/dev/null',
@@ -216,6 +267,7 @@ test('gate reviewer credential boundary: caller HOME・Issue worktree・GitHub t
     HOME: callerHome,
     ANTHROPIC_API_KEY: 'dummy-key-not-forwarded',
     CLAUDE_AUTH_PROBE_CMD: 'true',
+    CLAUDE_EXECUTABLE: worktreeCli,
     GH_TOKEN: 'ghp_credential_boundary_test_value',
     GITHUB_TOKEN: 'github-token-boundary-test',
     GH_CONFIG_DIR: path.join(callerHome, '.config', 'gh'),
@@ -232,6 +284,7 @@ test('gate reviewer credential boundary: caller HOME・Issue worktree・GitHub t
   const reviewerEnv = fs.readFileSync(envLog, 'utf8');
   assert.doesNotMatch(reviewerEnv, /^(GH_TOKEN|GITHUB_TOKEN)=/m);
   assert.doesNotMatch(reviewerEnv, new RegExp(callerHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(reviewerEnv, new RegExp(worktreePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(reviewerEnv, /^GIT_CONFIG_GLOBAL=\/dev\/null$/m);
   assert.match(reviewerEnv, /^GIT_CONFIG_SYSTEM=\/dev\/null$/m);
   assert.match(reviewerEnv, /^GH_CONFIG_DIR=\/tmp\/agent-skill-chain-reviewer\.[^/]+\/xdg\/gh$/m);
@@ -240,6 +293,32 @@ test('gate reviewer credential boundary: caller HOME・Issue worktree・GitHub t
   const reviewerCwd = fs.readFileSync(cwdLog, 'utf8').trim();
   assert.notEqual(reviewerCwd, worktreePath);
   assert.match(reviewerCwd, /^\/tmp\/agent-skill-chain-reviewer\.[^/]+\/workspace$/);
+});
+
+test('claude launch_gate_reviewer: 外部timeoutに依存せず停止したreviewerを打ち切ってhuman_requiredへ倒す（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const env = envWithout([], {
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    GATE_REVIEWER_CMD: '/bin/sleep 30',
+    GATE_REVIEWER_TIMEOUT_SEC: '1',
+    GATE_REVIEWER_RETRIES: '1',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const startedAt = Date.now();
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /レビュア起動に失敗しました（rc=124, attempts=1）/);
+  assert.ok(elapsedMs < 25000, `watchdogがreviewerを時間内に停止すること: elapsed=${elapsedMs}ms`);
+  const adapter = fs.readFileSync(path.join(repo.dir, '.agent-skill-chain', 'adapters', 'claude.sh'), 'utf8');
+  const runner = adapter.slice(adapter.indexOf('_run_reviewer_sanitized()'), adapter.indexOf('_claude_reviewer_auth_ok()'));
+  assert.doesNotMatch(runner, /(?:\/usr\/bin\/timeout|\/bin\/timeout|command -v timeout)/);
+  assert.match(runner, /\/bin\/sleep/);
 });
 
 test('claude launch_gate_reviewer: caller指定rootとsymlink認証ファイルからcaller HOMEへ脱出できない（Issue #691）', async (t) => {
