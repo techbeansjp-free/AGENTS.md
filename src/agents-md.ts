@@ -39,8 +39,10 @@ async function main(argv: string[]): Promise<number> {
 }
 
 main(process.argv.slice(2))
-  .then((code) => process.exit(code))
+  .then((code) => {
+    process.exitCode = code;
+  })
   .catch((error) => {
     process.stderr.write(`予期しないエラー: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exit(1);
+    process.exitCode = 1;
   });

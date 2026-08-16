@@ -70,17 +70,13 @@ function reviewerPrompt(repoDir: string, targetSha: string, baseSha: string): st
   return result.stdout.trimEnd();
 }
 
-function assertFullIndexHashes(prompt: string): void {
-  const diffMatch = prompt.match(/## 判定対象の差分\n```diff\n([\s\S]*?)\n```/);
-  assert.ok(diffMatch, '判定対象の差分セクションが存在すること');
-  const indexLines = diffMatch[1].match(/^index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?$/gm) ?? [];
-  assert.ok(indexLines.length > 0, 'diff区間にindex行が存在すること');
-  for (const line of indexLines) {
-    const match = line.match(/^index ([0-9a-f]+)\.\.([0-9a-f]+)(?: [0-7]{6})?$/);
-    assert.ok(match);
-    assert.ok(match[1].length === 40 || match[1].length === 64, `old hashが完全長であること: ${line}`);
-    assert.equal(match[2].length, match[1].length, `new hashが完全長であること: ${line}`);
-  }
+function assertAddedArtifactDeduplicated(prompt: string): void {
+  assert.match(
+    prompt,
+    /成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC\.md"（変更種別: 追加、差分: 省略）/,
+  );
+  assert.doesNotMatch(prompt, /^index [0-9a-f]+\.\.[0-9a-f]+/m);
+  assert.equal(prompt.match(/AC-1: deterministic prompt/g)?.length, 1);
 }
 
 test('gate reviewer-prompt: auto abbrevが実際に伸長したcloneでも出力とdigestが完全一致する', (t) => {
@@ -114,8 +110,8 @@ test('gate reviewer-prompt: auto abbrevが実際に伸長したcloneでも出力
 
   const baselinePrompt = reviewerPrompt(baselineDir, targetSha, baseSha);
   const inflatedPrompt = reviewerPrompt(inflatedDir, targetSha, baseSha);
-  assertFullIndexHashes(baselinePrompt);
-  assertFullIndexHashes(inflatedPrompt);
+  assertAddedArtifactDeduplicated(baselinePrompt);
+  assertAddedArtifactDeduplicated(inflatedPrompt);
   assert.equal(inflatedPrompt, baselinePrompt);
   assert.equal(evidencePromptDigest(inflatedPrompt), evidencePromptDigest(baselinePrompt));
 });
@@ -135,7 +131,7 @@ test('gate reviewer-prompt: core.abbrev=7・12・未設定のcloneで出力とdi
     cloneRepo(sourceDir, cloneDir);
     if (abbrev !== undefined) git(cloneDir, ['config', 'core.abbrev', abbrev]);
     const prompt = reviewerPrompt(cloneDir, targetSha, baseSha);
-    assertFullIndexHashes(prompt);
+    assertAddedArtifactDeduplicated(prompt);
     return prompt;
   });
 
