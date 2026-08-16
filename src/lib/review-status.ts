@@ -310,21 +310,43 @@ function unresolvedGateFindings(
       entries.push(candidate);
       byAttempt.set(candidate.evidence.attempt_id, entries);
     }
-    const completeAttempts = [...byAttempt.values()].filter((entries) => {
+    const attempts = [...byAttempt.values()];
+    const completeAttempts = attempts.filter((entries) => {
       const expectedCounts = new Set(entries.map(({ evidence }) => evidence.expected_count));
       if (expectedCounts.size !== 1) return false;
       const expectedCount = entries[0]?.evidence.expected_count;
       if (expectedCount !== 1 && expectedCount !== 2) return false;
       const slots = entries.map(({ evidence }) => evidence.reviewer?.slot);
+      const metadataIsCoherent = [
+        entries.map(({ evidence }) => evidence.profile),
+        entries.map(({ evidence }) => evidence.prompt_digest),
+        entries.map(({ evidence }) => evidence.execution?.trusted_base_sha),
+        entries.map(({ evidence }) => evidence.execution?.launcher_digest),
+        entries.map(({ evidence }) => evidence.execution?.launcher_token_digest),
+        entries.map(({ evidence }) => evidence.target_sha),
+      ].every((values) => values.every((value) => typeof value === 'string') && new Set(values).size === 1);
       return (
         entries.length === expectedCount &&
         new Set(slots).size === expectedCount &&
-        slots.every((slot) => Number.isInteger(slot) && slot >= 1 && slot <= expectedCount)
+        slots.every((slot) => Number.isInteger(slot) && slot >= 1 && slot <= expectedCount) &&
+        metadataIsCoherent
       );
     });
 
-    const incompleteAttempts = [...byAttempt.values()].filter((entries) => !completeAttempts.includes(entries));
-    if (incompleteAttempts.length > 0) {
+    const latestEntry = (attempt: typeof forGate) => attempt.reduce((latest, entry) =>
+      compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
+    );
+    const latestCompleteAttempt = completeAttempts.reduce<typeof forGate | undefined>((latest, candidate) => {
+      if (!latest) return candidate;
+      return compareReviewEntries(latestEntry(candidate).entry, latestEntry(latest).entry) > 0 ? candidate : latest;
+    }, undefined);
+    const activeIncompleteAttempts = attempts
+      .filter((entries) => !completeAttempts.includes(entries))
+      .filter((entries) => (
+        !latestCompleteAttempt ||
+        compareReviewEntries(latestEntry(entries).entry, latestEntry(latestCompleteAttempt).entry) > 0
+      ));
+    if (activeIncompleteAttempts.length > 0) {
       findings.push({
         severity: 'blocking',
         origin: targetOrigin,
@@ -332,7 +354,7 @@ function unresolvedGateFindings(
         evidence: ['不完備なゲートレビューattemptがあり、blocking findingの解決状態を完全には判定できません'],
         source_segment: sourceSegment,
       });
-      for (const attempt of incompleteAttempts) {
+      for (const attempt of activeIncompleteAttempts) {
         for (const { evidence } of attempt) {
           for (const finding of evidence.verdict.blockers) {
             if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
@@ -343,20 +365,11 @@ function unresolvedGateFindings(
       }
     }
 
-    if (completeAttempts.length === 0) {
+    if (!latestCompleteAttempt) {
       continue;
     }
 
-    const latestAttempt = completeAttempts.reduce((current, candidate) => {
-      const currentLatest = current.reduce((latest, entry) =>
-        compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
-      );
-      const candidateLatest = candidate.reduce((latest, entry) =>
-        compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
-      );
-      return compareReviewEntries(candidateLatest.entry, currentLatest.entry) > 0 ? candidate : current;
-    });
-    for (const { evidence } of latestAttempt) {
+    for (const { evidence } of latestCompleteAttempt) {
       for (const finding of evidence.verdict.blockers) {
         if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
           findings.push({ ...finding, source_segment: sourceSegment });

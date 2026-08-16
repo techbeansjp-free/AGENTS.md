@@ -56,6 +56,7 @@ function gateEvidence(options: {
   attemptId: string;
   expectedCount?: ReviewEvidence['expected_count'];
   reviewerSlot?: ReviewEvidence['reviewer']['slot'];
+  promptDigest?: string;
   blockers: ReviewEvidence['verdict']['blockers'];
 }): string {
   const expectedCount = options.expectedCount ?? 1;
@@ -84,7 +85,7 @@ function gateEvidence(options: {
       reasoning: 'high',
       capability: { model_tier: 'test', reasoning_tier: 'test', read_only: true },
     },
-    prompt_digest: `sha256:${'d'.repeat(64)}`,
+    prompt_digest: options.promptDigest ?? `sha256:${'d'.repeat(64)}`,
     verdict: {
       conformance: options.blockers.length > 0 ? 'fail' : 'pass',
       falsification: 'pass',
@@ -638,6 +639,97 @@ test('segment start (github backend): 新しい不完備attemptのblocking findi
   assert.match(result.stdout, /GATE_REVIEW_ATTEMPT_INCOMPLETE/);
   assert.match(result.stdout, /INCOMPLETE-ATTEMPT-BLOCKER/);
   assert.match(result.stdout, /不完備attemptの投稿済みslotが検出したfindingです/);
+});
+
+test('segment start (github backend): 新しい完備attemptで古い不完備attemptを解消する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 692);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-692',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-692-incomplete-old',
+        expectedCount: 2,
+        reviewerSlot: 1,
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'STALE-INCOMPLETE-BLOCKER',
+          evidence: ['新しい完備attemptにより解消された古いfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-692',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-692-complete-new',
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-692', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /GATE_REVIEW_ATTEMPT_INCOMPLETE/);
+  assert.doesNotMatch(result.stdout, /STALE-INCOMPLETE-BLOCKER/);
+  assert.doesNotMatch(result.stdout, /新しい完備attemptにより解消された古いfindingです/);
+});
+
+test('segment start (github backend): メタデータ不整合attemptで完備した過去attemptを置換しない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 693);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-693',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-693-complete-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'COHERENT-PREVIOUS-BLOCKER',
+          evidence: ['整合した過去attemptのfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    ...([1, 2] as const).map((slot) => ({
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-693',
+        gate: 'spec' as const,
+        targetSha,
+        attemptId: 'attempt-693-incoherent-new',
+        expectedCount: 2 as const,
+        reviewerSlot: slot,
+        promptDigest: `sha256:${(slot === 1 ? 'd' : 'e').repeat(64)}`,
+        blockers: [],
+      }),
+      submittedAt: `2026-08-15T00:0${slot}:00Z`,
+    })),
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-693', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /GATE_REVIEW_ATTEMPT_INCOMPLETE/);
+  assert.match(result.stdout, /COHERENT-PREVIOUS-BLOCKER/);
+  assert.match(result.stdout, /整合した過去attemptのfindingです/);
 });
 
 test('segment start (github backend): 完備した新しいattemptで過去attemptを置換する', (t) => {
