@@ -142,6 +142,92 @@ test('cleanup: main前進後のsquash mergeでupstreamがgoneになってもwork
   assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
 });
 
+test('cleanup: upstreamもremote refも無いローカル限定commitとrevertは削除せず保護する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'net-zero-commits', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'LOCAL_ONLY.md'), '# local only\n');
+  execFileSync('git', ['add', 'LOCAL_ONLY.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: add local-only content'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['revert', '--no-edit', 'HEAD'], { cwd: worktreePath, stdio: 'pipe' });
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+
+  assert.throws(
+    () => execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], { cwd: worktreePath, stdio: 'pipe' }),
+    '前提: upstreamを解決できないこと',
+  );
+  assert.equal(
+    execFileSync('git', ['for-each-ref', `--contains=${branch}`, '--format=%(refname)', 'refs/remotes'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim(),
+    '',
+    '前提: branchのcommit列がremote refから到達不能であること',
+  );
+  assert.equal(
+    execFileSync('git', ['diff', '--name-only', 'main', branch], { cwd: worktreePath, encoding: 'utf8' }).trim(),
+    '',
+    '前提: commitとrevertにより最終treeが分岐点と一致すること',
+  );
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 1);
+  assert.match(cleanup.stderr, /未pushのcommit/);
+  assert.ok(fs.existsSync(worktreePath), '未pushのcommit列があるworktreeを削除しないこと');
+});
+
+test('cleanup: upstreamもremote refも無いローカル限定の空commitは削除せず保護する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'empty-commit', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+  execFileSync('git', ['commit', '--allow-empty', '-m', 'test: preserve local-only empty commit'], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+  });
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+
+  assert.throws(
+    () => execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], { cwd: worktreePath, stdio: 'pipe' }),
+    '前提: upstreamを解決できないこと',
+  );
+  assert.equal(
+    execFileSync('git', ['for-each-ref', `--contains=${branch}`, '--format=%(refname)', 'refs/remotes'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim(),
+    '',
+    '前提: 空commitがremote refから到達不能であること',
+  );
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 1);
+  assert.match(cleanup.stderr, /未pushのcommit/);
+  assert.ok(fs.existsSync(worktreePath), '未pushの空commitがあるworktreeを削除しないこと');
+});
+
 test('issue start (local backend): --title/--request-fileを渡すとstate.yamlへ永続化され、segment startのプロンプトへ供給される（ISSUE-183 AC-4/AC-5）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

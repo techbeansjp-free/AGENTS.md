@@ -167,6 +167,8 @@ export function hasUnpushedCommits(worktreePath: string, branch: string): boolea
  *    変更したpathに限定し、default branch履歴上のcommitと厳密な内容比較を行う。
  *    default branchが無関係なpathの変更で前進しても検出でき、空白を無視するpatch IDの
  *    ようにローカル限定の内容差分を統合済みとみなすこともない。
+ *    分岐点との最終差分が無い場合、到達不能なcommit列の保全を内容比較では立証できないため
+ *    統合未済とみなす。
  * 3. default branchが特定できない、または上記いずれの判定も成立しない場合は統合未済とみなす
  *    （安全側）。
  */
@@ -181,24 +183,12 @@ function isIntegratedIntoDefaultBranch(worktreePath: string, branch: string): bo
   const ancestor = git(['merge-base', '--is-ancestor', branch, base], worktreePath);
   if (ancestor.status === 0) return true;
 
-  const branchTree = git(['rev-parse', `${branch}^{tree}`], worktreePath);
-  if (branchTree.status !== 0) return false;
-  const targetTree = branchTree.stdout.trim();
-
-  const baseTrees = git(['log', base, '--format=%T'], worktreePath);
-  if (baseTrees.status !== 0) return false;
-  const treeMatched = baseTrees.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .includes(targetTree);
-  if (treeMatched) return true;
-
   const mergeBase = git(['merge-base', branch, base], worktreePath);
   if (mergeBase.status !== 0) return false;
   const changed = git(['diff', '--no-renames', '--name-only', '-z', mergeBase.stdout.trim(), branch], worktreePath);
   if (changed.status !== 0) return false;
   const changedPaths = changed.stdout.split('\0').filter(Boolean);
-  if (changedPaths.length === 0) return true;
+  if (changedPaths.length === 0) return false;
 
   const baseCommits = git(
     ['--literal-pathspecs', 'rev-list', `${mergeBase.stdout.trim()}..${base}`, '--', ...changedPaths],
