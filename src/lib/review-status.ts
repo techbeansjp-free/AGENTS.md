@@ -332,19 +332,24 @@ function unresolvedGateFindings(
         metadataIsCoherent
       );
     });
+    const conclusiveAttempts = completeAttempts.filter((entries) => entries.every(({ evidence }) => (
+      evidence.verdict.inconclusive === false &&
+      evidence.verdict.conformance !== 'pending' &&
+      evidence.verdict.falsification !== 'pending'
+    )));
 
     const latestEntry = (attempt: typeof forGate) => attempt.reduce((latest, entry) =>
       compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
     );
-    const latestCompleteAttempt = completeAttempts.reduce<typeof forGate | undefined>((latest, candidate) => {
+    const latestConclusiveAttempt = conclusiveAttempts.reduce<typeof forGate | undefined>((latest, candidate) => {
       if (!latest) return candidate;
       return compareReviewEntries(latestEntry(candidate).entry, latestEntry(latest).entry) > 0 ? candidate : latest;
     }, undefined);
     const activeIncompleteAttempts = attempts
       .filter((entries) => !completeAttempts.includes(entries))
       .filter((entries) => (
-        !latestCompleteAttempt ||
-        compareReviewEntries(latestEntry(entries).entry, latestEntry(latestCompleteAttempt).entry) > 0
+        !latestConclusiveAttempt ||
+        compareReviewEntries(latestEntry(entries).entry, latestEntry(latestConclusiveAttempt).entry) > 0
       ));
     if (activeIncompleteAttempts.length > 0) {
       findings.push({
@@ -365,11 +370,34 @@ function unresolvedGateFindings(
       }
     }
 
-    if (!latestCompleteAttempt) {
-      continue;
+    const activeInconclusiveAttempts = completeAttempts
+      .filter((entries) => !conclusiveAttempts.includes(entries))
+      .filter((entries) => (
+        !latestConclusiveAttempt ||
+        compareReviewEntries(latestEntry(entries).entry, latestEntry(latestConclusiveAttempt).entry) > 0
+      ));
+    if (activeInconclusiveAttempts.length > 0) {
+      findings.push({
+        severity: 'blocking',
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_ATTEMPT_INCONCLUSIVE',
+        evidence: ['判定不能なゲートレビューattemptがあり、blocking findingの解決状態を確定できません'],
+        source_segment: sourceSegment,
+      });
+      for (const attempt of activeInconclusiveAttempts) {
+        for (const { evidence } of attempt) {
+          for (const finding of evidence.verdict.blockers) {
+            if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
+              findings.push({ ...finding, source_segment: sourceSegment });
+            }
+          }
+        }
+      }
     }
 
-    for (const { evidence } of latestCompleteAttempt) {
+    if (!latestConclusiveAttempt) continue;
+
+    for (const { evidence } of latestConclusiveAttempt) {
       for (const finding of evidence.verdict.blockers) {
         if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
           findings.push({ ...finding, source_segment: sourceSegment });

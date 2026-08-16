@@ -57,6 +57,9 @@ function gateEvidence(options: {
   expectedCount?: ReviewEvidence['expected_count'];
   reviewerSlot?: ReviewEvidence['reviewer']['slot'];
   promptDigest?: string;
+  conformance?: ReviewEvidence['verdict']['conformance'];
+  falsification?: ReviewEvidence['verdict']['falsification'];
+  inconclusive?: boolean;
   blockers: ReviewEvidence['verdict']['blockers'];
 }): string {
   const expectedCount = options.expectedCount ?? 1;
@@ -87,11 +90,11 @@ function gateEvidence(options: {
     },
     prompt_digest: options.promptDigest ?? `sha256:${'d'.repeat(64)}`,
     verdict: {
-      conformance: options.blockers.length > 0 ? 'fail' : 'pass',
-      falsification: 'pass',
+      conformance: options.conformance ?? (options.blockers.length > 0 ? 'fail' : 'pass'),
+      falsification: options.falsification ?? 'pass',
       blockers: options.blockers,
       approved_artifacts: [],
-      inconclusive: false,
+      inconclusive: options.inconclusive ?? false,
     },
   });
 }
@@ -508,6 +511,45 @@ test('segment start (github backend): 候補branchのmanifest削除後もdefault
   assert.doesNotMatch(result.stdout, /gate_review_trust_policy/);
 });
 
+test('segment start (github backend): localのremote-tracking refを書き換えてもGitHubのtrusted actor登録を使う', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 694);
+  const manifestPath = path.join(repo.dir, '.agent-skill-chain', 'project', 'manifest.yaml');
+  const originalManifest = fs.readFileSync(manifestPath, 'utf8');
+  const manifest = originalManifest.replace(
+    '      trusted_reviewer_actors:\n        - adachi-tatsuru',
+    '      trusted_reviewer_actors:\n        - adachi-tatsuru\n        - candidate-recorder',
+  );
+  assert.notEqual(manifest, originalManifest, '候補branchのtrusted actor登録を書き換えられること');
+  fs.writeFileSync(manifestPath, manifest);
+  execFileSync('git', ['add', manifestPath], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: mutate candidate trust policy'], { cwd: repo.dir, stdio: 'pipe' });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  execFileSync('git', ['update-ref', 'refs/remotes/origin/main', targetSha], { cwd: repo.dir, stdio: 'pipe' });
+  stub.seedPrReviews(prNumber, [{
+    state: 'COMMENTED',
+    author: { login: 'candidate-recorder' },
+    body: gateEvidence({
+      issueId: 'ISSUE-694',
+      gate: 'spec',
+      targetSha,
+      attemptId: 'attempt-694-mutable-ref',
+      blockers: [{
+        severity: 'blocking',
+        origin: 'specification',
+        code: 'MUTABLE-REF-BLOCKER',
+        evidence: ['書き換えたremote-tracking refだけが登録したactorによるfindingです'],
+      }],
+    }),
+    submittedAt: '2026-08-15T00:00:00Z',
+  }]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-694', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /MUTABLE-REF-BLOCKER/);
+  assert.doesNotMatch(result.stdout, /書き換えたremote-tracking refだけが登録したactorによるfindingです/);
+});
+
 test('segment start (github backend): slot不足の新しいattemptで完備した過去attemptを置換しない', (t) => {
   const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 684);
   const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
@@ -781,6 +823,180 @@ test('segment start (github backend): 完備した新しいattemptで過去attem
   assert.match(result.stdout, /LATEST-COMPLETE-BLOCKER/);
 });
 
+test('segment start (github backend): 判定済みでblockerのない新しい完備attemptは過去のblocking findingを解消する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 697);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-697',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-697-blocking-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'RESOLVED-PREVIOUS-BLOCKER',
+          evidence: ['判定済みの新しいattemptにより解消されるfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-697',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-697-clear-new',
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-697', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /RESOLVED-PREVIOUS-BLOCKER/);
+  assert.doesNotMatch(result.stdout, /GATE_REVIEW_ATTEMPT_INCONCLUSIVE/);
+});
+
+test('segment start (github backend): inconclusiveな新しい完備attemptは過去のblocking findingを消さない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 695);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-695',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-695-conclusive-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'INCONCLUSIVE-PREVIOUS-BLOCKER',
+          evidence: ['判定不能attemptより前に確認されたfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-695',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-695-inconclusive-new',
+        inconclusive: true,
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-695', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /GATE_REVIEW_ATTEMPT_INCONCLUSIVE/);
+  assert.match(result.stdout, /INCONCLUSIVE-PREVIOUS-BLOCKER/);
+  assert.match(result.stdout, /判定不能attemptより前に確認されたfindingです/);
+});
+
+test('segment start (github backend): pendingな新しい完備attemptは過去のblocking findingを消さない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 696);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-696',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-696-conclusive-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'PENDING-PREVIOUS-BLOCKER',
+          evidence: ['pending attemptより前に確認されたfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-696',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-696-pending-new',
+        conformance: 'pending',
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-696', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /GATE_REVIEW_ATTEMPT_INCONCLUSIVE/);
+  assert.match(result.stdout, /PENDING-PREVIOUS-BLOCKER/);
+  assert.match(result.stdout, /pending attemptより前に確認されたfindingです/);
+});
+
+test('segment start (github backend): falsification pendingな新しい完備attemptは過去のblocking findingを消さない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 698);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-698',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-698-conclusive-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'FALSIFICATION-PENDING-PREVIOUS-BLOCKER',
+          evidence: ['falsification pendingより前に確認されたfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-698',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-698-pending-new',
+        falsification: 'pending',
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-698', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /GATE_REVIEW_ATTEMPT_INCONCLUSIVE/);
+  assert.match(result.stdout, /FALSIFICATION-PENDING-PREVIOUS-BLOCKER/);
+  assert.match(result.stdout, /falsification pendingより前に確認されたfindingです/);
+});
+
 test('segment start (github backend): 完備したattemptがなければ判定不能をblocking findingとして同梱する', (t) => {
   const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 687);
   const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
@@ -809,8 +1025,9 @@ test('segment start (github backend): 完備したattemptがなければ判定�
 test('segment start (github backend): trusted actor登録を解決できない場合も未検証evidenceと部分障害を通知して起動を継続する', (t) => {
   const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 683);
   const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
-  execFileSync('git', ['update-ref', '-d', 'refs/heads/main'], { cwd: repo.dir, stdio: 'pipe' });
-  execFileSync('git', ['update-ref', '-d', 'refs/remotes/origin/main'], { cwd: repo.dir, stdio: 'pipe' });
+  const state = stub.readState();
+  state.failApiPaths = ['contents/.agent-skill-chain/project/manifest.yaml'];
+  stub.writeState(state);
   stub.seedPrReviews(prNumber, [
     {
       state: 'COMMENTED',
@@ -840,7 +1057,7 @@ test('segment start (github backend): trusted actor登録を解決できない�
   assert.match(result.stdout, /blocking findingがありますが、trusted\s+actor登録を解決できないため内容を検証できません/);
   assert.match(result.stdout, /partial_failures:/);
   assert.match(result.stdout, /side: gate_review_trust_policy/);
-  assert.match(result.stdout, /repository default\s+branchを解決できません/);
+  assert.match(result.stdout, /GitHubのrepository default\s+branchからproject policy manifestを取得できません/);
 });
 
 test('segment start (github backend): 時刻カットオフ無しでPR/Issueコメントをrole contractへ同梱する', (t) => {

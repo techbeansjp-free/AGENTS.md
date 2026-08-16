@@ -636,6 +636,28 @@ if (cmd === 'api') {
     process.exit(0);
   }
 
+  const repositoryContentMatch = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/contents\\/(.+)\\?ref=([^&]+)$/.exec(apiPath || '');
+  if (repositoryContentMatch && method === 'GET') {
+    const contentPath = decodeURIComponent(repositoryContentMatch[1]);
+    const ref = decodeURIComponent(repositoryContentMatch[2]);
+    try {
+      const remoteDir = childProcess.execFileSync(
+        'git',
+        ['remote', 'get-url', 'origin'],
+        { cwd: process.cwd(), encoding: 'utf8' },
+      ).trim();
+      const content = childProcess.execFileSync(
+        'git',
+        ['--git-dir', remoteDir, 'show', 'refs/heads/' + ref + ':' + contentPath],
+      );
+      process.stdout.write(JSON.stringify({ content: content.toString('base64'), encoding: 'base64' }));
+      process.exit(0);
+    } catch {
+      process.stderr.write('gh-stub: repository content not found\\n');
+      process.exit(1);
+    }
+  }
+
   if (apiPath === 'repos/{owner}/{repo}/dispatches' && method === 'POST') {
     if (state.failRepositoryDispatch) {
       process.stderr.write('gh-stub: simulated repository dispatch failure\\n');
