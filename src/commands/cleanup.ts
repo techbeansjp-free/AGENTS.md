@@ -1,7 +1,7 @@
 import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
-import { findIssueWorktree, hasUncommittedChanges, hasUnpushedCommits } from '../lib/worktree.js';
+import { findIssueWorktree, hasUncommittedChanges, inspectUnpushedCommits } from '../lib/worktree.js';
 import { leaseFilePath, integrationFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile } from '../lib/yaml-io.js';
 import { activeLeaseFor, type WriterLease } from '../lib/github-lease.js';
@@ -60,8 +60,17 @@ export async function run(args: string[]): Promise<number> {
       return fail('worktree 内に未commitの変更があるため削除できません');
     }
 
-    if (entry.branch && hasUnpushedCommits(entry.path, entry.branch)) {
-      return fail('未pushのcommitがあるため削除できません');
+    if (entry.branch) {
+      const unpushed = inspectUnpushedCommits(entry.path, entry.branch);
+      if (unpushed.hasUnpushedCommits && unpushed.reason === 'unpreserved_commits') {
+        const shas = unpushed.commitShas.map((sha) => sha.slice(0, 12)).join(', ');
+        return fail(
+          `未pushのcommitがあるため削除できません（保全されていないcommit: ${unpushed.commitShas.length}件 ${shas}）`,
+        );
+      }
+      if (unpushed.hasUnpushedCommits) {
+        return fail(`commitの保全状況を確認できないため削除できません（${unpushed.detail}）`);
+      }
     }
 
     let integrationDone = false;

@@ -284,6 +284,131 @@ test('cleanup: upstreamもremote refも無いローカル限定commitとrevert�
   assert.ok(fs.existsSync(worktreePath), '未pushのcommit列があるworktreeを削除しないこと');
 });
 
+test('cleanup: 相殺された追加pathと統合済みpathが混在しても到達不能commitを削除せずSHAを表示する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'net-zero-path-prefix', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'TEMP.md'), '# temporary\n');
+  execFileSync('git', ['add', 'TEMP.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: add temporary path'], { cwd: worktreePath, stdio: 'pipe' });
+  const temporaryCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  execFileSync('git', ['revert', '--no-edit', 'HEAD'], { cwd: worktreePath, stdio: 'pipe' });
+  const revertCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  fs.writeFileSync(path.join(worktreePath, 'KEEP.md'), '# keep\n');
+  execFileSync('git', ['add', 'KEEP.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: add retained path'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['push', '-u', 'origin', branch], { cwd: worktreePath, stdio: 'pipe' });
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+
+  fs.writeFileSync(path.join(repo.dir, 'KEEP.md'), '# keep\n');
+  execFileSync('git', ['add', 'KEEP.md'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: integrate retained path only'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
+
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+  assert.equal(
+    execFileSync('git', ['diff', '--name-only', 'main', branch], { cwd: worktreePath, encoding: 'utf8' }).trim(),
+    '',
+    '前提: branchの最終treeとmainの内容差分が無いこと',
+  );
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 1);
+  assert.match(cleanup.stderr, /保全されていないcommit: 2件/);
+  assert.match(cleanup.stderr, new RegExp(temporaryCommit.slice(0, 12)));
+  assert.match(cleanup.stderr, new RegExp(revertCommit.slice(0, 12)));
+  assert.ok(fs.existsSync(worktreePath), '相殺されたpathを触ったcommit列があるworktreeを削除しないこと');
+});
+
+test('cleanup: 既存pathの変更を戻して別pathだけ統合した場合も到達不能commitを削除しない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  fs.writeFileSync(path.join(repo.dir, 'file-a.txt'), 'original\n');
+  execFileSync('git', ['add', 'file-a.txt'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: add base file'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'restored-path-prefix', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'file-a.txt'), 'changed\n');
+  execFileSync('git', ['add', 'file-a.txt'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: change file a'], { cwd: worktreePath, stdio: 'pipe' });
+  fs.writeFileSync(path.join(worktreePath, 'file-a.txt'), 'original\n');
+  execFileSync('git', ['add', 'file-a.txt'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: restore file a'], { cwd: worktreePath, stdio: 'pipe' });
+  fs.writeFileSync(path.join(worktreePath, 'file-b.txt'), 'integrated\n');
+  execFileSync('git', ['add', 'file-b.txt'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: add file b'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['push', '-u', 'origin', branch], { cwd: worktreePath, stdio: 'pipe' });
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+  fs.writeFileSync(path.join(repo.dir, 'file-b.txt'), 'integrated\n');
+  execFileSync('git', ['add', 'file-b.txt'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: integrate file b only'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 1);
+  assert.match(cleanup.stderr, /保全されていないcommit: 2件/);
+  assert.ok(fs.existsSync(worktreePath), '最終差分から消えた既存pathのcommit列があるworktreeを削除しないこと');
+});
+
+test('cleanup: デフォルトブランチを特定できない場合は理由を表示してworktreeを残す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'unknown-default-branch', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+  execFileSync('git', ['commit', '--allow-empty', '-m', 'test: preserve when default branch is unknown'], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+  });
+  execFileSync('git', ['push', '-u', 'origin', branch], { cwd: worktreePath, stdio: 'pipe' });
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+  execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['branch', '-m', 'main', 'unknown-base'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['update-ref', '-d', 'refs/remotes/origin/HEAD'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['update-ref', '-d', 'refs/remotes/origin/main'], { cwd: repo.dir, stdio: 'pipe' });
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 1);
+  assert.match(cleanup.stderr, /commitの保全状況を確認できないため削除できません/);
+  assert.match(cleanup.stderr, /デフォルトブランチを特定できません/);
+  assert.ok(fs.existsSync(worktreePath), '保全状況を確定できないworktreeを削除しないこと');
+});
+
 test('cleanup: upstreamもremote refも無いローカル限定の空commitは削除せず保護する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
