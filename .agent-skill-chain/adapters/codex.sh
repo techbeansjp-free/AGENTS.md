@@ -153,37 +153,60 @@ launch_gate_reviewer() {
   return "$rc"
 }
 
-# 1 Issue = 1 worktree（I4）で動くため cwd は linked worktree であり、その `.git` は共通 .git
-# ディレクトリを指す1行のファイルにすぎない。commit が実際に書き込む先（index.lock・refs・objects・
-# logs）は共通 .git 配下の実体で、これは cwd の外にある。codex の workspace-write サンドボックスは
-# cwd 配下しか書込みを許さないため、この実体を追加の書込み root として明示しない限りワーカーは
-# I3（セグメント完了ごとの commit+push）を満たせない。push も既定では名前解決ごと遮断される。
-# Issue #364: codex-cli 0.146.0 で writable_roots・network_access による解消を実測確認済み。
-# 共通 .git の1 root だけで足りる（worktree 固有の管理ディレクトリはその配下に含まれる）。
-_codex_worker_sandbox_opts() {
-  local common_dir='' toml quoted opts=''
-  common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
-  # --path-format は比較的新しい git にしか無いため、絶対パス化を自前で補う。
-  if [[ -z "$common_dir" ]]; then
-    common_dir="$(git rev-parse --git-common-dir 2>/dev/null || true)"
-    if [[ -n "$common_dir" && "$common_dir" != /* ]]; then
-      common_dir="$PWD/$common_dir"
+# git が返す管理ディレクトリを、symlink を含まない実在する絶対パスへ解決する。
+# Issue #682: 解決できない値のまま Codex を起動すると commit 時まで失敗が遅延するため、
+# 起動コマンドの組み立て段階で日本語エラーにする。
+_codex_resolve_git_metadata_dir() {
+  local selector="$1" label="$2" resolved=''
+  resolved="$(git rev-parse --path-format=absolute "$selector" 2>/dev/null || true)"
+  # --path-format を持たない Git との互換性を保ち、相対値は cwd を基準に絶対化する。
+  if [[ -z "$resolved" ]]; then
+    resolved="$(git rev-parse "$selector" 2>/dev/null || true)"
+    if [[ -n "$resolved" && "$resolved" != /* ]]; then
+      resolved="$PWD/$resolved"
     fi
   fi
-  if [[ -n "$common_dir" && -d "$common_dir" ]]; then
-    common_dir="$(cd -- "$common_dir" >/dev/null 2>&1 && pwd -P)"
-  else
-    common_dir=''
+  if [[ -z "$resolved" || ! -d "$resolved" ]]; then
+    echo "_codex_worker_sandbox_opts: ${label}の絶対パスを解決できませんでした" >&2
+    return 1
   fi
-  if [[ -n "$common_dir" ]]; then
+  if ! resolved="$(cd -- "$resolved" >/dev/null 2>&1 && pwd -P)" || [[ -z "$resolved" ]]; then
+    echo "_codex_worker_sandbox_opts: ${label}の実体パスを解決できませんでした" >&2
+    return 1
+  fi
+  printf '%s\n' "$resolved"
+}
+
+# linked worktree の `.git` は gitfile であり、index.lock は共有 git ディレクトリとは別の
+# worktree 専用メタデータディレクトリへ作られる。Codex の writable_roots は親 root の指定だけで
+# その子孫を同じ権限にはしないため、共有領域と worktree 専用領域をそれぞれ明示する。
+# 通常の作業ツリーでは両者が同じ実体パスになるので重複させない。push のネットワーク通信は許可するが、
+# HOME や一時ディレクトリ等を追加の書込み root にはしない。
+_codex_worker_sandbox_opts() {
+  local common_dir git_dir root toml quoted roots_toml=''
+  if ! common_dir="$(_codex_resolve_git_metadata_dir --git-common-dir '共有 git メタデータディレクトリ')"; then
+    return 1
+  fi
+  if ! git_dir="$(_codex_resolve_git_metadata_dir --git-dir '起動対象作業ツリーの git メタデータディレクトリ')"; then
+    return 1
+  fi
+
+  local -a writable_roots=("$common_dir")
+  if [[ "$git_dir" != "$common_dir" ]]; then
+    writable_roots+=("$git_dir")
+  fi
+  for root in "${writable_roots[@]}"; do
     # TOML文字列リテラル層のescape（\ と "）と、bash -c で再解釈されるshell層のquote（%q）は
     # 別物なので順に適用する。どちらか一方だけでは空白・記号を含むパスで壊れる。
-    toml="${common_dir//\\/\\\\}"
+    toml="${root//\\/\\\\}"
     toml="${toml//\"/\\\"}"
-    printf -v quoted '%q' "sandbox_workspace_write.writable_roots=[\"$toml\"]"
-    opts="-c $quoted "
-  fi
-  printf '%s-c sandbox_workspace_write.network_access=true' "$opts"
+    if [[ -n "$roots_toml" ]]; then
+      roots_toml+=','
+    fi
+    roots_toml+="\"$toml\""
+  done
+  printf -v quoted '%q' "sandbox_workspace_write.writable_roots=[$roots_toml]"
+  printf '%s -c sandbox_workspace_write.network_access=true' "-c $quoted"
 }
 
 # role_contract が Codex CLI の stdin UTF-8 境界破損に対する安全閾値を超える場合は、
@@ -211,7 +234,9 @@ _worker_default_cmd() {
   local model effort sandbox_opts base contract_bytes quoted_contract quoted_executable
   model="$(_codex_worker_model "$segment")"
   effort="$(_codex_worker_effort "$segment")"
-  sandbox_opts="$(_codex_worker_sandbox_opts)"
+  if ! sandbox_opts="$(_codex_worker_sandbox_opts)"; then
+    return 1
+  fi
   printf -v quoted_executable '%q' "$codex_executable"
   base="$quoted_executable exec --sandbox workspace-write $sandbox_opts --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\""
   contract_bytes="$(printf '%s' "$contract" | wc -c)"
