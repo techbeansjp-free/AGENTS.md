@@ -83,10 +83,6 @@ export async function run(args: string[]): Promise<number> {
         }
       }
     }
-    if (!integrationDone) {
-      return fail('対応する PR / Integration Record が完了済み（merged または closed）ではないため削除できません');
-    }
-
     if (entry.branch) {
       const unpushed = inspectUnpushedCommits(entry.path, entry.branch, pushedCommit);
       if (unpushed.hasUnpushedCommits && unpushed.reason === 'unpreserved_commits') {
@@ -98,6 +94,10 @@ export async function run(args: string[]): Promise<number> {
       if (unpushed.hasUnpushedCommits) {
         return fail(`commitの保全状況を確認できないため削除できません（${unpushed.detail}）`);
       }
+    }
+
+    if (!integrationDone) {
+      return fail('対応する PR / Integration Record が完了済み（merged または closed）ではないため削除できません');
     }
 
     const remove = git(['worktree', 'remove', entry.path], root);
