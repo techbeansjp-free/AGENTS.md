@@ -39,14 +39,11 @@ import {
   buildTrustedGateAttestation,
   canonicalReportIsOversize,
   createTrustedGateCheck,
-  createTrustedGatePreparationFailureCheck,
   fetchTrustedGateApiContext,
   finalizeTrustedGateCheck,
-  finalizeTrustedGateCheckFailure,
   githubJsonDirect,
   parseTrustedGateCheckOutput,
   parseTrustedGateDispatchEvent,
-  parseTrustedGateFailureEvent,
   parseTrustedGateWorkflow,
   readTrustedGateCheck,
   readTrustedGateRecordState,
@@ -175,7 +172,6 @@ noncanonicalなローカルcacheへ復元する。標準Actions Appやopaque Che
 const RECORD_TRUSTED_CHECK_USAGE = `
 使い方:
   agent-skill-chain gate record-trusted-check validate
-  agent-skill-chain gate record-trusted-check fail-preparation
   agent-skill-chain gate record-trusted-check prepare <state_path> <attestation_envelope_path>
   agent-skill-chain gate record-trusted-check finalize <state_path> <attestation_envelope_path> <verification_json_path>
 
@@ -1417,17 +1413,6 @@ function trustedGateEventFromEnvironment(): ReturnType<typeof parseTrustedGateDi
   return parseTrustedGateDispatchEvent(event);
 }
 
-function trustedGateFailureEventFromEnvironment(): ReturnType<typeof parseTrustedGateFailureEvent> {
-  const eventPath = requiredEnvironment('GITHUB_EVENT_PATH');
-  let event: unknown;
-  try {
-    event = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
-  } catch {
-    throw new CliError('GITHUB_EVENT_PATHのrepository_dispatch eventを解釈できません');
-  }
-  return parseTrustedGateFailureEvent(event);
-}
-
 export function consumeTrustedGateSecrets(
   env: NodeJS.ProcessEnv = process.env,
 ): {
@@ -1451,16 +1436,12 @@ export function consumeTrustedGateSecrets(
   };
 }
 
-function assertTrustedRecorderBaseCheckout(root: string, workflowSha: string): void {
+function assertTrustedRecorderCheckout(root: string, workflowSha: string, targetSha: string): void {
   const head = git(['rev-parse', 'HEAD'], root).stdout.trim();
   if (head !== workflowSha) throw new CliError('trusted recorder checkoutがGITHUB_WORKFLOW_SHAと一致しません');
   if (git(['status', '--porcelain', '--untracked-files=no'], root).stdout.trim()) {
     throw new CliError('trusted recorder checkoutのtracked fileがdirtyです');
   }
-}
-
-function assertTrustedRecorderCheckout(root: string, workflowSha: string, targetSha: string): void {
-  assertTrustedRecorderBaseCheckout(root, workflowSha);
   if (git(['rev-parse', '--verify', `${targetSha}^{commit}`], root).status !== 0) {
     throw new CliError('dispatch target SHAのGit objectがありません');
   }
@@ -1492,12 +1473,10 @@ export async function recordTrustedCheck(args: string[]): Promise<number> {
       return 0;
     }
     const [phase, firstPath, secondPath] = args;
-    if (!phase || !['validate', 'fail-preparation', 'prepare', 'finalize'].includes(phase)) {
-      throw new CliError('record-trusted-check phaseはvalidate|fail-preparation|prepare|finalizeのみです');
+    if (!phase || !['validate', 'prepare', 'finalize'].includes(phase)) {
+      throw new CliError('record-trusted-check phaseはvalidate|prepare|finalizeのみです');
     }
-    const event = phase === 'fail-preparation'
-      ? trustedGateFailureEventFromEnvironment()
-      : trustedGateEventFromEnvironment();
+    const event = trustedGateEventFromEnvironment();
     const workflow = parseTrustedGateWorkflow(process.env);
     if (phase === 'validate') {
       if (args.length !== 1) throw new CliError('validateに追加引数は指定できません');
@@ -1512,24 +1491,6 @@ export async function recordTrustedCheck(args: string[]): Promise<number> {
     const repository = requiredEnvironment('GITHUB_REPOSITORY');
     const { githubToken, credentials } = consumeTrustedGateSecrets();
     const root = repoRoot();
-    if (phase === 'fail-preparation') {
-      if (args.length !== 1) throw new CliError('fail-preparationに追加引数は指定できません');
-      const repositoryId = Number(requiredEnvironment('GITHUB_REPOSITORY_ID'));
-      if (!Number.isSafeInteger(repositoryId) || repositoryId <= 0) {
-        throw new CliError('GITHUB_REPOSITORY_IDが正の安全な整数ではありません');
-      }
-      assertTrustedRecorderBaseCheckout(root, workflow.sha);
-      const config = loadConfig(root);
-      await createTrustedGatePreparationFailureCheck({
-        repository,
-        repositoryId,
-        credentials,
-        checkName: config.checks[event.payload.gate],
-        payload: event.payload,
-        workflow,
-      });
-      return 0;
-    }
     assertTrustedRecorderCheckout(root, workflow.sha, event.payload.target_sha);
 
     if (phase === 'prepare') {
@@ -1591,49 +1552,6 @@ export async function recordTrustedCheck(args: string[]): Promise<number> {
       canonicalJson(state.workflow) !== canonicalJson(workflow)
     ) {
       throw new CliError('stateのdispatch actor/payload/workflow tupleがcurrent runと一致しません');
-    }
-    const attestationOutcome = process.env.ASC_GATE_ATTEST_OUTCOME ?? 'success';
-    const verificationOutcome = process.env.ASC_GATE_VERIFY_OUTCOME ?? 'success';
-    const allowedOutcomes = ['success', 'failure', 'cancelled', 'skipped'];
-    if (!allowedOutcomes.includes(attestationOutcome) || !allowedOutcomes.includes(verificationOutcome)) {
-      throw new CliError('attestationまたはverification step outcomeを解釈できません');
-    }
-    if (attestationOutcome !== 'success' || verificationOutcome !== 'success') {
-      const currentCheck = await readTrustedGateCheck({
-        repository,
-        repositoryId: state.attestation.repository.id,
-        credentials,
-        checkId: state.check.id,
-      });
-      const expectedExternalId = trustedGateExternalId(workflow, event.payload);
-      assertTrustedAppCheck({
-        check: currentCheck,
-        expectedAppId: Number(credentials.appId),
-        expectedName: state.check.name,
-        expectedSha: event.payload.target_sha,
-        expectedExternalId,
-        expectedStatus: 'in_progress',
-      });
-      if (currentCheck.conclusion !== null || currentCheck.id !== state.attestation.check.id) {
-        throw new CliError('Checkがreplayされたか既にcompletedです');
-      }
-      const currentActionRun = await githubJsonDirect<TrustedGateActionRun>(
-        fetch,
-        githubToken,
-        `/repos/${repository}/actions/runs/${workflow.run_id}`,
-      );
-      assertTrustedActionRun(currentActionRun, state);
-
-      // Issue #680: attestationを立証できない場合も、専用App Checkを未完了のまま残さない。
-      await finalizeTrustedGateCheckFailure({
-        repository,
-        repositoryId: state.attestation.repository.id,
-        credentials,
-        checkId: currentCheck.id,
-        attestation: state.attestation,
-        reason: attestationOutcome === 'success' ? 'verification_failed' : 'attestation_failed',
-      });
-      return 0;
     }
     const envelopeBytes = fs.readFileSync(secondPath);
     let envelope: TrustedGateAttestationEnvelope;

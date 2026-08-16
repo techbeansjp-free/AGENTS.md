@@ -144,17 +144,6 @@ function exactKeys(value: object, expected: readonly string[], label: string): v
 }
 
 export function parseTrustedGateDispatchEvent(value: unknown): { actor: string; payload: TrustedGatePayload } {
-  return parseTrustedGateDispatchEventFields(value, true);
-}
-
-export function parseTrustedGateFailureEvent(value: unknown): { actor: string; payload: TrustedGatePayload } {
-  return parseTrustedGateDispatchEventFields(value, false);
-}
-
-function parseTrustedGateDispatchEventFields(
-  value: unknown,
-  requireExactPayload: boolean,
-): { actor: string; payload: TrustedGatePayload } {
   if (!value || typeof value !== 'object') throw new Error('repository_dispatch eventを解釈できません');
   const event = value as {
     action?: unknown;
@@ -168,9 +157,7 @@ function parseTrustedGateDispatchEventFields(
   if (!event.client_payload || typeof event.client_payload !== 'object' || Array.isArray(event.client_payload)) {
     throw new Error('client_payloadを解釈できません');
   }
-  if (requireExactPayload) {
-    exactKeys(event.client_payload, ['pr_number', 'gate', 'target_sha'], 'client_payload');
-  }
+  exactKeys(event.client_payload, ['pr_number', 'gate', 'target_sha'], 'client_payload');
   const raw = event.client_payload as Record<string, unknown>;
   if (typeof raw.pr_number !== 'number' || !Number.isSafeInteger(raw.pr_number) || raw.pr_number <= 0) {
     throw new Error('client_payload.pr_numberは正のintegerである必要があります');
@@ -504,56 +491,6 @@ export async function createTrustedGateCheck(options: {
   return check;
 }
 
-export async function createTrustedGatePreparationFailureCheck(options: {
-  repository: string;
-  repositoryId: number;
-  credentials: GithubAppCredentials;
-  checkName: string;
-  payload: TrustedGatePayload;
-  workflow: TrustedGateWorkflow;
-  fetchImpl?: typeof fetch;
-}): Promise<void> {
-  const externalId = trustedGateExternalId(options.workflow, options.payload);
-  const durableText = canonicalJson({
-    schema_version: 'agent-skill-chain/check-output-error/v1',
-    payload: options.payload,
-    workflow: options.workflow,
-    reason: 'preparation_failed',
-  });
-  const check = await appCheckRequest<TrustedGateCheckRun>({
-    repository: options.repository,
-    repositoryId: options.repositoryId,
-    credentials: options.credentials,
-    path: `/repos/${options.repository}/check-runs`,
-    method: 'POST',
-    body: {
-      name: options.checkName,
-      head_sha: options.payload.target_sha,
-      status: 'completed',
-      conclusion: 'action_required',
-      completed_at: new Date().toISOString(),
-      external_id: encodeGateCheckExternalId(externalId),
-      output: {
-        title: `${options.payload.gate} gate: preparation_failed`,
-        summary: 'Gate input could not be validated; merge remains blocked.',
-        text: durableText,
-      },
-    },
-    fetchImpl: options.fetchImpl,
-  });
-  assertTrustedAppCheck({
-    check,
-    expectedAppId: safeInteger(options.credentials.appId, 'GitHub App ID'),
-    expectedName: options.checkName,
-    expectedSha: options.payload.target_sha,
-    expectedExternalId: externalId,
-    expectedStatus: 'completed',
-  });
-  if (check.conclusion !== 'action_required') {
-    throw new Error('前段検証失敗のCheck Runがaction_requiredで完了していません');
-  }
-}
-
 export async function readTrustedGateCheck(options: {
   repository: string;
   repositoryId: number;
@@ -620,43 +557,6 @@ export async function finalizeTrustedGateCheck(options: {
         summary: options.reportOversize || outputOversize
           ? 'Canonical gate output exceeds the trusted recorder limit; merge remains blocked.'
           : `blocker_count=${blockers.length}; blocker_digest=${digestOf(canonicalJson(blockers))}`,
-        text: durableText,
-      },
-    },
-    fetchImpl: options.fetchImpl,
-  });
-}
-
-export async function finalizeTrustedGateCheckFailure(options: {
-  repository: string;
-  repositoryId: number;
-  credentials: GithubAppCredentials;
-  checkId: number;
-  attestation: TrustedGateAttestationEnvelope;
-  reason: 'attestation_failed' | 'verification_failed';
-  fetchImpl?: typeof fetch;
-}): Promise<void> {
-  const durableText = canonicalJson({
-    schema_version: 'agent-skill-chain/check-output-error/v1',
-    attestation: options.attestation,
-    reason: options.reason,
-  });
-  if (Buffer.byteLength(durableText, 'utf8') > MAX_CHECK_OUTPUT_BYTES) {
-    throw new Error('action_required error envelopeもGitHub Check output上限を超えています');
-  }
-  await appCheckRequest<unknown>({
-    repository: options.repository,
-    repositoryId: options.repositoryId,
-    credentials: options.credentials,
-    path: `/repos/${options.repository}/check-runs/${safeInteger(options.checkId, 'Check ID')}`,
-    method: 'PATCH',
-    body: {
-      status: 'completed',
-      conclusion: 'action_required',
-      completed_at: new Date().toISOString(),
-      output: {
-        title: `${options.attestation.gate} gate: ${options.reason}`,
-        summary: 'Gate attestation could not be established; merge remains blocked.',
         text: durableText,
       },
     },

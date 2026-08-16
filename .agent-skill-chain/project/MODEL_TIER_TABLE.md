@@ -26,7 +26,7 @@ AI reviewは進行役がcleanなrepository default branchのprotected base workt
 
 trusted recorderはverdict、target SHA、prompt/artifact/launcher digest、protected base SHA、one-time attempt ID/token、credential-scrubbed ephemeral-clone/read-only attestation、adapter能力、`review-` namespaceのreviewer run ID/slotをGitHub PR reviewへ保存する。Review API actorはAIレビュア本人ではなくCoordination Backendへの記録主体であり、writer actorと同一でもよい。worker/reviewerにはReview API投稿能力を与えない。
 
-PR/commit/review API metadataと証跡をGitHub Actions上で自動検証しgate reportとCheck Runを生成するtrusted gate recorder workflowは、ローカルレビューが送出する `agent-skill-chain-gate-record` を受信する。workflowはAI、provider CLI、Codex Action、provider API credential、self-hosted runnerを使用せず、review actorが未登録・actor関係未解決・実行attestation不一致・SHA不一致・digest不一致・latest Strict attemptのslot不足/重複・判定不能なら `action_required` とし、旧attemptへfallbackせず、latest attemptの全reviewerがpass/passかつblocking無しの場合だけsuccessとする。GitHubモードでのI2判定がガイドラインであり、レビュー実施要否を進行役が判断する点は変わらない（AGENTS.md I2）。
+PR/commit/review API metadataと証跡をGitHub Actions上で自動検証しgate reportとCheck Runを生成する専用verifier workflowは、Issue #386（gate/reconcile/trusted-gate 3ワークフロー削除）以降このリポジトリに存在しない。GitHubモードでのI2判定はガイドラインであり進行役の手動判断による（AGENTS.md I2）。将来自動verifierを再導入する場合の設計条件は次の通り：AI、provider CLI、Codex Action、provider API credential、self-hosted runnerを使用しないこと、review actorが未登録・actor関係未解決・実行attestation不一致・SHA不一致・digest不一致・latest Strict attemptのslot不足/重複・判定不能なら `action_required` とすること、旧attemptへfallbackしないこと、latest attemptの全reviewerがpass/passかつblocking無しの場合だけsuccessとすること。
 
 GitHub Actions Appの一致だけではworkflow sourceを識別できない。#274は固定SHAのbootstrapとreport整合性までを扱う。GitHub モードのI2はガイドラインであり自動CI強制を持たないため（AGENTS.md I2）、本書が扱うのは進行役が手動起動するコア変更レビューのモデル選定に限る。
 
