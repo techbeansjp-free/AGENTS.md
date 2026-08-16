@@ -35,6 +35,29 @@ _codex_auth_ok() {
 # 一切ログに流さない。
 _claude_auth_ok() { _codex_auth_ok; }
 
+# Issue #691: Codex reviewerも実際のレビュアと同じ隔離HOME・cwdで認証を検証する。
+_codex_reviewer_auth_ok() {
+  local probe="${CODEX_AUTH_PROBE_CMD:-}"
+  if [[ -z "$probe" ]]; then
+    local codex_executable="${CODEX_EXECUTABLE:-codex}"
+    if command -v "$codex_executable" >/dev/null 2>&1; then
+      local quoted_executable
+      printf -v quoted_executable '%q' "$(command -v "$codex_executable")"
+      probe="$quoted_executable login status"
+    else
+      return 1
+    fi
+  fi
+  local timeout_sec="${CODEX_AUTH_PROBE_TIMEOUT_SEC:-20}"
+  _run_reviewer_sanitized "" "$probe" "$timeout_sec" >/dev/null 2>&1
+}
+
+_claude_reviewer_auth_ok() { _codex_reviewer_auth_ok; }
+
+_reviewer_auth_failure_message() {
+  printf '%s\n' "隔離環境でCodexの認証が成立しません（CODEX_HOME/auth.jsonの認証情報が見つからないか、認証probeに失敗しました）。呼び出し元HOMEは利用できないため、隔離領域へ複製可能なauth.jsonを用意するかcodex loginを実行してください"
+}
+
 # モデル決定順序（ISSUE-307 / ADR-0015、テスト用完全上書き CODEX_WORKER_CMD・WORKER_CMD は
 # launch_worker 側で最優先判定済み）:
 #   (1) アダプタ固有の個別上書き環境変数（CODEX_IMPLEMENTATION_MODEL / CODEX_HIGH_CAPABILITY_MODEL）
@@ -118,29 +141,15 @@ launch_gate_reviewer() {
   ASC_REVIEW_REASONING="$effort"
   export ASC_REVIEW_MODEL ASC_REVIEW_REASONING
 
-  local original_home="${HOME:-}"
-  local isolated_root
-  isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-reviewer.XXXXXX")"
-  ASC_REVIEWER_ORIGINAL_HOME="$original_home"
-  ASC_REVIEWER_SANITIZED_ROOT="$isolated_root"
-  export ASC_REVIEWER_ORIGINAL_HOME ASC_REVIEWER_SANITIZED_ROOT
-
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
     if ! command -v "$codex_executable" >/dev/null 2>&1; then
       _codex_fail_safe "Codex CLI が見つかりません"
-      local fail_safe_rc=$?
-      rm -rf -- "$isolated_root"
-      return "$fail_safe_rc"
+      return
     fi
     local quoted_executable
-    local quoted_root
-    local denied_home
-    printf -v quoted_executable '%q' "$codex_executable"
-    printf -v quoted_root '%q' "$isolated_root/workspace"
-    denied_home="${original_home//\\/\\\\}"
-    denied_home="${denied_home//\"/\\\"}"
-    GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -C $quoted_root --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'approval_policy=\"never\"' -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"$denied_home\"=\"deny\"}' -"
+    printf -v quoted_executable '%q' "$(command -v "$codex_executable")"
+    GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'approval_policy=\"never\"' -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"/home\"=\"deny\",\"/Users\"=\"deny\",\"/root\"=\"deny\"}' -"
   elif [[ -n "${CODEX_REVIEWER_CMD:-}" ]]; then
     GATE_REVIEWER_CMD="$CODEX_REVIEWER_CMD"
   fi
@@ -149,7 +158,6 @@ launch_gate_reviewer() {
   set +e
   _codex_gate_lifecycle "$@"
   local rc=$?
-  rm -rf -- "$isolated_root"
   return "$rc"
 }
 
