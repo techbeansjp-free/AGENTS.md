@@ -184,7 +184,33 @@ _claude_reviewer_auth_ok() {
 }
 
 _reviewer_auth_failure_message() {
-  printf '%s\n' "隔離環境でClaude Codeの認証が成立しません（認証情報が見つからないか、認証probeに失敗しました）。macOS Keychainなどcaller HOMEに紐づく認証は利用できません。ANTHROPIC_API_KEYまたはCLAUDE_CODE_OAUTH_TOKEN、もしくはCLAUDE_CONFIG_DIR配下のログイン情報を設定してください"
+  local original_home="${HOME:-}"
+  local claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
+  local portable_auth_found=false
+
+  printf '%s\n' "隔離環境でClaude Codeの認証probeに失敗しました。"
+  if [[ -n "${ANTHROPIC_API_KEY:-}" || -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    printf '%s\n' "- 環境変数による資格情報: 設定されています（実値は表示しません）。"
+    portable_auth_found=true
+  else
+    printf '%s\n' "- 環境変数による資格情報: ANTHROPIC_API_KEYとCLAUDE_CODE_OAUTH_TOKENは未設定です。"
+  fi
+  if [[ -n "$claude_config" && -f "$claude_config/.credentials.json" && ! -L "$claude_config/.credentials.json" ]]; then
+    printf '%s\n' "- 設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりました。"
+    portable_auth_found=true
+  else
+    printf '%s\n' "- 設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりません。"
+  fi
+  if [[ "$portable_auth_found" == "true" ]]; then
+    printf '%s\n' "持ち込み可能な認証情報は検出されましたが、隔離環境の認証probeが失敗しています。資格情報の有効性と権限を確認してください。"
+  else
+    printf '%s\n' "隔離環境へ持ち込める認証情報がありません。macOS Keychainなどcaller HOMEに紐づく資格情報ストアは利用できません。"
+  fi
+  # Issue #691: 値を表示しないtestコマンドとcaller側のprobeを組み合わせ、資格情報ストア限定構成を判別可能にする。
+  printf '%s\n' '資格情報ストア限定構成の判定方法: 呼び出し元で `claude auth status` が成功し、次の両方が失敗する場合はmacOS Keychainなどの資格情報ストア限定構成です。'
+  printf '%s\n' '  test -n "${ANTHROPIC_API_KEY:-}${CLAUDE_CODE_OAUTH_TOKEN:-}"'
+  printf '%s\n' '  test -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json" && test ! -L "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json"'
+  printf '%s\n' "回避するには、ANTHROPIC_API_KEYまたはCLAUDE_CODE_OAUTH_TOKEN、もしくは設定ディレクトリ配下の通常ファイルとしてログイン情報を設定してください。"
 }
 
 # writer lease を取得する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる。

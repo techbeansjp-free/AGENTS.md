@@ -309,12 +309,14 @@ test('claude launch_gate_reviewer: caller HOME依存の認証不成立は原因�
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.equal(fs.existsSync(reviewerMarker), false, '決定的な認証不成立ではレビュアを起動しないこと');
-  assert.match(res.stderr, /隔離環境でClaude Codeの認証が成立しません/);
-  assert.match(res.stderr, /認証情報が見つからないか、認証probeに失敗/);
+  assert.match(res.stderr, /隔離環境でClaude Codeの認証probeに失敗/);
+  assert.match(res.stderr, /ANTHROPIC_API_KEYとCLAUDE_CODE_OAUTH_TOKENは未設定/);
+  assert.match(res.stderr, /設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりません/);
+  assert.match(res.stderr, /隔離環境へ持ち込める認証情報がありません/);
+  assert.match(res.stderr, /呼び出し元で `claude auth status` が成功/);
+  assert.match(res.stderr, /test -n "\$\{ANTHROPIC_API_KEY:-\}\$\{CLAUDE_CODE_OAUTH_TOKEN:-\}"/);
+  assert.match(res.stderr, /test -f "\$\{CLAUDE_CONFIG_DIR:-\$HOME\/\.claude\}\/\.credentials\.json"/);
   assert.match(res.stderr, /macOS Keychain/);
-  assert.match(res.stderr, /ANTHROPIC_API_KEY/);
-  assert.match(res.stderr, /CLAUDE_CODE_OAUTH_TOKEN/);
-  assert.match(res.stderr, /CLAUDE_CONFIG_DIR/);
   assert.doesNotMatch(res.stderr, new RegExp(callerHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
@@ -324,10 +326,13 @@ test('claude launch_gate_reviewer: tokenが存在しても隔離環境の認証p
   setAdapter(repo.dir, 'claude');
 
   const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-fast-path-issue691-'));
+  const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-token-home-issue691-'));
   const reviewerMarker = path.join(markerDir, 'reviewer-invoked');
   t.after(() => fs.rmSync(markerDir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(callerHome, { recursive: true, force: true }));
   const secretToken = 'issue691-invalid-token-must-not-be-logged';
   const env = envWithout([], {
+    HOME: callerHome,
     ANTHROPIC_API_KEY: secretToken,
     CLAUDE_AUTH_PROBE_CMD: 'false',
     GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}`,
@@ -339,8 +344,36 @@ test('claude launch_gate_reviewer: tokenが存在しても隔離環境の認証p
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.equal(fs.existsSync(reviewerMarker), false);
-  assert.match(res.stderr, /認証情報が見つからないか、認証probeに失敗/);
+  assert.match(res.stderr, /環境変数による資格情報: 設定されています（実値は表示しません）/);
+  assert.match(res.stderr, /設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりません/);
+  assert.match(res.stderr, /持ち込み可能な認証情報は検出されましたが、隔離環境の認証probeが失敗/);
   assert.doesNotMatch(res.stderr, new RegExp(secretToken));
+  assert.doesNotMatch(res.stderr, new RegExp(callerHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('claude launch_gate_reviewer: 設定ディレクトリのログイン情報があってprobeに失敗した原因を区別する（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const claudeConfig = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-config-diagnostic-issue691-'));
+  const secretCredential = 'issue691-credential-content-must-not-be-logged';
+  t.after(() => fs.rmSync(claudeConfig, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(claudeConfig, '.credentials.json'), secretCredential, 'utf8');
+  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
+    CLAUDE_CONFIG_DIR: claudeConfig,
+    CLAUDE_AUTH_PROBE_CMD: 'false',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /ANTHROPIC_API_KEYとCLAUDE_CODE_OAUTH_TOKENは未設定/);
+  assert.match(res.stderr, /設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりました/);
+  assert.match(res.stderr, /持ち込み可能な認証情報は検出されましたが、隔離環境の認証probeが失敗/);
+  assert.doesNotMatch(res.stderr, new RegExp(secretCredential));
+  assert.doesNotMatch(res.stderr, new RegExp(claudeConfig.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('claude launch_gate_reviewer: 認証未設定かつ実疎通確認も失敗する場合は安全側（human_required）へ倒し exit が 0 でも 3 でもない（真の認証欠如、regressionなし）', async (t) => {
