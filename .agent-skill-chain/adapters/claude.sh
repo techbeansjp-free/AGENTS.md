@@ -119,17 +119,10 @@ _run_reviewer_sanitized() {
   local original_home="${HOME:-}"
   local codex_home="${CODEX_HOME:-${original_home:+$original_home/.codex}}"
   local claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
-  local reviewer_home="$isolated_root/home"
-  # Issue #691: Claude CodeのmacOSログインはKeychainを使うため、認証probeが参照したHOMEを維持する。
-  # callerが別のHOMEを注入できる専用変数は受け付けず、OS判定もPATHではなく固定system binaryを使う。
-  # XDG・Git・GitHubの設定は引き続き隔離する。
-  if [[ -n "$original_home" && -x /usr/bin/uname && "$(/usr/bin/uname -s 2>/dev/null)" == "Darwin" ]]; then
-    reviewer_home="$original_home"
-  fi
   local -a clean_env=(
     env -i
     "PATH=$PATH"
-    "HOME=$reviewer_home"
+    "HOME=$isolated_root/home"
     "XDG_CONFIG_HOME=$isolated_root/xdg"
     "GH_CONFIG_DIR=$isolated_root/xdg/gh"
     "GIT_CONFIG_GLOBAL=/dev/null"
@@ -157,6 +150,24 @@ _run_reviewer_sanitized() {
   [[ "$owns_root" == "true" ]] && rm -rf -- "$isolated_root"
   printf '%s' "$output"
   return "$rc"
+}
+
+# Issue #691: レビュアの認証プローブも実際のレビュアと同じ隔離環境で実行する。
+# caller HOMEに紐づくKeychain認証を利用可能と誤判定せず、決定的な認証不成立は再試行前に検出する。
+_claude_reviewer_auth_ok() {
+  if [[ -n "${ANTHROPIC_API_KEY:-}" || -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    return 0
+  fi
+  local probe="${CLAUDE_AUTH_PROBE_CMD:-}"
+  if [[ -z "$probe" ]]; then
+    if command -v claude >/dev/null 2>&1; then
+      probe='claude auth status'
+    else
+      return 1
+    fi
+  fi
+  local t="${CLAUDE_AUTH_PROBE_TIMEOUT_SEC:-20}"
+  _run_reviewer_sanitized "" "$probe" "$t" >/dev/null 2>&1
 }
 
 # writer lease を取得する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる。
@@ -289,10 +300,10 @@ launch_gate_reviewer() {
     fi
   fi
 
-  # 認証（実値はログ・stdout に出さない）。env非空の高速パス→claude auth statusの実疎通フォールバック
-  # の2段判定（Issue #185 _claude_auth_ok）。真に認証が欠如している場合のみフェイルセーフする。
-  if ! _claude_auth_ok; then
-    _fail_safe "認証情報が未設定かつ実疎通確認にも失敗しました（env未設定・claude auth status失敗/不在）"
+  # 認証（実値はログ・stdout に出さない）。env非空の高速パス→隔離環境内の実疎通フォールバック
+  # の2段判定を行い、実際のレビュア環境で認証できない場合だけフェイルセーフする。
+  if ! _claude_reviewer_auth_ok; then
+    _fail_safe "隔離環境でClaude Codeの認証情報が見つかりません。macOS Keychainなどcaller HOMEに紐づく認証は利用できません。ANTHROPIC_API_KEYまたはCLAUDE_CODE_OAUTH_TOKEN、もしくはCLAUDE_CONFIG_DIR配下のログイン情報を設定してください"
     return
   fi
 

@@ -208,78 +208,15 @@ test('gate reviewer credential boundary: GitHub token・git/gh configをAI subpr
   assert.equal(readFinal(reportPath), 'approved');
 });
 
-test('claude launch_gate_reviewer: macOS Keychainログインでは認証probeとreviewerが同じHOMEを使う（Issue #691）', async (t) => {
-  if (process.platform !== 'darwin') {
-    t.skip('macOS固有のKeychain経路は実macOSで検証する');
-    return;
-  }
-
+test('claude launch_gate_reviewer: 全OSでcaller HOMEを隔離し専用HOME変数も受け付けない（Issue #691）', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
 
-  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-keychain-issue691-'));
   const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-caller-home-issue691-'));
-  const spoofedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-spoofed-home-issue691-'));
-  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-reviewer-root-issue691-'));
   t.after(() => fs.rmSync(callerHome, { recursive: true, force: true }));
-  t.after(() => fs.rmSync(spoofedHome, { recursive: true, force: true }));
-  const claudeStub = path.join(stubDir, 'claude');
-  const homeLog = path.join(stubDir, 'home.log');
-  const unameStub = path.join(stubDir, 'uname');
-  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
-  fs.writeFileSync(
-    claudeStub,
-    [
-      '#!/usr/bin/env bash',
-      'set -euo pipefail',
-      `printf '%s|%s\\n' "\${HOME:-}" "\${ASC_REVIEWER_ORIGINAL_HOME:-}" >> ${JSON.stringify(homeLog)}`,
-      `test "\${HOME:-}" = ${JSON.stringify(callerHome)}`,
-      'if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then exit 0; fi',
-      'cat >/dev/null',
-      `printf '%s' ${JSON.stringify(stubVerdict)}`,
-      '',
-    ].join('\n'),
-    { mode: 0o755 },
-  );
-  // Issue #691: 実装は固定パスのOS情報を使うため、このPATH stubはmacOS分岐を作らない。
-  // 逆の値を返しても実macOSではcaller HOMEを維持できることを検証する。
-  fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Linux\\n\'\n', { mode: 0o755 });
-
-  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
-    HOME: callerHome,
-    ASC_REVIEWER_ORIGINAL_HOME: spoofedHome,
-    PATH: `${stubDir}:${process.env.PATH}`,
-    CLAUDE_EXECUTABLE: claudeStub,
-    CLAUDE_AUTH_PROBE_CMD: `${JSON.stringify(claudeStub)} auth status`,
-    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
-  });
-  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
-
-  assert.equal(res.status, 0, res.stderr);
-  assert.equal(readFinal(reportPath), 'approved');
-  assert.deepEqual(fs.readFileSync(homeLog, 'utf8').trim().split('\n'), [
-    `${callerHome}|${spoofedHome}`,
-    `${callerHome}|`,
-  ]);
-});
-
-test('claude launch_gate_reviewer: macOS以外ではPATH上のunameがDarwinを返してもcaller HOMEを隔離する（Issue #691）', async (t) => {
-  if (process.platform === 'darwin') {
-    t.skip('非macOSの隔離経路は非macOSで検証する');
-    return;
-  }
-
-  const { repo, reportPath, targetSha } = setupGateReview();
-  t.after(() => repo.cleanup());
-  setAdapter(repo.dir, 'claude');
-
-  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-home-isolation-'));
-  const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-reviewer-root-'));
-  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
   t.after(() => fs.rmSync(isolatedRoot, { recursive: true, force: true }));
-  const unameStub = path.join(stubDir, 'uname');
-  fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Darwin\\n\'\n', { mode: 0o755 });
   const expectedReviewerHome = path.join(isolatedRoot, 'home');
   const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
   const command = [
@@ -288,8 +225,9 @@ test('claude launch_gate_reviewer: macOS以外ではPATH上のunameがDarwinを�
     'test -z "${ASC_REVIEWER_ORIGINAL_HOME:-}"',
     `printf '%s' ${JSON.stringify(stubVerdict)}`,
   ].join('; ');
+
   const env = envWithout([], {
-    PATH: `${stubDir}:${process.env.PATH}`,
+    HOME: callerHome,
     ANTHROPIC_API_KEY: 'dummy-key',
     ASC_REVIEWER_ORIGINAL_HOME: '/caller-controlled/reviewer-home',
     ASC_REVIEWER_SANITIZED_ROOT: isolatedRoot,
@@ -300,6 +238,37 @@ test('claude launch_gate_reviewer: macOS以外ではPATH上のunameがDarwinを�
 
   assert.equal(res.status, 0, res.stderr);
   assert.equal(readFinal(reportPath), 'approved');
+});
+
+test('claude launch_gate_reviewer: caller HOME依存の認証不成立は原因と回避手段を診断して再試行しない（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-keychain-home-issue691-'));
+  const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-keychain-root-issue691-'));
+  const reviewerMarker = path.join(isolatedRoot, 'reviewer-invoked');
+  t.after(() => fs.rmSync(callerHome, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(isolatedRoot, { recursive: true, force: true }));
+  const env = envWithout([], {
+    HOME: callerHome,
+    ASC_REVIEWER_SANITIZED_ROOT: isolatedRoot,
+    CLAUDE_AUTH_PROBE_CMD: `test "\${HOME:-}" = ${JSON.stringify(callerHome)}`,
+    GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}`,
+    GATE_REVIEWER_RETRIES: '3',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.equal(fs.existsSync(reviewerMarker), false, '決定的な認証不成立ではレビュアを起動しないこと');
+  assert.match(res.stderr, /隔離環境でClaude Codeの認証情報が見つかりません/);
+  assert.match(res.stderr, /macOS Keychain/);
+  assert.match(res.stderr, /ANTHROPIC_API_KEY/);
+  assert.match(res.stderr, /CLAUDE_CODE_OAUTH_TOKEN/);
+  assert.match(res.stderr, /CLAUDE_CONFIG_DIR/);
+  assert.doesNotMatch(res.stderr, new RegExp(callerHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('claude launch_gate_reviewer: 認証未設定かつ実疎通確認も失敗する場合は安全側（human_required）へ倒し exit が 0 でも 3 でもない（真の認証欠如、regressionなし）', async (t) => {
