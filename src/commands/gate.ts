@@ -312,7 +312,13 @@ function changedPaths(root: string, baseSha: string, targetSha: string): string[
   return result.stdout.split('\n').map((entry) => entry.trim()).filter(Boolean);
 }
 
-function expectedArtifactPaths(root: string, gateId: Segment, baseSha: string, targetSha: string): string[] {
+function expectedArtifactPaths(
+  root: string,
+  gateId: Segment,
+  baseSha: string,
+  targetSha: string,
+  allowEmpty = false,
+): string[] {
   const changed = changedPaths(root, baseSha, targetSha);
   const candidates =
     gateId === 'spec'
@@ -327,7 +333,7 @@ function expectedArtifactPaths(root: string, gateId: Segment, baseSha: string, t
                 !entry.startsWith('docs/adr/'),
             );
   const unique = [...new Set(candidates)];
-  if (unique.length === 0) throw new CliError(`${gateId} gateの承認対象成果物がありません`);
+  if (!allowEmpty && unique.length === 0) throw new CliError(`${gateId} gateの承認対象成果物がありません`);
   return unique;
 }
 
@@ -1985,6 +1991,39 @@ function collectAcIds(specText: string): string[] {
   return [...ids].sort((a, b) => Number(a.slice(3)) - Number(b.slice(3)));
 }
 
+interface ChangedPathStatus {
+  status: string;
+  path: string;
+  oldPath?: string;
+}
+
+function changedPathStatuses(root: string, baseSha: string, targetSha: string): ChangedPathStatus[] {
+  const result = git(
+    ['diff', '--name-status', '-z', '--find-renames', `${baseSha}...${targetSha}`],
+    root,
+  );
+  if (result.status !== 0) throw new CliError(`base...targetの変更種別を取得できません: ${result.stderr.trim()}`);
+
+  const fields = result.stdout.split('\0');
+  if (fields.at(-1) === '') fields.pop();
+  const statuses: ChangedPathStatus[] = [];
+  for (let index = 0; index < fields.length;) {
+    const status = fields[index++];
+    if (!status) throw new CliError('base...targetの変更種別を解釈できません');
+    if (/^[RC]/.test(status)) {
+      const oldPath = fields[index++];
+      const changedPath = fields[index++];
+      if (!oldPath || !changedPath) throw new CliError('base...targetの改名情報を解釈できません');
+      statuses.push({ status, oldPath, path: changedPath });
+    } else {
+      const changedPath = fields[index++];
+      if (!changedPath) throw new CliError('base...targetの変更パスを解釈できません');
+      statuses.push({ status, path: changedPath });
+    }
+  }
+  return statuses;
+}
+
 function buildReviewerPrompt(
   root: string,
   number: string,
@@ -2084,24 +2123,60 @@ function buildReviewerPrompt(
     sections.push('');
 
     const artifactNames = baseSha
-      ? expectedArtifactPaths(root, gateId, baseSha, targetSha)
+      ? expectedArtifactPaths(root, gateId, baseSha, targetSha, true)
       : SEGMENT_ARTIFACTS[gateId];
     if (baseSha) {
-      const diff = git(
-        ['diff', '--no-ext-diff', '--no-color', '--full-index', `${baseSha}...${targetSha}`, '--', ...artifactNames],
-        root,
-      );
+      const statuses = changedPathStatuses(root, baseSha, targetSha);
+      const statusByPath = new Map(statuses.map((entry) => [entry.path, entry]));
+      const omittedAdditions = artifactNames.filter((name) => statusByPath.get(name)?.status === 'A');
+      const diffPathspec = artifactNames.flatMap((name) => {
+        if (omittedAdditions.includes(name)) return [];
+        const status = statusByPath.get(name);
+        return status?.oldPath ? [status.oldPath, name] : [name];
+      });
+      const diff = diffPathspec.length > 0
+        ? git(
+            [
+              'diff',
+              '--no-ext-diff',
+              '--no-color',
+              '--full-index',
+              '--find-renames',
+              `${baseSha}...${targetSha}`,
+              '--',
+              ...new Set(diffPathspec),
+            ],
+            root,
+          )
+        : { status: 0, stdout: '', stderr: '' };
       if (diff.status !== 0) throw new CliError(`判定対象差分を読めません: ${diff.stderr.trim()}`);
       sections.push('## 判定対象の差分');
-      sections.push(diff.stdout ? '```diff\n' + diff.stdout.trimEnd() + '\n```' : '(差分なし)');
+      if (artifactNames.length === 0) {
+        sections.push('(対象成果物なし)');
+      } else {
+        if (omittedAdditions.length > 0) {
+          sections.push(
+            '次の対象成果物は新規追加であり、差分が全文再掲になるため差分での展開を省略した。' +
+              '全文は「判定対象の成果物」に展開済みである。',
+          );
+          for (const name of omittedAdditions) sections.push(`- ${name}（変更種別: 追加、差分: 省略）`);
+        }
+        if (diff.stdout) sections.push('```diff\n' + diff.stdout.trimEnd() + '\n```');
+        else if (omittedAdditions.length === 0) sections.push('(差分なし)');
+      }
       sections.push('');
     }
     sections.push('## 判定対象の成果物');
-    for (const name of artifactNames) {
-      const content = readArtifact(name);
-      sections.push(`### ${name}`);
-      sections.push(content !== undefined ? '```\n' + content.trimEnd() + '\n```' : '(未検出)');
+    if (artifactNames.length === 0) {
+      sections.push('(対象成果物なし)');
       sections.push('');
+    } else {
+      for (const name of artifactNames) {
+        const content = readArtifact(name);
+        sections.push(`### ${name}`);
+        sections.push(content !== undefined ? '```\n' + content.trimEnd() + '\n```' : '(未検出)');
+        sections.push('');
+      }
     }
     if (gateId !== 'spec') {
       sections.push('## 上流の承認済み成果物（整合検査用）');

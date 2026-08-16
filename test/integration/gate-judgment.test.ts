@@ -21,14 +21,24 @@ const GOLDEN_PROMPT_PATH = fileURLToPath(new URL('../fixtures/gate-reviewer-prom
 const GOLDEN_FIXTURE_BASE_SHA = '5a9f3f234fd221cdec49b7885462b27746599b02';
 const GOLDEN_FIXTURE_TARGET_SHA = '82241c97d5b973d30b2bdbe8a16f03e3699393ae';
 
-function normalizeDiffIndexHashes(prompt: string): string {
-  return prompt.replace(/^index [0-9a-f]+\.\.[0-9a-f]+(?= |$)/gm, 'index <old>..<new>');
-}
-
 function promptDiffSection(prompt: string): string {
   const match = prompt.match(/## 判定対象の差分\n```diff\n([\s\S]*?)\n```/);
   assert.ok(match, '判定対象の差分セクションが存在すること');
   return match[1];
+}
+
+function commitAll(repoDir: string, message: string): string {
+  execFileSync('git', ['add', '-A'], { cwd: repoDir });
+  execFileSync('git', ['commit', '-m', message], { cwd: repoDir });
+  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+}
+
+function promptSection(prompt: string, heading: string, nextHeading: string): string {
+  const start = prompt.indexOf(`${heading}\n`);
+  const end = prompt.indexOf(`\n${nextHeading}`, start + heading.length);
+  assert.notEqual(start, -1, `${heading}が存在すること`);
+  assert.notEqual(end, -1, `${nextHeading}が存在すること`);
+  return prompt.slice(start + heading.length + 1, end);
 }
 
 interface GateReport {
@@ -586,7 +596,7 @@ test('gate reviewer-prompt: SPEC.md が未埋め込みファイルを名指し�
   assert.doesNotMatch(res.stdout, /existing behavior that SPEC\.md references/);
 });
 
-test('gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以外は修正前goldenと一致する', (t) => {
+test('gate reviewer-prompt: 新規追加成果物の全文再掲を省略した固定出力とバイト数上限を保つ', (t) => {
   const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-reviewer-prompt-golden-'));
   t.after(() => fs.rmSync(repoDir, { recursive: true, force: true }));
   execFileSync('git', ['init', '--initial-branch=main', '--object-format=sha1'], { cwd: repoDir, stdio: 'pipe' });
@@ -628,17 +638,128 @@ test('gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以�
   const prompt = result.stdout.trimEnd();
   assert.match(prompt, new RegExp(`^- target_sha: ${targetSha}$`, 'm'));
 
-  const diffSection = promptDiffSection(prompt);
+  const golden = fs.readFileSync(GOLDEN_PROMPT_PATH, 'utf8').trimEnd();
+  assert.match(golden, new RegExp(`^- target_sha: ${GOLDEN_FIXTURE_TARGET_SHA}$`, 'm'));
+  assert.equal(prompt, golden);
+  assert.equal(Buffer.byteLength(prompt, 'utf8'), 3_839);
+  assert.equal(prompt.match(/AC-1: deterministic prompt/g)?.length, 1);
+  assert.match(prompt, /SPEC\.md（変更種別: 追加、差分: 省略）/);
+  assert.doesNotMatch(prompt, /new file mode|\+AC-1: deterministic prompt/);
+});
+
+test('gate reviewer-prompt: 既存変更・新規追加・空ファイル・削除の情報をパス単位で保持する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  fs.writeFileSync(path.join(repo.dir, 'existing.txt'), 'before\nkept\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'deleted.txt'), 'deleted body\n', 'utf8');
+  const baseSha = commitAll(repo.dir, 'test: add implementation prompt base');
+
+  fs.writeFileSync(path.join(repo.dir, 'existing.txt'), 'after\nkept\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'added.txt'), 'added body\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'empty.txt'), '', 'utf8');
+  fs.rmSync(path.join(repo.dir, 'deleted.txt'));
+  const targetSha = commitAll(repo.dir, 'test: mix implementation prompt changes');
+
+  const result = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-681', 'implementation', targetSha, baseSha],
+    { cwd: repo.dir },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const diffSection = promptSection(result.stdout, '## 判定対象の差分', '## 判定対象の成果物');
+
+  assert.match(diffSection, /added\.txt（変更種別: 追加、差分: 省略）/);
+  assert.match(diffSection, /empty\.txt（変更種別: 追加、差分: 省略）/);
+  assert.doesNotMatch(diffSection, /diff --git a\/added\.txt|diff --git a\/empty\.txt|\+added body/);
+  assert.match(diffSection, /diff --git a\/existing\.txt b\/existing\.txt/);
+  assert.match(diffSection, /-before\n\+after/);
+  assert.match(diffSection, /diff --git a\/deleted\.txt b\/deleted\.txt/);
+  assert.match(diffSection, /-deleted body/);
   const indexLines = diffSection.match(/^index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?$/gm) ?? [];
-  assert.ok(indexLines.length > 0, 'diff区間にindex行が存在すること');
+  assert.ok(indexLines.length > 0, '保持した差分のindex行が存在すること');
   for (const line of indexLines) {
     const match = line.match(/^index ([0-9a-f]+)\.\.([0-9a-f]+)(?: [0-7]{6})?$/);
     assert.ok(match);
     assert.ok(match[1].length === 40 || match[1].length === 64, `old hashが完全長であること: ${line}`);
     assert.equal(match[2].length, match[1].length, `new hashが完全長であること: ${line}`);
   }
+  assert.match(result.stdout, /### added\.txt\n```\nadded body\n```/);
+  assert.match(result.stdout, /### empty\.txt\n```\n\n```/);
+  assert.match(result.stdout, /### deleted\.txt\n\(未検出\)/);
+});
 
-  const golden = fs.readFileSync(GOLDEN_PROMPT_PATH, 'utf8').trimEnd();
-  assert.match(golden, new RegExp(`^- target_sha: ${GOLDEN_FIXTURE_TARGET_SHA}$`, 'm'));
-  assert.equal(normalizeDiffIndexHashes(prompt), normalizeDiffIndexHashes(golden));
+test('gate reviewer-prompt: 純粋な改名と内容変更付き改名のrename情報と差分を保持する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  fs.writeFileSync(path.join(repo.dir, 'pure-old.txt'), 'pure rename body\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'changed-old.txt'), 'line one\nline two\nline three\n', 'utf8');
+  const baseSha = commitAll(repo.dir, 'test: add rename prompt base');
+
+  execFileSync('git', ['mv', 'pure-old.txt', 'pure-new.txt'], { cwd: repo.dir });
+  execFileSync('git', ['mv', 'changed-old.txt', 'changed-new.txt'], { cwd: repo.dir });
+  fs.writeFileSync(path.join(repo.dir, 'changed-new.txt'), 'line one\nchanged line\nline three\n', 'utf8');
+  const targetSha = commitAll(repo.dir, 'test: rename implementation artifacts');
+
+  const result = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-681', 'implementation', targetSha, baseSha],
+    { cwd: repo.dir },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const diffSection = promptDiffSection(result.stdout);
+
+  assert.match(diffSection, /rename from pure-old\.txt\nrename to pure-new\.txt/);
+  assert.match(diffSection, /similarity index 100%/);
+  assert.match(diffSection, /rename from changed-old\.txt\nrename to changed-new\.txt/);
+  assert.match(diffSection, /-line two\n\+changed line/);
+  assert.doesNotMatch(result.stdout, /pure-new\.txt（変更種別: 追加、差分: 省略）/);
+  assert.doesNotMatch(result.stdout, /changed-new\.txt（変更種別: 追加、差分: 省略）/);
+});
+
+test('gate reviewer-prompt: 差分区間を対象成果物へ限定し上流SPECを二重展開しない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nupstream before\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'DESIGN.md'), '# DESIGN\n\nbefore\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'PLAN.md'), '# PLAN\n\nstable\n', 'utf8');
+  const baseSha = commitAll(repo.dir, 'test: add design prompt base');
+
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nupstream target unique\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'DESIGN.md'), '# DESIGN\n\nafter\n', 'utf8');
+  const targetSha = commitAll(repo.dir, 'test: change design and upstream spec');
+
+  const result = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-681', 'design', targetSha, baseSha],
+    { cwd: repo.dir },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const diffSection = promptDiffSection(result.stdout);
+  const upstreamSection = result.stdout.slice(result.stdout.indexOf('## 上流の承認済み成果物'));
+
+  assert.match(diffSection, /diff --git a\/DESIGN\.md b\/DESIGN\.md/);
+  assert.doesNotMatch(diffSection, /SPEC\.md|upstream target unique/);
+  assert.match(upstreamSection, /upstream target unique/);
+  assert.equal(result.stdout.match(/upstream target unique/g)?.length, 1);
+});
+
+test('gate reviewer-prompt: implementation対象成果物が空集合なら両区間で明示する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nbefore\n', 'utf8');
+  const baseSha = commitAll(repo.dir, 'test: add empty target set base');
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nafter\n', 'utf8');
+  const targetSha = commitAll(repo.dir, 'test: change only non-target artifact');
+
+  const result = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-681', 'implementation', targetSha, baseSha],
+    { cwd: repo.dir },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /## 判定対象の差分\n\(対象成果物なし\)\n\n## 判定対象の成果物\n\(対象成果物なし\)/,
+  );
+  assert.equal(result.stdout.match(/after/g)?.length, 1);
 });
