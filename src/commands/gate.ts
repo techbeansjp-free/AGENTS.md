@@ -308,9 +308,11 @@ function aggregateVerdicts(verdicts: ReviewerVerdict[]): ReviewerVerdict {
 }
 
 function changedPaths(root: string, baseSha: string, targetSha: string): string[] {
-  const result = git(['diff', '--name-only', `${baseSha}...${targetSha}`], root);
+  const result = git(['diff', '--name-only', '-z', `${baseSha}...${targetSha}`], root);
   if (result.status !== 0) throw new CliError(`base...target差分を取得できません: ${result.stderr.trim()}`);
-  return result.stdout.split('\n').map((entry) => entry.trim()).filter(Boolean);
+  const paths = result.stdout.split('\0');
+  if (paths.at(-1) === '') paths.pop();
+  return paths;
 }
 
 function expectedArtifactPaths(

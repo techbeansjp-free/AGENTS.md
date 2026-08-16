@@ -751,6 +751,53 @@ test('gate reviewer-prompt: 既存変更・新規追加・空ファイル・削�
   assert.match(result.stdout, /### deleted\.txt\n\(未検出\)/);
 });
 
+test('gate reviewer-prompt: 特殊文字を含む新規成果物を差分で省略明示し成果物で全文展開する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+  }).trim();
+  const artifacts = [
+    { name: 'line\nbreak.txt', body: 'newline path body\n' },
+    { name: 'tab\tname.txt', body: 'tab path body\n' },
+    { name: '日本語.txt', body: 'non ascii path body\n' },
+  ];
+  for (const artifact of artifacts) {
+    fs.writeFileSync(path.join(repo.dir, artifact.name), artifact.body, 'utf8');
+  }
+  const targetSha = commitAll(repo.dir, 'test: add implementation artifacts with special paths');
+
+  const result = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-681', 'implementation', targetSha, baseSha],
+    { cwd: repo.dir },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const diffSection = promptSection(result.stdout, '## 判定対象の差分', '## 判定対象の成果物');
+  const artifactSection = promptSection(
+    result.stdout,
+    '## 判定対象の成果物',
+    '## 上流の承認済み成果物（整合検査用）',
+  );
+
+  for (const artifact of artifacts) {
+    assert.ok(
+      diffSection.includes(`- ${artifact.name}（変更種別: 追加、差分: 省略）`),
+      `${JSON.stringify(artifact.name)} の追加差分が省略明示されること`,
+    );
+    assert.ok(
+      artifactSection.includes(`### ${artifact.name}\n\`\`\`\n${artifact.body.trimEnd()}\n\`\`\``),
+      `${JSON.stringify(artifact.name)} の全文が成果物区間に展開されること`,
+    );
+    assert.equal(
+      result.stdout.match(new RegExp(artifact.body.trim(), 'g'))?.length,
+      1,
+      `${JSON.stringify(artifact.name)} の本文が二重展開されないこと`,
+    );
+  }
+});
+
 test('gate reviewer-prompt: 純粋な改名と内容変更付き改名のrename情報と差分を保持する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
