@@ -68,7 +68,7 @@ export interface UnresolvedGithubComment {
 }
 
 export interface GithubPartialFailure {
-  side: typeof GITHUB_ISSUE_SIDE | 'pr' | 'pr_review_thread_comments';
+  side: typeof GITHUB_ISSUE_SIDE | 'pr' | 'pr_review_thread_comments' | 'gate_review_trust_policy';
   reason: string;
 }
 
@@ -142,6 +142,7 @@ interface SuccessfulPrDetection {
   blockingFindings: GithubGateFinding[];
   comments: UnresolvedGithubComment[];
   reviewThreadCommentFailure?: string;
+  gateReviewTrustPolicyFailure?: string;
 }
 
 interface FailedSideDetection {
@@ -218,31 +219,38 @@ function unresolvedReviews(reviews: GithubReview[]): UnresolvedGithubReview[] {
   return unresolved;
 }
 
+interface GithubGateFindingDetection {
+  findings: GithubGateFinding[];
+  trustPolicyFailure?: string;
+}
+
 function unresolvedGateFindings(
   root: string,
   reviews: GithubReview[],
   issueNumber: string,
   segment: string | undefined,
   targetSha: string | undefined,
-): GithubGateFinding[] {
+): GithubGateFindingDetection {
   const targetOrigin = segment ? SEGMENT_TO_ORIGIN[segment as Segment] : undefined;
-  if (!targetOrigin || !targetSha) return [];
+  if (!targetOrigin || !targetSha) return { findings: [] };
 
-  let trustedActors: Set<string>;
+  let trustedActors: Set<string> | undefined;
+  let trustPolicyFailure: string | undefined;
   try {
-    trustedActors = new Set(loadCoreReviewPolicy(root)?.execution.trusted_reviewer_actors ?? []);
-  } catch {
-    // Issue #680: recorder登録を解決できない環境ではevidenceを信頼せず、worker起動は継続する。
-    trustedActors = new Set();
+    const policy = loadCoreReviewPolicy(root);
+    const configuredActors = policy?.execution.trusted_reviewer_actors;
+    if (!configuredActors || configuredActors.length === 0) {
+      trustPolicyFailure = 'ゲートレビューevidenceのtrusted actor登録をproject policyから解決できません';
+    } else {
+      trustedActors = new Set(configuredActors);
+    }
+  } catch (error) {
+    trustPolicyFailure = `ゲートレビューevidenceのtrusted actor登録を解決できません: ${errorReason(error)}`;
   }
-  if (trustedActors.size === 0) return [];
 
-  const matching: { evidence: ReviewEvidence; entry: { review: GithubReview; index: number } }[] = [];
+  const candidates: { evidence: ReviewEvidence; entry: { review: GithubReview; index: number } }[] = [];
   reviews.forEach((review, index) => {
-    const author = review.author?.login;
     if (
-      !author ||
-      !trustedActors.has(author) ||
       review.state === 'DISMISSED' ||
       typeof review.body !== 'string' ||
       !review.body.includes(REVIEW_EVIDENCE_MARKER)
@@ -259,12 +267,36 @@ function unresolvedGateFindings(
         typeof evidence.attempt_id === 'string' &&
         isEvidenceVerdict(evidence.verdict)
       ) {
-        matching.push({ evidence, entry: { review, index } });
+        candidates.push({ evidence, entry: { review, index } });
       }
     } catch {
       // 構造化evidenceの完全な検証とCheck Run発行はtrusted recorderが担う。
       // worker promptでは解釈不能なreviewをblocking findingとして推測しない。
     }
+  });
+
+  if (!trustedActors) {
+    const findings = candidates.flatMap(({ evidence }) => {
+      const hasRelevantBlocker = evidence.verdict.blockers.some(
+        (finding) => finding.severity === 'blocking' && finding.origin === targetOrigin,
+      );
+      if (!hasRelevantBlocker) return [];
+      return [{
+        severity: 'blocking' as const,
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_EVIDENCE_UNVERIFIED',
+        evidence: [
+          `${evidence.gate} gate evidenceにblocking findingがありますが、trusted actor登録を解決できないため内容を検証できません`,
+        ],
+        source_segment: evidence.gate,
+      }];
+    });
+    return { findings, ...(trustPolicyFailure ? { trustPolicyFailure } : {}) };
+  }
+
+  const matching = candidates.filter(({ entry }) => {
+    const author = entry.review.author?.login;
+    return typeof author === 'string' && trustedActors.has(author);
   });
 
   const findings: GithubGateFinding[] = [];
@@ -319,7 +351,7 @@ function unresolvedGateFindings(
       }
     }
   }
-  return findings;
+  return { findings };
 }
 
 function compareReviewEntries(
@@ -445,17 +477,18 @@ function detectGithubPrSide(
     }
     const reviewThreadResult = detectReviewThreadComments(root, payload.number);
     const head = git(['rev-parse', 'HEAD'], root);
+    const gateFindingResult = unresolvedGateFindings(
+      root,
+      payload.reviews,
+      issueNumber,
+      segment,
+      head.status === 0 ? head.stdout.trim() : undefined,
+    );
     return {
       succeeded: true,
       prNumber: payload.number,
       reviews: unresolvedReviews(payload.reviews),
-      blockingFindings: unresolvedGateFindings(
-        root,
-        payload.reviews,
-        issueNumber,
-        segment,
-        head.status === 0 ? head.stdout.trim() : undefined,
-      ),
+      blockingFindings: gateFindingResult.findings,
       comments: [
         ...payload.comments
           .map((comment) => unresolvedComment(comment, 'pr_comment'))
@@ -463,6 +496,9 @@ function detectGithubPrSide(
         ...reviewThreadResult.comments,
       ],
       ...(reviewThreadResult.failure ? { reviewThreadCommentFailure: reviewThreadResult.failure } : {}),
+      ...(gateFindingResult.trustPolicyFailure
+        ? { gateReviewTrustPolicyFailure: gateFindingResult.trustPolicyFailure }
+        : {}),
     };
   } catch (error) {
     return {
@@ -502,6 +538,12 @@ export function detectGithubReviewStatus(
     partialFailures.push({
       side: 'pr_review_thread_comments',
       reason: prResult.reviewThreadCommentFailure,
+    });
+  }
+  if (prResult.succeeded && prResult.gateReviewTrustPolicyFailure) {
+    partialFailures.push({
+      side: 'gate_review_trust_policy',
+      reason: prResult.gateReviewTrustPolicyFailure,
     });
   }
 

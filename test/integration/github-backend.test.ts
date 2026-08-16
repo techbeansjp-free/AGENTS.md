@@ -603,7 +603,7 @@ test('segment start (github backend): 完備したattemptがなければ判定�
   assert.match(result.stdout, /完備なゲートレビューattemptがなく/);
 });
 
-test('segment start (github backend): trusted actor登録を解決できなくてもworker起動を継続する', (t) => {
+test('segment start (github backend): trusted actor登録を解決できない場合も未検証evidenceと部分障害を通知して起動を継続する', (t) => {
   const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 683);
   const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
   fs.rmSync(path.join(repo.dir, '.agent-skill-chain', 'project', 'manifest.yaml'));
@@ -631,6 +631,12 @@ test('segment start (github backend): trusted actor登録を解決できなく�
 
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /UNRESOLVED-POLICY-BLOCKER/);
+  assert.doesNotMatch(result.stdout, /登録元を解決できないevidenceです/);
+  assert.match(result.stdout, /GATE_REVIEW_EVIDENCE_UNVERIFIED/);
+  assert.match(result.stdout, /blocking findingがありますが、trusted\s+actor登録を解決できないため内容を検証できません/);
+  assert.match(result.stdout, /partial_failures:/);
+  assert.match(result.stdout, /side: gate_review_trust_policy/);
+  assert.match(result.stdout, /trusted actor登録をproject policyから解決できません/);
 });
 
 test('segment start (github backend): 時刻カットオフ無しでPR/Issueコメントをrole contractへ同梱する', (t) => {
