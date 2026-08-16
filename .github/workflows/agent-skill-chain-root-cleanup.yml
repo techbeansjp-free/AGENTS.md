@@ -7,6 +7,10 @@
 # 同一の secrets.RELEASE_MAIN_PAT・admin mergeパターンを再利用し、新規credentialは追加しない
 # （ADR-0007）。squashコミットのメッセージを --subject で明示固定して '[skip ci]' の生存を保証する
 # ことが再帰トリガ防止（無限ループ防止）の主機構であり、concurrency が二重発火を防止する。
+# npm ci / npm run build は package.json・lockfile・有効なbuild scriptが揃う範囲だけで実行し、
+# npm前提を持たないconsumerで無条件失敗させない。npm手順の後にCLI保証を行うことで、buildで
+# 用意できるCLI経路を先に利用し、CLI未検出は除去処理へ沈黙して伝播させず明示的に失敗させる
+# （Issue #686）。
 name: agent-skill-chain / root-cleanup
 
 on:
@@ -33,9 +37,45 @@ jobs:
         with:
           node-version: '20'
 
-      - run: npm ci
+      - name: Detect npm build prerequisites
+        id: npm-prereq
+        run: |
+          ci=false
+          build_script=false
+          if [[ -f package.json && ( -f package-lock.json || -f npm-shrinkwrap.json ) ]]; then
+            ci=true
+          fi
+          if [[ -f package.json ]] && node -e "const value = require('./package.json').scripts?.build; process.exit(typeof value === 'string' && value.trim().length > 0 ? 0 : 1)" 2>/dev/null; then
+            build_script=true
+          fi
+          echo "ci=$ci" >> "$GITHUB_OUTPUT"
+          if [[ "$ci" == true && "$build_script" == true ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - run: npm run build
+      - name: npm ci
+        if: steps.npm-prereq.outputs.ci == 'true'
+        run: npm ci
+
+      - name: npm run build
+        if: steps.npm-prereq.outputs.build == 'true'
+        run: npm run build
+
+      - name: Ensure agent-skill-chain CLI
+        # Issue #677: ローカル用ラッパーと同じ共有実装を使い、CLI解決・自動導入の変更が
+        # CIワークフローだけへ横展開されない状態の再発を防ぐ。
+        run: |
+          source .agent-skill-chain/scripts/cli-resolve.sh
+          asc_resolve_cli
+          if [[ ${#ASC_CLI[@]} -eq 2 && ${ASC_CLI[0]} == node ]]; then
+            echo "agent-skill-chain CLI: bin/agents-md.js を使用します（追加インストール不要）"
+          elif [[ ${ASC_CLI[0]} == "$PWD/node_modules/.bin/agent-skill-chain" ]]; then
+            echo "agent-skill-chain CLI: node_modules/.bin/agent-skill-chain を使用します（追加インストール不要）"
+          else
+            echo "agent-skill-chain CLI: PATH上の agent-skill-chain を使用します"
+          fi
 
       - name: Remove stray root-level segment artifacts（存在すれば）
         env:
