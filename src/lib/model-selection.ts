@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { parse } from 'yaml';
 import { git } from './exec.js';
 import { readYamlFile } from './yaml-io.js';
 import { validateAgainstSchema } from './schema.js';
@@ -64,6 +65,27 @@ export function loadCoreReviewPolicy(root: string): CoreReviewPolicy | undefined
   if (!fs.existsSync(manifestPath)) return undefined;
 
   const manifest = readYamlFile<ProjectPolicyManifest>(manifestPath);
+  const validation = validateAgainstSchema('project-policy', manifest, root);
+  if (!validation.valid) {
+    throw new Error(`project policy manifest がスキーマに適合しません: ${validation.errors.join('; ')}`);
+  }
+  return manifest.model_selection?.core_review;
+}
+
+/** Issue #680: evidenceの信頼元は候補branchではなく、保護されたdefault branchから読む。 */
+export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | undefined {
+  const base = resolveBaseRef(root);
+  if (!base) throw new Error('repository default branchを解決できません');
+
+  const manifestResult = git(
+    ['show', `${base}:.agent-skill-chain/project/manifest.yaml`],
+    root,
+  );
+  if (manifestResult.status !== 0) {
+    throw new Error(`repository default branchのproject policy manifestを取得できません: ${manifestResult.stderr.trim()}`);
+  }
+
+  const manifest = parse(manifestResult.stdout) as ProjectPolicyManifest;
   const validation = validateAgainstSchema('project-policy', manifest, root);
   if (!validation.valid) {
     throw new Error(`project policy manifest がスキーマに適合しません: ${validation.errors.join('; ')}`);

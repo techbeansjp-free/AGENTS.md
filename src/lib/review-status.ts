@@ -8,7 +8,7 @@ import {
   type EvidenceFinding,
   type ReviewEvidence,
 } from './review-evidence.js';
-import { loadCoreReviewPolicy } from './model-selection.js';
+import { loadProtectedCoreReviewPolicy } from './model-selection.js';
 import { resolveCurrentBranch } from './worktree.js';
 import { toYamlString, tryReadYamlFile } from './yaml-io.js';
 
@@ -237,7 +237,7 @@ function unresolvedGateFindings(
   let trustedActors: Set<string> | undefined;
   let trustPolicyFailure: string | undefined;
   try {
-    const policy = loadCoreReviewPolicy(root);
+    const policy = loadProtectedCoreReviewPolicy(root);
     const configuredActors = policy?.execution.trusted_reviewer_actors;
     if (!configuredActors || configuredActors.length === 0) {
       trustPolicyFailure = 'ゲートレビューevidenceのtrusted actor登録をproject policyから解決できません';
@@ -323,14 +323,27 @@ function unresolvedGateFindings(
       );
     });
 
-    if (completeAttempts.length === 0) {
+    const incompleteAttempts = [...byAttempt.values()].filter((entries) => !completeAttempts.includes(entries));
+    if (incompleteAttempts.length > 0) {
       findings.push({
         severity: 'blocking',
         origin: targetOrigin,
         code: 'GATE_REVIEW_ATTEMPT_INCOMPLETE',
-        evidence: ['完備なゲートレビューattemptがなく、blocking findingの解決状態を判定できません'],
+        evidence: ['不完備なゲートレビューattemptがあり、blocking findingの解決状態を完全には判定できません'],
         source_segment: sourceSegment,
       });
+      for (const attempt of incompleteAttempts) {
+        for (const { evidence } of attempt) {
+          for (const finding of evidence.verdict.blockers) {
+            if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
+              findings.push({ ...finding, source_segment: sourceSegment });
+            }
+          }
+        }
+      }
+    }
+
+    if (completeAttempts.length === 0) {
       continue;
     }
 
