@@ -50,6 +50,10 @@ type WorkerContract = RolesDocument['role_contracts'][string];
 
 const QUICK_EXEMPT_IMPLEMENTATION_INPUTS = new Set(['SPEC.md', 'DESIGN.md', 'PLAN.md']);
 
+function hasText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 /** Issue #690: quick は成果物の利用を禁じず、存在義務だけを免除する。 */
 function buildQuickImplementationContract(contract: WorkerContract, worktreePath: string): WorkerContract {
   const hasPlan = fs.existsSync(path.join(worktreePath, 'PLAN.md'));
@@ -75,14 +79,14 @@ function buildQuickImplementationContract(contract: WorkerContract, worktreePath
 /**
  * ローカル Coordination Backend の state.yaml が保持する title/request（ISSUE-183）を、
  * ワーカー起動プロンプトへ同梱する `issue:` セクションへ整形する。title/request のいずれも
- * 無い state（後方互換ケース）では undefined を返し、呼び出し側は従来どおりの出力
+ * 無いか空白だけの state（後方互換ケース）では undefined を返し、呼び出し側は従来どおりの出力
  * （セクション無し）のままにする。
  */
 function buildIssueBlock(issueIdRaw: string, state: LocalStateIssueFields | undefined): string | undefined {
-  if (!state || (state.title === undefined && state.request === undefined)) return undefined;
+  if (!state || (!hasText(state.title) && !hasText(state.request))) return undefined;
   const issueYaml: Record<string, string> = { id: state.id ?? issueIdRaw };
-  if (state.title !== undefined) issueYaml.title = state.title;
-  if (state.request !== undefined) issueYaml.request = state.request;
+  if (hasText(state.title)) issueYaml.title = state.title;
+  if (hasText(state.request)) issueYaml.request = state.request;
   const indented = toYamlString(issueYaml)
     .split('\n')
     .filter((line) => line.length > 0)
@@ -96,10 +100,12 @@ function readGithubIssueBlock(root: string, issueIdRaw: string, issueNumber: str
   if (view.status !== 0) return undefined;
   try {
     const payload = JSON.parse(view.stdout) as { number?: number; title?: string; body?: string };
+    // Issue #690: quick は成果物の代わりにIssue本文を要求の正本とするため、空の本文では起動しない。
+    if (!hasText(payload.body)) return undefined;
     return buildIssueBlock(issueIdRaw, {
       id: payload.number === undefined ? issueIdRaw : `ISSUE-${payload.number}`,
-      ...(typeof payload.title === 'string' && payload.title.length > 0 ? { title: payload.title } : {}),
-      ...(typeof payload.body === 'string' && payload.body.length > 0 ? { request: payload.body } : {}),
+      ...(hasText(payload.title) ? { title: payload.title } : {}),
+      request: payload.body,
     });
   } catch {
     return undefined;
@@ -162,9 +168,11 @@ export async function start(args: string[]): Promise<number> {
     // local backend で state.yaml に title/request（Issue本文）があれば、ワーカー起動プロンプトへ
     // 同梱する（ISSUE-183 要件5・AC-5）。本文が無い state・GitHubモードでは従来どおり同梱しない。
     let issueBlock: string | undefined;
+    let hasIssueRequest = false;
     if (config.coordination.backend === 'local') {
       const state = tryReadYamlFile<LocalStateIssueFields>(stateFilePath(root, number));
       issueBlock = buildIssueBlock(issueIdRaw, state);
+      hasIssueRequest = hasText(state?.request);
     }
 
     if (segment === 'implementation') {
@@ -178,7 +186,7 @@ export async function start(args: string[]): Promise<number> {
         if (config.coordination.backend === 'github') {
           issueBlock = readGithubIssueBlock(root, issueIdRaw, number);
         }
-        if (!issueBlock) {
+        if (!issueBlock || (config.coordination.backend === 'local' && !hasIssueRequest)) {
           return fail('Issue内容を取得できないためsize:quick用のimplementation契約を生成できません');
         }
         contract = buildQuickImplementationContract(contract, worktree.worktree.path);

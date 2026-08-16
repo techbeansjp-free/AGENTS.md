@@ -230,6 +230,31 @@ test('segment start (github backend): size:quick のimplementation契約はIssue
   assert.match(contractWithAllArtifacts, /承認済みSPEC\/DESIGNを変更しない/);
   assert.match(contractWithAllArtifacts, /PLANの順序に従う/);
 
+  for (const payload of [
+    { number: 690, title: '', body: '' },
+    { number: 690, title: ' \n\t', body: ' \n\t' },
+    { number: 690, title: 'quick契約のGitHub検証', body: '' },
+    { number: 690, title: 'quick契約のGitHub検証', body: ' \n\t' },
+  ]) {
+    stub.seedIssueContentResponse('690', { stdout: JSON.stringify(payload) });
+    const emptyIssue = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+    assert.equal(emptyIssue.status, 1);
+    assert.match(emptyIssue.stderr, /Issue内容を取得できないためsize:quick用のimplementation契約を生成できません/);
+    assert.doesNotMatch(emptyIssue.stdout, /^role: implementation_worker/m);
+  }
+
+  stub.seedIssueContentResponse('690', { status: 1, stderr: 'issue API unavailable\n' });
+  const unavailableIssue = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(unavailableIssue.status, 1);
+  assert.match(unavailableIssue.stderr, /Issue内容を取得できないためsize:quick用のimplementation契約を生成できません/);
+
+  stub.seedIssueContentResponse('690', { stdout: '{invalid json' });
+  const malformedIssue = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(malformedIssue.status, 1);
+  assert.match(malformedIssue.stderr, /Issue内容を取得できないためsize:quick用のimplementation契約を生成できません/);
+
+  stub.seedIssueContentResponse('690');
+
   stub.seedIssueLabels('690', ['type:bugfix', 'risk:high', 'size:quick']);
   const guarded = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
   assert.equal(guarded.status, 0, guarded.stderr);

@@ -354,6 +354,24 @@ test('segment start (local backend): size:quick のimplementation契約はstate�
   assert.match(contract, /inputs:\n\s+- Issue/);
   assert.doesNotMatch(contract, /\n\s+- (?:SPEC\.md|DESIGN\.md|PLAN\.md)\s*$/m);
   assert.doesNotMatch(contract, /PLANの順序に従う/);
+
+  for (const issueFields of [
+    { title: '', request: '' },
+    { title: ' \n\t', request: ' \n\t' },
+    { title: 'quick契約のローカル検証', request: '' },
+    { title: 'quick契約のローカル検証', request: ' \n\t' },
+    {},
+  ]) {
+    const currentState = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+    delete currentState.title;
+    delete currentState.request;
+    fs.writeFileSync(statePath, stringify({ ...currentState, ...issueFields }));
+
+    const missingIssue = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir });
+    assert.equal(missingIssue.status, 1);
+    assert.match(missingIssue.stderr, /Issue内容を取得できないためsize:quick用のimplementation契約を生成できません/);
+    assert.doesNotMatch(missingIssue.stdout, /^role: implementation_worker/m);
+  }
 });
 
 test('segment start (spec, Issue #427): human_confirmation.before_implementationが未設定でも対象外セグメントには影響しない', async (t) => {
