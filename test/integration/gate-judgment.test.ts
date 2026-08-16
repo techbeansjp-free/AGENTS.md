@@ -31,6 +31,14 @@ function promptDiffSection(prompt: string): string {
   return match[1];
 }
 
+function promptAcIdSection(prompt: string): string {
+  const match = prompt.match(
+    /## 適用対象の AC-ID（SPEC\.md 由来。全件を conformance 判定で網羅すること）\n([^\n]+)\n\n## conformance/,
+  );
+  assert.ok(match, '適用対象の AC-ID セクションが存在すること');
+  return match[1];
+}
+
 interface GateReport {
   schema_version: string;
   gate: {
@@ -445,24 +453,79 @@ test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
-  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: 認証\nAC-2: 認可\n', 'utf8');
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\n#### AC-1: 認証\n#### AC-2: 認可\n', 'utf8');
   execFileSync('git', ['add', 'SPEC.md'], { cwd: repo.dir });
   execFileSync('git', ['commit', '-m', 'test: add prompt target'], { cwd: repo.dir });
   const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
 
   const res = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
   assert.equal(res.status, 0, res.stderr);
-  assert.match(res.stdout, /AC-1, AC-2/);
+  assert.equal(promptAcIdSection(res.stdout), 'AC-1, AC-2');
   assert.match(res.stdout, /conformance/);
   assert.match(res.stdout, /falsification/);
   assert.match(res.stdout, /origin/);
   assert.match(res.stdout, /read-only/);
 });
 
+test('gate reviewer-prompt: 見出し以外と非準拠見出しを除外し、宣言を重複なく数値昇順で列挙する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  fs.writeFileSync(
+    path.join(repo.dir, 'SPEC.md'),
+    [
+      '# SPEC',
+      '',
+      '散文 AC-90',
+      '<!-- AC-91 -->',
+      '- AC-92',
+      '> AC-93',
+      '### AC-94: 第3レベル',
+      '##### AC-95: 第5レベル',
+      '#### AC-96 コロンなし',
+      '#### AC-97 : コロン直前に空白',
+      '#### AC-10:空白なし',
+      '#### AC-2: 2番',
+      '#### AC-1: 1番',
+      '#### AC-2: 重複',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: add mixed AC declarations'], { cwd: repo.dir });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+
+  const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-679', 'spec', targetSha], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(promptAcIdSection(result.stdout), 'AC-1, AC-2, AC-10');
+});
+
+test('gate reviewer-prompt: 正規宣言が0件なら本文や非準拠見出しの同形文字列を列挙せずhuman_requiredへ倒す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  fs.writeFileSync(
+    path.join(repo.dir, 'SPEC.md'),
+    '# SPEC\n\n散文 AC-1\n<!-- AC-2 -->\n### AC-3: 第3レベル\n#### AC-4 コロンなし\n',
+    'utf8',
+  );
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-m', 'test: add nonconforming AC mentions'], { cwd: repo.dir });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+
+  const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-679', 'spec', targetSha], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    promptAcIdSection(result.stdout),
+    '(SPEC.md から AC-ID を検出できず。conformance は inconclusive とし human_required へ倒すこと)',
+  );
+});
+
 test('gate reviewer-prompt: light適用時だけ追加のseverityルーブリックを出力する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
-  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\n#### AC-1: sample\n');
   execFileSync('git', ['add', 'SPEC.md'], { cwd: repo.dir });
   execFileSync('git', ['commit', '-m', 'test: add prompt target'], { cwd: repo.dir });
   const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
@@ -565,7 +628,7 @@ test('gate reviewer-prompt: SPEC.md が未埋め込みファイルを名指し�
   fs.writeFileSync(path.join(repo.dir, referencedTestPath), referencedTestContent, 'utf8');
   fs.writeFileSync(
     path.join(repo.dir, 'SPEC.md'),
-    `# SPEC\n\nAC-1: 既存動作を維持する\n\n既存の ${referencedTestPath} が回帰しないことを確認する。\n`,
+    `# SPEC\n\n#### AC-1: 既存動作を維持する\n\n既存の ${referencedTestPath} が回帰しないことを確認する。\n`,
     'utf8',
   );
   execFileSync('git', ['add', 'SPEC.md', referencedTestPath], { cwd: repo.dir });
@@ -586,7 +649,7 @@ test('gate reviewer-prompt: SPEC.md が未埋め込みファイルを名指し�
   assert.doesNotMatch(res.stdout, /existing behavior that SPEC\.md references/);
 });
 
-test('gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以外は修正前goldenと一致する', (t) => {
+test('gate reviewer-prompt: 全index行をfull hashで出力し、hash表記以外は期待goldenと一致する', (t) => {
   const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-reviewer-prompt-golden-'));
   t.after(() => fs.rmSync(repoDir, { recursive: true, force: true }));
   execFileSync('git', ['init', '--initial-branch=main', '--object-format=sha1'], { cwd: repoDir, stdio: 'pipe' });
