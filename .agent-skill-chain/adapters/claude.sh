@@ -149,6 +149,11 @@ _reviewer_sanitized_path() {
 # 以外の読取りは不要。実値はログ・stdout/stderrに出さない（Issue #691）。
 _run_reviewer_sanitized() {
   local prompt="$1" reviewer_cmd="$2" timeout_sec="$3"
+  # Issue #691: 不正な値でwatchdogのsleepが失敗すると時間制限が無効になるため、起動前に拒否する。
+  if [[ ! "$timeout_sec" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s\n' "_run_reviewer_sanitized: timeout秒数は正整数で指定してください（value=${timeout_sec}）" >&2
+    return 64
+  fi
   local isolated_root
   isolated_root="$(/usr/bin/mktemp -d /tmp/agent-skill-chain-reviewer.XXXXXX)"
   /bin/mkdir -p "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg" \
@@ -198,29 +203,95 @@ _run_reviewer_sanitized() {
   fi
 
   local prompt_file="$isolated_root/prompt" output_file="$isolated_root/output"
-  local timeout_marker="$isolated_root/timed-out" reviewer_pid watchdog_pid rc=0 output=""
+  local timeout_marker="$isolated_root/timed-out" watchdog_ready="$isolated_root/watchdog-ready"
+  local watchdog_armed="$isolated_root/watchdog-armed" reviewer_pid_file="$isolated_root/reviewer-pid"
+  local reviewer_pid watchdog_pid rc=0 output="" monitor_was_enabled=false
   printf '%s' "$prompt" >"$prompt_file"
+  # Issue #691: reviewerより先にwatchdogを起動し、準備完了を確認する。期限後は独立した
+  # reviewerプロセスグループ全体へTERMを送り、1秒の猶予後も残るプロセスをKILLする。
+  (
+    active_sleep_pid=''
+    trap '[[ -z "$active_sleep_pid" ]] || kill -TERM "$active_sleep_pid" 2>/dev/null || true; exit 0' TERM
+    : >"$watchdog_ready" || exit 1
+    while [[ ! -s "$reviewer_pid_file" ]]; do
+      /bin/sleep 0.01 2>/dev/null || exit 1
+    done
+    IFS= read -r watched_pid <"$reviewer_pid_file" || exit 1
+    [[ "$watched_pid" =~ ^[1-9][0-9]*$ ]] || exit 1
+    /bin/sleep "$timeout_sec" 2>/dev/null &
+    active_sleep_pid=$!
+    : >"$watchdog_armed" || {
+      kill -TERM "$active_sleep_pid" 2>/dev/null || true
+      exit 1
+    }
+    wait "$active_sleep_pid" 2>/dev/null || true
+    active_sleep_pid=''
+    : >"$timeout_marker"
+    kill -TERM -- "-$watched_pid" 2>/dev/null || true
+    /bin/sleep 1 2>/dev/null &
+    active_sleep_pid=$!
+    wait "$active_sleep_pid" 2>/dev/null || true
+    active_sleep_pid=''
+    if kill -0 -- "-$watched_pid" 2>/dev/null; then
+      kill -KILL -- "-$watched_pid" 2>/dev/null || true
+    fi
+  ) &
+  watchdog_pid=$!
+
+  local watchdog_wait
+  for ((watchdog_wait = 0; watchdog_wait < 100; watchdog_wait++)); do
+    [[ ! -f "$watchdog_ready" ]] || break
+    kill -0 "$watchdog_pid" 2>/dev/null || break
+    /bin/sleep 0.01 2>/dev/null || break
+  done
+  if [[ ! -f "$watchdog_ready" ]] || ! kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    /bin/rm -rf -- "$isolated_root"
+    printf '%s\n' "_run_reviewer_sanitized: watchdogを起動できないためレビュアを起動しません" >&2
+    return 70
+  fi
+
+  [[ $- == *m* ]] && monitor_was_enabled=true
+  set -m
   (
     cd -- "$isolated_root/workspace" &&
       exec "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" <"$prompt_file" >"$output_file" 2>/dev/null
   ) &
   reviewer_pid=$!
-  # Issue #691: 外部timeoutが無い環境で無制限実行へ降格しないよう、常設のshell watchdogで打ち切る。
-  (
-    timer_pid=''
-    trap '[[ -z "$timer_pid" ]] || kill -TERM "$timer_pid" 2>/dev/null || true; exit 0' TERM
-    /bin/sleep "$timeout_sec" 2>/dev/null &
-    timer_pid=$!
-    wait "$timer_pid" 2>/dev/null || exit 0
-    : >"$timeout_marker"
-    kill -TERM "$reviewer_pid" 2>/dev/null || true
-  ) &
-  watchdog_pid=$!
-  wait "$reviewer_pid" || rc=$?
-  if kill -0 "$watchdog_pid" 2>/dev/null; then
+  [[ "$monitor_was_enabled" == "true" ]] || set +m
+  printf '%s\n' "$reviewer_pid" >"$reviewer_pid_file"
+
+  for ((watchdog_wait = 0; watchdog_wait < 100; watchdog_wait++)); do
+    [[ ! -f "$watchdog_armed" ]] || break
+    kill -0 "$watchdog_pid" 2>/dev/null || break
+    /bin/sleep 0.01 2>/dev/null || break
+  done
+  if [[ ! -f "$watchdog_armed" ]] || ! kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM -- "-$reviewer_pid" 2>/dev/null || true
+    /bin/sleep 0.1 2>/dev/null || true
+    kill -KILL -- "-$reviewer_pid" 2>/dev/null || true
+    wait "$reviewer_pid" 2>/dev/null || true
     kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    /bin/rm -rf -- "$isolated_root"
+    printf '%s\n' "_run_reviewer_sanitized: watchdogを準備できないためレビュアを停止しました" >&2
+    return 70
   fi
-  wait "$watchdog_pid" 2>/dev/null || true
+
+  wait "$reviewer_pid" || rc=$?
+  if [[ -f "$timeout_marker" ]]; then
+    wait "$watchdog_pid" 2>/dev/null || true
+  elif kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+  fi
+  # reviewer本体が正常終了しても子孫だけが残る場合に、隔離プロセスを残さない。
+  if kill -0 -- "-$reviewer_pid" 2>/dev/null; then
+    kill -TERM -- "-$reviewer_pid" 2>/dev/null || true
+    /bin/sleep 0.1 2>/dev/null || true
+    kill -KILL -- "-$reviewer_pid" 2>/dev/null || true
+  fi
   if [[ -f "$timeout_marker" ]]; then
     rc=124
   fi
@@ -457,6 +528,12 @@ launch_gate_reviewer() {
   local timeout_sec="${GATE_REVIEWER_TIMEOUT_SEC:-900}"
   local retries="${GATE_REVIEWER_RETRIES:-3}"
   local interval="${GATE_REVIEWER_RETRY_INTERVAL_SEC:-30}"
+
+  # Issue #691: 不正値は決定的で再試行しても直らず、watchdogを無効化し得るため起動前に停止する。
+  if [[ ! "$timeout_sec" =~ ^[1-9][0-9]*$ ]]; then
+    _fail_safe "GATE_REVIEWER_TIMEOUT_SEC は正整数で指定してください（value=${timeout_sec}）"
+    return
+  fi
 
   # read-only レビュア起動（プロンプトは stdin）。一時障害はリトライ、timeout は打ち切り。
   local attempt=1 verdict rc

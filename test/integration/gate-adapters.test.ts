@@ -295,14 +295,24 @@ test('gate reviewer credential boundary: caller HOME・Issue worktree・GitHub t
   assert.match(reviewerCwd, /^\/tmp\/agent-skill-chain-reviewer\.[^/]+\/workspace$/);
 });
 
-test('claude launch_gate_reviewer: 外部timeoutに依存せず停止したreviewerを打ち切ってhuman_requiredへ倒す（Issue #691）', async (t) => {
+test('claude launch_gate_reviewer: TERMを無視するreviewerのプロセスグループをKILLしてhuman_requiredへ倒す（Issue #691）', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
-  t.after(() => repo.cleanup());
+  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-watchdog-issue691-'));
+  const childPidFile = path.join(markerDir, 'child.pid');
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(markerDir, { recursive: true, force: true });
+  });
   setAdapter(repo.dir, 'claude');
 
   const env = envWithout([], {
     CLAUDE_AUTH_PROBE_CMD: 'true',
-    GATE_REVIEWER_CMD: '/bin/sleep 30',
+    GATE_REVIEWER_CMD: [
+      "trap '' TERM",
+      `/bin/bash -c 'trap "" TERM; while :; do :; done' &`,
+      `printf '%s\\n' "$!" > ${JSON.stringify(childPidFile)}`,
+      'while :; do :; done',
+    ].join('\n'),
     GATE_REVIEWER_TIMEOUT_SEC: '1',
     GATE_REVIEWER_RETRIES: '1',
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
@@ -314,11 +324,40 @@ test('claude launch_gate_reviewer: 外部timeoutに依存せず停止したrevie
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.match(res.stderr, /レビュア起動に失敗しました（rc=124, attempts=1）/);
-  assert.ok(elapsedMs < 25000, `watchdogがreviewerを時間内に停止すること: elapsed=${elapsedMs}ms`);
+  assert.ok(elapsedMs < 10000, `watchdogが期限と猶予の後にreviewerを停止すること: elapsed=${elapsedMs}ms`);
+  assert.ok(fs.existsSync(childPidFile), 'reviewerの子プロセスが起動したこと');
+  const childPid = Number(fs.readFileSync(childPidFile, 'utf8').trim());
+  assert.throws(() => process.kill(childPid, 0), 'reviewerの子プロセスも残らないこと');
   const adapter = fs.readFileSync(path.join(repo.dir, '.agent-skill-chain', 'adapters', 'claude.sh'), 'utf8');
   const runner = adapter.slice(adapter.indexOf('_run_reviewer_sanitized()'), adapter.indexOf('_claude_reviewer_auth_ok()'));
   assert.doesNotMatch(runner, /(?:\/usr\/bin\/timeout|\/bin\/timeout|command -v timeout)/);
-  assert.match(runner, /\/bin\/sleep/);
+  assert.match(runner, /kill -TERM -- "-\$watched_pid"/);
+  assert.match(runner, /kill -KILL -- "-\$watched_pid"/);
+});
+
+test('claude launch_gate_reviewer: 不正なtimeout値はreviewer起動前に日本語診断で拒否する（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-invalid-timeout-issue691-'));
+  const reviewerMarker = path.join(markerDir, 'reviewer-invoked');
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(markerDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'claude');
+
+  const env = envWithout([], {
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}`,
+    GATE_REVIEWER_TIMEOUT_SEC: 'not-a-positive-integer',
+    GATE_REVIEWER_RETRIES: '1',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.equal(fs.existsSync(reviewerMarker), false, '不正なtimeout値ではreviewerを起動しないこと');
+  assert.match(res.stderr, /GATE_REVIEWER_TIMEOUT_SEC は正整数で指定してください/);
 });
 
 test('claude launch_gate_reviewer: caller指定rootとsymlink認証ファイルからcaller HOMEへ脱出できない（Issue #691）', async (t) => {
