@@ -169,6 +169,101 @@ test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate
   assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
 });
 
+test('segment start (github backend): size:quick のimplementation契約はIssue本文と存在する成果物だけを使う（Issue #690）', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const { stub, env, cleanup } = makeStub();
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  const start = runCli(['issue', 'start', 'ISSUE-690', 'bugfix', 'quick-contract', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+    env,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  assert.equal(fs.existsSync(path.join(worktreePath, 'SPEC.md')), false);
+  assert.equal(fs.existsSync(path.join(worktreePath, 'DESIGN.md')), false);
+  assert.equal(fs.existsSync(path.join(worktreePath, 'PLAN.md')), false);
+
+  stub.seedIssueLabels('690', ['type:bugfix', 'risk:normal', 'size:quick']);
+  stub.seedIssueBody('690', 'quick契約だけで実装対象を確定できる要求本文');
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(acquire.status, 0, acquire.stderr);
+
+  const result = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /request: quick契約だけで実装対象を確定できる要求本文/);
+
+  const contract = result.stdout.slice(result.stdout.indexOf('inputs:'), result.stdout.indexOf('worker_completion_report:'));
+  assert.match(contract, /inputs:\n\s+- Issue/);
+  assert.doesNotMatch(contract, /\n\s+- (?:SPEC\.md|DESIGN\.md|PLAN\.md)\s*$/m);
+  assert.doesNotMatch(contract, /\n\s+- accepted ADR\s*$/m);
+  assert.match(contract, /related accepted ADR（存在する場合）/);
+  assert.doesNotMatch(contract, /PLANの順序に従う/);
+  assert.match(contract, /Issue内容から実装範囲を確定できない場合は推測で補完せずblockedを報告する/);
+  assert.match(contract, /gate-reportを書き換えない/);
+  assert.match(contract, /自worktree内でのみ作業する/);
+  assert.match(contract, /必須チェック（lint\/test\/build）実行済み/);
+  assert.match(contract, /commit \+ push済み/);
+
+  fs.writeFileSync(path.join(worktreePath, 'PLAN.md'), '# PLAN\n\n1. 既存の計画を実行する\n');
+  const withPlan = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(withPlan.status, 0, withPlan.stderr);
+  const contractWithPlan = withPlan.stdout.slice(
+    withPlan.stdout.indexOf('inputs:'),
+    withPlan.stdout.indexOf('worker_completion_report:'),
+  );
+  assert.match(contractWithPlan, /\n\s+- PLAN\.md\s*$/m);
+  assert.match(contractWithPlan, /PLANの順序に従う/);
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nquick要求\n');
+  fs.writeFileSync(path.join(worktreePath, 'DESIGN.md'), '# DESIGN\n\nquick設計\n');
+  const withAllArtifacts = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(withAllArtifacts.status, 0, withAllArtifacts.stderr);
+  const contractWithAllArtifacts = withAllArtifacts.stdout.slice(
+    withAllArtifacts.stdout.indexOf('inputs:'),
+    withAllArtifacts.stdout.indexOf('worker_completion_report:'),
+  );
+  assert.match(contractWithAllArtifacts, /inputs:\n\s+- Issue\n\s+- SPEC\.md\n\s+- DESIGN\.md\n\s+- PLAN\.md/);
+  assert.match(contractWithAllArtifacts, /承認済みSPEC\/DESIGNを変更しない/);
+  assert.match(contractWithAllArtifacts, /PLANの順序に従う/);
+
+  for (const payload of [
+    { number: 690, title: '', body: '' },
+    { number: 690, title: ' \n\t', body: ' \n\t' },
+    { number: 690, title: 'quick契約のGitHub検証', body: '' },
+    { number: 690, title: 'quick契約のGitHub検証', body: ' \n\t' },
+  ]) {
+    stub.seedIssueContentResponse('690', { stdout: JSON.stringify(payload) });
+    const emptyIssue = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+    assert.equal(emptyIssue.status, 1);
+    assert.match(emptyIssue.stderr, /Issue内容を取得できないためsize:quick用のimplementation契約を生成できません/);
+    assert.doesNotMatch(emptyIssue.stdout, /^role: implementation_worker/m);
+  }
+
+  stub.seedIssueContentResponse('690', { status: 1, stderr: 'issue API unavailable\n' });
+  const unavailableIssue = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(unavailableIssue.status, 1);
+  assert.match(unavailableIssue.stderr, /Issue内容を取得できないためsize:quick用のimplementation契約を生成できません/);
+
+  stub.seedIssueContentResponse('690', { stdout: '{invalid json' });
+  const malformedIssue = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(malformedIssue.status, 1);
+  assert.match(malformedIssue.stderr, /Issue内容を取得できないためsize:quick用のimplementation契約を生成できません/);
+
+  stub.seedIssueContentResponse('690');
+
+  stub.seedIssueLabels('690', ['type:bugfix', 'risk:high', 'size:quick']);
+  const guarded = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(guarded.status, 0, guarded.stderr);
+  assert.match(guarded.stderr, /risk が normal ではありません（現在: high）/);
+  assert.match(guarded.stdout, /inputs:\n\s+- SPEC\.md\n\s+- DESIGN\.md\n\s+- PLAN\.md/);
+  assert.match(guarded.stdout, /PLANの順序に従う/);
+  assert.doesNotMatch(guarded.stdout, /quick契約だけで実装対象を確定できる要求本文/);
+});
+
 test('segment start (github backend): CHANGES_REQUESTEDレビューをrole contractへ同梱する', (t) => {
   const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 440);
   stub.seedPrReviews(prNumber, [

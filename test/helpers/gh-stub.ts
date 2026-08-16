@@ -170,6 +170,12 @@ if (cmd === 'issue' && sub === 'view') {
   const issueNumber = args[2];
   const state = loadState();
   const fields = (flag('--json') || 'comments').split(',');
+  const issueContentResponse = (state.issueContentResponses || {})[issueNumber];
+  if (issueContentResponse && fields.includes('number') && fields.includes('title') && fields.includes('body')) {
+    if (issueContentResponse.stderr) process.stderr.write(issueContentResponse.stderr);
+    if (issueContentResponse.stdout) process.stdout.write(issueContentResponse.stdout);
+    process.exit(issueContentResponse.status || 0);
+  }
   const issueViewFailure = (state.issueViewFailures || {})[issueNumber];
   if (issueViewFailure && fields.includes('comments')) {
     process.stderr.write(issueViewFailure);
@@ -1006,6 +1012,7 @@ export interface GhStubState {
   prCreateCalls?: { args: string[]; body: string | undefined }[];
   failPrReviewStatusView?: boolean;
   issueViewFailures?: Record<string, string>;
+  issueContentResponses?: Record<string, { status?: number; stdout?: string; stderr?: string }>;
   issueCommentFailures?: Record<string, string>;
   prViewFailures?: Record<string, string>;
   prViewCalls?: { key: string; fields: string[]; repo?: string }[];
@@ -1086,6 +1093,10 @@ export interface GhStub {
   seedPrReviewThreadComments(prNumber: number, comments: unknown[]): void;
   seedPrReviewThreadCommentsFailure(prNumber: number, failure: { stderr: string }): void;
   seedIssueViewFailure(issueNumber: string, failure: { stderr: string }): void;
+  seedIssueContentResponse(
+    issueNumber: string,
+    response?: { status?: number; stdout?: string; stderr?: string },
+  ): void;
   seedIssueEvents(issueNumber: string, events: unknown[]): void;
   seedIssueEventsFailure(issueNumber: string, stderr: string): void;
   seedIssueCommentFailure(issueNumber: string, failure: { stderr: string }): void;
@@ -1218,6 +1229,16 @@ export function createGhStub(baseDir: string): GhStub {
     seedIssueViewFailure(issueNumber: string, failure: { stderr: string }): void {
       const state = this.readState();
       state.issueViewFailures = { ...(state.issueViewFailures ?? {}), [issueNumber]: failure.stderr };
+      this.writeState(state);
+    },
+    seedIssueContentResponse(
+      issueNumber: string,
+      response?: { status?: number; stdout?: string; stderr?: string },
+    ): void {
+      const state = this.readState();
+      state.issueContentResponses = { ...(state.issueContentResponses ?? {}) };
+      if (response === undefined) delete state.issueContentResponses[issueNumber];
+      else state.issueContentResponses[issueNumber] = response;
       this.writeState(state);
     },
     seedIssueCommentFailure(issueNumber: string, failure: { stderr: string }): void {

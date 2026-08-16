@@ -12,7 +12,7 @@ import {
   setHumanConfirmationBeforeImplementation,
 } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
-import { reviewFilePath } from '../../src/lib/local-state.js';
+import { reviewFilePath, stateFilePath } from '../../src/lib/local-state.js';
 
 // coordination.backend: local での中核フロー（issue start → lease acquire → segment start →
 // gate review/publish → checkpoint → pr create → cleanup）を素通しで検証する。
@@ -312,6 +312,66 @@ test('segment start (実装セグメント, Issue #427): human_confirmation.befo
   const segmentStart = runCli(['segment', 'start', 'ISSUE-6', 'implementation'], { cwd: repo.dir });
   assert.equal(segmentStart.status, 0, segmentStart.stderr);
   assert.match(segmentStart.stdout, /role: implementation_worker/);
+  assert.match(segmentStart.stdout, /inputs:\n\s+- SPEC\.md\n\s+- DESIGN\.md\n\s+- PLAN\.md/);
+  assert.match(segmentStart.stdout, /PLANの順序に従う/);
+});
+
+test('segment start (local backend): size:quick のimplementation契約はstateのIssue内容を入力にする（Issue #690）', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  setHumanConfirmationBeforeImplementation(repo.dir, false);
+
+  const start = runCli(
+    [
+      'issue',
+      'start',
+      'ISSUE-690',
+      'bugfix',
+      'quick-contract-local',
+      FIXED_TIMESTAMP,
+      '--size',
+      'quick',
+      '--title',
+      'quick契約のローカル検証',
+      '--request',
+      'stateに保存された要求本文',
+    ],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const statePath = stateFilePath(repo.dir, '690');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(statePath, stringify({ ...state, risk: 'normal' }));
+
+  const acquire = runCli(['lease', 'acquire', 'ISSUE-690', 'implementation'], { cwd: repo.dir });
+  assert.equal(acquire.status, 0, acquire.stderr);
+  const result = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /title: quick契約のローカル検証/);
+  assert.match(result.stdout, /request: stateに保存された要求本文/);
+
+  const contract = result.stdout.slice(result.stdout.indexOf('inputs:'), result.stdout.indexOf('worker_completion_report:'));
+  assert.match(contract, /inputs:\n\s+- Issue/);
+  assert.doesNotMatch(contract, /\n\s+- (?:SPEC\.md|DESIGN\.md|PLAN\.md)\s*$/m);
+  assert.doesNotMatch(contract, /PLANの順序に従う/);
+
+  for (const issueFields of [
+    { title: '', request: '' },
+    { title: ' \n\t', request: ' \n\t' },
+    { title: 'quick契約のローカル検証', request: '' },
+    { title: 'quick契約のローカル検証', request: ' \n\t' },
+    {},
+  ]) {
+    const currentState = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+    delete currentState.title;
+    delete currentState.request;
+    fs.writeFileSync(statePath, stringify({ ...currentState, ...issueFields }));
+
+    const missingIssue = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir });
+    assert.equal(missingIssue.status, 1);
+    assert.match(missingIssue.stderr, /Issue内容を取得できないためsize:quick用のimplementation契約を生成できません/);
+    assert.doesNotMatch(missingIssue.stdout, /^role: implementation_worker/m);
+  }
 });
 
 test('segment start (spec, Issue #427): human_confirmation.before_implementationが未設定でも対象外セグメントには影響しない', async (t) => {
