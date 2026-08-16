@@ -169,7 +169,7 @@ test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate
   assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
 });
 
-test('segment start (github backend): size:quick のimplementation契約はIssue本文を入力にして免除成果物を要求しない（Issue #690）', (t) => {
+test('segment start (github backend): size:quick のimplementation契約はIssue本文と存在する成果物だけを使う（Issue #690）', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   const { stub, env, cleanup } = makeStub();
   t.after(() => {
@@ -207,6 +207,28 @@ test('segment start (github backend): size:quick のimplementation契約はIssue
   assert.match(contract, /自worktree内でのみ作業する/);
   assert.match(contract, /必須チェック（lint\/test\/build）実行済み/);
   assert.match(contract, /commit \+ push済み/);
+
+  fs.writeFileSync(path.join(worktreePath, 'PLAN.md'), '# PLAN\n\n1. 既存の計画を実行する\n');
+  const withPlan = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(withPlan.status, 0, withPlan.stderr);
+  const contractWithPlan = withPlan.stdout.slice(
+    withPlan.stdout.indexOf('inputs:'),
+    withPlan.stdout.indexOf('worker_completion_report:'),
+  );
+  assert.match(contractWithPlan, /\n\s+- PLAN\.md\s*$/m);
+  assert.match(contractWithPlan, /PLANの順序に従う/);
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nquick要求\n');
+  fs.writeFileSync(path.join(worktreePath, 'DESIGN.md'), '# DESIGN\n\nquick設計\n');
+  const withAllArtifacts = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });
+  assert.equal(withAllArtifacts.status, 0, withAllArtifacts.stderr);
+  const contractWithAllArtifacts = withAllArtifacts.stdout.slice(
+    withAllArtifacts.stdout.indexOf('inputs:'),
+    withAllArtifacts.stdout.indexOf('worker_completion_report:'),
+  );
+  assert.match(contractWithAllArtifacts, /inputs:\n\s+- Issue\n\s+- SPEC\.md\n\s+- DESIGN\.md\n\s+- PLAN\.md/);
+  assert.match(contractWithAllArtifacts, /承認済みSPEC\/DESIGNを変更しない/);
+  assert.match(contractWithAllArtifacts, /PLANの順序に従う/);
 
   stub.seedIssueLabels('690', ['type:bugfix', 'risk:high', 'size:quick']);
   const guarded = runCli(['segment', 'start', 'ISSUE-690', 'implementation'], { cwd: repo.dir, env });

@@ -52,6 +52,7 @@ const QUICK_EXEMPT_IMPLEMENTATION_INPUTS = new Set(['SPEC.md', 'DESIGN.md', 'PLA
 
 /** Issue #690: quick は成果物の利用を禁じず、存在義務だけを免除する。 */
 function buildQuickImplementationContract(contract: WorkerContract, worktreePath: string): WorkerContract {
+  const hasPlan = fs.existsSync(path.join(worktreePath, 'PLAN.md'));
   const inputs = [
     'Issue',
     ...contract.inputs.filter(
@@ -62,6 +63,7 @@ function buildQuickImplementationContract(contract: WorkerContract, worktreePath
   const rules = contract.rules.flatMap((rule) =>
     rule.startsWith('PLANの順序に従う')
       ? [
+          ...(hasPlan ? [rule] : []),
           '同梱されたIssue内容を要求の正本として実装する',
           'Issue内容から実装範囲を確定できない場合は推測で補完せずblockedを報告する',
         ]
