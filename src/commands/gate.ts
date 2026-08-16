@@ -307,8 +307,13 @@ function aggregateVerdicts(verdicts: ReviewerVerdict[]): ReviewerVerdict {
   };
 }
 
+const REVIEWER_RENAME_DIFF_OPTIONS = ['--find-renames'] as const;
+
 function changedPaths(root: string, baseSha: string, targetSha: string): string[] {
-  const result = git(['diff', '--name-only', '-z', `${baseSha}...${targetSha}`], root);
+  const result = git(
+    ['diff', '--name-only', '-z', ...REVIEWER_RENAME_DIFF_OPTIONS, `${baseSha}...${targetSha}`],
+    root,
+  );
   if (result.status !== 0) throw new CliError(`base...target差分を取得できません: ${result.stderr.trim()}`);
   const paths = result.stdout.split('\0');
   if (paths.at(-1) === '') paths.pop();
@@ -1996,7 +2001,7 @@ interface ChangedPathStatus {
 
 function changedPathStatuses(root: string, baseSha: string, targetSha: string): ChangedPathStatus[] {
   const result = git(
-    ['diff', '--name-status', '-z', '--find-renames', `${baseSha}...${targetSha}`],
+    ['diff', '--name-status', '-z', ...REVIEWER_RENAME_DIFF_OPTIONS, `${baseSha}...${targetSha}`],
     root,
   );
   if (result.status !== 0) throw new CliError(`base...targetの変更種別を取得できません: ${result.stderr.trim()}`);
@@ -2019,6 +2024,12 @@ function changedPathStatuses(root: string, baseSha: string, targetSha: string): 
     }
   }
   return statuses;
+}
+
+function promptPath(pathname: string): string {
+  return JSON.stringify(pathname)
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 function buildReviewerPrompt(
@@ -2138,7 +2149,7 @@ function buildReviewerPrompt(
               '--no-ext-diff',
               '--no-color',
               '--full-index',
-              '--find-renames',
+              ...REVIEWER_RENAME_DIFF_OPTIONS,
               `${baseSha}...${targetSha}`,
               '--',
               ...new Set(diffPathspec),
@@ -2156,7 +2167,12 @@ function buildReviewerPrompt(
             '次の対象成果物は新規追加であり、差分が全文再掲になるため差分での展開を省略した。' +
               '全文は「判定対象の成果物」に展開済みである。',
           );
-          for (const name of omittedAdditions) sections.push(`- ${name}（変更種別: 追加、差分: 省略）`);
+          for (const name of omittedAdditions) {
+            sections.push(
+              `- 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(name)}` +
+                '（変更種別: 追加、差分: 省略）',
+            );
+          }
         }
         if (diff.stdout) sections.push('```diff\n' + diff.stdout.trimEnd() + '\n```');
         else if (omittedAdditions.length === 0) sections.push('(差分なし)');
@@ -2170,7 +2186,9 @@ function buildReviewerPrompt(
     } else {
       for (const name of artifactNames) {
         const content = readArtifact(name);
-        sections.push(`### ${name}`);
+        sections.push(
+          `### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(name)}`,
+        );
         sections.push(content !== undefined ? '```\n' + content.trimEnd() + '\n```' : '(未検出)');
         sections.push('');
       }

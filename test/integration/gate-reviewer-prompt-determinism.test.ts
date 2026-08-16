@@ -71,7 +71,10 @@ function reviewerPrompt(repoDir: string, targetSha: string, baseSha: string): st
 }
 
 function assertAddedArtifactDeduplicated(prompt: string): void {
-  assert.match(prompt, /SPEC\.md（変更種別: 追加、差分: 省略）/);
+  assert.match(
+    prompt,
+    /成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC\.md"（変更種別: 追加、差分: 省略）/,
+  );
   assert.doesNotMatch(prompt, /^index [0-9a-f]+\.\.[0-9a-f]+/m);
   assert.equal(prompt.match(/AC-1: deterministic prompt/g)?.length, 1);
 }
