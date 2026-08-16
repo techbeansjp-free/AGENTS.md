@@ -128,175 +128,156 @@ export function resolveCurrentBranch(root: string): string | undefined {
 }
 
 /**
- * Issue #361: GitHubの「Squash and merge」はマージ後にリモートブランチを自動削除する。
- * この状態で（削除操作自体や後続の `git fetch --prune` により）ローカルのremote-tracking
- * ブランチ（`refs/remotes/origin/<branch>`）も失われると、`branch.<name>.remote`/`.merge`の
- * config自体は残ったままなので `<branch>@{upstream}` は「gone」状態になり
- * `git rev-parse --abbrev-ref <branch>@{upstream}` が非ゼロ終了する。これは
- * 「一度もpushしていない」場合と区別できないため、upstream解決不能を即「未push」と断定せず、
- * ブランチの内容が既にdefault branchへ実質的に統合済みかどうかを判定してから安全側判定を行う。
+ * Issue #692: cleanupが保全すべきなのは「一度もpushされていないcommit」である。
+ * squash/rebase後の内容一致ではpush実績を立証できないため、実remoteと一致する
+ * remote-tracking refとそのpush reflog、または呼び出し元がPRから取得したhead SHAだけを
+ * push済み位置の根拠にする。
  */
 export type UnpushedCommitCheck =
   | { hasUnpushedCommits: false }
   | { hasUnpushedCommits: true; reason: 'unpreserved_commits'; commitShas: string[] }
   | { hasUnpushedCommits: true; reason: 'indeterminate'; detail: string };
 
-export function inspectUnpushedCommits(worktreePath: string, branch: string): UnpushedCommitCheck {
-  const upstream = git(['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], worktreePath);
-  if (upstream.status === 0) {
-    const ahead = git(['rev-list', '--count', `${upstream.stdout.trim()}..${branch}`], worktreePath);
-    if (ahead.status === 0) {
-      const aheadCount = Number.parseInt(ahead.stdout.trim(), 10);
-      if (Number.isFinite(aheadCount) && aheadCount === 0) return { hasUnpushedCommits: false };
+export function inspectUnpushedCommits(
+  worktreePath: string,
+  branch: string,
+  knownPushedCommit?: string,
+): UnpushedCommitCheck {
+  if (knownPushedCommit) {
+    const known = commitsAfterPushedPosition(worktreePath, branch, knownPushedCommit);
+    if ('detail' in known) return { hasUnpushedCommits: true, reason: 'indeterminate', detail: known.detail };
+    return known.commitShas.length === 0
+      ? { hasUnpushedCommits: false }
+      : { hasUnpushedCommits: true, reason: 'unpreserved_commits', commitShas: known.commitShas };
+  }
+
+  const remoteRefs = git(
+    ['for-each-ref', '--format=%(refname)%09%(objectname)', 'refs/remotes'],
+    worktreePath,
+  );
+  if (remoteRefs.status !== 0) {
+    return { hasUnpushedCommits: true, reason: 'indeterminate', detail: 'remote-tracking refを列挙できません' };
+  }
+
+  const remotes = git(['remote'], worktreePath);
+  if (remotes.status !== 0) {
+    return { hasUnpushedCommits: true, reason: 'indeterminate', detail: 'リモート一覧を取得できません' };
+  }
+  const remoteNames = remotes.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+
+  const pushedPositions: string[] = [];
+  for (const line of remoteRefs.stdout.split('\n').filter(Boolean)) {
+    const [refName, localSha] = line.split('\t');
+    const remote = remoteNames.find((name) => refName.startsWith(`refs/remotes/${name}/`));
+    if (!remote) continue;
+    const remoteBranch = refName.slice(`refs/remotes/${remote}/`.length);
+    if (!remoteBranch || remoteBranch === 'HEAD') continue;
+
+    const relation = commitRelation(worktreePath, branch, localSha);
+    const reflog = git(['reflog', 'show', '--format=%H%x09%gs', refName], worktreePath);
+    const reflogPositions =
+      reflog.status === 0
+        ? reflog.stdout
+            .split('\n')
+            .map((entry) => entry.split('\t'))
+            .filter((entry) => entry.length >= 2 && entry.slice(1).join('\t').includes('update by push'))
+            .map(([sha]) => sha)
+            .filter((sha) => commitRelation(worktreePath, branch, sha) !== 'unrelated')
+        : [];
+    if (relation === 'unrelated' && reflogPositions.length === 0) continue;
+
+    const live = git(['ls-remote', '--exit-code', remote, `refs/heads/${remoteBranch}`], worktreePath);
+    if (live.status !== 0) {
+      if (live.status === 2) continue;
+      return {
+        hasUnpushedCommits: true,
+        reason: 'indeterminate',
+        detail: `実リモート ${remote} の ${remoteBranch} を確認できません`,
+      };
+    }
+    const liveSha = live.stdout.trim().split(/\s+/)[0];
+    if (liveSha !== localSha) continue;
+    pushedPositions.push(localSha, ...reflogPositions);
+  }
+
+  let closest: { sha: string; commitShas: string[] } | undefined;
+  for (const pushedPosition of new Set(pushedPositions)) {
+    const after = commitsAfterPushedPosition(worktreePath, branch, pushedPosition);
+    if ('detail' in after) continue;
+    if (!closest || after.commitShas.length < closest.commitShas.length) {
+      closest = { sha: pushedPosition, commitShas: after.commitShas };
     }
   }
-
-  // Issue #692: upstreamは「保全先」の一例に過ぎない。追跡設定が無い、
-  // goneである、またはdefault branchを指す場合でも、別のremote refが先端を
-  // 保持していればworktree削除でcommitは失われない。
-  const remoteRefs = git(['for-each-ref', `--contains=${branch}`, '--format=%(refname)', 'refs/remotes'], worktreePath);
-  if (remoteRefs.status === 0 && remoteRefs.stdout.trim().length > 0) return { hasUnpushedCommits: false };
-
-  // remote refから到達不能でもdefault branchへ統合済みなら保全されている。
-  // 統合を確定できない場合は、ローカル限定commitとみなし安全側でtrueを返す。
-  const integration = integrationIntoDefaultBranch(worktreePath, branch);
-  if (integration.integrated) return { hasUnpushedCommits: false };
-  if ('detail' in integration) {
-    return { hasUnpushedCommits: true, reason: 'indeterminate', detail: integration.detail };
+  if (closest) {
+    return closest.commitShas.length === 0
+      ? { hasUnpushedCommits: false }
+      : { hasUnpushedCommits: true, reason: 'unpreserved_commits', commitShas: closest.commitShas };
   }
-  return {
-    hasUnpushedCommits: true,
-    reason: 'unpreserved_commits',
-    commitShas: integration.unpreservedCommits,
-  };
+
+  return unpreservedCommitsSinceDefaultBranch(worktreePath, branch);
 }
 
-export function hasUnpushedCommits(worktreePath: string, branch: string): boolean {
-  return inspectUnpushedCommits(worktreePath, branch).hasUnpushedCommits;
+export function hasUnpushedCommits(worktreePath: string, branch: string, knownPushedCommit?: string): boolean {
+  return inspectUnpushedCommits(worktreePath, branch, knownPushedCommit).hasUnpushedCommits;
 }
 
-/**
- * Issue #361: ブランチ`branch`の内容が、`worktreePath`の default branch へ既に統合済みかどうかを
- * 判定する。
- *
- * 1. 通常マージ・fast-forward・rebase-mergeは祖先関係（`git merge-base --is-ancestor`）で
- *    検出できる。
- * 2. rebase mergeとsquash mergeはcommit SHAを変える。各固有commitが触れたpathをすべて集め、
- *    commitごとにdefault branch履歴上のcommitと厳密な内容比較を行う。最終treeで相殺された
- *    pathも比較対象から落とさない。空commitは内容比較では保全を立証できないため統合未済とする。
- * 3. default branchが特定できない、または上記いずれの判定も成立しない場合は統合未済とみなす
- *    （安全側）。
- */
-type IntegrationCheck =
-  | { integrated: true }
-  | { integrated: false; unpreservedCommits: string[] }
-  | { integrated: false; detail: string };
+type CommitRelation = 'branch_contains_position' | 'position_contains_branch' | 'unrelated';
 
-function integrationIntoDefaultBranch(worktreePath: string, branch: string): IntegrationCheck {
+function commitRelation(worktreePath: string, branch: string, position: string): CommitRelation {
+  const positionBeforeBranch = git(['merge-base', '--is-ancestor', position, branch], worktreePath);
+  if (positionBeforeBranch.status === 0) return 'branch_contains_position';
+  const branchBeforePosition = git(['merge-base', '--is-ancestor', branch, position], worktreePath);
+  if (branchBeforePosition.status === 0) return 'position_contains_branch';
+  return 'unrelated';
+}
+
+function commitsAfterPushedPosition(
+  worktreePath: string,
+  branch: string,
+  pushedPosition: string,
+): { commitShas: string[] } | { detail: string } {
+  const exists = git(['rev-parse', '--verify', `${pushedPosition}^{commit}`], worktreePath);
+  if (exists.status !== 0) return { detail: `push済みcommit ${pushedPosition.slice(0, 12)} を解決できません` };
+
+  const relation = commitRelation(worktreePath, branch, pushedPosition);
+  if (relation === 'position_contains_branch') return { commitShas: [] };
+  if (relation === 'unrelated') {
+    return { detail: `push済みcommit ${pushedPosition.slice(0, 12)} と作業ブランチの関係を確定できません` };
+  }
+
+  const commits = git(['rev-list', '--reverse', `${pushedPosition}..${branch}`], worktreePath);
+  if (commits.status !== 0) return { detail: 'push済み位置より後のcommitを列挙できません' };
+  return { commitShas: commits.stdout.split('\n').map((line) => line.trim()).filter(Boolean) };
+}
+
+function unpreservedCommitsSinceDefaultBranch(worktreePath: string, branch: string): UnpushedCommitCheck {
   let base: string;
   try {
     base = defaultBranch(worktreePath);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    return { integrated: false, detail };
+    return { hasUnpushedCommits: true, reason: 'indeterminate', detail };
   }
-
-  const ancestor = git(['merge-base', '--is-ancestor', branch, base], worktreePath);
-  if (ancestor.status === 0) return { integrated: true };
-  if (ancestor.status !== 1) {
-    return { integrated: false, detail: 'ブランチとデフォルトブランチの祖先関係を確認できません' };
-  }
-
   const mergeBase = git(['merge-base', branch, base], worktreePath);
   if (mergeBase.status !== 0) {
-    return { integrated: false, detail: 'ブランチとデフォルトブランチの分岐点を確認できません' };
+    return {
+      hasUnpushedCommits: true,
+      reason: 'indeterminate',
+      detail: 'ブランチとデフォルトブランチの分岐点を確認できません',
+    };
   }
-  const mergeBaseSha = mergeBase.stdout.trim();
-  const branchCommits = git(['rev-list', '--reverse', `${mergeBaseSha}..${branch}`], worktreePath);
-  if (branchCommits.status !== 0) {
-    return { integrated: false, detail: 'ブランチ固有のcommitを列挙できません' };
+  const commits = git(['rev-list', '--reverse', `${mergeBase.stdout.trim()}..${branch}`], worktreePath);
+  if (commits.status !== 0) {
+    return { hasUnpushedCommits: true, reason: 'indeterminate', detail: 'ブランチ固有のcommitを列挙できません' };
   }
-  const commits = branchCommits.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (commits.length === 0) {
-    return { integrated: false, detail: 'ブランチ固有のcommitを確認できません' };
-  }
-
-  const changedPathsByCommit = new Map<string, string[]>();
-  const allChangedPaths = new Set<string>();
-  for (const commit of commits) {
-    const changed = git(
-      ['diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', '-z', `${commit}^`, commit],
-      worktreePath,
-    );
-    if (changed.status !== 0) {
-      return { integrated: false, detail: `commit ${commit.slice(0, 12)} の変更pathを確認できません` };
-    }
-    const changedPaths = changed.stdout.split('\0').filter(Boolean);
-    changedPathsByCommit.set(commit, changedPaths);
-    for (const changedPath of changedPaths) allChangedPaths.add(changedPath);
-  }
-
-  const unreachableCommits: string[] = [];
-  for (const commit of commits) {
-    const inDefaultBranch = git(['merge-base', '--is-ancestor', commit, base], worktreePath);
-    if (inDefaultBranch.status === 0) continue;
-    if (inDefaultBranch.status !== 1) {
-      return { integrated: false, detail: `commit ${commit.slice(0, 12)} の到達可能性を確認できません` };
-    }
-
-    const remoteRefs = git(['for-each-ref', `--contains=${commit}`, '--format=%(refname)', 'refs/remotes'], worktreePath);
-    if (remoteRefs.status !== 0) {
-      return { integrated: false, detail: `commit ${commit.slice(0, 12)} のリモート保全状況を確認できません` };
-    }
-    if (remoteRefs.stdout.trim().length === 0) unreachableCommits.push(commit);
-  }
-  if (unreachableCommits.length === 0) return { integrated: true };
-  if (allChangedPaths.size === 0) {
-    return { integrated: false, unpreservedCommits: unreachableCommits };
-  }
-
-  const unpreservedCommits: string[] = [];
-  for (const commit of unreachableCommits) {
-    const changedPaths = changedPathsByCommit.get(commit) ?? [];
-    if (changedPaths.length === 0) {
-      unpreservedCommits.push(commit);
-      continue;
-    }
-
-    const baseCommits = git(
-      ['--literal-pathspecs', 'rev-list', `${mergeBaseSha}..${base}`, '--', ...changedPaths],
-      worktreePath,
-    );
-    if (baseCommits.status !== 0) {
-      return { integrated: false, detail: `commit ${commit.slice(0, 12)} の統合先履歴を確認できません` };
-    }
-
-    let contentIntegrated = false;
-    for (const baseCommit of baseCommits.stdout
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)) {
-      const sameContent = git(
-        ['--literal-pathspecs', 'diff', '--quiet', branch, baseCommit, '--', ...changedPaths],
-        worktreePath,
-      );
-      if (sameContent.status === 0) {
-        contentIntegrated = true;
-        break;
-      }
-      if (sameContent.status !== 1) {
-        return { integrated: false, detail: `commit ${commit.slice(0, 12)} の内容を比較できません` };
-      }
-    }
-    if (!contentIntegrated) unpreservedCommits.push(commit);
-  }
-
-  return unpreservedCommits.length === 0
-    ? { integrated: true }
-    : { integrated: false, unpreservedCommits };
+  const commitShas = commits.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+  return commitShas.length === 0
+    ? { hasUnpushedCommits: false }
+    : { hasUnpushedCommits: true, reason: 'unpreserved_commits', commitShas };
 }
 
 /**

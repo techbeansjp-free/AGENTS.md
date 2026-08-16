@@ -22,6 +22,11 @@ interface IntegrationRecord {
   status: 'draft' | 'ready_for_review' | 'merged' | 'closed';
 }
 
+interface PullRequestRecord {
+  state: string;
+  headRefOid?: string;
+}
+
 export async function run(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -60,8 +65,30 @@ export async function run(args: string[]): Promise<number> {
       return fail('worktree 内に未commitの変更があるため削除できません');
     }
 
+    let integrationDone = false;
+    let pushedCommit: string | undefined;
+    if (config.coordination.backend === 'local') {
+      const record = tryReadYamlFile<IntegrationRecord>(integrationFilePath(root, number));
+      integrationDone = record?.status === 'merged' || record?.status === 'closed';
+    } else if (entry.branch) {
+      const prView = gh(['pr', 'list', '--head', entry.branch, '--state', 'all', '--json', 'state,headRefOid'], root);
+      if (prView.status === 0) {
+        try {
+          const prs = JSON.parse(prView.stdout) as PullRequestRecord[];
+          const completed = prs.find((pr) => pr.state === 'MERGED' || pr.state === 'CLOSED');
+          integrationDone = !!completed;
+          pushedCommit = completed?.headRefOid;
+        } catch {
+          integrationDone = false;
+        }
+      }
+    }
+    if (!integrationDone) {
+      return fail('対応する PR / Integration Record が完了済み（merged または closed）ではないため削除できません');
+    }
+
     if (entry.branch) {
-      const unpushed = inspectUnpushedCommits(entry.path, entry.branch);
+      const unpushed = inspectUnpushedCommits(entry.path, entry.branch, pushedCommit);
       if (unpushed.hasUnpushedCommits && unpushed.reason === 'unpreserved_commits') {
         const shas = unpushed.commitShas.map((sha) => sha.slice(0, 12)).join(', ');
         return fail(
@@ -71,25 +98,6 @@ export async function run(args: string[]): Promise<number> {
       if (unpushed.hasUnpushedCommits) {
         return fail(`commitの保全状況を確認できないため削除できません（${unpushed.detail}）`);
       }
-    }
-
-    let integrationDone = false;
-    if (config.coordination.backend === 'local') {
-      const record = tryReadYamlFile<IntegrationRecord>(integrationFilePath(root, number));
-      integrationDone = record?.status === 'merged' || record?.status === 'closed';
-    } else if (entry.branch) {
-      const prView = gh(['pr', 'list', '--head', entry.branch, '--state', 'all', '--json', 'state'], root);
-      if (prView.status === 0) {
-        try {
-          const prs = JSON.parse(prView.stdout) as { state: string }[];
-          integrationDone = prs.some((pr) => pr.state === 'MERGED' || pr.state === 'CLOSED');
-        } catch {
-          integrationDone = false;
-        }
-      }
-    }
-    if (!integrationDone) {
-      return fail('対応する PR / Integration Record が完了済み（merged または closed）ではないため削除できません');
     }
 
     const remove = git(['worktree', 'remove', entry.path], root);
