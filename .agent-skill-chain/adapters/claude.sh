@@ -100,56 +100,253 @@ _asc_cli() {
   "${ASC_CLI[@]}" "$@"
 }
 
-# AI reviewerへはmodel providerのローカルlogin保存先（およびISSUE-562: 呼び出し元環境の
-# ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN。_claude_auth_ok()の高速パス判定と一貫させ、
-# ファイル・Keychainいずれの認証方式にも依存させないため）だけを渡し、GitHub credential・
-# gh/git設定・caller HOMEを渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace以外の
-# 読取りは不要。実値はログ・stdout/stderrに出さない（Issue #185 _claude_auth_ok と同じ非ログ方針）。
+# Issue #691: env shebangが必要とするruntimeを解決できるよう、選択済みCLIの実体ディレクトリだけを
+# 固定PATHへ追加する。caller HOMEとIssue worktreeの実体配下は隔離境界を動かせるため追加しない。
+_reviewer_sanitized_path() {
+  local sanitized_path='/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+  local review_adapter="${ASC_REVIEW_ADAPTER:-claude}" executable cli_path cli_dir
+  if [[ "$review_adapter" == "codex" ]]; then
+    executable="${CODEX_EXECUTABLE:-codex}"
+  else
+    executable="${CLAUDE_EXECUTABLE:-claude}"
+  fi
+  cli_path="$(command -v "$executable" 2>/dev/null || true)"
+  if [[ "$cli_path" != /* ]]; then
+    printf '%s\n' "$sanitized_path"
+    return
+  fi
+
+  cli_dir="${cli_path%/*}"
+  [[ -n "$cli_dir" ]] || cli_dir='/'
+  cli_dir="$(cd -- "$cli_dir" >/dev/null 2>&1 && pwd -P)" || {
+    printf '%s\n' "$sanitized_path"
+    return
+  }
+
+  local original_home_dir='' repo_dir=''
+  if [[ -n "${HOME:-}" && -d "$HOME" ]]; then
+    original_home_dir="$(cd -- "$HOME" >/dev/null 2>&1 && pwd -P)" || original_home_dir=''
+  fi
+  if [[ -d "$REPO_ROOT" ]]; then
+    repo_dir="$(cd -- "$REPO_ROOT" >/dev/null 2>&1 && pwd -P)" || repo_dir=''
+  fi
+  local excluded=false
+  if [[ -n "$original_home_dir" && ( "$cli_dir" == "$original_home_dir" || "$cli_dir" == "$original_home_dir/"* ) ]]; then
+    excluded=true
+  fi
+  if [[ -n "$repo_dir" && ( "$cli_dir" == "$repo_dir" || "$cli_dir" == "$repo_dir/"* ) ]]; then
+    excluded=true
+  fi
+  if [[ "$excluded" == "false" && ":$sanitized_path:" != *":$cli_dir:"* ]]; then
+    sanitized_path+=":$cli_dir"
+  fi
+  printf '%s\n' "$sanitized_path"
+}
+
+# AI reviewerへは隔離領域へ複製したmodel providerのログインファイルと、呼び出し元環境の
+# ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKENだけを渡す。GitHub credential・gh/git設定・caller HOME・
+# callerのprovider設定ディレクトリは渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace
+# 以外の読取りは不要。実値はログ・stdout/stderrに出さない（Issue #691）。
 _run_reviewer_sanitized() {
   local prompt="$1" reviewer_cmd="$2" timeout_sec="$3"
-  local isolated_root="${ASC_REVIEWER_SANITIZED_ROOT:-}"
-  local owns_root=false
-  if [[ -z "$isolated_root" ]]; then
-    isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-reviewer.XXXXXX")"
-    owns_root=true
+  # Issue #691: 不正な値でwatchdogのsleepが失敗すると時間制限が無効になるため、起動前に拒否する。
+  if [[ ! "$timeout_sec" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s\n' "_run_reviewer_sanitized: timeout秒数は正整数で指定してください（value=${timeout_sec}）" >&2
+    return 64
   fi
-  mkdir -p "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
-  chmod 700 "$isolated_root" "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
+  local isolated_root
+  isolated_root="$(/usr/bin/mktemp -d /tmp/agent-skill-chain-reviewer.XXXXXX)"
+  /bin/mkdir -p "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg" \
+    "$isolated_root/auth/claude" "$isolated_root/auth/codex"
+  /bin/chmod 700 "$isolated_root" "$isolated_root/home" "$isolated_root/workspace" \
+    "$isolated_root/xdg" "$isolated_root/auth" "$isolated_root/auth/claude" "$isolated_root/auth/codex"
 
-  local original_home="${ASC_REVIEWER_ORIGINAL_HOME:-${HOME:-}}"
+  local original_home="${HOME:-}"
   local codex_home="${CODEX_HOME:-${original_home:+$original_home/.codex}}"
   local claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
+  local staged_codex_home="$isolated_root/auth/codex"
+  local staged_claude_config="$isolated_root/auth/claude"
+  local review_adapter="${ASC_REVIEW_ADAPTER:-claude}"
+  local sanitized_path
+  sanitized_path="$(_reviewer_sanitized_path)"
+  # Issue #691: 設定ディレクトリ全体やsymlinkを持ち込むとcaller HOMEや任意パスへの読取り経路に
+  # なるため、認証に必要な既知の通常ファイルだけを隔離領域へ複製する。
+  if [[ "$review_adapter" == "codex" && -n "$codex_home" && -f "$codex_home/auth.json" && ! -L "$codex_home/auth.json" ]]; then
+    /bin/cp "$codex_home/auth.json" "$staged_codex_home/auth.json"
+    /bin/chmod 600 "$staged_codex_home/auth.json"
+  fi
+  if [[ "$review_adapter" == "claude" && -n "$claude_config" && -f "$claude_config/.credentials.json" && ! -L "$claude_config/.credentials.json" ]]; then
+    /bin/cp "$claude_config/.credentials.json" "$staged_claude_config/.credentials.json"
+    /bin/chmod 600 "$staged_claude_config/.credentials.json"
+  fi
   local -a clean_env=(
-    env -i
-    "PATH=$PATH"
+    /usr/bin/env -i
+    "PATH=$sanitized_path"
     "HOME=$isolated_root/home"
     "XDG_CONFIG_HOME=$isolated_root/xdg"
     "GH_CONFIG_DIR=$isolated_root/xdg/gh"
     "GIT_CONFIG_GLOBAL=/dev/null"
     "GIT_CONFIG_SYSTEM=/dev/null"
     "GIT_TERMINAL_PROMPT=0"
-    "TMPDIR=${TMPDIR:-/tmp}"
+    "TMPDIR=/tmp"
     "LANG=${LANG:-C.UTF-8}"
     "LC_ALL=${LC_ALL:-}"
-    "ASC_REVIEWER_SANITIZED_ROOT=$isolated_root"
   )
-  [[ -n "$codex_home" && -d "$codex_home" ]] && clean_env+=("CODEX_HOME=$codex_home")
-  [[ -n "$claude_config" && -d "$claude_config" ]] && clean_env+=("CLAUDE_CONFIG_DIR=$claude_config")
-  # ISSUE-562: _claude_auth_ok() の高速パス（env非空判定）と一貫させ、呼び出し元環境の
-  # トークンが設定されている場合は隔離サブプロセスへもそのまま引き継ぐ。Keychain等
-  # ファイル外認証（CLAUDE_CONFIG_DIR転送では再現不可）でもレビュアを起動できるようにする。
-  [[ -n "${ANTHROPIC_API_KEY:-}" ]] && clean_env+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
-  [[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]] && clean_env+=("CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN")
-
-  local rc=0 output=""
-  if command -v timeout >/dev/null 2>&1; then
-    output="$(printf '%s' "$prompt" | timeout "$timeout_sec" "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+  if [[ "$review_adapter" == "codex" ]]; then
+    clean_env+=("CODEX_HOME=$staged_codex_home")
   else
-    output="$(printf '%s' "$prompt" | "${clean_env[@]}" bash -c "$reviewer_cmd" 2>/dev/null)" || rc=$?
+    clean_env+=("CLAUDE_CONFIG_DIR=$staged_claude_config")
+    # ISSUE-562: 呼び出し元のprovider tokenが設定されている場合は隔離サブプロセスへ引き継ぐ。
+    # Issue #691: tokenの存在だけでは認証済みとせず、下流のprobeで実際の成立を検証する。
+    [[ -n "${ANTHROPIC_API_KEY:-}" ]] && clean_env+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+    [[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]] && clean_env+=("CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN")
   fi
-  [[ "$owns_root" == "true" ]] && rm -rf -- "$isolated_root"
+
+  local prompt_file="$isolated_root/prompt" output_file="$isolated_root/output"
+  local timeout_marker="$isolated_root/timed-out" watchdog_ready="$isolated_root/watchdog-ready"
+  local watchdog_armed="$isolated_root/watchdog-armed" reviewer_pid_file="$isolated_root/reviewer-pid"
+  local reviewer_pid watchdog_pid rc=0 output="" monitor_was_enabled=false
+  printf '%s' "$prompt" >"$prompt_file"
+  # Issue #691: reviewerより先にwatchdogを起動し、準備完了を確認する。期限後は独立した
+  # reviewerプロセスグループ全体へTERMを送り、1秒の猶予後も残るプロセスをKILLする。
+  (
+    active_sleep_pid=''
+    trap '[[ -z "$active_sleep_pid" ]] || kill -TERM "$active_sleep_pid" 2>/dev/null || true; exit 0' TERM
+    : >"$watchdog_ready" || exit 1
+    while [[ ! -s "$reviewer_pid_file" ]]; do
+      /bin/sleep 0.01 2>/dev/null || exit 1
+    done
+    IFS= read -r watched_pid <"$reviewer_pid_file" || exit 1
+    [[ "$watched_pid" =~ ^[1-9][0-9]*$ ]] || exit 1
+    /bin/sleep "$timeout_sec" 2>/dev/null &
+    active_sleep_pid=$!
+    : >"$watchdog_armed" || {
+      kill -TERM "$active_sleep_pid" 2>/dev/null || true
+      exit 1
+    }
+    wait "$active_sleep_pid" 2>/dev/null || true
+    active_sleep_pid=''
+    : >"$timeout_marker"
+    kill -TERM -- "-$watched_pid" 2>/dev/null || true
+    /bin/sleep 1 2>/dev/null &
+    active_sleep_pid=$!
+    wait "$active_sleep_pid" 2>/dev/null || true
+    active_sleep_pid=''
+    if kill -0 -- "-$watched_pid" 2>/dev/null; then
+      kill -KILL -- "-$watched_pid" 2>/dev/null || true
+    fi
+  ) &
+  watchdog_pid=$!
+
+  local watchdog_wait
+  for ((watchdog_wait = 0; watchdog_wait < 100; watchdog_wait++)); do
+    [[ ! -f "$watchdog_ready" ]] || break
+    kill -0 "$watchdog_pid" 2>/dev/null || break
+    /bin/sleep 0.01 2>/dev/null || break
+  done
+  if [[ ! -f "$watchdog_ready" ]] || ! kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    /bin/rm -rf -- "$isolated_root"
+    printf '%s\n' "_run_reviewer_sanitized: watchdogを起動できないためレビュアを起動しません" >&2
+    return 70
+  fi
+
+  [[ $- == *m* ]] && monitor_was_enabled=true
+  set -m
+  (
+    cd -- "$isolated_root/workspace" &&
+      exec "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" <"$prompt_file" >"$output_file" 2>/dev/null
+  ) &
+  reviewer_pid=$!
+  [[ "$monitor_was_enabled" == "true" ]] || set +m
+  printf '%s\n' "$reviewer_pid" >"$reviewer_pid_file"
+
+  for ((watchdog_wait = 0; watchdog_wait < 100; watchdog_wait++)); do
+    [[ ! -f "$watchdog_armed" ]] || break
+    kill -0 "$watchdog_pid" 2>/dev/null || break
+    /bin/sleep 0.01 2>/dev/null || break
+  done
+  if [[ ! -f "$watchdog_armed" ]] || ! kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM -- "-$reviewer_pid" 2>/dev/null || true
+    /bin/sleep 0.1 2>/dev/null || true
+    kill -KILL -- "-$reviewer_pid" 2>/dev/null || true
+    wait "$reviewer_pid" 2>/dev/null || true
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    /bin/rm -rf -- "$isolated_root"
+    printf '%s\n' "_run_reviewer_sanitized: watchdogを準備できないためレビュアを停止しました" >&2
+    return 70
+  fi
+
+  wait "$reviewer_pid" || rc=$?
+  if [[ -f "$timeout_marker" ]]; then
+    wait "$watchdog_pid" 2>/dev/null || true
+  elif kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+  fi
+  # reviewer本体が正常終了しても子孫だけが残る場合に、隔離プロセスを残さない。
+  if kill -0 -- "-$reviewer_pid" 2>/dev/null; then
+    kill -TERM -- "-$reviewer_pid" 2>/dev/null || true
+    /bin/sleep 0.1 2>/dev/null || true
+    kill -KILL -- "-$reviewer_pid" 2>/dev/null || true
+  fi
+  if [[ -f "$timeout_marker" ]]; then
+    rc=124
+  fi
+  [[ ! -f "$output_file" ]] || output="$(<"$output_file")"
+  /bin/rm -rf -- "$isolated_root"
   printf '%s' "$output"
   return "$rc"
+}
+
+# Issue #691: レビュアの認証プローブも実際のレビュアと同じ隔離環境で実行する。
+# caller HOMEに紐づくKeychain認証を利用可能と誤判定せず、決定的な認証不成立は再試行前に検出する。
+_claude_reviewer_auth_ok() {
+  local probe="${CLAUDE_AUTH_PROBE_CMD:-}"
+  if [[ -z "$probe" ]]; then
+    local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
+    if command -v "$claude_executable" >/dev/null 2>&1; then
+      local quoted_executable
+      printf -v quoted_executable '%q' "$(command -v "$claude_executable")"
+      probe="$quoted_executable auth status"
+    else
+      return 1
+    fi
+  fi
+  local t="${CLAUDE_AUTH_PROBE_TIMEOUT_SEC:-20}"
+  _run_reviewer_sanitized "" "$probe" "$t" >/dev/null 2>&1
+}
+
+_reviewer_auth_failure_message() {
+  local original_home="${HOME:-}"
+  local claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
+  local portable_auth_found=false
+
+  printf '%s\n' "隔離環境でClaude Codeの認証probeに失敗しました。"
+  if [[ -n "${ANTHROPIC_API_KEY:-}" || -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    printf '%s\n' "- 環境変数による資格情報: 設定されています（実値は表示しません）。"
+    portable_auth_found=true
+  else
+    printf '%s\n' "- 環境変数による資格情報: ANTHROPIC_API_KEYとCLAUDE_CODE_OAUTH_TOKENは未設定です。"
+  fi
+  if [[ -n "$claude_config" && -f "$claude_config/.credentials.json" && ! -L "$claude_config/.credentials.json" ]]; then
+    printf '%s\n' "- 設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりました。"
+    portable_auth_found=true
+  else
+    printf '%s\n' "- 設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりません。"
+  fi
+  if [[ "$portable_auth_found" == "true" ]]; then
+    printf '%s\n' "持ち込み可能な認証情報は検出されましたが、隔離環境の認証probeが失敗しています。資格情報の有効性と権限を確認してください。"
+  else
+    printf '%s\n' "隔離環境へ持ち込める認証情報がありません。macOS Keychainなどcaller HOMEに紐づく資格情報ストアは利用できません。"
+  fi
+  # Issue #691: 値を表示しないtestコマンドとcaller側のprobeを組み合わせ、資格情報ストア限定構成を判別可能にする。
+  printf '%s\n' '資格情報ストア限定構成の判定方法: 呼び出し元で `claude auth status` が成功し、次の両方が失敗する場合はmacOS Keychainなどの資格情報ストア限定構成です。'
+  printf '%s\n' '  test -n "${ANTHROPIC_API_KEY:-}${CLAUDE_CODE_OAUTH_TOKEN:-}"'
+  printf '%s\n' '  test -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json" && test ! -L "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json"'
+  printf '%s\n' "回避するには、ANTHROPIC_API_KEYまたはCLAUDE_CODE_OAUTH_TOKEN、もしくは設定ディレクトリ配下の通常ファイルとしてログイン情報を設定してください。"
 }
 
 # writer lease を取得する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる。
@@ -282,10 +479,10 @@ launch_gate_reviewer() {
     fi
   fi
 
-  # 認証（実値はログ・stdout に出さない）。env非空の高速パス→claude auth statusの実疎通フォールバック
-  # の2段判定（Issue #185 _claude_auth_ok）。真に認証が欠如している場合のみフェイルセーフする。
-  if ! _claude_auth_ok; then
-    _fail_safe "認証情報が未設定かつ実疎通確認にも失敗しました（env未設定・claude auth status失敗/不在）"
+  # 認証（実値はログ・stdout に出さない）。tokenや隔離領域へ複製した認証ファイルの有無だけで
+  # 成功扱いせず、実際のレビュア環境内でprobeが成功した場合だけ起動へ進む（Issue #691）。
+  if ! _claude_reviewer_auth_ok; then
+    _fail_safe "$(_reviewer_auth_failure_message)"
     return
   fi
 
@@ -295,7 +492,7 @@ launch_gate_reviewer() {
     local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
     if command -v "$claude_executable" >/dev/null 2>&1; then
       local quoted_executable
-      printf -v quoted_executable '%q' "$claude_executable"
+      printf -v quoted_executable '%q' "$(command -v "$claude_executable")"
       reviewer_cmd="$quoted_executable -p --output-format text --allowed-tools ''"
       local selected_model=""
       if [[ "$core_claude_review" == "true" ]]; then
@@ -331,6 +528,12 @@ launch_gate_reviewer() {
   local timeout_sec="${GATE_REVIEWER_TIMEOUT_SEC:-900}"
   local retries="${GATE_REVIEWER_RETRIES:-3}"
   local interval="${GATE_REVIEWER_RETRY_INTERVAL_SEC:-30}"
+
+  # Issue #691: 不正値は決定的で再試行しても直らず、watchdogを無効化し得るため起動前に停止する。
+  if [[ ! "$timeout_sec" =~ ^[1-9][0-9]*$ ]]; then
+    _fail_safe "GATE_REVIEWER_TIMEOUT_SEC は正整数で指定してください（value=${timeout_sec}）"
+    return
+  fi
 
   # read-only レビュア起動（プロンプトは stdin）。一時障害はリトライ、timeout は打ち切り。
   local attempt=1 verdict rc
