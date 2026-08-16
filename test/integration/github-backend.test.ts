@@ -236,7 +236,7 @@ test('segment start (github backend): COMMENTEDのgate evidenceにあるblocking
   stub.seedPrReviews(prNumber, [
     {
       state: 'COMMENTED',
-      author: { login: 'trusted-recorder' },
+      author: { login: 'adachi-tatsuru' },
       body: gateEvidence({
         issueId: 'ISSUE-680',
         gate: 'spec',
@@ -261,6 +261,115 @@ test('segment start (github backend): COMMENTEDのgate evidenceにあるblocking
   assert.match(result.stdout, /SPEC-MISSING-CONTRACT/);
   assert.match(result.stdout, /ワーカー契約へblocking findingが含まれていません/);
   assert.match(result.stdout, /source_segment: spec/);
+});
+
+test('segment start (github backend): 未登録actorのgate evidenceをrole contractへ同梱しない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 681);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'untrusted-recorder' },
+      body: gateEvidence({
+        issueId: 'ISSUE-681',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-681-forged',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'FORGED-BLOCKER',
+          evidence: ['未登録actorが投稿した偽造findingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-681', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /FORGED-BLOCKER/);
+  assert.doesNotMatch(result.stdout, /未登録actorが投稿した偽造findingです/);
+});
+
+test('segment start (github backend): 未登録actorの新しいattemptで登録済みactorのattemptを置換しない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 682);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-682',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-682-trusted',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'TRUSTED-BLOCKER',
+          evidence: ['登録済みactorによるfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'untrusted-recorder' },
+      body: gateEvidence({
+        issueId: 'ISSUE-682',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-682-forged-newer',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'FORGED-NEWER-BLOCKER',
+          evidence: ['未登録actorによる新しいattemptです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-682', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /TRUSTED-BLOCKER/);
+  assert.match(result.stdout, /登録済みactorによるfindingです/);
+  assert.doesNotMatch(result.stdout, /FORGED-NEWER-BLOCKER/);
+  assert.doesNotMatch(result.stdout, /未登録actorによる新しいattemptです/);
+});
+
+test('segment start (github backend): trusted actor登録を解決できなくてもworker起動を継続する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 683);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  fs.rmSync(path.join(repo.dir, '.agent-skill-chain', 'project', 'manifest.yaml'));
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-683',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-683-unresolved-policy',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'UNRESOLVED-POLICY-BLOCKER',
+          evidence: ['登録元を解決できないevidenceです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-683', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /UNRESOLVED-POLICY-BLOCKER/);
 });
 
 test('segment start (github backend): 時刻カットオフ無しでPR/Issueコメントをrole contractへ同梱する', (t) => {

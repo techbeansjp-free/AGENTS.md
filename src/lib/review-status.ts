@@ -8,6 +8,7 @@ import {
   type EvidenceFinding,
   type ReviewEvidence,
 } from './review-evidence.js';
+import { loadCoreReviewPolicy } from './model-selection.js';
 import { resolveCurrentBranch } from './worktree.js';
 import { toYamlString, tryReadYamlFile } from './yaml-io.js';
 
@@ -218,6 +219,7 @@ function unresolvedReviews(reviews: GithubReview[]): UnresolvedGithubReview[] {
 }
 
 function unresolvedGateFindings(
+  root: string,
   reviews: GithubReview[],
   issueNumber: string,
   segment: string | undefined,
@@ -226,9 +228,25 @@ function unresolvedGateFindings(
   const targetOrigin = segment ? SEGMENT_TO_ORIGIN[segment as Segment] : undefined;
   if (!targetOrigin || !targetSha) return [];
 
+  let trustedActors: Set<string>;
+  try {
+    trustedActors = new Set(loadCoreReviewPolicy(root)?.execution.trusted_reviewer_actors ?? []);
+  } catch {
+    // Issue #680: recorder登録を解決できない環境ではevidenceを信頼せず、worker起動は継続する。
+    trustedActors = new Set();
+  }
+  if (trustedActors.size === 0) return [];
+
   const matching: { evidence: ReviewEvidence; entry: { review: GithubReview; index: number } }[] = [];
   reviews.forEach((review, index) => {
-    if (review.state === 'DISMISSED' || typeof review.body !== 'string' || !review.body.includes(REVIEW_EVIDENCE_MARKER)) {
+    const author = review.author?.login;
+    if (
+      !author ||
+      !trustedActors.has(author) ||
+      review.state === 'DISMISSED' ||
+      typeof review.body !== 'string' ||
+      !review.body.includes(REVIEW_EVIDENCE_MARKER)
+    ) {
       return;
     }
     try {
@@ -396,6 +414,7 @@ function detectGithubPrSide(
       prNumber: payload.number,
       reviews: unresolvedReviews(payload.reviews),
       blockingFindings: unresolvedGateFindings(
+        root,
         payload.reviews,
         issueNumber,
         segment,
