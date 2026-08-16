@@ -564,6 +564,43 @@ export async function finalizeTrustedGateCheck(options: {
   });
 }
 
+export async function finalizeTrustedGateCheckFailure(options: {
+  repository: string;
+  repositoryId: number;
+  credentials: GithubAppCredentials;
+  checkId: number;
+  attestation: TrustedGateAttestationEnvelope;
+  reason: 'attestation_failed' | 'verification_failed';
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  const durableText = canonicalJson({
+    schema_version: 'agent-skill-chain/check-output-error/v1',
+    attestation: options.attestation,
+    reason: options.reason,
+  });
+  if (Buffer.byteLength(durableText, 'utf8') > MAX_CHECK_OUTPUT_BYTES) {
+    throw new Error('action_required error envelopeもGitHub Check output上限を超えています');
+  }
+  await appCheckRequest<unknown>({
+    repository: options.repository,
+    repositoryId: options.repositoryId,
+    credentials: options.credentials,
+    path: `/repos/${options.repository}/check-runs/${safeInteger(options.checkId, 'Check ID')}`,
+    method: 'PATCH',
+    body: {
+      status: 'completed',
+      conclusion: 'action_required',
+      completed_at: new Date().toISOString(),
+      output: {
+        title: `${options.attestation.gate} gate: ${options.reason}`,
+        summary: 'Gate attestation could not be established; merge remains blocked.',
+        text: durableText,
+      },
+    },
+    fetchImpl: options.fetchImpl,
+  });
+}
+
 export function writeTrustedGateRecordState(
   statePath: string,
   envelopePath: string,

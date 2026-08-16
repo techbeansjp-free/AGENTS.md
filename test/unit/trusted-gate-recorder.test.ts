@@ -13,6 +13,7 @@ import {
   canonicalReportIsOversize,
   fetchTrustedGateApiContext,
   finalizeTrustedGateCheck,
+  finalizeTrustedGateCheckFailure,
   parseTrustedGateDispatchEvent,
   parseTrustedGateWorkflow,
   selectLatestTrustedGateCheck,
@@ -24,6 +25,7 @@ import {
   type TrustedGatePayload,
   type TrustedGateWorkflow,
 } from '../../src/lib/trusted-gate-recorder.js';
+import { readYamlFile } from '../../src/lib/yaml-io.js';
 
 const SHA = 'a'.repeat(40);
 const BASE_SHA = 'b'.repeat(40);
@@ -52,6 +54,63 @@ test('repository_dispatch受信workflowを配布元と展開先へ同期してCh
   assert.match(deployed, /gate record-trusted-check prepare/);
   assert.match(deployed, /gate record-trusted-check finalize/);
   assert.match(deployed, /ASC_GATE_APP_PRIVATE_KEY: \$\{\{ secrets\.ASC_GATE_APP_PRIVATE_KEY \}\}/);
+});
+
+interface WorkflowStep {
+  name?: string;
+  id?: string;
+  if?: string;
+  run?: string;
+  env?: Record<string, string>;
+}
+
+function trustedGateSteps(): WorkflowStep[] {
+  const packageRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  const workflow = readYamlFile<{ jobs: { record: { steps: WorkflowStep[] } } }>(
+    path.join(packageRoot, '.github', 'workflows', 'agent-skill-chain-trusted-gate.yml'),
+  );
+  return workflow.jobs.record.steps;
+}
+
+function workflowStep(name: string): WorkflowStep {
+  const step = trustedGateSteps().find((candidate) => candidate.name === name);
+  assert.ok(step, `${name} stepが存在すること`);
+  return step;
+}
+
+test('trusted gate workflowはnpm構成を検出し、buildとCLI解決をconsumer構成へ適応させる', () => {
+  const detect = workflowStep('Detect npm build prerequisites');
+  assert.equal(detect.id, 'npm-prereq');
+  assert.match(detect.run ?? '', /package-lock\.json/);
+  assert.match(detect.run ?? '', /npm-shrinkwrap\.json/);
+  assert.match(detect.run ?? '', /build=true/);
+  assert.equal(workflowStep('npm ci').if, "steps.npm-prereq.outputs.ci == 'true'");
+  assert.equal(workflowStep('npm run build').if, "steps.npm-prereq.outputs.build == 'true'");
+  const ensure = workflowStep('Ensure agent-skill-chain CLI').run ?? '';
+  assert.match(ensure, /source \.agent-skill-chain\/scripts\/cli-resolve\.sh/);
+  assert.match(ensure, /asc_resolve_cli/);
+
+  for (const name of [
+    'Validate dispatch payload allowlist',
+    'Prepare dedicated-App in-progress Check and envelope',
+    'Finalize dedicated-App Check as the last operation',
+  ]) {
+    const run = workflowStep(name).run ?? '';
+    assert.match(run, /asc_resolve_cli/);
+    assert.match(run, /"\$\{ASC_CLI\[@\]\}" gate record-trusted-check/);
+    assert.doesNotMatch(run, /node bin\/agents-md\.js/);
+  }
+});
+
+test('trusted gate workflowはattestation失敗後もprepare済みCheckをfail-closedで完了させる', () => {
+  assert.equal(workflowStep('Prepare dedicated-App in-progress Check and envelope').id, 'prepare');
+  assert.equal(workflowStep('Attest exact gate envelope').id, 'attest');
+  assert.equal(workflowStep('Verify signer workflow, ref, digest, and certificate').id, 'verify');
+  const finalize = workflowStep('Finalize dedicated-App Check as the last operation');
+  assert.match(finalize.if ?? '', /always\(\)/);
+  assert.match(finalize.if ?? '', /steps\.prepare\.outcome == 'success'/);
+  assert.equal(finalize.env?.ASC_GATE_ATTEST_OUTCOME, '${{ steps.attest.outcome }}');
+  assert.equal(finalize.env?.ASC_GATE_VERIFY_OUTCOME, '${{ steps.verify.outcome }}');
 });
 
 test('recorder secretはdirect fetch用に退避後、子process環境から除去される', () => {
@@ -380,4 +439,56 @@ test('48KiB超reportはaction_requiredとなり、App PATCHが最後のHTTP操�
   const patch = JSON.parse(String(last?.init?.body));
   assert.equal(patch.conclusion, 'action_required');
   assert.equal(JSON.parse(patch.output.text).schema_version, 'agent-skill-chain/check-output-error/v1');
+});
+
+test('attestation失敗はprepare済みCheckをaction_requiredで完了する', async () => {
+  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.endsWith('/installation')) return new Response(JSON.stringify({ id: 88 }), { status: 200 });
+    if (url.endsWith('/repos/techbeansjp-free/AGENTS.md')) {
+      return new Response(JSON.stringify({ id: 77 }), { status: 200 });
+    }
+    if (url.endsWith('/access_tokens')) {
+      return new Response(JSON.stringify({
+        token: 'app-installation-token',
+        expires_at: '2026-07-26T01:00:00Z',
+      }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ id: 501 }), { status: 200 });
+  };
+  const attestation = {
+    schema_version: 'agent-skill-chain/gate-attestation/v1',
+    repository: { full_name: 'techbeansjp-free/AGENTS.md', id: 77 },
+    pr_number: 274,
+    target_sha: SHA,
+    gate: 'implementation',
+    review_attempt: {
+      attempt_id: 'attempt-1',
+      expected_count: 2,
+      evidence_digest: `sha256:${'d'.repeat(64)}`,
+    },
+    workflow: WORKFLOW,
+    check: { id: 501, name: 'agent-skill-chain/implementation-gate', app_id: 12345 },
+    report_digest: `sha256:${'e'.repeat(64)}`,
+  } satisfies TrustedGateAttestationEnvelope;
+  await finalizeTrustedGateCheckFailure({
+    repository: 'techbeansjp-free/AGENTS.md',
+    repositoryId: 77,
+    credentials: { appId: '12345', privateKey: privateKeyPem },
+    checkId: 501,
+    attestation,
+    reason: 'attestation_failed',
+    fetchImpl: fetchImpl as typeof fetch,
+  });
+
+  const last = calls.at(-1);
+  assert.ok(last?.url.endsWith('/check-runs/501'));
+  assert.equal(last?.init?.method, 'PATCH');
+  const patch = JSON.parse(String(last?.init?.body));
+  assert.equal(patch.conclusion, 'action_required');
+  assert.equal(JSON.parse(patch.output.text).reason, 'attestation_failed');
 });

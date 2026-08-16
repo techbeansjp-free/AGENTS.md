@@ -36,15 +36,42 @@ jobs:
         with:
           node-version: '20'
 
-      - run: npm ci
-      - run: npm run build
+      - name: Detect npm build prerequisites
+        id: npm-prereq
+        run: |
+          if [[ -f package.json && ( -f package-lock.json || -f npm-shrinkwrap.json ) ]]; then
+            echo "ci=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ci=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f package.json ]] && node -e "process.exit((require('./package.json').scripts || {}).build ? 0 : 1)" 2>/dev/null; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: npm ci
+        if: steps.npm-prereq.outputs.ci == 'true'
+        run: npm ci
+
+      - name: npm run build
+        if: steps.npm-prereq.outputs.build == 'true'
+        run: npm run build
+
+      - name: Ensure agent-skill-chain CLI
+        run: |
+          source .agent-skill-chain/scripts/cli-resolve.sh
+          asc_resolve_cli
 
       - name: Validate dispatch payload allowlist
         id: payload
         env:
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
           GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
-        run: node bin/agents-md.js gate record-trusted-check validate >> "$GITHUB_OUTPUT"
+        run: |
+          source .agent-skill-chain/scripts/cli-resolve.sh
+          asc_resolve_cli
+          "${ASC_CLI[@]}" gate record-trusted-check validate >> "$GITHUB_OUTPUT"
 
       - name: Fetch target as a read-only Git object
         env:
@@ -55,6 +82,7 @@ jobs:
           test "$(git rev-parse "refs/agent-skill-chain/targets/${TARGET_SHA}^{commit}")" = "$TARGET_SHA"
 
       - name: Prepare dedicated-App in-progress Check and envelope
+        id: prepare
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
@@ -62,16 +90,20 @@ jobs:
           ASC_GATE_APP_ID: ${{ vars.ASC_GATE_APP_ID || secrets.ASC_GATE_APP_ID }}
           ASC_GATE_APP_PRIVATE_KEY: ${{ secrets.ASC_GATE_APP_PRIVATE_KEY }}
         run: |
-          node bin/agents-md.js gate record-trusted-check prepare \
+          source .agent-skill-chain/scripts/cli-resolve.sh
+          asc_resolve_cli
+          "${ASC_CLI[@]}" gate record-trusted-check prepare \
             "$RUNNER_TEMP/trusted-gate-state.json" \
             "$RUNNER_TEMP/agent-skill-chain-gate-attestation.json"
 
       - name: Attest exact gate envelope
+        id: attest
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
         with:
           subject-path: ${{ runner.temp }}/agent-skill-chain-gate-attestation.json
 
       - name: Verify signer workflow, ref, digest, and certificate
+        id: verify
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
@@ -84,14 +116,19 @@ jobs:
             --format json > "$RUNNER_TEMP/trusted-gate-verification.json"
 
       - name: Finalize dedicated-App Check as the last operation
+        if: always() && steps.prepare.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
           GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
           ASC_GATE_APP_ID: ${{ vars.ASC_GATE_APP_ID || secrets.ASC_GATE_APP_ID }}
           ASC_GATE_APP_PRIVATE_KEY: ${{ secrets.ASC_GATE_APP_PRIVATE_KEY }}
+          ASC_GATE_ATTEST_OUTCOME: ${{ steps.attest.outcome }}
+          ASC_GATE_VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         run: |
-          node bin/agents-md.js gate record-trusted-check finalize \
+          source .agent-skill-chain/scripts/cli-resolve.sh
+          asc_resolve_cli
+          "${ASC_CLI[@]}" gate record-trusted-check finalize \
             "$RUNNER_TEMP/trusted-gate-state.json" \
             "$RUNNER_TEMP/agent-skill-chain-gate-attestation.json" \
             "$RUNNER_TEMP/trusted-gate-verification.json"

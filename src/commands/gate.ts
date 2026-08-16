@@ -41,6 +41,7 @@ import {
   createTrustedGateCheck,
   fetchTrustedGateApiContext,
   finalizeTrustedGateCheck,
+  finalizeTrustedGateCheckFailure,
   githubJsonDirect,
   parseTrustedGateCheckOutput,
   parseTrustedGateDispatchEvent,
@@ -1552,6 +1553,49 @@ export async function recordTrustedCheck(args: string[]): Promise<number> {
       canonicalJson(state.workflow) !== canonicalJson(workflow)
     ) {
       throw new CliError('stateのdispatch actor/payload/workflow tupleがcurrent runと一致しません');
+    }
+    const attestationOutcome = process.env.ASC_GATE_ATTEST_OUTCOME ?? 'success';
+    const verificationOutcome = process.env.ASC_GATE_VERIFY_OUTCOME ?? 'success';
+    const allowedOutcomes = ['success', 'failure', 'cancelled', 'skipped'];
+    if (!allowedOutcomes.includes(attestationOutcome) || !allowedOutcomes.includes(verificationOutcome)) {
+      throw new CliError('attestationまたはverification step outcomeを解釈できません');
+    }
+    if (attestationOutcome !== 'success' || verificationOutcome !== 'success') {
+      const currentCheck = await readTrustedGateCheck({
+        repository,
+        repositoryId: state.attestation.repository.id,
+        credentials,
+        checkId: state.check.id,
+      });
+      const expectedExternalId = trustedGateExternalId(workflow, event.payload);
+      assertTrustedAppCheck({
+        check: currentCheck,
+        expectedAppId: Number(credentials.appId),
+        expectedName: state.check.name,
+        expectedSha: event.payload.target_sha,
+        expectedExternalId,
+        expectedStatus: 'in_progress',
+      });
+      if (currentCheck.conclusion !== null || currentCheck.id !== state.attestation.check.id) {
+        throw new CliError('Checkがreplayされたか既にcompletedです');
+      }
+      const currentActionRun = await githubJsonDirect<TrustedGateActionRun>(
+        fetch,
+        githubToken,
+        `/repos/${repository}/actions/runs/${workflow.run_id}`,
+      );
+      assertTrustedActionRun(currentActionRun, state);
+
+      // Issue #680: attestationを立証できない場合も、専用App Checkを未完了のまま残さない。
+      await finalizeTrustedGateCheckFailure({
+        repository,
+        repositoryId: state.attestation.repository.id,
+        credentials,
+        checkId: currentCheck.id,
+        attestation: state.attestation,
+        reason: attestationOutcome === 'success' ? 'verification_failed' : 'attestation_failed',
+      });
+      return 0;
     }
     const envelopeBytes = fs.readFileSync(secondPath);
     let envelope: TrustedGateAttestationEnvelope;
