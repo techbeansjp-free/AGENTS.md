@@ -116,12 +116,12 @@ _run_reviewer_sanitized() {
   mkdir -p "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
   chmod 700 "$isolated_root" "$isolated_root/home" "$isolated_root/workspace" "$isolated_root/xdg"
 
-  local original_home="${ASC_REVIEWER_ORIGINAL_HOME:-${HOME:-}}"
+  local original_home="${HOME:-}"
   local codex_home="${CODEX_HOME:-${original_home:+$original_home/.codex}}"
   local claude_config="${CLAUDE_CONFIG_DIR:-${original_home:+$original_home/.claude}}"
   local reviewer_home="$isolated_root/home"
-  # Issue #691: Claude CodeのmacOSログインはKeychainを使うため認証済みCLIと同じHOMEを維持する。
-  # OS判定はcallerが変更できるPATHを参照せず、固定されたシステムbinaryだけを使う。
+  # Issue #691: Claude CodeのmacOSログインはKeychainを使うため、認証probeが参照したHOMEを維持する。
+  # callerが別のHOMEを注入できる専用変数は受け付けず、OS判定もPATHではなく固定system binaryを使う。
   # XDG・Git・GitHubの設定は引き続き隔離する。
   if [[ -n "$original_home" && -x /usr/bin/uname && "$(/usr/bin/uname -s 2>/dev/null)" == "Darwin" ]]; then
     reviewer_home="$original_home"

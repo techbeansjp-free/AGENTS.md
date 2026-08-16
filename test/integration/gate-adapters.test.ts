@@ -97,6 +97,7 @@ const REVIEW_ENV_KEYS = [
   'GATE_REVIEWER_CMD',
   'GATE_REVIEWER_RETRIES',
   'GATE_REVIEWER_RETRY_INTERVAL_SEC',
+  'ASC_REVIEWER_ORIGINAL_HOME',
   'ASC_REVIEWER_SANITIZED_ROOT',
   'ASC_BASE_REF',
   'ASC_REVIEW_SUBJECT',
@@ -218,17 +219,22 @@ test('claude launch_gate_reviewer: macOS Keychainログインでは認証probe�
   setAdapter(repo.dir, 'claude');
 
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-keychain-issue691-'));
+  const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-caller-home-issue691-'));
+  const spoofedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-spoofed-home-issue691-'));
   t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(callerHome, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(spoofedHome, { recursive: true, force: true }));
   const claudeStub = path.join(stubDir, 'claude');
+  const homeLog = path.join(stubDir, 'home.log');
   const unameStub = path.join(stubDir, 'uname');
-  const expectedHome = process.env.HOME!;
   const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
   fs.writeFileSync(
     claudeStub,
     [
       '#!/usr/bin/env bash',
       'set -euo pipefail',
-      `test "\${HOME:-}" = ${JSON.stringify(expectedHome)}`,
+      `printf '%s|%s\\n' "\${HOME:-}" "\${ASC_REVIEWER_ORIGINAL_HOME:-}" >> ${JSON.stringify(homeLog)}`,
+      `test "\${HOME:-}" = ${JSON.stringify(callerHome)}`,
       'if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then exit 0; fi',
       'cat >/dev/null',
       `printf '%s' ${JSON.stringify(stubVerdict)}`,
@@ -241,6 +247,8 @@ test('claude launch_gate_reviewer: macOS Keychainログインでは認証probe�
   fs.writeFileSync(unameStub, '#!/usr/bin/env bash\nprintf \'Linux\\n\'\n', { mode: 0o755 });
 
   const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
+    HOME: callerHome,
+    ASC_REVIEWER_ORIGINAL_HOME: spoofedHome,
     PATH: `${stubDir}:${process.env.PATH}`,
     CLAUDE_EXECUTABLE: claudeStub,
     CLAUDE_AUTH_PROBE_CMD: `${JSON.stringify(claudeStub)} auth status`,
@@ -250,6 +258,10 @@ test('claude launch_gate_reviewer: macOS Keychainログインでは認証probe�
 
   assert.equal(res.status, 0, res.stderr);
   assert.equal(readFinal(reportPath), 'approved');
+  assert.deepEqual(fs.readFileSync(homeLog, 'utf8').trim().split('\n'), [
+    `${callerHome}|${spoofedHome}`,
+    `${callerHome}|`,
+  ]);
 });
 
 test('claude launch_gate_reviewer: macOS以外ではPATH上のunameがDarwinを返してもcaller HOMEを隔離する（Issue #691）', async (t) => {
@@ -273,11 +285,13 @@ test('claude launch_gate_reviewer: macOS以外ではPATH上のunameがDarwinを�
   const command = [
     'cat >/dev/null',
     `test "\${HOME:-}" = ${JSON.stringify(expectedReviewerHome)}`,
+    'test -z "${ASC_REVIEWER_ORIGINAL_HOME:-}"',
     `printf '%s' ${JSON.stringify(stubVerdict)}`,
   ].join('; ');
   const env = envWithout([], {
     PATH: `${stubDir}:${process.env.PATH}`,
     ANTHROPIC_API_KEY: 'dummy-key',
+    ASC_REVIEWER_ORIGINAL_HOME: '/caller-controlled/reviewer-home',
     ASC_REVIEWER_SANITIZED_ROOT: isolatedRoot,
     GATE_REVIEWER_CMD: command,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
