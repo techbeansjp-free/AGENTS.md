@@ -154,7 +154,8 @@ export function inspectUnpushedCommits(
       detail: 'ブランチとデフォルトブランチの分岐点を確認できません',
     };
   }
-  const commits = git(['rev-list', '--reverse', `${mergeBase.stdout.trim()}..${branch}`], worktreePath);
+  const mergeBaseSha = mergeBase.stdout.trim();
+  const commits = git(['rev-list', '--reverse', `${mergeBaseSha}..${branch}`], worktreePath);
   if (commits.status !== 0) {
     return { hasUnpushedCommits: true, reason: 'indeterminate', detail: 'ブランチ固有のcommitを列挙できません' };
   }
@@ -193,6 +194,10 @@ export function inspectUnpushedCommits(
             return [refName, sha] as const;
           }),
       );
+      for (const [refName, sha] of liveHeads) {
+        reachableRefs.push(sha);
+        if (refName === `refs/heads/${branch}`) pushedPositions.push(sha);
+      }
       for (const [refName, localSha] of trackingRefs) {
         const prefix = `refs/remotes/${remote}/`;
         if (!refName.startsWith(prefix)) continue;
@@ -236,17 +241,37 @@ export function inspectUnpushedCommits(
       unpreserved.push(commitSha);
       continue;
     }
-    const content = git(['diff', '--quiet', commitSha, base, '--', ...paths.paths], worktreePath);
-    if (content.status === 0) continue;
-    if (content.status === 1) {
-      unpreserved.push(commitSha);
-      continue;
+    const commitContent = git(['diff', '--quiet', commitSha, base, '--', ...paths.paths], worktreePath);
+    if (commitContent.status === 0) continue;
+    if (commitContent.status !== 1) {
+      return {
+        hasUnpushedCommits: true,
+        reason: 'indeterminate',
+        detail: `commit ${commitSha.slice(0, 12)} の統合内容を確認できません`,
+      };
     }
-    return {
-      hasUnpushedCommits: true,
-      reason: 'indeterminate',
-      detail: `commit ${commitSha.slice(0, 12)} の統合内容を確認できません`,
-    };
+
+    if (existingPushedPositions.length === 0) {
+      const tipContent = git(['diff', '--quiet', branch, base, '--', ...paths.paths], worktreePath);
+      if (tipContent.status === 0) {
+        const differsFromMergeBase = git(['diff', '--quiet', branch, mergeBaseSha, '--', ...paths.paths], worktreePath);
+        if (differsFromMergeBase.status === 1) continue;
+        if (differsFromMergeBase.status !== 0) {
+          return {
+            hasUnpushedCommits: true,
+            reason: 'indeterminate',
+            detail: `commit ${commitSha.slice(0, 12)} の分岐後の内容を確認できません`,
+          };
+        }
+      } else if (tipContent.status !== 1) {
+        return {
+          hasUnpushedCommits: true,
+          reason: 'indeterminate',
+          detail: `commit ${commitSha.slice(0, 12)} のブランチ先端内容を確認できません`,
+        };
+      }
+    }
+    unpreserved.push(commitSha);
   }
 
   if (unpreserved.length === 0) return { hasUnpushedCommits: false };

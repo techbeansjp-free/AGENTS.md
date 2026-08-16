@@ -188,6 +188,81 @@ test('cleanup: local backendでremote ref削除後も全commitの内容がsquash
   assert.ok(!fs.existsSync(worktreePath), '内容として統合済みのworktreeが削除されること');
 });
 
+test('cleanup: 同一pathの複数commitをsquash統合しremote refを削除した後も削除できる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'same-path-squash', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'first\n');
+  execFileSync('git', ['add', 'CONTENT.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: add first path state'], { cwd: worktreePath, stdio: 'pipe' });
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'second\n');
+  execFileSync('git', ['add', 'CONTENT.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: update same path'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['push', '-u', 'origin', branch], { cwd: worktreePath, stdio: 'pipe' });
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+  execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: squash same path states'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 0, cleanup.stderr);
+  assert.equal(cleanup.stdout.trim(), worktreePath);
+  assert.ok(!fs.existsSync(worktreePath), '同一pathをsquash統合済みのworktreeが削除されること');
+});
+
+test('cleanup: live remote headはlocal remote-tracking refが無くてもpush済みと判定する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'live-remote-head', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+  fs.writeFileSync(path.join(worktreePath, 'REMOTE.md'), '# remote only\n');
+  execFileSync('git', ['add', 'REMOTE.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: preserve at live remote head'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['push', '-u', 'origin', branch], { cwd: worktreePath, stdio: 'pipe' });
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: closed');
+  fs.writeFileSync(integrationPath, integrationText);
+  execFileSync('git', ['update-ref', '-d', `refs/remotes/origin/${branch}`], { cwd: worktreePath, stdio: 'pipe' });
+  assert.equal(
+    execFileSync('git', ['for-each-ref', '--format=%(refname)', `refs/remotes/origin/${branch}`], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim(),
+    '',
+    '前提: local remote-tracking refが存在しないこと',
+  );
+  assert.match(
+    execFileSync('git', ['ls-remote', '--heads', 'origin', branch], { cwd: worktreePath, encoding: 'utf8' }),
+    new RegExp(`refs/heads/${branch}$`, 'm'),
+    '前提: 実remoteにはIssue branchが存在すること',
+  );
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 0, cleanup.stderr);
+  assert.equal(cleanup.stdout.trim(), worktreePath);
+  assert.ok(!fs.existsSync(worktreePath), '実remoteで保全済みのworktreeが削除されること');
+});
+
 test('cleanup: PR head後のローカルcommitがcherry-pick済みなら削除できる', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   const gh = makeGhStub();
