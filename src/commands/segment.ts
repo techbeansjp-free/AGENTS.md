@@ -1,11 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { repoRoot, worktreeRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, validateSegment, CliError } from '../lib/issue.js';
 import { leaseFilePath, stateFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile, toYamlString } from '../lib/yaml-io.js';
+import { gh } from '../lib/exec.js';
 import { activeLeaseFor, type WriterLease } from '../lib/github-lease.js';
-import { loadRoles } from '../lib/roles.js';
+import { loadRoles, type RolesDocument } from '../lib/roles.js';
 import { loadProjectPolicyDocuments } from '../lib/project-policy.js';
+import { quickBlockedNotice, resolveQuickMode } from '../lib/quick-mode.js';
+import { resolveIssueWorktreeExactlyOne } from '../lib/worktree.js';
 import {
   detectGithubReviewStatus,
   detectLocalBlockingFindings,
@@ -41,23 +46,70 @@ interface LocalStateIssueFields {
   request?: string;
 }
 
+type WorkerContract = RolesDocument['role_contracts'][string];
+
+const QUICK_EXEMPT_IMPLEMENTATION_INPUTS = new Set(['SPEC.md', 'DESIGN.md', 'PLAN.md']);
+
+function hasText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/** Issue #690: quick は成果物の利用を禁じず、存在義務だけを免除する。 */
+function buildQuickImplementationContract(contract: WorkerContract, worktreePath: string): WorkerContract {
+  const hasPlan = fs.existsSync(path.join(worktreePath, 'PLAN.md'));
+  const inputs = [
+    'Issue',
+    ...contract.inputs.filter(
+      (input) => QUICK_EXEMPT_IMPLEMENTATION_INPUTS.has(input) && fs.existsSync(path.join(worktreePath, input)),
+    ),
+    'related accepted ADR（存在する場合）',
+  ];
+  const rules = contract.rules.flatMap((rule) =>
+    rule.startsWith('PLANの順序に従う')
+      ? [
+          ...(hasPlan ? [rule] : []),
+          '同梱されたIssue内容を要求の正本として実装する',
+          'Issue内容から実装範囲を確定できない場合は推測で補完せずblockedを報告する',
+        ]
+      : [rule],
+  );
+  return { ...contract, inputs, rules };
+}
+
 /**
  * ローカル Coordination Backend の state.yaml が保持する title/request（ISSUE-183）を、
  * ワーカー起動プロンプトへ同梱する `issue:` セクションへ整形する。title/request のいずれも
- * 無い state（後方互換ケース）では undefined を返し、呼び出し側は従来どおりの出力
+ * 無いか空白だけの state（後方互換ケース）では undefined を返し、呼び出し側は従来どおりの出力
  * （セクション無し）のままにする。
  */
 function buildIssueBlock(issueIdRaw: string, state: LocalStateIssueFields | undefined): string | undefined {
-  if (!state || (state.title === undefined && state.request === undefined)) return undefined;
+  if (!state || (!hasText(state.title) && !hasText(state.request))) return undefined;
   const issueYaml: Record<string, string> = { id: state.id ?? issueIdRaw };
-  if (state.title !== undefined) issueYaml.title = state.title;
-  if (state.request !== undefined) issueYaml.request = state.request;
+  if (hasText(state.title)) issueYaml.title = state.title;
+  if (hasText(state.request)) issueYaml.request = state.request;
   const indented = toYamlString(issueYaml)
     .split('\n')
     .filter((line) => line.length > 0)
     .map((line) => `  ${line}`)
     .join('\n');
   return `issue:\n${indented}`;
+}
+
+function readGithubIssueBlock(root: string, issueIdRaw: string, issueNumber: string): string | undefined {
+  const view = gh(['issue', 'view', issueNumber, '--json', 'number,title,body'], root);
+  if (view.status !== 0) return undefined;
+  try {
+    const payload = JSON.parse(view.stdout) as { number?: number; title?: string; body?: string };
+    // Issue #690: quick は成果物の代わりにIssue本文を要求の正本とするため、空の本文では起動しない。
+    if (!hasText(payload.body)) return undefined;
+    return buildIssueBlock(issueIdRaw, {
+      id: payload.number === undefined ? issueIdRaw : `ISSUE-${payload.number}`,
+      ...(hasText(payload.title) ? { title: payload.title } : {}),
+      request: payload.body,
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 function buildCompletionReportBlock(issueId: string, role: string, segment: string): string {
@@ -110,15 +162,35 @@ export async function start(args: string[]): Promise<number> {
 
     const role = SEGMENT_TO_ROLE[segment];
     const roles = loadRoles(root);
-    const contract = roles.role_contracts[role];
+    let contract = roles.role_contracts[role];
     if (!contract) return fail(`config/roles.yaml に role_contracts.${role} が定義されていません`);
 
     // local backend で state.yaml に title/request（Issue本文）があれば、ワーカー起動プロンプトへ
     // 同梱する（ISSUE-183 要件5・AC-5）。本文が無い state・GitHubモードでは従来どおり同梱しない。
     let issueBlock: string | undefined;
+    let hasIssueRequest = false;
     if (config.coordination.backend === 'local') {
       const state = tryReadYamlFile<LocalStateIssueFields>(stateFilePath(root, number));
       issueBlock = buildIssueBlock(issueIdRaw, state);
+      hasIssueRequest = hasText(state?.request);
+    }
+
+    if (segment === 'implementation') {
+      const worktree = resolveIssueWorktreeExactlyOne(root, config, number);
+      if (worktree.status !== 'found') {
+        return fail(`ISSUE-${number} の worktree を一意に解決できないためimplementation契約を生成できません`);
+      }
+      const quick = resolveQuickMode(root, worktree.worktree.path, number, config.coordination.backend);
+      if (quick.requested && !quick.exempt) process.stderr.write(`${quickBlockedNotice(quick)}\n`);
+      if (quick.exempt) {
+        if (config.coordination.backend === 'github') {
+          issueBlock = readGithubIssueBlock(root, issueIdRaw, number);
+        }
+        if (!issueBlock || (config.coordination.backend === 'local' && !hasIssueRequest)) {
+          return fail('Issue内容を取得できないためsize:quick用のimplementation契約を生成できません');
+        }
+        contract = buildQuickImplementationContract(contract, worktree.worktree.path);
+      }
     }
 
     let reviewStatus;
