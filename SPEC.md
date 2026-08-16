@@ -24,13 +24,13 @@ agent-skill-chain は、対象リポジトリ（以下 consumer）へ GitHub Act
 
 ### 要求
 
-`package.json`・lockfile・`build` script を持たない consumer に配布された root-cleanup ワークフローが、npm 前提の不成立を理由に失敗しないこと。かつ、その回避によって別の失敗（agent-skill-chain CLI 未検出）へ問題が移動しないこと。npm 前提を満たす consumer（agent-skill-chain 自身の開発リポジトリを含む）では従来どおり動作すること。
+`package.json`・lockfile・`build` script を持たない consumer に配布された root-cleanup ワークフローが、npm 前提の不成立を理由に失敗しないこと。かつ、その回避によって agent-skill-chain CLI 未検出という別の失敗が沈黙して後続へ伝播しないこと——CLI を解決できない場合は、除去処理・root clean 検証を CLI 不在のまま実行させず、CLI 保証の時点で非ゼロ終了による明示的な失敗として顕在化させる。ここで要求するのは失敗の顕在化までであり、「CLI を必ず用意できること」自体は本要求に含めない。npm 前提を満たす consumer（agent-skill-chain 自身の開発リポジトリを含む）では従来どおり動作すること。
 
 ### 要件
 
 - 配布正本の root-cleanup ワークフローは、`npm ci` を「`package.json` が存在し、かつ `package-lock.json` または `npm-shrinkwrap.json` のいずれかが存在する」場合にのみ実行する。
-- 同ワークフローは、`npm run build` を「`package.json` が存在し、かつその `scripts.build` が有効に定義されている」場合にのみ実行する。ここで「有効に定義されている」とは、値が空でない文字列であることを指し、空文字列・空白のみの文字列・`null`・文字列以外の型はキー未定義と同一に扱う。
-- 上記の前提検査そのものは、前提が成立しない場合でも異常終了せず、後続ステップの実行条件として利用できる判定結果を出力する。
+- 同ワークフローは、`npm run build` を「`npm ci` の実行条件（`package.json` が存在し、かつ `package-lock.json` または `npm-shrinkwrap.json` のいずれかが存在する）が成立し、**かつ** `package.json` の `scripts.build` が有効に定義されている」場合にのみ実行する。ここで「有効に定義されている」とは、値が空でない文字列であることを指し、空文字列・空白のみの文字列・`null`・文字列以外の型はキー未定義と同一に扱う。`npm ci` の実行条件を `npm run build` の実行条件へ合成するのは、依存を導入しないまま build script を実行すると devDependencies 未導入により典型的に失敗し、失敗箇所が `npm ci` から `npm run build` へ移動するだけで「npm 前提の不成立を理由に失敗しない」という要求を満たせないためである。
+- 上記の前提検査そのものは、前提が成立しない場合でも異常終了せず、後続ステップの実行条件として利用できる判定結果を出力する。判定は「`npm ci` 実行可否」と「`scripts.build` が有効に定義されているか」を別々に評価したうえで、`npm run build` 実行可否をその両者がともに成立する場合にのみ「可」とする形で導く。これにより、lockfile 不在の構成では build も実行されず、かつ lockfile を持ち `scripts.build` のみを欠く構成では build だけがスキップされることを、それぞれ区別して判定できる。
 - 同ワークフローは、root 直下成果物の除去処理および root clean 検証を実行する前に、agent-skill-chain CLI が 3 経路のいずれかで解決可能な状態であることを保証する。保証処理は、ラッパースクリプト群と同一の共有 CLI 解決実装を用い、CLI 解決ロジックの重複実装を作らない。
 - root-cleanup の既存の振る舞い（実行契機、`[skip ci]` ガード、同時実行制御、root 直下成果物の除去、ローカルチェックアウトの main 同期、root clean 検証、使用する認証情報）は変更しない。新しい認証情報・シークレットを追加しない。
 - 配布正本と、本リポジトリ自身の `.github/workflows/` に展開されたワークフローは同一内容を保つ。
@@ -78,14 +78,14 @@ agent-skill-chain は、対象リポジトリ（以下 consumer）へ GitHub Act
 
 - Given: `package.json` と lockfile（`package-lock.json` または `npm-shrinkwrap.json` のいずれか）を持つが、`package.json` の `scripts.build` が有効に定義されていない作業ディレクトリ。「有効に定義されていない」とは、`scripts` 自体が無い場合、`scripts.build` キーが無い場合、および値が非正常値（空文字列、空白のみの文字列、`null`、文字列以外の型）である場合を指し、これらをすべて含む
 - When: 配布正本の root-cleanup ワークフローが持つ npm 前提判定ステップの実体を、上記のそれぞれの作業ディレクトリで実行する
-- Then: いずれの場合も判定ステップは正常終了し、`npm ci` 実行可否と `npm run build` 実行可否を互いに独立した2つの判定結果として出力する。前者は「可」、後者は「不可」となる（非正常値はキー未定義と同一に扱う）。これによりワークフロー定義上の `npm ci` ステップのみ実行条件が成立し、`npm run build` ステップは実行されない。加えて、実行に用いる判定ステップの実体は、配布正本ワークフロー YAML 内の当該ステップ定義から機械的に抽出したものであり、抽出結果が抽出元の記述と一致することを検証手順自身が確認する
+- Then: いずれの場合も判定ステップは正常終了し、`npm ci` 実行可否と `npm run build` 実行可否を別個の2つの判定結果として出力する。前者は「可」、後者は「不可」となる（非正常値はキー未定義と同一に扱う）。すなわち `npm ci` 実行可否が「可」であっても `scripts.build` が有効に定義されていなければ `npm run build` 実行可否は「不可」となり、build script の有無が独立の判定入力として機能することが示される。これによりワークフロー定義上の `npm ci` ステップのみ実行条件が成立し、`npm run build` ステップは実行されない。加えて、実行に用いる判定ステップの実体は、配布正本ワークフロー YAML 内の当該ステップ定義から機械的に抽出したものであり、抽出結果が抽出元の記述と一致することを検証手順自身が確認する
 - 検証方法見込み: `automated`
 
-#### AC-7: lockfile が無く build script はある構成では npm run build のみ実行される
+#### AC-7: lockfile が無い構成では build script があっても npm 手順が実行されない
 
-- Given: `package.json` を持ち、その `scripts.build` が定義されているが、`package-lock.json`・`npm-shrinkwrap.json` のいずれも持たない作業ディレクトリ
+- Given: `package.json` を持ち、その `scripts.build` が有効に定義されているが、`package-lock.json`・`npm-shrinkwrap.json` のいずれも持たない作業ディレクトリ
 - When: 配布正本の root-cleanup ワークフローが持つ npm 前提判定ステップの実体を、その作業ディレクトリで実行する
-- Then: 判定ステップは正常終了し、`npm ci` 実行可否と `npm run build` 実行可否を互いに独立した2つの判定結果として出力する。前者は「不可」、後者は「可」となる。これによりワークフロー定義上の `npm run build` ステップのみ実行条件が成立し、`npm ci` ステップは実行されない。加えて、実行に用いる判定ステップの実体は、配布正本ワークフロー YAML 内の当該ステップ定義から機械的に抽出したものであり、抽出結果が抽出元の記述と一致することを検証手順自身が確認する
+- Then: 判定ステップは正常終了し、`npm ci` 実行可否と `npm run build` 実行可否を別個の2つの判定結果として出力する。`npm ci` 実行可否は lockfile 不在により「不可」となり、`npm run build` 実行可否は `scripts.build` が有効に定義されていても `npm ci` 実行可否が成立しないため「不可」となる。これによりワークフロー定義上の `npm ci` ステップ・`npm run build` ステップのいずれも実行条件が成立せず、依存を導入しないままの build 実行は発生しない。加えて、実行に用いる判定ステップの実体は、配布正本ワークフロー YAML 内の当該ステップ定義から機械的に抽出したものであり、抽出結果が抽出元の記述と一致することを検証手順自身が確認する
 - 検証方法見込み: `automated`
 
 #### AC-8: CLI が解決可能な構成では CLI 保証ステップが成功し CLI が使える状態になる
