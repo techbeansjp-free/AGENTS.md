@@ -351,7 +351,7 @@ test('segment start (local backend): size:quick のimplementation契約はstate�
   assert.match(result.stdout, /request: stateに保存された要求本文/);
 
   const contract = result.stdout.slice(result.stdout.indexOf('inputs:'), result.stdout.indexOf('worker_completion_report:'));
-  assert.match(contract, /inputs:\n\s+- issue/);
+  assert.match(contract, /inputs:\n\s+- Issue/);
   assert.doesNotMatch(contract, /\n\s+- (?:SPEC\.md|DESIGN\.md|PLAN\.md)\s*$/m);
   assert.doesNotMatch(contract, /PLANの順序に従う/);
 });

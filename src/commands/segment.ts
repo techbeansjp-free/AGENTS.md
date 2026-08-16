@@ -53,7 +53,7 @@ const QUICK_EXEMPT_IMPLEMENTATION_INPUTS = new Set(['SPEC.md', 'DESIGN.md', 'PLA
 /** Issue #690: quick は成果物の利用を禁じず、存在義務だけを免除する。 */
 function buildQuickImplementationContract(contract: WorkerContract, worktreePath: string): WorkerContract {
   const inputs = [
-    'issue',
+    'Issue',
     ...contract.inputs.filter(
       (input) => QUICK_EXEMPT_IMPLEMENTATION_INPUTS.has(input) && fs.existsSync(path.join(worktreePath, input)),
     ),
@@ -93,11 +93,11 @@ function readGithubIssueBlock(root: string, issueIdRaw: string, issueNumber: str
   const view = gh(['issue', 'view', issueNumber, '--json', 'number,title,body'], root);
   if (view.status !== 0) return undefined;
   try {
-    const issue = JSON.parse(view.stdout) as { number?: number; title?: string; body?: string };
+    const payload = JSON.parse(view.stdout) as { number?: number; title?: string; body?: string };
     return buildIssueBlock(issueIdRaw, {
-      id: issue.number === undefined ? issueIdRaw : `ISSUE-${issue.number}`,
-      ...(typeof issue.title === 'string' && issue.title.length > 0 ? { title: issue.title } : {}),
-      ...(typeof issue.body === 'string' && issue.body.length > 0 ? { request: issue.body } : {}),
+      id: payload.number === undefined ? issueIdRaw : `ISSUE-${payload.number}`,
+      ...(typeof payload.title === 'string' && payload.title.length > 0 ? { title: payload.title } : {}),
+      ...(typeof payload.body === 'string' && payload.body.length > 0 ? { request: payload.body } : {}),
     });
   } catch {
     return undefined;

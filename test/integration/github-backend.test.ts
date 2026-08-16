@@ -197,7 +197,7 @@ test('segment start (github backend): size:quick のimplementation契約はIssue
   assert.match(result.stdout, /request: quick契約だけで実装対象を確定できる要求本文/);
 
   const contract = result.stdout.slice(result.stdout.indexOf('inputs:'), result.stdout.indexOf('worker_completion_report:'));
-  assert.match(contract, /inputs:\n\s+- issue/);
+  assert.match(contract, /inputs:\n\s+- Issue/);
   assert.doesNotMatch(contract, /\n\s+- (?:SPEC\.md|DESIGN\.md|PLAN\.md)\s*$/m);
   assert.doesNotMatch(contract, /\n\s+- accepted ADR\s*$/m);
   assert.match(contract, /related accepted ADR（存在する場合）/);
