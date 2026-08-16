@@ -74,6 +74,20 @@ agent-skill-chain は、対象リポジトリ（以下 consumer）へ GitHub Act
 - Then: 検査が成功し、配布正本と展開先の root-cleanup ワークフローが同一内容であることが確認される
 - 検証方法見込み: `automated`
 
+#### AC-6: lockfile はあるが build script が無い構成では npm ci のみ実行される
+
+- Given: `package.json` と lockfile（`package-lock.json` または `npm-shrinkwrap.json` のいずれか）を持つが、`package.json` に `scripts.build` が定義されていない作業ディレクトリ
+- When: 配布正本の root-cleanup ワークフローが持つ npm 前提判定ステップの実体を、その作業ディレクトリで実行する
+- Then: 判定ステップは正常終了し、`npm ci` 実行可否と `npm run build` 実行可否を互いに独立した2つの判定結果として出力する。前者は「可」、後者は「不可」となる。これによりワークフロー定義上の `npm ci` ステップのみ実行条件が成立し、`npm run build` ステップは実行されない
+- 検証方法見込み: `automated`
+
+#### AC-7: lockfile が無く build script はある構成では npm run build のみ実行される
+
+- Given: `package.json` を持ち、その `scripts.build` が定義されているが、`package-lock.json`・`npm-shrinkwrap.json` のいずれも持たない作業ディレクトリ
+- When: 配布正本の root-cleanup ワークフローが持つ npm 前提判定ステップの実体を、その作業ディレクトリで実行する
+- Then: 判定ステップは正常終了し、`npm ci` 実行可否と `npm run build` 実行可否を互いに独立した2つの判定結果として出力する。前者は「不可」、後者は「可」となる。これによりワークフロー定義上の `npm run build` ステップのみ実行条件が成立し、`npm ci` ステップは実行されない
+- 検証方法見込み: `automated`
+
 ## スコープ外
 
 - 非公開の実 consumer リポジトリ上で GitHub Actions を実際に起動しての最終確認。本 Issue の検証は、ワークフロー定義の構造検査と、ステップ実体をローカルの模擬構成で実行する自動テストによって代替する。
