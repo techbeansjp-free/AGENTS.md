@@ -149,7 +149,7 @@ interface FailedSideDetection {
   reason: string;
 }
 
-const SEGMENT_TO_ORIGIN: Record<Segment, string> = {
+const SEGMENT_TO_ORIGIN: Record<Segment, EvidenceFinding['origin']> = {
   spec: 'specification',
   design: 'design',
   implementation: 'implementation',
@@ -271,10 +271,46 @@ function unresolvedGateFindings(
   for (const sourceSegment of SEGMENTS) {
     const forGate = matching.filter(({ evidence }) => evidence.gate === sourceSegment);
     if (forGate.length === 0) continue;
-    const latest = forGate.reduce((current, candidate) =>
-      compareReviewEntries(candidate.entry, current.entry) > 0 ? candidate : current,
-    );
-    const latestAttempt = forGate.filter(({ evidence }) => evidence.attempt_id === latest.evidence.attempt_id);
+
+    const byAttempt = new Map<string, typeof forGate>();
+    for (const candidate of forGate) {
+      const entries = byAttempt.get(candidate.evidence.attempt_id) ?? [];
+      entries.push(candidate);
+      byAttempt.set(candidate.evidence.attempt_id, entries);
+    }
+    const completeAttempts = [...byAttempt.values()].filter((entries) => {
+      const expectedCounts = new Set(entries.map(({ evidence }) => evidence.expected_count));
+      if (expectedCounts.size !== 1) return false;
+      const expectedCount = entries[0]?.evidence.expected_count;
+      if (expectedCount !== 1 && expectedCount !== 2) return false;
+      const slots = entries.map(({ evidence }) => evidence.reviewer?.slot);
+      return (
+        entries.length === expectedCount &&
+        new Set(slots).size === expectedCount &&
+        slots.every((slot) => Number.isInteger(slot) && slot >= 1 && slot <= expectedCount)
+      );
+    });
+
+    if (completeAttempts.length === 0) {
+      findings.push({
+        severity: 'blocking',
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_ATTEMPT_INCOMPLETE',
+        evidence: ['完備なゲートレビューattemptがなく、blocking findingの解決状態を判定できません'],
+        source_segment: sourceSegment,
+      });
+      continue;
+    }
+
+    const latestAttempt = completeAttempts.reduce((current, candidate) => {
+      const currentLatest = current.reduce((latest, entry) =>
+        compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
+      );
+      const candidateLatest = candidate.reduce((latest, entry) =>
+        compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
+      );
+      return compareReviewEntries(candidateLatest.entry, currentLatest.entry) > 0 ? candidate : current;
+    });
     for (const { evidence } of latestAttempt) {
       for (const finding of evidence.verdict.blockers) {
         if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
