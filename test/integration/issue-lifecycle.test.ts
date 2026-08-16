@@ -142,6 +142,102 @@ test('cleanup: main前進後のsquash mergeでupstreamがgoneになってもwork
   assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
 });
 
+test('cleanup: squash merge後のローカル限定空commitは削除せず保護する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'post-squash-empty', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SQUASHED.md'), '# squashed\n');
+  const checkpoint = runCli(['checkpoint', 'test: add squash target'], { cwd: worktreePath });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+
+  execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: squash issue change'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '--allow-empty', '-m', 'test: preserve post-squash empty commit'], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+  });
+
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+  assert.throws(
+    () => execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], { cwd: worktreePath, stdio: 'pipe' }),
+    '前提: upstreamを解決できないこと',
+  );
+  assert.equal(
+    execFileSync('git', ['for-each-ref', `--contains=${branch}`, '--format=%(refname)', 'refs/remotes'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim(),
+    '',
+    '前提: 空commitを含むbranch先端がremote refから到達不能であること',
+  );
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 1);
+  assert.match(cleanup.stderr, /未pushのcommit/);
+  assert.ok(fs.existsSync(worktreePath), 'squash merge後の未push空commitがあるworktreeを削除しないこと');
+});
+
+test('cleanup: squash merge後のローカル限定内容commitは削除せず保護する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'post-squash-content', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SQUASHED.md'), '# squashed\n');
+  const checkpoint = runCli(['checkpoint', 'test: add squash target'], { cwd: worktreePath });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+
+  execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: squash issue change'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
+
+  fs.writeFileSync(path.join(worktreePath, 'LOCAL_ONLY.md'), '# local only\n');
+  execFileSync('git', ['add', 'LOCAL_ONLY.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: preserve post-squash content'], { cwd: worktreePath, stdio: 'pipe' });
+
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+  assert.throws(
+    () => execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], { cwd: worktreePath, stdio: 'pipe' }),
+    '前提: upstreamを解決できないこと',
+  );
+  assert.equal(
+    execFileSync('git', ['for-each-ref', `--contains=${branch}`, '--format=%(refname)', 'refs/remotes'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim(),
+    '',
+    '前提: 内容commitを含むbranch先端がremote refから到達不能であること',
+  );
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 1);
+  assert.match(cleanup.stderr, /未pushのcommit/);
+  assert.ok(fs.existsSync(worktreePath), 'squash merge後の未push内容commitがあるworktreeを削除しないこと');
+});
+
 test('cleanup: upstreamもremote refも無いローカル限定commitとrevertは削除せず保護する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

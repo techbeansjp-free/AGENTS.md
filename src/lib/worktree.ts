@@ -167,8 +167,9 @@ export function hasUnpushedCommits(worktreePath: string, branch: string): boolea
  *    変更したpathに限定し、default branch履歴上のcommitと厳密な内容比較を行う。
  *    default branchが無関係なpathの変更で前進しても検出でき、空白を無視するpatch IDの
  *    ようにローカル限定の内容差分を統合済みとみなすこともない。
- *    分岐点との最終差分が無い場合、到達不能なcommit列の保全を内容比較では立証できないため
- *    統合未済とみなす。
+ *    remote refとdefault branchのどちらからも到達不能なcommit列については、全commitの
+ *    内容が統合先commitに反映されたことを立証できる場合だけ統合済みとみなす。空commitや、
+ *    それより前のcommit時点で既に同じ内容だった後続commitは立証不能なので統合未済とする。
  * 3. default branchが特定できない、または上記いずれの判定も成立しない場合は統合未済とみなす
  *    （安全側）。
  */
@@ -185,13 +186,41 @@ function isIntegratedIntoDefaultBranch(worktreePath: string, branch: string): bo
 
   const mergeBase = git(['merge-base', branch, base], worktreePath);
   if (mergeBase.status !== 0) return false;
-  const changed = git(['diff', '--no-renames', '--name-only', '-z', mergeBase.stdout.trim(), branch], worktreePath);
+  const mergeBaseSha = mergeBase.stdout.trim();
+  const branchCommits = git(['rev-list', '--reverse', `${mergeBaseSha}..${branch}`], worktreePath);
+  if (branchCommits.status !== 0) return false;
+  const commits = branchCommits.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (commits.length === 0) return false;
+
+  const unreachableCommits: string[] = [];
+  for (const commit of commits) {
+    const inDefaultBranch = git(['merge-base', '--is-ancestor', commit, base], worktreePath);
+    if (inDefaultBranch.status === 0) continue;
+    if (inDefaultBranch.status !== 1) return false;
+
+    const remoteRefs = git(['for-each-ref', `--contains=${commit}`, '--format=%(refname)', 'refs/remotes'], worktreePath);
+    if (remoteRefs.status !== 0) return false;
+    if (remoteRefs.stdout.trim().length === 0) unreachableCommits.push(commit);
+  }
+  if (unreachableCommits.length === 0) return true;
+
+  // 空commitは内容比較では統合を立証できない。1つでも含む場合は削除を拒否する。
+  for (const commit of unreachableCommits) {
+    const hasContent = git(['diff-tree', '--quiet', '--no-commit-id', '-r', `${commit}^`, commit], worktreePath);
+    if (hasContent.status === 0) return false;
+    if (hasContent.status !== 1) return false;
+  }
+
+  const changed = git(['diff', '--no-renames', '--name-only', '-z', mergeBaseSha, branch], worktreePath);
   if (changed.status !== 0) return false;
   const changedPaths = changed.stdout.split('\0').filter(Boolean);
   if (changedPaths.length === 0) return false;
 
   const baseCommits = git(
-    ['--literal-pathspecs', 'rev-list', `${mergeBase.stdout.trim()}..${base}`, '--', ...changedPaths],
+    ['--literal-pathspecs', 'rev-list', `${mergeBaseSha}..${base}`, '--', ...changedPaths],
     worktreePath,
   );
   if (baseCommits.status !== 0) return false;
@@ -203,7 +232,19 @@ function isIntegratedIntoDefaultBranch(worktreePath: string, branch: string): bo
       ['--literal-pathspecs', 'diff', '--quiet', branch, commit, '--', ...changedPaths],
       worktreePath,
     );
-    if (sameContent.status === 0) return true;
+    if (sameContent.status === 0) {
+      // Issue #692: squash/rebase後に追加されたcommitが最終treeを変えない場合も保護する。
+      // branch先端より前に同じ内容へ到達していれば、後続commitの取り込みを立証できない。
+      for (const branchCommit of commits.slice(0, -1)) {
+        const matchedBeforeTip = git(
+          ['--literal-pathspecs', 'diff', '--quiet', branchCommit, commit, '--', ...changedPaths],
+          worktreePath,
+        );
+        if (matchedBeforeTip.status === 0) return false;
+        if (matchedBeforeTip.status !== 1) return false;
+      }
+      return true;
+    }
     if (sameContent.status !== 1) return false;
   }
   return false;
