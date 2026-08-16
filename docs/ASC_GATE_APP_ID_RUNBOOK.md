@@ -2,11 +2,11 @@
 
 ## 目的・対象範囲
 
-`agent-skill-chain setup ruleset`（`setup github` から内部的に実行される場合を含む）の既定の配布テンプレート（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`）は `required_status_checks` に `verify` のみを含み、`agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれも含まない。この既定経路では `ASC_GATE_APP_ID` は不要であり、`setup ruleset` は未設定のままでも完走する（ISSUE-593。理由: gate Checkを発行可能なCI workflowがこのリポジトリにも配布テンプレートにも存在せず、required gate Checkにしてしまうと誰も発行できないstatusでPRが恒久的にマージ不能になるため）。
+`agent-skill-chain setup ruleset`（`setup github` から内部的に実行される場合を含む）の既定の配布テンプレート（`.agent-skill-chain/templates/github/provisioning/rulesets/main.json`）は `required_status_checks` に `verify` のみを含み、`agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれも含まない。この既定経路では `ASC_GATE_APP_ID` は不要であり、`setup ruleset` は未設定のままでも完走する（ISSUE-593。理由: gate Check発行には対象リポジトリごとの専用App設定が必要であり、GitHubモードのセグメントゲート自体は進行役が実施要否を判断するガイドラインだからである）。
 
-本ドキュメントが必要になるのは、手元のテンプレート複製へ `agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれかを `required_status_checks` へ再度加え、専用GitHub Appによる `gate publish` の完全運用（ADR-0052が言及する `dedicated_app`/`required_workflow` backend）を選ぶ場合に限る。対象は、その運用を選ぶ対象リポジトリの管理者である。
+本ドキュメントは、ローカルゲートレビュー後の `repository_dispatch` を受信する trusted gate recorder workflow でCheck Runを発行する場合に必要である。手元のテンプレート複製へ `agent-skill-chain/{spec,design,implementation,validation}-gate` のいずれかを `required_status_checks` へ加える場合にも、同じ専用GitHub App設定を使う。対象は、その運用を選ぶ対象リポジトリの管理者である。
 
-本ドキュメントの内容だけで、専用GitHub Appの新規作成から `ASC_GATE_APP_ID` への設定までを完了できる。他の成果物（README.md・AGENTS.md・ADR・ソースコード等）を参照する必要はない。
+本ドキュメントの内容だけで、専用GitHub Appの新規作成からActions environmentへのApp ID・秘密鍵設定までを完了できる。他の成果物（README.md・AGENTS.md・ADR・ソースコード等）を参照する必要はない。
 
 ## 前提・用語
 
@@ -27,6 +27,7 @@
    - **Metadata**: Read-only（GitHub Appの必須既定権限。変更不要）
 5. "Where can this GitHub App be installed?" は対象リポジトリのオーナーアカウントのみに導入する場合は "Only on this account" を選ぶ。
 6. "Create GitHub App" を押して作成する。
+7. 作成後の設定ページで秘密鍵を生成し、PEMを安全な場所へ保存する。この秘密鍵は後でActions secretへ登録する。
 
 ### 2. 対象リポジトリへのinstallation
 
@@ -41,32 +42,37 @@
 2. ページ上部の "About" セクションにある **App ID** 欄の数値を確認する（installation IDではなく、Appそのものの数値ID）。
 3. この数値が標準GitHub Actions AppのID `15368` と一致しないことを確認する（一致する場合は誤って標準Appのページを見ている）。
 
-### 4. `ASC_GATE_APP_ID` への設定
+### 4. Actions environmentへの設定
 
-確認したApp IDを、`agent-skill-chain setup ruleset`（または `setup github`）を実行する環境の環境変数 `ASC_GATE_APP_ID` へ設定する。
+対象リポジトリに `agent-skill-chain-gate-bootstrap-v1` environmentを作成し、次の値を登録する。
+
+- Actions variable `ASC_GATE_APP_ID`: 手順3で確認したApp ID
+- Actions secret `ASC_GATE_APP_PRIVATE_KEY`: 手順1で生成した秘密鍵PEMの全文
+
+required gate Checkをrulesetへ追加する場合は、同じApp IDを `setup ruleset`（または `setup github`）実行環境の環境変数にも設定する。
 
 ```bash
 export ASC_GATE_APP_ID=<手順3で確認したApp ID>
 npx github:techbeansjp-free/AGENTS.md setup ruleset [owner/repo]
 ```
 
-`ASC_GATE_APP_ID` はsecretではなく単なる識別子のため、CI環境で設定する場合も通常の環境変数（GitHub Actionsの `env:` 等）でよく、暗号化されたsecretストレージへ格納する必要はない。
+`ASC_GATE_APP_ID` はsecretではなく単なる識別子である。`ASC_GATE_APP_PRIVATE_KEY` は認証情報なので、必ずActions secretとして登録し、通常のvariableやログへ出力しない。
 
 ### 5. 設定の確認
 
-`setup ruleset` が正常終了（終了コード0）し、標準出力に適用したrulesetの内容（`required_status_checks` の各 `context` に対応する `integration_id` が手順3のApp IDと一致すること）が表示されれば、設定は完了している。`required_status_checks` にgate check contextが1件以上存在する場合のみ、`ASC_GATE_APP_ID` が未設定・不正・標準GitHub Actions AppのIDだと `setup ruleset` はrulesetを適用せずエラー終了する（gate check contextを1件も含まない既定テンプレートに対しては、この検証自体が発生しない）。
+ローカルゲートレビューを1回実行し、`agent-skill-chain / trusted gate recorder` workflowが成功して対象SHAへ `agent-skill-chain/<gate>-gate` Check Runを発行すればActions設定は完了している。required gate Checkをrulesetへ追加した場合は、`setup ruleset` が終了コード0で完了し、標準出力の各 `integration_id` が手順3のApp IDと一致することも確認する。`required_status_checks` にgate check contextが1件以上存在する場合のみ、`ASC_GATE_APP_ID` が未設定・不正・標準GitHub Actions AppのIDだと `setup ruleset` はrulesetを適用せずエラー終了する。
 
-`gate publish` 自体は、Check Runを発行可能なCI workflowが現状このリポジトリにも配布テンプレートにも存在しないため、進行役が任意実行する記録専用ツールであり、rulesetのrequired statusには現状寄与しない。専用App運用（本手順）を完了しても、その発行元workflowを別途用意しない限りCheck Runは発行されない。
+trusted gate recorder workflowはdefault branch上の固定されたworkflow実装を使い、dispatch対象のPR review evidenceを再検証してから専用App identityでCheck Runを発行する。個人アクセストークンから `gate publish` を直接実行する経路には依存しない。
 
 ## 制約
 
-- 本手順は専用GitHub Appの作成・installation・App ID取得・環境変数設定までを対象とする。作成したAppの秘密鍵を使ってgate Check（`check_run`）を実際に発行する側（`agent-skill-chain gate publish` 等の呼び出し元）の認証方法は、本手順の対象外である（「対象外」節を参照）。
+- trusted gate recorder workflowを利用するには、対象リポジトリでActionsとartifact attestationを利用できる必要がある。
 - 対象リポジトリで branch ruleset を変更する権限（Administration権限を持つGitHub認証情報での `gh` CLIログイン等）が別途必要である。これは専用GitHub Appの権限とは別に、`setup ruleset` を実行する人間・進行役の既存の認証情報が担う。
 
 ## 完了条件・検証方法
 
-- 完了条件: 対象リポジトリで `agent-skill-chain setup ruleset` が `ASC_GATE_APP_ID` を用いて終了コード0で完了し、`required_status_checks` の各gate Check contextへ手順3で確認したApp IDが `integration_id` として設定されていること。
-- 検証方法: `setup ruleset` の標準出力に表示されたrulesetのJSONを確認し、`agent-skill-chain/{spec,design,implementation,validation}-gate` の4件それぞれで `integration_id` が期待するApp IDと一致することを目視確認する。
+- 完了条件: trusted gate recorder workflowがdispatchを受信して成功し、対象SHAに専用App identityのgate Check Runが発行されていること。required gate Checkをrulesetへ追加した場合は、各contextの `integration_id` も同じApp IDであること。
+- 検証方法: workflow runと対象SHAのCheck Runを確認する。rulesetを変更した場合は `setup ruleset` の標準出力に表示されたJSONも確認する。
 
 ## 未決事項
 
@@ -74,6 +80,5 @@ npx github:techbeansjp-free/AGENTS.md setup ruleset [owner/repo]
 
 ## 対象外
 
-- 専用GitHub Appの秘密鍵（`ASC_GATE_APP_PRIVATE_KEY`）を用いたCheck Run発行の自動化フロー設計・実装。
 - `agent-skill-chain setup ruleset` 以外のセットアップ手順（`setup labels`・`sync templates` 等）。
 - branch rulesetそのものの構造・強制内容（`required_status_checks` 以外のルール）。

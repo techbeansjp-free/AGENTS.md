@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
+import { renderReviewEvidence, type ReviewEvidence } from '../../src/lib/review-evidence.js';
 
 // coordination.backend: github での中核フロー（issue start → lease acquire/release/re-acquire →
 // segment start → gate review/publish(Check Run) → checkpoint → pr create → cleanup）と
@@ -46,6 +47,48 @@ function prepareReviewStatusSegment(
     cleanup();
   });
   return { repo, stub, env, branch, prNumber: issueNumber + 1000 };
+}
+
+function gateEvidence(options: {
+  issueId: string;
+  gate: ReviewEvidence['gate'];
+  targetSha: string;
+  attemptId: string;
+  blockers: ReviewEvidence['verdict']['blockers'];
+}): string {
+  return renderReviewEvidence({
+    schema_version: 'agent-skill-chain/gate-review-evidence/v3',
+    issue_id: options.issueId,
+    gate: options.gate,
+    profile: 'standard',
+    target_sha: options.targetSha,
+    attempt_id: options.attemptId,
+    expected_count: 1,
+    execution: {
+      launcher: 'agent-skill-chain/gate-local-review/v1',
+      trusted_base_sha: 'a'.repeat(40),
+      launcher_digest: `sha256:${'b'.repeat(64)}`,
+      launcher_token_digest: `sha256:${'c'.repeat(64)}`,
+      isolation: 'ephemeral_clone',
+      sandbox: 'read_only',
+    },
+    reviewer: {
+      run_id: `review-${options.attemptId}`,
+      slot: 1,
+      adapter: 'codex',
+      model: 'test-model',
+      reasoning: 'high',
+      capability: { model_tier: 'test', reasoning_tier: 'test', read_only: true },
+    },
+    prompt_digest: `sha256:${'d'.repeat(64)}`,
+    verdict: {
+      conformance: options.blockers.length > 0 ? 'fail' : 'pass',
+      falsification: 'pass',
+      blockers: options.blockers,
+      approved_artifacts: [],
+      inconclusive: false,
+    },
+  });
 }
 
 test('issue lifecycle (github backend): lease acquire/release/re-acquire -> gate publish(Check Run) -> pr create -> cleanup', async (t) => {
@@ -185,6 +228,39 @@ test('segment start (github backend): CHANGES_REQUESTEDレビューをrole contr
   assert.match(result.stdout, /^review_status:/m);
   assert.match(result.stdout, /state: CHANGES_REQUESTED/);
   assert.match(result.stdout, /null時のフォールバックを追加してください/);
+});
+
+test('segment start (github backend): COMMENTEDのgate evidenceにあるblocking findingをrole contractへ同梱する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 680);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'trusted-recorder' },
+      body: gateEvidence({
+        issueId: 'ISSUE-680',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-680-blocking',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'SPEC-MISSING-CONTRACT',
+          evidence: ['ワーカー契約へblocking findingが含まれていません'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-680', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^review_status:/m);
+  assert.match(result.stdout, /unresolved_blocking_findings:/);
+  assert.match(result.stdout, /SPEC-MISSING-CONTRACT/);
+  assert.match(result.stdout, /ワーカー契約へblocking findingが含まれていません/);
+  assert.match(result.stdout, /source_segment: spec/);
 });
 
 test('segment start (github backend): 時刻カットオフ無しでPR/Issueコメントをrole contractへ同梱する', (t) => {

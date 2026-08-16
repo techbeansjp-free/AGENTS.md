@@ -1,6 +1,13 @@
-import { gh } from './exec.js';
+import { gh, git } from './exec.js';
 import { SEGMENTS, type Segment } from './issue.js';
 import { reviewFilePath } from './local-state.js';
+import {
+  REVIEW_EVIDENCE_MARKER,
+  isEvidenceVerdict,
+  parseReviewEvidence,
+  type EvidenceFinding,
+  type ReviewEvidence,
+} from './review-evidence.js';
 import { resolveCurrentBranch } from './worktree.js';
 import { toYamlString, tryReadYamlFile } from './yaml-io.js';
 
@@ -70,6 +77,7 @@ export interface GithubReviewStatus {
   pr_number?: number;
   unresolved_reviews: UnresolvedGithubReview[];
   unresolved_comments: UnresolvedGithubComment[];
+  unresolved_blocking_findings?: GithubGateFinding[];
   partial_failures?: GithubPartialFailure[];
 }
 
@@ -87,6 +95,10 @@ interface RawGateFinding {
 }
 
 export interface GateFinding extends RawGateFinding {
+  source_segment: Segment;
+}
+
+export interface GithubGateFinding extends EvidenceFinding {
   source_segment: Segment;
 }
 
@@ -126,6 +138,7 @@ interface SuccessfulPrDetection {
   succeeded: true;
   prNumber?: number;
   reviews: UnresolvedGithubReview[];
+  blockingFindings: GithubGateFinding[];
   comments: UnresolvedGithubComment[];
   reviewThreadCommentFailure?: string;
 }
@@ -202,6 +215,57 @@ function unresolvedReviews(reviews: GithubReview[]): UnresolvedGithubReview[] {
     });
   }
   return unresolved;
+}
+
+function unresolvedGateFindings(
+  reviews: GithubReview[],
+  issueNumber: string,
+  segment: string | undefined,
+  targetSha: string | undefined,
+): GithubGateFinding[] {
+  const targetOrigin = segment ? SEGMENT_TO_ORIGIN[segment as Segment] : undefined;
+  if (!targetOrigin || !targetSha) return [];
+
+  const matching: { evidence: ReviewEvidence; entry: { review: GithubReview; index: number } }[] = [];
+  reviews.forEach((review, index) => {
+    if (review.state === 'DISMISSED' || typeof review.body !== 'string' || !review.body.includes(REVIEW_EVIDENCE_MARKER)) {
+      return;
+    }
+    try {
+      const evidence = parseReviewEvidence(review.body);
+      if (
+        evidence?.schema_version === 'agent-skill-chain/gate-review-evidence/v3' &&
+        evidence.issue_id === `ISSUE-${issueNumber}` &&
+        evidence.target_sha === targetSha &&
+        SEGMENTS.includes(evidence.gate) &&
+        typeof evidence.attempt_id === 'string' &&
+        isEvidenceVerdict(evidence.verdict)
+      ) {
+        matching.push({ evidence, entry: { review, index } });
+      }
+    } catch {
+      // 構造化evidenceの完全な検証とCheck Run発行はtrusted recorderが担う。
+      // worker promptでは解釈不能なreviewをblocking findingとして推測しない。
+    }
+  });
+
+  const findings: GithubGateFinding[] = [];
+  for (const sourceSegment of SEGMENTS) {
+    const forGate = matching.filter(({ evidence }) => evidence.gate === sourceSegment);
+    if (forGate.length === 0) continue;
+    const latest = forGate.reduce((current, candidate) =>
+      compareReviewEntries(candidate.entry, current.entry) > 0 ? candidate : current,
+    );
+    const latestAttempt = forGate.filter(({ evidence }) => evidence.attempt_id === latest.evidence.attempt_id);
+    for (const { evidence } of latestAttempt) {
+      for (const finding of evidence.verdict.blockers) {
+        if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
+          findings.push({ ...finding, source_segment: sourceSegment });
+        }
+      }
+    }
+  }
+  return findings;
 }
 
 function compareReviewEntries(
@@ -282,7 +346,11 @@ function detectGithubIssueSide(root: string, issueNumber: string): SuccessfulIss
   }
 }
 
-function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDetection | FailedSideDetection {
+function detectGithubPrSide(
+  root: string,
+  issueNumber: string,
+  segment?: string,
+): SuccessfulPrDetection | FailedSideDetection {
   const branch = resolveCurrentBranch(root);
   if (!branch) {
     return { succeeded: false, reason: '現在のブランチ名を解決できません' };
@@ -302,7 +370,7 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
   );
   if (result.status !== 0) {
     if (result.stderr.toLowerCase().includes('no pull requests found')) {
-      return { succeeded: true, reviews: [], comments: [] };
+      return { succeeded: true, reviews: [], blockingFindings: [], comments: [] };
     }
     return {
       succeeded: false,
@@ -322,10 +390,17 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
       throw new Error('number/state/headRefName/reviews/commentsが不正です');
     }
     const reviewThreadResult = detectReviewThreadComments(root, payload.number);
+    const head = git(['rev-parse', 'HEAD'], root);
     return {
       succeeded: true,
       prNumber: payload.number,
       reviews: unresolvedReviews(payload.reviews),
+      blockingFindings: unresolvedGateFindings(
+        payload.reviews,
+        issueNumber,
+        segment,
+        head.status === 0 ? head.stdout.trim() : undefined,
+      ),
       comments: [
         ...payload.comments
           .map((comment) => unresolvedComment(comment, 'pr_comment'))
@@ -346,9 +421,10 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
 export function detectGithubReviewStatus(
   root: string,
   issueNumber: string,
+  segment?: string,
 ): GithubReviewStatus | FailedGithubReviewStatus | undefined {
   const issueResult = detectGithubIssueSide(root, issueNumber);
-  const prResult = detectGithubPrSide(root, issueNumber);
+  const prResult = detectGithubPrSide(root, issueNumber, segment);
 
   if (!issueResult.succeeded && !prResult.succeeded) {
     return {
@@ -359,6 +435,7 @@ export function detectGithubReviewStatus(
   }
 
   const unresolvedReviews = prResult.succeeded ? prResult.reviews : [];
+  const unresolvedBlockingFindings = prResult.succeeded ? prResult.blockingFindings : [];
   const unresolvedComments = [
     ...(prResult.succeeded ? prResult.comments : []),
     ...(issueResult.succeeded ? issueResult.comments : []),
@@ -373,7 +450,12 @@ export function detectGithubReviewStatus(
     });
   }
 
-  if (unresolvedReviews.length === 0 && unresolvedComments.length === 0 && partialFailures.length === 0) {
+  if (
+    unresolvedReviews.length === 0 &&
+    unresolvedComments.length === 0 &&
+    unresolvedBlockingFindings.length === 0 &&
+    partialFailures.length === 0
+  ) {
     return undefined;
   }
   return {
@@ -382,6 +464,9 @@ export function detectGithubReviewStatus(
     ...(prResult.succeeded && prResult.prNumber !== undefined ? { pr_number: prResult.prNumber } : {}),
     unresolved_reviews: unresolvedReviews,
     unresolved_comments: unresolvedComments,
+    ...(unresolvedBlockingFindings.length > 0
+      ? { unresolved_blocking_findings: unresolvedBlockingFindings }
+      : {}),
     ...(partialFailures.length > 0 ? { partial_failures: partialFailures } : {}),
   };
 }

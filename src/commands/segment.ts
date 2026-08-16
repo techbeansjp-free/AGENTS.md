@@ -131,7 +131,7 @@ export async function start(args: string[]): Promise<number> {
       } catch {
         // Issue #446: 検出用root解決の失敗でworker起動全体を止めず、PR側の部分障害として表面化させる。
       }
-      reviewStatus = detectGithubReviewStatus(githubRoot, number);
+      reviewStatus = detectGithubReviewStatus(githubRoot, number, segment);
     }
 
     const parts = [`role: ${role}`];

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { consumeTrustedGateSecrets } from '../../src/commands/gate.js';
 import { canonicalJson } from '../../src/lib/review-evidence.js';
 import { encodeGateCheckExternalId } from '../../src/lib/gate-provenance.js';
@@ -34,6 +37,22 @@ const WORKFLOW: TrustedGateWorkflow = {
   run_attempt: 1,
 };
 const EXTERNAL_ID = encodeGateCheckExternalId(trustedGateExternalId(WORKFLOW, PAYLOAD));
+
+test('repository_dispatch受信workflowを配布元と展開先へ同期してCheck Run記録CLIへ結線する', () => {
+  const packageRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  const relativePath = '.github/workflows/agent-skill-chain-trusted-gate.yml';
+  const deployed = fs.readFileSync(path.join(packageRoot, relativePath), 'utf8');
+  const template = fs.readFileSync(
+    path.join(packageRoot, '.agent-skill-chain', 'templates', 'github', relativePath),
+    'utf8',
+  );
+
+  assert.equal(deployed, template);
+  assert.match(deployed, /repository_dispatch:\n\s+types: \[agent-skill-chain-gate-record\]/);
+  assert.match(deployed, /gate record-trusted-check prepare/);
+  assert.match(deployed, /gate record-trusted-check finalize/);
+  assert.match(deployed, /ASC_GATE_APP_PRIVATE_KEY: \$\{\{ secrets\.ASC_GATE_APP_PRIVATE_KEY \}\}/);
+});
 
 test('recorder secretはdirect fetch用に退避後、子process環境から除去される', () => {
   const env: NodeJS.ProcessEnv = {
