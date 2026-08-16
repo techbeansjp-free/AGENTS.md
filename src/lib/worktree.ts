@@ -127,7 +127,7 @@ export function resolveCurrentBranch(root: string): string | undefined {
   return resolveCurrentBranchInfo(root)?.branch;
 }
 
-/** Issue #692: cleanup前にブランチ固有commitがpush・到達可能性・統合内容のいずれかで保全済みか検査する。 */
+/** Issue #692: cleanup前に既知の保全位置を起点として到達可能性と別SHAでの統合を検査する。 */
 export type UnpushedCommitCheck =
   | { hasUnpushedCommits: false }
   | { hasUnpushedCommits: true; reason: 'unpreserved_commits'; commitShas: string[] }
@@ -195,6 +195,17 @@ export function inspectUnpushedCommits(
           }),
       );
       for (const [refName, sha] of liveHeads) {
+        if (git(['rev-parse', '--verify', `${sha}^{commit}`], worktreePath).status !== 0) {
+          if (refName !== `refs/heads/${branch}`) continue;
+          const fetch = git(['fetch', '--no-tags', remote, sha], worktreePath);
+          if (
+            fetch.status !== 0 ||
+            git(['rev-parse', '--verify', `${sha}^{commit}`], worktreePath).status !== 0
+          ) {
+            remoteEvidenceError ??= `実リモート ${remote} のcommit ${sha.slice(0, 12)} を取得できません`;
+            continue;
+          }
+        }
         reachableRefs.push(sha);
         if (refName === `refs/heads/${branch}`) pushedPositions.push(sha);
       }
@@ -232,43 +243,21 @@ export function inspectUnpushedCommits(
     ) {
       continue;
     }
-
-    const paths = commitPaths(worktreePath, commitSha);
-    if ('detail' in paths) {
-      return { hasUnpushedCommits: true, reason: 'indeterminate', detail: paths.detail };
-    }
-    if (paths.paths.length === 0) {
-      unpreserved.push(commitSha);
-      continue;
-    }
-    const commitContent = git(['diff', '--quiet', commitSha, base, '--', ...paths.paths], worktreePath);
-    if (commitContent.status === 0) continue;
-    if (commitContent.status !== 1) {
-      return {
-        hasUnpushedCommits: true,
-        reason: 'indeterminate',
-        detail: `commit ${commitSha.slice(0, 12)} の統合内容を確認できません`,
-      };
-    }
-
-    if (existingPushedPositions.length === 0) {
-      const tipContent = git(['diff', '--quiet', branch, base, '--', ...paths.paths], worktreePath);
-      if (tipContent.status === 0) {
-        const differsFromMergeBase = git(['diff', '--quiet', branch, mergeBaseSha, '--', ...paths.paths], worktreePath);
-        if (differsFromMergeBase.status === 1) continue;
-        if (differsFromMergeBase.status !== 0) {
+    if (existingPushedPositions.length > 0) {
+      const paths = commitPaths(worktreePath, commitSha);
+      if ('detail' in paths) {
+        return { hasUnpushedCommits: true, reason: 'indeterminate', detail: paths.detail };
+      }
+      if (paths.paths.length > 0) {
+        const commitContent = git(['diff', '--quiet', commitSha, base, '--', ...paths.paths], worktreePath);
+        if (commitContent.status === 0) continue;
+        if (commitContent.status !== 1) {
           return {
             hasUnpushedCommits: true,
             reason: 'indeterminate',
-            detail: `commit ${commitSha.slice(0, 12)} の分岐後の内容を確認できません`,
+            detail: `commit ${commitSha.slice(0, 12)} の統合内容を確認できません`,
           };
         }
-      } else if (tipContent.status !== 1) {
-        return {
-          hasUnpushedCommits: true,
-          reason: 'indeterminate',
-          detail: `commit ${commitSha.slice(0, 12)} のブランチ先端内容を確認できません`,
-        };
       }
     }
     unpreserved.push(commitSha);
@@ -277,6 +266,13 @@ export function inspectUnpushedCommits(
   if (unpreserved.length === 0) return { hasUnpushedCommits: false };
   if (remoteEvidenceError) {
     return { hasUnpushedCommits: true, reason: 'indeterminate', detail: remoteEvidenceError };
+  }
+  if (existingPushedPositions.length === 0) {
+    return {
+      hasUnpushedCommits: true,
+      reason: 'indeterminate',
+      detail: 'push済み位置またはIntegration Recordの記録SHAを確認できません',
+    };
   }
   return { hasUnpushedCommits: true, reason: 'unpreserved_commits', commitShas: unpreserved };
 }

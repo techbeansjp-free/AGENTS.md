@@ -20,6 +20,7 @@ issue_id: ISSUE-<番号> 形式のIssue ID
 
 interface IntegrationRecord {
   status: 'draft' | 'ready_for_review' | 'merged' | 'closed';
+  head_sha?: string;
 }
 
 interface PullRequestRecord {
@@ -70,6 +71,7 @@ export async function run(args: string[]): Promise<number> {
     if (config.coordination.backend === 'local') {
       const record = tryReadYamlFile<IntegrationRecord>(integrationFilePath(root, number));
       integrationDone = record?.status === 'merged' || record?.status === 'closed';
+      if (integrationDone) pushedCommit = record?.head_sha;
     } else if (entry.branch) {
       const prView = gh(['pr', 'list', '--head', entry.branch, '--state', 'all', '--json', 'state,headRefOid'], root);
       if (prView.status === 0) {
