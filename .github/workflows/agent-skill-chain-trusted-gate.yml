@@ -8,6 +8,7 @@ on:
     types: [agent-skill-chain-gate-record]
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
   issues: write
@@ -80,6 +81,17 @@ jobs:
         run: |
           git fetch --no-tags origin "pull/${PR_NUMBER}/head:refs/agent-skill-chain/targets/${TARGET_SHA}"
           test "$(git rev-parse "refs/agent-skill-chain/targets/${TARGET_SHA}^{commit}")" = "$TARGET_SHA"
+
+      - name: Record pre-prepare failure as action_required
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ASC_GATE_APP_ID: ${{ vars.ASC_GATE_APP_ID || secrets.ASC_GATE_APP_ID }}
+          ASC_GATE_APP_PRIVATE_KEY: ${{ secrets.ASC_GATE_APP_PRIVATE_KEY }}
+        run: |
+          source .agent-skill-chain/scripts/cli-resolve.sh
+          asc_resolve_cli
+          "${ASC_CLI[@]}" gate record-trusted-check fail-preparation
 
       - name: Prepare dedicated-App in-progress Check and envelope
         id: prepare

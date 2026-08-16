@@ -11,10 +11,12 @@ import { encodeGateCheckExternalId } from '../../src/lib/gate-provenance.js';
 import {
   assertTrustedGateAttestationVerification,
   canonicalReportIsOversize,
+  createTrustedGatePreparationFailureCheck,
   fetchTrustedGateApiContext,
   finalizeTrustedGateCheck,
   finalizeTrustedGateCheckFailure,
   parseTrustedGateDispatchEvent,
+  parseTrustedGateFailureEvent,
   parseTrustedGateWorkflow,
   selectLatestTrustedGateCheck,
   trustedGateExternalId,
@@ -72,6 +74,16 @@ function trustedGateSteps(): WorkflowStep[] {
   return workflow.jobs.record.steps;
 }
 
+function trustedGateWorkflow(): {
+  permissions: Record<string, string>;
+  jobs: { record: { steps: WorkflowStep[] } };
+} {
+  const packageRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  return readYamlFile(
+    path.join(packageRoot, '.github', 'workflows', 'agent-skill-chain-trusted-gate.yml'),
+  );
+}
+
 function workflowStep(name: string): WorkflowStep {
   const step = trustedGateSteps().find((candidate) => candidate.name === name);
   assert.ok(step, `${name} stepが存在すること`);
@@ -103,6 +115,7 @@ test('trusted gate workflowはnpm構成を検出し、buildとCLI解決をconsum
 });
 
 test('trusted gate workflowはattestation失敗後もprepare済みCheckをfail-closedで完了させる', () => {
+  assert.equal(trustedGateWorkflow().permissions.actions, 'read');
   assert.equal(workflowStep('Prepare dedicated-App in-progress Check and envelope').id, 'prepare');
   assert.equal(workflowStep('Attest exact gate envelope').id, 'attest');
   assert.equal(workflowStep('Verify signer workflow, ref, digest, and certificate').id, 'verify');
@@ -111,6 +124,17 @@ test('trusted gate workflowはattestation失敗後もprepare済みCheckをfail-c
   assert.match(finalize.if ?? '', /steps\.prepare\.outcome == 'success'/);
   assert.equal(finalize.env?.ASC_GATE_ATTEST_OUTCOME, '${{ steps.attest.outcome }}');
   assert.equal(finalize.env?.ASC_GATE_VERIFY_OUTCOME, '${{ steps.verify.outcome }}');
+});
+
+test('trusted gate workflowはpayloadまたはtarget検証失敗をprepare前にaction_requiredとして記録する', () => {
+  const steps = trustedGateSteps();
+  const failureIndex = steps.findIndex((step) => step.name === 'Record pre-prepare failure as action_required');
+  const prepareIndex = steps.findIndex((step) => step.name === 'Prepare dedicated-App in-progress Check and envelope');
+  assert.ok(failureIndex > steps.findIndex((step) => step.name === 'Fetch target as a read-only Git object'));
+  assert.ok(failureIndex < prepareIndex);
+  const failure = steps[failureIndex];
+  assert.equal(failure.if, 'failure()');
+  assert.match(failure.run ?? '', /gate record-trusted-check fail-preparation/);
 });
 
 test('recorder secretはdirect fetch用に退避後、子process環境から除去される', () => {
@@ -188,6 +212,14 @@ test('dispatch payloadはpr_number integer・gate enum・40hex SHAだけを許�
       client_payload: { ...PAYLOAD, pr_number: '274' },
     }),
     /integer/,
+  );
+  assert.deepEqual(
+    parseTrustedGateFailureEvent({
+      action: 'agent-skill-chain-gate-record',
+      sender: { login: 'trusted-recorder' },
+      client_payload: { ...PAYLOAD, unexpected: 'rejected-by-strict-validation' },
+    }),
+    { actor: 'trusted-recorder', payload: PAYLOAD },
   );
 });
 
@@ -379,6 +411,50 @@ test('attestation certificateはsubject digestとexact workflow run/attemptを�
     () => assertTrustedGateAttestationVerification({ verification: wrongSigner, envelopeBytes: bytes, envelope }),
     /run\/attempt/,
   );
+});
+
+test('prepare前の検証失敗はcompleted action_required Checkを1回のCheck API操作で記録する', async () => {
+  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.endsWith('/installation')) return new Response(JSON.stringify({ id: 88 }), { status: 200 });
+    if (url.endsWith('/access_tokens')) {
+      return new Response(JSON.stringify({
+        token: 'app-installation-token',
+        expires_at: '2026-07-26T01:00:00Z',
+      }), { status: 201 });
+    }
+    const body = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({
+      id: 501,
+      name: body.name,
+      head_sha: body.head_sha,
+      external_id: body.external_id,
+      status: body.status,
+      conclusion: body.conclusion,
+      app: { id: 12345, name: 'Agent Skill Chain Gate', slug: 'agent-skill-chain-gate' },
+    }), { status: 201 });
+  };
+
+  await createTrustedGatePreparationFailureCheck({
+    repository: 'techbeansjp-free/AGENTS.md',
+    repositoryId: 77,
+    credentials: { appId: '12345', privateKey: privateKeyPem },
+    checkName: 'agent-skill-chain/implementation-gate',
+    payload: PAYLOAD,
+    workflow: WORKFLOW,
+    fetchImpl: fetchImpl as typeof fetch,
+  });
+
+  const checkCalls = calls.filter((call) => call.url.endsWith('/check-runs'));
+  assert.equal(checkCalls.length, 1);
+  const body = JSON.parse(String(checkCalls[0].init?.body));
+  assert.equal(body.status, 'completed');
+  assert.equal(body.conclusion, 'action_required');
+  assert.equal(JSON.parse(body.output.text).reason, 'preparation_failed');
 });
 
 test('48KiB超reportはaction_requiredとなり、App PATCHが最後のHTTP操作になる', async () => {
