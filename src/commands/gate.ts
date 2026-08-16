@@ -14,6 +14,7 @@ import { digestOf, artifactDigestOf, artifactDigestOfFile, ARTIFACT_ABSENT_DIGES
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { classifyCoreReview } from '../lib/model-selection.js';
 import { resolveReviewProfile } from '../lib/review-profile.js';
+import { extractSpecAcIds } from '../lib/spec-ac-ids.js';
 import {
   LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS,
   resolveLightReview,
@@ -1985,12 +1986,6 @@ const SEGMENT_ORIGIN: Record<Segment, string> = {
   validation: 'validation',
 };
 
-function collectAcIds(specText: string): string[] {
-  const ids = new Set<string>();
-  for (const match of specText.matchAll(/\bAC-[0-9]+\b/g)) ids.add(match[0]);
-  return [...ids].sort((a, b) => Number(a.slice(3)) - Number(b.slice(3)));
-}
-
 interface ChangedPathStatus {
   status: string;
   path: string;
@@ -2038,7 +2033,7 @@ function buildReviewerPrompt(
     };
 
     const specText = readArtifact('SPEC.md') ?? '';
-    const acIds = collectAcIds(specText);
+    const acIds = extractSpecAcIds(specText);
 
     const sections: string[] = [];
     sections.push('# ゲートレビュア判定プロンプト（read-only）');
