@@ -10,7 +10,7 @@
 // （PR #541 レビュー指摘）。本ファイル後半は「Ensure agent-skill-chain CLI」ステップのbash実体を
 // 同様にfixture上で実行し、3経路（bin/agents-md.js・node_modules/.bin/agent-skill-chain・PATH）
 // のいずれかが既にあれば npm install を呼ばないこと、非Node consumer（package.jsonが無い＝
-// 3経路いずれも無いケース）でのみ npm install -g agent-skill-chain@latest を呼び、その結果
+// 3経路いずれも無いケース）でのみ GitHub リポジトリからの npm install -g を呼び、その結果
 // CLIがPATH上で解決可能になる（＝後続のverify-branch-name等がCLI未検出で失敗しない）ことを検証する。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -227,14 +227,14 @@ test('Ensure CLI: PATH上にagent-skill-chainが既にある場合は npm instal
   assert.deepEqual(result.npmArgs, [], 'npmは一切呼ばれないこと');
 });
 
-test('Ensure CLI: 非Node consumer（package.json・3経路いずれも無い）は npm install -g agent-skill-chain@latest を呼び、以後PATHでCLIが解決可能になる', () => {
+test('Ensure CLI: 非Node consumer（package.json・3経路いずれも無い）はGitHubからCLIを導入し、以後PATHで解決可能になる', () => {
   const result = runEnsureCliStep(() => {
     // 何も用意しない = package.jsonすら無いnon-Node consumerを模す
   });
   assert.equal(result.status, 0, `ステップは成功終了すること（stderr: ${result.stderr}）`);
   assert.deepEqual(
     result.npmArgs,
-    ['install -g agent-skill-chain@latest', 'prefix -g'],
+    ['install -g github:techbeansjp-free/AGENTS.md', 'prefix -g'],
     '自動導入後にグローバルprefixを取得して再解決すること',
   );
   assert.ok(
