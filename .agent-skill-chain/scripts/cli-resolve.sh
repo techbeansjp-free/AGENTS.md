@@ -3,10 +3,10 @@
 # CLI が未導入なら GitHub リポジトリからのグローバル導入を試行する。
 # 対話環境では事前確認を行い、AGENT_SKILL_CHAIN_AUTO_INSTALL=0 で無効化できる。
 
-# Issue #683: consumer assets は導入時の Git ref を保持しないため、推測したタグへ固定すると
-# 展開済み内容とは異なるCLIを取得しうる。正式な導入手段と同じくrefを省略し、既定ブランチの
-# CLIが展開済みテンプレートより新しくても後方互換で処理を続行することを期待挙動とする。
-ASC_CLI_INSTALL_SOURCE="github:techbeansjp-free/AGENTS.md"
+# Issue #683: 正式な導入手段と同じく既定は可変refとする。固定が必要なconsumerは
+# ASC_CLI_INSTALL_SOURCE="github:techbeansjp-free/AGENTS.md#<tag-or-branch>" を指定できる。
+# 版が展開済みassetsと異なる場合は警告し、明示的に選ばれた新しいCLIで処理を続行する。
+ASC_CLI_INSTALL_SOURCE="${ASC_CLI_INSTALL_SOURCE:-github:techbeansjp-free/AGENTS.md}"
 
 _ASC_CLI_RESOLVE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 _ASC_CLI_REPO_ROOT="$(cd -- "$_ASC_CLI_RESOLVE_DIR/../.." &>/dev/null && pwd)"
@@ -34,6 +34,35 @@ _asc_try_resolve() {
   fi
 
   return 1
+}
+
+_asc_warn_installed_version_mismatch() {
+  local consumer_version_file="$_ASC_CLI_REPO_ROOT/.agent-skill-chain/.installed_version"
+  [[ -f "$consumer_version_file" ]] || return 0
+
+  local consumer_version
+  if ! IFS= read -r consumer_version < "$consumer_version_file" || [[ -z "$consumer_version" ]]; then
+    return 0
+  fi
+
+  local global_root
+  if ! global_root="$(npm root -g 2>/dev/null)" || [[ -z "$global_root" ]]; then
+    return 0
+  fi
+
+  local installed_version
+  if ! installed_version="$(node -e '
+    const fs = require("node:fs");
+    const pkg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    if (typeof pkg.version !== "string" || pkg.version.length === 0) process.exit(1);
+    process.stdout.write(pkg.version);
+  ' "$global_root/agent-skill-chain/package.json" 2>/dev/null)"; then
+    return 0
+  fi
+
+  if [[ "$installed_version" != "$consumer_version" ]]; then
+    echo "警告: 自動導入したagent-skill-chain CLIの版（${installed_version}）は、consumerへ展開済みassetsの版（${consumer_version}）と異なります。CLIの処理を続行します。版を揃えるにはupgradeするか、ASC_CLI_INSTALL_SOURCEへ固定refを指定してください。" >&2
+  fi
 }
 
 _asc_auto_install() {
@@ -74,6 +103,8 @@ _asc_auto_install() {
     echo "agent-skill-chain CLI の自動導入は成功しましたが、導入先を含めてもCLI実体を再解決できません。" >&2
     return 1
   fi
+
+  _asc_warn_installed_version_mismatch
 
   return 0
 }

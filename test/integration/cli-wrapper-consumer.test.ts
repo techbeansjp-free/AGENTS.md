@@ -13,6 +13,8 @@ import {
 
 function installNpmStub(stubDir: string, prefix: string, log: string): void {
   const installedCli = path.join(prefix, 'bin', 'agent-skill-chain');
+  const globalRoot = path.join(prefix, 'lib', 'node_modules');
+  const packageJson = path.join(globalRoot, 'agent-skill-chain', 'package.json');
   const cliBody = [
     '#!/usr/bin/env bash',
     'if [[ "${1:-}" == "--help" ]]; then exit 0; fi',
@@ -35,10 +37,16 @@ function installNpmStub(stubDir: string, prefix: string, log: string): void {
       `  printf '%s\\n' ${JSON.stringify(prefix)}`,
       '  exit 0',
       'fi',
+      'if [[ "${1:-} ${2:-}" == "root -g" ]]; then',
+      `  printf '%s\\n' ${JSON.stringify(globalRoot)}`,
+      '  exit 0',
+      'fi',
       'if [[ "${1:-} ${2:-}" == "install -g" ]]; then',
       `  mkdir -p ${JSON.stringify(path.dirname(installedCli))}`,
       `  printf '%s' ${JSON.stringify(cliEncoded)} | base64 -d > ${JSON.stringify(installedCli)}`,
       `  chmod +x ${JSON.stringify(installedCli)}`,
+      `  mkdir -p ${JSON.stringify(path.dirname(packageJson))}`,
+      `  printf '%s\\n' ${JSON.stringify(JSON.stringify({ name: 'agent-skill-chain', version: '0.2.0' }))} > ${JSON.stringify(packageJson)}`,
       '  exit 0',
       'fi',
       'exit 1',

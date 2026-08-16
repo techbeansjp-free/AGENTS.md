@@ -91,8 +91,11 @@ function installNpmBehavior(
   npmLog: string,
   mode: 'success' | 'no-cli' | 'bad-help' | 'failure',
   delegatedLog: string,
+  installedVersion = '9.9.9',
 ): void {
   const cli = path.join(prefix, 'bin', 'agent-skill-chain');
+  const globalRoot = path.join(prefix, 'lib', 'node_modules');
+  const packageJson = path.join(globalRoot, 'agent-skill-chain', 'package.json');
   const helpStatus = mode === 'bad-help' ? 23 : 0;
   const cliBody = `#!/usr/bin/env bash\nif [[ "\${1:-}" == "--help" ]]; then exit ${helpStatus}; fi\nprintf '%s\\n' "$*" >> ${JSON.stringify(delegatedLog)}\n`;
   const cliEncoded = Buffer.from(cliBody).toString('base64');
@@ -108,16 +111,23 @@ function installNpmBehavior(
         ? `  printf '%s' ${JSON.stringify(cliEncoded)} | base64 -d > ${JSON.stringify(cli)}`
         : '  :',
       mode === 'success' || mode === 'bad-help' ? `  chmod +x ${JSON.stringify(cli)}` : '  :',
+      mode === 'success' || mode === 'bad-help'
+        ? `  mkdir -p ${JSON.stringify(path.dirname(packageJson))}`
+        : '  :',
+      mode === 'success' || mode === 'bad-help'
+        ? `  printf '%s\n' ${JSON.stringify(JSON.stringify({ name: 'agent-skill-chain', version: installedVersion }))} > ${JSON.stringify(packageJson)}`
+        : '  :',
       '  exit 0',
       'fi',
       `if [[ "\${1:-} \${2:-}" == "prefix -g" ]]; then printf '%s\\n' ${JSON.stringify(prefix)}; exit 0; fi`,
+      `if [[ "\${1:-} \${2:-}" == "root -g" ]]; then printf '%s\\n' ${JSON.stringify(globalRoot)}; exit 0; fi`,
       'exit 1',
       '',
     ].join('\n'),
   );
 }
 
-test('非対話の未解決時は自動導入し、PATH外の導入先を加えて再解決する', () => {
+test('導入元指定を省略すると既定ブランチから自動導入し、PATH外の導入先を加えて再解決する', () => {
   const fixture = createResolverFixture();
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue677-npm-'));
   const prefix = fs.mkdtempSync(path.join(os.tmpdir(), 'issue677-prefix-'));
@@ -131,6 +141,54 @@ test('非対話の未解決時は自動導入し、PATH外の導入先を加え�
     assert.match(fs.readFileSync(npmLog, 'utf8'), /^install -g github:techbeansjp-free\/AGENTS\.md$/m);
     assert.match(fs.readFileSync(npmLog, 'utf8'), /^prefix -g$/m);
     assert.equal(fs.readFileSync(delegated, 'utf8'), 'hello two words\n');
+  } finally {
+    fixture.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+    fs.rmSync(prefix, { recursive: true, force: true });
+  }
+});
+
+test('ASC_CLI_INSTALL_SOURCEで固定refを指定すると同じrefから自動導入する', () => {
+  const fixture = createResolverFixture();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue683-fixed-ref-npm-'));
+  const prefix = fs.mkdtempSync(path.join(os.tmpdir(), 'issue683-fixed-ref-prefix-'));
+  const npmLog = path.join(fixture.root, 'npm.log');
+  const delegated = path.join(fixture.root, 'delegated.log');
+  const source = 'github:techbeansjp-free/AGENTS.md#v0.2.117';
+  try {
+    installNpmBehavior(stubDir, prefix, npmLog, 'success', delegated);
+    const result = run(
+      fixture,
+      baseEnv({ PATH: `${stubDir}:/usr/bin:/bin`, ASC_CLI_INSTALL_SOURCE: source }),
+      ['fixed-ref'],
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(fs.readFileSync(npmLog, 'utf8'), /^install -g github:techbeansjp-free\/AGENTS\.md#v0\.2\.117$/m);
+    assert.equal(fs.readFileSync(delegated, 'utf8'), 'fixed-ref\n');
+  } finally {
+    fixture.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+    fs.rmSync(prefix, { recursive: true, force: true });
+  }
+});
+
+test('自動導入CLIとconsumer assetsの版が異なる場合は警告して処理を続行する', () => {
+  const fixture = createResolverFixture();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue683-version-warning-npm-'));
+  const prefix = fs.mkdtempSync(path.join(os.tmpdir(), 'issue683-version-warning-prefix-'));
+  const delegated = path.join(fixture.root, 'delegated.log');
+  try {
+    fs.writeFileSync(path.join(fixture.root, '.agent-skill-chain', '.installed_version'), '1.2.3\n');
+    installNpmBehavior(stubDir, prefix, path.join(fixture.root, 'npm.log'), 'success', delegated, '9.9.9');
+    const result = run(
+      fixture,
+      baseEnv({ PATH: `${stubDir}:${path.dirname(process.execPath)}:/usr/bin:/bin` }),
+      ['version-mismatch'],
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /CLIの版（9\.9\.9）.*assetsの版（1\.2\.3）.*処理を続行/u);
+    assert.match(result.stderr, /ASC_CLI_INSTALL_SOURCEへ固定ref/u);
+    assert.equal(fs.readFileSync(delegated, 'utf8'), 'version-mismatch\n');
   } finally {
     fixture.cleanup();
     fs.rmSync(stubDir, { recursive: true, force: true });
@@ -217,6 +275,21 @@ test('GitHub導入元の到達性検査は自動導入と同じsourceをnpmへ�
     fixture.cleanup();
     fs.rmSync(stubDir, { recursive: true, force: true });
   }
+});
+
+// ネットワーク障害で既定スイートを不安定にしないため通常はskipし、明示した場合だけ実GitHub sourceへ接続する。
+test('GitHub導入元へ実際に到達してpackage versionを取得できる', (t) => {
+  if (process.env.ASC_TEST_LIVE_CLI_INSTALL_SOURCE !== '1') {
+    t.skip('ASC_TEST_LIVE_CLI_INSTALL_SOURCE=1 が指定された場合だけlive到達性を確認する');
+    return;
+  }
+  const result = spawnSync(
+    'bash',
+    ['-c', 'unset ASC_CLI_INSTALL_SOURCE; source .agent-skill-chain/scripts/cli-resolve.sh; asc_verify_cli_install_source'],
+    { cwd: packageRoot, env: process.env, encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /github:techbeansjp-free\/AGENTS\.md.*version [0-9]+\.[0-9]+\.[0-9]+/u);
 });
 
 test('対話確認で拒否するとnpmを呼ばず理由付き日本語エラーで停止する', (t) => {
