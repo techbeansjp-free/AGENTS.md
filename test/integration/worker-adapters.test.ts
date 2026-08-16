@@ -117,6 +117,23 @@ function runCodexLaunchWorkerDirect(worktreePath: string, args: string[], env: N
   }
 }
 
+/** Codex の既定 worker コマンドだけを組み立て、プロセス自体は起動しない。 */
+function buildCodexWorkerCommand(scriptRoot: string, cwd: string, env: NodeJS.ProcessEnv): ScriptResult {
+  const adapterPath = path.join(scriptRoot, '.agent-skill-chain', 'adapters', 'codex.sh');
+  const script = 'set -uo pipefail; source "$1"; set +e; _worker_default_cmd spec "role: spec_worker"';
+  try {
+    const stdout = execFileSync('bash', ['-c', script, '_', adapterPath], { cwd, encoding: 'utf8', env });
+    return { status: 0, stdout, stderr: '' };
+  } catch (error) {
+    const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    return {
+      status: typeof e.status === 'number' ? e.status : 1,
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+    };
+  }
+}
+
 function detectClaudeCodeSession(env: NodeJS.ProcessEnv): boolean {
   const adapterPath = path.join(packageRoot(), '.agent-skill-chain', 'adapters', 'claude.sh');
   const script = 'source "$1"; if _orchestrator_is_claude_code_cli_session; then printf true; else printf false; fi';
@@ -198,6 +215,50 @@ function installCodexStub(t: { after(fn: () => void): void }): {
     { mode: 0o755 },
   );
   return { stubDir, argvCapturePath, stdinCapturePath };
+}
+
+/**
+ * writable_roots が期待値と完全一致するときだけ、worker の cwd で実際に commit と push を行う
+ * Codex stub。HOME は存在しないパスに固定し、認証情報を必要としないローカル bare remote へ push
+ * することで、HOME を書込み root に追加しない経路を再現する。
+ */
+function installCommitPushCodexStub(
+  t: { after(fn: () => void): void },
+  expectedWritableRoots: string,
+): { stubDir: string; argvCapturePath: string; unavailableHome: string; outputName: string } {
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-codex-git-stub-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const argvCapturePath = path.join(stubDir, 'argv.txt');
+  const unavailableHome = path.join(stubDir, 'home-must-not-be-created');
+  const outputName = 'codex-sandbox-commit-push.txt';
+  const codexStub = path.join(stubDir, 'codex');
+  fs.writeFileSync(
+    codexStub,
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
+      `expected=${JSON.stringify(expectedWritableRoots)}`,
+      'matched=false',
+      'for arg in "$@"; do',
+      '  if [[ "$arg" == "$expected" ]]; then matched=true; fi',
+      'done',
+      'if [[ "$matched" != true ]]; then',
+      '  echo "writable_roots が期待値と一致しません" >&2',
+      '  exit 91',
+      'fi',
+      'cat >/dev/null',
+      `printf 'Issue #682 sandbox commit/push\\n' > ${JSON.stringify(outputName)}`,
+      `git add -- ${JSON.stringify(outputName)}`,
+      "git commit -m 'test: codex sandbox commit and push' >/dev/null",
+      'git push origin HEAD >/dev/null',
+      'SHA=$(git rev-parse HEAD)',
+      `node ${JSON.stringify(binPath)} report status "$ASC_ISSUE_ID" "$ASC_ROLE" "$ASC_SEGMENT" completed "$SHA" "" "" "$ASC_DISPATCH_TOKEN"`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  return { stubDir, argvCapturePath, unavailableHome, outputName };
 }
 
 /**
@@ -2270,31 +2331,55 @@ test('lease acquire (local backend): 同issue内の他segmentコンフリクト�
   assert.equal(acquireDesign.status, 1, '1 Issueにつき同時1つのwriter leaseのみ許可されるため拒否されること');
 });
 
-// --- Issue #364 (1) codex workspace-write サンドボックスと共通 .git ------------------------
+// --- Issue #682: codex workspace-write サンドボックスと worktree git メタデータ ---------
 
-test('codex launch_worker: linked worktreeの共通.gitディレクトリを追加の書込みrootとして渡し、push用の名前解決も許可する（Issue #364）', async (t) => {
+test('codex launch_worker: linked worktree固有と共有gitメタデータを書込みrootへ列挙し、HOMEを追加せずcommit・pushを完遂する（Issue #682）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerAdapter(repo.dir, 'codex');
 
-  const { stubDir, argvCapturePath } = installCodexStub(t);
-  const env = envWithout([], { CODEX_AUTH_PROBE_CMD: 'true', PATH: `${stubDir}:${process.env.PATH}` });
+  const commonDir = fs.realpathSync(
+    execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim(),
+  );
+  const gitDir = fs.realpathSync(
+    execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-dir'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim(),
+  );
+  assert.notEqual(gitDir, commonDir, 'fixtureはgitfileを持つlinked worktreeであること');
+  const expectedRoots = `sandbox_workspace_write.writable_roots=["${commonDir}","${gitDir}"]`;
+  const { stubDir, argvCapturePath, unavailableHome, outputName } = installCommitPushCodexStub(t, expectedRoots);
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    HOME: unavailableHome,
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
 
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
   assert.equal(res.status, 0, res.stderr);
 
-  // worktree の .git は共通 .git を指すファイルにすぎず、commit が実際に書く実体は cwd の外に
-  // ある。その絶対パスが書込み root として渡らないと worker は index.lock を作れず I3 を満たせない。
-  const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+  const branch = execFileSync('git', ['branch', '--show-current'], {
     cwd: worktreePath,
+    encoding: 'utf8',
+  }).trim();
+  const localHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const remoteHead = execFileSync('git', ['--git-dir', repo.remoteDir, 'rev-parse', `refs/heads/${branch}`], {
     encoding: 'utf8',
   }).trim();
   const argv = fs.readFileSync(argvCapturePath, 'utf8');
 
-  assert.ok(
-    argv.includes(`sandbox_workspace_write.writable_roots=["${commonDir}"]`),
-    `共通.gitディレクトリが書込みrootとして渡されること (argv=${argv})`,
+  assert.equal(remoteHead, localHead, 'workerが作成したcommitがremote branchへpush済みであること');
+  assert.equal(
+    execFileSync('git', ['--git-dir', repo.remoteDir, 'show', `${remoteHead}:${outputName}`], { encoding: 'utf8' }),
+    'Issue #682 sandbox commit/push\n',
   );
+  assert.ok(argv.includes(expectedRoots), `共有領域とworktree固有領域が個別に列挙されること (argv=${argv})`);
+  assert.ok(!fs.existsSync(unavailableHome), 'push完遂のためにHOMEを書込み可能にしたり作成したりしないこと');
+  assert.ok(!argv.includes(unavailableHome), 'HOMEをwritable_rootsへ含めないこと');
   assert.ok(
     argv.includes('sandbox_workspace_write.network_access=true'),
     `git pushの名前解決が遮断されないこと (argv=${argv})`,
@@ -2304,6 +2389,77 @@ test('codex launch_worker: linked worktreeの共通.gitディレクトリを追�
     !argv.includes('danger-full-access') && !argv.includes('--dangerously-bypass-approvals-and-sandbox'),
     'サンドボックス自体を無効化する緩和を行わないこと',
   );
+});
+
+test('codex worker command: 通常の作業ツリーでは同一実体のgitディレクトリを1要素だけ列挙する（Issue #682）', (t) => {
+  const repo = createTmpRepo();
+  t.after(() => repo.cleanup());
+  const gitDir = fs.realpathSync(path.join(repo.dir, '.git'));
+  const env = envWithout([], { CODEX_EXECUTABLE: 'true' });
+
+  const res = buildCodexWorkerCommand(repo.dir, repo.dir, env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.ok(
+    res.stdout.includes(`sandbox_workspace_write.writable_roots=\\[\\"${gitDir}\\"\\]`),
+    `通常の作業ツリーでは重複のない1要素になること (${res.stdout})`,
+  );
+});
+
+test('codex worker command: .gitがsymlinkの場合はリンク先の実体パスを列挙する（Issue #682）', (t) => {
+  const repo = createTmpRepo();
+  const metadataParent = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-symlink-git-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(metadataParent, { recursive: true, force: true });
+  });
+  const linkedGitDir = path.join(repo.dir, '.git');
+  const realGitDir = path.join(metadataParent, 'metadata');
+  fs.renameSync(linkedGitDir, realGitDir);
+  fs.symlinkSync(realGitDir, linkedGitDir, 'dir');
+  const env = envWithout([], { CODEX_EXECUTABLE: 'true' });
+
+  const res = buildCodexWorkerCommand(repo.dir, repo.dir, env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.ok(
+    res.stdout.includes(`sandbox_workspace_write.writable_roots=\\[\\"${realGitDir}\\"\\]`),
+    `symlinkではなく実体パスが列挙されること (${res.stdout})`,
+  );
+  assert.ok(!res.stdout.includes(linkedGitDir), 'symlink自体のパスを列挙しないこと');
+});
+
+test('codex launch_worker: git-dirだけを解決不能にするとCodex起動前に日本語エラーで停止する（Issue #682）', async (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'codex');
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const gitStubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-git-dir-failure-'));
+  t.after(() => fs.rmSync(gitStubDir, { recursive: true, force: true }));
+  const realGit = fs.realpathSync(execFileSync('which', ['git'], { encoding: 'utf8' }).trim());
+  fs.writeFileSync(
+    path.join(gitStubDir, 'git'),
+    [
+      '#!/usr/bin/env bash',
+      'for arg in "$@"; do',
+      '  if [[ "$arg" == "--git-dir" ]]; then exit 1; fi',
+      'done',
+      `exec ${JSON.stringify(realGit)} "$@"`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    PATH: `${gitStubDir}:${stubDir}:${process.env.PATH}`,
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+
+  assert.notEqual(res.status, 0, 'git-dir解決失敗を成功扱いしないこと');
+  assert.match(res.stderr, /起動対象作業ツリーの git メタデータディレクトリの絶対パスを解決できませんでした/);
+  assert.ok(!fs.existsSync(argvCapturePath), '解決できない書込み領域のままCodexを起動しないこと');
 });
 
 // --- Issue #364 (2) $var 直後の非ASCII文字による変数名の取り込み --------------------------
