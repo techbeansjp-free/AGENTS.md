@@ -70,7 +70,11 @@ test('consumerへ展開した54本全数が共有実装から自動導入分岐�
       fs.rmSync(npmLog, { force: true });
       const result = runWrapper(fixture.root, relative, env);
       const calls = fs.existsSync(npmLog) ? fs.readFileSync(npmLog, 'utf8') : '';
-      assert.match(calls, /^install -g agent-skill-chain@latest$/m, `${relative} が自動導入を試行すること`);
+      assert.match(
+        calls,
+        /^install -g github:techbeansjp-free\/AGENTS\.md$/m,
+        `${relative} が自動導入を試行すること`,
+      );
       assert.doesNotMatch(result.stderr, /共有実装を(?:解決|読み込)めません/, `${relative}: ${result.stderr}`);
     }
   } finally {

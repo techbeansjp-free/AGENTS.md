@@ -128,7 +128,7 @@ test('非対話の未解決時は自動導入し、PATH外の導入先を加え�
     const result = run(fixture, baseEnv({ PATH: `${stubDir}:/usr/bin:/bin` }), ['hello', 'two words']);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, '', '共有実装は標準出力へ書かないこと');
-    assert.match(fs.readFileSync(npmLog, 'utf8'), /^install -g agent-skill-chain@latest$/m);
+    assert.match(fs.readFileSync(npmLog, 'utf8'), /^install -g github:techbeansjp-free\/AGENTS\.md$/m);
     assert.match(fs.readFileSync(npmLog, 'utf8'), /^prefix -g$/m);
     assert.equal(fs.readFileSync(delegated, 'utf8'), 'hello two words\n');
   } finally {
@@ -173,13 +173,49 @@ test('opt-outは値0だけで有効になり、それ以外は既定の自動導
         assert.equal(calls, '');
         assert.match(result.stderr, /AGENT_SKILL_CHAIN_AUTO_INSTALL=0.*自動導入を行いません/u);
       } else {
-        assert.match(calls, /^install -g agent-skill-chain@latest$/m, `値 ${JSON.stringify(value)} は自動導入すること`);
+        assert.match(
+          calls,
+          /^install -g github:techbeansjp-free\/AGENTS\.md$/m,
+          `値 ${JSON.stringify(value)} は自動導入すること`,
+        );
       }
     } finally {
       fixture.cleanup();
       fs.rmSync(stubDir, { recursive: true, force: true });
       fs.rmSync(prefix, { recursive: true, force: true });
     }
+  }
+});
+
+test('GitHub導入元の到達性検査は自動導入と同じsourceをnpmへ渡す', () => {
+  const fixture = createResolverFixture();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue683-source-check-'));
+  const npmLog = path.join(fixture.root, 'npm-source.log');
+  try {
+    writeExecutable(
+      path.join(stubDir, 'npm'),
+      [
+        '#!/usr/bin/env bash',
+        `printf '%s\n' "$*" >> ${JSON.stringify(npmLog)}`,
+        'if [[ "$*" == "view github:techbeansjp-free/AGENTS.md version" ]]; then',
+        "  printf '9.9.9\\n'",
+        '  exit 0',
+        'fi',
+        'exit 1',
+        '',
+      ].join('\n'),
+    );
+    const result = spawnSync(
+      'bash',
+      ['-c', 'source .agent-skill-chain/scripts/cli-resolve.sh; asc_verify_cli_install_source'],
+      { cwd: fixture.root, env: baseEnv({ PATH: `${stubDir}:/usr/bin:/bin` }), encoding: 'utf8' },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(npmLog, 'utf8'), 'view github:techbeansjp-free/AGENTS.md version\n');
+    assert.match(result.stdout, /github:techbeansjp-free\/AGENTS\.md.*9\.9\.9/u);
+  } finally {
+    fixture.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
   }
 });
 
