@@ -265,6 +265,91 @@ test('hasUnpushedCommits: squashマージ後にリモートブランチが削除
   );
 });
 
+test('hasUnpushedCommits: default branchが別変更で前進した後のsquash mergeも変更pathの内容一致でfalseになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-squash-after-base-advance';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-squash-after-base-advance`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+
+  fs.writeFileSync(path.join(worktreePath, 'FIRST.md'), '# first\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add FIRST.md']);
+  fs.writeFileSync(path.join(worktreePath, 'SECOND.md'), '# second\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add SECOND.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  fs.writeFileSync(path.join(repo.dir, 'CONCURRENT.md'), '# concurrent\n');
+  gitIn(repo.dir, ['add', '-A']);
+  gitIn(repo.dir, ['commit', '-m', 'chore: advance main']);
+  gitIn(repo.dir, ['merge', '--squash', branch]);
+  gitIn(repo.dir, ['commit', '-m', 'feat: squash feature branch']);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  assert.equal(gitOk(worktreePath, ['merge-base', '--is-ancestor', branch, 'main']), false);
+  assert.notEqual(
+    execFileSync('git', ['rev-parse', `${branch}^{tree}`], { cwd: worktreePath, encoding: 'utf8' }).trim(),
+    execFileSync('git', ['rev-parse', 'main^{tree}'], { cwd: worktreePath, encoding: 'utf8' }).trim(),
+    '前進分により既存のtree一致判定は成立しないこと',
+  );
+  assert.equal(hasUnpushedCommits(worktreePath, branch), false);
+});
+
+test('hasUnpushedCommits: merge commit方式で統合済みなupstream goneブランチはfalseになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-merge-commit';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-merge-commit`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'MERGED.md'), '# merged\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add MERGED.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  gitIn(repo.dir, ['merge', '--no-ff', '-m', 'merge feature branch', branch]);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  assert.equal(gitOk(worktreePath, ['merge-base', '--is-ancestor', branch, 'main']), true);
+  assert.equal(hasUnpushedCommits(worktreePath, branch), false);
+});
+
+test('hasUnpushedCommits: rebase merge方式でSHAが変わった統合済みブランチはfalseになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-rebase-merge';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-rebase-merge`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'FIRST.md'), '# first\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add FIRST.md']);
+  fs.writeFileSync(path.join(worktreePath, 'SECOND.md'), '# second\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add SECOND.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+  const originalCommits = execFileSync('git', ['rev-list', '--reverse', `main..${branch}`], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+  })
+    .trim()
+    .split('\n');
+
+  fs.writeFileSync(path.join(repo.dir, 'CONCURRENT.md'), '# concurrent\n');
+  gitIn(repo.dir, ['add', '-A']);
+  gitIn(repo.dir, ['commit', '-m', 'chore: advance main']);
+  gitIn(repo.dir, ['cherry-pick', ...originalCommits]);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  assert.equal(gitOk(worktreePath, ['merge-base', '--is-ancestor', branch, 'main']), false);
+  assert.equal(hasUnpushedCommits(worktreePath, branch), false);
+});
+
 test('hasUnpushedCommits: upstreamがgone状態でもdefault branchへ未統合の内容が残っていればtrueのままになる', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -295,6 +380,30 @@ test('hasUnpushedCommits: upstreamがgone状態でもdefault branchへ未統合�
     true,
     '未統合の内容が残る場合はupstream goneでも安全側でtrueのままであること',
   );
+});
+
+test('hasUnpushedCommits: squash merge後の空白だけのローカル限定commitも統合済みと誤判定しない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-unpushed-whitespace';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-unpushed-whitespace`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'value with space\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add CONTENT.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  gitIn(repo.dir, ['merge', '--squash', branch]);
+  gitIn(repo.dir, ['commit', '-m', 'feat: squash CONTENT.md']);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'value  with space\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'fix: preserve significant whitespace']);
+
+  assert.equal(hasUnpushedCommits(worktreePath, branch), true, '空白差分を含むローカル限定commitは削除から保護すること');
 });
 
 test('findIssueWorktree: worktree.path_patternに沿ったworktreeをissue番号から見つける', (t) => {

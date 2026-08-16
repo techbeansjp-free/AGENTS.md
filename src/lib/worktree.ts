@@ -140,10 +140,20 @@ export function hasUnpushedCommits(worktreePath: string, branch: string): boolea
   const upstream = git(['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], worktreePath);
   if (upstream.status === 0) {
     const ahead = git(['rev-list', '--count', `${upstream.stdout.trim()}..${branch}`], worktreePath);
-    return ahead.status === 0 && Number.parseInt(ahead.stdout.trim() || '0', 10) > 0;
+    if (ahead.status !== 0) return true;
+    const aheadCount = Number.parseInt(ahead.stdout.trim(), 10);
+    if (!Number.isFinite(aheadCount)) return true;
+    if (aheadCount === 0) return false;
   }
-  // upstream解決不能（未push、またはIssue #361のgone状態）。
-  // default branchへ統合済みと判定できた場合のみpush実績ありとみなし、それ以外は安全側でtrue。
+
+  // Issue #692: upstreamは「保全先」の一例に過ぎない。追跡設定が無い、
+  // goneである、またはdefault branchを指す場合でも、別のremote refが先端を
+  // 保持していればworktree削除でcommitは失われない。
+  const remoteRefs = git(['for-each-ref', `--contains=${branch}`, '--format=%(refname)', 'refs/remotes'], worktreePath);
+  if (remoteRefs.status === 0 && remoteRefs.stdout.trim().length > 0) return false;
+
+  // remote refから到達不能でもdefault branchへ統合済みなら保全されている。
+  // 統合を確定できない場合は、ローカル限定commitとみなし安全側でtrueを返す。
   return !isIntegratedIntoDefaultBranch(worktreePath, branch);
 }
 
@@ -153,10 +163,10 @@ export function hasUnpushedCommits(worktreePath: string, branch: string): boolea
  *
  * 1. 通常マージ・fast-forward・rebase-mergeは祖先関係（`git merge-base --is-ancestor`）で
  *    検出できる。
- * 2. squashマージはdefault branch側に新しいコミットハッシュを作るため祖先関係にならない。
- *    その代わり、分岐後にdefault branch側で他の変更が入っていなければ、squashコミットの
- *    tree（作業ツリーの内容そのもの）はブランチ先端のtreeと完全に一致する。そこでブランチ先端の
- *    tree hashが、default branchの履歴中いずれかのコミットのtree hashと一致するかで判定する。
+ * 2. rebase mergeとsquash mergeはcommit SHAを変える。分岐点からIssueブランチが
+ *    変更したpathに限定し、default branch履歴上のcommitと厳密な内容比較を行う。
+ *    default branchが無関係なpathの変更で前進しても検出でき、空白を無視するpatch IDの
+ *    ようにローカル限定の内容差分を統合済みとみなすこともない。
  * 3. default branchが特定できない、または上記いずれの判定も成立しない場合は統合未済とみなす
  *    （安全側）。
  */
@@ -177,10 +187,36 @@ function isIntegratedIntoDefaultBranch(worktreePath: string, branch: string): bo
 
   const baseTrees = git(['log', base, '--format=%T'], worktreePath);
   if (baseTrees.status !== 0) return false;
-  return baseTrees.stdout
+  const treeMatched = baseTrees.stdout
     .split('\n')
     .map((line) => line.trim())
     .includes(targetTree);
+  if (treeMatched) return true;
+
+  const mergeBase = git(['merge-base', branch, base], worktreePath);
+  if (mergeBase.status !== 0) return false;
+  const changed = git(['diff', '--no-renames', '--name-only', '-z', mergeBase.stdout.trim(), branch], worktreePath);
+  if (changed.status !== 0) return false;
+  const changedPaths = changed.stdout.split('\0').filter(Boolean);
+  if (changedPaths.length === 0) return true;
+
+  const baseCommits = git(
+    ['--literal-pathspecs', 'rev-list', `${mergeBase.stdout.trim()}..${base}`, '--', ...changedPaths],
+    worktreePath,
+  );
+  if (baseCommits.status !== 0) return false;
+  for (const commit of baseCommits.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)) {
+    const sameContent = git(
+      ['--literal-pathspecs', 'diff', '--quiet', branch, commit, '--', ...changedPaths],
+      worktreePath,
+    );
+    if (sameContent.status === 0) return true;
+    if (sameContent.status !== 1) return false;
+  }
+  return false;
 }
 
 /**

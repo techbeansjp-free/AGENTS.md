@@ -96,6 +96,52 @@ test('issue lifecycle (local backend): start -> lease -> segment -> gate -> chec
   assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
 });
 
+test('cleanup: main前進後のsquash mergeでupstreamがgoneになってもworktreeを削除できる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'squash-cleanup', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'ISSUE_CHANGE.md'), '# issue change\n');
+  const checkpoint = runCli(['checkpoint', 'bugfix: add issue change'], { cwd: worktreePath });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+
+  fs.writeFileSync(path.join(repo.dir, 'CONCURRENT_CHANGE.md'), '# concurrent main change\n');
+  execFileSync('git', ['add', 'CONCURRENT_CHANGE.md'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'chore: advance main before squash merge'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'bugfix: squash issue change'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
+
+  assert.throws(
+    () => execFileSync('git', ['merge-base', '--is-ancestor', branch, 'main'], { cwd: repo.dir, stdio: 'pipe' }),
+    'squash merge後はIssueブランチ先端がmainの祖先ではないこと',
+  );
+  assert.notEqual(
+    execFileSync('git', ['rev-parse', `${branch}^{tree}`], { cwd: repo.dir, encoding: 'utf8' }).trim(),
+    execFileSync('git', ['rev-parse', 'main^{tree}'], { cwd: repo.dir, encoding: 'utf8' }).trim(),
+    'mainの別変更によりtree一致では統合済みと判定できないこと',
+  );
+
+  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
+  fs.writeFileSync(integrationPath, integrationText);
+
+  const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
+  assert.equal(cleanup.status, 0, cleanup.stderr);
+  assert.equal(cleanup.stdout.trim(), worktreePath);
+  assert.ok(!fs.existsSync(worktreePath), 'cleanup後はworktreeが削除されていること');
+});
+
 test('issue start (local backend): --title/--request-fileを渡すとstate.yamlへ永続化され、segment startのプロンプトへ供給される（ISSUE-183 AC-4/AC-5）', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
