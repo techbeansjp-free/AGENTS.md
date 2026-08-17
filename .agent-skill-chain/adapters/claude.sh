@@ -100,47 +100,119 @@ _asc_cli() {
   "${ASC_CLI[@]}" "$@"
 }
 
-# Issue #691: env shebangが必要とするruntimeを解決できるよう、選択済みCLIの実体ディレクトリだけを
-# 固定PATHへ追加する。caller HOMEとIssue worktreeの実体配下は隔離境界を動かせるため追加しない。
+# Issue #727: reviewerのPATH探索範囲は固定値から広げない。script形式CLIのinterpreterは
+# _reviewer_resolve_executable_command がcaller環境で絶対パスへ解決して起動列へ埋め込む。
 _reviewer_sanitized_path() {
-  local sanitized_path='/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
-  local review_adapter="${ASC_REVIEW_ADAPTER:-claude}" executable cli_path cli_dir
-  if [[ "$review_adapter" == "codex" ]]; then
-    executable="${CODEX_EXECUTABLE:-codex}"
+  printf '%s\n' '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+}
+
+# CLIとshebang interpreterをcaller環境で決定的に絶対パスへ解決し、隔離PATH探索を
+# 必要としないshell-quoted起動列を返す。失敗時のstdoutは解決不能だった対象名である。
+# env -Sは空白区切りのinterpreter引数を保持する。直接shebangの引数はkernelと同じく
+# ひとつの引数として保持する。多段shimは最終native実体まで再帰して解決する。
+_reviewer_resolve_executable_command() {
+  local requested="${1:-}" depth="${2:-0}"
+  if [[ -z "$requested" || ! "$depth" =~ ^[0-9]+$ || "$depth" -ge 8 ]]; then
+    printf '%s\n' "${requested:-不明な実行対象}"
+    return 126
+  fi
+
+  local executable_path=''
+  if [[ "$requested" == /* ]]; then
+    executable_path="$requested"
   else
-    executable="${CLAUDE_EXECUTABLE:-claude}"
+    executable_path="$(command -v -- "$requested" 2>/dev/null || true)"
   fi
-  cli_path="$(command -v "$executable" 2>/dev/null || true)"
-  if [[ "$cli_path" != /* ]]; then
-    printf '%s\n' "$sanitized_path"
-    return
+  if [[ "$executable_path" != /* ]]; then
+    printf '%s\n' "$requested"
+    return 127
+  fi
+  if [[ ! -e "$executable_path" ]]; then
+    printf '%s\n' "$executable_path"
+    return 127
+  fi
+  if [[ ! -f "$executable_path" || ! -r "$executable_path" || ! -x "$executable_path" ]]; then
+    printf '%s\n' "$executable_path"
+    return 126
   fi
 
-  cli_dir="${cli_path%/*}"
-  [[ -n "$cli_dir" ]] || cli_dir='/'
-  cli_dir="$(cd -- "$cli_dir" >/dev/null 2>&1 && pwd -P)" || {
-    printf '%s\n' "$sanitized_path"
-    return
-  }
+  local first_line=''
+  IFS= read -r first_line <"$executable_path" || true
+  first_line="${first_line%$'\r'}"
+  if [[ "$first_line" != '#!'* ]]; then
+    local quoted_native
+    printf -v quoted_native '%q' "$executable_path"
+    printf '/usr/bin/env -- %s' "$quoted_native"
+    return 0
+  fi
 
-  local original_home_dir='' repo_dir=''
-  if [[ -n "${HOME:-}" && -d "$HOME" ]]; then
-    original_home_dir="$(cd -- "$HOME" >/dev/null 2>&1 && pwd -P)" || original_home_dir=''
+  local shebang="${first_line#\#!}"
+  shebang="${shebang#"${shebang%%[![:space:]]*}"}"
+  local shebang_interpreter="${shebang%%[[:space:]]*}" shebang_arg=''
+  if [[ "$shebang" != "$shebang_interpreter" ]]; then
+    shebang_arg="${shebang#"$shebang_interpreter"}"
+    shebang_arg="${shebang_arg#"${shebang_arg%%[![:space:]]*}"}"
   fi
-  if [[ -d "$REPO_ROOT" ]]; then
-    repo_dir="$(cd -- "$REPO_ROOT" >/dev/null 2>&1 && pwd -P)" || repo_dir=''
+  if [[ -z "$shebang_interpreter" ]]; then
+    printf '%s\n' "$executable_path"
+    return 126
   fi
-  local excluded=false
-  if [[ -n "$original_home_dir" && ( "$cli_dir" == "$original_home_dir" || "$cli_dir" == "$original_home_dir/"* ) ]]; then
-    excluded=true
+
+  local interpreter_request="$shebang_interpreter"
+  local -a interpreter_args=()
+  if [[ "${shebang_interpreter##*/}" == 'env' ]]; then
+    if [[ "$shebang_arg" == '-S '* ]]; then
+      local split_string="${shebang_arg#-S }"
+      local -a split_parts=()
+      read -r -a split_parts <<<"$split_string"
+      if ((${#split_parts[@]} == 0)); then
+        printf '%s\n' "$executable_path"
+        return 126
+      fi
+      interpreter_request="${split_parts[0]}"
+      interpreter_args=("${split_parts[@]:1}")
+    elif [[ -n "$shebang_arg" && "$shebang_arg" != -* && "$shebang_arg" != *[[:space:]]* ]]; then
+      interpreter_request="$shebang_arg"
+    else
+      printf '%s\n' "${shebang_arg:-$executable_path}"
+      return 127
+    fi
+  elif [[ -n "$shebang_arg" ]]; then
+    interpreter_args=("$shebang_arg")
   fi
-  if [[ -n "$repo_dir" && ( "$cli_dir" == "$repo_dir" || "$cli_dir" == "$repo_dir/"* ) ]]; then
-    excluded=true
+
+  local resolved_interpreter='' resolve_rc=0
+  resolved_interpreter="$(_reviewer_resolve_executable_command "$interpreter_request" "$((depth + 1))")" || resolve_rc=$?
+  if ((resolve_rc != 0)); then
+    printf '%s\n' "$resolved_interpreter"
+    return "$resolve_rc"
   fi
-  if [[ "$excluded" == "false" && ":$sanitized_path:" != *":$cli_dir:"* ]]; then
-    sanitized_path+=":$cli_dir"
+
+  local arg quoted_script
+  for arg in "${interpreter_args[@]}"; do
+    printf -v arg '%q' "$arg"
+    resolved_interpreter+=" $arg"
+  done
+  printf -v quoted_script '%q' "$executable_path"
+  printf '%s %s' "$resolved_interpreter" "$quoted_script"
+}
+
+_reviewer_launch_failure_message() {
+  local target="${1:-不明な実行対象}" rc="${2:-127}"
+  local sanitized_path
+  sanitized_path="$(_reviewer_sanitized_path)"
+  if [[ "$rc" == '126' ]]; then
+    printf '%s\n' "レビュア実行系の起動に失敗しました。対象: ${target}。実行権限不足（EACCES）または実行形式不正（ENOEXEC）を確認してください。隔離環境の固定PATH: ${sanitized_path}。対象を呼び出し元環境で実行可能な状態にしてください"
+  else
+    printf '%s\n' "レビュア実行系の起動に失敗しました。解決できなかった対象: ${target}。隔離環境の固定PATH: ${sanitized_path}。対象を呼び出し元環境のPATHへ導入するか実行ファイル設定を確認してください"
   fi
-  printf '%s\n' "$sanitized_path"
+}
+
+_reviewer_execution_failure_message() {
+  local target="${1:-不明な実行対象}" rc="${2:-1}"
+  local sanitized_path
+  sanitized_path="$(_reviewer_sanitized_path)"
+  printf '%s\n' "レビュア実行系の起動に失敗しました。解決済み対象: ${target}（rc=${rc}）。実行権限不足（EACCES）または実行形式不正（ENOEXEC）、もしくは多段shim内の未解決interpreterを確認してください。隔離環境の固定PATH: ${sanitized_path}。対象を呼び出し元環境で単独起動して実行可能性を確認してください"
 }
 
 # AI reviewerへは隔離領域へ複製したmodel providerのログインファイルと、呼び出し元環境の
@@ -307,13 +379,12 @@ _claude_reviewer_auth_ok() {
   local probe="${CLAUDE_AUTH_PROBE_CMD:-}"
   if [[ -z "$probe" ]]; then
     local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
-    if command -v "$claude_executable" >/dev/null 2>&1; then
-      local quoted_executable
-      printf -v quoted_executable '%q' "$(command -v "$claude_executable")"
-      probe="$quoted_executable auth status"
-    else
-      return 1
+    if [[ -z "${reviewer_executable_cmd:-}" ]]; then
+      local resolve_rc=0
+      reviewer_executable_cmd="$(_reviewer_resolve_executable_command "$claude_executable")" || resolve_rc=$?
+      ((resolve_rc == 0)) || return "$resolve_rc"
     fi
+    probe="$reviewer_executable_cmd auth status"
   fi
   local t="${CLAUDE_AUTH_PROBE_TIMEOUT_SEC:-20}"
   _run_reviewer_sanitized "" "$probe" "$t" >/dev/null 2>&1
@@ -479,9 +550,39 @@ launch_gate_reviewer() {
     fi
   fi
 
+  # Issue #727: default認証probeまたはdefault reviewerがCLIを使う場合は、認証判定より前に
+  # CLIと全shebang interpreterをcaller環境で絶対パスへ解決する。解決不能を認証失敗へ
+  # 誤分類せず、固定PATHを明示した起動失敗として安全側へ倒す。
+  local reviewer_executable_cmd="${reviewer_executable_cmd:-}"
+  local reviewer_executable_name='' resolve_rc=0 needs_default_executable=false
+  if [[ "${ASC_REVIEW_ADAPTER:-claude}" == 'codex' ]]; then
+    reviewer_executable_name="${CODEX_EXECUTABLE:-codex}"
+    if [[ -z "${CODEX_AUTH_PROBE_CMD:-}" || ( -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ) ]]; then
+      needs_default_executable=true
+    fi
+  else
+    reviewer_executable_name="${CLAUDE_EXECUTABLE:-claude}"
+    if [[ -z "${CLAUDE_AUTH_PROBE_CMD:-}" || -z "${GATE_REVIEWER_CMD:-}" ]]; then
+      needs_default_executable=true
+    fi
+  fi
+  if [[ "$needs_default_executable" == 'true' && -z "$reviewer_executable_cmd" ]]; then
+    reviewer_executable_cmd="$(_reviewer_resolve_executable_command "$reviewer_executable_name")" || resolve_rc=$?
+    if ((resolve_rc != 0)); then
+      _fail_safe "$(_reviewer_launch_failure_message "$reviewer_executable_cmd" "$resolve_rc")"
+      return
+    fi
+  fi
+
   # 認証（実値はログ・stdout に出さない）。tokenや隔離領域へ複製した認証ファイルの有無だけで
   # 成功扱いせず、実際のレビュア環境内でprobeが成功した場合だけ起動へ進む（Issue #691）。
-  if ! _claude_reviewer_auth_ok; then
+  local auth_rc=0
+  _claude_reviewer_auth_ok || auth_rc=$?
+  if ((auth_rc != 0)); then
+    if [[ "$auth_rc" == '126' || "$auth_rc" == '127' ]]; then
+      _fail_safe "$(_reviewer_execution_failure_message "$reviewer_executable_name" "$auth_rc")"
+      return
+    fi
     _fail_safe "$(_reviewer_auth_failure_message)"
     return
   fi
@@ -489,11 +590,8 @@ launch_gate_reviewer() {
   # レビュア実行系。コア時は公式 --model と能力証明を必須化する。通常時だけ汎用上書きを許可する。
   local reviewer_cmd="${GATE_REVIEWER_CMD:-}"
   if [[ -z "$reviewer_cmd" ]]; then
-    local claude_executable="${CLAUDE_EXECUTABLE:-claude}"
-    if command -v "$claude_executable" >/dev/null 2>&1; then
-      local quoted_executable
-      printf -v quoted_executable '%q' "$(command -v "$claude_executable")"
-      reviewer_cmd="$quoted_executable -p --output-format text --allowed-tools ''"
+    if [[ -n "$reviewer_executable_cmd" ]]; then
+      reviewer_cmd="$reviewer_executable_cmd -p --output-format text --allowed-tools ''"
       local selected_model=""
       if [[ "$core_claude_review" == "true" ]]; then
         selected_model="$CLAUDE_CORE_REVIEW_MODEL"
@@ -549,6 +647,10 @@ launch_gate_reviewer() {
   done
 
   if [[ ${rc:-1} -ne 0 || -z "${verdict:-}" ]]; then
+    if [[ "${rc:-1}" == '126' || "${rc:-1}" == '127' ]]; then
+      _fail_safe "$(_reviewer_execution_failure_message "${reviewer_executable_name:-レビュア実行系CLI}" "${rc:-1}")"
+      return
+    fi
     _fail_safe "レビュア起動に失敗しました（rc=${rc:-1}, attempts=${retries}）"
     return
   fi
