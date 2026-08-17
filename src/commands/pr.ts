@@ -76,6 +76,7 @@ interface IntegrationRecord {
   branch: string;
   pr_url?: string;
   status: 'draft' | 'ready_for_review' | 'merged' | 'closed';
+  head_sha: string;
   closes: string;
   gates: {
     spec: 'pending' | 'approved' | 'rejected';
@@ -180,11 +181,16 @@ export async function create(args: string[]): Promise<number> {
       if (existing) {
         return fail(`Integration Record は既に存在します（status=${existing.status}）: ${integrationFilePath(root, number)}`);
       }
+      const branchHead = git(['rev-parse', '--verify', `${branch}^{commit}`], root);
+      if (branchHead.status !== 0) {
+        return fail(`Integration Record に記録するブランチ先端SHAを確認できません: ${branch}`);
+      }
       const record: IntegrationRecord = {
         schema_version: 'agent-skill-chain/integration/v1',
         issue_id: issueId,
         branch,
         status: 'draft',
+        head_sha: branchHead.stdout.trim(),
         closes: issueId,
         gates: { spec: 'pending', design: 'pending', implementation: 'pending', validation: 'pending' },
       };

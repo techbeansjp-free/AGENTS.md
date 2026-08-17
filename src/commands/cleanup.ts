@@ -68,10 +68,14 @@ export async function run(args: string[]): Promise<number> {
 
     let integrationDone = false;
     let pushedCommit: string | undefined;
+    let localIntegrationMissingHead = false;
     if (config.coordination.backend === 'local') {
       const record = tryReadYamlFile<IntegrationRecord>(integrationFilePath(root, number));
       integrationDone = record?.status === 'merged' || record?.status === 'closed';
-      if (integrationDone) pushedCommit = record?.head_sha;
+      if (integrationDone) {
+        pushedCommit = record?.head_sha;
+        localIntegrationMissingHead = !pushedCommit;
+      }
     } else if (entry.branch) {
       const prView = gh(['pr', 'list', '--head', entry.branch, '--state', 'all', '--json', 'state,headRefOid'], root);
       if (prView.status === 0) {
@@ -89,13 +93,27 @@ export async function run(args: string[]): Promise<number> {
       const unpushed = inspectUnpushedCommits(entry.path, entry.branch, pushedCommit);
       if (unpushed.hasUnpushedCommits && unpushed.reason === 'unpreserved_commits') {
         const shas = unpushed.commitShas.map((sha) => sha.slice(0, 12)).join(', ');
+        const legacyRecordAction = localIntegrationMissingHead
+          ? '。Integration Record に head_sha が無いため、統合時点の Issue ブランチ SHA を確認して head_sha を記録した後、cleanup を再実行してください'
+          : '';
         return fail(
-          `未pushのcommitがあるため削除できません（保全されていないcommit: ${unpushed.commitShas.length}件 ${shas}）`,
+          `未pushのcommitがあるため削除できません（保全されていないcommit: ${unpushed.commitShas.length}件 ${shas}）${legacyRecordAction}`,
         );
       }
       if (unpushed.hasUnpushedCommits) {
+        if (localIntegrationMissingHead) {
+          return fail(
+            `Integration Record に head_sha が無いため削除できません。統合時点の Issue ブランチ SHA を確認して head_sha を記録した後、cleanup を再実行してください（追加確認: ${unpushed.detail}）`,
+          );
+        }
         return fail(`commitの保全状況を確認できないため削除できません（${unpushed.detail}）`);
       }
+    }
+
+    if (localIntegrationMissingHead) {
+      return fail(
+        'Integration Record に head_sha が無いため削除できません。統合時点の Issue ブランチ SHA を確認して head_sha を記録した後、cleanup を再実行してください',
+      );
     }
 
     if (!integrationDone) {

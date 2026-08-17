@@ -267,13 +267,6 @@ export function inspectUnpushedCommits(
   if (remoteEvidenceError) {
     return { hasUnpushedCommits: true, reason: 'indeterminate', detail: remoteEvidenceError };
   }
-  if (existingPushedPositions.length === 0) {
-    return {
-      hasUnpushedCommits: true,
-      reason: 'indeterminate',
-      detail: 'push済み位置またはIntegration Recordの記録SHAを確認できません',
-    };
-  }
   return { hasUnpushedCommits: true, reason: 'unpreserved_commits', commitShas: unpreserved };
 }
 
