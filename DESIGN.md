@@ -9,15 +9,14 @@ worktree 削除コマンド（`agent-skill-chain cleanup <issue_id>` と、そ�
 
 対象は、未push判定の中核ロジック（`src/lib/worktree.ts`）、その判定へ「既知の保全位置」を供給する経路（`src/commands/cleanup.ts`・`src/commands/pr.ts`）、および同じ判定を共有する2つの利用側（`src/commands/reconcile.ts`・`src/commands/lease.ts`）である。worktree の削除操作そのもの（Git の worktree 削除と prune）、他3条件（writer lease・未commitの変更・PR/Integration Record 完了）の判定基準は対象外とする。
 
-本 Issue は当初 `size:quick` 指定で着手したが、変更差分に `.agent-skill-chain/schemas/integration.schema.yaml` を含むため quick 免除が成立せず、通常フローの成果物（本 `DESIGN.md` と `PLAN.md`）が必要である。実装は本書の大部分について完了済みであり、本書はその設計判断を記述する。ただし本ラウンドの設計見直しで新たに確定した3点（reflog 由来の過去 push 位置を採用しないこと、`head_sha` を持たない完了済み Integration Record を単独の拒否理由にしないこと、すべての live remote head について object 取得を試みること）は未実装であり、実装すべき変更単位として `PLAN.md` に列挙する。いずれも判定を厳格化する方向か、作業消失を伴わない拒否を減らす方向の変更であり、本書が定める判定の意味が正本である。
+本 Issue は当初 `size:quick` 指定で着手したが、変更差分に `.agent-skill-chain/schemas/integration.schema.yaml` を含むため quick 免除が成立せず、通常フローの成果物（本 `DESIGN.md` と `PLAN.md`）が必要である。実装は既に完了しているため、本書は「これから作る設計」ではなく、本 Issue で実際に採った設計判断を記述する。
 
 ## 前提・用語
 
 - Issueブランチ: 1つの Issue に対応するブランチ。1 Issue = 1 ブランチ = 1 worktree = 1 PR の分離規約に従う。
 - 統合先ブランチ（base）: Issue ブランチの変更が最終的に取り込まれる既定ブランチ。本書では `base` と表記する。
 - ブランチ固有 commit: `merge-base(branch, base)` から Issue ブランチ先端までの commit 列。判定の単位はこの1件ずつである。
-- 保全済み: そのブランチ固有 commit の変更内容が、実 remote 上のいずれかの ref から到達可能であるか、または統合先ブランチへ取り込まれている状態。本設計では「記録済み push 位置から到達可能である」「統合先または実 remote の head から到達可能である」「（補助的に）その commit が触れた path の内容が統合先の現在内容と一致する」のいずれかで成立させる。
-- 記録済み push 位置: 実 remote 上のいずれかの ref から到達可能であることが確認済み、または確認済みであったと Git 上の証跡で裏付けられる commit SHA。本設計での供給源は、live remote head、完了済み PR の `headRefOid`、および検証 ref で裏付けた Integration Record の `head_sha` の3つに限る。ある commit が記録済み push 位置の祖先であれば、その commit も実 remote 上の ref から到達可能である。
+- 保全済み: そのブランチ固有 commit が、worktree を削除しても失われない状態にあること。本設計では「実 remote へ push された位置以前にある」「統合先または実 remote の head から到達可能である」「（補助的に）その commit が触れた path の内容が統合先へ取り込まれている」のいずれかで成立させる。
 - ローカル限定 commit: 上記のいずれも成立しない commit。worktree を削除すると復元できない。
 - live remote head: `git ls-remote --heads <remote>` が返す、実 remote 上の ref とその SHA。ローカルの `refs/remotes/...`（remote-tracking ref）とは独立した情報源であり、実 remote の現在値を表す。
 - 既知の保全位置（`KnownPreservedCommit`）: 判定の外側（Coordination Backend）から供給される、「この SHA は保全されている」という主張。GitHub モードでは完了済み PR の `headRefOid`、local backend では Integration Record の `head_sha`。
@@ -43,20 +42,20 @@ worktree 削除コマンド（`agent-skill-chain cleanup <issue_id>` と、そ�
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
 | 要件1（拒否はローカル限定commit存在時のみ） | `inspectUnpushedCommits`（commit 単位の保全判定） | SHA一致・祖先関係の不成立自体を拒否根拠にしない |
-| 要件2（squash merge済みを保全済みと判定） | 記録済み push 位置からの到達可能性判定 | ブランチ先端が記録済み push 位置であれば、全ブランチ固有 commit がその祖先として成立する。統合先が分岐後に前進していても、Issue ブランチ先端の tree と一致する commit が統合先に無くても結果は変わらない |
-| 要件3（merge commit・rebase merge も同様） | 到達可能性判定（`base` と記録済み push 位置を到達元集合へ含める） | merge commit は `base` からの祖先関係で、rebase merge は記録済み push 位置（rebase 前のブランチ先端）からの祖先関係で成立する |
-| 要件4（upstream追跡refの状態に依存しない） | remote-tracking ref を live remote head と一致する場合のみ到達元へ採用する設計 | upstream 設定の有無・gone・別ブランチ指定のいずれも判定根拠にしない |
+| 要件2（squash merge済みを保全済みと判定） | 保全根拠の合成（既知の保全位置 + live remote head）と内容一致による補助判定 | 統合先が分岐後に前進していても成立する |
+| 要件3（merge commit・rebase merge も同様） | 到達可能性判定（`base` を到達元集合へ常に含める） | merge commit は祖先関係、rebase merge は内容一致で成立 |
+| 要件4（upstream追跡refの状態に依存しない） | remote-tracking ref を live remote head と一致する場合のみ補助採用する設計 | upstream 設定の有無・gone・別ブランチ指定のいずれも判定根拠にしない |
 | 要件5（拒否時にcommit特定情報を出力） | `unpreserved_commits` の SHA 列と `cleanup` の日本語メッセージ生成 | PR 完了だけを根拠に検査を省略しない（検査を完了検査より先に実行） |
 | 要件6（確定不能時は拒否） | `indeterminate` の生成条件と `cleanup` の拒否経路 | 事由文字列を日本語で出力 |
 | 要件7（読み取りのみ） | Git 読み取りコマンドへの限定。例外は object 取得（`fetch --no-tags <remote> <sha>`）と、`pr complete` による検証 ref の作成 | いずれもブランチ・作業ツリー・remote 上の ref を書き換えない |
 | 要件8（他3条件と削除経路は不変） | `cleanup` の検査順序変更のみに留め、lease・未commit・完了検査の判定基準と削除経路は変更しない | 検査順序は要件5のため未push検査を完了検査より前へ移動 |
 | 要件9（他用途の安全性維持） | `hasUnpushedCommits` の boolean 互換ラッパーを維持し、`reconcile`・`lease` は既知の保全位置を渡さない | 情報不足時は「未保全側」へ倒れ、回収・再開のいずれも作業を失わせない |
-| 要件10（Gitの事実で成立、両モードで誤検知なし） | 保全根拠の主軸を Git 上の到達可能性に置き、Coordination Backend 由来の値は検証を経てから採用する | `head_sha` は検証 ref または現在の到達可能性で裏付けてから採用。`head_sha` を持たない完了済み Record は根拠を1つ供給しないだけであり、それ自体を拒否理由にはしない |
-| `AC-1` | 記録済み push 位置からの到達可能性判定（ブランチ先端が記録済み push 位置であること） | 統合先前進・remote ref 削除済みでも削除できる。内容一致による補助判定には依存しない |
+| 要件10（Gitの事実で成立、両モードで誤検知なし） | 保全根拠の主軸を Git 上の到達可能性に置き、Coordination Backend 由来の値は検証を経てから採用する | `head_sha` は検証 ref または現在の到達可能性で裏付けてから採用 |
+| `AC-1` | 保全根拠の合成 + 内容一致による補助判定 | 統合先前進・remote ref 削除済みでも削除できる |
 | `AC-2` | commit 単位の到達可能性判定と `unpreserved_commits` 出力 | マージ後に追加した未push commit を検出 |
 | `AC-3` | 「push 実績が無いと確定できる」経路（remote 未設定・remote に当該ブランチ不在） | `indeterminate` ではなく `unpreserved_commits` として SHA を出す |
 | `AC-4` | 到達可能性判定（`base` からの祖先関係） | merge commit・fast-forward |
-| `AC-5` | 記録済み push 位置からの到達可能性判定（rebase 前のブランチ先端が記録済み push 位置であること） | 別 SHA として統合先へ載っても、元の commit 列は記録済み位置の祖先である。内容一致による補助判定には依存しない |
+| `AC-5` | 既知の保全位置 + 内容一致による補助判定 | rebase merge |
 | `AC-6` | upstream 追跡設定を判定根拠に用いない設計 | 追跡先が統合先を指していても結果が変わらない |
 | `AC-7` | live remote head を到達元集合へ加える設計 | push 済み・未マージでも拒否されない |
 | `AC-8` | `indeterminate` の生成条件（統合先を特定できない等） | 事由付きで拒否 |
@@ -72,7 +71,7 @@ worktree 削除コマンド（`agent-skill-chain cleanup <issue_id>` と、そ�
 - `inspectCommitReachability`（単一 commit の到達可能性）: 1つの SHA について「統合先または実 remote の head から到達可能か」を、到達可能／到達不能／判定不能の3値で返す。内容一致は根拠に用いない。統合完了を記録する側が、記録しようとしている位置が実在の保全位置かを事前確認するために使う。
 - `commitPaths`（変更 path 列挙）: 1つの commit が触れた path の集合を返す。root commit とマージ commit を含めて漏れなく列挙し、失敗時は判定不能の事由を返す。返す文字列は commit 由来であり信頼できない入力として扱う。
 - `integrationPreservationRef`（検証 ref 名の解決）: Issue 番号から検証 ref 名を導く唯一の関数。記録側と検証側で ref 名が乖離しないようにする。
-- `cleanup`（削除の可否決定）: 4条件（有効な writer lease 不在・未commitの変更が無い・未pushのcommitが無い・PR または Integration Record が完了済み）を検査し、すべて満たす場合のみ worktree を削除する。既知の保全位置を判定へ供給し、判定結果を日本語の拒否理由へ変換する。4条件以外の拒否理由を追加しない——`head_sha` の欠落のような根拠の不足は、判定への入力が1つ減ることとしてのみ扱い、独立した拒否条件に昇格させない。
+- `cleanup`（削除の可否決定）: 4条件を検査し、すべて満たす場合のみ worktree を削除する。既知の保全位置を判定へ供給し、判定結果を日本語の拒否理由へ変換する。
 - `pr complete`（local backend の統合完了記録）: Integration Record を `merged`／`closed` へ遷移させ、その時点の Issue ブランチ先端を検証したうえで `head_sha` と検証 ref へ記録する。
 - `reconcile`・`lease`（判定の他利用側）: 既知の保全位置を渡さずに boolean 判定のみを使う。
 
@@ -108,34 +107,22 @@ graph TD
 
 | # | 根拠 | 採用条件 | 採用しない場合に起きること |
 |---|---|---|---|
-| 1 | live remote head からの到達可能性 | `git ls-remote --heads` が実 remote から返した head SHA。ローカルの remote-tracking ref の有無・鮮度を前提条件にしない。object がローカルに無い場合は、当該 head が Issue ブランチのものかを問わず取得を試み、取得できなければ判定不能とする | ローカル ref が削除済み・古い環境で、実際には push 済みの commit を未保全と誤判定する |
-| 2 | remote-tracking ref | `refs/remotes/<remote>/<branch>` の値が live remote head と一致する場合に限り到達元として採用する。reflog に残る過去の `update by push` 位置は採用しない | 実 remote と値が一致するローカル ref を到達元名として使えなくなるだけで、判定結果は根拠1と同一になる |
-| 3 | 完了済み PR の `headRefOid` | GitHub モードで、`state` が `MERGED` または `CLOSED` の PR が返した head SHA。object がローカルに存在することを確認して採用する | squash merge 後に remote ブランチが削除された構成で push 位置を復元できず、統合済みの worktree を削除できない（AC-1 が成立しない） |
+| 1 | live remote head からの到達可能性 | `git ls-remote --heads` が実 remote から返した head SHA。ローカルの remote-tracking ref の有無・鮮度を前提条件にしない。object がローカルに無い場合、対象が Issue ブランチの head なら取得を試み、取得できなければ判定不能とする | ローカル ref が削除済み・古い環境で、実際には push 済みの commit を未保全と誤判定する |
+| 2 | remote-tracking ref とその reflog | `refs/remotes/<remote>/<branch>` の値が live remote head と一致する場合に限り採用する。Issue ブランチに対応する ref については、reflog のうち `update by push` を含むエントリの SHA も過去の push 位置として採用する | 現在の head より前に push され、その後 remote 側が前進した位置が根拠から漏れる |
+| 3 | 完了済み PR の `headRefOid` | GitHub モードで、`state` が `MERGED` または `CLOSED` の PR が返した head SHA。object がローカルに存在することを確認して採用する。GitHub が返す完了済み PR の head は remote へ push された位置そのものであるため、追加の裏付けを求めない | squash merge 後に remote ブランチが削除された構成で push 位置を復元できず、統合済みの worktree を削除できない |
 | 4 | Integration Record の `head_sha` と検証 ref | local backend で、Record が完了状態かつ `head_sha` を持つ場合。**その値をそのまま信用せず**、(a) 現在も到達元集合から到達可能である、または (b) 検証 ref `refs/agent-skill-chain/integrations/<issue番号>` がその SHA を指している、のいずれかを確認してから採用する | local backend で remote を持たない構成の統合済み worktree を削除できない |
 
 根拠3・4を無検証で採用しないことが本設計の要点である。Coordination Backend の値は Git 上の保全を保証しない——記録された時点で実際には push も統合もされていない位置が記録され得るため、その位置を起点に「自分は自分の祖先である」という自己参照で保全を成立させると、ローカル限定 commit を保全済みと誤判定して失う。根拠4の (b) は、記録時点で到達可能性を確認したという事実を Git 上の ref として残すことで、後から remote ref が消えても記録の正当性を再確認できるようにするものである。
 
-**根拠2で reflog を採用しない理由。** reflog の `update by push` エントリは、現在の live remote head の祖先であるか、祖先でないかのいずれかである。祖先である場合、そのエントリから到達できる commit は live remote head からも到達でき、根拠1に対して何も追加しない。祖先でない場合、それは remote ブランチが force-push により旧履歴を捨てた痕跡であり、当該 SHA は現在の remote 上のどの ref からも到達できず統合先にも取り込まれていない。この状態は SPEC が定めるローカル限定 commit そのものであるため、保全根拠として採用すると削除により作業を失う。すなわち reflog は、追加の判定力を持つ唯一の場面が同時に唯一の危険な場面であり、根拠として採らない。
-
-**根拠3が「実 remote 上の ref から到達可能」を満たす理由。** GitHub は PR ごとに `refs/pull/<PR番号>/head` を remote 上に保持し、この ref は PR が `MERGED`・`CLOSED` になった後も、head ブランチの ref が削除された後も残る。`headRefOid` はその ref が指す SHA であるため、`git ls-remote --heads` の一覧に現れなくても実 remote 上の ref から到達可能であり、保全済みの定義を満たす。PR が存在するという事実自体が当該 ref の存在を含意するため、採用に際して追加の remote 問い合わせは求めない。裏返せば、この根拠は「GitHub が当該 PR を保持している」という前提に依存する。前提が崩れる場合（リポジトリ自体の削除等）は worktree の有無にかかわらず作業が失われるため、本判定の守備範囲外とする。
-
-収集した根拠は2つの集合に集約する。ひとつは「記録済み push 位置」の集合（根拠1のうち Issue ブランチの head、根拠3、根拠4）、もうひとつは「到達元 ref」の集合（統合先ブランチ、根拠1の全 head、根拠2の ref）である。ブランチ固有 commit は、いずれかの集合の要素から到達可能であれば保全済みとする。
+収集した根拠は2つの集合に集約する。ひとつは「push 済み位置」の集合（根拠1のうち Issue ブランチの head、根拠2、根拠3、根拠4）、もうひとつは「到達元 ref」の集合（統合先ブランチ、根拠1の全 head、根拠2の ref）である。ブランチ固有 commit は、いずれかの集合の要素から到達可能であれば保全済みとする。
 
 ## 内容一致による補助判定
 
-### 位置づけと適用範囲
-
-内容一致は、記録済み push 位置からも到達元 ref からも到達できない commit に対してのみ働く、**一方向の十分条件**である。一致すれば保全済みと確定し、一致しなければ何も確定しないため、その commit は他の根拠が無い限り未保全側（安全側）へ倒れる。
-
-このため本設計は、squash merge・rebase merge・cherry-pick で SHA が変わる構成の保全立証を内容一致に依存させない。これらの構成では、統合前のブランチ先端が記録済み push 位置として得られ、ブランチ固有 commit はすべてその祖先であるため、到達可能性だけで全 commit の保全が成立する。AC-1（統合先前進 + remote ref 削除済みの squash merge）と AC-5（rebase merge）が成立する根拠はこの到達可能性であり、内容一致ではない。
-
-内容一致が実際に働くのは、記録済み push 位置より後に作られた commit だけである。この範囲では、同一 path を複数 commit で更新した場合の中間 commit——path の途中状態を持つ commit——は、統合先の現在内容と一致しないため内容一致では保全済みにできない。これは仕様上正しい帰結である。中間状態そのものは統合先に存在せず、SPEC が定める保全済みの条件（remote 上の ref から到達可能、または統合先へ取り込み済み）を満たさないためである。記録済み push 位置より前にある中間 commit は、その位置の祖先であるため到達可能性で保全済みとなり、この制約の影響を受けない。
-
-### 判定の詳細
+squash merge と cherry-pick では、Issue ブランチの commit が統合先に別 SHA として現れるため、到達可能性だけでは保全を立証できない。この場合に限り、内容一致を補助根拠として用いる。
 
 - 比較対象は、当該 commit が触れた path の集合（`commitPaths` が返す集合）である。ブランチの最終差分ではなく commit ごとの変更 path を用いる。最終差分では、途中で追加し後で取り消した path が集合から消え、その commit を取りこぼすためである。
 - 比較は、当該 commit の当該 path の内容と、統合先ブランチの現在の内容を突き合わせる。一致すれば当該 commit は内容として取り込まれていると扱う。
-- **適用条件: 記録済み push 位置が1つ以上存在する場合に限る。** push 実績が1つも見つからない状態で内容一致だけを根拠にすると、「push 済みで squash 統合されたもの」と「一度も push されておらず内容がたまたま一致するもの」を区別できない。区別できない以上、内容一致は保全の証拠にならない。したがって push 実績が皆無の状況では、内容が一致していても未保全として扱う（AC-3 の要求と一致する）。
+- **適用条件: 既知の push 済み位置が1つ以上存在する場合に限る。** push 実績が1つも見つからない状態で内容一致だけを根拠にすると、「push 済みで squash 統合されたもの」と「一度も push されておらず内容がたまたま一致するもの」を区別できない。区別できない以上、内容一致は保全の証拠にならない。したがって push 実績が皆無の状況では、内容が一致していても未保全として扱う。
 - 変更 path が空の commit（空 commit）には内容比較を適用しない。比較対象が無い以上「内容として取り込まれている」とは言えず、到達可能性が無ければ未保全とする。
 - 比較に用いる path は commit 由来の文字列であり、Git の pathspec magic（`:(exclude)...` 等）として解釈され得る。解釈されると比較対象が空集合になり、差分無し（=統合済み）へ倒れて未保全 commit を見逃す。これを防ぐため、比較を行う Git 呼び出しには `--literal-pathspecs` を付け、commit 由来の文字列が pathspec magic として解釈される経路を残さない。
 - 比較コマンドが「差分あり／差分なし」以外の終了状態を返した場合は、未保全とも保全済みとも判定せず判定不能とする。
@@ -147,9 +134,8 @@ local backend には remote が存在しない構成があり得るため、「p
 - 意味: status を `merged` または `closed` へ遷移した時点で、統合済みとして記録した Issue ブランチの commit SHA。
 - 記録タイミング: 完了状態への遷移時のみ。Draft の作成時には記録しない。Draft 時点の位置は push 実績も統合実績も保証しないため、それを保全根拠にすると未 push の位置を「統合済みの位置」として扱う誤りが生じる。
 - 記録前の検証: 遷移を行う `pr complete` は、Issue ブランチ先端が統合先または実 remote の head から到達可能であることを `inspectCommitReachability` で確認する。到達不能なら記録せず日本語で理由を返す。判定不能でも記録しない。確認後に先端が変化していないことを再確認してから書き込み、同時に検証 ref を当該 SHA へ設定する。
-- 欠落時の扱い: `head_sha` を持たない完了済み Record（本変更以前に作られたもの）では位置を推測しない。**この欠落は保全根拠を1つ供給しないことを意味するだけであり、それ自体を独立した削除拒否の理由にはしない。** 判定は他の Git 上の根拠（統合先からの祖先関係、live remote head、内容一致）だけで行い、それらで保全を立証できれば削除する。立証できない場合は通常どおり `unpreserved_commits` または `indeterminate` として拒否し、そのメッセージへ後述の復旧手順を併記する。欠落そのものを拒否理由にすると、merge commit 方式で統合され統合先の祖先になっているブランチのように Git だけで保全が立証できる worktree まで削除できなくなり、SPEC 要件1（拒否はローカル限定 commit が存在する場合のみ）と要件8（他3条件の意味と挙動を変えない）に反する。
-- 欠落時の復旧手順: 利用者が取るべき対応として、(a) 当該ブランチを remote へ push し直して live remote head を復活させる、または (b) 統合時点の Issue ブランチ SHA を確認し、Record へ `head_sha` として記録したうえで検証 ref `refs/agent-skill-chain/integrations/<issue番号>` を同じ SHA へ設定する、のいずれかを案内する。(b) で検証 ref の設定まで求めるのは、`head_sha` の追記だけでは根拠4の採用条件（現在の到達可能性、または検証 ref による裏付け）を満たさず、remote ref が既に消えた構成では再実行しても同じ拒否が繰り返されるためである。案内は利用者が実際に完了できる手順でなければならない。
-- 後方互換性: `head_sha` は任意フィールドであり、既存 Record はスキーマ検証を引き続き通る。挙動面では、既存 Record を持つ worktree のうち Git だけで保全を立証できないものの削除が「拒否」方向へ変化する。これは作業消失を伴わない安全側の変化であり、上記の復旧手順で解消する。スキーマ変更が quick 免除の解除条件に該当することを踏まえ、フィールドの追加のみに留め、既存フィールドの意味・必須性は変更していない。
+- 欠落時の扱い: `head_sha` を持たない完了済み Record（本変更以前に作られたもの）では位置を推測せず、削除を拒否する。拒否理由には、統合時点の Issue ブランチ SHA を確認して `head_sha` を記録したうえで再実行する、という利用者の取るべき対応を日本語で含める。
+- 後方互換性: `head_sha` は任意フィールドであり、既存 Record はスキーマ検証を引き続き通る。挙動面では、既存 Record を持つ worktree の削除が「拒否」方向へ変化する。これは作業消失を伴わない安全側の変化であり、上記の案内に従って `head_sha` を追記すれば解消する。スキーマ変更が quick 免除の解除条件に該当することを踏まえ、フィールドの追加のみに留め、既存フィールドの意味・必須性は変更していない。
 
 ## 判定不能（`indeterminate`）と安全側の定義
 
@@ -161,7 +147,7 @@ local backend には remote が存在しない構成があり得るため、「p
 - 分岐点（merge-base）を確定できない、またはブランチ固有 commit を列挙できない。
 - remote 一覧または remote-tracking ref 一覧を取得できない。
 - 実 remote への問い合わせ（`ls-remote`）が失敗する（ネットワーク不通等）。
-- live remote head の object がローカルに無く、取得もできない。対象は Issue ブランチの head に限らず、`ls-remote --heads` が返したすべての head である。到達元集合へ加えられない head が残ると「その head から到達可能だったかもしれない」という未確定が残るため、未保全と確定させずに判定不能とする。
+- Issue ブランチの live remote head の object がローカルに無く、取得もできない。
 - commit の変更 path を列挙できない、または内容比較が想定外の終了状態を返す。
 - 既知の保全位置として渡された SHA の object がローカルに存在しない。この場合は当該根拠を採用しないだけであり、他の根拠で保全を立証できればそのまま保全済みとなる。
 
@@ -194,13 +180,13 @@ local backend には remote が存在しない構成があり得るため、「p
 
 ## 関連ADR
 
-本設計は、既存の accepted ADR が定めた判断を採用・変更・置換するものではないため、`related_adrs:` に列挙すべき accepted ADR は無い。
+本設計は、既存の accepted ADR が定めた判断を採用・変更・置換するものではないため、参照すべき関連 ADR は無い。
 
 ```yaml
 related_adrs: []
 ```
 
-本設計が含む判断のうち、保全根拠の採否規則——到達可能性を主根拠とし内容一致を一方向の補助に限ること、Coordination Backend 由来の位置を裏付け無しに採用しないこと、reflog 由来の過去 push 位置を採用しないこと——は、本 Issue 固有の実装詳細ではなく以後の保全判定全体を拘束する判断であるため、ADR-0066 として `status: proposed` で新規作成した。設計ゲート承認時に accepted へ遷移する。
+本設計が含む2つの判断——保全判定の主根拠を到達可能性に置き内容一致を補助に限定すること、および Coordination Backend 由来の位置を無検証で保全根拠にしないこと——は ADR 化の候補である。ただし本ラウンドは、成果物を `DESIGN.md` と `PLAN.md` の2件に限定する指示の下で実施しているため、ADR の新規作成は行わない。
 
 ## 障害・ロールバック考慮
 
@@ -220,18 +206,19 @@ related_adrs: []
 ## 完了条件・検証方法
 
 - 完了条件: SPEC.md の要件1〜10 と AC-1〜AC-10 に対応する設計要素が上記対応表のとおり定義され、判定の3値・保全根拠の採否条件・安全側の定義が本書内で確定していること。
-- 検証方法: 全 AC を自動テストで検証する。squash merge・merge commit・rebase merge の3方式で削除が成功すること、および過去に検出された偽陰性の反例（最終差分が空になる構成、squash 後に追加したローカル限定 commit・空 commit、相殺 path が最終差分から消える構成、squash 済み path 上の commit と取り消し、古い remote-tracking ref が残る構成、pathspec magic と同名のファイルを追加した構成、未 push の位置が記録された Record を用いる構成）で削除が拒否されることを、いずれも `cleanup` コマンドの終了コードと worktree の残存／削除を一体で検証する。本ラウンドで確定させた3点についても、(a) force-push により live remote head から到達不能になった過去 push 位置だけが reflog に残る構成で削除が拒否されること、(b) `head_sha` を持たない完了済み Record を持ちつつ merge commit 方式で統合先の祖先になっている構成で削除が成功すること、(c) Issue ブランチ以外の live remote head の object がローカルに無い構成で、取得に成功すれば判定が成立し、取得に失敗すれば事由付きの判定不能となること、をそれぞれ検証する。判定を共有する `reconcile`・`lease` の2用途についても、ローカル限定 commit が残る構成と squash merge 済みで保全済みの構成の双方を実行し、扱いを固定する。検証の実施結果は `VALIDATION.md` が保持する。
+- 検証方法: 全 AC を自動テストで検証する。squash merge・merge commit・rebase merge の3方式で削除が成功すること、および過去に検出された偽陰性の反例（最終差分が空になる構成、squash 後に追加したローカル限定 commit・空 commit、相殺 path が最終差分から消える構成、squash 済み path 上の commit と取り消し、古い remote-tracking ref が残る構成、pathspec magic と同名のファイルを追加した構成、未 push の位置が記録された Record を用いる構成）で削除が拒否されることを、いずれも `cleanup` コマンドの終了コードと worktree の残存／削除を一体で検証する。判定を共有する `reconcile`・`lease` の2用途についても、ローカル限定 commit が残る構成と squash merge 済みで保全済みの構成の双方を実行し、扱いを固定する。検証の実施結果は `VALIDATION.md` が保持する。
 
 ## 未決事項
 
 - `reconcile`・`lease` の2用途へ既知の保全位置を供給するかどうか。現状は供給せず安全側へ倒しているが、期限切れ lease が回収されずに残る運用上の不便が実害となる場合は再検討の余地がある。
 - 検証 ref による保全根拠は、ローカルの ref のみを拠り所とする。remote へ push 済みであることを復元元とする耐久性の考え方より弱い保証であり、根拠の強化方式は本 Issue では確定していない。
+- 本設計の2つの主要判断を ADR として独立に記録するかどうか（本ラウンドの成果物範囲外のため未実施）。
 
 ## スコープ外
 
 - writer lease・未commitの変更・PR または Integration Record 完了という他3条件の判定基準そのものの変更。
 - worktree 削除後のローカルブランチ削除や remote ブランチ削除といった、削除範囲の拡張。
 - マージ方式の変更、PR マージコマンドの挙動変更、マージ後の統合先ブランチ同期処理の変更。
-- 検証 ref による保全根拠がローカルの ref のみに閉じており、remote へ push 済みであることを復元元とする耐久性より弱い保証にとどまること。根拠自体は本設計内で成立しており AC の充足に不足は無いため、保証の強化のみを別 Issue（Issue #740 として起票済み）へ分離する。
-
-かつて別 Issue（Issue #736）へ分離していた「`head_sha` を持たない既存 Integration Record の扱い」と「Issue ブランチ以外の live remote head の object 取得」は、いずれも SPEC の要件1・要件6・AC-1 の充足に直接影響するため分離を取り消し、本書の該当箇所（Integration Record の `head_sha`、判定不能と安全側の定義）で本 Issue の設計として確定させた。
+- 既知の残課題として別 Issue へ分離した次の3点。
+  - 保全済みの commit を未保全と誤判定する残存条件2件（`head_sha` を持たない既存 Integration Record に対する復旧手順が案内どおりには機能しないこと、および Issue ブランチ以外の live remote head の object がローカルに無い場合に取得を試みず判定不能へ倒れること）。いずれも失敗方向は削除拒否であり作業消失を伴わない。Issue #736 として起票済み。
+  - 検証 ref による保全根拠がローカルの ref のみに閉じており、remote push 済みを復元元とする耐久性より弱い保証になること。Issue #740 として起票済み。
