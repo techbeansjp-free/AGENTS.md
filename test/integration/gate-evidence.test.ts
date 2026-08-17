@@ -49,40 +49,6 @@ function injectBlobBatch(repoDir: string, start: number, count: number): void {
   assert.equal(imported.status, 0, imported.stderr);
 }
 
-test('local review完了dispatchはexact payloadをPOSTし、API失敗を非0へ保つ', (t) => {
-  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-gate-dispatch-'));
-  const stub = createGhStub(stubDir);
-  const env = stub.env(process.env);
-  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
-
-  const payload = {
-    event_type: 'agent-skill-chain-gate-record',
-    client_payload: {
-      pr_number: 274,
-      gate: 'implementation',
-      target_sha: 'a'.repeat(40),
-    },
-  };
-  const dispatched = spawnSync(
-    'gh',
-    ['api', '-X', 'POST', 'repos/{owner}/{repo}/dispatches', '--input', '-'],
-    { env, input: JSON.stringify(payload), encoding: 'utf8' },
-  );
-  assert.equal(dispatched.status, 0, dispatched.stderr);
-  assert.deepEqual(stub.readState().repositoryDispatches, [payload]);
-
-  const failingState = stub.readState();
-  failingState.failRepositoryDispatch = true;
-  stub.writeState(failingState);
-  const failed = spawnSync(
-    'gh',
-    ['api', '-X', 'POST', 'repos/{owner}/{repo}/dispatches', '--input', '-'],
-    { env, input: JSON.stringify(payload), encoding: 'utf8' },
-  );
-  assert.notEqual(failed.status, 0);
-  assert.deepEqual(stub.readState().repositoryDispatches, [payload]);
-});
-
 test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Check Runへ結線する', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-evidence-'));

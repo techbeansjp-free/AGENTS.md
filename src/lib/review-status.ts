@@ -1,6 +1,14 @@
 import { gh } from './exec.js';
 import { SEGMENTS, type Segment } from './issue.js';
 import { reviewFilePath } from './local-state.js';
+import {
+  REVIEW_EVIDENCE_MARKER,
+  isEvidenceVerdict,
+  parseReviewEvidence,
+  type EvidenceFinding,
+  type ReviewEvidence,
+} from './review-evidence.js';
+import { loadProtectedCoreReviewPolicy } from './model-selection.js';
 import { resolveCurrentBranch } from './worktree.js';
 import { toYamlString, tryReadYamlFile } from './yaml-io.js';
 
@@ -35,6 +43,7 @@ interface GithubPrPayload {
   number?: number;
   state?: string;
   headRefName?: string;
+  headRefOid?: string;
   reviews?: GithubReview[];
   comments?: GithubComment[];
 }
@@ -60,7 +69,13 @@ export interface UnresolvedGithubComment {
 }
 
 export interface GithubPartialFailure {
-  side: typeof GITHUB_ISSUE_SIDE | 'pr' | 'pr_review_thread_comments';
+  side:
+    | typeof GITHUB_ISSUE_SIDE
+    | 'pr'
+    | 'pr_review_thread_comments'
+    | 'gate_review_trust_policy'
+    | 'gate_review_target_sha'
+    | 'gate_review_evidence';
   reason: string;
 }
 
@@ -70,6 +85,7 @@ export interface GithubReviewStatus {
   pr_number?: number;
   unresolved_reviews: UnresolvedGithubReview[];
   unresolved_comments: UnresolvedGithubComment[];
+  unresolved_blocking_findings?: GithubGateFinding[];
   partial_failures?: GithubPartialFailure[];
 }
 
@@ -87,6 +103,10 @@ interface RawGateFinding {
 }
 
 export interface GateFinding extends RawGateFinding {
+  source_segment: Segment;
+}
+
+export interface GithubGateFinding extends EvidenceFinding {
   source_segment: Segment;
 }
 
@@ -126,8 +146,12 @@ interface SuccessfulPrDetection {
   succeeded: true;
   prNumber?: number;
   reviews: UnresolvedGithubReview[];
+  blockingFindings: GithubGateFinding[];
   comments: UnresolvedGithubComment[];
   reviewThreadCommentFailure?: string;
+  gateReviewTrustPolicyFailure?: string;
+  gateReviewTargetShaFailure?: string;
+  gateReviewEvidenceFailure?: string;
 }
 
 interface FailedSideDetection {
@@ -135,7 +159,7 @@ interface FailedSideDetection {
   reason: string;
 }
 
-const SEGMENT_TO_ORIGIN: Record<Segment, string> = {
+const SEGMENT_TO_ORIGIN: Record<Segment, EvidenceFinding['origin']> = {
   spec: 'specification',
   design: 'design',
   implementation: 'implementation',
@@ -202,6 +226,273 @@ function unresolvedReviews(reviews: GithubReview[]): UnresolvedGithubReview[] {
     });
   }
   return unresolved;
+}
+
+interface GithubGateFindingDetection {
+  findings: GithubGateFinding[];
+  trustPolicyFailure?: string;
+  evidenceFailure?: string;
+}
+
+const REVIEW_PROFILE_STRENGTH: Record<ReviewEvidence['profile'], number> = {
+  standard: 1,
+  strict: 2,
+};
+
+function unresolvedGateFindings(
+  root: string,
+  reviews: GithubReview[],
+  issueNumber: string,
+  segment: string | undefined,
+  targetSha: string | undefined,
+): GithubGateFindingDetection {
+  const targetOrigin = segment ? SEGMENT_TO_ORIGIN[segment as Segment] : undefined;
+  if (!targetOrigin) return { findings: [] };
+
+  let trustedActors: Set<string> | undefined;
+  let requiredProfile: ReviewEvidence['profile'] | undefined;
+  let trustPolicyFailure: string | undefined;
+  try {
+    const policy = loadProtectedCoreReviewPolicy(root);
+    const configuredActors = policy?.execution.trusted_reviewer_actors;
+    if (!configuredActors || configuredActors.length === 0) {
+      trustPolicyFailure = 'ゲートレビューevidenceのtrusted actor登録をproject policyから解決できません';
+    } else {
+      trustedActors = new Set(configuredActors);
+      requiredProfile = policy.required_profile;
+    }
+  } catch (error) {
+    trustPolicyFailure = `ゲートレビューevidenceのtrusted actor登録を解決できません: ${errorReason(error)}`;
+  }
+
+  const candidates: { evidence: ReviewEvidence; entry: { review: GithubReview; index: number } }[] = [];
+  const malformedEntries: { entry: { review: GithubReview; index: number }; reason: string }[] = [];
+  reviews.forEach((review, index) => {
+    if (
+      review.state === 'DISMISSED' ||
+      typeof review.body !== 'string' ||
+      !review.body.includes(REVIEW_EVIDENCE_MARKER)
+    ) {
+      return;
+    }
+    try {
+      const evidence = parseReviewEvidence(review.body);
+      if (
+        evidence?.schema_version === 'agent-skill-chain/gate-review-evidence/v3' &&
+        evidence.issue_id === `ISSUE-${issueNumber}` &&
+        SEGMENTS.includes(evidence.gate) &&
+        typeof evidence.attempt_id === 'string' &&
+        isEvidenceVerdict(evidence.verdict)
+      ) {
+        candidates.push({ evidence, entry: { review, index } });
+      }
+    } catch (error) {
+      // Issue #680: 解釈不能な証跡を黙って落とすと、古い判定を確定結果として誤採用する。
+      malformedEntries.push({ entry: { review, index }, reason: errorReason(error) });
+    }
+  });
+
+  if (!trustedActors) {
+    const findings = candidates.flatMap(({ evidence }) => {
+      const hasRelevantBlocker = evidence.verdict.blockers.some(
+        (finding) => finding.severity === 'blocking' && finding.origin === targetOrigin,
+      );
+      if (!hasRelevantBlocker) return [];
+      return [{
+        severity: 'blocking' as const,
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_EVIDENCE_UNVERIFIED',
+        evidence: [
+          `${evidence.gate} gate evidenceにblocking findingがありますが、trusted actor登録を解決できないため内容を検証できません`,
+        ],
+        source_segment: evidence.gate,
+      }];
+    });
+    return { findings, ...(trustPolicyFailure ? { trustPolicyFailure } : {}) };
+  }
+
+  const matching = candidates.filter(({ entry }) => {
+    const author = entry.review.author?.login;
+    return typeof author === 'string' && trustedActors.has(author);
+  });
+  const trustedMalformedEntries = malformedEntries.filter(({ entry }) => {
+    const author = entry.review.author?.login;
+    return typeof author === 'string' && trustedActors.has(author);
+  });
+
+  const findings: GithubGateFinding[] = [];
+  if (!targetSha) {
+    if (reviews.some((review) => (
+      review.state !== 'DISMISSED' &&
+      typeof review.body === 'string' &&
+      review.body.includes(REVIEW_EVIDENCE_MARKER) &&
+      typeof review.author?.login === 'string' &&
+      trustedActors.has(review.author.login)
+    ))) {
+      findings.push({
+        severity: 'blocking',
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_TARGET_SHA_UNVERIFIED',
+        evidence: ['PR head SHAを取得できないため、ゲートレビューevidenceの対象を検証できません'],
+        source_segment: segment as Segment,
+      });
+    }
+    return { findings };
+  }
+
+  let evidenceFailure: string | undefined;
+  for (const sourceSegment of SEGMENTS) {
+    const forGate = matching.filter(({ evidence }) => evidence.gate === sourceSegment);
+
+    const byAttempt = new Map<string, typeof forGate>();
+    for (const candidate of forGate) {
+      const entries = byAttempt.get(candidate.evidence.attempt_id) ?? [];
+      entries.push(candidate);
+      byAttempt.set(candidate.evidence.attempt_id, entries);
+    }
+    const attempts = [...byAttempt.values()];
+    const completeAttempts = attempts.filter((entries) => {
+      const expectedCounts = new Set(entries.map(({ evidence }) => evidence.expected_count));
+      if (expectedCounts.size !== 1) return false;
+      const expectedCount = entries[0]?.evidence.expected_count;
+      if (expectedCount !== 1 && expectedCount !== 2) return false;
+      const profile = entries[0]?.evidence.profile;
+      if (
+        (profile !== 'standard' || expectedCount !== 1) &&
+        (profile !== 'strict' || expectedCount !== 2)
+      ) return false;
+      const slots = entries.map(({ evidence }) => evidence.reviewer?.slot);
+      const metadataIsCoherent = [
+        entries.map(({ evidence }) => evidence.profile),
+        entries.map(({ evidence }) => evidence.prompt_digest),
+        entries.map(({ evidence }) => evidence.execution?.trusted_base_sha),
+        entries.map(({ evidence }) => evidence.execution?.launcher_digest),
+        entries.map(({ evidence }) => evidence.execution?.launcher_token_digest),
+        entries.map(({ evidence }) => evidence.target_sha),
+      ].every((values) => values.every((value) => typeof value === 'string') && new Set(values).size === 1);
+      return (
+        entries.length === expectedCount &&
+        new Set(slots).size === expectedCount &&
+        slots.every((slot) => Number.isInteger(slot) && slot >= 1 && slot <= expectedCount) &&
+        metadataIsCoherent
+      );
+    });
+    const conclusiveAttempts = completeAttempts.filter((entries) => entries.every(({ evidence }) => (
+      evidence.verdict.inconclusive === false &&
+      evidence.verdict.conformance !== 'pending' &&
+      evidence.verdict.falsification !== 'pending'
+    )));
+
+    const attemptProfileStrength = (attempt: typeof forGate): number => Math.max(
+      ...attempt.map(({ evidence }) => REVIEW_PROFILE_STRENGTH[evidence.profile]),
+    );
+    const meetsRequiredProfile = (attempt: typeof forGate): boolean => (
+      !requiredProfile ||
+      attemptProfileStrength(attempt) >= REVIEW_PROFILE_STRENGTH[requiredProfile]
+    );
+
+    const latestEntry = (attempt: typeof forGate) => attempt.reduce((latest, entry) =>
+      compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
+    );
+    const appendAttemptBlockers = (attempt: typeof forGate): void => {
+      for (const { evidence } of attempt) {
+        for (const finding of evidence.verdict.blockers) {
+          if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
+            findings.push({
+              ...finding,
+              ...(evidence.target_sha !== targetSha
+                ? {
+                    evidence: [
+                      ...finding.evidence,
+                      `このblocking findingのtarget_sha (${evidence.target_sha}) は現在のPR head (${targetSha}) と異なるため未再判定です`,
+                    ],
+                  }
+                : {}),
+              source_segment: sourceSegment,
+            });
+          }
+        }
+      }
+    };
+    // Issue #680: 記録済みblockerは、同一SHAか現在のPR headを後から確定判定した場合だけ解消する。
+    const isSupersededByConclusiveAttempt = (attempt: typeof forGate): boolean => {
+      const attemptTargetSha = attempt[0]?.evidence.target_sha;
+      return conclusiveAttempts.some((candidate) => (
+        candidate !== attempt &&
+        meetsRequiredProfile(candidate) &&
+        attemptProfileStrength(candidate) >= attemptProfileStrength(attempt) &&
+        compareReviewEntries(latestEntry(candidate).entry, latestEntry(attempt).entry) > 0 &&
+        (
+          candidate[0]?.evidence.target_sha === attemptTargetSha ||
+          candidate[0]?.evidence.target_sha === targetSha
+        )
+      ));
+    };
+    const activeConclusiveAttempts = conclusiveAttempts.filter((attempt) => (
+      !isSupersededByConclusiveAttempt(attempt)
+    ));
+    const latestCurrentConclusiveAttempt = conclusiveAttempts
+      .filter((attempt) => attempt[0]?.evidence.target_sha === targetSha)
+      .filter(meetsRequiredProfile)
+      .reduce<typeof forGate | undefined>((latest, candidate) => {
+        if (!latest) return candidate;
+        return compareReviewEntries(latestEntry(candidate).entry, latestEntry(latest).entry) > 0 ? candidate : latest;
+      }, undefined);
+    const activeMalformedEntries = sourceSegment === segment
+      ? trustedMalformedEntries.filter(({ entry }) => (
+          !latestCurrentConclusiveAttempt ||
+          compareReviewEntries(entry, latestEntry(latestCurrentConclusiveAttempt).entry) > 0
+        ))
+      : [];
+    if (activeMalformedEntries.length > 0) {
+      evidenceFailure = 'trusted actorのゲートレビューevidenceを解釈できません';
+      findings.push({
+        severity: 'blocking',
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_EVIDENCE_MALFORMED',
+        evidence: activeMalformedEntries.map(({ entry, reason }) => (
+          `${entry.review.author?.login ?? 'unknown'}のゲートレビューevidenceを解釈できません: ${reason}`
+        )),
+        source_segment: sourceSegment,
+      });
+    }
+    const activeIncompleteAttempts = attempts
+      .filter((entries) => !completeAttempts.includes(entries))
+      .filter((entries) => !isSupersededByConclusiveAttempt(entries));
+    if (activeIncompleteAttempts.length > 0) {
+      findings.push({
+        severity: 'blocking',
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_ATTEMPT_INCOMPLETE',
+        evidence: ['不完備なゲートレビューattemptがあり、blocking findingの解決状態を完全には判定できません'],
+        source_segment: sourceSegment,
+      });
+      for (const attempt of activeIncompleteAttempts) {
+        appendAttemptBlockers(attempt);
+      }
+    }
+
+    const activeInconclusiveAttempts = completeAttempts
+      .filter((entries) => !conclusiveAttempts.includes(entries))
+      .filter((entries) => !isSupersededByConclusiveAttempt(entries));
+    if (activeInconclusiveAttempts.length > 0) {
+      findings.push({
+        severity: 'blocking',
+        origin: targetOrigin,
+        code: 'GATE_REVIEW_ATTEMPT_INCONCLUSIVE',
+        evidence: ['判定不能なゲートレビューattemptがあり、blocking findingの解決状態を確定できません'],
+        source_segment: sourceSegment,
+      });
+      for (const attempt of activeInconclusiveAttempts) {
+        appendAttemptBlockers(attempt);
+      }
+    }
+
+    for (const attempt of activeConclusiveAttempts) {
+      appendAttemptBlockers(attempt);
+    }
+  }
+  return { findings, ...(evidenceFailure ? { evidenceFailure } : {}) };
 }
 
 function compareReviewEntries(
@@ -282,7 +573,11 @@ function detectGithubIssueSide(root: string, issueNumber: string): SuccessfulIss
   }
 }
 
-function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDetection | FailedSideDetection {
+function detectGithubPrSide(
+  root: string,
+  issueNumber: string,
+  segment?: string,
+): SuccessfulPrDetection | FailedSideDetection {
   const branch = resolveCurrentBranch(root);
   if (!branch) {
     return { succeeded: false, reason: '現在のブランチ名を解決できません' };
@@ -297,12 +592,12 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
   }
 
   const result = gh(
-    ['pr', 'view', branch, '--json', 'number,state,headRefName,reviews,comments'],
+    ['pr', 'view', branch, '--json', 'number,state,headRefName,headRefOid,reviews,comments'],
     root,
   );
   if (result.status !== 0) {
     if (result.stderr.toLowerCase().includes('no pull requests found')) {
-      return { succeeded: true, reviews: [], comments: [] };
+      return { succeeded: true, reviews: [], blockingFindings: [], comments: [] };
     }
     return {
       succeeded: false,
@@ -322,10 +617,21 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
       throw new Error('number/state/headRefName/reviews/commentsが不正です');
     }
     const reviewThreadResult = detectReviewThreadComments(root, payload.number);
+    const targetSha = typeof payload.headRefOid === 'string' && payload.headRefOid.length > 0
+      ? payload.headRefOid
+      : undefined;
+    const gateFindingResult = unresolvedGateFindings(
+      root,
+      payload.reviews,
+      issueNumber,
+      segment,
+      targetSha,
+    );
     return {
       succeeded: true,
       prNumber: payload.number,
       reviews: unresolvedReviews(payload.reviews),
+      blockingFindings: gateFindingResult.findings,
       comments: [
         ...payload.comments
           .map((comment) => unresolvedComment(comment, 'pr_comment'))
@@ -333,6 +639,15 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
         ...reviewThreadResult.comments,
       ],
       ...(reviewThreadResult.failure ? { reviewThreadCommentFailure: reviewThreadResult.failure } : {}),
+      ...(gateFindingResult.trustPolicyFailure
+        ? { gateReviewTrustPolicyFailure: gateFindingResult.trustPolicyFailure }
+        : {}),
+      ...(!targetSha
+        ? { gateReviewTargetShaFailure: `PR #${payload.number} のhead SHAを取得できません` }
+        : {}),
+      ...(gateFindingResult.evidenceFailure
+        ? { gateReviewEvidenceFailure: gateFindingResult.evidenceFailure }
+        : {}),
     };
   } catch (error) {
     return {
@@ -346,9 +661,10 @@ function detectGithubPrSide(root: string, issueNumber: string): SuccessfulPrDete
 export function detectGithubReviewStatus(
   root: string,
   issueNumber: string,
+  segment?: string,
 ): GithubReviewStatus | FailedGithubReviewStatus | undefined {
   const issueResult = detectGithubIssueSide(root, issueNumber);
-  const prResult = detectGithubPrSide(root, issueNumber);
+  const prResult = detectGithubPrSide(root, issueNumber, segment);
 
   if (!issueResult.succeeded && !prResult.succeeded) {
     return {
@@ -359,6 +675,7 @@ export function detectGithubReviewStatus(
   }
 
   const unresolvedReviews = prResult.succeeded ? prResult.reviews : [];
+  const unresolvedBlockingFindings = prResult.succeeded ? prResult.blockingFindings : [];
   const unresolvedComments = [
     ...(prResult.succeeded ? prResult.comments : []),
     ...(issueResult.succeeded ? issueResult.comments : []),
@@ -372,8 +689,31 @@ export function detectGithubReviewStatus(
       reason: prResult.reviewThreadCommentFailure,
     });
   }
+  if (prResult.succeeded && prResult.gateReviewTrustPolicyFailure) {
+    partialFailures.push({
+      side: 'gate_review_trust_policy',
+      reason: prResult.gateReviewTrustPolicyFailure,
+    });
+  }
+  if (prResult.succeeded && prResult.gateReviewTargetShaFailure) {
+    partialFailures.push({
+      side: 'gate_review_target_sha',
+      reason: prResult.gateReviewTargetShaFailure,
+    });
+  }
+  if (prResult.succeeded && prResult.gateReviewEvidenceFailure) {
+    partialFailures.push({
+      side: 'gate_review_evidence',
+      reason: prResult.gateReviewEvidenceFailure,
+    });
+  }
 
-  if (unresolvedReviews.length === 0 && unresolvedComments.length === 0 && partialFailures.length === 0) {
+  if (
+    unresolvedReviews.length === 0 &&
+    unresolvedComments.length === 0 &&
+    unresolvedBlockingFindings.length === 0 &&
+    partialFailures.length === 0
+  ) {
     return undefined;
   }
   return {
@@ -382,6 +722,9 @@ export function detectGithubReviewStatus(
     ...(prResult.succeeded && prResult.prNumber !== undefined ? { pr_number: prResult.prNumber } : {}),
     unresolved_reviews: unresolvedReviews,
     unresolved_comments: unresolvedComments,
+    ...(unresolvedBlockingFindings.length > 0
+      ? { unresolved_blocking_findings: unresolvedBlockingFindings }
+      : {}),
     ...(partialFailures.length > 0 ? { partial_failures: partialFailures } : {}),
   };
 }
