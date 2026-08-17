@@ -24,24 +24,40 @@
 # 実装セグメントのテスト群は、squash merge後の誤検知の解消（偽陽性）と、ローカル限定commitの
 # 取りこぼし防止（偽陰性）を厚く覆っていた一方、次の3点はコマンドの終了コードと副作用で直接
 # 立証されていなかった。本セグメントで test/integration/cleanup-preservation-acceptance.test.ts
-# を新設し、6本の受入テストで補った（実装コードは一切変更していない。差分は当該テストファイルと
+# を新設し、8本の受入テストで補った（実装コードは一切変更していない。差分は当該テストファイルと
 # 本レポートのみ）。
 #   1. upstream追跡refが統合先ブランチを指す構成（AC-6）。追跡設定の指し先が判定へ影響しない
 #      ことを、upstream基準では統合先に先行commitが見える状態を作って立証した。
 #   2. 未pushのcommit以外の3条件（AC-9）。有効なwriter lease・未commitの変更・Integration Record
 #      未完了のそれぞれについて、非0終了・固有の日本語理由・worktreeの残存を一体で確認した。
 #   3. 未push判定を共有する他用途（AC-10）。期限切れwriter leaseの回収（reconcile）と作業継続の
-#      ためのlease再取得（lease resume）の双方で、ローカル限定commitが残るworktreeが
-#      「保全されていない作業が残る」側として扱われること、および保全済み側の扱いが定義された
-#      挙動（回収可・再開拒否）に一致することを確認した。
+#      ためのlease再取得（lease resume）の双方について、(a) ローカル限定commitが残るworktree、
+#      (b) 全commitがremoteの当該ブランチrefへpush済みで実remoteのheadから到達できるworktree、
+#      (c) 全commitがpush済みだった後にsquash mergeで別SHAとして統合され、remoteのIssueブランチ
+#      refとremote-tracking refがどちらも削除されたworktree（AC-1と同一構成の保全済みworktree）の
+#      3構成を実行し、それぞれの扱いを固定した。
 #
-# ---- 判定の根拠として採らなかった観測（info） ----
-# reconcile と lease resume は未push判定を「統合位置の情報を渡さない」形で呼び出すため、
-# squash merge済みで remote ブランチも remote-tracking ref も削除された worktree は、内容として
-# 保全済みであっても「未保全側」として扱われる。方向は常に安全側（回収しない・再開を許す）で
-# あり作業消失を伴わないため、AC-10 の Then（未定義・不安全な状態にならない）を満たす。運用上は
-# 回収されない期限切れleaseが残り得るが、これは削除拒否と同種の運用上の不便であり、本Issueの
-# 目的（削除の誤検知解消）とは独立である。
+# ---- AC-10の保全済み側の「定義された挙動」（本レポートが判定の根拠として採る） ----
+# reconcile（期限切れwriter leaseの回収可否判定）と lease resume（作業継続のためのlease再取得時の
+# 残作業判定）は、未push判定を「統合位置（GitHub PRのheadRefOid／Integration Recordのhead_sha）を
+# 渡さない」形で呼び出す。したがって上記(c)の構成——squash mergeで別SHAとして統合され、remoteの
+# Issueブランチrefもremote-tracking refも存在しない保全済みworktree——では、両用途とも当該worktree
+# を「保全されていない作業が残る」側として扱う。これが本Issueの変更後の定義された挙動であり、
+# 本レポートは次の理由によりAC-10のThen（保全済みworktreeの扱いが定義された挙動に一致し、未定義・
+# 不安全な状態にならない）を満たすと判定する。
+#   1. 挙動が決定的である。判定入力（統合位置を渡さない呼び出し・remote refの不在・統合先から
+#      到達不能なブランチ先端）に対して結果は一意に定まり、実行のたびに変わる余地が無い。上記(c)
+#      の構成を両用途で実行する受入テストを追加し、この挙動をテストで固定した。
+#   2. 誤りの方向が常に安全側である。reconcileは回収を据え置いて human_required へ昇格するのみで、
+#      lease.yaml・lease ref・worktree・commitのいずれも削除しない。lease resumeは再開を許すのみで、
+#      ブランチ先端も作業ツリーも書き換えない。どちらの経路も作業を失わせない。
+#   3. 失われた作業が実際に無いことを同一テスト内で立証している。同じ(c)構成のworktreeに対し、
+#      統合位置を受け取る cleanup は終了コード0で削除に成功する。すなわち作業は統合先へ保全済み
+#      であり、reconcile・lease resume の「未保全側」扱いは情報不足による安全側の据え置きである。
+# 残る影響は、回収されない期限切れleaseが運用上残り得ることに限られる。これは削除拒否と同種の
+# 運用上の不便であり、作業消失でも未定義動作でもなく、本Issueの目的（cleanupの削除誤検知の解消）
+# とは独立である。上記(b)の構成では両用途とも保全済み側として扱われる（回収する・再開を拒否する）
+# ことも併せて固定した。
 #
 # ---- 成果物要求に関する観測（info、origin: specification、判定には用いていない） ----
 # 本ブランチの差分は `.agent-skill-chain/schemas/integration.schema.yaml`（Integration Recordの
@@ -57,7 +73,7 @@
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-692
-target_sha: b7a644343c38d61c626d9a036af4fcd41e37cfeb
+target_sha: 9533dc4ee1a583b2a62fe8f825c60a59f4d596ba
 
 acceptance_criteria:
   # AC-1: 全commitがpush済みかつsquash mergeで統合済み、統合先は分岐後に前進していてIssueブランチ
@@ -177,22 +193,27 @@ acceptance_criteria:
   # AC-10: 期限切れwriter leaseの回収可否判定と、作業継続のためのlease再取得時の残作業判定において、
   # ローカル限定commitが残るworktreeが「保全されていない作業が残る」側として扱われ回収による作業
   # 消失が起きないこと。保全済みworktreeの扱いも定義された挙動に一致し未定義・不安全にならないこと。
+  # 保全済み側は、AC-1と同一構成（squash mergeで別SHAとして統合済み、remoteのIssueブランチrefと
+  # remote-tracking refはどちらも削除済み）を両用途で実行して扱いを確定させた。観測された扱いを
+  # 「定義された挙動」と判定した根拠は本レポート冒頭のAC-10の節に記載し、テストで固定している。
   - ac_id: AC-10
     verification:
       mode: automated
       result: pass
     evidence:
       - "npm test（test/integration/cleanup-preservation-acceptance.test.ts、本セグメントで追加）: reconcile: ローカル限定commitが残るworktreeの期限切れleaseは回収せず人間判断へ昇格する — PASS（一度もpushしていないcommitが残る状態で期限切れleaseを作り、reconcileの出力が reclaimed:(none) / escalated: ISSUE-692:implementation（human_required）となり、lease.yamlとworktreeがともに残存することを確認）"
-      - "npm test（test/integration/cleanup-preservation-acceptance.test.ts、本セグメントで追加）: reconcile: push済みで未保全commitが無いworktreeの期限切れleaseは回収される — PASS（保全済み側の定義された挙動。reclaimedとしてlease.yamlのみ削除され、worktreeはreconcileの対象外として残る）"
+      - "npm test（test/integration/cleanup-preservation-acceptance.test.ts、本セグメントで追加）: reconcile: push済みで未保全commitが無いworktreeの期限切れleaseは回収される — PASS（実remoteのheadから到達できる保全済み側の定義された挙動。reclaimedとしてlease.yamlのみ削除され、worktreeはreconcileの対象外として残る）"
+      - "npm test（test/integration/cleanup-preservation-acceptance.test.ts、本セグメントで追加）: reconcile: squash merge済みで保全済みのworktreeの期限切れleaseは回収を据え置く — PASS（AC-1と同一構成の保全済みworktree。統合先を分岐後に前進させたうえでsquash merge、Integration Recordのhead_shaが統合時点のブランチSHAであること・remote-tracking refとremoteのIssueブランチrefがともに存在しないこと・ブランチ先端が統合先の祖先でないことを前提として明示検査。reconcileは reclaimed:(none) / escalated: ISSUE-692:implementation（human_required）となりlease.yamlもworktreeも残す。続けて同一worktreeに対しcleanupが終了コード0で削除に成功することまで同一テスト内で確認し、据え置きが情報不足による安全側の扱いであって作業消失を伴わないことを立証した）"
       - "npm test（test/integration/cleanup-preservation-acceptance.test.ts、本セグメントで追加）: lease resume: ローカル限定commitだけが残るworktreeは残作業ありとして再開できる — PASS（未commitの変更が無いことを前提検査したうえで、未pushのcommitだけを根拠に再開が成立し、当該ファイルが削除されず残ることを確認）"
-      - "npm test（test/integration/cleanup-preservation-acceptance.test.ts、本セグメントで追加）: lease resume: push済みで未保全commitも未commitの変更も無いworktreeは再開を拒否する — PASS（保全済み側の定義された挙動。『未commitまたは未pushの変更がありません』で拒否）"
+      - "npm test（test/integration/cleanup-preservation-acceptance.test.ts、本セグメントで追加）: lease resume: push済みで未保全commitも未commitの変更も無いworktreeは再開を拒否する — PASS（実remoteのheadから到達できる保全済み側の定義された挙動。『未commitまたは未pushの変更がありません』で拒否）"
+      - "npm test（test/integration/cleanup-preservation-acceptance.test.ts、本セグメントで追加）: lease resume: squash merge済みで保全済みのworktreeは残作業あり側として再開を許す — PASS（AC-1と同一構成の保全済みworktree。remote-tracking refとremoteのIssueブランチrefがともに存在しないこと・ブランチ先端が統合先の祖先でないこと・未commitの変更が無いことを前提として明示検査。resumeは終了コード0で成立し、統合済みの内容とブランチ先端SHAが書き換わらないことを確認。続けてlease releaseの後、完了済みPRのheadRefOidを受け取るcleanupが同一worktreeを終了コード0で削除できることまで確認し、再開の許可が情報不足による安全側の扱いであって作業消失を伴わないことを立証した）"
       - "npm test（test/integration/reconcile.test.ts）: reconcile (トップレベル): worktreeに未commitの変更が残る期限切れleaseはescalatedされ回収されない / worktreeが無い期限切れleaseはreclaimedされ、lease.yamlが削除される — いずれもPASS（未commit側の既存挙動が回帰していないこと）"
 
 regression:
   executed: true
   evidence:
-    - "npm test 全件（tsc build + test/unit + test/integration、対象 b7a644343c38d61c626d9a036af4fcd41e37cfeb）: tests 1317 / suites 0 / pass 1316 / fail 0 / cancelled 0 / skipped 1 / todo 0 / duration_ms 441135。終了コード0"
+    - "npm test 全件（tsc build + test/unit + test/integration、対象 9533dc4ee1a583b2a62fe8f825c60a59f4d596ba）: tests 1319 / suites 0 / pass 1318 / fail 0 / cancelled 0 / skipped 1 / todo 0 / duration_ms 370467。終了コード0"
     - "唯一のskipは『GitHub導入元へ実際に到達してpackage versionを取得できる』（環境変数 ASC_TEST_LIVE_CLI_INSTALL_SOURCE=1 を指定した場合だけ実行するlive到達性テスト。本Issueと無関係の恒常的な条件付きskip）"
-    - "本セグメント着手時点のベースライン（対象 1ac570b45d57e997923fd5fab237838c823c2cd3、受入テスト追加前）: tests 1311 / pass 1310 / fail 0 / skipped 1。差の6件は本セグメントで追加した受入テストであり、既存テストの増減・失敗は無い"
+    - "本セグメント着手時点のベースライン（対象 1ac570b45d57e997923fd5fab237838c823c2cd3、受入テスト追加前）: tests 1311 / pass 1310 / fail 0 / skipped 1。差の8件は本セグメントで追加した受入テストであり、既存テストの増減・失敗は無い（うち2件はAC-10の保全済み側をsquash merge済み構成で検証するため本ラウンドで追加した）"
     - "npm run typecheck（tsc --noEmit -p tsconfig.test.json）: エラー0件"
-    - "本セグメントの差分は test/integration/cleanup-preservation-acceptance.test.ts の新設と本レポートのみで、src/ 配下・.agent-skill-chain/ 配下の実装資産を変更していない"
+    - "本セグメントの差分は test/integration/cleanup-preservation-acceptance.test.ts の新設・追記と本レポートのみで、src/ 配下・.agent-skill-chain/ 配下の実装資産を変更していない。target_sha は検証を実行したブランチ先端であり、本レポートのcommitは VALIDATION.md 以外を変更しない"
