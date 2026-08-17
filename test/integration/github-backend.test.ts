@@ -448,6 +448,136 @@ test('segment start (github backend): strictでexpected_count=1のattemptは過�
   assert.match(result.stdout, /profileとexpected_countが整合しないattemptより前のfindingです/);
 });
 
+test('segment start (github backend): 後発standard attemptはstrict attemptのblocking findingを消さない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 706);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    ...([1, 2] as const).map((slot) => ({
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-706',
+        gate: 'spec' as const,
+        targetSha,
+        attemptId: 'attempt-706-strict-blocking-old',
+        expectedCount: 2 as const,
+        reviewerSlot: slot,
+        blockers: slot === 1 ? [{
+          severity: 'blocking' as const,
+          origin: 'specification' as const,
+          code: 'STRICT-PROFILE-BLOCKER',
+          evidence: ['standard profileでは解消できないstrict attemptのfindingです'],
+        }] : [],
+      }),
+      submittedAt: `2026-08-15T00:0${slot - 1}:00Z`,
+    })),
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-706',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-706-standard-clear-new',
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:02:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-706', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /STRICT-PROFILE-BLOCKER/);
+  assert.match(result.stdout, /standard profileでは解消できないstrict attemptのfindingです/);
+});
+
+test('segment start (github backend): 後発strict attemptはstandard attemptのblocking findingを解消する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 707);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-707',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-707-standard-blocking-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'STANDARD-PROFILE-RESOLVED',
+          evidence: ['strict profileにより解消されるstandard attemptのfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    ...([1, 2] as const).map((slot) => ({
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-707',
+        gate: 'spec' as const,
+        targetSha,
+        attemptId: 'attempt-707-strict-clear-new',
+        expectedCount: 2 as const,
+        reviewerSlot: slot,
+        blockers: [],
+      }),
+      submittedAt: `2026-08-15T00:0${slot}:00Z`,
+    })),
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-707', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /STANDARD-PROFILE-RESOLVED/);
+  assert.doesNotMatch(result.stdout, /strict profileにより解消されるstandard attemptのfindingです/);
+});
+
+test('segment start (github backend): required_profileがstrictならstandard attemptはblocking findingを消さない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 708);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-708',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-708-standard-blocking-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'REQUIRED-STRICT-BLOCKER',
+          evidence: ['required_profileを下回るattemptでは解消できないfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-708',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-708-standard-clear-new',
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-708', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /REQUIRED-STRICT-BLOCKER/);
+  assert.match(result.stdout, /required_profileを下回るattemptでは解消できないfindingです/);
+});
+
 test('segment start (github backend): PR head前進後も旧SHAのblocking findingを未再判定として保持する', (t) => {
   const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 704);
   const previousSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
@@ -510,18 +640,20 @@ test('segment start (github backend): 現在のPR headに対する確定attempt�
       }),
       submittedAt: '2026-08-15T00:00:00Z',
     },
-    {
+    ...([1, 2] as const).map((slot) => ({
       state: 'COMMENTED',
       author: { login: 'adachi-tatsuru' },
       body: gateEvidence({
         issueId: 'ISSUE-705',
-        gate: 'spec',
+        gate: 'spec' as const,
         targetSha: currentSha,
         attemptId: 'attempt-705-current-head',
+        expectedCount: 2 as const,
+        reviewerSlot: slot,
         blockers: [],
       }),
-      submittedAt: '2026-08-15T00:01:00Z',
-    },
+      submittedAt: `2026-08-15T00:0${slot}:00Z`,
+    })),
   ]);
 
   const result = runCli(['segment', 'start', 'ISSUE-705', 'spec'], { cwd: repo.dir, env });
@@ -947,18 +1079,20 @@ test('segment start (github backend): 新しい完備attemptで古い不完備at
       }),
       submittedAt: '2026-08-15T00:00:00Z',
     },
-    {
+    ...([1, 2] as const).map((slot) => ({
       state: 'COMMENTED',
       author: { login: 'adachi-tatsuru' },
       body: gateEvidence({
         issueId: 'ISSUE-692',
-        gate: 'spec',
+        gate: 'spec' as const,
         targetSha,
         attemptId: 'attempt-692-complete-new',
+        expectedCount: 2 as const,
+        reviewerSlot: slot,
         blockers: [],
       }),
-      submittedAt: '2026-08-15T00:01:00Z',
-    },
+      submittedAt: `2026-08-15T00:0${slot}:00Z`,
+    })),
   ]);
 
   const result = runCli(['segment', 'start', 'ISSUE-692', 'spec'], { cwd: repo.dir, env });
@@ -1085,18 +1219,20 @@ test('segment start (github backend): 判定済みでblockerのない新しい�
       }),
       submittedAt: '2026-08-15T00:00:00Z',
     },
-    {
+    ...([1, 2] as const).map((slot) => ({
       state: 'COMMENTED',
       author: { login: 'adachi-tatsuru' },
       body: gateEvidence({
         issueId: 'ISSUE-697',
-        gate: 'spec',
+        gate: 'spec' as const,
         targetSha,
         attemptId: 'attempt-697-clear-new',
+        expectedCount: 2 as const,
+        reviewerSlot: slot,
         blockers: [],
       }),
-      submittedAt: '2026-08-15T00:01:00Z',
-    },
+      submittedAt: `2026-08-15T00:0${slot}:00Z`,
+    })),
   ]);
 
   const result = runCli(['segment', 'start', 'ISSUE-697', 'spec'], { cwd: repo.dir, env });

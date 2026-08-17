@@ -234,6 +234,11 @@ interface GithubGateFindingDetection {
   evidenceFailure?: string;
 }
 
+const REVIEW_PROFILE_STRENGTH: Record<ReviewEvidence['profile'], number> = {
+  standard: 1,
+  strict: 2,
+};
+
 function unresolvedGateFindings(
   root: string,
   reviews: GithubReview[],
@@ -245,6 +250,7 @@ function unresolvedGateFindings(
   if (!targetOrigin) return { findings: [] };
 
   let trustedActors: Set<string> | undefined;
+  let requiredProfile: ReviewEvidence['profile'] | undefined;
   let trustPolicyFailure: string | undefined;
   try {
     const policy = loadProtectedCoreReviewPolicy(root);
@@ -253,6 +259,7 @@ function unresolvedGateFindings(
       trustPolicyFailure = 'ゲートレビューevidenceのtrusted actor登録をproject policyから解決できません';
     } else {
       trustedActors = new Set(configuredActors);
+      requiredProfile = policy.required_profile;
     }
   } catch (error) {
     trustPolicyFailure = `ゲートレビューevidenceのtrusted actor登録を解決できません: ${errorReason(error)}`;
@@ -376,6 +383,14 @@ function unresolvedGateFindings(
       evidence.verdict.falsification !== 'pending'
     )));
 
+    const attemptProfileStrength = (attempt: typeof forGate): number => Math.max(
+      ...attempt.map(({ evidence }) => REVIEW_PROFILE_STRENGTH[evidence.profile]),
+    );
+    const meetsRequiredProfile = (attempt: typeof forGate): boolean => (
+      !requiredProfile ||
+      attemptProfileStrength(attempt) >= REVIEW_PROFILE_STRENGTH[requiredProfile]
+    );
+
     const latestEntry = (attempt: typeof forGate) => attempt.reduce((latest, entry) =>
       compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
     );
@@ -404,6 +419,8 @@ function unresolvedGateFindings(
       const attemptTargetSha = attempt[0]?.evidence.target_sha;
       return conclusiveAttempts.some((candidate) => (
         candidate !== attempt &&
+        meetsRequiredProfile(candidate) &&
+        attemptProfileStrength(candidate) >= attemptProfileStrength(attempt) &&
         compareReviewEntries(latestEntry(candidate).entry, latestEntry(attempt).entry) > 0 &&
         (
           candidate[0]?.evidence.target_sha === attemptTargetSha ||
@@ -416,6 +433,7 @@ function unresolvedGateFindings(
     ));
     const latestCurrentConclusiveAttempt = conclusiveAttempts
       .filter((attempt) => attempt[0]?.evidence.target_sha === targetSha)
+      .filter(meetsRequiredProfile)
       .reduce<typeof forGate | undefined>((latest, candidate) => {
         if (!latest) return candidate;
         return compareReviewEntries(latestEntry(candidate).entry, latestEntry(latest).entry) > 0 ? candidate : latest;
