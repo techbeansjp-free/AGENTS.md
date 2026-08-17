@@ -1,13 +1,42 @@
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { packageRoot, repoRoot, worktreeRoot, resolveAsset, ASSET_NAMESPACE } from '../../src/lib/paths.js';
 
 function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'pipe' });
+}
+
+/**
+ * Issue #734: 「祖先に `.git` が一切存在しない起点」を、共有された `os.tmpdir()`（多くの環境で
+ * `/tmp`）へ依存せずに作る。
+ *
+ * `os.tmpdir()` 配下に起点を置くと、遡上が必ず共有ディレクトリ自身を経由する。そこへ他プロセス
+ * （同一 `npm test` 内の別テストファイル、別セッション、read-only の `/tmp/.git` を差し込む実行
+ * サンドボックス等）が `.git` を作ると、この起点は「.git が見つからない」状態でなくなり、結果が
+ * 実行順序・並列度・環境に依存して変わる。
+ *
+ * repoRoot() の遡上は `path.dirname` による純粋に字句的な操作で、途中ディレクトリの実在を要求
+ * しない（実在しないパスの `.git` は lstat が失敗し「無し」と扱われる）。よってファイルシステム
+ * ルート直下の一意な未使用名を基点にすれば、遡上が触れる祖先はその一意名配下（誰も作れない）と
+ * ファイルシステムルートだけになり、共有一時ディレクトリの汚染から完全に切り離せる。
+ */
+function gitlessStartDir(): string {
+  const fsRoot = path.parse(path.resolve(os.tmpdir())).root;
+  const uniqueBase = path.join(fsRoot, `asc-issue734-gitless-${process.pid}-${randomUUID()}`);
+  assert.equal(fs.existsSync(uniqueBase), false, `前提: ${uniqueBase} が実在しないこと`);
+  return path.join(uniqueBase, 'x', 'y');
+}
+
+/** テストが共有一時ディレクトリへ `.git` 付きの残骸を溜めないよう、後始末を必ず登録する。 */
+function makeTempDir(t: TestContext, prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
 }
 
 test('packageRoot: このworktree自身のルートを返す（package.jsonが存在する）', () => {
@@ -18,8 +47,8 @@ test('packageRoot: このworktree自身のルートを返す（package.jsonが�
 // 通常リポジトリ（.git がディレクトリ）での repoRoot() は Issue #185 の修正前後で
 // 1バイトも変わらない（AC-2: regressionゼロ）。この2テストは実際に `.git` を
 // ディレクトリとして作り、その回帰なし経路を検証する。
-test('repoRoot: .git を含む祖先ディレクトリを、深い階層から呼んでも正しく返す（通常リポジトリ・regressionなし、AC-2）', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-root-test-'));
+test('repoRoot: .git を含む祖先ディレクトリを、深い階層から呼んでも正しく返す（通常リポジトリ・regressionなし、AC-2）', (t) => {
+  const tmp = makeTempDir(t, 'repo-root-test-');
   const gitRoot = path.join(tmp, 'proj');
   const deep = path.join(gitRoot, 'a', 'b', 'c');
   fs.mkdirSync(deep, { recursive: true });
@@ -29,20 +58,24 @@ test('repoRoot: .git を含む祖先ディレクトリを、深い階層から�
   assert.equal(result, gitRoot);
 });
 
-test('repoRoot: 起点ディレクトリ自身が .git を持つ場合はそのまま返す（通常リポジトリ・regressionなし、AC-2）', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-root-test-'));
+test('repoRoot: 起点ディレクトリ自身が .git を持つ場合はそのまま返す（通常リポジトリ・regressionなし、AC-2）', (t) => {
+  const tmp = makeTempDir(t, 'repo-root-test-');
   fs.mkdirSync(path.join(tmp, '.git'));
 
   assert.equal(repoRoot(tmp), tmp);
 });
 
 test('repoRoot: .git がどこにも見つからない場合は例外を投げる（AC-2）', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-root-test-'));
-  const orphan = path.join(tmp, 'x', 'y');
-  fs.mkdirSync(orphan, { recursive: true });
+  const orphan = gitlessStartDir();
 
-  // os.tmpdir() 配下は通常 git リポジトリの外側であるため、ここから遡っても
-  // .git は見つからず、必ず例外になるはず。
+  // 遡上が触れる祖先のうち、このテストが所有しないのはファイルシステムルートだけ。root所有で
+  // 通常の実行主体は書き込めないが、成立しなければ失敗理由が判るよう前提として明示検査する。
+  assert.equal(
+    fs.existsSync(path.join(path.parse(orphan).root, '.git')),
+    false,
+    '前提: ファイルシステムルート直下に .git が無いこと',
+  );
+
   assert.throws(() => repoRoot(orphan), /\.git が見つかりません/);
 });
 
@@ -109,8 +142,8 @@ test('worktreeRoot: 現在いる作業ツリー自身のルートを返す（lin
   assert.equal(worktreeRoot(deep), worktreePath);
 });
 
-test('resolveAsset: root/.agent-skill-chain/<relativePath> が存在すればそちらを優先する', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-asset-test-'));
+test('resolveAsset: root/.agent-skill-chain/<relativePath> が存在すればそちらを優先する', (t) => {
+  const tmp = makeTempDir(t, 'resolve-asset-test-');
   const inRepoDir = path.join(tmp, ASSET_NAMESPACE, 'config');
   fs.mkdirSync(inRepoDir, { recursive: true });
   const inRepoFile = path.join(inRepoDir, 'agent-skill-chain.yaml');
@@ -120,8 +153,8 @@ test('resolveAsset: root/.agent-skill-chain/<relativePath> が存在すればそ
   assert.equal(resolved, inRepoFile);
 });
 
-test('resolveAsset: rootに無ければ packageRoot() 側のアセットへフォールバックする', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-asset-test-'));
+test('resolveAsset: rootに無ければ packageRoot() 側のアセットへフォールバックする', (t) => {
+  const tmp = makeTempDir(t, 'resolve-asset-test-');
   // root には .agent-skill-chain を一切作らない。
 
   const resolved = resolveAsset(path.join('config', 'agent-skill-chain.yaml'), tmp);
@@ -130,8 +163,8 @@ test('resolveAsset: rootに無ければ packageRoot() 側のアセットへフ�
   assert.equal(fs.existsSync(resolved), true);
 });
 
-test('resolveAsset: rootにもpackageRootにも無ければ例外を投げる', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-asset-test-'));
+test('resolveAsset: rootにもpackageRootにも無ければ例外を投げる', (t) => {
+  const tmp = makeTempDir(t, 'resolve-asset-test-');
 
   assert.throws(
     () => resolveAsset(path.join('config', 'does-not-exist-asset.yaml'), tmp),
