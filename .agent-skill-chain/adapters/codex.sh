@@ -40,13 +40,12 @@ _codex_reviewer_auth_ok() {
   local probe="${CODEX_AUTH_PROBE_CMD:-}"
   if [[ -z "$probe" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
-    if command -v "$codex_executable" >/dev/null 2>&1; then
-      local quoted_executable
-      printf -v quoted_executable '%q' "$(command -v "$codex_executable")"
-      probe="$quoted_executable login status"
-    else
-      return 1
+    if [[ -z "${reviewer_executable_cmd:-}" ]]; then
+      local resolve_rc=0
+      reviewer_executable_cmd="$(_reviewer_resolve_executable_command "$codex_executable")" || resolve_rc=$?
+      ((resolve_rc == 0)) || return "$resolve_rc"
     fi
+    probe="$reviewer_executable_cmd login status"
   fi
   local timeout_sec="${CODEX_AUTH_PROBE_TIMEOUT_SEC:-20}"
   _run_reviewer_sanitized "" "$probe" "$timeout_sec" >/dev/null 2>&1
@@ -112,6 +111,7 @@ launch_gate_reviewer() {
   local core_codex_review="${ASC_CORE_REVIEW_REQUIRED:-false}"
   local model="${CODEX_REVIEWER_MODEL:-gpt-5.6}"
   local effort="${CODEX_REVIEWER_REASONING_EFFORT:-high}"
+  local reviewer_executable_cmd=''
 
   _codex_fail_safe() {
     echo "launch_gate_reviewer: $1（フェイルセーフで human_required へ倒します）" >&2
@@ -143,13 +143,13 @@ launch_gate_reviewer() {
 
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
-    if ! command -v "$codex_executable" >/dev/null 2>&1; then
-      _codex_fail_safe "Codex CLI が見つかりません"
+    local resolve_rc=0
+    reviewer_executable_cmd="$(_reviewer_resolve_executable_command "$codex_executable")" || resolve_rc=$?
+    if ((resolve_rc != 0)); then
+      _codex_fail_safe "$(_reviewer_launch_failure_message "$reviewer_executable_cmd" "$resolve_rc")"
       return
     fi
-    local quoted_executable
-    printf -v quoted_executable '%q' "$(command -v "$codex_executable")"
-    GATE_REVIEWER_CMD="$quoted_executable exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'approval_policy=\"never\"' -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"/home\"=\"deny\",\"/Users\"=\"deny\",\"/root\"=\"deny\"}' -"
+    GATE_REVIEWER_CMD="$reviewer_executable_cmd exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'approval_policy=\"never\"' -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"/home\"=\"deny\",\"/Users\"=\"deny\",\"/root\"=\"deny\"}' -"
   elif [[ -n "${CODEX_REVIEWER_CMD:-}" ]]; then
     GATE_REVIEWER_CMD="$CODEX_REVIEWER_CMD"
   fi

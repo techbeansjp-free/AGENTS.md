@@ -48,7 +48,7 @@ function installCliShim(repoDir: string): void {
   const binDir = path.join(repoDir, 'node_modules', '.bin');
   fs.mkdirSync(binDir, { recursive: true });
   const shim = path.join(binDir, 'agent-skill-chain');
-  fs.writeFileSync(shim, `#!/usr/bin/env bash\nexec node ${JSON.stringify(binPath)} "$@"\n`, { mode: 0o755 });
+  fs.writeFileSync(shim, `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(binPath)} "$@"\n`, { mode: 0o755 });
 }
 
 /** issue start → SPEC.md → checkpoint → gate review を行い、pending gate-report を得る共通準備。 */
@@ -142,7 +142,7 @@ function createCodexStub(dir: string, verdict: string): { executable: string; ar
   fs.writeFileSync(
     executable,
     [
-      '#!/usr/bin/env bash',
+      '#!/bin/bash -e',
       'set -euo pipefail',
       `printf '%s\\n' "$@" > ${JSON.stringify(argsLog)}`,
       'approval_policy_found=false',
@@ -226,6 +226,7 @@ test('claude launch_gate_reviewer: 非標準ディレクトリのCLIとenv sheba
   );
   const env = envWithout([], {
     CLAUDE_EXECUTABLE: executable,
+    PATH: `${runtimeDir}:${process.env.PATH}`,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
 
@@ -235,7 +236,7 @@ test('claude launch_gate_reviewer: 非標準ディレクトリのCLIとenv sheba
   assert.equal(readFinal(reportPath), 'approved');
   assert.equal(fs.readFileSync(runtimeLog, 'utf8').trim().split('\n').length, 2, '認証probeとreviewerの双方がenv shebang runtimeを使うこと');
   for (const reviewerPath of fs.readFileSync(pathLog, 'utf8').trim().split('\n')) {
-    assert.equal(reviewerPath, `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${runtimeDir}`);
+    assert.equal(reviewerPath, '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
   }
 });
 
@@ -718,10 +719,17 @@ test('gate-launch-reviewer.sh: reviewer-contextが返すadapterが未登録値�
 
 test('codex launch_gate_reviewer: 認証不成立は gate を approve せず human_required・exit≠0 を返す', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
-  t.after(() => repo.cleanup());
+  const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-auth-failure-issue727-'));
+  const authSecret = 'issue727-invalid-auth-secret-must-not-be-logged';
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(codexHome, { recursive: true, force: true });
+  });
+  fs.writeFileSync(path.join(codexHome, 'auth.json'), authSecret, 'utf8');
 
   setAdapter(repo.dir, 'codex');
   const env = envWithout([], {
+    CODEX_HOME: codexHome,
     CODEX_AUTH_PROBE_CMD: 'false',
     CODEX_REVIEWER_CMD: 'false',
   });
@@ -732,6 +740,163 @@ test('codex launch_gate_reviewer: 認証不成立は gate を approve せず hum
   assert.notEqual(res.status, 3);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.match(res.stderr, /隔離環境でCodexの認証が成立しません/);
+  assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, new RegExp(authSecret));
+});
+
+test('codex launch_gate_reviewer: HOME配下のenv -S interpreterを絶対パスで起動しshebang引数を保持する（Issue #727 AC-1/AC-2/AC-5）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-caller-home-issue727-'));
+  const observationDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-observation-issue727-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(callerHome, { recursive: true, force: true });
+    fs.rmSync(observationDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+
+  const binDir = path.join(callerHome, 'bin');
+  const codexHome = path.join(callerHome, '.codex');
+  const interpreter = path.join(binDir, 'node');
+  const executable = path.join(binDir, 'codex');
+  const pathLog = path.join(observationDir, 'path.log');
+  const interpreterArgsLog = path.join(observationDir, 'interpreter-args.log');
+  const authSecret = 'issue727-auth-secret-must-not-be-logged';
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(codexHome, { recursive: true });
+  fs.writeFileSync(path.join(codexHome, 'auth.json'), authSecret, 'utf8');
+  fs.writeFileSync(
+    interpreter,
+    [
+      '#!/bin/bash',
+      `printf '%s\\n' "$PATH" >> ${JSON.stringify(pathLog)}`,
+      `printf '%s\\n' "$@" >> ${JSON.stringify(interpreterArgsLog)}`,
+      'exec /bin/bash "$@"',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(
+    executable,
+    [
+      '#!/usr/bin/env -S node --noprofile',
+      'set -euo pipefail',
+      'grep -q issue727-auth-secret-must-not-be-logged "${CODEX_HOME}/auth.json"',
+      'if [[ "${1:-}" == "login" && "${2:-}" == "status" ]]; then exit 0; fi',
+      'cat >/dev/null',
+      `printf '%s' ${JSON.stringify(stubVerdict)}`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  const env = envWithout([], {
+    HOME: callerHome,
+    CODEX_HOME: codexHome,
+    CODEX_EXECUTABLE: executable,
+    PATH: `${binDir}:${process.env.PATH}`,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+  const observedPaths = fs.readFileSync(pathLog, 'utf8').trim().split('\n');
+  assert.equal(observedPaths.length, 2, '認証probeとreviewerの双方が同じ解決済みinterpreterを使うこと');
+  for (const reviewerPath of observedPaths) {
+    assert.equal(reviewerPath, '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
+    assert.doesNotMatch(reviewerPath, new RegExp(binDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  const interpreterArgs = fs.readFileSync(interpreterArgsLog, 'utf8');
+  assert.match(interpreterArgs, /^--noprofile$/m, 'env -Sのinterpreter引数を欠落させないこと');
+  assert.match(interpreterArgs, new RegExp(`^${executable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+  assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, new RegExp(authSecret));
+});
+
+test('codex launch_gate_reviewer: 多段shimのinterpreter解決不能を認証失敗と区別する（Issue #727 AC-3）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-multistage-issue727-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+
+  const missingInterpreter = `issue727-missing-runtime-${process.pid}-${Date.now()}`;
+  const interpreter = path.join(stubDir, 'node');
+  const executable = path.join(stubDir, 'codex');
+  fs.writeFileSync(interpreter, `#!/usr/bin/env ${missingInterpreter}\n`, { mode: 0o755 });
+  fs.writeFileSync(executable, '#!/usr/bin/env node\n', { mode: 0o755 });
+  const env = envWithout([], {
+    CODEX_EXECUTABLE: executable,
+    PATH: `${stubDir}:${process.env.PATH}`,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, new RegExp(`解決できなかった対象: ${missingInterpreter}`));
+  assert.match(res.stderr, /隔離環境の固定PATH: \/usr\/local\/bin:\/usr\/bin:\/bin:\/usr\/sbin:\/sbin/);
+  assert.match(res.stderr, /呼び出し元環境のPATHへ導入するか実行ファイル設定を確認/);
+  assert.doesNotMatch(res.stderr, /Codexの認証が成立しません/);
+});
+
+test('codex launch_gate_reviewer: ENOEXEC相当の実行失敗を認証失敗と区別する（Issue #727）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-enoexec-issue727-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+  const executable = path.join(stubDir, 'codex');
+  fs.writeFileSync(executable, 'not-an-executable-format\n', { mode: 0o755 });
+
+  const res = runLauncher(
+    repo.dir,
+    ['ISSUE-1', 'spec', 'standard', reportPath, targetSha],
+    envWithout([], { CODEX_EXECUTABLE: executable, GATE_REVIEWER_RETRY_INTERVAL_SEC: '0' }),
+  );
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /実行権限不足（EACCES）または実行形式不正（ENOEXEC）/);
+  assert.doesNotMatch(res.stderr, /Codexの認証が成立しません/);
+});
+
+test('codex launch_gate_reviewer: EACCES相当の実行失敗を認証失敗と区別する（Issue #727）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-eacces-issue727-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+  const executable = path.join(stubDir, 'codex');
+  fs.writeFileSync(executable, '#!/bin/bash\nexit 0\n', { mode: 0o644 });
+
+  const res = runLauncher(
+    repo.dir,
+    ['ISSUE-1', 'spec', 'standard', reportPath, targetSha],
+    envWithout([], { CODEX_EXECUTABLE: executable, GATE_REVIEWER_RETRY_INTERVAL_SEC: '0' }),
+  );
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /対象: .*codex。実行権限不足（EACCES）または実行形式不正（ENOEXEC）/);
+  assert.doesNotMatch(res.stderr, /Codexの認証が成立しません/);
+});
+
+test('reviewer executable resolver: native形式はinterpreterを追加せず絶対パスで実行する（Issue #727 AC-6）', () => {
+  const adapterPath = path.join(process.cwd(), '.agent-skill-chain', 'adapters', 'claude.sh');
+  const output = execFileSync(
+    'bash',
+    ['-c', 'source "$1"; resolved="$(_reviewer_resolve_executable_command "$2")"; printf "%s\\n" "$resolved"; eval "$resolved"', 'bash', adapterPath, process.execPath],
+    { encoding: 'utf8' },
+  );
+  assert.equal(output.trim(), `/usr/bin/env -- ${process.execPath}`);
 });
 
 test('codex launch_gate_reviewer: auth.jsonだけを隔離CODEX_HOMEへ複製して起動する（Issue #691）', async (t) => {
