@@ -1,7 +1,13 @@
 import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
-import { findIssueWorktree, hasUncommittedChanges, inspectUnpushedCommits } from '../lib/worktree.js';
+import {
+  findIssueWorktree,
+  hasUncommittedChanges,
+  inspectUnpushedCommits,
+  integrationPreservationRef,
+  type KnownPreservedCommit,
+} from '../lib/worktree.js';
 import { leaseFilePath, integrationFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile } from '../lib/yaml-io.js';
 import { activeLeaseFor, type WriterLease } from '../lib/github-lease.js';
@@ -67,14 +73,20 @@ export async function run(args: string[]): Promise<number> {
     }
 
     let integrationDone = false;
-    let pushedCommit: string | undefined;
+    let preservedCommit: KnownPreservedCommit | undefined;
     let localIntegrationMissingHead = false;
     if (config.coordination.backend === 'local') {
       const record = tryReadYamlFile<IntegrationRecord>(integrationFilePath(root, number));
       integrationDone = record?.status === 'merged' || record?.status === 'closed';
       if (integrationDone) {
-        pushedCommit = record?.head_sha;
-        localIntegrationMissingHead = !pushedCommit;
+        localIntegrationMissingHead = !record?.head_sha;
+        if (record?.head_sha) {
+          preservedCommit = {
+            sha: record.head_sha,
+            source: 'integration_record',
+            verificationRef: integrationPreservationRef(number),
+          };
+        }
       }
     } else if (entry.branch) {
       const prView = gh(['pr', 'list', '--head', entry.branch, '--state', 'all', '--json', 'state,headRefOid'], root);
@@ -83,14 +95,14 @@ export async function run(args: string[]): Promise<number> {
           const prs = JSON.parse(prView.stdout) as PullRequestRecord[];
           const completed = prs.find((pr) => pr.state === 'MERGED' || pr.state === 'CLOSED');
           integrationDone = !!completed;
-          pushedCommit = completed?.headRefOid;
+          if (completed?.headRefOid) preservedCommit = { sha: completed.headRefOid, source: 'github_pr' };
         } catch {
           integrationDone = false;
         }
       }
     }
     if (entry.branch) {
-      const unpushed = inspectUnpushedCommits(entry.path, entry.branch, pushedCommit);
+      const unpushed = inspectUnpushedCommits(entry.path, entry.branch, preservedCommit);
       if (unpushed.hasUnpushedCommits && unpushed.reason === 'unpreserved_commits') {
         const shas = unpushed.commitShas.map((sha) => sha.slice(0, 12)).join(', ');
         const legacyRecordAction = localIntegrationMissingHead

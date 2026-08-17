@@ -3,7 +3,13 @@ import path from 'node:path';
 import { repoRoot, resolveAsset } from '../lib/paths.js';
 import { loadConfig, type AgentSkillChainConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
-import { defaultBranch, findIssueWorktree, resolveCurrentBranch } from '../lib/worktree.js';
+import {
+  defaultBranch,
+  findIssueWorktree,
+  inspectCommitReachability,
+  integrationPreservationRef,
+  resolveCurrentBranch,
+} from '../lib/worktree.js';
 import { integrationFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile, writeYamlFileAtomic } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
@@ -70,13 +76,21 @@ PLAN.md/VALIDATION.md）を検出時のみ自動で検出・削除する（ISSUE
   すべて成功した場合: 終了コード0。
 `;
 
+const COMPLETE_USAGE = `
+使い方: agent-skill-chain pr complete <issue_id> <merged|closed>
+
+local backend の Integration Record を統合完了状態へ遷移する。Issue ブランチ先端が
+default branch または実 remote から到達可能であることを確認できた場合だけ、そのSHAを
+head_shaへ記録する。確認できない場合は状態を変更せず、日本語の理由を標準エラー出力へ返す。
+`;
+
 interface IntegrationRecord {
   schema_version: string;
   issue_id: string;
   branch: string;
   pr_url?: string;
   status: 'draft' | 'ready_for_review' | 'merged' | 'closed';
-  head_sha: string;
+  head_sha?: string;
   closes: string;
   gates: {
     spec: 'pending' | 'approved' | 'rejected';
@@ -181,16 +195,11 @@ export async function create(args: string[]): Promise<number> {
       if (existing) {
         return fail(`Integration Record は既に存在します（status=${existing.status}）: ${integrationFilePath(root, number)}`);
       }
-      const branchHead = git(['rev-parse', '--verify', `${branch}^{commit}`], root);
-      if (branchHead.status !== 0) {
-        return fail(`Integration Record に記録するブランチ先端SHAを確認できません: ${branch}`);
-      }
       const record: IntegrationRecord = {
         schema_version: 'agent-skill-chain/integration/v1',
         issue_id: issueId,
         branch,
         status: 'draft',
-        head_sha: branchHead.stdout.trim(),
         closes: issueId,
         gates: { spec: 'pending', design: 'pending', implementation: 'pending', validation: 'pending' },
       };
@@ -222,6 +231,69 @@ export async function create(args: string[]): Promise<number> {
     );
     if (result.status !== 0) return fail(`gh pr create に失敗しました: ${result.stderr.trim()}`);
     return ok(result.stdout.trim());
+  });
+}
+
+export async function complete(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(COMPLETE_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, targetStatus] = args;
+    if (!issueIdRaw || (targetStatus !== 'merged' && targetStatus !== 'closed')) {
+      throw new CliError('issue_id と status（merged または closed）は必須です');
+    }
+    const { number } = parseIssueId(issueIdRaw);
+    const root = repoRoot();
+    const config = loadConfig(root);
+    if (config.coordination.backend !== 'local') {
+      return fail('pr complete は local backend の Integration Record 専用です');
+    }
+
+    const recordPath = integrationFilePath(root, number);
+    const record = tryReadYamlFile<IntegrationRecord>(recordPath);
+    if (!record) return fail(`Integration Record が見つかりません: ${recordPath}`);
+    if (record.status === 'merged' || record.status === 'closed') {
+      return fail(`Integration Record は既に完了済みです（status=${record.status}）: ${recordPath}`);
+    }
+
+    const entry = findIssueWorktree(root, config, number);
+    if (!entry?.branch || entry.branch !== record.branch) {
+      return fail(`Integration Record と一致する Issue worktree を確認できません: ${record.branch}`);
+    }
+    const branchHead = git(['rev-parse', '--verify', `${record.branch}^{commit}`], entry.path);
+    if (branchHead.status !== 0) {
+      return fail(`統合完了時の Issue ブランチ先端SHAを確認できません: ${record.branch}`);
+    }
+    const headSha = branchHead.stdout.trim();
+    const preservation = inspectCommitReachability(entry.path, headSha);
+    if (!preservation.reachable && preservation.reason === 'unreachable') {
+      return fail(
+        `Integration Record を完了できません。Issue ブランチ先端 ${headSha.slice(0, 12)} は` +
+          'remote または統合先から到達できません',
+      );
+    }
+    if (!preservation.reachable) {
+      return fail(`Integration Record を完了できません。commitの保全状況を確認できません（${preservation.detail}）`);
+    }
+
+    const confirmedHead = git(['rev-parse', '--verify', `${record.branch}^{commit}`], entry.path);
+    if (confirmedHead.status !== 0 || confirmedHead.stdout.trim() !== headSha) {
+      return fail('保全状況の確認中に Issue ブランチ先端が変化したため、Integration Record を更新しません');
+    }
+    const completedRecord: IntegrationRecord = { ...record, status: targetStatus, head_sha: headSha };
+    const outcome = validateAgainstSchema('integration', completedRecord, root);
+    if (!outcome.valid) return fail(`Integration Record がスキーマに適合しません: ${outcome.errors.join('; ')}`);
+
+    const preservationRef = integrationPreservationRef(number);
+    const recordPosition = git(['update-ref', preservationRef, headSha], entry.path);
+    if (recordPosition.status !== 0) {
+      return fail(`確認済みの統合位置を記録できません: ${recordPosition.stderr.trim()}`);
+    }
+
+    writeYamlFileAtomic(recordPath, completedRecord);
+    return ok(recordPath);
   });
 }
 

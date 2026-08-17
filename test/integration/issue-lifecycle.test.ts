@@ -21,7 +21,7 @@ function makeGhStub() {
   return { stub, env: stub.env(process.env), cleanup: () => fs.rmSync(scratchDir, { recursive: true, force: true }) };
 }
 
-function completeIntegrationRecord(
+function forceCompleteIntegrationRecord(
   integrationPath: string,
   status: 'merged' | 'closed',
   headSha?: string,
@@ -30,6 +30,12 @@ function completeIntegrationRecord(
   record.status = status;
   if (headSha) record.head_sha = headSha;
   fs.writeFileSync(integrationPath, stringify(record));
+}
+
+function completeIntegrationRecord(repoDir: string, status: 'merged' | 'closed', issueId = 'ISSUE-692'): string {
+  const result = runCli(['pr', 'complete', issueId, status], { cwd: repoDir });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
 }
 
 // coordination.backend: local での中核フロー（issue start → lease acquire → segment start →
@@ -99,7 +105,7 @@ test('issue lifecycle (local backend): start -> lease -> segment -> gate -> chec
   const integrationPath = prCreate.stdout.trim();
   assert.ok(fs.existsSync(integrationPath));
   const createdIntegration = parse(fs.readFileSync(integrationPath, 'utf8')) as { head_sha?: string };
-  assert.equal(createdIntegration.head_sha, checkpoint.stdout.trim(), 'Integration Record作成時にhead_shaを記録すること');
+  assert.equal(createdIntegration.head_sha, undefined, 'draft作成時はhead_shaを記録しないこと');
 
   // cleanup: 有効leaseは解放済み・commitはpush済みだが、Integration Recordが merged/closed で
   // なければ拒否される。
@@ -107,8 +113,13 @@ test('issue lifecycle (local backend): start -> lease -> segment -> gate -> chec
   assert.equal(cleanupBeforeMerge.status, 1);
   assert.match(cleanupBeforeMerge.stderr, /Integration Record/);
 
-  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
-  fs.writeFileSync(integrationPath, integrationText);
+  completeIntegrationRecord(repo.dir, 'merged', 'ISSUE-1');
+  const completedIntegration = parse(fs.readFileSync(integrationPath, 'utf8')) as {
+    status: string;
+    head_sha?: string;
+  };
+  assert.equal(completedIntegration.status, 'merged');
+  assert.equal(completedIntegration.head_sha, checkpoint.stdout.trim(), '完了遷移時のbranch先端SHAを記録すること');
 
   const cleanup = runCli(['cleanup', 'ISSUE-1'], { cwd: repo.dir });
   assert.equal(cleanup.status, 0, cleanup.stderr);
@@ -229,8 +240,10 @@ test('cleanup: local backendでremote ref削除後もIntegration Recordの記録
   execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'test: squash local backend branch'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  completeIntegrationRecord(repo.dir, 'merged');
   execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
-  completeIntegrationRecord(integrationPath, 'merged', integratedHead);
+  const completedRecord = parse(fs.readFileSync(integrationPath, 'utf8')) as { head_sha?: string };
+  assert.equal(completedRecord.head_sha, integratedHead);
 
   assert.equal(
     execFileSync('git', ['for-each-ref', '--format=%(refname)', `refs/remotes/origin/${branch}`], {
@@ -274,6 +287,69 @@ test('cleanup: head_shaが無い既存Integration Recordは対応方法を示し
   assert.ok(fs.existsSync(worktreePath), '記録位置が無い既存Integration Recordのworktreeを削除しないこと');
 });
 
+test('pr complete: 未pushのbranch先端はhead_shaへ記録せず状態遷移を拒否する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'reject-unpreserved-completion', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+  fs.writeFileSync(path.join(worktreePath, 'LOCAL_ONLY.md'), '# local only\n');
+  execFileSync('git', ['add', 'LOCAL_ONLY.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: keep completion unpreserved'], { cwd: worktreePath, stdio: 'pipe' });
+  const localHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+  const complete = runCli(['pr', 'complete', 'ISSUE-692', 'merged'], { cwd: repo.dir });
+  assert.equal(complete.status, 1);
+  assert.match(complete.stderr, /remote または統合先から到達できません/);
+  assert.match(complete.stderr, new RegExp(localHead.slice(0, 12)));
+
+  const record = parse(fs.readFileSync(integrationPath, 'utf8')) as { status: string; head_sha?: string };
+  assert.equal(record.status, 'draft');
+  assert.equal(record.head_sha, undefined);
+});
+
+test('pr complete: 内容だけが別SHAで統合済みでもbranch先端自体が未保全なら記録を拒否する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(
+    ['issue', 'start', 'ISSUE-692', 'bugfix', 'reject-content-only-completion', FIXED_TIMESTAMP, '--size', 'quick'],
+    { cwd: repo.dir },
+  );
+  assert.equal(start.status, 0, start.stderr);
+  const [branch, worktreePath] = start.stdout.trim().split('\n');
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT_ONLY.md'), '# integrated as another SHA\n');
+  execFileSync('git', ['add', 'CONTENT_ONLY.md'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: local-only content'], { cwd: worktreePath, stdio: 'pipe' });
+  const localHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+
+  fs.writeFileSync(path.join(repo.dir, 'CONCURRENT.md'), '# concurrent\n');
+  execFileSync('git', ['add', 'CONCURRENT.md'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'test: advance integration target'], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['cherry-pick', localHead], { cwd: repo.dir, stdio: 'pipe' });
+  execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  assert.throws(() =>
+    execFileSync('git', ['merge-base', '--is-ancestor', localHead, 'main'], { cwd: repo.dir, stdio: 'pipe' }),
+  );
+
+  const complete = runCli(['pr', 'complete', 'ISSUE-692', 'merged'], { cwd: repo.dir });
+  assert.equal(complete.status, 1);
+  assert.match(complete.stderr, new RegExp(localHead.slice(0, 12)));
+  const record = parse(fs.readFileSync(prCreate.stdout.trim(), 'utf8')) as { status: string; head_sha?: string };
+  assert.equal(record.status, 'draft');
+  assert.equal(record.head_sha, undefined);
+});
+
 test('cleanup: 同一pathの複数commitをsquash統合後もIntegration Recordの記録SHAにより削除できる', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -284,6 +360,9 @@ test('cleanup: 同一pathの複数commitをsquash統合後もIntegration Record�
   );
   assert.equal(start.status, 0, start.stderr);
   const [branch, worktreePath] = start.stdout.trim().split('\n');
+  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
+  assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
   fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'first\n');
   execFileSync('git', ['add', 'CONTENT.md'], { cwd: worktreePath, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'test: add first path state'], { cwd: worktreePath, stdio: 'pipe' });
@@ -296,14 +375,13 @@ test('cleanup: 同一pathの複数commitをsquash統合後もIntegration Record�
     encoding: 'utf8',
   }).trim();
 
-  const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
-  assert.equal(prCreate.status, 0, prCreate.stderr);
-  const integrationPath = prCreate.stdout.trim();
   execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'test: squash same path states'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  completeIntegrationRecord(repo.dir, 'merged');
   execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
-  completeIntegrationRecord(integrationPath, 'merged', integratedHead);
+  const completedRecord = parse(fs.readFileSync(integrationPath, 'utf8')) as { head_sha?: string };
+  assert.equal(completedRecord.head_sha, integratedHead);
 
   const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
   assert.equal(cleanup.status, 0, cleanup.stderr);
@@ -328,9 +406,7 @@ test('cleanup: live remote headはlocal remote-tracking refが無くてもpush�
 
   const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
   assert.equal(prCreate.status, 0, prCreate.stderr);
-  const integrationPath = prCreate.stdout.trim();
-  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: closed');
-  fs.writeFileSync(integrationPath, integrationText);
+  completeIntegrationRecord(repo.dir, 'closed');
   execFileSync('git', ['update-ref', '-d', `refs/remotes/origin/${branch}`], { cwd: worktreePath, stdio: 'pipe' });
   assert.equal(
     execFileSync('git', ['for-each-ref', '--format=%(refname)', `refs/remotes/origin/${branch}`], {
@@ -372,8 +448,7 @@ test('cleanup: localに未取得のremote descendantを取得してから到達�
 
   const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
   assert.equal(prCreate.status, 0, prCreate.stderr);
-  const mainHead = execFileSync('git', ['rev-parse', 'main'], { cwd: repo.dir, encoding: 'utf8' }).trim();
-  completeIntegrationRecord(prCreate.stdout.trim(), 'closed', mainHead);
+  completeIntegrationRecord(repo.dir, 'closed');
 
   const otherClone = path.join(cloneRoot, 'clone');
   execFileSync('git', ['clone', repo.remoteDir, otherClone], { stdio: 'pipe' });
@@ -414,8 +489,7 @@ test('cleanup: localに未取得のremote descendantを取得できなければ�
 
   const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
   assert.equal(prCreate.status, 0, prCreate.stderr);
-  const mainHead = execFileSync('git', ['rev-parse', 'main'], { cwd: repo.dir, encoding: 'utf8' }).trim();
-  completeIntegrationRecord(prCreate.stdout.trim(), 'closed', mainHead);
+  completeIntegrationRecord(repo.dir, 'closed');
 
   const otherClone = path.join(cloneRoot, 'clone');
   execFileSync('git', ['clone', repo.remoteDir, otherClone], { stdio: 'pipe' });
@@ -473,7 +547,7 @@ test('cleanup: PR head後のローカルcommitがcherry-pick済みなら削除�
   assert.ok(!fs.existsSync(worktreePath), '別SHAで内容が保全されたworktreeが削除されること');
 });
 
-test('cleanup: remoteにIssue branchが無い未push commitは統合未完了でもSHAを優先して表示する', (t) => {
+test('cleanup: 未push commit後のdraft Recordを手編集でclosedにしてもSHAを表示して削除を拒否する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
@@ -489,6 +563,10 @@ test('cleanup: remoteにIssue branchが無い未push commitは統合未完了で
   const localCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
   const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
   assert.equal(prCreate.status, 0, prCreate.stderr);
+  const integrationPath = prCreate.stdout.trim();
+  const draftRecord = parse(fs.readFileSync(integrationPath, 'utf8')) as { head_sha?: string };
+  assert.equal(draftRecord.head_sha, undefined, '未pushのdraft Recordにhead_shaを記録しないこと');
+  forceCompleteIntegrationRecord(integrationPath, 'closed', localCommit);
 
   const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
   assert.equal(cleanup.status, 1);
@@ -589,7 +667,7 @@ test('cleanup: 実remoteで削除済みの古いremote-tracking refは信頼せ�
     cwd: worktreePath,
     stdio: 'pipe',
   });
-  completeIntegrationRecord(integrationPath, 'merged');
+  forceCompleteIntegrationRecord(integrationPath, 'merged');
   assert.doesNotThrow(() =>
     execFileSync('git', ['rev-parse', '--verify', `refs/remotes/origin/${branch}`], { cwd: worktreePath, stdio: 'pipe' }),
   );
@@ -623,13 +701,15 @@ test('cleanup: squash merge後のローカル限定空commitは削除せず保�
   execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'test: squash issue change'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  completeIntegrationRecord(repo.dir, 'merged');
   execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['commit', '--allow-empty', '-m', 'test: preserve post-squash empty commit'], {
     cwd: worktreePath,
     stdio: 'pipe',
   });
 
-  completeIntegrationRecord(integrationPath, 'merged', integratedHead);
+  const completedRecord = parse(fs.readFileSync(integrationPath, 'utf8')) as { head_sha?: string };
+  assert.equal(completedRecord.head_sha, integratedHead);
   assert.throws(
     () => execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], { cwd: worktreePath, stdio: 'pipe' }),
     '前提: upstreamを解決できないこと',
@@ -671,13 +751,15 @@ test('cleanup: squash merge後のローカル限定内容commitは削除せず�
   execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'test: squash issue change'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  completeIntegrationRecord(repo.dir, 'merged');
   execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
 
   fs.writeFileSync(path.join(worktreePath, 'LOCAL_ONLY.md'), '# local only\n');
   execFileSync('git', ['add', 'LOCAL_ONLY.md'], { cwd: worktreePath, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'test: preserve post-squash content'], { cwd: worktreePath, stdio: 'pipe' });
 
-  completeIntegrationRecord(integrationPath, 'merged', integratedHead);
+  const completedRecord = parse(fs.readFileSync(integrationPath, 'utf8')) as { head_sha?: string };
+  assert.equal(completedRecord.head_sha, integratedHead);
   assert.throws(
     () => execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], { cwd: worktreePath, stdio: 'pipe' }),
     '前提: upstreamを解決できないこと',
@@ -718,6 +800,7 @@ test('cleanup: local backendでsquash後の同一path変更とrevertをIntegrati
   execFileSync('git', ['merge', '--squash', branch], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'test: squash integrated content'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
+  completeIntegrationRecord(repo.dir, 'merged');
   execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
 
   fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'local only\n');
@@ -725,7 +808,8 @@ test('cleanup: local backendでsquash後の同一path変更とrevertをIntegrati
   execFileSync('git', ['commit', '-m', 'test: change integrated path locally'], { cwd: worktreePath, stdio: 'pipe' });
   const changedCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
   execFileSync('git', ['revert', '--no-edit', 'HEAD'], { cwd: worktreePath, stdio: 'pipe' });
-  completeIntegrationRecord(integrationPath, 'merged', integratedHead);
+  const completedRecord = parse(fs.readFileSync(integrationPath, 'utf8')) as { head_sha?: string };
+  assert.equal(completedRecord.head_sha, integratedHead);
 
   const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
   assert.equal(cleanup.status, 1);
@@ -753,7 +837,7 @@ test('cleanup: upstreamもremote refも無いローカル限定commitとrevert�
   execFileSync('git', ['commit', '-m', 'test: add local-only content'], { cwd: worktreePath, stdio: 'pipe' });
   execFileSync('git', ['revert', '--no-edit', 'HEAD'], { cwd: worktreePath, stdio: 'pipe' });
 
-  completeIntegrationRecord(integrationPath, 'merged');
+  forceCompleteIntegrationRecord(integrationPath, 'merged');
 
   assert.throws(
     () => execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], { cwd: worktreePath, stdio: 'pipe' }),
@@ -775,7 +859,7 @@ test('cleanup: upstreamもremote refも無いローカル限定commitとrevert�
 
   const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
   assert.equal(cleanup.status, 1);
-  assert.match(cleanup.stderr, /保全されていないcommit: 1件/);
+  assert.match(cleanup.stderr, /保全されていないcommit: 2件/);
   assert.ok(fs.existsSync(worktreePath), '未pushのcommit列があるworktreeを削除しないこと');
 });
 
@@ -807,7 +891,7 @@ test('cleanup: 相殺された追加pathと統合済みpathが混在しても保
   execFileSync('git', ['commit', '-m', 'test: integrate retained path only'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
 
-  completeIntegrationRecord(integrationPath, 'merged');
+  forceCompleteIntegrationRecord(integrationPath, 'merged');
   assert.equal(
     execFileSync('git', ['diff', '--name-only', 'main', branch], { cwd: worktreePath, encoding: 'utf8' }).trim(),
     '',
@@ -816,7 +900,7 @@ test('cleanup: 相殺された追加pathと統合済みpathが混在しても保
 
   const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
   assert.equal(cleanup.status, 1);
-  assert.match(cleanup.stderr, /保全されていないcommit: 1件/);
+  assert.match(cleanup.stderr, /保全されていないcommit: 3件/);
   assert.ok(fs.existsSync(worktreePath), '相殺されたpathを触ったcommit列があるworktreeを削除しないこと');
 });
 
@@ -854,11 +938,11 @@ test('cleanup: 既存pathの変更を戻して別pathだけ統合した場合も
   execFileSync('git', ['add', 'file-b.txt'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'test: integrate file b only'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['push', 'origin', 'main'], { cwd: repo.dir, stdio: 'pipe' });
-  completeIntegrationRecord(integrationPath, 'merged');
+  forceCompleteIntegrationRecord(integrationPath, 'merged');
 
   const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
   assert.equal(cleanup.status, 1);
-  assert.match(cleanup.stderr, /保全されていないcommit: 1件/);
+  assert.match(cleanup.stderr, /保全されていないcommit: 3件/);
   assert.ok(fs.existsSync(worktreePath), '最終差分から消えた既存pathのcommit列があるworktreeを削除しないこと');
 });
 
@@ -881,12 +965,12 @@ test('cleanup: デフォルトブランチを特定できない場合は理由�
   const prCreate = runCli(['pr', 'create', 'ISSUE-692', branch], { cwd: repo.dir });
   assert.equal(prCreate.status, 0, prCreate.stderr);
   const integrationPath = prCreate.stdout.trim();
+  const recordedHead = execFileSync('git', ['rev-parse', branch], { cwd: worktreePath, encoding: 'utf8' }).trim();
   execFileSync('git', ['push', 'origin', '--delete', branch], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['branch', '-m', 'main', 'unknown-base'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['update-ref', '-d', 'refs/remotes/origin/HEAD'], { cwd: repo.dir, stdio: 'pipe' });
   execFileSync('git', ['update-ref', '-d', 'refs/remotes/origin/main'], { cwd: repo.dir, stdio: 'pipe' });
-  const integrationText = fs.readFileSync(integrationPath, 'utf8').replace('status: draft', 'status: merged');
-  fs.writeFileSync(integrationPath, integrationText);
+  forceCompleteIntegrationRecord(integrationPath, 'merged', recordedHead);
 
   const cleanup = runCli(['cleanup', 'ISSUE-692'], { cwd: repo.dir });
   assert.equal(cleanup.status, 1);
@@ -913,7 +997,7 @@ test('cleanup: upstreamもremote refも無いローカル限定の空commitは�
     cwd: worktreePath,
     stdio: 'pipe',
   });
-  completeIntegrationRecord(integrationPath, 'merged');
+  forceCompleteIntegrationRecord(integrationPath, 'merged');
 
   assert.throws(
     () => execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], { cwd: worktreePath, stdio: 'pipe' }),

@@ -260,7 +260,7 @@ test('hasUnpushedCommits: squashマージ後にリモートブランチが削除
   );
 
   assert.equal(
-    hasUnpushedCommits(worktreePath, branch, pushedHead),
+    hasUnpushedCommits(worktreePath, branch, { sha: pushedHead, source: 'github_pr' }),
     false,
     'squashマージで内容が統合済みならupstream goneでもfalseになること',
   );
@@ -297,7 +297,7 @@ test('hasUnpushedCommits: default branchが別変更で前進した後のsquash 
     execFileSync('git', ['rev-parse', 'main^{tree}'], { cwd: worktreePath, encoding: 'utf8' }).trim(),
     '前進分により既存のtree一致判定は成立しないこと',
   );
-  assert.equal(hasUnpushedCommits(worktreePath, branch, pushedHead), false);
+  assert.equal(hasUnpushedCommits(worktreePath, branch, { sha: pushedHead, source: 'github_pr' }), false);
 });
 
 test('hasUnpushedCommits: merge commit方式で統合済みなupstream goneブランチはfalseになる', (t) => {
@@ -349,7 +349,10 @@ test('hasUnpushedCommits: rebase merge方式でSHAが変わった統合済みブ
   gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
 
   assert.equal(gitOk(worktreePath, ['merge-base', '--is-ancestor', branch, 'main']), false);
-  assert.equal(hasUnpushedCommits(worktreePath, branch, originalCommits.at(-1)), false);
+  assert.equal(
+    hasUnpushedCommits(worktreePath, branch, { sha: originalCommits.at(-1)!, source: 'github_pr' }),
+    false,
+  );
 });
 
 test('hasUnpushedCommits: upstreamがgone状態でもdefault branchへ未統合の内容が残っていればtrueのままになる', (t) => {
@@ -431,7 +434,7 @@ test('hasUnpushedCommits: squash済みpathのローカル限定変更とrevert�
   gitIn(worktreePath, ['commit', '-m', 'test: change squashed path locally']);
   gitIn(worktreePath, ['revert', '--no-edit', 'HEAD']);
 
-  assert.equal(hasUnpushedCommits(worktreePath, branch, pushedHead), true);
+  assert.equal(hasUnpushedCommits(worktreePath, branch, { sha: pushedHead, source: 'github_pr' }), true);
 });
 
 test('hasUnpushedCommits: 実remoteで削除済みの古いremote-tracking refをpush済み根拠にしない', (t) => {

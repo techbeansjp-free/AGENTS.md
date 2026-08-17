@@ -1,4 +1,4 @@
-// Issue #677 AC-6/AC-8: consumer展開物で54本全数の共有実装到達性と失敗形を検証する。
+// Issue #677 AC-6/AC-8: consumer展開物で全ラッパーの共有実装到達性と失敗形を検証する。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -55,7 +55,7 @@ function installNpmStub(stubDir: string, prefix: string, log: string): void {
   );
 }
 
-test('consumerへ展開した54本全数が共有実装から自動導入分岐へ到達する', () => {
+test('consumerへ展開した55本全数が共有実装から自動導入分岐へ到達する', () => {
   const fixture = createWrapperFixture();
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue677-consumer-bin-'));
   const prefix = fs.mkdtempSync(path.join(os.tmpdir(), 'issue677-consumer-prefix-'));
@@ -63,7 +63,7 @@ test('consumerへ展開した54本全数が共有実装から自動導入分岐�
   const npmLog = path.join(stubDir, 'npm.log');
   try {
     const targets = wrapperTargets(fixture.root);
-    assert.equal(targets.length, 54);
+    assert.equal(targets.length, 55);
     installNpmStub(stubDir, prefix, npmLog);
     const env = {
       PATH: `${stubDir}:/usr/bin:/bin`,
@@ -93,7 +93,7 @@ test('consumerへ展開した54本全数が共有実装から自動導入分岐�
   }
 });
 
-test('共有実装の4種の破損状態で54本全数が探索パス付き日本語エラーへ収束する', () => {
+test('共有実装の4種の破損状態で55本全数が探索パス付き日本語エラーへ収束する', () => {
   const fixture = createWrapperFixture();
   const cliRecord = path.join(fixture.root, 'delegated.log');
   const shared = path.join(fixture.root, '.agent-skill-chain', 'scripts', 'cli-resolve.sh');

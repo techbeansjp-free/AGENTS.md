@@ -133,10 +133,74 @@ export type UnpushedCommitCheck =
   | { hasUnpushedCommits: true; reason: 'unpreserved_commits'; commitShas: string[] }
   | { hasUnpushedCommits: true; reason: 'indeterminate'; detail: string };
 
+export type KnownPreservedCommit =
+  | { sha: string; source: 'github_pr' }
+  | { sha: string; source: 'integration_record'; verificationRef: string };
+
+export type CommitReachabilityCheck =
+  | { reachable: true }
+  | { reachable: false; reason: 'unreachable' }
+  | { reachable: false; reason: 'indeterminate'; detail: string };
+
+/** local backendの統合完了遷移が、確認済みの保全位置を記録するref。 */
+export function integrationPreservationRef(issueNumber: string): string {
+  return `refs/agent-skill-chain/integrations/${issueNumber}`;
+}
+
+/** commit自身が統合先または実remoteのheadから到達可能かを検査する。内容一致は根拠にしない。 */
+export function inspectCommitReachability(worktreePath: string, commitSha: string): CommitReachabilityCheck {
+  if (git(['rev-parse', '--verify', `${commitSha}^{commit}`], worktreePath).status !== 0) {
+    return { reachable: false, reason: 'indeterminate', detail: `commit ${commitSha.slice(0, 12)} が存在しません` };
+  }
+
+  let baseError: string | undefined;
+  try {
+    const base = defaultBranch(worktreePath);
+    if (git(['merge-base', '--is-ancestor', commitSha, base], worktreePath).status === 0) {
+      return { reachable: true };
+    }
+  } catch (error) {
+    baseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const remotes = git(['remote'], worktreePath);
+  if (remotes.status !== 0) {
+    return { reachable: false, reason: 'indeterminate', detail: 'リモート一覧を取得できません' };
+  }
+  let remoteError: string | undefined;
+  for (const remote of remotes.stdout.split('\n').map((line) => line.trim()).filter(Boolean)) {
+    const live = git(['ls-remote', '--heads', remote], worktreePath);
+    if (live.status !== 0) {
+      remoteError ??= `実リモート ${remote} を確認できません`;
+      continue;
+    }
+    for (const line of live.stdout.split('\n').filter(Boolean)) {
+      const [remoteSha] = line.split(/\s+/);
+      if (git(['rev-parse', '--verify', `${remoteSha}^{commit}`], worktreePath).status !== 0) {
+        const fetch = git(['fetch', '--no-tags', remote, remoteSha], worktreePath);
+        if (
+          fetch.status !== 0 ||
+          git(['rev-parse', '--verify', `${remoteSha}^{commit}`], worktreePath).status !== 0
+        ) {
+          remoteError ??= `実リモート ${remote} のcommit ${remoteSha.slice(0, 12)} を取得できません`;
+          continue;
+        }
+      }
+      if (git(['merge-base', '--is-ancestor', commitSha, remoteSha], worktreePath).status === 0) {
+        return { reachable: true };
+      }
+    }
+  }
+
+  if (remoteError) return { reachable: false, reason: 'indeterminate', detail: remoteError };
+  if (baseError) return { reachable: false, reason: 'indeterminate', detail: baseError };
+  return { reachable: false, reason: 'unreachable' };
+}
+
 export function inspectUnpushedCommits(
   worktreePath: string,
   branch: string,
-  knownPushedCommit?: string,
+  knownPreservedCommit?: KnownPreservedCommit,
 ): UnpushedCommitCheck {
   let base: string;
   try {
@@ -162,7 +226,7 @@ export function inspectUnpushedCommits(
   const branchCommits = commits.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
   if (branchCommits.length === 0) return { hasUnpushedCommits: false };
 
-  const pushedPositions = knownPushedCommit ? [knownPushedCommit] : [];
+  const pushedPositions: string[] = [];
   const reachableRefs = [base];
   let remoteEvidenceError: string | undefined;
 
@@ -232,6 +296,23 @@ export function inspectUnpushedCommits(
     }
   }
 
+  if (knownPreservedCommit) {
+    const knownSha = knownPreservedCommit.sha;
+    const knownCommitExists = git(['rev-parse', '--verify', `${knownSha}^{commit}`], worktreePath).status === 0;
+    if (knownCommitExists && knownPreservedCommit.source === 'github_pr') {
+      // GitHubが返す完了済みPRのheadRefOidは、過去にremoteへpushされた位置そのものである。
+      pushedPositions.push(knownSha);
+    } else if (knownCommitExists && knownPreservedCommit.source === 'integration_record') {
+      const currentlyPreserved = isReachableFromAny(worktreePath, knownSha, reachableRefs);
+      const recorded = git(
+        ['rev-parse', '--verify', `${knownPreservedCommit.verificationRef}^{commit}`],
+        worktreePath,
+      );
+      const transitionWasVerified = recorded.status === 0 && recorded.stdout.trim() === knownSha;
+      if (currentlyPreserved || transitionWasVerified) pushedPositions.push(knownSha);
+    }
+  }
+
   const existingPushedPositions = [...new Set(pushedPositions)].filter(
     (sha) => git(['rev-parse', '--verify', `${sha}^{commit}`], worktreePath).status === 0,
   );
@@ -263,15 +344,19 @@ export function inspectUnpushedCommits(
     unpreserved.push(commitSha);
   }
 
-  if (unpreserved.length === 0) return { hasUnpushedCommits: false };
   if (remoteEvidenceError) {
     return { hasUnpushedCommits: true, reason: 'indeterminate', detail: remoteEvidenceError };
   }
+  if (unpreserved.length === 0) return { hasUnpushedCommits: false };
   return { hasUnpushedCommits: true, reason: 'unpreserved_commits', commitShas: unpreserved };
 }
 
-export function hasUnpushedCommits(worktreePath: string, branch: string, knownPushedCommit?: string): boolean {
-  return inspectUnpushedCommits(worktreePath, branch, knownPushedCommit).hasUnpushedCommits;
+export function hasUnpushedCommits(
+  worktreePath: string,
+  branch: string,
+  knownPreservedCommit?: KnownPreservedCommit,
+): boolean {
+  return inspectUnpushedCommits(worktreePath, branch, knownPreservedCommit).hasUnpushedCommits;
 }
 
 function isReachableFromAny(worktreePath: string, commitSha: string, refs: string[]): boolean {
