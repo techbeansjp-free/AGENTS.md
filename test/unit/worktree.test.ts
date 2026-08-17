@@ -10,6 +10,7 @@ import {
   hasUncommittedChanges,
   defaultBranch,
   hasUnpushedCommits,
+  inspectUnpushedCommits,
   findIssueWorktree,
   resolveIssueWorktreeExactlyOne,
   worktreePathRegex,
@@ -435,6 +436,30 @@ test('hasUnpushedCommits: squash済みpathのローカル限定変更とrevert�
   gitIn(worktreePath, ['revert', '--no-edit', 'HEAD']);
 
   assert.equal(hasUnpushedCommits(worktreePath, branch, { sha: pushedHead, source: 'github_pr' }), true);
+});
+
+test('inspectUnpushedCommits: pathspec magicと同名のファイルを追加したローカル限定commitを未保全として報告する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-literal-pathspec';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-literal-pathspec`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'PUSHED.md'), '# pushed\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'test: establish pushed position']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  fs.writeFileSync(path.join(worktreePath, ':(exclude)*'), '# local only\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'test: add pathspec magic filename']);
+  const localOnlyCommit = gitRev(worktreePath);
+
+  assert.deepEqual(inspectUnpushedCommits(worktreePath, branch), {
+    hasUnpushedCommits: true,
+    reason: 'unpreserved_commits',
+    commitShas: [localOnlyCommit],
+  });
 });
 
 test('hasUnpushedCommits: 実remoteで削除済みの古いremote-tracking refをpush済み根拠にしない', (t) => {

@@ -330,7 +330,10 @@ export function inspectUnpushedCommits(
         return { hasUnpushedCommits: true, reason: 'indeterminate', detail: paths.detail };
       }
       if (paths.paths.length > 0) {
-        const commitContent = git(['diff', '--quiet', commitSha, base, '--', ...paths.paths], worktreePath);
+        const commitContent = git(
+          ['--literal-pathspecs', 'diff', '--quiet', commitSha, base, '--', ...paths.paths],
+          worktreePath,
+        );
         if (commitContent.status === 0) continue;
         if (commitContent.status !== 1) {
           return {
