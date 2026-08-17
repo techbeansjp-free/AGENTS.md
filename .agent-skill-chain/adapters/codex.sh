@@ -219,9 +219,11 @@ _codex_worker_sandbox_opts() {
 
 # role_contract が Codex CLI の stdin UTF-8 境界破損に対する安全閾値を超える場合は、
 # prompt を位置引数へ移し、外側の prompt_file redirect を /dev/null で明示的に上書きする。
-# 引数: <segment> <contract>
+# 第3引数のcontract_fileが指定されたdispatch経路では、本文をコマンドへ埋め込まずファイルを
+# 参照する。位置引数経路のsentinelはcommand substitutionによる末尾改行の欠落を防ぐ。
+# 引数: <segment> <contract> [contract_file]
 _worker_default_cmd() {
-  local segment="${1:-}" contract="${2:-}"
+  local segment="${1:-}" contract="${2:-}" contract_file="${3:-}"
   local threshold="${CODEX_STDIN_SAFE_THRESHOLD_BYTES:-32768}"
 
   if [[ ! "$threshold" =~ ^[1-9][0-9]*$ ]]; then
@@ -239,16 +241,36 @@ _worker_default_cmd() {
     return 1
   fi
 
-  local model effort sandbox_opts base contract_bytes quoted_contract quoted_executable
+  local model effort sandbox_opts base contract_bytes quoted_contract quoted_contract_file
+  local quoted_executable quoted_model quoted_effort_config
   model="$(_codex_worker_model "$segment")"
   effort="$(_codex_worker_effort "$segment")"
   if ! sandbox_opts="$(_codex_worker_sandbox_opts)"; then
     return 1
   fi
   printf -v quoted_executable '%q' "$codex_executable"
-  base="$quoted_executable exec --sandbox workspace-write $sandbox_opts --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\""
+  printf -v quoted_model '%q' "$model"
+  printf -v quoted_effort_config '%q' "model_reasoning_effort=\"$effort\""
+
+  # Issue #721: 構文検査の失敗経路を自動テストで再現するための検証時限定注入点。
+  # 明示的なtest modeが無い正常運用時は、差し替え値だけを渡しても一切作用しない。
+  if [[ "${ASC_DISPATCH_COMMAND_TEST_MODE:-}" == "enabled" && -n "${ASC_TEST_CODEX_EXECUTABLE_MATERIAL+x}" ]]; then
+    quoted_executable="$ASC_TEST_CODEX_EXECUTABLE_MATERIAL"
+  fi
+  base="$quoted_executable exec --sandbox workspace-write $sandbox_opts --color never -m $quoted_model -c $quoted_effort_config"
   contract_bytes="$(printf '%s' "$contract" | wc -c)"
   contract_bytes="${contract_bytes//[[:space:]]/}"
+
+  if [[ -n "$contract_file" ]]; then
+    printf -v quoted_contract_file '%q' "$contract_file"
+    if ((contract_bytes > threshold)); then
+      printf '_asc_contract=$(cat -- %s; _asc_cat_rc=$?; printf .; exit "$_asc_cat_rc") && _asc_contract=${_asc_contract%%.} && %s -- "$%s" </dev/null\n' \
+        "$quoted_contract_file" "$base" '_asc_contract'
+    else
+      printf '%s - < %s\n' "$base" "$quoted_contract_file"
+    fi
+    return 0
+  fi
 
   if ((contract_bytes > threshold)); then
     printf -v quoted_contract '%q' "$contract"

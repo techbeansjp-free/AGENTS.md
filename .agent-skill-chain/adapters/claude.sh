@@ -631,6 +631,28 @@ _dispatch_lease_renew_daemon() {
   done
 }
 
+# dispatch一時ディレクトリをコマンドラインに持つ今回サイクルのrenewプロセスだけを停止する。
+# PID単独では再利用時に無関係プロセスを停止し得るため、verify経路と同じ所有判定を行う。
+_stop_dispatch_lease_renew_daemon() {
+  local renew_pid="$1" dispatch_temp_dir="$2" renew_args="" poll
+  [[ "$renew_pid" =~ ^[1-9][0-9]*$ ]] || return 0
+  renew_args="$(ps -p "$renew_pid" -o args= 2>/dev/null || true)"
+  [[ "$renew_args" == *"$dispatch_temp_dir"* ]] || return 0
+
+  kill "$renew_pid" >/dev/null 2>&1 || true
+  wait "$renew_pid" 2>/dev/null || true
+  for poll in {1..10}; do
+    kill -0 "$renew_pid" >/dev/null 2>&1 || return 0
+    sleep 0.2
+  done
+  kill -9 "$renew_pid" >/dev/null 2>&1 || true
+  wait "$renew_pid" 2>/dev/null || true
+  for poll in {1..10}; do
+    kill -0 "$renew_pid" >/dev/null 2>&1 || return 0
+    sleep 0.2
+  done
+}
+
 # 今回のworker起動サイクルに属する完了報告だけを検証する。
 # 成功時は無出力で0、不合格時は呼び出し側がblocked_reasonへ使う理由をstdoutへ出して1を返す。
 _verify_worker_completion_report() {
@@ -808,15 +830,6 @@ _dispatch_via_agent_tool() {
   contract+="  instruction: 成果物をcommit・pushした後のcompleted投稿では、既存の5引数に空文字2つとdispatchトークンを追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} の形で実行する。変更が無い場合のみ、9・10番目の引数として true と具体的理由を追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} true '<具体的理由>' の形で実行する。"
   contract+=$'\n'
 
-  # Codexの安全閾値超過時はcontractを位置引数へ埋め込むため、トークン追記後にコマンドを
-  # 組み立て、contract_fileを読む通常経路と同じ自己完結した契約を渡す。
-  if [[ "$worker_adapter" == "codex" ]] && ! codex_cmd="$(_worker_default_cmd "$segment" "$contract")"; then
-    echo "launch_worker: Codex起動コマンドを組み立てられませんでした（codex CLI不在等）。固定Claude subagentへのフォールバックは行いません" >&2
-    rm -rf -- "$dispatch_temp_dir"
-    release_lease "$issue_id" >/dev/null 2>&1 || true
-    return 1
-  fi
-
   contract_file="$dispatch_temp_dir/contract.md"
   printf '%s' "$contract" >"$contract_file"
   chmod 600 "$contract_file"
@@ -841,21 +854,30 @@ _dispatch_via_agent_tool() {
   printf -v dispatch_temp_dir_quoted '%q' "$dispatch_temp_dir"
 
   if [[ "$worker_adapter" == "codex" ]]; then
-    # _worker_default_cmd（codex.sh版、動的束縛）は元々 stdin（末尾が単独の `-`）または
-    # 位置引数埋め込み（末尾が`</dev/null`、閾値超過時）のいずれかを返す（ISSUE-462）。
-    # stdin形は非dispatch経路ではrole_contract全文をプロセスのstdinへ直接パイプするが、
-    # dispatchではBashツールが実行するコマンド文字列として一度標準出力へ埋め込まれるため、
-    # stdin元をディスク上のcontract_fileへ明示的に差し替える（位置引数埋め込み形は既に
-    # contractを自己完結して含み `</dev/null` で閉じているため変更不要）。
-    if [[ "$codex_cmd" == *" -" ]]; then
-      codex_cmd="${codex_cmd% -} < ${contract_file_quoted}"
+    # Issue #721: 小さいcontractはstdin redirect、大きいcontractは実行時にcontract.mdを読み込む
+    # 位置引数とし、どちらも起動コマンド文字列へ本文を埋め込まない。
+    if ! codex_cmd="$(_worker_default_cmd "$segment" "$contract" "$contract_file")"; then
+      _stop_dispatch_lease_renew_daemon "$renew_pid" "$dispatch_temp_dir"
+      echo "launch_worker: Codex起動コマンドを組み立てられませんでした（codex CLI不在等）。固定Claude subagentへのフォールバックは行いません" >&2
+      rm -rf -- "$dispatch_temp_dir"
+      release_lease "$issue_id" >/dev/null 2>&1 || true
+      return 1
     fi
     codex_cmd="cd ${codex_worktree_root_quoted} && ${codex_cmd}"
+
+    # 提示前の最終防護。失敗時はrenew停止→一時資源削除→lease解放の順で安全側へ倒す。
+    if ! bash -n <<<"$codex_cmd"; then
+      _stop_dispatch_lease_renew_daemon "$renew_pid" "$dispatch_temp_dir"
+      rm -rf -- "$dispatch_temp_dir"
+      release_lease "$issue_id" >/dev/null 2>&1 || true
+      echo "launch_worker: Codex起動コマンドのシェル構文が妥当でないため、ワーカーを起動せず停止しました" >&2
+      return 5
+    fi
     printf '%s\n' \
       'AGENT_TOOL_DISPATCH_REQUIRED' \
       'dispatch_mode: bash_direct' \
       'run_in_background: false' \
-      "prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、次のコマンドをBashツールで直接実行する: ${codex_cmd}。workerは成果物をcommit・pushした後、contractに記載されたreport-status.shによるcompleted投稿を実行してから最終応答する。今回のdispatchトークンは ${dispatch_token}。completed投稿では既存の5引数に空文字2つとdispatchトークンを追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} の形で実行する。変更が無い場合のみ、9・10番目の引数として true と具体的理由を追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} true '<具体的理由>' の形で実行する。最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
+      "prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、行頭プレフィックス CODEX_CMD= の唯一の正本行からコマンドを抽出し、Bashツールで直接実行する。workerは成果物をcommit・pushした後、contractに記載されたreport-status.shによるcompleted投稿を実行してから最終応答する。今回のdispatchトークンは ${dispatch_token}。completed投稿では既存の5引数に空文字2つとdispatchトークンを追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} の形で実行する。変更が無い場合のみ、9・10番目の引数として true と具体的理由を追加し、report-status.sh <issue_id> <role> <segment> completed <push済みHEAD> '' '' ${dispatch_token} true '<具体的理由>' の形で実行する。最終応答は完了状態・target_sha・簡潔な1文要約のみに限定し、成果物本文・diff・引用等の実質的内容を一切含めない。" \
       "完了後に .agent-skill-chain/scripts/worker-launch-verify.sh ${issue_id} ${dispatch_temp_dir_quoted} をBashツールで実行する。" \
       "ISSUE_ID=${issue_id}" \
       "DISPATCH_TEMP_DIR=${dispatch_temp_dir}" \

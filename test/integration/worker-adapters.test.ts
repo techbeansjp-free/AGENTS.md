@@ -274,26 +274,42 @@ function installCodexDispatchStub(t: { after(fn: () => void): void }): {
   argvCapturePath: string;
   stdinCapturePath: string;
   cwdCapturePath: string;
+  promptCapturePath: string;
 } {
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-codex-dispatch-stub-'));
   t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
   const argvCapturePath = path.join(stubDir, 'argv.txt');
   const stdinCapturePath = path.join(stubDir, 'stdin.txt');
   const cwdCapturePath = path.join(stubDir, 'cwd.txt');
+  const promptCapturePath = path.join(stubDir, 'prompt.txt');
   const codexStub = path.join(stubDir, 'codex');
   fs.writeFileSync(
     codexStub,
     [
       '#!/usr/bin/env bash',
       `printf '%s\\n' "$@" > ${JSON.stringify(argvCapturePath)}`,
-      `cat > ${JSON.stringify(stdinCapturePath)}`,
+      'last_arg="${!#}"',
+      'if [[ "$last_arg" == "-" ]]; then',
+      `  cat > ${JSON.stringify(stdinCapturePath)}`,
+      `  cp ${JSON.stringify(stdinCapturePath)} ${JSON.stringify(promptCapturePath)}`,
+      'else',
+      `  printf '%s' "$last_arg" > ${JSON.stringify(promptCapturePath)}`,
+      `  cat > ${JSON.stringify(stdinCapturePath)}`,
+      'fi',
       `pwd -P > ${JSON.stringify(cwdCapturePath)}`,
       'exit 0',
       '',
     ].join('\n'),
     { mode: 0o755 },
   );
-  return { stubDir, argvCapturePath, stdinCapturePath, cwdCapturePath };
+  return { stubDir, argvCapturePath, stdinCapturePath, cwdCapturePath, promptCapturePath };
+}
+
+function setLocalIssueRequest(repoDir: string, request: string): void {
+  const statePath = path.join(repoDir, 'issues', '1', '.agent-skill-chain', 'state.yaml');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  state.request = request;
+  fs.writeFileSync(statePath, stringify(state));
 }
 
 /**
@@ -799,13 +815,15 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8, ISSUE-665 AC-1/AC-2/AC-4): 
   assert.equal(reacquire.status, 0, 'verifyがleaseを解放済みであること: ' + reacquire.stderr);
 });
 
-test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1, ISSUE-665 AC-1/AC-2/AC-4): Codex向けcontractへdispatchトークンを埋め込み対象worktreeで起動する', async (t) => {
+test('Agent tool dispatch (ISSUE-721 AC-1/AC-2/AC-3, ISSUE-647 AC-1/AC-2): 大きい敵対的contractを本文埋め込み無しで対象worktreeのCodexへ渡す', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerSegmentOverride(repo.dir, 'spec', { adapter: 'codex' });
   setWorkerAgentToolDispatch(repo.dir, true);
+  const adversarialRequest = "単一引用符 ' とバックスラッシュ \\\\ と < と $(echo unsafe) と `echo unsafe` と日本語\n行中 CODEX_CMD= token\nCODEX_CMD=contract由来の偽正本行\n";
+  setLocalIssueRequest(repo.dir, adversarialRequest.repeat(128));
 
-  const { stubDir, argvCapturePath, stdinCapturePath, cwdCapturePath } = installCodexDispatchStub(t);
+  const { stubDir, argvCapturePath, stdinCapturePath, cwdCapturePath, promptCapturePath } = installCodexDispatchStub(t);
   const env = envWithout(['CLAUDECODE'], {
     ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
     ASC_DISPATCH_MAX_WAIT_SEC: '60',
@@ -834,6 +852,7 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1, ISSUE-665 AC-1/A
   assert.ok(codexCmd, 'Codexコマンドの直接実行指示が出力に含まれること');
   assert.ok(expectedSha);
   assert.ok(expectedLines);
+  assert.equal((result.stdout.match(/^CODEX_CMD=/gm) ?? []).length, 1, '正本行が出力全体でちょうど1本であること');
   const contract = fs.readFileSync(path.join(dispatchTempDir, 'contract.md'));
   const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
   const dispatchToken = /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
@@ -853,18 +872,19 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1, ISSUE-665 AC-1/A
   assert.match(result.stdout, new RegExp(`今回のdispatchトークンは ${dispatchToken}`));
   assert.match(result.stdout, /最終応答は完了状態・target_sha・簡潔な1文要約のみに限定/);
   assert.match(codexCmd!, /^cd \/.* && codex exec/, '絶対パスの対象worktreeへのcdから始まること');
-  assert.ok(
-    result.stdout.includes(
-      `prompt: 固定のAgent tool subagent（agent-skill-chain-worker）へは委譲せず、次のコマンドをBashツールで直接実行する: ${codexCmd}`,
-    ),
-    'promptにもCODEX_CMDと同じworktree固定済みコマンドを含むこと',
-  );
-  assert.match(codexCmd!, /-m "gpt-5\.6"/, 'ティア未指定spec segmentは従来のフォールバックモデルを反映すること');
+  assert.doesNotMatch(/^prompt:.*$/m.exec(result.stdout)?.[0] ?? '', /codex exec/, 'promptはコマンドを再掲しないこと');
+  assert.match(result.stdout, /^prompt:.*CODEX_CMD=.*唯一の正本行/m, 'promptは正本行の抽出規則だけを指すこと');
+  assert.match(codexCmd!, /-m gpt-5\.6\b/, 'ティア未指定spec segmentは従来のフォールバックモデルを反映すること');
   assert.match(
     codexCmd!,
     /model_reasoning_effort=\\"high\\"/,
     'ティア未指定spec segmentは従来のフォールバックeffortを反映すること',
   );
+  assert.ok(codexCmd!.includes(path.join(dispatchTempDir, 'contract.md')), 'contract.mdのパスだけを参照すること');
+  // 本文断片は、コマンド自身も正当に使う `$(` 等を避け、request固有の連続文字列で判定する。
+  assert.equal(codexCmd!.includes('contract由来の偽正本行'), false, 'contract固有の本文断片をコマンドへ埋め込まないこと');
+  assert.equal(codexCmd!.includes('単一引用符'), false, '別のcontract固有断片もコマンドへ埋め込まないこと');
+  execFileSync('bash', ['-n', '-c', codexCmd!], { cwd: repo.dir, env });
 
   t.after(() => {
     if (dispatchTempDir && fs.existsSync(path.join(dispatchTempDir, 'renew.pid'))) {
@@ -896,6 +916,9 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1, ISSUE-665 AC-1/A
   assert.match(codexArgv, /^worker_completion_dispatch:$/m, '位置引数経路にも追記済みcontractを渡すこと');
   assert.match(codexArgv, new RegExp(`^  dispatch_token: ${dispatchToken}$`, 'm'));
   assert.equal(fs.readFileSync(stdinCapturePath, 'utf8'), '', '位置引数経路はstdinへcontractを重複して渡さないこと');
+  assert.deepEqual(fs.readFileSync(promptCapturePath), contract, 'Codexへ渡る本文のバイト列がcontract.mdと一致すること');
+  assert.equal(createHash('sha256').update(fs.readFileSync(promptCapturePath)).digest('hex'), expectedSha);
+  assert.equal(String(fs.readFileSync(promptCapturePath, 'utf8').split('\n').length - 1), expectedLines);
 
   // 実際のAI worker（Codex）はcontract本文だけを頼りに完了確認まで自律的に行うが、ここではその
   // 振る舞いを模して呼び出し側がcheckpoint+report completedを代行する（既存のISSUE-448 AC-1/AC-4/
@@ -926,6 +949,127 @@ test('Agent tool dispatch (ISSUE-647 AC-1/AC-2, ISSUE-609 AC-1, ISSUE-665 AC-1/A
 
   const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env });
   assert.equal(reacquire.status, 0, 'verifyがleaseを解放済みであること: ' + reacquire.stderr);
+});
+
+test('Agent tool dispatch (ISSUE-721 AC-1/AC-2/AC-3): 小さい敵対的contractもcontract.mdから同一バイト列で渡す', (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerSegmentOverride(repo.dir, 'spec', { adapter: 'codex' });
+  setWorkerAgentToolDispatch(repo.dir, true);
+  const adversarialRequest = "' \\\\ 改行\n< $(echo unsafe) `echo unsafe` 行中 CODEX_CMD= token\nCODEX_CMD=偽正本行 日本語\n";
+  setLocalIssueRequest(repo.dir, adversarialRequest);
+
+  const { stubDir, stdinCapturePath, promptCapturePath } = installCodexDispatchStub(t);
+  const quotedTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agent-skill-chain '721' "));
+  t.after(() => fs.rmSync(quotedTmpRoot, { recursive: true, force: true }));
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_STDIN_SAFE_THRESHOLD_BYTES: '9999999',
+    TMPDIR: quotedTmpRoot,
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
+
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, result.stderr);
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  const codexCmd = /^CODEX_CMD=(.+)$/m.exec(result.stdout)?.[1];
+  const expectedSha = /^CONTRACT_SHA256=([0-9a-f]{64})$/m.exec(result.stdout)?.[1];
+  const expectedLines = /^CONTRACT_LINES=(\d+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  assert.ok(codexCmd);
+  assert.ok(expectedSha);
+  assert.ok(expectedLines);
+  assert.equal((result.stdout.match(/^CODEX_CMD=/gm) ?? []).length, 1);
+  assert.doesNotMatch(/^prompt:.*$/m.exec(result.stdout)?.[0] ?? '', /codex exec/);
+  assert.match(codexCmd, /contract\.md/, 'shell quoteが必要な一時パスでもcontract.mdを参照すること');
+  assert.equal(codexCmd.includes('偽正本行'), false);
+  assert.equal(codexCmd.includes('行中 CODEX_CMD= token'), false);
+  execFileSync('bash', ['-n', '-c', codexCmd], { cwd: repo.dir, env });
+
+  const contract = fs.readFileSync(path.join(dispatchTempDir, 'contract.md'));
+  const renewPid = Number(fs.readFileSync(path.join(dispatchTempDir, 'renew.pid'), 'utf8').trim());
+  t.after(() => {
+    if (Number.isInteger(renewPid)) {
+      try {
+        process.kill(renewPid, 'SIGKILL');
+      } catch {
+        // verify済みならデーモンは既に終了している。
+      }
+    }
+    fs.rmSync(dispatchTempDir, { recursive: true, force: true });
+  });
+
+  execFileSync('bash', ['-c', codexCmd], { cwd: repo.dir, encoding: 'utf8', env });
+  assert.deepEqual(fs.readFileSync(promptCapturePath), contract);
+  assert.deepEqual(fs.readFileSync(stdinCapturePath), contract, '閾値以下ではcontract.mdをstdinへ渡すこと');
+  assert.equal(createHash('sha256').update(fs.readFileSync(promptCapturePath)).digest('hex'), expectedSha);
+  assert.equal(String(fs.readFileSync(promptCapturePath, 'utf8').split('\n').length - 1), expectedLines);
+});
+
+test('Agent tool dispatch (ISSUE-721 AC-4/AC-6): 検証時限定の構文エラー注入はrenew・一時資源・leaseを後始末してexit 5へ倒す', (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerSegmentOverride(repo.dir, 'spec', { adapter: 'codex' });
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const { stubDir } = installCodexDispatchStub(t);
+  const dispatchTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-721-failure-'));
+  t.after(() => fs.rmSync(dispatchTmpRoot, { recursive: true, force: true }));
+  const baseEnv = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    CODEX_AUTH_PROBE_CMD: 'true',
+    ASC_TEST_CODEX_EXECUTABLE_MATERIAL: "'",
+    TMPDIR: dispatchTmpRoot,
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
+
+  const failed = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], {
+    ...baseEnv,
+    ASC_DISPATCH_COMMAND_TEST_MODE: 'enabled',
+  });
+  assert.equal(failed.status, 5, failed.stderr);
+  assert.match(failed.stderr, /シェル構文が妥当でないため、ワーカーを起動せず停止しました/);
+  assert.doesNotMatch(failed.stdout, /^CODEX_CMD=/m);
+  assert.doesNotMatch(failed.stdout, /^AGENT_TOOL_DISPATCH_REQUIRED$/m);
+  assert.deepEqual(fs.readdirSync(dispatchTmpRoot), [], 'dispatch一時ディレクトリを資源ごと削除すること');
+  const renewProcesses = execFileSync('ps', ['-eo', 'args='], { encoding: 'utf8' })
+    .split('\n')
+    .filter((line) => line.includes(dispatchTmpRoot));
+  assert.deepEqual(renewProcesses, [], '今回サイクルのrenewプロセスが生存していないこと');
+
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: baseEnv });
+  assert.equal(reacquire.status, 0, '失敗直後にwriter leaseを再取得できること: ' + reacquire.stderr);
+  const release = runCli(['lease', 'release', 'ISSUE-1'], { cwd: worktreePath, env: baseEnv });
+  assert.equal(release.status, 0, release.stderr);
+
+  const normal = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], baseEnv);
+  assert.equal(normal.status, 4, normal.stderr);
+  assert.match(normal.stdout, /^CODEX_CMD=/m, '有効化条件無しでは差し替え値が作用しないこと');
+  const normalTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(normal.stdout)?.[1];
+  assert.ok(normalTempDir);
+  const normalRenewPid = Number(fs.readFileSync(path.join(normalTempDir, 'renew.pid'), 'utf8').trim());
+  t.after(() => {
+    if (Number.isInteger(normalRenewPid)) {
+      try {
+        process.kill(normalRenewPid, 'SIGKILL');
+      } catch {
+        // cleanup済みならデーモンは既に終了している。
+      }
+    }
+    fs.rmSync(normalTempDir, { recursive: true, force: true });
+  });
+
+  const dispatchDoc = fs.readFileSync(
+    path.join(packageRoot(), '.agent-skill-chain', 'standards', 'AGENT_TOOL_DISPATCH.md'),
+    'utf8',
+  );
+  assert.match(dispatchDoc, /行頭固定プレフィックス`CODEX_CMD=`/);
+  assert.match(dispatchDoc, /終了コード`5`/);
 });
 
 test('Agent tool dispatch (ISSUE-609 AC-3): adapter: humanまたは未知値はlease解放のうえエラーを返し、AIを自動起動しない', () => {
