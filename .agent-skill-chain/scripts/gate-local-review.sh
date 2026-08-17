@@ -131,13 +131,5 @@ if [[ -e "$TOKEN_FILE" ]]; then
   exit 1
 fi
 
-# 全slotのevidenceがdurableなPR Reviewになった後でだけ、protected-main recorderを起動する。
-# dispatch失敗はset -eにより非0終了し、証跡未記録のまま成功扱いにはしない。
-DISPATCH_BODY="$(node -e '
-  const [prNumber, gate, targetSha] = process.argv.slice(1);
-  process.stdout.write(JSON.stringify({
-    event_type: "agent-skill-chain-gate-record",
-    client_payload: {pr_number: Number(prNumber), gate, target_sha: targetSha},
-  }));
-' "$PR_NUMBER" "$GATE_ID" "$TARGET_SHA")"
-gh api -X POST "repos/{owner}/{repo}/dispatches" --input - <<<"$DISPATCH_BODY"
+# Issue #680: Check Run発行にはGitHub Appが必要だが、本プロジェクトはGitHub Appを
+# 使わず受信workflowも置かないため、repository_dispatchは送出しない。
