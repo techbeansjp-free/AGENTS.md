@@ -19,7 +19,7 @@
 - 進行役: Issue・worktree・lease・PR の調整のみを行う役割。成果物は書かない。
 - dispatch: `worker-launch.sh` がワーカープロセスを直接起動せず、起動に必要な固定メタデータを返す状態。
 - `bash_direct`: 進行役自身が Bash ツールで起動コマンドを直接実行する dispatch 方式。
-- dispatch 一時ディレクトリ: `contract.md`・`contract.sha256`・`renew.pid` を保持する worktree 外の `chmod 700` ディレクトリ。`contract.sha256` は contract の SHA256・行数・`DISPATCH_STARTED_AT`・`DISPATCH_TOKEN`・`STARTED_SHA` を保持する。
+- dispatch 一時ディレクトリ: `contract.md`・`contract.sha256`・`renew.pid` を保持する worktree 外の `chmod 700` ディレクトリ。`contract.sha256` は contract の SHA256・行数・`DISPATCH_STARTED_AT`・`DISPATCH_TOKEN`・`STARTED_SHA` を保持する。`renew.pid` は、dispatch 中（ワーカー起動待ち・実行中）に当該 Issue の writer lease を定期更新し続ける常駐プロセスの PID を保持する。このプロセスが生き残ると、ワーカーが存在しないまま writer lease が延命され、後続セグメントが lease を取得できなくなる。
 - 起動コマンド: 対象 worktree への `cd` から始まり、Codex CLI を model・reasoning effort・sandbox 設定つきで起動する1行の文字列。
 
 前提として、本 Issue は `risk:normal`・`size:quick` であり、対象は GitHub モードの調整状態である。`size:quick` は成果物作成義務の免除であって禁止ではないため、追跡可能性（I1）と仕様⇔検証の追跡（I7）を確保する目的で本 SPEC を作成する。
@@ -36,7 +36,9 @@
 - 起動コマンドの範囲が機械的に一意に決まる。指示文の散文とコマンドを、抽出規則を推測しなければ分離できない形で混在させない。
 - 抽出規則を本 SPEC 内で確定させる。すなわち起動コマンドの正本提示は、行頭固定プレフィックス `CODEX_CMD=` で始まる**ちょうど1行**とし、当該プレフィックスを除いた行末（改行直前）までの全体が起動コマンドである。起動コマンド文字列自体は生の改行文字を含まず（contract 本文由来の改行はシェルが解釈できる行内表現へ変換され、実行時に元の本文へ復元される）、出力エンコードは UTF-8 とする。散文の指示文（`prompt:` 行）は当該正本行を指す参照のみを持ち、実行対象のコマンド文字列を再掲しない。
 - 起動コマンドを実行した結果ワーカーへ渡る contract 本文は、dispatch 一時ディレクトリの `contract.md` と完全に一致する（内容の欠落・切り詰め・再エスケープによる差異がない）。この一致は、標準入力経由（閾値以下）と位置引数埋め込み（閾値超過）の**両経路それぞれで**成立する。
-- 生成側が、提示しようとしている起動コマンドの構文妥当性を機械的に検査する。検査に失敗した場合はワーカーを起動せず、日本語の診断を出力し、writer lease を解放し、終了コード `5`（起動コマンド妥当性検査失敗の専用値。`0` 完了・`3` human deferred・`4` dispatch 要求・`2` lease 取得前エラーのいずれとも重複しない）で終了する。
+- 生成側が、提示しようとしている起動コマンドの構文妥当性を機械的に検査する。検査は組み立てた起動コマンド文字列に対し次の3条件を要求し、いずれか1つでも満たさない場合を検査失敗とする。(i) 生の改行文字（LF）を含まない。(ii) シェルの構文解析（`bash -n` 相当）でエラーが発生しない。(iii) 文字列自身が行頭プレフィックス `CODEX_CMD=` を新たに生じさせず、正本行がちょうど1本である性質を壊さない。
+- 検査失敗を検証セグメントが機械的に再現できるよう、生成側は起動コマンドへ埋め込まれる素材（Codex 実行ファイルのパス等、コマンド文字列を構成する値）を外部から差し替え可能とし、その差し替えによって上記 (i)〜(iii) のいずれかに違反する文字列を組み立てられる注入点を持つ。注入点の具体的な手段（環境変数名等）は設計セグメントで確定する。
+- 検査に失敗した場合はワーカーを起動せず、日本語の診断を出力し、当該 dispatch のために生成した資源を残さずに停止する。すなわち (1) `renew.pid` が指す lease 更新プロセスを停止し、(2) dispatch 一時ディレクトリ（`contract.md`・`contract.sha256`・`renew.pid` を含む）を削除し、(3) writer lease を解放し、(4) 終了コード `5`（起動コマンド妥当性検査失敗の専用値。`0` 完了・`3` human deferred・`4` dispatch 要求・`2` lease 取得前エラーのいずれとも重複しない）で終了する。lease 解放のみを行い更新プロセスを残す実装は本要件を満たさない——孤児となった更新プロセスがワーカー不在の writer lease を延命し、後続セグメントが lease を取得できない停止状態を生むため。
 - 既存の claude adapter 経路（`subagent_type: agent-skill-chain-worker`）、非 dispatch 経路、`worker-launch-verify.sh` の完了判定契約は変更しない。
 - 運用手順書の codex 手順の記述が、変更後の実出力と一致する。
 
@@ -65,9 +67,9 @@
 
 #### AC-4: 妥当性検査失敗時は安全側へ倒す
 
-- Given: 起動コマンドの構文妥当性検査が失敗する状況を強制的に発生させている。
+- Given: adapter が `codex`、`worker.agent_tool_dispatch.enabled: true` の状態で、本 SPEC の要件が定める注入点を用い、起動コマンドへ埋め込まれる素材を、組み立て結果が検査条件 (i) 生の改行を含まない・(ii) シェル構文解析でエラーにならない・(iii) 行頭 `CODEX_CMD=` を新たに生じさせない、のいずれかに違反する値へ差し替えている。
 - When: `worker-launch.sh <issue_id> <segment>` を実行する。
-- Then: ワーカーを起動せず、日本語の診断メッセージを標準エラーへ出力し、writer lease を解放し、終了コード `5` で終了する。`5` は起動コマンド妥当性検査失敗を一意に表す専用値であり、`0`（完了）・`3`（human deferred）・`4`（dispatch 要求）・`2`（lease 取得前エラー）のいずれとも重複しない。標準出力に `CODEX_CMD=` 行・`AGENT_TOOL_DISPATCH_REQUIRED` 行を出力しない。
+- Then: 次のすべてが成立する。(a) ワーカーを起動しない。(b) 日本語の診断メッセージを標準エラーへ出力する。(c) dispatch のために起動した lease 更新プロセス（`renew.pid` が指すプロセス）が実行終了時点で生存していない。(d) dispatch 一時ディレクトリが `contract.md`・`contract.sha256`・`renew.pid` ごと削除されている。(e) writer lease が解放されており、同一 Issue に対して直後に新規 writer lease を取得できる。(f) 終了コードが `5` である。`5` は起動コマンド妥当性検査失敗を一意に表す専用値であり、`0`（完了）・`3`（human deferred）・`4`（dispatch 要求）・`2`（lease 取得前エラー）のいずれとも重複しない。(g) 標準出力に `CODEX_CMD=` 行・`AGENT_TOOL_DISPATCH_REQUIRED` 行を出力しない。(c)(d) を欠き lease 解放のみを行う実装は本 AC を充足しない。
 - 検証方法見込み: `automated`
 
 #### AC-5: 既存経路が回帰しない
