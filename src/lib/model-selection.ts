@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { git } from './exec.js';
+import { parse } from 'yaml';
+import { gh, git } from './exec.js';
 import { readYamlFile } from './yaml-io.js';
 import { validateAgainstSchema } from './schema.js';
 import { defaultBranch } from './worktree.js';
@@ -64,6 +65,58 @@ export function loadCoreReviewPolicy(root: string): CoreReviewPolicy | undefined
   if (!fs.existsSync(manifestPath)) return undefined;
 
   const manifest = readYamlFile<ProjectPolicyManifest>(manifestPath);
+  const validation = validateAgainstSchema('project-policy', manifest, root);
+  if (!validation.valid) {
+    throw new Error(`project policy manifest がスキーマに適合しません: ${validation.errors.join('; ')}`);
+  }
+  return manifest.model_selection?.core_review;
+}
+
+/** Issue #680: evidenceの信頼元はGitHub上の保護されたdefault branchから読む。 */
+export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | undefined {
+  const repositoryResult = gh(['api', 'repos/{owner}/{repo}'], root);
+  if (repositoryResult.status !== 0) {
+    throw new Error(`GitHubからrepository情報を取得できません: ${repositoryResult.stderr.trim()}`);
+  }
+
+  let defaultBranchName: string;
+  try {
+    const repository = JSON.parse(repositoryResult.stdout) as { default_branch?: unknown };
+    if (typeof repository.default_branch !== 'string' || repository.default_branch.length === 0) {
+      throw new Error('default_branchが不正です');
+    }
+    defaultBranchName = repository.default_branch;
+  } catch (error) {
+    throw new Error(`GitHubのrepository情報を解釈できません: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const manifestResult = gh(
+    [
+      'api',
+      `repos/{owner}/{repo}/contents/.agent-skill-chain/project/manifest.yaml?ref=${encodeURIComponent(defaultBranchName)}`,
+    ],
+    root,
+  );
+  if (manifestResult.status !== 0) {
+    throw new Error(`GitHubのrepository default branchからproject policy manifestを取得できません: ${manifestResult.stderr.trim()}`);
+  }
+
+  let manifestText: string;
+  try {
+    const response = JSON.parse(manifestResult.stdout) as { content?: unknown; encoding?: unknown };
+    if (response.encoding !== 'base64' || typeof response.content !== 'string') {
+      throw new Error('contentまたはencodingが不正です');
+    }
+    const encoded = response.content.replaceAll(/\s/g, '');
+    if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+      throw new Error('contentが正しいbase64ではありません');
+    }
+    manifestText = Buffer.from(encoded, 'base64').toString('utf8');
+  } catch (error) {
+    throw new Error(`GitHubのproject policy manifest応答を解釈できません: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const manifest = parse(manifestText) as ProjectPolicyManifest;
   const validation = validateAgainstSchema('project-policy', manifest, root);
   if (!validation.valid) {
     throw new Error(`project policy manifest がスキーマに適合しません: ${validation.errors.join('; ')}`);
