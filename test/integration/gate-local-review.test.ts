@@ -128,7 +128,7 @@ function createFixture(): Fixture {
   };
 }
 
-test('gate-local-review: default branch HEADがbase_shaより前進していてもbase_shaの隔離cloneで実行する', (t) => {
+test('gate-local-review: default branch HEADがbase_shaより前進していてもbase_shaの隔離cloneで実行し、不要なdispatchを送らない', (t) => {
   const fixture = createFixture();
   t.after(() => fixture.cleanup());
   const rootHeadBefore = git(fixture.repoDir, ['rev-parse', 'HEAD']);
@@ -148,14 +148,7 @@ test('gate-local-review: default branch HEADがbase_shaより前進していて�
   assert.match(trace, /remotes=\n/);
   assert.match(trace, new RegExp(`trusted_base=${fixture.baseSha}`));
   assert.match(trace, /review_root=.*agent-skill-chain-local-review\.[^/]+\/repo/);
-  assert.deepEqual(fixture.repositoryDispatches(), [{
-    event_type: 'agent-skill-chain-gate-record',
-    client_payload: {
-      pr_number: 652,
-      gate: 'implementation',
-      target_sha: fixture.targetSha,
-    },
-  }]);
+  assert.deepEqual(fixture.repositoryDispatches(), []);
 });
 
 test('gate-local-review: default branch以外のworktreeでは隔離clone作成前に拒否する', (t) => {
