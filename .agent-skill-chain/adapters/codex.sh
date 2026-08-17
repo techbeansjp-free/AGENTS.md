@@ -219,8 +219,9 @@ _codex_worker_sandbox_opts() {
 
 # role_contract が Codex CLI の stdin UTF-8 境界破損に対する安全閾値を超える場合は、
 # prompt を位置引数へ移し、外側の prompt_file redirect を /dev/null で明示的に上書きする。
-# 第3引数のcontract_fileが指定されたdispatch経路では、本文をコマンドへ埋め込まずファイルを
-# 参照する。位置引数経路のsentinelはcommand substitutionによる末尾改行の欠落を防ぐ。
+# Issue #721: 第3引数のcontract_fileが指定されたdispatch経路はseekableな通常ファイルを直接
+# stdinへredirectできるため、サイズによらず位置引数へ展開しない。閾値による緩和はpipeから
+# 本文を渡す非dispatch経路だけに適用する。
 # 引数: <segment> <contract> [contract_file]
 _worker_default_cmd() {
   local segment="${1:-}" contract="${2:-}" contract_file="${3:-}"
@@ -258,20 +259,15 @@ _worker_default_cmd() {
     quoted_executable="$ASC_TEST_CODEX_EXECUTABLE_MATERIAL"
   fi
   base="$quoted_executable exec --sandbox workspace-write $sandbox_opts --color never -m $quoted_model -c $quoted_effort_config"
-  contract_bytes="$(printf '%s' "$contract" | wc -c)"
-  contract_bytes="${contract_bytes//[[:space:]]/}"
 
   if [[ -n "$contract_file" ]]; then
     printf -v quoted_contract_file '%q' "$contract_file"
-    if ((contract_bytes > threshold)); then
-      printf '_asc_contract=$(cat -- %s; _asc_cat_rc=$?; printf .; exit "$_asc_cat_rc") && _asc_contract=${_asc_contract%%.} && %s -- "$%s" </dev/null\n' \
-        "$quoted_contract_file" "$base" '_asc_contract'
-    else
-      printf '%s - < %s\n' "$base" "$quoted_contract_file"
-    fi
+    printf '%s - < %s\n' "$base" "$quoted_contract_file"
     return 0
   fi
 
+  contract_bytes="$(printf '%s' "$contract" | wc -c)"
+  contract_bytes="${contract_bytes//[[:space:]]/}"
   if ((contract_bytes > threshold)); then
     printf -v quoted_contract '%q' "$contract"
     printf '%s -- %s </dev/null\n' "$base" "$quoted_contract"

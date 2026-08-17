@@ -815,7 +815,7 @@ test('Agent tool dispatch (ISSUE-448 AC-1/AC-4/AC-8, ISSUE-665 AC-1/AC-2/AC-4): 
   assert.equal(reacquire.status, 0, 'verifyがleaseを解放済みであること: ' + reacquire.stderr);
 });
 
-test('Agent tool dispatch (ISSUE-721 AC-1/AC-2/AC-3, ISSUE-647 AC-1/AC-2): 大きい敵対的contractを本文埋め込み無しで対象worktreeのCodexへ渡す', async (t) => {
+test('Agent tool dispatch (ISSUE-721 AC-1/AC-2/AC-3, ISSUE-647 AC-1/AC-2): 閾値超過の敵対的contractをstdinで対象worktreeのCodexへ渡す', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   setWorkerSegmentOverride(repo.dir, 'spec', { adapter: 'codex' });
@@ -913,9 +913,9 @@ test('Agent tool dispatch (ISSUE-721 AC-1/AC-2/AC-3, ISSUE-647 AC-1/AC-2): 大�
     'Codex実行時のcwdが対象Issue worktreeに固定されること',
   );
   const codexArgv = fs.readFileSync(argvCapturePath, 'utf8');
-  assert.match(codexArgv, /^worker_completion_dispatch:$/m, '位置引数経路にも追記済みcontractを渡すこと');
-  assert.match(codexArgv, new RegExp(`^  dispatch_token: ${dispatchToken}$`, 'm'));
-  assert.equal(fs.readFileSync(stdinCapturePath, 'utf8'), '', '位置引数経路はstdinへcontractを重複して渡さないこと');
+  assert.match(codexArgv, /\n-\n$/, '閾値超過時もCodexへstdin指示を渡すこと');
+  assert.doesNotMatch(codexArgv, /^worker_completion_dispatch:$/m, 'contract本文を位置引数へ展開しないこと');
+  assert.deepEqual(fs.readFileSync(stdinCapturePath), contract, '閾値超過時もcontract.mdをstdinへ渡すこと');
   assert.deepEqual(fs.readFileSync(promptCapturePath), contract, 'Codexへ渡る本文のバイト列がcontract.mdと一致すること');
   assert.equal(createHash('sha256').update(fs.readFileSync(promptCapturePath)).digest('hex'), expectedSha);
   assert.equal(String(fs.readFileSync(promptCapturePath, 'utf8').split('\n').length - 1), expectedLines);
@@ -1010,12 +1010,12 @@ test('Agent tool dispatch (ISSUE-721 AC-1/AC-2/AC-3): 小さい敵対的contract
 });
 
 // Issue #721: Linuxは execve の単一引数長を ARG_MAX とは別に MAX_ARG_STRLEN（32ページ = 131072
-// バイト）で制限する。ISSUE-680 の implementation dispatch では 138,274 バイトのcontractで
-// 実際に E2BIG（「引数リストが長すぎます」）が発生し、`bash -n` は構文として妥当と判定するため
-// 検査では捕捉できなかった。本文長に起因する起動失敗が原理的に発生しないことを、実測値を
-// 下回らない長さで立証する。
+// バイト）で制限する。ISSUE-680 の implementation dispatch では 138,274 バイト、validationでは
+// 140,019 バイトのcontractで実際に E2BIG（「引数リストが長すぎます」）が発生し、`bash -n` は
+// 構文として妥当と判定するため検査では捕捉できなかった。本文長に起因する起動失敗が原理的に
+// 発生しないことを、validationの実測値を下回らない長さで立証する。
 const MAX_ARG_STRLEN_BYTES = 131072;
-const OBSERVED_E2BIG_CONTRACT_BYTES = 138274;
+const VALIDATION_E2BIG_CONTRACT_BYTES = 140019;
 
 test('Agent tool dispatch (ISSUE-721 AC-3): 単一引数長上限を超えるcontractでも本文長に起因して起動が失敗しない', (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
@@ -1025,9 +1025,9 @@ test('Agent tool dispatch (ISSUE-721 AC-3): 単一引数長上限を超えるcon
   const adversarialRequest =
     "単一引用符 ' とバックスラッシュ \\\\ と < と $(echo unsafe) と `echo unsafe` と日本語\n行中 CODEX_CMD= token\nCODEX_CMD=contract由来の偽正本行\n";
   const unit = Buffer.byteLength(adversarialRequest, 'utf8');
-  setLocalIssueRequest(repo.dir, adversarialRequest.repeat(Math.ceil(OBSERVED_E2BIG_CONTRACT_BYTES / unit) + 1));
+  setLocalIssueRequest(repo.dir, adversarialRequest.repeat(Math.ceil(VALIDATION_E2BIG_CONTRACT_BYTES / unit) + 1));
 
-  const { stubDir, stdinCapturePath, promptCapturePath } = installCodexDispatchStub(t);
+  const { stubDir, argvCapturePath, stdinCapturePath, promptCapturePath } = installCodexDispatchStub(t);
   const env = envWithout(['CLAUDECODE'], {
     ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
     ASC_DISPATCH_MAX_WAIT_SEC: '60',
@@ -1049,7 +1049,7 @@ test('Agent tool dispatch (ISSUE-721 AC-3): 単一引数長上限を超えるcon
 
   const contract = fs.readFileSync(path.join(dispatchTempDir, 'contract.md'));
   assert.ok(
-    contract.length >= OBSERVED_E2BIG_CONTRACT_BYTES,
+    contract.length >= VALIDATION_E2BIG_CONTRACT_BYTES,
     `contract本文が実測のE2BIG発生長を下回らないこと: ${contract.length}`,
   );
   assert.ok(contract.length > MAX_ARG_STRLEN_BYTES);
@@ -1069,10 +1069,13 @@ test('Agent tool dispatch (ISSUE-721 AC-3): 単一引数長上限を超えるcon
   });
 
   execFileSync('bash', ['-c', codexCmd], { cwd: repo.dir, encoding: 'utf8', env });
+  const codexArgv = fs.readFileSync(argvCapturePath, 'utf8');
+  assert.match(codexArgv, /\n-\n$/, '単一引数長上限を超えてもcontract本文をargvへ展開しないこと');
+  assert.doesNotMatch(codexArgv, /^worker_completion_dispatch:$/m);
+  assert.deepEqual(fs.readFileSync(stdinCapturePath), contract, '140,019バイト以上の本文をstdinで欠落なく渡すこと');
   assert.deepEqual(fs.readFileSync(promptCapturePath), contract, 'Codexへ渡る本文がcontract.mdと一致すること');
-  assert.equal(createHash('sha256').update(fs.readFileSync(promptCapturePath)).digest('hex'), expectedSha);
-  assert.equal(String(fs.readFileSync(promptCapturePath, 'utf8').split('\n').length - 1), expectedLines);
-  assert.equal(fs.existsSync(stdinCapturePath), true);
+  assert.equal(createHash('sha256').update(fs.readFileSync(stdinCapturePath)).digest('hex'), expectedSha);
+  assert.equal(String(fs.readFileSync(stdinCapturePath, 'utf8').split('\n').length - 1), expectedLines);
 });
 
 test('Agent tool dispatch (ISSUE-721 AC-4/AC-6): 検証時限定の構文エラー注入はrenew・一時資源・leaseを後始末してexit 5へ倒す', (t) => {

@@ -24,7 +24,7 @@
 
 1. `.agent-skill-chain/scripts/worker-launch.sh <issue_id> <segment>`を実行する。
 2. 終了コード`4`と`AGENT_TOOL_DISPATCH_REQUIRED`・`dispatch_mode: bash_direct`を受け取った場合、`subagent_type`へは委譲しない。起動コマンドの正本は行頭固定プレフィックス`CODEX_CMD=`で始まる唯一の行であり、プレフィックスを除いた行末までをそのまま抽出する。`prompt:`行は正本行を参照するだけでコマンドを再掲しない。
-3. 進行役自身が抽出したコマンドをBashツールで直接実行する（Agent tool経由のサブエージェント起動は行わない）。role_contract本文は起動コマンドへ埋め込まれず、`contract.md`（`DISPATCH_TEMP_DIR=`配下）をファイルとして参照してCodex CLIへ渡す形に解決済みである。contractは成果物のcommit・push後にcompleted reportを投稿してから最終応答する指示を含む。
+3. 進行役自身が抽出したコマンドをBashツールで直接実行する（Agent tool経由のサブエージェント起動は行わない）。role_contract本文は起動コマンドや位置引数へ展開されず、`contract.md`（`DISPATCH_TEMP_DIR=`配下）の通常ファイルから標準入力へredirectする`codex exec ... - < <contract.mdのパス>`の形に解決済みである。この経路は本文サイズにかかわらず同一で、単一引数長の上限に起因する起動失敗は発生しない。contractは成果物のcommit・push後にcompleted reportを投稿してから最終応答する指示を含む。
 4. コマンド実行後、`.agent-skill-chain/scripts/worker-launch-verify.sh <ISSUE_IDの値> <DISPATCH_TEMP_DIRの値>`を実行する。verifyの契約はadapter間で同一である。
 5. `_worker_default_cmd`（codex.sh版）の組み立てが失敗した場合（Codex CLI不在等）、`worker-launch.sh`はlease解放のうえ非0非3非4を返す。組み立て後のコマンドが`bash -n`相当の検査に失敗した場合はrenewプロセス停止・dispatch一時ディレクトリ削除・lease解放を行い、専用の終了コード`5`を返す。固定Claude subagentへの無条件フォールバックは行わない。
 
