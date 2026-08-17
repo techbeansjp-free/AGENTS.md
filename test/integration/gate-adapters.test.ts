@@ -27,10 +27,11 @@ function runLauncher(
   repoDir: string,
   args: string[],
   env: NodeJS.ProcessEnv,
+  cwd = repoDir,
 ): ScriptResult {
   const script = path.join(repoDir, '.agent-skill-chain', 'scripts', 'gate-launch-reviewer.sh');
   try {
-    const stdout = execFileSync('bash', [script, ...args], { cwd: repoDir, encoding: 'utf8', env });
+    const stdout = execFileSync('bash', [script, ...args], { cwd, encoding: 'utf8', env });
     return { status: 0, stdout, stderr: '' };
   } catch (error) {
     const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
@@ -83,12 +84,14 @@ const REVIEW_ENV_KEYS = [
   'ANTHROPIC_API_KEY',
   'CLAUDE_CODE_OAUTH_TOKEN',
   'CLAUDE_AUTH_PROBE_CMD',
+  'CLAUDE_CONFIG_DIR',
   'CLAUDE_EXECUTABLE',
   'CLAUDE_CORE_REVIEW_MODEL',
   'CLAUDE_CORE_REVIEW_MODEL_TIER',
   'CLAUDE_CORE_REVIEW_REASONING_TIER',
   'CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD',
   'CODEX_AUTH_PROBE_CMD',
+  'CODEX_HOME',
   'CODEX_EXECUTABLE',
   'CODEX_REVIEWER_CMD',
   'CODEX_REVIEWER_MODEL',
@@ -97,9 +100,17 @@ const REVIEW_ENV_KEYS = [
   'GATE_REVIEWER_CMD',
   'GATE_REVIEWER_RETRIES',
   'GATE_REVIEWER_RETRY_INTERVAL_SEC',
+  'GATE_REVIEWER_TIMEOUT_SEC',
+  'ASC_REVIEWER_ORIGINAL_HOME',
+  'ASC_REVIEWER_SANITIZED_ROOT',
   'ASC_BASE_REF',
   'ASC_REVIEW_SUBJECT',
   'ASC_REVIEW_ADAPTER_REQUESTED',
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
+  'GH_CONFIG_DIR',
+  'GIT_CONFIG_GLOBAL',
+  'GIT_CONFIG_SYSTEM',
 ] as const;
 
 /** 呼出元のレビュー設定を除去し、テストが明示した値だけを加えた hermetic env を作る。 */
@@ -160,6 +171,7 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
   const env = envWithout([], {
     ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
     GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${stubVerdict}'`,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
@@ -179,31 +191,307 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
 });
 
-test('gate reviewer credential boundary: GitHub token・caller HOME・git/gh configをAI subprocessへ継承しない', async (t) => {
+test('claude launch_gate_reviewer: 非標準ディレクトリのCLIとenv shebang runtimeを隔離PATHで起動できる（Issue #691）', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
+  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-runtime-issue691-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(runtimeDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'claude');
+
+  const runtimeName = `issue691-runtime-${process.pid}-${Date.now()}`;
+  const runtime = path.join(runtimeDir, runtimeName);
+  const executable = path.join(runtimeDir, 'claude-nonstandard');
+  const runtimeLog = path.join(runtimeDir, 'runtime.log');
+  const pathLog = path.join(runtimeDir, 'path.log');
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  fs.writeFileSync(
+    runtime,
+    `#!/bin/bash\nprintf 'runtime\\n' >> ${JSON.stringify(runtimeLog)}\nexec /bin/bash "$@"\n`,
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(
+    executable,
+    [
+      `#!/usr/bin/env ${runtimeName}`,
+      'set -euo pipefail',
+      `printf '%s\\n' "$PATH" >> ${JSON.stringify(pathLog)}`,
+      'if [[ "${1:-}" == "auth" && "${2:-}" == "status" ]]; then exit 0; fi',
+      'cat >/dev/null',
+      `printf '%s' ${JSON.stringify(stubVerdict)}`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  const env = envWithout([], {
+    CLAUDE_EXECUTABLE: executable,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+  assert.equal(fs.readFileSync(runtimeLog, 'utf8').trim().split('\n').length, 2, '認証probeとreviewerの双方がenv shebang runtimeを使うこと');
+  for (const reviewerPath of fs.readFileSync(pathLog, 'utf8').trim().split('\n')) {
+    assert.equal(reviewerPath, `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${runtimeDir}`);
+  }
+});
+
+test('gate reviewer credential boundary: caller HOME・Issue worktree・GitHub token・git/gh configをAI subprocessへ継承しない', async (t) => {
+  const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
+
+  const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-caller-home-issue691-'));
+  const observationDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-observation-issue691-'));
+  t.after(() => fs.rmSync(callerHome, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(observationDir, { recursive: true, force: true }));
+  const envLog = path.join(observationDir, 'env.log');
+  const cwdLog = path.join(observationDir, 'cwd.log');
+  const worktreeCli = path.join(worktreePath, 'claude-worktree-stub');
+  fs.mkdirSync(path.join(callerHome, '.claude'), { recursive: true });
+  fs.mkdirSync(path.join(callerHome, '.codex'), { recursive: true });
+  fs.writeFileSync(path.join(callerHome, '.claude', '.credentials.json'), '{"test":true}\n', 'utf8');
+  fs.writeFileSync(path.join(callerHome, '.codex', 'auth.json'), '{"test":true}\n', 'utf8');
+  fs.writeFileSync(worktreeCli, '#!/bin/bash\nexit 0\n', { mode: 0o755 });
   const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
   const command = [
     'cat >/dev/null',
-    'test -z "${GH_TOKEN:-}"',
-    'test -z "${GITHUB_TOKEN:-}"',
-    'test "${GIT_CONFIG_GLOBAL:-}" = /dev/null',
-    'test "${GH_CONFIG_DIR:-}" != "${CALLER_GH_CONFIG_DIR:-}"',
+    `/usr/bin/env > ${JSON.stringify(envLog)}`,
+    `/bin/pwd > ${JSON.stringify(cwdLog)}`,
     `printf '%s' '${stubVerdict}'`,
   ].join('; ');
   const env = envWithout([], {
+    HOME: callerHome,
     ANTHROPIC_API_KEY: 'dummy-key-not-forwarded',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    CLAUDE_EXECUTABLE: worktreeCli,
     GH_TOKEN: 'ghp_credential_boundary_test_value',
     GITHUB_TOKEN: 'github-token-boundary-test',
-    CALLER_GH_CONFIG_DIR: '/credential-bearing/gh',
-    GH_CONFIG_DIR: '/credential-bearing/gh',
+    GH_CONFIG_DIR: path.join(callerHome, '.config', 'gh'),
+    GIT_CONFIG_GLOBAL: path.join(callerHome, '.gitconfig'),
+    GIT_CONFIG_SYSTEM: path.join(callerHome, 'system.gitconfig'),
+    PATH: `${path.join(callerHome, 'bin')}:${process.env.PATH}`,
+    GATE_REVIEWER_CMD: command,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env, worktreePath);
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+
+  const reviewerEnv = fs.readFileSync(envLog, 'utf8');
+  assert.doesNotMatch(reviewerEnv, /^(GH_TOKEN|GITHUB_TOKEN)=/m);
+  assert.doesNotMatch(reviewerEnv, new RegExp(callerHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(reviewerEnv, new RegExp(worktreePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(reviewerEnv, /^GIT_CONFIG_GLOBAL=\/dev\/null$/m);
+  assert.match(reviewerEnv, /^GIT_CONFIG_SYSTEM=\/dev\/null$/m);
+  assert.match(reviewerEnv, /^GH_CONFIG_DIR=\/tmp\/agent-skill-chain-reviewer\.[^/]+\/xdg\/gh$/m);
+  assert.match(reviewerEnv, /^CLAUDE_CONFIG_DIR=\/tmp\/agent-skill-chain-reviewer\.[^/]+\/auth\/claude$/m);
+  assert.doesNotMatch(reviewerEnv, /^CODEX_HOME=/m);
+  const reviewerCwd = fs.readFileSync(cwdLog, 'utf8').trim();
+  assert.notEqual(reviewerCwd, worktreePath);
+  assert.match(reviewerCwd, /^\/tmp\/agent-skill-chain-reviewer\.[^/]+\/workspace$/);
+});
+
+test('claude launch_gate_reviewer: TERMを無視するreviewerのプロセスグループをKILLしてhuman_requiredへ倒す（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-watchdog-issue691-'));
+  const childPidFile = path.join(markerDir, 'child.pid');
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(markerDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'claude');
+
+  const env = envWithout([], {
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    GATE_REVIEWER_CMD: [
+      "trap '' TERM",
+      `/bin/bash -c 'trap "" TERM; while :; do :; done' &`,
+      `printf '%s\\n' "$!" > ${JSON.stringify(childPidFile)}`,
+      'while :; do :; done',
+    ].join('\n'),
+    GATE_REVIEWER_TIMEOUT_SEC: '1',
+    GATE_REVIEWER_RETRIES: '1',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const startedAt = Date.now();
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /レビュア起動に失敗しました（rc=124, attempts=1）/);
+  assert.ok(elapsedMs < 10000, `watchdogが期限と猶予の後にreviewerを停止すること: elapsed=${elapsedMs}ms`);
+  assert.ok(fs.existsSync(childPidFile), 'reviewerの子プロセスが起動したこと');
+  const childPid = Number(fs.readFileSync(childPidFile, 'utf8').trim());
+  assert.throws(() => process.kill(childPid, 0), 'reviewerの子プロセスも残らないこと');
+  const adapter = fs.readFileSync(path.join(repo.dir, '.agent-skill-chain', 'adapters', 'claude.sh'), 'utf8');
+  const runner = adapter.slice(adapter.indexOf('_run_reviewer_sanitized()'), adapter.indexOf('_claude_reviewer_auth_ok()'));
+  assert.doesNotMatch(runner, /(?:\/usr\/bin\/timeout|\/bin\/timeout|command -v timeout)/);
+  assert.match(runner, /kill -TERM -- "-\$watched_pid"/);
+  assert.match(runner, /kill -KILL -- "-\$watched_pid"/);
+});
+
+test('claude launch_gate_reviewer: 不正なtimeout値はreviewer起動前に日本語診断で拒否する（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-invalid-timeout-issue691-'));
+  const reviewerMarker = path.join(markerDir, 'reviewer-invoked');
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(markerDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'claude');
+
+  const env = envWithout([], {
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}`,
+    GATE_REVIEWER_TIMEOUT_SEC: 'not-a-positive-integer',
+    GATE_REVIEWER_RETRIES: '1',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.equal(fs.existsSync(reviewerMarker), false, '不正なtimeout値ではreviewerを起動しないこと');
+  assert.match(res.stderr, /GATE_REVIEWER_TIMEOUT_SEC は正整数で指定してください/);
+});
+
+test('claude launch_gate_reviewer: caller指定rootとsymlink認証ファイルからcaller HOMEへ脱出できない（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-caller-home-issue691-'));
+  const outsideCredential = path.join(callerHome, 'outside-credentials.json');
+  const claudeConfig = path.join(callerHome, '.claude');
+  const observation = path.join(os.tmpdir(), `claude-isolation-observation-${process.pid}-${Date.now()}`);
+  t.after(() => fs.rmSync(callerHome, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(observation, { force: true }));
+  fs.mkdirSync(claudeConfig, { recursive: true });
+  fs.writeFileSync(outsideCredential, '{"secret":"must-not-follow"}\n', 'utf8');
+  fs.symlinkSync(outsideCredential, path.join(claudeConfig, '.credentials.json'));
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const command = [
+    'cat >/dev/null',
+    'test -z "${ASC_REVIEWER_ORIGINAL_HOME:-}"',
+    'test -z "${ASC_REVIEWER_SANITIZED_ROOT:-}"',
+    'test ! -e "${CLAUDE_CONFIG_DIR}/.credentials.json"',
+    'test -z "$(/usr/bin/find "${HOME}/.." -type l -print -quit)"',
+    `printf '%s\n%s\n%s\n' "\${HOME:-}" "\${CLAUDE_CONFIG_DIR:-}" "\${PWD:-}" > ${JSON.stringify(observation)}`,
+    `printf '%s' ${JSON.stringify(stubVerdict)}`,
+  ].join('; ');
+
+  const env = envWithout([], {
+    HOME: callerHome,
+    CLAUDE_CONFIG_DIR: claudeConfig,
+    ANTHROPIC_API_KEY: 'dummy-key',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    ASC_REVIEWER_ORIGINAL_HOME: '/caller-controlled/reviewer-home',
+    ASC_REVIEWER_SANITIZED_ROOT: path.join(callerHome, 'caller-controlled-root'),
     GATE_REVIEWER_CMD: command,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
   assert.equal(res.status, 0, res.stderr);
   assert.equal(readFinal(reportPath), 'approved');
+  const observedPaths = fs.readFileSync(observation, 'utf8');
+  assert.doesNotMatch(observedPaths, new RegExp(callerHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(observedPaths, /^\/tmp\/agent-skill-chain-reviewer\./m);
+});
+
+test('claude launch_gate_reviewer: caller HOME依存の認証不成立は原因と回避手段を診断して再試行しない（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-keychain-home-issue691-'));
+  const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-keychain-root-issue691-'));
+  const reviewerMarker = path.join(isolatedRoot, 'reviewer-invoked');
+  t.after(() => fs.rmSync(callerHome, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(isolatedRoot, { recursive: true, force: true }));
+  const env = envWithout([], {
+    HOME: callerHome,
+    ASC_REVIEWER_SANITIZED_ROOT: isolatedRoot,
+    CLAUDE_AUTH_PROBE_CMD: `test "\${HOME:-}" = ${JSON.stringify(callerHome)}`,
+    GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}`,
+    GATE_REVIEWER_RETRIES: '3',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.equal(fs.existsSync(reviewerMarker), false, '決定的な認証不成立ではレビュアを起動しないこと');
+  assert.match(res.stderr, /隔離環境でClaude Codeの認証probeに失敗/);
+  assert.match(res.stderr, /ANTHROPIC_API_KEYとCLAUDE_CODE_OAUTH_TOKENは未設定/);
+  assert.match(res.stderr, /設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりません/);
+  assert.match(res.stderr, /隔離環境へ持ち込める認証情報がありません/);
+  assert.match(res.stderr, /呼び出し元で `claude auth status` が成功/);
+  assert.match(res.stderr, /test -n "\$\{ANTHROPIC_API_KEY:-\}\$\{CLAUDE_CODE_OAUTH_TOKEN:-\}"/);
+  assert.match(res.stderr, /test -f "\$\{CLAUDE_CONFIG_DIR:-\$HOME\/\.claude\}\/\.credentials\.json"/);
+  assert.match(res.stderr, /macOS Keychain/);
+  assert.doesNotMatch(res.stderr, new RegExp(callerHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('claude launch_gate_reviewer: tokenが存在しても隔離環境の認証probe失敗を高速経路で迂回しない（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-fast-path-issue691-'));
+  const callerHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-token-home-issue691-'));
+  const reviewerMarker = path.join(markerDir, 'reviewer-invoked');
+  t.after(() => fs.rmSync(markerDir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(callerHome, { recursive: true, force: true }));
+  const secretToken = 'issue691-invalid-token-must-not-be-logged';
+  const env = envWithout([], {
+    HOME: callerHome,
+    ANTHROPIC_API_KEY: secretToken,
+    CLAUDE_AUTH_PROBE_CMD: 'false',
+    GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}`,
+    GATE_REVIEWER_RETRIES: '3',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.equal(fs.existsSync(reviewerMarker), false);
+  assert.match(res.stderr, /環境変数による資格情報: 設定されています（実値は表示しません）/);
+  assert.match(res.stderr, /設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりません/);
+  assert.match(res.stderr, /持ち込み可能な認証情報は検出されましたが、隔離環境の認証probeが失敗/);
+  assert.doesNotMatch(res.stderr, new RegExp(secretToken));
+  assert.doesNotMatch(res.stderr, new RegExp(callerHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('claude launch_gate_reviewer: 設定ディレクトリのログイン情報があってprobeに失敗した原因を区別する（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const claudeConfig = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-config-diagnostic-issue691-'));
+  const secretCredential = 'issue691-credential-content-must-not-be-logged';
+  t.after(() => fs.rmSync(claudeConfig, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(claudeConfig, '.credentials.json'), secretCredential, 'utf8');
+  const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
+    CLAUDE_CONFIG_DIR: claudeConfig,
+    CLAUDE_AUTH_PROBE_CMD: 'false',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /ANTHROPIC_API_KEYとCLAUDE_CODE_OAUTH_TOKENは未設定/);
+  assert.match(res.stderr, /設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりました/);
+  assert.match(res.stderr, /持ち込み可能な認証情報は検出されましたが、隔離環境の認証probeが失敗/);
+  assert.doesNotMatch(res.stderr, new RegExp(secretCredential));
+  assert.doesNotMatch(res.stderr, new RegExp(claudeConfig.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('claude launch_gate_reviewer: 認証未設定かつ実疎通確認も失敗する場合は安全側（human_required）へ倒し exit が 0 でも 3 でもない（真の認証欠如、regressionなし）', async (t) => {
@@ -211,9 +499,8 @@ test('claude launch_gate_reviewer: 認証未設定かつ実疎通確認も失敗
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
 
-  // Given: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 未設定。Issue #185で認証チェックが
-  // env非空→claude auth statusの実疎通フォールバックの2段化になったため、CLAUDE_AUTH_PROBE_CMD=false
-  // でプローブを常に失敗させ、実行機のclaude CLIの実際の認証状態に依存せずhermeticにする。
+  // Given: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 未設定。CLAUDE_AUTH_PROBE_CMD=falseで
+  // プローブを常に失敗させ、実行機のclaude CLIの実際の認証状態に依存せずhermeticにする。
   const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
     CLAUDE_AUTH_PROBE_CMD: 'false',
@@ -258,6 +545,7 @@ test('claude launch_gate_reviewer: レビュア起動失敗は human_required �
   // Given: 認証キーはあるが、レビュアが非ゼロ終了する（API 障害相当）。
   const env = envWithout([], {
     ANTHROPIC_API_KEY: 'dummy-key',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
     GATE_REVIEWER_CMD: 'cat >/dev/null; exit 1',
     GATE_REVIEWER_RETRIES: '2',
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
@@ -277,9 +565,7 @@ test('claude launch_gate_reviewer: 呼び出し元のANTHROPIC_API_KEYを隔離�
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
 
-  // Given: 隔離サブプロセス内でANTHROPIC_API_KEYの値そのものを検査するコマンド
-  // （_claude_auth_ok()の高速パスは呼び出し元プロセスで判定済みのため、ここでは
-  // 実際に起動される隔離env -iサブプロセス側に値が渡っているかだけを確認する）。
+  // Given: 隔離サブプロセス内でANTHROPIC_API_KEYの値そのものを検査するコマンド。
   const command = [
     'cat >/dev/null',
     'test "${ANTHROPIC_API_KEY:-}" = "issue562-forwarded-key"',
@@ -287,6 +573,7 @@ test('claude launch_gate_reviewer: 呼び出し元のANTHROPIC_API_KEYを隔離�
   ].join('; ');
   const env = envWithout([], {
     ANTHROPIC_API_KEY: 'issue562-forwarded-key',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
     GATE_REVIEWER_CMD: command,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
@@ -310,6 +597,7 @@ test('claude launch_gate_reviewer: 呼び出し元のCLAUDE_CODE_OAUTH_TOKENを�
   ].join('; ');
   const env = envWithout(['ANTHROPIC_API_KEY'], {
     CLAUDE_CODE_OAUTH_TOKEN: 'issue562-forwarded-oauth-token',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
     GATE_REVIEWER_CMD: command,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
@@ -320,23 +608,27 @@ test('claude launch_gate_reviewer: 呼び出し元のCLAUDE_CODE_OAUTH_TOKENを�
   assert.equal(readFinal(reportPath), 'approved');
 });
 
-test('claude launch_gate_reviewer: いずれのトークンも未設定でも既存のCLAUDE_CONFIG_DIRファイルベース認証引き継ぎ挙動は変化しない（AC-2）', async (t) => {
+test('claude launch_gate_reviewer: CLAUDE_CONFIG_DIRの認証ファイルだけを隔離領域へ複製する（Issue #691）', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'claude');
 
   const fakeClaudeConfig = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-config-issue562-'));
   t.after(() => fs.rmSync(fakeClaudeConfig, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(fakeClaudeConfig, '.credentials.json'), '{"marker":"staged-credential"}\n', 'utf8');
+  fs.writeFileSync(path.join(fakeClaudeConfig, 'settings.json'), '{"hooks":"must-not-copy"}\n', 'utf8');
 
   const command = [
     'cat >/dev/null',
     'test -z "${ANTHROPIC_API_KEY:-}"',
     'test -z "${CLAUDE_CODE_OAUTH_TOKEN:-}"',
-    `test "\${CLAUDE_CONFIG_DIR:-}" = ${JSON.stringify(fakeClaudeConfig)}`,
+    `test "\${CLAUDE_CONFIG_DIR:-}" != ${JSON.stringify(fakeClaudeConfig)}`,
+    'grep -q staged-credential "${CLAUDE_CONFIG_DIR}/.credentials.json"',
+    'test ! -e "${CLAUDE_CONFIG_DIR}/settings.json"',
     'printf \'%s\' \'{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}\'',
   ].join('; ');
   const env = envWithout(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'], {
-    CLAUDE_AUTH_PROBE_CMD: 'true',
+    CLAUDE_AUTH_PROBE_CMD: 'grep -q staged-credential "${CLAUDE_CONFIG_DIR}/.credentials.json"',
     CLAUDE_CONFIG_DIR: fakeClaudeConfig,
     GATE_REVIEWER_CMD: command,
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
@@ -439,6 +731,40 @@ test('codex launch_gate_reviewer: 認証不成立は gate を approve せず hum
   assert.notEqual(res.status, 0, '認証不成立は exit 0（完了）にならないこと');
   assert.notEqual(res.status, 3);
   assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /隔離環境でCodexの認証が成立しません/);
+});
+
+test('codex launch_gate_reviewer: auth.jsonだけを隔離CODEX_HOMEへ複製して起動する（Issue #691）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'codex');
+
+  const callerCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-home-issue691-'));
+  t.after(() => fs.rmSync(callerCodexHome, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(callerCodexHome, 'auth.json'), '{"marker":"codex-staged-auth"}\n', 'utf8');
+  fs.writeFileSync(path.join(callerCodexHome, 'config.toml'), 'must_not_copy = true\n', 'utf8');
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const command = [
+    'cat >/dev/null',
+    `test "\${CODEX_HOME:-}" != ${JSON.stringify(callerCodexHome)}`,
+    'grep -q codex-staged-auth "${CODEX_HOME}/auth.json"',
+    'test ! -e "${CODEX_HOME}/config.toml"',
+    'test -z "${CLAUDE_CONFIG_DIR:-}"',
+    'test -z "${ANTHROPIC_API_KEY:-}"',
+    `printf '%s' ${JSON.stringify(stubVerdict)}`,
+  ].join('; ');
+  const env = envWithout([], {
+    CODEX_HOME: callerCodexHome,
+    ANTHROPIC_API_KEY: 'must-not-cross-provider-boundary',
+    CODEX_AUTH_PROBE_CMD: 'grep -q codex-staged-auth "${CODEX_HOME}/auth.json"',
+    CODEX_REVIEWER_CMD: command,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
 });
 
 test('codex launch_gate_reviewer: Codex CLI 不在は cleanup 後も error を返す', async (t) => {
@@ -581,6 +907,7 @@ test('claude core reviewer: 実在model・能力attestation・reasoning probeを
     ASC_BASE_REF: 'main',
     ASC_REVIEW_SUBJECT: 'core_audit',
     ANTHROPIC_API_KEY: 'dummy',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
     CLAUDE_EXECUTABLE: stub.executable,
     CLAUDE_CORE_REVIEW_MODEL: 'claude-frontier-test-model',
     CLAUDE_CORE_REVIEW_MODEL_TIER: 'frontier_coding',
@@ -635,6 +962,7 @@ test('gate-launch-reviewer.sh: 完了(0)/deferred(3)/error(≠0,≠3) の終了�
     setAdapter(repo.dir, 'claude');
     const env = envWithout([], {
       ANTHROPIC_API_KEY: 'dummy',
+      CLAUDE_AUTH_PROBE_CMD: 'true',
       GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '{"conformance":"pass","falsification":"pass","blockers":[]}'`,
       GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
     });
