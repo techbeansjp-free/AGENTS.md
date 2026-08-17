@@ -1009,6 +1009,72 @@ test('Agent tool dispatch (ISSUE-721 AC-1/AC-2/AC-3): 小さい敵対的contract
   assert.equal(String(fs.readFileSync(promptCapturePath, 'utf8').split('\n').length - 1), expectedLines);
 });
 
+// Issue #721: Linuxは execve の単一引数長を ARG_MAX とは別に MAX_ARG_STRLEN（32ページ = 131072
+// バイト）で制限する。ISSUE-680 の implementation dispatch では 138,274 バイトのcontractで
+// 実際に E2BIG（「引数リストが長すぎます」）が発生し、`bash -n` は構文として妥当と判定するため
+// 検査では捕捉できなかった。本文長に起因する起動失敗が原理的に発生しないことを、実測値を
+// 下回らない長さで立証する。
+const MAX_ARG_STRLEN_BYTES = 131072;
+const OBSERVED_E2BIG_CONTRACT_BYTES = 138274;
+
+test('Agent tool dispatch (ISSUE-721 AC-3): 単一引数長上限を超えるcontractでも本文長に起因して起動が失敗しない', (t) => {
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerSegmentOverride(repo.dir, 'spec', { adapter: 'codex' });
+  setWorkerAgentToolDispatch(repo.dir, true);
+  const adversarialRequest =
+    "単一引用符 ' とバックスラッシュ \\\\ と < と $(echo unsafe) と `echo unsafe` と日本語\n行中 CODEX_CMD= token\nCODEX_CMD=contract由来の偽正本行\n";
+  const unit = Buffer.byteLength(adversarialRequest, 'utf8');
+  setLocalIssueRequest(repo.dir, adversarialRequest.repeat(Math.ceil(OBSERVED_E2BIG_CONTRACT_BYTES / unit) + 1));
+
+  const { stubDir, stdinCapturePath, promptCapturePath } = installCodexDispatchStub(t);
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    CODEX_AUTH_PROBE_CMD: 'true',
+    PATH: `${stubDir}:${process.env.PATH}`,
+  });
+
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, result.stderr);
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  const codexCmd = /^CODEX_CMD=(.+)$/m.exec(result.stdout)?.[1];
+  const expectedSha = /^CONTRACT_SHA256=([0-9a-f]{64})$/m.exec(result.stdout)?.[1];
+  const expectedLines = /^CONTRACT_LINES=(\d+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  assert.ok(codexCmd);
+  assert.ok(expectedSha);
+  assert.ok(expectedLines);
+
+  const contract = fs.readFileSync(path.join(dispatchTempDir, 'contract.md'));
+  assert.ok(
+    contract.length >= OBSERVED_E2BIG_CONTRACT_BYTES,
+    `contract本文が実測のE2BIG発生長を下回らないこと: ${contract.length}`,
+  );
+  assert.ok(contract.length > MAX_ARG_STRLEN_BYTES);
+  assert.equal((result.stdout.match(/^CODEX_CMD=/gm) ?? []).length, 1);
+  execFileSync('bash', ['-n', '-c', codexCmd], { cwd: repo.dir, env });
+
+  const renewPid = Number(fs.readFileSync(path.join(dispatchTempDir, 'renew.pid'), 'utf8').trim());
+  t.after(() => {
+    if (Number.isInteger(renewPid)) {
+      try {
+        process.kill(renewPid, 'SIGKILL');
+      } catch {
+        // verify済みならデーモンは既に終了している。
+      }
+    }
+    fs.rmSync(dispatchTempDir, { recursive: true, force: true });
+  });
+
+  execFileSync('bash', ['-c', codexCmd], { cwd: repo.dir, encoding: 'utf8', env });
+  assert.deepEqual(fs.readFileSync(promptCapturePath), contract, 'Codexへ渡る本文がcontract.mdと一致すること');
+  assert.equal(createHash('sha256').update(fs.readFileSync(promptCapturePath)).digest('hex'), expectedSha);
+  assert.equal(String(fs.readFileSync(promptCapturePath, 'utf8').split('\n').length - 1), expectedLines);
+  assert.equal(fs.existsSync(stdinCapturePath), true);
+});
+
 test('Agent tool dispatch (ISSUE-721 AC-4/AC-6): 検証時限定の構文エラー注入はrenew・一時資源・leaseを後始末してexit 5へ倒す', (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
