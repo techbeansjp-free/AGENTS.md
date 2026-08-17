@@ -55,6 +55,7 @@ function gateEvidence(options: {
   targetSha: string;
   attemptId: string;
   expectedCount?: ReviewEvidence['expected_count'];
+  profile?: ReviewEvidence['profile'];
   reviewerSlot?: ReviewEvidence['reviewer']['slot'];
   promptDigest?: string;
   conformance?: ReviewEvidence['verdict']['conformance'];
@@ -68,7 +69,7 @@ function gateEvidence(options: {
     schema_version: 'agent-skill-chain/gate-review-evidence/v3',
     issue_id: options.issueId,
     gate: options.gate,
-    profile: expectedCount === 2 ? 'strict' : 'standard',
+    profile: options.profile ?? (expectedCount === 2 ? 'strict' : 'standard'),
     target_sha: options.targetSha,
     attempt_id: options.attemptId,
     expected_count: expectedCount,
@@ -400,6 +401,135 @@ test('segment start (github backend): local HEADと異なるPR head SHAのblocki
   assert.match(result.stdout, /PR-HEAD-BLOCKER/);
   assert.match(result.stdout, /PR headを対象とする最新findingです/);
   assert.doesNotMatch(result.stdout, /gate_review_target_sha/);
+});
+
+test('segment start (github backend): strictでexpected_count=1のattemptは過去のblocking findingを消さない', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 703);
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-703',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-703-blocking-old',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'PROFILE-COUNT-PREVIOUS-BLOCKER',
+          evidence: ['profileとexpected_countが整合しないattemptより前のfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-703',
+        gate: 'spec',
+        targetSha,
+        attemptId: 'attempt-703-profile-count-mismatch',
+        profile: 'strict',
+        expectedCount: 1,
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-703', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /GATE_REVIEW_ATTEMPT_INCOMPLETE/);
+  assert.match(result.stdout, /PROFILE-COUNT-PREVIOUS-BLOCKER/);
+  assert.match(result.stdout, /profileとexpected_countが整合しないattemptより前のfindingです/);
+});
+
+test('segment start (github backend): PR head前進後も旧SHAのblocking findingを未再判定として保持する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 704);
+  const previousSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const currentSha = 'e'.repeat(40);
+  const state = stub.readState();
+  const pr = Object.values(state.prsByBranch ?? {}).find((candidate) => candidate.number === prNumber);
+  assert.ok(pr);
+  pr.headRefOid = currentSha;
+  stub.writeState(state);
+  stub.seedPrReviews(prNumber, [{
+    state: 'COMMENTED',
+    author: { login: 'adachi-tatsuru' },
+    body: gateEvidence({
+      issueId: 'ISSUE-704',
+      gate: 'spec',
+      targetSha: previousSha,
+      attemptId: 'attempt-704-previous-head',
+      blockers: [{
+        severity: 'blocking',
+        origin: 'specification',
+        code: 'PREVIOUS-SHA-BLOCKER',
+        evidence: ['PR head前進前に確認されたfindingです'],
+      }],
+    }),
+    submittedAt: '2026-08-15T00:00:00Z',
+  }]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-704', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /PREVIOUS-SHA-BLOCKER/);
+  assert.match(result.stdout, /PR head前進前に確認されたfindingです/);
+  assert.match(result.stdout, /現在のPR head .* と異なるため未再判定です/);
+});
+
+test('segment start (github backend): 現在のPR headに対する確定attemptで旧SHAのblocking findingを置換する', (t) => {
+  const { repo, stub, env, prNumber } = prepareReviewStatusSegment(t, 705);
+  const previousSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const currentSha = 'e'.repeat(40);
+  const state = stub.readState();
+  const pr = Object.values(state.prsByBranch ?? {}).find((candidate) => candidate.number === prNumber);
+  assert.ok(pr);
+  pr.headRefOid = currentSha;
+  stub.writeState(state);
+  stub.seedPrReviews(prNumber, [
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-705',
+        gate: 'spec',
+        targetSha: previousSha,
+        attemptId: 'attempt-705-previous-head',
+        blockers: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'SUPERSEDED-PREVIOUS-SHA-BLOCKER',
+          evidence: ['現在のPR headに対する確定attemptで解消されるfindingです'],
+        }],
+      }),
+      submittedAt: '2026-08-15T00:00:00Z',
+    },
+    {
+      state: 'COMMENTED',
+      author: { login: 'adachi-tatsuru' },
+      body: gateEvidence({
+        issueId: 'ISSUE-705',
+        gate: 'spec',
+        targetSha: currentSha,
+        attemptId: 'attempt-705-current-head',
+        blockers: [],
+      }),
+      submittedAt: '2026-08-15T00:01:00Z',
+    },
+  ]);
+
+  const result = runCli(['segment', 'start', 'ISSUE-705', 'spec'], { cwd: repo.dir, env });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /SUPERSEDED-PREVIOUS-SHA-BLOCKER/);
+  assert.doesNotMatch(result.stdout, /現在のPR headに対する確定attemptで解消されるfindingです/);
+  assert.doesNotMatch(result.stdout, /未再判定/);
 });
 
 test('segment start (github backend): PR head SHAを取得できない場合はlocal HEADへfallbackしない', (t) => {

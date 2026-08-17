@@ -273,7 +273,6 @@ function unresolvedGateFindings(
       if (
         evidence?.schema_version === 'agent-skill-chain/gate-review-evidence/v3' &&
         evidence.issue_id === `ISSUE-${issueNumber}` &&
-        evidence.target_sha === targetSha &&
         SEGMENTS.includes(evidence.gate) &&
         typeof evidence.attempt_id === 'string' &&
         isEvidenceVerdict(evidence.verdict)
@@ -350,6 +349,11 @@ function unresolvedGateFindings(
       if (expectedCounts.size !== 1) return false;
       const expectedCount = entries[0]?.evidence.expected_count;
       if (expectedCount !== 1 && expectedCount !== 2) return false;
+      const profile = entries[0]?.evidence.profile;
+      if (
+        (profile !== 'standard' || expectedCount !== 1) &&
+        (profile !== 'strict' || expectedCount !== 2)
+      ) return false;
       const slots = entries.map(({ evidence }) => evidence.reviewer?.slot);
       const metadataIsCoherent = [
         entries.map(({ evidence }) => evidence.profile),
@@ -375,14 +379,51 @@ function unresolvedGateFindings(
     const latestEntry = (attempt: typeof forGate) => attempt.reduce((latest, entry) =>
       compareReviewEntries(entry.entry, latest.entry) > 0 ? entry : latest,
     );
-    const latestConclusiveAttempt = conclusiveAttempts.reduce<typeof forGate | undefined>((latest, candidate) => {
-      if (!latest) return candidate;
-      return compareReviewEntries(latestEntry(candidate).entry, latestEntry(latest).entry) > 0 ? candidate : latest;
-    }, undefined);
+    const appendAttemptBlockers = (attempt: typeof forGate): void => {
+      for (const { evidence } of attempt) {
+        for (const finding of evidence.verdict.blockers) {
+          if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
+            findings.push({
+              ...finding,
+              ...(evidence.target_sha !== targetSha
+                ? {
+                    evidence: [
+                      ...finding.evidence,
+                      `このblocking findingのtarget_sha (${evidence.target_sha}) は現在のPR head (${targetSha}) と異なるため未再判定です`,
+                    ],
+                  }
+                : {}),
+              source_segment: sourceSegment,
+            });
+          }
+        }
+      }
+    };
+    // Issue #680: 記録済みblockerは、同一SHAか現在のPR headを後から確定判定した場合だけ解消する。
+    const isSupersededByConclusiveAttempt = (attempt: typeof forGate): boolean => {
+      const attemptTargetSha = attempt[0]?.evidence.target_sha;
+      return conclusiveAttempts.some((candidate) => (
+        candidate !== attempt &&
+        compareReviewEntries(latestEntry(candidate).entry, latestEntry(attempt).entry) > 0 &&
+        (
+          candidate[0]?.evidence.target_sha === attemptTargetSha ||
+          candidate[0]?.evidence.target_sha === targetSha
+        )
+      ));
+    };
+    const activeConclusiveAttempts = conclusiveAttempts.filter((attempt) => (
+      !isSupersededByConclusiveAttempt(attempt)
+    ));
+    const latestCurrentConclusiveAttempt = conclusiveAttempts
+      .filter((attempt) => attempt[0]?.evidence.target_sha === targetSha)
+      .reduce<typeof forGate | undefined>((latest, candidate) => {
+        if (!latest) return candidate;
+        return compareReviewEntries(latestEntry(candidate).entry, latestEntry(latest).entry) > 0 ? candidate : latest;
+      }, undefined);
     const activeMalformedEntries = sourceSegment === segment
       ? trustedMalformedEntries.filter(({ entry }) => (
-          !latestConclusiveAttempt ||
-          compareReviewEntries(entry, latestEntry(latestConclusiveAttempt).entry) > 0
+          !latestCurrentConclusiveAttempt ||
+          compareReviewEntries(entry, latestEntry(latestCurrentConclusiveAttempt).entry) > 0
         ))
       : [];
     if (activeMalformedEntries.length > 0) {
@@ -399,10 +440,7 @@ function unresolvedGateFindings(
     }
     const activeIncompleteAttempts = attempts
       .filter((entries) => !completeAttempts.includes(entries))
-      .filter((entries) => (
-        !latestConclusiveAttempt ||
-        compareReviewEntries(latestEntry(entries).entry, latestEntry(latestConclusiveAttempt).entry) > 0
-      ));
+      .filter((entries) => !isSupersededByConclusiveAttempt(entries));
     if (activeIncompleteAttempts.length > 0) {
       findings.push({
         severity: 'blocking',
@@ -412,22 +450,13 @@ function unresolvedGateFindings(
         source_segment: sourceSegment,
       });
       for (const attempt of activeIncompleteAttempts) {
-        for (const { evidence } of attempt) {
-          for (const finding of evidence.verdict.blockers) {
-            if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
-              findings.push({ ...finding, source_segment: sourceSegment });
-            }
-          }
-        }
+        appendAttemptBlockers(attempt);
       }
     }
 
     const activeInconclusiveAttempts = completeAttempts
       .filter((entries) => !conclusiveAttempts.includes(entries))
-      .filter((entries) => (
-        !latestConclusiveAttempt ||
-        compareReviewEntries(latestEntry(entries).entry, latestEntry(latestConclusiveAttempt).entry) > 0
-      ));
+      .filter((entries) => !isSupersededByConclusiveAttempt(entries));
     if (activeInconclusiveAttempts.length > 0) {
       findings.push({
         severity: 'blocking',
@@ -437,24 +466,12 @@ function unresolvedGateFindings(
         source_segment: sourceSegment,
       });
       for (const attempt of activeInconclusiveAttempts) {
-        for (const { evidence } of attempt) {
-          for (const finding of evidence.verdict.blockers) {
-            if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
-              findings.push({ ...finding, source_segment: sourceSegment });
-            }
-          }
-        }
+        appendAttemptBlockers(attempt);
       }
     }
 
-    if (!latestConclusiveAttempt) continue;
-
-    for (const { evidence } of latestConclusiveAttempt) {
-      for (const finding of evidence.verdict.blockers) {
-        if (finding.severity === 'blocking' && finding.origin === targetOrigin) {
-          findings.push({ ...finding, source_segment: sourceSegment });
-        }
-      }
+    for (const attempt of activeConclusiveAttempts) {
+      appendAttemptBlockers(attempt);
     }
   }
   return { findings, ...(evidenceFailure ? { evidenceFailure } : {}) };
