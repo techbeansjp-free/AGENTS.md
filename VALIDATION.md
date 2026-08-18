@@ -183,8 +183,18 @@
 #   .agent-skill-chain/ci/verify-artifacts.sh ISSUE-741 --started-segments spec,design,implementation -> 0
 # .agent-skill-chain/ci/verify-ac-coverage.sh ISSUE-741 は本ファイル作成後に実行し、
 # 全 AC-ID の対応と孤児の不在を確認した（終了コード0）。
-# PR #746 のリモート CI は verify・verify-config-doc-sync がいずれも SUCCESS、
-# mergeStateStatus は CLEAN である（PR は Draft のまま）。
+# 本ファイルを commit すると独立検証セグメントが開始済みとなるため、commit 後に
+# detect-changed-segments.sh を再実行して S が spec,design,implementation,validation の
+# 4件になることを確認し、その S で verify-artifacts.sh を再実行して終了コード0を確認した。
+# リモート CI（本ファイルを含む SHA 82be9f0b1a9f13cfdb021503bd554567249aab7d に対する実行）:
+#   verify・verify-config-doc-sync がいずれも SUCCESS。verify job の各ステップは
+#   verify-root-clean のみ skipped（PR が Draft のため実行条件を満たさない）で、
+#   Derive issue_id・Detect started segments・verify-artifacts・verify-spec-bdd・
+#   verify-design-diagram・verify-ac-coverage・verify-adr・lint-vocab・lint-references・
+#   lint-secrets・adr-lint を含む他の全ステップが success。
+#   すなわち本変更が導入した3引数形式の呼び出しは実 CI 環境でも通しで成立している。
+# PR は Draft のままであり、本セグメントでは遷移させていない。mergeStateStatus は
+# その後 default branch が前進したため BEHIND であり、マージ準備の判断は進行役の責務である。
 #
 # ============================================================================
 # 制約
@@ -577,8 +587,12 @@ regression:
       verify-config-doc-sync・verify-root-clean・verify-artifacts・verify-ac-coverage、および
       lint-vocab・lint-references・lint-secrets（--diff origin/main）・adr-lint check。すべて終了コード0。
     - |-
-      PR #746 のリモート CI: verify と verify-config-doc-sync がいずれも SUCCESS、
-      mergeStateStatus は CLEAN。PR は Draft のままであり、本セグメントでは遷移させていない。
+      PR #746 のリモート CI（本ファイルを含む SHA 82be9f0b1a9f13cfdb021503bd554567249aab7d
+      に対する実行）: verify と verify-config-doc-sync がいずれも SUCCESS。verify job の各ステップは
+      verify-root-clean のみ skipped（PR が Draft のため実行条件を満たさない）で、
+      Detect started segments・verify-artifacts・verify-ac-coverage を含む他の全ステップが success。
+      本変更が導入した3引数形式の呼び出しが実 CI 環境でも通しで成立することを示す。
+      PR は Draft のままであり、本セグメントでは遷移させていない。
     - |-
       非退行の確認（本変更で新たに失敗しないこと）: quick 免除有効の経路（AC-4）、
       quick シグナル未解決の経路（AC-12・AC-13）、文書のみの主経路と要求・要件から順に
