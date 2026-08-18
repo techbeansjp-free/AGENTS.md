@@ -76,12 +76,12 @@ jobs:
         # verify-artifacts の code 判定（git diff base...HEAD）が base を解決できるようにする。
         # actions/checkout@v7.0.1 はPRのマージrefのみをフェッチし、baseブランチ自体はローカルに
         # 存在しないため（PR #172 run 29717941752 で実落ち）、ここで明示的にフェッチする
-        # actions/checkout がremote.origin.fetchをPRのマージrefへ限定する環境でも
-        # `origin/$BASE_REF` を解決できるよう、remote-tracking refの更新先を明示する。
+        # （下記 verify-adr ステップと同一パターン。remote.origin.fetch の既定refspecにより
+        # `origin/$BASE_REF` としてローカルへ反映される）。
         if: github.base_ref != ''
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: git fetch origin "refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+        run: git fetch origin "$BASE_REF"
 
       - name: Derive issue_id
         id: ctx
@@ -177,7 +177,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin "refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          git fetch origin "$BASE_REF"
           CHANGED_ADRS="$(git diff --name-only "origin/$BASE_REF"...HEAD -- 'docs/adr/*.md')"
           for adr_path in $CHANGED_ADRS; do
             ./.agent-skill-chain/ci/verify-adr.sh "$adr_path"
@@ -195,7 +195,7 @@ jobs:
         if: github.base_ref != '' && steps.ctx.outputs.skip_checks != 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: git fetch origin "refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+        run: git fetch origin "$BASE_REF"
 
       - name: lint-secrets (PRで追加された行のみ)
         if: github.base_ref != '' && steps.ctx.outputs.skip_checks != 'true'
