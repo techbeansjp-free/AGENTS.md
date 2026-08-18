@@ -231,7 +231,7 @@ export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | 
 
 - 要件1: 準備段の目的を「信頼実行環境の用意」に限定し、consumer project 固有のビルド処理を起動せず、その成否を前提としない。
 - 要件2: `package.json`・lockfile・build script のいずれも持たない consumer project でも準備段が成立する。
-- 要件3: 信頼実行環境は次の全てを満たす。(a) レビュア起動・prompt 生成・verdict 記録に使う実行コードと asset が、審査対象（target SHA の Issue worktree）由来でない。(b) その由来が実行時に識別でき、証跡へ記録される値（trusted base SHA・launcher digest・隔離種別）が consumer project での実行においても実際に埋まる。(c) 隔離環境が credential を伴う remote を保持しない。
+- 要件3: 信頼実行環境は次の全てを満たす。(a) レビュア起動・prompt 生成・verdict 記録に使う実行コードと asset が、審査対象（target SHA の Issue worktree）由来でない。(b) その由来が実行時に識別でき、証跡へ記録される値（trusted base SHA・launcher digest・隔離種別）が consumer project での実行においても実際に埋まる。(c) 隔離環境に登録された remote が1件も存在しない。隔離 clone は local path から作られるため remote の URL に credential を含まず、「URL が credential を含まないこと」を条件に置くと常に真となり検査として機能しない。remote が登録されたまま残れば、ambient な credential helper や global Git 設定を経由して外部への push・fetch 経路が生きるため、remote の不在そのものを要件とする。
 - 要件4: 信頼実行環境を用意できない場合は実行しない。審査対象コードへのフォールバックを行わず、非0終了と、不成立の前提および是正手段を含む日本語メッセージを出す。
 - 要件5: 既存の拒否経路（Issue worktree からの記録、recorder HEAD 不一致、protected base worktree の dirty）は現状のまま有効である。
 - 要件6: launcher digest の算出対象は配布集合の要素のみで構成する（上限）。同時に、レビュア起動・prompt 生成・verdict 記録を実際に行う実行コードと、その実行系が隔離 clone から読み込む asset のうち配布集合に属するものは、必ず算出対象に含める（下限）。下限の具体的な範囲は、実地確認した事実に原文引用した現行 `LOCAL_REVIEW_LAUNCHER_PATHS` の要素から `.agent-skill-chain/project/` 配下の2件を除いた残り全件を下回らない。配布集合外の文書（consumer 固有 project policy 文書を含む）は算出対象に含めず、その有無・内容によって証跡記録が失敗せず digest 値も変動しない。加えて、算出対象として定めた配布集合の要素のいずれかを trusted base SHA から取得できない場合は、取得できた要素だけの部分集合で digest を算出せず、非0終了して証跡を投稿しない。
@@ -335,11 +335,11 @@ AC-14 は個別要件の検証に加えて、要求全体（consumer project か
 - Then: 実行された CLI 実体のパスが隔離 clone のディレクトリ配下にあり、用意した隔離 clone 外の2実体はいずれも実行されない。隔離 clone 内に CLI 実体を用意できない場合は、外部の実体へ落ちずに AC-5 の経路で非0終了する。ただし本 AC の Given が定める実行環境は AC-14 の Given を満たすため、当該環境で隔離 clone 内に CLI 実体を用意できないまま非0終了する実装は AC-14 を充足しない
 - 検証方法見込み: `automated`
 
-#### AC-11: 隔離環境が credential を伴う remote を保持しない
+#### AC-11: 隔離 clone に remote が登録されていない
 
 - Given: レビュア起動段へ到達した実行における隔離 clone
 - When: レビュア起動スクリプトが実行される
-- Then: 隔離 clone に登録された remote が存在しない、または登録された全 remote の URL が credential を含まない。実地確認した事実に原文引用した `git -C "$TRUSTED_ROOT" remote remove origin` による remote 不在の状態は本条件を充足する
+- Then: 隔離 clone に登録された remote が1件も存在しない（隔離 clone に対する `git remote` の出力が空である）。remote が登録されたまま、その URL が credential を含まないことをもって本条件を充足したとは見なさない。実地確認した事実に原文引用した `git -C "$TRUSTED_ROOT" remote remove origin` に相当する remote 削除を行わず remote を残す実装は本条件を充足しない
 - 検証方法見込み: `automated`
 
 #### AC-12: 下限に属する算出対象要素を取得できない場合に launcher digest が算出されない
