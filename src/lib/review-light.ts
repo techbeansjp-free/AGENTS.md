@@ -1,4 +1,5 @@
 import { gh } from './exec.js';
+import { parseGhArrayResponse } from './gh-json.js';
 import { reviewFilePath, stateFilePath, type CoordinationBackend } from './local-state.js';
 import { classifyCoreReview, type CoreReviewDecision } from './model-selection.js';
 import { resolveReviewProfile, type ReviewAutonomy, type ReviewRisk } from './review-profile.js';
@@ -91,11 +92,6 @@ function readLocalSignal(root: string, issueNumber: string): ReviewSignal {
   };
 }
 
-function flattenEvents(value: unknown): GithubIssueEvent[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => (Array.isArray(entry) ? flattenEvents(entry) : [entry as GithubIssueEvent]));
-}
-
 /** review:light の直近 labeled event が GitHub User によるものかを安全側に検証する。 */
 export function verifyGrantorIsHuman(
   root: string,
@@ -104,12 +100,13 @@ export function verifyGrantorIsHuman(
 ): boolean {
   if (backend === 'local') return false;
   const response = gh(
-    ['api', `repos/{owner}/{repo}/issues/${issueNumber}/events`, '--paginate', '--slurp'],
+    ['api', `repos/{owner}/{repo}/issues/${issueNumber}/events`, '--paginate'],
     root,
   );
   if (response.status !== 0) return false;
   try {
-    const events = flattenEvents(JSON.parse(response.stdout)).filter(
+    // Issue #774: 解釈失敗は例外として送出され、下の catch で「検証不成立」（strict 側）へ倒れる。
+    const events = parseGhArrayResponse<GithubIssueEvent>(response.stdout).filter(
       (event) => event.event === 'labeled' && event.label?.name === LIGHT_REVIEW_LABEL,
     );
     if (
