@@ -710,7 +710,7 @@ launch_gate_reviewer() {
 # Agent tool dispatch中にwriter leaseを更新する独立デーモン。第2引数の一時ディレクトリは
 # 起動コマンドラインへそのまま残り、verify側がPID再利用を検知する識別子になる。
 _dispatch_lease_renew_daemon() {
-  local issue_id="$1" dispatch_temp_dir="$2" renew_interval="$3" max_wait="$4"
+  local issue_id="$1" dispatch_temp_dir="$2" renew_interval="$3" max_wait="$4" detach_mode="${5:-}"
   local started=$SECONDS elapsed remaining wait_sec wait_pid=""
 
   # /dev/nullへのreadはEOFで即時復帰するため待機には使えない。sleepを明示的な子として保持し、
@@ -722,6 +722,16 @@ _dispatch_lease_renew_daemon() {
     fi
     exit 0
   ' TERM INT HUP
+  # Issue #757: nohupから継承したSIGHUP無視を上の共通cleanup trapで上書きしない。
+  # TERM・INTは引き続き子sleepを止めて終了し、setsid・perl経路のHUP動作も維持する。
+  if [[ "$detach_mode" == "nohup" ]]; then
+    trap '' HUP
+  fi
+
+  # 親はこの応答とPIDの一致を確認するまでdispatch_requiredを返さない。launcherが
+  # setsid(2)やexecに失敗した場合に、renew無しのleaseをfail-openで残すことを防ぐ。
+  printf '%s\n' "$$" >"$dispatch_temp_dir/renew.ready"
+  chmod 600 "$dispatch_temp_dir/renew.ready"
 
   while (( SECONDS - started < max_wait )); do
     elapsed=$((SECONDS - started))
@@ -759,6 +769,95 @@ _stop_dispatch_lease_renew_daemon() {
   done
 }
 
+# Issue #757: renewデーモンを新しいセッションへ切り離す起動前置詞を解決する。
+# setsid(1)はutil-linux由来でmacOSには存在せず、必須にすると当該環境でdispatch経路が
+# 一切使えなくなる。一方で「親セッション終了時にデーモンが道連れにならない」性質は、
+# 未commitの実装が失われる実害に直結するため捨てられない。そこでsetsid(2)を直接呼べる
+# perl（macOSに標準搭載）を次点に置き、どちらも無い環境ではSIGHUPの到達だけを断つnohupを
+# 最後の手段とする。perl経路はforkせずexecで自プロセスを置換するため、setsid(1)の非fork
+# 経路と同じく $! のPIDと「コマンドラインにdispatch一時ディレクトリが残る」性質
+# （renew.pidの所有判定が依存する）を維持する。起動側はjob controlを一時停止し、バック
+# グラウンドプロセスがprocess group leaderとなってsetsid(2)をEPERMにしないようにする。
+# 解決結果は _ASC_SESSION_DETACH_CMD（起動前置詞の配列）と _ASC_SESSION_DETACH_MODE
+# （setsid|perl|nohup）へ格納する。いずれも解決できない場合だけ1を返す。
+_ASC_SESSION_DETACH_CMD=()
+_ASC_SESSION_DETACH_MODE=""
+_resolve_session_detach_launcher() {
+  _ASC_SESSION_DETACH_CMD=()
+  _ASC_SESSION_DETACH_MODE=""
+
+  if command -v setsid >/dev/null 2>&1; then
+    _ASC_SESSION_DETACH_CMD=(setsid)
+    _ASC_SESSION_DETACH_MODE=setsid
+    return 0
+  fi
+
+  if command -v perl >/dev/null 2>&1 && perl -MPOSIX -e 'exit(defined(&POSIX::setsid) ? 0 : 1)' >/dev/null 2>&1; then
+    _ASC_SESSION_DETACH_CMD=(
+      perl -MPOSIX -e
+      'my $sid = POSIX::setsid(); die "setsid: $!\n" if !defined($sid) || $sid < 0; exec { $ARGV[0] } @ARGV; die "exec: $!\n";'
+      --
+    )
+    _ASC_SESSION_DETACH_MODE=perl
+    return 0
+  fi
+
+  if command -v nohup >/dev/null 2>&1; then
+    _ASC_SESSION_DETACH_CMD=(nohup)
+    _ASC_SESSION_DETACH_MODE=nohup
+    return 0
+  fi
+
+  return 1
+}
+
+# Issue #757: macOS標準環境にはsha256sumが無いため、標準搭載のshasumへ退避する。
+# どちらの出力形式も先頭フィールドだけを取り出し、検証済みの小文字64桁digestへ正規化する。
+_dispatch_contract_sha256() {
+  local contract_file="$1" output="" digest=""
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    output="$(sha256sum "$contract_file")" || return 1
+  elif command -v shasum >/dev/null 2>&1; then
+    output="$(shasum -a 256 "$contract_file")" || return 1
+  else
+    return 1
+  fi
+
+  digest="${output%%[[:space:]]*}"
+  [[ "$digest" =~ ^[0-9a-fA-F]{64}$ ]] || return 1
+  printf '%s\n' "$digest" | tr '[:upper:]' '[:lower:]'
+}
+
+# Issue #757: dispatch監査時刻の生成と比較を、GNU/BSD dateの機能差に依存しない
+# Node.jsの単一実装へ集約する。epoch-msは許可形式を先に限定し、Dateが別の日付へ
+# 正規化する不正な暦日もcanonical表現との一致確認で拒否する。
+_dispatch_timestamp() {
+  local operation="${1:-}" value="${2:-}"
+
+  command -v node >/dev/null 2>&1 || return 1
+  node - "$operation" "$value" <<'NODE'
+const operation = process.argv[2];
+const value = process.argv[3];
+
+if (operation === 'now') {
+  process.stdout.write(new Date().toISOString());
+  process.exit(0);
+}
+
+if (operation !== 'epoch-ms' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
+  process.exit(1);
+}
+
+const epoch = Date.parse(value);
+if (!Number.isFinite(epoch)) process.exit(1);
+const canonical = new Date(epoch).toISOString();
+const expected = value.includes('.') ? value : value.replace(/Z$/, '.000Z');
+if (canonical !== expected) process.exit(1);
+process.stdout.write(String(epoch));
+NODE
+}
+
 # 今回のworker起動サイクルに属する完了報告だけを検証する。
 # 成功時は無出力で0、不合格時は呼び出し側がblocked_reasonへ使う理由をstdoutへ出して1を返す。
 _verify_worker_completion_report() {
@@ -780,8 +879,8 @@ _verify_worker_completion_report() {
   reported_no_change="$(sed -n 's/^no_change=//p' <<<"$latest")"
   reported_no_change_reason_present="$(sed -n 's/^no_change_reason_present=//p' <<<"$latest")"
 
-  if ! started_epoch="$(date -u -d "$started_at" +%s%3N 2>/dev/null)" ||
-    ! reported_epoch="$(date -u -d "$reported_created_at" +%s%3N 2>/dev/null)"; then
+  if ! started_epoch="$(_dispatch_timestamp epoch-ms "$started_at" 2>/dev/null)" ||
+    ! reported_epoch="$(_dispatch_timestamp epoch-ms "$reported_created_at" 2>/dev/null)"; then
     printf '%s\n' 'workerのreport鮮度を確認できませんでした（created_atまたは比較基準時刻が不正です）'
     return 1
   fi
@@ -898,10 +997,13 @@ _dispatch_via_agent_tool() {
     release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   fi
-  if ! command -v setsid >/dev/null 2>&1; then
-    echo "launch_worker: Agent tool dispatchに必要なsetsidが見つかりません" >&2
+  if ! _resolve_session_detach_launcher; then
+    echo "launch_worker: Agent tool dispatchのrenewデーモンを親セッションから切り離す手段（setsid・perl・nohupのいずれか）が見つかりません" >&2
     release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
+  fi
+  if [[ "$_ASC_SESSION_DETACH_MODE" == "nohup" ]]; then
+    echo "launch_worker: setsid・perlがないためnohupでrenewデーモンを起動します（SIGHUPは遮断しますが新セッションへの分離は行われません）" >&2
   fi
 
   local temp_base="${TMPDIR:-/tmp}"
@@ -926,7 +1028,12 @@ _dispatch_via_agent_tool() {
     return 1
   fi
   dispatch_token="$(basename -- "$dispatch_temp_dir")"
-  dispatch_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
+  if ! dispatch_started_at="$(_dispatch_timestamp now)"; then
+    echo "launch_worker: dispatch開始時刻を生成できませんでした" >&2
+    rm -rf -- "$dispatch_temp_dir"
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
   chmod 700 "$dispatch_temp_dir"
   # Issue #665: contract.md自体を厳密に実行するworkerへdispatchトークンを確実に渡す。
   # 監査digestは、この追記後のcontract_fileから算出する。
@@ -939,18 +1046,48 @@ _dispatch_via_agent_tool() {
   contract_file="$dispatch_temp_dir/contract.md"
   printf '%s' "$contract" >"$contract_file"
   chmod 600 "$contract_file"
-  contract_sha="$(sha256sum "$contract_file" | awk '{print $1}')"
+  if ! contract_sha="$(_dispatch_contract_sha256 "$contract_file")"; then
+    echo "launch_worker: contractのSHA-256を算出できませんでした（sha256sumまたはshasumが必要です）" >&2
+    rm -rf -- "$dispatch_temp_dir"
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
   contract_lines="$(wc -l <"$contract_file" | tr -d '[:space:]')"
   printf 'CONTRACT_SHA256=%s\nCONTRACT_LINES=%s\nDISPATCH_STARTED_AT=%s\nDISPATCH_TOKEN=%s\nSTARTED_SHA=%s\n' \
     "$contract_sha" "$contract_lines" "$dispatch_started_at" "$dispatch_token" "$started_sha" \
     >"$dispatch_temp_dir/contract.sha256"
   chmod 600 "$dispatch_temp_dir/contract.sha256"
 
-  setsid bash -c \
-    'source "$1"; _dispatch_lease_renew_daemon "$2" "$3" "$4" "$5"' \
+  local monitor_was_enabled=false renew_pid renew_ready_pid="" renew_poll renew_started=false
+  [[ $- == *m* ]] && monitor_was_enabled=true
+  [[ "$monitor_was_enabled" == "false" ]] || set +m
+  "${_ASC_SESSION_DETACH_CMD[@]}" bash -c \
+    'source "$1"; _dispatch_lease_renew_daemon "$2" "$3" "$4" "$5" "$6"' \
     _ "$ADAPTER_DIR/claude.sh" "$issue_id" "$dispatch_temp_dir" "$renew_interval" "$max_wait" \
+    "$_ASC_SESSION_DETACH_MODE" \
     </dev/null >/dev/null 2>&1 &
-  local renew_pid=$!
+  renew_pid=$!
+  [[ "$monitor_was_enabled" == "false" ]] || set -m
+
+  for renew_poll in {1..100}; do
+    if [[ -f "$dispatch_temp_dir/renew.ready" ]]; then
+      renew_ready_pid="$(tr -d '[:space:]' <"$dispatch_temp_dir/renew.ready")"
+      if [[ "$renew_ready_pid" == "$renew_pid" ]] && kill -0 "$renew_pid" >/dev/null 2>&1; then
+        renew_started=true
+        break
+      fi
+    fi
+    kill -0 "$renew_pid" >/dev/null 2>&1 || break
+    sleep 0.02
+  done
+  rm -f -- "$dispatch_temp_dir/renew.ready"
+  if [[ "$renew_started" != "true" ]]; then
+    _stop_dispatch_lease_renew_daemon "$renew_pid" "$dispatch_temp_dir"
+    echo "launch_worker: Agent tool dispatchのrenewデーモンを安全に起動できませんでした（セッション分離または起動確認に失敗しました）" >&2
+    rm -rf -- "$dispatch_temp_dir"
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
   printf '%s\n' "$renew_pid" >"$dispatch_temp_dir/renew.pid"
   chmod 600 "$dispatch_temp_dir/renew.pid"
   disown "$renew_pid" 2>/dev/null || true
@@ -1102,7 +1239,10 @@ launch_worker() {
     return
   fi
   dispatch_token="$(basename -- "$dispatch_token_path")"
-  worker_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
+  if ! worker_started_at="$(_dispatch_timestamp now)"; then
+    _fail_blocked "worker開始時刻を生成できませんでした"
+    return
+  fi
   if ! started_sha="$(git rev-parse HEAD 2>/dev/null)" || [[ -z "$started_sha" ]]; then
     _fail_blocked "dispatch開始時点のHEADを取得できませんでした"
     return
