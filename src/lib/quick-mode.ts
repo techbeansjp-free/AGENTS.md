@@ -1,6 +1,7 @@
 import { gh } from './exec.js';
 import { stateFilePath, type CoordinationBackend } from './local-state.js';
-import { tryReadYamlFile } from './yaml-io.js';
+import fs from 'node:fs';
+import { readYamlFile } from './yaml-io.js';
 import { changedPaths, GUARDRAIL_PATHS } from './self-reference-guardrail.js';
 
 /**
@@ -40,7 +41,9 @@ export type IssueSize = 'quick' | 'standard';
 export type IssueRisk = 'unclassified' | 'normal' | 'high';
 
 export interface QuickModeDecision {
-  /** quick シグナル（ラベルまたは state.yaml）が読み取れたか。 */
+  /** quick シグナルの取得と構造解釈に成功したか。 */
+  signalResolved: boolean;
+  /** quick がシグナル（ラベルまたは state.yaml）で明示要求されたか。 */
   requested: boolean;
   /** 実際に成果物存在要求を免除するか。requested かつガードレール非抵触のときだけ真。 */
   exempt: boolean;
@@ -53,6 +56,11 @@ interface SizeSignal {
   risk: IssueRisk;
 }
 
+interface SignalResolution {
+  resolved: boolean;
+  signal?: SizeSignal;
+}
+
 /** ラベル名の集合から risk を解決する。`risk:normal` が明示されている場合のみ normal。 */
 function riskFromLabels(names: string[]): IssueRisk {
   if (names.includes('risk:high')) return 'high';
@@ -62,24 +70,36 @@ function riskFromLabels(names: string[]): IssueRisk {
 }
 
 interface GhLabelsPayload {
-  labels?: ({ name?: string } | string)[];
+  labels: ({ name: string } | string)[];
 }
 
-function readSignalFromGitHub(root: string, issueNumber: string): SizeSignal {
+function readSignalFromGitHub(root: string, issueNumber: string): SignalResolution {
   const view = gh([`issue`, 'view', issueNumber, '--json', 'labels'], root);
-  // gh 未認証・ネットワーク不通・Issue 不在などは安全側（standard）へ倒す。quick は
-  // 明示的なオプトインでのみ成立し、シグナルを読めない状況で自動適用してはならない。
-  if (view.status !== 0) return { size: 'standard', risk: 'unclassified' };
-  let payload: GhLabelsPayload;
+  if (view.status !== 0) return { resolved: false };
+  let payload: unknown;
   try {
-    payload = JSON.parse(view.stdout) as GhLabelsPayload;
+    payload = JSON.parse(view.stdout);
   } catch {
-    return { size: 'standard', risk: 'unclassified' };
+    return { resolved: false };
   }
-  const names = (payload.labels ?? [])
-    .map((label) => (typeof label === 'string' ? label : label.name))
-    .filter((name): name is string => typeof name === 'string');
-  return { size: names.includes(QUICK_SIZE_LABEL) ? 'quick' : 'standard', risk: riskFromLabels(names) };
+  if (typeof payload !== 'object' || payload === null || !Array.isArray((payload as Partial<GhLabelsPayload>).labels)) {
+    return { resolved: false };
+  }
+  const labels = (payload as GhLabelsPayload).labels;
+  const names: string[] = [];
+  for (const label of labels) {
+    if (typeof label === 'string') {
+      names.push(label);
+    } else if (typeof label === 'object' && label !== null && typeof label.name === 'string') {
+      names.push(label.name);
+    } else {
+      return { resolved: false };
+    }
+  }
+  return {
+    resolved: true,
+    signal: { size: names.includes(QUICK_SIZE_LABEL) ? 'quick' : 'standard', risk: riskFromLabels(names) },
+  };
 }
 
 interface LocalStateSizeFields {
@@ -87,12 +107,29 @@ interface LocalStateSizeFields {
   risk?: string;
 }
 
-function readSignalFromLocalState(root: string, issueNumber: string): SizeSignal {
-  const state = tryReadYamlFile<LocalStateSizeFields>(stateFilePath(root, issueNumber));
-  if (!state) return { size: 'standard', risk: 'unclassified' };
+function readSignalFromLocalState(root: string, issueNumber: string): SignalResolution {
+  const filePath = stateFilePath(root, issueNumber);
+  if (!fs.existsSync(filePath)) return { resolved: false };
+  let state: unknown;
+  try {
+    state = readYamlFile<unknown>(filePath);
+  } catch {
+    return { resolved: false };
+  }
+  if (typeof state !== 'object' || state === null || Array.isArray(state)) return { resolved: false };
+  const fields = state as LocalStateSizeFields;
+  if (fields.size !== undefined && fields.size !== 'quick' && fields.size !== 'standard') return { resolved: false };
+  if (
+    fields.risk !== undefined &&
+    fields.risk !== 'normal' &&
+    fields.risk !== 'high' &&
+    fields.risk !== 'unclassified'
+  ) {
+    return { resolved: false };
+  }
   const risk: IssueRisk =
-    state.risk === 'normal' || state.risk === 'high' || state.risk === 'unclassified' ? state.risk : 'unclassified';
-  return { size: state.size === 'quick' ? 'quick' : 'standard', risk };
+    fields.risk === 'normal' || fields.risk === 'high' || fields.risk === 'unclassified' ? fields.risk : 'unclassified';
+  return { resolved: true, signal: { size: fields.size === 'quick' ? 'quick' : 'standard', risk } };
 }
 
 /**
@@ -109,8 +146,13 @@ export function resolveQuickMode(
   issueNumber: string,
   backend: CoordinationBackend,
 ): QuickModeDecision {
-  const signal = backend === 'github' ? readSignalFromGitHub(root, issueNumber) : readSignalFromLocalState(root, issueNumber);
-  if (signal.size !== 'quick') return { requested: false, exempt: false, blockedReasons: [] };
+  const resolution =
+    backend === 'github' ? readSignalFromGitHub(root, issueNumber) : readSignalFromLocalState(root, issueNumber);
+  if (!resolution.resolved || !resolution.signal) {
+    return { signalResolved: false, requested: false, exempt: false, blockedReasons: [] };
+  }
+  const signal = resolution.signal;
+  if (signal.size !== 'quick') return { signalResolved: true, requested: false, exempt: false, blockedReasons: [] };
 
   const blockedReasons: string[] = [];
   if (signal.risk !== 'normal') {
@@ -123,7 +165,7 @@ export function resolveQuickMode(
   for (const guardrail of GUARDRAIL_PATHS) {
     if (changed.paths.some(guardrail.test)) blockedReasons.push(guardrail.reason);
   }
-  return { requested: true, exempt: blockedReasons.length === 0, blockedReasons };
+  return { signalResolved: true, requested: true, exempt: blockedReasons.length === 0, blockedReasons };
 }
 
 /** quick 適用対象外になった理由を利用者へ提示する固定書式のメッセージ。 */
@@ -132,4 +174,9 @@ export function quickBlockedNotice(decision: QuickModeDecision): string {
     'quick（size:quick）が指定されていますが、次の理由により quick 適用対象外のため通常の成果物要求を適用します:',
     ...decision.blockedReasons.map((reason) => `  - ${reason}`),
   ].join('\n');
+}
+
+/** quick シグナル未解決時に、免除と閉包追加の双方を抑止したことを示す固定書式。 */
+export function quickUnresolvedNotice(): string {
+  return 'quick シグナルを解決できなかったため、quick 免除も上流セグメントの閉包追加も適用しません';
 }
