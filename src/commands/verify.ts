@@ -166,15 +166,19 @@ docs/adr/・.agent-skill-chain/config/segments.yaml・AGENTS.md・.agent-skill-c
 `;
 // Issue #200: 「現在存在するか」だけでは、成果物ファイル自体を意図的に削除するIssue
 // （本Issue #200のSPEC.md等）を自己言及的に不合格にしてしまう。baseブランチから分岐後の
-// コミット履歴上でadd/modifyされた実績があるかをOR条件で加える。git log自体が失敗する場合
-// （shallow clone等でdefaultBranchが解決できない等）は安全側（実績なし=false）に倒す。
+// コミット履歴上でadd/modifyされた実績があるかをOR条件で加える。PRのmerge refでは、削除済み
+// パスのmerge結果が第1親と同一になると既定の履歴簡約が第2親側のadd/modify実績を省略するため、
+// --full-historyで全親を走査する。git log自体が失敗する場合は安全側（実績なし=false）に倒す。
 function wasEverAddedOrModified(worktreePath: string, file: string): boolean {
   try {
     const base = defaultBranch(worktreePath);
     // 2ドット（片側差分）を用いる。3ドット（対称差分）だとbase側にのみ存在する
     // コミットまで含んでしまい、現ブランチが一度も触れていないファイルを誤って
     // 「実績あり」と判定しうるため使わない。
-    const log = git(['log', '--diff-filter=AM', '--name-only', `${base}..HEAD`, '--', file], worktreePath);
+    const log = git(
+      ['log', '--full-history', '--diff-filter=AM', '--name-only', `${base}..HEAD`, '--', file],
+      worktreePath,
+    );
     return log.status === 0 && log.stdout.trim().length > 0;
   } catch {
     return false;
