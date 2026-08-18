@@ -68,6 +68,19 @@ for (const file of workflowFiles) {
     assert.doesNotMatch(run, /detect-changed-segments\.sh[^\n]*\|/);
   });
 
+  test(`${relative}: base fetchはremote-trackingブランチの更新先を明示する`, () => {
+    const fetchCommands = workflow(file).jobs.verify.steps.flatMap((step) =>
+      (step.run ?? '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('git fetch origin ')),
+    );
+    assert.equal(fetchCommands.length, 3);
+    for (const command of fetchCommands) {
+      assert.equal(command, 'git fetch origin "refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"');
+    }
+  });
+
   test(`${relative}: ワークフローはSだけを一括で渡しRの導出規則を持たない`, () => {
     const steps = workflow(file).jobs.verify.steps;
     const step = namedStep(steps, 'verify-artifacts (対象集合を一括検査)');
