@@ -80,3 +80,23 @@ test('base SHA不在とガードレール差分は免除不成立へ倒す', (t)
   assert.equal(invalidDiff.exempt, false);
   assert.equal(invalidDiff.guardrail.status, 'unresolved');
 });
+
+test('ガードレール対象から外へのrenameは旧パスを検査して免除不成立にする', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  writeSignals(repo.dir, 'quick', 'normal');
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  execFileSync('git', ['mv', 'AGENTS.md', 'CONSTITUTION.md'], { cwd: repo.dir });
+  execFileSync('git', ['commit', '-am', 'test: rename guardrail path'], { cwd: repo.dir });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+
+  const result = resolveGateQuickExemption({
+    root: repo.dir,
+    issueNumber: '1',
+    backend: 'local',
+    baseSha,
+    targetSha,
+  });
+  assert.deepEqual(result.guardrail, { status: 'resolved', value: 'included' });
+  assert.equal(result.exempt, false);
+});

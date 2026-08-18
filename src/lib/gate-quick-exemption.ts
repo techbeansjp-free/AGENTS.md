@@ -66,6 +66,29 @@ function unresolvedSignals(reason: string): QuickSignals {
   };
 }
 
+function changedPathsFromNameStatus(output: string): string[] | undefined {
+  const fields = output.split('\0');
+  if (fields.at(-1) === '') fields.pop();
+  const paths: string[] = [];
+  for (let index = 0; index < fields.length;) {
+    const status = fields[index++];
+    if (!status) return undefined;
+    if (/^[RC][0-9]{1,3}$/.test(status)) {
+      const oldPath = fields[index++];
+      const newPath = fields[index++];
+      if (!oldPath || !newPath) return undefined;
+      paths.push(oldPath, newPath);
+    } else if (/^[ADMUTXB]$/.test(status)) {
+      const changedPath = fields[index++];
+      if (!changedPath) return undefined;
+      paths.push(changedPath);
+    } else {
+      return undefined;
+    }
+  }
+  return paths;
+}
+
 /** Coordination Backend の一次情報から size/risk を三値で解決する。 */
 export function readQuickSignals(root: string, issueNumber: string, backend: CoordinationBackend): QuickSignals {
   if (backend === 'github') {
@@ -107,17 +130,19 @@ export function resolveGateQuickExemption(options: {
     guardrail = { status: 'unresolved', reason: 'base SHA が指定されていません' };
   } else {
     const result = git(
-      ['diff', '--name-only', '-z', '--find-renames', `${options.baseSha}...${options.targetSha}`],
+      ['diff', '--name-status', '-z', '--find-renames', `${options.baseSha}...${options.targetSha}`],
       options.root,
     );
     if (result.status !== 0) {
       guardrail = { status: 'unresolved', reason: '変更差分を取得できません' };
     } else {
-      const paths = result.stdout.split('\0').filter(Boolean);
-      guardrail = {
-        status: 'resolved',
-        value: GUARDRAIL_PATHS.some((entry) => paths.some(entry.test)) ? 'included' : 'not_included',
-      };
+      const paths = changedPathsFromNameStatus(result.stdout);
+      guardrail = paths === undefined
+        ? { status: 'unresolved', reason: '変更差分を解釈できません' }
+        : {
+            status: 'resolved',
+            value: GUARDRAIL_PATHS.some((entry) => paths.some(entry.test)) ? 'included' : 'not_included',
+          };
     }
   }
   return {

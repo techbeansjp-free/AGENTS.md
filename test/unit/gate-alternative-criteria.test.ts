@@ -21,3 +21,10 @@ test('片側マーカー欠落と意味を持たないブロックは安全側�
   assert.equal(extractAlternativeCriteria(`worker\n${SYNC_END_MARKER}\n\n受入基準`), '受入基準');
   assert.equal(extractAlternativeCriteria('<!-- comment -->\n\n---\n\n   '), undefined);
 });
+
+test('見出しとメタデータだけの本文は代替判定基準として採用しない', () => {
+  assert.equal(extractAlternativeCriteria('## 受入基準'), undefined);
+  assert.equal(extractAlternativeCriteria('## 要求\n\n### 期待する挙動\n\n<!-- 未記入 -->'), undefined);
+  assert.equal(extractAlternativeCriteria('---\ntitle: quick change\nlabels: size:quick\n---\n\n## 受入基準'), undefined);
+  assert.equal(extractAlternativeCriteria('## 受入基準\n\n動作すること'), '動作すること');
+});

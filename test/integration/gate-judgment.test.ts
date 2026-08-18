@@ -1091,7 +1091,7 @@ test('gate reviewer-prompt: quick免除下でSPEC.mdが無くてもIssue本文�
   assert.doesNotMatch(result.stdout, /target SHAの必須成果物を読めません/);
 });
 
-test('gate reviewer-prompt: 免除不成立で必須成果物が不在なら従来どおり起動前に中断する', (t) => {
+test('gate reviewer-prompt: 免除不成立で必須成果物が不在なら状態を描画してから起動を中断する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
   const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
@@ -1102,7 +1102,40 @@ test('gate reviewer-prompt: 免除不成立で必須成果物が不在なら従�
   const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-733', 'design', targetSha, baseSha], { cwd: repo.dir });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /target SHAの必須成果物を読めません: DESIGN\.md/);
-  assert.equal(result.stdout, '');
+  assert.match(result.stdout, /本来存在すべきであるのに欠落: DESIGN\.md/);
+  assert.match(result.stdout, /本来存在すべきであるのに欠落: PLAN\.md/);
+  assert.doesNotMatch(result.stdout, /quick 免除により正当に不在/);
+});
+
+test('gate reviewer-prompt: 必須成果物が読み取り不能なら状態を描画してから起動を中断する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  fs.mkdirSync(path.join(repo.dir, 'DESIGN.md'));
+  fs.writeFileSync(path.join(repo.dir, 'DESIGN.md', 'nested.txt'), 'not a blob\n');
+  fs.writeFileSync(path.join(repo.dir, 'PLAN.md'), '# PLAN\n');
+  const targetSha = commitAll(repo.dir, 'test: unreadable design artifact');
+  writeQuickLocalState(repo.dir, '要求本文', 'quick', 'normal');
+
+  const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-733', 'design', targetSha, baseSha], { cwd: repo.dir });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /必須成果物の内容を取得できません: DESIGN\.md/);
+  assert.match(result.stdout, /内容を取得できなかった: DESIGN\.md/);
+  assert.doesNotMatch(result.stdout, /DESIGN\.md\)\n.*quick 免除により正当に不在/s);
+});
+
+test('gate reviewer-prompt: 見出しだけのIssue本文では代替判定基準を採用しない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  fs.writeFileSync(path.join(repo.dir, 'code.txt'), 'quick implementation\n');
+  const targetSha = commitAll(repo.dir, 'test: quick without criteria');
+  writeQuickLocalState(repo.dir, '## 受入基準\n\n<!-- 未記入 -->');
+
+  const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-733', 'spec', targetSha, baseSha], { cwd: repo.dir });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /conformance は inconclusive/);
+  assert.doesNotMatch(result.stdout, /## 代替判定基準（trusted な Issue 本文由来）/);
 });
 
 test('gate reviewer-prompt: 判定区間標識を成果物とIssue本文から偽装できない', (t) => {

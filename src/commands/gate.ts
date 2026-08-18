@@ -2150,8 +2150,6 @@ function resolveReviewerPromptInput(
   const backend = loadConfig(root).coordination.backend;
   const quick = resolveGateQuickExemption({ root, issueNumber: number, backend, baseSha, targetSha });
   const requiredArtifacts = readRequiredGateArtifacts(root, targetSha, gateId);
-  const abortReason = gateLaunchAbortReason(requiredArtifacts, quick.exempt);
-  if (abortReason) throw new CliError(abortReason);
 
   const spec = gateId === 'spec'
     ? requiredArtifacts[0] ?? readArtifactAtSha(root, targetSha, 'SPEC.md')
@@ -2358,19 +2356,6 @@ export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): str
   return sections.join('\n').trimEnd();
 }
 
-function buildReviewerPrompt(
-  root: string,
-  number: string,
-  gateId: Segment,
-  targetSha: string,
-  baseSha?: string,
-  lightReviewOverride?: LightReviewDecision | null,
-): string {
-  return buildReviewerPromptFromResolved(
-    resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, lightReviewOverride),
-  );
-}
-
 /**
  * conformance/falsification 判定プロトコルのプロンプト（ルーブリック・出力契約）を組み立てる（判定プロトコル）。
  * 対象セグメントの成果物・SPEC の AC-ID を read-only で収集し、レビュアへの指示を出力する。
@@ -2385,6 +2370,13 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
     if (!issueIdRaw || !gateId || !targetSha) throw new CliError('issue_id, gate_id, target_sha はすべて必須です');
     const { number } = parseIssueId(issueIdRaw);
     validateGateId(gateId);
-    return ok(buildReviewerPrompt(repoRoot(), number, gateId, targetSha, baseSha));
+    const input = resolveReviewerPromptInput(repoRoot(), number, gateId, targetSha, baseSha);
+    const prompt = buildReviewerPromptFromResolved(input);
+    const abortReason = gateLaunchAbortReason(input.requiredArtifacts, input.quick.exempt);
+    if (abortReason) {
+      ok(prompt);
+      throw new CliError(abortReason);
+    }
+    return ok(prompt);
   });
 }

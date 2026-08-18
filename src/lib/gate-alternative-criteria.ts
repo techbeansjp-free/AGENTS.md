@@ -27,15 +27,23 @@ export function removeIssueSyncTranscript(body: string): string {
 }
 
 function ignorableBlock(block: string): boolean {
-  const trimmed = block.trim();
+  const trimmed = block
+    .replace(/<!--[^]*?-->/g, '')
+    .split('\n')
+    .filter((line) => !/^\s{0,3}#{1,6}(?:\s+|$)/.test(line))
+    .join('\n')
+    .trim();
   if (!trimmed) return true;
-  if (/^(?:<!--[^]*?-->\s*)+$/.test(trimmed)) return true;
   return /^(?:-{3,}|_{3,}|\*{3,})$/.test(trimmed);
+}
+
+function removeFrontMatter(body: string): string {
+  return body.replace(/^---[ \t]*\n[^]*?\n---[ \t]*(?:\n|$)/, '');
 }
 
 /** 空行区切りの意味ある本文ブロックだけを代替判定基準として採用する。 */
 export function extractAlternativeCriteria(body: string): string | undefined {
-  const blocks = removeIssueSyncTranscript(body)
+  const blocks = removeFrontMatter(removeIssueSyncTranscript(body))
     .split(/\n[ \t]*\n+/)
     .map((block) => block.trim())
     .filter((block) => !ignorableBlock(block));
