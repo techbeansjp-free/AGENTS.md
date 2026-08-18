@@ -29,6 +29,7 @@ review:
   adapter: claude                # claude | codex | human（判定ステップが起動する launch_gate_reviewer 実体）
   standard: {reviewer_count: 1, modes: [conformance, falsification]}
   strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
+  round_limit: {narrowing_threshold: 2, cutoff_threshold: 4}
 
 # worker: セグメント作業ワーカー（spec/design/implementation/validation）を起動する実行系アダプタと
 # モデル選択の恒久設定（正本: AGENTS.md §設定、ADR-0015）。

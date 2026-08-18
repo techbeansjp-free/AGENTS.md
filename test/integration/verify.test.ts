@@ -598,6 +598,59 @@ test('verify artifacts: SPEC.md/DESIGN.md/PLAN.mdをcommit後に削除しても�
   assert.equal(afterDeleteDesign.status, 0, afterDeleteDesign.stderr);
 });
 
+test('verify artifacts: PRのmerge refで履歴簡約される成果物もadd実績として検出する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  function gitIn(args: string[]): string {
+    return execFileSync('git', args, { cwd: repo.dir, encoding: 'utf8' }).trim();
+  }
+
+  // Given: PR branchで成果物を追加後に削除し、そのbranchをbaseへno-ff mergeする。
+  // merge commitの成果物パスは第1親（base）とTREESAMEになるため、既定の履歴簡約では
+  // 当該パスを変更した第2親（PR branch）の履歴が刈り取られる。
+  const headRef = 'bugfix/741-verify-artifacts-unstarted-segments';
+  gitIn(['checkout', '-b', headRef]);
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n');
+  fs.writeFileSync(path.join(repo.dir, 'DESIGN.md'), '# DESIGN\n');
+  fs.writeFileSync(path.join(repo.dir, 'PLAN.md'), '# PLAN\n');
+  fs.mkdirSync(path.join(repo.dir, 'docs', 'adr'), { recursive: true });
+  fs.writeFileSync(path.join(repo.dir, 'docs', 'adr', 'ADR-0001-sample.md'), '# ADR\n');
+  gitIn(['add', '-A']);
+  gitIn(['commit', '-m', 'docs: add issue artifacts']);
+  fs.rmSync(path.join(repo.dir, 'SPEC.md'));
+  fs.rmSync(path.join(repo.dir, 'DESIGN.md'));
+  fs.rmSync(path.join(repo.dir, 'PLAN.md'));
+  gitIn(['add', '-A']);
+  gitIn(['commit', '-m', 'docs: remove issue artifacts']);
+
+  gitIn(['checkout', 'main']);
+  gitIn(['merge', '--no-ff', headRef, '-m', 'Merge pull request #741']);
+  const mergeSha = gitIn(['rev-parse', 'HEAD']);
+  gitIn(['checkout', '--detach', mergeSha]);
+  gitIn(['branch', '-D', 'main']);
+
+  assert.equal(
+    gitIn(['log', '--diff-filter=AM', '--name-only', 'origin/main..HEAD', '--', 'SPEC.md']),
+    '',
+    '前提: 既定の履歴簡約ではPR branch側のadd実績が省略されること',
+  );
+  assert.match(
+    gitIn(['log', '--full-history', '--diff-filter=AM', '--name-only', 'origin/main..HEAD', '--', 'SPEC.md']),
+    /SPEC\.md/,
+    '前提: --full-historyならPR branch側のadd実績を列挙できること',
+  );
+
+  // When: actions/checkoutが作るmerge ref相当のdetached HEADで検査する。
+  const env = { ...process.env, GITHUB_BASE_REF: 'main', GITHUB_HEAD_REF: headRef };
+  const spec = runCli(['verify', 'artifacts', 'ISSUE-741', 'spec'], { cwd: repo.dir, env });
+  const design = runCli(['verify', 'artifacts', 'ISSUE-741', 'design'], { cwd: repo.dir, env });
+
+  // Then: ワークツリーには成果物が無くても、PR branch側のadd実績により充足する。
+  assert.equal(spec.status, 0, spec.stderr);
+  assert.equal(design.status, 0, design.stderr);
+});
+
 test('verify artifacts: VALIDATION.mdをcommit後に削除しても、履歴上の実績によりvalidationセグメントは成功する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
