@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0073
-status: proposed   # proposed | accepted | superseded | deprecated
+status: accepted   # proposed | accepted | superseded | deprecated
 title: gh 一覧応答の解釈を共有パーサへ集約し、空出力を空一覧として扱わない
 tags: [github, cli, compatibility, gate]
 supersedes: []
