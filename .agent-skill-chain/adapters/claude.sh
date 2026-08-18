@@ -610,9 +610,13 @@ launch_gate_reviewer() {
   fi
 
   # 判定プロンプト（ルーブリック・出力契約）を組み立てる。
-  local prompt
+  local prompt prompt_digest
   if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}" "${ASC_EVIDENCE_PR_NUMBER:-}" "${ASC_REVIEW_ATTEMPT_ID:-}")"; then
     _fail_safe "判定プロンプトの生成に失敗しました"
+    return
+  fi
+  if ! prompt_digest="sha256:$(printf '%s' "$prompt" | sha256sum | awk '{print $1}')" || [[ ! "$prompt_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    _fail_safe "レビュアへ渡す判定プロンプトのdigest生成に失敗しました"
     return
   fi
 
@@ -668,7 +672,7 @@ launch_gate_reviewer() {
       "$issue_id" "$gate_id" "$profile" "$target_sha" "$ASC_EVIDENCE_BASE_SHA" "$ASC_TRUSTED_BASE_SHA" \
       "$ASC_EVIDENCE_PR_NUMBER" "$ASC_REVIEW_ATTEMPT_ID" "$ASC_REVIEW_EXPECTED_COUNT" \
       "$ASC_REVIEWER_RUN_ID" "$ASC_REVIEWER_SLOT" \
-      "${ASC_REVIEW_ADAPTER:-claude}" "$evidence_model" "$evidence_reasoning" >/dev/null; then
+      "${ASC_REVIEW_ADAPTER:-claude}" "$evidence_model" "$evidence_reasoning" "$prompt_digest" >/dev/null; then
       _fail_safe "verdict のGitHub PR review evidence投稿に失敗しました"
       return
     fi

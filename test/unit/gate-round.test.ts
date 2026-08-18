@@ -51,7 +51,7 @@ function evidence(options: {
         severity: 'blocking',
         origin: 'implementation',
         code: `finding-${options.attempt}-${options.slot}`,
-        evidence: [options.evidenceText ?? `対象記述 ${options.attempt} に未処理経路がある`],
+        evidence: [options.evidenceText ?? `SPEC.md の対象記述 ${options.attempt} に未処理経路がある`],
       }],
       approved_artifacts: [],
       inconclusive: false,
@@ -110,7 +110,7 @@ test('ラウンド導出: Strictの2 slotをattempt_idで畳み、target_sha変�
 test('ラウンド導出: 当該attemptと未登録actorを除外し、根拠要約を600文字で明示的に切り詰める', () => {
   const context = deriveGateRoundContext({
     reviews: [
-      review(1, evidence({ attempt: 'attempt-old', slot: 1, evidenceText: '根'.repeat(700) })),
+      review(1, evidence({ attempt: 'attempt-old', slot: 1, evidenceText: `SPEC.md: ${'根'.repeat(700)}` })),
       review(2, evidence({ attempt: 'attempt-untrusted', slot: 1 }), 'intruder'),
       review(3, evidence({ attempt: 'attempt-current', slot: 1 })),
     ],
@@ -190,7 +190,7 @@ test('ラウンド履歴: 節全体が24000文字以内になり、古いラウ�
       review(index + 1, evidence({
         attempt: `attempt-${index}`,
         slot: 1,
-        evidenceText: `${index}:` + '長'.repeat(590),
+        evidenceText: `SPEC.md ${index}:` + '長'.repeat(590),
       }))),
     issueId: 'ISSUE-729',
     gate: 'implementation',

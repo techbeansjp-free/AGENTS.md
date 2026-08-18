@@ -123,7 +123,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const directSubmit = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env, input: JSON.stringify(rawVerdict) },
   );
@@ -141,7 +141,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const wrongBase = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -158,7 +158,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const submitted = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -167,7 +167,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const replayedSlot = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -189,7 +189,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const submittedSlotTwo = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit-2', '2', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit-2', '2', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -434,7 +434,7 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
   const submitted = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-369', 'spec', 'standard', targetSha, baseSha, baseSha, '369',
-      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', generatedPromptDigest,
     ],
     {
       cwd: generationDir,
@@ -503,6 +503,7 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
     approved_artifacts: [{ path: 'SPEC.md' }],
     inconclusive: false,
   };
+  const submittedPromptDigest = evidencePromptDigest('gate evidence fence extraction fixture');
 
   // slot毎に独立したlauncher tokenを用意し、1件ずつ standard profile（expected_count: 1）で
   // submit-evidence を呼ぶ。目的はfence除去の可否のみの検証であり、Strictの2体集約・
@@ -524,7 +525,7 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
     return runCli(
       [
         'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'standard', targetSha, baseSha, baseSha, '275',
-        `attempt-${runId}`, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+        `attempt-${runId}`, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', submittedPromptDigest,
       ],
       { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: body },
     );
@@ -585,7 +586,7 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
         severity: 'info' as const,
         origin: 'specification' as const,
         code: 'literal-brace-test',
-        evidence: ['config value `{key: value}` を含む説明文'],
+        evidence: ['SPEC.md の config value `{key: value}` を含む説明文'],
       },
     ],
   };

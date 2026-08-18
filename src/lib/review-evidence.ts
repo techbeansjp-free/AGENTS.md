@@ -2,6 +2,10 @@ import { digestOf } from './digest.js';
 
 export const REVIEW_EVIDENCE_MARKER = '<!-- agent-skill-chain:gate-review-evidence -->';
 
+const FINDING_EVIDENCE_MIN_LENGTH = 16;
+const AC_ID_PATTERN = /(?:^|[^A-Za-z0-9])AC-[0-9]+(?:$|[^A-Za-z0-9])/i;
+const ARTIFACT_PATH_PATTERN = /(?:^|[\s"'`(（])(?:\.?[A-Za-z0-9_-]+\/)*\.?[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?=$|[\s"'`:：,，。)）\]])/;
+
 export interface EvidenceFinding {
   severity: 'blocking' | 'warning' | 'info';
   origin: 'specification' | 'design' | 'implementation' | 'validation';
@@ -146,14 +150,17 @@ function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerific
 function isFindingShape(value: unknown): value is EvidenceFinding {
   if (!value || typeof value !== 'object') return false;
   const finding = value as Partial<EvidenceFinding>;
+  const evidence = Array.isArray(finding.evidence) &&
+    finding.evidence.every((entry) => typeof entry === 'string' && entry.trim().length > 0)
+      ? finding.evidence.join(' / ').trim()
+      : '';
   return (
     ['blocking', 'warning', 'info'].includes(finding.severity ?? '') &&
     ['specification', 'design', 'implementation', 'validation'].includes(finding.origin ?? '') &&
     typeof finding.code === 'string' &&
     finding.code.length > 0 &&
-    Array.isArray(finding.evidence) &&
-    finding.evidence.length > 0 &&
-    finding.evidence.every((entry) => typeof entry === 'string' && entry.trim().length > 0)
+    evidence.length >= FINDING_EVIDENCE_MIN_LENGTH &&
+    (AC_ID_PATTERN.test(evidence) || ARTIFACT_PATH_PATTERN.test(evidence))
   );
 }
 

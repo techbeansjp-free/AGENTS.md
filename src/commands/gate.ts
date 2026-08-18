@@ -159,7 +159,7 @@ falsification（反証）判定プロトコルの指示（ルーブリック・�
 `;
 
 const SUBMIT_EVIDENCE_USAGE = `
-使い方: agent-skill-chain gate submit-evidence <issue_id> <gate_id> <profile> <target_sha> <base_sha> <trusted_base_sha> <pr_number> <attempt_id> <expected_count> <reviewer_run_id> <slot> <adapter> <model> <reasoning>
+使い方: agent-skill-chain gate submit-evidence <issue_id> <gate_id> <profile> <target_sha> <base_sha> <trusted_base_sha> <pr_number> <attempt_id> <expected_count> <reviewer_run_id> <slot> <adapter> <model> <reasoning> <prompt_digest>
 
 protected base由来のローカルreviewer verdict（stdin JSON）を構造化し、GitHub PR Review APIへ
 COMMENTとして保存する。Issue worktreeのcandidate recorderからの実行、dirty base、SHA不一致は拒否する。
@@ -1133,6 +1133,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
       adapterRaw,
       model,
       reasoning,
+      promptDigest,
     ] = args;
     if (
       !issueIdRaw ||
@@ -1148,7 +1149,8 @@ export async function submitEvidence(args: string[]): Promise<number> {
       !slotRaw ||
       !adapterRaw ||
       model === undefined ||
-      reasoning === undefined
+      reasoning === undefined ||
+      !promptDigest
     ) {
       throw new CliError('submit-evidenceの引数が不足しています');
     }
@@ -1165,6 +1167,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
     if (expectedCount !== expectedFromProfile) throw new CliError('expected_countがprofileと一致しません');
     if (!/^attempt-[A-Za-z0-9._-]+$/.test(attemptId)) throw new CliError('attempt_id形式が不正です');
     if (!/^review-[A-Za-z0-9._-]+$/.test(reviewerRunId)) throw new CliError('reviewer_run_id形式が不正です');
+    if (!/^sha256:[0-9a-f]{64}$/.test(promptDigest)) throw new CliError('prompt_digest形式が不正です');
     const launcherTokenPath = process.env.ASC_LAUNCHER_TOKEN_FILE;
     if (!launcherTokenPath) throw new CliError('launcher token fileがありません');
 
@@ -1201,25 +1204,6 @@ export async function submitEvidence(args: string[]): Promise<number> {
     const lightReview = tryReadYamlFile<GateReport>(
       reviewFilePath(root, number, gateId, config.coordination.backend),
     )?.gate.light_review;
-    const roundContext = fetchGateRoundContext({
-      root,
-      backend: config.coordination.backend,
-      prNumber,
-      issueId,
-      gate: gateId,
-      currentAttemptId: attemptId,
-      trustedActors: policy.execution.trusted_reviewer_actors,
-      verifyAttempt: historicalGateAttemptVerifier({
-        root,
-        issueId,
-        issueNumber: number,
-        gateId,
-        trustedActors: policy.execution.trusted_reviewer_actors,
-      }),
-    });
-    const promptDigest = evidencePromptDigest(
-      buildReviewerPrompt(root, number, gateId, targetSha, baseSha, lightReview ?? null, roundContext),
-    );
     const launcherDigest = localReviewLauncherDigest(root, trustedBaseSha);
     let parsedVerdict: unknown;
     try {

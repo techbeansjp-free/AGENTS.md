@@ -1119,6 +1119,8 @@ test('gate adapter: reviewer-promptへ証跡投稿と同じPR番号・attempt_id
     source,
     /gate reviewer-prompt[^\n]*ASC_EVIDENCE_PR_NUMBER[^\n]*ASC_REVIEW_ATTEMPT_ID/,
   );
+  assert.match(source, /prompt_digest="sha256:\$\(printf '%s' "\$prompt" \| sha256sum/);
+  assert.match(source, /gate submit-evidence[\s\S]*"\$prompt_digest"/);
 });
 
 test('gate-launch-reviewer.sh: 引数不足は exit 1（使い方エラー）', async (t) => {
