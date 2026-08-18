@@ -4,10 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { createTmpRepo, setAdapter, FIXED_TIMESTAMP, type CoordinationBackend } from '../helpers/tmp-repo.js';
 import { runCli, binPath } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
+import { ARTIFACT_ABSENT_DIGEST } from '../../src/lib/digest.js';
 
 // #164-② gate判定ステップの adapter 層（launch_gate_reviewer）+ 起動ラッパー
 // （.agent-skill-chain/scripts/gate-launch-reviewer.sh）を実際の bash で駆動して検証する:
@@ -189,6 +190,49 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   assert.equal(report.gate.falsification, 'pass');
   assert.equal(report.gate.approved_artifacts[0].path, 'SPEC.md');
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
+});
+
+test('claude launch_gate_reviewer: quick免除でVALIDATION.md不在でもレビュアを起動してgate-reportを生成する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  installCliShim(repo.dir);
+  t.after(() => repo.cleanup());
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const start = runCli([
+    'issue', 'start', 'ISSUE-733', 'bugfix', 'quick-validation', FIXED_TIMESTAMP,
+    '--size', 'quick', '--request', 'quick validation requirements',
+  ], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  const statePath = path.join(repo.dir, 'issues', '733', '.agent-skill-chain', 'state.yaml');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(statePath, stringify({ ...state, risk: 'normal' }));
+  fs.writeFileSync(path.join(worktreePath, 'code.txt'), 'implemented\n');
+  const checkpoint = runCli(['checkpoint', 'test: quick implementation'], { cwd: worktreePath });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const targetSha = checkpoint.stdout.trim();
+  const review = runCli(['gate', 'review', 'ISSUE-733', 'validation', 'standard'], { cwd: worktreePath });
+  assert.equal(review.status, 0, review.stderr);
+  const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
+  const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[]}';
+  const env = envWithout([], {
+    ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${verdict}'`,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+    ASC_EVIDENCE_BASE_SHA: baseSha,
+  });
+
+  const result = runLauncher(repo.dir, ['ISSUE-733', 'validation', 'standard', reportPath, targetSha], env, worktreePath);
+  assert.equal(result.status, 0, result.stderr);
+  const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+    gate: { final: string; conformance: string; falsification: string; approved_artifacts: { path: string; digest: string }[] };
+  };
+  assert.deepEqual(
+    { final: report.gate.final, conformance: report.gate.conformance, falsification: report.gate.falsification },
+    { final: 'approved', conformance: 'pass', falsification: 'pass' },
+  );
+  assert.equal(report.gate.approved_artifacts[0].path, 'VALIDATION.md');
+  assert.equal(report.gate.approved_artifacts[0].digest, ARTIFACT_ABSENT_DIGEST);
 });
 
 test('claude launch_gate_reviewer: 非標準ディレクトリのCLIとenv shebang runtimeを隔離PATHで起動できる（Issue #691）', async (t) => {

@@ -16,6 +16,23 @@ import { classifyCoreReview } from '../lib/model-selection.js';
 import { resolveReviewProfile } from '../lib/review-profile.js';
 import { extractSpecAcIds } from '../lib/spec-ac-ids.js';
 import {
+  artifactSetStatus,
+  extractAcIdsFromArtifact,
+  readArtifactAtSha,
+  readRequiredGateArtifacts,
+  REQUIRED_GATE_ARTIFACTS,
+  type AcIdResult,
+  type ArtifactReadResult,
+} from '../lib/gate-artifacts.js';
+import { readAlternativeCriteria } from '../lib/gate-alternative-criteria.js';
+import {
+  artifactPresentation,
+  determineJudgmentAxis,
+  gateLaunchAbortReason,
+  type JudgmentAxis,
+} from '../lib/gate-judgment-rules.js';
+import { resolveGateQuickExemption, type GateQuickExemption } from '../lib/gate-quick-exemption.js';
+import {
   LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS,
   resolveLightReview,
   type LightReviewDecision,
@@ -349,11 +366,16 @@ function artifactsAtSha(
   root: string,
   paths: string[],
   targetSha: string,
-  allowAbsent: boolean,
+  allowAbsent: boolean | ((artifactPath: string) => boolean),
 ): { path: string; digest: string }[] {
   return paths.map((artifactPath) => ({
     path: artifactPath,
-    digest: artifactDigestAtSha(root, artifactPath, targetSha, allowAbsent),
+    digest: artifactDigestAtSha(
+      root,
+      artifactPath,
+      targetSha,
+      typeof allowAbsent === 'function' ? allowAbsent(artifactPath) : allowAbsent,
+    ),
   }));
 }
 
@@ -362,6 +384,26 @@ function artifactDigestAtSha(root: string, artifactPath: string, targetSha: stri
   if (shown.status === 0) return artifactDigestOf(shown.stdout);
   if (allowAbsent) return ABSENT_ARTIFACT_DIGEST;
   throw new CliError(`target SHAの必須成果物を読めません: ${artifactPath}`);
+}
+
+function approvedArtifactsForPrompt(
+  root: string,
+  gateId: Segment,
+  targetSha: string,
+  baseSha: string,
+  promptInput: ReviewerPromptInput,
+): { path: string; digest: string }[] {
+  const paths = gateId === 'implementation'
+    ? expectedArtifactPaths(root, gateId, baseSha, targetSha)
+    : promptInput.targetArtifacts.map((artifact) => artifact.path);
+  return artifactsAtSha(
+    root,
+    paths,
+    targetSha,
+    (artifactPath) =>
+      gateId === 'implementation' ||
+      (promptInput.quick.exempt && REQUIRED_GATE_ARTIFACTS[gateId].includes(artifactPath)),
+  );
 }
 
 function localReviewLauncherDigest(root: string, trustedBaseSha: string): string {
@@ -881,8 +923,7 @@ export async function reconcile(args: string[]): Promise<number> {
       const changed =
         downstreamInvalidated ||
         baseline.approvedArtifacts.some(
-          (artifact) =>
-            artifactDigestAtSha(root, artifact.path, targetSha, gateId === 'implementation') !== artifact.digest,
+          (artifact) => artifactDigestAtSha(root, artifact.path, targetSha, true) !== artifact.digest,
         );
 
       if (changed) {
@@ -988,10 +1029,34 @@ export async function recordVerdict(args: string[]): Promise<number> {
     }
 
     const approvedArtifactsByPath = new Map<string, string>();
+    const quickAbsentArtifacts = new Set<string>();
+    const normalizedReportPath = path.resolve(gateReportPath).split(path.sep).join('/');
+    const reportIssue = /\/issues\/([1-9][0-9]*)\/\.agent-skill-chain\/reviews\//.exec(normalizedReportPath)?.[1];
+    const evidenceBaseSha = process.env.ASC_EVIDENCE_BASE_SHA;
+    if (reportIssue && evidenceBaseSha) {
+      const config = loadConfig(root);
+      const quick = resolveGateQuickExemption({
+        root,
+        issueNumber: reportIssue,
+        backend: config.coordination.backend,
+        baseSha: evidenceBaseSha,
+        targetSha: report.gate.target_sha,
+      });
+      if (quick.exempt) {
+        for (const artifact of readRequiredGateArtifacts(root, report.gate.target_sha, report.gate.id)) {
+          if (artifact.status === 'unreadable') {
+            throw new CliError(`target SHAの必須成果物を読めません: ${artifact.path}`);
+          }
+          if (artifact.status === 'absent') quickAbsentArtifacts.add(artifact.path);
+        }
+      }
+    }
     for (const artifact of verdict.approved_artifacts ?? []) {
       let digest: string;
       if (artifactBaseDir) {
-        digest = artifactDigestOfFile(path.join(artifactBaseDir, artifact.path));
+        digest = quickAbsentArtifacts.has(artifact.path)
+          ? ABSENT_ARTIFACT_DIGEST
+          : artifactDigestOfFile(path.join(artifactBaseDir, artifact.path));
       } else if (artifact.digest) {
         digest = artifact.digest;
       } else {
@@ -1004,6 +1069,9 @@ export async function recordVerdict(args: string[]): Promise<number> {
         return fail(`approved_artifacts '${artifact.path}' の digest が独立 verdict 間で一致しません`);
       }
       approvedArtifactsByPath.set(artifact.path, digest);
+    }
+    for (const artifactPath of quickAbsentArtifacts) {
+      approvedArtifactsByPath.set(artifactPath, ABSENT_ARTIFACT_DIGEST);
     }
     const approvedArtifacts = [...approvedArtifactsByPath].map(([artifactPath, digest]) => ({
       path: artifactPath,
@@ -1111,19 +1179,13 @@ export async function submitEvidence(args: string[]): Promise<number> {
 
     const policy = classifyCoreReview(root, { targetSha, baseRef: baseSha }).policy;
     if (!policy) throw new CliError('登録済みreview policyがありません');
-    const artifacts = artifactsAtSha(
-      root,
-      expectedArtifactPaths(root, gateId, baseSha, targetSha),
-      targetSha,
-      gateId === 'implementation',
-    );
     const config = loadConfig(root);
     const lightReview = tryReadYamlFile<GateReport>(
       reviewFilePath(root, number, gateId, config.coordination.backend),
     )?.gate.light_review;
-    const promptDigest = evidencePromptDigest(
-      buildReviewerPrompt(root, number, gateId, targetSha, baseSha, lightReview ?? null),
-    );
+    const promptInput = resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, lightReview ?? null);
+    const artifacts = approvedArtifactsForPrompt(root, gateId, targetSha, baseSha, promptInput);
+    const promptDigest = evidencePromptDigest(buildReviewerPromptFromResolved(promptInput));
     const launcherDigest = localReviewLauncherDigest(root, trustedBaseSha);
     let parsedVerdict: unknown;
     try {
@@ -1250,12 +1312,6 @@ function buildVerifiedGateReport(options: {
   ];
   const unresolvedWriterActor = writerLogins.some((login) => !login);
   const writerActors = [...new Set(writerLogins.filter((login): login is string => !!login))];
-  const artifacts = artifactsAtSha(
-    options.root,
-    expectedArtifactPaths(options.root, options.gateId, options.baseSha, options.targetSha),
-    options.targetSha,
-    options.gateId === 'implementation',
-  );
   const launcherDigest = localReviewLauncherDigest(options.root, options.baseSha);
   const lightReviewPath = reviewFilePath(options.root, options.issueNumber, options.gateId, 'github');
   const hasTrustedLightReview = tryReadYamlFile<GateReport>(lightReviewPath)?.gate.light_review !== undefined;
@@ -1272,6 +1328,21 @@ function buildVerifiedGateReport(options: {
   const effectiveProfile =
     options.profile === 'strict' || trustedLightReview.strict_locked ? 'strict' : 'standard';
   const expectedLightReview = hasTrustedLightReview ? trustedLightReview : undefined;
+  const promptInput = resolveReviewerPromptInput(
+    options.root,
+    options.issueNumber,
+    options.gateId,
+    options.targetSha,
+    options.baseSha,
+    expectedLightReview ?? null,
+  );
+  const artifacts = approvedArtifactsForPrompt(
+    options.root,
+    options.gateId,
+    options.targetSha,
+    options.baseSha,
+    promptInput,
+  );
   const result = verifyGithubReviewEvidence({
     reviews: options.reviews,
     issueId: options.issueId,
@@ -1281,16 +1352,7 @@ function buildVerifiedGateReport(options: {
     trustedActors: policy.policy.execution.trusted_reviewer_actors,
     writerActors,
     unresolvedWriterActor,
-    expectedPromptDigest: evidencePromptDigest(
-      buildReviewerPrompt(
-        options.root,
-        options.issueNumber,
-        options.gateId,
-        options.targetSha,
-        options.baseSha,
-        expectedLightReview ?? null,
-      ),
-    ),
+    expectedPromptDigest: evidencePromptDigest(buildReviewerPromptFromResolved(promptInput)),
     expectedLightReview,
     expectedArtifacts: artifacts,
     expectedTrustedBaseSha: options.baseSha,
@@ -2032,6 +2094,258 @@ function promptPath(pathname: string): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
+export const JUDGMENT_TARGET_BEGIN = '<!-- agent-skill-chain:judgment-target:begin -->';
+export const JUDGMENT_TARGET_END = '<!-- agent-skill-chain:judgment-target:end -->';
+export const JUDGMENT_AXIS_BEGIN = '<!-- agent-skill-chain:judgment-axis:begin -->';
+export const JUDGMENT_AXIS_END = '<!-- agent-skill-chain:judgment-axis:end -->';
+
+const PROMPT_BOUNDARY_MARKERS = [
+  JUDGMENT_TARGET_BEGIN,
+  JUDGMENT_TARGET_END,
+  JUDGMENT_AXIS_BEGIN,
+  JUDGMENT_AXIS_END,
+] as const;
+
+function neutralizePromptBoundaries(content: string): string {
+  return PROMPT_BOUNDARY_MARKERS.reduce(
+    (current, marker) => current.split(marker).join(`(埋め込み標識を無害化: ${marker.slice(5, -4).trim()})`),
+    content,
+  );
+}
+
+export interface ReviewerPromptInput {
+  number: string;
+  gateId: Segment;
+  targetSha: string;
+  quick: GateQuickExemption;
+  requiredArtifacts: ArtifactReadResult[];
+  targetArtifacts: ArtifactReadResult[];
+  upstreamSpec: ArtifactReadResult;
+  acIds: AcIdResult;
+  axis: JudgmentAxis;
+  alternativeCriteria?: string;
+  diff?: string;
+  omittedAdditions: string[];
+  lightReview?: LightReviewDecision;
+}
+
+function resolveReviewerPromptInput(
+  root: string,
+  number: string,
+  gateId: Segment,
+  targetSha: string,
+  baseSha?: string,
+  lightReviewOverride?: LightReviewDecision | null,
+): ReviewerPromptInput {
+  const backend = loadConfig(root).coordination.backend;
+  const quick = resolveGateQuickExemption({ root, issueNumber: number, backend, baseSha, targetSha });
+  const requiredArtifacts = readRequiredGateArtifacts(root, targetSha, gateId);
+  const abortReason = gateLaunchAbortReason(requiredArtifacts, quick.exempt);
+  if (abortReason) throw new CliError(abortReason);
+
+  const spec = gateId === 'spec'
+    ? requiredArtifacts[0] ?? readArtifactAtSha(root, targetSha, 'SPEC.md')
+    : readArtifactAtSha(root, targetSha, 'SPEC.md');
+  const acIds = extractAcIdsFromArtifact(spec);
+  const requiredStatus = artifactSetStatus(requiredArtifacts);
+  const needsAlternative =
+    quick.exempt &&
+    (acIds.status === 'empty' || (acIds.status === 'present' && requiredStatus === 'absent'));
+  const alternativeCriteria = needsAlternative
+    ? readAlternativeCriteria(root, number, backend)
+    : undefined;
+  const axis = determineJudgmentAxis({
+    exempt: quick.exempt,
+    artifactStatus: requiredStatus,
+    acIds,
+    alternativeAvailable: alternativeCriteria !== undefined,
+  });
+
+  const artifactNames = baseSha
+    ? expectedArtifactPaths(root, gateId, baseSha, targetSha, true)
+    : SEGMENT_ARTIFACTS[gateId];
+  const requiredByPath = new Map(requiredArtifacts.map((artifact) => [artifact.path, artifact]));
+  const targetArtifacts = artifactNames
+    .map((name) => requiredByPath.get(name) ?? readArtifactAtSha(root, targetSha, name))
+    .filter((artifact) => REQUIRED_GATE_ARTIFACTS[gateId].includes(artifact.path) || artifact.status !== 'absent');
+  let diff: string | undefined;
+  let omittedAdditions: string[] = [];
+  if (baseSha) {
+    const statuses = changedPathStatuses(root, baseSha, targetSha);
+    const statusByPath = new Map(statuses.map((entry) => [entry.path, entry]));
+    omittedAdditions = artifactNames.filter((name) => statusByPath.get(name)?.status === 'A');
+    const diffPathspec = artifactNames.flatMap((name) => {
+      if (omittedAdditions.includes(name)) return [];
+      const status = statusByPath.get(name);
+      return status?.oldPath ? [status.oldPath, name] : [name];
+    });
+    if (diffPathspec.length > 0) {
+      const result = git(
+        [
+          'diff', '--no-ext-diff', '--no-color', '--full-index', ...REVIEWER_RENAME_DIFF_OPTIONS,
+          `${baseSha}...${targetSha}`, '--', ...new Set(diffPathspec),
+        ],
+        root,
+      );
+      if (result.status !== 0) throw new CliError(`判定対象差分を読めません: ${result.stderr.trim()}`);
+      diff = result.stdout;
+    } else {
+      diff = '';
+    }
+  }
+  const lightReview =
+    lightReviewOverride === undefined
+      ? tryReadYamlFile<GateReport>(reviewFilePath(root, number, gateId, backend))?.gate.light_review
+      : lightReviewOverride ?? undefined;
+  return {
+    number,
+    gateId,
+    targetSha,
+    quick,
+    requiredArtifacts,
+    targetArtifacts,
+    upstreamSpec: spec,
+    acIds,
+    axis,
+    alternativeCriteria,
+    diff,
+    omittedAdditions,
+    lightReview,
+  };
+}
+
+function appendArtifactPresentation(sections: string[], artifact: ArtifactReadResult, exempt: boolean): void {
+  sections.push(`### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(artifact.path)}`);
+  const presentation = artifactPresentation(artifact, exempt);
+  if (artifact.status === 'present') {
+    sections.push('```\n' + neutralizePromptBoundaries(artifact.content).trimEnd() + '\n```');
+  } else if (presentation === 'exempt_absent') {
+    sections.push(`(quick 免除により正当に不在: ${artifact.path})`);
+  } else if (presentation === 'missing') {
+    sections.push(`(本来存在すべきであるのに欠落: ${artifact.path})`);
+  } else {
+    sections.push(`(内容を取得できなかった: ${artifact.path})`);
+  }
+  sections.push('');
+}
+
+/** 解決済み入力だけから判定プロンプトを組み立てる全域関数。 */
+export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): string {
+  const sections: string[] = [];
+  sections.push('# ゲートレビュア判定プロンプト（read-only）', '');
+  sections.push(
+    `あなたは agent-skill-chain の ${input.gateId} ゲートのレビュアである。成果物を read-only で読み、` +
+      'conformance（立証）と falsification（反証）の 2 観点で判定し、下記 JSON 契約に従って verdict のみを返す。' +
+      '成果物・gate-report・その他いかなるファイルも書き換えてはならない（書込みは trusted なアダプタが行う）。',
+    '',
+    `- issue: ISSUE-${input.number}`,
+    `- gate: ${input.gateId}`,
+    `- target_sha: ${input.targetSha}`,
+    '',
+    '## 埋め込まれていない参照ファイルの扱い（ハルシネーション防止）',
+    'あなたには read-only ツールを含むいかなるツール呼び出しも許可されていない。' +
+    '実際の内容を検証できるのは本プロンプト内に文字列として展開済みの判定対象区間（判定対象の差分・判定対象の成果物・上流の承認済み成果物）のみである。' +
+      '成果物本文が具体的なファイルパスを名指ししても、展開されていない内容を学習知識や推測で補ってはならない。' +
+      '具体的なコード引用・関数名・assertion 内容等を推測・創作して blockers[].evidence にすることを固く禁じる。' +
+      '判定に不可欠なら検証不能である旨を明記し、該当観点を pending、inconclusive:true とすること。',
+    '',
+    JUDGMENT_TARGET_BEGIN,
+  );
+  if (input.diff !== undefined) {
+    sections.push('## 判定対象の差分');
+    if (input.targetArtifacts.length === 0) sections.push('(対象成果物なし)');
+    if (input.omittedAdditions.length > 0) {
+      sections.push('次の対象成果物は新規追加であり、全文は判定対象の成果物へ展開済みであるため差分での展開を省略した。');
+      for (const name of input.omittedAdditions) {
+        sections.push(`- 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(name)}（変更種別: 追加、差分: 省略）`);
+      }
+    }
+    if (input.diff) sections.push('```diff\n' + neutralizePromptBoundaries(input.diff).trimEnd() + '\n```');
+    else if (input.omittedAdditions.length === 0 && input.targetArtifacts.length > 0) sections.push('(差分なし)');
+    sections.push('');
+  }
+  sections.push('## 判定対象の成果物');
+  if (input.targetArtifacts.length === 0) sections.push('(対象成果物なし)', '');
+  else for (const artifact of input.targetArtifacts) appendArtifactPresentation(sections, artifact, input.quick.exempt);
+
+  if (input.gateId !== 'spec') {
+    if (input.upstreamSpec.status === 'present') {
+      sections.push(
+        '## 上流の承認済み成果物（整合検査用）',
+        '### SPEC.md',
+        '```\n' + neutralizePromptBoundaries(input.upstreamSpec.content).trimEnd() + '\n```',
+        '',
+      );
+    } else if (input.upstreamSpec.status === 'unreadable') {
+      sections.push('## 上流の承認済み成果物（整合検査用）', '(SPEC.md の内容を取得できなかった)', '');
+    }
+  }
+  sections.push(JUDGMENT_TARGET_END, '', JUDGMENT_AXIS_BEGIN);
+  if (input.axis === 'ac_coverage') {
+    sections.push(
+      '## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）',
+      input.acIds.ids.join(', '),
+      '',
+      '## conformance（立証）ルーブリック',
+      '- 適用対象の全 AC-ID / 要件が当該セグメント成果物で証跡付きに充足されているかを判定する。' +
+        '1 件でも欠落・未証跡なら conformance=fail とし、欠落を生んだセグメントを origin に持つ blocking finding を付与する。',
+    );
+  } else if (input.axis === 'alternative') {
+    const absentRequired = input.requiredArtifacts.filter((artifact) => artifact.status === 'absent').map((artifact) => artifact.path);
+    sections.push('## 代替判定基準（trusted な Issue 本文由来）');
+    if (input.acIds.status === 'empty') sections.push('- AC-ID は quick 免除により正当に存在しない。');
+    if (absentRequired.length > 0) sections.push(`- 網羅を立証すべき必須成果物は quick 免除により正当に不在: ${absentRequired.join(', ')}`);
+    sections.push(
+      '- 次の代替判定基準に記載された要求・期待する挙動・受入基準のすべてを conformance 判定で網羅すること。',
+      '',
+      neutralizePromptBoundaries(input.alternativeCriteria ?? ''),
+      '',
+      '## conformance（立証）ルーブリック',
+      '- 代替判定基準の全記述が判定対象区間の実装・テスト証跡で充足されているかを判定する。' +
+        '1 件でも欠落・未証跡なら conformance=fail とし、blocking finding を付与する。',
+    );
+  } else {
+    sections.push(
+      '## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）',
+      '(SPEC.md から AC-ID を検出できず。conformance は inconclusive とし human_required へ倒すこと)',
+      '',
+      '## conformance（立証）ルーブリック',
+      '- conformance の判定軸を実体化できない。conformance=pending、inconclusive:true とし human_required へ倒すこと。',
+    );
+  }
+  sections.push(JUDGMENT_AXIS_END, '', '## falsification（反証）ルーブリック');
+  sections.push(
+    '- 反例（未処理エッジ・矛盾・危険な既定・未テストの失敗経路・spec⇔実装乖離）を能動的に 1 件以上探索する。' +
+      'blocking な反例が 1 件でもあれば falsification=fail とし origin 付き blocking finding を付与する。',
+  );
+  if (input.lightReview?.applied === true) {
+    sections.push(
+      '## Lightプロファイル追加ルーブリック',
+      '- AC-ID未達の指摘は常にblockingとし、warning以下へ格下げしない。',
+      '- セキュリティ・データ喪失・互換性破壊・AGENTS.md不変条件違反はblockingへ昇格する。',
+      '- 上記以外のwarning・infoは記録するが、後続対応を必須としない。',
+    );
+  }
+  sections.push(
+    '## final の扱い',
+    '- final はアダプタが verdict から機械的に導出する（両 pass かつ blocking 無し→approved／いずれか fail もしくは blocking→rejected）。' +
+      '判定不能（inconclusive）・origin 衝突・人間判断が必要な場合は inconclusive:true を返す（silent pass 禁止＝I8）。',
+    '',
+    '## 出力 JSON 契約（この形式のみを返すこと）',
+    '```json',
+    JSON.stringify({
+      conformance: 'pass|fail|pending',
+      falsification: 'pass|fail|pending',
+      blockers: [{ severity: 'blocking|warning|info', origin: 'specification|design|implementation|validation', code: '短い識別子', evidence: ['根拠（ファイル・AC-ID 等）'] }],
+      approved_artifacts: [{ path: '判定対象成果物の相対パス（digest は trusted code が算出）' }],
+      inconclusive: false,
+    }, null, 2),
+    '```',
+    `- 欠落・反例が当該セグメント起因なら origin='${SEGMENT_ORIGIN[input.gateId]}' を第一候補とする。`,
+  );
+  return sections.join('\n').trimEnd();
+}
+
 function buildReviewerPrompt(
   root: string,
   number: string,
@@ -2040,167 +2354,9 @@ function buildReviewerPrompt(
   baseSha?: string,
   lightReviewOverride?: LightReviewDecision | null,
 ): string {
-    const readArtifact = (name: string): string | undefined => {
-      const shown = git(['show', `${targetSha}:${name}`], root);
-      return shown.status === 0 ? shown.stdout : undefined;
-    };
-
-    const specText = readArtifact('SPEC.md') ?? '';
-    const acIds = extractSpecAcIds(specText);
-
-    const sections: string[] = [];
-    sections.push('# ゲートレビュア判定プロンプト（read-only）');
-    sections.push('');
-    sections.push(
-      `あなたは agent-skill-chain の ${gateId} ゲートのレビュアである。成果物を read-only で読み、` +
-        'conformance（立証）と falsification（反証）の 2 観点で判定し、下記 JSON 契約に従って verdict のみを返す。' +
-        '成果物・gate-report・その他いかなるファイルも書き換えてはならない（書込みは trusted なアダプタが行う）。',
-    );
-    sections.push('');
-    sections.push(`- issue: ISSUE-${number}`);
-    sections.push(`- gate: ${gateId}`);
-    sections.push(`- target_sha: ${targetSha}`);
-    sections.push('');
-    sections.push('## 埋め込まれていない参照ファイルの扱い（ハルシネーション防止）');
-    sections.push(
-      'あなたには read-only ツールを含むいかなるツール呼び出しも許可されていない。' +
-        '実際の内容を検証できるのは本プロンプト内に文字列として展開済みのセクション（判定対象の差分・判定対象の成果物・上流の承認済み成果物）のみである。' +
-        '成果物本文が具体的なファイルパス（既存テストファイル名・実装ファイル名等）を名指しで言及していても、' +
-        'そのファイルが上記セクションに展開されていない限り内容は一切不明であり、あなたの学習知識や推測で内容を補ってはならない。' +
-        '埋め込まれていないファイルについて、具体的なコード引用・関数名・assertion 内容等を伴う証跡を推測・創作し、' +
-        'それを blockers[].evidence として提示することを固く禁じる。' +
-        '当該ファイルの記述が判定に不可欠な場合は、その部分は検証不能である旨を明記した上で conformance または falsification を pending とし、inconclusive:true を返すこと。',
-    );
-    sections.push('');
-    sections.push('## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）');
-    sections.push(acIds.length > 0 ? acIds.join(', ') : '(SPEC.md から AC-ID を検出できず。conformance は inconclusive とし human_required へ倒すこと)');
-    sections.push('');
-
-    sections.push('## conformance（立証）ルーブリック');
-    sections.push(
-      '- 適用対象の全 AC-ID / 要件が当該セグメント成果物で証跡付きに充足されているかを判定する。' +
-        '1 件でも欠落・未証跡なら conformance=fail とし、欠落を生んだセグメントを origin に持つ blocking finding を付与する。',
-    );
-    sections.push('## falsification（反証）ルーブリック');
-    sections.push(
-      '- 反例（未処理エッジ・矛盾・危険な既定・未テストの失敗経路・spec⇔実装乖離）を能動的に 1 件以上探索する。' +
-        'blocking な反例が 1 件でもあれば falsification=fail とし origin 付き blocking finding を付与する。',
-    );
-    const lightReview =
-      lightReviewOverride === undefined
-        ? tryReadYamlFile<GateReport>(
-            reviewFilePath(root, number, gateId, loadConfig(root).coordination.backend),
-          )?.gate.light_review
-        : lightReviewOverride ?? undefined;
-    if (lightReview?.applied === true) {
-      sections.push('## Lightプロファイル追加ルーブリック');
-      sections.push('- AC-ID未達の指摘は常にblockingとし、warning以下へ格下げしない。');
-      sections.push('- セキュリティ・データ喪失・互換性破壊・AGENTS.md不変条件違反はblockingへ昇格する。');
-      sections.push('- 上記以外のwarning・infoは記録するが、後続対応を必須としない。');
-    }
-    sections.push('## final の扱い');
-    sections.push(
-      `- final はアダプタが verdict から機械的に導出する（両 pass かつ blocking 無し→approved／いずれか fail もしくは blocking→rejected）。` +
-        '判定不能（inconclusive）・origin 衝突・人間判断が必要な場合は inconclusive:true を返す（silent pass 禁止＝I8）。',
-    );
-    sections.push('');
-    sections.push('## 出力 JSON 契約（この形式のみを返すこと）');
-    sections.push('```json');
-    sections.push(
-      JSON.stringify(
-        {
-          conformance: 'pass|fail|pending',
-          falsification: 'pass|fail|pending',
-          blockers: [
-            {
-              severity: 'blocking|warning|info',
-              origin: 'specification|design|implementation|validation',
-              code: '短い識別子',
-              evidence: ['根拠（ファイル・AC-ID 等）'],
-            },
-          ],
-          approved_artifacts: [{ path: '判定対象成果物の相対パス（digest は trusted code が算出）' }],
-          inconclusive: false,
-        },
-        null,
-        2,
-      ),
-    );
-    sections.push('```');
-    sections.push(`- 欠落・反例が当該セグメント起因なら origin='${SEGMENT_ORIGIN[gateId]}' を第一候補とする。`);
-    sections.push('');
-
-    const artifactNames = baseSha
-      ? expectedArtifactPaths(root, gateId, baseSha, targetSha, true)
-      : SEGMENT_ARTIFACTS[gateId];
-    if (baseSha) {
-      const statuses = changedPathStatuses(root, baseSha, targetSha);
-      const statusByPath = new Map(statuses.map((entry) => [entry.path, entry]));
-      const omittedAdditions = artifactNames.filter((name) => statusByPath.get(name)?.status === 'A');
-      const diffPathspec = artifactNames.flatMap((name) => {
-        if (omittedAdditions.includes(name)) return [];
-        const status = statusByPath.get(name);
-        return status?.oldPath ? [status.oldPath, name] : [name];
-      });
-      const diff = diffPathspec.length > 0
-        ? git(
-            [
-              'diff',
-              '--no-ext-diff',
-              '--no-color',
-              '--full-index',
-              ...REVIEWER_RENAME_DIFF_OPTIONS,
-              `${baseSha}...${targetSha}`,
-              '--',
-              ...new Set(diffPathspec),
-            ],
-            root,
-          )
-        : { status: 0, stdout: '', stderr: '' };
-      if (diff.status !== 0) throw new CliError(`判定対象差分を読めません: ${diff.stderr.trim()}`);
-      sections.push('## 判定対象の差分');
-      if (artifactNames.length === 0) {
-        sections.push('(対象成果物なし)');
-      } else {
-        if (omittedAdditions.length > 0) {
-          sections.push(
-            '次の対象成果物は新規追加であり、差分が全文再掲になるため差分での展開を省略した。' +
-              '全文は「判定対象の成果物」に展開済みである。',
-          );
-          for (const name of omittedAdditions) {
-            sections.push(
-              `- 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(name)}` +
-                '（変更種別: 追加、差分: 省略）',
-            );
-          }
-        }
-        if (diff.stdout) sections.push('```diff\n' + diff.stdout.trimEnd() + '\n```');
-        else if (omittedAdditions.length === 0) sections.push('(差分なし)');
-      }
-      sections.push('');
-    }
-    sections.push('## 判定対象の成果物');
-    if (artifactNames.length === 0) {
-      sections.push('(対象成果物なし)');
-      sections.push('');
-    } else {
-      for (const name of artifactNames) {
-        const content = readArtifact(name);
-        sections.push(
-          `### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(name)}`,
-        );
-        sections.push(content !== undefined ? '```\n' + content.trimEnd() + '\n```' : '(未検出)');
-        sections.push('');
-      }
-    }
-    if (gateId !== 'spec') {
-      sections.push('## 上流の承認済み成果物（整合検査用）');
-      sections.push('### SPEC.md');
-      sections.push(specText ? '```\n' + specText.trimEnd() + '\n```' : '(未検出)');
-      sections.push('');
-    }
-
-    return sections.join('\n').trimEnd();
+  return buildReviewerPromptFromResolved(
+    resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, lightReviewOverride),
+  );
 }
 
 /**

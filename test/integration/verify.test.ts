@@ -1073,6 +1073,37 @@ test('verify gate-report (Issue #316 AC-6): implementation以外のgateではABS
   assert.match(result.stderr, /approved_artifacts のファイルが削除されています（digest不一致として扱います）: NEVER_EXISTED\.md/);
 });
 
+test('verify gate-report: quick免除下のspec必須成果物不在標識を許容する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const start = runCli([
+    'issue', 'start', 'ISSUE-733', 'bugfix', 'quick-absent-spec', FIXED_TIMESTAMP,
+    '--size', 'quick', '--request', 'quick requirement',
+  ], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  const statePath = path.join(repo.dir, 'issues', '733', '.agent-skill-chain', 'state.yaml');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(statePath, stringify({ ...state, risk: 'normal' }));
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const review = runCli(['gate', 'review', 'ISSUE-733', 'spec', 'standard', targetSha], { cwd: worktreePath });
+  assert.equal(review.status, 0, review.stderr);
+  const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
+  const approvedText = fs
+    .readFileSync(reportPath, 'utf8')
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: pass')
+    .replace('final: pending', 'final: approved')
+    .replace(
+      'approved_artifacts: []',
+      `approved_artifacts:\n    - path: SPEC.md\n      digest: ${ABSENT_ARTIFACT_DIGEST}`,
+    );
+  fs.writeFileSync(reportPath, approvedText);
+
+  const result = runCli(['verify', 'gate-report', reportPath], { cwd: worktreePath });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 // Issue #316（前提条件、AC-1・AC-2・AC-7）: gateReportの成果物検証ループはtarget_shaが正当な
 // commit SHAであることを暗黙の前提にしている。この前提が崩れる代表的な3パターン（空文字列・
 // HEAD等の解決可能なref名・完全に無効な文字列）のいずれでも、成果物検証ループへ一切入らず

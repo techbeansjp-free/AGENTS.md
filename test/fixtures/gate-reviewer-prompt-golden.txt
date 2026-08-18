@@ -7,13 +7,31 @@
 - target_sha: 82241c97d5b973d30b2bdbe8a16f03e3699393ae
 
 ## 埋め込まれていない参照ファイルの扱い（ハルシネーション防止）
-あなたには read-only ツールを含むいかなるツール呼び出しも許可されていない。実際の内容を検証できるのは本プロンプト内に文字列として展開済みのセクション（判定対象の差分・判定対象の成果物・上流の承認済み成果物）のみである。成果物本文が具体的なファイルパス（既存テストファイル名・実装ファイル名等）を名指しで言及していても、そのファイルが上記セクションに展開されていない限り内容は一切不明であり、あなたの学習知識や推測で内容を補ってはならない。埋め込まれていないファイルについて、具体的なコード引用・関数名・assertion 内容等を伴う証跡を推測・創作し、それを blockers[].evidence として提示することを固く禁じる。当該ファイルの記述が判定に不可欠な場合は、その部分は検証不能である旨を明記した上で conformance または falsification を pending とし、inconclusive:true を返すこと。
+あなたには read-only ツールを含むいかなるツール呼び出しも許可されていない。実際の内容を検証できるのは本プロンプト内に文字列として展開済みの判定対象区間（判定対象の差分・判定対象の成果物・上流の承認済み成果物）のみである。成果物本文が具体的なファイルパスを名指ししても、展開されていない内容を学習知識や推測で補ってはならない。具体的なコード引用・関数名・assertion 内容等を推測・創作して blockers[].evidence にすることを固く禁じる。判定に不可欠なら検証不能である旨を明記し、該当観点を pending、inconclusive:true とすること。
 
+<!-- agent-skill-chain:judgment-target:begin -->
+## 判定対象の差分
+次の対象成果物は新規追加であり、全文は判定対象の成果物へ展開済みであるため差分での展開を省略した。
+- 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC.md"（変更種別: 追加、差分: 省略）
+
+## 判定対象の成果物
+### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC.md"
+```
+# SPEC
+
+AC-1: deterministic prompt
+```
+
+<!-- agent-skill-chain:judgment-target:end -->
+
+<!-- agent-skill-chain:judgment-axis:begin -->
 ## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）
 (SPEC.md から AC-ID を検出できず。conformance は inconclusive とし human_required へ倒すこと)
 
 ## conformance（立証）ルーブリック
-- 適用対象の全 AC-ID / 要件が当該セグメント成果物で証跡付きに充足されているかを判定する。1 件でも欠落・未証跡なら conformance=fail とし、欠落を生んだセグメントを origin に持つ blocking finding を付与する。
+- conformance の判定軸を実体化できない。conformance=pending、inconclusive:true とし human_required へ倒すこと。
+<!-- agent-skill-chain:judgment-axis:end -->
+
 ## falsification（反証）ルーブリック
 - 反例（未処理エッジ・矛盾・危険な既定・未テストの失敗経路・spec⇔実装乖離）を能動的に 1 件以上探索する。blocking な反例が 1 件でもあれば falsification=fail とし origin 付き blocking finding を付与する。
 ## final の扱い
@@ -43,15 +61,3 @@
 }
 ```
 - 欠落・反例が当該セグメント起因なら origin='specification' を第一候補とする。
-
-## 判定対象の差分
-次の対象成果物は新規追加であり、差分が全文再掲になるため差分での展開を省略した。全文は「判定対象の成果物」に展開済みである。
-- 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC.md"（変更種別: 追加、差分: 省略）
-
-## 判定対象の成果物
-### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC.md"
-```
-# SPEC
-
-AC-1: deterministic prompt
-```

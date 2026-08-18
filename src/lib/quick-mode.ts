@@ -1,7 +1,6 @@
-import { gh } from './exec.js';
-import { stateFilePath, type CoordinationBackend } from './local-state.js';
-import { tryReadYamlFile } from './yaml-io.js';
+import type { CoordinationBackend } from './local-state.js';
 import { changedPaths, GUARDRAIL_PATHS } from './self-reference-guardrail.js';
+import { readQuickSignals } from './gate-quick-exemption.js';
 
 /**
  * quick モード（軽量な変更向けの成果物免除）の判定。
@@ -48,53 +47,6 @@ export interface QuickModeDecision {
   blockedReasons: string[];
 }
 
-interface SizeSignal {
-  size: IssueSize;
-  risk: IssueRisk;
-}
-
-/** ラベル名の集合から risk を解決する。`risk:normal` が明示されている場合のみ normal。 */
-function riskFromLabels(names: string[]): IssueRisk {
-  if (names.includes('risk:high')) return 'high';
-  if (names.includes('risk:normal')) return 'normal';
-  // ラベル未付与は「リスク未分類」が既定値（安全側）。
-  return 'unclassified';
-}
-
-interface GhLabelsPayload {
-  labels?: ({ name?: string } | string)[];
-}
-
-function readSignalFromGitHub(root: string, issueNumber: string): SizeSignal {
-  const view = gh([`issue`, 'view', issueNumber, '--json', 'labels'], root);
-  // gh 未認証・ネットワーク不通・Issue 不在などは安全側（standard）へ倒す。quick は
-  // 明示的なオプトインでのみ成立し、シグナルを読めない状況で自動適用してはならない。
-  if (view.status !== 0) return { size: 'standard', risk: 'unclassified' };
-  let payload: GhLabelsPayload;
-  try {
-    payload = JSON.parse(view.stdout) as GhLabelsPayload;
-  } catch {
-    return { size: 'standard', risk: 'unclassified' };
-  }
-  const names = (payload.labels ?? [])
-    .map((label) => (typeof label === 'string' ? label : label.name))
-    .filter((name): name is string => typeof name === 'string');
-  return { size: names.includes(QUICK_SIZE_LABEL) ? 'quick' : 'standard', risk: riskFromLabels(names) };
-}
-
-interface LocalStateSizeFields {
-  size?: string;
-  risk?: string;
-}
-
-function readSignalFromLocalState(root: string, issueNumber: string): SizeSignal {
-  const state = tryReadYamlFile<LocalStateSizeFields>(stateFilePath(root, issueNumber));
-  if (!state) return { size: 'standard', risk: 'unclassified' };
-  const risk: IssueRisk =
-    state.risk === 'normal' || state.risk === 'high' || state.risk === 'unclassified' ? state.risk : 'unclassified';
-  return { size: state.size === 'quick' ? 'quick' : 'standard', risk };
-}
-
 /**
  * quick 免除を適用してよいかを判定する。
  *
@@ -109,12 +61,14 @@ export function resolveQuickMode(
   issueNumber: string,
   backend: CoordinationBackend,
 ): QuickModeDecision {
-  const signal = backend === 'github' ? readSignalFromGitHub(root, issueNumber) : readSignalFromLocalState(root, issueNumber);
-  if (signal.size !== 'quick') return { requested: false, exempt: false, blockedReasons: [] };
+  const resolved = readQuickSignals(root, issueNumber, backend);
+  if (resolved.legacy.size !== 'quick') {
+    return { requested: false, exempt: false, blockedReasons: [] };
+  }
 
   const blockedReasons: string[] = [];
-  if (signal.risk !== 'normal') {
-    blockedReasons.push(`risk が normal ではありません（現在: ${signal.risk}）。quick は risk が normal の場合のみ適用できます`);
+  if (resolved.legacy.risk !== 'normal') {
+    blockedReasons.push(`risk が normal ではありません（現在: ${resolved.legacy.risk}）。quick は risk が normal の場合のみ適用できます`);
   }
   const changed = changedPaths(worktreePath);
   if (!changed.resolvable) {
