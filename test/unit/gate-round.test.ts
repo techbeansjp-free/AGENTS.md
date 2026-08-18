@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   deriveGateRoundContext,
   fetchGateRoundContext,
+  gateRoundFailureDiagnostic,
   latestGateAttemptId,
   renderGateRoundHistory,
   resolveGateRoundLimit,
@@ -210,6 +211,76 @@ test('ラウンド導出: ローカル・PR無し・trusted actor無し・attemp
     ...base,
     fetchReviews: () => ({ status: 1, stdout: '' }),
   }).status, 'unavailable');
+});
+
+test('ラウンド診断: 取得・解釈の失敗だけを診断対象とし、正常な運用形態では診断を出さない', () => {
+  const base = {
+    root: process.cwd(),
+    backend: 'github' as const,
+    prNumber: '756',
+    issueId: 'ISSUE-729',
+    gate: 'implementation' as const,
+    currentAttemptId: 'attempt-current',
+    trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
+  };
+  // 正常な運用形態（失敗ではない）: 診断を出さない。
+  for (const normal of [
+    fetchGateRoundContext({ ...base, backend: 'local' }),
+    fetchGateRoundContext({ ...base, prNumber: undefined }),
+    fetchGateRoundContext({ ...base, currentAttemptId: undefined }),
+    fetchGateRoundContext({ ...base, trustedActors: [] }),
+  ]) {
+    assert.equal(normal.status, 'unavailable');
+    assert.equal(gateRoundFailureDiagnostic(normal), undefined);
+  }
+
+  // gh の非 0 終了・JSON として解釈できない応答: 理由付きの診断を出す。
+  const ghFailed = fetchGateRoundContext({ ...base, fetchReviews: () => ({ status: 1, stdout: '' }) });
+  const unparsable = fetchGateRoundContext({ ...base, fetchReviews: () => ({ status: 0, stdout: '' }) });
+  for (const failure of [ghFailed, unparsable]) {
+    assert.equal(failure.status, 'unavailable');
+    const diagnostic = gateRoundFailureDiagnostic(failure);
+    assert.ok(diagnostic, '失敗経路では診断行が生成されること');
+    assert.match(diagnostic, /過去ラウンドの判定記録を取得できませんでした/);
+    assert.match(diagnostic, /ラウンド予算による限定は適用されません/);
+  }
+  assert.match(gateRoundFailureDiagnostic(ghFailed)!, /取得に失敗/);
+  assert.match(gateRoundFailureDiagnostic(unparsable)!, /解釈できませんでした/);
+
+  // 取得できた場合は診断対象にならない。
+  assert.equal(
+    gateRoundFailureDiagnostic({ status: 'available', round: 0, history: [] }),
+    undefined,
+  );
+});
+
+test('ラウンド履歴: 出力形の違いを吸収し、空応答を過去ラウンド0件として扱わない', () => {
+  const base = {
+    root: process.cwd(),
+    backend: 'github' as const,
+    prNumber: '756',
+    issueId: 'ISSUE-729',
+    gate: 'implementation' as const,
+    currentAttemptId: 'attempt-current',
+    trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
+  };
+  const records = [review(1, evidence({ attempt: 'attempt-past', slot: 1 }))];
+  const shapes = {
+    single: JSON.stringify(records),
+    concatenated: `${JSON.stringify(records)}\n${JSON.stringify([])}`,
+    pages: JSON.stringify([records, []]),
+  };
+  for (const [name, stdout] of Object.entries(shapes)) {
+    const context = fetchGateRoundContext({ ...base, fetchReviews: () => ({ status: 0, stdout }) });
+    assert.equal(context.status, 'available', name);
+    if (context.status === 'available') assert.equal(context.round, 1, name);
+  }
+  // 空出力は「過去ラウンド0件」ではなく取得不能とする。
+  const empty = fetchGateRoundContext({ ...base, fetchReviews: () => ({ status: 0, stdout: '   ' }) });
+  assert.equal(empty.status, 'unavailable');
+  if (empty.status === 'unavailable') assert.equal(empty.failed, true);
 });
 
 test('ラウンド履歴: 節全体が24000文字以内になり、古いラウンドの省略番号を明示する', () => {

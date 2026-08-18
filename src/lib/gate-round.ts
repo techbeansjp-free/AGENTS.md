@@ -1,4 +1,5 @@
 import { gh } from './exec.js';
+import { parseGhArrayResponse } from './gh-json.js';
 import {
   validateGithubReviewEvidenceAttempt,
   validateGithubReviewEvidenceRecord,
@@ -44,11 +45,21 @@ export interface GateRoundRecord {
 
 export type GateRoundContext =
   | { status: 'available'; round: number; history: GateRoundRecord[]; diagnostics?: string[] }
-  | { status: 'unavailable'; reason: string };
+  // Issue #774: failed は「取得・解釈が失敗した」ことだけを表す。ローカルモード・PR 番号未指定等の
+  // 正常な運用形態は失敗ではないため false のままとし、診断の出力対象から外す。
+  | { status: 'unavailable'; reason: string; failed?: boolean };
 
-function parseGhList<T>(stdout: string): T[] {
-  const parsed = JSON.parse(stdout) as T[] | T[][];
-  return Array.isArray(parsed[0]) ? (parsed as T[][]).flat() : (parsed as T[]);
+/**
+ * ラウンド履歴の取得・解釈が失敗した場合にだけ、進行役向けの診断行を返す。
+ * Issue #774: 正常な運用形態でも毎回診断を出すと利用者が診断を読まなくなり、
+ * 失敗を可視化するという目的自体を損なうため、出力対象を失敗に限定する。
+ */
+export function gateRoundFailureDiagnostic(context: GateRoundContext): string | undefined {
+  if (context.status !== 'unavailable' || context.failed !== true) return undefined;
+  return (
+    `警告: 過去ラウンドの判定記録を取得できませんでした（理由: ${context.reason}）。` +
+    'ラウンド番号を導出できないため、ラウンド予算による限定は適用されません。'
+  );
 }
 
 export function summarizeFindingEvidence(evidence: string[]): string {
@@ -180,15 +191,15 @@ export function fetchGateRoundContext(options: {
     return { status: 'unavailable', reason: 'trusted recorder actor が登録されていません' };
   }
   const response = options.fetchReviews?.() ?? gh(
-      ['api', `repos/{owner}/{repo}/pulls/${options.prNumber}/reviews?per_page=100`, '--paginate', '--slurp'],
+      ['api', `repos/{owner}/{repo}/pulls/${options.prNumber}/reviews?per_page=100`, '--paginate'],
       options.root,
     );
   if (response.status !== 0) {
-    return { status: 'unavailable', reason: 'PR review evidence の取得に失敗しました' };
+    return { status: 'unavailable', reason: 'PR review evidence の取得に失敗しました', failed: true };
   }
   try {
     return deriveGateRoundContext({
-      reviews: parseGhList<GithubReviewRecord>(response.stdout),
+      reviews: parseGhArrayResponse<GithubReviewRecord>(response.stdout),
       issueId: options.issueId,
       gate: options.gate,
       currentAttemptId: options.currentAttemptId,
@@ -196,7 +207,7 @@ export function fetchGateRoundContext(options: {
       verifyAttempt: options.verifyAttempt,
     });
   } catch {
-    return { status: 'unavailable', reason: 'PR review evidence の応答を解釈できませんでした' };
+    return { status: 'unavailable', reason: 'PR review evidence の応答を解釈できませんでした', failed: true };
   }
 }
 

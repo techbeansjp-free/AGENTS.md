@@ -30,6 +30,49 @@ function flag(name) {
   return i === -1 ? undefined : args[i + 1];
 }
 
+// Issue #774: gh の一覧応答の出力形を切り替える。要素の順序は全出力形で保つ必要があるため、
+// 連続した塊へ分割する（丸め込み分配にすると平坦化後の順序が変わる）。
+function chunkPages(elements, count) {
+  const pages = Math.max(1, count || 1);
+  const size = Math.ceil(elements.length / pages);
+  const buckets = [];
+  for (let i = 0; i < pages; i += 1) {
+    buckets.push(size === 0 ? [] : elements.slice(i * size, (i + 1) * size));
+  }
+  return buckets;
+}
+function writeArrayList(state, elements) {
+  const shape = state.listResponseShape || 'single';
+  if (shape === 'single') {
+    process.stdout.write(JSON.stringify(elements));
+    return;
+  }
+  const pages = chunkPages(elements, state.listResponsePages);
+  process.stdout.write(
+    shape === 'pages'
+      ? JSON.stringify(pages)
+      : pages.map(function (page) { return JSON.stringify(page); }).join('\\n'),
+  );
+}
+function writeObjectList(state, key, elements) {
+  const shape = state.listResponseShape || 'single';
+  const wrap = function (page) {
+    const document = {};
+    document[key] = page;
+    return document;
+  };
+  if (shape === 'single') {
+    process.stdout.write(JSON.stringify(wrap(elements)));
+    return;
+  }
+  const pages = chunkPages(elements, state.listResponsePages).map(wrap);
+  process.stdout.write(
+    shape === 'pages'
+      ? JSON.stringify(pages)
+      : pages.map(function (page) { return JSON.stringify(page); }).join('\\n'),
+  );
+}
+
 function git(args) {
   childProcess.execFileSync('git', args, { cwd: process.cwd(), stdio: 'pipe' });
 }
@@ -623,12 +666,27 @@ if (cmd === 'api') {
   const hasInput = args.includes('--input');
   const body = hasInput ? readStdin() : '';
   const state = loadState();
+  // Issue #774: gh 2.63.0 未満はページ一括オプションを未知フラグとして拒否する。実 gh と同じく
+  // API へ到達する前に失敗させるため、呼び出し記録より前で判定する。
+  if (state.rejectSlurp && args.indexOf('--slurp') !== -1) {
+    process.stderr.write('unknown flag: --slurp\\n');
+    process.exit(1);
+  }
   state.apiCalls = state.apiCalls || [];
-  state.apiCalls.push({ method, path: apiPath });
+  state.apiCalls.push({ method, path: apiPath, args: args });
   saveState(state);
   if ((state.failApiPaths || []).some((fragment) => apiPath.includes(fragment))) {
     process.stderr.write('gh-stub: simulated api failure: ' + method + ' ' + apiPath + '\\n');
     process.exit(1);
+  }
+  // Issue #774: 終了コード0のまま任意の標準出力（空・JSONでない断片等）を返す経路。
+  // 「取得は成功したが解釈できない」状況を再現する。
+  const rawResponse = (state.rawApiResponses || []).filter(function (entry) {
+    return apiPath.indexOf(entry.fragment) !== -1;
+  })[0];
+  if (rawResponse) {
+    process.stdout.write(rawResponse.stdout);
+    process.exit(0);
   }
 
   if (apiPath === 'repos/{owner}/{repo}' && method === 'GET') {
@@ -722,7 +780,7 @@ if (cmd === 'api') {
       process.exit(1);
     }
     const events = (state.issueEvents || {})[issueNumber] || [];
-    process.stdout.write(args.includes('--slurp') ? JSON.stringify([events]) : JSON.stringify(events));
+    writeArrayList(state, events);
     process.exit(0);
   }
 
@@ -847,7 +905,7 @@ if (cmd === 'api') {
   }
 
   if (/\\/pulls\\/\\d+\\/commits(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify(state.pullCommits || []));
+    writeArrayList(state, state.pullCommits || []);
     process.exit(0);
   }
 
@@ -868,12 +926,12 @@ if (cmd === 'api') {
   }
 
   if (/\\/commits\\/[^/]+\\/pulls(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify(state.commitPulls || []));
+    writeArrayList(state, state.commitPulls || []);
     process.exit(0);
   }
 
   if (/\\/pulls\\/\\d+\\/reviews(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify(state.pullReviews || []));
+    writeArrayList(state, state.pullReviews || []);
     process.exit(0);
   }
 
@@ -902,7 +960,7 @@ if (cmd === 'api') {
     const checkRuns = (state.checkRuns || []).filter((check) =>
       (!checkName || check.name === checkName) && check.head_sha === headSha,
     );
-    process.stdout.write(JSON.stringify({ check_runs: checkRuns }));
+    writeObjectList(state, 'check_runs', checkRuns);
     process.exit(0);
   }
 
@@ -913,12 +971,12 @@ if (cmd === 'api') {
     const actionRuns = (state.actionRuns || []).filter((run) =>
       (!checkSuiteId || String(run.check_suite_id) === checkSuiteId) && (!headSha || run.head_sha === headSha),
     );
-    process.stdout.write(JSON.stringify({ workflow_runs: actionRuns }));
+    writeObjectList(state, 'workflow_runs', actionRuns);
     process.exit(0);
   }
 
   if (/\\/actions\\/workflows\\/.+\\/runs(?:\\?.*)?$/.test(apiPath || '') && method === 'GET') {
-    process.stdout.write(JSON.stringify({ workflow_runs: state.actionRuns || [] }));
+    writeObjectList(state, 'workflow_runs', state.actionRuns || []);
     process.exit(0);
   }
 
@@ -1040,7 +1098,15 @@ export interface GhStubState {
   publishedCheckWorkflowPath?: string;
   publishedCheckWorkflowEvent?: string;
   failApiPaths?: string[];
-  apiCalls?: { method: string; path: string }[];
+  apiCalls?: { method: string; path: string; args?: string[] }[];
+  /** Issue #774: gh 2.63.0 未満を再現し、ページ一括オプションを含む起動を非 0 終了で拒否する。 */
+  rejectSlurp?: boolean;
+  /** Issue #774: 一覧応答の出力形。single=単一文書 / concatenated=連結文書 / pages=ページ配列。 */
+  listResponseShape?: 'single' | 'concatenated' | 'pages';
+  /** Issue #774: `concatenated`・`pages` のときに分割するページ数（既定 1）。 */
+  listResponsePages?: number;
+  /** Issue #774: パス断片に一致する `gh api` へ、終了コード0のまま任意の標準出力を返す。 */
+  rawApiResponses?: { fragment: string; stdout: string }[];
   prCreateCalls?: { args: string[]; body: string | undefined }[];
   failPrReviewStatusView?: boolean;
   issueViewFailures?: Record<string, string>;
@@ -1191,6 +1257,13 @@ export interface GhStub {
   /** ISSUE-593: 以後の `gh api -X POST .../check-runs` を強制失敗させる（個人アカウント認証による
    * Check Run発行不能を再現する）。 */
   failCheckRunPost(stderr: string): void;
+  /** Issue #774: gh 2.63.0 未満を再現する。ページ一括オプションを含む `gh api` 起動を
+   * `unknown flag: --slurp` を標準エラー出力へ出して非 0 終了で拒否する。 */
+  setRejectSlurp(reject: boolean): void;
+  /** Issue #774: 一覧応答の出力形とページ数を切り替える（単一文書・連結文書・ページ配列）。 */
+  setListResponseShape(shape: 'single' | 'concatenated' | 'pages', pages?: number): void;
+  /** Issue #774: パス断片に一致する `gh api` を終了コード0のまま任意の標準出力で応答させる。 */
+  seedRawApiResponse(fragment: string, stdout: string): void;
 }
 
 /**
@@ -1394,6 +1467,22 @@ export function createGhStub(baseDir: string): GhStub {
     ): void {
       const state = this.readState();
       state.prCrossRepoInfo = { ...(state.prCrossRepoInfo ?? {}), [String(prNumber)]: info };
+      this.writeState(state);
+    },
+    setRejectSlurp(reject: boolean): void {
+      const state = this.readState();
+      state.rejectSlurp = reject;
+      this.writeState(state);
+    },
+    setListResponseShape(shape: 'single' | 'concatenated' | 'pages', pages = 1): void {
+      const state = this.readState();
+      state.listResponseShape = shape;
+      state.listResponsePages = pages;
+      this.writeState(state);
+    },
+    seedRawApiResponse(fragment: string, stdout: string): void {
+      const state = this.readState();
+      state.rawApiResponses = [...(state.rawApiResponses ?? []), { fragment, stdout }];
       this.writeState(state);
     },
     failCheckRunPost(stderr: string): void {
