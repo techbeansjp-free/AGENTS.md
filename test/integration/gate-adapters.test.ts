@@ -235,6 +235,69 @@ test('claude launch_gate_reviewer: quick免除でVALIDATION.md不在でもレビ
   assert.equal(report.gate.approved_artifacts[0].digest, ARTIFACT_ABSENT_DIGEST);
 });
 
+test('claude launch_gate_reviewer: 必須成果物が読み取り不能ならspec/design/validationでレビュアを起動せずapprovedにしない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  installCliShim(repo.dir);
+  setAdapter(repo.dir, 'claude');
+  t.after(() => repo.cleanup());
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const cases = [
+    { gate: 'spec' as const, artifact: 'SPEC.md' },
+    { gate: 'design' as const, artifact: 'DESIGN.md' },
+    { gate: 'validation' as const, artifact: 'VALIDATION.md' },
+  ];
+  let issueNumber = 810;
+
+  for (const exempt of [true, false]) {
+    for (const testCase of cases) {
+      const currentIssue = String(issueNumber++);
+      const startArgs = [
+        'issue', 'start', `ISSUE-${currentIssue}`, 'bugfix', `unreadable-${testCase.gate}-${exempt ? 'quick' : 'standard'}`,
+        FIXED_TIMESTAMP, '--request', '成果物の読み取り不能時は安全側へ倒す',
+      ];
+      if (exempt) startArgs.push('--size', 'quick');
+      const start = runCli(startArgs, { cwd: repo.dir });
+      assert.equal(start.status, 0, start.stderr);
+      const [, worktreePath] = start.stdout.trim().split('\n');
+      const statePath = path.join(repo.dir, 'issues', currentIssue, '.agent-skill-chain', 'state.yaml');
+      const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+      fs.writeFileSync(statePath, stringify({ ...state, risk: 'normal' }));
+
+      const unreadablePath = path.join(worktreePath, testCase.artifact);
+      fs.mkdirSync(unreadablePath);
+      fs.writeFileSync(path.join(unreadablePath, 'nested.txt'), 'tree entry is not a blob\n');
+      const checkpoint = runCli(['checkpoint', `test: unreadable ${testCase.gate} artifact`], { cwd: worktreePath });
+      assert.equal(checkpoint.status, 0, checkpoint.stderr);
+      const targetSha = checkpoint.stdout.trim();
+      const review = runCli(['gate', 'review', `ISSUE-${currentIssue}`, testCase.gate, 'standard'], {
+        cwd: worktreePath,
+      });
+      assert.equal(review.status, 0, review.stderr);
+      const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
+      const reviewerMarker = path.join(repo.dir, `reviewer-started-${currentIssue}`);
+      const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[]}';
+      const env = envWithout([], {
+        ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+        CLAUDE_AUTH_PROBE_CMD: 'true',
+        GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}; cat >/dev/null; printf '%s' '${verdict}'`,
+        GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+        ASC_EVIDENCE_BASE_SHA: baseSha,
+      });
+
+      const result = runLauncher(
+        repo.dir,
+        [`ISSUE-${currentIssue}`, testCase.gate, 'standard', reportPath, targetSha],
+        env,
+        worktreePath,
+      );
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /判定プロンプトの生成に失敗しました/);
+      assert.equal(fs.existsSync(reviewerMarker), false, `${testCase.gate} でレビュアを起動しないこと`);
+      assert.equal(readFinal(reportPath), 'human_required');
+    }
+  }
+});
+
 test('claude launch_gate_reviewer: 非標準ディレクトリのCLIとenv shebang runtimeを隔離PATHで起動できる（Issue #691）', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-runtime-issue691-'));

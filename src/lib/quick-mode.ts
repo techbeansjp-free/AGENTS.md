@@ -62,12 +62,14 @@ export function resolveQuickMode(
   backend: CoordinationBackend,
 ): QuickModeDecision {
   const resolved = readQuickSignals(root, issueNumber, backend);
-  if (resolved.legacy.size !== 'quick') {
+  if (resolved.size.status !== 'resolved' || resolved.size.value !== 'quick') {
     return { requested: false, exempt: false, blockedReasons: [] };
   }
 
   const blockedReasons: string[] = [];
-  if (resolved.legacy.risk !== 'normal') {
+  if (resolved.risk.status === 'unresolved') {
+    blockedReasons.push(`risk シグナルを解決できません（${resolved.risk.reason}）。quick は risk が normal の場合のみ適用できます`);
+  } else if (resolved.risk.value !== 'normal') {
     blockedReasons.push(`risk が normal ではありません（現在: ${resolved.legacy.risk}）。quick は risk が normal の場合のみ適用できます`);
   }
   const changed = changedPaths(worktreePath);

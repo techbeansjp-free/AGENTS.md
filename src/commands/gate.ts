@@ -279,9 +279,9 @@ interface LauncherToken {
  */
 function deriveFinal(verdict: ReviewerVerdict): GateReport['gate']['final'] {
   const hasBlocking = (verdict.blockers ?? []).some((b) => b.severity === 'blocking');
-  if (verdict.inconclusive === true || verdict.final === 'human_required') return 'human_required';
-  if (verdict.conformance === 'pass' && verdict.falsification === 'pass' && !hasBlocking) return 'approved';
   if (verdict.conformance === 'fail' || verdict.falsification === 'fail' || hasBlocking) return 'rejected';
+  if (verdict.inconclusive === true || verdict.final === 'human_required') return 'human_required';
+  if (verdict.conformance === 'pass' && verdict.falsification === 'pass') return 'approved';
   return 'human_required';
 }
 
@@ -1084,7 +1084,7 @@ export async function recordVerdict(args: string[]): Promise<number> {
       report.gate.light_review.remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS &&
       (hasBlocking || conformance === 'fail' || falsification === 'fail');
     if (lightReviewCutoffReached) verdict.inconclusive = true;
-    const final = deriveFinal(verdict);
+    const final = lightReviewCutoffReached ? 'human_required' : deriveFinal(verdict);
     report.gate.conformance = conformance;
     report.gate.falsification = falsification;
     report.gate.final = final;

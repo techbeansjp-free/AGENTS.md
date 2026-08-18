@@ -234,6 +234,34 @@ test('gate record-verdict: inconclusive の verdict は silent pass せず final
   assert.equal(readReport(reportPath).gate.final, 'human_required');
 });
 
+test('gate record-verdict: inconclusive でも fail と blocking finding を優先して final=rejected にする', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(repo.dir, scaffold());
+  const verdict = JSON.stringify({
+    conformance: 'pending',
+    falsification: 'fail',
+    inconclusive: true,
+    blockers: [
+      {
+        severity: 'blocking',
+        origin: 'implementation',
+        code: 'INCONCLUSIVE-COUNTEREXAMPLE',
+        evidence: ['判定不能でも反証側の否定判定を保持する'],
+      },
+    ],
+  });
+  const res = runCli(['gate', 'record-verdict', reportPath], { cwd: repo.dir, input: verdict });
+
+  assert.equal(res.status, 0, res.stderr);
+  const report = readReport(reportPath);
+  assert.equal(report.gate.final, 'rejected');
+  assert.equal(report.gate.conformance, 'pending');
+  assert.equal(report.gate.falsification, 'fail');
+  assert.equal(report.gate.blockers[0].code, 'INCONCLUSIVE-COUNTEREXAMPLE');
+});
+
 test('gate record-verdict: lightの再レビュー上限でblockingが残ればhuman_requiredへ打ち切る', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -1105,4 +1133,67 @@ test('gate reviewer-prompt: GitHubラベルとIssue本文でもlocalと同じqui
   });
   assert.notEqual(ambiguous.status, 0);
   assert.match(ambiguous.stderr, /target SHAの必須成果物を読めません/);
+});
+
+test('gate reviewer-prompt: 4ゲートの代替判定基準はワーカー供給値と競合してもIssue本文の一次情報だけを使う', (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const artifacts = ['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md'];
+  for (const artifact of artifacts) fs.writeFileSync(path.join(repo.dir, artifact), '');
+  const controlSha = commitAll(repo.dir, 'test: trusted criteria control');
+
+  stub.seedIssueLabels('733', ['size:quick', 'risk:normal']);
+  stub.seedIssueBody('733', 'TRUSTED_PRIMARY_REQUIREMENT\n\nTRUSTED_PRIMARY_ACCEPTANCE');
+  const controlAxes = new Map<string, string>();
+  for (const gate of ['spec', 'design', 'implementation', 'validation'] as const) {
+    const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-733', gate, controlSha, baseSha], {
+      cwd: repo.dir,
+      env,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    controlAxes.set(
+      gate,
+      promptSection(
+        result.stdout,
+        '<!-- agent-skill-chain:judgment-axis:begin -->',
+        '<!-- agent-skill-chain:judgment-axis:end -->',
+      ),
+    );
+  }
+
+  for (const artifact of artifacts) {
+    fs.writeFileSync(path.join(repo.dir, artifact), `WORKER_ONLY_CRITERIA from ${artifact}\n`);
+  }
+  const workerSuppliedSha = commitAll(repo.dir, 'test: add worker supplied criteria');
+  stub.seedOpenPr({ number: 742, headRefName: 'worker-supplied', body: 'WORKER_ONLY_CRITERIA from PR body' });
+  stub.seedPrComments(742, [{ body: 'WORKER_ONLY_CRITERIA from PR comment' }]);
+  const state = stub.readState();
+  state.comments['733'] = [{
+    id: '733',
+    url: 'https://github.com/test/repo/issues/733#issuecomment-733',
+    body: 'WORKER_ONLY_CRITERIA from Issue comment',
+    createdAt: new Date(state.clock).toISOString(),
+  }];
+  stub.writeState(state);
+
+  for (const gate of ['spec', 'design', 'implementation', 'validation'] as const) {
+    const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-733', gate, workerSuppliedSha, baseSha], {
+      cwd: repo.dir,
+      env,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const axis = promptSection(
+      result.stdout,
+      '<!-- agent-skill-chain:judgment-axis:begin -->',
+      '<!-- agent-skill-chain:judgment-axis:end -->',
+    );
+    assert.equal(axis, controlAxes.get(gate));
+    assert.match(axis, /TRUSTED_PRIMARY_REQUIREMENT/);
+    assert.doesNotMatch(axis, /WORKER_ONLY_CRITERIA/);
+  }
 });

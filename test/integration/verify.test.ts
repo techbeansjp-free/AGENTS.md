@@ -819,6 +819,12 @@ test('verify artifacts: GitHubモードは size:quick ラベルで免除し、ri
   const quickValidation = runCli(['verify', 'artifacts', 'ISSUE-1', 'validation'], { cwd: repo.dir, env });
   assert.equal(quickValidation.status, 0, quickValidation.stderr);
 
+  // Given: size が相反する複数ラベルで解決不能なら、quick を含んでいても免除しない。
+  stub.seedIssueLabels('1', ['type:feature', 'risk:normal', 'size:quick', 'size:standard']);
+  const ambiguous = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
+  assert.equal(ambiguous.status, 1);
+  assert.match(ambiguous.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+
   // Given: risk:high が付与されている
   stub.seedIssueLabels('1', ['type:feature', 'risk:high', 'size:quick']);
   const high = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
