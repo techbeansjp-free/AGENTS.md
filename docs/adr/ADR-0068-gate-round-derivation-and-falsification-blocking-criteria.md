@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0068
-status: proposed
+status: accepted
 title: ゲートのラウンド番号を耐久記録の反復識別子から導出し、反証の blocking 基準と打ち切りを機械化する
 tags: [gate, review-profile, termination, prompt, guardrail]
 supersedes: []
