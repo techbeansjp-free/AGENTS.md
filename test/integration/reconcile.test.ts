@@ -411,8 +411,8 @@ test('gate reconcile (github backend): 終了コード0のまま解釈できな�
   const sha2 = checkpointUnrelatedChange(worktreePath, env, 'unparsable object response');
   seedPullCommits(stub, [sha1, sha2], repo.dir);
   const beforeCount = checkRuns(stub).length;
-  // 空出力・閉じていない断片のいずれも「要素0件」として扱わない（無言の劣化の禁止）。
-  for (const rawStdout of ['', '   \n', '{"check_runs":[']) {
+  // 空出力・閉じていない断片・属性欠落・属性の型不正のいずれも「要素0件」として扱わない（無言の劣化の禁止）。
+  for (const rawStdout of ['', '   \n', '{"check_runs":[', '{"total_count":0}', '{"check_runs":null}']) {
     stub.writeState({ ...stub.readState(), rawApiResponses: [{ fragment: '/check-runs?', stdout: rawStdout }] });
     const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
     assert.notEqual(result.status, 0, `解釈できない応答で停止すること: ${JSON.stringify(rawStdout)}`);

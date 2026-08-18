@@ -131,7 +131,10 @@ export function parseGhArrayResponse<T>(stdout: string): T[] {
 /**
  * オブジェクト応答（要素配列を属性として持つ一覧応答）の全ページ要素を返す。
  * 各文書が配列であればその各要素をページとみなし、配列でなければ当該文書自体を 1 ページとみなす。
- * ページに当該属性が無い、または配列でない場合はそのページの寄与を 0 件とする（現行挙動の保持）。
+ * ページが JSON オブジェクトでない場合、当該属性を持たない場合、属性が配列でない場合はいずれも解釈失敗とする。
+ * GitHub の一覧 API は要素 0 件のページ・範囲外のページに対しても当該属性を空配列として必ず返すため、
+ * 属性の欠落・型不正は「一覧が空である」ことの証拠を何も持たない。これを 0 件として受理すると、
+ * 取得失敗が要素 0 件と区別できないまま下流へ流れ、本モジュールが除去しようとしている無言の劣化になる。
  */
 export function parseGhObjectResponse<T>(stdout: string, key: string): T[] {
   return splitGhJsonDocuments(stdout).flatMap((document) => {
@@ -141,7 +144,10 @@ export function parseGhObjectResponse<T>(stdout: string, key: string): T[] {
         throw new GhJsonParseError('オブジェクト応答のページが JSON オブジェクトではありません');
       }
       const value = page[key];
-      return Array.isArray(value) ? (value as T[]) : [];
+      if (!Array.isArray(value)) {
+        throw new GhJsonParseError(`オブジェクト応答のページに配列属性 '${key}' がありません`);
+      }
+      return value as T[];
     });
   });
 }

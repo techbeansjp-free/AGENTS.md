@@ -88,12 +88,27 @@ test('gh-json: 配列応答の文書が配列でない場合とオブジェク�
   assert.throws(() => parseGhObjectResponse('[[{"id":1}]]', 'check_runs'), GhJsonParseError);
 });
 
-test('gh-json: ページに当該属性が無い・配列でない場合はそのページの寄与を 0 件とする', () => {
-  assert.deepEqual(parseGhObjectResponse('{"total_count":0}', 'check_runs'), []);
-  assert.deepEqual(parseGhObjectResponse('{"check_runs":null}', 'check_runs'), []);
+test('gh-json: ページに当該属性が無い・配列でない場合は解釈失敗にする', () => {
+  // GitHub の一覧 API は要素 0 件のページ・範囲外のページに対しても当該属性を空配列で返す
+  // （実測: check-runs / actions runs を per_page=1 で全ページ取得、0 件応答、範囲外ページのいずれも
+  // 属性は常に存在し配列だった）。したがって属性の欠落・型不正は一覧が空である証拠にならず、
+  // 0 件として受理すると取得失敗が要素 0 件と区別できないまま下流へ流れる。
+  assert.throws(() => parseGhObjectResponse('{"total_count":0}', 'check_runs'), GhJsonParseError);
+  assert.throws(() => parseGhObjectResponse('{"check_runs":null}', 'check_runs'), GhJsonParseError);
+  assert.throws(() => parseGhObjectResponse('{"check_runs":{"id":1}}', 'check_runs'), GhJsonParseError);
+  // 複数ページのうち 1 ページでも属性を欠く場合、他ページが取得できていても解釈失敗とする。
+  assert.throws(
+    () => parseGhObjectResponse(`{"total_count":1}\n${JSON.stringify({ check_runs: REVIEWS })}`, 'check_runs'),
+    GhJsonParseError,
+  );
+  assert.throws(
+    () => parseGhObjectResponse(JSON.stringify([{ check_runs: REVIEWS }, { total_count: 3 }]), 'check_runs'),
+    /check_runs/,
+  );
+  // 属性が存在し空配列である場合だけ、そのページの寄与が 0 件として成立する。
   assert.deepEqual(
-    parseGhObjectResponse(`{"total_count":1}\n${JSON.stringify({ check_runs: REVIEWS })}`, 'check_runs'),
-    REVIEWS,
+    parseGhObjectResponse('{"total_count":0,"check_runs":[]}\n{"total_count":0,"check_runs":[]}', 'check_runs'),
+    [],
   );
 });
 
