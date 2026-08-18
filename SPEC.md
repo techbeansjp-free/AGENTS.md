@@ -107,6 +107,23 @@ export const NAMESPACED_ENTRIES = ['standards', 'templates', 'schemas', 'config'
   fi
 ```
 
+CLI の解決元はスクリプト自身の配置位置から導かれるが、そこに実体が無い場合は PATH 上の実体へも解決する（同 `.agent-skill-chain/scripts/cli-resolve.sh`）:
+
+```bash
+_ASC_CLI_RESOLVE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+_ASC_CLI_REPO_ROOT="$(cd -- "$_ASC_CLI_RESOLVE_DIR/../.." &>/dev/null && pwd)"
+```
+
+```bash
+  local path_cli
+  if path_cli="$(command -v agent-skill-chain 2>/dev/null)" \
+    && [[ -f "$path_cli" && -x "$path_cli" && -s "$path_cli" ]] \
+    && "$path_cli" --help >/dev/null 2>&1; then
+    ASC_CLI=("$path_cli")
+    return 0
+  fi
+```
+
 同じ根本原因は配布 CI テンプレートでは既に解消されている（`.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-ci.yml`）:
 
 ```yaml
@@ -166,6 +183,43 @@ const LOCAL_REVIEW_LAUNCHER_PATHS = [
   });
 ```
 
+隔離環境から credential を伴う remote を除く処理は remote の削除である（同 `.agent-skill-chain/scripts/gate-local-review.sh`）:
+
+```bash
+# reviewerにcredential-bearing remote URLやglobal Git設定を見せない。target objectはlocal clone済みなので
+# remoteを削除してもgit showによるread-only成果物参照は維持できる。
+git -C "$TRUSTED_ROOT" remote remove origin
+```
+
+コアレビュー方針・分類の読み取り元は隔離 clone ではなく protected base worktree の root である（同 `src/commands/gate.ts`）:
+
+```ts
+    // reviewer policy/classifierはprotected base（main worktree）をtrust rootとし、Issue worktreeが
+    // 同じPRで変更したcandidate policyを自己承認に使わない。
+    const policyRoot = root;
+```
+
+方針文書を持たないリポジトリでは方針そのものが解決されず、そこから導かれる制約も生じない（`src/lib/model-selection.ts`）:
+
+```ts
+  const manifestPath = path.join(root, '.agent-skill-chain', 'project', 'manifest.yaml');
+  if (!fs.existsSync(manifestPath)) return undefined;
+```
+
+```ts
+  const policy = loadCoreReviewPolicy(root);
+  if (!policy) {
+    return { required: false, status: 'resolved', reason: 'policy_absent', changed_paths: [] };
+  }
+```
+
+証跡の trusted actor を解決する方針は GitHub の保護された default branch から取得する（同 `src/lib/model-selection.ts`）:
+
+```ts
+/** Issue #680: evidenceの信頼元はGitHub上の保護されたdefault branchから読む。 */
+export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | undefined {
+```
+
 ## 要求 → 要件 → 受入条件
 
 ### 要求
@@ -181,17 +235,23 @@ const LOCAL_REVIEW_LAUNCHER_PATHS = [
 - 要件5: 既存の拒否経路（Issue worktree からの記録、recorder HEAD 不一致、protected base worktree の dirty）は現状のまま有効である。
 - 要件6: launcher digest の算出対象は配布集合の要素のみで構成する。配布集合外の文書（consumer 固有 project policy 文書を含む）は算出対象に含めず、その有無・内容によって証跡記録が失敗せず digest 値も変動しない。
 
-要件6 を置く理由: 要件3(b) は consumer project の実行でも launcher digest が埋まることを要求するが、現行の算出対象には consumer へ配布も生成もされない `.agent-skill-chain/project/MODEL_TIER_TABLE.md` が含まれ、全件取得に失敗すると算出が例外で停止する（実地確認した事実の `NAMESPACED_ENTRIES`・`src/lib/project-policy-scaffold.ts`・`LOCAL_REVIEW_LAUNCHER_PATHS` の各引用）。したがって算出対象を見直さない限り要件3(b) は原理的に充足できない。信頼境界の観点でも、digest が束縛すべきは「配布され全 consumer に同一の意味で存在する launcher 構成」であり、consumer 固有文書を含むリポジトリ全体の内容は同じ証跡に記録される trusted base SHA が束縛するため、算出対象を配布集合へ限定しても束縛は弱まらない。
+要件6 を置く理由（必要性）: 要件3(b) は consumer project の実行でも launcher digest が埋まることを要求するが、現行の算出対象には consumer へ配布も生成もされない `.agent-skill-chain/project/MODEL_TIER_TABLE.md` が含まれ、全件取得に失敗すると算出が例外で停止する（実地確認した事実の `NAMESPACED_ENTRIES`・`src/lib/project-policy-scaffold.ts`・`LOCAL_REVIEW_LAUNCHER_PATHS` の各引用）。したがって算出対象を見直さない限り要件3(b) は原理的に充足できない。
+
+要件6 が信頼境界を弱めない理由（束縛対象の定義）: 除外の正当化は「別の値がリポジトリ全体を束縛するから安全」という網羅性の主張には置かない。launcher digest は証跡の execution 節で `launcher`・`trusted_base_sha`・`isolation: ephemeral_clone` と併記される値であり（実地確認した事実の execution 引用）、その役割は「この verdict を生成した実行系が、審査対象ではなく隔離 clone 内の保護 base 由来であること」を後から検証可能にすることである。よって digest が束縛すべき対象は、レビュア起動・prompt 生成・verdict 記録を実際に実行するコードと、その実行系が隔離 clone から読み込む asset に限られる。consumer 固有の project policy 文書はこの定義に当たらない。隔離 clone 内の実行系はこれらの文書を読まないためである。
+
+除外対象が信頼判断に影響しない理由: project policy 文書がコアレビューの要否・reviewer capability・証跡の trusted actor の判断へ影響する経路は次の2つであり、いずれも launcher digest とは独立の機構で束縛される。(a) コアレビューの分類と capability 要求は protected base worktree の root を trust root として読む（実地確認した事実の `policyRoot` 引用）。本 SPEC が対象とするローカルゲートレビュー経路では、この root は「protected base worktree が dirty でないこと」と「recorder HEAD が trusted base SHA と一致すること」の既存検査（同引用。要件5・AC-4 が維持を要求する）を通過した作業ツリーであり、読み取り内容はその時点で trusted base SHA に束縛される。(b) 証跡の trusted actor 登録は GitHub の保護された default branch から取得する（同 `loadProtectedCoreReviewPolicy` 引用）。どちらの経路も隔離 clone 内の blob を読まないため、launcher digest の算出対象から当該文書を外しても、これら2経路の束縛は変化しない。
+
+加えて、当該文書を持たない consumer では影響そのものが存在しない。方針文書が無ければコアレビュー方針は解決されず `policy_absent` となり（同 `classifyCoreReview` 引用）、そこから導かれる制約が生じない。この状態で当該文書の digest 取得を必須にすることは、信頼判断へ影響しない対象を理由に実行を停止させるだけである。
 
 ### 要件と受入条件の対応
 
 | 要件 | 対応する受入条件 |
 |---|---|
-| 要件1 | AC-1, AC-2 |
+| 要件1 | AC-1, AC-2, AC-9 |
 | 要件2 | AC-1 |
-| 要件3(a) | AC-3, AC-6 |
+| 要件3(a) | AC-3, AC-6, AC-10 |
 | 要件3(b) | AC-7 |
-| 要件3(c) | AC-3 |
+| 要件3(c) | AC-11 |
 | 要件4 | AC-5 |
 | 要件5 | AC-4 |
 | 要件6 | AC-7, AC-8 |
@@ -200,14 +260,14 @@ const LOCAL_REVIEW_LAUNCHER_PATHS = [
 
 #### AC-1: 非 Node consumer で準備段が成立する
 
-- Given: `package.json` も lockfile も持たない consumer project の protected base worktree（既存のローカルレビュー統合テストと同種の stub 構成）。かつ、隔離環境で信頼実行コードを調達できる状態にある（調達手段は設計セグメントが確定する）
+- Given: `package.json` も lockfile も持たない consumer project の protected base worktree（既存のローカルレビュー統合テストと同種の stub 構成）。事前条件として、隔離 clone 内に信頼実行コード一式（レビュア起動スクリプト・adapter・CLI 実体）が存在することを判定時に確認する（その配置手段は設計セグメントが確定する。存在しない場合は AC-5 の対象であり本 AC の対象外）
 - When: 当該リポジトリの base SHA・target SHA に対してローカルゲートレビューを実行する
 - Then: 準備段が依存導入・ビルドの不在を理由に停止せず、隔離 clone 内のレビュア起動スクリプトが呼ばれる。npm 呼び出し記録に `ci --ignore-scripts` と `run build` のいずれも含まれない
 - 検証方法見込み: `automated`
 
 #### AC-2: consumer 自身のビルドを起動しない
 
-- Given: `package.json` と lockfile を持ち、build script が「痕跡ファイルを作成してから非0終了する」consumer project。かつ、隔離環境で信頼実行コードを調達できる状態にある
+- Given: `package.json` と lockfile を持ち、build script が「痕跡ファイルを作成してから非0終了する」consumer project。AC-1 と同じ事前条件（隔離 clone 内に信頼実行コード一式が存在すること）を判定時に確認する
 - When: 当該リポジトリに対してローカルゲートレビューを実行する
 - Then: 隔離 clone 内のレビュア起動スクリプトが呼ばれる。npm 呼び出し記録に `run build` が含まれず、隔離 clone 内に当該 build script の痕跡ファイルが存在しない（終了コードの握り潰しでは充足しない）
 - 検証方法見込み: `automated`
@@ -216,7 +276,7 @@ const LOCAL_REVIEW_LAUNCHER_PATHS = [
 
 - Given: consumer project でレビュア起動段へ到達した実行
 - When: レビュア起動スクリプトが実行される
-- Then: そのスクリプトと adapter の解決元が Issue worktree（target SHA の作業ツリー）ではなく、base SHA の隔離 clone であることを実行時の値で確認でき、隔離 clone に remote が残っていない
+- Then: そのスクリプトと adapter の解決元が Issue worktree（target SHA の作業ツリー）ではなく、base SHA の隔離 clone であることを実行時の値で確認できる
 - 検証方法見込み: `automated`
 
 #### AC-4: 既存の拒否経路が維持される
@@ -254,25 +314,46 @@ const LOCAL_REVIEW_LAUNCHER_PATHS = [
 - Then: 算出された launcher digest が両者で一致し、いずれの状態でも算出が失敗しない
 - 検証方法見込み: `automated`
 
+#### AC-9: consumer の依存導入が失敗しても準備段が成立する
+
+- Given: `package.json` と lockfile を持ち、consumer 自身の依存導入が必ず失敗する consumer project（到達不能な private registry の指定・ネットワーク到達不可・engine 制約の不一致のいずれか1つを再現した stub 構成）。AC-1 と同じ事前条件（隔離 clone 内に信頼実行コード一式が存在すること）を判定時に確認する
+- When: 当該リポジトリに対してローカルゲートレビューを実行する
+- Then: 準備段が依存導入の失敗を理由に非0終了せず、隔離 clone 内のレビュア起動スクリプトが呼ばれる。すなわち consumer 自身の依存導入の終了コードが準備段の成否条件として使われていない
+- 検証方法見込み: `automated`
+
+#### AC-10: prompt 生成・verdict 記録に使う CLI の解決元が隔離 clone 内である
+
+- Given: 配布集合のみを持ち agent-skill-chain 本体のソースを持たない consumer project で、レビュア起動段へ到達した実行。かつ、隔離 clone の外に agent-skill-chain CLI の実体が存在する状態（consumer リポジトリ root 直下の `node_modules/.bin/agent-skill-chain` と、`command -v agent-skill-chain` が解決する PATH 上の実体の両方を用意する）
+- When: 準備段以降の処理が、prompt 生成と verdict 記録に使う CLI を解決して実行する
+- Then: 実行された CLI 実体のパスが隔離 clone のディレクトリ配下にあり、用意した隔離 clone 外の2実体はいずれも実行されない。隔離 clone 内に CLI 実体を用意できない場合は、外部の実体へ落ちずに AC-5 の経路で非0終了する
+- 検証方法見込み: `automated`
+
+#### AC-11: 隔離環境が credential を伴う remote を保持しない
+
+- Given: レビュア起動段へ到達した実行における隔離 clone
+- When: レビュア起動スクリプトが実行される
+- Then: 隔離 clone に登録された remote が存在しない、または登録された全 remote の URL が credential を含まない。実地確認した事実に原文引用した `git -C "$TRUSTED_ROOT" remote remove origin` による remote 不在の状態は本条件を充足する
+- 検証方法見込み: `automated`
+
 ## 制約
 
 - 信頼境界を弱める解を採らない。Issue worktree のコードをそのまま実行する（隔離 clone を廃してビルドを省く）方針は不変条件 I5 に反するため不可とする。
 - 安全側ラチェット（不変条件 I8）に従い、前提不成立時は成功側へ倒さない。
-- 全4ゲートと全実行環境の直積を受入条件として要求しない。AC は代表構成（非 Node consumer・ビルドが失敗する consumer・consumer 形状のリポジトリ・本リポジトリ）で判定する。
+- 全4ゲートと全実行環境の直積を受入条件として要求しない。AC は代表構成（非 Node consumer・ビルドが失敗する consumer・依存導入が失敗する consumer・consumer 形状のリポジトリ・本リポジトリ）で判定する。
 - 変更は配布物（`.agent-skill-chain/` 配下と CLI 実装）に閉じ、consumer 側の作業を追加要求しない。
 - 要件6 が求める見直しは launcher digest の算出対象に限る。project policy の配布方針、model selection policy の適用範囲、証跡に記録する他の値の意味は変更しない。
 
 ## 完了条件
 
-- AC-1 から AC-8 の全てについて検証方法と証跡が対応している。
+- AC-1 から AC-11 の全てについて検証方法と証跡が対応している。
 - 「要件と受入条件の対応」表の全要件に、少なくとも1つの AC が対応している。
 - 既存の gate-local-review 統合テストが、変更後の期待値へ更新されたうえで成功する。
 - `verify doc-length`・`verify spec-bdd`・`lint references`・`lint vocab`・`lint secrets`・`adr-lint` を含む PR の CI が成功する。
 
 ## 未決事項
 
-- 信頼実行環境の具体的な調達手段（隔離 clone 内でのビルド範囲の限定、導入済み配布パッケージの利用、事前ビルド済み成果物の利用のいずれか、またはその組み合わせ）は設計セグメントで確定する。
-- 調達手段が「隔離 clone 外の配布パッケージ」を含む場合、その版と由来を証跡へどう記録するか（既存の launcher digest との関係）は設計セグメントで確定する。
+- 信頼実行環境の具体的な調達手段（隔離 clone 内でのビルド範囲の限定、導入済み配布パッケージからの実体複製、事前ビルド済み成果物の配置のいずれか、またはその組み合わせ）は設計セグメントで確定する。ただし手段の選択肢は AC-10 の制約下にあり、どの手段を選んでも、実行される CLI・レビュア起動スクリプト・adapter の実体は隔離 clone 配下に存在しなければならない。
+- 調達「元」が隔離 clone 外の配布パッケージである場合に、その版と由来を証跡へどう記録するか（既存の launcher digest との関係）は設計セグメントで確定する。この場合も実行に用いる実体は隔離 clone 配下へ配置し、隔離 clone 外の実体を直接実行する解は採らない。
 - launcher digest の算出対象に含める配布集合要素の具体的な列挙は、要件6 が定める上限（配布集合の要素のみ）の内側で設計セグメントが確定する。
 
 ## スコープ外
