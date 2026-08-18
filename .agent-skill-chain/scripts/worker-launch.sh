@@ -14,7 +14,8 @@
 # 終了コード（launch_workerの終了コードをそのまま伝播する）:
 #   0        worker完了（report_status completed済み、lease解放済み）
 #   3        deferred（human adapterのみ。正常系。lease は保持継続、人間の非同期作業待ち）
-#   4        dispatch_required（claude adapterのみ。lease保持継続、Agent tool呼び出し待ち）
+#   4        dispatch_required（lease保持継続、Agent toolまたはBash直接実行待ち）
+#   5        bash_direct起動コマンドの構文検査失敗（ワーカー未起動、lease解放済み）
 #   その他    error（フェイルセーフ。lease解放済み・report_status blocked済み、要人間確認）
 #
 # I8 安全側ラチェット: adapter未解決・launch_worker未定義は「まだ何も起動していない」ため
