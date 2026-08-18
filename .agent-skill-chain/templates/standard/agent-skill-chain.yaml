@@ -28,6 +28,7 @@ review:
   adapter: claude                 # claude | codex | human
   standard: {reviewer_count: 1, modes: [conformance, falsification]}
   strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
+  round_limit: {narrowing_threshold: 2, cutoff_threshold: 4}
 
 worker:
   adapter: claude                 # claude | codex | human（セグメント別の個別上書きが無い場合の既定）

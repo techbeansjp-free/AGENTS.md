@@ -39,7 +39,9 @@ export type IssueSize = 'quick' | 'standard';
 export type IssueRisk = 'unclassified' | 'normal' | 'high';
 
 export interface QuickModeDecision {
-  /** quick シグナル（ラベルまたは state.yaml）が読み取れたか。 */
+  /** quick シグナルの取得と構造解釈に成功したか。 */
+  signalResolved: boolean;
+  /** quick がシグナル（ラベルまたは state.yaml）で明示要求されたか。 */
   requested: boolean;
   /** 実際に成果物存在要求を免除するか。requested かつガードレール非抵触のときだけ真。 */
   exempt: boolean;
@@ -62,14 +64,17 @@ export function resolveQuickMode(
   backend: CoordinationBackend,
 ): QuickModeDecision {
   const resolved = readQuickSignals(root, issueNumber, backend);
-  if (resolved.size.status !== 'resolved' || resolved.size.value !== 'quick') {
-    return { requested: false, exempt: false, blockedReasons: [] };
+  // Issue #741: size/risk のどちらかでも一次情報から解決できない場合は、quick 免除も
+  // 上流セグメントの閉包追加も適用しない（未解決を quick とも standard とも決めつけない）。
+  if (resolved.size.status !== 'resolved' || resolved.risk.status !== 'resolved') {
+    return { signalResolved: false, requested: false, exempt: false, blockedReasons: [] };
+  }
+  if (resolved.size.value !== 'quick') {
+    return { signalResolved: true, requested: false, exempt: false, blockedReasons: [] };
   }
 
   const blockedReasons: string[] = [];
-  if (resolved.risk.status === 'unresolved') {
-    blockedReasons.push(`risk シグナルを解決できません（${resolved.risk.reason}）。quick は risk が normal の場合のみ適用できます`);
-  } else if (resolved.risk.value !== 'normal') {
+  if (resolved.risk.value !== 'normal') {
     blockedReasons.push(`risk が normal ではありません（現在: ${resolved.legacy.risk}）。quick は risk が normal の場合のみ適用できます`);
   }
   const changed = changedPaths(worktreePath);
@@ -79,7 +84,7 @@ export function resolveQuickMode(
   for (const guardrail of GUARDRAIL_PATHS) {
     if (changed.paths.some(guardrail.test)) blockedReasons.push(guardrail.reason);
   }
-  return { requested: true, exempt: blockedReasons.length === 0, blockedReasons };
+  return { signalResolved: true, requested: true, exempt: blockedReasons.length === 0, blockedReasons };
 }
 
 /** quick 適用対象外になった理由を利用者へ提示する固定書式のメッセージ。 */
@@ -88,4 +93,9 @@ export function quickBlockedNotice(decision: QuickModeDecision): string {
     'quick（size:quick）が指定されていますが、次の理由により quick 適用対象外のため通常の成果物要求を適用します:',
     ...decision.blockedReasons.map((reason) => `  - ${reason}`),
   ].join('\n');
+}
+
+/** quick シグナル未解決時に、免除と閉包追加の双方を抑止したことを示す固定書式。 */
+export function quickUnresolvedNotice(): string {
+  return 'quick シグナルを解決できなかったため、quick 免除も上流セグメントの閉包追加も適用しません';
 }

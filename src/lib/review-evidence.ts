@@ -2,6 +2,10 @@ import { digestOf } from './digest.js';
 
 export const REVIEW_EVIDENCE_MARKER = '<!-- agent-skill-chain:gate-review-evidence -->';
 
+const FINDING_EVIDENCE_MIN_LENGTH = 16;
+const AC_ID_PATTERN = /(?:^|[^A-Za-z0-9])AC-[0-9]+(?:$|[^A-Za-z0-9])/i;
+const ARTIFACT_PATH_PATTERN = /(?:^|[\s"'`(（])(?:\.?[A-Za-z0-9_-]+\/)*\.?[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?=$|[\s"'`:：,，。)）\]])/;
+
 export interface EvidenceFinding {
   severity: 'blocking' | 'warning' | 'info';
   origin: 'specification' | 'design' | 'implementation' | 'validation';
@@ -94,6 +98,7 @@ export interface EvidenceVerification {
   final: 'approved' | 'rejected' | 'human_required';
   conformance: 'pass' | 'fail' | 'pending';
   falsification: 'pass' | 'fail' | 'pending';
+  inconclusive: boolean;
   blockers: EvidenceFinding[];
   approved_artifacts: { path: string; digest: string }[];
   reviewers: VerifiedReviewer[];
@@ -134,6 +139,7 @@ function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerific
     final: 'human_required',
     conformance: 'pending',
     falsification: 'pending',
+    inconclusive: true,
     blockers,
     approved_artifacts: [],
     reviewers: [],
@@ -141,16 +147,26 @@ function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerific
   };
 }
 
-function isFindingShape(value: unknown): value is EvidenceFinding {
+type FindingValidation = 'current' | 'historical_v3';
+
+function isFindingShape(value: unknown, validation: FindingValidation): value is EvidenceFinding {
   if (!value || typeof value !== 'object') return false;
   const finding = value as Partial<EvidenceFinding>;
+  const legacyEvidence =
+    Array.isArray(finding.evidence) && finding.evidence.every((entry) => typeof entry === 'string');
+  const evidence = Array.isArray(finding.evidence) &&
+    finding.evidence.every((entry) => typeof entry === 'string' && entry.trim().length > 0)
+      ? finding.evidence.join(' / ').trim()
+      : '';
   return (
     ['blocking', 'warning', 'info'].includes(finding.severity ?? '') &&
     ['specification', 'design', 'implementation', 'validation'].includes(finding.origin ?? '') &&
     typeof finding.code === 'string' &&
     finding.code.length > 0 &&
-    Array.isArray(finding.evidence) &&
-    finding.evidence.every((entry) => typeof entry === 'string')
+    (validation === 'historical_v3'
+      ? legacyEvidence
+      : evidence.length >= FINDING_EVIDENCE_MIN_LENGTH &&
+        (AC_ID_PATTERN.test(evidence) || ARTIFACT_PATH_PATTERN.test(evidence)))
   );
 }
 
@@ -182,21 +198,25 @@ function isLightReviewShape(value: unknown): value is LightReviewEvidence {
   );
 }
 
-export function isEvidenceVerdict(value: unknown, digestRequired = true): value is EvidenceVerdict {
+export function isEvidenceVerdict(
+  value: unknown,
+  digestRequired = true,
+  findingValidation: FindingValidation = 'current',
+): value is EvidenceVerdict {
   if (!value || typeof value !== 'object') return false;
   const verdict = value as Partial<EvidenceVerdict>;
   return (
     ['pass', 'fail', 'pending'].includes(verdict.conformance ?? '') &&
     ['pass', 'fail', 'pending'].includes(verdict.falsification ?? '') &&
     Array.isArray(verdict.blockers) &&
-    verdict.blockers.every(isFindingShape) &&
+    verdict.blockers.every((finding) => isFindingShape(finding, findingValidation)) &&
     Array.isArray(verdict.approved_artifacts) &&
     verdict.approved_artifacts.every((artifact) => isArtifactShape(artifact, digestRequired)) &&
     typeof verdict.inconclusive === 'boolean'
   );
 }
 
-function isEvidenceShape(value: ReviewEvidence): boolean {
+function isEvidenceShape(value: ReviewEvidence, findingValidation: FindingValidation): boolean {
   return (
     value.schema_version === 'agent-skill-chain/gate-review-evidence/v3' &&
     /^ISSUE-[0-9]+$/.test(value.issue_id) &&
@@ -229,8 +249,119 @@ function isEvidenceShape(value: ReviewEvidence): boolean {
     typeof value.prompt_digest === 'string' &&
     /^sha256:[0-9a-f]{64}$/.test(value.prompt_digest) &&
     (value.light_review === undefined || isLightReviewShape(value.light_review)) &&
-    isEvidenceVerdict(value.verdict)
+    isEvidenceVerdict(value.verdict, true, findingValidation)
   );
+}
+
+export interface ValidatedGithubReviewEvidence {
+  api: GithubReviewRecord;
+  evidence: ReviewEvidence;
+  reviewId: number;
+  actor: string;
+}
+
+export type GithubReviewEvidenceValidation =
+  | { valid: true; value: ValidatedGithubReviewEvidence }
+  | { valid: false; reason: string };
+
+/**
+ * PR review 1件の証跡形式と GitHub API metadata の結線を検証する。
+ * 最新attemptの最終判定と過去ラウンド導出が同じ信頼境界を使うための共通入口。
+ */
+export function validateGithubReviewEvidenceRecord(
+  review: GithubReviewRecord,
+  options: {
+    issueId: string;
+    gate: ReviewEvidence['gate'];
+    trustedActors: string[];
+    findingValidation?: FindingValidation;
+  },
+): GithubReviewEvidenceValidation {
+  let parsed: unknown;
+  try {
+    parsed = parseReviewEvidence(review.body);
+  } catch {
+    return { valid: false, reason: `review ${review.id} のevidence JSONを検証できません` };
+  }
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    !isEvidenceShape(parsed as ReviewEvidence, options.findingValidation ?? 'current')
+  ) {
+    return { valid: false, reason: `review ${review.id} のevidence形式が不正です` };
+  }
+  const evidence = parsed as ReviewEvidence;
+  if (evidence.issue_id !== options.issueId || evidence.gate !== options.gate) {
+    return { valid: false, reason: `review ${review.id} は対象Issue/gateのevidenceではありません` };
+  }
+  const reviewId = Number(review.id);
+  if (!Number.isSafeInteger(reviewId) || reviewId <= 0) {
+    return { valid: false, reason: `review ${review.id} のAPI IDが不正です` };
+  }
+  const actor = review.user?.login ?? '';
+  if (!actor) return { valid: false, reason: `review ${review.id} のactorを解決できません` };
+  if (!options.trustedActors.includes(actor)) {
+    return { valid: false, reason: `review ${review.id} のactorはtrusted recorderではありません` };
+  }
+  if (review.state.toUpperCase() === 'DISMISSED') {
+    return { valid: false, reason: `review ${review.id} はdismiss済みです` };
+  }
+  if (review.commit_id !== evidence.target_sha) {
+    return { valid: false, reason: `review ${review.id} のAPI commit SHAがevidenceと一致しません` };
+  }
+  const expectedCount = evidence.profile === 'strict' ? 2 : 1;
+  if (evidence.expected_count !== expectedCount) {
+    return { valid: false, reason: `review ${review.id} のexpected_countがprofileと一致しません` };
+  }
+  if (evidence.reviewer.slot > expectedCount) {
+    return { valid: false, reason: `review ${review.id} のslotがprofileと一致しません` };
+  }
+  return { valid: true, value: { api: review, evidence, reviewId, actor } };
+}
+
+export type GithubReviewAttemptValidation =
+  | { valid: true; values: ValidatedGithubReviewEvidence[] }
+  | { valid: false; reason: string };
+
+/** 完備attemptのslot・run・digest・実行attestationの一貫性を検証する。 */
+export function validateGithubReviewEvidenceAttempt(
+  candidates: ValidatedGithubReviewEvidence[],
+): GithubReviewAttemptValidation {
+  if (candidates.length === 0) return { valid: false, reason: 'review evidenceがありません' };
+  const first = candidates[0].evidence;
+  const expectedCount = first.profile === 'strict' ? 2 : 1;
+  const expectedSlots = expectedCount === 2 ? [1, 2] : [1];
+  if (candidates.length !== expectedCount) {
+    return {
+      valid: false,
+      reason: `独立review evidence件数が不足または過剰です: expected=${expectedCount}, actual=${candidates.length}`,
+    };
+  }
+  if (candidates.some(({ evidence }) =>
+    evidence.attempt_id !== first.attempt_id ||
+    evidence.target_sha !== first.target_sha ||
+    evidence.profile !== first.profile ||
+    evidence.expected_count !== first.expected_count ||
+    evidence.prompt_digest !== first.prompt_digest ||
+    canonicalJson(evidence.light_review ?? null) !== canonicalJson(first.light_review ?? null) ||
+    evidence.execution.trusted_base_sha !== first.execution.trusted_base_sha ||
+    evidence.execution.launcher_digest !== first.execution.launcher_digest ||
+    evidence.execution.launcher_token_digest !== first.execution.launcher_token_digest
+  )) {
+    return { valid: false, reason: 'review attempt内の証跡・実行attestationが一致しません' };
+  }
+  const runIds = new Set(candidates.map(({ evidence }) => evidence.reviewer.run_id));
+  const slots = new Set(candidates.map(({ evidence }) => evidence.reviewer.slot));
+  if (runIds.size !== candidates.length || slots.size !== candidates.length) {
+    return { valid: false, reason: 'reviewer run IDまたはslotが重複しています' };
+  }
+  if (expectedSlots.some((slot) => !slots.has(slot as 1 | 2))) {
+    return { valid: false, reason: '必要なreviewer slotが揃っていません' };
+  }
+  return {
+    valid: true,
+    values: [...candidates].sort((left, right) => left.evidence.reviewer.slot - right.evidence.reviewer.slot),
+  };
 }
 
 export function verifyGithubReviewEvidence(options: {
@@ -242,7 +373,6 @@ export function verifyGithubReviewEvidence(options: {
   trustedActors: string[];
   writerActors: string[];
   unresolvedWriterActor: boolean;
-  expectedPromptDigest: string;
   expectedLightReview?: LightReviewEvidence;
   expectedArtifacts: { path: string; digest: string }[];
   expectedTrustedBaseSha: string;
@@ -250,7 +380,12 @@ export function verifyGithubReviewEvidence(options: {
   coreReviewRequired: boolean;
   codexModel: string;
   codexReasoning: string;
-}): EvidenceVerification {
+  gateRound?: { round: number; cutoffThreshold: number };
+  findingValidation?: FindingValidation;
+} & (
+  | { promptDigestVerification?: 'match_expected'; expectedPromptDigest: string }
+  | { promptDigestVerification: 'record_only'; expectedPromptDigest?: never }
+)): EvidenceVerification {
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
   }
@@ -288,10 +423,14 @@ export function verifyGithubReviewEvidence(options: {
 
   if (matching.length === 0) return fail('現在のtarget SHA用review evidenceがありません');
   const latest = matching.reduce((current, candidate) => candidate.reviewId > current.reviewId ? candidate : current);
-  if (!isEvidenceShape(latest.evidence as ReviewEvidence)) {
-    return fail(`review ${latest.api.id} のevidence形式が不正です`);
-  }
-  const latestEvidence = latest.evidence as ReviewEvidence;
+  const latestValidation = validateGithubReviewEvidenceRecord(latest.api, {
+    issueId: options.issueId,
+    gate: options.gate,
+    trustedActors: options.trustedActors,
+    findingValidation: options.findingValidation,
+  });
+  if (!latestValidation.valid) return fail(latestValidation.reason);
+  const latestEvidence = latestValidation.value.evidence;
   const expectedLightReview = canonicalJson(options.expectedLightReview ?? null);
   if (canonicalJson(latestEvidence.light_review ?? null) !== expectedLightReview) {
     return fail(`最新review attemptのlight_reviewがtrusted再評価値と一致しません: ${latestEvidence.attempt_id}`);
@@ -303,16 +442,20 @@ export function verifyGithubReviewEvidence(options: {
     return fail('コア対象にはStrict profileが必要です');
   }
   const selected = matching.filter((candidate) => candidate.evidence.attempt_id === latestEvidence.attempt_id);
+  const validatedCandidates: ValidatedGithubReviewEvidence[] = [];
   for (const candidate of selected) {
-    if (!isEvidenceShape(candidate.evidence as ReviewEvidence)) {
-      return fail(`review ${candidate.api.id} のevidence形式が不正です`);
-    }
+    const validation = validateGithubReviewEvidenceRecord(candidate.api, {
+      issueId: options.issueId,
+      gate: options.gate,
+      trustedActors: options.trustedActors,
+      findingValidation: options.findingValidation,
+    });
+    if (!validation.valid) return fail(validation.reason);
+    validatedCandidates.push(validation.value);
   }
-  const candidates = selected.map(({ api, evidence }) => ({
-    api,
-    evidence: evidence as ReviewEvidence,
-    actor: api.user?.login ?? '',
-  }));
+  const attemptValidation = validateGithubReviewEvidenceAttempt(validatedCandidates);
+  if (!attemptValidation.valid) return fail(attemptValidation.reason);
+  const candidates = attemptValidation.values;
 
   const expectedCount = options.profile === 'strict' ? 2 : 1;
   if (latestEvidence.expected_count !== expectedCount) {
@@ -321,9 +464,6 @@ export function verifyGithubReviewEvidence(options: {
 
   for (const candidate of candidates) {
     const { api: review, evidence, actor } = candidate;
-    if (!actor) return fail(`review ${review.id} のactorを解決できません`);
-    if (!options.trustedActors.includes(actor)) return fail(`review ${review.id} のactorはtrusted recorderではありません`);
-    if (review.state.toUpperCase() === 'DISMISSED') return fail(`review ${review.id} はdismiss済みです`);
     if (review.commit_id !== options.targetSha) {
       return fail(`review ${review.id} のAPI commit SHAが現在のPR headと一致しません`);
     }
@@ -332,7 +472,10 @@ export function verifyGithubReviewEvidence(options: {
     if (canonicalJson(evidence.light_review ?? null) !== expectedLightReview) {
       return fail(`review ${review.id} のlight_reviewがtrusted再評価値と一致しません`);
     }
-    if (evidence.prompt_digest !== options.expectedPromptDigest) {
+    if (
+      options.promptDigestVerification !== 'record_only' &&
+      evidence.prompt_digest !== options.expectedPromptDigest
+    ) {
       return fail(`review ${review.id} のprompt digestが一致しません`);
     }
     if (
@@ -374,24 +517,13 @@ export function verifyGithubReviewEvidence(options: {
     }
   }
 
-  const expectedSlots = expectedCount === 2 ? [1, 2] : [1];
-  if (candidates.length !== expectedSlots.length) {
-    return fail(`独立review evidence件数が不足または過剰です: expected=${expectedSlots.length}, actual=${candidates.length}`);
-  }
-  const runIds = new Set(candidates.map((candidate) => candidate.evidence.reviewer.run_id));
-  const slots = new Set(candidates.map((candidate) => candidate.evidence.reviewer.slot));
-  if (runIds.size !== candidates.length || slots.size !== candidates.length) {
-    return fail('reviewer run IDまたはslotが重複しています');
-  }
-  if (expectedSlots.some((slot) => !slots.has(slot as 1 | 2))) return fail('必要なreviewer slotが揃っていません');
-  const tokenDigests = new Set(candidates.map((candidate) => candidate.evidence.execution.launcher_token_digest));
-  if (tokenDigests.size !== 1) return fail('review attempt内のlauncher token digestが一致しません');
-  const lightReviews = new Set(candidates.map((candidate) => canonicalJson(candidate.evidence.light_review ?? null)));
-  if (lightReviews.size !== 1) return fail('review attempt内のlight_review証跡が一致しません');
-
   const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
   const blockers = verdicts.flatMap((verdict) => verdict.blockers);
   const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
+  const cutoffReached =
+    options.gateRound !== undefined &&
+    options.gateRound.round >= options.gateRound.cutoffThreshold &&
+    hasBlocking;
   const rejected = verdicts.some(
     (verdict) => verdict.conformance === 'fail' || verdict.falsification === 'fail',
   ) || hasBlocking;
@@ -401,7 +533,14 @@ export function verifyGithubReviewEvidence(options: {
       verdict.falsification === 'pass' &&
       verdict.inconclusive === false,
   ) && !hasBlocking;
-  const final = rejected ? 'rejected' : approved ? 'approved' : 'human_required';
+  const trustedInconclusive = cutoffReached;
+  const final = trustedInconclusive
+    ? 'human_required'
+    : rejected
+      ? 'rejected'
+      : approved
+        ? 'approved'
+        : 'human_required';
   return {
     final,
     conformance: rejected
@@ -413,6 +552,7 @@ export function verifyGithubReviewEvidence(options: {
       : approved
         ? 'pass'
         : 'pending',
+    inconclusive: trustedInconclusive || verdicts.some((verdict) => verdict.inconclusive),
     falsification: rejected
       ? verdicts.some((verdict) => verdict.falsification === 'fail')
         ? 'fail'
@@ -456,5 +596,12 @@ export function verifyGithubReviewEvidence(options: {
           })),
       )),
     },
+    ...(cutoffReached
+      ? {
+          reason:
+            `ラウンド上限に達したため人間判断へ移行します: round=${options.gateRound?.round}, ` +
+            `cutoff_threshold=${options.gateRound?.cutoffThreshold}, unresolved_blocking=${blockers.filter((finding) => finding.severity === 'blocking').length}`,
+        }
+      : {}),
   };
 }

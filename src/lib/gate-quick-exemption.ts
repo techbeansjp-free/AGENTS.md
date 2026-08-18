@@ -109,8 +109,17 @@ export function readQuickSignals(root: string, issueNumber: string, backend: Coo
     }
   }
 
-  const state = tryReadYamlFile<{ size?: unknown; risk?: unknown }>(stateFilePath(root, issueNumber));
-  if (!state) return unresolvedSignals('Issue 状態ファイルを取得できません');
+  // Issue #741: 状態ファイルが壊れている・ディレクトリである等の読み取り失敗は例外にせず
+  // 未解決として畳む。未解決時は quick 免除も上流閉包も適用しないため、安全側で停止する。
+  let state: { size?: unknown; risk?: unknown } | undefined;
+  try {
+    state = tryReadYamlFile<{ size?: unknown; risk?: unknown }>(stateFilePath(root, issueNumber));
+  } catch {
+    return unresolvedSignals('Issue 状態ファイルを解釈できません');
+  }
+  if (!state || typeof state !== 'object' || Array.isArray(state)) {
+    return unresolvedSignals('Issue 状態ファイルを取得できません');
+  }
   const sizeValues = state.size === undefined ? [] : typeof state.size === 'string' ? [state.size] : ['<invalid>'];
   const riskValues = state.risk === undefined ? [] : typeof state.risk === 'string' ? [state.risk] : ['<invalid>'];
   return signalsFromValues(sizeValues, riskValues);

@@ -3,6 +3,7 @@ import { readYamlFile } from './yaml-io.js';
 import { resolveAsset, repoRoot } from './paths.js';
 import { validateAgainstSchema } from './schema.js';
 import type { WorkerConfig } from './worker-selection.js';
+import { resolveGateRoundLimit, validateGateRoundLimit, type GateRoundLimit } from './gate-round.js';
 
 export interface AgentSkillChainConfig {
   schema_version: string;
@@ -17,6 +18,7 @@ export interface AgentSkillChainConfig {
     adapter?: 'claude' | 'codex' | 'human';
     standard: { reviewer_count: number; modes: string[] };
     strict: { reviewer_count: number; trigger: { risk_not_normal: boolean; autonomy_full: boolean } };
+    round_limit?: GateRoundLimit;
   };
   worker: WorkerConfig;
   worktree: {
@@ -82,7 +84,10 @@ export function loadConfig(root: string = repoRoot(), overrideConfig?: unknown):
           outcome.errors.map((e) => `  - ${e}`).join('\n'),
       );
     }
-    return overrideConfig as AgentSkillChainConfig;
+    const config = overrideConfig as AgentSkillChainConfig;
+    const roundLimitError = validateGateRoundLimit(resolveGateRoundLimit(config.review.round_limit));
+    if (roundLimitError) throw new Error(`config/agent-skill-chain.yaml の設定エラー: ${roundLimitError}`);
+    return config;
   }
   if (cached && cached.root === root) return cached.config;
   const configPath = resolveAsset(path.join('config', 'agent-skill-chain.yaml'), root);
@@ -94,6 +99,8 @@ export function loadConfig(root: string = repoRoot(), overrideConfig?: unknown):
         outcome.errors.map((e) => `  - ${e}`).join('\n'),
     );
   }
+  const roundLimitError = validateGateRoundLimit(resolveGateRoundLimit(config.review.round_limit));
+  if (roundLimitError) throw new Error(`config/agent-skill-chain.yaml の設定エラー: ${roundLimitError}`);
   cached = { root, config };
   return config;
 }

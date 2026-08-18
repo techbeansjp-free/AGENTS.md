@@ -47,9 +47,19 @@ import {
   type EvidenceVerdict,
   type GithubReviewRecord,
   type ReviewEvidence,
+  type ValidatedGithubReviewEvidence,
   type VerifiedReviewAttempt,
   type VerifiedReviewer,
 } from '../lib/review-evidence.js';
+import {
+  deriveGateRoundContext,
+  fetchGateRoundContext,
+  latestGateAttemptId,
+  renderGateRoundHistory,
+  resolveGateRoundLimit,
+  type GateRoundContext,
+  type GateRoundLimit,
+} from '../lib/gate-round.js';
 import {
   assertTrustedAppCheck,
   assertTrustedGateAttestationVerification,
@@ -157,7 +167,7 @@ adapter: claude|codex|human。進行役がローカルreviewerを明示選択す
 `;
 
 const REVIEWER_PROMPT_USAGE = `
-使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha> [base_sha]
+使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha> [base_sha] [pr_number] [attempt_id]
 
 対象セグメントの成果物・AC-ID・上流承認物を read-only で収集し、conformance（立証）/
 falsification（反証）判定プロトコルの指示（ルーブリック・出力 JSON 契約）を標準出力へ出す。
@@ -165,7 +175,7 @@ falsification（反証）判定プロトコルの指示（ルーブリック・�
 `;
 
 const SUBMIT_EVIDENCE_USAGE = `
-使い方: agent-skill-chain gate submit-evidence <issue_id> <gate_id> <profile> <target_sha> <base_sha> <trusted_base_sha> <pr_number> <attempt_id> <expected_count> <reviewer_run_id> <slot> <adapter> <model> <reasoning>
+使い方: agent-skill-chain gate submit-evidence <issue_id> <gate_id> <profile> <target_sha> <base_sha> <trusted_base_sha> <pr_number> <attempt_id> <expected_count> <reviewer_run_id> <slot> <adapter> <model> <reasoning> <prompt_digest>
 
 protected base由来のローカルreviewer verdict（stdin JSON）を構造化し、GitHub PR Review APIへ
 COMMENTとして保存する。Issue worktreeのcandidate recorderからの実行、dirty base、SHA不一致は拒否する。
@@ -413,6 +423,62 @@ function localReviewLauncherDigest(root: string, trustedBaseSha: string): string
     return { path: launcherPath, digest: digestOf(shown.stdout) };
   });
   return digestOf(JSON.stringify(blobs));
+}
+
+function historicalGateAttemptVerifier(options: {
+  root: string;
+  issueId: string;
+  gateId: Segment;
+  trustedActors: string[];
+}): (attempt: ValidatedGithubReviewEvidence[]) => boolean {
+  return (attempt) => {
+    const first = attempt[0]?.evidence;
+    if (!first) return false;
+    try {
+      const policy = classifyCoreReview(options.root, {
+        targetSha: first.target_sha,
+        baseRef: first.execution.trusted_base_sha,
+      });
+      if (!policy.policy || (policy.required && policy.status !== 'resolved')) return false;
+      const artifacts = artifactsAtSha(
+        options.root,
+        expectedArtifactPaths(
+          options.root,
+          options.gateId,
+          first.execution.trusted_base_sha,
+          first.target_sha,
+        ),
+        first.target_sha,
+        options.gateId === 'implementation',
+      );
+      const result = verifyGithubReviewEvidence({
+        reviews: attempt.map(({ api }) => api),
+        issueId: options.issueId,
+        gate: options.gateId,
+        profile: first.profile,
+        targetSha: first.target_sha,
+        trustedActors: options.trustedActors,
+        // 履歴取得時点ではwriter一覧を再取得しないため、actor分離を信頼根拠にせず
+        // trusted recorderがwriterと同一である最も厳しい関係として再検証する。
+        writerActors: options.trustedActors,
+        unresolvedWriterActor: false,
+        // 過去証跡のprompt digestは投稿時の実物を記録するが、現行の生成ロジックでは
+        // 再現できない。履歴の真正性はプロンプト非依存のexecution attestationで検証する。
+        promptDigestVerification: 'record_only',
+        expectedLightReview: first.light_review,
+        expectedArtifacts: artifacts,
+        findingValidation: 'historical_v3',
+        expectedTrustedBaseSha: first.execution.trusted_base_sha,
+        expectedLauncherDigest: localReviewLauncherDigest(options.root, first.execution.trusted_base_sha),
+        coreReviewRequired: policy.required,
+        codexModel: policy.policy.adapters.codex.model,
+        codexReasoning: policy.policy.adapters.codex.reasoning_effort,
+      });
+      return result.review_attempt?.attempt_id === first.attempt_id;
+    } catch {
+      return false;
+    }
+  };
 }
 
 function launcherTokenPayload(token: LauncherToken): Omit<LauncherToken, 'consumed_slots'> {
@@ -1129,6 +1195,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
       adapterRaw,
       model,
       reasoning,
+      promptDigest,
     ] = args;
     if (
       !issueIdRaw ||
@@ -1144,7 +1211,8 @@ export async function submitEvidence(args: string[]): Promise<number> {
       !slotRaw ||
       !adapterRaw ||
       model === undefined ||
-      reasoning === undefined
+      reasoning === undefined ||
+      !promptDigest
     ) {
       throw new CliError('submit-evidenceの引数が不足しています');
     }
@@ -1161,6 +1229,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
     if (expectedCount !== expectedFromProfile) throw new CliError('expected_countがprofileと一致しません');
     if (!/^attempt-[A-Za-z0-9._-]+$/.test(attemptId)) throw new CliError('attempt_id形式が不正です');
     if (!/^review-[A-Za-z0-9._-]+$/.test(reviewerRunId)) throw new CliError('reviewer_run_id形式が不正です');
+    if (!/^sha256:[0-9a-f]{64}$/.test(promptDigest)) throw new CliError('prompt_digest形式が不正です');
     const launcherTokenPath = process.env.ASC_LAUNCHER_TOKEN_FILE;
     if (!launcherTokenPath) throw new CliError('launcher token fileがありません');
 
@@ -1191,9 +1260,10 @@ export async function submitEvidence(args: string[]): Promise<number> {
     const lightReview = tryReadYamlFile<GateReport>(
       reviewFilePath(root, number, gateId, config.coordination.backend),
     )?.gate.light_review;
+    // Issue #729: prompt digest は投稿側（launcher）が生成時に算出した実物を受け取る。
+    // ラウンド文脈を含むプロンプトは recorder 側で再現できないため、ここで再計算しない。
     const promptInput = resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, lightReview ?? null);
     const artifacts = approvedArtifactsForPrompt(root, gateId, targetSha, baseSha, promptInput);
-    const promptDigest = evidencePromptDigest(buildReviewerPromptFromResolved(promptInput));
     const launcherDigest = localReviewLauncherDigest(root, trustedBaseSha);
     let parsedVerdict: unknown;
     try {
@@ -1336,6 +1406,29 @@ function buildVerifiedGateReport(options: {
   const effectiveProfile =
     options.profile === 'strict' || trustedLightReview.strict_locked ? 'strict' : 'standard';
   const expectedLightReview = hasTrustedLightReview ? trustedLightReview : undefined;
+  const currentAttemptId = latestGateAttemptId({
+    reviews: options.reviews,
+    issueId: options.issueId,
+    gate: options.gateId,
+    targetSha: options.targetSha,
+    trustedActors: policy.policy.execution.trusted_reviewer_actors,
+  });
+  const roundContext = currentAttemptId
+    ? deriveGateRoundContext({
+        reviews: options.reviews,
+        issueId: options.issueId,
+        gate: options.gateId,
+        currentAttemptId,
+        trustedActors: policy.policy.execution.trusted_reviewer_actors,
+        verifyAttempt: historicalGateAttemptVerifier({
+          root: options.root,
+          issueId: options.issueId,
+          gateId: options.gateId,
+          trustedActors: policy.policy.execution.trusted_reviewer_actors,
+        }),
+      })
+    : { status: 'unavailable' as const, reason: '当該 target SHA の attempt_id を解決できませんでした' };
+  const roundLimit = resolveGateRoundLimit(loadConfig(options.root).review.round_limit);
   const promptInput = resolveReviewerPromptInput(
     options.root,
     options.issueNumber,
@@ -1343,6 +1436,8 @@ function buildVerifiedGateReport(options: {
     options.targetSha,
     options.baseSha,
     expectedLightReview ?? null,
+    roundContext,
+    roundLimit,
   );
   const artifacts = approvedArtifactsForPrompt(
     options.root,
@@ -1368,6 +1463,9 @@ function buildVerifiedGateReport(options: {
     coreReviewRequired: policy.required,
     codexModel: policy.policy.adapters.codex.model,
     codexReasoning: policy.policy.adapters.codex.reasoning_effort,
+    ...(roundContext.status === 'available'
+      ? { gateRound: { round: roundContext.round, cutoffThreshold: roundLimit.cutoff_threshold } }
+      : {}),
   });
   const report: GateReport = {
     schema_version: 'agent-skill-chain/gate-report/v1',
@@ -2137,6 +2235,8 @@ export interface ReviewerPromptInput {
   diff?: string;
   omittedAdditions: string[];
   lightReview?: LightReviewDecision;
+  roundContext: GateRoundContext;
+  roundLimit: GateRoundLimit;
 }
 
 function resolveReviewerPromptInput(
@@ -2146,8 +2246,11 @@ function resolveReviewerPromptInput(
   targetSha: string,
   baseSha?: string,
   lightReviewOverride?: LightReviewDecision | null,
+  roundContextOverride?: GateRoundContext,
+  roundLimitOverride?: GateRoundLimit,
 ): ReviewerPromptInput {
-  const backend = loadConfig(root).coordination.backend;
+  const config = loadConfig(root);
+  const backend = config.coordination.backend;
   const quick = resolveGateQuickExemption({ root, issueNumber: number, backend, baseSha, targetSha });
   const requiredArtifacts = readRequiredGateArtifacts(root, targetSha, gateId);
 
@@ -2219,7 +2322,40 @@ function resolveReviewerPromptInput(
     diff,
     omittedAdditions,
     lightReview,
+    roundContext: roundContextOverride ?? {
+      status: 'unavailable',
+      reason: 'ラウンド情報が判定プロンプト生成へ渡されていません',
+    },
+    roundLimit: roundLimitOverride ?? resolveGateRoundLimit(config.review.round_limit),
   };
+}
+
+/**
+ * root/SHA から判定プロンプトを組み立てる（入力解決とレンダリングの合成）。
+ * Issue #729: ラウンド文脈は呼び出し側が耐久記録から解決して渡す。
+ */
+export function buildReviewerPrompt(
+  root: string,
+  number: string,
+  gateId: Segment,
+  targetSha: string,
+  baseSha?: string,
+  lightReviewOverride?: LightReviewDecision | null,
+  roundContextOverride?: GateRoundContext,
+  roundLimitOverride?: GateRoundLimit,
+): string {
+  return buildReviewerPromptFromResolved(
+    resolveReviewerPromptInput(
+      root,
+      number,
+      gateId,
+      targetSha,
+      baseSha,
+      lightReviewOverride,
+      roundContextOverride,
+      roundLimitOverride,
+    ),
+  );
 }
 
 function appendArtifactPresentation(sections: string[], artifact: ArtifactReadResult, exempt: boolean): void {
@@ -2325,9 +2461,57 @@ export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): str
   }
   sections.push(JUDGMENT_AXIS_END, '', '## falsification（反証）ルーブリック');
   sections.push(
-    '- 反例（未処理エッジ・矛盾・危険な既定・未テストの失敗経路・spec⇔実装乖離）を能動的に 1 件以上探索する。' +
-      'blocking な反例が 1 件でもあれば falsification=fail とし origin 付き blocking finding を付与する。',
+    '- 反例（未処理エッジ・矛盾・危険な既定・未テストの失敗経路・specと実装の乖離）を探索する。',
+    '- blocking 基準を満たす反例が 1 件も無い場合は falsification=pass とする。' +
+      'これは正常かつ第一級の帰結であり、pass のために基準を緩めたり、pass を避けるために基準外の反例を blocking へ引き上げたりしない。',
+    '- 反証観点の反例は、次の 3 条件をすべて満たす場合だけ blocking とする。' +
+      'いずれかを満たさない反例は warning 以下として記録する。3 条件は全ラウンドで必要条件であり、取り除かない。',
+    '  1. 目的阻害性: 当該 Issue の目的達成を直接妨げる、または既存機能の回帰・データ喪失・セキュリティ低下を伴う。',
+    '  2. 到達可能性: 前提とする入力が、本システムの他の機械的検査を通過して実際に成立し得る。',
+    '  3. 責務内是正可能性: 当該セグメントの責務範囲内で是正でき、下流セグメントで確定する事項を先取りしない。',
+    '- blocking 基準を満たす反例が 1 件以上あれば falsification=fail とし、origin 付き blocking finding を付与する。',
+    '- ラウンド番号やレビュープロファイルを理由に、データ喪失・セキュリティ低下・既存機能の回帰・当該 Issue の目的未達という区分そのものを blocking 対象から除外しない。' +
+      'これらに該当し、3 条件と実証性をすべて満たす反例は全ラウンド・全プロファイルで blocking のままとする。',
+    '- 実証性とは、反例が成立する経路を、当該ラウンドの判定対象成果物の記述を引用して具体的に示せることである。' +
+      'この定義だけで実証性を blocking の必要条件にはしない。',
+    '- 上記の blocking 基準は反証観点の反例だけへ適用する。立証観点の AC-ID 未達・未証跡には適用しない。',
   );
+  if (
+    input.roundContext.status === 'available' &&
+    input.roundContext.round >= input.roundLimit.narrowing_threshold
+  ) {
+    sections.push('## 高ラウンドの反証追加要件');
+    sections.push(
+      `- 現在のラウンド ${input.roundContext.round} は限定閾値 ${input.roundLimit.narrowing_threshold} 以上である。` +
+        '目的阻害性・到達可能性・責務内是正可能性の 3 条件をすべて満たし、かつ実証性を満たす反例だけを blocking とする。',
+      '- この限定でも 3 条件はいずれも取り除かない。実証性を満たさない反例は warning 以下として記録する。',
+    );
+  }
+  sections.push('## 過去ラウンドの判定記録');
+  if (input.roundContext.status === 'available' && input.roundContext.diagnostics?.length) {
+    sections.push('ラウンド計数時に除外した証跡があります:');
+    sections.push(...input.roundContext.diagnostics.map((diagnostic) => `- ${diagnostic}`));
+  }
+  if (input.roundContext.status === 'unavailable') {
+    sections.push(
+      `過去ラウンドの判定記録を耐久記録から取得できなかった（理由: ${input.roundContext.reason}）。` +
+        'これは過去ラウンドが存在しないことを意味しない。ラウンド番号は導出できていないため、高ラウンドの限定を適用しない。',
+    );
+  } else if (input.roundContext.history.length === 0 && input.roundContext.diagnostics?.length) {
+    sections.push(
+      '過去の review evidence は取得できたが、検証を通過せずラウンド計数から除外された。' +
+        '過去ラウンドを再検証できないため、本ラウンドが初回であるとは判定できない。',
+    );
+  } else if (input.roundContext.history.length === 0) {
+    sections.push('本ラウンドは初回（ラウンド 0）であり、過去ラウンドの判定記録は無い。');
+  } else {
+    sections.push(`現在のラウンド番号: ${input.roundContext.round}`);
+    sections.push(renderGateRoundHistory(input.roundContext.history));
+    sections.push(
+      '過去ラウンドで記録済みの finding code のうち、当該ラウンドの成果物で是正済みと確認できる論点を、新たな根拠なしに再び blocking として提出しない。' +
+        '未修正のまま残る blocking を同一 code で再提出することは、この禁止の対象外であり許容する。',
+    );
+  }
   if (input.lightReview?.applied === true) {
     sections.push(
       '## Lightプロファイル追加ルーブリック',
@@ -2366,11 +2550,31 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
       printUsage(REVIEWER_PROMPT_USAGE);
       return 0;
     }
-    const [issueIdRaw, gateId, targetSha, baseSha] = args;
+    const [issueIdRaw, gateId, targetSha, baseSha, prNumber, attemptId] = args;
     if (!issueIdRaw || !gateId || !targetSha) throw new CliError('issue_id, gate_id, target_sha はすべて必須です');
-    const { number } = parseIssueId(issueIdRaw);
+    const { issueId, number } = parseIssueId(issueIdRaw);
     validateGateId(gateId);
-    const input = resolveReviewerPromptInput(repoRoot(), number, gateId, targetSha, baseSha);
+    const root = repoRoot();
+    const config = loadConfig(root);
+    const policy = classifyCoreReview(root, { targetSha, baseRef: baseSha }).policy;
+    const roundContext = fetchGateRoundContext({
+      root,
+      backend: config.coordination.backend,
+      prNumber,
+      issueId,
+      gate: gateId,
+      currentAttemptId: attemptId,
+      trustedActors: policy?.execution.trusted_reviewer_actors ?? [],
+      verifyAttempt: policy
+        ? historicalGateAttemptVerifier({
+            root,
+            issueId,
+            gateId,
+            trustedActors: policy.execution.trusted_reviewer_actors,
+          })
+        : () => false,
+    });
+    const input = resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, undefined, roundContext);
     const prompt = buildReviewerPromptFromResolved(input);
     const abortReason = gateLaunchAbortReason(input.requiredArtifacts, input.quick.exempt);
     if (abortReason) {
