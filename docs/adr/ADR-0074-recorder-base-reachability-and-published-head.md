@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0074
-status: proposed
+status: accepted
 title: 証跡記録処理のbase一致要求を到達可能性へ緩め、公開済みHEADの追加検証に代えて入力の供給元をコミットのツリーへ固定する
 tags: [gate-review, evidence, trust-boundary, recorder]
 supersedes: []
