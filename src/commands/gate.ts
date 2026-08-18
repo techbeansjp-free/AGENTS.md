@@ -29,7 +29,9 @@ import {
   verifyGithubReviewEvidence,
   type EvidenceVerdict,
   type GithubReviewRecord,
+  type LightReviewEvidence,
   type ReviewEvidence,
+  type ValidatedGithubReviewEvidence,
   type VerifiedReviewAttempt,
   type VerifiedReviewer,
 } from '../lib/review-evidence.js';
@@ -40,6 +42,7 @@ import {
   renderGateRoundHistory,
   resolveGateRoundLimit,
   type GateRoundContext,
+  type GateRoundRecord,
 } from '../lib/gate-round.js';
 import {
   assertTrustedAppCheck,
@@ -379,6 +382,75 @@ function localReviewLauncherDigest(root: string, trustedBaseSha: string): string
     return { path: launcherPath, digest: digestOf(shown.stdout) };
   });
   return digestOf(JSON.stringify(blobs));
+}
+
+function historicalGateAttemptVerifier(options: {
+  root: string;
+  issueId: string;
+  issueNumber: string;
+  gateId: Segment;
+  trustedActors: string[];
+}): (attempt: ValidatedGithubReviewEvidence[], priorHistory: GateRoundRecord[]) => boolean {
+  return (attempt, priorHistory) => {
+    const first = attempt[0]?.evidence;
+    if (!first) return false;
+    try {
+      const policy = classifyCoreReview(options.root, {
+        targetSha: first.target_sha,
+        baseRef: first.execution.trusted_base_sha,
+      });
+      if (!policy.policy || (policy.required && policy.status !== 'resolved')) return false;
+      const artifacts = artifactsAtSha(
+        options.root,
+        expectedArtifactPaths(
+          options.root,
+          options.gateId,
+          first.execution.trusted_base_sha,
+          first.target_sha,
+        ),
+        first.target_sha,
+        options.gateId === 'implementation',
+      );
+      const roundContext: GateRoundContext = {
+        status: 'available',
+        round: priorHistory.length,
+        history: priorHistory,
+      };
+      const result = verifyGithubReviewEvidence({
+        reviews: attempt.map(({ api }) => api),
+        issueId: options.issueId,
+        gate: options.gateId,
+        profile: first.profile,
+        targetSha: first.target_sha,
+        trustedActors: options.trustedActors,
+        // 履歴取得時点ではwriter一覧を再取得しないため、actor分離を信頼根拠にせず
+        // trusted recorderがwriterと同一である最も厳しい関係として再検証する。
+        writerActors: options.trustedActors,
+        unresolvedWriterActor: false,
+        expectedPromptDigest: evidencePromptDigest(
+          buildReviewerPrompt(
+            options.root,
+            options.issueNumber,
+            options.gateId,
+            first.target_sha,
+            first.execution.trusted_base_sha,
+            (first.light_review as LightReviewEvidence | undefined) ?? null,
+            roundContext,
+          ),
+        ),
+        expectedLightReview: first.light_review,
+        expectedArtifacts: artifacts,
+        expectedTrustedBaseSha: first.execution.trusted_base_sha,
+        expectedLauncherDigest: localReviewLauncherDigest(options.root, first.execution.trusted_base_sha),
+        coreReviewRequired: policy.required,
+        codexModel: policy.policy.adapters.codex.model,
+        codexReasoning: policy.policy.adapters.codex.reasoning_effort,
+      });
+      return result.review_attempt?.attempt_id === first.attempt_id;
+    } catch {
+      return false;
+    }
+  };
 }
 
 function launcherTokenPayload(token: LauncherToken): Omit<LauncherToken, 'consumed_slots'> {
@@ -1137,6 +1209,13 @@ export async function submitEvidence(args: string[]): Promise<number> {
       gate: gateId,
       currentAttemptId: attemptId,
       trustedActors: policy.execution.trusted_reviewer_actors,
+      verifyAttempt: historicalGateAttemptVerifier({
+        root,
+        issueId,
+        issueNumber: number,
+        gateId,
+        trustedActors: policy.execution.trusted_reviewer_actors,
+      }),
     });
     const promptDigest = evidencePromptDigest(
       buildReviewerPrompt(root, number, gateId, targetSha, baseSha, lightReview ?? null, roundContext),
@@ -1294,6 +1373,7 @@ function buildVerifiedGateReport(options: {
     issueId: options.issueId,
     gate: options.gateId,
     targetSha: options.targetSha,
+    trustedActors: policy.policy.execution.trusted_reviewer_actors,
   });
   const roundContext = currentAttemptId
     ? deriveGateRoundContext({
@@ -1302,6 +1382,13 @@ function buildVerifiedGateReport(options: {
         gate: options.gateId,
         currentAttemptId,
         trustedActors: policy.policy.execution.trusted_reviewer_actors,
+        verifyAttempt: historicalGateAttemptVerifier({
+          root: options.root,
+          issueId: options.issueId,
+          issueNumber: options.issueNumber,
+          gateId: options.gateId,
+          trustedActors: policy.policy.execution.trusted_reviewer_actors,
+        }),
       })
     : { status: 'unavailable' as const, reason: '当該 target SHA の attempt_id を解決できませんでした' };
   const roundLimit = resolveGateRoundLimit(loadConfig(options.root).review.round_limit);
@@ -2309,6 +2396,15 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
       gate: gateId,
       currentAttemptId: attemptId,
       trustedActors: policy?.execution.trusted_reviewer_actors ?? [],
+      verifyAttempt: policy
+        ? historicalGateAttemptVerifier({
+            root,
+            issueId,
+            issueNumber: number,
+            gateId,
+            trustedActors: policy.execution.trusted_reviewer_actors,
+          })
+        : () => false,
     });
     return ok(buildReviewerPrompt(root, number, gateId, targetSha, baseSha, undefined, roundContext));
   });

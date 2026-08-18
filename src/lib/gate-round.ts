@@ -1,10 +1,10 @@
 import { gh } from './exec.js';
 import {
-  isEvidenceVerdict,
-  parseReviewEvidence,
-  REVIEW_EVIDENCE_MARKER,
+  validateGithubReviewEvidenceAttempt,
+  validateGithubReviewEvidenceRecord,
   type GithubReviewRecord,
   type ReviewEvidence,
+  type ValidatedGithubReviewEvidence,
 } from './review-evidence.js';
 
 export const DEFAULT_GATE_ROUND_LIMIT = {
@@ -51,31 +51,9 @@ function parseGhList<T>(stdout: string): T[] {
   return Array.isArray(parsed[0]) ? (parsed as T[][]).flat() : (parsed as T[]);
 }
 
-function reviewId(review: GithubReviewRecord): number | undefined {
-  const value = Number(review.id);
-  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
-}
-
-function evidenceFromReview(review: GithubReviewRecord): ReviewEvidence | undefined {
-  if (!review.body.includes(REVIEW_EVIDENCE_MARKER)) return undefined;
-  try {
-    const evidence = parseReviewEvidence(review.body);
-    if (
-      evidence?.schema_version !== 'agent-skill-chain/gate-review-evidence/v3' ||
-      !/^attempt-[A-Za-z0-9._-]+$/.test(evidence.attempt_id) ||
-      ![1, 2].includes(evidence.reviewer?.slot) ||
-      !isEvidenceVerdict(evidence.verdict)
-    ) {
-      return undefined;
-    }
-    return evidence;
-  } catch {
-    return undefined;
-  }
-}
-
-function summarizeEvidence(evidence: string[]): string {
+export function summarizeFindingEvidence(evidence: string[]): string {
   const summary = evidence.join(' / ');
+  if (summary.trim().length === 0) return '（根拠要約を生成できません: evidence が空です）';
   if (summary.length <= GATE_ROUND_FINDING_SUMMARY_LIMIT) return summary;
   const marker = '…（600文字上限により切り詰め）';
   return summary.slice(0, GATE_ROUND_FINDING_SUMMARY_LIMIT - marker.length) + marker;
@@ -104,60 +82,63 @@ export function deriveGateRoundContext(options: {
   gate: ReviewEvidence['gate'];
   currentAttemptId: string;
   trustedActors: string[];
+  verifyAttempt: (attempt: ValidatedGithubReviewEvidence[], priorHistory: GateRoundRecord[]) => boolean;
 }): GateRoundContext {
   if (options.trustedActors.length === 0) {
     return { status: 'unavailable', reason: 'trusted recorder actor が登録されていません' };
   }
   const trustedActors = new Set(options.trustedActors);
   const candidates = options.reviews.flatMap((review) => {
-    const id = reviewId(review);
-    const evidence = evidenceFromReview(review);
-    const actor = review.user?.login;
-    if (
-      id === undefined ||
-      !evidence ||
-      !actor ||
-      !trustedActors.has(actor) ||
-      evidence.issue_id !== options.issueId ||
-      evidence.gate !== options.gate ||
-      evidence.attempt_id === options.currentAttemptId
-    ) {
-      return [];
-    }
-    return [{ id, evidence }];
+    const validation = validateGithubReviewEvidenceRecord(review, {
+      issueId: options.issueId,
+      gate: options.gate,
+      trustedActors: [...trustedActors],
+    });
+    if (!validation.valid || validation.value.evidence.attempt_id === options.currentAttemptId) return [];
+    return [validation.value];
   });
 
-  const grouped = new Map<string, { firstReviewId: number; targetSha: string; slots: GateRoundSlot[] }>();
-  for (const candidate of candidates.sort((left, right) => left.id - right.id)) {
-    const { evidence } = candidate;
-    const existing = grouped.get(evidence.attempt_id) ?? {
-      firstReviewId: candidate.id,
-      targetSha: evidence.target_sha,
-      slots: [],
-    };
-    existing.slots.push({
-      slot: evidence.reviewer.slot,
-      conformance: evidence.verdict.conformance,
-      falsification: evidence.verdict.falsification,
-      inconclusive: evidence.verdict.inconclusive,
-      findings: evidence.verdict.blockers.map((finding) => ({
-        severity: finding.severity,
-        origin: finding.origin,
-        code: finding.code,
-        evidence_summary: summarizeEvidence(finding.evidence),
-      })),
-    });
-    grouped.set(evidence.attempt_id, existing);
+  const grouped = new Map<string, ValidatedGithubReviewEvidence[]>();
+  for (const candidate of candidates.sort((left, right) => left.reviewId - right.reviewId)) {
+    const existing = grouped.get(candidate.evidence.attempt_id) ?? [];
+    existing.push(candidate);
+    grouped.set(candidate.evidence.attempt_id, existing);
   }
 
-  const history = [...grouped.entries()]
-    .sort((left, right) => left[1].firstReviewId - right[1].firstReviewId)
-    .map(([attemptId, record], round) => ({
-      round,
-      attempt_id: attemptId,
+  const verifiedAttempts = [...grouped.entries()]
+    .flatMap(([attemptId, attempt]) => {
+      const validation = validateGithubReviewEvidenceAttempt(attempt);
+      if (!validation.valid) return [];
+      return [{
+        attemptId,
+        firstReviewId: Math.min(...validation.values.map((entry) => entry.reviewId)),
+        targetSha: validation.values[0].evidence.target_sha,
+        slots: validation.values.map(({ evidence }) => ({
+          slot: evidence.reviewer.slot,
+          conformance: evidence.verdict.conformance,
+          falsification: evidence.verdict.falsification,
+          inconclusive: evidence.verdict.inconclusive,
+          findings: evidence.verdict.blockers.map((finding) => ({
+            severity: finding.severity,
+            origin: finding.origin,
+            code: finding.code,
+            evidence_summary: summarizeFindingEvidence(finding.evidence),
+          })),
+        })),
+      }];
+    })
+    .sort((left, right) => left.firstReviewId - right.firstReviewId);
+  const history: GateRoundRecord[] = [];
+  for (const record of verifiedAttempts) {
+    const attempt = grouped.get(record.attemptId) ?? [];
+    if (!options.verifyAttempt(attempt, history)) continue;
+    history.push({
+      round: history.length,
+      attempt_id: record.attemptId,
       target_sha: record.targetSha,
-      slots: record.slots.sort((left, right) => left.slot - right.slot),
-    }));
+      slots: record.slots,
+    });
+  }
   return { status: 'available', round: history.length, history };
 }
 
@@ -169,6 +150,7 @@ export function fetchGateRoundContext(options: {
   gate: ReviewEvidence['gate'];
   currentAttemptId?: string;
   trustedActors: string[];
+  verifyAttempt: (attempt: ValidatedGithubReviewEvidence[], priorHistory: GateRoundRecord[]) => boolean;
   fetchReviews?: () => { status: number; stdout: string };
 }): GateRoundContext {
   if (options.backend !== 'github') {
@@ -193,6 +175,7 @@ export function fetchGateRoundContext(options: {
       gate: options.gate,
       currentAttemptId: options.currentAttemptId,
       trustedActors: options.trustedActors,
+      verifyAttempt: options.verifyAttempt,
     });
   } catch {
     return { status: 'unavailable', reason: 'PR review evidence の応答を解釈できませんでした' };
@@ -204,16 +187,17 @@ export function latestGateAttemptId(options: {
   issueId: string;
   gate: ReviewEvidence['gate'];
   targetSha: string;
+  trustedActors: string[];
 }): string | undefined {
   return options.reviews
     .flatMap((review) => {
-      const id = reviewId(review);
-      const evidence = evidenceFromReview(review);
-      return id !== undefined &&
-        evidence?.issue_id === options.issueId &&
-        evidence.gate === options.gate &&
-        evidence.target_sha === options.targetSha
-        ? [{ id, attemptId: evidence.attempt_id }]
+      const validation = validateGithubReviewEvidenceRecord(review, {
+        issueId: options.issueId,
+        gate: options.gate,
+        trustedActors: options.trustedActors,
+      });
+      return validation.valid && validation.value.evidence.target_sha === options.targetSha
+        ? [{ id: validation.value.reviewId, attemptId: validation.value.evidence.attempt_id }]
         : [];
     })
     .sort((left, right) => right.id - left.id)[0]?.attemptId;

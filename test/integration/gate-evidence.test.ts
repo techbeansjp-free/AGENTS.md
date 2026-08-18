@@ -599,4 +599,17 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
   const proseOnly = submitWithBody('review-prose-only', 'JSONを生成できませんでした。');
   assert.notEqual(proseOnly.status, 0);
   assert.match(proseOnly.stderr, /verdict JSONを解釈できません/);
+
+  const emptyFindingEvidence = submitWithBody('review-empty-finding-evidence', JSON.stringify({
+    ...rawVerdict,
+    falsification: 'fail',
+    blockers: [{
+      severity: 'blocking',
+      origin: 'implementation',
+      code: 'EMPTY-EVIDENCE',
+      evidence: [],
+    }],
+  }));
+  assert.notEqual(emptyFindingEvidence.status, 0);
+  assert.match(emptyFindingEvidence.stderr, /finding・inconclusive契約に適合しません/);
 });

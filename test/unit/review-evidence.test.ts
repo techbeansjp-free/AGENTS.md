@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   evidencePromptDigest,
+  isEvidenceVerdict,
   renderReviewEvidence,
   verifyGithubReviewEvidence,
   type GithubReviewRecord,
@@ -124,10 +125,15 @@ test('ラウンド打ち切り: 閾値到達時のblockingをrejectedより先�
 
   const cutoff = verify(blockingReviews, { gateRound: { round: 4, cutoffThreshold: 4 } });
   assert.equal(cutoff.final, 'human_required');
+  assert.equal(cutoff.inconclusive, true);
   assert.match(cutoff.reason ?? '', /round=4/);
   assert.match(cutoff.reason ?? '', /cutoff_threshold=4/);
   assert.match(cutoff.reason ?? '', /unresolved_blocking=2/);
 
+  assert.equal(
+    verify(blockingReviews, { gateRound: { round: 3, cutoffThreshold: 4 } }).inconclusive,
+    false,
+  );
   assert.equal(
     verify(blockingReviews, { gateRound: { round: 3, cutoffThreshold: 4 } }).final,
     'rejected',
@@ -241,6 +247,26 @@ test('schema: 不正なfinding enumをpass/passに添えてもapprovedへ倒れ�
     ]).final,
     'human_required',
   );
+});
+
+test('schema: finding.evidence の空配列と空文字要素を拒否する', () => {
+  const emptyEvidence = evidence(1).verdict;
+  emptyEvidence.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'EMPTY-EVIDENCE',
+    evidence: [],
+  }];
+  assert.equal(isEvidenceVerdict(emptyEvidence), false);
+
+  const blankEvidence = evidence(1).verdict;
+  blankEvidence.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'BLANK-EVIDENCE',
+    evidence: ['   '],
+  }];
+  assert.equal(isEvidenceVerdict(blankEvidence), false);
 });
 
 test('light review証跡: prompt digestへ結線して保持し、同一attempt内の不一致を拒否する', () => {

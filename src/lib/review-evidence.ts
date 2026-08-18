@@ -94,6 +94,7 @@ export interface EvidenceVerification {
   final: 'approved' | 'rejected' | 'human_required';
   conformance: 'pass' | 'fail' | 'pending';
   falsification: 'pass' | 'fail' | 'pending';
+  inconclusive: boolean;
   blockers: EvidenceFinding[];
   approved_artifacts: { path: string; digest: string }[];
   reviewers: VerifiedReviewer[];
@@ -134,6 +135,7 @@ function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerific
     final: 'human_required',
     conformance: 'pending',
     falsification: 'pending',
+    inconclusive: true,
     blockers,
     approved_artifacts: [],
     reviewers: [],
@@ -150,7 +152,8 @@ function isFindingShape(value: unknown): value is EvidenceFinding {
     typeof finding.code === 'string' &&
     finding.code.length > 0 &&
     Array.isArray(finding.evidence) &&
-    finding.evidence.every((entry) => typeof entry === 'string')
+    finding.evidence.length > 0 &&
+    finding.evidence.every((entry) => typeof entry === 'string' && entry.trim().length > 0)
   );
 }
 
@@ -233,6 +236,112 @@ function isEvidenceShape(value: ReviewEvidence): boolean {
   );
 }
 
+export interface ValidatedGithubReviewEvidence {
+  api: GithubReviewRecord;
+  evidence: ReviewEvidence;
+  reviewId: number;
+  actor: string;
+}
+
+export type GithubReviewEvidenceValidation =
+  | { valid: true; value: ValidatedGithubReviewEvidence }
+  | { valid: false; reason: string };
+
+/**
+ * PR review 1件の証跡形式と GitHub API metadata の結線を検証する。
+ * 最新attemptの最終判定と過去ラウンド導出が同じ信頼境界を使うための共通入口。
+ */
+export function validateGithubReviewEvidenceRecord(
+  review: GithubReviewRecord,
+  options: {
+    issueId: string;
+    gate: ReviewEvidence['gate'];
+    trustedActors: string[];
+  },
+): GithubReviewEvidenceValidation {
+  let parsed: unknown;
+  try {
+    parsed = parseReviewEvidence(review.body);
+  } catch {
+    return { valid: false, reason: `review ${review.id} のevidence JSONを検証できません` };
+  }
+  if (!parsed || typeof parsed !== 'object' || !isEvidenceShape(parsed as ReviewEvidence)) {
+    return { valid: false, reason: `review ${review.id} のevidence形式が不正です` };
+  }
+  const evidence = parsed as ReviewEvidence;
+  if (evidence.issue_id !== options.issueId || evidence.gate !== options.gate) {
+    return { valid: false, reason: `review ${review.id} は対象Issue/gateのevidenceではありません` };
+  }
+  const reviewId = Number(review.id);
+  if (!Number.isSafeInteger(reviewId) || reviewId <= 0) {
+    return { valid: false, reason: `review ${review.id} のAPI IDが不正です` };
+  }
+  const actor = review.user?.login ?? '';
+  if (!actor) return { valid: false, reason: `review ${review.id} のactorを解決できません` };
+  if (!options.trustedActors.includes(actor)) {
+    return { valid: false, reason: `review ${review.id} のactorはtrusted recorderではありません` };
+  }
+  if (review.state.toUpperCase() === 'DISMISSED') {
+    return { valid: false, reason: `review ${review.id} はdismiss済みです` };
+  }
+  if (review.commit_id !== evidence.target_sha) {
+    return { valid: false, reason: `review ${review.id} のAPI commit SHAがevidenceと一致しません` };
+  }
+  const expectedCount = evidence.profile === 'strict' ? 2 : 1;
+  if (evidence.expected_count !== expectedCount) {
+    return { valid: false, reason: `review ${review.id} のexpected_countがprofileと一致しません` };
+  }
+  if (evidence.reviewer.slot > expectedCount) {
+    return { valid: false, reason: `review ${review.id} のslotがprofileと一致しません` };
+  }
+  return { valid: true, value: { api: review, evidence, reviewId, actor } };
+}
+
+export type GithubReviewAttemptValidation =
+  | { valid: true; values: ValidatedGithubReviewEvidence[] }
+  | { valid: false; reason: string };
+
+/** 完備attemptのslot・run・digest・実行attestationの一貫性を検証する。 */
+export function validateGithubReviewEvidenceAttempt(
+  candidates: ValidatedGithubReviewEvidence[],
+): GithubReviewAttemptValidation {
+  if (candidates.length === 0) return { valid: false, reason: 'review evidenceがありません' };
+  const first = candidates[0].evidence;
+  const expectedCount = first.profile === 'strict' ? 2 : 1;
+  const expectedSlots = expectedCount === 2 ? [1, 2] : [1];
+  if (candidates.length !== expectedCount) {
+    return {
+      valid: false,
+      reason: `独立review evidence件数が不足または過剰です: expected=${expectedCount}, actual=${candidates.length}`,
+    };
+  }
+  if (candidates.some(({ evidence }) =>
+    evidence.attempt_id !== first.attempt_id ||
+    evidence.target_sha !== first.target_sha ||
+    evidence.profile !== first.profile ||
+    evidence.expected_count !== first.expected_count ||
+    evidence.prompt_digest !== first.prompt_digest ||
+    canonicalJson(evidence.light_review ?? null) !== canonicalJson(first.light_review ?? null) ||
+    evidence.execution.trusted_base_sha !== first.execution.trusted_base_sha ||
+    evidence.execution.launcher_digest !== first.execution.launcher_digest ||
+    evidence.execution.launcher_token_digest !== first.execution.launcher_token_digest
+  )) {
+    return { valid: false, reason: 'review attempt内の証跡・実行attestationが一致しません' };
+  }
+  const runIds = new Set(candidates.map(({ evidence }) => evidence.reviewer.run_id));
+  const slots = new Set(candidates.map(({ evidence }) => evidence.reviewer.slot));
+  if (runIds.size !== candidates.length || slots.size !== candidates.length) {
+    return { valid: false, reason: 'reviewer run IDまたはslotが重複しています' };
+  }
+  if (expectedSlots.some((slot) => !slots.has(slot as 1 | 2))) {
+    return { valid: false, reason: '必要なreviewer slotが揃っていません' };
+  }
+  return {
+    valid: true,
+    values: [...candidates].sort((left, right) => left.evidence.reviewer.slot - right.evidence.reviewer.slot),
+  };
+}
+
 export function verifyGithubReviewEvidence(options: {
   reviews: GithubReviewRecord[];
   issueId: string;
@@ -289,10 +398,13 @@ export function verifyGithubReviewEvidence(options: {
 
   if (matching.length === 0) return fail('現在のtarget SHA用review evidenceがありません');
   const latest = matching.reduce((current, candidate) => candidate.reviewId > current.reviewId ? candidate : current);
-  if (!isEvidenceShape(latest.evidence as ReviewEvidence)) {
-    return fail(`review ${latest.api.id} のevidence形式が不正です`);
-  }
-  const latestEvidence = latest.evidence as ReviewEvidence;
+  const latestValidation = validateGithubReviewEvidenceRecord(latest.api, {
+    issueId: options.issueId,
+    gate: options.gate,
+    trustedActors: options.trustedActors,
+  });
+  if (!latestValidation.valid) return fail(latestValidation.reason);
+  const latestEvidence = latestValidation.value.evidence;
   const expectedLightReview = canonicalJson(options.expectedLightReview ?? null);
   if (canonicalJson(latestEvidence.light_review ?? null) !== expectedLightReview) {
     return fail(`最新review attemptのlight_reviewがtrusted再評価値と一致しません: ${latestEvidence.attempt_id}`);
@@ -304,16 +416,19 @@ export function verifyGithubReviewEvidence(options: {
     return fail('コア対象にはStrict profileが必要です');
   }
   const selected = matching.filter((candidate) => candidate.evidence.attempt_id === latestEvidence.attempt_id);
+  const validatedCandidates: ValidatedGithubReviewEvidence[] = [];
   for (const candidate of selected) {
-    if (!isEvidenceShape(candidate.evidence as ReviewEvidence)) {
-      return fail(`review ${candidate.api.id} のevidence形式が不正です`);
-    }
+    const validation = validateGithubReviewEvidenceRecord(candidate.api, {
+      issueId: options.issueId,
+      gate: options.gate,
+      trustedActors: options.trustedActors,
+    });
+    if (!validation.valid) return fail(validation.reason);
+    validatedCandidates.push(validation.value);
   }
-  const candidates = selected.map(({ api, evidence }) => ({
-    api,
-    evidence: evidence as ReviewEvidence,
-    actor: api.user?.login ?? '',
-  }));
+  const attemptValidation = validateGithubReviewEvidenceAttempt(validatedCandidates);
+  if (!attemptValidation.valid) return fail(attemptValidation.reason);
+  const candidates = attemptValidation.values;
 
   const expectedCount = options.profile === 'strict' ? 2 : 1;
   if (latestEvidence.expected_count !== expectedCount) {
@@ -322,9 +437,6 @@ export function verifyGithubReviewEvidence(options: {
 
   for (const candidate of candidates) {
     const { api: review, evidence, actor } = candidate;
-    if (!actor) return fail(`review ${review.id} のactorを解決できません`);
-    if (!options.trustedActors.includes(actor)) return fail(`review ${review.id} のactorはtrusted recorderではありません`);
-    if (review.state.toUpperCase() === 'DISMISSED') return fail(`review ${review.id} はdismiss済みです`);
     if (review.commit_id !== options.targetSha) {
       return fail(`review ${review.id} のAPI commit SHAが現在のPR headと一致しません`);
     }
@@ -375,21 +487,6 @@ export function verifyGithubReviewEvidence(options: {
     }
   }
 
-  const expectedSlots = expectedCount === 2 ? [1, 2] : [1];
-  if (candidates.length !== expectedSlots.length) {
-    return fail(`独立review evidence件数が不足または過剰です: expected=${expectedSlots.length}, actual=${candidates.length}`);
-  }
-  const runIds = new Set(candidates.map((candidate) => candidate.evidence.reviewer.run_id));
-  const slots = new Set(candidates.map((candidate) => candidate.evidence.reviewer.slot));
-  if (runIds.size !== candidates.length || slots.size !== candidates.length) {
-    return fail('reviewer run IDまたはslotが重複しています');
-  }
-  if (expectedSlots.some((slot) => !slots.has(slot as 1 | 2))) return fail('必要なreviewer slotが揃っていません');
-  const tokenDigests = new Set(candidates.map((candidate) => candidate.evidence.execution.launcher_token_digest));
-  if (tokenDigests.size !== 1) return fail('review attempt内のlauncher token digestが一致しません');
-  const lightReviews = new Set(candidates.map((candidate) => canonicalJson(candidate.evidence.light_review ?? null)));
-  if (lightReviews.size !== 1) return fail('review attempt内のlight_review証跡が一致しません');
-
   const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
   const blockers = verdicts.flatMap((verdict) => verdict.blockers);
   const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
@@ -406,7 +503,14 @@ export function verifyGithubReviewEvidence(options: {
       verdict.falsification === 'pass' &&
       verdict.inconclusive === false,
   ) && !hasBlocking;
-  const final = cutoffReached ? 'human_required' : rejected ? 'rejected' : approved ? 'approved' : 'human_required';
+  const trustedInconclusive = cutoffReached;
+  const final = trustedInconclusive
+    ? 'human_required'
+    : rejected
+      ? 'rejected'
+      : approved
+        ? 'approved'
+        : 'human_required';
   return {
     final,
     conformance: rejected
@@ -418,6 +522,7 @@ export function verifyGithubReviewEvidence(options: {
       : approved
         ? 'pass'
         : 'pending',
+    inconclusive: trustedInconclusive || verdicts.some((verdict) => verdict.inconclusive),
     falsification: rejected
       ? verdicts.some((verdict) => verdict.falsification === 'fail')
         ? 'fail'

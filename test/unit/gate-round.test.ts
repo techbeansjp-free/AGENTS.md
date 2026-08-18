@@ -6,6 +6,7 @@ import {
   latestGateAttemptId,
   renderGateRoundHistory,
   resolveGateRoundLimit,
+  summarizeFindingEvidence,
   validateGateRoundLimit,
 } from '../../src/lib/gate-round.js';
 import { renderReviewEvidence, type GithubReviewRecord, type ReviewEvidence } from '../../src/lib/review-evidence.js';
@@ -15,15 +16,17 @@ function evidence(options: {
   slot: 1 | 2;
   target?: string;
   evidenceText?: string;
+  profile?: 'standard' | 'strict';
 }): ReviewEvidence {
+  const profile = options.profile ?? (options.slot === 2 ? 'strict' : 'standard');
   return {
     schema_version: 'agent-skill-chain/gate-review-evidence/v3',
     issue_id: 'ISSUE-729',
     gate: 'implementation',
-    profile: options.slot === 2 ? 'strict' : 'standard',
+    profile,
     target_sha: options.target ?? options.attempt.padEnd(40, 'a').slice(0, 40),
     attempt_id: options.attempt,
-    expected_count: options.slot === 2 ? 2 : 1,
+    expected_count: profile === 'strict' ? 2 : 1,
     execution: {
       launcher: 'agent-skill-chain/gate-local-review/v1',
       trusted_base_sha: 'b'.repeat(40),
@@ -66,12 +69,14 @@ function review(id: number, value: ReviewEvidence, actor = 'trusted'): GithubRev
   };
 }
 
+const acceptVerifiedAttempt = () => true;
+
 test('ラウンド導出: Strictの2 slotをattempt_idで畳み、target_sha変更後もStandardと同じ反復数になる', () => {
   const reviews = [
-    review(1, evidence({ attempt: 'attempt-old-1', slot: 1, target: '1'.repeat(40) })),
-    review(2, evidence({ attempt: 'attempt-old-1', slot: 2, target: '1'.repeat(40) })),
-    review(3, evidence({ attempt: 'attempt-old-2', slot: 1, target: '2'.repeat(40) })),
-    review(4, evidence({ attempt: 'attempt-old-2', slot: 2, target: '2'.repeat(40) })),
+    review(1, evidence({ attempt: 'attempt-old-1', slot: 1, target: '1'.repeat(40), profile: 'strict' })),
+    review(2, evidence({ attempt: 'attempt-old-1', slot: 2, target: '1'.repeat(40), profile: 'strict' })),
+    review(3, evidence({ attempt: 'attempt-old-2', slot: 1, target: '2'.repeat(40), profile: 'strict' })),
+    review(4, evidence({ attempt: 'attempt-old-2', slot: 2, target: '2'.repeat(40), profile: 'strict' })),
   ];
   const strict = deriveGateRoundContext({
     reviews,
@@ -79,6 +84,7 @@ test('ラウンド導出: Strictの2 slotをattempt_idで畳み、target_sha変�
     gate: 'implementation',
     currentAttemptId: 'attempt-current',
     trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
   });
   assert.equal(strict.status, 'available');
   if (strict.status === 'available') {
@@ -88,11 +94,15 @@ test('ラウンド導出: Strictの2 slotをattempt_idで畳み、target_sha変�
   }
 
   const standard = deriveGateRoundContext({
-    reviews: [reviews[0], reviews[2]],
+    reviews: [
+      review(1, evidence({ attempt: 'attempt-old-1', slot: 1, target: '1'.repeat(40) })),
+      review(3, evidence({ attempt: 'attempt-old-2', slot: 1, target: '2'.repeat(40) })),
+    ],
     issueId: 'ISSUE-729',
     gate: 'implementation',
     currentAttemptId: 'attempt-current',
     trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
   });
   assert.equal(standard.status === 'available' ? standard.round : -1, 2);
 });
@@ -108,6 +118,7 @@ test('ラウンド導出: 当該attemptと未登録actorを除外し、根拠要
     gate: 'implementation',
     currentAttemptId: 'attempt-current',
     trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
   });
   assert.equal(context.status, 'available');
   if (context.status === 'available') {
@@ -119,6 +130,39 @@ test('ラウンド導出: 当該attemptと未登録actorを除外し、根拠要
   }
 });
 
+test('ラウンド導出: API metadataまたはattempt attestationが不正なreviewを計数しない', () => {
+  const apiMismatch = review(1, evidence({ attempt: 'attempt-api-mismatch', slot: 1 }));
+  apiMismatch.commit_id = 'f'.repeat(40);
+  const first = evidence({ attempt: 'attempt-prompt-mismatch', slot: 1, profile: 'strict' });
+  const second = evidence({ attempt: 'attempt-prompt-mismatch', slot: 2, profile: 'strict' });
+  second.prompt_digest = `sha256:${'f'.repeat(64)}`;
+  const context = deriveGateRoundContext({
+    reviews: [apiMismatch, review(2, first), review(3, second)],
+    issueId: 'ISSUE-729',
+    gate: 'implementation',
+    currentAttemptId: 'attempt-current',
+    trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
+  });
+  assert.deepEqual(context, { status: 'available', round: 0, history: [] });
+});
+
+test('ラウンド導出: trusted verifierが真正性を確認できない完備attemptを計数しない', () => {
+  const context = deriveGateRoundContext({
+    reviews: [review(1, evidence({ attempt: 'attempt-form-only', slot: 1 }))],
+    issueId: 'ISSUE-729',
+    gate: 'implementation',
+    currentAttemptId: 'attempt-current',
+    trustedActors: ['trusted'],
+    verifyAttempt: () => false,
+  });
+  assert.deepEqual(context, { status: 'available', round: 0, history: [] });
+});
+
+test('根拠要約: 防御的に空配列からも空文字を生成しない', () => {
+  assert.match(summarizeFindingEvidence([]), /evidence が空/);
+});
+
 test('ラウンド導出: ローカル・PR無し・trusted actor無し・attempt無しを初回と区別して導出不能にする', () => {
   const base = {
     root: process.cwd(),
@@ -128,6 +172,7 @@ test('ラウンド導出: ローカル・PR無し・trusted actor無し・attemp
     gate: 'implementation' as const,
     currentAttemptId: 'attempt-current',
     trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
   };
   assert.equal(fetchGateRoundContext({ ...base, backend: 'local' }).status, 'unavailable');
   assert.equal(fetchGateRoundContext({ ...base, prNumber: undefined }).status, 'unavailable');
@@ -151,6 +196,7 @@ test('ラウンド履歴: 節全体が24000文字以内になり、古いラウ�
     gate: 'implementation',
     currentAttemptId: 'attempt-current',
     trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
   });
   assert.equal(context.status, 'available');
   if (context.status === 'available') {
@@ -178,5 +224,6 @@ test('最新attempt選択: 同一Issue・gate・targetの最大review IDだけ�
     issueId: 'ISSUE-729',
     gate: 'implementation',
     targetSha: 'f'.repeat(40),
+    trustedActors: ['trusted'],
   }), 'attempt-current');
 });
