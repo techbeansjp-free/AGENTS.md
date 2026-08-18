@@ -54,6 +54,13 @@ properties:
             properties:
               risk_not_normal: {type: boolean}
               autonomy_full: {type: boolean}
+      round_limit:
+        type: object
+        required: [narrowing_threshold, cutoff_threshold]
+        additionalProperties: false
+        properties:
+          narrowing_threshold: {type: integer, minimum: 1}
+          cutoff_threshold: {type: integer, minimum: 2}
   worker:
     type: object
     required: []

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot, worktreeRoot, resolveAsset } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
-import { loadSegments } from '../lib/segments.js';
+import { deriveSegmentOrder, loadSegments, type SegmentDefinition } from '../lib/segments.js';
 import { parseIssueId, validateSegment, CliError, type Segment } from '../lib/issue.js';
 import {
   findIssueWorktree,
@@ -20,7 +20,13 @@ import { computeTemplateSyncDiffs } from '../lib/template-sync.js';
 import { checkAdrFinalizePath } from '../lib/adr-finalize-guard.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { ROOT_ARTIFACT_FILES } from '../lib/root-artifacts.js';
-import { QUICK_EXEMPT_OUTPUTS, quickBlockedNotice, resolveQuickMode } from '../lib/quick-mode.js';
+import {
+  QUICK_EXEMPT_OUTPUTS,
+  quickBlockedNotice,
+  quickUnresolvedNotice,
+  resolveQuickMode,
+} from '../lib/quick-mode.js';
+import { deriveArtifactTargets, type ArtifactTarget } from '../lib/artifact-targets.js';
 import { extractSpecAcIds, parseSpecAcDeclarationHeading, type SpecAcDeclaration } from '../lib/spec-ac-ids.js';
 import { ABSENT_ARTIFACT_DIGEST } from './gate.js';
 
@@ -148,6 +154,7 @@ export async function configDocSync(args: string[]): Promise<number> {
 // ---- artifacts ----
 const ARTIFACTS_USAGE = `
 使い方: agent-skill-chain verify artifacts <issue_id> <segment>
+        agent-skill-chain verify artifacts <issue_id> --started-segments <segment[,segment...]>
 
 quick（軽量な変更）の Issue は SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md の存在要求を免除する。
 指定方法は GitHub モードでは Issue ラベル 'size:quick'、ローカルモードでは state.yaml の
@@ -155,19 +162,23 @@ quick（軽量な変更）の Issue は SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md 
 docs/adr/・.agent-skill-chain/config/segments.yaml・AGENTS.md・.agent-skill-chain/schemas/ が
 含まれる場合は免除せず、理由を標準エラー出力へ示したうえで通常どおり成果物を要求する。
 
-出力: 0=当該セグメントの必須成果物は全て存在、1=欠落・不正segment・スタブ未実装
+出力: 0=対象セグメントの必須成果物は全て存在、1=欠落・不正segment・スタブ未実装
 `;
 // Issue #200: 「現在存在するか」だけでは、成果物ファイル自体を意図的に削除するIssue
 // （本Issue #200のSPEC.md等）を自己言及的に不合格にしてしまう。baseブランチから分岐後の
-// コミット履歴上でadd/modifyされた実績があるかをOR条件で加える。git log自体が失敗する場合
-// （shallow clone等でdefaultBranchが解決できない等）は安全側（実績なし=false）に倒す。
+// コミット履歴上でadd/modifyされた実績があるかをOR条件で加える。PRのmerge refでは、削除済み
+// パスのmerge結果が第1親と同一になると既定の履歴簡約が第2親側のadd/modify実績を省略するため、
+// --full-historyで全親を走査する。git log自体が失敗する場合は安全側（実績なし=false）に倒す。
 function wasEverAddedOrModified(worktreePath: string, file: string): boolean {
   try {
     const base = defaultBranch(worktreePath);
     // 2ドット（片側差分）を用いる。3ドット（対称差分）だとbase側にのみ存在する
     // コミットまで含んでしまい、現ブランチが一度も触れていないファイルを誤って
     // 「実績あり」と判定しうるため使わない。
-    const log = git(['log', '--diff-filter=AM', '--name-only', `${base}..HEAD`, '--', file], worktreePath);
+    const log = git(
+      ['log', '--full-history', '--diff-filter=AM', '--name-only', `${base}..HEAD`, '--', file],
+      worktreePath,
+    );
     return log.status === 0 && log.stdout.trim().length > 0;
   } catch {
     return false;
@@ -210,21 +221,62 @@ function checkOutputExists(worktreePath: string, output: string): boolean {
       return false;
   }
 }
+
+function parseStartedSegments(value: string): Segment[] {
+  if (value.trim() === '') return [];
+  return value.split(',').map((raw) => {
+    const segment = raw.trim();
+    validateSegment(segment);
+    return segment;
+  });
+}
+
+function targetSummary(targets: readonly ArtifactTarget[]): string {
+  if (targets.length === 0) return '必須成果物検査の対象集合: （空）';
+  return [
+    '必須成果物検査の対象集合:',
+    ...targets.map((target) =>
+      target.addedByClosure
+        ? `  - ${target.segment}（上流閉包により追加・セグメント未開始）`
+        : `  - ${target.segment}（開始済み）`,
+    ),
+  ].join('\n');
+}
+
+function outputsForTarget(definition: SegmentDefinition, quickExempt: boolean): string[] {
+  return quickExempt
+    ? definition.outputs.filter((output) => !QUICK_EXEMPT_OUTPUTS.includes(output))
+    : definition.outputs;
+}
+
 export async function artifacts(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) return printUsage(ARTIFACTS_USAGE), 0;
-    const [issueIdRaw, segment] = args;
-    if (!issueIdRaw || !segment) throw new CliError('issue_id, segment はすべて必須です');
+    const [issueIdRaw, selector, selectorValue] = args;
+    if (!issueIdRaw || !selector) throw new CliError('issue_id, segment はすべて必須です');
     const { number } = parseIssueId(issueIdRaw);
-    validateSegment(segment);
+
+    const batch = selector === '--started-segments';
+    if (batch && (selectorValue === undefined || args.length !== 3)) {
+      throw new CliError('--started-segments にはカンマ区切りの開始済みセグメント集合が必要です');
+    }
+    if (!batch && args.length !== 2) throw new CliError(`不明な引数です: ${args.slice(2).join(' ')}`);
+    const startedSegments = batch ? parseStartedSegments(selectorValue as string) : (() => {
+      validateSegment(selector);
+      return [selector];
+    })();
 
     const root = repoRoot();
     const config = loadConfig(root);
     const entry = findIssueWorktree(root, config, number);
     if (!entry) return fail(`ISSUE-${number} の worktree が見つかりません`);
 
-    const def = loadSegments(root).segments.find((s) => s.id === segment);
-    if (!def) return fail(`config/segments.yaml に segment '${segment}' が定義されていません`);
+    const segmentDocument = loadSegments(root);
+
+    if (batch && startedSegments.length === 0) {
+      process.stderr.write(`${targetSummary([])}\n`);
+      return ok();
+    }
 
     // Issue #425: quick の判定入力はラベル/state.yaml のみで、免除対象である成果物ファイルには
     // 一切依存しない（成果物の中にシグナルを置くと免除が原理的に発動しない循環になるため）。
@@ -232,10 +284,35 @@ export async function artifacts(args: string[]): Promise<number> {
     if (quick.requested && !quick.exempt) {
       process.stderr.write(`${quickBlockedNotice(quick)}\n`);
     }
-    const outputs = quick.exempt ? def.outputs.filter((output) => !QUICK_EXEMPT_OUTPUTS.includes(output)) : def.outputs;
+    if (!quick.signalResolved) {
+      process.stderr.write(`${quickUnresolvedNotice()}\n`);
+    }
 
-    const missing = outputs.filter((output) => !checkOutputExists(entry.path, output));
-    return violations(missing.map((o) => `segment '${segment}' の必須成果物が欠落しています: ${o}`));
+    if (!batch) {
+      const segment = startedSegments[0];
+      const def = segmentDocument.segments.find((definition) => definition.id === segment);
+      if (!def) return fail(`config/segments.yaml に segment '${segment}' が定義されていません`);
+      const outputs = outputsForTarget(def, quick.exempt);
+      const missing = outputs.filter((output) => !checkOutputExists(entry.path, output));
+      return violations(missing.map((output) => `segment '${segment}' の必須成果物が欠落しています: ${output}`));
+    }
+
+    const addUpstreamClosure = quick.signalResolved && !quick.exempt;
+    const order = addUpstreamClosure ? deriveSegmentOrder(segmentDocument.segments) : [];
+    const targets = deriveArtifactTargets(startedSegments, order, addUpstreamClosure);
+    process.stderr.write(`${targetSummary(targets)}\n`);
+
+    const missing: string[] = [];
+    for (const target of targets) {
+      const def = segmentDocument.segments.find((definition) => definition.id === target.segment);
+      if (!def) return fail(`config/segments.yaml に segment '${target.segment}' が定義されていません`);
+      for (const output of outputsForTarget(def, quick.exempt)) {
+        if (checkOutputExists(entry.path, output)) continue;
+        const origin = target.addedByClosure ? '（上流閉包により追加・セグメント未開始）' : '';
+        missing.push(`segment '${target.segment}'${origin} の必須成果物が欠落しています: ${output}`);
+      }
+    }
+    return violations(missing);
   });
 }
 

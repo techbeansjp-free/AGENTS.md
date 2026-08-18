@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   evidencePromptDigest,
+  isEvidenceVerdict,
   renderReviewEvidence,
   verifyGithubReviewEvidence,
   type GithubReviewRecord,
@@ -104,6 +105,46 @@ test('strict: 1件不足またはslot重複はhuman_required', () => {
   assert.equal(verify([review(1, 1)], { profile: 'standard' }).final, 'human_required');
 });
 
+test('ラウンド打ち切り: 閾値到達時のblockingをrejectedより先にhuman_requiredへ移し、未到達・導出不能・blocker無しは既存判定を保つ', () => {
+  const blockingVerdict: ReviewEvidence['verdict'] = {
+    conformance: 'pass',
+    falsification: 'fail',
+    blockers: [{
+      severity: 'blocking',
+      origin: 'implementation',
+      code: 'still-blocking',
+      evidence: ['src/commands/gate.ts に未解消経路が残る'],
+    }],
+    approved_artifacts: [...artifacts],
+    inconclusive: false,
+  };
+  const blockingReviews = [
+    review(1, 1, { body: renderReviewEvidence(evidence(1, { verdict: blockingVerdict })) }),
+    review(2, 2, { body: renderReviewEvidence(evidence(2, { verdict: blockingVerdict })) }),
+  ];
+
+  const cutoff = verify(blockingReviews, { gateRound: { round: 4, cutoffThreshold: 4 } });
+  assert.equal(cutoff.final, 'human_required');
+  assert.equal(cutoff.inconclusive, true);
+  assert.match(cutoff.reason ?? '', /round=4/);
+  assert.match(cutoff.reason ?? '', /cutoff_threshold=4/);
+  assert.match(cutoff.reason ?? '', /unresolved_blocking=2/);
+
+  assert.equal(
+    verify(blockingReviews, { gateRound: { round: 3, cutoffThreshold: 4 } }).inconclusive,
+    false,
+  );
+  assert.equal(
+    verify(blockingReviews, { gateRound: { round: 3, cutoffThreshold: 4 } }).final,
+    'rejected',
+  );
+  assert.equal(verify(blockingReviews).final, 'rejected');
+  assert.equal(
+    verify([review(1, 1), review(2, 2)], { gateRound: { round: 4, cutoffThreshold: 4 } }).final,
+    'approved',
+  );
+});
+
 test('retry: same-SHAの旧complete attemptを無視して最新attemptだけを採用し、最新不完全時はfallbackしない', () => {
   const oldOne = evidence(1, { attempt_id: 'attempt-old' });
   const oldTwo = evidence(2, { attempt_id: 'attempt-old' });
@@ -147,12 +188,18 @@ test('provenance: 同一actorのtrusted recorderをrun attestationで区別し�
   assert.equal(verify([review(1, 1), review(2, 2)], { unresolvedWriterActor: true }).final, 'human_required');
 });
 
-test('freshness: API commit SHA、本文target、prompt、artifact digest改変を拒否する', () => {
+test('freshness: API commit SHA、本文target、引き渡されたprompt digest、artifact digest改変を拒否する', () => {
   assert.equal(verify([review(1, 1, { commit_id: 'c'.repeat(40) }), review(2, 2)]).final, 'human_required');
   const stale = evidence(1, { target_sha: 'c'.repeat(40) });
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(stale) }), review(2, 2)]).final, 'human_required');
   const badPrompt = evidence(1, { prompt_digest: `sha256:${'d'.repeat(64)}` });
-  assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badPrompt) }), review(2, 2)]).final, 'human_required');
+  const badPromptSlotTwo = evidence(2, { prompt_digest: badPrompt.prompt_digest });
+  const promptMismatch = verify([
+    review(1, 1, { body: renderReviewEvidence(badPrompt) }),
+    review(2, 2, { body: renderReviewEvidence(badPromptSlotTwo) }),
+  ]);
+  assert.equal(promptMismatch.final, 'human_required');
+  assert.match(promptMismatch.reason ?? '', /prompt digestが一致しません/);
   const badExecution = evidence(1);
   badExecution.execution.launcher_digest = `sha256:${'e'.repeat(64)}`;
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(badExecution) }), review(2, 2)]).final, 'human_required');
@@ -184,7 +231,7 @@ test('capability: core Codex model/reasoning不一致を拒否し、blocking ver
     severity: 'blocking',
     origin: 'specification',
     code: 'COUNTEREXAMPLE',
-    evidence: ['反例'],
+    evidence: ['SPEC.md の要求と実装が一致しない'],
   }];
   assert.equal(verify([review(1, 1), review(2, 2, { body: renderReviewEvidence(blocked) })]).final, 'rejected');
 });
@@ -206,6 +253,62 @@ test('schema: 不正なfinding enumをpass/passに添えてもapprovedへ倒れ�
     ]).final,
     'human_required',
   );
+});
+
+test('schema: finding.evidence の空・短すぎる要約・対象識別子の欠落を拒否する', () => {
+  const emptyEvidence = evidence(1).verdict;
+  emptyEvidence.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'EMPTY-EVIDENCE',
+    evidence: [],
+  }];
+  assert.equal(isEvidenceVerdict(emptyEvidence), false);
+
+  const blankEvidence = evidence(1).verdict;
+  blankEvidence.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'BLANK-EVIDENCE',
+    evidence: ['   '],
+  }];
+  assert.equal(isEvidenceVerdict(blankEvidence), false);
+
+  const shortEvidence = evidence(1).verdict;
+  shortEvidence.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'SHORT-EVIDENCE',
+    evidence: ['反例'],
+  }];
+  assert.equal(isEvidenceVerdict(shortEvidence), false);
+
+  const unidentifiedEvidence = evidence(1).verdict;
+  unidentifiedEvidence.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'NO-TARGET',
+    evidence: ['対象の記述に未解消の失敗経路が残っています'],
+  }];
+  assert.equal(isEvidenceVerdict(unidentifiedEvidence), false);
+
+  const artifactPathEvidence = evidence(1).verdict;
+  artifactPathEvidence.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'PATH-TARGET',
+    evidence: ['src/commands/gate.ts の対象記述に未解消の失敗経路が残る'],
+  }];
+  assert.equal(isEvidenceVerdict(artifactPathEvidence), true);
+
+  const acIdEvidence = evidence(1).verdict;
+  acIdEvidence.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'AC-TARGET',
+    evidence: ['AC-3 の要求に対する検証証跡が不足している'],
+  }];
+  assert.equal(isEvidenceVerdict(acIdEvidence), true);
 });
 
 test('light review証跡: prompt digestへ結線して保持し、同一attempt内の不一致を拒否する', () => {

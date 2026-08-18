@@ -1110,6 +1110,49 @@ test('claude core reviewer: 能力attestationまたはreasoning probe不足はhu
 
 // --- T5: ラッパーの終了コード分岐（引数・アダプタ解決） --------------------------------
 
+test('gate adapter: reviewer-promptへ証跡投稿と同じPR番号・attempt_idを渡す', () => {
+  const source = fs.readFileSync(
+    path.join(process.cwd(), '.agent-skill-chain', 'adapters', 'claude.sh'),
+    'utf8',
+  );
+  assert.match(
+    source,
+    /gate reviewer-prompt[^\n]*ASC_EVIDENCE_PR_NUMBER[^\n]*ASC_REVIEW_ATTEMPT_ID/,
+  );
+  assert.match(source, /prompt_hash="\$\(printf '%s' "\$prompt" \| _sha256_digest\)"/);
+  assert.match(source, /gate submit-evidence[\s\S]*"\$prompt_digest"/);
+});
+
+test('gate adapter: sha256sum不在時も既存のshasum fallbackでprompt digestを算出する', (t) => {
+  const adapter = path.join(process.cwd(), '.agent-skill-chain', 'adapters', 'claude.sh');
+  const helper = /^_sha256_digest\(\) \{[\s\S]*?^\}/m.exec(fs.readFileSync(adapter, 'utf8'))?.[0];
+  assert.ok(helper, 'promptとcontractが共有するSHA-256 helperを抽出できること');
+  const shasum = execFileSync('bash', ['-lc', 'command -v shasum'], { encoding: 'utf8' }).trim();
+  const tr = execFileSync('bash', ['-lc', 'command -v tr'], { encoding: 'utf8' }).trim();
+  const portableBin = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-prompt-digest-'));
+  t.after(() => fs.rmSync(portableBin, { recursive: true, force: true }));
+  fs.symlinkSync(shasum, path.join(portableBin, 'shasum'));
+  fs.symlinkSync(tr, path.join(portableBin, 'tr'));
+
+  const digest = execFileSync(
+    '/bin/bash',
+    ['-c', `${helper}\nprintf %s prompt-body | _sha256_digest`],
+    { encoding: 'utf8', env: { ...process.env, PATH: portableBin } },
+  ).trim();
+  assert.equal(digest, '735c5f663a35ca8fef9fb2f2890c0a48aee0c53b00c166105fd45427a7a6a40a');
+
+  assert.throws(
+    () => execFileSync('/bin/bash', ['-c', `${helper}\nprintf %s prompt-body | _sha256_digest`], {
+      env: { ...process.env, PATH: '' },
+      stdio: 'pipe',
+    }),
+    (error: unknown) => {
+      const stderr = (error as { stderr?: Buffer | string }).stderr?.toString() ?? '';
+      return /sha256sumまたはshasumが見つかりません/.test(stderr);
+    },
+  );
+});
+
 test('gate-launch-reviewer.sh: 引数不足は exit 1（使い方エラー）', async (t) => {
   const { repo } = setupGateReview();
   t.after(() => repo.cleanup());
