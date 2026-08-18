@@ -66,7 +66,15 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const baseSha = git(repo.dir, ['rev-parse', 'HEAD']);
   git(repo.dir, ['checkout', '-b', 'process/271-evidence-test']);
   fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: evidence\n');
-  git(repo.dir, ['add', 'SPEC.md']);
+  const configPath = path.join(repo.dir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const baseConfig = fs.readFileSync(configPath, 'utf8');
+  const targetConfig = baseConfig.replace(
+    'round_limit: {narrowing_threshold: 2, cutoff_threshold: 4}',
+    'round_limit: {narrowing_threshold: 1, cutoff_threshold: 3}',
+  );
+  assert.notEqual(targetConfig, baseConfig);
+  fs.writeFileSync(configPath, targetConfig);
+  git(repo.dir, ['add', 'SPEC.md', '.agent-skill-chain/config/agent-skill-chain.yaml']);
   git(repo.dir, ['commit', '-m', 'test: add evidence target']);
   const targetSha = git(repo.dir, ['rev-parse', 'HEAD']);
   git(repo.dir, ['checkout', 'main']);
@@ -200,6 +208,51 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     assert.equal(parseReviewEvidence((submittedReview as { body: string }).body)?.prompt_digest, promptDigest);
   }
 
+  const secondAttemptId = 'attempt-integration-2';
+  const secondRoundPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', secondAttemptId],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(secondRoundPrompt.status, 0, secondRoundPrompt.stderr);
+  assert.match(secondRoundPrompt.stdout, /現在のラウンド番号: 1/);
+  assert.doesNotMatch(secondRoundPrompt.stdout, /高ラウンドの反証追加要件/);
+  const secondPromptDigest = evidencePromptDigest(secondRoundPrompt.stdout.trimEnd());
+  fs.writeFileSync(tokenPath, `${JSON.stringify({
+    schema_version: 'agent-skill-chain/launcher-token/v1',
+    attempt_id: secondAttemptId,
+    expected_count: 2,
+    profile: 'strict',
+    target_sha: targetSha,
+    base_sha: baseSha,
+    pr_number: '274',
+    nonce: 'f'.repeat(48),
+    slots: [
+      { slot: 1, run_id: 'review-integration-second-submit' },
+      { slot: 2, run_id: 'review-integration-second-submit-2' },
+    ],
+    consumed_slots: [],
+  })}\n`, { mode: 0o600 });
+  for (const [runId, slot] of [
+    ['review-integration-second-submit', '1'],
+    ['review-integration-second-submit-2', '2'],
+  ] as const) {
+    const secondSubmitted = runCli(
+      [
+        'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
+        secondAttemptId, '2', runId, slot, 'codex', 'gpt-5.6-sol', 'xhigh', secondPromptDigest,
+      ],
+      { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
+    );
+    assert.equal(secondSubmitted.status, 0, secondSubmitted.stderr);
+  }
+
+  const targetConfigChangedPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', 'attempt-integration-3'],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(targetConfigChangedPrompt.status, 0, targetConfigChangedPrompt.stderr);
+  assert.match(targetConfigChangedPrompt.stdout, /現在のラウンド番号: 2/);
+
   const reportPath = path.join(repo.dir, 'verified-gate.yaml');
   const verified = runCli(
     ['gate', 'verify-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, '274', reportPath, 'ordinary'],
@@ -217,7 +270,6 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     'same_as_writer',
   ]);
 
-  const configPath = path.join(repo.dir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
   const originalConfig = fs.readFileSync(configPath, 'utf8');
   const changedConfig = originalConfig.replace(
     'round_limit: {narrowing_threshold: 2, cutoff_threshold: 4}',
@@ -226,11 +278,11 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.notEqual(changedConfig, originalConfig);
   fs.writeFileSync(configPath, changedConfig);
   const nextRoundPrompt = runCli(
-    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', 'attempt-integration-2'],
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', 'attempt-integration-3'],
     { cwd: repo.dir, env },
   );
   assert.equal(nextRoundPrompt.status, 0, nextRoundPrompt.stderr);
-  assert.match(nextRoundPrompt.stdout, /現在のラウンド番号: 1/);
+  assert.match(nextRoundPrompt.stdout, /現在のラウンド番号: 2/);
   fs.writeFileSync(configPath, originalConfig);
 
   const published = runCli(['gate', 'publish', 'ISSUE-271', reportPath], { cwd: repo.dir, env });

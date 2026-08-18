@@ -419,7 +419,7 @@ function historicalGateAttemptVerifier(options: {
         history: priorHistory,
       };
       const historicalConfig = git(
-        ['show', `${first.target_sha}:.agent-skill-chain/config/agent-skill-chain.yaml`],
+        ['show', `${first.execution.trusted_base_sha}:.agent-skill-chain/config/agent-skill-chain.yaml`],
         options.root,
       );
       if (historicalConfig.status !== 0) return false;
