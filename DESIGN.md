@@ -27,6 +27,59 @@
 | 必須成果物検査への権限・トークン | ワークフローの権限宣言に Issue 読み取りが無く、当該実行段の環境変数にもトークンが無い | 一致（SPEC 前提のとおり CI では quick 免除が一度も適用されていない） |
 | 非 Draft PR での先行失敗 | root 直下成果物の検査は非 Draft のときのみ実行され、必須成果物検査より前の段に位置する | 一致（SPEC 前提のとおり、受入条件の観測単位を直接実行に置く必要がある） |
 
+### 確認箇所の原文
+
+上表の各行は実物のファイル内容に基づく事実主張である。本文書だけで真偽を確かめられるようにするため、確認箇所の原文をそのまま引用する。引用元は、セグメント定義ファイル `.agent-skill-chain/config/segments.yaml`、CI ワークフロー定義（展開結果 `.github/workflows/agent-skill-chain-ci.yml` と配布テンプレート `.agent-skill-chain/templates/github/.github/workflows/agent-skill-chain-ci.yml`。両者は現状バイト単位で同一であり、下記の同期検査段がその同一性を無条件に検査する）、および開始済みセグメント集合の導出スクリプト `.agent-skill-chain/scripts/detect-changed-segments.sh` である。
+
+**セグメント連鎖順序と各セグメントの `outputs`。** セグメント定義ファイルの定義本体は次のとおりである。
+
+```yaml
+schema_version: agent-skill-chain/segments/v1
+segments:
+  - {id: spec,           outputs: [SPEC.md],                                                next: design}
+  - {id: design,         outputs: [DESIGN.md, ADR, PLAN.md],                                 next: implementation}
+  - {id: implementation, outputs: [code, unit_test_results],                                 next: validation}
+  - {id: validation,     outputs: [acceptance_test_results, regression_test_results],        next: completed}
+```
+
+`next` を先頭要素から辿ると `spec → design → implementation → validation → completed` の一本鎖になる。先頭要素は他のどの要素の `next` にも現れない `spec` として一意に定まる。`completed` は `id` を持つ要素として定義に存在せず `next` の値としてのみ現れるため `outputs` を持たない。
+
+**必須成果物検査を実行する段への権限・トークン付与状況。** ワークフロー定義の権限宣言は次の2行のみである。
+
+```yaml
+permissions:
+  contents: read
+```
+
+必須成果物検査を実行する段は次のとおりで、`env:` を持たず、Issue ラベル取得に要するトークンもリポジトリ識別子も与えていない。
+
+```yaml
+      - name: verify-artifacts (開始済みセグメントごと)
+        if: steps.ctx.outputs.skip_checks != 'true'
+        run: |
+          tr ',' '\n' <<< "${{ steps.segments.outputs.values }}" | while IFS= read -r segment; do
+            [[ -z "$segment" ]] && continue
+            ./.agent-skill-chain/ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" "$segment"
+          done
+```
+
+**非 Draft PR での root 直下成果物検査の先行。** root 直下成果物の検査段は次のとおりである。
+
+```yaml
+      - name: verify-root-clean (merge-ready)
+        # ISSUE-590: マージ準備完了状態（Draftではない）のPRについて、repoRoot直下に対象4ファイル
+        # （SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md）が残存していないかを既存の
+        # .agent-skill-chain/ci/verify-root-clean.sh（verify root-clean CLI、Issue #208で導入済み・
+        # 無変更のまま再利用）で検査する。Issueブランチへ削除commitを追加できない制約上、
+        # validation-gateまで正常に完了したPRでもこの検査は常に失敗する設計であり（ADR-0046）、
+        # マージには `--admin` によるbypassを要求する。Draft中はroot直下に対象ファイルが存在する
+        # ことが正常な中間状態であるため、draft == false のときのみ実行する。
+        if: steps.ctx.outputs.skip_checks != 'true' && github.event.pull_request.draft == false
+        run: ./.agent-skill-chain/ci/verify-root-clean.sh
+```
+
+同ジョブの段は定義順に実行される。段名を定義順に並べると `actions/checkout` → `actions/setup-node` → `Detect npm build prerequisites` → `npm ci` → `npm run build` → `Ensure agent-skill-chain CLI` → `Fetch base branch for diff-based checks` → `Derive issue_id` → `verify-branch-name` → `verify-worktree-path` → `verify-root-clean (merge-ready)` → `verify-template-sync` → `Detect started segments` → `verify-artifacts (開始済みセグメントごと)` → `verify-spec-bdd` → `verify-design-diagram` → `verify-ac-coverage` → `verify-adr (PRで変更されたADRごと)` → `lint-vocab` → `lint-references` → `Fetch base branch for secret scan` → `lint-secrets (PRで追加された行のみ)` → `adr-lint` であり、root 直下成果物の検査段は必須成果物検査段より前に位置する。したがって非 Draft PR ではジョブが必須成果物検査段へ到達しない。受入条件と完了条件の観測単位を CI ジョブ全体ではなく検査の直接実行へ置く必要があるのはこのためである。
+
 ## 設計判断
 
 ### D1. 対象集合の導出を入出力を持たない純関数へ切り出す
@@ -49,6 +102,52 @@ S が空なら R も空とする。S が空でなく閉包追加を行う場合�
 
 判定結果に「シグナル入力自体を取得できたか」を表す真偽値を追加する。GitHub モードではラベル取得コマンドが非0終了した場合と応答を解釈できない場合、ローカルモードでは Issue 状態ファイルを読めない場合を未解決とする。閉包追加を行う条件は「解決できた、かつ免除を適用しない」の連言とする。未解決のときは解決できなかった旨と、そのため免除も閉包追加も適用しない旨を標準エラー出力へ書く。
 
+**未解決条件が SPEC の列挙する解決不能要因をすべて覆うことの確認。** SPEC は GitHub モードの解決不能要因として「権限・トークン未付与、API エラー、レート制限、当該 Issue 不在」の4つを列挙する。上の2条件（取得コマンドの非0終了・応答の解釈不能）がこの4つを覆うことを、現行のラベル取得実装と実測で確認した。
+
+現行のラベル取得実装 `src/lib/quick-mode.ts` の該当箇所は次のとおりで、取得コマンドの終了コードが0以外の場合と、標準出力を JSON として解釈できない場合を、いずれも同一の結果（quick 未要求）へ畳み込んでいる。本設計はこの2つの分岐点をそのまま未解決の契機として用いる。
+
+```ts
+  const view = gh([`issue`, 'view', issueNumber, '--json', 'labels'], root);
+  // gh 未認証・ネットワーク不通・Issue 不在などは安全側（standard）へ倒す。quick は
+  // 明示的なオプトインでのみ成立し、シグナルを読めない状況で自動適用してはならない。
+  if (view.status !== 0) return { size: 'standard', risk: 'unclassified' };
+  let payload: GhLabelsPayload;
+  try {
+    payload = JSON.parse(view.stdout) as GhLabelsPayload;
+  } catch {
+    return { size: 'standard', risk: 'unclassified' };
+  }
+```
+
+第1の条件は原因ではなく結果（非0終了）で定義されているため、取得が成功終了しなかったすべての場合を覆う。残る危険は「取得できていないのに終了コード0を返す」場合だけであり、それが成立すると解決成功かつ quick 未要求へ誤分類され、要件5・`AC-12`・`AC-13` の反例になる。この危険が現実に成立しないことを、本リポジトリで次のとおり実測した。
+
+当該 Issue が不在の場合。
+
+```
+$ gh issue view 99999999 --json labels; echo "exit=$?"
+GraphQL: Could not resolve to an issue or pull request with the number of 99999999. (repository.issue)
+exit=1
+```
+
+認証情報が与えられていない場合（`gh` の設定ディレクトリを空にし、トークンの環境変数を取り除いて実行）。
+
+```
+$ env -u GH_TOKEN -u GITHUB_TOKEN GH_CONFIG_DIR=<空のディレクトリ> gh issue view 741 --json labels; echo "exit=$?"
+To get started with GitHub CLI, please run:  gh auth login
+Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.
+exit=4
+```
+
+トークンは与えられているが API が HTTP エラーを返す場合。
+
+```
+$ GH_TOKEN=<無効な値> gh issue view 741 --json labels; echo "exit=$?"
+HTTP 401: Bad credentials (https://api.github.com/graphql)
+exit=1
+```
+
+3件とも標準出力は空、終了コードは0以外、診断は標準エラー出力である。したがって「当該 Issue 不在」は第1の条件（非0終了）へ帰着し、終了コード0かつ空応答という誤分類経路は存在しない。「権限・トークン未付与」も同じく第1の条件へ帰着する。「API エラー」「レート制限」はいずれも API が HTTP エラーを返す事象であり、3件目の実測が示すとおり `gh` は API の HTTP エラーを非0終了として返すため、これも第1の条件へ帰着する。第2の条件（応答の解釈不能）は、終了コード0でありながら標準出力が JSON でない場合——中継プロキシによる応答の置換など——を受け止める残余条項である。よって D3 の2条件は SPEC が列挙する4要因をすべて覆う。ローカルモードでは Issue 状態ファイルの読み取り自体が成否の唯一の入力であり、読めない場合を未解決とすることで同様に覆う。
+
 この既定は、強制を強める方向ではなく弱める方向へ倒す点で agent-skill-chain の通常の安全側既定と逆であるため、判断とその根拠を ADR として独立に記録する。
 
 ### D4. CI ワークフローが必須成果物検査へ Issue 読み取り権限とトークンを与える
@@ -69,9 +168,102 @@ S 導出スクリプト自体は base 解決失敗・差分算出失敗のいず
 | base ブランチの明示取得 | base 参照名が空でないとき base を取得する。本ワークフローは pull request 事象でのみ起動し、当該事象では base 参照名が空にならない |
 | 展開結果と配布テンプレートの同期検査 | 無条件に実行され、両者が同一でなければ失敗する。上記2段を配布先が弱めた状態では S 導出段へ到達しない |
 
+**根拠の原文。** 上表の3段、比較対象となる S 導出段と後続段、および S 導出スクリプトの該当箇所を原文で示す。
+
+*根拠(1) リポジトリ取得深度が履歴を切り詰めないこと。* ジョブ最初の段は次のとおりで、`fetch-depth: 0` は全履歴の取得を指定する値であり浅い複製にならない。
+
+```yaml
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+```
+
+*根拠(2) base 取得段が S 導出段より前に、S 導出段より弱い実行条件で存在すること。* base 取得段と S 導出段は次のとおりである。
+
+```yaml
+      - name: Fetch base branch for diff-based checks
+        # verify-artifacts の code 判定（git diff base...HEAD）が base を解決できるようにする。
+        # actions/checkout@v7.0.1 はPRのマージrefのみをフェッチし、baseブランチ自体はローカルに
+        # 存在しないため（PR #172 run 29717941752 で実落ち）、ここで明示的にフェッチする
+        # （下記 verify-adr ステップと同一パターン。remote.origin.fetch の既定refspecにより
+        # `origin/$BASE_REF` としてローカルへ反映される）。
+        if: github.base_ref != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF"
+```
+
+```yaml
+      - name: Detect started segments
+        id: segments
+        if: steps.ctx.outputs.skip_checks != 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          values="$(./.agent-skill-chain/scripts/detect-changed-segments.sh "$BASE_REF" | paste -sd, -)"
+          echo "values=$values" >> "$GITHUB_OUTPUT"
+```
+
+段名の定義順（前掲）において base 取得段は S 導出段より前にある。ワークフローの起動条件は次のとおり `pull_request` 事象に限られ、当該事象では base 参照名が空にならないため、base 取得段の条件 `github.base_ref != ''` は S 導出段が実行されるあらゆる場合に真である。
+
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+```
+
+展開結果と配布テンプレートの同期検査段は `if:` を持たず無条件に実行され、両者が一致しなければその時点でジョブが停止する。この段も S 導出段より前にある。配布先が上記2段を弱めた定義を持つ場合、S 導出段へ到達する前にこの段で停止する。
+
+```yaml
+      - name: verify-template-sync
+        run: ./.agent-skill-chain/ci/verify-template-sync.sh
+```
+
+S 導出スクリプトが base を解決する箇所は次のとおりで、`origin/<base 参照名>` を先に試す。上記の取得段によりこの参照は必ず存在する。
+
+```bash
+if git rev-parse --verify --quiet "origin/$BASE_REF" >/dev/null; then
+  BASE_REV="origin/$BASE_REF"
+elif git rev-parse --verify --quiet "$BASE_REF" >/dev/null; then
+  BASE_REV="$BASE_REF"
+else
+  echo "base branchを解決できません: $BASE_REF" >&2
+  exit 1
+fi
+```
+
+*根拠(3) 差分算出失敗は後続の別の段が同一条件で既に失敗させること。* S 導出スクリプトの差分算出箇所は次のとおりで、失敗時は終了コード1を返す。
+
+```bash
+if ! git diff --name-only "$BASE_REV...HEAD" >"$tmpfile"; then
+  echo "git diff failed for $BASE_REV...HEAD" >&2
+  exit 1
+fi
+```
+
+同一の base に対する同形式の差分算出を、S 導出段と同じ `if:` 条件を持つ後続段がパイプを介さずに行っている。
+
+```yaml
+      - name: verify-adr (PRで変更されたADRごと)
+        if: steps.ctx.outputs.skip_checks != 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          CHANGED_ADRS="$(git diff --name-only "origin/$BASE_REF"...HEAD -- 'docs/adr/*.md')"
+          for adr_path in $CHANGED_ADRS; do
+            ./.agent-skill-chain/ci/verify-adr.sh "$adr_path"
+          done
+```
+
+`shell:` を明示しない `run:` の既定シェルは `bash -e` であり `pipefail` を含まない。S 導出段はコマンド置換の内側にパイプを持つため、スクリプトが返す終了コード1がパイプ末尾の整形コマンドの終了コードに置き換わり、段の失敗として現れない。これが握り潰しの実体である。一方 verify-adr 段はコマンド置換の結果を変数へ代入するだけでパイプを持たないため、`git diff` の失敗はそのまま段の失敗になる。
+
 したがって S 導出段に到達した時点で base 参照は必ず解決でき、`base 解決失敗` は起きない。残る失敗要因は共通祖先が無く差分算出自体が失敗する場合だけだが、同一の base に対する同一形式の差分算出を後続の別の段が同じ実行条件でパイプを介さずに行っており、その段は現状でも当該条件で失敗する。すなわち該当する PR は本変更の前から赤い。
 
-**設計。** (a) 上記の前提を偶然成立している性質ではなく検査済みの不変条件へ格上げする。ワークフロー定義に対する静的検査として、リポジトリ取得の深度が履歴を切り詰めないこと・base 取得段が S 導出段より前に存在すること・S 導出段が導出の失敗を空の S へ読み替えないことを確認する。(b) S 導出段における終了コードの握り潰しを解消し、導出失敗が空の S として下流へ渡らないようにする。(a) の確認により (b) は現状で緑の PR を赤へ変えず、既に確定しているジョブ失敗の報告位置を、理由を提示できる段へ移すだけである。あわせて S 導出スクリプトの差分算出失敗時のメッセージを、base 解決失敗時と同じく理由が読み取れる日本語へ揃える。
+**設計。** (a) 上記の前提を偶然成立している性質ではなく検査済みの不変条件へ格上げする。ワークフロー定義に対する静的検査として、リポジトリ取得の深度が履歴を切り詰めないこと・base 取得段が S 導出段より前に存在すること・S 導出段が導出の失敗を空の S へ読み替えないことを確認する。(b) S 導出段における終了コードの握り潰しを解消し、導出失敗が空の S として下流へ渡らないようにする。(a) の確認により (b) は現状で緑の PR を赤へ変えず、既に確定しているジョブ失敗の報告位置を、理由を提示できる段へ移すだけである。
+
+**S 導出スクリプトの失敗時メッセージは変更しない。** 当初は差分算出失敗時の文面を base 解決失敗時と同じ日本語へ揃える案を採っていたが、これは取りやめる。SPEC の要件6 は S を解決できない場合の挙動を「判定不能として失敗し、理由を標準エラー出力へ提示する（現行動作を維持する）」と定める。上に原文を引用したとおり、現行実装は base 解決失敗時に `base branchを解決できません: <base 参照名>`、差分算出失敗時に `git diff failed for <base 参照>...HEAD` を標準エラー出力へ書いて終了コード1を返しており、「失敗する」「理由を提示する」「両者を互いに区別できる」のいずれも既に満たしている。文面の言語を揃えることは、要件6 が維持を求めている現行動作に対する変更であり、かつ本 Issue の目的（対象集合の拡張と、導出失敗を空集合へ読み替える経路の解消）に寄与しない。よって本 Issue では文面を変更せず現行のまま維持する。これは要求・要件セグメントから設計セグメントへ申し送られた「base ブランチ解決失敗以外の要因で S が解決できない場合のメッセージ粒度を要件6 に照らして確認すること」への回答でもある——確認の結果、現行の粒度が要件6 を満たしており変更を要さない。
 
 **他案を採らない理由。** 握り潰しの是正を本 Issue のスコープから外す案は、S が空へ潰れる経路を残したまま閉包追加だけを導入することになり、本 Issue の是正が実効を持たないまま完了しうる状態を許す。SPEC の非退行保証へ例外を追記する案は、承認済みの要求節を変更して受入条件の再通過を要する一方、上記の確認により例外を必要とする実体が無い。
 
@@ -87,7 +279,7 @@ S 導出スクリプト自体は base 解決失敗・差分算出失敗のいず
 - 欠落: セグメント名と欠落した成果物名を対にして列挙する。閉包追加によって R へ加わったセグメントについては、当該セグメントが開始されていないこと自体が失敗理由であると読み取れる語を付す。開始済みセグメントの欠落は「作りかけの成果物を仕上げる」、閉包追加分の欠落は「上流セグメントを開始する」という別の是正行動に対応するため、両者を文面で区別する。
 - quick 免除の解除: 解除の理由（リスク区分が normal でない、または変更差分がガードレール対象を含む）を欠落の列挙と同時に提示する。免除されると期待した利用者が、解除理由と欠落の双方を1回の実行で把握できるようにするためである。
 - quick シグナルの未解決: 解決できなかった旨と、そのため免除も閉包追加も適用しない旨を提示する。強制が弱い側へ倒れたことを沈黙させないためである。一時的失敗と恒久的な未付与は観測側から区別できないため文面でも区別しない。
-- S の解決失敗: base を解決できない場合と差分を算出できない場合を、いずれも理由が読み取れる日本語で、かつ互いに区別できる文面で提示する。
+- S の解決失敗: base を解決できない場合と差分を算出できない場合を、いずれも理由として標準エラー出力へ提示し、両者を互いに区別できる文面とする。本項目のみ新設・変更ではなく現状維持の明示である。現行実装が既にこの構成を満たしており、要件6 が現行動作の維持を求めているため文面を変更しない（D5 参照）。
 
 ## 要件 → 設計要素の対応表
 
@@ -145,11 +337,11 @@ graph TD
 
 ```yaml
 related_adrs:
-  - id: ADR-0066
+  - id: ADR-0067
     relation: adopts
 ```
 
-ADR-0066 は本 Issue の設計セグメントで新規作成する決定であり、必須成果物検査の対象集合を開始済みセグメントの上流閉包へ拡張すること、閉包追加対象を要求・要件セグメントと設計・実装計画セグメントに限ること、および quick シグナルを解決できない実行環境では閉包追加を行わず本変更前と同一の対象集合へ劣化させることを記録する。作成時点の状態は `proposed` であり、設計ゲート承認時に `accepted` へ遷移する。
+ADR-0067 は本 Issue の設計セグメントで新規作成する決定であり、必須成果物検査の対象集合を開始済みセグメントの上流閉包へ拡張すること、閉包追加対象を要求・要件セグメントと設計・実装計画セグメントに限ること、および quick シグナルを解決できない実行環境では閉包追加を行わず本変更前と同一の対象集合へ劣化させることを記録する。作成時点の状態は `proposed` であり、設計ゲート承認時に `accepted` へ遷移する。
 
 ## 検出されない状態（設計上の既知の限界）
 
