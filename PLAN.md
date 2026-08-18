@@ -1,0 +1,26 @@
+# PLAN: gate-local-review の信頼 clone が consumer project のビルド成功を前提とし、ローカルゲートレビューを実行できない
+
+- Issue: `ISSUE-759`
+- 対応する DESIGN: `DESIGN.md`
+
+## 実装順序・変更単位
+
+DESIGN.md の設計要素 E1〜E11 を、次の順序・単位で実装する。変更対象は `.agent-skill-chain/scripts/gate-local-review.sh`、`.agent-skill-chain/scripts/cli-resolve.sh`、`src/commands/gate.ts`、`src/lib/review-evidence.ts`、`init`・`upgrade`・`uninstall` の各コマンド、新規の digest 実装、およびテストに閉じる。レビュアの判定内容・プロンプト構成・ゲート集約規則・project policy の配布方針・ローカルモードの経路は変更しない。
+
+| # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
+|---|---|---|---|---|
+| 1 | 正準ツリー digest の実装（E5） | パッケージ root 配下の通常ファイル（`node_modules/`・`.git/` 配下を除く）から、実行ビット・内容の SHA-256・相対パスを 1 行として相対パス昇順で連結し、その SHA-256 を単一値とする算出を CLI 側（TypeScript）へ実装する。対象範囲内に symbolic link を見つけた場合は算出せず失敗させる。同一アルゴリズムを準備段から Node.js の 1 回起動で実行できる形（引数にパッケージ root を取り値を標準出力へ出す）でも用意し、両実装が同一ツリーに対し同値を返すことを単体テストで固定する | `AC-13` | なし |
+| 2 | 導入マーカーの生成・撤去（E4） | `init`・`upgrade` が、自身のパッケージ root から #1 の算出で得た値と、パッケージ名・バージョン・スキーマ識別子を `.agent-skill-chain/.trusted-cli.json` へ書き出す（`--dry-run` では書かない。実行結果の要約へは記載する）。`uninstall` は `.agent-skill-chain/.installed_version` と同じ扱いで撤去対象へ含める。配布元→展開先の複製一覧・所有権記録・stale 判定の対象にはしない。既存の導入・更新・撤去の他の挙動は変更しない | `AC-13, AC-14` | `#1` |
+| 3 | 信頼モードでの CLI 解決の閉鎖（E6） | `.agent-skill-chain/scripts/cli-resolve.sh` に、`ASC_TRUSTED_CLI_ROOT` が設定されている場合は当該 root 配下の 2 経路（`bin/agents-md.js`、`node_modules/.bin/agent-skill-chain`）のみを探索し、`PATH` 上の実体への解決と自動導入フォールバックを行わず、解決できない場合は理由を日本語で出して非0終了する規則を追加する。未設定時の解決順序と自動導入の挙動は変更しない | `AC-10, AC-5` | なし |
+| 4 | 調達段の実装（E3・E4・E5 の結線） | 同ファイルへ調達の公開関数を追加する。手順は、base SHA のコミット内容からの期待値読み取り、候補列挙（protected base worktree root 直下の依存ディレクトリ、`npm root -g` が返すディレクトリ、`command -v` が解決する実体から辿るパッケージ root の順）、linked worktree 配下の候補の除外、候補ごとの digest 算出と期待値照合、一致した最初の候補の複製（実行ビット保持、`node_modules/` 配下を除く）、実行入口の用意、依存モジュールへの参照経路の付与（実体は複製しない）、複製先での digest 再算出による確認、調達結果（調達モード・調達元識別子・実体 digest）の確定とする。npm による依存導入・build script の実行は行わない。失敗時は前提と是正手段を含む日本語メッセージを出して非0終了する | `AC-1, AC-2, AC-5, AC-9, AC-10, AC-13, AC-14` | `#1, #3` |
+| 5 | 準備段の分岐と隔離環境検査（E1・E2・E9） | `.agent-skill-chain/scripts/gate-local-review.sh` の無条件の `npm ci --ignore-scripts` と `npm run build` を撤去し、base SHA の `package.json` だけを入力とする調達モード判定を置く。`clone_build` では従来の 2 コマンドを実行し、`package_copy` では隔離 clone 内の `cli-resolve.sh` を読み込んで #4 の関数を呼ぶ。併せて、remote 削除後に登録 remote が 1 件も無いことの積極検査、調達物の配置先を隔離 clone の `.git/info/exclude` へ登録する処理、`gate-review.sh`・`gate-launch-reviewer.sh` 起動時の `ASC_TRUSTED_CLI_ROOT` 付与を追加する。既存の引数検査・PR metadata 照合・protected base worktree の検査・build 後の dirty 検査・token 消費確認は変更しない | `AC-1, AC-2, AC-3, AC-6, AC-9, AC-11, AC-14` | `#4` |
+| 6 | launcher digest の算出対象の確定（E7） | `src/commands/gate.ts` の固定パス集合から `.agent-skill-chain/project/` 配下の 2 件を除き、`.agent-skill-chain/scripts/cli-resolve.sh` を加える。算出対象のいずれかを trusted base SHA から取得できない場合に部分集合で算出せず、取得できなかった要素を示して非0終了する現行挙動は変更しない | `AC-7, AC-8, AC-12` | なし |
+| 7 | launcher token の拡張と記録時再検証（E8） | 準備段が生成する launcher token へ `trusted_root` と `procurement`（調達モード・調達元識別子・実体 digest）を加え、`src/commands/gate.ts` の token 契約検査へ当該フィールドの形式検査を追加する。証跡投稿では、実行中の CLI のパッケージ root が `trusted_root` 配下にあること、調達モードを base SHA から独立に再導出した値が token と一致すること、`package_copy` では実行中のパッケージ root の digest が base SHA の期待値および token の値と一致することを検査し、不成立なら投稿せず非0終了する。証跡の `execution` へ `procurement` を記録し、`src/lib/review-evidence.ts` では当該フィールドを任意フィールドとして扱い、存在する場合のみ形式を検査する。スキーマ識別子は据え置く | `AC-3, AC-4, AC-10, AC-13` | `#1, #5` |
+| 8 | 自リポジトリ形状の統合テスト更新（E11） | 既存のローカルレビュー統合テストの stub リポジトリへ、`agent-skill-chain` を名乗る `package.json`（`bin` 入口つき）を置いて `clone_build` 経路を選択させ、npm 呼び出し記録の期待値を従来の 2 コマンドのまま維持することを確認する。併せて、隔離 clone の登録 remote が空であること、レビュア起動スクリプトと adapter の解決元が隔離 clone であること、既存 3 拒否経路のメッセージが失われていないことを確認する | `AC-3, AC-4, AC-6, AC-11` | `#5, #7` |
+| 9 | consumer 形状の統合テスト（E11） | 配布集合と導入マーカーだけを持つ stub リポジトリを 3 構成（`package.json` も lockfile も持たない構成、build script が痕跡ファイルを作成してから非0終了する構成、依存導入が必ず失敗する構成）用意し、期待値に一致する stub パッケージを隔離 clone の外へ置いて実行する。各構成でレビュア起動段へ到達し証跡が投稿されること、npm 呼び出し記録に `ci --ignore-scripts` と `run build` のいずれも現れないこと、build script の痕跡ファイルが隔離 clone 内に生じないことを確認する。さらに、隔離 clone の外に非正規の実体を 2 つ（依存ディレクトリ配下と `PATH` 上）置いた状態で、実行される CLI の実体が隔離 clone 配下であり外部 2 実体が実行されないこと、調達元の実体を 1 バイト改変した状態ではレビュアを起動せず非0終了し証跡が投稿されないこと、供給元が存在しない状態では非0終了して前提と是正手段を含む日本語メッセージが出ること、Issue worktree 側へ同一相対パスの改変 asset を置いても生成される prompt にその内容が現れないことを確認する | `AC-1, AC-2, AC-5, AC-9, AC-10, AC-13, AC-14, AC-15` | `#5, #7` |
+| 10 | launcher digest の検証テスト（E11） | consumer 形状（`.agent-skill-chain/project/` 配下の文書を持たない）で証跡の `execution` が `trusted_base_sha`・`launcher_digest`・`isolation` を持つこと、`.agent-skill-chain/project/` 配下の有無・内容だけが異なる 2 状態で digest が一致し算出が失敗しないこと、算出対象の各要素（本設計が確定した 10 要素）についてその要素だけを欠いた状態では部分集合で算出せず非0終了し欠落要素が日本語で示されることを確認する | `AC-7, AC-8, AC-12` | `#6` |
+| 11 | 全体検査 | 本リポジトリのテストスイート全体を実行して成功を確認し、`verify doc-length`・`verify spec-bdd`・`lint references`・`lint vocab`・`lint secrets`・`lint adr` を含む機械検査を通す。実行結果は独立検証セグメントの証跡として残す | `AC-1〜AC-15` | `#8, #9, #10` |
+
+## 実装順序の見直しについて
+
+実装中に作業順序（上記の変更単位の並び）のみを見直す場合は、本ファイルのみを更新すればよい。設計要素・責務・境界そのもの（調達モードの判定入力、期待値の供給元の限定、候補列挙と採用規則、依存モジュールの実体を隔離 clone 配下へ配置しない境界、launcher digest の算出対象、証跡へ記録する項目と記録時の再検証）を変更する場合は、DESIGN.md の更新および設計ゲートの再通過が必要になる。
