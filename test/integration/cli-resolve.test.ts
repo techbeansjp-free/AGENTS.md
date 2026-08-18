@@ -432,3 +432,59 @@ test('実CLIは第3経路の起動可能性検証が前提とする --help exit 
   const result = spawnSync('node', [path.join(packageRoot, 'bin', 'agents-md.js'), '--help'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
 });
+
+// Issue #759 PLAN #3 / DESIGN E6: 信頼実行の文脈（ASC_TRUSTED_CLI_ROOT）では隔離 clone 配下の
+// 2 経路だけを探索し、PATH 上の実体への解決も自動導入フォールバックも行わない。
+test('ASC_TRUSTED_CLI_ROOT指定時は隔離clone配下のbin/agents-md.jsを最優先で解決する', () => {
+  const fixture = createResolverFixture();
+  const pathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-path-'));
+  const trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-trusted-'));
+  const record = path.join(fixture.root, 'selected.log');
+  try {
+    commandStub(path.join(trustedRoot, 'bin', 'agents-md.js'), 'trusted-bin', record, { node: true });
+    commandStub(path.join(trustedRoot, 'node_modules', '.bin', 'agent-skill-chain'), 'trusted-node-modules', record);
+    commandStub(path.join(fixture.root, 'bin', 'agents-md.js'), 'issue-worktree-bin', record, { node: true });
+    commandStub(path.join(pathDir, 'agent-skill-chain'), 'PATH', record);
+    const env = baseEnv({
+      PATH: `${pathDir}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
+      ASC_TRUSTED_CLI_ROOT: trustedRoot,
+    });
+
+    const result = run(fixture, env);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(fs.readFileSync(record, 'utf8').trim().split('\n'), ['trusted-bin']);
+  } finally {
+    fixture.cleanup();
+    fs.rmSync(pathDir, { recursive: true, force: true });
+    fs.rmSync(trustedRoot, { recursive: true, force: true });
+  }
+});
+
+test('ASC_TRUSTED_CLI_ROOT配下に実体が無ければPATHへ落ちず自動導入もせず非0終了する', () => {
+  const fixture = createResolverFixture();
+  const pathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-path-'));
+  const trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-trusted-'));
+  const record = path.join(fixture.root, 'selected.log');
+  const npmLog = path.join(fixture.root, 'npm.log');
+  try {
+    commandStub(path.join(pathDir, 'agent-skill-chain'), 'PATH', record);
+    writeExecutable(path.join(pathDir, 'npm'), `#!/usr/bin/env bash\necho called >> ${JSON.stringify(npmLog)}\nexit 0\n`);
+    const env = baseEnv({
+      PATH: `${pathDir}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
+      ASC_TRUSTED_CLI_ROOT: trustedRoot,
+    });
+
+    const result = run(fixture, env);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /信頼実行環境のCLI実体を隔離clone配下で解決できません/);
+    assert.match(result.stderr, /PATH上の実体への解決と自動導入フォールバックを行いません/);
+    assert.equal(fs.existsSync(record), false, 'PATH上の実体を実行しないこと');
+    assert.equal(fs.existsSync(npmLog), false, '自動導入を試みないこと');
+  } finally {
+    fixture.cleanup();
+    fs.rmSync(pathDir, { recursive: true, force: true });
+    fs.rmSync(trustedRoot, { recursive: true, force: true });
+  }
+});

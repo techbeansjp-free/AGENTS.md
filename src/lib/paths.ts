@@ -125,8 +125,25 @@ export const ASSET_NAMESPACE = '.agent-skill-chain';
  */
 export function resolveAsset(relativePath: string, root: string = repoRoot()): string {
   const inRepo = path.join(root, ASSET_NAMESPACE, relativePath);
-  if (fs.existsSync(inRepo)) return inRepo;
+  if (fs.existsSync(inRepo)) return traceResolvedAsset(inRepo);
   const inPackage = path.join(packageRoot(), ASSET_NAMESPACE, relativePath);
-  if (fs.existsSync(inPackage)) return inPackage;
+  if (fs.existsSync(inPackage)) return traceResolvedAsset(inPackage);
   throw new Error(`アセットが見つかりません: ${relativePath}（${inRepo} / ${inPackage} 共に無し）`);
+}
+
+/**
+ * Issue #759: 実行時に解決された asset の絶対パスを観測できるようにする。`ASC_ASSET_TRACE_FILE`
+ * が与えられたときに限り有効で、未設定時は何も出力せず解決の順序・結果・失敗時の挙動を変えない。
+ * 記録するのは本番経路が実際に用いる同一の解決関数が返した値であり、観測のために別経路で解決し直さない。
+ */
+function traceResolvedAsset(resolved: string): string {
+  const traceFile = process.env.ASC_ASSET_TRACE_FILE;
+  if (traceFile) {
+    try {
+      fs.appendFileSync(traceFile, `${resolved}\n`);
+    } catch {
+      // 観測の失敗が本番経路の解決結果を変えないようにする（I8: 観測は判定の入力ではない）。
+    }
+  }
+  return resolved;
 }

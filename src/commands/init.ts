@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { copyTreeFailOnConflict } from '../lib/fs-copy.js';
 import { collectManagedAssetMappings, packageVersion } from '../lib/asset-manifest.js';
 import { writeInstalledVersion } from '../lib/version-marker.js';
+import { applyTrustedCliMarker, formatTrustedCliMarkerOutcome } from '../lib/trusted-cli-marker.js';
 import { scaffoldProjectPolicy } from '../lib/project-policy-scaffold.js';
 import { isHelp, printUsage, guard, ok } from '../lib/cli-io.js';
 import { digestOfFile } from '../lib/digest.js';
@@ -140,6 +141,9 @@ export async function init(args: string[]): Promise<number> {
 
     summary.push('GitHub workflowは未展開です。必要な場合だけ setup github を明示実行してください。');
     summary.push(`${prefix}installed_version: ${packageVersion()}`);
+    // Issue #759: ローカルゲートの準備段が隔離 clone 外から調達する CLI 実体の期待値。
+    // 配布集合の外にあるため、所有権記録・stale 判定・複製一覧へは登録しない。
+    summary.push(formatTrustedCliMarkerOutcome(applyTrustedCliMarker(targetDir, { dryRun }), prefix));
     if (profile === 'lightweight') {
       // 要件5・AC-5: 逸脱の機械的阻止が無いことを明示する（設計要素6）。
       summary.push(

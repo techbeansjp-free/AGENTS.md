@@ -404,3 +404,49 @@ test('trusted Strict profileをlight_review.applied自己申告でStandardへ降
   assert.equal(result.final, 'human_required');
   assert.match(result.reason ?? '', /profile.*trusted/);
 });
+
+// Issue #759 DESIGN E8: 証跡の execution へ調達の事実（調達モード・調達元識別子・実体digest）を
+// 任意フィールドとして加える。スキーマ識別子は据え置き、既に投稿済みの証跡を形式不適合にしない。
+test('procurement: 未記録の証跡は従来どおり受理し、記録済みは形式検査したうえでattempt内一致を要求する', () => {
+  // 既存の証跡（procurement 無し）は引き続き approved へ到達する。
+  assert.equal(verify([review(1, 1), review(2, 2)]).final, 'approved');
+
+  const procurement = {
+    mode: 'package_copy' as const,
+    source: 'candidate-a:/consumer/node_modules/agent-skill-chain#agent-skill-chain@1.2.3',
+    digest: `sha256:${'1'.repeat(64)}`,
+  };
+  const recordedOne = evidence(1);
+  recordedOne.execution.procurement = procurement;
+  const recordedTwo = evidence(2);
+  recordedTwo.execution.procurement = procurement;
+  assert.equal(
+    verify([
+      review(1, 1, { body: renderReviewEvidence(recordedOne) }),
+      review(2, 2, { body: renderReviewEvidence(recordedTwo) }),
+    ]).final,
+    'approved',
+  );
+
+  // 片側だけが調達の事実を持つ attempt は、実行attestationの不一致として拒否する。
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(recordedOne) }), review(2, 2)]).final,
+    'human_required',
+  );
+
+  // package_copy は実体 digest を必須にする（形式不適合は証跡として受理しない）。
+  const malformed = evidence(1);
+  malformed.execution.procurement = { mode: 'package_copy', source: 'candidate-a:/x#y@1' };
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(malformed) }), review(2, 2)]).final,
+    'human_required',
+  );
+
+  // 調達元識別子が空値の証跡も受理しない。
+  const emptySource = evidence(1);
+  emptySource.execution.procurement = { mode: 'clone_build', source: '' };
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(emptySource) }), review(2, 2)]).final,
+    'human_required',
+  );
+});
