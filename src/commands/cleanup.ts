@@ -1,7 +1,13 @@
 import { repoRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, CliError } from '../lib/issue.js';
-import { findIssueWorktree, hasUncommittedChanges, hasUnpushedCommits } from '../lib/worktree.js';
+import {
+  findIssueWorktree,
+  hasUncommittedChanges,
+  inspectUnpushedCommits,
+  integrationPreservationRef,
+  type KnownPreservedCommit,
+} from '../lib/worktree.js';
 import { leaseFilePath, integrationFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile } from '../lib/yaml-io.js';
 import { activeLeaseFor, type WriterLease } from '../lib/github-lease.js';
@@ -20,6 +26,12 @@ issue_id: ISSUE-<番号> 形式のIssue ID
 
 interface IntegrationRecord {
   status: 'draft' | 'ready_for_review' | 'merged' | 'closed';
+  head_sha?: string;
+}
+
+interface PullRequestRecord {
+  state: string;
+  headRefOid?: string;
 }
 
 export async function run(args: string[]): Promise<number> {
@@ -60,25 +72,62 @@ export async function run(args: string[]): Promise<number> {
       return fail('worktree 内に未commitの変更があるため削除できません');
     }
 
-    if (entry.branch && hasUnpushedCommits(entry.path, entry.branch)) {
-      return fail('未pushのcommitがあるため削除できません');
-    }
-
     let integrationDone = false;
+    let preservedCommit: KnownPreservedCommit | undefined;
+    let localIntegrationMissingHead = false;
     if (config.coordination.backend === 'local') {
       const record = tryReadYamlFile<IntegrationRecord>(integrationFilePath(root, number));
       integrationDone = record?.status === 'merged' || record?.status === 'closed';
+      if (integrationDone) {
+        localIntegrationMissingHead = !record?.head_sha;
+        if (record?.head_sha) {
+          preservedCommit = {
+            sha: record.head_sha,
+            source: 'integration_record',
+            verificationRef: integrationPreservationRef(number),
+          };
+        }
+      }
     } else if (entry.branch) {
-      const prView = gh(['pr', 'list', '--head', entry.branch, '--state', 'all', '--json', 'state'], root);
+      const prView = gh(['pr', 'list', '--head', entry.branch, '--state', 'all', '--json', 'state,headRefOid'], root);
       if (prView.status === 0) {
         try {
-          const prs = JSON.parse(prView.stdout) as { state: string }[];
-          integrationDone = prs.some((pr) => pr.state === 'MERGED' || pr.state === 'CLOSED');
+          const prs = JSON.parse(prView.stdout) as PullRequestRecord[];
+          const completed = prs.find((pr) => pr.state === 'MERGED' || pr.state === 'CLOSED');
+          integrationDone = !!completed;
+          if (completed?.headRefOid) preservedCommit = { sha: completed.headRefOid, source: 'github_pr' };
         } catch {
           integrationDone = false;
         }
       }
     }
+    if (entry.branch) {
+      const unpushed = inspectUnpushedCommits(entry.path, entry.branch, preservedCommit);
+      if (unpushed.hasUnpushedCommits && unpushed.reason === 'unpreserved_commits') {
+        const shas = unpushed.commitShas.map((sha) => sha.slice(0, 12)).join(', ');
+        const legacyRecordAction = localIntegrationMissingHead
+          ? '。Integration Record に head_sha が無いため、統合時点の Issue ブランチ SHA を確認して head_sha を記録した後、cleanup を再実行してください'
+          : '';
+        return fail(
+          `未pushのcommitがあるため削除できません（保全されていないcommit: ${unpushed.commitShas.length}件 ${shas}）${legacyRecordAction}`,
+        );
+      }
+      if (unpushed.hasUnpushedCommits) {
+        if (localIntegrationMissingHead) {
+          return fail(
+            `Integration Record に head_sha が無いため削除できません。統合時点の Issue ブランチ SHA を確認して head_sha を記録した後、cleanup を再実行してください（追加確認: ${unpushed.detail}）`,
+          );
+        }
+        return fail(`commitの保全状況を確認できないため削除できません（${unpushed.detail}）`);
+      }
+    }
+
+    if (localIntegrationMissingHead) {
+      return fail(
+        'Integration Record に head_sha が無いため削除できません。統合時点の Issue ブランチ SHA を確認して head_sha を記録した後、cleanup を再実行してください',
+      );
+    }
+
     if (!integrationDone) {
       return fail('対応する PR / Integration Record が完了済み（merged または closed）ではないため削除できません');
     }

@@ -1,4 +1,4 @@
-// Issue #677 AC-4: 承認済み設計SHAの変更前ラッパーと、共有実装化後の全54本を同一fixtureで比較する。
+// Issue #677 AC-4: 承認済み設計SHAに存在した54本を同一fixtureで比較する。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -24,11 +24,11 @@ function revisionFile(relative: string): string {
   });
 }
 
-test('対象54本の委譲argvと終了コードが変更前と一致する', () => {
+test('既存54本の委譲argvと終了コードが変更前と一致する', () => {
   const fixture = createWrapperFixture();
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue677-no-external-'));
   try {
-    const targets = wrapperTargets();
+    const targets = wrapperTargets().filter((relative) => !relative.endsWith('/pr-complete.sh'));
     assert.equal(targets.length, 54);
     const current = new Map(targets.map((relative) => [relative, fs.readFileSync(path.join(packageRoot, relative), 'utf8')]));
     for (const relative of targets) fs.writeFileSync(path.join(fixture.root, relative), revisionFile(relative));

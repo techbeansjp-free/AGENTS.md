@@ -58,6 +58,7 @@ export const routes: Record<string, Handler> = {
   'gate reviewer-context': gate.reviewerContext,
   'gate reviewer-prompt': gate.reviewerPrompt,
   'pr create': pr.create,
+  'pr complete': pr.complete,
   'pr merge': pr.merge,
   'adr finalize': adr.finalize,
   'report status': report.status,

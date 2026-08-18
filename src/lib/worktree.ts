@@ -127,60 +127,252 @@ export function resolveCurrentBranch(root: string): string | undefined {
   return resolveCurrentBranchInfo(root)?.branch;
 }
 
-/**
- * Issue #361: GitHubの「Squash and merge」はマージ後にリモートブランチを自動削除する。
- * この状態で（削除操作自体や後続の `git fetch --prune` により）ローカルのremote-tracking
- * ブランチ（`refs/remotes/origin/<branch>`）も失われると、`branch.<name>.remote`/`.merge`の
- * config自体は残ったままなので `<branch>@{upstream}` は「gone」状態になり
- * `git rev-parse --abbrev-ref <branch>@{upstream}` が非ゼロ終了する。これは
- * 「一度もpushしていない」場合と区別できないため、upstream解決不能を即「未push」と断定せず、
- * ブランチの内容が既にdefault branchへ実質的に統合済みかどうかを判定してから安全側判定を行う。
- */
-export function hasUnpushedCommits(worktreePath: string, branch: string): boolean {
-  const upstream = git(['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], worktreePath);
-  if (upstream.status === 0) {
-    const ahead = git(['rev-list', '--count', `${upstream.stdout.trim()}..${branch}`], worktreePath);
-    return ahead.status === 0 && Number.parseInt(ahead.stdout.trim() || '0', 10) > 0;
-  }
-  // upstream解決不能（未push、またはIssue #361のgone状態）。
-  // default branchへ統合済みと判定できた場合のみpush実績ありとみなし、それ以外は安全側でtrue。
-  return !isIntegratedIntoDefaultBranch(worktreePath, branch);
+/** Issue #692: cleanup前に既知の保全位置を起点として到達可能性と別SHAでの統合を検査する。 */
+export type UnpushedCommitCheck =
+  | { hasUnpushedCommits: false }
+  | { hasUnpushedCommits: true; reason: 'unpreserved_commits'; commitShas: string[] }
+  | { hasUnpushedCommits: true; reason: 'indeterminate'; detail: string };
+
+export type KnownPreservedCommit =
+  | { sha: string; source: 'github_pr' }
+  | { sha: string; source: 'integration_record'; verificationRef: string };
+
+export type CommitReachabilityCheck =
+  | { reachable: true }
+  | { reachable: false; reason: 'unreachable' }
+  | { reachable: false; reason: 'indeterminate'; detail: string };
+
+/** local backendの統合完了遷移が、確認済みの保全位置を記録するref。 */
+export function integrationPreservationRef(issueNumber: string): string {
+  return `refs/agent-skill-chain/integrations/${issueNumber}`;
 }
 
-/**
- * Issue #361: ブランチ`branch`の内容が、`worktreePath`の default branch へ既に統合済みかどうかを
- * 判定する。
- *
- * 1. 通常マージ・fast-forward・rebase-mergeは祖先関係（`git merge-base --is-ancestor`）で
- *    検出できる。
- * 2. squashマージはdefault branch側に新しいコミットハッシュを作るため祖先関係にならない。
- *    その代わり、分岐後にdefault branch側で他の変更が入っていなければ、squashコミットの
- *    tree（作業ツリーの内容そのもの）はブランチ先端のtreeと完全に一致する。そこでブランチ先端の
- *    tree hashが、default branchの履歴中いずれかのコミットのtree hashと一致するかで判定する。
- * 3. default branchが特定できない、または上記いずれの判定も成立しない場合は統合未済とみなす
- *    （安全側）。
- */
-function isIntegratedIntoDefaultBranch(worktreePath: string, branch: string): boolean {
+/** commit自身が統合先または実remoteのheadから到達可能かを検査する。内容一致は根拠にしない。 */
+export function inspectCommitReachability(worktreePath: string, commitSha: string): CommitReachabilityCheck {
+  if (git(['rev-parse', '--verify', `${commitSha}^{commit}`], worktreePath).status !== 0) {
+    return { reachable: false, reason: 'indeterminate', detail: `commit ${commitSha.slice(0, 12)} が存在しません` };
+  }
+
+  let baseError: string | undefined;
+  try {
+    const base = defaultBranch(worktreePath);
+    if (git(['merge-base', '--is-ancestor', commitSha, base], worktreePath).status === 0) {
+      return { reachable: true };
+    }
+  } catch (error) {
+    baseError = error instanceof Error ? error.message : String(error);
+  }
+
+  const remotes = git(['remote'], worktreePath);
+  if (remotes.status !== 0) {
+    return { reachable: false, reason: 'indeterminate', detail: 'リモート一覧を取得できません' };
+  }
+  let remoteError: string | undefined;
+  for (const remote of remotes.stdout.split('\n').map((line) => line.trim()).filter(Boolean)) {
+    const live = git(['ls-remote', '--heads', remote], worktreePath);
+    if (live.status !== 0) {
+      remoteError ??= `実リモート ${remote} を確認できません`;
+      continue;
+    }
+    for (const line of live.stdout.split('\n').filter(Boolean)) {
+      const [remoteSha] = line.split(/\s+/);
+      if (git(['rev-parse', '--verify', `${remoteSha}^{commit}`], worktreePath).status !== 0) {
+        const fetch = git(['fetch', '--no-tags', remote, remoteSha], worktreePath);
+        if (
+          fetch.status !== 0 ||
+          git(['rev-parse', '--verify', `${remoteSha}^{commit}`], worktreePath).status !== 0
+        ) {
+          remoteError ??= `実リモート ${remote} のcommit ${remoteSha.slice(0, 12)} を取得できません`;
+          continue;
+        }
+      }
+      if (git(['merge-base', '--is-ancestor', commitSha, remoteSha], worktreePath).status === 0) {
+        return { reachable: true };
+      }
+    }
+  }
+
+  if (remoteError) return { reachable: false, reason: 'indeterminate', detail: remoteError };
+  if (baseError) return { reachable: false, reason: 'indeterminate', detail: baseError };
+  return { reachable: false, reason: 'unreachable' };
+}
+
+export function inspectUnpushedCommits(
+  worktreePath: string,
+  branch: string,
+  knownPreservedCommit?: KnownPreservedCommit,
+): UnpushedCommitCheck {
   let base: string;
   try {
     base = defaultBranch(worktreePath);
-  } catch {
-    return false;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { hasUnpushedCommits: true, reason: 'indeterminate', detail };
   }
 
-  const ancestor = git(['merge-base', '--is-ancestor', branch, base], worktreePath);
-  if (ancestor.status === 0) return true;
+  const mergeBase = git(['merge-base', branch, base], worktreePath);
+  if (mergeBase.status !== 0) {
+    return {
+      hasUnpushedCommits: true,
+      reason: 'indeterminate',
+      detail: 'ブランチとデフォルトブランチの分岐点を確認できません',
+    };
+  }
+  const mergeBaseSha = mergeBase.stdout.trim();
+  const commits = git(['rev-list', '--reverse', `${mergeBaseSha}..${branch}`], worktreePath);
+  if (commits.status !== 0) {
+    return { hasUnpushedCommits: true, reason: 'indeterminate', detail: 'ブランチ固有のcommitを列挙できません' };
+  }
+  const branchCommits = commits.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+  if (branchCommits.length === 0) return { hasUnpushedCommits: false };
 
-  const branchTree = git(['rev-parse', `${branch}^{tree}`], worktreePath);
-  if (branchTree.status !== 0) return false;
-  const targetTree = branchTree.stdout.trim();
+  const pushedPositions: string[] = [];
+  const reachableRefs = [base];
+  let remoteEvidenceError: string | undefined;
 
-  const baseTrees = git(['log', base, '--format=%T'], worktreePath);
-  if (baseTrees.status !== 0) return false;
-  return baseTrees.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .includes(targetTree);
+  const remoteRefs = git(['for-each-ref', '--format=%(refname)%09%(objectname)', 'refs/remotes'], worktreePath);
+  if (remoteRefs.status !== 0) remoteEvidenceError = 'remote-tracking refを列挙できません';
+
+  const remotes = git(['remote'], worktreePath);
+  if (remotes.status !== 0) remoteEvidenceError ??= 'リモート一覧を取得できません';
+
+  if (!remoteEvidenceError) {
+    const trackingRefs = new Map(
+      remoteRefs.stdout
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => line.split('\t') as [string, string]),
+    );
+    for (const remote of remotes.stdout.split('\n').map((line) => line.trim()).filter(Boolean)) {
+      const live = git(['ls-remote', '--heads', remote], worktreePath);
+      if (live.status !== 0) {
+        remoteEvidenceError ??= `実リモート ${remote} を確認できません`;
+        continue;
+      }
+      const liveHeads = new Map(
+        live.stdout
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => {
+            const [sha, refName] = line.split(/\s+/);
+            return [refName, sha] as const;
+          }),
+      );
+      for (const [refName, sha] of liveHeads) {
+        if (git(['rev-parse', '--verify', `${sha}^{commit}`], worktreePath).status !== 0) {
+          if (refName !== `refs/heads/${branch}`) continue;
+          const fetch = git(['fetch', '--no-tags', remote, sha], worktreePath);
+          if (
+            fetch.status !== 0 ||
+            git(['rev-parse', '--verify', `${sha}^{commit}`], worktreePath).status !== 0
+          ) {
+            remoteEvidenceError ??= `実リモート ${remote} のcommit ${sha.slice(0, 12)} を取得できません`;
+            continue;
+          }
+        }
+        reachableRefs.push(sha);
+        if (refName === `refs/heads/${branch}`) pushedPositions.push(sha);
+      }
+      for (const [refName, localSha] of trackingRefs) {
+        const prefix = `refs/remotes/${remote}/`;
+        if (!refName.startsWith(prefix)) continue;
+        const remoteBranch = refName.slice(prefix.length);
+        if (!remoteBranch || remoteBranch === 'HEAD') continue;
+        if (liveHeads.get(`refs/heads/${remoteBranch}`) !== localSha) continue;
+
+        reachableRefs.push(refName);
+        if (remoteBranch !== branch) continue;
+        pushedPositions.push(localSha);
+        const reflog = git(['reflog', 'show', '--format=%H%x09%gs', refName], worktreePath);
+        if (reflog.status !== 0) continue;
+        pushedPositions.push(
+          ...reflog.stdout
+            .split('\n')
+            .map((entry) => entry.split('\t'))
+            .filter((entry) => entry.length >= 2 && entry.slice(1).join('\t').includes('update by push'))
+            .map(([sha]) => sha),
+        );
+      }
+    }
+  }
+
+  if (knownPreservedCommit) {
+    const knownSha = knownPreservedCommit.sha;
+    const knownCommitExists = git(['rev-parse', '--verify', `${knownSha}^{commit}`], worktreePath).status === 0;
+    if (knownCommitExists && knownPreservedCommit.source === 'github_pr') {
+      // GitHubが返す完了済みPRのheadRefOidは、過去にremoteへpushされた位置そのものである。
+      pushedPositions.push(knownSha);
+    } else if (knownCommitExists && knownPreservedCommit.source === 'integration_record') {
+      const currentlyPreserved = isReachableFromAny(worktreePath, knownSha, reachableRefs);
+      const recorded = git(
+        ['rev-parse', '--verify', `${knownPreservedCommit.verificationRef}^{commit}`],
+        worktreePath,
+      );
+      const transitionWasVerified = recorded.status === 0 && recorded.stdout.trim() === knownSha;
+      if (currentlyPreserved || transitionWasVerified) pushedPositions.push(knownSha);
+    }
+  }
+
+  const existingPushedPositions = [...new Set(pushedPositions)].filter(
+    (sha) => git(['rev-parse', '--verify', `${sha}^{commit}`], worktreePath).status === 0,
+  );
+  const unpreserved: string[] = [];
+  for (const commitSha of branchCommits) {
+    if (
+      isReachableFromAny(worktreePath, commitSha, existingPushedPositions) ||
+      isReachableFromAny(worktreePath, commitSha, reachableRefs)
+    ) {
+      continue;
+    }
+    if (existingPushedPositions.length > 0) {
+      const paths = commitPaths(worktreePath, commitSha);
+      if ('detail' in paths) {
+        return { hasUnpushedCommits: true, reason: 'indeterminate', detail: paths.detail };
+      }
+      if (paths.paths.length > 0) {
+        const commitContent = git(
+          ['--literal-pathspecs', 'diff', '--quiet', commitSha, base, '--', ...paths.paths],
+          worktreePath,
+        );
+        if (commitContent.status === 0) continue;
+        if (commitContent.status !== 1) {
+          return {
+            hasUnpushedCommits: true,
+            reason: 'indeterminate',
+            detail: `commit ${commitSha.slice(0, 12)} の統合内容を確認できません`,
+          };
+        }
+      }
+    }
+    unpreserved.push(commitSha);
+  }
+
+  if (remoteEvidenceError) {
+    return { hasUnpushedCommits: true, reason: 'indeterminate', detail: remoteEvidenceError };
+  }
+  if (unpreserved.length === 0) return { hasUnpushedCommits: false };
+  return { hasUnpushedCommits: true, reason: 'unpreserved_commits', commitShas: unpreserved };
+}
+
+export function hasUnpushedCommits(
+  worktreePath: string,
+  branch: string,
+  knownPreservedCommit?: KnownPreservedCommit,
+): boolean {
+  return inspectUnpushedCommits(worktreePath, branch, knownPreservedCommit).hasUnpushedCommits;
+}
+
+function isReachableFromAny(worktreePath: string, commitSha: string, refs: string[]): boolean {
+  return refs.some((ref) => git(['merge-base', '--is-ancestor', commitSha, ref], worktreePath).status === 0);
+}
+
+function commitPaths(worktreePath: string, commitSha: string): { paths: string[] } | { detail: string } {
+  const changed = git(
+    ['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '-m', '-z', commitSha],
+    worktreePath,
+  );
+  if (changed.status !== 0) return { detail: `commit ${commitSha.slice(0, 12)} の変更pathを列挙できません` };
+  return { paths: [...new Set(changed.stdout.split('\0').filter(Boolean))] };
 }
 
 /**
