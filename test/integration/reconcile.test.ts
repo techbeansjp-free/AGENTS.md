@@ -437,6 +437,60 @@ test('gate reconcile (github backend): Check Run API失敗はbaseline不在扱�
   assert.equal(checkRuns(stub).length, 2, 'API失敗後に新しいCheck Runを発行しないこと');
 });
 
+// Issue #774: gh 2.63.0 未満はページ一括オプションを未知フラグとして拒否する。オブジェクト応答
+// （Check Run一覧・Actions run一覧）は `--paginate` のみでは連結された複数のJSON文書として返るため、
+// 先頭ページのみの採用・解釈失敗による空集合のいずれにも倒れないことを実測する。
+test('gate reconcile (github backend): ページ一括オプションを拒否するghでも連結文書・ページ配列のオブジェクト応答からbaselineを解決する', async (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const { repo, worktreePath, sha1 } = setupApprovedSpecAndDesignGates({ backend: 'github', env });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  const sha2 = checkpointUnrelatedChange(worktreePath, env, 'concatenated object response');
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
+
+  // 古い gh: ページ一括オプションを非0終了で拒否し、全一覧応答を連結文書（出力形 (ii)）で返す。
+  stub.setRejectSlurp(true);
+  stub.setListResponseShape('concatenated', 3);
+  const oldGh = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
+  assert.equal(oldGh.status, 0, oldGh.stderr);
+  assert.match(oldGh.stdout, /reissued: spec, design/);
+  assert.match(oldGh.stdout, /invalidated: \(none\)/);
+  for (const call of (stub.readState().apiCalls ?? []).filter((c) => c.method === 'GET')) {
+    assert.ok(!call.args?.includes(['--', 'slurp'].join('')), 'ページ一括オプションを渡さないこと');
+  }
+
+  // 新しい gh: ページ一括オプションを受け付け、同じ内容をページ配列（出力形 (iii)）で返す。
+  const sha3 = checkpointUnrelatedChange(worktreePath, env, 'page array object response');
+  seedPullCommits(stub, [sha1, sha2, sha3], repo.dir);
+  stub.setRejectSlurp(false);
+  stub.setListResponseShape('pages', 2);
+  const newGh = runCli(['gate', 'reconcile', 'ISSUE-1', sha3, '1'], { cwd: repo.dir, env });
+  assert.equal(newGh.status, 0, newGh.stderr);
+  assert.equal(newGh.stdout, oldGh.stdout.replace(new RegExp(sha2, 'g'), sha3));
+});
+
+test('gate reconcile (github backend): 終了コード0のまま解釈できないCheck Run応答をbaseline不在扱いにせず停止する', async (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const { repo, worktreePath, sha1 } = setupApprovedSpecAndDesignGates({ backend: 'github', env });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+  const sha2 = checkpointUnrelatedChange(worktreePath, env, 'unparsable object response');
+  seedPullCommits(stub, [sha1, sha2], repo.dir);
+  const beforeCount = checkRuns(stub).length;
+  // 空出力・閉じていない断片・属性欠落・属性の型不正のいずれも「要素0件」として扱わない（無言の劣化の禁止）。
+  for (const rawStdout of ['', '   \n', '{"check_runs":[', '{"total_count":0}', '{"check_runs":null}']) {
+    stub.writeState({ ...stub.readState(), rawApiResponses: [{ fragment: '/check-runs?', stdout: rawStdout }] });
+    const result = runCli(['gate', 'reconcile', 'ISSUE-1', sha2, '1'], { cwd: repo.dir, env });
+    assert.notEqual(result.status, 0, `解釈できない応答で停止すること: ${JSON.stringify(rawStdout)}`);
+    assert.match(result.stderr, /GitHub API一覧応答を解釈できません/);
+    assert.equal(checkRuns(stub).length, beforeCount, '解釈失敗後に新しいCheck Runを発行しないこと');
+  }
+});
+
 test('gate reconcile (github backend): untrusted workflow pathの最新候補を棄却しtrusted次点候補を採用する', async (t) => {
   const { stub, env, cleanup } = makeGhStub();
   const { repo, worktreePath, sha1 } = setupApprovedSpecAndDesignGates({ backend: 'github', env });

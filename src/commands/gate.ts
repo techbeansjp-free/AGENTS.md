@@ -10,6 +10,7 @@ import { issueDir, reviewFilePath, stateFilePath } from '../lib/local-state.js';
 import { readYamlFile, tryReadYamlFile, writeYamlFileAtomic, toYamlString } from '../lib/yaml-io.js';
 import { validateAgainstSchema } from '../lib/schema.js';
 import { git, gh } from '../lib/exec.js';
+import { GhJsonParseError, parseGhArrayResponse, parseGhObjectResponse } from '../lib/gh-json.js';
 import { digestOf, artifactDigestOf, artifactDigestOfFile, ARTIFACT_ABSENT_DIGEST } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { classifyCoreReview } from '../lib/model-selection.js';
@@ -56,6 +57,7 @@ import {
 import {
   deriveGateRoundContext,
   fetchGateRoundContext,
+  gateRoundFailureDiagnostic,
   latestGateAttemptId,
   renderGateRoundHistory,
   resolveGateRoundLimit,
@@ -579,10 +581,28 @@ function extractFirstJsonObject(text: string): string {
   return text.trim();
 }
 
+/** Issue #774: 解釈失敗を空集合へ倒さず、使い方エラーとして当該コマンドを停止させる。 */
+function asCliError(error: unknown): never {
+  if (error instanceof GhJsonParseError) {
+    throw new CliError(`GitHub API一覧応答を解釈できません: ${error.message}`);
+  }
+  throw error;
+}
+
 function parseGhList<T>(stdout: string): T[] {
-  const parsed = JSON.parse(stdout) as T[] | T[][];
-  if (!Array.isArray(parsed)) throw new CliError('GitHub API一覧応答が配列ではありません');
-  return parsed.flat() as T[];
+  try {
+    return parseGhArrayResponse<T>(stdout);
+  } catch (error) {
+    asCliError(error);
+  }
+}
+
+function parseGhPagedObject<T>(stdout: string, key: string): T[] {
+  try {
+    return parseGhObjectResponse<T>(stdout, key);
+  } catch (error) {
+    asCliError(error);
+  }
 }
 
 function validateGateId(value: string): asserts value is Segment {
@@ -762,27 +782,11 @@ function parseCheckRuns(stdout: string): {
   check_suite?: { id?: number } | null;
   output?: { text?: string | null } | null;
 }[] {
-  const parsed = JSON.parse(stdout) as
-    | { check_runs?: unknown[] }
-    | { check_runs?: unknown[] }[];
-  const pages = Array.isArray(parsed) ? parsed : [parsed];
-  return pages.flatMap((page) => (Array.isArray(page.check_runs) ? page.check_runs : [])) as {
-    id?: number;
-    conclusion?: string | null;
-    check_suite?: { id?: number } | null;
-    output?: { text?: string | null } | null;
-  }[];
+  return parseGhPagedObject(stdout, 'check_runs');
 }
 
 function parseWorkflowRuns(stdout: string): { path?: string; event?: string }[] {
-  const parsed = JSON.parse(stdout) as
-    | { workflow_runs?: unknown[] }
-    | { workflow_runs?: unknown[] }[];
-  const pages = Array.isArray(parsed) ? parsed : [parsed];
-  return pages.flatMap((page) => (Array.isArray(page.workflow_runs) ? page.workflow_runs : [])) as {
-    path?: string;
-    event?: string;
-  }[];
+  return parseGhPagedObject(stdout, 'workflow_runs');
 }
 
 function parseApprovedArtifacts(text: string, root: string): ApprovedArtifact[] | undefined {
@@ -806,7 +810,7 @@ function resolveApprovedBaseline(
   let resolvedPrNumber = prNumber;
   if (!resolvedPrNumber) {
     const pullsResponse = gh(
-      ['api', `repos/{owner}/{repo}/commits/${targetSha}/pulls?per_page=100`, '--paginate', '--slurp'],
+      ['api', `repos/{owner}/{repo}/commits/${targetSha}/pulls?per_page=100`, '--paginate'],
       root,
     );
     if (pullsResponse.status !== 0) {
@@ -819,7 +823,7 @@ function resolveApprovedBaseline(
   }
 
   const commitsResponse = gh(
-    ['api', `repos/{owner}/{repo}/pulls/${resolvedPrNumber}/commits?per_page=100`, '--paginate', '--slurp'],
+    ['api', `repos/{owner}/{repo}/pulls/${resolvedPrNumber}/commits?per_page=100`, '--paginate'],
     root,
   );
   if (commitsResponse.status !== 0) {
@@ -838,7 +842,6 @@ function resolveApprovedBaseline(
         'api',
         `repos/{owner}/{repo}/commits/${commit.sha}/check-runs?check_name=${encodeURIComponent(checkName)}&filter=all&per_page=100`,
         '--paginate',
-        '--slurp',
       ],
       root,
     );
@@ -857,7 +860,6 @@ function resolveApprovedBaseline(
           'api',
           `repos/{owner}/{repo}/actions/runs?check_suite_id=${checkSuiteId}&head_sha=${encodeURIComponent(commit.sha)}&per_page=100`,
           '--paginate',
-          '--slurp',
         ],
         root,
       );
@@ -1505,11 +1507,11 @@ export async function verifyEvidence(args: string[]): Promise<number> {
     const prResponse = gh(['api', `repos/{owner}/{repo}/pulls/${prNumber}`], root);
     const repositoryResponse = gh(['api', 'repos/{owner}/{repo}'], root);
     const commitsResponse = gh(
-      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/commits?per_page=100`, '--paginate', '--slurp'],
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/commits?per_page=100`, '--paginate'],
       root,
     );
     const reviewsResponse = gh(
-      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate', '--slurp'],
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
       root,
     );
     if (
@@ -1824,7 +1826,6 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
         'api',
         `repos/{owner}/{repo}/commits/${targetSha}/check-runs?check_name=${encodeURIComponent(checkName)}&filter=all&per_page=100`,
         '--paginate',
-        '--slurp',
       ],
       root,
     );
@@ -1833,7 +1834,6 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
         'api',
         `repos/{owner}/{repo}/actions/workflows/${encodeURIComponent(TRUSTED_GATE_WORKFLOW_PATH)}/runs?event=repository_dispatch&branch=main&per_page=100`,
         '--paginate',
-        '--slurp',
       ],
       root,
     );
@@ -1849,11 +1849,7 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
     ) {
       throw new CliError('repository identity/default branchを解決できません');
     }
-    const parsedChecks = JSON.parse(checksResponse.stdout) as
-      | { check_runs?: TrustedGateCheckRun[] }
-      | { check_runs?: TrustedGateCheckRun[] }[];
-    const checkPages = Array.isArray(parsedChecks) ? parsedChecks : [parsedChecks];
-    const checkRuns = checkPages.flatMap((page) => page.check_runs ?? []);
+    const checkRuns = parseGhPagedObject<TrustedGateCheckRun>(checksResponse.stdout, 'check_runs');
     const potentialOutputs = checkRuns.flatMap((run) => {
       if (
         run.app?.id !== expectedAppId ||
@@ -1878,11 +1874,7 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       throw new CliError('専用App Check outputから対象PRを一意に解決できません');
     }
     const prNumber = [...prNumbers][0];
-    const parsedActions = JSON.parse(actionsResponse.stdout) as
-      | { workflow_runs?: TrustedGateActionRun[] }
-      | { workflow_runs?: TrustedGateActionRun[] }[];
-    const actionPages = Array.isArray(parsedActions) ? parsedActions : [parsedActions];
-    const actionRuns = actionPages.flatMap((page) => page.workflow_runs ?? []);
+    const actionRuns = parseGhPagedObject<TrustedGateActionRun>(actionsResponse.stdout, 'workflow_runs');
     const selected = selectLatestTrustedGateCheck({
       actionRuns,
       checkRuns,
@@ -1898,11 +1890,11 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
     const attestation = output.attestation;
     const pullResponse = gh(['api', `repos/{owner}/{repo}/pulls/${prNumber}`], root);
     const commitsResponse = gh(
-      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/commits?per_page=100`, '--paginate', '--slurp'],
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/commits?per_page=100`, '--paginate'],
       root,
     );
     const reviewsResponse = gh(
-      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate', '--slurp'],
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
       root,
     );
     const issueNumber = parseIssueId(issueIdRaw).number;
@@ -2548,6 +2540,10 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
           })
         : () => false,
     });
+    // Issue #774: 取得・解釈の失敗だけを標準エラー出力へ提示する。標準出力の判定プロンプト本文と
+    // 終了コードには触れない（記録済み証跡の prompt digest を変化させないため）。
+    const diagnostic = gateRoundFailureDiagnostic(roundContext);
+    if (diagnostic) process.stderr.write(`${diagnostic}\n`);
     const input = resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, undefined, roundContext);
     const abortReason = gateLaunchAbortReason(input.requiredArtifacts, input.quick.exempt);
     if (abortReason) throw new CliError(abortReason);
