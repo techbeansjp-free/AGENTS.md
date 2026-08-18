@@ -571,6 +571,24 @@ test('gate reviewer-prompt: 過去記録あり・初回・取得不能を区別�
   assert.match(withDiagnostic, /ラウンド計数時に除外した証跡があります/);
   assert.match(withDiagnostic, /review 10 のevidence形式が不正なためラウンド計数から除外/);
 
+  const excludedOnly = buildReviewerPrompt(
+    repo.dir,
+    '729',
+    'spec',
+    targetSha,
+    undefined,
+    null,
+    {
+      status: 'available',
+      round: 0,
+      history: [],
+      diagnostics: ['review 10 のevidence形式が不正なためラウンド計数から除外'],
+    },
+  );
+  assert.match(excludedOnly, /過去の review evidence は取得できたが、検証を通過せず/);
+  assert.match(excludedOnly, /初回であるとは判定できない/);
+  assert.doesNotMatch(excludedOnly, /本ラウンドは初回（ラウンド 0）/);
+
   const first = buildReviewerPrompt(
     repo.dir,
     '729',

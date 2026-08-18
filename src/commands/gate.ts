@@ -29,7 +29,6 @@ import {
   verifyGithubReviewEvidence,
   type EvidenceVerdict,
   type GithubReviewRecord,
-  type LightReviewEvidence,
   type ReviewEvidence,
   type ValidatedGithubReviewEvidence,
   type VerifiedReviewAttempt,
@@ -41,10 +40,8 @@ import {
   latestGateAttemptId,
   renderGateRoundHistory,
   resolveGateRoundLimit,
-  validateGateRoundLimit,
   type GateRoundContext,
   type GateRoundLimit,
-  type GateRoundRecord,
 } from '../lib/gate-round.js';
 import {
   assertTrustedAppCheck,
@@ -389,11 +386,10 @@ function localReviewLauncherDigest(root: string, trustedBaseSha: string): string
 function historicalGateAttemptVerifier(options: {
   root: string;
   issueId: string;
-  issueNumber: string;
   gateId: Segment;
   trustedActors: string[];
-}): (attempt: ValidatedGithubReviewEvidence[], priorHistory: GateRoundRecord[]) => boolean {
-  return (attempt, priorHistory) => {
+}): (attempt: ValidatedGithubReviewEvidence[]) => boolean {
+  return (attempt) => {
     const first = attempt[0]?.evidence;
     if (!first) return false;
     try {
@@ -413,21 +409,6 @@ function historicalGateAttemptVerifier(options: {
         first.target_sha,
         options.gateId === 'implementation',
       );
-      const roundContext: GateRoundContext = {
-        status: 'available',
-        round: priorHistory.length,
-        history: priorHistory,
-      };
-      const historicalConfig = git(
-        ['show', `${first.execution.trusted_base_sha}:.agent-skill-chain/config/agent-skill-chain.yaml`],
-        options.root,
-      );
-      if (historicalConfig.status !== 0) return false;
-      const parsedHistoricalConfig = parseYaml(historicalConfig.stdout) as {
-        review?: { round_limit?: GateRoundLimit };
-      };
-      const historicalRoundLimit = resolveGateRoundLimit(parsedHistoricalConfig.review?.round_limit);
-      if (validateGateRoundLimit(historicalRoundLimit)) return false;
       const result = verifyGithubReviewEvidence({
         reviews: attempt.map(({ api }) => api),
         issueId: options.issueId,
@@ -439,18 +420,9 @@ function historicalGateAttemptVerifier(options: {
         // trusted recorderがwriterと同一である最も厳しい関係として再検証する。
         writerActors: options.trustedActors,
         unresolvedWriterActor: false,
-        expectedPromptDigest: evidencePromptDigest(
-          buildReviewerPrompt(
-            options.root,
-            options.issueNumber,
-            options.gateId,
-            first.target_sha,
-            first.execution.trusted_base_sha,
-            (first.light_review as LightReviewEvidence | undefined) ?? null,
-            roundContext,
-            historicalRoundLimit,
-          ),
-        ),
+        // 過去証跡のprompt digestは投稿時の実物を記録するが、現行の生成ロジックでは
+        // 再現できない。履歴の真正性はプロンプト非依存のexecution attestationで検証する。
+        promptDigestVerification: 'record_only',
         expectedLightReview: first.light_review,
         expectedArtifacts: artifacts,
         findingValidation: 'historical_v3',
@@ -1383,7 +1355,6 @@ function buildVerifiedGateReport(options: {
         verifyAttempt: historicalGateAttemptVerifier({
           root: options.root,
           issueId: options.issueId,
-          issueNumber: options.issueNumber,
           gateId: options.gateId,
           trustedActors: policy.policy.execution.trusted_reviewer_actors,
         }),
@@ -2247,6 +2218,11 @@ export function buildReviewerPrompt(
         `過去ラウンドの判定記録を耐久記録から取得できなかった（理由: ${roundContext.reason}）。` +
           'これは過去ラウンドが存在しないことを意味しない。ラウンド番号は導出できていないため、高ラウンドの限定を適用しない。',
       );
+    } else if (roundContext.history.length === 0 && roundContext.diagnostics?.length) {
+      sections.push(
+        '過去の review evidence は取得できたが、検証を通過せずラウンド計数から除外された。' +
+          '過去ラウンドを再検証できないため、本ラウンドが初回であるとは判定できない。',
+      );
     } else if (roundContext.history.length === 0) {
       sections.push('本ラウンドは初回（ラウンド 0）であり、過去ラウンドの判定記録は無い。');
     } else {
@@ -2403,7 +2379,6 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
         ? historicalGateAttemptVerifier({
             root,
             issueId,
-            issueNumber: number,
             gateId,
             trustedActors: policy.execution.trusted_reviewer_actors,
           })

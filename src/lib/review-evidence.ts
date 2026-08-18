@@ -373,7 +373,6 @@ export function verifyGithubReviewEvidence(options: {
   trustedActors: string[];
   writerActors: string[];
   unresolvedWriterActor: boolean;
-  expectedPromptDigest: string;
   expectedLightReview?: LightReviewEvidence;
   expectedArtifacts: { path: string; digest: string }[];
   expectedTrustedBaseSha: string;
@@ -383,7 +382,10 @@ export function verifyGithubReviewEvidence(options: {
   codexReasoning: string;
   gateRound?: { round: number; cutoffThreshold: number };
   findingValidation?: FindingValidation;
-}): EvidenceVerification {
+} & (
+  | { promptDigestVerification?: 'match_expected'; expectedPromptDigest: string }
+  | { promptDigestVerification: 'record_only'; expectedPromptDigest?: never }
+)): EvidenceVerification {
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
   }
@@ -470,7 +472,10 @@ export function verifyGithubReviewEvidence(options: {
     if (canonicalJson(evidence.light_review ?? null) !== expectedLightReview) {
       return fail(`review ${review.id} のlight_reviewがtrusted再評価値と一致しません`);
     }
-    if (evidence.prompt_digest !== options.expectedPromptDigest) {
+    if (
+      options.promptDigestVerification !== 'record_only' &&
+      evidence.prompt_digest !== options.expectedPromptDigest
+    ) {
       return fail(`review ${review.id} のprompt digestが一致しません`);
     }
     if (

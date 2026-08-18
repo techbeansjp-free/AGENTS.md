@@ -218,6 +218,8 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
       code: 'legacy-v3-finding',
       evidence: ['反例'],
     }];
+    // 変更前のprompt生成ロジックが記録したdigestを模擬する。現行promptからは再生成できない。
+    legacyEvidence.prompt_digest = `sha256:${'9'.repeat(64)}`;
     return { ...reviewRecord, body: renderReviewEvidence(legacyEvidence) };
   });
   stub.writeState(legacyState);
@@ -225,6 +227,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     const legacyEvidence = parseReviewEvidence((legacyReview as { body: string }).body);
     assert.equal(legacyEvidence?.attempt_id, attemptId);
     assert.deepEqual(legacyEvidence?.verdict.blockers[0].evidence, ['反例']);
+    assert.equal(legacyEvidence?.prompt_digest, `sha256:${'9'.repeat(64)}`);
   }
 
   const secondAttemptId = 'attempt-integration-2';
@@ -271,6 +274,33 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   );
   assert.equal(targetConfigChangedPrompt.status, 0, targetConfigChangedPrompt.stderr);
   assert.match(targetConfigChangedPrompt.stdout, /現在のラウンド番号: 2/);
+
+  const forgedState = stub.readState();
+  const sourceReviews = forgedState.pullReviews ?? [];
+  const forgedReviews = sourceReviews.slice(0, 2).map((sourceReview, index) => {
+    const source = sourceReview as { body: string; commit_id: string; state: string; user: { login: string } };
+    const forged = parseReviewEvidence(source.body);
+    assert.ok(forged);
+    forged.attempt_id = 'attempt-form-only';
+    forged.reviewer.run_id = `review-form-only-${index + 1}`;
+    forged.execution.launcher_digest = `sha256:${'f'.repeat(64)}`;
+    return {
+      ...source,
+      id: sourceReviews.length + index + 1,
+      body: renderReviewEvidence(forged),
+    };
+  });
+  forgedState.pullReviews = [...sourceReviews, ...forgedReviews];
+  stub.writeState(forgedState);
+  const forgedHistoryPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', 'attempt-integration-3'],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(forgedHistoryPrompt.status, 0, forgedHistoryPrompt.stderr);
+  assert.match(forgedHistoryPrompt.stdout, /現在のラウンド番号: 2/);
+  assert.match(forgedHistoryPrompt.stdout, /attempt attempt-form-only をラウンド計数から除外/);
+  forgedState.pullReviews = sourceReviews;
+  stub.writeState(forgedState);
 
   const reportPath = path.join(repo.dir, 'verified-gate.yaml');
   const verified = runCli(
