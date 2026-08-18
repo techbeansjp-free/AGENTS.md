@@ -122,6 +122,22 @@ test('gate reconcile: 成果物が変化していないcommitへは両ゲート�
   assert.match(reconcile.stdout, /invalidated: \(none\)/);
 });
 
+test('gate reconcile: 存在しないtarget SHAを不在継続として扱わない', (t) => {
+  const { repo } = setupApprovedSpecAndDesignGates();
+  t.after(() => repo.cleanup());
+  const designReportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'design.yaml');
+  const designReport = parse(fs.readFileSync(designReportPath, 'utf8')) as GateReport;
+  designReport.gate.approved_artifacts.push({ path: 'PLAN.md', digest: ARTIFACT_ABSENT_DIGEST });
+  fs.writeFileSync(designReportPath, stringify(designReport));
+  const before = fs.readFileSync(designReportPath, 'utf8');
+
+  const reconcile = runCli(['gate', 'reconcile', 'ISSUE-1', 'f'.repeat(40)], { cwd: repo.dir });
+
+  assert.notEqual(reconcile.status, 0);
+  assert.match(reconcile.stderr, /target_sha が有効なcommitとして解決できません/);
+  assert.equal(fs.readFileSync(designReportPath, 'utf8'), before);
+});
+
 test('gate reconcile: spec成果物の変更commitを渡すとspec/design双方がinvalidatedされる', async (t) => {
   const { repo, worktreePath } = setupApprovedSpecAndDesignGates();
   t.after(() => repo.cleanup());

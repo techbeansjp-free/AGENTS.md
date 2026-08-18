@@ -894,6 +894,10 @@ export async function reconcile(args: string[]): Promise<number> {
     const { number } = parseIssueId(issueIdRaw);
 
     const root = repoRoot();
+    const resolvedTarget = git(['rev-parse', '--verify', `${targetSha}^{commit}`], root);
+    if (resolvedTarget.status !== 0 || !/^[0-9a-f]{40}$/.test(targetSha)) {
+      throw new CliError(`target_sha が有効なcommitとして解決できません: ${targetSha}`);
+    }
     const config = loadConfig(root);
 
     // 変数名は出力メッセージの語（`reissued: ...`。後方互換のため不変）とは独立させる
@@ -2089,9 +2093,11 @@ function changedPathStatuses(root: string, baseSha: string, targetSha: string): 
 }
 
 function promptPath(pathname: string): string {
-  return JSON.stringify(pathname)
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
+  return neutralizePromptBoundaries(
+    JSON.stringify(pathname)
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029'),
+  );
 }
 
 export const JUDGMENT_TARGET_BEGIN = '<!-- agent-skill-chain:judgment-target:begin -->';
@@ -2215,16 +2221,18 @@ function resolveReviewerPromptInput(
 }
 
 function appendArtifactPresentation(sections: string[], artifact: ArtifactReadResult, exempt: boolean): void {
-  sections.push(`### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(artifact.path)}`);
+  const renderedPath = promptPath(artifact.path);
+  const neutralizedPath = neutralizePromptBoundaries(artifact.path);
+  sections.push(`### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${renderedPath}`);
   const presentation = artifactPresentation(artifact, exempt);
   if (artifact.status === 'present') {
     sections.push('```\n' + neutralizePromptBoundaries(artifact.content).trimEnd() + '\n```');
   } else if (presentation === 'exempt_absent') {
-    sections.push(`(quick 免除により正当に不在: ${artifact.path})`);
+    sections.push(`(quick 免除により正当に不在: ${neutralizedPath})`);
   } else if (presentation === 'missing') {
-    sections.push(`(本来存在すべきであるのに欠落: ${artifact.path})`);
+    sections.push(`(本来存在すべきであるのに欠落: ${neutralizedPath})`);
   } else {
-    sections.push(`(内容を取得できなかった: ${artifact.path})`);
+    sections.push(`(内容を取得できなかった: ${neutralizedPath})`);
   }
   sections.push('');
 }
