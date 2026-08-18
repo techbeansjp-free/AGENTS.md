@@ -77,3 +77,9 @@ test('ISSUE-733 AC-6: 空白・コメント・水平線だけの要求記述節�
   assert.equal(extractAlternativeCriteria('## 要求\n<!-- comment -->\n\n---\n\n   '), undefined);
   assert.equal(extractAlternativeCriteria('---\ntitle: quick change\n---\n\n## 受入基準'), undefined);
 });
+
+test('ISSUE-733 AC-6: 本文を伴わない下位見出しだけの要求記述節は展開不能にする', () => {
+  assert.equal(extractAlternativeCriteria('## 受入基準\n### 詳細'), undefined);
+  assert.equal(extractAlternativeCriteria('## 要求\n### 条件\n#### 例外'), undefined);
+  assert.equal(extractAlternativeCriteria('## 受入基準\n### 詳細\n終了コードを 0 にする。'), '### 詳細\n終了コードを 0 にする。');
+});

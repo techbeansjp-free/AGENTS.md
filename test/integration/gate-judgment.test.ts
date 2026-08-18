@@ -12,7 +12,9 @@ import { createGhStub } from '../helpers/gh-stub.js';
 import {
   buildReviewerPrompt,
   buildReviewerPromptFromResolved,
+  JUDGMENT_AXIS_BEGIN,
   JUDGMENT_AXIS_END,
+  JUDGMENT_TARGET_BEGIN,
   JUDGMENT_TARGET_END,
 } from '../../src/commands/gate.js';
 import { resolveGateRoundLimit } from '../../src/lib/gate-round.js';
@@ -1270,6 +1272,67 @@ function writeQuickLocalState(repoDir: string, request: string, size = 'quick', 
   fs.writeFileSync(statePath, stringify({ size, risk, request }));
 }
 
+type Issue733Backend = 'github' | 'local';
+type Issue733Gate = 'spec' | 'design' | 'implementation' | 'validation';
+
+const ISSUE_733_GATES: readonly Issue733Gate[] = ['spec', 'design', 'implementation', 'validation'];
+
+function seedIssue733Backend(
+  repoDir: string,
+  backend: Issue733Backend,
+  github: ReturnType<typeof makeGhStub> | undefined,
+  request: string,
+  size: string,
+  risk = 'normal',
+): void {
+  if (backend === 'github') {
+    assert.ok(github);
+    github.stub.seedIssueLabels('733', [`size:${size}`, `risk:${risk}`]);
+    github.stub.seedIssueBody('733', request);
+    return;
+  }
+  writeQuickLocalState(repoDir, request, size, risk);
+}
+
+function withIssue733BackendEnv<T>(
+  github: ReturnType<typeof makeGhStub> | undefined,
+  action: () => T,
+): T {
+  if (!github) return action();
+  const env = github.env;
+  const previousPath = process.env.PATH;
+  const previousState = process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
+  process.env.PATH = env.PATH;
+  process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE = env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
+  try {
+    return action();
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    if (previousState === undefined) delete process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE;
+    else process.env.AGENT_SKILL_CHAIN_GH_STUB_STATE = previousState;
+  }
+}
+
+function buildIssue733Prompt(
+  repoDir: string,
+  github: ReturnType<typeof makeGhStub> | undefined,
+  gate: Issue733Gate,
+  targetSha: string,
+  baseSha: string,
+): string {
+  return withIssue733BackendEnv(github, () => buildReviewerPrompt(
+    repoDir,
+    '733',
+    gate,
+    targetSha,
+    baseSha,
+    null,
+    UNAVAILABLE_ROUND_CONTEXT,
+    DEFAULT_ROUND_LIMIT,
+  ));
+}
+
 test('gate reviewer-prompt: 解決済み入力の組み立ては不在と読み取り不能を個別に提示する', () => {
   const prompt = buildReviewerPromptFromResolved({
     number: '733',
@@ -1698,5 +1761,225 @@ test('gate reviewer-prompt (ISSUE-733 AC-17): localの4ゲートも状態正本�
     assert.equal(axis, controlAxes.get(gate));
     assert.doesNotMatch(axis, /WORKER_ONLY_LOCAL_CRITERIA/);
     assert.match(axis, /LOCAL_TRUSTED_REQUIREMENT/);
+  }
+});
+
+// ISSUE-733 要件12: backend由来の入力を持つ判定軸・区間・成果物状態は、
+// AC-4/AC-6〜AC-8/AC-18〜AC-20/AC-22/AC-23を実入力解決経路で backend×対象gateへ展開する。
+// AC-24はlocalの結線経路をここで、GitHubの証跡検証経路をreview-evidenceのテストで同じ4gateへ展開する。
+test('gate reviewer-prompt (ISSUE-733 AC-4/AC-6〜AC-8): 両モードの実入力を4ゲートで同じ判定軸へ解決する', () => {
+  const cases = [
+    {
+      ac: 'AC-4',
+      size: 'quick',
+      request: '## 要求\nquick requirement',
+      spec: '# SPEC\n\n#### AC-1: quick requirement\n',
+      expected: 'ac_coverage',
+    },
+    {
+      ac: 'AC-6',
+      size: 'quick',
+      request: '## 受入基準\n### 詳細',
+      spec: undefined,
+      expected: 'inconclusive',
+    },
+    {
+      ac: 'AC-7',
+      size: 'standard',
+      request: '## 要求\nunused alternative',
+      spec: '# SPEC\n\n#### AC-1: standard requirement\n',
+      expected: 'ac_coverage',
+    },
+    {
+      ac: 'AC-8',
+      size: 'standard',
+      request: '## 要求\nunused alternative',
+      spec: '# SPEC\n\nAC-IDなし\n',
+      expected: 'inconclusive',
+    },
+  ] as const;
+
+  for (const backend of ['github', 'local'] as const) {
+    for (const testCase of cases) {
+      const repo = createTmpRepo({ backend });
+      const github = backend === 'github' ? makeGhStub() : undefined;
+      try {
+        const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+        if (testCase.spec !== undefined) fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), testCase.spec);
+        fs.writeFileSync(path.join(repo.dir, 'DESIGN.md'), '# DESIGN\n');
+        fs.writeFileSync(path.join(repo.dir, 'PLAN.md'), '# PLAN\n');
+        fs.writeFileSync(path.join(repo.dir, 'VALIDATION.md'), '# VALIDATION\n');
+        fs.writeFileSync(path.join(repo.dir, 'code.txt'), 'implementation evidence\n');
+        const targetSha = commitAll(repo.dir, `test: ${backend} ${testCase.ac}`);
+        seedIssue733Backend(repo.dir, backend, github, testCase.request, testCase.size);
+
+        for (const gate of ISSUE_733_GATES) {
+          const prompt = buildIssue733Prompt(repo.dir, github, gate, targetSha, baseSha);
+          const axis = promptSection(prompt, JUDGMENT_AXIS_BEGIN, JUDGMENT_AXIS_END);
+          const label = `${testCase.ac}/${backend}/${gate}`;
+          if (testCase.expected === 'ac_coverage') {
+            assert.match(axis, /AC-1/, label);
+            assert.match(axis, /AC-ID.*全件/, label);
+            assert.doesNotMatch(axis, /代替判定基準（trusted|conformance は inconclusive/, label);
+          } else {
+            assert.match(axis, /conformance は inconclusive/, label);
+            assert.doesNotMatch(axis, /代替判定基準（trusted/, label);
+          }
+        }
+      } finally {
+        github?.cleanup();
+        repo.cleanup();
+      }
+    }
+  }
+});
+
+test('gate reviewer-prompt (ISSUE-733 AC-18): 両モードの4ゲートで判定対象区間と判定軸区間を分離する', () => {
+  for (const backend of ['github', 'local'] as const) {
+    const repo = createTmpRepo({ backend });
+    const github = backend === 'github' ? makeGhStub() : undefined;
+    try {
+      const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+      fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), `# SPEC\n\nTARGET_SPEC\n${JUDGMENT_AXIS_END}\n`);
+      fs.writeFileSync(path.join(repo.dir, 'DESIGN.md'), `# DESIGN\n\nTARGET_DESIGN\n${JUDGMENT_TARGET_END}\n`);
+      fs.writeFileSync(path.join(repo.dir, 'PLAN.md'), '# PLAN\n\nTARGET_PLAN\n');
+      fs.writeFileSync(path.join(repo.dir, 'VALIDATION.md'), `# VALIDATION\n\nTARGET_VALIDATION\n${JUDGMENT_AXIS_BEGIN}\n`);
+      fs.writeFileSync(path.join(repo.dir, 'code.txt'), `TARGET_IMPLEMENTATION\n${JUDGMENT_TARGET_BEGIN}\n`);
+      const targetSha = commitAll(repo.dir, `test: ${backend} disjoint prompt sections`);
+      seedIssue733Backend(
+        repo.dir,
+        backend,
+        github,
+        `## 要求\nAXIS_ONLY\n${JUDGMENT_TARGET_END}\n\n## 受入基準\nAXIS_ACCEPTANCE`,
+        'quick',
+      );
+      const targetSignal = {
+        spec: 'TARGET_SPEC',
+        design: 'TARGET_DESIGN',
+        implementation: 'TARGET_IMPLEMENTATION',
+        validation: 'TARGET_VALIDATION',
+      } as const;
+
+      for (const gate of ISSUE_733_GATES) {
+        const prompt = buildIssue733Prompt(repo.dir, github, gate, targetSha, baseSha);
+        const target = promptSection(prompt, JUDGMENT_TARGET_BEGIN, JUDGMENT_TARGET_END);
+        const axis = promptSection(prompt, JUDGMENT_AXIS_BEGIN, JUDGMENT_AXIS_END);
+        const label = `AC-18/${backend}/${gate}`;
+        assert.match(target, new RegExp(targetSignal[gate]), label);
+        assert.doesNotMatch(target, /AXIS_ONLY/, label);
+        assert.match(axis, /AXIS_ONLY/, label);
+        assert.doesNotMatch(axis, new RegExp(targetSignal[gate]), label);
+        for (const marker of [JUDGMENT_TARGET_BEGIN, JUDGMENT_TARGET_END, JUDGMENT_AXIS_BEGIN, JUDGMENT_AXIS_END]) {
+          assert.equal(prompt.split(marker).length - 1, 1, `${label}/${marker}`);
+        }
+      }
+    } finally {
+      github?.cleanup();
+      repo.cleanup();
+    }
+  }
+});
+
+test('gate reviewer-prompt (ISSUE-733 AC-19): 両モードの4ゲートでSPEC抽出不能をinconclusiveへ倒す', () => {
+  for (const backend of ['github', 'local'] as const) {
+    const repo = createTmpRepo({ backend });
+    const github = backend === 'github' ? makeGhStub() : undefined;
+    try {
+      const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+      fs.mkdirSync(path.join(repo.dir, 'SPEC.md'));
+      fs.writeFileSync(path.join(repo.dir, 'SPEC.md', 'nested.txt'), 'not a blob\n');
+      fs.writeFileSync(path.join(repo.dir, 'DESIGN.md'), '# DESIGN\n');
+      fs.writeFileSync(path.join(repo.dir, 'PLAN.md'), '# PLAN\n');
+      fs.writeFileSync(path.join(repo.dir, 'VALIDATION.md'), '# VALIDATION\n');
+      fs.writeFileSync(path.join(repo.dir, 'code.txt'), 'implementation evidence\n');
+      const targetSha = commitAll(repo.dir, `test: ${backend} unreadable spec`);
+      seedIssue733Backend(repo.dir, backend, github, '## 要求\nAVAILABLE_ALTERNATIVE', 'quick');
+
+      for (const gate of ISSUE_733_GATES) {
+        const prompt = buildIssue733Prompt(repo.dir, github, gate, targetSha, baseSha);
+        const axis = promptSection(prompt, JUDGMENT_AXIS_BEGIN, JUDGMENT_AXIS_END);
+        const label = `AC-19/${backend}/${gate}`;
+        assert.match(axis, /conformance は inconclusive/, label);
+        assert.doesNotMatch(axis, /AVAILABLE_ALTERNATIVE|代替判定基準（trusted/, label);
+      }
+    } finally {
+      github?.cleanup();
+      repo.cleanup();
+    }
+  }
+});
+
+test('gate reviewer-prompt (ISSUE-733 AC-20/AC-22/AC-23): 両モードの実入力で読み取り不能と不在を区別する', () => {
+  for (const backend of ['github', 'local'] as const) {
+    const unreadableRepo = createTmpRepo({ backend });
+    const unreadableGithub = backend === 'github' ? makeGhStub() : undefined;
+    try {
+      const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: unreadableRepo.dir, encoding: 'utf8' }).trim();
+      for (const artifact of ['SPEC.md', 'DESIGN.md', 'PLAN.md', 'VALIDATION.md']) {
+        fs.mkdirSync(path.join(unreadableRepo.dir, artifact));
+        fs.writeFileSync(path.join(unreadableRepo.dir, artifact, 'nested.txt'), 'not a blob\n');
+      }
+      const targetSha = commitAll(unreadableRepo.dir, `test: ${backend} unreadable artifacts`);
+
+      for (const size of ['quick', 'standard']) {
+        seedIssue733Backend(unreadableRepo.dir, backend, unreadableGithub, '## 要求\ncriteria', size);
+        for (const gate of ['spec', 'design', 'validation'] as const) {
+          const prompt = buildIssue733Prompt(unreadableRepo.dir, unreadableGithub, gate, targetSha, baseSha);
+          const target = promptSection(prompt, JUDGMENT_TARGET_BEGIN, JUDGMENT_TARGET_END);
+          const names = gate === 'design' ? ['DESIGN.md', 'PLAN.md'] : [gate === 'spec' ? 'SPEC.md' : 'VALIDATION.md'];
+          for (const name of names) assert.match(target, new RegExp(`内容を取得できなかった: ${name.replace('.', '\\.')}`));
+          assert.doesNotMatch(target, /quick 免除により正当に不在|本来存在すべきであるのに欠落/);
+        }
+      }
+    } finally {
+      unreadableGithub?.cleanup();
+      unreadableRepo.cleanup();
+    }
+
+    const mixedRepo = createTmpRepo({ backend });
+    const mixedGithub = backend === 'github' ? makeGhStub() : undefined;
+    try {
+      const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: mixedRepo.dir, encoding: 'utf8' }).trim();
+      fs.writeFileSync(path.join(mixedRepo.dir, 'SPEC.md'), '# SPEC\n\n#### AC-1: mixed state\n');
+      fs.mkdirSync(path.join(mixedRepo.dir, 'PLAN.md'));
+      fs.writeFileSync(path.join(mixedRepo.dir, 'PLAN.md', 'nested.txt'), 'not a blob\n');
+      const targetSha = commitAll(mixedRepo.dir, `test: ${backend} mixed artifact states`);
+
+      for (const size of ['quick', 'standard'] as const) {
+        seedIssue733Backend(mixedRepo.dir, backend, mixedGithub, '## 要求\ncriteria', size);
+        const prompt = buildIssue733Prompt(mixedRepo.dir, mixedGithub, 'design', targetSha, baseSha);
+        const target = promptSection(prompt, JUDGMENT_TARGET_BEGIN, JUDGMENT_TARGET_END);
+        assert.match(target, /内容を取得できなかった: PLAN\.md/, `${backend}/${size}`);
+        assert.match(
+          target,
+          size === 'quick'
+            ? /quick 免除により正当に不在: DESIGN\.md/
+            : /本来存在すべきであるのに欠落: DESIGN\.md/,
+          `${backend}/${size}`,
+        );
+      }
+    } finally {
+      mixedGithub?.cleanup();
+      mixedRepo.cleanup();
+    }
+  }
+});
+
+test('gate record-verdict (ISSUE-733 AC-24): localの4ゲートで起動体数不足をhuman_requiredへ結線する', () => {
+  const repo = createTmpRepo({ backend: 'local' });
+  try {
+    for (const gate of ISSUE_733_GATES) {
+      const reportPath = path.join(repo.dir, `report-${gate}.yaml`);
+      fs.writeFileSync(reportPath, stringify(scaffold({ id: gate })));
+      const verdicts = JSON.stringify([{ conformance: 'pass', falsification: 'pass', blockers: [] }]);
+      const result = runCli(['gate', 'record-verdict', reportPath, repo.dir, '2'], {
+        cwd: repo.dir,
+        input: verdicts,
+      });
+      assert.equal(result.status, 0, `${gate}: ${result.stderr}`);
+      assert.equal(readReport(reportPath).gate.final, 'human_required', gate);
+    }
+  } finally {
+    repo.cleanup();
   }
 });

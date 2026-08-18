@@ -72,6 +72,7 @@ function ignorableBlock(block: string): boolean {
   if (!trimmed) return true;
   if (/^(?:\s*<!--[\s\S]*?-->\s*)+$/.test(trimmed)) return true;
   if (/^(?:-{3,}|_{3,}|\*{3,})$/.test(trimmed)) return true;
+  if (trimmed.split('\n').every((line) => /^ {0,3}#{1,6}\s+.+?\s*$/.test(line))) return true;
   const placeholder = normalizePlaceholder(trimmed);
   return placeholder !== undefined && PLACEHOLDER_LINES.has(placeholder);
 }

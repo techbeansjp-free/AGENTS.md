@@ -126,6 +126,17 @@ test('ISSUE-733 AC-24: profile要求数を超えて起動された全slotを集�
   assert.deepEqual(result.reviewers.map((entry) => entry.slot), [1, 2]);
 });
 
+test('ISSUE-733 AC-24: GitHubの4ゲートで要求体数に満たない証跡をhuman_requiredへ倒す', () => {
+  for (const gate of ['spec', 'design', 'implementation', 'validation'] as const) {
+    const first = evidence(1, { gate, expected_count: 2 });
+    const result = verify(
+      [review(1, 1, { body: renderReviewEvidence(first) })],
+      { gate },
+    );
+    assert.equal(result.final, 'human_required', gate);
+  }
+});
+
 test('ISSUE-733 AC-15: ラウンド打ち切りよりfail・blockingを優先し、未到達・blocker無しも集約判定を保つ', () => {
   const blockingVerdict: ReviewEvidence['verdict'] = {
     conformance: 'pass',
