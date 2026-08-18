@@ -21,6 +21,10 @@ properties:
   status:
     type: string
     enum: [draft, ready_for_review, merged, closed]
+  head_sha:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+    description: statusをmerged/closedへ遷移した時点で統合済みとして記録したIssueブランチのcommit SHA。
   closes:
     type: string
     pattern: '^ISSUE-[0-9]+$'
@@ -39,6 +43,7 @@ examples:
     issue_id: ISSUE-123
     branch: feature/123-user-authentication
     pr_url: 'https://github.com/example/repo/pull/45'
-    status: draft
+    status: merged
+    head_sha: '0123456789abcdef0123456789abcdef01234567'
     closes: ISSUE-123
     gates: {spec: approved, design: approved, implementation: pending, validation: pending}
