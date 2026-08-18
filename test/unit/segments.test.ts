@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSegments, segmentDefinition } from '../../src/lib/segments.js';
+import { deriveSegmentOrder, loadSegments, segmentDefinition, type SegmentDefinition } from '../../src/lib/segments.js';
 import { repoRoot } from '../../src/lib/paths.js';
 
 const EXPECTED = [
@@ -45,5 +45,27 @@ test('segmentDefinition: 未定義のsegment idを渡すと例外を投げる', 
   assert.throws(
     () => segmentDefinition('unknown' as unknown as Parameters<typeof segmentDefinition>[0]),
     /unknown/,
+  );
+});
+
+test('deriveSegmentOrder: 定義配列の並びに依存せずnextの一本鎖から固定順を導出する', () => {
+  const shuffled = [EXPECTED[2], EXPECTED[0], EXPECTED[3], EXPECTED[1]] as SegmentDefinition[];
+  assert.deepEqual(deriveSegmentOrder(shuffled), ['spec', 'design', 'implementation', 'validation']);
+});
+
+test('deriveSegmentOrder: 複数先頭・循環・未到達を判定不能として例外にする', () => {
+  assert.throws(
+    () => deriveSegmentOrder([
+      { id: 'spec', outputs: ['SPEC.md'], next: 'completed' },
+      { id: 'design', outputs: ['DESIGN.md'], next: 'completed' },
+    ] as SegmentDefinition[]),
+    /連鎖先頭を一意に解決できません/,
+  );
+  assert.throws(
+    () => deriveSegmentOrder([
+      { id: 'spec', outputs: ['SPEC.md'], next: 'design' },
+      { id: 'design', outputs: ['DESIGN.md'], next: 'spec' },
+    ] as SegmentDefinition[]),
+    /連鎖先頭を一意に解決できません|循環/,
   );
 });
