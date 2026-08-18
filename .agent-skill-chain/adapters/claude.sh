@@ -215,6 +215,265 @@ _reviewer_execution_failure_message() {
   printf '%s\n' "レビュア実行系の起動に失敗しました。解決済み対象: ${target}（rc=${rc}）。実行権限不足（EACCES）または実行形式不正（ENOEXEC）、もしくは多段shim内の未解決interpreterを確認してください。隔離環境の固定PATH: ${sanitized_path}。対象を呼び出し元環境で単独起動して実行可能性を確認してください"
 }
 
+# --- Issue #758: 外部資格情報ストア限定構成（分類C）の資格情報取り込み ---
+#
+# 認証情報の所在は分類A（環境変数トークン）・分類B（呼び出し元設定ディレクトリの通常ファイル）・
+# 分類C（外部資格情報ストア限定。macOS Keychain等）の3つに限られる。分類A・分類Bのいずれからも
+# 認証素材を用意できなかった場合に限り、呼び出し元プロセス上で資格情報ストアへ問い合わせ、その
+# 標準出力をシェルのリダイレクトで隔離設定ディレクトリの認証ファイルのみへ接続する。
+#
+# 実値が通る経路をこの1本だけに保つため、取得結果を保持する変数・コマンド引数・隔離設定
+# ディレクトリ外のファイル・分岐を伴うパイプ中継はいずれも作らない。取得コマンドの標準エラーは
+# 資格情報ストア由来の診断が実値やその一部を含み得るため破棄する。取得後の検査も値を出力しない
+# 構造検査に限り、認証成否の判定点は隔離環境の認証probe1つに保つ（取得可否を判定点にしない）。
+#
+# env（いずれも呼び出し元プロセスの環境変数であり、隔離サブプロセスの基底環境集合へは加えない）:
+#   CLAUDE_CREDENTIAL_STORE_CMD          取得コマンドの完全上書き（テストのモック境界。
+#                                        WORKER_CMD/GATE_REVIEWER_CMD/CLAUDE_AUTH_PROBE_CMDと同型）。
+#                                        空文字を明示した場合は取得手段なしとして扱う。
+#   CLAUDE_CREDENTIAL_STORE_TIMEOUT_SEC  取得の時間上限（正整数、既定20）。
+
+# 取得結果状態。not_attempted|command_unavailable|timeout|command_failed|malformed|staged。
+# export しないため隔離サブプロセスへは渡らず、値も状態名だけで資格情報を含まない。
+ASC_CREDENTIAL_STORE_STATE='not_attempted'
+
+# 取得コマンド文字列を解決する。既定値は主要な分類C環境（macOS）で既定の問い合わせコマンドが
+# 実行可能な場合に限り与える。解決できない場合は非零で返す。
+_claude_credential_store_command() {
+  if [[ -n "${CLAUDE_CREDENTIAL_STORE_CMD+set}" ]]; then
+    [[ -n "$CLAUDE_CREDENTIAL_STORE_CMD" ]] || return 1
+    printf '%s' "$CLAUDE_CREDENTIAL_STORE_CMD"
+    return 0
+  fi
+  [[ -x /usr/bin/security ]] || return 1
+  [[ "$(/usr/bin/uname -s 2>/dev/null || true)" == 'Darwin' ]] || return 1
+  printf '%s' "/usr/bin/security find-generic-password -s 'Claude Code-credentials' -w"
+}
+
+# 取得の時間上限を解決する。不正値は取得手段なしとして扱うため非零で返す（既定値へ黙って
+# 落とすと、利用者が指定した上限が効かないまま待ち続ける経路ができるため）。
+_claude_credential_store_timeout() {
+  local t="${CLAUDE_CREDENTIAL_STORE_TIMEOUT_SEC:-20}"
+  [[ "$t" =~ ^[1-9][0-9]*$ ]] || return 1
+  printf '%s' "$t"
+}
+
+# 取得結果の構造検査。非空であること・先頭の非空白文字が { であること・末尾の非空白文字が }
+# であることだけを判定し、内容は変数・stdout・stderr・ログのいずれへも書き出さない。
+_claude_credential_structure_ok() {
+  local file="${1:-}" awk_bin='/usr/bin/awk'
+  [[ -n "$file" && -s "$file" ]] || return 1
+  [[ -x "$awk_bin" ]] || awk_bin="$(command -v awk 2>/dev/null || true)"
+  [[ -n "$awk_bin" && -x "$awk_bin" ]] || return 1
+  "$awk_bin" '
+    {
+      head = $0
+      sub(/^[ \t\r]+/, "", head)
+      if (seen == 0 && head != "") { seen = 1; first = substr(head, 1, 1) }
+      tail = $0
+      sub(/[ \t\r]+$/, "", tail)
+      if (tail != "") last = substr(tail, length(tail), 1)
+    }
+    END { exit (seen == 1 && first == "{" && last == "}") ? 0 : 1 }
+  ' "$file" >/dev/null 2>&1
+}
+
+# 取得結果状態に対応する診断行。実値・その一部・認証ファイルの内容・取得コマンドの標準エラーは
+# いずれも含めない。_reviewer_auth_failure_message と取得直後の診断で同じ文言を使う。
+_claude_credential_store_state_message() {
+  case "${ASC_CREDENTIAL_STORE_STATE:-not_attempted}" in
+    not_attempted)
+      printf '%s\n' "- 外部資格情報ストア: 分類A・分類Bで認証素材を用意できたため問い合わせていません。"
+      ;;
+    command_unavailable)
+      printf '%s\n' "- 外部資格情報ストア: 取得手段を解決できません。macOS Keychainなどへ問い合わせる既定コマンドを実行できないか、CLAUDE_CREDENTIAL_STORE_CMDが空、またはCLAUDE_CREDENTIAL_STORE_TIMEOUT_SECが正整数ではありません。"
+      ;;
+    timeout)
+      printf '%s\n' "- 外部資格情報ストア: 取得が時間上限内に完了しなかったため打ち切りました。対話的な承認要求が出ていないかを確認し、必要ならCLAUDE_CREDENTIAL_STORE_TIMEOUT_SECを延ばしてください。"
+      ;;
+    command_failed)
+      printf '%s\n' "- 外部資格情報ストア: 取得コマンドが失敗したか出力が空でした（取得コマンドの標準エラーは実値を含み得るため破棄しています）。呼び出し元で同じコマンドを単独実行して確認してください。"
+      ;;
+    malformed)
+      printf '%s\n' "- 外部資格情報ストア: 取得結果が想定の形式ではありません（内容は表示しません）。"
+      ;;
+    staged)
+      printf '%s\n' "- 外部資格情報ストア: 資格情報を取得して隔離設定ディレクトリへ配置しました。"
+      ;;
+    *)
+      printf '%s\n' "- 外部資格情報ストア: 取得結果状態を判定できません。"
+      ;;
+  esac
+}
+
+# 分類Cの資格情報を取得し、隔離設定ディレクトリの認証ファイルへ配置する。
+# 引数: <隔離設定ディレクトリ> <作業用ファイルの置き場（隔離領域直下。隔離設定ディレクトリの
+#       内容を認証ファイル1点に保つため、作業用ファイルは設定ディレクトリ外へ置く）>
+# 呼び出し側へは失敗を返さず、結末は ASC_CREDENTIAL_STORE_STATE の記録にとどめる。
+#
+# 削除対象は本関数が配置した認証ファイルに限る。分類Bの複製が既にある構成では、D-CLASS-SELECT
+# 側の判定により本関数は起動しないが、経路が増えても既存ファイルを消さないよう入口でも検査する。
+_claude_credential_store_stage() {
+  local staged_config_dir="${1:-}" work_dir="${2:-}"
+  ASC_CREDENTIAL_STORE_STATE='not_attempted'
+  [[ -n "$staged_config_dir" && -n "$work_dir" ]] || return 0
+  local target="$staged_config_dir/.credentials.json"
+  if [[ -e "$target" ]]; then
+    return 0
+  fi
+
+  local store_cmd store_timeout
+  store_cmd="$(_claude_credential_store_command)" || {
+    ASC_CREDENTIAL_STORE_STATE='command_unavailable'
+    _claude_credential_store_stage_diagnostic
+    return 0
+  }
+  store_timeout="$(_claude_credential_store_timeout)" || {
+    ASC_CREDENTIAL_STORE_STATE='command_unavailable'
+    _claude_credential_store_stage_diagnostic
+    return 0
+  }
+
+  # 作成マスクを制限した状態で空ファイルとして先行作成する。作成から権限設定までの間に
+  # 緩い権限で認証ファイルが存在する窓を作らないため。
+  local previous_umask
+  previous_umask="$(umask)"
+  umask 077
+  if ! : >"$target"; then
+    umask "$previous_umask"
+    ASC_CREDENTIAL_STORE_STATE='command_failed'
+    _claude_credential_store_stage_diagnostic
+    return 0
+  fi
+  umask "$previous_umask"
+  /bin/chmod 600 "$target"
+
+  local marker="$work_dir/credential-store-timed-out"
+  local ready="$work_dir/credential-store-watchdog-ready"
+  local armed="$work_dir/credential-store-watchdog-armed"
+  local pid_file="$work_dir/credential-store-pid"
+  /bin/rm -f -- "$marker" "$ready" "$armed" "$pid_file"
+
+  local watchdog_pid store_pid rc=0 wait_i timed_out=false monitor_was_enabled=false
+  # 時間上限は外部のtimeoutコマンドへ委ねず自前の監視プロセスで強制する。当該コマンドは主要な
+  # 分類C環境に既定で存在せず、有無で経路が分かれると実機とCIで別経路を走らせることになる。
+  (
+    active_sleep_pid=''
+    trap '[[ -z "$active_sleep_pid" ]] || kill -TERM "$active_sleep_pid" 2>/dev/null || true; exit 0' TERM
+    : >"$ready" || exit 1
+    while [[ ! -s "$pid_file" ]]; do
+      /bin/sleep 0.01 2>/dev/null || exit 1
+    done
+    IFS= read -r watched_pid <"$pid_file" || exit 1
+    [[ "$watched_pid" =~ ^[1-9][0-9]*$ ]] || exit 1
+    /bin/sleep "$store_timeout" 2>/dev/null &
+    active_sleep_pid=$!
+    : >"$armed" || {
+      kill -TERM "$active_sleep_pid" 2>/dev/null || true
+      exit 1
+    }
+    wait "$active_sleep_pid" 2>/dev/null || true
+    active_sleep_pid=''
+    : >"$marker"
+    kill -TERM -- "-$watched_pid" 2>/dev/null || true
+    /bin/sleep 1 2>/dev/null &
+    active_sleep_pid=$!
+    wait "$active_sleep_pid" 2>/dev/null || true
+    active_sleep_pid=''
+    if kill -0 -- "-$watched_pid" 2>/dev/null; then
+      kill -KILL -- "-$watched_pid" 2>/dev/null || true
+    fi
+  ) &
+  watchdog_pid=$!
+
+  for ((wait_i = 0; wait_i < 100; wait_i++)); do
+    [[ ! -f "$ready" ]] || break
+    kill -0 "$watchdog_pid" 2>/dev/null || break
+    /bin/sleep 0.01 2>/dev/null || break
+  done
+  if [[ ! -f "$ready" ]] || ! kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    /bin/rm -f -- "$target"
+    ASC_CREDENTIAL_STORE_STATE='command_failed'
+    _claude_credential_store_stage_diagnostic
+    return 0
+  fi
+
+  # 取得ステップは独自のプロセスグループで起動し、標準出力は隔離設定ディレクトリの認証ファイル
+  # のみへ接続する。実値はここから認証ファイルへ直接流れ、起動列にも環境変数にも現れない。
+  [[ $- == *m* ]] && monitor_was_enabled=true
+  set -m
+  (
+    exec /bin/bash -c "$store_cmd" >"$target" 2>/dev/null
+  ) &
+  store_pid=$!
+  [[ "$monitor_was_enabled" == "true" ]] || set +m
+  printf '%s\n' "$store_pid" >"$pid_file"
+
+  for ((wait_i = 0; wait_i < 100; wait_i++)); do
+    [[ ! -f "$armed" ]] || break
+    kill -0 "$watchdog_pid" 2>/dev/null || break
+    /bin/sleep 0.01 2>/dev/null || break
+  done
+  if [[ ! -f "$armed" ]] || ! kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM -- "-$store_pid" 2>/dev/null || true
+    /bin/sleep 0.1 2>/dev/null || true
+    kill -KILL -- "-$store_pid" 2>/dev/null || true
+    wait "$store_pid" 2>/dev/null || true
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    /bin/rm -f -- "$target"
+    ASC_CREDENTIAL_STORE_STATE='command_failed'
+    _claude_credential_store_stage_diagnostic
+    return 0
+  fi
+
+  wait "$store_pid" || rc=$?
+  [[ ! -f "$marker" ]] || timed_out=true
+  if [[ "$timed_out" == 'true' ]]; then
+    wait "$watchdog_pid" 2>/dev/null || true
+  elif kill -0 "$watchdog_pid" 2>/dev/null; then
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+  fi
+  # 取得ステップの子孫が隔離領域の削除後まで認証ファイルへ書き続けないよう、終了を確認する。
+  if kill -0 -- "-$store_pid" 2>/dev/null; then
+    kill -TERM -- "-$store_pid" 2>/dev/null || true
+    /bin/sleep 0.1 2>/dev/null || true
+    kill -KILL -- "-$store_pid" 2>/dev/null || true
+  fi
+  /bin/rm -f -- "$marker" "$ready" "$armed" "$pid_file"
+
+  if [[ "$timed_out" == 'true' ]]; then
+    ASC_CREDENTIAL_STORE_STATE='timeout'
+  elif ((rc != 0)) || [[ ! -s "$target" ]]; then
+    ASC_CREDENTIAL_STORE_STATE='command_failed'
+  elif _claude_credential_structure_ok "$target"; then
+    ASC_CREDENTIAL_STORE_STATE='staged'
+  else
+    ASC_CREDENTIAL_STORE_STATE='malformed'
+  fi
+  # 打ち切り時までに書かれ得る部分的な内容を隔離probeへ渡さないため、staged以外では削除する。
+  # 削除するのは本関数が先行作成した認証ファイルだけである。
+  if [[ "$ASC_CREDENTIAL_STORE_STATE" != 'staged' ]]; then
+    /bin/rm -f -- "$target"
+  fi
+  _claude_credential_store_stage_diagnostic
+  return 0
+}
+
+# 取得直後の診断。隔離probeの構成時は本関数の標準エラーが呼び出し元で破棄されるため、この診断が
+# 実際に届くのはレビュア本体の構成時——すなわち隔離probeが成立した後に取得が失敗した経路——に
+# 限られる。その経路では認証不成立の診断が出ないまま verdict 空で human_required へ倒れるため、
+# ここで原因を提示しないと原因を特定できない（Issue #758）。実値は含めない。
+_claude_credential_store_stage_diagnostic() {
+  [[ "${ASC_CREDENTIAL_STORE_STATE:-not_attempted}" != 'staged' ]] || return 0
+  [[ "${ASC_CREDENTIAL_STORE_STATE:-not_attempted}" != 'not_attempted' ]] || return 0
+  printf '%s\n' "launch_gate_reviewer: 分類C（外部資格情報ストア）の資格情報を隔離設定ディレクトリへ用意できませんでした。" >&2
+  _claude_credential_store_state_message >&2
+}
+
 # AI reviewerへは隔離領域へ複製したmodel providerのログインファイルと、呼び出し元環境の
 # ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKENだけを渡す。GitHub credential・gh/git設定・caller HOME・
 # callerのprovider設定ディレクトリは渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace
@@ -247,9 +506,18 @@ _run_reviewer_sanitized() {
     /bin/cp "$codex_home/auth.json" "$staged_codex_home/auth.json"
     /bin/chmod 600 "$staged_codex_home/auth.json"
   fi
+  local class_b_staged=false
   if [[ "$review_adapter" == "claude" && -n "$claude_config" && -f "$claude_config/.credentials.json" && ! -L "$claude_config/.credentials.json" ]]; then
     /bin/cp "$claude_config/.credentials.json" "$staged_claude_config/.credentials.json"
     /bin/chmod 600 "$staged_claude_config/.credentials.json"
+    class_b_staged=true
+  fi
+  # Issue #758: 分類判定は呼び出し元の状態だけに依存させる。分類A（環境変数トークンが非空）
+  # または分類B（複製できた通常ファイル）が成立した構成では資格情報ストアへ問い合わせない。
+  # 分類Cの取得はこの分岐でのみ起動するため、分類Bの複製が取得側で削除されることはない。
+  ASC_CREDENTIAL_STORE_STATE='not_attempted'
+  if [[ "$review_adapter" == "claude" && "$class_b_staged" == 'false' && -z "${ANTHROPIC_API_KEY:-}" && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    _claude_credential_store_stage "$staged_claude_config" "$isolated_root"
   fi
   local -a clean_env=(
     /usr/bin/env -i
@@ -408,16 +676,21 @@ _reviewer_auth_failure_message() {
   else
     printf '%s\n' "- 設定ディレクトリ配下のログイン情報: 隔離領域へ複製可能な通常ファイルが見つかりません。"
   fi
+  # Issue #758: 分類Cの検出結果は取得結果状態を根拠に提示する。取得できたが隔離probeが不成立の
+  # 場合（staged）は、持ち込み可能な認証情報が有った場合と同じ結語へ集約する。
+  _claude_credential_store_state_message
+  [[ "${ASC_CREDENTIAL_STORE_STATE:-not_attempted}" != 'staged' ]] || portable_auth_found=true
+  printf '%s\n' "- 設定ディレクトリの扱い: CLAUDE_CONFIG_DIRは常に隔離領域内の制御されたパスを指し、呼び出し元の設定ディレクトリを解決先にしません（未設定にもしません）。"
   if [[ "$portable_auth_found" == "true" ]]; then
     printf '%s\n' "持ち込み可能な認証情報は検出されましたが、隔離環境の認証probeが失敗しています。資格情報の有効性と権限を確認してください。"
   else
-    printf '%s\n' "隔離環境へ持ち込める認証情報がありません。macOS Keychainなどcaller HOMEに紐づく資格情報ストアは利用できません。"
+    printf '%s\n' "隔離環境へ持ち込める認証情報がありません。上の分類ごとの検出結果から原因を特定してください。"
   fi
   # Issue #691: 値を表示しないtestコマンドとcaller側のprobeを組み合わせ、資格情報ストア限定構成を判別可能にする。
   printf '%s\n' '資格情報ストア限定構成の判定方法: 呼び出し元で `claude auth status` が成功し、次の両方が失敗する場合はmacOS Keychainなどの資格情報ストア限定構成です。'
   printf '%s\n' '  test -n "${ANTHROPIC_API_KEY:-}${CLAUDE_CODE_OAUTH_TOKEN:-}"'
   printf '%s\n' '  test -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json" && test ! -L "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json"'
-  printf '%s\n' "回避するには、ANTHROPIC_API_KEYまたはCLAUDE_CODE_OAUTH_TOKEN、もしくは設定ディレクトリ配下の通常ファイルとしてログイン情報を設定してください。"
+  printf '%s\n' "回避するには、ANTHROPIC_API_KEYまたはCLAUDE_CODE_OAUTH_TOKEN、もしくは設定ディレクトリ配下の通常ファイルとしてログイン情報を設定してください。資格情報ストア限定構成では、CLAUDE_CREDENTIAL_STORE_CMDへ資格情報を標準出力へ返すコマンドを指定することでも解消できます。"
 }
 
 # writer lease を取得する。.agent-skill-chain/config/agent-skill-chain.yaml の lease.ttl_seconds を用いる。
@@ -482,6 +755,8 @@ report_status() {
 # 終了コード: 0=判定完了 / 2（!=0,!=3）=error（final=human_required 書込み後）。
 # env: ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN（認証、高速パス）、
 #      CLAUDE_AUTH_PROBE_CMD | CLAUDE_AUTH_PROBE_TIMEOUT_SEC（認証の実疎通フォールバック、_claude_auth_ok参照）、
+#      CLAUDE_CREDENTIAL_STORE_CMD | CLAUDE_CREDENTIAL_STORE_TIMEOUT_SEC（分類C＝外部資格情報ストア限定構成での
+#      資格情報取得。分類A・分類Bのいずれからも用意できない場合のみ使う。Issue #758）、
 #      GATE_REVIEWER_CMD（通常レビューの実行系上書き）、CLAUDE_REVIEWER_MODEL（通常レビューの明示model）、
 #      CLAUDE_CORE_REVIEW_MODEL / CLAUDE_CORE_REVIEW_MODEL_TIER /
 #      CLAUDE_CORE_REVIEW_REASONING_TIER / CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD（コアレビュー能力証明）、
