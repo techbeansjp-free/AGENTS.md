@@ -2785,6 +2785,29 @@ function pathWithoutCommands(t: { after(fn: () => void): void }, commands: strin
     .join(path.delimiter);
 }
 
+/** GNUの-dを拒否し、%Nを展開しないBSD date相当のstubをPATH先頭へ置く。 */
+function pathWithBsdDateStub(t: { after(fn: () => void): void }, basePath: string): string {
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-bsd-date-stub-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(stubDir, 'date'),
+    [
+      '#!/usr/bin/env bash',
+      'for arg in "$@"; do',
+      '  [[ "$arg" == "-d" ]] && exit 64',
+      '  if [[ "$arg" == *"%N"* || "$arg" == *"%3N"* ]]; then',
+      "    printf '%s\\n' '2026-08-18T00:00:00.%3NZ'",
+      '    exit 0',
+      '  fi',
+      'done',
+      'exec /bin/date "$@"',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  return `${stubDir}${path.delimiter}${basePath}`;
+}
+
 /** プロセスのセッションIDを返す。`ps -o sid=` 非対応環境では null（判定不能）を返す。 */
 function sessionIdOf(pid: number): number | null {
   try {
@@ -2974,6 +2997,76 @@ test('Agent tool dispatch (ISSUE-757): setsid不在環境でも起動でき、re
       'setsid不在でもrenewデーモンを新セッションへ分離し、親セッション終了の道連れを防ぐこと',
     );
   }
+});
+
+test('Agent tool dispatch (ISSUE-757): BSD date環境でも監査時刻を生成しdispatchからverifyまで完走する', (t) => {
+  const portablePath = pathWithoutCommands(t, ['setsid', 'sha256sum']);
+  const dispatchPath = pathWithBsdDateStub(t, portablePath);
+  const env = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('setsid', env), false, '前提: setsidを解決できないPATHであること');
+  assert.equal(commandExists('sha256sum', env), false, '前提: sha256sumを解決できないPATHであること');
+  assert.equal(commandExists('shasum', env), true, '前提: macOS標準のshasumを利用できること');
+  assert.throws(
+    () => execFileSync('date', ['-u', '-d', '2026-08-18T00:00:00Z', '+%s'], { env, stdio: 'pipe' }),
+    '前提: BSD date相当のstubはGNU固有の-dを拒否すること',
+  );
+  assert.match(
+    execFileSync('date', ['-u', '+%Y-%m-%dT%H:%M:%S.%3NZ'], { env, encoding: 'utf8' }),
+    /%3N/,
+    '前提: BSD date相当のstubは%Nを展開しないこと',
+  );
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const dispatchEnv = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], dispatchEnv);
+  assert.equal(result.status, 4, `BSD date環境でもdispatchを起動できること: ${result.stderr}`);
+
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+  const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
+  const dispatchToken = /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
+  assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
+  assert.doesNotMatch(audit, /%3N/, '監査時刻へBSD dateの未展開書式を混入させないこと');
+  assert.ok(dispatchToken);
+
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const report = runCli(
+    [
+      'report',
+      'status',
+      'ISSUE-1',
+      'spec_worker',
+      'spec',
+      'completed',
+      head,
+      '',
+      '',
+      dispatchToken,
+      'true',
+      'BSD date互換経路の検証のみで成果物変更は不要',
+    ],
+    { cwd: worktreePath, env: dispatchEnv },
+  );
+  assert.equal(report.status, 0, report.stderr);
+
+  const verified = runWorkerVerifier(
+    worktreePath,
+    worktreePath,
+    ['ISSUE-1', dispatchTempDir],
+    dispatchEnv,
+  );
+  assert.equal(verified.status, 0, `BSD date環境でもverifyまで完走できること: ${verified.stderr}`);
+  assert.equal(fs.existsSync(dispatchTempDir), false, 'verify成功後はdispatch一時領域を削除すること');
 });
 
 test('Agent tool dispatch (ISSUE-757): nohup経路のrenewデーモンはSIGHUPを無視し、TERMでは停止する', (t) => {

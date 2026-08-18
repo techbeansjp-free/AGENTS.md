@@ -188,8 +188,7 @@ else
   if [[ -z "$INTEGRITY_ERROR" ]]; then
     if [[ -z "$EXPECTED_SHA" || -z "$EXPECTED_LINES" || "$ACTUAL_SHA" != "$EXPECTED_SHA" || "$ACTUAL_LINES" != "$EXPECTED_LINES" ]]; then
       INTEGRITY_ERROR="contract.mdのSHA256または行数がdispatch時の監査証跡と一致しません"
-    elif [[ ! "$DISPATCH_STARTED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{3})?Z$ ]] ||
-      ! date -u -d "$DISPATCH_STARTED_AT" +%s >/dev/null 2>&1; then
+    elif ! _dispatch_timestamp epoch-ms "$DISPATCH_STARTED_AT" >/dev/null 2>&1; then
       INTEGRITY_ERROR="contract.sha256のDISPATCH_STARTED_ATが欠落またはUTC ISO8601形式ではありません"
     elif [[ -z "$DISPATCH_TOKEN" ]]; then
       INTEGRITY_ERROR="contract.sha256のDISPATCH_TOKENが欠落しています"

@@ -819,6 +819,35 @@ _dispatch_contract_sha256() {
   printf '%s\n' "$digest" | tr '[:upper:]' '[:lower:]'
 }
 
+# Issue #757: dispatch監査時刻の生成と比較を、GNU/BSD dateの機能差に依存しない
+# Node.jsの単一実装へ集約する。epoch-msは許可形式を先に限定し、Dateが別の日付へ
+# 正規化する不正な暦日もcanonical表現との一致確認で拒否する。
+_dispatch_timestamp() {
+  local operation="${1:-}" value="${2:-}"
+
+  command -v node >/dev/null 2>&1 || return 1
+  node - "$operation" "$value" <<'NODE'
+const operation = process.argv[2];
+const value = process.argv[3];
+
+if (operation === 'now') {
+  process.stdout.write(new Date().toISOString());
+  process.exit(0);
+}
+
+if (operation !== 'epoch-ms' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
+  process.exit(1);
+}
+
+const epoch = Date.parse(value);
+if (!Number.isFinite(epoch)) process.exit(1);
+const canonical = new Date(epoch).toISOString();
+const expected = value.includes('.') ? value : value.replace(/Z$/, '.000Z');
+if (canonical !== expected) process.exit(1);
+process.stdout.write(String(epoch));
+NODE
+}
+
 # 今回のworker起動サイクルに属する完了報告だけを検証する。
 # 成功時は無出力で0、不合格時は呼び出し側がblocked_reasonへ使う理由をstdoutへ出して1を返す。
 _verify_worker_completion_report() {
@@ -840,8 +869,8 @@ _verify_worker_completion_report() {
   reported_no_change="$(sed -n 's/^no_change=//p' <<<"$latest")"
   reported_no_change_reason_present="$(sed -n 's/^no_change_reason_present=//p' <<<"$latest")"
 
-  if ! started_epoch="$(date -u -d "$started_at" +%s%3N 2>/dev/null)" ||
-    ! reported_epoch="$(date -u -d "$reported_created_at" +%s%3N 2>/dev/null)"; then
+  if ! started_epoch="$(_dispatch_timestamp epoch-ms "$started_at" 2>/dev/null)" ||
+    ! reported_epoch="$(_dispatch_timestamp epoch-ms "$reported_created_at" 2>/dev/null)"; then
     printf '%s\n' 'workerのreport鮮度を確認できませんでした（created_atまたは比較基準時刻が不正です）'
     return 1
   fi
@@ -989,7 +1018,12 @@ _dispatch_via_agent_tool() {
     return 1
   fi
   dispatch_token="$(basename -- "$dispatch_temp_dir")"
-  dispatch_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
+  if ! dispatch_started_at="$(_dispatch_timestamp now)"; then
+    echo "launch_worker: dispatch開始時刻を生成できませんでした" >&2
+    rm -rf -- "$dispatch_temp_dir"
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
   chmod 700 "$dispatch_temp_dir"
   # Issue #665: contract.md自体を厳密に実行するworkerへdispatchトークンを確実に渡す。
   # 監査digestは、この追記後のcontract_fileから算出する。
@@ -1171,7 +1205,10 @@ launch_worker() {
     return
   fi
   dispatch_token="$(basename -- "$dispatch_token_path")"
-  worker_started_at="$(date -u '+%Y-%m-%dT%H:%M:%S.%3NZ')"
+  if ! worker_started_at="$(_dispatch_timestamp now)"; then
+    _fail_blocked "worker開始時刻を生成できませんでした"
+    return
+  fi
   if ! started_sha="$(git rev-parse HEAD 2>/dev/null)" || [[ -z "$started_sha" ]]; then
     _fail_blocked "dispatch開始時点のHEADを取得できませんでした"
     return
