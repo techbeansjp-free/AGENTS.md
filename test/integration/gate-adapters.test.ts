@@ -11,6 +11,100 @@ import { createGhStub } from '../helpers/gh-stub.js';
 import { ARTIFACT_ABSENT_DIGEST } from '../../src/lib/digest.js';
 import { envWithout, installCliShim, readFinal, runLauncher, setupGateReview } from '../helpers/gate-launcher.js';
 
+type GateTestBackend = 'github' | 'local';
+
+function setupGateTestBackend(
+  t: { after(callback: () => void): void },
+  backend: GateTestBackend,
+) {
+  const scratchDir = backend === 'github'
+    ? fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-gate-adapters-'))
+    : undefined;
+  const tokenDir = backend === 'github'
+    ? fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-local-review.'))
+    : undefined;
+  if (tokenDir) fs.chmodSync(tokenDir, 0o700);
+  const stub = scratchDir ? createGhStub(scratchDir) : undefined;
+  const env = stub?.env(process.env) ?? process.env;
+  const repo = createTmpRepo({ backend });
+  installCliShim(repo.dir);
+  setAdapter(repo.dir, 'claude');
+  t.after(() => {
+    repo.cleanup();
+    if (scratchDir) fs.rmSync(scratchDir, { recursive: true, force: true });
+    if (tokenDir) fs.rmSync(tokenDir, { recursive: true, force: true });
+  });
+  return { repo, stub, env, tokenDir };
+}
+
+function configureGateTestIssue(options: {
+  repoDir: string;
+  stub?: ReturnType<typeof createGhStub>;
+  issueNumber: string;
+  request: string;
+  size: 'quick' | 'standard';
+}): void {
+  if (options.stub) {
+    options.stub.seedIssueBody(options.issueNumber, options.request);
+    options.stub.seedIssueLabels(options.issueNumber, [`size:${options.size}`, 'risk:normal']);
+    return;
+  }
+  const statePath = path.join(options.repoDir, 'issues', options.issueNumber, '.agent-skill-chain', 'state.yaml');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(statePath, stringify({ ...state, size: options.size, risk: 'normal', request: options.request }));
+}
+
+function githubEvidenceEnv(options: {
+  stub: ReturnType<typeof createGhStub>;
+  env: NodeJS.ProcessEnv;
+  targetSha: string;
+  baseSha: string;
+  gate: string;
+  issueNumber: string;
+  tokenDir: string;
+}): NodeJS.ProcessEnv {
+  const prNumber = String(9000 + Number(options.issueNumber));
+  const attemptId = `attempt-issue733-${options.gate}-${options.issueNumber}`;
+  const reviewerRunId = `review-issue733-${options.gate}-${options.issueNumber}`;
+  const tokenPath = path.join(options.tokenDir, `${attemptId}.json`);
+  const state = options.stub.readState();
+  state.pullMetadata = {
+    number: Number(prNumber),
+    state: 'open',
+    user: { login: 'trusted-writer' },
+    head: { sha: options.targetSha, ref: `bugfix/${options.issueNumber}-gate-adapter-test` },
+    base: { sha: options.baseSha, ref: 'main' },
+  };
+  state.pullCommits = [{ author: { login: 'trusted-writer' }, committer: { login: 'trusted-writer' } }];
+  state.apiActor = 'adachi-tatsuru';
+  options.stub.writeState(state);
+  fs.writeFileSync(tokenPath, `${JSON.stringify({
+    schema_version: 'agent-skill-chain/launcher-token/v1',
+    attempt_id: attemptId,
+    expected_count: 1,
+    profile: 'standard',
+    target_sha: options.targetSha,
+    base_sha: options.baseSha,
+    pr_number: prNumber,
+    nonce: 'a'.repeat(48),
+    slots: [{ slot: 1, run_id: reviewerRunId }],
+    consumed_slots: [],
+  })}\n`, { mode: 0o600 });
+  return {
+    ...options.env,
+    ASC_EVIDENCE_BASE_SHA: options.baseSha,
+    ASC_TRUSTED_BASE_SHA: options.baseSha,
+    ASC_EVIDENCE_PR_NUMBER: prNumber,
+    ASC_REVIEW_ATTEMPT_ID: attemptId,
+    ASC_REVIEW_EXPECTED_COUNT: '1',
+    ASC_LAUNCHER_TOKEN_FILE: tokenPath,
+    ASC_REVIEWER_RUN_ID: reviewerRunId,
+    ASC_REVIEWER_SLOT: '1',
+    ASC_REVIEW_MODEL: 'test-model',
+    ASC_REVIEW_REASONING: 'test-reasoning',
+  };
+}
+
 // #164-② gate判定ステップの adapter 層（launch_gate_reviewer）+ 起動ラッパー
 // （.agent-skill-chain/scripts/gate-launch-reviewer.sh）を実際の bash で駆動して検証する:
 //   T2 claude（完了経路・認証未設定フェイルセーフ）、T3 human（非同期 deferred）、
@@ -89,152 +183,103 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
 });
 
-test('claude launch_gate_reviewer (ISSUE-733 AC-12): quick免除下の4ゲートを起動してgate-reportを生成する', (t) => {
-  const repo = createTmpRepo({ backend: 'local' });
-  installCliShim(repo.dir);
-  t.after(() => repo.cleanup());
-  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
-  const start = runCli([
-    'issue', 'start', 'ISSUE-733', 'bugfix', 'quick-validation', FIXED_TIMESTAMP,
-    '--size', 'quick', '--request', '## 要求\nquick review requirements\n\n## 受入基準\nreview is completed',
-  ], { cwd: repo.dir });
-  assert.equal(start.status, 0, start.stderr);
-  const [, worktreePath] = start.stdout.trim().split('\n');
-  const statePath = path.join(repo.dir, 'issues', '733', '.agent-skill-chain', 'state.yaml');
-  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
-  fs.writeFileSync(statePath, stringify({ ...state, risk: 'normal' }));
-  fs.writeFileSync(path.join(worktreePath, 'code.txt'), 'implemented\n');
-  const checkpoint = runCli(['checkpoint', 'test: quick implementation'], { cwd: worktreePath });
-  assert.equal(checkpoint.status, 0, checkpoint.stderr);
-  const targetSha = checkpoint.stdout.trim();
-  const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[]}';
-  const env = envWithout([], {
-    ANTHROPIC_API_KEY: 'dummy-key-not-logged',
-    CLAUDE_AUTH_PROBE_CMD: 'true',
-    GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${verdict}'`,
-    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
-    ASC_EVIDENCE_BASE_SHA: baseSha,
-  });
+test('claude launch_gate_reviewer (ISSUE-733 AC-12): quick免除下の4ゲートを両backendで起動する', (t) => {
+  for (const backend of ['local', 'github'] as const) {
+    const { repo, stub, env: backendEnv, tokenDir } = setupGateTestBackend(t, backend);
+    const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+    const request = '## 要求\nquick review requirements\n\n## 受入基準\nreview is completed';
+    const start = runCli([
+      'issue', 'start', 'ISSUE-733', 'bugfix', `quick-validation-${backend}`, FIXED_TIMESTAMP,
+      '--size', 'quick', '--request', request,
+    ], { cwd: repo.dir, env: backendEnv });
+    assert.equal(start.status, 0, `${backend}: ${start.stderr}`);
+    const [, worktreePath] = start.stdout.trim().split('\n');
+    configureGateTestIssue({ repoDir: repo.dir, stub, issueNumber: '733', request, size: 'quick' });
+    fs.writeFileSync(path.join(worktreePath, 'code.txt'), 'implemented\n');
+    const checkpoint = runCli(['checkpoint', 'test: quick implementation'], { cwd: worktreePath, env: backendEnv });
+    assert.equal(checkpoint.status, 0, `${backend}: ${checkpoint.stderr}`);
+    const targetSha = checkpoint.stdout.trim();
+    const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[],"inconclusive":false}';
+    const absentByGate = new Map([
+      ['spec', ['SPEC.md']],
+      ['design', ['DESIGN.md', 'PLAN.md']],
+      ['implementation', []],
+      ['validation', ['VALIDATION.md']],
+    ]);
 
-  const absentByGate = new Map([
-    ['spec', ['SPEC.md']],
-    ['design', ['DESIGN.md', 'PLAN.md']],
-    ['implementation', []],
-    ['validation', ['VALIDATION.md']],
-  ]);
-  for (const gate of ['spec', 'design', 'implementation', 'validation'] as const) {
-    const review = runCli(['gate', 'review', 'ISSUE-733', gate, 'standard'], { cwd: worktreePath });
-    assert.equal(review.status, 0, review.stderr);
-    const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
-    const result = runLauncher(repo.dir, ['ISSUE-733', gate, 'standard', reportPath, targetSha], env, worktreePath);
-    assert.equal(result.status, 0, `${gate}: ${result.stderr}`);
-    const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
-      gate: { final: string; conformance: string; falsification: string; approved_artifacts: { path: string; digest: string }[] };
-    };
-    assert.deepEqual(
-      { final: report.gate.final, conformance: report.gate.conformance, falsification: report.gate.falsification },
-      { final: 'approved', conformance: 'pass', falsification: 'pass' },
-      gate,
-    );
-    for (const artifactPath of absentByGate.get(gate) ?? []) {
-      assert.deepEqual(
-        report.gate.approved_artifacts.find((artifact) => artifact.path === artifactPath),
-        { path: artifactPath, digest: ARTIFACT_ABSENT_DIGEST },
+    for (const gate of ['spec', 'design', 'implementation', 'validation'] as const) {
+      const review = runCli(['gate', 'review', 'ISSUE-733', gate, 'standard'], { cwd: worktreePath, env: backendEnv });
+      assert.equal(review.status, 0, `${backend}/${gate}: ${review.stderr}`);
+      const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
+      const evidenceEnv = stub
+        ? githubEvidenceEnv({ stub, env: backendEnv, targetSha, baseSha, gate, issueNumber: '733', tokenDir: tokenDir! })
+        : { ...backendEnv, ASC_EVIDENCE_BASE_SHA: baseSha };
+      const launchEnv = envWithout([], {
+        ...evidenceEnv,
+        ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+        CLAUDE_AUTH_PROBE_CMD: 'true',
+        GATE_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${verdict}'`,
+        GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+      });
+      const result = runLauncher(
+        repo.dir,
+        ['ISSUE-733', gate, 'standard', reportPath, targetSha],
+        launchEnv,
+        backend === 'github' ? repo.dir : worktreePath,
       );
+      assert.equal(result.status, 0, `${backend}/${gate}: ${result.stderr}`);
+      if (stub) {
+        assert.equal(stub.readState().pullReviews?.length, 1 + ['spec', 'design', 'implementation', 'validation'].indexOf(gate));
+        continue;
+      }
+      const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+        gate: { final: string; conformance: string; falsification: string; approved_artifacts: { path: string; digest: string }[] };
+      };
+      assert.deepEqual(
+        { final: report.gate.final, conformance: report.gate.conformance, falsification: report.gate.falsification },
+        { final: 'approved', conformance: 'pass', falsification: 'pass' },
+        `${backend}/${gate}`,
+      );
+      for (const artifactPath of absentByGate.get(gate) ?? []) {
+        assert.deepEqual(
+          report.gate.approved_artifacts.find((artifact) => artifact.path === artifactPath),
+          { path: artifactPath, digest: ARTIFACT_ABSENT_DIGEST },
+        );
+      }
     }
   }
 });
 
-test('claude launch_gate_reviewer (ISSUE-733 AC-13/AC-24): 免除不成立の成果物不在は3ゲートで未起動かつhuman_requiredになる', (t) => {
-  const repo = createTmpRepo({ backend: 'local' });
-  installCliShim(repo.dir);
-  setAdapter(repo.dir, 'claude');
-  t.after(() => repo.cleanup());
-  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
-  let issueNumber = 830;
+test('claude launch_gate_reviewer (ISSUE-733 AC-13/AC-24): 免除不成立の成果物不在は両backendの3ゲートで未起動になる', (t) => {
+  for (const backend of ['local', 'github'] as const) {
+    const { repo, stub, env: backendEnv } = setupGateTestBackend(t, backend);
+    const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+    let issueNumber = 830;
 
-  for (const gate of ['spec', 'design', 'validation'] as const) {
-    const currentIssue = String(issueNumber++);
-    const start = runCli([
-      'issue', 'start', `ISSUE-${currentIssue}`, 'bugfix', `missing-${gate}`, FIXED_TIMESTAMP,
-      '--request', '## 要求\nstandard review requirements',
-    ], { cwd: repo.dir });
-    assert.equal(start.status, 0, start.stderr);
-    const [, worktreePath] = start.stdout.trim().split('\n');
-    const statePath = path.join(repo.dir, 'issues', currentIssue, '.agent-skill-chain', 'state.yaml');
-    const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
-    fs.writeFileSync(statePath, stringify({ ...state, size: 'standard', risk: 'normal' }));
-    fs.writeFileSync(path.join(worktreePath, 'code.txt'), 'implemented\n');
-    const checkpoint = runCli(['checkpoint', `test: missing ${gate} artifact`], { cwd: worktreePath });
-    assert.equal(checkpoint.status, 0, checkpoint.stderr);
-    const targetSha = checkpoint.stdout.trim();
-    const review = runCli(['gate', 'review', `ISSUE-${currentIssue}`, gate, 'standard'], { cwd: worktreePath });
-    assert.equal(review.status, 0, review.stderr);
-    const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
-    const reviewerMarker = path.join(repo.dir, `missing-reviewer-started-${currentIssue}`);
-    const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[]}';
-    const env = envWithout([], {
-      ANTHROPIC_API_KEY: 'dummy-key-not-logged',
-      CLAUDE_AUTH_PROBE_CMD: 'true',
-      GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}; cat >/dev/null; printf '%s' '${verdict}'`,
-      GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
-      ASC_EVIDENCE_BASE_SHA: baseSha,
-    });
-
-    const result = runLauncher(
-      repo.dir,
-      [`ISSUE-${currentIssue}`, gate, 'standard', reportPath, targetSha],
-      env,
-      worktreePath,
-    );
-    assert.notEqual(result.status, 0);
-    assert.equal(fs.existsSync(reviewerMarker), false, `${gate} でレビュアを起動しないこと`);
-    assert.equal(readFinal(reportPath), 'human_required');
-  }
-});
-
-test('claude launch_gate_reviewer: 必須成果物が読み取り不能ならspec/design/validationでレビュアを起動せずapprovedにしない', (t) => {
-  const repo = createTmpRepo({ backend: 'local' });
-  installCliShim(repo.dir);
-  setAdapter(repo.dir, 'claude');
-  t.after(() => repo.cleanup());
-  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
-  const cases = [
-    { gate: 'spec' as const, artifact: 'SPEC.md' },
-    { gate: 'design' as const, artifact: 'DESIGN.md' },
-    { gate: 'validation' as const, artifact: 'VALIDATION.md' },
-  ];
-  let issueNumber = 810;
-
-  for (const exempt of [true, false]) {
-    for (const testCase of cases) {
+    for (const gate of ['spec', 'design', 'validation'] as const) {
       const currentIssue = String(issueNumber++);
-      const startArgs = [
-        'issue', 'start', `ISSUE-${currentIssue}`, 'bugfix', `unreadable-${testCase.gate}-${exempt ? 'quick' : 'standard'}`,
-        FIXED_TIMESTAMP, '--request', '成果物の読み取り不能時は安全側へ倒す',
-      ];
-      if (exempt) startArgs.push('--size', 'quick');
-      const start = runCli(startArgs, { cwd: repo.dir });
-      assert.equal(start.status, 0, start.stderr);
+      const request = '## 要求\nstandard review requirements';
+      const start = runCli([
+        'issue', 'start', `ISSUE-${currentIssue}`, 'bugfix', `missing-${gate}-${backend}`, FIXED_TIMESTAMP,
+        '--request', request,
+      ], { cwd: repo.dir, env: backendEnv });
+      assert.equal(start.status, 0, `${backend}/${gate}: ${start.stderr}`);
       const [, worktreePath] = start.stdout.trim().split('\n');
-      const statePath = path.join(repo.dir, 'issues', currentIssue, '.agent-skill-chain', 'state.yaml');
-      const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
-      fs.writeFileSync(statePath, stringify({ ...state, risk: 'normal' }));
-
-      const unreadablePath = path.join(worktreePath, testCase.artifact);
-      fs.mkdirSync(unreadablePath);
-      fs.writeFileSync(path.join(unreadablePath, 'nested.txt'), 'tree entry is not a blob\n');
-      const checkpoint = runCli(['checkpoint', `test: unreadable ${testCase.gate} artifact`], { cwd: worktreePath });
-      assert.equal(checkpoint.status, 0, checkpoint.stderr);
+      configureGateTestIssue({ repoDir: repo.dir, stub, issueNumber: currentIssue, request, size: 'standard' });
+      fs.writeFileSync(path.join(worktreePath, 'code.txt'), 'implemented\n');
+      const checkpoint = runCli(['checkpoint', `test: missing ${gate} artifact`], { cwd: worktreePath, env: backendEnv });
+      assert.equal(checkpoint.status, 0, `${backend}/${gate}: ${checkpoint.stderr}`);
       const targetSha = checkpoint.stdout.trim();
-      const review = runCli(['gate', 'review', `ISSUE-${currentIssue}`, testCase.gate, 'standard'], {
+      const review = runCli(['gate', 'review', `ISSUE-${currentIssue}`, gate, 'standard'], {
         cwd: worktreePath,
+        env: backendEnv,
       });
-      assert.equal(review.status, 0, review.stderr);
+      assert.equal(review.status, 0, `${backend}/${gate}: ${review.stderr}`);
       const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
-      const reviewerMarker = path.join(repo.dir, `reviewer-started-${currentIssue}`);
-      const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[]}';
+      const reviewerMarker = path.join(repo.dir, `missing-reviewer-started-${backend}-${currentIssue}`);
+      const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[],"inconclusive":false}';
       const env = envWithout([], {
+        ...backendEnv,
         ANTHROPIC_API_KEY: 'dummy-key-not-logged',
         CLAUDE_AUTH_PROBE_CMD: 'true',
         GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}; cat >/dev/null; printf '%s' '${verdict}'`,
@@ -244,14 +289,86 @@ test('claude launch_gate_reviewer: 必須成果物が読み取り不能ならspe
 
       const result = runLauncher(
         repo.dir,
-        [`ISSUE-${currentIssue}`, testCase.gate, 'standard', reportPath, targetSha],
+        [`ISSUE-${currentIssue}`, gate, 'standard', reportPath, targetSha],
         env,
-        worktreePath,
+        backend === 'github' ? repo.dir : worktreePath,
       );
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /判定プロンプトの生成に失敗しました/);
-      assert.equal(fs.existsSync(reviewerMarker), false, `${testCase.gate} でレビュアを起動しないこと`);
+      assert.equal(fs.existsSync(reviewerMarker), false, `${backend}/${gate} でレビュアを起動しないこと`);
       assert.equal(readFinal(reportPath), 'human_required');
+    }
+  }
+});
+
+test('claude launch_gate_reviewer (ISSUE-733 AC-21): 読み取り不能なら両backendの3ゲートでレビュアを起動しない', (t) => {
+  for (const backend of ['local', 'github'] as const) {
+    const { repo, stub, env: backendEnv } = setupGateTestBackend(t, backend);
+    const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+    const cases = [
+      { gate: 'spec' as const, artifact: 'SPEC.md' },
+      { gate: 'design' as const, artifact: 'DESIGN.md' },
+      { gate: 'validation' as const, artifact: 'VALIDATION.md' },
+    ];
+    let issueNumber = 810;
+
+    for (const exempt of [true, false]) {
+      for (const testCase of cases) {
+        const currentIssue = String(issueNumber++);
+        const request = '## 要求\n成果物の読み取り不能時は安全側へ倒す';
+        const startArgs = [
+          'issue', 'start', `ISSUE-${currentIssue}`, 'bugfix',
+          `unreadable-${testCase.gate}-${exempt ? 'quick' : 'standard'}-${backend}`,
+          FIXED_TIMESTAMP, '--request', request,
+        ];
+        if (exempt) startArgs.push('--size', 'quick');
+        const start = runCli(startArgs, { cwd: repo.dir, env: backendEnv });
+        assert.equal(start.status, 0, `${backend}/${testCase.gate}: ${start.stderr}`);
+        const [, worktreePath] = start.stdout.trim().split('\n');
+        configureGateTestIssue({
+          repoDir: repo.dir,
+          stub,
+          issueNumber: currentIssue,
+          request,
+          size: exempt ? 'quick' : 'standard',
+        });
+
+        const unreadablePath = path.join(worktreePath, testCase.artifact);
+        fs.mkdirSync(unreadablePath);
+        fs.writeFileSync(path.join(unreadablePath, 'nested.txt'), 'tree entry is not a blob\n');
+        const checkpoint = runCli(['checkpoint', `test: unreadable ${testCase.gate} artifact`], {
+          cwd: worktreePath,
+          env: backendEnv,
+        });
+        assert.equal(checkpoint.status, 0, `${backend}/${testCase.gate}: ${checkpoint.stderr}`);
+        const targetSha = checkpoint.stdout.trim();
+        const review = runCli(['gate', 'review', `ISSUE-${currentIssue}`, testCase.gate, 'standard'], {
+          cwd: worktreePath,
+          env: backendEnv,
+        });
+        assert.equal(review.status, 0, `${backend}/${testCase.gate}: ${review.stderr}`);
+        const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
+        const reviewerMarker = path.join(repo.dir, `reviewer-started-${backend}-${currentIssue}`);
+        const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[],"inconclusive":false}';
+        const env = envWithout([], {
+          ...backendEnv,
+          ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+          CLAUDE_AUTH_PROBE_CMD: 'true',
+          GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}; cat >/dev/null; printf '%s' '${verdict}'`,
+          GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+          ASC_EVIDENCE_BASE_SHA: baseSha,
+        });
+
+        const result = runLauncher(
+          repo.dir,
+          [`ISSUE-${currentIssue}`, testCase.gate, 'standard', reportPath, targetSha],
+          env,
+          backend === 'github' ? repo.dir : worktreePath,
+        );
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /判定プロンプトの生成に失敗しました/);
+        assert.equal(fs.existsSync(reviewerMarker), false, `${backend}/${testCase.gate} でレビュアを起動しないこと`);
+        assert.equal(readFinal(reportPath), 'human_required');
+      }
     }
   }
 });

@@ -70,11 +70,15 @@ function normalizePlaceholder(text: string): string | undefined {
 function ignorableBlock(block: string): boolean {
   const trimmed = block.trim();
   if (!trimmed) return true;
-  if (/^(?:\s*<!--[\s\S]*?-->\s*)+$/.test(trimmed)) return true;
-  if (/^(?:-{3,}|_{3,}|\*{3,})$/.test(trimmed)) return true;
-  if (trimmed.split('\n').every((line) => /^ {0,3}#{1,6}\s+.+?\s*$/.test(line))) return true;
-  const placeholder = normalizePlaceholder(trimmed);
-  return placeholder !== undefined && PLACEHOLDER_LINES.has(placeholder);
+  const withoutComments = trimmed.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+  return withoutComments.split('\n').every((line) => {
+    const normalized = line.trim();
+    if (!normalized) return true;
+    if (/^ {0,3}#{1,6}\s+.+?\s*$/.test(line)) return true;
+    if (/^(?:-{3,}|_{3,}|\*{3,})$/.test(normalized)) return true;
+    const placeholder = normalizePlaceholder(normalized);
+    return placeholder !== undefined && PLACEHOLDER_LINES.has(placeholder);
+  });
 }
 
 interface Heading {
