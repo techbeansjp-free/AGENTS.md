@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parse } from 'yaml';
 import { gh, git } from './exec.js';
 import { readYamlFile } from './yaml-io.js';
-import { validateAgainstSchema } from './schema.js';
+import { validateAgainstSchema, validateAgainstSchemaDocument } from './schema.js';
 import { defaultBranch } from './worktree.js';
 
 export interface CoreReviewPolicy {
@@ -66,6 +66,24 @@ export function loadCoreReviewPolicy(root: string): CoreReviewPolicy | undefined
 
   const manifest = readYamlFile<ProjectPolicyManifest>(manifestPath);
   const validation = validateAgainstSchema('project-policy', manifest, root);
+  if (!validation.valid) {
+    throw new Error(`project policy manifest がスキーマに適合しません: ${validation.errors.join('; ')}`);
+  }
+  return manifest.model_selection?.core_review;
+}
+
+/** evidence記録用に、policyと検証スキーマを指定コミットのツリーだけから読む。 */
+export function loadCoreReviewPolicyAtRef(root: string, ref: string): CoreReviewPolicy | undefined {
+  const manifestResult = git(['show', `${ref}:.agent-skill-chain/project/manifest.yaml`], root);
+  if (manifestResult.status !== 0) return undefined;
+  const schemaResult = git(['show', `${ref}:.agent-skill-chain/schemas/project-policy.schema.yaml`], root);
+  if (schemaResult.status !== 0) {
+    throw new Error('trusted baseのproject policy検証スキーマを読めません');
+  }
+
+  const manifest = parse(manifestResult.stdout) as ProjectPolicyManifest;
+  const schema = parse(schemaResult.stdout) as Record<string, unknown>;
+  const validation = validateAgainstSchemaDocument(schema, manifest);
   if (!validation.valid) {
     throw new Error(`project policy manifest がスキーマに適合しません: ${validation.errors.join('; ')}`);
   }
@@ -155,9 +173,14 @@ function matchesCorePath(policy: CoreReviewPolicy, changedPath: string): boolean
  */
 export function classifyCoreReview(
   root: string,
-  options: { targetSha?: string; baseRef?: string; reviewSubject?: 'ordinary' | 'core_audit' } = {},
+  options: {
+    targetSha?: string;
+    baseRef?: string;
+    reviewSubject?: 'ordinary' | 'core_audit';
+    policy?: CoreReviewPolicy;
+  } = {},
 ): CoreReviewDecision {
-  const policy = loadCoreReviewPolicy(root);
+  const policy = options.policy ?? loadCoreReviewPolicy(root);
   if (!policy) {
     return { required: false, status: 'resolved', reason: 'policy_absent', changed_paths: [] };
   }
