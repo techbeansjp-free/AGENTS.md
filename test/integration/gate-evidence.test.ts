@@ -66,7 +66,15 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const baseSha = git(repo.dir, ['rev-parse', 'HEAD']);
   git(repo.dir, ['checkout', '-b', 'process/271-evidence-test']);
   fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: evidence\n');
-  git(repo.dir, ['add', 'SPEC.md']);
+  const configPath = path.join(repo.dir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const baseConfig = fs.readFileSync(configPath, 'utf8');
+  const targetConfig = baseConfig.replace(
+    'round_limit: {narrowing_threshold: 2, cutoff_threshold: 4}',
+    'round_limit: {narrowing_threshold: 1, cutoff_threshold: 3}',
+  );
+  assert.notEqual(targetConfig, baseConfig);
+  fs.writeFileSync(configPath, targetConfig);
+  git(repo.dir, ['add', 'SPEC.md', '.agent-skill-chain/config/agent-skill-chain.yaml']);
   git(repo.dir, ['commit', '-m', 'test: add evidence target']);
   const targetSha = git(repo.dir, ['rev-parse', 'HEAD']);
   git(repo.dir, ['checkout', 'main']);
@@ -76,7 +84,8 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     // CLIのgit wrapperと同じく末尾改行を保持したblob内容でdigestする。
     digest: artifactDigestOf(execFileSync('git', ['show', `${targetSha}:SPEC.md`], { cwd: repo.dir, encoding: 'utf8' })),
   };
-  const prompt = runCli(['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha], {
+  const attemptId = 'attempt-integration-1';
+  const prompt = runCli(['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', attemptId], {
     cwd: repo.dir,
     env,
   });
@@ -94,6 +103,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     author: { login: 'adachi-tatsuru' },
     committer: { login: 'adachi-tatsuru' },
   }];
+  state.apiActor = 'adachi-tatsuru';
   stub.writeState(state);
 
   const rawVerdict = {
@@ -103,7 +113,6 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     approved_artifacts: [{ path: 'SPEC.md' }],
     inconclusive: false,
   };
-  const attemptId = 'attempt-integration-1';
   fs.writeFileSync(tokenPath, `${JSON.stringify({
     schema_version: 'agent-skill-chain/launcher-token/v1',
     attempt_id: attemptId,
@@ -122,7 +131,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const directSubmit = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env, input: JSON.stringify(rawVerdict) },
   );
@@ -140,7 +149,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const wrongBase = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -157,7 +166,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const submitted = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -166,7 +175,7 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   const replayedSlot = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -178,22 +187,120 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     (stateAfterSubmit.pullReviews?.[0] as { body: string }).body,
   );
   assert.ok(submittedEvidence);
-  const makeEvidence = (slot: 1 | 2): ReviewEvidence => ({
-    ...submittedEvidence,
-    reviewer: {
-      ...submittedEvidence.reviewer,
-      run_id: `review-integration-${slot}`,
-      slot,
-    },
+  assert.equal(submittedEvidence.schema_version, 'agent-skill-chain/gate-review-evidence/v3');
+  const slotTwoPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', attemptId],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(slotTwoPrompt.status, 0, slotTwoPrompt.stderr);
+  assert.equal(evidencePromptDigest(slotTwoPrompt.stdout.trimEnd()), submittedEvidence.prompt_digest);
+  const submittedSlotTwo = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
+      attemptId, '2', 'review-integration-submit-2', '2', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+    ],
+    { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
+  );
+  assert.equal(submittedSlotTwo.status, 0, submittedSlotTwo.stderr);
+  const completedAttempt = stub.readState().pullReviews ?? [];
+  assert.equal(completedAttempt.length, 2);
+  for (const submittedReview of completedAttempt) {
+    assert.equal(parseReviewEvidence((submittedReview as { body: string }).body)?.prompt_digest, promptDigest);
+  }
+  const legacyState = stub.readState();
+  legacyState.pullReviews = (legacyState.pullReviews ?? []).map((submittedReview) => {
+    const reviewRecord = submittedReview as { body: string } & Record<string, unknown>;
+    const legacyEvidence = parseReviewEvidence(reviewRecord.body);
+    assert.ok(legacyEvidence);
+    legacyEvidence.verdict.blockers = [{
+      severity: 'warning',
+      origin: 'specification',
+      code: 'legacy-v3-finding',
+      evidence: ['反例'],
+    }];
+    // 変更前のprompt生成ロジックが記録したdigestを模擬する。現行promptからは再生成できない。
+    legacyEvidence.prompt_digest = `sha256:${'9'.repeat(64)}`;
+    return { ...reviewRecord, body: renderReviewEvidence(legacyEvidence) };
   });
-  stateAfterSubmit.pullReviews = [1, 2].map((slot) => ({
-    id: slot,
-    body: renderReviewEvidence(makeEvidence(slot as 1 | 2)),
-    commit_id: targetSha,
-    state: 'COMMENTED',
-    user: { login: 'adachi-tatsuru' },
-  }));
-  stub.writeState(stateAfterSubmit);
+  stub.writeState(legacyState);
+  for (const legacyReview of stub.readState().pullReviews ?? []) {
+    const legacyEvidence = parseReviewEvidence((legacyReview as { body: string }).body);
+    assert.equal(legacyEvidence?.attempt_id, attemptId);
+    assert.deepEqual(legacyEvidence?.verdict.blockers[0].evidence, ['反例']);
+    assert.equal(legacyEvidence?.prompt_digest, `sha256:${'9'.repeat(64)}`);
+  }
+
+  const secondAttemptId = 'attempt-integration-2';
+  const secondRoundPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', secondAttemptId],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(secondRoundPrompt.status, 0, secondRoundPrompt.stderr);
+  assert.match(secondRoundPrompt.stdout, /現在のラウンド番号: 1/);
+  assert.doesNotMatch(secondRoundPrompt.stdout, /高ラウンドの反証追加要件/);
+  const secondPromptDigest = evidencePromptDigest(secondRoundPrompt.stdout.trimEnd());
+  fs.writeFileSync(tokenPath, `${JSON.stringify({
+    schema_version: 'agent-skill-chain/launcher-token/v1',
+    attempt_id: secondAttemptId,
+    expected_count: 2,
+    profile: 'strict',
+    target_sha: targetSha,
+    base_sha: baseSha,
+    pr_number: '274',
+    nonce: 'f'.repeat(48),
+    slots: [
+      { slot: 1, run_id: 'review-integration-second-submit' },
+      { slot: 2, run_id: 'review-integration-second-submit-2' },
+    ],
+    consumed_slots: [],
+  })}\n`, { mode: 0o600 });
+  for (const [runId, slot] of [
+    ['review-integration-second-submit', '1'],
+    ['review-integration-second-submit-2', '2'],
+  ] as const) {
+    const secondSubmitted = runCli(
+      [
+        'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
+        secondAttemptId, '2', runId, slot, 'codex', 'gpt-5.6-sol', 'xhigh', secondPromptDigest,
+      ],
+      { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
+    );
+    assert.equal(secondSubmitted.status, 0, secondSubmitted.stderr);
+  }
+
+  const targetConfigChangedPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', 'attempt-integration-3'],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(targetConfigChangedPrompt.status, 0, targetConfigChangedPrompt.stderr);
+  assert.match(targetConfigChangedPrompt.stdout, /現在のラウンド番号: 2/);
+
+  const forgedState = stub.readState();
+  const sourceReviews = forgedState.pullReviews ?? [];
+  const forgedReviews = sourceReviews.slice(0, 2).map((sourceReview, index) => {
+    const source = sourceReview as { body: string; commit_id: string; state: string; user: { login: string } };
+    const forged = parseReviewEvidence(source.body);
+    assert.ok(forged);
+    forged.attempt_id = 'attempt-form-only';
+    forged.reviewer.run_id = `review-form-only-${index + 1}`;
+    forged.execution.launcher_digest = `sha256:${'f'.repeat(64)}`;
+    return {
+      ...source,
+      id: sourceReviews.length + index + 1,
+      body: renderReviewEvidence(forged),
+    };
+  });
+  forgedState.pullReviews = [...sourceReviews, ...forgedReviews];
+  stub.writeState(forgedState);
+  const forgedHistoryPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', 'attempt-integration-3'],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(forgedHistoryPrompt.status, 0, forgedHistoryPrompt.stderr);
+  assert.match(forgedHistoryPrompt.stdout, /現在のラウンド番号: 2/);
+  assert.match(forgedHistoryPrompt.stdout, /attempt attempt-form-only をラウンド計数から除外/);
+  forgedState.pullReviews = sourceReviews;
+  stub.writeState(forgedState);
 
   const reportPath = path.join(repo.dir, 'verified-gate.yaml');
   const verified = runCli(
@@ -211,6 +318,21 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     'same_as_writer',
     'same_as_writer',
   ]);
+
+  const originalConfig = fs.readFileSync(configPath, 'utf8');
+  const changedConfig = originalConfig.replace(
+    'round_limit: {narrowing_threshold: 2, cutoff_threshold: 4}',
+    'round_limit: {narrowing_threshold: 1, cutoff_threshold: 3}',
+  );
+  assert.notEqual(changedConfig, originalConfig);
+  fs.writeFileSync(configPath, changedConfig);
+  const nextRoundPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', 'attempt-integration-3'],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(nextRoundPrompt.status, 0, nextRoundPrompt.stderr);
+  assert.match(nextRoundPrompt.stdout, /現在のラウンド番号: 2/);
+  fs.writeFileSync(configPath, originalConfig);
 
   const published = runCli(['gate', 'publish', 'ISSUE-271', reportPath], { cwd: repo.dir, env });
   assert.equal(published.status, 0, published.stderr);
@@ -383,8 +505,9 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
   );
   assert.ok(gitObjectCount(verificationDir) > gitObjectCount(generationDir));
 
+  const attemptId = 'attempt-clone-roundtrip-1';
   const generatedPrompt = runCli(
-    ['gate', 'reviewer-prompt', 'ISSUE-369', 'spec', targetSha, baseSha],
+    ['gate', 'reviewer-prompt', 'ISSUE-369', 'spec', targetSha, baseSha, '369', attemptId],
     { cwd: generationDir, env },
   );
   assert.equal(generatedPrompt.status, 0, generatedPrompt.stderr);
@@ -405,7 +528,6 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
   state.apiActor = 'adachi-tatsuru';
   stub.writeState(state);
 
-  const attemptId = 'attempt-clone-roundtrip-1';
   const reviewerRunId = 'review-clone-roundtrip-1';
   fs.writeFileSync(tokenPath, `${JSON.stringify({
     schema_version: 'agent-skill-chain/launcher-token/v1',
@@ -429,7 +551,7 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
   const submitted = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-369', 'spec', 'standard', targetSha, baseSha, baseSha, '369',
-      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', generatedPromptDigest,
     ],
     {
       cwd: generationDir,
@@ -498,6 +620,7 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
     approved_artifacts: [{ path: 'SPEC.md' }],
     inconclusive: false,
   };
+  const submittedPromptDigest = evidencePromptDigest('gate evidence fence extraction fixture');
 
   // slot毎に独立したlauncher tokenを用意し、1件ずつ standard profile（expected_count: 1）で
   // submit-evidence を呼ぶ。目的はfence除去の可否のみの検証であり、Strictの2体集約・
@@ -519,7 +642,7 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
     return runCli(
       [
         'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'standard', targetSha, baseSha, baseSha, '275',
-        `attempt-${runId}`, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+        `attempt-${runId}`, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', submittedPromptDigest,
       ],
       { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: body },
     );
@@ -580,7 +703,7 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
         severity: 'info' as const,
         origin: 'specification' as const,
         code: 'literal-brace-test',
-        evidence: ['config value `{key: value}` を含む説明文'],
+        evidence: ['SPEC.md の config value `{key: value}` を含む説明文'],
       },
     ],
   };
@@ -594,4 +717,17 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
   const proseOnly = submitWithBody('review-prose-only', 'JSONを生成できませんでした。');
   assert.notEqual(proseOnly.status, 0);
   assert.match(proseOnly.stderr, /verdict JSONを解釈できません/);
+
+  const emptyFindingEvidence = submitWithBody('review-empty-finding-evidence', JSON.stringify({
+    ...rawVerdict,
+    falsification: 'fail',
+    blockers: [{
+      severity: 'blocking',
+      origin: 'implementation',
+      code: 'EMPTY-EVIDENCE',
+      evidence: [],
+    }],
+  }));
+  assert.notEqual(emptyFindingEvidence.status, 0);
+  assert.match(emptyFindingEvidence.stderr, /finding・inconclusive契約に適合しません/);
 });

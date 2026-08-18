@@ -48,9 +48,9 @@
 
 ### `review`
 
-- **既定値**: `adapter: claude`、Standard は reviewer 1体で `conformance` と `falsification`、Strict は reviewer 2体で `risk_not_normal` または `autonomy_full` をトリガーとする。
-- **取りうる値**: `adapter` は `claude | codex | human`。各 `reviewer_count` は1以上の整数、Standard の `modes` は `conformance | falsification` の配列、Strict の各トリガーは真偽値。
-- **影響**: 現行 CLI は `adapter` と、選択済み Standard/Strict profile の `reviewer_count` をゲートレビュー起動に使う。基準 profile は I8 の `risk != normal` または `autonomy == full` で決まり、`standard.modes` と `strict.trigger` は現行 CLI の分岐では参照しない。Light はこの設定ではなく、人間が付与した `review:light` 等の独立シグナルと安全側ガードレールから決まる。
+- **既定値**: `adapter: claude`、Standard は reviewer 1体で `conformance` と `falsification`、Strict は reviewer 2体で `risk_not_normal` または `autonomy_full` をトリガーとする。`round_limit` は `narrowing_threshold: 2`、`cutoff_threshold: 4`。
+- **取りうる値**: `adapter` は `claude | codex | human`。各 `reviewer_count` は1以上の整数、Standard の `modes` は `conformance | falsification` の配列、Strict の各トリガーは真偽値。`narrowing_threshold` は1以上、`cutoff_threshold` は2以上の整数で、前者が後者より真に小さい必要がある。
+- **影響**: 現行 CLI は `adapter` と、選択済み Standard/Strict profile の `reviewer_count` をゲートレビュー起動に使う。基準 profile は I8 の `risk != normal` または `autonomy == full` で決まり、`standard.modes` と `strict.trigger` は現行 CLI の分岐では参照しない。ラウンド番号が限定閾値以上になると反証 finding の blocking 基準へ実証性を追加し、打ち切り閾値以上で未解消 blocking が残ると人間判断へ移す。Light は独立シグナルと安全側ガードレールから決まり、既存の Light 打ち切りと本設定の打ち切りはいずれかが成立した時点で作用する。
 - **詳細**: [AGENTS.md の「4 セグメント・4 ゲート」](../AGENTS.md#4-セグメント4-ゲート)
 
 ### `worker`

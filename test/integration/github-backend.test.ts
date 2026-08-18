@@ -65,6 +65,10 @@ function gateEvidence(options: {
 }): string {
   const expectedCount = options.expectedCount ?? 1;
   const reviewerSlot = options.reviewerSlot ?? 1;
+  const blockers = options.blockers.map((finding) => ({
+    ...finding,
+    evidence: finding.evidence.map((entry) => `SPEC.md: ${entry}`),
+  }));
   return renderReviewEvidence({
     schema_version: 'agent-skill-chain/gate-review-evidence/v3',
     issue_id: options.issueId,
@@ -91,9 +95,9 @@ function gateEvidence(options: {
     },
     prompt_digest: options.promptDigest ?? `sha256:${'d'.repeat(64)}`,
     verdict: {
-      conformance: options.conformance ?? (options.blockers.length > 0 ? 'fail' : 'pass'),
+      conformance: options.conformance ?? (blockers.length > 0 ? 'fail' : 'pass'),
       falsification: options.falsification ?? 'pass',
-      blockers: options.blockers,
+      blockers,
       approved_artifacts: [],
       inconclusive: options.inconclusive ?? false,
     },

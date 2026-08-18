@@ -34,6 +34,7 @@ test('loadConfig: 実物の .agent-skill-chain/config/agent-skill-chain.yaml を
 // 場所）を明示的に渡す（test/unit/schema.test.ts の同種テストと同じ回避策）。
 test('loadConfig (AC-6): worker.segment_overrides.implementation が codex/highest_capability/high に恒久設定され、worker.model_tiersのみに具体的なモデル文字列を持つ', () => {
   const config = loadConfig(packageRoot());
+  assert.deepEqual(config.review.round_limit, { narrowing_threshold: 2, cutoff_threshold: 4 });
   assert.equal(config.worker.adapter, 'claude');
   assert.equal(config.worker.agent_tool_dispatch?.enabled, true);
   assert.equal(config.templates.claude_agents_source, '.agent-skill-chain/templates/claude/agents');
@@ -90,4 +91,25 @@ test('loadConfig: スキーマ不適合の config は例外を投げる', () => 
   );
 
   assert.throws(() => loadConfig(tmp), /スキーマ（agent-skill-chain\/config\/v1）に適合しません/);
+});
+
+test('loadConfig: round_limitの大なり・等号は日本語の設定エラー、各下限と非整数はスキーマエラーになる', () => {
+  const valid = structuredClone(loadConfig(packageRoot()));
+  for (const roundLimit of [
+    { narrowing_threshold: 5, cutoff_threshold: 4 },
+    { narrowing_threshold: 4, cutoff_threshold: 4 },
+  ]) {
+    const config = structuredClone(valid);
+    config.review.round_limit = roundLimit;
+    assert.throws(() => loadConfig(packageRoot(), config), /真に小さい/);
+  }
+  for (const roundLimit of [
+    { narrowing_threshold: 0, cutoff_threshold: 4 },
+    { narrowing_threshold: 1, cutoff_threshold: 1 },
+    { narrowing_threshold: 1.5, cutoff_threshold: 4 },
+  ]) {
+    const config = structuredClone(valid);
+    config.review.round_limit = roundLimit;
+    assert.throws(() => loadConfig(packageRoot(), config), /スキーマ.*適合しません/s);
+  }
 });
