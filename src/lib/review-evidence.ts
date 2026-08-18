@@ -250,6 +250,7 @@ export function verifyGithubReviewEvidence(options: {
   coreReviewRequired: boolean;
   codexModel: string;
   codexReasoning: string;
+  gateRound?: { round: number; cutoffThreshold: number };
 }): EvidenceVerification {
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
@@ -392,6 +393,10 @@ export function verifyGithubReviewEvidence(options: {
   const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
   const blockers = verdicts.flatMap((verdict) => verdict.blockers);
   const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
+  const cutoffReached =
+    options.gateRound !== undefined &&
+    options.gateRound.round >= options.gateRound.cutoffThreshold &&
+    hasBlocking;
   const rejected = verdicts.some(
     (verdict) => verdict.conformance === 'fail' || verdict.falsification === 'fail',
   ) || hasBlocking;
@@ -401,7 +406,7 @@ export function verifyGithubReviewEvidence(options: {
       verdict.falsification === 'pass' &&
       verdict.inconclusive === false,
   ) && !hasBlocking;
-  const final = rejected ? 'rejected' : approved ? 'approved' : 'human_required';
+  const final = cutoffReached ? 'human_required' : rejected ? 'rejected' : approved ? 'approved' : 'human_required';
   return {
     final,
     conformance: rejected
@@ -456,5 +461,12 @@ export function verifyGithubReviewEvidence(options: {
           })),
       )),
     },
+    ...(cutoffReached
+      ? {
+          reason:
+            `ラウンド上限に達したため人間判断へ移行します: round=${options.gateRound?.round}, ` +
+            `cutoff_threshold=${options.gateRound?.cutoffThreshold}, unresolved_blocking=${blockers.filter((finding) => finding.severity === 'blocking').length}`,
+        }
+      : {}),
   };
 }

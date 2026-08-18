@@ -611,7 +611,7 @@ launch_gate_reviewer() {
 
   # 判定プロンプト（ルーブリック・出力契約）を組み立てる。
   local prompt
-  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}")"; then
+  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}" "${ASC_EVIDENCE_PR_NUMBER:-}" "${ASC_REVIEW_ATTEMPT_ID:-}")"; then
     _fail_safe "判定プロンプトの生成に失敗しました"
     return
   fi

@@ -104,6 +104,41 @@ test('strict: 1件不足またはslot重複はhuman_required', () => {
   assert.equal(verify([review(1, 1)], { profile: 'standard' }).final, 'human_required');
 });
 
+test('ラウンド打ち切り: 閾値到達時のblockingをrejectedより先にhuman_requiredへ移し、未到達・導出不能・blocker無しは既存判定を保つ', () => {
+  const blockingVerdict: ReviewEvidence['verdict'] = {
+    conformance: 'pass',
+    falsification: 'fail',
+    blockers: [{
+      severity: 'blocking',
+      origin: 'implementation',
+      code: 'still-blocking',
+      evidence: ['対象成果物に未解消経路が残る'],
+    }],
+    approved_artifacts: [...artifacts],
+    inconclusive: false,
+  };
+  const blockingReviews = [
+    review(1, 1, { body: renderReviewEvidence(evidence(1, { verdict: blockingVerdict })) }),
+    review(2, 2, { body: renderReviewEvidence(evidence(2, { verdict: blockingVerdict })) }),
+  ];
+
+  const cutoff = verify(blockingReviews, { gateRound: { round: 4, cutoffThreshold: 4 } });
+  assert.equal(cutoff.final, 'human_required');
+  assert.match(cutoff.reason ?? '', /round=4/);
+  assert.match(cutoff.reason ?? '', /cutoff_threshold=4/);
+  assert.match(cutoff.reason ?? '', /unresolved_blocking=2/);
+
+  assert.equal(
+    verify(blockingReviews, { gateRound: { round: 3, cutoffThreshold: 4 } }).final,
+    'rejected',
+  );
+  assert.equal(verify(blockingReviews).final, 'rejected');
+  assert.equal(
+    verify([review(1, 1), review(2, 2)], { gateRound: { round: 4, cutoffThreshold: 4 } }).final,
+    'approved',
+  );
+});
+
 test('retry: same-SHAの旧complete attemptを無視して最新attemptだけを採用し、最新不完全時はfallbackしない', () => {
   const oldOne = evidence(1, { attempt_id: 'attempt-old' });
   const oldTwo = evidence(2, { attempt_id: 'attempt-old' });

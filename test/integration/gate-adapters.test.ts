@@ -1110,6 +1110,17 @@ test('claude core reviewer: 能力attestationまたはreasoning probe不足はhu
 
 // --- T5: ラッパーの終了コード分岐（引数・アダプタ解決） --------------------------------
 
+test('gate adapter: reviewer-promptへ証跡投稿と同じPR番号・attempt_idを渡す', () => {
+  const source = fs.readFileSync(
+    path.join(process.cwd(), '.agent-skill-chain', 'adapters', 'claude.sh'),
+    'utf8',
+  );
+  assert.match(
+    source,
+    /gate reviewer-prompt[^\n]*ASC_EVIDENCE_PR_NUMBER[^\n]*ASC_REVIEW_ATTEMPT_ID/,
+  );
+});
+
 test('gate-launch-reviewer.sh: 引数不足は exit 1（使い方エラー）', async (t) => {
   const { repo } = setupGateReview();
   t.after(() => repo.cleanup());

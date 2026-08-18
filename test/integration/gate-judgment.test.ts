@@ -9,6 +9,8 @@ import { parse, stringify } from 'yaml';
 import { createTmpRepo, unsetAdapter } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
+import { buildReviewerPrompt } from '../../src/commands/gate.js';
+import type { GateRoundContext, GateRoundRecord } from '../../src/lib/gate-round.js';
 
 // #164-② gate判定ステップの CLI 層（src/commands/gate.ts）を検証する:
 //   - publish の終了状態判定を final 基準へ精緻化（T1）
@@ -477,6 +479,112 @@ test('gate reviewer-prompt: AC-ID・conformance/falsification ルーブリック
   assert.match(res.stdout, /read-only/);
 });
 
+test('gate reviewer-prompt: 反証の合格条件・3条件・不緩和条項を全ラウンドへ置き、高ラウンドだけ実証性を追加要件にする', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\n#### AC-1: sample\n');
+  const targetSha = commitAll(repo.dir, 'test: add falsification prompt target');
+  const roundRecord = (round: number): GateRoundRecord => ({
+    round,
+    attempt_id: `attempt-${round}`,
+    target_sha: String(round).repeat(40),
+    slots: [{
+      slot: 1,
+      conformance: 'pass',
+      falsification: 'fail',
+      inconclusive: false,
+      findings: [{
+        severity: 'blocking',
+        origin: 'specification',
+        code: `finding-${round}`,
+        evidence_summary: `SPECの対象記述に欠陥 ${round} がある`,
+      }],
+    }],
+  });
+  const below: GateRoundContext = { status: 'available', round: 1, history: [roundRecord(0)] };
+  const narrowed: GateRoundContext = {
+    status: 'available',
+    round: 2,
+    history: [roundRecord(0), roundRecord(1)],
+  };
+  const belowPrompt = buildReviewerPrompt(repo.dir, '729', 'spec', targetSha, undefined, null, below);
+  const narrowedPrompt = buildReviewerPrompt(repo.dir, '729', 'spec', targetSha, undefined, null, narrowed);
+
+  for (const prompt of [belowPrompt, narrowedPrompt]) {
+    assert.match(prompt, /blocking 基準を満たす反例が 1 件も無い場合は falsification=pass/);
+    assert.match(prompt, /目的阻害性/);
+    assert.match(prompt, /到達可能性/);
+    assert.match(prompt, /責務内是正可能性/);
+    assert.match(prompt, /3 条件は全ラウンドで必要条件/);
+    assert.match(prompt, /データ喪失・セキュリティ低下・既存機能の回帰・当該 Issue の目的未達/);
+    assert.doesNotMatch(prompt, /能動的に 1 件以上探索/);
+  }
+  assert.doesNotMatch(belowPrompt, /高ラウンドの反証追加要件/);
+  assert.doesNotMatch(belowPrompt, /実証性を満たさない反例は warning 以下/);
+  assert.match(narrowedPrompt, /高ラウンドの反証追加要件/);
+  assert.match(narrowedPrompt, /3 条件をすべて満たし、かつ実証性を満たす反例だけを blocking/);
+  assert.match(narrowedPrompt, /3 条件はいずれも取り除かない/);
+  assert.match(narrowedPrompt, /実証性を満たさない反例は warning 以下/);
+});
+
+test('gate reviewer-prompt: 過去記録あり・初回・取得不能を区別し、根拠要約と蒸し返し境界を展開する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\n#### AC-1: sample\n');
+  const targetSha = commitAll(repo.dir, 'test: add round history target');
+  const history: GateRoundContext = {
+    status: 'available',
+    round: 1,
+    history: [{
+      round: 0,
+      attempt_id: 'attempt-old',
+      target_sha: 'a'.repeat(40),
+      slots: [{
+        slot: 1,
+        conformance: 'pass',
+        falsification: 'fail',
+        inconclusive: false,
+        findings: [{
+          severity: 'blocking',
+          origin: 'specification',
+          code: 'old-finding',
+          evidence_summary: 'SPECの対象記述に停止しない経路がある',
+        }],
+      }],
+    }],
+  };
+  const withHistory = buildReviewerPrompt(repo.dir, '729', 'spec', targetSha, undefined, null, history);
+  assert.match(withHistory, /code="old-finding"/);
+  assert.match(withHistory, /根拠要約: "SPECの対象記述に停止しない経路がある"/);
+  assert.match(withHistory, /是正済みと確認できる論点を、新たな根拠なしに再び blocking/);
+  assert.match(withHistory, /未修正のまま残る blocking を同一 code で再提出することは、この禁止の対象外/);
+
+  const first = buildReviewerPrompt(
+    repo.dir,
+    '729',
+    'spec',
+    targetSha,
+    undefined,
+    null,
+    { status: 'available', round: 0, history: [] },
+  );
+  assert.match(first, /初回（ラウンド 0）/);
+
+  const unavailable = buildReviewerPrompt(
+    repo.dir,
+    '729',
+    'spec',
+    targetSha,
+    undefined,
+    null,
+    { status: 'unavailable', reason: 'PR番号なし' },
+  );
+  assert.match(unavailable, /取得できなかった/);
+  assert.match(unavailable, /過去ラウンドが存在しないことを意味しない/);
+  assert.doesNotMatch(unavailable, /初回（ラウンド 0）/);
+  assert.doesNotMatch(unavailable, /高ラウンドの反証追加要件/);
+});
+
 test('gate reviewer-prompt: 見出し以外と非準拠見出しを除外し、宣言を重複なく数値昇順で列挙する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -704,7 +812,7 @@ test('gate reviewer-prompt: 新規追加成果物の全文再掲を省略した�
   const golden = fs.readFileSync(GOLDEN_PROMPT_PATH, 'utf8').trimEnd();
   assert.match(golden, new RegExp(`^- target_sha: ${GOLDEN_FIXTURE_TARGET_SHA}$`, 'm'));
   assert.equal(prompt, golden);
-  assert.equal(Buffer.byteLength(prompt, 'utf8'), 4_111);
+  assert.equal(Buffer.byteLength(prompt, 'utf8'), 6_184);
   assert.equal(prompt.match(/AC-1: deterministic prompt/g)?.length, 1);
   assert.match(prompt, /成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC\.md"（変更種別: 追加、差分: 省略）/);
   assert.doesNotMatch(prompt, /new file mode|\+AC-1: deterministic prompt/);
@@ -811,9 +919,10 @@ test('gate reviewer-prompt: 特殊文字を含む新規成果物を差分で省�
   assert.deepEqual(result.stdout.match(/^## .+$/gm), [
     '## 埋め込まれていない参照ファイルの扱い（ハルシネーション防止）',
     '## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）',
-    '## conformance（立証）ルーブリック',
-    '## falsification（反証）ルーブリック',
-    '## final の扱い',
+      '## conformance（立証）ルーブリック',
+      '## falsification（反証）ルーブリック',
+      '## 過去ラウンドの判定記録',
+      '## final の扱い',
     '## 出力 JSON 契約（この形式のみを返すこと）',
     '## 判定対象の差分',
     '## 判定対象の成果物',
