@@ -127,6 +127,7 @@ test('各コマンドの -h/--help は終了コード0でUSAGE文字列を出す
       { args: ['lease', 'resume', '-h'], usagePattern: /使い方: agent-skill-chain lease resume/ },
       { args: ['gate', 'publish', '-h'], usagePattern: /使い方: agent-skill-chain gate publish/ },
       { args: ['pr', 'create', '-h'], usagePattern: /使い方: agent-skill-chain pr create/ },
+      { args: ['pr', 'complete', '-h'], usagePattern: /使い方: agent-skill-chain pr complete/ },
       { args: ['setup', '-h'], usagePattern: /使い方: agent-skill-chain setup/ },
       { args: ['setup', 'github', '-h'], usagePattern: /使い方: agent-skill-chain setup github/ },
       { args: ['checkpoint', '--help'], usagePattern: /使い方: agent-skill-chain checkpoint/ },
