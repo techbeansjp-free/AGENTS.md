@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0066
-status: proposed
+status: accepted
 title: ゲート判定プロンプトの区間分離と、判定軸の実体の取得経路限定
 tags: [gate, review, security, prompt]
 supersedes: []
