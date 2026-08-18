@@ -27,6 +27,7 @@
 | レビュア起動段 | 準備段の完了後、隔離環境内の起動スクリプトがレビュアを起動し、verdict を証跡へ記録する区間。 |
 | 信頼実行環境 | レビュア起動・prompt 生成・verdict 記録に使う実行コードと asset 一式が、審査対象由来でないと確認できる実行環境。 |
 | 配布集合 | `agent-skill-chain` が consumer project へ配布し、導入済み consumer に必ず存在する asset の集合（`ROOT_LEVEL_ENTRIES` と `NAMESPACED_ENTRIES` が定める範囲）。 |
+| 調達実行コード | 隔離 clone の作成時点では clone 内に存在せず、準備段が隔離 clone の外から取得して隔離 clone 配下へ配置した、レビュア起動・prompt 生成・verdict 記録・adapter に用いる実行コードの実体。 |
 
 ## 前提・入力・出力
 
@@ -233,15 +234,18 @@ export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | 
 - 要件3: 信頼実行環境は次の全てを満たす。(a) レビュア起動・prompt 生成・verdict 記録に使う実行コードと asset が、審査対象（target SHA の Issue worktree）由来でない。(b) その由来が実行時に識別でき、証跡へ記録される値（trusted base SHA・launcher digest・隔離種別）が consumer project での実行においても実際に埋まる。(c) 隔離環境が credential を伴う remote を保持しない。
 - 要件4: 信頼実行環境を用意できない場合は実行しない。審査対象コードへのフォールバックを行わず、非0終了と、不成立の前提および是正手段を含む日本語メッセージを出す。
 - 要件5: 既存の拒否経路（Issue worktree からの記録、recorder HEAD 不一致、protected base worktree の dirty）は現状のまま有効である。
-- 要件6: launcher digest の算出対象は配布集合の要素のみで構成する。配布集合外の文書（consumer 固有 project policy 文書を含む）は算出対象に含めず、その有無・内容によって証跡記録が失敗せず digest 値も変動しない。
+- 要件6: launcher digest の算出対象は配布集合の要素のみで構成する。配布集合外の文書（consumer 固有 project policy 文書を含む）は算出対象に含めず、その有無・内容によって証跡記録が失敗せず digest 値も変動しない。加えて、算出対象として定めた配布集合の要素のいずれかを trusted base SHA から取得できない場合は、取得できた要素だけの部分集合で digest を算出せず、非0終了して証跡を投稿しない。
+- 要件7: 調達実行コードは、次の全てを満たす場合にのみ実行する。(a) 調達元の識別子（何をどこから取得したかを一意に示す値）が実行時に確定する。(b) 調達した実体の内容から算出した digest が、審査対象（target SHA の Issue worktree）が変更しうる情報源に依存しない期待値と一致する。(c) (a) の識別子と (b) の digest を証跡へ記録する。いずれかを満たせない場合は調達実行コードを実行せず、要件4 の経路で非0終了する。
 
-要件6 を置く理由（必要性）: 要件3(b) は consumer project の実行でも launcher digest が埋まることを要求するが、現行の算出対象には consumer へ配布も生成もされない `.agent-skill-chain/project/MODEL_TIER_TABLE.md` が含まれ、全件取得に失敗すると算出が例外で停止する（実地確認した事実の `NAMESPACED_ENTRIES`・`src/lib/project-policy-scaffold.ts`・`LOCAL_REVIEW_LAUNCHER_PATHS` の各引用）。したがって算出対象を見直さない限り要件3(b) は原理的に充足できない。
+要件6 を置く理由（必要性）: 要件3(b) は consumer project の実行でも launcher digest が埋まることを要求するが、現行の算出対象には consumer へ配布も生成もされない `.agent-skill-chain/project/MODEL_TIER_TABLE.md` が含まれ、全件取得に失敗すると算出が例外で停止する（実地確認した事実の `NAMESPACED_ENTRIES`・`src/lib/project-policy-scaffold.ts`・`LOCAL_REVIEW_LAUNCHER_PATHS` の各引用）。したがって算出対象を見直さない限り要件3(b) は原理的に充足できない。一方で、算出対象に残した要素については全件取得の成功を算出の前提とする（取得できない要素があれば算出しない）。これは実地確認した事実に原文引用した `if (shown.status !== 0) throw new CliError(...)` が示す現行の束縛強度をそのまま維持するものであり、算出対象の縮小を口実に部分集合での算出を許すと安全側ラチェット（不変条件 I8）に反するためである。
 
 要件6 が信頼境界を弱めない理由（束縛対象の定義）: 除外の正当化は「別の値がリポジトリ全体を束縛するから安全」という網羅性の主張には置かない。launcher digest は証跡の execution 節で `launcher`・`trusted_base_sha`・`isolation: ephemeral_clone` と併記される値であり（実地確認した事実の execution 引用）、その役割は「この verdict を生成した実行系が、審査対象ではなく隔離 clone 内の保護 base 由来であること」を後から検証可能にすることである。よって digest が束縛すべき対象は、レビュア起動・prompt 生成・verdict 記録を実際に実行するコードと、その実行系が隔離 clone から読み込む asset に限られる。consumer 固有の project policy 文書はこの定義に当たらない。隔離 clone 内の実行系はこれらの文書を読まないためである。
 
 除外対象が信頼判断に影響しない理由: project policy 文書がコアレビューの要否・reviewer capability・証跡の trusted actor の判断へ影響する経路は次の2つであり、いずれも launcher digest とは独立の機構で束縛される。(a) コアレビューの分類と capability 要求は protected base worktree の root を trust root として読む（実地確認した事実の `policyRoot` 引用）。本 SPEC が対象とするローカルゲートレビュー経路では、この root は「protected base worktree が dirty でないこと」と「recorder HEAD が trusted base SHA と一致すること」の既存検査（同引用。要件5・AC-4 が維持を要求する）を通過した作業ツリーであり、読み取り内容はその時点で trusted base SHA に束縛される。(b) 証跡の trusted actor 登録は GitHub の保護された default branch から取得する（同 `loadProtectedCoreReviewPolicy` 引用）。どちらの経路も隔離 clone 内の blob を読まないため、launcher digest の算出対象から当該文書を外しても、これら2経路の束縛は変化しない。
 
 加えて、当該文書を持たない consumer では影響そのものが存在しない。方針文書が無ければコアレビュー方針は解決されず `policy_absent` となり（同 `classifyCoreReview` 引用）、そこから導かれる制約が生じない。この状態で当該文書の digest 取得を必須にすることは、信頼判断へ影響しない対象を理由に実行を停止させるだけである。
+
+要件7 を置く理由（必要性）: 要件3(a)(b) と AC-3・AC-7・AC-10 は、実行される実体が隔離 clone 配下にあることと、証跡に trusted base SHA・launcher digest・隔離種別が埋まることまでしか要求しない。したがって、隔離 clone の外にあった実体をそのまま隔離 clone 配下へ複製して実行する調達手段を採ると、実行された verdict 記録コードの由来が未検証のままでもこれらを全て充足でき、本 SPEC の目的（verdict を記録する実行コードが保護された base 由来であること）が破れる。実地確認した事実に原文引用した `command -v agent-skill-chain` による PATH 上の実体への解決は、実行コードの供給元が隔離 clone 外にも存在しうることを示す。配置先が隔離 clone 配下であることは由来の検証にならないため、調達実行コードそのものの由来と完全性の検証、およびその証跡への記録を要件として要求する。
 
 ### 要件と受入条件の対応
 
@@ -250,11 +254,12 @@ export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | 
 | 要件1 | AC-1, AC-2, AC-9 |
 | 要件2 | AC-1 |
 | 要件3(a) | AC-3, AC-6, AC-10 |
-| 要件3(b) | AC-7 |
+| 要件3(b) | AC-7, AC-13 |
 | 要件3(c) | AC-11 |
 | 要件4 | AC-5 |
 | 要件5 | AC-4 |
-| 要件6 | AC-7, AC-8 |
+| 要件6 | AC-7, AC-8, AC-12 |
+| 要件7 | AC-13 |
 
 ### 受入条件（Acceptance Criteria）
 
@@ -304,7 +309,7 @@ export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | 
 
 - Given: 配布集合は導入済みだが `.agent-skill-chain/project/MODEL_TIER_TABLE.md` を持たない consumer 形状のリポジトリと、その protected default branch の SHA
 - When: 当該 SHA を trusted base SHA として、レビュアの verdict を証跡へ投稿する
-- Then: `trusted baseのlauncher構成を読めません` を理由に停止せず、投稿された証跡の execution が、`trusted_base_sha` に当該 SHA、`launcher_digest` に `sha256:` で始まる非空値、`isolation` に `ephemeral_clone` を持つ
+- Then: `.agent-skill-chain/project/` 配下の文書を取得できないことを理由として `trusted baseのlauncher構成を読めません` で停止せず、投稿された証跡の execution が、`trusted_base_sha` に当該 SHA、`launcher_digest` に `sha256:` で始まる非空値、`isolation` に `ephemeral_clone` を持つ。本 AC が停止を認めない範囲は `.agent-skill-chain/project/` 配下の文書の不在に限り、算出対象として定めた配布集合の要素を取得できない場合の停止は本 AC の対象外である（当該場合の要求は AC-12）
 - 検証方法見込み: `automated`
 
 #### AC-8: launcher digest が consumer 固有文書に影響されない
@@ -335,25 +340,39 @@ export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | 
 - Then: 隔離 clone に登録された remote が存在しない、または登録された全 remote の URL が credential を含まない。実地確認した事実に原文引用した `git -C "$TRUSTED_ROOT" remote remove origin` による remote 不在の状態は本条件を充足する
 - 検証方法見込み: `automated`
 
+#### AC-12: 算出対象要素を取得できない場合に launcher digest が算出されない
+
+- Given: launcher digest の算出対象として定めた配布集合の要素のうち1件（例として `.agent-skill-chain/adapters/claude.sh`）が trusted base SHA では欠落しており取得できないリポジトリ状態（配布集合の要素が導入済み consumer に必ず存在するという前提が崩れた状態）
+- When: 当該 SHA を trusted base SHA として、レビュアの verdict を証跡へ投稿する
+- Then: 取得できた要素だけの部分集合で launcher digest を算出することなく非0終了し、証跡を投稿しない。取得できなかった要素を示す日本語メッセージを標準エラーへ出す
+- 検証方法見込み: `automated`
+
+#### AC-13: 調達実行コードの由来と完全性が検証され証跡へ記録される
+
+- Given: 配布集合のみを持ち agent-skill-chain 本体のソースを持たない consumer project での実行。準備段が調達実行コードを持ち込む設計を採る場合は、(i) 調達元の実体が要件7(b) の期待値どおりである状態と、(ii) 調達元の実体の内容を1バイト改変した状態の2状態を用意する
+- When: 用意した各状態でローカルゲートレビューを実行する
+- Then: (i) ではレビュア起動段へ到達し、投稿された証跡に調達元の識別子と調達した実体の digest が非空値で記録される。(ii) ではレビュアを起動しないまま非0終了し、証跡を投稿しない。改変した実体を隔離 clone 配下へ複製したことのみを根拠に実行する経路は本 AC を充足しない。準備段が調達実行コードを持ち込まない設計を採る場合は、(i)(ii) に代えて、隔離 clone 外の実体が実行コードとして隔離 clone 配下へ複製・配置されないことを実行時の観測で示すことをもって充足する
+- 検証方法見込み: `automated`
+
 ## 制約
 
 - 信頼境界を弱める解を採らない。Issue worktree のコードをそのまま実行する（隔離 clone を廃してビルドを省く）方針は不変条件 I5 に反するため不可とする。
 - 安全側ラチェット（不変条件 I8）に従い、前提不成立時は成功側へ倒さない。
-- 全4ゲートと全実行環境の直積を受入条件として要求しない。AC は代表構成（非 Node consumer・ビルドが失敗する consumer・依存導入が失敗する consumer・consumer 形状のリポジトリ・本リポジトリ）で判定する。
+- 全4ゲートと全実行環境の直積を受入条件として要求しない。AC は代表構成（非 Node consumer・ビルドが失敗する consumer・依存導入が失敗する consumer・consumer 形状のリポジトリ・算出対象要素を取得できないリポジトリ状態・調達実行コードが改変された実行環境・本リポジトリ）で判定する。
 - 変更は配布物（`.agent-skill-chain/` 配下と CLI 実装）に閉じ、consumer 側の作業を追加要求しない。
-- 要件6 が求める見直しは launcher digest の算出対象に限る。project policy の配布方針、model selection policy の適用範囲、証跡に記録する他の値の意味は変更しない。
+- 要件6 が求める見直しは launcher digest の算出対象と、算出対象要素を取得できない場合の停止挙動に限る。project policy の配布方針、model selection policy の適用範囲、証跡に記録する他の値の意味は変更しない。
 
 ## 完了条件
 
-- AC-1 から AC-11 の全てについて検証方法と証跡が対応している。
+- AC-1 から AC-13 の全てについて検証方法と証跡が対応している。
 - 「要件と受入条件の対応」表の全要件に、少なくとも1つの AC が対応している。
 - 既存の gate-local-review 統合テストが、変更後の期待値へ更新されたうえで成功する。
 - `verify doc-length`・`verify spec-bdd`・`lint references`・`lint vocab`・`lint secrets`・`adr-lint` を含む PR の CI が成功する。
 
 ## 未決事項
 
-- 信頼実行環境の具体的な調達手段（隔離 clone 内でのビルド範囲の限定、導入済み配布パッケージからの実体複製、事前ビルド済み成果物の配置のいずれか、またはその組み合わせ）は設計セグメントで確定する。ただし手段の選択肢は AC-10 の制約下にあり、どの手段を選んでも、実行される CLI・レビュア起動スクリプト・adapter の実体は隔離 clone 配下に存在しなければならない。
-- 調達「元」が隔離 clone 外の配布パッケージである場合に、その版と由来を証跡へどう記録するか（既存の launcher digest との関係）は設計セグメントで確定する。この場合も実行に用いる実体は隔離 clone 配下へ配置し、隔離 clone 外の実体を直接実行する解は採らない。
+- 信頼実行環境の具体的な調達手段（隔離 clone 内でのビルド範囲の限定、導入済み配布パッケージからの実体複製、事前ビルド済み成果物の配置のいずれか、またはその組み合わせ）は設計セグメントで確定する。ただし手段の選択肢は AC-10 と AC-13 の制約下にあり、どの手段を選んでも、実行される CLI・レビュア起動スクリプト・adapter の実体は隔離 clone 配下に存在しなければならない。
+- 調達「元」が隔離 clone 外の配布パッケージである場合に、要件7 が記録を求める調達元識別子と実体 digest を証跡のどのキーへどの表現で格納するか（既存の launcher digest との併記形式）は設計セグメントで確定する。由来・完全性の検証を行うこと自体と、記録すべき値の種類は要件7 と AC-13 が確定済みであり、設計セグメントへ委ねない。この場合も実行に用いる実体は隔離 clone 配下へ配置し、隔離 clone 外の実体を直接実行する解は採らない。
 - launcher digest の算出対象に含める配布集合要素の具体的な列挙は、要件6 が定める上限（配布集合の要素のみ）の内側で設計セグメントが確定する。
 
 ## スコープ外
