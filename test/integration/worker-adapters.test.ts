@@ -59,6 +59,26 @@ function runWorkerLauncher(worktreePath: string, args: string[], env: NodeJS.Pro
   return runWorkerLauncherFrom(worktreePath, worktreePath, args, env);
 }
 
+/** job control有効な呼び出し元でworker-launch.shをsourceし、Perl setsidのEPERM条件を再現する。 */
+function runWorkerLauncherWithMonitor(worktreePath: string, args: string[], env: NodeJS.ProcessEnv): ScriptResult {
+  const script = path.join(worktreePath, '.agent-skill-chain', 'scripts', 'worker-launch.sh');
+  try {
+    const stdout = execFileSync('bash', ['-c', 'set -m; source "$1" "$2" "$3"', '_', script, ...args], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+      env,
+    });
+    return { status: 0, stdout, stderr: '' };
+  } catch (error) {
+    const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    return {
+      status: typeof e.status === 'number' ? e.status : 1,
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+    };
+  }
+}
+
 /** 呼び出すscriptの所在とcwdを分離し、対象worktree外からの絶対パス起動を再現する。 */
 function runWorkerLauncherFrom(scriptRoot: string, cwd: string, args: string[], env: NodeJS.ProcessEnv): ScriptResult {
   const script = path.join(scriptRoot, '.agent-skill-chain', 'scripts', 'worker-launch.sh');
@@ -1320,6 +1340,24 @@ test('worker-launch-verify (ISSUE-448 AC-3): renew.pid不在でもkillを試み�
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('worker-launch-verify (ISSUE-757): sha256sum不在時もshasumでcontract完全性を検証できる', (t) => {
+  const fixture = createVerifyFixture(t);
+  const verifyPath = pathWithoutCommands(t, ['sha256sum']);
+  const env = envWithout([], { PATH: verifyPath });
+  assert.equal(commandExists('sha256sum', env), false, '前提: sha256sumを解決できないPATHであること');
+  assert.equal(commandExists('shasum', env), true, '前提: macOS標準のshasumを利用できること');
+
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    env,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(fixture.dispatchTempDir), false, '検証成功後はdispatch一時領域を削除すること');
+  assert.equal(fs.existsSync(fixture.leasePath), false, '検証成功後はleaseを解放すること');
+});
+
 test('worker-launch-verify (ISSUE-549 AC-1): contract.sha256不在はreport completedでもblocked＋lease解放へ倒す', (t) => {
   const fixture = createVerifyFixture(t, 'absent');
   const result = runWorkerVerifier(
@@ -1360,6 +1398,35 @@ test('worker-launch-verify (ISSUE-642 AC-4): DISPATCH_STARTED_AT欠落は監査�
   assert.match(result.stderr, /DISPATCH_STARTED_ATが欠落またはUTC ISO8601形式ではありません/);
   assert.equal(readWorkerReport(fixture.repo.dir, 'spec').status, 'blocked');
   assert.equal(fs.existsSync(fixture.leasePath), false);
+});
+
+test('worker-launch-verify (ISSUE-757): node不在とDISPATCH_STARTED_AT形式不正を区別する', async (t) => {
+  await t.test('node不在は依存関係エラーを返す', () => {
+    const fixture = createVerifyFixture(t);
+    const env = envWithout([], { PATH: pathWithOneShotNode(t) });
+    const result = runWorkerVerifier(
+      fixture.worktreePath,
+      fixture.worktreePath,
+      ['ISSUE-1', fixture.dispatchTempDir],
+      env,
+    );
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /DISPATCH_STARTED_ATを検証できません（nodeコマンドが見つかりません）/);
+    assert.doesNotMatch(result.stderr, /欠落またはUTC ISO8601形式ではありません/);
+  });
+
+  await t.test('不正な時刻は形式エラーを返す', () => {
+    const fixture = createVerifyFixture(t, 'match', '2026-08-18 00:00:00');
+    const result = runWorkerVerifier(
+      fixture.worktreePath,
+      fixture.worktreePath,
+      ['ISSUE-1', fixture.dispatchTempDir],
+      process.env,
+    );
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /DISPATCH_STARTED_ATが欠落またはUTC ISO8601形式ではありません/);
+    assert.doesNotMatch(result.stderr, /nodeコマンドが見つかりません/);
+  });
 });
 
 test('worker-launch-verify (ISSUE-661 AC-6): DISPATCH_TOKEN欠落は監査証跡不備としてblockedへ倒す', (t) => {
@@ -2704,4 +2771,528 @@ test('shellスクリプト全体: $var の直後に非ASCII文字を置かない
   for (const root of roots) walk(path.join(packageRoot(), root));
 
   assert.deepEqual(offenders, [], `\$var の直後は ${'${var}'} と明示区切りにすること:\n${offenders.join('\n')}`);
+});
+
+// Issue #757: Agent tool dispatch の renew デーモン起動が setsid(1) を必須にしていたため、
+// util-linux 由来の setsid を持たない macOS では dispatch 経路が一切使えなかった。
+// 以下は「setsid あり（Linux 相当）」「setsid なし（macOS 相当）」の双方で起動できること、
+// および setsid 不在時もセッション分離という本来の目的が保たれることを検証する。
+
+/** 与えたenvのPATH上でコマンドを解決できるかを、実際のPATH探索と同じ手段で判定する。 */
+function commandExists(command: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  try {
+    execFileSync('bash', ['-c', 'command -v "$1" >/dev/null 2>&1', '_', command], { env, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** perl が setsid(2) を呼べるか（POSIX モジュールが利用可能か）を判定する。 */
+function perlCanSetsid(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!commandExists('perl', env)) return false;
+  try {
+    execFileSync('perl', ['-MPOSIX', '-e', 'exit(defined(&POSIX::setsid) ? 0 : 1)'], { env, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 指定コマンドだけを解決不能にしたPATH文字列を作る（macOSのsetsid非搭載をLinux上で再現する）。
+ * 当該コマンドを含むPATHディレクトリだけをシンボリックリンクの複製へ差し替え、他のディレクトリは
+ * そのまま残すため、テスト対象以外のコマンド解決と探索順序は変わらない。
+ */
+function pathWithoutCommands(t: { after(fn: () => void): void }, commands: string[]): string {
+  const mirrorRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-path-mirror-'));
+  t.after(() => fs.rmSync(mirrorRoot, { recursive: true, force: true }));
+  let index = 0;
+  return (process.env.PATH ?? '')
+    .split(path.delimiter)
+    .filter((dir) => dir.length > 0)
+    .map((dir) => {
+      let entries: string[];
+      try {
+        entries = fs.readdirSync(dir);
+      } catch {
+        return dir;
+      }
+      if (!commands.some((command) => entries.includes(command))) return dir;
+      const mirror = path.join(mirrorRoot, String(index++));
+      fs.mkdirSync(mirror);
+      for (const entry of entries) {
+        if (commands.includes(entry)) continue;
+        try {
+          fs.symlinkSync(path.join(dir, entry), path.join(mirror, entry));
+        } catch {
+          // 同名衝突・読み取り不能エントリはPATH解決上も無視されるため、そのまま落とす。
+        }
+      }
+      return mirror;
+    })
+    .join(path.delimiter);
+}
+
+/** GNUの-dを拒否し、%Nを展開しないBSD date相当のstubをPATH先頭へ置く。 */
+function pathWithBsdDateStub(t: { after(fn: () => void): void }, basePath: string): string {
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-bsd-date-stub-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(stubDir, 'date'),
+    [
+      '#!/usr/bin/env bash',
+      'for arg in "$@"; do',
+      '  [[ "$arg" == "-d" ]] && exit 64',
+      '  if [[ "$arg" == *"%N"* || "$arg" == *"%3N"* ]]; then',
+      "    printf '%s\\n' '2026-08-18T00:00:00.%3NZ'",
+      '    exit 0',
+      '  fi',
+      'done',
+      'exec /bin/date "$@"',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  return `${stubDir}${path.delimiter}${basePath}`;
+}
+
+/** 最初のCLI実行だけ実Nodeへ渡し、その後はnode不在となるPATHを作る。 */
+function pathWithOneShotNode(t: { after(fn: () => void): void }): string {
+  const basePath = pathWithoutCommands(t, ['node']);
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-one-shot-node-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  const stub = path.join(stubDir, 'node');
+  fs.writeFileSync(
+    stub,
+    `#!/usr/bin/env bash\nrm -f -- "$0"\nexec ${JSON.stringify(process.execPath)} "$@"\n`,
+    { mode: 0o755 },
+  );
+  return `${stubDir}${path.delimiter}${basePath}`;
+}
+
+/** 能力probeだけ成功し、実際のsetsid launcher起動は失敗するPerl stubを置く。 */
+function pathWithFailingPerlLauncher(t: { after(fn: () => void): void }): string {
+  const basePath = pathWithoutCommands(t, ['setsid', 'perl']);
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-failing-perl-'));
+  t.after(() => fs.rmSync(stubDir, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(stubDir, 'perl'),
+    [
+      '#!/usr/bin/env bash',
+      'for arg in "$@"; do',
+      "  [[ \"$arg\" == *'defined(&POSIX::setsid)'* ]] && exit 0",
+      'done',
+      'exit 70',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  return `${stubDir}${path.delimiter}${basePath}`;
+}
+
+/** プロセスのセッションIDを返す。`ps -o sid=` 非対応環境では null（判定不能）を返す。 */
+function sessionIdOf(pid: number): number | null {
+  try {
+    const value = Number(execFileSync('ps', ['-p', String(pid), '-o', 'sid='], { encoding: 'utf8' }).trim());
+    return Number.isInteger(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** claude.sh を直接sourceし、解決されたセッション分離launcherを観測する。 */
+function runSessionDetachResolver(env: NodeJS.ProcessEnv): ScriptResult {
+  const adapterPath = path.join(packageRoot(), '.agent-skill-chain', 'adapters', 'claude.sh');
+  const script = [
+    'set -uo pipefail',
+    'source "$1"',
+    'if _resolve_session_detach_launcher; then',
+    '  printf "MODE=%s\\n" "$_ASC_SESSION_DETACH_MODE"',
+    '  printf "CMD=%s\\n" "${_ASC_SESSION_DETACH_CMD[*]}"',
+    'else',
+    '  printf "MODE=unresolved\\n"',
+    '  exit 9',
+    'fi',
+  ].join('\n');
+  try {
+    const stdout = execFileSync('bash', ['-c', script, '_', adapterPath], { encoding: 'utf8', env });
+    return { status: 0, stdout, stderr: '' };
+  } catch (error) {
+    const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    return {
+      status: typeof e.status === 'number' ? e.status : 1,
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+    };
+  }
+}
+
+/** dispatch起動で作られたrenewデーモンを確実に停止し、一時ディレクトリを片付ける。 */
+function cleanupDispatchDaemon(t: { after(fn: () => void): void }, dispatchTempDir: string): void {
+  t.after(() => {
+    const pidFile = path.join(dispatchTempDir, 'renew.pid');
+    if (fs.existsSync(pidFile)) {
+      const pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      if (Number.isInteger(pid) && pid > 0) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // 既に終了している場合は何もしない。
+        }
+      }
+    }
+    fs.rmSync(dispatchTempDir, { recursive: true, force: true });
+  });
+}
+
+/** renewデーモンのPIDを読み、コマンドラインに当該dispatch一時ディレクトリを持つことを確認する。 */
+function readRunningRenewPid(dispatchTempDir: string): number {
+  const pidFile = path.join(dispatchTempDir, 'renew.pid');
+  assert.equal(fs.existsSync(pidFile), true, 'renew.pidを書き出していること');
+  const pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+  assert.ok(Number.isInteger(pid) && pid > 0, `renew.pidが正のPIDであること: ${pid}`);
+  const args = execFileSync('ps', ['-p', String(pid), '-o', 'args='], { encoding: 'utf8' });
+  assert.ok(
+    args.includes(dispatchTempDir),
+    `renewデーモンが生存し、コマンドラインにdispatch一時ディレクトリを持つこと: ${args}`,
+  );
+  return pid;
+}
+
+/** setsid相当のセッション分離が成立するまで短時間ポーリングする（exec完了待ち）。 */
+function waitForOwnSession(pid: number): boolean {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (sessionIdOf(pid) === pid) return true;
+    execFileSync('bash', ['-c', 'sleep 0.1']);
+  }
+  return false;
+}
+
+/** シグナル送信後に対象PIDが終了するまで短時間ポーリングする。 */
+function waitForProcessExit(pid: number): boolean {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return true;
+    }
+    execFileSync('bash', ['-c', 'sleep 0.1']);
+  }
+  return false;
+}
+
+const SESSION_ID_OBSERVABLE = sessionIdOf(process.pid) !== null;
+
+test('セッション分離launcher (ISSUE-757): setsid→perl→nohupの順で解決し、いずれも無い場合だけ失敗する', (t) => {
+  if (commandExists('setsid')) {
+    const withSetsid = runSessionDetachResolver(envWithout([]));
+    assert.equal(withSetsid.status, 0, withSetsid.stderr);
+    assert.match(withSetsid.stdout, /^MODE=setsid$/m, 'setsidがある環境では従来どおりsetsidを使うこと');
+    assert.match(withSetsid.stdout, /^CMD=setsid$/m);
+  }
+
+  const noSetsidEnv = envWithout([], { PATH: pathWithoutCommands(t, ['setsid']) });
+  assert.equal(commandExists('setsid', noSetsidEnv), false, '前提: setsidを解決できないPATHであること');
+  if (perlCanSetsid(noSetsidEnv)) {
+    const withPerl = runSessionDetachResolver(noSetsidEnv);
+    assert.equal(withPerl.status, 0, withPerl.stderr);
+    assert.match(withPerl.stdout, /^MODE=perl$/m, 'setsid不在時はsetsid(2)を直接呼べるperlへ委ねること');
+    assert.match(withPerl.stdout, /POSIX::setsid\(\)/, 'perl経路が実際にsetsid(2)を呼ぶこと');
+  }
+
+  const noPerlEnv = envWithout([], { PATH: pathWithoutCommands(t, ['setsid', 'perl']) });
+  assert.equal(commandExists('perl', noPerlEnv), false, '前提: perlを解決できないPATHであること');
+  if (commandExists('nohup', noPerlEnv)) {
+    const withNohup = runSessionDetachResolver(noPerlEnv);
+    assert.equal(withNohup.status, 0, withNohup.stderr);
+    assert.match(withNohup.stdout, /^MODE=nohup$/m, '最後の手段としてnohupへ退避すること');
+  }
+
+  const noneEnv = envWithout([], { PATH: pathWithoutCommands(t, ['setsid', 'perl', 'nohup']) });
+  const unresolved = runSessionDetachResolver(noneEnv);
+  assert.equal(unresolved.status, 9, unresolved.stderr);
+  assert.match(unresolved.stdout, /^MODE=unresolved$/m);
+});
+
+test('Agent tool dispatch (ISSUE-757): setsidがある環境ではrenewデーモンが新しいセッションで動く', (t) => {
+  if (!commandExists('setsid') || !SESSION_ID_OBSERVABLE) return;
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, result.stderr);
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+
+  const pid = readRunningRenewPid(dispatchTempDir);
+  assert.equal(waitForOwnSession(pid), true, 'renewデーモンが自身をセッションリーダーとする新セッションで動くこと');
+});
+
+test('Agent tool dispatch (ISSUE-757): setsid不在環境でも起動でき、renewデーモンのセッション分離を維持する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['setsid', 'sha256sum']);
+  const probeEnv = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('setsid', probeEnv), false, '前提: setsidを解決できないPATHであること');
+  assert.equal(commandExists('sha256sum', probeEnv), false, '前提: sha256sumを解決できないPATHであること');
+  assert.equal(commandExists('shasum', probeEnv), true, '前提: macOS標準のshasumを利用できること');
+  if (!perlCanSetsid(probeEnv)) return;
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, `setsid不在でもdispatchを起動できること: ${result.stderr}`);
+  assert.match(result.stdout, /^AGENT_TOOL_DISPATCH_REQUIRED$/m);
+  assert.doesNotMatch(result.stderr, /setsid/, 'setsid不在を起動不能として扱わないこと');
+
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+  assert.equal(fs.existsSync(path.join(dispatchTempDir, 'contract.md')), true, 'contractを配置していること');
+  const expectedSha = /^CONTRACT_SHA256=([0-9a-f]{64})$/m.exec(result.stdout)?.[1];
+  assert.equal(
+    expectedSha,
+    createHash('sha256').update(fs.readFileSync(path.join(dispatchTempDir, 'contract.md'))).digest('hex'),
+    'shasum経路でもsha256sum経路と同じ16進digestを返すこと',
+  );
+
+  const pid = readRunningRenewPid(dispatchTempDir);
+  if (SESSION_ID_OBSERVABLE) {
+    assert.equal(
+      waitForOwnSession(pid),
+      true,
+      'setsid不在でもrenewデーモンを新セッションへ分離し、親セッション終了の道連れを防ぐこと',
+    );
+  }
+});
+
+test('Agent tool dispatch (ISSUE-757): set -m環境でもPerl経路のrenewデーモンをセッション分離する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['setsid']);
+  const probeEnv = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('setsid', probeEnv), false, '前提: setsidを解決できないPATHであること');
+  if (!perlCanSetsid(probeEnv) || !SESSION_ID_OBSERVABLE) return;
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncherWithMonitor(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, `set -m環境でもdispatchを起動できること: ${result.stderr}`);
+
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+  const pid = readRunningRenewPid(dispatchTempDir);
+  assert.equal(waitForOwnSession(pid), true, 'Perl経路のrenewデーモンが自身をセッションリーダーとすること');
+});
+
+test('Agent tool dispatch (ISSUE-757): BSD date環境でも監査時刻を生成しdispatchからverifyまで完走する', (t) => {
+  const portablePath = pathWithoutCommands(t, ['setsid', 'sha256sum']);
+  const dispatchPath = pathWithBsdDateStub(t, portablePath);
+  const env = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('setsid', env), false, '前提: setsidを解決できないPATHであること');
+  assert.equal(commandExists('sha256sum', env), false, '前提: sha256sumを解決できないPATHであること');
+  assert.equal(commandExists('shasum', env), true, '前提: macOS標準のshasumを利用できること');
+  assert.throws(
+    () => execFileSync('date', ['-u', '-d', '2026-08-18T00:00:00Z', '+%s'], { env, stdio: 'pipe' }),
+    '前提: BSD date相当のstubはGNU固有の-dを拒否すること',
+  );
+  assert.match(
+    execFileSync('date', ['-u', '+%Y-%m-%dT%H:%M:%S.%3NZ'], { env, encoding: 'utf8' }),
+    /%3N/,
+    '前提: BSD date相当のstubは%Nを展開しないこと',
+  );
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const dispatchEnv = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], dispatchEnv);
+  assert.equal(result.status, 4, `BSD date環境でもdispatchを起動できること: ${result.stderr}`);
+
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+  const audit = fs.readFileSync(path.join(dispatchTempDir, 'contract.sha256'), 'utf8');
+  const dispatchToken = /^DISPATCH_TOKEN=(.+)$/m.exec(audit)?.[1];
+  assert.match(audit, /^DISPATCH_STARTED_AT=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m);
+  assert.doesNotMatch(audit, /%3N/, '監査時刻へBSD dateの未展開書式を混入させないこと');
+  assert.ok(dispatchToken);
+
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const report = runCli(
+    [
+      'report',
+      'status',
+      'ISSUE-1',
+      'spec_worker',
+      'spec',
+      'completed',
+      head,
+      '',
+      '',
+      dispatchToken,
+      'true',
+      'BSD date互換経路の検証のみで成果物変更は不要',
+    ],
+    { cwd: worktreePath, env: dispatchEnv },
+  );
+  assert.equal(report.status, 0, report.stderr);
+
+  const verified = runWorkerVerifier(
+    worktreePath,
+    worktreePath,
+    ['ISSUE-1', dispatchTempDir],
+    dispatchEnv,
+  );
+  assert.equal(verified.status, 0, `BSD date環境でもverifyまで完走できること: ${verified.stderr}`);
+  assert.equal(fs.existsSync(dispatchTempDir), false, 'verify成功後はdispatch一時領域を削除すること');
+});
+
+test('Agent tool dispatch (ISSUE-757): nohup経路のrenewデーモンはSIGHUPを無視し、TERMでは停止する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['setsid', 'perl']);
+  const probeEnv = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('setsid', probeEnv), false, '前提: setsidを解決できないPATHであること');
+  assert.equal(commandExists('perl', probeEnv), false, '前提: perlを解決できないPATHであること');
+  if (!commandExists('nohup', probeEnv)) return;
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, `nohup退避でもdispatchを起動できること: ${result.stderr}`);
+  assert.match(result.stderr, /nohupでrenewデーモンを起動します/, '分離が不完全であることを明示すること');
+
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+  const pid = readRunningRenewPid(dispatchTempDir);
+
+  process.kill(pid, 'SIGHUP');
+  execFileSync('bash', ['-c', 'sleep 0.2']);
+  assert.doesNotThrow(() => process.kill(pid, 0), 'nohup経路ではSIGHUP受信後もrenewデーモンが生存すること');
+
+  process.kill(pid, 'SIGTERM');
+  assert.equal(waitForProcessExit(pid), true, 'TERMでは既存どおり子sleepを後始末して終了すること');
+});
+
+test('Agent tool dispatch (ISSUE-757): SHA-256算出手段が無い場合は一時領域とleaseを後始末する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['sha256sum', 'shasum']);
+  const probeEnv = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('sha256sum', probeEnv), false, '前提: sha256sumを解決できないPATHであること');
+  assert.equal(commandExists('shasum', probeEnv), false, '前提: shasumを解決できないPATHであること');
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const dispatchTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-757-hash-failure-'));
+  t.after(() => fs.rmSync(dispatchTmpRoot, { recursive: true, force: true }));
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    TMPDIR: dispatchTmpRoot,
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /contractのSHA-256を算出できませんでした/);
+  assert.deepEqual(fs.readdirSync(dispatchTmpRoot), [], '作成済みのdispatch一時領域を削除すること');
+
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(reacquire.status, 0, `ハッシュ算出失敗時はleaseを解放すること: ${reacquire.stderr}`);
+  const release = runCli(['lease', 'release', 'ISSUE-1'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(release.status, 0, release.stderr);
+});
+
+test('Agent tool dispatch (ISSUE-757): 分離launcherの実起動失敗はrenew.pidを残さずleaseを解放する', (t) => {
+  const dispatchPath = pathWithFailingPerlLauncher(t);
+  const probeEnv = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('setsid', probeEnv), false, '前提: setsidを解決できないPATHであること');
+  assert.equal(perlCanSetsid(probeEnv), true, '前提: Perl能力probeは成功すること');
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const dispatchTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-757-detach-failure-'));
+  t.after(() => fs.rmSync(dispatchTmpRoot, { recursive: true, force: true }));
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    TMPDIR: dispatchTmpRoot,
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /renewデーモンを安全に起動できませんでした/);
+  assert.deepEqual(fs.readdirSync(dispatchTmpRoot), [], 'renew.pidを含むdispatch一時領域を残さないこと');
+
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(reacquire.status, 0, `分離launcher起動失敗時はleaseを解放すること: ${reacquire.stderr}`);
+  const release = runCli(['lease', 'release', 'ISSUE-1'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(release.status, 0, release.stderr);
+});
+
+test('Agent tool dispatch (ISSUE-757): 分離手段が一切無い環境では起動せずleaseを解放する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['setsid', 'perl', 'nohup']);
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /setsid・perl・nohupのいずれか/);
+
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(reacquire.status, 0, `起動しなかった場合はleaseを解放すること: ${reacquire.stderr}`);
 });
