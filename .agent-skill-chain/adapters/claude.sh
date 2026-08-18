@@ -706,7 +706,7 @@ launch_gate_reviewer() {
 # Agent tool dispatch中にwriter leaseを更新する独立デーモン。第2引数の一時ディレクトリは
 # 起動コマンドラインへそのまま残り、verify側がPID再利用を検知する識別子になる。
 _dispatch_lease_renew_daemon() {
-  local issue_id="$1" dispatch_temp_dir="$2" renew_interval="$3" max_wait="$4"
+  local issue_id="$1" dispatch_temp_dir="$2" renew_interval="$3" max_wait="$4" detach_mode="${5:-}"
   local started=$SECONDS elapsed remaining wait_sec wait_pid=""
 
   # /dev/nullへのreadはEOFで即時復帰するため待機には使えない。sleepを明示的な子として保持し、
@@ -718,6 +718,11 @@ _dispatch_lease_renew_daemon() {
     fi
     exit 0
   ' TERM INT HUP
+  # Issue #757: nohupから継承したSIGHUP無視を上の共通cleanup trapで上書きしない。
+  # TERM・INTは引き続き子sleepを止めて終了し、setsid・perl経路のHUP動作も維持する。
+  if [[ "$detach_mode" == "nohup" ]]; then
+    trap '' HUP
+  fi
 
   while (( SECONDS - started < max_wait )); do
     elapsed=$((SECONDS - started))
@@ -794,6 +799,24 @@ _resolve_session_detach_launcher() {
   fi
 
   return 1
+}
+
+# Issue #757: macOS標準環境にはsha256sumが無いため、標準搭載のshasumへ退避する。
+# どちらの出力形式も先頭フィールドだけを取り出し、検証済みの小文字64桁digestへ正規化する。
+_dispatch_contract_sha256() {
+  local contract_file="$1" output="" digest=""
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    output="$(sha256sum "$contract_file")" || return 1
+  elif command -v shasum >/dev/null 2>&1; then
+    output="$(shasum -a 256 "$contract_file")" || return 1
+  else
+    return 1
+  fi
+
+  digest="${output%%[[:space:]]*}"
+  [[ "$digest" =~ ^[0-9a-fA-F]{64}$ ]] || return 1
+  printf '%s\n' "$digest" | tr '[:upper:]' '[:lower:]'
 }
 
 # 今回のworker起動サイクルに属する完了報告だけを検証する。
@@ -979,7 +1002,12 @@ _dispatch_via_agent_tool() {
   contract_file="$dispatch_temp_dir/contract.md"
   printf '%s' "$contract" >"$contract_file"
   chmod 600 "$contract_file"
-  contract_sha="$(sha256sum "$contract_file" | awk '{print $1}')"
+  if ! contract_sha="$(_dispatch_contract_sha256 "$contract_file")"; then
+    echo "launch_worker: contractのSHA-256を算出できませんでした（sha256sumまたはshasumが必要です）" >&2
+    rm -rf -- "$dispatch_temp_dir"
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
   contract_lines="$(wc -l <"$contract_file" | tr -d '[:space:]')"
   printf 'CONTRACT_SHA256=%s\nCONTRACT_LINES=%s\nDISPATCH_STARTED_AT=%s\nDISPATCH_TOKEN=%s\nSTARTED_SHA=%s\n' \
     "$contract_sha" "$contract_lines" "$dispatch_started_at" "$dispatch_token" "$started_sha" \
@@ -987,8 +1015,9 @@ _dispatch_via_agent_tool() {
   chmod 600 "$dispatch_temp_dir/contract.sha256"
 
   "${_ASC_SESSION_DETACH_CMD[@]}" bash -c \
-    'source "$1"; _dispatch_lease_renew_daemon "$2" "$3" "$4" "$5"' \
+    'source "$1"; _dispatch_lease_renew_daemon "$2" "$3" "$4" "$5" "$6"' \
     _ "$ADAPTER_DIR/claude.sh" "$issue_id" "$dispatch_temp_dir" "$renew_interval" "$max_wait" \
+    "$_ASC_SESSION_DETACH_MODE" \
     </dev/null >/dev/null 2>&1 &
   local renew_pid=$!
   printf '%s\n' "$renew_pid" >"$dispatch_temp_dir/renew.pid"

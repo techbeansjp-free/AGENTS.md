@@ -1320,6 +1320,24 @@ test('worker-launch-verify (ISSUE-448 AC-3): renew.pid不在でもkillを試み�
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('worker-launch-verify (ISSUE-757): sha256sum不在時もshasumでcontract完全性を検証できる', (t) => {
+  const fixture = createVerifyFixture(t);
+  const verifyPath = pathWithoutCommands(t, ['sha256sum']);
+  const env = envWithout([], { PATH: verifyPath });
+  assert.equal(commandExists('sha256sum', env), false, '前提: sha256sumを解決できないPATHであること');
+  assert.equal(commandExists('shasum', env), true, '前提: macOS標準のshasumを利用できること');
+
+  const result = runWorkerVerifier(
+    fixture.worktreePath,
+    fixture.worktreePath,
+    ['ISSUE-1', fixture.dispatchTempDir],
+    env,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(fixture.dispatchTempDir), false, '検証成功後はdispatch一時領域を削除すること');
+  assert.equal(fs.existsSync(fixture.leasePath), false, '検証成功後はleaseを解放すること');
+});
+
 test('worker-launch-verify (ISSUE-549 AC-1): contract.sha256不在はreport completedでもblocked＋lease解放へ倒す', (t) => {
   const fixture = createVerifyFixture(t, 'absent');
   const result = runWorkerVerifier(
@@ -2845,6 +2863,19 @@ function waitForOwnSession(pid: number): boolean {
   return false;
 }
 
+/** シグナル送信後に対象PIDが終了するまで短時間ポーリングする。 */
+function waitForProcessExit(pid: number): boolean {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return true;
+    }
+    execFileSync('bash', ['-c', 'sleep 0.1']);
+  }
+  return false;
+}
+
 const SESSION_ID_OBSERVABLE = sessionIdOf(process.pid) !== null;
 
 test('セッション分離launcher (ISSUE-757): setsid→perl→nohupの順で解決し、いずれも無い場合だけ失敗する', (t) => {
@@ -2901,9 +2932,11 @@ test('Agent tool dispatch (ISSUE-757): setsidがある環境ではrenewデーモ
 });
 
 test('Agent tool dispatch (ISSUE-757): setsid不在環境でも起動でき、renewデーモンのセッション分離を維持する', (t) => {
-  const dispatchPath = pathWithoutCommands(t, ['setsid']);
+  const dispatchPath = pathWithoutCommands(t, ['setsid', 'sha256sum']);
   const probeEnv = envWithout([], { PATH: dispatchPath });
   assert.equal(commandExists('setsid', probeEnv), false, '前提: setsidを解決できないPATHであること');
+  assert.equal(commandExists('sha256sum', probeEnv), false, '前提: sha256sumを解決できないPATHであること');
+  assert.equal(commandExists('shasum', probeEnv), true, '前提: macOS標準のshasumを利用できること');
   if (!perlCanSetsid(probeEnv)) return;
 
   const { repo, worktreePath } = setupWorkerIssue();
@@ -2926,6 +2959,12 @@ test('Agent tool dispatch (ISSUE-757): setsid不在環境でも起動でき、re
   assert.ok(dispatchTempDir);
   cleanupDispatchDaemon(t, dispatchTempDir);
   assert.equal(fs.existsSync(path.join(dispatchTempDir, 'contract.md')), true, 'contractを配置していること');
+  const expectedSha = /^CONTRACT_SHA256=([0-9a-f]{64})$/m.exec(result.stdout)?.[1];
+  assert.equal(
+    expectedSha,
+    createHash('sha256').update(fs.readFileSync(path.join(dispatchTempDir, 'contract.md'))).digest('hex'),
+    'shasum経路でもsha256sum経路と同じ16進digestを返すこと',
+  );
 
   const pid = readRunningRenewPid(dispatchTempDir);
   if (SESSION_ID_OBSERVABLE) {
@@ -2937,7 +2976,7 @@ test('Agent tool dispatch (ISSUE-757): setsid不在環境でも起動でき、re
   }
 });
 
-test('Agent tool dispatch (ISSUE-757): setsidもperlも無い環境ではnohupへ退避し、分離が不完全であることを警告する', (t) => {
+test('Agent tool dispatch (ISSUE-757): nohup経路のrenewデーモンはSIGHUPを無視し、TERMでは停止する', (t) => {
   const dispatchPath = pathWithoutCommands(t, ['setsid', 'perl']);
   const probeEnv = envWithout([], { PATH: dispatchPath });
   assert.equal(commandExists('setsid', probeEnv), false, '前提: setsidを解決できないPATHであること');
@@ -2962,7 +3001,45 @@ test('Agent tool dispatch (ISSUE-757): setsidもperlも無い環境ではnohup�
   const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
   assert.ok(dispatchTempDir);
   cleanupDispatchDaemon(t, dispatchTempDir);
-  readRunningRenewPid(dispatchTempDir);
+  const pid = readRunningRenewPid(dispatchTempDir);
+
+  process.kill(pid, 'SIGHUP');
+  execFileSync('bash', ['-c', 'sleep 0.2']);
+  assert.doesNotThrow(() => process.kill(pid, 0), 'nohup経路ではSIGHUP受信後もrenewデーモンが生存すること');
+
+  process.kill(pid, 'SIGTERM');
+  assert.equal(waitForProcessExit(pid), true, 'TERMでは既存どおり子sleepを後始末して終了すること');
+});
+
+test('Agent tool dispatch (ISSUE-757): SHA-256算出手段が無い場合は一時領域とleaseを後始末する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['sha256sum', 'shasum']);
+  const probeEnv = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('sha256sum', probeEnv), false, '前提: sha256sumを解決できないPATHであること');
+  assert.equal(commandExists('shasum', probeEnv), false, '前提: shasumを解決できないPATHであること');
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const dispatchTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-757-hash-failure-'));
+  t.after(() => fs.rmSync(dispatchTmpRoot, { recursive: true, force: true }));
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    TMPDIR: dispatchTmpRoot,
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /contractのSHA-256を算出できませんでした/);
+  assert.deepEqual(fs.readdirSync(dispatchTmpRoot), [], '作成済みのdispatch一時領域を削除すること');
+
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(reacquire.status, 0, `ハッシュ算出失敗時はleaseを解放すること: ${reacquire.stderr}`);
+  const release = runCli(['lease', 'release', 'ISSUE-1'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(release.status, 0, release.stderr);
 });
 
 test('Agent tool dispatch (ISSUE-757): 分離手段が一切無い環境では起動せずleaseを解放する', (t) => {

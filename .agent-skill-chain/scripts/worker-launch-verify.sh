@@ -35,6 +35,23 @@ _cli() {
   "${ASC_CLI[@]}" "$@"
 }
 
+# Issue #757: dispatch時と同じ優先順位・出力契約でcontractのSHA-256を再計算する。
+_contract_sha256() {
+  local contract_file="$1" output="" digest=""
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    output="$(sha256sum "$contract_file")" || return 1
+  elif command -v shasum >/dev/null 2>&1; then
+    output="$(shasum -a 256 "$contract_file")" || return 1
+  else
+    return 1
+  fi
+
+  digest="${output%%[[:space:]]*}"
+  [[ "$digest" =~ ^[0-9a-fA-F]{64}$ ]] || return 1
+  printf '%s\n' "$digest" | tr '[:upper:]' '[:lower:]'
+}
+
 ISSUE_ID="${1:-}"
 DISPATCH_TEMP_DIR="${2:-}"
 
@@ -163,17 +180,22 @@ else
   DISPATCH_STARTED_AT="$(sed -n 's/^DISPATCH_STARTED_AT=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   DISPATCH_TOKEN="$(sed -n 's/^DISPATCH_TOKEN=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
   STARTED_SHA="$(sed -n 's/^STARTED_SHA=//p' "$DISPATCH_TEMP_DIR/contract.sha256" | head -n1)"
-  ACTUAL_SHA="$(sha256sum "$CONTRACT_FILE" | awk '{print $1}')"
-  ACTUAL_LINES="$(wc -l <"$CONTRACT_FILE" | tr -d '[:space:]')"
-  if [[ -z "$EXPECTED_SHA" || -z "$EXPECTED_LINES" || "$ACTUAL_SHA" != "$EXPECTED_SHA" || "$ACTUAL_LINES" != "$EXPECTED_LINES" ]]; then
-    INTEGRITY_ERROR="contract.mdのSHA256または行数がdispatch時の監査証跡と一致しません"
-  elif [[ ! "$DISPATCH_STARTED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{3})?Z$ ]] ||
-    ! date -u -d "$DISPATCH_STARTED_AT" +%s >/dev/null 2>&1; then
-    INTEGRITY_ERROR="contract.sha256のDISPATCH_STARTED_ATが欠落またはUTC ISO8601形式ではありません"
-  elif [[ -z "$DISPATCH_TOKEN" ]]; then
-    INTEGRITY_ERROR="contract.sha256のDISPATCH_TOKENが欠落しています"
-  elif [[ ! "$STARTED_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
-    INTEGRITY_ERROR="contract.sha256のSTARTED_SHAが欠落または40桁16進数形式ではありません"
+  if ! ACTUAL_SHA="$(_contract_sha256 "$CONTRACT_FILE")"; then
+    INTEGRITY_ERROR="contract.mdのSHA-256を算出できませんでした（sha256sumまたはshasumが必要です）"
+  else
+    ACTUAL_LINES="$(wc -l <"$CONTRACT_FILE" | tr -d '[:space:]')"
+  fi
+  if [[ -z "$INTEGRITY_ERROR" ]]; then
+    if [[ -z "$EXPECTED_SHA" || -z "$EXPECTED_LINES" || "$ACTUAL_SHA" != "$EXPECTED_SHA" || "$ACTUAL_LINES" != "$EXPECTED_LINES" ]]; then
+      INTEGRITY_ERROR="contract.mdのSHA256または行数がdispatch時の監査証跡と一致しません"
+    elif [[ ! "$DISPATCH_STARTED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{3})?Z$ ]] ||
+      ! date -u -d "$DISPATCH_STARTED_AT" +%s >/dev/null 2>&1; then
+      INTEGRITY_ERROR="contract.sha256のDISPATCH_STARTED_ATが欠落またはUTC ISO8601形式ではありません"
+    elif [[ -z "$DISPATCH_TOKEN" ]]; then
+      INTEGRITY_ERROR="contract.sha256のDISPATCH_TOKENが欠落しています"
+    elif [[ ! "$STARTED_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+      INTEGRITY_ERROR="contract.sha256のSTARTED_SHAが欠落または40桁16進数形式ではありません"
+    fi
   fi
 fi
 
