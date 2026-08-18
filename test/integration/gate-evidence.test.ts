@@ -49,7 +49,7 @@ function injectBlobBatch(repoDir: string, start: number, count: number): void {
   assert.equal(imported.status, 0, imported.stderr);
 }
 
-test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Check Runへ結線する', (t) => {
+test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡を検証してsuccess Check Runへ結線する（Issue #703 AC-8）', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-evidence-'));
   const stub = createGhStub(stubDir);

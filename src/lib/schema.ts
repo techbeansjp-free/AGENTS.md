@@ -44,6 +44,18 @@ export interface ValidationOutcome {
 
 export function validateAgainstSchema(name: SchemaName, data: unknown, root?: string): ValidationOutcome {
   const validator = getValidator(name, root);
+  return validationOutcome(validator, data);
+}
+
+/** コミットのツリー等、作業コピー以外から取得したスキーマで入力を検証する。 */
+export function validateAgainstSchemaDocument(
+  schema: Record<string, unknown>,
+  data: unknown,
+): ValidationOutcome {
+  return validationOutcome(ajv.compile(schema), data);
+}
+
+function validationOutcome(validator: ValidateFunction, data: unknown): ValidationOutcome {
   const valid = validator(data) as boolean;
   if (valid) return { valid: true, errors: [] };
   const errors = (validator.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? ''}`.trim());
