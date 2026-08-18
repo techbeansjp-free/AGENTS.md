@@ -207,6 +207,25 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   for (const submittedReview of completedAttempt) {
     assert.equal(parseReviewEvidence((submittedReview as { body: string }).body)?.prompt_digest, promptDigest);
   }
+  const legacyState = stub.readState();
+  legacyState.pullReviews = (legacyState.pullReviews ?? []).map((submittedReview) => {
+    const reviewRecord = submittedReview as { body: string } & Record<string, unknown>;
+    const legacyEvidence = parseReviewEvidence(reviewRecord.body);
+    assert.ok(legacyEvidence);
+    legacyEvidence.verdict.blockers = [{
+      severity: 'warning',
+      origin: 'specification',
+      code: 'legacy-v3-finding',
+      evidence: ['反例'],
+    }];
+    return { ...reviewRecord, body: renderReviewEvidence(legacyEvidence) };
+  });
+  stub.writeState(legacyState);
+  for (const legacyReview of stub.readState().pullReviews ?? []) {
+    const legacyEvidence = parseReviewEvidence((legacyReview as { body: string }).body);
+    assert.equal(legacyEvidence?.attempt_id, attemptId);
+    assert.deepEqual(legacyEvidence?.verdict.blockers[0].evidence, ['反例']);
+  }
 
   const secondAttemptId = 'attempt-integration-2';
   const secondRoundPrompt = runCli(

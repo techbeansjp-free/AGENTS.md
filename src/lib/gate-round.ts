@@ -43,7 +43,7 @@ export interface GateRoundRecord {
 }
 
 export type GateRoundContext =
-  | { status: 'available'; round: number; history: GateRoundRecord[] }
+  | { status: 'available'; round: number; history: GateRoundRecord[]; diagnostics?: string[] }
   | { status: 'unavailable'; reason: string };
 
 function parseGhList<T>(stdout: string): T[] {
@@ -88,13 +88,20 @@ export function deriveGateRoundContext(options: {
     return { status: 'unavailable', reason: 'trusted recorder actor が登録されていません' };
   }
   const trustedActors = new Set(options.trustedActors);
+  const diagnostics: string[] = [];
   const candidates = options.reviews.flatMap((review) => {
+    if (!review.body.includes('<!-- agent-skill-chain:gate-review-evidence -->')) return [];
     const validation = validateGithubReviewEvidenceRecord(review, {
       issueId: options.issueId,
       gate: options.gate,
       trustedActors: [...trustedActors],
+      findingValidation: 'historical_v3',
     });
-    if (!validation.valid || validation.value.evidence.attempt_id === options.currentAttemptId) return [];
+    if (!validation.valid) {
+      diagnostics.push(`ラウンド計数から除外: ${validation.reason}`);
+      return [];
+    }
+    if (validation.value.evidence.attempt_id === options.currentAttemptId) return [];
     return [validation.value];
   });
 
@@ -108,7 +115,10 @@ export function deriveGateRoundContext(options: {
   const verifiedAttempts = [...grouped.entries()]
     .flatMap(([attemptId, attempt]) => {
       const validation = validateGithubReviewEvidenceAttempt(attempt);
-      if (!validation.valid) return [];
+      if (!validation.valid) {
+        diagnostics.push(`attempt ${attemptId} をラウンド計数から除外: ${validation.reason}`);
+        return [];
+      }
       return [{
         attemptId,
         firstReviewId: Math.min(...validation.values.map((entry) => entry.reviewId)),
@@ -131,7 +141,10 @@ export function deriveGateRoundContext(options: {
   const history: GateRoundRecord[] = [];
   for (const record of verifiedAttempts) {
     const attempt = grouped.get(record.attemptId) ?? [];
-    if (!options.verifyAttempt(attempt, history)) continue;
+    if (!options.verifyAttempt(attempt, history)) {
+      diagnostics.push(`attempt ${record.attemptId} をラウンド計数から除外: trusted verifierの検証に失敗しました`);
+      continue;
+    }
     history.push({
       round: history.length,
       attempt_id: record.attemptId,
@@ -139,7 +152,12 @@ export function deriveGateRoundContext(options: {
       slots: record.slots,
     });
   }
-  return { status: 'available', round: history.length, history };
+  return {
+    status: 'available',
+    round: history.length,
+    history,
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
+  };
 }
 
 export function fetchGateRoundContext(options: {

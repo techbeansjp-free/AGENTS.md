@@ -144,7 +144,12 @@ test('ラウンド導出: API metadataまたはattempt attestationが不正なre
     trustedActors: ['trusted'],
     verifyAttempt: acceptVerifiedAttempt,
   });
-  assert.deepEqual(context, { status: 'available', round: 0, history: [] });
+  assert.equal(context.status, 'available');
+  if (context.status === 'available') {
+    assert.equal(context.round, 0);
+    assert.equal(context.history.length, 0);
+    assert.match(context.diagnostics?.join('\n') ?? '', /ラウンド計数から除外/);
+  }
 });
 
 test('ラウンド導出: trusted verifierが真正性を確認できない完備attemptを計数しない', () => {
@@ -156,7 +161,30 @@ test('ラウンド導出: trusted verifierが真正性を確認できない完�
     trustedActors: ['trusted'],
     verifyAttempt: () => false,
   });
-  assert.deepEqual(context, { status: 'available', round: 0, history: [] });
+  assert.equal(context.status, 'available');
+  if (context.status === 'available') {
+    assert.equal(context.round, 0);
+    assert.match(context.diagnostics?.join('\n') ?? '', /trusted verifierの検証に失敗/);
+  }
+});
+
+test('ラウンド導出: 現行検査より前に有効だったv3 findingも履歴として計数する', () => {
+  const legacy = evidence({ attempt: 'attempt-legacy-v3', slot: 1 });
+  legacy.verdict.blockers[0].evidence = ['反例'];
+  const context = deriveGateRoundContext({
+    reviews: [review(1, legacy)],
+    issueId: 'ISSUE-729',
+    gate: 'implementation',
+    currentAttemptId: 'attempt-current',
+    trustedActors: ['trusted'],
+    verifyAttempt: acceptVerifiedAttempt,
+  });
+  assert.equal(context.status, 'available');
+  if (context.status === 'available') {
+    assert.equal(context.round, 1);
+    assert.equal(context.history[0].slots[0].findings[0].evidence_summary, '反例');
+    assert.equal(context.diagnostics, undefined);
+  }
 });
 
 test('根拠要約: 防御的に空配列からも空文字を生成しない', () => {

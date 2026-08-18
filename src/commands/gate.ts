@@ -453,6 +453,7 @@ function historicalGateAttemptVerifier(options: {
         ),
         expectedLightReview: first.light_review,
         expectedArtifacts: artifacts,
+        findingValidation: 'historical_v3',
         expectedTrustedBaseSha: first.execution.trusted_base_sha,
         expectedLauncherDigest: localReviewLauncherDigest(options.root, first.execution.trusted_base_sha),
         coreReviewRequired: policy.required,
@@ -2237,6 +2238,10 @@ export function buildReviewerPrompt(
       );
     }
     sections.push('## 過去ラウンドの判定記録');
+    if (roundContext.status === 'available' && roundContext.diagnostics?.length) {
+      sections.push('ラウンド計数時に除外した証跡があります:');
+      sections.push(...roundContext.diagnostics.map((diagnostic) => `- ${diagnostic}`));
+    }
     if (roundContext.status === 'unavailable') {
       sections.push(
         `過去ラウンドの判定記録を耐久記録から取得できなかった（理由: ${roundContext.reason}）。` +

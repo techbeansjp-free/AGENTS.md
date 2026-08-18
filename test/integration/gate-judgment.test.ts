@@ -559,6 +559,18 @@ test('gate reviewer-prompt: 過去記録あり・初回・取得不能を区別�
   assert.match(withHistory, /是正済みと確認できる論点を、新たな根拠なしに再び blocking/);
   assert.match(withHistory, /未修正のまま残る blocking を同一 code で再提出することは、この禁止の対象外/);
 
+  const withDiagnostic = buildReviewerPrompt(
+    repo.dir,
+    '729',
+    'spec',
+    targetSha,
+    undefined,
+    null,
+    { ...history, diagnostics: ['review 10 のevidence形式が不正なためラウンド計数から除外'] },
+  );
+  assert.match(withDiagnostic, /ラウンド計数時に除外した証跡があります/);
+  assert.match(withDiagnostic, /review 10 のevidence形式が不正なためラウンド計数から除外/);
+
   const first = buildReviewerPrompt(
     repo.dir,
     '729',

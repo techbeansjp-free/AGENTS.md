@@ -610,15 +610,16 @@ launch_gate_reviewer() {
   fi
 
   # 判定プロンプト（ルーブリック・出力契約）を組み立てる。
-  local prompt prompt_digest
+  local prompt prompt_digest prompt_hash
   if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}" "${ASC_EVIDENCE_PR_NUMBER:-}" "${ASC_REVIEW_ATTEMPT_ID:-}")"; then
     _fail_safe "判定プロンプトの生成に失敗しました"
     return
   fi
-  if ! prompt_digest="sha256:$(printf '%s' "$prompt" | sha256sum | awk '{print $1}')" || [[ ! "$prompt_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  if ! prompt_hash="$(printf '%s' "$prompt" | _sha256_digest)" || [[ ! "$prompt_hash" =~ ^[0-9a-f]{64}$ ]]; then
     _fail_safe "レビュアへ渡す判定プロンプトのdigest生成に失敗しました"
     return
   fi
+  prompt_digest="sha256:$prompt_hash"
 
   # backendと判定対象成果物のbase_dirを解決する。GitHub modeではreviewerはPR review evidenceだけを
   # 投稿し、CIのprotected-base verifierがgate-reportへ結線する。
@@ -812,15 +813,25 @@ _resolve_session_detach_launcher() {
 }
 
 # Issue #757: macOS標準環境にはsha256sumが無いため、標準搭載のshasumへ退避する。
+# 引数があればファイル、無ければstdinを処理し、promptとcontractで同じ実装を共有する。
 # どちらの出力形式も先頭フィールドだけを取り出し、検証済みの小文字64桁digestへ正規化する。
-_dispatch_contract_sha256() {
-  local contract_file="$1" output="" digest=""
+_sha256_digest() {
+  local input_file="${1:-}" output="" digest=""
 
   if command -v sha256sum >/dev/null 2>&1; then
-    output="$(sha256sum "$contract_file")" || return 1
+    if [[ -n "$input_file" ]]; then
+      output="$(sha256sum "$input_file")" || return 1
+    else
+      output="$(sha256sum)" || return 1
+    fi
   elif command -v shasum >/dev/null 2>&1; then
-    output="$(shasum -a 256 "$contract_file")" || return 1
+    if [[ -n "$input_file" ]]; then
+      output="$(shasum -a 256 "$input_file")" || return 1
+    else
+      output="$(shasum -a 256)" || return 1
+    fi
   else
+    printf '%s\n' 'SHA-256算出に必要なsha256sumまたはshasumが見つかりません' >&2
     return 1
   fi
 
@@ -1046,7 +1057,7 @@ _dispatch_via_agent_tool() {
   contract_file="$dispatch_temp_dir/contract.md"
   printf '%s' "$contract" >"$contract_file"
   chmod 600 "$contract_file"
-  if ! contract_sha="$(_dispatch_contract_sha256 "$contract_file")"; then
+  if ! contract_sha="$(_sha256_digest "$contract_file")"; then
     echo "launch_worker: contractのSHA-256を算出できませんでした（sha256sumまたはshasumが必要です）" >&2
     rm -rf -- "$dispatch_temp_dir"
     release_lease "$issue_id" >/dev/null 2>&1 || true

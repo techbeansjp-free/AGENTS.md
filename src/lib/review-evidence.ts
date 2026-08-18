@@ -147,9 +147,13 @@ function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerific
   };
 }
 
-function isFindingShape(value: unknown): value is EvidenceFinding {
+type FindingValidation = 'current' | 'historical_v3';
+
+function isFindingShape(value: unknown, validation: FindingValidation): value is EvidenceFinding {
   if (!value || typeof value !== 'object') return false;
   const finding = value as Partial<EvidenceFinding>;
+  const legacyEvidence =
+    Array.isArray(finding.evidence) && finding.evidence.every((entry) => typeof entry === 'string');
   const evidence = Array.isArray(finding.evidence) &&
     finding.evidence.every((entry) => typeof entry === 'string' && entry.trim().length > 0)
       ? finding.evidence.join(' / ').trim()
@@ -159,8 +163,10 @@ function isFindingShape(value: unknown): value is EvidenceFinding {
     ['specification', 'design', 'implementation', 'validation'].includes(finding.origin ?? '') &&
     typeof finding.code === 'string' &&
     finding.code.length > 0 &&
-    evidence.length >= FINDING_EVIDENCE_MIN_LENGTH &&
-    (AC_ID_PATTERN.test(evidence) || ARTIFACT_PATH_PATTERN.test(evidence))
+    (validation === 'historical_v3'
+      ? legacyEvidence
+      : evidence.length >= FINDING_EVIDENCE_MIN_LENGTH &&
+        (AC_ID_PATTERN.test(evidence) || ARTIFACT_PATH_PATTERN.test(evidence)))
   );
 }
 
@@ -192,21 +198,25 @@ function isLightReviewShape(value: unknown): value is LightReviewEvidence {
   );
 }
 
-export function isEvidenceVerdict(value: unknown, digestRequired = true): value is EvidenceVerdict {
+export function isEvidenceVerdict(
+  value: unknown,
+  digestRequired = true,
+  findingValidation: FindingValidation = 'current',
+): value is EvidenceVerdict {
   if (!value || typeof value !== 'object') return false;
   const verdict = value as Partial<EvidenceVerdict>;
   return (
     ['pass', 'fail', 'pending'].includes(verdict.conformance ?? '') &&
     ['pass', 'fail', 'pending'].includes(verdict.falsification ?? '') &&
     Array.isArray(verdict.blockers) &&
-    verdict.blockers.every(isFindingShape) &&
+    verdict.blockers.every((finding) => isFindingShape(finding, findingValidation)) &&
     Array.isArray(verdict.approved_artifacts) &&
     verdict.approved_artifacts.every((artifact) => isArtifactShape(artifact, digestRequired)) &&
     typeof verdict.inconclusive === 'boolean'
   );
 }
 
-function isEvidenceShape(value: ReviewEvidence): boolean {
+function isEvidenceShape(value: ReviewEvidence, findingValidation: FindingValidation): boolean {
   return (
     value.schema_version === 'agent-skill-chain/gate-review-evidence/v3' &&
     /^ISSUE-[0-9]+$/.test(value.issue_id) &&
@@ -239,7 +249,7 @@ function isEvidenceShape(value: ReviewEvidence): boolean {
     typeof value.prompt_digest === 'string' &&
     /^sha256:[0-9a-f]{64}$/.test(value.prompt_digest) &&
     (value.light_review === undefined || isLightReviewShape(value.light_review)) &&
-    isEvidenceVerdict(value.verdict)
+    isEvidenceVerdict(value.verdict, true, findingValidation)
   );
 }
 
@@ -264,6 +274,7 @@ export function validateGithubReviewEvidenceRecord(
     issueId: string;
     gate: ReviewEvidence['gate'];
     trustedActors: string[];
+    findingValidation?: FindingValidation;
   },
 ): GithubReviewEvidenceValidation {
   let parsed: unknown;
@@ -272,7 +283,11 @@ export function validateGithubReviewEvidenceRecord(
   } catch {
     return { valid: false, reason: `review ${review.id} のevidence JSONを検証できません` };
   }
-  if (!parsed || typeof parsed !== 'object' || !isEvidenceShape(parsed as ReviewEvidence)) {
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    !isEvidenceShape(parsed as ReviewEvidence, options.findingValidation ?? 'current')
+  ) {
     return { valid: false, reason: `review ${review.id} のevidence形式が不正です` };
   }
   const evidence = parsed as ReviewEvidence;
@@ -367,6 +382,7 @@ export function verifyGithubReviewEvidence(options: {
   codexModel: string;
   codexReasoning: string;
   gateRound?: { round: number; cutoffThreshold: number };
+  findingValidation?: FindingValidation;
 }): EvidenceVerification {
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
@@ -409,6 +425,7 @@ export function verifyGithubReviewEvidence(options: {
     issueId: options.issueId,
     gate: options.gate,
     trustedActors: options.trustedActors,
+    findingValidation: options.findingValidation,
   });
   if (!latestValidation.valid) return fail(latestValidation.reason);
   const latestEvidence = latestValidation.value.evidence;
@@ -429,6 +446,7 @@ export function verifyGithubReviewEvidence(options: {
       issueId: options.issueId,
       gate: options.gate,
       trustedActors: options.trustedActors,
+      findingValidation: options.findingValidation,
     });
     if (!validation.valid) return fail(validation.reason);
     validatedCandidates.push(validation.value);
