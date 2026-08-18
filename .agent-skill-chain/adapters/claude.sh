@@ -755,6 +755,47 @@ _stop_dispatch_lease_renew_daemon() {
   done
 }
 
+# Issue #757: renewデーモンを新しいセッションへ切り離す起動前置詞を解決する。
+# setsid(1)はutil-linux由来でmacOSには存在せず、必須にすると当該環境でdispatch経路が
+# 一切使えなくなる。一方で「親セッション終了時にデーモンが道連れにならない」性質は、
+# 未commitの実装が失われる実害に直結するため捨てられない。そこでsetsid(2)を直接呼べる
+# perl（macOSに標準搭載）を次点に置き、どちらも無い環境ではSIGHUPの到達だけを断つnohupを
+# 最後の手段とする。perl経路はforkせずexecで自プロセスを置換するため、setsid(1)の非fork
+# 経路と同じく $! のPIDと「コマンドラインにdispatch一時ディレクトリが残る」性質
+# （renew.pidの所有判定が依存する）を維持する。
+# 解決結果は _ASC_SESSION_DETACH_CMD（起動前置詞の配列）と _ASC_SESSION_DETACH_MODE
+# （setsid|perl|nohup）へ格納する。いずれも解決できない場合だけ1を返す。
+_ASC_SESSION_DETACH_CMD=()
+_ASC_SESSION_DETACH_MODE=""
+_resolve_session_detach_launcher() {
+  _ASC_SESSION_DETACH_CMD=()
+  _ASC_SESSION_DETACH_MODE=""
+
+  if command -v setsid >/dev/null 2>&1; then
+    _ASC_SESSION_DETACH_CMD=(setsid)
+    _ASC_SESSION_DETACH_MODE=setsid
+    return 0
+  fi
+
+  if command -v perl >/dev/null 2>&1 && perl -MPOSIX -e 'exit(defined(&POSIX::setsid) ? 0 : 1)' >/dev/null 2>&1; then
+    _ASC_SESSION_DETACH_CMD=(
+      perl -MPOSIX -e
+      'my $sid = POSIX::setsid(); die "setsid: $!\n" if !defined($sid) || $sid < 0; exec { $ARGV[0] } @ARGV; die "exec: $!\n";'
+      --
+    )
+    _ASC_SESSION_DETACH_MODE=perl
+    return 0
+  fi
+
+  if command -v nohup >/dev/null 2>&1; then
+    _ASC_SESSION_DETACH_CMD=(nohup)
+    _ASC_SESSION_DETACH_MODE=nohup
+    return 0
+  fi
+
+  return 1
+}
+
 # 今回のworker起動サイクルに属する完了報告だけを検証する。
 # 成功時は無出力で0、不合格時は呼び出し側がblocked_reasonへ使う理由をstdoutへ出して1を返す。
 _verify_worker_completion_report() {
@@ -894,10 +935,13 @@ _dispatch_via_agent_tool() {
     release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
   fi
-  if ! command -v setsid >/dev/null 2>&1; then
-    echo "launch_worker: Agent tool dispatchに必要なsetsidが見つかりません" >&2
+  if ! _resolve_session_detach_launcher; then
+    echo "launch_worker: Agent tool dispatchのrenewデーモンを親セッションから切り離す手段（setsid・perl・nohupのいずれか）が見つかりません" >&2
     release_lease "$issue_id" >/dev/null 2>&1 || true
     return 1
+  fi
+  if [[ "$_ASC_SESSION_DETACH_MODE" == "nohup" ]]; then
+    echo "launch_worker: setsid・perlがないためnohupでrenewデーモンを起動します（SIGHUPは遮断しますが新セッションへの分離は行われません）" >&2
   fi
 
   local temp_base="${TMPDIR:-/tmp}"
@@ -942,7 +986,7 @@ _dispatch_via_agent_tool() {
     >"$dispatch_temp_dir/contract.sha256"
   chmod 600 "$dispatch_temp_dir/contract.sha256"
 
-  setsid bash -c \
+  "${_ASC_SESSION_DETACH_CMD[@]}" bash -c \
     'source "$1"; _dispatch_lease_renew_daemon "$2" "$3" "$4" "$5"' \
     _ "$ADAPTER_DIR/claude.sh" "$issue_id" "$dispatch_temp_dir" "$renew_interval" "$max_wait" \
     </dev/null >/dev/null 2>&1 &

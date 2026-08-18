@@ -2705,3 +2705,283 @@ test('shellスクリプト全体: $var の直後に非ASCII文字を置かない
 
   assert.deepEqual(offenders, [], `\$var の直後は ${'${var}'} と明示区切りにすること:\n${offenders.join('\n')}`);
 });
+
+// Issue #757: Agent tool dispatch の renew デーモン起動が setsid(1) を必須にしていたため、
+// util-linux 由来の setsid を持たない macOS では dispatch 経路が一切使えなかった。
+// 以下は「setsid あり（Linux 相当）」「setsid なし（macOS 相当）」の双方で起動できること、
+// および setsid 不在時もセッション分離という本来の目的が保たれることを検証する。
+
+/** 与えたenvのPATH上でコマンドを解決できるかを、実際のPATH探索と同じ手段で判定する。 */
+function commandExists(command: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  try {
+    execFileSync('bash', ['-c', 'command -v "$1" >/dev/null 2>&1', '_', command], { env, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** perl が setsid(2) を呼べるか（POSIX モジュールが利用可能か）を判定する。 */
+function perlCanSetsid(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!commandExists('perl', env)) return false;
+  try {
+    execFileSync('perl', ['-MPOSIX', '-e', 'exit(defined(&POSIX::setsid) ? 0 : 1)'], { env, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 指定コマンドだけを解決不能にしたPATH文字列を作る（macOSのsetsid非搭載をLinux上で再現する）。
+ * 当該コマンドを含むPATHディレクトリだけをシンボリックリンクの複製へ差し替え、他のディレクトリは
+ * そのまま残すため、テスト対象以外のコマンド解決と探索順序は変わらない。
+ */
+function pathWithoutCommands(t: { after(fn: () => void): void }, commands: string[]): string {
+  const mirrorRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-path-mirror-'));
+  t.after(() => fs.rmSync(mirrorRoot, { recursive: true, force: true }));
+  let index = 0;
+  return (process.env.PATH ?? '')
+    .split(path.delimiter)
+    .filter((dir) => dir.length > 0)
+    .map((dir) => {
+      let entries: string[];
+      try {
+        entries = fs.readdirSync(dir);
+      } catch {
+        return dir;
+      }
+      if (!commands.some((command) => entries.includes(command))) return dir;
+      const mirror = path.join(mirrorRoot, String(index++));
+      fs.mkdirSync(mirror);
+      for (const entry of entries) {
+        if (commands.includes(entry)) continue;
+        try {
+          fs.symlinkSync(path.join(dir, entry), path.join(mirror, entry));
+        } catch {
+          // 同名衝突・読み取り不能エントリはPATH解決上も無視されるため、そのまま落とす。
+        }
+      }
+      return mirror;
+    })
+    .join(path.delimiter);
+}
+
+/** プロセスのセッションIDを返す。`ps -o sid=` 非対応環境では null（判定不能）を返す。 */
+function sessionIdOf(pid: number): number | null {
+  try {
+    const value = Number(execFileSync('ps', ['-p', String(pid), '-o', 'sid='], { encoding: 'utf8' }).trim());
+    return Number.isInteger(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** claude.sh を直接sourceし、解決されたセッション分離launcherを観測する。 */
+function runSessionDetachResolver(env: NodeJS.ProcessEnv): ScriptResult {
+  const adapterPath = path.join(packageRoot(), '.agent-skill-chain', 'adapters', 'claude.sh');
+  const script = [
+    'set -uo pipefail',
+    'source "$1"',
+    'if _resolve_session_detach_launcher; then',
+    '  printf "MODE=%s\\n" "$_ASC_SESSION_DETACH_MODE"',
+    '  printf "CMD=%s\\n" "${_ASC_SESSION_DETACH_CMD[*]}"',
+    'else',
+    '  printf "MODE=unresolved\\n"',
+    '  exit 9',
+    'fi',
+  ].join('\n');
+  try {
+    const stdout = execFileSync('bash', ['-c', script, '_', adapterPath], { encoding: 'utf8', env });
+    return { status: 0, stdout, stderr: '' };
+  } catch (error) {
+    const e = error as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    return {
+      status: typeof e.status === 'number' ? e.status : 1,
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+    };
+  }
+}
+
+/** dispatch起動で作られたrenewデーモンを確実に停止し、一時ディレクトリを片付ける。 */
+function cleanupDispatchDaemon(t: { after(fn: () => void): void }, dispatchTempDir: string): void {
+  t.after(() => {
+    const pidFile = path.join(dispatchTempDir, 'renew.pid');
+    if (fs.existsSync(pidFile)) {
+      const pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      if (Number.isInteger(pid) && pid > 0) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // 既に終了している場合は何もしない。
+        }
+      }
+    }
+    fs.rmSync(dispatchTempDir, { recursive: true, force: true });
+  });
+}
+
+/** renewデーモンのPIDを読み、コマンドラインに当該dispatch一時ディレクトリを持つことを確認する。 */
+function readRunningRenewPid(dispatchTempDir: string): number {
+  const pidFile = path.join(dispatchTempDir, 'renew.pid');
+  assert.equal(fs.existsSync(pidFile), true, 'renew.pidを書き出していること');
+  const pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+  assert.ok(Number.isInteger(pid) && pid > 0, `renew.pidが正のPIDであること: ${pid}`);
+  const args = execFileSync('ps', ['-p', String(pid), '-o', 'args='], { encoding: 'utf8' });
+  assert.ok(
+    args.includes(dispatchTempDir),
+    `renewデーモンが生存し、コマンドラインにdispatch一時ディレクトリを持つこと: ${args}`,
+  );
+  return pid;
+}
+
+/** setsid相当のセッション分離が成立するまで短時間ポーリングする（exec完了待ち）。 */
+function waitForOwnSession(pid: number): boolean {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (sessionIdOf(pid) === pid) return true;
+    execFileSync('bash', ['-c', 'sleep 0.1']);
+  }
+  return false;
+}
+
+const SESSION_ID_OBSERVABLE = sessionIdOf(process.pid) !== null;
+
+test('セッション分離launcher (ISSUE-757): setsid→perl→nohupの順で解決し、いずれも無い場合だけ失敗する', (t) => {
+  if (commandExists('setsid')) {
+    const withSetsid = runSessionDetachResolver(envWithout([]));
+    assert.equal(withSetsid.status, 0, withSetsid.stderr);
+    assert.match(withSetsid.stdout, /^MODE=setsid$/m, 'setsidがある環境では従来どおりsetsidを使うこと');
+    assert.match(withSetsid.stdout, /^CMD=setsid$/m);
+  }
+
+  const noSetsidEnv = envWithout([], { PATH: pathWithoutCommands(t, ['setsid']) });
+  assert.equal(commandExists('setsid', noSetsidEnv), false, '前提: setsidを解決できないPATHであること');
+  if (perlCanSetsid(noSetsidEnv)) {
+    const withPerl = runSessionDetachResolver(noSetsidEnv);
+    assert.equal(withPerl.status, 0, withPerl.stderr);
+    assert.match(withPerl.stdout, /^MODE=perl$/m, 'setsid不在時はsetsid(2)を直接呼べるperlへ委ねること');
+    assert.match(withPerl.stdout, /POSIX::setsid\(\)/, 'perl経路が実際にsetsid(2)を呼ぶこと');
+  }
+
+  const noPerlEnv = envWithout([], { PATH: pathWithoutCommands(t, ['setsid', 'perl']) });
+  assert.equal(commandExists('perl', noPerlEnv), false, '前提: perlを解決できないPATHであること');
+  if (commandExists('nohup', noPerlEnv)) {
+    const withNohup = runSessionDetachResolver(noPerlEnv);
+    assert.equal(withNohup.status, 0, withNohup.stderr);
+    assert.match(withNohup.stdout, /^MODE=nohup$/m, '最後の手段としてnohupへ退避すること');
+  }
+
+  const noneEnv = envWithout([], { PATH: pathWithoutCommands(t, ['setsid', 'perl', 'nohup']) });
+  const unresolved = runSessionDetachResolver(noneEnv);
+  assert.equal(unresolved.status, 9, unresolved.stderr);
+  assert.match(unresolved.stdout, /^MODE=unresolved$/m);
+});
+
+test('Agent tool dispatch (ISSUE-757): setsidがある環境ではrenewデーモンが新しいセッションで動く', (t) => {
+  if (!commandExists('setsid') || !SESSION_ID_OBSERVABLE) return;
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, result.stderr);
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+
+  const pid = readRunningRenewPid(dispatchTempDir);
+  assert.equal(waitForOwnSession(pid), true, 'renewデーモンが自身をセッションリーダーとする新セッションで動くこと');
+});
+
+test('Agent tool dispatch (ISSUE-757): setsid不在環境でも起動でき、renewデーモンのセッション分離を維持する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['setsid']);
+  const probeEnv = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('setsid', probeEnv), false, '前提: setsidを解決できないPATHであること');
+  if (!perlCanSetsid(probeEnv)) return;
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, `setsid不在でもdispatchを起動できること: ${result.stderr}`);
+  assert.match(result.stdout, /^AGENT_TOOL_DISPATCH_REQUIRED$/m);
+  assert.doesNotMatch(result.stderr, /setsid/, 'setsid不在を起動不能として扱わないこと');
+
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+  assert.equal(fs.existsSync(path.join(dispatchTempDir, 'contract.md')), true, 'contractを配置していること');
+
+  const pid = readRunningRenewPid(dispatchTempDir);
+  if (SESSION_ID_OBSERVABLE) {
+    assert.equal(
+      waitForOwnSession(pid),
+      true,
+      'setsid不在でもrenewデーモンを新セッションへ分離し、親セッション終了の道連れを防ぐこと',
+    );
+  }
+});
+
+test('Agent tool dispatch (ISSUE-757): setsidもperlも無い環境ではnohupへ退避し、分離が不完全であることを警告する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['setsid', 'perl']);
+  const probeEnv = envWithout([], { PATH: dispatchPath });
+  assert.equal(commandExists('setsid', probeEnv), false, '前提: setsidを解決できないPATHであること');
+  assert.equal(commandExists('perl', probeEnv), false, '前提: perlを解決できないPATHであること');
+  if (!commandExists('nohup', probeEnv)) return;
+
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 4, `nohup退避でもdispatchを起動できること: ${result.stderr}`);
+  assert.match(result.stderr, /nohupでrenewデーモンを起動します/, '分離が不完全であることを明示すること');
+
+  const dispatchTempDir = /^DISPATCH_TEMP_DIR=(.+)$/m.exec(result.stdout)?.[1];
+  assert.ok(dispatchTempDir);
+  cleanupDispatchDaemon(t, dispatchTempDir);
+  readRunningRenewPid(dispatchTempDir);
+});
+
+test('Agent tool dispatch (ISSUE-757): 分離手段が一切無い環境では起動せずleaseを解放する', (t) => {
+  const dispatchPath = pathWithoutCommands(t, ['setsid', 'perl', 'nohup']);
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+  setWorkerAdapter(repo.dir, 'claude');
+  setWorkerAgentToolDispatch(repo.dir, true);
+
+  const env = envWithout(['CLAUDECODE'], {
+    ASC_ORCHESTRATOR_SESSION_OVERRIDE: 'claude_code_cli',
+    ASC_DISPATCH_MAX_WAIT_SEC: '60',
+    WORKER_RENEW_INTERVAL_SEC: '30',
+    PATH: dispatchPath,
+  });
+  const result = runWorkerLauncher(worktreePath, ['ISSUE-1', 'spec'], env);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /setsid・perl・nohupのいずれか/);
+
+  const reacquire = runCli(['lease', 'acquire', 'ISSUE-1', 'spec'], { cwd: worktreePath, env: envWithout([]) });
+  assert.equal(reacquire.status, 0, `起動しなかった場合はleaseを解放すること: ${reacquire.stderr}`);
+});
