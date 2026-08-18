@@ -41,7 +41,9 @@ import {
   latestGateAttemptId,
   renderGateRoundHistory,
   resolveGateRoundLimit,
+  validateGateRoundLimit,
   type GateRoundContext,
+  type GateRoundLimit,
   type GateRoundRecord,
 } from '../lib/gate-round.js';
 import {
@@ -416,6 +418,16 @@ function historicalGateAttemptVerifier(options: {
         round: priorHistory.length,
         history: priorHistory,
       };
+      const historicalConfig = git(
+        ['show', `${first.target_sha}:.agent-skill-chain/config/agent-skill-chain.yaml`],
+        options.root,
+      );
+      if (historicalConfig.status !== 0) return false;
+      const parsedHistoricalConfig = parseYaml(historicalConfig.stdout) as {
+        review?: { round_limit?: GateRoundLimit };
+      };
+      const historicalRoundLimit = resolveGateRoundLimit(parsedHistoricalConfig.review?.round_limit);
+      if (validateGateRoundLimit(historicalRoundLimit)) return false;
       const result = verifyGithubReviewEvidence({
         reviews: attempt.map(({ api }) => api),
         issueId: options.issueId,
@@ -436,6 +448,7 @@ function historicalGateAttemptVerifier(options: {
             first.execution.trusted_base_sha,
             (first.light_review as LightReviewEvidence | undefined) ?? null,
             roundContext,
+            historicalRoundLimit,
           ),
         ),
         expectedLightReview: first.light_review,
@@ -2148,6 +2161,7 @@ export function buildReviewerPrompt(
   baseSha?: string,
   lightReviewOverride?: LightReviewDecision | null,
   roundContextOverride?: GateRoundContext,
+  roundLimitOverride?: GateRoundLimit,
 ): string {
     const readArtifact = (name: string): string | undefined => {
       const shown = git(['show', `${targetSha}:${name}`], root);
@@ -2191,7 +2205,7 @@ export function buildReviewerPrompt(
         '1 件でも欠落・未証跡なら conformance=fail とし、欠落を生んだセグメントを origin に持つ blocking finding を付与する。',
     );
     const config = loadConfig(root);
-    const roundLimit = resolveGateRoundLimit(config.review.round_limit);
+    const roundLimit = roundLimitOverride ?? resolveGateRoundLimit(config.review.round_limit);
     const roundContext = roundContextOverride ?? {
       status: 'unavailable' as const,
       reason: 'ラウンド情報が判定プロンプト生成へ渡されていません',

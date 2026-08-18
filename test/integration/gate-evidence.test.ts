@@ -217,6 +217,22 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
     'same_as_writer',
   ]);
 
+  const configPath = path.join(repo.dir, '.agent-skill-chain', 'config', 'agent-skill-chain.yaml');
+  const originalConfig = fs.readFileSync(configPath, 'utf8');
+  const changedConfig = originalConfig.replace(
+    'round_limit: {narrowing_threshold: 2, cutoff_threshold: 4}',
+    'round_limit: {narrowing_threshold: 1, cutoff_threshold: 3}',
+  );
+  assert.notEqual(changedConfig, originalConfig);
+  fs.writeFileSync(configPath, changedConfig);
+  const nextRoundPrompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-271', 'spec', targetSha, baseSha, '274', 'attempt-integration-2'],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(nextRoundPrompt.status, 0, nextRoundPrompt.stderr);
+  assert.match(nextRoundPrompt.stdout, /現在のラウンド番号: 1/);
+  fs.writeFileSync(configPath, originalConfig);
+
   const published = runCli(['gate', 'publish', 'ISSUE-271', reportPath], { cwd: repo.dir, env });
   assert.equal(published.status, 0, published.stderr);
   assert.equal((stub.readState() as unknown as { checkRuns: { conclusion: string }[] }).checkRuns[0].conclusion, 'success');
