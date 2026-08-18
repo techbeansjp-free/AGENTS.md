@@ -394,7 +394,7 @@ function approvedArtifactsForPrompt(
   promptInput: ReviewerPromptInput,
 ): { path: string; digest: string }[] {
   const paths = gateId === 'implementation'
-    ? expectedArtifactPaths(root, gateId, baseSha, targetSha)
+    ? expectedArtifactPaths(root, gateId, baseSha, targetSha, true)
     : promptInput.targetArtifacts.map((artifact) => artifact.path);
   return artifactsAtSha(
     root,

@@ -338,6 +338,100 @@ test('GitHub evidence: Review API由来のStrict 2件を検証してsuccess Chec
   assert.match(missingRequired.stderr, /必須成果物を読めません: SPEC\.md/);
 });
 
+test('GitHub evidence: implementation対象成果物が空集合でも投稿とgate-report生成を完了する', (t) => {
+  const repo = createTmpRepo({ backend: 'github' });
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-empty-implementation-evidence-'));
+  const stub = createGhStub(stubDir);
+  const env = stub.env(process.env);
+  const tokenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-local-review.'));
+  fs.chmodSync(tokenDir, 0o700);
+  const tokenPath = path.join(tokenDir, 'launcher-token.json');
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+    fs.rmSync(tokenDir, { recursive: true, force: true });
+  });
+
+  const baseSha = git(repo.dir, ['rev-parse', 'HEAD']);
+  git(repo.dir, ['checkout', '-b', 'bugfix/733-empty-implementation-evidence']);
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: implementation evidence\n');
+  git(repo.dir, ['add', 'SPEC.md']);
+  git(repo.dir, ['commit', '-m', 'test: add non-implementation target']);
+  const targetSha = git(repo.dir, ['rev-parse', 'HEAD']);
+  git(repo.dir, ['checkout', 'main']);
+
+  const state = stub.readState();
+  state.pullMetadata = {
+    number: 742,
+    state: 'open',
+    user: { login: 'adachi-tatsuru' },
+    head: { sha: targetSha, ref: 'bugfix/733-empty-implementation-evidence' },
+    base: { sha: baseSha, ref: 'main' },
+  };
+  state.pullCommits = [{
+    author: { login: 'adachi-tatsuru' },
+    committer: { login: 'adachi-tatsuru' },
+  }];
+  state.apiActor = 'adachi-tatsuru';
+  stub.writeState(state);
+
+  const attemptId = 'attempt-empty-implementation-evidence';
+  const reviewerRunId = 'review-empty-implementation-evidence';
+  fs.writeFileSync(tokenPath, `${JSON.stringify({
+    schema_version: 'agent-skill-chain/launcher-token/v1',
+    attempt_id: attemptId,
+    expected_count: 1,
+    profile: 'standard',
+    target_sha: targetSha,
+    base_sha: baseSha,
+    pr_number: '742',
+    nonce: 'a'.repeat(48),
+    slots: [{ slot: 1, run_id: reviewerRunId }],
+    consumed_slots: [],
+  })}\n`, { mode: 0o600 });
+
+  const verdict = {
+    conformance: 'pass',
+    falsification: 'pass',
+    blockers: [],
+    approved_artifacts: [],
+    inconclusive: false,
+  };
+  const submitted = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, baseSha, '742',
+      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+    ],
+    {
+      cwd: repo.dir,
+      env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify(verdict),
+    },
+  );
+  assert.equal(submitted.status, 0, submitted.stderr);
+  const submittedReview = stub.readState().pullReviews?.[0] as { body: string } | undefined;
+  assert.ok(submittedReview);
+  const submittedEvidence = parseReviewEvidence(submittedReview.body);
+  assert.ok(submittedEvidence);
+  assert.deepEqual(submittedEvidence.verdict.approved_artifacts, []);
+
+  const reportPath = path.join(repo.dir, 'verified-empty-implementation.yaml');
+  const verified = runCli(
+    [
+      'gate', 'verify-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, '742',
+      reportPath, 'ordinary',
+    ],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(verified.status, 0, verified.stderr);
+  assert.match(verified.stdout, /final: approved/);
+  const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+    gate: { final: string; approved_artifacts: { path: string; digest: string }[] };
+  };
+  assert.equal(report.gate.final, 'approved');
+  assert.deepEqual(report.gate.approved_artifacts, []);
+});
+
 test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁数が異なっても往復に成功する', (t) => {
   const repo = createTmpRepo({ backend: 'github' });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-evidence-clone-roundtrip-'));
