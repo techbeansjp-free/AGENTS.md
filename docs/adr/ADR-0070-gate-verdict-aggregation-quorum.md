@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0070
-status: proposed
+status: accepted
 title: ゲート最終判定の集約母数を、起動されたレビュア体数ではなくプロファイルが要求する体数に置く
 tags: [gate, review, safety]
 supersedes: []
