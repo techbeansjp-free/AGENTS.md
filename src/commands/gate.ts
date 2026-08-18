@@ -380,9 +380,9 @@ function artifactsAtSha(
 }
 
 function artifactDigestAtSha(root: string, artifactPath: string, targetSha: string, allowAbsent = false): string {
-  const shown = git(['show', `${targetSha}:${artifactPath}`], root);
-  if (shown.status === 0) return artifactDigestOf(shown.stdout);
-  if (allowAbsent) return ABSENT_ARTIFACT_DIGEST;
+  const artifact = readArtifactAtSha(root, targetSha, artifactPath);
+  if (artifact.status === 'present') return artifactDigestOf(artifact.content);
+  if (artifact.status === 'absent' && allowAbsent) return ABSENT_ARTIFACT_DIGEST;
   throw new CliError(`target SHAの必須成果物を読めません: ${artifactPath}`);
 }
 
@@ -1083,12 +1083,16 @@ export async function recordVerdict(args: string[]): Promise<number> {
     }));
 
     const hasBlocking = (verdict.blockers ?? []).some((finding) => finding.severity === 'blocking');
+    const derivedFinal = deriveFinal(verdict);
     const lightReviewCutoffReached =
       report.gate.light_review?.applied === true &&
       report.gate.light_review.remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS &&
-      (hasBlocking || conformance === 'fail' || falsification === 'fail');
+      !hasBlocking &&
+      conformance !== 'fail' &&
+      falsification !== 'fail' &&
+      derivedFinal === 'human_required';
     if (lightReviewCutoffReached) verdict.inconclusive = true;
-    const final = lightReviewCutoffReached ? 'human_required' : deriveFinal(verdict);
+    const final = lightReviewCutoffReached ? 'human_required' : derivedFinal;
     report.gate.conformance = conformance;
     report.gate.falsification = falsification;
     report.gate.final = final;

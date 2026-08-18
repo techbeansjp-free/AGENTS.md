@@ -22,7 +22,7 @@ import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { ROOT_ARTIFACT_FILES } from '../lib/root-artifacts.js';
 import { QUICK_EXEMPT_OUTPUTS, quickBlockedNotice, resolveQuickMode } from '../lib/quick-mode.js';
 import { extractSpecAcIds, parseSpecAcDeclarationHeading, type SpecAcDeclaration } from '../lib/spec-ac-ids.js';
-import { REQUIRED_GATE_ARTIFACTS } from '../lib/gate-artifacts.js';
+import { readArtifactAtSha, REQUIRED_GATE_ARTIFACTS } from '../lib/gate-artifacts.js';
 import { resolveGateQuickExemption } from '../lib/gate-quick-exemption.js';
 import { ABSENT_ARTIFACT_DIGEST } from './gate.js';
 
@@ -308,8 +308,10 @@ export async function gateReport(args: string[]): Promise<number> {
       }).exempt;
     }
     for (const artifact of report.gate.approved_artifacts) {
-      const shown = git(['show', `${report.gate.target_sha}:${artifact.path}`], root);
-      if (shown.status !== 0) {
+      const current = readArtifactAtSha(root, report.gate.target_sha, artifact.path);
+      if (current.status === 'unreadable') {
+        errors.push(`approved_artifacts のファイルを読み取れません: ${artifact.path}`);
+      } else if (current.status === 'absent') {
         // trusted gate recorder は implementation の削除対象、または quick 免除により正当に
         // 不在だった必須成果物だけを sentinel digest として記録する。検証側は記録済み sentinel
         // 自体を照合し、後から実在した場合は下の digest 比較で不一致にする。
@@ -322,7 +324,7 @@ export async function gateReport(args: string[]): Promise<number> {
         if (!sentinelExempt) {
           errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
         }
-      } else if (artifactDigestOf(shown.stdout) !== artifact.digest) {
+      } else if (artifactDigestOf(current.content) !== artifact.digest) {
         errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
     }

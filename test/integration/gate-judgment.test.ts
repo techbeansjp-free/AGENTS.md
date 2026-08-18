@@ -262,7 +262,7 @@ test('gate record-verdict: inconclusive でも fail と blocking finding を優�
   assert.equal(report.gate.blockers[0].code, 'INCONCLUSIVE-COUNTEREXAMPLE');
 });
 
-test('gate record-verdict: lightの再レビュー上限でblockingが残ればhuman_requiredへ打ち切る', async (t) => {
+test('gate record-verdict: lightの再レビュー上限でもfailとblockingを優先する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
@@ -283,6 +283,29 @@ test('gate record-verdict: lightの再レビュー上限でblockingが残ればh
     falsification: 'pass',
     blockers: [{ severity: 'blocking', origin: 'specification', code: 'AC-1', evidence: ['未達'] }],
   });
+  const res = runCli(['gate', 'record-verdict', reportPath], { cwd: repo.dir, input: verdict });
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readReport(reportPath).gate.final, 'rejected');
+});
+
+test('gate record-verdict: lightの再レビュー上限で否定判定が無いpendingはhuman_requiredへ打ち切る', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const reportPath = writeReport(
+    repo.dir,
+    scaffold({
+      light_review: {
+        requested: true,
+        applied: true,
+        disabled_reasons: [],
+        remediation_round: 1,
+        strict_locked: false,
+      },
+    }),
+  );
+  const verdict = JSON.stringify({ conformance: 'pending', falsification: 'pass', blockers: [] });
   const res = runCli(['gate', 'record-verdict', reportPath], { cwd: repo.dir, input: verdict });
 
   assert.equal(res.status, 0, res.stderr);

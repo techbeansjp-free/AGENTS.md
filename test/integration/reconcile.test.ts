@@ -26,6 +26,20 @@ function sha256(content: Buffer | string): string {
   return artifactDigestOf(content);
 }
 
+function hideLooseBlob(repoDir: string, targetSha: string, artifactPath: string): void {
+  const blobSha = execFileSync('git', ['rev-parse', `${targetSha}:${artifactPath}`], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  }).trim();
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  }).trim();
+  const objectPath = path.resolve(repoDir, commonDir, 'objects', blobSha.slice(0, 2), blobSha.slice(2));
+  assert.equal(fs.existsSync(objectPath), true);
+  fs.renameSync(objectPath, `${objectPath}.unreadable`);
+}
+
 interface GateReport {
   gate: {
     conformance: string;
@@ -186,6 +200,26 @@ test('gate reconcile: 承認時の不在標識は不在継続なら一致し、�
   const appeared = runCli(['gate', 'reconcile', 'ISSUE-1', checkpoint.stdout.trim()], { cwd: repo.dir });
   assert.equal(appeared.status, 0, appeared.stderr);
   assert.match(appeared.stdout, /invalidated: design/);
+});
+
+test('gate reconcile: target treeに存在する成果物のblob読み取り失敗を不在継続として扱わない', (t) => {
+  const { repo, worktreePath } = setupApprovedSpecAndDesignGates();
+  t.after(() => repo.cleanup());
+  const designReportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'design.yaml');
+  const designReport = parse(fs.readFileSync(designReportPath, 'utf8')) as GateReport;
+  designReport.gate.approved_artifacts.push({ path: 'PLAN.md', digest: ARTIFACT_ABSENT_DIGEST });
+  fs.writeFileSync(designReportPath, stringify(designReport));
+
+  fs.writeFileSync(path.join(worktreePath, 'PLAN.md'), '# PLAN\n\npresent but unreadable\n');
+  const checkpoint = runCli(['checkpoint', 'test: add unreadable artifact'], { cwd: worktreePath });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const targetSha = checkpoint.stdout.trim();
+  hideLooseBlob(repo.dir, targetSha, 'PLAN.md');
+
+  const result = runCli(['gate', 'reconcile', 'ISSUE-1', targetSha], { cwd: repo.dir });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /target SHAの必須成果物を読めません: PLAN\.md/);
 });
 
 function makeGhStub() {

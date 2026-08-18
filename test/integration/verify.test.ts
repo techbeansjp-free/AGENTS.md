@@ -29,6 +29,20 @@ function sha256(content: Buffer | string): string {
   return artifactDigestOf(content);
 }
 
+function hideLooseBlob(repoDir: string, targetSha: string, artifactPath: string): void {
+  const blobSha = execFileSync('git', ['rev-parse', `${targetSha}:${artifactPath}`], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  }).trim();
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  }).trim();
+  const objectPath = path.resolve(repoDir, commonDir, 'objects', blobSha.slice(0, 2), blobSha.slice(2));
+  assert.equal(fs.existsSync(objectPath), true);
+  fs.renameSync(objectPath, `${objectPath}.unreadable`);
+}
+
 // ---- verify branch-name ----
 
 test('verify branch-name: 明示引数で pattern 適合・違反を判定できる', async (t) => {
@@ -1038,6 +1052,42 @@ test('verify gate-report (Issue #316 AC-5): ABSENT_ARTIFACT_DIGEST sentinelで�
 
   const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
   assert.equal(result.status, 0, result.stderr);
+});
+
+test('verify gate-report: target treeに存在する成果物のblob読み取り失敗を不在標識で許容しない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add unreadable artifact'], { cwd: worktreePath });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'implementation', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
+  const approvedText = fs
+    .readFileSync(gateReportPath, 'utf8')
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: pass')
+    .replace('final: pending', 'final: approved')
+    .replace(
+      'approved_artifacts: []',
+      `approved_artifacts:\n    - path: SPEC.md\n      digest: ${ABSENT_ARTIFACT_DIGEST}`,
+    );
+  fs.writeFileSync(gateReportPath, approvedText);
+  hideLooseBlob(repo.dir, targetSha, 'SPEC.md');
+
+  const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /approved_artifacts のファイルを読み取れません: SPEC\.md/);
 });
 
 // Issue #316 AC-6: implementation以外のgate（spec/design/validation）では、証跡生成側がそもそも
