@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0071
-status: proposed
+status: accepted
 title: ゲートレビュアの外部資格情報ストア資格情報を標準出力の直接リダイレクトのみで隔離設定ディレクトリへ取り込む
 tags: [adapter, gate-reviewer, credentials, isolation, security]
 supersedes: []
