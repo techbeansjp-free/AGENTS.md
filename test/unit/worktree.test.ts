@@ -10,6 +10,7 @@ import {
   hasUncommittedChanges,
   defaultBranch,
   hasUnpushedCommits,
+  inspectUnpushedCommits,
   findIssueWorktree,
   resolveIssueWorktreeExactlyOne,
   worktreePathRegex,
@@ -217,7 +218,7 @@ test('hasUnpushedCommits: push前はtrue、git push -u origin後はfalseにな�
 // 自動削除される。この状態を実際のgit操作（push→squashマージ→リモートブランチ削除）で再現し、
 // squashマージ済みにもかかわらず旧実装が「未push」と誤判定していたことの回帰を防ぐ。
 
-test('hasUnpushedCommits: squashマージ後にリモートブランチが削除されupstreamがgone状態になっても、内容がdefault branchへ統合済みならfalseになる', (t) => {
+test('hasUnpushedCommits: squashマージ後にリモートブランチが削除されてもPR head以降のcommitが無ければfalseになる', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
@@ -229,6 +230,7 @@ test('hasUnpushedCommits: squashマージ後にリモートブランチが削除
   gitIn(worktreePath, ['add', '-A']);
   gitIn(worktreePath, ['commit', '-m', 'feat: add NEW_FILE.md']);
   gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+  const pushedHead = gitRev(worktreePath);
 
   // 前提: push直後はupstreamが解決可能で、hasUnpushedCommitsはfalse（ahead=0）
   assert.equal(hasUnpushedCommits(worktreePath, branch), false, '前提: push直後はfalse');
@@ -259,9 +261,98 @@ test('hasUnpushedCommits: squashマージ後にリモートブランチが削除
   );
 
   assert.equal(
-    hasUnpushedCommits(worktreePath, branch),
+    hasUnpushedCommits(worktreePath, branch, { sha: pushedHead, source: 'github_pr' }),
     false,
     'squashマージで内容が統合済みならupstream goneでもfalseになること',
+  );
+});
+
+test('hasUnpushedCommits: default branchが別変更で前進した後のsquash mergeもPR headによりfalseになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-squash-after-base-advance';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-squash-after-base-advance`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+
+  fs.writeFileSync(path.join(worktreePath, 'FIRST.md'), '# first\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add FIRST.md']);
+  fs.writeFileSync(path.join(worktreePath, 'SECOND.md'), '# second\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add SECOND.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+  const pushedHead = gitRev(worktreePath);
+
+  fs.writeFileSync(path.join(repo.dir, 'CONCURRENT.md'), '# concurrent\n');
+  gitIn(repo.dir, ['add', '-A']);
+  gitIn(repo.dir, ['commit', '-m', 'chore: advance main']);
+  gitIn(repo.dir, ['merge', '--squash', branch]);
+  gitIn(repo.dir, ['commit', '-m', 'feat: squash feature branch']);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  assert.equal(gitOk(worktreePath, ['merge-base', '--is-ancestor', branch, 'main']), false);
+  assert.notEqual(
+    execFileSync('git', ['rev-parse', `${branch}^{tree}`], { cwd: worktreePath, encoding: 'utf8' }).trim(),
+    execFileSync('git', ['rev-parse', 'main^{tree}'], { cwd: worktreePath, encoding: 'utf8' }).trim(),
+    '前進分により既存のtree一致判定は成立しないこと',
+  );
+  assert.equal(hasUnpushedCommits(worktreePath, branch, { sha: pushedHead, source: 'github_pr' }), false);
+});
+
+test('hasUnpushedCommits: merge commit方式で統合済みなupstream goneブランチはfalseになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-merge-commit';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-merge-commit`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'MERGED.md'), '# merged\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add MERGED.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  gitIn(repo.dir, ['merge', '--no-ff', '-m', 'merge feature branch', branch]);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  assert.equal(gitOk(worktreePath, ['merge-base', '--is-ancestor', branch, 'main']), true);
+  assert.equal(hasUnpushedCommits(worktreePath, branch), false);
+});
+
+test('hasUnpushedCommits: rebase merge方式でSHAが変わった統合済みブランチはfalseになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-rebase-merge';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-rebase-merge`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'FIRST.md'), '# first\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add FIRST.md']);
+  fs.writeFileSync(path.join(worktreePath, 'SECOND.md'), '# second\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add SECOND.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+  const originalCommits = execFileSync('git', ['rev-list', '--reverse', `main..${branch}`], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+  })
+    .trim()
+    .split('\n');
+
+  fs.writeFileSync(path.join(repo.dir, 'CONCURRENT.md'), '# concurrent\n');
+  gitIn(repo.dir, ['add', '-A']);
+  gitIn(repo.dir, ['commit', '-m', 'chore: advance main']);
+  gitIn(repo.dir, ['cherry-pick', ...originalCommits]);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  assert.equal(gitOk(worktreePath, ['merge-base', '--is-ancestor', branch, 'main']), false);
+  assert.equal(
+    hasUnpushedCommits(worktreePath, branch, { sha: originalCommits.at(-1)!, source: 'github_pr' }),
+    false,
   );
 });
 
@@ -295,6 +386,98 @@ test('hasUnpushedCommits: upstreamがgone状態でもdefault branchへ未統合�
     true,
     '未統合の内容が残る場合はupstream goneでも安全側でtrueのままであること',
   );
+});
+
+test('hasUnpushedCommits: squash merge後の空白だけのローカル限定commitも統合済みと誤判定しない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-unpushed-whitespace';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-unpushed-whitespace`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'value with space\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add CONTENT.md']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  gitIn(repo.dir, ['merge', '--squash', branch]);
+  gitIn(repo.dir, ['commit', '-m', 'feat: squash CONTENT.md']);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'value  with space\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'fix: preserve significant whitespace']);
+
+  assert.equal(hasUnpushedCommits(worktreePath, branch), true, '空白差分を含むローカル限定commitは削除から保護すること');
+});
+
+test('hasUnpushedCommits: squash済みpathのローカル限定変更とrevertをPR headとの内容一致で見逃さない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-same-path-revert';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-same-path-revert`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'pushed\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add pushed content']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+  const pushedHead = gitRev(worktreePath);
+
+  gitIn(repo.dir, ['merge', '--squash', branch]);
+  gitIn(repo.dir, ['commit', '-m', 'feat: squash pushed content']);
+  gitIn(repo.dir, ['push', 'origin', 'main']);
+  gitIn(repo.dir, ['push', 'origin', '--delete', branch]);
+
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'local only\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'test: change squashed path locally']);
+  gitIn(worktreePath, ['revert', '--no-edit', 'HEAD']);
+
+  assert.equal(hasUnpushedCommits(worktreePath, branch, { sha: pushedHead, source: 'github_pr' }), true);
+});
+
+test('inspectUnpushedCommits: pathspec magicと同名のファイルを追加したローカル限定commitを未保全として報告する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-literal-pathspec';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-literal-pathspec`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'PUSHED.md'), '# pushed\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'test: establish pushed position']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  fs.writeFileSync(path.join(worktreePath, ':(exclude)*'), '# local only\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'test: add pathspec magic filename']);
+  const localOnlyCommit = gitRev(worktreePath);
+
+  assert.deepEqual(inspectUnpushedCommits(worktreePath, branch), {
+    hasUnpushedCommits: true,
+    reason: 'unpreserved_commits',
+    commitShas: [localOnlyCommit],
+  });
+});
+
+test('hasUnpushedCommits: 実remoteで削除済みの古いremote-tracking refをpush済み根拠にしない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const branch = 'feature/692-stale-remote-ref';
+  const worktreePath = path.join(repo.dir, '.worktrees', `${FIXED_TIMESTAMP}-feature-692-stale-remote-ref`);
+  gitIn(repo.dir, ['worktree', 'add', '-b', branch, worktreePath, 'main']);
+  fs.writeFileSync(path.join(worktreePath, 'CONTENT.md'), 'pushed once\n');
+  gitIn(worktreePath, ['add', '-A']);
+  gitIn(worktreePath, ['commit', '-m', 'feat: add pushed content']);
+  gitIn(worktreePath, ['push', '-u', 'origin', branch]);
+
+  execFileSync('git', ['--git-dir', repo.remoteDir, 'update-ref', '-d', `refs/heads/${branch}`], { stdio: 'pipe' });
+  assert.equal(gitOk(worktreePath, ['rev-parse', '--verify', `refs/remotes/origin/${branch}`]), true);
+  assert.equal(gitOk(worktreePath, ['ls-remote', '--exit-code', 'origin', `refs/heads/${branch}`]), false);
+  assert.equal(hasUnpushedCommits(worktreePath, branch), true);
 });
 
 test('findIssueWorktree: worktree.path_patternに沿ったworktreeをissue番号から見つける', (t) => {
