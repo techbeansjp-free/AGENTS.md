@@ -82,6 +82,24 @@ test('verify artifacts一括: 閉包追加分・開始済み分・双方の欠�
   assert.match(result.stderr, /segment 'implementation'.*code/);
 });
 
+test('verify artifacts一括: 閉包追加分が充足して開始済み分だけ欠落する場合は開始済み分を報告する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const worktree = startIssue(repo);
+  fs.writeFileSync(path.join(worktree, 'SPEC.md'), '# SPEC\n');
+  writeDesignArtifacts(worktree);
+
+  const result = verifyBatch(repo, 'implementation');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /spec（上流閉包により追加・セグメント未開始）/);
+  assert.match(result.stderr, /design（上流閉包により追加・セグメント未開始）/);
+  assert.match(result.stderr, /implementation（開始済み）/);
+  assert.match(result.stderr, /segment 'implementation'.*code/);
+  assert.match(result.stderr, /segment 'implementation'.*unit_test_results/);
+  assert.doesNotMatch(result.stderr, /segment 'spec'.*必須成果物が欠落/);
+  assert.doesNotMatch(result.stderr, /segment 'design'.*必須成果物が欠落/);
+});
+
 test('verify artifacts一括: ISSUE-692再現条件ではquick解除理由と未開始design成果物の欠落を同時に示す', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -97,6 +115,29 @@ test('verify artifacts一括: ISSUE-692再現条件ではquick解除理由と未
   assert.match(result.stderr, /schemas\/ 配下/);
   assert.match(result.stderr, /segment 'design'（上流閉包により追加・セグメント未開始）.*DESIGN\.md/);
   assert.match(result.stderr, /segment 'design'（上流閉包により追加・セグメント未開始）.*PLAN\.md/);
+});
+
+test('verify artifacts一括: quick免除解除後も対象集合が全充足なら解除理由を示して成功する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const worktree = startIssue(repo);
+  patchState(repo, '741', { size: 'quick', risk: 'normal' });
+  fs.writeFileSync(path.join(worktree, 'SPEC.md'), '# SPEC\n');
+  writeDesignArtifacts(worktree);
+  checkpointImplementation(worktree);
+  fs.writeFileSync(path.join(worktree, 'VALIDATION.md'), '# VALIDATION\n');
+  fs.appendFileSync(path.join(worktree, '.agent-skill-chain', 'schemas', 'state.schema.yaml'), '\n# guardrail\n');
+
+  const result = verifyBatch(repo, 'implementation,validation');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /quick 適用対象外/);
+  assert.match(result.stderr, /docs\/adr\/ 配下/);
+  assert.match(result.stderr, /schemas\/ 配下/);
+  assert.match(result.stderr, /spec（上流閉包により追加・セグメント未開始）/);
+  assert.match(result.stderr, /design（上流閉包により追加・セグメント未開始）/);
+  assert.match(result.stderr, /implementation（開始済み）/);
+  assert.match(result.stderr, /validation（開始済み）/);
+  assert.doesNotMatch(result.stderr, /必須成果物が欠落/);
 });
 
 test('verify artifacts一括: quick免除有効時は閉包追加を抑止するが開始済み分の欠落は検査する', (t) => {
