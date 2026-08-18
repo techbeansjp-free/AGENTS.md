@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0072
-status: proposed
+status: accepted
 title: 信頼 clone の実行コードを調達モードで分け、調達実体の期待値の供給元を base SHA の導入マーカーへ限定する
 tags: [gate, trust-boundary, local-review, distribution, provenance]
 supersedes: []
