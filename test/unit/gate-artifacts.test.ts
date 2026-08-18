@@ -36,3 +36,17 @@ test('target treeから存在・不在・blob以外を三値で区別する', (t
   assert.equal(unreadable.status, 'unreadable');
   assert.deepEqual(extractAcIdsFromArtifact(unreadable), { status: 'unreadable', ids: [] });
 });
+
+test('Git pathspec magicを含む成果物パスを別のblobへ誤束縛しない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  fs.writeFileSync(path.join(repo.dir, 'foo'), 'pathspec target\n');
+  fs.writeFileSync(path.join(repo.dir, ':(literal)foo'), 'literal filename\n');
+  const sha = commit(repo.dir);
+
+  assert.deepEqual(readArtifactAtSha(repo.dir, sha, ':(literal)foo'), {
+    status: 'present',
+    path: ':(literal)foo',
+    content: 'literal filename\n',
+  });
+});

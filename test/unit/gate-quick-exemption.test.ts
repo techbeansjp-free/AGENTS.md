@@ -81,6 +81,29 @@ test('base SHA不在とガードレール差分は免除不成立へ倒す', (t)
   assert.equal(invalidDiff.guardrail.status, 'unresolved');
 });
 
+test('ISSUE-733 AC-3: local状態ファイルの欠落・構文不正・非通常ファイルは免除不成立へ倒す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  const statePath = stateFilePath(repo.dir, '1');
+  fs.rmSync(statePath, { force: true });
+  assert.equal(resolveGateQuickExemption({
+    root: repo.dir, issueNumber: '1', backend: 'local', baseSha: targetSha, targetSha,
+  }).exempt, false);
+
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(statePath, '[invalid');
+  assert.equal(resolveGateQuickExemption({
+    root: repo.dir, issueNumber: '1', backend: 'local', baseSha: targetSha, targetSha,
+  }).size.status, 'unresolved');
+
+  fs.rmSync(statePath, { force: true });
+  fs.mkdirSync(statePath);
+  assert.equal(resolveGateQuickExemption({
+    root: repo.dir, issueNumber: '1', backend: 'local', baseSha: targetSha, targetSha,
+  }).risk.status, 'unresolved');
+});
+
 test('ガードレール対象から外へのrenameは旧パスを検査して免除不成立にする', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

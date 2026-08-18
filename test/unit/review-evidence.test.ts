@@ -105,7 +105,28 @@ test('strict: 1件不足またはslot重複はhuman_required', () => {
   assert.equal(verify([review(1, 1)], { profile: 'standard' }).final, 'human_required');
 });
 
-test('ラウンド打ち切り: 閾値到達時のblockingをrejectedより先にhuman_requiredへ移し、未到達・導出不能・blocker無しは既存判定を保つ', () => {
+test('ISSUE-733 AC-24: profile要求数を超えて起動された全slotを集約する', () => {
+  const first = evidence(1, { profile: 'standard', expected_count: 1 });
+  const second = evidence(2, { profile: 'standard', expected_count: 1 });
+  second.verdict.falsification = 'fail';
+  second.verdict.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'OVERLAUNCH-BLOCKING',
+    evidence: ['src/commands/gate.ts の追加slotがblocking findingを返した'],
+  }];
+  const result = verify(
+    [
+      review(1, 1, { body: renderReviewEvidence(first) }),
+      review(2, 2, { body: renderReviewEvidence(second) }),
+    ],
+    { profile: 'standard', coreReviewRequired: false },
+  );
+  assert.equal(result.final, 'rejected');
+  assert.deepEqual(result.reviewers.map((entry) => entry.slot), [1, 2]);
+});
+
+test('ISSUE-733 AC-15: ラウンド打ち切りよりfail・blockingを優先し、未到達・blocker無しも集約判定を保つ', () => {
   const blockingVerdict: ReviewEvidence['verdict'] = {
     conformance: 'pass',
     falsification: 'fail',
@@ -124,11 +145,9 @@ test('ラウンド打ち切り: 閾値到達時のblockingをrejectedより先�
   ];
 
   const cutoff = verify(blockingReviews, { gateRound: { round: 4, cutoffThreshold: 4 } });
-  assert.equal(cutoff.final, 'human_required');
-  assert.equal(cutoff.inconclusive, true);
-  assert.match(cutoff.reason ?? '', /round=4/);
-  assert.match(cutoff.reason ?? '', /cutoff_threshold=4/);
-  assert.match(cutoff.reason ?? '', /unresolved_blocking=2/);
+  assert.equal(cutoff.final, 'rejected');
+  assert.equal(cutoff.inconclusive, false);
+  assert.equal(cutoff.reason, undefined);
 
   assert.equal(
     verify(blockingReviews, { gateRound: { round: 3, cutoffThreshold: 4 } }).inconclusive,

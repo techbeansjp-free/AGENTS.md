@@ -18,6 +18,7 @@ import { extractSpecAcIds } from '../lib/spec-ac-ids.js';
 import {
   artifactSetStatus,
   extractAcIdsFromArtifact,
+  literalGitPathspec,
   readArtifactAtSha,
   readRequiredGateArtifacts,
   REQUIRED_GATE_ARTIFACTS,
@@ -31,6 +32,7 @@ import {
   gateLaunchAbortReason,
   type JudgmentAxis,
 } from '../lib/gate-judgment-rules.js';
+import { aggregateGateAttempt } from '../lib/gate-verdict-aggregation.js';
 import { resolveGateQuickExemption, type GateQuickExemption } from '../lib/gate-quick-exemption.js';
 import {
   LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS,
@@ -129,7 +131,8 @@ pending の gate-report（gate review が生成したスキャフォールド）
 レビュア verdict（JSON。複数レビュア時は配列）を結線して判定済み gate-report を書き出す。final は verdict の
 conformance/falsification/blockers/inconclusive から機械的に導出する（両pass かつ blocking finding
 無し→approved／いずれか fail もしくは blocking finding あり→rejected／inconclusive→human_required）。
-expected_reviewer_count を指定した場合は、独立 verdict の件数が完全一致しなければ書込みを拒否する。
+expected_reviewer_count を指定した場合は、その要求体数を実際の verdict 件数から独立して用いる。
+配列の null は起動済みだが判定未確定の slot を表し、起動不足・判定未確定はいずれも human_required として書き出す。
 
 verdict JSON（stdin）:
   {"conformance":"pass|fail|pending","falsification":"pass|fail|pending",
@@ -280,58 +283,6 @@ interface LauncherToken {
   nonce: string;
   slots: { slot: 1 | 2; run_id: string }[];
   consumed_slots: number[];
-}
-
-/**
- * verdict の各観点（conformance・falsification・blockers・inconclusive）から final を機械的に導出する。
- * I8 安全側: 判定不能（inconclusive・観点が pending 等）は decidedly approve/reject へ倒さず
- * human_required にする。approve は「両 pass かつ blocking finding が 1 件も無い」ときのみ。
- */
-function deriveFinal(verdict: ReviewerVerdict): GateReport['gate']['final'] {
-  const hasBlocking = (verdict.blockers ?? []).some((b) => b.severity === 'blocking');
-  if (verdict.conformance === 'fail' || verdict.falsification === 'fail' || hasBlocking) return 'rejected';
-  if (verdict.inconclusive === true || verdict.final === 'human_required') return 'human_required';
-  if (verdict.conformance === 'pass' && verdict.falsification === 'pass') return 'approved';
-  return 'human_required';
-}
-
-function aggregateSubverdict(
-  verdicts: ReviewerVerdict[],
-  key: 'conformance' | 'falsification',
-): GateReport['gate']['conformance'] {
-  const values = verdicts.map((verdict) => verdict[key] ?? 'pending');
-  if (values.includes('fail')) return 'fail';
-  if (values.every((value) => value === 'pass')) return 'pass';
-  return 'pending';
-}
-
-/**
- * Strict profile の独立 verdict を trusted code で集約する。
- * 1 件でも rejected なら rejected、全件 approved の場合だけ approved、
- * それ以外（判定不能・pending）は human_required とする（I8）。
- */
-function aggregateVerdicts(verdicts: ReviewerVerdict[]): ReviewerVerdict {
-  const finals = verdicts.map(deriveFinal);
-  const final = finals.includes('rejected')
-    ? 'rejected'
-    : finals.every((value) => value === 'approved')
-      ? 'approved'
-      : 'human_required';
-  return {
-    conformance: aggregateSubverdict(verdicts, 'conformance'),
-    falsification: aggregateSubverdict(verdicts, 'falsification'),
-    blockers: verdicts.flatMap((verdict) => verdict.blockers ?? []),
-    approved_artifacts: verdicts.flatMap((verdict) => verdict.approved_artifacts ?? []),
-    approved_digest:
-      verdicts.length > 0 &&
-      verdicts.every(
-        (verdict) => verdict.approved_digest && verdict.approved_digest === verdicts[0].approved_digest,
-      )
-        ? verdicts[0].approved_digest
-        : undefined,
-    final,
-    inconclusive: final === 'human_required',
-  };
 }
 
 const REVIEWER_RENAME_DIFF_OPTIONS = ['--find-renames'] as const;
@@ -1074,26 +1025,49 @@ export async function recordVerdict(args: string[]): Promise<number> {
     const base = validateAgainstSchema('gate-report', report, root);
     if (!base.valid) return fail(`入力 gate-report がスキーマに適合しません: ${base.errors.join('; ')}`);
 
-    let parsedVerdict: ReviewerVerdict | ReviewerVerdict[];
+    let parsedVerdict: ReviewerVerdict | (ReviewerVerdict | null)[];
     try {
-      parsedVerdict = JSON.parse(fs.readFileSync(0, 'utf8')) as ReviewerVerdict | ReviewerVerdict[];
+      parsedVerdict = JSON.parse(fs.readFileSync(0, 'utf8')) as ReviewerVerdict | (ReviewerVerdict | null)[];
     } catch (error) {
       return fail(`verdict JSON を解釈できません: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    const verdicts = Array.isArray(parsedVerdict) ? parsedVerdict : [parsedVerdict];
-    if (verdicts.length === 0) return fail('verdict は1件以上必要です');
-    if (expectedReviewerCount !== undefined && verdicts.length !== expectedReviewerCount) {
-      return fail(
-        `独立 reviewer verdict 件数が不足しています: expected=${expectedReviewerCount}, actual=${verdicts.length}`,
-      );
-    }
     if (expectedReviewerCount !== undefined && !Array.isArray(parsedVerdict)) {
       return fail('expected_reviewer_count 指定時の verdict JSON は独立 verdict の配列である必要があります');
     }
-    const verdict = aggregateVerdicts(verdicts);
-    const conformance = verdict.conformance ?? 'pending';
-    const falsification = verdict.falsification ?? 'pending';
+    const slotEntries = Array.isArray(parsedVerdict) ? parsedVerdict : [parsedVerdict];
+    if (slotEntries.length === 0 && expectedReviewerCount === undefined) {
+      return fail('verdict が空の場合は expected_reviewer_count が必要です');
+    }
+    const resolvedVerdicts = slotEntries.filter((entry): entry is ReviewerVerdict => entry !== null);
+    const verdictBySlot = new Map(slotEntries.map((entry, index) => [
+      index + 1,
+      entry === null
+        ? { status: 'unresolved' as const }
+        : { status: 'resolved' as const, verdict: entry },
+    ]));
+    const aggregation = aggregateGateAttempt<Finding, ReviewerVerdict>({
+      requiredReviewerCount: expectedReviewerCount ?? slotEntries.length,
+      launchedSlots: slotEntries.map((_entry, index) => index + 1),
+      verdictBySlot,
+    });
+    const verdict: ReviewerVerdict = {
+      conformance: aggregation.conformance,
+      falsification: aggregation.falsification,
+      blockers: aggregation.blockers,
+      approved_artifacts: resolvedVerdicts.flatMap((entry) => entry.approved_artifacts ?? []),
+      approved_digest:
+        resolvedVerdicts.length > 0 &&
+        resolvedVerdicts.every(
+          (entry) => entry.approved_digest && entry.approved_digest === resolvedVerdicts[0].approved_digest,
+        )
+          ? resolvedVerdicts[0].approved_digest
+          : undefined,
+      final: aggregation.final,
+      inconclusive: aggregation.inconclusive,
+    };
+    const conformance = aggregation.conformance;
+    const falsification = aggregation.falsification;
     if (!SUBVERDICT_VALUES.has(conformance) || !SUBVERDICT_VALUES.has(falsification)) {
       return fail('verdict の conformance / falsification は pass|fail|pending のいずれかである必要があります');
     }
@@ -1149,7 +1123,7 @@ export async function recordVerdict(args: string[]): Promise<number> {
     }));
 
     const hasBlocking = (verdict.blockers ?? []).some((finding) => finding.severity === 'blocking');
-    const derivedFinal = deriveFinal(verdict);
+    const derivedFinal = aggregation.final;
     const lightReviewCutoffReached =
       report.gate.light_review?.applied === true &&
       report.gate.light_review.remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS &&
@@ -2294,7 +2268,7 @@ function resolveReviewerPromptInput(
       const result = git(
         [
           'diff', '--no-ext-diff', '--no-color', '--full-index', ...REVIEWER_RENAME_DIFF_OPTIONS,
-          `${baseSha}...${targetSha}`, '--', ...new Set(diffPathspec),
+          `${baseSha}...${targetSha}`, '--', ...new Set(diffPathspec.map(literalGitPathspec)),
         ],
         root,
       );
@@ -2490,11 +2464,11 @@ export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): str
   sections.push('## 過去ラウンドの判定記録');
   if (input.roundContext.status === 'available' && input.roundContext.diagnostics?.length) {
     sections.push('ラウンド計数時に除外した証跡があります:');
-    sections.push(...input.roundContext.diagnostics.map((diagnostic) => `- ${diagnostic}`));
+    sections.push(...input.roundContext.diagnostics.map((diagnostic) => `- ${neutralizePromptBoundaries(diagnostic)}`));
   }
   if (input.roundContext.status === 'unavailable') {
     sections.push(
-      `過去ラウンドの判定記録を耐久記録から取得できなかった（理由: ${input.roundContext.reason}）。` +
+      `過去ラウンドの判定記録を耐久記録から取得できなかった（理由: ${neutralizePromptBoundaries(input.roundContext.reason)}）。` +
         'これは過去ラウンドが存在しないことを意味しない。ラウンド番号は導出できていないため、高ラウンドの限定を適用しない。',
     );
   } else if (input.roundContext.history.length === 0 && input.roundContext.diagnostics?.length) {
@@ -2506,7 +2480,7 @@ export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): str
     sections.push('本ラウンドは初回（ラウンド 0）であり、過去ラウンドの判定記録は無い。');
   } else {
     sections.push(`現在のラウンド番号: ${input.roundContext.round}`);
-    sections.push(renderGateRoundHistory(input.roundContext.history));
+    sections.push(neutralizePromptBoundaries(renderGateRoundHistory(input.roundContext.history)));
     sections.push(
       '過去ラウンドで記録済みの finding code のうち、当該ラウンドの成果物で是正済みと確認できる論点を、新たな根拠なしに再び blocking として提出しない。' +
         '未修正のまま残る blocking を同一 code で再提出することは、この禁止の対象外であり許容する。',
@@ -2575,12 +2549,8 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
         : () => false,
     });
     const input = resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, undefined, roundContext);
-    const prompt = buildReviewerPromptFromResolved(input);
     const abortReason = gateLaunchAbortReason(input.requiredArtifacts, input.quick.exempt);
-    if (abortReason) {
-      ok(prompt);
-      throw new CliError(abortReason);
-    }
-    return ok(prompt);
+    if (abortReason) throw new CliError(abortReason);
+    return ok(buildReviewerPromptFromResolved(input));
   });
 }

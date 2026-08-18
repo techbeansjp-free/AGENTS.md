@@ -1,4 +1,5 @@
 import { digestOf } from './digest.js';
+import { aggregateGateAttempt } from './gate-verdict-aggregation.js';
 
 export const REVIEW_EVIDENCE_MARKER = '<!-- agent-skill-chain:gate-review-evidence -->';
 
@@ -313,9 +314,6 @@ export function validateGithubReviewEvidenceRecord(
   if (evidence.expected_count !== expectedCount) {
     return { valid: false, reason: `review ${review.id} のexpected_countがprofileと一致しません` };
   }
-  if (evidence.reviewer.slot > expectedCount) {
-    return { valid: false, reason: `review ${review.id} のslotがprofileと一致しません` };
-  }
   return { valid: true, value: { api: review, evidence, reviewId, actor } };
 }
 
@@ -331,10 +329,10 @@ export function validateGithubReviewEvidenceAttempt(
   const first = candidates[0].evidence;
   const expectedCount = first.profile === 'strict' ? 2 : 1;
   const expectedSlots = expectedCount === 2 ? [1, 2] : [1];
-  if (candidates.length !== expectedCount) {
+  if (candidates.length < expectedCount) {
     return {
       valid: false,
-      reason: `独立review evidence件数が不足または過剰です: expected=${expectedCount}, actual=${candidates.length}`,
+      reason: `独立review evidence件数が不足しています: expected=${expectedCount}, actual=${candidates.length}`,
     };
   }
   if (candidates.some(({ evidence }) =>
@@ -517,51 +515,28 @@ export function verifyGithubReviewEvidence(options: {
     }
   }
 
-  const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
-  const blockers = verdicts.flatMap((verdict) => verdict.blockers);
+  const aggregation = aggregateGateAttempt<EvidenceFinding, EvidenceVerdict>({
+    requiredReviewerCount: expectedCount,
+    launchedSlots: candidates.map((candidate) => candidate.evidence.reviewer.slot),
+    verdictBySlot: new Map(candidates.map((candidate) => [
+      candidate.evidence.reviewer.slot,
+      { status: 'resolved' as const, verdict: candidate.evidence.verdict },
+    ])),
+  });
+  const blockers = aggregation.blockers;
   const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
   const cutoffReached =
     options.gateRound !== undefined &&
     options.gateRound.round >= options.gateRound.cutoffThreshold &&
-    hasBlocking;
-  const rejected = verdicts.some(
-    (verdict) => verdict.conformance === 'fail' || verdict.falsification === 'fail',
-  ) || hasBlocking;
-  const approved = verdicts.every(
-    (verdict) =>
-      verdict.conformance === 'pass' &&
-      verdict.falsification === 'pass' &&
-      verdict.inconclusive === false,
-  ) && !hasBlocking;
-  const trustedInconclusive = cutoffReached;
-  const final = trustedInconclusive
-    ? 'human_required'
-    : rejected
-      ? 'rejected'
-      : approved
-        ? 'approved'
-        : 'human_required';
+    hasBlocking &&
+    aggregation.final === 'human_required';
+  const trustedInconclusive = cutoffReached || aggregation.inconclusive;
+  const final = cutoffReached ? 'human_required' : aggregation.final;
   return {
     final,
-    conformance: rejected
-      ? verdicts.some((verdict) => verdict.conformance === 'fail')
-        ? 'fail'
-        : verdicts.every((verdict) => verdict.conformance === 'pass')
-          ? 'pass'
-          : 'pending'
-      : approved
-        ? 'pass'
-        : 'pending',
-    inconclusive: trustedInconclusive || verdicts.some((verdict) => verdict.inconclusive),
-    falsification: rejected
-      ? verdicts.some((verdict) => verdict.falsification === 'fail')
-        ? 'fail'
-        : verdicts.every((verdict) => verdict.falsification === 'pass')
-          ? 'pass'
-          : 'pending'
-      : approved
-        ? 'pass'
-        : 'pending',
+    conformance: aggregation.conformance,
+    inconclusive: trustedInconclusive,
+    falsification: aggregation.falsification,
     blockers,
     approved_artifacts: options.expectedArtifacts,
     reviewers: candidates.map(({ api, evidence, actor }) => ({

@@ -89,14 +89,14 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
   assert.match(report.gate.approved_artifacts[0].digest, /^sha256:[0-9a-f]{64}$/);
 });
 
-test('claude launch_gate_reviewer: quick免除でVALIDATION.md不在でもレビュアを起動してgate-reportを生成する', (t) => {
+test('claude launch_gate_reviewer (ISSUE-733 AC-12): quick免除下の4ゲートを起動してgate-reportを生成する', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   installCliShim(repo.dir);
   t.after(() => repo.cleanup());
   const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
   const start = runCli([
     'issue', 'start', 'ISSUE-733', 'bugfix', 'quick-validation', FIXED_TIMESTAMP,
-    '--size', 'quick', '--request', 'quick validation requirements',
+    '--size', 'quick', '--request', '## 要求\nquick review requirements\n\n## 受入基準\nreview is completed',
   ], { cwd: repo.dir });
   assert.equal(start.status, 0, start.stderr);
   const [, worktreePath] = start.stdout.trim().split('\n');
@@ -107,9 +107,6 @@ test('claude launch_gate_reviewer: quick免除でVALIDATION.md不在でもレビ
   const checkpoint = runCli(['checkpoint', 'test: quick implementation'], { cwd: worktreePath });
   assert.equal(checkpoint.status, 0, checkpoint.stderr);
   const targetSha = checkpoint.stdout.trim();
-  const review = runCli(['gate', 'review', 'ISSUE-733', 'validation', 'standard'], { cwd: worktreePath });
-  assert.equal(review.status, 0, review.stderr);
-  const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
   const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[]}';
   const env = envWithout([], {
     ANTHROPIC_API_KEY: 'dummy-key-not-logged',
@@ -119,17 +116,81 @@ test('claude launch_gate_reviewer: quick免除でVALIDATION.md不在でもレビ
     ASC_EVIDENCE_BASE_SHA: baseSha,
   });
 
-  const result = runLauncher(repo.dir, ['ISSUE-733', 'validation', 'standard', reportPath, targetSha], env, worktreePath);
-  assert.equal(result.status, 0, result.stderr);
-  const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
-    gate: { final: string; conformance: string; falsification: string; approved_artifacts: { path: string; digest: string }[] };
-  };
-  assert.deepEqual(
-    { final: report.gate.final, conformance: report.gate.conformance, falsification: report.gate.falsification },
-    { final: 'approved', conformance: 'pass', falsification: 'pass' },
-  );
-  assert.equal(report.gate.approved_artifacts[0].path, 'VALIDATION.md');
-  assert.equal(report.gate.approved_artifacts[0].digest, ARTIFACT_ABSENT_DIGEST);
+  const absentByGate = new Map([
+    ['spec', ['SPEC.md']],
+    ['design', ['DESIGN.md', 'PLAN.md']],
+    ['implementation', []],
+    ['validation', ['VALIDATION.md']],
+  ]);
+  for (const gate of ['spec', 'design', 'implementation', 'validation'] as const) {
+    const review = runCli(['gate', 'review', 'ISSUE-733', gate, 'standard'], { cwd: worktreePath });
+    assert.equal(review.status, 0, review.stderr);
+    const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
+    const result = runLauncher(repo.dir, ['ISSUE-733', gate, 'standard', reportPath, targetSha], env, worktreePath);
+    assert.equal(result.status, 0, `${gate}: ${result.stderr}`);
+    const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+      gate: { final: string; conformance: string; falsification: string; approved_artifacts: { path: string; digest: string }[] };
+    };
+    assert.deepEqual(
+      { final: report.gate.final, conformance: report.gate.conformance, falsification: report.gate.falsification },
+      { final: 'approved', conformance: 'pass', falsification: 'pass' },
+      gate,
+    );
+    for (const artifactPath of absentByGate.get(gate) ?? []) {
+      assert.deepEqual(
+        report.gate.approved_artifacts.find((artifact) => artifact.path === artifactPath),
+        { path: artifactPath, digest: ARTIFACT_ABSENT_DIGEST },
+      );
+    }
+  }
+});
+
+test('claude launch_gate_reviewer (ISSUE-733 AC-13/AC-24): 免除不成立の成果物不在は3ゲートで未起動かつhuman_requiredになる', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  installCliShim(repo.dir);
+  setAdapter(repo.dir, 'claude');
+  t.after(() => repo.cleanup());
+  const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+  let issueNumber = 830;
+
+  for (const gate of ['spec', 'design', 'validation'] as const) {
+    const currentIssue = String(issueNumber++);
+    const start = runCli([
+      'issue', 'start', `ISSUE-${currentIssue}`, 'bugfix', `missing-${gate}`, FIXED_TIMESTAMP,
+      '--request', '## 要求\nstandard review requirements',
+    ], { cwd: repo.dir });
+    assert.equal(start.status, 0, start.stderr);
+    const [, worktreePath] = start.stdout.trim().split('\n');
+    const statePath = path.join(repo.dir, 'issues', currentIssue, '.agent-skill-chain', 'state.yaml');
+    const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+    fs.writeFileSync(statePath, stringify({ ...state, size: 'standard', risk: 'normal' }));
+    fs.writeFileSync(path.join(worktreePath, 'code.txt'), 'implemented\n');
+    const checkpoint = runCli(['checkpoint', `test: missing ${gate} artifact`], { cwd: worktreePath });
+    assert.equal(checkpoint.status, 0, checkpoint.stderr);
+    const targetSha = checkpoint.stdout.trim();
+    const review = runCli(['gate', 'review', `ISSUE-${currentIssue}`, gate, 'standard'], { cwd: worktreePath });
+    assert.equal(review.status, 0, review.stderr);
+    const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
+    const reviewerMarker = path.join(repo.dir, `missing-reviewer-started-${currentIssue}`);
+    const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[]}';
+    const env = envWithout([], {
+      ANTHROPIC_API_KEY: 'dummy-key-not-logged',
+      CLAUDE_AUTH_PROBE_CMD: 'true',
+      GATE_REVIEWER_CMD: `touch ${JSON.stringify(reviewerMarker)}; cat >/dev/null; printf '%s' '${verdict}'`,
+      GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+      ASC_EVIDENCE_BASE_SHA: baseSha,
+    });
+
+    const result = runLauncher(
+      repo.dir,
+      [`ISSUE-${currentIssue}`, gate, 'standard', reportPath, targetSha],
+      env,
+      worktreePath,
+    );
+    assert.notEqual(result.status, 0);
+    assert.equal(fs.existsSync(reviewerMarker), false, `${gate} でレビュアを起動しないこと`);
+    assert.equal(readFinal(reportPath), 'human_required');
+  }
 });
 
 test('claude launch_gate_reviewer: 必須成果物が読み取り不能ならspec/design/validationでレビュアを起動せずapprovedにしない', (t) => {

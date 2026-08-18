@@ -20,15 +20,21 @@ export const REQUIRED_GATE_ARTIFACTS: Record<Segment, readonly string[]> = {
   validation: ['VALIDATION.md'],
 };
 
+export function literalGitPathspec(artifactPath: string): string {
+  return `:(literal)${artifactPath}`;
+}
+
 /** target SHA のツリーで不在を肯定的に確認してから blob 本文を読む。 */
 export function readArtifactAtSha(root: string, targetSha: string, artifactPath: string): ArtifactReadResult {
-  const listed = git(['ls-tree', '-z', targetSha, '--', artifactPath], root);
+  const listed = git(['ls-tree', '-z', targetSha, '--', literalGitPathspec(artifactPath)], root);
   if (listed.status !== 0) return { status: 'unreadable', path: artifactPath, reason: 'tree を列挙できません' };
   const entries = listed.stdout.split('\0').filter(Boolean);
   if (entries.length === 0) return { status: 'absent', path: artifactPath };
   if (entries.length !== 1) return { status: 'unreadable', path: artifactPath, reason: 'tree entry を一意に解決できません' };
-  const match = /^\d+\s+(\S+)\s+([0-9a-f]+)\t/.exec(entries[0]);
-  if (!match || match[1] !== 'blob') return { status: 'unreadable', path: artifactPath, reason: 'tree entry が blob ではありません' };
+  const match = /^\d+\s+(\S+)\s+([0-9a-f]+)\t([^]*)$/.exec(entries[0]);
+  if (!match || match[1] !== 'blob' || match[3] !== artifactPath) {
+    return { status: 'unreadable', path: artifactPath, reason: 'tree entry が対象 blob と一致しません' };
+  }
   const shown = git(['cat-file', '-p', match[2]], root);
   if (shown.status !== 0) return { status: 'unreadable', path: artifactPath, reason: 'blob 本文を取得できません' };
   return { status: 'present', path: artifactPath, content: shown.stdout };
