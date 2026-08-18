@@ -724,6 +724,11 @@ _dispatch_lease_renew_daemon() {
     trap '' HUP
   fi
 
+  # 親はこの応答とPIDの一致を確認するまでdispatch_requiredを返さない。launcherが
+  # setsid(2)やexecに失敗した場合に、renew無しのleaseをfail-openで残すことを防ぐ。
+  printf '%s\n' "$$" >"$dispatch_temp_dir/renew.ready"
+  chmod 600 "$dispatch_temp_dir/renew.ready"
+
   while (( SECONDS - started < max_wait )); do
     elapsed=$((SECONDS - started))
     remaining=$((max_wait - elapsed))
@@ -767,7 +772,8 @@ _stop_dispatch_lease_renew_daemon() {
 # perl（macOSに標準搭載）を次点に置き、どちらも無い環境ではSIGHUPの到達だけを断つnohupを
 # 最後の手段とする。perl経路はforkせずexecで自プロセスを置換するため、setsid(1)の非fork
 # 経路と同じく $! のPIDと「コマンドラインにdispatch一時ディレクトリが残る」性質
-# （renew.pidの所有判定が依存する）を維持する。
+# （renew.pidの所有判定が依存する）を維持する。起動側はjob controlを一時停止し、バック
+# グラウンドプロセスがprocess group leaderとなってsetsid(2)をEPERMにしないようにする。
 # 解決結果は _ASC_SESSION_DETACH_CMD（起動前置詞の配列）と _ASC_SESSION_DETACH_MODE
 # （setsid|perl|nohup）へ格納する。いずれも解決できない場合だけ1を返す。
 _ASC_SESSION_DETACH_CMD=()
@@ -1048,12 +1054,36 @@ _dispatch_via_agent_tool() {
     >"$dispatch_temp_dir/contract.sha256"
   chmod 600 "$dispatch_temp_dir/contract.sha256"
 
+  local monitor_was_enabled=false renew_pid renew_ready_pid="" renew_poll renew_started=false
+  [[ $- == *m* ]] && monitor_was_enabled=true
+  [[ "$monitor_was_enabled" == "false" ]] || set +m
   "${_ASC_SESSION_DETACH_CMD[@]}" bash -c \
     'source "$1"; _dispatch_lease_renew_daemon "$2" "$3" "$4" "$5" "$6"' \
     _ "$ADAPTER_DIR/claude.sh" "$issue_id" "$dispatch_temp_dir" "$renew_interval" "$max_wait" \
     "$_ASC_SESSION_DETACH_MODE" \
     </dev/null >/dev/null 2>&1 &
-  local renew_pid=$!
+  renew_pid=$!
+  [[ "$monitor_was_enabled" == "false" ]] || set -m
+
+  for renew_poll in {1..100}; do
+    if [[ -f "$dispatch_temp_dir/renew.ready" ]]; then
+      renew_ready_pid="$(tr -d '[:space:]' <"$dispatch_temp_dir/renew.ready")"
+      if [[ "$renew_ready_pid" == "$renew_pid" ]] && kill -0 "$renew_pid" >/dev/null 2>&1; then
+        renew_started=true
+        break
+      fi
+    fi
+    kill -0 "$renew_pid" >/dev/null 2>&1 || break
+    sleep 0.02
+  done
+  rm -f -- "$dispatch_temp_dir/renew.ready"
+  if [[ "$renew_started" != "true" ]]; then
+    _stop_dispatch_lease_renew_daemon "$renew_pid" "$dispatch_temp_dir"
+    echo "launch_worker: Agent tool dispatchのrenewデーモンを安全に起動できませんでした（セッション分離または起動確認に失敗しました）" >&2
+    rm -rf -- "$dispatch_temp_dir"
+    release_lease "$issue_id" >/dev/null 2>&1 || true
+    return 1
+  fi
   printf '%s\n' "$renew_pid" >"$dispatch_temp_dir/renew.pid"
   chmod 600 "$dispatch_temp_dir/renew.pid"
   disown "$renew_pid" 2>/dev/null || true
