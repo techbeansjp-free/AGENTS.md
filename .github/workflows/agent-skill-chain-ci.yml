@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 jobs:
   verify:
@@ -142,16 +143,16 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          values="$(./.agent-skill-chain/scripts/detect-changed-segments.sh "$BASE_REF" | paste -sd, -)"
+          detected="$(./.agent-skill-chain/scripts/detect-changed-segments.sh "$BASE_REF")"
+          values="$(paste -sd, - <<< "$detected")"
           echo "values=$values" >> "$GITHUB_OUTPUT"
 
-      - name: verify-artifacts (開始済みセグメントごと)
+      - name: verify-artifacts (対象集合を一括検査)
         if: steps.ctx.outputs.skip_checks != 'true'
-        run: |
-          tr ',' '\n' <<< "${{ steps.segments.outputs.values }}" | while IFS= read -r segment; do
-            [[ -z "$segment" ]] && continue
-            ./.agent-skill-chain/ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" "$segment"
-          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: ./.agent-skill-chain/ci/verify-artifacts.sh "${{ steps.ctx.outputs.issue_id }}" --started-segments "${{ steps.segments.outputs.values }}"
 
       - name: verify-spec-bdd
         if: steps.ctx.outputs.skip_checks != 'true' && contains(steps.segments.outputs.values, 'spec')
