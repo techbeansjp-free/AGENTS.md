@@ -2,11 +2,11 @@
 
 ```yaml
 id: ADR-0076
-status: accepted
+status: superseded
 title: reviewer stderrをraw非保持で有界分類しnon-core Codex model既定を利用可能な具体名へ固定する
 tags: [adapter, codex, gate-reviewer, diagnostics, security]
 supersedes: []
-superseded-by: null
+superseded-by: ADR-0079
 deprecated-reason: null
 ```
 
