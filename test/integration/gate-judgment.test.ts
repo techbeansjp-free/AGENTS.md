@@ -1523,6 +1523,29 @@ test('gate reviewer-prompt: 見出しだけのIssue本文では代替判定基�
   assert.doesNotMatch(result.stdout, /## 代替判定基準（trusted な Issue 本文由来）/);
 });
 
+test('gate reviewer-prompt (ISSUE-733 AC-6): task-list placeholderはGitHub/localともinconclusiveにする', (t) => {
+  for (const backend of ['local', 'github'] as const) {
+    const github = backend === 'github' ? makeGhStub() : undefined;
+    const repo = createTmpRepo({ backend });
+    t.after(() => {
+      repo.cleanup();
+      github?.cleanup();
+    });
+    const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+    fs.writeFileSync(path.join(repo.dir, 'code.txt'), `${backend} task-list placeholder\n`);
+    const targetSha = commitAll(repo.dir, `test: ${backend} task-list placeholder`);
+    seedIssue733Backend(repo.dir, backend, github, '## 受入基準\n- [ ] TBD', 'quick');
+
+    const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-733', 'spec', targetSha, baseSha], {
+      cwd: repo.dir,
+      env: github?.env,
+    });
+    assert.equal(result.status, 0, `${backend}: ${result.stderr}`);
+    assert.match(result.stdout, /conformance は inconclusive/, backend);
+    assert.doesNotMatch(result.stdout, /## 代替判定基準（trusted な Issue 本文由来）/, backend);
+  }
+});
+
 test('gate reviewer-prompt (ISSUE-733 AC-18): 判定区間標識を成果物とIssue本文から偽装できない', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());

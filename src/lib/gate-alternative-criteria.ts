@@ -62,7 +62,10 @@ function normalizePlaceholder(text: string): string | undefined {
   let previous: string;
   do {
     previous = normalized;
-    normalized = normalized.replace(/^(?:[-*+]|[0-9]+[.)])\s+/, '').trim();
+    normalized = normalized
+      .replace(/^(?:[-*+]|[0-9]+[.)])(?:\s+|$)/, '')
+      .replace(/^\[(?: |x)\](?:\s+|$)/i, '')
+      .trim();
   } while (normalized !== previous);
   return normalized.toLowerCase().replace(/[。．.、，,；;：:！？!?]+$/u, '').trim();
 }
@@ -77,7 +80,7 @@ function ignorableBlock(block: string): boolean {
     if (/^ {0,3}#{1,6}\s+.+?\s*$/.test(line)) return true;
     if (/^(?:-{3,}|_{3,}|\*{3,})$/.test(normalized)) return true;
     const placeholder = normalizePlaceholder(normalized);
-    return placeholder !== undefined && PLACEHOLDER_LINES.has(placeholder);
+    return placeholder !== undefined && (placeholder === '' || PLACEHOLDER_LINES.has(placeholder));
   });
 }
 

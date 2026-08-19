@@ -64,6 +64,16 @@ test('ISSUE-733 AC-5/AC-6: 固定placeholderはリスト記号と末尾句読点
   );
 });
 
+test('ISSUE-733 AC-6: task-list markerだけ、または固定placeholderだけの項目は展開不能にする', () => {
+  for (const placeholder of ['- [ ]', '- [x]', '* [X]', '1. [ ]', '- [ ] TBD', '- [x] 未定。']) {
+    assert.equal(extractAlternativeCriteria(`## 受入基準\n${placeholder}`), undefined, placeholder);
+  }
+  assert.equal(
+    extractAlternativeCriteria('## 受入基準\n- [ ] 終了コードを 0 にする。'),
+    '- [ ] 終了コードを 0 にする。',
+  );
+});
+
 test('ISSUE-733 AC-5: 文字数・意味を推定せず、固定placeholder以外の短い記述も採用する', () => {
   assert.equal(extractAlternativeCriteria('## 受入基準\n終了コードを 0 にする。'), '終了コードを 0 にする。');
   assert.equal(extractAlternativeCriteria('## 要求\n動く'), '動く');
