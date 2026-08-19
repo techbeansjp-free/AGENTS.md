@@ -154,7 +154,15 @@ if [[ -n "$(git -C "$TRUSTED_ROOT" status --porcelain)" ]]; then
 fi
 TRUSTED_SCRIPT_DIR="$TRUSTED_ROOT/.agent-skill-chain/scripts"
 
-REVIEW_OUTPUT="$(ASC_TRUSTED_CLI_ROOT="$TRUSTED_ROOT" "$TRUSTED_SCRIPT_DIR/gate-review.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$TARGET_SHA")"
+attempt_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(12).toString("hex"))')"
+attempt_id="attempt-${GATE_ID}-${TARGET_SHA:0:12}-${attempt_nonce}"
+REVIEW_OUTPUT="$(
+  ASC_TRUSTED_CLI_ROOT="$TRUSTED_ROOT" \
+  ASC_EVIDENCE_BASE_SHA="$BASE_SHA" \
+  ASC_EVIDENCE_PR_NUMBER="$PR_NUMBER" \
+  ASC_REVIEW_ATTEMPT_ID="$attempt_id" \
+    "$TRUSTED_SCRIPT_DIR/gate-review.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$TARGET_SHA"
+)"
 REPORT_PATH="$(sed -n 's/^gate_report_path: //p' <<<"$REVIEW_OUTPUT")"
 EFFECTIVE_PROFILE="$(sed -n 's/^review_profile: //p' <<<"$REVIEW_OUTPUT")"
 if [[ -z "$REPORT_PATH" ]]; then
@@ -170,8 +178,6 @@ PENDING_REPORT_PATH="$REPORT_PATH"
 
 COUNT=1
 [[ "$PROFILE" == "strict" ]] && COUNT=2
-attempt_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(12).toString("hex"))')"
-attempt_id="attempt-${GATE_ID}-${TARGET_SHA:0:12}-${attempt_nonce}"
 declare -a run_ids=()
 for slot in $(seq 1 "$COUNT"); do
   run_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(12).toString("hex"))')"

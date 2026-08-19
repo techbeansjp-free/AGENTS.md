@@ -1,5 +1,13 @@
 import { digestOf } from './digest.js';
 import { aggregateGateAttempt } from './gate-verdict-aggregation.js';
+import {
+  selectFindingClassificationComments,
+  validateDurableRoundBudgetDeclaration,
+  type DurableRoundBudgetDeclaration,
+  type FindingClassificationRecord,
+  type FindingReclassification,
+  type RoundBudgetCommentRecord,
+} from './round-budget-policy.js';
 
 export const REVIEW_EVIDENCE_MARKER = '<!-- agent-skill-chain:gate-review-evidence -->';
 export const REVIEW_ATTEMPT_MARKER = '<!-- agent-skill-chain:gate-review-attempt -->';
@@ -13,6 +21,7 @@ export interface EvidenceFinding {
   origin: 'specification' | 'design' | 'implementation' | 'validation';
   code: string;
   evidence: string[];
+  reclassification?: FindingReclassification;
 }
 
 export interface EvidenceVerdict {
@@ -91,6 +100,7 @@ export interface ReviewEvidence {
   };
   prompt_digest: string;
   light_review?: LightReviewEvidence;
+  round_budget_declaration?: DurableRoundBudgetDeclaration;
   verdict: EvidenceVerdict;
 }
 
@@ -115,6 +125,7 @@ export interface GithubReviewRecord {
   commit_id: string;
   state: string;
   user: { login: string | null } | null;
+  submitted_at?: string;
 }
 
 export interface VerifiedReviewer {
@@ -141,6 +152,12 @@ export interface VerifiedReviewAttempt {
   evidence_digest: string;
 }
 
+export interface SubverdictReclassification {
+  original_conformance: 'pass' | 'fail' | 'pending';
+  original_falsification: 'pass' | 'fail' | 'pending';
+  basis: 'all_blocking_findings_reclassified';
+}
+
 export interface EvidenceVerification {
   final: 'approved' | 'rejected' | 'human_required';
   conformance: 'pass' | 'fail' | 'pending';
@@ -151,6 +168,8 @@ export interface EvidenceVerification {
   reviewers: VerifiedReviewer[];
   review_attempt?: VerifiedReviewAttempt;
   light_review?: LightReviewEvidence;
+  /** 有効sub-verdictの導出が起きた場合だけ、レビュアのraw値を併記する。 */
+  subverdict_reclassification?: SubverdictReclassification;
   reason?: string;
 }
 
@@ -308,6 +327,8 @@ function isEvidenceShape(value: ReviewEvidence, findingValidation: FindingValida
     typeof value.prompt_digest === 'string' &&
     /^sha256:[0-9a-f]{64}$/.test(value.prompt_digest) &&
     (value.light_review === undefined || isLightReviewShape(value.light_review)) &&
+    (value.round_budget_declaration === undefined ||
+      validateDurableRoundBudgetDeclaration(value.round_budget_declaration)) &&
     isEvidenceVerdict(value.verdict, true, findingValidation)
   );
 }
@@ -511,6 +532,8 @@ export function validateGithubReviewEvidenceAttempt(
     evidence.expected_count !== first.expected_count ||
     evidence.prompt_digest !== first.prompt_digest ||
     canonicalJson(evidence.light_review ?? null) !== canonicalJson(first.light_review ?? null) ||
+    canonicalJson(evidence.round_budget_declaration ?? null) !==
+      canonicalJson(first.round_budget_declaration ?? null) ||
     evidence.execution.trusted_base_sha !== first.execution.trusted_base_sha ||
     evidence.execution.launcher_digest !== first.execution.launcher_digest ||
     evidence.execution.launcher_token_digest !== first.execution.launcher_token_digest ||
@@ -532,6 +555,79 @@ export function validateGithubReviewEvidenceAttempt(
   };
 }
 
+/**
+ * 最終round後のfinding分類recordを、latest attemptのfinding severityの差し替えとしてだけ適用する。
+ * Issue #786: 分類はseverityだけを置換し、レビュアのraw conformance/falsification/inconclusiveは
+ * 書き換えない。判定はこの置換後のfinding集合と有効sub-verdictを入力として1箇所で再計算する。
+ */
+function applyFindingClassifications(options: {
+  blockers: EvidenceFinding[];
+  comments: RoundBudgetCommentRecord[];
+  candidates: ValidatedGithubReviewEvidence[];
+  issueId: string;
+  gate: ReviewEvidence['gate'];
+  trustedActors: string[];
+}): { status: 'applied'; blockers: EvidenceFinding[] } | { status: 'invalid'; reason: string } {
+  // 作成側（gate classify-finding）と同じ選択規則で、trusted recorderのrecordだけを採る。
+  const selection = selectFindingClassificationComments({
+    comments: options.comments,
+    issueId: options.issueId,
+    gate: options.gate,
+    trustedActors: options.trustedActors,
+  });
+  if (selection.status === 'invalid') return { status: 'invalid', reason: selection.reason };
+  const records = selection.matches.map(({ record }) => record);
+  if (records.length === 0) return { status: 'applied', blockers: options.blockers };
+
+  const keys = new Set<string>();
+  const replacements: { original: EvidenceFinding; classified: EvidenceFinding }[] = [];
+  for (const record of records) {
+    // 参照先は最新attemptの検証済みreviewだけに限定する。結線できないrecordは不正ではなく
+    // 「当該attemptには適用しない」として扱う。分類recordはclassify-findingが追加・上書きを拒否する
+    // 不変のIssueコメントであり機構内で除去できないため、過去attempt由来のrecordを不正とすると、
+    // 人間が明示指示した追加の修正ラウンドでもゲートが恒久的に human_required へ固定される。
+    const source = options.candidates.find((candidate) => String(candidate.api.id) === record.source_review_id);
+    if (!source) continue;
+    const key = `${record.source_review_id}:${record.finding.code}`;
+    if (keys.has(key)) return { status: 'invalid', reason: `finding分類recordが重複しています: ${key}` };
+    keys.add(key);
+    const matches = source.evidence.verdict.blockers.filter((finding) => finding.code === record.finding.code);
+    if (matches.length !== 1) {
+      return { status: 'invalid', reason: `source review内のfinding codeが一意ではありません: ${record.finding.code}` };
+    }
+    const original = matches[0];
+    if (
+      record.finding.reclassification.original_severity !== original.severity ||
+      record.finding.origin !== original.origin ||
+      canonicalJson(record.finding.evidence) !== canonicalJson(original.evidence) ||
+      canonicalJson(record.finding.reclassification.raw_evidence) !== canonicalJson(original.evidence)
+    ) {
+      return {
+        status: 'invalid',
+        reason: `finding分類recordがsource reviewの元severityまたはraw evidenceと一致しません: ${record.finding.code}`,
+      };
+    }
+    replacements.push({ original, classified: record.finding });
+  }
+
+  const used = new Set<number>();
+  const blockers = options.blockers.map((finding) => {
+    const index = replacements.findIndex((entry, candidateIndex) =>
+      !used.has(candidateIndex) &&
+      entry.original.severity === finding.severity &&
+      entry.original.origin === finding.origin &&
+      entry.original.code === finding.code &&
+      canonicalJson(entry.original.evidence) === canonicalJson(finding.evidence));
+    if (index < 0) return finding;
+    used.add(index);
+    return replacements[index].classified;
+  });
+  if (used.size !== replacements.length) {
+    return { status: 'invalid', reason: 'finding分類recordをcurrent gate findingへ一意に結線できません' };
+  }
+  return { status: 'applied', blockers };
+}
+
 export function verifyGithubReviewEvidence(options: {
   reviews: GithubReviewRecord[];
   issueId: string;
@@ -542,6 +638,9 @@ export function verifyGithubReviewEvidence(options: {
   writerActors: string[];
   unresolvedWriterActor: boolean;
   expectedLightReview?: LightReviewEvidence;
+  expectedRoundBudgetDeclaration?: DurableRoundBudgetDeclaration;
+  /** 最終round後のfinding分類recordを含むIssueコメント。severity差し替えの入力としてだけ使う。 */
+  findingClassifications?: RoundBudgetCommentRecord[];
   expectedArtifacts: { path: string; digest: string }[];
   expectedTrustedBaseSha: string;
   expectedLauncherDigest: string;
@@ -624,8 +723,12 @@ export function verifyGithubReviewEvidence(options: {
   if (!latestValidation.valid) return fail(latestValidation.reason);
   const latestEvidence = latestValidation.value.evidence;
   const expectedLightReview = canonicalJson(options.expectedLightReview ?? null);
+  const expectedRoundBudgetDeclaration = canonicalJson(options.expectedRoundBudgetDeclaration ?? null);
   if (canonicalJson(latestEvidence.light_review ?? null) !== expectedLightReview) {
     return fail(`最新review attemptのlight_reviewがtrusted再評価値と一致しません: ${latestEvidence.attempt_id}`);
+  }
+  if (canonicalJson(latestEvidence.round_budget_declaration ?? null) !== expectedRoundBudgetDeclaration) {
+    return fail(`最新review attemptのround budget宣言がtrusted再評価値と一致しません: ${latestEvidence.attempt_id}`);
   }
   if (latestEvidence.profile !== options.profile) {
     return fail(`最新review attemptのprofileがtrusted profileと一致しません: ${latestEvidence.attempt_id}`);
@@ -674,6 +777,9 @@ export function verifyGithubReviewEvidence(options: {
     if (canonicalJson(evidence.light_review ?? null) !== expectedLightReview) {
       return fail(`review ${review.id} のlight_reviewがtrusted再評価値と一致しません`);
     }
+    if (canonicalJson(evidence.round_budget_declaration ?? null) !== expectedRoundBudgetDeclaration) {
+      return fail(`review ${review.id} のround budget宣言attestationが一致しません`);
+    }
     if (
       options.promptDigestVerification !== 'record_only' &&
       evidence.prompt_digest !== options.expectedPromptDigest
@@ -719,26 +825,97 @@ export function verifyGithubReviewEvidence(options: {
     }
   }
 
+  const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
+  // Issue #786: 分類recordはfinding severityの差し替えだけを行い、レビュアのraw値は書き換えない。
+  // 分類recordが不正なら判定を推測せず human_required へ倒す。分類は「成立した最終round事前宣言の
+  // もとで実施した最終round」の手続きであり、宣言が成立しない経路では差し替え自体を行わない。
+  // 宣言と切り離して差し替えを許すと、任意のroundでblockingを消してcutoffによる安全側停止を
+  // 回避できる経路が残る。
+  const rawBlockers = verdicts.flatMap((verdict) => verdict.blockers);
+  const classification = options.findingClassifications && options.expectedRoundBudgetDeclaration
+    ? applyFindingClassifications({
+        blockers: rawBlockers,
+        comments: options.findingClassifications,
+        candidates,
+        issueId: options.issueId,
+        gate: options.gate,
+        trustedActors: options.trustedActors,
+      })
+    : ({ status: 'applied', blockers: rawBlockers } as const);
+  const classificationError = classification.status === 'invalid' ? classification.reason : undefined;
+  // 差し替えはrawと同じ順序・同じ件数の写像であるため、slotごとの区間へ切り戻せる。
+  const classifiedBlockers = classification.status === 'applied' ? classification.blockers : rawBlockers;
+  const hasBlocking = classifiedBlockers.some((finding) => finding.severity === 'blocking');
+  const isFinalRound =
+    options.gateRound !== undefined && options.gateRound.round >= options.gateRound.cutoffThreshold;
+  // Issue #786: 有効sub-verdictの導出。配布済みルーブリックはblocking findingを付与するとき
+  // 同じレビュアのsub-verdictをfailとすることを求めるため、severityだけを差し替えるとrawのfailが
+  // 残り、4類型外findingしか残らない最終roundでもapprovedへ収束できない。逆に、分類の有無や
+  // blocking件数だけを理由に判定値やinconclusiveを直接代入すると判定不能が承認へ倒れる。
+  // どちらも避けるため、次の4条件がすべて成立するレビュアのrawな 'fail' だけを 'pass' として扱う。
+  const derivationActive = classificationError === undefined && options.expectedRoundBudgetDeclaration !== undefined;
+  let blockerOffset = 0;
+  const effective = verdicts.map((verdict) => {
+    const slotBlockers = classifiedBlockers.slice(blockerOffset, blockerOffset + verdict.blockers.length);
+    blockerOffset += verdict.blockers.length;
+    const substitutable =
+      // (a) 当該ゲート・当該attemptの最終round事前宣言がD2・D4の検査に合格して成立している
+      derivationActive &&
+      // (b) 当該レビュアのraw inconclusiveがfalseである
+      verdict.inconclusive === false &&
+      // (c) 当該attemptのblocking findingが1件残らず有効な分類recordでwarningへ差し替えられている
+      !hasBlocking &&
+      // (d) 当該レビュアが当該attemptへblocking findingを1件以上提出している
+      verdict.blockers.some((finding) => finding.severity === 'blocking');
+    return {
+      conformance: substitutable && verdict.conformance === 'fail' ? ('pass' as const) : verdict.conformance,
+      falsification: substitutable && verdict.falsification === 'fail' ? ('pass' as const) : verdict.falsification,
+      blockers: slotBlockers,
+    };
+  });
+  const subverdictDerived = effective.some(
+    (value, index) =>
+      value.conformance !== verdicts[index].conformance ||
+      value.falsification !== verdicts[index].falsification,
+  );
+  // Issue #733: slot件数・判定確定数の検査を含む集約は1箇所（aggregateGateAttempt）で行う。
+  // Issue #786: その入力は分類後のfindingと有効sub-verdictであり、raw inconclusiveは保持する。
   const aggregation = aggregateGateAttempt<EvidenceFinding, EvidenceVerdict>({
     requiredReviewerCount: expectedCount,
     launchedSlots: candidates.map((candidate) => candidate.evidence.reviewer.slot),
-    verdictBySlot: new Map(candidates.map((candidate) => [
+    verdictBySlot: new Map(candidates.map((candidate, index) => [
       candidate.evidence.reviewer.slot,
-      { status: 'resolved' as const, verdict: candidate.evidence.verdict },
+      { status: 'resolved' as const, verdict: { ...candidate.evidence.verdict, ...effective[index] } },
     ])),
   });
   const blockers = aggregation.blockers;
-  const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
   // Issue #733: 打ち切り判定を aggregation.final に従属させない。集約規則では blocking finding が
   // あれば final は必ず rejected になるため、従属させるとラウンド上限の打ち切りが到達不能になる。
-  const cutoffReached =
-    options.gateRound !== undefined &&
-    options.gateRound.round >= options.gateRound.cutoffThreshold &&
-    hasBlocking;
-  const trustedInconclusive = cutoffReached || aggregation.inconclusive;
-  const final = cutoffReached ? 'human_required' : aggregation.final;
+  const cutoffReached = isFinalRound && hasBlocking;
+  const hasPending = effective.some(
+    (value) => value.conformance === 'pending' || value.falsification === 'pending',
+  );
+  // 判定値は順序評価で確定し、分類の有無やblocking件数だけを理由に直接代入しない。
+  const final = classificationError
+    ? 'human_required'
+    : cutoffReached
+      ? 'human_required'
+      : derivationActive
+        ? hasPending
+          ? 'human_required'
+          // 最終roundは進行役の裁量による追加差し戻しが残らないため 'rejected' を用いない。
+          // approvedの条件を欠く入力は4類型のblocking残存を含めてすべて human_required へ収束させる。
+          : isFinalRound
+            ? aggregation.final === 'approved' ? 'approved' : 'human_required'
+            : aggregation.final
+        : aggregation.final;
+  // 判定不能は最終判定と一致させる。打ち切り・分類record不正・最終roundの承認条件未達はいずれも
+  // final を human_required へ倒すため、別系統の真偽値を持たない。
+  const trustedInconclusive = final === 'human_required';
+  const finalRoundUnapproved = derivationActive && isFinalRound && !cutoffReached && final === 'human_required';
   return {
     final,
+    // 判定へ用いた有効sub-verdictを記録する。rawはsubverdict_reclassificationへ併記する。
     conformance: aggregation.conformance,
     inconclusive: trustedInconclusive,
     falsification: aggregation.falsification,
@@ -762,6 +939,23 @@ export function verifyGithubReviewEvidence(options: {
       sandbox: evidence.execution.sandbox,
     })),
     ...(options.expectedLightReview ? { light_review: options.expectedLightReview } : {}),
+    ...(subverdictDerived
+      ? {
+          subverdict_reclassification: {
+            original_conformance: verdicts.some((verdict) => verdict.conformance === 'fail')
+              ? ('fail' as const)
+              : verdicts.every((verdict) => verdict.conformance === 'pass')
+                ? ('pass' as const)
+                : ('pending' as const),
+            original_falsification: verdicts.some((verdict) => verdict.falsification === 'fail')
+              ? ('fail' as const)
+              : verdicts.every((verdict) => verdict.falsification === 'pass')
+                ? ('pass' as const)
+                : ('pending' as const),
+            basis: 'all_blocking_findings_reclassified' as const,
+          },
+        }
+      : {}),
     review_attempt: {
       attempt_id: latestEvidence.attempt_id,
       expected_count: expectedCount,
@@ -776,12 +970,22 @@ export function verifyGithubReviewEvidence(options: {
           })),
       )),
     },
-    ...(cutoffReached
-      ? {
-          reason:
-            `ラウンド上限に達したため人間判断へ移行します: round=${options.gateRound?.round}, ` +
-            `cutoff_threshold=${options.gateRound?.cutoffThreshold}, unresolved_blocking=${blockers.filter((finding) => finding.severity === 'blocking').length}`,
-        }
-      : {}),
+    ...(classificationError
+      ? { reason: classificationError }
+      : cutoffReached
+        ? {
+            reason:
+              `ラウンド上限に達したため人間判断へ移行します: round=${options.gateRound?.round}, ` +
+              `cutoff_threshold=${options.gateRound?.cutoffThreshold}, unresolved_blocking=${blockers.filter((finding) => finding.severity === 'blocking').length}`,
+          }
+        : finalRoundUnapproved
+          ? {
+              reason:
+                `最終roundの承認条件を満たさないため人間判断へ移行します: round=${options.gateRound?.round}, ` +
+                `conformance=${effective.map((value) => value.conformance).join('/')}, ` +
+                `falsification=${effective.map((value) => value.falsification).join('/')}, ` +
+                `reviewer_inconclusive=${verdicts.map((verdict) => String(verdict.inconclusive)).join('/')}`,
+            }
+          : {}),
   };
 }

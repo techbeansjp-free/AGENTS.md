@@ -24,6 +24,8 @@ interface WorkerReport {
   no_change?: boolean;
   no_change_reason?: string;
   blocked_reason?: string;
+  remediation_required?: boolean;
+  remediations?: { method: string; non_addition_failure_reason?: string }[];
 }
 
 test('report status (local backend): completedはissues/<n>/.agent-skill-chain/reports/<segment>.yamlへ書き込まれる', async (t) => {
@@ -186,6 +188,30 @@ test('report status: statusがcompleted|blocked以外は使い方エラーとし
   const result = runCli(['report', 'status', 'ISSUE-1', 'spec_worker', 'spec', 'in_progress', 'abc123'], { cwd: repo.dir });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /status は completed\|blocked/);
+});
+
+test('report status (AC-7): blocking remediationは報告必須で、理由なしrequired_additionを拒否する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const args = ['report', 'status', 'ISSUE-1', 'implementation_worker', 'implementation', 'completed', 'abc123', '', '', 'dispatch-1', 'false', '', 'true'];
+  const missing = runCli(args, { cwd: repo.dir });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /remediations/);
+
+  const reasonless = runCli([...args, JSON.stringify([{ method: 'required_addition', finding_code: 'F-1', summary: '分岐を追加' }])], { cwd: repo.dir });
+  assert.equal(reasonless.status, 1);
+  assert.match(reasonless.stderr, /non_addition_failure_reason/);
+
+  const accepted = runCli([...args, JSON.stringify([{
+    method: 'required_addition',
+    finding_code: 'F-1',
+    summary: 'Issue目的に必要な分岐を追加',
+    non_addition_failure_reason: '既存分岐の書換え・削除では必須入力を表現できないため',
+  }])], { cwd: repo.dir });
+  assert.equal(accepted.status, 0, accepted.stderr);
+  const report = parse(fs.readFileSync(accepted.stdout.trim(), 'utf8')) as WorkerReport;
+  assert.equal(report.remediation_required, true);
+  assert.equal(report.remediations?.[0].method, 'required_addition');
 });
 
 // Issue #185 AC-3: repoRoot()のworktree一貫化（ADR-0004）により、linked worktree内から

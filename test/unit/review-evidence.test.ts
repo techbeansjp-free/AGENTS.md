@@ -6,11 +6,17 @@ import {
   renderReviewAttemptStart,
   renderReviewEvidence,
   verifyGithubReviewEvidence,
+  type EvidenceFinding,
   type GithubReviewRecord,
   type LightReviewEvidence,
   type ReviewAttemptStart,
   type ReviewEvidence,
 } from '../../src/lib/review-evidence.js';
+import {
+  createFindingClassificationRecord,
+  createRoundBudgetDeclaration,
+  renderFindingClassificationRecord,
+} from '../../src/lib/round-budget-policy.js';
 
 const targetSha = 'a'.repeat(40);
 const baseSha = 'c'.repeat(40);
@@ -495,6 +501,356 @@ test('trusted Strict profileをlight_review.applied自己申告でStandardへ降
   );
   assert.equal(result.final, 'human_required');
   assert.match(result.reason ?? '', /profile.*trusted/);
+});
+
+// Issue #786: 分類後の判定集約（D3）の両方向を固定する。
+// ラウンド1の欠陥は「blocking が0件なら conformance/falsification/final/inconclusive を無条件に
+// 上書きして approved へ倒す」、ラウンド2の欠陥は「severity だけ差し替えて sub-verdict に一切
+// 反映せず rejected が永久に確定する」であり、正反対の両方が blocking と判定された。
+// 有効 sub-verdict は raw を書き換えず、4条件がすべて成立するレビュアの raw 'fail' だけを
+// 'pass' として扱う派生値であり、判定値は順序評価で決まる。
+const finalRoundDeclaration = {
+  ...createRoundBudgetDeclaration({
+    issueId: 'ISSUE-271',
+    gate: 'spec',
+    previousAttemptId: 'attempt-before-final',
+    finalRound: 4,
+  }),
+  declared_at: '2026-08-19T00:00:00.000Z',
+  record_id: '11',
+};
+const finalRound = { round: 4, cutoffThreshold: 4 };
+
+function blockingFinding(code: string): EvidenceFinding {
+  return {
+    severity: 'blocking',
+    origin: 'implementation',
+    code,
+    evidence: [`src/commands/gate.ts の限定4類型外の指摘 (${code})`],
+  };
+}
+
+function verdictOf(overrides: Partial<ReviewEvidence['verdict']>): ReviewEvidence['verdict'] {
+  return {
+    conformance: 'pass',
+    falsification: 'pass',
+    blockers: [],
+    approved_artifacts: [...artifacts],
+    inconclusive: false,
+    ...overrides,
+  };
+}
+
+function declaredReviews(
+  first: ReviewEvidence['verdict'],
+  second: ReviewEvidence['verdict'],
+  declared = true,
+): GithubReviewRecord[] {
+  const attach = (slot: 1 | 2, verdict: ReviewEvidence['verdict']) =>
+    review(slot, slot, {
+      body: renderReviewEvidence(evidence(slot, {
+        verdict,
+        ...(declared ? { round_budget_declaration: finalRoundDeclaration } : {}),
+      })),
+    });
+  return [attach(1, first), attach(2, second)];
+}
+
+function classificationComment(
+  id: number,
+  sourceReviewId: string,
+  finding: EvidenceFinding,
+  actor = 'trusted-reviewer',
+) {
+  return {
+    id,
+    body: renderFindingClassificationRecord(createFindingClassificationRecord({
+      issueId: 'ISSUE-271',
+      gate: 'spec',
+      sourceReviewId,
+      sourceFinding: finding,
+      followUpIssueId: 'ISSUE-900',
+      downgradeReason: '最終roundの限定4類型外であるため',
+    })),
+    createdAt: '2026-08-19T00:01:00.000Z',
+    user: { login: actor },
+  };
+}
+
+// ラウンド2の回帰（`CLASSIFICATION_NEUTRALIZED_BY_FAIL_SUBVERDICT` /
+// `FINDING_CLASSIFICATION_NEVER_UNBLOCKS_FINAL_ROUND`）を固定する。
+// 配布ルーブリックは blocking finding に同じレビュアの fail sub-verdict を伴わせるため、
+// severity だけを差し替えると最終roundが永久に rejected へ固定され、進行役に次手が無くなる。
+test('D3: 4条件が揃う最終roundは、raw failを保持したまま有効sub-verdictでapprovedになる', () => {
+  const first = blockingFinding('NON_FINAL_CATEGORY_ONE');
+  const second = blockingFinding('NON_FINAL_CATEGORY_TWO');
+  const reviews = declaredReviews(
+    verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [first] }),
+    verdictOf({ conformance: 'pass', falsification: 'fail', blockers: [second] }),
+  );
+
+  const withoutClassification = verify(reviews, {
+    gateRound: finalRound,
+    expectedRoundBudgetDeclaration: finalRoundDeclaration,
+  });
+  assert.equal(withoutClassification.final, 'human_required');
+
+  const result = verify(reviews, {
+    gateRound: finalRound,
+    expectedRoundBudgetDeclaration: finalRoundDeclaration,
+    findingClassifications: [
+      classificationComment(21, '1', first),
+      classificationComment(22, '2', second),
+    ],
+  });
+  assert.equal(result.final, 'approved');
+  assert.equal(result.conformance, 'pass');
+  assert.equal(result.falsification, 'pass');
+  assert.equal(result.inconclusive, false);
+  // raw値は失われず、同じ現行記録へ併記される。
+  assert.deepEqual(result.subverdict_reclassification, {
+    original_conformance: 'fail',
+    original_falsification: 'fail',
+    basis: 'all_blocking_findings_reclassified',
+  });
+  // findingは削除されず、原文evidenceとfollow-up追跡を保ったwarningとして残る。
+  assert.deepEqual(result.blockers.map((finding) => finding.severity), ['warning', 'warning']);
+  assert.deepEqual(result.blockers[0].evidence, first.evidence);
+  assert.equal(result.blockers[0].reclassification?.original_severity, 'blocking');
+  assert.equal(result.blockers[0].reclassification?.follow_up_issue_id, 'ISSUE-900');
+});
+
+// ラウンド1の回帰（`FINAL_ROUND_CLASSIFICATION_FORCES_APPROVAL` /
+// `CLASSIFICATION_FORCES_APPROVED_OVER_INCONCLUSIVE`）を固定する。
+// blocking が0件になったことだけを根拠に判定値と inconclusive を直接代入すると、
+// レビュアが「検証不能」と表明した attempt が承認として記録される。
+test('D3: 4条件を単独で崩した入力はいずれもapprovedにならず、最終roundではrejectedでなくhuman_requiredへ収束する', () => {
+  const first = blockingFinding('NON_FINAL_CATEGORY_ONE');
+  const second = blockingFinding('NON_FINAL_CATEGORY_TWO');
+  const classifications = [classificationComment(21, '1', first), classificationComment(22, '2', second)];
+
+  // (a) 宣言が成立していない: 分類は判定へ届かず、既存の打ち切り挙動のまま。
+  const withoutDeclaration = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [first] }),
+      verdictOf({ conformance: 'pass', falsification: 'fail', blockers: [second] }),
+      false,
+    ),
+    { gateRound: finalRound, findingClassifications: classifications },
+  );
+  assert.equal(withoutDeclaration.final, 'human_required');
+  assert.equal(withoutDeclaration.blockers[0].severity, 'blocking');
+  assert.equal(withoutDeclaration.subverdict_reclassification, undefined);
+
+  // (b) レビュアがrawで inconclusive を表明している: 推測による承認を記録しない。
+  const inconclusive = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'pending', falsification: 'pending', blockers: [first], inconclusive: true }),
+      verdictOf({ conformance: 'pass', falsification: 'fail', blockers: [second] }),
+    ),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: classifications,
+    },
+  );
+  assert.equal(inconclusive.final, 'human_required');
+  assert.equal(inconclusive.inconclusive, true);
+  // 判定不能を表明したレビュアのraw値は差し替えられず、そのまま集約へ残る。
+  assert.equal(inconclusive.conformance, 'pending');
+  assert.equal(inconclusive.subverdict_reclassification?.original_conformance, 'pending');
+
+  // (c) 未分類のblockingが残る: 差し替え漏れをapprovedへ倒さない。
+  const partial = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [first] }),
+      verdictOf({ conformance: 'pass', falsification: 'fail', blockers: [second] }),
+    ),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: [classifications[0]],
+    },
+  );
+  assert.equal(partial.final, 'human_required');
+  assert.equal(partial.subverdict_reclassification, undefined);
+  assert.equal(partial.blockers.filter((finding) => finding.severity === 'blocking').length, 1);
+
+  // (d) blocking findingを1件も提出していないレビュアの fail は差し替えの裏付けを持たない。
+  const unbackedFail = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [first] }),
+      verdictOf({ conformance: 'pass', falsification: 'fail' }),
+    ),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: [classifications[0]],
+    },
+  );
+  assert.equal(unbackedFail.final, 'human_required');
+  assert.equal(unbackedFail.falsification, 'fail');
+  assert.match(unbackedFail.reason ?? '', /最終roundの承認条件/);
+});
+
+// D3: 最終ラウンド以外は従来どおり rejected を返す。導入前の判定を変えない経路を固定する。
+test('D3: 最終round以外と宣言なし経路は導入前と同じrejectedを維持する', () => {
+  const finding = blockingFinding('STILL_BLOCKING');
+  const rejecting = declaredReviews(
+    verdictOf({ conformance: 'pass', falsification: 'fail', blockers: [finding] }),
+    verdictOf({ conformance: 'pass', falsification: 'fail', blockers: [finding] }),
+    false,
+  );
+  assert.equal(verify(rejecting, { gateRound: { round: 3, cutoffThreshold: 4 } }).final, 'rejected');
+  assert.equal(verify(rejecting).final, 'rejected');
+
+  // 宣言が成立していても最終round以外で未分類blockingが残れば rejected のまま。
+  const declaredNonFinal = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'pass', falsification: 'fail', blockers: [finding] }),
+      verdictOf({ conformance: 'pass', falsification: 'fail', blockers: [finding] }),
+    ),
+    {
+      gateRound: { round: 3, cutoffThreshold: 4 },
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+    },
+  );
+  assert.equal(declaredNonFinal.final, 'rejected');
+});
+
+// Issue #786 D4: 分類recordのdigestは公開情報から再計算できるため、digest一致は信頼の根拠にならない。
+// PR review evidence が trustedActors で actor を束縛している以上、Issueコメント経路だけを
+// 未束縛にしない。非trustedな投稿は採用しないだけで、ゲートを停止もさせない。
+test('D4: 非trustedな投稿者のfinding分類recordを採用せず、単独でゲートも停止させない', () => {
+  const finding = blockingFinding('NON_FINAL_CATEGORY_ONE');
+  const reviews = declaredReviews(
+    verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [finding] }),
+    verdictOf({ conformance: 'pass', falsification: 'pass' }),
+  );
+  const options = { gateRound: finalRound, expectedRoundBudgetDeclaration: finalRoundDeclaration };
+
+  const forged = verify(reviews, {
+    ...options,
+    findingClassifications: [classificationComment(21, '1', finding, 'outsider')],
+  });
+  assert.equal(forged.final, 'human_required');
+  assert.equal(forged.blockers[0].severity, 'blocking');
+
+  const trusted = verify(reviews, {
+    ...options,
+    findingClassifications: [classificationComment(21, '1', finding)],
+  });
+  assert.equal(trusted.final, 'approved');
+
+  // 第三者が解釈不能なmarker付きコメントを投稿しても、当該ゲートを恒久停止させない。
+  const junk = { id: 22, body: `${'<!-- agent-skill-chain:finding-classification -->'}\n本文なし`, createdAt: '2026-08-19T00:02:00.000Z', user: { login: 'outsider' } };
+  const survived = verify(reviews, {
+    ...options,
+    findingClassifications: [classificationComment(21, '1', finding), junk],
+  });
+  assert.equal(survived.final, 'approved');
+});
+
+// Issue #786 D4-4: 分類recordへの上書き検知（`CLASSIFICATION_RECORD_EDIT_NOT_DETECTED` の回帰）。
+// classification_digestは秘密値を含まず公開されたsource review本文から再計算できるため、
+// write権限保有者が trusted recorder の既存コメント本文を差し替えれば、投稿者束縛もdigest検査も
+// 素通りする偽造recordを注入できる。上書きを検知しないと、4類型に該当するblockingまで
+// warningへ差し替わり、レビュアのfailもpassへ差し替わって最終roundがapprovedとして記録される。
+test('D4: 作成後に上書きされたfinding分類recordを採用せず、4類型のblockingをwarningへ差し替えない', () => {
+  const outside = blockingFinding('NON_FINAL_CATEGORY_ONE');
+  const dataLoss = blockingFinding('DATA_LOSS_FINDING');
+  const reviews = declaredReviews(
+    verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [outside, dataLoss] }),
+    verdictOf({ conformance: 'pass', falsification: 'pass' }),
+  );
+  const options = { gateRound: finalRound, expectedRoundBudgetDeclaration: finalRoundDeclaration };
+
+  // trusted recorderは4類型外のoutsideだけを分類する。dataLossはblockingのまま残り、
+  // 上限到達により人間判断へ移行する。これが偽造前の正しい帰結である。
+  const classified = verify(reviews, {
+    ...options,
+    findingClassifications: [classificationComment(21, '1', outside)],
+  });
+  assert.equal(classified.final, 'human_required');
+  assert.deepEqual(
+    classified.blockers.filter((entry) => entry.severity === 'blocking').map((entry) => entry.code),
+    ['DATA_LOSS_FINDING'],
+  );
+
+  // 反例経路: 同じ trusted recorder が過去に投稿したコメント1件を編集し、dataLossの
+  // source_review_id・origin・evidence・raw_evidenceを公開本文から複写した偽造recordを注入する。
+  // 投稿者もdigestも正しいが、API上のcreated_atとupdated_atが一致しない。
+  const injected = { ...classificationComment(22, '1', dataLoss), updatedAt: '2026-08-19T00:05:00.000Z' };
+  const forged = verify(reviews, {
+    ...options,
+    findingClassifications: [classificationComment(21, '1', outside), injected],
+  });
+  assert.equal(forged.final, 'human_required');
+  assert.match(forged.reason ?? '', /上書き/);
+  // 分類は1件も適用されず、両findingがblockingのまま残る。
+  assert.deepEqual(forged.blockers.map((entry) => entry.severity), ['blocking', 'blocking']);
+  // レビュアのraw failもpassへ差し替わらない。
+  assert.equal(forged.conformance, 'fail');
+  assert.equal(forged.falsification, 'fail');
+  assert.equal(forged.subverdict_reclassification, undefined);
+  assert.equal(forged.inconclusive, true);
+});
+
+// Issue #786 D3: 分類recordの参照先は最新attemptの検証済みreviewだけに限定する
+// （`FINAL_ROUND_DECLARATION_BREAKS_ROUND_DERIVATION_AND_LOCKS_GATE` の回帰）。
+// 分類recordは classify-finding が追加・上書きを拒否する不変のIssueコメントであり、機構内で
+// 除去する手段がない。結線できないrecordを不正として human_required を確定させると、SPEC.md R1・
+// AC-6 が明示的に認める「人間が明示指示した追加の修正ラウンド」でも、blocking 0件・両観点 pass の
+// attemptが常に human_required へ固定され、当該ゲートは二度と approved に到達できなくなる。
+test('D3: 最新attemptへ結線できない分類recordは不正にせず非適用として扱い、後続attemptを固定しない', () => {
+  const stale = blockingFinding('CLASSIFIED_IN_A_PREVIOUS_ATTEMPT');
+  // 過去attemptのreview（id=99）に対する分類record。現在のattemptには存在しないreviewを指す。
+  const staleRecord = classificationComment(31, '99', stale);
+
+  // 追加の修正ラウンド: blocking 0件・両観点passのattemptは approved へ到達する。
+  const resolved = verify(
+    declaredReviews(verdictOf({}), verdictOf({})),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: [staleRecord],
+    },
+  );
+  assert.equal(resolved.final, 'approved');
+  assert.equal(resolved.inconclusive, false);
+  assert.equal(resolved.reason, undefined);
+
+  // 非適用であって「差し替え成立」ではない。現在のattemptのblockingは残り、
+  // 陳腐化したrecordがsame-codeのfindingを黙って降格させることもない。
+  const reReported = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [stale] }),
+      verdictOf({ conformance: 'pass', falsification: 'pass' }),
+    ),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: [staleRecord],
+    },
+  );
+  assert.equal(reReported.final, 'human_required');
+  assert.deepEqual(reReported.blockers.map((finding) => finding.severity), ['blocking']);
+  assert.equal(reReported.subverdict_reclassification, undefined);
+
+  // 当該attemptへ結線できるrecordが同時にあれば、そちらは従来どおり適用される。
+  const mixed = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [stale] }),
+      verdictOf({ conformance: 'pass', falsification: 'pass' }),
+    ),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: [staleRecord, classificationComment(32, '1', stale)],
+    },
+  );
+  assert.equal(mixed.final, 'approved');
+  assert.deepEqual(mixed.blockers.map((finding) => finding.severity), ['warning']);
 });
 
 // Issue #759 要件7(c)・AC-13 / DESIGN E8: 調達元識別子と実体 digest の記録を必須とする対象は

@@ -82,6 +82,11 @@ interface GateReport {
       remediation_round: number;
       strict_locked: boolean;
     };
+    subverdict_reclassification?: {
+      original_conformance: string;
+      original_falsification: string;
+      basis: string;
+    };
   };
 }
 
@@ -201,6 +206,56 @@ test('gate publish: final=rejected は failure、approved(両pass) は success �
   );
 });
 
+// Issue #786 D3: 4類型外findingだけが残った最終roundは、raw failを併記したまま有効sub-verdictで
+// approved を記録する。ラウンド2の欠陥（severityだけ差し替えてsub-verdictへ反映せず永久にrejected）
+// を戻さないため、既存のpublish整合検査（approvedは両passのみ許可）を通ることを固定する。
+// 逆に4類型のblockingが残る最終roundは rejected ではなく human_required として発行される。
+test('gate publish (D3): 有効sub-verdictのapprovedはsuccess、4類型blocking残存の最終roundはaction_requiredになる', async (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  const approvedPath = writeReport(repo.dir, scaffold({
+    final: 'approved',
+    conformance: 'pass',
+    falsification: 'pass',
+    subverdict_reclassification: {
+      original_conformance: 'fail',
+      original_falsification: 'fail',
+      basis: 'all_blocking_findings_reclassified',
+    },
+    blockers: [{
+      severity: 'warning',
+      origin: 'implementation',
+      code: 'NON_FINAL_CATEGORY',
+      evidence: ['src/commands/gate.ts の限定4類型外の指摘'],
+    }],
+  }));
+  const approved = runCli(['gate', 'publish', 'ISSUE-1', approvedPath], { cwd: repo.dir, env });
+  assert.equal(approved.status, 0, approved.stderr);
+
+  const unresolvedPath = path.join(repo.dir, 'unresolved.yaml');
+  fs.writeFileSync(unresolvedPath, stringify(scaffold({
+    final: 'human_required',
+    conformance: 'fail',
+    falsification: 'fail',
+    blockers: [{
+      severity: 'blocking',
+      origin: 'implementation',
+      code: 'PREVIOUS_BLOCKING_UNRESOLVED',
+      evidence: ['src/commands/gate.ts の既出blockingが未是正のまま残る'],
+    }],
+  })), 'utf8');
+  const unresolved = runCli(['gate', 'publish', 'ISSUE-1', unresolvedPath], { cwd: repo.dir, env });
+  assert.equal(unresolved.status, 0, unresolved.stderr);
+
+  const checkRuns = (stub.readState() as unknown as { checkRuns?: CheckRunRecord[] }).checkRuns ?? [];
+  assert.deepEqual(checkRuns.map((run) => run.conclusion), ['success', 'action_required']);
+});
+
 // --- record-verdict: verdict → gate-report 結線と final 機械導出 -----------------------
 
 test('gate record-verdict: pass/pass の verdict は final=approved で結線される', async (t) => {
@@ -234,6 +289,42 @@ test('gate record-verdict: blocking finding を含む verdict は final=rejected
   const report = readReport(reportPath);
   assert.equal(report.gate.final, 'rejected');
   assert.equal(report.gate.blockers[0].origin, 'design');
+});
+
+test('gate record-verdict (AC-5): current findingのraw evidence改変を拒否し完全記録を保持する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const reportPath = writeReport(repo.dir, scaffold({ id: 'design' }));
+  const baseFinding = {
+    severity: 'warning', origin: 'design', code: 'NON_FINAL_CATEGORY',
+    evidence: ['DESIGN.md のraw evidence原文'],
+    reclassification: {
+      original_severity: 'blocking', classified_severity: 'warning',
+      downgrade_reason: '限定4類型外',
+      outside_blocking_categories: {
+        previous_blocking_unresolved: false,
+        issue_purpose_blocked: false,
+        test_build_regression: false,
+        data_loss_or_security: false,
+      },
+      raw_evidence: ['要約へ改変した文字列'],
+      follow_up_issue_id: 'ISSUE-900',
+    },
+  };
+  const rejected = runCli(['gate', 'record-verdict', reportPath], {
+    cwd: repo.dir,
+    input: JSON.stringify({ conformance: 'pass', falsification: 'pass', blockers: [baseFinding] }),
+  });
+  assert.equal(rejected.status, 1);
+  assert.match(rejected.stderr, /raw evidence原文.*完全一致/);
+
+  baseFinding.reclassification.raw_evidence = [...baseFinding.evidence];
+  const accepted = runCli(['gate', 'record-verdict', reportPath], {
+    cwd: repo.dir,
+    input: JSON.stringify({ conformance: 'pass', falsification: 'pass', blockers: [baseFinding] }),
+  });
+  assert.equal(accepted.status, 0, accepted.stderr);
+  assert.deepEqual((readReport(reportPath).gate.blockers[0] as unknown as { reclassification: { raw_evidence: string[] } }).reclassification.raw_evidence, baseFinding.evidence);
 });
 
 test('gate record-verdict: inconclusive の verdict は silent pass せず final=human_required になる', async (t) => {
