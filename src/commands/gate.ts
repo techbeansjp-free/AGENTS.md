@@ -1148,13 +1148,12 @@ export async function recordVerdict(args: string[]): Promise<number> {
 
     const hasBlocking = (verdict.blockers ?? []).some((finding) => finding.severity === 'blocking');
     const derivedFinal = aggregation.final;
+    // Issue #733: light の再レビュー上限に達した attempt に否定判定が残る場合は、集約結果が
+    // rejected でも人間判断へ倒す。集約結果へ従属させると打ち切り経路が到達不能になる。
     const lightReviewCutoffReached =
       report.gate.light_review?.applied === true &&
       report.gate.light_review.remediation_round >= LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS &&
-      !hasBlocking &&
-      conformance !== 'fail' &&
-      falsification !== 'fail' &&
-      derivedFinal === 'human_required';
+      (hasBlocking || conformance === 'fail' || falsification === 'fail');
     if (lightReviewCutoffReached) verdict.inconclusive = true;
     const final = lightReviewCutoffReached ? 'human_required' : derivedFinal;
     report.gate.conformance = conformance;

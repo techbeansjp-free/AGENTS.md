@@ -276,7 +276,7 @@ test('gate record-verdict: inconclusive でも fail と blocking finding を優�
   assert.equal(report.gate.blockers[0].code, 'INCONCLUSIVE-COUNTEREXAMPLE');
 });
 
-test('gate record-verdict: lightの再レビュー上限でもfailとblockingを優先する', async (t) => {
+test('gate record-verdict: lightの再レビュー上限でblockingが残ればhuman_requiredへ打ち切る', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
@@ -300,10 +300,10 @@ test('gate record-verdict: lightの再レビュー上限でもfailとblockingを
   const res = runCli(['gate', 'record-verdict', reportPath], { cwd: repo.dir, input: verdict });
 
   assert.equal(res.status, 0, res.stderr);
-  assert.equal(readReport(reportPath).gate.final, 'rejected');
+  assert.equal(readReport(reportPath).gate.final, 'human_required');
 });
 
-test('gate record-verdict: lightの再レビュー上限で否定判定が無いpendingはhuman_requiredへ打ち切る', async (t) => {
+test('gate record-verdict: lightの再レビュー上限で否定判定が無いpendingはhuman_requiredへ倒れる', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 

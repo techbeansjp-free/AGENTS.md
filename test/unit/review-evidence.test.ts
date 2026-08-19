@@ -171,7 +171,7 @@ test('ISSUE-733 AC-24: GitHubの4ゲートで要求体数に満たない証跡�
   }
 });
 
-test('ISSUE-733 AC-15: ラウンド打ち切りよりfail・blockingを優先し、未到達・blocker無しも集約判定を保つ', () => {
+test('ISSUE-733 AC-15: 閾値到達時のblockingをrejectedより先にhuman_requiredへ移し、未到達・blocker無しは集約判定を保つ', () => {
   const blockingVerdict: ReviewEvidence['verdict'] = {
     conformance: 'pass',
     falsification: 'fail',
@@ -190,9 +190,11 @@ test('ISSUE-733 AC-15: ラウンド打ち切りよりfail・blockingを優先し
   ];
 
   const cutoff = verify(blockingReviews, { gateRound: { round: 4, cutoffThreshold: 4 } });
-  assert.equal(cutoff.final, 'rejected');
-  assert.equal(cutoff.inconclusive, false);
-  assert.equal(cutoff.reason, undefined);
+  assert.equal(cutoff.final, 'human_required');
+  assert.equal(cutoff.inconclusive, true);
+  assert.match(cutoff.reason ?? '', /round=4/);
+  assert.match(cutoff.reason ?? '', /cutoff_threshold=4/);
+  assert.match(cutoff.reason ?? '', /unresolved_blocking=2/);
 
   assert.equal(
     verify(blockingReviews, { gateRound: { round: 3, cutoffThreshold: 4 } }).inconclusive,

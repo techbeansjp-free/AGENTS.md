@@ -697,11 +697,12 @@ export function verifyGithubReviewEvidence(options: {
   });
   const blockers = aggregation.blockers;
   const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
+  // Issue #733: 打ち切り判定を aggregation.final に従属させない。集約規則では blocking finding が
+  // あれば final は必ず rejected になるため、従属させるとラウンド上限の打ち切りが到達不能になる。
   const cutoffReached =
     options.gateRound !== undefined &&
     options.gateRound.round >= options.gateRound.cutoffThreshold &&
-    hasBlocking &&
-    aggregation.final === 'human_required';
+    hasBlocking;
   const trustedInconclusive = cutoffReached || aggregation.inconclusive;
   const final = cutoffReached ? 'human_required' : aggregation.final;
   return {
