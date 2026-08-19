@@ -36,6 +36,21 @@ import {
 import { aggregateGateAttempt } from '../lib/gate-verdict-aggregation.js';
 import { resolveGateQuickExemption, type GateQuickExemption } from '../lib/gate-quick-exemption.js';
 import {
+  assertPromptWithinLimit,
+  classifyEvidenceFiles,
+  expandedInputListLine,
+  formatPromptInputPath,
+  omittedInputListLine,
+  reserveInputListBytes,
+  resolvePromptBudget,
+  resolvePromptInputLimit,
+  resolveReviewerPromptConfig,
+  resolveReviewerPromptInputs,
+  DEFAULT_PROMPT_MAX_INPUT_BYTES,
+  type PromptBudgetMetrics,
+  type PromptInputFile,
+} from '../lib/reviewer-prompt-inputs.js';
+import {
   LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS,
   resolveLightReview,
   type LightReviewDecision,
@@ -156,7 +171,7 @@ gate-report の final を human_required に設定して書き出す（conforman
 `;
 
 const REVIEWER_CONTEXT_USAGE = `
-使い方: agent-skill-chain gate reviewer-context <issue_id> [target_sha] [base_ref] [review_subject] [adapter]
+使い方: agent-skill-chain gate reviewer-context <issue_id> [target_sha] [base_ref] [review_subject] [adapter] [gate_id]
 
 判定ステップ・adapter が必要とするコンテキストを KEY=VALUE 形式で標準出力へ出す。
   adapter=<claude|codex|human>   review.adapter（未設定時 claude）
@@ -164,19 +179,25 @@ const REVIEWER_CONTEXT_USAGE = `
   issue_number=<n>                issue_id から抽出した番号
   core_review_required=<bool>     登録済みproject policyによるコアレビュー要否
   core_review_status=<status>     resolved|unresolved
+  light_review_applied=<bool>     gate_id指定時のみ。当該gateのlight profile適用可否
 
 target_sha/base_ref: 指定時はGit差分からコア変更を分類する。
 review_subject: ordinary|core_audit。GitHub workflowがPR labelの正本値を渡す。
                 ローカルモードで省略時はstate.yamlのreview_subjectを読む。
 adapter: claude|codex|human。進行役がローカルreviewerを明示選択する場合だけ指定する。
+gate_id: 指定時のみ light_review_applied を出力する。判定プロンプト生成へ明示引数として渡す値であり、
+         プロンプト生成側は実行時のgate-reportを読まない。
 `;
 
 const REVIEWER_PROMPT_USAGE = `
-使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha> [base_sha] [pr_number] [attempt_id]
+使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha> [base_sha] [pr_number] [attempt_id] [light_review_applied]
 
 対象セグメントの成果物・AC-ID・上流承認物を read-only で収集し、conformance（立証）/
 falsification（反証）判定プロトコルの指示（ルーブリック・出力 JSON 契約）を標準出力へ出す。
 レビュアへの入力プロンプトであり、本コマンドはファイルを読むのみ（書込みなし）。
+
+light_review_applied: true|false（省略時 false）。Lightプロファイル追加ルーブリックの有無を決める
+                      唯一の入力。実行時のgate-reportは読まないため、同一引数の生成は常に同一バイト列になる。
 `;
 
 const SUBMIT_EVIDENCE_USAGE = `
@@ -1444,6 +1465,8 @@ function buildVerifiedGateReport(options: {
       })
     : { status: 'unavailable' as const, reason: '当該 target SHA の attempt_id を解決できませんでした' };
   const roundLimit = resolveGateRoundLimit(loadConfig(options.root).review.round_limit);
+  // Issue #751: 判定プロンプトのラウンド上限は target SHA の設定だけで決まる。ここで作業ツリー側の
+  // roundLimit を渡すと、生成時と照合時で高ラウンド節の有無が食い違い prompt digest が一致しなくなる。
   const promptInput = resolveReviewerPromptInput(
     options.root,
     options.issueNumber,
@@ -1452,7 +1475,6 @@ function buildVerifiedGateReport(options: {
     options.baseSha,
     expectedLightReview ?? null,
     roundContext,
-    roundLimit,
   );
   const artifacts = approvedArtifactsForPrompt(
     options.root,
@@ -2085,7 +2107,7 @@ export async function reviewerContext(args: string[]): Promise<number> {
       printUsage(REVIEWER_CONTEXT_USAGE);
       return 0;
     }
-    const [issueIdRaw, targetSha, baseRef, reviewSubjectRaw, requestedAdapterRaw] = args;
+    const [issueIdRaw, targetSha, baseRef, reviewSubjectRaw, requestedAdapterRaw, gateIdRaw] = args;
     if (!issueIdRaw) throw new CliError('issue_id は必須です');
     const { number } = parseIssueId(issueIdRaw);
 
@@ -2117,6 +2139,17 @@ export async function reviewerContext(args: string[]): Promise<number> {
       throw new CliError(`未登録adapterは選択できません: ${requestedAdapterRaw}`);
     }
     const adapter = (requestedAdapterRaw || configuredAdapter) as 'claude' | 'codex' | 'human';
+    // Issue #751: light profileの適用可否は調整状態であり target SHA へ束縛できない。判定プロンプト
+    // 生成が実行時状態を読まずに済むよう、trusted launcherがここで解決して明示引数として渡す。
+    const lightReviewLines: string[] = [];
+    if (gateIdRaw) {
+      validateGateId(gateIdRaw);
+      const applied =
+        tryReadYamlFile<GateReport>(
+          reviewFilePath(root, number, gateIdRaw, config.coordination.backend),
+        )?.gate.light_review?.applied === true;
+      lightReviewLines.push(`light_review_applied=${applied}`);
+    }
     const policyLines = policy
       ? [
           `core_required_profile=${policy.required_profile}`,
@@ -2144,6 +2177,7 @@ export async function reviewerContext(args: string[]): Promise<number> {
         `core_review_required=${decision.required}`,
         `core_review_status=${decision.status}`,
         `core_review_reason=${decision.reason}`,
+        ...lightReviewLines,
         ...policyLines,
       ].join('\n'),
     );
@@ -2199,12 +2233,41 @@ function changedPathStatuses(root: string, baseSha: string, targetSha: string): 
   return statuses;
 }
 
+/**
+ * Issue #751: 連続バッククォート列の件数と同数の可変長引数を一度に展開すると、
+ * 通常のUTF-8成果物でもV8の引数上限を超えてRangeErrorになる。逐次走査で最長列を求める。
+ */
+function longestBacktickRun(content: string): number {
+  let longest = 0;
+  let current = 0;
+  for (let index = 0; index < content.length; index += 1) {
+    if (content.charCodeAt(index) === 0x60) {
+      current += 1;
+      if (current > longest) longest = current;
+    } else {
+      current = 0;
+    }
+  }
+  return longest;
+}
+
+/** 本文中の最長バッククォート列より長いフェンスで囲み、本文が区切りを閉じられないようにする。 */
+function fencedPromptContent(content: string): string {
+  const fence = '`'.repeat(Math.max(3, longestBacktickRun(content) + 1));
+  return `${fence}\n${content}${content.endsWith('\n') ? '' : '\n'}${fence}`;
+}
+
+/**
+ * Issue #733: 成果物パスにも区間標識の偽装が入り得るため、Issue #751 の正準パス表記へ
+ * 無害化を重ねてから判定プロンプトへ書き出す。
+ */
 function promptPath(pathname: string): string {
-  return neutralizePromptBoundaries(
-    JSON.stringify(pathname)
-      .replace(/\u2028/g, '\\u2028')
-      .replace(/\u2029/g, '\\u2029'),
-  );
+  return neutralizePromptBoundaries(formatPromptInputPath(pathname));
+}
+
+/** 本文由来の区間標識偽装を無害化したうえで、動的フェンスで囲む。 */
+function fencedPromptBody(content: string): string {
+  return fencedPromptContent(neutralizePromptBoundaries(content));
 }
 
 export const JUDGMENT_TARGET_BEGIN = '<!-- agent-skill-chain:judgment-target:begin -->';
@@ -2239,9 +2302,20 @@ export interface ReviewerPromptInput {
   alternativeCriteria?: string;
   diff?: string;
   omittedAdditions: string[];
-  lightReview?: LightReviewDecision;
+  lightReview?: Pick<LightReviewDecision, 'applied'>;
   roundContext: GateRoundContext;
   roundLimit: GateRoundLimit;
+  /**
+   * Issue #751: gate 別の固定表で解決した上流成果物・憲法文書・1段の根拠ファイル。
+   * 未指定の合成入力では上流を SPEC.md 単独とみなす（既存の合成テスト互換）。
+   */
+  upstreamArtifacts?: ArtifactReadResult[];
+  constitutionArtifacts?: ArtifactReadResult[];
+  evidenceFiles?: PromptInputFile[];
+  /** 判定入力一覧へ載せる、target SHA blob 由来のバイト数・digest。 */
+  promptInputFiles?: PromptInputFile[];
+  adrDerivationUnavailable?: boolean;
+  promptInputLimit?: number;
 }
 
 function resolveReviewerPromptInput(
@@ -2249,13 +2323,17 @@ function resolveReviewerPromptInput(
   number: string,
   gateId: Segment,
   targetSha: string,
-  baseSha?: string,
-  lightReviewOverride?: LightReviewDecision | null,
+  baseSha: string | undefined,
+  // Issue #751: 実行時のgate-report読取りに戻さない。target SHAに束縛されない状態で
+  // 生成物が変わると、同一引数での再生成がバイト列一致しなくなる。
+  lightReview: Pick<LightReviewDecision, 'applied'> | null,
   roundContextOverride?: GateRoundContext,
   roundLimitOverride?: GateRoundLimit,
 ): ReviewerPromptInput {
-  const config = loadConfig(root);
-  const backend = config.coordination.backend;
+  // Issue #751: 判定プロンプトの入力は target SHA の blob と target SHA の設定だけで決まる。
+  // 作業ツリー側の設定を読むと、同一引数の再生成がバイト列一致しなくなる。
+  const config = resolveReviewerPromptConfig(root, targetSha);
+  const backend = config?.coordination.backend ?? 'github';
   const quick = resolveGateQuickExemption({ root, issueNumber: number, backend, baseSha, targetSha });
   const requiredArtifacts = readRequiredGateArtifacts(root, targetSha, gateId);
 
@@ -2309,10 +2387,26 @@ function resolveReviewerPromptInput(
       diff = '';
     }
   }
-  const lightReview =
-    lightReviewOverride === undefined
-      ? tryReadYamlFile<GateReport>(reviewFilePath(root, number, gateId, backend))?.gate.light_review
-      : lightReviewOverride ?? undefined;
+  const promptInputs = resolveReviewerPromptInputs({
+    root,
+    gateId,
+    targetSha,
+    baseSha,
+    targetArtifactPaths: artifactNames,
+  });
+  const promptInputFiles = [
+    ...promptInputs.targetArtifacts,
+    ...promptInputs.upstreamArtifacts,
+    ...promptInputs.constitution,
+  ]
+    .map((resolved) => resolved.file)
+    .filter((file): file is PromptInputFile => file !== undefined);
+  const upstreamArtifacts = promptInputs.upstreamArtifacts.map((resolved) =>
+    resolved.path === 'SPEC.md' ? spec : readArtifactAtSha(root, targetSha, resolved.path),
+  );
+  const constitutionArtifacts = promptInputs.constitution.map((resolved) =>
+    readArtifactAtSha(root, targetSha, resolved.path),
+  );
   return {
     number,
     gateId,
@@ -2326,12 +2420,18 @@ function resolveReviewerPromptInput(
     alternativeCriteria,
     diff,
     omittedAdditions,
-    lightReview,
+    ...(lightReview === null ? {} : { lightReview }),
     roundContext: roundContextOverride ?? {
       status: 'unavailable',
       reason: 'ラウンド情報が判定プロンプト生成へ渡されていません',
     },
-    roundLimit: roundLimitOverride ?? resolveGateRoundLimit(config.review.round_limit),
+    roundLimit: roundLimitOverride ?? resolveGateRoundLimit(config?.review.round_limit),
+    upstreamArtifacts,
+    constitutionArtifacts,
+    evidenceFiles: promptInputs.evidenceFiles,
+    promptInputFiles,
+    adrDerivationUnavailable: promptInputs.adrDerivationUnavailable,
+    promptInputLimit: resolvePromptInputLimit(root, targetSha),
   };
 }
 
@@ -2344,8 +2444,9 @@ export function buildReviewerPrompt(
   number: string,
   gateId: Segment,
   targetSha: string,
-  baseSha?: string,
-  lightReviewOverride?: LightReviewDecision | null,
+  baseSha: string | undefined,
+  // Issue #751: 実行時のgate-report読取りに戻さない。
+  lightReview: Pick<LightReviewDecision, 'applied'> | null,
   roundContextOverride?: GateRoundContext,
   roundLimitOverride?: GateRoundLimit,
 ): string {
@@ -2356,7 +2457,7 @@ export function buildReviewerPrompt(
       gateId,
       targetSha,
       baseSha,
-      lightReviewOverride,
+      lightReview,
       roundContextOverride,
       roundLimitOverride,
     ),
@@ -2369,7 +2470,7 @@ function appendArtifactPresentation(sections: string[], artifact: ArtifactReadRe
   sections.push(`### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${renderedPath}`);
   const presentation = artifactPresentation(artifact, exempt);
   if (artifact.status === 'present') {
-    sections.push('```\n' + neutralizePromptBoundaries(artifact.content).trimEnd() + '\n```');
+    sections.push(fencedPromptBody(artifact.content.trimEnd()));
   } else if (presentation === 'exempt_absent') {
     sections.push(`(quick 免除により正当に不在: ${neutralizedPath})`);
   } else if (presentation === 'missing') {
@@ -2395,10 +2496,12 @@ export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): str
     '',
     '## 埋め込まれていない参照ファイルの扱い（ハルシネーション防止）',
     'あなたには read-only ツールを含むいかなるツール呼び出しも許可されていない。' +
-    '実際の内容を検証できるのは本プロンプト内に文字列として展開済みの判定対象区間（判定対象の差分・判定対象の成果物・上流の承認済み成果物）のみである。' +
-      '成果物本文が具体的なファイルパスを名指ししても、展開されていない内容を学習知識や推測で補ってはならない。' +
-      '具体的なコード引用・関数名・assertion 内容等を推測・創作して blockers[].evidence にすることを固く禁じる。' +
-      '判定に不可欠なら検証不能である旨を明記し、該当観点を pending、inconclusive:true とすること。',
+      '実際の内容を検証できるのは、本プロンプトの「展開済みファイル一覧」に列挙され、対応する内容が判定対象区間へ文字列として展開されたファイルだけである。' +
+      '「省略ファイル一覧」に列挙されたファイル、およびどちらの一覧にも現れないファイルの内容は不明であり、あなたの学習知識や推測で補ってはならない。' +
+      '両一覧を、内容が与えられているか否かの唯一の判別手段として扱うこと。' +
+      '埋め込まれていないファイルについて、具体的なコード引用・関数名・assertion 内容等を伴う証跡を推測・創作し、' +
+      'それを blockers[].evidence として提示することを固く禁じる。' +
+      '当該ファイルの記述が判定に不可欠な場合は、その部分は検証不能である旨を明記した上で conformance または falsification を pending とし、inconclusive:true を返すこと。',
     '',
     JUDGMENT_TARGET_BEGIN,
   );
@@ -2415,22 +2518,61 @@ export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): str
     else if (input.omittedAdditions.length === 0 && input.targetArtifacts.length > 0) sections.push('(差分なし)');
     sections.push('');
   }
+  // Issue #751: 展開済み・省略の両一覧がレビュアにとって唯一の判別手段であるため、
+  // 一覧へ載せるのは実際に本文を展開できた入力だけに限る。
+  const promptInputFileByPath = new Map(
+    (input.promptInputFiles ?? []).map((file) => [file.path, file] as const),
+  );
+  const renderedRequiredFiles: PromptInputFile[] = [];
+  const renderedPaths = new Set<string>();
+  const recordRendered = (artifactPath: string, expanded: boolean): void => {
+    renderedPaths.add(artifactPath);
+    if (!expanded) return;
+    const file = promptInputFileByPath.get(artifactPath);
+    if (file && !renderedRequiredFiles.some((entry) => entry.path === artifactPath)) {
+      renderedRequiredFiles.push(file);
+    }
+  };
+  const appendReferenceArtifact = (label: string, artifact: ArtifactReadResult): void => {
+    if (renderedPaths.has(artifact.path)) return;
+    sections.push(`### ${label}パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(artifact.path)}`);
+    if (artifact.status === 'present') sections.push(fencedPromptBody(artifact.content.trimEnd()));
+    else if (artifact.status === 'unreadable') sections.push('(内容を取得できなかった)');
+    else sections.push('(target SHAに未検出)');
+    sections.push('');
+    recordRendered(artifact.path, artifact.status === 'present');
+  };
+
   sections.push('## 判定対象の成果物');
   if (input.targetArtifacts.length === 0) sections.push('(対象成果物なし)', '');
-  else for (const artifact of input.targetArtifacts) appendArtifactPresentation(sections, artifact, input.quick.exempt);
+  else for (const artifact of input.targetArtifacts) {
+    appendArtifactPresentation(sections, artifact, input.quick.exempt);
+    recordRendered(artifact.path, artifact.status === 'present');
+  }
 
-  if (input.gateId !== 'spec') {
-    if (input.upstreamSpec.status === 'present') {
-      sections.push(
-        '## 上流の承認済み成果物（整合検査用）',
-        '### SPEC.md',
-        '```\n' + neutralizePromptBoundaries(input.upstreamSpec.content).trimEnd() + '\n```',
-        '',
-      );
-    } else if (input.upstreamSpec.status === 'unreadable') {
-      sections.push('## 上流の承認済み成果物（整合検査用）', '(SPEC.md の内容を取得できなかった)', '');
+  const upstreamArtifacts =
+    input.upstreamArtifacts ?? (input.gateId === 'spec' ? [] : [input.upstreamSpec]);
+  sections.push('## 上流の承認済み成果物（整合検査用）');
+  if (input.gateId === 'spec') {
+    sections.push('(spec gateに上流の承認済み成果物は無い)', '');
+  } else {
+    // Issue #751: 上流成果物にはdocs/adr/配下の任意の変更済みパスが入る。Gitは改行入りパスを
+    // 許容するため、見出しを素のまま埋めると本文フェンス外へ偽の構造見出しを注入できる。
+    for (const artifact of upstreamArtifacts) appendReferenceArtifact('上流成果物', artifact);
+    if (input.adrDerivationUnavailable === true) {
+      sections.push('(当該IssueのADR集合はbase SHA未指定のため導出不能)', '');
     }
   }
+
+  const constitutionArtifacts = input.constitutionArtifacts ?? [];
+  if (constitutionArtifacts.length > 0) {
+    sections.push('## 憲法文書');
+    for (const artifact of constitutionArtifacts) appendReferenceArtifact('憲法文書', artifact);
+  }
+
+  // 判定入力の展開状況・根拠ファイルは、必須区間のレンダー長 M が確定してから差し込む。
+  const inputStatusIndex = sections.length;
+
   sections.push(JUDGMENT_TARGET_END, '', JUDGMENT_AXIS_BEGIN);
   if (input.axis === 'ac_coverage') {
     sections.push(
@@ -2542,7 +2684,73 @@ export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): str
     '```',
     `- 欠落・反例が当該セグメント起因なら origin='${SEGMENT_ORIGIN[input.gateId]}' を第一候補とする。`,
   );
-  return sections.join('\n').trimEnd();
+
+  const evidenceFiles = input.evidenceFiles ?? [];
+  // 一覧行と根拠ファイル見出しにも区間標識の偽装が入り得るため、予約計算と描画で同じ無害化を通す。
+  const listFile = (file: PromptInputFile): PromptInputFile => ({
+    ...file,
+    path: neutralizePromptBoundaries(file.path),
+  });
+  const renderEvidenceBlock = (file: PromptInputFile): string =>
+    `### 根拠ファイルパス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(file.path)}` +
+    `\n${fencedPromptBody(file.text ?? '')}`;
+  const renderPrompt = (
+    metrics: PromptBudgetMetrics,
+    expandedLines: readonly string[],
+    omittedLines: readonly string[],
+    evidenceBlocks: readonly string[],
+    includeEmptyMarkers: boolean,
+  ): string => {
+    const block: string[] = [];
+    block.push('## 判定入力の展開状況');
+    block.push(`- 適用上限: ${metrics.limit} B`);
+    block.push(`- 必須区間のレンダー長 M: ${metrics.mandatoryBytes} B`);
+    block.push(`- 一覧の予約長 L: ${metrics.listReservationBytes} B`);
+    block.push(`- 根拠ファイル予算 B: ${metrics.evidenceBudgetBytes} B`);
+    block.push('### 展開済みファイル一覧');
+    block.push(...(expandedLines.length > 0 ? expandedLines : includeEmptyMarkers ? ['- (なし)'] : []));
+    block.push('### 省略ファイル一覧');
+    block.push(...(omittedLines.length > 0 ? omittedLines : includeEmptyMarkers ? ['- (なし)'] : []));
+    block.push('');
+    block.push('## 根拠ファイル');
+    block.push('以下の小節に、展開済みファイル一覧へ載せた根拠ファイルの全文を示す。該当しない場合は小節を置かない。');
+    block.push(...evidenceBlocks);
+    block.push('');
+    return [...sections.slice(0, inputStatusIndex), ...block, ...sections.slice(inputStatusIndex)]
+      .join('\n')
+      .trimEnd();
+  };
+  const listReservationBytes = reserveInputListBytes(
+    renderedRequiredFiles.map(listFile),
+    evidenceFiles.map(listFile),
+  );
+  const metrics = resolvePromptBudget({
+    limit: input.promptInputLimit ?? DEFAULT_PROMPT_MAX_INPUT_BYTES,
+    listReservationBytes,
+    candidateCount: renderedRequiredFiles.length + evidenceFiles.length,
+    renderMandatory: (candidateMetrics) => renderPrompt(candidateMetrics, [], [], [], false),
+  });
+  const classified = classifyEvidenceFiles(
+    evidenceFiles,
+    metrics.evidenceBudgetBytes,
+    (file) => Buffer.byteLength(`\n${renderEvidenceBlock(file)}`, 'utf8'),
+  );
+  const expandedLines = [
+    ...renderedRequiredFiles.map((file) => expandedInputListLine(listFile(file))),
+    ...classified.expanded.map((file) => expandedInputListLine(listFile(file))),
+  ];
+  const omittedLines = classified.omitted.map((entry) =>
+    omittedInputListLine({ ...entry, file: listFile(entry.file) }),
+  );
+  const prompt = renderPrompt(
+    metrics,
+    expandedLines,
+    omittedLines,
+    classified.expanded.map(renderEvidenceBlock),
+    true,
+  );
+  assertPromptWithinLimit(prompt, metrics);
+  return prompt;
 }
 
 /**
@@ -2555,16 +2763,20 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
       printUsage(REVIEWER_PROMPT_USAGE);
       return 0;
     }
-    const [issueIdRaw, gateId, targetSha, baseSha, prNumber, attemptId] = args;
+    const [issueIdRaw, gateId, targetSha, baseSha, prNumber, attemptId, lightReviewAppliedRaw] = args;
     if (!issueIdRaw || !gateId || !targetSha) throw new CliError('issue_id, gate_id, target_sha はすべて必須です');
     const { issueId, number } = parseIssueId(issueIdRaw);
     validateGateId(gateId);
+    if (lightReviewAppliedRaw && lightReviewAppliedRaw !== 'true' && lightReviewAppliedRaw !== 'false') {
+      throw new CliError(`light_review_applied は true|false のいずれかである必要があります: '${lightReviewAppliedRaw}'`);
+    }
+    const lightReview = lightReviewAppliedRaw === 'true' ? { applied: true } : null;
     const root = repoRoot();
-    const config = loadConfig(root);
+    const config = resolveReviewerPromptConfig(root, targetSha);
     const policy = classifyCoreReview(root, { targetSha, baseRef: baseSha }).policy;
     const roundContext = fetchGateRoundContext({
       root,
-      backend: config.coordination.backend,
+      backend: config?.coordination.backend ?? 'github',
       prNumber,
       issueId,
       gate: gateId,
@@ -2583,7 +2795,7 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
     // 終了コードには触れない（記録済み証跡の prompt digest を変化させないため）。
     const diagnostic = gateRoundFailureDiagnostic(roundContext);
     if (diagnostic) process.stderr.write(`${diagnostic}\n`);
-    const input = resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, undefined, roundContext);
+    const input = resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, lightReview, roundContext);
     const abortReason = gateLaunchAbortReason(input.requiredArtifacts, input.quick.exempt);
     if (abortReason) throw new CliError(abortReason);
     return ok(buildReviewerPromptFromResolved(input));

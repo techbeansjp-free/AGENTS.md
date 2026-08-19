@@ -237,7 +237,7 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
   );
   assert.equal(secondRoundPrompt.status, 0, secondRoundPrompt.stderr);
   assert.match(secondRoundPrompt.stdout, /現在のラウンド番号: 1/);
-  assert.doesNotMatch(secondRoundPrompt.stdout, /高ラウンドの反証追加要件/);
+  assert.match(secondRoundPrompt.stdout, /高ラウンドの反証追加要件/);
   const secondPromptDigest = evidencePromptDigest(secondRoundPrompt.stdout.trimEnd());
   fs.writeFileSync(tokenPath, `${JSON.stringify({
     schema_version: 'agent-skill-chain/launcher-token/v1',
