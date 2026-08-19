@@ -2594,9 +2594,13 @@ export function buildReviewerPrompt(
       status: 'unavailable' as const,
       reason: 'ラウンド情報が判定プロンプト生成へ渡されていません',
     };
+    // Issue #786 / #751: coordination backend も判定対象 SHA に束縛した設定 blob から解決する。
+    // 作業ツリーの設定へ戻すと、同一引数での再生成が作業ツリーの状態次第で変わる。
+    // 設定 blob を解決できない場合の 'github' は、同ファイルの他経路と同じ既定値へ揃えたもの。
     const roundBudgetDeclaration = roundBudgetDeclarationOverride === undefined
-      ? tryReadYamlFile<GateReport>(reviewFilePath(root, number, gateId, config.coordination.backend))
-          ?.gate.round_budget_declaration
+      ? tryReadYamlFile<GateReport>(
+          reviewFilePath(root, number, gateId, targetConfig?.coordination.backend ?? 'github'),
+        )?.gate.round_budget_declaration
       : roundBudgetDeclarationOverride ?? undefined;
 
     sections.push('## falsification（反証）ルーブリック');
