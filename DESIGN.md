@@ -75,13 +75,13 @@ SPEC.md の全要件・全 AC-ID は、下表の 12 の設計要素へ対応す�
 | 要件3(b)（由来が実行時に識別でき証跡値が埋まる） | E4, E5, E7, E8 | 調達元識別子と実体 digest、launcher digest の算出成立 |
 | 要件3(c)（隔離環境に remote が1件も存在しない） | E9 | 削除に加えて不在の積極検査 |
 | 要件4（用意できない場合は非0終了・フォールバック禁止） | E3, E6 | 前提と是正手段を含む日本語メッセージ |
-| 要件5（既存の拒否経路の維持） | E8, E9 | 3 メッセージと検査位置を変更しない |
+| 要件5（既存の拒否経路の維持と現行の受理条件の維持） | E8, E9 | 3 メッセージと検査位置を変更せず、recorder HEAD の前進を許容する現行の受理条件も完全一致へ戻さない |
 | 要件6（launcher digest の算出対象の上限と下限） | E7 | 上限と下限に挟まれた範囲を 10 要素の固定列挙へ確定、全件取得の前提維持 |
 | 要件7（調達実行コードの由来・完全性・記録・(d) の 2 つのパス条件） | E3, E4, E5, E8 | 期待値供給元の限定と二重検証。(d) が定める 2 条件（候補の実体パスと、依存の供給元に置かれた参照経路を解決した後の実体パス）は採用前に E3 が照合する |
 | AC-1 | E1, E3, E11 | 非 Node consumer で npm 呼び出し記録に `ci --ignore-scripts` と `run build` のいずれも現れない |
 | AC-2 | E1, E3, E11 | build script の痕跡ファイルが隔離 clone 内に生じない |
 | AC-3 | E3, E6, E10, E11 | 起動スクリプトと adapter の解決元が隔離 clone。自リポジトリ形状と consumer 形状の双方で確認する |
-| AC-4 | E8, E9, E11 | 既存 3 メッセージの保持 |
+| AC-4 | E8, E9, E11 | 既存 3 メッセージの保持と、前進のみの対照を拒否せず証跡を投稿すること |
 | AC-5 | E3, E6, E11 | 供給元不在時の非0終了と、探索した候補の識別子・探索先を全件含む日本語メッセージ |
 | AC-6 | E1, E2, E11 | 本リポジトリでの回帰なし |
 | AC-7 | E7, E11 | consumer 形状で execution 値が埋まる |
@@ -139,16 +139,16 @@ SPEC.md の全要件・全 AC-ID は、下表の 12 の設計要素へ対応す�
   - 非追加: `.agent-skill-chain/.trusted-cli.json` は配布集合の外にあるため、要件6 の上限により算出対象へ含めない。
 - `E8 launcher token の拡張と証跡記録・記録時再検証`（`.agent-skill-chain/scripts/gate-local-review.sh` と `src/commands/gate.ts`、`src/lib/review-evidence.ts`）: 調達の事実を、準備段から証跡までを貫く 1 本の経路で束縛することを責務とする。
   - launcher token（準備段が所有者専用の権限で生成し、slot ごとに 1 回だけ消費される既存の受け渡し経路）へ `trusted_root`（隔離 clone の絶対パス）と `procurement`（調達モード・調達元識別子・実体 digest）を追加する。token payload の digest は証跡へ `launcher_token_digest` として記録済みであり、追加した値も同じ digest に含まれる。新しい受け渡し経路を作らないのはこのためである。
-  - 証跡投稿（`gate submit-evidence`）は、既存の検査（Issue worktree からの投稿拒否、recorder HEAD と trusted base SHA の一致、protected base worktree の tracked file が dirty でないこと）に加えて次を行う。(i) token の追加フィールドの形式検査。(ii) 実行中の CLI 実体のパッケージ root が `trusted_root` 配下にあること（`clone_build` では隔離 clone の root 自身がパッケージ root になるため、この判定は root 自身を含む）。(iii) 調達モードを base SHA のコミット内容から独立に再導出し、token の値と一致すること。(iv) 調達モードが `package_copy` の場合、実行中のパッケージ root の正準ツリー digest を再算出し、base SHA の導入マーカーの期待値および token の値と一致すること。いずれか不成立なら証跡を投稿せず非0終了する。
+  - 証跡投稿（`gate submit-evidence`）は、既存の検査（Issue worktree の candidate recorder からの投稿拒否、recorder が repository default branch の worktree であること、trusted base SHA が recorder HEAD から到達可能であること、protected base worktree の tracked file が dirty でないこと）に加えて次を行う。(i) token の追加フィールドの形式検査。(ii) 実行中の CLI 実体のパッケージ root が `trusted_root` 配下にあること（`clone_build` では隔離 clone の root 自身がパッケージ root になるため、この判定は root 自身を含む）。(iii) 調達モードを base SHA のコミット内容から独立に再導出し、token の値と一致すること。(iv) 調達モードが `package_copy` の場合、実行中のパッケージ root の正準ツリー digest を再算出し、base SHA の導入マーカーの期待値および token の値と一致すること。いずれか不成立なら証跡を投稿せず非0終了する。
   - 証跡の `execution` へ `procurement`（調達モード・調達元識別子・`package_copy` のときは実体 digest）を記録する。証跡のスキーマ識別子は現行のまま据え置き、当該フィールドを任意フィールドとして追加する。既に投稿済みの証跡を形式不適合にすると、過去 attempt の検証と round 計数が一斉に失敗するためである。存在する場合のみ形式を検査する。
   - 調達元識別子は「何をどこから取得したか」を一意に示す値とし、採用候補の実体パスとパッケージ名・バージョンを組み合わせた文字列とする。`clone_build` の場合は隔離 clone の base SHA を指す値とする。
 - `E9 隔離環境の健全性検査`（`.agent-skill-chain/scripts/gate-local-review.sh`）: 隔離 clone が満たすべき状態を、処理の実行ではなく状態の観測によって確定することを責務とする。
   - remote の削除後に `git remote` の出力が空であることを積極的に検査し、空でなければ非0終了する。削除処理の存在ではなく不在という状態を検査対象にするのは、削除が失われた場合に検査が沈黙しないようにするため（AC-11）。
   - 既存の「隔離した protected base clone が build 後に dirty」検査は維持する（E3 の除外設定と併用する）。
-  - 既存の 3 拒否経路（recorder HEAD 不一致・Issue worktree からの投稿・protected base worktree の dirty）のメッセージと検査位置は変更しない。
+  - 既存の 3 拒否経路（recorder HEAD から到達不能な trusted base SHA・Issue worktree の candidate recorder からの投稿・protected base worktree の dirty）のメッセージと検査位置は変更しない。あわせて、recorder HEAD が repository default branch 上で trusted base SHA より前進しているだけの状態を拒否しない現行の受理条件も維持し、recorder HEAD と trusted base SHA の完全一致を要求する判定へ戻さない。
 - `E10 prompt 生成が読み込む asset の解決基点`（`src/commands/gate.ts` と共有の asset 解決）: レビュア起動段が読む asset（レビュー観点の template・schema・role contract・project policy 分類）の解決を 1 本の固定順序に確定し、Issue worktree を基点にしないことを責務とする。
   - 固定順序: 第 1 段は、隔離 clone 内から起動された CLI プロセスの作業ディレクトリが指す repository root（ローカルゲートレビュー経路ではこれが protected base worktree の root であり、コアレビュー方針の読み取り基点と同一である）の配下の `.agent-skill-chain/<相対パス>`。存在すればこれを採る。第 2 段は、実行中の CLI のパッケージ root 配下の `.agent-skill-chain/<相対パス>`（`package_copy` では隔離 clone 内の複製先、`clone_build` では隔離 clone の root）。第 1 段で解決できた場合は第 2 段を参照せず、両段で解決できない場合は解決失敗として停止する。「protected base worktree の root か隔離 clone か」は二者択一の設計選択ではなく、この 1 本の順序が実行時に決める結果である。本設計はこの順序を変更しない。
-  - どちらの段も Issue worktree を含まない。第 1 段が protected base worktree であることは既存検査（作業ツリー root と repository root の一致、HEAD と trusted base SHA の一致、tracked file が dirty でないこと）が担保し、第 2 段が隔離 clone 配下であることは E6（`ASC_TRUSTED_CLI_ROOT` による CLI 解決の閉鎖）と E8 の記録時再検査（実行中の CLI のパッケージ root が `trusted_root` 配下にあること）が担保する。本設計はこれらの検査を変更しない。
+  - どちらの段も Issue worktree を含まない。第 1 段が protected base worktree であることは既存検査（作業ツリー root と repository root の一致、現在のブランチが repository default branch であること、trusted base SHA が recorder HEAD から到達可能であること、tracked file が dirty でないこと）が担保する。この検査の下で第 1 段の読み取り内容は、審査対象（target SHA の Issue worktree）ではなく保護された default branch の履歴に束縛される。第 2 段が隔離 clone 配下であることは E6（`ASC_TRUSTED_CLI_ROOT` による CLI 解決の閉鎖）と E8 の記録時再検査（実行中の CLI のパッケージ root が `trusted_root` 配下にあること）が担保する。本設計はこれらの検査を変更しない。
   - レビュア起動スクリプトと adapter は上記の解決を経ず、スクリプト自身の位置から解決されるため、常に隔離 clone 配下の実体が使われる（準備段が隔離 clone 内のレビュア起動スクリプトを起動し、当該スクリプトが自身の位置から adapter ディレクトリを決める）。
   - 観測点: AC-15 が要求する「実行時に解決された各 asset のパス」を実行中に観測できるようにするため、共有の asset 解決が返した絶対パスを 1 行ずつ追記する出力先を、環境変数 `ASC_ASSET_TRACE_FILE` が与えられたときに限り有効にする。未設定時は何も出力せず、解決の順序・結果・失敗時の挙動を変えない。記録するのは本番経路が実際に用いる同一の解決関数が返した値であり、観測のために別経路で解決し直さない。
 - `E11 検証`: 上記の振る舞いを固定する自動テスト。既存のローカルレビュー統合テストの stub 構成を、consumer 形状（配布集合と導入マーカーのみを持ち、期待値に一致する stub パッケージを隔離 clone の外に置く）と自リポジトリ形状（`agent-skill-chain` を名乗る `package.json` と build 定義を持つ）の両方へ拡張する。npm は `PATH` 先頭に置く記録用の代替コマンドで模し、実ネットワークへはアクセスしない。consumer 形状では、起動スクリプトと adapter の解決元が隔離 clone 配下であること（AC-3）と、E10 の観測点が記録した各 asset の解決済みパスが Issue worktree 配下でないこと（AC-15 の連言の第 1 項）を、いずれも実行時の値で確認する。consumer 形状ではさらに、依存の供給元に置かれた参照経路が審査対象の linked worktree 配下を指す候補が採用されないこと（AC-16）を、当該参照経路を持たない状態と持つ状態の 2 状態で確認する。詳細な構成と網羅範囲は PLAN.md に置く。
