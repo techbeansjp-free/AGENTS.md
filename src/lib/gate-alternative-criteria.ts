@@ -68,9 +68,24 @@ function normalizePlaceholder(text: string): string | undefined {
       .replace(/^>\s?/, '')
       .replace(/^(?:[-*+]|[0-9]+[.)])(?:\s+|$)/, '')
       .replace(/^\[(?: |x)\](?:\s+|$)/i, '')
+      .replace(/[。．.、，,；;：:！？!?]+$/u, '')
       .trim();
+
+    const code = /^(`+)([^`]*)\1$/.exec(normalized);
+    if (code) {
+      normalized = code[2].trim();
+      continue;
+    }
+    for (const marker of ['**', '__', '~~', '*', '_'] as const) {
+      if (normalized.length >= marker.length * 2
+        && normalized.startsWith(marker)
+        && normalized.endsWith(marker)) {
+        normalized = normalized.slice(marker.length, -marker.length).trim();
+        break;
+      }
+    }
   } while (normalized !== previous);
-  return normalized.toLowerCase().replace(/[。．.、，,；;：:！？!?]+$/u, '').trim();
+  return normalized.toLowerCase();
 }
 
 function ignorableBlock(block: string): boolean {

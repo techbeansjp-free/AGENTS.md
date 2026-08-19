@@ -80,6 +80,23 @@ test('ISSUE-733 AC-6: blockquote内のtask-list placeholderも展開不能にす
   }
 });
 
+test('ISSUE-733 AC-6: Markdown装飾された固定placeholderも展開不能にする', () => {
+  for (const placeholder of [
+    '**TBD**', '__未定__', '*なし*', '_none_', '~~N/A~~', '`TBD`', '`` 未定 ``',
+    '- [ ] **TBD**', '> - [x] `未定`', '**TBD。**', '**`TBD`**',
+  ]) {
+    assert.equal(extractAlternativeCriteria(`## 受入基準\n${placeholder}`), undefined, placeholder);
+  }
+});
+
+test('ISSUE-733 AC-5: 一般Markdown本文と部分装飾は固定placeholderとして除外しない', () => {
+  for (const criterion of [
+    '**終了コードを 0 にする。**', '`TBD` を出力しない', '[TBD](https://example.com)を解消する', '*TBD',
+  ]) {
+    assert.equal(extractAlternativeCriteria(`## 受入基準\n${criterion}`), criterion);
+  }
+});
+
 test('ISSUE-733 AC-5: 文字数・意味を推定せず、固定placeholder以外の短い記述も採用する', () => {
   assert.equal(extractAlternativeCriteria('## 受入基準\n終了コードを 0 にする。'), '終了コードを 0 にする。');
   assert.equal(extractAlternativeCriteria('## 要求\n動く'), '動く');
