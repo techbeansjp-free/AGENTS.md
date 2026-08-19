@@ -18,6 +18,7 @@ import {
 } from '../helpers/tmp-repo.js';
 import { runCli, binPath } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
+import { decodeCodexConfigValue, decodeTomlBasicString, readStubArgv } from '../helpers/codex-config-arg.js';
 import { packageRoot } from '../../src/lib/paths.js';
 
 // #166 launch_worker（セグメント作業ワーカー起動）の adapter 層 + 起動ラッパー
@@ -2345,6 +2346,41 @@ test('codex launch_worker: 個別上書き環境変数（CODEX_IMPLEMENTATION_MO
   assert.match(argv, /override-model/, '個別上書き環境変数が設定由来の解決済みモデルより優先されること');
   assert.match(argv, /model_reasoning_effort="xhigh"/, '個別上書き環境変数が設定由来のreasoning effortより優先されること');
   assert.doesNotMatch(argv, /gpt-5\.6-sol/, '設定由来の値が個別上書きに敗れ反映されないこと');
+});
+
+test('codex launch_worker: 引用符・空白・バックスラッシュを含む値をTOML層とshell層の両方で無改変に渡す（Issue #744）', async (t) => {
+  // reviewer 側と同じクォート欠陥が worker 側の起動列にも存在した。WORKER_CMD は消費側で
+  // /bin/bash -c により再解釈され、その argv の -c 値は Codex 側で TOML として解釈される。
+  // reasoning effort は個別上書き環境変数由来の到達可能な入力であり、shell 層の quote だけを
+  // 適用していた旧実装では引用符やバックスラッシュを含む値が TOML basic string を破壊していた。
+  const { repo, worktreePath } = setupWorkerIssue();
+  t.after(() => repo.cleanup());
+
+  const { stubDir, argvCapturePath } = installCodexStub(t);
+  const hostileEffort = 'hi"gh a\\b';
+  const hostileModel = 'vendor model"with\\backslash';
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    PATH: `${stubDir}:${process.env.PATH}`,
+    CODEX_IMPLEMENTATION_MODEL: hostileModel,
+    CODEX_IMPLEMENTATION_REASONING_EFFORT: hostileEffort,
+  });
+
+  const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  const argv = readStubArgv(fs.readFileSync(argvCapturePath, 'utf8'));
+
+  // shell 層: -m の値は TOML ではなく素の引数であり、原文のまま1引数として届くこと。
+  assert.equal(argv[argv.indexOf('-m') + 1], hostileModel, `明示modelが1引数として無改変で届くこと (argv=${JSON.stringify(argv)})`);
+  // TOML 層: model_reasoning_effort は妥当な basic string であり、復号すると原文へ戻ること。
+  assert.equal(decodeCodexConfigValue(argv, 'model_reasoning_effort'), hostileEffort);
+  // 同じ起動列に同居する writable_roots も TOML として妥当なままであること。
+  const roots = argv.filter((arg) => arg.startsWith('sandbox_workspace_write.writable_roots='));
+  assert.equal(roots.length, 1, `writable_rootsが1つ届くこと (argv=${JSON.stringify(argv)})`);
+  for (const literal of roots[0].slice('sandbox_workspace_write.writable_roots=['.length, -1).split(',')) {
+    assert.ok(decodeTomlBasicString(literal).startsWith('/'), `writable_rootsの各要素が復号可能な絶対パスであること (${literal})`);
+  }
 });
 
 test('codex launch_worker: CODEX_WORKER_CMD完全上書きは設定由来のモデル・閾値解決そのものを行わせない（AC-2, ISSUE-462 AC-4）', async (t) => {

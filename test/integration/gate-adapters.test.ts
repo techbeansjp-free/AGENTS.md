@@ -9,6 +9,11 @@ import { setAdapter } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { envWithout, readFinal, runLauncher, setupGateReview } from '../helpers/gate-launcher.js';
+import {
+  CODEX_REVIEWER_STATIC_CONFIG_ARGS,
+  decodeCodexConfigValue,
+  readStubArgv,
+} from '../helpers/codex-config-arg.js';
 
 // #164-② gate判定ステップの adapter 層（launch_gate_reviewer）+ 起動ラッパー
 // （.agent-skill-chain/scripts/gate-launch-reviewer.sh）を実際の bash で駆動して検証する:
@@ -1100,6 +1105,49 @@ test('codex reviewer: 明示model overrideを無改変で最優先にする（Is
   assert.equal(res.status, 0, res.stderr);
   assert.equal(readFinal(reportPath), 'approved');
   assert.match(fs.readFileSync(stub.argsLog, 'utf8'), new RegExp(`^${explicitModel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+});
+
+test('codex reviewer: 引用符・空白・バックスラッシュを含む値をTOML層とshell層の両方で無改変に渡す（Issue #744）', async (t) => {
+  // CodeRabbit の Major 指摘（GATE_REVIEWER_CMD の消費経路とクォート処理）に対する回帰テスト。
+  // GATE_REVIEWER_CMD は消費側で /bin/bash -c により再解釈され、その argv の -c 値は Codex 側で
+  // TOML として解釈される。model_reasoning_effort は CODEX_REVIEWER_REASONING_EFFORT 由来の
+  // 到達可能な入力であり、shell 層の quote だけを適用していた旧実装では、引用符やバックスラッシュを
+  // 含む値が TOML basic string を破壊して不正な設定値のまま Codex へ渡っていた。
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-config-quoting-issue744-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stub = createCodexStub(stubDir, stubVerdict);
+  // 引用符・空白・バックスラッシュを同時に含む到達可能な入力。
+  const hostileEffort = 'hi"gh a\\b';
+  const hostileModel = 'vendor model"with\\backslash';
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_EXECUTABLE: stub.executable,
+    CODEX_REVIEWER_MODEL: hostileModel,
+    CODEX_REVIEWER_REASONING_EFFORT: hostileEffort,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+  const argv = readStubArgv(fs.readFileSync(stub.argsLog, 'utf8'));
+
+  // shell 層: -m の値は TOML ではなく素の引数であり、原文のまま1引数として届くこと。
+  assert.equal(argv[argv.indexOf('-m') + 1], hostileModel, `明示modelが1引数として無改変で届くこと (argv=${JSON.stringify(argv)})`);
+  // TOML 層: model_reasoning_effort は妥当な basic string であり、復号すると原文へ戻ること。
+  assert.equal(decodeCodexConfigValue(argv, 'model_reasoning_effort'), hostileEffort);
+  // 手書きの escape を残していた静的 config 値に余分なバックスラッシュが混入しないこと。
+  for (const expected of CODEX_REVIEWER_STATIC_CONFIG_ARGS) {
+    assert.ok(argv.includes(expected), `静的config引数が無改変で届くこと: ${expected} (argv=${JSON.stringify(argv)})`);
+  }
+  assert.ok(argv.includes('-'), 'promptをstdinから読む末尾の - が失われないこと');
 });
 
 test('codex reviewer: 区切り文字を含む明示modelのmodel unavailableを誤分類しない（Issue #744 AC-1/AC-6）', async (t) => {
