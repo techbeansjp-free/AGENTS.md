@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0079
-status: proposed
+status: accepted
 title: reviewer stderr分類のmodel identifierを引用符以外のASCII可視1〜128 byteとして確定する
 tags: [adapter, codex, gate-reviewer, diagnostics, security]
 supersedes: [ADR-0076]
