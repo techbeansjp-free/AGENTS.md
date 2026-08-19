@@ -128,7 +128,7 @@ function createFixture(): Fixture {
   };
 }
 
-test('gate-local-review: default branch HEADがbase_shaより前進していてもbase_shaの隔離cloneで実行し、不要なdispatchを送らない', (t) => {
+test('gate-local-review: default branch HEADがbase_shaより前進していてもbase_shaの隔離cloneで実行し、不要なdispatchを送らない（Issue #703 AC-9）', (t) => {
   const fixture = createFixture();
   t.after(() => fixture.cleanup());
   const rootHeadBefore = git(fixture.repoDir, ['rev-parse', 'HEAD']);
@@ -151,7 +151,7 @@ test('gate-local-review: default branch HEADがbase_shaより前進していて�
   assert.deepEqual(fixture.repositoryDispatches(), []);
 });
 
-test('gate-local-review: default branch以外のworktreeでは隔離clone作成前に拒否する', (t) => {
+test('gate-local-review: default branch以外のworktreeでは隔離clone作成前に拒否する（Issue #703 AC-9）', (t) => {
   const fixture = createFixture();
   t.after(() => fixture.cleanup());
   git(fixture.repoDir, ['checkout', 'bugfix/643-review-target']);
@@ -165,7 +165,7 @@ test('gate-local-review: default branch以外のworktreeでは隔離clone作成�
   assert.equal(fs.existsSync(fixture.reviewTrace), false, '拒否後にreviewerを起動しないこと');
 });
 
-test('gate-local-review: base_shaがdefault branchから到達不能なら隔離clone作成前に拒否する', (t) => {
+test('gate-local-review: base_shaがdefault branchから到達不能なら隔離clone作成前に拒否する（Issue #703 AC-9）', (t) => {
   const fixture = createFixture();
   t.after(() => fixture.cleanup());
   fixture.setPullBase(fixture.targetSha);
