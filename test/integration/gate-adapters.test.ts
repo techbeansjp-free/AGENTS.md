@@ -57,6 +57,39 @@ function createCodexStub(dir: string, verdict: string): { executable: string; ar
   return { executable, argsLog };
 }
 
+function classifyReviewerStderr(input: string | Buffer): Record<string, string> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-stderr-classifier-issue744-'));
+  const stateFile = path.join(dir, 'state');
+  try {
+    execFileSync(
+      'bash',
+      ['-c', 'source "$1"; _reviewer_classify_stderr "$2"', 'bash', path.join(process.cwd(), '.agent-skill-chain', 'adapters', 'claude.sh'), stateFile],
+      { input, stdio: ['pipe', 'pipe', 'pipe'] },
+    );
+    return Object.fromEntries(
+      fs.readFileSync(stateFile, 'utf8').trim().split('\n').map((line) => line.split('=', 2)),
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function renderFailureEnvelope(internal: string, rc: string, attempts: string, env: NodeJS.ProcessEnv = {}): string {
+  return execFileSync(
+    'bash',
+    [
+      '-c',
+      'source "$1"; _reviewer_failure_envelope "$2" "$3" "$4"',
+      'bash',
+      path.join(process.cwd(), '.agent-skill-chain', 'adapters', 'claude.sh'),
+      internal,
+      rc,
+      attempts,
+    ],
+    { encoding: 'utf8', env: { ...process.env, ...env } },
+  );
+}
+
 // --- T2: claude launch_gate_reviewer ---------------------------------------------------
 
 test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-report へ結線し exit 0（final=approved）', async (t) => {
@@ -221,7 +254,7 @@ test('claude launch_gate_reviewer: TERMを無視するreviewerのプロセスグ
 
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
-  assert.match(res.stderr, /レビュア起動に失敗しました（rc=124, attempts=1）/);
+  assert.match(res.stderr, /code=REVIEWER_TIMEOUT classification=TIMEOUT rc=124 attempts=1 stderr_truncated=false/);
   assert.ok(elapsedMs < 10000, `watchdogが期限と猶予の後にreviewerを停止すること: elapsed=${elapsedMs}ms`);
   assert.ok(fs.existsSync(childPidFile), 'reviewerの子プロセスが起動したこと');
   const childPid = Number(fs.readFileSync(childPidFile, 'utf8').trim());
@@ -614,6 +647,59 @@ test('gate-launch-reviewer.sh: reviewer-contextが返すadapterが未登録値�
 
 // --- T4: codex launch_gate_reviewer（認証不成立 fail-safe） ------------------------------
 
+test('reviewer stderr classifier: model/authの完全一致だけを相互排他的に分類する（Issue #744 AC-1）', () => {
+  const modelSignatures = [
+    "error: model 'gpt-5.6-sol' is not available",
+    "error: model 'gpt-5.6-terra' is not supported",
+    "error: model 'gpt-5.6-luna' does not exist",
+    "error: unknown model 'gpt-5.6-sol'",
+  ];
+  const authSignatures = [
+    'error: authentication failed',
+    'error: unauthorized',
+    'error: not authenticated',
+    'error: login required',
+    'error: not logged in',
+    'error: http 401',
+    'error: http 403',
+  ];
+  for (const signature of modelSignatures) {
+    assert.equal(classifyReviewerStderr(`${signature}\n`).classification, 'MODEL_UNAVAILABLE', signature);
+  }
+  for (const signature of authSignatures) {
+    assert.equal(classifyReviewerStderr(`${signature}\r\n`).classification, 'AUTHENTICATION_FAILURE', signature);
+  }
+  assert.equal(classifyReviewerStderr('error: unknown option for model command\n').classification, 'EXECUTION_FAILURE');
+  assert.equal(classifyReviewerStderr("error: model 'gpt-5.6-sol' is not available: retry\n").classification, 'EXECUTION_FAILURE');
+  assert.equal(
+    classifyReviewerStderr("error: model 'gpt-5.6-sol' is not available\nerror: unauthorized\n").classification,
+    'EXECUTION_FAILURE',
+  );
+});
+
+test('reviewer stderr classifier: 64 KiBだけを検査し、超過後も入力をdrainする（Issue #744 AC-2）', () => {
+  const exact = classifyReviewerStderr(Buffer.alloc(64 * 1024, 0x78));
+  assert.deepEqual(exact, {
+    classification: 'EXECUTION_FAILURE',
+    stderr_bytes: String(64 * 1024),
+    stderr_truncated: 'false',
+  });
+  const over = classifyReviewerStderr(Buffer.alloc(64 * 1024 + 1, 0x78));
+  assert.equal(over.stderr_bytes, String(64 * 1024));
+  assert.equal(over.stderr_truncated, 'true');
+  const signature = "error: unknown model 'gpt-5.6-sol'";
+  const boundarySuffix = `${'x'.repeat(64 * 1024 - signature.length - 1)}\n${signature}x`;
+  assert.equal(classifyReviewerStderr(boundarySuffix).classification, 'EXECUTION_FAILURE', '上限位置を偽の行末にしないこと');
+});
+
+test('reviewer failure envelope: allowlist検証不能時は固定分類とrcだけへ縮退する（Issue #744 AC-4）', () => {
+  const tainted = 'classification=MODEL_UNAVAILABLE;stderr_truncated=false;raw=secret-fragment';
+  const output = renderFailureEnvelope(tainted, '41', '3');
+  assert.equal(output, 'classification=EXECUTION_FAILURE rc=41');
+  assert.doesNotMatch(output, /secret-fragment/);
+  assert.ok(Buffer.byteLength(output) <= 4096);
+});
+
 test('codex launch_gate_reviewer: 認証不成立は gate を approve せず human_required・exit≠0 を返す', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-auth-failure-issue727-'));
@@ -870,6 +956,7 @@ test('codex launch_gate_reviewer: exec未対応フラグを使わずapproval_pol
   const argv = fs.readFileSync(stub.argsLog, 'utf8');
   assert.doesNotMatch(argv, /^--ask-for-approval$/m);
   assert.match(argv, /^approval_policy="never"$/m);
+  assert.match(argv, /^gpt-5\.6-sol$/m);
 });
 
 test('codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabilityモデルを使う', async (t) => {
@@ -888,8 +975,126 @@ test('codex launch_gate_reviewer: 既定起動はread-only sandboxとhigh-capabi
   assert.equal(res.status, 0, res.stderr);
   const adapter = fs.readFileSync(path.join(repo.dir, '.agent-skill-chain', 'adapters', 'codex.sh'), 'utf8');
   assert.match(adapter, /--sandbox read-only/, 'reviewerはread-only sandboxで起動すること');
-  assert.match(adapter, /CODEX_REVIEWER_MODEL:-gpt-5\.6/, 'reviewerはhigh-capability既定モデルを使うこと');
+  assert.match(adapter, /model='gpt-5\.6-sol'/, 'reviewerは利用可能なconcrete既定モデルを使うこと');
   assert.match(adapter, /CODEX_REVIEWER_REASONING_EFFORT:-high/, 'reviewerはhigh reasoning effortを使うこと');
+});
+
+test('codex reviewer: 組込み既定のmodel unavailableを安全な専用診断にする（Issue #744 AC-1/AC-5）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'codex');
+  const secret = 'issue744-provider-secret-must-not-appear';
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_REVIEWER_CMD: `cat >/dev/null; printf '%s\\n' "error: model 'gpt-5.6-sol' is not available" ${JSON.stringify(secret)} >&2; exit 41`,
+    GATE_REVIEWER_RETRIES: '2',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /code=NONCORE_DEFAULT_MODEL_UNAVAILABLE classification=MODEL_UNAVAILABLE rc=41 attempts=2 stderr_truncated=false/);
+  assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, new RegExp(secret));
+  assert.ok(Buffer.byteLength(res.stderr) <= 4096);
+});
+
+test('codex reviewer: chunk分割された認証失敗をretry後の固定診断にする（Issue #744 AC-1/AC-8）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'codex');
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_REVIEWER_CMD: "cat >/dev/null; printf 'error: una' >&2; printf 'uthorized\\n' >&2; exit 42",
+    GATE_REVIEWER_RETRIES: '2',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /code=REVIEWER_AUTHENTICATION_FAILURE classification=AUTHENTICATION_FAILURE rc=42 attempts=2 stderr_truncated=false/);
+});
+
+test('codex reviewer: 64 KiB超過をraw非保持でdrainし外部診断へtruncatedを示す（Issue #744 AC-2）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'codex');
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_REVIEWER_CMD: 'cat >/dev/null; /usr/bin/head -c 65537 /dev/zero >&2; exit 43',
+    GATE_REVIEWER_RETRIES: '1',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /classification=EXECUTION_FAILURE rc=43 attempts=1 stderr_truncated=true/);
+  assert.ok(Buffer.byteLength(res.stderr) <= 4096);
+});
+
+test('codex reviewer: 明示model overrideを無改変で最優先にする（Issue #744 AC-6）', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-model-override-issue744-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+  const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const stub = createCodexStub(stubDir, stubVerdict);
+  const explicitModel = 'vendor-model_2026.preview';
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_EXECUTABLE: stub.executable,
+    CODEX_REVIEWER_MODEL: explicitModel,
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+  assert.match(fs.readFileSync(stub.argsLog, 'utf8'), new RegExp(`^${explicitModel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+});
+
+test('codex reviewer: 成功・失敗ともraw stderrと秘密値を外へ出さず隔離rootを削除する（Issue #744 AC-3/AC-8）', async (t) => {
+  const secret = 'issue744-secret-and-raw-stderr-fragment';
+
+  for (const succeeds of [true, false]) {
+    const { repo, reportPath, targetSha } = setupGateReview();
+    const observationDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-cleanup-issue744-'));
+    const rootLog = path.join(observationDir, 'root.log');
+    try {
+      setAdapter(repo.dir, 'codex');
+      const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+      const command = succeeds
+        ? `cat >/dev/null; dirname "$HOME" > ${JSON.stringify(rootLog)}; printf '%s\\n' ${JSON.stringify(secret)} >&2; printf '%s' '${verdict}'`
+        : `cat >/dev/null; dirname "$HOME" > ${JSON.stringify(rootLog)}; printf '%s' ${JSON.stringify(secret)}; printf '%s\\n' ${JSON.stringify(secret)} >&2; exit 42`;
+      const env = envWithout([], {
+        CODEX_AUTH_PROBE_CMD: 'true',
+        CODEX_REVIEWER_CMD: command,
+        GATE_REVIEWER_RETRIES: '1',
+        GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+      });
+
+      const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+      assert.equal(res.status === 0, succeeds, res.stderr);
+      assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, new RegExp(secret));
+      assert.equal(fs.existsSync(fs.readFileSync(rootLog, 'utf8').trim()), false, '隔離rootが残らないこと');
+      if (!succeeds) {
+        assert.match(res.stderr, /classification=EXECUTION_FAILURE rc=42 attempts=1/);
+        assert.equal(readFinal(reportPath), 'human_required');
+      }
+    } finally {
+      repo.cleanup();
+      fs.rmSync(observationDir, { recursive: true, force: true });
+    }
+  }
 });
 
 // --- Issue #271: コア独立レビューのモデル能力強制 -------------------------------------

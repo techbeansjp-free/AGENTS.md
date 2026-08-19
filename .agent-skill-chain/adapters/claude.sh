@@ -474,6 +474,207 @@ _claude_credential_store_stage_diagnostic() {
   _claude_credential_store_state_message >&2
 }
 
+# Issue #744: reviewer stderrをrawのまま保持せず、固定grammarの有限状態だけへ畳み込む。
+# 入力はstdin、出力は隔離領域内のstate_fileであり、元のbyte・行・文字列断片は書き出さない。
+_reviewer_classify_stderr() {
+  local state_file="$1" byte='' pending_cr=false line_has_data=false line_invalid=false
+  local inspected_bytes=0 truncated=false model_seen=false auth_seen=false
+  local max_bytes=65536
+  local -a auth_patterns=(
+    'error: authentication failed'
+    'error: unauthorized'
+    'error: not authenticated'
+    'error: login required'
+    'error: not logged in'
+    'error: http 401'
+    'error: http 403'
+  )
+  local -a auth_pos=(0 0 0 0 0 0 0)
+  local -a model_prefixes=("error: model '" "error: model '" "error: model '" "error: unknown model '")
+  local -a model_suffixes=("' is not available" "' is not supported" "' does not exist" "'")
+  local -a model_phase=(prefix prefix prefix prefix)
+  local -a model_pos=(0 0 0 0)
+  local -a model_id_len=(0 0 0 0)
+
+  _reviewer_dfa_reset_line() {
+    auth_pos=(0 0 0 0 0 0 0)
+    model_phase=(prefix prefix prefix prefix)
+    model_pos=(0 0 0 0)
+    model_id_len=(0 0 0 0)
+    line_has_data=false
+    line_invalid=false
+    pending_cr=false
+  }
+
+  _reviewer_dfa_feed_byte() {
+    local current="$1" i expected phase prefix suffix pos id_len active=false
+    line_has_data=true
+    if [[ "$line_invalid" == 'true' ]]; then return 0; fi
+    if [[ -z "$current" ]]; then
+      line_invalid=true
+      return
+    fi
+    for i in "${!auth_patterns[@]}"; do
+      pos="${auth_pos[$i]}"
+      ((pos >= 0)) || continue
+      expected="${auth_patterns[$i]:$pos:1}"
+      if [[ -n "$expected" && "$current" == "$expected" ]]; then
+        auth_pos[$i]=$((pos + 1))
+      else
+        auth_pos[$i]=-1
+      fi
+    done
+    for i in "${!model_prefixes[@]}"; do
+      phase="${model_phase[$i]}"
+      [[ "$phase" != 'invalid' ]] || continue
+      pos="${model_pos[$i]}"
+      case "$phase" in
+        prefix)
+          prefix="${model_prefixes[$i]}"
+          expected="${prefix:$pos:1}"
+          if [[ -n "$expected" && "$current" == "$expected" ]]; then
+            pos=$((pos + 1))
+            model_pos[$i]="$pos"
+            if ((pos == ${#prefix})); then
+              model_phase[$i]='identifier'
+              model_pos[$i]=0
+            fi
+          else
+            model_phase[$i]='invalid'
+          fi
+          ;;
+        identifier)
+          id_len="${model_id_len[$i]}"
+          if [[ "$current" == "'" && "$id_len" -ge 1 ]]; then
+            model_phase[$i]='suffix'
+            model_pos[$i]=1
+          elif [[ "$current" == [a-z0-9._-] && "$id_len" -lt 128 ]]; then
+            model_id_len[$i]=$((id_len + 1))
+          else
+            model_phase[$i]='invalid'
+          fi
+          ;;
+        suffix)
+          suffix="${model_suffixes[$i]}"
+          expected="${suffix:$pos:1}"
+          if [[ -n "$expected" && "$current" == "$expected" ]]; then
+            model_pos[$i]=$((pos + 1))
+          else
+            model_phase[$i]='invalid'
+          fi
+          ;;
+        *) model_phase[$i]='invalid' ;;
+      esac
+    done
+    for i in "${!auth_patterns[@]}"; do
+      if ((${auth_pos[$i]} >= 0)); then active=true; fi
+    done
+    for i in "${!model_prefixes[@]}"; do
+      if [[ "${model_phase[$i]}" != 'invalid' ]]; then active=true; fi
+    done
+    [[ "$active" == 'true' ]] || line_invalid=true
+  }
+
+  _reviewer_dfa_finish_line() {
+    local i
+    if [[ "$line_invalid" == 'false' ]]; then
+      for i in "${!auth_patterns[@]}"; do
+        if ((${auth_pos[$i]} == ${#auth_patterns[$i]})); then
+          auth_seen=true
+        fi
+      done
+      for i in "${!model_prefixes[@]}"; do
+        if [[ "${model_phase[$i]}" == 'suffix' ]] && ((${model_pos[$i]} == ${#model_suffixes[$i]})); then
+          model_seen=true
+        fi
+      done
+    fi
+    _reviewer_dfa_reset_line
+  }
+
+  shopt -s nocasematch
+  _reviewer_dfa_reset_line
+  LC_ALL=C
+  while IFS= read -r -n 1 -d '' byte; do
+    if ((inspected_bytes >= max_bytes)); then
+      truncated=true
+      # 上限直後にもbyteがあるため、上限位置を行末と誤認して完全一致を成立させない。
+      line_invalid=true
+      /bin/cat >/dev/null
+      break
+    fi
+    inspected_bytes=$((inspected_bytes + 1))
+    if [[ "$pending_cr" == 'true' ]]; then
+      if [[ "$byte" == $'\n' ]]; then
+        _reviewer_dfa_finish_line
+        continue
+      fi
+      pending_cr=false
+      line_invalid=true
+    fi
+    if [[ "$byte" == $'\n' ]]; then
+      _reviewer_dfa_finish_line
+    elif [[ "$byte" == $'\r' ]]; then
+      pending_cr=true
+    else
+      _reviewer_dfa_feed_byte "$byte"
+    fi
+  done
+  if [[ "$line_has_data" == 'true' || "$pending_cr" == 'true' || "$line_invalid" == 'true' ]]; then
+    _reviewer_dfa_finish_line
+  fi
+
+  local classification='EXECUTION_FAILURE'
+  if [[ "$model_seen" == 'true' && "$auth_seen" == 'false' ]]; then
+    classification='MODEL_UNAVAILABLE'
+  elif [[ "$auth_seen" == 'true' && "$model_seen" == 'false' ]]; then
+    classification='AUTHENTICATION_FAILURE'
+  fi
+  printf 'classification=%s\nstderr_bytes=%s\nstderr_truncated=%s\n' \
+    "$classification" "$inspected_bytes" "$truncated" >"$state_file"
+}
+
+_reviewer_internal_diagnostic() {
+  local classification="${1:-EXECUTION_FAILURE}" truncated="${2:-false}"
+  case "$classification" in
+    MODEL_UNAVAILABLE | AUTHENTICATION_FAILURE | TIMEOUT | EXECUTION_FAILURE) ;;
+    *) classification='EXECUTION_FAILURE' ;;
+  esac
+  [[ "$truncated" == 'true' || "$truncated" == 'false' ]] || truncated=false
+  printf 'classification=%s;stderr_truncated=%s' "$classification" "$truncated"
+}
+
+# 外部診断はallowlist値だけから再構成する。検証不能時はclassificationとrcだけへ縮退する。
+_reviewer_failure_envelope() {
+  local internal="${1:-}" rc="${2:-1}" attempts="${3:-1}"
+  local classification='EXECUTION_FAILURE' truncated=false code='REVIEWER_EXECUTION_FAILURE'
+  if [[ "$internal" =~ ^classification=(MODEL_UNAVAILABLE|AUTHENTICATION_FAILURE|TIMEOUT|EXECUTION_FAILURE)\;stderr_truncated=(true|false)$ ]]; then
+    classification="${BASH_REMATCH[1]}"
+    truncated="${BASH_REMATCH[2]}"
+  else
+    [[ "$rc" =~ ^[0-9]+$ ]] || rc=1
+    printf 'classification=EXECUTION_FAILURE rc=%s' "$rc"
+    return
+  fi
+  if [[ ! "$rc" =~ ^[0-9]+$ || ! "$attempts" =~ ^[1-9][0-9]*$ ]]; then
+    [[ "$rc" =~ ^[0-9]+$ ]] || rc=1
+    printf 'classification=%s rc=%s' "$classification" "$rc"
+    return
+  fi
+  case "$classification" in
+    MODEL_UNAVAILABLE)
+      code='REVIEWER_MODEL_UNAVAILABLE'
+      if [[ "${ASC_REVIEW_ADAPTER:-claude}" == 'codex' && "${ASC_CORE_REVIEW_REQUIRED:-false}" != 'true' && "${ASC_CODEX_MODEL_SOURCE:-}" == 'default' ]]; then
+        code='NONCORE_DEFAULT_MODEL_UNAVAILABLE'
+      fi
+      ;;
+    AUTHENTICATION_FAILURE) code='REVIEWER_AUTHENTICATION_FAILURE' ;;
+    TIMEOUT) code='REVIEWER_TIMEOUT' ;;
+  esac
+  printf 'code=%s classification=%s rc=%s attempts=%s stderr_truncated=%s' \
+    "$code" "$classification" "$rc" "$attempts" "$truncated"
+}
+
 # AI reviewerへは隔離領域へ複製したmodel providerのログインファイルと、呼び出し元環境の
 # ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKENだけを渡す。GitHub credential・gh/git設定・caller HOME・
 # callerのprovider設定ディレクトリは渡さない。判定対象はpromptへ埋込み済みなので、隔離workspace
@@ -543,9 +744,10 @@ _run_reviewer_sanitized() {
   fi
 
   local prompt_file="$isolated_root/prompt" output_file="$isolated_root/output"
+  local stderr_pipe="$isolated_root/reviewer-stderr" stderr_state="$isolated_root/reviewer-stderr-state"
   local timeout_marker="$isolated_root/timed-out" watchdog_ready="$isolated_root/watchdog-ready"
   local watchdog_armed="$isolated_root/watchdog-armed" reviewer_pid_file="$isolated_root/reviewer-pid"
-  local reviewer_pid watchdog_pid rc=0 output="" monitor_was_enabled=false
+  local reviewer_pid watchdog_pid classifier_pid='' stderr_fifo_fd='' rc=0 output="" monitor_was_enabled=false
   printf '%s' "$prompt" >"$prompt_file"
   # Issue #691: reviewerより先にwatchdogを起動し、準備完了を確認する。期限後は独立した
   # reviewerプロセスグループ全体へTERMを送り、1秒の猶予後も残るプロセスをKILLする。
@@ -592,11 +794,25 @@ _run_reviewer_sanitized() {
     return 70
   fi
 
+  if ! /usr/bin/mkfifo "$stderr_pipe" || ! exec {stderr_fifo_fd}<>"$stderr_pipe"; then
+    kill -TERM "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+    /bin/rm -rf -- "$isolated_root"
+    _reviewer_internal_diagnostic EXECUTION_FAILURE false
+    return 70
+  fi
+  (
+    # classifier自身が親のread/write descriptorを保持するとEOFを観測できないため先に閉じる。
+    exec {stderr_fifo_fd}>&-
+    _reviewer_classify_stderr "$stderr_state" <"$stderr_pipe"
+  ) &
+  classifier_pid=$!
+
   [[ $- == *m* ]] && monitor_was_enabled=true
   set -m
   (
     cd -- "$isolated_root/workspace" &&
-      exec "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" <"$prompt_file" >"$output_file" 2>/dev/null
+      exec "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" <"$prompt_file" >"$output_file" 2>"$stderr_pipe"
   ) &
   reviewer_pid=$!
   [[ "$monitor_was_enabled" == "true" ]] || set +m
@@ -612,6 +828,8 @@ _run_reviewer_sanitized() {
     /bin/sleep 0.1 2>/dev/null || true
     kill -KILL -- "-$reviewer_pid" 2>/dev/null || true
     wait "$reviewer_pid" 2>/dev/null || true
+    exec {stderr_fifo_fd}>&-
+    wait "$classifier_pid" 2>/dev/null || true
     kill -TERM "$watchdog_pid" 2>/dev/null || true
     wait "$watchdog_pid" 2>/dev/null || true
     /bin/rm -rf -- "$isolated_root"
@@ -632,10 +850,33 @@ _run_reviewer_sanitized() {
     /bin/sleep 0.1 2>/dev/null || true
     kill -KILL -- "-$reviewer_pid" 2>/dev/null || true
   fi
+  exec {stderr_fifo_fd}>&-
+  local classifier_rc=0
+  wait "$classifier_pid" || classifier_rc=$?
   if [[ -f "$timeout_marker" ]]; then
     rc=124
   fi
-  [[ ! -f "$output_file" ]] || output="$(<"$output_file")"
+  if ((rc == 0)); then
+    [[ ! -f "$output_file" ]] || output="$(<"$output_file")"
+  else
+    local classification='EXECUTION_FAILURE' stderr_truncated=false state_key state_value
+    if ((classifier_rc == 0)) && [[ -f "$stderr_state" ]]; then
+      while IFS='=' read -r state_key state_value; do
+        case "$state_key" in
+          classification)
+            case "$state_value" in
+              MODEL_UNAVAILABLE | AUTHENTICATION_FAILURE | EXECUTION_FAILURE) classification="$state_value" ;;
+            esac
+            ;;
+          stderr_truncated)
+            [[ "$state_value" == 'true' || "$state_value" == 'false' ]] && stderr_truncated="$state_value"
+            ;;
+        esac
+      done <"$stderr_state"
+    fi
+    [[ "$rc" != '124' ]] || classification='TIMEOUT'
+    output="$(_reviewer_internal_diagnostic "$classification" "$stderr_truncated")"
+  fi
   /bin/rm -rf -- "$isolated_root"
   printf '%s' "$output"
   return "$rc"
@@ -914,14 +1155,16 @@ launch_gate_reviewer() {
   fi
 
   # read-only レビュア起動（プロンプトは stdin）。一時障害はリトライ、timeout は打ち切り。
-  local attempt=1 verdict rc
+  local attempt=1 completed_attempts=0 verdict rc internal_diagnostic=''
   while ((attempt <= retries)); do
     verdict=""
     rc=0
     verdict="$(_run_reviewer_sanitized "$prompt" "$reviewer_cmd" "$timeout_sec")" || rc=$?
+    completed_attempts="$attempt"
     if [[ $rc -eq 0 && -n "$verdict" ]]; then
       break
     fi
+    internal_diagnostic="$verdict"
     ((attempt++))
     if ((attempt <= retries)); then sleep "$interval"; fi
   done
@@ -931,7 +1174,9 @@ launch_gate_reviewer() {
       _fail_safe "$(_reviewer_execution_failure_message "${reviewer_executable_name:-レビュア実行系CLI}" "${rc:-1}")"
       return
     fi
-    _fail_safe "レビュア起動に失敗しました（rc=${rc:-1}, attempts=${retries}）"
+    local safe_diagnostic
+    safe_diagnostic="$(_reviewer_failure_envelope "$internal_diagnostic" "${rc:-1}" "${completed_attempts:-1}")"
+    _fail_safe "レビュア起動に失敗しました（${safe_diagnostic}）"
     return
   fi
 

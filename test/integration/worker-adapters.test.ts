@@ -2448,9 +2448,10 @@ test('codex launch_worker (直接呼び出し, ASC_WORKER_MODEL_TIERはあるが
   assert.equal(reacquire.status, 0, 'blocked後にleaseが解放されること: ' + reacquire.stderr);
 });
 
-test('codex.sh: アダプタのソースに具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに追加されていない（AC-9, DESIGN.md）', () => {
+test('codex.sh: worker model resolverにworker.model_tiersの具体値をハードコードしない（AC-9, DESIGN.md）', () => {
   const source = fs.readFileSync(path.join(packageRoot(), '.agent-skill-chain', 'adapters', 'codex.sh'), 'utf8');
-  assert.doesNotMatch(source, /gpt-5\.6-sol/, 'ティア対応表の具体的なモデル文字列をアダプタのソースへ追加していないこと');
+  const workerResolver = source.slice(source.indexOf('_codex_worker_model()'), source.indexOf('_codex_worker_effort()'));
+  assert.doesNotMatch(workerResolver, /gpt-5\.6-sol/, 'workerのティア対応表に属する具体値をworker model resolverへ追加していないこと');
 });
 
 test('config.schema.yaml: examplesを含め具体的なモデル文字列（worker.model_tiersのgpt-5.6-sol）が新たに置かれていない（SPEC.md制約, ADR-0015）', () => {

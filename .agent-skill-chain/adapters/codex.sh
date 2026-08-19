@@ -104,12 +104,12 @@ _codex_worker_effort() {
 # 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
 # env: CODEX_REVIEWER_CMD（テスト用完全上書き）、GATE_REVIEWER_CMD（後方互換上書き）、
 #      CODEX_EXECUTABLE（既定 codex。実行バイナリの明示指定）、
-#      CODEX_REVIEWER_MODEL（通常既定 gpt-5.6）、CODEX_REVIEWER_REASONING_EFFORT（通常既定 high）、
+#      CODEX_REVIEWER_MODEL（通常既定 gpt-5.6-sol）、CODEX_REVIEWER_REASONING_EFFORT（通常既定 high）、
 #      CODEX_CORE_REVIEWER_ATTESTED（コア時の完全command上書きがmodel/effort/read-onlyを満たす証明）。
 launch_gate_reviewer() {
   local report_path="${4:-}"
   local core_codex_review="${ASC_CORE_REVIEW_REQUIRED:-false}"
-  local model="${CODEX_REVIEWER_MODEL:-gpt-5.6}"
+  local model='' model_source='default'
   local effort="${CODEX_REVIEWER_REASONING_EFFORT:-high}"
   local reviewer_executable_cmd=''
 
@@ -120,6 +120,7 @@ launch_gate_reviewer() {
   }
 
   if [[ "$core_codex_review" == "true" ]]; then
+    model_source='core_policy'
     model="${CODEX_REVIEWER_MODEL:-${ASC_CODEX_REQUIRED_MODEL:-}}"
     effort="${CODEX_REVIEWER_REASONING_EFFORT:-${ASC_CODEX_REQUIRED_REASONING_EFFORT:-}}"
     if [[ -z "${ASC_CODEX_REQUIRED_MODEL:-}" || "$model" != "$ASC_CODEX_REQUIRED_MODEL" ]]; then
@@ -136,10 +137,16 @@ launch_gate_reviewer() {
         return
       fi
     fi
+  elif [[ -n "${CODEX_REVIEWER_MODEL:-}" ]]; then
+    model="$CODEX_REVIEWER_MODEL"
+    model_source='explicit'
+  else
+    model='gpt-5.6-sol'
   fi
+  ASC_CODEX_MODEL_SOURCE="$model_source"
   ASC_REVIEW_MODEL="$model"
   ASC_REVIEW_REASONING="$effort"
-  export ASC_REVIEW_MODEL ASC_REVIEW_REASONING
+  export ASC_CODEX_MODEL_SOURCE ASC_REVIEW_MODEL ASC_REVIEW_REASONING
 
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
@@ -149,7 +156,10 @@ launch_gate_reviewer() {
       _codex_fail_safe "$(_reviewer_launch_failure_message "$reviewer_executable_cmd" "$resolve_rc")"
       return
     fi
-    GATE_REVIEWER_CMD="$reviewer_executable_cmd exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'approval_policy=\"never\"' -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"/home\"=\"deny\",\"/Users\"=\"deny\",\"/root\"=\"deny\"}' -"
+    local quoted_model quoted_effort_config
+    printf -v quoted_model '%q' "$model"
+    printf -v quoted_effort_config '%q' "model_reasoning_effort=\"$effort\""
+    GATE_REVIEWER_CMD="$reviewer_executable_cmd exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check --color never -m $quoted_model -c $quoted_effort_config -c 'approval_policy=\"never\"' -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"/home\"=\"deny\",\"/Users\"=\"deny\",\"/root\"=\"deny\"}' -"
   elif [[ -n "${CODEX_REVIEWER_CMD:-}" ]]; then
     GATE_REVIEWER_CMD="$CODEX_REVIEWER_CMD"
   fi
