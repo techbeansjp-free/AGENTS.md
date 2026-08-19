@@ -10,20 +10,28 @@
 #   f377e5988539b89ae950996a2e803aaaed891a36 に VALIDATION.md のみを追加した差分であり、
 #   実装ファイル・SPEC.md・DESIGN.md・PLAN.md・ADR-0078 を一切変更しない。
 #
-# 根拠1: 検証実行時点の worktree HEAD が当該実装 SHA であること。validation worker が再実行した実出力:
-#   $ git log --oneline -3
+# 根拠1: 検証は当該実装 SHA の worktree で実行した。rev を明示しているため再実行で再現する実出力:
+#   $ git log --oneline -3 f377e5988539b89ae950996a2e803aaaed891a36
 #   f377e59 fix: 分類後の判定を有効sub-verdictで再計算し制御レコードの投稿者を束縛する
 #   89ffd95 chore(adr): ADR-0078 を accepted へ更新
 #   0188f52 docs: 最終ラウンドの判定値をhuman_requiredへ収束させ裏付け規則を確定する
 #
-# 根拠2: 本成果物を追加する commit の差分が VALIDATION.md 1件だけであること。
-#   `git add -N VALIDATION.md` 後に validation worker が再実行した実出力:
-#   $ git diff --stat HEAD
-#   VALIDATION.md | 87 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#   1 file changed, 87 insertions(+)
+# 根拠2: 実装 SHA から本成果物を含む最終 commit までの差分が VALIDATION.md 1件だけであること:
+#   $ git diff --stat f377e5988539b89ae950996a2e803aaaed891a36..HEAD
+#   VALIDATION.md | 96 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#   1 file changed, 96 insertions(+)
 #
-# 検出した欠陥: なし。本検証で origin を付して記載すべき欠陥は検出していない。
-# 実装・承認済み成果物（SPEC.md / DESIGN.md / PLAN.md / ADR-0078）への変更は行っていない。
+# ── 検証で検出した欠陥 ────────────────────────────────────────────────
+# code: MERGE_REF_BUILD_TYPE_ERROR / origin: implementation / severity: blocking
+#   PR #791 の CI（verify・verify-config-doc-sync）が、main 最新 74ae980（v0.2.133）と本ブランチの
+#   マージ ref に対する npm ci の prepare build で失敗する。実出力:
+#     src/commands/gate.ts(2598,74): error TS2304: Cannot find name 'config'.
+#   本ブランチ単独（f377e59）の npm run build は exit 0 である。main の 96b7388（Issue #751）が
+#   buildReviewerPrompt() のローカル config を targetConfig へ置き換えた一方、本 Issue の実装が
+#   同関数へ config.coordination.backend 参照を追加したため、テキストマージは競合せずマージ後だけ
+#   型解決が失敗する。AC-1〜AC-8 の判定は実装 SHA に対するもので本欠陥に覆されないが、PR マージ前に
+#   implementation セグメントでの解消を要する。進行役の指示により validation worker は実装を変更しない。
+# 承認済み成果物（SPEC.md / DESIGN.md / PLAN.md / ADR-0078）への変更は行っていない。
 
 schema_version: agent-skill-chain/validation-report/v1
 issue_id: ISSUE-786
@@ -84,4 +92,5 @@ regression:
     - '両方向の回帰再実行（永久rejected側）: test/unit/review-evidence.test.ts「D3: 4条件が揃う最終roundは、raw failを保持したまま有効sub-verdictでapprovedになる」pass。severity 差し替えが sub-verdict へ届かず最終roundが rejected に固定される経路が無いことを固定する'
     - 'test/unit/round-budget-policy.test.ts 7件 pass。gate横断の宣言衝突（別gateの宣言を重複と数えない）と制御レコードの投稿者束縛（非trusted投稿は採用せず単独でゲートも停止させない）の回帰を含む'
     - 'test/unit/review-evidence.test.ts 15件 pass / test/unit/roles.test.ts 7件 pass / test/unit/schema.test.ts 50件 pass / test/integration/report.test.ts 9件 pass / test/integration/worker-adapters.test.ts 88件 pass'
+    - 'PR #791 のマージ ref に対する GitHub Actions: verify・verify-config-doc-sync がともに fail。単一の根本原因は上記 MERGE_REF_BUILD_TYPE_ERROR であり、本ブランチ単独の build・test は緑'
     - '.agent-skill-chain/ci/verify-template-sync.sh exit 0 / .agent-skill-chain/ci/verify-doc-length.sh exit 0 / .agent-skill-chain/ci/verify-adr.sh docs/adr/ADR-0078-finding-reclassification-effective-subverdict-and-control-record-trust.md exit 0 / .agent-skill-chain/scripts/adr-lint.sh check exit 0 / .agent-skill-chain/scripts/lint-references.sh exit 0 / .agent-skill-chain/scripts/lint-vocab.sh exit 0'
