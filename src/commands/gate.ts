@@ -25,6 +25,7 @@ import {
   reserveInputListBytes,
   resolvePromptBudget,
   resolvePromptInputLimit,
+  resolveReviewerPromptConfig,
   resolveReviewerPromptInputs,
   type PromptBudgetMetrics,
   type PromptInputFile,
@@ -2146,7 +2147,9 @@ function promptPath(pathname: string): string {
 }
 
 function fencedPromptContent(content: string): string {
-  return `\`\`\`\n${content}${content.endsWith('\n') ? '' : '\n'}\`\`\``;
+  const longestContentFence = Math.max(0, ...[...content.matchAll(/`+/g)].map((match) => match[0].length));
+  const fence = '`'.repeat(Math.max(3, longestContentFence + 1));
+  return `${fence}\n${content}${content.endsWith('\n') ? '' : '\n'}${fence}`;
 }
 
 export function buildReviewerPrompt(
@@ -2200,8 +2203,8 @@ export function buildReviewerPrompt(
       '- 適用対象の全 AC-ID / 要件が当該セグメント成果物で証跡付きに充足されているかを判定する。' +
         '1 件でも欠落・未証跡なら conformance=fail とし、欠落を生んだセグメントを origin に持つ blocking finding を付与する。',
     );
-    const config = loadConfig(root);
-    const roundLimit = roundLimitOverride ?? resolveGateRoundLimit(config.review.round_limit);
+    const targetConfig = resolveReviewerPromptConfig(root, targetSha);
+    const roundLimit = roundLimitOverride ?? resolveGateRoundLimit(targetConfig?.review.round_limit);
     const roundContext = roundContextOverride ?? {
       status: 'unavailable' as const,
       reason: 'ラウンド情報が判定プロンプト生成へ渡されていません',
@@ -2260,7 +2263,7 @@ export function buildReviewerPrompt(
     const lightReview =
       lightReviewOverride === undefined
         ? tryReadYamlFile<GateReport>(
-            reviewFilePath(root, number, gateId, config.coordination.backend),
+            reviewFilePath(root, number, gateId, targetConfig?.coordination.backend ?? 'github'),
           )?.gate.light_review
         : lightReviewOverride ?? undefined;
     if (lightReview?.applied === true) {
@@ -2477,11 +2480,11 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
     const { issueId, number } = parseIssueId(issueIdRaw);
     validateGateId(gateId);
     const root = repoRoot();
-    const config = loadConfig(root);
+    const config = resolveReviewerPromptConfig(root, targetSha);
     const policy = classifyCoreReview(root, { targetSha, baseRef: baseSha }).policy;
     const roundContext = fetchGateRoundContext({
       root,
-      backend: config.coordination.backend,
+      backend: config?.coordination.backend ?? 'github',
       prNumber,
       issueId,
       gate: gateId,

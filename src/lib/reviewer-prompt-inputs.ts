@@ -97,6 +97,24 @@ function targetTreePaths(root: string, targetSha: string): string[] {
   return paths;
 }
 
+const PATH_MENTION_LEFT_BOUNDARY = /[\s"'`([{<（［｛〈《「『【〔]/u;
+const PATH_MENTION_RIGHT_BOUNDARY = /[\s"'`)\]}>、。，．,;；:：!?！？）］｝〉》」』】〕]/u;
+
+/** リポジトリ相対パスを、別パスの部分文字列ではなく独立した名指しとして照合する。 */
+function containsExactPathMention(sourceText: string, candidatePath: string): boolean {
+  let offset = sourceText.indexOf(candidatePath);
+  while (offset >= 0) {
+    const before = offset === 0 ? undefined : sourceText[offset - 1];
+    const end = offset + candidatePath.length;
+    const after = end === sourceText.length ? undefined : sourceText[end];
+    const leftIsBoundary = before === undefined || PATH_MENTION_LEFT_BOUNDARY.test(before);
+    const rightIsBoundary = after === undefined || PATH_MENTION_RIGHT_BOUNDARY.test(after);
+    if (leftIsBoundary && rightIsBoundary) return true;
+    offset = sourceText.indexOf(candidatePath, offset + 1);
+  }
+  return false;
+}
+
 /** gate_id別の固定表から、必須入力と1段だけの根拠ファイル集合を解決する。 */
 export function resolveReviewerPromptInputs(options: {
   root: string;
@@ -139,7 +157,7 @@ export function resolveReviewerPromptInputs(options: {
     .map((entry) => readPromptInput(options.root, options.targetSha, entry).file?.text ?? '')
     .join('\n');
   const evidenceFiles = targetTreePaths(options.root, options.targetSha)
-    .filter((entry) => !requiredPaths.has(entry) && sourceText.includes(entry))
+    .filter((entry) => !requiredPaths.has(entry) && containsExactPathMention(sourceText, entry))
     .map((entry) => readPromptInput(options.root, options.targetSha, entry).file)
     .filter((entry): entry is PromptInputFile => entry !== undefined);
 
@@ -152,10 +170,10 @@ export function resolveReviewerPromptInputs(options: {
   };
 }
 
-/** 上限値を作業ツリーではなくtarget SHAの設定blobだけから解決する。 */
-export function resolvePromptInputLimit(root: string, targetSha: string): number {
+/** prompt生成用設定を作業ツリーではなくtarget SHAの設定blobだけから解決する。 */
+export function resolveReviewerPromptConfig(root: string, targetSha: string): AgentSkillChainConfig | undefined {
   const result = gitBytes(['show', `${targetSha}:${CONFIG_PATH}`], root);
-  if (result.status !== 0) return DEFAULT_PROMPT_MAX_INPUT_BYTES;
+  if (result.status !== 0) return undefined;
   const text = decodeUtf8(result.stdout);
   if (text === undefined) throw new Error(`${CONFIG_PATH} のtarget SHA blobはUTF-8テキストである必要があります`);
   let parsed: unknown;
@@ -164,8 +182,12 @@ export function resolvePromptInputLimit(root: string, targetSha: string): number
   } catch (error) {
     throw new Error(`${CONFIG_PATH} のtarget SHA blobを解釈できません: ${(error as Error).message}`);
   }
-  const config = loadConfig(root, parsed) as AgentSkillChainConfig;
-  return config.review.prompt_max_input_bytes ?? DEFAULT_PROMPT_MAX_INPUT_BYTES;
+  return loadConfig(root, parsed) as AgentSkillChainConfig;
+}
+
+/** 上限値を作業ツリーではなくtarget SHAの設定blobだけから解決する。 */
+export function resolvePromptInputLimit(root: string, targetSha: string): number {
+  return resolveReviewerPromptConfig(root, targetSha)?.review.prompt_max_input_bytes ?? DEFAULT_PROMPT_MAX_INPUT_BYTES;
 }
 
 export function formatPromptInputPath(inputPath: string): string {
