@@ -558,6 +558,57 @@ test('GitHub evidence: implementation対象成果物が空集合でも投稿とg
   };
   assert.equal(report.gate.final, 'approved');
   assert.deepEqual(report.gate.approved_artifacts, []);
+
+  const invalidAttemptId = 'attempt-invalid-implementation-evidence';
+  const invalidRunId = 'review-invalid-implementation-evidence';
+  fs.writeFileSync(tokenPath, `${JSON.stringify({
+    schema_version: 'agent-skill-chain/launcher-token/v1',
+    attempt_id: invalidAttemptId,
+    expected_count: 1,
+    profile: 'standard',
+    target_sha: targetSha,
+    base_sha: baseSha,
+    pr_number: '742',
+    nonce: 'b'.repeat(48),
+    slots: [{ slot: 1, run_id: invalidRunId }],
+    consumed_slots: [],
+  })}\n`, { mode: 0o600 });
+  const invalidSubmitted = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, baseSha, '742',
+      invalidAttemptId, '1', invalidRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+    ],
+    {
+      cwd: repo.dir,
+      env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify({ ...verdict, inconclusive: 'true' }),
+    },
+  );
+  assert.equal(invalidSubmitted.status, 0, invalidSubmitted.stderr);
+  const invalidReview = stub.readState().pullReviews?.at(-1) as { body: string } | undefined;
+  assert.ok(invalidReview);
+  assert.deepEqual(parseReviewEvidence(invalidReview.body)?.verdict, {
+    conformance: 'pending',
+    falsification: 'pending',
+    blockers: [],
+    approved_artifacts: [],
+    inconclusive: true,
+  });
+
+  const invalidReportPath = path.join(repo.dir, 'verified-invalid-implementation.yaml');
+  const invalidVerified = runCli(
+    [
+      'gate', 'verify-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, '742',
+      invalidReportPath, 'ordinary',
+    ],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(invalidVerified.status, 0, invalidVerified.stderr);
+  assert.match(invalidVerified.stdout, /final: human_required/);
+  assert.equal(
+    (parse(fs.readFileSync(invalidReportPath, 'utf8')) as { gate: { final: string } }).gate.final,
+    'human_required',
+  );
 });
 
 test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁数が異なっても往復に成功する', (t) => {
@@ -828,6 +879,12 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
       evidence: [],
     }],
   }));
-  assert.notEqual(emptyFindingEvidence.status, 0);
-  assert.match(emptyFindingEvidence.stderr, /finding・inconclusive契約に適合しません/);
+  assert.equal(emptyFindingEvidence.status, 0, emptyFindingEvidence.stderr);
+  const safeReview = stub.readState().pullReviews?.at(-1) as { body: string } | undefined;
+  const safeEvidence = parseReviewEvidence(safeReview?.body ?? '');
+  assert.equal(safeEvidence?.verdict.conformance, 'pending');
+  assert.equal(safeEvidence?.verdict.falsification, 'pending');
+  assert.deepEqual(safeEvidence?.verdict.blockers, []);
+  assert.equal(safeEvidence?.verdict.inconclusive, true);
+  assert.deepEqual(safeEvidence?.verdict.approved_artifacts.map(({ path: artifactPath }) => artifactPath), ['SPEC.md']);
 });

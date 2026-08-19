@@ -41,6 +41,10 @@ test('ISSUE-733 AC-5/AC-6: 要求記述節だけを採用し、前文・管理�
 test('ISSUE-733 AC-5/AC-6: 要求記述節の見出しは固定ラベルへ正規化後完全一致する', () => {
   assert.equal(extractAlternativeCriteria('## **受入条件：**\n終了コードを 0 にする。'), '終了コードを 0 にする。');
   assert.equal(extractAlternativeCriteria('## ＲＥＱＵＩＲＥＭＥＮＴＳ：\nwork'), 'work');
+  assert.equal(extractAlternativeCriteria('## 受入基準 ##\n動作すること'), '動作すること');
+  assert.equal(extractAlternativeCriteria('## Requirements ###   \nwork'), 'work');
+  assert.equal(extractAlternativeCriteria('## 受入基準#\nwork'), undefined);
+  assert.equal(extractAlternativeCriteria('## 受入基準 # 注記\nwork'), undefined);
   assert.equal(extractAlternativeCriteria('## 受入基準（案）\nwork'), undefined);
 });
 

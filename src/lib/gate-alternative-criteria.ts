@@ -138,7 +138,12 @@ function headingsOutsideEnclosures(lines: readonly string[]): Heading[] {
     }
 
     const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*$/.exec(line);
-    if (heading) headings.push({ index, level: heading[1].length, text: heading[2] });
+    if (heading) {
+      // CommonMark の ATX closing sequence は見出し名ではない。直前に空白が無い
+      // 本文末尾の # は通常の文字なので残し、固定ラベルとの完全一致を保つ。
+      const text = heading[2].replace(/[ \t]+#+[ \t]*$/, '').trimEnd();
+      headings.push({ index, level: heading[1].length, text });
+    }
   }
   return headings;
 }

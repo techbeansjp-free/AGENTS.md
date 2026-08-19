@@ -1569,6 +1569,26 @@ test('gate reviewer-prompt (ISSUE-733 AC-6): Markdown装飾placeholderはGitHub/
   }
 });
 
+test('gate reviewer-prompt (ISSUE-733 AC-5): ATX closing sequence付き受入基準をGitHub/localとも展開する', (t) => {
+  for (const backend of ['local', 'github'] as const) {
+    const github = backend === 'github' ? makeGhStub() : undefined;
+    const repo = createTmpRepo({ backend });
+    t.after(() => { repo.cleanup(); github?.cleanup(); });
+    const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+    fs.writeFileSync(path.join(repo.dir, 'code.txt'), `${backend} closing sequence\n`);
+    const targetSha = commitAll(repo.dir, `test: ${backend} ATX closing sequence`);
+    seedIssue733Backend(repo.dir, backend, github, '## 受入基準 ##\n動作すること', 'quick');
+
+    const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-733', 'spec', targetSha, baseSha], {
+      cwd: repo.dir, env: github?.env,
+    });
+    assert.equal(result.status, 0, `${backend}: ${result.stderr}`);
+    assert.match(result.stdout, /代替判定基準（trusted な Issue 本文由来）/, backend);
+    assert.match(result.stdout, /動作すること/, backend);
+    assert.doesNotMatch(result.stdout, /conformance は inconclusive/, backend);
+  }
+});
+
 test('gate reviewer-prompt (ISSUE-733 AC-6): blockquote内task-list placeholderはGitHub/localともinconclusiveにする', (t) => {
   for (const backend of ['local', 'github'] as const) {
     const github = backend === 'github' ? makeGhStub() : undefined;

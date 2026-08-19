@@ -1282,10 +1282,17 @@ export async function submitEvidence(args: string[]): Promise<number> {
     } catch (error) {
       throw new CliError(`verdict JSONを解釈できません: ${error instanceof Error ? error.message : String(error)}`);
     }
-    if (!isEvidenceVerdict(parsedVerdict, false)) {
-      throw new CliError('verdict JSONが必須enum・finding・inconclusive契約に適合しません');
-    }
-    const verdict: EvidenceVerdict = { ...parsedVerdict, approved_artifacts: artifacts };
+    // スキーマ不適合応答も当該slotの未確定結果として耐久化する。ここで捨てると、
+    // current attempt のevidenceが0件になり、同一SHAの旧complete attemptへfallbackし得る。
+    const verdict: EvidenceVerdict = isEvidenceVerdict(parsedVerdict, false)
+      ? { ...parsedVerdict, approved_artifacts: artifacts }
+      : {
+          conformance: 'pending',
+          falsification: 'pending',
+          blockers: [],
+          approved_artifacts: artifacts,
+          inconclusive: true,
+        };
 
     const core = classifyCoreReview(root, { targetSha, baseRef: baseSha, policy });
     if (core.required && (core.status !== 'resolved' || profile !== 'strict')) {
