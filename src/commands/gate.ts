@@ -17,6 +17,19 @@ import { classifyCoreReview, loadCoreReviewPolicyAtRef } from '../lib/model-sele
 import { resolveReviewProfile } from '../lib/review-profile.js';
 import { extractSpecAcIds } from '../lib/spec-ac-ids.js';
 import {
+  assertPromptWithinLimit,
+  classifyEvidenceFiles,
+  expandedInputListLine,
+  formatPromptInputPath,
+  omittedInputListLine,
+  reserveInputListBytes,
+  resolvePromptBudget,
+  resolvePromptInputLimit,
+  resolveReviewerPromptInputs,
+  type PromptBudgetMetrics,
+  type PromptInputFile,
+} from '../lib/reviewer-prompt-inputs.js';
+import {
   LIGHT_REVIEW_MAX_REMEDIATION_ROUNDS,
   resolveLightReview,
   type LightReviewDecision,
@@ -2132,6 +2145,10 @@ function promptPath(pathname: string): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
+function fencedPromptContent(content: string): string {
+  return `\`\`\`\n${content}${content.endsWith('\n') ? '' : '\n'}\`\`\``;
+}
+
 export function buildReviewerPrompt(
   root: string,
   number: string,
@@ -2166,9 +2183,9 @@ export function buildReviewerPrompt(
     sections.push('## 埋め込まれていない参照ファイルの扱い（ハルシネーション防止）');
     sections.push(
       'あなたには read-only ツールを含むいかなるツール呼び出しも許可されていない。' +
-        '実際の内容を検証できるのは本プロンプト内に文字列として展開済みのセクション（判定対象の差分・判定対象の成果物・上流の承認済み成果物）のみである。' +
-        '成果物本文が具体的なファイルパス（既存テストファイル名・実装ファイル名等）を名指しで言及していても、' +
-        'そのファイルが上記セクションに展開されていない限り内容は一切不明であり、あなたの学習知識や推測で内容を補ってはならない。' +
+        '実際の内容を検証できるのは、本プロンプトの「展開済みファイル一覧」に列挙され、対応する内容が文字列として展開されたファイルだけである。' +
+        '「省略ファイル一覧」に列挙されたファイルの内容は不明であり、あなたの学習知識や推測で補ってはならない。' +
+        '両一覧を、内容が与えられているか否かの唯一の判別手段として扱うこと。' +
         '埋め込まれていないファイルについて、具体的なコード引用・関数名・assertion 内容等を伴う証跡を推測・創作し、' +
         'それを blockers[].evidence として提示することを固く禁じる。' +
         '当該ファイルの記述が判定に不可欠な場合は、その部分は検証不能である旨を明記した上で conformance または falsification を pending とし、inconclusive:true を返すこと。',
@@ -2333,28 +2350,116 @@ export function buildReviewerPrompt(
       }
       sections.push('');
     }
+    const inputs = resolveReviewerPromptInputs({
+      root,
+      gateId,
+      targetSha,
+      baseSha,
+      targetArtifactPaths: artifactNames,
+    });
+    const requiredFiles = new Map<string, PromptInputFile>();
+    for (const resolved of [...inputs.targetArtifacts, ...inputs.upstreamArtifacts, ...inputs.constitution]) {
+      if (resolved.file && !requiredFiles.has(resolved.path)) requiredFiles.set(resolved.path, resolved.file);
+    }
+    const renderedRequiredPaths = new Set<string>();
+
     sections.push('## 判定対象の成果物');
-    if (artifactNames.length === 0) {
+    if (inputs.targetArtifacts.length === 0) {
       sections.push('(対象成果物なし)');
       sections.push('');
     } else {
-      for (const name of artifactNames) {
-        const content = readArtifact(name);
+      for (const resolved of inputs.targetArtifacts) {
         sections.push(
-          `### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(name)}`,
+          `### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(resolved.path)}`,
         );
-        sections.push(content !== undefined ? '```\n' + content.trimEnd() + '\n```' : '(未検出)');
+        sections.push(resolved.file ? fencedPromptContent(resolved.file.content.toString('utf8')) : '(未検出)');
+        sections.push('');
+        renderedRequiredPaths.add(resolved.path);
+      }
+    }
+    sections.push('## 上流の承認済み成果物（整合検査用）');
+    if (gateId === 'spec') {
+      sections.push('(spec gateに上流の承認済み成果物は無い)');
+      sections.push('');
+    } else {
+      for (const resolved of inputs.upstreamArtifacts) {
+        if (renderedRequiredPaths.has(resolved.path)) continue;
+        sections.push(`### ${resolved.path}`);
+        sections.push(resolved.file ? fencedPromptContent(resolved.file.content.toString('utf8')) : '(target SHAに未検出)');
+        sections.push('');
+        renderedRequiredPaths.add(resolved.path);
+      }
+      if (inputs.adrDerivationUnavailable) {
+        sections.push('(当該IssueのADR集合はbase SHA未指定のため導出不能)');
         sections.push('');
       }
     }
-    if (gateId !== 'spec') {
-      sections.push('## 上流の承認済み成果物（整合検査用）');
-      sections.push('### SPEC.md');
-      sections.push(specText ? '```\n' + specText.trimEnd() + '\n```' : '(未検出)');
+
+    sections.push('## 憲法文書');
+    for (const resolved of inputs.constitution) {
+      if (renderedRequiredPaths.has(resolved.path)) continue;
+      sections.push(`### ${resolved.path}`);
+      sections.push(resolved.file ? fencedPromptContent(resolved.file.content.toString('utf8')) : '(target SHAに未検出)');
       sections.push('');
+      renderedRequiredPaths.add(resolved.path);
     }
 
-    return sections.join('\n').trimEnd();
+    const fixedSections = [...sections];
+    const renderEvidenceBlock = (file: PromptInputFile): string =>
+      `### 根拠ファイルパス（JSON文字列形式・制御文字はエスケープ済み）: ${formatPromptInputPath(file.path)}` +
+      `\n${fencedPromptContent(file.text ?? '')}`;
+    const renderPrompt = (
+      metrics: PromptBudgetMetrics,
+      expandedLines: readonly string[],
+      omittedLines: readonly string[],
+      evidenceBlocks: readonly string[],
+      includeEmptyMarkers: boolean,
+    ): string => {
+      const output = [...fixedSections];
+      output.push('## 判定入力の展開状況');
+      output.push(`- 適用上限: ${metrics.limit} B`);
+      output.push(`- 必須区間のレンダー長 M: ${metrics.mandatoryBytes} B`);
+      output.push(`- 一覧の予約長 L: ${metrics.listReservationBytes} B`);
+      output.push(`- 根拠ファイル予算 B: ${metrics.evidenceBudgetBytes} B`);
+      output.push('### 展開済みファイル一覧');
+      output.push(...(expandedLines.length > 0 ? expandedLines : includeEmptyMarkers ? ['- (なし)'] : []));
+      output.push('### 省略ファイル一覧');
+      output.push(...(omittedLines.length > 0 ? omittedLines : includeEmptyMarkers ? ['- (なし)'] : []));
+      output.push('');
+      output.push('## 根拠ファイル');
+      output.push('以下の小節に、展開済みファイル一覧へ載せた根拠ファイルの全文を示す。該当しない場合は小節を置かない。');
+      output.push(...evidenceBlocks);
+      return output.join('\n').trimEnd();
+    };
+
+    const requiredFileList = [...requiredFiles.values()];
+    const listReservationBytes = reserveInputListBytes(requiredFileList, inputs.evidenceFiles);
+    const limit = resolvePromptInputLimit(root, targetSha);
+    const metrics = resolvePromptBudget({
+      limit,
+      listReservationBytes,
+      candidateCount: requiredFileList.length + inputs.evidenceFiles.length,
+      renderMandatory: (candidateMetrics) => renderPrompt(candidateMetrics, [], [], [], false),
+    });
+    const classified = classifyEvidenceFiles(
+      inputs.evidenceFiles,
+      metrics.evidenceBudgetBytes,
+      (file) => Buffer.byteLength(`\n${renderEvidenceBlock(file)}`, 'utf8'),
+    );
+    const expandedLines = [
+      ...requiredFileList.map(expandedInputListLine),
+      ...classified.expanded.map(expandedInputListLine),
+    ];
+    const omittedLines = classified.omitted.map(omittedInputListLine);
+    const prompt = renderPrompt(
+      metrics,
+      expandedLines,
+      omittedLines,
+      classified.expanded.map(renderEvidenceBlock),
+      true,
+    );
+    assertPromptWithinLimit(prompt, metrics);
+    return prompt;
 }
 
 /**
