@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { parse, stringify } from 'yaml';
+import { traceRuntimeDependencyResolution } from './dependency-trace.js';
+
+// Issue #759: 当該依存を実際に読み込む本モジュールを基点に、実行時の module 解決が返す
+// 解決先を参照経路ごと解決した実体パスとして観測する（ASC_DEPENDENCY_TRACE_FILE 設定時のみ）。
+traceRuntimeDependencyResolution(import.meta.url, ['yaml']);
 
 export function readYamlFile<T = unknown>(filePath: string): T {
   const raw = fs.readFileSync(filePath, 'utf8');

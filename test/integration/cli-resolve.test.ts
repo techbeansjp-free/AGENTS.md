@@ -432,3 +432,227 @@ test('実CLIは第3経路の起動可能性検証が前提とする --help exit 
   const result = spawnSync('node', [path.join(packageRoot, 'bin', 'agents-md.js'), '--help'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
 });
+
+// Issue #759 PLAN #3 / DESIGN E6: 信頼実行の文脈（ASC_TRUSTED_CLI_ROOT）では隔離 clone 配下の
+// 2 経路だけを探索し、PATH 上の実体への解決も自動導入フォールバックも行わない。
+test('ASC_TRUSTED_CLI_ROOT指定時は隔離clone配下のbin/agents-md.jsを最優先で解決する', () => {
+  const fixture = createResolverFixture();
+  const pathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-path-'));
+  const trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-trusted-'));
+  const record = path.join(fixture.root, 'selected.log');
+  try {
+    commandStub(path.join(trustedRoot, 'bin', 'agents-md.js'), 'trusted-bin', record, { node: true });
+    commandStub(path.join(trustedRoot, 'node_modules', '.bin', 'agent-skill-chain'), 'trusted-node-modules', record);
+    commandStub(path.join(fixture.root, 'bin', 'agents-md.js'), 'issue-worktree-bin', record, { node: true });
+    commandStub(path.join(pathDir, 'agent-skill-chain'), 'PATH', record);
+    const env = baseEnv({
+      PATH: `${pathDir}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
+      ASC_TRUSTED_CLI_ROOT: trustedRoot,
+    });
+
+    const result = run(fixture, env);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(fs.readFileSync(record, 'utf8').trim().split('\n'), ['trusted-bin']);
+  } finally {
+    fixture.cleanup();
+    fs.rmSync(pathDir, { recursive: true, force: true });
+    fs.rmSync(trustedRoot, { recursive: true, force: true });
+  }
+});
+
+test('ASC_TRUSTED_CLI_ROOT配下に実体が無ければPATHへ落ちず自動導入もせず非0終了する', () => {
+  const fixture = createResolverFixture();
+  const pathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-path-'));
+  const trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-trusted-'));
+  const record = path.join(fixture.root, 'selected.log');
+  const npmLog = path.join(fixture.root, 'npm.log');
+  try {
+    commandStub(path.join(pathDir, 'agent-skill-chain'), 'PATH', record);
+    writeExecutable(path.join(pathDir, 'npm'), `#!/usr/bin/env bash\necho called >> ${JSON.stringify(npmLog)}\nexit 0\n`);
+    const env = baseEnv({
+      PATH: `${pathDir}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
+      ASC_TRUSTED_CLI_ROOT: trustedRoot,
+    });
+
+    const result = run(fixture, env);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /信頼実行環境のCLI実体を隔離clone配下で解決できません/);
+    assert.match(result.stderr, /PATH上の実体への解決と自動導入フォールバックを行いません/);
+    assert.equal(fs.existsSync(record), false, 'PATH上の実体を実行しないこと');
+    assert.equal(fs.existsSync(npmLog), false, '自動導入を試みないこと');
+  } finally {
+    fixture.cleanup();
+    fs.rmSync(pathDir, { recursive: true, force: true });
+    fs.rmSync(trustedRoot, { recursive: true, force: true });
+  }
+});
+
+// Issue #759 PLAN #4 / DESIGN 判断4: 要件7(d) 第二条件（候補が依存を解決する供給元に置かれた
+// 参照経路を全て解決した後の実体パスが、protected base worktree 以外の linked worktree 配下に
+// ないこと）の照合対象・解決手段・判定手段を固定する。第一条件と同じ 1 つの判定関数を共有する。
+interface DependencySupplyResult {
+  status: number;
+  rejection: string;
+  checked: string[];
+}
+
+function checkDependencySupply(
+  candidate: string,
+  foreignWorktrees: string[],
+): DependencySupplyResult {
+  const script = [
+    'set -uo pipefail',
+    'source .agent-skill-chain/scripts/cli-resolve.sh',
+    `_ASC_FOREIGN_WORKTREES=(${foreignWorktrees.map((entry) => JSON.stringify(entry)).join(' ')})`,
+    `candidate=${JSON.stringify(candidate)}`,
+    'candidate_real="$(_asc_realpath "$candidate")"',
+    '_asc_check_dependency_supply "$candidate" "$candidate_real"',
+    'status=$?',
+    'printf "status=%s\\n" "$status"',
+    'printf "rejection=%s\\n" "$_ASC_DEPENDENCY_REJECTION"',
+    'for entry in ${_ASC_DEPENDENCY_CHECKED_TARGETS[@]+"${_ASC_DEPENDENCY_CHECKED_TARGETS[@]}"}; do printf "checked=%s\\n" "$entry"; done',
+  ].join('\n');
+  const result = spawnSync('bash', ['-c', script], {
+    cwd: packageRoot,
+    env: { ...process.env },
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const lines = result.stdout.split('\n');
+  return {
+    status: Number(lines.find((line) => line.startsWith('status='))?.slice('status='.length) ?? -1),
+    rejection: lines.find((line) => line.startsWith('rejection='))?.slice('rejection='.length) ?? '',
+    checked: lines.filter((line) => line.startsWith('checked=')).map((line) => line.slice('checked='.length)),
+  };
+}
+
+interface SupplyFixture {
+  root: string;
+  candidate: string;
+  parent: string;
+  outside: string;
+  foreign: string;
+  cleanup(): void;
+}
+
+function createSupplyFixture(): SupplyFixture {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'issue759-supply-')));
+  const parent = path.join(root, 'store', 'node_modules');
+  const candidate = path.join(parent, 'agent-skill-chain');
+  const outside = path.join(root, 'outside');
+  const foreign = path.join(root, 'foreign-worktree');
+  fs.mkdirSync(candidate, { recursive: true });
+  fs.writeFileSync(path.join(candidate, 'package.json'), '{"name":"agent-skill-chain"}\n');
+  fs.mkdirSync(path.join(outside, 'yaml'), { recursive: true });
+  fs.mkdirSync(path.join(outside, 'scoped'), { recursive: true });
+  fs.mkdirSync(path.join(foreign, 'node_modules', 'yaml'), { recursive: true });
+  // 供給元(2): 候補と同じ親の依存ディレクトリ。実体・参照経路・スコープ名を混在させる。
+  fs.symlinkSync(path.join(outside, 'yaml'), path.join(parent, 'yaml'));
+  fs.mkdirSync(path.join(parent, '@scope'), { recursive: true });
+  fs.symlinkSync(path.join(outside, 'scoped'), path.join(parent, '@scope', 'inner'));
+  // 供給元(1): 候補パッケージ root 直下の依存ディレクトリ。
+  fs.mkdirSync(path.join(candidate, 'node_modules'), { recursive: true });
+  fs.symlinkSync(path.join(outside, 'yaml'), path.join(candidate, 'node_modules', 'ajv'));
+  return { root, candidate, parent, outside, foreign, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
+}
+
+test('要件7(d)第二条件: 供給元2か所の自身・直下エントリ・スコープ直下を照合し、候補自身は重ねない', () => {
+  const fixture = createSupplyFixture();
+  try {
+    const result = checkDependencySupply(fixture.candidate, [fixture.foreign]);
+
+    assert.equal(result.status, 0, result.rejection);
+    const checked = new Set(result.checked);
+    for (const expected of [
+      path.join(fixture.candidate, 'node_modules'),
+      path.join(fixture.candidate, 'node_modules', 'ajv'),
+      fixture.parent,
+      path.join(fixture.parent, 'yaml'),
+      path.join(fixture.parent, '@scope'),
+      path.join(fixture.parent, '@scope', 'inner'),
+    ]) {
+      assert.equal(checked.has(expected), true, `${expected} が照合対象に含まれること`);
+    }
+    assert.equal(checked.has(fixture.candidate), false, '候補パッケージ自身は第二条件で重ねて数えないこと');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('要件7(d)第二条件: 解決後の実体パスが審査対象のlinked worktree配下なら候補を除外する', () => {
+  const fixture = createSupplyFixture();
+  try {
+    fs.rmSync(path.join(fixture.parent, 'yaml'));
+    fs.symlinkSync(path.join(fixture.foreign, 'node_modules', 'yaml'), path.join(fixture.parent, 'yaml'));
+
+    const result = checkDependencySupply(fixture.candidate, [fixture.foreign]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.rejection, /解決後の実体パスが審査対象のlinked worktree配下です/);
+    assert.ok(result.rejection.includes(path.join(fixture.parent, 'yaml')), '検査した参照経路が示されること');
+    assert.ok(
+      result.rejection.includes(path.join(fixture.foreign, 'node_modules', 'yaml')),
+      '解決後の実体パスが示されること',
+    );
+    assert.ok(result.rejection.includes(fixture.foreign), '該当した linked worktree のパスが示されること');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('要件7(d)第二条件: スコープ名ディレクトリ直下の参照経路も照合する', () => {
+  const fixture = createSupplyFixture();
+  try {
+    fs.rmSync(path.join(fixture.parent, '@scope', 'inner'));
+    fs.symlinkSync(path.join(fixture.foreign, 'node_modules', 'yaml'), path.join(fixture.parent, '@scope', 'inner'));
+
+    const result = checkDependencySupply(fixture.candidate, [fixture.foreign]);
+
+    assert.equal(result.status, 1);
+    assert.ok(result.rejection.includes(path.join(fixture.parent, '@scope', 'inner')));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('要件7(d)第二条件: 解決できない参照経路は安全側へ倒して候補を除外する', () => {
+  const fixture = createSupplyFixture();
+  try {
+    fs.rmSync(path.join(fixture.outside, 'yaml'), { recursive: true, force: true });
+
+    const result = checkDependencySupply(fixture.candidate, [fixture.foreign]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.rejection, /参照経路を解決できません/);
+    assert.match(result.rejection, /解決不能/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('要件7(d): 候補の実体パスと依存の参照先はいずれも同一の判定関数で照合する', () => {
+  const fixture = createSupplyFixture();
+  try {
+    const script = [
+      'set -uo pipefail',
+      'source .agent-skill-chain/scripts/cli-resolve.sh',
+      `_ASC_FOREIGN_WORKTREES=(${JSON.stringify(fixture.foreign)})`,
+      `_asc_path_in_foreign_linked_worktree ${JSON.stringify(path.join(fixture.foreign, 'node_modules', 'agent-skill-chain'))}`,
+      'printf "inside=%s matched=%s\\n" "$?" "$_ASC_MATCHED_WORKTREE"',
+      `_asc_path_in_foreign_linked_worktree ${JSON.stringify(fixture.candidate)}`,
+      'printf "outside=%s matched=%s\\n" "$?" "$_ASC_MATCHED_WORKTREE"',
+      // 候補用と依存用で判定規則を分けていないこと（関数が1つだけであること）。
+      'declare -F | sed -n "s/^declare -f //p" | grep -c "in_foreign_linked_worktree" | sed "s/^/judges=/"',
+    ].join('\n');
+    const result = spawnSync('bash', ['-c', script], { cwd: packageRoot, env: { ...process.env }, encoding: 'utf8' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, new RegExp(`inside=0 matched=${fixture.foreign}`));
+    assert.match(result.stdout, /outside=1 matched=$/m);
+    assert.match(result.stdout, /judges=1/);
+  } finally {
+    fixture.cleanup();
+  }
+});

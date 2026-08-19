@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { repoRoot, worktreeRoot } from '../lib/paths.js';
+import { packageRoot, repoRoot, worktreeRoot } from '../lib/paths.js';
 import { loadConfig } from '../lib/config.js';
 import { parseIssueId, validateSegment, SEGMENTS, CliError, type Segment } from '../lib/issue.js';
 import { findIssueWorktree } from '../lib/worktree.js';
@@ -48,7 +48,12 @@ import {
   type ValidatedGithubReviewEvidence,
   type VerifiedReviewAttempt,
   type VerifiedReviewer,
+  isEvidenceProcurement,
+  type EvidenceProcurement,
 } from '../lib/review-evidence.js';
+import { canonicalTreeDigest } from '../lib/tree-digest.js';
+import { traceRuntimeDependencyResolution } from '../lib/dependency-trace.js';
+import { isTrustedCliMarker, trustedCliMarkerRelativePath } from '../lib/trusted-cli-marker.js';
 import {
   deriveGateRoundContext,
   fetchGateRoundContext,
@@ -84,6 +89,10 @@ import {
   type TrustedGateRecordState,
   type TrustedGateRepository,
 } from '../lib/trusted-gate-recorder.js';
+
+// Issue #759: 当該依存を実際に読み込む本モジュールを基点に、実行時の module 解決が返す
+// 解決先を参照経路ごと解決した実体パスとして観測する（ASC_DEPENDENCY_TRACE_FILE 設定時のみ）。
+traceRuntimeDependencyResolution(import.meta.url, ['yaml']);
 
 const REVIEW_USAGE = `
 使い方: agent-skill-chain gate review <issue_id> <gate_id> <profile> [target_sha]
@@ -260,16 +269,30 @@ const SUBVERDICT_VALUES = new Set(['pass', 'fail', 'pending']);
 // Issue #309: 実在する成果物の内容 digest（artifactDigestOf/artifactDigestOfFile）とは
 // 別ドメインから導出された sentinel のため、実在ファイルの内容といかなる場合も衝突しない。
 export const ABSENT_ARTIFACT_DIGEST = ARTIFACT_ABSENT_DIGEST;
-const LOCAL_REVIEW_LAUNCHER_PATHS = [
+/**
+ * launcher digest の算出対象（Issue #759）。
+ *
+ * 上限は配布集合（`ROOT_LEVEL_ENTRIES` / `NAMESPACED_ENTRIES` が定める範囲）の要素のみ。下限は
+ * レビュア起動・prompt 生成・verdict 記録を実際に行う実行コードと、その実行系が隔離 clone から
+ * 読み込む配布集合所属 asset。`.agent-skill-chain/project/` 配下の2件は配布集合の外にあり
+ * consumer では取得できないため対象から外し、隔離 clone 内から読み込まれて実行される共有実装
+ * `cli-resolve.sh`（調達段の実装を含む）を対象へ加える。この列挙は固定であり、実行環境・実行時の
+ * 解決結果によって変動しない（同一 base SHA に対する digest を一意に保つため）。
+ *
+ * 算出対象を変えると同一 base SHA でも digest 値が変わるため、本変更より前に投稿済みの証跡は
+ * 変更後のコードで再検証すると不一致になり、ラウンド計数から除外される。これは意図した帰結であり
+ * （安全側: 過去の証跡を無条件には信用しない）、除外は黙って0件扱いにせず
+ * `deriveGateRoundContext` の diagnostics 経由でレビュアプロンプトへ明示される。
+ */
+export const LOCAL_REVIEW_LAUNCHER_PATHS = [
   '.agent-skill-chain/scripts/gate-local-review.sh',
   '.agent-skill-chain/scripts/gate-launch-reviewer.sh',
   '.agent-skill-chain/scripts/gate-review.sh',
+  '.agent-skill-chain/scripts/cli-resolve.sh',
   '.agent-skill-chain/adapters/claude.sh',
   '.agent-skill-chain/adapters/codex.sh',
   '.agent-skill-chain/adapters/human.sh',
   '.agent-skill-chain/config/roles.yaml',
-  '.agent-skill-chain/project/manifest.yaml',
-  '.agent-skill-chain/project/MODEL_TIER_TABLE.md',
   '.agent-skill-chain/schemas/gate-report.schema.yaml',
   '.agent-skill-chain/schemas/project-policy.schema.yaml',
 ] as const;
@@ -283,6 +306,10 @@ interface LauncherToken {
   base_sha: string;
   pr_number: string;
   nonce: string;
+  /** 準備段が作った隔離 clone の絶対パス（Issue #759）。 */
+  trusted_root: string;
+  /** 調達の事実（Issue #759）。token payload の digest を通じて証跡へ束縛される。 */
+  procurement: EvidenceProcurement;
   slots: { slot: 1 | 2; run_id: string }[];
   consumed_slots: number[];
 }
@@ -396,13 +423,92 @@ function artifactDigestAtSha(root: string, artifactPath: string, targetSha: stri
   throw new CliError(`target SHAの必須成果物を読めません: ${artifactPath}`);
 }
 
-function localReviewLauncherDigest(root: string, trustedBaseSha: string): string {
+export function localReviewLauncherDigest(root: string, trustedBaseSha: string): string {
   const blobs = LOCAL_REVIEW_LAUNCHER_PATHS.map((launcherPath) => {
     const shown = git(['show', `${trustedBaseSha}:${launcherPath}`], root);
     if (shown.status !== 0) throw new CliError(`trusted baseのlauncher構成を読めません: ${launcherPath}`);
     return { path: launcherPath, digest: digestOf(shown.stdout) };
   });
   return digestOf(JSON.stringify(blobs));
+}
+
+/**
+ * 調達モードを base SHA のコミット内容だけから独立に再導出する（Issue #759）。
+ * 準備段が申告した値を信用せず、記録時に同じ入力から導き直して突き合わせるための実装。
+ */
+function deriveProcurementMode(root: string, trustedBaseSha: string): EvidenceProcurement['mode'] {
+  const shown = git(['show', `${trustedBaseSha}:package.json`], root);
+  if (shown.status !== 0) return 'package_copy';
+  let pkg: { name?: unknown; bin?: unknown };
+  try {
+    pkg = JSON.parse(shown.stdout) as { name?: unknown; bin?: unknown };
+  } catch {
+    return 'package_copy';
+  }
+  const hasEntry =
+    (typeof pkg.bin === 'string' && pkg.name === 'agent-skill-chain') ||
+    (!!pkg.bin &&
+      typeof pkg.bin === 'object' &&
+      typeof (pkg.bin as Record<string, unknown>)['agent-skill-chain'] === 'string');
+  return pkg.name === 'agent-skill-chain' && hasEntry ? 'clone_build' : 'package_copy';
+}
+
+/** 調達実体の期待値を base SHA のコミット内容（導入マーカー）からのみ読む（Issue #759）。 */
+function readTrustedCliExpectation(root: string, trustedBaseSha: string): { tree_digest: string } {
+  const markerPath = trustedCliMarkerRelativePath().split(path.sep).join('/');
+  const shown = git(['show', `${trustedBaseSha}:${markerPath}`], root);
+  if (shown.status !== 0) {
+    throw new CliError(`trusted baseの信頼CLI導入マーカーを読めません: ${markerPath}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(shown.stdout);
+  } catch {
+    throw new CliError(`trusted baseの信頼CLI導入マーカーを解釈できません: ${markerPath}`);
+  }
+  if (!isTrustedCliMarker(parsed)) {
+    throw new CliError(`trusted baseの信頼CLI導入マーカーの形式が不正です: ${markerPath}`);
+  }
+  return parsed;
+}
+
+function realPathOf(target: string): string {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    return path.resolve(target);
+  }
+}
+
+/**
+ * 準備段の実行結果を信用せず、証跡投稿時に調達の事実を独立に再検証する（Issue #759、設計要素E8）。
+ * (ii) 実行中のCLIのパッケージrootが隔離clone配下にあること、(iii) 調達モードがbase SHAから
+ * 再導出した値と一致すること、(iv) package_copy では実行中のパッケージrootのdigestが
+ * base SHAの期待値およびtokenの値と一致すること。いずれか不成立なら証跡を投稿しない。
+ */
+function assertProcurementAtRecordTime(options: {
+  root: string;
+  trustedBaseSha: string;
+  trustedRoot: string;
+  procurement: EvidenceProcurement;
+}): void {
+  const trustedRoot = realPathOf(options.trustedRoot);
+  const runningPackageRoot = realPathOf(packageRoot());
+  if (runningPackageRoot !== trustedRoot && !runningPackageRoot.startsWith(`${trustedRoot}${path.sep}`)) {
+    throw new CliError('実行中のCLI実体が隔離clone配下にありません');
+  }
+  const derivedMode = deriveProcurementMode(options.root, options.trustedBaseSha);
+  if (derivedMode !== options.procurement.mode) {
+    throw new CliError(
+      `調達モードがtrusted baseから再導出した値と一致しません: token=${options.procurement.mode}, derived=${derivedMode}`,
+    );
+  }
+  if (derivedMode !== 'package_copy') return;
+  const expected = readTrustedCliExpectation(options.root, options.trustedBaseSha);
+  const recomputed = canonicalTreeDigest(runningPackageRoot);
+  if (expected.tree_digest !== recomputed || options.procurement.digest !== recomputed) {
+    throw new CliError('調達実体のdigestがtrusted baseの期待値またはlauncher tokenの値と一致しません');
+  }
 }
 
 function historicalGateAttemptVerifier(options: {
@@ -476,7 +582,7 @@ function reserveLauncherTokenSlot(options: {
   prNumber: string;
   reviewerRunId: string;
   slot: number;
-}): { digest: string; finalSlot: boolean } {
+}): { digest: string; finalSlot: boolean; trustedRoot: string; procurement: EvidenceProcurement } {
   const tokenPath = path.resolve(options.tokenPath);
   const parent = path.dirname(tokenPath);
   const parentStat = fs.lstatSync(parent);
@@ -512,6 +618,9 @@ function reserveLauncherTokenSlot(options: {
     token.pr_number !== options.prNumber ||
     !/^attempt-[A-Za-z0-9._-]+$/.test(token.attempt_id) ||
     !/^[0-9a-f]{48}$/.test(token.nonce) ||
+    typeof token.trusted_root !== 'string' ||
+    !path.isAbsolute(token.trusted_root) ||
+    !isEvidenceProcurement(token.procurement) ||
     token.slots.length !== token.expected_count ||
     token.slots.some(
       (entry, index) =>
@@ -538,7 +647,12 @@ function reserveLauncherTokenSlot(options: {
   } finally {
     fs.closeSync(descriptor);
   }
-  return { digest, finalSlot: token.consumed_slots.length === token.expected_count };
+  return {
+    digest,
+    finalSlot: token.consumed_slots.length === token.expected_count,
+    trustedRoot: token.trusted_root,
+    procurement: token.procurement,
+  };
 }
 
 function assertDefaultBranchBase(
@@ -1266,6 +1380,12 @@ export async function submitEvidence(args: string[]): Promise<number> {
       reviewerRunId,
       slot,
     });
+    assertProcurementAtRecordTime({
+      root,
+      trustedBaseSha,
+      trustedRoot: launcherToken.trustedRoot,
+      procurement: launcherToken.procurement,
+    });
 
     const evidence: ReviewEvidence = {
       schema_version: 'agent-skill-chain/gate-review-evidence/v3',
@@ -1282,6 +1402,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
         launcher_token_digest: launcherToken.digest,
         isolation: 'ephemeral_clone',
         sandbox: 'read_only',
+        procurement: launcherToken.procurement,
       },
       reviewer: {
         run_id: reviewerRunId,

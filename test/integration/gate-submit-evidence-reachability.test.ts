@@ -8,13 +8,17 @@ import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
 import { parseReviewEvidence } from '../../src/lib/review-evidence.js';
+import { packageRoot } from '../../src/lib/paths.js';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 }
 
 test('gate submit-evidence: recorderの前進を許容しつつ受理条件と入力をtrusted baseへ固定する（Issue #703 AC-1〜AC-7）', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  // Issue #759: 準備段が生成する launcher token は trusted_root と procurement を必須にする。
+  // 記録時の再検証は調達モードを base SHA のコミット内容から独立に再導出するため、本 fixture は
+  // agent-skill-chain 本体を名乗る package.json を持つ形状（clone_build 経路）で組む。
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-evidence-reachability-'));
   const stub = createGhStub(stubDir);
   const env = stub.env(process.env);
@@ -79,6 +83,8 @@ test('gate submit-evidence: recorderの前進を許容しつつ受理条件と�
       base_sha: baseArg,
       pr_number: '780',
       nonce: invocation.toString(16).padStart(48, '0'),
+      trusted_root: packageRoot(),
+      procurement: { mode: 'clone_build', source: `clone_build:${trustedBaseArg}` },
       slots: [{ slot: 1, run_id: runId }],
       consumed_slots: [],
     })}\n`, { mode: 0o600 });
