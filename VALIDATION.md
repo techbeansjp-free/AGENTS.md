@@ -23,6 +23,45 @@
 #       の実装（.agent-skill-chain/adapters/claude.sh・codex.sh）と自動テスト。
 # 出力: 本ファイルの acceptance_criteria（AC ごとの検証方法・結果・証跡）と regression。
 #
+# 検証対象の実装 SHA と、本成果物を載せるコミットの関係:
+#   本ファイルが書く「対象 SHA」「target_sha」「regression の npm test の対象」はいずれも、独立検証を
+#   実施した実装コミット 7a14bc691dc4c1a1370094a0695cc4c661845867 を指す。本ファイル自身は、それを追加する
+#   コミットの SHA を内容として持てない（コミット SHA は本ファイルの内容を入力として決まるため）。
+#   そこで SHA を書く代わりに、次の不変を成果物内に宣言する。
+#
+#   不変: 本成果物を追加するコミットは、検証対象の実装 SHA 7a14bc691dc4c1a1370094a0695cc4c661845867 に
+#   VALIDATION.md のみを追加した差分であり、実装ファイル（.agent-skill-chain/ 配下・src/ 配下・test/ 配下を
+#   含む）を一切変更しない。SPEC.md・DESIGN.md・PLAN.md も変更しない。したがって AC-1〜AC-8 の evidence と
+#   regression の結果は、実装内容が同一である本成果物のコミットに対してもそのまま適用可能である。
+#
+#   根拠（本セグメントで再実行した実際の出力の原文引用）:
+#
+#     $ git diff --stat 7a14bc691dc4c1a1370094a0695cc4c661845867 be6869746962e62149399a66a29ccdb89b98e714
+#      VALIDATION.md | 270 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#      1 file changed, 270 insertions(+)
+#
+#     $ git log --oneline 7a14bc69..be686974
+#     be68697 validation(ISSUE-744): AC-1〜AC-8の独立検証結果と回帰実行証跡を記録する
+#
+#     $ git diff --name-only 7a14bc691dc4c1a1370094a0695cc4c661845867 be6869746962e62149399a66a29ccdb89b98e714
+#     VALIDATION.md
+#
+#     $ git merge-base --is-ancestor 7a14bc69 be686974; echo "exit=$?"
+#     exit=0
+#
+#     $ git rev-list --count 7a14bc69..be686974
+#     1
+#
+#   上記の be6869746962e62149399a66a29ccdb89b98e714 は本改訂の直前 HEAD である。本改訂は AC-1〜AC-8 の
+#   検証内容・結果・証跡と実装コードを一切変更せず、本ファイルへ SHA 関係の記述だけを追記したものであり、
+#   直前 HEAD の上に VALIDATION.md 単独の変更として重なる。commit 直前の作業ツリー状態がそれを示す:
+#
+#     $ git status --porcelain
+#      M VALIDATION.md
+#
+#   よって実装 SHA から本成果物のコミットまでの累積差分は VALIDATION.md に閉じており、上記の不変は
+#   本改訂でも成立する。実装 SHA は本成果物のコミットの祖先であり、両者の実装内容は同一である。
+#
 # 全ACに共通する検証環境（個々のACのevidenceでは繰り返さない）:
 #   - ホスト: Linux / bash 5 / Node.js 20系 / setsid(1) 利用可。branch bugfix/744-codex-reviewer-stderr-diagnostics。
 #   - 自動テスト: npm test（pretest で npm run build を実行）。1426件中 pass 1425・fail 0・skip 1。
