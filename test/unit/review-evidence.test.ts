@@ -704,6 +704,63 @@ test('D4: 作成後に上書きされたfinding分類recordを採用せず、4�
   assert.equal(forged.inconclusive, true);
 });
 
+// Issue #786 D3: 分類recordの参照先は最新attemptの検証済みreviewだけに限定する
+// （`FINAL_ROUND_DECLARATION_BREAKS_ROUND_DERIVATION_AND_LOCKS_GATE` の回帰）。
+// 分類recordは classify-finding が追加・上書きを拒否する不変のIssueコメントであり、機構内で
+// 除去する手段がない。結線できないrecordを不正として human_required を確定させると、SPEC.md R1・
+// AC-6 が明示的に認める「人間が明示指示した追加の修正ラウンド」でも、blocking 0件・両観点 pass の
+// attemptが常に human_required へ固定され、当該ゲートは二度と approved に到達できなくなる。
+test('D3: 最新attemptへ結線できない分類recordは不正にせず非適用として扱い、後続attemptを固定しない', () => {
+  const stale = blockingFinding('CLASSIFIED_IN_A_PREVIOUS_ATTEMPT');
+  // 過去attemptのreview（id=99）に対する分類record。現在のattemptには存在しないreviewを指す。
+  const staleRecord = classificationComment(31, '99', stale);
+
+  // 追加の修正ラウンド: blocking 0件・両観点passのattemptは approved へ到達する。
+  const resolved = verify(
+    declaredReviews(verdictOf({}), verdictOf({})),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: [staleRecord],
+    },
+  );
+  assert.equal(resolved.final, 'approved');
+  assert.equal(resolved.inconclusive, false);
+  assert.equal(resolved.reason, undefined);
+
+  // 非適用であって「差し替え成立」ではない。現在のattemptのblockingは残り、
+  // 陳腐化したrecordがsame-codeのfindingを黙って降格させることもない。
+  const reReported = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [stale] }),
+      verdictOf({ conformance: 'pass', falsification: 'pass' }),
+    ),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: [staleRecord],
+    },
+  );
+  assert.equal(reReported.final, 'human_required');
+  assert.deepEqual(reReported.blockers.map((finding) => finding.severity), ['blocking']);
+  assert.equal(reReported.subverdict_reclassification, undefined);
+
+  // 当該attemptへ結線できるrecordが同時にあれば、そちらは従来どおり適用される。
+  const mixed = verify(
+    declaredReviews(
+      verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [stale] }),
+      verdictOf({ conformance: 'pass', falsification: 'pass' }),
+    ),
+    {
+      gateRound: finalRound,
+      expectedRoundBudgetDeclaration: finalRoundDeclaration,
+      findingClassifications: [staleRecord, classificationComment(32, '1', stale)],
+    },
+  );
+  assert.equal(mixed.final, 'approved');
+  assert.deepEqual(mixed.blockers.map((finding) => finding.severity), ['warning']);
+});
+
 // Issue #759 要件7(c)・AC-13 / DESIGN E8: 調達元識別子と実体 digest の記録を必須とする対象は
 // 「本要件の充足によって新規に投稿される証跡」に限り、本機構の導入より前に投稿済みの既存証跡が
 // 当該記録を持たないことを形式不適合として扱うことは求めない。したがって証跡形式（本ファイルが

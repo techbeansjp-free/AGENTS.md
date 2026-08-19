@@ -589,6 +589,11 @@ function historicalGateAttemptVerifier(options: {
         // 再現できない。履歴の真正性はプロンプト非依存のexecution attestationで検証する。
         promptDigestVerification: 'record_only',
         expectedLightReview: first.light_review,
+        // Issue #786: light_review と同じ自己参照方式で扱う。省略すると期待値が null に固定され、
+        // 宣言を載せた過去attemptが必ず検証失敗してラウンド計数から落ち、最終round到達後にroundが
+        // 増えなくなる。宣言をround導出元にしないというD1の境界は、宣言の有無で計数結果が変わらない
+        // この自己参照によって保たれる。
+        expectedRoundBudgetDeclaration: first.round_budget_declaration,
         expectedArtifacts: artifacts,
         findingValidation: 'historical_v3',
         expectedTrustedBaseSha: first.execution.trusted_base_sha,
@@ -915,6 +920,7 @@ export async function review(args: string[]): Promise<number> {
     });
     const effectiveProfile = lightReview.strict_locked ? 'strict' : lightReview.applied ? 'standard' : profile;
     let roundBudgetDeclaration: DurableRoundBudgetDeclaration | undefined;
+    let unresolvedDeclarationReason: string | undefined;
     const attemptId = process.env.ASC_REVIEW_ATTEMPT_ID;
     const prNumber = process.env.ASC_EVIDENCE_PR_NUMBER;
     if (config.coordination.backend === 'github' && attemptId && prNumber) {
@@ -940,8 +946,12 @@ export async function review(args: string[]): Promise<number> {
         comments: parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout),
         trustedActors: policy.execution.trusted_reviewer_actors,
       });
+      // Issue #786: 宣言なし・事後追加・上書き・digest不一致は、コマンド失敗ではなく判定記録としての
+      // human_required へ収束させる。reviewer起動前に例外終了してgate-reportを1件も書かないと、
+      // 最終roundに到達しつつ宣言を作成できない入力（直前attemptがreject状態ではない等）で、
+      // approved・rejected・human_requiredのいずれにも到達しない停止状態が残る。
       if (resolution.required && !resolution.declaration) {
-        throw new CliError(`最終roundの事前宣言を検証できません: ${resolution.reason ?? '不明な不一致'}`);
+        unresolvedDeclarationReason = resolution.reason ?? '不明な不一致';
       }
       roundBudgetDeclaration = resolution.declaration;
     }
@@ -953,7 +963,7 @@ export async function review(args: string[]): Promise<number> {
         target_sha: targetSha,
         conformance: 'pending',
         falsification: 'pending',
-        final: 'pending',
+        final: unresolvedDeclarationReason ? 'human_required' : 'pending',
         blockers: [],
         approved_digest: `sha256:${'0'.repeat(64)}`,
         approved_artifacts: [],
@@ -966,6 +976,14 @@ export async function review(args: string[]): Promise<number> {
 
     const reportPath = reviewFilePath(root, number, gateId, config.coordination.backend);
     writeYamlFileAtomic(reportPath, scaffold);
+    if (unresolvedDeclarationReason) {
+      // 判定記録を残した上でreviewer起動へ進ませない。宣言が成立しない最終roundのreviewを
+      // そのまま実行すると、事前宣言のない打ち切り・降格が成立してしまう。
+      return fail(
+        `最終roundの事前宣言を検証できません: ${unresolvedDeclarationReason}\n` +
+          `gate_report_path: ${reportPath}\nfinal: human_required`,
+      );
+    }
 
     const reviewerCount = config.review[effectiveProfile].reviewer_count;
     return ok(

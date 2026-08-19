@@ -446,14 +446,15 @@ function applyFindingClassifications(options: {
   const keys = new Set<string>();
   const replacements: { original: EvidenceFinding; classified: EvidenceFinding }[] = [];
   for (const record of records) {
+    // 参照先は最新attemptの検証済みreviewだけに限定する。結線できないrecordは不正ではなく
+    // 「当該attemptには適用しない」として扱う。分類recordはclassify-findingが追加・上書きを拒否する
+    // 不変のIssueコメントであり機構内で除去できないため、過去attempt由来のrecordを不正とすると、
+    // 人間が明示指示した追加の修正ラウンドでもゲートが恒久的に human_required へ固定される。
+    const source = options.candidates.find((candidate) => String(candidate.api.id) === record.source_review_id);
+    if (!source) continue;
     const key = `${record.source_review_id}:${record.finding.code}`;
     if (keys.has(key)) return { status: 'invalid', reason: `finding分類recordが重複しています: ${key}` };
     keys.add(key);
-    // 参照先は最新attemptの検証済みreviewだけに限定する。過去attemptのfindingを持ち込ませない。
-    const source = options.candidates.find((candidate) => String(candidate.api.id) === record.source_review_id);
-    if (!source) {
-      return { status: 'invalid', reason: `finding分類recordがlatest attemptを参照していません: ${record.source_review_id}` };
-    }
     const matches = source.evidence.verdict.blockers.filter((finding) => finding.code === record.finding.code);
     if (matches.length !== 1) {
       return { status: 'invalid', reason: `source review内のfinding codeが一意ではありません: ${record.finding.code}` };
