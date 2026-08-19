@@ -25,7 +25,7 @@
 - 常時: `npm run build`、対象unit/integration test、`npm test`、`git diff --check`。
 - 規範文書: `lint-references.sh`、`lint-vocab.sh`、`verify-doc-length.sh`。
 - 配布: `verify-template-sync.sh` とstandard/lightweightのinit/upgrade integration test。
-- ADR: `proposed` の ADR-0077 を追加するため、`adr-lint.sh check` で採番の一意性・`related_adrs` のstale参照が無いこと・accepted ADR-0068 を変更していないことを確認する。
+- ADR: `proposed` の ADR-0078 を追加するため、`adr-lint.sh check` で採番の一意性・`related_adrs` のstale参照が無いこと・accepted ADR-0068 を変更していないことを確認する。
 - 判定集約: 有効sub-verdictの4条件（宣言成立・raw `inconclusive` false・未分類blockingの不在・failのfinding裏付け）をそれぞれ単独で崩した入力で `approved` にならないこと、4条件成立時のみ `rejected` が解消すること、raw値が現行記録に残ること、有効sub-verdictを記録した `approved` が既存のpublish整合検査を通ることを検証する。
 - 反証ケース: round取得不能、宣言なし・レビュー開始後/結果後の追加・上書き、直前attempt/digest不一致、非trustedな投稿者による宣言・分類記録、非trusted記録単独でのゲート停止、current recordの元severity欠落・raw evidence変更、判定不能を表明したattempt、未分類blockingの残存、follow-up永続化失敗、データ喪失・セキュリティ低下、理由なし必要追加、worker 1ロールだけの契約欠落をそれぞれ失敗または安全側停止として検証する。
 

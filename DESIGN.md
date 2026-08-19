@@ -139,7 +139,7 @@ related_adrs:
     relation: adopts
 ```
 
-ADR-0068 のround導出、閾値、cutoff、取得不能 fallbackを採用し、その判断境界は変更しない。D3 の有効 sub-verdict 導出と D4 の制御レコード信頼境界は、これらの境界の外側にある新しいアーキテクチャ判断であるため、本Issueで ADR-0077 を `proposed` として作成する（`related_adrs:` は accepted のみを対象とするため同フィールドには載せない）。
+ADR-0068 のround導出、閾値、cutoff、取得不能 fallbackを採用し、その判断境界は変更しない。D3 の有効 sub-verdict 導出と D4 の制御レコード信頼境界は、これらの境界の外側にある新しいアーキテクチャ判断であるため、本Issueで ADR-0078 を `proposed` として作成する（`related_adrs:` は accepted のみを対象とするため同フィールドには載せない）。
 
 ## 障害・ロールバック考慮
 
