@@ -20,7 +20,7 @@ Issue #729 で実装済みの `review.round_limit`、round 0 起算、耐久 rev
 | R1 / AC-3 | D2 最終後の4類型分類、D3 分類後の集約 | 限定列挙以外を warning にし、その結果を判定へ届ける |
 | R1 / AC-4 | D2 安全分類、D3 導出の限界 | データ喪失・セキュリティ低下は常時 blocking で、導出は類型判定を代行しない |
 | R1 / AC-5 | D2 evidence・follow-up 手続き、D3 raw 値の併記 | raw evidence と raw sub-verdict を同じ現行記録へ保持 |
-| R1 / AC-6 | D1 cutoff/fallback、D3 収束先、D4 偽造の不採用 | 解決可能時は収束、不能時は既存fallback、偽造で人間判断を無効化させない |
+| R1 / AC-6 | D1 cutoff/fallback、D3 収束先、D4 偽造の不採用 | 最終ラウンドの4類型残存は `human_required` へ収束、不能時は既存fallback、偽造で人間判断を無効化させない |
 | R2 / AC-7 | D5 worker role contract | 4 workerへ選択的に同一方針を配布 |
 | R3 / AC-8 | D3 導出の適用範囲、D4 束縛、D6 回帰防止検査 | ゲート・2観点・レビュア数・Strict・quickを不変にする |
 
@@ -54,20 +54,25 @@ GitHub modeはraw PR reviewを削除・改変せず、source review IDを持つ�
 
 ### D3: 分類後の判定集約規則
 
-配布済みの立証・反証ルーブリックは、blocking finding を付与するとき同じ観点の sub-verdict を fail とすることを求める。したがってレビュアの raw な `fail` と blocking finding は対で提出される。分類が finding の severity だけを差し替え、集約が raw の sub-verdict をそのまま使うと、4類型外の finding だけが残った最終ラウンドでも `rejected` が確定し、SPEC の R1 と完了状態が要求する「warning はゲート後の進行を妨げない」を満たす経路が存在しない。この受理条件を設計として確定する。
+配布済みの立証・反証ルーブリックは、blocking finding を付与するとき同じ観点の sub-verdict を fail とすることを求める。したがってレビュアの raw な `fail` と blocking finding は対で提出される。分類が finding の severity だけを差し替え、集約が raw の sub-verdict をそのまま使うと、4類型外の finding だけが残った最終ラウンドでも `fail` が残るため `approved` へ収束せず、SPEC の R1 と完了状態が要求する「warning はゲート後の進行を妨げない」を満たす経路が存在しない。この受理条件と、最終ラウンドの判定値がどの規則で確定するかを設計として確定する。
 
 1. レビュアが提出した `conformance`・`falsification`・`inconclusive` は書き換えない。GitHub モードの PR review、ローカルモードの入力 verdict のいずれでも raw 値として保持する。
 2. 判定の集約は raw 値ではなく**有効 sub-verdict** を入力とする。有効 sub-verdict は、レビュアごとに次の4条件がすべて成立する場合に限り raw の `fail` を `pass` として扱い、1つでも欠ければ raw をそのまま使う。
    - 当該ゲート・当該 attempt の最終ラウンド事前宣言が D2・D4 の検査に合格して成立している
    - 当該レビュアの raw `inconclusive` が false である
    - 当該 attempt の blocking finding が1件残らず有効な分類記録で warning へ差し替えられている
-   - 当該レビュアが blocking finding を1件以上提出しており、その `fail` が finding に裏付けられている
-3. `rejected` は、有効 sub-verdict に `fail` が1つでもある場合、または分類後の finding に blocking が残る場合とする。raw 値からは判定しない。
-4. `approved` は、全レビュアの有効 conformance・有効 falsification がともに `pass`、全レビュアの raw `inconclusive` が false、分類後の blocking が0件、かつ事前宣言が成立している場合に限る。
-5. いずれにも収束しない場合（有効 sub-verdict に `pending` が残る、分類記録が不正、宣言が不成立）は `human_required` とする。分類の有無や blocking 件数だけを理由に判定値や `inconclusive` を直接代入する分岐は設けない。
-6. 事前宣言が無い経路、ラウンド値を解決できない経路、分類記録が1件も無い経路では条件が成立しないため、判定は本設計の導入前と同一になる。
+   - 当該レビュアが当該 attempt へ blocking finding を1件以上提出している
 
-未分類の blocking が1件でも残れば条件が崩れて raw の `fail` が維持されるため、blocking 件数の消滅だけを根拠に `approved` と `inconclusive: false` を確定する経路は成立しない。有効 sub-verdict は4類型の該当性を自ら判定せず、分類記録が保持する「4類型のいずれにも該当しない」旨の申告に依拠する。この申告を成立させられるのは D4 が定める trusted recorder だけであり、元 severity と raw evidence は不変のまま残るため、事後監査で申告の当否を検証できる。
+   4つ目の条件が用いる `fail` と finding の対応付けは、観点単位ではなくレビュア単位で行う。gate-report の finding は `origin`（セグメント）だけを持ち、conformance・falsification のどちらの観点が付与したかを示す識別子を持たず、本設計でも追加しない。3つ目の条件により当該 attempt の blocking finding は1件残らず warning へ差し替えられているため、blocking finding を1件以上提出したレビュアについては、そのレビュアの両観点の `fail` を差し替え済み finding に裏付けられたものとして扱う。blocking finding を1件も提出していないレビュアの `fail` は差し替えの対象を持たないため、raw をそのまま使う。
+3. 判定値は次の順に評価し、最初に一致した規則で確定する。後続の規則は適用しない。raw 値から直接は判定しない。
+   - 有効 sub-verdict に `pending` が残る、分類記録を有効な記録として採用できない、または存在する事前宣言が D2・D4 の検査に不合格である場合は `human_required` とする。
+   - 成立した事前宣言のもとで実施した最終ラウンドでは、全レビュアの有効 conformance・有効 falsification がともに `pass`、全レビュアの raw `inconclusive` が false、分類後の blocking が0件、のすべてを満たす場合に限り `approved` とし、いずれかを欠く場合は `human_required` とする。分類後に4類型の blocking が残る入力もこの規則で `human_required` となり、最終ラウンドで `rejected` を用いることはない。D2 は最終ラウンド後の最終判定を `human_required` と定めて進行役の裁量による追加差し戻しを禁じているため、最終ラウンドで `rejected` を返すと、差し戻しも承認も許されない、進行役に次手の無い停止状態になる。
+   - 成立した事前宣言のもとで実施した最終ラウンド以外のラウンドでは、有効 sub-verdict に `fail` が1つでもある場合、または分類後の finding に blocking が残る場合を `rejected` とする。
+   - いずれの規則にも一致しない場合は、本設計の導入前と同じ既存の集約規則で判定する。
+4. 分類の有無や blocking 件数だけを理由に、判定値や `inconclusive` を直接代入する分岐は設けない。判定値は必ず上記の順序評価で決め、`inconclusive` はレビュアの raw 値のまま集約する。
+5. 事前宣言が無い経路、ラウンド値を解決できない経路、分類記録が1件も無い経路では有効 sub-verdict の導出条件が成立しないため、判定は本設計の導入前と同一になる。
+
+未分類の blocking が1件でも残れば条件が崩れて raw の `fail` が維持されるため、blocking 件数の消滅だけを根拠に `approved` と `inconclusive: false` を確定する経路は成立しない。raw の `fail` が維持された最終ラウンドは、分類後に blocking が残るか否かにかかわらず `human_required` へ収束するため、判定値の定まらない入力は残らない。有効 sub-verdict は4類型の該当性を自ら判定せず、分類記録が保持する「4類型のいずれにも該当しない」旨の申告に依拠する。この申告を成立させられるのは D4 が定める trusted recorder だけであり、元 severity と raw evidence は不変のまま残るため、事後監査で申告の当否を検証できる。
 
 本導出は R3 が予算の制御対象として認める進行判断に属する。レビュアは両観点を従来どおり完全に評価し、raw 値・検査項目・必要レビュア数・Strict 固定・quick 境界はいずれも変わらない。有効 sub-verdict は raw 値を置き換えるのではなく、raw 値と分類後 finding 集合から進行判断を導く派生値である。
 
@@ -101,12 +106,12 @@ GitHub modeはraw PR reviewを削除・改変せず、source review IDを持つ�
 - `test/unit/roles.test.ts`: 全4 workerにD5の4規範があり、`gate_reviewer`には編集規範が無いことを検査する。
 - `test/unit/gate-round-policy-assets.test.ts`: gate-review skillに既定round 0〜4、最終直前の宣言遷移、4類型、常時blocking、同一findingの追跡値、`human_required`、導出不能fallbackが揃うことを検査する。
 - `test/unit/state.test.ts`とゲート証跡検査: local宣言のschema適合・任意性・非導出境界、直前attemptとdigestの一致、宣言なし・レビュー開始後・結果後・上書きの拒否を検査する。GitHub fixtureでもAPI順序とdigest不一致を拒否する。
-- `test/unit/review-evidence.test.ts`: D3の有効 sub-verdict 導出を、4条件をそれぞれ単独で崩した入力で検査する。宣言なし、raw `inconclusive: true`、未分類 blocking の残存、finding の裏付けが無い `fail` のいずれでも `approved` にならず、4条件が揃うときだけ `rejected` が解消することを固定する。raw 値が現行記録から失われないことも同じ検査で確認する。
+- `test/unit/review-evidence.test.ts`: D3の有効 sub-verdict 導出と判定値の順序評価を検査する。4条件をそれぞれ単独で崩した入力（宣言なし、raw `inconclusive: true`、未分類 blocking の残存、blocking finding を1件も提出していないレビュアの `fail`）のいずれでも `approved` にならず、最終ラウンドではそれらが `rejected` ではなく `human_required` へ収束し、最終ラウンド以外では従来どおり `rejected` となり、4条件が揃うときだけ最終ラウンドが `approved` になることを固定する。raw 値が現行記録から失われないことも同じ検査で確認する。
 - 信頼境界の検査: trusted recorder 以外が投稿した宣言・分類記録が採用されないこと、同内容を trusted recorder が投稿すれば採用されること、非 trusted の記録が単独ではゲートを停止させないこと、作成側の重複検査も投稿者で絞ることを検査する。
-- `test/integration/gate-judgment.test.ts`: warning分類後のcurrent recordだけから元/分類後severity、理由、4類型外根拠、raw evidence、follow-upを検証し、Git履歴を参照しない。有効 sub-verdict を記録した `approved` が既存の publish 整合検査を通ることも確認する。
+- `test/integration/gate-judgment.test.ts`: warning分類後のcurrent recordだけから元/分類後severity、理由、4類型外根拠、raw evidence、follow-upを検証し、Git履歴を参照しない。有効 sub-verdict を記録した `approved` が既存の publish 整合検査を通ること、および4類型の blocking が残る最終ラウンドが `rejected` ではなく `human_required` として記録されることも確認する。
 - `test/integration/worker-adapters.test.ts`: remediation dispatchの報告を検査し、理由なし`required_addition`とremediation未報告を拒否する。
 - `test/integration/init.test.ts` と `test/integration/upgrade.test.ts`: standard/lightweight の双方で role contract・gate-review skill・state schema が配布され、配布元との不一致を残さないことを検査する。
-- 既存 `test/unit/gate-round.test.ts`、`test/unit/review-evidence.test.ts`、`test/integration/gate-judgment.test.ts` を回帰検査として維持する。round導出、cutoff、取得不能 fallback、Strict のレビュア件数、およびレビュアが提出する raw な conformance/falsification とその記録は変えない。変えるのは D3 が定める有効 sub-verdict の導出と `rejected`・`approved` の再計算だけであり、有効な事前宣言と有効な分類記録が揃わない経路では従来と同一の判定になることを既存テストで固定する。
+- 既存 `test/unit/gate-round.test.ts`、`test/unit/review-evidence.test.ts`、`test/integration/gate-judgment.test.ts` を回帰検査として維持する。round導出、cutoff、取得不能 fallback、Strict のレビュア件数、およびレビュアが提出する raw な conformance/falsification とその記録は変えない。変えるのは D3 が定める有効 sub-verdict の導出と、`rejected`・`approved`・`human_required` の再計算だけであり、有効な事前宣言と有効な分類記録が揃わない経路では従来と同一の判定になることを既存テストで固定する。
 
 ### 依存関係
 

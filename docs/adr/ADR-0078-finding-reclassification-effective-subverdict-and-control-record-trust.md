@@ -35,7 +35,7 @@ deprecated-reason: null
 
 ## Consequences
 
-- 4類型外の finding だけが残った最終ラウンドは `approved` へ収束し、warning は原文 evidence と follow-up Issue の追跡を保ったままゲート後の進行を妨げない。進行役に次手が無い停止状態は生じない。
+- 4類型外の finding だけが残った最終ラウンドは `approved` へ収束し、warning は原文 evidence と follow-up Issue の追跡を保ったままゲート後の進行を妨げない。4類型の blocking が残る最終ラウンドは `rejected` ではなく `human_required` へ収束する。最終ラウンド後は進行役の裁量による差し戻しが残らないため、`rejected` は最終ラウンド以外のラウンドの帰結に限られる。いずれの場合も進行役に次手が無い停止状態は生じない。
 - 未分類の blocking が1件でも残る場合、またはレビュアが判定不能を表明した場合は条件が崩れて raw の `fail` が維持されるため、判定不能を承認へ倒す回帰は起きない。
 - 有効 sub-verdict は4類型の該当性を自ら判定せず、分類記録が保持する「4類型のいずれにも該当しない」旨の申告に依拠する。誤った申告を成立させられるのは trusted recorder に限られ、元 severity と raw evidence は不変のまま残るため事後監査で申告の当否を検証できる。この監査は自動化されず、trusted recorder の説明責任に依存する。
 - 事前宣言・分類記録のいずれも無い経路、およびラウンド値を解決できない経路では条件が成立せず、判定は本決定の導入前と同一になる。
