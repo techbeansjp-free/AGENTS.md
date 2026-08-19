@@ -405,10 +405,18 @@ test('trusted Strict profileをlight_review.applied自己申告でStandardへ降
   assert.match(result.reason ?? '', /profile.*trusted/);
 });
 
-// Issue #759 DESIGN E8: 証跡の execution へ調達の事実（調達モード・調達元識別子・実体digest）を
-// 任意フィールドとして加える。スキーマ識別子は据え置き、既に投稿済みの証跡を形式不適合にしない。
-test('procurement: 未記録の証跡は従来どおり受理し、記録済みは形式検査したうえでattempt内一致を要求する', () => {
-  // 既存の証跡（procurement 無し）は引き続き approved へ到達する。
+// Issue #759 要件7(c)・AC-13 / DESIGN E8: 調達元識別子と実体 digest の記録を必須とする対象は
+// 「本要件の充足によって新規に投稿される証跡」に限り、本機構の導入より前に投稿済みの既存証跡が
+// 当該記録を持たないことを形式不適合として扱うことは求めない。したがって証跡形式（本ファイルが
+// 対象とする層）では任意フィールドとし、必須性は記録経路の側で担保する。
+//
+// 記録経路の側での必須性は test/integration/gate-procurement-evidence.test.ts が固定する
+// （調達情報を欠く launcher token では新規投稿できず、新規投稿の証跡は調達元識別子を必ず持つ）。
+// 本テストが固定するのはその補集合、すなわち「導入前に投稿済みの証跡を後から形式不適合にしない」
+// 側の境界と、記録がある場合の形式検査・attempt 内一致である。
+test('procurement: 導入前の投稿済み証跡は受理し、記録済みは形式検査したうえでattempt内一致を要求する', () => {
+  // 本機構の導入より前に投稿済みの証跡（procurement 無し）は引き続き approved へ到達する。
+  // 新規投稿でこの形が生じ得ないことは上記の統合テストが別途固定する。
   assert.equal(verify([review(1, 1), review(2, 2)]).final, 'approved');
 
   const procurement = {

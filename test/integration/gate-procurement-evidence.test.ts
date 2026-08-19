@@ -12,7 +12,7 @@ import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
 import { packageRoot } from '../../src/lib/paths.js';
-import { evidencePromptDigest } from '../../src/lib/review-evidence.js';
+import { evidencePromptDigest, parseReviewEvidence, type ReviewEvidence } from '../../src/lib/review-evidence.js';
 import { TRUSTED_CLI_MARKER_SCHEMA } from '../../src/lib/trusted-cli-marker.js';
 
 function git(cwd: string, args: string[]): string {
@@ -35,9 +35,11 @@ interface Harness {
   targetSha: string;
   tokenPath: string;
   writeToken(procurement: Record<string, unknown>): void;
-  postedReviews(): unknown[];
+  postedReviews(): { body: string }[];
   submit(): { status: number; stdout: string; stderr: string };
   submitFrom(cwd: string): { status: number; stdout: string; stderr: string };
+  /** PR metadata の base と起動引数の base/trusted base を同時に差し替えて投稿する。 */
+  submitWithBase(sha: string): { status: number; stdout: string; stderr: string };
   cleanup(): void;
 }
 
@@ -109,7 +111,7 @@ function createHarness(options: { selfPackage: boolean; marker?: { tree_digest: 
       );
     },
     postedReviews() {
-      return stub.readState().pullReviews ?? [];
+      return (stub.readState().pullReviews ?? []) as { body: string }[];
     },
     submit() {
       return this.submitFrom(repo.dir);
@@ -122,6 +124,25 @@ function createHarness(options: { selfPackage: boolean; marker?: { tree_digest: 
           evidencePromptDigest('procurement fixture prompt'),
         ],
         { cwd, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: VERDICT },
+      );
+    },
+    submitWithBase(sha: string) {
+      const current = stub.readState();
+      current.pullMetadata = {
+        number: 759,
+        state: 'open',
+        user: { login: 'adachi-tatsuru' },
+        head: { sha: targetSha, ref: 'process/759-procurement' },
+        base: { sha, ref: 'main' },
+      };
+      stub.writeState(current);
+      return runCli(
+        [
+          'gate', 'submit-evidence', 'ISSUE-759', 'spec', 'standard', targetSha, sha, sha, '759',
+          ATTEMPT_ID, '1', RUN_ID, '1', 'human', 'human', 'manual',
+          evidencePromptDigest('procurement fixture prompt'),
+        ],
+        { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: VERDICT },
       );
     },
     cleanup() {
@@ -208,9 +229,12 @@ test('submit-evidence: package_copyで調達実体のdigestが期待値と一致
   assert.deepEqual(harness.postedReviews(), []);
 });
 
-// Issue #759 AC-4 / PLAN #8: 準備段の変更で既存の拒否経路が失われていないことを、
-// SPEC.md「実地確認した事実」が原文引用した3メッセージそのもので固定する。
-test('submit-evidence: recorder HEADがtrusted base SHAと一致しなければ拒否する（AC-4）', (t) => {
+// Issue #759 AC-4 / PLAN #8: 準備段の変更で既存の拒否経路が失われていないことを固定する。
+// recorder と trusted base SHA の関係を検査する経路は Issue #703 が「HEAD の完全一致」から
+// 「trusted base SHA が recorder HEAD から到達可能であること」へ置き換えた（default branch が
+// 進むたびに他 PR のゲートが止まる欠陥の是正）。本 Issue はその判定を弱めず、到達不能な
+// trusted base SHA を拒否し続けることを固定する。
+test('submit-evidence: trusted base SHAがrecorder HEADから到達不能なら拒否する（AC-4）', (t) => {
   const harness = createHarness({ selfPackage: true });
   t.after(() => harness.cleanup());
   harness.writeToken({
@@ -221,11 +245,16 @@ test('submit-evidence: recorder HEADがtrusted base SHAと一致しなければ�
   git(harness.repoDir, ['add', 'advanced.txt']);
   git(harness.repoDir, ['commit', '-m', 'test: advance protected base worktree']);
 
-  const result = harness.submit();
+  // recorder が default branch 上で前進しただけの状態は拒否しない（Issue #703）。
+  const advanced = harness.submit();
+  assert.equal(advanced.status, 0, advanced.stderr);
+  assert.equal(harness.postedReviews().length, 1);
 
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /recorder HEADがtrusted base SHAと一致しません/);
-  assert.deepEqual(harness.postedReviews(), []);
+  // default branch から到達できない SHA を trusted base とする実行は拒否し続ける。
+  const unreachable = harness.submitWithBase(harness.targetSha);
+  assert.notEqual(unreachable.status, 0);
+  assert.match(unreachable.stderr, /trusted base SHAがrecorder HEADから到達不能です/);
+  assert.equal(harness.postedReviews().length, 1, '拒否時に証跡を増やさないこと');
 });
 
 test('submit-evidence: Issue worktreeのcandidate recorderからは投稿できない（AC-4）', (t) => {
@@ -250,4 +279,58 @@ test('submit-evidence: Issue worktreeのcandidate recorderからは投稿でき�
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Issue worktreeのcandidate recorderからevidenceを投稿できません/);
   assert.deepEqual(harness.postedReviews(), []);
+});
+
+// Issue #759 要件7(c) / AC-13: 調達元識別子と実体 digest の記録を必須とする対象は
+// 「本要件の充足によって新規に投稿される証跡」に限る。したがって、証跡形式（DESIGN E8 が
+// 後方互換のため任意フィールドとした側）ではなく記録経路の側で必須性が担保されていなければ
+// ならない。以下は「調達情報なしの証跡が新規に投稿される」経路が存在しないことを固定する。
+test('submit-evidence: 調達情報を欠くlauncher tokenでは証跡を新規投稿できない（要件7(c), AC-13）', (t) => {
+  const harness = createHarness({ selfPackage: true });
+  t.after(() => harness.cleanup());
+
+  const malformed: Record<string, unknown>[] = [
+    // procurement 自体が無い。
+    { trusted_root: packageRoot() },
+    // mode が未登録値。
+    { trusted_root: packageRoot(), procurement: { mode: 'unknown', source: 'x' } },
+    // 調達元識別子が空値。
+    { trusted_root: packageRoot(), procurement: { mode: 'clone_build', source: '' } },
+    // package_copy なのに実体 digest が無い。
+    { trusted_root: packageRoot(), procurement: { mode: 'package_copy', source: 'candidate-a:/tmp/x#agent-skill-chain@1.0.0' } },
+    // digest の形式が不正。
+    {
+      trusted_root: packageRoot(),
+      procurement: { mode: 'package_copy', source: 'candidate-a:/tmp/x#agent-skill-chain@1.0.0', digest: 'sha256:zz' },
+    },
+  ];
+
+  for (const token of malformed) {
+    harness.writeToken(token);
+    const result = harness.submit();
+    assert.notEqual(result.status, 0, JSON.stringify(token));
+    assert.match(result.stderr, /launcher tokenがattempt\/run\/slot契約と一致しないか既に消費済みです/);
+    assert.deepEqual(harness.postedReviews(), [], JSON.stringify(token));
+  }
+});
+
+test('submit-evidence: 新規に投稿される証跡には必ず調達元識別子が非空値で記録される（要件7(c), AC-13(i)）', (t) => {
+  const harness = createHarness({ selfPackage: true });
+  t.after(() => harness.cleanup());
+  harness.writeToken({
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${harness.baseSha}` },
+  });
+
+  const result = harness.submit();
+
+  assert.equal(result.status, 0, result.stderr);
+  const reviews = harness.postedReviews();
+  assert.equal(reviews.length, 1);
+  const evidence = parseReviewEvidence(reviews[0].body) as ReviewEvidence;
+  const procurement = evidence.execution.procurement;
+  assert.ok(procurement, '新規投稿の証跡は調達の事実を必ず持つこと');
+  assert.equal(procurement.mode, 'clone_build');
+  assert.equal(procurement.source, `clone_build:${harness.baseSha}`);
+  assert.ok(procurement.source.length > 0);
 });

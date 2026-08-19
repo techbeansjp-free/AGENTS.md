@@ -38,6 +38,7 @@ import {
   type EvidenceProcurement,
 } from '../lib/review-evidence.js';
 import { canonicalTreeDigest } from '../lib/tree-digest.js';
+import { traceRuntimeDependencyResolution } from '../lib/dependency-trace.js';
 import { isTrustedCliMarker, trustedCliMarkerRelativePath } from '../lib/trusted-cli-marker.js';
 import {
   deriveGateRoundContext,
@@ -74,6 +75,10 @@ import {
   type TrustedGateRecordState,
   type TrustedGateRepository,
 } from '../lib/trusted-gate-recorder.js';
+
+// Issue #759: 当該依存を実際に読み込む本モジュールを基点に、実行時の module 解決が返す
+// 解決先を参照経路ごと解決した実体パスとして観測する（ASC_DEPENDENCY_TRACE_FILE 設定時のみ）。
+traceRuntimeDependencyResolution(import.meta.url, ['yaml']);
 
 const REVIEW_USAGE = `
 使い方: agent-skill-chain gate review <issue_id> <gate_id> <profile> [target_sha]

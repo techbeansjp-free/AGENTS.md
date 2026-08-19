@@ -50,8 +50,11 @@ const GATE_REVIEW_STUB = [
   '',
 ].join('\n');
 
-// レビュア起動段の観測点。解決元（AC-3）・remote 不在（AC-11）・実行された CLI 実体（AC-10）を
-// 実行時の値として記録し、必要なら実際に証跡を投稿する（AC-13(i)・AC-14）。
+// レビュア起動段の観測点。解決元（AC-3）・remote 不在（AC-11）・実行された CLI 実体（AC-10）・
+// 隔離 clone 配下に作られた依存への参照経路の解決後実体パス（AC-16）を実行時の値として記録し、
+// 必要なら実際に判定プロンプトを生成し（AC-15）、その本文から導出した digest で証跡を投稿する
+// （AC-13(i)・AC-14）。固定文字列由来の digest では AC-15 の連言を立証できないため、
+// ASC_TEST_PROMPT_FILE が与えられた場合は本番経路の `gate reviewer-prompt` を実際に駆動する。
 const GATE_LAUNCH_REVIEWER_STUB = [
   '#!/usr/bin/env bash',
   'set -uo pipefail',
@@ -66,6 +69,10 @@ const GATE_LAUNCH_REVIEWER_STUB = [
   '  printf "trusted_base=%s\\n" "$ASC_TRUSTED_BASE_SHA"',
   '  printf "trusted_cli_root=%s\\n" "${ASC_TRUSTED_CLI_ROOT:-}"',
   '} >> "$ASC_TEST_REVIEW_TRACE"',
+  'for entry in "$REVIEW_ROOT"/node_modules/* "$REVIEW_ROOT"/node_modules/agent-skill-chain/node_modules; do',
+  '  [[ -e "$entry" || -L "$entry" ]] || continue',
+  '  printf "trusted_link=%s -> %s\\n" "$entry" "$(readlink -f -- "$entry")" >> "$ASC_TEST_REVIEW_TRACE"',
+  'done',
   'if [[ -n "${ASC_TEST_RESOLVE_CLI:-}" ]]; then',
   '  source "$REVIEW_ROOT/.agent-skill-chain/scripts/cli-resolve.sh"',
   '  if ! asc_resolve_cli; then',
@@ -73,11 +80,23 @@ const GATE_LAUNCH_REVIEWER_STUB = [
   '    exit 1',
   '  fi',
   '  printf "cli=%s\\n" "${ASC_CLI[*]}" >> "$ASC_TEST_REVIEW_TRACE"',
+  '  PROMPT_DIGEST="${ASC_TEST_PROMPT_DIGEST:-}"',
+  '  if [[ -n "${ASC_TEST_PROMPT_FILE:-}" ]]; then',
+  '    if ! PROMPT="$("${ASC_CLI[@]}" gate reviewer-prompt \\',
+  '      "$1" "$2" "$5" "$ASC_EVIDENCE_BASE_SHA" "$ASC_EVIDENCE_PR_NUMBER" "$ASC_REVIEW_ATTEMPT_ID" \\',
+  '      2>>"$ASC_TEST_REVIEW_TRACE")"; then',
+  '      printf "prompt=failed\\n" >> "$ASC_TEST_REVIEW_TRACE"',
+  '      exit 1',
+  '    fi',
+  '    printf "%s" "$PROMPT" > "$ASC_TEST_PROMPT_FILE"',
+  '    PROMPT_DIGEST="sha256:$(printf "%s" "$PROMPT" | node -e \'const c=require("node:crypto");const h=c.createHash("sha256");process.stdin.on("data",(d)=>h.update(d));process.stdin.on("end",()=>process.stdout.write(h.digest("hex")))\')"',
+  '    printf "prompt=generated\\n" >> "$ASC_TEST_REVIEW_TRACE"',
+  '  fi',
   '  if [[ -n "${ASC_TEST_SUBMIT_EVIDENCE:-}" ]]; then',
   '    if printf "%s" "$ASC_TEST_VERDICT" | "${ASC_CLI[@]}" gate submit-evidence \\',
   '      "$1" "$2" "$3" "$5" "$ASC_EVIDENCE_BASE_SHA" "$ASC_TRUSTED_BASE_SHA" "$ASC_EVIDENCE_PR_NUMBER" \\',
   '      "$ASC_REVIEW_ATTEMPT_ID" "$ASC_REVIEW_EXPECTED_COUNT" "$ASC_REVIEWER_RUN_ID" "$ASC_REVIEWER_SLOT" \\',
-  '      human human manual "$ASC_TEST_PROMPT_DIGEST" >> "$ASC_TEST_REVIEW_TRACE" 2>&1; then',
+  '      human human manual "$PROMPT_DIGEST" >> "$ASC_TEST_REVIEW_TRACE" 2>&1; then',
   '      printf "submit=ok\\n" >> "$ASC_TEST_REVIEW_TRACE"',
   '    else',
   '      printf "submit=failed\\n" >> "$ASC_TEST_REVIEW_TRACE"',
@@ -141,6 +160,8 @@ interface ConsumerOptions {
   resolveCli?: boolean;
   submitEvidence?: boolean;
   omitMarker?: boolean;
+  /** レビュア起動段で本番経路の判定プロンプト生成を実際に駆動する（AC-15）。 */
+  generatePrompt?: boolean;
 }
 
 interface Fixture {
@@ -148,15 +169,20 @@ interface Fixture {
   env: NodeJS.ProcessEnv;
   baseSha: string;
   targetSha: string;
+  scratchDir: string;
+  /** 期待値と一致する配布パッケージの実体（隔離 clone の外に置く調達候補）。 */
+  distributedPackage: string;
   reviewTrace: string;
   npmTrace: string;
   foreignTrace: string;
+  promptFile: string;
   buildTraceName: string;
   npmTraceLines(): string[];
   reviewTraceText(): string;
   foreignTraceText(): string;
+  promptText(): string;
   postedReviews(): { body: string }[];
-  run(): { status: number; stdout: string; stderr: string };
+  run(extraEnv?: NodeJS.ProcessEnv): { status: number; stdout: string; stderr: string };
   cleanup(): void;
 }
 
@@ -236,11 +262,18 @@ function createSelfFixture(): Fixture & { mainHead: string; setPullBase(sha: str
     repositoryDispatches() {
       return stub.readState().repositoryDispatches ?? [];
     },
-    run() {
+    scratchDir,
+    distributedPackage: '',
+    promptFile: path.join(scratchDir, 'prompt.txt'),
+    promptText() {
+      const file = path.join(scratchDir, 'prompt.txt');
+      return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    },
+    run(extraEnv: NodeJS.ProcessEnv = {}) {
       const result = spawnSync(
         path.join(repo.dir, '.agent-skill-chain', 'scripts', 'gate-local-review.sh'),
         ['ISSUE-643', 'implementation', 'standard', targetSha, currentPullBaseSha, '652', 'human'],
-        { cwd: repo.dir, env, encoding: 'utf8' },
+        { cwd: repo.dir, env: { ...env, ...extraEnv }, encoding: 'utf8' },
       );
       if (result.error) throw result.error;
       return { status: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
@@ -263,6 +296,7 @@ function createConsumerFixture(options: ConsumerOptions = {}): Fixture {
     resolveCli = false,
     submitEvidence = false,
     omitMarker = false,
+    generatePrompt = false,
   } = options;
 
   const repo = createTmpRepo({ backend: 'github' });
@@ -273,6 +307,7 @@ function createConsumerFixture(options: ConsumerOptions = {}): Fixture {
   const reviewTrace = path.join(scratchDir, 'review-trace.txt');
   const npmTrace = path.join(scratchDir, 'npm-trace.txt');
   const foreignTrace = path.join(scratchDir, 'foreign-trace.txt');
+  const promptFile = path.join(scratchDir, 'prompt.txt');
   const buildTraceName = 'consumer-build-ran.txt';
   fs.mkdirSync(npmBin);
   fs.mkdirSync(pathDir);
@@ -382,6 +417,7 @@ function createConsumerFixture(options: ConsumerOptions = {}): Fixture {
           }),
         }
       : {}),
+    ...(generatePrompt ? { ASC_TEST_PROMPT_FILE: promptFile } : {}),
   });
 
   const state = stub.readState();
@@ -401,9 +437,12 @@ function createConsumerFixture(options: ConsumerOptions = {}): Fixture {
     env,
     baseSha,
     targetSha,
+    scratchDir,
+    distributedPackage: sourceDir,
     reviewTrace,
     npmTrace,
     foreignTrace,
+    promptFile,
     buildTraceName,
     npmTraceLines() {
       return fs.existsSync(npmTrace) ? fs.readFileSync(npmTrace, 'utf8').trim().split('\n').filter(Boolean) : [];
@@ -414,14 +453,17 @@ function createConsumerFixture(options: ConsumerOptions = {}): Fixture {
     foreignTraceText() {
       return fs.existsSync(foreignTrace) ? fs.readFileSync(foreignTrace, 'utf8') : '';
     },
+    promptText() {
+      return fs.existsSync(promptFile) ? fs.readFileSync(promptFile, 'utf8') : '';
+    },
     postedReviews() {
       return (stub.readState().pullReviews ?? []) as { body: string }[];
     },
-    run() {
+    run(extraEnv: NodeJS.ProcessEnv = {}) {
       const result = spawnSync(
         path.join(repo.dir, '.agent-skill-chain', 'scripts', 'gate-local-review.sh'),
         ['ISSUE-759', 'implementation', 'standard', targetSha, baseSha, '764', 'human'],
-        { cwd: repo.dir, env, encoding: 'utf8' },
+        { cwd: repo.dir, env: { ...env, ...extraEnv }, encoding: 'utf8' },
       );
       if (result.error) throw result.error;
       return { status: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
@@ -431,6 +473,30 @@ function createConsumerFixture(options: ConsumerOptions = {}): Fixture {
       fs.rmSync(scratchDir, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * AC-13(i)・AC-14: 投稿された証跡が1件で、その execution へ調達元識別子と実体 digest が
+ * 非空値で記録されていることを確かめる。AC-14 は代表 consumer 3構成すべてで verdict の
+ * 証跡投稿まで要求するため、3構成それぞれの検査から本ヘルパを呼ぶ。
+ */
+function assertProcurementEvidence(fixture: Fixture, expectedBaseSha: string): ReviewEvidence {
+  const reviews = fixture.postedReviews();
+  assert.equal(reviews.length, 1, '証跡が投稿されること');
+  const evidence = parseReviewEvidence(reviews[0].body) as ReviewEvidence;
+  assert.equal(evidence.execution.trusted_base_sha, expectedBaseSha);
+  assert.match(evidence.execution.launcher_digest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(evidence.execution.isolation, 'ephemeral_clone');
+  const procurement = evidence.execution.procurement;
+  assert.ok(procurement, 'execution.procurement が記録されること');
+  assert.equal(procurement.mode, 'package_copy');
+  assert.equal(typeof procurement.source, 'string');
+  assert.ok(procurement.source.length > 0, '調達元識別子が非空値であること');
+  assert.match(procurement.source, /^candidate-[abc]:.+#agent-skill-chain@0\.0\.0-distributed$/);
+  assert.equal(typeof procurement.digest, 'string');
+  assert.ok((procurement.digest ?? '').length > 0, '調達実体のdigestが非空値であること');
+  assert.match(procurement.digest ?? '', /^sha256:[0-9a-f]{64}$/);
+  return evidence;
 }
 
 // ---------------------------------------------------------------------------
@@ -510,8 +576,8 @@ test('gate-local-review: protected base worktreeがdirtyなら引き続き拒否
 // PLAN #9: consumer 形状（package_copy 経路）
 // ---------------------------------------------------------------------------
 
-test('gate-local-review: package.jsonもlockfileも持たないconsumerで準備段が成立する（AC-1, AC-14）', (t) => {
-  const fixture = createConsumerFixture({ resolveCli: true });
+test('gate-local-review: package.jsonもlockfileも持たないconsumerで準備段が成立し証跡が投稿される（AC-1, AC-14）', (t) => {
+  const fixture = createConsumerFixture({ resolveCli: true, submitEvidence: true });
   t.after(() => fixture.cleanup());
 
   const result = fixture.run();
@@ -525,10 +591,13 @@ test('gate-local-review: package.jsonもlockfileも持たないconsumerで準備
   assert.match(trace, /remotes=\n/);
   // AC-10: 実行された CLI 実体が隔離 clone のディレクトリ配下にあること。
   assert.match(trace, /cli=.*agent-skill-chain-local-review\.[^/]+\/repo\/node_modules\/\.bin\/agent-skill-chain/);
+  // AC-14: 本構成でも verdict が証跡へ投稿されること（レビュア起動段への到達だけでは足りない）。
+  assert.match(trace, /submit=ok/);
+  assertProcurementEvidence(fixture, fixture.baseSha);
 });
 
-test('gate-local-review: consumerのbuild scriptを起動せず痕跡も残さない（AC-2, AC-14）', (t) => {
-  const fixture = createConsumerFixture({ consumerNode: 'failing_build', resolveCli: true });
+test('gate-local-review: consumerのbuild scriptを起動せず痕跡も残さないまま証跡が投稿される（AC-2, AC-14）', (t) => {
+  const fixture = createConsumerFixture({ consumerNode: 'failing_build', resolveCli: true, submitEvidence: true });
   t.after(() => fixture.cleanup());
 
   const result = fixture.run();
@@ -542,10 +611,13 @@ test('gate-local-review: consumerのbuild scriptを起動せず痕跡も残さ�
     false,
     'build scriptの痕跡ファイルが隔離clone内に生じないこと（終了コードの握り潰しでは充足しない）',
   );
+  // AC-14: build が失敗する構成でも verdict の証跡投稿まで到達すること。
+  assert.match(fixture.reviewTraceText(), /submit=ok/);
+  assertProcurementEvidence(fixture, fixture.baseSha);
 });
 
-test('gate-local-review: consumerの依存導入が必ず失敗する構成でも準備段が成立する（AC-9, AC-14）', (t) => {
-  const fixture = createConsumerFixture({ consumerNode: 'failing_install', resolveCli: true });
+test('gate-local-review: consumerの依存導入が必ず失敗する構成でも証跡投稿まで到達する（AC-9, AC-14）', (t) => {
+  const fixture = createConsumerFixture({ consumerNode: 'failing_install', resolveCli: true, submitEvidence: true });
   t.after(() => fixture.cleanup());
 
   const result = fixture.run();
@@ -555,6 +627,9 @@ test('gate-local-review: consumerの依存導入が必ず失敗する構成で�
   assert.equal(npmCalls.includes('ci --ignore-scripts'), false);
   assert.equal(npmCalls.includes('install'), false);
   assert.match(fixture.reviewTraceText(), /review_root=.*agent-skill-chain-local-review\./);
+  // AC-14: 依存導入が失敗する構成でも verdict の証跡投稿まで到達すること。
+  assert.match(fixture.reviewTraceText(), /submit=ok/);
+  assertProcurementEvidence(fixture, fixture.baseSha);
 });
 
 test('gate-local-review: 隔離clone外の非正規実体は実行されず隔離clone配下の実体だけが実行される（AC-3, AC-10）', (t) => {
@@ -658,29 +733,16 @@ test('gate-local-review: consumer形状でレビュア起動段へ到達し、�
 
   assert.equal(result.status, 0, result.stderr + fixture.reviewTraceText());
   assert.match(fixture.reviewTraceText(), /submit=ok/);
-  const reviews = fixture.postedReviews();
-  assert.equal(reviews.length, 1, '証跡が投稿されること');
-  const evidence = parseReviewEvidence(reviews[0].body) as ReviewEvidence;
-
   // AC-7: consumer 形状（.agent-skill-chain/project/MODEL_TIER_TABLE.md を持たない）でも execution が埋まる。
-  assert.equal(evidence.execution.trusted_base_sha, fixture.baseSha);
-  assert.match(evidence.execution.launcher_digest, /^sha256:[0-9a-f]{64}$/);
-  assert.equal(evidence.execution.isolation, 'ephemeral_clone');
-
   // AC-13(i): 調達元の識別子と調達した実体の digest が非空値で記録される。
-  const procurement = evidence.execution.procurement;
-  assert.ok(procurement, 'execution.procurement が記録されること');
-  assert.equal(procurement.mode, 'package_copy');
-  assert.equal(typeof procurement.source, 'string');
-  assert.ok(procurement.source.length > 0, '調達元識別子が非空値であること');
-  assert.match(procurement.source, /^candidate-[abc]:.+#agent-skill-chain@0\.0\.0-distributed$/);
-  assert.equal(typeof procurement.digest, 'string');
-  assert.ok((procurement.digest ?? '').length > 0, '調達実体のdigestが非空値であること');
-  assert.match(procurement.digest ?? '', /^sha256:[0-9a-f]{64}$/);
+  assertProcurementEvidence(fixture, fixture.baseSha);
 });
 
-test('gate-local-review: prompt生成が読み込むassetの解決元が審査対象でない（AC-15）', (t) => {
-  const fixture = createConsumerFixture({ resolveCli: true, submitEvidence: true });
+test('gate-local-review: 実生成したpromptとその読み込みassetの解決元が審査対象でない（AC-15）', (t) => {
+  // 固定文字列から作った digest では AC-15 の連言（第2項: 生成された prompt に Issue worktree 側の
+  // 改変内容が現れないこと）を立証できない。本テストは本番経路の判定プロンプト生成を実際に駆動し、
+  // 生成された prompt 本文そのものと、その本文から導出した digest で証跡を投稿する。
+  const fixture = createConsumerFixture({ resolveCli: true, submitEvidence: true, generatePrompt: true });
   t.after(() => fixture.cleanup());
   const assetTrace = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'asc-asset-trace-')), 'assets.txt');
   t.after(() => fs.rmSync(path.dirname(assetTrace), { recursive: true, force: true }));
@@ -696,16 +758,18 @@ test('gate-local-review: prompt生成が読み込むassetの解決元が審査�
     stdio: 'pipe',
   });
   const tamperedMarker = '# ISSUE-WORKTREE-TAMPERED-ASSET-MARKER';
-  const issueRoles = path.join(issueWorktree, '.agent-skill-chain', 'config', 'roles.yaml');
-  fs.appendFileSync(issueRoles, `\n${tamperedMarker}\n`);
+  for (const relative of [
+    ['.agent-skill-chain', 'config', 'roles.yaml'],
+    ['.agent-skill-chain', 'config', 'agent-skill-chain.yaml'],
+    ['.agent-skill-chain', 'config', 'segments.yaml'],
+    ['.agent-skill-chain', 'project', 'manifest.yaml'],
+  ]) {
+    fs.appendFileSync(path.join(issueWorktree, ...relative), `\n${tamperedMarker}\n`);
+  }
 
-  const result = spawnSync(
-    path.join(fixture.repoDir, '.agent-skill-chain', 'scripts', 'gate-local-review.sh'),
-    ['ISSUE-759', 'implementation', 'standard', fixture.targetSha, fixture.baseSha, '764', 'human'],
-    { cwd: fixture.repoDir, env: { ...fixture.env, ASC_ASSET_TRACE_FILE: assetTrace }, encoding: 'utf8' },
-  );
-  if (result.error) throw result.error;
+  const result = fixture.run({ ASC_ASSET_TRACE_FILE: assetTrace });
   assert.equal(result.status, 0, result.stderr + fixture.reviewTraceText());
+  assert.match(fixture.reviewTraceText(), /prompt=generated/, '本番経路のprompt生成を駆動していること');
 
   const resolved = fs.readFileSync(assetTrace, 'utf8').trim().split('\n').filter(Boolean);
   assert.ok(resolved.length > 0, '解決されたassetのパスが観測できること');
@@ -713,8 +777,187 @@ test('gate-local-review: prompt生成が読み込むassetの解決元が審査�
   for (const entry of resolved) {
     assert.equal(entry.startsWith(issueWorktree + path.sep), false, `${entry} が Issue worktree 配下でないこと`);
   }
-  // AC-15 連言の第2項: 生成された成果（証跡本文）に Issue worktree 側の改変内容が現れないこと。
+  // AC-15 連言の第2項: 実際に生成された prompt 本文に Issue worktree 側の改変内容が現れないこと。
+  const prompt = fixture.promptText();
+  assert.ok(prompt.length > 0, '判定プロンプトが実際に生成されていること');
+  assert.match(prompt, /ゲートレビュア判定プロンプト/);
+  assert.equal(prompt.includes(tamperedMarker), false, '生成されたpromptに審査対象側の改変内容が現れないこと');
+  // 投稿された証跡の prompt digest が、固定文字列ではなく生成された prompt 本文由来であること。
   const reviews = fixture.postedReviews();
   assert.equal(reviews.length, 1);
+  const evidence = parseReviewEvidence(reviews[0].body) as ReviewEvidence;
+  assert.equal(evidence.prompt_digest, evidencePromptDigest(prompt));
+  assert.notEqual(evidence.prompt_digest, evidencePromptDigest('gate-local-review consumer fixture prompt'));
   assert.equal(reviews[0].body.includes(tamperedMarker), false);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN #10: 審査対象由来の依存解決の排除（AC-16 / 要件7(d) の2条件）
+// ---------------------------------------------------------------------------
+
+const MALICIOUS_DEPENDENCY_MARKER = 'ISSUE-WORKTREE-MALICIOUS-DEPENDENCY-MARKER';
+
+/** 実行時依存と同名の、識別可能な内容を持つ悪意ある依存実体を置く。 */
+function writeMaliciousDependency(dir: string): void {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    `${JSON.stringify({ name: 'yaml', version: '9.9.9-malicious', main: 'index.js' }, null, 2)}\n`,
+  );
+  fs.writeFileSync(
+    path.join(dir, 'index.js'),
+    `// ${MALICIOUS_DEPENDENCY_MARKER}\nmodule.exports = { marker: ${JSON.stringify(MALICIOUS_DEPENDENCY_MARKER)} };\n`,
+  );
+}
+
+test('gate-local-review: 審査対象の依存実体は参照経路の解決後まで照合して実行時に解決させない（AC-16）', (t) => {
+  // AC-16 の Given が必須とする2状態を実際に構成する。
+  // (i) 当該依存を Issue worktree 配下でない実体から解決する状態。
+  // (ii) 候補と同じ親の依存ディレクトリへ、当該依存と同名の symbolic link を作り、その参照先を
+  //      Issue worktree 配下の悪意ある依存実体へ向けた状態。
+  // (ii) を欠く構成での観測は本 AC の充足として扱わないため、両状態を1つのテストで観測する。
+  const fixture = createConsumerFixture({
+    supply: 'path',
+    resolveCli: true,
+    submitEvidence: true,
+    generatePrompt: true,
+  });
+  t.after(() => fixture.cleanup());
+
+  // Issue worktree を本リポジトリの linked worktree として登録し、その配下に
+  // 正規の調達候補と同じ配置形態の CLI 実体と、悪意ある依存実体を置く。
+  const issueWorktreeParent = fs.mkdtempSync(path.join(os.tmpdir(), 'asc-ac16-issue-worktree-'));
+  const issueWorktree = path.join(issueWorktreeParent, 'issue');
+  t.after(() => fs.rmSync(issueWorktreeParent, { recursive: true, force: true }));
+  execFileSync('git', ['worktree', 'add', '--quiet', '--detach', issueWorktree, fixture.targetSha], {
+    cwd: fixture.repoDir,
+    stdio: 'pipe',
+  });
+  const issueNodeModules = path.join(issueWorktree, 'node_modules');
+  fs.cpSync(fixture.distributedPackage, path.join(issueNodeModules, 'agent-skill-chain'), {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+  const maliciousDependency = path.join(issueNodeModules, 'yaml');
+  writeMaliciousDependency(maliciousDependency);
+
+  // 採用されうる候補が1つに定まることを確かめる。
+  // (a) protected base worktree root 直下の依存ディレクトリ: 実体なし。
+  // (b) npm root -g: Issue worktree 配下（第一の条件で除外される）。
+  // (c) PATH 上の実行ファイルから辿るパッケージ root: 期待値と一致する唯一の候補。
+  assert.equal(
+    fs.existsSync(path.join(fixture.repoDir, 'node_modules', 'agent-skill-chain')),
+    false,
+    '候補(a)が解決不能であること',
+  );
+  const candidateParent = path.dirname(fixture.distributedPackage);
+  const traceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asc-ac16-trace-'));
+  t.after(() => fs.rmSync(traceDir, { recursive: true, force: true }));
+
+  // ---- 状態 (i): 依存を Issue worktree 配下でない実体から解決する ----
+  const digestBefore = canonicalTreeDigest(fixture.distributedPackage);
+  const dependencyTraceFirst = path.join(traceDir, 'dependencies-i.txt');
+  const assetTraceFirst = path.join(traceDir, 'assets-i.txt');
+  const first = fixture.run({
+    ASC_TEST_NPM_GLOBAL_ROOT: issueNodeModules,
+    ASC_DEPENDENCY_TRACE_FILE: dependencyTraceFirst,
+    ASC_ASSET_TRACE_FILE: assetTraceFirst,
+  });
+
+  assert.equal(first.status, 0, first.stderr + fixture.reviewTraceText());
+  const firstTrace = fixture.reviewTraceText();
+  assert.match(firstTrace, /submit=ok/, '(i) ではレビュア起動段へ到達し証跡が投稿されること');
+  const firstEvidence = assertProcurementEvidence(fixture, fixture.baseSha);
+  assert.equal(
+    firstEvidence.execution.procurement?.source.startsWith(`candidate-c:${fixture.distributedPackage}#`),
+    true,
+    '(i) では linked worktree 外の候補が採用されること',
+  );
+  assert.equal(
+    firstEvidence.execution.procurement?.source.includes(issueWorktree),
+    false,
+    'Issue worktree 配下の候補が採用されないこと',
+  );
+
+  // 隔離 clone から当該候補または悪意ある依存実体への参照経路が1つも作られないこと。
+  const trustedLinks = firstTrace
+    .split('\n')
+    .filter((line) => line.startsWith('trusted_link='))
+    .map((line) => line.slice('trusted_link='.length));
+  assert.ok(trustedLinks.length > 0, '隔離clone配下の参照経路が観測できること');
+  for (const link of trustedLinks) {
+    assert.equal(link.includes(issueWorktree), false, `${link} が Issue worktree を指さないこと`);
+  }
+
+  // 実行時に解決された各依存の実体パスがいずれも Issue worktree 配下でないこと。
+  const dependencyLines = fs.readFileSync(dependencyTraceFirst, 'utf8').trim().split('\n').filter(Boolean);
+  assert.ok(dependencyLines.length > 0, '実行時依存の解決先が観測できること');
+  const observedSpecifiers = new Set(dependencyLines.map((line) => line.split('\t')[0]));
+  // 実行中の CLI が自身のパッケージの依存として宣言する実行時依存を全件観測する。
+  for (const specifier of ['yaml', 'ajv']) {
+    assert.equal(observedSpecifiers.has(specifier), true, `${specifier} の解決先が観測されること`);
+  }
+  for (const line of dependencyLines) {
+    const [specifier, real] = line.split('\t');
+    assert.notEqual(real, 'unresolved', `${specifier} が実行時に解決されること`);
+    assert.equal(real.startsWith(issueWorktree + path.sep), false, `${real} が Issue worktree 配下でないこと`);
+  }
+
+  // 悪意ある依存実体の識別可能な内容が prompt・verdict・実行観測のいずれにも現れないこと。
+  const firstPrompt = fixture.promptText();
+  assert.ok(firstPrompt.length > 0);
+  for (const observed of [
+    firstPrompt,
+    fixture.postedReviews().map((review) => review.body).join('\n'),
+    firstTrace,
+    dependencyLines.join('\n'),
+    fs.readFileSync(assetTraceFirst, 'utf8'),
+  ]) {
+    assert.equal(observed.includes(MALICIOUS_DEPENDENCY_MARKER), false);
+  }
+
+  // ---- 状態 (ii): 候補と同じ親の依存ディレクトリへ、悪意ある実体を指す参照経路を置く ----
+  fs.rmSync(fixture.reviewTrace, { force: true });
+  fs.rmSync(fixture.promptFile, { force: true });
+  fs.rmSync(path.join(candidateParent, 'yaml'), { recursive: true, force: true });
+  fs.symlinkSync(maliciousDependency, path.join(candidateParent, 'yaml'));
+
+  // (ii) は候補パッケージ自身のファイルを変更しないため、候補の正準ツリー digest は (i) と一致する。
+  // digest 照合だけでは検出できない経路であることを実測値の比較で固定する。
+  assert.equal(canonicalTreeDigest(fixture.distributedPackage), digestBefore, '候補のdigestが (i) と一致すること');
+
+  const dependencyTraceSecond = path.join(traceDir, 'dependencies-ii.txt');
+  const assetTraceSecond = path.join(traceDir, 'assets-ii.txt');
+  const second = fixture.run({
+    ASC_TEST_NPM_GLOBAL_ROOT: issueNodeModules,
+    ASC_DEPENDENCY_TRACE_FILE: dependencyTraceSecond,
+    ASC_ASSET_TRACE_FILE: assetTraceSecond,
+  });
+
+  assert.notEqual(second.status, 0, '(ii) では候補を採用せず非0終了すること');
+  assert.match(second.stderr, /調達候補が審査対象のlinked worktreeに由来する、または審査対象のlinked worktree配下の実体を依存として解決するため、全候補を採用前に除外しました/);
+  // 第一の条件（候補の実体パス）による除外の診断。
+  assert.match(second.stderr, /第一の条件により除外/);
+  assert.ok(
+    second.stderr.includes(path.join(issueNodeModules, 'agent-skill-chain')),
+    'Issue worktree 配下の候補が第一の条件で除外されたことが診断に現れること',
+  );
+  // 第二の条件（依存の供給元に置かれた参照経路の解決後実体パス）による除外の診断。
+  assert.match(second.stderr, /第二の条件により除外/);
+  assert.ok(second.stderr.includes(path.join(candidateParent, 'yaml')), '検査した参照経路が診断に現れること');
+  assert.ok(second.stderr.includes(maliciousDependency), '解決後の実体パスが診断に現れること');
+  assert.ok(second.stderr.includes(issueWorktree), '該当した linked worktree のパスが診断に現れること');
+
+  assert.equal(fs.existsSync(fixture.reviewTrace), false, '(ii) ではレビュアを起動しないこと');
+  assert.equal(fixture.postedReviews().length, 1, '(ii) では証跡を投稿しないこと');
+  assert.equal(fixture.promptText(), '', '(ii) では判定プロンプトを生成しないこと');
+  for (const traceFile of [dependencyTraceSecond, assetTraceSecond]) {
+    const text = fs.existsSync(traceFile) ? fs.readFileSync(traceFile, 'utf8') : '';
+    assert.equal(text.includes(MALICIOUS_DEPENDENCY_MARKER), false);
+    assert.equal(text.includes(maliciousDependency), false);
+  }
+  assert.equal(
+    fixture.postedReviews().map((review) => review.body).join('\n').includes(MALICIOUS_DEPENDENCY_MARKER),
+    false,
+  );
 });

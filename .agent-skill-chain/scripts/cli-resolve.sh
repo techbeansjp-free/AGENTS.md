@@ -6,7 +6,12 @@
 # Issue #759: 信頼実行（ローカルゲートレビュー）の文脈では、隔離 clone 配下の実体のみを解決し
 # （ASC_TRUSTED_CLI_ROOT）、隔離 clone の外にある配布パッケージを検証してから複製する調達段
 # （asc_procure_trusted_cli）を本ファイルが担う。解決と調達を同一境界へ置くのは、探索順を
-# 2 か所へ複製しないためである。
+# 2 か所へ複製しないためである。調達候補の採否は 2 つのパス条件で決める。第一に候補の実体パス、
+# 第二に候補が実行時に依存を解決する供給元（候補パッケージ直下および候補と同じ親の node_modules）
+# に置かれた参照経路を全て解決した後の実体パスが、いずれも protected base worktree 以外の
+# linked worktree 配下にないこと。第二の条件が独立に必要なのは、正準ツリー digest が依存
+# ディレクトリ配下を対象から除くため、参照経路を審査対象へ向けた改変が候補の digest を変えず、
+# 候補の実体パス照合と digest 照合をいずれも通過してしまうためである。
 
 # Issue #683: 正式な導入手段と同じく既定は可変refとする。固定が必要なconsumerは
 # ASC_CLI_INSTALL_SOURCE="github:techbeansjp-free/AGENTS.md#<tag-or-branch>" を指定できる。
@@ -315,20 +320,131 @@ _asc_realpath() {
   node -e 'const fs=require("node:fs");try{process.stdout.write(fs.realpathSync(process.argv[1]))}catch(e){process.exit(1)}' -- "$1"
 }
 
-# 本リポジトリの linked worktree（protected base worktree を除く）配下の候補を除外するための判定。
-# 要件3(a) の「審査対象由来でないこと」を、内容一致だけでなく所在によっても担保する。
-_asc_candidate_in_linked_worktree() {
-  local candidate_real="$1" protected_real="$2" protected_root="$3"
+# 本リポジトリの linked worktree（protected base worktree を除く）の実体パス一覧。
+# 一度だけ解決し、候補の実体パスと依存の参照経路の解決後実体パスの双方から参照する。
+_ASC_FOREIGN_WORKTREES=()
+# 直前の判定で該当した linked worktree のパス（診断へ載せるため）。
+_ASC_MATCHED_WORKTREE=""
+
+_asc_load_foreign_worktrees() {
+  local protected_root="$1" protected_real="$2"
   local line worktree_path worktree_real
+  _ASC_FOREIGN_WORKTREES=()
   while IFS= read -r line; do
     [[ "$line" == worktree\ * ]] || continue
     worktree_path="${line#worktree }"
     worktree_real="$(_asc_realpath "$worktree_path" 2>/dev/null || printf '%s' "$worktree_path")"
     [[ "$worktree_real" == "$protected_real" ]] && continue
-    if [[ "$candidate_real" == "$worktree_real" || "$candidate_real" == "$worktree_real"/* ]]; then
+    _ASC_FOREIGN_WORKTREES+=("$worktree_real")
+  done < <(git -C "$protected_root" worktree list --porcelain 2>/dev/null || true)
+}
+
+# 実体パスが protected base worktree 以外の linked worktree 配下にあるかの唯一の判定。
+# 要件7(d) の第一条件（候補の実体パス）と第二条件（依存の供給元に置かれた参照経路の解決後
+# 実体パス）は、規則を 2 つへ分けると片方だけが更新されて食い違うため、この 1 関数を共有する。
+_asc_path_in_foreign_linked_worktree() {
+  local subject_real="$1" worktree_real
+  _ASC_MATCHED_WORKTREE=""
+  ((${#_ASC_FOREIGN_WORKTREES[@]} == 0)) && return 1
+  for worktree_real in "${_ASC_FOREIGN_WORKTREES[@]}"; do
+    if [[ "$subject_real" == "$worktree_real" || "$subject_real" == "$worktree_real"/* ]]; then
+      _ASC_MATCHED_WORKTREE="$worktree_real"
       return 0
     fi
-  done < <(git -C "$protected_root" worktree list --porcelain 2>/dev/null || true)
+  done
+  return 1
+}
+
+# 要件7(d) 第二条件の照合対象を列挙し、参照経路を全て解決した実体パスを併記する。
+# 供給元は 2 か所（候補パッケージ root 直下の依存ディレクトリと、親が依存ディレクトリである場合の
+# 当該親ディレクトリ）に限り、それぞれディレクトリ自身とその直下の全エントリを対象とする。
+# 名前が `@` で始まるエントリはスコープ名のディレクトリであり、その直下の各エントリも対象へ加える。
+# 候補パッケージ自身は第一条件で照合済みのため重ねて数えない。
+# 出力は `<照合対象パス>\t<解決後の実体パス>` の1行。解決できない場合は実体パスを空にする。
+_ASC_DEPENDENCY_SUPPLY_JS="$(cat <<'ASC_DEP_SUPPLY_JS'
+const fs = require("node:fs");
+const path = require("node:path");
+const DEPENDENCY_DIR = "node_modules";
+const candidate = process.argv[1];
+const candidateReal = process.argv[2];
+const supplies = [path.join(candidate, DEPENDENCY_DIR)];
+const parent = path.dirname(candidate);
+if (path.basename(parent) === DEPENDENCY_DIR) supplies.push(parent);
+const targets = new Set();
+function addEntries(dir, expandScope) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (error) {
+    return;
+  }
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    targets.add(entryPath);
+    if (expandScope && entry.name.startsWith("@")) addEntries(entryPath, false);
+  }
+}
+for (const supply of supplies) {
+  try {
+    fs.lstatSync(supply);
+  } catch (error) {
+    continue;
+  }
+  targets.add(supply);
+  addEntries(supply, true);
+}
+const lines = [];
+for (const target of [...targets].sort()) {
+  let resolved = "";
+  try {
+    resolved = fs.realpathSync(target);
+  } catch (error) {
+    resolved = "";
+  }
+  if (resolved !== "" && resolved === candidateReal) continue;
+  lines.push(target + "\t" + resolved);
+}
+process.stdout.write(lines.join("\n"));
+ASC_DEP_SUPPLY_JS
+)"
+
+# 直前の第二条件の判定結果。除外理由と、照合を通過した参照経路の集合。
+_ASC_DEPENDENCY_REJECTION=""
+_ASC_DEPENDENCY_CHECKED_TARGETS=()
+
+# 要件7(d) 第二条件を判定する。解決できない参照経路（リンク切れ・権限不足・循環）も、
+# 解決先が審査対象の配下でないことを示せないため候補を除外する（安全側ラチェット）。
+_asc_check_dependency_supply() {
+  local candidate="$1" candidate_real="$2"
+  local supply_output target resolved
+  _ASC_DEPENDENCY_REJECTION=""
+  _ASC_DEPENDENCY_CHECKED_TARGETS=()
+  if ! supply_output="$(node -e "$_ASC_DEPENDENCY_SUPPLY_JS" -- "$candidate" "$candidate_real" 2>/dev/null)"; then
+    _ASC_DEPENDENCY_REJECTION="依存の供給元（候補パッケージ直下および候補と同じ親の node_modules）を列挙できませんでした"
+    return 1
+  fi
+  while IFS=$'\t' read -r target resolved; do
+    [[ -n "$target" ]] || continue
+    if [[ -z "$resolved" ]]; then
+      _ASC_DEPENDENCY_REJECTION="依存の供給元に置かれた参照経路を解決できません（参照経路 ${target} → 解決不能）"
+      return 1
+    fi
+    if _asc_path_in_foreign_linked_worktree "$resolved"; then
+      _ASC_DEPENDENCY_REJECTION="依存の供給元に置かれた参照経路の解決後の実体パスが審査対象のlinked worktree配下です（参照経路 ${target} → 実体 ${resolved}, linked worktree ${_ASC_MATCHED_WORKTREE}）"
+      return 1
+    fi
+    _ASC_DEPENDENCY_CHECKED_TARGETS+=("$target")
+  done <<<"$supply_output"
+  return 0
+}
+
+# 参照経路を作ってよいのは、第二条件で照合を通過した集合の内側だけに限る。
+_asc_dependency_target_checked() {
+  local needle="$1" entry
+  ((${#_ASC_DEPENDENCY_CHECKED_TARGETS[@]} == 0)) && return 1
+  for entry in "${_ASC_DEPENDENCY_CHECKED_TARGETS[@]}"; do
+    [[ "$entry" == "$needle" ]] && return 0
+  done
   return 1
 }
 
@@ -352,6 +468,7 @@ asc_procure_trusted_cli() {
 
   local protected_real
   protected_real="$(_asc_realpath "$protected_root" 2>/dev/null || printf '%s' "$protected_root")"
+  _asc_load_foreign_worktrees "$protected_root" "$protected_real"
 
   local -a candidate_ids=() candidate_paths=() candidate_notes=()
   local -a searched=()
@@ -365,7 +482,7 @@ asc_procure_trusted_cli() {
   # 候補(b): `npm root -g` が返すディレクトリ配下。npm 不在・失敗時は候補なしとして次へ進む。
   local global_root=""
   if command -v npm >/dev/null 2>&1; then
-    if global_root="$(npm root -g 2>/dev/null)" && [[ -n "$global_root" ]]; then
+    if global_root="$(npm root -g 2>/dev/null)" && global_root="${global_root%/}" && [[ -n "$global_root" ]]; then
       searched+=("(b) npm root -g が返すディレクトリ配下: ${global_root}/${expected_package}")
       if [[ -d "$global_root/$expected_package" ]]; then
         candidate_ids+=("b"); candidate_paths+=("$global_root/$expected_package"); candidate_notes+=("")
@@ -390,18 +507,24 @@ asc_procure_trusted_cli() {
     searched+=("(c) PATH上の実行ファイルから辿るパッケージ root: 探索不能（command -v ${expected_package} が解決しませんでした）")
   fi
 
-  local index adopted_path="" adopted_id="" adopted_digest="" candidate_count=0
+  local index adopted_path="" adopted_id="" adopted_real="" adopted_digest="" eligible_count=0
   local -a rejected=()
   # set -u 下で空配列の展開に依存しないよう、要素数を先に確かめてから走査する。
   for ((index = 0; index < ${#candidate_paths[@]}; index++)); do
     local candidate="${candidate_paths[$index]}" candidate_id="${candidate_ids[$index]}"
     local candidate_real
     candidate_real="$(_asc_realpath "$candidate" 2>/dev/null || printf '%s' "$candidate")"
-    if _asc_candidate_in_linked_worktree "$candidate_real" "$protected_real" "$protected_root"; then
-      rejected+=("(${candidate_id}) ${candidate}: 本リポジトリのlinked worktree配下のため列挙から除外しました")
+    # 要件7(d) の 2 条件はいずれも採用前・正準ツリーdigest算出前に判定する。
+    # 除外した候補には複製も参照経路の付与も行わない。
+    if _asc_path_in_foreign_linked_worktree "$candidate_real"; then
+      rejected+=("(${candidate_id}) ${candidate}: 第一の条件により除外（候補の実体パスが審査対象のlinked worktree配下です: 実体 ${candidate_real}, linked worktree ${_ASC_MATCHED_WORKTREE}）")
       continue
     fi
-    candidate_count=$((candidate_count + 1))
+    if ! _asc_check_dependency_supply "$candidate" "$candidate_real"; then
+      rejected+=("(${candidate_id}) ${candidate}: 第二の条件により除外（${_ASC_DEPENDENCY_REJECTION}）")
+      continue
+    fi
+    eligible_count=$((eligible_count + 1))
     local candidate_digest
     if ! candidate_digest="$(asc_canonical_tree_digest "$candidate" 2>/dev/null)"; then
       rejected+=("(${candidate_id}) ${candidate}: 正準ツリーdigestを算出できませんでした")
@@ -411,14 +534,18 @@ asc_procure_trusted_cli() {
       rejected+=("(${candidate_id}) ${candidate}: digestが期待値と一致しません（実測 ${candidate_digest}）")
       continue
     fi
-    adopted_path="$candidate"; adopted_id="$candidate_id"; adopted_digest="$candidate_digest"
+    adopted_path="$candidate"; adopted_id="$candidate_id"; adopted_real="$candidate_real"; adopted_digest="$candidate_digest"
     break
   done
 
   if [[ -z "$adopted_path" ]]; then
+    # 前提を 3 種に分ける。(1) 候補が1つも存在しない (2) 候補は存在したが除外規則で全て除外
+    # (3) 除外されなかった候補はあったが期待値と一致するものが無い。
     local reason
-    if (( candidate_count == 0 )); then
+    if (( ${#candidate_paths[@]} == 0 )); then
       reason="信頼実行コードの供給元が実行環境に存在しません。是正: 配布パッケージ ${expected_package}@${expected_version} を consumer の node_modules 配下または PATH 上へ導入してから再実行してください（ローカルの package キャッシュのみの状態は供給元として扱いません）。"
+    elif (( eligible_count == 0 )); then
+      reason="調達候補が審査対象のlinked worktreeに由来する、または審査対象のlinked worktree配下の実体を依存として解決するため、全候補を採用前に除外しました。是正: 当該参照経路を除去するか、審査対象外の実体から依存を解決できる状態にしてから再実行してください。"
     else
       reason="調達候補の完全性検証に失敗しました（期待値 ${expected_digest} と一致する候補がありません）。是正: 導入版と導入マーカーの整合を回復するため upgrade を実行し、その結果を default branch へ反映してください。"
     fi
@@ -458,7 +585,14 @@ asc_procure_trusted_cli() {
     return 1
   fi
 
-  # 依存モジュールは実体を複製せず、参照経路だけを与える（実行時の依存閉包の束縛は Issue #772 の射程）。
+  # 依存モジュールは実体を複製せず、参照経路だけを与える。依存実体の由来・完全性の積極的な検証は
+  # Issue #772 の射程だが、要件7(d) 第二条件（参照先の解決後実体パスが審査対象のlinked worktree
+  # 配下でないこと）は本関数が担う。採用の判定と付与の間に参照先が差し替えられた場合へ備え、
+  # 付与の直前に同じ照合を再度行い、1つでも条件を満たさなければ付与せず非0終了する。
+  if ! _asc_check_dependency_supply "$adopted_path" "$adopted_real"; then
+    echo "調達候補の依存の供給元が採用後に条件を満たさなくなったため、参照経路を作らずに停止します（${_ASC_DEPENDENCY_REJECTION}）。" >&2
+    return 1
+  fi
   local candidate_parent dep dep_name
   candidate_parent="$(dirname -- "$adopted_path")"
   if [[ "$(basename -- "$candidate_parent")" == "node_modules" ]]; then
@@ -466,11 +600,13 @@ asc_procure_trusted_cli() {
       [[ -e "$dep" ]] || continue
       dep_name="$(basename -- "$dep")"
       [[ "$dep_name" == "$expected_package" || "$dep_name" == ".bin" ]] && continue
+      # 照合を経ていない対象へは参照経路を作らない。
+      _asc_dependency_target_checked "$dep" || continue
       [[ -e "$trusted_root/node_modules/$dep_name" ]] && continue
       ln -s -- "$dep" "$trusted_root/node_modules/$dep_name"
     done
   fi
-  if [[ -d "$adopted_path/node_modules" ]]; then
+  if [[ -d "$adopted_path/node_modules" ]] && _asc_dependency_target_checked "$adopted_path/node_modules"; then
     ln -s -- "$adopted_path/node_modules" "$dest/node_modules"
   fi
 
