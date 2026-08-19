@@ -349,6 +349,17 @@ export function selectFindingClassificationComments(options: {
     if (!validateFindingClassificationRecord(record)) {
       return { status: 'invalid', reason: `finding分類record ${comment.id}のdigestまたは必須値が不正です` };
     }
+    // Issue #786: 宣言recordと同じ上書き検知。digestは公開情報から再計算できるため、
+    // trusted recorderが過去に投稿したコメント本文を差し替えれば投稿者束縛もdigest検査も素通りし、
+    // blockingをwarningへ差し替える偽造recordを注入できる。上書きは従来どおり不正として扱う。
+    const createdAt = commentTime(comment, 'created');
+    const updatedAt = commentTime(comment, 'updated');
+    if (!createdAt || Number.isNaN(Date.parse(createdAt))) {
+      return { status: 'invalid', reason: `finding分類record ${comment.id}のAPI作成時刻を解決できません` };
+    }
+    if (updatedAt && updatedAt !== createdAt) {
+      return { status: 'invalid', reason: `finding分類record ${comment.id}は作成後に上書きされています` };
+    }
     matches.push({ comment, record });
   }
   return { status: 'selected', matches };

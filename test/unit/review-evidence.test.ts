@@ -658,3 +658,48 @@ test('D4: 非trustedな投稿者のfinding分類recordを採用せず、単独�
   });
   assert.equal(survived.final, 'approved');
 });
+
+// Issue #786 D4-4: 分類recordへの上書き検知（`CLASSIFICATION_RECORD_EDIT_NOT_DETECTED` の回帰）。
+// classification_digestは秘密値を含まず公開されたsource review本文から再計算できるため、
+// write権限保有者が trusted recorder の既存コメント本文を差し替えれば、投稿者束縛もdigest検査も
+// 素通りする偽造recordを注入できる。上書きを検知しないと、4類型に該当するblockingまで
+// warningへ差し替わり、レビュアのfailもpassへ差し替わって最終roundがapprovedとして記録される。
+test('D4: 作成後に上書きされたfinding分類recordを採用せず、4類型のblockingをwarningへ差し替えない', () => {
+  const outside = blockingFinding('NON_FINAL_CATEGORY_ONE');
+  const dataLoss = blockingFinding('DATA_LOSS_FINDING');
+  const reviews = declaredReviews(
+    verdictOf({ conformance: 'fail', falsification: 'fail', blockers: [outside, dataLoss] }),
+    verdictOf({ conformance: 'pass', falsification: 'pass' }),
+  );
+  const options = { gateRound: finalRound, expectedRoundBudgetDeclaration: finalRoundDeclaration };
+
+  // trusted recorderは4類型外のoutsideだけを分類する。dataLossはblockingのまま残り、
+  // 上限到達により人間判断へ移行する。これが偽造前の正しい帰結である。
+  const classified = verify(reviews, {
+    ...options,
+    findingClassifications: [classificationComment(21, '1', outside)],
+  });
+  assert.equal(classified.final, 'human_required');
+  assert.deepEqual(
+    classified.blockers.filter((entry) => entry.severity === 'blocking').map((entry) => entry.code),
+    ['DATA_LOSS_FINDING'],
+  );
+
+  // 反例経路: 同じ trusted recorder が過去に投稿したコメント1件を編集し、dataLossの
+  // source_review_id・origin・evidence・raw_evidenceを公開本文から複写した偽造recordを注入する。
+  // 投稿者もdigestも正しいが、API上のcreated_atとupdated_atが一致しない。
+  const injected = { ...classificationComment(22, '1', dataLoss), updatedAt: '2026-08-19T00:05:00.000Z' };
+  const forged = verify(reviews, {
+    ...options,
+    findingClassifications: [classificationComment(21, '1', outside), injected],
+  });
+  assert.equal(forged.final, 'human_required');
+  assert.match(forged.reason ?? '', /上書き/);
+  // 分類は1件も適用されず、両findingがblockingのまま残る。
+  assert.deepEqual(forged.blockers.map((entry) => entry.severity), ['blocking', 'blocking']);
+  // レビュアのraw failもpassへ差し替わらない。
+  assert.equal(forged.conformance, 'fail');
+  assert.equal(forged.falsification, 'fail');
+  assert.equal(forged.subverdict_reclassification, undefined);
+  assert.equal(forged.inconclusive, true);
+});

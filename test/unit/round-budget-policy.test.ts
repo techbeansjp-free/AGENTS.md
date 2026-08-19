@@ -257,4 +257,19 @@ test('finding分類recordの選択: marker・issue_id・gate・投稿者の同�
     user: { login: 'trusted-recorder' },
   };
   assert.equal(selectFindingClassificationComments({ comments: [tampered], ...base }).status, 'invalid');
+
+  // Issue #786: 宣言recordと同じ上書き検知。digestは公開されたsource review本文から再計算できるため、
+  // trusted recorderの既存コメントを本文だけ差し替えた偽造recordはdigest検査を素通りする。
+  const reason = (result: ReturnType<typeof selectFindingClassificationComments>) => {
+    assert.equal(result.status, 'invalid');
+    return result.status === 'invalid' ? result.reason : '';
+  };
+  const edited = { ...comment(17, 'implementation', '101', 'trusted-recorder'), updatedAt: '2026-08-19T00:05:00.000Z' };
+  assert.match(reason(selectFindingClassificationComments({ comments: [edited], ...base })), /上書き/);
+  // 上書き検知を成立させられない時刻不明のrecordも、宣言側と同じく不正として扱う。
+  const { createdAt: _createdAt, ...timeless } = comment(18, 'implementation', '101', 'trusted-recorder');
+  assert.match(reason(selectFindingClassificationComments({ comments: [timeless], ...base })), /作成時刻/);
+  // 未編集のコメントは従来どおり採用する（updated_atはcreated_atと一致する）。
+  const untouched = { ...comment(19, 'implementation', '101', 'trusted-recorder'), updated_at: '2026-08-19T00:01:00.000Z' };
+  assert.equal(selectFindingClassificationComments({ comments: [untouched], ...base }).status, 'selected');
 });
