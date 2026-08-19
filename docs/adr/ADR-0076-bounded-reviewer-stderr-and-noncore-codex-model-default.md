@@ -3,7 +3,7 @@
 ```yaml
 id: ADR-0076
 status: proposed
-title: reviewer stderrを隔離内で有界捕捉しnon-core Codex model既定を利用可能な具体名へ固定する
+title: reviewer stderrをraw非保持で有界分類しnon-core Codex model既定を利用可能な具体名へ固定する
 tags: [adapter, codex, gate-reviewer, diagnostics, security]
 supersedes: []
 superseded-by: null
@@ -23,14 +23,17 @@ non-core Codex reviewer はmodel未指定時に汎用名 `gpt-5.6` を暗黙選�
 
 ## Decision
 
-reviewer stderrはpipeへ接続し、隔離runnerの親制御処理が末尾までdrainしながら先頭64 KiBだけを
-メモリ保持する。reviewer終了が0ならbufferを破棄し、stderrの一時ファイルを作らない。非ゼロまたはtimeoutが
-確定した後だけ、bufferを同じ隔離root内の権限`0600` sinkへmaterializeして分類し、直後に削除する。
+reviewer stderrはpipeへ接続し、隔離runnerの親制御処理が末尾までdrainする。raw byte、文字列断片、行は
+ファイルにも親メモリにも保持しない。先頭64 KiBだけをstreaming DFAへ逐次入力し、保持するのは固定grammarの
+有限状態、検査byte count、超過フラグ、model/auth各signatureの成立・衝突状態だけとする。上限超過後も
+SIGPIPEを避けるため末尾まで読み捨てる。成功時は分類状態を破棄して診断を生成せず、非ゼロまたはtimeout時だけ
+固定状態から分類を返す。いずれの経路でもraw stderrのsinkやbufferを作らない。
 
 model identifierは`[a-z0-9][a-z0-9._-]{0,127}`に制限する。model分類は、
 `error: model '<id>' is not available`、
 `error: model '<id>' is not supported`、`error: model '<id>' does not exist`、
-`error: unknown model '<id>'`の行全体に完全一致する場合だけ成立する。authenticationは
+`error: unknown model '<id>'`の行全体に完全一致する場合だけ成立する。DFAはidentifier自体を保持せず、
+文字種と1〜128 byteの長さだけを状態遷移で検査する。authenticationは
 `error: authentication failed`、`error: unauthorized`、`error: not authenticated`、
 `error: login required`、`error: not logged in`、`error: http 401`、`error: http 403`の行全体に
 完全一致する場合だけ成立する。両分類が同時に現れる場合や部分一致は`EXECUTION_FAILURE`へ倒す。timeoutを含む分類は
@@ -46,7 +49,8 @@ model・reasoning・read-only・完全command override attestationを引き続�
 ## Consequences
 
 - 起動失敗を再現した時点で、安全な分類、終了コード、試行回数、切り詰め有無を取得できる。
-- 成功時stderrをfileへ保存せず、非ゼロ時もraw stderrや資格情報を外部へ出さない。
+- 成否判明前を含む全経路でraw stderrをfileや親メモリへ保持せず、資格情報を外部へ出さない。
+- 成功時は診断を生成せず、非ゼロ・timeout時だけ固定サイズ状態から診断する。
 - 完全一致しない文面や複数分類に衝突する失敗は、一般分類へ安全側に縮退する。
 - non-core は観測済みの利用不能な汎用名へ黙って倒れず、明示overrideによる運用回避も維持する。
 - signatureが将来のprovider文面に一致しない場合は分類精度が下がるが、承認には倒れない。

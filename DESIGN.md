@@ -15,9 +15,8 @@ watchdog、`human_required` へのフェイルセーフは維持する。
 
 - 入力: reviewer command、prompt、timeout、core/non-core 区分、明示 model override、終了コード、stderr。
 - 出力: 成功時は従来の verdict、失敗時は非ゼロと安全な診断、gate 状態は `human_required`。
-- raw stderr のメモリ保持上限は 64 KiB、外部診断全体の上限は 4 KiB とする。
-- 成功時の stderr は一時ファイルへ保存せず drain 後にメモリから破棄する。raw stderr のファイル化は
-  非ゼロ終了の確定後だけ隔離領域内で行い、分類直後に削除する。
+- stderr は raw byte・文字列断片・行をファイルにも親プロセスのメモリにも保持せず、先頭 64 KiB だけを
+  streaming DFA の分類入力とする。外部診断全体の上限は 4 KiB とする。
 - prompt、reviewer stdout の一時ファイル、認証素材は隔離領域内だけに置き、全終了経路で削除する。
   成功時の構造化 verdict は従来どおり lifecycle へ返す。
 - 診断は固定分類と数値・真偽値だけから構成し、stderr の文字列断片を転載しない。
@@ -27,9 +26,9 @@ watchdog、`human_required` へのフェイルセーフは維持する。
 
 | 要件 / AC-ID | 対応する設計要素 | 検証可能な結果 |
 |---|---|---|
-| `AC-1` | D1 有界メモリ、D2 完全一致分類、D4 lifecycle 結線 | 4分類と rc・試行回数を区別 |
-| `AC-2` | D1 有界捕捉、D3 安全な診断 envelope | 64 KiB / 4 KiB の境界を検査 |
-| `AC-3` | D1 成功時file保存ゼロ、D3 allowlist、D5 cleanup | 秘密値・raw断片・一時領域が残らない |
+| `AC-1` | D1 streaming DFA、D2 完全一致分類、D4 lifecycle 結線 | 4分類と rc・試行回数を区別 |
+| `AC-2` | D1 有界検査、D3 安全な診断 envelope | 64 KiB / 4 KiB の境界を検査 |
+| `AC-3` | D1 raw非保持、D3 allowlist、D5 cleanup | 秘密値・raw断片・一時領域が残らない |
 | `AC-4` | D3 検証失敗時の縮退 | 分類と rc だけで非ゼロ終了 |
 | `AC-5` | D6 non-core model 解決、D2 model分類 | 暗黙 `gpt-5.6` を使わず専用分類 |
 | `AC-6` | D6 override 優先順位 | 明示値を無改変で command へ渡す |
@@ -41,8 +40,8 @@ watchdog、`human_required` へのフェイルセーフは維持する。
 ### コンポーネント構成
 
 - **Codex model resolver**: non-core の明示 override と組込み既定を選び、選択元を診断 context にする。
-- **共有隔離 runner**: stderr pipeを有界メモリへdrainし、終了後の破棄または隔離sink化を決める。
-- **安全分類器**: stderr と終了状態を隔離領域内で照合し、固定分類だけを返す。
+- **共有隔離 runner**: stderr pipeを末尾までdrainし、raw内容を保持せず検査byte countと超過だけを管理する。
+- **streaming分類器**: 各byteを固定grammarのDFAへ送り、秘密値へ逆変換できない固定サイズ状態だけを返す。
 - **review lifecycle**: retry を管理し、最終失敗へ rc・試行回数・安全な分類を結線する。
 - **gate recorder**: 既存どおり成功 verdict を記録し、失敗時は `human_required` を維持する。
 
@@ -51,11 +50,10 @@ watchdog、`human_required` へのフェイルセーフは維持する。
 ```mermaid
 flowchart TD
   A[Codex model resolver] --> B[共有隔離 runner]
-  B --> C[stderr pipeを有界メモリへdrain]
+  B --> C[stderrをraw非保持でstreaming DFAへdrain]
   C --> D{終了状態}
-  D -->|成功かつ verdict 有り| E[buffer破棄後に既存 gate recorder]
-  D -->|非ゼロまたはtimeout| F[隔離0600 sinkへmaterialize]
-  F --> G[安全分類器]
+  D -->|成功かつ verdict 有り| E[分類状態を破棄して既存 gate recorder]
+  D -->|非ゼロまたはtimeout| G[固定状態から安全分類を確定]
   G --> H[review lifecycle retry]
   H -->|残り試行有り| B
   H -->|最終失敗| I[human_required と非ゼロ]
@@ -71,20 +69,20 @@ flowchart TD
 
 ## 設計判断
 
-### D1: stderr は pipe から親の有界メモリへ drain し、終了後に扱いを決める
+### D1: stderr は raw 内容を保持しない streaming DFA へ drain する
 
 実 reviewer の stderr は pipe へ接続し、隔離 runner の親制御処理が reviewer と並行して末尾まで読む。
-親は先頭 64 KiB だけをメモリのbyte bufferに保持し、超過分は保存せず読み捨て、超過フラグだけを持つ。
-reader が先に終了して reviewer の終了コードを SIGPIPE で変えないよう、reviewer 終了まで必ずdrainする。
-終了コードを予知して分岐せず、`wait` 後に0ならbufferを即時破棄し、stderrの一時ファイルを一切作らない。
-非ゼロまたはtimeout確定後だけbufferを隔離root内の権限`0600` sinkへmaterializeし、分類入力にする。
-pipeまたは有界bufferを準備できない場合は reviewer を起動せず execution failure とする。
+親はraw byte、文字列断片、行を保存せず、先頭64 KiBを逐次DFAへ入力する。保持可能なのはgrammar上の
+有限状態、検査byte count、`truncated`、model/auth各signatureの成立・衝突状態だけで、入力へ逆変換できる
+可変長値は持たない。64 KiB超過後は分類入力を止めて`truncated=true`とするが、readerを閉じてreviewerの
+終了コードをSIGPIPEで変えないよう末尾まで読み捨てる。成功、非ゼロ、timeoutのいずれでもstderr fileや
+raw bufferを作らない。pipeまたはDFAを準備できない場合はreviewerを起動せずexecution failureとする。
 
 ### D2: raw 文字列を返さない固定分類を使う
 
 分類値は `MODEL_UNAVAILABLE`、`AUTHENTICATION_FAILURE`、`TIMEOUT`、
-`EXECUTION_FAILURE` の閉じた集合とする。timeout marker があれば `TIMEOUT` とする。それ以外は、行末の
-CRだけを除去してASCII case-insensitiveにした**行全体**を次のgrammarへ完全一致させる。
+`EXECUTION_FAILURE` の閉じた集合とする。timeout marker があれば `TIMEOUT` とする。それ以外はDFAが
+ASCII case-insensitiveに逐次照合し、行末CRを許容した**行全体**の完全一致だけを次のgrammarで成立させる。
 
 - model identifierは`[a-z0-9][a-z0-9._-]{0,127}`とし、`error: model '<id>' is not available`、
   `error: model '<id>' is not supported`、`error: model '<id>' does not exist`、
@@ -95,6 +93,7 @@ CRだけを除去してASCII case-insensitiveにした**行全体**を次のgram
 - modelとauthenticationの両signatureが同じstderrに現れる場合、またはどちらにも完全一致しない場合は、
   原因を推測せず`EXECUTION_FAILURE`とする。
 
+各候補は現在位置・identifier長・行終端到達だけを状態遷移で管理し、identifier自体や行を保持しない。
 したがって`unknown option for model command`、追加suffix、部分文字列一致はmodel分類にならない。
 non-core の組込み既定を使ったmodel failureだけは外部codeを
 `NONCORE_DEFAULT_MODEL_UNAVAILABLE`とする。分類器はstderr本文を返さない。
@@ -109,18 +108,18 @@ credential 値や stderr 由来の可変文字列を envelope の候補にしな
 
 ### D4: attempt 情報は lifecycle が最終診断へ結線する
 
-runner はreviewer終了後、成功ならstderr bufferを破棄してverdictだけを返す。非ゼロならbufferを隔離sinkへ
-materializeして安全分類へ変換し、raw sinkを削除してから終了状態と分類を返す。lifecycle は既存retry回数を
-数え、最終失敗時だけ最後の安全分類と実際の試行回数をfail-safe messageへ含める。分類不能や診断受渡し
-失敗は一般execution failureに縮退し、承認へ倒さない。
+runner はreviewer終了後、成功ならDFA状態を破棄してverdictだけを返し、診断を生成しない。非ゼロなら
+固定サイズの成立・衝突状態から安全分類を確定して終了状態とともに返す。timeoutはraw内容に依存せず
+`TIMEOUT`とする。lifecycle は既存retry回数を数え、最終失敗時だけ最後の安全分類、rc、実際の試行回数、
+`truncated`をfail-safe messageへ含める。分類不能や診断受渡し失敗は一般execution failureに縮退し、
+承認へ倒さない。
 
 ### D5: cleanup は単一の終了処理で保証する
 
-成功、通常の非ゼロ、timeout、watchdog準備失敗、分類失敗のすべてで、watchdogとstderr drainを回収する。
-成功時はメモリbufferを破棄してから隔離rootを削除し、stderr fileが存在しなかったことを検査可能にする。
-非ゼロ時はmaterializeしたraw sinkを分類直後に削除し、その後に隔離rootを削除する。隔離root外へ返せるのは
-成功時の構造化verdictと、失敗時に固定分類から作った安全な診断だけである。raw stderr、prompt、stdoutの
-一時ファイル、認証ファイルを隔離root外へ移動・複製しない。
+成功、通常の非ゼロ、timeout、watchdog準備失敗、分類失敗のすべてで、watchdogとstderr drainを回収し、
+DFA状態を消去して隔離rootを削除する。stderr fileとraw bufferは全経路で存在しない。隔離root外へ返せるのは
+成功時の構造化verdictと、非ゼロ・timeout時に固定状態から作った安全な診断だけである。raw stderr、prompt、
+stdoutの一時ファイル、認証ファイルを隔離root外へ移動・複製しない。
 
 ### D6: non-core model は明示 override を最優先する
 
@@ -137,7 +136,7 @@ core の不足値を補う fallback として使わない。
 
 ## 障害・ロールバック考慮
 
-- pipe drain・メモリbuffer・materializeの失敗: reviewer群とwatchdogを停止し、`EXECUTION_FAILURE`で非ゼロにする。
+- pipe drain・DFA状態遷移の失敗: reviewer群とwatchdogを停止し、`EXECUTION_FAILURE`で非ゼロにする。
 - signature の未知化: raw 内容を出さず一般分類へ縮退する。将来 signature を増やす判断は別変更とする。
 - 誤分類: gate はどの分類でも `human_required` のため silent approval は生じない。
 - model 既定の利用不能: 専用分類で停止し、明示 override による運用回避を可能にする。
@@ -157,8 +156,8 @@ related_adrs:
 ## 検証方針・完了条件
 
 - 4つのmodel完全一致fixture、7つの認証fixture、`unknown option for model command`、複合signatureを注入する。
-- 成功reviewerへ秘密値を含むstderrを出させ、stderr file生成が0件でbufferが破棄されることを検査する。
-- 非ゼロreviewerで64 KiB境界、超過、秘密値、retry、timeoutを決定的に注入する。
+- 成功reviewerへ秘密値を含むstderrを出させ、raw内容の保持、stderr file、診断がすべて0件であることを検査する。
+- 非ゼロreviewerで64 KiB境界、超過、秘密値、chunk分割、retry、timeoutを決定的に注入し、固定状態だけを検査する。
 - command 記録 stub で明示 override、non-core 既定、core attestation 不一致を検査する。
 - 一時 root と追跡対象差分を検査し、raw stderr・偽秘密値・認証素材が残らないことを確認する。
 - `npm run build` と全自動テスト、secret scan、適用される lint を implementation / validation で通す。
