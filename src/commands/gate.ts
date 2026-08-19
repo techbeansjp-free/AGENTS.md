@@ -150,7 +150,7 @@ gate-report の final を human_required に設定して書き出す（conforman
 `;
 
 const REVIEWER_CONTEXT_USAGE = `
-使い方: agent-skill-chain gate reviewer-context <issue_id> [target_sha] [base_ref] [review_subject] [adapter]
+使い方: agent-skill-chain gate reviewer-context <issue_id> [target_sha] [base_ref] [review_subject] [adapter] [gate_id]
 
 判定ステップ・adapter が必要とするコンテキストを KEY=VALUE 形式で標準出力へ出す。
   adapter=<claude|codex|human>   review.adapter（未設定時 claude）
@@ -158,19 +158,25 @@ const REVIEWER_CONTEXT_USAGE = `
   issue_number=<n>                issue_id から抽出した番号
   core_review_required=<bool>     登録済みproject policyによるコアレビュー要否
   core_review_status=<status>     resolved|unresolved
+  light_review_applied=<bool>     gate_id指定時のみ。当該gateのlight profile適用可否
 
 target_sha/base_ref: 指定時はGit差分からコア変更を分類する。
 review_subject: ordinary|core_audit。GitHub workflowがPR labelの正本値を渡す。
                 ローカルモードで省略時はstate.yamlのreview_subjectを読む。
 adapter: claude|codex|human。進行役がローカルreviewerを明示選択する場合だけ指定する。
+gate_id: 指定時のみ light_review_applied を出力する。判定プロンプト生成へ明示引数として渡す値であり、
+         プロンプト生成側は実行時のgate-reportを読まない。
 `;
 
 const REVIEWER_PROMPT_USAGE = `
-使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha> [base_sha] [pr_number] [attempt_id]
+使い方: agent-skill-chain gate reviewer-prompt <issue_id> <gate_id> <target_sha> [base_sha] [pr_number] [attempt_id] [light_review_applied]
 
 対象セグメントの成果物・AC-ID・上流承認物を read-only で収集し、conformance（立証）/
 falsification（反証）判定プロトコルの指示（ルーブリック・出力 JSON 契約）を標準出力へ出す。
 レビュアへの入力プロンプトであり、本コマンドはファイルを読むのみ（書込みなし）。
+
+light_review_applied: true|false（省略時 false）。Lightプロファイル追加ルーブリックの有無を決める
+                      唯一の入力。実行時のgate-reportは読まないため、同一引数の生成は常に同一バイト列になる。
 `;
 
 const SUBMIT_EVIDENCE_USAGE = `
@@ -2026,7 +2032,7 @@ export async function reviewerContext(args: string[]): Promise<number> {
       printUsage(REVIEWER_CONTEXT_USAGE);
       return 0;
     }
-    const [issueIdRaw, targetSha, baseRef, reviewSubjectRaw, requestedAdapterRaw] = args;
+    const [issueIdRaw, targetSha, baseRef, reviewSubjectRaw, requestedAdapterRaw, gateIdRaw] = args;
     if (!issueIdRaw) throw new CliError('issue_id は必須です');
     const { number } = parseIssueId(issueIdRaw);
 
@@ -2058,6 +2064,17 @@ export async function reviewerContext(args: string[]): Promise<number> {
       throw new CliError(`未登録adapterは選択できません: ${requestedAdapterRaw}`);
     }
     const adapter = (requestedAdapterRaw || configuredAdapter) as 'claude' | 'codex' | 'human';
+    // Issue #751: light profileの適用可否は調整状態であり target SHA へ束縛できない。判定プロンプト
+    // 生成が実行時状態を読まずに済むよう、trusted launcherがここで解決して明示引数として渡す。
+    const lightReviewLines: string[] = [];
+    if (gateIdRaw) {
+      validateGateId(gateIdRaw);
+      const applied =
+        tryReadYamlFile<GateReport>(
+          reviewFilePath(root, number, gateIdRaw, config.coordination.backend),
+        )?.gate.light_review?.applied === true;
+      lightReviewLines.push(`light_review_applied=${applied}`);
+    }
     const policyLines = policy
       ? [
           `core_required_profile=${policy.required_profile}`,
@@ -2085,6 +2102,7 @@ export async function reviewerContext(args: string[]): Promise<number> {
         `core_review_required=${decision.required}`,
         `core_review_status=${decision.status}`,
         `core_review_reason=${decision.reason}`,
+        ...lightReviewLines,
         ...policyLines,
       ].join('\n'),
     );
@@ -2140,15 +2158,26 @@ function changedPathStatuses(root: string, baseSha: string, targetSha: string): 
   return statuses;
 }
 
-function promptPath(pathname: string): string {
-  return JSON.stringify(pathname)
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
+/**
+ * Issue #751: 連続バッククォート列の件数と同数の可変長引数を一度に展開すると、
+ * 通常のUTF-8成果物でもV8の引数上限を超えてRangeErrorになる。逐次走査で最長列を求める。
+ */
+function longestBacktickRun(content: string): number {
+  let longest = 0;
+  let current = 0;
+  for (let index = 0; index < content.length; index += 1) {
+    if (content.charCodeAt(index) === 0x60) {
+      current += 1;
+      if (current > longest) longest = current;
+    } else {
+      current = 0;
+    }
+  }
+  return longest;
 }
 
 function fencedPromptContent(content: string): string {
-  const longestContentFence = Math.max(0, ...[...content.matchAll(/`+/g)].map((match) => match[0].length));
-  const fence = '`'.repeat(Math.max(3, longestContentFence + 1));
+  const fence = '`'.repeat(Math.max(3, longestBacktickRun(content) + 1));
   return `${fence}\n${content}${content.endsWith('\n') ? '' : '\n'}${fence}`;
 }
 
@@ -2157,8 +2186,10 @@ export function buildReviewerPrompt(
   number: string,
   gateId: Segment,
   targetSha: string,
-  baseSha?: string,
-  lightReviewOverride?: LightReviewDecision | null,
+  baseSha: string | undefined,
+  // Issue #751: 実行時のgate-report読取りに戻さない。target SHAに束縛されない状態で
+  // 生成物が変わると、同一引数での再生成がバイト列一致しなくなる。
+  lightReview: Pick<LightReviewDecision, 'applied'> | null,
   roundContextOverride?: GateRoundContext,
   roundLimitOverride?: GateRoundLimit,
 ): string {
@@ -2260,12 +2291,6 @@ export function buildReviewerPrompt(
           '未修正のまま残る blocking を同一 code で再提出することは、この禁止の対象外であり許容する。',
       );
     }
-    const lightReview =
-      lightReviewOverride === undefined
-        ? tryReadYamlFile<GateReport>(
-            reviewFilePath(root, number, gateId, targetConfig?.coordination.backend ?? 'github'),
-          )?.gate.light_review
-        : lightReviewOverride ?? undefined;
     if (lightReview?.applied === true) {
       sections.push('## Lightプロファイル追加ルーブリック');
       sections.push('- AC-ID未達の指摘は常にblockingとし、warning以下へ格下げしない。');
@@ -2343,7 +2368,7 @@ export function buildReviewerPrompt(
           );
           for (const name of omittedAdditions) {
             sections.push(
-              `- 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(name)}` +
+              `- 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${formatPromptInputPath(name)}` +
                 '（変更種別: 追加、差分: 省略）',
             );
           }
@@ -2373,7 +2398,7 @@ export function buildReviewerPrompt(
     } else {
       for (const resolved of inputs.targetArtifacts) {
         sections.push(
-          `### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${promptPath(resolved.path)}`,
+          `### 成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${formatPromptInputPath(resolved.path)}`,
         );
         sections.push(resolved.file ? fencedPromptContent(resolved.file.content.toString('utf8')) : '(未検出)');
         sections.push('');
@@ -2385,9 +2410,13 @@ export function buildReviewerPrompt(
       sections.push('(spec gateに上流の承認済み成果物は無い)');
       sections.push('');
     } else {
+      // Issue #751: 上流成果物にはdocs/adr/配下の任意の変更済みパスが入る。Gitは改行入りパスを
+      // 許容するため、見出しを素のまま埋めると本文フェンス外へ偽の構造見出しを注入できる。
       for (const resolved of inputs.upstreamArtifacts) {
         if (renderedRequiredPaths.has(resolved.path)) continue;
-        sections.push(`### ${resolved.path}`);
+        sections.push(
+          `### 上流成果物パス（JSON文字列形式・制御文字はエスケープ済み）: ${formatPromptInputPath(resolved.path)}`,
+        );
         sections.push(resolved.file ? fencedPromptContent(resolved.file.content.toString('utf8')) : '(target SHAに未検出)');
         sections.push('');
         renderedRequiredPaths.add(resolved.path);
@@ -2401,7 +2430,9 @@ export function buildReviewerPrompt(
     sections.push('## 憲法文書');
     for (const resolved of inputs.constitution) {
       if (renderedRequiredPaths.has(resolved.path)) continue;
-      sections.push(`### ${resolved.path}`);
+      sections.push(
+        `### 憲法文書パス（JSON文字列形式・制御文字はエスケープ済み）: ${formatPromptInputPath(resolved.path)}`,
+      );
       sections.push(resolved.file ? fencedPromptContent(resolved.file.content.toString('utf8')) : '(target SHAに未検出)');
       sections.push('');
       renderedRequiredPaths.add(resolved.path);
@@ -2475,10 +2506,14 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
       printUsage(REVIEWER_PROMPT_USAGE);
       return 0;
     }
-    const [issueIdRaw, gateId, targetSha, baseSha, prNumber, attemptId] = args;
+    const [issueIdRaw, gateId, targetSha, baseSha, prNumber, attemptId, lightReviewAppliedRaw] = args;
     if (!issueIdRaw || !gateId || !targetSha) throw new CliError('issue_id, gate_id, target_sha はすべて必須です');
     const { issueId, number } = parseIssueId(issueIdRaw);
     validateGateId(gateId);
+    if (lightReviewAppliedRaw && lightReviewAppliedRaw !== 'true' && lightReviewAppliedRaw !== 'false') {
+      throw new CliError(`light_review_applied は true|false のいずれかである必要があります: '${lightReviewAppliedRaw}'`);
+    }
+    const lightReview = lightReviewAppliedRaw === 'true' ? { applied: true } : null;
     const root = repoRoot();
     const config = resolveReviewerPromptConfig(root, targetSha);
     const policy = classifyCoreReview(root, { targetSha, baseRef: baseSha }).policy;
@@ -2503,6 +2538,6 @@ export async function reviewerPrompt(args: string[]): Promise<number> {
     // 終了コードには触れない（記録済み証跡の prompt digest を変化させないため）。
     const diagnostic = gateRoundFailureDiagnostic(roundContext);
     if (diagnostic) process.stderr.write(`${diagnostic}\n`);
-    return ok(buildReviewerPrompt(root, number, gateId, targetSha, baseSha, undefined, roundContext));
+    return ok(buildReviewerPrompt(root, number, gateId, targetSha, baseSha, lightReview, roundContext));
   });
 }
