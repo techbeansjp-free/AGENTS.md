@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { run, runOrThrow, git, gh, commandExists } from '../../src/lib/exec.js';
+import { run, runBytes, runOrThrow, git, gitBytes, gh, commandExists } from '../../src/lib/exec.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 
 const NOT_A_REAL_BINARY = 'surely-not-a-real-binary-xyz';
@@ -19,6 +19,12 @@ test('run: 存在しないコマンドは status:127 で stderr にエラー理�
   const result = run(NOT_A_REAL_BINARY, []);
   assert.equal(result.status, 127);
   assert.ok(result.stderr.length > 0, 'stderr にエラー理由が含まれること');
+});
+
+test('runBytes: NULを含む標準出力をBufferのまま返す', () => {
+  const result = runBytes(process.execPath, ['-e', 'process.stdout.write(Buffer.from([0x61, 0x00, 0xff]))']);
+  assert.equal(result.status, 0);
+  assert.deepEqual(result.stdout, Buffer.from([0x61, 0x00, 0xff]));
 });
 
 test('runOrThrow: 成功時は trim された stdout を返す', () => {
@@ -45,6 +51,22 @@ test('git: gitラッパーは git 実体へ委譲する', () => {
   const result = git(['--version']);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /^git version/);
+});
+
+test('gitBytes: blobを文字列変換せず読み出す', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'exec-bytes-test-repo-'));
+  execFileSync('git', ['init', '--initial-branch=main'], { cwd: tmp, stdio: 'pipe' });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: tmp });
+  execFileSync('git', ['config', 'user.name', 'exec test'], { cwd: tmp });
+  const bytes = Buffer.from([0x61, 0x00, 0xff]);
+  fs.writeFileSync(path.join(tmp, 'blob.bin'), bytes);
+  execFileSync('git', ['add', 'blob.bin'], { cwd: tmp });
+  execFileSync('git', ['commit', '-m', 'test: add binary blob'], { cwd: tmp, stdio: 'pipe' });
+
+  const result = gitBytes(['show', 'HEAD:blob.bin'], tmp);
+  assert.equal(result.status, 0);
+  assert.deepEqual(result.stdout, bytes);
+  fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 test('commandExists: 実在するコマンドは true、存在しないコマンドは false', () => {
