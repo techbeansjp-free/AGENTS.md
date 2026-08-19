@@ -6,23 +6,25 @@
 ## 実装方針・変更境界
 
 実装は既存の adapter と統合テストへ閉じ、設定スキーマ、gate verdict schema、accepted SPEC / ADR は
-変更しない。raw stderr の捕捉と分類を先に完成させ、その出力だけを lifecycle と model 解決へ結線する。
+変更しない。stderrのpipe drainと有界メモリを先に完成させ、非ゼロ後のmaterializeと分類だけを
+lifecycleとmodel解決へ結線する。
 各変更単位で既存の never-approved と cleanup を維持する。
 
 ## 実装順序・変更単位
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | bounded stderr sink | 共有隔離 runner に64 KiB上限、超過フラグ、drain、全経路cleanupを追加 | `AC-2, AC-3, AC-8` | なし |
-| 2 | 固定分類とenvelope | 4分類、静的code、allowlist検証、4 KiB上限、安全側縮退を追加 | `AC-1, AC-2, AC-3, AC-4` | `#1` |
-| 3 | lifecycle 結線 | retryの最後の分類、rc、実試行回数をfail-safeへ渡し成功時は破棄 | `AC-1, AC-4, AC-8` | `#2` |
-| 4 | non-core model 解決 | 明示overrideを最優先し、未指定時の`gpt-5.6`をconcrete defaultへ置換 | `AC-5, AC-6` | `#2` |
-| 5 | core 境界の回帰防止 | policy値・reasoning・command attestationの既存分岐を維持しテスト固定 | `AC-7, AC-8` | `#4` |
-| 6 | 統合テスト | 分類、境界、秘密値、cleanup、retry、timeout、model選択をstubで網羅 | `AC-1`〜`AC-8` | `#1`〜`#5` |
+| 1 | pipe drainと有界メモリ | 親がstderrをdrainし先頭64 KiBだけをメモリ保持、成功時はfile生成なしで破棄 | `AC-2, AC-3, AC-8` | なし |
+| 2 | 非ゼロ時materialize | `wait`後の非ゼロ・timeoutだけ隔離0600 sinkへbufferを書き、分類後に即削除 | `AC-2, AC-3, AC-4, AC-8` | `#1` |
+| 3 | 完全一致分類とenvelope | 固定grammar、衝突時一般分類、allowlist、4 KiB上限、安全側縮退を追加 | `AC-1, AC-2, AC-3, AC-4` | `#2` |
+| 4 | lifecycle 結線 | retryの最後の分類、rc、実試行回数をfail-safeへ渡す | `AC-1, AC-4, AC-8` | `#3` |
+| 5 | non-core model 解決 | 明示overrideを最優先し、未指定時の`gpt-5.6`をconcrete defaultへ置換 | `AC-5, AC-6` | `#3` |
+| 6 | core 境界の回帰防止 | policy値・reasoning・command attestationの既存分岐を維持しテスト固定 | `AC-7, AC-8` | `#5` |
+| 7 | 統合テスト | 完全一致、成功時fileゼロ、境界、秘密値、cleanup、retry、timeoutをstubで網羅 | `AC-1`〜`AC-8` | `#1`〜`#6` |
 
 ## 変更対象
 
-- `.agent-skill-chain/adapters/claude.sh`: 共有隔離 runner の bounded sink、分類、cleanup、lifecycle 結線。
+- `.agent-skill-chain/adapters/claude.sh`: 共有隔離 runner のpipe drain、有界メモリ、非ゼロ時sink、分類、cleanup。
 - `.agent-skill-chain/adapters/codex.sh`: non-core model の優先順位と診断 context。
 - `test/integration/gate-adapters.test.ts`: Codex reviewer の診断、model、fail-safe 回帰。
 - 必要な場合のみ既存の credential 隔離統合テストへ cleanup / secret 非残存の観測を追加する。
@@ -33,13 +35,15 @@
 
 ### 診断分類
 
-- model unavailable、authentication failure、timeout、未知の非ゼロを別々の固定 stderr fixture で注入する。
+- modelの4完全一致形式、authenticationの7完全一致行、timeout、未知の非ゼロを固定fixtureで注入する。
+- `unknown option for model command`とmodel/auth複合入力が`EXECUTION_FAILURE`になることをassertする。
 - raw stderr の任意断片が診断へ転載されず、分類・rc・attemptsだけが観測できることを assert する。
 - 未知の文面は `EXECUTION_FAILURE` へ縮退し、exit 0 や approved にならないことを assert する。
 
 ### 境界と秘密値
 
-- 64 KiBちょうど、64 KiB+1、大量 stderr を注入し、保存上限と超過フラグを検査する。
+- 成功reviewerへ秘密値を含むstderrを出させ、一時stderr fileが作られずbufferが破棄されることを検査する。
+- 非ゼロreviewerへ64 KiBちょうど、64 KiB+1、大量stderrを注入し、materialize上限と超過フラグを検査する。
 - 偽token、偽認証JSON、環境由来の偽資格情報を stderr へ混在させ、外部出力と残存ファイルを走査する。
 - 診断 envelope の検証失敗を注入し、分類と rc だけへ縮退することを検査する。
 
@@ -59,7 +63,7 @@
 
 ## ロールバック・作業再開
 
-bounded sink、分類、lifecycle 結線、model 既定は分離して実装するが、失敗診断が半端な状態で有効に
+pipe drain、非ゼロmaterialize、分類、lifecycle結線、model既定は分離して実装するが、失敗診断が半端な状態で有効に
 ならないよう1つの implementation checkpoint として push する。中断時は最初に変更パスとテスト結果を
 確認し、raw stderr が隔離外へ出る中間状態では commit しない。ロールバックは当該 checkpoint 全体を戻す。
 
