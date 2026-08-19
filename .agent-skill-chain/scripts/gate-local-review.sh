@@ -52,8 +52,24 @@ fi
 # GitHubが返したbase SHAを一時cloneへcheckoutし、lockfileから依存を復元してbase sourceをbuildする。
 # 以降はこの隔離clone内のCLI/adapterだけを使用し、source worktreeの生成物を実行しない。
 TRUSTED_TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-local-review.XXXXXX")"
-trap 'rm -rf -- "$TRUSTED_TMP"' EXIT
 TRUSTED_ROOT="$TRUSTED_TMP/repo"
+
+# Issue #733: gate-report scaffold を生成してからレビュアを起動するまでの区間で非ゼロ終了すると、
+# conformance/falsification/final がいずれも pending の scaffold だけが残り、判定の欠落が無言で放置される。
+# set -euo pipefail 下では attempt 記録の POST 失敗のようにこの区間のどの失敗も即時終了になるため、
+# 失敗箇所ごとに包むのではなく区間全体を EXIT trap で安全側へ倒す（AGENTS.md I8）。
+# レビュア起動後は gate-launch-reviewer.sh 側の安全網が最終判定を確定させるので、起動直前に
+# PENDING_REPORT_PATH を空へ戻し、deferred 表明や記録済みの判定を本 trap が上書きしないようにする。
+PENDING_REPORT_PATH=""
+_asc_local_review_exit() {
+  local code=$?
+  if [[ "$code" -ne 0 && -n "$PENDING_REPORT_PATH" && -f "$TRUSTED_ROOT/bin/agents-md.js" ]]; then
+    echo "レビュアを起動できないまま終了しました。gate-report を human_required へ倒します（${PENDING_REPORT_PATH}）" >&2
+    node "$TRUSTED_ROOT/bin/agents-md.js" gate mark-human-required "$PENDING_REPORT_PATH" >/dev/null 2>&1 || true
+  fi
+  rm -rf -- "$TRUSTED_TMP"
+}
+trap _asc_local_review_exit EXIT
 git clone --quiet --no-checkout "$REPO_ROOT" "$TRUSTED_ROOT"
 git -C "$TRUSTED_ROOT" checkout --quiet --detach "$BASE_SHA"
 # reviewerにcredential-bearing remote URLやglobal Git設定を見せない。target objectはlocal clone済みなので
@@ -82,6 +98,7 @@ if [[ "$EFFECTIVE_PROFILE" != "standard" && "$EFFECTIVE_PROFILE" != "strict" ]];
   exit 1
 fi
 PROFILE="$EFFECTIVE_PROFILE"
+PENDING_REPORT_PATH="$REPORT_PATH"
 
 COUNT=1
 [[ "$PROFILE" == "strict" ]] && COUNT=2
@@ -145,6 +162,7 @@ attempt_request="$(node -e '
 ' "$TOKEN_FILE" "$ISSUE_ID" "$GATE_ID" "$TARGET_SHA")"
 gh api -X POST "repos/{owner}/{repo}/pulls/$PR_NUMBER/reviews" --input - <<<"$attempt_request" >/dev/null
 
+PENDING_REPORT_PATH=""
 for slot in $(seq 1 "$COUNT"); do
   run_id="${run_ids[$((slot - 1))]}"
   ASC_BASE_REF="$BASE_SHA" \

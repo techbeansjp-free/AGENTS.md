@@ -20,9 +20,13 @@ interface Fixture {
   mainHead: string;
   reviewTrace: string;
   npmTrace: string;
+  reportPath: string;
+  cliTrace: string;
   setPullBase(baseSha: string): void;
+  failReviewApi(): void;
   repositoryDispatches(): unknown[];
   reviews(): unknown[];
+  cliInvocations(): string[];
   run(): { status: number; stdout: string; stderr: string };
   cleanup(): void;
 }
@@ -34,6 +38,8 @@ function createFixture(): Fixture {
   const npmBin = path.join(scratchDir, 'npm-bin');
   const reviewTrace = path.join(scratchDir, 'review-trace.txt');
   const npmTrace = path.join(scratchDir, 'npm-trace.txt');
+  const cliTrace = path.join(scratchDir, 'cli-trace.txt');
+  const reportPath = path.join(scratchDir, 'gate-report.yaml');
   fs.mkdirSync(npmBin);
   fs.writeFileSync(
     path.join(npmBin, 'npm'),
@@ -42,9 +48,26 @@ function createFixture(): Fixture {
   );
 
   const scriptsDir = path.join(repo.dir, '.agent-skill-chain', 'scripts');
+  // scaffold は protected base worktree の外へ書く（共有worktreeを汚さないため）。
+  // 実物と同じく conformance/falsification/final がすべて pending の状態で生成する。
   fs.writeFileSync(
     path.join(scriptsDir, 'gate-review.sh'),
-    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "gate_report_path: %s/review.yaml\\n" "$PWD"\nprintf "review_profile: standard\\n"\n',
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      'cat > "$ASC_TEST_REPORT_PATH" <<YAML',
+      'schema_version: agent-skill-chain/gate-report/v1',
+      'gate:',
+      '  id: $2',
+      '  target_sha: $4',
+      '  conformance: pending',
+      '  falsification: pending',
+      '  final: pending',
+      'YAML',
+      'printf "gate_report_path: %s\\n" "$ASC_TEST_REPORT_PATH"',
+      'printf "review_profile: standard\\n"',
+      '',
+    ].join('\n'),
     { mode: 0o755 },
   );
   fs.writeFileSync(
@@ -65,7 +88,29 @@ function createFixture(): Fixture {
     ].join('\n'),
     { mode: 0o755 },
   );
-  git(repo.dir, ['add', '.agent-skill-chain/scripts/gate-review.sh', '.agent-skill-chain/scripts/gate-launch-reviewer.sh']);
+  // 隔離clone内のCLI実体。gate-local-review.sh のフェイルセーフはこれを起動する。
+  // 追跡対象にしておくことで clone 後の dirty 判定に掛からない。
+  fs.mkdirSync(path.join(repo.dir, 'bin'), { recursive: true });
+  fs.writeFileSync(
+    path.join(repo.dir, 'bin', 'agents-md.js'),
+    [
+      "const fs = require('node:fs');",
+      'const argv = process.argv.slice(2);',
+      "fs.appendFileSync(process.env.ASC_TEST_CLI_TRACE, process.argv[1] + ' :: ' + argv.join(' ') + '\\n');",
+      "if (argv[0] === 'gate' && argv[1] === 'mark-human-required') {",
+      '  const target = argv[2];',
+      "  const text = fs.readFileSync(target, 'utf8');",
+      "  fs.writeFileSync(target, text.replace(/^([ \\t]*final:).*$/m, '$1 human_required'));",
+      '}',
+      '',
+    ].join('\n'),
+  );
+  git(repo.dir, [
+    'add',
+    '.agent-skill-chain/scripts/gate-review.sh',
+    '.agent-skill-chain/scripts/gate-launch-reviewer.sh',
+    'bin/agents-md.js',
+  ]);
   git(repo.dir, ['commit', '-m', 'test: install isolated review stubs']);
   const baseSha = git(repo.dir, ['rev-parse', 'HEAD']);
 
@@ -85,6 +130,8 @@ function createFixture(): Fixture {
     PATH: `${npmBin}${path.delimiter}${process.env.PATH}`,
     ASC_TEST_NPM_TRACE: npmTrace,
     ASC_TEST_REVIEW_TRACE: reviewTrace,
+    ASC_TEST_CLI_TRACE: cliTrace,
+    ASC_TEST_REPORT_PATH: reportPath,
   });
   let currentPullBaseSha = baseSha;
   const setPullBase = (pullBaseSha: string): void => {
@@ -106,12 +153,21 @@ function createFixture(): Fixture {
     mainHead,
     reviewTrace,
     npmTrace,
+    reportPath,
+    cliTrace,
     setPullBase,
+    failReviewApi() {
+      stub.writeState({ ...stub.readState(), failApiPaths: ['/reviews'] });
+    },
     repositoryDispatches() {
       return stub.readState().repositoryDispatches ?? [];
     },
     reviews() {
       return stub.readState().pullReviews ?? [];
+    },
+    cliInvocations() {
+      if (!fs.existsSync(cliTrace)) return [];
+      return fs.readFileSync(cliTrace, 'utf8').trim().split('\n').filter(Boolean);
     },
     run() {
       const result = spawnSync(
@@ -162,6 +218,7 @@ test('gate-local-review: default branch HEADがbase_shaより前進していて�
   assert.equal(attempt.expected_count, 1);
   assert.match(attempt.execution.launcher_token_digest, /^sha256:[0-9a-f]{64}$/);
   assert.deepEqual(fixture.repositoryDispatches(), []);
+  assert.deepEqual(fixture.cliInvocations(), [], '正常系でフェイルセーフを発火させないこと');
 });
 
 test('gate-local-review: default branch以外のworktreeでは隔離clone作成前に拒否する（Issue #703 AC-9）', (t) => {
@@ -203,4 +260,34 @@ test('gate-local-review: protected base worktreeがdirtyなら引き続き拒否
   assert.match(result.stderr, /protected base worktreeがdirtyです/);
   assert.equal(fs.existsSync(fixture.npmTrace), false, '拒否後に隔離cloneのbuildへ進まないこと');
   assert.equal(fs.existsSync(fixture.reviewTrace), false, '拒否後にreviewerを起動しないこと');
+});
+
+test('gate-local-review (ISSUE-733 AC-24): attempt記録POSTが非ゼロ終了してもgate-reportをpendingのまま残さない', (t) => {
+  const fixture = createFixture();
+  t.after(() => fixture.cleanup());
+  // レビュアが示した到達経路: PR metadata検査・隔離clone・buildを通過した後、
+  // レビュアループより前のattempt記録POSTだけがGitHub Review APIの一時障害で失敗する。
+  fixture.failReviewApi();
+
+  const result = fixture.run();
+
+  assert.notEqual(result.status, 0, 'attempt記録を残せないまま成功終了しないこと');
+  assert.equal(fs.existsSync(fixture.reviewTrace), false, 'attempt記録POST失敗後にレビュアを起動しないこと');
+  assert.deepEqual(fixture.reviews(), [], 'attempt記録が投稿されていないこと');
+
+  // AC-24 (a): レビュアが1体も起動されずverdictが存在しないattemptのfinalはhuman_requiredとして
+  // 導出され、未導出（pending）のまま放置されない。
+  const report = fs.readFileSync(fixture.reportPath, 'utf8');
+  assert.match(report, /^\s*final: human_required$/m);
+  assert.doesNotMatch(report, /^\s*final: pending$/m);
+  assert.match(report, /^\s*conformance: pending$/m, 'sub-verdictは据え置くこと');
+
+  const invocations = fixture.cliInvocations();
+  assert.equal(invocations.length, 1);
+  assert.match(
+    invocations[0],
+    new RegExp(`agent-skill-chain-local-review\\.[^/]+/repo/bin/agents-md\\.js :: gate mark-human-required ${fixture.reportPath}$`),
+    'フェイルセーフは隔離clone内のCLIで実行すること',
+  );
+  assert.match(result.stderr, /human_required へ倒します/);
 });
