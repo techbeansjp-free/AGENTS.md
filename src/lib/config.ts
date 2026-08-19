@@ -19,6 +19,7 @@ export interface AgentSkillChainConfig {
     standard: { reviewer_count: number; modes: string[] };
     strict: { reviewer_count: number; trigger: { risk_not_normal: boolean; autonomy_full: boolean } };
     round_limit?: GateRoundLimit;
+    prompt_max_input_bytes?: number;
   };
   worker: WorkerConfig;
   worktree: {

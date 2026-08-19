@@ -35,6 +35,7 @@ test('loadConfig: 実物の .agent-skill-chain/config/agent-skill-chain.yaml を
 test('loadConfig (AC-6): worker.segment_overrides.implementation が codex/highest_capability/high に恒久設定され、worker.model_tiersのみに具体的なモデル文字列を持つ', () => {
   const config = loadConfig(packageRoot());
   assert.deepEqual(config.review.round_limit, { narrowing_threshold: 2, cutoff_threshold: 4 });
+  assert.equal(config.review.prompt_max_input_bytes, 1_500_000);
   assert.equal(config.worker.adapter, 'claude');
   assert.equal(config.worker.agent_tool_dispatch?.enabled, true);
   assert.equal(config.templates.claude_agents_source, '.agent-skill-chain/templates/claude/agents');
@@ -110,6 +111,15 @@ test('loadConfig: round_limitの大なり・等号は日本語の設定エラー
   ]) {
     const config = structuredClone(valid);
     config.review.round_limit = roundLimit;
+    assert.throws(() => loadConfig(packageRoot(), config), /スキーマ.*適合しません/s);
+  }
+});
+
+test('loadConfig: prompt_max_input_bytesは正整数だけを受理する', () => {
+  const valid = structuredClone(loadConfig(packageRoot()));
+  for (const value of [0, -1, 1.5]) {
+    const config = structuredClone(valid);
+    config.review.prompt_max_input_bytes = value;
     assert.throws(() => loadConfig(packageRoot(), config), /スキーマ.*適合しません/s);
   }
 });

@@ -27,6 +27,7 @@ review:
   standard: {reviewer_count: 1, modes: [conformance, falsification]}
   strict:   {reviewer_count: 2, trigger: {risk_not_normal: true, autonomy_full: true}}
   round_limit: {narrowing_threshold: 2, cutoff_threshold: 4}
+  prompt_max_input_bytes: 1500000
 
 worker:
   adapter: human                 # claude | codex | human（軽量プロファイルはコンシューマの手動運用が既定）

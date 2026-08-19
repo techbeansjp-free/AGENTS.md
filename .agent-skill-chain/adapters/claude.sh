@@ -1175,9 +1175,23 @@ launch_gate_reviewer() {
     fi
   fi
 
+  # backendと判定対象成果物のbase_dirを解決する。GitHub modeではreviewerはPR review evidenceだけを
+  # 投稿し、CIのprotected-base verifierがgate-reportへ結線する。
+  # Issue #751: 判定プロンプト生成は実行時のgate-reportを読まない。Lightプロファイル追加ルーブリックの
+  # 有無はここで解決し、明示引数として渡す（プロンプト組み立ての前に解決する必要がある）。
+  local reviewer_context base_dir backend light_review_applied
+  reviewer_context="$(_asc_cli gate reviewer-context "$issue_id" "" "" "" "" "$gate_id")"
+  base_dir="$(sed -n 's/^base_dir=//p' <<<"$reviewer_context")"
+  backend="$(sed -n 's/^backend=//p' <<<"$reviewer_context")"
+  light_review_applied="$(sed -n 's/^light_review_applied=//p' <<<"$reviewer_context")"
+  case "$light_review_applied" in
+  true | false) ;;
+  *) light_review_applied="false" ;;
+  esac
+
   # 判定プロンプト（ルーブリック・出力契約）を組み立てる。
   local prompt prompt_digest prompt_hash
-  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}" "${ASC_EVIDENCE_PR_NUMBER:-}" "${ASC_REVIEW_ATTEMPT_ID:-}")"; then
+  if ! prompt="$(_asc_cli gate reviewer-prompt "$issue_id" "$gate_id" "$target_sha" "${ASC_EVIDENCE_BASE_SHA:-}" "${ASC_EVIDENCE_PR_NUMBER:-}" "${ASC_REVIEW_ATTEMPT_ID:-}" "$light_review_applied")"; then
     _fail_safe "判定プロンプトの生成に失敗しました"
     return
   fi
@@ -1186,13 +1200,6 @@ launch_gate_reviewer() {
     return
   fi
   prompt_digest="sha256:$prompt_hash"
-
-  # backendと判定対象成果物のbase_dirを解決する。GitHub modeではreviewerはPR review evidenceだけを
-  # 投稿し、CIのprotected-base verifierがgate-reportへ結線する。
-  local reviewer_context base_dir backend
-  reviewer_context="$(_asc_cli gate reviewer-context "$issue_id")"
-  base_dir="$(sed -n 's/^base_dir=//p' <<<"$reviewer_context")"
-  backend="$(sed -n 's/^backend=//p' <<<"$reviewer_context")"
 
   local timeout_sec="${GATE_REVIEWER_TIMEOUT_SEC:-900}"
   local retries="${GATE_REVIEWER_RETRIES:-3}"
