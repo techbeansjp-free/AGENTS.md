@@ -11,10 +11,10 @@
 
 | # | 変更単位 | 内容 | 対応 AC-ID | 依存する変更単位 |
 |---|---|---|---|---|
-| 1 | 進行役契約 | `gate-review/SKILL.md`へ解決済み予算の事前宣言、4類型、最終後の`human_required`、warning・raw evidence・follow-up、取得不能fallbackを自己完結に記載 | AC-1〜AC-6, AC-8 | なし |
-| 2 | local宣言 | `state.schema.yaml`の既存gate内へ任意の予算宣言を追加し、round導出・cutoff・降格台帳には使わないことを固定 | AC-1, AC-2, AC-6 | #1 |
-| 3 | worker契約 | `roles.yaml`の4 workerへ書換え・削除、上流最小改訂、範囲外の実測報告を追加 | AC-7 | なし |
-| 4 | 契約単体検査 | role、skill、stateの静的・schema検査を追加し、4類型、常時blocking、raw evidence、follow-up、fallback、誤配布禁止を検証 | AC-1〜AC-8 | #1〜#3 |
+| 1 | 最終round事前宣言 | `gate-review/SKILL.md`、state/gate証跡schema、verdict記録・review起動経路へ、最終roundを開始させるreject時の耐久宣言と直前attempt・作成順序・digest結線を追加。レビュー開始後/結果後の追加・上書きを拒否し、宣言をround導出へ使わない | AC-1, AC-2, AC-6, AC-8 | なし |
+| 2 | finding現行追跡 | gate-report findingとGitHub分類記録へ元/分類後severity、理由、4類型外根拠、raw evidence、follow-upを同居させ、`record-verdict`がcurrent record単独で検証 | AC-3〜AC-6 | #1 |
+| 3 | worker契約・報告 | `roles.yaml`の4 workerへ非追加手段の優先と必要追加の例外条件を配布し、worker-report schema・`report status`へremediation種別と必要追加理由の条件検査を追加 | AC-7 | なし |
+| 4 | 契約単体検査 | 事前宣言の正常遷移、宣言なし/開始後/結果後/上書き、current finding記録、4類型、常時blocking、理由なし必要追加、fallback、誤配布禁止を検証 | AC-1〜AC-8 | #1〜#3 |
 | 5 | 配布検査 | init/upgradeのstandard・lightweight fixtureでskill、roles、schemaの展開と同期を検証 | AC-1, AC-2, AC-7, AC-8 | #1〜#4 |
 | 6 | 回帰検査 | 既存gate round/evidence/judgmentテスト、build、lint、template syncを実行し、ゲート品質と既存fallbackの不変を確認 | AC-3, AC-4, AC-6, AC-8 | #4, #5 |
 
@@ -24,7 +24,7 @@
 - 規範文書: `lint-references.sh`、`lint-vocab.sh`、`verify-doc-length.sh`。
 - 配布: `verify-template-sync.sh` とstandard/lightweightのinit/upgrade integration test。
 - ADR: 新規ADRを作らずaccepted ADR-0068を変更しないため、`adr-lint.sh check`で既存整合だけを確認する。
-- 反証ケース: round取得不能、宣言なし・事後変更、4類型外の新規finding、follow-up永続化失敗、データ喪失・セキュリティ低下、worker 1ロールだけの契約欠落をそれぞれ失敗または安全側停止として検証する。
+- 反証ケース: round取得不能、宣言なし・レビュー開始後/結果後の追加・上書き、直前attempt/digest不一致、current recordの元severity欠落・raw evidence変更、follow-up永続化失敗、データ喪失・セキュリティ低下、理由なし必要追加、worker 1ロールだけの契約欠落をそれぞれ失敗または安全側停止として検証する。
 
 ## 障害時・ロールバック
 

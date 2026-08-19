@@ -37,7 +37,9 @@ Issue #729 で実装済みの `review.round_limit`、round 0 起算、耐久 rev
 
 `.agent-skill-chain/templates/claude/skills/gate-review/SKILL.md` を進行役向け手続きの正本とし、配布済み `.claude/skills/gate-review/SKILL.md` へ init/upgrade が展開する。標準・軽量の両 profile で同じ skill を配るため、AGENTS.md だけに依存しない。
 
-進行役はラウンド値を解決できる場合、対象ゲートの作業・レビュー開始前に、初回 round 0、解決済み最終ラウンド、4類型、類型外 finding の warning 化と follow-up を記録する。GitHub mode は Issue コメント、local mode は `state.yaml` の任意 `gate.round_budget_declaration` を使う。現行state schemaは `additionalProperties: false` かつ宣言の格納先を持たないため、後者だけを具体的な欠落として追加する。値は `declared_at`、`first_round: 0`、解決済み `final_round`、4類型、類型外の処置とし、現在ラウンドは格納しない。round計数、cutoff判定、降格判断の台帳には使用せず、同一ゲートの宣言後に予算を変える場合は事後上書きせず `human_required` とする。任意追加なので既存stateのmigrationは不要である。
+進行役はラウンド値を解決でき、rejectされた反復の既存導出結果に1を加えた値が解決済み最終ラウンドと一致した時、その差し戻しを確定する同じ状態遷移で「次回が最終」と宣言する。宣言は `gate`、直前の `attempt_id`、解決済み `final_round`、4類型、類型外findingのwarning化・follow-upを含む不変payloadとする。GitHub modeは固定marker付きIssueコメント、local modeは`state.yaml`の任意`gate.round_budget_declaration`に耐久化する。これは既存導出結果のsnapshotであり、round計数やcutoffの導出元にはしない。
+
+最終反復のtrusted launcherはreviewer起動前に、最新完了attemptが宣言の直前attemptと一致し、既存導出値が宣言の`final_round`と一致することを検査する。宣言のCoordination Backend上の作成順序とcanonical digestを既存attemptの開始attestation・prompt・review evidenceへ結線する。宣言なし、レビュー開始後の作成、結果確定後の追加、payloadの上書き、直前attempt・digest・導出値の不一致は証跡検証で拒否して`human_required`とする。GitHubではコメントのAPI作成・更新metadataとPR reviewの順序、localではreview開始時に読み取ったstateのdigestとgate-report内のattempt結線を検査するため、事後追加はschema適合だけでは通過できない。attempt IDと既存review開始attestationを再利用し、新round counter・別導出元・宣言専用台帳は作らない。導出不能時は宣言遷移を推測せずD1のfallbackを維持する。
 
 最終ラウンド後は各 finding を次のいずれかへ再分類する。
 
@@ -46,7 +48,9 @@ Issue #729 で実装済みの `review.round_limit`、round 0 起算、耐久 rev
 3. test/build 失敗または回帰
 4. データ喪失またはセキュリティ低下
 
-1〜4が残れば最終判定は `human_required` とし、進行役の裁量で追加差し戻しをしない。4はラウンド、risk、profileに関係なく blocking とする。類型外は warning とし、元severity、分類理由、4類型外である根拠、evidence原文、follow-up Issue番号を同じ調整記録へ残す。GitHub mode は raw PR reviewを不変に保ってIssueコメントへ分類を記録する。local mode はraw gate-reportを先にcheckpointし、同じgate-reportの次commitでseverityをwarningへ変え、既存evidence文字列を変更せずmetadata文字列を追記する。これにより元severityとraw evidenceはGit履歴、分類とfollow-upは現行記録から復元できる。follow-up の永続化を確認してから進み、専用の降格台帳・検出経路への反映は Issue #745 に残す。
+1〜4が残れば最終判定は `human_required` とし、進行役の裁量で追加差し戻しをしない。4はラウンド、risk、profileに関係なく blocking とする。類型外findingは同じfinding記録の`severity`をwarningとし、必須`reclassification`に`original_severity`、`classified_severity: warning`、`downgrade_reason`、4類型すべてに該当しない根拠、永続化済み`follow_up_issue_id`を保持する。既存`evidence`配列をraw evidence原文として不変保持し、元reviewの値との完全一致を検査する。
+
+GitHub modeはraw PR reviewを削除・改変せず、source review IDを持つ固定marker付き分類記録にfinding全体を保存する。local modeは`.agent-skill-chain/schemas/gate-report.schema.yaml`の同じ現行findingへ`reclassification`を保存する。`gate record-verdict`とschema検査はcurrent record単独で全必須値とraw evidence一致を判定し、Git履歴からの元severity復元を前提にしない。follow-up永続化前、必須値欠落、raw evidence変更では進行せず`human_required`とする。これはゲートの現行追跡記録の拡張であり、専用の降格台帳やIssue #745のworker除外契約は導入しない。
 
 ### D3: workerへ届く非追記型の是正契約
 
@@ -56,15 +60,18 @@ Issue #729 で実装済みの `review.round_limit`、round 0 起算、耐久 rev
 
 - blocking を局所的な条項・例外・分岐・フラグの追記で塞がず、原因となる既存記述・実装を書き換えるか削除する。
 - 不要な要求・挙動を減らして発生源を除けるかを先に評価し、原因が上流なら最小の上流改訂と必要な再ゲートを選ぶ。
+- Issue目的に本来必要な追加は例外として認めるが、書換え・削除・不要要求の削減・上流最小改訂のいずれでも目的を達成できない理由を検証可能なworker reportへ残す場合に限る。
 - 真因が Issue の範囲外なら成果物を拡張せず、対象SHA・再現コマンド・終了コード・該当assetを実測報告する。
 
-個別worker間で文言を独自拡張せず、テストが4契約の意味的な同値と gate reviewer への誤配布がないことを検査する。Issue #745 が扱う降格済み finding の除外・伝達は追加しない。
+`.agent-skill-chain/schemas/worker-report.schema.yaml`の任意`remediations`は、是正方法を`rewrite|delete|reduce_unneeded|upstream_minimal_revision|required_addition|out_of_scope`から選ぶ。blocking付きremediation dispatchのcompleted報告では1件以上を必須とし、`required_addition`だけは非追加手段で達成不能な具体的理由を必須にする。`report status`は空理由の必要追加をschema検査で拒否する。個別worker間で文言を独自拡張せず、4契約の意味的同値とgate reviewerへの誤配布禁止を検査する。Issue #745が扱う降格済みfindingの除外・伝達は追加しない。
 
 ### D4: 配布・回帰検査
 
-- `test/unit/roles.test.ts`: 全4 workerにD3の3規範があり、`gate_reviewer` には編集規範が無いことを検査する。
-- `test/unit/gate-round-policy-assets.test.ts`: gate-review skillに既定 round 0〜4、事前宣言、4類型、常時 blocking、raw evidence、follow-up、`human_required`、導出不能 fallback が同時に存在することを検査する。
-- `test/unit/state.test.ts`: local declaration のschema適合、任意性、導出入力に使わない境界を検査する。
+- `test/unit/roles.test.ts`: 全4 workerにD3の4規範があり、`gate_reviewer`には編集規範が無いことを検査する。
+- `test/unit/gate-round-policy-assets.test.ts`: gate-review skillに既定round 0〜4、最終直前の宣言遷移、4類型、常時blocking、同一findingの追跡値、`human_required`、導出不能fallbackが揃うことを検査する。
+- `test/unit/state.test.ts`とgate証跡検査: local宣言のschema適合・任意性・非導出境界、直前attemptとdigestの一致、宣言なし・レビュー開始後・結果後・上書きの拒否を検査する。GitHub fixtureでもAPI順序とdigest不一致を拒否する。
+- `test/integration/gate-judgment.test.ts`: warning分類後のcurrent recordだけから元/分類後severity、理由、4類型外根拠、raw evidence、follow-upを検証し、Git履歴を参照しない。
+- `test/integration/worker-adapters.test.ts`: remediation dispatchの報告を検査し、理由なし`required_addition`とremediation未報告を拒否する。
 - `test/integration/init.test.ts` と `test/integration/upgrade.test.ts`: standard/lightweight の双方で role contract・gate-review skill・state schema が配布され、配布元との不一致を残さないことを検査する。
 - 既存 `test/unit/gate-round.test.ts`、`test/unit/review-evidence.test.ts`、`test/integration/gate-judgment.test.ts` を回帰検査として維持し、round導出、cutoff、取得不能 fallback、conformance/falsification、Strict の件数を変えない。
 
@@ -99,9 +106,9 @@ ADR-0068 のround導出、閾値、cutoff、取得不能 fallbackを採用し、
 
 ## 障害・ロールバック考慮
 
-- 宣言未記録・事後変更: ゲートを開始または継続せず `human_required`。既存review evidenceを削除・上書きしない。
+- 宣言未記録・事後追加・事後変更: attempt結線またはdigest検査で拒否し`human_required`。既存review evidenceを削除・上書きしない。
 - follow-up永続化失敗: warning findingを黙って消さず `human_required`。便宜的にblockingへ戻して記録失敗を隠さない。
-- local declaration不正: state schema検査で停止する。任意フィールドのため既存stateは移行なしで有効とする。
+- local declaration・reclassification不正: state/gate-report schema検査で停止する。任意フィールドのため既存state/reportは移行なしで有効とする。
 - worker契約の誤配布: role unit testとsegment起動の既存テストで検出し、旧配布物へ戻す。
 - ロールバック: role contract、skill、state schemaの追加差分を同一checkpoint単位でrevertする。既存 `round_limit`、round導出、review evidenceは変更しないため、従来の通常差し戻しへ戻る。
 - 影響を受けない機能: ゲート数、2観点、reviewer数、Strict固定、quick免除、既存config/default、反証ルーブリック、accepted ADR-0068。
