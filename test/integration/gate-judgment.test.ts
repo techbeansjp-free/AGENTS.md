@@ -785,18 +785,44 @@ test('gate reviewer-prompt: light適用時だけ追加のseverityルーブリッ
     ),
   );
 
-  const applied = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
+  // Issue #751: 追加ルーブリックの有無を決めるのは明示引数だけである。trusted launcherは
+  // reviewer-contextが解決した light_review_applied をそのまま渡す。
+  const context = runCli(
+    ['gate', 'reviewer-context', 'ISSUE-1', targetSha, '', '', '', 'spec'],
+    { cwd: repo.dir },
+  );
+  assert.equal(context.status, 0, context.stderr);
+  assert.match(context.stdout, /^light_review_applied=true$/m);
+
+  const applied = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha, '', '', '', 'true'], {
+    cwd: repo.dir,
+  });
   assert.equal(applied.status, 0, applied.stderr);
   assert.match(applied.stdout, /Lightプロファイル追加ルーブリック/);
   assert.match(applied.stdout, /AC-ID未達の指摘は常にblocking/);
   assert.match(applied.stdout, /セキュリティ・データ喪失・互換性破壊/);
 
+  const disabled = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha, '', '', '', 'false'], {
+    cwd: repo.dir,
+  });
+  assert.equal(disabled.status, 0, disabled.stderr);
+  assert.doesNotMatch(disabled.stdout, /Lightプロファイル追加ルーブリック/);
+
   const report = readReport(reportPath);
   report.gate.light_review!.applied = false;
   fs.writeFileSync(reportPath, stringify(report));
-  const disabled = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
-  assert.equal(disabled.status, 0, disabled.stderr);
-  assert.doesNotMatch(disabled.stdout, /Lightプロファイル追加ルーブリック/);
+  const contextAfter = runCli(
+    ['gate', 'reviewer-context', 'ISSUE-1', targetSha, '', '', '', 'spec'],
+    { cwd: repo.dir },
+  );
+  assert.equal(contextAfter.status, 0, contextAfter.stderr);
+  assert.match(contextAfter.stdout, /^light_review_applied=false$/m);
+
+  const rejected = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha, '', '', '', 'yes'], {
+    cwd: repo.dir,
+  });
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr, /light_review_applied は true\|false/);
 });
 
 test('gate review: remediationごとに再評価しStrict固定を差分復帰・ラベル除去後も維持する', (t) => {
@@ -852,14 +878,11 @@ test('gate review: remediationごとに再評価しStrict固定を差分復帰�
   assert.equal(report.gate.light_review?.remediation_round, 3);
 });
 
-test('gate reviewer-prompt: SPEC.md が未埋め込みファイルを名指しで言及しても、その内容を埋め込まず検証不能制約を明示する（Issue #318 回帰）', async (t) => {
+test('gate reviewer-prompt: SPEC.md が名指しした実在ファイルを展開し、一覧外だけを検証不能とする', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
 
-  // spec gate は SPEC.md のみを埋め込む（SEGMENT_ARTIFACTS['spec']）。SPEC.md 本文が
-  // 具体的な既存テストファイル名を名指しで言及しても、そのファイル自体はプロンプトへ
-  // 埋め込まれない。レビュアがこの未埋め込みファイルの内容を推測・創作して
-  // blocking finding の証跡を捏造した実例（Issue #316 PR #317）の再発防止テスト。
+  // Issue #751: spec gate では SPEC.md が名指ししたtarget SHA上の実在ファイルを根拠として展開する。
   const referencedTestPath = 'test/unit/existing-feature.test.ts';
   const referencedTestContent =
     "import { test } from 'node:test';\ntest('existing behavior that SPEC.md references', () => {});\n";
@@ -877,15 +900,18 @@ test('gate reviewer-prompt: SPEC.md が未埋め込みファイルを名指し�
   const res = runCli(['gate', 'reviewer-prompt', 'ISSUE-1', 'spec', targetSha], { cwd: repo.dir });
   assert.equal(res.status, 0, res.stderr);
 
-  // 制約セクション: 未埋め込みファイルの内容を推測・創作してはならない旨が明示されていること。
+  // 制約セクション: 両一覧を判別手段とし、省略ファイルだけを推測禁止にすること。
   assert.match(res.stdout, /埋め込まれていない参照ファイルの扱い/);
   assert.match(res.stdout, /検証不能/);
   assert.match(res.stdout, /推測.*創作|創作.*推測/);
   assert.match(res.stdout, /固く禁じる/);
+  assert.match(res.stdout, /展開済みファイル一覧/);
+  assert.match(res.stdout, /省略ファイル一覧/);
 
-  // SPEC.md はファイル名を言及するが、参照先ファイルの実内容そのものは埋め込まれないこと。
+  // 名指ししたパスと実内容がともに展開されること。
   assert.match(res.stdout, new RegExp(referencedTestPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.doesNotMatch(res.stdout, /existing behavior that SPEC\.md references/);
+  assert.match(res.stdout, /existing behavior that SPEC\.md references/);
+  assert.equal(res.stdout.match(/existing behavior that SPEC\.md references/g)?.length, 1);
 });
 
 test('gate reviewer-prompt: 新規追加成果物の全文再掲を省略した固定出力とバイト数上限を保つ', (t) => {
@@ -933,7 +959,7 @@ test('gate reviewer-prompt: 新規追加成果物の全文再掲を省略した�
   const golden = fs.readFileSync(GOLDEN_PROMPT_PATH, 'utf8').trimEnd();
   assert.match(golden, new RegExp(`^- target_sha: ${GOLDEN_FIXTURE_TARGET_SHA}$`, 'm'));
   assert.equal(prompt, golden);
-  assert.equal(Buffer.byteLength(prompt, 'utf8'), 6_184);
+  assert.equal(Buffer.byteLength(prompt, 'utf8'), 6_859);
   assert.equal(prompt.match(/AC-1: deterministic prompt/g)?.length, 1);
   assert.match(prompt, /成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC\.md"（変更種別: 追加、差分: 省略）/);
   assert.doesNotMatch(prompt, /new file mode|\+AC-1: deterministic prompt/);
@@ -1037,20 +1063,22 @@ test('gate reviewer-prompt: 特殊文字を含む新規成果物を差分で省�
       `${JSON.stringify(artifact.name)} の本文が二重展開されないこと`,
     );
   }
-  assert.deepEqual(result.stdout.match(/^## .+$/gm), [
-    '## 埋め込まれていない参照ファイルの扱い（ハルシネーション防止）',
-    '## 適用対象の AC-ID（SPEC.md 由来。全件を conformance 判定で網羅すること）',
-      '## conformance（立証）ルーブリック',
-      '## falsification（反証）ルーブリック',
-      '## 過去ラウンドの判定記録',
-      '## final の扱い',
-    '## 出力 JSON 契約（この形式のみを返すこと）',
+  const headings: string[] = result.stdout.match(/^## .+$/gm) ?? [];
+  assert.doesNotMatch(headings.join('\n'), /forged-section|forged-heading/);
+  for (const heading of [
     '## 判定対象の差分',
     '## 判定対象の成果物',
     '## 上流の承認済み成果物（整合検査用）',
-  ]);
+    '## 憲法文書',
+    '## 判定入力の展開状況',
+    '## 根拠ファイル',
+  ]) {
+    assert.ok(headings.includes(heading), `${heading}が構造見出しとして存在すること`);
+  }
   assert.doesNotMatch(result.stdout, /^### forged-heading$/m);
-  assert.equal(result.stdout.match(/^```$/gm)?.length, 7);
+  const fenceCount = result.stdout.match(/^```$/gm)?.length ?? 0;
+  assert.equal(fenceCount % 2, 0, '固定入力の追加後もコードフェンスが対になること');
+  assert.ok(fenceCount >= 7, '既存区間と追加した固定入力のコードフェンスが保たれること');
   assert.equal(result.stdout.match(/^## 出力 JSON 契約（この形式のみを返すこと）$/gm)?.length, 1);
 });
 
@@ -1143,7 +1171,10 @@ test('gate reviewer-prompt: 大きい成果物も末尾と上流成果物まで�
   );
 
   assert.ok(artifactSection.trimEnd().endsWith(artifactTail + '\n```'));
-  assert.match(result.stdout, /## 上流の承認済み成果物（整合検査用）\n### SPEC\.md\n/);
+  assert.match(
+    result.stdout,
+    /## 上流の承認済み成果物（整合検査用）\n### 上流成果物パス（JSON文字列形式・制御文字はエスケープ済み）: "SPEC\.md"\n/,
+  );
   assert.equal(result.stdout.match(new RegExp(artifactTail, 'g'))?.length, 1);
 });
 
