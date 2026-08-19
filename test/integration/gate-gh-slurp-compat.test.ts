@@ -9,6 +9,7 @@ import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
 import { evidencePromptDigest } from '../../src/lib/review-evidence.js';
+import { packageRoot } from '../../src/lib/paths.js';
 
 // Issue #774: gh 2.63.0 未満はページ一括オプションを未知フラグとして拒否する。
 // 本ファイルは、そのような gh の下でも gate の取得経路が全ページを取得して機能すること
@@ -122,7 +123,9 @@ test('AC-6: 失敗ではない運用形態（ローカルモード・PR番号未
 });
 
 test('AC-5/AC-8: ページ一括オプションを拒否するghでもラウンド履歴が構築され、受け付けるghと判定プロンプトが一致する', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  // Issue #759: 証跡投稿は launcher token の trusted_root と procurement を必須にし、調達モードを
+  // base SHA のコミット内容から再導出して照合する。本 fixture は clone_build 経路の形状で組む。
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-slurp-round-'));
   const stub = createGhStub(stubDir);
   const env = stub.env(process.env);
@@ -180,6 +183,8 @@ test('AC-5/AC-8: ページ一括オプションを拒否するghでもラウン�
     base_sha: baseSha,
     pr_number: '779',
     nonce: 'a'.repeat(48),
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [
       { slot: 1, run_id: 'review-slurp-round-1' },
       { slot: 2, run_id: 'review-slurp-round-2' },

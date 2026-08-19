@@ -49,7 +49,7 @@ if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
 fi
 
 # bin/ と node_modules/ はgitignoredであり、main worktreeのclean判定だけでは由来を証明できない。
-# GitHubが返したbase SHAを一時cloneへcheckoutし、lockfileから依存を復元してbase sourceをbuildする。
+# GitHubが返したbase SHAを一時cloneへcheckoutし、信頼実行コード一式をこのclone配下へ用意する。
 # 以降はこの隔離clone内のCLI/adapterだけを使用し、source worktreeの生成物を実行しない。
 TRUSTED_TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-local-review.XXXXXX")"
 trap 'rm -rf -- "$TRUSTED_TMP"' EXIT
@@ -59,11 +59,79 @@ git -C "$TRUSTED_ROOT" checkout --quiet --detach "$BASE_SHA"
 # reviewerにcredential-bearing remote URLやglobal Git設定を見せない。target objectはlocal clone済みなので
 # remoteを削除してもgit showによるread-only成果物参照は維持できる。
 git -C "$TRUSTED_ROOT" remote remove origin
-(
-  cd -- "$TRUSTED_ROOT"
-  npm ci --ignore-scripts
-  npm run build
-)
+# Issue #759: 削除処理の存在ではなく「remoteが1件も無い」状態そのものを検査する
+# （削除が失われた場合に検査が沈黙しないようにするため）。
+if [[ -n "$(git -C "$TRUSTED_ROOT" remote)" ]]; then
+  echo "隔離cloneにremoteが残っています。review evidenceを投稿しません。" >&2
+  exit 1
+fi
+
+# Issue #759: 準備段の目的は「信頼実行環境の用意」に限る。consumer固有のビルド処理は起動せず、
+# その成否も前提にしない。判定入力はbase SHAのコミット内容だけであり、作業ツリー状態・環境変数・
+# PATH・npmの有無を用いない（審査対象や実行環境からモードを動かせないようにするため）。
+PROCUREMENT_MODE="package_copy"
+if TRUSTED_PACKAGE_JSON="$(git -C "$TRUSTED_ROOT" show "${BASE_SHA}:package.json" 2>/dev/null)"; then
+  if printf '%s' "$TRUSTED_PACKAGE_JSON" | node -e '
+    let raw = "";
+    process.stdin.on("data", (chunk) => { raw += chunk; });
+    process.stdin.on("end", () => {
+      let pkg;
+      try { pkg = JSON.parse(raw); } catch (error) { process.exit(1); }
+      const hasEntry =
+        (typeof pkg.bin === "string" && pkg.name === "agent-skill-chain") ||
+        (pkg.bin && typeof pkg.bin === "object" && typeof pkg.bin["agent-skill-chain"] === "string");
+      process.exit(pkg && pkg.name === "agent-skill-chain" && hasEntry ? 0 : 1);
+    });
+  '; then
+    PROCUREMENT_MODE="clone_build"
+  fi
+fi
+
+PROCUREMENT_SOURCE=""
+PROCUREMENT_DIGEST=""
+if [[ "$PROCUREMENT_MODE" == "clone_build" ]]; then
+  # 隔離clone自身がagent-skill-chain本体のソースを持つ場合に限り、そのCLIを生成する。
+  # ここで走るbuildはagent-skill-chain自身のCLI生成であり、consumer固有のビルドではない。
+  (
+    cd -- "$TRUSTED_ROOT"
+    npm ci --ignore-scripts
+    npm run build
+  )
+  PROCUREMENT_SOURCE="clone_build:${BASE_SHA}"
+else
+  # Issue #759: `.git/info/exclude` はuntracked pathにのみ作用する。base SHAが node_modules/ 配下を
+  # tracked にしている場合、調達物の配置がtracked pathの変更として現れ「隔離したprotected base clone
+  # がcleanである」という前提が破れる。安全側（I8）へ倒し、調達へ進まずに停止する。
+  if [[ -n "$(git -C "$TRUSTED_ROOT" ls-tree -r --name-only "$BASE_SHA" -- node_modules)" ]]; then
+    echo "base SHAが node_modules/ 配下をtrackしているため信頼実行環境を用意できません。前提: 調達物の配置先（隔離clone直下の node_modules/）がbase SHAのtracked pathと重ならないこと。是正: default branchで node_modules/ の追跡を外してから再実行してください。" >&2
+    exit 1
+  fi
+  # 調達物の配置先だけを除外する。それ以外の差分検知能力は変えない。
+  printf '/node_modules/\n' >> "$TRUSTED_ROOT/.git/info/exclude"
+
+  TRUSTED_CLI_RESOLVE="$TRUSTED_ROOT/.agent-skill-chain/scripts/cli-resolve.sh"
+  if [[ ! -r "$TRUSTED_CLI_RESOLVE" ]]; then
+    echo "隔離clone内にCLI解決の共有実装がありません（探索パス: ${TRUSTED_CLI_RESOLVE}）。前提: base SHAが調達段の実装を含むこと。是正: 調達段を含む版をdefault branchへ反映してから再実行してください。" >&2
+    exit 1
+  fi
+  # 呼び出し元（protected base worktreeの作業ツリー版）で代替しない。代替すると証跡のlauncher digestが
+  # 指すbase SHAの実装と、実際に走った調達コードが食い違う。
+  # shellcheck source=/dev/null
+  source "$TRUSTED_CLI_RESOLVE"
+  if ! declare -F asc_procure_trusted_cli >/dev/null; then
+    echo "隔離clone内のCLI解決実装に調達段の公開関数がありません（探索パス: ${TRUSTED_CLI_RESOLVE}）。前提: base SHAが調達段の実装を含むこと。是正: 調達段を含む版をdefault branchへ反映してから再実行してください。" >&2
+    exit 1
+  fi
+  PROCUREMENT_OUTPUT="$(asc_procure_trusted_cli "$TRUSTED_ROOT" "$BASE_SHA" "$REPO_ROOT")"
+  PROCUREMENT_MODE="$(sed -n 's/^procurement_mode: //p' <<<"$PROCUREMENT_OUTPUT")"
+  PROCUREMENT_SOURCE="$(sed -n 's/^procurement_source: //p' <<<"$PROCUREMENT_OUTPUT")"
+  PROCUREMENT_DIGEST="$(sed -n 's/^procurement_digest: //p' <<<"$PROCUREMENT_OUTPUT")"
+  if [[ "$PROCUREMENT_MODE" != "package_copy" || -z "$PROCUREMENT_SOURCE" || -z "$PROCUREMENT_DIGEST" ]]; then
+    echo "調達結果（調達モード・調達元識別子・実体digest）を確定できませんでした。" >&2
+    exit 1
+  fi
+fi
+
 if [[ -n "$(git -C "$TRUSTED_ROOT" status --porcelain)" ]]; then
   echo "隔離したprotected base cloneがbuild後にdirtyです。review evidenceを投稿しません。" >&2
   exit 1
@@ -73,6 +141,7 @@ TRUSTED_SCRIPT_DIR="$TRUSTED_ROOT/.agent-skill-chain/scripts"
 attempt_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(12).toString("hex"))')"
 attempt_id="attempt-${GATE_ID}-${TARGET_SHA:0:12}-${attempt_nonce}"
 REVIEW_OUTPUT="$(
+  ASC_TRUSTED_CLI_ROOT="$TRUSTED_ROOT" \
   ASC_EVIDENCE_BASE_SHA="$BASE_SHA" \
   ASC_EVIDENCE_PR_NUMBER="$PR_NUMBER" \
   ASC_REVIEW_ATTEMPT_ID="$attempt_id" \
@@ -101,7 +170,10 @@ TOKEN_FILE="$TRUSTED_TMP/launcher-token.json"
 token_nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(24).toString("hex"))')"
 node -e '
   const fs = require("node:fs");
-  const [file, attemptId, expectedCount, profile, targetSha, baseSha, prNumber, nonce, ...runIds] = process.argv.slice(1);
+  const [
+    file, attemptId, expectedCount, profile, targetSha, baseSha, prNumber, nonce,
+    trustedRoot, procurementMode, procurementSource, procurementDigest, ...runIds
+  ] = process.argv.slice(1);
   const token = {
     schema_version: "agent-skill-chain/launcher-token/v1",
     attempt_id: attemptId,
@@ -111,11 +183,18 @@ node -e '
     base_sha: baseSha,
     pr_number: prNumber,
     nonce,
+    trusted_root: trustedRoot,
+    procurement: {
+      mode: procurementMode,
+      source: procurementSource,
+      ...(procurementDigest ? {digest: procurementDigest} : {}),
+    },
     slots: runIds.map((run_id, index) => ({slot: index + 1, run_id})),
     consumed_slots: [],
   };
   fs.writeFileSync(file, JSON.stringify(token) + "\n", {mode: 0o600, flag: "wx"});
-' "$TOKEN_FILE" "$attempt_id" "$COUNT" "$PROFILE" "$TARGET_SHA" "$BASE_SHA" "$PR_NUMBER" "$token_nonce" "${run_ids[@]}"
+' "$TOKEN_FILE" "$attempt_id" "$COUNT" "$PROFILE" "$TARGET_SHA" "$BASE_SHA" "$PR_NUMBER" "$token_nonce" \
+  "$TRUSTED_ROOT" "$PROCUREMENT_MODE" "$PROCUREMENT_SOURCE" "$PROCUREMENT_DIGEST" "${run_ids[@]}"
 
 for slot in $(seq 1 "$COUNT"); do
   run_id="${run_ids[$((slot - 1))]}"
@@ -129,6 +208,7 @@ for slot in $(seq 1 "$COUNT"); do
   ASC_REVIEWER_RUN_ID="$run_id" \
   ASC_REVIEWER_SLOT="$slot" \
   ASC_REVIEW_ADAPTER_REQUESTED="$ADAPTER" \
+  ASC_TRUSTED_CLI_ROOT="$TRUSTED_ROOT" \
     "$TRUSTED_SCRIPT_DIR/gate-launch-reviewer.sh" "$ISSUE_ID" "$GATE_ID" "$PROFILE" "$REPORT_PATH" "$TARGET_SHA"
 done
 if [[ -e "$TOKEN_FILE" ]]; then

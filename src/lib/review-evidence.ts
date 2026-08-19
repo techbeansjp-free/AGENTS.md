@@ -38,6 +38,35 @@ export interface LightReviewEvidence {
   strict_locked: boolean;
 }
 
+/**
+ * 調達の事実（Issue #759）。準備段が隔離 clone の外から実行コードを調達した場合に、
+ * 調達元の識別子と調達した実体の digest を証跡へ残す。
+ *
+ * 既に投稿済みの証跡を形式不適合にしないため、`ReviewEvidence['execution']` では任意フィールド
+ * として扱い、存在する場合のみ形式を検査する（スキーマ識別子は据え置く）。
+ */
+export interface EvidenceProcurement {
+  mode: 'clone_build' | 'package_copy';
+  /** 何をどこから取得したかを一意に示す値。`clone_build` では隔離 clone の base SHA を指す。 */
+  source: string;
+  /** `package_copy` のときの調達実体の正準ツリー digest。 */
+  digest?: string;
+}
+
+export function isEvidenceProcurement(value: unknown): value is EvidenceProcurement {
+  if (!value || typeof value !== 'object') return false;
+  const procurement = value as Partial<EvidenceProcurement>;
+  if (procurement.mode !== 'clone_build' && procurement.mode !== 'package_copy') return false;
+  if (typeof procurement.source !== 'string' || procurement.source.length === 0) return false;
+  if (procurement.mode === 'package_copy') {
+    return typeof procurement.digest === 'string' && /^sha256:[0-9a-f]{64}$/.test(procurement.digest);
+  }
+  return (
+    procurement.digest === undefined ||
+    (typeof procurement.digest === 'string' && /^sha256:[0-9a-f]{64}$/.test(procurement.digest))
+  );
+}
+
 export interface ReviewEvidence {
   schema_version: 'agent-skill-chain/gate-review-evidence/v3';
   issue_id: string;
@@ -53,6 +82,7 @@ export interface ReviewEvidence {
     launcher_token_digest: string;
     isolation: 'ephemeral_clone';
     sandbox: 'read_only';
+    procurement?: EvidenceProcurement;
   };
   reviewer: {
     run_id: string;
@@ -252,6 +282,7 @@ function isEvidenceShape(value: ReviewEvidence, findingValidation: FindingValida
     /^sha256:[0-9a-f]{64}$/.test(value.execution.launcher_token_digest) &&
     value.execution.isolation === 'ephemeral_clone' &&
     value.execution.sandbox === 'read_only' &&
+    (value.execution.procurement === undefined || isEvidenceProcurement(value.execution.procurement)) &&
     !!value.reviewer &&
     typeof value.reviewer.run_id === 'string' &&
     /^review-[A-Za-z0-9._-]+$/.test(value.reviewer.run_id) &&
@@ -369,7 +400,8 @@ export function validateGithubReviewEvidenceAttempt(
       canonicalJson(first.round_budget_declaration ?? null) ||
     evidence.execution.trusted_base_sha !== first.execution.trusted_base_sha ||
     evidence.execution.launcher_digest !== first.execution.launcher_digest ||
-    evidence.execution.launcher_token_digest !== first.execution.launcher_token_digest
+    evidence.execution.launcher_token_digest !== first.execution.launcher_token_digest ||
+    canonicalJson(evidence.execution.procurement ?? null) !== canonicalJson(first.execution.procurement ?? null)
   )) {
     return { valid: false, reason: 'review attempt内の証跡・実行attestationが一致しません' };
   }

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { ASSET_NAMESPACE } from '../lib/paths.js';
 import { ROOT_LEVEL_ENTRIES, NAMESPACED_ENTRIES } from '../lib/asset-manifest.js';
 import { versionMarkerRelativePath } from '../lib/version-marker.js';
+import { trustedCliMarkerRelativePath } from '../lib/trusted-cli-marker.js';
 import { git } from '../lib/exec.js';
 import { listWorktrees } from '../lib/worktree.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
@@ -33,6 +34,9 @@ function managedRelativePaths(targetDir: string): string[] {
     ...NAMESPACED_ENTRIES.map((entry) => path.join(ASSET_NAMESPACE, entry)),
     '.github',
     versionMarkerRelativePath(),
+    // Issue #759: `.installed_version` と同じ実行時状態であり、撤去後に残すと参照者不在の
+    // 期待値だけがリポジトリへ残る。
+    trustedCliMarkerRelativePath(),
   ];
   return candidates.filter((relative) => fs.existsSync(path.join(targetDir, relative)));
 }
