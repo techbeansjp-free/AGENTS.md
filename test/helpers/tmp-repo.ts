@@ -28,7 +28,10 @@ export type CoordinationBackend = 'local' | 'github';
  * （既定の github だと lease/issue resume/cleanup 等が gh 呼び出しを要求し、gh-stub 無しでは
  * テストできないため）。
  */
-export function createTmpRepo({ backend = 'local' }: { backend?: CoordinationBackend } = {}): TmpRepo {
+export function createTmpRepo({
+  backend = 'local',
+  selfPackage = false,
+}: { backend?: CoordinationBackend; selfPackage?: boolean } = {}): TmpRepo {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-repo-'));
   const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-remote-'));
   execFileSync('git', ['init', '--bare', '--initial-branch=main', remoteDir], { stdio: 'pipe' });
@@ -61,6 +64,25 @@ export function createTmpRepo({ backend = 'local' }: { backend?: CoordinationBac
   }
 
   fs.writeFileSync(path.join(dir, 'README.md'), '# test fixture repo\n');
+  // Issue #759: 初期commitへ agent-skill-chain 本体を名乗る package.json を含める。ローカル
+  // ゲートの準備段は base SHA のコミット内容だけを入力に調達モードを決めるため、この有無が
+  // `clone_build`（自リポジトリ形状）と `package_copy`（consumer 形状）の分岐そのものになる。
+  if (selfPackage) {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'agent-skill-chain',
+          version: '0.0.0-fixture',
+          private: true,
+          bin: { 'agent-skill-chain': './bin/agents-md.js' },
+          scripts: { build: 'true' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
   git(dir, ['add', '-A']);
   git(dir, ['commit', '-m', 'chore: initial commit']);
   git(dir, ['push', '-u', 'origin', 'main']);

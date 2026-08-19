@@ -8,6 +8,7 @@ import { parse } from 'yaml';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
+import { packageRoot } from '../../src/lib/paths.js';
 import { digestOf, artifactDigestOf } from '../../src/lib/digest.js';
 import {
   canonicalJson,
@@ -50,7 +51,7 @@ function injectBlobBatch(repoDir: string, start: number, count: number): void {
 }
 
 test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡を検証してsuccess Check Runへ結線する（Issue #703 AC-8）', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-evidence-'));
   const stub = createGhStub(stubDir);
   const env = stub.env(process.env);
@@ -122,6 +123,9 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
     base_sha: baseSha,
     pr_number: '274',
     nonce: 'e'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [
       { slot: 1, run_id: 'review-integration-submit' },
       { slot: 2, run_id: 'review-integration-submit-2' },
@@ -248,6 +252,9 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
     base_sha: baseSha,
     pr_number: '274',
     nonce: 'f'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [
       { slot: 1, run_id: 'review-integration-second-submit' },
       { slot: 2, run_id: 'review-integration-second-submit-2' },
@@ -461,7 +468,9 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
 });
 
 test('GitHub evidence: implementation対象成果物が空集合でも投稿とgate-report生成を完了する', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  // Issue #759: 証跡投稿は base SHA から再導出した調達モードと launcher token の一致を要求する。
+  // 自リポジトリ形状にすることで clone_build へ解決させ、本テストの主題（空集合の成果物）を保つ。
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-empty-implementation-evidence-'));
   const stub = createGhStub(stubDir);
   const env = stub.env(process.env);
@@ -508,6 +517,9 @@ test('GitHub evidence: implementation対象成果物が空集合でも投稿とg
     base_sha: baseSha,
     pr_number: '742',
     nonce: 'a'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [{ slot: 1, run_id: reviewerRunId }],
     consumed_slots: [],
   })}\n`, { mode: 0o600 });
@@ -570,6 +582,9 @@ test('GitHub evidence: implementation対象成果物が空集合でも投稿とg
     base_sha: baseSha,
     pr_number: '742',
     nonce: 'b'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [{ slot: 1, run_id: invalidRunId }],
     consumed_slots: [],
   })}\n`, { mode: 0o600 });
@@ -612,7 +627,7 @@ test('GitHub evidence: implementation対象成果物が空集合でも投稿とg
 });
 
 test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁数が異なっても往復に成功する', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-evidence-clone-roundtrip-'));
   const generationDir = path.join(root, 'generation');
   const verificationDir = path.join(root, 'verification');
@@ -689,6 +704,9 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
     base_sha: baseSha,
     pr_number: '369',
     nonce: 'c'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [{ slot: 1, run_id: reviewerRunId }],
     consumed_slots: [],
   })}\n`, { mode: 0o600 });
@@ -733,7 +751,7 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
 });
 
 test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェンスで囲まれていても内部のJSONを解釈する（Issue #303）', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-evidence-fence-'));
   const stub = createGhStub(stubDir);
   const env = stub.env(process.env);
@@ -787,6 +805,9 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
       base_sha: baseSha,
       pr_number: '275',
       nonce: 'f'.repeat(48),
+      // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+      trusted_root: packageRoot(),
+      procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
       slots: [{ slot: 1, run_id: runId }],
       consumed_slots: [],
     })}\n`, { mode: 0o600 });

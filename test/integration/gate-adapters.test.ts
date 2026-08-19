@@ -9,6 +9,7 @@ import { createTmpRepo, setAdapter, FIXED_TIMESTAMP } from '../helpers/tmp-repo.
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { ARTIFACT_ABSENT_DIGEST } from '../../src/lib/digest.js';
+import { packageRoot } from '../../src/lib/paths.js';
 import { envWithout, installCliShim, readFinal, runLauncher, setupGateReview } from '../helpers/gate-launcher.js';
 
 type GateTestBackend = 'github' | 'local';
@@ -16,6 +17,9 @@ type GateTestBackend = 'github' | 'local';
 function setupGateTestBackend(
   t: { after(callback: () => void): void },
   backend: GateTestBackend,
+  // Issue #759: 証跡投稿まで到達するテストは、base SHA の package.json から再導出される調達モードが
+  // launcher token の申告と一致する必要がある。自リポジトリ形状にすると clone_build へ解決される。
+  options: { selfPackage?: boolean } = {},
 ) {
   const scratchDir = backend === 'github'
     ? fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-gate-adapters-'))
@@ -26,7 +30,7 @@ function setupGateTestBackend(
   if (tokenDir) fs.chmodSync(tokenDir, 0o700);
   const stub = scratchDir ? createGhStub(scratchDir) : undefined;
   const env = stub?.env(process.env) ?? process.env;
-  const repo = createTmpRepo({ backend });
+  const repo = createTmpRepo({ backend, selfPackage: options.selfPackage ?? false });
   installCliShim(repo.dir);
   setAdapter(repo.dir, 'claude');
   t.after(() => {
@@ -87,6 +91,9 @@ function githubEvidenceEnv(options: {
     base_sha: options.baseSha,
     pr_number: prNumber,
     nonce: 'a'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${options.baseSha}` },
     slots: [{ slot: 1, run_id: reviewerRunId }],
     consumed_slots: [],
   })}\n`, { mode: 0o600 });
@@ -185,7 +192,7 @@ test('claude launch_gate_reviewer: read-only レビュアの verdict を gate-re
 
 test('claude launch_gate_reviewer (ISSUE-733 AC-12): quick免除下の4ゲートを両backendで起動する', (t) => {
   for (const backend of ['local', 'github'] as const) {
-    const { repo, stub, env: backendEnv, tokenDir } = setupGateTestBackend(t, backend);
+    const { repo, stub, env: backendEnv, tokenDir } = setupGateTestBackend(t, backend, { selfPackage: true });
     const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
     const request = '## 要求\nquick review requirements\n\n## 受入基準\nreview is completed';
     const start = runCli([

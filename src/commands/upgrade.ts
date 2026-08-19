@@ -3,6 +3,7 @@ import path from 'node:path';
 import { copyTreeMirror } from '../lib/fs-copy.js';
 import { collectManagedAssetMappings, packageVersion } from '../lib/asset-manifest.js';
 import { readInstalledVersion, writeInstalledVersion } from '../lib/version-marker.js';
+import { applyTrustedCliMarker, formatTrustedCliMarkerOutcome } from '../lib/trusted-cli-marker.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 import { detectLegacyAssets, formatLegacyAssetWarning } from '../lib/legacy-migration.js';
 import { digestOfFile } from '../lib/digest.js';
@@ -258,6 +259,10 @@ export async function upgrade(args: string[]): Promise<number> {
     if (legacyWarning) {
       summary.push('', legacyWarning);
     }
+
+    // Issue #759: ローカルゲートの準備段が隔離 clone 外から調達する CLI 実体の期待値。
+    // 配布集合の外にあるため、所有権記録・stale 判定・複製一覧へは登録しない。
+    summary.push(formatTrustedCliMarkerOutcome(applyTrustedCliMarker(targetDir, { dryRun }), prefix));
 
     if (!dryRun) {
       writeInstalledVersion(targetDir, newVersion);
