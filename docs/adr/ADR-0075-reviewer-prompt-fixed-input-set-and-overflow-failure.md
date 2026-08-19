@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0075
-status: proposed
+status: accepted
 title: 判定プロンプトの入力集合を gate_id 別の固定表で定め、上限超過は切り捨てずに生成失敗とする
 tags: [gate, reviewer-prompt, determinism, safety]
 supersedes: []
