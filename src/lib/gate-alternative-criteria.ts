@@ -63,6 +63,9 @@ function normalizePlaceholder(text: string): string | undefined {
   do {
     previous = normalized;
     normalized = normalized
+      // Quote prefixes are presentation only.  Strip them before list/task-list
+      // markers so a quoted placeholder cannot become a judgment criterion.
+      .replace(/^>\s?/, '')
       .replace(/^(?:[-*+]|[0-9]+[.)])(?:\s+|$)/, '')
       .replace(/^\[(?: |x)\](?:\s+|$)/i, '')
       .trim();

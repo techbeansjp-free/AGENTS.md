@@ -475,6 +475,26 @@ test('gate record-verdict: 起動済みslotの判定が未確定ならhuman_requ
   assert.equal(readReport(reportPath).gate.final, 'human_required');
 });
 
+test('gate record-verdict (ISSUE-733 AC-24): 不正なslot verdictは全4ゲートでhuman_requiredへ倒す', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  for (const gate of ISSUE_733_GATES) {
+    const reportPath = path.join(repo.dir, `invalid-verdict-${gate}.yaml`);
+    fs.writeFileSync(reportPath, stringify(scaffold({ id: gate })));
+    const result = runCli(['gate', 'record-verdict', reportPath, repo.dir, '1'], {
+      cwd: repo.dir,
+      input: JSON.stringify([{
+        conformance: 'pass', falsification: 'pass', blockers: [], inconclusive: 'true',
+      }]),
+    });
+    assert.equal(result.status, 0, `${gate}: ${result.stderr}`);
+    const report = readReport(reportPath);
+    assert.equal(report.gate.final, 'human_required', gate);
+    assert.equal(report.gate.conformance, 'pending', gate);
+  }
+});
+
 test('gate record-verdict: 要求体数を超えたslotも全件を集約する', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -1546,6 +1566,25 @@ test('gate reviewer-prompt (ISSUE-733 AC-6): task-list placeholderはGitHub/loca
   }
 });
 
+test('gate reviewer-prompt (ISSUE-733 AC-6): blockquote内task-list placeholderはGitHub/localともinconclusiveにする', (t) => {
+  for (const backend of ['local', 'github'] as const) {
+    const github = backend === 'github' ? makeGhStub() : undefined;
+    const repo = createTmpRepo({ backend });
+    t.after(() => { repo.cleanup(); github?.cleanup(); });
+    const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+    fs.writeFileSync(path.join(repo.dir, 'code.txt'), `${backend} quoted task-list placeholder\n`);
+    const targetSha = commitAll(repo.dir, `test: ${backend} quoted task-list placeholder`);
+    seedIssue733Backend(repo.dir, backend, github, '## 受入基準\n> - [ ] TBD', 'quick');
+
+    const result = runCli(['gate', 'reviewer-prompt', 'ISSUE-733', 'spec', targetSha, baseSha], {
+      cwd: repo.dir, env: github?.env,
+    });
+    assert.equal(result.status, 0, `${backend}: ${result.stderr}`);
+    assert.match(result.stdout, /conformance は inconclusive/, backend);
+    assert.doesNotMatch(result.stdout, /## 代替判定基準（trusted な Issue 本文由来）/, backend);
+  }
+});
+
 test('gate reviewer-prompt (ISSUE-733 AC-18): 判定区間標識を成果物とIssue本文から偽装できない', (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
@@ -2004,5 +2043,65 @@ test('gate record-verdict (ISSUE-733 AC-24): localの4ゲートで起動体数�
     }
   } finally {
     repo.cleanup();
+  }
+});
+
+test('gate record-verdict (ISSUE-733 AC-24): localの4ゲートでfail・blocking・pending・未確定を安全側へ結線する', () => {
+  const repo = createTmpRepo({ backend: 'local' });
+  try {
+    const cases = [
+      {
+        name: 'fail', expected: 'rejected', verdicts: [{ conformance: 'fail', falsification: 'pass', blockers: [] }],
+      },
+      {
+        name: 'blocking', expected: 'rejected', verdicts: [{
+          conformance: 'pass', falsification: 'pass', blockers: [{
+            severity: 'blocking', origin: 'implementation', code: 'AC24-BLOCKING',
+            evidence: ['AC-24 の反例を十分な根拠とともに記録する'],
+          }],
+        }],
+      },
+      {
+        name: 'pending', expected: 'human_required', verdicts: [{ conformance: 'pending', falsification: 'pass', blockers: [] }],
+      },
+      { name: 'unresolved', expected: 'human_required', verdicts: [null] },
+    ] as const;
+    for (const gate of ISSUE_733_GATES) {
+      for (const testCase of cases) {
+        const reportPath = path.join(repo.dir, `ac24-${gate}-${testCase.name}.yaml`);
+        fs.writeFileSync(reportPath, stringify(scaffold({ id: gate })));
+        const result = runCli(['gate', 'record-verdict', reportPath, repo.dir, '1'], {
+          cwd: repo.dir, input: JSON.stringify(testCase.verdicts),
+        });
+        assert.equal(result.status, 0, `${gate}/${testCase.name}: ${result.stderr}`);
+        assert.equal(readReport(reportPath).gate.final, testCase.expected, `${gate}/${testCase.name}`);
+      }
+    }
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('gate reviewer-prompt (ISSUE-733 AC-6): AC-IDがあってdesign/validation成果物が欠落し代替不能ならinconclusiveにする', () => {
+  for (const backend of ['github', 'local'] as const) {
+    const repo = createTmpRepo({ backend });
+    const github = backend === 'github' ? makeGhStub() : undefined;
+    try {
+      const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' }).trim();
+      fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\n#### AC-1: retained criterion\n');
+      fs.writeFileSync(path.join(repo.dir, 'code.txt'), 'quick evidence\n');
+      const targetSha = commitAll(repo.dir, `test: ${backend} AC-ID with absent artifacts`);
+      seedIssue733Backend(repo.dir, backend, github, '## 受入基準\n- [ ] TBD', 'quick');
+
+      for (const gate of ['design', 'validation'] as const) {
+        const prompt = buildIssue733Prompt(repo.dir, github, gate, targetSha, baseSha);
+        const axis = promptSection(prompt, JUDGMENT_AXIS_BEGIN, JUDGMENT_AXIS_END);
+        assert.match(axis, /conformance は inconclusive/, `${backend}/${gate}`);
+        assert.doesNotMatch(axis, /代替判定基準（trusted|AC-1/, `${backend}/${gate}`);
+      }
+    } finally {
+      github?.cleanup();
+      repo.cleanup();
+    }
   }
 });

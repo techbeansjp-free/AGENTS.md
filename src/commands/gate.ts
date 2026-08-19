@@ -256,6 +256,22 @@ interface ReviewerVerdict {
   final?: 'approved' | 'rejected' | 'pending' | 'human_required';
 }
 
+/** Local reviewer input has optional artifact fields, but its supplied verdict
+ * values must satisfy the same runtime contract as submitted evidence. */
+function isReviewerVerdict(value: unknown): value is ReviewerVerdict {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as ReviewerVerdict;
+  return isEvidenceVerdict(
+    {
+      ...candidate,
+      blockers: candidate.blockers ?? [],
+      approved_artifacts: candidate.approved_artifacts ?? [],
+      inconclusive: candidate.inconclusive ?? false,
+    },
+    false,
+  );
+}
+
 const SUBVERDICT_VALUES = new Set(['pass', 'fail', 'pending']);
 // Issue #309: 実在する成果物の内容 digest（artifactDigestOf/artifactDigestOfFile）とは
 // 別ドメインから導出された sentinel のため、実在ファイルの内容といかなる場合も衝突しない。
@@ -1045,10 +1061,10 @@ export async function recordVerdict(args: string[]): Promise<number> {
     if (slotEntries.length === 0 && expectedReviewerCount === undefined) {
       return fail('verdict が空の場合は expected_reviewer_count が必要です');
     }
-    const resolvedVerdicts = slotEntries.filter((entry): entry is ReviewerVerdict => entry !== null);
+    const resolvedVerdicts = slotEntries.filter((entry): entry is ReviewerVerdict => isReviewerVerdict(entry));
     const verdictBySlot = new Map(slotEntries.map((entry, index) => [
       index + 1,
-      entry === null
+      !isReviewerVerdict(entry)
         ? { status: 'unresolved' as const }
         : { status: 'resolved' as const, verdict: entry },
     ]));
