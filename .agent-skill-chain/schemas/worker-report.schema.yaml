@@ -46,6 +46,48 @@ properties:
   human_escalation_requested:
     type: boolean
     default: false
+  remediation_required:
+    type: boolean
+    default: false
+    description: blocking findingへのremediation dispatchである場合にtrue。
+  remediations:
+    type: array
+    items:
+      $ref: '#/definitions/remediation'
+
+allOf:
+  - if:
+      properties: {remediation_required: {const: true}, status: {const: completed}}
+      required: [remediation_required, status]
+    then:
+      required: [remediations]
+      properties: {remediations: {minItems: 1}}
+
+definitions:
+  remediation:
+    type: object
+    required: [method, finding_code, summary]
+    additionalProperties: false
+    properties:
+      method:
+        type: string
+        enum: [rewrite, delete, reduce_unneeded, upstream_minimal_revision,
+               required_addition, out_of_scope]
+      finding_code: {type: string, minLength: 1, pattern: '.*\S.*'}
+      summary: {type: string, minLength: 1, pattern: '.*\S.*'}
+      non_addition_failure_reason:
+        type: string
+        minLength: 1
+        pattern: '.*\S.*'
+      target_sha: {type: string, minLength: 1}
+      reproduction_command: {type: string, minLength: 1, pattern: '.*\S.*'}
+      exit_code: {type: integer}
+      asset: {type: string, minLength: 1, pattern: '.*\S.*'}
+    allOf:
+      - if: {properties: {method: {const: required_addition}}, required: [method]}
+        then: {required: [non_addition_failure_reason]}
+      - if: {properties: {method: {const: out_of_scope}}, required: [method]}
+        then: {required: [target_sha, reproduction_command, exit_code, asset]}
 
 examples:
   - schema_version: agent-skill-chain/worker-report/v1

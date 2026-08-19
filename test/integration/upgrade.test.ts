@@ -637,6 +637,10 @@ test('upgrade: profile: lightweightで導入済みのプロジェクトはupgrad
 
   const claudeMd = fs.readFileSync(path.join(targetDir, 'CLAUDE.md'), 'utf8');
   assert.doesNotMatch(claudeMd, /@AGENTS\.md/, 'upgrade後もCLAUDE.mdは軽量プロファイル版のまま@AGENTS.md importを含まないこと');
+  const gateSkill = fs.readFileSync(path.join(targetDir, '.claude', 'skills', 'gate-review', 'SKILL.md'), 'utf8');
+  assert.match(gateSkill, /最終round 4、最大5回/);
+  assert.match(fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'config', 'roles.yaml'), 'utf8'), /非追加手段で達成不能/);
+  assert.match(fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'schemas', 'gate-report.schema.yaml'), 'utf8'), /raw_evidence/);
 });
 
 test('upgrade: agent-skill-chain.yamlがパース不能（ケースC）の場合は警告してprofile: standardへフォールバックする', (t) => {

@@ -101,8 +101,34 @@ properties:
             items: {type: string}
           remediation_round: {type: integer, minimum: 0}
           strict_locked: {type: boolean}
+      round_budget_declaration:
+        $ref: '#/definitions/round_budget_attestation'
 
 definitions:
+  round_budget_attestation:
+    type: object
+    required: [schema_version, issue_id, gate, previous_attempt_id, final_round, blocking_categories, nonblocking_action,
+               declaration_digest, declared_at, record_id]
+    additionalProperties: false
+    properties:
+      schema_version: {const: agent-skill-chain/round-budget-declaration/v1}
+      issue_id: {type: string, pattern: '^ISSUE-[0-9]+$'}
+      gate: {type: string, enum: [spec, design, implementation, validation]}
+      previous_attempt_id: {type: string, pattern: '^attempt-[A-Za-z0-9._-]+$'}
+      final_round: {type: integer, minimum: 2}
+      blocking_categories:
+        type: array
+        minItems: 4
+        maxItems: 4
+        uniqueItems: true
+        items:
+          type: string
+          enum: [previous_blocking_unresolved, issue_purpose_blocked, test_build_regression,
+                 data_loss_or_security]
+      nonblocking_action: {const: warning_with_persisted_follow_up}
+      declaration_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      declared_at: {type: string, format: date-time}
+      record_id: {type: string, minLength: 1}
   finding:
     type: object
     required: [severity, origin, code, evidence]
@@ -121,6 +147,30 @@ definitions:
       evidence:
         type: array
         items: {type: string}
+      reclassification:
+        type: object
+        required: [original_severity, classified_severity, downgrade_reason,
+                   outside_blocking_categories, raw_evidence, follow_up_issue_id]
+        additionalProperties: false
+        properties:
+          original_severity: {type: string, enum: [blocking, warning, info]}
+          classified_severity: {const: warning}
+          downgrade_reason: {type: string, minLength: 1, pattern: '.*\S.*'}
+          outside_blocking_categories:
+            type: object
+            required: [previous_blocking_unresolved, issue_purpose_blocked,
+                       test_build_regression, data_loss_or_security]
+            additionalProperties: false
+            properties:
+              previous_blocking_unresolved: {const: false}
+              issue_purpose_blocked: {const: false}
+              test_build_regression: {const: false}
+              data_loss_or_security: {const: false}
+          raw_evidence:
+            type: array
+            minItems: 1
+            items: {type: string}
+          follow_up_issue_id: {type: string, pattern: '^ISSUE-[0-9]+$'}
 
 # --- gate-reconcile.sh 無効化ルール（A-6） ---
 # pushごとに approved_artifacts の digest を照合し、変化なしなら最新head SHAへ成功を再発行、

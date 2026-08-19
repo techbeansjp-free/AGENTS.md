@@ -750,6 +750,8 @@ if (cmd === 'api') {
     process.stdout.write(JSON.stringify((state.comments[issueNumber] || []).map((comment) => ({
       id: Number(comment.id),
       body: comment.body,
+      created_at: comment.createdAt,
+      updated_at: comment.updatedAt || comment.createdAt,
     }))));
     process.exit(0);
   }

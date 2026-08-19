@@ -190,6 +190,12 @@ test('init: プロファイル未指定（既定）でも.claude/skills/配下�
   const claudeMd = fs.readFileSync(path.join(targetDir, 'CLAUDE.md'), 'utf8');
   assert.match(claudeMd, /@AGENTS\.md/, '既定プロファイルはCLAUDE.mdの@AGENTS.md常時importを維持すること（AC-6）');
   assert.doesNotMatch(result.stdout, /軽量プロファイルで導入しました/);
+  const gateSkill = fs.readFileSync(path.join(targetDir, '.claude', 'skills', 'gate-review', 'SKILL.md'), 'utf8');
+  assert.match(gateSkill, /最終round 4、最大5回/);
+  assert.match(gateSkill, /gate-declare-final-round\.sh/);
+  const roles = fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'config', 'roles.yaml'), 'utf8');
+  assert.equal((roles.match(/blockingを局所的な条項・例外・分岐・フラグ/g) ?? []).length, 4);
+  assert.match(fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'schemas', 'worker-report.schema.yaml'), 'utf8'), /required_addition/);
 });
 
 // ISSUE-522: profile: standard（既定）で導入したconsumer projectに、このリポジトリ自身の
@@ -261,6 +267,10 @@ test('init --profile=lightweight: CLAUDE.mdが@AGENTS.md importを含まず、co
       `軽量プロファイルでも${skill}/SKILL.mdが配置されること`,
     );
   }
+  const lightweightGateSkill = fs.readFileSync(path.join(targetDir, '.claude', 'skills', 'gate-review', 'SKILL.md'), 'utf8');
+  assert.match(lightweightGateSkill, /最終round 4、最大5回/);
+  assert.match(lightweightGateSkill, /通常のblocking差し戻し/);
+  assert.match(fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'schemas', 'state.schema.yaml'), 'utf8'), /round_budget_declaration/);
 
   assert.match(
     result.stdout,

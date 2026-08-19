@@ -1,4 +1,8 @@
 import { digestOf } from './digest.js';
+import {
+  validateDurableRoundBudgetDeclaration,
+  type DurableRoundBudgetDeclaration,
+} from './round-budget-policy.js';
 
 export const REVIEW_EVIDENCE_MARKER = '<!-- agent-skill-chain:gate-review-evidence -->';
 
@@ -59,6 +63,7 @@ export interface ReviewEvidence {
   };
   prompt_digest: string;
   light_review?: LightReviewEvidence;
+  round_budget_declaration?: DurableRoundBudgetDeclaration;
   verdict: EvidenceVerdict;
 }
 
@@ -68,6 +73,7 @@ export interface GithubReviewRecord {
   commit_id: string;
   state: string;
   user: { login: string | null } | null;
+  submitted_at?: string;
 }
 
 export interface VerifiedReviewer {
@@ -249,6 +255,8 @@ function isEvidenceShape(value: ReviewEvidence, findingValidation: FindingValida
     typeof value.prompt_digest === 'string' &&
     /^sha256:[0-9a-f]{64}$/.test(value.prompt_digest) &&
     (value.light_review === undefined || isLightReviewShape(value.light_review)) &&
+    (value.round_budget_declaration === undefined ||
+      validateDurableRoundBudgetDeclaration(value.round_budget_declaration)) &&
     isEvidenceVerdict(value.verdict, true, findingValidation)
   );
 }
@@ -344,6 +352,8 @@ export function validateGithubReviewEvidenceAttempt(
     evidence.expected_count !== first.expected_count ||
     evidence.prompt_digest !== first.prompt_digest ||
     canonicalJson(evidence.light_review ?? null) !== canonicalJson(first.light_review ?? null) ||
+    canonicalJson(evidence.round_budget_declaration ?? null) !==
+      canonicalJson(first.round_budget_declaration ?? null) ||
     evidence.execution.trusted_base_sha !== first.execution.trusted_base_sha ||
     evidence.execution.launcher_digest !== first.execution.launcher_digest ||
     evidence.execution.launcher_token_digest !== first.execution.launcher_token_digest
@@ -374,6 +384,7 @@ export function verifyGithubReviewEvidence(options: {
   writerActors: string[];
   unresolvedWriterActor: boolean;
   expectedLightReview?: LightReviewEvidence;
+  expectedRoundBudgetDeclaration?: DurableRoundBudgetDeclaration;
   expectedArtifacts: { path: string; digest: string }[];
   expectedTrustedBaseSha: string;
   expectedLauncherDigest: string;
@@ -432,8 +443,12 @@ export function verifyGithubReviewEvidence(options: {
   if (!latestValidation.valid) return fail(latestValidation.reason);
   const latestEvidence = latestValidation.value.evidence;
   const expectedLightReview = canonicalJson(options.expectedLightReview ?? null);
+  const expectedRoundBudgetDeclaration = canonicalJson(options.expectedRoundBudgetDeclaration ?? null);
   if (canonicalJson(latestEvidence.light_review ?? null) !== expectedLightReview) {
     return fail(`最新review attemptのlight_reviewがtrusted再評価値と一致しません: ${latestEvidence.attempt_id}`);
+  }
+  if (canonicalJson(latestEvidence.round_budget_declaration ?? null) !== expectedRoundBudgetDeclaration) {
+    return fail(`最新review attemptのround budget宣言がtrusted再評価値と一致しません: ${latestEvidence.attempt_id}`);
   }
   if (latestEvidence.profile !== options.profile) {
     return fail(`最新review attemptのprofileがtrusted profileと一致しません: ${latestEvidence.attempt_id}`);
@@ -471,6 +486,9 @@ export function verifyGithubReviewEvidence(options: {
     if (evidence.expected_count !== expectedCount) return fail(`review ${review.id} のexpected_countが一致しません`);
     if (canonicalJson(evidence.light_review ?? null) !== expectedLightReview) {
       return fail(`review ${review.id} のlight_reviewがtrusted再評価値と一致しません`);
+    }
+    if (canonicalJson(evidence.round_budget_declaration ?? null) !== expectedRoundBudgetDeclaration) {
+      return fail(`review ${review.id} のround budget宣言attestationが一致しません`);
     }
     if (
       options.promptDigestVerification !== 'record_only' &&

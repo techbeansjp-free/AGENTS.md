@@ -66,3 +66,14 @@ test('loadRoles: 全segment workerの rules に再開時の最新レビュー確
     );
   }
 });
+
+test('loadRoles (AC-7): 全4 workerだけに非追記型是正の同一契約を配布する', () => {
+  const roles = loadRoles(process.cwd());
+  const requiredFragments = ['局所的な条項・例外・分岐・フラグ', '不要な要求・挙動', '非追加手段で達成不能', '真因がIssueの範囲外'];
+  for (const role of WORKER_CONTRACTS) {
+    const text = roles.role_contracts[role].rules.join('\n');
+    for (const fragment of requiredFragments) assert.match(text, new RegExp(fragment), `${role}: ${fragment}`);
+  }
+  const reviewerText = roles.role_contracts.gate_reviewer.rules.join('\n');
+  for (const fragment of requiredFragments) assert.doesNotMatch(reviewerText, new RegExp(fragment));
+});

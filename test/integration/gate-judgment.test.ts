@@ -223,6 +223,42 @@ test('gate record-verdict: blocking finding を含む verdict は final=rejected
   assert.equal(report.gate.blockers[0].origin, 'design');
 });
 
+test('gate record-verdict (AC-5): current findingのraw evidence改変を拒否し完全記録を保持する', async (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const reportPath = writeReport(repo.dir, scaffold({ id: 'design' }));
+  const baseFinding = {
+    severity: 'warning', origin: 'design', code: 'NON_FINAL_CATEGORY',
+    evidence: ['DESIGN.md のraw evidence原文'],
+    reclassification: {
+      original_severity: 'blocking', classified_severity: 'warning',
+      downgrade_reason: '限定4類型外',
+      outside_blocking_categories: {
+        previous_blocking_unresolved: false,
+        issue_purpose_blocked: false,
+        test_build_regression: false,
+        data_loss_or_security: false,
+      },
+      raw_evidence: ['要約へ改変した文字列'],
+      follow_up_issue_id: 'ISSUE-900',
+    },
+  };
+  const rejected = runCli(['gate', 'record-verdict', reportPath], {
+    cwd: repo.dir,
+    input: JSON.stringify({ conformance: 'pass', falsification: 'pass', blockers: [baseFinding] }),
+  });
+  assert.equal(rejected.status, 1);
+  assert.match(rejected.stderr, /raw evidence原文.*完全一致/);
+
+  baseFinding.reclassification.raw_evidence = [...baseFinding.evidence];
+  const accepted = runCli(['gate', 'record-verdict', reportPath], {
+    cwd: repo.dir,
+    input: JSON.stringify({ conformance: 'pass', falsification: 'pass', blockers: [baseFinding] }),
+  });
+  assert.equal(accepted.status, 0, accepted.stderr);
+  assert.deepEqual((readReport(reportPath).gate.blockers[0] as unknown as { reclassification: { raw_evidence: string[] } }).reclassification.raw_evidence, baseFinding.evidence);
+});
+
 test('gate record-verdict: inconclusive の verdict は silent pass せず final=human_required になる', async (t) => {
   const repo = createTmpRepo({ backend: 'local' });
   t.after(() => repo.cleanup());
