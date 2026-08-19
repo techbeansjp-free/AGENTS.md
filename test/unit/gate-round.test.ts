@@ -10,7 +10,13 @@ import {
   summarizeFindingEvidence,
   validateGateRoundLimit,
 } from '../../src/lib/gate-round.js';
-import { renderReviewEvidence, type GithubReviewRecord, type ReviewEvidence } from '../../src/lib/review-evidence.js';
+import {
+  renderReviewAttemptStart,
+  renderReviewEvidence,
+  type GithubReviewRecord,
+  type ReviewAttemptStart,
+  type ReviewEvidence,
+} from '../../src/lib/review-evidence.js';
 
 function evidence(options: {
   attempt: string;
@@ -325,4 +331,42 @@ test('最新attempt選択: 同一Issue・gate・targetの最大review IDだけ�
     targetSha: 'f'.repeat(40),
     trustedActors: ['trusted'],
   }), 'attempt-current');
+});
+
+test('最新attempt選択: evidenceがまだ無いdurable attemptを旧complete evidenceより優先する', () => {
+  const targetSha = 'f'.repeat(40);
+  const old = evidence({ attempt: 'attempt-old', slot: 1, target: targetSha });
+  const attempt: ReviewAttemptStart = {
+    schema_version: 'agent-skill-chain/gate-review-attempt/v1',
+    issue_id: 'ISSUE-729',
+    gate: 'implementation',
+    profile: 'strict',
+    target_sha: targetSha,
+    attempt_id: 'attempt-current-zero',
+    expected_count: 2,
+    execution: {
+      trusted_base_sha: 'b'.repeat(40),
+      launcher_token_digest: `sha256:${'d'.repeat(64)}`,
+    },
+    reviewers: [
+      { slot: 1, run_id: 'review-current-zero-1' },
+      { slot: 2, run_id: 'review-current-zero-2' },
+    ],
+  };
+  assert.equal(latestGateAttemptId({
+    reviews: [
+      review(1, old),
+      {
+        id: 2,
+        body: renderReviewAttemptStart(attempt),
+        commit_id: targetSha,
+        state: 'COMMENTED',
+        user: { login: 'trusted' },
+      },
+    ],
+    issueId: 'ISSUE-729',
+    gate: 'implementation',
+    targetSha,
+    trustedActors: ['trusted'],
+  }), 'attempt-current-zero');
 });

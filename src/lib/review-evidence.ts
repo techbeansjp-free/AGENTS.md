@@ -2,6 +2,7 @@ import { digestOf } from './digest.js';
 import { aggregateGateAttempt } from './gate-verdict-aggregation.js';
 
 export const REVIEW_EVIDENCE_MARKER = '<!-- agent-skill-chain:gate-review-evidence -->';
+export const REVIEW_ATTEMPT_MARKER = '<!-- agent-skill-chain:gate-review-attempt -->';
 
 const FINDING_EVIDENCE_MIN_LENGTH = 16;
 const AC_ID_PATTERN = /(?:^|[^A-Za-z0-9])AC-[0-9]+(?:$|[^A-Za-z0-9])/i;
@@ -61,6 +62,21 @@ export interface ReviewEvidence {
   prompt_digest: string;
   light_review?: LightReviewEvidence;
   verdict: EvidenceVerdict;
+}
+
+export interface ReviewAttemptStart {
+  schema_version: 'agent-skill-chain/gate-review-attempt/v1';
+  issue_id: string;
+  gate: ReviewEvidence['gate'];
+  profile: ReviewEvidence['profile'];
+  target_sha: string;
+  attempt_id: string;
+  expected_count: 1 | 2;
+  execution: {
+    trusted_base_sha: string;
+    launcher_token_digest: string;
+  };
+  reviewers: { run_id: string; slot: 1 | 2 }[];
 }
 
 export interface GithubReviewRecord {
@@ -128,11 +144,22 @@ export function renderReviewEvidence(evidence: ReviewEvidence): string {
   return `${REVIEW_EVIDENCE_MARKER}\n\`\`\`json\n${JSON.stringify(evidence, null, 2)}\n\`\`\`\n`;
 }
 
+export function renderReviewAttemptStart(attempt: ReviewAttemptStart): string {
+  return `${REVIEW_ATTEMPT_MARKER}\n\`\`\`json\n${JSON.stringify(attempt, null, 2)}\n\`\`\`\n`;
+}
+
 export function parseReviewEvidence(body: string): ReviewEvidence | undefined {
   if (!body.includes(REVIEW_EVIDENCE_MARKER)) return undefined;
   const match = /```json\s*\n([\s\S]*?)\n```/.exec(body);
   if (!match) throw new Error('構造化review evidenceのJSON blockがありません');
   return JSON.parse(match[1]) as ReviewEvidence;
+}
+
+export function parseReviewAttemptStart(body: string): ReviewAttemptStart | undefined {
+  if (!body.includes(REVIEW_ATTEMPT_MARKER)) return undefined;
+  const match = /```json\s*\n([\s\S]*?)\n```/.exec(body);
+  if (!match) throw new Error('構造化review attemptのJSON blockがありません');
+  return JSON.parse(match[1]) as ReviewAttemptStart;
 }
 
 function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerification {
@@ -261,6 +288,117 @@ export interface ValidatedGithubReviewEvidence {
   actor: string;
 }
 
+export interface ValidatedGithubReviewAttemptStart {
+  api: GithubReviewRecord;
+  attempt: ReviewAttemptStart;
+  reviewId: number;
+  actor: string;
+}
+
+export type GithubReviewAttemptStartValidation =
+  | { valid: true; value: ValidatedGithubReviewAttemptStart }
+  | { valid: false; reason: string };
+
+function isReviewAttemptStartShape(value: unknown): value is ReviewAttemptStart {
+  if (!value || typeof value !== 'object') return false;
+  const attempt = value as Partial<ReviewAttemptStart>;
+  const expectedCount = attempt.profile === 'strict' ? 2 : 1;
+  return (
+    attempt.schema_version === 'agent-skill-chain/gate-review-attempt/v1' &&
+    typeof attempt.issue_id === 'string' &&
+    /^ISSUE-[0-9]+$/.test(attempt.issue_id) &&
+    ['spec', 'design', 'implementation', 'validation'].includes(attempt.gate ?? '') &&
+    ['standard', 'strict'].includes(attempt.profile ?? '') &&
+    typeof attempt.target_sha === 'string' &&
+    /^[0-9a-f]{40}$/.test(attempt.target_sha) &&
+    typeof attempt.attempt_id === 'string' &&
+    /^attempt-[A-Za-z0-9._-]+$/.test(attempt.attempt_id) &&
+    attempt.expected_count === expectedCount &&
+    !!attempt.execution &&
+    typeof attempt.execution.trusted_base_sha === 'string' &&
+    /^[0-9a-f]{40}$/.test(attempt.execution.trusted_base_sha) &&
+    typeof attempt.execution.launcher_token_digest === 'string' &&
+    /^sha256:[0-9a-f]{64}$/.test(attempt.execution.launcher_token_digest) &&
+    Array.isArray(attempt.reviewers) &&
+    attempt.reviewers.length === expectedCount &&
+    attempt.reviewers.every((reviewer, index) =>
+      reviewer.slot === index + 1 &&
+      /^review-[A-Za-z0-9._-]+$/.test(reviewer.run_id)
+    ) &&
+    new Set(attempt.reviewers.map((reviewer) => reviewer.run_id)).size === expectedCount
+  );
+}
+
+export function validateGithubReviewAttemptStartRecord(
+  review: GithubReviewRecord,
+  options: {
+    issueId: string;
+    gate: ReviewEvidence['gate'];
+    trustedActors: string[];
+  },
+): GithubReviewAttemptStartValidation {
+  let parsed: unknown;
+  try {
+    parsed = parseReviewAttemptStart(review.body);
+  } catch {
+    return { valid: false, reason: `review ${review.id} のattempt JSONを検証できません` };
+  }
+  if (!isReviewAttemptStartShape(parsed)) {
+    return { valid: false, reason: `review ${review.id} のattempt形式が不正です` };
+  }
+  if (parsed.issue_id !== options.issueId || parsed.gate !== options.gate) {
+    return { valid: false, reason: `review ${review.id} は対象Issue/gateのattemptではありません` };
+  }
+  const reviewId = Number(review.id);
+  if (!Number.isSafeInteger(reviewId) || reviewId <= 0) {
+    return { valid: false, reason: `review ${review.id} のAPI IDが不正です` };
+  }
+  const actor = review.user?.login ?? '';
+  if (!actor) return { valid: false, reason: `review ${review.id} のactorを解決できません` };
+  if (!options.trustedActors.includes(actor)) {
+    return { valid: false, reason: `review ${review.id} のactorはtrusted recorderではありません` };
+  }
+  if (review.state.toUpperCase() === 'DISMISSED') {
+    return { valid: false, reason: `review ${review.id} はdismiss済みです` };
+  }
+  if (review.commit_id !== parsed.target_sha) {
+    return { valid: false, reason: `review ${review.id} のAPI commit SHAがattemptと一致しません` };
+  }
+  return { valid: true, value: { api: review, attempt: parsed, reviewId, actor } };
+}
+
+export function latestGithubReviewAttemptStartRecord(options: {
+  reviews: GithubReviewRecord[];
+  issueId: string;
+  gate: ReviewEvidence['gate'];
+  targetSha: string;
+  trustedActors: string[];
+}): GithubReviewAttemptStartValidation | undefined {
+  const candidates = options.reviews.flatMap((review) => {
+    if (!review.body.includes(REVIEW_ATTEMPT_MARKER)) return [];
+    let routed: Partial<ReviewAttemptStart> | undefined;
+    try {
+      routed = parseReviewAttemptStart(review.body);
+    } catch {
+      return [];
+    }
+    if (
+      routed?.issue_id !== options.issueId ||
+      routed.gate !== options.gate ||
+      routed.target_sha !== options.targetSha
+    ) {
+      return [];
+    }
+    const reviewId = Number(review.id);
+    return [{ review, reviewId: Number.isSafeInteger(reviewId) ? reviewId : -1 }];
+  });
+  if (candidates.length === 0) return undefined;
+  const latest = candidates.reduce((current, candidate) =>
+    candidate.reviewId > current.reviewId ? candidate : current
+  );
+  return validateGithubReviewAttemptStartRecord(latest.review, options);
+}
+
 export type GithubReviewEvidenceValidation =
   | { valid: true; value: ValidatedGithubReviewEvidence }
   | { valid: false; reason: string };
@@ -387,6 +525,23 @@ export function verifyGithubReviewEvidence(options: {
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
   }
+  const currentAttemptRecord = latestGithubReviewAttemptStartRecord({
+    reviews: options.reviews,
+    issueId: options.issueId,
+    gate: options.gate,
+    targetSha: options.targetSha,
+    trustedActors: options.trustedActors,
+  });
+  if (currentAttemptRecord && !currentAttemptRecord.valid) return fail(currentAttemptRecord.reason);
+  const currentAttempt = currentAttemptRecord?.value.attempt;
+  if (currentAttempt) {
+    if (currentAttempt.profile !== options.profile) {
+      return fail(`current review attemptのprofileがtrusted profileと一致しません: ${currentAttempt.attempt_id}`);
+    }
+    if (currentAttempt.execution.trusted_base_sha !== options.expectedTrustedBaseSha) {
+      return fail(`current review attemptのtrusted base SHAが一致しません: ${currentAttempt.attempt_id}`);
+    }
+  }
   const expectedByPath = new Map(options.expectedArtifacts.map((artifact) => [artifact.path, artifact.digest]));
   const matching: {
     api: GithubReviewRecord;
@@ -420,8 +575,15 @@ export function verifyGithubReviewEvidence(options: {
   }
 
   if (matching.length === 0) return fail('現在のtarget SHA用review evidenceがありません');
-  const latest = matching.reduce((current, candidate) => candidate.reviewId > current.reviewId ? candidate : current);
-  const latestValidation = validateGithubReviewEvidenceRecord(latest.api, {
+  const latestEvidenceCandidate = currentAttempt
+    ? matching
+        .filter((candidate) => candidate.evidence.attempt_id === currentAttempt.attempt_id)
+        .sort((left, right) => right.reviewId - left.reviewId)[0]
+    : matching.reduce((current, candidate) => candidate.reviewId > current.reviewId ? candidate : current);
+  if (!latestEvidenceCandidate) {
+    return fail(`current review attemptのreview evidenceがありません: ${currentAttempt?.attempt_id}`);
+  }
+  const latestValidation = validateGithubReviewEvidenceRecord(latestEvidenceCandidate.api, {
     issueId: options.issueId,
     gate: options.gate,
     trustedActors: options.trustedActors,
@@ -454,6 +616,16 @@ export function verifyGithubReviewEvidence(options: {
   const attemptValidation = validateGithubReviewEvidenceAttempt(validatedCandidates);
   if (!attemptValidation.valid) return fail(attemptValidation.reason);
   const candidates = attemptValidation.values;
+
+  if (currentAttempt) {
+    const expectedReviewers = new Map(currentAttempt.reviewers.map((reviewer) => [reviewer.slot, reviewer.run_id]));
+    if (candidates.some(({ evidence }) =>
+      evidence.execution.launcher_token_digest !== currentAttempt.execution.launcher_token_digest ||
+      expectedReviewers.get(evidence.reviewer.slot) !== evidence.reviewer.run_id
+    )) {
+      return fail(`current review attemptのlauncher tokenまたはreviewer slotが一致しません: ${currentAttempt.attempt_id}`);
+    }
+  }
 
   const expectedCount = options.profile === 'strict' ? 2 : 1;
   if (latestEvidence.expected_count !== expectedCount) {

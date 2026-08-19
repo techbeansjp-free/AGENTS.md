@@ -112,6 +112,39 @@ node -e '
   fs.writeFileSync(file, JSON.stringify(token) + "\n", {mode: 0o600, flag: "wx"});
 ' "$TOKEN_FILE" "$attempt_id" "$COUNT" "$PROFILE" "$TARGET_SHA" "$BASE_SHA" "$PR_NUMBER" "$token_nonce" "${run_ids[@]}"
 
+attempt_request="$(node -e '
+  const crypto = require("node:crypto");
+  const fs = require("node:fs");
+  const [tokenFile, issueId, gate, targetSha] = process.argv.slice(1);
+  const token = JSON.parse(fs.readFileSync(tokenFile, "utf8"));
+  const canonical = (value) => {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value && typeof value === "object") {
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+    }
+    return JSON.stringify(value);
+  };
+  const { consumed_slots: _consumedSlots, ...tokenPayload } = token;
+  const launcherTokenDigest = `sha256:${crypto.createHash("sha256").update(canonical(tokenPayload)).digest("hex")}`;
+  const attempt = {
+    schema_version: "agent-skill-chain/gate-review-attempt/v1",
+    issue_id: issueId,
+    gate,
+    profile: token.profile,
+    target_sha: targetSha,
+    attempt_id: token.attempt_id,
+    expected_count: token.expected_count,
+    execution: {
+      trusted_base_sha: token.base_sha,
+      launcher_token_digest: launcherTokenDigest,
+    },
+    reviewers: token.slots,
+  };
+  const body = `<!-- agent-skill-chain:gate-review-attempt -->\n\`\`\`json\n${JSON.stringify(attempt, null, 2)}\n\`\`\`\n`;
+  process.stdout.write(JSON.stringify({body, event: "COMMENT", commit_id: targetSha}));
+' "$TOKEN_FILE" "$ISSUE_ID" "$GATE_ID" "$TARGET_SHA")"
+gh api -X POST "repos/{owner}/{repo}/pulls/$PR_NUMBER/reviews" --input - <<<"$attempt_request" >/dev/null
+
 for slot in $(seq 1 "$COUNT"); do
   run_id="${run_ids[$((slot - 1))]}"
   ASC_BASE_REF="$BASE_SHA" \

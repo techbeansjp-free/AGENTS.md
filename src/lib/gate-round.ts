@@ -3,6 +3,7 @@ import { parseGhArrayResponse } from './gh-json.js';
 import {
   validateGithubReviewEvidenceAttempt,
   validateGithubReviewEvidenceRecord,
+  latestGithubReviewAttemptStartRecord,
   type GithubReviewRecord,
   type ReviewEvidence,
   type ValidatedGithubReviewEvidence,
@@ -218,6 +219,8 @@ export function latestGateAttemptId(options: {
   targetSha: string;
   trustedActors: string[];
 }): string | undefined {
+  const started = latestGithubReviewAttemptStartRecord(options);
+  if (started?.valid) return started.value.attempt.attempt_id;
   return options.reviews
     .flatMap((review) => {
       const validation = validateGithubReviewEvidenceRecord(review, {

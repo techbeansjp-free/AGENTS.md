@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
+import { parseReviewAttemptStart } from '../../src/lib/review-evidence.js';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -21,6 +22,7 @@ interface Fixture {
   npmTrace: string;
   setPullBase(baseSha: string): void;
   repositoryDispatches(): unknown[];
+  reviews(): unknown[];
   run(): { status: number; stdout: string; stderr: string };
   cleanup(): void;
 }
@@ -108,6 +110,9 @@ function createFixture(): Fixture {
     repositoryDispatches() {
       return stub.readState().repositoryDispatches ?? [];
     },
+    reviews() {
+      return stub.readState().pullReviews ?? [];
+    },
     run() {
       const result = spawnSync(
         path.join(repo.dir, '.agent-skill-chain', 'scripts', 'gate-local-review.sh'),
@@ -148,6 +153,14 @@ test('gate-local-review: default branch HEADがbase_shaより前進していて�
   assert.match(trace, /remotes=\n/);
   assert.match(trace, new RegExp(`trusted_base=${fixture.baseSha}`));
   assert.match(trace, /review_root=.*agent-skill-chain-local-review\.[^/]+\/repo/);
+  const reviews = fixture.reviews() as { body: string; commit_id: string }[];
+  assert.equal(reviews.length, 1);
+  const attempt = parseReviewAttemptStart(reviews[0].body);
+  assert.ok(attempt);
+  assert.equal(attempt.target_sha, fixture.targetSha);
+  assert.equal(attempt.execution.trusted_base_sha, fixture.baseSha);
+  assert.equal(attempt.expected_count, 1);
+  assert.match(attempt.execution.launcher_token_digest, /^sha256:[0-9a-f]{64}$/);
   assert.deepEqual(fixture.repositoryDispatches(), []);
 });
 

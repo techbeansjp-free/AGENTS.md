@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {
   evidencePromptDigest,
   isEvidenceVerdict,
+  renderReviewAttemptStart,
   renderReviewEvidence,
   verifyGithubReviewEvidence,
   type GithubReviewRecord,
   type LightReviewEvidence,
+  type ReviewAttemptStart,
   type ReviewEvidence,
 } from '../../src/lib/review-evidence.js';
 
@@ -66,6 +68,38 @@ function review(id: number, slot: 1 | 2, overrides: Partial<GithubReviewRecord> 
     state: 'COMMENTED',
     user: { login: 'trusted-reviewer' },
     ...overrides,
+  };
+}
+
+function attemptReview(
+  id: number,
+  attemptId: string,
+  overrides: Partial<ReviewAttemptStart> = {},
+): GithubReviewRecord {
+  const attempt: ReviewAttemptStart = {
+    schema_version: 'agent-skill-chain/gate-review-attempt/v1',
+    issue_id: 'ISSUE-271',
+    gate: 'spec',
+    profile: 'strict',
+    target_sha: targetSha,
+    attempt_id: attemptId,
+    expected_count: 2,
+    execution: {
+      trusted_base_sha: baseSha,
+      launcher_token_digest: launcherTokenDigest,
+    },
+    reviewers: [
+      { slot: 1, run_id: 'review-run-1' },
+      { slot: 2, run_id: 'review-run-2' },
+    ],
+    ...overrides,
+  };
+  return {
+    id,
+    body: renderReviewAttemptStart(attempt),
+    commit_id: targetSha,
+    state: 'COMMENTED',
+    user: { login: 'trusted-reviewer' },
   };
 }
 
@@ -202,6 +236,32 @@ test('retry: same-SHAの旧complete attemptを無視して最新attemptだけを
     review(3, 2, { body: renderReviewEvidence(newTwo) }),
   ]);
   assert.equal(validAfterMalformedHistory.final, 'approved');
+});
+
+test('ISSUE-733 AC-24: 耐久記録されたcurrent attemptがevidence 0件でも旧complete attemptへfallbackしない', () => {
+  const oldOne = evidence(1, { attempt_id: 'attempt-old' });
+  const oldTwo = evidence(2, { attempt_id: 'attempt-old' });
+  const result = verify([
+    review(1, 1, { body: renderReviewEvidence(oldOne) }),
+    review(2, 2, { body: renderReviewEvidence(oldTwo) }),
+    attemptReview(3, 'attempt-current-zero'),
+  ]);
+  assert.equal(result.final, 'human_required');
+  assert.match(result.reason ?? '', /current review attemptのreview evidenceがありません/);
+});
+
+test('ISSUE-733 AC-24: 耐久記録されたcurrent attemptが一部slotだけでも旧complete attemptへfallbackしない', () => {
+  const oldOne = evidence(1, { attempt_id: 'attempt-old' });
+  const oldTwo = evidence(2, { attempt_id: 'attempt-old' });
+  const currentOne = evidence(1, { attempt_id: 'attempt-current-partial' });
+  const result = verify([
+    review(1, 1, { body: renderReviewEvidence(oldOne) }),
+    review(2, 2, { body: renderReviewEvidence(oldTwo) }),
+    attemptReview(3, 'attempt-current-partial'),
+    review(4, 1, { body: renderReviewEvidence(currentOne) }),
+  ]);
+  assert.equal(result.final, 'human_required');
+  assert.match(result.reason ?? '', /独立review evidence件数が不足しています/);
 });
 
 test('provenance: 同一actorのtrusted recorderをrun attestationで区別し、未登録・actor未解決は拒否する', () => {
