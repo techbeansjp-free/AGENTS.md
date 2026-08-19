@@ -138,11 +138,19 @@ _ASC_CLI_REPO_ROOT="$(cd -- "$_ASC_CLI_RESOLVE_DIR/../.." &>/dev/null && pwd)"
 信頼境界の担保は準備段のビルドそのものではなく、記録時の検査と digest が担っている（`src/commands/gate.ts`）:
 
 ```ts
-    if (executionRoot !== root) throw new CliError('Issue worktreeのcandidate recorderからevidenceを投稿できません');
+    if (executionRoot !== root) {
+      throw new CliError(
+        'Issue worktreeのcandidate recorderからevidenceを投稿できません。repository default branch worktreeから実行してください',
+      );
+    }
 ```
 
 ```ts
-    if (head !== trustedBaseSha) throw new CliError('recorder HEADがtrusted base SHAと一致しません');
+    if (git(['merge-base', '--is-ancestor', trustedBaseSha, 'HEAD'], root).status !== 0) {
+      throw new CliError(
+        'trusted base SHAがrecorder HEADから到達不能です。記録実行worktreeでgit fetchと早送りを行ってください',
+      );
+    }
 ```
 
 証跡へ記録される実行環境の値（同 `src/commands/gate.ts`）:
@@ -233,7 +241,7 @@ export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | 
 - 要件2: `package.json`・lockfile・build script のいずれも持たない consumer project でも準備段が成立する。
 - 要件3: 信頼実行環境は次の全てを満たす。(a) レビュア起動・prompt 生成・verdict 記録に使う実行コードと asset が、審査対象（target SHA の Issue worktree）由来でない。(b) その由来が実行時に識別でき、証跡へ記録される値（trusted base SHA・launcher digest・隔離種別）が consumer project での実行においても実際に埋まる。(c) 隔離環境に登録された remote が1件も存在しない。隔離 clone は local path から作られるため remote の URL に credential を含まず、「URL が credential を含まないこと」を条件に置くと常に真となり検査として機能しない。remote が登録されたまま残れば、ambient な credential helper や global Git 設定を経由して外部への push・fetch 経路が生きるため、remote の不在そのものを要件とする。
 - 要件4: 信頼実行環境を用意できない場合は実行しない。審査対象コードへのフォールバックを行わず、非0終了と、不成立の前提および是正手段を含む日本語メッセージを出す。
-- 要件5: 既存の拒否経路（Issue worktree からの記録、recorder HEAD 不一致、protected base worktree の dirty）は現状のまま有効である。
+- 要件5: 既存の拒否経路（Issue worktree の candidate recorder からの記録、recorder HEAD から到達不能な trusted base SHA、protected base worktree の dirty）は現状のまま有効である。同時に、recorder HEAD が repository default branch 上で trusted base SHA より前進しているだけの状態を拒否しない現行の受理条件も維持し、recorder HEAD と trusted base SHA の完全一致を要求する判定へ戻さない。
 - 要件6: launcher digest の算出対象は配布集合の要素のみで構成する（上限）。同時に、レビュア起動・prompt 生成・verdict 記録を実際に行う実行コードと、その実行系が隔離 clone から読み込む asset のうち配布集合に属するものは、必ず算出対象に含める（下限）。下限の具体的な範囲は、実地確認した事実に原文引用した現行 `LOCAL_REVIEW_LAUNCHER_PATHS` の要素から `.agent-skill-chain/project/` 配下の2件を除いた残り全件を下回らない。配布集合外の文書（consumer 固有 project policy 文書を含む）は算出対象に含めず、その有無・内容によって証跡記録が失敗せず digest 値も変動しない。加えて、算出対象として定めた配布集合の要素のいずれかを trusted base SHA から取得できない場合は、取得できた要素だけの部分集合で digest を算出せず、非0終了して証跡を投稿しない。算出対象の許容範囲は、本要件が定めるこの上限（配布集合の要素のみ）と下限のみによって一意に定まる。本 SPEC の他の記述は下限の根拠と除外の妥当性を述べるものであり、配布集合より狭い上限を追加で課さない。
 - 要件7: 調達実行コードは、次の全てを満たす場合にのみ実行する。(a) 調達元の識別子（何をどこから取得したかを一意に示す値）が実行時に確定する。(b) 調達した実体の内容から算出した digest が、審査対象（target SHA の Issue worktree）が変更しうる情報源に依存しない期待値と一致する。(c) (a) の識別子と (b) の digest を、本要件の充足によって新規に投稿される証跡へ記録する。(d) 調達候補は、次の2つのパス条件をいずれも満たす場合にのみ採用・実行する。第一に、調達候補の実体パスが、本リポジトリの linked worktree のうち protected base worktree 以外の配下にないこと。第二に、当該候補がレビュア起動・prompt 生成・verdict 記録の実行時に読み込む依存モジュールについて、その供給元（候補パッケージ直下および候補と同じ親の `node_modules`）に置かれた参照経路（symbolic link 等）を全て解決した後の実体パスが、いずれも protected base worktree 以外の linked worktree 配下にないこと。いずれかを満たさない候補は候補全体として採用・実行せず、隔離 clone から当該候補または当該依存への参照経路も作らない。候補の実体パスのみを照合し、依存の供給元に置かれた参照経路の解決後の実体パスを照合しない実装は本項を満たさない。いずれかを満たせない場合は調達実行コードを実行せず、要件4 の経路で非0終了する。本要件が由来・完全性を検証して証跡へ記録する対象は用語表が定める調達実行コードであり、審査対象外から供給される実行時依存の閉包に対する積極的な完全性検証はスコープ外とする。ただし (d) による審査対象からの依存解決の排除は本要件の一部であり、スコープ外ではない。また (c) が記録を必須とする対象は本要件の充足によって新規に投稿される証跡に限り、本要件を満たす機構の導入より前に投稿済みの既存証跡が当該記録を持たないことを、証跡の形式不適合として扱うことは求めない。
 
@@ -241,7 +249,7 @@ export function loadProtectedCoreReviewPolicy(root: string): CoreReviewPolicy | 
 
 要件6 が信頼境界を弱めない理由（束縛対象の定義）: 除外の正当化は「別の値がリポジトリ全体を束縛するから安全」という網羅性の主張には置かない。launcher digest は証跡の execution 節で `launcher`・`trusted_base_sha`・`isolation: ephemeral_clone` と併記される値であり（実地確認した事実の execution 引用）、その役割は「この verdict を生成した実行系が、審査対象ではなく隔離 clone 内の保護 base 由来であること」を後から検証可能にすることである。よって digest が必ず束縛しなければならない対象は、レビュア起動・prompt 生成・verdict 記録を実際に実行するコードと、その実行系が隔離 clone から読み込む asset である。この定義は要件6 の下限のみを与える規範であり、上限は与えない——当該定義に当たるもの（配布集合に属する範囲）を算出対象から外してはならないが、当該定義に当たらない配布集合の要素を算出対象へ加えることは、要件6 が定める唯一の上限（配布集合）の内側であり妨げない。下限を定めなければ、算出対象を極小の部分集合へ縮小した設計が要件6 に反さないことになり、現行の束縛強度を下回る縮小を許してしまうためである（安全側ラチェット・不変条件 I8）。要件6 の下限は、この定義に当たる要素と、現行 `LOCAL_REVIEW_LAUNCHER_PATHS` から `.agent-skill-chain/project/` 配下の2件を除いた列挙との和集合である。列挙側の要素を、それが当該定義に当たるか否かに関わらず下限へ含めるのは、現行実装が既に束縛している対象を下回らないためであり（安全側ラチェット・不変条件 I8）、列挙側の要素はいずれも配布集合に属するため、両者は上限の内側で同時に充足できる。consumer 固有の project policy 文書を算出対象から外す根拠は、それが上限（配布集合）の外にあることである。隔離 clone 内の実行系がこれらの文書を読まないことは、この除外が束縛の実効性を損なわないことを補足する事実であり、配布集合より狭い上限を課すものではない。
 
-除外対象が信頼判断に影響しない理由: project policy 文書がコアレビューの要否・reviewer capability・証跡の trusted actor の判断へ影響する経路は次の2つであり、いずれも launcher digest とは独立の機構で束縛される。(a) コアレビューの分類と capability 要求は protected base worktree の root を trust root として読む（実地確認した事実の `policyRoot` 引用）。本 SPEC が対象とするローカルゲートレビュー経路では、この root は「protected base worktree が dirty でないこと」と「recorder HEAD が trusted base SHA と一致すること」の既存検査（同引用。要件5・AC-4 が維持を要求する）を通過した作業ツリーであり、読み取り内容はその時点で trusted base SHA に束縛される。(b) 証跡の trusted actor 登録は GitHub の保護された default branch から取得する（同 `loadProtectedCoreReviewPolicy` 引用）。どちらの経路も隔離 clone 内の blob を読まないため、launcher digest の算出対象から当該文書を外しても、これら2経路の束縛は変化しない。
+除外対象が信頼判断に影響しない理由: project policy 文書がコアレビューの要否・reviewer capability・証跡の trusted actor の判断へ影響する経路は次の2つであり、いずれも launcher digest とは独立の機構で束縛される。(a) コアレビューの分類と capability 要求は protected base worktree の root を trust root として読む（実地確認した事実の `policyRoot` 引用）。本 SPEC が対象とするローカルゲートレビュー経路では、この root は「protected base worktree が dirty でないこと」と「recorder HEAD が repository default branch 上にあり trusted base SHA がそこから到達可能であること」の既存検査（同引用。要件5・AC-4 が維持を要求する）を通過した作業ツリーであり、読み取り内容は審査対象（target SHA の Issue worktree）ではなく保護された default branch の履歴に束縛される。(b) 証跡の trusted actor 登録は GitHub の保護された default branch から取得する（同 `loadProtectedCoreReviewPolicy` 引用）。どちらの経路も隔離 clone 内の blob を読まないため、launcher digest の算出対象から当該文書を外しても、これら2経路の束縛は変化しない。
 
 加えて、当該文書を持たない consumer では影響そのものが存在しない。方針文書が無ければコアレビュー方針は解決されず `policy_absent` となり（同 `classifyCoreReview` 引用）、そこから導かれる制約が生じない。この状態で当該文書の digest 取得を必須にすることは、信頼判断へ影響しない対象を理由に実行を停止させるだけである。
 
@@ -288,9 +296,9 @@ AC-14 は個別要件の検証に加えて、要求全体（consumer project か
 
 #### AC-4: 既存の拒否経路が維持される
 
-- Given: recorder の HEAD が trusted base SHA と異なる場合、Issue worktree から記録を試みる場合、protected base worktree が dirty な場合のそれぞれ
+- Given: trusted base SHA が recorder の HEAD から到達不能な場合、Issue worktree の candidate recorder から記録を試みる場合、protected base worktree が dirty な場合のそれぞれ。加えて対照として、recorder の HEAD が repository default branch 上で trusted base SHA より前進しているだけの場合
 - When: ローカルゲートレビューまたは証跡投稿を実行する
-- Then: いずれも現状と同じく非0終了し、実地確認した事実に原文引用した3メッセージ（`recorder HEADがtrusted base SHAと一致しません`、`Issue worktreeのcandidate recorderからevidenceを投稿できません`、`protected base worktreeがdirtyです。review evidenceを投稿しません。`）が失われていない
+- Then: 前3者はいずれも現状と同じく非0終了して証跡を投稿せず、実地確認した事実に原文引用した3メッセージ（`trusted base SHAがrecorder HEADから到達不能です。記録実行worktreeでgit fetchと早送りを行ってください`、`Issue worktreeのcandidate recorderからevidenceを投稿できません。repository default branch worktreeから実行してください`、`protected base worktreeがdirtyです。review evidenceを投稿しません。`）が失われていない。対照の前進のみの場合は拒否せず証跡を投稿する（recorder の受理条件を trusted base SHA との完全一致から到達可能性検査へ置き換えた現行挙動を回帰させないため）
 - 検証方法見込み: `automated`
 
 #### AC-5: 信頼実行環境を用意できない場合は明示的に失敗する
