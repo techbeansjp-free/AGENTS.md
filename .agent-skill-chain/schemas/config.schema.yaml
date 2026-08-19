@@ -61,6 +61,7 @@ properties:
         properties:
           narrowing_threshold: {type: integer, minimum: 1}
           cutoff_threshold: {type: integer, minimum: 2}
+      prompt_max_input_bytes: {type: integer, minimum: 1}
   worker:
     type: object
     required: []
