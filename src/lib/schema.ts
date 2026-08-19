@@ -2,6 +2,11 @@ import path from 'node:path';
 import { Ajv, type ValidateFunction } from 'ajv';
 import { readYamlFile } from './yaml-io.js';
 import { resolveAsset } from './paths.js';
+import { traceRuntimeDependencyResolution } from './dependency-trace.js';
+
+// Issue #759: 当該依存を実際に読み込む本モジュールを基点に、実行時の module 解決が返す
+// 解決先を参照経路ごと解決した実体パスとして観測する（ASC_DEPENDENCY_TRACE_FILE 設定時のみ）。
+traceRuntimeDependencyResolution(import.meta.url, ['ajv']);
 
 // スキーマ側が schema_version（非標準の注記キー）を宣言しているため strict:false で許容する。
 const ajv = new Ajv({ strict: false, allErrors: true });

@@ -8,7 +8,7 @@ import { parse, stringify } from 'yaml';
 import { createTmpRepo, FIXED_TIMESTAMP } from '../helpers/tmp-repo.js';
 import { runCli } from '../helpers/cli.js';
 import { createGhStub } from '../helpers/gh-stub.js';
-import { artifactDigestOf } from '../../src/lib/digest.js';
+import { ARTIFACT_ABSENT_DIGEST, artifactDigestOf } from '../../src/lib/digest.js';
 import { reviewFilePath as productionReviewFilePath } from '../../src/lib/local-state.js';
 
 // このファイルは名前が近い2つの別コマンドをまとめて検証する:
@@ -24,6 +24,20 @@ import { reviewFilePath as productionReviewFilePath } from '../../src/lib/local-
 // 自前計算する。gate.tsのartifactDigestAtShaが比較する期待値と一致させるため。
 function sha256(content: Buffer | string): string {
   return artifactDigestOf(content);
+}
+
+function hideLooseBlob(repoDir: string, targetSha: string, artifactPath: string): void {
+  const blobSha = execFileSync('git', ['rev-parse', `${targetSha}:${artifactPath}`], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  }).trim();
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  }).trim();
+  const objectPath = path.resolve(repoDir, commonDir, 'objects', blobSha.slice(0, 2), blobSha.slice(2));
+  assert.equal(fs.existsSync(objectPath), true);
+  fs.renameSync(objectPath, `${objectPath}.unreadable`);
 }
 
 interface GateReport {
@@ -122,6 +136,22 @@ test('gate reconcile: 成果物が変化していないcommitへは両ゲート�
   assert.match(reconcile.stdout, /invalidated: \(none\)/);
 });
 
+test('gate reconcile: 存在しないtarget SHAを不在継続として扱わない', (t) => {
+  const { repo } = setupApprovedSpecAndDesignGates();
+  t.after(() => repo.cleanup());
+  const designReportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'design.yaml');
+  const designReport = parse(fs.readFileSync(designReportPath, 'utf8')) as GateReport;
+  designReport.gate.approved_artifacts.push({ path: 'PLAN.md', digest: ARTIFACT_ABSENT_DIGEST });
+  fs.writeFileSync(designReportPath, stringify(designReport));
+  const before = fs.readFileSync(designReportPath, 'utf8');
+
+  const reconcile = runCli(['gate', 'reconcile', 'ISSUE-1', 'f'.repeat(40)], { cwd: repo.dir });
+
+  assert.notEqual(reconcile.status, 0);
+  assert.match(reconcile.stderr, /target_sha が有効なcommitとして解決できません/);
+  assert.equal(fs.readFileSync(designReportPath, 'utf8'), before);
+});
+
 test('gate reconcile: spec成果物の変更commitを渡すとspec/design双方がinvalidatedされる', async (t) => {
   const { repo, worktreePath } = setupApprovedSpecAndDesignGates();
   t.after(() => repo.cleanup());
@@ -150,6 +180,46 @@ test('gate reconcile: spec成果物の変更commitを渡すとspec/design双方�
     fs.readFileSync(path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'design.yaml'), 'utf8'),
   ) as GateReport;
   assert.equal(designReport.gate.final, 'pending');
+});
+
+test('gate reconcile: 承認時の不在標識は不在継続なら一致し、成果物出現なら無効化する', (t) => {
+  const { repo, worktreePath, sha1 } = setupApprovedSpecAndDesignGates();
+  t.after(() => repo.cleanup());
+  const designReportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'design.yaml');
+  const designReport = parse(fs.readFileSync(designReportPath, 'utf8')) as GateReport;
+  designReport.gate.approved_artifacts.push({ path: 'PLAN.md', digest: ARTIFACT_ABSENT_DIGEST });
+  fs.writeFileSync(designReportPath, stringify(designReport));
+
+  const unchanged = runCli(['gate', 'reconcile', 'ISSUE-1', sha1], { cwd: repo.dir });
+  assert.equal(unchanged.status, 0, unchanged.stderr);
+  assert.match(unchanged.stdout, /reissued: spec, design/);
+
+  fs.writeFileSync(path.join(worktreePath, 'PLAN.md'), '# PLAN\n\nnewly present\n');
+  const checkpoint = runCli(['checkpoint', 'test: materialize absent artifact'], { cwd: worktreePath });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const appeared = runCli(['gate', 'reconcile', 'ISSUE-1', checkpoint.stdout.trim()], { cwd: repo.dir });
+  assert.equal(appeared.status, 0, appeared.stderr);
+  assert.match(appeared.stdout, /invalidated: design/);
+});
+
+test('gate reconcile: target treeに存在する成果物のblob読み取り失敗を不在継続として扱わない', (t) => {
+  const { repo, worktreePath } = setupApprovedSpecAndDesignGates();
+  t.after(() => repo.cleanup());
+  const designReportPath = path.join(repo.dir, 'issues', '1', '.agent-skill-chain', 'reviews', 'design.yaml');
+  const designReport = parse(fs.readFileSync(designReportPath, 'utf8')) as GateReport;
+  designReport.gate.approved_artifacts.push({ path: 'PLAN.md', digest: ARTIFACT_ABSENT_DIGEST });
+  fs.writeFileSync(designReportPath, stringify(designReport));
+
+  fs.writeFileSync(path.join(worktreePath, 'PLAN.md'), '# PLAN\n\npresent but unreadable\n');
+  const checkpoint = runCli(['checkpoint', 'test: add unreadable artifact'], { cwd: worktreePath });
+  assert.equal(checkpoint.status, 0, checkpoint.stderr);
+  const targetSha = checkpoint.stdout.trim();
+  hideLooseBlob(repo.dir, targetSha, 'PLAN.md');
+
+  const result = runCli(['gate', 'reconcile', 'ISSUE-1', targetSha], { cwd: repo.dir });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /target SHAの必須成果物を読めません: PLAN\.md/);
 });
 
 function makeGhStub() {

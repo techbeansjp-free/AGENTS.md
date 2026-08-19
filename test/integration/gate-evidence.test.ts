@@ -8,6 +8,7 @@ import { parse } from 'yaml';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { createGhStub } from '../helpers/gh-stub.js';
 import { runCli } from '../helpers/cli.js';
+import { packageRoot } from '../../src/lib/paths.js';
 import { digestOf, artifactDigestOf } from '../../src/lib/digest.js';
 import {
   canonicalJson,
@@ -50,7 +51,7 @@ function injectBlobBatch(repoDir: string, start: number, count: number): void {
 }
 
 test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡を検証してsuccess Check Runへ結線する（Issue #703 AC-8）', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-evidence-'));
   const stub = createGhStub(stubDir);
   const env = stub.env(process.env);
@@ -122,6 +123,9 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
     base_sha: baseSha,
     pr_number: '274',
     nonce: 'e'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [
       { slot: 1, run_id: 'review-integration-submit' },
       { slot: 2, run_id: 'review-integration-submit-2' },
@@ -248,6 +252,9 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
     base_sha: baseSha,
     pr_number: '274',
     nonce: 'f'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [
       { slot: 1, run_id: 'review-integration-second-submit' },
       { slot: 2, run_id: 'review-integration-second-submit-2' },
@@ -460,8 +467,167 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
   assert.match(missingRequired.stderr, /必須成果物を読めません: SPEC\.md/);
 });
 
+test('GitHub evidence: implementation対象成果物が空集合でも投稿とgate-report生成を完了する', (t) => {
+  // Issue #759: 証跡投稿は base SHA から再導出した調達モードと launcher token の一致を要求する。
+  // 自リポジトリ形状にすることで clone_build へ解決させ、本テストの主題（空集合の成果物）を保つ。
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-empty-implementation-evidence-'));
+  const stub = createGhStub(stubDir);
+  const env = stub.env(process.env);
+  const tokenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-skill-chain-local-review.'));
+  fs.chmodSync(tokenDir, 0o700);
+  const tokenPath = path.join(tokenDir, 'launcher-token.json');
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+    fs.rmSync(tokenDir, { recursive: true, force: true });
+  });
+
+  const baseSha = git(repo.dir, ['rev-parse', 'HEAD']);
+  git(repo.dir, ['checkout', '-b', 'bugfix/733-empty-implementation-evidence']);
+  fs.writeFileSync(path.join(repo.dir, 'SPEC.md'), '# SPEC\n\nAC-1: implementation evidence\n');
+  git(repo.dir, ['add', 'SPEC.md']);
+  git(repo.dir, ['commit', '-m', 'test: add non-implementation target']);
+  const targetSha = git(repo.dir, ['rev-parse', 'HEAD']);
+  git(repo.dir, ['checkout', 'main']);
+
+  const state = stub.readState();
+  state.pullMetadata = {
+    number: 742,
+    state: 'open',
+    user: { login: 'adachi-tatsuru' },
+    head: { sha: targetSha, ref: 'bugfix/733-empty-implementation-evidence' },
+    base: { sha: baseSha, ref: 'main' },
+  };
+  state.pullCommits = [{
+    author: { login: 'adachi-tatsuru' },
+    committer: { login: 'adachi-tatsuru' },
+  }];
+  state.apiActor = 'adachi-tatsuru';
+  stub.writeState(state);
+
+  const attemptId = 'attempt-empty-implementation-evidence';
+  const reviewerRunId = 'review-empty-implementation-evidence';
+  fs.writeFileSync(tokenPath, `${JSON.stringify({
+    schema_version: 'agent-skill-chain/launcher-token/v1',
+    attempt_id: attemptId,
+    expected_count: 1,
+    profile: 'standard',
+    target_sha: targetSha,
+    base_sha: baseSha,
+    pr_number: '742',
+    nonce: 'a'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
+    slots: [{ slot: 1, run_id: reviewerRunId }],
+    consumed_slots: [],
+  })}\n`, { mode: 0o600 });
+
+  const verdict = {
+    conformance: 'pass',
+    falsification: 'pass',
+    blockers: [],
+    approved_artifacts: [],
+    inconclusive: false,
+  };
+  const prompt = runCli(
+    ['gate', 'reviewer-prompt', 'ISSUE-733', 'implementation', targetSha, baseSha, '742', attemptId],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(prompt.status, 0, prompt.stderr);
+  const promptDigest = evidencePromptDigest(prompt.stdout.trimEnd());
+  const submitted = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, baseSha, '742',
+      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+    ],
+    {
+      cwd: repo.dir,
+      env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify(verdict),
+    },
+  );
+  assert.equal(submitted.status, 0, submitted.stderr);
+  const submittedReview = stub.readState().pullReviews?.[0] as { body: string } | undefined;
+  assert.ok(submittedReview);
+  const submittedEvidence = parseReviewEvidence(submittedReview.body);
+  assert.ok(submittedEvidence);
+  assert.deepEqual(submittedEvidence.verdict.approved_artifacts, []);
+
+  const reportPath = path.join(repo.dir, 'verified-empty-implementation.yaml');
+  const verified = runCli(
+    [
+      'gate', 'verify-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, '742',
+      reportPath, 'ordinary',
+    ],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(verified.status, 0, verified.stderr);
+  assert.match(verified.stdout, /final: approved/);
+  const report = parse(fs.readFileSync(reportPath, 'utf8')) as {
+    gate: { final: string; approved_artifacts: { path: string; digest: string }[] };
+  };
+  assert.equal(report.gate.final, 'approved');
+  assert.deepEqual(report.gate.approved_artifacts, []);
+
+  const invalidAttemptId = 'attempt-invalid-implementation-evidence';
+  const invalidRunId = 'review-invalid-implementation-evidence';
+  fs.writeFileSync(tokenPath, `${JSON.stringify({
+    schema_version: 'agent-skill-chain/launcher-token/v1',
+    attempt_id: invalidAttemptId,
+    expected_count: 1,
+    profile: 'standard',
+    target_sha: targetSha,
+    base_sha: baseSha,
+    pr_number: '742',
+    nonce: 'b'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
+    slots: [{ slot: 1, run_id: invalidRunId }],
+    consumed_slots: [],
+  })}\n`, { mode: 0o600 });
+  const invalidSubmitted = runCli(
+    [
+      'gate', 'submit-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, baseSha, '742',
+      invalidAttemptId, '1', invalidRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+    ],
+    {
+      cwd: repo.dir,
+      env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath },
+      input: JSON.stringify({ ...verdict, inconclusive: 'true' }),
+    },
+  );
+  assert.equal(invalidSubmitted.status, 0, invalidSubmitted.stderr);
+  const invalidReview = stub.readState().pullReviews?.at(-1) as { body: string } | undefined;
+  assert.ok(invalidReview);
+  assert.deepEqual(parseReviewEvidence(invalidReview.body)?.verdict, {
+    conformance: 'pending',
+    falsification: 'pending',
+    blockers: [],
+    approved_artifacts: [],
+    inconclusive: true,
+  });
+
+  const invalidReportPath = path.join(repo.dir, 'verified-invalid-implementation.yaml');
+  const invalidVerified = runCli(
+    [
+      'gate', 'verify-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, '742',
+      invalidReportPath, 'ordinary',
+    ],
+    { cwd: repo.dir, env },
+  );
+  assert.equal(invalidVerified.status, 0, invalidVerified.stderr);
+  assert.match(invalidVerified.stdout, /final: human_required/);
+  assert.equal(
+    (parse(fs.readFileSync(invalidReportPath, 'utf8')) as { gate: { final: string } }).gate.final,
+    'human_required',
+  );
+});
+
 test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁数が異なっても往復に成功する', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-evidence-clone-roundtrip-'));
   const generationDir = path.join(root, 'generation');
   const verificationDir = path.join(root, 'verification');
@@ -538,6 +704,9 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
     base_sha: baseSha,
     pr_number: '369',
     nonce: 'c'.repeat(48),
+    // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+    trusted_root: packageRoot(),
+    procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
     slots: [{ slot: 1, run_id: reviewerRunId }],
     consumed_slots: [],
   })}\n`, { mode: 0o600 });
@@ -582,7 +751,7 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
 });
 
 test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェンスで囲まれていても内部のJSONを解釈する（Issue #303）', (t) => {
-  const repo = createTmpRepo({ backend: 'github' });
+  const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-stub-evidence-fence-'));
   const stub = createGhStub(stubDir);
   const env = stub.env(process.env);
@@ -636,6 +805,9 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
       base_sha: baseSha,
       pr_number: '275',
       nonce: 'f'.repeat(48),
+      // Issue #759: 準備段が隔離cloneのパスと調達の事実をtoken経由で運ぶ。
+      trusted_root: packageRoot(),
+      procurement: { mode: 'clone_build', source: `clone_build:${baseSha}` },
       slots: [{ slot: 1, run_id: runId }],
       consumed_slots: [],
     })}\n`, { mode: 0o600 });
@@ -728,6 +900,12 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
       evidence: [],
     }],
   }));
-  assert.notEqual(emptyFindingEvidence.status, 0);
-  assert.match(emptyFindingEvidence.stderr, /finding・inconclusive契約に適合しません/);
+  assert.equal(emptyFindingEvidence.status, 0, emptyFindingEvidence.stderr);
+  const safeReview = stub.readState().pullReviews?.at(-1) as { body: string } | undefined;
+  const safeEvidence = parseReviewEvidence(safeReview?.body ?? '');
+  assert.equal(safeEvidence?.verdict.conformance, 'pending');
+  assert.equal(safeEvidence?.verdict.falsification, 'pending');
+  assert.deepEqual(safeEvidence?.verdict.blockers, []);
+  assert.equal(safeEvidence?.verdict.inconclusive, true);
+  assert.deepEqual(safeEvidence?.verdict.approved_artifacts.map(({ path: artifactPath }) => artifactPath), ['SPEC.md']);
 });

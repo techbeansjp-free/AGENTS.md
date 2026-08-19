@@ -29,6 +29,20 @@ function sha256(content: Buffer | string): string {
   return artifactDigestOf(content);
 }
 
+function hideLooseBlob(repoDir: string, targetSha: string, artifactPath: string): void {
+  const blobSha = execFileSync('git', ['rev-parse', `${targetSha}:${artifactPath}`], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  }).trim();
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  }).trim();
+  const objectPath = path.resolve(repoDir, commonDir, 'objects', blobSha.slice(0, 2), blobSha.slice(2));
+  assert.equal(fs.existsSync(objectPath), true);
+  fs.renameSync(objectPath, `${objectPath}.unreadable`);
+}
+
 // ---- verify branch-name ----
 
 test('verify branch-name: 明示引数で pattern 適合・違反を判定できる', async (t) => {
@@ -872,6 +886,12 @@ test('verify artifacts: GitHubモードは size:quick ラベルで免除し、ri
   const quickValidation = runCli(['verify', 'artifacts', 'ISSUE-1', 'validation'], { cwd: repo.dir, env });
   assert.equal(quickValidation.status, 0, quickValidation.stderr);
 
+  // Given: size が相反する複数ラベルで解決不能なら、quick を含んでいても免除しない。
+  stub.seedIssueLabels('1', ['type:feature', 'risk:normal', 'size:quick', 'size:standard']);
+  const ambiguous = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
+  assert.equal(ambiguous.status, 1);
+  assert.match(ambiguous.stderr, /segment 'spec' の必須成果物が欠落しています: SPEC\.md/);
+
   // Given: risk:high が付与されている
   stub.seedIssueLabels('1', ['type:feature', 'risk:high', 'size:quick']);
   const high = runCli(['verify', 'artifacts', 'ISSUE-1', 'spec'], { cwd: repo.dir, env });
@@ -1087,6 +1107,42 @@ test('verify gate-report (Issue #316 AC-5): ABSENT_ARTIFACT_DIGEST sentinelで�
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('verify gate-report: target treeに存在する成果物のblob読み取り失敗を不在標識で許容しない', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+
+  const start = runCli(['issue', 'start', 'ISSUE-1', 'feature', 'sample-feature', FIXED_TIMESTAMP], {
+    cwd: repo.dir,
+  });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+
+  fs.writeFileSync(path.join(worktreePath, 'SPEC.md'), '# SPEC\n\nAC-1: sample\n');
+  execFileSync('git', ['add', 'SPEC.md'], { cwd: worktreePath });
+  execFileSync('git', ['commit', '-m', 'test: add unreadable artifact'], { cwd: worktreePath });
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+
+  const gateReview = runCli(['gate', 'review', 'ISSUE-1', 'implementation', 'standard'], { cwd: worktreePath });
+  assert.equal(gateReview.status, 0, gateReview.stderr);
+  const gateReportPath = /gate_report_path:\s*(\S+)/.exec(gateReview.stdout)![1];
+  const approvedText = fs
+    .readFileSync(gateReportPath, 'utf8')
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: pass')
+    .replace('final: pending', 'final: approved')
+    .replace(
+      'approved_artifacts: []',
+      `approved_artifacts:\n    - path: SPEC.md\n      digest: ${ABSENT_ARTIFACT_DIGEST}`,
+    );
+  fs.writeFileSync(gateReportPath, approvedText);
+  hideLooseBlob(repo.dir, targetSha, 'SPEC.md');
+
+  const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /approved_artifacts のファイルを読み取れません: SPEC\.md/);
+});
+
 // Issue #316 AC-6: implementation以外のgate（spec/design/validation）では、証跡生成側がそもそも
 // sentinel digestを持つapproved_artifactsエントリを生成し得ないため、検証側でも例外を適用しない
 // （I8安全側原則。gate.id限定無しに無条件許容すると「不在の正当な記録」を偽装できてしまう）。
@@ -1124,6 +1180,37 @@ test('verify gate-report (Issue #316 AC-6): implementation以外のgateではABS
   const result = runCli(['verify', 'gate-report', gateReportPath], { cwd: worktreePath });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /approved_artifacts のファイルが削除されています（digest不一致として扱います）: NEVER_EXISTED\.md/);
+});
+
+test('verify gate-report: quick免除下のspec必須成果物不在標識を許容する', (t) => {
+  const repo = createTmpRepo({ backend: 'local' });
+  t.after(() => repo.cleanup());
+  const start = runCli([
+    'issue', 'start', 'ISSUE-733', 'bugfix', 'quick-absent-spec', FIXED_TIMESTAMP,
+    '--size', 'quick', '--request', 'quick requirement',
+  ], { cwd: repo.dir });
+  assert.equal(start.status, 0, start.stderr);
+  const [, worktreePath] = start.stdout.trim().split('\n');
+  const statePath = path.join(repo.dir, 'issues', '733', '.agent-skill-chain', 'state.yaml');
+  const state = parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(statePath, stringify({ ...state, risk: 'normal' }));
+  const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
+  const review = runCli(['gate', 'review', 'ISSUE-733', 'spec', 'standard', targetSha], { cwd: worktreePath });
+  assert.equal(review.status, 0, review.stderr);
+  const reportPath = /gate_report_path:\s*(\S+)/.exec(review.stdout)![1];
+  const approvedText = fs
+    .readFileSync(reportPath, 'utf8')
+    .replace('conformance: pending', 'conformance: pass')
+    .replace('falsification: pending', 'falsification: pass')
+    .replace('final: pending', 'final: approved')
+    .replace(
+      'approved_artifacts: []',
+      `approved_artifacts:\n    - path: SPEC.md\n      digest: ${ABSENT_ARTIFACT_DIGEST}`,
+    );
+  fs.writeFileSync(reportPath, approvedText);
+
+  const result = runCli(['verify', 'gate-report', reportPath], { cwd: worktreePath });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 // Issue #316（前提条件、AC-1・AC-2・AC-7）: gateReportの成果物検証ループはtarget_shaが正当な

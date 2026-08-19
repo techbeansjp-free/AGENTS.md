@@ -1,8 +1,6 @@
-import { gh } from './exec.js';
-import { stateFilePath, type CoordinationBackend } from './local-state.js';
-import fs from 'node:fs';
-import { readYamlFile } from './yaml-io.js';
+import type { CoordinationBackend } from './local-state.js';
 import { changedPaths, GUARDRAIL_PATHS } from './self-reference-guardrail.js';
+import { readQuickSignals } from './gate-quick-exemption.js';
 
 /**
  * quick モード（軽量な変更向けの成果物免除）の判定。
@@ -51,87 +49,6 @@ export interface QuickModeDecision {
   blockedReasons: string[];
 }
 
-interface SizeSignal {
-  size: IssueSize;
-  risk: IssueRisk;
-}
-
-interface SignalResolution {
-  resolved: boolean;
-  signal?: SizeSignal;
-}
-
-/** ラベル名の集合から risk を解決する。`risk:normal` が明示されている場合のみ normal。 */
-function riskFromLabels(names: string[]): IssueRisk {
-  if (names.includes('risk:high')) return 'high';
-  if (names.includes('risk:normal')) return 'normal';
-  // ラベル未付与は「リスク未分類」が既定値（安全側）。
-  return 'unclassified';
-}
-
-interface GhLabelsPayload {
-  labels: ({ name: string } | string)[];
-}
-
-function readSignalFromGitHub(root: string, issueNumber: string): SignalResolution {
-  const view = gh([`issue`, 'view', issueNumber, '--json', 'labels'], root);
-  if (view.status !== 0) return { resolved: false };
-  let payload: unknown;
-  try {
-    payload = JSON.parse(view.stdout);
-  } catch {
-    return { resolved: false };
-  }
-  if (typeof payload !== 'object' || payload === null || !Array.isArray((payload as Partial<GhLabelsPayload>).labels)) {
-    return { resolved: false };
-  }
-  const labels = (payload as GhLabelsPayload).labels;
-  const names: string[] = [];
-  for (const label of labels) {
-    if (typeof label === 'string') {
-      names.push(label);
-    } else if (typeof label === 'object' && label !== null && typeof label.name === 'string') {
-      names.push(label.name);
-    } else {
-      return { resolved: false };
-    }
-  }
-  return {
-    resolved: true,
-    signal: { size: names.includes(QUICK_SIZE_LABEL) ? 'quick' : 'standard', risk: riskFromLabels(names) },
-  };
-}
-
-interface LocalStateSizeFields {
-  size?: string;
-  risk?: string;
-}
-
-function readSignalFromLocalState(root: string, issueNumber: string): SignalResolution {
-  const filePath = stateFilePath(root, issueNumber);
-  if (!fs.existsSync(filePath)) return { resolved: false };
-  let state: unknown;
-  try {
-    state = readYamlFile<unknown>(filePath);
-  } catch {
-    return { resolved: false };
-  }
-  if (typeof state !== 'object' || state === null || Array.isArray(state)) return { resolved: false };
-  const fields = state as LocalStateSizeFields;
-  if (fields.size !== undefined && fields.size !== 'quick' && fields.size !== 'standard') return { resolved: false };
-  if (
-    fields.risk !== undefined &&
-    fields.risk !== 'normal' &&
-    fields.risk !== 'high' &&
-    fields.risk !== 'unclassified'
-  ) {
-    return { resolved: false };
-  }
-  const risk: IssueRisk =
-    fields.risk === 'normal' || fields.risk === 'high' || fields.risk === 'unclassified' ? fields.risk : 'unclassified';
-  return { resolved: true, signal: { size: fields.size === 'quick' ? 'quick' : 'standard', risk } };
-}
-
 /**
  * quick 免除を適用してよいかを判定する。
  *
@@ -146,17 +63,19 @@ export function resolveQuickMode(
   issueNumber: string,
   backend: CoordinationBackend,
 ): QuickModeDecision {
-  const resolution =
-    backend === 'github' ? readSignalFromGitHub(root, issueNumber) : readSignalFromLocalState(root, issueNumber);
-  if (!resolution.resolved || !resolution.signal) {
+  const resolved = readQuickSignals(root, issueNumber, backend);
+  // Issue #741: size/risk のどちらかでも一次情報から解決できない場合は、quick 免除も
+  // 上流セグメントの閉包追加も適用しない（未解決を quick とも standard とも決めつけない）。
+  if (resolved.size.status !== 'resolved' || resolved.risk.status !== 'resolved') {
     return { signalResolved: false, requested: false, exempt: false, blockedReasons: [] };
   }
-  const signal = resolution.signal;
-  if (signal.size !== 'quick') return { signalResolved: true, requested: false, exempt: false, blockedReasons: [] };
+  if (resolved.size.value !== 'quick') {
+    return { signalResolved: true, requested: false, exempt: false, blockedReasons: [] };
+  }
 
   const blockedReasons: string[] = [];
-  if (signal.risk !== 'normal') {
-    blockedReasons.push(`risk が normal ではありません（現在: ${signal.risk}）。quick は risk が normal の場合のみ適用できます`);
+  if (resolved.risk.value !== 'normal') {
+    blockedReasons.push(`risk が normal ではありません（現在: ${resolved.legacy.risk}）。quick は risk が normal の場合のみ適用できます`);
   }
   const changed = changedPaths(worktreePath);
   if (!changed.resolvable) {

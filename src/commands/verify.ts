@@ -28,6 +28,8 @@ import {
 } from '../lib/quick-mode.js';
 import { deriveArtifactTargets, type ArtifactTarget } from '../lib/artifact-targets.js';
 import { extractSpecAcIds, parseSpecAcDeclarationHeading, type SpecAcDeclaration } from '../lib/spec-ac-ids.js';
+import { readArtifactAtSha, REQUIRED_GATE_ARTIFACTS } from '../lib/gate-artifacts.js';
+import { resolveGateQuickExemption } from '../lib/gate-quick-exemption.js';
 import { ABSENT_ARTIFACT_DIGEST } from './gate.js';
 
 function violations(lines: string[]): number {
@@ -364,19 +366,42 @@ export async function gateReport(args: string[]): Promise<number> {
       errors.push(`gate.target_sha が有効なcommitとして解決できません: ${targetSha}`);
       return violations(errors);
     }
+    const normalizedReportPath = path.resolve(reportPath).split(path.sep).join('/');
+    const issueMatch = /\/issues\/([1-9][0-9]*)\/\.agent-skill-chain\/reviews\//.exec(normalizedReportPath);
+    let quickExempt = false;
+    if (issueMatch && ['spec', 'design', 'implementation', 'validation'].includes(report.gate.id)) {
+      let baseSha: string | undefined;
+      try {
+        baseSha = git(['rev-parse', defaultBranch(worktreeRoot())], worktreeRoot()).stdout.trim() || undefined;
+      } catch {
+        baseSha = undefined;
+      }
+      quickExempt = resolveGateQuickExemption({
+        root,
+        issueNumber: issueMatch[1],
+        backend: loadConfig(root).coordination.backend,
+        baseSha,
+        targetSha,
+      }).exempt;
+    }
     for (const artifact of report.gate.approved_artifacts) {
-      const shown = git(['show', `${report.gate.target_sha}:${artifact.path}`], root);
-      if (shown.status !== 0) {
-        // Issue #316: implementation gate（gate.tsのallowAbsentがgateId==='implementation'の
-        // 場合のみ真であることに対応）に限り、target_shaに実在しない成果物をABSENT_ARTIFACT_DIGEST
-        // sentinelで正当に記録しうる。spec/design/validation gateでは証跡生成側がそもそも
-        // sentinel digestを持つエントリを生成し得ないため、gate.id以外では例外を適用しない
-        // （I8安全側原則。無条件に許容すると「不在の正当な記録」を偽装できてしまう）。
-        const sentinelExempt = report.gate.id === 'implementation' && artifact.digest === ABSENT_ARTIFACT_DIGEST;
+      const current = readArtifactAtSha(root, report.gate.target_sha, artifact.path);
+      if (current.status === 'unreadable') {
+        errors.push(`approved_artifacts のファイルを読み取れません: ${artifact.path}`);
+      } else if (current.status === 'absent') {
+        // trusted gate recorder は implementation の削除対象、または quick 免除により正当に
+        // 不在だった必須成果物だけを sentinel digest として記録する。検証側は記録済み sentinel
+        // 自体を照合し、後から実在した場合は下の digest 比較で不一致にする。
+        const sentinelExempt =
+          artifact.digest === ABSENT_ARTIFACT_DIGEST &&
+          (report.gate.id === 'implementation' ||
+            (quickExempt &&
+              ['spec', 'design', 'validation'].includes(report.gate.id) &&
+              REQUIRED_GATE_ARTIFACTS[report.gate.id as Segment].includes(artifact.path)));
         if (!sentinelExempt) {
           errors.push(`approved_artifacts のファイルが削除されています（digest不一致として扱います）: ${artifact.path}`);
         }
-      } else if (artifactDigestOf(shown.stdout) !== artifact.digest) {
+      } else if (artifactDigestOf(current.content) !== artifact.digest) {
         errors.push(`approved_artifacts の digest が現在のファイル内容と一致しません: ${artifact.path}`);
       }
     }

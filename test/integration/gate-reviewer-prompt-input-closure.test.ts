@@ -152,7 +152,14 @@ test('ISSUE-751 AC-3/8: target SHA設定とblobだけを読み、作業ツリー
 
   const withoutBase = prompt(repo.dir, 'implementation', targetSha);
   assert.match(withoutBase, /base SHA未指定のため導出不能/);
-  assert.match(withoutBase, /\(未検出\)/);
+  // target SHA に無い固定入力は、黙って落とさずパスを名指しして不在を明示する。
+  for (const absent of ['DESIGN.md', 'PLAN.md']) {
+    assert.match(
+      withoutBase,
+      new RegExp(`パス（JSON文字列形式・制御文字はエスケープ済み）: "${absent}"\\n\\(target SHAに未検出\\)`),
+      `${absent} の不在がパス名指しで明示されること`,
+    );
+  }
 });
 
 test('ISSUE-751 AC-2: 根拠パスを独立したrepository-relative path境界でだけ名指しと判定する', (t) => {

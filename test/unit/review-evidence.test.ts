@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {
   evidencePromptDigest,
   isEvidenceVerdict,
+  renderReviewAttemptStart,
   renderReviewEvidence,
   verifyGithubReviewEvidence,
   type GithubReviewRecord,
   type LightReviewEvidence,
+  type ReviewAttemptStart,
   type ReviewEvidence,
 } from '../../src/lib/review-evidence.js';
 
@@ -69,6 +71,38 @@ function review(id: number, slot: 1 | 2, overrides: Partial<GithubReviewRecord> 
   };
 }
 
+function attemptReview(
+  id: number,
+  attemptId: string,
+  overrides: Partial<ReviewAttemptStart> = {},
+): GithubReviewRecord {
+  const attempt: ReviewAttemptStart = {
+    schema_version: 'agent-skill-chain/gate-review-attempt/v1',
+    issue_id: 'ISSUE-271',
+    gate: 'spec',
+    profile: 'strict',
+    target_sha: targetSha,
+    attempt_id: attemptId,
+    expected_count: 2,
+    execution: {
+      trusted_base_sha: baseSha,
+      launcher_token_digest: launcherTokenDigest,
+    },
+    reviewers: [
+      { slot: 1, run_id: 'review-run-1' },
+      { slot: 2, run_id: 'review-run-2' },
+    ],
+    ...overrides,
+  };
+  return {
+    id,
+    body: renderReviewAttemptStart(attempt),
+    commit_id: targetSha,
+    state: 'COMMENTED',
+    user: { login: 'trusted-reviewer' },
+  };
+}
+
 function verify(reviews: GithubReviewRecord[], overrides: Record<string, unknown> = {}) {
   return verifyGithubReviewEvidence({
     reviews,
@@ -105,7 +139,39 @@ test('strict: 1件不足またはslot重複はhuman_required', () => {
   assert.equal(verify([review(1, 1)], { profile: 'standard' }).final, 'human_required');
 });
 
-test('ラウンド打ち切り: 閾値到達時のblockingをrejectedより先にhuman_requiredへ移し、未到達・導出不能・blocker無しは既存判定を保つ', () => {
+test('ISSUE-733 AC-24: profile要求数を超えて起動された全slotを集約する', () => {
+  const first = evidence(1, { profile: 'standard', expected_count: 1 });
+  const second = evidence(2, { profile: 'standard', expected_count: 1 });
+  second.verdict.falsification = 'fail';
+  second.verdict.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'OVERLAUNCH-BLOCKING',
+    evidence: ['src/commands/gate.ts の追加slotがblocking findingを返した'],
+  }];
+  const result = verify(
+    [
+      review(1, 1, { body: renderReviewEvidence(first) }),
+      review(2, 2, { body: renderReviewEvidence(second) }),
+    ],
+    { profile: 'standard', coreReviewRequired: false },
+  );
+  assert.equal(result.final, 'rejected');
+  assert.deepEqual(result.reviewers.map((entry) => entry.slot), [1, 2]);
+});
+
+test('ISSUE-733 AC-24: GitHubの4ゲートで要求体数に満たない証跡をhuman_requiredへ倒す', () => {
+  for (const gate of ['spec', 'design', 'implementation', 'validation'] as const) {
+    const first = evidence(1, { gate, expected_count: 2 });
+    const result = verify(
+      [review(1, 1, { body: renderReviewEvidence(first) })],
+      { gate },
+    );
+    assert.equal(result.final, 'human_required', gate);
+  }
+});
+
+test('ISSUE-733 AC-15: 閾値到達時のblockingをrejectedより先にhuman_requiredへ移し、未到達・blocker無しは集約判定を保つ', () => {
   const blockingVerdict: ReviewEvidence['verdict'] = {
     conformance: 'pass',
     falsification: 'fail',
@@ -172,6 +238,32 @@ test('retry: same-SHAの旧complete attemptを無視して最新attemptだけを
     review(3, 2, { body: renderReviewEvidence(newTwo) }),
   ]);
   assert.equal(validAfterMalformedHistory.final, 'approved');
+});
+
+test('ISSUE-733 AC-24: 耐久記録されたcurrent attemptがevidence 0件でも旧complete attemptへfallbackしない', () => {
+  const oldOne = evidence(1, { attempt_id: 'attempt-old' });
+  const oldTwo = evidence(2, { attempt_id: 'attempt-old' });
+  const result = verify([
+    review(1, 1, { body: renderReviewEvidence(oldOne) }),
+    review(2, 2, { body: renderReviewEvidence(oldTwo) }),
+    attemptReview(3, 'attempt-current-zero'),
+  ]);
+  assert.equal(result.final, 'human_required');
+  assert.match(result.reason ?? '', /current review attemptのreview evidenceがありません/);
+});
+
+test('ISSUE-733 AC-24: 耐久記録されたcurrent attemptが一部slotだけでも旧complete attemptへfallbackしない', () => {
+  const oldOne = evidence(1, { attempt_id: 'attempt-old' });
+  const oldTwo = evidence(2, { attempt_id: 'attempt-old' });
+  const currentOne = evidence(1, { attempt_id: 'attempt-current-partial' });
+  const result = verify([
+    review(1, 1, { body: renderReviewEvidence(oldOne) }),
+    review(2, 2, { body: renderReviewEvidence(oldTwo) }),
+    attemptReview(3, 'attempt-current-partial'),
+    review(4, 1, { body: renderReviewEvidence(currentOne) }),
+  ]);
+  assert.equal(result.final, 'human_required');
+  assert.match(result.reason ?? '', /独立review evidence件数が不足しています/);
 });
 
 test('provenance: 同一actorのtrusted recorderをrun attestationで区別し、未登録・actor未解決は拒否する', () => {
@@ -403,4 +495,58 @@ test('trusted Strict profileをlight_review.applied自己申告でStandardへ降
   );
   assert.equal(result.final, 'human_required');
   assert.match(result.reason ?? '', /profile.*trusted/);
+});
+
+// Issue #759 要件7(c)・AC-13 / DESIGN E8: 調達元識別子と実体 digest の記録を必須とする対象は
+// 「本要件の充足によって新規に投稿される証跡」に限り、本機構の導入より前に投稿済みの既存証跡が
+// 当該記録を持たないことを形式不適合として扱うことは求めない。したがって証跡形式（本ファイルが
+// 対象とする層）では任意フィールドとし、必須性は記録経路の側で担保する。
+//
+// 記録経路の側での必須性は test/integration/gate-procurement-evidence.test.ts が固定する
+// （調達情報を欠く launcher token では新規投稿できず、新規投稿の証跡は調達元識別子を必ず持つ）。
+// 本テストが固定するのはその補集合、すなわち「導入前に投稿済みの証跡を後から形式不適合にしない」
+// 側の境界と、記録がある場合の形式検査・attempt 内一致である。
+test('procurement: 導入前の投稿済み証跡は受理し、記録済みは形式検査したうえでattempt内一致を要求する', () => {
+  // 本機構の導入より前に投稿済みの証跡（procurement 無し）は引き続き approved へ到達する。
+  // 新規投稿でこの形が生じ得ないことは上記の統合テストが別途固定する。
+  assert.equal(verify([review(1, 1), review(2, 2)]).final, 'approved');
+
+  const procurement = {
+    mode: 'package_copy' as const,
+    source: 'candidate-a:/consumer/node_modules/agent-skill-chain#agent-skill-chain@1.2.3',
+    digest: `sha256:${'1'.repeat(64)}`,
+  };
+  const recordedOne = evidence(1);
+  recordedOne.execution.procurement = procurement;
+  const recordedTwo = evidence(2);
+  recordedTwo.execution.procurement = procurement;
+  assert.equal(
+    verify([
+      review(1, 1, { body: renderReviewEvidence(recordedOne) }),
+      review(2, 2, { body: renderReviewEvidence(recordedTwo) }),
+    ]).final,
+    'approved',
+  );
+
+  // 片側だけが調達の事実を持つ attempt は、実行attestationの不一致として拒否する。
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(recordedOne) }), review(2, 2)]).final,
+    'human_required',
+  );
+
+  // package_copy は実体 digest を必須にする（形式不適合は証跡として受理しない）。
+  const malformed = evidence(1);
+  malformed.execution.procurement = { mode: 'package_copy', source: 'candidate-a:/x#y@1' };
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(malformed) }), review(2, 2)]).final,
+    'human_required',
+  );
+
+  // 調達元識別子が空値の証跡も受理しない。
+  const emptySource = evidence(1);
+  emptySource.execution.procurement = { mode: 'clone_build', source: '' };
+  assert.equal(
+    verify([review(1, 1, { body: renderReviewEvidence(emptySource) }), review(2, 2)]).final,
+    'human_required',
+  );
 });

@@ -5,6 +5,11 @@ import { gh, git } from './exec.js';
 import { readYamlFile } from './yaml-io.js';
 import { validateAgainstSchema, validateAgainstSchemaDocument } from './schema.js';
 import { defaultBranch } from './worktree.js';
+import { traceRuntimeDependencyResolution } from './dependency-trace.js';
+
+// Issue #759: 当該依存を実際に読み込む本モジュールを基点に、実行時の module 解決が返す
+// 解決先を参照経路ごと解決した実体パスとして観測する（ASC_DEPENDENCY_TRACE_FILE 設定時のみ）。
+traceRuntimeDependencyResolution(import.meta.url, ['yaml']);
 
 export interface CoreReviewPolicy {
   required_profile: 'strict';
