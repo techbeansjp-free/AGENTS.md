@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0078
-status: proposed
+status: accepted
 title: 最終ラウンド後のfinding分類を有効sub-verdict経由で判定へ反映し、制御レコードの投稿者を証跡と同一の信頼境界へ束縛する
 tags: [gate-review, round-budget, trust-boundary, evidence]
 supersedes: []
