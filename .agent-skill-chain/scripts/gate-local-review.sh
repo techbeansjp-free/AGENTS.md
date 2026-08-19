@@ -52,8 +52,24 @@ fi
 # GitHubが返したbase SHAを一時cloneへcheckoutし、信頼実行コード一式をこのclone配下へ用意する。
 # 以降はこの隔離clone内のCLI/adapterだけを使用し、source worktreeの生成物を実行しない。
 TRUSTED_TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-skill-chain-local-review.XXXXXX")"
-trap 'rm -rf -- "$TRUSTED_TMP"' EXIT
 TRUSTED_ROOT="$TRUSTED_TMP/repo"
+
+# Issue #733: gate-report scaffold を生成してからレビュアを起動するまでの区間で非ゼロ終了すると、
+# conformance/falsification/final がいずれも pending の scaffold だけが残り、判定の欠落が無言で放置される。
+# set -euo pipefail 下では attempt 記録の POST 失敗のようにこの区間のどの失敗も即時終了になるため、
+# 失敗箇所ごとに包むのではなく区間全体を EXIT trap で安全側へ倒す（AGENTS.md I8）。
+# レビュア起動後は gate-launch-reviewer.sh 側の安全網が最終判定を確定させるので、起動直前に
+# PENDING_REPORT_PATH を空へ戻し、deferred 表明や記録済みの判定を本 trap が上書きしないようにする。
+PENDING_REPORT_PATH=""
+_asc_local_review_exit() {
+  local code=$?
+  if [[ "$code" -ne 0 && -n "$PENDING_REPORT_PATH" && -f "$TRUSTED_ROOT/bin/agents-md.js" ]]; then
+    echo "レビュアを起動できないまま終了しました。gate-report を human_required へ倒します（${PENDING_REPORT_PATH}）" >&2
+    node "$TRUSTED_ROOT/bin/agents-md.js" gate mark-human-required "$PENDING_REPORT_PATH" >/dev/null 2>&1 || true
+  fi
+  rm -rf -- "$TRUSTED_TMP"
+}
+trap _asc_local_review_exit EXIT
 git clone --quiet --no-checkout "$REPO_ROOT" "$TRUSTED_ROOT"
 git -C "$TRUSTED_ROOT" checkout --quiet --detach "$BASE_SHA"
 # reviewerにcredential-bearing remote URLやglobal Git設定を見せない。target objectはlocal clone済みなので
@@ -150,6 +166,7 @@ if [[ "$EFFECTIVE_PROFILE" != "standard" && "$EFFECTIVE_PROFILE" != "strict" ]];
   exit 1
 fi
 PROFILE="$EFFECTIVE_PROFILE"
+PENDING_REPORT_PATH="$REPORT_PATH"
 
 COUNT=1
 [[ "$PROFILE" == "strict" ]] && COUNT=2
@@ -190,6 +207,40 @@ node -e '
 ' "$TOKEN_FILE" "$attempt_id" "$COUNT" "$PROFILE" "$TARGET_SHA" "$BASE_SHA" "$PR_NUMBER" "$token_nonce" \
   "$TRUSTED_ROOT" "$PROCUREMENT_MODE" "$PROCUREMENT_SOURCE" "$PROCUREMENT_DIGEST" "${run_ids[@]}"
 
+attempt_request="$(node -e '
+  const crypto = require("node:crypto");
+  const fs = require("node:fs");
+  const [tokenFile, issueId, gate, targetSha] = process.argv.slice(1);
+  const token = JSON.parse(fs.readFileSync(tokenFile, "utf8"));
+  const canonical = (value) => {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value && typeof value === "object") {
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+    }
+    return JSON.stringify(value);
+  };
+  const { consumed_slots: _consumedSlots, ...tokenPayload } = token;
+  const launcherTokenDigest = `sha256:${crypto.createHash("sha256").update(canonical(tokenPayload)).digest("hex")}`;
+  const attempt = {
+    schema_version: "agent-skill-chain/gate-review-attempt/v1",
+    issue_id: issueId,
+    gate,
+    profile: token.profile,
+    target_sha: targetSha,
+    attempt_id: token.attempt_id,
+    expected_count: token.expected_count,
+    execution: {
+      trusted_base_sha: token.base_sha,
+      launcher_token_digest: launcherTokenDigest,
+    },
+    reviewers: token.slots,
+  };
+  const body = `<!-- agent-skill-chain:gate-review-attempt -->\n\`\`\`json\n${JSON.stringify(attempt, null, 2)}\n\`\`\`\n`;
+  process.stdout.write(JSON.stringify({body, event: "COMMENT", commit_id: targetSha}));
+' "$TOKEN_FILE" "$ISSUE_ID" "$GATE_ID" "$TARGET_SHA")"
+gh api -X POST "repos/{owner}/{repo}/pulls/$PR_NUMBER/reviews" --input - <<<"$attempt_request" >/dev/null
+
+PENDING_REPORT_PATH=""
 for slot in $(seq 1 "$COUNT"); do
   run_id="${run_ids[$((slot - 1))]}"
   ASC_BASE_REF="$BASE_SHA" \

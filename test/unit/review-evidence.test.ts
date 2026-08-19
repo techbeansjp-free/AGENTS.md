@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {
   evidencePromptDigest,
   isEvidenceVerdict,
+  renderReviewAttemptStart,
   renderReviewEvidence,
   verifyGithubReviewEvidence,
   type GithubReviewRecord,
   type LightReviewEvidence,
+  type ReviewAttemptStart,
   type ReviewEvidence,
 } from '../../src/lib/review-evidence.js';
 
@@ -69,6 +71,38 @@ function review(id: number, slot: 1 | 2, overrides: Partial<GithubReviewRecord> 
   };
 }
 
+function attemptReview(
+  id: number,
+  attemptId: string,
+  overrides: Partial<ReviewAttemptStart> = {},
+): GithubReviewRecord {
+  const attempt: ReviewAttemptStart = {
+    schema_version: 'agent-skill-chain/gate-review-attempt/v1',
+    issue_id: 'ISSUE-271',
+    gate: 'spec',
+    profile: 'strict',
+    target_sha: targetSha,
+    attempt_id: attemptId,
+    expected_count: 2,
+    execution: {
+      trusted_base_sha: baseSha,
+      launcher_token_digest: launcherTokenDigest,
+    },
+    reviewers: [
+      { slot: 1, run_id: 'review-run-1' },
+      { slot: 2, run_id: 'review-run-2' },
+    ],
+    ...overrides,
+  };
+  return {
+    id,
+    body: renderReviewAttemptStart(attempt),
+    commit_id: targetSha,
+    state: 'COMMENTED',
+    user: { login: 'trusted-reviewer' },
+  };
+}
+
 function verify(reviews: GithubReviewRecord[], overrides: Record<string, unknown> = {}) {
   return verifyGithubReviewEvidence({
     reviews,
@@ -105,7 +139,39 @@ test('strict: 1件不足またはslot重複はhuman_required', () => {
   assert.equal(verify([review(1, 1)], { profile: 'standard' }).final, 'human_required');
 });
 
-test('ラウンド打ち切り: 閾値到達時のblockingをrejectedより先にhuman_requiredへ移し、未到達・導出不能・blocker無しは既存判定を保つ', () => {
+test('ISSUE-733 AC-24: profile要求数を超えて起動された全slotを集約する', () => {
+  const first = evidence(1, { profile: 'standard', expected_count: 1 });
+  const second = evidence(2, { profile: 'standard', expected_count: 1 });
+  second.verdict.falsification = 'fail';
+  second.verdict.blockers = [{
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'OVERLAUNCH-BLOCKING',
+    evidence: ['src/commands/gate.ts の追加slotがblocking findingを返した'],
+  }];
+  const result = verify(
+    [
+      review(1, 1, { body: renderReviewEvidence(first) }),
+      review(2, 2, { body: renderReviewEvidence(second) }),
+    ],
+    { profile: 'standard', coreReviewRequired: false },
+  );
+  assert.equal(result.final, 'rejected');
+  assert.deepEqual(result.reviewers.map((entry) => entry.slot), [1, 2]);
+});
+
+test('ISSUE-733 AC-24: GitHubの4ゲートで要求体数に満たない証跡をhuman_requiredへ倒す', () => {
+  for (const gate of ['spec', 'design', 'implementation', 'validation'] as const) {
+    const first = evidence(1, { gate, expected_count: 2 });
+    const result = verify(
+      [review(1, 1, { body: renderReviewEvidence(first) })],
+      { gate },
+    );
+    assert.equal(result.final, 'human_required', gate);
+  }
+});
+
+test('ISSUE-733 AC-15: 閾値到達時のblockingをrejectedより先にhuman_requiredへ移し、未到達・blocker無しは集約判定を保つ', () => {
   const blockingVerdict: ReviewEvidence['verdict'] = {
     conformance: 'pass',
     falsification: 'fail',
@@ -172,6 +238,32 @@ test('retry: same-SHAの旧complete attemptを無視して最新attemptだけを
     review(3, 2, { body: renderReviewEvidence(newTwo) }),
   ]);
   assert.equal(validAfterMalformedHistory.final, 'approved');
+});
+
+test('ISSUE-733 AC-24: 耐久記録されたcurrent attemptがevidence 0件でも旧complete attemptへfallbackしない', () => {
+  const oldOne = evidence(1, { attempt_id: 'attempt-old' });
+  const oldTwo = evidence(2, { attempt_id: 'attempt-old' });
+  const result = verify([
+    review(1, 1, { body: renderReviewEvidence(oldOne) }),
+    review(2, 2, { body: renderReviewEvidence(oldTwo) }),
+    attemptReview(3, 'attempt-current-zero'),
+  ]);
+  assert.equal(result.final, 'human_required');
+  assert.match(result.reason ?? '', /current review attemptのreview evidenceがありません/);
+});
+
+test('ISSUE-733 AC-24: 耐久記録されたcurrent attemptが一部slotだけでも旧complete attemptへfallbackしない', () => {
+  const oldOne = evidence(1, { attempt_id: 'attempt-old' });
+  const oldTwo = evidence(2, { attempt_id: 'attempt-old' });
+  const currentOne = evidence(1, { attempt_id: 'attempt-current-partial' });
+  const result = verify([
+    review(1, 1, { body: renderReviewEvidence(oldOne) }),
+    review(2, 2, { body: renderReviewEvidence(oldTwo) }),
+    attemptReview(3, 'attempt-current-partial'),
+    review(4, 1, { body: renderReviewEvidence(currentOne) }),
+  ]);
+  assert.equal(result.final, 'human_required');
+  assert.match(result.reason ?? '', /独立review evidence件数が不足しています/);
 });
 
 test('provenance: 同一actorのtrusted recorderをrun attestationで区別し、未登録・actor未解決は拒否する', () => {
