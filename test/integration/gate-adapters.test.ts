@@ -57,6 +57,46 @@ function createCodexStub(dir: string, verdict: string): { executable: string; ar
   return { executable, argsLog };
 }
 
+/**
+ * 受け取った `-m` の値をそのまま model unavailable の stderr へ echo して非ゼロ終了する
+ * codex exec 互換 stub。明示 model が無改変で reviewer へ渡ることと、その値を含む
+ * stderr が分類器で MODEL_UNAVAILABLE になることを同じ経路で観測する（Issue #744）。
+ */
+function createCodexModelEchoStub(dir: string, exitCode: number): { executable: string; argsLog: string } {
+  const executable = path.join(dir, 'codex-model-echo-stub');
+  const argsLog = path.join(dir, 'codex-model-echo-args.log');
+  fs.writeFileSync(
+    executable,
+    [
+      '#!/bin/bash',
+      'set -uo pipefail',
+      `printf '%s\\n' "$@" > ${JSON.stringify(argsLog)}`,
+      'model=""',
+      'prev=""',
+      'for arg in "$@"; do',
+      '  [[ "$prev" != "-m" ]] || model="$arg"',
+      '  prev="$arg"',
+      'done',
+      'cat >/dev/null',
+      `printf "error: model '%s' is not available\\n" "$model" >&2`,
+      `exit ${exitCode}`,
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+  return { executable, argsLog };
+}
+
+/** setsid(1) は util-linux 由来で macOS には無い。別session detach の再現可否を判定する。 */
+function hasSetsid(): boolean {
+  try {
+    execFileSync('bash', ['-c', 'command -v setsid'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function classifyReviewerStderr(input: string | Buffer): Record<string, string> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-stderr-classifier-issue744-'));
   const stateFile = path.join(dir, 'state');
@@ -1060,6 +1100,114 @@ test('codex reviewer: 明示model overrideを無改変で最優先にする（Is
   assert.equal(res.status, 0, res.stderr);
   assert.equal(readFinal(reportPath), 'approved');
   assert.match(fs.readFileSync(stub.argsLog, 'utf8'), new RegExp(`^${explicitModel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+});
+
+test('codex reviewer: 区切り文字を含む明示modelのmodel unavailableを誤分類しない（Issue #744 AC-1/AC-6）', async (t) => {
+  // implementation-gate round 1 の反例: CODEX_REVIEWER_MODEL='vendor/model' は codex.sh を
+  // 無改変で通過して reviewer へ渡るが、'/' が model DFA の全分岐を無効化するため
+  // model unavailable が EXECUTION_FAILURE へ誤分類されていた。
+  const explicitModel = 'vendor/model';
+  assert.equal(
+    classifyReviewerStderr(`error: model '${explicitModel}' is not available\n`).classification,
+    'MODEL_UNAVAILABLE',
+  );
+  assert.equal(
+    classifyReviewerStderr("error: unknown model 'org/team/model:2026-08+preview'\n").classification,
+    'MODEL_UNAVAILABLE',
+  );
+  assert.equal(classifyReviewerStderr('error: unknown option for model command\n').classification, 'EXECUTION_FAILURE');
+  assert.equal(
+    classifyReviewerStderr(`error: model '${explicitModel}' is not available: retry\n`).classification,
+    'EXECUTION_FAILURE',
+  );
+
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-model-charset-issue744-'));
+  t.after(() => {
+    repo.cleanup();
+    fs.rmSync(stubDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+  const stub = createCodexModelEchoStub(stubDir, 41);
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_EXECUTABLE: stub.executable,
+    CODEX_REVIEWER_MODEL: explicitModel,
+    GATE_REVIEWER_RETRIES: '1',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(fs.readFileSync(stub.argsLog, 'utf8'), /^vendor\/model$/m, '明示modelを無改変でreviewerへ渡すこと');
+  assert.match(
+    res.stderr,
+    /code=REVIEWER_MODEL_UNAVAILABLE classification=MODEL_UNAVAILABLE rc=41 attempts=1 stderr_truncated=false/,
+  );
+});
+
+test('codex reviewer: 別sessionへdetachした子がstderr FIFOを保持しても回収が停止しない（Issue #744 AC-3/AC-8）', async (t) => {
+  // implementation-gate round 1 の反例: reviewer が別 session / process group へ子を detach して
+  // 正常終了すると、その子は stderr FIFO の write descriptor を継承し、reviewer プロセスグループへの
+  // kill では停止しないため、分類drainの回収が EOF を待って無期限に停止していた。
+  if (!hasSetsid()) {
+    t.skip('setsid(1) が無い環境では別sessionへのdetachを再現できない');
+    return;
+  }
+  const { repo, reportPath, targetSha } = setupGateReview();
+  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-detached-fifo-issue744-'));
+  const detachedInfo = path.join(markerDir, 'detached-child.info');
+  const rootLog = path.join(markerDir, 'root.log');
+  let detachedPid = 0;
+  t.after(() => {
+    if (detachedPid > 0) {
+      try {
+        process.kill(detachedPid, 'SIGKILL');
+      } catch {
+        /* 既に終了していれば何もしない */
+      }
+    }
+    repo.cleanup();
+    fs.rmSync(markerDir, { recursive: true, force: true });
+  });
+  setAdapter(repo.dir, 'codex');
+
+  const verdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_REVIEWER_CMD: [
+      'cat >/dev/null',
+      `dirname "$HOME" > ${JSON.stringify(rootLog)}`,
+      `setsid /bin/bash -c 'printf "%s %s\\n" "$$" "$(ps -o sid= -p $$ | tr -d " ")" > ${JSON.stringify(detachedInfo)}; exec /bin/sleep 120' &`,
+      `printf '%s' ${JSON.stringify(verdict)}`,
+    ].join('\n'),
+    GATE_REVIEWER_TIMEOUT_SEC: '30',
+    GATE_REVIEWER_RETRIES: '1',
+    GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
+  });
+
+  const startedAt = Date.now();
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(readFinal(reportPath), 'approved');
+  assert.ok(elapsedMs < 20000, `detachした子のstderr保持で回収が停止しないこと: elapsed=${elapsedMs}ms`);
+  assert.equal(fs.existsSync(fs.readFileSync(rootLog, 'utf8').trim()), false, '隔離rootが残らないこと');
+
+  const [childPid, childSid] = fs.readFileSync(detachedInfo, 'utf8').trim().split(/\s+/);
+  detachedPid = Number(childPid);
+  const ownSid = execFileSync('ps', ['-o', 'sid=', '-p', String(process.pid)], { encoding: 'utf8' }).trim();
+  assert.notEqual(childSid, ownSid, '子が別sessionへdetachしていること');
+  assert.doesNotThrow(() => process.kill(detachedPid, 0), 'detachした子がreviewer終了後も生存していること');
+
+  const adapter = fs.readFileSync(path.join(repo.dir, '.agent-skill-chain', 'adapters', 'claude.sh'), 'utf8');
+  const runner = adapter.slice(adapter.indexOf('_run_reviewer_sanitized()'), adapter.indexOf('_claude_reviewer_auth_ok()'));
+  const reviewerLaunch = runner.slice(runner.indexOf('classifier_pid=$!'), runner.indexOf('reviewer_pid=$!'));
+  assert.match(reviewerLaunch, /exec \{stderr_fifo_fd\}>&-/, 'reviewer subshellがFIFO descriptorを閉じること');
+  assert.match(reviewerLaunch, /cd -- "\$isolated_root\/workspace"/, '対象がreviewer起動subshellであること');
 });
 
 test('codex reviewer: 成功・失敗ともraw stderrと秘密値を外へ出さず隔離rootを削除する（Issue #744 AC-3/AC-8）', async (t) => {

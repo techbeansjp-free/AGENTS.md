@@ -476,10 +476,17 @@ _claude_credential_store_stage_diagnostic() {
 
 # Issue #744: reviewer stderrをrawのまま保持せず、固定grammarの有限状態だけへ畳み込む。
 # 入力はstdin、出力は隔離領域内のstate_fileであり、元のbyte・行・文字列断片は書き出さない。
+# 第2引数のwriter_done markerは、正当な書き手（reviewerとそのプロセスグループ）が回収済みである
+# ことを親が示す印である。reviewerが別session/process groupへdetachした子はstderr FIFOの
+# write descriptorを保持し続けEOFを永久に遅らせ得るため、印がある状態で入力が止まったら終端として
+# 扱う。marker未指定（直接呼び出し）の場合は従来どおりEOFまでブロックする。
 _reviewer_classify_stderr() {
-  local state_file="$1" byte='' pending_cr=false line_has_data=false line_invalid=false
+  local state_file="$1" writer_done="${2:-}"
+  local byte='' pending_cr=false line_has_data=false line_invalid=false read_rc=0
   local inspected_bytes=0 truncated=false model_seen=false auth_seen=false
   local max_bytes=65536
+  local -a read_wait_args=()
+  [[ -z "$writer_done" ]] || read_wait_args=(-t 0.5)
   local -a auth_patterns=(
     'error: authentication failed'
     'error: unauthorized'
@@ -544,11 +551,15 @@ _reviewer_classify_stderr() {
           fi
           ;;
         identifier)
+          # Issue #744: 明示 model override は任意のidentifierを取り得る（SPEC AC-6）。
+          # `vendor/model` のように`[a-z0-9._-]`外の文字を含む値でもmodel signatureを成立させないと、
+          # 到達可能な model unavailable が EXECUTION_FAILURE へ誤分類される。行全体の完全一致という
+          # 判別条件は変えず、identifierだけを「引用符以外の非空白可視文字・128字以内」へ広げる。
           id_len="${model_id_len[$i]}"
           if [[ "$current" == "'" && "$id_len" -ge 1 ]]; then
             model_phase[$i]='suffix'
             model_pos[$i]=1
-          elif [[ "$current" == [a-z0-9._-] && "$id_len" -lt 128 ]]; then
+          elif [[ "$current" == [[:graph:]] && "$current" != "'" && "$id_len" -lt 128 ]]; then
             model_id_len[$i]=$((id_len + 1))
           else
             model_phase[$i]='invalid'
@@ -595,11 +606,22 @@ _reviewer_classify_stderr() {
   shopt -s nocasematch
   _reviewer_dfa_reset_line
   LC_ALL=C
-  while IFS= read -r -n 1 -d '' byte; do
+  while true; do
+    read_rc=0
+    IFS= read -r -n 1 -d '' "${read_wait_args[@]}" byte || read_rc=$?
+    if ((read_rc != 0)); then
+      # EOF・読取り失敗は従来どおり入力終端とする。128超はデータ待ちの打ち切りにすぎない。
+      ((read_rc > 128)) || break
+      # 正当な書き手が回収済みなら、残る書き手はdetachした子だけなので終端とみなす。
+      if [[ -n "$writer_done" && -f "$writer_done" ]]; then break; fi
+      continue
+    fi
     if ((inspected_bytes >= max_bytes)); then
       truncated=true
       # 上限直後にもbyteがあるため、上限位置を行末と誤認して完全一致を成立させない。
       line_invalid=true
+      # 上限超過分はrawを保持せず高速に読み捨てる。detachした書き手が残る場合の
+      # 上限は親（_reviewer_reap_classifier）が強制終了で与える。
       /bin/cat >/dev/null
       break
     fi
@@ -632,6 +654,27 @@ _reviewer_classify_stderr() {
   fi
   printf 'classification=%s\nstderr_bytes=%s\nstderr_truncated=%s\n' \
     "$classification" "$inspected_bytes" "$truncated" >"$state_file"
+}
+
+# Issue #744: 分類drainの回収に上限を与える。reviewerが別session/process groupへdetachした子は
+# stderr FIFOのwrite descriptorを保持し、reviewerのプロセスグループへのkillでは停止しないため、
+# EOFを待つだけの回収は無期限に停止し得る。writer_done markerで分類側の終端判定を成立させ、
+# それでも終わらない経路（上限超過後の読み捨て等）は分類プロセスグループごと強制終了する。
+_reviewer_reap_classifier() {
+  local classifier_pid="$1" writer_done="$2" done_marker="$3" wait_tick=0 rc=0
+  : >"$writer_done" 2>/dev/null || true
+  # 上限は検査対象の64 KiBを最も遅い入力で処理し切る余裕を取る（0.05秒×1800=90秒）。
+  for ((wait_tick = 0; wait_tick < 1800; wait_tick++)); do
+    [[ ! -f "$done_marker" ]] || break
+    /bin/sleep 0.05 2>/dev/null || break
+  done
+  if [[ ! -f "$done_marker" ]]; then
+    kill -TERM -- "-$classifier_pid" 2>/dev/null || true
+    /bin/sleep 0.1 2>/dev/null || true
+    kill -KILL -- "-$classifier_pid" 2>/dev/null || true
+  fi
+  wait "$classifier_pid" 2>/dev/null || rc=$?
+  return "$rc"
 }
 
 _reviewer_internal_diagnostic() {
@@ -745,6 +788,8 @@ _run_reviewer_sanitized() {
 
   local prompt_file="$isolated_root/prompt" output_file="$isolated_root/output"
   local stderr_pipe="$isolated_root/reviewer-stderr" stderr_state="$isolated_root/reviewer-stderr-state"
+  local stderr_writers_done="$isolated_root/stderr-writers-done"
+  local stderr_drain_done="$isolated_root/stderr-drain-done"
   local timeout_marker="$isolated_root/timed-out" watchdog_ready="$isolated_root/watchdog-ready"
   local watchdog_armed="$isolated_root/watchdog-armed" reviewer_pid_file="$isolated_root/reviewer-pid"
   local reviewer_pid watchdog_pid classifier_pid='' stderr_fifo_fd='' rc=0 output="" monitor_was_enabled=false
@@ -801,16 +846,21 @@ _run_reviewer_sanitized() {
     _reviewer_internal_diagnostic EXECUTION_FAILURE false
     return 70
   fi
+  [[ $- == *m* ]] && monitor_was_enabled=true
+  # Issue #744: 分類drainもreviewerと同じく独立プロセスグループへ置き、停止しない場合に
+  # 読み捨て子ごと回収できるようにする。
+  set -m
   (
     # classifier自身が親のread/write descriptorを保持するとEOFを観測できないため先に閉じる。
     exec {stderr_fifo_fd}>&-
-    _reviewer_classify_stderr "$stderr_state" <"$stderr_pipe"
+    _reviewer_classify_stderr "$stderr_state" "$stderr_writers_done" <"$stderr_pipe"
+    : >"$stderr_drain_done"
   ) &
   classifier_pid=$!
-
-  [[ $- == *m* ]] && monitor_was_enabled=true
-  set -m
   (
+    # Issue #744: reviewerとその子孫がFIFOのread/write descriptorを継承すると、別sessionへ
+    # detachした子がwrite端を保持しEOFを永久に遅らせるため、起動前に必ず閉じる。
+    exec {stderr_fifo_fd}>&-
     cd -- "$isolated_root/workspace" &&
       exec "${clean_env[@]}" /bin/bash -c "$reviewer_cmd" <"$prompt_file" >"$output_file" 2>"$stderr_pipe"
   ) &
@@ -829,7 +879,7 @@ _run_reviewer_sanitized() {
     kill -KILL -- "-$reviewer_pid" 2>/dev/null || true
     wait "$reviewer_pid" 2>/dev/null || true
     exec {stderr_fifo_fd}>&-
-    wait "$classifier_pid" 2>/dev/null || true
+    _reviewer_reap_classifier "$classifier_pid" "$stderr_writers_done" "$stderr_drain_done" || true
     kill -TERM "$watchdog_pid" 2>/dev/null || true
     wait "$watchdog_pid" 2>/dev/null || true
     /bin/rm -rf -- "$isolated_root"
@@ -852,7 +902,7 @@ _run_reviewer_sanitized() {
   fi
   exec {stderr_fifo_fd}>&-
   local classifier_rc=0
-  wait "$classifier_pid" || classifier_rc=$?
+  _reviewer_reap_classifier "$classifier_pid" "$stderr_writers_done" "$stderr_drain_done" || classifier_rc=$?
   if [[ -f "$timeout_marker" ]]; then
     rc=124
   fi
