@@ -9,7 +9,12 @@ import { createGhStub } from '../helpers/gh-stub.js';
 import { createTmpRepo } from '../helpers/tmp-repo.js';
 import { canonicalTreeDigest } from '../../src/lib/tree-digest.js';
 import { TRUSTED_CLI_MARKER_SCHEMA } from '../../src/lib/trusted-cli-marker.js';
-import { evidencePromptDigest, parseReviewEvidence, type ReviewEvidence } from '../../src/lib/review-evidence.js';
+import {
+  evidencePromptDigest,
+  parseReviewAttemptStart,
+  parseReviewEvidence,
+  type ReviewEvidence,
+} from '../../src/lib/review-evidence.js';
 
 const packageRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 
@@ -41,11 +46,28 @@ const NPM_STUB = [
   '',
 ].join('\n');
 
+// Issue #733: ASC_TEST_REPORT_PATH が与えられた場合は、実物と同じく conformance/falsification/final
+// がすべて pending の gate-report scaffold を実体として生成する。フェイルセーフが scaffold を
+// human_required へ倒すことを観測するには、書き換え対象の実体が存在している必要がある。
+// scaffold は protected base worktree の外へ書く（共有worktreeを汚さないため）。
 const GATE_REVIEW_STUB = [
   '#!/usr/bin/env bash',
   'set -euo pipefail',
   'printf "trusted_cli_root_at_gate_review=%s\\n" "${ASC_TRUSTED_CLI_ROOT:-}" >> "$ASC_TEST_REVIEW_TRACE"',
-  'printf "gate_report_path: %s/review.yaml\\n" "$PWD"',
+  'if [[ -n "${ASC_TEST_REPORT_PATH:-}" ]]; then',
+  '  cat > "$ASC_TEST_REPORT_PATH" <<YAML',
+  'schema_version: agent-skill-chain/gate-report/v1',
+  'gate:',
+  '  id: $2',
+  '  target_sha: $4',
+  '  conformance: pending',
+  '  falsification: pending',
+  '  final: pending',
+  'YAML',
+  '  printf "gate_report_path: %s\\n" "$ASC_TEST_REPORT_PATH"',
+  'else',
+  '  printf "gate_report_path: %s/review.yaml\\n" "$PWD"',
+  'fi',
   'printf "review_profile: standard\\n"',
   '',
 ].join('\n');
@@ -193,7 +215,18 @@ function installReviewStubs(repoDir: string): void {
 }
 
 /** 自リポジトリ形状（agent-skill-chain 本体のソースと build 定義を持つ）の fixture。 */
-function createSelfFixture(): Fixture & { mainHead: string; setPullBase(sha: string): void; repositoryDispatches(): unknown[] } {
+function createSelfFixture(): Fixture & {
+  mainHead: string;
+  setPullBase(sha: string): void;
+  repositoryDispatches(): unknown[];
+  /** Issue #733: gate-report scaffold の実体。フェイルセーフの書き換え結果を観測する。 */
+  reportPath: string;
+  /** Issue #733: 隔離clone内CLIの起動記録。フェイルセーフの実行主体を観測する。 */
+  cliTrace: string;
+  /** Issue #733: attempt 記録 POST を GitHub Review API 障害として失敗させる。 */
+  failReviewApi(): void;
+  cliInvocations(): string[];
+} {
   const repo = createTmpRepo({ backend: 'github', selfPackage: true });
   const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-local-review-test-'));
   const stub = createGhStub(scratchDir);
@@ -201,9 +234,28 @@ function createSelfFixture(): Fixture & { mainHead: string; setPullBase(sha: str
   const reviewTrace = path.join(scratchDir, 'review-trace.txt');
   const npmTrace = path.join(scratchDir, 'npm-trace.txt');
   const foreignTrace = path.join(scratchDir, 'foreign-trace.txt');
+  const cliTrace = path.join(scratchDir, 'cli-trace.txt');
+  const reportPath = path.join(scratchDir, 'gate-report.yaml');
   fs.mkdirSync(npmBin);
   fs.writeFileSync(path.join(npmBin, 'npm'), NPM_STUB, { mode: 0o755 });
 
+  // Issue #733: 隔離clone内のCLI実体。gate-local-review.sh のフェイルセーフはこれを起動する。
+  // 追跡対象にしておくことで clone 後の dirty 判定に掛からない。
+  fs.mkdirSync(path.join(repo.dir, 'bin'), { recursive: true });
+  fs.writeFileSync(
+    path.join(repo.dir, 'bin', 'agents-md.js'),
+    [
+      "const fs = require('node:fs');",
+      'const argv = process.argv.slice(2);',
+      "fs.appendFileSync(process.env.ASC_TEST_CLI_TRACE, process.argv[1] + ' :: ' + argv.join(' ') + '\\n');",
+      "if (argv[0] === 'gate' && argv[1] === 'mark-human-required') {",
+      '  const target = argv[2];',
+      "  const text = fs.readFileSync(target, 'utf8');",
+      "  fs.writeFileSync(target, text.replace(/^([ \\t]*final:).*$/m, '$1 human_required'));",
+      '}',
+      '',
+    ].join('\n'),
+  );
   installReviewStubs(repo.dir);
   git(repo.dir, ['add', '-A']);
   git(repo.dir, ['commit', '-m', 'test: install isolated review stubs']);
@@ -226,6 +278,8 @@ function createSelfFixture(): Fixture & { mainHead: string; setPullBase(sha: str
     ASC_TEST_NPM_TRACE: npmTrace,
     ASC_TEST_REVIEW_TRACE: reviewTrace,
     ASC_TEST_FOREIGN_TRACE: foreignTrace,
+    ASC_TEST_CLI_TRACE: cliTrace,
+    ASC_TEST_REPORT_PATH: reportPath,
   });
   let currentPullBaseSha = baseSha;
   const setPullBase = (pullBaseSha: string): void => {
@@ -245,6 +299,8 @@ function createSelfFixture(): Fixture & { mainHead: string; setPullBase(sha: str
     reviewTrace,
     npmTrace,
     foreignTrace,
+    reportPath,
+    cliTrace,
     buildTraceName: 'consumer-build-ran.txt',
     npmTraceLines() {
       return fs.existsSync(npmTrace) ? fs.readFileSync(npmTrace, 'utf8').trim().split('\n').filter(Boolean) : [];
@@ -259,8 +315,15 @@ function createSelfFixture(): Fixture & { mainHead: string; setPullBase(sha: str
       return (stub.readState().pullReviews ?? []) as { body: string }[];
     },
     setPullBase,
+    failReviewApi() {
+      stub.writeState({ ...stub.readState(), failApiPaths: ['/reviews'] });
+    },
     repositoryDispatches() {
       return stub.readState().repositoryDispatches ?? [];
+    },
+    cliInvocations() {
+      if (!fs.existsSync(cliTrace)) return [];
+      return fs.readFileSync(cliTrace, 'utf8').trim().split('\n').filter(Boolean);
     },
     scratchDir,
     distributedPackage: '',
@@ -476,14 +539,31 @@ function createConsumerFixture(options: ConsumerOptions = {}): Fixture {
 }
 
 /**
+ * 投稿された review のうち verdict の証跡だけを取り出す。
+ *
+ * Issue #733 がレビュア起動前に attempt 記録（別マーカー）を1件投稿するため、投稿件数そのものを
+ * 数えると証跡の件数と一致しない。`parseReviewEvidence` は証跡マーカーを持たない本文へ undefined
+ * を返すので、これで attempt 記録と証跡を分離する。
+ */
+function postedEvidence(fixture: Fixture): ReviewEvidence[] {
+  return fixture
+    .postedReviews()
+    .map((review) => parseReviewEvidence(review.body))
+    .filter((evidence): evidence is ReviewEvidence => evidence !== undefined);
+}
+
+/**
  * AC-13(i)・AC-14: 投稿された証跡が1件で、その execution へ調達元識別子と実体 digest が
  * 非空値で記録されていることを確かめる。AC-14 は代表 consumer 3構成すべてで verdict の
  * 証跡投稿まで要求するため、3構成それぞれの検査から本ヘルパを呼ぶ。
  */
 function assertProcurementEvidence(fixture: Fixture, expectedBaseSha: string): ReviewEvidence {
-  const reviews = fixture.postedReviews();
-  assert.equal(reviews.length, 1, '証跡が投稿されること');
-  const evidence = parseReviewEvidence(reviews[0].body) as ReviewEvidence;
+  // Issue #733: レビュア起動前に attempt 記録が1件投稿される。証跡と別物であることも併せて固定する。
+  const attempts = fixture.postedReviews().filter((review) => parseReviewAttemptStart(review.body) !== undefined);
+  assert.equal(attempts.length, 1, 'レビュア起動前のattempt記録が1件投稿されること');
+  const evidences = postedEvidence(fixture);
+  assert.equal(evidences.length, 1, '証跡が投稿されること');
+  const evidence = evidences[0];
   assert.equal(evidence.execution.trusted_base_sha, expectedBaseSha);
   assert.match(evidence.execution.launcher_digest, /^sha256:[0-9a-f]{64}$/);
   assert.equal(evidence.execution.isolation, 'ephemeral_clone');
@@ -528,7 +608,17 @@ test('gate-local-review: 自リポジトリ形状ではclone_build経路で従�
   assert.match(trace, /adapters_dir=.*agent-skill-chain-local-review\.[^/]+\/repo\/\.agent-skill-chain\/adapters/);
   assert.match(trace, /trusted_cli_root=.*agent-skill-chain-local-review\.[^/]+\/repo/);
   assert.match(trace, /trusted_cli_root_at_gate_review=.*agent-skill-chain-local-review\.[^/]+\/repo/);
+  // Issue #733: attempt 記録が1件だけ投稿され、launcher token digest まで揃っていること。
+  const reviews = fixture.postedReviews() as { body: string; commit_id: string }[];
+  assert.equal(reviews.length, 1);
+  const attempt = parseReviewAttemptStart(reviews[0].body);
+  assert.ok(attempt);
+  assert.equal(attempt.target_sha, fixture.targetSha);
+  assert.equal(attempt.execution.trusted_base_sha, fixture.baseSha);
+  assert.equal(attempt.expected_count, 1);
+  assert.match(attempt.execution.launcher_token_digest, /^sha256:[0-9a-f]{64}$/);
   assert.deepEqual(fixture.repositoryDispatches(), []);
+  assert.deepEqual(fixture.cliInvocations(), [], '正常系でフェイルセーフを発火させないこと');
 });
 
 test('gate-local-review: default branch以外のworktreeでは隔離clone作成前に拒否する（AC-4 / Issue #703 AC-9）', (t) => {
@@ -570,6 +660,41 @@ test('gate-local-review: protected base worktreeがdirtyなら引き続き拒否
   assert.match(result.stderr, /protected base worktreeがdirtyです/);
   assert.equal(fs.existsSync(fixture.npmTrace), false, '拒否後に隔離cloneのbuildへ進まないこと');
   assert.equal(fs.existsSync(fixture.reviewTrace), false, '拒否後にreviewerを起動しないこと');
+});
+
+test('gate-local-review (ISSUE-733 AC-24): attempt記録POSTが非ゼロ終了してもgate-reportをpendingのまま残さない', (t) => {
+  const fixture = createSelfFixture();
+  t.after(() => fixture.cleanup());
+  // レビュアが示した到達経路: PR metadata検査・隔離clone・buildを通過した後、
+  // レビュアループより前のattempt記録POSTだけがGitHub Review APIの一時障害で失敗する。
+  fixture.failReviewApi();
+
+  const result = fixture.run();
+
+  assert.notEqual(result.status, 0, 'attempt記録を残せないまま成功終了しないこと');
+  // gate-review.sh 自体も痕跡へ書くため、ファイルの有無ではなくレビュア起動段だけが書く行で観測する。
+  assert.doesNotMatch(
+    fixture.reviewTraceText(),
+    /review_root=/,
+    'attempt記録POST失敗後にレビュアを起動しないこと',
+  );
+  assert.deepEqual(fixture.postedReviews(), [], 'attempt記録が投稿されていないこと');
+
+  // AC-24 (a): レビュアが1体も起動されずverdictが存在しないattemptのfinalはhuman_requiredとして
+  // 導出され、未導出（pending）のまま放置されない。
+  const report = fs.readFileSync(fixture.reportPath, 'utf8');
+  assert.match(report, /^\s*final: human_required$/m);
+  assert.doesNotMatch(report, /^\s*final: pending$/m);
+  assert.match(report, /^\s*conformance: pending$/m, 'sub-verdictは据え置くこと');
+
+  const invocations = fixture.cliInvocations();
+  assert.equal(invocations.length, 1);
+  assert.match(
+    invocations[0],
+    new RegExp(`agent-skill-chain-local-review\\.[^/]+/repo/bin/agents-md\\.js :: gate mark-human-required ${fixture.reportPath}$`),
+    'フェイルセーフは隔離clone内のCLIで実行すること',
+  );
+  assert.match(result.stderr, /human_required へ倒します/);
 });
 
 // ---------------------------------------------------------------------------
@@ -783,12 +908,15 @@ test('gate-local-review: 実生成したpromptとその読み込みassetの解�
   assert.match(prompt, /ゲートレビュア判定プロンプト/);
   assert.equal(prompt.includes(tamperedMarker), false, '生成されたpromptに審査対象側の改変内容が現れないこと');
   // 投稿された証跡の prompt digest が、固定文字列ではなく生成された prompt 本文由来であること。
-  const reviews = fixture.postedReviews();
-  assert.equal(reviews.length, 1);
-  const evidence = parseReviewEvidence(reviews[0].body) as ReviewEvidence;
+  const evidences = postedEvidence(fixture);
+  assert.equal(evidences.length, 1);
+  const evidence = evidences[0];
   assert.equal(evidence.prompt_digest, evidencePromptDigest(prompt));
   assert.notEqual(evidence.prompt_digest, evidencePromptDigest('gate-local-review consumer fixture prompt'));
-  assert.equal(reviews[0].body.includes(tamperedMarker), false);
+  assert.equal(
+    fixture.postedReviews().some((review) => review.body.includes(tamperedMarker)),
+    false,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -949,7 +1077,8 @@ test('gate-local-review: 審査対象の依存実体は参照経路の解決後�
   assert.ok(second.stderr.includes(issueWorktree), '該当した linked worktree のパスが診断に現れること');
 
   assert.equal(fs.existsSync(fixture.reviewTrace), false, '(ii) ではレビュアを起動しないこと');
-  assert.equal(fixture.postedReviews().length, 1, '(ii) では証跡を投稿しないこと');
+  // (i) が投稿した1件から増えないこと（調達の失敗は attempt 記録より前で起きるため attempt も増えない）。
+  assert.equal(postedEvidence(fixture).length, 1, '(ii) では証跡を投稿しないこと');
   assert.equal(fixture.promptText(), '', '(ii) では判定プロンプトを生成しないこと');
   for (const traceFile of [dependencyTraceSecond, assetTraceSecond]) {
     const text = fs.existsSync(traceFile) ? fs.readFileSync(traceFile, 'utf8') : '';

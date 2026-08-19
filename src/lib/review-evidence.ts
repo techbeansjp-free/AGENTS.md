@@ -1,4 +1,5 @@
 import { digestOf } from './digest.js';
+import { aggregateGateAttempt } from './gate-verdict-aggregation.js';
 import {
   selectFindingClassificationComments,
   validateDurableRoundBudgetDeclaration,
@@ -9,6 +10,7 @@ import {
 } from './round-budget-policy.js';
 
 export const REVIEW_EVIDENCE_MARKER = '<!-- agent-skill-chain:gate-review-evidence -->';
+export const REVIEW_ATTEMPT_MARKER = '<!-- agent-skill-chain:gate-review-attempt -->';
 
 const FINDING_EVIDENCE_MIN_LENGTH = 16;
 const AC_ID_PATTERN = /(?:^|[^A-Za-z0-9])AC-[0-9]+(?:$|[^A-Za-z0-9])/i;
@@ -102,6 +104,21 @@ export interface ReviewEvidence {
   verdict: EvidenceVerdict;
 }
 
+export interface ReviewAttemptStart {
+  schema_version: 'agent-skill-chain/gate-review-attempt/v1';
+  issue_id: string;
+  gate: ReviewEvidence['gate'];
+  profile: ReviewEvidence['profile'];
+  target_sha: string;
+  attempt_id: string;
+  expected_count: 1 | 2;
+  execution: {
+    trusted_base_sha: string;
+    launcher_token_digest: string;
+  };
+  reviewers: { run_id: string; slot: 1 | 2 }[];
+}
+
 export interface GithubReviewRecord {
   id: number | string;
   body: string;
@@ -176,11 +193,22 @@ export function renderReviewEvidence(evidence: ReviewEvidence): string {
   return `${REVIEW_EVIDENCE_MARKER}\n\`\`\`json\n${JSON.stringify(evidence, null, 2)}\n\`\`\`\n`;
 }
 
+export function renderReviewAttemptStart(attempt: ReviewAttemptStart): string {
+  return `${REVIEW_ATTEMPT_MARKER}\n\`\`\`json\n${JSON.stringify(attempt, null, 2)}\n\`\`\`\n`;
+}
+
 export function parseReviewEvidence(body: string): ReviewEvidence | undefined {
   if (!body.includes(REVIEW_EVIDENCE_MARKER)) return undefined;
   const match = /```json\s*\n([\s\S]*?)\n```/.exec(body);
   if (!match) throw new Error('構造化review evidenceのJSON blockがありません');
   return JSON.parse(match[1]) as ReviewEvidence;
+}
+
+export function parseReviewAttemptStart(body: string): ReviewAttemptStart | undefined {
+  if (!body.includes(REVIEW_ATTEMPT_MARKER)) return undefined;
+  const match = /```json\s*\n([\s\S]*?)\n```/.exec(body);
+  if (!match) throw new Error('構造化review attemptのJSON blockがありません');
+  return JSON.parse(match[1]) as ReviewAttemptStart;
 }
 
 function fail(reason: string, blockers: EvidenceFinding[] = []): EvidenceVerification {
@@ -312,6 +340,117 @@ export interface ValidatedGithubReviewEvidence {
   actor: string;
 }
 
+export interface ValidatedGithubReviewAttemptStart {
+  api: GithubReviewRecord;
+  attempt: ReviewAttemptStart;
+  reviewId: number;
+  actor: string;
+}
+
+export type GithubReviewAttemptStartValidation =
+  | { valid: true; value: ValidatedGithubReviewAttemptStart }
+  | { valid: false; reason: string };
+
+function isReviewAttemptStartShape(value: unknown): value is ReviewAttemptStart {
+  if (!value || typeof value !== 'object') return false;
+  const attempt = value as Partial<ReviewAttemptStart>;
+  const expectedCount = attempt.profile === 'strict' ? 2 : 1;
+  return (
+    attempt.schema_version === 'agent-skill-chain/gate-review-attempt/v1' &&
+    typeof attempt.issue_id === 'string' &&
+    /^ISSUE-[0-9]+$/.test(attempt.issue_id) &&
+    ['spec', 'design', 'implementation', 'validation'].includes(attempt.gate ?? '') &&
+    ['standard', 'strict'].includes(attempt.profile ?? '') &&
+    typeof attempt.target_sha === 'string' &&
+    /^[0-9a-f]{40}$/.test(attempt.target_sha) &&
+    typeof attempt.attempt_id === 'string' &&
+    /^attempt-[A-Za-z0-9._-]+$/.test(attempt.attempt_id) &&
+    attempt.expected_count === expectedCount &&
+    !!attempt.execution &&
+    typeof attempt.execution.trusted_base_sha === 'string' &&
+    /^[0-9a-f]{40}$/.test(attempt.execution.trusted_base_sha) &&
+    typeof attempt.execution.launcher_token_digest === 'string' &&
+    /^sha256:[0-9a-f]{64}$/.test(attempt.execution.launcher_token_digest) &&
+    Array.isArray(attempt.reviewers) &&
+    attempt.reviewers.length === expectedCount &&
+    attempt.reviewers.every((reviewer, index) =>
+      reviewer.slot === index + 1 &&
+      /^review-[A-Za-z0-9._-]+$/.test(reviewer.run_id)
+    ) &&
+    new Set(attempt.reviewers.map((reviewer) => reviewer.run_id)).size === expectedCount
+  );
+}
+
+export function validateGithubReviewAttemptStartRecord(
+  review: GithubReviewRecord,
+  options: {
+    issueId: string;
+    gate: ReviewEvidence['gate'];
+    trustedActors: string[];
+  },
+): GithubReviewAttemptStartValidation {
+  let parsed: unknown;
+  try {
+    parsed = parseReviewAttemptStart(review.body);
+  } catch {
+    return { valid: false, reason: `review ${review.id} のattempt JSONを検証できません` };
+  }
+  if (!isReviewAttemptStartShape(parsed)) {
+    return { valid: false, reason: `review ${review.id} のattempt形式が不正です` };
+  }
+  if (parsed.issue_id !== options.issueId || parsed.gate !== options.gate) {
+    return { valid: false, reason: `review ${review.id} は対象Issue/gateのattemptではありません` };
+  }
+  const reviewId = Number(review.id);
+  if (!Number.isSafeInteger(reviewId) || reviewId <= 0) {
+    return { valid: false, reason: `review ${review.id} のAPI IDが不正です` };
+  }
+  const actor = review.user?.login ?? '';
+  if (!actor) return { valid: false, reason: `review ${review.id} のactorを解決できません` };
+  if (!options.trustedActors.includes(actor)) {
+    return { valid: false, reason: `review ${review.id} のactorはtrusted recorderではありません` };
+  }
+  if (review.state.toUpperCase() === 'DISMISSED') {
+    return { valid: false, reason: `review ${review.id} はdismiss済みです` };
+  }
+  if (review.commit_id !== parsed.target_sha) {
+    return { valid: false, reason: `review ${review.id} のAPI commit SHAがattemptと一致しません` };
+  }
+  return { valid: true, value: { api: review, attempt: parsed, reviewId, actor } };
+}
+
+export function latestGithubReviewAttemptStartRecord(options: {
+  reviews: GithubReviewRecord[];
+  issueId: string;
+  gate: ReviewEvidence['gate'];
+  targetSha: string;
+  trustedActors: string[];
+}): GithubReviewAttemptStartValidation | undefined {
+  const candidates = options.reviews.flatMap((review) => {
+    if (!review.body.includes(REVIEW_ATTEMPT_MARKER)) return [];
+    let routed: Partial<ReviewAttemptStart> | undefined;
+    try {
+      routed = parseReviewAttemptStart(review.body);
+    } catch {
+      return [];
+    }
+    if (
+      routed?.issue_id !== options.issueId ||
+      routed.gate !== options.gate ||
+      routed.target_sha !== options.targetSha
+    ) {
+      return [];
+    }
+    const reviewId = Number(review.id);
+    return [{ review, reviewId: Number.isSafeInteger(reviewId) ? reviewId : -1 }];
+  });
+  if (candidates.length === 0) return undefined;
+  const latest = candidates.reduce((current, candidate) =>
+    candidate.reviewId > current.reviewId ? candidate : current
+  );
+  return validateGithubReviewAttemptStartRecord(latest.review, options);
+}
+
 export type GithubReviewEvidenceValidation =
   | { valid: true; value: ValidatedGithubReviewEvidence }
   | { valid: false; reason: string };
@@ -365,9 +504,6 @@ export function validateGithubReviewEvidenceRecord(
   if (evidence.expected_count !== expectedCount) {
     return { valid: false, reason: `review ${review.id} のexpected_countがprofileと一致しません` };
   }
-  if (evidence.reviewer.slot > expectedCount) {
-    return { valid: false, reason: `review ${review.id} のslotがprofileと一致しません` };
-  }
   return { valid: true, value: { api: review, evidence, reviewId, actor } };
 }
 
@@ -383,10 +519,10 @@ export function validateGithubReviewEvidenceAttempt(
   const first = candidates[0].evidence;
   const expectedCount = first.profile === 'strict' ? 2 : 1;
   const expectedSlots = expectedCount === 2 ? [1, 2] : [1];
-  if (candidates.length !== expectedCount) {
+  if (candidates.length < expectedCount) {
     return {
       valid: false,
-      reason: `独立review evidence件数が不足または過剰です: expected=${expectedCount}, actual=${candidates.length}`,
+      reason: `独立review evidence件数が不足しています: expected=${expectedCount}, actual=${candidates.length}`,
     };
   }
   if (candidates.some(({ evidence }) =>
@@ -520,6 +656,23 @@ export function verifyGithubReviewEvidence(options: {
   if (options.unresolvedWriterActor || options.writerActors.length === 0) {
     return fail('PR/commitのwriter actorを完全に解決できません');
   }
+  const currentAttemptRecord = latestGithubReviewAttemptStartRecord({
+    reviews: options.reviews,
+    issueId: options.issueId,
+    gate: options.gate,
+    targetSha: options.targetSha,
+    trustedActors: options.trustedActors,
+  });
+  if (currentAttemptRecord && !currentAttemptRecord.valid) return fail(currentAttemptRecord.reason);
+  const currentAttempt = currentAttemptRecord?.value.attempt;
+  if (currentAttempt) {
+    if (currentAttempt.profile !== options.profile) {
+      return fail(`current review attemptのprofileがtrusted profileと一致しません: ${currentAttempt.attempt_id}`);
+    }
+    if (currentAttempt.execution.trusted_base_sha !== options.expectedTrustedBaseSha) {
+      return fail(`current review attemptのtrusted base SHAが一致しません: ${currentAttempt.attempt_id}`);
+    }
+  }
   const expectedByPath = new Map(options.expectedArtifacts.map((artifact) => [artifact.path, artifact.digest]));
   const matching: {
     api: GithubReviewRecord;
@@ -553,8 +706,15 @@ export function verifyGithubReviewEvidence(options: {
   }
 
   if (matching.length === 0) return fail('現在のtarget SHA用review evidenceがありません');
-  const latest = matching.reduce((current, candidate) => candidate.reviewId > current.reviewId ? candidate : current);
-  const latestValidation = validateGithubReviewEvidenceRecord(latest.api, {
+  const latestEvidenceCandidate = currentAttempt
+    ? matching
+        .filter((candidate) => candidate.evidence.attempt_id === currentAttempt.attempt_id)
+        .sort((left, right) => right.reviewId - left.reviewId)[0]
+    : matching.reduce((current, candidate) => candidate.reviewId > current.reviewId ? candidate : current);
+  if (!latestEvidenceCandidate) {
+    return fail(`current review attemptのreview evidenceがありません: ${currentAttempt?.attempt_id}`);
+  }
+  const latestValidation = validateGithubReviewEvidenceRecord(latestEvidenceCandidate.api, {
     issueId: options.issueId,
     gate: options.gate,
     trustedActors: options.trustedActors,
@@ -591,6 +751,16 @@ export function verifyGithubReviewEvidence(options: {
   const attemptValidation = validateGithubReviewEvidenceAttempt(validatedCandidates);
   if (!attemptValidation.valid) return fail(attemptValidation.reason);
   const candidates = attemptValidation.values;
+
+  if (currentAttempt) {
+    const expectedReviewers = new Map(currentAttempt.reviewers.map((reviewer) => [reviewer.slot, reviewer.run_id]));
+    if (candidates.some(({ evidence }) =>
+      evidence.execution.launcher_token_digest !== currentAttempt.execution.launcher_token_digest ||
+      expectedReviewers.get(evidence.reviewer.slot) !== evidence.reviewer.run_id
+    )) {
+      return fail(`current review attemptのlauncher tokenまたはreviewer slotが一致しません: ${currentAttempt.attempt_id}`);
+    }
+  }
 
   const expectedCount = options.profile === 'strict' ? 2 : 1;
   if (latestEvidence.expected_count !== expectedCount) {
@@ -661,31 +831,33 @@ export function verifyGithubReviewEvidence(options: {
   // もとで実施した最終round」の手続きであり、宣言が成立しない経路では差し替え自体を行わない。
   // 宣言と切り離して差し替えを許すと、任意のroundでblockingを消してcutoffによる安全側停止を
   // 回避できる経路が残る。
+  const rawBlockers = verdicts.flatMap((verdict) => verdict.blockers);
   const classification = options.findingClassifications && options.expectedRoundBudgetDeclaration
     ? applyFindingClassifications({
-        blockers: verdicts.flatMap((verdict) => verdict.blockers),
+        blockers: rawBlockers,
         comments: options.findingClassifications,
         candidates,
         issueId: options.issueId,
         gate: options.gate,
         trustedActors: options.trustedActors,
       })
-    : ({ status: 'applied', blockers: verdicts.flatMap((verdict) => verdict.blockers) } as const);
+    : ({ status: 'applied', blockers: rawBlockers } as const);
   const classificationError = classification.status === 'invalid' ? classification.reason : undefined;
-  const blockers = classification.status === 'applied'
-    ? classification.blockers
-    : verdicts.flatMap((verdict) => verdict.blockers);
-  const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
+  // 差し替えはrawと同じ順序・同じ件数の写像であるため、slotごとの区間へ切り戻せる。
+  const classifiedBlockers = classification.status === 'applied' ? classification.blockers : rawBlockers;
+  const hasBlocking = classifiedBlockers.some((finding) => finding.severity === 'blocking');
   const isFinalRound =
     options.gateRound !== undefined && options.gateRound.round >= options.gateRound.cutoffThreshold;
-  const cutoffReached = isFinalRound && hasBlocking;
   // Issue #786: 有効sub-verdictの導出。配布済みルーブリックはblocking findingを付与するとき
   // 同じレビュアのsub-verdictをfailとすることを求めるため、severityだけを差し替えるとrawのfailが
   // 残り、4類型外findingしか残らない最終roundでもapprovedへ収束できない。逆に、分類の有無や
   // blocking件数だけを理由に判定値やinconclusiveを直接代入すると判定不能が承認へ倒れる。
   // どちらも避けるため、次の4条件がすべて成立するレビュアのrawな 'fail' だけを 'pass' として扱う。
   const derivationActive = classificationError === undefined && options.expectedRoundBudgetDeclaration !== undefined;
+  let blockerOffset = 0;
   const effective = verdicts.map((verdict) => {
+    const slotBlockers = classifiedBlockers.slice(blockerOffset, blockerOffset + verdict.blockers.length);
+    blockerOffset += verdict.blockers.length;
     const substitutable =
       // (a) 当該ゲート・当該attemptの最終round事前宣言がD2・D4の検査に合格して成立している
       derivationActive &&
@@ -698,6 +870,7 @@ export function verifyGithubReviewEvidence(options: {
     return {
       conformance: substitutable && verdict.conformance === 'fail' ? ('pass' as const) : verdict.conformance,
       falsification: substitutable && verdict.falsification === 'fail' ? ('pass' as const) : verdict.falsification,
+      blockers: slotBlockers,
     };
   });
   const subverdictDerived = effective.some(
@@ -705,67 +878,47 @@ export function verifyGithubReviewEvidence(options: {
       value.conformance !== verdicts[index].conformance ||
       value.falsification !== verdicts[index].falsification,
   );
+  // Issue #733: slot件数・判定確定数の検査を含む集約は1箇所（aggregateGateAttempt）で行う。
+  // Issue #786: その入力は分類後のfindingと有効sub-verdictであり、raw inconclusiveは保持する。
+  const aggregation = aggregateGateAttempt<EvidenceFinding, EvidenceVerdict>({
+    requiredReviewerCount: expectedCount,
+    launchedSlots: candidates.map((candidate) => candidate.evidence.reviewer.slot),
+    verdictBySlot: new Map(candidates.map((candidate, index) => [
+      candidate.evidence.reviewer.slot,
+      { status: 'resolved' as const, verdict: { ...candidate.evidence.verdict, ...effective[index] } },
+    ])),
+  });
+  const blockers = aggregation.blockers;
+  // Issue #733: 打ち切り判定を aggregation.final に従属させない。集約規則では blocking finding が
+  // あれば final は必ず rejected になるため、従属させるとラウンド上限の打ち切りが到達不能になる。
+  const cutoffReached = isFinalRound && hasBlocking;
   const hasPending = effective.some(
     (value) => value.conformance === 'pending' || value.falsification === 'pending',
   );
-  const rejected = effective.some(
-    (value) => value.conformance === 'fail' || value.falsification === 'fail',
-  ) || hasBlocking;
-  const approved = effective.every(
-    (value, index) =>
-      value.conformance === 'pass' &&
-      value.falsification === 'pass' &&
-      verdicts[index].inconclusive === false,
-  ) && !hasBlocking;
-  const trustedInconclusive = cutoffReached;
   // 判定値は順序評価で確定し、分類の有無やblocking件数だけを理由に直接代入しない。
   const final = classificationError
     ? 'human_required'
-    : derivationActive
-      ? hasPending
-        ? 'human_required'
-        : isFinalRound
+    : cutoffReached
+      ? 'human_required'
+      : derivationActive
+        ? hasPending
+          ? 'human_required'
           // 最終roundは進行役の裁量による追加差し戻しが残らないため 'rejected' を用いない。
           // approvedの条件を欠く入力は4類型のblocking残存を含めてすべて human_required へ収束させる。
-          ? approved ? 'approved' : 'human_required'
-          : rejected
-            ? 'rejected'
-            : approved
-              ? 'approved'
-              : 'human_required'
-      : trustedInconclusive
-        ? 'human_required'
-        : rejected
-          ? 'rejected'
-          : approved
-            ? 'approved'
-            : 'human_required';
-  const finalRoundUnapproved = derivationActive && isFinalRound && final === 'human_required';
+          : isFinalRound
+            ? aggregation.final === 'approved' ? 'approved' : 'human_required'
+            : aggregation.final
+        : aggregation.final;
+  // 判定不能は最終判定と一致させる。打ち切り・分類record不正・最終roundの承認条件未達はいずれも
+  // final を human_required へ倒すため、別系統の真偽値を持たない。
+  const trustedInconclusive = final === 'human_required';
+  const finalRoundUnapproved = derivationActive && isFinalRound && !cutoffReached && final === 'human_required';
   return {
     final,
     // 判定へ用いた有効sub-verdictを記録する。rawはsubverdict_reclassificationへ併記する。
-    conformance: rejected
-      ? effective.some((value) => value.conformance === 'fail')
-        ? 'fail'
-        : effective.every((value) => value.conformance === 'pass')
-          ? 'pass'
-          : 'pending'
-      : approved
-        ? 'pass'
-        : 'pending',
-    inconclusive:
-      classificationError !== undefined ||
-      trustedInconclusive ||
-      verdicts.some((verdict) => verdict.inconclusive),
-    falsification: rejected
-      ? effective.some((value) => value.falsification === 'fail')
-        ? 'fail'
-        : effective.every((value) => value.falsification === 'pass')
-          ? 'pass'
-          : 'pending'
-      : approved
-        ? 'pass'
-        : 'pending',
+    conformance: aggregation.conformance,
+    inconclusive: trustedInconclusive,
+    falsification: aggregation.falsification,
     blockers,
     approved_artifacts: options.expectedArtifacts,
     reviewers: candidates.map(({ api, evidence, actor }) => ({
