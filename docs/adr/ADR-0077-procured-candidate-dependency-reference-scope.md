@@ -2,7 +2,7 @@
 
 ```yaml
 id: ADR-0077
-status: proposed
+status: accepted
 title: 調達候補の採否を、候補の実体パスと依存の供給元に置かれた参照経路の解決後実体パスの2条件で判定する
 tags: [gate, trust-boundary, local-review, provenance, dependency-resolution]
 supersedes: []
