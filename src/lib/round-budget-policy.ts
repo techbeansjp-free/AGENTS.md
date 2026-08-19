@@ -38,6 +38,32 @@ export interface RoundBudgetCommentRecord {
   created_at?: string;
   updatedAt?: string;
   updated_at?: string;
+  /** GitHub Issue コメントAPIが返す作成者。制御レコードの採否を束縛する唯一の入力。 */
+  user?: { login?: string | null } | null;
+  author?: { login?: string | null } | null;
+}
+
+/**
+ * Issue #786: 制御レコード（最終round事前宣言・finding分類record）の投稿者を解決する。
+ * digestは秘密値を含まず公開情報から再計算できるため、digest一致は信頼の根拠にならない。
+ * 同じゲート判定を動かすPR review evidenceと同一のtrusted recorder集合で束縛する。
+ */
+export function controlRecordActor(comment: RoundBudgetCommentRecord): string | undefined {
+  const login = comment.user?.login ?? comment.author?.login;
+  return typeof login === 'string' && login.length > 0 ? login : undefined;
+}
+
+/**
+ * trusted recorder以外の投稿は制御レコードとして採用しないが、不正として全体を停止もさせない。
+ * 停止させると、Issueへコメントできる任意のアクターが1件投稿するだけで当該ゲートを恒久的に
+ * 止められる可用性側の攻撃面を新設することになる。採用しない場合の帰結は既存fallbackと同じ。
+ */
+export function isTrustedControlRecordComment(
+  comment: RoundBudgetCommentRecord,
+  trustedActors: string[],
+): boolean {
+  const actor = controlRecordActor(comment);
+  return actor !== undefined && trustedActors.includes(actor);
 }
 
 function canonicalJson(value: unknown): string {
@@ -132,12 +158,16 @@ export function selectRoundBudgetDeclarationComments(options: {
   comments: RoundBudgetCommentRecord[];
   issueId: string;
   gate: RoundBudgetDeclaration['gate'];
+  trustedActors: string[];
 }):
   | { status: 'selected'; matches: { comment: RoundBudgetCommentRecord; declaration: RoundBudgetDeclaration }[] }
   | { status: 'invalid'; reason: string } {
   const matches: { comment: RoundBudgetCommentRecord; declaration: RoundBudgetDeclaration }[] = [];
   for (const comment of options.comments) {
     if (!comment.body.includes(ROUND_BUDGET_DECLARATION_MARKER)) continue;
+    // 投稿者の束縛は解釈・digest検査の前段に置く。非trustedな解釈不能コメント1件で
+    // 当該ゲートを恒久停止させないため、採用しないだけで invalid にはしない。
+    if (!isTrustedControlRecordComment(comment, options.trustedActors)) continue;
     let declaration: RoundBudgetDeclaration | undefined;
     try {
       declaration = parseRoundBudgetDeclaration(comment.body);
@@ -155,6 +185,7 @@ export function resolveDurableRoundBudgetDeclaration(options: {
   comments: RoundBudgetCommentRecord[];
   issueId: string;
   gate: RoundBudgetDeclaration['gate'];
+  trustedActors: string[];
   previousAttemptId: string;
   finalRound: number;
   previousEvidenceCompletedAt?: string;
@@ -287,6 +318,40 @@ export function validateFindingClassificationRecord(value: unknown): value is Fi
   ) return false;
   if (validateFindingReclassification(record.finding) !== undefined) return false;
   return record.classification_digest === digestOf(canonicalJson(classificationPayload(record as FindingClassificationRecord)));
+}
+
+/**
+ * 対象Issue・対象gate・trusted recorderのfinding分類recordだけを選ぶ。
+ * Issue #786: 作成側の重複検査と解決側の適用は同じ選択規則を使う。片側だけを絞ると、
+ * 第三者のコメント1件で trusted recorder の分類を作成不能にできる。
+ */
+export function selectFindingClassificationComments(options: {
+  comments: RoundBudgetCommentRecord[];
+  issueId: string;
+  gate: FindingClassificationRecord['gate'];
+  trustedActors: string[];
+}):
+  | { status: 'selected'; matches: { comment: RoundBudgetCommentRecord; record: FindingClassificationRecord }[] }
+  | { status: 'invalid'; reason: string } {
+  const matches: { comment: RoundBudgetCommentRecord; record: FindingClassificationRecord }[] = [];
+  for (const comment of options.comments) {
+    if (!comment.body.includes(FINDING_CLASSIFICATION_MARKER)) continue;
+    // 投稿者の束縛は解釈・digest検査の前段に置く。digestは公開情報から再計算できるため
+    // 信頼の根拠にならず、非trustedな投稿は採用もゲート停止もさせない。
+    if (!isTrustedControlRecordComment(comment, options.trustedActors)) continue;
+    let record: FindingClassificationRecord | undefined;
+    try {
+      record = parseFindingClassificationRecord(comment.body);
+    } catch {
+      return { status: 'invalid', reason: `finding分類record ${comment.id}を解釈できません` };
+    }
+    if (!record || record.issue_id !== options.issueId || record.gate !== options.gate) continue;
+    if (!validateFindingClassificationRecord(record)) {
+      return { status: 'invalid', reason: `finding分類record ${comment.id}のdigestまたは必須値が不正です` };
+    }
+    matches.push({ comment, record });
+  }
+  return { status: 'selected', matches };
 }
 
 export function validateFindingReclassification(

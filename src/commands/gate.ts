@@ -32,6 +32,7 @@ import {
   verifyGithubReviewEvidence,
   type EvidenceVerdict,
   type GithubReviewRecord,
+  type SubverdictReclassification,
   type ReviewEvidence,
   type ValidatedGithubReviewEvidence,
   type VerifiedReviewAttempt,
@@ -75,11 +76,10 @@ import {
 import {
   createRoundBudgetDeclaration,
   createFindingClassificationRecord,
-  FINDING_CLASSIFICATION_MARKER,
-  parseFindingClassificationRecord,
   renderFindingClassificationRecord,
   resolveDurableRoundBudgetDeclaration,
   renderRoundBudgetDeclaration,
+  selectFindingClassificationComments,
   selectRoundBudgetDeclarationComments,
   validateFindingReclassification,
   type DurableRoundBudgetDeclaration,
@@ -249,6 +249,7 @@ export interface GateReport {
     review_attempt?: VerifiedReviewAttempt;
     light_review?: LightReviewDecision;
     round_budget_declaration?: DurableRoundBudgetDeclaration;
+    subverdict_reclassification?: SubverdictReclassification;
   };
 }
 
@@ -734,6 +735,7 @@ function resolveGithubFinalRoundDeclaration(options: {
     comments: options.comments,
     issueId: options.issueId,
     gate: options.gateId,
+    trustedActors: options.trustedActors,
     previousAttemptId: previous.attempt_id,
     finalRound,
     previousEvidenceCompletedAt: previousTimes.at(-1),
@@ -904,6 +906,7 @@ export async function declareFinalRound(args: string[]): Promise<number> {
       comments: parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout),
       issueId,
       gate: gateId,
+      trustedActors: policy.execution.trusted_reviewer_actors,
     });
     if (existing.status === 'invalid') throw new CliError(existing.reason);
     if (existing.matches.length > 0) {
@@ -964,17 +967,17 @@ export async function classifyFinding(args: string[]): Promise<number> {
     if (!validated.valid) throw new CliError(validated.reason);
     const matches = validated.value.evidence.verdict.blockers.filter((finding) => finding.code === findingCode);
     if (matches.length !== 1) throw new CliError(`source review内のfinding codeは1件だけ必要です: actual=${matches.length}`);
-    const comments = parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout);
-    const duplicate = comments.some((comment) => {
-      if (!comment.body.includes(FINDING_CLASSIFICATION_MARKER)) return false;
-      try {
-        const record = parseFindingClassificationRecord(comment.body);
-        return record?.issue_id === issueId && record.gate === gateId &&
-          record.source_review_id === sourceReviewId && record.finding.code === findingCode;
-      } catch {
-        return true;
-      }
+    // Issue #786: 作成側の重複検査も解決側と同じ選択規則（marker・issue_id・gate・投稿者）を使う。
+    // 投稿者で絞らないと、第三者のコメント1件で trusted recorder の分類を作成不能にできる。
+    const existing = selectFindingClassificationComments({
+      comments: parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout),
+      issueId,
+      gate: gateId,
+      trustedActors: policy.execution.trusted_reviewer_actors,
     });
+    if (existing.status === 'invalid') throw new CliError(existing.reason);
+    const duplicate = existing.matches.some(({ record }) =>
+      record.source_review_id === sourceReviewId && record.finding.code === findingCode);
     if (duplicate) throw new CliError('同じsource findingの分類記録は既に存在し、追加・上書きできません');
     const record = createFindingClassificationRecord({
       issueId,
@@ -1755,6 +1758,10 @@ function buildVerifiedGateReport(options: {
       ...(result.light_review ? { light_review: result.light_review } : {}),
       ...(declarationResolution.declaration
         ? { round_budget_declaration: declarationResolution.declaration }
+        : {}),
+      // 有効sub-verdictを判定へ用いた場合だけ、レビュアのraw値を同じ現行記録へ併記する。
+      ...(result.subverdict_reclassification
+        ? { subverdict_reclassification: result.subverdict_reclassification }
         : {}),
     },
   };

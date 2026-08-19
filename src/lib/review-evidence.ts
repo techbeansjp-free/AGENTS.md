@@ -1,9 +1,7 @@
 import { digestOf } from './digest.js';
 import {
-  FINDING_CLASSIFICATION_MARKER,
-  parseFindingClassificationRecord,
+  selectFindingClassificationComments,
   validateDurableRoundBudgetDeclaration,
-  validateFindingClassificationRecord,
   type DurableRoundBudgetDeclaration,
   type FindingClassificationRecord,
   type FindingReclassification,
@@ -107,6 +105,12 @@ export interface VerifiedReviewAttempt {
   evidence_digest: string;
 }
 
+export interface SubverdictReclassification {
+  original_conformance: 'pass' | 'fail' | 'pending';
+  original_falsification: 'pass' | 'fail' | 'pending';
+  basis: 'all_blocking_findings_reclassified';
+}
+
 export interface EvidenceVerification {
   final: 'approved' | 'rejected' | 'human_required';
   conformance: 'pass' | 'fail' | 'pending';
@@ -117,6 +121,8 @@ export interface EvidenceVerification {
   reviewers: VerifiedReviewer[];
   review_attempt?: VerifiedReviewAttempt;
   light_review?: LightReviewEvidence;
+  /** 有効sub-verdictの導出が起きた場合だけ、レビュアのraw値を併記する。 */
+  subverdict_reclassification?: SubverdictReclassification;
   reason?: string;
 }
 
@@ -383,8 +389,8 @@ export function validateGithubReviewEvidenceAttempt(
 
 /**
  * 最終round後のfinding分類recordを、latest attemptのfinding severityの差し替えとしてだけ適用する。
- * Issue #786: 分類はseverityだけを置換し、conformance/falsification/inconclusive/finalには触れない。
- * 判定はこの置換後のfinding集合を入力として、既存の集約規則が1箇所で再計算する。
+ * Issue #786: 分類はseverityだけを置換し、レビュアのraw conformance/falsification/inconclusiveは
+ * 書き換えない。判定はこの置換後のfinding集合と有効sub-verdictを入力として1箇所で再計算する。
  */
 function applyFindingClassifications(options: {
   blockers: EvidenceFinding[];
@@ -392,22 +398,17 @@ function applyFindingClassifications(options: {
   candidates: ValidatedGithubReviewEvidence[];
   issueId: string;
   gate: ReviewEvidence['gate'];
+  trustedActors: string[];
 }): { status: 'applied'; blockers: EvidenceFinding[] } | { status: 'invalid'; reason: string } {
-  const records: FindingClassificationRecord[] = [];
-  for (const comment of options.comments) {
-    if (!comment.body.includes(FINDING_CLASSIFICATION_MARKER)) continue;
-    let record: FindingClassificationRecord | undefined;
-    try {
-      record = parseFindingClassificationRecord(comment.body);
-    } catch {
-      return { status: 'invalid', reason: `finding分類record ${comment.id}を解釈できません` };
-    }
-    if (!record || record.issue_id !== options.issueId || record.gate !== options.gate) continue;
-    if (!validateFindingClassificationRecord(record)) {
-      return { status: 'invalid', reason: `finding分類record ${comment.id}のdigestまたは必須値が不正です` };
-    }
-    records.push(record);
-  }
+  // 作成側（gate classify-finding）と同じ選択規則で、trusted recorderのrecordだけを採る。
+  const selection = selectFindingClassificationComments({
+    comments: options.comments,
+    issueId: options.issueId,
+    gate: options.gate,
+    trustedActors: options.trustedActors,
+  });
+  if (selection.status === 'invalid') return { status: 'invalid', reason: selection.reason };
+  const records = selection.matches.map(({ record }) => record);
   if (records.length === 0) return { status: 'applied', blockers: options.blockers };
 
   const keys = new Set<string>();
@@ -622,15 +623,19 @@ export function verifyGithubReviewEvidence(options: {
   }
 
   const verdicts = candidates.map((candidate) => candidate.evidence.verdict);
-  // Issue #786: 分類recordはここでfinding severityを差し替えるだけで、以降の集約規則は変えない。
-  // 分類recordが不正なら判定を推測せず human_required へ倒す。
-  const classification = options.findingClassifications
+  // Issue #786: 分類recordはfinding severityの差し替えだけを行い、レビュアのraw値は書き換えない。
+  // 分類recordが不正なら判定を推測せず human_required へ倒す。分類は「成立した最終round事前宣言の
+  // もとで実施した最終round」の手続きであり、宣言が成立しない経路では差し替え自体を行わない。
+  // 宣言と切り離して差し替えを許すと、任意のroundでblockingを消してcutoffによる安全側停止を
+  // 回避できる経路が残る。
+  const classification = options.findingClassifications && options.expectedRoundBudgetDeclaration
     ? applyFindingClassifications({
         blockers: verdicts.flatMap((verdict) => verdict.blockers),
         comments: options.findingClassifications,
         candidates,
         issueId: options.issueId,
         gate: options.gate,
+        trustedActors: options.trustedActors,
       })
     : ({ status: 'applied', blockers: verdicts.flatMap((verdict) => verdict.blockers) } as const);
   const classificationError = classification.status === 'invalid' ? classification.reason : undefined;
@@ -638,35 +643,78 @@ export function verifyGithubReviewEvidence(options: {
     ? classification.blockers
     : verdicts.flatMap((verdict) => verdict.blockers);
   const hasBlocking = blockers.some((finding) => finding.severity === 'blocking');
-  const cutoffReached =
-    options.gateRound !== undefined &&
-    options.gateRound.round >= options.gateRound.cutoffThreshold &&
-    hasBlocking;
-  const rejected = verdicts.some(
-    (verdict) => verdict.conformance === 'fail' || verdict.falsification === 'fail',
+  const isFinalRound =
+    options.gateRound !== undefined && options.gateRound.round >= options.gateRound.cutoffThreshold;
+  const cutoffReached = isFinalRound && hasBlocking;
+  // Issue #786: 有効sub-verdictの導出。配布済みルーブリックはblocking findingを付与するとき
+  // 同じレビュアのsub-verdictをfailとすることを求めるため、severityだけを差し替えるとrawのfailが
+  // 残り、4類型外findingしか残らない最終roundでもapprovedへ収束できない。逆に、分類の有無や
+  // blocking件数だけを理由に判定値やinconclusiveを直接代入すると判定不能が承認へ倒れる。
+  // どちらも避けるため、次の4条件がすべて成立するレビュアのrawな 'fail' だけを 'pass' として扱う。
+  const derivationActive = classificationError === undefined && options.expectedRoundBudgetDeclaration !== undefined;
+  const effective = verdicts.map((verdict) => {
+    const substitutable =
+      // (a) 当該ゲート・当該attemptの最終round事前宣言がD2・D4の検査に合格して成立している
+      derivationActive &&
+      // (b) 当該レビュアのraw inconclusiveがfalseである
+      verdict.inconclusive === false &&
+      // (c) 当該attemptのblocking findingが1件残らず有効な分類recordでwarningへ差し替えられている
+      !hasBlocking &&
+      // (d) 当該レビュアが当該attemptへblocking findingを1件以上提出している
+      verdict.blockers.some((finding) => finding.severity === 'blocking');
+    return {
+      conformance: substitutable && verdict.conformance === 'fail' ? ('pass' as const) : verdict.conformance,
+      falsification: substitutable && verdict.falsification === 'fail' ? ('pass' as const) : verdict.falsification,
+    };
+  });
+  const subverdictDerived = effective.some(
+    (value, index) =>
+      value.conformance !== verdicts[index].conformance ||
+      value.falsification !== verdicts[index].falsification,
+  );
+  const hasPending = effective.some(
+    (value) => value.conformance === 'pending' || value.falsification === 'pending',
+  );
+  const rejected = effective.some(
+    (value) => value.conformance === 'fail' || value.falsification === 'fail',
   ) || hasBlocking;
-  const approved = verdicts.every(
-    (verdict) =>
-      verdict.conformance === 'pass' &&
-      verdict.falsification === 'pass' &&
-      verdict.inconclusive === false,
+  const approved = effective.every(
+    (value, index) =>
+      value.conformance === 'pass' &&
+      value.falsification === 'pass' &&
+      verdicts[index].inconclusive === false,
   ) && !hasBlocking;
   const trustedInconclusive = cutoffReached;
+  // 判定値は順序評価で確定し、分類の有無やblocking件数だけを理由に直接代入しない。
   const final = classificationError
     ? 'human_required'
-    : trustedInconclusive
-      ? 'human_required'
-      : rejected
-        ? 'rejected'
-        : approved
-          ? 'approved'
-          : 'human_required';
+    : derivationActive
+      ? hasPending
+        ? 'human_required'
+        : isFinalRound
+          // 最終roundは進行役の裁量による追加差し戻しが残らないため 'rejected' を用いない。
+          // approvedの条件を欠く入力は4類型のblocking残存を含めてすべて human_required へ収束させる。
+          ? approved ? 'approved' : 'human_required'
+          : rejected
+            ? 'rejected'
+            : approved
+              ? 'approved'
+              : 'human_required'
+      : trustedInconclusive
+        ? 'human_required'
+        : rejected
+          ? 'rejected'
+          : approved
+            ? 'approved'
+            : 'human_required';
+  const finalRoundUnapproved = derivationActive && isFinalRound && final === 'human_required';
   return {
     final,
+    // 判定へ用いた有効sub-verdictを記録する。rawはsubverdict_reclassificationへ併記する。
     conformance: rejected
-      ? verdicts.some((verdict) => verdict.conformance === 'fail')
+      ? effective.some((value) => value.conformance === 'fail')
         ? 'fail'
-        : verdicts.every((verdict) => verdict.conformance === 'pass')
+        : effective.every((value) => value.conformance === 'pass')
           ? 'pass'
           : 'pending'
       : approved
@@ -677,9 +725,9 @@ export function verifyGithubReviewEvidence(options: {
       trustedInconclusive ||
       verdicts.some((verdict) => verdict.inconclusive),
     falsification: rejected
-      ? verdicts.some((verdict) => verdict.falsification === 'fail')
+      ? effective.some((value) => value.falsification === 'fail')
         ? 'fail'
-        : verdicts.every((verdict) => verdict.falsification === 'pass')
+        : effective.every((value) => value.falsification === 'pass')
           ? 'pass'
           : 'pending'
       : approved
@@ -705,6 +753,23 @@ export function verifyGithubReviewEvidence(options: {
       sandbox: evidence.execution.sandbox,
     })),
     ...(options.expectedLightReview ? { light_review: options.expectedLightReview } : {}),
+    ...(subverdictDerived
+      ? {
+          subverdict_reclassification: {
+            original_conformance: verdicts.some((verdict) => verdict.conformance === 'fail')
+              ? ('fail' as const)
+              : verdicts.every((verdict) => verdict.conformance === 'pass')
+                ? ('pass' as const)
+                : ('pending' as const),
+            original_falsification: verdicts.some((verdict) => verdict.falsification === 'fail')
+              ? ('fail' as const)
+              : verdicts.every((verdict) => verdict.falsification === 'pass')
+                ? ('pass' as const)
+                : ('pending' as const),
+            basis: 'all_blocking_findings_reclassified' as const,
+          },
+        }
+      : {}),
     review_attempt: {
       attempt_id: latestEvidence.attempt_id,
       expected_count: expectedCount,
@@ -727,6 +792,14 @@ export function verifyGithubReviewEvidence(options: {
               `ラウンド上限に達したため人間判断へ移行します: round=${options.gateRound?.round}, ` +
               `cutoff_threshold=${options.gateRound?.cutoffThreshold}, unresolved_blocking=${blockers.filter((finding) => finding.severity === 'blocking').length}`,
           }
-        : {}),
+        : finalRoundUnapproved
+          ? {
+              reason:
+                `最終roundの承認条件を満たさないため人間判断へ移行します: round=${options.gateRound?.round}, ` +
+                `conformance=${effective.map((value) => value.conformance).join('/')}, ` +
+                `falsification=${effective.map((value) => value.falsification).join('/')}, ` +
+                `reviewer_inconclusive=${verdicts.map((verdict) => String(verdict.inconclusive)).join('/')}`,
+            }
+          : {}),
   };
 }

@@ -69,6 +69,11 @@ interface GateReport {
       remediation_round: number;
       strict_locked: boolean;
     };
+    subverdict_reclassification?: {
+      original_conformance: string;
+      original_falsification: string;
+      basis: string;
+    };
   };
 }
 
@@ -186,6 +191,56 @@ test('gate publish: final=rejected は failure、approved(両pass) は success �
     checkRuns.map((r) => r.conclusion),
     ['failure', 'success'],
   );
+});
+
+// Issue #786 D3: 4類型外findingだけが残った最終roundは、raw failを併記したまま有効sub-verdictで
+// approved を記録する。ラウンド2の欠陥（severityだけ差し替えてsub-verdictへ反映せず永久にrejected）
+// を戻さないため、既存のpublish整合検査（approvedは両passのみ許可）を通ることを固定する。
+// 逆に4類型のblockingが残る最終roundは rejected ではなく human_required として発行される。
+test('gate publish (D3): 有効sub-verdictのapprovedはsuccess、4類型blocking残存の最終roundはaction_requiredになる', async (t) => {
+  const { stub, env, cleanup } = makeGhStub();
+  const repo = createTmpRepo({ backend: 'github' });
+  t.after(() => {
+    repo.cleanup();
+    cleanup();
+  });
+
+  const approvedPath = writeReport(repo.dir, scaffold({
+    final: 'approved',
+    conformance: 'pass',
+    falsification: 'pass',
+    subverdict_reclassification: {
+      original_conformance: 'fail',
+      original_falsification: 'fail',
+      basis: 'all_blocking_findings_reclassified',
+    },
+    blockers: [{
+      severity: 'warning',
+      origin: 'implementation',
+      code: 'NON_FINAL_CATEGORY',
+      evidence: ['src/commands/gate.ts の限定4類型外の指摘'],
+    }],
+  }));
+  const approved = runCli(['gate', 'publish', 'ISSUE-1', approvedPath], { cwd: repo.dir, env });
+  assert.equal(approved.status, 0, approved.stderr);
+
+  const unresolvedPath = path.join(repo.dir, 'unresolved.yaml');
+  fs.writeFileSync(unresolvedPath, stringify(scaffold({
+    final: 'human_required',
+    conformance: 'fail',
+    falsification: 'fail',
+    blockers: [{
+      severity: 'blocking',
+      origin: 'implementation',
+      code: 'PREVIOUS_BLOCKING_UNRESOLVED',
+      evidence: ['src/commands/gate.ts の既出blockingが未是正のまま残る'],
+    }],
+  })), 'utf8');
+  const unresolved = runCli(['gate', 'publish', 'ISSUE-1', unresolvedPath], { cwd: repo.dir, env });
+  assert.equal(unresolved.status, 0, unresolved.stderr);
+
+  const checkRuns = (stub.readState() as unknown as { checkRuns?: CheckRunRecord[] }).checkRuns ?? [];
+  assert.deepEqual(checkRuns.map((run) => run.conclusion), ['success', 'action_required']);
 });
 
 // --- record-verdict: verdict → gate-report 結線と final 機械導出 -----------------------

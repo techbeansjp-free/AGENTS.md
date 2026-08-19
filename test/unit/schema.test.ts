@@ -150,6 +150,28 @@ test("validateAgainstSchema('gate-report'): light_reviewは完全な任意証跡
   assert.equal(validateAgainstSchema('gate-report', invalid, packageRoot()).valid, false);
 });
 
+// Issue #786: 既存の publish 整合検査は final=approved に対し conformance/falsification の
+// 両 pass を要求するため、この2フィールドには判定へ用いた有効 sub-verdict を記録する。
+// レビュアが提出した raw 値は同じ現行記録へ併記し、失わせない。
+test("validateAgainstSchema('gate-report'): 有効sub-verdictのraw併記は完全payloadだけを許可する", () => {
+  const doc = loadSchemaDoc('gate-report');
+  const report = structuredClone(doc.examples[0]) as { gate: Record<string, unknown> };
+  report.gate.subverdict_reclassification = {
+    original_conformance: 'fail',
+    original_falsification: 'fail',
+    basis: 'all_blocking_findings_reclassified',
+  };
+  assert.deepEqual(validateAgainstSchema('gate-report', report, packageRoot()), { valid: true, errors: [] });
+
+  const missing = structuredClone(report) as { gate: { subverdict_reclassification: Record<string, unknown> } };
+  delete missing.gate.subverdict_reclassification.original_falsification;
+  assert.equal(validateAgainstSchema('gate-report', missing, packageRoot()).valid, false);
+
+  const forgedBasis = structuredClone(report) as { gate: { subverdict_reclassification: Record<string, unknown> } };
+  forgedBasis.gate.subverdict_reclassification.basis = 'blocking_count_zero';
+  assert.equal(validateAgainstSchema('gate-report', forgedBasis, packageRoot()).valid, false);
+});
+
 test('validateAgainstSchema: 実物の config/agent-skill-chain.yaml をそのまま渡すとvalidになる', () => {
   const configPath = resolveAsset(path.join('config', 'agent-skill-chain.yaml'));
   const config = readYamlFile(configPath);

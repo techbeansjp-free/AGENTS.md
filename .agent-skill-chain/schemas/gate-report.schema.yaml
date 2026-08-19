@@ -103,6 +103,20 @@ properties:
           strict_locked: {type: boolean}
       round_budget_declaration:
         $ref: '#/definitions/round_budget_attestation'
+      subverdict_reclassification:
+        type: object
+        description: >
+          conformance/falsification へ有効 sub-verdict を記録した場合に限り併記する、
+          レビュアが提出した raw な sub-verdict。既存の publish 整合検査は
+          final=approved に対し conformance/falsification の両 pass を要求するため、
+          1つのフィールドが有効値と raw 値を同時に保持できない。raw 値の追跡は
+          この併記フィールドが担う。
+        required: [original_conformance, original_falsification, basis]
+        additionalProperties: false
+        properties:
+          original_conformance: {type: string, enum: [pass, fail, pending]}
+          original_falsification: {type: string, enum: [pass, fail, pending]}
+          basis: {const: all_blocking_findings_reclassified}
 
 definitions:
   round_budget_attestation:
