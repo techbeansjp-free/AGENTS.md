@@ -5,10 +5,15 @@ import {
   isEvidenceVerdict,
   renderReviewEvidence,
   verifyGithubReviewEvidence,
+  type EvidenceFinding,
   type GithubReviewRecord,
   type LightReviewEvidence,
   type ReviewEvidence,
 } from '../../src/lib/review-evidence.js';
+import {
+  createFindingClassificationRecord,
+  renderFindingClassificationRecord,
+} from '../../src/lib/round-budget-policy.js';
 
 const targetSha = 'a'.repeat(40);
 const baseSha = 'c'.repeat(40);
@@ -403,4 +408,104 @@ test('trusted Strict profileをlight_review.applied自己申告でStandardへ降
   );
   assert.equal(result.final, 'human_required');
   assert.match(result.reason ?? '', /profile.*trusted/);
+});
+
+// Issue #786: 最終round後のfinding分類は severity の差し替えだけを行う。
+// 分類後に「blocking finding が0件」を根拠として conformance/falsification/inconclusive/final を
+// 無条件に上書きすると、レビュアが inconclusive:true と表明した attempt が approved として
+// 記録され、判定不能を approve へ倒さない不変条件が壊れる。
+test('finding分類: severity差し替えだけを適用し、レビュアのinconclusiveをapprovedへ上書きしない', () => {
+  const finding: EvidenceFinding = {
+    severity: 'warning',
+    origin: 'implementation',
+    code: 'UNVERIFIABLE_PATH',
+    evidence: ['src/commands/gate.ts の当該経路を検証できない'],
+  };
+  const inconclusiveVerdict: ReviewEvidence['verdict'] = {
+    conformance: 'pending',
+    falsification: 'pending',
+    blockers: [finding],
+    approved_artifacts: [...artifacts],
+    inconclusive: true,
+  };
+  const reviews = [
+    review(1, 1, { body: renderReviewEvidence(evidence(1, { verdict: inconclusiveVerdict })) }),
+    review(2, 2),
+  ];
+  const classification = renderFindingClassificationRecord(createFindingClassificationRecord({
+    issueId: 'ISSUE-271',
+    gate: 'spec',
+    sourceReviewId: '1',
+    sourceFinding: finding,
+    followUpIssueId: 'ISSUE-900',
+    downgradeReason: '最終roundの限定4類型外であるため',
+  }));
+
+  const withoutClassification = verify(reviews);
+  assert.equal(withoutClassification.final, 'human_required');
+  assert.equal(withoutClassification.inconclusive, true);
+
+  const classified = verify(reviews, {
+    findingClassifications: [{ id: 21, body: classification, createdAt: '2026-08-19T00:01:00.000Z' }],
+  });
+  assert.equal(classified.final, 'human_required', 'inconclusiveな最終roundをapprovedへ倒さないこと');
+  assert.equal(classified.inconclusive, true);
+  assert.equal(classified.conformance, 'pending');
+  assert.equal(classified.falsification, 'pending');
+  assert.equal(classified.blockers.length, 1);
+  assert.equal(classified.blockers[0].reclassification?.follow_up_issue_id, 'ISSUE-900');
+});
+
+// Issue #786: 差し替えの効果は「打ち切り判定の入力となる blocking 件数」に限られる。
+// レビュアの判定値そのものは分類では変えない。
+test('finding分類: blockingをwarningへ差し替えた結果だけが既存の集約規則へ入力される', () => {
+  const blocking: EvidenceFinding = {
+    severity: 'blocking',
+    origin: 'implementation',
+    code: 'NON_FINAL_CATEGORY',
+    evidence: ['src/commands/gate.ts の限定4類型外の指摘'],
+  };
+  const verdictWithBlocking: ReviewEvidence['verdict'] = {
+    conformance: 'pass',
+    falsification: 'pass',
+    blockers: [blocking],
+    approved_artifacts: [...artifacts],
+    inconclusive: false,
+  };
+  const reviews = [
+    review(1, 1, { body: renderReviewEvidence(evidence(1, { verdict: verdictWithBlocking })) }),
+    review(2, 2),
+  ];
+  const gateRound = { round: 4, cutoffThreshold: 4 };
+  assert.equal(verify(reviews, { gateRound }).final, 'human_required');
+
+  const record = createFindingClassificationRecord({
+    issueId: 'ISSUE-271',
+    gate: 'spec',
+    sourceReviewId: '1',
+    sourceFinding: blocking,
+    followUpIssueId: 'ISSUE-900',
+    downgradeReason: '最終roundの限定4類型外であるため',
+  });
+  const classified = verify(reviews, {
+    gateRound,
+    findingClassifications: [{ id: 21, body: renderFindingClassificationRecord(record), createdAt: '2026-08-19T00:01:00.000Z' }],
+  });
+  assert.equal(classified.final, 'approved');
+  assert.equal(classified.inconclusive, false);
+  assert.equal(classified.blockers[0].severity, 'warning');
+  assert.equal(classified.blockers[0].reclassification?.original_severity, 'blocking');
+
+  // digest改変・source review不一致は承認を推測せず human_required へ倒す。
+  const tampered = verify(reviews, {
+    gateRound,
+    findingClassifications: [{
+      id: 21,
+      body: renderFindingClassificationRecord({ ...record, source_review_id: '2' }),
+      createdAt: '2026-08-19T00:01:00.000Z',
+    }],
+  });
+  assert.equal(tampered.final, 'human_required');
+  assert.equal(tampered.inconclusive, true);
+  assert.equal(tampered.blockers[0].severity, 'blocking');
 });

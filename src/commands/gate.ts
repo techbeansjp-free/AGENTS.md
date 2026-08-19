@@ -80,9 +80,8 @@ import {
   renderFindingClassificationRecord,
   resolveDurableRoundBudgetDeclaration,
   renderRoundBudgetDeclaration,
-  ROUND_BUDGET_DECLARATION_MARKER,
+  selectRoundBudgetDeclarationComments,
   validateFindingReclassification,
-  validateFindingClassificationRecord,
   type DurableRoundBudgetDeclaration,
   type RoundBudgetCommentRecord,
   type FindingReclassification,
@@ -114,6 +113,8 @@ const DECLARE_FINAL_ROUND_USAGE = `
 直前の完備trusted attemptがrejectされ、次回がreview.round_limit.cutoff_thresholdと一致する場合だけ、
 最終round・4類型・類型外findingのwarning/follow-up手続きを固定marker付きIssueコメントへ耐久化する。
 宣言は既存round導出のsnapshotであり、round counterまたは導出元としては使用しない。
+重複検査は対象issue_idと対象gateの宣言だけを数える。round値を解決できない経路は宣言を作らず、
+通常差し戻しfallbackのまま差し戻し回数の有限性保証の対象外として扱う。
 `;
 
 const CLASSIFY_FINDING_USAGE = `
@@ -651,11 +652,6 @@ function parseGhPagedObject<T>(stdout: string, key: string): T[] {
   }
 }
 
-// Issue #774: keep pagination without the gh page-bundling flag. The token is
-// assembled here so the compatibility guard can continue to count the ten
-// pre-existing literal call sites independently from this policy's new reads.
-const GH_PAGINATE = ['--', 'paginate'].join('');
-
 function validateGateId(value: string): asserts value is Segment {
   validateSegment(value);
 }
@@ -748,79 +744,6 @@ function resolveGithubFinalRoundDeclaration(options: {
     : { required: true, reason: resolved.reason, roundContext };
 }
 
-function applyGithubFindingClassifications(options: {
-  result: ReturnType<typeof verifyGithubReviewEvidence>;
-  comments: RoundBudgetCommentRecord[];
-  reviews: GithubReviewRecord[];
-  issueId: string;
-  gateId: Segment;
-  currentAttemptId: string;
-}): string | undefined {
-  const records = [];
-  for (const comment of options.comments) {
-    if (!comment.body.includes(FINDING_CLASSIFICATION_MARKER)) continue;
-    let record;
-    try {
-      record = parseFindingClassificationRecord(comment.body);
-    } catch {
-      return `finding分類record ${comment.id}を解釈できません`;
-    }
-    if (!record || record.issue_id !== options.issueId || record.gate !== options.gateId) continue;
-    if (!validateFindingClassificationRecord(record)) return `finding分類record ${comment.id}のdigestまたは必須値が不正です`;
-    records.push(record);
-  }
-  if (records.length === 0) return undefined;
-  const keys = new Set<string>();
-  const replacements: { original: Finding; classified: Finding }[] = [];
-  for (const record of records) {
-    const key = `${record.source_review_id}:${record.finding.code}`;
-    if (keys.has(key)) return `finding分類recordが重複しています: ${key}`;
-    keys.add(key);
-    const sourceReview = options.reviews.find((review) => String(review.id) === record.source_review_id);
-    if (!sourceReview) return `finding分類recordのsource reviewがありません: ${record.source_review_id}`;
-    let sourceEvidence;
-    try {
-      sourceEvidence = parseReviewEvidence(sourceReview.body);
-    } catch {
-      return `finding分類recordのsource reviewを解釈できません: ${record.source_review_id}`;
-    }
-    if (sourceEvidence?.attempt_id !== options.currentAttemptId) {
-      return `finding分類recordがlatest attemptを参照していません: ${record.source_review_id}`;
-    }
-    const sourceFindings = sourceEvidence.verdict.blockers.filter((finding) => finding.code === record.finding.code);
-    if (sourceFindings.length !== 1) return `source review内のfinding codeが一意ではありません: ${record.finding.code}`;
-    const original = sourceFindings[0];
-    if (
-      record.finding.reclassification.original_severity !== original.severity ||
-      record.finding.origin !== original.origin ||
-      canonicalJson(record.finding.evidence) !== canonicalJson(original.evidence) ||
-      canonicalJson(record.finding.reclassification.raw_evidence) !== canonicalJson(original.evidence)
-    ) return `finding分類recordがsource reviewの元severityまたはraw evidenceと一致しません: ${record.finding.code}`;
-    replacements.push({ original, classified: record.finding });
-  }
-  const used = new Set<number>();
-  options.result.blockers = options.result.blockers.map((finding) => {
-    const index = replacements.findIndex((entry, candidateIndex) =>
-      !used.has(candidateIndex) &&
-      entry.original.severity === finding.severity &&
-      entry.original.origin === finding.origin &&
-      entry.original.code === finding.code &&
-      canonicalJson(entry.original.evidence) === canonicalJson(finding.evidence));
-    if (index < 0) return finding;
-    used.add(index);
-    return replacements[index].classified;
-  });
-  if (used.size !== replacements.length) return 'finding分類recordをcurrent gate findingへ一意に結線できません';
-  if (!options.result.blockers.some((finding) => finding.severity === 'blocking')) {
-    options.result.conformance = 'pass';
-    options.result.falsification = 'pass';
-    options.result.final = 'approved';
-    options.result.inconclusive = false;
-    options.result.reason = undefined;
-  }
-  return undefined;
-}
-
 export async function review(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -862,11 +785,11 @@ export async function review(args: string[]): Promise<number> {
       const policy = classifyCoreReview(root, { targetSha, baseRef: process.env.ASC_EVIDENCE_BASE_SHA }).policy;
       if (!policy) throw new CliError('登録済みreview policyがありません');
       const reviewsResponse = gh(
-        ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, GH_PAGINATE],
+        ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
         root,
       );
       const commentsResponse = gh(
-        ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, GH_PAGINATE],
+        ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, '--paginate'],
         root,
       );
       if (reviewsResponse.status !== 0 || commentsResponse.status !== 0) {
@@ -931,17 +854,17 @@ export async function declareFinalRound(args: string[]): Promise<number> {
     const config = loadConfig(root);
     if (config.coordination.backend !== 'github') {
       throw new CliError(
-        'ローカルモードでは耐久review evidenceからround値を解決できないため宣言を推測しません。通常差し戻しfallbackを維持します',
+        'ローカルモードでは耐久review evidenceからround値を解決できないため宣言を推測しません。通常差し戻しfallbackを維持し、この経路は差し戻し回数の有限性保証の対象外です',
       );
     }
     const policy = classifyCoreReview(root, {}).policy;
     if (!policy) throw new CliError('登録済みreview policyがありません');
     const reviewsResponse = gh(
-      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, GH_PAGINATE],
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
       root,
     );
     const commentsResponse = gh(
-      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, GH_PAGINATE],
+      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, '--paginate'],
       root,
     );
     if (reviewsResponse.status !== 0 || commentsResponse.status !== 0) {
@@ -974,11 +897,17 @@ export async function declareFinalRound(args: string[]): Promise<number> {
         slot.findings.some((finding) => finding.severity === 'blocking'),
     );
     if (!rejected) throw new CliError('直前attemptがreject状態ではないため最終round宣言を作成しません');
-    const parsedComments = parseGhList<{ body?: string }>(commentsResponse.stdout);
-    const existing = parsedComments.filter((comment) =>
-      typeof comment.body === 'string' && comment.body.includes(ROUND_BUDGET_DECLARATION_MARKER));
-    if (existing.length > 0) {
-      throw new CliError('round budget宣言は既に存在します。追加・上書きはできません');
+    // Issue #786: 重複検査は解決側と同じ選択規則で対象gateの宣言だけを数える。
+    // Issue単位のコメント集合をgateで絞らずに数えると、別gateの宣言を重複と誤認して
+    // 当該gateの宣言を作成できなくし、そのgateのreview自体を停止させる。
+    const existing = selectRoundBudgetDeclarationComments({
+      comments: parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout),
+      issueId,
+      gate: gateId,
+    });
+    if (existing.status === 'invalid') throw new CliError(existing.reason);
+    if (existing.matches.length > 0) {
+      throw new CliError('対象gateのround budget宣言は既に存在します。追加・上書きはできません');
     }
     const declaration = createRoundBudgetDeclaration({
       issueId,
@@ -1013,11 +942,11 @@ export async function classifyFinding(args: string[]): Promise<number> {
     const policy = classifyCoreReview(root, {}).policy;
     if (!policy) throw new CliError('登録済みreview policyがありません');
     const reviewsResponse = gh(
-      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, GH_PAGINATE],
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
       root,
     );
     const commentsResponse = gh(
-      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, GH_PAGINATE],
+      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, '--paginate'],
       root,
     );
     const followUpResponse = gh(['issue', 'view', followUpNumber, '--json', 'number'], root);
@@ -1799,22 +1728,12 @@ function buildVerifiedGateReport(options: {
     ...(declarationResolution.declaration
       ? { expectedRoundBudgetDeclaration: declarationResolution.declaration }
       : {}),
+    // 分類recordは最終round宣言が成立している場合だけ severity 差し替えの入力になる。
+    // 判定値の上書きはせず、差し替え後のfinding集合を既存の集約規則が再計算する。
+    ...(declarationResolution.declaration && currentAttemptId
+      ? { findingClassifications: options.issueComments }
+      : {}),
   });
-  if (declarationResolution.declaration && currentAttemptId) {
-    const classificationError = applyGithubFindingClassifications({
-      result,
-      comments: options.issueComments,
-      reviews: options.reviews,
-      issueId: options.issueId,
-      gateId: options.gateId,
-      currentAttemptId,
-    });
-    if (classificationError) {
-      result.final = 'human_required';
-      result.inconclusive = true;
-      result.reason = classificationError;
-    }
-  }
   if (declarationResolution.required && !declarationResolution.declaration) {
     result.final = 'human_required';
     result.inconclusive = true;
@@ -1896,7 +1815,7 @@ export async function verifyEvidence(args: string[]): Promise<number> {
       root,
     );
     const commentsResponse = gh(
-      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, GH_PAGINATE],
+      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, '--paginate'],
       root,
     );
     if (
@@ -2287,7 +2206,7 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
     const issueNumber = parseIssueId(issueIdRaw).number;
     const issueResponse = gh(['api', `repos/{owner}/{repo}/issues/${issueNumber}`], root);
     const issueCommentsResponse = gh(
-      ['api', `repos/{owner}/{repo}/issues/${issueNumber}/comments?per_page=100`, GH_PAGINATE],
+      ['api', `repos/{owner}/{repo}/issues/${issueNumber}/comments?per_page=100`, '--paginate'],
       root,
     );
     if (

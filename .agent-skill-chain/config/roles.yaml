@@ -96,6 +96,7 @@ role_contracts:
       - 不要な要求・挙動を減らして発生源を除けるかを先に評価し、原因が上流なら最小の上流改訂と必要な再ゲートを選ぶ
       - Issue目的に本来必要な追加は、非追加手段で達成不能な具体的理由をworker reportへ残す場合だけ許可する
       - 真因がIssueの範囲外なら成果物を拡張せず、対象SHA・再現コマンド・終了コード・該当assetを実測報告する
+      - ラウンド値を解決できない経路のゲートは通常のblocking差し戻しを維持するだけで差し戻し回数の有限性保証の対象外であり、残りラウンド数を前提にした部分的な是正をしない
     completion:
       - .agent-skill-chain/schemas/validation-report.schema.yaml が要求するAC構造に適合している
       - 未解決の曖昧さがない
@@ -115,6 +116,7 @@ role_contracts:
       - 不要な要求・挙動を減らして発生源を除けるかを先に評価し、原因が上流なら最小の上流改訂と必要な再ゲートを選ぶ
       - Issue目的に本来必要な追加は、非追加手段で達成不能な具体的理由をworker reportへ残す場合だけ許可する
       - 真因がIssueの範囲外なら成果物を拡張せず、対象SHA・再現コマンド・終了コード・該当assetを実測報告する
+      - ラウンド値を解決できない経路のゲートは通常のblocking差し戻しを維持するだけで差し戻し回数の有限性保証の対象外であり、残りラウンド数を前提にした部分的な是正をしない
     completion:
       - DESIGN.md/PLAN.mdが.agent-skill-chain/templates/issue/{DESIGN,PLAN}.mdの構造に適合している
       - proposed ADRを作成済み
@@ -134,6 +136,7 @@ role_contracts:
       - 不要な要求・挙動を減らして発生源を除けるかを先に評価し、原因が上流なら最小の上流改訂と必要な再ゲートを選ぶ
       - Issue目的に本来必要な追加は、非追加手段で達成不能な具体的理由をworker reportへ残す場合だけ許可する
       - 真因がIssueの範囲外なら成果物を拡張せず、対象SHA・再現コマンド・終了コード・該当assetを実測報告する
+      - ラウンド値を解決できない経路のゲートは通常のblocking差し戻しを維持するだけで差し戻し回数の有限性保証の対象外であり、残りラウンド数を前提にした部分的な是正をしない
     completion:
       - 実装完了
       - 必須チェック（lint/test/build）実行済み
@@ -151,6 +154,7 @@ role_contracts:
       - 不要な要求・挙動を減らして発生源を除けるかを先に評価し、原因が上流なら最小の上流改訂と必要な再ゲートを選ぶ
       - Issue目的に本来必要な追加は、非追加手段で達成不能な具体的理由をworker reportへ残す場合だけ許可する
       - 真因がIssueの範囲外なら成果物を拡張せず、対象SHA・再現コマンド・終了コード・該当assetを実測報告する
+      - ラウンド値を解決できない経路のゲートは通常のblocking差し戻しを維持するだけで差し戻し回数の有限性保証の対象外であり、残りラウンド数を前提にした部分的な是正をしない
     completion:
       - 全ACのverification.resultが記録されている
       - regression実行結果が記録されている
@@ -163,6 +167,7 @@ role_contracts:
     rules:
       - conformance（立証）とfalsification（反証）の2観点を分離して判定する（Strictでは専任分離）
       - 成果物を編集しない（read-only）
+      - ラウンド値を解決できない経路のゲートは通常のblocking差し戻しを維持するだけで差し戻し回数の有限性保証の対象外であり、残りラウンド数を根拠に判定を緩めない
     completion:
       - conformance / falsification verdict を返却済み
       - blocking findingには必ずorigin（specification|design|implementation|validation）を付与する

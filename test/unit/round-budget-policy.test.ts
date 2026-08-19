@@ -4,8 +4,10 @@ import {
   FINAL_ROUND_BLOCKING_CATEGORIES,
   createFindingClassificationRecord,
   createRoundBudgetDeclaration,
+  renderRoundBudgetDeclaration,
   resolveDurableRoundBudgetDeclaration,
   roundBudgetDeclarationDigest,
+  selectRoundBudgetDeclarationComments,
   validateFindingReclassification,
   validateFindingClassificationRecord,
   validateRoundBudgetDeclaration,
@@ -107,4 +109,45 @@ test('finding再分類: 同一current recordのraw evidence完全一致と4類�
     }) ?? '',
     /4類型すべて/,
   );
+});
+
+// Issue #786: 宣言コメントはIssue単位に並ぶ。作成側がgateで絞らずに重複を数えると、
+// spec-gateが宣言済みのIssueではdesign/implementation/validationの宣言を作れなくなり、
+// 解決側（gateで絞る）は永久に actual=0 を返して当該gateのreviewが起動できなくなる。
+test('宣言の重複検査: 別gateの宣言を重複と数えず、同一gateの再宣言だけを検出する', () => {
+  const comment = (gate: 'spec' | 'design' | 'implementation' | 'validation', id: number) => ({
+    id,
+    body: renderRoundBudgetDeclaration(createRoundBudgetDeclaration({
+      issueId: 'ISSUE-786',
+      gate,
+      previousAttemptId: `attempt-${gate}-before-final`,
+      finalRound: 4,
+    })),
+    createdAt: '2026-08-19T00:01:00.000Z',
+  });
+  const comments = [comment('spec', 10)];
+
+  const forImplementation = selectRoundBudgetDeclarationComments({
+    comments,
+    issueId: 'ISSUE-786',
+    gate: 'implementation',
+  });
+  assert.equal(forImplementation.status, 'selected');
+  assert.deepEqual(forImplementation.status === 'selected' ? forImplementation.matches : null, []);
+
+  const forSpec = selectRoundBudgetDeclarationComments({ comments, issueId: 'ISSUE-786', gate: 'spec' });
+  assert.equal(forSpec.status === 'selected' ? forSpec.matches.length : -1, 1);
+
+  const otherIssue = selectRoundBudgetDeclarationComments({ comments, issueId: 'ISSUE-787', gate: 'spec' });
+  assert.deepEqual(otherIssue.status === 'selected' ? otherIssue.matches : null, []);
+
+  // spec-gate宣言が残ったままでも implementation-gate の宣言は解決できる。
+  const resolved = resolveDurableRoundBudgetDeclaration({
+    comments: [...comments, comment('implementation', 11)],
+    issueId: 'ISSUE-786',
+    gate: 'implementation',
+    previousAttemptId: 'attempt-implementation-before-final',
+    finalRound: 4,
+  });
+  assert.equal(resolved.status, 'available');
 });

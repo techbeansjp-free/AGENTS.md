@@ -23,7 +23,7 @@ when_to_use: Use when a segment worker has finished a segment and gate review sh
 
 - **review profile**: Standard（レビュア1体、既定）／Light（人間の明示要求時のみ、危険信号で自動Strict固定）／Strict（`risk != normal` または `autonomy == full`、専任2体）。
 - **gate-report**: `.agent-skill-chain/schemas/gate-report.schema.yaml` 準拠の判定記録。
-- **round**: 初回をround 0とする同一Issue・同一gateのreview反復。既定は全4 gateで最終round 4、最大5回。
+- **round**: 初回をround 0とする同一Issue・同一gateのreview反復。ラウンド値を解決できる経路では、既定は全4 gateで最終round 4、最大5回。解決できない経路は本予算の対象外であり、差し戻し回数の有限性を保証しない。
 
 ## 入力
 
@@ -36,7 +36,7 @@ when_to_use: Use when a segment worker has finished a segment and gate review sh
 
 ## 手順
 
-1. `review.round_limit`の既存導出値を使う。値を解決できない場合はroundを推測せず、打ち切り・warning降格・取得不能だけを理由とする`human_required`を適用しない。通常のblocking差し戻しを維持する。
+1. `review.round_limit`の既存導出値を使う。値を解決できない場合はroundを推測せず、打ち切り・warning降格・取得不能だけを理由とする`human_required`を適用しない。通常のblocking差し戻しを維持し、この経路は差し戻し回数の有限性保証の対象外として扱う（各roundの帰結は承認・差し戻し・人間判断のいずれかだが、上限は定めない）。
 2. rejectされた反復の次が解決済み最終roundになる場合、差し戻しを確定する同じ状態遷移で `.agent-skill-chain/scripts/gate-declare-final-round.sh <issue_id> <gate_id> <pr_number>` を実行する。宣言は次回が最終、直前attempt、最終round、下記4類型、類型外findingのwarning化とfollow-upを含む不変記録であり、round導出元には使わない。
 3. `.agent-skill-chain/scripts/gate-review.sh <issue_id> <gate_id> <profile> [target_sha]` を実行する。trusted launcherはreviewer起動前に宣言の作成順序・canonical digest・直前attempt・最終roundを照合する。宣言なし、review開始後/結果後の追加、上書き、digest不一致は`human_required`へ安全側停止する。
 4. レビュアはconformanceを先に、falsificationを続けて判定する。Strictは専任2体を独立起動し、両者を集約する。gate・2観点・検査・必要レビュア数・Strict固定・quick境界はroundを理由に減らさない。
@@ -54,7 +54,7 @@ when_to_use: Use when a segment worker has finished a segment and gate review sh
 
 ## 完了条件
 
-- 対象ゲートの `final` が確定している（pass、または人間判断への昇格 `human_required`）。
+- 対象ゲートの `final` が確定している（pass、または人間判断への昇格 `human_required`）。ラウンド値を解決できない経路では、差し戻し回数の上限に到達したことを完了条件にしない。
 - blockersがある場合、差し戻し先（`finding.origin`）が進行役へ報告されている。
 
 ## 検証方法

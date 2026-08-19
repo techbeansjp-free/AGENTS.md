@@ -195,6 +195,7 @@ test('init: プロファイル未指定（既定）でも.claude/skills/配下�
   assert.match(gateSkill, /gate-declare-final-round\.sh/);
   const roles = fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'config', 'roles.yaml'), 'utf8');
   assert.equal((roles.match(/blockingを局所的な条項・例外・分岐・フラグ/g) ?? []).length, 4);
+  assert.equal((roles.match(/差し戻し回数の有限性保証の対象外/g) ?? []).length, 5);
   assert.match(fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'schemas', 'worker-report.schema.yaml'), 'utf8'), /required_addition/);
 });
 
@@ -270,6 +271,7 @@ test('init --profile=lightweight: CLAUDE.mdが@AGENTS.md importを含まず、co
   const lightweightGateSkill = fs.readFileSync(path.join(targetDir, '.claude', 'skills', 'gate-review', 'SKILL.md'), 'utf8');
   assert.match(lightweightGateSkill, /最終round 4、最大5回/);
   assert.match(lightweightGateSkill, /通常のblocking差し戻し/);
+  assert.match(lightweightGateSkill, /差し戻し回数の有限性保証の対象外として扱う/);
   assert.match(fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'schemas', 'state.schema.yaml'), 'utf8'), /round_budget_declaration/);
 
   assert.match(

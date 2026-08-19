@@ -639,7 +639,9 @@ test('upgrade: profile: lightweightで導入済みのプロジェクトはupgrad
   assert.doesNotMatch(claudeMd, /@AGENTS\.md/, 'upgrade後もCLAUDE.mdは軽量プロファイル版のまま@AGENTS.md importを含まないこと');
   const gateSkill = fs.readFileSync(path.join(targetDir, '.claude', 'skills', 'gate-review', 'SKILL.md'), 'utf8');
   assert.match(gateSkill, /最終round 4、最大5回/);
-  assert.match(fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'config', 'roles.yaml'), 'utf8'), /非追加手段で達成不能/);
+  const upgradedRoles = fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'config', 'roles.yaml'), 'utf8');
+  assert.match(upgradedRoles, /非追加手段で達成不能/);
+  assert.equal((upgradedRoles.match(/差し戻し回数の有限性保証の対象外/g) ?? []).length, 5);
   assert.match(fs.readFileSync(path.join(targetDir, '.agent-skill-chain', 'schemas', 'gate-report.schema.yaml'), 'utf8'), /raw_evidence/);
 });
 

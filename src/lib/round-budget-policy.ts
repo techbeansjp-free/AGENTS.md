@@ -123,16 +123,19 @@ function commentTime(value: RoundBudgetCommentRecord, key: 'created' | 'updated'
   return key === 'created' ? value.createdAt ?? value.created_at : value.updatedAt ?? value.updated_at;
 }
 
-export function resolveDurableRoundBudgetDeclaration(options: {
+/**
+ * 対象Issue・対象gateの宣言recordだけを選ぶ。
+ * Issue #786: 宣言コメントはIssue単位に並ぶため、gateで絞らずに数えると別gateの宣言を
+ * 重複と誤認し、当該gateの宣言を永久に作成できなくする。作成側と解決側は同じ選択規則を使う。
+ */
+export function selectRoundBudgetDeclarationComments(options: {
   comments: RoundBudgetCommentRecord[];
   issueId: string;
   gate: RoundBudgetDeclaration['gate'];
-  previousAttemptId: string;
-  finalRound: number;
-  previousEvidenceCompletedAt?: string;
-  reviewStartedAt?: string;
-}): { status: 'available'; declaration: DurableRoundBudgetDeclaration } | { status: 'invalid'; reason: string } {
-  const candidates: { comment: RoundBudgetCommentRecord; declaration: RoundBudgetDeclaration }[] = [];
+}):
+  | { status: 'selected'; matches: { comment: RoundBudgetCommentRecord; declaration: RoundBudgetDeclaration }[] }
+  | { status: 'invalid'; reason: string } {
+  const matches: { comment: RoundBudgetCommentRecord; declaration: RoundBudgetDeclaration }[] = [];
   for (const comment of options.comments) {
     if (!comment.body.includes(ROUND_BUDGET_DECLARATION_MARKER)) continue;
     let declaration: RoundBudgetDeclaration | undefined;
@@ -142,9 +145,24 @@ export function resolveDurableRoundBudgetDeclaration(options: {
       return { status: 'invalid', reason: `宣言record ${comment.id}を解釈できません` };
     }
     if (declaration?.issue_id === options.issueId && declaration.gate === options.gate) {
-      candidates.push({ comment, declaration });
+      matches.push({ comment, declaration });
     }
   }
+  return { status: 'selected', matches };
+}
+
+export function resolveDurableRoundBudgetDeclaration(options: {
+  comments: RoundBudgetCommentRecord[];
+  issueId: string;
+  gate: RoundBudgetDeclaration['gate'];
+  previousAttemptId: string;
+  finalRound: number;
+  previousEvidenceCompletedAt?: string;
+  reviewStartedAt?: string;
+}): { status: 'available'; declaration: DurableRoundBudgetDeclaration } | { status: 'invalid'; reason: string } {
+  const selection = selectRoundBudgetDeclarationComments(options);
+  if (selection.status === 'invalid') return selection;
+  const candidates = selection.matches;
   if (candidates.length !== 1) {
     return { status: 'invalid', reason: `対象gateの不変宣言は1件だけ必要です: actual=${candidates.length}` };
   }
