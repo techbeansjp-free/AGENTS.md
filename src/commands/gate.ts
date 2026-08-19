@@ -256,8 +256,9 @@ interface ReviewerVerdict {
   final?: 'approved' | 'rejected' | 'pending' | 'human_required';
 }
 
-/** Local reviewer input has optional artifact fields, but its supplied verdict
- * values must satisfy the same runtime contract as submitted evidence. */
+/** Local reviewer input has optional artifact fields and accepts the existing
+ * local finding shape. GitHub evidence adds stricter provenance requirements
+ * that are not part of the local reviewer contract. */
 function isReviewerVerdict(value: unknown): value is ReviewerVerdict {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as ReviewerVerdict;
@@ -269,6 +270,7 @@ function isReviewerVerdict(value: unknown): value is ReviewerVerdict {
       inconclusive: candidate.inconclusive ?? false,
     },
     false,
+    'historical_v3',
   );
 }
 
