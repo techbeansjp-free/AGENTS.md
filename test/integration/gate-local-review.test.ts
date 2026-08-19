@@ -437,7 +437,7 @@ function createConsumerFixture(options: ConsumerOptions = {}): Fixture {
 // PLAN #8: 自リポジトリ形状（clone_build 経路）
 // ---------------------------------------------------------------------------
 
-test('gate-local-review: 自リポジトリ形状ではclone_build経路で従来どおりbuildし、隔離cloneのremoteが空である（AC-3, AC-4, AC-6, AC-11）', (t) => {
+test('gate-local-review: 自リポジトリ形状ではclone_build経路で従来どおりbuildし、隔離cloneのremoteが空である（AC-3, AC-4, AC-6, AC-11 / Issue #703 AC-9）', (t) => {
   const fixture = createSelfFixture();
   t.after(() => fixture.cleanup());
   const rootHeadBefore = git(fixture.repoDir, ['rev-parse', 'HEAD']);
@@ -465,7 +465,7 @@ test('gate-local-review: 自リポジトリ形状ではclone_build経路で従�
   assert.deepEqual(fixture.repositoryDispatches(), []);
 });
 
-test('gate-local-review: default branch以外のworktreeでは隔離clone作成前に拒否する（AC-4）', (t) => {
+test('gate-local-review: default branch以外のworktreeでは隔離clone作成前に拒否する（AC-4 / Issue #703 AC-9）', (t) => {
   const fixture = createSelfFixture();
   t.after(() => fixture.cleanup());
   git(fixture.repoDir, ['checkout', 'bugfix/643-review-target']);
@@ -479,7 +479,7 @@ test('gate-local-review: default branch以外のworktreeでは隔離clone作成�
   assert.equal(fs.existsSync(fixture.reviewTrace), false, '拒否後にreviewerを起動しないこと');
 });
 
-test('gate-local-review: base_shaがdefault branchから到達不能なら隔離clone作成前に拒否する（AC-4）', (t) => {
+test('gate-local-review: base_shaがdefault branchから到達不能なら隔離clone作成前に拒否する（AC-4 / Issue #703 AC-9）', (t) => {
   const fixture = createSelfFixture();
   t.after(() => fixture.cleanup());
   fixture.setPullBase(fixture.targetSha);

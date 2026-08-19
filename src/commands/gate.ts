@@ -13,7 +13,7 @@ import { git, gh } from '../lib/exec.js';
 import { GhJsonParseError, parseGhArrayResponse, parseGhObjectResponse } from '../lib/gh-json.js';
 import { digestOf, artifactDigestOf, artifactDigestOfFile, ARTIFACT_ABSENT_DIGEST } from '../lib/digest.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
-import { classifyCoreReview } from '../lib/model-selection.js';
+import { classifyCoreReview, loadCoreReviewPolicyAtRef } from '../lib/model-selection.js';
 import { resolveReviewProfile } from '../lib/review-profile.js';
 import { extractSpecAcIds } from '../lib/spec-ac-ids.js';
 import {
@@ -635,14 +635,18 @@ function assertDefaultBranchBase(
   repository: { default_branch?: string },
   expectedBaseSha: string,
   expectedHeadSha: string,
+  expectedTrustedBaseSha: string = expectedBaseSha,
 ): void {
   if (
     !repository.default_branch ||
     pr.base?.ref !== repository.default_branch ||
     pr.base.sha !== expectedBaseSha ||
+    pr.base.sha !== expectedTrustedBaseSha ||
     pr.head?.sha !== expectedHeadSha
   ) {
-    throw new CliError('PRがrepository default branchの指定base/head SHAを対象としていません');
+    throw new CliError(
+      'PR metadataがrepository default branch・指定base SHA・trusted base SHA・target SHAと一致しません。対象PR・target SHA・起動引数を確認してください',
+    );
   }
 }
 
@@ -1270,7 +1274,11 @@ export async function submitEvidence(args: string[]): Promise<number> {
 
     const root = repoRoot();
     const executionRoot = worktreeRoot();
-    if (executionRoot !== root) throw new CliError('Issue worktreeのcandidate recorderからevidenceを投稿できません');
+    if (executionRoot !== root) {
+      throw new CliError(
+        'Issue worktreeのcandidate recorderからevidenceを投稿できません。repository default branch worktreeから実行してください',
+      );
+    }
     const prResponse = gh(['api', `repos/{owner}/{repo}/pulls/${prNumber}`], root);
     const repositoryResponse = gh(['api', 'repos/{owner}/{repo}'], root);
     if (prResponse.status !== 0 || repositoryResponse.status !== 0) {
@@ -1278,18 +1286,26 @@ export async function submitEvidence(args: string[]): Promise<number> {
     }
     const pr = JSON.parse(prResponse.stdout) as { head?: { sha?: string }; base?: { sha?: string; ref?: string } };
     const repository = JSON.parse(repositoryResponse.stdout) as { default_branch?: string };
-    if (baseSha !== trustedBaseSha) throw new CliError('base SHAとtrusted base SHAが一致しません');
-    assertDefaultBranchBase(pr, repository, baseSha, targetSha);
-    const head = git(['rev-parse', 'HEAD'], root).stdout.trim();
-    if (head !== trustedBaseSha) throw new CliError('recorder HEADがtrusted base SHAと一致しません');
+    assertDefaultBranchBase(pr, repository, baseSha, targetSha, trustedBaseSha);
+    const currentBranch = git(['symbolic-ref', '--quiet', '--short', 'HEAD'], root);
+    if (currentBranch.status !== 0 || currentBranch.stdout.trim() !== repository.default_branch) {
+      throw new CliError(
+        `repository default branchのworktreeから実行してください（current=${currentBranch.stdout.trim() || 'detached'}, default=${repository.default_branch || 'unknown'}）`,
+      );
+    }
+    if (git(['merge-base', '--is-ancestor', trustedBaseSha, 'HEAD'], root).status !== 0) {
+      throw new CliError(
+        'trusted base SHAがrecorder HEADから到達不能です。記録実行worktreeでgit fetchと早送りを行ってください',
+      );
+    }
     // gate-local-review.sh は起動前に untracked を含む完全な clean 状態を確認する。
     // その後 gate-review.sh が Git 管理外の coordination scaffold を生成するため、
     // recorder では tracked file の改変だけを再検査する。
     if (git(['status', '--porcelain', '--untracked-files=no'], root).stdout.trim()) {
-      throw new CliError('trusted base worktreeのtracked fileがdirtyです');
+      throw new CliError('trusted base worktreeのtracked fileがdirtyです。作業ツリーの変更を退避してください');
     }
 
-    const policy = classifyCoreReview(root, { targetSha, baseRef: baseSha }).policy;
+    const policy = loadCoreReviewPolicyAtRef(root, trustedBaseSha);
     if (!policy) throw new CliError('登録済みreview policyがありません');
     const artifacts = artifactsAtSha(
       root,
@@ -1297,9 +1313,8 @@ export async function submitEvidence(args: string[]): Promise<number> {
       targetSha,
       gateId === 'implementation',
     );
-    const config = loadConfig(root);
     const lightReview = tryReadYamlFile<GateReport>(
-      reviewFilePath(root, number, gateId, config.coordination.backend),
+      reviewFilePath(root, number, gateId, 'github'),
     )?.gate.light_review;
     const launcherDigest = localReviewLauncherDigest(root, trustedBaseSha);
     let parsedVerdict: unknown;
@@ -1315,7 +1330,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
     }
     const verdict: EvidenceVerdict = { ...parsedVerdict, approved_artifacts: artifacts };
 
-    const core = classifyCoreReview(root, { targetSha, baseRef: baseSha });
+    const core = classifyCoreReview(root, { targetSha, baseRef: baseSha, policy });
     if (core.required && (core.status !== 'resolved' || profile !== 'strict')) {
       throw new CliError('コア対象の分類またはStrict profileを確認できません');
     }
