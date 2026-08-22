@@ -19,8 +19,8 @@ GitHub モードで Issue 本文または PR 本文を成果物内容の正本�
 - 成果物: checkpoint SHA の Git tree に存在する `SPEC.md`、`DESIGN.md`、`PLAN.md`、`VALIDATION.md`。
 - 固定同期マーカー: 開始文字列 `<!-- agent-skill-chain:issue-sync:begin (do not edit manually) -->` と終了文字列 `<!-- agent-skill-chain:issue-sync:end -->` で囲む、agent-skill-chain が排他的に置換する区間。
 - 成果物 payload: 成果物の元文字列へ可逆なマーカー無害化を適用し、固定同期マーカー文字列を含まなくした掲載文字列。
-- ゲート状態の対象 SHA: 表示する既存ゲート状態が判定した commit の 40 桁完全 SHA。
-- 対象本文: `issue_sync.target` が指定する `issue_body`、`pr_body`、または `both` のうち、対象 Issue または一意に特定できる open PR に実在する本文。
+- 同期トリガー: 成功した checkpoint、または対象ゲート結果を発行する `gate publish`。
+- 対象本文: `issue_sync.target` が指定する `issue_body`、`pr_body`、または `both` のうち、対象 Issue または全ての関連 open PR を最終ページまで列挙した結果から一意に特定できる PR に実在する本文。
 - 同期失敗: GitHub API エラー、対象 PR の不在・複数該当、競合の未解消、本文上限への安全な縮退不能などにより、対象本文の固定同期マーカーを更新できない状態。
 
 ## 入力・出力
@@ -32,11 +32,11 @@ GitHub モードで Issue 本文または PR 本文を成果物内容の正本�
 - Issue ID、対象 branch、および remote push に成功した checkpoint SHA。
 - checkpoint SHA に存在する成果物の内容。
 - 対象となる GitHub Issue 本文と、一意に特定できる場合の open PR 本文。
-- checkpoint 時点で既に存在するゲート状態と、その判定対象 SHA。
+- 同期トリガーの種別。`gate publish` の場合は、その呼び出しが発行する対象ゲートの直接利用可能な現在結果と判定対象の完全 SHA。
 
 ### 出力
 
-- 有効条件を満たす場合、指定された各対象本文の固定同期マーカー内に、checkpoint SHA、実在する成果物の全文を復元できる payload、および判定対象 SHA を伴う既存のゲート状態を反映した同期結果。
+- 有効条件を満たす場合、指定された各対象本文の固定同期マーカー内に、対象の完全 SHA と実在する成果物の全文を復元できる payload を含む同期結果。checkpoint 同期は対象 SHA を明示的に未判定とし、`gate publish` 同期は当該呼び出しが発行する現在の対象ゲート結果だけを含む。
 - 同期を完了できない場合、対象、理由、および checkpoint SHA を識別できる警告。
 - 同期結果にかかわらず、commit と remote push が成功している checkpoint の成功結果と checkpoint SHA。
 
@@ -51,17 +51,17 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 - Coordination Backend が `github` であり、かつ `issue_sync.enabled` が `true` の場合だけ、成功した各セグメントの checkpoint push 後に同期を試行する。ローカルモードまたは明示的な無効化では GitHub 本文を変更しない。
 - 同期元は branch の作業コピーや移動し得る branch tip ではなく、remote push に成功した checkpoint SHA の Git tree とする。同期結果にはその完全 SHA を含める。
 - checkpoint SHA に存在する成果物だけを掲載し、存在する成果物はマーカー無害化以外の要約・抽出・改変をせず、復号により元文字列を完全に再現できる payload として全文を掲載する。後続セグメントの未作成成果物について、空の節、推測した内容、またはプレースホルダーを生成しない。
-- `issue_sync.target` の `issue_body`、`pr_body`、`both` を尊重する。PR 本文は対象 Issue に対応する open PR が一意に特定できる場合だけ更新する。`both` の一方を解決または更新できなくても、他方の同期は独立して試行する。
+- `issue_sync.target` の `issue_body`、`pr_body`、`both` を尊重する。PR 本文は、対象 Issue と対象 branch に関連する全ての open PR を API の最終ページまで網羅的に列挙し、該当 PR が 1 件だけと確定できる場合に限り更新する。0 件、2 件以上、ページ取得もしくは API の一部でも失敗、または列挙結果の完全性に曖昧さがある場合は、PR 対象だけを `sync_failed_no_write` として一切書き込まない。`both` の一方を解決または更新できなくても、他方の同期は独立して試行する。
 - 成果物 payload のマーカー無害化は、先に全ての `&` を `&amp;` へ置換し、次に成果物内の各開始・終了マーカー文字列の先頭 `<` だけを `&#60;` へ置換する。復号は、無害化された開始・終了マーカーを元の文字列へ戻した後、`&amp;` を `&` へ戻す逆順で行う。この変換により、元の `&amp;` や `&#60;` を含む成果物とも衝突せず、payload 内に固定同期マーカーと同一の文字列を残さない。
 - 対象本文内の固定同期マーカーが 0 個なら区間を追加する。開始・終了が各 1 個で開始が終了より前にある場合だけ既存区間を置換する。それ以外の個数または順序は境界不正として書き込まない。追加・置換のいずれもマーカー外の人間記述を文字列として不変に保ち、同期の反復でマーカー区間を増殖させない。
 - 書き込み直前の本文変更を compare-and-swap 相当で検知する。安全に解消できない競合では書き込まず、第三者の変更を保持して警告する。
 - 対象本文ごとに、全文ブロックを含む本文が `issue_sync.max_body_chars` 以下なら全文ブロックを書き込む。全文ブロックでは上限を超え、checkpoint SHA を含む縮退ブロックなら上限以下になる場合だけ縮退ブロックを書き込む。縮退ブロックでも上限を超える場合はマーカー外を変更せず、当該対象本文へ一切書き込まず、非致命の同期失敗を返す。3 状態は相互排他的であり、上限超過を理由にマーカー外を削除または切り詰めない。
-- checkpoint 同期が既存ゲート状態を表示する場合は、各状態にゲート名、状態値、および判定対象 SHA を併記する。判定対象 SHA が checkpoint SHA と一致する状態だけを「この checkpoint の状態」とし、一致しない状態は「過去の SHA の状態」であり最新 checkpoint の通過を示さないと明示する。既存状態が無いゲートは未判定とし、対象 SHA や通過状態を生成しない。
+- checkpoint 同期は、自身の checkpoint SHA を同期対象として表示し、その SHA のゲート状態を明示的に未判定と表示する。過去または現在の Check Run、ゲート記録、一時記録から結果を推論、復元、または取得せず、他 Issue の履歴も走査しない。
 - checkpoint 同期は Check Run、ゲート承認、ゲート通過、または新たなゲート状態を生成・変更してはならない。転記内容を後続のゲート判定入力へ読み戻してはならない。
 - 同期失敗は警告として観測可能にするが、commit と remote push が成功した checkpoint の成功結果を失敗へ変更しない。複数対象の一部失敗も、成功可能な他方の更新を取り消さない。
-- `gate publish` による既存同期を維持する。checkpoint 同期の追加後も、ゲート発行時には発行対象 SHA と確定済みゲート状態を用いて同じ対象選択・固定マーカー保護・競合検知・上限処理を適用する。
+- `gate publish` は checkpoint 同期と同一の成果物 writer を使い、発行対象の完全 SHA と、その呼び出しで即時に利用できる現在の対象ゲート結果だけを同期する。他ゲートや過去の結果を推論、復元、または取得せず、checkpoint と同じ対象選択・固定マーカー保護・競合検知・上限処理を適用する。
 
-対象本文ごとの処理結果は `synced_full`、`synced_fallback`、`sync_failed_no_write` のいずれか一つとする。対象解決不能、境界不正、縮退不能、未解消競合、API エラーは `sync_failed_no_write` であり、当該対象へ書き込まない。有効条件を満たさない場合は同期処理自体を行わない `not_applicable` とする。`both` では Issue 本文と PR 本文がそれぞれ独立にこの状態を取るため、一方の結果を他方へ波及させない。
+同期呼び出しの状態は排他的である。有効条件を満たさない呼び出し全体だけを `not_applicable` とし、この場合は対象別状態を生成しない。有効な呼び出しでは、設定上の各対象本文に `synced_full`、`synced_fallback`、`sync_failed_no_write` のいずれか一つだけを付与する。対象解決不能、境界不正、縮退不能、未解消競合、列挙の曖昧さ、ページ取得失敗、その他の API エラーは `sync_failed_no_write` であり、当該対象へ書き込まない。`both` では Issue 本文と PR 本文がそれぞれ独立に状態を取り、一方の結果を他方へ波及させない。
 
 ### 受入条件（Acceptance Criteria）
 
