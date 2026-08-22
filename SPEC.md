@@ -58,10 +58,10 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、成果物�
 - checkpoint と `gate publish` の双方で、全文ブロックまたは縮退ブロックを対象本文へ書き込む直前ごとに、候補の対象 SHA と既存マーカー SHA を Git commit の ancestry で比較する。固定同期マーカーが存在しない場合、候補 SHA が既存マーカー SHA と同一の場合、または既存マーカー SHA が候補 SHA の祖先である場合だけ書き込み可能とする。候補 SHA が既存マーカー SHA の祖先である古い候補、または両 SHA が相互に祖先でない比較不能な候補は、当該対象だけを `sync_failed_no_write` として本文を一切変更しない。これにより、新しい同期済み本文を古い候補または別履歴の候補で巻き戻さない。`both` の他方は独立して鮮度を判定する。
 - ancestry 検査後かつ書き込み直前の本文変更を compare-and-swap 相当で検知する。安全に解消できない競合では当該候補を再取得した本文と既存マーカー SHA に対して再検査しない限り書き込まず、第三者の変更を保持して警告する。
 - 対象本文ごとに、対象の完全 SHA と可逆な全成果物 payload を含む全文ブロックを含めた本文が `issue_sync.max_body_chars` 以下なら `synced_full` として書き込む。全文込みは上限を超えるが、対象の 40 桁完全 SHA と `https://github.com/<owner>/<repository>/commit/<40桁完全SHA>` 形式で同じ SHA を指す Git commit ポインタだけを固定同期マーカー内に含む縮退ブロックなら上限以下になる場合だけ、`synced_fallback` として書き込む。縮退ブロックは成果物 payload、成果物本文、ゲート結果を含まず、成果物へ可逆ではない。縮退込みも上限を超える場合は `sync_failed_no_write` とし、更新 API を呼ばず対象本文を文字列として完全に不変に保つ。3 状態は相互排他的であり、`synced_full` だけが全成果物を可逆に復元でき、上限超過を理由にマーカー外を削除または切り詰めない。
-- checkpoint 同期は、自身の checkpoint SHA を同期対象として表示し、その SHA のゲート状態を明示的に未判定と表示する。過去または現在の Check Run、ゲート記録、一時記録から結果を推論、復元、または取得せず、他 Issue の履歴も走査しない。
+- checkpoint 同期の `synced_full` は、自身の checkpoint SHA を同期対象として表示し、その SHA のゲート状態を明示的に未判定と表示する。`synced_fallback` は完全 SHA と Git commit ポインタだけを表示し、ゲート状態を表示しない。いずれも過去または現在の Check Run、ゲート記録、一時記録から結果を推論、復元、または取得せず、他 Issue の履歴も走査しない。
 - checkpoint 同期は Check Run、ゲート承認、ゲート通過、または新たなゲート状態を生成・変更してはならない。転記内容を後続のゲート判定入力へ読み戻してはならない。
 - 同期失敗は警告として観測可能にするが、commit と remote push が成功した checkpoint の成功結果を失敗へ変更しない。複数対象の一部失敗も、成功可能な他方の更新を取り消さない。
-- `gate publish` は checkpoint 同期と同一の成果物 writer を使い、発行対象の完全 SHA と、その呼び出しで即時に利用できる現在の対象ゲート結果だけを同期する。他ゲートや過去の結果を推論、復元、または取得せず、checkpoint と同じ対象選択・固定マーカー保護・競合検知・上限処理を適用する。
+- `gate publish` は checkpoint 同期と同一の成果物 writer を使う。`synced_full` では発行対象の完全 SHA と、その呼び出しで即時に利用できる現在の対象ゲート結果だけを同期し、`synced_fallback` では完全 SHA と Git commit ポインタだけを同期する。他ゲートや過去の結果を推論、復元、または取得せず、checkpoint と同じ対象選択・固定マーカー保護・競合検知・上限処理を適用する。
 
 同期呼び出しの状態は排他的である。有効条件を満たさない呼び出し全体だけを `not_applicable` とし、この場合は対象別状態を生成しない。有効な呼び出しでは、設定上の各対象本文に `synced_full`、`synced_fallback`、`sync_failed_no_write` のいずれか一つだけを付与する。`synced_full` は対象の完全 SHA と可逆な全成果物 payload を含む本文へ更新済み、`synced_fallback` は対象の完全 SHA とその Git commit への明示的なポインタだけを含む非可逆な本文へ更新済み、`sync_failed_no_write` は更新 API を呼ばず本文が同期呼び出し前と完全に同一、をそれぞれ意味する。対象解決不能、境界不正、縮退不能、古いまたは比較不能な候補 SHA、未解消競合、列挙の曖昧さ、ページ取得失敗、その他の API エラーは `sync_failed_no_write` であり、当該対象へ書き込まない。`both` では Issue 本文と PR 本文がそれぞれ独立に状態を取り、一方の結果を他方へ波及させない。
 
@@ -139,14 +139,14 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、成果物�
 - verification.mode: `automated`
 - 想定証跡: SPEC のみ、SPEC・DESIGN、SPEC・DESIGN・PLAN、4 成果物すべての各 Git tree と、両マーカーおよびエスケープ表記を含む成果物について、境界数、payload の復号一致、未作成節の不在を検査するログ
 
-#### AC-9: checkpoint 同期は対象 SHA を未判定と表示し履歴を参照しない
+#### AC-9: checkpoint の全文同期は対象 SHA を未判定と表示し履歴を参照しない
 
 - Given: 対象 checkpoint SHA と、同一または異なる SHA の過去もしくは現在の Check Run、ゲート記録、一時記録、または他 Issue の履歴が存在し得る
 - When: checkpoint 後の同期が行われる
-- Then: checkpoint の完全 SHA と当該 SHA が未判定であることだけが表示され、Check Run 履歴取得、ゲート結果の推論・復元、一時記録への縮退、他 Issue の履歴走査、新たな Check Run・承認・通過・状態変更は発生せず、同期マーカー内の内容はゲート判定入力から除外される
+- Then: `synced_full` では checkpoint の完全 SHA と当該 SHA が未判定であることだけがゲート情報として表示され、`synced_fallback` では完全 SHA と Git commit ポインタ以外を表示せず、いずれも Check Run 履歴取得、ゲート結果の推論・復元、一時記録への縮退、他 Issue の履歴走査、新たな Check Run・承認・通過・状態変更は発生せず、同期マーカー内の内容はゲート判定入力から除外される
 - 検証方法見込み: `automated`
 - verification.mode: `automated`
-- 想定証跡: 既存の同一 SHA・異なる SHA・他 Issue の結果と一時記録を fixture に置いて checkpoint 同期を実行し、未判定表示、履歴 API 呼び出しの不在、同期前後の Check Run・ゲート状態の不変、および判定入力から同期区間が除外されることを検査する自動テストログ
+- 想定証跡: 既存の同一 SHA・異なる SHA・他 Issue の結果と一時記録を fixture に置いて checkpoint 同期を実行し、`synced_full` の未判定表示、`synced_fallback` にゲート情報が無いこと、履歴 API 呼び出しの不在、同期前後の Check Run・ゲート状態の不変、および判定入力から同期区間が除外されることを検査する自動テストログ
 
 #### AC-10: 同期失敗が push 済み checkpoint の耐久性を破壊しない
 
@@ -161,7 +161,7 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、成果物�
 
 - Given: checkpoint 同期後に同じ Issue のゲートが発行され、`issue_sync` が有効である
 - When: `gate publish` が実行される
-- Then: checkpoint と同一の成果物 writer が、発行対象の完全 SHA と当該呼び出しに直接渡された現在の対象ゲート結果だけで固定同期マーカーを更新し、他ゲートや過去の結果の推論・取得・復元、一時記録への縮退、他 Issue の履歴走査を行わず、target、可逆なマーカー無害化、境界検査、書き込み前の ancestry による鮮度検査、競合保護、マーカー外不変、排他的な本文上限状態、未作成成果物除外、および同期失敗の非致命性を checkpoint 同期と共有する
+- Then: checkpoint と同一の成果物 writer が、`synced_full` では発行対象の完全 SHA と当該呼び出しに直接渡された現在の対象ゲート結果だけで固定同期マーカーを更新し、`synced_fallback` では完全 SHA と Git commit ポインタだけで更新し、他ゲートや過去の結果の推論・取得・復元、一時記録への縮退、他 Issue の履歴走査を行わず、target、可逆なマーカー無害化、境界検査、書き込み前の ancestry による鮮度検査、競合保護、マーカー外不変、排他的な本文上限状態、未作成成果物除外、および同期失敗の非致命性を checkpoint 同期と共有する
 - 検証方法見込み: `automated`
 - verification.mode: `automated`
 - 想定証跡: 複数ゲートと過去結果を fixture に置き、各 `gate publish` に直接渡した 1 件の現在結果だけが表示されること、履歴 API 呼び出しが無いこと、および checkpoint と共有する writer 契約を検査する統合テストログ
