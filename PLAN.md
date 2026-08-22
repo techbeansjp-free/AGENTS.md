@@ -15,22 +15,23 @@
 |---|---|---|---|---|
 | 1 | branch から Issue 番号を解決 | `branch.pattern` を尊重して `{issue_id}` を一意抽出する共有関数を追加し、標準 branch、custom pattern、不一致を unit test する | AC-1, AC-2 | なし |
 | 2 | payload と境界 parser の純粋化 | 規定順序の可逆 marker codec、0組/正常1組/欠落/重複/逆転を分類する parser、marker 外を不変にする置換関数を実装する | AC-5, AC-7 | なし |
-| 3 | SHA固定スナップショットとゲート表示 | `git show` で実在成果物だけを読み、各ゲートの `final` と `target_sha` を同一 SHA、過去 SHA、未判定として描画する。placeholder を生成しない | AC-3, AC-7, AC-8 | #2 |
-| 4 | 対象別本文トランザクション | full/fallback/no-write の排他的上限判定、本文全体 CAS、1回再試行、古い/順序不明 SHA の no-write、同一内容 no-op、型付き結果を実装する | AC-4, AC-5, AC-6, AC-9, AC-10 | #2, #3 |
-| 5 | 共有同期サービスへ統合 | target 解決と対象別処理を束ね、`issue_body`、`pr_body`、`both` を独立実行する。現行 `syncGateArtifacts` の重複責務を共有入口へ置換する | AC-2, AC-4, AC-10 | #1, #4 |
-| 6 | checkpoint 後置フック | push 成功後に完全 SHA と Issue 番号で共有同期を呼ぶ。全結果/例外を SHA 付き stderr 警告へ変換し、stdout 1行 SHA・終了コード0・remote ref を維持する。push 失敗時は呼ばない | AC-1, AC-2, AC-3, AC-9 | #1, #5 |
-| 7 | gate publish 接続を維持 | gate report の永続化後、Check Run 成否と独立して共有入口を呼ぶ既存順序を保ち、発行 target SHA と最新記録を同期へ渡す | AC-8, AC-10 | #5 |
-| 8 | GitHub stub の観測点拡張 | 必要最小限の API 読書き失敗、本文全体競合、Issue/PR 個別失敗、Check Run 呼出し数を注入・観測できるようにする | AC-4, AC-5, AC-8, AC-9 | #4 |
-| 9 | checkpoint 統合テスト | SPEC→DESIGN→PLAN→VALIDATION を順に checkpoint し、各 push 直後の完全 SHA、存在成果物だけの本文、gate 未到達、remote ref を検査する | AC-1, AC-3, AC-7, AC-9 | #6, #8 |
-| 10 | target・競合・上限・gate 回帰テスト | 3 target、PR 0/1/複数、片側 API 失敗、CAS、marker、上限3状態、旧gate state、checkpoint/gate 重複を網羅する | AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-10 | #7, #8 |
-| 11 | 全体検証と証跡整理 | build、対象テスト、全テスト、常時 lint を foreground 実行し、AC別ログを validation worker へ渡す | AC-1〜AC-10 | #9, #10 |
+| 3 | backend 正準ゲート状態 resolver | local は Git 管理下 `reviews/<gate>.yaml` を読む。GitHub は Issue branch の checkpoint までを新しい commit 順に各 gate Check 名で照会し、各 SHA の最新 completed record の name/head SHA、gate-report schema、gate id/target SHA、final/conclusion が一致する場合だけ選ぶ。一時 review file は読まず、候補無し/不正は `unknown`、取得不能は `unavailable` とする | AC-8, AC-10 | なし |
+| 4 | SHA固定スナップショットとゲート表示 | `git show` で実在成果物だけを読み、resolver の確定状態には gate target SHA と checkpoint SHA に対する `current` / `older` / `unjudged` を描画する。unknown/unavailable に状態や SHA を補わない | AC-3, AC-7, AC-8 | #2, #3 |
+| 5 | 対象別本文トランザクション | full/fallback/no-write の排他的上限判定、本文全体 CAS、1回再試行、古い/順序不明 SHA の no-write、同一内容 no-op、型付き結果を実装する | AC-4, AC-5, AC-6, AC-9, AC-10 | #2, #4 |
+| 6 | 共有同期サービスへ統合 | checkpoint と `gate publish` が同じ resolver と renderer を必ず通る trigger 非依存入口へ置換し、target 解決と対象別処理を束ねる。CAS 再試行時も正準状態を再解決する | AC-2, AC-4, AC-8, AC-10 | #1, #3, #5 |
+| 7 | checkpoint 後置フック | push 成功後に完全 SHA と Issue 番号で共有同期を呼ぶ。全結果/例外を SHA 付き stderr 警告へ変換し、stdout 1行 SHA・終了コード0・remote ref を維持する。push 失敗時は呼ばない | AC-1, AC-2, AC-3, AC-9 | #1, #6 |
+| 8 | gate publish 接続を維持 | Check Run 発行試行後、成否と独立して発行 target SHA で同じ共有入口を呼ぶ。一時 report を直接 renderer へ渡さず、発行成否にかかわらず正準 Check Run resolver の結果だけを描画する | AC-8, AC-10 | #6 |
+| 9 | GitHub stub の観測点拡張 | 本文競合・対象別失敗に加え、commit 別 Check Run、別プロセス実行、API失敗、malformed output、identity/name/head SHA 不一致を注入・観測可能にする | AC-4, AC-5, AC-8, AC-9 | #3, #5 |
+| 10 | checkpoint 統合テスト | SPEC→DESIGN→PLAN→VALIDATION を順に checkpoint し、各 push 直後の完全 SHA、存在成果物だけの本文、gate 未到達、remote ref を検査する | AC-1, AC-3, AC-7, AC-9 | #7, #9 |
+| 11 | 正準状態・回帰統合テスト | checkpoint と gate publish を別プロセスで実行して一時 file 不在でも Check Run 状態が再現されること、Check Run absent/malformed/wrong-SHA/wrong-identity、current/stale checkpoint の表示、local record 維持、3 target、CAS、上限、重複を網羅する | AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-10 | #8, #9 |
+| 12 | 全体検証と証跡整理 | build、対象テスト、全テスト、常時 lint を foreground 実行し、AC別ログを validation worker へ渡す | AC-1〜AC-10 | #10, #11 |
 
 ## テスト配置とケース行列
 
 ### 既存テストの拡張先
 
-- `test/integration/issue-sync.test.ts`: 既存 gate publish 回帰を残したまま checkpoint 主経路、3 target、両対象の独立性、CAS、marker、本文上限、ゲート表示を追加する。同期契約の統合テストをここへ集約する。
-- `test/helpers/gh-stub.ts`: 本文 read/edit、PR 一意選択、Check Run の既存 stub に、対象別失敗と本文全体の競合注入・呼出し観測だけを追加する。
+- `test/integration/issue-sync.test.ts`: 既存 gate publish 回帰を残したまま checkpoint 主経路、3 target、両対象の独立性、CAS、marker、本文上限、別プロセスの Check Run 正準状態解決とゲート表示を追加する。
+- `test/helpers/gh-stub.ts`: 本文 read/edit、PR 一意選択、Check Run の既存 stub に、commit/identity/output 別応答、取得失敗、対象別失敗、本文全体競合の注入・呼出し観測を追加する。
 - `test/unit/worktree.test.ts`: branch pattern からの Issue 番号抽出を標準/custom/detached由来文字列/不一致で検査する。
 - `test/integration/verify.test.ts`: 既存 checkpoint の attached/detached・push SHA 契約を回帰基準として維持し、必要なら disabled/local で同期 API が無いことの最小ケースを追加する。
 
@@ -46,7 +47,9 @@
 | marker | 開始/終了文字列、`&amp;`、`&#60;` を成果物へ混在 | payload に生 marker なし、逆変換が元全文と一致 |
 | 境界 | 0組、正常1組、片側欠落、重複、逆転 | 追加/区間置換/no-write が排他的、marker 外全文一致 |
 | 本文上限 | full が上限ちょうど、full 1文字超過で fallback 可能、fallback も超過 | `synced_full` / `synced_fallback` / `sync_failed_no_write`、最後は edit なし |
-| gate表示 | 記録なし、同じ target SHA、異なる target SHA | 未判定に偽SHAなし、現在表示、過去表示と最新未通過の明記 |
+| gate正本 | gate publish と checkpoint を別プロセスで実行、一時 review file 無し | Check Run だけから同じ状態を復元し、temp file の生成・残存に非依存 |
+| gate不正 | Check Run 無し、API失敗、malformed schema、wrong gate/name/head/target SHA/identity | unknown/unavailable 表示、状態・SHAを捏造せず、書込みや Check Run 生成なし |
+| gate表示 | checkpoint と同じ target SHA、祖先 SHA、関係を証明不能な SHA | gate target SHA、current/older/unjudged、older は最新通過を示さない旨 |
 | 非致命性 | API、境界、上限、CAS、PR解決失敗 | checkpoint は0、stdoutは完全 SHA 1行、remote ref一致、stderr診断 |
 | gate分離 | checkpoint のみ実行 | Check Run、承認、gate record の生成・変更が0件 |
 | 無効条件 | local、GitHub+disabled | Issue/PR の read/edit 0件、従来 checkpoint 結果 |
@@ -54,9 +57,9 @@
 ## 実装上の検査順序
 
 1. 純粋関数と unit test を実装し、codec・境界・branch 解決を先に固定する。
-2. 対象別トランザクションを既存 gate publish テストで回帰確認する。
-3. checkpoint 後置フックを接続し、4 checkpoint の統合テストを通す。
-4. `both`、CAS、上限、旧 gate state の反証ケースを追加し、no-write と非致命性を確認する。
+2. GitHub Check Run resolver と local resolver を固定し、別プロセス・absent・malformed・wrong-SHA/identity を先に反証する。
+3. 対象別トランザクションを既存 gate publish テストで回帰確認する。
+4. checkpoint 後置フックを接続し、4 checkpoint、current/older/unjudged、`both`、CAS、上限を確認する。
 5. `npm run build`、対象テスト、`npm test`、`.agent-skill-chain/ci/verify-doc-length.sh`、`.agent-skill-chain/scripts/lint-references.sh`、`.agent-skill-chain/scripts/lint-vocab.sh`、`.agent-skill-chain/scripts/adr-lint.sh check` をすべて foreground で実行する。
 
 ## 障害時の切り戻し単位

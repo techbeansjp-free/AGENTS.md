@@ -14,7 +14,7 @@
 - 前提: checkpoint は commit 後に `origin` への push が成功して初めて完全 SHA を同期へ渡す。push 失敗時は同期しない。
 - 同期候補: target SHA、同 SHA に実在する成果物 payload、既存ゲート表示から構成する固定マーカーブロック。
 - CAS 観測値: GitHub から読み取った対象本文全体。マーカー区間だけでなく、マーカー外の第三者更新も競合として検知する。
-- 入力: backend、既存 `issue_sync` 3設定、Issue 番号、branch、target SHA、同 SHA の Git tree、既存ゲート記録、対象本文。
+- 入力: backend、既存 `issue_sync` 3設定、Issue 番号、branch、target SHA、同 SHA の Git tree、backend の正準ゲート記録、対象本文。
 - 出力: 対象ごとの `synced_full`、`synced_fallback`、`sync_failed_no_write`、または全体の `not_applicable` と診断。checkpoint 呼出し元には完全 SHA と非致命警告を返す。
 
 ## 要件 → 設計要素の対応表
@@ -37,11 +37,11 @@
 ### コンポーネント構成
 
 - D1 checkpoint オーケストレータ (`src/commands/checkpoint.ts`): 従来どおり stage、commit、branch 解決、push、完全 SHA 確定までを致命処理として実行する。push 成功後だけ設定と Issue 番号を解決して D2 を `try/catch` 内で呼び、全結果を SHA 付き警告へ変換した後も `ok(sha)` を返す。stdout は既存どおり SHA 1行だけとする。
-- D2 共有同期サービス (`src/lib/issue-sync.ts`): gate 固有名の入口を trigger 非依存の入口へ置き換え、checkpoint と `gate publish` の双方から同じ target SHA で呼ぶ。適用条件、スナップショット生成、対象解決、対象別更新を順序付けるだけで、commit、push、Check Run、ゲート状態の生成・更新は行わない。
+- D2 共有同期サービス (`src/lib/issue-sync.ts`): gate 固有名の入口を trigger 非依存の入口へ置き換え、checkpoint と `gate publish` の双方から同じ target SHA と同じ D6 resolver で呼ぶ。適用条件、正準ゲート状態解決、スナップショット生成、対象解決、対象別更新を順序付けるだけで、commit、push、Check Run、ゲート状態の生成・更新は行わない。
 - D3 SHA 固定スナップショットと renderer (`src/lib/issue-sync.ts`): `git show <targetSha>:<artifact>` で実在する4成果物だけを取得する。payload は全 `&` を `&amp;`、次に両固定マーカーの先頭 `<` を `&#60;` に変換し、逆順の decoder で元文字列を復元できる純粋関数とする。
 - D4 Issue/PR 対象解決: branch pattern から Issue 番号を一意に抽出する共有関数と、既存の open PR 一意選択を使う。`both` は Issue と PR を別の D5 呼出しへ分け、PR 解決失敗を Issue 更新へ波及させない。
 - D5 本文更新トランザクション (`src/lib/issue-sync.ts`): 境界解析、候補生成、上限状態決定、本文全体 CAS、最大1回の再試行、書込み、型付き結果を対象ごとに閉じ込める。API 失敗・境界不正・縮退不能・未解消競合は書き込まず `sync_failed_no_write` とする。
-- D6 ゲート表示アダプタ: 既存記録から `final` と `target_sha` の組を読み、同期 target と一致すれば「この checkpoint の状態」、不一致なら「過去の SHA の状態で最新 checkpoint の通過を示さない」、記録無しなら「未判定」と描画する。同期本文は競合検知以外では読み戻さず、ゲート判定入力にしない。
+- D6 正準ゲート状態 resolver と表示アダプタ: backend と checkpoint SHA を入力に4ゲートを解決する。local は従来どおり Git 管理下 `reviews/<gate>.yaml` だけを読む。GitHub は一時 `reviews/*.yaml` を一切読まず、対象 Issue branch の checkpoint SHA までの commit に探索範囲を限定し、新しい SHA から順に各ゲートの設定済み Check 名を `commits/<sha>/check-runs?check_name=...&filter=all&per_page=100` と pagination で取得する。各 SHA の最新 ID の `status=completed` record を現在候補とし、Check 名と `head_sha`、`output.text` 内の gate-report schema、`gate.id` と `gate.target_sha`、`final` と conclusion の対応がすべて一致する場合だけ適用する。現在候補が malformed または identity/SHA 不一致なら古い候補へ fallback せず `unknown`、API/branch 範囲/応答を取得・解釈できなければ `unavailable`、全探索範囲に record が無ければ `unknown` とし、理由を保持して状態を推測しない。renderer は確定候補だけ `final` と gate target SHA を表示し、checkpoint SHA と同一なら `current`、祖先なら `older`、同一性・祖先性を証明できなければ `unjudged` と表示する。`unknown` / `unavailable` には状態値や架空 SHA を付けない。
 
 ### 処理順序と依存関係
 
@@ -52,6 +52,9 @@ flowchart LR
   B -->|成功 + 完全SHA| D[D1 非致命後置フック]
   G[gate publish 記録済み状態 + 対象SHA] --> D2[D2 共有同期サービス]
   D --> D2
+  D2 --> R[D6 backend正準ゲート状態resolver]
+  R -->|GitHub| Q[Check Run API]
+  R -->|local| L[Git管理下 reviews]
   D2 --> E[D3 SHA固定スナップショット]
   D2 --> F[D4 対象解決]
   E --> H[D5 対象別本文トランザクション]
@@ -74,7 +77,7 @@ flowchart LR
 
 境界 parser は開始・終了マーカーの出現数と順序を検査し、`absent`、`valid`、`invalid` の一つだけを返す。`absent` は元本文を切り詰めず末尾へ1区間を追加し、`valid` は境界を含む区間だけを置換し、`invalid` は no-write とする。
 
-各試行では本文全体を読み、最新ゲート記録から候補を再描画し、full と fallback の完成本文を別々に生成する。full が上限以下なら `synced_full`、それ以外で fallback が上限以下なら `synced_fallback`、双方超過なら `sync_failed_no_write` とする。候補と現本文が同一なら書込みを省略して対応する成功状態を返す。
+各同期試行の開始時と CAS 再試行時に D6 を呼び、backend の正準記録から候補を再描画して full と fallback の完成本文を別々に生成する。GitHub の Check Run API 失敗や malformed record は一時ファイルへ fallback せず、該当ゲートを `unavailable` / `unknown` と表示した候補を生成する。full が上限以下なら `synced_full`、それ以外で fallback が上限以下なら `synced_fallback`、双方超過なら `sync_failed_no_write` とする。候補と現本文が同一なら書込みを省略して対応する成功状態を返す。
 
 書込み直前に本文全体を再取得し、観測本文と1文字でも異なれば、最新本文・最新ゲート記録から全処理を1回だけ再実行する。再競合では no-write とする。現在の正常ブロックが示す同期 SHA が候補より Git 履歴上で新しい場合、または両 SHA の順序を証明できない場合も no-write とし、遅延した checkpoint/gate publish が新しい同期を巻き戻さない。同一 SHA の checkpoint と gate publish は、再試行時のゲート記録再読込と同一候補の no-op により安全に収束する。マーカーブロックの読取りは freshness/CAS にだけ使い、ゲート状態の真偽を決める入力には使わない。
 
@@ -94,7 +97,7 @@ ADR-0021 の Git から GitHub 本文への一方向転記、3設定、固定対
 
 ## 障害・ロールバック考慮
 
-- 想定される失敗モード: push 失敗、設定/Issue番号解決不能、Git object 読取り失敗、PR 不在/複数、API 読書き失敗、marker 境界不正、CAS 競合、本文上限、古い SHA の遅延同期。
+- 想定される失敗モード: push 失敗、設定/Issue番号解決不能、Git object 読取り失敗、PR 不在/複数、本文または Check Run API 失敗、Check Run の schema/identity/SHA 不一致、marker 境界不正、CAS 競合、本文上限、古い SHA の遅延同期。
 - 隔離: push 失敗だけは checkpoint 失敗とし、それ以外は対象別 no-write 警告にする。marker 外本文を切り詰めず、成功済み対象を補償更新で戻さない。
 - ロールバック手順: checkpoint 後置フックを外し、gate command の呼出しを共有同期入口へ維持または従来入口へ戻す。Git commit と remote push、既存マーカー本文、ゲート記録は残るためデータ移行は不要である。
 - 影響を受ける既存機能: checkpoint の stderr に同期診断が加わるが stdout/終了コード契約は維持する。gate publish の Check Run 成否、ローカル backend、disabled 設定は変わらない。
@@ -102,7 +105,7 @@ ADR-0021 の Git から GitHub 本文への一方向転記、3設定、固定対
 ## 制約・完了条件・検証方法
 
 - 新設定、schema、成果物種別、Check Run、ゲート状態を追加しない。GitHub 本文から成果物や判定を逆生成しない。
-- 実装は4成果物すべての checkpoint、3 target、SHA 固定、CAS、marker codec、3上限状態、同一/過去/未判定ゲート表示を自動テストする。
+- 実装は4成果物すべての checkpoint、3 target、SHA 固定、CAS、marker codec、3上限状態、Check Run の current/older/unjudged/unknown/unavailable 表示、および local の Git 管理下 record 維持を自動テストする。
 - `npm run build`、対象自動テスト、全テスト、doc-length、lint-references、lint-vocab が成功し、AC-1〜AC-10 の証跡を validation セグメントへ渡せることを完了条件とする。
 
 ## 未決事項・対象外
