@@ -57,7 +57,7 @@
 2. 対象別トランザクションを既存 gate publish テストで回帰確認する。
 3. checkpoint 後置フックを接続し、4 checkpoint の統合テストを通す。
 4. `both`、CAS、上限、旧 gate state の反証ケースを追加し、no-write と非致命性を確認する。
-5. `npm run build`、対象テスト、`npm test`、`.agent-skill-chain/ci/verify-doc-length.sh`、`.agent-skill-chain/scripts/lint-references.sh`、`.agent-skill-chain/scripts/lint-vocab.sh` をすべて foreground で実行する。
+5. `npm run build`、対象テスト、`npm test`、`.agent-skill-chain/ci/verify-doc-length.sh`、`.agent-skill-chain/scripts/lint-references.sh`、`.agent-skill-chain/scripts/lint-vocab.sh`、`.agent-skill-chain/scripts/adr-lint.sh check` をすべて foreground で実行する。
 
 ## 障害時の切り戻し単位
 
