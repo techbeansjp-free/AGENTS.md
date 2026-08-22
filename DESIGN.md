@@ -34,26 +34,26 @@
 | 要件 / AC-ID | 対応する設計要素 | 検証方法 |
 |---|---|---|
 | R1 / AC-1 | D1 `validateReviewerVerdictShape`、D5 evidence v4・gate-report v2 | `automated`（単体: 観点欠落・列挙外値の各入力が受理拒否を経て `human_required` になる） |
-| R1 / AC-2 | D1 `classifyFindingSeverity` の conformance 分岐 | `automated`（単体: 昇格類型・必須根拠を伴わない AC-ID 未達 finding が blocking のまま） |
+| R1 / AC-2 | D1 `classifyFindingSeverity` の `conformance_failure` 分岐 | `automated`（単体: `unmet` / `evidence_missing` が昇格類型・必須根拠なしで blocking。単なる AC-ID 言及は AC-4） |
 | R1 / AC-3 | D1 `evaluatePromotion`、D5 gate-report v2 の `promotion` / `promotion_evaluation` | `automated`（単体: 4類型 × 必須根拠充足で blocking、記録内容だけで再現可能） |
 | R1 / AC-4 | D1 の降格経路、D5 の原文保持制約 | `automated`（単体: 昇格不成立の各経路が warning 以下、evidence 原文が同一） |
 | R2 / AC-5 | D2 `deriveGateFinal` 規則1 | `automated`（単体: 立証 fail・blocking 1件以上の各入力が `rejected`） |
 | R2 / AC-6 | D2 `deriveGateFinal` 規則2 | `automated`（単体: 立証 pending・探索記録欠落／不完全・判定不能の各入力が `human_required`） |
 | R2 / AC-7 | D2 `deriveGateFinal` 規則3 と安全側停止事実の適用規則 | `automated`（単体: warning/info 多数かつ探索記録ありで `approved`。3事実いずれが真でも `approved` が保たれる） |
-| R3 / AC-8 | D3 `decideReviewProfile`、D4 `resolveReviewProfileInputs`、判断3 の実装経路全数表、D5 `decodeRecordedReviewProfile`、D7 設定・プロンプトからの `risk` 除去 | `automated`（単体: `risk` 3値すべてで `standard`。統合: profile を決定・記録する全経路に `risk` 由来の入力が無いことの grep 検査） |
+| R3 / AC-8 | D3 `decideReviewProfile`、D4 `resolveLiveReviewProfile`、判断3のinventory、D5 `decodeLegacyEvidenceProfile`、D7の旧経路除去 | `automated`（単体: 他入力同一なら`risk` 3値で同じ結果。統合: inventory全経路に`risk`由来のlive入力が無い） |
 | R3 / AC-9 | D3 の順序評価と全域性 | `automated`（単体: 決定入力の全組合せに対する表駆動テスト） |
 | R4 / AC-10 | D5 スキーマ4件の版更新と `src/lib/gate-record-migration.ts` | `automated`（単体: v1 レコードの `approved` が保持され再導出されない。統合: 旧版 Check の再構築が成功し続ける） |
-| R4 / AC-11 | D7 `AGENTS.md`・`docs/GLOSSARY.md`・設定テンプレート・`roles.yaml`・配布スキル | `automated`（統合: 規範文書に `risk` 由来の strict 昇格記述が残っていないことの検査） |
+| R4 / AC-11 | D7 `AGENTS.md`・`docs/GLOSSARY.md`・設定テンプレート・`roles.yaml`・配布スキル | `automated`（統合: 2規範文書に反証の非二値化、4昇格類型、類型別必須根拠、R3 の profile 順序があり、旧 `risk` 昇格記述が無いことを固定文字列で検査） |
 
 ## 責務・境界
 
 ### コンポーネント構成
 
-- **D1 `src/lib/gate-finding-severity.ts`（新設）**: finding 単位の判断だけを負う。観点宣言の検査、昇格類型の閉じた列挙、類型ごとの必須根拠の形式検査、逐語引用の照合、severity の決定。ゲート最終判定を知らず、自分で確定させない。
+- **D1 `src/lib/gate-finding-severity.ts`（新設）**: finding 単位の判断だけを負う。観点宣言と `conformance_failure` の検査、昇格類型の閉じた列挙、類型ごとの必須根拠の形式検査、逐語引用の照合、severity の決定。ゲート最終判定を知らず、自分で確定させない。
 - **D2 `src/lib/gate-verdict-aggregation.ts`（改訂）**: attempt 単位の判断だけを負う。slot 件数・判定確定数の検査、`SPEC.md` R2 の順序評価による最終判定の導出、安全側停止事実の適用。最終判定を導出する唯一の場所とする。finding の severity を自分で決めない。
-- **D3 `src/lib/review-profile.ts`（全面改訂）**: profile の live 決定だけを負う全域関数。5つの決定入力を受け取り、`SPEC.md` R3 の順序評価で決定結果・適用規則番号・次ラウンドへ持ち越すラチェット値を返す。副作用を持たず `risk` 型を持たず、記録済み profile の復元を行わない。
-- **D4 `src/lib/review-light.ts`（責務の付け替え）**: D3 の決定入力を Coordination Backend から解決することだけを負う。明示オプトインの有無と付与主体の人間確認、変更差分の解決可否、コア対象の成立、直前ラウンドの strict 確定を読み取る。決定規則そのものを持たない。
-- **D5 スキーマとマイグレーション**: `.agent-skill-chain/schemas/{gate-report,state,config}.schema.yaml` と review evidence の版更新、および `src/lib/gate-record-migration.ts`（新設）。旧版レコードの解釈と記録済み profile の復元（`decodeRecordedReviewProfile`）だけを負う。決定規則を持たず D3 を呼ばない。
+- **D3 `src/lib/review-profile.ts`（全面改訂）**: profile の live 決定だけを負う全域関数。R3 の4論理入力（差分解決可否とコア成立を別scalarにした5項目）を受け、順序評価で決定結果・適用規則番号・次ラウンドのラチェット値を返す。副作用・`risk` 型・旧記録復号を持たない。
+- **D4 `src/lib/review-light.ts`（責務の付け替え）**: `resolveLiveReviewProfile` facade として、明示オプトインの人間確認、差分解決、コア成立、直前ラウンドの strict 確定を Coordination Backend から解決して D3 へ一度だけ渡す。決定規則を複製しない。
+- **D5 スキーマとマイグレーション**: `.agent-skill-chain/schemas/{gate-report,state,config}.schema.yaml` と review evidence の版更新、および `src/lib/gate-record-migration.ts`（新設）。旧版レコードの解釈と、v3 evidence の `profile`・`expected_count` から記録済み wire profile を復号する `decodeLegacyEvidenceProfile` だけを負う。決定規則を持たず D3 を呼ばない。
 - **D6 判定プロンプト（`src/commands/gate.ts` の `buildReviewerPromptFromResolved`）**: 反証ルーブリックを、探索の指示を保ったまま、合否値の要求から昇格類型と必須根拠の申告要求へ置き換える。出力 JSON 契約を新版へ更新する。
 - **D7 規範文書と配布物**: `AGENTS.md`・`docs/GLOSSARY.md`・`.agent-skill-chain/config/{agent-skill-chain,roles}.yaml`・`.agent-skill-chain/templates/{standard,lightweight}/agent-skill-chain.yaml`・`.agent-skill-chain/templates/claude/skills/gate-review/SKILL.md`。
 
@@ -106,6 +106,7 @@ perspective: conformance | falsification      # 新設・必須
 origin: specification | design | implementation | validation   # 既存
 code: <文字列>                                 # 既存
 evidence: [<文字列>, ...]                      # 既存。原文をそのまま保持する
+conformance_failure: {ac_id: AC-<n>, kind: unmet | evidence_missing}  # 立証の AC-ID 未達・未証跡だけ
 promotion:                                     # 反証観点でレビュアが昇格を申告する場合のみ
   category: issue_purpose_blocked | existing_behavior_regression | data_loss_or_security | ci_build_failure
   quote_path: <引用元のリポジトリ相対パス>
@@ -126,12 +127,12 @@ promotion_evaluation:                          # 記録側が書く。レビュ�
 | `data_loss_or_security` | データ喪失またはセキュリティ低下 | 喪失・低下が生じる資産のパスと、その資産へ到達する操作の名前 | 双方が当該 target SHA に実在するリポジトリ相対パスまたはコマンド名として解決できる |
 | `ci_build_failure` | CI・ビルドの失敗 | 失敗するコマンド行と、その出力または終了コード | `$ ` で始まるコマンド行を1行以上含み、それに続く出力行または終了コード表記を1行以上含む |
 
-**引用照合の入力供給元**。`quote_path` と `quote` は全類型に共通で必須とする。記録側は当該 attempt の target SHA の git tree から `quote_path` のファイル本文を読み、`quote` が逐語一致する部分文字列であることを照合する。照合は改行コードを LF へ正規化し各行の末尾空白を除いたうえで行い、正規化後16文字以上を要求する。照合対象を判定プロンプトの入力集合ではなく target SHA の git tree とするのは、GitHub 経路とローカル経路のいずれでも記録側が同一の入力を再構築でき、かつ第三者が gate-report と target SHA だけで同じ照合を再現できるためである。レビュアは判定プロンプトへ展開された本文しか知り得ないため、展開外のファイルからの逐語一致は事実上成立しない。
+**入力閉包と引用照合**。`quote_path` と `quote` は全類型に共通で必須とする。D6 が target SHA から解決し prompt digest に束縛した判定入力パス集合を evidence と gate-report に保存し、D1 はその集合内の本文だけを読む。`quote` は LF 正規化・行末空白除去後に16文字以上の逐語一致を要求する。これにより read-only レビュアは供給済み本文だけで根拠を作れ、記録側と第三者は gate-report の target SHA・入力パス集合・引用から同じ分類を再現できる。
 
 **severity 決定の順序**（finding 単位。先に成立した規則で確定する）
 
 1. `perspective` が未宣言、または `perspective`・`promotion.category`・`severity` のいずれかが列挙外 → verdict 全体を受理しない。値の既定補完も当該 finding の黙殺も行わない。受理拒否は当該 slot の verdict を未確定として D2 の `inconclusive` へ写像し、最終判定は D2 の規則2で `human_required` になる（AC-1）。
-2. `perspective: conformance` かつ AC-ID の未達・未証跡を指摘している → 昇格類型への該当と必須根拠の有無を問わず `blocking`（AC-2）。判定は当該 finding の `evidence` が AC-ID を含むことで機械的に行う。
+2. `perspective: conformance` かつ `conformance_failure` があり、`ac_id` が target SHA の `SPEC.md` の AC 集合に実在する → 昇格類型と必須根拠を問わず `blocking`（AC-2）。単に `evidence` が AC-ID を含むだけではこの規則へ入れない。`conformance: fail` なのに有効な `conformance_failure` が0件、または当該宣言があるのに `conformance: pass` の verdict は形状不整合として受理せず AC-1 へ戻す。
 3. `perspective: falsification` かつ `promotion` があり、`category` が列挙内で、当該類型の `basis` 形式検査と `quote` 照合の双方を満たす → `blocking`。`promotion_evaluation.outcome: promoted` を記録する（AC-3）。
 4. 上記のいずれにも該当しない → レビュアが申告した `warning` / `info` をそのまま採用し、`blocking` の申告は `warning` へ降格する。`severity` 以外（`perspective`・`origin`・`code`・`evidence` 原文）は一切変更せず、降格時は `promotion_evaluation.outcome: not_promoted` と `rejected_reason` を併記する（AC-4）。
 
@@ -176,35 +177,33 @@ GateFinalInput {
 | 最終round到達 ∧ 確定結果が `approved` | `approved` | `approved`（同一） |
 | light 上限到達 ∧ 否定判定が残る | `human_required` | 規則1で `rejected` → 事実が真 → `human_required`（同一） |
 | light 上限到達 ∧ 否定判定が残らない | `approved` | `approved`（同一） |
-
 意図的変更は2行目の1件のみである。差し替え対象となる blocking が0件のとき、分類recordの不正は判定へ影響し得ず、blocking を消して安全側停止を回避する経路も存在しない。この1件を現行のまま無条件 `human_required` に据え置くと AC-7（立証 pass・blocking 0件・探索記録ありの attempt を `approved` とする）を満たせない。不正の事実は `reason` へ記録し続ける。他の6行はいずれも現行と同一の帰結であり、ISSUE-786 の有限性保証は失われない。
-
 **反証探索記録**。`gate.falsification_search` は `conducted`（真偽値）と `counterexamples_considered`（探索した反例候補の要約の配列）を持ち、合否値を持たない。フィールド自体が無ければ `absent`、`conducted !== true` または配列が空か16文字未満の要素を含めば `incomplete`、それ以外を `complete` とする。規則2により `complete` 以外は `approved` へ到達できない。これが反証探索の維持を機械的に担保する経路であり、探索の指示（D6）と合わせて二重に保つ。
-
 **ISSUE-786 の finding 分類record に対する制約**。分類record による blocking → warning の差し替えは `perspective: falsification` の finding に限る。`perspective: conformance` の finding を対象とする分類record は不正として扱い `classification_invalid` を立てる。この制約が無いと、AC-2 が無条件 blocking とする AC-ID 未達が最終round で warning へ差し替えられ、不変条件 I7 が緩む。分類record の機構自体は撤去しない。
 
 ### 判断3: レビュープロファイルの決定（R3 / AC-8・AC-9）
 
-決定入力 `ReviewProfileInputs` は5項目である。`full_opt_in`（`full` の明示オプトインがあり付与主体を人間と確認できた）、`light_opt_in`（`light` について同じ）、`diff`（`resolved` / `unresolved`）、`core_target`（`diff === 'resolved'` のときのみ意味を持つ）、`strict_locked`（当該 Issue の当該ゲートが過去ラウンドで strict へ確定済み）。`risk` はこの型に存在しない。`ReviewRisk`・`ReviewAutonomy` 型と `resolveReviewProfile` を削除し、`risk` を live 決定へ渡せる経路をコンパイル時に消す。決定は規則を上から評価し、最初に成立したもので確定する。規則4に条件が無いため全組合せに対して帰結が一意に定まる。
+`ReviewProfileInputs` は R3 の4論理入力を、`full_opt_in`・`light_opt_in`・`diff`（`resolved` / `unresolved`）・`core_target`・`strict_locked` の5 scalarで表す。`core_target` は差分解決時だけ意味を持つ。`risk` は型に存在せず、`ReviewRisk`・`ReviewAutonomy`・`resolveReviewProfile` を削除する。D3 は次を上から評価し、規則4で全域を閉じる。
 
 1. `full_opt_in` → `strict`（2体）
 2. `diff === 'unresolved'`、`core_target`、または `strict_locked` → `strict`（2体）。あわせて次ラウンドへ持ち越す `strict_locked` を真にする
 3. `light_opt_in` → `light`（1体）
 4. それ以外 → `standard`（1体）
 
-戻り値は `{ profile, reviewer_count, rule, strict_locked_next }` とし、`rule` に成立した規則番号を含めて gate-report と review evidence へ記録する。第三者が記録だけを読んで決定を再現できる状態にする。
-
-**profile を決定・記録する実装経路の全数**。型の削除だけでは消えない経路を含め、次の4経路がリポジトリ内の全数である。これ以外に profile を決定・記録する経路は存在せず、実装セグメントは AC-8 の grep 検査でこれを固定する。
-
-| 実装経路 | 現行の `risk` 依存 | 改訂後の扱い |
-|---|---|---|
-| `gate review`（`src/commands/gate.ts`）→ `resolveLightReview`（`src/lib/review-light.ts`） | `resolveReviewProfile(signal.risk, signal.autonomy)` を I8 ガードレールとして呼び light を無効化する | D4 が5つの決定入力を解決し D3 が live 決定する。`risk` シグナルの読み取り（`riskFromLabels`、`state.yaml` の `risk` 読み込み）ごと削除する |
-| `issue start` の `state.yaml` 初期化（`src/commands/issue.ts`） | `config.risk.default !== 'normal' \|\| config.autonomy.default === 'full'` を直書きし `review_profile` と `gate.profile` へ書き込む | profile を決定しない。当該式と `review_profile` の書き込みを削除する。state v2 は `review_profile` を持たず、`gate.profile` は任意フィールドとして attempt 開始時に D3 の決定結果が書かれる |
-| `gate materialize-check-report`（`src/commands/gate.ts`） | `resolveReviewProfile(risk ラベル, autonomy ラベル)` を trusted profile として渡し、旧 Check の再構築と体数期待値に用いる | 記録の `schema_version` で経路を分ける（下記） |
-| `gate review` / `gate record-verdict` / `gate publish` の profile 引数 | 呼び出し側の指定値を基準にし `light_review` の結果で上書きする | D3 の決定結果を唯一の正とし、引数は決定結果と一致することを検査する宣言として扱う。不一致は日本語の理由と決定結果を示して失敗させる |
-
-**`gate materialize-check-report` の版分岐**。この経路は「これから実施する attempt の profile を決める」のではなく「既に発行済みの Check output を再構築して改竄が無いことを確認する」ものであり、live 決定とは目的が異なる。記録が gate-report v2 の場合は D3 の live 決定で再構築する——v2 レコードは同じ規則・同じ決定入力の下で書かれているため再導出が一致し、現行と同じ独立再構築による改竄検知が保たれる。記録が gate-report v1 の場合は D5 の `decodeRecordedReviewProfile` が当該記録の wire profile をそのまま返し、profile を再導出しない。新規則で再導出すると `risk:high` 由来で `strict` として記録された過去の Check が `standard` として再構築され、`canonicalJson(report) !== canonicalJson(rebuilt)` により既存の承認済み Check が検証不能になるためである。v1 経路で失われる独立再導出の代わりに、再構築側は (a) 記録済み profile と evidence の `expected_count`・充足 slot 数が整合すること、(b) 当該 target SHA の差分にコア対象が成立する場合は `strict` であること、の2点を独立に検査する。(b) は差分の内容だけを入力とし `risk` を入力としない既存の検査であり、コア対象で体数が下がる経路は生じない。コア対象でない Issue は新規則でも既定が `standard` であるため、記録済み値を用いることによる体数低下の余地は本変更後の規則が許す範囲を超えない。
-
+戻り値は `{ profile, wire_profile, reviewer_count, rule, inputs, strict_locked_next }` とし、gate-report v2・evidence v4・launcher tokenへ同じ値を記録する。
+**live 決定と記録経路の全数**。実装では次の表を正準inventoryとして `test/integration/review-profile-paths.test.ts` に固定する。D3/D4 以外が `risk`・`autonomy`・ラベルから profile を導出することを禁止する。
+| 経路 | 改訂後の責務 |
+|---|---|
+| `src/commands/gate.ts` の `review` | D4を呼ぶlive決定入口。既存profile引数は互換のため構文だけ検査するが決定へ使わず、scaffoldへ決定結果を書き、stdoutで返す |
+| `verifyEvidence` と `buildVerifiedGateReport` | D4の再導出結果をv4 evidence・必要体数と照合する。後者は生のprofileでなく決定オブジェクトだけを受ける |
+| `recordTrustedCheck` → `fetchTrustedGateApiContext` → `buildVerifiedGateReportFromTrustedContext` | API contextにIssue eventsを追加し、D4が `full` / `light` の人間付与と差分を解決する。`trusted-gate-recorder.ts` のriskラベル式を削除する |
+| `materializeCheckReport` | v2は同じAPI contextからD4で再導出する。v1はD5の旧証跡復号へ分岐し、riskラベル式を削除する |
+| `gate-local-review.sh`、`gate-launch-reviewer.sh`、各adapter、`submitEvidence` | `review` が返した値をlauncher token・attempt・v4 evidenceへ無変換で運ぶ。引数はtoken/scaffoldとの一致検査だけに使い、決定しない |
+| `reviewerContext` / core model policy | コア分類とmodel能力を返すだけとしprofileを変更しない。launcherのcore検査はscaffoldのD3規則番号との整合検査に置換する |
+| `issue start` | 起票時は差分が無いためprofileを決めない。直書き式と`review_profile`を削除し、state v2の`gate.profile`はattempt開始時だけ書く |
+| `recordVerdict` / `publish` / `reconcile` | profile引数を持たず決定もしない。scaffoldに記録済みの決定を保持し、v2形状だけを更新する |
+`submit-evidence`・`verify-evidence` の既存profile引数はwire互換の検査値として残すが、tokenまたはD4結果と不一致なら `human_required` とする。設定の `review.strict.trigger` と配布スキルの旧profile定義も削除するため、表外からlive決定へ値を注入できない。
+**v1 profile の復元**。gate-report v1 自体にprofileは無い。GitHubの旧Check再構築では、同じ `attempt_id`・target・gate に属する完備v3 evidenceの `profile` を復元元とし、全slotの値一致、`expected_count`（1=`standard`、2=`strict`）、充足slot数を照合する。不一致・証跡欠落は推測せず `human_required`。旧 `final` は再導出せず、コア対象なら復元値が `strict` であることも独立検査する。
 **決定入力の解決**（D4。既存シグナルの読み替えであり、新しいラベル・設定キーを追加しない）
 
 | 入力 | GitHub モード | ローカルモード |
@@ -213,9 +212,7 @@ GateFinalInput {
 | `light_opt_in` | ラベル `review:light` の直近付与 event の actor が User | `state.yaml` の `review_intensity: light`。同上により常に偽 |
 | `diff` / `core_target` | `base...target` 差分の解決可否と、`AGENTS.md`・`.agent-skill-chain/schemas/` 配下・`.agent-skill-chain/config/segments.yaml`・`docs/adr/` 配下への該当、プロジェクトポリシー登録済みのコアパス列挙への該当、`review:core-audit` ラベル | 同左（ラベルの代わりに `state.yaml` の `review_subject: core_audit`） |
 | `strict_locked` | 直前ラウンドの gate-report の `light_review.strict_locked` | 同左 |
-
-`full_opt_in` にも付与主体の人間確認を課す点が現行からの変更である。現行は `autonomy:full` ラベルの存在だけで strict へ倒しており、確認を経ていない。`strict_locked` のラチェットは現行では `light` が要求された場合にしか真へ遷移しないが、本設計では規則2の成立時点で `light` 要求の有無にかかわらず真にする。降格は人間の明示行為に限る点は変えない。
-
+`verifyGrantorIsHuman` はラベル名を引数に取る共通関数へ置換し、`full` と `light` を同じevent規則で検査する。`strict_locked` は規則2の成立時点で `light` の有無にかかわらず真にする。
 **wire profile への写像**。決定結果 `strict` は wire profile `strict`・2体・`light_review.applied` 偽、`light` は `standard`・1体・真、`standard` は `standard`・1体・偽へ写像する。review evidence・launcher token・`config.review.<profile>.reviewer_count` が保持する2値表現は変更しない。新しい profile 値を wire へ導入しないため、投稿済み証跡の再検証・ラウンド計数・digest 照合はいずれも影響を受けない。
 
 ### 判断4: 破壊的変更の履行（R4 / AC-10・AC-11）
@@ -224,14 +221,16 @@ GateFinalInput {
 
 | スキーマ | 旧版 → 新版 | 外部契約の変化（1対1） | 旧版レコードの解釈規則 |
 |---|---|---|---|
-| gate-report | `.../gate-report/v1` → `v2` | `gate.falsification`（合否値）を受理せず `gate.falsification_search` を必須とする。finding へ `perspective` を必須追加し `promotion`・`promotion_evaluation` を許可する。`gate.review_profile`（決定結果・規則番号）を追加する | v1 レコードは記録済みの `final` をそのまま有効とし再導出しない。`falsification` の値は `falsification_search: {conducted: true, source: legacy_v1_verdict}` として読み、finding の `perspective` は未宣言のまま保持する。v1 レコードを新規判定の入力にしない |
+| gate-report | `.../gate-report/v1` → `v2` | `gate.falsification`（合否値）を禁止し `falsification_search` を必須化する。findingへ`perspective`・`conformance_failure`・`promotion`・`promotion_evaluation`、gateへ`review_profile`（決定・規則・入力）と`review_input_paths`を定義する | v1の記録済み`final`を再導出しない。旧反証値は履歴表示だけに読み替え、findingの観点は未宣言のまま保持し、新規判定へ使わない |
 | state | `.../state/v1` → `v2` | 必須フィールドから `review_profile` を削除する。`gate.falsification`（`verdict` + `counterexamples_tested`）を受理せず `gate.falsification_search`（`conducted` + `counterexamples_considered`）を必須とする。`gate.profile` を必須から任意へ変える | v1 の `gate.falsification.counterexamples_tested` を `counterexamples_considered` として読み `verdict` は破棄する。`review_profile`・`gate.profile` の記録値はそのまま保持し、live 決定の入力にしない |
 | config | `.../config/v1` → `v2` | `review.strict.trigger` を受理しない（`review.strict` の必須は `reviewer_count` のみになる）。v1 は `additionalProperties: false` かつ `trigger` を必須とするため、フィールド削除は版を上げないと旧版文書を不正化する | v1 の設定文書は受理し `trigger` を読み捨てる。`doctor` が「当該フィールドは無効であり profile 決定に影響しない」旨を日本語で報告する |
 | gate review evidence | `.../gate-review-evidence/v3` → `v4` | verdict から `falsification`（合否値）を受理せず `falsification_search` を必須とする。finding へ `perspective` を必須追加し `promotion` を許可する | v3 証跡はラウンド計数と過去ラウンド展開の入力としてのみ受理し続ける。現ラウンドの判定入力としては受理しない |
 
-いずれのスキーマも `schema_version` を `oneOf` で新旧2値受理とし、版ごとに必須フィールドを分岐させる。旧版で記録済みの承認は無効化しない——`gate reconcile` が旧版レコードを読んで digest 一致を確認した場合、記録済みの `final: approved` をそのまま最新 SHA へ再発行する。移行規則は `src/lib/gate-record-migration.ts` に単一の写像関数として実装し、スキーマ添付コメントと同一の内容を保つ。
+各スキーマは `oneOf` で新旧を分岐し、`src/lib/config.ts` と `gate-record-migration.ts` が版別に読む。`gate reconcile` はdigest一致のv1承認をv1のまま再発行し、変更ありのv1だけをv2 pending scaffoldへ移す。移行規則は単一写像とスキーマコメントに同じ内容を置く。
 
-**規範文書・配布物の改訂**（AC-11）。`AGENTS.md` 不変条件 I2 は「立証+反証の2観点レビューでゲートを通過する」を、2観点の実施を保ったまま通過条件が立証の充足・blocking 不在・反証探索記録の存在であることを示す記述へ改める。不変条件 I8 は「`risk != normal`（`unclassified` 含む）OR `autonomy == full` → `review_profile: strict`」を削除し、strict の成立条件を R3 の順序評価と一致させる（autonomy の既定 `gated` と昇格を人間の明示行為に限る規則は残す）。レビュープロファイル節は Standard／Light／Strict の成立条件を R3 の4規則と体数の対応へ改め、`risk` を profile 決定の入力とする記述を残さない。`docs/GLOSSARY.md` の「ゲート」行は反証が合否ではなく finding 産出であることが読み取れる定義へ改め、3列・20行以内の制約を守る。`.agent-skill-chain/config/agent-skill-chain.yaml` と `.agent-skill-chain/templates/{standard,lightweight}/agent-skill-chain.yaml` からは `review.strict.trigger` を削除する（`modes: [conformance, falsification]` は2観点の実施を表す記述であり残す）。`.agent-skill-chain/config/roles.yaml` のゲートレビュア契約は出力を「立証の合否値・観点宣言つき finding 群・反証探索記録」へ改め、`.agent-skill-chain/templates/claude/skills/gate-review/SKILL.md` を D6 と同一内容へ改める。`AGENTS.md` は現在140行・上限150行であり、上記はいずれも既存記述の置換であって行数を増やさない。
+**規範文書・配布物の改訂**（AC-11）。追加条項を作らず既存定義を置換する。`AGENTS.md` I2 は、立証の AC 未達は blocking、反証は合否値を持たない探索、反証 finding の blocking は `issue_purpose_blocked`・`existing_behavior_regression`・`data_loss_or_security`・`ci_build_failure` と各類型の必須根拠が揃う場合だけ、通過は立証 pass・blocking 0・探索記録 complete と1行内で定義する。I8 とレビュープロファイル節は R3 の「full → 差分不能/コア/strict固定 → light → standard」の順序へ置換し、`risk` 条件を削除する。`docs/GLOSSARY.md` の「ゲート」行にも同じ4類型・必須根拠・非二値化を収める。`test/integration/normative-gate-contract.test.ts` は両文書に4 id、必須根拠、反証非二値、R3順序があることと旧 `risk != normal` / 危険信号文言が無いことを検査する。
+
+`.agent-skill-chain/config/agent-skill-chain.yaml` と `.agent-skill-chain/templates/{standard,lightweight}/agent-skill-chain.yaml` は自身の `schema_version` をv2へ上げて `review.strict.trigger` を削除する。`roles.yaml` はゲートレビュア出力を「立証合否・`conformance_failure`・観点つき finding・反証探索記録」へ置換する。`.agent-skill-chain/templates/claude/skills/gate-review/SKILL.md` はprofile定義、出力、手順4〜6、制約を新契約へ置換し、Light追加ルーブリックも4類型だけを使う。template-syncと上記統合テストで展開物の残存旧語彙を検出する。`AGENTS.md` は140行・上限150行であり、いずれも既存行の置換で行数を増やさない。
 
 **判定プロンプトの改訂**（D6、AC-8 の「判定プロンプトに `risk` 由来の strict 昇格経路が存在しない」を含む）。反証ルーブリックから「blocking 基準を満たす反例が1件も無い場合は falsification=pass とする」「1件以上あれば falsification=fail とする」の2文を削除する。反例の探索指示は削除しない。代わりに、探索した反例候補を `falsification_search.counterexamples_considered` へ列挙すること、blocking として提出する反例には昇格類型 id・引用元パス・逐語引用・類型ごとの必須根拠を付すこと、いずれかを欠く反例は warning 以下として記録することを指示する。既存の3条件（目的阻害性・到達可能性・責務内是正可能性）は4類型の意味説明として、実証性は逐語引用の必須化として引き継ぐ。高ラウンドの限定節（ISSUE-786）はそのまま残す。出力 JSON 契約を evidence v4 の形へ更新し、profile 決定結果と適用規則番号をプロンプトへ記載する。判定プロンプトの生成元（`src/commands/gate.ts`）は launcher digest の算出対象集合に含まれないため、本改訂は launcher digest ではなく `prompt_digest` の不一致として現れる。`.agent-skill-chain/config/roles.yaml` は launcher digest の算出対象であり、その改訂は launcher digest を変える。
 
@@ -257,18 +256,18 @@ GateFinalInput {
 
 `.agent-skill-chain/standards/TEST_POLICY.md` の常時必須区分に従い、単体テストと統合テストを実装セグメントの完了条件とする。
 
-- **単体（D1）**: 観点欠落・列挙外の観点値／類型 id／severity 値の各入力で受理拒否になり `inconclusive` へ写像されること。AC-ID 未達 conformance finding が昇格類型・必須根拠なしで blocking のままであること。4類型それぞれについて、必須根拠充足で `promoted`、形式不備・引用不一致・`quote_path` 不在・類型非該当の4経路で `not_promoted` かつ warning になること。降格時に `evidence` 原文・`origin`・`code`・`perspective` が不変であること。運用実測で観測済みの3件の実欠陥に相当する finding が `promoted` になること。
+- **単体（D1）**: 観点欠落・列挙外値・立証合否と `conformance_failure` の矛盾を受理拒否にする。`unmet` / `evidence_missing` は blocking、単なる AC-ID 言及は warning 以下にする。4類型は必須根拠充足で `promoted`、形式不備・引用不一致・入力閉包外・類型非該当で `not_promoted` にし、原文を保持する。運用実測の3欠陥相当も固定する。
 - **単体（D2）**: 立証3値 × blocking 有無 × 探索記録3値 × `inconclusive` の全組合せに対する表駆動テストで規則1〜3を固定する。安全側停止事実3件 × 基礎導出3値の9通りについて、基礎導出が `approved` のときは3件いずれが真でも `approved` のまま、`rejected` のときは `human_required`、`human_required` のときは不変であることを固定する。写像の像に `approved` が新たに現れないことを固定する。反証観点の合否値を入力に持たないことを型と実行の双方で固定する。
 - **単体（D3）**: 決定入力5項目の全組合せ（`diff: unresolved` のとき `core_target` は不問）に対する表駆動テストで規則番号と体数が一意に定まることを固定する。`risk` 3値のいずれを Issue へ与えても決定結果が変わらないことを固定する。
-- **単体（D5）**: v1 gate-report の `final: approved` が移行写像を通っても `approved` のままであること、`falsification` の合否値が探索記録へ読み替わること、`decodeRecordedReviewProfile` が v1 レコードの `strict` を保持し新規則で再導出しないこと、v1 config の `trigger` が読み捨てられ profile 決定へ影響しないこと。
-- **統合**: `gate review` → レビュア起動 → `gate record-verdict` → `gate verify-evidence` の1周が v4 evidence で `approved` / `rejected` / `human_required` の3帰結へ到達すること。v3 証跡がラウンド計数へ引き続き算入されること。コア対象の差分で strict 2体が要求されること。`risk:high` ラベル付き Issue が `standard` になること。`risk:high` で `strict` として記録された v1 Check output が `gate materialize-check-report` で引き続き再構築できること。profile を決定・記録する4経路のいずれにも `risk` 由来の入力が無いことの grep 検査。
+- **単体（D5）**: v1 gate-report の `approved` を再導出しないこと、旧反証値の読み替え、v3 evidenceの1/2 slotからstandard/strictを復元すること、不一致を推測しないこと、v1 configのtriggerを読み捨てること。
+- **統合**: v4 evidence の3帰結、v3のラウンド計数、コアstrict、`risk` 3値で同一profile、旧strict Check再構築、inventory全経路でprofile引数が決定へ使われず `risk` がD3/D4へ入らないこと、scaffold・reconcile・全schema literalがv2であること、AC-11の規範契約を検査する。
 - **CI 既存検査**: `verify gate-report`（版を判別して検査内容を分岐させる改訂を要する）・`verify doc-length`・`lint-vocab`・`lint-references`・`adr-lint`・`verify-template-sync` を通す。
 
 ## 完了条件
 
 - 判断1〜判断4のすべてが実装・スキーマ・判定プロンプト・規範文書で一致し、AC-1〜AC-11 のそれぞれに対応表が示す自動検証が存在し成功する。
 - 4スキーマの `schema_version` が新版へ更新され、旧版レコードの解釈規則が移行写像とスキーマ添付コメントの双方に明文化されている。上記4件以外のスキーマの版は変わっていない。最終判定を導出する箇所が D2 の1つだけであり、他の箇所が導出結果を事後に書き換えていない。
-- 判断3の実装経路全数表が挙げる4経路のいずれにも `risk` を profile の live 決定へ渡す入力が存在せず、設定・判定プロンプトにも存在しない。
+- 判断3のinventoryにある全経路がテストで列挙され、D3/D4以外にprofile決定がなく、`risk` がlive決定・設定・判定プロンプトへ入らない。
 
 ## 未決事項
 
