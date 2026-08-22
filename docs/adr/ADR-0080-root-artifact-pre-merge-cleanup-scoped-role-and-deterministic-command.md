@@ -32,21 +32,23 @@ root成果物のマージ前削除を、案3——scope を限定した専用ロ
 
 1. **専用ロールを定義する**。`.agent-skill-chain/config/roles.yaml` へ `root_artifact_cleanup_worker`（`lease: writer`、`scope: root_artifacts_only`）を、ロール定義と入出力契約の双方として置く。capabilities は writer lease の取得・更新・解放と自ブランチへの commit・push に限り、forbidden に「対象4ファイル以外への変更」と「ファイル内容の編集」を明示する。進行役のロール定義は変更しない。
 
-2. **決定的コマンドを新設する**。CLI サブコマンド `root-cleanup branch <issue_id>` と、`.agent-skill-chain/scripts/` 配下の薄いラッパーの2層で提供する。入力は対象 Issue の識別子のみとし、ファイル内容・commit メッセージ本文・任意テキストを外部から与える引数も標準入力経路も設けない。LLM・対話エージェント・アダプタを起動しない。これにより、進行役が本コマンドを経由して成果物を著述することを引数仕様の水準で不可能にする（不変条件 I5）。
+2. **決定的コマンドを新設する**。CLI サブコマンド `root-cleanup branch <issue_id>` と、`.agent-skill-chain/scripts/` 配下の薄いラッパーの2層で提供する。入力は対象 Issue の識別子のみとし、ファイル内容・commit メッセージ本文・任意テキストを外部から与える引数も標準入力経路も設けない。LLM・対話エージェントを起動しない。進行役はadapterのprotected launcherへ実行を要求するだけで、commit主体は専用ロールとする。
 
-3. **判定順序を固定する**。対象4ファイルを worktree・index・HEAD の3か所から「削除対象」「内容喪失リスクあり」「不在」のいずれか1つへ分類し、停止条件・削除・no-op の順に評価して最初に成立した1つだけを実行する。停止条件は常に no-op 判定より優先する。停止条件は、対象4ファイル以外の変更が commit へ含まれること、内容喪失リスクありが1件以上あること、対象worktree が既定ブランチをチェックアウトしていること、対象 Issue に writer lease が存在すること、および remote 側の前提（対象ブランチの remote 先頭が存在し、それが HEAD の祖先または一致であり、remote 先頭から HEAD への差分が root成果物の削除のみで構成されること）を満たさないことであり、いずれも commit を作らず非ゼロ終了する。remote 側の前提を削除より前に置くのは、本コマンドが行う push を常に fast-forward かつ root成果物の削除のみに限定し、ワーカーの未push作業を remote へ持ち込ませないためである。
+3. **通常ワーカーと専用ロールを非偽造の実行grantで分離する**。mutation可能なexecutorは対象worktreeの可変スクリプトではなくprotected base/version固定packageからdigest固定で調達する。既存のprotected launcher／one-time token契約を使い、launcherだけが`root_artifact_cleanup_worker`、Issue、branch、HEAD、executor digest、短期expiry、nonceを拘束したgrantへ署名する。署名鍵・未使用nonce registry・cleanup用Git credentialはworktree、Git common dir、worker環境の外に置く。executorは固定keyringで署名・claims・未消費nonce・自身のdigestを全repository mutationより前に検証し原子的に消費する。欠落・偽造・期限切れ・再利用・claim不一致・registry障害は非ゼロ終了し、leaseも取得しない。role環境変数、呼出し元名、writer leaseの保持有無を認可根拠にしないため、workerがleaseを解放し、別Issueを指定し、対象worktree側のwrapper/CLIを改変しても作用させられない。進行役identityはcommit/pushへ渡さず、専用ロールcredentialを子プロセスだけへ渡す。
 
-4. **復元可能性を成功条件ではなく停止条件で担保する**。Git から復元できない内容（未追跡ファイル・未commitの変更）を持つ対象ファイルが1件でもあれば、削除せずに停止する。解釈できない状態はすべて「内容喪失リスクあり」へ倒す。追跡済みファイルの未ステージ削除・ステージ済み削除は、削除によって失われる内容が無く HEAD から復元できるため「削除対象」として扱う。
+4. **判定順序を固定する**。grant認可、read-only実行文脈検査、Issue単位lease排他、対象外index検査、root成果物snapshot、停止条件、削除、no-op、remote同期の順に評価する。停止条件は常にno-opより優先する。remote先頭は存在してHEADの祖先または一致であり、その差分はroot成果物の削除だけでなければならない。
 
-5. **終了コード0を remote の実体で定義する**。終了コード0は、削除経路・no-op 経路のいずれであっても、対象ブランチの remote 先頭が対象worktree の HEAD と一致し、かつその commit の tree と作業ツリーの双方に root成果物が1件も存在しない状態が成立していることを意味する。事後条件を remote で定義するのは、マージ準備完了状態の PR に課される root 残存検査が push 済みブランチの先頭に対して走るためであり、ローカルだけが clean で remote へ未反映の状態を成功とすると成功が残存を隠蔽するためである。この検証は削除経路・no-op 経路が共通に通る無条件の最終段として置き、remote 先頭が既に HEAD と一致していれば push を行わない。事後条件を満たせない状態は no-op として成功を返さず、必ず非ゼロ終了させる。
+5. **復元可能性を最初のindex/worktree mutation前の停止条件で担保する**。対象4 literal pathについて、全て`--no-optional-locks`付きで、`ls-tree -rz --full-tree HEAD`、`ls-files --stage -z`、`ls-files --others --exclude-standard -z`、`ls-files --others --ignored --exclude-standard -z`、`-c status.renames=copies status --porcelain=v2 -z --untracked-files=all --ignored=matching --find-renames=50%`の5入力を採取する。ignored・通常untracked・newly staged・内容/mode/type差・rename/copy・unmerged・未知状態は全て「内容喪失リスクあり」として、`git rm`等を一度も行わず停止する。追跡済みの未stage/stage済み削除だけはHEADから復元できるため「削除対象」とする。
 
-6. **writer lease の排他性を Issue 単位走査で担保し、待機も強制解放も回収もしない**。1 Issue につき同時1つという writer lease の制約に本コマンド自身も従う。ただしその排他性は lease ref の compare-and-set では担保されない——GitHub モードの lease ref は `<issue番号>-<segment>` 単位であり、force 無し push が防ぐのは同一 segment の二重取得だけであるため、新しい segment 値の ref を push しても同一 Issue の他 segment が保持する lease とは競合しない。したがって競合判定は、Issue 番号を prefix とする ref 走査（GitHub モード）と、Issue につき1ファイルである lease 正本の存在検査（ローカルモード）によって Issue 単位で行い、削除・commit・push のいずれよりも前に置く。対象 Issue に lease が1件でも存在すれば、期限内・期限切れを問わず取得を試みずに停止し、保持者・segment・失効時刻を診断へ示す。期限切れ lease の回収は既存の回収経路の責務であり、scope を限定したロールへ他主体の lease を評価・回収する能力を与えない。GitHub モードで走査と自 ref 取得の間に生じる窓は、取得直後の再走査で自分以外の lease を検出した場合に自らの lease を解放して譲ることで、本コマンド側を常に譲歩側へ倒す。取得後は成功・失敗・例外のいずれの終了経路でも解放する。なお取得時に、新規作業の受け入れ判定である WIP 上限判定と、可視性のためのラベル付与・コメント投稿は行わない。本コマンドは既に受け入れ済み Issue の終端処理であり、上限到達時——マージを最も急ぐ状況——に拒否されると本決定の目的に反するためである。
+6. **終了コード0を remote の実体で定義する**。終了コード0は、削除経路・no-op 経路のいずれであっても、対象ブランチの remote 先頭が対象worktree の HEAD と一致し、かつその commit の tree と作業ツリーの双方に root成果物が1件も存在しない状態が成立していることを意味する。この検証は両経路共通の最終段とし、事後条件を満たせなければ非ゼロ終了させる。
 
-7. **許可コマンド列挙には `ci/` の実行だけを加え、削除系は加えない**。claude adapter のセグメント作業ワーカーの既定許可コマンド列挙へ `.agent-skill-chain/ci/` 配下の実行を `.agent-skill-chain/scripts/` 配下と同じ表記形式で追加する。ファイル削除系のコマンドは追加せず、無制限自動承認も既定にしない。列挙外は拒否という安全側の設計を維持する。削除がワーカーの責務ではなくなったこと、およびその帰結として削除系を意図的に列挙しないことを、当該列挙の近傍へ理由付きで記述する。
+7. **writer lease の排他性を Issue 単位走査で担保する**。GitHubのsegment別refではforce無しpushが同一segmentしか排他しないため、Issue prefix走査を認可後・削除前に行う。既存leaseは期限内外を問わず停止し、取得直後にも再走査して他segmentがあれば自leaseを解放して譲る。ローカルはIssueごとの単一leaseファイルの排他生成を使う。待機・強制解放・回収、WIP判定、ラベル・コメント副作用は行わない。leaseは書込み排他だけを担い、実行認可には使わない。
 
-8. **既定ブランチの事後清掃自動化を置き換えない**。既定ブランチへの push を契機として、既定ブランチ root 直下へ混入した root成果物を短命ブランチと機械生成PR経由で削除する既存の自動化（ADR-0007 が定めた決定）と、root 直下の残存を検査する既存の検査コマンドは、対象ファイル集合・起動契機・終了コード・出力仕様のいずれも変更しない。本決定が新設するのは Issue ブランチ上のマージ前削除であり、契機・対象ブランチ・実行主体が異なる別機構として併存させる。
+8. **許可コマンド列挙には `ci/` の実行だけを加え、削除系は加えない**。claude adapterへread-only検査の2表記を追加する。`scripts/*`がcleanup wrapperを字句上含むことを明記し、実効認可はgrantが担う。ファイル削除系や無制限自動承認は追加しない。
 
-9. **新しい設定項目を追加しない**。対象4ファイルは既存の固定リテラルをそのまま用い、設定化しない。対象集合・commitメッセージ・判定順序はプロジェクトごとに変える必要が無く、変更可能にすることが上記5の事後条件と「削除のみで構成された commit」という保証を弱めるためである。
+9. **既定ブランチの事後清掃自動化を置き換えない**。既存の事後清掃と残存検査は対象集合・契機・終了コード・出力仕様を変更せず、Issueブランチのマージ前削除と併存させる。
+
+10. **新しいproject設定項目を追加しない**。対象4ファイルは既存の固定リテラルを用いる。署名鍵・nonce registry・Git credentialはprotected launcherのrole credentialであり、worker配布configへ置かない。
 
 ## Consequences
 
@@ -56,7 +58,7 @@ root成果物のマージ前削除を、案3——scope を限定した専用ロ
 - 削除がどの実行系のワーカーの責務でもなくなるため、実行系による実効権限の非対称が解消する。claude adapter・codex adapter のいずれで作業していても同一の手順でマージ前削除が完了する。
 - 削除能力がワーカー全体ではなく対象4ファイルへ限定される。ワーカーへ与える権限は増えず、read-only 検査の実行だけが増える。
 - 進行役の権限を拡大せずに済む。commit の主体はクリーンアップロールであり、内容入力経路が存在しないため、進行役が本コマンドを経由して成果物を著述することはできない。
-- セグメント作業ワーカーが本コマンドのラッパーを呼び出しても、ワーカー自身が自 segment の writer lease を保持しており、本コマンドの競合判定が segment を問わない Issue 単位走査であるため、削除・commit・push のいずれよりも前に必ず停止する。「削除はワーカーの責務ではない」という方針が、列挙の増減ではなく writer lease の制約によって構造的に成立する。
+- セグメント作業ワーカーがラッパーやCLIを直接呼び、leaseを解放し、別Issueや偽のrole環境変数を指定しても、protected launcherの未使用署名付きgrantを取得できないためrepository mutation前に停止する。leaseは認可ではなく排他へ責務を限定できる。
 - ワーカーが push 前に read-only の機械検査を自ら実行できるようになり、検査失敗の発見が PR 作成後から push 前へ前倒しになる。
 
 **欠点・受け入れるコスト**
@@ -66,6 +68,7 @@ root成果物のマージ前削除を、案3——scope を限定した専用ロ
 - 本コマンドの実行中（秒単位）は、WIP 上限判定用のラベルを付けないため、他 Issue から見た有効 writer lease 数が1件少なく数えられる。上限判定は advisory であり、この誤差で不変条件は破れない。
 - 本コマンド自身の lease が異常終了で解放されずに残った場合、期限切れであっても回収しない方針の帰結として、次回以降の実行が Issue 単位判定で停止する。既存の回収経路による解放が必要になるが、診断が保持者・segment・失効時刻を示すため停止理由は特定できる。他主体の作業を破壊しないことを優先して受け入れるコストである。
 - writer lease の segment 集合に値が1つ増える。既存の lease 文書はすべて有効なまま保たれる後方互換な拡張であり、スキーマ名前空間の版更新は不要である。あわせて worktree 削除が有効 lease を探す走査を、segment 名の直書き列挙から Issue 番号 prefix による ref 走査へ置き換える。segment 値の固定集合をコード側へ新設しないのは、集合を別の場所へ移し替えても追随漏れの発生源が場所を変えるだけであり、prefix 走査は segment 値に依存せず列挙するため将来の追加で追随自体が不要になるためである。
+- protected launcherにcleanup grantの署名・原子的消費と専用Git credentialの管理責務が増える。registryやcredentialが利用不能ならcleanupは安全側に停止し、通常worker経路へfallbackしない。
 
 **today以降のフォローアップ事項**
 
