@@ -21,7 +21,7 @@ GitHub モードで Issue 本文または PR 本文を成果物内容の正本�
 - 成果物 payload: 成果物の元文字列へ可逆なマーカー無害化を適用し、固定同期マーカー文字列を含まなくした掲載文字列。
 - 同期トリガー: 成功した checkpoint、または対象ゲート結果を発行する `gate publish`。
 - 対象本文: `issue_sync.target` が指定する `issue_body`、`pr_body`、または `both` のうち、対象 Issue または全ての関連 open PR を最終ページまで列挙した結果から一意に特定できる PR に実在する本文。
-- 同期失敗: GitHub API エラー、対象 PR の不在・複数該当、競合の未解消、本文上限への安全な縮退不能などにより、対象本文の固定同期マーカーを更新できない状態。
+- 同期失敗: GitHub API エラー、PR 検索のページ取得失敗・不完全性・不在・複数該当、競合の未解消、本文上限への安全な縮退不能などにより、対象本文の固定同期マーカーを更新できない状態。
 
 ## 入力・出力
 
@@ -29,15 +29,15 @@ GitHub モードで Issue 本文または PR 本文を成果物内容の正本�
 
 - Coordination Backend のモード。
 - `issue_sync.enabled`、`issue_sync.target`、`issue_sync.max_body_chars` の実効設定値。
-- Issue ID、対象 branch、および remote push に成功した checkpoint SHA。
-- checkpoint SHA に存在する成果物の内容。
+- Issue ID、対象 branch、および同期対象の完全 SHA。checkpoint では remote push に成功した checkpoint SHA、`gate publish` では当該発行対象 SHA とする。
+- 同期対象の完全 SHA に存在する成果物の内容。
 - 対象となる GitHub Issue 本文と、一意に特定できる場合の open PR 本文。
 - 同期トリガーの種別。`gate publish` の場合は、その呼び出しが発行する対象ゲートの直接利用可能な現在結果と判定対象の完全 SHA。
 
 ### 出力
 
 - 有効条件を満たす場合、指定された各対象本文の固定同期マーカー内に、対象の完全 SHA と実在する成果物の全文を復元できる payload を含む同期結果。checkpoint 同期は対象 SHA を明示的に未判定とし、`gate publish` 同期は当該呼び出しが発行する現在の対象ゲート結果だけを含む。
-- 同期を完了できない場合、対象、理由、および checkpoint SHA を識別できる警告。
+- 同期を完了できない場合、対象、理由、および同期対象の完全 SHA を識別できる警告。
 - 同期結果にかかわらず、commit と remote push が成功している checkpoint の成功結果と checkpoint SHA。
 
 ## 要求 → 要件 → 受入条件
@@ -48,7 +48,7 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 
 ### 要件
 
-- Coordination Backend が `github` であり、かつ `issue_sync.enabled` が `true` の場合だけ、成功した各セグメントの checkpoint push 後に同期を試行する。ローカルモードまたは明示的な無効化では GitHub 本文を変更しない。
+- Coordination Backend が `github` であり、かつ `issue_sync.enabled` が `true` の場合だけ、成功した各セグメントの checkpoint push それぞれの後に、各 checkpoint の現在の成果物内容の同期を他の checkpoint と独立して best-effort で試行する。ローカルモードまたは明示的な無効化では GitHub 本文を変更しない。
 - 同期元は branch の作業コピーや移動し得る branch tip ではなく、remote push に成功した checkpoint SHA の Git tree とする。同期結果にはその完全 SHA を含める。
 - checkpoint SHA に存在する成果物だけを掲載し、存在する成果物はマーカー無害化以外の要約・抽出・改変をせず、復号により元文字列を完全に再現できる payload として全文を掲載する。後続セグメントの未作成成果物について、空の節、推測した内容、またはプレースホルダーを生成しない。
 - `issue_sync.target` の `issue_body`、`pr_body`、`both` を尊重する。PR 本文は、対象 Issue と対象 branch に関連する全ての open PR を API の最終ページまで網羅的に列挙し、該当 PR が 1 件だけと確定できる場合に限り更新する。0 件、2 件以上、ページ取得もしくは API の一部でも失敗、または列挙結果の完全性に曖昧さがある場合は、PR 対象だけを `sync_failed_no_write` として一切書き込まない。`both` の一方を解決または更新できなくても、他方の同期は独立して試行する。
@@ -94,14 +94,23 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 
 #### AC-4: target ごとの対象選択と独立性を守る
 
-- Given: `issue_sync.target` が `issue_body`、`pr_body`、または `both` のいずれかであり、対象 Issue と open PR の有無・一意性が既知である
+- Given: `issue_sync.target` が `issue_body`、`pr_body`、または `both` のいずれかである
 - When: checkpoint 後の同期が行われる
-- Then: 指定された対象だけが更新され、PR は一意に特定できる場合だけ更新され、`both` の一方が未解決または失敗でも他方の同期は試行される
+- Then: 指定された対象だけが更新され、`both` の一方が未解決または失敗でも他方の同期は試行され、無効な呼び出しだけが `not_applicable`、有効な各対象は `synced_full`、`synced_fallback`、`sync_failed_no_write` のいずれか一つだけとなる
 - 検証方法見込み: `automated`
 - verification.mode: `automated`
-- 想定証跡: 3 種の target、PR が 0 件・1 件・複数件、および一方の API エラーを組み合わせた統合テストログ
+- 想定証跡: 3 種の target、無効条件、および `both` の一方の失敗を組み合わせ、更新対象、独立性、排他的な結果状態を検査する統合テストログ
 
-#### AC-5: マーカー境界とマーカー外の内容を保護する
+#### AC-5: 関連 open PR を最終ページまで検索して一意性を確定する
+
+- Given: PR 本文が同期対象であり、対象 Issue と branch に関連する open PR が 0 件、1 件、2 件以上のいずれかで、結果が複数ページに分かれ得る
+- When: checkpoint または `gate publish` の同期が PR 対象を解決する
+- Then: 全ての関連 open PR を最終ページまで列挙した後に 1 件だけと確定できる場合に限り更新し、0 件、2 件以上、ページ取得もしくは API の一部でも失敗、または完全性が曖昧な場合は PR 対象だけが `sync_failed_no_write` となる
+- 検証方法見込み: `automated`
+- verification.mode: `automated`
+- 想定証跡: 0 件・1 件・2 件以上、1 ページ・複数ページ、中間ページ・最終ページの失敗、不完全なページネーション情報を組み合わせ、PR 書き込みと Issue 側の独立性を検査する統合テストログ
+
+#### AC-6: マーカー境界とマーカー外の内容を保護する
 
 - Given: 対象本文にマーカー外の人間記述があり、固定同期マーカーが 0 組、正常な 1 組、または個数・順序が不正な状態で、書き込み前に第三者更新が起こり得る
 - When: checkpoint 同期を初回または反復実行する
@@ -110,7 +119,7 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 - verification.mode: `automated`
 - 想定証跡: 初回追加、反復置換、開始・終了の欠落・重複・逆転、同一内容再実行、および競合注入後の本文全体と警告を比較する自動テストログ
 
-#### AC-6: 本文サイズ上限を安全に守る
+#### AC-7: 本文サイズ上限を安全に守る
 
 - Given: 同一のマーカー外本文に対して、全文ブロックを含む本文と checkpoint SHA 付き縮退ブロックを含む本文の生成後文字数が既知である
 - When: checkpoint 同期が対象本文を生成する
@@ -119,7 +128,7 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 - verification.mode: `automated`
 - 想定証跡: 全文が上限ちょうど、全文が 1 文字超過して縮退可能、マーカー外が縮退の最小領域も残さない場合について、結果状態、書込み有無、本文全体、checkpoint SHA 付き案内、および警告を検査する自動テストログ
 
-#### AC-7: 成果物を可逆に無害化し未作成成果物を掲載しない
+#### AC-8: 成果物を可逆に無害化し未作成成果物を掲載しない
 
 - Given: checkpoint SHA には 4 成果物の一部だけが存在し、その内容には開始・終了マーカー文字列、`&amp;`、または `&#60;` と同じ文字列が含まれ得る
 - When: checkpoint 同期が固定同期マーカーを生成する
@@ -128,16 +137,16 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 - verification.mode: `automated`
 - 想定証跡: SPEC のみ、SPEC・DESIGN、SPEC・DESIGN・PLAN、4 成果物すべての各 Git tree と、両マーカーおよびエスケープ表記を含む成果物について、境界数、payload の復号一致、未作成節の不在を検査するログ
 
-#### AC-8: checkpoint 同期がゲート状態を偽装せず判定入力にもならない
+#### AC-9: checkpoint 同期は対象 SHA を未判定と表示し履歴を参照しない
 
-- Given: 対象 checkpoint のゲートが未到達、checkpoint SHA と同じ SHA の既存状態を持つ、または異なる SHA の既存状態を持つ
+- Given: 対象 checkpoint SHA と、同一または異なる SHA の過去もしくは現在の Check Run、ゲート記録、一時記録、または他 Issue の履歴が存在し得る
 - When: checkpoint 後の同期が行われる
-- Then: 新たな Check Run、承認、通過、またはゲート状態変更は発生せず、既存状態には判定対象 SHA と checkpoint SHA との一致・不一致が表示され、不一致は過去の状態かつ最新 checkpoint の通過を示さず、同期マーカー内の内容はゲート判定入力から除外される
+- Then: checkpoint の完全 SHA と当該 SHA が未判定であることだけが表示され、Check Run 履歴取得、ゲート結果の推論・復元、一時記録への縮退、他 Issue の履歴走査、新たな Check Run・承認・通過・状態変更は発生せず、同期マーカー内の内容はゲート判定入力から除外される
 - 検証方法見込み: `automated`
 - verification.mode: `automated`
-- 想定証跡: 未判定、同一 SHA の通過状態、異なる SHA の通過状態について、表示された判定対象 SHA・現在/過去表示、同期前後の Check Run・ゲート状態、および判定入力から同期区間が除外されることを検査する自動テストログ
+- 想定証跡: 既存の同一 SHA・異なる SHA・他 Issue の結果と一時記録を fixture に置いて checkpoint 同期を実行し、未判定表示、履歴 API 呼び出しの不在、同期前後の Check Run・ゲート状態の不変、および判定入力から同期区間が除外されることを検査する自動テストログ
 
-#### AC-9: 同期失敗が push 済み checkpoint の耐久性を破壊しない
+#### AC-10: 同期失敗が push 済み checkpoint の耐久性を破壊しない
 
 - Given: checkpoint の commit と remote push は成功し、その後の GitHub API エラー、境界不正、縮退不能、競合、または対象解決不能により一部または全部の同期が失敗する
 - When: checkpoint 処理が完了する
@@ -146,14 +155,14 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 - verification.mode: `automated`
 - 想定証跡: 同期失敗を注入した checkpoint の終了コード、標準出力、警告、remote ref、および対象本文を検査する統合テストログ
 
-#### AC-10: gate publish 時の既存同期が互換性を保つ
+#### AC-11: gate publish は直接利用できる現在の対象ゲート結果だけを同期する
 
 - Given: checkpoint 同期後に同じ Issue のゲートが発行され、`issue_sync` が有効である
 - When: `gate publish` が実行される
-- Then: 発行対象 SHA と判定対象 SHA を伴う確定済みゲート状態で固定同期マーカーが更新され、target、可逆なマーカー無害化、境界検査、競合保護、マーカー外不変、排他的な本文上限状態、未作成成果物除外、および同期失敗の非致命性が checkpoint 同期と同じ契約を維持する
+- Then: checkpoint と同一の成果物 writer が、発行対象の完全 SHA と当該呼び出しに直接渡された現在の対象ゲート結果だけで固定同期マーカーを更新し、他ゲートや過去の結果の推論・取得・復元、一時記録への縮退、他 Issue の履歴走査を行わず、target、可逆なマーカー無害化、境界検査、競合保護、マーカー外不変、排他的な本文上限状態、未作成成果物除外、および同期失敗の非致命性を checkpoint 同期と共有する
 - 検証方法見込み: `automated`
 - verification.mode: `automated`
-- 想定証跡: checkpoint 同期後に各ゲートを発行し、既存 issue-sync 回帰テストと本文スナップショットが成功する統合テストログ
+- 想定証跡: 複数ゲートと過去結果を fixture に置き、各 `gate publish` に直接渡した 1 件の現在結果だけが表示されること、履歴 API 呼び出しが無いこと、および checkpoint と共有する writer 契約を検査する統合テストログ
 
 ## 制約
 
@@ -165,17 +174,18 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 
 ## 完了条件・検証方法
 
-- AC-1 から AC-10 が自動テストに一意に対応し、SPEC、DESIGN、PLAN、VALIDATION の全 checkpoint を含む検証結果と実行ログが `VALIDATION.md` の同じ AC-ID の `verification.mode` と `evidence` に記録される。
-- checkpoint 単体の成功・失敗、GitHub API を模擬する統合テスト、既存 issue-sync 回帰テスト、および repository の常時必須検査が成功する。
+- AC-1 から AC-11 が自動テストに一意に対応し、SPEC、DESIGN、PLAN、VALIDATION の全 checkpoint を含む検証結果と実行ログが `VALIDATION.md` の同じ AC-ID の `verification.mode` と `evidence` に記録される。
+- checkpoint 単体の成功・失敗、各 checkpoint の独立した best-effort 同期、GitHub API を模擬する統合テスト、最終ページまでの PR 一意性検索、履歴参照の不在、checkpoint の未判定表示、`gate publish` の直接利用可能な現在結果だけの表示、既存 issue-sync 回帰テスト、および repository の常時必須検査が成功する。
 - spec checkpoint 前に、次の静的検査を foreground で完了し、すべて終了コード 0 を確認する。
   - `.agent-skill-chain/ci/verify-spec-bdd.sh SPEC.md`
+  - `npm run build`
   - `.agent-skill-chain/ci/verify-doc-length.sh`
   - `.agent-skill-chain/scripts/lint-vocab.sh`
   - `.agent-skill-chain/scripts/lint-references.sh`
 
 ## 未決事項
 
-なし。本仕様で対象条件、4 セグメントの同期契機、SHA の固定、対象選択、マーカー無害化、境界不正時・競合時・上限超過時・同期失敗時の排他的な挙動、ゲート状態の判定対象 SHA、およびゲート同期との関係を確定する。
+なし。本仕様で対象条件、4 セグメントの同期契機、SHA の固定、最終ページまでの PR 一意性検索、マーカー無害化、境界不正時・競合時・上限超過時・同期失敗時の排他的な挙動、checkpoint の明示的な未判定表示、および `gate publish` の現在の対象ゲート結果だけの同期を確定する。
 
 ## スコープ外
 
@@ -184,5 +194,6 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 - GitHub 以外の Coordination Backend の成果物正本または耐久性モデルを変更すること。
 - 同期された本文をゲート判定、成果物検証、または成果物ファイル生成の入力にすること。
 - ゲートの通過条件、レビュー判定、Check Run の発行条件、または既存ゲート状態の意味を変更すること。
+- checkpoint で過去・現在の Check Run 履歴を取得すること、一時記録からゲート結果を復元すること、または他 Issue の履歴を走査すること。
 - #814 の reasoning effort policy の内容を変更すること。
 - GitHub 本文上限を超える成果物をコメントや外部ストレージへ分割保存する新方式を追加すること。
