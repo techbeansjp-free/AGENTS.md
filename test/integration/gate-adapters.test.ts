@@ -1399,12 +1399,11 @@ test('codex reviewer: 明示model overrideを無改変で最優先にする（Is
   assert.match(fs.readFileSync(stub.argsLog, 'utf8'), new RegExp(`^${explicitModel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
 });
 
-test('codex reviewer: 引用符・空白・バックスラッシュを含む値をTOML層とshell層の両方で無改変に渡す（Issue #744）', async (t) => {
+test('codex reviewer: 引用符・空白・バックスラッシュを含むmodelをshell層で無改変に渡す（Issue #744）', async (t) => {
   // CodeRabbit の Major 指摘（GATE_REVIEWER_CMD の消費経路とクォート処理）に対する回帰テスト。
   // GATE_REVIEWER_CMD は消費側で /bin/bash -c により再解釈され、その argv の -c 値は Codex 側で
-  // TOML として解釈される。model_reasoning_effort は CODEX_REVIEWER_REASONING_EFFORT 由来の
-  // 到達可能な入力であり、shell 層の quote だけを適用していた旧実装では、引用符やバックスラッシュを
-  // 含む値が TOML basic string を破壊して不正な設定値のまま Codex へ渡っていた。
+  // TOML として解釈されるmodel_reasoning_effortは許可値highに固定し、model側のshell quoteと
+  // 静的TOML引数が同じ起動列で壊れないことを検証する。
   const { repo, reportPath, targetSha } = setupGateReview();
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-config-quoting-issue744-'));
   t.after(() => {
@@ -1414,14 +1413,12 @@ test('codex reviewer: 引用符・空白・バックスラッシュを含む値�
   setAdapter(repo.dir, 'codex');
   const stubVerdict = '{"conformance":"pass","falsification":"pass","blockers":[],"approved_artifacts":[{"path":"SPEC.md"}]}';
   const stub = createCodexStub(stubDir, stubVerdict);
-  // 引用符・空白・バックスラッシュを同時に含む到達可能な入力。
-  const hostileEffort = 'hi"gh a\\b';
   const hostileModel = 'vendor model"with\\backslash';
   const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'true',
     CODEX_EXECUTABLE: stub.executable,
     CODEX_REVIEWER_MODEL: hostileModel,
-    CODEX_REVIEWER_REASONING_EFFORT: hostileEffort,
+    CODEX_REVIEWER_REASONING_EFFORT: 'high',
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
 
@@ -1433,8 +1430,7 @@ test('codex reviewer: 引用符・空白・バックスラッシュを含む値�
 
   // shell 層: -m の値は TOML ではなく素の引数であり、原文のまま1引数として届くこと。
   assert.equal(argv[argv.indexOf('-m') + 1], hostileModel, `明示modelが1引数として無改変で届くこと (argv=${JSON.stringify(argv)})`);
-  // TOML 層: model_reasoning_effort は妥当な basic string であり、復号すると原文へ戻ること。
-  assert.equal(decodeCodexConfigValue(argv, 'model_reasoning_effort'), hostileEffort);
+  assert.equal(decodeCodexConfigValue(argv, 'model_reasoning_effort'), 'high');
   // 手書きの escape を残していた静的 config 値に余分なバックスラッシュが混入しないこと。
   for (const expected of CODEX_REVIEWER_STATIC_CONFIG_ARGS) {
     assert.ok(argv.includes(expected), `静的config引数が無改変で届くこと: ${expected} (argv=${JSON.stringify(argv)})`);
@@ -1604,7 +1600,7 @@ test('gate-launch-reviewer: core reviewをstandardで起動するとadapter前�
   assert.match(res.stderr, /profile=strict/);
 });
 
-test('codex core reviewer: gpt-5.6-sol/xhigh/read-onlyのattested overrideだけを許可する', async (t) => {
+test('codex core reviewer: gpt-5.6-sol/high/read-onlyのattested overrideだけを許可する', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'codex');
@@ -1616,7 +1612,7 @@ test('codex core reviewer: gpt-5.6-sol/xhigh/read-onlyのattested overrideだけ
     CODEX_AUTH_PROBE_CMD: 'true',
     CODEX_REVIEWER_CMD: `cat >/dev/null; printf '%s' '${stubVerdict}'`,
     CODEX_REVIEWER_MODEL: 'gpt-5.6-sol',
-    CODEX_REVIEWER_REASONING_EFFORT: 'xhigh',
+    CODEX_REVIEWER_REASONING_EFFORT: 'high',
     CODEX_CORE_REVIEWER_ATTESTED: 'true',
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
@@ -1630,7 +1626,7 @@ test('codex core reviewer: gpt-5.6-sol/xhigh/read-onlyのattested overrideだけ
   assert.match(adapter, /ASC_CODEX_REQUIRED_REASONING_EFFORT/);
 });
 
-test('codex core reviewer: modelまたはeffortの不一致は起動せずhuman_requiredへ止める', async (t) => {
+test('codex core reviewer: 旧xhighは起動せずhuman_requiredへ止める', async (t) => {
   const { repo, reportPath, targetSha } = setupGateReview();
   t.after(() => repo.cleanup());
   setAdapter(repo.dir, 'codex');
@@ -1640,8 +1636,8 @@ test('codex core reviewer: modelまたはeffortの不一致は起動せずhuman_
     ASC_REVIEW_SUBJECT: 'core_audit',
     CODEX_AUTH_PROBE_CMD: 'true',
     CODEX_REVIEWER_CMD: 'cat >/dev/null; exit 0',
-    CODEX_REVIEWER_MODEL: 'gpt-5.6-terra',
-    CODEX_REVIEWER_REASONING_EFFORT: 'high',
+    CODEX_REVIEWER_MODEL: 'gpt-5.6-sol',
+    CODEX_REVIEWER_REASONING_EFFORT: 'xhigh',
     CODEX_CORE_REVIEWER_ATTESTED: 'true',
   });
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
@@ -1649,6 +1645,25 @@ test('codex core reviewer: modelまたはeffortの不一致は起動せずhuman_
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.match(res.stderr, /project policy と一致しません/);
+});
+
+test('codex non-core reviewer: highを超える環境上書きは起動せずhuman_requiredへ止める', async (t) => {
+  const { repo, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'codex');
+
+  const marker = path.join(repo.dir, 'reviewer-started');
+  const env = envWithout([], {
+    CODEX_AUTH_PROBE_CMD: 'true',
+    CODEX_REVIEWER_CMD: `touch ${JSON.stringify(marker)}`,
+    CODEX_REVIEWER_REASONING_EFFORT: 'maximum_reasoning',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'standard', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /medium または high/);
+  assert.equal(fs.existsSync(marker), false, '不正なeffortではreviewer subprocessを起動しないこと');
 });
 
 test('claude core reviewer: 実在model・能力attestation・reasoning probeを検証し--modelで起動する', async (t) => {
@@ -1666,7 +1681,7 @@ test('claude core reviewer: 実在model・能力attestation・reasoning probeを
     CLAUDE_EXECUTABLE: stub.executable,
     CLAUDE_CORE_REVIEW_MODEL: 'claude-frontier-test-model',
     CLAUDE_CORE_REVIEW_MODEL_TIER: 'frontier_coding',
-    CLAUDE_CORE_REVIEW_REASONING_TIER: 'maximum_reasoning',
+    CLAUDE_CORE_REVIEW_REASONING_TIER: 'high',
     CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD: 'true',
     GATE_REVIEWER_RETRY_INTERVAL_SEC: '0',
   });
@@ -1689,13 +1704,38 @@ test('claude core reviewer: 能力attestationまたはreasoning probe不足はhu
     ANTHROPIC_API_KEY: 'dummy',
     CLAUDE_CORE_REVIEW_MODEL: 'claude-frontier-test-model',
     CLAUDE_CORE_REVIEW_MODEL_TIER: 'frontier_coding',
-    CLAUDE_CORE_REVIEW_REASONING_TIER: 'maximum_reasoning',
+    CLAUDE_CORE_REVIEW_REASONING_TIER: 'high',
   });
   const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
 
   assert.notEqual(res.status, 0);
   assert.equal(readFinal(reportPath), 'human_required');
   assert.match(res.stderr, /reasoning.*probe/);
+});
+
+test('claude core reviewer: 旧maximum_reasoning attestationは起動せずhuman_requiredへ止める', async (t) => {
+  const { repo, worktreePath, reportPath, targetSha } = setupGateReview();
+  t.after(() => repo.cleanup());
+  setAdapter(repo.dir, 'claude');
+
+  const stub = createClaudeStub(worktreePath, '{}');
+  const env = envWithout([], {
+    ASC_BASE_REF: 'main',
+    ASC_REVIEW_SUBJECT: 'core_audit',
+    ANTHROPIC_API_KEY: 'dummy',
+    CLAUDE_AUTH_PROBE_CMD: 'true',
+    CLAUDE_EXECUTABLE: stub.executable,
+    CLAUDE_CORE_REVIEW_MODEL: 'claude-frontier-test-model',
+    CLAUDE_CORE_REVIEW_MODEL_TIER: 'frontier_coding',
+    CLAUDE_CORE_REVIEW_REASONING_TIER: 'maximum_reasoning',
+    CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD: 'true',
+  });
+  const res = runLauncher(repo.dir, ['ISSUE-1', 'spec', 'strict', reportPath, targetSha], env);
+
+  assert.notEqual(res.status, 0);
+  assert.equal(readFinal(reportPath), 'human_required');
+  assert.match(res.stderr, /reasoning tier を high/);
+  assert.equal(fs.existsSync(stub.argsLog), false, '旧attestationではClaude subprocessを起動しないこと');
 });
 
 // --- T5: ラッパーの終了コード分岐（引数・アダプタ解決） --------------------------------

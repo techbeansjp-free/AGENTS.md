@@ -651,9 +651,9 @@ test('gate reviewer-context: 明示core_auditはStrictとadapter別能力要求�
   assert.match(res.stdout, /^core_review_status=resolved$/m);
   assert.match(res.stdout, /^core_required_profile=strict$/m);
   assert.match(res.stdout, /^core_model_tier=frontier_coding$/m);
-  assert.match(res.stdout, /^core_reasoning_tier=maximum_reasoning$/m);
+  assert.match(res.stdout, /^core_reasoning_tier=high$/m);
   assert.match(res.stdout, /^codex_required_model=gpt-5\.6-sol$/m);
-  assert.match(res.stdout, /^codex_required_reasoning_effort=xhigh$/m);
+  assert.match(res.stdout, /^codex_required_reasoning_effort=high$/m);
 });
 
 test('gate reviewer-context: GitHub core reviewも明示adapterを保ちCIは証跡検証専用になる', async (t) => {

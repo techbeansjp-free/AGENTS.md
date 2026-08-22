@@ -8,14 +8,14 @@
 
 コア変更はmanifestのexact path/path prefixに一致する差分、コア監査はCoordination Backendの `core_audit` である。GitHubは `review:core-audit` label、ローカルはstateの `review_subject` を使い、相互同期しない。差分・状態を解決できない場合は通常作業と推測せず `human_required` にする。
 
-コア対象はStrictと独立reviewer 2体を必要とし、各reviewerに `frontier_coding`、`maximum_reasoning`、read-onlyを要求する。
+コア対象はStrictと独立reviewer 2体を必要とし、各reviewerに `frontier_coding`、`high`、read-onlyを要求する。
 
 ## adapter契約
 
 | adapter | model | reasoning | 検証 |
 |---|---|---|---|
-| Codex | `gpt-5.6-sol` | `xhigh` | `codex exec`のmodel/effortを厳密照合しread-only sandboxで起動 |
-| Claude Code | 実行環境が宣言した実在model | 最大利用可能reasoning | `--model`、能力attestation、reasoning probe、無書込みtool |
+| Codex | `gpt-5.6-sol` | `high` | `codex exec`のmodel/effortを厳密照合しread-only sandboxで起動 |
+| Claude Code | 実行環境が宣言した実在model | `high` | `--model`、能力attestation、reasoning probe、無書込みtool |
 | human | 自動modelなし | 自動reasoningなし | 自動承認せず `human_required` |
 
 Claude CodeへCodex固有slugや設定keyを渡さない。具体的Claude model名を推測しない。Cursor等はadapter、安定した非対話実行、capability probeが実装・登録されるまで利用不能とする。

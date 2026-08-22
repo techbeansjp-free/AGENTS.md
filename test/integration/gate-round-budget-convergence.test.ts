@@ -117,7 +117,7 @@ function prepareFinalRound(t: TestContext): Fixture {
       const submitted = runCli(
         [
           'gate', 'submit-evidence', 'ISSUE-786', 'spec', 'strict', targetSha, baseSha, baseSha, PR_NUMBER,
-          attemptId, '2', runId, String(slotIndex + 1), 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+          attemptId, '2', runId, String(slotIndex + 1), 'codex', 'gpt-5.6-sol', 'high', promptDigest,
         ],
         { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
       );
@@ -250,7 +250,7 @@ test('D1: round budget宣言をevidenceへ載せた最終round attemptもラウ�
     const submitted = runCli(
       [
         'gate', 'submit-evidence', 'ISSUE-786', 'spec', 'strict', targetSha, baseSha, baseSha, PR_NUMBER,
-        FINAL_ATTEMPT_ID, '2', runId, String(slotIndex + 1), 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+        FINAL_ATTEMPT_ID, '2', runId, String(slotIndex + 1), 'codex', 'gpt-5.6-sol', 'high', promptDigest,
       ],
       { cwd: repoDir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(finalVerdict) },
     );

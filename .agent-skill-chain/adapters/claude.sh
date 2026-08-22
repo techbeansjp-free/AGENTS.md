@@ -1085,8 +1085,8 @@ launch_gate_reviewer() {
       _fail_safe "Claude core reviewer の model tier を frontier_coding と検証できません"
       return
     fi
-    if [[ "${CLAUDE_CORE_REVIEW_REASONING_TIER:-}" != "${ASC_CORE_REASONING_TIER:-maximum_reasoning}" ]]; then
-      _fail_safe "Claude core reviewer の reasoning tier を maximum_reasoning と検証できません"
+    if [[ "${CLAUDE_CORE_REVIEW_REASONING_TIER:-}" != "${ASC_CORE_REASONING_TIER:-high}" ]]; then
+      _fail_safe "Claude core reviewer の reasoning tier を high と検証できません"
       return
     fi
     if [[ -z "${CLAUDE_CORE_REVIEW_MODEL:-}" || "${CLAUDE_CORE_REVIEW_MODEL:-}" == gpt-* ]]; then
@@ -1095,7 +1095,7 @@ launch_gate_reviewer() {
     fi
     local reasoning_probe="${CLAUDE_CORE_REVIEW_REASONING_PROBE_CMD:-}"
     if [[ -z "$reasoning_probe" ]]; then
-      _fail_safe "Claude core reviewer の最大利用可能reasoningを検証するprobeが未設定です"
+      _fail_safe "Claude core reviewer の high reasoningを検証するprobeが未設定です"
       return
     fi
     local reasoning_probe_timeout="${CLAUDE_CORE_REVIEW_REASONING_PROBE_TIMEOUT_SEC:-20}"

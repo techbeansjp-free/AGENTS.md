@@ -195,7 +195,7 @@ test('AC-5/AC-8: ページ一括オプションを拒否するghでもラウン�
     const submitted = runCli(
       [
         'gate', 'submit-evidence', 'ISSUE-774', 'spec', 'strict', targetSha, baseSha, baseSha, '779',
-        attemptId, '2', runId, slot, 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+        attemptId, '2', runId, slot, 'codex', 'gpt-5.6-sol', 'high', promptDigest,
       ],
       { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
     );
