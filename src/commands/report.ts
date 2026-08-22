@@ -10,7 +10,7 @@ import { gh } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
 const USAGE = `
-使い方: agent-skill-chain report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason] [human_escalation_requested] [dispatch_token] [no_change] [no_change_reason]
+使い方: agent-skill-chain report status <issue_id> <role> <segment> <status> <target_sha> [blocked_reason] [human_escalation_requested] [dispatch_token] [no_change] [no_change_reason] [remediation_required] [remediations_json]
 
 role:     spec_worker|design_worker|implementation_worker|validation_worker|adr_finalization_worker
 segment:  spec|design|implementation|validation|adr_finalization
@@ -22,6 +22,10 @@ human_escalation_requested: 省略可（既定false）。'true' を指定する�
 dispatch_token: 省略可。workerへ配達されたdispatchサイクル固有の識別子をそのまま指定する。
 no_change: 省略可（既定false）。変更が無い場合のみ9番目の引数へ'true'を指定する。
 no_change_reason: 省略可。no_change=trueの場合に、変更不要と判断した具体的理由を指定する。
+remediation_required: blocking findingへの是正dispatchならtrue。省略時は
+  ASC_REMEDIATION_REQUIREDを読む。
+remediations_json: worker-report.schema.yamlのremediations配列をJSONで指定する。省略時は
+  ASC_REMEDIATIONS_JSONを読む。required_additionは非追加手段で達成不能な理由が必須。
 
 出力:
   成功時: 終了コード0。発行先（Issueコメントurlまたはreportファイルパス）を標準出力へ。
@@ -59,6 +63,8 @@ interface WorkerReport {
   no_change_reason?: string;
   blocked_reason?: string;
   human_escalation_requested?: boolean;
+  remediation_required?: boolean;
+  remediations?: unknown[];
 }
 
 export async function status(args: string[]): Promise<number> {
@@ -78,6 +84,8 @@ export async function status(args: string[]): Promise<number> {
       dispatchToken,
       noChangeRaw,
       noChangeReason,
+      remediationRequiredArg,
+      remediationsArg,
     ] = args;
     if (!issueIdRaw || !role || !segment || !statusValue || !targetSha) {
       throw new CliError('issue_id, role, segment, status, target_sha はすべて必須です');
@@ -90,6 +98,21 @@ export async function status(args: string[]): Promise<number> {
     }
     if (noChangeRaw === 'true' && !hasNonWhitespaceText(noChangeReason)) {
       throw new CliError('no_change=true の場合 no_change_reason は空白以外の文字を含む必要があります');
+    }
+    const remediationRequiredRaw = remediationRequiredArg ?? process.env.ASC_REMEDIATION_REQUIRED;
+    const remediationsRaw = remediationsArg ?? process.env.ASC_REMEDIATIONS_JSON;
+    if (remediationRequiredRaw !== undefined && remediationRequiredRaw !== 'true' && remediationRequiredRaw !== 'false') {
+      throw new CliError('remediation_required は true|false のいずれかである必要があります');
+    }
+    let remediations: unknown[] | undefined;
+    if (remediationsRaw !== undefined) {
+      try {
+        const parsed = JSON.parse(remediationsRaw) as unknown;
+        if (!Array.isArray(parsed)) throw new Error('配列ではありません');
+        remediations = parsed;
+      } catch (error) {
+        throw new CliError(`remediations_json を解釈できません: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
     const { issueId, number } = parseIssueId(issueIdRaw);
 
@@ -108,6 +131,8 @@ export async function status(args: string[]): Promise<number> {
       ...(hasNonWhitespaceText(noChangeReason) ? { no_change_reason: noChangeReason } : {}),
       ...(blockedReason ? { blocked_reason: blockedReason } : {}),
       ...(humanEscalationRaw === 'true' ? { human_escalation_requested: true } : {}),
+      ...(remediationRequiredRaw !== undefined ? { remediation_required: remediationRequiredRaw === 'true' } : {}),
+      ...(remediations !== undefined ? { remediations } : {}),
     };
     const outcome = validateAgainstSchema('worker-report', report, root);
     if (!outcome.valid) return fail(`worker report がスキーマに適合しません: ${outcome.errors.join('; ')}`);

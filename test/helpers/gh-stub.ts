@@ -202,6 +202,7 @@ if (cmd === 'issue' && sub === 'comment') {
     url: 'https://github.com/test/repo/issues/' + issueNumber + '#issuecomment-' + id,
     body,
     createdAt: new Date(state.clock).toISOString(),
+    author: state.commentActor || state.apiActor || 'trusted-reviewer',
   });
   state.clock += 1000;
   saveState(state);
@@ -750,6 +751,9 @@ if (cmd === 'api') {
     process.stdout.write(JSON.stringify((state.comments[issueNumber] || []).map((comment) => ({
       id: Number(comment.id),
       body: comment.body,
+      created_at: comment.createdAt,
+      updated_at: comment.updatedAt || comment.createdAt,
+      user: { login: comment.author || state.apiActor || 'trusted-reviewer' },
     }))));
     process.exit(0);
   }
@@ -762,6 +766,7 @@ if (cmd === 'api') {
       url: 'https://github.com/test/repo/issues/' + issueNumber + '#issuecomment-' + id,
       body: parsed.body,
       createdAt: new Date(state.clock).toISOString(),
+      author: state.commentActor || state.apiActor || 'trusted-reviewer',
     };
     state.clock += 1000;
     state.comments[issueNumber] = state.comments[issueNumber] || [];
@@ -1066,7 +1071,17 @@ export interface GhStubFreshnessEntry {
 export interface GhStubState {
   nextId: number;
   clock: number;
-  comments: Record<string, { id: string; url: string; body: string; createdAt: string }[]>;
+  comments: Record<string, {
+    id: string;
+    url: string;
+    body: string;
+    createdAt: string;
+    updatedAt?: string;
+    /** Issue #786: 制御レコードの投稿者束縛を検査するための作成者。 */
+    author?: string;
+  }[]>;
+  /** 以後に作成するIssueコメントの投稿者。未設定時は apiActor を使う。 */
+  commentActor?: string;
   rulesets: unknown[];
   prs: Record<string, unknown[]>;
   labels: string[];

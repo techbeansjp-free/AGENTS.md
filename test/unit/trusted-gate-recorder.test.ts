@@ -154,6 +154,7 @@ test('API正本はwrite以上actor・current head・default main base・Issue pr
     }],
     ['/repos/techbeansjp-free/AGENTS.md/pulls/274/commits?per_page=100&page=1', []],
     ['/repos/techbeansjp-free/AGENTS.md/pulls/274/reviews?per_page=100&page=1', []],
+    ['/repos/techbeansjp-free/AGENTS.md/issues/271/comments?per_page=100&page=1', []],
   ]);
   const request = async (input: string | URL | Request): Promise<Response> => {
     const pathname = new URL(String(input)).pathname + new URL(String(input)).search;
@@ -172,6 +173,7 @@ test('API正本はwrite以上actor・current head・default main base・Issue pr
   assert.equal(context.issueId, 'ISSUE-271');
   assert.equal(context.profile, 'strict');
   assert.equal(context.reviewSubject, 'core_audit');
+  assert.deepEqual(context.issueComments, []);
 
   responses.set('/repos/techbeansjp-free/AGENTS.md/collaborators/trusted-recorder/permission', {
     permission: 'read',
