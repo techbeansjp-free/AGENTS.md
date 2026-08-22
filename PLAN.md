@@ -15,18 +15,24 @@
 |---|---|---|---|---|
 | 1 | branch から Issue 番号を解決 | `branch.pattern` を尊重して `{issue_id}` を一意抽出する共有関数を追加し、標準 branch、custom pattern、不一致を unit test する | AC-1, AC-2 | なし |
 | 2 | payload と境界 parser の純粋化 | 規定順序の可逆 marker codec、0組/正常1組/欠落/重複/逆転を分類する parser、marker 外を不変にする置換関数を実装する | AC-5, AC-7 | なし |
-| 3 | backend 正準ゲート状態 resolver | local は Git 管理下 `reviews/<gate>.yaml` を読む。GitHub は Issue branch の checkpoint までを新しい commit 順に各 gate Check 名で照会し、各 SHA の最新 completed record の name/head SHA、gate-report schema、gate id/target SHA、final/conclusion が一致する場合だけ選ぶ。一時 review file は読まず、候補無し/不正は `unknown`、取得不能は `unavailable` とする | AC-8, AC-10 | なし |
-| 4 | SHA固定スナップショットとゲート表示 | `git show` で実在成果物だけを読み、resolver の確定状態には gate target SHA と checkpoint SHA に対する `current` / `older` / `unjudged` を描画する。unknown/unavailable に状態や SHA を補わない | AC-3, AC-7, AC-8 | #2, #3 |
+| 3 | backend 正準ゲート状態 resolver | 入力を backend、repository、checkpoint SHA、gate id→Check 名、trusted recorder identity、既存 schema として固定する。GitHub は Check Run だけを正本とし、到達可能な新しい commit から gate ごとの completed record を選び、同一 commit は完了時刻・ID順で1件に決定後、name/head/target SHA、identity、構文、schema、gate id、final/conclusion を検証する。不在・取得不能・不正はすべて理由付き `unknown` とし、古い record や一時 file へ fallback しない。local は Git 管理下 record を維持する | AC-8, AC-10 | なし |
+| 4 | SHA固定スナップショットとゲート表示 | `git show` で実在成果物だけを読み、検証済み record target SHA と checkpoint SHA の同一/祖先/証明不能を `current` / `older` / `unjudged` と描画する。`unknown` に final state や target SHA を補わない | AC-3, AC-7, AC-8 | #2, #3 |
 | 5 | 対象別本文トランザクション | full/fallback/no-write の排他的上限判定、本文全体 CAS、1回再試行、古い/順序不明 SHA の no-write、同一内容 no-op、型付き結果を実装する | AC-4, AC-5, AC-6, AC-9, AC-10 | #2, #4 |
-| 6 | 共有同期サービスへ統合 | checkpoint と `gate publish` が同じ resolver と renderer を必ず通る trigger 非依存入口へ置換し、target 解決と対象別処理を束ねる。CAS 再試行時も正準状態を再解決する | AC-2, AC-4, AC-8, AC-10 | #1, #3, #5 |
+| 6 | 共有同期サービスへ統合 | checkpoint と `gate publish` が同じ resolver 入力、record 選択、identity/schema 検査、renderer を必ず通る trigger 非依存入口へ置換し、target 解決と対象別処理を束ねる。CAS 再試行時も正準状態を再解決する | AC-2, AC-4, AC-8, AC-10 | #1, #3, #5 |
 | 7 | checkpoint 後置フック | push 成功後に完全 SHA と Issue 番号で共有同期を呼ぶ。全結果/例外を SHA 付き stderr 警告へ変換し、stdout 1行 SHA・終了コード0・remote ref を維持する。push 失敗時は呼ばない | AC-1, AC-2, AC-3, AC-9 | #1, #6 |
 | 8 | gate publish 接続を維持 | Check Run 発行試行後、成否と独立して発行 target SHA で同じ共有入口を呼ぶ。一時 report を直接 renderer へ渡さず、発行成否にかかわらず正準 Check Run resolver の結果だけを描画する | AC-8, AC-10 | #6 |
 | 9 | GitHub stub の観測点拡張 | 本文競合・対象別失敗に加え、commit 別 Check Run、別プロセス実行、API失敗、malformed output、identity/name/head SHA 不一致を注入・観測可能にする | AC-4, AC-5, AC-8, AC-9 | #3, #5 |
 | 10 | checkpoint 統合テスト | SPEC→DESIGN→PLAN→VALIDATION を順に checkpoint し、各 push 直後の完全 SHA、存在成果物だけの本文、gate 未到達、remote ref を検査する | AC-1, AC-3, AC-7, AC-9 | #7, #9 |
-| 11 | 正準状態・回帰統合テスト | checkpoint と gate publish を別プロセスで実行して一時 file 不在でも Check Run 状態が再現されること、Check Run absent/malformed/wrong-SHA/wrong-identity、current/stale checkpoint の表示、local record 維持、3 target、CAS、上限、重複を網羅する | AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-10 | #8, #9 |
+| 11 | 正準状態・回帰統合テスト | gate publish 終了後に一時 file が無いことを確認して checkpoint を別プロセス実行し、Check Run だけから再現する。gate ごとの completed record 選択、absent/API unavailable/malformed/wrong name/head/target SHA/gate/identity、current/older/unjudged、unknown が状態と SHA を合成しないこと、local record 維持、3 target、CAS、上限、重複を網羅する | AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-10 | #8, #9 |
 | 12 | 全体検証と証跡整理 | build、対象テスト、全テスト、常時 lint を foreground 実行し、AC別ログを validation worker へ渡す | AC-1〜AC-10 | #10, #11 |
 
 ## テスト配置とケース行列
+
+### GitHub gate resolver の具体作業
+
+resolver API の入力を backend、repository、checkpoint SHA、gate id→設定済み Check 名、信頼する recorder identity、既存 gate-report schema として固定する。GitHub backend は gate ごとに到達可能 commit を新しい順で照会し、最初に completed record がある commit を採用する。同一 commit では完了時刻、次いで Check Run ID の降順で最新1件を選択してから、name、head SHA、recorder identity、output 構文、schema、gate id、record target SHA、final/conclusion の整合性を検証する。API・branch 範囲・応答の取得または解釈不能は理由付き `unavailable`、record 不在、malformed、wrong name/head/target SHA/gate/identity は理由付き `unknown` とし、より古い record や一時ファイルから状態を合成しない。
+
+checkpoint と `gate publish` の入口を同じ resolver と renderer に接続する。検証済み record target SHA と checkpoint SHA の比較は同一を `current`、祖先を `older`、関係を証明不能なら `unjudged` とし、`unknown` / `unavailable` には final state と target SHA を描画しない。local backend は Git 管理下 record の既存経路を維持し、GitHub Check Run と相互 fallback しない。
 
 ### 既存テストの拡張先
 
@@ -47,9 +53,12 @@
 | marker | 開始/終了文字列、`&amp;`、`&#60;` を成果物へ混在 | payload に生 marker なし、逆変換が元全文と一致 |
 | 境界 | 0組、正常1組、片側欠落、重複、逆転 | 追加/区間置換/no-write が排他的、marker 外全文一致 |
 | 本文上限 | full が上限ちょうど、full 1文字超過で fallback 可能、fallback も超過 | `synced_full` / `synced_fallback` / `sync_failed_no_write`、最後は edit なし |
-| gate正本 | gate publish と checkpoint を別プロセスで実行、一時 review file 無し | Check Run だけから同じ状態を復元し、temp file の生成・残存に非依存 |
-| gate不正 | Check Run 無し、API失敗、malformed schema、wrong gate/name/head/target SHA/identity | unknown/unavailable 表示、状態・SHAを捏造せず、書込みや Check Run 生成なし |
-| gate表示 | checkpoint と同じ target SHA、祖先 SHA、関係を証明不能な SHA | gate target SHA、current/older/unjudged、older は最新通過を示さない旨 |
+| gate正本 | gate publish を子プロセスで完了して終了し、一時 report が存在しない状態で checkpoint を別プロセス実行 | 作業ディレクトリやプロセス間 temp file を使わず、4ゲートそれぞれを Check Run だけから同じ状態へ復元 |
+| record選択 | 各 gate で複数 commit、同一 commit の複数 completed、in-progress と completed を混在 | checkpoint から到達可能な最新 commit、同一 commit の最新 completed 1件を完了時刻・ID順で選び、他 gate と混同しない |
+| gate不在・取得不能 | Check Run 無し、completed 無し、Check Run API/branch 範囲/応答失敗 | 不在は理由付き unknown、取得不能は unavailable、final state・target SHA無し、temp/local/本文から補完せず Check Run 生成なし |
+| gate不正 | malformed JSON/YAML、schema 不適合、wrong gate/name/head/target SHA/identity、final/conclusion 不整合 | 選択 record を理由付き unknown とし、より古い valid record へ fallbackせず、状態・SHAを捏造しない |
+| gate表示 | record target SHA が checkpoint と同一、祖先、関係を証明不能 | 検証済み target SHA と current/older/unjudged を表示し、stale record は older、unknown は比較表示なし |
+| backend分離 | 同じ fixture で GitHub backend と local backend | GitHub は Check Run のみ、local は Git 管理下 record のみを読み、相互 fallback なし |
 | 非致命性 | API、境界、上限、CAS、PR解決失敗 | checkpoint は0、stdoutは完全 SHA 1行、remote ref一致、stderr診断 |
 | gate分離 | checkpoint のみ実行 | Check Run、承認、gate record の生成・変更が0件 |
 | 無効条件 | local、GitHub+disabled | Issue/PR の read/edit 0件、従来 checkpoint 結果 |
