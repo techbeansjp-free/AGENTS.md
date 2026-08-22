@@ -42,6 +42,34 @@
 #     判定の根拠にはしていない。
 #   - 上記に加えて、テスト結果に依存しない独立確認を実施した。内訳は各ACの evidence に記す。
 #     これは自動テストが主張どおりの対象を見ているかを、テストを介さずに確かめるためである。
+#   - ゲート対象SHAと本ファイルの target_sha の関係: 本ファイルの target_sha は実装SHA
+#     3c7149eab1bd7bd8b481f7a8073563669fa7985b であり、ゲート対象は本ファイルを追加した
+#     a72e5513af4f166131ef7db46af8ef27a6334e96 である。両者の関係は次の2点の実測で確定している。
+#     (a) git merge-base --is-ancestor 3c7149eab1bd7bd8b481f7a8073563669fa7985b
+#         a72e5513af4f166131ef7db46af8ef27a6334e96 の終了コードは0であり、実装SHAはゲート対象SHAの
+#         祖先である。すなわち実装SHAの内容はゲート対象SHAに巻き戻されず含まれている。
+#     (b) git diff --name-status a72e5513af4f166131ef7db46af8ef27a6334e96
+#         3c7149eab1bd7bd8b481f7a8073563669fa7985b の出力は、D とタブ区切りで VALIDATION.md を示す
+#         1行のみである。両SHAの差は VALIDATION.md の有無だけであり、他のファイルは1件も差が無い。
+#     VALIDATION.md は検証報告であって src/ ・ test/ のいずれからも読み込まれず、tsconfig のビルド対象
+#     にも含まれない。したがって 3c7149ea で得た型検査・自動テストの結果は a72e5513 でも同じ入力に
+#     対する同じ結果として成立する。
+#   - 全量実行の skipped 1 件の同定: skip した1件は test/integration/cli-resolve.test.ts の
+#     'GitHub導入元へ実際に到達してpackage versionを取得できる' である。根拠は次の連言である。
+#     (a) test/ 配下を skip で全走査した結果、skip 指定は t.skip( の9箇所のみで、node:test の
+#         skip オプション形式による指定は1件も無い。したがって候補集合はこの9箇所で閉じている。
+#     (b) 9箇所のうち6箇所（test/integration/upgrade.test.ts の2箇所・test/unit/stale-assets.test.ts の
+#         4箇所）は isRunningAsRoot()、すなわち process.getuid() === 0 を条件とする。実行環境の
+#         id -u は 1000 であり、この6箇所は成立しない。
+#     (c) 残る3箇所の条件は、ASC_TEST_LIVE_CLI_INSTALL_SOURCE が '1' でないこと（上記の1件）、
+#         setsid(1) の不在、script(1) の不在である。ASC_TEST_LIVE_CLI_INSTALL_SOURCE は
+#         リポジトリ全体を走査しても当該テストの読み取り箇所以外に一切現れず、package.json の
+#         test スクリプトも環境変数を設定しない。素の npm test では未設定であり、この1件は必ず skip する。
+#     (d) 実測の skipped が1であることから、残る2箇所（setsid・script）は skip していない。すなわち
+#         実行環境には setsid(1) と script(1) が存在した。
+#     この1件は実ネットワークでGitHub導入元へ到達する明示オプトインのテストであり、既定スイートを
+#     ネットワーク障害で不安定にしないため通常は skip する設計である。本Issueの AC-1〜AC-12 の
+#     いずれとも対応せず、AC別の判定に影響しない。
 #
 # 完了条件: 全AC-IDに verification.result と evidence が対応し、regression の実行結果が
 #       記録されていること。
@@ -143,7 +171,11 @@ acceptance_criteria:
     verification: {mode: automated, result: pass}
     evidence:
       - "test/integration/worker-allowlist.test.ts: 'AC-11: 既存の事後清掃自動化・root残存検査のラッパーが同じサブコマンドへ委譲し続ける' / 'AC-11: 既存の事後清掃自動化・root残存検査の実装が新設モジュールへ依存しない'"
-      - "独立確認: 実在する6パス（src/commands/root-cleanup.ts・src/commands/verify.ts・src/lib/root-artifacts.ts・src/commands/lease.ts・.agent-skill-chain/scripts/root-cleanup.sh・.agent-skill-chain/ci/verify-root-clean.sh。存在を ls で確認済み）を対象に git show --stat 3c7149ea を実行した結果、差分エントリは0件であった。既存の清掃自動化・残存検査・lease acquire の実装は対象SHAで1行も変わっていない"
+      - "独立確認（着手前基点の同定）: 本Issue着手前の基点は既定ブランチ main の先頭 1c6c3cdc3a3ba7924779fdaff7dda8aba9cd7d5d である。git merge-base main HEAD の出力が同SHAであり、本ブランチの全commit（spec 2件・merge 1件・design 2件・implementation 1件・validation 1件の計7件）はこの基点以降に積まれている。git rev-parse origin/main も同一SHAを返す"
+      - "独立確認（着手前基点との累積差分・AC-11の主証跡）: 実行コマンドは git diff --stat 1c6c3cdc3a3ba7924779fdaff7dda8aba9cd7d5d...a72e5513af4f166131ef7db46af8ef27a6334e96 -- src/commands/root-cleanup.ts src/commands/verify.ts src/lib/root-artifacts.ts src/commands/lease.ts .agent-skill-chain/scripts/root-cleanup.sh .agent-skill-chain/ci/verify-root-clean.sh である。標準出力は空、終了コード0。--stat を --name-status へ置換した同一実行も標準出力は空・終了コード0であった。三点差分は単一commitの差分ではなく基点からゲート対象SHAまでの累積結果を示すため、PLAN.md が許す複数commitへの分割で積み上げられた場合も含めて、対象6パスに変更が無いことを判定できる。比較の技法は src/commands/verify.ts の checkOutputExists が用いる base と HEAD の三点差分と同型である"
+      - "独立確認（上記が空振りでないことの確認）: 同一の commit 対・同一のオプションのまま、pathspec へ既知の変更パス src/commands/cleanup.ts を1件だけ加えて再実行すると、出力は M とタブ区切りで src/commands/cleanup.ts を示す1行・終了コード0となる。したがって対象6パスでの空の出力は、pathspec が何にも一致しなかったことによる空振りではなく、当該6パスに差分が存在しないことを示す"
+      - "独立確認（対象6パスの実在）: 6パスはいずれもゲート対象SHAの作業ツリーに実在する（ls -l で6件すべてのサイズ・モードを確認。作業ツリーは git status --short が空でHEADと一致する）。かつ上記 --name-status の出力に追加を示す A エントリが1件も無いため、6パスは基点 1c6c3cdc の時点でも同一内容で存在していた"
+      - "上記により、既存の事後清掃自動化（root-cleanup）・root残存検査（verify root-clean）・lease acquire の実装は、本Issue着手前の基点からゲート対象SHAまでの全commitを通じて1行も変わっていない"
       - "回帰: 既存テストは期待値を変更せずに成功している。全量実行の fail は0件であり、既存の verify-root-clean 関連テスト（'verify-root-clean (merge-ready)' ステップの存在・if条件・配置順を検査する6件）も pass した"
       - "local-test-run: npm test @ 3c7149ea（tests 1638 / pass 1637 / fail 0 / skipped 1 / 終了コード0）"
 
@@ -161,4 +193,6 @@ regression:
     - "local-test-run: npm test @ 3c7149eab1bd7bd8b481f7a8073563669fa7985b。実測 tests 1638 / suites 0 / pass 1637 / fail 0 / cancelled 0 / skipped 1 / todo 0 / duration_ms 745128.763492、終了コード0"
     - "型検査・ビルド: npm test の pretest が npm run build（tsc）を実行し成功。単独実行でも終了コード0"
     - "機械検査（いずれも前景実行・終了コード0）: .agent-skill-chain/ci/verify-doc-length.sh / .agent-skill-chain/ci/verify-template-sync.sh / .agent-skill-chain/ci/verify-config-doc-sync.sh / .agent-skill-chain/scripts/lint-references.sh / .agent-skill-chain/scripts/lint-vocab.sh / .agent-skill-chain/scripts/adr-lint.sh check"
-    - "既存挙動の非回帰: 既存の事後清掃自動化・root残存検査・lease acquire の実装6パスに対象SHAで差分が無いこと（git show --stat の出力が空）と、それらの既存テストが期待値変更なしに成功したこと"
+    - "AC対応・スキーマ適合の機械検査: .agent-skill-chain/ci/verify-ac-coverage.sh ISSUE-798 を前景で実行した。標準出力・標準エラーとも空、終了コード0。PLAN.md は本検査を設計セグメントでは実行できない（VALIDATION.md が独立検証セグメントの成果物であるため）として独立検証セグメントへ割り当てており、本セグメントで実行した。同スクリプトは agent-skill-chain CLI の verify ac-coverage サブコマンドへの薄いラッパーであり、SPEC.md の全 AC-ID に検証方法と証跡が対応していること（孤児AC・孤児テスト参照の不在）と、本ファイルの validation-report スキーマ適合を機械判定する"
+    - "上記が無条件成功でないことの確認: 同じスクリプトへ実在しない ISSUE-999999 を与えると、ISSUE-999999 の worktree が見つかりません と出力して終了コード1で停止する。したがって ISSUE-798 での終了コード0は、検査が実行された上での成功である"
+    - "既存挙動の非回帰: 既存の事後清掃自動化・root残存検査・lease acquire の実装6パスに、本Issue着手前の基点 1c6c3cdc3a3ba7924779fdaff7dda8aba9cd7d5d からゲート対象SHA a72e5513af4f166131ef7db46af8ef27a6334e96 までの累積差分（三点差分・pathspec限定）が無いこと（標準出力が空・終了コード0。詳細と空振りでないことの確認は AC-11 の evidence に記載）と、それらの既存テストが期待値変更なしに成功したこと"
