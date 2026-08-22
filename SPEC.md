@@ -17,26 +17,29 @@ worker が終了して one-time credential も失われた場合、期限前の 
 ### 要件
 
 - 回復判定の入力は、正本から一度に観測した active lease 全体とする。Issue、segment、holder、branch、worktree、`acquired_at`、`expires_at` および credential を公開せず正本 lease 全体を一意に束縛する digest を観測スナップショットとして固定する。
-- 回復可能な report 状態は次のどちらかだけとする。(a) `acquired_at` 以後の completion report が無い、または (b) 同時点以後の report が1件だけあり、その segment、holder が観測スナップショットと一致し、status は `completed`、target SHA は対象 worktree の HEAD と一致する。`acquired_at` より前の report は観測 lease の判定対象外とする。
-- 回復前に worker process 不在、worktree clean、未push commit 不在、前項の report 状態を全て立証する。検査不能、実行中または不明の process、dirty/unpushed 状態、時刻不明、複数、競合、不一致または `completed` 以外の report があれば回復しない。
-- holder と観測スナップショットに束縛した明示確認を必須とする。削除は観測 digest を含む全スナップショットが直前の正本と一致する場合だけ CAS で行い、更新・延長・再取得された lease は削除しない。
+- 回復可能性は、観測 lease の正常終了を正に立証する次の排他的な二経路だけで成立する。(a) `acquired_at` 以後に、観測 lease と segment・holder・対象 worktree の HEAD が一致する唯一の `completed` report がある。(b) `completed` report が無く、launcher が credential を渡した対象 worker の一意な runtime identity、起動完了、継続した heartbeat と監視、terminal exit、および再起動しない状態を耐久化した lifecycle 証跡が全て同じ実行を示す。`acquired_at` より前の report は terminal proof にしない。
+- process または PID の不在、経過時間、startup grace、stale heartbeat のいずれも単独または組み合わせで terminal proof にしない。正常な起動窓、未起動、起動中、launcher 生存、監視不能、runtime identity 不明・不一致、terminal exit または非再起動の未立証は全て回復を拒否する。
+- 回復処理は、観測した lease instance に CAS で束縛された排他的 recovery claim を取得してから安全条件を判定する。report 投稿、lease の renew・release・resume、対象 worker の起動、および回復は同じ claim を検査し、競合する操作の片方だけが成立する。claim の競合・状態不明・検査不能時は回復しない。
+- claim 取得後に lifecycle 証跡、`acquired_at` 以後の report 集合とその digest、worktree、HEAD および remote 状態を再観測する。claim 前の観測から変化した場合、terminal proof が一意に成立しない場合、worktree が clean でない場合、または未push commit がある場合は回復しない。claim 取得後から削除まで、検査済み report の追加・変更、renew、release、resume または worker start が成功し得る状態を許さない。
+- holder と観測スナップショットに束縛した明示確認を必須とする。削除は、再観測した digest を含む全 lease スナップショットが直前の正本と一致する場合だけ CAS で行い、更新・延長・再取得された lease は削除しない。
 - CAS 削除前に、回復 attempt、holder、観測 digest、判定根拠、時刻を含む GitHub Issue 上の耐久化された監査予約を記録し、読み戻しで確認する。予約の記録または確認が失敗したら lease を変更しない。削除後は同じ attempt に最終結果を記録・確認し、それが失敗した場合は部分成功の理由付き非0終了として「回復完了」を報告しない。
+- claim は安全な中止時と回復終了時に解除を確認する。削除前に claim の取得・保持状態を確認できない場合は lease を削除しない。削除後に最終監査結果または claim 解除を確認できない場合は部分成功の理由付き非0終了とする。いずれも正当な writer の作業、report、lifecycle 証跡および監査証跡を削除せず、回復完了または再開可能と報告しない。
 - credential の実値は表示・保存・確認入力しない。
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: 安全条件を満たす orphaned lease だけを回復する
+#### AC-1: positive terminal proof を持つ lease だけを回復対象にする
 
-- Given: worker process が不在で、worktree は clean、未push commit は無く、`acquired_at` 以後の report が無い、または唯一の report が観測した segment・holder・HEAD に一致する `completed` である
+- Given: 観測 lease と一致する `acquired_at` 以後の唯一の `completed` report、または completed report 不在時に launcher が credential を渡した対象 worker の同一 runtime identity について起動完了から terminal exit・非再起動までを示す耐久化された完全な lifecycle 証跡がある
 - When: holder と観測 digest に束縛した明示確認付き回復を実行する
-- Then: 監査予約が確認された後だけ対象 lease が CAS で削除され、同じ attempt の最終結果と holder・根拠・時刻が監査可能になる
+- Then: 二経路の一方だけが positive terminal proof として採用され、他の安全条件の検査へ進める
 - 検証方法見込み: `automated`
 
-#### AC-2: process が実行中または検査不能なら回復しない
+#### AC-2: 起動状態または終了状態が曖昧なら回復しない
 
-- Given: process が存在する、または process 検査が失敗・不明である
+- Given: PID 不在や時間経過だけが観測された、または worker が未起動・起動中、launcher 生存、監視不能、runtime identity 不一致、terminal exit・非再起動未立証のいずれかである
 - When: 回復を実行する
-- Then: lease と worktree は変更されず、理由付き非0終了となる
+- Then: 正常な起動窓を含め lease と worktree は変更されず、理由付き非0終了となる
 - 検証方法見込み: `automated`
 
 #### AC-3: 未保存または未push の作業があれば回復しない
@@ -46,23 +49,23 @@ worker が終了して one-time credential も失われた場合、期限前の 
 - Then: lease は保持され、変更と commit は一切削除されない
 - 検証方法見込み: `automated`
 
-#### AC-4: completion report の不整合時は回復しない
+#### AC-4: recovery claim と再検査で競合を排除する
 
-- Given: `acquired_at` 以後の report が複数ある、時刻・segment・holder・target SHA・status のいずれかが不明または不一致である、あるいは status が `completed` 以外である
-- When: 回復を実行する
-- Then: lease は保持され、理由付き非0終了となる
+- Given: 回復と、report 投稿、lease の renew・release・resume または worker start が同じ観測 lease に対して競合する
+- When: 観測 lease に束縛した claim を取得し、lifecycle・report 集合と digest・worktree・HEAD・remote 状態を再検査する
+- Then: 競合する操作の片方だけが成立し、claim 前後で状態または report 集合が変化した場合は削除せず理由付き非0終了となる
 - 検証方法見込み: `automated`
 
-#### AC-5: 対象同一性と監査順序を強制する
+#### AC-5: 対象同一性、監査順序および失敗時の保存を強制する
 
-- Given: 明示確認が無い、Issue・segment・holder・branch・worktree・`acquired_at`・`expires_at`・digest のいずれかが直前の正本と異なる、または監査予約を記録・確認できない
+- Given: 削除前の明示確認・lease スナップショット・監査予約・claim のいずれかを確認できない、または削除後の最終監査結果か claim 解除を確認できない
 - When: 回復を実行する
-- Then: CAS 削除を拒否し、対象と他の active lease は変化せず、理由付き非0終了となる。CAS 削除後の最終監査結果の記録・確認失敗は部分成功の非0終了となり、回復完了と報告されない
+- Then: 削除前の失敗では CAS 削除を拒否して lease を保持し、削除後の失敗では部分成功とする。どちらも正当な writer の作業と全証跡を削除せず、理由付き非0終了となり、回復完了または再開可能と報告されない
 - 検証方法見込み: `automated`
 
 #### AC-6: 回復後は1 writer のまま直ちに再取得できる
 
-- Given: AC-1 を満たして lease が回復された
+- Given: AC-1〜AC-5 を満たし、監査予約後の CAS 削除、claim 解除および最終監査結果の確認まで完了した
 - When: 同じ Issue の新しい writer が lease acquire を実行し、並行する別 acquire も実行する
 - Then: 1つだけが成功し、成功した writer は直ちに作業を再開でき、credential は出力されない
 - 検証方法見込み: `automated`
