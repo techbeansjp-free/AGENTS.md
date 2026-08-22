@@ -17,6 +17,9 @@ import {
 
 const implementationBase = 'fa67956a4e3a0ed4697e32c6f0caef1aad961af6';
 
+/** 承認済み設計SHAより後に新設されたラッパー。同SHAに実体が無いため比較対象にできない。 */
+const ADDED_AFTER_BASE = ['/pr-complete.sh', '/root-cleanup-branch.sh'];
+
 function revisionFile(relative: string): string {
   return execFileSync('git', ['show', `${implementationBase}:${relative}`], {
     cwd: packageRoot,
@@ -28,7 +31,9 @@ test('既存54本の委譲argvと終了コードが変更前と一致する', ()
   const fixture = createWrapperFixture();
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue677-no-external-'));
   try {
-    const targets = wrapperTargets().filter((relative) => !relative.endsWith('/pr-complete.sh'));
+    const targets = wrapperTargets().filter(
+      (relative) => !ADDED_AFTER_BASE.some((suffix) => relative.endsWith(suffix)),
+    );
     assert.equal(targets.length, 54);
     const current = new Map(targets.map((relative) => [relative, fs.readFileSync(path.join(packageRoot, relative), 'utf8')]));
     for (const relative of targets) fs.writeFileSync(path.join(fixture.root, relative), revisionFile(relative));

@@ -23,7 +23,10 @@ properties:
         description: "lease保持者の実行ID（例: run-456）"
       segment:
         type: string
-        enum: [spec, design, implementation, validation, adr_finalization]
+        # scope限定ロールが取得するleaseの値（adr_finalization・root_artifact_cleanup）を含む。
+        # 値の追加は既存lease文書をすべて有効なまま保つ後方互換な拡張であり、schema名前空間の
+        # 版更新を要しない。走査はIssue番号prefixベースであり、この列挙を必要としない（ADR-0080）。
+        enum: [spec, design, implementation, validation, adr_finalization, root_artifact_cleanup]
       acquired_at:
         type: string
         format: date-time

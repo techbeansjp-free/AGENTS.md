@@ -21,6 +21,7 @@ import * as testing from '../commands/testing.js';
 import * as worker from '../commands/worker.js';
 import * as release from '../commands/release.js';
 import * as rootCleanup from '../commands/root-cleanup.js';
+import * as rootCleanupBranch from '../commands/root-cleanup-branch.js';
 import * as bootstrap from '../commands/bootstrap.js';
 
 export type Handler = (args: string[]) => Promise<number> | number;
@@ -71,6 +72,7 @@ export const routes: Record<string, Handler> = {
   'release tag': release.tag,
   'release publish': release.publish,
   'root-cleanup run': rootCleanup.run,
+  'root-cleanup branch': rootCleanupBranch.branch,
   'test run': testing.run,
   'lint vocab': lint.vocab,
   'lint references': lint.references,

@@ -52,11 +52,11 @@ test('プロジェクトローカルCLIの literal は共有実装1ファイル�
   assert.ok(literals.every((literal) => shared.includes(literal)), '共有実装が3経路の literal をすべて保持すること');
 });
 
-test('55本の前文は終了形を正規化すると文字単位で一致し、契約割当も固定される', () => {
+test('56本の前文は終了形を正規化すると文字単位で一致し、契約割当も固定される', () => {
   const marked = files
     .map((file) => ({ file, block: preamble(contents.get(file)!) }))
     .filter((entry): entry is { file: string; block: string } => entry.block !== undefined);
-  assert.equal(marked.length, 55);
+  assert.equal(marked.length, 56);
 
   const normalized = marked.map(({ block }) =>
     block
@@ -65,18 +65,18 @@ test('55本の前文は終了形を正規化すると文字単位で一致し、
       .join('\n')
       .replace(/\breturn\b/g, 'exit'),
   );
-  assert.equal(new Set(normalized).size, 1, '終了形以外の前文テキストが全55本で一致すること');
+  assert.equal(new Set(normalized).size, 1, '終了形以外の前文テキストが全56本で一致すること');
 
   const returnFiles = marked.filter(({ block }) => /\n\s*return 1\b/.test(block)).map(({ file }) => relative(file));
   const exitFiles = marked.filter(({ block }) => /\n\s*exit 1\b/.test(block)).map(({ file }) => relative(file));
-  assert.equal(exitFiles.length, 53);
+  assert.equal(exitFiles.length, 54);
   assert.deepEqual(returnFiles, [
     '.agent-skill-chain/adapters/claude.sh',
     '.agent-skill-chain/adapters/human.sh',
   ]);
 });
 
-test('前文マーカーによる対象集合55本と既知の非対象集合が完全に分離される', () => {
+test('前文マーカーによる対象集合56本と既知の非対象集合が完全に分離される', () => {
   const marked = files.filter((file) => preamble(contents.get(file)!) !== undefined);
   const counts = { scripts: 0, ci: 0, adapters: 0 };
   for (const file of marked) {
@@ -84,7 +84,7 @@ test('前文マーカーによる対象集合55本と既知の非対象集合が
     const group = segments[1];
     if (group === 'scripts' || group === 'ci' || group === 'adapters') counts[group] += 1;
   }
-  assert.deepEqual(counts, { scripts: 41, ci: 12, adapters: 2 });
+  assert.deepEqual(counts, { scripts: 42, ci: 12, adapters: 2 });
 
   const complement = files.filter((file) => !marked.includes(file)).map(relative);
   assert.deepEqual(complement, [

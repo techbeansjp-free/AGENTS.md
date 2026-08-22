@@ -67,6 +67,22 @@ roles:
     forbidden:
       - adr.content_edit   # id / Context / Decision / Consequences / supersedes は accepted 後不変
 
+  # root成果物クリーンアップワーカー: PRをReadyへ移す前に、進行役が root-cleanup-branch.sh を
+  # 起動して割り当てる。root直下の SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md の削除だけを行い、
+  # ファイル内容は一切書き換えない（ADR-0080）。commitの主体は進行役ではなく当該ロールである。
+  root_artifact_cleanup_worker:
+    lease: writer
+    scope: root_artifacts_only
+    capabilities:
+      - lease.acquire
+      - lease.renew
+      - lease.release
+      - branch.commit    # root直下 SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md の削除のみ
+      - branch.push
+    forbidden:
+      - out_of_scope.change        # 対象4ファイル以外への変更
+      - root_artifact.content_edit  # ファイル内容の編集
+
 # 各ロールを実行するアダプタの最小能力要件（A-10）:
 #   自worktree内read/write、テスト実行、writer leaseの取得・更新・解放、
 #   自ブランチへのcommit/push、Draft PR/Integration Recordの更新、
@@ -183,6 +199,19 @@ role_contracts:
     completion:
       - status更新をcommit + push済み
     forbidden: [Context/Decision/Consequences/supersedesの変更]
+
+  root_artifact_cleanup_worker:
+    inputs: [issue_id]
+    outputs: ['root直下 SPEC.md/DESIGN.md/PLAN.md/VALIDATION.md の削除だけで構成されたcommit']
+    rules:
+      - 対象はroot直下のSPEC.md・DESIGN.md・PLAN.md・VALIDATION.mdの4ファイルだけとする
+      - ファイル内容を編集せず、削除以外の変更をcommitへ持ち込まない
+      - Gitから復元できない内容（未追跡ファイル・未commitの変更）があれば削除せず停止する
+      - 対象Issueにwriter leaseが1件でも存在すれば、segmentを問わず待機も強制解放も回収もせず停止する
+      - 既定ブランチをチェックアウトしている対象worktreeでは実行しない
+    completion:
+      - 対象ブランチのremote先頭がlocal HEADと一致し、そのtreeにも作業ツリーにも対象4ファイルが存在しない
+    forbidden: [対象4ファイル以外への変更, ファイル内容の編集, 他主体のwriter leaseの評価・回収]
 
 # 完了・blocked報告は全ワーカー共通で .agent-skill-chain/schemas/worker-report.schema.yaml に従う。
 # 進行役はこの固定スキーマのみを読み、成果物の中身を読んで裁定しない（I5）。

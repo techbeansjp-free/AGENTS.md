@@ -48,7 +48,20 @@ fi
 # 充填を経由しない素のPR本文でDraft PRを作成できてしまい、PRテンプレートの実効的な徹底
 # （AC-5/AC-6）を損なうため除外する。`gh pr view/edit/comment` はPR作成ではなく更新・参照用途
 # のため引き続き許可する。
-WORKER_ALLOWED_TOOLS_DEFAULT='Read Grep Glob Edit Write MultiEdit Bash(git add:*) Bash(git commit:*) Bash(git push:*) Bash(git status:*) Bash(git diff:*) Bash(git rev-parse:*) Bash(git log:*) Bash(git show:*) Bash(git fetch:*) Bash(git restore:*) Bash(gh pr view:*) Bash(gh pr edit:*) Bash(gh pr comment:*) Bash(gh issue comment:*) Bash(.agent-skill-chain/scripts/*) Bash(bash .agent-skill-chain/scripts/*) Bash(node bin/agents-md.js:*) Bash(npm run:*) Bash(npm test:*) Bash(npm ci:*) Bash(mkdir:*) Bash(ls:*)'
+#
+# ISSUE-798 / ADR-0080: `.agent-skill-chain/ci/` 配下の実行を `.agent-skill-chain/scripts/` 配下と
+# 同じ2表記（直接実行・bash経由）で許可する。ci/ 配下は成果物を変更しない read-only の機械検査で
+# あり、ワーカーがpush前に自ら実行できることで検査失敗の発見がPR作成後からpush前へ前倒しになる。
+# 書込み能力は増えない。
+#
+# ISSUE-798 / ADR-0080: ファイル削除系のコマンド（`rm`・`git rm`・`find` の削除実行・
+# index からの強制削除）はいずれも意図的に列挙しない。root成果物のマージ前削除は
+# `.agent-skill-chain/config/roles.yaml` の root_artifact_cleanup_worker（scope: root_artifacts_only）
+# と決定的コマンド `root-cleanup branch` の担当へ移っており、削除はセグメント作業ワーカーの責務では
+# なくなったためである。対象を限定できない削除能力をワーカー全体へ与える代わりに、対象4ファイルへ
+# 限定された専用ロールが担う。無制限自動承認（--permission-mode bypassPermissions）も既定にせず、
+# 列挙外は拒否という安全側の設計を維持する。
+WORKER_ALLOWED_TOOLS_DEFAULT='Read Grep Glob Edit Write MultiEdit Bash(git add:*) Bash(git commit:*) Bash(git push:*) Bash(git status:*) Bash(git diff:*) Bash(git rev-parse:*) Bash(git log:*) Bash(git show:*) Bash(git fetch:*) Bash(git restore:*) Bash(gh pr view:*) Bash(gh pr edit:*) Bash(gh pr comment:*) Bash(gh issue comment:*) Bash(.agent-skill-chain/scripts/*) Bash(bash .agent-skill-chain/scripts/*) Bash(.agent-skill-chain/ci/*) Bash(bash .agent-skill-chain/ci/*) Bash(node bin/agents-md.js:*) Bash(npm run:*) Bash(npm test:*) Bash(npm ci:*) Bash(mkdir:*) Bash(ls:*)'
 
 # Issue #185: launch_worker/launch_gate_reviewer 共通の認証チェック（2段化）。
 # (a) 高速パス: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN のいずれかが非空なら authed とみなす

@@ -10,7 +10,7 @@ import {
 } from '../lib/worktree.js';
 import { leaseFilePath, integrationFilePath } from '../lib/local-state.js';
 import { tryReadYamlFile } from '../lib/yaml-io.js';
-import { activeLeaseFor, type WriterLease } from '../lib/github-lease.js';
+import { activeLeasesFor, type WriterLease } from '../lib/github-lease.js';
 import { git, gh } from '../lib/exec.js';
 import { isHelp, printUsage, guard, fail, ok } from '../lib/cli-io.js';
 
@@ -53,17 +53,20 @@ export async function run(args: string[]): Promise<number> {
     }
 
     // standards/GIT_CONVENTIONS.md が定めるworktree削除の条件: 4条件をすべて満たした場合のみ削除する。
+    //
+    // GitHubモードの有効lease探索は、segment名を直書きで列挙せず既存のIssue単位プリミティブ
+    // `activeLeasesFor`（Issue番号prefixによるref走査に有効期限フィルタを掛けたもの）へ委ねる。
+    // segment値の固定集合をコード側へ持つと、値が増えるたびに追随漏れが起きうるためである
+    // （ADR-0080）。prefix走査はsegment値に依存せず全leaseを列挙するので追随自体が不要になる。
     const now = new Date().toISOString();
-    const activeLease =
+    const localLeaseExpiresAt =
       config.coordination.backend === 'local'
         ? tryReadYamlFile<WriterLease>(leaseFilePath(root, number))?.writer_lease.expires_at
-        : activeLeaseFor(number, 'spec', root) ??
-          activeLeaseFor(number, 'design', root) ??
-          activeLeaseFor(number, 'implementation', root) ??
-          activeLeaseFor(number, 'validation', root) ??
-          activeLeaseFor(number, 'adr_finalization', root);
+        : undefined;
     const hasActiveLease =
-      config.coordination.backend === 'local' ? !!activeLease && activeLease > now : !!activeLease;
+      config.coordination.backend === 'local'
+        ? !!localLeaseExpiresAt && localLeaseExpiresAt > now
+        : activeLeasesFor(number, root).length > 0;
     if (hasActiveLease) {
       return fail('有効な writer lease が存在するため削除できません');
     }

@@ -9,7 +9,15 @@ const EXPECTED_CONTRACTS = [
   'validation_worker',
   'gate_reviewer',
   'adr_finalization_worker',
+  'root_artifact_cleanup_worker',
 ] as const;
+
+interface ScopedRole {
+  lease?: string;
+  scope?: string;
+  capabilities?: string[];
+  forbidden?: string[];
+}
 
 const WORKER_CONTRACTS = ['spec_worker', 'design_worker', 'implementation_worker', 'validation_worker'] as const;
 
@@ -76,6 +84,54 @@ test('loadRoles (AC-7): 全4 workerだけに非追記型是正の同一契約を
   }
   const reviewerText = roles.role_contracts.gate_reviewer.rules.join('\n');
   for (const fragment of requiredFragments) assert.doesNotMatch(reviewerText, new RegExp(fragment));
+});
+
+// ISSUE-798 / AC-1: root成果物クリーンアップロールは、既存の scope 限定ロール
+// （adr_finalization_worker）と同じ構造で `roles:` と `role_contracts:` の双方に存在する。
+test('loadRoles (AC-1): root_artifact_cleanup_worker が scope 限定の書込みロールとして定義されている', () => {
+  const roles = loadRoles(process.cwd());
+  const role = roles.roles.root_artifact_cleanup_worker as ScopedRole | undefined;
+  assert.ok(role, 'roles: 配下に root_artifact_cleanup_worker が存在すること');
+  assert.equal(role.lease, 'writer');
+  assert.equal(role.scope, 'root_artifacts_only');
+
+  // capabilities は lease 操作と自ブランチへの commit/push だけで構成される。
+  assert.deepEqual(
+    [...(role.capabilities ?? [])].sort(),
+    ['branch.commit', 'branch.push', 'lease.acquire', 'lease.release', 'lease.renew'],
+  );
+
+  // forbidden に「対象4ファイル以外への変更」と「ファイル内容の編集」が含まれる。
+  assert.ok(role.forbidden?.includes('out_of_scope.change'), 'forbidden に対象4ファイル以外への変更が含まれること');
+  assert.ok(
+    role.forbidden?.includes('root_artifact.content_edit'),
+    'forbidden にファイル内容の編集が含まれること',
+  );
+
+  // 既存の scope 限定ロールと同じ構造をとる（宣言されるキー集合が一致する）。
+  const adrRole = roles.roles.adr_finalization_worker as ScopedRole;
+  assert.deepEqual(Object.keys(role).sort(), Object.keys(adrRole).sort());
+});
+
+// ISSUE-798 / AC-12: 進行役の権限は本Issueで一切拡大していない。
+test('loadRoles (AC-12): 進行役の forbidden が不変で、新ロールに著述・内容編集能力が無い', () => {
+  const roles = loadRoles(process.cwd());
+  const orchestrator = roles.roles.orchestrator as ScopedRole;
+  assert.ok(orchestrator.forbidden?.includes('artifact_branch.commit'), '成果物branchへのcommit禁止が残ること');
+  assert.ok(orchestrator.forbidden?.includes('artifact.author'), '成果物の著述禁止が残ること');
+  assert.equal(orchestrator.lease, 'none');
+  assert.equal(
+    (orchestrator.capabilities ?? []).some((c) => /branch\.(commit|push)/.test(c)),
+    false,
+    '進行役へ成果物branchへのcommit能力を与えていないこと',
+  );
+
+  const role = roles.roles.root_artifact_cleanup_worker as ScopedRole;
+  assert.equal(
+    (role.capabilities ?? []).some((c) => /artifact\.(author|edit|content)/.test(c) || c === 'worktree.write'),
+    false,
+    'クリーンアップロールに著述・内容編集に相当する能力が無いこと',
+  );
 });
 
 // Issue #786 / AC-6: ラウンド値を解決できない経路の有限性非保証は、4 workerとgate_reviewerの
