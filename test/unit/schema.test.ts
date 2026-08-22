@@ -238,13 +238,15 @@ test("validateAgainstSchema('config') (AC-4): 未知のmodel_tier名はinvalid�
   assert.ok(outcome.errors.length > 0);
 });
 
-test("validateAgainstSchema('config') (AC-4): 未知のreasoning_effort名はinvalidになる", () => {
+test("validateAgainstSchema('config') (AC-4): highを超える旧値と未知のreasoning_effort名はinvalidになる", () => {
   const doc = loadConfigSchemaDoc();
-  const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
-  broken.worker.segment_overrides.implementation = { adapter: 'codex', reasoning_effort: 'ultra' };
-  const outcome = validateConfig(broken);
-  assert.equal(outcome.valid, false);
-  assert.ok(outcome.errors.length > 0);
+  for (const effort of ['xhigh', 'maximum_reasoning', 'ultra']) {
+    const broken = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
+    broken.worker.segment_overrides.implementation = { adapter: 'codex', reasoning_effort: effort };
+    const outcome = validateConfig(broken);
+    assert.equal(outcome.valid, false, `${effort} はinvalidであること`);
+    assert.ok(outcome.errors.length > 0);
+  }
 });
 
 test("validateAgainstSchema('config') (AC-4): 未知のセグメント名（4セグメント以外）はinvalidになる", () => {
@@ -313,7 +315,7 @@ test("validateAgainstSchema('config') (AC-4): model_tiersのティアエント�
 test("validateAgainstSchema('config') (AC-4): model_tier・reasoning_effortとadapter: codexの組合せはvalidになる", () => {
   const doc = loadConfigSchemaDoc();
   const ok = structuredClone(doc.examples[1]) as { worker: { segment_overrides: Record<string, unknown> } };
-  ok.worker.segment_overrides.validation = { adapter: 'codex', model_tier: 'highest_capability', reasoning_effort: 'xhigh' };
+  ok.worker.segment_overrides.validation = { adapter: 'codex', model_tier: 'highest_capability', reasoning_effort: 'high' };
   const outcome = validateConfig(ok);
   assert.deepEqual(outcome, { valid: true, errors: [] });
 });

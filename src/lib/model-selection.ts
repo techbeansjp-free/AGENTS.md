@@ -23,7 +23,7 @@ export interface CoreReviewPolicy {
   };
   capability: {
     model_tier: 'frontier_coding';
-    reasoning_tier: 'maximum_reasoning';
+    reasoning_tier: 'high';
   };
   triggers: {
     github_label: 'review:core-audit';
@@ -34,7 +34,7 @@ export interface CoreReviewPolicy {
   adapters: {
     codex: {
       model: 'gpt-5.6-sol';
-      reasoning_effort: 'xhigh';
+      reasoning_effort: 'high';
       override_attestation_env: 'CODEX_CORE_REVIEWER_ATTESTED';
     };
     claude: {

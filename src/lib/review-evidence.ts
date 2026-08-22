@@ -799,7 +799,7 @@ export function verifyGithubReviewEvidence(options: {
     if (options.coreReviewRequired) {
       if (
         evidence.reviewer.capability.model_tier !== 'frontier_coding' ||
-        evidence.reviewer.capability.reasoning_tier !== 'maximum_reasoning'
+        evidence.reviewer.capability.reasoning_tier !== 'high'
       ) {
         return fail(`review ${review.id} はコア必須能力を証明していません`);
       }

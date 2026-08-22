@@ -84,6 +84,13 @@ _codex_shell_command() {
   printf '%s' "$out"
 }
 
+_codex_reasoning_effort_allowed() {
+  case "${1:-}" in
+    medium | high) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # モデル決定順序（ISSUE-307 / ADR-0015、テスト用完全上書き CODEX_WORKER_CMD・WORKER_CMD は
 # launch_worker 側で最優先判定済み）:
 #   (1) アダプタ固有の個別上書き環境変数（CODEX_IMPLEMENTATION_MODEL / CODEX_HIGH_CAPABILITY_MODEL）
@@ -169,6 +176,10 @@ launch_gate_reviewer() {
     model_source='explicit'
   else
     model='gpt-5.6-sol'
+  fi
+  if ! _codex_reasoning_effort_allowed "$effort"; then
+    _codex_fail_safe "Codex reviewer のreasoning effortは medium または high である必要があります"
+    return
   fi
   ASC_CODEX_MODEL_SOURCE="$model_source"
   ASC_REVIEW_MODEL="$model"
@@ -331,6 +342,16 @@ _worker_default_cmd() {
 #      ASC_WORKER_MODEL / ASC_WORKER_REASONING_EFFORT（worker-launch.sh が worker.model_tiers から
 #      解決済みの値として export する、ISSUE-307）、ASC_WORKER_MODEL_TIER（同、防御的検査専用）。
 launch_worker() {
+  local segment="${2:-}" effort=''
+  case "$segment" in
+    spec | design | implementation | validation)
+      effort="$(_codex_worker_effort "$segment")"
+      if ! _codex_reasoning_effort_allowed "$effort"; then
+        echo "launch_worker: Codex worker のreasoning effortは medium または high である必要があります" >&2
+        return 1
+      fi
+      ;;
+  esac
   if [[ -n "${CODEX_WORKER_CMD:-}" ]]; then
     WORKER_CMD="$CODEX_WORKER_CMD"
   fi

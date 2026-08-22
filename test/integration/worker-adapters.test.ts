@@ -2325,7 +2325,7 @@ test('codex launch_worker (implementation, セグメント別上書き・ティ�
   assert.match(argv, /model_reasoning_effort="medium"/, 'segment_overrides/model_tiers無しの既存設定はISSUE-307適用前と同一effortに解決されること');
 });
 
-test('codex launch_worker: 個別上書き環境変数（CODEX_IMPLEMENTATION_MODEL/CODEX_IMPLEMENTATION_REASONING_EFFORT）は設定由来の解決済み値より優先される（AC-2）', async (t) => {
+test('codex launch_worker: highを超える個別reasoning上書きは起動前に拒否する（ISSUE-814 AC-4/AC-6）', async (t) => {
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
   // 本物のconfigのimplementation上書き（highest_capability/high、具体モデルgpt-5.6-sol）が
@@ -2341,29 +2341,26 @@ test('codex launch_worker: 個別上書き環境変数（CODEX_IMPLEMENTATION_MO
 
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
 
-  assert.equal(res.status, 0, res.stderr);
-  const argv = fs.readFileSync(argvCapturePath, 'utf8');
-  assert.match(argv, /override-model/, '個別上書き環境変数が設定由来の解決済みモデルより優先されること');
-  assert.match(argv, /model_reasoning_effort="xhigh"/, '個別上書き環境変数が設定由来のreasoning effortより優先されること');
-  assert.doesNotMatch(argv, /gpt-5\.6-sol/, '設定由来の値が個別上書きに敗れ反映されないこと');
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /medium または high/);
+  assert.equal(fs.existsSync(argvCapturePath), false, '不正なeffortではCodex subprocessを起動しないこと');
 });
 
-test('codex launch_worker: 引用符・空白・バックスラッシュを含む値をTOML層とshell層の両方で無改変に渡す（Issue #744）', async (t) => {
+test('codex launch_worker: 引用符・空白・バックスラッシュを含むmodelをshell層で無改変に渡す（Issue #744）', async (t) => {
   // reviewer 側と同じクォート欠陥が worker 側の起動列にも存在した。WORKER_CMD は消費側で
   // /bin/bash -c により再解釈され、その argv の -c 値は Codex 側で TOML として解釈される。
-  // reasoning effort は個別上書き環境変数由来の到達可能な入力であり、shell 層の quote だけを
-  // 適用していた旧実装では引用符やバックスラッシュを含む値が TOML basic string を破壊していた。
+  // reasoning effort は許可値highに固定し、model側のshell quoteとwritable_rootsのTOML値が
+  // 同じ起動列で壊れないことを検証する。
   const { repo, worktreePath } = setupWorkerIssue();
   t.after(() => repo.cleanup());
 
   const { stubDir, argvCapturePath } = installCodexStub(t);
-  const hostileEffort = 'hi"gh a\\b';
   const hostileModel = 'vendor model"with\\backslash';
   const env = envWithout([], {
     CODEX_AUTH_PROBE_CMD: 'true',
     PATH: `${stubDir}:${process.env.PATH}`,
     CODEX_IMPLEMENTATION_MODEL: hostileModel,
-    CODEX_IMPLEMENTATION_REASONING_EFFORT: hostileEffort,
+    CODEX_IMPLEMENTATION_REASONING_EFFORT: 'high',
   });
 
   const res = runWorkerLauncher(worktreePath, ['ISSUE-1', 'implementation'], env);
@@ -2373,8 +2370,7 @@ test('codex launch_worker: 引用符・空白・バックスラッシュを含�
 
   // shell 層: -m の値は TOML ではなく素の引数であり、原文のまま1引数として届くこと。
   assert.equal(argv[argv.indexOf('-m') + 1], hostileModel, `明示modelが1引数として無改変で届くこと (argv=${JSON.stringify(argv)})`);
-  // TOML 層: model_reasoning_effort は妥当な basic string であり、復号すると原文へ戻ること。
-  assert.equal(decodeCodexConfigValue(argv, 'model_reasoning_effort'), hostileEffort);
+  assert.equal(decodeCodexConfigValue(argv, 'model_reasoning_effort'), 'high');
   // 同じ起動列に同居する writable_roots も TOML として妥当なままであること。
   const roots = argv.filter((arg) => arg.startsWith('sandbox_workspace_write.writable_roots='));
   assert.equal(roots.length, 1, `writable_rootsが1つ届くこと (argv=${JSON.stringify(argv)})`);

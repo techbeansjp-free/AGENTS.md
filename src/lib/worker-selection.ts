@@ -13,7 +13,7 @@
 export type WorkerSegment = 'spec' | 'design' | 'implementation' | 'validation';
 export type WorkerAdapter = 'claude' | 'codex' | 'human';
 export type ModelTier = 'highest_capability';
-export type ReasoningEffort = 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'medium' | 'high';
 
 export interface WorkerSegmentOverride {
   adapter?: WorkerAdapter;

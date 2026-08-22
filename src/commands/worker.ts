@@ -18,7 +18,7 @@ KEY=VALUE 形式で標準出力へ出す。
   model_tier=<highest_capability>       セグメント別上書きに指定がある場合のみ出力
   model=<具体的なモデル文字列>          model_tierが指定されている場合、worker.model_tiers
                                          を引いて解決した値
-  reasoning_effort=<medium|high|xhigh>  セグメント別上書きに指定がある場合のみ出力
+  reasoning_effort=<medium|high>        セグメント別上書きに指定がある場合のみ出力
 
 segment（spec|design|implementation|validation）を省略した場合も agent_tool_dispatch を含む
 4行を返す。segment を指定すると、そのセグメントに
