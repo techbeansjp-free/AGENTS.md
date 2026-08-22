@@ -46,6 +46,8 @@ export const routes: Record<string, Handler> = {
   'lease status': lease.status,
   'segment start': segment.start,
   'gate review': gate.review,
+  'gate declare-final-round': gate.declareFinalRound,
+  'gate classify-finding': gate.classifyFinding,
   'gate publish': gate.publish,
   'gate reconcile': gate.reconcile,
   'gate record-verdict': gate.recordVerdict,

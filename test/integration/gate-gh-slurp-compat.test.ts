@@ -36,16 +36,31 @@ test('AC-1: src配下のgh起動引数からページ一括オプションが全
   const offenders = files.filter((file) => fs.readFileSync(file, 'utf8').includes(PAGE_BUNDLING_FLAG));
   assert.deepEqual(offenders, [], 'src配下にページ一括オプションの残存が無いこと');
 
-  // 変更前にページ一括オプションを与えていた12箇所は、いずれも --paginate を保っていること。
+  // 全ページ取得を意図する gh 起動は --paginate をリテラルで保っていること。
+  // Issue #786: round budget 宣言・finding 分類記録の読み取り8箇所を追加したため期待値を更新した。
   const paginateCounts = new Map(
     ['src/commands/gate.ts', 'src/lib/gate-round.ts', 'src/lib/review-light.ts'].map((relative) => [
       relative,
       fs.readFileSync(path.join(PACKAGE_ROOT, relative), 'utf8').split('--paginate').length - 1,
     ]),
   );
-  assert.equal(paginateCounts.get('src/commands/gate.ts'), 10);
+  assert.equal(paginateCounts.get('src/commands/gate.ts'), 18);
   assert.equal(paginateCounts.get('src/lib/gate-round.ts'), 1);
   assert.equal(paginateCounts.get('src/lib/review-light.ts'), 1);
+});
+
+// Issue #786: 上のリテラル計数ガードは、トークンを断片から動的に組み立てると素通りする。
+// 実際に `['--', 'paginate'].join('')` を導入して計数を据え置いた回帰があったため、
+// 「src配下では paginate が常にリテラル --paginate としてだけ現れる」ことを直接検査する。
+test('AC-1: --paginate を断片から動的組み立てしてリテラル計数ガードを迂回する経路がsrc配下に無い', () => {
+  const files = sourceFiles(path.join(PACKAGE_ROOT, 'src'));
+  const evasions = files.flatMap((file) => {
+    const text = fs.readFileSync(file, 'utf8');
+    const total = text.split('paginate').length - 1;
+    const literal = text.split('--paginate').length - 1;
+    return total === literal ? [] : [path.relative(PACKAGE_ROOT, file)];
+  });
+  assert.deepEqual(evasions, [], 'paginate トークンは常にリテラル --paginate として書くこと');
 });
 
 test('AC-6: ラウンド履歴の取得失敗と解釈失敗だけを標準エラー出力へ提示し、終了コードと本文を変えない', (t) => {

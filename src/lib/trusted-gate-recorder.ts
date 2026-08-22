@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { digestOf } from './digest.js';
 import { canonicalJson, type GithubReviewRecord, type VerifiedReviewAttempt } from './review-evidence.js';
+import type { RoundBudgetCommentRecord } from './round-budget-policy.js';
 import { createInstallationToken, type GithubAppCredentials } from './github-app-auth.js';
 import {
   INLINE_REPORT_MAX_BYTES,
@@ -82,6 +83,7 @@ export interface TrustedGateApiContext {
   reviewSubject: 'ordinary' | 'core_audit';
   commits: { author: { login: string | null } | null; committer: { login: string | null } | null }[];
   reviews: GithubReviewRecord[];
+  issueComments: RoundBudgetCommentRecord[];
 }
 
 export interface TrustedGateCheckRun {
@@ -305,7 +307,7 @@ export async function fetchTrustedGateApiContext(options: {
     throw new Error('PRのcurrent headまたはrepository default baseがdispatch入力と一致しません');
   }
   const issueNumber = issueNumberFromBranch(pullRequest.head.ref);
-  const [issueRecord, commits, reviews] = await Promise.all([
+  const [issueRecord, commits, reviews, issueComments] = await Promise.all([
     githubJsonDirect<TrustedGateIssue>(fetchImpl, options.githubToken, `${repoPath}/issues/${issueNumber}`),
     githubArrayDirect<TrustedGateApiContext['commits'][number]>(
       fetchImpl,
@@ -316,6 +318,11 @@ export async function fetchTrustedGateApiContext(options: {
       fetchImpl,
       options.githubToken,
       `${repoPath}/pulls/${options.payload.pr_number}/reviews`,
+    ),
+    githubArrayDirect<RoundBudgetCommentRecord>(
+      fetchImpl,
+      options.githubToken,
+      `${repoPath}/issues/${issueNumber}/comments`,
     ),
   ]);
   if (issueRecord.number !== issueNumber || issueRecord.state !== 'open' || !Array.isArray(issueRecord.labels)) {
@@ -335,6 +342,7 @@ export async function fetchTrustedGateApiContext(options: {
     reviewSubject: labels.includes('review:core-audit') ? 'core_audit' : 'ordinary',
     commits,
     reviews,
+    issueComments,
   };
 }
 

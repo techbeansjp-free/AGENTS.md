@@ -66,3 +66,27 @@ test('loadRoles: 全segment workerの rules に再開時の最新レビュー確
     );
   }
 });
+
+test('loadRoles (AC-7): 全4 workerだけに非追記型是正の同一契約を配布する', () => {
+  const roles = loadRoles(process.cwd());
+  const requiredFragments = ['局所的な条項・例外・分岐・フラグ', '不要な要求・挙動', '非追加手段で達成不能', '真因がIssueの範囲外'];
+  for (const role of WORKER_CONTRACTS) {
+    const text = roles.role_contracts[role].rules.join('\n');
+    for (const fragment of requiredFragments) assert.match(text, new RegExp(fragment), `${role}: ${fragment}`);
+  }
+  const reviewerText = roles.role_contracts.gate_reviewer.rules.join('\n');
+  for (const fragment of requiredFragments) assert.doesNotMatch(reviewerText, new RegExp(fragment));
+});
+
+// Issue #786 / AC-6: ラウンド値を解決できない経路の有限性非保証は、4 workerとgate_reviewerの
+// 双方の契約に現れる必要がある。片方だけでは残りラウンド数を前提にした是正・判定を止められない。
+test('loadRoles (AC-6): 全4 workerとgate_reviewerへ有限性保証の対象外である旨を配布する', () => {
+  const roles = loadRoles(process.cwd());
+  for (const role of [...WORKER_CONTRACTS, 'gate_reviewer'] as const) {
+    assert.match(
+      roles.role_contracts[role].rules.join('\n'),
+      /ラウンド値を解決できない経路のゲートは通常のblocking差し戻しを維持するだけで差し戻し回数の有限性保証の対象外/,
+      role,
+    );
+  }
+});

@@ -97,6 +97,42 @@ test("validateAgainstSchema('state'): review_intensityは任意でlight/fullを�
   });
 });
 
+test("validateAgainstSchema('state'): round budget宣言は任意だが完全payloadだけを許可する", () => {
+  const doc = loadSchemaDoc('state');
+  const state = structuredClone(doc.examples[0]) as { gate: Record<string, unknown> };
+  state.gate.round_budget_declaration = {
+    schema_version: 'agent-skill-chain/round-budget-declaration/v1', issue_id: 'ISSUE-123', gate: 'design',
+    previous_attempt_id: 'attempt-design-previous', final_round: 4,
+    blocking_categories: ['previous_blocking_unresolved', 'issue_purpose_blocked', 'test_build_regression', 'data_loss_or_security'],
+    nonblocking_action: 'warning_with_persisted_follow_up',
+    declaration_digest: `sha256:${'a'.repeat(64)}`, declared_at: '2026-08-19T00:00:00.000Z', record_id: '10',
+  };
+  assert.equal(validateAgainstSchema('state', state, packageRoot()).valid, true);
+  const invalid = structuredClone(state) as { gate: { round_budget_declaration: Record<string, unknown> } };
+  delete invalid.gate.round_budget_declaration.previous_attempt_id;
+  assert.equal(validateAgainstSchema('state', invalid, packageRoot()).valid, false);
+});
+
+test("validateAgainstSchema('worker-report'): blocking remediationとrequired_addition理由を条件検査する", () => {
+  const base = {
+    schema_version: 'agent-skill-chain/worker-report/v1', issue_id: 'ISSUE-123',
+    role: 'implementation_worker', segment: 'implementation', status: 'completed', target_sha: 'abc123',
+    remediation_required: true,
+  };
+  assert.equal(validateAgainstSchema('worker-report', base, packageRoot()).valid, false);
+  assert.equal(validateAgainstSchema('worker-report', {
+    ...base,
+    remediations: [{ method: 'required_addition', finding_code: 'F-1', summary: '追加' }],
+  }, packageRoot()).valid, false);
+  assert.equal(validateAgainstSchema('worker-report', {
+    ...base,
+    remediations: [{
+      method: 'required_addition', finding_code: 'F-1', summary: '追加',
+      non_addition_failure_reason: '書換え・削除ではIssue目的を達成できない',
+    }],
+  }, packageRoot()).valid, true);
+});
+
 test("validateAgainstSchema('gate-report'): light_reviewは完全な任意証跡だけを許可する", () => {
   const doc = loadSchemaDoc('gate-report');
   const report = structuredClone(doc.examples[0]) as { gate: Record<string, unknown> };
@@ -112,6 +148,28 @@ test("validateAgainstSchema('gate-report'): light_reviewは完全な任意証跡
   const invalid = structuredClone(report) as { gate: { light_review: Record<string, unknown> } };
   delete invalid.gate.light_review.strict_locked;
   assert.equal(validateAgainstSchema('gate-report', invalid, packageRoot()).valid, false);
+});
+
+// Issue #786: 既存の publish 整合検査は final=approved に対し conformance/falsification の
+// 両 pass を要求するため、この2フィールドには判定へ用いた有効 sub-verdict を記録する。
+// レビュアが提出した raw 値は同じ現行記録へ併記し、失わせない。
+test("validateAgainstSchema('gate-report'): 有効sub-verdictのraw併記は完全payloadだけを許可する", () => {
+  const doc = loadSchemaDoc('gate-report');
+  const report = structuredClone(doc.examples[0]) as { gate: Record<string, unknown> };
+  report.gate.subverdict_reclassification = {
+    original_conformance: 'fail',
+    original_falsification: 'fail',
+    basis: 'all_blocking_findings_reclassified',
+  };
+  assert.deepEqual(validateAgainstSchema('gate-report', report, packageRoot()), { valid: true, errors: [] });
+
+  const missing = structuredClone(report) as { gate: { subverdict_reclassification: Record<string, unknown> } };
+  delete missing.gate.subverdict_reclassification.original_falsification;
+  assert.equal(validateAgainstSchema('gate-report', missing, packageRoot()).valid, false);
+
+  const forgedBasis = structuredClone(report) as { gate: { subverdict_reclassification: Record<string, unknown> } };
+  forgedBasis.gate.subverdict_reclassification.basis = 'blocking_count_zero';
+  assert.equal(validateAgainstSchema('gate-report', forgedBasis, packageRoot()).valid, false);
 });
 
 test('validateAgainstSchema: 実物の config/agent-skill-chain.yaml をそのまま渡すとvalidになる', () => {

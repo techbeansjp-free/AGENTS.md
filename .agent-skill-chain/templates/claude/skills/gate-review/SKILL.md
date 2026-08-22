@@ -23,6 +23,7 @@ when_to_use: Use when a segment worker has finished a segment and gate review sh
 
 - **review profile**: Standard（レビュア1体、既定）／Light（人間の明示要求時のみ、危険信号で自動Strict固定）／Strict（`risk != normal` または `autonomy == full`、専任2体）。
 - **gate-report**: `.agent-skill-chain/schemas/gate-report.schema.yaml` 準拠の判定記録。
+- **round**: 初回をround 0とする同一Issue・同一gateのreview反復。ラウンド値を解決できる経路では、既定は全4 gateで最終round 4、最大5回。解決できない経路は本予算の対象外であり、差し戻し回数の有限性を保証しない。
 
 ## 入力
 
@@ -35,22 +36,25 @@ when_to_use: Use when a segment worker has finished a segment and gate review sh
 
 ## 手順
 
-1. `.agent-skill-chain/scripts/gate-review.sh <issue_id> <gate_id> <profile> [target_sha]` を実行し、レビュアを起動してgate-reportを生成する。
-2. レビュアはconformance（成果物が要求・受入条件を満たしているか）を先に判定し、続けてfalsification（見落とし・反証可能な欠陥が無いか）を判定する。
-3. Strict profileの場合は専任2体を独立に起動し、両者の判定を集約する。
-4. blockingな指摘がある場合、`finding.origin`（`specification|design|implementation|validation`）を確認する。指摘の起源セグメントが対象セグメントより前であれば、進行役へ差し戻し先として報告する。
-5. `.agent-skill-chain/scripts/gate-publish.sh <issue_id> <gate_report_path>` でgate-reportを発行する（GitHubモードはCheck Run、ローカルモードは `reviews/<gate>.yaml`）。
-6. 承認済み成果物の内容に変更があった場合は `.agent-skill-chain/scripts/gate-reconcile.sh` で当該ゲートおよび下流ゲートの無効化・再照合を行う。
+1. `review.round_limit`の既存導出値を使う。値を解決できない場合はroundを推測せず、打ち切り・warning降格・取得不能だけを理由とする`human_required`を適用しない。通常のblocking差し戻しを維持し、この経路は差し戻し回数の有限性保証の対象外として扱う（各roundの帰結は承認・差し戻し・人間判断のいずれかだが、上限は定めない）。
+2. rejectされた反復の次が解決済み最終roundになる場合、差し戻しを確定する同じ状態遷移で `.agent-skill-chain/scripts/gate-declare-final-round.sh <issue_id> <gate_id> <pr_number>` を実行する。宣言は次回が最終、直前attempt、最終round、下記4類型、類型外findingのwarning化とfollow-upを含む不変記録であり、round導出元には使わない。
+3. `.agent-skill-chain/scripts/gate-review.sh <issue_id> <gate_id> <profile> [target_sha]` を実行する。trusted launcherはreviewer起動前に宣言の作成順序・canonical digest・直前attempt・最終roundを照合する。宣言なし、review開始後/結果後の追加、上書き、digest不一致は`human_required`へ安全側停止する。
+4. レビュアはconformanceを先に、falsificationを続けて判定する。Strictは専任2体を独立起動し、両者を集約する。gate・2観点・検査・必要レビュア数・Strict固定・quick境界はroundを理由に減らさない。
+5. 最終round後もblockingとするのは、(a)既出blocking未是正、(b)Issue目的の直接阻害、(c)test/build失敗または回帰、(d)データ喪失またはセキュリティ低下だけである。(d)はround・risk・profileにかかわらず常時blocking。1件でも残れば`human_required`とし、進行役の裁量で追加差し戻し・承認を行わない。
+6. 4類型外findingは削除せず同じcurrent findingのseverityをwarningにする。GitHubではfollow-up Issue永続化後に`.agent-skill-chain/scripts/gate-classify-finding.sh`を使い、ローカルではgate-reportの同じfindingへ記録する。`reclassification`へ元/分類後severity、理由、4類型外の根拠、未改変のraw evidence、follow-up Issue番号を残す。follow-up永続化前・必須値欠落・raw evidence変更は`human_required`とし、便宜的にblockingへ戻さない。GitHubのraw PR reviewは削除・改変しない。
+7. blockingがあれば`finding.origin`を確認して差し戻し先を報告する。`.agent-skill-chain/scripts/gate-publish.sh <issue_id> <gate_report_path>`で発行し、成果物変更時は`gate-reconcile.sh`で当該gateと下流gateを無効化・再照合する。
 
 ## 制約
 
 - レビュアはread-onlyであり、成果物の著述・修正は行わない。
 - `gate-report`（`.agent-skill-chain/schemas/gate-report.schema.yaml` 準拠ファイル）を、判定結果の記録以外の目的で書き換えない。
 - Light profileは人間の `review:light` 等の明示シグナルがある場合のみ適用し、危険信号があれば自動的にStrictへ固定する。
+- round budget宣言を追加round counter、別の閾値設定、またはround導出元として使用しない。
+- 最終round後の4類型blockingに対する追加修正roundは、人間が回数と条件を明示した場合だけ開始する。
 
 ## 完了条件
 
-- 対象ゲートの `final` が確定している（pass、または人間判断への昇格 `human_required`）。
+- 対象ゲートの `final` が確定している（pass、または人間判断への昇格 `human_required`）。ラウンド値を解決できない経路では、差し戻し回数の上限に到達したことを完了条件にしない。
 - blockersがある場合、差し戻し先（`finding.origin`）が進行役へ報告されている。
 
 ## 検証方法

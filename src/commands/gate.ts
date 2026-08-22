@@ -60,10 +60,13 @@ import {
   canonicalJson,
   evidencePromptDigest,
   isEvidenceVerdict,
+  parseReviewEvidence,
   renderReviewEvidence,
+  validateGithubReviewEvidenceRecord,
   verifyGithubReviewEvidence,
   type EvidenceVerdict,
   type GithubReviewRecord,
+  type SubverdictReclassification,
   type ReviewEvidence,
   type ValidatedGithubReviewEvidence,
   type VerifiedReviewAttempt,
@@ -109,6 +112,19 @@ import {
   type TrustedGateRecordState,
   type TrustedGateRepository,
 } from '../lib/trusted-gate-recorder.js';
+import {
+  createRoundBudgetDeclaration,
+  createFindingClassificationRecord,
+  renderFindingClassificationRecord,
+  resolveDurableRoundBudgetDeclaration,
+  renderRoundBudgetDeclaration,
+  selectFindingClassificationComments,
+  selectRoundBudgetDeclarationComments,
+  validateFindingReclassification,
+  type DurableRoundBudgetDeclaration,
+  type RoundBudgetCommentRecord,
+  type FindingReclassification,
+} from '../lib/round-budget-policy.js';
 
 // Issue #759: 当該依存を実際に読み込む本モジュールを基点に、実行時の module 解決が返す
 // 解決先を参照経路ごと解決した実体パスとして観測する（ASC_DEPENDENCY_TRACE_FILE 設定時のみ）。
@@ -132,6 +148,24 @@ target_sha: 省略可。指定時はこの値をgate-reportのtarget_shaとし�
   成功時: 終了コード0。schemas/gate-report.schema.yaml準拠のgate-reportパス（レビュア記入用の
           白紙スキャフォールド）とreviewer_countを標準出力へ。
   失敗時: 終了コード1以上。理由を標準エラー出力へ。
+`;
+
+const DECLARE_FINAL_ROUND_USAGE = `
+使い方: agent-skill-chain gate declare-final-round <issue_id> <gate_id> <pr_number>
+
+直前の完備trusted attemptがrejectされ、次回がreview.round_limit.cutoff_thresholdと一致する場合だけ、
+最終round・4類型・類型外findingのwarning/follow-up手続きを固定marker付きIssueコメントへ耐久化する。
+宣言は既存round導出のsnapshotであり、round counterまたは導出元としては使用しない。
+重複検査は対象issue_idと対象gateの宣言だけを数える。round値を解決できない経路は宣言を作らず、
+通常差し戻しfallbackのまま差し戻し回数の有限性保証の対象外として扱う。
+`;
+
+const CLASSIFY_FINDING_USAGE = `
+使い方: agent-skill-chain gate classify-finding <issue_id> <gate_id> <pr_number> <source_review_id> <finding_code> <follow_up_issue_id> <downgrade_reason>
+
+最終roundの4類型外findingをwarningへ分類し、raw PR reviewを変更せず、同じfindingの全内容・
+元/分類後severity・理由・4類型外根拠・raw evidence・永続化済みfollow-up Issueを固定marker付き
+Issueコメントへ記録する。既存分類の追加・上書きは拒否する。
 `;
 
 const PUBLISH_USAGE = `
@@ -247,6 +281,7 @@ interface Finding {
   origin: 'specification' | 'design' | 'implementation' | 'validation';
   code: string;
   evidence: string[];
+  reclassification?: FindingReclassification;
 }
 
 export interface GateReport {
@@ -263,6 +298,8 @@ export interface GateReport {
     reviewers?: VerifiedReviewer[];
     review_attempt?: VerifiedReviewAttempt;
     light_review?: LightReviewDecision;
+    round_budget_declaration?: DurableRoundBudgetDeclaration;
+    subverdict_reclassification?: SubverdictReclassification;
   };
 }
 
@@ -564,6 +601,11 @@ function historicalGateAttemptVerifier(options: {
         // 再現できない。履歴の真正性はプロンプト非依存のexecution attestationで検証する。
         promptDigestVerification: 'record_only',
         expectedLightReview: first.light_review,
+        // Issue #786: light_review と同じ自己参照方式で扱う。省略すると期待値が null に固定され、
+        // 宣言を載せた過去attemptが必ず検証失敗してラウンド計数から落ち、最終round到達後にroundが
+        // 増えなくなる。宣言をround導出元にしないというD1の境界は、宣言の有無で計数結果が変わらない
+        // この自己参照によって保たれる。
+        expectedRoundBudgetDeclaration: first.round_budget_declaration,
         expectedArtifacts: artifacts,
         findingValidation: 'historical_v3',
         expectedTrustedBaseSha: first.execution.trusted_base_sha,
@@ -795,6 +837,66 @@ function publishCheckRun(
   }
 }
 
+function resolveGithubFinalRoundDeclaration(options: {
+  root: string;
+  issueId: string;
+  gateId: Segment;
+  currentAttemptId: string;
+  reviews: GithubReviewRecord[];
+  comments: RoundBudgetCommentRecord[];
+  trustedActors: string[];
+  reviewStartedAt?: string;
+}): {
+  required: boolean;
+  declaration?: DurableRoundBudgetDeclaration;
+  reason?: string;
+  roundContext: GateRoundContext;
+} {
+  const roundContext = deriveGateRoundContext({
+    reviews: options.reviews,
+    issueId: options.issueId,
+    gate: options.gateId,
+    currentAttemptId: options.currentAttemptId,
+    trustedActors: options.trustedActors,
+    verifyAttempt: historicalGateAttemptVerifier({
+      root: options.root,
+      issueId: options.issueId,
+      gateId: options.gateId,
+      trustedActors: options.trustedActors,
+    }),
+  });
+  if (roundContext.status !== 'available') return { required: false, roundContext };
+  const finalRound = resolveGateRoundLimit(loadConfig(options.root).review.round_limit).cutoff_threshold;
+  if (roundContext.round !== finalRound) return { required: false, roundContext };
+  const previous = roundContext.history.at(-1);
+  if (!previous) {
+    return { required: true, reason: '最終roundの直前attemptを解決できません', roundContext };
+  }
+  const previousTimes = options.reviews.flatMap((review) => {
+    try {
+      const evidence = parseReviewEvidence(review.body);
+      return evidence?.attempt_id === previous.attempt_id && review.submitted_at
+        ? [review.submitted_at]
+        : [];
+    } catch {
+      return [];
+    }
+  }).sort();
+  const resolved = resolveDurableRoundBudgetDeclaration({
+    comments: options.comments,
+    issueId: options.issueId,
+    gate: options.gateId,
+    trustedActors: options.trustedActors,
+    previousAttemptId: previous.attempt_id,
+    finalRound,
+    previousEvidenceCompletedAt: previousTimes.at(-1),
+    reviewStartedAt: options.reviewStartedAt,
+  });
+  return resolved.status === 'available'
+    ? { required: true, declaration: resolved.declaration, roundContext }
+    : { required: true, reason: resolved.reason, roundContext };
+}
+
 export async function review(args: string[]): Promise<number> {
   return guard(() => {
     if (isHelp(args)) {
@@ -803,7 +905,7 @@ export async function review(args: string[]): Promise<number> {
     }
     const [issueIdRaw, gateId, profile, targetShaArg] = args;
     if (!issueIdRaw || !gateId || !profile) throw new CliError('issue_id, gate_id, profile はすべて必須です');
-    const { number } = parseIssueId(issueIdRaw);
+    const { issueId, number } = parseIssueId(issueIdRaw);
     validateGateId(gateId);
     if (profile !== 'standard' && profile !== 'strict') {
       throw new CliError(`profile は standard|strict のいずれかである必要があります: '${profile}'`);
@@ -829,6 +931,42 @@ export async function review(args: string[]): Promise<number> {
       targetSha,
     });
     const effectiveProfile = lightReview.strict_locked ? 'strict' : lightReview.applied ? 'standard' : profile;
+    let roundBudgetDeclaration: DurableRoundBudgetDeclaration | undefined;
+    let unresolvedDeclarationReason: string | undefined;
+    const attemptId = process.env.ASC_REVIEW_ATTEMPT_ID;
+    const prNumber = process.env.ASC_EVIDENCE_PR_NUMBER;
+    if (config.coordination.backend === 'github' && attemptId && prNumber) {
+      const policy = classifyCoreReview(root, { targetSha, baseRef: process.env.ASC_EVIDENCE_BASE_SHA }).policy;
+      if (!policy) throw new CliError('登録済みreview policyがありません');
+      const reviewsResponse = gh(
+        ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
+        root,
+      );
+      const commentsResponse = gh(
+        ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, '--paginate'],
+        root,
+      );
+      if (reviewsResponse.status !== 0 || commentsResponse.status !== 0) {
+        throw new CliError('最終round宣言の照合に必要なreview evidenceまたはIssueコメントを取得できません');
+      }
+      const resolution = resolveGithubFinalRoundDeclaration({
+        root,
+        issueId,
+        gateId,
+        currentAttemptId: attemptId,
+        reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
+        comments: parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout),
+        trustedActors: policy.execution.trusted_reviewer_actors,
+      });
+      // Issue #786: 宣言なし・事後追加・上書き・digest不一致は、コマンド失敗ではなく判定記録としての
+      // human_required へ収束させる。reviewer起動前に例外終了してgate-reportを1件も書かないと、
+      // 最終roundに到達しつつ宣言を作成できない入力（直前attemptがreject状態ではない等）で、
+      // approved・rejected・human_requiredのいずれにも到達しない停止状態が残る。
+      if (resolution.required && !resolution.declaration) {
+        unresolvedDeclarationReason = resolution.reason ?? '不明な不一致';
+      }
+      roundBudgetDeclaration = resolution.declaration;
+    }
 
     const scaffold: GateReport = {
       schema_version: 'agent-skill-chain/gate-report/v1',
@@ -837,11 +975,12 @@ export async function review(args: string[]): Promise<number> {
         target_sha: targetSha,
         conformance: 'pending',
         falsification: 'pending',
-        final: 'pending',
+        final: unresolvedDeclarationReason ? 'human_required' : 'pending',
         blockers: [],
         approved_digest: `sha256:${'0'.repeat(64)}`,
         approved_artifacts: [],
         light_review: lightReview,
+        ...(roundBudgetDeclaration ? { round_budget_declaration: roundBudgetDeclaration } : {}),
       },
     };
     const outcome = validateAgainstSchema('gate-report', scaffold, root);
@@ -849,11 +988,172 @@ export async function review(args: string[]): Promise<number> {
 
     const reportPath = reviewFilePath(root, number, gateId, config.coordination.backend);
     writeYamlFileAtomic(reportPath, scaffold);
+    if (unresolvedDeclarationReason) {
+      // 判定記録を残した上でreviewer起動へ進ませない。宣言が成立しない最終roundのreviewを
+      // そのまま実行すると、事前宣言のない打ち切り・降格が成立してしまう。
+      return fail(
+        `最終roundの事前宣言を検証できません: ${unresolvedDeclarationReason}\n` +
+          `gate_report_path: ${reportPath}\nfinal: human_required`,
+      );
+    }
 
     const reviewerCount = config.review[effectiveProfile].reviewer_count;
     return ok(
       `gate_report_path: ${reportPath}\nreviewer_count: ${reviewerCount}\nreview_profile: ${effectiveProfile}`,
     );
+  });
+}
+
+export async function declareFinalRound(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(DECLARE_FINAL_ROUND_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, gateId, prNumber] = args;
+    if (!issueIdRaw || !gateId || !prNumber) {
+      throw new CliError('issue_id, gate_id, pr_number はすべて必須です');
+    }
+    const { issueId, number } = parseIssueId(issueIdRaw);
+    validateGateId(gateId);
+    const root = repoRoot();
+    const config = loadConfig(root);
+    if (config.coordination.backend !== 'github') {
+      throw new CliError(
+        'ローカルモードでは耐久review evidenceからround値を解決できないため宣言を推測しません。通常差し戻しfallbackを維持し、この経路は差し戻し回数の有限性保証の対象外です',
+      );
+    }
+    const policy = classifyCoreReview(root, {}).policy;
+    if (!policy) throw new CliError('登録済みreview policyがありません');
+    const reviewsResponse = gh(
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
+      root,
+    );
+    const commentsResponse = gh(
+      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, '--paginate'],
+      root,
+    );
+    if (reviewsResponse.status !== 0 || commentsResponse.status !== 0) {
+      throw new CliError('既存review evidenceまたはIssueコメントを取得できません');
+    }
+    const reviews = parseGhList<GithubReviewRecord>(reviewsResponse.stdout);
+    const roundContext = deriveGateRoundContext({
+      reviews,
+      issueId,
+      gate: gateId,
+      currentAttemptId: 'attempt-round-budget-declaration-next',
+      trustedActors: policy.execution.trusted_reviewer_actors,
+      verifyAttempt: historicalGateAttemptVerifier({
+        root,
+        issueId,
+        gateId,
+        trustedActors: policy.execution.trusted_reviewer_actors,
+      }),
+    });
+    if (roundContext.status !== 'available') {
+      throw new CliError('round値を解決できないため最終round宣言を作成しません');
+    }
+    const finalRound = resolveGateRoundLimit(config.review.round_limit).cutoff_threshold;
+    if (roundContext.round !== finalRound || roundContext.history.length === 0) {
+      throw new CliError(`次回roundが解決済み最終roundではありません: next=${roundContext.round}, final=${finalRound}`);
+    }
+    const previous = roundContext.history.at(-1)!;
+    const rejected = previous.slots.some(
+      (slot) => slot.conformance === 'fail' || slot.falsification === 'fail' ||
+        slot.findings.some((finding) => finding.severity === 'blocking'),
+    );
+    if (!rejected) throw new CliError('直前attemptがreject状態ではないため最終round宣言を作成しません');
+    // Issue #786: 重複検査は解決側と同じ選択規則で対象gateの宣言だけを数える。
+    // Issue単位のコメント集合をgateで絞らずに数えると、別gateの宣言を重複と誤認して
+    // 当該gateの宣言を作成できなくし、そのgateのreview自体を停止させる。
+    const existing = selectRoundBudgetDeclarationComments({
+      comments: parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout),
+      issueId,
+      gate: gateId,
+      trustedActors: policy.execution.trusted_reviewer_actors,
+    });
+    if (existing.status === 'invalid') throw new CliError(existing.reason);
+    if (existing.matches.length > 0) {
+      throw new CliError('対象gateのround budget宣言は既に存在します。追加・上書きはできません');
+    }
+    const declaration = createRoundBudgetDeclaration({
+      issueId,
+      gate: gateId,
+      previousAttemptId: previous.attempt_id,
+      finalRound,
+    });
+    const posted = gh(['issue', 'comment', number, '--body', renderRoundBudgetDeclaration(declaration)], root);
+    if (posted.status !== 0) return fail(`round budget宣言の耐久化に失敗しました: ${posted.stderr.trim()}`);
+    return ok(posted.stdout.trim());
+  });
+}
+
+export async function classifyFinding(args: string[]): Promise<number> {
+  return guard(() => {
+    if (isHelp(args)) {
+      printUsage(CLASSIFY_FINDING_USAGE);
+      return 0;
+    }
+    const [issueIdRaw, gateId, prNumber, sourceReviewId, findingCode, followUpIssueRaw, downgradeReason] = args;
+    if (!issueIdRaw || !gateId || !prNumber || !sourceReviewId || !findingCode || !followUpIssueRaw || !downgradeReason?.trim()) {
+      throw new CliError('classify-findingの引数が不足しています');
+    }
+    const { issueId, number } = parseIssueId(issueIdRaw);
+    const { issueId: followUpIssueId, number: followUpNumber } = parseIssueId(followUpIssueRaw);
+    validateGateId(gateId);
+    const root = repoRoot();
+    const config = loadConfig(root);
+    if (config.coordination.backend !== 'github') {
+      throw new CliError('ローカルモードはgate-reportの同一finding.reclassificationへ記録してください');
+    }
+    const policy = classifyCoreReview(root, {}).policy;
+    if (!policy) throw new CliError('登録済みreview policyがありません');
+    const reviewsResponse = gh(
+      ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
+      root,
+    );
+    const commentsResponse = gh(
+      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, '--paginate'],
+      root,
+    );
+    const followUpResponse = gh(['issue', 'view', followUpNumber, '--json', 'number'], root);
+    if (reviewsResponse.status !== 0 || commentsResponse.status !== 0 || followUpResponse.status !== 0) {
+      throw new CliError('source review、既存分類記録、またはfollow-up Issueの永続化を確認できません');
+    }
+    const source = parseGhList<GithubReviewRecord>(reviewsResponse.stdout)
+      .find((review) => String(review.id) === sourceReviewId);
+    if (!source) throw new CliError(`source review ${sourceReviewId} がありません`);
+    const validated = validateGithubReviewEvidenceRecord(source, {
+      issueId,
+      gate: gateId,
+      trustedActors: policy.execution.trusted_reviewer_actors,
+    });
+    if (!validated.valid) throw new CliError(validated.reason);
+    const matches = validated.value.evidence.verdict.blockers.filter((finding) => finding.code === findingCode);
+    if (matches.length !== 1) throw new CliError(`source review内のfinding codeは1件だけ必要です: actual=${matches.length}`);
+    // Issue #786: 作成側の重複検査も解決側と同じ選択規則（marker・issue_id・gate・投稿者）を使う。
+    // 投稿者で絞らないと、第三者のコメント1件で trusted recorder の分類を作成不能にできる。
+    const existing = selectFindingClassificationComments({
+      comments: parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout),
+      issueId,
+      gate: gateId,
+      trustedActors: policy.execution.trusted_reviewer_actors,
+    });
+    if (existing.status === 'invalid') throw new CliError(existing.reason);
+    const duplicate = existing.matches.some(({ record }) =>
+      record.source_review_id === sourceReviewId && record.finding.code === findingCode);
+    if (duplicate) throw new CliError('同じsource findingの分類記録は既に存在し、追加・上書きできません');
+    const record = createFindingClassificationRecord({
+      issueId,
+      gate: gateId,
+      sourceReviewId,
+      sourceFinding: matches[0],
+      followUpIssueId,
+      downgradeReason,
+    });
+    const posted = gh(['issue', 'comment', number, '--body', renderFindingClassificationRecord(record)], root);
+    if (posted.status !== 0) return fail(`finding分類記録の耐久化に失敗しました: ${posted.stderr.trim()}`);
+    return ok(posted.stdout.trim());
   });
 }
 
@@ -1230,6 +1530,12 @@ export async function recordVerdict(args: string[]): Promise<number> {
     if (!SUBVERDICT_VALUES.has(conformance) || !SUBVERDICT_VALUES.has(falsification)) {
       return fail('verdict の conformance / falsification は pass|fail|pending のいずれかである必要があります');
     }
+    for (const finding of verdict.blockers ?? []) {
+      const reclassificationError = validateFindingReclassification(finding);
+      if (reclassificationError) {
+        return fail(`finding '${finding.code}' の再分類記録が不正です: ${reclassificationError}`);
+      }
+    }
 
     const approvedArtifactsByPath = new Map<string, string>();
     const quickAbsentArtifacts = new Set<string>();
@@ -1403,6 +1709,9 @@ export async function submitEvidence(args: string[]): Promise<number> {
     const lightReview = tryReadYamlFile<GateReport>(
       reviewFilePath(root, number, gateId, 'github'),
     )?.gate.light_review;
+    const roundBudgetDeclaration = tryReadYamlFile<GateReport>(
+      reviewFilePath(root, number, gateId, 'github'),
+    )?.gate.round_budget_declaration;
     // Issue #729: prompt digest は投稿側（launcher）が生成時に算出した実物を受け取る。
     // ラウンド文脈を含むプロンプトは recorder 側で再現できないため、ここで再計算しない。
     const promptInput = resolveReviewerPromptInput(root, number, gateId, targetSha, baseSha, lightReview ?? null);
@@ -1491,6 +1800,7 @@ export async function submitEvidence(args: string[]): Promise<number> {
       },
       prompt_digest: promptDigest,
       ...(lightReview ? { light_review: lightReview } : {}),
+      ...(roundBudgetDeclaration ? { round_budget_declaration: roundBudgetDeclaration } : {}),
       verdict,
     };
     const body = JSON.stringify({ body: renderReviewEvidence(evidence), event: 'COMMENT', commit_id: targetSha });
@@ -1522,6 +1832,7 @@ function buildVerifiedGateReport(options: {
   };
   commits: { author: { login: string | null } | null; committer: { login: string | null } | null }[];
   reviews: GithubReviewRecord[];
+  issueComments: RoundBudgetCommentRecord[];
 }): { report: GateReport; reason?: string } {
   const policy = classifyCoreReview(options.root, {
     targetSha: options.targetSha,
@@ -1586,8 +1897,34 @@ function buildVerifiedGateReport(options: {
       })
     : { status: 'unavailable' as const, reason: '当該 target SHA の attempt_id を解決できませんでした' };
   const roundLimit = resolveGateRoundLimit(loadConfig(options.root).review.round_limit);
+  const currentReviewStartedAt = currentAttemptId
+    ? options.reviews
+        .flatMap((review) => {
+          try {
+            return parseReviewEvidence(review.body)?.attempt_id === currentAttemptId && review.submitted_at
+              ? [review.submitted_at]
+              : [];
+          } catch {
+            return [];
+          }
+        })
+        .sort()[0]
+    : undefined;
+  const declarationResolution = currentAttemptId
+    ? resolveGithubFinalRoundDeclaration({
+        root: options.root,
+        issueId: options.issueId,
+        gateId: options.gateId,
+        currentAttemptId,
+        reviews: options.reviews,
+        comments: options.issueComments,
+        trustedActors: policy.policy.execution.trusted_reviewer_actors,
+        reviewStartedAt: currentReviewStartedAt,
+      })
+    : { required: false, roundContext };
   // Issue #751: 判定プロンプトのラウンド上限は target SHA の設定だけで決まる。ここで作業ツリー側の
   // roundLimit を渡すと、生成時と照合時で高ラウンド節の有無が食い違い prompt digest が一致しなくなる。
+  // Issue #786: 宣言attestationも実行時のgate-report読取りではなくtrusted再評価値から渡す。
   const promptInput = resolveReviewerPromptInput(
     options.root,
     options.issueNumber,
@@ -1596,6 +1933,8 @@ function buildVerifiedGateReport(options: {
     options.baseSha,
     expectedLightReview ?? null,
     roundContext,
+    undefined,
+    declarationResolution.declaration ?? null,
   );
   const artifacts = approvedArtifactsForPrompt(
     options.root,
@@ -1624,7 +1963,20 @@ function buildVerifiedGateReport(options: {
     ...(roundContext.status === 'available'
       ? { gateRound: { round: roundContext.round, cutoffThreshold: roundLimit.cutoff_threshold } }
       : {}),
+    ...(declarationResolution.declaration
+      ? { expectedRoundBudgetDeclaration: declarationResolution.declaration }
+      : {}),
+    // 分類recordは最終round宣言が成立している場合だけ severity 差し替えの入力になる。
+    // 判定値の上書きはせず、差し替え後のfinding集合を既存の集約規則が再計算する。
+    ...(declarationResolution.declaration && currentAttemptId
+      ? { findingClassifications: options.issueComments }
+      : {}),
   });
+  if (declarationResolution.required && !declarationResolution.declaration) {
+    result.final = 'human_required';
+    result.inconclusive = true;
+    result.reason = `最終roundの事前宣言を検証できません: ${declarationResolution.reason ?? '不明な不一致'}`;
+  }
   const report: GateReport = {
     schema_version: 'agent-skill-chain/gate-report/v1',
     gate: {
@@ -1639,6 +1991,13 @@ function buildVerifiedGateReport(options: {
       reviewers: result.reviewers,
       ...(result.review_attempt ? { review_attempt: result.review_attempt } : {}),
       ...(result.light_review ? { light_review: result.light_review } : {}),
+      ...(declarationResolution.declaration
+        ? { round_budget_declaration: declarationResolution.declaration }
+        : {}),
+      // 有効sub-verdictを判定へ用いた場合だけ、レビュアのraw値を同じ現行記録へ併記する。
+      ...(result.subverdict_reclassification
+        ? { subverdict_reclassification: result.subverdict_reclassification }
+        : {}),
     },
   };
   const validation = validateAgainstSchema('gate-report', report, options.root);
@@ -1665,6 +2024,7 @@ function buildVerifiedGateReportFromTrustedContext(
     pullRequest: context.pullRequest,
     commits: context.commits,
     reviews: context.reviews,
+    issueComments: context.issueComments,
   });
 }
 
@@ -1696,11 +2056,16 @@ export async function verifyEvidence(args: string[]): Promise<number> {
       ['api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`, '--paginate'],
       root,
     );
+    const commentsResponse = gh(
+      ['api', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`, '--paginate'],
+      root,
+    );
     if (
       prResponse.status !== 0 ||
       repositoryResponse.status !== 0 ||
       commitsResponse.status !== 0 ||
-      reviewsResponse.status !== 0
+      reviewsResponse.status !== 0 ||
+      commentsResponse.status !== 0
     ) {
       throw new CliError('GitHub PR/commit/review metadataを取得できません');
     }
@@ -1727,6 +2092,7 @@ export async function verifyEvidence(args: string[]): Promise<number> {
       pullRequest: pr,
       commits,
       reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
+      issueComments: parseGhList<RoundBudgetCommentRecord>(commentsResponse.stdout),
     });
     writeYamlFileAtomic(reportPath, verified.report);
     return ok(
@@ -2081,11 +2447,16 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
     );
     const issueNumber = parseIssueId(issueIdRaw).number;
     const issueResponse = gh(['api', `repos/{owner}/{repo}/issues/${issueNumber}`], root);
+    const issueCommentsResponse = gh(
+      ['api', `repos/{owner}/{repo}/issues/${issueNumber}/comments?per_page=100`, '--paginate'],
+      root,
+    );
     if (
       pullResponse.status !== 0 ||
       commitsResponse.status !== 0 ||
       reviewsResponse.status !== 0 ||
-      issueResponse.status !== 0
+      issueResponse.status !== 0 ||
+      issueCommentsResponse.status !== 0
     ) {
       throw new CliError('PR、Issue、commit、review evidenceのAPI正本を取得できません');
     }
@@ -2127,6 +2498,7 @@ export async function materializeCheckReport(args: string[]): Promise<number> {
       reviewSubject: labels.includes('review:core-audit') ? 'core_audit' : 'ordinary',
       commits: parseGhList<TrustedGateApiContext['commits'][number]>(commitsResponse.stdout),
       reviews: parseGhList<GithubReviewRecord>(reviewsResponse.stdout),
+      issueComments: parseGhList<RoundBudgetCommentRecord>(issueCommentsResponse.stdout),
     };
     const rebuiltResult = buildVerifiedGateReportFromTrustedContext(root, context);
     if (!rebuiltResult.report.gate.review_attempt) {
@@ -2424,6 +2796,8 @@ export interface ReviewerPromptInput {
   diff?: string;
   omittedAdditions: string[];
   lightReview?: Pick<LightReviewDecision, 'applied'>;
+  /** Issue #786: review開始前に照合済みの最終round事前宣言。round導出元としては使わない。 */
+  roundBudgetDeclaration?: DurableRoundBudgetDeclaration;
   roundContext: GateRoundContext;
   roundLimit: GateRoundLimit;
   /**
@@ -2450,6 +2824,9 @@ function resolveReviewerPromptInput(
   lightReview: Pick<LightReviewDecision, 'applied'> | null,
   roundContextOverride?: GateRoundContext,
   roundLimitOverride?: GateRoundLimit,
+  // Issue #786: 宣言attestationは呼び出し側のtrusted再評価値で渡す。null は「解決できなかった」、
+  // undefined は「呼び出し側が解決していない」を表し、後者だけ耐久記録から読む。
+  roundBudgetDeclarationOverride?: DurableRoundBudgetDeclaration | null,
 ): ReviewerPromptInput {
   // Issue #751: 判定プロンプトの入力は target SHA の blob と target SHA の設定だけで決まる。
   // 作業ツリー側の設定を読むと、同一引数の再生成がバイト列一致しなくなる。
@@ -2475,6 +2852,14 @@ function resolveReviewerPromptInput(
     acIds,
     alternativeAvailable: alternativeCriteria !== undefined,
   });
+
+  // Issue #786 / #751: 宣言attestationも判定対象 SHA に束縛した設定 blob 由来の backend で解決する。
+  // 作業ツリーの設定へ戻すと、同一引数での再生成が作業ツリーの状態次第で変わる。
+  const roundBudgetDeclaration = roundBudgetDeclarationOverride === undefined
+    ? tryReadYamlFile<GateReport>(
+        reviewFilePath(root, number, gateId, backend),
+      )?.gate.round_budget_declaration
+    : roundBudgetDeclarationOverride ?? undefined;
 
   const artifactNames = baseSha
     ? expectedArtifactPaths(root, gateId, baseSha, targetSha, true)
@@ -2542,6 +2927,7 @@ function resolveReviewerPromptInput(
     diff,
     omittedAdditions,
     ...(lightReview === null ? {} : { lightReview }),
+    ...(roundBudgetDeclaration ? { roundBudgetDeclaration } : {}),
     roundContext: roundContextOverride ?? {
       status: 'unavailable',
       reason: 'ラウンド情報が判定プロンプト生成へ渡されていません',
@@ -2570,6 +2956,7 @@ export function buildReviewerPrompt(
   lightReview: Pick<LightReviewDecision, 'applied'> | null,
   roundContextOverride?: GateRoundContext,
   roundLimitOverride?: GateRoundLimit,
+  roundBudgetDeclarationOverride?: DurableRoundBudgetDeclaration | null,
 ): string {
   return buildReviewerPromptFromResolved(
     resolveReviewerPromptInput(
@@ -2581,6 +2968,7 @@ export function buildReviewerPrompt(
       lightReview,
       roundContextOverride,
       roundLimitOverride,
+      roundBudgetDeclarationOverride,
     ),
   );
 }
@@ -2753,6 +3141,17 @@ export function buildReviewerPromptFromResolved(input: ReviewerPromptInput): str
       `- 現在のラウンド ${input.roundContext.round} は限定閾値 ${input.roundLimit.narrowing_threshold} 以上である。` +
         '目的阻害性・到達可能性・責務内是正可能性の 3 条件をすべて満たし、かつ実証性を満たす反例だけを blocking とする。',
       '- この限定でも 3 条件はいずれも取り除かない。実証性を満たさない反例は warning 以下として記録する。',
+    );
+  }
+  if (input.roundBudgetDeclaration) {
+    sections.push('## 最終round事前宣言attestation');
+    sections.push(
+      `- record_id: ${JSON.stringify(input.roundBudgetDeclaration.record_id)}`,
+      `- declared_at: ${JSON.stringify(input.roundBudgetDeclaration.declared_at)}`,
+      `- previous_attempt_id: ${JSON.stringify(input.roundBudgetDeclaration.previous_attempt_id)}`,
+      `- final_round: ${input.roundBudgetDeclaration.final_round}`,
+      `- declaration_digest: ${input.roundBudgetDeclaration.declaration_digest}`,
+      '- この宣言はround導出元ではなく、review開始前に照合済みの不変snapshotである。',
     );
   }
   sections.push('## 過去ラウンドの判定記録');

@@ -93,6 +93,8 @@ test('前文マーカーによる対象集合55本と既知の非対象集合が
     '.agent-skill-chain/scripts/cli-resolve.sh',
     '.agent-skill-chain/scripts/codex-hang-check.sh',
     '.agent-skill-chain/scripts/detect-changed-segments.sh',
+    '.agent-skill-chain/scripts/gate-classify-finding.sh',
+    '.agent-skill-chain/scripts/gate-declare-final-round.sh',
     '.agent-skill-chain/scripts/gate-local-review.sh',
     '.agent-skill-chain/scripts/skill-description-budget.sh',
   ]);
