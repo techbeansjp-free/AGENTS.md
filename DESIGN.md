@@ -1,77 +1,87 @@
-# DESIGN: Codex core review の reasoning effort を high に固定する
+# DESIGN: worker・core gate review の reasoning 上限を high に統一する
 
 - Issue: `ISSUE-814`
 - 対応する SPEC: `SPEC.md`
 
 ## 目的・対象・入出力
 
-Codex core review の必須 tuple を `gpt-5.6-sol / high / read-only` に一意化する。入力は登録済み project policy、core 判定、reviewer context、adapter 起動値、review evidence であり、出力は同じ tuple を証明した Strict review 2体の証跡、または不一致時の `human_required` である。Claude・human・通常 worker・non-core reviewer・固定 bootstrap 履歴は対象外とする。
+worker と gate reviewer の現行 runtime における reasoning effort の上限を `high` にし、core review は provider にかかわらず `high` を必須にする。入力は config、registered project policy、core 判定、reviewer context、adapter 起動値・runtime probe、review evidence である。出力は許可値で起動した worker、または Strict 独立 reviewer 2体の検証済み evidence、不一致時の設定エラーまたは `human_required` である。ADR と固定 bootstrap 証跡は歴史的入力ではなく不変の監査記録として変更対象から隔離する。
 
 ## 要件 → 設計要素の対応表
 
 | 要件 / AC-ID | 対応する設計要素 | 備考 |
 |---|---|---|
-| AC-1 | D1 policy 正本同期 | model、Strict、2体は維持し effort だけを `high` にする |
-| AC-2 | D2 tuple 伝播・照合境界 | context、adapter、recorder、verifier を同じ policy 値へ結線する |
-| AC-3 | D3 文書・fixture 同期 | 現行 core policy の旧期待値だけを更新する |
-| AC-4 | D4 非対象契約の回帰境界 | Claude、human、worker、non-core、bootstrap を不変にする |
-| AC-5 | D5 正負の拒否テスト | `high` を受理・記録し、core の `xhigh` を拒否する |
+| AC-1 | D1 共通 `high` policy | Strict・2体・read-only・fail-closed は維持する |
+| AC-2 | D2 Codex tuple 境界 | `gpt-5.6-sol / high / read-only` を完全一致で検証する |
+| AC-3 | D3 Claude runtime 証明境界 | runtime 固有 model/probe と evidence tier `high` を検証する |
+| AC-4 | D4 worker・non-core 許可値境界 | 許容集合を `medium | high` に閉じる |
+| AC-5 | D5 伝播・規範同期 | config から起動・evidence・生きた文書まで同期する |
+| AC-6 | D6 負例の fail-closed | 旧値を全入力境界で拒否する |
+| AC-7 | D7 歴史的証跡の隔離 | ADR/bootstrap を差分対象に含めない |
 
 ## 責務・境界
 
-### コンポーネント構成
+### D1 共通 `high` policy
 
-- D1 policy 正本同期: `.agent-skill-chain/project/manifest.yaml` の Codex `reasoning_effort` と `.agent-skill-chain/schemas/project-policy.schema.yaml` の const、`src/lib/model-selection.ts` の型を `high` に合わせる。新しい値域・fallback・互換フラグは作らない。
-- D2 tuple 伝播・照合境界: `src/commands/gate.ts` が reviewer context と recorder/verifier へ policy 値を渡し、`.agent-skill-chain/scripts/gate-launch-reviewer.sh` と `.agent-skill-chain/adapters/codex.sh` が `model_reasoning_effort="high"`、read-only sandbox、override attestation を照合する。`src/lib/review-evidence.ts` は記録値を protected policy と完全一致で検証する。これらの汎用処理は実測テストがハードコードを示した場合だけ変更する。
-- D3 文書・fixture 同期: `.agent-skill-chain/project/MODEL_TIER_TABLE.md` の Codex 行と、proposed の `docs/adr/ADR-0009-core-review-provider-capability-policy.md` にある Context/Decision の旧具体値を訂正する。新規 ADR は作らない。
-- D4 非対象契約の回帰境界: `frontier_coding / maximum_reasoning`、Strict、reviewer 2体、read-only、Claude capability probe、human の `human_required`、通常 worker の `xhigh` 値域、non-core の明示 `xhigh`、bootstrap ledger を保持する。
-- D5 テスト境界: policy/context/adapter/evidence の正負テストと、既存 Strict evidence fixture を現行 tuple に同期する。
+`.agent-skill-chain/project/manifest.yaml`、project-policy schema、`CoreReviewPolicy` 型のベンダー中立 reasoning tier を `high` にする。reviewer context は同値を launcher と evidence recorder へ渡す。Strict、reviewer count 2、`frontier_coding`、read-only、分類不能時の `human_required` は変えない。
+
+### D2 Codex tuple 境界
+
+Codex core policy は model `gpt-5.6-sol` と reasoning effort `high` を保持する。Codex adapter は policy 由来の model/effort、read-only sandbox、完全 command override attestation を起動前に完全一致で検査する。evidence verifier は reviewer の model、reasoning、capability tier、read-only を protected policy と照合し、いずれかの不一致を承認しない。
+
+### D3 Claude runtime 証明境界
+
+Claude adapter は実行環境が宣言する実在 model を公式 model 指定へ渡し、model tier attestation、reasoning tier `high` の attestation、実行環境固有 reasoning probe、無書込み tool を起動前に検証する。probe は選択 runtime で `high` が有効であることを証明し、単なる `maximum_reasoning` 文字列の一致を成功条件にしない。recorder は reviewer reasoning と capability reasoning tier を `high` と記録し、verifier は両方を照合する。Codex 固有 model/設定 key は Claude 経路へ渡さない。
+
+### D4 worker・non-core 許可値境界
+
+config schema と `ReasoningEffort` 型、worker CLI help/context の許容集合を `medium | high` にする。登録済み実装 role policy から実装者判断による `xhigh` 格上げ許可を削除する。Codex worker と non-core reviewer の環境上書きは schema 外の runtime 入力であるため、adapter 自身も `medium | high` の allowlist を起動前に検証する。現行 implementation worker の恒久値 `high`、reasoning 未指定時の既存 fallback は `high` 以下である限り維持する。
+
+### D5 伝播・規範同期
+
+project manifest/schema/type、config/schema/type、gate/worker context、launcher、Codex/Claude adapter、review recorder/verifier、`MODEL_TIER_TABLE.md`、登録済み implementation role policy、test fixture を同一契約へ同期する。値の別名、互換分岐、追加フラグは作らない。
+
+### D6 負例の fail-closed
+
+config と project policy の旧値は schema error、環境上書きの旧値は adapter の起動前検査失敗、Claude の旧 attestation/probe と旧 evidence は `human_required`、Codex の旧 effort/evidence は policy mismatch とする。拒否後に lower effort へ自動変換せず、worker/reviewer subprocess と gate success へ進ませない。
+
+### D7 歴史的証跡の隔離
+
+`docs/adr/` と bootstrap ledger・command・fixture は編集しない。静的検索は現行 runtime asset と歴史的 asset を別集合として評価し、後者の旧文字列を現行許可値と誤認しない。accepted ADR-0031/ADR-0079 は effort 値の変更を妨げず、旧値を記録する ADR-0009/ADR-0015 は proposed であるため、新規 superseding ADR は作らない。
 
 ### 依存関係
 
 ```mermaid
 graph LR
-  P[manifest + schema + type] --> C[reviewer context]
-  C --> A[launcher + Codex adapter]
+  P[config + project policy] --> C[worker/reviewer context]
+  C --> A[Codex/Claude adapter + probe]
   A --> R[review evidence recorder]
   P --> V[evidence verifier]
   R --> V
   V --> O[approved or human_required]
+  H[historical ADR/bootstrap] -. immutable audit record .-> O
 ```
 
-依存は policy から起動・記録・検証への一方向であり、adapter や evidence から policy を書き戻さないため循環しない。
+policy から選択・起動・記録・検証への一方向依存とし、adapter/evidence から policy を書き戻さない。歴史的証跡は現行値の解決には使わない。
 
 ### 図示要否の判断
 
 - 判断: `要`
-- 根拠: policy、context、adapter、recorder、verifier の5責務があり、同一 tuple の伝播と独立照合を図示する必要がある。
+- 根拠: worker と2 provider の起動境界、evidence 検証、歴史的証跡の隔離という複数責務の依存方向を明示する必要がある。
 
 ## テスト・fixture の同期範囲
 
-- policy/schema: `test/unit/model-selection.test.ts` と `test/integration/self-extension-policy.test.ts` で `high`、Strict、2体、Claude/human 不変を検証し、旧 `xhigh` manifest が schema 不適合になる反例を加える。
-- reviewer context: `test/integration/gate-judgment.test.ts` で `codex_required_reasoning_effort=high` を検証する。
-- adapter: `test/integration/gate-adapters.test.ts` で `gpt-5.6-sol/high/read-only` の attested 起動を成功させ、同 model/read-only でも `xhigh` は起動前に `human_required` とする。
-- evidence: `test/unit/review-evidence.test.ts` で Strict 2 slot の `high` 証跡を承認し、片方が `xhigh` なら policy mismatch で `human_required` とする。
-- core evidence fixture: `test/integration/gate-evidence.test.ts`、`test/integration/gate-round-budget-convergence.test.ts`、`test/integration/gate-gh-slurp-compat.test.ts` の core/Strict tuple を `high` にする。`test/integration/gate-submit-evidence-reachability.test.ts` の standard/non-core 明示 `xhigh` は回帰境界として残す。
-
-## 関連ADR
-
-```yaml
-related_adrs:
-  - id: ADR-0031
-    relation: references
-  - id: ADR-0079
-    relation: references
-```
-
-ADR-0031 が core 対象の Strict 優先を、ADR-0079 が Codex model と fail-closed 起動境界を確定しており、本設計はそれらを変更しない。ADR-0009 は proposed で、誤った具体値の訂正は既存判断の責務境界を変えないため、新規 ADR は不要である。
+- policy/config/schema/type: core capability が `high`、worker 許容値が `medium | high`、Strict 2体・Claude/human 契約が維持されることを検証する。旧値を持つ manifest/config は invalid とする。
+- context: worker context と core reviewer context が `high` を出力し、help に旧許容値を表示しないことを検証する。
+- Codex adapter: core の正しい tuple と通常 worker/reviewer の許可値を成功させ、各環境上書きの `xhigh` / `maximum_reasoning` は subprocess 起動前に失敗させる。
+- Claude adapter: runtime 固有 model、`high` attestation、成功 probe、read-only を成功させ、旧 tier、probe 不足・失敗、provider 不一致を `human_required` とする。
+- evidence: Strict 2 slot の Codex/Claude `high` evidence を承認し、reasoning または capability tier が旧値の evidence は `human_required` とする。
+- 静的回帰: 生きた runtime asset に旧許可値が残らず、ADR/bootstrap 集合に差分が無いことを path 限定検索と `git diff` で検証する。
 
 ## 障害・ロールバック考慮
 
-- 想定される失敗モード: policy/schema/型/文書/fixture の一部だけが旧値のまま残り、起動拒否、証跡拒否、または誤った承認が起きる。
-- ロールバック手順: 当該実装 checkpoint を一括 revert し、policy と全伝播先を旧 tuple に整合した状態へ戻す。値の混在した部分ロールバックはしない。
-- 影響を受ける既存機能: Codex core review の reasoning 値だけ。model、reviewer 数、独立性、read-only、attestation、fail-closed、他 adapter と通常 worker は影響を受けない。
+policy/schema/型/adapter/fixture の一部だけが旧値のままなら設定不適合、起動拒否、証跡拒否として顕在化させる。例外を追加せず最初にずれた正本または伝播先を修正する。ロールバックが必要なら実装 checkpoint 全体を一括で戻し、混在状態を残さない。歴史的 ADR/bootstrap は最初から変更しないためロールバック対象にも含めない。
 
 ## 完了条件・検証・未決事項
 
-全 AC の自動テスト、型検査、文書検査が成功し、現行 core policy を示す生きた asset に旧必須値が残らないことを完了条件とする。未決事項はない。
+AC-1〜AC-7 の正負テスト、型検査、文書・静的検査が成功し、現行 runtime asset の `xhigh` / `maximum_reasoning` が許可経路としてゼロ、歴史的 ADR/bootstrap の差分がゼロであることを完了条件とする。未決事項はない。
