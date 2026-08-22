@@ -8,7 +8,7 @@
 
 GitHub モードで Issue 本文または PR 本文を成果物内容の正本として使う設定では、各セグメントの成果物が remote push 済みの commit に存在するだけでなく、GitHub 本文の固定同期マーカー内からも確認できなければならない。現状は同期が `gate publish` に依存するため、ゲート未到達、中断、またはゲート発行経路の制約で停止した Issue では、commit 済みの要求・設計・実装計画が GitHub 上に存在しないように見える。
 
-本 Issue の目的は、各セグメントの checkpoint commit と remote push が成功した時点を成果物同期の契機に加え、ゲート発行前でも指定された GitHub 本文へ、その checkpoint の完全 SHA に固定した成果物内容を転記することである。checkpoint による耐久性の確保と GitHub 本文への転記は結果上独立させ、転記不能によって push 済み checkpoint を失敗扱いにしない。
+本 Issue の目的は、各セグメントの checkpoint commit と remote push が成功した時点を成果物同期の契機に加え、ゲート発行前でも指定された GitHub 本文へ、その checkpoint の完全 SHA に固定した成果物内容を転記することである。実装セグメントでコードとテストだけが変わり成果物文書が変わらない checkpoint も同期契機に含む。checkpoint による耐久性の確保と GitHub 本文への転記は結果上独立させ、転記不能によって push 済み checkpoint を失敗扱いにしない。
 
 関連する確定済み判断として、GitHub 本文の固定同期マーカー内に転記された成果物はゲートの判定軸へ読み戻してはならない。本仕様もこの境界を維持し、checkpoint 同期によってゲート状態を生成、承認、または変更しない。
 
@@ -19,6 +19,7 @@ GitHub モードで Issue 本文または PR 本文を成果物内容の正本�
 - 成果物: checkpoint SHA の Git tree に存在する `SPEC.md`、`DESIGN.md`、`PLAN.md`、`VALIDATION.md`。
 - 固定同期マーカー: 開始文字列 `<!-- agent-skill-chain:issue-sync:begin (do not edit manually) -->` と終了文字列 `<!-- agent-skill-chain:issue-sync:end -->` で囲む、agent-skill-chain が排他的に置換する区間。
 - 成果物 payload: 成果物の元文字列へ可逆なマーカー無害化を適用し、固定同期マーカー文字列を含まなくした掲載文字列。
+- 既存マーカー SHA: 対象本文の正常な固定同期マーカー区間に記録されている 40 桁完全 SHA。
 - 同期トリガー: 成功した checkpoint、または対象ゲート結果を発行する `gate publish`。
 - 対象本文: `issue_sync.target` が指定する `issue_body`、`pr_body`、または `both` のうち、対象 Issue または全ての関連 open PR を最終ページまで列挙した結果から一意に特定できる PR に実在する本文。
 - 同期失敗: GitHub API エラー、PR 検索のページ取得失敗・不完全性・不在・複数該当、競合の未解消、本文上限への安全な縮退不能などにより、対象本文の固定同期マーカーを更新できない状態。
@@ -36,7 +37,7 @@ GitHub モードで Issue 本文または PR 本文を成果物内容の正本�
 
 ### 出力
 
-- 有効条件を満たす場合、指定された各対象本文の固定同期マーカー内に、対象の完全 SHA と実在する成果物の全文を復元できる payload を含む同期結果。checkpoint 同期は対象 SHA を明示的に未判定とし、`gate publish` 同期は当該呼び出しが発行する現在の対象ゲート結果だけを含む。
+- 有効条件を満たす場合、指定された各対象本文に対する排他的な同期結果。`synced_full` の固定同期マーカー内は対象の完全 SHA と実在する全成果物の全文を復元できる payload を含む。`synced_fallback` の固定同期マーカー内は対象の 40 桁完全 SHA と、その SHA を指す当該 repository の Git commit への明示的なポインタだけを含み、成果物は復元できない。`sync_failed_no_write` は対象本文を一切変更しない。
 - 同期を完了できない場合、対象、理由、および同期対象の完全 SHA を識別できる警告。
 - 同期結果にかかわらず、commit と remote push が成功している checkpoint の成功結果と checkpoint SHA。
 
@@ -44,35 +45,36 @@ GitHub モードで Issue 本文または PR 本文を成果物内容の正本�
 
 ### 要求
 
-GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESIGN・PLAN・VALIDATION の作成または更新を含む各セグメントの checkpoint commit と push が成功した後、成功したゲートの発行を待たずに、指定された GitHub 本文へ成果物を同期する。同期は checkpoint SHA に固定された内容だけを用い、既存の競合保護、本文上限、マーカー外不変、対象選択、未作成成果物の除外、および `gate publish` 時の同期との互換性を維持する。
+GitHub モードかつ `issue_sync.enabled: true` の Issue では、成果物文書の変更有無にかかわらず各セグメントの checkpoint commit と push が成功した後、成功したゲートの発行を待たずに、指定された GitHub 本文へ成果物を同期する。実装セグメントでコードとテストだけが変わる checkpoint も対象とする。同期は checkpoint SHA に固定された内容だけを用い、既存の競合保護、本文上限、マーカー外不変、対象選択、未作成成果物の除外、および `gate publish` 時の同期との互換性を維持する。
 
 ### 要件
 
-- Coordination Backend が `github` であり、かつ `issue_sync.enabled` が `true` の場合だけ、成功した各セグメントの checkpoint push それぞれの後に、各 checkpoint の現在の成果物内容の同期を他の checkpoint と独立して best-effort で試行する。ローカルモードまたは明示的な無効化では GitHub 本文を変更しない。
+- Coordination Backend が `github` であり、かつ `issue_sync.enabled` が `true` の場合だけ、成功した各セグメントの checkpoint push それぞれの後に、成果物文書が変更されたか否かにかかわらず、各 checkpoint SHA に存在する成果物内容の同期を他の checkpoint と独立して best-effort で試行する。実装セグメントでコードとテストだけが変更され、`SPEC.md`、`DESIGN.md`、`PLAN.md`、`VALIDATION.md` のいずれも変更されない checkpoint も同期する。ローカルモードまたは明示的な無効化では GitHub 本文を変更しない。
 - 同期元は branch の作業コピーや移動し得る branch tip ではなく、remote push に成功した checkpoint SHA の Git tree とする。同期結果にはその完全 SHA を含める。
 - checkpoint SHA に存在する成果物だけを掲載し、存在する成果物はマーカー無害化以外の要約・抽出・改変をせず、復号により元文字列を完全に再現できる payload として全文を掲載する。後続セグメントの未作成成果物について、空の節、推測した内容、またはプレースホルダーを生成しない。
 - `issue_sync.target` の `issue_body`、`pr_body`、`both` を尊重する。PR 本文は、対象 Issue と対象 branch に関連する全ての open PR を API の最終ページまで網羅的に列挙し、該当 PR が 1 件だけと確定できる場合に限り更新する。0 件、2 件以上、ページ取得もしくは API の一部でも失敗、または列挙結果の完全性に曖昧さがある場合は、PR 対象だけを `sync_failed_no_write` として一切書き込まない。`both` の一方を解決または更新できなくても、他方の同期は独立して試行する。
 - 成果物 payload のマーカー無害化は、先に全ての `&` を `&amp;` へ置換し、次に成果物内の各開始・終了マーカー文字列の先頭 `<` だけを `&#60;` へ置換する。復号は、無害化された開始・終了マーカーを元の文字列へ戻した後、`&amp;` を `&` へ戻す逆順で行う。この変換により、元の `&amp;` や `&#60;` を含む成果物とも衝突せず、payload 内に固定同期マーカーと同一の文字列を残さない。
 - 対象本文内の固定同期マーカーが 0 個なら区間を追加する。開始・終了が各 1 個で開始が終了より前にある場合だけ既存区間を置換する。それ以外の個数または順序は境界不正として書き込まない。追加・置換のいずれもマーカー外の人間記述を文字列として不変に保ち、同期の反復でマーカー区間を増殖させない。
-- 書き込み直前の本文変更を compare-and-swap 相当で検知する。安全に解消できない競合では書き込まず、第三者の変更を保持して警告する。
-- 対象本文ごとに、全文ブロックを含む本文が `issue_sync.max_body_chars` 以下なら全文ブロックを書き込む。全文ブロックでは上限を超え、checkpoint SHA を含む縮退ブロックなら上限以下になる場合だけ縮退ブロックを書き込む。縮退ブロックでも上限を超える場合はマーカー外を変更せず、当該対象本文へ一切書き込まず、非致命の同期失敗を返す。3 状態は相互排他的であり、上限超過を理由にマーカー外を削除または切り詰めない。
+- checkpoint と `gate publish` の双方で、全文ブロックまたは縮退ブロックを対象本文へ書き込む直前ごとに、候補の対象 SHA と既存マーカー SHA を Git commit の ancestry で比較する。固定同期マーカーが存在しない場合、候補 SHA が既存マーカー SHA と同一の場合、または既存マーカー SHA が候補 SHA の祖先である場合だけ書き込み可能とする。候補 SHA が既存マーカー SHA の祖先である古い候補、または両 SHA が相互に祖先でない比較不能な候補は、当該対象だけを `sync_failed_no_write` として本文を一切変更しない。これにより、新しい同期済み本文を古い候補または別履歴の候補で巻き戻さない。`both` の他方は独立して鮮度を判定する。
+- ancestry 検査後かつ書き込み直前の本文変更を compare-and-swap 相当で検知する。安全に解消できない競合では当該候補を再取得した本文と既存マーカー SHA に対して再検査しない限り書き込まず、第三者の変更を保持して警告する。
+- 対象本文ごとに、対象の完全 SHA と可逆な全成果物 payload を含む全文ブロックを含めた本文が `issue_sync.max_body_chars` 以下なら `synced_full` として書き込む。全文込みは上限を超えるが、対象の 40 桁完全 SHA と `https://github.com/<owner>/<repository>/commit/<40桁完全SHA>` 形式で同じ SHA を指す Git commit ポインタだけを固定同期マーカー内に含む縮退ブロックなら上限以下になる場合だけ、`synced_fallback` として書き込む。縮退ブロックは成果物 payload、成果物本文、ゲート結果を含まず、成果物へ可逆ではない。縮退込みも上限を超える場合は `sync_failed_no_write` とし、更新 API を呼ばず対象本文を文字列として完全に不変に保つ。3 状態は相互排他的であり、`synced_full` だけが全成果物を可逆に復元でき、上限超過を理由にマーカー外を削除または切り詰めない。
 - checkpoint 同期は、自身の checkpoint SHA を同期対象として表示し、その SHA のゲート状態を明示的に未判定と表示する。過去または現在の Check Run、ゲート記録、一時記録から結果を推論、復元、または取得せず、他 Issue の履歴も走査しない。
 - checkpoint 同期は Check Run、ゲート承認、ゲート通過、または新たなゲート状態を生成・変更してはならない。転記内容を後続のゲート判定入力へ読み戻してはならない。
 - 同期失敗は警告として観測可能にするが、commit と remote push が成功した checkpoint の成功結果を失敗へ変更しない。複数対象の一部失敗も、成功可能な他方の更新を取り消さない。
 - `gate publish` は checkpoint 同期と同一の成果物 writer を使い、発行対象の完全 SHA と、その呼び出しで即時に利用できる現在の対象ゲート結果だけを同期する。他ゲートや過去の結果を推論、復元、または取得せず、checkpoint と同じ対象選択・固定マーカー保護・競合検知・上限処理を適用する。
 
-同期呼び出しの状態は排他的である。有効条件を満たさない呼び出し全体だけを `not_applicable` とし、この場合は対象別状態を生成しない。有効な呼び出しでは、設定上の各対象本文に `synced_full`、`synced_fallback`、`sync_failed_no_write` のいずれか一つだけを付与する。対象解決不能、境界不正、縮退不能、未解消競合、列挙の曖昧さ、ページ取得失敗、その他の API エラーは `sync_failed_no_write` であり、当該対象へ書き込まない。`both` では Issue 本文と PR 本文がそれぞれ独立に状態を取り、一方の結果を他方へ波及させない。
+同期呼び出しの状態は排他的である。有効条件を満たさない呼び出し全体だけを `not_applicable` とし、この場合は対象別状態を生成しない。有効な呼び出しでは、設定上の各対象本文に `synced_full`、`synced_fallback`、`sync_failed_no_write` のいずれか一つだけを付与する。`synced_full` は対象の完全 SHA と可逆な全成果物 payload を含む本文へ更新済み、`synced_fallback` は対象の完全 SHA とその Git commit への明示的なポインタだけを含む非可逆な本文へ更新済み、`sync_failed_no_write` は更新 API を呼ばず本文が同期呼び出し前と完全に同一、をそれぞれ意味する。対象解決不能、境界不正、縮退不能、古いまたは比較不能な候補 SHA、未解消競合、列挙の曖昧さ、ページ取得失敗、その他の API エラーは `sync_failed_no_write` であり、当該対象へ書き込まない。`both` では Issue 本文と PR 本文がそれぞれ独立に状態を取り、一方の結果を他方へ波及させない。
 
 ### 受入条件（Acceptance Criteria）
 
-#### AC-1: 有効条件を満たす checkpoint がゲート未到達でも同期される
+#### AC-1: 成果物文書が変わらない実装 checkpoint もゲート未到達で同期される
 
-- Given: Coordination Backend が GitHub、`issue_sync.enabled: true` であり、SPEC、DESIGN、PLAN、または VALIDATION の対象セグメント成果物を含む commit がまだゲートを通過していない
+- Given: Coordination Backend が GitHub、`issue_sync.enabled: true` であり、要求・設計・実装計画・検証の成果物 checkpoint、またはコードとテストだけが変更され `SPEC.md`、`DESIGN.md`、`PLAN.md`、`VALIDATION.md` のいずれも変更されない実装セグメントの checkpoint が、まだゲートを通過していない
 - When: checkpoint の commit と remote push が成功する
-- Then: `gate publish` を実行しなくても、設定された既存の対象本文の固定同期マーカー内へ checkpoint SHA とその SHA に存在する成果物が同期される
+- Then: `gate publish` を実行しなくても、成果物文書の差分有無にかかわらず、設定された既存の対象本文の固定同期マーカー内へ checkpoint SHA とその SHA に存在する成果物が同期される
 - 検証方法見込み: `automated`
 - verification.mode: `automated`
-- 想定証跡: ゲート未到達の SPEC、DESIGN、PLAN、VALIDATION 各 checkpoint を順に実行し、4 回それぞれの push 後の GitHub API 書き込み内容と完全 SHA を検査する統合テストログ
+- 想定証跡: ゲート未到達の SPEC、DESIGN、PLAN、VALIDATION 各 checkpoint に加え、直前の同期済み SHA からコードファイルとテストファイルだけを変更して全成果物文書の blob SHA が不変な実装セグメント checkpoint を順に実行し、5 回それぞれの push 後に GitHub 更新 API が呼ばれ、マーカー SHA が当該 checkpoint SHA へ進み、その Git tree に存在する成果物 payload が一致することを検査する統合テストログ
 
 #### AC-2: 無効条件では GitHub 本文を変更しない
 
@@ -123,10 +125,10 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 
 - Given: 同一のマーカー外本文に対して、全文ブロックを含む本文と checkpoint SHA 付き縮退ブロックを含む本文の生成後文字数が既知である
 - When: checkpoint 同期が対象本文を生成する
-- Then: 全文込みが上限以下なら `synced_full`、全文込みは上限超過だが縮退込みが上限以下なら `synced_fallback`、縮退込みも上限超過なら `sync_failed_no_write` の一つだけとなり、最後の状態では書き込まず、全状態でマーカー外の内容を変更しない
+- Then: 全文込みが上限以下なら、完全 SHA と可逆な全成果物 payload を含む `synced_full`、全文込みは上限超過だが縮退込みが上限以下なら、40 桁完全 SHA と同じ SHA の Git commit への明示的なポインタだけを含み成果物を復元できない `synced_fallback`、縮退込みも上限超過なら、更新 API を呼ばず本文全体が呼び出し前と同一の `sync_failed_no_write` の一つだけとなり、全状態でマーカー外の内容を変更しない
 - 検証方法見込み: `automated`
 - verification.mode: `automated`
-- 想定証跡: 全文が上限ちょうど、全文が 1 文字超過して縮退可能、マーカー外が縮退の最小領域も残さない場合について、結果状態、書込み有無、本文全体、checkpoint SHA 付き案内、および警告を検査する自動テストログ
+- 想定証跡: 全文が上限ちょうど、全文が 1 文字超過して縮退可能、マーカー外が縮退の最小領域も残さない場合について、状態が一つだけであること、`synced_full` の payload 復号が全成果物と一致すること、`synced_fallback` のマーカー内が 40 桁完全 SHA と同じ SHA を末尾に持つ commit URL だけで成果物 payload・成果物本文・ゲート結果を含まず復元不能であること、`sync_failed_no_write` では更新 API 呼び出しが 0 回で本文が byte-for-byte 不変であることを検査する自動テストログ
 
 #### AC-8: 成果物を可逆に無害化し未作成成果物を掲載しない
 
@@ -159,10 +161,19 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 
 - Given: checkpoint 同期後に同じ Issue のゲートが発行され、`issue_sync` が有効である
 - When: `gate publish` が実行される
-- Then: checkpoint と同一の成果物 writer が、発行対象の完全 SHA と当該呼び出しに直接渡された現在の対象ゲート結果だけで固定同期マーカーを更新し、他ゲートや過去の結果の推論・取得・復元、一時記録への縮退、他 Issue の履歴走査を行わず、target、可逆なマーカー無害化、境界検査、競合保護、マーカー外不変、排他的な本文上限状態、未作成成果物除外、および同期失敗の非致命性を checkpoint 同期と共有する
+- Then: checkpoint と同一の成果物 writer が、発行対象の完全 SHA と当該呼び出しに直接渡された現在の対象ゲート結果だけで固定同期マーカーを更新し、他ゲートや過去の結果の推論・取得・復元、一時記録への縮退、他 Issue の履歴走査を行わず、target、可逆なマーカー無害化、境界検査、書き込み前の ancestry による鮮度検査、競合保護、マーカー外不変、排他的な本文上限状態、未作成成果物除外、および同期失敗の非致命性を checkpoint 同期と共有する
 - 検証方法見込み: `automated`
 - verification.mode: `automated`
 - 想定証跡: 複数ゲートと過去結果を fixture に置き、各 `gate publish` に直接渡した 1 件の現在結果だけが表示されること、履歴 API 呼び出しが無いこと、および checkpoint と共有する writer 契約を検査する統合テストログ
+
+#### AC-12: checkpoint と gate publish の同期鮮度は単調に進む
+
+- Given: 対象本文の固定同期マーカーに既存マーカー SHA があり、checkpoint または `gate publish` の候補 SHA が同一 SHA、既存 SHA の子孫、既存 SHA の祖先、または既存 SHA と相互に祖先でない別履歴の SHA である
+- When: 全文ブロックまたは縮退ブロックの書き込みを試行する
+- Then: 各書き込みの直前に候補 SHA と既存マーカー SHA を ancestry で比較し、同一または子孫の候補だけを書き込み可能とし、古い祖先候補と比較不能な候補は当該対象だけが `sync_failed_no_write` となって更新 API を呼ばず、より新しい同期済み本文を巻き戻さない
+- 検証方法見込み: `automated`
+- verification.mode: `automated`
+- 想定証跡: checkpoint と `gate publish` の双方について、同一・子孫・祖先・別履歴の各候補を全文ブロックと縮退ブロックの両経路で実行し、全 write 試行前に ancestry 検査が呼ばれること、同一・子孫だけが更新されること、祖先・別履歴では対象別状態が `sync_failed_no_write`、更新 API 呼び出しが 0 回、本文が byte-for-byte 不変で既存マーカー SHA が維持されること、および `both` の他方は独立に更新可能であることを検査する統合テストログ
 
 ## 制約
 
@@ -174,8 +185,8 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 
 ## 完了条件・検証方法
 
-- AC-1 から AC-11 が自動テストに一意に対応し、SPEC、DESIGN、PLAN、VALIDATION の全 checkpoint を含む検証結果と実行ログが `VALIDATION.md` の同じ AC-ID の `verification.mode` と `evidence` に記録される。
-- checkpoint 単体の成功・失敗、各 checkpoint の独立した best-effort 同期、GitHub API を模擬する統合テスト、最終ページまでの PR 一意性検索、履歴参照の不在、checkpoint の未判定表示、`gate publish` の直接利用可能な現在結果だけの表示、既存 issue-sync 回帰テスト、および repository の常時必須検査が成功する。
+- AC-1 から AC-12 が自動テストに一意に対応し、SPEC、DESIGN、PLAN、VALIDATION の全 checkpoint と、コード・テストだけが変わり成果物文書が変わらない実装セグメント checkpoint を含む検証結果および実行ログが `VALIDATION.md` の同じ AC-ID の `verification.mode` と `evidence` に記録される。
+- checkpoint 単体の成功・失敗、成果物文書が不変な実装 checkpoint を含む各 checkpoint の独立した best-effort 同期、3 状態の排他性と厳密な本文内容、checkpoint と `gate publish` の全 write 前 ancestry 検査、古い・比較不能な候補による巻き戻しの不在、GitHub API を模擬する統合テスト、最終ページまでの PR 一意性検索、履歴参照の不在、checkpoint の未判定表示、`gate publish` の直接利用可能な現在結果だけの表示、既存 issue-sync 回帰テスト、および repository の常時必須検査が成功する。
 - spec checkpoint 前に、次の静的検査を foreground で完了し、すべて終了コード 0 を確認する。
   - `.agent-skill-chain/ci/verify-spec-bdd.sh SPEC.md`
   - `npm run build`
@@ -185,7 +196,7 @@ GitHub モードかつ `issue_sync.enabled: true` の Issue では、SPEC・DESI
 
 ## 未決事項
 
-なし。本仕様で対象条件、4 セグメントの同期契機、SHA の固定、最終ページまでの PR 一意性検索、マーカー無害化、境界不正時・競合時・上限超過時・同期失敗時の排他的な挙動、checkpoint の明示的な未判定表示、および `gate publish` の現在の対象ゲート結果だけの同期を確定する。
+なし。本仕様で対象条件、成果物文書が不変な実装 checkpoint を含む 4 セグメントの同期契機、SHA の固定、全 write 前の単調な ancestry 鮮度検査、最終ページまでの PR 一意性検索、マーカー無害化、境界不正時・競合時・上限超過時・同期失敗時の排他的な挙動、checkpoint の明示的な未判定表示、および `gate publish` の現在の対象ゲート結果だけの同期を確定する。
 
 ## スコープ外
 
