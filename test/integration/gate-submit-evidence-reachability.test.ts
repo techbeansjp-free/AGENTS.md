@@ -91,7 +91,7 @@ test('gate submit-evidence: recorderの前進を許容しつつ受理条件と�
     return runCli(
       [
         'gate', 'submit-evidence', 'ISSUE-703', 'spec', 'standard', targetSha, baseArg,
-        trustedBaseArg, '780', attemptId, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'xhigh',
+        trustedBaseArg, '780', attemptId, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'high',
         `sha256:${'7'.repeat(64)}`,
       ],
       {

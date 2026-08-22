@@ -28,10 +28,10 @@ test('model selection policy: manifestのCodex固定値とClaude能力証明契�
   assert.equal(policy.required_profile, 'strict');
   assert.deepEqual(policy.capability, {
     model_tier: 'frontier_coding',
-    reasoning_tier: 'maximum_reasoning',
+    reasoning_tier: 'high',
   });
   assert.equal(policy.adapters.codex.model, 'gpt-5.6-sol');
-  assert.equal(policy.adapters.codex.reasoning_effort, 'xhigh');
+  assert.equal(policy.adapters.codex.reasoning_effort, 'high');
   assert.equal(policy.adapters.claude.model_env, 'CLAUDE_CORE_REVIEW_MODEL');
   assert.deepEqual(policy.execution, {
     reviewer_location: 'local',

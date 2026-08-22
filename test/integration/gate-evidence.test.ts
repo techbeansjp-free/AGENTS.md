@@ -135,7 +135,7 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
   const directSubmit = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'high', promptDigest,
     ],
     { cwd: repo.dir, env, input: JSON.stringify(rawVerdict) },
   );
@@ -153,7 +153,7 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
   const wrongBase = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'high', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -170,7 +170,7 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
   const submitted = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'high', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -179,7 +179,7 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
   const replayedSlot = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+      attemptId, '2', 'review-integration-submit', '1', 'codex', 'gpt-5.6-sol', 'high', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -201,7 +201,7 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
   const submittedSlotTwo = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-      attemptId, '2', 'review-integration-submit-2', '2', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+      attemptId, '2', 'review-integration-submit-2', '2', 'codex', 'gpt-5.6-sol', 'high', promptDigest,
     ],
     { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
   );
@@ -268,7 +268,7 @@ test('GitHub evidence: Review API由来のStrict 2件と変更前形式の証跡
     const secondSubmitted = runCli(
       [
         'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'strict', targetSha, baseSha, baseSha, '274',
-        secondAttemptId, '2', runId, slot, 'codex', 'gpt-5.6-sol', 'xhigh', secondPromptDigest,
+        secondAttemptId, '2', runId, slot, 'codex', 'gpt-5.6-sol', 'high', secondPromptDigest,
       ],
       { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: JSON.stringify(rawVerdict) },
     );
@@ -540,7 +540,7 @@ test('GitHub evidence: implementation対象成果物が空集合でも投稿とg
   const submitted = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, baseSha, '742',
-      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'high', promptDigest,
     ],
     {
       cwd: repo.dir,
@@ -591,7 +591,7 @@ test('GitHub evidence: implementation対象成果物が空集合でも投稿とg
   const invalidSubmitted = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-733', 'implementation', 'standard', targetSha, baseSha, baseSha, '742',
-      invalidAttemptId, '1', invalidRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', promptDigest,
+      invalidAttemptId, '1', invalidRunId, '1', 'codex', 'gpt-5.6-sol', 'high', promptDigest,
     ],
     {
       cwd: repo.dir,
@@ -720,7 +720,7 @@ test('gate evidence: reviewer-prompt生成cloneと検証cloneのauto abbrev桁�
   const submitted = runCli(
     [
       'gate', 'submit-evidence', 'ISSUE-369', 'spec', 'standard', targetSha, baseSha, baseSha, '369',
-      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', generatedPromptDigest,
+      attemptId, '1', reviewerRunId, '1', 'codex', 'gpt-5.6-sol', 'high', generatedPromptDigest,
     ],
     {
       cwd: generationDir,
@@ -814,7 +814,7 @@ test('gate submit-evidence: レビュアCLI出力がMarkdownコードフェン�
     return runCli(
       [
         'gate', 'submit-evidence', 'ISSUE-271', 'spec', 'standard', targetSha, baseSha, baseSha, '275',
-        `attempt-${runId}`, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'xhigh', submittedPromptDigest,
+        `attempt-${runId}`, '1', runId, '1', 'codex', 'gpt-5.6-sol', 'high', submittedPromptDigest,
       ],
       { cwd: repo.dir, env: { ...env, ASC_LAUNCHER_TOKEN_FILE: tokenPath }, input: body },
     );

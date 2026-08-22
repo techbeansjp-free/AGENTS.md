@@ -94,7 +94,7 @@ properties:
             additionalProperties: false
             properties:
               model_tier: {const: frontier_coding}
-              reasoning_tier: {const: maximum_reasoning}
+              reasoning_tier: {const: high}
           triggers:
             type: object
             required: [github_label, local_state_value, exact_paths, path_prefixes]
@@ -123,7 +123,7 @@ properties:
                 additionalProperties: false
                 properties:
                   model: {const: gpt-5.6-sol}
-                  reasoning_effort: {const: xhigh}
+                  reasoning_effort: {const: high}
                   override_attestation_env: {const: CODEX_CORE_REVIEWER_ATTESTED}
               claude:
                 type: object

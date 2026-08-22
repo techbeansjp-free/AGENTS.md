@@ -47,10 +47,10 @@ function evidence(slot: 1 | 2, overrides: Partial<ReviewEvidence> = {}): ReviewE
       slot,
       adapter: 'codex',
       model: 'gpt-5.6-sol',
-      reasoning: 'xhigh',
+      reasoning: 'high',
       capability: {
         model_tier: 'frontier_coding',
-        reasoning_tier: 'maximum_reasoning',
+        reasoning_tier: 'high',
         read_only: true,
       },
     },
@@ -125,7 +125,7 @@ function verify(reviews: GithubReviewRecord[], overrides: Record<string, unknown
     expectedLauncherDigest: launcherDigest,
     coreReviewRequired: true,
     codexModel: 'gpt-5.6-sol',
-    codexReasoning: 'xhigh',
+    codexReasoning: 'high',
     ...overrides,
   });
 }
@@ -322,6 +322,24 @@ test('capability: core Codex model/reasoning不一致を拒否し、blocking ver
   const weak = evidence(1);
   weak.reviewer.model = 'other-model';
   assert.equal(verify([review(1, 1, { body: renderReviewEvidence(weak) }), review(2, 2)]).final, 'human_required');
+
+  const legacyEffort = evidence(1);
+  legacyEffort.reviewer.reasoning = 'xhigh';
+  const legacyResult = verify([
+    review(1, 1, { body: renderReviewEvidence(legacyEffort) }),
+    review(2, 2),
+  ]);
+  assert.equal(legacyResult.final, 'human_required');
+  assert.match(legacyResult.reason ?? '', /Codex model\/reasoningがpolicyと一致しません/);
+
+  const legacyCapability = evidence(1);
+  legacyCapability.reviewer.capability.reasoning_tier = 'maximum_reasoning';
+  const legacyCapabilityResult = verify([
+    review(1, 1, { body: renderReviewEvidence(legacyCapability) }),
+    review(2, 2),
+  ]);
+  assert.equal(legacyCapabilityResult.final, 'human_required');
+  assert.match(legacyCapabilityResult.reason ?? '', /コア必須能力を証明していません/);
 
   const blocked = evidence(2);
   blocked.verdict.falsification = 'fail';

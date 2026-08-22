@@ -10,7 +10,6 @@
 
 - 実装作業はClaude自身が直接編集するのではなく、**Codex CLI（`codex exec`）へ委譲する**。呼び出し経路（CLI操作環境が提供するコマンド、直接のシェル呼び出し等）は稼働環境に依存してよいが、規約として固定するのは「最終的に `codex exec` がreasoning effort `high`（既定）で起動されること」である。
 - reasoning effortは **`high`** を既定の最上位ティアとする。委譲時は `codex exec` の `model_reasoning_effort` に `high` を明示指定する。
-- **実装者（Codex）の判断による `xhigh` への格上げを許可する**。難度が高いと判断した場合、都度のユーザー承認なしに `xhigh` を使ってよい。
 
 ## 完了条件
 

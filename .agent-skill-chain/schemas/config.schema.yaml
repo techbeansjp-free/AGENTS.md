@@ -215,7 +215,7 @@ definitions:
     properties:
       adapter: {type: string, enum: [claude, codex, human]}
       model_tier: {type: string, enum: [highest_capability]}
-      reasoning_effort: {type: string, enum: [medium, high, xhigh]}
+      reasoning_effort: {type: string, enum: [medium, high]}
     if:
       anyOf:
         - required: [model_tier]

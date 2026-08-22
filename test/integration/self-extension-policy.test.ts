@@ -61,13 +61,31 @@ test('self-extension project policy: manifestで登録した実在文書だけ�
   });
   assert.deepEqual(modelSelection.core_review.capability, {
     model_tier: 'frontier_coding',
-    reasoning_tier: 'maximum_reasoning',
+    reasoning_tier: 'high',
   });
   assert.deepEqual(modelSelection.core_review.adapters.codex, {
     model: 'gpt-5.6-sol',
-    reasoning_effort: 'xhigh',
+    reasoning_effort: 'high',
     override_attestation_env: 'CODEX_CORE_REVIEWER_ATTESTED',
   });
+  const legacyManifest = structuredClone(manifest) as {
+    model_selection: { core_review: { adapters: { codex: { reasoning_effort: string } } } };
+  };
+  legacyManifest.model_selection.core_review.adapters.codex.reasoning_effort = 'xhigh';
+  assert.equal(
+    validateAgainstSchema('project-policy', legacyManifest, packageRoot).valid,
+    false,
+    '旧Codex core review effortはschemaが拒否すること',
+  );
+  const legacyCapability = structuredClone(manifest) as {
+    model_selection: { core_review: { capability: { reasoning_tier: string } } };
+  };
+  legacyCapability.model_selection.core_review.capability.reasoning_tier = 'maximum_reasoning';
+  assert.equal(
+    validateAgainstSchema('project-policy', legacyCapability, packageRoot).valid,
+    false,
+    '旧provider共通reasoning tierはschemaが拒否すること',
+  );
   assert.equal(modelSelection.core_review.adapters.claude.model_env, 'CLAUDE_CORE_REVIEW_MODEL');
   assert.doesNotMatch(
     fs.readFileSync(path.join(projectDir, 'MODEL_TIER_TABLE.md'), 'utf8'),
