@@ -57,6 +57,33 @@ _reviewer_auth_failure_message() {
   printf '%s\n' "隔離環境でCodexの認証が成立しません（CODEX_HOME/auth.jsonの認証情報が見つからないか、認証probeに失敗しました）。呼び出し元HOMEは利用できないため、隔離領域へ複製可能なauth.jsonを用意するかcodex loginを実行してください"
 }
 
+# Codex の起動列には性質の異なる2つのescape層がある。`-c key=value` の value は Codex 側で
+# TOML として解釈され、起動列全体は消費側の `/bin/bash -c` で shell として再解釈される。
+# 片方だけを適用すると、引用符・空白・バックスラッシュを含む値で TOML か argv のどちらかが壊れる。
+# Issue #744: 手書きのバックスラッシュを起動列へ残さず、両層を必ずこの2関数だけで通す。
+
+# 値を TOML basic string リテラルへ埋め込む（TOML層）。`\` と `"` を TOML の規則で escape する。
+_codex_toml_basic_string() {
+  local value="${1-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '"%s"' "$value"
+}
+
+# 引数列を `/bin/bash -c` が元の argv へ復元できる1本の文字列にする（shell層）。
+# 呼び出し側は素の値を渡すだけでよく、quote を手書きしない。
+_codex_shell_command() {
+  local out='' arg quoted
+  for arg in "$@"; do
+    printf -v quoted '%q' "$arg"
+    if [[ -n "$out" ]]; then
+      out+=' '
+    fi
+    out+="$quoted"
+  done
+  printf '%s' "$out"
+}
+
 # モデル決定順序（ISSUE-307 / ADR-0015、テスト用完全上書き CODEX_WORKER_CMD・WORKER_CMD は
 # launch_worker 側で最優先判定済み）:
 #   (1) アダプタ固有の個別上書き環境変数（CODEX_IMPLEMENTATION_MODEL / CODEX_HIGH_CAPABILITY_MODEL）
@@ -104,12 +131,12 @@ _codex_worker_effort() {
 # 引数: <issue_id> <gate_id> <profile> <gate_report_path> <target_sha>
 # env: CODEX_REVIEWER_CMD（テスト用完全上書き）、GATE_REVIEWER_CMD（後方互換上書き）、
 #      CODEX_EXECUTABLE（既定 codex。実行バイナリの明示指定）、
-#      CODEX_REVIEWER_MODEL（通常既定 gpt-5.6）、CODEX_REVIEWER_REASONING_EFFORT（通常既定 high）、
+#      CODEX_REVIEWER_MODEL（通常既定 gpt-5.6-sol）、CODEX_REVIEWER_REASONING_EFFORT（通常既定 high）、
 #      CODEX_CORE_REVIEWER_ATTESTED（コア時の完全command上書きがmodel/effort/read-onlyを満たす証明）。
 launch_gate_reviewer() {
   local report_path="${4:-}"
   local core_codex_review="${ASC_CORE_REVIEW_REQUIRED:-false}"
-  local model="${CODEX_REVIEWER_MODEL:-gpt-5.6}"
+  local model='' model_source='default'
   local effort="${CODEX_REVIEWER_REASONING_EFFORT:-high}"
   local reviewer_executable_cmd=''
 
@@ -120,6 +147,7 @@ launch_gate_reviewer() {
   }
 
   if [[ "$core_codex_review" == "true" ]]; then
+    model_source='core_policy'
     model="${CODEX_REVIEWER_MODEL:-${ASC_CODEX_REQUIRED_MODEL:-}}"
     effort="${CODEX_REVIEWER_REASONING_EFFORT:-${ASC_CODEX_REQUIRED_REASONING_EFFORT:-}}"
     if [[ -z "${ASC_CODEX_REQUIRED_MODEL:-}" || "$model" != "$ASC_CODEX_REQUIRED_MODEL" ]]; then
@@ -136,10 +164,16 @@ launch_gate_reviewer() {
         return
       fi
     fi
+  elif [[ -n "${CODEX_REVIEWER_MODEL:-}" ]]; then
+    model="$CODEX_REVIEWER_MODEL"
+    model_source='explicit'
+  else
+    model='gpt-5.6-sol'
   fi
+  ASC_CODEX_MODEL_SOURCE="$model_source"
   ASC_REVIEW_MODEL="$model"
   ASC_REVIEW_REASONING="$effort"
-  export ASC_REVIEW_MODEL ASC_REVIEW_REASONING
+  export ASC_CODEX_MODEL_SOURCE ASC_REVIEW_MODEL ASC_REVIEW_REASONING
 
   if [[ -z "${CODEX_REVIEWER_CMD:-}" && -z "${GATE_REVIEWER_CMD:-}" ]]; then
     local codex_executable="${CODEX_EXECUTABLE:-codex}"
@@ -149,7 +183,21 @@ launch_gate_reviewer() {
       _codex_fail_safe "$(_reviewer_launch_failure_message "$reviewer_executable_cmd" "$resolve_rc")"
       return
     fi
-    GATE_REVIEWER_CMD="$reviewer_executable_cmd exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check --color never -m \"$model\" -c \"model_reasoning_effort=\\\"$effort\\\"\" -c 'approval_policy=\"never\"' -c 'shell_environment_policy.inherit=\"none\"' -c 'shell_environment_policy.include_only=[\"PATH\"]' -c 'default_permissions=\"review\"' -c 'permissions.review.filesystem={\":workspace_roots\"={\".\"=\"read\"},\"/home\"=\"deny\",\"/Users\"=\"deny\",\"/root\"=\"deny\"}' -"
+    # reviewer_executable_cmd は _reviewer_resolve_executable_command が shell層まで組み立て済みの
+    # 起動列であり、再quoteすると1語の実行ファイル名に潰れる。以降の引数だけを両層へ通す。
+    local effort_config
+    effort_config="model_reasoning_effort=$(_codex_toml_basic_string "$effort")"
+    GATE_REVIEWER_CMD="$reviewer_executable_cmd $(_codex_shell_command \
+      exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules \
+      --skip-git-repo-check --color never \
+      -m "$model" \
+      -c "$effort_config" \
+      -c 'approval_policy="never"' \
+      -c 'shell_environment_policy.inherit="none"' \
+      -c 'shell_environment_policy.include_only=["PATH"]' \
+      -c 'default_permissions="review"' \
+      -c 'permissions.review.filesystem={":workspace_roots"={"."="read"},"/home"="deny","/Users"="deny","/root"="deny"}' \
+      -)"
   elif [[ -n "${CODEX_REVIEWER_CMD:-}" ]]; then
     GATE_REVIEWER_CMD="$CODEX_REVIEWER_CMD"
   fi
@@ -191,7 +239,7 @@ _codex_resolve_git_metadata_dir() {
 # 通常の作業ツリーでは両者が同じ実体パスになるので重複させない。push のネットワーク通信は許可するが、
 # HOME や一時ディレクトリ等を追加の書込み root にはしない。
 _codex_worker_sandbox_opts() {
-  local common_dir git_dir root toml quoted roots_toml=''
+  local common_dir git_dir root quoted roots_toml=''
   if ! common_dir="$(_codex_resolve_git_metadata_dir --git-common-dir '共有 git メタデータディレクトリ')"; then
     return 1
   fi
@@ -204,14 +252,12 @@ _codex_worker_sandbox_opts() {
     writable_roots+=("$git_dir")
   fi
   for root in "${writable_roots[@]}"; do
-    # TOML文字列リテラル層のescape（\ と "）と、bash -c で再解釈されるshell層のquote（%q）は
-    # 別物なので順に適用する。どちらか一方だけでは空白・記号を含むパスで壊れる。
-    toml="${root//\\/\\\\}"
-    toml="${toml//\"/\\\"}"
+    # TOML層のescapeとshell層のquoteは別物なので順に適用する。どちらか一方だけでは
+    # 空白・記号を含むパスで壊れる。TOML層は _codex_toml_basic_string に集約する。
     if [[ -n "$roots_toml" ]]; then
       roots_toml+=','
     fi
-    roots_toml+="\"$toml\""
+    roots_toml+="$(_codex_toml_basic_string "$root")"
   done
   printf -v quoted '%q' "sandbox_workspace_write.writable_roots=[$roots_toml]"
   printf '%s -c sandbox_workspace_write.network_access=true' "-c $quoted"
@@ -251,7 +297,9 @@ _worker_default_cmd() {
   fi
   printf -v quoted_executable '%q' "$codex_executable"
   printf -v quoted_model '%q' "$model"
-  printf -v quoted_effort_config '%q' "model_reasoning_effort=\"$effort\""
+  # launch_gate_reviewer と同じくTOML層→shell層の順に通す。effort は環境変数由来で
+  # 引用符・バックスラッシュを含みうるため、shell層のquoteだけではTOMLが壊れる。
+  printf -v quoted_effort_config '%q' "model_reasoning_effort=$(_codex_toml_basic_string "$effort")"
 
   # Issue #721: 構文検査の失敗経路を自動テストで再現するための検証時限定注入点。
   # 明示的なtest modeが無い正常運用時は、差し替え値だけを渡しても一切作用しない。
