@@ -18,4 +18,6 @@ GitHubエラーは秘密情報を伏字化し、日本語で行動可能な診�
 
 外部接続を要しないpolicy CLIはofflineで動作する。GitHub必須gateは接続障害時にpendingとし、local結果を失敗へ読み替えない。
 
+`pr create --dry-run`も`--apply`と同じtrusted Git policyとownership evidenceの事前判定を必須とする。dry-runはGitHub/`gh`を呼ばずpreviewまでに限定し、applyはその上で明示authorizationを必須とする。trusted authority不明時はどちらもfail-closedにする。
+
 PR CIで`origin/HEAD`がない場合も、workflowがGitHub eventから明示したbase SHAだけをauthorityとする。explicit modeのcandidateはmanifestと全inventoryを持つfragmented setに限定し、monolith、project directoryとの混在、orphan/missing fragmentをschema分岐前からfail-closedにする。初回bootstrapのproject set不在はtrusted commit側だけに認める。候補側の環境変数やcheckout中のfileをtrusted SHAの代替にせず、checkoutはbase commitとその全fragmentをGit objectから読める履歴を取得する。
