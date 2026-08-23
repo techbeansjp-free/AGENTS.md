@@ -96,6 +96,9 @@ When("source型契約を検証する", function () {
 Then("source型契約は失敗する", function () {
   assert.ok(this.sourceTypeErrors.length > 0);
 });
+Given("JSDoc型注釈を持つTypeScript sourceがある", function () {
+  this.forbiddenSource = "/** @" + "param {string} value */";
+});
 Given("repositoryのproject choiceを読み込む", function () {
   this.sourceQualityRoot = process.cwd();
 });

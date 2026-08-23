@@ -61,7 +61,6 @@ import { type ModeAnswer } from "./domain/mode.js";
 
 type Flags = Record<string, string | boolean>;
 
-/** @param {string[]} args */
 function parse(args: string[]): { flags: Flags; positionals: string[] } {
   const flags: Flags = {};
   const positionals: string[] = [];
@@ -77,7 +76,6 @@ function parse(args: string[]): { flags: Flags; positionals: string[] } {
   return { flags, positionals };
 }
 
-/** @param {Record<string, string|boolean>} flags @param {string} key */
 function required(flags: Flags, key: string): string {
   const value = flags[key];
   if (typeof value !== "string" || value === "")
@@ -85,7 +83,6 @@ function required(flags: Flags, key: string): string {
   return value;
 }
 
-/** @param {Record<string, string|boolean>} flags */
 function requiredExpectedRevision(flags: Flags): number {
   const raw = required(flags, "expected-revision");
   if (!/^\d+$/.test(raw))
@@ -93,7 +90,6 @@ function requiredExpectedRevision(flags: Flags): number {
   return Number(raw);
 }
 
-/** @param {'pending'|'rejected'} status @param {string} reason */
 function policyAuthorityFailure(
   status: "pending" | "rejected",
   reason: string,
@@ -122,16 +118,14 @@ function policyAuthorityFailure(
   });
 }
 
-/** @param {unknown} value */
 function print(value: unknown): void {
   process.stdout.write(`${JSON.stringify(sanitizeOutput(value), null, 2)}\n`);
 }
-/** @param {string} file */
 function readJson<T = unknown>(file: string): T {
   return parseJsonStrict(fs.readFileSync(file, "utf8"), file) as T;
 }
 
-/** Fragmented policy input is loaded as a complete inventory; legacy input remains a single policy object. @param {string} file */
+/** Fragmented policy input is loaded as a complete inventory; legacy input remains a single policy object. */
 function readPolicyInput(file: string): Policy | PolicySet {
   const value = readJson<Record<string, unknown>>(file);
   if (value.schemaVersion !== "agent-skill-chain/project-policy-manifest/v1")
@@ -153,7 +147,6 @@ function assembledPolicy(input: Policy | PolicySet): Policy {
   return isPolicySet(input) ? input.policy : input;
 }
 
-/** @param {unknown} value */
 function printableMigration(value: unknown): unknown {
   if (!isRecord(value) || !Array.isArray(value.artifacts)) return value;
   const artifacts = value.artifacts as unknown[];
@@ -167,7 +160,6 @@ function printableMigration(value: unknown): unknown {
   };
 }
 
-/** @param {Record<string, string|boolean>} flags */
 function applyMode(flags: Flags): boolean {
   if (flags.apply === true && flags["dry-run"] === true)
     throw new Error("--applyと--dry-runは同時に指定できません");
@@ -178,14 +170,13 @@ function applyMode(flags: Flags): boolean {
   return flags.apply === true;
 }
 
-/** Lifecycle operations are preview-only unless --apply is explicit. @param {Record<string, string|boolean>} flags */
+/** Lifecycle operations are preview-only unless --apply is explicit. */
 function lifecycleApplyMode(flags: Flags): boolean {
   if (flags.apply === true && flags["dry-run"] === true)
     throw new Error("--applyと--dry-runは同時に指定できません");
   return flags.apply === true;
 }
 
-/** @param {string} root */
 function defaultBranch(root: string): string {
   const symbolic = git(
     ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
@@ -197,7 +188,6 @@ function defaultBranch(root: string): string {
   throw new Error("既定ブランチが不明です。origin/HEADを設定してください");
 }
 
-/** @param {string[]} argv */
 export async function main(argv: string[]): Promise<number> {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
@@ -594,9 +584,7 @@ export async function main(argv: string[]): Promise<number> {
           status: "rejected",
           candidateSetHash: candidateSet.setHash,
           trustedSetHash: trustedSet.setHash,
-          errors: comparison.rejected.flatMap(
-            (/** @type {unknown} */ item) => item.reasons,
-          ),
+          errors: comparison.rejected.flatMap((item) => item.reasons),
         };
         print(
           serializeDiagnostic({
@@ -684,9 +672,7 @@ export async function main(argv: string[]): Promise<number> {
         trustedSetHash: trustedSet.setHash,
         trustedProvenance: trustedSet.provenance,
         stagedAdditions: comparison.stagedAdditions,
-        errors: comparison.rejected.flatMap(
-          (/** @type {unknown} */ item) => item.reasons,
-        ),
+        errors: comparison.rejected.flatMap((item) => item.reasons),
       };
       print(
         result.valid

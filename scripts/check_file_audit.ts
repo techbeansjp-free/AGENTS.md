@@ -3,9 +3,20 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { git } from "../src/lib/process.js";
 
-const AUDIT_PATH = "docs/reviews/02_課題834追加実装レビュー.md";
+const AUDIT_DIRECTORY = "docs/reviews";
+const AUDIT_NAME_PATTERN = /^\d+_課題834.*レビュー\.md$/u;
 
-/** @param {string} markdown */
+function latestAuditPath(root: string): string | undefined {
+  const directory = path.join(root, AUDIT_DIRECTORY);
+  if (!fs.existsSync(directory)) return undefined;
+  const name = fs
+    .readdirSync(directory)
+    .filter((entry) => AUDIT_NAME_PATTERN.test(entry))
+    .sort()
+    .at(-1);
+  return name ? `${AUDIT_DIRECTORY}/${name}` : undefined;
+}
+
 export function parseFileAudit(markdown: string) {
   const base = /\| 比較基点 \| `([a-f0-9]{40})` \|/iu.exec(markdown)?.[1];
   const implementation = /\| H_impl \| `([a-f0-9]{40})` \|/iu.exec(
@@ -40,12 +51,14 @@ export function parseFileAudit(markdown: string) {
   return { base, implementation, entries };
 }
 
-/** @param {string} root */
 export function checkFileAudit(root: string) {
   const errors: string[] = [];
-  const artifact = path.join(root, AUDIT_PATH);
+  const auditPath = latestAuditPath(root);
+  if (!auditPath)
+    return { valid: false, errors: ["課題834のreview artifactがありません"] };
+  const artifact = path.join(root, auditPath);
   if (!fs.existsSync(artifact))
-    return { valid: false, errors: [`${AUDIT_PATH}がありません`] };
+    return { valid: false, errors: [`${auditPath}がありません`] };
   const parsed = parseFileAudit(fs.readFileSync(artifact, "utf8"));
   if (!parsed.base || !parsed.implementation)
     return {
@@ -136,7 +149,7 @@ export function checkFileAudit(root: string) {
     .stdout.trim()
     .split(/\r?\n/u)
     .filter(Boolean);
-  if (finalPaths.length !== 1 || finalPaths[0] !== AUDIT_PATH)
+  if (finalPaths.length !== 1 || finalPaths[0] !== auditPath)
     errors.push(
       `H_impl..currentはreview artifactだけでなければなりません: ${finalPaths.join(",")}`,
     );
@@ -146,6 +159,7 @@ export function checkFileAudit(root: string) {
     base: parsed.base,
     implementation: parsed.implementation,
     current,
+    auditPath,
     auditedFiles: parsed.entries.length,
   };
 }

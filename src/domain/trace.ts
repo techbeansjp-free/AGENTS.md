@@ -105,8 +105,6 @@ export function validateDependencyGraph(
 /**
  * Validate project-adapter supplied scenario trace without owning its file format,
  * runner, display language, or directory convention.
- * @param {unknown} traceInput
- * @param {{layers?: string[]}} [options]
  */
 export function validateScenarioTrace(
   traceInput: unknown,

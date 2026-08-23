@@ -53,7 +53,6 @@ export interface MergeInput {
   mergeableVerified?: boolean;
 }
 
-/** @param {string} pattern @param {string} value */
 function branchMatches(pattern: string, value: string): boolean {
   const escaped = pattern
     .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
@@ -61,7 +60,6 @@ function branchMatches(pattern: string, value: string): boolean {
   return new RegExp(`^${escaped}$`).test(value);
 }
 
-/** @param {unknown} value @param {string} name */
 function requireStringArray(value: unknown, name: string): string[] {
   if (
     !Array.isArray(value) ||
@@ -80,7 +78,6 @@ function requireStringArray(value: unknown, name: string): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
-/** @param {unknown} evidence @param {string} headSha */
 function validateDeliveryEvidence(
   evidence: DeliveryEvidence,
   headSha: string,
@@ -129,7 +126,6 @@ function validateDeliveryEvidence(
   }
 }
 
-/** @param {{apply: boolean, authorization?: string, evidence: unknown, headSha: string, issue: number, head: string, base: string, repository: string, trustedPolicy?: unknown, candidatePolicy?: unknown}} input @param {(operation: string, input: unknown) => unknown} external */
 export function createPullRequest(
   input: PullRequestInput,
   external: (
@@ -254,10 +250,8 @@ export function createPullRequest(
   };
 }
 
-/** @param {{trustedPolicy: unknown, candidatePolicy?: unknown, method: string, checks?: string[], approvals?: Array<{state: string, commitSha: string, actorId: string, submittedAt: string, reviewId: string}>, headSha?: string, prAuthorActorId?: string, implementationAuthorActorId?: string, branch: string, repositoryVerified?: boolean, shaVerified?: boolean, protectionVerified?: boolean, mergeableVerified?: boolean}} input */
 export function authorizeMerge(input: MergeInput) {
   const policy = input.trustedPolicy?.merge;
-  /** @param {string} reason */
   const deny = (reason: string) => ({
     allowed: false,
     reason,

@@ -53,11 +53,9 @@ const REQUIRED_GUIDE_HEADINGS = [
   "## 正本",
 ];
 
-/** @param {string} root */
 function actualDirectories(root: string): string[] {
   const namespace = path.resolve(root, ".agent-skill-chain");
   if (!fs.existsSync(namespace)) return [];
-  /** @param {string} directory @returns {string[]} */
   const visit = (directory: string): string[] => {
     const relative = path.relative(root, directory).replaceAll(path.sep, "/");
     if (
@@ -83,7 +81,6 @@ function actualDirectories(root: string): string[] {
     .sort();
 }
 
-/** @param {string} directory @param {string} root */
 function entryFor(directory: string, root: string): string | undefined {
   if (ENTRY_DOCUMENTS.has(directory)) return ENTRY_DOCUMENTS.get(directory);
   if (
@@ -114,14 +111,12 @@ function entryFor(directory: string, root: string): string | undefined {
   return undefined;
 }
 
-/** @param {string} markdown */
 function localLinks(markdown: string): string[] {
   return [...markdown.matchAll(/\]\(([^)\s]+)(?:\s+['"][^'"]*['"])?\)/gu)]
     .map((match) => match[1])
     .filter((link) => !/^(?:https?:|mailto:|#)/u.test(link));
 }
 
-/** @param {string} root */
 export function checkDirectoryGuides(root = process.cwd()) {
   const errors: string[] = [];
   const directories = actualDirectories(root);

@@ -130,7 +130,6 @@ interface ReviewInput extends ImmutableReviewEvidence {
   findings?: Finding[];
 }
 
-/** @param {unknown} acceptance */
 function validRiskAcceptance(acceptance?: RiskAcceptance): boolean {
   return (
     acceptance?.authority === "human" &&
@@ -143,7 +142,6 @@ function validRiskAcceptance(acceptance?: RiskAcceptance): boolean {
   );
 }
 
-/** @param {unknown} value */
 function stringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
@@ -151,24 +149,20 @@ function stringArray(value: unknown): value is string[] {
   );
 }
 
-/** @param {unknown} value */
 function commitOid(value: unknown): value is string {
   return (
     typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value)
   );
 }
-/** @param {unknown} value */
 function sha256(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 }
-/** @param {unknown} value */
 function stableActorId(value: unknown): value is string {
   return (
     typeof value === "string" &&
     /^[A-Za-z0-9][A-Za-z0-9_.:=/-]{0,255}$/u.test(value)
   );
 }
-/** @param {unknown} value */
 function safeEvidencePath(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -177,7 +171,6 @@ function safeEvidencePath(value: unknown): value is string {
     !/[\\\u0000-\u001f\u007f]/u.test(value)
   );
 }
-/** @param {unknown} object @param {string[]} fields @param {string} label @param {string[]} errors */
 function exactFields(
   object: unknown,
   fields: string[],
@@ -196,7 +189,6 @@ function exactFields(
       errors.push(`${label}.${field}は未知fieldです`);
 }
 
-/** @param {unknown} review */
 function validateImmutableCandidateEvidence(
   review: ImmutableReviewEvidence,
 ): string[] {
@@ -383,7 +375,7 @@ function validateImmutableCandidateEvidence(
   return errors;
 }
 
-/** Build the domain evidence from already observed Git/GitHub metadata. @param {unknown} observation */
+/** Build the domain evidence from already observed Git/GitHub metadata. */
 export function buildReviewEvidence(observation: ReviewObservation) {
   const evidence = {
     candidateEvidence: {
@@ -411,7 +403,6 @@ export function buildReviewEvidence(observation: ReviewObservation) {
   };
 }
 
-/** @param {unknown} review */
 export function evaluateReview(review: ReviewInput) {
   if (!Number.isInteger(review.round) || review.round < 1 || review.round > 3)
     throw new Error("レビューのラウンドは1〜3で指定してください");

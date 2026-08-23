@@ -14,7 +14,6 @@ const SPEC_FILES = [
   "docs/specs/13_移行・廃止/00_移行方針.md",
 ];
 
-/** @param {string} root */
 export function checkCliContract(root = process.cwd()) {
   const errors = [];
   const metadataFile = path.resolve(root, "package.json");

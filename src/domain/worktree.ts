@@ -5,7 +5,6 @@ import { safeSlug } from "../lib/security.js";
 import { enforceTrustedBoundary } from "./enforcement.js";
 import { type Policy, type RuleObservation } from "../types.js";
 
-/** @param {string} remote */
 function githubRepository(remote: string): string | undefined {
   const match =
     /^(?:https:\/\/github\.com\/|git@github\.com:)([^/]+\/[^/]+?)(?:\.git)?$/.exec(
@@ -14,7 +13,7 @@ function githubRepository(remote: string): string | undefined {
   return match?.[1];
 }
 
-/** Resolve the nearest existing ancestor so a symlinked parent cannot disguise a missing destination. @param {string} target */
+/** Resolve the nearest existing ancestor so a symlinked parent cannot disguise a missing destination. */
 function canonicalDestination(target: string): string {
   let current = path.resolve(target);
   const missing: string[] = [];
@@ -37,7 +36,6 @@ function canonicalDestination(target: string): string {
   }
 }
 
-/** @param {string} target */
 function pathEntryExists(target: string): boolean {
   try {
     fs.lstatSync(target);
@@ -54,7 +52,6 @@ function pathEntryExists(target: string): boolean {
   }
 }
 
-/** @param {{repoRoot: string, worktreePath: string, branch: string, base: string, expectedRepository?: string, trustedPolicy?: unknown}} input */
 export function createWorktree(input: {
   repoRoot: string;
   worktreePath: string;
@@ -175,7 +172,6 @@ export function createWorktree(input: {
   };
 }
 
-/** @param {string} repoRoot @param {string} worktreePath @param {{repository: string, base: string, specConsistent: boolean|'unknown', testsPassed: boolean|'unknown', reviewApproved: boolean|'unknown', prMerged: boolean|'unknown'}} evidence */
 export function inspectFinalizeState(
   repoRoot: string,
   worktreePath: string,

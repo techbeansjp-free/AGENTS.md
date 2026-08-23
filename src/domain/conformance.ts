@@ -113,11 +113,9 @@ export function validateDevelopmentConsiderations(
   return validateDevelopmentConsiderationRecords(rows, label);
 }
 
-/** @param {unknown} value */
 function text(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
-/** @param {unknown} value */
 function strings(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
@@ -127,7 +125,6 @@ function strings(value: unknown): value is string[] {
   );
 }
 
-/** @param {unknown} contract */
 export function validateConformanceContract(contract: unknown) {
   const errors: string[] = [];
   if (!isRecord(contract))
@@ -185,7 +182,7 @@ export function validateConformanceContract(contract: unknown) {
   };
 }
 
-/** Keep shape validation separate so candidate data cannot trigger filesystem reads before its paths are proven safe. @param {unknown} binding */
+/** Keep shape validation separate so candidate data cannot trigger filesystem reads before its paths are proven safe. */
 export function validateProjectConformanceBinding(binding: unknown) {
   const errors: string[] = [];
   if (!isRecord(binding))
@@ -254,7 +251,7 @@ export function validateProjectConformanceBinding(binding: unknown) {
   return { valid: errors.length === 0, errors };
 }
 
-/** Strip non-executable text so a hook name mentioned only in a comment or literal cannot satisfy conformance. @param {string} source */
+/** Strip non-executable text so a hook name mentioned only in a comment or literal cannot satisfy conformance. */
 function executableSource(source: string): string {
   let result = "";
   let state = "code";
@@ -319,7 +316,6 @@ function executableSource(source: string): string {
   return result;
 }
 
-/** @param {string} file @param {string} name */
 function hasExport(file: string, name: string): boolean {
   const source = executableSource(fs.readFileSync(file, "utf8"));
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -347,7 +343,6 @@ function hasExport(file: string, name: string): boolean {
   return false;
 }
 
-/** @param {string} root @param {unknown} contract @param {unknown} binding @param {{tool?: string, passedScenarioIds?: string[]}} evidence */
 export function validateRepositoryConformance(
   root: string,
   contract: unknown,

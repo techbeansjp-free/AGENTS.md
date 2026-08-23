@@ -3,7 +3,6 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { validateDependencyGraph } from "../src/domain/trace.js";
 
-/** @param {string} directory @returns {string[]} */
 function typeScriptFiles(directory: string): string[] {
   if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -46,7 +45,6 @@ export function collectTypeScriptDependencyGraph(root: string) {
   return { nodes, edges };
 }
 
-/** @param {string} root */
 export function checkTypeScriptDependencyGraph(root: string) {
   const graph = collectTypeScriptDependencyGraph(root);
   return validateDependencyGraph(graph.nodes, graph.edges);

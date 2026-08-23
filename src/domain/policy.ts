@@ -35,7 +35,6 @@ const currentPolicyVersionLabel = policyVersionLabel(
 const compatiblePolicyVersionLabels =
   COMPATIBLE_POLICY_SCHEMA_VERSIONS.map(policyVersionLabel).join("、");
 
-/** @param {unknown} value @param {string[]} allowed @param {string} prefix @param {string[]} errors */
 function rejectUnknownKeys(
   value: unknown,
   allowed: string[],
@@ -50,7 +49,6 @@ function rejectUnknownKeys(
     if (!allowed.includes(key)) errors.push(`${prefix}.${key}は未知fieldです`);
 }
 
-/** @param {unknown} value @param {string} name @param {string[]} errors @param {{allowed?: string[], min?: number, max?: number}} [options] */
 function validateStringArray(
   value: unknown,
   name: string,
@@ -88,7 +86,6 @@ function hasConcreteDecisionText(value: unknown, minimum: number): boolean {
   );
 }
 
-/** @param {unknown} policy */
 export function validatePolicy(policy: unknown) {
   const errors: string[] = [];
   const candidate = isRecord(policy) ? policy : {};
@@ -464,7 +461,6 @@ function requireManifest(value: unknown): PolicyManifest {
   return value as PolicyManifest;
 }
 
-/** @param {unknown} manifest */
 export function validateProjectPolicyManifest(manifest: unknown) {
   const errors: string[] = [];
   rejectUnknownKeys(
@@ -606,7 +602,6 @@ export function validateProjectPolicyManifest(manifest: unknown) {
   return { valid: errors.length === 0, errors };
 }
 
-/** @param {unknown} manifest @param {string} manifestRaw @param {(relative: string) => {value: unknown, raw: string}} reader @param {string[]} inventory @param {Record<string, unknown>} [provenance] */
 function assemblePolicySet(
   manifest: PolicyManifest,
   manifestRaw: string,
@@ -704,7 +699,6 @@ function assemblePolicySet(
   };
 }
 
-/** @param {string} root */
 export function loadProjectPolicySet(root: string): PolicySet {
   const namespace = path.join(root, ".agent-skill-chain");
   const manifestFile = resolveContained(
@@ -794,7 +788,7 @@ export function loadProjectPolicySet(root: string): PolicySet {
   );
 }
 
-/** Read a project policy set from one fixed Git commit without assigning authority semantics. @param {string} root @param {string} ref */
+/** Read a project policy set from one fixed Git commit without assigning authority semantics. */
 export function loadProjectPolicySetAtCommit(
   root: string,
   ref: string,
@@ -878,7 +872,7 @@ export function loadProjectPolicySetAtCommit(
   );
 }
 
-/** Compatibility wrapper for callers that already resolved a trusted ref. @param {string} root @param {string} ref */
+/** Compatibility wrapper for callers that already resolved a trusted ref. */
 export function loadTrustedProjectPolicySet(
   root: string,
   ref: string,
@@ -886,13 +880,11 @@ export function loadTrustedProjectPolicySet(
   return loadProjectPolicySetAtCommit(root, ref);
 }
 
-/** @param {string} root @param {string} defaultBranch */
 export function loadTrustedPolicy(root: string, defaultBranch: string): Policy {
   const ref = `origin/${defaultBranch}`;
   return loadTrustedProjectPolicySet(root, ref).policy;
 }
 
-/** @param {string} root @param {string} defaultBranch */
 export function loadEffectiveTrustedPolicy(
   root: string,
   defaultBranch: string,
@@ -900,7 +892,6 @@ export function loadEffectiveTrustedPolicy(
   return loadEffectiveTrustedPolicySet(root, defaultBranch).policy;
 }
 
-/** @param {string} root @param {string} defaultBranch */
 export function loadEffectiveTrustedPolicySet(
   root: string,
   defaultBranch: string,
@@ -916,7 +907,7 @@ export function loadEffectiveTrustedPolicySet(
   return loadEffectiveTrustedPolicySetAtCommit(root, resolved.stdout.trim());
 }
 
-/** Assemble floor and project extension exclusively from an already resolved commit. @param {string} root @param {string} ref */
+/** Assemble floor and project extension exclusively from an already resolved commit. */
 function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
   const packageFloorFile = path.join(
     packageRoot,
@@ -999,7 +990,7 @@ function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
     );
   const setEntries = [
     ...baseEntries,
-    ...projectSet.setEntries.map((/** @type {string[]} */ entry) => [
+    ...projectSet.setEntries.map((entry): [string, string] => [
       `project/${entry[0]}`,
       entry[1],
     ]),
@@ -1027,7 +1018,7 @@ function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
   };
 }
 
-/** Resolve authority policy only from a fixed trusted commit and trusted provider observation. @param {string} root @param {{trustedCommit?: string, expectedBaseSha?: string, candidateHeadSha?: string, baseRef?: string, defaultBranch?: string, repository?: string, pr?: number, provider?: unknown}} [options] */
+/** Resolve authority policy only from a fixed trusted commit and trusted provider observation. */
 export function loadOperationPolicy(
   root: string,
   options: {
@@ -1191,14 +1182,13 @@ export function loadOperationPolicy(
   );
 }
 
-/** @param {string} root */
 export function loadConsumerPolicy(root: string): Policy | undefined {
   const file = path.join(root, ".agent-skill-chain", "project-policy.json");
   if (!fs.existsSync(file)) return undefined;
   return loadProjectPolicySet(root).policy;
 }
 
-/** Read an optional consumer policy from one fixed commit. @param {string} root @param {string} ref */
+/** Read an optional consumer policy from one fixed commit. */
 export function loadConsumerPolicyAtCommit(
   root: string,
   ref: string,

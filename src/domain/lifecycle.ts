@@ -12,7 +12,6 @@ const ROOT_ASSETS = ["AGENTS.md"];
 const NAMESPACE_ROOT_ASSETS = ["00_利用案内.md"];
 const NAMESPACE_ASSETS = ["docs", "skills", "templates", "schemas", "policy"];
 
-/** @param {string} relative */
 function isPackageOwnedPath(relative: string): boolean {
   const normalized = relative.replaceAll("\\", "/");
   return (
@@ -26,7 +25,6 @@ function isPackageOwnedPath(relative: string): boolean {
   );
 }
 
-/** @param {string} file */
 function digest(file: string): string {
   return crypto
     .createHash("sha256")
@@ -34,7 +32,6 @@ function digest(file: string): string {
     .digest("hex");
 }
 
-/** @param {string} directory @returns {string[]} */
 function walkFiles(directory: string): string[] {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const resolved = path.join(directory, entry.name);
@@ -46,7 +43,6 @@ function walkFiles(directory: string): string[] {
   });
 }
 
-/** @param {string} target */
 function mappings(target: string): Array<{ src: string; dest: string }> {
   const result = ROOT_ASSETS.map((name) => ({
     src: path.join(packageRoot, name),
@@ -71,7 +67,6 @@ function mappings(target: string): Array<{ src: string; dest: string }> {
   return result;
 }
 
-/** @param {string} target @param {{apply: boolean}} options */
 export function init(target: string, options: { apply: boolean }) {
   const assets = mappings(target);
   const conflicts = assets
@@ -102,7 +97,6 @@ export function init(target: string, options: { apply: boolean }) {
   return { applied: true, assets: Object.keys(record.files) };
 }
 
-/** @param {string} target @param {{apply: boolean}} options */
 export function upgrade(target: string, options: { apply: boolean }) {
   const recordPath = path.join(
     target,
@@ -146,7 +140,6 @@ export function upgrade(target: string, options: { apply: boolean }) {
   return { applied: true, retained };
 }
 
-/** @param {string} target @param {{apply: boolean}} options */
 export function uninstall(target: string, options: { apply: boolean }) {
   const recordPath = path.join(
     target,
@@ -186,7 +179,6 @@ export function uninstall(target: string, options: { apply: boolean }) {
   };
 }
 
-/** @param {string} target */
 export function doctor(target: string) {
   const legacy = [".agents", ".workflow"].filter((name) =>
     fs.existsSync(path.join(target, name)),

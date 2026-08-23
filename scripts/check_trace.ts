@@ -4,7 +4,6 @@ import { pathToFileURL } from "node:url";
 import { validateScenarioTrace } from "../src/domain/trace.js";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
 
-/** @param {string} directory @param {(file: string) => boolean} predicate @returns {string[]} */
 function walkFiles(
   directory: string,
   predicate: (file: string) => boolean,
@@ -46,7 +45,6 @@ const GHERKIN_DIALECTS: Record<Dialect, Grammar> = {
 /**
  * The adapter owns dialect parsing so the package validator can remain neutral
  * while each project makes its structural keyword choice explicit.
- * @param {string} text @param {'en'|'ja'} [dialect]
  */
 export function parseProjectGherkin(
   text: string,
@@ -78,7 +76,6 @@ export function parseProjectGherkin(
   return scenarios;
 }
 
-/** @param {string} root @param {string[]} layers @param {string[]} forbiddenSuffixes @param {'en'|'ja'} [dialect] */
 export function collectProjectTrace(
   root: string,
   layers: string[],
@@ -107,7 +104,6 @@ export function collectProjectTrace(
   };
 }
 
-/** @param {string} root */
 export function checkProjectTrace(root: string) {
   const choices = loadProjectPolicySet(root).policy.projectChoices;
   const layers = choices?.testLayers;

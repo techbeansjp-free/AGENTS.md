@@ -328,7 +328,7 @@ Then("生成した仕様file名は連番付き日本語である", function () {
     );
   assert.ok(files.length >= 30);
   assert.ok(
-    files.every((/** @type {string} */ name) =>
+    files.every((name) =>
       /^\d{2}_[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}].*\.md$/u.test(
         name,
       ),

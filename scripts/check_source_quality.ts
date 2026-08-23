@@ -31,6 +31,7 @@ const FORBIDDEN_TYPE_PATTERNS = [
   /\bas\s+any\b/u,
   /<\s*any\s*>/u,
   /@(?:param|returns?|type)\s*\{[^}\n]*\bany\b/u,
+  /@(?:param|returns?|type|typedef)\s*\{/u,
 ];
 const SOURCE_SHEBANG_PATTERN =
   /^#![^\n]*(?:\b(?:node|deno|bun|python\d*|sh|bash|zsh)\b)/u;

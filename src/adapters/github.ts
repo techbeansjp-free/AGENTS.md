@@ -102,7 +102,7 @@ export class GitHubProviderUnavailableError extends Error {
   }
 }
 
-/** Compare the immutable policy-authority observation tuple. @param {unknown} left @param {unknown} right */
+/** Compare the immutable policy-authority observation tuple. */
 export function samePolicyAuthorityObservation(
   left: PolicyAuthorityObservation,
   right: PolicyAuthorityObservation,
@@ -119,7 +119,6 @@ export function samePolicyAuthorityObservation(
   return keys.every((key) => left[key] === right[key]);
 }
 
-/** @param {string} repository @param {number} prNumber @param {string} cwd */
 function observePolicyAuthority(
   repository: string,
   prNumber: number,
@@ -222,7 +221,6 @@ function observePolicyAuthority(
   };
 }
 
-/** @param {string} repository @param {string} cwd @param {'read'|'write'} access */
 function verifyRepository(
   repository: string,
   cwd: string,
@@ -264,7 +262,6 @@ function verifyRepository(
 
 /**
  * The only GitHub CLI process boundary. Domain code and skills never invoke gh.
- * @param {string} operation @param {unknown} input @param {string} cwd
  */
 export function github(
   operation: "issue.sync",

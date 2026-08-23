@@ -72,7 +72,6 @@ function nonEmpty(value: unknown): value is string {
   );
 }
 
-/** @param {string} ruleId @param {string} purpose @param {string} risk @param {string[]} reasons @param {string[]} scope @param {string[]} checks @param {Array<{description: string, dryRunDiff: string}>} autoFixes @param {string} next @param {string} requiredAuthority @param {string} rollback */
 export function diagnostic(
   ruleId: string,
   purpose: string,
@@ -258,7 +257,6 @@ export function validateRule(rule: unknown) {
   return { valid: errors.length === 0, errors, diagnostic: remediation };
 }
 
-/** @param {unknown} rule @param {{violated: boolean, reasons?: string[], checks?: string[], autoFixes?: Array<{description: string, dryRunDiff: string}>}} input */
 export function evaluateRule(
   rule: Rule,
   input: {
@@ -330,7 +328,6 @@ export function evaluateRule(
   };
 }
 
-/** @param {unknown} policy */
 export function validateEnforcementPolicy(policy: unknown) {
   const errors: string[] = [];
   const diagnostics: Diagnostic[] = [];
@@ -359,7 +356,6 @@ export function validateEnforcementPolicy(policy: unknown) {
   return { valid: errors.length === 0, errors, diagnostics };
 }
 
-/** @param {unknown} trusted @param {unknown} candidate */
 export function compareTrustedPolicy(trusted: Policy, candidate: Policy) {
   const trustedRules = new Map(
     (trusted.rules ?? []).map((rule) => [rule.ruleId, rule]),
@@ -524,7 +520,6 @@ export function compareTrustedPolicy(trusted: Policy, candidate: Policy) {
   return { allowed: rejected.length === 0, rejected, stagedAdditions };
 }
 
-/** @param {unknown} rule @param {unknown} override @param {{ruleId: string, issue: number, scope: string, actor: string, sha: string, now: string}} expected */
 export function validateOverride(
   rule: Rule,
   override: OverrideRecord,
@@ -602,7 +597,6 @@ export function validateOverride(
   };
 }
 
-/** @param {Array<{id: string, requiresExternal: boolean}>} gates @param {{online: boolean}} environment */
 export function planOfflineGates(
   gates: Array<{ id: string; requiresExternal: boolean }>,
   environment: { online: boolean },
@@ -617,7 +611,6 @@ export function planOfflineGates(
   }));
 }
 
-/** @param {unknown} value @returns {unknown} */
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable);
   if (isRecord(value))
@@ -629,7 +622,6 @@ function stable(value: unknown): unknown {
   return value;
 }
 
-/** @param {unknown} input */
 export function evidenceFingerprint(input: unknown): string {
   return crypto
     .createHash("sha256")
@@ -637,7 +629,6 @@ export function evidenceFingerprint(input: unknown): string {
     .digest("hex");
 }
 
-/** @param {{kind: 'targeted'|'final', changedFiles: string[], risk: string[], evidence: unknown, successfulFingerprints?: string[], successfulEvidence?: Array<{fingerprint: string, passed: boolean, sha?: string, policyHash?: string, tool?: string, scope?: string[]}>}} input */
 export function planValidation(input: ValidationInput) {
   const evidenceErrors: string[] = [];
   if (!/^[a-f0-9]{40}$/i.test(input.evidence?.sha ?? ""))
@@ -749,7 +740,6 @@ export function planValidation(input: ValidationInput) {
   };
 }
 
-/** @param {Array<{kind: string, value?: number, secret?: string}>} events @param {{localFeedbackMs?: number, prGateMs?: number}} budgets */
 export function aggregateMetrics(
   events: Array<{ kind: string; value?: number; secret?: string }>,
   budgets: { localFeedbackMs?: number; prGateMs?: number } = {},
@@ -799,7 +789,6 @@ export function aggregateMetrics(
   return result;
 }
 
-/** @param {unknown} floor @param {unknown} project @param {{trusted?: boolean}} [options] */
 export function resolveEffectivePolicy(
   floor: Policy,
   project: Policy | undefined,
@@ -867,7 +856,6 @@ export function resolveEffectivePolicy(
   };
 }
 
-/** @param {{policy: unknown, ruleId: string, boundary: string, violated: boolean, reasons?: string[], checks?: string[], override?: unknown, expectedOverride?: unknown, online?: boolean, requiresExternal?: boolean, validation?: unknown, events?: unknown[]}} input */
 export function enforceOperation(input: {
   policy: Policy;
   ruleId: string;
@@ -994,7 +982,7 @@ export function enforceOperation(input: {
   };
 }
 
-/** Operation adapters must bind each independently derived observation to one exact trusted rule ID; cross-rule reuse would cross an authority boundary and make a missing observation fail open. @param {{policy: unknown, boundary: string, observations: Array<{ruleId: string, violated: boolean, reasons?: string[], checks?: string[]}>}} input */
+/** Operation adapters must bind each independently derived observation to one exact trusted rule ID; cross-rule reuse would cross an authority boundary and make a missing observation fail open. */
 export function enforceTrustedBoundary(input: {
   policy: Policy;
   boundary: string;
@@ -1072,7 +1060,6 @@ export function enforceTrustedBoundary(input: {
     : { allowed: true, boundary: input.boundary, results };
 }
 
-/** @param {unknown} trusted @param {unknown} candidate */
 export interface ConceptualMigrationState {
   state: string;
   fromVersion: string;
@@ -1153,7 +1140,6 @@ export function planMigration(
   return { ...base, planFingerprint };
 }
 
-/** @param {ReturnType<typeof planMigration>} plan @param {{approvedPlanHash?: string, expectedRevision?: number}} [authority] */
 export function applyMigration(
   plan: ConceptualMigrationState,
   authority: MigrationAuthority = {},
@@ -1180,7 +1166,6 @@ export function applyMigration(
   };
 }
 
-/** @param {ReturnType<typeof applyMigration>} state @param {{approvedPlanHash?: string, expectedRevision?: number}} [authority] */
 export function rollbackMigration(
   state: ConceptualMigrationState,
   authority: MigrationAuthority = {},
@@ -1202,7 +1187,6 @@ export function rollbackMigration(
   };
 }
 
-/** @param {ReturnType<typeof rollbackMigration>} state @param {unknown} trusted @param {unknown} candidate @param {{approvedPlanHash?: string, expectedRevision?: number}} [authority] */
 export function retryMigration(
   state: ConceptualMigrationState,
   trusted: Policy,
@@ -1231,7 +1215,6 @@ export function retryMigration(
   };
 }
 
-/** @param {unknown} state @param {unknown} trusted @param {unknown} candidate @param {number} revision @param {{approvedPlanHash?: string, expectedRevision?: number}} authority */
 function conceptualMigrationReasons(
   state: ConceptualMigrationState,
   trusted: Policy,
@@ -1283,7 +1266,6 @@ function conceptualMigrationReasons(
   return reasons;
 }
 
-/** @param {unknown} state @param {string[]} reasons */
 function conceptualRejected(
   state: ConceptualMigrationState,
   reasons: string[],
@@ -1310,7 +1292,6 @@ function conceptualRejected(
   };
 }
 
-/** @param {string[]} files @param {string[]} patterns */
 export function classifyPackageAssets(
   files: string[],
   patterns: string[] = [],
@@ -1328,7 +1309,6 @@ export function classifyPackageAssets(
   };
 }
 
-/** @param {string} file */
 function pathIsSensitive(file: string): boolean {
   const name = file.split("/").at(-1)?.toLowerCase() ?? "";
   const stem = name.replace(/\.[^.]+$/u, "");
@@ -1341,7 +1321,6 @@ function pathIsSensitive(file: string): boolean {
   );
 }
 
-/** @param {unknown} value @returns {boolean} */
 function structuredSecret(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(structuredSecret);
   if (!value || typeof value !== "object") return false;
@@ -1353,7 +1332,6 @@ function structuredSecret(value: unknown): boolean {
   );
 }
 
-/** @param {string} contents */
 function contentIsSensitive(contents: string): boolean {
   if (
     /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]{20,}-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/-]{8,}|\b[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@|["']?(?:token|password|secret|api[_-]?key|apiKey|databaseUrl|connectionString|privateKey)["']?\s*[=:]\s*(?:"[^"\r\n]{8,}"|'[^'\r\n]{8,}'|(?![/[{(])[A-Za-z0-9._+~-]{8,})/i.test(
@@ -1368,7 +1346,6 @@ function contentIsSensitive(contents: string): boolean {
   }
 }
 
-/** @param {string[]} files @param {string[]} allowed @param {Record<string, string>} [contents] */
 export function validatePackageManifest(
   files: string[],
   allowed: string[],
@@ -1419,7 +1396,6 @@ export function validatePackageManifest(
   };
 }
 
-/** @param {Array<{path: string, owner: string, targetLayer: 'package'|'project'|'spec'|'evidence', evidence?: string}>} assets @param {'local'|'pr'|'package'} stage */
 export function validateOwnershipBoundary(
   assets: Array<{
     path: string;

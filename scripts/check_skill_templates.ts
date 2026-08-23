@@ -110,11 +110,9 @@ const EXPECTED_OUTPUT_MARKERS = new Map<string, string>([
   ["step-11-pr", "waiting_for_human_review"],
 ]);
 
-/** @param {string[]} values */
 const uniqueSorted = (values: string[]): string[] =>
   [...new Set(values)].sort();
 
-/** @param {string} root */
 export function checkSkillTemplateContracts(root = process.cwd()) {
   const errors: string[] = [];
   const skillsRoot = path.resolve(root, ".agent-skill-chain/skills");

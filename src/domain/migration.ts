@@ -103,7 +103,6 @@ function hash(contents: string | null): string | null {
     : crypto.createHash("sha256").update(contents).digest("hex");
 }
 
-/** @param {unknown} value */
 function digest(value: unknown): string {
   return crypto.createHash("sha256").update(stableJson(value)).digest("hex");
 }
@@ -125,7 +124,6 @@ function fragmentedSet(input: PolicyInput): input is PolicySet {
   );
 }
 
-/** @param {string[]} reasons */
 function rejected(reasons: string[]): GateResult {
   return {
     state: "rejected",
@@ -183,7 +181,6 @@ function requireJournalPersistence(options: MigrationOptions): GateResult {
     : rejected(["call-siteのdurable journal persistが必要です"]);
 }
 
-/** @param {unknown} error */
 function simulatedCrash(error: unknown): boolean {
   return Boolean(
     error && typeof error === "object" && "simulatedCrash" in error,
@@ -212,7 +209,6 @@ function immutable(state: MigrationState) {
   };
 }
 
-/** @param {string} root @param {string} relative */
 function rejectSymlink(root: string, relative: string): void {
   let current = path.resolve(root);
   for (const part of relative.split("/")) {

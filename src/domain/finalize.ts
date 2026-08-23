@@ -26,7 +26,6 @@ interface FinalizeState {
   [key: string]: unknown;
 }
 
-/** @param {unknown} state */
 export function buildFinalizeReport(state: FinalizeState) {
   const reasons: string[] = [];
   if (
@@ -74,7 +73,6 @@ export function buildFinalizeReport(state: FinalizeState) {
   return { version: 1, safe: reasons.length === 0, reasons, snapshot, hash };
 }
 
-/** @param {{report: unknown, approvedHash: string, currentState: unknown, trustedPolicy: unknown}} input @param {(operation: string, payload: unknown) => void} destructive */
 export function applyFinalize(
   input: {
     report: ReturnType<typeof buildFinalizeReport>;

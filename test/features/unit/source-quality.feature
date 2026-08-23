@@ -30,3 +30,8 @@ Feature: project固有の型品質と汎用開発考慮事項
     Given project choiceを乖離させtestとconformanceをtrue、runnerを空、ESLintをoff、trusted jobをfalseへ変更したprojectがある
     When project品質bindingを検証する
     Then project choice乖離と品質scriptの自己緩和を拒否する
+
+  Scenario: SCN-UNIT-QUALITY-007 TypeScript sourceへJSDoc型注釈を残さない
+    Given JSDoc型注釈を持つTypeScript sourceがある
+    When source型契約を検証する
+    Then source型契約は失敗する
