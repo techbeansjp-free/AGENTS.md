@@ -8,11 +8,11 @@ import { createPullRequest, authorizeMerge } from './domain/delivery.js';
 import { createWorktree, inspectFinalizeState } from './domain/worktree.js';
 import { buildFinalizeReport, applyFinalize } from './domain/finalize.js';
 import { init, upgrade, uninstall, doctor } from './domain/lifecycle.js';
-import { loadEffectiveTrustedPolicySet, loadOperationPolicy, loadProjectPolicySet, validatePolicy } from './domain/policy.js';
+import { loadEffectiveTrustedPolicySet, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, validatePolicy } from './domain/policy.js';
 import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic } from './domain/enforcement.js';
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration } from './domain/migration.js';
 import { validateScenarioTrace } from './domain/trace.js';
-import { github } from './adapters/github.js';
+import { github, GitHubProviderUnavailableError, samePolicyAuthorityObservation } from './adapters/github.js';
 import { git } from './lib/process.js';
 import { writeFileAtomic } from './lib/atomic.js';
 import { validateRepositoryConformance } from './domain/conformance.js';
@@ -46,6 +46,11 @@ function requiredExpectedRevision(flags) {
   const raw = required(flags, 'expected-revision');
   if (!/^\d+$/.test(raw)) throw new Error('--expected-revisionは0以上の整数でなければなりません');
   return Number(raw);
+}
+
+/** @param {'pending'|'rejected'} status @param {string} reason */
+function policyAuthorityFailure(status, reason) {
+  return serializeDiagnostic({ allowed: false, status, diagnostic: { ruleId: status === 'pending' ? 'ASC-POLICY-PROVIDER-001' : 'ASC-POLICY-AUTHORITY-001', purpose: 'PR policy authorityをtrusted provider観測へ拘束する', risk: 'authority', reasons: [reason], scope: ['policy validate', 'pull_request'], checks: ['repository、PR、default/base/head tupleを検証した'], autoFixes: [], next: status === 'pending' ? 'local安全結果を保持し、provider接続後に同じ固定commitで再実行してください' : '入力とtrusted provider観測の不一致を修正して再実行してください', requiredAuthority: 'repository read', rollback: 'policy適用や外部状態変更を行わない' } });
 }
 
 /** @param {unknown} value */
@@ -192,14 +197,42 @@ export async function main(argv) {
   if (command === 'policy' && subcommand === 'validate') {
     const { flags, positionals } = parse(rest);
     const file = path.resolve(positionals[0] ?? required(flags, 'file'));
-    const parsed = readJson(file);
     const root = path.resolve(typeof flags.root === 'string' ? flags.root : path.join(path.dirname(file), '..'));
-    const explicitMode = flags['trusted-commit'] !== undefined || flags['expected-base-sha'] !== undefined;
-    const explicitTrusted = explicitMode ? { trustedCommit: required(flags, 'trusted-commit'), expectedBaseSha: required(flags, 'expected-base-sha') } : undefined;
-    if (explicitMode && parsed.schemaVersion !== 'agent-skill-chain/project-policy-manifest/v1') throw new Error('explicit trusted commitを使うCI validateはcandidateの完全なfragmented project policy setを必須とします');
+    const explicitKeys = ['trusted-commit', 'expected-base-sha', 'candidate-head-sha', 'base-ref', 'default-branch', 'repo', 'pr'];
+    const explicitMode = explicitKeys.some((key) => flags[key] !== undefined);
+    let explicitTrusted;
+    if (explicitMode) {
+      const trustedCommit = required(flags, 'trusted-commit'); const expectedBaseSha = required(flags, 'expected-base-sha'); const candidateHeadSha = required(flags, 'candidate-head-sha');
+      const baseRef = required(flags, 'base-ref'); const defaultBranch = required(flags, 'default-branch'); const repository = required(flags, 'repo'); const prRaw = required(flags, 'pr');
+      if (!/^[1-9]\d*$/u.test(prRaw)) throw new Error('--prは正のPR numberで指定してください');
+      const pr = Number(prRaw); let provider;
+      try { provider = github('policy.authority', { repository, pr }, root); }
+      catch (error) { if (error instanceof GitHubProviderUnavailableError) { print(policyAuthorityFailure('pending', error.message)); return 1; } throw error; }
+      explicitTrusted = { trustedCommit, expectedBaseSha, candidateHeadSha, baseRef, defaultBranch, repository, pr, provider };
+      const entrypoint = path.resolve(root, '.agent-skill-chain/project-policy.json');
+      if (file !== entrypoint) throw new Error('explicit PR validateのentrypointは.agent-skill-chain/project-policy.jsonに限定されます');
+      let trustedSet; let candidateSet;
+      try {
+        trustedSet = loadOperationPolicy(root, explicitTrusted);
+        candidateSet = loadProjectPolicySetAtCommit(root, candidateHeadSha);
+        if (candidateSet.manifest.schemaVersion !== 'agent-skill-chain/project-policy-manifest/v1') throw new Error('explicit trusted commitを使うCI validateはcandidate commitの完全なfragmented project policy setを必須とします');
+      } catch (error) { print(policyAuthorityFailure('rejected', error instanceof Error ? error.message : String(error))); return 1; }
+      const effective = resolveEffectivePolicy(trustedSet.policy, candidateSet.policy);
+      if (!effective.valid) { print(serializeDiagnostic({ allowed: false, candidateSetHash: candidateSet.setHash, trustedSetHash: trustedSet.setHash, diagnostic: effective.diagnostic })); return 1; }
+      const comparison = compareTrustedPolicy(trustedSet.policy, effective.policy);
+      if (!comparison.allowed) { const result = { valid: false, status: 'rejected', candidateSetHash: candidateSet.setHash, trustedSetHash: trustedSet.setHash, errors: comparison.rejected.flatMap((/** @type {any} */ item) => item.reasons) }; print(serializeDiagnostic({ ...result, diagnostic: comparison.rejected[0] })); return 1; }
+      let recheckedProvider;
+      try { recheckedProvider = github('policy.authority', { repository, pr }, root); }
+      catch (error) { print(policyAuthorityFailure('pending', error instanceof Error ? error.message : String(error))); return 1; }
+      if (!samePolicyAuthorityObservation(provider, recheckedProvider)) { print(policyAuthorityFailure('pending', 'provider authority tupleが検証中に変更されました')); return 1; }
+      const result = { valid: true, status: 'validated', candidateSetHash: candidateSet.setHash, candidateSemanticPolicyHash: candidateSet.semanticPolicyHash, candidateProvenance: candidateSet.provenance, trustedSetHash: trustedSet.setHash, trustedProvenance: trustedSet.provenance, stagedAdditions: comparison.stagedAdditions, errors: [] };
+      print(result.valid ? result : serializeDiagnostic({ ...result, diagnostic: comparison.rejected[0] }));
+      return result.valid ? 0 : 1;
+    }
+    const parsed = readJson(file);
     if (parsed.schemaVersion === 'agent-skill-chain/project-policy-manifest/v1') {
       const candidateSet = loadProjectPolicySet(root);
-      const trustedSet = loadOperationPolicy(root, explicitTrusted);
+      const trustedSet = loadOperationPolicy(root);
       const effective = resolveEffectivePolicy(trustedSet.policy, candidateSet.policy);
       if (!effective.valid) { print(serializeDiagnostic({ allowed: false, candidateSetHash: candidateSet.setHash, trustedSetHash: trustedSet.setHash, diagnostic: effective.diagnostic })); return 1; }
       const comparison = compareTrustedPolicy(trustedSet.policy, effective.policy);

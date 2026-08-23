@@ -113,7 +113,7 @@ Feature: policy拡張を段階移行して失敗から再実行する
   Scenario: SCN-INT-RISK-022 PR checkoutはorigin HEADがなくてもexplicit trusted base SHAを検証できる
     Given origin HEADのないPR checkoutとtrusted base commitとcandidate policy setがある
     When explicit trusted commitでpolicy validate CLIを実行する
-    Then base SHA一致だけ成功し欠落・不正・不一致はfail closedになる
+    Then default branchとprovider head commitに拘束したpolicyだけ成功しdirty filesystem・自己申告・非default・branch injectionはauthorityにならない
 
   Scenario: SCN-INT-RISK-023 review evidence CLIはGitとtrusted GitHub providerを実観測する
     Given H_impl後にPhase A review artifactだけをcommitした隔離repositoryがある

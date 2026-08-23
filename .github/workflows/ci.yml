@@ -6,6 +6,7 @@ on:
 # 検証だけを行い、リポジトリへの書き込み権限は与えない。
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   quality:
@@ -17,6 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Node.js実行環境を準備する
         uses: actions/setup-node@v4
         with:
@@ -31,7 +33,16 @@ jobs:
       - name: 型を検証する
         run: npm run typecheck
       - name: repository固有policyをdogfood検証する
-        run: node bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json --trusted-commit=${{ github.event.pull_request.base.sha }} --expected-base-sha=${{ github.event.pull_request.base.sha }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASC_TRUSTED_COMMIT: ${{ github.event.pull_request.base.sha }}
+          ASC_EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ASC_CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASC_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          ASC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ASC_REPOSITORY: ${{ github.repository }}
+          ASC_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json "--trusted-commit=$ASC_TRUSTED_COMMIT" "--expected-base-sha=$ASC_EXPECTED_BASE_SHA" "--candidate-head-sha=$ASC_CANDIDATE_HEAD_SHA" "--base-ref=$ASC_BASE_REF" "--default-branch=$ASC_DEFAULT_BRANCH" "--repo=$ASC_REPOSITORY" "--pr=$ASC_PR_NUMBER"
       - name: 構築対象とパッケージ資産を検証する
         run: npm run build
       - name: npm配布物への開発用ファイル混入を拒否する

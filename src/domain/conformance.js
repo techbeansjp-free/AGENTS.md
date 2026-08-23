@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { resolveContained } from '../lib/security.js';
 
 const IDS = Array.from({ length: 12 }, (_, index) => `I${index + 1}`);
@@ -51,6 +52,8 @@ export function validateProjectConformanceBinding(binding) {
     if (!strings(item.sourcePaths)) errors.push(`${item.id}.sourcePathsが不正です`);
     if (!strings(item.counterexampleScenarios) || item.counterexampleScenarios.some((/** @type {string} */ id) => !/^SCN-[A-Z0-9-]+$/.test(id))) errors.push(`${item.id}.counterexampleScenariosが不正です`);
     if (!Array.isArray(item.enforcement) || item.enforcement.length === 0) errors.push(`${item.id}.enforcementが必要です`);
+    const enforcementTuples = (item.enforcement ?? []).map((/** @type {any} */ point) => `${typeof point?.path === 'string' ? path.posix.normalize(point.path.normalize('NFC')) : ''}\u0000${point?.export ?? ''}`);
+    if (new Set(enforcementTuples).size !== enforcementTuples.length) errors.push(`${item.id}.enforcementのpath/export tupleが重複しています`);
     for (const point of item.enforcement ?? []) {
       if (!point || typeof point !== 'object' || Array.isArray(point)) { errors.push(`${item.id}.enforcement itemが不正です`); continue; }
       for (const key of Object.keys(point)) if (!['path', 'export'].includes(key)) errors.push(`${item.id}.enforcement.${key}は未知fieldです`);

@@ -6,7 +6,7 @@ import { Given, When, Then } from '@cucumber/cucumber';
 import { classifyMode, detectQuickDisqualifiers } from '../../src/domain/mode.js';
 import { safeSlug, resolveContained, redactSecrets } from '../../src/lib/security.js';
 import { evaluateReview } from '../../src/domain/review.js';
-import { validatePolicy } from '../../src/domain/policy.js';
+import { loadOperationPolicy, validatePolicy } from '../../src/domain/policy.js';
 import { parseGherkinScenarios, validateScenarioTrace } from '../../src/domain/trace.js';
 import * as traceDomain from '../../src/domain/trace.js';
 import { run } from '../../src/lib/process.js';
@@ -26,7 +26,7 @@ const reviewBase = () => ({
   externalEvidence: {
     provenance: { source: 'github', repository: 'o/r', prNumber: 835, runId: '32635972969', reviewId: '9001' },
     implementation: { repository: 'o/r', commitSha: H_IMPL, authorActorId: 'actor-implementer' },
-    pr: { repository: 'o/r', number: 835, headSha: H_FINAL, authorActorId: 'actor-implementer' },
+    pr: { repository: 'o/r', number: 835, headSha: H_FINAL, authorActorId: 'actor-pr-author' },
     ci: { repository: 'o/r', runId: '32635972969', event: 'pull_request', headSha: H_FINAL, conclusion: 'success', pullRequestNumbers: [835] },
     review: { repository: 'o/r', prNumber: 835, reviewId: '9001', commitSha: H_FINAL, actorId: 'actor-reviewer', submittedAt: '2026-08-23T12:00:00Z', verdict: 'approved' },
   },
@@ -35,6 +35,26 @@ const reviewBase = () => ({
   findings: [], tests: 'pass', specConsistency: 'pass',
 });
 const runtimeFiles = () => fs.readdirSync('src', { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => path.join(entry.parentPath, entry.name));
+
+Given('remote default branchから分岐したfeature commitがある', function () {
+  this.root = this.initRepo();
+  fs.mkdirSync(path.join(this.root, '.agent-skill-chain/policy'), { recursive: true });
+  fs.copyFileSync('.agent-skill-chain/policy/default.json', path.join(this.root, '.agent-skill-chain/policy/default.json'));
+  spawnSync('git', ['add', '.agent-skill-chain/policy/default.json'], { cwd: this.root });
+  spawnSync('git', ['commit', '-q', '-m', 'trusted default'], { cwd: this.root });
+  this.defaultSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: this.root, encoding: 'utf8' }).stdout.trim();
+  spawnSync('git', ['update-ref', 'refs/remotes/origin/main', this.defaultSha], { cwd: this.root });
+  fs.writeFileSync(path.join(this.root, 'feature.txt'), 'candidate only\n');
+  spawnSync('git', ['add', 'feature.txt'], { cwd: this.root });
+  spawnSync('git', ['commit', '-q', '-m', 'feature only'], { cwd: this.root });
+  this.featureSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: this.root, encoding: 'utf8' }).stdout.trim();
+});
+When('feature commitをtrusted commitとexpected base SHAの両方へ指定する', function () {
+  const candidateHeadSha = 'f'.repeat(40);
+  try { this.operationPolicy = loadOperationPolicy(this.root, { trustedCommit: this.featureSha, expectedBaseSha: this.featureSha, candidateHeadSha, baseRef: 'main', defaultBranch: 'main', repository: 'o/r', pr: 1, provider: { provenance: { source: 'github', repository: 'o/r', prNumber: 1 }, repository: 'o/r', prNumber: 1, baseRefName: 'main', defaultBranch: 'main', baseRefOid: this.featureSha, headRefOid: candidateHeadSha } }); }
+  catch (error) { this.operationPolicyError = error instanceof Error ? error.message : String(error); }
+});
+Then('explicit trusted authorityはremote default branchへ拘束されて拒否される', function () { assert.equal(this.operationPolicy, undefined); assert.match(this.operationPolicyError ?? '', /default|ancestor|base|trusted/u); });
 
 Given('Q-01〜Q-08がすべてtrueで、それぞれに根拠がある', function () { this.answers = validAnswers(); });
 Given('Q-04を{word}にする', function (state) {

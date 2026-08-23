@@ -116,6 +116,11 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
       | I11 |
       | I12 |
 
+  Scenario: SCN-UNIT-CONFORMANCE-002 canonical pathが同一のenforcement tupleを重複登録できない
+    Given canonical化するとpathとexportが重複するproject conformance bindingがある
+    When project conformance bindingを検証する
+    Then runtimeとschemaは重複tupleを拒否する
+
   Scenario: SCN-UNIT-RISK-017 canonical fingerprintは全安全契約とauthority choiceを拘束する
     Given trusted ruleのevidence remediation rollbackとauthority choiceをcandidateが変更する
     When trusted policyとcandidate policyを比較する

@@ -1,6 +1,35 @@
 import fs from 'node:fs';
 import { run } from '../lib/process.js';
 
+export class GitHubProviderUnavailableError extends Error {
+  /** @param {string} message */
+  constructor(message) { super(message); this.name = 'GitHubProviderUnavailableError'; this.code = 'ASC_GITHUB_PROVIDER_UNAVAILABLE'; }
+}
+
+/** Compare the immutable policy-authority observation tuple. @param {any} left @param {any} right */
+export function samePolicyAuthorityObservation(left, right) {
+  return ['repository', 'prNumber', 'defaultBranch', 'baseRefName', 'baseRefOid', 'headRefOid'].every((key) => left?.[key] === right?.[key]);
+}
+
+/** @param {string} repository @param {number} prNumber @param {string} cwd */
+function observePolicyAuthority(repository, prNumber, cwd) {
+  try { run('gh', ['auth', 'status'], cwd); } catch { throw new GitHubProviderUnavailableError('GitHub providerの認証状態を観測できません'); }
+  let observedRepository; let observedPr;
+  try {
+    observedRepository = JSON.parse(run('gh', ['repo', 'view', repository, '--json', 'nameWithOwner,viewerPermission,defaultBranchRef'], cwd).stdout);
+    observedPr = JSON.parse(run('gh', ['pr', 'view', String(prNumber), '--repo', repository, '--json', 'number,baseRefName,baseRefOid,headRefOid'], cwd).stdout);
+  } catch { throw new GitHubProviderUnavailableError('GitHub providerのrepositoryまたはPR観測を取得できません'); }
+  const complete = typeof observedRepository?.nameWithOwner === 'string' && typeof observedRepository?.viewerPermission === 'string' && typeof observedRepository?.defaultBranchRef?.name === 'string' && Number.isInteger(observedPr?.number) && typeof observedPr?.baseRefName === 'string' && /^[a-f0-9]{40}$/iu.test(observedPr?.baseRefOid ?? '') && /^[a-f0-9]{40}$/iu.test(observedPr?.headRefOid ?? '');
+  if (!complete) throw new GitHubProviderUnavailableError('GitHub providerのauthority観測が不完全です');
+  const levels = ['READ', 'TRIAGE', 'WRITE', 'MAINTAIN', 'ADMIN'];
+  if (levels.indexOf(observedRepository.viewerPermission) < 0) throw new Error('対象GitHubリポジトリの読み取り権限が不足しています');
+  return {
+    provenance: { source: 'github', repository, prNumber }, repository: observedRepository.nameWithOwner,
+    defaultBranch: observedRepository.defaultBranchRef.name, prNumber: observedPr.number,
+    baseRefName: observedPr.baseRefName, baseRefOid: observedPr.baseRefOid, headRefOid: observedPr.headRefOid,
+  };
+}
+
 /** @param {string} repository @param {string} cwd @param {'read'|'write'} access */
 function verifyRepository(repository, cwd, access) {
   run('gh', ['auth', 'status'], cwd);
@@ -58,6 +87,9 @@ export function github(operation, input, cwd) {
     const result = run('gh', ['pr', 'view', String(input.pr), '--repo', input.repository, '--json',
       'number,url,headRefName,baseRefName,headRefOid,baseRefOid,mergeStateStatus,reviewDecision,latestReviews,statusCheckRollup'], cwd);
     return JSON.parse(result.stdout);
+  }
+  if (operation === 'policy.authority') {
+    return observePolicyAuthority(input.repository, input.pr, cwd);
   }
   if (operation === 'review.evidence') {
     verifyRepository(input.repository, cwd, 'read');

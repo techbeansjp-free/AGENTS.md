@@ -136,6 +136,11 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Then policyはinvalidである
     And policy schema逸脱をすべて報告する
 
+  Scenario: SCN-UNIT-POLICY-005 feature commitをPR base SHAとして自己申告できない
+    Given remote default branchから分岐したfeature commitがある
+    When feature commitをtrusted commitとexpected base SHAの両方へ指定する
+    Then explicit trusted authorityはremote default branchへ拘束されて拒否される
+
   Scenario: SCN-UNIT-PACKAGE-001 Step 0〜11にそれぞれ1つのskill contractがある
     Given v0.3 package assetを走査する
     When skill contractを数える

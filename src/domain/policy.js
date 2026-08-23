@@ -163,18 +163,18 @@ export function loadProjectPolicySet(root) {
   }, inventory, { source: 'filesystem' });
 }
 
-/** @param {string} root @param {string} ref */
-export function loadTrustedProjectPolicySet(root, ref) {
+/** Read a project policy set from one fixed Git commit without assigning authority semantics. @param {string} root @param {string} ref */
+export function loadProjectPolicySetAtCommit(root, ref) {
   const resolved = git(['rev-parse', '--verify', `${ref}^{commit}`], root, { allowFailure: true });
-  if (resolved.status !== 0) throw new Error(`${ref}をtrusted commit SHAへ解決できません`);
+  if (resolved.status !== 0) throw new Error(`${ref}を固定Git commit SHAへ解決できません`);
   const commitSha = resolved.stdout.trim();
   /** @param {string} relative */
   const show = (relative) => {
     const full = `.agent-skill-chain/${relative}`;
     const mode = git(['ls-tree', commitSha, full], root, { allowFailure: true });
-    if (mode.status !== 0 || !mode.stdout.trim().startsWith('100644 blob ')) throw new Error(`${commitSha}のtrusted project fragmentが通常fileではありません: ${relative}`);
+    if (mode.status !== 0 || !mode.stdout.trim().startsWith('100644 blob ')) throw new Error(`${commitSha}のproject fragmentが通常fileではありません: ${relative}`);
     const result = git(['show', `${commitSha}:${full}`], root, { allowFailure: true });
-    if (result.status !== 0) throw new Error(`${commitSha}のtrusted project fragmentを読めません: ${relative}`);
+    if (result.status !== 0) throw new Error(`${commitSha}のproject fragmentを読めません: ${relative}`);
     return { value: parseJsonStrict(result.stdout, `${commitSha}:${full}`), raw: result.stdout };
   };
   const manifestResult = show('project-policy.json');
@@ -189,6 +189,11 @@ export function loadTrustedProjectPolicySet(root, ref) {
   for (const line of treeLines) if (!line.startsWith('100644 blob ')) throw new Error(`project inventoryにsymlink、gitlink、実行fileがあります: ${line}`);
   const inventory = treeLines.map((line) => line.slice(line.indexOf('\t') + 1).replace(/^\.agent-skill-chain\//, ''));
   return assemblePolicySet(manifest, manifestResult.raw, show, inventory, { source: 'git', commitSha });
+}
+
+/** Compatibility wrapper for callers that already resolved a trusted ref. @param {string} root @param {string} ref */
+export function loadTrustedProjectPolicySet(root, ref) {
+  return loadProjectPolicySetAtCommit(root, ref);
 }
 
 /** @param {string} root @param {string} defaultBranch */
@@ -240,14 +245,32 @@ function loadEffectiveTrustedPolicySetAtCommit(root, ref) {
   return { ...projectSet, policy: effective.policy, setHash, hash: setHash, setEntries, semanticPolicyHash: crypto.createHash('sha256').update(stableJson(effective.policy)).digest('hex'), provenance: { ...projectSet.provenance, floorCommitSha: ref } };
 }
 
-/** Resolve authority policy only from a fixed trusted commit. Explicit PR authority requires caller-provided base binding. @param {string} root @param {{trustedCommit?: string, expectedBaseSha?: string}} [options] */
+/** Resolve authority policy only from a fixed trusted commit and trusted provider observation. @param {string} root @param {{trustedCommit?: string, expectedBaseSha?: string, candidateHeadSha?: string, baseRef?: string, defaultBranch?: string, repository?: string, pr?: number, provider?: any}} [options] */
 export function loadOperationPolicy(root, options = {}) {
-  if (options.trustedCommit !== undefined || options.expectedBaseSha !== undefined) {
+  if (Object.keys(options).length > 0) {
     if (!/^[a-f0-9]{40}$/iu.test(options.trustedCommit ?? '') || !/^[a-f0-9]{40}$/iu.test(options.expectedBaseSha ?? '')) throw new Error('explicit trusted commitとexpected base SHAはどちらも40桁SHAで必要です');
     const trustedCommit = /** @type {string} */ (options.trustedCommit); const expectedBaseSha = /** @type {string} */ (options.expectedBaseSha);
     if (trustedCommit.toLowerCase() !== expectedBaseSha.toLowerCase()) throw new Error('explicit trusted commitがGitHub PR expected base SHAと一致しません');
+    if (!/^[a-f0-9]{40}$/iu.test(options.candidateHeadSha ?? '') || options.candidateHeadSha?.toLowerCase() === trustedCommit.toLowerCase()) throw new Error('candidate head SHAはtrusted baseと異なる40桁SHAで必要です');
+    if (typeof options.baseRef !== 'string' || options.baseRef.length === 0 || typeof options.defaultBranch !== 'string' || options.defaultBranch.length === 0) throw new Error('PR base refとrepository default branchは空でないbranch名で必要です');
+    if (options.baseRef !== options.defaultBranch) throw new Error('非default branchをbaseとするPRはtrusted authorityとして使用できません');
+    const defaultBranch = /** @type {string} */ (options.defaultBranch);
+    const checkedBranch = git(['check-ref-format', '--branch', defaultBranch], root, { allowFailure: true });
+    if (checkedBranch.status !== 0 || checkedBranch.stdout.trim() !== defaultBranch) throw new Error('repository default branchは有効なGit branch名で必要です');
+    const provider = options.provider;
+    if (provider?.provenance?.source !== 'github') throw new Error('trusted GitHub providerによるPR authority観測が必要です');
+    if (provider.repository !== options.repository || provider.provenance.repository !== options.repository) throw new Error('GitHub providerのrepositoryが明示対象と一致しません');
+    if (provider.prNumber !== options.pr || provider.provenance.prNumber !== options.pr) throw new Error('GitHub providerのPR numberが明示対象と一致しません');
+    if (provider.baseRefName !== options.baseRef || provider.defaultBranch !== options.defaultBranch) throw new Error('GitHub providerのbase/default branch観測が一致しません');
+    if (String(provider.baseRefOid ?? '').toLowerCase() !== trustedCommit.toLowerCase()) throw new Error('GitHub providerのPR base OIDがtrusted commitと一致しません');
+    if (String(provider.headRefOid ?? '').toLowerCase() !== options.candidateHeadSha?.toLowerCase()) throw new Error('GitHub providerのcandidate headが明示したPR head SHAと一致しません');
     const resolved = git(['rev-parse', '--verify', `${trustedCommit}^{commit}`], root, { allowFailure: true });
     if (resolved.status !== 0 || resolved.stdout.trim().toLowerCase() !== trustedCommit.toLowerCase()) throw new Error('explicit trusted commitをrepository内の固定commit SHAへ解決できません');
+    const remoteDefaultRef = `refs/remotes/origin/${defaultBranch}`;
+    const remoteDefault = git(['rev-parse', '--verify', `${remoteDefaultRef}^{commit}`], root, { allowFailure: true });
+    if (remoteDefault.status !== 0 || !/^[a-f0-9]{40}$/iu.test(remoteDefault.stdout.trim())) throw new Error('明示されたremote default branchを固定commitへ解決できません');
+    const ancestry = git(['merge-base', '--is-ancestor', trustedCommit, remoteDefault.stdout.trim()], root, { allowFailure: true });
+    if (ancestry.status !== 0) throw new Error('trusted commitはremote default branch commitのancestorではありません');
     return loadEffectiveTrustedPolicySetAtCommit(root, resolved.stdout.trim());
   }
   const symbolic = git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], root, { allowFailure: true });
