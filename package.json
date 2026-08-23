@@ -1,0 +1,44 @@
+{
+  "name": "agent-skill-chain",
+  "version": "0.3.0-beta.1",
+  "description": "人とAIエージェントが使う、安全側に倒す軽量開発ワークフロー。",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "agent-skill-chain": "./bin/agent-skill-chain.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    ".agent-skill-chain/skills/",
+    ".agent-skill-chain/templates/",
+    ".agent-skill-chain/schemas/",
+    ".agent-skill-chain/policy/",
+    ".agent-skill-chain/docs/",
+    "AGENTS.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.js",
+    "typecheck": "tsc --noEmit",
+    "docs:format": "python3 scripts/check_japanese_docs.py",
+    "test:format": "python3 scripts/check_gherkin_format.py",
+    "package:check": "python3 scripts/check_package_contents.py",
+    "test": "cucumber-js --config cucumber.mjs",
+    "test:unit": "cucumber-js --config cucumber.mjs --tags @unit",
+    "test:integration": "cucumber-js --config cucumber.mjs --tags @integration",
+    "test:e2e": "cucumber-js --config cucumber.mjs --tags @e2e",
+    "prepack": "npm run build && npm run docs:format && npm run typecheck && npm run test:format && npm test"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^13.2.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/techbeansjp-free/AGENTS.md.git"
+  }
+}

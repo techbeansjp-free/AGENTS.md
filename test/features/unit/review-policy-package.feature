@@ -1,0 +1,131 @@
+@unit
+Feature: Review、policy、package境界を有限かつ説明可能にする
+
+  Scenario: SCN-UNIT-REVIEW-001 両観点のrubricが完了してfindingなしなら承認する
+    Given round 1の肯定・敵対rubric、test、specがすべてpassである
+    And findingは0件である
+    When review gateを評価する
+    Then reviewはapprovedである
+
+  Scenario Outline: SCN-UNIT-REVIEW-002 片方の観点が欠けたreviewは拒否する
+    Given round 1の肯定・敵対rubric、test、specがすべてpassである
+    And <観点>の<項目>が未評価である
+    When review gateを評価する
+    Then reviewはrejectedである
+
+    Examples:
+      | 観点 | 項目 |
+      | affirmative | correctness |
+      | adversarial | security |
+
+  Scenario: SCN-UNIT-REVIEW-003 MediumとLowは記録するがblockingにしない
+    Given 完全なreviewにMediumとLowのvalid findingがある
+    When review gateを評価する
+    Then reviewはapprovedである
+    And blocking findingは0件である
+
+  Scenario: SCN-UNIT-REVIEW-004 未解決Highはblockingにする
+    Given 完全なreviewにHighのvalid finding "H1"がある
+    When review gateを評価する
+    Then blocking findingは"H1"である
+    And reviewはrejectedである
+
+  Scenario: SCN-UNIT-REVIEW-005 round 3のfindingは定義済み分類を要求する
+    Given round 3のfinding分類が"mystery"である
+    When review gateを評価する
+    Then reviewはrejectedである
+
+  Scenario: SCN-UNIT-REVIEW-006 同じscopeのreview budgetは3 roundを超えない
+    Given review roundが4である
+    When review gateを評価する
+    Then review評価は例外で停止する
+
+  Scenario: SCN-UNIT-REVIEW-007 未知のfinding状態や重大度をfail-closedで拒否する
+    Given 完全なreviewに未知の状態と重大度を持つfindingがある
+    When review gateを評価する
+    Then reviewはrejectedである
+
+  Scenario: SCN-UNIT-REVIEW-008 High riskは人間のownerと理由と再確認条件が揃う場合だけ受容できる
+    Given 完全なreviewに人間が条件付き受容したHigh findingがある
+    When review gateを評価する
+    Then reviewはapprovedである
+
+  Scenario: SCN-UNIT-REVIEW-009 round 2で既承認範囲を全再走査しない
+    Given round 2のreviewが全範囲再走査を要求している
+    When review gateを評価する
+    Then reviewはrejectedである
+
+  Scenario: SCN-UNIT-REVIEW-010 not-applicableは観点ごとの理由を要求する
+    Given 完全なreviewに理由なしのnot-applicableがある
+    When review gateを評価する
+    Then reviewはrejectedである
+
+  Scenario: SCN-UNIT-POLICY-001 package defaultはPR停止かつmerge disabledである
+    Given package default policyを読み込む
+    When policyを検証する
+    Then policyはvalidである
+    And delivery stopはpull_requestである
+    And merge modeはdisabledである
+
+  Scenario Outline: SCN-UNIT-POLICY-002 merge policyへ別操作の権限を混入できない
+    Given package default policyを読み込む
+    And merge policyの<操作>をtrueにする
+    When policyを検証する
+    Then policyはinvalidである
+
+    Examples:
+      | 操作 |
+      | deleteBranch |
+      | closeIssue |
+      | release |
+      | finalize |
+      | cleanup |
+
+  Scenario: SCN-UNIT-POLICY-003 unknown merge modeを拒否する
+    Given package default policyを読み込む
+    And merge modeを"trust-me"にする
+    When policyを検証する
+    Then policyはinvalidである
+
+  Scenario: SCN-UNIT-POLICY-004 schemaから逸脱する未知fieldと配列値を拒否する
+    Given package default policyを読み込む
+    And policyへ未知fieldと不正な配列値を混入する
+    When policyを検証する
+    Then policyはinvalidである
+    And policy schema逸脱をすべて報告する
+
+  Scenario: SCN-UNIT-PACKAGE-001 Step 0〜11にそれぞれ1つのskill contractがある
+    Given v0.3 package assetを走査する
+    When skill contractを数える
+    Then Step 0〜11が重複なくすべて存在する
+
+  Scenario: SCN-UNIT-PACKAGE-002 gh process callはGitHub adapterだけに存在する
+    Given runtime sourceを走査する
+    When gh process callの所在を検査する
+    Then GitHub adapter以外の違反fileは0件である
+
+  Scenario: SCN-UNIT-PACKAGE-003 legacy非template assetへのruntime importがない
+    Given runtime sourceを走査する
+    When legacy runtime importを検査する
+    Then legacy import違反fileは0件である
+
+  Scenario: SCN-UNIT-PACKAGE-004 ADRは将来拡張点だけでsubsystemを持たない
+    Given v0.3 package assetを走査する
+    When ADR実装assetを検査する
+    Then ADR domain、template、CLI、gateは存在しない
+
+  Scenario: SCN-UNIT-PACKAGE-005 固定の人向け文書は連番付き日本語file名で統一する
+    Given v0.3 package assetを走査する
+    When 固定の人向けMarkdown file名を検査する
+    Then 連番付き日本語file名の違反は0件である
+
+  Scenario: SCN-UNIT-PACKAGE-006 repository直下は短いAGENTS入口だけにする
+    Given v0.3 package assetを走査する
+    When 規範文書の配置を検査する
+    Then repository直下の規範文書はAGENTSだけである
+    And namespace配下に連番付き規範文書が3件ある
+
+  Scenario: SCN-UNIT-PACKAGE-007 英語だけの人向けMarkdownを形式検査で拒否する
+    Given 英語だけの人向けMarkdownがある
+    When 日本語文書形式検査を実行する
+    Then 日本語文書形式検査は失敗する

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "agent-skill-chain/project-policy/v0.3",
+  "delivery": { "stopAt": "pull_request" },
+  "merge": {
+    "mode": "assisted",
+    "branches": ["feature/*", "fix/*", "refactor/*"],
+    "methods": ["squash"],
+    "requiredChecks": ["typecheck", "test"],
+    "requiredReviews": 1
+  }
+}

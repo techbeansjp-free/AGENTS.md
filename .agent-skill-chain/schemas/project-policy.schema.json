@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/techbeansjp-free/AGENTS.md/schemas/project-policy-v0.3.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "delivery", "merge"],
+  "properties": {
+    "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.3" },
+    "delivery": {
+      "type": "object", "additionalProperties": false, "required": ["stopAt"],
+      "properties": { "stopAt": { "const": "pull_request" } }
+    },
+    "merge": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mode", "branches", "methods", "requiredChecks", "requiredReviews"],
+      "properties": {
+        "mode": { "enum": ["disabled", "assisted", "automatic"] },
+        "branches": { "type": "array", "items": { "type": "string", "minLength": 1 }, "maxItems": 32 },
+        "methods": { "type": "array", "items": { "enum": ["merge", "squash", "rebase"] }, "uniqueItems": true },
+        "requiredChecks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "requiredReviews": { "type": "integer", "minimum": 0, "maximum": 20 }
+      }
+    }
+  }
+}
