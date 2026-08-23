@@ -19,6 +19,7 @@
   "files": [
     "bin/",
     "src/",
+    ".agent-skill-chain/00_利用案内.md",
     ".agent-skill-chain/skills/",
     ".agent-skill-chain/templates/",
     ".agent-skill-chain/schemas/",
@@ -28,6 +29,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.js",
+    "directories:check": "node scripts/check_directory_guides.js",
     "skills:check": "node scripts/check_skill_templates.js",
     "typecheck": "tsc --noEmit",
     "docs:format": "python3 scripts/check_japanese_docs.py",

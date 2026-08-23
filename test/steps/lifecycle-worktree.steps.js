@@ -77,6 +77,21 @@ When('uninstallをapplyして失敗を確認する', function () { try { uninsta
 Then('uninstallは失敗する', function () { assert.ok(this.error instanceof Error); });
 Then('consumer外のfileは保持される', function () { assert.equal(fs.readFileSync(this.outsideFile, 'utf8'), '削除してはいけない'); });
 
+Given('旧version導入後にconsumerが同名の利用案内を作成している', function () {
+  this.root = this.temp();
+  init(this.root, { apply: true });
+  this.consumerGuide = path.join(this.root, '.agent-skill-chain', '00_利用案内.md');
+  const recordPath = path.join(this.root, '.agent-skill-chain', 'managed-assets.json');
+  const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+  delete record.files[path.join('.agent-skill-chain', '00_利用案内.md')];
+  fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
+  fs.writeFileSync(this.consumerGuide, 'consumerが先に所有した案内\n');
+});
+Then('consumerの同名利用案内は保持される', function () {
+  assert.ok(this.result.retained.includes(path.join('.agent-skill-chain', '00_利用案内.md')));
+  assert.equal(fs.readFileSync(this.consumerGuide, 'utf8'), 'consumerが先に所有した案内\n');
+});
+
 Given('dirty fileを持つ一時Git repositoryがある', function () {
   this.root = this.initRepo(); this.worktree = `${this.root}-worktree`; this.temporaryDirectories.push(this.worktree);
   fs.writeFileSync(path.join(this.root, 'dirty.txt'), 'preserve');

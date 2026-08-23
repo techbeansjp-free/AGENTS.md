@@ -8,12 +8,13 @@ import { PACKAGE_VERSION } from '../lib/version.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ROOT_ASSETS = ['AGENTS.md'];
+const NAMESPACE_ROOT_ASSETS = ['00_利用案内.md'];
 const NAMESPACE_ASSETS = ['docs', 'skills', 'templates', 'schemas', 'policy'];
 
 /** @param {string} relative */
 function isPackageOwnedPath(relative) {
   const normalized = relative.replaceAll('\\', '/');
-  return normalized === 'AGENTS.md' || NAMESPACE_ASSETS.some((directory) => normalized.startsWith(`.agent-skill-chain/${directory}/`));
+  return normalized === 'AGENTS.md' || NAMESPACE_ROOT_ASSETS.some((file) => normalized === `.agent-skill-chain/${file}`) || NAMESPACE_ASSETS.some((directory) => normalized.startsWith(`.agent-skill-chain/${directory}/`));
 }
 
 /** @param {string} file */
@@ -30,6 +31,7 @@ function walkFiles(directory) {
 /** @param {string} target */
 function mappings(target) {
   const result = ROOT_ASSETS.map((name) => ({ src: path.join(packageRoot, name), dest: path.join(target, name) }));
+  for (const file of NAMESPACE_ROOT_ASSETS) result.push({ src: path.join(packageRoot, '.agent-skill-chain', file), dest: path.join(target, '.agent-skill-chain', file) });
   for (const directory of NAMESPACE_ASSETS) {
     const source = path.join(packageRoot, '.agent-skill-chain', directory);
     if (!fs.existsSync(source)) continue;
@@ -68,7 +70,7 @@ export function upgrade(target, options) {
   const planned = [];
   for (const item of current) {
     const key = path.relative(target, item.dest);
-    if (fs.existsSync(item.dest) && old.files?.[key] && digest(item.dest) !== old.files[key]) retained.push(key);
+    if (fs.existsSync(item.dest) && (!old.files?.[key] || digest(item.dest) !== old.files[key])) retained.push(key);
     else planned.push(item);
   }
   if (!options.apply) return { applied: false, planned: planned.map((item) => path.relative(target, item.dest)), retained };

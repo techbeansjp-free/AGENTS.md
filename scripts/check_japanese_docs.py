@@ -17,10 +17,12 @@ DIRECTORIES = (
     ".agent-skill-chain/skills",
     ".agent-skill-chain/templates",
     ".agent-skill-chain/docs",
+    ".agent-skill-chain/policy",
+    ".agent-skill-chain/schemas",
     "docs/specs",
     "docs/reviews",
 )
-ROOT_DOCUMENTS = ("AGENTS.md",)
+ROOT_DOCUMENTS = ("AGENTS.md", ".agent-skill-chain/00_利用案内.md")
 
 
 def markdown_files(root: Path) -> list[Path]:

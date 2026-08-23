@@ -51,6 +51,7 @@ const requiredCliCategories = [
 
 Then('docs specsの必須16カテゴリと固定文書が存在する', function () {
   const specs = path.join(this.root, 'docs', 'specs');
+  assert.equal(fs.existsSync(path.join(specs, '00_利用案内.md')), true);
   for (const category of requiredCliCategories) assert.equal(fs.statSync(path.join(specs, category)).isDirectory(), true, category);
   for (const file of ['00_仕様書構成/00_仕様書索引.md', '03_アーキテクチャ/00_全体構成.md', '14_開発・品質/00_ディレクトリ構成.md', '14_開発・品質/01_コーディング標準.md', '16_参照資料/00_官公庁一次資料台帳.md']) {
     assert.equal(fs.existsSync(path.join(specs, file)), true, file);
@@ -73,10 +74,11 @@ When('README文言変更を根拠付きno-spec-impactで検証する', function 
 Then('spec indexの更新時刻は変わらない', function () { assert.equal(fs.statSync(this.specIndex).mtimeMs, this.mtime); });
 Then('生成した仕様file名は連番付き日本語である', function () {
   const specs = path.join(this.root, 'docs', 'specs');
-  const categories = fs.readdirSync(specs, { withFileTypes: true });
+  const entries = fs.readdirSync(specs, { withFileTypes: true });
+  const categories = entries.filter((entry) => entry.isDirectory());
   assert.ok(categories.length >= 16);
-  assert.ok(categories.every((entry) => entry.isDirectory() && /^\d{2}_[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(entry.name)));
-  const files = categories.flatMap((entry) => fs.readdirSync(path.join(specs, entry.name), { withFileTypes: true }).filter((child) => child.isFile()).map((child) => child.name));
+  assert.ok(categories.every((entry) => /^\d{2}_[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(entry.name)));
+  const files = entries.filter((entry) => entry.isFile()).map((entry) => entry.name).concat(categories.flatMap((entry) => fs.readdirSync(path.join(specs, entry.name), { withFileTypes: true }).filter((child) => child.isFile()).map((child) => child.name)));
   assert.ok(files.length >= 30);
   assert.ok(files.every((/** @type {string} */ name) => /^\d{2}_[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}].*\.md$/u.test(name)));
 });

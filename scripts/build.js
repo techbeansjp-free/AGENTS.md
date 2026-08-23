@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CURRENT_POLICY_SCHEMA_VERSION, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../src/lib/version.js';
+import { checkDirectoryGuides } from './check_directory_guides.js';
 import { checkSkillTemplateContracts } from './check_skill_templates.js';
 
 const required = [
   'bin/agent-skill-chain.js', 'AGENTS.md',
+  '.agent-skill-chain/00_利用案内.md',
   '.agent-skill-chain/docs/00_運用ポリシー.md',
   '.agent-skill-chain/docs/01_開発ワークフロー.md',
   '.agent-skill-chain/docs/02_品質基準.md',
@@ -16,6 +18,8 @@ const required = [
 ];
 const missing = required.filter((file) => !fs.existsSync(path.resolve(file)));
 if (missing.length) throw new Error(`パッケージ資産が不足しています: ${missing.join(', ')}`);
+const directoryGuides = checkDirectoryGuides();
+if (!directoryGuides.valid) throw new Error(`directory利用案内が不正です: ${directoryGuides.errors.join('; ')}`);
 const skillContracts = checkSkillTemplateContracts();
 if (!skillContracts.valid) throw new Error(`skill・template契約が不正です: ${skillContracts.errors.join('; ')}`);
 const packageMetadata = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -30,4 +34,4 @@ if (CURRENT_POLICY_SCHEMA_VERSION !== `agent-skill-chain/project-policy/v${relea
 if (JSON.stringify(policySchema.properties?.schemaVersion?.enum) !== JSON.stringify(SUPPORTED_POLICY_SCHEMA_VERSIONS)) throw new Error('package.jsonとproject policy schemaの対応versionが一致しません');
 for (const [name, version] of [['manifest schema', manifestSchema.properties?.policy?.properties?.schemaVersion?.const], ['default policy', defaultPolicy.schemaVersion], ['sample policy', samplePolicy.schemaVersion]]) if (version !== CURRENT_POLICY_SCHEMA_VERSION) throw new Error(`${name}がpackage.jsonの現行project policy schema versionと一致しません`);
 fs.chmodSync(path.resolve('bin/agent-skill-chain.js'), 0o755);
-process.stdout.write(`v${releaseVersion}パッケージ資産検査: 合格（製品${PACKAGE_VERSION}、project policy ${CURRENT_POLICY_SCHEMA_VERSION}、skill・template契約${skillContracts.skills}件）\n`);
+process.stdout.write(`v${releaseVersion}パッケージ資産検査: 合格（製品${PACKAGE_VERSION}、project policy ${CURRENT_POLICY_SCHEMA_VERSION}、directory入口${directoryGuides.directories}件、skill・template契約${skillContracts.skills}件）\n`);

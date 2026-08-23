@@ -12,6 +12,7 @@ import * as traceDomain from '../../src/domain/trace.js';
 import { collectProjectTrace, parseProjectGherkin } from '../../scripts/check_trace.js';
 import { collectJavaScriptDependencyGraph } from '../../scripts/check_dependency_graph.js';
 import { checkFileAudit } from '../../scripts/check_file_audit.js';
+import { checkDirectoryGuides } from '../../scripts/check_directory_guides.js';
 import { checkSkillTemplateContracts } from '../../scripts/check_skill_templates.js';
 import { run } from '../../src/lib/process.js';
 import { main } from '../../src/cli.js';
@@ -187,7 +188,7 @@ Then('policy schema逸脱をすべて報告する', function () {
 
 Given('v0.3 package assetを走査する', function () { this.packageScanned = true; });
 Given('runtime sourceを走査する', function () { this.sourceFiles = runtimeFiles(); });
-When('skill contractを数える', function () { this.skills = fs.readdirSync('.agent-skill-chain/skills').sort(); });
+When('skill contractを数える', function () { this.skills = fs.readdirSync('.agent-skill-chain/skills', { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort(); });
 Then('Step 0〜11が重複なくすべて存在する', function () {
   assert.equal(this.skills.length, 12); for (let index = 0; index <= 11; index += 1) assert.equal(this.skills.filter((/** @type {string} */ name) => name.startsWith(`step-${String(index).padStart(2, '0')}-`)).length, 1);
 });
@@ -198,13 +199,13 @@ Then('legacy import違反fileは0件である', function () { assert.deepEqual(t
 When('ADR実装assetを検査する', function () { this.adrAssets = ['src/domain/adr.js', '.agent-skill-chain/templates/adr'].filter((file) => fs.existsSync(file)); });
 Then('ADR domain、template、CLI、gateは存在しない', function () { assert.deepEqual(this.adrAssets, []); });
 When('固定の人向けMarkdown file名を検査する', function () {
-  const roots = ['.agent-skill-chain/docs', '.agent-skill-chain/templates/common', '.agent-skill-chain/templates/issue', '.agent-skill-chain/templates/specs', 'docs/specs'];
-  this.nameOffenders = roots.flatMap((root) => fs.readdirSync(root, { recursive: true, withFileTypes: true }).flatMap((entry) => {
+  const roots = ['.agent-skill-chain/docs', '.agent-skill-chain/policy', '.agent-skill-chain/schemas', '.agent-skill-chain/templates/common', '.agent-skill-chain/templates/issue', '.agent-skill-chain/templates/specs', 'docs/specs'];
+  this.nameOffenders = ['.agent-skill-chain/00_利用案内.md'].filter((file) => !/^\d{2}_[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}].*\.md$/u.test(path.basename(file))).concat(roots.flatMap((root) => fs.readdirSync(root, { recursive: true, withFileTypes: true }).flatMap((entry) => {
     const name = entry.name;
     if (entry.isDirectory()) return !/^\d{2}_[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(name) ? [path.join(entry.parentPath, name)] : [];
     if (entry.isFile() && name.endsWith('.md')) return !/^\d{2}_[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}].*\.md$/u.test(name) ? [path.join(entry.parentPath, name)] : [];
     return [];
-  }));
+  })));
 });
 Then('連番付き日本語file名の違反は0件である', function () { assert.deepEqual(this.nameOffenders, []); });
 When('規範文書の配置を検査する', function () {
@@ -325,6 +326,37 @@ Then('正規契約だけが合格しリンク切れ・対応漏れ・経路欠�
   assert.match(this.omittedSkillContracts.errors.join(' '), /テンプレート対応/u);
   assert.equal(this.unroutedSkillContracts.valid, false);
   assert.match(this.unroutedSkillContracts.errors.join(' '), /ワークフロー.*対応/u);
+});
+
+Given('packageのdirectory利用案内契約がある', function () {
+  this.directoryGuideRoot = process.cwd();
+  const copy = () => {
+    const root = this.temp('asc-directory-guide-');
+    fs.cpSync('.agent-skill-chain', path.join(root, '.agent-skill-chain'), { recursive: true });
+    fs.copyFileSync('AGENTS.md', path.join(root, 'AGENTS.md'));
+    return root;
+  };
+  this.missingDirectoryGuideRoot = copy();
+  this.unknownDirectoryGuideRoot = copy();
+  this.brokenDirectoryGuideRoot = copy();
+});
+When('正規契約と入口欠落・未知directory・リンク切れ契約を検証する', function () {
+  this.validDirectoryGuides = checkDirectoryGuides(this.directoryGuideRoot);
+  fs.rmSync(path.join(this.missingDirectoryGuideRoot, '.agent-skill-chain/policy/00_利用案内.md'));
+  fs.mkdirSync(path.join(this.unknownDirectoryGuideRoot, '.agent-skill-chain/templates/未説明'));
+  fs.appendFileSync(path.join(this.brokenDirectoryGuideRoot, '.agent-skill-chain/00_利用案内.md'), '\n[存在しない案内](templates/存在しない案内.md)\n');
+  this.missingDirectoryGuides = checkDirectoryGuides(this.missingDirectoryGuideRoot);
+  this.unknownDirectoryGuides = checkDirectoryGuides(this.unknownDirectoryGuideRoot);
+  this.brokenDirectoryGuides = checkDirectoryGuides(this.brokenDirectoryGuideRoot);
+});
+Then('正規契約だけが合格し入口欠落・未知directory・リンク切れは拒否される', function () {
+  assert.equal(this.validDirectoryGuides.valid, true, this.validDirectoryGuides.errors.join('; '));
+  assert.equal(this.missingDirectoryGuides.valid, false);
+  assert.match(this.missingDirectoryGuides.errors.join(' '), /入口文書がありません/u);
+  assert.equal(this.unknownDirectoryGuides.valid, false);
+  assert.match(this.unknownDirectoryGuides.errors.join(' '), /入口文書が未定義/u);
+  assert.equal(this.brokenDirectoryGuides.valid, false);
+  assert.match(this.brokenDirectoryGuides.errors.join(' '), /link先がありません/u);
 });
 
 Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.traceRoot = process.cwd(); this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });

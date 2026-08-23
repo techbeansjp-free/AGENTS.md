@@ -8,6 +8,7 @@ const UI_CATEGORIES = new Set(['05_画面', '17_デザイン', '18_レイアウ�
 const UI_PROJECT_KINDS = new Set(['ui', 'theme', 'responsive', 'design-system']);
 const PROJECT_KINDS = new Set(['cli', 'api', 'service', 'library', 'batch', 'data', ...UI_PROJECT_KINDS]);
 const REQUIRED = [
+  '00_利用案内.md',
   '00_仕様書構成/00_仕様書索引.md',
   '01_システム概要/00_概要.md',
   '02_要件/00_要件一覧.md',

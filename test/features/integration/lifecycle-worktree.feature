@@ -39,6 +39,11 @@ Feature: Packageとworktree lifecycleでconsumer dataを保護する
     Then uninstallは失敗する
     And consumer外のfileは保持される
 
+  Scenario: SCN-INT-LIFECYCLE-007 upgradeは新規package pathにあるconsumer fileを上書きしない
+    Given 旧version導入後にconsumerが同名の利用案内を作成している
+    When upgradeをapplyする
+    Then consumerの同名利用案内は保持される
+
   Scenario: SCN-INT-WORKTREE-001 sourceがdirtyでもその状態を変更せず専用worktreeを作る
     Given dirty fileを持つ一時Git repositoryがある
     When 新しいbranchと専用pathでworktreeを作成する

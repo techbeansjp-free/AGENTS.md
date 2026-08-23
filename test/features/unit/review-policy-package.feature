@@ -206,3 +206,8 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given packageのStep skillとtemplate契約がある
     When 正規契約とリンク切れ・対応漏れ・経路欠落契約を検証する
     Then 正規契約だけが合格しリンク切れ・対応漏れ・経路欠落は拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-014 全directoryはownerと使い方が分かる入口文書を持つ
+    Given packageのdirectory利用案内契約がある
+    When 正規契約と入口欠落・未知directory・リンク切れ契約を検証する
+    Then 正規契約だけが合格し入口欠落・未知directory・リンク切れは拒否される
