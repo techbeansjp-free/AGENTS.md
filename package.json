@@ -5,7 +5,10 @@
   "type": "module",
   "agentSkillChain": {
     "policySchemaVersion": "0.3.1",
-    "compatiblePolicySchemaVersions": ["0.3.0"]
+    "compatiblePolicySchemaVersions": ["0.3.0"],
+    "deprecatedPolicySchemaAliases": {
+      "0.3": "0.3.0"
+    }
   },
   "engines": {
     "node": ">=20"

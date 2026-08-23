@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { parseJsonStrict, resolveContained, stableJson } from '../lib/security.js';
 import { validateProjectConformanceBinding } from './conformance.js';
-import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../lib/version.js';
+import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, DEPRECATED_POLICY_SCHEMA_ALIASES, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../lib/version.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 /** @param {string} version */
@@ -42,8 +42,10 @@ export function validatePolicy(policy) {
   rejectUnknownKeys(policy, ['schemaVersion', 'delivery', 'merge', 'rules', 'budgets', 'projectChoices'], 'policy', errors);
   rejectUnknownKeys(policy?.delivery, ['stopAt'], 'delivery', errors);
   rejectUnknownKeys(policy?.merge, ['mode', 'branches', 'methods', 'requiredChecks', 'requiredReviews'], 'merge', errors);
-  if (!SUPPORTED_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion)) errors.push(`schemaVersionが未対応です。${currentPolicyVersionLabel}へのstaged migrationを実行してください`);
-  if (COMPATIBLE_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion) && (policy.rules !== undefined || policy.budgets !== undefined || policy.projectChoices !== undefined)) errors.push(`${compatiblePolicyVersionLabels}ではrules、budgets、projectChoicesを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`);
+  const deprecatedAliasTarget = DEPRECATED_POLICY_SCHEMA_ALIASES[policy?.schemaVersion];
+  const compatibleInput = COMPATIBLE_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion) || COMPATIBLE_POLICY_SCHEMA_VERSIONS.includes(deprecatedAliasTarget);
+  if (!SUPPORTED_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion) && !deprecatedAliasTarget) errors.push(`schemaVersionが未対応です。${currentPolicyVersionLabel}へのstaged migrationを実行してください`);
+  if (compatibleInput && (policy.rules !== undefined || policy.budgets !== undefined || policy.projectChoices !== undefined)) errors.push(`${compatiblePolicyVersionLabels}ではrules、budgets、projectChoicesを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`);
   if (policy?.delivery?.stopAt !== 'pull_request') errors.push('delivery.stopAtはpull_requestでなければなりません');
   if (!['disabled', 'assisted', 'automatic'].includes(policy?.merge?.mode)) errors.push('merge.modeが不正です');
   validateStringArray(policy?.merge?.branches, 'merge.branches', errors, { max: 32 });
@@ -66,7 +68,7 @@ export function validatePolicy(policy) {
       if (Array.isArray(policy.projectChoices?.forbiddenTestFileSuffixes) && policy.projectChoices.forbiddenTestFileSuffixes.some((/** @type {unknown} */ suffix) => typeof suffix !== 'string' || !/^\.[A-Za-z0-9._-]+$/u.test(suffix))) errors.push('projectChoices.forbiddenTestFileSuffixesが不正です');
     }
   }
-  const migration = COMPATIBLE_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion) || errors.some((error) => error.includes('schemaVersion') || error.includes('未知field')) ? { target: CURRENT_POLICY_SCHEMA_VERSION, activation: 'staged', remediation: 'policy、schema、runtime、CI、templateを同一migrationで更新してください', rollback: '入力policyを変更せずtrusted版を保持する' } : undefined;
+  const migration = compatibleInput || errors.some((error) => error.includes('schemaVersion') || error.includes('未知field')) ? { target: CURRENT_POLICY_SCHEMA_VERSION, activation: 'staged', deprecatedAlias: deprecatedAliasTarget ? { input: policy.schemaVersion, canonical: deprecatedAliasTarget } : undefined, remediation: 'policy、schema、runtime、CI、templateを同一migrationで更新してください', rollback: '入力policyを変更せずtrusted版を保持する' } : undefined;
   return { valid: errors.length === 0, errors, migration, diagnostics: errors.length ? [{ ruleId: 'ASC-POLICY-INVALID', purpose: 'schemaとruntimeのpolicy契約を一致させる', risk: 'unknown', reasons: errors, scope: ['policy'], checks: ['schemaVersion、未知field、rules、budgetsを確認した'], autoFixes: [{ description: `${currentPolicyVersionLabel} staged migrationを作る`, dryRunDiff: `schemaVersionとrulesを${currentPolicyVersionLabel}形式へ更新する` }], next: 'migrationをdry-runしてから適用してください', requiredAuthority: 'project policy owner', rollback: 'trusted policyを保持する' }] : [] };
 }
 

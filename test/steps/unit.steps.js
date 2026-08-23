@@ -14,7 +14,7 @@ import { collectJavaScriptDependencyGraph } from '../../scripts/check_dependency
 import { checkFileAudit } from '../../scripts/check_file_audit.js';
 import { run } from '../../src/lib/process.js';
 import { main } from '../../src/cli.js';
-import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../../src/lib/version.js';
+import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, DEPRECATED_POLICY_SCHEMA_ALIASES, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../../src/lib/version.js';
 
 const validAnswers = () => Object.fromEntries(Array.from({ length: 8 }, (_, index) => [
   `Q-${String(index + 1).padStart(2, '0')}`, { answer: true, evidence: `evidence-${index + 1}` },
@@ -275,8 +275,13 @@ Then('製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する', functio
   assert.match(PACKAGE_VERSION, /^0\.3\.1-beta\./u);
   assert.equal(CURRENT_POLICY_SCHEMA_VERSION, `agent-skill-chain/project-policy/v${this.releaseVersion}`);
   assert.deepEqual(COMPATIBLE_POLICY_SCHEMA_VERSIONS, ['agent-skill-chain/project-policy/v0.3.0']);
+  assert.deepEqual(DEPRECATED_POLICY_SCHEMA_ALIASES, { 'agent-skill-chain/project-policy/v0.3': 'agent-skill-chain/project-policy/v0.3.0' });
   assert.deepEqual(this.policySchema.properties.schemaVersion.enum, SUPPORTED_POLICY_SCHEMA_VERSIONS);
   assert.equal(this.defaultPolicy.schemaVersion, CURRENT_POLICY_SCHEMA_VERSION);
+  const legacyAlias = validatePolicy({ schemaVersion: 'agent-skill-chain/project-policy/v0.3', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 } });
+  assert.equal(legacyAlias.valid, true);
+  assert.ok(legacyAlias.migration);
+  assert.deepEqual(legacyAlias.migration.deprecatedAlias, { input: 'agent-skill-chain/project-policy/v0.3', canonical: 'agent-skill-chain/project-policy/v0.3.0' });
 });
 
 Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.traceRoot = process.cwd(); this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });
