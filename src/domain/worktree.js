@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { git } from '../lib/process.js';
 import { safeSlug } from '../lib/security.js';
+import { enforceTrustedBoundary } from './enforcement.js';
 
 /** @param {string} remote */
 function githubRepository(remote) {
@@ -9,18 +10,34 @@ function githubRepository(remote) {
   return match?.[1];
 }
 
-/** @param {{repoRoot: string, worktreePath: string, branch: string, base: string, expectedRepository?: string}} input */
+/** @param {{repoRoot: string, worktreePath: string, branch: string, base: string, expectedRepository?: string, trustedPolicy?: any}} input */
 export function createWorktree(input) {
   const actualRoot = git(['rev-parse', '--show-toplevel'], input.repoRoot).stdout.trim();
-  if (fs.realpathSync(actualRoot) !== fs.realpathSync(input.repoRoot)) throw new Error('リポジトリ直下パスが一致しません');
+  const rootMismatch = fs.realpathSync(actualRoot) !== fs.realpathSync(input.repoRoot);
   const branchParts = input.branch.split('/');
   if (branchParts.length < 2 || branchParts.some((part) => safeSlug(part) !== part)) throw new Error('ブランチは名前空間を持つ安全で長さ制限内の名前にしてください');
   const destination = path.resolve(input.worktreePath);
-  if (destination === fs.realpathSync(input.repoRoot) || fs.existsSync(destination)) throw new Error('worktree作成先は未作成の専用パスにしてください');
+  const gitCommonRaw = git(['rev-parse', '--git-common-dir'], input.repoRoot).stdout.trim();
+  const gitCommon = fs.realpathSync(path.resolve(input.repoRoot, gitCommonRaw));
+  const gitRelative = path.relative(gitCommon, destination);
+  const gitInternal = gitRelative === '' || (!gitRelative.startsWith(`..${path.sep}`) && gitRelative !== '..' && !path.isAbsolute(gitRelative));
+  const destinationConflict = destination === fs.realpathSync(input.repoRoot) || fs.existsSync(destination);
+  let repositoryMismatch = false;
   if (input.expectedRepository) {
     const remote = git(['remote', 'get-url', 'origin'], input.repoRoot, { allowFailure: true });
-    if (remote.status !== 0 || githubRepository(remote.stdout) !== input.expectedRepository) throw new Error('originのリポジトリ同一性が一致しません');
+    repositoryMismatch = remote.status !== 0 || githubRepository(remote.stdout) !== input.expectedRepository;
   }
+  if (input.trustedPolicy) {
+    const enforcement = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'worktree', observations: [
+      { riskClass: 'path', violated: gitInternal, reasons: ['worktree作成先がGit common dir内です'], checks: ['destinationとGit common dirを比較した'] },
+      { riskClass: 'identity', violated: rootMismatch || destinationConflict || repositoryMismatch, reasons: ['repository、root、destinationまたはoriginの同一性が一致しません'], checks: ['actual repositoryとremoteを検査した'] },
+    ] });
+    if (!enforcement.allowed) throw new Error(`${enforcement.diagnostic.ruleId}: ${enforcement.diagnostic.reasons.join('; ')}`);
+  }
+  if (rootMismatch) throw new Error('リポジトリ直下パスが一致しません');
+  if (gitInternal) throw new Error('Git内部領域へworktreeを作成できません');
+  if (destinationConflict) throw new Error('worktree作成先は未作成の専用パスにしてください');
+  if (repositoryMismatch) throw new Error('originのリポジトリ同一性が一致しません');
   const baseCheck = git(['rev-parse', '--verify', `${input.base}^{commit}`], input.repoRoot, { allowFailure: true });
   if (baseCheck.status !== 0) throw new Error('基点コミットを検証できません');
   const dirtyBefore = git(['status', '--porcelain=v1', '--untracked-files=all'], input.repoRoot).stdout;

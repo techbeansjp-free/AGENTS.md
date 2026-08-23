@@ -1,3 +1,5 @@
+import { enforceTrustedBoundary } from './enforcement.js';
+
 /** @param {string} pattern @param {string} value */
 function branchMatches(pattern, value) {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replaceAll('*', '.*');
@@ -35,13 +37,21 @@ function validateDeliveryEvidence(evidence, headSha) {
   }
 }
 
-/** @param {{apply: boolean, authorization?: string, evidence: any, headSha: string, issue: number, head: string, base: string, repository: string}} input @param {(operation: string, input: any) => any} external */
+/** @param {{apply: boolean, authorization?: string, evidence: any, headSha: string, issue: number, head: string, base: string, repository: string, trustedPolicy?: any}} input @param {(operation: string, input: any) => any} external */
 export function createPullRequest(input, external) {
   const [owner, repositoryName, extra] = input.repository.split('/');
   if (extra || !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner ?? '') || !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(repositoryName ?? '') || repositoryName === '.' || repositoryName === '..') throw new Error('リポジトリは正確なowner/name形式で指定してください');
   if (!/^\d+$/.test(String(input.issue)) || !input.head || !input.base) throw new Error('Issue番号、先頭ブランチ、基点ブランチが必要です');
   if (input.head.startsWith('-') || input.base.startsWith('-') || input.head.includes('..') || input.base.includes('..')) throw new Error('先頭・基点ブランチ名が安全ではありません');
   validateDeliveryEvidence(input.evidence, input.headSha);
+  if (input.trustedPolicy) {
+    const ownership = input.evidence?.ownership;
+    const enforcement = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'pull_request', observations: [{
+      ruleId: 'ASC-DOGFOOD-OWNERSHIP-PR-001', violated: ownership?.classified !== true || typeof ownership?.owner !== 'string' || typeof ownership?.targetLayer !== 'string',
+      reasons: ['PR evidenceにasset分類、owner、targetLayerの実測結果が必要です'], checks: ['HEAD SHAに拘束されたPR evidenceのownership分類を確認した'],
+    }] });
+    if (!enforcement.allowed) throw new Error(`${enforcement.diagnostic.ruleId}: ${enforcement.diagnostic.reasons.join('; ')}`);
+  }
   const preview = { operation: 'pr.create', repository: input.repository, issue: input.issue, head: input.head, headSha: input.headSha, base: input.base, bodyLink: `Relates to #${input.issue}` };
   if (!input.apply) return { state: 'preview', preview };
   if (input.authorization !== 'approved') throw new Error('外部書き込みには明示的な承認が必要です');

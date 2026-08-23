@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "agent-skill-chain/project-policy-manifest/v1",
+  "policy": {
+    "schemaVersion": "agent-skill-chain/project-policy/v0.4",
+    "delivery": { "stopAt": "pull_request" },
+    "merge": { "mode": "disabled", "branches": [], "methods": [], "requiredChecks": [], "requiredReviews": 1 },
+    "budgets": { "localFeedbackMs": 120000, "prGateMs": 900000 }
+  },
+  "choiceFiles": ["project/choices/development.json"],
+  "ruleFiles": ["project/rules/docs.json", "project/rules/ownership-local.json", "project/rules/ownership-pr.json", "project/rules/package.json", "project/rules/safety.json"],
+  "conformanceFiles": ["project/conformance/bindings.json"],
+  "conformanceDirectory": "project/conformance"
+}

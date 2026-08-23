@@ -159,3 +159,7 @@
 - 未決事項と決定権者:
 - 次に実行するステップ:
 - 再開に必要な状態:
+
+## 13. risk rule参照（該当時だけ）
+
+安全・authority境界へ影響する場合だけ、関連rule ID、最小scope、強制強度、解決経路、rollbackを要求・ACへ対応付ける。詳細なrule catalogはproject policyへ置き、このtemplateへ複製しない。

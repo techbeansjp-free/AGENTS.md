@@ -7,10 +7,15 @@ import { createPullRequest, authorizeMerge } from './domain/delivery.js';
 import { createWorktree, inspectFinalizeState } from './domain/worktree.js';
 import { buildFinalizeReport, applyFinalize } from './domain/finalize.js';
 import { init, upgrade, uninstall, doctor } from './domain/lifecycle.js';
-import { loadTrustedPolicy } from './domain/policy.js';
+import { loadEffectiveTrustedPolicySet, loadOperationPolicy, loadProjectPolicySet, validatePolicy } from './domain/policy.js';
+import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic } from './domain/enforcement.js';
+import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration } from './domain/migration.js';
 import { validateScenarioTrace } from './domain/trace.js';
 import { github } from './adapters/github.js';
 import { git } from './lib/process.js';
+import { writeFileAtomic } from './lib/atomic.js';
+import { validateRepositoryConformance } from './domain/conformance.js';
+import { parseJsonStrict } from './lib/security.js';
 
 /** @param {string[]} args */
 function parse(args) {
@@ -35,8 +40,31 @@ function required(flags, key) {
   return value;
 }
 
+/** @param {Record<string, string|boolean>} flags */
+function requiredExpectedRevision(flags) {
+  const raw = required(flags, 'expected-revision');
+  if (!/^\d+$/.test(raw)) throw new Error('--expected-revisionは0以上の整数でなければなりません');
+  return Number(raw);
+}
+
 /** @param {unknown} value */
-function print(value) { process.stdout.write(`${JSON.stringify(value, null, 2)}\n`); }
+function print(value) { process.stdout.write(`${JSON.stringify(sanitizeOutput(value), null, 2)}\n`); }
+/** @param {string} file */
+function readJson(file) { return parseJsonStrict(fs.readFileSync(file, 'utf8'), file); }
+
+/** Fragmented policy input is loaded as a complete inventory; legacy input remains a single policy object. @param {string} file */
+function readPolicyInput(file) {
+  const value = readJson(file);
+  if (value?.schemaVersion !== 'agent-skill-chain/project-policy-manifest/v1') return value;
+  if (path.basename(file) !== 'project-policy.json' || path.basename(path.dirname(file)) !== '.agent-skill-chain') throw new Error('fragmented project policy manifestは.agent-skill-chain/project-policy.jsonから読み込んでください');
+  return loadProjectPolicySet(path.dirname(path.dirname(file)));
+}
+
+/** @param {any} value */
+function printableMigration(value) {
+  if (!Array.isArray(value?.artifacts)) return value;
+  return { ...value, artifacts: value.artifacts.map((/** @type {any} */ { before, after, ...artifact }) => artifact) };
+}
 
 /** @param {Record<string, string|boolean>} flags */
 function applyMode(flags) {
@@ -56,13 +84,13 @@ function defaultBranch(root) {
 export async function main(argv) {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === '--help' || command === '-h') {
-    print({ usage: 'agent-skill-chain <issue|project|spec|review|worktree|pr|init|upgrade|doctor|uninstall> ...' });
+    print({ usage: 'agent-skill-chain <issue|project|spec|review|policy|worktree|pr|init|upgrade|doctor|uninstall> ...' });
     return 0;
   }
   if (command === 'issue' && subcommand === 'create') {
     const { flags } = parse(rest);
     const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
-    const assessment = JSON.parse(fs.readFileSync(required(flags, 'assessment'), 'utf8'));
+    const assessment = readJson(required(flags, 'assessment'));
     print(createIssueStaging(root, { title: required(flags, 'title'), answers: assessment }));
     return 0;
   }
@@ -94,7 +122,7 @@ export async function main(argv) {
   if (command === 'spec' && subcommand === 'validate') {
     const { flags } = parse(rest);
     const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
-    const review = typeof flags.review === 'string' ? JSON.parse(fs.readFileSync(flags.review, 'utf8')) : undefined;
+    const review = typeof flags.review === 'string' ? readJson(flags.review) : undefined;
     const result = validateSpecs(root, { changedFiles: typeof flags.changed === 'string' ? flags.changed.split(',').filter(Boolean) : [], review });
     print(result);
     return result.valid ? 0 : 1;
@@ -102,20 +130,138 @@ export async function main(argv) {
   if (command === 'review' && subcommand === 'validate') {
     const { flags, positionals } = parse(rest);
     const file = positionals[0] ?? required(flags, 'file');
-    const result = evaluateReview(JSON.parse(fs.readFileSync(file, 'utf8')));
+    const result = evaluateReview(readJson(file));
     print(result);
     return result.approved ? 0 : 1;
   }
   if (command === 'trace' && subcommand === 'validate') {
     const { flags } = parse(rest);
-    const result = validateScenarioTrace(required(flags, 'features-root'));
+    const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
+    const choices = loadProjectPolicySet(root).policy.projectChoices;
+    const result = validateScenarioTrace(required(flags, 'features-root'), { layers: choices.testLayers, forbiddenFileSuffixes: typeof flags['forbidden-test-suffixes'] === 'string' ? flags['forbidden-test-suffixes'].split(',').filter(Boolean) : [] });
     print(result);
     return result.valid ? 0 : 1;
+  }
+  if (command === 'conformance' && subcommand === 'validate') {
+    const { flags } = parse(rest);
+    const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
+    const contract = readJson(path.resolve(required(flags, 'contract')));
+    const binding = readJson(path.resolve(required(flags, 'binding')));
+    const evidence = readJson(path.resolve(required(flags, 'evidence')));
+    const result = validateRepositoryConformance(root, contract, binding, evidence);
+    print(result.valid ? result : serializeDiagnostic({ ...result, diagnostic: { ruleId: 'ASC-CONFORMANCE-001', purpose: '機能拡張不変条件を実行可能な証拠へ結ぶ', risk: 'quality', reasons: result.errors, scope: ['conformance'], checks: ['exact invariant、source、export、SCN、成功証拠を検証した'], autoFixes: [], next: '不足するproject bindingまたは成功証拠を追加してください', requiredAuthority: 'project owner', rollback: '不完全なbindingを適用しない' } }));
+    return result.valid ? 0 : 1;
+  }
+  if (command === 'policy' && subcommand === 'validate') {
+    const { flags, positionals } = parse(rest);
+    const file = path.resolve(positionals[0] ?? required(flags, 'file'));
+    const parsed = readJson(file);
+    const root = path.resolve(typeof flags.root === 'string' ? flags.root : path.join(path.dirname(file), '..'));
+    if (parsed.schemaVersion === 'agent-skill-chain/project-policy-manifest/v1') {
+      const candidateSet = loadProjectPolicySet(root);
+      const trustedSet = loadOperationPolicy(root);
+      const effective = resolveEffectivePolicy(trustedSet.policy, candidateSet.policy);
+      if (!effective.valid) { print(serializeDiagnostic({ allowed: false, candidateSetHash: candidateSet.setHash, trustedSetHash: trustedSet.setHash, diagnostic: effective.diagnostic })); return 1; }
+      const comparison = compareTrustedPolicy(trustedSet.policy, effective.policy);
+      const result = { valid: comparison.allowed, candidateSetHash: candidateSet.setHash, candidateSemanticPolicyHash: candidateSet.semanticPolicyHash, trustedSetHash: trustedSet.setHash, trustedProvenance: trustedSet.provenance, stagedAdditions: comparison.stagedAdditions, errors: comparison.rejected.flatMap((/** @type {any} */ item) => item.reasons) };
+      print(result.valid ? result : serializeDiagnostic({ ...result, diagnostic: comparison.rejected[0] }));
+      return result.valid ? 0 : 1;
+    }
+    const policy = parsed;
+    const result = validatePolicy(policy);
+    print(result.valid ? result : serializeDiagnostic({ ...result, diagnostic: result.diagnostics[0] }));
+    return result.valid ? 0 : 1;
+  }
+  if (command === 'policy' && subcommand === 'evaluate') {
+    const { flags } = parse(rest);
+    const trusted = readJson(path.resolve(required(flags, 'trusted')));
+    const candidate = readJson(path.resolve(required(flags, 'candidate')));
+    const trustedValidation = validatePolicy(trusted);
+    const candidateValidation = validatePolicy(candidate);
+    if (!trustedValidation.valid || !candidateValidation.valid) {
+      const diagnostic = trustedValidation.diagnostics[0] ?? candidateValidation.diagnostics[0];
+      print(serializeDiagnostic({ allowed: false, code: 'ASC-POLICY-INVALID', trustedErrors: trustedValidation.errors, candidateErrors: candidateValidation.errors, diagnostic }));
+      return 1;
+    }
+    const result = compareTrustedPolicy(trusted, candidate);
+    print(result.allowed ? result : serializeDiagnostic({ ...result, diagnostic: result.rejected[0] }));
+    return result.allowed ? 0 : 1;
+  }
+  if (command === 'policy' && subcommand === 'enforce') {
+    const { flags } = parse(rest);
+    const policy = readJson(path.resolve(required(flags, 'policy')));
+    const input = readJson(path.resolve(required(flags, 'input')));
+    const result = enforceOperation({ ...input, policy });
+    print(result.allowed ? result : serializeDiagnostic(result));
+    return result.allowed ? 0 : 1;
+  }
+  if (command === 'policy' && subcommand === 'migrate') {
+    const { flags } = parse(rest);
+    const apply = applyMode(flags);
+    const expectedRevision = apply ? requiredExpectedRevision(flags) : undefined;
+    const operation = typeof flags.operation === 'string' ? flags.operation : 'apply';
+    if (!['apply', 'rollback', 'retry', 'recover'].includes(operation)) throw new Error('--operationはapply、rollback、retry、recoverのいずれかです');
+    const stateFile = typeof flags.state === 'string' ? path.resolve(flags.state) : undefined;
+    if (apply && !stateFile) throw new Error('--applyには--state=...が必要です');
+    let result;
+    const trustedFile = typeof flags.trusted === 'string' ? path.resolve(flags.trusted) : undefined;
+    const candidateFile = typeof flags.candidate === 'string' ? path.resolve(flags.candidate) : undefined;
+    const trusted = trustedFile ? readPolicyInput(trustedFile) : undefined;
+    const candidate = candidateFile ? readPolicyInput(candidateFile) : undefined;
+    if (operation === 'apply') {
+      if (!trusted || !candidate) throw new Error('applyには--trustedと--candidateが必要です');
+      const trustedValidation = validatePolicy(trusted.policy ?? trusted);
+      const candidateValidation = validatePolicy(candidate.policy ?? candidate);
+      if (!trustedValidation.valid || !candidateValidation.valid) {
+        const diagnostic = trustedValidation.diagnostics[0] ?? candidateValidation.diagnostics[0];
+        print(serializeDiagnostic({ state: 'rejected', allowed: false, diagnostic }));
+        return 1;
+      }
+      if (typeof flags.manifest === 'string') {
+        const manifest = readJson(path.resolve(flags.manifest));
+        const plan = planFileMigration(path.resolve(manifest.root), trusted, candidate, manifest.entries ?? []);
+        if (apply) {
+          const approvedPlanHash = required(flags, 'approved-plan-hash');
+          if (approvedPlanHash !== plan.planFingerprint) throw new Error('approved plan hashがdry-run planと一致しません');
+          const persist = (/** @type {any} */ value) => writeFileAtomic(/** @type {string} */ (stateFile), `${JSON.stringify(value, null, 2)}\n`);
+          persist(plan);
+          result = applyFileMigration(plan, trusted, candidate, { approvedPlanHash, expectedRevision, persist });
+        } else result = plan;
+      } else {
+        if (trusted.policy || candidate.policy) throw new Error('fragmented project policy setのmigrationにはraw inventoryを列挙する--manifestが必要です');
+        const plan = planMigration(trusted, candidate);
+        if (apply) writeFileAtomic(/** @type {string} */ (stateFile), `${JSON.stringify(plan, null, 2)}\n`);
+        result = apply ? applyMigration(plan, { approvedPlanHash: required(flags, 'approved-plan-hash'), expectedRevision }) : plan;
+      }
+    } else {
+      if (!stateFile || !fs.existsSync(stateFile)) throw new Error('rollback/retryには既存の--stateが必要です');
+      const state = readJson(stateFile);
+      if (!apply) { print({ state: 'preview', operation, currentRevision: state.revision, requiredApproval: 'approved-plan-hash', requiredExpectedRevision: state.revision }); return 0; }
+      if (state.manifest) {
+        if (!trusted || !candidate) throw new Error('実manifestのrollback/retryには--trustedと--candidateが必要です');
+        const approvedPlanHash = required(flags, 'approved-plan-hash');
+        const persist = (/** @type {any} */ value) => writeFileAtomic(/** @type {string} */ (stateFile), `${JSON.stringify(value, null, 2)}\n`);
+        result = operation === 'rollback' ? rollbackFileMigration(state, trusted, candidate, { approvedPlanHash, expectedRevision, persist }) : operation === 'retry' ? retryFileMigration(state, trusted, candidate, { approvedPlanHash, expectedRevision, persist }) : recoverFileMigration(state, trusted, candidate, { approvedPlanHash, expectedRevision, persist });
+      } else {
+        if (operation === 'retry' && (!trusted || !candidate)) throw new Error('retryには--trustedと--candidateが必要です');
+        const authority = { approvedPlanHash: required(flags, 'approved-plan-hash'), expectedRevision };
+        result = operation === 'rollback' ? rollbackMigration(state, authority) : retryMigration(state, trusted, candidate, authority);
+      }
+    }
+    if (apply && result.state === 'rejected') {
+      const reportFile = typeof flags.report === 'string' ? path.resolve(flags.report) : `${stateFile}.report.json`;
+      writeFileAtomic(reportFile, `${JSON.stringify(result, null, 2)}\n`);
+    } else if (apply) {
+      writeFileAtomic(/** @type {string} */ (stateFile), `${JSON.stringify(result, null, 2)}\n`);
+    }
+    print(result.state === 'rejected' ? serializeDiagnostic(result) : printableMigration(result));
+    return result.state === 'rejected' || result.allowed === false ? 1 : 0;
   }
   if (command === 'worktree' && subcommand === 'create') {
     const { flags } = parse(rest);
     const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
-    print(createWorktree({ repoRoot: root, worktreePath: required(flags, 'path'), branch: required(flags, 'branch'), base: required(flags, 'base'), expectedRepository: typeof flags.repo === 'string' ? flags.repo : undefined }));
+    const trustedSet = loadOperationPolicy(root);
+    print(createWorktree({ repoRoot: root, worktreePath: required(flags, 'path'), branch: required(flags, 'branch'), base: required(flags, 'base'), expectedRepository: typeof flags.repo === 'string' ? flags.repo : undefined, trustedPolicy: trustedSet.policy }));
     return 0;
   }
   if (command === 'worktree' && subcommand === 'finalize') {
@@ -123,13 +269,13 @@ export async function main(argv) {
     const apply = applyMode(flags);
     const root = path.resolve(required(flags, 'root'));
     const target = path.resolve(required(flags, 'path'));
-    const evidence = JSON.parse(fs.readFileSync(required(flags, 'evidence'), 'utf8'));
+    const evidence = readJson(required(flags, 'evidence'));
     const state = inspectFinalizeState(root, target, evidence);
     const report = buildFinalizeReport(state);
     if (!apply) { print(report); return report.safe ? 0 : 1; }
     const approvedHash = required(flags, 'report-hash');
     if (flags.authorize !== 'approved') throw new Error('完了処理の適用には--authorize=approvedが必要です');
-    const result = applyFinalize({ report, approvedHash, currentState: inspectFinalizeState(root, target, evidence) }, (operation, payload) => {
+    const result = applyFinalize({ report, approvedHash, currentState: inspectFinalizeState(root, target, evidence), trustedPolicy: loadOperationPolicy(root).policy }, (operation, payload) => {
       if (operation !== 'worktree.remove') throw new Error('未対応の完了処理です');
       git(['worktree', 'remove', payload.path], root);
     });
@@ -139,12 +285,13 @@ export async function main(argv) {
   if (command === 'pr' && subcommand === 'create') {
     const { flags } = parse(rest);
     const apply = applyMode(flags);
-    const evidence = JSON.parse(fs.readFileSync(path.resolve(required(flags, 'evidence')), 'utf8'));
+    const evidence = readJson(path.resolve(required(flags, 'evidence')));
+    const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
     const input = {
       apply, authorization: typeof flags.authorize === 'string' ? flags.authorize : undefined, repository: required(flags, 'repo'), issue: Number(required(flags, 'issue')),
-      head: required(flags, 'head'), headSha: required(flags, 'head-sha'), base: required(flags, 'base'), evidence,
+      head: required(flags, 'head'), headSha: required(flags, 'head-sha'), base: required(flags, 'base'), evidence, trustedPolicy: loadOperationPolicy(root).policy,
     };
-    print(createPullRequest(input, (operation, payload) => github(operation, payload, process.cwd())));
+    print(createPullRequest(input, (operation, payload) => github(operation, payload, root)));
     return 0;
   }
   if (command === 'pr' && subcommand === 'merge') {
@@ -155,9 +302,11 @@ export async function main(argv) {
     const pr = required(flags, 'pr');
     const method = required(flags, 'method');
     const base = defaultBranch(root);
-    const trustedPolicy = loadTrustedPolicy(root, base);
+    const trustedSet = loadEffectiveTrustedPolicySet(root, base);
+    const trustedPolicy = trustedSet.policy;
     const inspected = github('pr.inspect', { repository, pr }, root);
     if (inspected.baseRefName !== base) throw new Error('PRの基点が検証済み既定ブランチではありません');
+    if (trustedSet.provenance?.commitSha && inspected.baseRefOid !== trustedSet.provenance.commitSha) throw new Error('PR base SHAがtrusted policy setのcommit SHAと一致しません');
     const protection = github('branch.protection', { repository, branch: base }, root);
     const checks = (inspected.statusCheckRollup ?? []).filter((/** @type {any} */ item) => ['SUCCESS', 'NEUTRAL', 'SKIPPED'].includes(item.conclusion ?? item.status)).map((/** @type {any} */ item) => item.name ?? item.context).filter(Boolean);
     const approvals = new Set((inspected.latestReviews ?? []).filter((/** @type {any} */ review) => review.state === 'APPROVED').map((/** @type {any} */ review) => review.author?.login).filter(Boolean)).size;

@@ -1,11 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/techbeansjp-free/AGENTS.md/schemas/project-policy-v0.3.json",
+  "$id": "https://github.com/techbeansjp-free/AGENTS.md/schemas/project-policy-v0.4.json",
+  "title": "agent-skill-chain risk比例型project policy",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "delivery", "merge"],
   "properties": {
-    "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.3" },
+    "schemaVersion": { "enum": ["agent-skill-chain/project-policy/v0.3", "agent-skill-chain/project-policy/v0.4"] },
     "delivery": {
       "type": "object", "additionalProperties": false, "required": ["stopAt"],
       "properties": { "stopAt": { "const": "pull_request" } }
@@ -15,11 +16,69 @@
       "required": ["mode", "branches", "methods", "requiredChecks", "requiredReviews"],
       "properties": {
         "mode": { "enum": ["disabled", "assisted", "automatic"] },
-        "branches": { "type": "array", "items": { "type": "string", "minLength": 1 }, "maxItems": 32 },
+        "branches": { "type": "array", "items": { "type": "string", "minLength": 1 }, "maxItems": 32, "uniqueItems": true },
         "methods": { "type": "array", "items": { "enum": ["merge", "squash", "rebase"] }, "uniqueItems": true },
         "requiredChecks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
         "requiredReviews": { "type": "integer", "minimum": 0, "maximum": 20 }
       }
+    },
+    "budgets": {
+      "type": "object", "additionalProperties": false, "required": ["localFeedbackMs", "prGateMs"],
+      "properties": {
+        "localFeedbackMs": { "type": "integer", "minimum": 1 },
+        "prGateMs": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rule" } },
+    "projectChoices": { "$ref": "#/$defs/projectChoices" }
+  },
+  "allOf": [{
+    "if": { "properties": { "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.4" } } },
+    "then": { "required": ["budgets", "rules"] },
+    "else": { "not": { "anyOf": [{ "required": ["budgets"] }, { "required": ["rules"] }, { "required": ["projectChoices"] }] } }
+  }],
+  "$defs": {
+    "projectChoices": {
+      "type": "object", "additionalProperties": false,
+      "required": ["language", "testRunner", "testLayers", "naming", "packageManager", "runtime", "ci", "modelMapping", "release"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1 },
+        "testRunner": { "type": "string", "minLength": 1 },
+        "testLayers": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "naming": { "type": "string", "minLength": 1 },
+        "packageManager": { "type": "string", "minLength": 1 },
+        "runtime": { "type": "string", "minLength": 1 },
+        "ci": { "type": "string", "minLength": 1 },
+        "modelMapping": { "type": "string", "minLength": 1 },
+        "release": { "type": "string", "minLength": 1 }
+      }
+    },
+    "rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ruleId", "purpose", "riskClass", "scope", "enforcement", "activation", "owner", "targetLayer", "evidence", "remediation", "overridePolicy", "rollback"],
+      "properties": {
+        "ruleId": { "type": "string", "pattern": "^ASC-[A-Z0-9-]+$" },
+        "purpose": { "type": "string", "minLength": 1 },
+        "riskClass": { "type": "string", "minLength": 1 },
+        "scope": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "enforcement": { "enum": ["deny", "require", "assist", "warn", "record"] },
+        "activation": { "enum": ["active", "staged", "disabled"] },
+        "owner": { "type": "string", "minLength": 1 },
+        "targetLayer": { "enum": ["package", "project", "spec"] },
+        "evidence": { "type": "string", "minLength": 1 },
+        "remediation": { "type": "string", "minLength": 1 },
+        "overridePolicy": { "enum": ["never", "bound"] },
+        "rollback": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [{
+        "if": { "properties": { "enforcement": { "const": "deny" } }, "required": ["enforcement"] },
+        "then": {
+          "properties": {
+            "riskClass": { "enum": ["secret", "path", "authority", "irreversible", "identity", "artifact"] },
+            "overridePolicy": { "const": "never" }
+          }
+        }
+      }]
     }
   }
 }

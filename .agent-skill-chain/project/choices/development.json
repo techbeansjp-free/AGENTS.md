@@ -1,0 +1,5 @@
+{
+  "language": "日本語", "testRunner": "cucumber-js", "testLayers": ["unit", "integration", "e2e"],
+  "naming": "連番付き日本語Markdownと一意なSCN ID", "packageManager": "npm", "runtime": "Node.js 20以上",
+  "ci": ".github/workflows/ci.yml", "modelMapping": "roleごとにprojectが選択する", "release": "明示authorityによる手動操作"
+}

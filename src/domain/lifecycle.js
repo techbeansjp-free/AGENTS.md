@@ -97,7 +97,7 @@ export function uninstall(target, options) {
   if (!options.apply) return { applied: false, removable, retained };
   for (const file of removable) fs.rmSync(file);
   fs.rmSync(recordPath);
-  return { applied: true, retained, consumerAssetsPreserved: ['.agent-skill-chain/tmp', '.agent-skill-chain/project-policy.json', 'docs/specs'] };
+  return { applied: true, retained, consumerAssetsPreserved: ['.agent-skill-chain/tmp', '.agent-skill-chain/project-policy.json', '.agent-skill-chain/project', 'docs/specs'] };
 }
 
 /** @param {string} target */

@@ -145,8 +145,8 @@ Given('英語だけの人向けMarkdownがある', function () { this.root = thi
 When('日本語文書形式検査を実行する', function () { this.documentCheck = spawnSync('python3', ['scripts/check_japanese_docs.py', this.root], { cwd: process.cwd(), encoding: 'utf8' }); });
 Then('日本語文書形式検査は失敗する', function () { assert.notEqual(this.documentCheck.status, 0); assert.ok(this.documentCheck.stderr.includes('日本語')); });
 
-Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.featuresRoot = 'test/features'; });
-When('Gherkin traceを検証する', function () { this.result = validateScenarioTrace(this.featuresRoot); });
+Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.featuresRoot = 'test/features'; this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });
+When('Gherkin traceを検証する', function () { this.result = validateScenarioTrace(this.featuresRoot, { layers: this.testLayers, forbiddenFileSuffixes: this.forbiddenFileSuffixes }); });
 Then('全scenarioに一意なSCN IDとGiven、When、Thenがある', function () { assert.equal(this.result.errors.filter((/** @type {string} */ error) => /duplicate|missing/.test(error)).length, 0); });
 Then('unit、integration、E2Eの各layerにscenarioがある', function () { for (const layer of ['unit', 'integration', 'e2e']) assert.ok(this.result.layerCounts[layer] > 0); });
 Then('JavaScriptのNode test起票は0件である', function () { assert.deepEqual(this.result.nodeTests, []); });
@@ -161,3 +161,6 @@ Given('同じSCN IDを持つ2つのGherkin scenarioがある', function () {
   fs.writeFileSync(path.join(this.featuresRoot, 'e2e', 'x.feature'), 'Feature: 日本語E2E\nScenario: SCN-X-003 日本語E2E\n Given 日本語前提\n When 日本語操作\n Then 日本語結果\n');
 });
 Then('重複errorを検出する', function () { assert.ok(this.result.errors.some((/** @type {string} */ error) => error.includes('重複'))); });
+Given('projectがcomponentとjourneyのtest layerを選択する', function () { const root = this.temp(); this.featuresRoot = path.join(root, 'features'); this.testLayers = ['component', 'journey']; for (const layer of this.testLayers) { fs.mkdirSync(path.join(this.featuresRoot, layer), { recursive: true }); fs.writeFileSync(path.join(this.featuresRoot, layer, `${layer}.feature`), `Feature: configured layer\nScenario: SCN-${layer.toUpperCase()}-001 configured scenario\n Given configured precondition\n When configured action\n Then configured result\n`); } });
+When('configured layerでGherkin traceを検証する', function () { this.result = validateScenarioTrace(this.featuresRoot, { layers: this.testLayers }); });
+Then('generic traceはfixed 3 layerを要求しない', function () { assert.equal(this.result.valid, true, this.result.errors.join('; ')); assert.deepEqual(Object.keys(this.result.layerCounts), this.testLayers); assert.equal(JSON.stringify(this.result).includes('unit'), false); assert.equal(JSON.stringify(this.result).includes('integration'), false); assert.equal(JSON.stringify(this.result).includes('e2e'), false); });

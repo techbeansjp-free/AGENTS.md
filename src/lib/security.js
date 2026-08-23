@@ -42,9 +42,12 @@ export function resolveContained(root, candidate, options = {}) {
 /** @param {string} input */
 export function redactSecrets(input) {
   return String(input)
+    .replace(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g, '[REDACTED_PRIVATE_KEY]')
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, '$1[REDACTED]@')
+    .replace(/\bBearer\s+[^\s,;"']+/gi, 'Bearer [REDACTED]')
     .replace(/\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '[REDACTED_GITHUB_TOKEN]')
     .replace(/(Authorization\s*:\s*Bearer\s+)[^\s]+/gi, '$1[REDACTED]')
-    .replace(/\b(?:token|password|secret|api[_-]?key)\s*[=:]\s*[^\s]+/gi, '[REDACTED_SECRET]');
+    .replace(/\b(?:token|password|secret|api[_-]?key|apiKey|databaseUrl|connectionString|privateKey)\s*[=:]\s*[^\s,;]+/gi, '[REDACTED_SECRET]');
 }
 
 /** @param {unknown} value @returns {string} */
@@ -54,4 +57,53 @@ export function stableJson(value) {
     return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+/** JSON parser that rejects duplicate object keys instead of applying last-key-wins semantics. @param {string} source @param {string} [label] */
+export function parseJsonStrict(source, label = 'JSON') {
+  let index = 0;
+  /** @param {string} message @returns {never} */
+  const fail = (message) => { throw new Error(`${label}: ${message} (offset ${index})`); };
+  const whitespace = () => { while (/\s/u.test(source[index] ?? '')) index += 1; };
+  const string = () => {
+    if (source[index] !== '"') fail('文字列が必要です');
+    const start = index++;
+    let escaped = false;
+    while (index < source.length) {
+      const character = source[index++];
+      if (!escaped && character === '"') return JSON.parse(source.slice(start, index));
+      if (!escaped && character === '\\') escaped = true;
+      else escaped = false;
+    }
+    fail('文字列が閉じていません');
+  };
+  /** @returns {any} */
+  const value = () => {
+    whitespace();
+    if (source[index] === '{') {
+      index += 1;
+      /** @type {Record<string, any>} */
+      const object = {};
+      const keys = new Set(); whitespace();
+      if (source[index] === '}') { index += 1; return object; }
+      while (index < source.length) {
+        whitespace(); const key = string(); if (keys.has(key)) fail(`重複keyを拒否しました: ${key}`); keys.add(key); whitespace();
+        if (source[index++] !== ':') fail('colonが必要です'); object[key] = value(); whitespace();
+        const separator = source[index++]; if (separator === '}') return object; if (separator !== ',') fail('commaまたはobject終端が必要です');
+      }
+      fail('objectが閉じていません');
+    }
+    if (source[index] === '[') {
+      index += 1;
+      /** @type {any[]} */
+      const array = [];
+      whitespace(); if (source[index] === ']') { index += 1; return array; }
+      while (index < source.length) { array.push(value()); whitespace(); const separator = source[index++]; if (separator === ']') return array; if (separator !== ',') fail('commaまたはarray終端が必要です'); }
+      fail('arrayが閉じていません');
+    }
+    if (source[index] === '"') return string();
+    const token = /^(?:true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/u.exec(source.slice(index))?.[0];
+    if (!token) fail('値が不正です'); index += token.length; return JSON.parse(token);
+  };
+  const parsed = value(); whitespace(); if (index !== source.length) fail('末尾に余分な入力があります'); return parsed;
 }

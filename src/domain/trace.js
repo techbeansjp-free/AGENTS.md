@@ -29,9 +29,11 @@ export function parseGherkinScenarios(text) {
   return scenarios;
 }
 
-/** @param {string} featuresRoot */
-export function validateScenarioTrace(featuresRoot) {
+/** @param {string} featuresRoot @param {{layers?: string[], forbiddenFileSuffixes?: string[]}} [options] */
+export function validateScenarioTrace(featuresRoot, options = {}) {
   const errors = [];
+  const layers = options.layers ?? [];
+  if (!Array.isArray(layers) || layers.length === 0 || layers.some((layer) => typeof layer !== 'string' || layer.trim() === '') || new Set(layers).size !== layers.length) errors.push('project policyから空でない一意なtest layerを選択してください');
   const featureFiles = walkFiles(featuresRoot, (file) => file.endsWith('.feature'));
   const scenarios = featureFiles.flatMap((file) => parseGherkinScenarios(fs.readFileSync(file, 'utf8')).map((scenario) => ({ ...scenario, file })));
   const ids = new Set();
@@ -42,12 +44,12 @@ export function validateScenarioTrace(featuresRoot) {
   }
   /** @type {Record<string, number>} */
   const layerCounts = {};
-  for (const layer of ['unit', 'integration', 'e2e']) {
+  for (const layer of layers) {
     layerCounts[layer] = scenarios.filter((scenario) => scenario.file.split(path.sep).includes(layer)).length;
     if (layerCounts[layer] === 0) errors.push(`${layer}層にGherkinシナリオがありません`);
   }
   const testRoot = path.dirname(featuresRoot);
-  const nodeTests = walkFiles(testRoot, (file) => file.endsWith('.test.js'));
-  if (nodeTests.length > 0) errors.push(`Node test起票が残っています: ${nodeTests.join(', ')}`);
-  return { valid: errors.length === 0, errors, scenarios: scenarios.map(({ id, title, file }) => ({ id, title, layer: ['unit', 'integration', 'e2e'].find((layer) => file.split(path.sep).includes(layer)) ?? 'unknown' })), layerCounts, nodeTests };
+  const forbiddenFiles = walkFiles(testRoot, (file) => (options.forbiddenFileSuffixes ?? []).some((suffix) => file.endsWith(suffix)));
+  if (forbiddenFiles.length > 0) errors.push(`project policyが禁止するtest fileが残っています: ${forbiddenFiles.join(', ')}`);
+  return { valid: errors.length === 0, errors, scenarios: scenarios.map(({ id, title, file }) => ({ id, title, layer: layers.find((layer) => file.split(path.sep).includes(layer)) ?? 'unknown' })), layerCounts, forbiddenFiles, nodeTests: forbiddenFiles };
 }

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-skill-chain.invalid/schemas/project-rule-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ruleId", "purpose", "riskClass", "scope", "enforcement", "activation", "owner", "targetLayer", "evidence", "remediation", "overridePolicy", "rollback"],
+  "properties": {
+    "ruleId": { "type": "string", "pattern": "^ASC-[A-Z0-9-]+$" },
+    "purpose": { "type": "string", "minLength": 1 },
+    "riskClass": { "type": "string", "minLength": 1 },
+    "scope": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "enforcement": { "enum": ["deny", "require", "assist", "warn", "record"] },
+    "activation": { "enum": ["active", "staged", "disabled"] },
+    "owner": { "type": "string", "minLength": 1 },
+    "targetLayer": { "enum": ["package", "project", "spec"] },
+    "evidence": { "type": "string", "minLength": 1 },
+    "remediation": { "type": "string", "minLength": 1 },
+    "overridePolicy": { "enum": ["never", "bound"] },
+    "rollback": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [{
+    "if": { "properties": { "enforcement": { "const": "deny" } }, "required": ["enforcement"] },
+    "then": { "properties": { "riskClass": { "enum": ["secret", "path", "authority", "irreversible", "identity", "artifact"] }, "overridePolicy": { "const": "never" } } }
+  }]
+}

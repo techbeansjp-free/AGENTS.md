@@ -29,7 +29,8 @@
     "test:unit": "cucumber-js --config cucumber.mjs --tags @unit",
     "test:integration": "cucumber-js --config cucumber.mjs --tags @integration",
     "test:e2e": "cucumber-js --config cucumber.mjs --tags @e2e",
-    "prepack": "npm run build && npm run docs:format && npm run typecheck && npm run test:format && npm test"
+    "conformance:check": "node scripts/check_conformance.js",
+    "prepack": "npm run build && npm run docs:format && npm run typecheck && npm run test:format && npm test && npm run package:check"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

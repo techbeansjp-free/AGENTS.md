@@ -17,3 +17,8 @@ Feature: Gherkinを全test layerの正本にする
     Given 同じSCN IDを持つ2つのGherkin scenarioがある
     When Gherkin traceを検証する
     Then 重複errorを検出する
+
+  Scenario: SCN-UNIT-TRACE-004 test layerはproject choiceから解決する
+    Given projectがcomponentとjourneyのtest layerを選択する
+    When configured layerでGherkin traceを検証する
+    Then generic traceはfixed 3 layerを要求しない

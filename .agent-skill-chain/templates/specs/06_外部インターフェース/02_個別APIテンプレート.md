@@ -17,12 +17,12 @@
 
 ```mermaid
 sequenceDiagram
-  participant Caller as 呼出元
-  participant API as 対象API
-  participant Dependency as 依存先
-  Caller->>API: 要求
-  API->>API: 入力・権限検証
-  API->>Dependency: 検証済み要求
-  Dependency-->>API: 結果
-  API-->>Caller: 応答
+  participant Caller
+  participant Interface
+  participant Dependency
+  Caller->>Interface: Message
+  Interface->>Interface: Validate
+  Interface->>Dependency: ValidatedMessage
+  Dependency-->>Interface: Result
+  Interface-->>Caller: ObservableResult
 ```

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "agent-skill-chain/project-policy/v0.3",
+  "schemaVersion": "agent-skill-chain/project-policy/v0.4",
   "delivery": { "stopAt": "pull_request" },
   "merge": {
     "mode": "assisted",
@@ -7,5 +7,22 @@
     "methods": ["squash"],
     "requiredChecks": ["typecheck", "test"],
     "requiredReviews": 1
-  }
+  },
+  "budgets": { "localFeedbackMs": 60000, "prGateMs": 600000 },
+  "rules": [
+    {
+      "ruleId": "ASC-SAMPLE-STYLE-001",
+      "purpose": "project固有の品質ruleを段階導入する",
+      "riskClass": "quality",
+      "scope": ["project_scope"],
+      "enforcement": "assist",
+      "activation": "staged",
+      "owner": "project owner",
+      "targetLayer": "project",
+      "evidence": "projectが選択した検証hook",
+      "remediation": "dry-run差分を確認してからproject ruleを適用する",
+      "overridePolicy": "bound",
+      "rollback": "修正差分を元へ戻す"
+    }
+  ]
 }

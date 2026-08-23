@@ -25,6 +25,8 @@ Given('packageをinstall済みのconsumerがある', function () { this.root = t
 Given('consumerが品質基準、project policy、docs specsを変更している', function () {
   fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'docs', '02_品質基準.md'), '利用側による変更');
   fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'project-policy.json'), '{"consumer":true}\n');
+  fs.mkdirSync(path.join(this.root, '.agent-skill-chain', 'project', 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'project', 'rules', 'consumer.json'), '{"consumer":true}\n');
   fs.mkdirSync(path.join(this.root, 'docs', 'specs', '00_仕様書構成'), { recursive: true });
   fs.writeFileSync(path.join(this.root, 'docs', 'specs', '00_仕様書構成', '00_仕様書索引.md'), '利用側仕様');
 });
@@ -34,18 +36,22 @@ Then('consumer変更はすべて保持される', function () {
   assert.equal(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'docs', '02_品質基準.md'), 'utf8'), '利用側による変更');
   assert.equal(fs.readFileSync(path.join(this.root, 'docs', 'specs', '00_仕様書構成', '00_仕様書索引.md'), 'utf8'), '利用側仕様');
   assert.equal(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'project-policy.json'), 'utf8'), '{"consumer":true}\n');
+  assert.equal(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'project', 'rules', 'consumer.json'), 'utf8'), '{"consumer":true}\n');
 });
 
 Given('consumerが品質基準とtransient stagingを持つ', function () {
   fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'docs', '02_品質基準.md'), '保持する');
   fs.mkdirSync(path.join(this.root, '.agent-skill-chain', 'tmp', 'issues'), { recursive: true });
   fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'tmp', 'issues', 'draft'), 'keep');
+  fs.mkdirSync(path.join(this.root, '.agent-skill-chain', 'project', 'choices'), { recursive: true });
+  fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'project', 'choices', 'consumer.json'), 'keep');
 });
 When('uninstallをapplyする', function () { this.result = uninstall(this.root, { apply: true }); });
 Then('modified品質基準とtransient stagingは保持される', function () {
   assert.ok(this.result.retained.includes(path.join('.agent-skill-chain', 'docs', '02_品質基準.md')));
   assert.equal(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'docs', '02_品質基準.md'), 'utf8'), '保持する');
   assert.equal(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'tmp', 'issues', 'draft'), 'utf8'), 'keep');
+  assert.equal(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'project', 'choices', 'consumer.json'), 'utf8'), 'keep');
 });
 
 Given('packageをinstall済みでlegacy .agentsと.workflowを持つconsumerがある', function () { this.root = this.temp(); init(this.root, { apply: true }); fs.mkdirSync(path.join(this.root, '.agents')); fs.mkdirSync(path.join(this.root, '.workflow')); });

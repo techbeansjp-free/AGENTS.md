@@ -28,13 +28,11 @@ jobs:
         run: npm run test:format
       - name: 型を検証する
         run: npm run typecheck
+      - name: repository固有policyをdogfood検証する
+        run: node bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json
       - name: 構築対象とパッケージ資産を検証する
         run: npm run build
       - name: npm配布物への開発用ファイル混入を拒否する
         run: npm run package:check
-      - name: 単体Gherkinを実行する
-        run: npm run test:unit
-      - name: 結合Gherkinを実行する
-        run: npm run test:integration
-      - name: E2E Gherkinを実行する
-        run: npm run test:e2e
+      - name: 全テストとrepository conformance証拠を検証する
+        run: npm run conformance:check

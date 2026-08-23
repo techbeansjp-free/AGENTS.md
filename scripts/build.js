@@ -7,6 +7,10 @@ const required = [
   '.agent-skill-chain/docs/01_開発ワークフロー.md',
   '.agent-skill-chain/docs/02_品質基準.md',
   '.agent-skill-chain/schemas/project-policy.schema.json', '.agent-skill-chain/policy/default.json',
+  '.agent-skill-chain/schemas/project-policy-manifest.schema.json',
+  '.agent-skill-chain/schemas/project-choice.schema.json', '.agent-skill-chain/schemas/project-rule.schema.json',
+  '.agent-skill-chain/schemas/project-conformance-binding.schema.json',
+  '.agent-skill-chain/schemas/conformance-contract.schema.json', '.agent-skill-chain/policy/conformance.json',
 ];
 const missing = required.filter((file) => !fs.existsSync(path.resolve(file)));
 if (missing.length) throw new Error(`パッケージ資産が不足しています: ${missing.join(', ')}`);
