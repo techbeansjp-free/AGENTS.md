@@ -34,7 +34,7 @@ export function validateConformanceContract(contract) {
   return { valid: errors.length === 0, errors, invariants: contract.invariants ?? [] };
 }
 
-/** Validate the project-owned binding structure without resolving repository paths or evidence. @param {any} binding */
+/** Keep shape validation separate so candidate data cannot trigger filesystem reads before its paths are proven safe. @param {any} binding */
 export function validateProjectConformanceBinding(binding) {
   const errors = [];
   if (!binding || typeof binding !== 'object' || Array.isArray(binding)) return { valid: false, errors: ['bindingはobjectでなければなりません'] };
@@ -59,12 +59,13 @@ export function validateProjectConformanceBinding(binding) {
       if (!point || typeof point !== 'object' || Array.isArray(point)) { errors.push(`${item.id}.enforcement itemが不正です`); continue; }
       for (const key of Object.keys(point)) if (!['path', 'export'].includes(key)) errors.push(`${item.id}.enforcement.${key}は未知fieldです`);
       if (!text(point.path) || !text(point.export)) errors.push(`${item.id}.enforcementはpathとexportが必要です`);
+      else if (!/^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\/\/)(?!.*\\)(?!.*\/$)[^\u0000]+$/u.test(point.path)) errors.push(`${item.id}.enforcement.pathが不正です`);
     }
   }
   return { valid: errors.length === 0, errors };
 }
 
-/** Remove comments and literals while preserving lines and token boundaries. @param {string} source */
+/** Strip non-executable text so a hook name mentioned only in a comment or literal cannot satisfy conformance. @param {string} source */
 function executableSource(source) {
   let result = ''; let state = 'code'; let escaped = false;
   for (let index = 0; index < source.length; index += 1) {

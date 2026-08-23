@@ -287,16 +287,19 @@ export function enforceOperation(input) {
   return { ...evaluated, allowed: false, validation: validationPlan, metrics: metricResult };
 }
 
-/** Actual operation adapters derive observations and call this function; caller-supplied rule IDs or violated flags are not inputs. @param {{policy: any, boundary: string, observations: Array<{ruleId?: string, riskClass?: string, violated: boolean, reasons?: string[], checks?: string[]}>}} input */
+/** Operation adapters must bind each independently derived observation to one exact trusted rule ID. @param {{policy: any, boundary: string, observations: Array<{ruleId: string, violated: boolean, reasons?: string[], checks?: string[]}>}} input */
 export function enforceTrustedBoundary(input) {
   const validation = validateEnforcementPolicy(input.policy);
   if (!validation.valid) return { allowed: false, boundary: input.boundary, diagnostic: validation.diagnostics[0] ?? diagnostic('ASC-POLICY-INVALID', 'trusted policyをoperation前に検証する', 'authority', validation.errors, [input.boundary], ['trusted policy全ruleを検証した'], [], 'trusted policyを修正してからoperationを再実行してください', 'project policy owner', 'operationを実行しない') };
   const applicable = (input.policy?.rules ?? []).filter((/** @type {any} */ rule) => rule.scope.includes(input.boundary));
+  if (applicable.length === 0) return { allowed: false, boundary: input.boundary, diagnostic: diagnostic('ASC-SCOPE-001', 'operation境界をtrusted ruleで統治する', 'authority', [`${input.boundary}へ適用するtrusted ruleがありません`], [input.boundary], ['trusted policyの全scopeを確認した'], [], 'trusted policyへ対象boundaryを持つruleを追加してください', 'project policy owner', 'operationを実行しない') };
+  const observations = Array.isArray(input.observations) ? input.observations : [];
   const results = applicable.map((/** @type {any} */ rule) => {
-    const observed = input.observations.find((item) => item.ruleId === rule.ruleId || item.riskClass === rule.riskClass) ?? {
+    const matches = observations.filter((item) => item?.ruleId === rule.ruleId);
+    const observed = matches.length === 1 ? matches[0] : {
       violated: true,
-      reasons: [`${rule.ruleId}に必要なactual observationがありません`],
-      checks: ['operation adapterの観測完全性を確認した'],
+      reasons: [matches.length === 0 ? `${rule.ruleId}に必要なactual observationがありません` : `${rule.ruleId}のactual observationが重複しています`],
+      checks: ['operation adapterのrule ID別観測完全性を確認した'],
     };
     return evaluateRule(rule, observed);
   });

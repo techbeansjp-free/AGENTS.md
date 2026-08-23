@@ -93,9 +93,9 @@ export function github(operation, input, cwd) {
   }
   if (operation === 'pr.reviews') {
     verifyRepository(input.repository, cwd, 'read');
-    const reviews = JSON.parse(run('gh', ['api', `repos/${input.repository}/pulls/${input.pr}/reviews`], cwd).stdout);
-    if (!Array.isArray(reviews)) throw new Error('GitHub review観測が配列ではありません');
-    return reviews.map((/** @type {any} */ review) => ({ state: review.state, commitSha: review.commit_id, actorId: review.user?.node_id }));
+    const pages = JSON.parse(run('gh', ['api', '--paginate', '--slurp', `repos/${input.repository}/pulls/${input.pr}/reviews?per_page=100`], cwd).stdout);
+    if (!Array.isArray(pages) || pages.some((/** @type {any} */ page) => !Array.isArray(page))) throw new Error('GitHub review観測がpage配列ではありません');
+    return pages.flat().map((/** @type {any} */ review) => ({ state: review.state, commitSha: review.commit_id, actorId: review.user?.node_id, submittedAt: review.submitted_at, reviewId: String(review.id ?? '') }));
   }
   if (operation === 'commit.inspect') {
     verifyRepository(input.repository, cwd, 'read');

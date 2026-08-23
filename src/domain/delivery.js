@@ -48,27 +48,26 @@ export function createPullRequest(input, external) {
     const effective = resolveEffectivePolicy(input.trustedPolicy, input.candidatePolicy);
     const comparison = effective.valid ? compareTrustedPolicy(input.trustedPolicy, effective.policy) : { allowed: false, rejected: [effective.diagnostic] };
     const ownership = input.evidence?.ownership;
-    const enforcement = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'pull_request', observations: [
-      {
-        riskClass: 'authority', violated: !effective.valid || !comparison.allowed,
-        reasons: effective.valid ? comparison.rejected.flatMap((/** @type {any} */ item) => item?.reasons ?? []) : effective.diagnostic?.reasons ?? ['candidate policyを安全floorへ合成できません'],
-        checks: ['trusted policyと固定candidate policyの自己緩和を比較した'],
-      },
-      {
-        riskClass: 'quality', violated: ownership?.classified !== true || typeof ownership?.owner !== 'string' || typeof ownership?.targetLayer !== 'string',
-        reasons: ['PR evidenceにasset分類、owner、targetLayerの実測結果が必要です'], checks: ['HEAD SHAに拘束されたPR evidenceのownership分類を確認した'],
-      },
-    ] });
+    const observations = (input.trustedPolicy.rules ?? []).filter((/** @type {any} */ rule) => rule.scope?.includes('pull_request')).map((/** @type {any} */ rule) => rule.riskClass === 'authority' ? {
+      ruleId: rule.ruleId, violated: !effective.valid || !comparison.allowed,
+      reasons: effective.valid ? comparison.rejected.flatMap((/** @type {any} */ item) => item?.reasons ?? []) : effective.diagnostic?.reasons ?? ['candidate policyを安全floorへ合成できません'],
+      checks: ['trusted policyと固定candidate policyの自己緩和を比較した'],
+    } : rule.riskClass === 'quality' ? {
+      ruleId: rule.ruleId, violated: ownership?.classified !== true || typeof ownership?.owner !== 'string' || typeof ownership?.targetLayer !== 'string',
+      reasons: ['PR evidenceにasset分類、owner、targetLayerの実測結果が必要です'], checks: ['HEAD SHAに拘束されたPR evidenceのownership分類を確認した'],
+    } : undefined).filter(Boolean);
+    const enforcement = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'pull_request', observations });
     if (!enforcement.allowed) throw new Error(`${enforcement.diagnostic.ruleId}: ${enforcement.diagnostic.reasons.join('; ')}`);
   }
   const preview = { operation: 'pr.create', authorityStatus: 'unverified-preview', repository: input.repository, issue: input.issue, head: input.head, headSha: input.headSha, base: input.base, bodyLink: `Relates to #${input.issue}` };
   if (!input.apply) return { state: 'preview', preview };
+  if (!input.trustedPolicy) throw new Error('外部PR作成には既定ブランチから取得したtrusted policyが必要です');
   if (input.authorization !== 'approved') throw new Error('外部書き込みには明示的な承認が必要です');
   const result = external('pr.create', preview);
   return { state: 'waiting_for_human_review', url: result.url, next: '独立したpr mergeコマンドを使う。暗黙のマージ・完了処理・後片付けは行わない' };
 }
 
-/** @param {{trustedPolicy: any, candidatePolicy?: any, method: string, checks?: string[], approvals?: Array<{state: string, commitSha: string, actorId: string}>, headSha?: string, prAuthorActorId?: string, implementationAuthorActorId?: string, branch: string, repositoryVerified?: boolean, shaVerified?: boolean, protectionVerified?: boolean, mergeableVerified?: boolean}} input */
+/** @param {{trustedPolicy: any, candidatePolicy?: any, method: string, checks?: string[], approvals?: Array<{state: string, commitSha: string, actorId: string, submittedAt: string, reviewId: string}>, headSha?: string, prAuthorActorId?: string, implementationAuthorActorId?: string, branch: string, repositoryVerified?: boolean, shaVerified?: boolean, protectionVerified?: boolean, mergeableVerified?: boolean}} input */
 export function authorizeMerge(input) {
   const policy = input.trustedPolicy?.merge;
   /** @param {string} reason */
@@ -87,7 +86,15 @@ export function authorizeMerge(input) {
   const needsApproval = (policy.requiredReviews ?? 0) > 0 || policy.mode === 'assisted';
   if (needsApproval && (typeof input.prAuthorActorId !== 'string' || input.prAuthorActorId === '' || typeof input.implementationAuthorActorId !== 'string' || input.implementationAuthorActorId === '')) return deny('PR authorとimplementation authorのstable ID観測がありません');
   const latestByActor = new Map();
-  for (const approval of input.approvals) if (typeof approval?.actorId === 'string' && approval.actorId !== '') latestByActor.set(approval.actorId, approval);
+  for (const approval of input.approvals) {
+    const timestamp = typeof approval?.submittedAt === 'string' ? Date.parse(approval.submittedAt) : Number.NaN;
+    if (typeof approval?.actorId !== 'string' || approval.actorId === '' || typeof approval?.state !== 'string' || approval.state === '' || !/^[a-f0-9]{40}$/iu.test(approval?.commitSha ?? '') || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u.test(approval?.submittedAt ?? '') || !Number.isFinite(timestamp) || typeof approval?.reviewId !== 'string' || approval.reviewId === '') return deny('review観測のactor、state、commit SHA、submittedAt、review IDが不正です');
+    const current = latestByActor.get(approval.actorId);
+    if (!current) { latestByActor.set(approval.actorId, approval); continue; }
+    const currentTimestamp = Date.parse(current.submittedAt);
+    if (timestamp === currentTimestamp && approval.reviewId === current.reviewId && (approval.state !== current.state || approval.commitSha !== current.commitSha)) return deny('同一review IDの観測内容が矛盾しています');
+    if (timestamp > currentTimestamp || (timestamp === currentTimestamp && approval.reviewId.localeCompare(current.reviewId, 'en', { numeric: true }) > 0)) latestByActor.set(approval.actorId, approval);
+  }
   const independentApprovals = new Set([...latestByActor.values()].filter((approval) => approval.state === 'APPROVED' && approval.commitSha === input.headSha && approval.actorId !== input.prAuthorActorId && approval.actorId !== input.implementationAuthorActorId).map((approval) => approval.actorId));
   if (independentApprovals.size < (policy.requiredReviews ?? 0)) return deny('同じHEAD SHAに対する独立reviewが不足しています');
   if (policy.mode === 'assisted' && independentApprovals.size < 1) return deny('assistedモードには同じHEAD SHAに対する独立した人間承認が必要です');

@@ -176,3 +176,18 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     Given source、counterexample、成功証拠の配列型が不正なconformance入力がある
     When repository conformanceを直接検証する
     Then 全配列型不正は例外なしでinvalidになる
+
+  Scenario: SCN-UNIT-RISK-026 同じrisk classの観測を別ruleへ流用しない
+    Given trusted boundaryに同じrisk classのruleが2件と1件分の観測だけがある
+    When trusted boundaryを評価する
+    Then 未観測のruleは同じrisk classでも拒否される
+
+  Scenario: SCN-UNIT-CONFORMANCE-005 enforcement pathの末尾slashをschemaとruntimeで拒否する
+    Given 末尾slashを持つenforcement pathがある
+    When project conformance bindingを検証する
+    Then runtimeとschemaは末尾slashを拒否する
+
+  Scenario: SCN-UNIT-RISK-027 trusted ruleがないoperation境界を暗黙許可しない
+    Given trusted boundaryに適用ruleがないpolicyがある
+    When trusted boundaryを評価する
+    Then scope未統治のoperationを拒否する

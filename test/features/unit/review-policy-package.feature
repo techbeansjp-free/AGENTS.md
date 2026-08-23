@@ -195,7 +195,7 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
   Scenario: SCN-UNIT-PACKAGE-011 個別監査gateはGit差分と1ファイル1行を完全照合する
     Given H_implの全変更pathと一致する個別監査artifactがある
     When 個別監査gateを正規表と余分なpathで検証する
-    Then 正規表だけが合格し余分なpathは拒否される
+    Then 正規表だけが合格し余分なpathと空差分基点は拒否される
 
   Scenario: SCN-UNIT-PACKAGE-012 製品versionはpackage.jsonを正本としpolicy patch移行と一致する
     Given package metadataとpolicy version artifactがある

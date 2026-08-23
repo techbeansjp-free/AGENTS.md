@@ -23,12 +23,13 @@ function rejectUnknownKeys(value, allowed, prefix, errors) {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) errors.push(`${prefix}.${key}は未知fieldです`);
 }
 
-/** @param {any} value @param {string} name @param {string[]} errors @param {{allowed?: string[], max?: number}} [options] */
+/** @param {any} value @param {string} name @param {string[]} errors @param {{allowed?: string[], min?: number, max?: number}} [options] */
 function validateStringArray(value, name, errors, options = {}) {
   if (!Array.isArray(value)) {
     errors.push(`${name}は配列でなければなりません`);
     return;
   }
+  if (options.min !== undefined && value.length < options.min) errors.push(`${name}は${options.min}件以上でなければなりません`);
   if (options.max !== undefined && value.length > options.max) errors.push(`${name}は${options.max}件以内でなければなりません`);
   if (value.some((item) => typeof item !== 'string' || item.length === 0)) errors.push(`${name}には空でない文字列だけを指定してください`);
   if (options.allowed && value.some((item) => !options.allowed?.includes(item))) errors.push(`${name}に許可されていない値があります`);
@@ -60,10 +61,10 @@ export function validatePolicy(policy) {
     const enforcement = validateEnforcementPolicy(policy);
     errors.push(...enforcement.errors);
     if (policy.projectChoices !== undefined) {
-      const fields = ['language', 'testRunner', 'testLayers', 'forbiddenTestFileSuffixes', 'naming', 'packageManager', 'runtime', 'ci', 'modelMapping', 'release'];
+      const fields = ['language', 'testRunner', 'gherkinDialect', 'testLayers', 'forbiddenTestFileSuffixes', 'naming', 'packageManager', 'runtime', 'ci', 'modelMapping', 'release'];
       rejectUnknownKeys(policy.projectChoices, fields, 'projectChoices', errors);
       for (const field of fields.filter((field) => !['testLayers', 'forbiddenTestFileSuffixes'].includes(field))) if (typeof policy.projectChoices?.[field] !== 'string' || policy.projectChoices[field].trim() === '') errors.push(`projectChoices.${field}は空でない文字列でなければなりません`);
-      validateStringArray(policy.projectChoices?.testLayers, 'projectChoices.testLayers', errors);
+      validateStringArray(policy.projectChoices?.testLayers, 'projectChoices.testLayers', errors, { min: 1 });
       validateStringArray(policy.projectChoices?.forbiddenTestFileSuffixes, 'projectChoices.forbiddenTestFileSuffixes', errors);
       if (Array.isArray(policy.projectChoices?.forbiddenTestFileSuffixes) && policy.projectChoices.forbiddenTestFileSuffixes.some((/** @type {unknown} */ suffix) => typeof suffix !== 'string' || !/^\.[A-Za-z0-9._-]+$/u.test(suffix))) errors.push('projectChoices.forbiddenTestFileSuffixesが不正です');
     }

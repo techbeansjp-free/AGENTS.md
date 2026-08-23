@@ -28,7 +28,7 @@
         "properties": {
           "id": { "type": "string", "pattern": "^I(?:[1-9]|1[0-2])$" },
           "sourcePaths": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-          "enforcement": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "object", "additionalProperties": false, "required": ["path", "export"], "properties": { "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$" }, "export": { "type": "string", "minLength": 1 } } } },
+          "enforcement": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "object", "additionalProperties": false, "required": ["path", "export"], "properties": { "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$)[^\\u0000]+$" }, "export": { "type": "string", "minLength": 1 } } } },
           "counterexampleScenarios": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^SCN-[A-Z0-9-]+$" } }
         }
       }

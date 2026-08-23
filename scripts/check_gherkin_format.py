@@ -100,7 +100,7 @@ def main() -> int:
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print("Gherkin形式検査: 合格（日本語のFeature/Scenario/Given/When/Then、一意のSCN ID、全テスト層）")
+    print("Gherkin形式検査: 合格（英語keyword・日本語説明、一意のSCN ID、全テスト層）")
     return 0
 
 

@@ -30,6 +30,9 @@ export function checkFileAudit(root) {
     const resolved = git(['rev-parse', '--verify', `${oid}^{commit}`], root, { allowFailure: true });
     if (resolved.status !== 0 || resolved.stdout.trim() !== oid) errors.push(`固定commitを解決できません: ${oid}`);
   }
+  if (parsed.base === parsed.implementation) errors.push('比較基点とH_implは異なるcommitでなければなりません');
+  const baseAncestry = git(['merge-base', '--is-ancestor', parsed.base, parsed.implementation], root, { allowFailure: true });
+  if (baseAncestry.status !== 0) errors.push('比較基点がH_implのancestorではありません');
   const expected = git(['-c', 'core.quotepath=false', 'diff', '--name-status', `${parsed.base}..${parsed.implementation}`, '--'], root).stdout.trim().split(/\r?\n/u).filter(Boolean).map((line) => {
     const [status, ...parts] = line.split('\t');
     return { status: status[0], path: parts.at(-1) };

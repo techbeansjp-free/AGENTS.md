@@ -43,3 +43,13 @@ Feature: Gherkinを全test layerの正本にする
     Given repository sourceのimport graphと循環反例がある
     When project hookのdependency graphを検証する
     Then source graphは非循環で循環反例だけを拒否する
+
+  Scenario: SCN-UNIT-TRACE-008 project adapterは選択された日本語keywordをcanonical roleへ変換する
+    Given 日本語keywordのGherkin scenarioがある
+    When 日本語方言でGherkin構造を解析する
+    Then canonical Given When Thenへ変換される
+
+  Scenario: SCN-UNIT-TRACE-009 current policyのtestLayersは1件以上を必須にする
+    Given 空のtestLayersを持つcurrent project policyがある
+    When current project policyを検証する
+    Then runtimeとschemaは空のtestLayersを拒否する

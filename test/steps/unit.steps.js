@@ -261,8 +261,13 @@ When('個別監査gateを正規表と余分なpathで検証する', function () 
   this.validAudit = checkFileAudit(this.root);
   fs.writeFileSync(this.auditFile, `${this.auditMarkdown}| \`extra.js\` | A | package owner | package | 単一責務 | 非循環 | SCN-X-002 | 削除でrollback | pass |\n`);
   this.invalidAudit = checkFileAudit(this.root);
+  fs.writeFileSync(this.auditFile, this.auditMarkdown.replace(this.auditBase, this.auditImplementation));
+  this.sameCommitAudit = checkFileAudit(this.root);
+  const unrelated = spawnSync('git', ['commit-tree', `${this.auditBase}^{tree}`, '-m', 'unrelated audit base'], { cwd: this.root, encoding: 'utf8' }).stdout.trim();
+  fs.writeFileSync(this.auditFile, this.auditMarkdown.replace(this.auditBase, unrelated));
+  this.nonAncestorAudit = checkFileAudit(this.root);
 });
-Then('正規表だけが合格し余分なpathは拒否される', function () { assert.equal(this.validAudit.valid, true, this.validAudit.errors.join('; ')); assert.equal(this.invalidAudit.valid, false); assert.match(this.invalidAudit.errors.join(' '), /path集合/u); });
+Then('正規表だけが合格し余分なpathと空差分基点は拒否される', function () { assert.equal(this.validAudit.valid, true, this.validAudit.errors.join('; ')); assert.equal(this.invalidAudit.valid, false); assert.match(this.invalidAudit.errors.join(' '), /path集合/u); assert.equal(this.sameCommitAudit.valid, false); assert.match(this.sameCommitAudit.errors.join(' '), /異なるcommit/u); assert.equal(this.nonAncestorAudit.valid, false); assert.match(this.nonAncestorAudit.errors.join(' '), /ancestor/u); });
 
 Given('package metadataとpolicy version artifactがある', function () {
   this.packageMetadata = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -292,6 +297,12 @@ Then('JavaScriptのNode test起票は0件である', function () { assert.deepEq
 Given('Whenが欠けたGherkin scenarioがある', function () { this.gherkin = 'Feature: 日本語機能\nScenario: SCN-X-001 日本語scenario\n Given 日本語前提\n Then 日本語結果\n'; });
 When('Gherkin構造を解析する', function () { this.parsed = parseProjectGherkin(this.gherkin); });
 Then('When不足を検出する', function () { assert.equal(this.parsed[0].steps.includes('when'), false); });
+Given('日本語keywordのGherkin scenarioがある', function () { this.gherkin = '機能: 日本語機能\nシナリオ: SCN-X-002 日本語scenario\n 前提 日本語前提\n もし 日本語操作\n ならば 日本語結果\n'; });
+When('日本語方言でGherkin構造を解析する', function () { this.parsed = parseProjectGherkin(this.gherkin, 'ja'); });
+Then('canonical Given When Thenへ変換される', function () { assert.deepEqual(this.parsed[0].steps, ['given', 'when', 'then']); });
+Given('空のtestLayersを持つcurrent project policyがある', function () { this.emptyLayersPolicy = JSON.parse(fs.readFileSync('.agent-skill-chain/policy/default.json', 'utf8')); this.emptyLayersPolicy.projectChoices = { ...JSON.parse(fs.readFileSync('.agent-skill-chain/project/choices/development.json', 'utf8')), testLayers: [] }; this.choiceSchema = JSON.parse(fs.readFileSync('.agent-skill-chain/schemas/project-choice.schema.json', 'utf8')); });
+When('current project policyを検証する', function () { this.policyValidation = validatePolicy(this.emptyLayersPolicy); });
+Then('runtimeとschemaは空のtestLayersを拒否する', function () { assert.equal(this.policyValidation.valid, false); assert.match(this.policyValidation.errors.join(' '), /testLayers.*1件以上/u); assert.equal(this.choiceSchema.properties.testLayers.minItems, 1); });
 Given('同じSCN IDを持つ2つのGherkin scenarioがある', function () {
   const root = this.temp(); this.traceRoot = root; this.featuresRoot = path.join(root, 'test', 'features'); this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = [];
   for (const layer of ['unit', 'integration', 'e2e']) fs.mkdirSync(path.join(this.featuresRoot, layer), { recursive: true });

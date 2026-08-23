@@ -40,7 +40,7 @@
     "architecture:check": "node scripts/check_dependency_graph.js",
     "audit:check": "node scripts/check_file_audit.js",
     "conformance:check": "node scripts/check_conformance.js",
-    "prepack": "npm run build && npm run docs:format && npm run typecheck && npm run test:format && npm run trace:check && npm run architecture:check && npm test && npm run audit:check && npm run package:check"
+    "prepack": "npm run build && npm run docs:format && npm run typecheck && npm run test:format && npm run trace:check && npm run architecture:check && npm test && npm run conformance:check && npm run audit:check && npm run package:check"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

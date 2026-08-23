@@ -52,6 +52,14 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When PR createをdry-runして失敗を確認する
     Then PR createは失敗する
 
+  Scenario: SCN-INT-DELIVERY-007 trusted policyなしでexternal PRを作成しない
+    Given review、test、spec evidenceがすべてpassである
+    And PR単位のexternal writeが承認済みである
+    And trusted policyをPR inputから除く
+    When PR createをapplyする
+    Then PR createは失敗する
+    And external operation callは0件である
+
   Scenario: SCN-INT-GITHUB-001 Issue syncはrepositoryを確認してread-after-write一致を要求する
     Given exact repositoryと同じbodyを返すgh stubがある
     When Issue sync adapterを実行する
@@ -99,6 +107,11 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When PR create adapterを実行する
     Then PR create adapterは失敗する
 
+  Scenario: SCN-INT-GITHUB-009 reviewを全page取得し時刻とstable IDを保持する
+    Given 複数pageのreviewを返すexact repositoryのgh stubがある
+    When PR reviews adapterを実行する
+    Then 全pageのreviewと順序根拠を取得できる
+
   Scenario: SCN-INT-MERGE-001 candidate PR自身のautomatic policyで自己承認できない
     Given trusted policyはdisabledでcandidate policyはautomaticである
     When candidate branchのmerge authorizationを評価する
@@ -133,6 +146,12 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
 
   Scenario: SCN-INT-MERGE-007 同一reviewerの最新状態が変更要求なら旧承認を数えない
     Given 同一reviewerが承認後に変更要求へ更新している
+    When merge authorizationを評価する
+    Then mergeは許可されない
+
+  Scenario: SCN-INT-MERGE-008 review時刻が不正なら配列順を信頼せずfail-closedにする
+    Given 同一reviewerが承認後に変更要求へ更新している
+    And reviewのsubmittedAtが不正である
     When merge authorizationを評価する
     Then mergeは許可されない
 

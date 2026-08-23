@@ -24,6 +24,12 @@ const safeDeliveryEvidence = () => {
   };
 };
 
+const trustedDeliveryPolicy = () => ({
+  schemaVersion: 'agent-skill-chain/project-policy/v0.3.1', delivery: { stopAt: 'pull_request' },
+  merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 }, budgets: { localFeedbackMs: 100, prGateMs: 1000 },
+  rules: [{ ruleId: 'ASC-TRUST-TEST-001', purpose: 'PRで自己緩和を防止する', riskClass: 'authority', scope: ['pull_request'], enforcement: 'deny', activation: 'active', owner: 'policy owner', targetLayer: 'package', evidence: 'trusted comparison', remediation: 'trusted条件を維持する', overridePolicy: 'never', rollback: 'PRを作成しない' }],
+});
+
 Given('review、test、spec evidenceがすべてpassである', function () { this.evidence = safeDeliveryEvidence(); });
 Given('PR単位のexternal writeが承認済みである', function () { this.authorization = 'approved'; });
 Given('{word} evidenceをfailにする', function (name) { if (name === 'review') this.evidence.review.approved = false; else if (name === 'tests') this.evidence.tests.passed = false; else this.evidence.spec.consistent = false; });
@@ -33,7 +39,7 @@ Given('PR inputの{word}を{string}にする', function (field, value) { this.pr
 When('PR createをdry-runする', function () { this.result = createPullRequest({ apply: false, evidence: this.evidence, headSha: this.evidence.headSha, issue: 824, head: 'feature', base: 'main', repository: 'o/r' }, () => { this.calls.push('unexpected'); }); });
 When('PR createをapplyする', function () {
   try {
-    this.result = createPullRequest({ apply: true, authorization: this.authorization, evidence: this.evidence, headSha: this.evidence.headSha, issue: 824, head: 'feature', base: 'main', repository: 'o/r' }, (operation) => { this.calls.push(operation); return { url: 'https://example.invalid/pr/1' }; });
+    this.result = createPullRequest({ apply: true, authorization: this.authorization, evidence: this.evidence, headSha: this.evidence.headSha, issue: 824, head: 'feature', base: 'main', repository: 'o/r', trustedPolicy: this.omitTrustedPolicy ? undefined : trustedDeliveryPolicy() }, (operation) => { this.calls.push(operation); return { url: 'https://example.invalid/pr/1' }; });
   } catch (error) { this.error = error; }
 });
 When('PR createをdry-runして失敗を確認する', function () {
@@ -46,6 +52,7 @@ Then('delivery stateはwaiting_for_human_reviewである', function () { assert.
 Then('external operation callは0件である', function () { assert.equal(this.calls.length, 0); });
 Then('external operationは{string}だけである', function (operation) { assert.deepEqual(this.calls, [operation]); });
 Then('PR createは失敗する', function () { assert.ok(this.error instanceof Error); });
+Given('trusted policyをPR inputから除く', function () { this.omitTrustedPolicy = true; });
 
 /** @param {any} world @param {boolean} matchingBody @param {string} [permission] */
 function prepareGhStub(world, matchingBody, permission = 'WRITE') {
@@ -77,13 +84,15 @@ Then('Issue syncは失敗する', function () { assert.ok(this.error instanceof 
 Then('errorにwrite権限不足が含まれる', function () { assert.match(this.error.message, /書き込み権限/); });
 Then('Issue edit操作は呼ばれない', function () { assert.equal(fs.readFileSync(this.ghLog, 'utf8').includes('issue edit'), false); });
 
-/** @param {any} world @param {'pr'|'protection'} operation */
+/** @param {any} world @param {'pr'|'protection'|'reviews'} operation */
 function prepareGhReadStub(world, operation) {
   const directory = world.temp('asc-gh-read-');
   world.ghLog = path.join(directory, 'operations.log');
   const stub = path.join(directory, 'gh');
   const payload = operation === 'pr'
     ? JSON.stringify({ number: 1, url: 'https://github.com/o/r/pull/1', headRefName: 'feature/x', baseRefName: 'main', headRefOid: 'a'.repeat(40), baseRefOid: 'b'.repeat(40), statusCheckRollup: [], latestReviews: [] })
+    : operation === 'reviews'
+      ? JSON.stringify([Array.from({ length: 31 }, (_, index) => ({ id: index + 1, state: 'APPROVED', commit_id: 'a'.repeat(40), user: { node_id: `reviewer-${index}` }, submitted_at: `2026-08-23T12:00:${String(index).padStart(2, '0')}Z` })), [{ id: 32, state: 'CHANGES_REQUESTED', commit_id: 'a'.repeat(40), user: { node_id: 'reviewer-0' }, submitted_at: '2026-08-23T13:00:00Z' }]])
     : JSON.stringify({ required_status_checks: null });
   fs.writeFileSync(stub, `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'READ'}));if(args[0]==='pr')process.stdout.write(${JSON.stringify(payload)});if(args[0]==='api')process.stdout.write(${JSON.stringify(payload)});\n`);
   fs.chmodSync(stub, 0o755);
@@ -92,6 +101,7 @@ function prepareGhReadStub(world, operation) {
 
 Given('PR状態を返すexact repositoryのgh stubがある', function () { prepareGhReadStub(this, 'pr'); });
 Given('branch protectionを返すexact repositoryのgh stubがある', function () { prepareGhReadStub(this, 'protection'); });
+Given('複数pageのreviewを返すexact repositoryのgh stubがある', function () { prepareGhReadStub(this, 'reviews'); });
 When('PR inspect adapterを実行する', function () {
   const original = process.env.PATH; process.env.PATH = this.stubPath;
   try { this.result = github('pr.inspect', { repository: 'o/r', pr: 1 }, process.cwd()); } finally { process.env.PATH = original; }
@@ -100,8 +110,13 @@ When('branch protection adapterを実行する', function () {
   const original = process.env.PATH; process.env.PATH = this.stubPath;
   try { this.result = github('branch.protection', { repository: 'o/r', branch: 'main' }, process.cwd()); } finally { process.env.PATH = original; }
 });
+When('PR reviews adapterを実行する', function () {
+  const original = process.env.PATH; process.env.PATH = this.stubPath;
+  try { this.result = github('pr.reviews', { repository: 'o/r', pr: 1 }, process.cwd()); } finally { process.env.PATH = original; }
+});
 Then('PR状態を取得できる', function () { assert.equal(this.result.headRefName, 'feature/x'); });
 Then('branch protection状態を取得できる', function () { assert.equal(this.result.known, true); assert.equal(this.result.protected, true); });
+Then('全pageのreviewと順序根拠を取得できる', function () { assert.equal(this.result.length, 32); assert.deepEqual(this.result.at(-1), { state: 'CHANGES_REQUESTED', commitSha: 'a'.repeat(40), actorId: 'reviewer-0', submittedAt: '2026-08-23T13:00:00Z', reviewId: '32' }); const log = fs.readFileSync(this.ghLog, 'utf8'); assert.match(log, /api --paginate --slurp repos\/o\/r\/pulls\/1\/reviews\?per_page=100/u); });
 Then('PR読取前にauthとrepository確認が行われる', function () {
   const operations = fs.readFileSync(this.ghLog, 'utf8').trim().split('\n').map((line) => line.split(' ').slice(0, 2).join(' '));
   assert.deepEqual(operations, ['auth status', 'repo view', 'pr view']);
@@ -111,7 +126,7 @@ Then('protection読取前にauthとrepository確認が行われる', function ()
   assert.deepEqual(operations, ['auth status', 'repo view', 'api repos/o/r/branches/main/protection']);
 });
 
-/** @param {any} world @param {boolean} matchingHead @param {boolean} [matchingBase] */
+/** `matchingBase` reproduces a base-branch OID change between preflight and PR read-back. @param {any} world @param {boolean} matchingHead @param {boolean} [matchingBase] */
 function prepareGhCreateStub(world, matchingHead, matchingBase = true) {
   const directory = world.temp('asc-gh-create-');
   world.ghLog = path.join(directory, 'operations.log');
@@ -150,7 +165,7 @@ Given('trusted policyはdisabledでcandidate policyはautomaticである', funct
 Given('trusted policyがautomaticでcheck {string}とreview 1件を要求する', function (check) {
   this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [check], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [], headSha: 'a'.repeat(40), prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
 });
-Given('branch、method、check、reviewがすべて条件を満たす', function () { this.mergeInput.checks = ['ci']; this.mergeInput.approvals = [{ state: 'APPROVED', commitSha: this.mergeInput.headSha, actorId: 'independent-reviewer' }]; });
+Given('branch、method、check、reviewがすべて条件を満たす', function () { this.mergeInput.checks = ['ci']; this.mergeInput.approvals = [{ state: 'APPROVED', commitSha: this.mergeInput.headSha, actorId: 'independent-reviewer', submittedAt: '2026-08-23T12:00:00Z', reviewId: '1' }]; });
 Given('trusted policyがassistedである', function () { this.trustedPolicy = { merge: { mode: 'assisted', branches: ['feature/*'], methods: ['merge'], requiredChecks: [], requiredReviews: 0 } }; });
 Given('trusted automatic policyがrequired check {string}を持つ', function (check) { this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['*'], methods: ['squash'], requiredChecks: [check], requiredReviews: 0 } }, method: 'squash', checks: undefined, approvals: [], headSha: 'a'.repeat(40), branch: 'x', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true }; });
 When('candidate branchのmerge authorizationを評価する', function () { this.result = authorizeMerge(this.mergeInput); });
@@ -159,20 +174,21 @@ When('human approvalなしとありでmerge authorizationを評価する', funct
   const headSha = 'a'.repeat(40);
   const base = { trustedPolicy: this.trustedPolicy, method: 'merge', checks: [], approvals: [], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
   this.withoutApproval = authorizeMerge(base);
-  this.withApproval = authorizeMerge({ ...base, approvals: [{ state: 'APPROVED', commitSha: headSha, actorId: 'independent-reviewer' }] });
+  this.withApproval = authorizeMerge({ ...base, approvals: [{ state: 'APPROVED', commitSha: headSha, actorId: 'independent-reviewer', submittedAt: '2026-08-23T12:00:00Z', reviewId: '1' }] });
 });
 When('check state unknownでmerge authorizationを評価する', function () { this.result = authorizeMerge(this.mergeInput); });
 Given('reviewが旧HEADまたは実装者自身による承認である', function () {
   const headSha = 'a'.repeat(40);
-  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [{ state: 'APPROVED', commitSha: 'b'.repeat(40), actorId: 'reviewer' }, { state: 'APPROVED', commitSha: headSha, actorId: 'implementer' }], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
+  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [{ state: 'APPROVED', commitSha: 'b'.repeat(40), actorId: 'reviewer', submittedAt: '2026-08-23T11:00:00Z', reviewId: '1' }, { state: 'APPROVED', commitSha: headSha, actorId: 'implementer', submittedAt: '2026-08-23T12:00:00Z', reviewId: '2' }], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
 });
 Given('repository、SHA、保護設定のtrusted観測が欠けている', function () {
   this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 0 } }, method: 'squash', checks: [], approvals: [], headSha: 'a'.repeat(40), branch: 'feature/a' };
 });
 Given('同一reviewerが承認後に変更要求へ更新している', function () {
   const headSha = 'a'.repeat(40);
-  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [{ state: 'APPROVED', commitSha: headSha, actorId: 'reviewer' }, { state: 'CHANGES_REQUESTED', commitSha: headSha, actorId: 'reviewer' }], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
+  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [{ state: 'CHANGES_REQUESTED', commitSha: headSha, actorId: 'reviewer', submittedAt: '2026-08-23T13:00:00Z', reviewId: '2' }, { state: 'APPROVED', commitSha: headSha, actorId: 'reviewer', submittedAt: '2026-08-23T12:00:00Z', reviewId: '1' }], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
 });
+Given('reviewのsubmittedAtが不正である', function () { this.mergeInput.approvals[0].submittedAt = 'sometime'; });
 Then('mergeは許可されない', function () { assert.equal(this.result.allowed, false); });
 Then('mergeは許可される', function () { assert.equal(this.result.allowed, true); });
 Then('許可operationは{string}だけである', function (operation) { assert.deepEqual(this.result.operations, [operation]); });

@@ -25,7 +25,8 @@ export function buildFinalizeReport(state) {
 /** @param {{report: any, approvedHash: string, currentState: any, trustedPolicy?: any}} input @param {(operation: string, payload: any) => void} destructive */
 export function applyFinalize(input, destructive) {
   if (input.trustedPolicy) {
-    const boundary = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'worktree', observations: [{ riskClass: 'identity', violated: !input.report.safe, reasons: input.report.reasons, checks: ['actual finalize reportのrepository、SHA、review、test、recovery状態を導出した'] }] });
+    const observations = (input.trustedPolicy.rules ?? []).filter((/** @type {any} */ rule) => rule.scope?.includes('worktree') && ['identity', 'path'].includes(rule.riskClass)).map((/** @type {any} */ rule) => ({ ruleId: rule.ruleId, violated: !input.report.safe, reasons: input.report.reasons, checks: ['actual finalize reportのrepository、path、SHA、review、test、recovery状態を導出した'] }));
+    const boundary = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'worktree', observations });
     if (!boundary.allowed) throw new Error(`${boundary.diagnostic.ruleId}: ${boundary.diagnostic.reasons.join('; ')}`);
   }
   if (!input.report.safe) throw new Error(`安全でないため完了処理を拒否しました: ${input.report.reasons.join('; ')}`);

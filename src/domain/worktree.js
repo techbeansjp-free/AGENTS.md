@@ -28,10 +28,10 @@ export function createWorktree(input) {
     repositoryMismatch = remote.status !== 0 || githubRepository(remote.stdout) !== input.expectedRepository;
   }
   if (input.trustedPolicy) {
-    const enforcement = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'worktree', observations: [
-      { riskClass: 'path', violated: gitInternal, reasons: ['worktree作成先がGit common dir内です'], checks: ['destinationとGit common dirを比較した'] },
-      { riskClass: 'identity', violated: rootMismatch || destinationConflict || repositoryMismatch, reasons: ['repository、root、destinationまたはoriginの同一性が一致しません'], checks: ['actual repositoryとremoteを検査した'] },
-    ] });
+    const observations = (input.trustedPolicy.rules ?? []).filter((/** @type {any} */ rule) => rule.scope?.includes('worktree')).map((/** @type {any} */ rule) => rule.riskClass === 'path' ?
+      { ruleId: rule.ruleId, violated: gitInternal, reasons: ['worktree作成先がGit common dir内です'], checks: ['destinationとGit common dirを比較した'] } : rule.riskClass === 'identity' ?
+        { ruleId: rule.ruleId, violated: rootMismatch || destinationConflict || repositoryMismatch, reasons: ['repository、root、destinationまたはoriginの同一性が一致しません'], checks: ['actual repositoryとremoteを検査した'] } : undefined).filter(Boolean);
+    const enforcement = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'worktree', observations });
     if (!enforcement.allowed) throw new Error(`${enforcement.diagnostic.ruleId}: ${enforcement.diagnostic.reasons.join('; ')}`);
   }
   if (rootMismatch) throw new Error('リポジトリ直下パスが一致しません');
