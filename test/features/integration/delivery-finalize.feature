@@ -94,6 +94,11 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     And errorにwrite権限不足が含まれる
     And Issue edit操作は呼ばれない
 
+  Scenario: SCN-INT-GITHUB-008 PR作成中のremote base OID変更をread-after-writeで拒否する
+    Given 作成中にremote base OIDが変更されるgh stubがある
+    When PR create adapterを実行する
+    Then PR create adapterは失敗する
+
   Scenario: SCN-INT-MERGE-001 candidate PR自身のautomatic policyで自己承認できない
     Given trusted policyはdisabledでcandidate policyはautomaticである
     When candidate branchのmerge authorizationを評価する

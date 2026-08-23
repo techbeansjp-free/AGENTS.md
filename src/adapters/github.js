@@ -8,22 +8,25 @@ export class GitHubProviderUnavailableError extends Error {
 
 /** Compare the immutable policy-authority observation tuple. @param {any} left @param {any} right */
 export function samePolicyAuthorityObservation(left, right) {
-  return ['repository', 'prNumber', 'defaultBranch', 'baseRefName', 'baseRefOid', 'headRefOid'].every((key) => left?.[key] === right?.[key]);
+  return ['repository', 'prNumber', 'defaultBranch', 'defaultBranchTipOid', 'baseRefName', 'baseRefOid', 'headRefOid'].every((key) => left?.[key] === right?.[key]);
 }
 
 /** @param {string} repository @param {number} prNumber @param {string} cwd */
 function observePolicyAuthority(repository, prNumber, cwd) {
   try { run('gh', ['auth', 'status'], cwd); } catch { throw new GitHubProviderUnavailableError('GitHub providerの認証状態を観測できません'); }
-  let observedRepository; let observedPr;
+  let observedRepository; let observedPr; let defaultBranchTipOid;
   try {
     observedRepository = JSON.parse(run('gh', ['repo', 'view', repository, '--json', 'nameWithOwner,defaultBranchRef'], cwd).stdout);
     observedPr = JSON.parse(run('gh', ['pr', 'view', String(prNumber), '--repo', repository, '--json', 'number,baseRefName,baseRefOid,headRefOid'], cwd).stdout);
+    const defaultBranch = observedRepository?.defaultBranchRef?.name;
+    if (typeof defaultBranch !== 'string') throw new Error('default branchが不明です');
+    defaultBranchTipOid = run('gh', ['api', `repos/${repository}/commits/${encodeURIComponent(defaultBranch)}`, '--jq', '.sha'], cwd).stdout.trim();
   } catch { throw new GitHubProviderUnavailableError('GitHub providerのrepositoryまたはPR観測を取得できません'); }
-  const complete = typeof observedRepository?.nameWithOwner === 'string' && typeof observedRepository?.defaultBranchRef?.name === 'string' && Number.isInteger(observedPr?.number) && typeof observedPr?.baseRefName === 'string' && /^[a-f0-9]{40}$/iu.test(observedPr?.baseRefOid ?? '') && /^[a-f0-9]{40}$/iu.test(observedPr?.headRefOid ?? '');
+  const complete = typeof observedRepository?.nameWithOwner === 'string' && typeof observedRepository?.defaultBranchRef?.name === 'string' && /^[a-f0-9]{40}$/iu.test(defaultBranchTipOid ?? '') && Number.isInteger(observedPr?.number) && typeof observedPr?.baseRefName === 'string' && /^[a-f0-9]{40}$/iu.test(observedPr?.baseRefOid ?? '') && /^[a-f0-9]{40}$/iu.test(observedPr?.headRefOid ?? '');
   if (!complete) throw new GitHubProviderUnavailableError('GitHub providerのauthority観測が不完全です');
   return {
     provenance: { source: 'github', repository, prNumber }, repository: observedRepository.nameWithOwner,
-    defaultBranch: observedRepository.defaultBranchRef.name, prNumber: observedPr.number,
+    defaultBranch: observedRepository.defaultBranchRef.name, defaultBranchTipOid, prNumber: observedPr.number,
     baseRefName: observedPr.baseRefName, baseRefOid: observedPr.baseRefOid, headRefOid: observedPr.headRefOid,
   };
 }
@@ -68,14 +71,16 @@ export function github(operation, input, cwd) {
     if (!/^[a-f0-9]{40}$/i.test(input.headSha ?? '')) throw new Error('PR対象HEAD SHAが不正です');
     const remoteHead = run('gh', ['api', `repos/${input.repository}/commits/${encodeURIComponent(input.head)}`, '--jq', '.sha'], cwd).stdout.trim();
     if (remoteHead !== input.headSha) throw new Error('PR作成前にremote branchのHEAD SHAが証拠と一致しません');
+    const remoteBase = run('gh', ['api', `repos/${input.repository}/commits/${encodeURIComponent(input.base)}`, '--jq', '.sha'], cwd).stdout.trim();
+    if (!/^[a-f0-9]{40}$/iu.test(remoteBase)) throw new Error('PR作成前にremote base branchを固定commitへ解決できません');
     const result = run('gh', [
       'pr', 'create', '--repo', input.repository, '--head', input.head, '--base', input.base,
       '--title', input.title ?? `Issue #${input.issue}`, '--body', input.bodyLink,
     ], cwd);
     const url = result.stdout.trim();
     if (!new RegExp(`^https://github\\.com/${input.repository.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/pull/\\d+$`).test(url)) throw new Error('PR作成結果のURLが対象リポジトリと一致しません');
-    const observed = JSON.parse(run('gh', ['pr', 'view', url, '--repo', input.repository, '--json', 'url,headRefName,baseRefName,headRefOid'], cwd).stdout);
-    if (observed.url !== url || observed.headRefName !== input.head || observed.baseRefName !== input.base || observed.headRefOid !== input.headSha) {
+    const observed = JSON.parse(run('gh', ['pr', 'view', url, '--repo', input.repository, '--json', 'url,headRefName,baseRefName,headRefOid,baseRefOid'], cwd).stdout);
+    if (observed.url !== url || observed.headRefName !== input.head || observed.baseRefName !== input.base || observed.headRefOid !== input.headSha || observed.baseRefOid !== remoteBase) {
       throw new Error('PR作成後の読み取り検証に失敗しました');
     }
     return { url };

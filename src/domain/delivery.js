@@ -52,7 +52,7 @@ export function createPullRequest(input, external) {
     }] });
     if (!enforcement.allowed) throw new Error(`${enforcement.diagnostic.ruleId}: ${enforcement.diagnostic.reasons.join('; ')}`);
   }
-  const preview = { operation: 'pr.create', repository: input.repository, issue: input.issue, head: input.head, headSha: input.headSha, base: input.base, bodyLink: `Relates to #${input.issue}` };
+  const preview = { operation: 'pr.create', authorityStatus: 'unverified-preview', repository: input.repository, issue: input.issue, head: input.head, headSha: input.headSha, base: input.base, bodyLink: `Relates to #${input.issue}` };
   if (!input.apply) return { state: 'preview', preview };
   if (input.authorization !== 'approved') throw new Error('外部書き込みには明示的な承認が必要です');
   const result = external('pr.create', preview);

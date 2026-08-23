@@ -121,6 +121,11 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     When project conformance bindingを検証する
     Then runtimeとschemaは重複tupleを拒否する
 
+  Scenario: SCN-UNIT-CONFORMANCE-003 enforcement型不正を例外でなくstructured invalidにする
+    Given enforcementが配列でないproject conformance bindingがある
+    When project conformance bindingを検証する
+    Then validatorは例外終了せずenforcement不正を返す
+
   Scenario: SCN-UNIT-RISK-017 canonical fingerprintは全安全契約とauthority choiceを拘束する
     Given trusted ruleのevidence remediation rollbackとauthority choiceをcandidateが変更する
     When trusted policyとcandidate policyを比較する

@@ -51,10 +51,11 @@ export function validateProjectConformanceBinding(binding) {
     for (const field of Object.keys(item)) if (!BINDING_FIELDS.includes(field)) errors.push(`${item.id ?? 'unknown'}.${field}は未知fieldです`);
     if (!strings(item.sourcePaths)) errors.push(`${item.id}.sourcePathsが不正です`);
     if (!strings(item.counterexampleScenarios) || item.counterexampleScenarios.some((/** @type {string} */ id) => !/^SCN-[A-Z0-9-]+$/.test(id))) errors.push(`${item.id}.counterexampleScenariosが不正です`);
-    if (!Array.isArray(item.enforcement) || item.enforcement.length === 0) errors.push(`${item.id}.enforcementが必要です`);
-    const enforcementTuples = (item.enforcement ?? []).map((/** @type {any} */ point) => `${typeof point?.path === 'string' ? path.posix.normalize(point.path.normalize('NFC')) : ''}\u0000${point?.export ?? ''}`);
+    const enforcement = Array.isArray(item.enforcement) ? item.enforcement : [];
+    if (enforcement.length === 0) errors.push(`${item.id}.enforcementが必要です`);
+    const enforcementTuples = enforcement.map((/** @type {any} */ point) => `${typeof point?.path === 'string' ? path.posix.normalize(point.path.normalize('NFC')) : ''}\u0000${point?.export ?? ''}`);
     if (new Set(enforcementTuples).size !== enforcementTuples.length) errors.push(`${item.id}.enforcementのpath/export tupleが重複しています`);
-    for (const point of item.enforcement ?? []) {
+    for (const point of enforcement) {
       if (!point || typeof point !== 'object' || Array.isArray(point)) { errors.push(`${item.id}.enforcement itemが不正です`); continue; }
       for (const key of Object.keys(point)) if (!['path', 'export'].includes(key)) errors.push(`${item.id}.enforcement.${key}は未知fieldです`);
       if (!text(point.path) || !text(point.export)) errors.push(`${item.id}.enforcementはpathとexportが必要です`);
@@ -115,7 +116,7 @@ export function validateRepositoryConformance(root, contract, binding, evidence)
     for (const relative of item.sourcePaths ?? []) {
       try { const file = resolveContained(root, relative); if (!fs.statSync(file).isFile()) errors.push(`${item.id}のsourceがfileではありません: ${relative}`); } catch { errors.push(`${item.id}のsourceが実在しません: ${relative}`); }
     }
-    for (const point of item.enforcement ?? []) {
+    for (const point of Array.isArray(item.enforcement) ? item.enforcement : []) {
       try { const file = resolveContained(root, point.path); if (!text(point.export) || !hasExport(file, point.export)) errors.push(`${item.id}のenforcement exportが実在しません: ${point.path}#${point.export}`); } catch { errors.push(`${item.id}のenforcement pathが実在しません: ${point.path}`); }
     }
     for (const scenario of item.counterexampleScenarios ?? []) if (!passed.has(scenario)) errors.push(`${item.id}のcounterexampleに成功証拠がありません: ${scenario}`);

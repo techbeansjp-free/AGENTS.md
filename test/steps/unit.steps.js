@@ -51,7 +51,7 @@ Given('remote default branchから分岐したfeature commitがある', function
 });
 When('feature commitをtrusted commitとexpected base SHAの両方へ指定する', function () {
   const candidateHeadSha = 'f'.repeat(40);
-  try { this.operationPolicy = loadOperationPolicy(this.root, { trustedCommit: this.featureSha, expectedBaseSha: this.featureSha, candidateHeadSha, baseRef: 'main', defaultBranch: 'main', repository: 'o/r', pr: 1, provider: { provenance: { source: 'github', repository: 'o/r', prNumber: 1 }, repository: 'o/r', prNumber: 1, baseRefName: 'main', defaultBranch: 'main', baseRefOid: this.featureSha, headRefOid: candidateHeadSha } }); }
+  try { this.operationPolicy = loadOperationPolicy(this.root, { trustedCommit: this.featureSha, expectedBaseSha: this.featureSha, candidateHeadSha, baseRef: 'main', defaultBranch: 'main', repository: 'o/r', pr: 1, provider: { provenance: { source: 'github', repository: 'o/r', prNumber: 1 }, repository: 'o/r', prNumber: 1, baseRefName: 'main', defaultBranch: 'main', defaultBranchTipOid: this.defaultSha, baseRefOid: this.featureSha, headRefOid: candidateHeadSha } }); }
   catch (error) { this.operationPolicyError = error instanceof Error ? error.message : String(error); }
 });
 Then('explicit trusted authorityはremote default branchへ拘束されて拒否される', function () { assert.equal(this.operationPolicy, undefined); assert.match(this.operationPolicyError ?? '', /default|ancestor|base|trusted/u); });

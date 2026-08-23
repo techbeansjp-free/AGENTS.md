@@ -269,6 +269,7 @@ export function loadOperationPolicy(root, options = {}) {
     const remoteDefaultRef = `refs/remotes/origin/${defaultBranch}`;
     const remoteDefault = git(['rev-parse', '--verify', `${remoteDefaultRef}^{commit}`], root, { allowFailure: true });
     if (remoteDefault.status !== 0 || !/^[a-f0-9]{40}$/iu.test(remoteDefault.stdout.trim())) throw new Error('明示されたremote default branchを固定commitへ解決できません');
+    if (String(provider.defaultBranchTipOid ?? '').toLowerCase() !== remoteDefault.stdout.trim().toLowerCase()) throw new Error('local remote default tipがGitHub providerの現在tip OIDと一致しません');
     const ancestry = git(['merge-base', '--is-ancestor', trustedCommit, remoteDefault.stdout.trim()], root, { allowFailure: true });
     if (ancestry.status !== 0) throw new Error('trusted commitはremote default branch commitのancestorではありません');
     return loadEffectiveTrustedPolicySetAtCommit(root, resolved.stdout.trim());

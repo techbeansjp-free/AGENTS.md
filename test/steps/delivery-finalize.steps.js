@@ -41,7 +41,7 @@ When('PR createをdry-runして失敗を確認する', function () {
     createPullRequest({ apply: false, evidence: this.evidence, headSha: this.evidence.headSha, issue: 824, head: 'feature', base: 'main', repository: 'o/r', ...this.prOverrides }, () => { this.calls.push('unexpected'); });
   } catch (error) { this.error = error; }
 });
-Then('delivery stateはpreviewである', function () { assert.equal(this.result.state, 'preview'); });
+Then('delivery stateはpreviewである', function () { assert.equal(this.result.state, 'preview'); assert.equal(this.result.preview.authorityStatus, 'unverified-preview'); });
 Then('delivery stateはwaiting_for_human_reviewである', function () { assert.equal(this.result.state, 'waiting_for_human_review'); });
 Then('external operation callは0件である', function () { assert.equal(this.calls.length, 0); });
 Then('external operationは{string}だけである', function (operation) { assert.deepEqual(this.calls, [operation]); });
@@ -111,21 +111,23 @@ Then('protection読取前にauthとrepository確認が行われる', function ()
   assert.deepEqual(operations, ['auth status', 'repo view', 'api repos/o/r/branches/main/protection']);
 });
 
-/** @param {any} world @param {boolean} matchingHead */
-function prepareGhCreateStub(world, matchingHead) {
+/** @param {any} world @param {boolean} matchingHead @param {boolean} [matchingBase] */
+function prepareGhCreateStub(world, matchingHead, matchingBase = true) {
   const directory = world.temp('asc-gh-create-');
   world.ghLog = path.join(directory, 'operations.log');
   const stub = path.join(directory, 'gh');
   const expected = 'a'.repeat(40);
   const observed = matchingHead ? expected : 'b'.repeat(40);
-  const pr = JSON.stringify({ url: 'https://github.com/o/r/pull/9', headRefName: 'feature/x', baseRefName: 'main', headRefOid: expected });
-  fs.writeFileSync(stub, `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'WRITE'}));if(args[0]==='api')process.stdout.write(${JSON.stringify(`${observed}\n`)});if(args[0]==='pr'&&args[1]==='create')process.stdout.write('https://github.com/o/r/pull/9\\n');if(args[0]==='pr'&&args[1]==='view')process.stdout.write(${JSON.stringify(pr)});\n`);
+  const base = 'c'.repeat(40); const observedBase = matchingBase ? base : 'd'.repeat(40);
+  const pr = JSON.stringify({ url: 'https://github.com/o/r/pull/9', headRefName: 'feature/x', baseRefName: 'main', headRefOid: expected, baseRefOid: observedBase });
+  fs.writeFileSync(stub, `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'WRITE'}));if(args[0]==='api')process.stdout.write((args[1].includes('feature%2Fx')?${JSON.stringify(observed)}:${JSON.stringify(base)})+'\\n');if(args[0]==='pr'&&args[1]==='create')process.stdout.write('https://github.com/o/r/pull/9\\n');if(args[0]==='pr'&&args[1]==='view')process.stdout.write(${JSON.stringify(pr)});\n`);
   fs.chmodSync(stub, 0o755);
   world.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ''}`;
 }
 
 Given('一致するremote HEADとPR状態を返すgh stubがある', function () { prepareGhCreateStub(this, true); });
 Given('異なるremote HEADを返すgh stubがある', function () { prepareGhCreateStub(this, false); });
+Given('作成中にremote base OIDが変更されるgh stubがある', function () { prepareGhCreateStub(this, true, false); });
 When('PR create adapterを実行する', function () {
   const original = process.env.PATH; process.env.PATH = this.stubPath;
   try { this.result = github('pr.create', { repository: 'o/r', issue: 824, head: 'feature/x', headSha: 'a'.repeat(40), base: 'main', bodyLink: 'Relates to #824' }, process.cwd()); } catch (error) { this.error = error; }
@@ -135,7 +137,7 @@ Then('PR create adapterは成功する', function () { assert.equal(this.result.
 Then('PR create adapterは失敗する', function () { assert.ok(this.error instanceof Error); });
 Then('PR作成順にauth、repository、remote HEAD、create、read-backが含まれる', function () {
   const operations = fs.readFileSync(this.ghLog, 'utf8').trim().split('\n').map((line) => line.split(' ').slice(0, 2).join(' '));
-  assert.deepEqual(operations, ['auth status', 'repo view', 'api repos/o/r/commits/feature%2Fx', 'pr create', 'pr view']);
+  assert.deepEqual(operations, ['auth status', 'repo view', 'api repos/o/r/commits/feature%2Fx', 'api repos/o/r/commits/main', 'pr create', 'pr view']);
 });
 Then('PR create操作は呼ばれない', function () {
   const operations = fs.readFileSync(this.ghLog, 'utf8').trim().split('\n');
