@@ -1,0 +1,40 @@
+name: v0.3 品質検証
+
+on:
+  pull_request:
+
+# 検証だけを行い、リポジトリへの書き込み権限は与えない。
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: 日本語文書・Gherkin・型・配布物の品質検証
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: ソースコードを取得する
+        uses: actions/checkout@v4
+      - name: Node.js実行環境を準備する
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: 固定ファイルどおりに開発依存を導入する
+        run: npm ci
+      - name: 人向け文書の日本語形式を検証する
+        run: npm run docs:format
+      - name: 日本語Gherkinの起票形式を検証する
+        run: npm run test:format
+      - name: 型を検証する
+        run: npm run typecheck
+      - name: 構築対象とパッケージ資産を検証する
+        run: npm run build
+      - name: npm配布物への開発用ファイル混入を拒否する
+        run: npm run package:check
+      - name: 単体Gherkinを実行する
+        run: npm run test:unit
+      - name: 結合Gherkinを実行する
+        run: npm run test:integration
+      - name: E2E Gherkinを実行する
+        run: npm run test:e2e

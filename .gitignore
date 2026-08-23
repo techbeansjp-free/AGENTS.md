@@ -1,36 +1,18 @@
-# macOS
+# OSとエディタのローカル生成物
 .DS_Store
-
-# エディタが自動生成するVSCodeマルチルートワークスペース設定ファイル
-# （root直下許可リスト外のためroot直下への残留を防ぐ、Issue #556）
 *.code-workspace
 
-# Node 依存（lockfileから npm ci で再現するため追跡不要）
+# lockfileから再現する開発依存と専用worktree
 node_modules/
-
-# CLI ビルド生成物（tsconfig.json outDir）
-/bin/
-
-# GitHub-native 自己拡張の4セグメント成果物は専用branchで追跡する。
-# ここにignore規則を追加しない。明示的な再包含により、将来の広いignore規則からも保護する。
-!/SPEC.md
-!/DESIGN.md
-!/PLAN.md
-!/VALIDATION.md
-
-# スクラッチ・非追跡メモ（issueドキュメント本則の外）
-**/memo/*
-
-# ローカルCoordination Backend用のIssue毎データ配置（src/lib/local-state.ts issueDir()）。
-# AGENTS.md「ディレクトリ構成」節はroot直下にこのディレクトリを含めておらず、本リポジトリは
-# coordination.backend: github で運用するためroot直下には作られないはずだが、手動レビュー
-# ツール実行時の事故的生成に備えた保険としてignoreする（Issue #399）。
-/issues/
-
-# worktree自体（各worktree配下は独立したリポジトリとして扱われるためgit管理外。
-# 空の親ディレクトリのuntracked表示のみを防ぐ）
 .worktrees/
 
-# ローカルエディタ/ツール実行系設定（配布正本は .agent-skill-chain/ 側、展開結果は追跡不要）
+# 同期前staging、失効済みlocal issue、他案件を含み得るmemo
+.agent-skill-chain/tmp/
+/issues/
+/memo/
+**/memo/
+
+# ローカルツール設定と実行ログ
 .claude/
 test-execution.log
+*.log
