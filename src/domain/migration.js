@@ -52,7 +52,7 @@ function simulatedCrash(error) { return Boolean(error && typeof error === 'objec
 
 /** @param {any} state */
 function immutable(state) {
-  return { root: state.root, trustedHash: state.trustedHash, candidateHash: state.candidateHash, candidateSetHash: state.candidateSetHash, candidateSemanticPolicyHash: state.candidateSemanticPolicyHash, candidateInventoryHash: state.candidateInventoryHash, manifestHash: state.manifestHash, manifest: state.manifest, artifacts: state.artifacts.map((/** @type {any} */ item) => ({ kind: item.kind, path: item.path, beforeHash: item.beforeHash, afterHash: item.afterHash })) };
+  return { root: state.root, trustedHash: state.trustedHash, candidateHash: state.candidateHash, candidateSetHash: state.candidateSetHash, candidateSemanticPolicyHash: state.candidateSemanticPolicyHash, candidateInventoryHash: state.candidateInventoryHash, manifestHash: state.manifestHash, manifest: state.manifest, artifacts: state.artifacts.map((/** @type {any} */ item) => ({ kind: item.kind, path: item.path, source: item.source, owner: item.owner, retention: item.retention, beforeHash: item.beforeHash, afterHash: item.afterHash })) };
 }
 
 /** @param {string} root @param {string} relative */
@@ -114,9 +114,9 @@ export function planFileMigration(root, trusted, candidate, entries) {
     if (artifactErrors.length) return rejected(artifactErrors);
     const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
     if (before === entry.after) continue;
-    artifacts.push({ kind: entry.kind, path: relative, source: entry.kind === 'policy' ? 'candidate canonical JSON' : `manifest:${relative}`, beforeHash: hash(before), afterHash: hash(entry.after), before, after: entry.after });
+    artifacts.push({ kind: entry.kind, path: relative, source: entry.kind === 'policy' ? 'candidate canonical JSON' : `manifest:${relative}`, owner: 'project policy owner', retention: 'transaction完了と外部証拠確認まで保持する', beforeHash: hash(before), afterHash: hash(entry.after), before, after: entry.after });
   }
-  const manifest = artifacts.map(({ kind, path: relative, source, beforeHash, afterHash }, order) => ({ order, kind, path: relative, source, beforeHash, afterHash }));
+  const manifest = artifacts.map(({ kind, path: relative, source, owner, retention, beforeHash, afterHash }, order) => ({ order, kind, path: relative, source, owner, retention, beforeHash, afterHash }));
   /** @type {any} */
   const state = {
     state: 'staged', allowed: true, revision: 0, history: ['staged'], root: path.resolve(root),
@@ -128,7 +128,7 @@ export function planFileMigration(root, trusted, candidate, entries) {
     compatibility: compareTrustedPolicy(trustedPolicy, candidatePolicy), manifest, artifacts,
     changes: [...new Set(manifest.map((item) => item.kind))], snapshot: '各manifest entryのbefore内容', rollback: 'durable journalとbefore hashから全fileを復元する', retry: 'approved plan hash、revision CAS、全hashを再検証して再適用する',
   };
-  state.planId = digest({ trusted: trustedPolicy, candidate: candidatePolicy, candidateSetHash: state.candidateSetHash, candidateInventoryHash: state.candidateInventoryHash, manifest, artifacts: artifacts.map((item) => ({ kind: item.kind, path: item.path, beforeHash: item.beforeHash, afterHash: item.afterHash })) });
+  state.planId = digest({ trusted: trustedPolicy, candidate: candidatePolicy, candidateSetHash: state.candidateSetHash, candidateInventoryHash: state.candidateInventoryHash, manifest, artifacts: artifacts.map((item) => ({ kind: item.kind, path: item.path, source: item.source, owner: item.owner, retention: item.retention, beforeHash: item.beforeHash, afterHash: item.afterHash })) });
   state.planFingerprint = digest({ planId: state.planId, immutable: immutable(state) });
   if (!state.compatibility.allowed) return { ...state, ...rejected(state.compatibility.rejected.flatMap((/** @type {any} */ item) => item.reasons)) };
   return state;
@@ -146,7 +146,7 @@ function verify(state, trusted, candidate, revision, expectedFileHash, approvedP
   if (digest(candidatePolicy) !== state.candidateHash) reasons.push('candidate policy hashが変化しました');
   if (state.candidateSetHash !== undefined && (!fragmentedSet(candidate) || candidate.setHash !== state.candidateSetHash || candidate.semanticPolicyHash !== state.candidateSemanticPolicyHash || digest(candidate.rawEntries) !== state.candidateInventoryHash)) reasons.push('candidate fragmented policy setのhashまたはinventoryが変化しました');
   if (digest(state.manifest) !== state.manifestHash) reasons.push('manifest hashが変化しました');
-  const expectedPlanId = digest({ trusted: trustedPolicy, candidate: candidatePolicy, candidateSetHash: state.candidateSetHash, candidateInventoryHash: state.candidateInventoryHash, manifest: state.manifest, artifacts: (state.artifacts ?? []).map((/** @type {any} */ item) => ({ kind: item.kind, path: item.path, beforeHash: item.beforeHash, afterHash: item.afterHash })) });
+  const expectedPlanId = digest({ trusted: trustedPolicy, candidate: candidatePolicy, candidateSetHash: state.candidateSetHash, candidateInventoryHash: state.candidateInventoryHash, manifest: state.manifest, artifacts: (state.artifacts ?? []).map((/** @type {any} */ item) => ({ kind: item.kind, path: item.path, source: item.source, owner: item.owner, retention: item.retention, beforeHash: item.beforeHash, afterHash: item.afterHash })) });
   if (expectedPlanId !== state.planId) reasons.push('planIdをtrusted/candidate/manifestから再導出できません');
   const expectedFingerprint = digest({ planId: state.planId, immutable: immutable(state) });
   if (expectedFingerprint !== state.planFingerprint) reasons.push('immutable plan fingerprintが一致しません');

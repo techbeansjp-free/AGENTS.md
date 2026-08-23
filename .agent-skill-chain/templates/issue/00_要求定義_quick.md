@@ -64,6 +64,8 @@
 - 出力:
 - 変更する責務:
 - 依存方向:
+- dependency graphのtopological orderと循環反例:
+- authority/evidenceの自己参照を防ぐ方法:
 - 信頼境界と承認:
 - 失敗時の動作:
 - 原子性・並行実行:
@@ -74,6 +76,8 @@
 | 順序 | 最小変更 | 先に確認する失敗 | 合格条件 |
 |---:|---|---|---|
 | 1 | （変更） | （SCN IDと失敗内容） | （観測結果） |
+
+- cycle/self-loop/unknown nodeを先に失敗させるSCN:
 
 - project policyが選択したtest layerごとの検証:
 - 型検査・既存テスト一式:

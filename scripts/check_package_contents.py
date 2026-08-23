@@ -43,9 +43,14 @@ def matches_manifest(file: str, entries: list[str]) -> bool:
 
 def sensitive(file: str) -> bool:
     name = Path(file).name.lower()
+    stem = name.rsplit(".", 1)[0]
     return (
         name.startswith(".env")
-        or re.search(r"(?:credential|credentials|secrets?|auth)(?:\.[^.]*)?$", name) is not None
+        or re.search(
+            r"(?:^|[._-])(?:credentials?|secrets?|auth|client-secrets?)(?:$|[._-])",
+            stem,
+        )
+        is not None
         or name.endswith((".pem", ".key", ".p12", ".pfx"))
     )
 

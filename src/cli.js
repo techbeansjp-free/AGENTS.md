@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { createIssueStaging, validateIssue } from './domain/issue.js';
 import { bootstrapProject, validateSpecs } from './domain/spec.js';
-import { evaluateReview } from './domain/review.js';
+import { buildReviewEvidence, evaluateReview } from './domain/review.js';
 import { createPullRequest, authorizeMerge } from './domain/delivery.js';
 import { createWorktree, inspectFinalizeState } from './domain/worktree.js';
 import { buildFinalizeReport, applyFinalize } from './domain/finalize.js';
@@ -15,7 +16,7 @@ import { github } from './adapters/github.js';
 import { git } from './lib/process.js';
 import { writeFileAtomic } from './lib/atomic.js';
 import { validateRepositoryConformance } from './domain/conformance.js';
-import { parseJsonStrict } from './lib/security.js';
+import { parseJsonStrict, resolveContained } from './lib/security.js';
 
 /** @param {string[]} args */
 function parse(args) {
@@ -131,14 +132,50 @@ export async function main(argv) {
     const { flags, positionals } = parse(rest);
     const file = positionals[0] ?? required(flags, 'file');
     const result = evaluateReview(readJson(file));
+    if (result.approved) {
+      const pending = { ...result, approved: false, status: 'pending', errors: [...result.errors, 'file由来のGitHub metadataはauthorityではありません。review evidenceでtrusted providerを実観測してください'] };
+      print(pending);
+      return 1;
+    }
     print(result);
-    return result.approved ? 0 : 1;
+    return 1;
+  }
+  if (command === 'review' && subcommand === 'evidence') {
+    const { flags } = parse(rest);
+    if (flags.external !== undefined) throw new Error('--externalの自己申告JSONはreview証拠として使用できません。trusted GitHub providerの明示IDを指定してください');
+    if (flags['implementer-actor-id'] !== undefined) throw new Error('--implementer-actor-idは自己申告authorityになるため使用できません。H_impl commit authorをGitHubから観測します');
+    const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
+    const implementationCommitSha = required(flags, 'implementation-commit');
+    const finalCommitSha = required(flags, 'final-commit');
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/iu.test(implementationCommitSha) || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/iu.test(finalCommitSha)) throw new Error('implementation/final commitは完全なGit OIDで指定してください');
+    const artifactInput = required(flags, 'artifact');
+    const artifactFile = resolveContained(root, artifactInput);
+    const artifactPath = path.relative(root, artifactFile).split(path.sep).join('/');
+    if (artifactPath !== artifactInput) throw new Error('--artifactは正規化済みrepository相対pathで指定してください');
+    const resolveCommit = (/** @type {string} */ oid) => git(['rev-parse', '--verify', `${oid}^{commit}`], root).stdout.trim();
+    if (resolveCommit(implementationCommitSha) !== implementationCommitSha || resolveCommit(finalCommitSha) !== finalCommitSha) throw new Error('指定commitを完全OIDへ一意に解決できません');
+    const implementationTreeSha = git(['rev-parse', `${implementationCommitSha}^{tree}`], root).stdout.trim();
+    const ancestry = git(['merge-base', '--is-ancestor', implementationCommitSha, finalCommitSha], root, { allowFailure: true });
+    const changedPaths = git(['diff', '--name-only', `${implementationCommitSha}..${finalCommitSha}`, '--'], root).stdout.trim().split(/\r?\n/u).filter(Boolean);
+    const blobOid = git(['rev-parse', `${finalCommitSha}:${artifactPath}`], root).stdout.trim();
+    const artifactContent = git(['show', `${finalCommitSha}:${artifactPath}`], root).stdout;
+    const repository = required(flags, 'repo');
+    const prRaw = required(flags, 'pr'); const runId = required(flags, 'run-id'); const reviewId = required(flags, 'review-id');
+    if (!/^[1-9]\d*$/u.test(prRaw) || !/^[1-9]\d*$/u.test(runId) || !/^[1-9]\d*$/u.test(reviewId)) throw new Error('PR、Actions run、reviewは正のimmutable IDで指定してください');
+    const externalEvidence = github('review.evidence', { repository, pr: Number(prRaw), runId, reviewId, implementationCommitSha }, root);
+    const result = buildReviewEvidence({
+      implementationCommitSha, finalCommitSha, implementationTreeSha, implementationIsAncestor: ancestry.status === 0, changedPaths,
+      artifact: { path: artifactPath, sha256: crypto.createHash('sha256').update(artifactContent).digest('hex'), blobOid },
+      externalEvidence,
+    });
+    print(result);
+    return result.valid ? 0 : 1;
   }
   if (command === 'trace' && subcommand === 'validate') {
     const { flags } = parse(rest);
     const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
     const choices = loadProjectPolicySet(root).policy.projectChoices;
-    const result = validateScenarioTrace(required(flags, 'features-root'), { layers: choices.testLayers, forbiddenFileSuffixes: typeof flags['forbidden-test-suffixes'] === 'string' ? flags['forbidden-test-suffixes'].split(',').filter(Boolean) : [] });
+    const result = validateScenarioTrace(required(flags, 'features-root'), { layers: choices?.testLayers, forbiddenFileSuffixes: typeof flags['forbidden-test-suffixes'] === 'string' ? flags['forbidden-test-suffixes'].split(',').filter(Boolean) : [] });
     print(result);
     return result.valid ? 0 : 1;
   }

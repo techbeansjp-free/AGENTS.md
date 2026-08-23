@@ -60,6 +60,48 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When review gateを評価する
     Then reviewはrejectedである
 
+  Scenario: SCN-UNIT-REVIEW-011 Phase A reviewはH_implとevidence-only H_finalを分離して外部証拠を拘束する
+    Given H_implの後にreview artifactだけを追加したH_finalの完全なreviewがある
+    When review gateを評価する
+    Then reviewはapprovedである
+
+  Scenario Outline: SCN-UNIT-REVIEW-012 Phase A review metadataの改竄を拒否する
+    Given 有効なPhase A review evidenceの<属性>を改竄する
+    When review gateを評価する
+    Then reviewはrejectedであり<診断>を返す
+
+    Examples:
+      | 属性 | 診断 |
+      | same-head | H_implとH_final |
+      | ancestry | ancestor |
+      | changed-path | evidence-only |
+      | artifact-sha | sha256 |
+      | blob-oid | blob OID |
+      | source | trusted GitHub provider |
+      | repository | repository |
+      | implementation-sha | implementation commit SHA |
+      | implementation-author | implementation commit author |
+      | pr-id | PR number |
+      | run-id | run ID |
+      | review-id | review ID |
+      | pr-head | PR head |
+      | ci-head | CI head |
+      | ci-event | pull_request event |
+      | run-pr | Actions runのPR number |
+      | empty-run-pr | Actions runのPR number |
+      | ci-conclusion | CI conclusion |
+      | reviewer-commit | review metadata commit |
+      | reviewer-actor | stable actor |
+      | pr-author-review | PR authorと独立 |
+      | implementer-review | observed implementation commit authorと独立 |
+      | submitted-at | submittedAt |
+      | verdict | approved verdict |
+
+  Scenario: SCN-UNIT-REVIEW-013 tracked Phase A artifactはH_final後に更新しない
+    Given tracked Phase A review recordを読む
+    When Phase A artifactのimmutable契約を検査する
+    Then H_final後は更新せず外部attestationだけで完了すると明記されている
+
   Scenario: SCN-UNIT-POLICY-001 package defaultはPR停止かつmerge disabledである
     Given package default policyを読み込む
     When policyを検証する

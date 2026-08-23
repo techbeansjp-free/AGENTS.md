@@ -71,9 +71,9 @@ Feature: policy拡張を段階移行して失敗から再実行する
     Then 次回実行がbefore after hashから全fileを回復する
 
   Scenario: SCN-INT-RISK-014 credential名と実content秘密をallowlisted directory内でも拒否する
-    Given allowlisted srcにcredentials fileとtoken内容がある
+    Given allowlisted srcにcredential境界、oauth、reauth及びtoken内容がある
     When 実npm packの名前とcontentを検査する
-    Then credential containerと秘密patternの両方を拒否する
+    Then credential containerと秘密patternだけを拒否しoauthとreauthを許可する
 
   Scenario: SCN-INT-RISK-015 conformance CLIは実在するenforcementと成功SCN証拠を要求する
     Given unknown、duplicate、dead referenceを持つconformance bindingがある
@@ -114,3 +114,32 @@ Feature: policy拡張を段階移行して失敗から再実行する
     Given origin HEADのないPR checkoutとtrusted base commitとcandidate policy setがある
     When explicit trusted commitでpolicy validate CLIを実行する
     Then base SHA一致だけ成功し欠落・不正・不一致はfail closedになる
+
+  Scenario: SCN-INT-RISK-023 review evidence CLIはGitとtrusted GitHub providerを実観測する
+    Given H_impl後にPhase A review artifactだけをcommitした隔離repositoryがある
+    And GitHub review providerのvalid観測がある
+    When review evidence CLIでGitとGitHub providerを結合する
+    Then 実tree、diff、artifact hash、blobとH_finalのtrusted review gateが一致する
+
+  Scenario Outline: SCN-INT-RISK-024 review evidence CLIは自己申告と不一致GitHub観測を承認しない
+    Given H_impl後にPhase A review artifactだけをcommitした隔離repositoryがある
+    And GitHub review providerの<variant>観測がある
+    When review evidence CLIでGitとGitHub providerを結合する
+    Then review evidenceは承認不能でgh呼出境界も守られる
+
+    Examples:
+      | variant |
+      | forged-file |
+      | forged-review-file |
+      | forged-implementer-option |
+      | wrong-repository |
+      | wrong-pr |
+      | wrong-run |
+      | wrong-run-pr |
+      | empty-run-pr |
+      | wrong-review |
+      | wrong-head |
+      | self-review |
+      | bot-pr-implementation-self-review |
+      | null-implementation-author |
+      | commented |

@@ -8,13 +8,28 @@ import { safeSlug, resolveContained, redactSecrets } from '../../src/lib/securit
 import { evaluateReview } from '../../src/domain/review.js';
 import { validatePolicy } from '../../src/domain/policy.js';
 import { parseGherkinScenarios, validateScenarioTrace } from '../../src/domain/trace.js';
+import * as traceDomain from '../../src/domain/trace.js';
 import { run } from '../../src/lib/process.js';
+import { main } from '../../src/cli.js';
 
 const validAnswers = () => Object.fromEntries(Array.from({ length: 8 }, (_, index) => [
   `Q-${String(index + 1).padStart(2, '0')}`, { answer: true, evidence: `evidence-${index + 1}` },
 ]));
+const H_IMPL = 'a'.repeat(40);
+const H_FINAL = 'c'.repeat(40);
 const reviewBase = () => ({
-  round: 1, headSha: 'a'.repeat(40),
+  round: 1, headSha: H_FINAL,
+  candidateEvidence: {
+    implementationCommitSha: H_IMPL, finalCommitSha: H_FINAL, implementationTreeSha: 'b'.repeat(40), implementationIsAncestor: true,
+    changedPaths: ['docs/reviews/phase-a.json'], artifact: { path: 'docs/reviews/phase-a.json', sha256: 'd'.repeat(64), blobOid: 'e'.repeat(40) },
+  },
+  externalEvidence: {
+    provenance: { source: 'github', repository: 'o/r', prNumber: 835, runId: '32635972969', reviewId: '9001' },
+    implementation: { repository: 'o/r', commitSha: H_IMPL, authorActorId: 'actor-implementer' },
+    pr: { repository: 'o/r', number: 835, headSha: H_FINAL, authorActorId: 'actor-implementer' },
+    ci: { repository: 'o/r', runId: '32635972969', event: 'pull_request', headSha: H_FINAL, conclusion: 'success', pullRequestNumbers: [835] },
+    review: { repository: 'o/r', prNumber: 835, reviewId: '9001', commitSha: H_FINAL, actorId: 'actor-reviewer', submittedAt: '2026-08-23T12:00:00Z', verdict: 'approved' },
+  },
   affirmative: { correctness: 'pass', value: 'pass', feasibility: 'pass', consistency: 'pass', maintainability: 'pass' },
   adversarial: { counterexamples: 'pass', failures: 'pass', boundaries: 'pass', abuse: 'pass', security: 'pass', dataLoss: 'pass', rollback: 'pass', scope: 'pass' },
   findings: [], tests: 'pass', specConsistency: 'pass',
@@ -85,9 +100,41 @@ Given('round 2のreviewが全範囲再走査を要求している', function () 
   this.review.findings = [{ id: 'H1', severity: 'High', status: 'resolved', evidence: '修正済み' }];
 });
 Given('完全なreviewに理由なしのnot-applicableがある', function () { this.review = reviewBase(); this.review.affirmative.value = 'not-applicable'; });
+Given('H_implの後にreview artifactだけを追加したH_finalの完全なreviewがある', function () { this.review = reviewBase(); });
+Given('有効なPhase A review evidenceの{word}を改竄する', function (attribute) {
+  this.review = reviewBase(); const other = 'f'.repeat(40);
+  if (attribute === 'same-head') this.review.candidateEvidence.finalCommitSha = H_IMPL;
+  if (attribute === 'ancestry') this.review.candidateEvidence.implementationIsAncestor = false;
+  if (attribute === 'changed-path') this.review.candidateEvidence.changedPaths.push('src/domain/review.js');
+  if (attribute === 'artifact-sha') this.review.candidateEvidence.artifact.sha256 = 'bad';
+  if (attribute === 'blob-oid') this.review.candidateEvidence.artifact.blobOid = 'bad';
+  if (attribute === 'pr-head') this.review.externalEvidence.pr.headSha = other;
+  if (attribute === 'source') this.review.externalEvidence.provenance.source = 'file';
+  if (attribute === 'repository') this.review.externalEvidence.ci.repository = 'x/r';
+  if (attribute === 'implementation-sha') this.review.externalEvidence.implementation.commitSha = other;
+  if (attribute === 'implementation-author') this.review.externalEvidence.implementation.authorActorId = null;
+  if (attribute === 'pr-id') this.review.externalEvidence.review.prNumber = 999;
+  if (attribute === 'run-id') this.review.externalEvidence.ci.runId = '999';
+  if (attribute === 'review-id') this.review.externalEvidence.review.reviewId = '';
+  if (attribute === 'ci-head') this.review.externalEvidence.ci.headSha = other;
+  if (attribute === 'ci-event') this.review.externalEvidence.ci.event = 'push';
+  if (attribute === 'run-pr') this.review.externalEvidence.ci.pullRequestNumbers = [999];
+  if (attribute === 'empty-run-pr') this.review.externalEvidence.ci.pullRequestNumbers = [];
+  if (attribute === 'ci-conclusion') this.review.externalEvidence.ci.conclusion = 'failure';
+  if (attribute === 'reviewer-commit') this.review.externalEvidence.review.commitSha = other;
+  if (attribute === 'reviewer-actor') this.review.externalEvidence.review.actorId = 'unstable actor name';
+  if (attribute === 'pr-author-review') this.review.externalEvidence.review.actorId = this.review.externalEvidence.pr.authorActorId;
+  if (attribute === 'implementer-review') this.review.externalEvidence.review.actorId = this.review.externalEvidence.implementation.authorActorId;
+  if (attribute === 'submitted-at') this.review.externalEvidence.review.submittedAt = 'sometime';
+  if (attribute === 'verdict') this.review.externalEvidence.review.verdict = 'commented';
+});
 When('review gateを評価する', function () { try { this.result = evaluateReview(this.review); } catch (error) { this.error = error; } });
 Then('reviewはapprovedである', function () { assert.equal(this.result.approved, true); });
 Then('reviewはrejectedである', function () { assert.equal(this.result.approved, false); });
+Then(/^reviewはrejectedであり(.+)を返す$/u, function (diagnostic) { assert.equal(this.result.approved, false); assert.ok(this.result.errors.some((/** @type {string} */ error) => error.includes(diagnostic)), this.result.errors.join('; ')); });
+Given('tracked Phase A review recordを読む', function () { this.phaseAReview = fs.readFileSync('docs/reviews/01_課題834実装レビュー.md', 'utf8'); });
+When('Phase A artifactのimmutable契約を検査する', function () { this.phaseAContractInspected = true; });
+Then('H_final後は更新せず外部attestationだけで完了すると明記されている', function () { assert.match(this.phaseAReview, /H_final後[^。]*更新しない/u); assert.match(this.phaseAReview, /完了[^。]*外部attestation/u); });
 Then('blocking findingは0件である', function () { assert.equal(this.result.blocking.length, 0); });
 Then('blocking findingは{string}である', function (id) { assert.deepEqual(this.result.blocking, [id]); });
 Then('review評価は例外で停止する', function () { assert.ok(this.error instanceof Error); });
@@ -164,3 +211,35 @@ Then('重複errorを検出する', function () { assert.ok(this.result.errors.so
 Given('projectがcomponentとjourneyのtest layerを選択する', function () { const root = this.temp(); this.featuresRoot = path.join(root, 'features'); this.testLayers = ['component', 'journey']; for (const layer of this.testLayers) { fs.mkdirSync(path.join(this.featuresRoot, layer), { recursive: true }); fs.writeFileSync(path.join(this.featuresRoot, layer, `${layer}.feature`), `Feature: configured layer\nScenario: SCN-${layer.toUpperCase()}-001 configured scenario\n Given configured precondition\n When configured action\n Then configured result\n`); } });
 When('configured layerでGherkin traceを検証する', function () { this.result = validateScenarioTrace(this.featuresRoot, { layers: this.testLayers }); });
 Then('generic traceはfixed 3 layerを要求しない', function () { assert.equal(this.result.valid, true, this.result.errors.join('; ')); assert.deepEqual(Object.keys(this.result.layerCounts), this.testLayers); assert.equal(JSON.stringify(this.result).includes('unit'), false); assert.equal(JSON.stringify(this.result).includes('integration'), false); assert.equal(JSON.stringify(this.result).includes('e2e'), false); });
+Given('testLayersを持たないlegacy project policyとGherkinがある', function () {
+  this.root = this.temp();
+  fs.mkdirSync(path.join(this.root, '.agent-skill-chain'), { recursive: true });
+  fs.writeFileSync(path.join(this.root, '.agent-skill-chain/project-policy.json'), `${JSON.stringify({ schemaVersion: 'agent-skill-chain/project-policy/v0.3', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 } })}\n`);
+  this.featuresRoot = path.join(this.root, 'features'); fs.mkdirSync(this.featuresRoot);
+  fs.writeFileSync(path.join(this.featuresRoot, 'legacy.feature'), 'Feature: legacy\nScenario: SCN-LEGACY-001 legacy\n Given precondition\n When action\n Then result\n');
+});
+When('trace CLIでlegacy policyを検証する', async function () {
+  let stdout = '';
+  const originalWrite = process.stdout.write;
+  process.stdout.write = (chunk) => { stdout += String(chunk); return true; };
+  try { this.status = await main(['trace', 'validate', `--root=${this.root}`, `--features-root=${this.featuresRoot}`]); } catch (error) { this.error = error; } finally { process.stdout.write = originalWrite; }
+  this.stdout = stdout;
+});
+Then('project choice不足をstructured invalidとして返す', function () { assert.equal(this.error, undefined); assert.equal(this.status, 1); assert.match(this.stdout, /project policy/u); });
+Given('{word}を持つdependency graphがある', function (variant) {
+  this.graph = variant === 'cycle' ? { nodes: ['requirement', 'design', 'test'], edges: [{ from: 'requirement', to: 'design' }, { from: 'design', to: 'test' }, { from: 'test', to: 'requirement' }] }
+    : variant === 'self-loop' ? { nodes: ['review'], edges: [{ from: 'review', to: 'review' }] }
+      : { nodes: ['requirement'], edges: [{ from: 'requirement', to: 'missing' }] };
+});
+When('dependency graphを検証する', function () { this.result = traceDomain.validateDependencyGraph(this.graph.nodes, this.graph.edges); });
+Then('dependency graphはcycle diagnostic付きでinvalidである', function () { assert.equal(this.result.valid, false); assert.match(this.result.errors.join(' '), /cycle|self-loop|unknown/u); });
+Given('repository sourceのimport graphと循環反例がある', function () {
+  const nodes = runtimeFiles(); const known = new Set(nodes.map((file) => path.resolve(file)));
+  const edges = nodes.flatMap((file) => [...fs.readFileSync(file, 'utf8').matchAll(/from\s+['"](\.\.?\/[^'"]+)['"]/gu)].map((match) => {
+    const resolved = path.resolve(path.dirname(file), match[1].endsWith('.js') ? match[1] : `${match[1]}.js`);
+    return known.has(resolved) ? { from: file, to: path.relative(process.cwd(), resolved) } : undefined;
+  }).filter(Boolean));
+  this.sourceGraph = { nodes, edges }; this.cyclicGraph = { nodes, edges: [...edges, { from: nodes[0], to: nodes[0] }] };
+});
+When('project hookのdependency graphを検証する', function () { this.sourceResult = traceDomain.validateDependencyGraph(this.sourceGraph.nodes, this.sourceGraph.edges); this.cyclicResult = traceDomain.validateDependencyGraph(this.cyclicGraph.nodes, this.cyclicGraph.edges); });
+Then('source graphは非循環で循環反例だけを拒否する', function () { assert.equal(this.sourceResult.valid, true, this.sourceResult.errors.join('; ')); assert.equal(this.cyclicResult.valid, false); });

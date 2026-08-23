@@ -49,7 +49,8 @@ export function serializeDiagnostic(value) {
   const result = safe && typeof safe === 'object' ? { ...safe, diagnostic: source } : { value: safe, diagnostic: source };
   return {
     result,
-    japanese: {
+    presentation: { fallbackLanguage: 'ja', authoritative: false },
+    messageJa: {
       rule: `ルールID: ${source.ruleId ?? 'ASC-UNKNOWN'}`,
       purpose: `目的: ${source.purpose ?? '安全な操作を保証する'}`,
       risk: `リスク: ${source.risk ?? 'unknown'}`,
@@ -173,10 +174,12 @@ export function compareTrustedPolicy(trusted, candidate) {
   return { allowed: rejected.length === 0, rejected, stagedAdditions };
 }
 
-/** @param {any} rule @param {any} override @param {{issue: number, scope: string, actor: string, sha: string, now: string}} expected */
+/** @param {any} rule @param {any} override @param {{ruleId: string, issue: number, scope: string, actor: string, sha: string, now: string}} expected */
 export function validateOverride(rule, override, expected) {
   const reasons = [];
   if (rule.overridePolicy !== 'bound') reasons.push('このruleはnon-overrideです');
+  if (!nonEmpty(expected?.ruleId) || expected.ruleId !== rule.ruleId) reasons.push('expected ruleIdが対象ruleと一致しません');
+  if (!nonEmpty(override?.ruleId) || override.ruleId !== expected?.ruleId || override.ruleId !== rule.ruleId) reasons.push('override recordのruleIdが対象ruleと一致しません');
   if (!Number.isInteger(override?.issue) || override.issue <= 0 || override.issue !== expected.issue) reasons.push('Issueが一致しません');
   if (!nonEmpty(override?.scope) || override.scope !== expected.scope || !rule.scope.includes(override.scope)) reasons.push('scopeが一致しません');
   if (!nonEmpty(override?.actor) || override.actor !== expected.actor) reasons.push('actorが一致しません');
@@ -188,7 +191,7 @@ export function validateOverride(rule, override, expected) {
   return {
     valid: reasons.length === 0, reasons,
     diagnostic: diagnostic(rule.ruleId, rule.purpose, rule.riskClass, reasons, rule.scope, ['overrideのIssue、scope、actor、reason、expiry、SHAを確認した'], [], '拘束条件を修正するかrule ownerへ新しいauthorityを依頼してください', rule.owner, rule.rollback),
-    audit: reasons.length ? undefined : { ruleId: rule.ruleId, issue: override.issue, scope: override.scope, actor: override.actor, reason: override.reason, expiresAt: override.expiresAt, sha: override.sha },
+    audit: reasons.length ? undefined : { ruleId: override.ruleId, issue: override.issue, scope: override.scope, actor: override.actor, reason: override.reason, expiresAt: override.expiresAt, sha: override.sha },
   };
 }
 
@@ -278,12 +281,14 @@ export function enforceOperation(input) {
 
 /** Actual operation adapters derive observations and call this function; caller-supplied rule IDs or violated flags are not inputs. @param {{policy: any, boundary: string, observations: Array<{ruleId?: string, riskClass?: string, violated: boolean, reasons?: string[], checks?: string[]}>}} input */
 export function enforceTrustedBoundary(input) {
+  const validation = validateEnforcementPolicy(input.policy);
+  if (!validation.valid) return { allowed: false, boundary: input.boundary, diagnostic: validation.diagnostics[0] ?? diagnostic('ASC-POLICY-INVALID', 'trusted policyをoperation前に検証する', 'authority', validation.errors, [input.boundary], ['trusted policy全ruleを検証した'], [], 'trusted policyを修正してからoperationを再実行してください', 'project policy owner', 'operationを実行しない') };
   const applicable = (input.policy?.rules ?? []).filter((/** @type {any} */ rule) => rule.scope.includes(input.boundary));
   const results = applicable.map((/** @type {any} */ rule) => {
     const observed = input.observations.find((item) => item.ruleId === rule.ruleId || item.riskClass === rule.riskClass) ?? { violated: false, reasons: ['actual stateに境界違反はない'], checks: ['operation adapterが実状態から導出した'] };
     return evaluateRule(rule, observed);
   });
-  const blocked = results.find((/** @type {any} */ result) => result.allowed === false);
+  const blocked = results.find((/** @type {any} */ result) => result.blocked === true || result.allowed !== true);
   return blocked ? { allowed: false, boundary: input.boundary, results, diagnostic: blocked.diagnostic } : { allowed: true, boundary: input.boundary, results };
 }
 
@@ -360,7 +365,12 @@ export function classifyPackageAssets(files, patterns = []) {
 }
 
 /** @param {string} file */
-function pathIsSensitive(file) { const name = file.split('/').at(-1)?.toLowerCase() ?? ''; return name.startsWith('.env') || /(?:credential|credentials|secrets?|auth)(?:\.[^.]+)?$/u.test(name) || ['.pem', '.key', '.p12', '.pfx'].some((suffix) => name.endsWith(suffix)); }
+function pathIsSensitive(file) {
+  const name = file.split('/').at(-1)?.toLowerCase() ?? '';
+  const stem = name.replace(/\.[^.]+$/u, '');
+  const credentialSegment = /(?:^|[._-])(?:credentials?|secrets?|auth|client-secrets?)(?:$|[._-])/u;
+  return name.startsWith('.env') || credentialSegment.test(stem) || ['.pem', '.key', '.p12', '.pfx'].some((suffix) => name.endsWith(suffix));
+}
 
 /** @param {unknown} value @returns {boolean} */
 function structuredSecret(value) {

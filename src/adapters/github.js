@@ -59,6 +59,20 @@ export function github(operation, input, cwd) {
       'number,url,headRefName,baseRefName,headRefOid,baseRefOid,mergeStateStatus,reviewDecision,latestReviews,statusCheckRollup'], cwd);
     return JSON.parse(result.stdout);
   }
+  if (operation === 'review.evidence') {
+    verifyRepository(input.repository, cwd, 'read');
+    const pr = JSON.parse(run('gh', ['pr', 'view', String(input.pr), '--repo', input.repository, '--json', 'number,headRefOid,author'], cwd).stdout);
+    const implementation = JSON.parse(run('gh', ['api', `repos/${input.repository}/commits/${input.implementationCommitSha}`], cwd).stdout);
+    const ci = JSON.parse(run('gh', ['api', `repos/${input.repository}/actions/runs/${input.runId}`], cwd).stdout);
+    const review = JSON.parse(run('gh', ['api', `repos/${input.repository}/pulls/${input.pr}/reviews/${input.reviewId}`], cwd).stdout);
+    return {
+      provenance: { source: 'github', repository: input.repository, prNumber: input.pr, runId: String(input.runId), reviewId: String(input.reviewId) },
+      implementation: { repository: input.repository, commitSha: implementation.sha, authorActorId: implementation.author?.node_id },
+      pr: { repository: input.repository, number: pr.number, headSha: pr.headRefOid, authorActorId: pr.author?.id },
+      ci: { repository: ci.repository?.full_name, runId: String(ci.id ?? ''), event: ci.event, headSha: ci.head_sha, conclusion: String(ci.conclusion ?? '').toLowerCase(), pullRequestNumbers: Array.isArray(ci.pull_requests) ? ci.pull_requests.map((/** @type {any} */ item) => item.number) : [] },
+      review: { repository: input.repository, prNumber: pr.number, reviewId: String(review.id ?? ''), commitSha: review.commit_id, actorId: review.user?.node_id, submittedAt: review.submitted_at, verdict: String(review.state ?? '').toLowerCase() },
+    };
+  }
   if (operation === 'branch.protection') {
     verifyRepository(input.repository, cwd, 'read');
     const result = run('gh', ['api', `repos/${input.repository}/branches/${encodeURIComponent(input.branch)}/protection`], cwd, { allowFailure: true });

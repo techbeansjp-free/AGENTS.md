@@ -66,10 +66,10 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     When trusted policyとcandidate policyを比較する
     Then すべてのauthority弱化理由を返す
 
-  Scenario: SCN-UNIT-RISK-011 diagnostic serializerは秘密を伏字化して日本語labelを返す
+  Scenario: SCN-UNIT-RISK-011 diagnostic serializerは秘密を伏字化してmachine正本と表示fallbackを分離する
     Given tokenとpasswordを含むblock diagnosticがある
     When diagnosticを安全にserializeする
-    Then 秘密値は出力されず日本語の固定labelと行動説明がある
+    Then 秘密値は出力されずmachine正本と非authorityの日本語fallbackがある
 
   Scenario: SCN-UNIT-RISK-012 failed証拠はtargeted検証の重複抑止に使わない
     Given 同じfingerprintだがpassed falseの証拠がある
@@ -135,3 +135,13 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     Given passed current evidenceとlegacy fingerprint及び矛盾structured cacheがある
     When targeted検証を計画する
     Then 完全bindingの成功証拠がないためdedupeを拒否する
+
+  Scenario: SCN-UNIT-RISK-021 overrideは別ruleの記録を横取りできない
+    Given override対象と異なるrule IDの記録がある
+    When overrideを検証する
+    Then overrideは拒否される
+
+  Scenario: SCN-UNIT-RISK-022 trusted boundaryは不正ruleと曖昧な判定をfail closedにする
+    Given trusted boundaryに必須属性を欠くruleがある
+    When trusted boundaryを評価する
+    Then policy検証でoperationを拒否する

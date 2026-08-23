@@ -6,12 +6,13 @@ import { Given, When, Then } from '@cucumber/cucumber';
 import { main } from '../../src/cli.js';
 import {
   aggregateMetrics, applyMigration, classifyPackageAssets, compareTrustedPolicy, evaluateRule,
-  enforceOperation, evidenceFingerprint, planMigration, planOfflineGates, planValidation, resolveEffectivePolicy, retryMigration,
+  enforceOperation, enforceTrustedBoundary, evidenceFingerprint, planMigration, planOfflineGates, planValidation, resolveEffectivePolicy, retryMigration,
   rollbackMigration, serializeDiagnostic, validateEnforcementPolicy, validateOverride, validateOwnershipBoundary, validatePackageManifest,
 } from '../../src/domain/enforcement.js';
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration } from '../../src/domain/migration.js';
 import { loadEffectiveTrustedPolicySet, loadOperationPolicy, loadProjectPolicySet, loadTrustedProjectPolicySet, validatePolicy } from '../../src/domain/policy.js';
 import { validateConformanceContract } from '../../src/domain/conformance.js';
+import { evaluateReview } from '../../src/domain/review.js';
 
 const SHA = 'a'.repeat(40);
 const baseRule = (changes = {}) => ({
@@ -56,7 +57,27 @@ const execute = async (args) => {
 /** @param {string[]} args */
 const executeBin = (args) => spawnSync(process.execPath, [path.resolve('bin/agent-skill-chain.js'), ...args], { cwd: process.cwd(), encoding: 'utf8' });
 /** @param {string} root @param {string[]} args */
-const executeBinIn = (root, args) => spawnSync(process.execPath, [path.resolve('bin/agent-skill-chain.js'), ...args], { cwd: root, encoding: 'utf8' });
+const executeBinIn = (root, args, env = process.env) => spawnSync(process.execPath, [path.resolve('bin/agent-skill-chain.js'), ...args], { cwd: root, encoding: 'utf8', env });
+/** @param {any} world @param {string} variant */
+const prepareReviewGhStub = (world, variant) => {
+  const directory = world.temp('asc-review-gh-'); world.ghLog = path.join(directory, 'operations.log');
+  const observedRepo = variant === 'wrong-repository' ? 'x/r' : 'o/r'; const observedPr = variant === 'wrong-pr' ? 999 : 835;
+  const observedRun = variant === 'wrong-run' ? 999 : 32635972969; const observedReview = variant === 'wrong-review' ? 999 : 9001;
+  const observedHead = variant === 'wrong-head' ? 'f'.repeat(40) : world.finalCommitSha;
+  const prAuthor = variant === 'bot-pr-implementation-self-review' ? 'actor-bot' : 'actor-implementer';
+  const implementationAuthor = variant === 'null-implementation-author' ? null : 'actor-implementer';
+  const reviewer = ['self-review', 'bot-pr-implementation-self-review'].includes(variant) ? 'actor-implementer' : 'actor-reviewer'; const state = variant === 'commented' ? 'COMMENTED' : 'APPROVED';
+  const pullRequests = variant === 'empty-run-pr' ? [] : [{ number: variant === 'wrong-run-pr' ? 999 : 835 }];
+  const stub = path.join(directory, 'gh');
+  fs.writeFileSync(stub, `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);const endpoint=args[1]||'';fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:${JSON.stringify(observedRepo)},viewerPermission:'READ'}));if(args[0]==='pr')process.stdout.write(JSON.stringify({number:${observedPr},headRefOid:${JSON.stringify(observedHead)},author:{id:${JSON.stringify(prAuthor)}}}));if(args[0]==='api'&&endpoint.includes('/commits/'))process.stdout.write(JSON.stringify({sha:${JSON.stringify(world.implementationCommitSha)},author:${implementationAuthor === null ? 'null' : `{node_id:${JSON.stringify(implementationAuthor)}}`}}));if(args[0]==='api'&&endpoint.includes('/actions/runs/'))process.stdout.write(JSON.stringify({id:${observedRun},repository:{full_name:'o/r'},head_sha:${JSON.stringify(observedHead)},conclusion:'success',event:'pull_request',pull_requests:${JSON.stringify(pullRequests)}}));if(args[0]==='api'&&endpoint.includes('/reviews/'))process.stdout.write(JSON.stringify({id:${observedReview},commit_id:${JSON.stringify(observedHead)},user:{node_id:${JSON.stringify(reviewer)}},submitted_at:'2026-08-23T12:00:00Z',state:${JSON.stringify(state)}}));\n`);
+  fs.chmodSync(stub, 0o755); world.reviewCliEnv = { ...process.env, PATH: `${directory}${path.delimiter}${process.env.PATH ?? ''}` }; world.reviewVariant = variant;
+};
+/** @param {string} headSha @param {any} evidence */
+const completeReview = (headSha, evidence) => ({
+  round: 1, headSha, tests: 'pass', specConsistency: 'pass', findings: [], ...evidence,
+  affirmative: { correctness: 'pass', value: 'pass', feasibility: 'pass', consistency: 'pass', maintainability: 'pass' },
+  adversarial: { counterexamples: 'pass', failures: 'pass', boundaries: 'pass', abuse: 'pass', security: 'pass', dataLoss: 'pass', rollback: 'pass', scope: 'pass' },
+});
 
 Given('secret保護のactive deny ruleがある', function () { this.rule = baseRule({ ruleId: 'ASC-SECRET-001', purpose: '秘密情報の混入を防ぐ', riskClass: 'secret', scope: ['artifact'] }); });
 Given('表記統一のactive assist ruleがある', function () {
@@ -86,8 +107,8 @@ Then('自己緩和をnon-overrideで拒否する', function () { assert.equal(th
 
 Given('override可能なruleと正しいoverrideがある', function () {
   this.rule = baseRule({ enforcement: 'require', overridePolicy: 'bound' });
-  this.expectedOverride = { issue: 834, scope: 'policy', actor: 'maintainer', sha: SHA, now: '2026-08-23T00:00:00Z' };
-  this.override = { issue: 834, scope: 'policy', actor: 'maintainer', reason: '障害復旧のため一時的に必要', expiresAt: '2026-08-24T00:00:00Z', sha: SHA };
+  this.expectedOverride = { ruleId: this.rule.ruleId, issue: 834, scope: 'policy', actor: 'maintainer', sha: SHA, now: '2026-08-23T00:00:00Z' };
+  this.override = { ruleId: this.rule.ruleId, issue: 834, scope: 'policy', actor: 'maintainer', reason: '障害復旧のため一時的に必要', expiresAt: '2026-08-24T00:00:00Z', sha: SHA };
 });
 Given('overrideの{word}が一致しない', function (attribute) {
   if (attribute === 'scope') this.override.scope = 'outside';
@@ -197,8 +218,8 @@ Then('実repositoryとremoteは変更されない', function () { assert.equal(s
 Given('delivery証拠をrequireするactive ruleがある', function () {
   this.rule = baseRule({ ruleId: 'ASC-DELIVERY-REQUIRE-001', purpose: 'delivery証拠を要求する', riskClass: 'quality', scope: ['delivery'], enforcement: 'require', overridePolicy: 'bound', targetLayer: 'project' });
   this.policy = basePolicy([this.rule]);
-  this.overrideExpected = { issue: 834, scope: 'delivery', actor: 'maintainer', sha: SHA, now: '2026-08-23T00:00:00Z' };
-  this.validOverride = { issue: 834, scope: 'delivery', actor: 'maintainer', reason: '復旧中の一時的authority', expiresAt: '2026-08-24T00:00:00Z', sha: SHA };
+  this.overrideExpected = { ruleId: this.rule.ruleId, issue: 834, scope: 'delivery', actor: 'maintainer', sha: SHA, now: '2026-08-23T00:00:00Z' };
+  this.validOverride = { ruleId: this.rule.ruleId, issue: 834, scope: 'delivery', actor: 'maintainer', reason: '復旧中の一時的authority', expiresAt: '2026-08-24T00:00:00Z', sha: SHA };
 });
 When('条件未達のoperationをenforceする', function () { this.result = enforceOperation({ policy: this.policy, ruleId: this.rule.ruleId, boundary: 'delivery', violated: true }); });
 Then('operationはrequiredとして非許可である', function () { assert.equal(this.result.status, 'required'); assert.equal(this.result.allowed, false); });
@@ -227,7 +248,7 @@ Given('tokenとpasswordを含むblock diagnosticがある', function () {
   this.diagnostic = { allowed: false, diagnostic: { ruleId: 'ASC-SECRET-001', purpose: '秘密を守る', risk: 'secret', reasons: ['token=super-secret-value password=never-show'], scope: ['package'], checks: ['api_key=hidden-value'], autoFixes: [], next: 'credentialを失効する', requiredAuthority: 'security owner', rollback: 'artifactを破棄する' } };
 });
 When('diagnosticを安全にserializeする', function () { this.result = serializeDiagnostic(this.diagnostic); });
-Then('秘密値は出力されず日本語の固定labelと行動説明がある', function () { const text = JSON.stringify(this.result); assert.equal(text.includes('super-secret-value'), false); assert.equal(text.includes('never-show'), false); for (const label of ['ルールID', '具体的根拠', '安全な次の操作', '必要な最小authority', 'rollback方法']) assert.ok(text.includes(label)); });
+Then('秘密値は出力されずmachine正本と非authorityの日本語fallbackがある', function () { const text = JSON.stringify(this.result); assert.equal(text.includes('super-secret-value'), false); assert.equal(text.includes('never-show'), false); assert.equal(this.result.presentation.authoritative, false); assert.equal(this.result.presentation.fallbackLanguage, 'ja'); assert.equal(this.result.result.diagnostic.ruleId, 'ASC-SECRET-001'); for (const label of ['ルールID', '具体的根拠', '安全な次の操作', '必要な最小authority', 'rollback方法']) assert.ok(text.includes(label)); });
 
 Given('同じfingerprintだがpassed falseの証拠がある', function () {
   this.failedValidation = { changedFiles: ['src/x.js'], risk: ['quality'], evidence: { sha: SHA, policyHash: 'c'.repeat(64), tool: 'cucumber-js', scope: ['unit'], passed: false } };
@@ -249,8 +270,8 @@ Then('安全floorを弱化せずproject ruleをstagedで追加する', function 
 
 Given('bound ruleとnon-override ruleと期限付きoverrideがある', function () {
   this.boundRule = baseRule({ enforcement: 'require', overridePolicy: 'bound', scope: ['policy'] }); this.nonOverrideRule = baseRule();
-  this.overrideExpected = { issue: 834, scope: 'policy', actor: 'maintainer', sha: SHA, now: '2026-08-23T00:00:00Z' };
-  this.validOverride = { issue: 834, scope: 'policy', actor: 'maintainer', reason: '期限付き復旧', expiresAt: '2026-08-24T00:00:00Z', sha: SHA };
+  this.overrideExpected = { ruleId: this.boundRule.ruleId, issue: 834, scope: 'policy', actor: 'maintainer', sha: SHA, now: '2026-08-23T00:00:00Z' };
+  this.validOverride = { ruleId: this.boundRule.ruleId, issue: 834, scope: 'policy', actor: 'maintainer', reason: '期限付き復旧', expiresAt: '2026-08-24T00:00:00Z', sha: SHA };
 });
 When('overrideの正常、Issue不一致、理由なし、期限切れ、non-overrideを検証する', function () {
   this.overrideResults = {
@@ -263,13 +284,36 @@ When('overrideの正常、Issue不一致、理由なし、期限切れ、non-ove
 });
 Then('正常overrideだけに監査recordがあり他は拒否される', function () { assert.ok(this.overrideResults.valid.audit); for (const key of ['issue', 'reason', 'expired', 'nonOverride']) { assert.equal(this.overrideResults[key].valid, false); assert.equal(this.overrideResults[key].audit, undefined); } });
 
+Given('override対象と異なるrule IDの記録がある', function () {
+  this.rule = baseRule({ ruleId: 'ASC-OVERRIDE-TARGET-001', enforcement: 'require', overridePolicy: 'bound' });
+  this.expectedOverride = { ruleId: this.rule.ruleId, issue: 834, scope: 'policy', actor: 'maintainer', sha: SHA, now: '2026-08-23T00:00:00Z' };
+  this.override = { ruleId: 'ASC-OTHER-RULE-001', issue: 834, scope: 'policy', actor: 'maintainer', reason: '別ruleの記録を再利用しようとした', expiresAt: '2026-08-24T00:00:00Z', sha: SHA };
+});
+
+Given('trusted boundaryに必須属性を欠くruleがある', function () {
+  const { targetLayer: _omitted, ...withoutTarget } = baseRule({ scope: ['pull_request'] });
+  const invalid = /** @type {any} */ (withoutTarget);
+  this.boundaryInput = { policy: basePolicy([invalid]), boundary: 'pull_request', observations: [{ ruleId: invalid.ruleId, violated: false }] };
+});
+When('trusted boundaryを評価する', function () { this.result = enforceTrustedBoundary(this.boundaryInput); });
+Then('policy検証でoperationを拒否する', function () { assert.equal(this.result.allowed, false); assert.equal(this.result.results, undefined); assert.match(JSON.stringify(this.result.diagnostic), /targetLayer/u); });
+
 Given('ownerとtarget layerが誤配置されたasset分類がある', function () { this.ownershipAssets = [{ path: '.agent-skill-chain/project-policy.json', owner: '', targetLayer: 'package', evidence: '' }]; });
 When('local、PR、packageのownership境界を評価する', function () { this.ownership = { local: validateOwnershipBoundary(this.ownershipAssets, 'local'), pr: validateOwnershipBoundary(this.ownershipAssets, 'pr'), package: validateOwnershipBoundary(this.ownershipAssets, 'package') }; });
 Then('localは移動先とdry-run案を支援しPRは証拠を要求して実配布だけをdenyする', function () { assert.equal(this.ownership.local.status, 'assisted'); assert.equal(this.ownership.local.allowed, true); assert.ok(this.ownership.local.diagnostic.autoFixes[0].dryRunDiff); assert.equal(this.ownership.pr.status, 'required'); assert.equal(this.ownership.pr.allowed, false); assert.equal(this.ownership.package.status, 'blocked'); assert.equal(this.ownership.package.allowed, false); });
 
 Given('I1〜I12のconformance contractがある', function () { this.contract = JSON.parse(fs.readFileSync('.agent-skill-chain/policy/conformance.json', 'utf8')); this.contractResult = validateConformanceContract(this.contract); });
 When('invariant {word}を検証する', function (id) { this.invariant = this.contractResult.invariants.find((/** @type {any} */ item) => item.id === id); });
-Then('source、enforcement point、counterexample SCN、evidence、rollbackが揃う', function () { assert.equal(this.contractResult.valid, true, this.contractResult.errors.join('; ')); for (const key of ['sourceHook', 'enforcementHooks', 'evidenceHooks', 'rollback']) assert.ok(this.invariant[key]?.length > 0, key); });
+Then('source、enforcement point、counterexample SCN、evidence、rollbackが揃う', function () {
+  assert.equal(this.contractResult.valid, true, this.contractResult.errors.join('; '));
+  for (const key of ['sourceHook', 'enforcementHooks', 'evidenceHooks', 'rollback']) assert.ok(this.invariant[key]?.length > 0, key);
+  for (const [file, property] of [['.agent-skill-chain/schemas/conformance-contract.schema.json', 'invariants'], ['.agent-skill-chain/schemas/project-conformance-binding.schema.json', 'bindings']]) {
+    const schema = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const clauses = schema.properties[property].allOf;
+    assert.ok(Array.isArray(clauses), `${file} must constrain exact invariant IDs`);
+    assert.equal(clauses.filter((/** @type {any} */ clause) => clause.contains?.properties?.id?.const === this.invariant.id && clause.minContains === 1 && clause.maxContains === 1).length, 1, `${file}:${this.invariant.id}`);
+  }
+});
 
 Given('policy、schema、runtime、CI、templateの隔離fixtureと変更manifestがある', function () {
   this.root = this.temp('asc-manifest-'); this.trusted = basePolicy();
@@ -355,9 +399,9 @@ Given('durable journalを持つ複数file migrationがある', function () { thi
 When('state書込直後、partial apply、rollback途中のcrashを注入する', function () { const journals = /** @type {any[]} */ ([]); try { applyFileMigration(this.plan, this.trusted, this.candidate, { approvedPlanHash: this.plan.planFingerprint, expectedRevision: 0, persist: (value) => journals.push(structuredClone(value)), interruptAfterStep: 0 }); } catch { /* simulated process interruption */ } this.initialJournal = journals[0]; this.partialRecovery = recoverFileMigration(journals.at(-1), this.trusted, this.candidate, { approvedPlanHash: this.plan.planFingerprint, expectedRevision: 0 }); const applied = applyFileMigration({ ...this.plan, revision: 0 }, this.trusted, this.candidate, { approvedPlanHash: this.plan.planFingerprint, expectedRevision: 0 }); const rollbackJournals = /** @type {any[]} */ ([]); try { rollbackFileMigration(applied, this.trusted, this.candidate, { approvedPlanHash: this.plan.planFingerprint, expectedRevision: 1, persist: (value) => rollbackJournals.push(structuredClone(value)), interruptAfterStep: 0 }); } catch { /* simulated process interruption */ } this.rollbackRecovery = recoverFileMigration(rollbackJournals.at(-1), this.trusted, this.candidate, { approvedPlanHash: this.plan.planFingerprint, expectedRevision: 1 }); });
 Then('次回実行がbefore after hashから全fileを回復する', function () { assert.equal(this.initialJournal.transaction.phase, 'applying'); assert.equal(this.partialRecovery.state, 'rolled_back'); assert.equal(this.rollbackRecovery.state, 'rolled_back'); for (const entry of this.entries) assert.equal(fs.readFileSync(path.join(this.root, entry.path), 'utf8'), 'before\n'); });
 
-Given('allowlisted srcにcredentials fileとtoken内容がある', function () { this.root = this.temp('asc-credential-pack-'); fs.mkdirSync(path.join(this.root, 'src')); writeJson(path.join(this.root, 'package.json'), { name: 'credential-fixture', version: '1.0.0', files: ['src/'] }); fs.writeFileSync(path.join(this.root, 'src/credentials.json'), '{"username":"x"}\n'); fs.writeFileSync(path.join(this.root, 'src/data.json'), '{"token":"token-never-ship"}\n'); });
-When('実npm packの名前とcontentを検査する', function () { const output = this.temp('asc-pack-output-'); const packed = spawnSync('npm', ['pack', '--json', '--ignore-scripts', `--pack-destination=${output}`], { cwd: this.root, encoding: 'utf8' }); assert.equal(packed.status, 0, packed.stderr); const report = JSON.parse(packed.stdout)[0]; const files = report.files.map((/** @type {any} */ item) => item.path); const archive = path.join(output, report.filename); const contents = Object.fromEntries(files.filter((/** @type {string} */ file) => file !== 'package.json').map((/** @type {string} */ file) => { const extracted = spawnSync('tar', ['-xOf', archive, `package/${file}`], { encoding: 'utf8' }); assert.equal(extracted.status, 0, extracted.stderr); return [file, extracted.stdout]; })); this.result = validatePackageManifest(files, ['src/'], contents); });
-Then('credential containerと秘密patternの両方を拒否する', function () { assert.equal(this.result.valid, false); assert.ok(this.result.reasons.some((/** @type {string} */ reason) => reason.includes('credentials.json'))); assert.ok(this.result.reasons.some((/** @type {string} */ reason) => reason.includes('data.json'))); });
+Given('allowlisted srcにcredential境界、oauth、reauth及びtoken内容がある', function () { this.root = this.temp('asc-credential-pack-'); fs.mkdirSync(path.join(this.root, 'src')); writeJson(path.join(this.root, 'package.json'), { name: 'credential-fixture', version: '1.0.0', files: ['src/'] }); for (const name of ['credentials.json', 'oauth-client.json', 'reauth-session.json', 'client-secrets.json']) fs.writeFileSync(path.join(this.root, 'src', name), '{"username":"x"}\n'); fs.writeFileSync(path.join(this.root, 'src/data.json'), '{"token":"token-never-ship"}\n'); });
+When('実npm packの名前とcontentを検査する', function () { const output = this.temp('asc-pack-output-'); const packed = spawnSync('npm', ['pack', '--json', '--ignore-scripts', `--pack-destination=${output}`], { cwd: this.root, encoding: 'utf8', env: { ...process.env, npm_config_cache: path.join(output, 'npm-cache') } }); assert.equal(packed.status, 0, packed.stderr); const archiveName = fs.readdirSync(output).find((name) => name.endsWith('.tgz')); assert.ok(archiveName, 'npm pack archive'); const archive = path.join(output, archiveName); const listed = spawnSync('tar', ['-tzf', archive], { encoding: 'utf8' }); assert.equal(listed.status, 0, listed.stderr); const files = listed.stdout.trim().split(/\r?\n/u).map((file) => file.replace(/^package\//u, '')).filter(Boolean); const contents = Object.fromEntries(files.filter((/** @type {string} */ file) => file !== 'package.json').map((/** @type {string} */ file) => { const extracted = spawnSync('tar', ['-xOf', archive, `package/${file}`], { encoding: 'utf8' }); assert.equal(extracted.status, 0, extracted.stderr); return [file, extracted.stdout]; })); this.result = validatePackageManifest(files, ['src/'], contents); });
+Then('credential containerと秘密patternだけを拒否しoauthとreauthを許可する', function () { assert.equal(this.result.valid, false); for (const name of ['credentials.json', 'client-secrets.json', 'data.json']) assert.ok(this.result.reasons.some((/** @type {string} */ reason) => reason.includes(name)), name); for (const name of ['oauth-client.json', 'reauth-session.json']) assert.equal(this.result.reasons.some((/** @type {string} */ reason) => reason.includes(name)), false, name); });
 
 Given('unknown、duplicate、dead referenceを持つconformance bindingがある', function () { this.root = this.temp('asc-conformance-cli-'); const contract = JSON.parse(fs.readFileSync('.agent-skill-chain/policy/conformance.json', 'utf8')); contract.invariants[11].id = 'I13'; contract.invariants.push(structuredClone(contract.invariants[0])); const binding = JSON.parse(fs.readFileSync('.agent-skill-chain/project/conformance/bindings.json', 'utf8')); binding.bindings[0].enforcement[0] = { path: 'missing.js', export: 'missing' }; this.contractFile = path.join(this.root, 'contract.json'); this.bindingFile = path.join(this.root, 'binding.json'); this.evidenceFile = path.join(this.root, 'evidence.json'); writeJson(this.contractFile, contract); writeJson(this.bindingFile, binding); writeJson(this.evidenceFile, { tool: 'cucumber-js', passedScenarioIds: [] }); });
 When('repository conformance CLIを実行する', function () { this.cliResult = executeBin(['conformance', 'validate', `--root=${process.cwd()}`, `--contract=${this.contractFile}`, `--binding=${this.bindingFile}`, `--evidence=${this.evidenceFile}`]); });
@@ -445,6 +489,36 @@ When('explicit trusted commitでpolicy validate CLIを実行する', function ()
   fs.renameSync(savedProjectDirectory, projectDirectory); fs.writeFileSync(manifestFile, manifestRaw); fs.writeFileSync(path.join(projectDirectory, 'rules/orphan-ci.json'), '{}\n'); this.explicitTrustedResults.push(executeBinIn(this.root, [...common, ...matching]));
 });
 Then('base SHA一致だけ成功し欠落・不正・不一致はfail closedになる', function () { assert.equal(this.explicitTrustedResults[0].status, 0, this.explicitTrustedResults[0].stderr || this.explicitTrustedResults[0].stdout); for (const result of this.explicitTrustedResults.slice(1)) assert.notEqual(result.status, 0); });
+
+Given('H_impl後にPhase A review artifactだけをcommitした隔離repositoryがある', function () {
+  this.root = this.initRepo();
+  fs.writeFileSync(path.join(this.root, 'product.js'), 'export const value = 1;\n');
+  spawnSync('git', ['add', 'product.js'], { cwd: this.root }); spawnSync('git', ['commit', '-q', '-m', 'implementation'], { cwd: this.root });
+  this.implementationCommitSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: this.root, encoding: 'utf8' }).stdout.trim();
+  this.artifactPath = 'docs/reviews/phase-a.json'; fs.mkdirSync(path.dirname(path.join(this.root, this.artifactPath)), { recursive: true }); writeJson(path.join(this.root, this.artifactPath), { phase: 'A', status: 'pending-external-attestation' });
+  spawnSync('git', ['add', this.artifactPath], { cwd: this.root }); spawnSync('git', ['commit', '-q', '-m', 'phase A evidence'], { cwd: this.root });
+  this.finalCommitSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: this.root, encoding: 'utf8' }).stdout.trim();
+  this.externalFile = path.join(this.temp('asc-review-external-'), 'external.json'); writeJson(this.externalFile, {
+    pr: { headSha: this.finalCommitSha }, ci: { headSha: this.finalCommitSha, runId: 'run-123', conclusion: 'success' },
+    review: { headSha: this.finalCommitSha, commitSha: this.finalCommitSha, actorId: 'reviewer-123', submittedAt: '2026-08-23T12:00:00Z', verdict: 'approved', artifactId: 'review-123' },
+  });
+});
+Given(/^GitHub review providerの(.+)観測がある$/u, function (variant) { prepareReviewGhStub(this, variant); });
+When('review evidence CLIでGitとGitHub providerを結合する', function () {
+  const common = ['review', 'evidence', `--root=${this.root}`, `--implementation-commit=${this.implementationCommitSha}`, `--final-commit=${this.finalCommitSha}`, `--artifact=${this.artifactPath}`];
+  const provider = ['--repo=o/r', '--pr=835', '--run-id=32635972969', '--review-id=9001'];
+  if (this.reviewVariant === 'forged-review-file') {
+    const forged = path.join(this.temp('asc-forged-review-'), 'review.json'); writeJson(forged, completeReview(this.finalCommitSha, {
+      candidateEvidence: { implementationCommitSha: this.implementationCommitSha, finalCommitSha: this.finalCommitSha, implementationTreeSha: 'a'.repeat(40), implementationIsAncestor: true, changedPaths: [this.artifactPath], artifact: { path: this.artifactPath, sha256: 'b'.repeat(64), blobOid: 'c'.repeat(40) } },
+      externalEvidence: { provenance: { source: 'github', repository: 'o/r', prNumber: 835, runId: '32635972969', reviewId: '9001' }, implementation: { repository: 'o/r', commitSha: this.implementationCommitSha, authorActorId: 'actor-implementer' }, pr: { repository: 'o/r', number: 835, headSha: this.finalCommitSha, authorActorId: 'actor-implementer' }, ci: { repository: 'o/r', runId: '32635972969', event: 'pull_request', headSha: this.finalCommitSha, conclusion: 'success', pullRequestNumbers: [835] }, review: { repository: 'o/r', prNumber: 835, reviewId: '9001', commitSha: this.finalCommitSha, actorId: 'actor-reviewer', submittedAt: '2026-08-23T12:00:00Z', verdict: 'approved' } },
+    }));
+    this.reviewEvidenceCli = executeBinIn(this.root, ['review', 'validate', `--file=${forged}`], this.reviewCliEnv); return;
+  }
+  const args = this.reviewVariant === 'forged-file' ? [...common, `--external=${this.externalFile}`] : this.reviewVariant === 'forged-implementer-option' ? [...common, ...provider, '--implementer-actor-id=forged-actor'] : [...common, ...provider];
+  this.reviewEvidenceCli = executeBinIn(this.root, args, this.reviewCliEnv); if (this.reviewEvidenceCli.stdout.trim()) { try { this.reviewEvidence = JSON.parse(this.reviewEvidenceCli.stdout); } catch {} }
+});
+Then('実tree、diff、artifact hash、blobとH_finalのtrusted review gateが一致する', function () { assert.equal(this.reviewEvidenceCli.status, 0, this.reviewEvidenceCli.stderr || this.reviewEvidenceCli.stdout); assert.equal(this.reviewEvidence.valid, true); assert.equal(this.reviewEvidence.status, 'verified'); assert.equal(this.reviewEvidence.externalEvidence.provenance.source, 'github'); assert.deepEqual(this.reviewEvidence.candidateEvidence.changedPaths, [this.artifactPath]); assert.match(this.reviewEvidence.candidateEvidence.implementationTreeSha, /^[a-f0-9]{40}$/u); assert.match(this.reviewEvidence.candidateEvidence.artifact.sha256, /^[a-f0-9]{64}$/u); assert.match(this.reviewEvidence.candidateEvidence.artifact.blobOid, /^[a-f0-9]{40}$/u); assert.equal(evaluateReview(completeReview(this.finalCommitSha, this.reviewEvidence)).approved, true); const operations = fs.readFileSync(this.ghLog, 'utf8').trim().split('\n').map((line) => line.split(' ').slice(0, 2).join(' ')); assert.deepEqual(operations, ['auth status', 'repo view', 'pr view', `api repos/o/r/commits/${this.implementationCommitSha}`, 'api repos/o/r/actions/runs/32635972969', 'api repos/o/r/pulls/835/reviews/9001']); });
+Then('review evidenceは承認不能でgh呼出境界も守られる', function () { assert.notEqual(this.reviewEvidenceCli.status, 0); if (this.reviewEvidence?.candidateEvidence) assert.equal(evaluateReview(completeReview(this.finalCommitSha, this.reviewEvidence)).approved, false); const called = fs.existsSync(this.ghLog) ? fs.readFileSync(this.ghLog, 'utf8') : ''; if (this.reviewVariant.startsWith('forged-')) assert.equal(called, ''); else assert.match(called, /repo view/u); });
 
 Given('passed current evidenceとlegacy fingerprint及び矛盾structured cacheがある', function () { this.boundValidation = { changedFiles: ['src/x.js'], risk: ['quality'], evidence: { sha: SHA, policyHash: 'c'.repeat(64), tool: 'runner', scope: ['selected'], passed: true } }; const fingerprint = evidenceFingerprint(this.boundValidation); this.boundValidation.successfulFingerprints = [fingerprint]; this.boundValidation.successfulEvidence = [{ fingerprint, passed: false }]; });
 Then('完全bindingの成功証拠がないためdedupeを拒否する', function () { assert.notEqual(this.result.status, 'deduplicated'); assert.equal(this.result.valid, false); assert.equal(this.result.diagnostic.ruleId, 'ASC-EVIDENCE-001'); });

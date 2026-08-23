@@ -99,6 +99,10 @@
 
 ## 6. 制約、前提、依存関係
 
+- 依存/authority/evidence graphのnode・edgeと正方向:
+- cycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAを拒否する条件:
+- rollback/retryのrevision、上限、終了条件:
+
 - 技術的制約:
 - 期間・運用上の制約:
 - 外部サービス・組織への依存:
