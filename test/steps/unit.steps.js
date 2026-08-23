@@ -12,6 +12,7 @@ import * as traceDomain from '../../src/domain/trace.js';
 import { collectProjectTrace, parseProjectGherkin } from '../../scripts/check_trace.js';
 import { collectJavaScriptDependencyGraph } from '../../scripts/check_dependency_graph.js';
 import { checkFileAudit } from '../../scripts/check_file_audit.js';
+import { checkSkillTemplateContracts } from '../../scripts/check_skill_templates.js';
 import { run } from '../../src/lib/process.js';
 import { main } from '../../src/cli.js';
 import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, DEPRECATED_POLICY_SCHEMA_ALIASES, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../../src/lib/version.js';
@@ -212,7 +213,7 @@ When('規範文書の配置を検査する', function () {
 });
 Then('repository直下の規範文書はAGENTSだけである', function () { assert.deepEqual(this.rootNormative, ['AGENTS.md']); });
 Then('namespace配下に連番付き規範文書が3件ある', function () { assert.equal(this.namespaceNormative.length, 3); assert.ok(this.namespaceNormative.every((/** @type {string} */ name) => /^\d{2}_.+\.md$/u.test(name))); });
-Given('英語だけの人向けMarkdownがある', function () { this.root = this.temp(); fs.writeFileSync(path.join(this.root, 'AGENTS.md'), '# English documentation\n\nThis document contains only English prose for people.\n'); });
+Given('英語だけの人向けMarkdownがある', function () { this.root = this.temp(); fs.writeFileSync(path.join(this.root, 'AGENTS.md'), '---\nname: machine-readable-name\ndescription: This description contains only English prose for people.\n---\n\n# 日本語文書\n'); });
 When('日本語文書形式検査を実行する', function () { this.documentCheck = spawnSync('python3', ['scripts/check_japanese_docs.py', this.root], { cwd: process.cwd(), encoding: 'utf8' }); });
 Then('日本語文書形式検査は失敗する', function () { assert.notEqual(this.documentCheck.status, 0); assert.ok(this.documentCheck.stderr.includes('日本語')); });
 When('project選択層とfalse block対応の文書契約を検査する', function () {
@@ -287,6 +288,43 @@ Then('製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する', functio
   assert.equal(legacyAlias.valid, true);
   assert.ok(legacyAlias.migration);
   assert.deepEqual(legacyAlias.migration.deprecatedAlias, { input: 'agent-skill-chain/project-policy/v0.3', canonical: 'agent-skill-chain/project-policy/v0.3.0' });
+});
+
+Given('packageのStep skillとtemplate契約がある', function () {
+  this.skillContractRoot = process.cwd();
+  this.brokenSkillContractRoot = this.temp('asc-skill-contract-');
+  this.omittedSkillContractRoot = this.temp('asc-skill-omission-');
+  this.unroutedSkillContractRoot = this.temp('asc-skill-route-');
+  fs.mkdirSync(path.join(this.brokenSkillContractRoot, '.agent-skill-chain/docs'), { recursive: true });
+  fs.mkdirSync(path.join(this.omittedSkillContractRoot, '.agent-skill-chain/docs'), { recursive: true });
+  fs.mkdirSync(path.join(this.unroutedSkillContractRoot, '.agent-skill-chain/docs'), { recursive: true });
+  for (const root of [this.brokenSkillContractRoot, this.omittedSkillContractRoot, this.unroutedSkillContractRoot]) {
+    fs.cpSync('.agent-skill-chain/skills', path.join(root, '.agent-skill-chain/skills'), { recursive: true });
+    fs.cpSync('.agent-skill-chain/templates', path.join(root, '.agent-skill-chain/templates'), { recursive: true });
+    fs.copyFileSync('.agent-skill-chain/docs/01_開発ワークフロー.md', path.join(root, '.agent-skill-chain/docs/01_開発ワークフロー.md'));
+  }
+});
+When('正規契約とリンク切れ・対応漏れ・経路欠落契約を検証する', function () {
+  this.validSkillContracts = checkSkillTemplateContracts(this.skillContractRoot);
+  const designSkill = path.join(this.brokenSkillContractRoot, '.agent-skill-chain/skills/step-05-design/SKILL.md');
+  fs.writeFileSync(designSkill, fs.readFileSync(designSkill, 'utf8').replace('../../templates/issue/02_設計.md', '../../templates/issue/存在しない設計.md'));
+  const planSkill = path.join(this.omittedSkillContractRoot, '.agent-skill-chain/skills/step-06-plan/SKILL.md');
+  fs.writeFileSync(planSkill, fs.readFileSync(planSkill, 'utf8').replace('[03_実装計画.md](../../templates/issue/03_実装計画.md)', '`03_実装計画.md`'));
+  const workflow = path.join(this.unroutedSkillContractRoot, '.agent-skill-chain/docs/01_開発ワークフロー.md');
+  fs.writeFileSync(workflow, fs.readFileSync(workflow, 'utf8').replace('[step-07-design-review](../skills/step-07-design-review/SKILL.md)', '`step-07-design-review`'));
+  this.brokenSkillContracts = checkSkillTemplateContracts(this.brokenSkillContractRoot);
+  this.omittedSkillContracts = checkSkillTemplateContracts(this.omittedSkillContractRoot);
+  this.unroutedSkillContracts = checkSkillTemplateContracts(this.unroutedSkillContractRoot);
+});
+Then('正規契約だけが合格しリンク切れ・対応漏れ・経路欠落は拒否される', function () {
+  assert.equal(this.validSkillContracts.valid, true, this.validSkillContracts.errors.join('; '));
+  assert.equal(this.validSkillContracts.skills, 12);
+  assert.equal(this.brokenSkillContracts.valid, false);
+  assert.match(this.brokenSkillContracts.errors.join(' '), /テンプレート対応|リンク先/u);
+  assert.equal(this.omittedSkillContracts.valid, false);
+  assert.match(this.omittedSkillContracts.errors.join(' '), /テンプレート対応/u);
+  assert.equal(this.unroutedSkillContracts.valid, false);
+  assert.match(this.unroutedSkillContracts.errors.join(' '), /ワークフロー.*対応/u);
 });
 
 Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.traceRoot = process.cwd(); this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });

@@ -201,3 +201,8 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given package metadataとpolicy version artifactがある
     When version正本との一致を検証する
     Then 製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する
+
+  Scenario: SCN-UNIT-PACKAGE-013 全Step skillは正確なtemplateと成果物へ拘束される
+    Given packageのStep skillとtemplate契約がある
+    When 正規契約とリンク切れ・対応漏れ・経路欠落契約を検証する
+    Then 正規契約だけが合格しリンク切れ・対応漏れ・経路欠落は拒否される

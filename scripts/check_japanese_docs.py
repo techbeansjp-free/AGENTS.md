@@ -47,9 +47,21 @@ def check(root: Path) -> list[str]:
 
     for file in files:
         in_code = False
+        in_frontmatter = False
         relative = file.relative_to(root).as_posix()
         for number, line in enumerate(file.read_text(encoding="utf-8").splitlines(), start=1):
             stripped = line.strip()
+            if number == 1 and stripped == "---":
+                in_frontmatter = True
+                continue
+            if in_frontmatter:
+                if stripped == "---":
+                    in_frontmatter = False
+                    continue
+                if stripped.startswith("description:"):
+                    stripped = stripped.partition(":")[2].strip()
+                else:
+                    continue
             if stripped.startswith("```") or stripped.startswith("~~~"):
                 in_code = not in_code
                 continue

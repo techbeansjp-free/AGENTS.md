@@ -28,6 +28,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.js",
+    "skills:check": "node scripts/check_skill_templates.js",
     "typecheck": "tsc --noEmit",
     "docs:format": "python3 scripts/check_japanese_docs.py",
     "test:format": "python3 scripts/check_gherkin_format.py",
