@@ -17,6 +17,7 @@ import { git } from './lib/process.js';
 import { writeFileAtomic } from './lib/atomic.js';
 import { validateRepositoryConformance } from './domain/conformance.js';
 import { parseJsonStrict, resolveContained } from './lib/security.js';
+import { canonicalLifecycleCommand, CLI_USAGE, PUBLIC_LIFECYCLE_COMMANDS } from './cli-contract.js';
 
 /** @param {string[]} args */
 function parse(args) {
@@ -79,6 +80,12 @@ function applyMode(flags) {
   return flags.apply === true;
 }
 
+/** Lifecycle operations are preview-only unless --apply is explicit. @param {Record<string, string|boolean>} flags */
+function lifecycleApplyMode(flags) {
+  if (flags.apply === true && flags['dry-run'] === true) throw new Error('--applyと--dry-runは同時に指定できません');
+  return flags.apply === true;
+}
+
 /** @param {string} root */
 function defaultBranch(root) {
   const symbolic = git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], root, { allowFailure: true });
@@ -90,7 +97,7 @@ function defaultBranch(root) {
 export async function main(argv) {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === '--help' || command === '-h') {
-    print({ usage: 'agent-skill-chain <issue|project|spec|review|policy|worktree|pr|init|upgrade|doctor|uninstall> ...' });
+    print({ usage: CLI_USAGE, lifecycle: PUBLIC_LIFECYCLE_COMMANDS.map((name) => `npx agent-skill-chain ${name}`) });
     return 0;
   }
   if (command === 'issue' && subcommand === 'create') {
@@ -406,12 +413,13 @@ export async function main(argv) {
     print(github('pr.merge', { repository, pr, method }, root));
     return 0;
   }
-  if (['init', 'upgrade', 'uninstall'].includes(command)) {
+  const lifecycleCommand = canonicalLifecycleCommand(command);
+  if (['install', 'update', 'delete'].includes(lifecycleCommand)) {
     const forwarded = subcommand ? [subcommand, ...rest] : rest;
     const { flags, positionals } = parse(forwarded);
-    const apply = applyMode(flags);
+    const apply = lifecycleApplyMode(flags);
     const root = path.resolve(positionals[0] ?? (typeof flags.root === 'string' ? flags.root : process.cwd()));
-    print(command === 'init' ? init(root, { apply }) : command === 'upgrade' ? upgrade(root, { apply }) : uninstall(root, { apply }));
+    print(lifecycleCommand === 'install' ? init(root, { apply }) : lifecycleCommand === 'update' ? upgrade(root, { apply }) : uninstall(root, { apply }));
     return 0;
   }
   if (command === 'doctor') {

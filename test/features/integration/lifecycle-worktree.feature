@@ -1,29 +1,29 @@
 @integration
 Feature: Packageとworktree lifecycleでconsumer dataを保護する
 
-  Scenario: SCN-INT-LIFECYCLE-001 initはdry-runとatomic applyを分離する
+  Scenario: SCN-INT-LIFECYCLE-001 installはdry-runとatomic applyを分離する
     Given 空のconsumer directoryがある
-    When initをdry-runしてからapplyする
+    When install domainをdry-runしてからapplyする
     Then dry-run時はassetが存在しない
     And apply後はmanaged asset recordが存在する
     And managed asset recordのversionはpackage.jsonと一致する
 
-  Scenario: SCN-INT-LIFECYCLE-002 init conflictはpartial writeを発生させない
+  Scenario: SCN-INT-LIFECYCLE-002 install conflictはpartial writeを発生させない
     Given consumerの運用ポリシー文書が既に存在する
-    When init applyを試みる
-    Then initは失敗する
+    When install domainのapplyを試みる
+    Then installは失敗する
     And AGENTS.mdは作成されない
 
-  Scenario: SCN-INT-LIFECYCLE-003 upgradeはmodified assetとconsumer spec/policyを保持する
+  Scenario: SCN-INT-LIFECYCLE-003 updateはmodified assetとconsumer spec/policyを保持する
     Given packageをinstall済みのconsumerがある
     And consumerが品質基準、project policy、docs specsを変更している
-    When upgradeをapplyする
+    When update domainをapplyする
     Then consumer変更はすべて保持される
 
-  Scenario: SCN-INT-LIFECYCLE-004 uninstallはmodified assetとtransient stagingを保持する
+  Scenario: SCN-INT-LIFECYCLE-004 deleteはmodified assetとtransient stagingを保持する
     Given packageをinstall済みのconsumerがある
     And consumerが品質基準とtransient stagingを持つ
-    When uninstallをapplyする
+    When delete domainをapplyする
     Then modified品質基準とtransient stagingは保持される
 
   Scenario: SCN-INT-LIFECYCLE-005 doctorはlegacy harnessを診断するだけで実行しない
@@ -35,13 +35,13 @@ Feature: Packageとworktree lifecycleでconsumer dataを保護する
   Scenario: SCN-INT-LIFECYCLE-006 改ざんされたasset recordでconsumer外のfileを削除しない
     Given packageをinstall済みのconsumerがある
     And managed asset recordへconsumer外の一致hash fileを混入する
-    When uninstallをapplyして失敗を確認する
-    Then uninstallは失敗する
+    When delete domainをapplyして失敗を確認する
+    Then deleteは失敗する
     And consumer外のfileは保持される
 
-  Scenario: SCN-INT-LIFECYCLE-007 upgradeは新規package pathにあるconsumer fileを上書きしない
+  Scenario: SCN-INT-LIFECYCLE-007 updateは新規package pathにあるconsumer fileを上書きしない
     Given 旧version導入後にconsumerが同名の利用案内を作成している
-    When upgradeをapplyする
+    When update domainをapplyする
     Then consumerの同名利用案内は保持される
 
   Scenario: SCN-INT-WORKTREE-001 sourceがdirtyでもその状態を変更せず専用worktreeを作る

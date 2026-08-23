@@ -31,6 +31,7 @@
     "build": "node scripts/build.js",
     "directories:check": "node scripts/check_directory_guides.js",
     "skills:check": "node scripts/check_skill_templates.js",
+    "cli:check": "node scripts/check_cli_contract.js",
     "typecheck": "tsc --noEmit",
     "docs:format": "python3 scripts/check_japanese_docs.py",
     "test:format": "python3 scripts/check_gherkin_format.py",

@@ -8,7 +8,7 @@ import { init, upgrade, uninstall, doctor } from '../../src/domain/lifecycle.js'
 import { createWorktree, inspectFinalizeState } from '../../src/domain/worktree.js';
 
 Given('空のconsumer directoryがある', function () { this.root = this.temp(); });
-When('initをdry-runしてからapplyする', function () {
+When('install domainをdry-runしてからapplyする', function () {
   this.preview = init(this.root, { apply: false });
   this.assetDuringPreview = fs.existsSync(path.join(this.root, 'AGENTS.md'));
   this.result = init(this.root, { apply: true });
@@ -22,8 +22,8 @@ Then('managed asset recordのversionはpackage.jsonと一致する', function ()
 });
 
 Given('consumerの運用ポリシー文書が既に存在する', function () { this.root = this.temp(); fs.mkdirSync(path.join(this.root, '.agent-skill-chain', 'docs'), { recursive: true }); fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'docs', '00_運用ポリシー.md'), '利用側ポリシー'); });
-When('init applyを試みる', function () { try { init(this.root, { apply: true }); } catch (error) { this.error = error; } });
-Then('initは失敗する', function () { assert.ok(this.error instanceof Error); });
+When('install domainのapplyを試みる', function () { try { init(this.root, { apply: true }); } catch (error) { this.error = error; } });
+Then('installは失敗する', function () { assert.ok(this.error instanceof Error); });
 Then('AGENTS.mdは作成されない', function () { assert.equal(fs.existsSync(path.join(this.root, 'AGENTS.md')), false); });
 
 Given('packageをinstall済みのconsumerがある', function () { this.root = this.temp(); init(this.root, { apply: true }); });
@@ -35,7 +35,7 @@ Given('consumerが品質基準、project policy、docs specsを変更してい�
   fs.mkdirSync(path.join(this.root, 'docs', 'specs', '00_仕様書構成'), { recursive: true });
   fs.writeFileSync(path.join(this.root, 'docs', 'specs', '00_仕様書構成', '00_仕様書索引.md'), '利用側仕様');
 });
-When('upgradeをapplyする', function () { this.result = upgrade(this.root, { apply: true }); });
+When('update domainをapplyする', function () { this.result = upgrade(this.root, { apply: true }); });
 Then('consumer変更はすべて保持される', function () {
   assert.ok(this.result.retained.includes(path.join('.agent-skill-chain', 'docs', '02_品質基準.md')));
   assert.equal(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'docs', '02_品質基準.md'), 'utf8'), '利用側による変更');
@@ -51,7 +51,7 @@ Given('consumerが品質基準とtransient stagingを持つ', function () {
   fs.mkdirSync(path.join(this.root, '.agent-skill-chain', 'project', 'choices'), { recursive: true });
   fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'project', 'choices', 'consumer.json'), 'keep');
 });
-When('uninstallをapplyする', function () { this.result = uninstall(this.root, { apply: true }); });
+When('delete domainをapplyする', function () { this.result = uninstall(this.root, { apply: true }); });
 Then('modified品質基準とtransient stagingは保持される', function () {
   assert.ok(this.result.retained.includes(path.join('.agent-skill-chain', 'docs', '02_品質基準.md')));
   assert.equal(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'docs', '02_品質基準.md'), 'utf8'), '保持する');
@@ -73,8 +73,8 @@ Given('managed asset recordへconsumer外の一致hash fileを混入する', fun
   record.files[path.relative(this.root, this.outsideFile)] = crypto.createHash('sha256').update(fs.readFileSync(this.outsideFile)).digest('hex');
   fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
 });
-When('uninstallをapplyして失敗を確認する', function () { try { uninstall(this.root, { apply: true }); } catch (error) { this.error = error; } });
-Then('uninstallは失敗する', function () { assert.ok(this.error instanceof Error); });
+When('delete domainをapplyして失敗を確認する', function () { try { uninstall(this.root, { apply: true }); } catch (error) { this.error = error; } });
+Then('deleteは失敗する', function () { assert.ok(this.error instanceof Error); });
 Then('consumer外のfileは保持される', function () { assert.equal(fs.readFileSync(this.outsideFile, 'utf8'), '削除してはいけない'); });
 
 Given('旧version導入後にconsumerが同名の利用案内を作成している', function () {

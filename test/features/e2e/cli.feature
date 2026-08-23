@@ -22,3 +22,21 @@ Feature: 利用者がCLIだけでpreview、apply、validateを再現する
     Then CLI終了codeは非0である
     And diagnosticに明示authorization不足が含まれる
     And ghは呼ばれない
+
+  Scenario: SCN-E2E-004 npxでinstall、update、doctor、deleteを実行する
+    Given local package binをnpxで解決できる空のconsumerがある
+    When npx installをflagなしでpreviewする
+    Then npx lifecycleの終了codeはすべて0である
+    And previewではAGENTS.mdが作成されない
+    When npx installとupdateをapplyしてdoctorを実行する
+    Then npx lifecycleの終了codeはすべて0である
+    And managed asset recordが作成される
+    When npx deleteをapplyする
+    Then npx lifecycleの終了codeはすべて0である
+    And managed asset recordが削除される
+
+  Scenario: SCN-E2E-005 npx lifecycleはapplyとdry-runの同時指定を拒否する
+    Given local package binをnpxで解決できる空のconsumerがある
+    When npx installへapplyとdry-runを同時指定する
+    Then npx lifecycleの終了codeは非0である
+    And previewではAGENTS.mdが作成されない

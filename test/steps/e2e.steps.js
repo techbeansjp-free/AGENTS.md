@@ -10,6 +10,11 @@ function execute(args, env = process.env, cwd = process.cwd()) {
   return spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8', env });
 }
 
+/** @param {string[]} args @param {string} cwd */
+function executeNpx(args, cwd) {
+  return spawnSync('npx', ['--no-install', 'agent-skill-chain', ...args], { cwd, encoding: 'utf8', env: process.env });
+}
+
 When('project bootstrapをdry-runする', function () {
   this.cliResults = [execute(['project', 'bootstrap', '--new-project', '--kind=cli', '--dry-run', `--root=${this.root}`])];
 });
@@ -50,3 +55,24 @@ Then('CLI終了codeは非0である', function () { assert.notEqual(this.cliResu
 Then('diagnosticに明示authorization不足が含まれる', function () { assert.match(`${this.cliResult.stdout}\n${this.cliResult.stderr}`, /明示的な承認/u); });
 Then('stdoutに{string}が含まれる', function (value) { assert.ok(this.cliResult.stdout.includes(value), `args=${JSON.stringify(this.prArgs)} stdout=${JSON.stringify(this.cliResult.stdout)} stderr=${JSON.stringify(this.cliResult.stderr)} pid=${this.cliResult.pid}`); });
 Then('ghは呼ばれない', function () { assert.equal(fs.existsSync(this.ghMarker), false); });
+
+Given('local package binをnpxで解決できる空のconsumerがある', function () {
+  this.root = this.temp('asc-npx-consumer-');
+  const binDirectory = path.join(this.root, 'node_modules', '.bin');
+  fs.mkdirSync(binDirectory, { recursive: true });
+  fs.symlinkSync(path.resolve('bin/agent-skill-chain.js'), path.join(binDirectory, 'agent-skill-chain'));
+  this.npxResults = [];
+});
+When('npx installをflagなしでpreviewする', function () { this.npxResults.push(executeNpx(['install', `--root=${this.root}`], this.root)); });
+Then('npx lifecycleの終了codeはすべて0である', function () { for (const result of this.npxResults) assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`); });
+Then('previewではAGENTS.mdが作成されない', function () { assert.equal(fs.existsSync(path.join(this.root, 'AGENTS.md')), false); });
+When('npx installとupdateをapplyしてdoctorを実行する', function () {
+  this.npxResults.push(executeNpx(['install', `--root=${this.root}`, '--apply'], this.root));
+  this.npxResults.push(executeNpx(['update', `--root=${this.root}`, '--apply'], this.root));
+  this.npxResults.push(executeNpx(['doctor', `--root=${this.root}`], this.root));
+});
+Then('managed asset recordが作成される', function () { assert.equal(fs.existsSync(path.join(this.root, '.agent-skill-chain', 'managed-assets.json')), true); });
+When('npx deleteをapplyする', function () { this.npxResults.push(executeNpx(['delete', `--root=${this.root}`, '--apply'], this.root)); });
+Then('managed asset recordが削除される', function () { assert.equal(fs.existsSync(path.join(this.root, '.agent-skill-chain', 'managed-assets.json')), false); });
+When('npx installへapplyとdry-runを同時指定する', function () { this.npxResults.push(executeNpx(['install', `--root=${this.root}`, '--apply', '--dry-run'], this.root)); });
+Then('npx lifecycleの終了codeは非0である', function () { for (const result of this.npxResults) assert.notEqual(result.status, 0); });

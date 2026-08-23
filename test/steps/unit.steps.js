@@ -14,6 +14,7 @@ import { collectJavaScriptDependencyGraph } from '../../scripts/check_dependency
 import { checkFileAudit } from '../../scripts/check_file_audit.js';
 import { checkDirectoryGuides } from '../../scripts/check_directory_guides.js';
 import { checkSkillTemplateContracts } from '../../scripts/check_skill_templates.js';
+import { checkCliContract } from '../../scripts/check_cli_contract.js';
 import { run } from '../../src/lib/process.js';
 import { main } from '../../src/cli.js';
 import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, DEPRECATED_POLICY_SCHEMA_ALIASES, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS, isPackageVersion, isPolicySchemaPatchVersion, packageReleaseVersion } from '../../src/lib/version.js';
@@ -371,6 +372,35 @@ Then('正規契約だけが合格し入口欠落・未知directory・リンク�
   assert.match(this.unknownDirectoryGuides.errors.join(' '), /入口文書が未定義/u);
   assert.equal(this.brokenDirectoryGuides.valid, false);
   assert.match(this.brokenDirectoryGuides.errors.join(' '), /link先がありません/u);
+});
+
+Given('npx lifecycleの公開契約がある', function () {
+  this.validCliContractRoot = process.cwd();
+  this.legacyCliContractRoot = this.temp('asc-cli-contract-');
+  const files = [
+    'package.json',
+    '.agent-skill-chain/00_利用案内.md',
+    'docs/specs/04_機能/00_ワークフローv0.3.md',
+    'docs/specs/12_運用保守/00_運用設計.md',
+    'docs/specs/13_移行・廃止/00_移行方針.md',
+  ];
+  for (const relative of files) {
+    const destination = path.join(this.legacyCliContractRoot, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(relative, destination);
+  }
+});
+When('正規契約と旧aliasを公開した契約を検証する', function () {
+  this.validCliContract = checkCliContract(this.validCliContractRoot);
+  const guide = path.join(this.legacyCliContractRoot, '.agent-skill-chain/00_利用案内.md');
+  fs.writeFileSync(guide, fs.readFileSync(guide, 'utf8').replaceAll('npx agent-skill-chain install', 'npx agent-skill-chain init'));
+  this.legacyCliContract = checkCliContract(this.legacyCliContractRoot);
+});
+Then('正規契約だけが合格し旧aliasの公開は拒否される', function () {
+  assert.equal(this.validCliContract.valid, true, this.validCliContract.errors.join('; '));
+  assert.equal(this.validCliContract.commands, 4);
+  assert.equal(this.legacyCliContract.valid, false);
+  assert.match(this.legacyCliContract.errors.join(' '), /公開command|旧alias/u);
 });
 
 Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.traceRoot = process.cwd(); this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });

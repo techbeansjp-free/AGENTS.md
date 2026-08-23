@@ -216,3 +216,8 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given 英語descriptionをblock scalarへ隠したMarkdownがある
     When 日本語文書形式検査を実行する
     Then block scalar回避として拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-016 npx lifecycle公開契約をpackage、help、利用案内、仕様で一致させる
+    Given npx lifecycleの公開契約がある
+    When 正規契約と旧aliasを公開した契約を検証する
+    Then 正規契約だけが合格し旧aliasの公開は拒否される

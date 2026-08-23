@@ -63,7 +63,7 @@ export function init(target, options) {
 /** @param {string} target @param {{apply: boolean}} options */
 export function upgrade(target, options) {
   const recordPath = path.join(target, '.agent-skill-chain', 'managed-assets.json');
-  if (!fs.existsSync(recordPath)) throw new Error('未導入です。先にinitを実行してください');
+  if (!fs.existsSync(recordPath)) throw new Error('未導入です。先にinstallを実行してください');
   const old = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
   const current = mappings(target);
   const retained = [];
