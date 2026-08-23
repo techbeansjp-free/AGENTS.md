@@ -242,6 +242,82 @@ Then("spec validationはvalidである", function () {
 Then("spec validationはinvalidである", function () {
   assert.equal(this.validation.valid, false);
 });
+When(
+  "有効行と重複IDと同一context重複とcandidateと置換先なし廃止を検証する",
+  function () {
+    const glossary = path.join(
+      this.root,
+      "docs",
+      "specs",
+      "01_システム概要",
+      "02_用語・略語.md",
+    );
+    const header =
+      "| 用語ID | 標準語 | 定義 | 種別 | 境界づけられたコンテキスト | 成立例・反例 | 類義語・禁止表現 | 根拠ID・資料 | owner | 状態・適用版・置換先 |\n" +
+      "|---|---|---|---|---|---|---|---|---|---|\n";
+    const row = (
+      id: string,
+      term: string,
+      type: string,
+      context: string,
+      lifecycle: string,
+    ) =>
+      `| ${id} | ${term} | 判定可能な定義 | ${type} | ${context} | 成立例・反例 | 禁止表現なし | FR-001 | domain owner | ${lifecycle} |\n`;
+    const validate = (rows: string) => {
+      fs.writeFileSync(glossary, `# 用語・略語\n\n${header}${rows}`);
+      return validateSpecs(this.root);
+    };
+    this.validGlossary = validate(
+      row("TERM-ORDER-001", "注文", "business", "受注", "active、v1、なし"),
+    );
+    this.invalidGlossaries = [
+      validate(
+        row("TERM-ORDER-001", "注文", "business", "受注", "active、v1、なし") +
+          row("TERM-ORDER-001", "受注", "business", "受注", "active、v1、なし"),
+      ),
+      validate(
+        row("TERM-ORDER-001", "注文", "business", "受注", "active、v1、なし") +
+          row("TERM-ORDER-002", "注文", "business", "受注", "active、v1、なし"),
+      ),
+      validate(
+        row(
+          "TERM-ORDER-001",
+          "注文",
+          "business",
+          "受注",
+          "candidate、v1、なし",
+        ),
+      ),
+      validate(
+        row(
+          "TERM-ORDER-001",
+          "注文",
+          "business",
+          "受注",
+          "deprecated、v1、なし",
+        ),
+      ),
+    ];
+  },
+);
+Then("有効な用語行だけが合格し不正な用語台帳はすべて拒否される", function () {
+  assert.equal(
+    this.validGlossary.valid,
+    true,
+    this.validGlossary.errors.join("; "),
+  );
+  assert.ok(
+    this.invalidGlossaries.every(
+      (result: ReturnType<typeof validateSpecs>) => !result.valid,
+    ),
+  );
+  assert.match(
+    this.invalidGlossaries
+      .flatMap((result: ReturnType<typeof validateSpecs>) => result.errors)
+      .join(" "),
+    /重複|candidate|置換先/u,
+  );
+});
 Then("bootstrapは失敗する", function () {
   assert.ok(this.error instanceof Error);
 });

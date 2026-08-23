@@ -47,6 +47,56 @@ const ARTIFACT_VOCABULARY_SKILLS = new Set([
   "step-10-review",
 ]);
 
+const DOMAIN_GLOSSARY_TEMPLATE_MARKERS = new Map<string, string[]>([
+  [
+    "issue/00_要求定義_full.md",
+    [
+      "### 4.2 ドメイン用語台帳の候補差分",
+      "| 用語ID | 候補語 | 変更種別 |",
+      "### 4.3 business rule候補",
+      "| ID | rule候補 | 関係する用語ID |",
+    ],
+  ],
+  [
+    "issue/00_要求定義_quick.md",
+    ["ドメイン用語台帳の候補差分", "business rule候補と関係する用語ID"],
+  ],
+  [
+    "issue/01_要件定義.md",
+    [
+      "### 2.1 ドメイン用語台帳の確定差分",
+      "| 用語ID | 標準語 | 定義 | 種別 | 境界づけられたコンテキスト | 成立例・反例 | 類義語・禁止表現 | 根拠ID・資料 | owner | 状態・適用版・置換先 |",
+      "| ID | ルール | 関係する用語ID |",
+    ],
+  ],
+  ["issue/02_設計.md", ["参照するドメイン用語IDと標準語"]],
+  ["issue/03_実装計画.md", ["ドメイン用語台帳の追加・変更・廃止task"]],
+  ["issue/04_レビュー.md", ["ドメイン用語台帳の候補・確定・現在有効な定義"]],
+  [
+    "specs/01_システム概要/02_用語・略語.md",
+    [
+      "現在有効なドメイン用語台帳の正本",
+      "| 用語ID | 標準語 | 定義 | 種別 | 境界づけられたコンテキスト | 成立例・反例 | 類義語・禁止表現 | 根拠ID・資料 | owner | 状態・適用版・置換先 |",
+      "## 更新規則",
+    ],
+  ],
+  [
+    "specs/15_要件追跡/01_変更履歴.md",
+    ["| 日付 | 変更 | 要件・SCN | 用語ID |"],
+  ],
+]);
+
+const DOMAIN_GLOSSARY_SKILLS = new Set([
+  "step-01-request",
+  "step-02-requirements",
+  "step-03-requirements-review",
+  "step-05-design",
+  "step-06-plan",
+  "step-07-design-review",
+  "step-09-implement",
+  "step-10-review",
+]);
+
 const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
   ["step-00-stage", []],
   [
@@ -228,6 +278,16 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       !workflow.includes("所有する上流成果物へ戻って版と追跡を更新する")
     )
       errors.push("成果物の正方向と上流へ戻る契約がありません");
+    if (!workflow.includes("## ドメイン用語台帳"))
+      errors.push("開発ワークフローにドメイン用語台帳契約がありません");
+    for (const marker of [
+      "candidate / active / deprecated",
+      "同じ表記でもコンテキストごとに意味が違う場合は別ID",
+      "実装後は用語差分を耐久用語台帳と仕様変更履歴へ反映",
+    ]) {
+      if (!workflow.includes(marker))
+        errors.push(`ドメイン用語台帳のlifecycle契約がありません: ${marker}`);
+    }
   }
 
   for (const relative of ARTIFACT_VOCABULARY_TEMPLATES) {
@@ -249,6 +309,18 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       errors.push("full要求templateへ要件のFR/NFR責務を混入できません");
     if (/^\| AC-[^|]+\|/mu.test(fullRequest))
       errors.push("full要求templateでACを採番せず要件定義へ分離してください");
+  }
+  for (const [relative, markers] of DOMAIN_GLOSSARY_TEMPLATE_MARKERS) {
+    const template = path.join(templatesRoot, relative);
+    if (!fs.existsSync(template)) {
+      errors.push(`ドメイン用語台帳templateがありません: ${relative}`);
+      continue;
+    }
+    const markdown = fs.readFileSync(template, "utf8");
+    for (const marker of markers) {
+      if (!markdown.includes(marker))
+        errors.push(`${relative}: ドメイン用語台帳契約がありません: ${marker}`);
+    }
   }
 
   for (const skill of expectedSkills) {
@@ -280,6 +352,15 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       )
     )
       errors.push(`${skill}/SKILL.mdに成果物用語の開始前読取契約がありません`);
+    if (
+      DOMAIN_GLOSSARY_SKILLS.has(skill) &&
+      !markdown.includes(
+        "[ドメイン用語台帳](../../docs/01_開発ワークフロー.md#ドメイン用語台帳)",
+      )
+    )
+      errors.push(
+        `${skill}/SKILL.mdにドメイン用語台帳の開始前読取契約がありません`,
+      );
     const links = uniqueSorted(
       [...markdown.matchAll(/\]\((\.\.\/\.\.\/templates\/[^)\s]+)\)/gu)].map(
         (match) => match[1],

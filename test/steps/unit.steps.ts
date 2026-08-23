@@ -1176,6 +1176,9 @@ Given("packageのStep skillとtemplate契約がある", function () {
   this.blockScalarSkillContractRoot = this.temp("asc-skill-frontmatter-");
   this.missingVocabularyContractRoot = this.temp("asc-skill-vocabulary-");
   this.mixedVocabularyContractRoot = this.temp("asc-skill-mixed-vocabulary-");
+  this.missingDomainGlossaryContractRoot = this.temp(
+    "asc-skill-domain-glossary-",
+  );
   fs.mkdirSync(
     path.join(this.brokenSkillContractRoot, ".agent-skill-chain/docs"),
     { recursive: true },
@@ -1200,6 +1203,13 @@ Given("packageのStep skillとtemplate契約がある", function () {
     path.join(this.mixedVocabularyContractRoot, ".agent-skill-chain/docs"),
     { recursive: true },
   );
+  fs.mkdirSync(
+    path.join(
+      this.missingDomainGlossaryContractRoot,
+      ".agent-skill-chain/docs",
+    ),
+    { recursive: true },
+  );
   for (const root of [
     this.brokenSkillContractRoot,
     this.omittedSkillContractRoot,
@@ -1207,6 +1217,7 @@ Given("packageのStep skillとtemplate契約がある", function () {
     this.blockScalarSkillContractRoot,
     this.missingVocabularyContractRoot,
     this.mixedVocabularyContractRoot,
+    this.missingDomainGlossaryContractRoot,
   ]) {
     fs.cpSync(
       ".agent-skill-chain/skills",
@@ -1297,6 +1308,16 @@ When("正規契約とリンク切れ・対応漏れ・経路欠落契約を検�
       .readFileSync(mixedRequest, "utf8")
       .replace("### 5.1 機能上の期待", "### 5.1 機能要求"),
   );
+  const missingGlossary = path.join(
+    this.missingDomainGlossaryContractRoot,
+    ".agent-skill-chain/templates/specs/01_システム概要/02_用語・略語.md",
+  );
+  fs.writeFileSync(
+    missingGlossary,
+    fs
+      .readFileSync(missingGlossary, "utf8")
+      .replace("| 用語ID | 標準語 | 定義 | 種別 |", "| 用語 | 定義 |"),
+  );
   this.brokenSkillContracts = checkSkillTemplateContracts(
     this.brokenSkillContractRoot,
   );
@@ -1314,6 +1335,9 @@ When("正規契約とリンク切れ・対応漏れ・経路欠落契約を検�
   );
   this.mixedVocabularyContracts = checkSkillTemplateContracts(
     this.mixedVocabularyContractRoot,
+  );
+  this.missingDomainGlossaryContracts = checkSkillTemplateContracts(
+    this.missingDomainGlossaryContractRoot,
   );
 });
 Then(
@@ -1354,6 +1378,11 @@ Then(
     assert.match(
       this.mixedVocabularyContracts.errors.join(" "),
       /FR\/NFR責務/u,
+    );
+    assert.equal(this.missingDomainGlossaryContracts.valid, false);
+    assert.match(
+      this.missingDomainGlossaryContracts.errors.join(" "),
+      /ドメイン用語台帳契約/u,
     );
   },
 );

@@ -40,6 +40,7 @@ const REQUIRED = [
   "00_利用案内.md",
   "00_仕様書構成/00_仕様書索引.md",
   "01_システム概要/00_概要.md",
+  "01_システム概要/02_用語・略語.md",
   "02_要件/00_要件一覧.md",
   "03_アーキテクチャ/00_全体構成.md",
   "04_機能/00_機能一覧.md",
@@ -57,6 +58,62 @@ const REQUIRED = [
   "15_要件追跡/00_追跡表.md",
   "16_参照資料/00_官公庁一次資料台帳.md",
 ];
+const GLOSSARY = "01_システム概要/02_用語・略語.md";
+const GLOSSARY_HEADER =
+  "| 用語ID | 標準語 | 定義 | 種別 | 境界づけられたコンテキスト | 成立例・反例 | 類義語・禁止表現 | 根拠ID・資料 | owner | 状態・適用版・置換先 |";
+const GLOSSARY_TYPES = new Set(["business", "system", "acronym"]);
+
+function tableCells(line: string): string[] {
+  return line
+    .split("|")
+    .slice(1, -1)
+    .map((cell) => cell.trim());
+}
+
+function validateDomainGlossary(file: string): string[] {
+  if (!fs.existsSync(file)) return [];
+  const errors: string[] = [];
+  const markdown = fs.readFileSync(file, "utf8");
+  if (!markdown.includes(GLOSSARY_HEADER))
+    errors.push("ドメイン用語台帳の必須列がありません");
+  const ids = new Set<string>();
+  const termsByContext = new Set<string>();
+  for (const line of markdown.split(/\r?\n/u)) {
+    const cells = tableCells(line);
+    const id = cells[0] ?? "";
+    if (!id.startsWith("TERM-")) continue;
+    if (cells.length !== 10) {
+      errors.push(`ドメイン用語台帳の列数が不正です: ${id}`);
+      continue;
+    }
+    if (!/^TERM-[A-Z0-9][A-Z0-9-]*$/u.test(id))
+      errors.push(`ドメイン用語IDが不正です: ${id}`);
+    if (ids.has(id)) errors.push(`ドメイン用語IDが重複しています: ${id}`);
+    ids.add(id);
+    if (cells.some((cell) => cell.length === 0 || cell === "-"))
+      errors.push(`ドメイン用語台帳に空欄があります: ${id}`);
+    const type = cells[3] ?? "";
+    if (!GLOSSARY_TYPES.has(type))
+      errors.push(`ドメイン用語の種別が不正です: ${id}`);
+    const term = cells[1] ?? "";
+    const context = cells[4] ?? "";
+    const termKey = `${context}\u0000${term}`;
+    if (termsByContext.has(termKey))
+      errors.push(
+        `同一コンテキストの標準語が重複しています: ${context}/${term}`,
+      );
+    termsByContext.add(termKey);
+    const lifecycle = cells[9] ?? "";
+    if (!/^(?:active|deprecated)(?:、|$)/u.test(lifecycle))
+      errors.push(`耐久用語台帳にcandidateまたは未知状態を置けません: ${id}`);
+    if (
+      lifecycle.startsWith("deprecated") &&
+      !/TERM-[A-Z0-9][A-Z0-9-]*/u.test(lifecycle)
+    )
+      errors.push(`deprecated用語に置換先がありません: ${id}`);
+  }
+  return errors;
+}
 
 function listTemplateFiles(root: string, relative = ""): string[] {
   const directory = path.join(root, relative);
@@ -159,6 +216,7 @@ export function validateSpecs(
     if (!fs.existsSync(file) || fs.statSync(file).size === 0)
       errors.push(`必須仕様がありません: ${name}`);
   }
+  errors.push(...validateDomainGlossary(path.join(specs, GLOSSARY)));
   const registry = path.join(specs, "16_参照資料", "00_官公庁一次資料台帳.md");
   if (fs.existsSync(registry)) {
     const registryText = fs.readFileSync(registry, "utf8");
