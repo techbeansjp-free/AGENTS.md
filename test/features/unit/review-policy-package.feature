@@ -176,3 +176,8 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given 英語だけの人向けMarkdownがある
     When 日本語文書形式検査を実行する
     Then 日本語文書形式検査は失敗する
+
+  Scenario: SCN-UNIT-PACKAGE-008 project選択の全test layerとnon-override安全境界をtemplate・運用仕様で保持する
+    Given v0.3 package assetを走査する
+    When project選択層とfalse block対応の文書契約を検査する
+    Then 全test layerは層ごとに追跡されnon-override denyは弱化されない

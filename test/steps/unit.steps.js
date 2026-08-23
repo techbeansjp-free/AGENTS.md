@@ -211,6 +211,14 @@ Then('namespace配下に連番付き規範文書が3件ある', function () { as
 Given('英語だけの人向けMarkdownがある', function () { this.root = this.temp(); fs.writeFileSync(path.join(this.root, 'AGENTS.md'), '# English documentation\n\nThis document contains only English prose for people.\n'); });
 When('日本語文書形式検査を実行する', function () { this.documentCheck = spawnSync('python3', ['scripts/check_japanese_docs.py', this.root], { cwd: process.cwd(), encoding: 'utf8' }); });
 Then('日本語文書形式検査は失敗する', function () { assert.notEqual(this.documentCheck.status, 0); assert.ok(this.documentCheck.stderr.includes('日本語')); });
+When('project選択層とfalse block対応の文書契約を検査する', function () {
+  this.traceTemplate = fs.readFileSync('.agent-skill-chain/templates/specs/15_要件追跡/00_追跡表.md', 'utf8');
+  this.operationsSpec = fs.readFileSync('docs/specs/12_運用保守/00_運用設計.md', 'utf8');
+});
+Then('全test layerは層ごとに追跡されnon-override denyは弱化されない', function () {
+  for (const fragment of ['projectChoices.testLayers', '全層', '1層1行', '固定の層名']) assert.ok(this.traceTemplate.includes(fragment), fragment);
+  for (const fragment of ['non-override deny', '弱めず', 'fail closed', '独立review']) assert.ok(this.operationsSpec.includes(fragment), fragment);
+});
 
 Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.featuresRoot = 'test/features'; this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });
 When('Gherkin traceを検証する', function () { this.result = validateScenarioTrace(this.featuresRoot, { layers: this.testLayers, forbiddenFileSuffixes: this.forbiddenFileSuffixes }); });
