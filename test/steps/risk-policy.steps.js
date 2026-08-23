@@ -257,6 +257,8 @@ Given('同じfingerprintだがpassed falseの証拠がある', function () {
 });
 When('targeted検証を計画する', function () { this.result = planValidation({ ...(this.boundValidation ?? this.failedValidation), kind: 'targeted' }); });
 Then('targeted検証はreadyでありdeduplicatedではない', function () { assert.equal(this.result.status, 'ready'); assert.ok(this.result.checks.length > 0); });
+When('final検証を計画する', function () { this.result = planValidation({ ...this.failedValidation, kind: 'final' }); });
+Then('final検証はstructured diagnostic付きでblockedになる', function () { assert.equal(this.result.status, 'blocked'); assert.equal(this.result.valid, false); assert.equal(this.result.diagnostic.ruleId, 'ASC-EVIDENCE-001'); assert.match(this.result.diagnostic.reasons.join(' '), /final gate/u); });
 
 Given('未知kindを含むpolicy metrics eventがある', function () { this.events = [{ kind: 'unknownMetric', value: 1 }]; });
 Then('metricsはstructured diagnostic付きでinvalidになる', function () { assert.equal(this.result.valid, false); assert.equal(this.result.diagnostic.ruleId, 'ASC-METRIC-001'); });

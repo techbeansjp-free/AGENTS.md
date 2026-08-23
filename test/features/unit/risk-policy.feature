@@ -150,3 +150,8 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     Given trusted boundaryに必須属性を欠くruleがある
     When trusted boundaryを評価する
     Then policy検証でoperationを拒否する
+
+  Scenario: SCN-UNIT-RISK-023 failed証拠でfinal gateを操作可能にしない
+    Given 同じfingerprintだがpassed falseの証拠がある
+    When final検証を計画する
+    Then final検証はstructured diagnostic付きでblockedになる
