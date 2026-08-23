@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { writeFileAtomic } from '../lib/atomic.js';
 import { resolveContained } from '../lib/security.js';
+import { PACKAGE_VERSION } from '../lib/version.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ROOT_ASSETS = ['AGENTS.md'];
@@ -47,7 +48,7 @@ export function init(target, options) {
   if (conflicts.length > 0) throw new Error(`初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(', ')}`);
   if (!options.apply) return { applied: false, assets: assets.map(({ dest }) => dest) };
   /** @type {{version: string, files: Record<string, string>}} */
-  const record = { version: '0.3.0-beta.1', files: {} };
+  const record = { version: PACKAGE_VERSION, files: {} };
   for (const { src, dest } of assets) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     if (!fs.existsSync(dest)) fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
@@ -71,7 +72,7 @@ export function upgrade(target, options) {
     else planned.push(item);
   }
   if (!options.apply) return { applied: false, planned: planned.map((item) => path.relative(target, item.dest)), retained };
-  const next = { version: '0.3.0-beta.1', files: { ...old.files } };
+  const next = { version: PACKAGE_VERSION, files: { ...old.files } };
   for (const item of planned) {
     fs.mkdirSync(path.dirname(item.dest), { recursive: true });
     fs.copyFileSync(item.src, item.dest);

@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/techbeansjp-free/AGENTS.md/schemas/project-policy-v0.4.json",
+  "$id": "https://github.com/techbeansjp-free/AGENTS.md/schemas/project-policy-v0.3.1.json",
   "title": "agent-skill-chain risk比例型project policy",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "delivery", "merge"],
   "properties": {
-    "schemaVersion": { "enum": ["agent-skill-chain/project-policy/v0.3", "agent-skill-chain/project-policy/v0.4"] },
+    "schemaVersion": { "enum": ["agent-skill-chain/project-policy/v0.3.0", "agent-skill-chain/project-policy/v0.3.1"] },
     "delivery": {
       "type": "object", "additionalProperties": false, "required": ["stopAt"],
       "properties": { "stopAt": { "const": "pull_request" } }
@@ -33,7 +33,7 @@
     "projectChoices": { "$ref": "#/$defs/projectChoices" }
   },
   "allOf": [{
-    "if": { "properties": { "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.4" } } },
+    "if": { "properties": { "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.3.1" } } },
     "then": { "required": ["budgets", "rules"] },
     "else": { "not": { "anyOf": [{ "required": ["budgets"] }, { "required": ["rules"] }, { "required": ["projectChoices"] }] } }
   }],

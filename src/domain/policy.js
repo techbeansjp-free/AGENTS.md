@@ -6,8 +6,13 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { parseJsonStrict, resolveContained, stableJson } from '../lib/security.js';
 import { validateProjectConformanceBinding } from './conformance.js';
+import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../lib/version.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+/** @param {string} version */
+const policyVersionLabel = (version) => version.replace('agent-skill-chain/project-policy/v', 'v');
+const currentPolicyVersionLabel = policyVersionLabel(CURRENT_POLICY_SCHEMA_VERSION);
+const compatiblePolicyVersionLabels = COMPATIBLE_POLICY_SCHEMA_VERSIONS.map(policyVersionLabel).join('、');
 
 /** @param {any} value @param {string[]} allowed @param {string} prefix @param {string[]} errors */
 function rejectUnknownKeys(value, allowed, prefix, errors) {
@@ -37,8 +42,8 @@ export function validatePolicy(policy) {
   rejectUnknownKeys(policy, ['schemaVersion', 'delivery', 'merge', 'rules', 'budgets', 'projectChoices'], 'policy', errors);
   rejectUnknownKeys(policy?.delivery, ['stopAt'], 'delivery', errors);
   rejectUnknownKeys(policy?.merge, ['mode', 'branches', 'methods', 'requiredChecks', 'requiredReviews'], 'merge', errors);
-  if (!['agent-skill-chain/project-policy/v0.3', 'agent-skill-chain/project-policy/v0.4'].includes(policy?.schemaVersion)) errors.push('schemaVersionが未対応です。v0.4へのstaged migrationを実行してください');
-  if (policy?.schemaVersion === 'agent-skill-chain/project-policy/v0.3' && (policy.rules !== undefined || policy.budgets !== undefined || policy.projectChoices !== undefined)) errors.push('v0.3ではrules、budgets、projectChoicesを使用できません。v0.4へstaged migrationしてください');
+  if (!SUPPORTED_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion)) errors.push(`schemaVersionが未対応です。${currentPolicyVersionLabel}へのstaged migrationを実行してください`);
+  if (COMPATIBLE_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion) && (policy.rules !== undefined || policy.budgets !== undefined || policy.projectChoices !== undefined)) errors.push(`${compatiblePolicyVersionLabels}ではrules、budgets、projectChoicesを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`);
   if (policy?.delivery?.stopAt !== 'pull_request') errors.push('delivery.stopAtはpull_requestでなければなりません');
   if (!['disabled', 'assisted', 'automatic'].includes(policy?.merge?.mode)) errors.push('merge.modeが不正です');
   validateStringArray(policy?.merge?.branches, 'merge.branches', errors, { max: 32 });
@@ -47,7 +52,7 @@ export function validatePolicy(policy) {
   if (!Number.isInteger(policy?.merge?.requiredReviews) || policy.merge.requiredReviews < 0 || policy.merge.requiredReviews > 20) errors.push('merge.requiredReviewsが不正です');
   const forbidden = ['deleteBranch', 'closeIssue', 'release', 'finalize', 'cleanup'];
   for (const key of forbidden) if (policy?.merge?.[key] === true) errors.push(`マージ権限へ${key}を含めてはいけません`);
-  if (policy?.schemaVersion === 'agent-skill-chain/project-policy/v0.4') {
+  if (policy?.schemaVersion === CURRENT_POLICY_SCHEMA_VERSION) {
     rejectUnknownKeys(policy?.budgets, ['localFeedbackMs', 'prGateMs'], 'budgets', errors);
     for (const key of ['localFeedbackMs', 'prGateMs']) if (!Number.isInteger(policy?.budgets?.[key]) || policy.budgets[key] < 1) errors.push(`budgets.${key}は1以上の整数でなければなりません`);
     const enforcement = validateEnforcementPolicy(policy);
@@ -61,8 +66,8 @@ export function validatePolicy(policy) {
       if (Array.isArray(policy.projectChoices?.forbiddenTestFileSuffixes) && policy.projectChoices.forbiddenTestFileSuffixes.some((/** @type {unknown} */ suffix) => typeof suffix !== 'string' || !/^\.[A-Za-z0-9._-]+$/u.test(suffix))) errors.push('projectChoices.forbiddenTestFileSuffixesが不正です');
     }
   }
-  const migration = policy?.schemaVersion === 'agent-skill-chain/project-policy/v0.3' || errors.some((error) => error.includes('schemaVersion') || error.includes('未知field')) ? { target: 'agent-skill-chain/project-policy/v0.4', activation: 'staged', remediation: 'policy、schema、runtime、CI、templateを同一migrationで更新してください', rollback: '入力policyを変更せずtrusted版を保持する' } : undefined;
-  return { valid: errors.length === 0, errors, migration, diagnostics: errors.length ? [{ ruleId: 'ASC-POLICY-INVALID', purpose: 'schemaとruntimeのpolicy契約を一致させる', risk: 'unknown', reasons: errors, scope: ['policy'], checks: ['schemaVersion、未知field、rules、budgetsを確認した'], autoFixes: [{ description: 'v0.4 staged migrationを作る', dryRunDiff: 'schemaVersionとrulesをv0.4形式へ更新する' }], next: 'migrationをdry-runしてから適用してください', requiredAuthority: 'project policy owner', rollback: 'trusted policyを保持する' }] : [] };
+  const migration = COMPATIBLE_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion) || errors.some((error) => error.includes('schemaVersion') || error.includes('未知field')) ? { target: CURRENT_POLICY_SCHEMA_VERSION, activation: 'staged', remediation: 'policy、schema、runtime、CI、templateを同一migrationで更新してください', rollback: '入力policyを変更せずtrusted版を保持する' } : undefined;
+  return { valid: errors.length === 0, errors, migration, diagnostics: errors.length ? [{ ruleId: 'ASC-POLICY-INVALID', purpose: 'schemaとruntimeのpolicy契約を一致させる', risk: 'unknown', reasons: errors, scope: ['policy'], checks: ['schemaVersion、未知field、rules、budgetsを確認した'], autoFixes: [{ description: `${currentPolicyVersionLabel} staged migrationを作る`, dryRunDiff: `schemaVersionとrulesを${currentPolicyVersionLabel}形式へ更新する` }], next: 'migrationをdry-runしてから適用してください', requiredAuthority: 'project policy owner', rollback: 'trusted policyを保持する' }] : [] };
 }
 
 const MANIFEST_VERSION = 'agent-skill-chain/project-policy-manifest/v1';
@@ -79,7 +84,7 @@ export function validateProjectPolicyManifest(manifest) {
   rejectUnknownKeys(manifest?.policy?.delivery, ['stopAt'], 'manifest.policy.delivery', errors);
   rejectUnknownKeys(manifest?.policy?.merge, ['mode', 'branches', 'methods', 'requiredChecks', 'requiredReviews'], 'manifest.policy.merge', errors);
   rejectUnknownKeys(manifest?.policy?.budgets, ['localFeedbackMs', 'prGateMs'], 'manifest.policy.budgets', errors);
-  if (manifest?.policy?.schemaVersion !== 'agent-skill-chain/project-policy/v0.4') errors.push('manifest.policy.schemaVersionが不正です');
+  if (manifest?.policy?.schemaVersion !== CURRENT_POLICY_SCHEMA_VERSION) errors.push('manifest.policy.schemaVersionが不正です');
   if (manifest?.policy?.delivery?.stopAt !== 'pull_request') errors.push('manifest.policy.delivery.stopAtが不正です');
   if (!['disabled', 'assisted', 'automatic'].includes(manifest?.policy?.merge?.mode)) errors.push('manifest.policy.merge.modeが不正です');
   validateStringArray(manifest?.policy?.merge?.branches, 'manifest.policy.merge.branches', errors, { max: 32 });
@@ -230,7 +235,7 @@ function loadEffectiveTrustedPolicySetAtCommit(root, ref) {
   const committedFloorValidation = validatePolicy(committedFloor);
   if (!committedFloorValidation.valid) throw new Error(`trusted commitのdefault policyが不正です: ${committedFloorValidation.errors.join('; ')}`);
   /** @type {any} */
-  const floorResult = committedFloor.schemaVersion === 'agent-skill-chain/project-policy/v0.4' ? resolveEffectivePolicy(packageFloor, committedFloor, { trusted: true }) : { valid: true, policy: packageFloor };
+  const floorResult = committedFloor.schemaVersion === CURRENT_POLICY_SCHEMA_VERSION ? resolveEffectivePolicy(packageFloor, committedFloor, { trusted: true }) : { valid: true, policy: packageFloor };
   if (!floorResult.valid) throw new Error(`trusted defaultをpackage safety floorへ合成できません: ${floorResult.diagnostic?.reasons?.join('; ') ?? '不明な構成error'}`);
   const floor = floorResult.policy;
   const result = git(['show', `${ref}:.agent-skill-chain/project-policy.json`], root, { allowFailure: true });

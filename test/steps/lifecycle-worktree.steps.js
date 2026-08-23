@@ -15,6 +15,11 @@ When('initをdry-runしてからapplyする', function () {
 });
 Then('dry-run時はassetが存在しない', function () { assert.equal(this.assetDuringPreview, false); });
 Then('apply後はmanaged asset recordが存在する', function () { assert.equal(fs.existsSync(path.join(this.root, '.agent-skill-chain', 'managed-assets.json')), true); });
+Then('managed asset recordのversionはpackage.jsonと一致する', function () {
+  const record = JSON.parse(fs.readFileSync(path.join(this.root, '.agent-skill-chain', 'managed-assets.json'), 'utf8'));
+  const packageMetadata = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  assert.equal(record.version, packageMetadata.version);
+});
 
 Given('consumerの運用ポリシー文書が既に存在する', function () { this.root = this.temp(); fs.mkdirSync(path.join(this.root, '.agent-skill-chain', 'docs'), { recursive: true }); fs.writeFileSync(path.join(this.root, '.agent-skill-chain', 'docs', '00_運用ポリシー.md'), '利用側ポリシー'); });
 When('init applyを試みる', function () { try { init(this.root, { apply: true }); } catch (error) { this.error = error; } });

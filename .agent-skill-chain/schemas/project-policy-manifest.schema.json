@@ -9,7 +9,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["schemaVersion", "delivery", "merge", "budgets"],
       "properties": {
-        "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.4" },
+        "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.3.1" },
         "delivery": { "type": "object", "additionalProperties": false, "required": ["stopAt"], "properties": { "stopAt": { "const": "pull_request" } } },
         "merge": {
           "type": "object", "additionalProperties": false,

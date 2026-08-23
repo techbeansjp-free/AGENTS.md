@@ -14,6 +14,7 @@ import { collectJavaScriptDependencyGraph } from '../../scripts/check_dependency
 import { checkFileAudit } from '../../scripts/check_file_audit.js';
 import { run } from '../../src/lib/process.js';
 import { main } from '../../src/cli.js';
+import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../../src/lib/version.js';
 
 const validAnswers = () => Object.fromEntries(Array.from({ length: 8 }, (_, index) => [
   `Q-${String(index + 1).padStart(2, '0')}`, { answer: true, evidence: `evidence-${index + 1}` },
@@ -263,6 +264,21 @@ When('個別監査gateを正規表と余分なpathで検証する', function () 
 });
 Then('正規表だけが合格し余分なpathは拒否される', function () { assert.equal(this.validAudit.valid, true, this.validAudit.errors.join('; ')); assert.equal(this.invalidAudit.valid, false); assert.match(this.invalidAudit.errors.join(' '), /path集合/u); });
 
+Given('package metadataとpolicy version artifactがある', function () {
+  this.packageMetadata = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  this.policySchema = JSON.parse(fs.readFileSync('.agent-skill-chain/schemas/project-policy.schema.json', 'utf8'));
+  this.defaultPolicy = JSON.parse(fs.readFileSync('.agent-skill-chain/policy/default.json', 'utf8'));
+});
+When('version正本との一致を検証する', function () { this.releaseVersion = this.packageMetadata.version.split('-')[0]; });
+Then('製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する', function () {
+  assert.equal(PACKAGE_VERSION, this.packageMetadata.version);
+  assert.match(PACKAGE_VERSION, /^0\.3\.1-beta\./u);
+  assert.equal(CURRENT_POLICY_SCHEMA_VERSION, `agent-skill-chain/project-policy/v${this.releaseVersion}`);
+  assert.deepEqual(COMPATIBLE_POLICY_SCHEMA_VERSIONS, ['agent-skill-chain/project-policy/v0.3.0']);
+  assert.deepEqual(this.policySchema.properties.schemaVersion.enum, SUPPORTED_POLICY_SCHEMA_VERSIONS);
+  assert.equal(this.defaultPolicy.schemaVersion, CURRENT_POLICY_SCHEMA_VERSION);
+});
+
 Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.traceRoot = process.cwd(); this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });
 When('Gherkin traceを検証する', function () { this.result = validateScenarioTrace(collectProjectTrace(this.traceRoot, this.testLayers, this.forbiddenFileSuffixes), { layers: this.testLayers }); });
 Then('全scenarioに一意なSCN IDとGiven、When、Thenがある', function () { assert.equal(this.result.errors.filter((/** @type {string} */ error) => /duplicate|missing/.test(error)).length, 0); });
@@ -285,7 +301,7 @@ Then('generic traceはfixed 3 layerを要求しない', function () { assert.equ
 Given('testLayersを持たないlegacy project policyとGherkinがある', function () {
   this.root = this.temp();
   fs.mkdirSync(path.join(this.root, '.agent-skill-chain'), { recursive: true });
-  fs.writeFileSync(path.join(this.root, '.agent-skill-chain/project-policy.json'), `${JSON.stringify({ schemaVersion: 'agent-skill-chain/project-policy/v0.3', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 } })}\n`);
+  fs.writeFileSync(path.join(this.root, '.agent-skill-chain/project-policy.json'), `${JSON.stringify({ schemaVersion: 'agent-skill-chain/project-policy/v0.3.0', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 } })}\n`);
   this.traceEvidence = path.join(this.root, 'trace.json');
   fs.writeFileSync(this.traceEvidence, `${JSON.stringify({ adapter: 'test', scenarios: [{ id: 'SCN-LEGACY-001', title: 'legacy', source: 'legacy.feature', layer: 'legacy', steps: ['given', 'when', 'then'] }], forbiddenFiles: [] })}\n`);
 });

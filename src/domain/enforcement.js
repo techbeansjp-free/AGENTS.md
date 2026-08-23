@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { CURRENT_POLICY_SCHEMA_VERSION } from '../lib/version.js';
 import { redactSecrets, stableJson } from '../lib/security.js';
 
 export const ENFORCEMENTS = ['deny', 'require', 'assist', 'warn', 'record'];
@@ -361,8 +362,8 @@ function conceptualMigrationReasons(state, trusted, candidate, revision, authori
   if (candidate && evidenceFingerprint(candidate) !== state.candidateHash) reasons.push('candidate policy hashが一致しません');
   const expected = evidenceFingerprint({ planId: state.planId, trustedHash: state.trustedHash, candidateHash: state.candidateHash, changes: state.changes });
   if (expected !== state.planFingerprint) reasons.push('immutable plan fingerprintが一致しません');
-  if (trusted?.schemaVersion === 'agent-skill-chain/project-policy/v0.4' && !validateEnforcementPolicy(trusted).valid) reasons.push('trusted policyのrule検証に失敗しました');
-  if (candidate?.schemaVersion === 'agent-skill-chain/project-policy/v0.4' && !validateEnforcementPolicy(candidate).valid) reasons.push('candidate policyのrule検証に失敗しました');
+  if (trusted?.schemaVersion === CURRENT_POLICY_SCHEMA_VERSION && !validateEnforcementPolicy(trusted).valid) reasons.push('trusted policyのrule検証に失敗しました');
+  if (candidate?.schemaVersion === CURRENT_POLICY_SCHEMA_VERSION && !validateEnforcementPolicy(candidate).valid) reasons.push('candidate policyのrule検証に失敗しました');
   return reasons;
 }
 

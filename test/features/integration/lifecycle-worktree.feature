@@ -6,6 +6,7 @@ Feature: Packageとworktree lifecycleでconsumer dataを保護する
     When initをdry-runしてからapplyする
     Then dry-run時はassetが存在しない
     And apply後はmanaged asset recordが存在する
+    And managed asset recordのversionはpackage.jsonと一致する
 
   Scenario: SCN-INT-LIFECYCLE-002 init conflictはpartial writeを発生させない
     Given consumerの運用ポリシー文書が既に存在する

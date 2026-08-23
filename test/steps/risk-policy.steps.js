@@ -21,7 +21,7 @@ const baseRule = (changes = {}) => ({
   remediation: '信頼済み条件を維持して再実行する', overridePolicy: 'never', rollback: 'trusted policyへ戻す', ...changes,
 });
 const basePolicy = (rules = [baseRule()]) => ({
-  schemaVersion: 'agent-skill-chain/project-policy/v0.4', delivery: { stopAt: 'pull_request' },
+  schemaVersion: 'agent-skill-chain/project-policy/v0.3.1', delivery: { stopAt: 'pull_request' },
   merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 1 },
   budgets: { localFeedbackMs: 100, prGateMs: 1000 }, rules,
 });
@@ -145,8 +145,8 @@ When('policy metricsを集計する', function () { this.result = aggregateMetri
 Then('6指標とbudget超過を機械可読に返す', function () { assert.deepEqual(Object.keys(this.result.metrics).sort(), ['duplicate', 'falseBlock', 'gateWaitMs', 'miss', 'override', 'rollback']); assert.equal(this.result.exceeded.localFeedback, true); });
 Then('metricsに秘密値は含まれない', function () { assert.equal(JSON.stringify(this.result).includes('never-log-this'), false); });
 
-Given('v0.3のtrusted policyとv0.4のcandidate policyがある', function () {
-  this.trusted = { schemaVersion: 'agent-skill-chain/project-policy/v0.3', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 } };
+Given('v0.3.0のtrusted policyとv0.3.1のcandidate policyがある', function () {
+  this.trusted = { schemaVersion: 'agent-skill-chain/project-policy/v0.3.0', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 } };
   this.candidate = basePolicy([baseRule({ activation: 'staged' })]); this.before = structuredClone(this.trusted); this.root = this.temp('asc-v03-v04-');
   this.entries = migrationEntries(this.root, this.candidate);
   this.beforeFiles = this.entries.map((/** @type {any} */ entry) => fs.readFileSync(path.join(this.root, entry.path), 'utf8'));
@@ -362,8 +362,8 @@ Given('rollback済みmigration stateと変更済みcandidateまたはrevision改
 When('trustedとcandidateを再検証してretryする', function () { this.tamperResults = [retryFileMigration(this.rolledTamper, this.trusted, this.changedCandidate, { approvedPlanHash: this.approvedPlanHash, expectedRevision: 2 }), retryFileMigration(this.revisionTamper, this.trusted, this.candidate, { approvedPlanHash: this.approvedPlanHash, expectedRevision: 2 })]; });
 Then('immutable fingerprintとhash不一致をstructured拒否する', function () { for (const result of this.tamperResults) { assert.equal(result.state, 'rejected'); assert.equal(result.allowed, false); assert.equal(result.diagnostic.ruleId, 'ASC-MIGRATION-TOCTOU-001'); } });
 
-Given(/^未知fieldを持つv0\.3 policyと空rulesのv0\.4 policyがある$/, function () { this.v03Unknown = { schemaVersion: 'agent-skill-chain/project-policy/v0.3', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 }, mystery: true }; this.v04Empty = basePolicy([]); });
-When('schema契約とruntime契約を検証する', function () { this.schemaRuntime = [validatePolicy(this.v03Unknown), validatePolicy(this.v04Empty)]; this.schemaText = fs.readFileSync('.agent-skill-chain/schemas/project-policy.schema.json', 'utf8'); });
+Given(/^未知fieldを持つv0\.3\.0 policyと空rulesのv0\.3\.1 policyがある$/, function () { this.v030Unknown = { schemaVersion: 'agent-skill-chain/project-policy/v0.3.0', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 }, mystery: true }; this.v031Empty = basePolicy([]); });
+When('schema契約とruntime契約を検証する', function () { this.schemaRuntime = [validatePolicy(this.v030Unknown), validatePolicy(this.v031Empty)]; this.schemaText = fs.readFileSync('.agent-skill-chain/schemas/project-policy.schema.json', 'utf8'); });
 Then('両方が安全なmigration diagnostic付きでinvalidになる', function () { for (const result of this.schemaRuntime) { assert.equal(result.valid, false); assert.ok(result.diagnostics[0]); assert.ok(result.migration || result.diagnostics[0].next.includes('migration')); } assert.ok(this.schemaText.includes('"minItems": 1')); assert.ok(this.schemaText.includes('"else"')); });
 
 Given('配布fixtureにenv派生fileとmanifest外assetがある', function () { this.root = this.temp('asc-pack-abuse-'); writeJson(path.join(this.root, 'package.json'), { name: 'fixture', version: '1.0.0', files: ['index.js', '.env.production', 'extra.txt'] }); fs.writeFileSync(path.join(this.root, 'index.js'), 'export {};\n'); fs.writeFileSync(path.join(this.root, '.env.production'), 'TOKEN=not-a-real-secret\n'); fs.writeFileSync(path.join(this.root, 'extra.txt'), 'extra\n'); });
