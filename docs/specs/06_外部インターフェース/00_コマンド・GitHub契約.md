@@ -12,8 +12,10 @@ GitHubエラーは秘密情報を伏字化し、日本語で行動可能な診�
 
 | Policy CLI | 入力 | 出力・終了code |
 |---|---|---|
-| `policy validate` | policy JSON | 有効性、全error、v0.3にはv0.4 staged migration案 |
+| `policy validate` | policy JSON。PR CIは`--trusted-commit`と`--expected-base-sha`にGitHub PR base SHAを明示 | 有効性、全error、v0.3にはv0.4 staged migration案。明示SHAは40hex・相互一致・repository内commit実在を検証 |
 | `policy evaluate` | `--trusted`と`--candidate` | 許可は0、自己緩和はASC-TRUST-001を含む1 |
 | `policy migrate` | trusted/candidate、`--dry-run`または`--apply`、state変更時はcall-siteの`--approved-plan-hash`と`--expected-revision` | plan、snapshot、history、rollback、retry、recover。state内の自己申告approvalをauthorityにせず、dry-runはfileを書き込まない |
 
 外部接続を要しないpolicy CLIはofflineで動作する。GitHub必須gateは接続障害時にpendingとし、local結果を失敗へ読み替えない。
+
+PR CIで`origin/HEAD`がない場合も、workflowがGitHub eventから明示したbase SHAだけをauthorityとする。explicit modeのcandidateはmanifestと全inventoryを持つfragmented setに限定し、monolith、project directoryとの混在、orphan/missing fragmentをschema分岐前からfail-closedにする。初回bootstrapのproject set不在はtrusted commit側だけに認める。候補側の環境変数やcheckout中のfileをtrusted SHAの代替にせず、checkoutはbase commitとその全fragmentをGit objectから読める履歴を取得する。

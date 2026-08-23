@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: ソースコードを取得する
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Node.js実行環境を準備する
         uses: actions/setup-node@v4
         with:
@@ -29,7 +31,7 @@ jobs:
       - name: 型を検証する
         run: npm run typecheck
       - name: repository固有policyをdogfood検証する
-        run: node bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json
+        run: node bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json --trusted-commit=${{ github.event.pull_request.base.sha }} --expected-base-sha=${{ github.event.pull_request.base.sha }}
       - name: 構築対象とパッケージ資産を検証する
         run: npm run build
       - name: npm配布物への開発用ファイル混入を拒否する

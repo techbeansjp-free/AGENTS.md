@@ -157,9 +157,12 @@ export async function main(argv) {
     const file = path.resolve(positionals[0] ?? required(flags, 'file'));
     const parsed = readJson(file);
     const root = path.resolve(typeof flags.root === 'string' ? flags.root : path.join(path.dirname(file), '..'));
+    const explicitMode = flags['trusted-commit'] !== undefined || flags['expected-base-sha'] !== undefined;
+    const explicitTrusted = explicitMode ? { trustedCommit: required(flags, 'trusted-commit'), expectedBaseSha: required(flags, 'expected-base-sha') } : undefined;
+    if (explicitMode && parsed.schemaVersion !== 'agent-skill-chain/project-policy-manifest/v1') throw new Error('explicit trusted commitを使うCI validateはcandidateの完全なfragmented project policy setを必須とします');
     if (parsed.schemaVersion === 'agent-skill-chain/project-policy-manifest/v1') {
       const candidateSet = loadProjectPolicySet(root);
-      const trustedSet = loadOperationPolicy(root);
+      const trustedSet = loadOperationPolicy(root, explicitTrusted);
       const effective = resolveEffectivePolicy(trustedSet.policy, candidateSet.policy);
       if (!effective.valid) { print(serializeDiagnostic({ allowed: false, candidateSetHash: candidateSet.setHash, trustedSetHash: trustedSet.setHash, diagnostic: effective.diagnostic })); return 1; }
       const comparison = compareTrustedPolicy(trustedSet.policy, effective.policy);

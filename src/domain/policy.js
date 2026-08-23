@@ -204,14 +204,18 @@ export function loadEffectiveTrustedPolicy(root, defaultBranch) {
 
 /** @param {string} root @param {string} defaultBranch */
 export function loadEffectiveTrustedPolicySet(root, defaultBranch) {
+  const branchRef = `origin/${defaultBranch}`;
+  const resolved = git(['rev-parse', '--verify', `${branchRef}^{commit}`], root, { allowFailure: true });
+  if (resolved.status !== 0) throw new Error(`${branchRef}のtrusted commit SHAを解決できません`);
+  return loadEffectiveTrustedPolicySetAtCommit(root, resolved.stdout.trim());
+}
+
+/** Assemble floor and project extension exclusively from an already resolved commit. @param {string} root @param {string} ref */
+function loadEffectiveTrustedPolicySetAtCommit(root, ref) {
   const packageFloorFile = path.join(packageRoot, '.agent-skill-chain', 'policy', 'default.json');
   const packageFloor = parseJsonStrict(fs.readFileSync(packageFloorFile, 'utf8'), 'package default safety floor');
   const packageFloorValidation = validatePolicy(packageFloor);
   if (!packageFloorValidation.valid) throw new Error(`package default safety floorが不正です: ${packageFloorValidation.errors.join('; ')}`);
-  const branchRef = `origin/${defaultBranch}`;
-  const resolved = git(['rev-parse', '--verify', `${branchRef}^{commit}`], root, { allowFailure: true });
-  if (resolved.status !== 0) throw new Error(`${branchRef}のtrusted commit SHAを解決できません`);
-  const ref = resolved.stdout.trim();
   const trustedFloor = git(['show', `${ref}:.agent-skill-chain/policy/default.json`], root, { allowFailure: true });
   if (trustedFloor.status !== 0) throw new Error(`${ref}にpackage default safety floorがありません`);
   const committedFloor = parseJsonStrict(trustedFloor.stdout, `${ref}:default policy`);
@@ -236,8 +240,16 @@ export function loadEffectiveTrustedPolicySet(root, defaultBranch) {
   return { ...projectSet, policy: effective.policy, setHash, hash: setHash, setEntries, semanticPolicyHash: crypto.createHash('sha256').update(stableJson(effective.policy)).digest('hex'), provenance: { ...projectSet.provenance, floorCommitSha: ref } };
 }
 
-/** Resolve authority policy only from a fixed trusted remote commit. Bootstrap floor is resolved by loadEffectiveTrustedPolicySet from that same commit. @param {string} root */
-export function loadOperationPolicy(root) {
+/** Resolve authority policy only from a fixed trusted commit. Explicit PR authority requires caller-provided base binding. @param {string} root @param {{trustedCommit?: string, expectedBaseSha?: string}} [options] */
+export function loadOperationPolicy(root, options = {}) {
+  if (options.trustedCommit !== undefined || options.expectedBaseSha !== undefined) {
+    if (!/^[a-f0-9]{40}$/iu.test(options.trustedCommit ?? '') || !/^[a-f0-9]{40}$/iu.test(options.expectedBaseSha ?? '')) throw new Error('explicit trusted commitとexpected base SHAはどちらも40桁SHAで必要です');
+    const trustedCommit = /** @type {string} */ (options.trustedCommit); const expectedBaseSha = /** @type {string} */ (options.expectedBaseSha);
+    if (trustedCommit.toLowerCase() !== expectedBaseSha.toLowerCase()) throw new Error('explicit trusted commitがGitHub PR expected base SHAと一致しません');
+    const resolved = git(['rev-parse', '--verify', `${trustedCommit}^{commit}`], root, { allowFailure: true });
+    if (resolved.status !== 0 || resolved.stdout.trim().toLowerCase() !== trustedCommit.toLowerCase()) throw new Error('explicit trusted commitをrepository内の固定commit SHAへ解決できません');
+    return loadEffectiveTrustedPolicySetAtCommit(root, resolved.stdout.trim());
+  }
   const symbolic = git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], root, { allowFailure: true });
   if (symbolic.status === 0) return loadEffectiveTrustedPolicySet(root, symbolic.stdout.trim().replace(/^origin\//, ''));
   throw new Error('origin/HEADをtrusted branchとcommit SHAへ解決できないためauthority operationを停止しました');

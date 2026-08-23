@@ -109,3 +109,8 @@ Feature: policy拡張を段階移行して失敗から再実行する
     Given recover可能journalとunknown hashのartifactがある
     When CLI recoveryが失敗する
     Then journalは保持され別reportへ失敗が記録される
+
+  Scenario: SCN-INT-RISK-022 PR checkoutはorigin HEADがなくてもexplicit trusted base SHAを検証できる
+    Given origin HEADのないPR checkoutとtrusted base commitとcandidate policy setがある
+    When explicit trusted commitでpolicy validate CLIを実行する
+    Then base SHA一致だけ成功し欠落・不正・不一致はfail closedになる
