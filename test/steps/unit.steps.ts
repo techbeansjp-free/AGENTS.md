@@ -1174,6 +1174,8 @@ Given("packageのStep skillとtemplate契約がある", function () {
   this.omittedSkillContractRoot = this.temp("asc-skill-omission-");
   this.unroutedSkillContractRoot = this.temp("asc-skill-route-");
   this.blockScalarSkillContractRoot = this.temp("asc-skill-frontmatter-");
+  this.missingVocabularyContractRoot = this.temp("asc-skill-vocabulary-");
+  this.mixedVocabularyContractRoot = this.temp("asc-skill-mixed-vocabulary-");
   fs.mkdirSync(
     path.join(this.brokenSkillContractRoot, ".agent-skill-chain/docs"),
     { recursive: true },
@@ -1190,11 +1192,21 @@ Given("packageのStep skillとtemplate契約がある", function () {
     path.join(this.blockScalarSkillContractRoot, ".agent-skill-chain/docs"),
     { recursive: true },
   );
+  fs.mkdirSync(
+    path.join(this.missingVocabularyContractRoot, ".agent-skill-chain/docs"),
+    { recursive: true },
+  );
+  fs.mkdirSync(
+    path.join(this.mixedVocabularyContractRoot, ".agent-skill-chain/docs"),
+    { recursive: true },
+  );
   for (const root of [
     this.brokenSkillContractRoot,
     this.omittedSkillContractRoot,
     this.unroutedSkillContractRoot,
     this.blockScalarSkillContractRoot,
+    this.missingVocabularyContractRoot,
+    this.mixedVocabularyContractRoot,
   ]) {
     fs.cpSync(
       ".agent-skill-chain/skills",
@@ -1265,6 +1277,26 @@ When("正規契約とリンク切れ・対応漏れ・経路欠落契約を検�
       .readFileSync(blockScalarSkill, "utf8")
       .replace(/^description:.*$/mu, "description: >\n  設計を作成する"),
   );
+  const vocabularyWorkflow = path.join(
+    this.missingVocabularyContractRoot,
+    ".agent-skill-chain/docs/01_開発ワークフロー.md",
+  );
+  fs.writeFileSync(
+    vocabularyWorkflow,
+    fs
+      .readFileSync(vocabularyWorkflow, "utf8")
+      .replace("| システム仕様書 |", "| 未定義成果物 |"),
+  );
+  const mixedRequest = path.join(
+    this.mixedVocabularyContractRoot,
+    ".agent-skill-chain/templates/issue/00_要求定義_full.md",
+  );
+  fs.writeFileSync(
+    mixedRequest,
+    fs
+      .readFileSync(mixedRequest, "utf8")
+      .replace("### 5.1 機能上の期待", "### 5.1 機能要求"),
+  );
   this.brokenSkillContracts = checkSkillTemplateContracts(
     this.brokenSkillContractRoot,
   );
@@ -1276,6 +1308,12 @@ When("正規契約とリンク切れ・対応漏れ・経路欠落契約を検�
   );
   this.blockScalarSkillContracts = checkSkillTemplateContracts(
     this.blockScalarSkillContractRoot,
+  );
+  this.missingVocabularyContracts = checkSkillTemplateContracts(
+    this.missingVocabularyContractRoot,
+  );
+  this.mixedVocabularyContracts = checkSkillTemplateContracts(
+    this.mixedVocabularyContractRoot,
   );
 });
 Then(
@@ -1306,6 +1344,16 @@ Then(
     assert.match(
       this.blockScalarSkillContracts.errors.join(" "),
       /block scalar/u,
+    );
+    assert.equal(this.missingVocabularyContracts.valid, false);
+    assert.match(
+      this.missingVocabularyContracts.errors.join(" "),
+      /システム仕様書の定義/u,
+    );
+    assert.equal(this.mixedVocabularyContracts.valid, false);
+    assert.match(
+      this.mixedVocabularyContracts.errors.join(" "),
+      /FR\/NFR責務/u,
     );
   },
 );

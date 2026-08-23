@@ -12,6 +12,41 @@ const DEVELOPMENT_CONSIDERATION_TEMPLATES = [
   "issue/04_レビュー.md",
 ];
 
+const ARTIFACT_VOCABULARY_TERMS = [
+  "要求",
+  "要件",
+  "制約",
+  "前提",
+  "対象外",
+  "受け入れ条件",
+  "設計",
+  "設計判断",
+  "実装計画",
+  "実装",
+  "システム仕様書",
+  "検証証拠",
+  "正本",
+];
+
+const ARTIFACT_VOCABULARY_TEMPLATES = [
+  ...DEVELOPMENT_CONSIDERATION_TEMPLATES,
+  "specs/00_利用案内.md",
+  "specs/00_仕様書構成/00_仕様書索引.md",
+  "specs/00_仕様書構成/01_記入・分割ルール.md",
+  "specs/01_システム概要/02_用語・略語.md",
+];
+
+const ARTIFACT_VOCABULARY_SKILLS = new Set([
+  "step-01-request",
+  "step-02-requirements",
+  "step-03-requirements-review",
+  "step-05-design",
+  "step-06-plan",
+  "step-07-design-review",
+  "step-09-implement",
+  "step-10-review",
+]);
+
 const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
   ["step-00-stage", []],
   [
@@ -180,6 +215,40 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       errors.push(
         `開発ワークフローからStep skillへの対応が不正です: ${workflowLinks.join(",")}`,
       );
+    if (!workflow.includes("## 成果物用語と責務境界"))
+      errors.push("開発ワークフローに成果物用語と責務境界の正本がありません");
+    for (const term of ARTIFACT_VOCABULARY_TERMS) {
+      if (!workflow.includes(`| ${term} |`))
+        errors.push(`成果物用語と責務境界に${term}の定義がありません`);
+    }
+    if (
+      !workflow.includes(
+        "要求 → 要件・受け入れ条件 → 設計・設計判断 → 実装計画 → 実装・検証証拠 → レビュー",
+      ) ||
+      !workflow.includes("所有する上流成果物へ戻って版と追跡を更新する")
+    )
+      errors.push("成果物の正方向と上流へ戻る契約がありません");
+  }
+
+  for (const relative of ARTIFACT_VOCABULARY_TEMPLATES) {
+    const template = path.join(templatesRoot, relative);
+    if (!fs.existsSync(template)) {
+      errors.push(`成果物用語を参照するtemplateがありません: ${relative}`);
+      continue;
+    }
+    if (!fs.readFileSync(template, "utf8").includes("成果物用語と責務境界"))
+      errors.push(`${relative}: 成果物用語と責務境界の正本参照がありません`);
+  }
+  const fullRequestTemplate = path.join(
+    templatesRoot,
+    "issue/00_要求定義_full.md",
+  );
+  if (fs.existsSync(fullRequestTemplate)) {
+    const fullRequest = fs.readFileSync(fullRequestTemplate, "utf8");
+    if (/^### 5\.[12] (?:機能要求|非機能要求)$/mu.test(fullRequest))
+      errors.push("full要求templateへ要件のFR/NFR責務を混入できません");
+    if (/^\| AC-[^|]+\|/mu.test(fullRequest))
+      errors.push("full要求templateでACを採番せず要件定義へ分離してください");
   }
 
   for (const skill of expectedSkills) {
@@ -204,6 +273,13 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
     }
     if (!markdown.includes("## テンプレート契約"))
       errors.push(`${skill}/SKILL.mdにテンプレート契約がありません`);
+    if (
+      ARTIFACT_VOCABULARY_SKILLS.has(skill) &&
+      !markdown.includes(
+        "[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)",
+      )
+    )
+      errors.push(`${skill}/SKILL.mdに成果物用語の開始前読取契約がありません`);
     const links = uniqueSorted(
       [...markdown.matchAll(/\]\((\.\.\/\.\.\/templates\/[^)\s]+)\)/gu)].map(
         (match) => match[1],
