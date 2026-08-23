@@ -154,8 +154,6 @@ recovery commandは `readPublicLease` interfaceしか受け取らず、`readLeas
 related_adrs:
   - id: ADR-0002
     relation: adopts
-  - id: ADR-0024
-    relation: supersedes
   - id: ADR-0029
     relation: adopts
 ```
