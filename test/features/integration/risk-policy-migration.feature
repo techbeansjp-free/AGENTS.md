@@ -110,7 +110,7 @@ Feature: policy拡張を段階移行して失敗から再実行する
     When CLI recoveryが失敗する
     Then journalは保持され別reportへ失敗が記録される
 
-  Scenario: SCN-INT-RISK-022 PR checkoutはorigin HEADがなくてもexplicit trusted base SHAを検証できる
+  Scenario: SCN-INT-RISK-022 PR checkoutはorigin HEADやviewer permission labelがなくてもproviderの実readをtrusted base SHAへ拘束できる
     Given origin HEADのないPR checkoutとtrusted base commitとcandidate policy setがある
     When explicit trusted commitでpolicy validate CLIを実行する
     Then default branchとprovider head commitに拘束したpolicyだけ成功しdirty filesystem・自己申告・非default・branch injectionはauthorityにならない

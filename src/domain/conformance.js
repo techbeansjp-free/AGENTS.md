@@ -63,11 +63,42 @@ export function validateProjectConformanceBinding(binding) {
   return { valid: errors.length === 0, errors };
 }
 
+/** Remove comments and literals while preserving lines and token boundaries. @param {string} source */
+function executableSource(source) {
+  let result = ''; let state = 'code'; let escaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const current = source[index]; const next = source[index + 1];
+    if (state === 'code') {
+      if (current === '/' && next === '/') { result += '  '; index += 1; state = 'line-comment'; continue; }
+      if (current === '/' && next === '*') { result += '  '; index += 1; state = 'block-comment'; continue; }
+      if (current === "'" || current === '"' || current === '`') { result += ' '; state = current; escaped = false; continue; }
+      result += current; continue;
+    }
+    if (state === 'line-comment') { if (current === '\n') { result += '\n'; state = 'code'; } else result += ' '; continue; }
+    if (state === 'block-comment') {
+      if (current === '*' && next === '/') { result += '  '; index += 1; state = 'code'; }
+      else result += current === '\n' ? '\n' : ' ';
+      continue;
+    }
+    if (escaped) { result += current === '\n' ? '\n' : ' '; escaped = false; continue; }
+    if (current === '\\') { result += ' '; escaped = true; continue; }
+    if (current === state) { result += ' '; state = 'code'; continue; }
+    result += current === '\n' ? '\n' : ' ';
+  }
+  return result;
+}
+
 /** @param {string} file @param {string} name */
 function hasExport(file, name) {
-  const source = fs.readFileSync(file, 'utf8');
+  const source = executableSource(fs.readFileSync(file, 'utf8'));
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`export\\s+(?:async\\s+)?(?:function|const|class)\\s+${escaped}\\b|export\\s*\\{[^}]*\\b${escaped}\\b`, 'u').test(source);
+  if (new RegExp(`^\\s*export\\s+(?:default\\s+)?(?:async\\s+)?(?:function\\s*\\*?|class|const|let|var)\\s+${escaped}\\b`, 'mu').test(source)) return true;
+  if (new RegExp(`^\\s*export\\s*\\*\\s+as\\s+${escaped}\\b`, 'mu').test(source)) return true;
+  for (const match of source.matchAll(/^\s*export\s*\{([^}]*)\}/gmu)) {
+    const exported = match[1].split(',').map((entry) => entry.trim().split(/\s+as\s+/u).at(-1)?.trim());
+    if (exported.includes(name)) return true;
+  }
+  return false;
 }
 
 /** @param {string} root @param {any} contract @param {any} binding @param {{tool?: string, passedScenarioIds?: string[]}} evidence */

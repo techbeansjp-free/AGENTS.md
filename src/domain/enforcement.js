@@ -230,7 +230,7 @@ export function planValidation(input) {
 
 /** @param {Array<{kind: string, value?: number, secret?: string}>} events @param {{localFeedbackMs?: number, prGateMs?: number}} budgets */
 export function aggregateMetrics(events, budgets = {}) {
-  const metrics = Object.fromEntries(METRIC_KINDS.map((kind) => [kind, kind === 'gateWaitMs' ? 0 : 0]));
+  const metrics = Object.fromEntries(METRIC_KINDS.map((kind) => [kind, 0]));
   const unknown = events.filter((event) => !METRIC_KINDS.includes(event.kind)).map((event) => event.kind);
   for (const event of events) if (METRIC_KINDS.includes(event.kind)) metrics[event.kind] += event.kind === 'gateWaitMs' ? Math.max(0, Number(event.value) || 0) : 1;
   /** @type {any} */

@@ -16,13 +16,11 @@ function observePolicyAuthority(repository, prNumber, cwd) {
   try { run('gh', ['auth', 'status'], cwd); } catch { throw new GitHubProviderUnavailableError('GitHub providerの認証状態を観測できません'); }
   let observedRepository; let observedPr;
   try {
-    observedRepository = JSON.parse(run('gh', ['repo', 'view', repository, '--json', 'nameWithOwner,viewerPermission,defaultBranchRef'], cwd).stdout);
+    observedRepository = JSON.parse(run('gh', ['repo', 'view', repository, '--json', 'nameWithOwner,defaultBranchRef'], cwd).stdout);
     observedPr = JSON.parse(run('gh', ['pr', 'view', String(prNumber), '--repo', repository, '--json', 'number,baseRefName,baseRefOid,headRefOid'], cwd).stdout);
   } catch { throw new GitHubProviderUnavailableError('GitHub providerのrepositoryまたはPR観測を取得できません'); }
-  const complete = typeof observedRepository?.nameWithOwner === 'string' && typeof observedRepository?.viewerPermission === 'string' && typeof observedRepository?.defaultBranchRef?.name === 'string' && Number.isInteger(observedPr?.number) && typeof observedPr?.baseRefName === 'string' && /^[a-f0-9]{40}$/iu.test(observedPr?.baseRefOid ?? '') && /^[a-f0-9]{40}$/iu.test(observedPr?.headRefOid ?? '');
+  const complete = typeof observedRepository?.nameWithOwner === 'string' && typeof observedRepository?.defaultBranchRef?.name === 'string' && Number.isInteger(observedPr?.number) && typeof observedPr?.baseRefName === 'string' && /^[a-f0-9]{40}$/iu.test(observedPr?.baseRefOid ?? '') && /^[a-f0-9]{40}$/iu.test(observedPr?.headRefOid ?? '');
   if (!complete) throw new GitHubProviderUnavailableError('GitHub providerのauthority観測が不完全です');
-  const levels = ['READ', 'TRIAGE', 'WRITE', 'MAINTAIN', 'ADMIN'];
-  if (levels.indexOf(observedRepository.viewerPermission) < 0) throw new Error('対象GitHubリポジトリの読み取り権限が不足しています');
   return {
     provenance: { source: 'github', repository, prNumber }, repository: observedRepository.nameWithOwner,
     defaultBranch: observedRepository.defaultBranchRef.name, prNumber: observedPr.number,
