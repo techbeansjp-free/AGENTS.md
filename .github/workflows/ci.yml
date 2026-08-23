@@ -32,6 +32,10 @@ jobs:
         run: npm run test:format
       - name: 型を検証する
         run: npm run typecheck
+      - name: project選択に従うscenario追跡を検証する
+        run: npm run trace:check
+      - name: repositoryの依存循環を拒否する
+        run: npm run architecture:check
       - name: repository固有policyをdogfood検証する
         env:
           GH_TOKEN: ${{ github.token }}
@@ -49,3 +53,5 @@ jobs:
         run: npm run package:check
       - name: 全テストとrepository conformance証拠を検証する
         run: npm run conformance:check
+      - name: 全変更fileの個別監査とGit差分path集合を照合する
+        run: npm run audit:check

@@ -1,34 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
-/** @param {string} directory @param {(file: string) => boolean} predicate @returns {string[]} */
-function walkFiles(directory, predicate) {
-  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const resolved = path.join(directory, entry.name);
-    if (entry.isDirectory()) return walkFiles(resolved, predicate);
-    return entry.isFile() && predicate(resolved) ? [resolved] : [];
-  });
-}
-
-/** @param {string} text */
-export function parseGherkinScenarios(text) {
-  const lines = text.split(/\r?\n/);
-  const scenarios = [];
-  /** @type {{id: string, title: string, keywords: Set<string>, line: number}|undefined} */
-  let current;
-  for (let index = 0; index < lines.length; index += 1) {
-    const scenario = /^\s*Scenario(?: Outline)?:\s+(SCN-[A-Z0-9-]+)\s+(.+?)\s*$/.exec(lines[index]);
-    if (scenario) {
-      current = { id: scenario[1], title: scenario[2], keywords: new Set(), line: index + 1 };
-      scenarios.push(current);
-      continue;
-    }
-    const step = /^\s*(Given|When|Then|And|But)\s+\S/.exec(lines[index]);
-    if (step && current) current.keywords.add(step[1]);
-  }
-  return scenarios;
-}
-
 /** Validate a caller-supplied directed graph without knowing its language or build tool. @param {unknown} nodesInput @param {unknown} edgesInput */
 export function validateDependencyGraph(nodesInput, edgesInput) {
   const errors = [];
@@ -63,27 +32,53 @@ export function validateDependencyGraph(nodesInput, edgesInput) {
   };
 }
 
-/** @param {string} featuresRoot @param {{layers?: string[], forbiddenFileSuffixes?: string[]}} [options] */
-export function validateScenarioTrace(featuresRoot, options = {}) {
+/**
+ * Validate project-adapter supplied scenario trace without owning its file format,
+ * runner, display language, or directory convention.
+ * @param {unknown} traceInput
+ * @param {{layers?: string[]}} [options]
+ */
+export function validateScenarioTrace(traceInput, options = {}) {
   const errors = [];
   const layers = options.layers ?? [];
   if (!Array.isArray(layers) || layers.length === 0 || layers.some((layer) => typeof layer !== 'string' || layer.trim() === '') || new Set(layers).size !== layers.length) errors.push('project policyから空でない一意なtest layerを選択してください');
-  const featureFiles = walkFiles(featuresRoot, (file) => file.endsWith('.feature'));
-  const scenarios = featureFiles.flatMap((file) => parseGherkinScenarios(fs.readFileSync(file, 'utf8')).map((scenario) => ({ ...scenario, file })));
+  /** @type {any} */
+  const trace = traceInput && typeof traceInput === 'object' && !Array.isArray(traceInput) ? traceInput : {};
+  if (trace !== traceInput) errors.push('trace evidenceはobjectでなければなりません');
+  for (const key of Object.keys(trace)) if (!['adapter', 'scenarios', 'forbiddenFiles'].includes(key)) errors.push(`trace evidence.${key}は未知fieldです`);
+  if (typeof trace.adapter !== 'string' || trace.adapter.trim() === '') errors.push('trace evidence.adapterが必要です');
+  /** @type {any[]} */
+  const scenarios = Array.isArray(trace.scenarios) ? trace.scenarios : [];
+  if (!Array.isArray(trace.scenarios)) errors.push('trace evidence.scenariosは配列でなければなりません');
+  /** @type {string[]} */
+  const forbiddenFiles = Array.isArray(trace.forbiddenFiles) && trace.forbiddenFiles.every((/** @type {unknown} */ file) => typeof file === 'string') ? trace.forbiddenFiles : [];
+  if (!Array.isArray(trace.forbiddenFiles) || forbiddenFiles.length !== trace.forbiddenFiles.length || new Set(forbiddenFiles).size !== forbiddenFiles.length) errors.push('trace evidence.forbiddenFilesは重複のない文字列配列でなければなりません');
   const ids = new Set();
-  for (const scenario of scenarios) {
-    if (ids.has(scenario.id)) errors.push(`GherkinシナリオIDが重複しています: ${scenario.id}`);
-    ids.add(scenario.id);
-    for (const keyword of ['Given', 'When', 'Then']) if (!scenario.keywords.has(keyword)) errors.push(`${scenario.id}に${keyword}がありません`);
-  }
   /** @type {Record<string, number>} */
-  const layerCounts = {};
-  for (const layer of layers) {
-    layerCounts[layer] = scenarios.filter((scenario) => scenario.file.split(path.sep).includes(layer)).length;
-    if (layerCounts[layer] === 0) errors.push(`${layer}層にGherkinシナリオがありません`);
+  const layerCounts = Object.fromEntries(Array.isArray(layers) ? layers.map((layer) => [layer, 0]) : []);
+  for (const scenario of scenarios) {
+    if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) { errors.push('scenario evidenceはobjectでなければなりません'); continue; }
+    for (const key of Object.keys(scenario)) if (!['id', 'title', 'source', 'layer', 'steps'].includes(key)) errors.push(`${String(scenario.id)}.${key}は未知fieldです`);
+    const { id, title, source, layer, steps } = scenario;
+    if (typeof id !== 'string' || !/^SCN-[A-Z0-9-]+$/u.test(id)) errors.push(`scenario IDが不正です: ${String(id)}`);
+    else if (ids.has(id)) errors.push(`scenario IDが重複しています: ${id}`);
+    else ids.add(id);
+    if (typeof title !== 'string' || title.trim() === '') errors.push(`${String(id)}のtitleが不正です`);
+    if (typeof source !== 'string' || source.trim() === '') errors.push(`${String(id)}のsourceが不正です`);
+    if (typeof layer !== 'string' || !layers.includes(layer)) errors.push(`${String(id)}のtest layerがproject choiceにありません: ${String(layer)}`);
+    else layerCounts[layer] += 1;
+    if (!Array.isArray(steps) || steps.some((step) => !['given', 'when', 'then'].includes(step))) errors.push(`${String(id)}のstep roleが不正です`);
+    else for (const role of ['given', 'when', 'then']) if (!steps.includes(role)) errors.push(`${String(id)}に${role} roleがありません`);
   }
-  const testRoot = path.dirname(featuresRoot);
-  const forbiddenFiles = walkFiles(testRoot, (file) => (options.forbiddenFileSuffixes ?? []).some((suffix) => file.endsWith(suffix)));
+  for (const layer of Array.isArray(layers) ? layers : []) if (layerCounts[layer] === 0) errors.push(`${layer}層にscenario evidenceがありません`);
   if (forbiddenFiles.length > 0) errors.push(`project policyが禁止するtest fileが残っています: ${forbiddenFiles.join(', ')}`);
-  return { valid: errors.length === 0, errors, scenarios: scenarios.map(({ id, title, file }) => ({ id, title, layer: layers.find((layer) => file.split(path.sep).includes(layer)) ?? 'unknown' })), layerCounts, forbiddenFiles, nodeTests: forbiddenFiles };
+  return {
+    valid: errors.length === 0,
+    errors,
+    adapter: typeof trace.adapter === 'string' ? trace.adapter : undefined,
+    scenarios: scenarios.filter((/** @type {any} */ scenario) => scenario && typeof scenario === 'object' && !Array.isArray(scenario)).map((/** @type {any} */ { id, title, source, layer }) => ({ id, title, source, layer })),
+    layerCounts,
+    forbiddenFiles,
+    nodeTests: forbiddenFiles,
+  };
 }

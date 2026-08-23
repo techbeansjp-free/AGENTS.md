@@ -25,7 +25,9 @@ Given('pass済みreview、tests、specのPR引数がある', function () {
   spawnSync('git', ['commit', '-q', '-m', 'trusted policy floor'], { cwd: this.prCwd });
   spawnSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: this.prCwd });
   spawnSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'], { cwd: this.prCwd });
-  const headSha = 'a'.repeat(40);
+  const headResult = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: this.prCwd, encoding: 'utf8' });
+  assert.equal(headResult.status, 0, headResult.stderr);
+  const headSha = headResult.stdout.trim();
   const evidence = path.join(this.root, 'pr-evidence.json');
   fs.writeFileSync(evidence, `${JSON.stringify({
     headSha,

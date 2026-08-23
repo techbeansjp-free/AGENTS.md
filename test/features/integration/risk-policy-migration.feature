@@ -143,3 +143,8 @@ Feature: policy拡張を段階移行して失敗から再実行する
       | bot-pr-implementation-self-review |
       | null-implementation-author |
       | commented |
+
+  Scenario: SCN-INT-RISK-025 read-after-write不一致でも現在artifactをbeforeへ復元する
+    Given read-after-write不一致を注入できる単一file migrationがある
+    When 不正writeを注入してmigration applyを実行する
+    Then applyは拒否され対象fileはbefore内容へrollbackされる

@@ -181,3 +181,18 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given v0.3 package assetを走査する
     When project選択層とfalse block対応の文書契約を検査する
     Then 全test layerは層ごとに追跡されnon-override denyは弱化されない
+
+  Scenario: SCN-UNIT-PACKAGE-009 汎用runtimeとtemplateへrepository固有rule ID・固定表示値を混入しない
+    Given package所有runtimeと変更済みtemplateを走査する
+    When repository固有IDと固定表示labelを検査する
+    Then 汎用packageの所有境界違反は0件である
+
+  Scenario: SCN-UNIT-PACKAGE-010 review templateは全変更fileの個別監査を要求する
+    Given review templateとPR事前確認を読む
+    When 全変更file監査契約を検査する
+    Then 1ファイル1行と差分path集合完全一致が必須である
+
+  Scenario: SCN-UNIT-PACKAGE-011 個別監査gateはGit差分と1ファイル1行を完全照合する
+    Given H_implの全変更pathと一致する個別監査artifactがある
+    When 個別監査gateを正規表と余分なpathで検証する
+    Then 正規表だけが合格し余分なpathは拒否される

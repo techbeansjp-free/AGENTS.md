@@ -17,12 +17,12 @@
 
 ```mermaid
 sequenceDiagram
-  participant Caller
-  participant Interface
-  participant Dependency
-  Caller->>Interface: Message
-  Interface->>Interface: Validate
-  Interface->>Dependency: ValidatedMessage
-  Dependency-->>Interface: Result
-  Interface-->>Caller: ObservableResult
+  participant caller_node as {project-selected label: caller}
+  participant interface_node as {project-selected label: interface}
+  participant dependency_node as {project-selected label: dependency}
+  caller_node->>interface_node: {project-selected label: message}
+  interface_node->>interface_node: {project-selected label: validate}
+  interface_node->>dependency_node: {project-selected label: validated message}
+  dependency_node-->>interface_node: {project-selected label: result}
+  interface_node-->>caller_node: {project-selected label: observable result}
 ```

@@ -53,10 +53,12 @@ export function validatePolicy(policy) {
     const enforcement = validateEnforcementPolicy(policy);
     errors.push(...enforcement.errors);
     if (policy.projectChoices !== undefined) {
-      const fields = ['language', 'testRunner', 'testLayers', 'naming', 'packageManager', 'runtime', 'ci', 'modelMapping', 'release'];
+      const fields = ['language', 'testRunner', 'testLayers', 'forbiddenTestFileSuffixes', 'naming', 'packageManager', 'runtime', 'ci', 'modelMapping', 'release'];
       rejectUnknownKeys(policy.projectChoices, fields, 'projectChoices', errors);
-      for (const field of fields.filter((field) => field !== 'testLayers')) if (typeof policy.projectChoices?.[field] !== 'string' || policy.projectChoices[field].trim() === '') errors.push(`projectChoices.${field}は空でない文字列でなければなりません`);
+      for (const field of fields.filter((field) => !['testLayers', 'forbiddenTestFileSuffixes'].includes(field))) if (typeof policy.projectChoices?.[field] !== 'string' || policy.projectChoices[field].trim() === '') errors.push(`projectChoices.${field}は空でない文字列でなければなりません`);
       validateStringArray(policy.projectChoices?.testLayers, 'projectChoices.testLayers', errors);
+      validateStringArray(policy.projectChoices?.forbiddenTestFileSuffixes, 'projectChoices.forbiddenTestFileSuffixes', errors);
+      if (Array.isArray(policy.projectChoices?.forbiddenTestFileSuffixes) && policy.projectChoices.forbiddenTestFileSuffixes.some((/** @type {unknown} */ suffix) => typeof suffix !== 'string' || !/^\.[A-Za-z0-9._-]+$/u.test(suffix))) errors.push('projectChoices.forbiddenTestFileSuffixesが不正です');
     }
   }
   const migration = policy?.schemaVersion === 'agent-skill-chain/project-policy/v0.3' || errors.some((error) => error.includes('schemaVersion') || error.includes('未知field')) ? { target: 'agent-skill-chain/project-policy/v0.4', activation: 'staged', remediation: 'policy、schema、runtime、CI、templateを同一migrationで更新してください', rollback: '入力policyを変更せずtrusted版を保持する' } : undefined;
@@ -93,9 +95,10 @@ export function validateProjectPolicyManifest(manifest) {
   if (!Array.isArray(manifest?.choiceFiles) || manifest.choiceFiles.length !== 1) errors.push('choiceFilesは1件の配列でなければなりません');
   if (!Array.isArray(manifest?.ruleFiles) || manifest.ruleFiles.length === 0) errors.push('ruleFilesは1件以上の配列でなければなりません');
   if (!Array.isArray(manifest?.conformanceFiles) || manifest.conformanceFiles.length === 0) errors.push('conformanceFilesは1件以上の配列でなければなりません');
+  if (ruleFiles.length > 126) errors.push('ruleFilesは126件以内でなければなりません');
+  if (conformanceFiles.length > 126) errors.push('conformanceFilesは126件以内でなければなりません');
   for (const reference of references) if (typeof reference !== 'string' || reference === '' || path.isAbsolute(reference) || reference.includes('..') || reference.includes('\\') || CONTROL.test(reference) || reference !== reference.normalize('NFC') || !/^project\/(?:choices|rules|conformance)\/[a-z0-9][a-z0-9.-]*\.json$/u.test(reference)) errors.push(`project fragment pathが不正です: ${String(reference)}`);
   for (const list of [choiceFiles, ruleFiles, conformanceFiles]) if (stableJson(list) !== stableJson([...list].sort())) errors.push('project fragment pathは字句順でなければなりません');
-  if (references.length > 128) errors.push('project fragmentは128件以内でなければなりません');
   const keys = references.map((reference) => typeof reference === 'string' ? reference.normalize('NFC').toLocaleLowerCase('und') : String(reference));
   if (new Set(keys).size !== keys.length) errors.push('project fragment pathが重複またはUnicode/case衝突しています');
   if (typeof manifest?.conformanceDirectory !== 'string' || manifest.conformanceDirectory !== 'project/conformance') errors.push('conformanceDirectoryはproject/conformanceでなければなりません');
@@ -284,4 +287,13 @@ export function loadConsumerPolicy(root) {
   const file = path.join(root, '.agent-skill-chain', 'project-policy.json');
   if (!fs.existsSync(file)) return undefined;
   return loadProjectPolicySet(root).policy;
+}
+
+/** Read an optional consumer policy from one fixed commit. @param {string} root @param {string} ref */
+export function loadConsumerPolicyAtCommit(root, ref) {
+  const resolved = git(['rev-parse', '--verify', `${ref}^{commit}`], root, { allowFailure: true });
+  if (resolved.status !== 0 || resolved.stdout.trim().toLowerCase() !== ref.toLowerCase()) throw new Error('candidate policyを読む固定commitを完全OIDへ解決できません');
+  const exists = git(['cat-file', '-e', `${resolved.stdout.trim()}:.agent-skill-chain/project-policy.json`], root, { allowFailure: true });
+  if (exists.status !== 0) return undefined;
+  return loadProjectPolicySetAtCommit(root, resolved.stdout.trim()).policy;
 }

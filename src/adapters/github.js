@@ -88,8 +88,19 @@ export function github(operation, input, cwd) {
   if (operation === 'pr.inspect') {
     verifyRepository(input.repository, cwd, 'read');
     const result = run('gh', ['pr', 'view', String(input.pr), '--repo', input.repository, '--json',
-      'number,url,headRefName,baseRefName,headRefOid,baseRefOid,mergeStateStatus,reviewDecision,latestReviews,statusCheckRollup'], cwd);
+      'number,url,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,mergeStateStatus,reviewDecision,statusCheckRollup'], cwd);
     return JSON.parse(result.stdout);
+  }
+  if (operation === 'pr.reviews') {
+    verifyRepository(input.repository, cwd, 'read');
+    const reviews = JSON.parse(run('gh', ['api', `repos/${input.repository}/pulls/${input.pr}/reviews`], cwd).stdout);
+    if (!Array.isArray(reviews)) throw new Error('GitHub review観測が配列ではありません');
+    return reviews.map((/** @type {any} */ review) => ({ state: review.state, commitSha: review.commit_id, actorId: review.user?.node_id }));
+  }
+  if (operation === 'commit.inspect') {
+    verifyRepository(input.repository, cwd, 'read');
+    const commit = JSON.parse(run('gh', ['api', `repos/${input.repository}/commits/${input.sha}`], cwd).stdout);
+    return { sha: commit.sha, authorActorId: commit.author?.node_id };
   }
   if (operation === 'policy.authority') {
     return observePolicyAuthority(input.repository, input.pr, cwd);

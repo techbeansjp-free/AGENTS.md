@@ -7,8 +7,11 @@ import { classifyMode, detectQuickDisqualifiers } from '../../src/domain/mode.js
 import { safeSlug, resolveContained, redactSecrets } from '../../src/lib/security.js';
 import { evaluateReview } from '../../src/domain/review.js';
 import { loadOperationPolicy, validatePolicy } from '../../src/domain/policy.js';
-import { parseGherkinScenarios, validateScenarioTrace } from '../../src/domain/trace.js';
+import { validateScenarioTrace } from '../../src/domain/trace.js';
 import * as traceDomain from '../../src/domain/trace.js';
+import { collectProjectTrace, parseProjectGherkin } from '../../scripts/check_trace.js';
+import { collectJavaScriptDependencyGraph } from '../../scripts/check_dependency_graph.js';
+import { checkFileAudit } from '../../scripts/check_file_audit.js';
 import { run } from '../../src/lib/process.js';
 import { main } from '../../src/cli.js';
 
@@ -152,7 +155,7 @@ When('review gateを評価する', function () { try { this.result = evaluateRev
 Then('reviewはapprovedである', function () { assert.equal(this.result.approved, true); });
 Then('reviewはrejectedである', function () { assert.equal(this.result.approved, false); });
 Then(/^reviewはrejectedであり(.+)を返す$/u, function (diagnostic) { assert.equal(this.result.approved, false); assert.ok(this.result.errors.some((/** @type {string} */ error) => error.includes(diagnostic)), this.result.errors.join('; ')); });
-Given('tracked Phase A review recordを読む', function () { this.phaseAReview = fs.readFileSync('docs/reviews/01_課題834実装レビュー.md', 'utf8'); });
+Given('tracked Phase A review recordを読む', function () { this.phaseAReview = fs.readFileSync('.agent-skill-chain/templates/issue/04_レビュー.md', 'utf8'); });
 When('Phase A artifactのimmutable契約を検査する', function () { this.phaseAContractInspected = true; });
 Then('H_final後は更新せず外部attestationだけで完了すると明記されている', function () { assert.match(this.phaseAReview, /H_final後[^。]*更新しない/u); assert.match(this.phaseAReview, /完了[^。]*外部attestation/u); });
 Then('blocking findingは0件である', function () { assert.equal(this.result.blocking.length, 0); });
@@ -220,37 +223,77 @@ Then('全test layerは層ごとに追跡されnon-override denyは弱化され�
   for (const fragment of ['non-override deny', '弱めず', 'fail closed', '独立review']) assert.ok(this.operationsSpec.includes(fragment), fragment);
 });
 
-Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.featuresRoot = 'test/features'; this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });
-When('Gherkin traceを検証する', function () { this.result = validateScenarioTrace(this.featuresRoot, { layers: this.testLayers, forbiddenFileSuffixes: this.forbiddenFileSuffixes }); });
+Given('package所有runtimeと変更済みtemplateを走査する', function () {
+  this.packageRuntime = runtimeFiles();
+  this.auditedMermaidTemplates = [
+    '.agent-skill-chain/templates/specs/03_アーキテクチャ/00_全体構成.md', '.agent-skill-chain/templates/specs/03_アーキテクチャ/01_システムコンテキスト.md',
+    '.agent-skill-chain/templates/specs/03_アーキテクチャ/02_配置・依存.md', '.agent-skill-chain/templates/specs/04_機能/01_個別機能テンプレート.md',
+    '.agent-skill-chain/templates/specs/04_機能/02_状態遷移.md', '.agent-skill-chain/templates/specs/05_画面/01_画面遷移.md',
+    '.agent-skill-chain/templates/specs/06_外部インターフェース/02_個別APIテンプレート.md', '.agent-skill-chain/templates/specs/07_データ/03_ライフサイクル.md',
+    '.agent-skill-chain/templates/specs/08_バッチ・ジョブ/01_個別ジョブテンプレート.md', '.agent-skill-chain/templates/specs/09_基盤・ネットワーク/01_論理ネットワーク.md',
+    '.agent-skill-chain/templates/specs/09_基盤・ネットワーク/02_物理・配備構成.md', '.agent-skill-chain/templates/specs/09_基盤・ネットワーク/03_データフロー.md',
+  ];
+});
+When('repository固有IDと固定表示labelを検査する', function () {
+  this.packageBoundaryOffenders = this.packageRuntime.filter((/** @type {string} */ file) => fs.readFileSync(file, 'utf8').includes('ASC-DOGFOOD-'));
+  const fixedLabels = /\b(?:Actor|Application|Domain|Adapter|External|Client|Service|Store|Pending|Completed|Denied|ScreenA|ScreenB|SafeResult|Caller|Dependency|Create|Validate|Use|Archive|Delete|Trigger|Guard|Process|Verify|Finish|RegionA|ZoneA|ZoneB|ServiceA|ServiceB|Source|Validation|Processing|Destination)\b/u;
+  this.templateBoundaryOffenders = this.auditedMermaidTemplates.filter((/** @type {string} */ file) => fixedLabels.test(fs.readFileSync(file, 'utf8').split('```mermaid')[1]?.split('```')[0] ?? ''));
+});
+Then('汎用packageの所有境界違反は0件である', function () { assert.deepEqual(this.packageBoundaryOffenders, []); assert.deepEqual(this.templateBoundaryOffenders, []); });
+
+Given('review templateとPR事前確認を読む', function () { this.reviewTemplate = fs.readFileSync('.agent-skill-chain/templates/issue/04_レビュー.md', 'utf8'); this.prChecklist = fs.readFileSync('.agent-skill-chain/templates/issue/11_プルリクエスト事前確認.md', 'utf8'); });
+When('全変更file監査契約を検査する', function () { this.fileAuditContract = `${this.reviewTemplate}\n${this.prChecklist}`; });
+Then('1ファイル1行と差分path集合完全一致が必須である', function () { for (const fragment of ['1ファイル1行', 'path集合', '完全一致', 'owner', 'target layer', '依存方向', '個別判定']) assert.ok(this.fileAuditContract.includes(fragment), fragment); });
+
+Given('H_implの全変更pathと一致する個別監査artifactがある', function () {
+  this.root = this.initRepo();
+  this.auditBase = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: this.root, encoding: 'utf8' }).stdout.trim();
+  fs.mkdirSync(path.join(this.root, 'src')); fs.writeFileSync(path.join(this.root, 'src', 'x.js'), 'export const x = 1;\n');
+  spawnSync('git', ['add', 'src/x.js'], { cwd: this.root }); spawnSync('git', ['commit', '-q', '-m', 'implementation'], { cwd: this.root });
+  this.auditImplementation = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: this.root, encoding: 'utf8' }).stdout.trim();
+  fs.mkdirSync(path.join(this.root, 'docs', 'reviews'), { recursive: true });
+  this.auditFile = path.join(this.root, 'docs', 'reviews', '01_課題834実装レビュー.md');
+  this.auditMarkdown = `# review\n\n| 項目 | 観測値 |\n|---|---|\n| 比較基点 | \`${this.auditBase}\` |\n| H_impl | \`${this.auditImplementation}\` |\n\n## 変更ファイル個別監査\n\n| path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |\n|---|---|---|---|---|---|---|---|---|\n| \`src/x.js\` | A | package owner | package | 単一責務 | 非循環 | SCN-X-001 | 削除でrollback | pass |\n`;
+  fs.writeFileSync(this.auditFile, this.auditMarkdown); spawnSync('git', ['add', 'docs/reviews/01_課題834実装レビュー.md'], { cwd: this.root }); spawnSync('git', ['commit', '-q', '-m', 'review evidence'], { cwd: this.root });
+});
+When('個別監査gateを正規表と余分なpathで検証する', function () {
+  this.validAudit = checkFileAudit(this.root);
+  fs.writeFileSync(this.auditFile, `${this.auditMarkdown}| \`extra.js\` | A | package owner | package | 単一責務 | 非循環 | SCN-X-002 | 削除でrollback | pass |\n`);
+  this.invalidAudit = checkFileAudit(this.root);
+});
+Then('正規表だけが合格し余分なpathは拒否される', function () { assert.equal(this.validAudit.valid, true, this.validAudit.errors.join('; ')); assert.equal(this.invalidAudit.valid, false); assert.match(this.invalidAudit.errors.join(' '), /path集合/u); });
+
+Given('repositoryの全feature fileとCucumber実行結果がある', function () { this.traceRoot = process.cwd(); this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = ['.test.js']; });
+When('Gherkin traceを検証する', function () { this.result = validateScenarioTrace(collectProjectTrace(this.traceRoot, this.testLayers, this.forbiddenFileSuffixes), { layers: this.testLayers }); });
 Then('全scenarioに一意なSCN IDとGiven、When、Thenがある', function () { assert.equal(this.result.errors.filter((/** @type {string} */ error) => /duplicate|missing/.test(error)).length, 0); });
 Then('unit、integration、E2Eの各layerにscenarioがある', function () { for (const layer of ['unit', 'integration', 'e2e']) assert.ok(this.result.layerCounts[layer] > 0); });
 Then('JavaScriptのNode test起票は0件である', function () { assert.deepEqual(this.result.nodeTests, []); });
 Given('Whenが欠けたGherkin scenarioがある', function () { this.gherkin = 'Feature: 日本語機能\nScenario: SCN-X-001 日本語scenario\n Given 日本語前提\n Then 日本語結果\n'; });
-When('Gherkin構造を解析する', function () { this.parsed = parseGherkinScenarios(this.gherkin); });
-Then('When不足を検出する', function () { assert.equal(this.parsed[0].keywords.has('When'), false); });
+When('Gherkin構造を解析する', function () { this.parsed = parseProjectGherkin(this.gherkin); });
+Then('When不足を検出する', function () { assert.equal(this.parsed[0].steps.includes('when'), false); });
 Given('同じSCN IDを持つ2つのGherkin scenarioがある', function () {
-  const root = this.temp(); this.featuresRoot = path.join(root, 'features');
+  const root = this.temp(); this.traceRoot = root; this.featuresRoot = path.join(root, 'test', 'features'); this.testLayers = ['unit', 'integration', 'e2e']; this.forbiddenFileSuffixes = [];
   for (const layer of ['unit', 'integration', 'e2e']) fs.mkdirSync(path.join(this.featuresRoot, layer), { recursive: true });
   fs.writeFileSync(path.join(this.featuresRoot, 'unit', 'x.feature'), 'Feature: 日本語機能\nScenario: SCN-X-001 日本語一\n Given 日本語前提\n When 日本語操作\n Then 日本語結果\nScenario: SCN-X-001 日本語二\n Given 日本語前提\n When 日本語操作\n Then 日本語結果\n');
   fs.writeFileSync(path.join(this.featuresRoot, 'integration', 'x.feature'), 'Feature: 日本語結合\nScenario: SCN-X-002 日本語結合\n Given 日本語前提\n When 日本語操作\n Then 日本語結果\n');
   fs.writeFileSync(path.join(this.featuresRoot, 'e2e', 'x.feature'), 'Feature: 日本語E2E\nScenario: SCN-X-003 日本語E2E\n Given 日本語前提\n When 日本語操作\n Then 日本語結果\n');
 });
 Then('重複errorを検出する', function () { assert.ok(this.result.errors.some((/** @type {string} */ error) => error.includes('重複'))); });
-Given('projectがcomponentとjourneyのtest layerを選択する', function () { const root = this.temp(); this.featuresRoot = path.join(root, 'features'); this.testLayers = ['component', 'journey']; for (const layer of this.testLayers) { fs.mkdirSync(path.join(this.featuresRoot, layer), { recursive: true }); fs.writeFileSync(path.join(this.featuresRoot, layer, `${layer}.feature`), `Feature: configured layer\nScenario: SCN-${layer.toUpperCase()}-001 configured scenario\n Given configured precondition\n When configured action\n Then configured result\n`); } });
-When('configured layerでGherkin traceを検証する', function () { this.result = validateScenarioTrace(this.featuresRoot, { layers: this.testLayers }); });
+Given('projectがcomponentとjourneyのtest layerを選択する', function () { const root = this.temp(); this.traceRoot = root; this.featuresRoot = path.join(root, 'test', 'features'); this.testLayers = ['component', 'journey']; for (const layer of this.testLayers) { fs.mkdirSync(path.join(this.featuresRoot, layer), { recursive: true }); fs.writeFileSync(path.join(this.featuresRoot, layer, `${layer}.feature`), `Feature: configured layer\nScenario: SCN-${layer.toUpperCase()}-001 configured scenario\n Given configured precondition\n When configured action\n Then configured result\n`); } });
+When('configured layerでGherkin traceを検証する', function () { this.result = validateScenarioTrace(collectProjectTrace(this.traceRoot, this.testLayers, []), { layers: this.testLayers }); });
 Then('generic traceはfixed 3 layerを要求しない', function () { assert.equal(this.result.valid, true, this.result.errors.join('; ')); assert.deepEqual(Object.keys(this.result.layerCounts), this.testLayers); assert.equal(JSON.stringify(this.result).includes('unit'), false); assert.equal(JSON.stringify(this.result).includes('integration'), false); assert.equal(JSON.stringify(this.result).includes('e2e'), false); });
 Given('testLayersを持たないlegacy project policyとGherkinがある', function () {
   this.root = this.temp();
   fs.mkdirSync(path.join(this.root, '.agent-skill-chain'), { recursive: true });
   fs.writeFileSync(path.join(this.root, '.agent-skill-chain/project-policy.json'), `${JSON.stringify({ schemaVersion: 'agent-skill-chain/project-policy/v0.3', delivery: { stopAt: 'pull_request' }, merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 } })}\n`);
-  this.featuresRoot = path.join(this.root, 'features'); fs.mkdirSync(this.featuresRoot);
-  fs.writeFileSync(path.join(this.featuresRoot, 'legacy.feature'), 'Feature: legacy\nScenario: SCN-LEGACY-001 legacy\n Given precondition\n When action\n Then result\n');
+  this.traceEvidence = path.join(this.root, 'trace.json');
+  fs.writeFileSync(this.traceEvidence, `${JSON.stringify({ adapter: 'test', scenarios: [{ id: 'SCN-LEGACY-001', title: 'legacy', source: 'legacy.feature', layer: 'legacy', steps: ['given', 'when', 'then'] }], forbiddenFiles: [] })}\n`);
 });
 When('trace CLIでlegacy policyを検証する', async function () {
   let stdout = '';
   const originalWrite = process.stdout.write;
   process.stdout.write = (chunk) => { stdout += String(chunk); return true; };
-  try { this.status = await main(['trace', 'validate', `--root=${this.root}`, `--features-root=${this.featuresRoot}`]); } catch (error) { this.error = error; } finally { process.stdout.write = originalWrite; }
+  try { this.status = await main(['trace', 'validate', `--root=${this.root}`, `--evidence=${this.traceEvidence}`]); } catch (error) { this.error = error; } finally { process.stdout.write = originalWrite; }
   this.stdout = stdout;
 });
 Then('project choice不足をstructured invalidとして返す', function () { assert.equal(this.error, undefined); assert.equal(this.status, 1); assert.match(this.stdout, /project policy/u); });
@@ -262,11 +305,7 @@ Given('{word}を持つdependency graphがある', function (variant) {
 When('dependency graphを検証する', function () { this.result = traceDomain.validateDependencyGraph(this.graph.nodes, this.graph.edges); });
 Then('dependency graphはcycle diagnostic付きでinvalidである', function () { assert.equal(this.result.valid, false); assert.match(this.result.errors.join(' '), /cycle|self-loop|unknown/u); });
 Given('repository sourceのimport graphと循環反例がある', function () {
-  const nodes = runtimeFiles(); const known = new Set(nodes.map((file) => path.resolve(file)));
-  const edges = nodes.flatMap((file) => [...fs.readFileSync(file, 'utf8').matchAll(/from\s+['"](\.\.?\/[^'"]+)['"]/gu)].map((match) => {
-    const resolved = path.resolve(path.dirname(file), match[1].endsWith('.js') ? match[1] : `${match[1]}.js`);
-    return known.has(resolved) ? { from: file, to: path.relative(process.cwd(), resolved) } : undefined;
-  }).filter(Boolean));
+  const { nodes, edges } = collectJavaScriptDependencyGraph(process.cwd());
   this.sourceGraph = { nodes, edges }; this.cyclicGraph = { nodes, edges: [...edges, { from: nodes[0], to: nodes[0] }] };
 });
 When('project hookのdependency graphを検証する', function () { this.sourceResult = traceDomain.validateDependencyGraph(this.sourceGraph.nodes, this.sourceGraph.edges); this.cyclicResult = traceDomain.validateDependencyGraph(this.cyclicGraph.nodes, this.cyclicGraph.edges); });

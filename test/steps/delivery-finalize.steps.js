@@ -148,19 +148,31 @@ Given('trusted policyはdisabledでcandidate policyはautomaticである', funct
   this.mergeInput = { trustedPolicy: { merge: { mode: 'disabled' } }, candidatePolicy: { merge: { mode: 'automatic', methods: ['squash'] } }, method: 'squash', checks: [], reviews: 0, branch: 'feature/a', humanApproval: false };
 });
 Given('trusted policyがautomaticでcheck {string}とreview 1件を要求する', function (check) {
-  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [check], requiredReviews: 1 } }, method: 'squash', checks: [], reviews: 0, branch: 'feature/a', humanApproval: false };
+  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [check], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [], headSha: 'a'.repeat(40), prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
 });
-Given('branch、method、check、reviewがすべて条件を満たす', function () { this.mergeInput.checks = ['ci']; this.mergeInput.reviews = 1; });
+Given('branch、method、check、reviewがすべて条件を満たす', function () { this.mergeInput.checks = ['ci']; this.mergeInput.approvals = [{ state: 'APPROVED', commitSha: this.mergeInput.headSha, actorId: 'independent-reviewer' }]; });
 Given('trusted policyがassistedである', function () { this.trustedPolicy = { merge: { mode: 'assisted', branches: ['feature/*'], methods: ['merge'], requiredChecks: [], requiredReviews: 0 } }; });
-Given('trusted automatic policyがrequired check {string}を持つ', function (check) { this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['*'], methods: ['squash'], requiredChecks: [check], requiredReviews: 0 } }, method: 'squash', checks: undefined, reviews: 0, branch: 'x', humanApproval: false }; });
+Given('trusted automatic policyがrequired check {string}を持つ', function (check) { this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['*'], methods: ['squash'], requiredChecks: [check], requiredReviews: 0 } }, method: 'squash', checks: undefined, approvals: [], headSha: 'a'.repeat(40), branch: 'x', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true }; });
 When('candidate branchのmerge authorizationを評価する', function () { this.result = authorizeMerge(this.mergeInput); });
 When('merge authorizationを評価する', function () { this.result = authorizeMerge(this.mergeInput); });
 When('human approvalなしとありでmerge authorizationを評価する', function () {
-  const base = { trustedPolicy: this.trustedPolicy, method: 'merge', checks: [], reviews: 0, branch: 'feature/a' };
-  this.withoutApproval = authorizeMerge({ ...base, humanApproval: false });
-  this.withApproval = authorizeMerge({ ...base, humanApproval: true });
+  const headSha = 'a'.repeat(40);
+  const base = { trustedPolicy: this.trustedPolicy, method: 'merge', checks: [], approvals: [], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
+  this.withoutApproval = authorizeMerge(base);
+  this.withApproval = authorizeMerge({ ...base, approvals: [{ state: 'APPROVED', commitSha: headSha, actorId: 'independent-reviewer' }] });
 });
 When('check state unknownでmerge authorizationを評価する', function () { this.result = authorizeMerge(this.mergeInput); });
+Given('reviewが旧HEADまたは実装者自身による承認である', function () {
+  const headSha = 'a'.repeat(40);
+  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [{ state: 'APPROVED', commitSha: 'b'.repeat(40), actorId: 'reviewer' }, { state: 'APPROVED', commitSha: headSha, actorId: 'implementer' }], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
+});
+Given('repository、SHA、保護設定のtrusted観測が欠けている', function () {
+  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 0 } }, method: 'squash', checks: [], approvals: [], headSha: 'a'.repeat(40), branch: 'feature/a' };
+});
+Given('同一reviewerが承認後に変更要求へ更新している', function () {
+  const headSha = 'a'.repeat(40);
+  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [{ state: 'APPROVED', commitSha: headSha, actorId: 'reviewer' }, { state: 'CHANGES_REQUESTED', commitSha: headSha, actorId: 'reviewer' }], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
+});
 Then('mergeは許可されない', function () { assert.equal(this.result.allowed, false); });
 Then('mergeは許可される', function () { assert.equal(this.result.allowed, true); });
 Then('許可operationは{string}だけである', function (operation) { assert.deepEqual(this.result.operations, [operation]); });

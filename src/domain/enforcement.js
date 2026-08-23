@@ -7,6 +7,7 @@ export const DENY_RISK_CLASSES = ['secret', 'path', 'authority', 'irreversible',
 export const METRIC_KINDS = ['gateWaitMs', 'duplicate', 'falseBlock', 'override', 'rollback', 'miss'];
 
 const RULE_FIELDS = ['ruleId', 'purpose', 'riskClass', 'scope', 'enforcement', 'activation', 'owner', 'targetLayer', 'evidence', 'remediation', 'overridePolicy', 'rollback'];
+const RULE_MEANING_FIELDS = RULE_FIELDS.filter((field) => field !== 'activation');
 /** @type {Record<string, number>} */
 const STRENGTH = { deny: 5, require: 4, assist: 3, warn: 2, record: 1 };
 /** @type {Record<string, number>} */
@@ -70,7 +71,7 @@ export function validateRule(rule) {
     for (const field of RULE_FIELDS) if (rule[field] === undefined) errors.push(`${field}が必要です`);
     for (const field of Object.keys(rule)) if (!RULE_FIELDS.includes(field)) errors.push(`${field}は未知fieldです`);
     for (const field of ['ruleId', 'purpose', 'riskClass', 'owner', 'evidence', 'remediation', 'rollback']) if (!nonEmpty(rule[field])) errors.push(`${field}は安全な空でない文字列でなければなりません`);
-    if (!['package', 'project', 'spec'].includes(rule.targetLayer)) errors.push('targetLayerはpackage、project、specのいずれかでなければなりません');
+    if (!['package', 'project', 'spec', 'evidence'].includes(rule.targetLayer)) errors.push('targetLayerはpackage、project、spec、evidenceのいずれかでなければなりません');
     if (!/^ASC-[A-Z0-9-]+$/.test(rule.ruleId ?? '')) errors.push('ruleIdはASC-で始まる安定IDでなければなりません');
     if (!Array.isArray(rule.scope) || rule.scope.length === 0 || rule.scope.some((/** @type {unknown} */ item) => !nonEmpty(item))) errors.push('scopeは空でない安全な文字列配列でなければなりません');
     else if (new Set(rule.scope).size !== rule.scope.length) errors.push('scopeに重複があります');
@@ -158,7 +159,9 @@ export function compareTrustedPolicy(trusted, candidate) {
       if ((ACTIVATION_STRENGTH[next.activation] ?? 0) < (ACTIVATION_STRENGTH[trustedRule.activation] ?? 99)) reasons.push(`${trustedRule.activation}から${next.activation}へactivationを弱化している`);
       if (trustedRule.overridePolicy === 'never' && next.overridePolicy !== 'never') reasons.push('non-override条件を緩和している');
       if (trustedRule.scope.some((/** @type {string} */ item) => !next.scope.includes(item))) reasons.push('trusted ruleのscope包含を狭めている');
-      const meaning = (/** @type {any} */ rule) => evidenceFingerprint(Object.fromEntries(RULE_FIELDS.map((field) => [field, rule[field]])));
+      // activationだけはdisabled -> staged -> activeの単調な昇格を許す。
+      // scope、enforcement、owner等の意味変更は別IDのstaged ruleとして再導入する。
+      const meaning = (/** @type {any} */ rule) => evidenceFingerprint(Object.fromEntries(RULE_MEANING_FIELDS.map((field) => [field, rule[field]])));
       if (meaning(trustedRule) !== meaning(next)) reasons.push('rule意味fingerprintを変更している');
     }
     if (reasons.length) rejected.push(diagnostic('ASC-TRUST-001', '候補変更による自己承認を防止する', 'authority', reasons, trustedRule.scope, ['trusted default policyとcandidate policyを比較した'], [], 'trusted条件を維持し、独立reviewと既定ブランチへの正規migrationを行ってください', 'default branch policy owner', 'candidateの緩和差分を取り消す'));
@@ -166,7 +169,7 @@ export function compareTrustedPolicy(trusted, candidate) {
   for (const [ruleId, rule] of candidateRules) {
     if (trustedRules.has(ruleId)) continue;
     if (rule.activation === 'staged') stagedAdditions.push(ruleId);
-    else rejected.push(diagnostic('ASC-MIGRATION-001', '新規ruleを段階適用して影響を確認する', rule.riskClass, ['新規ruleがstagedではありません'], rule.scope, ['trusted policyに同じrule IDがないことを確認した'], [{ description: '新規ruleをstagedへ変更する', dryRunDiff: `activation: ${rule.activation} -> staged` }], 'stagedでdogfoodし誤blockと検出漏れを確認してからactiveへ移行してください', rule.owner, `candidateから${ruleId}を除去する`));
+    else rejected.push(diagnostic('ASC-MIGRATION-001', '新規ruleを段階適用して影響を確認する', rule.riskClass, ['新規ruleがstagedではありません'], rule.scope, ['trusted policyに同じrule IDがないことを確認した'], [{ description: '新規ruleをstagedへ変更する', dryRunDiff: `activation: ${rule.activation} -> staged` }], 'staged運用で誤blockと検出漏れを確認してからactiveへ移行してください', rule.owner, `candidateから${ruleId}を除去する`));
   }
   if (trusted?.projectChoices && evidenceFingerprint(trusted.projectChoices) !== evidenceFingerprint(candidate?.projectChoices)) {
     rejected.push(diagnostic('ASC-TRUST-001', 'authorityを含むproject choiceの自己変更を防止する', 'authority', ['projectChoicesのrelease、model mapping、CIまたは開発契約を変更している'], ['projectChoices'], ['trustedとcandidateのprojectChoices fingerprintを比較した'], [], '新しいstaged migrationと独立reviewを作成してください', 'default branch policy owner', 'trusted projectChoicesを復元する'));
@@ -245,6 +248,7 @@ export function resolveEffectivePolicy(floor, project, options = {}) {
   if (!project) return { valid: true, policy: structuredClone(floor), source: 'package-default-floor' };
   const floorRules = new Map((floor.rules ?? []).map((/** @type {any} */ rule) => [rule.ruleId, rule]));
   const additions = [];
+  const replacements = new Map();
   const rejected = [];
   for (const rule of project.rules ?? []) {
     if (!floorRules.has(rule.ruleId)) {
@@ -253,10 +257,12 @@ export function resolveEffectivePolicy(floor, project, options = {}) {
     } else {
       const comparison = compareTrustedPolicy({ ...floor, rules: [floorRules.get(rule.ruleId)] }, { ...floor, rules: [rule] });
       rejected.push(...comparison.rejected.flatMap((item) => item.reasons));
+      if (comparison.allowed) replacements.set(rule.ruleId, rule);
     }
   }
   if (rejected.length) return { valid: false, policy: structuredClone(floor), diagnostic: diagnostic('ASC-EFFECTIVE-001', 'package安全floorをproject設定で弱化させない', 'authority', rejected, ['project-policy'], ['package defaultとproject extensionを比較した'], [], 'project固有ruleを新しいIDのstaged ruleとして追加してください', 'project policy owner', 'package default floorだけへ戻す') };
-  return { valid: true, source: 'package-floor+trusted-project-extension', policy: { ...structuredClone(floor), delivery: options.trusted ? project.delivery ?? floor.delivery : floor.delivery, merge: options.trusted ? project.merge ?? floor.merge : floor.merge, budgets: project.budgets ?? floor.budgets, projectChoices: project.projectChoices, rules: [...floor.rules, ...additions] } };
+  const effectiveRules = (floor.rules ?? []).map((/** @type {any} */ rule) => replacements.get(rule.ruleId) ?? rule);
+  return { valid: true, source: 'package-floor+trusted-project-extension', policy: { ...structuredClone(floor), delivery: options.trusted ? project.delivery ?? floor.delivery : floor.delivery, merge: options.trusted ? project.merge ?? floor.merge : floor.merge, budgets: project.budgets ?? floor.budgets, projectChoices: project.projectChoices, rules: [...effectiveRules, ...additions] } };
 }
 
 /** @param {{policy: any, ruleId: string, boundary: string, violated: boolean, reasons?: string[], checks?: string[], override?: any, expectedOverride?: any, online?: boolean, requiresExternal?: boolean, validation?: any, events?: any[]}} input */
@@ -286,7 +292,11 @@ export function enforceTrustedBoundary(input) {
   if (!validation.valid) return { allowed: false, boundary: input.boundary, diagnostic: validation.diagnostics[0] ?? diagnostic('ASC-POLICY-INVALID', 'trusted policyをoperation前に検証する', 'authority', validation.errors, [input.boundary], ['trusted policy全ruleを検証した'], [], 'trusted policyを修正してからoperationを再実行してください', 'project policy owner', 'operationを実行しない') };
   const applicable = (input.policy?.rules ?? []).filter((/** @type {any} */ rule) => rule.scope.includes(input.boundary));
   const results = applicable.map((/** @type {any} */ rule) => {
-    const observed = input.observations.find((item) => item.ruleId === rule.ruleId || item.riskClass === rule.riskClass) ?? { violated: false, reasons: ['actual stateに境界違反はない'], checks: ['operation adapterが実状態から導出した'] };
+    const observed = input.observations.find((item) => item.ruleId === rule.ruleId || item.riskClass === rule.riskClass) ?? {
+      violated: true,
+      reasons: [`${rule.ruleId}に必要なactual observationがありません`],
+      checks: ['operation adapterの観測完全性を確認した'],
+    };
     return evaluateRule(rule, observed);
   });
   const blocked = results.find((/** @type {any} */ result) => result.blocked === true || result.allowed !== true);
@@ -395,16 +405,16 @@ export function validatePackageManifest(files, allowed, contents = {}) {
   return { valid: reasons.length === 0, reasons, diagnostic: reasons.length ? diagnostic('ASC-ARTIFACT-001', '配布成果物の汚染を防止する', 'artifact', reasons, ['artifact_distribution'], ['実pack内容とmanifest allowlistを比較した'], [], '環境fileとallowlist外assetを除外して再構築してください', 'artifact owner', '汚染成果物を公開しない') : undefined };
 }
 
-/** @param {Array<{path: string, owner: string, targetLayer: 'package'|'project'|'spec', evidence?: string}>} assets @param {'local'|'pr'|'package'} stage */
+/** @param {Array<{path: string, owner: string, targetLayer: 'package'|'project'|'spec'|'evidence', evidence?: string}>} assets @param {'local'|'pr'|'package'} stage */
 export function validateOwnershipBoundary(assets, stage) {
   /** @param {string} file */
-  const expectedLayer = (file) => file === '.agent-skill-chain/project-policy.json' || ['.agent-skill-chain/project/', '.agent-skill-chain/tmp/', '.agent-skill-chain/role-log/', '.agent-skill-chain/metrics/'].some((prefix) => file.startsWith(prefix)) ? 'project' : file.startsWith('docs/specs/') || file.startsWith('test/') ? 'spec' : 'package';
+  const expectedLayer = (file) => file === '.agent-skill-chain/project-policy.json' || ['.agent-skill-chain/project/', '.agent-skill-chain/tmp/', '.agent-skill-chain/role-log/', '.agent-skill-chain/metrics/'].some((prefix) => file.startsWith(prefix)) ? 'project' : file.startsWith('docs/specs/') ? 'spec' : file.startsWith('test/') || file.startsWith('docs/reviews/') || file.startsWith('.agent-skill-chain/reviews/') ? 'evidence' : 'package';
   const findings = [];
   for (const asset of assets) {
     const expected = expectedLayer(asset.path);
     if (asset.targetLayer !== expected) findings.push({ path: asset.path, reason: `分類${asset.targetLayer}と配置${expected}が一致しません`, moveTo: expected === 'project' ? '.agent-skill-chain/project-policy.json' : expected === 'spec' ? 'docs/specs/' : '.agent-skill-chain/' });
     if (stage === 'pr' && (!nonEmpty(asset.owner) || !nonEmpty(asset.evidence))) findings.push({ path: asset.path, reason: 'PR分類にはownerとevidenceが必要です', moveTo: asset.path });
-    if (stage === 'package' && asset.targetLayer !== 'package') findings.push({ path: asset.path, reason: 'project/spec assetが実配布物へ混入しています', moveTo: '配布manifest外' });
+    if (stage === 'package' && asset.targetLayer !== 'package') findings.push({ path: asset.path, reason: 'project/spec/evidence assetが実配布物へ混入しています', moveTo: '配布manifest外' });
   }
   const enforcement = stage === 'local' ? 'assist' : stage === 'pr' ? 'require' : 'deny';
   const blocked = findings.length > 0 && stage !== 'local';

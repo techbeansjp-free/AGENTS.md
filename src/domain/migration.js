@@ -165,7 +165,7 @@ function verify(state, trusted, candidate, revision, expectedFileHash, approvedP
 }
 
 /** @param {any} state @param {any} trusted @param {any} candidate */
-/** @param {any} state @param {any} trusted @param {any} candidate @param {{approvedPlanHash?: string, expectedRevision?: number, persist?: (value: any) => void, interruptAfterStep?: number}} [options] */
+/** @param {any} state @param {any} trusted @param {any} candidate @param {{approvedPlanHash?: string, expectedRevision?: number, persist?: (value: any) => void, interruptAfterStep?: number, write?: (file: string, contents: string) => void}} [options] */
 export function applyFileMigration(state, trusted, candidate, options = {}) {
   const authority = requireExternalAuthority(state, options, 0);
   if (!authority.allowed) return authority;
@@ -182,9 +182,10 @@ export function applyFileMigration(state, trusted, candidate, options = {}) {
       if (hash(current) !== artifact.beforeHash) throw new Error(`${artifact.path}がwrite直前に変化しました`);
       journal = { ...journal, transaction: { phase: 'writing', nextStep: index, path: artifact.path } };
       options.persist?.(journal);
-      writeFileAtomic(file, artifact.after);
-      if (hash(fs.readFileSync(file, 'utf8')) !== artifact.afterHash) throw new Error(`${artifact.path}のread-after-write検証に失敗しました`);
+      // write後の検証失敗でも現在artifactを必ずbeforeへ戻せるよう、write前にrollback対象へ登録する。
       written.push(artifact);
+      (options.write ?? writeFileAtomic)(file, artifact.after);
+      if (hash(fs.readFileSync(file, 'utf8')) !== artifact.afterHash) throw new Error(`${artifact.path}のread-after-write検証に失敗しました`);
       journal = { ...journal, transaction: { phase: 'applying', nextStep: index + 1 } };
       options.persist?.(journal);
       if (options.interruptAfterStep === index) throw Object.assign(new Error('模擬crash'), { simulatedCrash: true });

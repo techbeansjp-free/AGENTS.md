@@ -8,7 +8,7 @@ import { createPullRequest, authorizeMerge } from './domain/delivery.js';
 import { createWorktree, inspectFinalizeState } from './domain/worktree.js';
 import { buildFinalizeReport, applyFinalize } from './domain/finalize.js';
 import { init, upgrade, uninstall, doctor } from './domain/lifecycle.js';
-import { loadEffectiveTrustedPolicySet, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, validatePolicy } from './domain/policy.js';
+import { loadConsumerPolicyAtCommit, loadEffectiveTrustedPolicySet, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, validatePolicy } from './domain/policy.js';
 import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic } from './domain/enforcement.js';
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration } from './domain/migration.js';
 import { validateScenarioTrace } from './domain/trace.js';
@@ -180,7 +180,7 @@ export async function main(argv) {
     const { flags } = parse(rest);
     const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
     const choices = loadProjectPolicySet(root).policy.projectChoices;
-    const result = validateScenarioTrace(required(flags, 'features-root'), { layers: choices?.testLayers, forbiddenFileSuffixes: typeof flags['forbidden-test-suffixes'] === 'string' ? flags['forbidden-test-suffixes'].split(',').filter(Boolean) : [] });
+    const result = validateScenarioTrace(readJson(path.resolve(required(flags, 'evidence'))), { layers: choices?.testLayers });
     print(result);
     return result.valid ? 0 : 1;
   }
@@ -360,9 +360,12 @@ export async function main(argv) {
     const apply = applyMode(flags);
     const evidence = readJson(path.resolve(required(flags, 'evidence')));
     const root = path.resolve(typeof flags.root === 'string' ? flags.root : process.cwd());
+    const headSha = required(flags, 'head-sha');
+    if (!/^[a-f0-9]{40}$/iu.test(headSha)) throw new Error('--head-shaは完全な40桁Git SHAで指定してください');
     const input = {
       apply, authorization: typeof flags.authorize === 'string' ? flags.authorize : undefined, repository: required(flags, 'repo'), issue: Number(required(flags, 'issue')),
-      head: required(flags, 'head'), headSha: required(flags, 'head-sha'), base: required(flags, 'base'), evidence, trustedPolicy: loadOperationPolicy(root).policy,
+      head: required(flags, 'head'), headSha, base: required(flags, 'base'), evidence, trustedPolicy: loadOperationPolicy(root).policy,
+      candidatePolicy: loadConsumerPolicyAtCommit(root, headSha),
     };
     print(createPullRequest(input, (operation, payload) => github(operation, payload, root)));
     return 0;
@@ -381,17 +384,25 @@ export async function main(argv) {
     if (inspected.baseRefName !== base) throw new Error('PRの基点が検証済み既定ブランチではありません');
     if (trustedSet.provenance?.commitSha && inspected.baseRefOid !== trustedSet.provenance.commitSha) throw new Error('PR base SHAがtrusted policy setのcommit SHAと一致しません');
     const protection = github('branch.protection', { repository, branch: base }, root);
-    const checks = (inspected.statusCheckRollup ?? []).filter((/** @type {any} */ item) => ['SUCCESS', 'NEUTRAL', 'SKIPPED'].includes(item.conclusion ?? item.status)).map((/** @type {any} */ item) => item.name ?? item.context).filter(Boolean);
-    const approvals = new Set((inspected.latestReviews ?? []).filter((/** @type {any} */ review) => review.state === 'APPROVED').map((/** @type {any} */ review) => review.author?.login).filter(Boolean)).size;
+    const checks = (inspected.statusCheckRollup ?? []).filter((/** @type {any} */ item) => (item.conclusion ?? item.status) === 'SUCCESS').map((/** @type {any} */ item) => item.name ?? item.context).filter(Boolean);
+    const approvals = github('pr.reviews', { repository, pr }, root);
+    const implementation = github('commit.inspect', { repository, sha: inspected.headRefOid }, root);
+    if (implementation.sha !== inspected.headRefOid) throw new Error('実装commitのtrusted観測がPR HEADと一致しません');
     const authorization = authorizeMerge({
-      trustedPolicy, method, checks, reviews: approvals, branch: inspected.headRefName,
-      humanApproval: flags['human-approved'] === true, repositoryVerified: true,
-      shaVerified: Boolean(inspected.headRefOid && inspected.baseRefOid), protectionVerified: protection.known,
+      trustedPolicy, method, checks, approvals, headSha: inspected.headRefOid, prAuthorActorId: inspected.author?.id,
+      implementationAuthorActorId: implementation.authorActorId, branch: inspected.headRefName, repositoryVerified: true,
+      shaVerified: Boolean(inspected.headRefOid && inspected.baseRefOid), protectionVerified: protection.known && protection.protected,
+      mergeableVerified: inspected.isDraft === false && inspected.mergeStateStatus === 'CLEAN',
     });
     if (!authorization.allowed) throw new Error(`マージを拒否しました: ${authorization.reason}`);
     if (!apply) { print({ state: 'preview', authorization, pr: inspected.url, headSha: inspected.headRefOid, baseSha: inspected.baseRefOid }); return 0; }
     const rechecked = github('pr.inspect', { repository, pr }, root);
-    if (rechecked.headRefOid !== inspected.headRefOid || rechecked.baseRefOid !== inspected.baseRefOid) throw new Error('マージ直前にPR状態が変化しました（TOCTOU）');
+    if (rechecked.headRefOid !== inspected.headRefOid || rechecked.baseRefOid !== inspected.baseRefOid || rechecked.headRefName !== inspected.headRefName || rechecked.baseRefName !== inspected.baseRefName || rechecked.author?.id !== inspected.author?.id) throw new Error('マージ直前にPR状態が変化しました（TOCTOU）');
+    const recheckedProtection = github('branch.protection', { repository, branch: base }, root);
+    const recheckedApprovals = github('pr.reviews', { repository, pr }, root);
+    const recheckedChecks = (rechecked.statusCheckRollup ?? []).filter((/** @type {any} */ item) => (item.conclusion ?? item.status) === 'SUCCESS').map((/** @type {any} */ item) => item.name ?? item.context).filter(Boolean);
+    const reauthorization = authorizeMerge({ trustedPolicy, method, checks: recheckedChecks, approvals: recheckedApprovals, headSha: rechecked.headRefOid, prAuthorActorId: rechecked.author?.id, implementationAuthorActorId: implementation.authorActorId, branch: rechecked.headRefName, repositoryVerified: true, shaVerified: true, protectionVerified: recheckedProtection.known && recheckedProtection.protected, mergeableVerified: rechecked.isDraft === false && rechecked.mergeStateStatus === 'CLEAN' });
+    if (!reauthorization.allowed) throw new Error(`マージ直前の再認可を拒否しました: ${reauthorization.reason}`);
     print(github('pr.merge', { repository, pr, method }, root));
     return 0;
   }

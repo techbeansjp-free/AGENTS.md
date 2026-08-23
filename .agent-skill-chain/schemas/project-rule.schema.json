@@ -12,7 +12,7 @@
     "enforcement": { "enum": ["deny", "require", "assist", "warn", "record"] },
     "activation": { "enum": ["active", "staged", "disabled"] },
     "owner": { "type": "string", "minLength": 1 },
-    "targetLayer": { "enum": ["package", "project", "spec"] },
+    "targetLayer": { "enum": ["package", "project", "spec", "evidence"] },
     "evidence": { "type": "string", "minLength": 1 },
     "remediation": { "type": "string", "minLength": 1 },
     "overridePolicy": { "enum": ["never", "bound"] },

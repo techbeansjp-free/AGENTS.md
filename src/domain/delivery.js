@@ -1,4 +1,4 @@
-import { enforceTrustedBoundary } from './enforcement.js';
+import { compareTrustedPolicy, enforceTrustedBoundary, resolveEffectivePolicy } from './enforcement.js';
 
 /** @param {string} pattern @param {string} value */
 function branchMatches(pattern, value) {
@@ -37,7 +37,7 @@ function validateDeliveryEvidence(evidence, headSha) {
   }
 }
 
-/** @param {{apply: boolean, authorization?: string, evidence: any, headSha: string, issue: number, head: string, base: string, repository: string, trustedPolicy?: any}} input @param {(operation: string, input: any) => any} external */
+/** @param {{apply: boolean, authorization?: string, evidence: any, headSha: string, issue: number, head: string, base: string, repository: string, trustedPolicy?: any, candidatePolicy?: any}} input @param {(operation: string, input: any) => any} external */
 export function createPullRequest(input, external) {
   const [owner, repositoryName, extra] = input.repository.split('/');
   if (extra || !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner ?? '') || !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(repositoryName ?? '') || repositoryName === '.' || repositoryName === '..') throw new Error('リポジトリは正確なowner/name形式で指定してください');
@@ -45,11 +45,20 @@ export function createPullRequest(input, external) {
   if (input.head.startsWith('-') || input.base.startsWith('-') || input.head.includes('..') || input.base.includes('..')) throw new Error('先頭・基点ブランチ名が安全ではありません');
   validateDeliveryEvidence(input.evidence, input.headSha);
   if (input.trustedPolicy) {
+    const effective = resolveEffectivePolicy(input.trustedPolicy, input.candidatePolicy);
+    const comparison = effective.valid ? compareTrustedPolicy(input.trustedPolicy, effective.policy) : { allowed: false, rejected: [effective.diagnostic] };
     const ownership = input.evidence?.ownership;
-    const enforcement = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'pull_request', observations: [{
-      ruleId: 'ASC-DOGFOOD-OWNERSHIP-PR-001', violated: ownership?.classified !== true || typeof ownership?.owner !== 'string' || typeof ownership?.targetLayer !== 'string',
-      reasons: ['PR evidenceにasset分類、owner、targetLayerの実測結果が必要です'], checks: ['HEAD SHAに拘束されたPR evidenceのownership分類を確認した'],
-    }] });
+    const enforcement = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'pull_request', observations: [
+      {
+        riskClass: 'authority', violated: !effective.valid || !comparison.allowed,
+        reasons: effective.valid ? comparison.rejected.flatMap((/** @type {any} */ item) => item?.reasons ?? []) : effective.diagnostic?.reasons ?? ['candidate policyを安全floorへ合成できません'],
+        checks: ['trusted policyと固定candidate policyの自己緩和を比較した'],
+      },
+      {
+        riskClass: 'quality', violated: ownership?.classified !== true || typeof ownership?.owner !== 'string' || typeof ownership?.targetLayer !== 'string',
+        reasons: ['PR evidenceにasset分類、owner、targetLayerの実測結果が必要です'], checks: ['HEAD SHAに拘束されたPR evidenceのownership分類を確認した'],
+      },
+    ] });
     if (!enforcement.allowed) throw new Error(`${enforcement.diagnostic.ruleId}: ${enforcement.diagnostic.reasons.join('; ')}`);
   }
   const preview = { operation: 'pr.create', authorityStatus: 'unverified-preview', repository: input.repository, issue: input.issue, head: input.head, headSha: input.headSha, base: input.base, bodyLink: `Relates to #${input.issue}` };
@@ -59,21 +68,28 @@ export function createPullRequest(input, external) {
   return { state: 'waiting_for_human_review', url: result.url, next: '独立したpr mergeコマンドを使う。暗黙のマージ・完了処理・後片付けは行わない' };
 }
 
-/** @param {{trustedPolicy: any, candidatePolicy?: any, method: string, checks?: string[], reviews: number, branch: string, humanApproval: boolean, repositoryVerified?: boolean, shaVerified?: boolean, protectionVerified?: boolean}} input */
+/** @param {{trustedPolicy: any, candidatePolicy?: any, method: string, checks?: string[], approvals?: Array<{state: string, commitSha: string, actorId: string}>, headSha?: string, prAuthorActorId?: string, implementationAuthorActorId?: string, branch: string, repositoryVerified?: boolean, shaVerified?: boolean, protectionVerified?: boolean, mergeableVerified?: boolean}} input */
 export function authorizeMerge(input) {
   const policy = input.trustedPolicy?.merge;
   /** @param {string} reason */
   const deny = (reason) => ({ allowed: false, reason, operations: [] });
   if (!policy || !['disabled', 'assisted', 'automatic'].includes(policy.mode)) return deny('信頼済みポリシーがないか不正です');
   if (policy.mode === 'disabled') return deny('信頼済みポリシーによりマージは無効です');
-  if (input.repositoryVerified === false || input.shaVerified === false || input.protectionVerified === false) return deny('リポジトリ・SHA・保護設定の検証に失敗しました');
+  if (input.repositoryVerified !== true || input.shaVerified !== true || input.protectionVerified !== true || input.mergeableVerified !== true) return deny('リポジトリ・SHA・保護設定・merge可能状態のtrusted観測が不足または失敗しました');
   if (!Array.isArray(policy.branches) || !policy.branches.some((/** @type {string} */ pattern) => branchMatches(pattern, input.branch))) return deny('先頭ブランチが許可されていません');
   if (!Array.isArray(policy.methods) || !policy.methods.includes(input.method)) return deny('マージ方式が許可されていません');
   if (!Array.isArray(input.checks)) return deny('検査状態が不明です');
   const observedChecks = input.checks;
   const missing = (policy.requiredChecks ?? []).filter((/** @type {string} */ check) => !observedChecks.includes(check));
   if (missing.length > 0) return deny(`必須検査が不足しています: ${missing.join(', ')}`);
-  if (!Number.isInteger(input.reviews) || input.reviews < (policy.requiredReviews ?? 0)) return deny('必須レビューが不足しています');
-  if (policy.mode === 'assisted' && !input.humanApproval) return deny('assistedモードにはPR単位の人間承認が必要です');
+  if (!/^[a-f0-9]{40}$/iu.test(input.headSha ?? '')) return deny('merge対象HEADの固定SHAがありません');
+  if (!Array.isArray(input.approvals)) return deny('reviewのtrusted観測がありません');
+  const needsApproval = (policy.requiredReviews ?? 0) > 0 || policy.mode === 'assisted';
+  if (needsApproval && (typeof input.prAuthorActorId !== 'string' || input.prAuthorActorId === '' || typeof input.implementationAuthorActorId !== 'string' || input.implementationAuthorActorId === '')) return deny('PR authorとimplementation authorのstable ID観測がありません');
+  const latestByActor = new Map();
+  for (const approval of input.approvals) if (typeof approval?.actorId === 'string' && approval.actorId !== '') latestByActor.set(approval.actorId, approval);
+  const independentApprovals = new Set([...latestByActor.values()].filter((approval) => approval.state === 'APPROVED' && approval.commitSha === input.headSha && approval.actorId !== input.prAuthorActorId && approval.actorId !== input.implementationAuthorActorId).map((approval) => approval.actorId));
+  if (independentApprovals.size < (policy.requiredReviews ?? 0)) return deny('同じHEAD SHAに対する独立reviewが不足しています');
+  if (policy.mode === 'assisted' && independentApprovals.size < 1) return deny('assistedモードには同じHEAD SHAに対する独立した人間承認が必要です');
   return { allowed: true, reason: '既定ブランチ上の信頼済みポリシーがマージを許可しています', operations: ['pr.merge'] };
 }

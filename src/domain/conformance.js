@@ -109,17 +109,19 @@ export function validateRepositoryConformance(root, contract, binding, evidence)
   const errors = [...contractResult.errors, ...bindingResult.errors];
   if (!binding || typeof binding !== 'object' || Array.isArray(binding)) return { valid: false, errors };
   const bindings = Array.isArray(binding.bindings) ? binding.bindings : [];
-  const passed = new Set(evidence?.passedScenarioIds ?? []);
+  const passedScenarioIds = Array.isArray(evidence?.passedScenarioIds) ? evidence.passedScenarioIds : [];
+  if (!Array.isArray(evidence?.passedScenarioIds) || evidence.passedScenarioIds.some((/** @type {unknown} */ id) => typeof id !== 'string' || !/^SCN-[A-Z0-9-]+$/u.test(id))) errors.push('成功証拠passedScenarioIdsが不正です');
+  const passed = new Set(passedScenarioIds);
   if (!text(evidence?.tool)) errors.push('成功証拠toolが必要です');
   for (const item of bindings) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) { errors.push('binding itemはobjectでなければなりません'); continue; }
-    for (const relative of item.sourcePaths ?? []) {
+    for (const relative of Array.isArray(item.sourcePaths) ? item.sourcePaths : []) {
       try { const file = resolveContained(root, relative); if (!fs.statSync(file).isFile()) errors.push(`${item.id}のsourceがfileではありません: ${relative}`); } catch { errors.push(`${item.id}のsourceが実在しません: ${relative}`); }
     }
     for (const point of Array.isArray(item.enforcement) ? item.enforcement : []) {
       try { const file = resolveContained(root, point.path); if (!text(point.export) || !hasExport(file, point.export)) errors.push(`${item.id}のenforcement exportが実在しません: ${point.path}#${point.export}`); } catch { errors.push(`${item.id}のenforcement pathが実在しません: ${point.path}`); }
     }
-    for (const scenario of item.counterexampleScenarios ?? []) if (!passed.has(scenario)) errors.push(`${item.id}のcounterexampleに成功証拠がありません: ${scenario}`);
+    for (const scenario of Array.isArray(item.counterexampleScenarios) ? item.counterexampleScenarios : []) if (!passed.has(scenario)) errors.push(`${item.id}のcounterexampleに成功証拠がありません: ${scenario}`);
   }
   return { valid: errors.length === 0, errors, checked: IDS, evidenceTool: evidence?.tool };
 }

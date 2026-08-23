@@ -121,6 +121,21 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When check state unknownでmerge authorizationを評価する
     Then mergeは許可されない
 
+  Scenario: SCN-INT-MERGE-005 旧HEADまたは実装者自身のreviewを承認数へ含めない
+    Given reviewが旧HEADまたは実装者自身による承認である
+    When merge authorizationを評価する
+    Then mergeは許可されない
+
+  Scenario: SCN-INT-MERGE-006 trusted観測が欠けたmerge認可はfail-closedにする
+    Given repository、SHA、保護設定のtrusted観測が欠けている
+    When merge authorizationを評価する
+    Then mergeは許可されない
+
+  Scenario: SCN-INT-MERGE-007 同一reviewerの最新状態が変更要求なら旧承認を数えない
+    Given 同一reviewerが承認後に変更要求へ更新している
+    When merge authorizationを評価する
+    Then mergeは許可されない
+
   Scenario: SCN-INT-FINALIZE-001 safeなdry-run reportはhashを返して何も削除しない
     Given merged、clean、pushed、recoveryありのworktree stateがある
     When finalize reportを作成する

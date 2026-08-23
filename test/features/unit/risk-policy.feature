@@ -160,3 +160,19 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     Given 同じfingerprintだがpassed falseの証拠がある
     When final検証を計画する
     Then final検証はstructured diagnostic付きでblockedになる
+
+  Scenario: SCN-UNIT-RISK-024 staged ruleは意味を変えずactiveへ単調昇格できる
+    Given trusted policyにstaged project ruleがある
+    And candidateは同じruleのactivationだけをactiveへ昇格する
+    When trusted policyとcandidate policyを比較してeffective policyを解決する
+    Then activation昇格は許可されeffective ruleはactiveになる
+
+  Scenario: SCN-UNIT-RISK-025 active denyのactual observation欠落を安全とみなさない
+    Given trusted boundaryにactive deny ruleと空の観測集合がある
+    When trusted boundaryを評価する
+    Then observation欠落をauthority diagnostic付きで拒否する
+
+  Scenario: SCN-UNIT-CONFORMANCE-004 conformanceの全配列型不正を例外でなくstructured invalidにする
+    Given source、counterexample、成功証拠の配列型が不正なconformance入力がある
+    When repository conformanceを直接検証する
+    Then 全配列型不正は例外なしでinvalidになる
