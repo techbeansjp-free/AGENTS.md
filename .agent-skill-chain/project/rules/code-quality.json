@@ -1,0 +1,14 @@
+{
+  "ruleId": "ASC-DOGFOOD-CODE-QUALITY-001",
+  "purpose": "このrepositoryの実装をstrict TypeScriptへ集約し禁止型・未整形・未検証入力を残さない",
+  "riskClass": "quality",
+  "scope": ["src", "bin", "scripts", "test", "CI", "prepack"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "lint、format:check、typecheck、source:check、testの同一gate成功",
+  "remediation": "TypeScriptへ統合し、禁止型を除去し、formatterを明示実行してruntime validatorと反例testを追加する",
+  "overridePolicy": "bound",
+  "rollback": "品質gateを外さず変更単位を縮小して再実装する"
+}

@@ -99,6 +99,19 @@
 
 ## 6. 制約、前提、依存関係
 
+### 6.1 開発考慮事項の適用判定（必須）
+
+| ID | 考慮事項 | 判定 | 理由 | 要求・確認証拠 |
+|---|---|---|---|---|
+| DC-PRIVACY | Privacy/Security by Design | applicable / not-applicable | （範囲を限定した理由） | （FR/NFR/AC・調査証拠） |
+| DC-OBSERVABILITY | Secure Logging・Observability・運用可能性 | applicable / not-applicable | （範囲を限定した理由） | （ログ・保持・rotation・監視・復旧の要求または対象外証拠） |
+| DC-UX | Human-Centered UI/UX・アクセシビリティ | applicable / not-applicable | （範囲を限定した理由） | （利用場面・ACまたは非UI証拠） |
+| DC-TOKENS | Design System・Design/Layout Token | applicable / not-applicable | （範囲を限定した理由） | （UI条件・token仕様または非該当証拠） |
+
+判定はproject policyのcapability選択と整合させる。具体製品やframeworkはここで既定化せず、applicableな項目を要件と`docs/specs/`へ追跡する。
+
+### 6.2 その他の制約
+
 - 依存/authority/evidence graphのnode・edgeと正方向:
 - cycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAを拒否する条件:
 - rollback/retryのrevision、上限、終了条件:

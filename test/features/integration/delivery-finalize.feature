@@ -102,15 +102,21 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     And errorにwrite権限不足が含まれる
     And Issue edit操作は呼ばれない
 
-  Scenario: SCN-INT-GITHUB-008 PR作成中のremote base OID変更をread-after-writeで拒否する
+  Scenario: SCN-INT-GITHUB-008 PR作成中のremote base OID変更は作成済みURL付きrollback要求にする
     Given 作成中にremote base OIDが変更されるgh stubがある
     When PR create adapterを実行する
-    Then PR create adapterは失敗する
+    Then PR create adapterはrollback要求を返す
+    And 作成済みPRのURLを失わない
 
   Scenario: SCN-INT-GITHUB-009 reviewを全page取得し時刻とstable IDを保持する
     Given 複数pageのreviewを返すexact repositoryのgh stubがある
     When PR reviews adapterを実行する
     Then 全pageのreviewと順序根拠を取得できる
+
+  Scenario: SCN-INT-GITHUB-010 commit観測はfull OIDと一致する応答だけを受理する
+    Given commit OID検証用のgh stubがある
+    When 短縮OIDと応答不一致と完全一致をcommit inspectへ渡す
+    Then 完全一致だけがcommit観測に成功する
 
   Scenario: SCN-INT-MERGE-001 candidate PR自身のautomatic policyで自己承認できない
     Given trusted policyはdisabledでcandidate policyはautomaticである

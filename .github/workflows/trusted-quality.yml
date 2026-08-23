@@ -1,0 +1,37 @@
+name: trusted project品質契約
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# base commitのvalidatorだけでcandidateの固定設定fileを読む。candidate code、script、依存は実行しない。
+permissions:
+  contents: read
+
+jobs:
+  trusted-project-quality:
+    name: base validatorで品質自己緩和を拒否
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: trusted baseを取得する
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: trusted validatorの依存だけを固定導入する
+        working-directory: trusted
+        run: npm ci --ignore-scripts
+      - name: candidateを実行せず固定fileとして取得する
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      - name: base validatorでcandidate品質設定を検証する
+        working-directory: trusted
+        run: node --import tsx scripts/check_project_quality.ts "--root=$GITHUB_WORKSPACE/candidate" "--trusted-root=$GITHUB_WORKSPACE/trusted"
+      - name: base source validatorでcandidate全体を検証する
+        working-directory: trusted
+        run: node --import tsx scripts/check_source_quality.ts "--root=$GITHUB_WORKSPACE/candidate"

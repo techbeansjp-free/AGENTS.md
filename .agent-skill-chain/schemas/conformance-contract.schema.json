@@ -7,31 +7,136 @@
   "properties": {
     "schemaVersion": { "const": "agent-skill-chain/conformance/v1" },
     "invariants": {
-      "type": "array", "minItems": 12, "maxItems": 12,
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
       "allOf": [
-        { "contains": { "properties": { "id": { "const": "I1" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I2" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I3" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I4" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I5" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I6" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I7" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I8" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I9" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I10" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I11" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 },
-        { "contains": { "properties": { "id": { "const": "I12" } }, "required": ["id"] }, "minContains": 1, "maxContains": 1 }
+        {
+          "contains": {
+            "properties": { "id": { "const": "I1" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I2" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I3" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I4" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I5" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I6" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I7" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I8" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I9" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I10" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I11" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": { "id": { "const": "I12" } },
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
       ],
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["id", "name", "statement", "sourceHook", "enforcementHooks", "evidenceHooks", "rollback"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "statement",
+          "sourceHook",
+          "enforcementHooks",
+          "evidenceHooks",
+          "rollback"
+        ],
         "properties": {
           "id": { "type": "string", "pattern": "^I(?:[1-9]|1[0-2])$" },
           "name": { "type": "string", "minLength": 1 },
           "statement": { "type": "string", "minLength": 1 },
           "sourceHook": { "type": "string", "minLength": 1 },
-          "enforcementHooks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-          "evidenceHooks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+          "enforcementHooks": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "evidenceHooks": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
           "rollback": { "type": "string", "minLength": 1 }
         }
       }

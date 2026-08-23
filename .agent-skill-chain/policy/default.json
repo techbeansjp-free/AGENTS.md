@@ -1,7 +1,13 @@
 {
   "schemaVersion": "agent-skill-chain/project-policy/v0.3.1",
   "delivery": { "stopAt": "pull_request" },
-  "merge": { "mode": "disabled", "branches": [], "methods": [], "requiredChecks": [], "requiredReviews": 0 },
+  "merge": {
+    "mode": "disabled",
+    "branches": [],
+    "methods": [],
+    "requiredChecks": [],
+    "requiredReviews": 0
+  },
   "budgets": { "localFeedbackMs": 120000, "prGateMs": 900000 },
   "rules": [
     {

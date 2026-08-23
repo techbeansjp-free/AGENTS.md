@@ -109,7 +109,7 @@ Feature: Issue stagingとsystem specificationを安全に統合する
 
     Examples:
       | 変更file |
-      | "src/cli.js" |
-      | "src/lib/security.js" |
+      | "src/cli.ts" |
+      | "src/lib/security.ts" |
       | ".agent-skill-chain/schemas/project-policy.schema.json" |
       | ".agent-skill-chain/skills/step-10-review/SKILL.md" |

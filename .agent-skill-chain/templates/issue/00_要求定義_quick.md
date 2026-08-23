@@ -60,6 +60,17 @@
 
 ## 6. 最小設計
 
+### 開発考慮事項の適用判定（必須）
+
+| ID | 考慮事項 | 判定 | 理由 | 要求・確認証拠 |
+|---|---|---|---|---|
+| DC-PRIVACY | Privacy/Security by Design | applicable / not-applicable | （範囲を限定した理由） | （AC・調査証拠） |
+| DC-OBSERVABILITY | Secure Logging・Observability・運用可能性 | applicable / not-applicable | （範囲を限定した理由） | （ログ・保持・rotation・監視・復旧または対象外証拠） |
+| DC-UX | Human-Centered UI/UX・アクセシビリティ | applicable / not-applicable | （範囲を限定した理由） | （利用場面・ACまたは非UI証拠） |
+| DC-TOKENS | Design System・Design/Layout Token | applicable / not-applicable | （範囲を限定した理由） | （UI条件・tokenまたは非該当証拠） |
+
+未判定、理由なし、証拠なしならquickを続行せず`full`へ昇格する。
+
 - 入力:
 - 出力:
 - 変更する責務:

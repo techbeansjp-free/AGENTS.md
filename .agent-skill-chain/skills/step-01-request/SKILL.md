@@ -15,3 +15,5 @@ description: 判定済みモードに対応する要求定義テンプレート�
 - `quick`: [00_要求定義_quick.md](../../templates/issue/00_要求定義_quick.md)
 
 2つを混在させたり独自構成へ置き換えたりしない。モードが不明なら`full`を選び、選択したテンプレートからステージング内の`00_要求定義.md`を作る。
+
+開発考慮事項を判定する前にproject choicesを読み、作業開始前に次の入口を全文読む。Privacy/Securityは[セキュリティ方針・資産](../../templates/specs/10_セキュリティ/00_セキュリティ方針・資産.md)、観測・運用は[非機能要件一覧](../../templates/specs/11_非機能/00_非機能要件一覧.md)と[運用設計](../../templates/specs/12_運用保守/00_運用設計.md)を参照する。UIまたはtoken capabilityが`not-applicable`でない場合は[デザイントークン](../../templates/specs/17_デザイン/00_デザイントークン.md)と[レイアウトトークン](../../templates/specs/18_レイアウト/00_レイアウトトークン.md)も全文読み、各DC行を理由・証拠付きで確定する。

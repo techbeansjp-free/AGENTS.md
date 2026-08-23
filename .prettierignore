@@ -1,0 +1,5 @@
+dist/
+node_modules/
+.worktrees/
+.agent-skill-chain/tmp/
+docs/reviews/01_課題834実装レビュー.md

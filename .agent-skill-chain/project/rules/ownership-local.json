@@ -1,5 +1,14 @@
 {
-  "ruleId": "ASC-DOGFOOD-OWNERSHIP-LOCAL-001", "purpose": "localでasset誤配置を検出し移動先を支援する", "riskClass": "quality", "scope": ["ownership_local"],
-  "enforcement": "assist", "activation": "staged", "owner": "repository maintainer", "targetLayer": "project", "evidence": "path、owner、targetLayerの構造比較",
-  "remediation": "dry-run移動案を確認して正しいlayerへ移す", "overridePolicy": "bound", "rollback": "移動前pathへ戻す"
+  "ruleId": "ASC-DOGFOOD-OWNERSHIP-LOCAL-001",
+  "purpose": "localでasset誤配置を検出し移動先を支援する",
+  "riskClass": "quality",
+  "scope": ["ownership_local"],
+  "enforcement": "assist",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "path、owner、targetLayerの構造比較",
+  "remediation": "dry-run移動案を確認して正しいlayerへ移す",
+  "overridePolicy": "bound",
+  "rollback": "移動前pathへ戻す"
 }

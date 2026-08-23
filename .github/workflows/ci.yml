@@ -26,12 +26,14 @@ jobs:
           cache: npm
       - name: 固定ファイルどおりに開発依存を導入する
         run: npm ci
+      - name: trusted project choiceと実品質設定のbindingを検証する
+        run: npm run project:quality
+      - name: lint・formatter検査・strict型検査・source契約・testを順に実行する
+        run: npm run quality
       - name: 人向け文書の日本語形式を検証する
         run: npm run docs:format
       - name: 日本語Gherkinの起票形式を検証する
         run: npm run test:format
-      - name: 型を検証する
-        run: npm run typecheck
       - name: project選択に従うscenario追跡を検証する
         run: npm run trace:check
       - name: repositoryの依存循環を拒否する
@@ -46,7 +48,7 @@ jobs:
           ASC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           ASC_REPOSITORY: ${{ github.repository }}
           ASC_PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: node bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json "--trusted-commit=$ASC_TRUSTED_COMMIT" "--expected-base-sha=$ASC_EXPECTED_BASE_SHA" "--candidate-head-sha=$ASC_CANDIDATE_HEAD_SHA" "--base-ref=$ASC_BASE_REF" "--default-branch=$ASC_DEFAULT_BRANCH" "--repo=$ASC_REPOSITORY" "--pr=$ASC_PR_NUMBER"
+        run: node dist/bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json "--trusted-commit=$ASC_TRUSTED_COMMIT" "--expected-base-sha=$ASC_EXPECTED_BASE_SHA" "--candidate-head-sha=$ASC_CANDIDATE_HEAD_SHA" "--base-ref=$ASC_BASE_REF" "--default-branch=$ASC_DEFAULT_BRANCH" "--repo=$ASC_REPOSITORY" "--pr=$ASC_PR_NUMBER"
       - name: 構築対象とパッケージ資産を検証する
         run: npm run build
       - name: npm配布物への開発用ファイル混入を拒否する

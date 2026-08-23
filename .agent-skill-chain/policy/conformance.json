@@ -1,17 +1,158 @@
 {
   "schemaVersion": "agent-skill-chain/conformance/v1",
   "invariants": [
-    { "id": "I1", "name": "Enablement", "statement": "safety境界以外はdenyせず安全な次行動を返す", "sourceHook": "package-contract", "enforcementHooks": ["rule-validation", "operation-enforcement"], "evidenceHooks": ["risk", "diagnostic"], "rollback": "stagedまたはassistへ戻す" },
-    { "id": "I2", "name": "Ownership separation", "statement": "package、project choice、repository rule、implementation evidenceを分離する", "sourceHook": "ownership-contract", "enforcementHooks": ["local-assist", "pr-require", "changed-file-audit", "artifact-deny"], "evidenceHooks": ["owner", "target-layer", "classification", "exact-path-set"], "rollback": "正しい所有layerへ移動する" },
-    { "id": "I3", "name": "Correctness trace", "statement": "要求からreviewとspec evidenceまで追跡する", "sourceHook": "durable-requirement", "enforcementHooks": ["trace-validation", "pr-evidence"], "evidenceHooks": ["requirement", "scenario", "test", "review", "spec"], "rollback": "不足linkを補いPRを保留する" },
-    { "id": "I4", "name": "Authority independence", "statement": "candidate自己緩和、implementer自己承認、authority相互参照を禁止する", "sourceHook": "trusted-policy", "enforcementHooks": ["policy-comparison", "boundary-validation", "independent-review"], "evidenceHooks": ["trusted-hash", "candidate-hash", "review-actor", "exact-head-attestation"], "rollback": "trusted条件を復元する" },
-    { "id": "I5", "name": "Identity and isolation", "statement": "repository、remote、base、worktree、path、Git内部、unrelated assetを隔離する", "sourceHook": "trusted-identity", "enforcementHooks": ["path-boundary", "worktree-boundary", "delivery-boundary"], "evidenceHooks": ["exact-identity", "sha", "canonical-path"], "rollback": "書き込み前状態を保持する" },
-    { "id": "I6", "name": "Evidence integrity", "statement": "証拠をSHA、policy、tool、scope、successへ拘束し自己参照を禁止してfinal fullを維持する", "sourceHook": "validation-evidence", "enforcementHooks": ["validation-planner", "review-head-binding", "final-gate"], "evidenceHooks": ["fingerprint", "passed", "scope", "tool", "external-attestation"], "rollback": "stale証拠を破棄して再検証する" },
-    { "id": "I7", "name": "Reversible and crash-recoverable", "statement": "call-site approval、preview、TOCTOU再確認、単一file atomic write、read-after-write、durable journal、rollback、retry、recoverを守る", "sourceHook": "migration-manifest", "enforcementHooks": ["migration-apply", "migration-rollback", "migration-retry", "migration-recover"], "evidenceHooks": ["target", "before-hash", "after-hash", "approved-plan-hash", "expected-revision", "journal"], "rollback": "before/after hashとdurable journalから全targetを復元する" },
-    { "id": "I8", "name": "Distribution boundary", "statement": "project state、evidence、secretをartifactへ混入させない", "sourceHook": "artifact-manifest", "enforcementHooks": ["actual-artifact-boundary"], "evidenceHooks": ["artifact-files", "allowlist", "content-scan"], "rollback": "汚染artifactを公開しない" },
-    { "id": "I9", "name": "Offline progress", "statement": "local安全作業を継続しexternal必須だけpendingにする", "sourceHook": "gate-dependency", "enforcementHooks": ["offline-planner"], "evidenceHooks": ["local-ready", "external-pending"], "rollback": "online planへ戻し保留だけ再試行する" },
-    { "id": "I10", "name": "UNIX simplicity", "statement": "単一責務、明示I/O、合成可能、最小共有状態、非循環dependency graphを守る", "sourceHook": "package-architecture", "enforcementHooks": ["dependency-graph-validation", "package-boundary"], "evidenceHooks": ["topological-order", "cycle-counterexample"], "rollback": "循環edge、新規legacyまたはhidden依存を除去する" },
-    { "id": "I11", "name": "Observable and redacted", "statement": "診断とmetricsを秘密なしで記録する", "sourceHook": "diagnostic-contract", "enforcementHooks": ["safe-serializer", "metrics-validation"], "evidenceHooks": ["redacted-structured-output"], "rollback": "secretを失効し安全な記録へ置換する" },
-    { "id": "I12", "name": "Project configurability", "statement": "開発環境、test file禁止pattern、release選択はproject policyへ置く", "sourceHook": "trusted-project-choices", "enforcementHooks": ["effective-policy-resolution"], "evidenceHooks": ["project-choices", "owner"], "rollback": "package floorを保持しproject choiceを戻す" }
+    {
+      "id": "I1",
+      "name": "Enablement",
+      "statement": "safety境界以外はdenyせず安全な次行動を返す",
+      "sourceHook": "package-contract",
+      "enforcementHooks": ["rule-validation", "operation-enforcement"],
+      "evidenceHooks": ["risk", "diagnostic"],
+      "rollback": "stagedまたはassistへ戻す"
+    },
+    {
+      "id": "I2",
+      "name": "Ownership separation",
+      "statement": "package、project choice、repository rule、implementation evidenceを分離する",
+      "sourceHook": "ownership-contract",
+      "enforcementHooks": [
+        "local-assist",
+        "pr-require",
+        "changed-file-audit",
+        "artifact-deny"
+      ],
+      "evidenceHooks": [
+        "owner",
+        "target-layer",
+        "classification",
+        "exact-path-set"
+      ],
+      "rollback": "正しい所有layerへ移動する"
+    },
+    {
+      "id": "I3",
+      "name": "Correctness trace",
+      "statement": "要求からreviewとspec evidenceまで追跡する",
+      "sourceHook": "durable-requirement",
+      "enforcementHooks": ["trace-validation", "pr-evidence"],
+      "evidenceHooks": ["requirement", "scenario", "test", "review", "spec"],
+      "rollback": "不足linkを補いPRを保留する"
+    },
+    {
+      "id": "I4",
+      "name": "Authority independence",
+      "statement": "candidate自己緩和、implementer自己承認、authority相互参照を禁止する",
+      "sourceHook": "trusted-policy",
+      "enforcementHooks": [
+        "policy-comparison",
+        "boundary-validation",
+        "independent-review"
+      ],
+      "evidenceHooks": [
+        "trusted-hash",
+        "candidate-hash",
+        "review-actor",
+        "exact-head-attestation"
+      ],
+      "rollback": "trusted条件を復元する"
+    },
+    {
+      "id": "I5",
+      "name": "Identity and isolation",
+      "statement": "repository、remote、base、worktree、path、Git内部、unrelated assetを隔離する",
+      "sourceHook": "trusted-identity",
+      "enforcementHooks": [
+        "path-boundary",
+        "worktree-boundary",
+        "delivery-boundary"
+      ],
+      "evidenceHooks": ["exact-identity", "sha", "canonical-path"],
+      "rollback": "書き込み前状態を保持する"
+    },
+    {
+      "id": "I6",
+      "name": "Evidence integrity",
+      "statement": "証拠をSHA、policy、tool、scope、successへ拘束し自己参照を禁止してfinal fullを維持する",
+      "sourceHook": "validation-evidence",
+      "enforcementHooks": [
+        "validation-planner",
+        "review-head-binding",
+        "final-gate"
+      ],
+      "evidenceHooks": [
+        "fingerprint",
+        "passed",
+        "scope",
+        "tool",
+        "external-attestation"
+      ],
+      "rollback": "stale証拠を破棄して再検証する"
+    },
+    {
+      "id": "I7",
+      "name": "Reversible and crash-recoverable",
+      "statement": "call-site approval、preview、TOCTOU再確認、単一file atomic write、read-after-write、durable journal、rollback、retry、recoverを守る",
+      "sourceHook": "migration-manifest",
+      "enforcementHooks": [
+        "migration-apply",
+        "migration-rollback",
+        "migration-retry",
+        "migration-recover"
+      ],
+      "evidenceHooks": [
+        "target",
+        "before-hash",
+        "after-hash",
+        "approved-plan-hash",
+        "expected-revision",
+        "journal"
+      ],
+      "rollback": "before/after hashとdurable journalから全targetを復元する"
+    },
+    {
+      "id": "I8",
+      "name": "Distribution boundary",
+      "statement": "project state、evidence、secretをartifactへ混入させない",
+      "sourceHook": "artifact-manifest",
+      "enforcementHooks": ["actual-artifact-boundary"],
+      "evidenceHooks": ["artifact-files", "allowlist", "content-scan"],
+      "rollback": "汚染artifactを公開しない"
+    },
+    {
+      "id": "I9",
+      "name": "Offline progress",
+      "statement": "local安全作業を継続しexternal必須だけpendingにする",
+      "sourceHook": "gate-dependency",
+      "enforcementHooks": ["offline-planner"],
+      "evidenceHooks": ["local-ready", "external-pending"],
+      "rollback": "online planへ戻し保留だけ再試行する"
+    },
+    {
+      "id": "I10",
+      "name": "UNIX simplicity",
+      "statement": "単一責務、明示I/O、合成可能、最小共有状態、非循環dependency graphを守る",
+      "sourceHook": "package-architecture",
+      "enforcementHooks": ["dependency-graph-validation", "package-boundary"],
+      "evidenceHooks": ["topological-order", "cycle-counterexample"],
+      "rollback": "循環edge、新規legacyまたはhidden依存を除去する"
+    },
+    {
+      "id": "I11",
+      "name": "Observable and redacted",
+      "statement": "診断とmetricsを秘密なしで記録する",
+      "sourceHook": "diagnostic-contract",
+      "enforcementHooks": ["safe-serializer", "metrics-validation"],
+      "evidenceHooks": ["redacted-structured-output"],
+      "rollback": "secretを失効し安全な記録へ置換する"
+    },
+    {
+      "id": "I12",
+      "name": "Project configurability",
+      "statement": "開発環境、test file禁止pattern、release選択はproject policyへ置く",
+      "sourceHook": "trusted-project-choices",
+      "enforcementHooks": ["effective-policy-resolution"],
+      "evidenceHooks": ["project-choices", "owner"],
+      "rollback": "package floorを保持しproject choiceを戻す"
+    }
   ]
 }
