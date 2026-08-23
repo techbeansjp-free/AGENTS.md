@@ -62,6 +62,11 @@ def check(root: Path) -> list[str]:
                     continue
                 if stripped.startswith("description:"):
                     stripped = stripped.partition(":")[2].strip()
+                    if stripped in {">", ">-", ">+", "|", "|-", "|+"}:
+                        errors.append(
+                            f"{relative}:{number}: descriptionは検査可能な単一行で記述し、block scalarを使用しないでください"
+                        )
+                        continue
                 else:
                     continue
             if stripped.startswith("```") or stripped.startswith("~~~"):

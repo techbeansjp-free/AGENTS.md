@@ -16,7 +16,7 @@ import { checkDirectoryGuides } from '../../scripts/check_directory_guides.js';
 import { checkSkillTemplateContracts } from '../../scripts/check_skill_templates.js';
 import { run } from '../../src/lib/process.js';
 import { main } from '../../src/cli.js';
-import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, DEPRECATED_POLICY_SCHEMA_ALIASES, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../../src/lib/version.js';
+import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, DEPRECATED_POLICY_SCHEMA_ALIASES, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS, isPackageVersion, isPolicySchemaPatchVersion, packageReleaseVersion } from '../../src/lib/version.js';
 
 const validAnswers = () => Object.fromEntries(Array.from({ length: 8 }, (_, index) => [
   `Q-${String(index + 1).padStart(2, '0')}`, { answer: true, evidence: `evidence-${index + 1}` },
@@ -215,8 +215,10 @@ When('規範文書の配置を検査する', function () {
 Then('repository直下の規範文書はAGENTSだけである', function () { assert.deepEqual(this.rootNormative, ['AGENTS.md']); });
 Then('namespace配下に連番付き規範文書が3件ある', function () { assert.equal(this.namespaceNormative.length, 3); assert.ok(this.namespaceNormative.every((/** @type {string} */ name) => /^\d{2}_.+\.md$/u.test(name))); });
 Given('英語だけの人向けMarkdownがある', function () { this.root = this.temp(); fs.writeFileSync(path.join(this.root, 'AGENTS.md'), '---\nname: machine-readable-name\ndescription: This description contains only English prose for people.\n---\n\n# 日本語文書\n'); });
+Given('英語descriptionをblock scalarへ隠したMarkdownがある', function () { this.root = this.temp(); fs.writeFileSync(path.join(this.root, 'AGENTS.md'), '---\nname: machine-readable-name\ndescription: >\n  This description contains only English prose for people.\n---\n\n# 日本語文書\n'); });
 When('日本語文書形式検査を実行する', function () { this.documentCheck = spawnSync('python3', ['scripts/check_japanese_docs.py', this.root], { cwd: process.cwd(), encoding: 'utf8' }); });
 Then('日本語文書形式検査は失敗する', function () { assert.notEqual(this.documentCheck.status, 0); assert.ok(this.documentCheck.stderr.includes('日本語')); });
+Then('block scalar回避として拒否される', function () { assert.notEqual(this.documentCheck.status, 0); assert.match(this.documentCheck.stderr, /block scalar/u); });
 When('project選択層とfalse block対応の文書契約を検査する', function () {
   this.traceTemplate = fs.readFileSync('.agent-skill-chain/templates/specs/15_要件追跡/00_追跡表.md', 'utf8');
   this.operationsSpec = fs.readFileSync('docs/specs/12_運用保守/00_運用設計.md', 'utf8');
@@ -276,7 +278,7 @@ Given('package metadataとpolicy version artifactがある', function () {
   this.policySchema = JSON.parse(fs.readFileSync('.agent-skill-chain/schemas/project-policy.schema.json', 'utf8'));
   this.defaultPolicy = JSON.parse(fs.readFileSync('.agent-skill-chain/policy/default.json', 'utf8'));
 });
-When('version正本との一致を検証する', function () { this.releaseVersion = this.packageMetadata.version.split('-')[0]; });
+When('version正本との一致を検証する', function () { this.releaseVersion = packageReleaseVersion(this.packageMetadata.version); });
 Then('製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する', function () {
   assert.equal(PACKAGE_VERSION, this.packageMetadata.version);
   assert.match(PACKAGE_VERSION, /^0\.3\.1-beta\./u);
@@ -289,6 +291,11 @@ Then('製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する', functio
   assert.equal(legacyAlias.valid, true);
   assert.ok(legacyAlias.migration);
   assert.deepEqual(legacyAlias.migration.deprecatedAlias, { input: 'agent-skill-chain/project-policy/v0.3', canonical: 'agent-skill-chain/project-policy/v0.3.0' });
+  for (const version of ['0.3.0', '0.3.1-beta.1', '0.3.1+build.7', '0.3.1-beta.1+build.7']) assert.equal(isPackageVersion(version), true, version);
+  for (const version of ['0.3.01', '0.3.1-01', '0.3.1-beta..1', '0.3.1+']) assert.equal(isPackageVersion(version), false, version);
+  for (const version of ['0.3.0', '0.3.1']) assert.equal(isPolicySchemaPatchVersion(version), true, version);
+  for (const version of ['0.3.01', '0.3.1-beta.1', '0.3']) assert.equal(isPolicySchemaPatchVersion(version), false, version);
+  assert.equal(packageReleaseVersion('0.3.1+build.7'), '0.3.1');
 });
 
 Given('packageのStep skillとtemplate契約がある', function () {
@@ -296,10 +303,12 @@ Given('packageのStep skillとtemplate契約がある', function () {
   this.brokenSkillContractRoot = this.temp('asc-skill-contract-');
   this.omittedSkillContractRoot = this.temp('asc-skill-omission-');
   this.unroutedSkillContractRoot = this.temp('asc-skill-route-');
+  this.blockScalarSkillContractRoot = this.temp('asc-skill-frontmatter-');
   fs.mkdirSync(path.join(this.brokenSkillContractRoot, '.agent-skill-chain/docs'), { recursive: true });
   fs.mkdirSync(path.join(this.omittedSkillContractRoot, '.agent-skill-chain/docs'), { recursive: true });
   fs.mkdirSync(path.join(this.unroutedSkillContractRoot, '.agent-skill-chain/docs'), { recursive: true });
-  for (const root of [this.brokenSkillContractRoot, this.omittedSkillContractRoot, this.unroutedSkillContractRoot]) {
+  fs.mkdirSync(path.join(this.blockScalarSkillContractRoot, '.agent-skill-chain/docs'), { recursive: true });
+  for (const root of [this.brokenSkillContractRoot, this.omittedSkillContractRoot, this.unroutedSkillContractRoot, this.blockScalarSkillContractRoot]) {
     fs.cpSync('.agent-skill-chain/skills', path.join(root, '.agent-skill-chain/skills'), { recursive: true });
     fs.cpSync('.agent-skill-chain/templates', path.join(root, '.agent-skill-chain/templates'), { recursive: true });
     fs.copyFileSync('.agent-skill-chain/docs/01_開発ワークフロー.md', path.join(root, '.agent-skill-chain/docs/01_開発ワークフロー.md'));
@@ -313,9 +322,12 @@ When('正規契約とリンク切れ・対応漏れ・経路欠落契約を検�
   fs.writeFileSync(planSkill, fs.readFileSync(planSkill, 'utf8').replace('[03_実装計画.md](../../templates/issue/03_実装計画.md)', '`03_実装計画.md`'));
   const workflow = path.join(this.unroutedSkillContractRoot, '.agent-skill-chain/docs/01_開発ワークフロー.md');
   fs.writeFileSync(workflow, fs.readFileSync(workflow, 'utf8').replace('[step-07-design-review](../skills/step-07-design-review/SKILL.md)', '`step-07-design-review`'));
+  const blockScalarSkill = path.join(this.blockScalarSkillContractRoot, '.agent-skill-chain/skills/step-05-design/SKILL.md');
+  fs.writeFileSync(blockScalarSkill, fs.readFileSync(blockScalarSkill, 'utf8').replace(/^description:.*$/mu, 'description: >\n  設計を作成する'));
   this.brokenSkillContracts = checkSkillTemplateContracts(this.brokenSkillContractRoot);
   this.omittedSkillContracts = checkSkillTemplateContracts(this.omittedSkillContractRoot);
   this.unroutedSkillContracts = checkSkillTemplateContracts(this.unroutedSkillContractRoot);
+  this.blockScalarSkillContracts = checkSkillTemplateContracts(this.blockScalarSkillContractRoot);
 });
 Then('正規契約だけが合格しリンク切れ・対応漏れ・経路欠落は拒否される', function () {
   assert.equal(this.validSkillContracts.valid, true, this.validSkillContracts.errors.join('; '));
@@ -326,6 +338,8 @@ Then('正規契約だけが合格しリンク切れ・対応漏れ・経路欠�
   assert.match(this.omittedSkillContracts.errors.join(' '), /テンプレート対応/u);
   assert.equal(this.unroutedSkillContracts.valid, false);
   assert.match(this.unroutedSkillContracts.errors.join(' '), /ワークフロー.*対応/u);
+  assert.equal(this.blockScalarSkillContracts.valid, false);
+  assert.match(this.blockScalarSkillContracts.errors.join(' '), /block scalar/u);
 });
 
 Given('packageのdirectory利用案内契約がある', function () {

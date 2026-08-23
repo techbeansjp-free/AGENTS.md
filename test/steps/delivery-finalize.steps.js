@@ -29,6 +29,10 @@ const trustedDeliveryPolicy = () => ({
   merge: { mode: 'disabled', branches: [], methods: [], requiredChecks: [], requiredReviews: 0 }, budgets: { localFeedbackMs: 100, prGateMs: 1000 },
   rules: [{ ruleId: 'ASC-TRUST-TEST-001', purpose: 'PRで自己緩和を防止する', riskClass: 'authority', scope: ['pull_request'], enforcement: 'deny', activation: 'active', owner: 'policy owner', targetLayer: 'package', evidence: 'trusted comparison', remediation: 'trusted条件を維持する', overridePolicy: 'never', rollback: 'PRを作成しない' }],
 });
+const trustedFinalizePolicy = () => ({
+  ...trustedDeliveryPolicy(),
+  rules: [{ ruleId: 'ASC-FINALIZE-TEST-001', purpose: '安全なworktreeだけを完了する', riskClass: 'identity', scope: ['worktree'], enforcement: 'deny', activation: 'active', owner: 'policy owner', targetLayer: 'package', evidence: 'finalize report', remediation: '状態を再確認する', overridePolicy: 'never', rollback: 'worktreeを保持する' }],
+});
 
 Given('review、test、spec evidenceがすべてpassである', function () { this.evidence = safeDeliveryEvidence(); });
 Given('PR単位のexternal writeが承認済みである', function () { this.authorization = 'approved'; });
@@ -189,6 +193,10 @@ Given('同一reviewerが承認後に変更要求へ更新している', function
   this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [{ state: 'CHANGES_REQUESTED', commitSha: headSha, actorId: 'reviewer', submittedAt: '2026-08-23T13:00:00Z', reviewId: '2' }, { state: 'APPROVED', commitSha: headSha, actorId: 'reviewer', submittedAt: '2026-08-23T12:00:00Z', reviewId: '1' }], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
 });
 Given('reviewのsubmittedAtが不正である', function () { this.mergeInput.approvals[0].submittedAt = 'sometime'; });
+Given('同一review IDに異なるactorと時刻の観測がある', function () {
+  const headSha = 'a'.repeat(40);
+  this.mergeInput = { trustedPolicy: { merge: { mode: 'automatic', branches: ['feature/*'], methods: ['squash'], requiredChecks: [], requiredReviews: 1 } }, method: 'squash', checks: [], approvals: [{ state: 'APPROVED', commitSha: headSha, actorId: 'reviewer-a', submittedAt: '2026-08-23T12:00:00Z', reviewId: 'same-id' }, { state: 'APPROVED', commitSha: headSha, actorId: 'reviewer-b', submittedAt: '2026-08-23T12:01:00Z', reviewId: 'same-id' }], headSha, prAuthorActorId: 'author', implementationAuthorActorId: 'implementer', branch: 'feature/a', repositoryVerified: true, shaVerified: true, protectionVerified: true, mergeableVerified: true };
+});
 Then('mergeは許可されない', function () { assert.equal(this.result.allowed, false); });
 Then('mergeは許可される', function () { assert.equal(this.result.allowed, true); });
 Then('許可operationは{string}だけである', function (operation) { assert.deepEqual(this.result.operations, [operation]); });
@@ -206,10 +214,11 @@ Given('safe finalize reportを作成済みである', function () { this.report 
 When('finalize reportを作成する', function () { this.report = buildFinalizeReport(this.state); });
 When('report hashを承認してfinalize applyを試みる', function () {
   this.report = buildFinalizeReport(this.state);
-  try { applyFinalize({ report: this.report, approvedHash: this.report.hash, currentState: this.state }, (operation) => this.calls.push(operation)); } catch (error) { this.error = error; }
+  try { applyFinalize({ report: this.report, approvedHash: this.report.hash, currentState: this.state, trustedPolicy: trustedFinalizePolicy() }, (operation) => this.calls.push(operation)); } catch (error) { this.error = error; }
 });
-When('current HEADを変更してfinalize applyする', function () { try { applyFinalize({ report: this.report, approvedHash: this.report.hash, currentState: { ...this.state, headSha: 'c'.repeat(40) } }, (operation) => this.calls.push(operation)); } catch (error) { this.error = error; } });
-When('同一stateと承認hashでfinalize applyする', function () { this.result = applyFinalize({ report: this.report, approvedHash: this.report.hash, currentState: this.state }, (operation) => this.calls.push(operation)); });
+When('current HEADを変更してfinalize applyする', function () { try { applyFinalize({ report: this.report, approvedHash: this.report.hash, currentState: { ...this.state, headSha: 'c'.repeat(40) }, trustedPolicy: trustedFinalizePolicy() }, (operation) => this.calls.push(operation)); } catch (error) { this.error = error; } });
+When('同一stateと承認hashでfinalize applyする', function () { this.result = applyFinalize({ report: this.report, approvedHash: this.report.hash, currentState: this.state, trustedPolicy: trustedFinalizePolicy() }, (operation) => this.calls.push(operation)); });
+When('trusted policyなしでfinalize applyを試みる', function () { try { applyFinalize({ report: this.report, approvedHash: this.report.hash, currentState: this.state, trustedPolicy: undefined }, (operation) => this.calls.push(operation)); } catch (error) { this.error = error; } });
 Then('reportはsafeで64桁hashを持つ', function () { assert.equal(this.report.safe, true); assert.match(this.report.hash, /^[a-f0-9]{64}$/); });
 Then('destructive operation callは0件である', function () { assert.equal(this.calls.length, 0); });
 Then('finalize applyは失敗する', function () { assert.ok(this.error instanceof Error); });

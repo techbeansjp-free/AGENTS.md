@@ -211,3 +211,8 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given packageのdirectory利用案内契約がある
     When 正規契約と入口欠落・未知directory・リンク切れ契約を検証する
     Then 正規契約だけが合格し入口欠落・未知directory・リンク切れは拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-015 frontmatter block scalarで日本語検査を迂回できない
+    Given 英語descriptionをblock scalarへ隠したMarkdownがある
+    When 日本語文書形式検査を実行する
+    Then block scalar回避として拒否される

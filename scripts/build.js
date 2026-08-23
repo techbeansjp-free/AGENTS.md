@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { CURRENT_POLICY_SCHEMA_VERSION, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS } from '../src/lib/version.js';
+import { CURRENT_POLICY_SCHEMA_VERSION, PACKAGE_VERSION, SUPPORTED_POLICY_SCHEMA_VERSIONS, packageReleaseVersion } from '../src/lib/version.js';
 import { checkDirectoryGuides } from './check_directory_guides.js';
 import { checkSkillTemplateContracts } from './check_skill_templates.js';
 
@@ -28,7 +28,7 @@ const policySchema = JSON.parse(fs.readFileSync('.agent-skill-chain/schemas/proj
 const manifestSchema = JSON.parse(fs.readFileSync('.agent-skill-chain/schemas/project-policy-manifest.schema.json', 'utf8'));
 const defaultPolicy = JSON.parse(fs.readFileSync('.agent-skill-chain/policy/default.json', 'utf8'));
 const samplePolicy = JSON.parse(fs.readFileSync('.agent-skill-chain/policy/sample.json', 'utf8'));
-const releaseVersion = PACKAGE_VERSION.split('-')[0];
+const releaseVersion = packageReleaseVersion(PACKAGE_VERSION);
 if (packageMetadata.version !== PACKAGE_VERSION || lockMetadata.version !== PACKAGE_VERSION || lockMetadata.packages?.['']?.version !== PACKAGE_VERSION) throw new Error('package.jsonとpackage-lock.jsonの製品versionが一致しません');
 if (CURRENT_POLICY_SCHEMA_VERSION !== `agent-skill-chain/project-policy/v${releaseVersion}`) throw new Error('製品versionと現行project policy schema versionが一致しません');
 if (JSON.stringify(policySchema.properties?.schemaVersion?.enum) !== JSON.stringify(SUPPORTED_POLICY_SCHEMA_VERSIONS)) throw new Error('package.jsonとproject policy schemaの対応versionが一致しません');

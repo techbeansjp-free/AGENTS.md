@@ -22,13 +22,12 @@ export function buildFinalizeReport(state) {
   return { version: 1, safe: reasons.length === 0, reasons, snapshot, hash };
 }
 
-/** @param {{report: any, approvedHash: string, currentState: any, trustedPolicy?: any}} input @param {(operation: string, payload: any) => void} destructive */
+/** @param {{report: any, approvedHash: string, currentState: any, trustedPolicy: any}} input @param {(operation: string, payload: any) => void} destructive */
 export function applyFinalize(input, destructive) {
-  if (input.trustedPolicy) {
-    const observations = (input.trustedPolicy.rules ?? []).filter((/** @type {any} */ rule) => rule.scope?.includes('worktree') && ['identity', 'path'].includes(rule.riskClass)).map((/** @type {any} */ rule) => ({ ruleId: rule.ruleId, violated: !input.report.safe, reasons: input.report.reasons, checks: ['actual finalize reportのrepository、path、SHA、review、test、recovery状態を導出した'] }));
-    const boundary = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'worktree', observations });
-    if (!boundary.allowed) throw new Error(`${boundary.diagnostic.ruleId}: ${boundary.diagnostic.reasons.join('; ')}`);
-  }
+  if (!input.trustedPolicy) throw new Error('finalize applyにはtrusted policyが必要です');
+  const observations = (input.trustedPolicy.rules ?? []).filter((/** @type {any} */ rule) => rule.scope?.includes('worktree') && ['identity', 'path'].includes(rule.riskClass)).map((/** @type {any} */ rule) => ({ ruleId: rule.ruleId, violated: !input.report.safe, reasons: input.report.reasons, checks: ['actual finalize reportのrepository、path、SHA、review、test、recovery状態を導出した'] }));
+  const boundary = enforceTrustedBoundary({ policy: input.trustedPolicy, boundary: 'worktree', observations });
+  if (!boundary.allowed) throw new Error(`${boundary.diagnostic.ruleId}: ${boundary.diagnostic.reasons.join('; ')}`);
   if (!input.report.safe) throw new Error(`安全でないため完了処理を拒否しました: ${input.report.reasons.join('; ')}`);
   if (!/^[a-f0-9]{64}$/.test(input.approvedHash) || input.approvedHash !== input.report.hash) throw new Error('明示承認が報告ハッシュと一致しません');
   const current = buildFinalizeReport(input.currentState);

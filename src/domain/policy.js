@@ -43,7 +43,8 @@ export function validatePolicy(policy) {
   rejectUnknownKeys(policy, ['schemaVersion', 'delivery', 'merge', 'rules', 'budgets', 'projectChoices'], 'policy', errors);
   rejectUnknownKeys(policy?.delivery, ['stopAt'], 'delivery', errors);
   rejectUnknownKeys(policy?.merge, ['mode', 'branches', 'methods', 'requiredChecks', 'requiredReviews'], 'merge', errors);
-  const deprecatedAliasTarget = DEPRECATED_POLICY_SCHEMA_ALIASES[policy?.schemaVersion];
+  const schemaVersion = policy?.schemaVersion;
+  const deprecatedAliasTarget = typeof schemaVersion === 'string' && Object.prototype.hasOwnProperty.call(DEPRECATED_POLICY_SCHEMA_ALIASES, schemaVersion) ? DEPRECATED_POLICY_SCHEMA_ALIASES[schemaVersion] : undefined;
   const compatibleInput = COMPATIBLE_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion) || COMPATIBLE_POLICY_SCHEMA_VERSIONS.includes(deprecatedAliasTarget);
   if (!SUPPORTED_POLICY_SCHEMA_VERSIONS.includes(policy?.schemaVersion) && !deprecatedAliasTarget) errors.push(`schemaVersionが未対応です。${currentPolicyVersionLabel}へのstaged migrationを実行してください`);
   if (compatibleInput && (policy.rules !== undefined || policy.budgets !== undefined || policy.projectChoices !== undefined)) errors.push(`${compatiblePolicyVersionLabels}ではrules、budgets、projectChoicesを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`);

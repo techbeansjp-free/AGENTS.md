@@ -155,6 +155,11 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When merge authorizationを評価する
     Then mergeは許可されない
 
+  Scenario: SCN-INT-MERGE-009 同一review IDを異なるactorや時刻へ再利用できない
+    Given 同一review IDに異なるactorと時刻の観測がある
+    When merge authorizationを評価する
+    Then mergeは許可されない
+
   Scenario: SCN-INT-FINALIZE-001 safeなdry-run reportはhashを返して何も削除しない
     Given merged、clean、pushed、recoveryありのworktree stateがある
     When finalize reportを作成する
@@ -191,3 +196,10 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When 同一stateと承認hashでfinalize applyする
     Then lifecycle stateはfinalizedである
     And destructive operationは"worktree.remove"だけである
+
+  Scenario: SCN-INT-FINALIZE-005 trusted policyなしではsafe reportもapplyしない
+    Given merged、clean、pushed、recoveryありのworktree stateがある
+    And safe finalize reportを作成済みである
+    When trusted policyなしでfinalize applyを試みる
+    Then finalize applyは失敗する
+    And destructive operation callは0件である

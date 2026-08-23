@@ -10,6 +10,27 @@ function githubRepository(remote) {
   return match?.[1];
 }
 
+/** Resolve the nearest existing ancestor so a symlinked parent cannot disguise a missing destination. @param {string} target */
+function canonicalDestination(target) {
+  let current = path.resolve(target);
+  const missing = [];
+  while (true) {
+    try { return path.resolve(fs.realpathSync(current), ...missing); }
+    catch (error) {
+      if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) throw error;
+      const parent = path.dirname(current);
+      if (parent === current) throw error;
+      missing.unshift(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+/** @param {string} target */
+function pathEntryExists(target) {
+  try { fs.lstatSync(target); return true; } catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return false; throw error; }
+}
+
 /** @param {{repoRoot: string, worktreePath: string, branch: string, base: string, expectedRepository?: string, trustedPolicy?: any}} input */
 export function createWorktree(input) {
   const actualRoot = git(['rev-parse', '--show-toplevel'], input.repoRoot).stdout.trim();
@@ -17,11 +38,12 @@ export function createWorktree(input) {
   const branchParts = input.branch.split('/');
   if (branchParts.length < 2 || branchParts.some((part) => safeSlug(part) !== part)) throw new Error('ブランチは名前空間を持つ安全で長さ制限内の名前にしてください');
   const destination = path.resolve(input.worktreePath);
+  const canonical = canonicalDestination(destination);
   const gitCommonRaw = git(['rev-parse', '--git-common-dir'], input.repoRoot).stdout.trim();
   const gitCommon = fs.realpathSync(path.resolve(input.repoRoot, gitCommonRaw));
-  const gitRelative = path.relative(gitCommon, destination);
+  const gitRelative = path.relative(gitCommon, canonical);
   const gitInternal = gitRelative === '' || (!gitRelative.startsWith(`..${path.sep}`) && gitRelative !== '..' && !path.isAbsolute(gitRelative));
-  const destinationConflict = destination === fs.realpathSync(input.repoRoot) || fs.existsSync(destination);
+  const destinationConflict = canonical === fs.realpathSync(input.repoRoot) || pathEntryExists(destination);
   let repositoryMismatch = false;
   if (input.expectedRepository) {
     const remote = git(['remote', 'get-url', 'origin'], input.repoRoot, { allowFailure: true });

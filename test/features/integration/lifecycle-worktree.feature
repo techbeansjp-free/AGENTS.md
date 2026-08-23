@@ -66,3 +66,9 @@ Feature: Packageとworktree lifecycleでconsumer dataを保護する
     Given remoteへpush済みのcleanな専用worktreeがある
     When finalize stateをread-onlyで検査する
     Then recovery参照は上流branchで到達可能である
+
+  Scenario: SCN-INT-WORKTREE-005 symlink祖先でGit内部領域を偽装できない
+    Given Git common dirを指すsymlink祖先のworktree pathがある
+    When symlink祖先配下へworktreeを作成する
+    Then worktree createは失敗する
+    And 専用pathは存在しない

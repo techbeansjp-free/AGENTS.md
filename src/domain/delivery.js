@@ -86,9 +86,13 @@ export function authorizeMerge(input) {
   const needsApproval = (policy.requiredReviews ?? 0) > 0 || policy.mode === 'assisted';
   if (needsApproval && (typeof input.prAuthorActorId !== 'string' || input.prAuthorActorId === '' || typeof input.implementationAuthorActorId !== 'string' || input.implementationAuthorActorId === '')) return deny('PR authorとimplementation authorのstable ID観測がありません');
   const latestByActor = new Map();
+  const byReviewId = new Map();
   for (const approval of input.approvals) {
     const timestamp = typeof approval?.submittedAt === 'string' ? Date.parse(approval.submittedAt) : Number.NaN;
     if (typeof approval?.actorId !== 'string' || approval.actorId === '' || typeof approval?.state !== 'string' || approval.state === '' || !/^[a-f0-9]{40}$/iu.test(approval?.commitSha ?? '') || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u.test(approval?.submittedAt ?? '') || !Number.isFinite(timestamp) || typeof approval?.reviewId !== 'string' || approval.reviewId === '') return deny('review観測のactor、state、commit SHA、submittedAt、review IDが不正です');
+    const sameId = byReviewId.get(approval.reviewId);
+    if (sameId && (sameId.actorId !== approval.actorId || sameId.state !== approval.state || sameId.commitSha !== approval.commitSha || sameId.submittedAt !== approval.submittedAt)) return deny('同一review IDの観測内容が矛盾しています');
+    if (!sameId) byReviewId.set(approval.reviewId, approval);
     const current = latestByActor.get(approval.actorId);
     if (!current) { latestByActor.set(approval.actorId, approval); continue; }
     const currentTimestamp = Date.parse(current.submittedAt);

@@ -113,6 +113,14 @@ When('期待repositoryを指定してworktreeを作成する', function () { try
 Then('worktree createは失敗する', function () { assert.ok(this.error instanceof Error); });
 Then('専用pathは存在しない', function () { assert.equal(fs.existsSync(this.worktree), false); });
 
+Given('Git common dirを指すsymlink祖先のworktree pathがある', function () {
+  this.root = this.initRepo();
+  const alias = `${this.root}-git-alias`; this.temporaryDirectories.push(alias);
+  fs.symlinkSync(path.join(this.root, '.git'), alias, 'dir');
+  this.worktree = path.join(alias, 'nested-worktree');
+});
+When('symlink祖先配下へworktreeを作成する', function () { try { createWorktree({ repoRoot: this.root, worktreePath: this.worktree, branch: 'feature/symlink-ancestor', base: 'main' }); } catch (error) { this.error = error; } });
+
 Given('remoteへpush済みのcleanな専用worktreeがある', function () {
   this.root = this.initRepo();
   const remote = this.temp('asc-bare-');

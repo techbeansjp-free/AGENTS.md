@@ -191,3 +191,8 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     Given trusted boundaryに適用ruleがないpolicyがある
     When trusted boundaryを評価する
     Then scope未統治のoperationを拒否する
+
+  Scenario: SCN-UNIT-RISK-028 Object prototype名をdeprecated version aliasとして受理しない
+    Given Object prototypeと同名のpolicy schema versionがある
+    When prototype名のpolicy versionを検証する
+    Then prototype名は未対応versionとして拒否される

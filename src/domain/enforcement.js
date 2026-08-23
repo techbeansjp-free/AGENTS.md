@@ -287,7 +287,7 @@ export function enforceOperation(input) {
   return { ...evaluated, allowed: false, validation: validationPlan, metrics: metricResult };
 }
 
-/** Operation adapters must bind each independently derived observation to one exact trusted rule ID. @param {{policy: any, boundary: string, observations: Array<{ruleId: string, violated: boolean, reasons?: string[], checks?: string[]}>}} input */
+/** Operation adapters must bind each independently derived observation to one exact trusted rule ID; cross-rule reuse would cross an authority boundary and make a missing observation fail open. @param {{policy: any, boundary: string, observations: Array<{ruleId: string, violated: boolean, reasons?: string[], checks?: string[]}>}} input */
 export function enforceTrustedBoundary(input) {
   const validation = validateEnforcementPolicy(input.policy);
   if (!validation.valid) return { allowed: false, boundary: input.boundary, diagnostic: validation.diagnostics[0] ?? diagnostic('ASC-POLICY-INVALID', 'trusted policyをoperation前に検証する', 'authority', validation.errors, [input.boundary], ['trusted policy全ruleを検証した'], [], 'trusted policyを修正してからoperationを再実行してください', 'project policy owner', 'operationを実行しない') };

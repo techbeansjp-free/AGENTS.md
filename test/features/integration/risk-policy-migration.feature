@@ -148,3 +148,8 @@ Feature: policy拡張を段階移行して失敗から再実行する
     Given read-after-write不一致を注入できる単一file migrationがある
     When 不正writeを注入してmigration applyを実行する
     Then applyは拒否され対象fileはbefore内容へrollbackされる
+
+  Scenario: SCN-INT-RISK-026 durable journalを省略したfile migrationはwrite前に拒否する
+    Given durable persistを省略できる単一file migrationがある
+    When durable persistなしでmigration applyを実行する
+    Then applyはjournal不足で拒否され対象fileは変更されない

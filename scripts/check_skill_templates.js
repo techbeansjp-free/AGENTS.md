@@ -64,7 +64,7 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       const declaredName = /^name:\s*(\S+)\s*$/mu.exec(frontmatter)?.[1];
       const description = /^description:\s*(.+)\s*$/mu.exec(frontmatter)?.[1];
       if (declaredName !== skill) errors.push(`${skill}/SKILL.mdのnameがdirectory名と一致しません`);
-      if (!description) errors.push(`${skill}/SKILL.mdのdescriptionがありません`);
+      if (!description || /^[>|][+-]?$/u.test(description)) errors.push(`${skill}/SKILL.mdのdescriptionはblock scalarでない単一行が必要です`);
     }
     if (!markdown.includes('## テンプレート契約')) errors.push(`${skill}/SKILL.mdにテンプレート契約がありません`);
     const links = uniqueSorted([...markdown.matchAll(/\]\((\.\.\/\.\.\/templates\/[^)\s]+)\)/gu)].map((match) => match[1]));

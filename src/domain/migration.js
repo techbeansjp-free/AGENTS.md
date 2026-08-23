@@ -47,6 +47,11 @@ function requireExternalAuthority(state, options, requiredRevision) {
   return reasons.length ? rejected(reasons) : { allowed: true };
 }
 
+/** File mutation is forbidden unless the caller supplies a durable journal boundary. @param {any} options */
+function requireJournalPersistence(options) {
+  return typeof options.persist === 'function' ? { allowed: true } : rejected(['call-siteのdurable journal persistが必要です']);
+}
+
 /** @param {unknown} error */
 function simulatedCrash(error) { return Boolean(error && typeof error === 'object' && 'simulatedCrash' in error); }
 
@@ -169,6 +174,8 @@ function verify(state, trusted, candidate, revision, expectedFileHash, approvedP
 export function applyFileMigration(state, trusted, candidate, options = {}) {
   const authority = requireExternalAuthority(state, options, 0);
   if (!authority.allowed) return authority;
+  const persistence = requireJournalPersistence(options);
+  if (!persistence.allowed) return persistence;
   const verified = verify(state, trusted, candidate, 0, 'beforeHash', options.approvedPlanHash);
   if (!verified.allowed) return verified;
   const written = [];
@@ -224,6 +231,8 @@ function restore(root, artifact) {
 export function rollbackFileMigration(state, trusted, candidate, options = {}) {
   const authority = requireExternalAuthority(state, options, 1);
   if (!authority.allowed) return authority;
+  const persistence = requireJournalPersistence(options);
+  if (!persistence.allowed) return persistence;
   const approved = options.approvedPlanHash;
   const verified = verify(state, trusted, candidate, 1, 'afterHash', approved);
   if (!verified.allowed) return verified;
@@ -255,6 +264,8 @@ export function rollbackFileMigration(state, trusted, candidate, options = {}) {
 export function retryFileMigration(state, trusted, candidate, options = {}) {
   const authority = requireExternalAuthority(state, options, 2);
   if (!authority.allowed) return authority;
+  const persistence = requireJournalPersistence(options);
+  if (!persistence.allowed) return persistence;
   const approved = options.approvedPlanHash;
   const verified = verify(state, trusted, candidate, 2, 'beforeHash', approved);
   if (!verified.allowed) return verified;
@@ -270,6 +281,8 @@ export function retryFileMigration(state, trusted, candidate, options = {}) {
 export function recoverFileMigration(state, trusted, candidate, options = {}) {
   const authority = requireExternalAuthority(state, options, undefined);
   if (!authority.allowed) return authority;
+  const persistence = requireJournalPersistence(options);
+  if (!persistence.allowed) return persistence;
   if (![0, 1].includes(state.revision)) return rejected([`recover対象revisionが不正です: ${state.revision}`]);
   const approved = options.approvedPlanHash;
   const structural = verify(state, trusted, candidate, /** @type {number} */ (options.expectedRevision), 'beforeHash', approved);
