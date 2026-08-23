@@ -2,16 +2,33 @@ import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { Given, When, Then } from "@cucumber/cucumber";
+import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import { createIssueStaging, validateIssue } from "../../src/domain/issue.js";
 import { bootstrapProject, validateSpecs } from "../../src/domain/spec.js";
+
+interface IssueSpecWorld extends WorkflowWorld {
+  answers: Parameters<typeof createIssueStaging>[1]["answers"];
+  invalidGlossaries: Array<ReturnType<typeof validateSpecs>>;
+  issue: ReturnType<typeof createIssueStaging>;
+  issueValidation: ReturnType<typeof validateIssue>;
+  mtime: number;
+  result: ReturnType<typeof bootstrapProject>;
+  root: string;
+  sentinel: string;
+  specIndex: string;
+  specValidation?: ReturnType<typeof validateSpecs>;
+  title: string;
+  validGlossary: ReturnType<typeof validateSpecs>;
+}
+
+const { Given, When, Then } = stepDefinitions<IssueSpecWorld>();
 
 const fixedNow = new Date("2026-08-23T01:00:00Z");
 
 Given("GitHub remoteを持たない一時repositoryがある", function () {
   this.root = this.initRepo();
 });
-When("title {string}でissue stagingを作成する", function (title) {
+When("title {string}でissue stagingを作成する", function (title: string) {
   this.issue = createIssueStaging(this.root, {
     title,
     answers: this.answers,
@@ -21,7 +38,7 @@ When("title {string}でissue stagingを作成する", function (title) {
 Then("modeはquickである", function () {
   assert.equal(this.issue.mode, "quick");
 });
-Then("stagingは{string}配下にある", function (expected) {
+Then("stagingは{string}配下にある", function (expected: string) {
   assert.ok(
     this.issue.path.includes(
       `${path.sep}${expected.replaceAll("/", path.sep)}${path.sep}`,
@@ -39,15 +56,18 @@ Then("00_要求定義.mdが存在する", function () {
   );
 });
 
-Given("title {string}で同じ時刻のstagingを作成済みである", function (title) {
-  this.title = title;
-  this.issue = createIssueStaging(this.root, {
-    title,
-    answers: this.answers,
-    now: fixedNow,
-  });
-});
-Given("staging内に{string}というsentinelがある", function (content) {
+Given(
+  "title {string}で同じ時刻のstagingを作成済みである",
+  function (title: string) {
+    this.title = title;
+    this.issue = createIssueStaging(this.root, {
+      title,
+      answers: this.answers,
+      now: fixedNow,
+    });
+  },
+);
+Given("staging内に{string}というsentinelがある", function (content: string) {
   this.sentinel = path.join(this.issue.path, "sentinel");
   fs.writeFileSync(this.sentinel, content);
 });
@@ -65,7 +85,7 @@ When("同じtitleと時刻で再作成する", function () {
 Then("atomic createは失敗する", function () {
   assert.ok(this.error instanceof Error);
 });
-Then("sentinel内容は{string}のままである", function (content) {
+Then("sentinel内容は{string}のままである", function (content: string) {
   assert.equal(fs.readFileSync(this.sentinel, "utf8"), content);
 });
 Then("pending directoryは残らない", function () {
@@ -83,42 +103,49 @@ Given("quick stagingを作成済みである", function () {
     now: fixedNow,
   });
 });
-When("changed file {string}でissueを検証する", function (file) {
-  this.validation = validateIssue(this.issue.path, { changedFiles: [file] });
+When("changed file {string}でissueを検証する", function (file: string) {
+  this.issueValidation = validateIssue(this.issue.path, {
+    changedFiles: [file],
+  });
 });
 When("changed fileなしでissueを検証する", function () {
-  this.validation = validateIssue(this.issue.path, { changedFiles: [] });
+  this.issueValidation = validateIssue(this.issue.path, { changedFiles: [] });
 });
 Then("validation modeはfullである", function () {
-  assert.equal(this.validation.mode, "full");
+  assert.equal(this.issueValidation.mode, "full");
 });
 Then("validationはinvalidである", function () {
-  assert.equal(this.validation.valid, false);
+  assert.equal(this.issueValidation.valid, false);
 });
 Then("errorに単調昇格が含まれる", function () {
   assert.ok(
-    this.validation.errors.some((error: string) => error.includes("単調昇格")),
+    this.issueValidation.errors.some((error: string) =>
+      error.includes("単調昇格"),
+    ),
   );
 });
 Then("errorにplaceholderが含まれる", function () {
   assert.ok(
-    this.validation.errors.some((error: string) =>
+    this.issueValidation.errors.some((error: string) =>
       error.includes("placeholder"),
     ),
   );
 });
 
-When("unsafe title {string}でissue stagingを作成する", function (title) {
-  try {
-    createIssueStaging(this.root, {
-      title,
-      answers: this.answers,
-      now: fixedNow,
-    });
-  } catch (error) {
-    this.error = error;
-  }
-});
+When(
+  "unsafe title {string}でissue stagingを作成する",
+  function (title: string) {
+    try {
+      createIssueStaging(this.root, {
+        title,
+        answers: this.answers,
+        now: fixedNow,
+      });
+    } catch (error) {
+      this.error = error;
+    }
+  },
+);
 Then("staging rootにentryは0件である", function () {
   const staging = path.join(this.root, ".agent-skill-chain", "tmp", "issues");
   assert.deepEqual(fs.existsSync(staging) ? fs.readdirSync(staging) : [], []);
@@ -237,10 +264,10 @@ Then("画面とdesignとlayoutのカテゴリが存在する", function () {
     );
 });
 Then("spec validationはvalidである", function () {
-  assert.equal((this.validation ?? validateSpecs(this.root)).valid, true);
+  assert.equal((this.specValidation ?? validateSpecs(this.root)).valid, true);
 });
 Then("spec validationはinvalidである", function () {
-  assert.equal(this.validation.valid, false);
+  assert.equal(this.specValidation?.valid, false);
 });
 When(
   "有効行と重複IDと同一context重複とcandidateと置換先なし廃止を検証する",
@@ -350,7 +377,7 @@ Given("spec indexの更新時刻を記録する", function () {
   this.mtime = fs.statSync(this.specIndex).mtimeMs;
 });
 When("architecture file変更をno-spec-impactで検証する", function () {
-  this.validation = validateSpecs(this.root, {
+  this.specValidation = validateSpecs(this.root, {
     changedFiles: ["src/architecture/router.ts"],
     review: {
       specImpact: "no-spec-impact",
@@ -358,8 +385,8 @@ When("architecture file変更をno-spec-impactで検証する", function () {
     },
   });
 });
-When("{string}変更をno-spec-impactで検証する", function (file) {
-  this.validation = validateSpecs(this.root, {
+When("{string}変更をno-spec-impactで検証する", function (file: string) {
+  this.specValidation = validateSpecs(this.root, {
     changedFiles: [file],
     review: {
       specImpact: "no-spec-impact",
@@ -368,7 +395,7 @@ When("{string}変更をno-spec-impactで検証する", function (file) {
   });
 });
 When("README文言変更を根拠付きno-spec-impactで検証する", function () {
-  this.validation = validateSpecs(this.root, {
+  this.specValidation = validateSpecs(this.root, {
     changedFiles: ["README.md"],
     review: {
       specImpact: "no-spec-impact",

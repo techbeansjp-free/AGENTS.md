@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { Given, When, Then } from "@cucumber/cucumber";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
   classifyMode,
   detectQuickDisqualifiers,
@@ -46,6 +46,403 @@ import {
   isPolicySchemaPatchVersion,
   packageReleaseVersion,
 } from "../../src/lib/version.js";
+
+interface UnitWorld extends WorkflowWorld {
+  adrAssets: string[];
+  answers: Parameters<typeof classifyMode>[0];
+  auditBase: string;
+  auditFile: string;
+  auditImplementation: string;
+  auditMarkdown: string;
+  auditedMermaidTemplates: string[];
+  blockScalarSkillContractRoot: string;
+  blockScalarSkillContracts: {
+    valid: boolean;
+    errors: string[];
+    skills: number;
+  };
+  brokenDirectoryGuideRoot: string;
+  brokenDirectoryGuides: {
+    valid: boolean;
+    errors: string[];
+    directories: number;
+    guides: number;
+    entries: { [k: string]: string };
+  };
+  brokenSkillContractRoot: string;
+  brokenSkillContracts: { valid: boolean; errors: string[]; skills: number };
+  candidate: string;
+  changedFiles: string[];
+  choiceSchema: ChoiceSchemaFixture;
+  considerationDocument: string;
+  considerationResult: {
+    valid: boolean;
+    errors: string[];
+    checked: readonly ["DC-PRIVACY", "DC-OBSERVABILITY", "DC-UX", "DC-TOKENS"];
+  };
+  cyclicGraph: { nodes: string[]; edges: { from: string; to: string }[] };
+  cyclicResult: {
+    valid: boolean;
+    errors: string[];
+    order: string[];
+    diagnostic:
+      | {
+          ruleId: string;
+          purpose: string;
+          risk: string;
+          reasons: string[];
+          scope: string[];
+          checks: string[];
+          autoFixes: never[];
+          next: string;
+          requiredAuthority: string;
+          rollback: string;
+        }
+      | undefined;
+  };
+  defaultPolicy: MutablePolicyFixture;
+  defaultSha: string;
+  diagnostic: string;
+  directoryGuideRoot: string;
+  documentCheck: SpawnSyncReturns<string>;
+  emptyLayersPolicy: MutablePolicyFixture;
+  featureSha: string;
+  featuresRoot: string;
+  fileAuditContract: string;
+  forbiddenFileSuffixes: string[] | never[];
+  forbiddenSource: string;
+  gherkin:
+    | "Feature: 日本語機能\nScenario: SCN-X-001 日本語scenario\n Given 日本語前提\n Then 日本語結果\n"
+    | "機能: 日本語機能\nシナリオ: SCN-X-002 日本語scenario\n 前提 日本語前提\n もし 日本語操作\n ならば 日本語結果\n";
+  graph: { nodes: string[]; edges: { from: string; to: string }[] };
+  invalidAudit:
+    | {
+        valid: boolean;
+        errors: string[];
+        base?: undefined;
+        implementation?: undefined;
+        auditedFiles?: undefined;
+        current?: undefined;
+        auditPath?: undefined;
+      }
+    | {
+        valid: boolean;
+        errors: string[];
+        base: string;
+        implementation: string;
+        auditedFiles: number;
+        current?: undefined;
+        auditPath?: undefined;
+      }
+    | {
+        valid: boolean;
+        errors: string[];
+        base: string;
+        implementation: string;
+        current: string;
+        auditPath: string;
+        auditedFiles: number;
+      };
+  legacyCliContract: { valid: boolean; errors: string[]; commands: number };
+  legacyCliContractRoot: string;
+  missingDirectoryGuideRoot: string;
+  missingDirectoryGuides: {
+    valid: boolean;
+    errors: string[];
+    directories: number;
+    guides: number;
+    entries: { [k: string]: string };
+  };
+  missingDomainGlossaryContractRoot: string;
+  missingDomainGlossaryContracts: {
+    valid: boolean;
+    errors: string[];
+    skills: number;
+  };
+  missingVocabularyContractRoot: string;
+  missingVocabularyContracts: {
+    valid: boolean;
+    errors: string[];
+    skills: number;
+  };
+  mixedVocabularyContractRoot: string;
+  mixedVocabularyContracts: {
+    valid: boolean;
+    errors: string[];
+    skills: number;
+  };
+  nameOffenders: string[];
+  namespaceNormative: string[];
+  nonAncestorAudit:
+    | {
+        valid: boolean;
+        errors: string[];
+        base?: undefined;
+        implementation?: undefined;
+        auditedFiles?: undefined;
+        current?: undefined;
+        auditPath?: undefined;
+      }
+    | {
+        valid: boolean;
+        errors: string[];
+        base: string;
+        implementation: string;
+        auditedFiles: number;
+        current?: undefined;
+        auditPath?: undefined;
+      }
+    | {
+        valid: boolean;
+        errors: string[];
+        base: string;
+        implementation: string;
+        current: string;
+        auditPath: string;
+        auditedFiles: number;
+      };
+  offenders: unknown;
+  omittedSkillContractRoot: string;
+  omittedSkillContracts: { valid: boolean; errors: string[]; skills: number };
+  operationPolicy: ReturnType<typeof loadOperationPolicy>;
+  operationPolicyError: string;
+  operationsSpec: string;
+  originalCredentials: string[];
+  outside: string;
+  packageBoundaryOffenders: unknown;
+  packageMetadata: PackageMetadataFixture;
+  packageRuntime: string[];
+  packageScanned: true;
+  parsed: ReturnType<typeof parseProjectGherkin>;
+  phaseAContractInspected: true;
+  phaseAReview: string;
+  policy: MutablePolicyFixture;
+  policySchema: PolicySchemaFixture;
+  policyValidation: ReturnType<typeof validatePolicy>;
+  prChecklist: string;
+  processSecret: "ghp_abcdefghijklmnopqrstuvwxyz1234567890";
+  projectQualityResult: ReturnType<typeof checkProjectQualityContract>;
+  projectQualityRoot: string;
+  releaseVersion: string;
+  review: ReviewFixture;
+  reviewTemplate: string;
+  root: string;
+  rootNormative: string[];
+  sameCommitAudit:
+    | {
+        valid: boolean;
+        errors: string[];
+        base?: undefined;
+        implementation?: undefined;
+        auditedFiles?: undefined;
+        current?: undefined;
+        auditPath?: undefined;
+      }
+    | {
+        valid: boolean;
+        errors: string[];
+        base: string;
+        implementation: string;
+        auditedFiles: number;
+        current?: undefined;
+        auditPath?: undefined;
+      }
+    | {
+        valid: boolean;
+        errors: string[];
+        base: string;
+        implementation: string;
+        current: string;
+        auditPath: string;
+        auditedFiles: number;
+      };
+  skillContractRoot: string;
+  skills: string[];
+  sourceFiles: string[];
+  sourceGraph: { nodes: string[]; edges: { from: string; to: string }[] };
+  sourceQuality: { valid: boolean; errors: string[]; files: number };
+  sourceQualityRoot: string;
+  sourceResult: {
+    valid: boolean;
+    errors: string[];
+    order: string[];
+    diagnostic:
+      | {
+          ruleId: string;
+          purpose: string;
+          risk: string;
+          reasons: string[];
+          scope: string[];
+          checks: string[];
+          autoFixes: never[];
+          next: string;
+          requiredAuthority: string;
+          rollback: string;
+        }
+      | undefined;
+  };
+  sourceTypeErrors: string[];
+  status: number;
+  stdout: string;
+  templateBoundaryOffenders: unknown;
+  testLayers: string[];
+  title: string;
+  traceEvidence: string;
+  traceRoot: string;
+  traceTemplate: string;
+  unknownDirectoryGuideRoot: string;
+  unknownDirectoryGuides: {
+    valid: boolean;
+    errors: string[];
+    directories: number;
+    guides: number;
+    entries: { [k: string]: string };
+  };
+  unroutedSkillContractRoot: string;
+  unroutedSkillContracts: { valid: boolean; errors: string[]; skills: number };
+  validAudit:
+    | {
+        valid: boolean;
+        errors: string[];
+        base?: undefined;
+        implementation?: undefined;
+        auditedFiles?: undefined;
+        current?: undefined;
+        auditPath?: undefined;
+      }
+    | {
+        valid: boolean;
+        errors: string[];
+        base: string;
+        implementation: string;
+        auditedFiles: number;
+        current?: undefined;
+        auditPath?: undefined;
+      }
+    | {
+        valid: boolean;
+        errors: string[];
+        base: string;
+        implementation: string;
+        current: string;
+        auditPath: string;
+        auditedFiles: number;
+      };
+  validCliContract: { valid: boolean; errors: string[]; commands: number };
+  validCliContractRoot: string;
+  validDirectoryGuides: {
+    valid: boolean;
+    errors: string[];
+    directories: number;
+    guides: number;
+    entries: { [k: string]: string };
+  };
+  validSkillContracts: { valid: boolean; errors: string[]; skills: number };
+  dependencyResult: ReturnType<typeof traceDomain.validateDependencyGraph>;
+  disqualifiers: ReturnType<typeof detectQuickDisqualifiers>;
+  modeResult: ReturnType<typeof classifyMode>;
+  reviewResult: ReturnType<typeof evaluateReview>;
+  traceResult: ReturnType<typeof validateScenarioTrace>;
+}
+
+interface MutablePolicyFixture {
+  schemaVersion: string;
+  delivery: { stopAt: string; [key: string]: unknown };
+  merge: {
+    mode: string;
+    branches: unknown[];
+    methods: unknown[];
+    requiredChecks: unknown[];
+    requiredReviews: number;
+    [key: string]: unknown;
+  };
+  rules?: unknown[];
+  projectChoices?: unknown;
+  [key: string]: unknown;
+}
+
+interface PackageMetadataFixture {
+  version: string;
+}
+
+interface PolicySchemaFixture {
+  properties: { schemaVersion: { enum: string[] } };
+}
+
+interface ChoiceSchemaFixture {
+  properties: { testLayers: { minItems: number } };
+}
+
+interface ReviewFixture {
+  round: number;
+  developmentConsiderations:
+    | Array<{ id: string; status: string; reason: string; evidence: string }>
+    | undefined;
+  headSha: string;
+  candidateEvidence: {
+    implementationCommitSha: string;
+    finalCommitSha: string;
+    implementationTreeSha: string;
+    implementationIsAncestor: boolean;
+    changedPaths: string[];
+    artifact: { path: string; sha256: string; blobOid: string };
+  };
+  externalEvidence: {
+    provenance: Record<string, unknown>;
+    implementation: {
+      repository: string;
+      commitSha: string;
+      authorActorId: unknown;
+    };
+    pr: {
+      repository: string;
+      number: number;
+      headSha: string;
+      authorActorId: string;
+    };
+    ci: {
+      repository: string;
+      runId: string;
+      event: string;
+      headSha: string;
+      conclusion: string;
+      pullRequestNumbers: number[];
+    };
+    review: {
+      repository: string;
+      prNumber: number;
+      reviewId: string;
+      commitSha: string;
+      actorId: unknown;
+      submittedAt: string;
+      verdict: string;
+    };
+  };
+  affirmative: Record<string, string | undefined>;
+  adversarial: Record<string, string | undefined>;
+  focus?: {
+    unresolvedBlocking: string[];
+    fixedDiff: string[];
+    adjacentScope: string[];
+    fullRescan: boolean;
+  };
+  findings: Array<{
+    id: string;
+    severity: string;
+    status: string;
+    evidence: string;
+    riskAcceptance?: {
+      authority: string;
+      owner: string;
+      reason: string;
+      reviewCondition: string;
+    };
+  }>;
+  tests: string;
+  specConsistency: string;
+}
+
+const { Given, When, Then } = stepDefinitions<UnitWorld>();
 
 Given("開発考慮事項が3行しかない成果物がある", function () {
   this.considerationDocument = [
@@ -223,6 +620,14 @@ Given(
           'publishQuiet: true,\n  tags: "@never",',
         ),
     );
+    const stepsRoot = path.join(this.projectQualityRoot, "test/steps");
+    fs.mkdirSync(stepsRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(stepsRoot, "unsafe.steps.ts"),
+      "import { " +
+        'Given } from "@cucumber/' +
+        'cucumber";\nGiven("unsafe", function () {});\n',
+    );
   },
 );
 When("project品質bindingを検証する", function () {
@@ -242,6 +647,11 @@ Then("project choice乖離と品質scriptの自己緩和を拒否する", functi
   assert.ok(
     this.projectQualityResult.errors.some((error: string) =>
       error.includes("自己緩和"),
+    ),
+  );
+  assert.ok(
+    this.projectQualityResult.errors.some((error: string) =>
+      error.includes("Cucumber stepを直接import"),
     ),
   );
 });
@@ -281,7 +691,7 @@ const developmentConsiderations = () => [
     evidence: "UI sourceなし",
   },
 ];
-const reviewBase = () => ({
+const reviewBase = (): ReviewFixture => ({
   round: 1,
   developmentConsiderations: developmentConsiderations(),
   headSha: H_FINAL,
@@ -437,7 +847,7 @@ Then(
 Given("Q-01〜Q-08がすべてtrueで、それぞれに根拠がある", function () {
   this.answers = validAnswers();
 });
-Given("Q-04を{word}にする", function (state) {
+Given("Q-04を{word}にする", function (state: string) {
   if (state === "false")
     this.answers["Q-04"] = { answer: false, evidence: "false evidence" };
   else if (state === "unknown")
@@ -447,37 +857,37 @@ Given("Q-04を{word}にする", function (state) {
   else if (state === "未回答") delete this.answers["Q-04"];
 });
 When("modeを判定する", function () {
-  this.result = classifyMode(this.answers);
+  this.modeResult = classifyMode(this.answers);
 });
 Then("判定結果はquickである", function () {
-  assert.equal(this.result.mode, "quick");
+  assert.equal(this.modeResult.mode, "quick");
 });
 Then("判定結果はfullである", function () {
-  assert.equal(this.result.mode, "full");
+  assert.equal(this.modeResult.mode, "full");
 });
 Then("不適格理由は0件である", function () {
-  assert.equal(this.result.reasons.length, 0);
+  assert.equal(this.modeResult.reasons.length, 0);
 });
 Then("不適格理由にQ-04が含まれる", function () {
   assert.ok(
-    this.result.reasons.some((reason: string) => reason.includes("Q-04")),
+    this.modeResult.reasons.some((reason: string) => reason.includes("Q-04")),
   );
 });
 
-Given("quickとして開始した変更fileが{string}である", function (files) {
+Given("quickとして開始した変更fileが{string}である", function (files: string) {
   this.changedFiles = files.split(",");
 });
 When("quick不適格要因を検査する", function () {
-  this.result = detectQuickDisqualifiers(this.changedFiles);
+  this.disqualifiers = detectQuickDisqualifiers(this.changedFiles);
 });
-Then("不適格要因は{string}である", function (expected) {
-  assert.deepEqual([...this.result].sort(), expected.split(",").sort());
+Then("不適格要因は{string}である", function (expected: string) {
+  assert.deepEqual([...this.disqualifiers].sort(), expected.split(",").sort());
 });
 Then("不適格要因は空である", function () {
-  assert.deepEqual(this.result, []);
+  assert.deepEqual(this.disqualifiers, []);
 });
 
-Given("issue titleが{string}である", function (title) {
+Given("issue titleが{string}である", function (title: string) {
   this.title = title.replace("<NUL>", "\u0000").replace("<RLO>", "\u202e");
 });
 When("安全なslugへ変換する", function () {
@@ -490,11 +900,11 @@ When("安全なslugへ変換する", function () {
 Then("title検証は失敗する", function () {
   assert.ok(this.error instanceof Error);
 });
-Then("slugは{string}である", function (slug) {
+Then("slugは{string}である", function (slug: string) {
   assert.equal(this.value, slug);
 });
 
-Given("containment rootと{string}がある", function (candidate) {
+Given("containment rootと{string}がある", function (candidate: string) {
   this.root = this.temp();
   this.candidate = candidate;
 });
@@ -534,8 +944,10 @@ When("secret redactionを行う", function () {
   this.value = redactSecrets(this.diagnostic);
 });
 Then("診断文字列に元のcredentialは残らない", function () {
+  assert.equal(typeof this.value, "string");
+  const redacted = this.value as string;
   for (const secret of this.originalCredentials)
-    assert.equal(this.value.includes(secret), false);
+    assert.equal(redacted.includes(secret), false);
 });
 Given("secret tokenを引数に持つ失敗commandがある", function () {
   this.processSecret = "ghp_abcdefghijklmnopqrstuvwxyz1234567890";
@@ -552,9 +964,11 @@ When("process境界でcommandを実行する", function () {
   }
 });
 Then("process errorに元のtokenは残らない", function () {
+  assert.ok(this.error instanceof Error);
   assert.equal(this.error.message.includes(this.processSecret), false);
 });
 Then("process errorには伏字が含まれる", function () {
+  assert.ok(this.error instanceof Error);
   assert.ok(this.error.message.includes("[REDACTED"));
 });
 
@@ -568,9 +982,13 @@ Given("開発考慮事項を欠く完全なreviewがある", function () {
 Given("findingは0件である", function () {
   this.review.findings = [];
 });
-Given("{word}の{word}が未評価である", function (perspective, item) {
-  this.review[perspective][item] = undefined;
-});
+Given(
+  "{word}の{word}が未評価である",
+  function (perspective: string, item: string) {
+    assert.ok(perspective === "affirmative" || perspective === "adversarial");
+    this.review[perspective][item] = undefined;
+  },
+);
 Given("完全なreviewにMediumとLowのvalid findingがある", function () {
   this.review = reviewBase();
   this.review.findings = [
@@ -578,13 +996,16 @@ Given("完全なreviewにMediumとLowのvalid findingがある", function () {
     { id: "L1", severity: "Low", status: "valid", evidence: "style" },
   ];
 });
-Given("完全なreviewにHighのvalid finding {string}がある", function (id) {
-  this.review = reviewBase();
-  this.review.findings = [
-    { id, severity: "High", status: "valid", evidence: "risk" },
-  ];
-});
-Given("round 3のfinding分類が{string}である", function (status) {
+Given(
+  "完全なreviewにHighのvalid finding {string}がある",
+  function (id: string) {
+    this.review = reviewBase();
+    this.review.findings = [
+      { id, severity: "High", status: "valid", evidence: "risk" },
+    ];
+  },
+);
+Given("round 3のfinding分類が{string}である", function (status: string) {
   this.review = reviewBase();
   this.review.round = 3;
   this.review.focus = {
@@ -597,7 +1018,7 @@ Given("round 3のfinding分類が{string}である", function (status) {
     { id: "H1", severity: "High", status, evidence: "risk" },
   ];
 });
-Given("review roundが{int}である", function (round) {
+Given("review roundが{int}である", function (round: number) {
   this.review = reviewBase();
   this.review.round = round;
 });
@@ -647,73 +1068,84 @@ Given(
     this.review = reviewBase();
   },
 );
-Given("有効なPhase A review evidenceの{word}を改竄する", function (attribute) {
-  this.review = reviewBase();
-  const other = "f".repeat(40);
-  if (attribute === "same-head")
-    this.review.candidateEvidence.finalCommitSha = H_IMPL;
-  if (attribute === "ancestry")
-    this.review.candidateEvidence.implementationIsAncestor = false;
-  if (attribute === "changed-path")
-    this.review.candidateEvidence.changedPaths.push("src/domain/review.ts");
-  if (attribute === "artifact-sha")
-    this.review.candidateEvidence.artifact.sha256 = "bad";
-  if (attribute === "blob-oid")
-    this.review.candidateEvidence.artifact.blobOid = "bad";
-  if (attribute === "pr-head") this.review.externalEvidence.pr.headSha = other;
-  if (attribute === "source")
-    this.review.externalEvidence.provenance.source = "file";
-  if (attribute === "repository")
-    this.review.externalEvidence.ci.repository = "x/r";
-  if (attribute === "implementation-sha")
-    this.review.externalEvidence.implementation.commitSha = other;
-  if (attribute === "implementation-author")
-    this.review.externalEvidence.implementation.authorActorId = null;
-  if (attribute === "pr-id") this.review.externalEvidence.review.prNumber = 999;
-  if (attribute === "run-id") this.review.externalEvidence.ci.runId = "999";
-  if (attribute === "review-id")
-    this.review.externalEvidence.review.reviewId = "";
-  if (attribute === "ci-head") this.review.externalEvidence.ci.headSha = other;
-  if (attribute === "ci-event") this.review.externalEvidence.ci.event = "push";
-  if (attribute === "run-pr")
-    this.review.externalEvidence.ci.pullRequestNumbers = [999];
-  if (attribute === "empty-run-pr")
-    this.review.externalEvidence.ci.pullRequestNumbers = [];
-  if (attribute === "ci-conclusion")
-    this.review.externalEvidence.ci.conclusion = "failure";
-  if (attribute === "reviewer-commit")
-    this.review.externalEvidence.review.commitSha = other;
-  if (attribute === "reviewer-actor")
-    this.review.externalEvidence.review.actorId = "unstable actor name";
-  if (attribute === "pr-author-review")
-    this.review.externalEvidence.review.actorId =
-      this.review.externalEvidence.pr.authorActorId;
-  if (attribute === "implementer-review")
-    this.review.externalEvidence.review.actorId =
-      this.review.externalEvidence.implementation.authorActorId;
-  if (attribute === "submitted-at")
-    this.review.externalEvidence.review.submittedAt = "sometime";
-  if (attribute === "verdict")
-    this.review.externalEvidence.review.verdict = "commented";
-});
+Given(
+  "有効なPhase A review evidenceの{word}を改竄する",
+  function (attribute: string) {
+    this.review = reviewBase();
+    const other = "f".repeat(40);
+    if (attribute === "same-head")
+      this.review.candidateEvidence.finalCommitSha = H_IMPL;
+    if (attribute === "ancestry")
+      this.review.candidateEvidence.implementationIsAncestor = false;
+    if (attribute === "changed-path")
+      this.review.candidateEvidence.changedPaths.push("src/domain/review.ts");
+    if (attribute === "artifact-sha")
+      this.review.candidateEvidence.artifact.sha256 = "bad";
+    if (attribute === "blob-oid")
+      this.review.candidateEvidence.artifact.blobOid = "bad";
+    if (attribute === "pr-head")
+      this.review.externalEvidence.pr.headSha = other;
+    if (attribute === "source")
+      this.review.externalEvidence.provenance.source = "file";
+    if (attribute === "repository")
+      this.review.externalEvidence.ci.repository = "x/r";
+    if (attribute === "implementation-sha")
+      this.review.externalEvidence.implementation.commitSha = other;
+    if (attribute === "implementation-author")
+      this.review.externalEvidence.implementation.authorActorId = null;
+    if (attribute === "pr-id")
+      this.review.externalEvidence.review.prNumber = 999;
+    if (attribute === "run-id") this.review.externalEvidence.ci.runId = "999";
+    if (attribute === "review-id")
+      this.review.externalEvidence.review.reviewId = "";
+    if (attribute === "ci-head")
+      this.review.externalEvidence.ci.headSha = other;
+    if (attribute === "ci-event")
+      this.review.externalEvidence.ci.event = "push";
+    if (attribute === "run-pr")
+      this.review.externalEvidence.ci.pullRequestNumbers = [999];
+    if (attribute === "empty-run-pr")
+      this.review.externalEvidence.ci.pullRequestNumbers = [];
+    if (attribute === "ci-conclusion")
+      this.review.externalEvidence.ci.conclusion = "failure";
+    if (attribute === "reviewer-commit")
+      this.review.externalEvidence.review.commitSha = other;
+    if (attribute === "reviewer-actor")
+      this.review.externalEvidence.review.actorId = "unstable actor name";
+    if (attribute === "pr-author-review")
+      this.review.externalEvidence.review.actorId =
+        this.review.externalEvidence.pr.authorActorId;
+    if (attribute === "implementer-review")
+      this.review.externalEvidence.review.actorId =
+        this.review.externalEvidence.implementation.authorActorId;
+    if (attribute === "submitted-at")
+      this.review.externalEvidence.review.submittedAt = "sometime";
+    if (attribute === "verdict")
+      this.review.externalEvidence.review.verdict = "commented";
+  },
+);
 When("review gateを評価する", function () {
   try {
-    this.result = evaluateReview(this.review);
+    this.reviewResult = evaluateReview(
+      this.review as Parameters<typeof evaluateReview>[0],
+    );
   } catch (error) {
     this.error = error;
   }
 });
 Then("reviewはapprovedである", function () {
-  assert.equal(this.result.approved, true);
+  assert.equal(this.reviewResult.approved, true);
 });
 Then("reviewはrejectedである", function () {
-  assert.equal(this.result.approved, false);
+  assert.equal(this.reviewResult.approved, false);
 });
-Then(/^reviewはrejectedであり(.+)を返す$/u, function (diagnostic) {
-  assert.equal(this.result.approved, false);
+Then(/^reviewはrejectedであり(.+)を返す$/u, function (diagnostic: string) {
+  assert.equal(this.reviewResult.approved, false);
   assert.ok(
-    this.result.errors.some((error: string) => error.includes(diagnostic)),
-    this.result.errors.join("; "),
+    this.reviewResult.errors.some((error: string) =>
+      error.includes(diagnostic),
+    ),
+    this.reviewResult.errors.join("; "),
   );
 });
 Given("tracked Phase A review recordを読む", function () {
@@ -733,10 +1165,10 @@ Then(
   },
 );
 Then("blocking findingは0件である", function () {
-  assert.equal(this.result.blocking.length, 0);
+  assert.equal(this.reviewResult.blocking.length, 0);
 });
-Then("blocking findingは{string}である", function (id) {
-  assert.deepEqual(this.result.blocking, [id]);
+Then("blocking findingは{string}である", function (id: string) {
+  assert.deepEqual(this.reviewResult.blocking, [id]);
 });
 Then("review評価は例外で停止する", function () {
   assert.ok(this.error instanceof Error);
@@ -745,12 +1177,12 @@ Then("review評価は例外で停止する", function () {
 Given("package default policyを読み込む", function () {
   this.policy = JSON.parse(
     fs.readFileSync(".agent-skill-chain/policy/default.json", "utf8"),
-  );
+  ) as unknown as MutablePolicyFixture;
 });
-Given("merge policyの{word}をtrueにする", function (operation) {
+Given("merge policyの{word}をtrueにする", function (operation: string) {
   this.policy.merge[operation] = true;
 });
-Given("merge modeを{string}にする", function (mode) {
+Given("merge modeを{string}にする", function (mode: string) {
   this.policy.merge.mode = mode;
 });
 Given("policyへ未知fieldと不正な配列値を混入する", function () {
@@ -763,13 +1195,14 @@ Given("policyへ未知fieldと不正な配列値を混入する", function () {
   this.policy.merge.requiredReviews = 21;
 });
 When("policyを検証する", function () {
-  this.result = validatePolicy(this.policy);
+  this.policyValidation = validatePolicy(this.policy);
+  this.validationOutcome = this.policyValidation;
 });
 Then("policyはvalidである", function () {
-  assert.equal(this.result.valid, true);
+  assert.equal(this.policyValidation.valid, true);
 });
 Then("policyはinvalidである", function () {
-  assert.equal(this.result.valid, false);
+  assert.equal(this.validationOutcome?.valid, false);
 });
 Then("delivery stopはpull_requestである", function () {
   assert.equal(this.policy.delivery.stopAt, "pull_request");
@@ -786,7 +1219,9 @@ Then("policy schema逸脱をすべて報告する", function () {
     "requiredReviews",
   ])
     assert.ok(
-      this.result.errors.some((error: string) => error.includes(fragment)),
+      this.policyValidation.errors.some((error: string) =>
+        error.includes(fragment),
+      ),
       fragment,
     );
 });
@@ -1102,16 +1537,18 @@ Then("正規表だけが合格し余分なpathと空差分基点は拒否され�
 });
 
 Given("package metadataとpolicy version artifactがある", function () {
-  this.packageMetadata = JSON.parse(fs.readFileSync("package.json", "utf8"));
+  this.packageMetadata = JSON.parse(
+    fs.readFileSync("package.json", "utf8"),
+  ) as unknown as PackageMetadataFixture;
   this.policySchema = JSON.parse(
     fs.readFileSync(
       ".agent-skill-chain/schemas/project-policy.schema.json",
       "utf8",
     ),
-  );
+  ) as unknown as PolicySchemaFixture;
   this.defaultPolicy = JSON.parse(
     fs.readFileSync(".agent-skill-chain/policy/default.json", "utf8"),
-  );
+  ) as unknown as MutablePolicyFixture;
 });
 When("version正本との一致を検証する", function () {
   this.releaseVersion = packageReleaseVersion(this.packageMetadata.version);
@@ -1511,7 +1948,7 @@ Given("repositoryの全feature fileとCucumber実行結果がある", function (
   this.forbiddenFileSuffixes = [".test.js"];
 });
 When("Gherkin traceを検証する", function () {
-  this.result = validateScenarioTrace(
+  this.traceResult = validateScenarioTrace(
     collectProjectTrace(
       this.traceRoot,
       this.testLayers,
@@ -1522,7 +1959,7 @@ When("Gherkin traceを検証する", function () {
 });
 Then("全scenarioに一意なSCN IDとGiven、When、Thenがある", function () {
   assert.equal(
-    this.result.errors.filter((error: string) =>
+    this.traceResult.errors.filter((error: string) =>
       /duplicate|missing/.test(error),
     ).length,
     0,
@@ -1530,10 +1967,10 @@ Then("全scenarioに一意なSCN IDとGiven、When、Thenがある", function ()
 });
 Then("unit、integration、E2Eの各layerにscenarioがある", function () {
   for (const layer of ["unit", "integration", "e2e"])
-    assert.ok(this.result.layerCounts[layer] > 0);
+    assert.ok(this.traceResult.layerCounts[layer] > 0);
 });
 Then("JavaScriptのNode test起票は0件である", function () {
-  assert.deepEqual(this.result.nodeTests, []);
+  assert.deepEqual(this.traceResult.nodeTests, []);
 });
 Given("Whenが欠けたGherkin scenarioがある", function () {
   this.gherkin =
@@ -1558,14 +1995,14 @@ Then("canonical Given When Thenへ変換される", function () {
 Given("空のtestLayersを持つcurrent project policyがある", function () {
   this.emptyLayersPolicy = JSON.parse(
     fs.readFileSync(".agent-skill-chain/policy/default.json", "utf8"),
-  );
+  ) as unknown as MutablePolicyFixture;
   this.emptyLayersPolicy.projectChoices = {
-    ...JSON.parse(
+    ...(JSON.parse(
       fs.readFileSync(
         ".agent-skill-chain/project/choices/development.json",
         "utf8",
       ),
-    ),
+    ) as unknown as Record<string, unknown>),
     testLayers: [],
   };
   this.choiceSchema = JSON.parse(
@@ -1573,10 +2010,11 @@ Given("空のtestLayersを持つcurrent project policyがある", function () {
       ".agent-skill-chain/schemas/project-choice.schema.json",
       "utf8",
     ),
-  );
+  ) as unknown as ChoiceSchemaFixture;
 });
 When("current project policyを検証する", function () {
   this.policyValidation = validatePolicy(this.emptyLayersPolicy);
+  this.validationOutcome = this.policyValidation;
 });
 Then("runtimeとschemaは空のtestLayersを拒否する", function () {
   assert.equal(this.policyValidation.valid, false);
@@ -1605,7 +2043,9 @@ Given("同じSCN IDを持つ2つのGherkin scenarioがある", function () {
   );
 });
 Then("重複errorを検出する", function () {
-  assert.ok(this.result.errors.some((error: string) => error.includes("重複")));
+  assert.ok(
+    this.traceResult.errors.some((error: string) => error.includes("重複")),
+  );
 });
 Given("projectがcomponentとjourneyのtest layerを選択する", function () {
   const root = this.temp();
@@ -1621,17 +2061,21 @@ Given("projectがcomponentとjourneyのtest layerを選択する", function () {
   }
 });
 When("configured layerでGherkin traceを検証する", function () {
-  this.result = validateScenarioTrace(
+  this.traceResult = validateScenarioTrace(
     collectProjectTrace(this.traceRoot, this.testLayers, []),
     { layers: this.testLayers },
   );
 });
 Then("generic traceはfixed 3 layerを要求しない", function () {
-  assert.equal(this.result.valid, true, this.result.errors.join("; "));
-  assert.deepEqual(Object.keys(this.result.layerCounts), this.testLayers);
-  assert.equal(JSON.stringify(this.result).includes("unit"), false);
-  assert.equal(JSON.stringify(this.result).includes("integration"), false);
-  assert.equal(JSON.stringify(this.result).includes("e2e"), false);
+  assert.equal(
+    this.traceResult.valid,
+    true,
+    this.traceResult.errors.join("; "),
+  );
+  assert.deepEqual(Object.keys(this.traceResult.layerCounts), this.testLayers);
+  assert.equal(JSON.stringify(this.traceResult).includes("unit"), false);
+  assert.equal(JSON.stringify(this.traceResult).includes("integration"), false);
+  assert.equal(JSON.stringify(this.traceResult).includes("e2e"), false);
 });
 Given("testLayersを持たないlegacy project policyとGherkinがある", function () {
   this.root = this.temp();
@@ -1672,7 +2116,7 @@ Then("project choice不足をstructured invalidとして返す", function () {
   assert.equal(this.status, 1);
   assert.match(this.stdout, /project policy/u);
 });
-Given("{word}を持つdependency graphがある", function (variant) {
+Given("{word}を持つdependency graphがある", function (variant: string) {
   this.graph =
     variant === "cycle"
       ? {
@@ -1691,14 +2135,17 @@ Given("{word}を持つdependency graphがある", function (variant) {
           };
 });
 When("dependency graphを検証する", function () {
-  this.result = traceDomain.validateDependencyGraph(
+  this.dependencyResult = traceDomain.validateDependencyGraph(
     this.graph.nodes,
     this.graph.edges,
   );
 });
 Then("dependency graphはcycle diagnostic付きでinvalidである", function () {
-  assert.equal(this.result.valid, false);
-  assert.match(this.result.errors.join(" "), /cycle|self-loop|unknown/u);
+  assert.equal(this.dependencyResult.valid, false);
+  assert.match(
+    this.dependencyResult.errors.join(" "),
+    /cycle|self-loop|unknown/u,
+  );
 });
 Given("repository sourceのimport graphと循環反例がある", function () {
   const { nodes, edges } = collectTypeScriptDependencyGraph(process.cwd());

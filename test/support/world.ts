@@ -2,13 +2,29 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { setWorldConstructor, Before, After } from "@cucumber/cucumber";
+import {
+  After as cucumberAfter,
+  Before as cucumberBefore,
+  Given as cucumberGiven,
+  Then as cucumberThen,
+  When as cucumberWhen,
+  setWorldConstructor,
+  World,
+  type IWorldOptions,
+} from "@cucumber/cucumber";
 
-class WorkflowWorld {
+type WorkflowParameters = Readonly<Record<string, unknown>>;
+
+export class WorkflowWorld extends World<WorkflowParameters> {
   value: unknown = undefined;
   error: unknown = undefined;
   calls: string[] = [];
+  validationOutcome: { valid: boolean } | undefined = undefined;
   temporaryDirectories: string[] = [];
+
+  constructor(options: IWorldOptions<WorkflowParameters>) {
+    super(options);
+  }
 
   temp(prefix = "asc-v03-") {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -30,13 +46,22 @@ class WorkflowWorld {
   }
 }
 
+export function stepDefinitions<WorldType extends WorkflowWorld>() {
+  return {
+    Given: cucumberGiven<WorldType>,
+    When: cucumberWhen<WorldType>,
+    Then: cucumberThen<WorldType>,
+  };
+}
+
 setWorldConstructor(WorkflowWorld);
-Before(function () {
+cucumberBefore<WorkflowWorld>(function () {
   this.value = undefined;
   this.error = undefined;
   this.calls = [];
+  this.validationOutcome = undefined;
 });
-After(function () {
+cucumberAfter<WorkflowWorld>(function () {
   for (const directory of this.temporaryDirectories.reverse())
     fs.rmSync(directory, { recursive: true, force: true });
 });

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { Given, When, Then } from "@cucumber/cucumber";
+import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
   createPullRequest,
   authorizeMerge,
@@ -11,8 +11,41 @@ import {
   buildFinalizeReport,
   applyFinalize,
 } from "../../src/domain/finalize.js";
-import { github } from "../../src/adapters/github.js";
+import {
+  github,
+  type ApprovalObservation,
+  type BranchProtectionObservation,
+  type PullRequestCreationResult,
+  type PullRequestInspection,
+} from "../../src/adapters/github.js";
 import { type Policy } from "../../src/types.js";
+
+interface DeliveryFinalizeWorld extends WorkflowWorld {
+  authorization: "approved";
+  bodyFile: string;
+  commitResults: Array<{ sha?: string; authorActorId?: string } | Error>;
+  deliveryResult: ReturnType<typeof createPullRequest>;
+  evidence: ReturnType<typeof safeDeliveryEvidence>;
+  finalizeReport: ReturnType<typeof buildFinalizeReport>;
+  finalizeResult: ReturnType<typeof applyFinalize>;
+  finalizeState: Parameters<typeof buildFinalizeReport>[0];
+  ghLog: string;
+  issueSyncResult: { url: string };
+  mergeInput: MergeInput;
+  mergeResult: ReturnType<typeof authorizeMerge>;
+  omitTrustedPolicy: boolean;
+  prCreationResult: PullRequestCreationResult;
+  prInspection: PullRequestInspection;
+  prOverrides: Record<string, string>;
+  protectionObservation: BranchProtectionObservation;
+  reviewObservations: ApprovalObservation[];
+  stubPath: string;
+  trustedPolicy: Policy;
+  withApproval: ReturnType<typeof authorizeMerge>;
+  withoutApproval: ReturnType<typeof authorizeMerge>;
+}
+
+const { Given, When, Then } = stepDefinitions<DeliveryFinalizeWorld>();
 
 interface GhStubWorld {
   temp(prefix?: string): string;
@@ -116,13 +149,17 @@ const trustedFinalizePolicy = (): Policy => ({
   ],
 });
 
+function policyWithMerge(merge: Policy["merge"]): Policy {
+  return { ...trustedDeliveryPolicy(), merge };
+}
+
 Given("review、test、spec evidenceがすべてpassである", function () {
   this.evidence = safeDeliveryEvidence();
 });
 Given("PR単位のexternal writeが承認済みである", function () {
   this.authorization = "approved";
 });
-Given("{word} evidenceをfailにする", function (name) {
+Given("{word} evidenceをfailにする", function (name: string) {
   if (name === "review") this.evidence.review.approved = false;
   else if (name === "tests") this.evidence.tests.passed = false;
   else this.evidence.spec.consistent = false;
@@ -133,11 +170,14 @@ Given("test evidenceのHEADだけが異なる", function () {
 Given("spec evidenceからscenario traceを除く", function () {
   this.evidence.spec.trace.scenarios = [];
 });
-Given("PR inputの{word}を{string}にする", function (field, value) {
-  this.prOverrides = { [field]: value };
-});
+Given(
+  "PR inputの{word}を{string}にする",
+  function (field: string, value: string) {
+    this.prOverrides = { [field]: value };
+  },
+);
 When("PR createをdry-runする", function () {
-  this.result = createPullRequest(
+  this.deliveryResult = createPullRequest(
     {
       apply: false,
       evidence: this.evidence,
@@ -155,7 +195,7 @@ When("PR createをdry-runする", function () {
 });
 When("PR createをapplyする", function () {
   try {
-    this.result = createPullRequest(
+    this.deliveryResult = createPullRequest(
       {
         apply: true,
         authorization: this.authorization,
@@ -201,16 +241,19 @@ When("PR createをdry-runして失敗を確認する", function () {
   }
 });
 Then("delivery stateはpreviewである", function () {
-  assert.equal(this.result.state, "preview");
-  assert.equal(this.result.preview.authorityStatus, "unverified-preview");
+  assert.equal(this.deliveryResult.state, "preview");
+  assert.equal(
+    this.deliveryResult.preview?.authorityStatus,
+    "unverified-preview",
+  );
 });
 Then("delivery stateはwaiting_for_human_reviewである", function () {
-  assert.equal(this.result.state, "waiting_for_human_review");
+  assert.equal(this.deliveryResult.state, "waiting_for_human_review");
 });
 Then("external operation callは0件である", function () {
   assert.equal(this.calls.length, 0);
 });
-Then("external operationは{string}だけである", function (operation) {
+Then("external operationは{string}だけである", function (operation: string) {
   assert.deepEqual(this.calls, [operation]);
 });
 Then("PR createは失敗する", function () {
@@ -239,19 +282,19 @@ function prepareGhStub(
 }
 
 Given("exact repositoryと同じbodyを返すgh stubがある", function () {
-  prepareGhStub(this as unknown as GhStubWorld, true);
+  prepareGhStub(this, true);
 });
 Given("exact repositoryだが異なるbodyを返すgh stubがある", function () {
-  prepareGhStub(this as unknown as GhStubWorld, false);
+  prepareGhStub(this, false);
 });
 Given("read権限だけを返すgh stubがある", function () {
-  prepareGhStub(this as unknown as GhStubWorld, true, "READ");
+  prepareGhStub(this, true, "READ");
 });
 When("Issue sync adapterを実行する", function () {
   const original = process.env.PATH;
   process.env.PATH = this.stubPath;
   try {
-    this.result = github(
+    this.issueSyncResult = github(
       "issue.sync",
       { repository: "o/r", issue: 824, bodyFile: this.bodyFile },
       process.cwd(),
@@ -263,7 +306,7 @@ When("Issue sync adapterを実行する", function () {
   }
 });
 Then("Issue syncは成功する", function () {
-  assert.equal(this.result.url, "https://github.com/o/r/issues/824");
+  assert.equal(this.issueSyncResult.url, "https://github.com/o/r/issues/824");
 });
 Then("gh操作順にauth、repo確認、edit、read-backが含まれる", function () {
   const lines = fs.readFileSync(this.ghLog, "utf8").trim().split("\n");
@@ -276,6 +319,7 @@ Then("Issue syncは失敗する", function () {
   assert.ok(this.error instanceof Error);
 });
 Then("errorにwrite権限不足が含まれる", function () {
+  assert.ok(this.error instanceof Error);
   assert.match(this.error.message, /書き込み権限/);
 });
 Then("Issue edit操作は呼ばれない", function () {
@@ -332,13 +376,13 @@ function prepareGhReadStub(
 }
 
 Given("PR状態を返すexact repositoryのgh stubがある", function () {
-  prepareGhReadStub(this as unknown as GhReadStubWorld, "pr");
+  prepareGhReadStub(this, "pr");
 });
 Given("branch protectionを返すexact repositoryのgh stubがある", function () {
-  prepareGhReadStub(this as unknown as GhReadStubWorld, "protection");
+  prepareGhReadStub(this, "protection");
 });
 Given("複数pageのreviewを返すexact repositoryのgh stubがある", function () {
-  prepareGhReadStub(this as unknown as GhReadStubWorld, "reviews");
+  prepareGhReadStub(this, "reviews");
 });
 Given("commit OID検証用のgh stubがある", function () {
   const directory = this.temp("asc-gh-commit-");
@@ -361,7 +405,9 @@ When("短縮OIDと応答不一致と完全一致をcommit inspectへ渡す", fun
           github("commit.inspect", { repository: "o/r", sha }, process.cwd()),
         );
       } catch (error) {
-        this.commitResults.push(error);
+        this.commitResults.push(
+          error instanceof Error ? error : new Error(String(error)),
+        );
       }
     }
   } finally {
@@ -380,7 +426,7 @@ When("PR inspect adapterを実行する", function () {
   const original = process.env.PATH;
   process.env.PATH = this.stubPath;
   try {
-    this.result = github(
+    this.prInspection = github(
       "pr.inspect",
       { repository: "o/r", pr: 1 },
       process.cwd(),
@@ -393,7 +439,7 @@ When("branch protection adapterを実行する", function () {
   const original = process.env.PATH;
   process.env.PATH = this.stubPath;
   try {
-    this.result = github(
+    this.protectionObservation = github(
       "branch.protection",
       { repository: "o/r", branch: "main" },
       process.cwd(),
@@ -406,7 +452,7 @@ When("PR reviews adapterを実行する", function () {
   const original = process.env.PATH;
   process.env.PATH = this.stubPath;
   try {
-    this.result = github(
+    this.reviewObservations = github(
       "pr.reviews",
       { repository: "o/r", pr: 1 },
       process.cwd(),
@@ -416,15 +462,15 @@ When("PR reviews adapterを実行する", function () {
   }
 });
 Then("PR状態を取得できる", function () {
-  assert.equal(this.result.headRefName, "feature/x");
+  assert.equal(this.prInspection.headRefName, "feature/x");
 });
 Then("branch protection状態を取得できる", function () {
-  assert.equal(this.result.known, true);
-  assert.equal(this.result.protected, true);
+  assert.equal(this.protectionObservation.known, true);
+  assert.equal(this.protectionObservation.protected, true);
 });
 Then("全pageのreviewと順序根拠を取得できる", function () {
-  assert.equal(this.result.length, 32);
-  assert.deepEqual(this.result.at(-1), {
+  assert.equal(this.reviewObservations.length, 32);
+  assert.deepEqual(this.reviewObservations.at(-1), {
     state: "CHANGES_REQUESTED",
     commitSha: "a".repeat(40),
     actorId: "reviewer-0",
@@ -487,19 +533,19 @@ function prepareGhCreateStub(
 }
 
 Given("一致するremote HEADとPR状態を返すgh stubがある", function () {
-  prepareGhCreateStub(this as unknown as GhReadStubWorld, true);
+  prepareGhCreateStub(this, true);
 });
 Given("異なるremote HEADを返すgh stubがある", function () {
-  prepareGhCreateStub(this as unknown as GhReadStubWorld, false);
+  prepareGhCreateStub(this, false);
 });
 Given("作成中にremote base OIDが変更されるgh stubがある", function () {
-  prepareGhCreateStub(this as unknown as GhReadStubWorld, true, false);
+  prepareGhCreateStub(this, true, false);
 });
 When("PR create adapterを実行する", function () {
   const original = process.env.PATH;
   process.env.PATH = this.stubPath;
   try {
-    this.result = github(
+    this.prCreationResult = github(
       "pr.create",
       {
         repository: "o/r",
@@ -518,17 +564,19 @@ When("PR create adapterを実行する", function () {
   }
 });
 Then("PR create adapterは成功する", function () {
-  assert.equal(this.result.url, "https://github.com/o/r/pull/9");
+  assert.equal(this.prCreationResult.url, "https://github.com/o/r/pull/9");
 });
 Then("PR create adapterは失敗する", function () {
   assert.ok(this.error instanceof Error);
 });
 Then("PR create adapterはrollback要求を返す", function () {
-  assert.equal(this.result.state, "rollback_required");
-  assert.match(this.result.reason, /作成済みPR/u);
+  assert.equal(this.prCreationResult.state, "rollback_required");
+  if (this.prCreationResult.state !== "rollback_required")
+    throw new Error("rollback_requiredではありません");
+  assert.match(this.prCreationResult.reason, /作成済みPR/u);
 });
 Then("作成済みPRのURLを失わない", function () {
-  assert.equal(this.result.url, "https://github.com/o/r/pull/9");
+  assert.equal(this.prCreationResult.url, "https://github.com/o/r/pull/9");
 });
 Then(
   "PR作成順にauth、repository、remote HEAD、create、read-backが含まれる",
@@ -560,29 +608,31 @@ Given(
   "trusted policyはdisabledでcandidate policyはautomaticである",
   function () {
     this.mergeInput = {
-      trustedPolicy: { merge: { mode: "disabled" } },
-      candidatePolicy: { merge: { mode: "automatic", methods: ["squash"] } },
+      trustedPolicy: trustedDeliveryPolicy(),
+      candidatePolicy: policyWithMerge({
+        mode: "automatic",
+        branches: ["feature/*"],
+        methods: ["squash"],
+        requiredChecks: [],
+        requiredReviews: 0,
+      }),
       method: "squash",
       checks: [],
-      reviews: 0,
       branch: "feature/a",
-      humanApproval: false,
     };
   },
 );
 Given(
   "trusted policyがautomaticでcheck {string}とreview 1件を要求する",
-  function (check) {
+  function (check: string) {
     this.mergeInput = {
-      trustedPolicy: {
-        merge: {
-          mode: "automatic",
-          branches: ["feature/*"],
-          methods: ["squash"],
-          requiredChecks: [check],
-          requiredReviews: 1,
-        },
-      },
+      trustedPolicy: policyWithMerge({
+        mode: "automatic",
+        branches: ["feature/*"],
+        methods: ["squash"],
+        requiredChecks: [check],
+        requiredReviews: 1,
+      }),
       method: "squash",
       checks: [],
       approvals: [],
@@ -610,29 +660,25 @@ Given("branch、method、check、reviewがすべて条件を満たす", function
   ];
 });
 Given("trusted policyがassistedである", function () {
-  this.trustedPolicy = {
-    merge: {
-      mode: "assisted",
-      branches: ["feature/*"],
-      methods: ["merge"],
-      requiredChecks: [],
-      requiredReviews: 0,
-    },
-  };
+  this.trustedPolicy = policyWithMerge({
+    mode: "assisted",
+    branches: ["feature/*"],
+    methods: ["merge"],
+    requiredChecks: [],
+    requiredReviews: 0,
+  });
 });
 Given(
   "trusted automatic policyがrequired check {string}を持つ",
-  function (check) {
+  function (check: string) {
     this.mergeInput = {
-      trustedPolicy: {
-        merge: {
-          mode: "automatic",
-          branches: ["*"],
-          methods: ["squash"],
-          requiredChecks: [check],
-          requiredReviews: 0,
-        },
-      },
+      trustedPolicy: policyWithMerge({
+        mode: "automatic",
+        branches: ["*"],
+        methods: ["squash"],
+        requiredChecks: [check],
+        requiredReviews: 0,
+      }),
       method: "squash",
       checks: undefined,
       approvals: [],
@@ -646,10 +692,10 @@ Given(
   },
 );
 When("candidate branchのmerge authorizationを評価する", function () {
-  this.result = authorizeMerge(this.mergeInput);
+  this.mergeResult = authorizeMerge(this.mergeInput);
 });
 When("merge authorizationを評価する", function () {
-  this.result = authorizeMerge(this.mergeInput);
+  this.mergeResult = authorizeMerge(this.mergeInput);
 });
 When("human approvalなしとありでmerge authorizationを評価する", function () {
   const headSha = "a".repeat(40);
@@ -682,20 +728,18 @@ When("human approvalなしとありでmerge authorizationを評価する", funct
   });
 });
 When("check state unknownでmerge authorizationを評価する", function () {
-  this.result = authorizeMerge(this.mergeInput);
+  this.mergeResult = authorizeMerge(this.mergeInput);
 });
 Given("reviewが旧HEADまたは実装者自身による承認である", function () {
   const headSha = "a".repeat(40);
   this.mergeInput = {
-    trustedPolicy: {
-      merge: {
-        mode: "automatic",
-        branches: ["feature/*"],
-        methods: ["squash"],
-        requiredChecks: [],
-        requiredReviews: 1,
-      },
-    },
+    trustedPolicy: policyWithMerge({
+      mode: "automatic",
+      branches: ["feature/*"],
+      methods: ["squash"],
+      requiredChecks: [],
+      requiredReviews: 1,
+    }),
     method: "squash",
     checks: [],
     approvals: [
@@ -726,15 +770,13 @@ Given("reviewが旧HEADまたは実装者自身による承認である", functi
 });
 Given("repository、SHA、保護設定のtrusted観測が欠けている", function () {
   this.mergeInput = {
-    trustedPolicy: {
-      merge: {
-        mode: "automatic",
-        branches: ["feature/*"],
-        methods: ["squash"],
-        requiredChecks: [],
-        requiredReviews: 0,
-      },
-    },
+    trustedPolicy: policyWithMerge({
+      mode: "automatic",
+      branches: ["feature/*"],
+      methods: ["squash"],
+      requiredChecks: [],
+      requiredReviews: 0,
+    }),
     method: "squash",
     checks: [],
     approvals: [],
@@ -745,15 +787,13 @@ Given("repository、SHA、保護設定のtrusted観測が欠けている", funct
 Given("同一reviewerが承認後に変更要求へ更新している", function () {
   const headSha = "a".repeat(40);
   this.mergeInput = {
-    trustedPolicy: {
-      merge: {
-        mode: "automatic",
-        branches: ["feature/*"],
-        methods: ["squash"],
-        requiredChecks: [],
-        requiredReviews: 1,
-      },
-    },
+    trustedPolicy: policyWithMerge({
+      mode: "automatic",
+      branches: ["feature/*"],
+      methods: ["squash"],
+      requiredChecks: [],
+      requiredReviews: 1,
+    }),
     method: "squash",
     checks: [],
     approvals: [
@@ -783,20 +823,20 @@ Given("同一reviewerが承認後に変更要求へ更新している", function
   };
 });
 Given("reviewのsubmittedAtが不正である", function () {
-  this.mergeInput.approvals[0].submittedAt = "sometime";
+  const approval = this.mergeInput.approvals?.[0];
+  if (!approval) throw new Error("review fixtureがありません");
+  approval.submittedAt = "sometime";
 });
 Given("同一review IDに異なるactorと時刻の観測がある", function () {
   const headSha = "a".repeat(40);
   this.mergeInput = {
-    trustedPolicy: {
-      merge: {
-        mode: "automatic",
-        branches: ["feature/*"],
-        methods: ["squash"],
-        requiredChecks: [],
-        requiredReviews: 1,
-      },
-    },
+    trustedPolicy: policyWithMerge({
+      mode: "automatic",
+      branches: ["feature/*"],
+      methods: ["squash"],
+      requiredChecks: [],
+      requiredReviews: 1,
+    }),
     method: "squash",
     checks: [],
     approvals: [
@@ -826,13 +866,13 @@ Given("同一review IDに異なるactorと時刻の観測がある", function ()
   };
 });
 Then("mergeは許可されない", function () {
-  assert.equal(this.result.allowed, false);
+  assert.equal(this.mergeResult.allowed, false);
 });
 Then("mergeは許可される", function () {
-  assert.equal(this.result.allowed, true);
+  assert.equal(this.mergeResult.allowed, true);
 });
-Then("許可operationは{string}だけである", function (operation) {
-  assert.deepEqual(this.result.operations, [operation]);
+Then("許可operationは{string}だけである", function (operation: string) {
+  assert.deepEqual(this.mergeResult.operations, [operation]);
 });
 Then("approvalなしは拒否され、approvalありだけ許可される", function () {
   assert.equal(this.withoutApproval.allowed, false);
@@ -840,7 +880,7 @@ Then("approvalなしは拒否され、approvalありだけ許可される", func
 });
 
 Given("merged、clean、pushed、recoveryありのworktree stateがある", function () {
-  this.state = safeState();
+  this.finalizeState = safeState();
 });
 Given("finalize stateを{word}にする", function (condition: string) {
   const changes = {
@@ -853,22 +893,22 @@ Given("finalize stateを{word}にする", function (condition: string) {
     "ignored-artifact": { ignoredArtifacts: ["output.bin"] },
   };
   assert.ok(condition in changes);
-  Object.assign(this.state, changes[condition as keyof typeof changes]);
+  Object.assign(this.finalizeState, changes[condition as keyof typeof changes]);
 });
 Given("safe finalize reportを作成済みである", function () {
-  this.report = buildFinalizeReport(this.state);
+  this.finalizeReport = buildFinalizeReport(this.finalizeState);
 });
 When("finalize reportを作成する", function () {
-  this.report = buildFinalizeReport(this.state);
+  this.finalizeReport = buildFinalizeReport(this.finalizeState);
 });
 When("report hashを承認してfinalize applyを試みる", function () {
-  this.report = buildFinalizeReport(this.state);
+  this.finalizeReport = buildFinalizeReport(this.finalizeState);
   try {
     applyFinalize(
       {
-        report: this.report,
-        approvedHash: this.report.hash,
-        currentState: this.state,
+        report: this.finalizeReport,
+        approvedHash: this.finalizeReport.hash,
+        currentState: this.finalizeState,
         trustedPolicy: trustedFinalizePolicy(),
       },
       (operation) => this.calls.push(operation),
@@ -881,9 +921,9 @@ When("current HEADを変更してfinalize applyする", function () {
   try {
     applyFinalize(
       {
-        report: this.report,
-        approvedHash: this.report.hash,
-        currentState: { ...this.state, headSha: "c".repeat(40) },
+        report: this.finalizeReport,
+        approvedHash: this.finalizeReport.hash,
+        currentState: { ...this.finalizeState, headSha: "c".repeat(40) },
         trustedPolicy: trustedFinalizePolicy(),
       },
       (operation) => this.calls.push(operation),
@@ -893,11 +933,11 @@ When("current HEADを変更してfinalize applyする", function () {
   }
 });
 When("同一stateと承認hashでfinalize applyする", function () {
-  this.result = applyFinalize(
+  this.finalizeResult = applyFinalize(
     {
-      report: this.report,
-      approvedHash: this.report.hash,
-      currentState: this.state,
+      report: this.finalizeReport,
+      approvedHash: this.finalizeReport.hash,
+      currentState: this.finalizeState,
       trustedPolicy: trustedFinalizePolicy(),
     },
     (operation) => this.calls.push(operation),
@@ -907,9 +947,9 @@ When("trusted policyなしでfinalize applyを試みる", function () {
   try {
     applyFinalize(
       {
-        report: this.report,
-        approvedHash: this.report.hash,
-        currentState: this.state,
+        report: this.finalizeReport,
+        approvedHash: this.finalizeReport.hash,
+        currentState: this.finalizeState,
         trustedPolicy: undefined,
       },
       (operation) => this.calls.push(operation),
@@ -919,8 +959,8 @@ When("trusted policyなしでfinalize applyを試みる", function () {
   }
 });
 Then("reportはsafeで64桁hashを持つ", function () {
-  assert.equal(this.report.safe, true);
-  assert.match(this.report.hash, /^[a-f0-9]{64}$/);
+  assert.equal(this.finalizeReport.safe, true);
+  assert.match(this.finalizeReport.hash, /^[a-f0-9]{64}$/u);
 });
 Then("destructive operation callは0件である", function () {
   assert.equal(this.calls.length, 0);
@@ -929,8 +969,8 @@ Then("finalize applyは失敗する", function () {
   assert.ok(this.error instanceof Error);
 });
 Then("lifecycle stateはfinalizedである", function () {
-  assert.equal(this.result.state, "finalized");
+  assert.equal(this.finalizeResult.state, "finalized");
 });
-Then("destructive operationは{string}だけである", function (operation) {
+Then("destructive operationは{string}だけである", function (operation: string) {
   assert.deepEqual(this.calls, [operation]);
 });

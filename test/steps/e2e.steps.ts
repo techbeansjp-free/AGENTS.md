@@ -2,7 +2,20 @@ import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { Given, When, Then } from "@cucumber/cucumber";
+import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+
+interface E2eWorld extends WorkflowWorld {
+  cliEnv: NodeJS.ProcessEnv;
+  cliResult: ReturnType<typeof execute>;
+  cliResults: Array<ReturnType<typeof execute>>;
+  ghMarker: string;
+  npxResults: Array<ReturnType<typeof executeNpx>>;
+  prArgs: string[];
+  prCwd: string;
+  root: string;
+}
+
+const { Given, When, Then } = stepDefinitions<E2eWorld>();
 
 function execute(
   args: string[],
@@ -161,7 +174,7 @@ Then("diagnosticに明示authorization不足が含まれる", function () {
     /明示的な承認/u,
   );
 });
-Then("stdoutに{string}が含まれる", function (value) {
+Then("stdoutに{string}が含まれる", function (value: string) {
   assert.ok(
     this.cliResult.stdout.includes(value),
     `args=${JSON.stringify(this.prArgs)} stdout=${JSON.stringify(this.cliResult.stdout)} stderr=${JSON.stringify(this.cliResult.stderr)} pid=${this.cliResult.pid}`,

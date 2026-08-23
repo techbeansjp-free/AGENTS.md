@@ -3,7 +3,7 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
-import { Given, When, Then } from "@cucumber/cucumber";
+import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
   init,
   upgrade,
@@ -15,13 +15,36 @@ import {
   inspectFinalizeState,
 } from "../../src/domain/worktree.js";
 
+interface LifecycleWorld extends WorkflowWorld {
+  assetDuringPreview: boolean;
+  consumerGuide: string;
+  doctorResult: ReturnType<typeof doctor>;
+  finalizeState: ReturnType<typeof inspectFinalizeState>;
+  outsideFile: string;
+  preview: ReturnType<typeof init>;
+  root: string;
+  statusBefore: string;
+  uninstallResult: ReturnType<typeof uninstall>;
+  upgradeResult: ReturnType<typeof upgrade>;
+  worktree: string;
+}
+
+const { Given, When, Then } = stepDefinitions<LifecycleWorld>();
+
+function readJsonObject(file: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new TypeError(`JSON objectではありません: ${file}`);
+  return parsed as Record<string, unknown>;
+}
+
 Given("空のconsumer directoryがある", function () {
   this.root = this.temp();
 });
 When("install domainをdry-runしてからapplyする", function () {
   this.preview = init(this.root, { apply: false });
   this.assetDuringPreview = fs.existsSync(path.join(this.root, "AGENTS.md"));
-  this.result = init(this.root, { apply: true });
+  init(this.root, { apply: true });
 });
 Then("dry-run時はassetが存在しない", function () {
   assert.equal(this.assetDuringPreview, false);
@@ -35,13 +58,10 @@ Then("apply後はmanaged asset recordが存在する", function () {
   );
 });
 Then("managed asset recordのversionはpackage.jsonと一致する", function () {
-  const record = JSON.parse(
-    fs.readFileSync(
-      path.join(this.root, ".agent-skill-chain", "managed-assets.json"),
-      "utf8",
-    ),
+  const record = readJsonObject(
+    path.join(this.root, ".agent-skill-chain", "managed-assets.json"),
   );
-  const packageMetadata = JSON.parse(fs.readFileSync("package.json", "utf8"));
+  const packageMetadata = readJsonObject("package.json");
   assert.equal(record.version, packageMetadata.version);
 });
 
@@ -114,11 +134,11 @@ Given(
   },
 );
 When("update domainをapplyする", function () {
-  this.result = upgrade(this.root, { apply: true });
+  this.upgradeResult = upgrade(this.root, { apply: true });
 });
 Then("consumer変更はすべて保持される", function () {
   assert.ok(
-    this.result.retained.includes(
+    this.upgradeResult.retained.includes(
       path.join(".agent-skill-chain", "docs", "02_品質基準.md"),
     ),
   );
@@ -192,11 +212,11 @@ Given("consumerが品質基準とtransient stagingを持つ", function () {
   );
 });
 When("delete domainをapplyする", function () {
-  this.result = uninstall(this.root, { apply: true });
+  this.uninstallResult = uninstall(this.root, { apply: true });
 });
 Then("modified品質基準とtransient stagingは保持される", function () {
   assert.ok(
-    this.result.retained.includes(
+    this.uninstallResult.retained.includes(
       path.join(".agent-skill-chain", "docs", "02_品質基準.md"),
     ),
   );
@@ -239,13 +259,16 @@ Given(
   },
 );
 When("doctorを実行する", function () {
-  this.result = doctor(this.root);
+  this.doctorResult = doctor(this.root);
 });
 Then("legacy directoryを2件報告する", function () {
-  assert.deepEqual(this.result.legacyDetected.sort(), [".agents", ".workflow"]);
+  assert.deepEqual(this.doctorResult.legacyDetected.sort(), [
+    ".agents",
+    ".workflow",
+  ]);
 });
 Then("legacy runtime enabledはfalseである", function () {
-  assert.equal(this.result.legacyRuntimeEnabled, false);
+  assert.equal(this.doctorResult.legacyRuntimeEnabled, false);
 });
 
 Given("managed asset recordへconsumer外の一致hash fileを混入する", function () {
@@ -257,8 +280,13 @@ Given("managed asset recordへconsumer外の一致hash fileを混入する", fun
     ".agent-skill-chain",
     "managed-assets.json",
   );
-  const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
-  record.files[path.relative(this.root, this.outsideFile)] = crypto
+  const record = readJsonObject(recordPath);
+  const files = record.files;
+  if (files === null || typeof files !== "object" || Array.isArray(files))
+    throw new TypeError("managed-assets.jsonのfilesがobjectではありません");
+  (files as Record<string, unknown>)[
+    path.relative(this.root, this.outsideFile)
+  ] = crypto
     .createHash("sha256")
     .update(fs.readFileSync(this.outsideFile))
     .digest("hex");
@@ -291,14 +319,19 @@ Given("旧version導入後にconsumerが同名の利用案内を作成してい�
     ".agent-skill-chain",
     "managed-assets.json",
   );
-  const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
-  delete record.files[path.join(".agent-skill-chain", "00_利用案内.md")];
+  const record = readJsonObject(recordPath);
+  const files = record.files;
+  if (files === null || typeof files !== "object" || Array.isArray(files))
+    throw new TypeError("managed-assets.jsonのfilesがobjectではありません");
+  delete (files as Record<string, unknown>)[
+    path.join(".agent-skill-chain", "00_利用案内.md")
+  ];
   fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
   fs.writeFileSync(this.consumerGuide, "consumerが先に所有した案内\n");
 });
 Then("consumerの同名利用案内は保持される", function () {
   assert.ok(
-    this.result.retained.includes(
+    this.upgradeResult.retained.includes(
       path.join(".agent-skill-chain", "00_利用案内.md"),
     ),
   );
@@ -320,7 +353,7 @@ Given("dirty fileを持つ一時Git repositoryがある", function () {
   );
 });
 When("新しいbranchと専用pathでworktreeを作成する", function () {
-  this.result = createWorktree({
+  createWorktree({
     repoRoot: this.root,
     worktreePath: this.worktree,
     branch: "feature/gherkin-worktree",
@@ -435,7 +468,7 @@ Given("remoteへpush済みのcleanな専用worktreeがある", function () {
   });
 });
 When("finalize stateをread-onlyで検査する", function () {
-  this.result = inspectFinalizeState(this.root, this.worktree, {
+  this.finalizeState = inspectFinalizeState(this.root, this.worktree, {
     repository: "o/r",
     base: "main",
     specConsistent: true,
@@ -445,6 +478,6 @@ When("finalize stateをread-onlyで検査する", function () {
   });
 });
 Then("recovery参照は上流branchで到達可能である", function () {
-  assert.equal(this.result.recoveryRef, "origin/feature/recovery");
-  assert.equal(this.result.recoveryReachable, true);
+  assert.equal(this.finalizeState.recoveryRef, "origin/feature/recovery");
+  assert.equal(this.finalizeState.recoveryReachable, true);
 });

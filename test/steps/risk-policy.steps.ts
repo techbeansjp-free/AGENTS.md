@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { Given, When, Then } from "@cucumber/cucumber";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import { main } from "../../src/cli.js";
 import {
   aggregateMetrics,
@@ -24,6 +24,7 @@ import {
   validateOverride,
   validateOwnershipBoundary,
   validatePackageManifest,
+  type ConceptualMigrationState,
 } from "../../src/domain/enforcement.js";
 import {
   applyFileMigration,
@@ -32,6 +33,7 @@ import {
   retryFileMigration,
   rollbackFileMigration,
   type MigrationEntry,
+  type GateResult,
   type MigrationState,
 } from "../../src/domain/migration.js";
 import {
@@ -40,6 +42,8 @@ import {
   loadProjectPolicySet,
   loadTrustedProjectPolicySet,
   validatePolicy,
+  type PolicyManifest,
+  type PolicySet,
 } from "../../src/domain/policy.js";
 import {
   validateConformanceContract,
@@ -51,7 +55,9 @@ import {
   type AutoFix,
   type Diagnostic,
   type Policy,
+  type ProjectChoices,
   type Rule,
+  isRecord,
 } from "../../src/types.js";
 
 interface ReviewStubWorld {
@@ -62,6 +68,511 @@ interface ReviewStubWorld {
   reviewCliEnv: NodeJS.ProcessEnv;
   reviewVariant: string;
 }
+
+interface BindingItemFixture {
+  id: string;
+  sourcePaths: unknown;
+  enforcement: Array<{ path: string; export: string }> | Record<string, never>;
+  counterexampleScenarios: unknown;
+}
+
+interface BindingFixture {
+  schemaVersion: string;
+  bindings: BindingItemFixture[];
+}
+
+interface BindingSchemaFixture {
+  properties: {
+    bindings: {
+      items: {
+        properties: {
+          enforcement: {
+            uniqueItems: boolean;
+            items: { properties: { path: { pattern: string } } };
+          };
+        };
+      };
+    };
+  };
+}
+
+interface ReviewEvidenceFixture extends Record<string, unknown> {
+  valid?: unknown;
+  status?: unknown;
+  externalEvidence?: {
+    provenance?: { source?: unknown };
+  };
+  candidateEvidence?: {
+    changedPaths?: unknown;
+    implementationTreeSha?: unknown;
+    artifact?: { sha256?: unknown; blobOid?: unknown };
+  };
+}
+
+interface InvariantFixture {
+  id: string;
+  sourceHook: string;
+  enforcementHooks: string[];
+  evidenceHooks: string[];
+  rollback: string;
+  [key: string]: string | string[];
+}
+
+interface PolicyManifestFixture {
+  policy?: unknown;
+  choiceFiles: string[];
+  ruleFiles: string[];
+  conformanceFiles: string[];
+}
+
+interface CliMigrationFixture {
+  state: string;
+  dryRun: boolean;
+  planFingerprint: string;
+  history: string[];
+  revision: number;
+  manifest: unknown[];
+  artifacts: unknown[];
+}
+
+interface CliEnvelopeFixture {
+  result: { status: string; diagnostic: Diagnostic };
+}
+
+interface CandidateObservationFixture {
+  candidateSetHash: string;
+  candidateProvenance: { commitSha: string };
+}
+
+type ValidationFixture = Omit<Parameters<typeof planValidation>[0], "kind">;
+
+interface RiskPolicyWorld extends WorkflowWorld {
+  actualBypasses: SpawnSyncReturns<string>[];
+  assetClassification: ReturnType<typeof classifyPackageAssets>;
+  afterContents: { [k: string]: unknown };
+  applied: ConceptualMigrationState;
+  appliedManifest: MigrationState;
+  approvedPlanHash: string;
+  artifactPath: "docs/reviews/phase-a.json";
+  assets: string[];
+  authorityPlan: MigrationState | GateResult;
+  authorityPlans: Array<MigrationState | GateResult>;
+  authorityResults: Array<
+    ConceptualMigrationState | MigrationState | GateResult
+  >;
+  badManifests: MigrationEntry[][];
+  baseSha: string;
+  before: Policy;
+  beforeContents: { [k: string]: unknown };
+  beforeFiles: string[];
+  binResults: SpawnSyncReturns<string>[];
+  binding: BindingFixture;
+  bindingFile: string;
+  bindingResult: { valid: boolean; errors: string[] };
+  bindingSchema: BindingSchemaFixture;
+  boundRule: Rule;
+  boundValidation: ValidationFixture;
+  boundary: unknown;
+  boundaryInput:
+    | {
+        policy: Policy;
+        boundary: string;
+        observations: { ruleId: string; violated: boolean }[];
+      }
+    | { policy: Policy; boundary: string; observations: never[] }
+    | {
+        policy: Policy;
+        boundary: string;
+        observations: { ruleId: string; violated: boolean; checks: string[] }[];
+      };
+  candidate: Policy;
+  candidateFile: string;
+  candidateRoot: string;
+  candidateSet: PolicySet;
+  changedCandidate: Policy;
+  cliManifestEntries: MigrationEntry[];
+  cliManifestResults: SpawnSyncReturns<string>[];
+  cliResult:
+    | { status: number; stdout: string; stderr: string }
+    | SpawnSyncReturns<string>;
+  cliResults: { status: number; stdout: string; stderr: string }[];
+  committedCandidateSetHash: string;
+  comparison: {
+    allowed: boolean;
+    rejected: Diagnostic[];
+    stagedAdditions: string[];
+  };
+  conformanceEvidence: { tool: string; passedScenarioIds: unknown };
+  contract: Record<string, unknown>;
+  contractFile: string;
+  contractResult: ReturnType<typeof validateConformanceContract>;
+  diagnostic: {
+    allowed: boolean;
+    diagnostic: {
+      ruleId: string;
+      purpose: string;
+      risk: string;
+      reasons: string[];
+      scope: string[];
+      checks: string[];
+      autoFixes: never[];
+      next: string;
+      requiredAuthority: string;
+      rollback: string;
+    };
+  };
+  dirtyCandidateResult: SpawnSyncReturns<string>;
+  duplicatePlan: MigrationState | GateResult;
+  effective:
+    | { valid: boolean; policy: Policy; source: string; diagnostic?: undefined }
+    | {
+        valid: boolean;
+        policy: Policy;
+        diagnostic: Diagnostic;
+        source?: undefined;
+      };
+  emptyManifest: MigrationEntry[];
+  enforceInput: string;
+  enforcePolicy: string;
+  entries: MigrationEntry[];
+  events: Parameters<typeof aggregateMetrics>[0];
+  evidenceAssets: Parameters<typeof validateOwnershipBoundary>[0];
+  evidenceFile: string;
+  expectedOverride: {
+    ruleId: string;
+    issue: number;
+    scope: string;
+    actor: string;
+    sha: string;
+    now: string;
+  };
+  explicitTrustedResults: SpawnSyncReturns<string>[];
+  externalFile: string;
+  failedValidation: ValidationFixture;
+  featureSha: string;
+  final:
+    | {
+        status: string;
+        scope: string;
+        valid: boolean;
+        checks: never[];
+        diagnostic: Diagnostic;
+        fingerprint?: undefined;
+      }
+    | {
+        status: string;
+        scope: string;
+        valid: boolean;
+        fingerprint: string;
+        checks: never[];
+        diagnostic: Diagnostic;
+      }
+    | {
+        status: string;
+        scope: string;
+        fingerprint: string;
+        checks: string[];
+        valid?: undefined;
+        diagnostic?: undefined;
+      };
+  finalCommitSha: string;
+  fingerprint: string;
+  floor: Policy;
+  fragmentApplied: MigrationState | GateResult;
+  fragmentEntries: MigrationEntry[];
+  fragmentPlan: MigrationState | GateResult;
+  gates: { id: string; requiresExternal: boolean }[];
+  gitValidBranchResults: SpawnSyncReturns<string>[];
+  implementationCommitSha: string;
+  initialJournal: MigrationState;
+  invariant: InvariantFixture;
+  journalBefore: string;
+  manifestFile: string;
+  migrationFile: string;
+  missingFloorError: string;
+  mixedFormPlan: MigrationState | GateResult;
+  monolithPlan: MigrationState | GateResult;
+  nonOverrideRule: Rule;
+  normalCandidate: Policy;
+  normalFile: string;
+  operationPolicy:
+    | {
+        policy: Policy;
+        setHash: string;
+        setEntries: string[][];
+        semanticPolicyHash: string;
+        provenance: { source: string; commitSha: string };
+      }
+    | {
+        policy: Policy;
+        setHash: string;
+        hash: string;
+        setEntries: string[][];
+        semanticPolicyHash: string;
+        provenance: {
+          floorCommitSha: string;
+          source?: undefined;
+          commitSha?: undefined;
+        };
+        rawEntries: Record<string, string>;
+        manifest: PolicyManifest | Policy;
+        choices: ProjectChoices[];
+        rules: Rule[];
+      };
+  operationPolicyError: string;
+  outputKinds: {
+    token: string;
+    nested: { apiKey: string };
+    text: string;
+    status: string;
+  }[];
+  override: NonNullable<Parameters<typeof validateOverride>[1]>;
+  overrideExpected: Parameters<typeof validateOverride>[2];
+  overrideResults: {
+    valid: {
+      valid: boolean;
+      reasons: string[];
+      diagnostic: Diagnostic;
+      audit:
+        | {
+            ruleId: string | undefined;
+            issue: number | undefined;
+            scope: string | undefined;
+            actor: string | undefined;
+            reason: string | undefined;
+            expiresAt: string | undefined;
+            sha: string | undefined;
+          }
+        | undefined;
+    };
+    issue: {
+      valid: boolean;
+      reasons: string[];
+      diagnostic: Diagnostic;
+      audit:
+        | {
+            ruleId: string | undefined;
+            issue: number | undefined;
+            scope: string | undefined;
+            actor: string | undefined;
+            reason: string | undefined;
+            expiresAt: string | undefined;
+            sha: string | undefined;
+          }
+        | undefined;
+    };
+    reason: {
+      valid: boolean;
+      reasons: string[];
+      diagnostic: Diagnostic;
+      audit:
+        | {
+            ruleId: string | undefined;
+            issue: number | undefined;
+            scope: string | undefined;
+            actor: string | undefined;
+            reason: string | undefined;
+            expiresAt: string | undefined;
+            sha: string | undefined;
+          }
+        | undefined;
+    };
+    expired: {
+      valid: boolean;
+      reasons: string[];
+      diagnostic: Diagnostic;
+      audit:
+        | {
+            ruleId: string | undefined;
+            issue: number | undefined;
+            scope: string | undefined;
+            actor: string | undefined;
+            reason: string | undefined;
+            expiresAt: string | undefined;
+            sha: string | undefined;
+          }
+        | undefined;
+    };
+    nonOverride: {
+      valid: boolean;
+      reasons: string[];
+      diagnostic: Diagnostic;
+      audit:
+        | {
+            ruleId: string | undefined;
+            issue: number | undefined;
+            scope: string | undefined;
+            actor: string | undefined;
+            reason: string | undefined;
+            expiresAt: string | undefined;
+            sha: string | undefined;
+          }
+        | undefined;
+    };
+  };
+  ownership: {
+    local: {
+      allowed: boolean;
+      status: string;
+      findings: { path: string; reason: string; moveTo: string }[];
+      diagnostic: Diagnostic | undefined;
+    };
+    pr: {
+      allowed: boolean;
+      status: string;
+      findings: { path: string; reason: string; moveTo: string }[];
+      diagnostic: Diagnostic | undefined;
+    };
+    package: {
+      allowed: boolean;
+      status: string;
+      findings: { path: string; reason: string; moveTo: string }[];
+      diagnostic: Diagnostic | undefined;
+    };
+    evidence: {
+      allowed: boolean;
+      status: string;
+      findings: { path: string; reason: string; moveTo: string }[];
+      diagnostic: Diagnostic | undefined;
+    };
+  };
+  ownershipAssets: Parameters<typeof validateOwnershipBoundary>[0];
+  packedFiles: string[];
+  partialRecovery: MigrationState | GateResult;
+  plan: MigrationState;
+  policy: Policy;
+  projectExtension: Policy;
+  projectSetErrors: Array<string | undefined>;
+  projectSetVariants: string[];
+  prototypeVersionPolicies: {
+    schemaVersion: string;
+    delivery: { stopAt: "pull_request" };
+    merge: {
+      mode: "disabled" | "assisted" | "automatic";
+      branches: string[];
+      methods: Array<"merge" | "squash" | "rebase">;
+      requiredChecks: string[];
+      requiredReviews: number;
+    };
+    budgets?: { localFeedbackMs?: number; prGateMs?: number };
+    rules: Rule[];
+    projectChoices?: ProjectChoices;
+  }[];
+  prototypeVersionResults: ReturnType<typeof validatePolicy>[];
+  providerIdentityResults: SpawnSyncReturns<string>[];
+  providerRaceResults: SpawnSyncReturns<string>[];
+  providerUnavailableResults: SpawnSyncReturns<string>[];
+  recoveryCli: SpawnSyncReturns<string>;
+  reportFile: string;
+  repositoryHead: string;
+  repositoryRemotes: string;
+  reviewEvidence: ReviewEvidenceFixture;
+  reviewEvidenceCli: SpawnSyncReturns<string>;
+  revisionTamper: MigrationState;
+  rollbackRecovery: MigrationState | GateResult;
+  rolledManifest: MigrationState;
+  rolledTamper: MigrationState;
+  root: string;
+  rule: Rule;
+  schemaRuntime: {
+    valid: boolean;
+    errors: string[];
+    migration:
+      | {
+          target: string;
+          activation: string;
+          deprecatedAlias: { input: string; canonical: string } | undefined;
+          remediation: string;
+          rollback: string;
+        }
+      | undefined;
+    diagnostics: {
+      ruleId: string;
+      purpose: string;
+      risk: string;
+      reasons: string[];
+      scope: string[];
+      checks: string[];
+      autoFixes: { description: string; dryRunDiff: string }[];
+      next: string;
+      requiredAuthority: string;
+      rollback: string;
+    }[];
+  }[];
+  schemaText: string;
+  secretPath: string;
+  serializedKinds: ReturnType<typeof serializeDiagnostic>[];
+  stagedRule: Rule;
+  stateFile: string;
+  tamperResults: (MigrationState | GateResult)[];
+  tamperedCliResult: SpawnSyncReturns<string>;
+  targeted:
+    | {
+        status: string;
+        scope: string;
+        valid: boolean;
+        checks: never[];
+        diagnostic: Diagnostic;
+        fingerprint?: undefined;
+      }
+    | {
+        status: string;
+        scope: string;
+        valid: boolean;
+        fingerprint: string;
+        checks: never[];
+        diagnostic: Diagnostic;
+      }
+    | {
+        status: string;
+        scope: string;
+        fingerprint: string;
+        checks: string[];
+        valid?: undefined;
+        diagnostic?: undefined;
+      };
+  tracked: string;
+  trackedPolicy: string;
+  trusted: Policy;
+  trustedFile: string;
+  trustedHead: string;
+  trustedSet: PolicySet;
+  v030Unknown: {
+    schemaVersion: string;
+    delivery: { stopAt: string };
+    merge: {
+      mode: string;
+      branches: never[];
+      methods: never[];
+      requiredChecks: never[];
+      requiredReviews: number;
+    };
+    mystery: boolean;
+  };
+  v031Empty: Policy;
+  validOverride: NonNullable<Parameters<typeof validateOverride>[1]>;
+  validationInput: ValidationFixture;
+  weakCandidate: Policy;
+  weakFile: string;
+  boundaryResult: ReturnType<typeof enforceTrustedBoundary>;
+  enforcementValidation: ReturnType<typeof validateEnforcementPolicy>;
+  fileMigrationResult: ReturnType<typeof applyFileMigration>;
+  metricsResult: ReturnType<typeof aggregateMetrics>;
+  migrationResult: ConceptualMigrationState;
+  offlinePlan: ReturnType<typeof planOfflineGates>;
+  operationResult: ReturnType<typeof enforceOperation>;
+  overrideValidation: ReturnType<typeof validateOverride>;
+  packageManifestResult: ReturnType<typeof validatePackageManifest>;
+  repositoryConformance: ReturnType<typeof validateRepositoryConformance>;
+  ruleEvaluation: ReturnType<typeof evaluateRule>;
+  serializedDiagnosticResult: ReturnType<typeof serializeDiagnostic>;
+  validationResult: ReturnType<typeof planValidation>;
+  ghLog: string;
+  reviewCliEnv: NodeJS.ProcessEnv;
+  reviewVariant: string;
+}
+
+const { Given, When, Then } = stepDefinitions<RiskPolicyWorld>();
 
 const SHA = "a".repeat(40);
 const baseRule = (changes: Partial<Rule> = {}): Rule => ({
@@ -105,6 +616,24 @@ const requireMigrationState = (value: unknown): MigrationState => {
     throw new Error("migration stateを期待しました");
   return value as MigrationState;
 };
+const requireDiagnostic = (
+  value: unknown,
+): Diagnostic & { overridePolicy?: string } => {
+  if (!isRecord(value) || typeof value.ruleId !== "string")
+    throw new Error("structured diagnosticを期待しました");
+  return value as unknown as Diagnostic & { overridePolicy?: string };
+};
+const requireReviewEvidence = (value: unknown): ReviewEvidenceFixture => {
+  if (!isRecord(value)) throw new Error("review evidence objectを期待しました");
+  return value as ReviewEvidenceFixture;
+};
+const requireFirst = <Value>(values: Value[], label: string): Value => {
+  const value = values[0];
+  if (value === undefined) throw new Error(`${label}がありません`);
+  return value;
+};
+const parseJsonFixture = <Value>(text: string): Value =>
+  JSON.parse(text) as unknown as Value;
 const migrationEntries = (
   root: string,
   candidate: unknown,
@@ -290,7 +819,7 @@ Given("表記統一のactive assist ruleがある", function () {
   });
 });
 When("違反を検出してruleを評価する", function () {
-  this.result = evaluateRule(this.rule, {
+  this.ruleEvaluation = evaluateRule(this.rule, {
     violated: true,
     reasons: ["対象fileで違反を検出した"],
     checks: ["scopeとriskを確認した"],
@@ -298,45 +827,50 @@ When("違反を検出してruleを評価する", function () {
   });
 });
 Then("判定はblockedである", function () {
-  assert.equal(this.result.status, "blocked");
-  assert.equal(this.result.blocked, true);
+  assert.equal(this.ruleEvaluation.status, "blocked");
+  assert.equal(this.ruleEvaluation.blocked, true);
 });
 Then(
   "日本語diagnosticにrule ID、根拠、解決経路、authority、rollbackがある",
   function () {
-    const diagnostic = this.result.diagnostic;
-    for (const key of [
-      "ruleId",
-      "purpose",
-      "risk",
-      "reasons",
-      "scope",
-      "checks",
-      "next",
-      "requiredAuthority",
-      "rollback",
-    ])
-      assert.ok(diagnostic[key] && diagnostic[key].length !== 0, key);
+    const diagnostic = this.ruleEvaluation.diagnostic;
+    for (const [key, value] of Object.entries({
+      ruleId: diagnostic.ruleId,
+      purpose: diagnostic.purpose,
+      risk: diagnostic.risk,
+      reasons: diagnostic.reasons,
+      scope: diagnostic.scope,
+      checks: diagnostic.checks,
+      next: diagnostic.next,
+      requiredAuthority: diagnostic.requiredAuthority,
+      rollback: diagnostic.rollback,
+    }))
+      assert.ok(value.length !== 0, key);
     assert.match(JSON.stringify(diagnostic), /[ぁ-んァ-ヶ一-龯]/u);
   },
 );
 Then("判定はassistedである", function () {
-  assert.equal(this.result.status, "assisted");
-  assert.equal(this.result.blocked, false);
+  assert.equal(this.ruleEvaluation.status, "assisted");
+  assert.equal(this.ruleEvaluation.blocked, false);
 });
 Then("自動修正候補にdry-run差分がある", function () {
-  assert.ok(this.result.diagnostic.autoFixes[0].dryRunDiff.includes("+ new"));
+  const autoFix = requireFirst(
+    this.ruleEvaluation.diagnostic.autoFixes,
+    "自動修正候補",
+  );
+  assert.ok(autoFix.dryRunDiff.includes("+ new"));
 });
 
 Given("任意最適化をdenyにしたpolicyがある", function () {
   this.policy = basePolicy([baseRule({ riskClass: "optimization" })]);
 });
 When("risk比例policyを検証する", function () {
-  this.result = validateEnforcementPolicy(this.policy);
+  this.enforcementValidation = validateEnforcementPolicy(this.policy);
+  this.validationOutcome = this.enforcementValidation;
 });
 Then("日本語diagnosticはstagedへの修正案を返す", function () {
   assert.ok(
-    this.result.diagnostics[0].autoFixes.some((fix: AutoFix) =>
+    this.enforcementValidation.diagnostics[0].autoFixes.some((fix: AutoFix) =>
       fix.dryRunDiff.includes("staged"),
     ),
   );
@@ -352,13 +886,13 @@ Given(
   },
 );
 When("trusted policyとcandidate policyを比較する", function () {
-  this.result = compareTrustedPolicy(this.trusted, this.candidate);
+  this.comparison = compareTrustedPolicy(this.trusted, this.candidate);
 });
 Then("自己緩和をnon-overrideで拒否する", function () {
-  assert.equal(this.result.allowed, false);
-  assert.equal(this.result.rejected[0].ruleId, "ASC-TRUST-001");
+  assert.equal(this.comparison.allowed, false);
+  assert.equal(this.comparison.rejected[0].ruleId, "ASC-TRUST-001");
   assert.equal(
-    this.result.rejected[0].requiredAuthority,
+    this.comparison.rejected[0].requiredAuthority,
     "default branch policy owner",
   );
 });
@@ -383,23 +917,23 @@ Given("override可能なruleと正しいoverrideがある", function () {
     sha: SHA,
   };
 });
-Given("overrideの{word}が一致しない", function (attribute) {
+Given("overrideの{word}が一致しない", function (attribute: string) {
   if (attribute === "scope") this.override.scope = "outside";
   if (attribute === "actor") this.override.actor = "unknown";
   if (attribute === "expiry") this.override.expiresAt = "2026-08-22T00:00:00Z";
   if (attribute === "sha") this.override.sha = "b".repeat(40);
 });
 When("overrideを検証する", function () {
-  this.result = validateOverride(
+  this.overrideValidation = validateOverride(
     this.rule,
     this.override,
     this.expectedOverride,
   );
 });
 Then("overrideは拒否される", function () {
-  assert.equal(this.result.valid, false);
-  assert.ok(this.result.reasons.length > 0);
-  assert.equal(this.result.audit, undefined);
+  assert.equal(this.overrideValidation.valid, false);
+  assert.ok(this.overrideValidation.reasons.length > 0);
+  assert.equal(this.overrideValidation.audit, undefined);
 });
 
 Given("local gateと外部service必須gateがある", function () {
@@ -409,19 +943,18 @@ Given("local gateと外部service必須gateがある", function () {
   ];
 });
 When("offlineでgateを計画する", function () {
-  this.result = planOfflineGates(this.gates, { online: false });
+  this.offlinePlan = planOfflineGates(this.gates, { online: false });
 });
 Then("local gateはreadyである", function () {
-  assert.equal(
-    this.result.find(
-      (gate: { id: string; status: string }) => gate.id === "local-test",
-    ).status,
-    "ready",
+  const localGate = this.offlinePlan.find(
+    (gate: { id: string; status: string }) => gate.id === "local-test",
   );
+  assert.ok(localGate);
+  assert.equal(localGate.status, "ready");
 });
 Then("外部service必須gateだけがpendingである", function () {
   assert.deepEqual(
-    this.result
+    this.offlinePlan
       .filter(
         (gate: { id: string; status: string }) => gate.status === "pending",
       )
@@ -493,13 +1026,13 @@ Given(
   },
 );
 When("policy metricsを集計する", function () {
-  this.result = aggregateMetrics(this.events, {
+  this.metricsResult = aggregateMetrics(this.events, {
     localFeedbackMs: 100,
     prGateMs: 1000,
   });
 });
 Then("6指標とbudget超過を機械可読に返す", function () {
-  assert.deepEqual(Object.keys(this.result.metrics).sort(), [
+  assert.deepEqual(Object.keys(this.metricsResult.metrics).sort(), [
     "duplicate",
     "falseBlock",
     "gateWaitMs",
@@ -507,10 +1040,13 @@ Then("6指標とbudget超過を機械可読に返す", function () {
     "override",
     "rollback",
   ]);
-  assert.equal(this.result.exceeded.localFeedback, true);
+  assert.equal(this.metricsResult.exceeded.localFeedback, true);
 });
 Then("metricsに秘密値は含まれない", function () {
-  assert.equal(JSON.stringify(this.result).includes("never-log-this"), false);
+  assert.equal(
+    JSON.stringify(this.metricsResult).includes("never-log-this"),
+    false,
+  );
 });
 
 Given("v0.3.0のtrusted policyとv0.3.1のcandidate policyがある", function () {
@@ -524,7 +1060,7 @@ Given("v0.3.0のtrusted policyとv0.3.1のcandidate policyがある", function (
       requiredChecks: [],
       requiredReviews: 0,
     },
-  };
+  } as unknown as Policy;
   this.candidate = basePolicy([baseRule({ activation: "staged" })]);
   this.before = structuredClone(this.trusted);
   this.root = this.temp("asc-v03-v04-");
@@ -534,13 +1070,15 @@ Given("v0.3.0のtrusted policyとv0.3.1のcandidate policyがある", function (
   );
 });
 When("migrationをdry-runする", function () {
-  this.result = this.entries
-    ? planFileMigration(this.root, this.trusted, this.candidate, this.entries)
-    : planMigration(this.trusted, this.candidate);
+  if (this.entries)
+    this.plan = requireMigrationState(
+      planFileMigration(this.root, this.trusted, this.candidate, this.entries),
+    );
+  else this.migrationResult = planMigration(this.trusted, this.candidate);
 });
 Then("staged planにschema、runtime、CI、templateの変更がある", function () {
-  assert.equal(this.result.state, "staged", JSON.stringify(this.result));
-  assert.deepEqual(this.result.changes, [
+  assert.equal(this.plan.state, "staged", JSON.stringify(this.plan));
+  assert.deepEqual(this.plan.changes, [
     "policy",
     "schema",
     "runtime",
@@ -577,7 +1115,7 @@ Given("適用済みmigrationと適用前snapshotがある", function () {
   });
 });
 When("migrationをrollbackしてretryする", function () {
-  this.result = retryMigration(
+  this.migrationResult = retryMigration(
     rollbackMigration(this.applied, {
       approvedPlanHash: this.approvedPlanHash,
       expectedRevision: 1,
@@ -588,7 +1126,7 @@ When("migrationをrollbackしてretryする", function () {
   );
 });
 Then("rollbackと再適用の状態遷移を記録する", function () {
-  assert.deepEqual(this.result.history, [
+  assert.deepEqual(this.migrationResult.history, [
     "staged",
     "applied",
     "rolled_back",
@@ -596,7 +1134,7 @@ Then("rollbackと再適用の状態遷移を記録する", function () {
   ]);
 });
 Then("最終policyはcandidateと一致する", function () {
-  assert.deepEqual(this.result.policy, this.candidate);
+  assert.deepEqual(this.migrationResult.policy, this.candidate);
 });
 
 Given("candidateに正当なstaged rule追加とtrusted rule緩和がある", function () {
@@ -613,14 +1151,14 @@ Given("candidateに正当なstaged rule追加とtrusted rule緩和がある", fu
   ]);
 });
 When("migration compatibilityを検査する", function () {
-  this.result = compareTrustedPolicy(this.trusted, this.candidate);
+  this.comparison = compareTrustedPolicy(this.trusted, this.candidate);
 });
 Then("staged rule追加は許可される", function () {
-  assert.deepEqual(this.result.stagedAdditions, ["ASC-NEW-001"]);
+  assert.deepEqual(this.comparison.stagedAdditions, ["ASC-NEW-001"]);
 });
 Then("trusted rule緩和だけが拒否される", function () {
-  assert.equal(this.result.rejected.length, 1);
-  assert.equal(this.result.rejected[0].ruleId, "ASC-TRUST-001");
+  assert.equal(this.comparison.rejected.length, 1);
+  assert.equal(this.comparison.rejected[0].ruleId, "ASC-TRUST-001");
 });
 
 Given(
@@ -636,7 +1174,7 @@ Given(
   },
 );
 When("package allowlistを評価する", function () {
-  this.result = classifyPackageAssets(this.assets, [
+  this.assetClassification = classifyPackageAssets(this.assets, [
     ".agent-skill-chain/project-policy.json",
     ".agent-skill-chain/role-log/",
     ".agent-skill-chain/metrics/",
@@ -645,8 +1183,8 @@ When("package allowlistを評価する", function () {
   ]);
 });
 Then("すべての開発assetが明示的に除外される", function () {
-  assert.deepEqual(this.result.excluded, this.assets);
-  assert.deepEqual(this.result.allowed, []);
+  assert.deepEqual(this.assetClassification.excluded, this.assets);
+  assert.deepEqual(this.assetClassification.allowed, []);
 });
 
 Given("dogfooding用のtrusted policyと通常拡張candidateがある", function () {
@@ -682,7 +1220,7 @@ Then("CLIは書き込まずstaged migrationを表示する", function () {
     this.cliResult.stdout.length > 0,
     JSON.stringify({ stderr: this.cliResult.stderr }),
   );
-  const output = JSON.parse(this.cliResult.stdout);
+  const output = parseJsonFixture<CliMigrationFixture>(this.cliResult.stdout);
   assert.equal(output.state, "staged");
   assert.equal(output.dryRun, true);
   assert.equal(fs.readdirSync(this.root).length, 2);
@@ -751,7 +1289,8 @@ When("policy migrate CLIをapply、rollback、retryする", async function () {
     `--candidate=${this.candidateFile}`,
     "--dry-run",
   ]);
-  const approval = `--approved-plan-hash=${JSON.parse(preview.stdout).planFingerprint}`;
+  const previewState = parseJsonFixture<CliMigrationFixture>(preview.stdout);
+  const approval = `--approved-plan-hash=${previewState.planFingerprint}`;
   this.cliResults = [
     await execute([
       "policy",
@@ -789,7 +1328,9 @@ Then("すべての状態遷移が成功する", function () {
   for (const result of this.cliResults)
     assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
-    JSON.parse(fs.readFileSync(this.stateFile, "utf8")).history,
+    parseJsonFixture<CliMigrationFixture>(
+      fs.readFileSync(this.stateFile, "utf8"),
+    ).history,
     ["staged", "applied", "rolled_back", "applied"],
   );
 });
@@ -838,7 +1379,7 @@ Given("delivery証拠をrequireするactive ruleがある", function () {
   };
 });
 When("条件未達のoperationをenforceする", function () {
-  this.result = enforceOperation({
+  this.operationResult = enforceOperation({
     policy: this.policy,
     ruleId: this.rule.ruleId,
     boundary: "delivery",
@@ -846,8 +1387,8 @@ When("条件未達のoperationをenforceする", function () {
   });
 });
 Then("operationはrequiredとして非許可である", function () {
-  assert.equal(this.result.status, "required");
-  assert.equal(this.result.allowed, false);
+  assert.equal(this.operationResult.status, "required");
+  assert.equal(this.operationResult.allowed, false);
 });
 Then("有効なoverrideまたは証拠があれば許可される", function () {
   const overridden = enforceOperation({
@@ -918,7 +1459,7 @@ Given(
   },
 );
 Then("すべてのauthority弱化理由を返す", function () {
-  const reasons = this.result.rejected
+  const reasons = this.comparison.rejected
     .flatMap((item: Diagnostic) => item.reasons)
     .join(" ");
   for (const fragment of [
@@ -951,17 +1492,26 @@ Given("tokenとpasswordを含むblock diagnosticがある", function () {
   };
 });
 When("diagnosticを安全にserializeする", function () {
-  this.result = serializeDiagnostic(this.diagnostic);
+  this.serializedDiagnosticResult = serializeDiagnostic(this.diagnostic);
 });
 Then(
   "秘密値は出力されずmachine正本と非authorityの日本語fallbackがある",
   function () {
-    const text = JSON.stringify(this.result);
+    const text = JSON.stringify(this.serializedDiagnosticResult);
     assert.equal(text.includes("super-secret-value"), false);
     assert.equal(text.includes("never-show"), false);
-    assert.equal(this.result.presentation.authoritative, false);
-    assert.equal(this.result.presentation.fallbackLanguage, "ja");
-    assert.equal(this.result.result.diagnostic.ruleId, "ASC-SECRET-001");
+    assert.equal(
+      this.serializedDiagnosticResult.presentation.authoritative,
+      false,
+    );
+    assert.equal(
+      this.serializedDiagnosticResult.presentation.fallbackLanguage,
+      "ja",
+    );
+    assert.equal(
+      this.serializedDiagnosticResult.result.diagnostic.ruleId,
+      "ASC-SECRET-001",
+    );
     for (const label of [
       "ルールID",
       "具体的根拠",
@@ -989,36 +1539,46 @@ Given("同じfingerprintだがpassed falseの証拠がある", function () {
   this.failedValidation.successfulEvidence = [{ fingerprint, passed: false }];
 });
 When("targeted検証を計画する", function () {
-  this.result = planValidation({
+  this.validationResult = planValidation({
     ...(this.boundValidation ?? this.failedValidation),
     kind: "targeted",
   });
 });
 Then("targeted検証はreadyでありdeduplicatedではない", function () {
-  assert.equal(this.result.status, "ready");
-  assert.ok(this.result.checks.length > 0);
+  assert.equal(this.validationResult.status, "ready");
+  assert.ok(this.validationResult.checks.length > 0);
 });
 When("final検証を計画する", function () {
-  this.result = planValidation({ ...this.failedValidation, kind: "final" });
+  this.validationResult = planValidation({
+    ...this.failedValidation,
+    kind: "final",
+  });
 });
 Then("final検証はstructured diagnostic付きでblockedになる", function () {
-  assert.equal(this.result.status, "blocked");
-  assert.equal(this.result.valid, false);
-  assert.equal(this.result.diagnostic.ruleId, "ASC-EVIDENCE-001");
-  assert.match(this.result.diagnostic.reasons.join(" "), /final gate/u);
+  assert.equal(this.validationResult.status, "blocked");
+  assert.equal(this.validationResult.valid, false);
+  assert.equal(this.validationResult.diagnostic.ruleId, "ASC-EVIDENCE-001");
+  assert.match(
+    this.validationResult.diagnostic.reasons.join(" "),
+    /final gate/u,
+  );
 });
 
 Given("未知kindを含むpolicy metrics eventがある", function () {
   this.events = [{ kind: "unknownMetric", value: 1 }];
 });
 Then("metricsはstructured diagnostic付きでinvalidになる", function () {
-  assert.equal(this.result.valid, false);
-  assert.equal(this.result.diagnostic.ruleId, "ASC-METRIC-001");
+  assert.equal(this.metricsResult.valid, false);
+  assert.equal(
+    requireDiagnostic(this.metricsResult.diagnostic).ruleId,
+    "ASC-METRIC-001",
+  );
 });
 
 Given("package defaultと初回導入前のproject policyがある", function () {
   this.floor = basePolicy([baseRule({ ruleId: "ASC-FLOOR-001" })]);
   this.projectExtension = {
+    ...basePolicy(),
     budgets: { localFeedbackMs: 50, prGateMs: 500 },
     rules: [
       baseRule({
@@ -1033,15 +1593,15 @@ Given("package defaultと初回導入前のproject policyがある", function ()
   };
 });
 When("effective policyを解決する", function () {
-  this.result = resolveEffectivePolicy(this.floor, this.projectExtension);
+  this.effective = resolveEffectivePolicy(this.floor, this.projectExtension);
 });
 Then("安全floorを弱化せずproject ruleをstagedで追加する", function () {
-  assert.equal(this.result.valid, true);
+  assert.equal(this.effective.valid, true);
   assert.deepEqual(
-    this.result.policy.rules.map((rule: Rule) => rule.ruleId),
+    this.effective.policy.rules.map((rule: Rule) => rule.ruleId),
     ["ASC-FLOOR-001", "ASC-PROJECT-001"],
   );
-  assert.equal(this.result.policy.rules[0].enforcement, "deny");
+  assert.equal(this.effective.policy.rules[0].enforcement, "deny");
   const trustedExtension = structuredClone(this.projectExtension);
   trustedExtension.rules[0].activation = "active";
   const trusted = resolveEffectivePolicy(this.floor, trustedExtension, {
@@ -1113,7 +1673,7 @@ When(
 );
 Then("正常overrideだけに監査recordがあり他は拒否される", function () {
   assert.ok(this.overrideResults.valid.audit);
-  for (const key of ["issue", "reason", "expired", "nonOverride"]) {
+  for (const key of ["issue", "reason", "expired", "nonOverride"] as const) {
     assert.equal(this.overrideResults[key].valid, false);
     assert.equal(this.overrideResults[key].audit, undefined);
   }
@@ -1158,12 +1718,12 @@ Given("trusted boundaryに必須属性を欠くruleがある", function () {
   };
 });
 When("trusted boundaryを評価する", function () {
-  this.result = enforceTrustedBoundary(this.boundaryInput);
+  this.boundaryResult = enforceTrustedBoundary(this.boundaryInput);
 });
 Then("policy検証でoperationを拒否する", function () {
-  assert.equal(this.result.allowed, false);
-  assert.equal(this.result.results, undefined);
-  assert.match(JSON.stringify(this.result.diagnostic), /targetLayer/u);
+  assert.equal(this.boundaryResult.allowed, false);
+  assert.equal(this.boundaryResult.results, undefined);
+  assert.match(JSON.stringify(this.boundaryResult.diagnostic), /targetLayer/u);
 });
 
 Given("trusted policyにstaged project ruleがある", function () {
@@ -1191,12 +1751,11 @@ When(
 Then("activation昇格は許可されeffective ruleはactiveになる", function () {
   assert.equal(this.comparison.allowed, true, JSON.stringify(this.comparison));
   assert.equal(this.effective.valid, true, JSON.stringify(this.effective));
-  assert.equal(
-    this.effective.policy.rules.find(
-      (rule: Rule) => rule.ruleId === this.stagedRule.ruleId,
-    ).activation,
-    "active",
+  const effectiveRule = this.effective.policy.rules.find(
+    (rule: Rule) => rule.ruleId === this.stagedRule.ruleId,
   );
+  assert.ok(effectiveRule);
+  assert.equal(effectiveRule.activation, "active");
 });
 
 Given("trusted boundaryにactive deny ruleと空の観測集合がある", function () {
@@ -1207,9 +1766,12 @@ Given("trusted boundaryにactive deny ruleと空の観測集合がある", funct
   };
 });
 Then("observation欠落をauthority diagnostic付きで拒否する", function () {
-  assert.equal(this.result.allowed, false);
-  assert.equal(this.result.diagnostic.risk, "authority");
-  assert.match(this.result.diagnostic.reasons.join(" "), /observation/u);
+  assert.equal(this.boundaryResult.allowed, false);
+  assert.equal(this.boundaryResult.diagnostic?.risk, "authority");
+  assert.match(
+    this.boundaryResult.diagnostic?.reasons.join(" ") ?? "",
+    /observation/u,
+  );
 });
 
 Given(
@@ -1217,36 +1779,41 @@ Given(
   function () {
     this.contract = JSON.parse(
       fs.readFileSync(".agent-skill-chain/policy/conformance.json", "utf8"),
-    );
+    ) as unknown as Record<string, unknown>;
     this.binding = JSON.parse(
       fs.readFileSync(
         ".agent-skill-chain/project/conformance/bindings.json",
         "utf8",
       ),
-    );
-    this.binding.bindings[0].sourcePaths = {};
-    this.binding.bindings[0].counterexampleScenarios = 1;
+    ) as unknown as BindingFixture;
+    const binding = requireFirst(this.binding.bindings, "binding");
+    binding.sourcePaths = {};
+    binding.counterexampleScenarios = 1;
     this.conformanceEvidence = { tool: "cucumber-js", passedScenarioIds: {} };
   },
 );
 When("repository conformanceを直接検証する", function () {
-  this.result = validateRepositoryConformance(
+  this.repositoryConformance = validateRepositoryConformance(
     process.cwd(),
     this.contract,
     this.binding,
-    this.conformanceEvidence,
+    this.conformanceEvidence as Parameters<
+      typeof validateRepositoryConformance
+    >[3],
   );
 });
 Then("全配列型不正は例外なしでinvalidになる", function () {
-  assert.equal(this.result.valid, false);
+  assert.equal(this.repositoryConformance.valid, false);
   for (const field of [
     "sourcePaths",
     "counterexampleScenarios",
     "passedScenarioIds",
   ])
     assert.ok(
-      this.result.errors.some((error: string) => error.includes(field)),
-      `${field}: ${this.result.errors.join("; ")}`,
+      this.repositoryConformance.errors.some((error: string) =>
+        error.includes(field),
+      ),
+      `${field}: ${this.repositoryConformance.errors.join("; ")}`,
     );
 });
 
@@ -1287,7 +1854,13 @@ Then(
   function () {
     assert.equal(this.ownership.local.status, "assisted");
     assert.equal(this.ownership.local.allowed, true);
-    assert.ok(this.ownership.local.diagnostic.autoFixes[0].dryRunDiff);
+    assert.ok(this.ownership.local.diagnostic);
+    assert.ok(
+      requireFirst(
+        this.ownership.local.diagnostic.autoFixes,
+        "ownership自動修正候補",
+      ).dryRunDiff,
+    );
     assert.equal(this.ownership.pr.status, "required");
     assert.equal(this.ownership.pr.allowed, false);
     assert.equal(this.ownership.package.status, "blocked");
@@ -1299,13 +1872,16 @@ Then(
 Given("I1〜I12のconformance contractがある", function () {
   this.contract = JSON.parse(
     fs.readFileSync(".agent-skill-chain/policy/conformance.json", "utf8"),
-  );
+  ) as unknown as Record<string, unknown>;
   this.contractResult = validateConformanceContract(this.contract);
 });
-When("invariant {word}を検証する", function (id) {
-  this.invariant = this.contractResult.invariants.find(
-    (item: { id: string }) => item.id === id,
-  );
+When("invariant {word}を検証する", function (id: string) {
+  const invariants = this.contractResult.invariants as InvariantFixture[];
+  this.invariant =
+    invariants.find((item: { id: string }) => item.id === id) ??
+    (() => {
+      throw new Error(`invariant ${id}がありません`);
+    })();
 });
 Then(
   "source、enforcement point、counterexample SCN、evidence、rollbackが揃う",
@@ -1332,7 +1908,18 @@ Then(
         "bindings",
       ],
     ]) {
-      const schema = JSON.parse(fs.readFileSync(file, "utf8"));
+      const schema = JSON.parse(fs.readFileSync(file, "utf8")) as unknown as {
+        properties: Record<
+          string,
+          {
+            allOf: Array<{
+              contains?: { properties?: { id?: { const?: string } } };
+              minContains?: number;
+              maxContains?: number;
+            }>;
+          }
+        >;
+      };
       const clauses = schema.properties[property].allOf;
       assert.ok(
         Array.isArray(clauses),
@@ -1340,11 +1927,7 @@ Then(
       );
       assert.equal(
         clauses.filter(
-          (clause: {
-            contains?: { properties?: { id?: { const?: string } } };
-            minContains?: number;
-            maxContains?: number;
-          }) =>
+          (clause) =>
             clause.contains?.properties?.id?.const === this.invariant.id &&
             clause.minContains === 1 &&
             clause.maxContains === 1,
@@ -1381,11 +1964,8 @@ Given(
   },
 );
 When("実manifestをdry-run、apply、rollbackする", function () {
-  this.plan = planFileMigration(
-    this.root,
-    this.trusted,
-    this.candidate,
-    this.entries,
+  this.plan = requireMigrationState(
+    planFileMigration(this.root, this.trusted, this.candidate, this.entries),
   );
   const approvedPlanHash = this.plan.planFingerprint;
   this.appliedManifest = requireMigrationState(
@@ -1475,7 +2055,9 @@ Given(
       ),
     );
     this.changedCandidate = structuredClone(this.candidate);
-    this.changedCandidate.budgets.localFeedbackMs += 1;
+    const budgets = this.changedCandidate.budgets;
+    assert.ok(budgets);
+    budgets.localFeedbackMs = (budgets.localFeedbackMs ?? 0) + 1;
     this.revisionTamper = { ...this.rolledTamper, revision: 99 };
   },
 );
@@ -1497,7 +2079,10 @@ Then("immutable fingerprintとhash不一致をstructured拒否する", function 
   for (const result of this.tamperResults) {
     assert.equal(result.state, "rejected");
     assert.equal(result.allowed, false);
-    assert.equal(result.diagnostic.ruleId, "ASC-MIGRATION-TOCTOU-001");
+    assert.equal(
+      requireDiagnostic(result.diagnostic).ruleId,
+      "ASC-MIGRATION-TOCTOU-001",
+    );
   }
 });
 
@@ -1563,22 +2148,32 @@ When("実npm pack内容をpackage境界で検証する", function () {
     { cwd: this.root, encoding: "utf8" },
   );
   assert.equal(packed.status, 0, packed.stderr);
-  this.packedFiles = JSON.parse(packed.stdout)[0].files.map(
+  const packResults = JSON.parse(packed.stdout) as unknown as Array<{
+    files: Array<{ path: string }>;
+  }>;
+  this.packedFiles = requireFirst(packResults, "npm pack結果").files.map(
     (item: { path: string }) => item.path,
   );
-  this.result = validatePackageManifest(this.packedFiles, ["index.js"]);
+  this.packageManifestResult = validatePackageManifest(this.packedFiles, [
+    "index.js",
+  ]);
 });
 Then("env派生fileとmanifest外assetをstructured拒否する", function () {
-  assert.equal(this.result.valid, false);
+  assert.equal(this.packageManifestResult.valid, false);
   assert.ok(
-    this.result.reasons.some((reason: string) =>
+    this.packageManifestResult.reasons.some((reason: string) =>
       reason.includes(".env.production"),
     ),
   );
   assert.ok(
-    this.result.reasons.some((reason: string) => reason.includes("extra.txt")),
+    this.packageManifestResult.reasons.some((reason: string) =>
+      reason.includes("extra.txt"),
+    ),
   );
-  assert.equal(this.result.diagnostic.ruleId, "ASC-ARTIFACT-001");
+  assert.equal(
+    requireDiagnostic(this.packageManifestResult.diagnostic).ruleId,
+    "ASC-ARTIFACT-001",
+  );
 });
 
 Given("同一policyと空の実manifestがある", function () {
@@ -1588,8 +2183,8 @@ Given("同一policyと空の実manifestがある", function () {
   this.emptyManifest = [];
 });
 Then("changesとmanifestは空である", function () {
-  assert.deepEqual(this.result.changes, []);
-  assert.deepEqual(this.result.manifest ?? [], []);
+  assert.deepEqual(this.migrationResult.changes, []);
+  assert.deepEqual(this.migrationResult.writes, []);
 });
 
 Given("tracked dogfood policyを持つ隔離Git repositoryがある", function () {
@@ -1655,7 +2250,7 @@ Then("通常拡張は成功し自己緩和はASC-TRUST-001で拒否される", f
   assert.ok(this.binResults[1].stdout.includes("ASC-TRUST-001"));
 });
 
-Given("{word}境界のrequire ruleと未達条件がある", function (boundary) {
+Given("{word}境界のrequire ruleと未達条件がある", function (boundary: string) {
   this.root = this.temp("asc-enforce-bin-");
   this.boundary = boundary;
   const rule = baseRule({
@@ -1725,7 +2320,9 @@ When(
       `--manifest=${this.manifestFile}`,
     ];
     const dryRun = executeBin(["policy", "migrate", ...common, "--dry-run"]);
-    const approvedPlanHash = JSON.parse(dryRun.stdout).planFingerprint;
+    const approvedPlanHash = parseJsonFixture<CliMigrationFixture>(
+      dryRun.stdout,
+    ).planFingerprint;
     const approval = `--approved-plan-hash=${approvedPlanHash}`;
     this.cliManifestResults = [
       dryRun,
@@ -1761,7 +2358,9 @@ When(
         "--apply",
       ]),
     ];
-    const tampered = JSON.parse(fs.readFileSync(this.stateFile, "utf8"));
+    const tampered = parseJsonFixture<CliMigrationFixture>(
+      fs.readFileSync(this.stateFile, "utf8"),
+    );
     tampered.revision = 99;
     writeJson(this.stateFile, tampered);
     this.tamperedCliResult = executeBin([
@@ -1793,34 +2392,29 @@ Then("実fileは復旧再適用され改竄retryだけがstructured拒否され�
 Given(
   "trusted ruleのevidence remediation rollbackとauthority choiceをcandidateが変更する",
   function () {
-    const choices = {
-      language: "a",
-      testRunner: "b",
-      gherkinDialect: "en",
-      testLayers: ["c"],
-      forbiddenTestFileSuffixes: [".test.js"],
-      naming: "d",
-      packageManager: "e",
-      runtime: "f",
-      ci: "g",
-      modelMapping: "h",
-      release: "i",
-    };
+    const choices = JSON.parse(
+      fs.readFileSync(
+        ".agent-skill-chain/project/choices/development.json",
+        "utf8",
+      ),
+    ) as unknown as ProjectChoices;
     this.trusted = { ...basePolicy(), projectChoices: choices };
     this.candidate = structuredClone(this.trusted);
-    Object.assign(this.candidate.rules[0], {
+    const candidateRule = requireFirst(this.candidate.rules, "candidate rule");
+    Object.assign(candidateRule, {
       evidence: "変更",
       remediation: "変更",
       rollback: "変更",
     });
+    assert.ok(this.candidate.projectChoices);
     this.candidate.projectChoices.release = "automatic";
   },
 );
 Then("同一rule IDの契約変更とauthority choice変更を拒否する", function () {
-  const reasons = this.result.rejected
+  const reasons = this.comparison.rejected
     .flatMap((item: Diagnostic) => item.reasons)
     .join(" ");
-  assert.equal(this.result.allowed, false);
+  assert.equal(this.comparison.allowed, false);
   assert.match(reasons, /意味fingerprint/u);
   assert.match(reasons, /projectChoices/u);
 });
@@ -1878,20 +2472,22 @@ Then("秘密が残らず全結果に完全diagnosticがある", function () {
     "private-never-show",
   ])
     assert.equal(output.includes(secret), false);
-  for (const item of this.serializedKinds)
-    for (const field of [
-      "ruleId",
-      "purpose",
-      "risk",
-      "reasons",
-      "scope",
-      "checks",
-      "autoFixes",
-      "next",
-      "requiredAuthority",
-      "rollback",
-    ])
-      assert.ok(item.result.diagnostic[field] !== undefined, field);
+  for (const item of this.serializedKinds) {
+    const diagnostic = item.result.diagnostic;
+    for (const [field, value] of Object.entries({
+      ruleId: diagnostic.ruleId,
+      purpose: diagnostic.purpose,
+      risk: diagnostic.risk,
+      reasons: diagnostic.reasons,
+      scope: diagnostic.scope,
+      checks: diagnostic.checks,
+      autoFixes: diagnostic.autoFixes,
+      next: diagnostic.next,
+      requiredAuthority: diagnostic.requiredAuthority,
+      rollback: diagnostic.rollback,
+    }))
+      assert.notEqual(value, undefined, field);
+  }
 });
 
 Given(
@@ -1985,7 +2581,7 @@ When("authority付き実manifestをdry-runする", function () {
 Then("全てのnon-owned pathはnon-override diagnosticで拒否される", function () {
   for (const result of this.authorityPlans) {
     assert.equal(result.allowed, false);
-    assert.equal(result.diagnostic.overridePolicy, "never");
+    assert.equal(requireDiagnostic(result.diagnostic).overridePolicy, "never");
   }
 });
 
@@ -2019,7 +2615,7 @@ Then("kind重複は許可しpath重複だけを拒否する", function () {
     true,
     JSON.stringify(this.authorityPlan),
   );
-  assert.equal(this.authorityPlan.manifest.length, 2);
+  assert.equal(requireMigrationState(this.authorityPlan).manifest.length, 2);
   assert.equal(this.duplicatePlan.allowed, false);
 });
 
@@ -2093,11 +2689,8 @@ Given("durable journalを持つ複数file migrationがある", function () {
     });
     fs.writeFileSync(path.join(this.root, entry.path), "before\n");
   }
-  this.plan = planFileMigration(
-    this.root,
-    this.trusted,
-    this.candidate,
-    this.entries,
+  this.plan = requireMigrationState(
+    planFileMigration(this.root, this.trusted, this.candidate, this.entries),
   );
 });
 When(
@@ -2163,6 +2756,7 @@ When(
   },
 );
 Then("次回実行がbefore after hashから全fileを回復する", function () {
+  assert.ok(isRecord(this.initialJournal.transaction));
   assert.equal(this.initialJournal.transaction.phase, "applying");
   assert.equal(this.partialRecovery.state, "rolled_back");
   assert.equal(this.rollbackRecovery.state, "rolled_back");
@@ -2191,27 +2785,34 @@ Given(
     this.migrationFile = path.join(this.root, "src/value.ts");
     fs.mkdirSync(path.dirname(this.migrationFile), { recursive: true });
     fs.writeFileSync(this.migrationFile, "before\n");
-    this.plan = planFileMigration(this.root, this.trusted, this.candidate, [
-      {
-        kind: "runtime",
-        path: "src/value.ts",
-        after: "export const value = 2;\n",
-      },
-    ]);
+    this.plan = requireMigrationState(
+      planFileMigration(this.root, this.trusted, this.candidate, [
+        {
+          kind: "runtime",
+          path: "src/value.ts",
+          after: "export const value = 2;\n",
+        },
+      ]),
+    );
   },
 );
 When("不正writeを注入してmigration applyを実行する", function () {
-  this.result = applyFileMigration(this.plan, this.trusted, this.candidate, {
-    approvedPlanHash: this.plan.planFingerprint,
-    expectedRevision: 0,
-    persist: persistJournal,
-    write: (file) => fs.writeFileSync(file, "corrupt\n"),
-  });
+  this.fileMigrationResult = applyFileMigration(
+    this.plan,
+    this.trusted,
+    this.candidate,
+    {
+      approvedPlanHash: this.plan.planFingerprint,
+      expectedRevision: 0,
+      persist: persistJournal,
+      write: (file) => fs.writeFileSync(file, "corrupt\n"),
+    },
+  );
 });
 Then("applyは拒否され対象fileはbefore内容へrollbackされる", function () {
-  assert.equal(this.result.allowed, false);
+  assert.equal(this.fileMigrationResult.allowed, false);
   assert.equal(fs.readFileSync(this.migrationFile, "utf8"), "before\n");
-  assert.match(JSON.stringify(this.result), /read-after-write/u);
+  assert.match(JSON.stringify(this.fileMigrationResult), /read-after-write/u);
 });
 
 Given("durable persistを省略できる単一file migrationがある", function () {
@@ -2230,23 +2831,33 @@ Given("durable persistを省略できる単一file migrationがある", function
   this.migrationFile = path.join(this.root, "src/value.ts");
   fs.mkdirSync(path.dirname(this.migrationFile), { recursive: true });
   fs.writeFileSync(this.migrationFile, "before\n");
-  this.plan = planFileMigration(this.root, this.trusted, this.candidate, [
-    {
-      kind: "runtime",
-      path: "src/value.ts",
-      after: "export const value = 2;\n",
-    },
-  ]);
+  this.plan = requireMigrationState(
+    planFileMigration(this.root, this.trusted, this.candidate, [
+      {
+        kind: "runtime",
+        path: "src/value.ts",
+        after: "export const value = 2;\n",
+      },
+    ]),
+  );
 });
 When("durable persistなしでmigration applyを実行する", function () {
-  this.result = applyFileMigration(this.plan, this.trusted, this.candidate, {
-    approvedPlanHash: this.plan.planFingerprint,
-    expectedRevision: 0,
-  });
+  this.fileMigrationResult = applyFileMigration(
+    this.plan,
+    this.trusted,
+    this.candidate,
+    {
+      approvedPlanHash: this.plan.planFingerprint,
+      expectedRevision: 0,
+    },
+  );
 });
 Then("applyはjournal不足で拒否され対象fileは変更されない", function () {
-  assert.equal(this.result.allowed, false);
-  assert.match(JSON.stringify(this.result), /durable journal persist/u);
+  assert.equal(this.fileMigrationResult.allowed, false);
+  assert.match(
+    JSON.stringify(this.fileMigrationResult),
+    /durable journal persist/u,
+  );
   assert.equal(fs.readFileSync(this.migrationFile, "utf8"), "before\n");
 });
 
@@ -2310,20 +2921,28 @@ When("実npm packの名前とcontentを検査する", function () {
         return [file, extracted.stdout];
       }),
   );
-  this.result = validatePackageManifest(files, ["src/"], contents);
+  this.packageManifestResult = validatePackageManifest(
+    files,
+    ["src/"],
+    contents,
+  );
 });
 Then(
   "credential containerと秘密patternだけを拒否しoauthとreauthを許可する",
   function () {
-    assert.equal(this.result.valid, false);
+    assert.equal(this.packageManifestResult.valid, false);
     for (const name of ["credentials.json", "client-secrets.json", "data.json"])
       assert.ok(
-        this.result.reasons.some((reason: string) => reason.includes(name)),
+        this.packageManifestResult.reasons.some((reason: string) =>
+          reason.includes(name),
+        ),
         name,
       );
     for (const name of ["oauth-client.json", "reauth-session.json"])
       assert.equal(
-        this.result.reasons.some((reason: string) => reason.includes(name)),
+        this.packageManifestResult.reasons.some((reason: string) =>
+          reason.includes(name),
+        ),
         false,
         name,
       );
@@ -2334,12 +2953,15 @@ Given(
   "unknown、duplicate、dead referenceを持つconformance bindingがある",
   function () {
     this.root = this.temp("asc-conformance-cli-");
-    const contract = JSON.parse(
+    const contract = parseJsonFixture<{ invariants: InvariantFixture[] }>(
       fs.readFileSync(".agent-skill-chain/policy/conformance.json", "utf8"),
     );
-    contract.invariants[11].id = "I13";
-    contract.invariants.push(structuredClone(contract.invariants[0]));
-    const binding = JSON.parse(
+    const lastInvariant = contract.invariants[11];
+    const firstInvariant = contract.invariants[0];
+    assert.ok(lastInvariant && firstInvariant);
+    lastInvariant.id = "I13";
+    contract.invariants.push(structuredClone(firstInvariant));
+    const binding = parseJsonFixture<BindingFixture>(
       fs.readFileSync(
         ".agent-skill-chain/project/conformance/bindings.json",
         "utf8",
@@ -2349,7 +2971,9 @@ Given(
       path.join(this.root, "fake-export.js"),
       "// export function missing() {}\nconst documentation = 'export function missing';\n`export function missing`;\n",
     );
-    binding.bindings[0].enforcement[0] = {
+    const enforcement = requireFirst(binding.bindings, "binding").enforcement;
+    assert.ok(Array.isArray(enforcement));
+    enforcement[0] = {
       path: "fake-export.js",
       export: "missing",
     };
@@ -2455,20 +3079,21 @@ When("actual binでpath例外を発生させる", function () {
 Then("stdoutは秘密なしの完全structured diagnosticになる", function () {
   assert.notEqual(this.cliResult.status, 0);
   assert.equal(this.cliResult.stdout.includes("token-never-show"), false);
-  const output = JSON.parse(this.cliResult.stdout);
-  for (const field of [
-    "ruleId",
-    "purpose",
-    "risk",
-    "reasons",
-    "scope",
-    "checks",
-    "autoFixes",
-    "next",
-    "requiredAuthority",
-    "rollback",
-  ])
-    assert.ok(output.result.diagnostic[field] !== undefined, field);
+  const output = parseJsonFixture<CliEnvelopeFixture>(this.cliResult.stdout);
+  const diagnostic = output.result.diagnostic;
+  for (const [field, value] of Object.entries({
+    ruleId: diagnostic.ruleId,
+    purpose: diagnostic.purpose,
+    risk: diagnostic.risk,
+    reasons: diagnostic.reasons,
+    scope: diagnostic.scope,
+    checks: diagnostic.checks,
+    autoFixes: diagnostic.autoFixes,
+    next: diagnostic.next,
+    requiredAuthority: diagnostic.requiredAuthority,
+    rollback: diagnostic.rollback,
+  }))
+    assert.notEqual(value, undefined, field);
 });
 
 Given(
@@ -2527,7 +3152,9 @@ Given(
     {
       const root = create();
       const file = path.join(root, ".agent-skill-chain/project-policy.json");
-      const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+      const manifest = parseJsonFixture<PolicyManifestFixture>(
+        fs.readFileSync(file, "utf8"),
+      );
       manifest.policy = 1;
       writeJson(file, manifest);
       this.projectSetVariants.push(root);
@@ -2535,7 +3162,10 @@ Given(
     {
       const root = create();
       const file = path.join(root, ".agent-skill-chain/project-policy.json");
-      const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+      const manifest = parseJsonFixture<PolicyManifestFixture>(
+        fs.readFileSync(file, "utf8"),
+      );
+      assert.ok(manifest.ruleFiles[0]);
       manifest.ruleFiles[0] = "project/rules/nested/rule.json";
       writeJson(file, manifest);
       this.projectSetVariants.push(root);
@@ -2586,17 +3216,14 @@ Then("inventory不一致、不正path、duplicate keyはすべて拒否される
     JSON.stringify(this.projectSetErrors),
   );
   assert.ok(
-    this.projectSetErrors.some((error: string) => error.includes("inventory")),
+    this.projectSetErrors.some((error) => error?.includes("inventory")),
   );
   assert.ok(
     this.projectSetErrors.some(
-      (error: string) =>
-        error.includes("symlink") || error.includes("通常JSON"),
+      (error) => error?.includes("symlink") || error?.includes("通常JSON"),
     ),
   );
-  assert.ok(
-    this.projectSetErrors.some((error: string) => error.includes("重複key")),
-  );
+  assert.ok(this.projectSetErrors.some((error) => error?.includes("重複key")));
 });
 
 Given("originにmanifestと全fragmentを持つtrusted commitがある", function () {
@@ -2663,13 +3290,15 @@ Given(
     ]);
     fs.mkdirSync(path.join(this.root, "src"));
     fs.writeFileSync(path.join(this.root, "src/value.ts"), "before\n");
-    this.plan = planFileMigration(this.root, this.trusted, this.candidate, [
-      {
-        kind: "runtime",
-        path: "src/value.ts",
-        after: "export const value = 2;\n",
-      },
-    ]);
+    this.plan = requireMigrationState(
+      planFileMigration(this.root, this.trusted, this.candidate, [
+        {
+          kind: "runtime",
+          path: "src/value.ts",
+          after: "export const value = 2;\n",
+        },
+      ]),
+    );
     this.approvedPlanHash = this.plan.planFingerprint;
   },
 );
@@ -2764,7 +3393,10 @@ Then("全APIはauthority不足をstructured拒否しfileを変更しない", fun
   for (const result of this.authorityResults) {
     assert.equal(result.allowed, false, JSON.stringify(result));
     assert.equal(result.state, "rejected");
-    assert.equal(result.diagnostic.ruleId, "ASC-MIGRATION-TOCTOU-001");
+    assert.equal(
+      requireDiagnostic(result.diagnostic).ruleId,
+      "ASC-MIGRATION-TOCTOU-001",
+    );
   }
   assert.equal(
     fs.readFileSync(path.join(this.root, "src/value.ts"), "utf8"),
@@ -2793,7 +3425,9 @@ Given("trustedとcandidateのfragmented project policy setがある", function (
     this.candidateRoot,
     ".agent-skill-chain/project-policy.json",
   );
-  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  const manifest = parseJsonFixture<PolicyManifestFixture>(
+    fs.readFileSync(manifestFile, "utf8"),
+  );
   const newRef = "project/rules/staged-migration.json";
   manifest.ruleFiles.push(newRef);
   manifest.ruleFiles.sort();
@@ -2858,17 +3492,19 @@ When(
       this.candidateSet,
       this.fragmentEntries,
     );
-    if (this.fragmentPlan.allowed)
+    if (this.fragmentPlan.allowed) {
+      const fragmentPlan = requireMigrationState(this.fragmentPlan);
       this.fragmentApplied = applyFileMigration(
-        this.fragmentPlan,
+        fragmentPlan,
         this.trustedSet,
         this.candidateSet,
         {
-          approvedPlanHash: this.fragmentPlan.planFingerprint,
+          approvedPlanHash: fragmentPlan.planFingerprint,
           expectedRevision: 0,
           persist: persistJournal,
         },
       );
+    }
   },
 );
 Then(
@@ -2955,13 +3591,15 @@ Given("recover可能journalとunknown hashのartifactがある", function () {
   ]);
   fs.mkdirSync(path.join(this.root, "src"));
   fs.writeFileSync(path.join(this.root, "src/value.ts"), "before\n");
-  this.plan = planFileMigration(this.root, this.trusted, this.candidate, [
-    {
-      kind: "runtime",
-      path: "src/value.ts",
-      after: "export const value = 2;\n",
-    },
-  ]);
+  this.plan = requireMigrationState(
+    planFileMigration(this.root, this.trusted, this.candidate, [
+      {
+        kind: "runtime",
+        path: "src/value.ts",
+        after: "export const value = 2;\n",
+      },
+    ]),
+  );
   this.stateFile = path.join(this.root, "journal.json");
   this.reportFile = `${this.stateFile}.report.json`;
   this.trustedFile = path.join(this.root, "trusted.json");
@@ -2992,11 +3630,13 @@ When("CLI recoveryが失敗する", function () {
 Then("journalは保持され別reportへ失敗が記録される", function () {
   assert.notEqual(this.recoveryCli.status, 0);
   assert.equal(fs.readFileSync(this.stateFile, "utf8"), this.journalBefore);
-  const journal = JSON.parse(this.journalBefore);
+  const journal = parseJsonFixture<CliMigrationFixture>(this.journalBefore);
   assert.ok(journal.manifest.length > 0 && journal.artifacts.length > 0);
   assert.equal(fs.existsSync(this.reportFile), true);
   assert.equal(
-    JSON.parse(fs.readFileSync(this.reportFile, "utf8")).state,
+    parseJsonFixture<{ state: string }>(
+      fs.readFileSync(this.reportFile, "utf8"),
+    ).state,
     "rejected",
   );
 });
@@ -3039,7 +3679,9 @@ Given(
       this.root,
       ".agent-skill-chain/project-policy.json",
     );
-    const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+    const manifest = parseJsonFixture<PolicyManifestFixture>(
+      fs.readFileSync(manifestFile, "utf8"),
+    );
     const ref = "project/rules/pr-candidate.json";
     manifest.ruleFiles.push(ref);
     manifest.ruleFiles.sort();
@@ -3205,7 +3847,7 @@ When("explicit trusted commitでpolicy validate CLIを実行する", function ()
     ".agent-skill-chain/project-policy.json",
   );
   const manifestRaw = fs.readFileSync(manifestFile, "utf8");
-  const dirtyManifest = JSON.parse(manifestRaw);
+  const dirtyManifest = parseJsonFixture<PolicyManifestFixture>(manifestRaw);
   const dirtyRef = "project/rules/dirty-uncommitted.json";
   dirtyManifest.ruleFiles.push(dirtyRef);
   dirtyManifest.ruleFiles.sort();
@@ -3254,21 +3896,29 @@ Then(
       assert.equal(result.status, 0, result.stderr || result.stdout);
     for (const result of this.providerIdentityResults) {
       assert.notEqual(result.status, 0);
-      assert.equal(JSON.parse(result.stdout).result.status, "rejected");
+      assert.equal(
+        parseJsonFixture<CliEnvelopeFixture>(result.stdout).result.status,
+        "rejected",
+      );
     }
     for (const result of [
       ...this.providerRaceResults,
       ...this.providerUnavailableResults,
     ]) {
       assert.notEqual(result.status, 0);
-      assert.equal(JSON.parse(result.stdout).result.status, "pending");
+      assert.equal(
+        parseJsonFixture<CliEnvelopeFixture>(result.stdout).result.status,
+        "pending",
+      );
     }
     assert.equal(
       this.dirtyCandidateResult.status,
       0,
       this.dirtyCandidateResult.stderr || this.dirtyCandidateResult.stdout,
     );
-    const dirtyObserved = JSON.parse(this.dirtyCandidateResult.stdout);
+    const dirtyObserved = parseJsonFixture<CandidateObservationFixture>(
+      this.dirtyCandidateResult.stdout,
+    );
     assert.equal(
       dirtyObserved.candidateSetHash,
       this.committedCandidateSetHash,
@@ -3294,7 +3944,12 @@ Given(
         counterexampleScenarios: ["SCN-UNIT-CONFORMANCE-001"],
       })),
     };
-    this.binding.bindings[0].enforcement.push(
+    const enforcement = requireFirst(
+      this.binding.bindings,
+      "binding",
+    ).enforcement;
+    assert.ok(Array.isArray(enforcement));
+    enforcement.push(
       {
         path: "./src/domain/conformance.js",
         export: "validateProjectConformanceBinding",
@@ -3321,7 +3976,7 @@ Given("enforcementが配列でないproject conformance bindingがある", funct
       counterexampleScenarios: ["SCN-UNIT-CONFORMANCE-001"],
     })),
   };
-  this.binding.bindings[0].enforcement = {};
+  requireFirst(this.binding.bindings, "binding").enforcement = {};
 });
 Given("末尾slashを持つenforcement pathがある", function () {
   this.binding = {
@@ -3338,7 +3993,12 @@ Given("末尾slashを持つenforcement pathがある", function () {
       counterexampleScenarios: ["SCN-UNIT-CONFORMANCE-001"],
     })),
   };
-  this.binding.bindings[0].enforcement[0].path = "src/domain/";
+  const enforcement = requireFirst(
+    this.binding.bindings,
+    "binding",
+  ).enforcement;
+  assert.ok(Array.isArray(enforcement));
+  requireFirst(enforcement, "enforcement").path = "src/domain/";
 });
 When("project conformance bindingを検証する", function () {
   this.bindingResult = validateProjectConformanceBinding(this.binding);
@@ -3347,7 +4007,7 @@ When("project conformance bindingを検証する", function () {
       ".agent-skill-chain/schemas/project-conformance-binding.schema.json",
       "utf8",
     ),
-  );
+  ) as unknown as BindingSchemaFixture;
 });
 Then("runtimeとschemaは重複tupleを拒否する", function () {
   assert.equal(this.bindingResult.valid, false);
@@ -3414,9 +4074,12 @@ Given(
   },
 );
 Then("未観測のruleは同じrisk classでも拒否される", function () {
-  assert.equal(this.result.allowed, false);
-  assert.equal(this.result.diagnostic.ruleId, "ASC-SAME-RISK-002");
-  assert.match(this.result.diagnostic.reasons.join(" "), /actual observation/u);
+  assert.equal(this.boundaryResult.allowed, false);
+  assert.equal(this.boundaryResult.diagnostic?.ruleId, "ASC-SAME-RISK-002");
+  assert.match(
+    this.boundaryResult.diagnostic?.reasons.join(" ") ?? "",
+    /actual observation/u,
+  );
 });
 Given("trusted boundaryに適用ruleがないpolicyがある", function () {
   this.boundaryInput = {
@@ -3426,8 +4089,8 @@ Given("trusted boundaryに適用ruleがないpolicyがある", function () {
   };
 });
 Then("scope未統治のoperationを拒否する", function () {
-  assert.equal(this.result.allowed, false);
-  assert.equal(this.result.diagnostic.ruleId, "ASC-SCOPE-001");
+  assert.equal(this.boundaryResult.allowed, false);
+  assert.equal(this.boundaryResult.diagnostic?.ruleId, "ASC-SCOPE-001");
 });
 
 Given("Object prototypeと同名のpolicy schema versionがある", function () {
@@ -3500,7 +4163,7 @@ Given(
     });
   },
 );
-Given(/^GitHub review providerの(.+)観測がある$/u, function (variant) {
+Given(/^GitHub review providerの(.+)観測がある$/u, function (variant: string) {
   prepareReviewGhStub(this as unknown as ReviewStubWorld, variant);
 });
 When("review evidence CLIでGitとGitHub providerを結合する", function () {
@@ -3590,7 +4253,9 @@ When("review evidence CLIでGitとGitHub providerを結合する", function () {
   this.reviewEvidenceCli = executeBinIn(this.root, args, this.reviewCliEnv);
   if (this.reviewEvidenceCli.stdout.trim()) {
     try {
-      this.reviewEvidence = JSON.parse(this.reviewEvidenceCli.stdout);
+      this.reviewEvidence = requireReviewEvidence(
+        JSON.parse(this.reviewEvidenceCli.stdout) as unknown,
+      );
     } catch {
       /* diagnosticの非JSON出力は後続assertionで失敗させる */
     }
@@ -3606,25 +4271,21 @@ Then(
     );
     assert.equal(this.reviewEvidence.valid, true);
     assert.equal(this.reviewEvidence.status, "verified");
-    assert.equal(
-      this.reviewEvidence.externalEvidence.provenance.source,
-      "github",
-    );
-    assert.deepEqual(this.reviewEvidence.candidateEvidence.changedPaths, [
-      this.artifactPath,
-    ]);
-    assert.match(
-      this.reviewEvidence.candidateEvidence.implementationTreeSha,
-      /^[a-f0-9]{40}$/u,
-    );
-    assert.match(
-      this.reviewEvidence.candidateEvidence.artifact.sha256,
-      /^[a-f0-9]{64}$/u,
-    );
-    assert.match(
-      this.reviewEvidence.candidateEvidence.artifact.blobOid,
-      /^[a-f0-9]{40}$/u,
-    );
+    const externalEvidence = this.reviewEvidence.externalEvidence;
+    const candidateEvidence = this.reviewEvidence.candidateEvidence;
+    assert.ok(externalEvidence?.provenance);
+    assert.ok(candidateEvidence?.artifact);
+    assert.equal(externalEvidence.provenance.source, "github");
+    assert.deepEqual(candidateEvidence.changedPaths, [this.artifactPath]);
+    assert.equal(typeof candidateEvidence.implementationTreeSha, "string");
+    const implementationTreeSha = candidateEvidence.implementationTreeSha;
+    assert.match(implementationTreeSha as string, /^[a-f0-9]{40}$/u);
+    assert.equal(typeof candidateEvidence.artifact.sha256, "string");
+    const artifactSha = candidateEvidence.artifact.sha256;
+    assert.match(artifactSha as string, /^[a-f0-9]{64}$/u);
+    assert.equal(typeof candidateEvidence.artifact.blobOid, "string");
+    const artifactBlobOid = candidateEvidence.artifact.blobOid;
+    assert.match(artifactBlobOid as string, /^[a-f0-9]{40}$/u);
     assert.equal(
       evaluateReview(completeReview(this.finalCommitSha, this.reviewEvidence))
         .approved,
@@ -3680,7 +4341,7 @@ Given(
   },
 );
 Then("完全bindingの成功証拠がないためdedupeを拒否する", function () {
-  assert.notEqual(this.result.status, "deduplicated");
-  assert.equal(this.result.valid, false);
-  assert.equal(this.result.diagnostic.ruleId, "ASC-EVIDENCE-001");
+  assert.notEqual(this.validationResult.status, "deduplicated");
+  assert.equal(this.validationResult.valid, false);
+  assert.equal(this.validationResult.diagnostic.ruleId, "ASC-EVIDENCE-001");
 });

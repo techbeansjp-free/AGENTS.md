@@ -132,7 +132,34 @@ export function checkProjectQualityContract(
   ])
     if (!eslint.includes(`@typescript-eslint/${rule}`))
       errors.push(`ESLintに${rule}がありません`);
+  if (!eslint.includes('files: ["{src,bin,scripts,test}/**/*.ts"]'))
+    errors.push("ESLintの型認識ruleはtestを含む全TypeScriptへ適用が必要です");
+  const stepsRoot = path.join(root, "test/steps");
+  if (!fs.existsSync(stepsRoot)) {
+    errors.push("型付きCucumber stepを検証するtest/stepsがありません");
+  } else {
+    const stepFiles = fs
+      .readdirSync(stepsRoot, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+      .map((entry) => path.join(entry.parentPath, entry.name));
+    for (const file of stepFiles) {
+      const source = fs.readFileSync(file, "utf8");
+      if (
+        /import\s*\{[^}]*\b(?:Given|When|Then)\b[^}]*\}\s*from\s*["']@cucumber\/cucumber["']/su.test(
+          source,
+        )
+      )
+        errors.push(
+          `${path.relative(root, file)}はCucumber stepを直接importせず型付きstepDefinitionsを使用してください`,
+        );
+      if (!source.includes("stepDefinitions<"))
+        errors.push(
+          `${path.relative(root, file)}は型付きstepDefinitionsでWorld型を拘束してください`,
+        );
+    }
+  }
   checks.push("ESLint explicit・propagated any rule");
+  checks.push("testの型認識lint・型付きCucumber World binding");
 
   const workflow = fs.readFileSync(
     path.join(root, ".github/workflows/ci.yml"),
