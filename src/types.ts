@@ -17,6 +17,12 @@ export interface RoleModelChoice {
   speed: "standard";
 }
 
+export interface ReviewerRoleModelChoice extends RoleModelChoice {
+  independence: {
+    differentFrom: "implementer";
+  };
+}
+
 export interface RoutingEvidenceRetentionChoice {
   retentionDays: number;
   maxRecordsPerIssue: number;
@@ -26,7 +32,11 @@ export interface RoutingEvidenceRetentionChoice {
 }
 
 export interface ModelMappingChoice {
-  roles: Record<RoutingRole, RoleModelChoice>;
+  roles: {
+    coordinator: RoleModelChoice;
+    implementer: RoleModelChoice;
+    reviewer: ReviewerRoleModelChoice;
+  };
   evidenceStoreRoot: string;
   retention: RoutingEvidenceRetentionChoice;
 }

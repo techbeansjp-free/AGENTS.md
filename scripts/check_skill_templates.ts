@@ -97,6 +97,23 @@ const DOMAIN_GLOSSARY_SKILLS = new Set([
   "step-10-review",
 ]);
 
+const ROUTING_INPUT_CONTRACT_ASSETS = [
+  "skills/step-06-plan/SKILL.md",
+  "skills/step-09-implement/SKILL.md",
+  "skills/step-10-review/SKILL.md",
+  "templates/issue/02_設計.md",
+  "templates/issue/03_実装計画.md",
+  "templates/issue/04_レビュー.md",
+] as const;
+
+const ROUTING_INPUT_CONTRACT_MARKERS = [
+  "role欄",
+  "provider欄",
+  "model設定欄",
+  "fallback欄",
+  "独立性証拠欄",
+] as const;
+
 const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
   ["step-00-stage", []],
   [
@@ -202,6 +219,7 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
   const errors: string[] = [];
   const skillsRoot = path.resolve(root, ".agent-skill-chain/skills");
   const templatesRoot = path.resolve(root, ".agent-skill-chain/templates");
+  const namespaceRoot = path.resolve(root, ".agent-skill-chain");
   const actualSkills = fs.existsSync(skillsRoot)
     ? fs
         .readdirSync(skillsRoot, { withFileTypes: true })
@@ -214,6 +232,17 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
     errors.push(
       `Step skill集合が0〜11の正規集合と一致しません: ${actualSkills.join(",")}`,
     );
+  for (const relative of ROUTING_INPUT_CONTRACT_ASSETS) {
+    const file = path.join(namespaceRoot, relative);
+    if (!fs.existsSync(file)) {
+      errors.push(`routing入力契約資産がありません: ${relative}`);
+      continue;
+    }
+    const markdown = fs.readFileSync(file, "utf8");
+    for (const marker of ROUTING_INPUT_CONTRACT_MARKERS)
+      if (!markdown.includes(marker))
+        errors.push(`${relative}: routing入力契約の${marker}がありません`);
+  }
   for (const relative of DEVELOPMENT_CONSIDERATION_TEMPLATES) {
     const template = path.join(templatesRoot, relative);
     if (!fs.existsSync(template)) {

@@ -23,10 +23,11 @@
         "speed": "standard"
       },
       "reviewer": {
-        "provider": "codex",
-        "logicalTier": "highest_available",
+        "provider": "claude",
+        "logicalTier": "project_default",
         "reasoningEffort": "high",
-        "speed": "standard"
+        "speed": "standard",
+        "independence": { "differentFrom": "implementer" }
       }
     },
     "evidenceStoreRoot": "docs/evidence/routing/",

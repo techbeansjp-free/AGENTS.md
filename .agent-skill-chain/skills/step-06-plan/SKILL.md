@@ -7,6 +7,10 @@ description: 承認対象の設計を、失敗テストから最小実装・仕�
 
 入力は設計。成果物は失敗する実行可能な受け入れ例、最小実装、合格、整理、仕様更新、risk比例検証、独立review、PR停止の順にした`03_実装計画.md`。受け入れ条件をproject policyが選択したtest layerと結果へ対応させ、project所有のコマンドだけを使う。
 
+## routing入力契約
+
+実装taskごとにrole欄、provider欄、model設定欄、fallback欄、独立性証拠欄を計画する。providerとmodel設定はproject choiceから受け取る入力であり、汎用skillは固有のmodel slugを既定しない。要求能力を満たす解決が不能な場合はfallback欄へ安全な停止・再開条件を置き、implementerとreviewerが異なることを独立性証拠欄で検証できるようにする。
+
 ## テンプレート契約
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、実装計画へ新しい要求・要件・設計判断を暗黙追加せず、発見時は上流へ戻す。

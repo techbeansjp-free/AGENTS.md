@@ -27,6 +27,7 @@ import {
   isRecord,
 } from "../types.js";
 import { validateProviderCapabilityMapping } from "./provider-capability.js";
+import { validateRoleConfigurationIndependence } from "./routing-independence.js";
 
 const PROJECT_CHOICE_FIELDS = [
   "language",
@@ -151,7 +152,13 @@ function validateModelMapping(value: unknown, errors: string[]): void {
     const roleChoice = roles[role];
     rejectUnknownKeys(
       roleChoice,
-      ["provider", "logicalTier", "reasoningEffort", "speed"],
+      [
+        "provider",
+        "logicalTier",
+        "reasoningEffort",
+        "speed",
+        ...(role === "reviewer" ? ["independence"] : []),
+      ],
       name,
       errors,
     );
@@ -167,7 +174,27 @@ function validateModelMapping(value: unknown, errors: string[]): void {
       errors.push(`${name}.reasoningEffortはhighでなければなりません`);
     if (record.speed !== "standard")
       errors.push(`${name}.speedはstandardでなければなりません`);
+    if (role === "reviewer") {
+      rejectUnknownKeys(
+        record.independence,
+        ["differentFrom"],
+        `${name}.independence`,
+        errors,
+      );
+      const independence = isRecord(record.independence)
+        ? record.independence
+        : {};
+      if (independence.differentFrom !== "implementer")
+        errors.push(
+          `${name}.independence.differentFromはimplementerでなければなりません`,
+        );
+    }
   }
+  const independence = validateRoleConfigurationIndependence(mapping.roles);
+  if (independence.verdict === "violated")
+    errors.push(
+      `${independence.ruleId ?? "BR-836-12"}: ${independence.reason ?? "role独立性違反です"}`,
+    );
   if (
     typeof mapping.evidenceStoreRoot !== "string" ||
     mapping.evidenceStoreRoot !== mapping.evidenceStoreRoot.normalize("NFC") ||

@@ -49,7 +49,7 @@
           "properties": {
             "coordinator": { "$ref": "#/$defs/roleModelChoice" },
             "implementer": { "$ref": "#/$defs/roleModelChoice" },
-            "reviewer": { "$ref": "#/$defs/roleModelChoice" }
+            "reviewer": { "$ref": "#/$defs/reviewerRoleModelChoice" }
           }
         },
         "evidenceStoreRoot": {
@@ -143,6 +143,33 @@
         },
         "reasoningEffort": { "const": "high" },
         "speed": { "const": "standard" }
+      }
+    },
+    "reviewerRoleModelChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "logicalTier",
+        "reasoningEffort",
+        "speed",
+        "independence"
+      ],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "logicalTier": {
+          "enum": ["project_default", "highest_available"]
+        },
+        "reasoningEffort": { "const": "high" },
+        "speed": { "const": "standard" },
+        "independence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["differentFrom"],
+          "properties": {
+            "differentFrom": { "const": "implementer" }
+          }
+        }
       }
     },
     "applicability": {

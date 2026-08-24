@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { loadProjectPolicySetAtCommit } from "../../src/domain/policy.js";
+import {
+  loadProjectPolicySetAtCommit,
+  readProjectChoices,
+  validateProjectChoices,
+} from "../../src/domain/policy.js";
 import {
   checkRoutingIndependence,
   ROUTING_EVALUATOR_PATHS,
@@ -19,6 +23,9 @@ class RoutingIndependenceWorld extends WorkflowWorld {
   trustedMappingVersion: string | undefined = undefined;
   trustedChoiceRoot: string | undefined = undefined;
   trustedBindingRaw: string | undefined = undefined;
+  roleConfiguration: unknown = undefined;
+  roleConfigurationValidation:
+    ReturnType<typeof validateProjectChoices> | undefined = undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<RoutingIndependenceWorld>();
@@ -156,4 +163,48 @@ Then("candidate側の資産による自己評価を拒否する", function () {
 
 Then("evaluatorRefは評価結果に記録する", function () {
   assert.equal(this.independenceResult?.evaluatorRef, this.candidateHead);
+});
+
+Given(
+  "implementerとreviewerが同一providerかつ同一論理tierへ解決するrole設定を与える",
+  function () {
+    const choices = readProjectChoices(
+      fs.readFileSync(
+        path.resolve(
+          "test",
+          "fixtures",
+          "routing",
+          "project-choice-configured.json",
+        ),
+        "utf8",
+      ),
+    );
+    assert.ok(choices.modelMapping);
+    const roleConfiguration = structuredClone(choices);
+    assert.ok(roleConfiguration.modelMapping);
+    roleConfiguration.modelMapping.roles.reviewer.provider =
+      roleConfiguration.modelMapping.roles.implementer.provider;
+    roleConfiguration.modelMapping.roles.reviewer.logicalTier =
+      roleConfiguration.modelMapping.roles.implementer.logicalTier;
+    this.roleConfiguration = roleConfiguration;
+  },
+);
+
+When("role設定を検証する", function () {
+  this.roleConfigurationValidation = validateProjectChoices(
+    this.roleConfiguration,
+  );
+});
+
+Then("role設定をrole独立性違反として拒否する", function () {
+  assert.equal(this.roleConfigurationValidation?.valid, false);
+});
+
+Then("role設定の拒否結果はrule IDを持つ", function () {
+  assert.ok(
+    this.roleConfigurationValidation?.errors.some((error) =>
+      error.includes("BR-836-12"),
+    ),
+    this.roleConfigurationValidation?.errors.join("; "),
+  );
 });

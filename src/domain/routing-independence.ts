@@ -1,3 +1,5 @@
+import { isRecord } from "../types.js";
+
 const CONTROL = /[\p{Cc}\p{Cf}]/u;
 
 export const ROUTING_TRUSTED_DATA_PATHS = [
@@ -26,6 +28,12 @@ export interface RoutingIndependenceResult {
   trustedRef: string;
   trustedDataPaths: readonly string[];
   ruleId?: string;
+  reason?: string;
+}
+
+export interface RoleConfigurationIndependenceResult {
+  verdict: "independent" | "violated";
+  ruleId?: "BR-836-12";
   reason?: string;
 }
 
@@ -119,4 +127,47 @@ export function checkRoutingIndependence(
     );
 
   return result(input, "independent");
+}
+
+export function validateRoleConfigurationIndependence(
+  roles: unknown,
+): RoleConfigurationIndependenceResult {
+  if (!isRecord(roles))
+    return {
+      verdict: "violated",
+      ruleId: "BR-836-12",
+      reason: "role設定を解決できないため独立性を確認できません",
+    };
+  const implementer = isRecord(roles.implementer) ? roles.implementer : {};
+  const reviewer = isRecord(roles.reviewer) ? roles.reviewer : {};
+  const independence = isRecord(reviewer.independence)
+    ? reviewer.independence
+    : {};
+  if (independence.differentFrom !== "implementer")
+    return {
+      verdict: "violated",
+      ruleId: "BR-836-12",
+      reason: "reviewer roleはimplementerと異なる独立性制約が必要です",
+    };
+  if (
+    typeof implementer.provider !== "string" ||
+    typeof implementer.logicalTier !== "string" ||
+    typeof reviewer.provider !== "string" ||
+    typeof reviewer.logicalTier !== "string"
+  )
+    return {
+      verdict: "violated",
+      ruleId: "BR-836-12",
+      reason: "implementerとreviewerのrole解決結果を比較できません",
+    };
+  if (
+    implementer.provider === reviewer.provider &&
+    implementer.logicalTier === reviewer.logicalTier
+  )
+    return {
+      verdict: "violated",
+      ruleId: "BR-836-12",
+      reason: "implementerとreviewerが同一providerかつ同一論理tierへ解決します",
+    };
+  return { verdict: "independent" };
 }
