@@ -54,6 +54,7 @@ import {
   CLI_USAGE,
   PUBLIC_LIFECYCLE_COMMANDS,
   routingDiagnostic,
+  routingRecovery,
 } from "./cli-contract.js";
 import { type Policy, isRecord } from "./types.js";
 import { type PolicySet } from "./domain/policy.js";
@@ -217,6 +218,7 @@ function routingFailure(
   reason: string,
   entrypoint: string,
 ) {
+  const recovery = routingRecovery(ruleId);
   return serializeDiagnostic({
     allowed: false,
     state,
@@ -224,13 +226,13 @@ function routingFailure(
       reason,
       checkedEntrypoint: entrypoint,
       safeFallback: "候補なし",
-      requiredAuthority: "mapping owner",
+      requiredAuthority: recovery.authority,
       stopPoint: "実装開始前",
-      resumeCondition: "provider実行入口を復旧し同じscopeで再解決する",
+      resumeCondition: recovery.resume,
     },
     diagnostic: routingDiagnostic(ruleId, reason, {
-      requiredAuthority: "mapping owner",
-      next: "provider実行入口を復旧し同じscopeでrouting resolveを再実行してください",
+      requiredAuthority: recovery.authority,
+      next: recovery.next,
     }),
   });
 }

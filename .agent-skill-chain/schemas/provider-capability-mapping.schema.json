@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-skill-chain.invalid/schemas/provider-capability-mapping-v1.json",
+  "$id": "https://agent-skill-chain.invalid/schemas/provider-capability-mapping-v2.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "mappingVersion", "providers"],
   "properties": {
     "schemaVersion": {
-      "const": "agent-skill-chain/provider-capability-mapping/v1"
+      "const": "agent-skill-chain/provider-capability-mapping/v2"
     },
     "mappingVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
     "providers": {
@@ -15,36 +15,23 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["provider", "models"],
+        "required": ["provider", "capabilities", "selectionSource"],
         "properties": {
           "provider": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9.-]{0,127}$"
           },
-          "models": {
+          "capabilities": {
             "type": "array",
             "minItems": 1,
+            "uniqueItems": true,
             "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["slug", "capabilities", "rank"],
-              "properties": {
-                "slug": {
-                  "type": "string",
-                  "pattern": "^[a-z0-9][a-z0-9.-]{0,127}$"
-                },
-                "capabilities": {
-                  "type": "array",
-                  "minItems": 1,
-                  "uniqueItems": true,
-                  "items": {
-                    "type": "string",
-                    "pattern": "^[a-z][a-z0-9_-]{0,63}$"
-                  }
-                },
-                "rank": { "type": "integer", "minimum": 1 }
-              }
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$"
             }
+          },
+          "selectionSource": {
+            "const": "provider_recommended_default"
           }
         }
       }

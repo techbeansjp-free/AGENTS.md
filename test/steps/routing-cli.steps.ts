@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { routingDiagnostic } from "../../src/cli-contract.js";
+import { routingDiagnostic, routingRecovery } from "../../src/cli-contract.js";
 import type { Diagnostic } from "../../src/types.js";
 import { isRecord } from "../../src/types.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
@@ -78,6 +78,16 @@ Then(
 
 Then("routing診断の必須項目はいずれも空でない", function () {
   assert.ok(this.diagnostic?.reasons.every((reason) => reason.trim() !== ""));
+});
+
+Then("provider障害とmapping不一致は異なる再開条件を返す", function () {
+  const provider = routingRecovery("FR-836-02");
+  const mapping = routingRecovery("FR-836-10");
+  assert.equal(provider.authority, "provider operator");
+  assert.match(provider.next, /provider実行入口.*復旧/u);
+  assert.equal(mapping.authority, "mapping owner");
+  assert.match(mapping.next, /trusted mappingを更新/u);
+  assert.notEqual(provider.resume, mapping.resume);
 });
 
 Given(

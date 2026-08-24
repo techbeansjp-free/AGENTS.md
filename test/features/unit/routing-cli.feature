@@ -7,3 +7,4 @@ Feature: routing CLI診断
     When routing診断を整形する
     Then 診断はrule IDと目的とリスクと根拠と次の操作と必要authorityとrollbackを持つ
     And routing診断の必須項目はいずれも空でない
+    And provider障害とmapping不一致は異なる再開条件を返す

@@ -80,11 +80,25 @@ Then("Codexはapp-serverのmodel listを厳密に観測する", async function (
           id: 1,
           result: {
             data: [
-              { id: "gpt-5.6-sol", model: "gpt-5.6-sol", hidden: false },
+              {
+                id: "gpt-5.6-sol",
+                model: "gpt-5.6-sol",
+                hidden: false,
+                isDefault: true,
+                supportedReasoningEfforts: [
+                  { reasoningEffort: "low" },
+                  { reasoningEffort: "high" },
+                ],
+              },
               {
                 id: "gpt-5.6-terra",
                 model: "gpt-5.6-terra",
                 hidden: false,
+                isDefault: false,
+                supportedReasoningEfforts: [
+                  { reasoningEffort: "medium" },
+                  { reasoningEffort: "high" },
+                ],
               },
             ],
             nextCursor: null,
@@ -102,6 +116,16 @@ Then("Codexはapp-serverのmodel listを厳密に観測する", async function (
   assert.deepEqual(calls, [{ file: "codex", args: ["app-server", "--stdio"] }]);
   assert.equal(observation.state, "available");
   assert.deepEqual(observation.models, ["gpt-5.6-sol", "gpt-5.6-terra"]);
+  assert.deepEqual(
+    observation.modelMetadata.filter((model) => model.recommended),
+    [
+      {
+        model: "gpt-5.6-sol",
+        recommended: true,
+        supportedReasoningEfforts: ["low", "high"],
+      },
+    ],
+  );
   assert.equal(observation.entrypoint, "codex app-server model/list");
 
   const incomplete = await observeProvider(

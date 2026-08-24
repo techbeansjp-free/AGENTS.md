@@ -41,21 +41,22 @@ export interface ModelMappingChoice {
   retention: RoutingEvidenceRetentionChoice;
 }
 
-export interface ProviderModelCapability {
-  slug: string;
-  capabilities: string[];
-  rank: number;
-}
-
 export interface ProviderCapability {
   provider: string;
-  models: ProviderModelCapability[];
+  capabilities: string[];
+  selectionSource: "provider_recommended_default";
 }
 
 export interface ProviderCapabilityMapping {
-  schemaVersion: "agent-skill-chain/provider-capability-mapping/v1";
+  schemaVersion: "agent-skill-chain/provider-capability-mapping/v2";
   mappingVersion: string;
   providers: ProviderCapability[];
+}
+
+export interface ProviderModelObservation {
+  model: string;
+  recommended: boolean;
+  supportedReasoningEfforts: string[];
 }
 
 export interface Rule {

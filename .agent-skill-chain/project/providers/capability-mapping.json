@@ -1,22 +1,11 @@
 {
-  "schemaVersion": "agent-skill-chain/provider-capability-mapping/v1",
+  "schemaVersion": "agent-skill-chain/provider-capability-mapping/v2",
   "mappingVersion": "2026-08-24",
   "providers": [
     {
       "provider": "codex",
-      "models": [
-        { "slug": "gpt-5.6-sol", "capabilities": ["coding"], "rank": 1 },
-        { "slug": "gpt-5.6-terra", "capabilities": ["coding"], "rank": 2 },
-        { "slug": "gpt-5.6-luna", "capabilities": ["coding"], "rank": 3 },
-        { "slug": "gpt-5.5", "capabilities": ["coding"], "rank": 4 },
-        { "slug": "gpt-5.4", "capabilities": ["coding"], "rank": 5 },
-        { "slug": "gpt-5.4-mini", "capabilities": ["coding"], "rank": 6 },
-        {
-          "slug": "gpt-5.3-codex-spark",
-          "capabilities": ["coding"],
-          "rank": 7
-        }
-      ]
+      "capabilities": ["coding"],
+      "selectionSource": "provider_recommended_default"
     }
   ]
 }

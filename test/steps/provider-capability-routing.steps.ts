@@ -36,40 +36,43 @@ function sourceFiles(directory: string): string[] {
   });
 }
 
-When(
-  "汎用packageのschemaとtemplateとsourceでmodel slugを検索する",
-  function () {
-    assert.ok(this.capabilityMapping);
-    const slugs = this.capabilityMapping.providers.flatMap((provider) =>
-      provider.models.map((model) => model.slug),
-    );
-    this.modelSlugOccurrences = [
-      ".agent-skill-chain/schemas",
-      ".agent-skill-chain/templates",
-      "src",
-    ].flatMap((directory) =>
-      sourceFiles(directory).filter((file) => {
-        const source = fs.readFileSync(file, "utf8");
-        return slugs.some((slug) => source.includes(slug));
-      }),
-    );
-  },
-);
+When("project mappingと汎用packageで固定model slugを検索する", function () {
+  assert.ok(this.capabilityMapping);
+  const modelSlug = /\bgpt-[a-z0-9.-]+\b/u;
+  const mappingSource = JSON.stringify(this.capabilityMapping);
+  this.modelSlugOccurrences = [
+    ...(mappingSource.match(/\bgpt-[a-z0-9.-]+\b/gu) ?? []).map(
+      (slug) => `project mapping:${slug}`,
+    ),
+    ".agent-skill-chain/schemas",
+    ".agent-skill-chain/templates",
+    "src",
+  ].flatMap((directory) =>
+    directory.startsWith("project mapping:")
+      ? [directory]
+      : sourceFiles(directory).filter((file) =>
+          modelSlug.test(fs.readFileSync(file, "utf8")),
+        ),
+  );
+});
 
 Then("必須値としてのmodel slug該当件数は0件である", function () {
   assert.deepEqual(this.modelSlugOccurrences, []);
 });
 
-Then("未知fieldと型不正と非昇順rankのmappingを拒否する", function () {
+Then("未知fieldと型不正と不正な選択元のmappingを拒否する", function () {
   assert.ok(this.capabilityMapping);
   const unknownField: unknown = {
     ...structuredClone(this.capabilityMapping),
     unexpected: true,
   };
-  const invalidRank = structuredClone(this.capabilityMapping);
-  const firstProvider = invalidRank.providers[0];
-  assert.ok(firstProvider?.models[1]);
-  firstProvider.models[1].rank = firstProvider.models[0]!.rank;
+  const invalidSelection = structuredClone(this.capabilityMapping);
+  const firstProvider = invalidSelection.providers[0];
+  assert.ok(firstProvider);
+  firstProvider.selectionSource = "manual_slug_rank" as never;
   assert.equal(validateProviderCapabilityMapping(unknownField).valid, false);
-  assert.equal(validateProviderCapabilityMapping(invalidRank).valid, false);
+  assert.equal(
+    validateProviderCapabilityMapping(invalidSelection).valid,
+    false,
+  );
 });

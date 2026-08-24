@@ -45,23 +45,29 @@ export function findPackageModelSlugViolations(
   root: string,
   mapping: ProviderCapabilityMapping,
 ): PackageModelSlugViolation[] {
-  const slugs = new Set(
-    mapping.providers.flatMap((provider) =>
-      provider.models.map((model) => model.slug),
-    ),
-  );
+  const slugs = new Set<string>();
+  const modelSlug = /\bgpt-[a-z0-9.-]+\b/gu;
+  for (const match of JSON.stringify(mapping).matchAll(modelSlug))
+    if (match[0]) slugs.add(match[0]);
   const violations: PackageModelSlugViolation[] = [];
   for (const file of PACKAGE_MODEL_SLUG_PATHS.flatMap((relative) =>
     assetFiles(path.join(root, relative)),
   )) {
     const source = fs.readFileSync(file, "utf8");
-    for (const slug of slugs)
-      if (source.includes(slug))
+    for (const match of source.matchAll(modelSlug)) {
+      const slug = match[0];
+      if (slug)
         violations.push({
           path: path.relative(root, file).split(path.sep).join("/"),
           slug,
         });
+    }
   }
+  for (const slug of slugs)
+    violations.push({
+      path: ".agent-skill-chain/project/providers/capability-mapping.json",
+      slug,
+    });
   return violations;
 }
 
@@ -132,7 +138,7 @@ export function checkConformance(root: string): number {
       ...result.errors,
       ...ownershipViolations.map(
         (violation) =>
-          `汎用package資産にproject固有model slugがあります: ${violation.path} (${violation.slug})`,
+          `固定model slugを保持している資産があります: ${violation.path} (${violation.slug})`,
       ),
     ];
     if (errors.length > 0) {
@@ -142,7 +148,7 @@ export function checkConformance(root: string): number {
       return 1;
     }
     process.stdout.write(
-      "conformance検査: 合格（I1〜I12、実在source/export、成功SCN証拠、model slug所有境界違反0件）\n",
+      "conformance検査: 合格（I1〜I12、実在source/export、成功SCN証拠、固定model slug 0件）\n",
     );
     return 0;
   } finally {

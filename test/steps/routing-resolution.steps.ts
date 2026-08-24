@@ -41,7 +41,7 @@ function configuredChoices(): ProjectChoices {
   return readProjectChoices(readFixture("project-choice-configured.json"));
 }
 
-function fixtureSlug(name: "unknown" | "higher"): string {
+function fixtureSlug(name: "current" | "lower" | "unknown" | "higher"): string {
   const value: unknown = parseJsonStrict(
     readFixture("resolution-slugs.json"),
     "routing resolution slug fixture",
@@ -70,6 +70,7 @@ function makeInput(
   choices: ProjectChoices,
   mapping: ProviderCapabilityMapping,
   models: string[],
+  recommendedModels: string[] = models.slice(0, 1),
 ): RoutingResolutionInput {
   return {
     scope: "T04-routing-domain",
@@ -80,6 +81,11 @@ function makeInput(
       provider: choices.modelMapping?.roles.implementer.provider ?? "",
       state: "available",
       models,
+      modelMetadata: models.map((model) => ({
+        model,
+        recommended: recommendedModels.includes(model),
+        supportedReasoningEfforts: ["low", "medium", "high"],
+      })),
       observedAt: "2026-08-24T00:00:00.000Z",
       entrypoint: "provider-fixture",
     },
@@ -100,12 +106,11 @@ function requireResolved(
 Given("ClaudeがcoordinatorでCodexの最高位coding tierを利用できる", function () {
   this.choices = configuredChoices();
   this.mapping = projectMapping();
-  const provider = this.mapping.providers[0];
-  assert.ok(provider);
   this.input = makeInput(
     this.choices,
     this.mapping,
-    provider.models.map((model) => model.slug),
+    [fixtureSlug("current"), fixtureSlug("lower")],
+    [fixtureSlug("current")],
   );
 });
 
@@ -126,11 +131,9 @@ Then("implementerはCodexである", function () {
   );
 });
 
-Then("modelはtrusted mapping上の最高位coding tierである", function () {
+Then("modelはprovider公式recommended defaultである", function () {
   const decision = requireResolved(this.decision);
-  const provider = this.mapping?.providers[0];
-  assert.ok(provider);
-  assert.equal(decision.model, provider.models[0]?.slug);
+  assert.equal(decision.model, fixtureSlug("current"));
 });
 
 Then("reasoning effortはhighである", function () {
@@ -141,14 +144,30 @@ Then("service tierはdefaultである", function () {
   assert.equal(requireResolved(this.decision).serviceTier, "default");
 });
 
+Then("high非対応の公式recommended defaultはpendingである", function () {
+  assert.ok(this.input);
+  const unsupported = resolveRouting({
+    ...this.input,
+    availability: {
+      ...this.input.availability,
+      modelMetadata: this.input.availability.modelMetadata.map((model) =>
+        model.recommended
+          ? { ...model, supportedReasoningEfforts: ["low", "medium"] }
+          : model,
+      ),
+    },
+  });
+  assert.equal(unsupported.state, "pending");
+  assert.equal(
+    unsupported.state === "pending" ? unsupported.ruleId : "",
+    "FR-836-05",
+  );
+});
+
 Given("ClaudeがcoordinatorでCodexを利用できる", function () {
   this.choices = configuredChoices();
   this.mapping = projectMapping();
-  const provider = this.mapping.providers[0];
-  assert.ok(provider);
-  this.input = makeInput(this.choices, this.mapping, [
-    provider.models[0]!.slug,
-  ]);
+  this.input = makeInput(this.choices, this.mapping, [fixtureSlug("current")]);
 });
 
 When("coordinator identityでproduct pathの実装を開始しようとする", function () {
@@ -197,12 +216,11 @@ Given(
   function () {
     this.choices = configuredChoices();
     this.mapping = projectMapping();
-    const provider = this.mapping.providers[0];
-    assert.ok(provider);
     this.input = makeInput(
       this.choices,
       this.mapping,
-      provider.models.map((model) => model.slug),
+      [fixtureSlug("current"), fixtureSlug("lower")],
+      [fixtureSlug("current")],
     );
     this.decision = resolveRouting(this.input);
   },
@@ -212,10 +230,9 @@ When(
   "低位modelまたは別のreasoning effortまたはfast以上の速度tierへ差し替えようとする",
   function () {
     const resolved = requireResolved(this.decision);
-    const lower = this.mapping?.providers[0]?.models[1];
-    assert.ok(lower);
+    const lower = fixtureSlug("lower");
     this.value = [
-      rejectRoutingDowngrade(resolved, { ...resolved, model: lower.slug }),
+      rejectRoutingDowngrade(resolved, { ...resolved, model: lower }),
       rejectRoutingDowngrade(resolved, {
         ...resolved,
         reasoningEffort: "medium",
@@ -228,7 +245,7 @@ When(
         ...this.input!,
         availability: {
           ...this.input!.availability,
-          models: [lower.slug],
+          models: [lower],
         },
       }),
       revalidateRouting(resolved, {
@@ -268,16 +285,16 @@ Then("実装を開始しない", function () {
   );
 });
 
-Given(
-  "利用可能model一覧がtrusted mappingに存在しないslugだけを含む",
-  function () {
-    this.choices = configuredChoices();
-    this.mapping = projectMapping();
-    this.input = makeInput(this.choices, this.mapping, [
-      fixtureSlug("unknown"),
-    ]);
-  },
-);
+Given("利用可能model一覧に公式recommended defaultがない", function () {
+  this.choices = configuredChoices();
+  this.mapping = projectMapping();
+  this.input = makeInput(
+    this.choices,
+    this.mapping,
+    [fixtureSlug("unknown")],
+    [],
+  );
+});
 
 When("最高位coding tierを解決する", function () {
   assert.ok(this.input);
@@ -288,7 +305,7 @@ Then("解決状態はpendingである", function () {
   assert.equal(this.decision?.state, "pending");
 });
 
-Then("mapping ownerへの更新要求を返す", function () {
+Then("provider再観測要求を返す", function () {
   assert.equal(
     this.decision?.state === "pending" && this.decision.updateRequired,
     true,
@@ -302,17 +319,11 @@ Then("順位を推測しない", function () {
   );
 });
 
-Given("trusted mappingの最高位順位に2件のmodelがある", function () {
+Given("provider観測にrecommended defaultが2件ある", function () {
   this.choices = configuredChoices();
-  this.mapping = structuredClone(projectMapping());
-  const models = this.mapping.providers[0]?.models;
-  assert.ok(models?.[1]);
-  models[1].rank = models[0]!.rank;
-  this.input = makeInput(
-    this.choices,
-    this.mapping,
-    models.map((model) => model.slug),
-  );
+  this.mapping = projectMapping();
+  const models = [fixtureSlug("current"), fixtureSlug("higher")];
+  this.input = makeInput(this.choices, this.mapping, models, models);
 });
 
 Given("その2件がいずれも利用可能である", function () {
@@ -328,13 +339,12 @@ Then("同一入力に対する結果は一意である", function () {
 Given("起票時点のcatalog fixtureとtrusted mappingを読み込む", function () {
   this.choices = configuredChoices();
   this.mapping = projectMapping();
-  const provider = this.mapping.providers[0];
-  assert.ok(provider);
-  this.expectedModel = provider.models[0]?.slug;
+  this.expectedModel = fixtureSlug("current");
   this.input = makeInput(
     this.choices,
     this.mapping,
-    provider.models.map((model) => model.slug),
+    [fixtureSlug("current"), fixtureSlug("lower")],
+    [fixtureSlug("current")],
   );
 });
 
@@ -350,23 +360,16 @@ Then("mapping versionを記録する", function () {
 });
 
 Given(
-  "catalog fixtureとtrusted mappingへ最上位のmodelを1件追加する",
+  "catalog fixtureの公式recommended defaultを新modelへ変更する",
   function () {
     this.choices = configuredChoices();
-    this.mapping = structuredClone(projectMapping());
-    const provider = this.mapping.providers[0];
-    assert.ok(provider?.models[0]);
+    this.mapping = projectMapping();
     this.expectedModel = fixtureSlug("higher");
-    for (const model of provider.models) model.rank += 1;
-    provider.models.unshift({
-      slug: this.expectedModel,
-      capabilities: ["coding"],
-      rank: 1,
-    });
     this.input = makeInput(
       this.choices,
       this.mapping,
-      provider.models.map((model) => model.slug),
+      [this.expectedModel, fixtureSlug("current")],
+      [this.expectedModel],
     );
   },
 );

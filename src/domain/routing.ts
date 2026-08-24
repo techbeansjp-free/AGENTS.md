@@ -1,6 +1,7 @@
 import type {
   ModelMappingChoice,
   ProviderCapabilityMapping,
+  ProviderModelObservation,
   RoutingRole,
 } from "../types.js";
 
@@ -10,6 +11,7 @@ export interface RoutingAvailability {
   provider: string;
   state: RoutingAvailabilityState;
   models: string[];
+  modelMetadata: ProviderModelObservation[];
   observedAt: string;
   entrypoint: string;
 }
@@ -139,37 +141,40 @@ export function resolveRouting(input: RoutingResolutionInput): RoutingDecision {
       "FR-836-10",
       "provider capability mappingに対応providerがありません",
     );
-  const known = new Set(provider.models.map((model) => model.slug));
-  if (
-    input.availability.models.length === 0 ||
-    input.availability.models.some((model) => !known.has(model))
-  )
+  if (!provider.capabilities.includes(input.requiredCapability))
     return pending(
-      "FR-836-10",
-      "利用可能model一覧とtrusted mappingが一致しません",
+      "FR-836-04",
+      "providerが要求されたcoding能力を宣言していません",
     );
+  if (provider.selectionSource !== "provider_recommended_default")
+    return pending("FR-836-10", "model選択元をtrusted mappingで解決できません");
   const available = new Set(input.availability.models);
-  const candidates = provider.models.filter(
-    (model) =>
-      available.has(model.slug) &&
-      model.capabilities.includes(input.requiredCapability) &&
-      Number.isInteger(model.rank) &&
-      model.rank >= 1,
+  if (available.size === 0)
+    return pending("FR-836-02", "利用可能model一覧が空です");
+  const recommended = input.availability.modelMetadata.filter(
+    (model) => model.recommended && available.has(model.model),
   );
-  if (candidates.length === 0)
-    return pending("FR-836-04", "coding能力要件を満たす交差がありません");
-  const highestRank = Math.min(...candidates.map((model) => model.rank));
-  const highest = candidates.filter((model) => model.rank === highestRank);
-  if (highest.length !== 1)
+  if (recommended.length === 0)
+    return pending(
+      "FR-836-02",
+      "provider公式recommended defaultを一意に観測できません",
+    );
+  if (recommended.length !== 1)
     return pending(
       "BR-836-09",
-      "最高位のmodelが同順位で複数あるため推測できません",
+      "provider公式recommended defaultが複数あるため推測できません",
+    );
+  const selected = recommended[0]!;
+  if (!selected.supportedReasoningEfforts.includes("high"))
+    return pending(
+      "FR-836-05",
+      "provider公式recommended defaultがreasoning effort highに対応しません",
     );
   return {
     state: "resolved",
     scope: input.scope,
     provider: implementer.provider,
-    model: highest[0]!.slug,
+    model: selected.model,
     mappingVersion: input.mapping.mappingVersion,
     evaluatorRef: input.evaluatorRef,
     reasoningEffort: "high",

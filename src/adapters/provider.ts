@@ -5,7 +5,8 @@ import {
   type ProcessResult,
 } from "../lib/process.js";
 import { parseJsonStrict } from "../lib/security.js";
-import { isRecord } from "../types.js";
+import { PACKAGE_VERSION } from "../lib/version.js";
+import { isRecord, type ProviderModelObservation } from "../types.js";
 
 export type ProviderAvailabilityState = "available" | "unavailable" | "unknown";
 
@@ -13,6 +14,7 @@ export interface ProviderAvailabilityObservation {
   provider: string;
   state: ProviderAvailabilityState;
   models: string[];
+  modelMetadata: ProviderModelObservation[];
   observedAt: string;
   entrypoint: string;
   reason?: string;
@@ -28,6 +30,7 @@ export type ProviderExecutor = (
 interface ProviderCatalog {
   available: boolean;
   models: string[];
+  modelMetadata: ProviderModelObservation[];
 }
 
 const PROVIDER_NAME = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
@@ -62,7 +65,7 @@ function codexInput(): string {
         clientInfo: {
           name: "agent-skill-chain",
           title: "agent-skill-chain",
-          version: "0.3.1",
+          version: PACKAGE_VERSION,
         },
       },
     },
@@ -89,17 +92,44 @@ function codexCatalog(stdout: string): ProviderCatalog | undefined {
     (result.nextCursor !== null && result.nextCursor !== undefined)
   )
     return undefined;
-  const models = result.data.map((entry) =>
-    isRecord(entry) ? entry.model : undefined,
-  );
-  if (
-    models.some(
-      (model) => typeof model !== "string" || !MODEL_SLUG.test(model),
-    ) ||
-    new Set(models).size !== models.length
-  )
-    return undefined;
-  return { available: models.length > 0, models: models as string[] };
+  const modelMetadata: ProviderModelObservation[] = [];
+  for (const entry of result.data) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.model !== "string" ||
+      !MODEL_SLUG.test(entry.model) ||
+      (entry.isDefault !== undefined && typeof entry.isDefault !== "boolean") ||
+      entry.hidden === true
+    )
+      return undefined;
+    const efforts = entry.supportedReasoningEfforts;
+    if (efforts !== undefined && !Array.isArray(efforts)) return undefined;
+    const supportedReasoningEfforts = (efforts ?? []).map((effort) =>
+      isRecord(effort) ? effort.reasoningEffort : undefined,
+    );
+    if (
+      supportedReasoningEfforts.some(
+        (effort) =>
+          typeof effort !== "string" ||
+          !/^[a-z][a-z0-9_-]{0,31}$/u.test(effort),
+      ) ||
+      new Set(supportedReasoningEfforts).size !==
+        supportedReasoningEfforts.length
+    )
+      return undefined;
+    modelMetadata.push({
+      model: entry.model,
+      recommended: entry.isDefault === true,
+      supportedReasoningEfforts: supportedReasoningEfforts as string[],
+    });
+  }
+  const models = modelMetadata.map((entry) => entry.model);
+  if (new Set(models).size !== models.length) return undefined;
+  return {
+    available: models.length > 0,
+    models,
+    modelMetadata,
+  };
 }
 
 async function defaultExecutor(
@@ -117,7 +147,9 @@ async function defaultExecutor(
   });
 }
 
-function isProviderCatalog(value: unknown): value is ProviderCatalog {
+function isLegacyProviderCatalog(
+  value: unknown,
+): value is { available: boolean; models: string[] } {
   if (!isRecord(value)) return false;
   if (
     Object.keys(value).length !== 2 ||
@@ -147,6 +179,7 @@ function unknownObservation(
     provider,
     state: "unknown",
     models: [],
+    modelMetadata: [],
     observedAt,
     entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
     reason,
@@ -188,12 +221,25 @@ export async function observeProvider(
       observedAt,
       "provider実行入口のread-only観測が失敗しました",
     );
-  let catalog: unknown;
+  let catalog: ProviderCatalog | undefined;
   try {
-    catalog =
-      provider === "codex"
-        ? codexCatalog(result.stdout)
-        : parseJsonStrict(result.stdout, "provider model catalog");
+    if (provider === "codex") catalog = codexCatalog(result.stdout);
+    else {
+      const value: unknown = parseJsonStrict(
+        result.stdout,
+        "provider model catalog",
+      );
+      if (isLegacyProviderCatalog(value))
+        catalog = {
+          available: value.available,
+          models: [...value.models],
+          modelMetadata: value.models.map((model) => ({
+            model,
+            recommended: false,
+            supportedReasoningEfforts: [],
+          })),
+        };
+    }
   } catch {
     return unknownObservation(
       provider,
@@ -201,7 +247,7 @@ export async function observeProvider(
       "provider model catalogを解釈できません",
     );
   }
-  if (!catalog || !isProviderCatalog(catalog))
+  if (!catalog)
     return unknownObservation(
       provider,
       observedAt,
@@ -211,6 +257,10 @@ export async function observeProvider(
     provider,
     state: catalog.available ? "available" : "unavailable",
     models: [...catalog.models],
+    modelMetadata: catalog.modelMetadata.map((entry) => ({
+      ...entry,
+      supportedReasoningEfforts: [...entry.supportedReasoningEfforts],
+    })),
     observedAt,
     entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
   };
