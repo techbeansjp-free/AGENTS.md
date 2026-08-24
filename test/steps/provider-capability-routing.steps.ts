@@ -19,9 +19,9 @@ Given("project固有のprovider capability mappingを読み込む", function () 
   this.capabilityMapping = readProviderCapabilityMapping(
     fs.readFileSync(
       path.resolve(
-        ".agent-skill-chain",
-        "project",
-        "providers",
+        "test",
+        "fixtures",
+        "routing",
         "capability-mapping.json",
       ),
       "utf8",

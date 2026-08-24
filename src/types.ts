@@ -84,7 +84,7 @@ export interface ProjectChoices {
   packageManager: string;
   runtime: string;
   ci: string;
-  modelMapping?: ModelMappingChoice;
+  modelMapping?: string | ModelMappingChoice;
   release: string;
   projectKind: string;
   capabilities: {

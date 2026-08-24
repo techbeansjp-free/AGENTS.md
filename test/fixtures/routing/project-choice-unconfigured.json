@@ -8,6 +8,7 @@
   "packageManager": "npm",
   "runtime": "Node.js 20以上",
   "ci": ".github/workflows/ci.yml",
+  "modelMapping": "roleごとにprojectが選択する",
   "release": "明示authorityによる手動操作",
   "projectKind": "cli",
   "capabilities": {

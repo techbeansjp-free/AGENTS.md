@@ -281,8 +281,14 @@ export function validateProjectChoices(value: unknown) {
     )
   )
     errors.push("projectChoices.forbiddenTestFileSuffixesが不正です");
-  if (projectChoices.modelMapping !== undefined)
-    validateModelMapping(projectChoices.modelMapping, errors);
+  if (projectChoices.modelMapping !== undefined) {
+    if (typeof projectChoices.modelMapping === "string") {
+      if (projectChoices.modelMapping.trim() === "")
+        errors.push(
+          "projectChoices.modelMappingは空でない文字列または構造化設定でなければなりません",
+        );
+    } else validateModelMapping(projectChoices.modelMapping, errors);
+  }
   const capabilities = isRecord(projectChoices.capabilities)
     ? projectChoices.capabilities
     : {};

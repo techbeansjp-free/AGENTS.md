@@ -46,6 +46,32 @@ function parseOutput(result: CommandResult): unknown {
   return JSON.parse(result.stdout) as unknown;
 }
 
+function configureRoutingProject(root: string): void {
+  const namespace = path.join(root, ".agent-skill-chain");
+  const providers = path.join(namespace, "project", "providers");
+  fs.mkdirSync(providers, { recursive: true });
+  fs.copyFileSync(
+    path.resolve("test", "fixtures", "routing", "capability-mapping.json"),
+    path.join(providers, "capability-mapping.json"),
+  );
+  fs.copyFileSync(
+    path.resolve(
+      "test",
+      "fixtures",
+      "routing",
+      "project-choice-configured.json",
+    ),
+    path.join(namespace, "project", "choices", "development.json"),
+  );
+  const manifestFile = path.join(namespace, "project-policy.json");
+  const manifest: unknown = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  assert.ok(typeof manifest === "object" && manifest !== null);
+  Object.assign(manifest, {
+    providerFiles: ["project/providers/capability-mapping.json"],
+  });
+  fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
 Given("routing解決が拒否された", function () {
   this.value = { ruleId: "FR-836-02", reason: "providerを利用できません" };
 });
@@ -103,6 +129,7 @@ Given(
       path.resolve(".agent-skill-chain", "project-policy.json"),
       path.join(this.root, ".agent-skill-chain", "project-policy.json"),
     );
+    configureRoutingProject(this.root);
     const emptyPath = this.temp("asc-routing-path-");
     this.cliEnvironment = { ...process.env, PATH: emptyPath };
   },

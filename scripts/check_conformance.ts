@@ -4,7 +4,6 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { validateRepositoryConformance } from "../src/domain/conformance.js";
-import { readProviderCapabilityMapping } from "../src/domain/provider-capability.js";
 import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 
 const PACKAGE_MODEL_SLUG_PATHS = [
@@ -43,12 +42,13 @@ function assetFiles(target: string): string[] {
 
 export function findPackageModelSlugViolations(
   root: string,
-  mapping: ProviderCapabilityMapping,
+  mapping?: ProviderCapabilityMapping,
 ): PackageModelSlugViolation[] {
   const slugs = new Set<string>();
   const modelSlug = /\bgpt-[a-z0-9.-]+\b/gu;
-  for (const match of JSON.stringify(mapping).matchAll(modelSlug))
-    if (match[0]) slugs.add(match[0]);
+  if (mapping)
+    for (const match of JSON.stringify(mapping).matchAll(modelSlug))
+      if (match[0]) slugs.add(match[0]);
   const violations: PackageModelSlugViolation[] = [];
   for (const file of PACKAGE_MODEL_SLUG_PATHS.flatMap((relative) =>
     assetFiles(path.join(root, relative)),
@@ -120,16 +120,7 @@ export function checkConformance(root: string): number {
         "utf8",
       ),
     );
-    const mapping = readProviderCapabilityMapping(
-      fs.readFileSync(
-        path.join(
-          root,
-          ".agent-skill-chain/project/providers/capability-mapping.json",
-        ),
-        "utf8",
-      ),
-    );
-    const ownershipViolations = findPackageModelSlugViolations(root, mapping);
+    const ownershipViolations = findPackageModelSlugViolations(root);
     const result = validateRepositoryConformance(root, contract, binding, {
       tool: "cucumber-js",
       passedScenarioIds: passedScenarioIds(reportInput),

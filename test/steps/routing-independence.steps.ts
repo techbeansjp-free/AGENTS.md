@@ -13,6 +13,7 @@ import {
   ROUTING_TRUSTED_DATA_PATHS,
   type RoutingIndependenceResult,
 } from "../../src/domain/routing-independence.js";
+import type { ModelMappingChoice, ProjectChoices } from "../../src/types.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class RoutingIndependenceWorld extends WorkflowWorld {
@@ -32,6 +33,40 @@ const { Given, When, Then } = stepDefinitions<RoutingIndependenceWorld>();
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+}
+
+function structuredMapping(
+  choices: ProjectChoices | undefined,
+): ModelMappingChoice {
+  const mapping = choices?.modelMapping;
+  assert.ok(mapping && typeof mapping !== "string");
+  return mapping;
+}
+
+function configureRoutingProject(repository: string): void {
+  const namespace = path.join(repository, ".agent-skill-chain");
+  const providerDirectory = path.join(namespace, "project", "providers");
+  fs.mkdirSync(providerDirectory, { recursive: true });
+  fs.copyFileSync(
+    path.resolve("test", "fixtures", "routing", "capability-mapping.json"),
+    path.join(providerDirectory, "capability-mapping.json"),
+  );
+  fs.copyFileSync(
+    path.resolve(
+      "test",
+      "fixtures",
+      "routing",
+      "project-choice-configured.json",
+    ),
+    path.join(namespace, "project", "choices", "development.json"),
+  );
+  const manifestFile = path.join(namespace, "project-policy.json");
+  const manifest: unknown = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  assert.ok(typeof manifest === "object" && manifest !== null);
+  Object.assign(manifest, {
+    providerFiles: ["project/providers/capability-mapping.json"],
+  });
+  fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 Given("Codexが対象scopeを実装した", function () {
@@ -76,6 +111,7 @@ Given(
       path.join(repository, ".agent-skill-chain", "project"),
       { recursive: true },
     );
+    configureRoutingProject(repository);
     for (const evaluatorPath of ROUTING_EVALUATOR_PATHS) {
       const destination = path.join(repository, evaluatorPath);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -89,8 +125,9 @@ Given(
       this.trustedRef,
     );
     this.trustedMappingVersion = trustedSet.providerMappings[0]?.mappingVersion;
-    this.trustedChoiceRoot =
-      trustedSet.choices[0]?.modelMapping?.evidenceStoreRoot;
+    this.trustedChoiceRoot = structuredMapping(
+      trustedSet.choices[0],
+    ).evidenceStoreRoot;
     this.trustedBindingRaw =
       trustedSet.rawEntries["project/conformance/bindings.json"];
 
@@ -136,7 +173,7 @@ Then("trusted base側の資産だけで評価する", function () {
     this.trustedMappingVersion,
   );
   assert.equal(
-    trustedSet.choices[0]?.modelMapping?.evidenceStoreRoot,
+    structuredMapping(trustedSet.choices[0]).evidenceStoreRoot,
     this.trustedChoiceRoot,
   );
   assert.equal(
@@ -179,13 +216,12 @@ Given(
         "utf8",
       ),
     );
-    assert.ok(choices.modelMapping);
     const roleConfiguration = structuredClone(choices);
-    assert.ok(roleConfiguration.modelMapping);
-    roleConfiguration.modelMapping.roles.reviewer.provider =
-      roleConfiguration.modelMapping.roles.implementer.provider;
-    roleConfiguration.modelMapping.roles.reviewer.logicalTier =
-      roleConfiguration.modelMapping.roles.implementer.logicalTier;
+    const modelMapping = structuredMapping(roleConfiguration);
+    modelMapping.roles.reviewer.provider =
+      modelMapping.roles.implementer.provider;
+    modelMapping.roles.reviewer.logicalTier =
+      modelMapping.roles.implementer.logicalTier;
     this.roleConfiguration = roleConfiguration;
   },
 );

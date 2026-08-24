@@ -38,45 +38,50 @@
     "runtime": { "type": "string", "minLength": 1 },
     "ci": { "type": "string", "minLength": 1 },
     "modelMapping": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["roles", "evidenceStoreRoot", "retention"],
-      "properties": {
-        "roles": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
           "type": "object",
           "additionalProperties": false,
-          "required": ["coordinator", "implementer", "reviewer"],
+          "required": ["roles", "evidenceStoreRoot", "retention"],
           "properties": {
-            "coordinator": { "$ref": "#/$defs/roleModelChoice" },
-            "implementer": { "$ref": "#/$defs/roleModelChoice" },
-            "reviewer": { "$ref": "#/$defs/reviewerRoleModelChoice" }
-          }
-        },
-        "evidenceStoreRoot": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 512,
-          "pattern": "^(?!/)(?!\\.\\./)(?!.*\\/\\.\\.\\/)(?!.*\\\\)(?:[A-Za-z0-9._-]+\\/)+$"
-        },
-        "retention": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "retentionDays",
-            "maxRecordsPerIssue",
-            "maxRecordBytes",
-            "rotationCondition",
-            "deletionMethod"
-          ],
-          "properties": {
-            "retentionDays": { "type": "integer", "minimum": 1 },
-            "maxRecordsPerIssue": { "type": "integer", "minimum": 1 },
-            "maxRecordBytes": { "type": "integer", "minimum": 1 },
-            "rotationCondition": { "const": "oldest_first" },
-            "deletionMethod": { "const": "preview_then_explicit" }
+            "roles": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["coordinator", "implementer", "reviewer"],
+              "properties": {
+                "coordinator": { "$ref": "#/$defs/roleModelChoice" },
+                "implementer": { "$ref": "#/$defs/roleModelChoice" },
+                "reviewer": { "$ref": "#/$defs/reviewerRoleModelChoice" }
+              }
+            },
+            "evidenceStoreRoot": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 512,
+              "pattern": "^(?!/)(?!\\.\\./)(?!.*\\/\\.\\.\\/)(?!.*\\\\)(?:[A-Za-z0-9._-]+\\/)+$"
+            },
+            "retention": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "retentionDays",
+                "maxRecordsPerIssue",
+                "maxRecordBytes",
+                "rotationCondition",
+                "deletionMethod"
+              ],
+              "properties": {
+                "retentionDays": { "type": "integer", "minimum": 1 },
+                "maxRecordsPerIssue": { "type": "integer", "minimum": 1 },
+                "maxRecordBytes": { "type": "integer", "minimum": 1 },
+                "rotationCondition": { "const": "oldest_first" },
+                "deletionMethod": { "const": "preview_then_explicit" }
+              }
+            }
           }
         }
-      }
+      ]
     },
     "release": { "type": "string", "minLength": 1 },
     "projectKind": { "type": "string", "minLength": 1 },

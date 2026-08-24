@@ -13,6 +13,7 @@ import {
 } from "../../src/domain/routing.js";
 import { parseJsonStrict } from "../../src/lib/security.js";
 import type {
+  ModelMappingChoice,
   ProjectChoices,
   ProviderCapabilityMapping,
 } from "../../src/types.js";
@@ -41,6 +42,12 @@ function configuredChoices(): ProjectChoices {
   return readProjectChoices(readFixture("project-choice-configured.json"));
 }
 
+function structuredMapping(choices: ProjectChoices): ModelMappingChoice {
+  const mapping = choices.modelMapping;
+  assert.ok(mapping && typeof mapping !== "string");
+  return mapping;
+}
+
 function fixtureSlug(name: "current" | "lower" | "unknown" | "higher"): string {
   const value: unknown = parseJsonStrict(
     readFixture("resolution-slugs.json"),
@@ -55,12 +62,7 @@ function fixtureSlug(name: "current" | "lower" | "unknown" | "higher"): string {
 function projectMapping(): ProviderCapabilityMapping {
   return readProviderCapabilityMapping(
     fs.readFileSync(
-      path.resolve(
-        ".agent-skill-chain",
-        "project",
-        "providers",
-        "capability-mapping.json",
-      ),
+      path.resolve("test", "fixtures", "routing", "capability-mapping.json"),
       "utf8",
     ),
   );
@@ -72,13 +74,14 @@ function makeInput(
   models: string[],
   recommendedModels: string[] = models.slice(0, 1),
 ): RoutingResolutionInput {
+  const modelMapping = structuredMapping(choices);
   return {
     scope: "T04-routing-domain",
     coordinatorIdentity: "claude-coordinator",
     implementerIdentity: "codex-implementer",
     reviewerIdentity: "independent-reviewer",
     availability: {
-      provider: choices.modelMapping?.roles.implementer.provider ?? "",
+      provider: modelMapping.roles.implementer.provider,
       state: "available",
       models,
       modelMetadata: models.map((model) => ({
@@ -90,7 +93,7 @@ function makeInput(
       entrypoint: "provider-fixture",
     },
     mapping,
-    modelMapping: choices.modelMapping,
+    modelMapping,
     requiredCapability: "coding",
     evaluatorRef: "trusted-ref-fixture",
   };

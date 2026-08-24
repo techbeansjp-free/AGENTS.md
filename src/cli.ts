@@ -197,8 +197,10 @@ function routingProject(root: string) {
   const choices = policySet.choices[0];
   const modelMapping = choices?.modelMapping;
   const mapping = policySet.providerMappings[0];
-  if (!choices || !modelMapping)
-    throw new Error("project choiceのmodelMappingが未設定です");
+  if (!choices || !modelMapping || typeof modelMapping === "string")
+    throw new Error(
+      "project choiceのmodelMappingは構造化設定が有効化されていません",
+    );
   if (!mapping) throw new Error("provider capability mappingが未設定です");
   return { modelMapping, mapping };
 }

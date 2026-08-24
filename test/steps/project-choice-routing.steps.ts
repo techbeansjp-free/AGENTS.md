@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { readProjectChoices } from "../../src/domain/policy.js";
-import { isRecord, type ProjectChoices } from "../../src/types.js";
+import {
+  isRecord,
+  type ModelMappingChoice,
+  type ProjectChoices,
+} from "../../src/types.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class ProjectChoiceRoutingWorld extends WorkflowWorld {
@@ -19,6 +23,14 @@ function fixture(name: string): string {
   );
 }
 
+function structuredMapping(
+  choice: ProjectChoices | undefined,
+): ModelMappingChoice {
+  const mapping = choice?.modelMapping;
+  assert.ok(mapping && typeof mapping !== "string");
+  return mapping;
+}
+
 Given("構造化したmodelMappingを持つproject choiceを読み込む", function () {
   this.configuredChoice = readProjectChoices(
     fixture("project-choice-configured.json"),
@@ -31,24 +43,24 @@ When("implementerのmodel設定を確認する", function () {
 
 Then("project choiceのreasoning effortはhighである", function () {
   assert.equal(
-    this.configuredChoice?.modelMapping?.roles.implementer.reasoningEffort,
+    structuredMapping(this.configuredChoice).roles.implementer.reasoningEffort,
     "high",
   );
 });
 
 Then("処理速度はstandardである", function () {
   assert.equal(
-    this.configuredChoice?.modelMapping?.roles.implementer.speed,
+    structuredMapping(this.configuredChoice).roles.implementer.speed,
     "standard",
   );
   const invalid = structuredClone(this.configuredChoice);
-  assert.ok(invalid?.modelMapping);
-  invalid.modelMapping.retention.rotationCondition = "unsupported" as never;
+  structuredMapping(invalid).retention.rotationCondition =
+    "unsupported" as never;
   assert.throws(() => readProjectChoices(JSON.stringify(invalid)));
 });
 
 Given(
-  "modelMapping設定済みと未設定のproject choice fixtureがある",
+  "modelMapping設定済みとlegacy形式のproject choice fixtureがある",
   function () {
     assert.ok(fixture("project-choice-configured.json").length > 0);
     assert.ok(fixture("project-choice-unconfigured.json").length > 0);
@@ -78,6 +90,9 @@ Then(
   },
 );
 
-Then("未設定fixtureのmodelMappingはundefinedである", function () {
-  assert.equal(this.unconfiguredChoice?.modelMapping, undefined);
+Then("legacy fixtureのmodelMappingは従来文字列である", function () {
+  assert.equal(
+    this.unconfiguredChoice?.modelMapping,
+    "roleごとにprojectが選択する",
+  );
 });
