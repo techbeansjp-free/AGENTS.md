@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "agent-skill-chain/provider-capability-mapping/v2",
+  "mappingVersion": "2026-08-24",
+  "providers": [
+    {
+      "provider": "codex",
+      "capabilities": ["coding"],
+      "selectionSource": "provider_recommended_default"
+    }
+  ]
+}

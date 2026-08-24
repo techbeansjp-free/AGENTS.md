@@ -8,7 +8,42 @@
   "packageManager": "npm",
   "runtime": "Node.js 20以上",
   "ci": ".github/workflows/ci.yml",
-  "modelMapping": "roleごとにprojectが選択する",
+  "modelMapping": {
+    "roles": {
+      "coordinator": {
+        "provider": "claude",
+        "logicalTier": "project_default",
+        "reasoningEffort": "high",
+        "speed": "standard"
+      },
+      "implementer": {
+        "provider": "codex",
+        "logicalTier": "highest_available",
+        "reasoningEffort": "high",
+        "speed": "standard"
+      },
+      "reviewer": {
+        "provider": "claude",
+        "logicalTier": "project_default",
+        "reasoningEffort": "high",
+        "speed": "standard",
+        "independence": { "differentFrom": "implementer" }
+      }
+    },
+    "fallback": {
+      "when": "implementer_unavailable",
+      "role": "coordinator",
+      "modelSelection": "project_default"
+    },
+    "evidenceStoreRoot": "docs/evidence/routing/",
+    "retention": {
+      "retentionDays": 30,
+      "maxRecordsPerIssue": 20,
+      "maxRecordBytes": 65536,
+      "rotationCondition": "oldest_first",
+      "deletionMethod": "preview_then_explicit"
+    }
+  },
   "release": "明示authorityによる手動操作",
   "projectKind": "cli",
   "capabilities": {
