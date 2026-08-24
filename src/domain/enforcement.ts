@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { CURRENT_POLICY_SCHEMA_VERSION } from "../lib/version.js";
 import { redactSecrets, stableJson } from "../lib/security.js";
+import { classifyProjectChoiceDiff } from "./project-choice-diff.js";
 import {
   type Activation,
   type AutoFix,
@@ -365,6 +366,7 @@ export function compareTrustedPolicy(trusted: Policy, candidate: Policy) {
   );
   const rejected: Diagnostic[] = [];
   const stagedAdditions: string[] = [];
+  const projectChoiceChanges: string[] = [];
   const authorityReasons: string[] = [];
   const mergeStrength: Record<Policy["merge"]["mode"], number> = {
     disabled: 3,
@@ -500,24 +502,50 @@ export function compareTrustedPolicy(trusted: Policy, candidate: Policy) {
     evidenceFingerprint(trusted.projectChoices) !==
       evidenceFingerprint(candidate?.projectChoices)
   ) {
-    rejected.push(
-      diagnostic(
-        "ASC-TRUST-001",
-        "authorityを含むproject choiceの自己変更を防止する",
-        "authority",
-        [
-          "projectChoicesのrelease、model mapping、CIまたは開発契約を変更している",
-        ],
-        ["projectChoices"],
-        ["trustedとcandidateのprojectChoices fingerprintを比較した"],
-        [],
-        "新しいstaged migrationと独立reviewを作成してください",
-        "default branch policy owner",
-        "trusted projectChoicesを復元する",
-      ),
+    const choiceDiff = classifyProjectChoiceDiff(
+      trusted.projectChoices,
+      candidate?.projectChoices,
     );
+    projectChoiceChanges.push(...choiceDiff.allowed);
+    if (choiceDiff.authority.length > 0)
+      rejected.push(
+        diagnostic(
+          "ASC-TRUST-001",
+          "authorityを含むproject choiceの自己変更を防止する",
+          "authority",
+          choiceDiff.authority.map(
+            (fieldPath) => `${fieldPath}のauthority選択を変更している`,
+          ),
+          ["projectChoices"],
+          ["trustedとcandidateのprojectChoicesをfield単位で比較した"],
+          [],
+          "default branch policy ownerがtrusted側でrelease・CI選択を先に更新してください",
+          "既定ブランチのproject policy owner",
+          "trusted projectChoicesのauthority fieldを復元する",
+        ),
+      );
+    if (choiceDiff.weakened.length > 0)
+      rejected.push(
+        diagnostic(
+          "ASC-TRUST-001",
+          "project choiceによる検証弱化を防止する",
+          "authority",
+          choiceDiff.weakened,
+          ["projectChoices"],
+          ["projectChoicesの単調性契約と未知fieldを検証した"],
+          [],
+          "弱化を取り消すか、検証を強化する方向へ変更してください",
+          "既定ブランチのproject policy owner",
+          "candidateのprojectChoices弱化差分を取り消す",
+        ),
+      );
   }
-  return { allowed: rejected.length === 0, rejected, stagedAdditions };
+  return {
+    allowed: rejected.length === 0,
+    rejected,
+    stagedAdditions,
+    projectChoiceChanges,
+  };
 }
 
 export function validateOverride(

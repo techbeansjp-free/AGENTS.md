@@ -54,6 +54,10 @@
           "export": "compareTrustedPolicy"
         },
         {
+          "path": "src/domain/project-choice-diff.ts",
+          "export": "classifyProjectChoiceDiff"
+        },
+        {
           "path": "src/domain/enforcement.ts",
           "export": "enforceTrustedBoundary"
         },
@@ -68,6 +72,7 @@
         "SCN-UNIT-RISK-026",
         "SCN-UNIT-RISK-027",
         "SCN-UNIT-RISK-028",
+        "SCN-UNIT-CHOICE-003",
         "SCN-UNIT-REVIEW-011",
         "SCN-UNIT-REVIEW-012",
         "SCN-UNIT-REVIEW-013",

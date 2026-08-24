@@ -40,6 +40,7 @@ interface Compatibility {
   allowed: boolean;
   rejected: Diagnostic[];
   stagedAdditions: string[];
+  projectChoiceChanges: string[];
 }
 export interface MigrationState {
   state: string;
