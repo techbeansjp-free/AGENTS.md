@@ -9,6 +9,19 @@ export interface ApplicabilityDecision {
 }
 
 export type RoutingRole = "coordinator" | "implementer" | "reviewer";
+export type RoutingRouteMode = "preferred" | "fallback";
+export type RoutingModelSelection =
+  "provider_recommended_default" | "project_default";
+export type RoutingReason =
+  | "preferred_implementer_available"
+  | "preferred_implementer_unavailable"
+  | "preferred_capability_mapping_missing"
+  | "preferred_capability_unconfirmed"
+  | "preferred_selection_source_unconfirmed"
+  | "preferred_model_catalog_empty"
+  | "preferred_recommended_default_missing"
+  | "preferred_recommended_default_ambiguous"
+  | "preferred_reasoning_effort_unsupported";
 
 export interface RoleModelChoice {
   provider: string;
@@ -36,6 +49,11 @@ export interface ModelMappingChoice {
     coordinator: RoleModelChoice;
     implementer: RoleModelChoice;
     reviewer: ReviewerRoleModelChoice;
+  };
+  fallback: {
+    when: "implementer_unavailable";
+    role: "coordinator";
+    modelSelection: "project_default";
   };
   evidenceStoreRoot: string;
   retention: RoutingEvidenceRetentionChoice;

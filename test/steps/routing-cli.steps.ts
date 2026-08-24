@@ -152,32 +152,21 @@ When("product実装taskの担当をrouting CLIから解決する", function () {
   );
 });
 
-Then("routing resolveは非0で実装を開始しない", function () {
-  assert.notEqual(this.resolveResult?.status, 0);
-  assert.doesNotMatch(
-    this.resolveResult?.stdout ?? "",
-    /"state":\s*"resolved"/u,
-  );
+Then("routing resolveは0でClaude fallbackを解決する", function () {
+  assert.equal(this.resolveResult?.status, 0, this.resolveResult?.stderr);
+  const decision = parseOutput(this.resolveResult!);
+  assert.ok(isRecord(decision));
+  assert.equal(decision.state, "resolved");
+  assert.equal(decision.routeMode, "fallback");
+  assert.equal(decision.provider, "claude");
+  assert.equal(decision.modelSelection, "project_default");
 });
 
-Then(
-  "利用不能の根拠と確認済み入口と安全なfallback候補と必要authorityと停止点と再開条件を返す",
-  function () {
-    const text = this.resolveResult?.stdout ?? "";
-    for (const expected of [
-      "provider実行入口",
-      "checkedEntrypoint",
-      "safeFallback",
-      "requiredAuthority",
-      "stopPoint",
-      "resumeCondition",
-    ])
-      assert.match(text, new RegExp(expected, "u"));
-  },
-);
-
-Then("安全なfallback候補は存在しないと明示する", function () {
-  assert.match(this.resolveResult?.stdout ?? "", /候補なし/u);
+Then("Codex利用不能の理由とClaude実装identityを返す", function () {
+  const text = this.resolveResult?.stdout ?? "";
+  assert.match(text, /preferred_implementer_unavailable/u);
+  assert.match(text, /claude-coordinator/u);
+  assert.match(text, /"implementer"/u);
 });
 
 When("routingの7サブコマンドを隔離projectで実行する", function () {
@@ -189,12 +178,15 @@ When("routingの7サブコマンドを隔離projectで実行する", function ()
     "--issue=836",
     "--scope=T07-cli",
     "--role=implementer",
-    "--provider=codex",
-    "--model=model-fixture",
+    "--route-mode=fallback",
+    "--provider=claude",
+    "--model=project_default",
+    "--model-selection=project_default",
+    "--routing-reason=preferred_implementer_unavailable",
     "--mapping-version=fixture-v1",
     "--reasoning-effort=high",
     "--service-tier=default",
-    "--identity=codex-implementer",
+    "--identity=claude-coordinator",
     "--evaluator-ref=trusted-evaluator-ref",
   ];
   const issueResult = execute(
@@ -271,7 +263,7 @@ When("routingの7サブコマンドを隔離projectで実行する", function ()
 Then("7サブコマンドは定義済みの終了codeを返す", function () {
   assert.deepEqual(
     this.commandResults.map((result) => result.status),
-    [1, 1, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 0],
     this.commandResults
       .map((result) => result.stderr || result.stdout)
       .join("\n"),

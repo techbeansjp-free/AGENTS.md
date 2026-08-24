@@ -30,6 +30,11 @@
         "independence": { "differentFrom": "implementer" }
       }
     },
+    "fallback": {
+      "when": "implementer_unavailable",
+      "role": "coordinator",
+      "modelSelection": "project_default"
+    },
     "evidenceStoreRoot": "docs/evidence/routing/",
     "retention": {
       "retentionDays": 30,

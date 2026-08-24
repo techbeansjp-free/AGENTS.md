@@ -135,7 +135,7 @@ function validatePositiveInteger(
 function validateModelMapping(value: unknown, errors: string[]): void {
   rejectUnknownKeys(
     value,
-    ["roles", "evidenceStoreRoot", "retention"],
+    ["roles", "fallback", "evidenceStoreRoot", "retention"],
     "modelMapping",
     errors,
   );
@@ -195,6 +195,19 @@ function validateModelMapping(value: unknown, errors: string[]): void {
     errors.push(
       `${independence.ruleId ?? "BR-836-12"}: ${independence.reason ?? "role独立性違反です"}`,
     );
+  rejectUnknownKeys(
+    mapping.fallback,
+    ["when", "role", "modelSelection"],
+    "modelMapping.fallback",
+    errors,
+  );
+  const fallback = isRecord(mapping.fallback) ? mapping.fallback : {};
+  if (fallback.when !== "implementer_unavailable")
+    errors.push("modelMapping.fallback.whenが不正です");
+  if (fallback.role !== "coordinator")
+    errors.push("modelMapping.fallback.roleが不正です");
+  if (fallback.modelSelection !== "project_default")
+    errors.push("modelMapping.fallback.modelSelectionが不正です");
   if (
     typeof mapping.evidenceStoreRoot !== "string" ||
     mapping.evidenceStoreRoot !== mapping.evidenceStoreRoot.normalize("NFC") ||

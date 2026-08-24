@@ -20,8 +20,11 @@
       "additionalProperties": false,
       "required": [
         "id",
+        "routeMode",
         "provider",
         "model",
+        "modelSelection",
+        "routingReason",
         "mappingVersion",
         "reasoningEffort",
         "serviceTier",
@@ -36,8 +39,25 @@
       ],
       "properties": {
         "id": { "$ref": "#/$defs/safeIdentifier" },
+        "routeMode": { "enum": ["preferred", "fallback"] },
         "provider": { "$ref": "#/$defs/safeIdentifier" },
         "model": { "$ref": "#/$defs/safeIdentifier" },
+        "modelSelection": {
+          "enum": ["provider_recommended_default", "project_default"]
+        },
+        "routingReason": {
+          "enum": [
+            "preferred_implementer_available",
+            "preferred_implementer_unavailable",
+            "preferred_capability_mapping_missing",
+            "preferred_capability_unconfirmed",
+            "preferred_selection_source_unconfirmed",
+            "preferred_model_catalog_empty",
+            "preferred_recommended_default_missing",
+            "preferred_recommended_default_ambiguous",
+            "preferred_reasoning_effort_unsupported"
+          ]
+        },
         "mappingVersion": { "$ref": "#/$defs/safeIdentifier" },
         "reasoningEffort": { "const": "high" },
         "serviceTier": { "const": "default" },
@@ -49,7 +69,33 @@
         "evaluatorRef": { "$ref": "#/$defs/safeIdentifier" },
         "issuedAt": { "type": "string", "format": "date-time" },
         "startState": { "const": "issued" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "routeMode": { "const": "preferred" } } },
+          "then": {
+            "properties": {
+              "model": { "not": { "const": "project_default" } },
+              "modelSelection": {
+                "const": "provider_recommended_default"
+              },
+              "routingReason": { "const": "preferred_implementer_available" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "routeMode": { "const": "fallback" } } },
+          "then": {
+            "properties": {
+              "model": { "const": "project_default" },
+              "modelSelection": { "const": "project_default" },
+              "routingReason": {
+                "not": { "const": "preferred_implementer_available" }
+              }
+            }
+          }
+        }
+      ]
     },
     "completionRecord": {
       "type": "object",

@@ -1,6 +1,6 @@
 @unit @provider-routing
 Feature: coordinatorからimplementerへのrouting解決
-  role分離とmodel解決を決定的に行い、不明な状態で実装を開始しないことを具体例で示す。
+  Codex優先とClaude fallbackを決定的に解決し、roleとmodel選択元を証拠化する具体例を示す。
 
   Scenario: SCN-UNIT-ROUTING-001 Claude進行時に利用可能なCodex最高位tierへ実装を委譲する
     Given ClaudeがcoordinatorでCodexの最高位coding tierを利用できる
@@ -9,7 +9,7 @@ Feature: coordinatorからimplementerへのrouting解決
     And modelはprovider公式recommended defaultである
     And reasoning effortはhighである
     And service tierはdefaultである
-    And high非対応の公式recommended defaultはpendingである
+    And high非対応の公式recommended defaultはClaude fallbackである
 
   Scenario: SCN-UNIT-ROUTING-004 Codexが使えるscopeでcoordinatorの実装を拒否する
     Given ClaudeがcoordinatorでCodexを利用できる
@@ -25,16 +25,16 @@ Feature: coordinatorからimplementerへのrouting解決
     And 実行直前の再検証で解決結果が変化しても拒否する
     And 実装を開始しない
 
-  Scenario: SCN-UNIT-ROUTING-007 公式recommended defaultを観測できないときpendingで停止する
+  Scenario: SCN-UNIT-ROUTING-007 公式recommended defaultを観測できないときClaude実装へ切り替える
     Given 利用可能model一覧に公式recommended defaultがない
     When 最高位coding tierを解決する
-    Then 解決状態はpendingである
-    And provider再観測要求を返す
-    And 順位を推測しない
+    Then 解決状態はfallbackである
+    And Claude coordinatorをimplementerへ切り替える
+    And Codexの順位を推測しない
 
-  Scenario: SCN-UNIT-ROUTING-011 recommended defaultが複数あるとき推測せずpendingにする
+  Scenario: SCN-UNIT-ROUTING-011 recommended defaultが複数あるとき推測せずClaude実装へ切り替える
     Given provider観測にrecommended defaultが2件ある
     And その2件がいずれも利用可能である
     When 最高位coding tierを解決する
-    Then 解決状態はpendingである
+    Then 解決状態はfallbackである
     And 同一入力に対する結果は一意である

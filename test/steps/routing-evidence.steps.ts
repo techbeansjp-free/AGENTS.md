@@ -56,8 +56,11 @@ function evidenceInput(
     issue: 836,
     scope: "T06-routing-evidence",
     role: "implementer",
+    routeMode: "preferred",
     provider: "codex",
     model: "model-fixture",
+    modelSelection: "provider_recommended_default",
+    routingReason: "preferred_implementer_available",
     mappingVersion: "fixture-v1",
     reasoningEffort: "high",
     serviceTier: "default",
@@ -116,14 +119,34 @@ Then("routing evidenceは必須拘束項目と開始状態issuedを持つ", func
     "issuedAt",
     "mappingVersion",
     "model",
+    "modelSelection",
     "provider",
     "reasoningEffort",
     "role",
+    "routeMode",
+    "routingReason",
     "scope",
     "serviceTier",
     "startState",
   ]);
   assert.equal(this.evidence?.startState, "issued");
+});
+
+Then("preferredとfallbackのevidence拘束は混在できない", function () {
+  for (const inconsistent of [
+    evidenceInput(this, {
+      routeMode: "preferred",
+      model: "project_default",
+      modelSelection: "project_default",
+    }),
+    evidenceInput(this, {
+      routeMode: "fallback",
+      model: "project_default",
+      modelSelection: "project_default",
+      routingReason: "preferred_implementer_available",
+    }),
+  ])
+    assert.throws(() => issueRoutingEvidence(inconsistent));
 });
 
 Then("同じ識別子の再発行は排他的に拒否される", function () {

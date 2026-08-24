@@ -43,7 +43,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["roles", "evidenceStoreRoot", "retention"],
+          "required": ["roles", "fallback", "evidenceStoreRoot", "retention"],
           "properties": {
             "roles": {
               "type": "object",
@@ -53,6 +53,16 @@
                 "coordinator": { "$ref": "#/$defs/roleModelChoice" },
                 "implementer": { "$ref": "#/$defs/roleModelChoice" },
                 "reviewer": { "$ref": "#/$defs/reviewerRoleModelChoice" }
+              }
+            },
+            "fallback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["when", "role", "modelSelection"],
+              "properties": {
+                "when": { "const": "implementer_unavailable" },
+                "role": { "const": "coordinator" },
+                "modelSelection": { "const": "project_default" }
               }
             },
             "evidenceStoreRoot": {

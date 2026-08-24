@@ -7,3 +7,4 @@ Feature: provider routingのproject choice
     When implementerのmodel設定を確認する
     Then project choiceのreasoning effortはhighである
     And 処理速度はstandardである
+    And Codex利用不能時のfallbackはClaude coordinatorのproject defaultである

@@ -124,6 +124,9 @@ When("product実装taskの担当を解決する", function () {
 
 Then("implementerはCodexである", function () {
   const decision = requireResolved(this.decision);
+  assert.equal(decision.routeMode, "preferred");
+  assert.equal(decision.modelSelection, "provider_recommended_default");
+  assert.equal(decision.routingReason, "preferred_implementer_available");
   assert.equal(
     decision.roles.implementer.provider,
     this.input?.availability.provider,
@@ -147,7 +150,7 @@ Then("service tierはdefaultである", function () {
   assert.equal(requireResolved(this.decision).serviceTier, "default");
 });
 
-Then("high非対応の公式recommended defaultはpendingである", function () {
+Then("high非対応の公式recommended defaultはClaude fallbackである", function () {
   assert.ok(this.input);
   const unsupported = resolveRouting({
     ...this.input,
@@ -160,11 +163,9 @@ Then("high非対応の公式recommended defaultはpendingである", function ()
       ),
     },
   });
-  assert.equal(unsupported.state, "pending");
-  assert.equal(
-    unsupported.state === "pending" ? unsupported.ruleId : "",
-    "FR-836-05",
-  );
+  const decision = requireResolved(unsupported);
+  assert.equal(decision.routeMode, "fallback");
+  assert.equal(decision.provider, "claude");
 });
 
 Given("ClaudeがcoordinatorでCodexを利用できる", function () {
@@ -197,7 +198,7 @@ Then("role違反として拒否する", function () {
   assert.deepEqual(this.value[0], {
     allowed: false,
     ruleId: "BR-836-01",
-    reason: "coordinatorはCodex利用可能scopeのproduct実装を担当できません",
+    reason: "coordinatorはpreferred routeのproduct実装を担当できません",
   });
   assert.deepEqual(this.value[1], {
     allowed: false,
@@ -322,22 +323,31 @@ When("最高位coding tierを解決する", function () {
   this.decision = resolveRouting(this.input);
 });
 
-Then("解決状態はpendingである", function () {
-  assert.equal(this.decision?.state, "pending");
+Then("解決状態はfallbackである", function () {
+  assert.equal(this.decision?.state, "resolved");
+  assert.equal(requireResolved(this.decision).routeMode, "fallback");
 });
 
-Then("provider再観測要求を返す", function () {
-  assert.equal(
-    this.decision?.state === "pending" && this.decision.updateRequired,
-    true,
+Then("Claude coordinatorをimplementerへ切り替える", function () {
+  const decision = requireResolved(this.decision);
+  assert.equal(decision.provider, "claude");
+  assert.equal(decision.modelSelection, "project_default");
+  assert.equal(decision.roles.implementer.identity, "claude-coordinator");
+  assert.equal(decision.roles.implementer.provider, "claude");
+  assert.deepEqual(
+    authorizeImplementation({
+      decision,
+      actorIdentity: "claude-coordinator",
+      changedPaths: ["src/domain/routing.ts"],
+    }),
+    { allowed: true },
   );
 });
 
-Then("順位を推測しない", function () {
-  assert.equal(
-    this.decision?.state === "pending" && "model" in this.decision,
-    false,
-  );
+Then("Codexの順位を推測しない", function () {
+  const decision = requireResolved(this.decision);
+  assert.equal(decision.modelSelection, "project_default");
+  assert.equal(decision.routingReason, "preferred_recommended_default_missing");
 });
 
 Given("provider観測にrecommended defaultが2件ある", function () {

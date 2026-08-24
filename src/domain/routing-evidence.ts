@@ -8,8 +8,11 @@ import {
 } from "../lib/security.js";
 import {
   isRecord,
+  type RoutingModelSelection,
   type RoutingEvidenceRetentionChoice,
+  type RoutingReason,
   type RoutingRole,
+  type RoutingRouteMode,
 } from "../types.js";
 
 export type EvidenceState = "issued" | "superseded" | "invalidated";
@@ -17,8 +20,11 @@ export type CompletionState = "completed" | "interrupted";
 
 export interface RoutingEvidence {
   id: string;
+  routeMode: RoutingRouteMode;
   provider: string;
   model: string;
+  modelSelection: RoutingModelSelection;
+  routingReason: RoutingReason;
   mappingVersion: string;
   reasoningEffort: "high";
   serviceTier: "default";
@@ -61,8 +67,11 @@ export interface RoutingEvidenceIssueInput extends EvidenceStorageInput {
   issue: number;
   scope: string;
   role: RoutingRole;
+  routeMode: RoutingRouteMode;
   provider: string;
   model: string;
+  modelSelection: RoutingModelSelection;
+  routingReason: RoutingReason;
   mappingVersion: string;
   reasoningEffort: "high";
   serviceTier: "default";
@@ -120,8 +129,11 @@ const ISSUE_INPUT_KEYS = [
   "issue",
   "scope",
   "role",
+  "routeMode",
   "provider",
   "model",
+  "modelSelection",
+  "routingReason",
   "mappingVersion",
   "reasoningEffort",
   "serviceTier",
@@ -153,8 +165,11 @@ const RETENTION_KEYS = [
 ] as const;
 const EVIDENCE_KEYS = [
   "id",
+  "routeMode",
   "provider",
   "model",
+  "modelSelection",
+  "routingReason",
   "mappingVersion",
   "reasoningEffort",
   "serviceTier",
@@ -425,6 +440,32 @@ function isRoutingRole(value: unknown): value is RoutingRole {
   );
 }
 
+const FALLBACK_REASONS = new Set<RoutingReason>([
+  "preferred_implementer_unavailable",
+  "preferred_capability_mapping_missing",
+  "preferred_capability_unconfirmed",
+  "preferred_selection_source_unconfirmed",
+  "preferred_model_catalog_empty",
+  "preferred_recommended_default_missing",
+  "preferred_recommended_default_ambiguous",
+  "preferred_reasoning_effort_unsupported",
+]);
+
+function hasConsistentRoutingBinding(record: Record<string, unknown>): boolean {
+  if (record.routeMode === "preferred")
+    return (
+      record.modelSelection === "provider_recommended_default" &&
+      record.routingReason === "preferred_implementer_available" &&
+      record.model !== "project_default"
+    );
+  return (
+    record.routeMode === "fallback" &&
+    record.modelSelection === "project_default" &&
+    record.model === "project_default" &&
+    FALLBACK_REASONS.has(record.routingReason as RoutingReason)
+  );
+}
+
 function readRoutingEvidenceFile(file: string): RoutingEvidence {
   const record = requireRecord(
     readJsonFile(file, "routing evidence"),
@@ -433,6 +474,10 @@ function readRoutingEvidenceFile(file: string): RoutingEvidence {
   );
   if (
     !isRoutingRole(record.role) ||
+    (record.routeMode !== "preferred" && record.routeMode !== "fallback") ||
+    (record.modelSelection !== "provider_recommended_default" &&
+      record.modelSelection !== "project_default") ||
+    !hasConsistentRoutingBinding(record) ||
     record.reasoningEffort !== "high" ||
     record.serviceTier !== "default" ||
     record.startState !== "issued" ||
@@ -453,6 +498,7 @@ function readRoutingEvidenceFile(file: string): RoutingEvidence {
     "evaluatorRef",
   ] as const)
     safeIdentifier(record[key], `routing evidence.${key}`);
+  safeReason(record.routingReason);
   isoTimestamp(record.issuedAt, "routing evidence.issuedAt");
   return record as unknown as RoutingEvidence;
 }
@@ -494,6 +540,10 @@ function validateIssueInput(value: unknown): {
     !Number.isInteger(record.issue) ||
     record.issue < 1 ||
     !isRoutingRole(record.role) ||
+    (record.routeMode !== "preferred" && record.routeMode !== "fallback") ||
+    (record.modelSelection !== "provider_recommended_default" &&
+      record.modelSelection !== "project_default") ||
+    !hasConsistentRoutingBinding(record) ||
     record.reasoningEffort !== "high" ||
     record.serviceTier !== "default" ||
     typeof record.baseSha !== "string" ||
@@ -509,6 +559,7 @@ function validateIssueInput(value: unknown): {
     "evaluatorRef",
   ] as const)
     safeIdentifier(record[key], `routing evidence発行入力.${key}`);
+  safeReason(record.routingReason);
   return {
     input: record as unknown as RoutingEvidenceIssueInput,
     storage: validatedStorage,
@@ -528,8 +579,11 @@ export function issueRoutingEvidence(
   );
   const evidence: RoutingEvidence = {
     id,
+    routeMode: input.routeMode,
     provider: input.provider,
     model: input.model,
+    modelSelection: input.modelSelection,
+    routingReason: input.routingReason,
     mappingVersion: input.mappingVersion,
     reasoningEffort: input.reasoningEffort,
     serviceTier: input.serviceTier,

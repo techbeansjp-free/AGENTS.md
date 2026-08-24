@@ -59,6 +59,17 @@ Then("処理速度はstandardである", function () {
   assert.throws(() => readProjectChoices(JSON.stringify(invalid)));
 });
 
+Then(
+  "Codex利用不能時のfallbackはClaude coordinatorのproject defaultである",
+  function () {
+    assert.deepEqual(structuredMapping(this.configuredChoice).fallback, {
+      when: "implementer_unavailable",
+      role: "coordinator",
+      modelSelection: "project_default",
+    });
+  },
+);
+
 Given(
   "modelMapping設定済みとlegacy形式のproject choice fixtureがある",
   function () {

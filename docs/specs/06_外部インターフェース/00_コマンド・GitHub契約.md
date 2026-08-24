@@ -29,7 +29,7 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 | `routing observe` | `--provider` | read-onlyのProviderAvailability。availableは0、unavailableまたはunknownは非0 |
 | `routing resolve` | `--root --scope --coordinator --implementer --reviewer --evaluator-ref` | project choice、trusted mapping、provider観測からroleとmodelを解決する。resolvedは0、pendingまたはrejectedは理由、確認済み入口、安全なfallback候補、必要authority、停止点、再開条件を含めて非0 |
 | `routing independence` | `--implementer --reviewer --candidate-paths --trusted-ref --candidate-head --evaluator-ref` | identity分離とcandidate自己評価を検査する。independentは0、violatedまたはpendingは構造化診断付きで非0 |
-| `routing evidence issue` | store設定と`--base-sha --issue --scope --role --provider --model --mapping-version --reasoning-effort --service-tier --identity --evaluator-ref` | 無指定は発行preview、`--apply`は書換不能なrouting evidenceを排他的に1件発行する |
+| `routing evidence issue` | store設定と`--base-sha --issue --scope --role --route-mode --provider --model --model-selection --routing-reason --mapping-version --reasoning-effort --service-tier --identity --evaluator-ref` | 無指定は発行preview、`--apply`はCodex優先またはClaude fallbackを拘束した書換不能なrouting evidenceを排他的に1件発行する |
 | `routing evidence complete` | store設定と`--evidence-id --implementation-head --end-state` | 無指定は追記preview、`--apply`はcompletedまたはinterruptedのcompletion recordを1件追記する |
 | `routing evidence state` | store設定と`--evidence-id --state --reason` | 無指定は追記preview、`--apply`はsupersededまたはinvalidatedのEvidenceStateRecordを追記する |
 | `routing evidence prune` | project choiceの保持方針。適用時は`--digest --target-ids` | 無指定は削除せず対象IDとdigestを返す。適用は`--apply --authorize=approved`とpreview一致を要求し、不一致またはauthority欠落は非0で拒否する |

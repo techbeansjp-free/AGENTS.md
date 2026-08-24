@@ -6,6 +6,7 @@ Feature: routing evidenceの不変性と保持
     Given Issueとscopeへ拘束するrouting evidence入力がある
     When routing evidenceを隔離storeへ発行する
     Then routing evidenceは必須拘束項目と開始状態issuedを持つ
+    And preferredとfallbackのevidence拘束は混在できない
     And 同じ識別子の再発行は排他的に拒否される
     And 残存lockはpathと復旧手順を示して拒否される
     When routing evidenceへcompletion recordを追記する

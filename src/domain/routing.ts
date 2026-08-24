@@ -2,7 +2,10 @@ import type {
   ModelMappingChoice,
   ProviderCapabilityMapping,
   ProviderModelObservation,
+  RoutingModelSelection,
+  RoutingReason,
   RoutingRole,
+  RoutingRouteMode,
 } from "../types.js";
 import path from "node:path";
 
@@ -36,9 +39,12 @@ interface RoleIdentity {
 
 export interface ResolvedRoutingDecision {
   state: "resolved";
+  routeMode: RoutingRouteMode;
   scope: string;
   provider: string;
   model: string;
+  modelSelection: RoutingModelSelection;
+  routingReason: RoutingReason;
   mappingVersion: string;
   evaluatorRef: string;
   reasoningEffort: "high";
@@ -85,6 +91,7 @@ function rejected(ruleId: string, reason: string): RejectedRoutingDecision {
 function roleIdentities(
   input: RoutingResolutionInput,
   choices: ModelMappingChoice,
+  routeMode: ResolvedRoutingDecision["routeMode"],
 ): Record<RoutingRole, RoleIdentity> {
   return {
     coordinator: {
@@ -92,13 +99,53 @@ function roleIdentities(
       provider: choices.roles.coordinator.provider,
     },
     implementer: {
-      identity: input.implementerIdentity,
-      provider: choices.roles.implementer.provider,
+      identity:
+        routeMode === "fallback"
+          ? input.coordinatorIdentity
+          : input.implementerIdentity,
+      provider:
+        routeMode === "fallback"
+          ? choices.roles.coordinator.provider
+          : choices.roles.implementer.provider,
     },
     reviewer: {
       identity: input.reviewerIdentity,
       provider: choices.roles.reviewer.provider,
     },
+  };
+}
+
+function fallback(
+  input: RoutingResolutionInput,
+  choices: ModelMappingChoice,
+  reason: Exclude<RoutingReason, "preferred_implementer_available">,
+): ResolvedRoutingDecision | RejectedRoutingDecision {
+  const coordinator = choices.roles.coordinator;
+  if (
+    choices.fallback.when !== "implementer_unavailable" ||
+    choices.fallback.role !== "coordinator" ||
+    choices.fallback.modelSelection !== "project_default" ||
+    coordinator.logicalTier !== "project_default" ||
+    coordinator.reasoningEffort !== "high" ||
+    coordinator.speed !== "standard"
+  )
+    return rejected(
+      "FR-836-05",
+      "coordinator fallbackのproject default、reasoning high、standard speedを解決できません",
+    );
+  return {
+    state: "resolved",
+    routeMode: "fallback",
+    scope: input.scope,
+    provider: coordinator.provider,
+    model: choices.fallback.modelSelection,
+    modelSelection: "project_default",
+    routingReason: reason,
+    mappingVersion: input.mapping.mappingVersion,
+    evaluatorRef: input.evaluatorRef,
+    reasoningEffort: "high",
+    serviceTier: "default",
+    roles: roleIdentities(input, choices, "fallback"),
   };
 }
 
@@ -113,7 +160,7 @@ export function resolveRouting(input: RoutingResolutionInput): RoutingDecision {
     input.coordinatorIdentity.trim() === "" ||
     input.implementerIdentity.trim() === "" ||
     input.reviewerIdentity.trim() === "" ||
-    input.coordinatorIdentity === input.implementerIdentity ||
+    input.coordinatorIdentity === input.reviewerIdentity ||
     input.implementerIdentity === input.reviewerIdentity
   )
     return rejected(
@@ -127,61 +174,53 @@ export function resolveRouting(input: RoutingResolutionInput): RoutingDecision {
     implementer.speed !== "standard"
   )
     return rejected("FR-836-05", "implementerのrouting選択値が許可集合外です");
-  if (
-    input.availability.state !== "available" ||
-    input.availability.provider !== implementer.provider
-  )
+  if (input.availability.provider !== implementer.provider)
     return pending(
       "FR-836-02",
-      "provider availabilityをavailableと確認できません",
+      "観測したproviderがimplementer設定と一致しません",
+    );
+  if (input.availability.state !== "available")
+    return fallback(input, choices, "preferred_implementer_unavailable");
+  if (input.coordinatorIdentity === input.implementerIdentity)
+    return rejected(
+      "FR-836-11",
+      "preferred routeではcoordinatorとimplementerを別identityへ解決する必要があります",
     );
   const provider = input.mapping.providers.find(
     (candidate) => candidate.provider === implementer.provider,
   );
   if (provider === undefined)
-    return pending(
-      "FR-836-10",
-      "provider capability mappingに対応providerがありません",
-    );
+    return fallback(input, choices, "preferred_capability_mapping_missing");
   if (!provider.capabilities.includes(input.requiredCapability))
-    return pending(
-      "FR-836-04",
-      "providerが要求されたcoding能力を宣言していません",
-    );
+    return fallback(input, choices, "preferred_capability_unconfirmed");
   if (provider.selectionSource !== "provider_recommended_default")
-    return pending("FR-836-10", "model選択元をtrusted mappingで解決できません");
+    return fallback(input, choices, "preferred_selection_source_unconfirmed");
   const available = new Set(input.availability.models);
   if (available.size === 0)
-    return pending("FR-836-02", "利用可能model一覧が空です");
+    return fallback(input, choices, "preferred_model_catalog_empty");
   const recommended = input.availability.modelMetadata.filter(
     (model) => model.recommended && available.has(model.model),
   );
   if (recommended.length === 0)
-    return pending(
-      "FR-836-02",
-      "provider公式recommended defaultを一意に観測できません",
-    );
+    return fallback(input, choices, "preferred_recommended_default_missing");
   if (recommended.length !== 1)
-    return pending(
-      "BR-836-09",
-      "provider公式recommended defaultが複数あるため推測できません",
-    );
+    return fallback(input, choices, "preferred_recommended_default_ambiguous");
   const selected = recommended[0]!;
   if (!selected.supportedReasoningEfforts.includes("high"))
-    return pending(
-      "FR-836-05",
-      "provider公式recommended defaultがreasoning effort highに対応しません",
-    );
+    return fallback(input, choices, "preferred_reasoning_effort_unsupported");
   return {
     state: "resolved",
+    routeMode: "preferred",
     scope: input.scope,
     provider: implementer.provider,
     model: selected.model,
+    modelSelection: "provider_recommended_default",
+    routingReason: "preferred_implementer_available",
     mappingVersion: input.mapping.mappingVersion,
     evaluatorRef: input.evaluatorRef,
     reasoningEffort: "high",
     serviceTier: "default",
-    roles: roleIdentities(input, choices),
+    roles: roleIdentities(input, choices, "preferred"),
   };
 }
 
@@ -210,8 +249,11 @@ export function revalidateRouting(
   if (
     actual.state !== "resolved" ||
     actual.scope !== expected.scope ||
+    actual.routeMode !== expected.routeMode ||
     actual.provider !== expected.provider ||
     actual.model !== expected.model ||
+    actual.modelSelection !== expected.modelSelection ||
+    actual.routingReason !== expected.routingReason ||
     actual.mappingVersion !== expected.mappingVersion ||
     actual.evaluatorRef !== expected.evaluatorRef ||
     actual.reasoningEffort !== expected.reasoningEffort ||
@@ -249,11 +291,14 @@ export function authorizeImplementation(input: {
       reason: input.decision.reason,
     };
   if (input.changedPaths.some(isProductPath)) {
-    if (input.actorIdentity === input.decision.roles.coordinator.identity)
+    if (
+      input.decision.routeMode === "preferred" &&
+      input.actorIdentity === input.decision.roles.coordinator.identity
+    )
       return {
         allowed: false,
         ruleId: "BR-836-01",
-        reason: "coordinatorはCodex利用可能scopeのproduct実装を担当できません",
+        reason: "coordinatorはpreferred routeのproduct実装を担当できません",
       };
     if (input.actorIdentity !== input.decision.roles.implementer.identity)
       return {
