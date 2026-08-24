@@ -13,7 +13,6 @@
     "packageManager",
     "runtime",
     "ci",
-    "modelMapping",
     "release",
     "projectKind",
     "capabilities",
@@ -38,7 +37,62 @@
     "packageManager": { "type": "string", "minLength": 1 },
     "runtime": { "type": "string", "minLength": 1 },
     "ci": { "type": "string", "minLength": 1 },
-    "modelMapping": { "type": "string", "minLength": 1 },
+    "modelMapping": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["roles", "fallback", "evidenceStoreRoot", "retention"],
+          "properties": {
+            "roles": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["coordinator", "implementer", "reviewer"],
+              "properties": {
+                "coordinator": { "$ref": "#/$defs/roleModelChoice" },
+                "implementer": { "$ref": "#/$defs/roleModelChoice" },
+                "reviewer": { "$ref": "#/$defs/reviewerRoleModelChoice" }
+              }
+            },
+            "fallback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["when", "role", "modelSelection"],
+              "properties": {
+                "when": { "const": "implementer_unavailable" },
+                "role": { "const": "coordinator" },
+                "modelSelection": { "const": "project_default" }
+              }
+            },
+            "evidenceStoreRoot": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 512,
+              "pattern": "^(?!/)(?!\\.\\./)(?!.*\\/\\.\\.\\/)(?!.*\\\\)(?:[A-Za-z0-9._-]+\\/)+$"
+            },
+            "retention": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "retentionDays",
+                "maxRecordsPerIssue",
+                "maxRecordBytes",
+                "rotationCondition",
+                "deletionMethod"
+              ],
+              "properties": {
+                "retentionDays": { "type": "integer", "minimum": 1 },
+                "maxRecordsPerIssue": { "type": "integer", "minimum": 1 },
+                "maxRecordBytes": { "type": "integer", "minimum": 1 },
+                "rotationCondition": { "const": "oldest_first" },
+                "deletionMethod": { "const": "preview_then_explicit" }
+              }
+            }
+          }
+        }
+      ]
+    },
     "release": { "type": "string", "minLength": 1 },
     "projectKind": { "type": "string", "minLength": 1 },
     "capabilities": {
@@ -93,6 +147,46 @@
     }
   },
   "$defs": {
+    "roleModelChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "logicalTier", "reasoningEffort", "speed"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "logicalTier": {
+          "enum": ["project_default", "highest_available"]
+        },
+        "reasoningEffort": { "const": "high" },
+        "speed": { "const": "standard" }
+      }
+    },
+    "reviewerRoleModelChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "logicalTier",
+        "reasoningEffort",
+        "speed",
+        "independence"
+      ],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "logicalTier": {
+          "enum": ["project_default", "highest_available"]
+        },
+        "reasoningEffort": { "const": "high" },
+        "speed": { "const": "standard" },
+        "independence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["differentFrom"],
+          "properties": {
+            "differentFrom": { "const": "implementer" }
+          }
+        }
+      }
+    },
     "applicability": {
       "type": "object",
       "additionalProperties": false,

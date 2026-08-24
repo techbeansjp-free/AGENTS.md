@@ -123,6 +123,7 @@ interface PolicyManifestFixture {
   choiceFiles: string[];
   ruleFiles: string[];
   conformanceFiles: string[];
+  providerFiles?: string[];
 }
 
 interface CliMigrationFixture {
@@ -3166,6 +3167,16 @@ Given(
     {
       const root = create();
       const file = path.join(root, ".agent-skill-chain/project-policy.json");
+      const manifest = parseJsonFixture<Record<string, unknown>>(
+        fs.readFileSync(file, "utf8"),
+      );
+      manifest.providerFiles = "project/providers/capability-mapping.json";
+      writeJson(file, manifest);
+      this.projectSetVariants.push(root);
+    }
+    {
+      const root = create();
+      const file = path.join(root, ".agent-skill-chain/project-policy.json");
       const manifest = parseJsonFixture<PolicyManifestFixture>(
         fs.readFileSync(file, "utf8"),
       );
@@ -3213,22 +3224,32 @@ When("filesystem policy setを厳密にloadする", function () {
     }
   });
 });
-Then("inventory不一致、不正path、duplicate keyはすべて拒否される", function () {
-  assert.equal(
-    this.projectSetErrors.every(Boolean),
-    true,
-    JSON.stringify(this.projectSetErrors),
-  );
-  assert.ok(
-    this.projectSetErrors.some((error) => error?.includes("inventory")),
-  );
-  assert.ok(
-    this.projectSetErrors.some(
-      (error) => error?.includes("symlink") || error?.includes("通常JSON"),
-    ),
-  );
-  assert.ok(this.projectSetErrors.some((error) => error?.includes("重複key")));
-});
+Then(
+  "inventory不一致、不正path、型不正、duplicate keyはすべて拒否される",
+  function () {
+    assert.equal(
+      this.projectSetErrors.every(Boolean),
+      true,
+      JSON.stringify(this.projectSetErrors),
+    );
+    assert.ok(
+      this.projectSetErrors.some((error) => error?.includes("inventory")),
+    );
+    assert.ok(
+      this.projectSetErrors.some(
+        (error) => error?.includes("symlink") || error?.includes("通常JSON"),
+      ),
+    );
+    assert.ok(
+      this.projectSetErrors.some((error) => error?.includes("重複key")),
+    );
+    assert.ok(
+      this.projectSetErrors.some((error) =>
+        error?.includes("providerFilesは配列"),
+      ),
+    );
+  },
+);
 
 Given("originにmanifestと全fragmentを持つtrusted commitがある", function () {
   this.root = this.initRepo();
@@ -3454,6 +3475,7 @@ Given("trustedとcandidateのfragmented project policy setがある", function (
     ...manifest.choiceFiles,
     ...manifest.ruleFiles,
     ...manifest.conformanceFiles,
+    ...(manifest.providerFiles ?? []),
   ].map((relative) => ({
     kind: "policy",
     path: `.agent-skill-chain/${relative}`,

@@ -1,0 +1,6 @@
+{
+  "current": "gpt-5.6-sol",
+  "lower": "gpt-5.6-terra",
+  "unknown": "unknown-model-fixture",
+  "higher": "higher-model-fixture"
+}

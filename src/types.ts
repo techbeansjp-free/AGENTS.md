@@ -8,6 +8,75 @@ export interface ApplicabilityDecision {
   evidence: string;
 }
 
+export type RoutingRole = "coordinator" | "implementer" | "reviewer";
+export type RoutingRouteMode = "preferred" | "fallback";
+export type RoutingModelSelection =
+  "provider_recommended_default" | "project_default";
+export type RoutingReason =
+  | "preferred_implementer_available"
+  | "preferred_implementer_unavailable"
+  | "preferred_capability_mapping_missing"
+  | "preferred_capability_unconfirmed"
+  | "preferred_selection_source_unconfirmed"
+  | "preferred_model_catalog_empty"
+  | "preferred_recommended_default_missing"
+  | "preferred_recommended_default_ambiguous"
+  | "preferred_reasoning_effort_unsupported";
+
+export interface RoleModelChoice {
+  provider: string;
+  logicalTier: "project_default" | "highest_available";
+  reasoningEffort: "high";
+  speed: "standard";
+}
+
+export interface ReviewerRoleModelChoice extends RoleModelChoice {
+  independence: {
+    differentFrom: "implementer";
+  };
+}
+
+export interface RoutingEvidenceRetentionChoice {
+  retentionDays: number;
+  maxRecordsPerIssue: number;
+  maxRecordBytes: number;
+  rotationCondition: "oldest_first";
+  deletionMethod: "preview_then_explicit";
+}
+
+export interface ModelMappingChoice {
+  roles: {
+    coordinator: RoleModelChoice;
+    implementer: RoleModelChoice;
+    reviewer: ReviewerRoleModelChoice;
+  };
+  fallback: {
+    when: "implementer_unavailable";
+    role: "coordinator";
+    modelSelection: "project_default";
+  };
+  evidenceStoreRoot: string;
+  retention: RoutingEvidenceRetentionChoice;
+}
+
+export interface ProviderCapability {
+  provider: string;
+  capabilities: string[];
+  selectionSource: "provider_recommended_default";
+}
+
+export interface ProviderCapabilityMapping {
+  schemaVersion: "agent-skill-chain/provider-capability-mapping/v2";
+  mappingVersion: string;
+  providers: ProviderCapability[];
+}
+
+export interface ProviderModelObservation {
+  model: string;
+  recommended: boolean;
+  supportedReasoningEfforts: string[];
+}
+
 export interface Rule {
   ruleId: string;
   purpose: string;
@@ -33,7 +102,7 @@ export interface ProjectChoices {
   packageManager: string;
   runtime: string;
   ci: string;
-  modelMapping: string;
+  modelMapping?: string | ModelMappingChoice;
   release: string;
   projectKind: string;
   capabilities: {

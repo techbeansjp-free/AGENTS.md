@@ -21,10 +21,30 @@ import {
 } from "../lib/version.js";
 import {
   type Policy,
+  type ProviderCapabilityMapping,
   type ProjectChoices,
   type Rule,
   isRecord,
 } from "../types.js";
+import { validateProviderCapabilityMapping } from "./provider-capability.js";
+import { validateRoleConfigurationIndependence } from "./routing-independence.js";
+
+const PROJECT_CHOICE_FIELDS = [
+  "language",
+  "testRunner",
+  "gherkinDialect",
+  "testLayers",
+  "forbiddenTestFileSuffixes",
+  "naming",
+  "packageManager",
+  "runtime",
+  "ci",
+  "modelMapping",
+  "release",
+  "projectKind",
+  "capabilities",
+  "quality",
+] as const;
 
 const packageRoot = findPackageRoot(import.meta.url);
 const policyVersionLabel = (version: string): string =>
@@ -84,6 +104,295 @@ function hasConcreteDecisionText(value: unknown, minimum: number): boolean {
     !/^(?:-|なし|未定|不明|x+)$/iu.test(value.trim()) &&
     !/[（{][^）}]+[）}]/u.test(value)
   );
+}
+
+function validateApplicabilityDecision(
+  value: unknown,
+  name: string,
+  errors: string[],
+): void {
+  rejectUnknownKeys(value, ["status", "reason", "evidence"], name, errors);
+  const record = isRecord(value) ? value : {};
+  if (record.status !== "applicable" && record.status !== "not-applicable")
+    errors.push(`${name}.statusが不正です`);
+  for (const [field, minimum] of [
+    ["reason", 8],
+    ["evidence", 4],
+  ] as const)
+    if (!hasConcreteDecisionText(record[field], minimum))
+      errors.push(`${name}.${field}を具体化してください`);
+}
+
+function validatePositiveInteger(
+  value: unknown,
+  name: string,
+  errors: string[],
+): void {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1)
+    errors.push(`${name}は1以上の整数でなければなりません`);
+}
+
+function validateModelMapping(value: unknown, errors: string[]): void {
+  rejectUnknownKeys(
+    value,
+    ["roles", "fallback", "evidenceStoreRoot", "retention"],
+    "modelMapping",
+    errors,
+  );
+  const mapping = isRecord(value) ? value : {};
+  rejectUnknownKeys(
+    mapping.roles,
+    ["coordinator", "implementer", "reviewer"],
+    "modelMapping.roles",
+    errors,
+  );
+  const roles = isRecord(mapping.roles) ? mapping.roles : {};
+  for (const role of ["coordinator", "implementer", "reviewer"] as const) {
+    const name = `modelMapping.roles.${role}`;
+    const roleChoice = roles[role];
+    rejectUnknownKeys(
+      roleChoice,
+      [
+        "provider",
+        "logicalTier",
+        "reasoningEffort",
+        "speed",
+        ...(role === "reviewer" ? ["independence"] : []),
+      ],
+      name,
+      errors,
+    );
+    const record = isRecord(roleChoice) ? roleChoice : {};
+    if (typeof record.provider !== "string" || record.provider.trim() === "")
+      errors.push(`${name}.providerは空でない文字列でなければなりません`);
+    if (
+      record.logicalTier !== "project_default" &&
+      record.logicalTier !== "highest_available"
+    )
+      errors.push(`${name}.logicalTierが不正です`);
+    if (record.reasoningEffort !== "high")
+      errors.push(`${name}.reasoningEffortはhighでなければなりません`);
+    if (record.speed !== "standard")
+      errors.push(`${name}.speedはstandardでなければなりません`);
+    if (role === "reviewer") {
+      rejectUnknownKeys(
+        record.independence,
+        ["differentFrom"],
+        `${name}.independence`,
+        errors,
+      );
+      const independence = isRecord(record.independence)
+        ? record.independence
+        : {};
+      if (independence.differentFrom !== "implementer")
+        errors.push(
+          `${name}.independence.differentFromはimplementerでなければなりません`,
+        );
+    }
+  }
+  const independence = validateRoleConfigurationIndependence(mapping.roles);
+  if (independence.verdict === "violated")
+    errors.push(
+      `${independence.ruleId ?? "BR-836-12"}: ${independence.reason ?? "role独立性違反です"}`,
+    );
+  rejectUnknownKeys(
+    mapping.fallback,
+    ["when", "role", "modelSelection"],
+    "modelMapping.fallback",
+    errors,
+  );
+  const fallback = isRecord(mapping.fallback) ? mapping.fallback : {};
+  if (fallback.when !== "implementer_unavailable")
+    errors.push("modelMapping.fallback.whenが不正です");
+  if (fallback.role !== "coordinator")
+    errors.push("modelMapping.fallback.roleが不正です");
+  if (fallback.modelSelection !== "project_default")
+    errors.push("modelMapping.fallback.modelSelectionが不正です");
+  if (
+    typeof mapping.evidenceStoreRoot !== "string" ||
+    mapping.evidenceStoreRoot !== mapping.evidenceStoreRoot.normalize("NFC") ||
+    !/^(?!\/)(?!\.\.\/)(?!.*\/\.\.\/)(?!.*\\)(?:[A-Za-z0-9._-]+\/)+$/u.test(
+      mapping.evidenceStoreRoot,
+    )
+  )
+    errors.push(
+      "modelMapping.evidenceStoreRootは安全なrepository相対directoryでなければなりません",
+    );
+  const retentionName = "modelMapping.retention";
+  rejectUnknownKeys(
+    mapping.retention,
+    [
+      "retentionDays",
+      "maxRecordsPerIssue",
+      "maxRecordBytes",
+      "rotationCondition",
+      "deletionMethod",
+    ],
+    retentionName,
+    errors,
+  );
+  const retention = isRecord(mapping.retention) ? mapping.retention : {};
+  for (const field of [
+    "retentionDays",
+    "maxRecordsPerIssue",
+    "maxRecordBytes",
+  ] as const)
+    validatePositiveInteger(
+      retention[field],
+      `${retentionName}.${field}`,
+      errors,
+    );
+  if (retention.rotationCondition !== "oldest_first")
+    errors.push(`${retentionName}.rotationConditionが不正です`);
+  if (retention.deletionMethod !== "preview_then_explicit")
+    errors.push(`${retentionName}.deletionMethodが不正です`);
+}
+
+export function validateProjectChoices(value: unknown) {
+  const errors: string[] = [];
+  rejectUnknownKeys(
+    value,
+    [...PROJECT_CHOICE_FIELDS],
+    "projectChoices",
+    errors,
+  );
+  const projectChoices = isRecord(value) ? value : {};
+  for (const field of [
+    "language",
+    "testRunner",
+    "gherkinDialect",
+    "naming",
+    "packageManager",
+    "runtime",
+    "ci",
+    "release",
+    "projectKind",
+  ] as const)
+    if (
+      typeof projectChoices[field] !== "string" ||
+      projectChoices[field].trim() === ""
+    )
+      errors.push(
+        `projectChoices.${field}は空でない文字列でなければなりません`,
+      );
+  validateStringArray(
+    projectChoices.testLayers,
+    "projectChoices.testLayers",
+    errors,
+    { min: 1 },
+  );
+  validateStringArray(
+    projectChoices.forbiddenTestFileSuffixes,
+    "projectChoices.forbiddenTestFileSuffixes",
+    errors,
+  );
+  if (
+    Array.isArray(projectChoices.forbiddenTestFileSuffixes) &&
+    projectChoices.forbiddenTestFileSuffixes.some(
+      (suffix) =>
+        typeof suffix !== "string" || !/^\.[A-Za-z0-9._-]+$/u.test(suffix),
+    )
+  )
+    errors.push("projectChoices.forbiddenTestFileSuffixesが不正です");
+  if (projectChoices.modelMapping !== undefined) {
+    if (typeof projectChoices.modelMapping === "string") {
+      if (projectChoices.modelMapping.trim() === "")
+        errors.push(
+          "projectChoices.modelMappingは空でない文字列または構造化設定でなければなりません",
+        );
+    } else validateModelMapping(projectChoices.modelMapping, errors);
+  }
+  const capabilities = isRecord(projectChoices.capabilities)
+    ? projectChoices.capabilities
+    : {};
+  const capabilityFields = [
+    "privacySecurity",
+    "observability",
+    "humanCenteredUi",
+    "designTokens",
+  ] as const;
+  rejectUnknownKeys(
+    projectChoices.capabilities,
+    [...capabilityFields],
+    "projectChoices.capabilities",
+    errors,
+  );
+  for (const field of capabilityFields)
+    validateApplicabilityDecision(
+      capabilities[field],
+      `projectChoices.capabilities.${field}`,
+      errors,
+    );
+  const quality = isRecord(projectChoices.quality)
+    ? projectChoices.quality
+    : {};
+  const qualityFields = [
+    "implementationLanguage",
+    "strictTypecheck",
+    "forbiddenTypes",
+    "lintCommand",
+    "formatCheckCommand",
+    "formatWriteCommand",
+    "typecheckCommand",
+    "runtimeValidation",
+    "auxiliaryLanguages",
+  ];
+  rejectUnknownKeys(
+    projectChoices.quality,
+    qualityFields,
+    "projectChoices.quality",
+    errors,
+  );
+  for (const field of [
+    "implementationLanguage",
+    "lintCommand",
+    "formatCheckCommand",
+    "formatWriteCommand",
+    "typecheckCommand",
+    "runtimeValidation",
+  ])
+    if (typeof quality[field] !== "string" || quality[field].trim() === "")
+      errors.push(
+        `projectChoices.quality.${field}は空でない文字列でなければなりません`,
+      );
+  if (quality.strictTypecheck !== true)
+    errors.push(
+      "projectChoices.quality.strictTypecheckはtrueでなければなりません",
+    );
+  validateStringArray(
+    quality.forbiddenTypes,
+    "projectChoices.quality.forbiddenTypes",
+    errors,
+    { min: 1 },
+  );
+  const auxiliaryLanguages = isRecord(quality.auxiliaryLanguages)
+    ? quality.auxiliaryLanguages
+    : {};
+  if (!isRecord(quality.auxiliaryLanguages))
+    errors.push(
+      "projectChoices.quality.auxiliaryLanguagesはobjectでなければなりません",
+    );
+  for (const [language, decision] of Object.entries(auxiliaryLanguages))
+    validateApplicabilityDecision(
+      decision,
+      `projectChoices.quality.auxiliaryLanguages.${language}`,
+      errors,
+    );
+  return { valid: errors.length === 0, errors };
+}
+
+export function isProjectChoices(value: unknown): value is ProjectChoices {
+  return validateProjectChoices(value).valid;
+}
+
+export function readProjectChoices(source: string): ProjectChoices {
+  const value: unknown = parseJsonStrict(source, "project choice");
+  const validation = validateProjectChoices(value);
+  if (!validation.valid)
+    throw new Error(
+      `project choiceが不正です: ${validation.errors.join("; ")}`,
+    );
+  return value as ProjectChoices;
 }
 
 export function validatePolicy(policy: unknown) {
@@ -190,175 +499,8 @@ export function validatePolicy(policy: unknown) {
         errors.push(`budgets.${key}は1以上の整数でなければなりません`);
     const enforcement = validateEnforcementPolicy(policy);
     errors.push(...enforcement.errors);
-    if (projectChoices !== undefined) {
-      const fields = [
-        "language",
-        "testRunner",
-        "gherkinDialect",
-        "testLayers",
-        "forbiddenTestFileSuffixes",
-        "naming",
-        "packageManager",
-        "runtime",
-        "ci",
-        "modelMapping",
-        "release",
-        "projectKind",
-        "capabilities",
-        "quality",
-      ];
-      rejectUnknownKeys(projectChoices, fields, "projectChoices", errors);
-      for (const field of fields
-        .slice(0, 11)
-        .filter(
-          (field) =>
-            !["testLayers", "forbiddenTestFileSuffixes"].includes(field),
-        ))
-        if (
-          typeof projectChoices[field] !== "string" ||
-          projectChoices[field].trim() === ""
-        )
-          errors.push(
-            `projectChoices.${field}は空でない文字列でなければなりません`,
-          );
-      validateStringArray(
-        projectChoices.testLayers,
-        "projectChoices.testLayers",
-        errors,
-        { min: 1 },
-      );
-      validateStringArray(
-        projectChoices.forbiddenTestFileSuffixes,
-        "projectChoices.forbiddenTestFileSuffixes",
-        errors,
-      );
-      if (
-        Array.isArray(projectChoices.forbiddenTestFileSuffixes) &&
-        projectChoices.forbiddenTestFileSuffixes.some(
-          (suffix) =>
-            typeof suffix !== "string" || !/^\.[A-Za-z0-9._-]+$/u.test(suffix),
-        )
-      )
-        errors.push("projectChoices.forbiddenTestFileSuffixesが不正です");
-      if (
-        typeof projectChoices.projectKind !== "string" ||
-        projectChoices.projectKind.trim() === ""
-      )
-        errors.push("projectChoices.projectKindは空でない文字列が必要です");
-      const capabilities = isRecord(projectChoices.capabilities)
-        ? projectChoices.capabilities
-        : {};
-      const capabilityFields = [
-        "privacySecurity",
-        "observability",
-        "humanCenteredUi",
-        "designTokens",
-      ];
-      rejectUnknownKeys(
-        projectChoices.capabilities,
-        capabilityFields,
-        "projectChoices.capabilities",
-        errors,
-      );
-      for (const field of capabilityFields) {
-        const decision = capabilities[field];
-        rejectUnknownKeys(
-          decision,
-          ["status", "reason", "evidence"],
-          `projectChoices.capabilities.${field}`,
-          errors,
-        );
-        const record = isRecord(decision) ? decision : {};
-        if (
-          !["applicable", "not-applicable"].some(
-            (status) => status === record.status,
-          )
-        )
-          errors.push(`projectChoices.capabilities.${field}.statusが不正です`);
-        for (const [property, minimum] of [
-          ["reason", 8],
-          ["evidence", 4],
-        ] as const)
-          if (!hasConcreteDecisionText(record[property], minimum))
-            errors.push(
-              `projectChoices.capabilities.${field}.${property}を具体化してください`,
-            );
-      }
-      const quality = isRecord(projectChoices.quality)
-        ? projectChoices.quality
-        : {};
-      const qualityFields = [
-        "implementationLanguage",
-        "strictTypecheck",
-        "forbiddenTypes",
-        "lintCommand",
-        "formatCheckCommand",
-        "formatWriteCommand",
-        "typecheckCommand",
-        "runtimeValidation",
-        "auxiliaryLanguages",
-      ];
-      rejectUnknownKeys(
-        projectChoices.quality,
-        qualityFields,
-        "projectChoices.quality",
-        errors,
-      );
-      for (const field of [
-        "implementationLanguage",
-        "lintCommand",
-        "formatCheckCommand",
-        "formatWriteCommand",
-        "typecheckCommand",
-        "runtimeValidation",
-      ])
-        if (typeof quality[field] !== "string" || quality[field].trim() === "")
-          errors.push(
-            `projectChoices.quality.${field}は空でない文字列でなければなりません`,
-          );
-      if (quality.strictTypecheck !== true)
-        errors.push(
-          "projectChoices.quality.strictTypecheckはtrueでなければなりません",
-        );
-      validateStringArray(
-        quality.forbiddenTypes,
-        "projectChoices.quality.forbiddenTypes",
-        errors,
-        { min: 1 },
-      );
-      const auxiliaryLanguages = isRecord(quality.auxiliaryLanguages)
-        ? quality.auxiliaryLanguages
-        : {};
-      if (!isRecord(quality.auxiliaryLanguages))
-        errors.push(
-          "projectChoices.quality.auxiliaryLanguagesはobjectでなければなりません",
-        );
-      for (const [language, decision] of Object.entries(auxiliaryLanguages)) {
-        rejectUnknownKeys(
-          decision,
-          ["status", "reason", "evidence"],
-          `projectChoices.quality.auxiliaryLanguages.${language}`,
-          errors,
-        );
-        const record = isRecord(decision) ? decision : {};
-        if (
-          !["applicable", "not-applicable"].some(
-            (status) => status === record.status,
-          )
-        )
-          errors.push(
-            `projectChoices.quality.auxiliaryLanguages.${language}.statusが不正です`,
-          );
-        for (const [field, minimum] of [
-          ["reason", 8],
-          ["evidence", 4],
-        ] as const)
-          if (!hasConcreteDecisionText(record[field], minimum))
-            errors.push(
-              `projectChoices.quality.auxiliaryLanguages.${language}.${field}を具体化してください`,
-            );
-      }
-    }
+    if (projectChoices !== undefined)
+      errors.push(...validateProjectChoices(projectChoices).errors);
   }
   const migration =
     compatibleInput ||
@@ -414,6 +556,7 @@ export interface PolicyManifest {
   choiceFiles: string[];
   ruleFiles: string[];
   conformanceFiles: string[];
+  providerFiles?: string[];
   conformanceDirectory: "project/conformance";
 }
 
@@ -431,6 +574,7 @@ export interface PolicySet {
   provenance: Record<string, unknown>;
   manifest: PolicyManifest | Policy;
   choices: ProjectChoices[];
+  providerMappings: ProviderCapabilityMapping[];
   rules: Rule[];
 }
 
@@ -471,6 +615,7 @@ export function validateProjectPolicyManifest(manifest: unknown) {
       "choiceFiles",
       "ruleFiles",
       "conformanceFiles",
+      "providerFiles",
       "conformanceDirectory",
     ],
     "manifest",
@@ -551,7 +696,15 @@ export function validateProjectPolicyManifest(manifest: unknown) {
   const conformanceFiles: unknown[] = Array.isArray(manifest.conformanceFiles)
     ? (manifest.conformanceFiles as unknown[])
     : [];
-  const references = [...choiceFiles, ...ruleFiles, ...conformanceFiles];
+  const providerFiles: unknown[] = Array.isArray(manifest.providerFiles)
+    ? (manifest.providerFiles as unknown[])
+    : [];
+  const references = [
+    ...choiceFiles,
+    ...ruleFiles,
+    ...conformanceFiles,
+    ...providerFiles,
+  ];
   if (
     !Array.isArray(manifest?.choiceFiles) ||
     manifest.choiceFiles.length !== 1
@@ -568,6 +721,13 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     errors.push("ruleFilesは126件以内でなければなりません");
   if (conformanceFiles.length > 126)
     errors.push("conformanceFilesは126件以内でなければなりません");
+  if (providerFiles.length > 126)
+    errors.push("providerFilesは126件以内でなければなりません");
+  if (
+    manifest.providerFiles !== undefined &&
+    !Array.isArray(manifest.providerFiles)
+  )
+    errors.push("providerFilesは配列でなければなりません");
   for (const reference of references)
     if (
       typeof reference !== "string" ||
@@ -577,12 +737,12 @@ export function validateProjectPolicyManifest(manifest: unknown) {
       reference.includes("\\") ||
       CONTROL.test(reference) ||
       reference !== reference.normalize("NFC") ||
-      !/^project\/(?:choices|rules|conformance)\/[a-z0-9][a-z0-9.-]*\.json$/u.test(
+      !/^project\/(?:choices|rules|conformance|providers)\/[a-z0-9][a-z0-9.-]*\.json$/u.test(
         reference,
       )
     )
       errors.push(`project fragment pathが不正です: ${String(reference)}`);
-  for (const list of [choiceFiles, ruleFiles, conformanceFiles])
+  for (const list of [choiceFiles, ruleFiles, conformanceFiles, providerFiles])
     if (stableJson(list) !== stableJson([...list].sort()))
       errors.push("project fragment pathは字句順でなければなりません");
   const keys = references.map((reference) =>
@@ -618,6 +778,7 @@ function assemblePolicySet(
     ...manifest.choiceFiles,
     ...manifest.ruleFiles,
     ...manifest.conformanceFiles,
+    ...(manifest.providerFiles ?? []),
   ].sort();
   const actual = [...inventory].sort();
   if (stableJson(expected) !== stableJson(actual))
@@ -636,6 +797,16 @@ function assemblePolicySet(
   const rules = manifest.ruleFiles.map(
     (relative) => entries[relative]!.value as Rule,
   );
+  const providerMappings = (manifest.providerFiles ?? []).map(
+    (relative) => entries[relative]!.value as ProviderCapabilityMapping,
+  );
+  for (const relative of manifest.providerFiles ?? []) {
+    const mapping = entries[relative]!.value;
+    const validation = validateProviderCapabilityMapping(mapping);
+    manifestValidation.errors.push(
+      ...validation.errors.map((error) => `${relative}: ${error}`),
+    );
+  }
   for (const relative of manifest.conformanceFiles) {
     const binding = entries[relative]!.value;
     const validation = validateProjectConformanceBinding(binding);
@@ -695,6 +866,7 @@ function assemblePolicySet(
     provenance,
     manifest,
     choices,
+    providerMappings,
     rules,
   };
 }
@@ -730,6 +902,7 @@ export function loadProjectPolicySet(root: string): PolicySet {
       provenance: { source: "filesystem-legacy" },
       manifest: policy,
       choices: policy.projectChoices ? [policy.projectChoices] : [],
+      providerMappings: [],
       rules: policy.rules,
     };
   }
@@ -742,7 +915,7 @@ export function loadProjectPolicySet(root: string): PolicySet {
     throw new Error(
       "project inventory rootは通常directoryでなければなりません",
     );
-  const allowedDirectories = ["choices", "rules", "conformance"];
+  const allowedDirectories = ["choices", "rules", "conformance", "providers"];
   for (const entry of fs.readdirSync(projectRoot, { withFileTypes: true }))
     if (
       !allowedDirectories.includes(entry.name) ||
@@ -852,6 +1025,7 @@ export function loadProjectPolicySetAtCommit(
       provenance: { source: "git-legacy", commitSha },
       manifest: policy,
       choices: policy.projectChoices ? [policy.projectChoices] : [],
+      providerMappings: [],
       rules: policy.rules,
     };
   }

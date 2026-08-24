@@ -53,9 +53,21 @@ import {
   canonicalLifecycleCommand,
   CLI_USAGE,
   PUBLIC_LIFECYCLE_COMMANDS,
+  routingDiagnostic,
+  routingRecovery,
 } from "./cli-contract.js";
 import { type Policy, isRecord } from "./types.js";
 import { type PolicySet } from "./domain/policy.js";
+import { observeProvider } from "./adapters/provider.js";
+import { resolveRouting } from "./domain/routing.js";
+import { checkRoutingIndependence } from "./domain/routing-independence.js";
+import {
+  appendCompletionRecord,
+  appendEvidenceStateRecord,
+  applyEvidencePrune,
+  issueRoutingEvidence,
+  previewEvidencePrune,
+} from "./domain/routing-evidence.js";
 import {
   readDeliveryEvidence,
   readEnforcementInput,
@@ -180,6 +192,53 @@ function defaultBranch(root: string): string {
   throw new Error("既定ブランチが不明です。origin/HEADを設定してください");
 }
 
+function routingProject(root: string) {
+  const policySet = loadProjectPolicySet(root);
+  const choices = policySet.choices[0];
+  const modelMapping = choices?.modelMapping;
+  const mapping = policySet.providerMappings[0];
+  if (!choices || !modelMapping || typeof modelMapping === "string")
+    throw new Error(
+      "project choiceのmodelMappingは構造化設定が有効化されていません",
+    );
+  if (!mapping) throw new Error("provider capability mappingが未設定です");
+  return { modelMapping, mapping };
+}
+
+function routingStorage(root: string) {
+  const { modelMapping } = routingProject(root);
+  return {
+    repositoryRoot: root,
+    storeRoot: modelMapping.evidenceStoreRoot,
+    retention: modelMapping.retention,
+  };
+}
+
+function routingFailure(
+  state: "pending" | "rejected",
+  ruleId: string,
+  reason: string,
+  entrypoint: string,
+) {
+  const recovery = routingRecovery(ruleId);
+  return serializeDiagnostic({
+    allowed: false,
+    state,
+    routingFailure: {
+      reason,
+      checkedEntrypoint: entrypoint,
+      safeFallback: "候補なし",
+      requiredAuthority: recovery.authority,
+      stopPoint: "実装開始前",
+      resumeCondition: recovery.resume,
+    },
+    diagnostic: routingDiagnostic(ruleId, reason, {
+      requiredAuthority: recovery.authority,
+      next: recovery.next,
+    }),
+  });
+}
+
 export async function main(argv: string[]): Promise<number> {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
@@ -190,6 +249,160 @@ export async function main(argv: string[]): Promise<number> {
       ),
     });
     return 0;
+  }
+  if (command === "routing" && subcommand === "observe") {
+    const { flags } = parse(rest);
+    const provider = required(flags, "provider");
+    const observation = await observeProvider(provider);
+    print(observation);
+    return observation.state === "available" ? 0 : 1;
+  }
+  if (command === "routing" && subcommand === "resolve") {
+    const { flags } = parse(rest);
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    const { modelMapping, mapping } = routingProject(root);
+    const provider = modelMapping.roles.implementer.provider;
+    const observation = await observeProvider(provider);
+    const decision = resolveRouting({
+      scope: required(flags, "scope"),
+      coordinatorIdentity: required(flags, "coordinator"),
+      implementerIdentity: required(flags, "implementer"),
+      reviewerIdentity: required(flags, "reviewer"),
+      availability: observation,
+      mapping,
+      modelMapping,
+      requiredCapability: "coding",
+      evaluatorRef: required(flags, "evaluator-ref"),
+    });
+    if (decision.state === "resolved") {
+      print(decision);
+      return 0;
+    }
+    print(
+      routingFailure(
+        decision.state,
+        decision.ruleId,
+        decision.reason,
+        observation.entrypoint,
+      ),
+    );
+    return 1;
+  }
+  if (command === "routing" && subcommand === "independence") {
+    const { flags } = parse(rest);
+    const result = checkRoutingIndependence({
+      implementerIdentity: required(flags, "implementer"),
+      reviewerIdentity: required(flags, "reviewer"),
+      candidatePaths:
+        typeof flags["candidate-paths"] === "string"
+          ? flags["candidate-paths"].split(",").filter(Boolean)
+          : [],
+      trustedRef: required(flags, "trusted-ref"),
+      candidateHead: required(flags, "candidate-head"),
+      evaluatorRef: required(flags, "evaluator-ref"),
+    });
+    print(
+      result.verdict === "independent"
+        ? result
+        : serializeDiagnostic({
+            allowed: false,
+            ...result,
+            diagnostic: routingDiagnostic(
+              result.ruleId ?? "FR-836-11",
+              result.reason ?? "routing independenceを確認できません",
+            ),
+          }),
+    );
+    return result.verdict === "independent" ? 0 : 1;
+  }
+  if (command === "routing" && subcommand === "evidence") {
+    const [operation, ...operationArgs] = rest;
+    const { flags } = parse(operationArgs);
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    const storage = routingStorage(root);
+    if (operation === "issue") {
+      const apply = applyMode(flags);
+      const input = {
+        ...storage,
+        baseSha: required(flags, "base-sha"),
+        issue: Number(required(flags, "issue")),
+        scope: required(flags, "scope"),
+        role: required(flags, "role"),
+        routeMode: required(flags, "route-mode"),
+        provider: required(flags, "provider"),
+        model: required(flags, "model"),
+        modelSelection: required(flags, "model-selection"),
+        routingReason: required(flags, "routing-reason"),
+        mappingVersion: required(flags, "mapping-version"),
+        reasoningEffort: required(flags, "reasoning-effort"),
+        serviceTier: required(flags, "service-tier"),
+        identity: required(flags, "identity"),
+        evaluatorRef: required(flags, "evaluator-ref"),
+      };
+      if (!apply) {
+        print({ preview: "routing evidenceを発行する", input });
+        return 0;
+      }
+      print(issueRoutingEvidence(input));
+      return 0;
+    }
+    if (operation === "complete") {
+      const apply = applyMode(flags);
+      const input = {
+        ...storage,
+        routingEvidenceId: required(flags, "evidence-id"),
+        implementationHead: required(flags, "implementation-head"),
+        endState: required(flags, "end-state"),
+      };
+      if (!apply) {
+        print({ preview: "completion recordを追記する", input });
+        return 0;
+      }
+      print(appendCompletionRecord(input));
+      return 0;
+    }
+    if (operation === "state") {
+      const apply = applyMode(flags);
+      const input = {
+        ...storage,
+        routingEvidenceId: required(flags, "evidence-id"),
+        state: required(flags, "state"),
+        reason: required(flags, "reason"),
+      };
+      if (!apply) {
+        print({ preview: "EvidenceStateRecordを追記する", input });
+        return 0;
+      }
+      print(appendEvidenceStateRecord(input));
+      return 0;
+    }
+    if (operation === "prune") {
+      const apply = applyMode(flags);
+      if (!apply) {
+        print(previewEvidencePrune(storage));
+        return 0;
+      }
+      if (flags.authorize !== "approved")
+        throw new Error(
+          "routing evidence prune --applyには--authorize=approvedが必要です",
+        );
+      print(
+        applyEvidencePrune({
+          ...storage,
+          approvedDigest: required(flags, "digest"),
+          targetIds: required(flags, "target-ids").split(",").filter(Boolean),
+          authorize: "approved",
+        }),
+      );
+      return 0;
+    }
+    throw new Error(
+      "routing evidenceにはissue、complete、state、pruneのいずれかが必要です",
+    );
   }
   if (command === "issue" && subcommand === "create") {
     const { flags } = parse(rest);

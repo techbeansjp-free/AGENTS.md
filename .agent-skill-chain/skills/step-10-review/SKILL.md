@@ -7,6 +7,10 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 入力は正確な先頭SHA・差分、受け入れ条件・シナリオ・テスト・仕様の証拠。成果物は肯定・敵対の評価、有限な指摘、テスト結果、`updated`の仕様追跡または範囲を限定した`no-spec-impact`を含む`04_レビュー.md`。影響不明または未解決Critical/Highは停止する。ラウンド3で分類し、任意範囲を安全側へ縮小する。
 
+## routing入力契約
+
+role欄、provider欄、model設定欄、fallback欄、独立性証拠欄を実装時のrouting evidenceと突合する。providerとmodel設定はproject choiceの入力契約として扱い、固有のmodel slugからreview authorityを推測しない。reviewerがimplementerと異なることを独立性証拠欄で確認できない場合はfallback欄の停止条件を適用し、承認しない。
+
 ## テンプレート契約
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、成果物間の責務越境、上流の暗黙変更、対象版とシステム仕様書の不一致をfindingにする。

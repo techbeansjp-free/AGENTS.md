@@ -87,7 +87,7 @@ const ORDER: MigrationKind[] = [
 ];
 const OWNED_PATHS: Record<MigrationKind, RegExp> = {
   policy:
-    /^\.agent-skill-chain\/(?:project-policy\.json|project\/(?:choices|rules|conformance)\/[a-z0-9][a-z0-9.-]*\.json)$/u,
+    /^\.agent-skill-chain\/(?:project-policy\.json|project\/(?:choices|rules|conformance|providers)\/[a-z0-9][a-z0-9.-]*\.json)$/u,
   schema: /^\.agent-skill-chain\/schemas\/.+\.json$/u,
   runtime: /^src\/.+\.ts$/u,
   CI: /^\.github\/workflows\/.+\.ya?ml$/u,

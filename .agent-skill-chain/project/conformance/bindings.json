@@ -11,15 +11,27 @@
     },
     {
       "id": "I2",
-      "sourcePaths": [".agent-skill-chain/project-policy.json"],
+      "sourcePaths": [
+        ".agent-skill-chain/project-policy.json",
+        ".agent-skill-chain/00_利用案内.md"
+      ],
       "enforcement": [
         {
           "path": "src/domain/enforcement.ts",
           "export": "validateOwnershipBoundary"
         },
-        { "path": "scripts/check_file_audit.ts", "export": "checkFileAudit" }
+        { "path": "scripts/check_file_audit.ts", "export": "checkFileAudit" },
+        {
+          "path": "scripts/check_conformance.ts",
+          "export": "findPackageModelSlugViolations"
+        }
       ],
-      "counterexampleScenarios": ["SCN-UNIT-RISK-016", "SCN-UNIT-PACKAGE-011"]
+      "counterexampleScenarios": [
+        "SCN-UNIT-RISK-016",
+        "SCN-UNIT-PACKAGE-011",
+        "SCN-UNIT-ROUTING-002",
+        "SCN-INT-ROUTING-005"
+      ]
     },
     {
       "id": "I3",

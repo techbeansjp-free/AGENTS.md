@@ -1,0 +1,58 @@
+{
+  "language": "日本語",
+  "testRunner": "cucumber-js",
+  "gherkinDialect": "en",
+  "testLayers": ["unit", "integration", "e2e"],
+  "forbiddenTestFileSuffixes": [".test.js", ".test.ts"],
+  "naming": "連番付き日本語Markdownと一意なSCN ID",
+  "packageManager": "npm",
+  "runtime": "Node.js 20以上",
+  "ci": ".github/workflows/ci.yml",
+  "modelMapping": "roleごとにprojectが選択する",
+  "release": "明示authorityによる手動操作",
+  "projectKind": "cli",
+  "capabilities": {
+    "privacySecurity": {
+      "status": "applicable",
+      "reason": "秘密を含み得る入力を扱うため安全境界を適用する",
+      "evidence": "秘密混入の反例BDD"
+    },
+    "observability": {
+      "status": "applicable",
+      "reason": "診断を運用判断へ使用するため観測可能性を適用する",
+      "evidence": "停止と再開の反例BDD"
+    },
+    "humanCenteredUi": {
+      "status": "not-applicable",
+      "reason": "画面を持たないCLIであるため視覚UIは対象外とする",
+      "evidence": "projectKind=cli"
+    },
+    "designTokens": {
+      "status": "not-applicable",
+      "reason": "視覚componentを持たないためtokenは対象外とする",
+      "evidence": "UI sourceなし"
+    }
+  },
+  "quality": {
+    "implementationLanguage": "TypeScript",
+    "strictTypecheck": true,
+    "forbiddenTypes": ["any"],
+    "lintCommand": "npm run lint",
+    "formatCheckCommand": "npm run format:check",
+    "formatWriteCommand": "npm run format:write",
+    "typecheckCommand": "npm run typecheck",
+    "runtimeValidation": "外部JSONをunknownで読みtype guardで検証する",
+    "auxiliaryLanguages": {
+      "python": {
+        "status": "not-applicable",
+        "reason": "TypeScriptへ実装を集約しているため対象外とする",
+        "evidence": "Python sourceなし"
+      },
+      "shell": {
+        "status": "not-applicable",
+        "reason": "TypeScriptへ実装を集約しているため対象外とする",
+        "evidence": "shell sourceなし"
+      }
+    }
+  }
+}

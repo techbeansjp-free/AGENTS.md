@@ -103,6 +103,15 @@
         "pattern": "^project/conformance/[a-z0-9][a-z0-9.-]*\\.json$"
       }
     },
+    "providerFiles": {
+      "type": "array",
+      "maxItems": 126,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^project/providers/[a-z0-9][a-z0-9.-]*\\.json$"
+      }
+    },
     "conformanceDirectory": { "const": "project/conformance" }
   }
 }

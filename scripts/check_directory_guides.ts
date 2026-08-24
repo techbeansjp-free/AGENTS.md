@@ -14,6 +14,7 @@ const ENTRY_DOCUMENTS = new Map([
   [".agent-skill-chain/project", INDEX],
   [".agent-skill-chain/project/choices", INDEX],
   [".agent-skill-chain/project/conformance", INDEX],
+  [".agent-skill-chain/project/providers", INDEX],
   [".agent-skill-chain/project/rules", INDEX],
   [".agent-skill-chain/schemas", ".agent-skill-chain/schemas/00_利用案内.md"],
   [".agent-skill-chain/skills", ".agent-skill-chain/skills/00_利用案内.md"],
@@ -185,6 +186,7 @@ export function checkDirectoryGuides(root = process.cwd()) {
     for (const directory of [
       ".agent-skill-chain/project/",
       ".agent-skill-chain/project/choices/",
+      ".agent-skill-chain/project/providers/",
       ".agent-skill-chain/project/rules/",
       ".agent-skill-chain/project/conformance/",
     ]) {

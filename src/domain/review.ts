@@ -108,6 +108,8 @@ interface Finding {
   severity?: string;
   status?: string;
   evidence?: unknown;
+  reproductionSteps?: unknown;
+  reproductionResult?: unknown;
   riskAcceptance?: RiskAcceptance;
 }
 interface ReviewInput extends ImmutableReviewEvidence {
@@ -215,9 +217,15 @@ function reviewInput(value: unknown): value is ReviewInput {
         (finding) =>
           isPlainRecord(finding) &&
           Object.keys(finding).every((key) =>
-            ["id", "severity", "status", "evidence", "riskAcceptance"].includes(
-              key,
-            ),
+            [
+              "id",
+              "severity",
+              "status",
+              "evidence",
+              "reproductionSteps",
+              "reproductionResult",
+              "riskAcceptance",
+            ].includes(key),
           ) &&
           (finding.riskAcceptance === undefined ||
             (isPlainRecord(finding.riskAcceptance) &&
@@ -599,6 +607,18 @@ export function evaluateReview(reviewValue: unknown) {
       errors.push(`${finding.id ?? "指摘"}の重大度が不正です`);
     if (typeof finding.status !== "string" || !DISPOSITIONS.has(finding.status))
       errors.push(`${finding.id ?? "指摘"}の分類が不正です`);
+    if (
+      typeof finding.status === "string" &&
+      DISPOSITIONS.has(finding.status) &&
+      finding.status !== "valid" &&
+      (typeof finding.reproductionSteps !== "string" ||
+        finding.reproductionSteps.trim() === "" ||
+        typeof finding.reproductionResult !== "string" ||
+        finding.reproductionResult.trim() === "")
+    )
+      errors.push(
+        `${finding.id ?? "指摘"}は分類前に現コードでの再現手順と再現結果が必要です`,
+      );
     if (
       typeof finding.id === "string" &&
       typeof finding.severity === "string" &&
