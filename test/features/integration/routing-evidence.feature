@@ -21,6 +21,8 @@ Feature: routing evidenceの不変性と保持
     Then previewは削除せず対象id一覧とダイジェストを返す
     When tombstone耐久化後の物理削除を失敗させてから同じ削除を再開する
     Then auditとtombstoneから冪等に削除を完了できる
+    When Issue単位件数が上限ちょうどのstoreをpreviewする
+    Then oldest firstのrotation対象が1件提示される
 
   Scenario: SCN-INT-ROUTING-009 head変更はrouting evidenceを失効させない
     Given routing evidenceとそのheadに依存するcompletion recordがある

@@ -25,9 +25,9 @@ Given("provider実行入口のread-only観測関数を注入した", function ()
   };
 });
 
-When("provider availabilityを観測する", function () {
+When("provider availabilityを観測する", async function () {
   assert.ok(this.providerExecutor);
-  this.providerObservation = observeProvider(
+  this.providerObservation = await observeProvider(
     "provider-fixture",
     this.providerExecutor,
     () => new Date("2026-08-24T00:00:00.000Z"),
@@ -39,7 +39,7 @@ Then("外部観測の呼び出し回数は2回以内である", function () {
   assert.equal(this.providerObservation?.state, "available");
 });
 
-Then("正常と起動不能と解釈不能は型付き観測結果を返す", function () {
+Then("正常と起動不能と解釈不能は型付き観測結果を返す", async function () {
   const now = () => new Date("2026-08-24T00:00:00.000Z");
   const throwing: ProviderExecutor = () => {
     throw new Error("起動不能");
@@ -50,14 +50,77 @@ Then("正常と起動不能と解釈不能は型付き観測結果を返す", fu
     stderr: "",
   });
   const available = this.providerObservation;
-  const launchFailure = observeProvider("provider-fixture", throwing, now);
-  const parseFailure = observeProvider("provider-fixture", malformed, now);
+  const launchFailure = await observeProvider(
+    "provider-fixture",
+    throwing,
+    now,
+  );
+  const parseFailure = await observeProvider(
+    "provider-fixture",
+    malformed,
+    now,
+  );
   assert.equal(available?.state, "available");
   assert.deepEqual(available?.models, ["model-fixture"]);
   assert.equal(launchFailure.state, "unknown");
   assert.deepEqual(launchFailure.models, []);
   assert.equal(parseFailure.state, "unknown");
   assert.deepEqual(parseFailure.models, []);
+});
+
+Then("Codexはapp-serverのmodel listを厳密に観測する", async function () {
+  const calls: Array<{ file: string; args: string[] }> = [];
+  const executor: ProviderExecutor = (file, args) => {
+    calls.push({ file, args });
+    return {
+      status: 0,
+      stdout: [
+        JSON.stringify({ id: 0, result: { userAgent: "fixture" } }),
+        JSON.stringify({
+          id: 1,
+          result: {
+            data: [
+              { id: "gpt-5.6-sol", model: "gpt-5.6-sol", hidden: false },
+              {
+                id: "gpt-5.6-terra",
+                model: "gpt-5.6-terra",
+                hidden: false,
+              },
+            ],
+            nextCursor: null,
+          },
+        }),
+      ].join("\n"),
+      stderr: "",
+    };
+  };
+  const observation = await observeProvider(
+    "codex",
+    executor,
+    () => new Date("2026-08-24T00:00:00.000Z"),
+  );
+  assert.deepEqual(calls, [{ file: "codex", args: ["app-server", "--stdio"] }]);
+  assert.equal(observation.state, "available");
+  assert.deepEqual(observation.models, ["gpt-5.6-sol", "gpt-5.6-terra"]);
+  assert.equal(observation.entrypoint, "codex app-server model/list");
+
+  const incomplete = await observeProvider(
+    "codex",
+    () => ({
+      status: 0,
+      stdout: JSON.stringify({
+        id: 1,
+        result: {
+          data: [{ id: "gpt-5.6-sol", model: "gpt-5.6-sol" }],
+          nextCursor: "next-page",
+        },
+      }),
+      stderr: "",
+    }),
+    () => new Date("2026-08-24T00:00:00.000Z"),
+  );
+  assert.equal(incomplete.state, "unknown");
+  assert.deepEqual(incomplete.models, []);
 });
 
 Given("秘密を含む標準エラーを返すprovider実行関数を注入した", function () {
@@ -69,9 +132,9 @@ Given("秘密を含む標準エラーを返すprovider実行関数を注入し�
   });
 });
 
-When("availabilityを観測する", function () {
+When("availabilityを観測する", async function () {
   assert.ok(this.providerExecutor);
-  this.providerObservation = observeProvider(
+  this.providerObservation = await observeProvider(
     "provider-fixture",
     this.providerExecutor,
     () => new Date("2026-08-24T00:00:00.000Z"),

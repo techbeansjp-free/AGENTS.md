@@ -17,6 +17,7 @@ export interface RoutingAvailability {
 export interface RoutingResolutionInput {
   scope: string;
   coordinatorIdentity: string;
+  implementerIdentity: string;
   reviewerIdentity: string;
   availability: RoutingAvailability;
   mapping: ProviderCapabilityMapping;
@@ -88,7 +89,7 @@ function roleIdentities(
       provider: choices.roles.coordinator.provider,
     },
     implementer: {
-      identity: choices.roles.implementer.provider,
+      identity: input.implementerIdentity,
       provider: choices.roles.implementer.provider,
     },
     reviewer: {
@@ -104,6 +105,17 @@ export function resolveRouting(input: RoutingResolutionInput): RoutingDecision {
     return pending("FR-836-05", "project choiceのmodelMappingが未設定です");
   if (input.evaluatorRef.trim() === "")
     return pending("FR-836-12", "evaluatorRefを確定できません");
+  if (
+    input.scope.trim() === "" ||
+    input.coordinatorIdentity.trim() === "" ||
+    input.implementerIdentity.trim() === "" ||
+    input.reviewerIdentity.trim() === "" ||
+    input.implementerIdentity === input.reviewerIdentity
+  )
+    return rejected(
+      "FR-836-11",
+      "scopeとrole identityを既知の独立した値へ解決できません",
+    );
   const implementer = choices.roles.implementer;
   if (
     implementer.logicalTier !== "highest_available" ||
@@ -190,12 +202,16 @@ export function revalidateRouting(
   const actual = resolveRouting(input);
   if (
     actual.state !== "resolved" ||
+    actual.scope !== expected.scope ||
     actual.provider !== expected.provider ||
     actual.model !== expected.model ||
     actual.mappingVersion !== expected.mappingVersion ||
     actual.evaluatorRef !== expected.evaluatorRef ||
     actual.reasoningEffort !== expected.reasoningEffort ||
-    actual.serviceTier !== expected.serviceTier
+    actual.serviceTier !== expected.serviceTier ||
+    actual.roles.coordinator.identity !== expected.roles.coordinator.identity ||
+    actual.roles.implementer.identity !== expected.roles.implementer.identity ||
+    actual.roles.reviewer.identity !== expected.roles.reviewer.identity
   )
     return {
       allowed: false,
@@ -219,21 +235,25 @@ export function authorizeImplementation(input: {
   actorIdentity: string;
   changedPaths: string[];
 }): RoutingGuardResult {
-  if (
-    input.decision.state === "resolved" &&
-    input.actorIdentity === input.decision.roles.coordinator.identity &&
-    input.changedPaths.some(isProductPath)
-  )
-    return {
-      allowed: false,
-      ruleId: "BR-836-01",
-      reason: "coordinatorはCodex利用可能scopeのproduct実装を担当できません",
-    };
   if (input.decision.state !== "resolved")
     return {
       allowed: false,
       ruleId: input.decision.ruleId,
       reason: input.decision.reason,
     };
+  if (input.changedPaths.some(isProductPath)) {
+    if (input.actorIdentity === input.decision.roles.coordinator.identity)
+      return {
+        allowed: false,
+        ruleId: "BR-836-01",
+        reason: "coordinatorはCodex利用可能scopeのproduct実装を担当できません",
+      };
+    if (input.actorIdentity !== input.decision.roles.implementer.identity)
+      return {
+        allowed: false,
+        ruleId: "BR-836-01",
+        reason: "product実装は解決済みimplementer identityだけが担当できます",
+      };
+  }
   return { allowed: true };
 }

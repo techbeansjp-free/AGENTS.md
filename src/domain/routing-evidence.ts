@@ -261,11 +261,10 @@ function requireRetention(value: unknown): RoutingEvidenceRetentionChoice {
     if (typeof item !== "number" || !Number.isInteger(item) || item < 1)
       throw new Error(`routing evidence保持方針.${key}は1以上の整数が必要です`);
   }
-  for (const key of ["rotationCondition", "deletionMethod"] as const) {
-    const item = record[key];
-    if (typeof item !== "string" || item.trim() === "" || CONTROL.test(item))
-      throw new Error(`routing evidence保持方針.${key}が必要です`);
-  }
+  if (record.rotationCondition !== "oldest_first")
+    throw new Error("routing evidence保持方針.rotationConditionが不正です");
+  if (record.deletionMethod !== "preview_then_explicit")
+    throw new Error("routing evidence保持方針.deletionMethodが不正です");
   return record as unknown as RoutingEvidenceRetentionChoice;
 }
 
@@ -314,9 +313,32 @@ function durableSyncDirectory(directory: string): void {
   }
 }
 
-function createAtomicExclusive(destination: string, contents: string): void {
+function containedRecordPath(storePath: string, relative: string): string {
+  return resolveContained(storePath, relative, { allowMissingLeaf: true });
+}
+
+function verifyContainedParent(storePath: string, destination: string): void {
   const parent = path.dirname(destination);
   fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+  const relative = path.relative(
+    fs.realpathSync(storePath),
+    fs.realpathSync(parent),
+  );
+  if (
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  )
+    throw new Error("evidence record directoryがstore外を指しています");
+}
+
+function createAtomicExclusive(
+  storePath: string,
+  destination: string,
+  contents: string,
+): void {
+  const parent = path.dirname(destination);
+  verifyContainedParent(storePath, destination);
   const lock = `${destination}.lock`;
   const lockDescriptor = fs.openSync(lock, "wx", 0o600);
   fs.closeSync(lockDescriptor);
@@ -335,6 +357,26 @@ function createAtomicExclusive(destination: string, contents: string): void {
     durableSyncDirectory(parent);
   } finally {
     fs.rmSync(temporary, { force: true });
+    fs.rmSync(lock, { force: true });
+  }
+}
+
+function lockKey(domain: string, value: unknown): string {
+  return `${domain}-${crypto.createHash("sha256").update(stableJson(value)).digest("hex")}`;
+}
+
+function withExclusiveRecordLock<T>(
+  storePath: string,
+  key: string,
+  action: () => T,
+): T {
+  const lock = containedRecordPath(storePath, `.locks/${key}.lock`);
+  verifyContainedParent(storePath, lock);
+  const descriptor = fs.openSync(lock, "wx", 0o600);
+  try {
+    return action();
+  } finally {
+    fs.closeSync(descriptor);
     fs.rmSync(lock, { force: true });
   }
 }
@@ -419,7 +461,9 @@ function listJson(directory: string): string[] {
 }
 
 function listRoutingEvidence(storePath: string): RoutingEvidence[] {
-  return listJson(path.join(storePath, "routing")).map(readRoutingEvidenceFile);
+  return listJson(containedRecordPath(storePath, "routing")).map(
+    readRoutingEvidenceFile,
+  );
 }
 
 function validateIssueInput(value: unknown): {
@@ -487,12 +531,33 @@ export function issueRoutingEvidence(
   };
   const source = json(evidence, validatedStorage.retention.maxRecordBytes);
   ensureStore(validatedStorage.storePath, validatedStorage.repositoryRoot);
-  const issueRecords = listRoutingEvidence(validatedStorage.storePath).filter(
-    (record) => record.issue === evidence.issue,
+  withExclusiveRecordLock(
+    validatedStorage.storePath,
+    lockKey("binding", [evidence.issue, evidence.scope, evidence.baseSha]),
+    () => {
+      const issueRecords = listRoutingEvidence(
+        validatedStorage.storePath,
+      ).filter((record) => record.issue === evidence.issue);
+      const activeDuplicate = issueRecords.some(
+        (record) =>
+          record.scope === evidence.scope &&
+          record.baseSha === evidence.baseSha &&
+          (stateRecords(validatedStorage.storePath, record.id).at(-1)?.state ??
+            "issued") === "issued",
+      );
+      if (activeDuplicate)
+        throw new Error(
+          "同じIssue、scope、base SHAの有効なrouting evidenceが既に存在します",
+        );
+      if (issueRecords.length >= validatedStorage.retention.maxRecordsPerIssue)
+        throw new Error("routing evidenceのIssue単位件数上限に達しています");
+      createAtomicExclusive(
+        validatedStorage.storePath,
+        evidencePath(validatedStorage.storePath, id),
+        source,
+      );
+    },
   );
-  if (issueRecords.length >= validatedStorage.retention.maxRecordsPerIssue)
-    throw new Error("routing evidenceのIssue単位件数上限に達しています");
-  createAtomicExclusive(evidencePath(validatedStorage.storePath, id), source);
   return evidence;
 }
 
@@ -537,7 +602,7 @@ function completionRecords(
   storePath: string,
   evidenceId: string,
 ): CompletionRecord[] {
-  return listJson(path.join(storePath, "completion"))
+  return listJson(containedRecordPath(storePath, "completion"))
     .map(readCompletionRecord)
     .filter((record) => record.routingEvidenceId === evidenceId)
     .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
@@ -557,11 +622,6 @@ export function appendCompletionRecord(
     record.routingEvidenceId,
     "routing evidence id",
   );
-  requireExistingEvidence(validatedStorage.storePath, evidenceId);
-  if (completionRecords(validatedStorage.storePath, evidenceId).length > 0)
-    throw new Error(
-      "同一routing evidenceのcompletion recordは1件だけ追記できます",
-    );
   if (
     (record.endState !== "completed" && record.endState !== "interrupted") ||
     typeof record.implementationHead !== "string" ||
@@ -581,13 +641,24 @@ export function appendCompletionRecord(
     implementationHead: record.implementationHead.toLowerCase(),
     recordedAt,
   };
-  createAtomicExclusive(
-    path.join(
-      validatedStorage.storePath,
-      "completion",
-      `${completion.id}.json`,
-    ),
-    json(completion, validatedStorage.retention.maxRecordBytes),
+  withExclusiveRecordLock(
+    validatedStorage.storePath,
+    lockKey("evidence", evidenceId),
+    () => {
+      requireExistingEvidence(validatedStorage.storePath, evidenceId);
+      if (completionRecords(validatedStorage.storePath, evidenceId).length > 0)
+        throw new Error(
+          "同一routing evidenceのcompletion recordは1件だけ追記できます",
+        );
+      createAtomicExclusive(
+        validatedStorage.storePath,
+        containedRecordPath(
+          validatedStorage.storePath,
+          `completion/${completion.id}.json`,
+        ),
+        json(completion, validatedStorage.retention.maxRecordBytes),
+      );
+    },
   );
   return completion;
 }
@@ -611,7 +682,7 @@ function stateRecords(
   storePath: string,
   evidenceId: string,
 ): EvidenceStateRecord[] {
-  return listJson(path.join(storePath, "states"))
+  return listJson(containedRecordPath(storePath, "states"))
     .map(readStateRecord)
     .filter((record) => record.routingEvidenceId === evidenceId)
     .sort((left, right) =>
@@ -635,7 +706,6 @@ export function appendEvidenceStateRecord(
     record.routingEvidenceId,
     "routing evidence id",
   );
-  requireExistingEvidence(validatedStorage.storePath, evidenceId);
   if (record.state !== "superseded" && record.state !== "invalidated")
     throw new Error(
       "evidence stateはsupersededまたはinvalidatedだけを追記できます",
@@ -652,9 +722,20 @@ export function appendEvidenceStateRecord(
     reason,
     recordedAt,
   };
-  createAtomicExclusive(
-    path.join(validatedStorage.storePath, "states", `${stateRecord.id}.json`),
-    json(stateRecord, validatedStorage.retention.maxRecordBytes),
+  withExclusiveRecordLock(
+    validatedStorage.storePath,
+    lockKey("evidence", evidenceId),
+    () => {
+      requireExistingEvidence(validatedStorage.storePath, evidenceId);
+      createAtomicExclusive(
+        validatedStorage.storePath,
+        containedRecordPath(
+          validatedStorage.storePath,
+          `states/${stateRecord.id}.json`,
+        ),
+        json(stateRecord, validatedStorage.retention.maxRecordBytes),
+      );
+    },
   );
   return stateRecord;
 }
@@ -757,7 +838,7 @@ export function previewEvidencePrune(
       0,
       Math.max(
         0,
-        ordered.length - validatedStorage.retention.maxRecordsPerIssue,
+        ordered.length - validatedStorage.retention.maxRecordsPerIssue + 1,
       ),
     ))
       targets.add(record.id);
@@ -772,7 +853,10 @@ export function previewEvidencePrune(
 function auditStartFile(storePath: string, digest: string): string {
   if (!/^[a-f0-9]{64}$/u.test(digest))
     throw new Error("承認済みprune digestが不正です");
-  return path.join(storePath, "prune-audits", `prune-${digest}`, "start.json");
+  return containedRecordPath(
+    storePath,
+    `prune-audits/prune-${digest}/start.json`,
+  );
 }
 
 function readAuditStart(file: string): PruneAuditStart {
@@ -826,7 +910,7 @@ function relatedRecordFiles(
   directory: "completion" | "states",
   evidenceId: string,
 ): string[] {
-  return listJson(path.join(storePath, directory)).filter((file) => {
+  return listJson(containedRecordPath(storePath, directory)).filter((file) => {
     const record =
       directory === "completion"
         ? readCompletionRecord(file)
@@ -840,7 +924,10 @@ function latestOutcome(
   auditId: string,
   evidenceId: string,
 ): PruneOutcome | undefined {
-  const directory = path.join(storePath, "prune-audits", auditId, "outcomes");
+  const directory = containedRecordPath(
+    storePath,
+    `prune-audits/${safeIdentifier(auditId, "prune audit id")}/outcomes`,
+  );
   const outcomes = listJson(directory)
     .map(readPruneOutcome)
     .filter((value) => value.routingEvidenceId === evidenceId)
@@ -866,7 +953,11 @@ function appendPruneOutcome(
     "prune outcome id",
   );
   createAtomicExclusive(
-    path.join(storePath, "prune-audits", auditId, "outcomes", `${id}.json`),
+    storePath,
+    containedRecordPath(
+      storePath,
+      `prune-audits/${safeIdentifier(auditId, "prune audit id")}/outcomes/${id}.json`,
+    ),
     json(record, maxBytes),
   );
 }
@@ -933,6 +1024,7 @@ export function applyEvidencePrune(
       startedAt: now().toISOString(),
     };
     createAtomicExclusive(
+      validatedStorage.storePath,
       startFile,
       json(audit, validatedStorage.retention.maxRecordBytes),
     );
@@ -946,78 +1038,86 @@ export function applyEvidencePrune(
   const completed: string[] = [];
   const failed: string[] = [];
   for (const evidenceId of audit.targetIds) {
-    const previous = latestOutcome(
+    withExclusiveRecordLock(
       validatedStorage.storePath,
-      audit.id,
-      evidenceId,
-    );
-    if (previous?.outcome === "succeeded") {
-      completed.push(evidenceId);
-      continue;
-    }
-    const tombstoneFile = path.join(
-      validatedStorage.storePath,
-      "tombstones",
-      `${evidenceId}.json`,
-    );
-    if (!fs.existsSync(tombstoneFile)) {
-      const tombstone: Tombstone = {
-        routingEvidenceId: evidenceId,
-        pruneAuditId: audit.id,
-        deletedAt: now().toISOString(),
-      };
-      createAtomicExclusive(
-        tombstoneFile,
-        json(tombstone, validatedStorage.retention.maxRecordBytes),
-      );
-      const confirmed = readJsonFile(
-        tombstoneFile,
-        "routing evidence tombstone",
-      );
-      if (stableJson(confirmed) !== stableJson(tombstone))
-        throw new Error("tombstoneの書き込み確認に失敗しました");
-    } else {
-      const existingTombstone = readTombstone(tombstoneFile);
-      if (
-        existingTombstone.routingEvidenceId !== evidenceId ||
-        existingTombstone.pruneAuditId !== audit.id
-      )
-        throw new Error("既存tombstoneがPruneAuditRecordと一致しません");
-    }
-    try {
-      const files = [
-        evidencePath(validatedStorage.storePath, evidenceId),
-        ...relatedRecordFiles(
+      lockKey("evidence", evidenceId),
+      () => {
+        const previous = latestOutcome(
           validatedStorage.storePath,
-          "completion",
+          audit.id,
           evidenceId,
-        ),
-        ...relatedRecordFiles(validatedStorage.storePath, "states", evidenceId),
-      ];
-      for (const file of files) if (fs.existsSync(file)) remove(file);
-      const recordedAt = now().toISOString();
-      appendPruneOutcome(
-        validatedStorage.storePath,
-        audit.id,
-        evidenceId,
-        "succeeded",
-        recordedAt,
-        validatedStorage.retention.maxRecordBytes,
-      );
-      completed.push(evidenceId);
-    } catch (error) {
-      const recordedAt = now().toISOString();
-      appendPruneOutcome(
-        validatedStorage.storePath,
-        audit.id,
-        evidenceId,
-        "failed",
-        recordedAt,
-        validatedStorage.retention.maxRecordBytes,
-      );
-      failed.push(evidenceId);
-      throw error;
-    }
+        );
+        if (previous?.outcome === "succeeded") {
+          completed.push(evidenceId);
+          return;
+        }
+        const tombstoneFile = containedRecordPath(
+          validatedStorage.storePath,
+          `tombstones/${evidenceId}.json`,
+        );
+        if (!fs.existsSync(tombstoneFile)) {
+          const tombstone: Tombstone = {
+            routingEvidenceId: evidenceId,
+            pruneAuditId: audit.id,
+            deletedAt: now().toISOString(),
+          };
+          createAtomicExclusive(
+            validatedStorage.storePath,
+            tombstoneFile,
+            json(tombstone, validatedStorage.retention.maxRecordBytes),
+          );
+          const confirmed = readJsonFile(
+            tombstoneFile,
+            "routing evidence tombstone",
+          );
+          if (stableJson(confirmed) !== stableJson(tombstone))
+            throw new Error("tombstoneの書き込み確認に失敗しました");
+        } else {
+          const existingTombstone = readTombstone(tombstoneFile);
+          if (
+            existingTombstone.routingEvidenceId !== evidenceId ||
+            existingTombstone.pruneAuditId !== audit.id
+          )
+            throw new Error("既存tombstoneがPruneAuditRecordと一致しません");
+        }
+        try {
+          const files = [
+            evidencePath(validatedStorage.storePath, evidenceId),
+            ...relatedRecordFiles(
+              validatedStorage.storePath,
+              "completion",
+              evidenceId,
+            ),
+            ...relatedRecordFiles(
+              validatedStorage.storePath,
+              "states",
+              evidenceId,
+            ),
+          ];
+          for (const file of files) if (fs.existsSync(file)) remove(file);
+          appendPruneOutcome(
+            validatedStorage.storePath,
+            audit.id,
+            evidenceId,
+            "succeeded",
+            now().toISOString(),
+            validatedStorage.retention.maxRecordBytes,
+          );
+          completed.push(evidenceId);
+        } catch (error) {
+          appendPruneOutcome(
+            validatedStorage.storePath,
+            audit.id,
+            evidenceId,
+            "failed",
+            now().toISOString(),
+            validatedStorage.retention.maxRecordBytes,
+          );
+          failed.push(evidenceId);
+          throw error;
+        }
+      },
+    );
   }
   return { auditId: audit.id, completed, failed };
 }

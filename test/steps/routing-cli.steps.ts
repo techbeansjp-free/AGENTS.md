@@ -106,6 +106,7 @@ When("product実装taskの担当をrouting CLIから解決する", function () {
       `--root=${this.root}`,
       "--scope=T07-cli",
       "--coordinator=claude-coordinator",
+      "--implementer=codex-implementer",
       "--reviewer=independent-reviewer",
       "--evaluator-ref=trusted-evaluator-ref",
     ],

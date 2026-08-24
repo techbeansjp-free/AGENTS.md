@@ -249,7 +249,7 @@ export async function main(argv: string[]): Promise<number> {
   if (command === "routing" && subcommand === "observe") {
     const { flags } = parse(rest);
     const provider = required(flags, "provider");
-    const observation = observeProvider(provider);
+    const observation = await observeProvider(provider);
     print(observation);
     return observation.state === "available" ? 0 : 1;
   }
@@ -260,10 +260,11 @@ export async function main(argv: string[]): Promise<number> {
     );
     const { modelMapping, mapping } = routingProject(root);
     const provider = modelMapping.roles.implementer.provider;
-    const observation = observeProvider(provider);
+    const observation = await observeProvider(provider);
     const decision = resolveRouting({
       scope: required(flags, "scope"),
       coordinatorIdentity: required(flags, "coordinator"),
+      implementerIdentity: required(flags, "implementer"),
       reviewerIdentity: required(flags, "reviewer"),
       availability: observation,
       mapping,

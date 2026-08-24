@@ -27,8 +27,8 @@ export interface RoutingEvidenceRetentionChoice {
   retentionDays: number;
   maxRecordsPerIssue: number;
   maxRecordBytes: number;
-  rotationCondition: string;
-  deletionMethod: string;
+  rotationCondition: "oldest_first";
+  deletionMethod: "preview_then_explicit";
 }
 
 export interface ModelMappingChoice {

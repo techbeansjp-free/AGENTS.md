@@ -72,8 +72,8 @@
             "retentionDays": { "type": "integer", "minimum": 1 },
             "maxRecordsPerIssue": { "type": "integer", "minimum": 1 },
             "maxRecordBytes": { "type": "integer", "minimum": 1 },
-            "rotationCondition": { "type": "string", "minLength": 1 },
-            "deletionMethod": { "type": "string", "minLength": 1 }
+            "rotationCondition": { "const": "oldest_first" },
+            "deletionMethod": { "const": "preview_then_explicit" }
           }
         }
       }

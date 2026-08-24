@@ -100,6 +100,33 @@
         "speed": { "const": "standard" }
       }
     },
+    "reviewerRoleModelChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "logicalTier",
+        "reasoningEffort",
+        "speed",
+        "independence"
+      ],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "logicalTier": {
+          "enum": ["project_default", "highest_available"]
+        },
+        "reasoningEffort": { "const": "high" },
+        "speed": { "const": "standard" },
+        "independence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["differentFrom"],
+          "properties": {
+            "differentFrom": { "const": "implementer" }
+          }
+        }
+      }
+    },
     "projectChoices": {
       "type": "object",
       "additionalProperties": false,
@@ -149,7 +176,7 @@
               "properties": {
                 "coordinator": { "$ref": "#/$defs/roleModelChoice" },
                 "implementer": { "$ref": "#/$defs/roleModelChoice" },
-                "reviewer": { "$ref": "#/$defs/roleModelChoice" }
+                "reviewer": { "$ref": "#/$defs/reviewerRoleModelChoice" }
               }
             },
             "evidenceStoreRoot": {
@@ -172,8 +199,8 @@
                 "retentionDays": { "type": "integer", "minimum": 1 },
                 "maxRecordsPerIssue": { "type": "integer", "minimum": 1 },
                 "maxRecordBytes": { "type": "integer", "minimum": 1 },
-                "rotationCondition": { "type": "string", "minLength": 1 },
-                "deletionMethod": { "type": "string", "minLength": 1 }
+                "rotationCondition": { "const": "oldest_first" },
+                "deletionMethod": { "const": "preview_then_explicit" }
               }
             }
           }

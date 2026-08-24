@@ -229,11 +229,10 @@ function validateModelMapping(value: unknown, errors: string[]): void {
       `${retentionName}.${field}`,
       errors,
     );
-  for (const field of ["rotationCondition", "deletionMethod"] as const)
-    if (typeof retention[field] !== "string" || retention[field].trim() === "")
-      errors.push(
-        `${retentionName}.${field}は空でない文字列でなければなりません`,
-      );
+  if (retention.rotationCondition !== "oldest_first")
+    errors.push(`${retentionName}.rotationConditionが不正です`);
+  if (retention.deletionMethod !== "preview_then_explicit")
+    errors.push(`${retentionName}.deletionMethodが不正です`);
 }
 
 export function validateProjectChoices(value: unknown) {

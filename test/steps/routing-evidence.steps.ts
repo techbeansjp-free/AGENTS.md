@@ -29,6 +29,7 @@ class RoutingEvidenceWorld extends WorkflowWorld {
   failures: unknown[] = [];
   implementationHead = "b".repeat(40);
   changedHead = "c".repeat(40);
+  escapedPath = "";
 }
 
 const { Given, When, Then } = stepDefinitions<RoutingEvidenceWorld>();
@@ -121,6 +122,12 @@ Then("同じ識別子の再発行は排他的に拒否される", function () {
       () => new Date("2026-08-24T01:02:03.000Z"),
     ),
   );
+  assert.throws(() =>
+    issueRoutingEvidence(
+      this.issueInput!,
+      () => new Date("2026-08-24T01:02:04.000Z"),
+    ),
+  );
 });
 
 When("routing evidenceへcompletion recordを追記する", function () {
@@ -197,6 +204,26 @@ When("保存許可list外の秘密fieldと安全でない識別子で保存を�
   assert.throws(() =>
     issueRoutingEvidence(evidenceInput(this, { scope: "../outside" })),
   );
+  const evidence = issueRoutingEvidence(
+    evidenceInput(this, { scope: "symlink-scope" }),
+    () => new Date("2026-08-24T00:30:00.000Z"),
+  );
+  this.escapedPath = this.temp("asc-routing-escape-");
+  fs.symlinkSync(
+    this.escapedPath,
+    path.join(this.repositoryRoot, this.storeRoot, "completion"),
+  );
+  assert.throws(() =>
+    appendCompletionRecord({
+      repositoryRoot: this.repositoryRoot,
+      storeRoot: this.storeRoot,
+      retention: this.retention,
+      routingEvidenceId: evidence.id,
+      implementationHead: this.implementationHead,
+      endState: "completed",
+    }),
+  );
+  fs.unlinkSync(path.join(this.repositoryRoot, this.storeRoot, "completion"));
 });
 
 Then("秘密とpath脱出を含む記録は保存されない", function () {
@@ -204,6 +231,7 @@ Then("秘密とpath脱出を含む記録は保存されない", function () {
     ? fs.readdirSync(this.repositoryRoot, { recursive: true, encoding: "utf8" })
     : [];
   assert.doesNotMatch(JSON.stringify(allFiles), /never-store-this|outside/u);
+  assert.deepEqual(fs.readdirSync(this.escapedPath), []);
 });
 
 When("期限超過routing evidenceを発行して削除previewを実行する", function () {
@@ -232,6 +260,33 @@ Then("previewは削除せず対象id一覧とダイジェストを返す", funct
   assert.deepEqual(this.preview?.targetIds, [requireEvidence(this).id]);
   assert.match(this.preview?.digest ?? "", /^[a-f0-9]{64}$/u);
   assert.equal(fs.existsSync(this.evidenceFile), true);
+});
+
+When("Issue単位件数が上限ちょうどのstoreをpreviewする", function () {
+  this.repositoryRoot = this.temp("asc-routing-capacity-");
+  this.storeRoot = "evidence/routing/";
+  this.retention = { ...completeRetention(), maxRecordsPerIssue: 2 };
+  for (const [scope, timestamp] of [
+    ["scope-one", "2026-08-24T01:00:00.000Z"],
+    ["scope-two", "2026-08-24T02:00:00.000Z"],
+  ] as const)
+    issueRoutingEvidence(
+      evidenceInput(this, { scope }),
+      () => new Date(timestamp),
+    );
+  this.preview = previewEvidencePrune(
+    {
+      repositoryRoot: this.repositoryRoot,
+      storeRoot: this.storeRoot,
+      retention: this.retention,
+    },
+    () => new Date("2026-08-24T03:00:00.000Z"),
+  );
+});
+
+Then("oldest firstのrotation対象が1件提示される", function () {
+  assert.equal(this.preview?.targetIds.length, 1);
+  assert.match(this.preview?.targetIds[0] ?? "", /scope-one/u);
 });
 
 When(

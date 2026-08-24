@@ -1,5 +1,6 @@
 import {
   run,
+  runJsonlSession,
   type ProcessOptions,
   type ProcessResult,
 } from "../lib/process.js";
@@ -22,7 +23,7 @@ export type ProviderExecutor = (
   args: string[],
   cwd: string,
   options: ProcessOptions,
-) => ProcessResult;
+) => ProcessResult | Promise<ProcessResult>;
 
 interface ProviderCatalog {
   available: boolean;
@@ -31,6 +32,90 @@ interface ProviderCatalog {
 
 const PROVIDER_NAME = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
 const MODEL_SLUG = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
+const CODEX_RESPONSE_ID = 1;
+const PROVIDER_TIMEOUT_MS = 10_000;
+
+function parseJsonLines(stdout: string): unknown[] {
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => parseJsonStrict(line, "provider JSONL response"));
+}
+
+function hasCodexResponse(stdout: string): boolean {
+  try {
+    return parseJsonLines(stdout).some(
+      (message) => isRecord(message) && message.id === CODEX_RESPONSE_ID,
+    );
+  } catch {
+    return false;
+  }
+}
+
+function codexInput(): string {
+  return [
+    {
+      method: "initialize",
+      id: 0,
+      params: {
+        clientInfo: {
+          name: "agent-skill-chain",
+          title: "agent-skill-chain",
+          version: "0.3.1",
+        },
+      },
+    },
+    { method: "initialized", params: {} },
+    {
+      method: "model/list",
+      id: CODEX_RESPONSE_ID,
+      params: { limit: 1000, includeHidden: false },
+    },
+  ]
+    .map((message) => JSON.stringify(message))
+    .join("\n")
+    .concat("\n");
+}
+
+function codexCatalog(stdout: string): ProviderCatalog | undefined {
+  const response = parseJsonLines(stdout).find(
+    (message) => isRecord(message) && message.id === CODEX_RESPONSE_ID,
+  );
+  if (!isRecord(response) || !isRecord(response.result)) return undefined;
+  const result = response.result;
+  if (
+    !Array.isArray(result.data) ||
+    (result.nextCursor !== null && result.nextCursor !== undefined)
+  )
+    return undefined;
+  const models = result.data.map((entry) =>
+    isRecord(entry) ? entry.model : undefined,
+  );
+  if (
+    models.some(
+      (model) => typeof model !== "string" || !MODEL_SLUG.test(model),
+    ) ||
+    new Set(models).size !== models.length
+  )
+    return undefined;
+  return { available: models.length > 0, models: models as string[] };
+}
+
+async function defaultExecutor(
+  file: string,
+  args: string[],
+  cwd: string,
+  options: ProcessOptions,
+): Promise<ProcessResult> {
+  if (file !== "codex") return run(file, args, cwd, options);
+  return runJsonlSession(file, args, cwd, {
+    ...options,
+    input: codexInput(),
+    timeoutMs: PROVIDER_TIMEOUT_MS,
+    isComplete: hasCodexResponse,
+  });
+}
 
 function isProviderCatalog(value: unknown): value is ProviderCatalog {
   if (!isRecord(value)) return false;
@@ -63,16 +148,16 @@ function unknownObservation(
     state: "unknown",
     models: [],
     observedAt,
-    entrypoint: provider,
+    entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
     reason,
   };
 }
 
-export function observeProvider(
+export async function observeProvider(
   provider: string,
-  execute: ProviderExecutor = run,
+  execute: ProviderExecutor = defaultExecutor,
   now: () => Date = () => new Date(),
-): ProviderAvailabilityObservation {
+): Promise<ProviderAvailabilityObservation> {
   const observedAt = now().toISOString();
   if (!PROVIDER_NAME.test(provider))
     return unknownObservation(
@@ -82,9 +167,14 @@ export function observeProvider(
     );
   let result: ProcessResult;
   try {
-    result = execute(provider, ["models", "list", "--json"], process.cwd(), {
-      allowFailure: true,
-    });
+    result = await execute(
+      provider,
+      provider === "codex"
+        ? ["app-server", "--stdio"]
+        : ["models", "list", "--json"],
+      process.cwd(),
+      { allowFailure: true },
+    );
   } catch {
     return unknownObservation(
       provider,
@@ -100,7 +190,10 @@ export function observeProvider(
     );
   let catalog: unknown;
   try {
-    catalog = parseJsonStrict(result.stdout, "provider model catalog");
+    catalog =
+      provider === "codex"
+        ? codexCatalog(result.stdout)
+        : parseJsonStrict(result.stdout, "provider model catalog");
   } catch {
     return unknownObservation(
       provider,
@@ -108,7 +201,7 @@ export function observeProvider(
       "provider model catalogを解釈できません",
     );
   }
-  if (!isProviderCatalog(catalog))
+  if (!catalog || !isProviderCatalog(catalog))
     return unknownObservation(
       provider,
       observedAt,
@@ -119,6 +212,6 @@ export function observeProvider(
     state: catalog.available ? "available" : "unavailable",
     models: [...catalog.models],
     observedAt,
-    entrypoint: provider,
+    entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
   };
 }

@@ -9,7 +9,7 @@ CLIは引数を構造化入力として受け、適用を伴う操作は既定�
 | review証拠 | exact repositoryと明示したH_impl/PR/run/review ID | read-only | commit author、PR current head/author、Actions event/head/conclusion/関連PR、immutable review commit/user/submittedAt/stateを再読取 |
 | policy authority | exact repositoryと明示したPR ID、base SHA/ref、default branch | read-only | PR baseRefName/baseRefOid/headRefOidとrepository defaultBranchRefをtrusted providerから再読取 |
 | merge | 既定branch上policy、branch保護、成功check、全pageから時刻順に決めた同じHEAD SHAの最新独立approval | 許可されたmethodで実行 | 直前に同じtrusted観測で再認可し、merged SHAと状態を再読取 |
-| provider availability | provider名の許可文字と実行入口 | `models list --json`のread-only実行 | stdoutだけを厳密に解析し、available、unavailable、unknown、model一覧、観測時刻、確認済み入口を返す。起動失敗、非0終了、解釈不能はunknownとし、stderr本文を転記しない |
+| provider availability | provider名の許可文字と実行入口 | Codexは`codex app-server --stdio`をinitializeして`model/list`、その他はprovider固有の`models list --json`をread-only実行 | stdoutだけを厳密に解析し、available、unavailable、unknown、model一覧、観測時刻、確認済み入口を返す。10秒以内に完了しない、起動失敗、非0終了、解釈不能、未取得pageありはunknownとし、stderr本文を転記しない |
 
 GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報の伏字化と行動可能な根拠・次行動を保持する。表示言語はproject choiceを読むcaller adapterが選択する。
 
@@ -27,7 +27,7 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 | コマンド | 入力 | 出力・終了code |
 |---|---|---|
 | `routing observe` | `--provider` | read-onlyのProviderAvailability。availableは0、unavailableまたはunknownは非0 |
-| `routing resolve` | `--root --scope --coordinator --reviewer --evaluator-ref` | project choice、trusted mapping、provider観測からroleとmodelを解決する。resolvedは0、pendingまたはrejectedは理由、確認済み入口、安全なfallback候補、必要authority、停止点、再開条件を含めて非0 |
+| `routing resolve` | `--root --scope --coordinator --implementer --reviewer --evaluator-ref` | project choice、trusted mapping、provider観測からroleとmodelを解決する。resolvedは0、pendingまたはrejectedは理由、確認済み入口、安全なfallback候補、必要authority、停止点、再開条件を含めて非0 |
 | `routing independence` | `--implementer --reviewer --candidate-paths --trusted-ref --candidate-head --evaluator-ref` | identity分離とcandidate自己評価を検査する。independentは0、violatedまたはpendingは構造化診断付きで非0 |
 | `routing evidence issue` | store設定と`--base-sha --issue --scope --role --provider --model --mapping-version --reasoning-effort --service-tier --identity --evaluator-ref` | 無指定は発行preview、`--apply`は書換不能なrouting evidenceを排他的に1件発行する |
 | `routing evidence complete` | store設定と`--evidence-id --implementation-head --end-state` | 無指定は追記preview、`--apply`はcompletedまたはinterruptedのcompletion recordを1件追記する |

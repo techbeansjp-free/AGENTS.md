@@ -74,6 +74,7 @@ function makeInput(
   return {
     scope: "T04-routing-domain",
     coordinatorIdentity: "claude-coordinator",
+    implementerIdentity: "codex-implementer",
     reviewerIdentity: "independent-reviewer",
     availability: {
       provider: choices.modelMapping?.roles.implementer.provider ?? "",
@@ -119,6 +120,10 @@ Then("implementerはCodexである", function () {
     decision.roles.implementer.provider,
     this.input?.availability.provider,
   );
+  assert.equal(
+    decision.roles.implementer.identity,
+    this.input?.implementerIdentity,
+  );
 });
 
 Then("modelはtrusted mapping上の最高位coding tierである", function () {
@@ -149,18 +154,31 @@ Given("ClaudeがcoordinatorでCodexを利用できる", function () {
 When("coordinator identityでproduct pathの実装を開始しようとする", function () {
   assert.ok(this.input);
   const decision = resolveRouting(this.input);
-  this.value = authorizeImplementation({
-    decision,
-    actorIdentity: this.input.coordinatorIdentity,
-    changedPaths: ["src/domain/routing.ts"],
-  });
+  this.value = [
+    authorizeImplementation({
+      decision,
+      actorIdentity: this.input.coordinatorIdentity,
+      changedPaths: ["src/domain/routing.ts"],
+    }),
+    authorizeImplementation({
+      decision,
+      actorIdentity: "unassigned-agent",
+      changedPaths: ["test/features/unit/routing-resolution.feature"],
+    }),
+  ];
 });
 
 Then("role違反として拒否する", function () {
-  assert.deepEqual(this.value, {
+  assert.ok(Array.isArray(this.value));
+  assert.deepEqual(this.value[0], {
     allowed: false,
     ruleId: "BR-836-01",
     reason: "coordinatorはCodex利用可能scopeのproduct実装を担当できません",
+  });
+  assert.deepEqual(this.value[1], {
+    allowed: false,
+    ruleId: "BR-836-01",
+    reason: "product実装は解決済みimplementer identityだけが担当できます",
   });
 });
 
@@ -168,7 +186,8 @@ Then("拒否結果はrule IDを持つ", function () {
   assert.equal(
     typeof this.value === "object" &&
       this.value !== null &&
-      "ruleId" in this.value,
+      Array.isArray(this.value) &&
+      this.value.every((result) => isRecord(result) && "ruleId" in result),
     true,
   );
 });
@@ -212,6 +231,10 @@ When(
           models: [lower.slug],
         },
       }),
+      revalidateRouting(resolved, {
+        ...this.input!,
+        implementerIdentity: "different-implementer",
+      }),
     ];
   },
 );
@@ -228,11 +251,12 @@ Then("無告知の後退として拒否する", function () {
 
 Then("実行直前の再検証で解決結果が変化しても拒否する", function () {
   assert.ok(Array.isArray(this.value));
-  assert.deepEqual(this.value[3], {
-    allowed: false,
-    ruleId: "FR-836-06",
-    reason: "実行直前のrouting再検証で解決結果が変化しました",
-  });
+  for (const outcome of this.value.slice(3))
+    assert.deepEqual(outcome, {
+      allowed: false,
+      ruleId: "FR-836-06",
+      reason: "実行直前のrouting再検証で解決結果が変化しました",
+    });
 });
 
 Then("実装を開始しない", function () {

@@ -41,6 +41,10 @@ Then("処理速度はstandardである", function () {
     this.configuredChoice?.modelMapping?.roles.implementer.speed,
     "standard",
   );
+  const invalid = structuredClone(this.configuredChoice);
+  assert.ok(invalid?.modelMapping);
+  invalid.modelMapping.retention.rotationCondition = "unsupported" as never;
+  assert.throws(() => readProjectChoices(JSON.stringify(invalid)));
 });
 
 Given(
