@@ -340,7 +340,7 @@ function createAtomicExclusive(
   const parent = path.dirname(destination);
   verifyContainedParent(storePath, destination);
   const lock = `${destination}.lock`;
-  const lockDescriptor = fs.openSync(lock, "wx", 0o600);
+  const lockDescriptor = acquireRecordLock(lock);
   fs.closeSync(lockDescriptor);
   const temporary = `${destination}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
   try {
@@ -365,6 +365,19 @@ function lockKey(domain: string, value: unknown): string {
   return `${domain}-${crypto.createHash("sha256").update(stableJson(value)).digest("hex")}`;
 }
 
+function acquireRecordLock(lock: string): number {
+  try {
+    return fs.openSync(lock, "wx", 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      throw new Error(
+        `evidence store lockを取得できません。別処理の完了を確認し、異常終了で残存した場合だけlockを手動削除してください: ${lock}`,
+        { cause: error },
+      );
+    throw error;
+  }
+}
+
 function withExclusiveRecordLock<T>(
   storePath: string,
   key: string,
@@ -372,7 +385,7 @@ function withExclusiveRecordLock<T>(
 ): T {
   const lock = containedRecordPath(storePath, `.locks/${key}.lock`);
   verifyContainedParent(storePath, lock);
-  const descriptor = fs.openSync(lock, "wx", 0o600);
+  const descriptor = acquireRecordLock(lock);
   try {
     return action();
   } finally {
@@ -966,7 +979,7 @@ export function applyEvidencePrune(
   value: unknown,
   now: () => Date = () => new Date(),
   dependencies: { remove?: (file: string) => void } = {},
-): { auditId: string; completed: string[]; failed: string[] } {
+): { auditId: string; completed: string[] } {
   const record = requireRecord(
     value,
     [
@@ -1036,7 +1049,6 @@ export function applyEvidencePrune(
   const remove =
     dependencies.remove ?? ((file: string) => fs.rmSync(file, { force: true }));
   const completed: string[] = [];
-  const failed: string[] = [];
   for (const evidenceId of audit.targetIds) {
     withExclusiveRecordLock(
       validatedStorage.storePath,
@@ -1113,11 +1125,13 @@ export function applyEvidencePrune(
             now().toISOString(),
             validatedStorage.retention.maxRecordBytes,
           );
-          failed.push(evidenceId);
-          throw error;
+          throw new Error(
+            `routing evidenceの削除に失敗しました: ${evidenceId}`,
+            { cause: error },
+          );
         }
       },
     );
   }
-  return { auditId: audit.id, completed, failed };
+  return { auditId: audit.id, completed };
 }

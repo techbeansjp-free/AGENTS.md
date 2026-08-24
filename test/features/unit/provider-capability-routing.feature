@@ -6,4 +6,5 @@ Feature: provider capability mappingの所有境界
     Given project固有のprovider capability mappingを読み込む
     When project mappingと汎用packageで固定model slugを検索する
     Then 必須値としてのmodel slug該当件数は0件である
+    And Claude系の固定model slugも所有境界違反として検出する
     And 未知fieldと型不正と不正な選択元のmappingを拒否する

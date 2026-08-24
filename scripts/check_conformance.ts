@@ -45,7 +45,7 @@ export function findPackageModelSlugViolations(
   mapping?: ProviderCapabilityMapping,
 ): PackageModelSlugViolation[] {
   const slugs = new Set<string>();
-  const modelSlug = /\bgpt-[a-z0-9.-]+\b/gu;
+  const modelSlug = /\b(?:gpt|claude)-[a-z0-9][a-z0-9.-]*\b/gu;
   if (mapping)
     for (const match of JSON.stringify(mapping).matchAll(modelSlug))
       if (match[0]) slugs.add(match[0]);

@@ -180,12 +180,14 @@ When("coordinator identityでproduct pathの実装を開始しようとする", 
     authorizeImplementation({
       decision,
       actorIdentity: this.input.coordinatorIdentity,
-      changedPaths: ["src/domain/routing.ts"],
+      changedPaths: ["./src/domain/routing.ts"],
     }),
     authorizeImplementation({
       decision,
       actorIdentity: "unassigned-agent",
-      changedPaths: ["test/features/unit/routing-resolution.feature"],
+      changedPaths: [
+        "fixture/../test/features/unit/routing-resolution.feature",
+      ],
     }),
   ];
 });
@@ -213,6 +215,22 @@ Then("拒否結果はrule IDを持つ", function () {
     true,
   );
 });
+
+Then(
+  "coordinatorとimplementerが同一identityのroutingは解決時に拒否する",
+  function () {
+    assert.ok(this.input);
+    const decision = resolveRouting({
+      ...this.input,
+      implementerIdentity: this.input.coordinatorIdentity,
+    });
+    assert.equal(decision.state, "rejected");
+    assert.equal(
+      decision.state === "rejected" ? decision.ruleId : "",
+      "FR-836-11",
+    );
+  },
+);
 
 Given(
   "最高位coding tierとreasoning effort highとservice tier defaultを解決した",
@@ -351,7 +369,7 @@ Given("起票時点のcatalog fixtureとtrusted mappingを読み込む", functio
   );
 });
 
-Then("解決済みmodelはgpt-5.6-solである", function () {
+Then("解決済みmodelは起票時点の公式recommended defaultである", function () {
   assert.equal(requireResolved(this.decision).model, this.expectedModel);
 });
 

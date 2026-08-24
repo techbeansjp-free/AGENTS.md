@@ -83,7 +83,7 @@ Feature: policy拡張を段階移行して失敗から再実行する
   Scenario: SCN-INT-RISK-016 project policy setはorphan、missing、symlink、duplicate keyを拒否する
     Given valid project policy manifestと悪用fragment variantsがある
     When filesystem policy setを厳密にloadする
-    Then inventory不一致、不正path、duplicate keyはすべて拒否される
+    Then inventory不一致、不正path、型不正、duplicate keyはすべて拒否される
 
   Scenario: SCN-INT-RISK-017 trusted project policy setは単一commitとset hashへ拘束される
     Given originにmanifestと全fragmentを持つtrusted commitがある

@@ -6,8 +6,10 @@ Feature: provider実行入口のread-only観測
     Given provider実行入口のread-only観測関数を注入した
     When provider availabilityを観測する
     Then 外部観測の呼び出し回数は2回以内である
+    And 全provider観測は10秒のtimeout上限を受け取る
     And 正常と起動不能と解釈不能は型付き観測結果を返す
     And Codexはapp-serverのmodel listを厳密に観測する
+    And Codex JSONLの末尾が部分行でも確定応答で観測完了する
 
   Scenario: SCN-UNIT-ROUTING-012 標準エラーの内容をどこへも転記しない
     Given 秘密を含む標準エラーを返すprovider実行関数を注入した

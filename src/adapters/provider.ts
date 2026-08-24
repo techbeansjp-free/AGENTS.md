@@ -46,14 +46,24 @@ function parseJsonLines(stdout: string): unknown[] {
     .map((line) => parseJsonStrict(line, "provider JSONL response"));
 }
 
+function parseTerminatedJsonLines(stdout: string): unknown[] {
+  return parseJsonLines(stdout.slice(0, stdout.lastIndexOf("\n") + 1));
+}
+
 function hasCodexResponse(stdout: string): boolean {
-  try {
-    return parseJsonLines(stdout).some(
-      (message) => isRecord(message) && message.id === CODEX_RESPONSE_ID,
-    );
-  } catch {
-    return false;
+  for (const line of stdout
+    .slice(0, stdout.lastIndexOf("\n") + 1)
+    .split("\n")) {
+    const source = line.trim();
+    if (!source) continue;
+    try {
+      const message = parseJsonStrict(source, "provider JSONL response");
+      if (isRecord(message) && message.id === CODEX_RESPONSE_ID) return true;
+    } catch {
+      continue;
+    }
   }
+  return false;
 }
 
 function codexInput(): string {
@@ -82,7 +92,7 @@ function codexInput(): string {
 }
 
 function codexCatalog(stdout: string): ProviderCatalog | undefined {
-  const response = parseJsonLines(stdout).find(
+  const response = parseTerminatedJsonLines(stdout).find(
     (message) => isRecord(message) && message.id === CODEX_RESPONSE_ID,
   );
   if (!isRecord(response) || !isRecord(response.result)) return undefined;
@@ -142,7 +152,7 @@ async function defaultExecutor(
   return runJsonlSession(file, args, cwd, {
     ...options,
     input: codexInput(),
-    timeoutMs: PROVIDER_TIMEOUT_MS,
+    timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
     isComplete: hasCodexResponse,
   });
 }
@@ -206,7 +216,7 @@ export async function observeProvider(
         ? ["app-server", "--stdio"]
         : ["models", "list", "--json"],
       process.cwd(),
-      { allowFailure: true },
+      { allowFailure: true, timeoutMs: PROVIDER_TIMEOUT_MS },
     );
   } catch {
     return unknownObservation(

@@ -3,6 +3,7 @@ import { redactSecrets } from "./security.js";
 
 export interface ProcessOptions {
   allowFailure?: boolean;
+  timeoutMs?: number;
 }
 
 export interface ProcessResult {
@@ -29,6 +30,7 @@ export function run(
     cwd,
     encoding: "utf8",
     env: process.env,
+    ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
   });
   const output = {
     status: result.status ?? 1,

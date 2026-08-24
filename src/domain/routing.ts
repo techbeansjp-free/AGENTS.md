@@ -4,6 +4,7 @@ import type {
   ProviderModelObservation,
   RoutingRole,
 } from "../types.js";
+import path from "node:path";
 
 export type RoutingAvailabilityState = "available" | "unavailable" | "unknown";
 
@@ -112,6 +113,7 @@ export function resolveRouting(input: RoutingResolutionInput): RoutingDecision {
     input.coordinatorIdentity.trim() === "" ||
     input.implementerIdentity.trim() === "" ||
     input.reviewerIdentity.trim() === "" ||
+    input.coordinatorIdentity === input.implementerIdentity ||
     input.implementerIdentity === input.reviewerIdentity
   )
     return rejected(
@@ -227,7 +229,7 @@ export function revalidateRouting(
 }
 
 function isProductPath(relative: string): boolean {
-  const normalized = relative.replaceAll("\\", "/");
+  const normalized = path.posix.normalize(relative.replaceAll("\\", "/"));
   return (
     normalized.startsWith("src/") ||
     normalized.startsWith("test/") ||

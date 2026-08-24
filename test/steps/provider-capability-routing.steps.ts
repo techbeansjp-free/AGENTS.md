@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { findPackageModelSlugViolations } from "../../scripts/check_conformance.js";
 import {
   readProviderCapabilityMapping,
   validateProviderCapabilityMapping,
@@ -24,35 +25,32 @@ Given("project固有のprovider capability mappingを読み込む", function () 
   );
 });
 
-function sourceFiles(directory: string): string[] {
-  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const resolved = path.join(directory, entry.name);
-    return entry.isDirectory() ? sourceFiles(resolved) : [resolved];
-  });
-}
-
 When("project mappingと汎用packageで固定model slugを検索する", function () {
   assert.ok(this.capabilityMapping);
-  const modelSlug = /\bgpt-[a-z0-9.-]+\b/u;
-  const mappingSource = JSON.stringify(this.capabilityMapping);
-  this.modelSlugOccurrences = [
-    ...(mappingSource.match(/\bgpt-[a-z0-9.-]+\b/gu) ?? []).map(
-      (slug) => `project mapping:${slug}`,
-    ),
-    ".agent-skill-chain/schemas",
-    ".agent-skill-chain/templates",
-    "src",
-  ].flatMap((directory) =>
-    directory.startsWith("project mapping:")
-      ? [directory]
-      : sourceFiles(directory).filter((file) =>
-          modelSlug.test(fs.readFileSync(file, "utf8")),
-        ),
-  );
+  this.modelSlugOccurrences = findPackageModelSlugViolations(
+    process.cwd(),
+    this.capabilityMapping,
+  ).map((violation) => `${violation.path}:${violation.slug}`);
 });
 
 Then("必須値としてのmodel slug該当件数は0件である", function () {
   assert.deepEqual(this.modelSlugOccurrences, []);
+});
+
+Then("Claude系の固定model slugも所有境界違反として検出する", function () {
+  const root = this.temp("asc-claude-slug-");
+  const sourceDirectory = path.join(root, "src");
+  fs.mkdirSync(sourceDirectory, { recursive: true });
+  fs.writeFileSync(
+    path.join(sourceDirectory, "fixed-model.ts"),
+    'export const model = "claude-opus-4-1-fixture";\n',
+  );
+  assert.deepEqual(findPackageModelSlugViolations(root), [
+    {
+      path: "src/fixed-model.ts",
+      slug: "claude-opus-4-1-fixture",
+    },
+  ]);
 });
 
 Then("未知fieldと型不正と不正な選択元のmappingを拒否する", function () {

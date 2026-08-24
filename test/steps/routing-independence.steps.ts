@@ -198,6 +198,26 @@ Then("candidate側の資産による自己評価を拒否する", function () {
   assert.equal(this.independenceResult?.ruleId, "FR-836-12");
 });
 
+Then("dot segmentを含むcandidate pathも安全側に停止する", function () {
+  assert.ok(this.trustedRef);
+  assert.ok(this.candidateHead);
+  for (const candidatePath of [
+    "./src/domain/routing.ts",
+    "fixture/../src/domain/routing.ts",
+  ]) {
+    const result = checkRoutingIndependence({
+      implementerIdentity: "codex-implementer",
+      reviewerIdentity: "independent-reviewer",
+      candidatePaths: [candidatePath],
+      trustedRef: this.trustedRef,
+      candidateHead: this.candidateHead,
+      evaluatorRef: this.trustedRef,
+    });
+    assert.equal(result.verdict, "pending");
+    assert.equal(result.ruleId, "FR-836-12");
+  }
+});
+
 Then("evaluatorRefは評価結果に記録する", function () {
   assert.equal(this.independenceResult?.evaluatorRef, this.candidateHead);
 });

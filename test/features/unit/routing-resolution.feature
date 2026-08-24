@@ -16,6 +16,7 @@ Feature: coordinatorからimplementerへのrouting解決
     When coordinator identityでproduct pathの実装を開始しようとする
     Then role違反として拒否する
     And 拒否結果はrule IDを持つ
+    And coordinatorとimplementerが同一identityのroutingは解決時に拒否する
 
   Scenario: SCN-UNIT-ROUTING-005 低位modelと別reasoningと高速tierへの無告知後退を拒否する
     Given 最高位coding tierとreasoning effort highとservice tier defaultを解決した

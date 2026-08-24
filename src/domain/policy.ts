@@ -710,6 +710,11 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     errors.push("conformanceFilesは126件以内でなければなりません");
   if (providerFiles.length > 126)
     errors.push("providerFilesは126件以内でなければなりません");
+  if (
+    manifest.providerFiles !== undefined &&
+    !Array.isArray(manifest.providerFiles)
+  )
+    errors.push("providerFilesは配列でなければなりません");
   for (const reference of references)
     if (
       typeof reference !== "string" ||

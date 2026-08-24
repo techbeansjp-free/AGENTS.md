@@ -52,7 +52,9 @@ function safeCandidatePath(relative: string): boolean {
     !relative.startsWith("/") &&
     !relative.includes("\\") &&
     !CONTROL.test(relative) &&
-    relative.split("/").every((part) => part !== "" && part !== "..")
+    relative
+      .split("/")
+      .every((part) => part !== "" && part !== "." && part !== "..")
   );
 }
 

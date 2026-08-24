@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -15,6 +16,7 @@ import {
   type RoutingEvidenceIssueInput,
 } from "../../src/domain/routing-evidence.js";
 import type { RoutingEvidenceRetentionChoice } from "../../src/types.js";
+import { stableJson } from "../../src/lib/security.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class RoutingEvidenceWorld extends WorkflowWorld {
@@ -68,6 +70,16 @@ function evidenceInput(
 function requireEvidence(world: RoutingEvidenceWorld): RoutingEvidence {
   assert.ok(world.evidence);
   return world.evidence;
+}
+
+function captureError(action: () => void): Error {
+  try {
+    action();
+  } catch (error) {
+    assert.ok(error instanceof Error);
+    return error;
+  }
+  assert.fail("例外が必要です");
 }
 
 Given("Issueとscopeへ拘束するrouting evidence入力がある", function () {
@@ -128,6 +140,65 @@ Then("同じ識別子の再発行は排他的に拒否される", function () {
       () => new Date("2026-08-24T01:02:04.000Z"),
     ),
   );
+});
+
+Then("残存lockはpathと復旧手順を示して拒否される", function () {
+  const evidence = requireEvidence(this);
+  const lockHash = crypto
+    .createHash("sha256")
+    .update(stableJson(evidence.id))
+    .digest("hex");
+  const recordLock = path.join(
+    this.repositoryRoot,
+    this.storeRoot,
+    ".locks",
+    `evidence-${lockHash}.lock`,
+  );
+  fs.writeFileSync(recordLock, "stale fixture\n");
+  const recordError = captureError(() =>
+    appendCompletionRecord({
+      repositoryRoot: this.repositoryRoot,
+      storeRoot: this.storeRoot,
+      retention: this.retention,
+      routingEvidenceId: evidence.id,
+      implementationHead: this.implementationHead,
+      endState: "completed",
+    }),
+  );
+  fs.rmSync(recordLock);
+
+  const completionId = `completion-${evidence.id}-20260824020000000`;
+  const atomicLock = path.join(
+    this.repositoryRoot,
+    this.storeRoot,
+    "completion",
+    `${completionId}.json.lock`,
+  );
+  fs.mkdirSync(path.dirname(atomicLock), { recursive: true });
+  fs.writeFileSync(atomicLock, "stale fixture\n");
+  const atomicError = captureError(() =>
+    appendCompletionRecord(
+      {
+        repositoryRoot: this.repositoryRoot,
+        storeRoot: this.storeRoot,
+        retention: this.retention,
+        routingEvidenceId: evidence.id,
+        implementationHead: this.implementationHead,
+        endState: "completed",
+      },
+      () => new Date("2026-08-24T02:00:00.000Z"),
+    ),
+  );
+  fs.rmSync(atomicLock);
+
+  for (const [error, lock] of [
+    [recordError, recordLock],
+    [atomicError, atomicLock],
+  ] as const) {
+    assert.match(error.message, /別処理の完了を確認/u);
+    assert.equal(error.message.includes(lock), true);
+    assert.match(error.message, /手動削除/u);
+  }
 });
 
 When("routing evidenceへcompletion recordを追記する", function () {
@@ -294,7 +365,7 @@ When(
   function () {
     assert.ok(this.preview);
     let failed = false;
-    assert.throws(() =>
+    const failure = captureError(() =>
       applyEvidencePrune(
         {
           repositoryRoot: this.repositoryRoot,
@@ -314,6 +385,10 @@ When(
       ),
     );
     assert.equal(failed, true);
+    assert.equal(
+      failure.message.includes(this.preview.targetIds[0] ?? ""),
+      true,
+    );
     const tombstones = path.join(
       this.repositoryRoot,
       this.storeRoot,
@@ -342,6 +417,12 @@ Then("auditとtombstoneから冪等に削除を完了できる", function () {
       this.value !== null &&
       "completed" in this.value,
     true,
+  );
+  assert.equal(
+    typeof this.value === "object" &&
+      this.value !== null &&
+      "failed" in this.value,
+    false,
   );
   assert.doesNotThrow(() =>
     applyEvidencePrune(
