@@ -13,6 +13,7 @@
       "id": "I2",
       "sourcePaths": [
         ".agent-skill-chain/project-policy.json",
+        ".agent-skill-chain/project/providers/capability-mapping.json",
         ".agent-skill-chain/00_利用案内.md"
       ],
       "enforcement": [

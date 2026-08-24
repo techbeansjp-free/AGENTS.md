@@ -22,5 +22,6 @@
     "project/rules/safety.json"
   ],
   "conformanceFiles": ["project/conformance/bindings.json"],
+  "providerFiles": ["project/providers/capability-mapping.json"],
   "conformanceDirectory": "project/conformance"
 }
