@@ -2377,8 +2377,12 @@ When(
   },
 );
 Then("実fileは復旧再適用され改竄retryだけがstructured拒否される", function () {
-  for (const result of this.cliManifestResults)
-    assert.equal(result.status, 0, result.stderr);
+  for (const [index, result] of this.cliManifestResults.entries())
+    assert.equal(
+      result.status,
+      0,
+      `operation=${index} stdout=${result.stdout} stderr=${result.stderr}`,
+    );
   for (const entry of this.cliManifestEntries)
     assert.equal(
       fs.readFileSync(path.join(this.root, entry.path), "utf8"),

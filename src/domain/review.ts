@@ -130,6 +130,129 @@ interface ReviewInput extends ImmutableReviewEvidence {
   findings?: Finding[];
 }
 
+function reviewInput(value: unknown): value is ReviewInput {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const allowed = [
+    "round",
+    "developmentConsiderations",
+    "affirmative",
+    "adversarial",
+    "rationales",
+    "focus",
+    "tests",
+    "specConsistency",
+    "findings",
+    "headSha",
+    "candidateEvidence",
+    "externalEvidence",
+    "valid",
+    "status",
+    "errors",
+  ];
+  if (Object.keys(record).some((key) => !allowed.includes(key))) return false;
+  if (typeof record.round !== "number") return false;
+  if (record.valid !== undefined && typeof record.valid !== "boolean")
+    return false;
+  if (record.status !== undefined && typeof record.status !== "string")
+    return false;
+  if (
+    record.errors !== undefined &&
+    (!Array.isArray(record.errors) ||
+      !record.errors.every((item) => typeof item === "string"))
+  )
+    return false;
+  for (const [field, expected] of [
+    ["affirmative", AFFIRMATIVE],
+    ["adversarial", ADVERSARIAL],
+  ] as const)
+    if (
+      record[field] !== undefined &&
+      (!isStringRecord(record[field]) ||
+        Object.keys(record[field]).some((key) => !expected.includes(key)))
+    )
+      return false;
+  if (record.rationales !== undefined) {
+    if (!isPlainRecord(record.rationales)) return false;
+    if (
+      Object.keys(record.rationales).some(
+        (key) => !["affirmative", "adversarial"].includes(key),
+      )
+    )
+      return false;
+    for (const [field, expected] of [
+      ["affirmative", AFFIRMATIVE],
+      ["adversarial", ADVERSARIAL],
+    ] as const)
+      if (
+        record.rationales[field] !== undefined &&
+        (!isStringRecord(record.rationales[field]) ||
+          Object.keys(record.rationales[field]).some(
+            (key) => !expected.includes(key),
+          ))
+      )
+        return false;
+  }
+  if (record.focus !== undefined) {
+    if (!isPlainRecord(record.focus)) return false;
+    if (
+      Object.keys(record.focus).some(
+        (key) =>
+          ![
+            "unresolvedBlocking",
+            "fixedDiff",
+            "adjacentScope",
+            "fullRescan",
+          ].includes(key),
+      )
+    )
+      return false;
+  }
+  if (
+    record.findings !== undefined &&
+    (!Array.isArray(record.findings) ||
+      !record.findings.every(
+        (finding) =>
+          isPlainRecord(finding) &&
+          Object.keys(finding).every((key) =>
+            ["id", "severity", "status", "evidence", "riskAcceptance"].includes(
+              key,
+            ),
+          ) &&
+          (finding.riskAcceptance === undefined ||
+            (isPlainRecord(finding.riskAcceptance) &&
+              Object.keys(finding.riskAcceptance).every((key) =>
+                ["authority", "owner", "reason", "reviewCondition"].includes(
+                  key,
+                ),
+              ))),
+      ))
+  )
+    return false;
+  if (
+    record.candidateEvidence !== undefined &&
+    !isPlainRecord(record.candidateEvidence)
+  )
+    return false;
+  if (
+    record.externalEvidence !== undefined &&
+    !isPlainRecord(record.externalEvidence)
+  )
+    return false;
+  return true;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isPlainRecord(value) &&
+    Object.values(value).every((item) => typeof item === "string")
+  );
+}
+
 function validRiskAcceptance(acceptance?: RiskAcceptance): boolean {
   return (
     acceptance?.authority === "human" &&
@@ -403,7 +526,15 @@ export function buildReviewEvidence(observation: ReviewObservation) {
   };
 }
 
-export function evaluateReview(review: ReviewInput) {
+export function evaluateReview(reviewValue: unknown) {
+  if (!reviewInput(reviewValue))
+    return {
+      approved: false,
+      blocking: [],
+      acceptedRisks: [],
+      errors: ["review入力の構造または未知fieldが不正です"],
+    };
+  const review = reviewValue;
   if (!Number.isInteger(review.round) || review.round < 1 || review.round > 3)
     throw new Error("レビューのラウンドは1〜3で指定してください");
   const errors: string[] = [];

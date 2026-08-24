@@ -41,7 +41,7 @@
     "formatCheckCommand": "npm run format:check",
     "formatWriteCommand": "npm run format:write",
     "typecheckCommand": "npm run typecheck",
-    "runtimeValidation": "JSON Schemaと明示的type guardで外部JSON・policy・evidenceを検証する",
+    "runtimeValidation": "外部JSONをunknownで読み、policy・manifest・state・evidenceの入力種別別type guardとdomain validatorで未知field・型不正を拒否する",
     "auxiliaryLanguages": {
       "python": {
         "status": "not-applicable",

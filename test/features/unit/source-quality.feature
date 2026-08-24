@@ -35,3 +35,19 @@ Feature: project固有の型品質と汎用開発考慮事項
     Given JSDoc型注釈を持つTypeScript sourceがある
     When source型契約を検証する
     Then source型契約は失敗する
+
+  Scenario: SCN-UNIT-QUALITY-008 base事前登録済みの品質強化を次PRで有効化できる
+    Given baseで事前登録したversioned staged品質proposalと完全一致するcandidateがある
+    When trusted品質契約migrationを検証する
+    Then 事前登録済みの品質強化だけを許可する
+
+  Scenario: SCN-UNIT-QUALITY-009 candidateは同一PRで品質proposalを登録して自己承認できない
+    Given baseで事前登録したversioned staged品質proposalと完全一致するcandidateがある
+    And candidate自身だけが登録した品質proposalで同じ変更を有効化しようとする
+    When trusted品質契約migrationを検証する
+    Then candidateによる同一PR内の自己承認を拒否する
+
+  Scenario: SCN-UNIT-QUALITY-010 外部JSONは入力種別ごとに型と未知fieldを検証する
+    Given 型不正なmigration manifestとstateの外部JSONがある
+    When CLIの入力種別別runtime validatorを実行する
+    Then 型不正と未知fieldを副作用前に拒否する

@@ -30,7 +30,6 @@ import {
   rollbackMigration,
   sanitizeOutput,
   serializeDiagnostic,
-  type ConceptualMigrationState,
 } from "./domain/enforcement.js";
 import {
   applyFileMigration,
@@ -49,7 +48,7 @@ import {
 import { git } from "./lib/process.js";
 import { writeFileAtomic } from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
-import { parseJsonStrict, resolveContained } from "./lib/security.js";
+import { resolveContained } from "./lib/security.js";
 import {
   canonicalLifecycleCommand,
   CLI_USAGE,
@@ -57,7 +56,19 @@ import {
 } from "./cli-contract.js";
 import { type Policy, isRecord } from "./types.js";
 import { type PolicySet } from "./domain/policy.js";
-import { type ModeAnswer } from "./domain/mode.js";
+import {
+  readDeliveryEvidence,
+  readEnforcementInput,
+  readFinalizeEvidence,
+  isPolicyInput,
+  readJsonInput,
+  readMigrationManifest,
+  readMigrationState,
+  readModeAssessment,
+  readPolicyFileInput,
+  readPolicyJson,
+  readSpecReview,
+} from "./adapters/json-input.js";
 
 type Flags = Record<string, string | boolean>;
 
@@ -121,25 +132,6 @@ function policyAuthorityFailure(
 function print(value: unknown): void {
   process.stdout.write(`${JSON.stringify(sanitizeOutput(value), null, 2)}\n`);
 }
-function readJson<T = unknown>(file: string): T {
-  return parseJsonStrict(fs.readFileSync(file, "utf8"), file) as T;
-}
-
-/** Fragmented policy input is loaded as a complete inventory; legacy input remains a single policy object. */
-function readPolicyInput(file: string): Policy | PolicySet {
-  const value = readJson<Record<string, unknown>>(file);
-  if (value.schemaVersion !== "agent-skill-chain/project-policy-manifest/v1")
-    return value as unknown as Policy;
-  if (
-    path.basename(file) !== "project-policy.json" ||
-    path.basename(path.dirname(file)) !== ".agent-skill-chain"
-  )
-    throw new Error(
-      "fragmented project policy manifestは.agent-skill-chain/project-policy.jsonから読み込んでください",
-    );
-  return loadProjectPolicySet(path.dirname(path.dirname(file)));
-}
-
 function isPolicySet(input: Policy | PolicySet): input is PolicySet {
   return "policy" in input;
 }
@@ -204,9 +196,7 @@ export async function main(argv: string[]): Promise<number> {
     const root = path.resolve(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
-    const assessment = readJson<Record<string, ModeAnswer>>(
-      required(flags, "assessment"),
-    );
+    const assessment = readModeAssessment(required(flags, "assessment"));
     print(
       createIssueStaging(root, {
         title: required(flags, "title"),
@@ -284,9 +274,7 @@ export async function main(argv: string[]): Promise<number> {
     );
     const review =
       typeof flags.review === "string"
-        ? readJson<NonNullable<Parameters<typeof validateSpecs>[1]>["review"]>(
-            flags.review,
-          )
+        ? readSpecReview(flags.review)
         : undefined;
     const result = validateSpecs(root, {
       changedFiles:
@@ -301,7 +289,7 @@ export async function main(argv: string[]): Promise<number> {
   if (command === "review" && subcommand === "validate") {
     const { flags, positionals } = parse(rest);
     const file = positionals[0] ?? required(flags, "file");
-    const result = evaluateReview(readJson(file));
+    const result = evaluateReview(readJsonInput(file));
     if (result.approved) {
       const pending = {
         ...result,
@@ -435,7 +423,7 @@ export async function main(argv: string[]): Promise<number> {
     );
     const choices = loadProjectPolicySet(root).policy.projectChoices;
     const result = validateScenarioTrace(
-      readJson(path.resolve(required(flags, "evidence"))),
+      readJsonInput(path.resolve(required(flags, "evidence"))),
       { layers: choices?.testLayers },
     );
     print(result);
@@ -446,11 +434,9 @@ export async function main(argv: string[]): Promise<number> {
     const root = path.resolve(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
-    const contract = readJson(path.resolve(required(flags, "contract")));
-    const binding = readJson(path.resolve(required(flags, "binding")));
-    const evidence = readJson<
-      Parameters<typeof validateRepositoryConformance>[3]
-    >(path.resolve(required(flags, "evidence")));
+    const contract = readJsonInput(path.resolve(required(flags, "contract")));
+    const binding = readJsonInput(path.resolve(required(flags, "binding")));
+    const evidence = readJsonInput(path.resolve(required(flags, "evidence")));
     const result = validateRepositoryConformance(
       root,
       contract,
@@ -640,8 +626,9 @@ export async function main(argv: string[]): Promise<number> {
       );
       return result.valid ? 0 : 1;
     }
-    const parsed = readJson<Record<string, unknown>>(file);
+    const parsed = readJsonInput(file);
     if (
+      isRecord(parsed) &&
       parsed.schemaVersion === "agent-skill-chain/project-policy-manifest/v1"
     ) {
       const candidateSet = loadProjectPolicySet(root);
@@ -695,12 +682,14 @@ export async function main(argv: string[]): Promise<number> {
   }
   if (command === "policy" && subcommand === "evaluate") {
     const { flags } = parse(rest);
-    const trusted = readJson<Policy>(path.resolve(required(flags, "trusted")));
-    const candidate = readJson<Policy>(
+    const trustedValue = readJsonInput(
+      path.resolve(required(flags, "trusted")),
+    );
+    const candidateValue = readJsonInput(
       path.resolve(required(flags, "candidate")),
     );
-    const trustedValidation = validatePolicy(trusted);
-    const candidateValidation = validatePolicy(candidate);
+    const trustedValidation = validatePolicy(trustedValue);
+    const candidateValidation = validatePolicy(candidateValue);
     if (!trustedValidation.valid || !candidateValidation.valid) {
       const diagnostic =
         trustedValidation.diagnostics[0] ?? candidateValidation.diagnostics[0];
@@ -715,7 +704,9 @@ export async function main(argv: string[]): Promise<number> {
       );
       return 1;
     }
-    const result = compareTrustedPolicy(trusted, candidate);
+    if (!isPolicyInput(trustedValue) || !isPolicyInput(candidateValue))
+      throw new Error("検証済みpolicy入力の型確定に失敗しました");
+    const result = compareTrustedPolicy(trustedValue, candidateValue);
     print(
       result.allowed
         ? result
@@ -725,10 +716,8 @@ export async function main(argv: string[]): Promise<number> {
   }
   if (command === "policy" && subcommand === "enforce") {
     const { flags } = parse(rest);
-    const policy = readJson<Policy>(path.resolve(required(flags, "policy")));
-    const input = readJson<
-      Omit<Parameters<typeof enforceOperation>[0], "policy">
-    >(path.resolve(required(flags, "input")));
+    const policy = readPolicyJson(path.resolve(required(flags, "policy")));
+    const input = readEnforcementInput(path.resolve(required(flags, "input")));
     const result = enforceOperation({ ...input, policy });
     print(result.allowed ? result : serializeDiagnostic(result));
     return result.allowed ? 0 : 1;
@@ -758,9 +747,9 @@ export async function main(argv: string[]): Promise<number> {
       typeof flags.candidate === "string"
         ? path.resolve(flags.candidate)
         : undefined;
-    const trusted = trustedFile ? readPolicyInput(trustedFile) : undefined;
+    const trusted = trustedFile ? readPolicyFileInput(trustedFile) : undefined;
     const candidate = candidateFile
-      ? readPolicyInput(candidateFile)
+      ? readPolicyFileInput(candidateFile)
       : undefined;
     if (operation === "apply") {
       if (!trusted || !candidate)
@@ -781,10 +770,7 @@ export async function main(argv: string[]): Promise<number> {
         return 1;
       }
       if (typeof flags.manifest === "string") {
-        const manifest = readJson<{
-          root: string;
-          entries: Parameters<typeof planFileMigration>[3];
-        }>(path.resolve(flags.manifest));
+        const manifest = readMigrationManifest(path.resolve(flags.manifest));
         const plan = planFileMigration(
           path.resolve(manifest.root),
           trusted,
@@ -832,7 +818,9 @@ export async function main(argv: string[]): Promise<number> {
     } else {
       if (!stateFile || !fs.existsSync(stateFile))
         throw new Error("rollback/retryには既存の--stateが必要です");
-      const state = readJson<Record<string, unknown>>(stateFile);
+      const loadedState = readMigrationState(stateFile);
+      const state = loadedState.state;
+      const fileMigrationState = loadedState.kind === "file";
       if (!apply) {
         print({
           state: "preview",
@@ -843,7 +831,7 @@ export async function main(argv: string[]): Promise<number> {
         });
         return 0;
       }
-      if (state.manifest) {
+      if (fileMigrationState) {
         if (!trusted || !candidate)
           throw new Error(
             "実manifestのrollback/retryには--trustedと--candidateが必要です",
@@ -851,7 +839,9 @@ export async function main(argv: string[]): Promise<number> {
         const approvedPlanHash = required(flags, "approved-plan-hash");
         const persist = (value: unknown): void =>
           writeFileAtomic(stateFile, `${JSON.stringify(value, null, 2)}\n`);
-        const migrationState = state as unknown as MigrationState;
+        if (loadedState.kind !== "file")
+          throw new Error("file migration stateの型確定に失敗しました");
+        const migrationState = loadedState.state;
         result =
           operation === "rollback"
             ? rollbackFileMigration(migrationState, trusted, candidate, {
@@ -877,16 +867,27 @@ export async function main(argv: string[]): Promise<number> {
           approvedPlanHash: required(flags, "approved-plan-hash"),
           expectedRevision,
         };
-        const conceptualState = state as unknown as ConceptualMigrationState;
-        result =
-          operation === "rollback"
-            ? rollbackMigration(conceptualState, authority)
-            : retryMigration(
-                conceptualState,
-                assembledPolicy(trusted as Policy | PolicySet),
-                assembledPolicy(candidate as Policy | PolicySet),
-                authority,
-              );
+        if (loadedState.kind !== "conceptual")
+          throw new Error("conceptual migration stateの型確定に失敗しました");
+        const conceptualState = loadedState.state;
+        if (operation !== "rollback" && (!trusted || !candidate))
+          throw new Error(
+            "conceptual migration retryにはtrustedとcandidateが必要です",
+          );
+        if (operation === "rollback")
+          result = rollbackMigration(conceptualState, authority);
+        else {
+          if (!trusted || !candidate)
+            throw new Error(
+              "conceptual migration retryにはtrustedとcandidateが必要です",
+            );
+          result = retryMigration(
+            conceptualState,
+            assembledPolicy(trusted),
+            assembledPolicy(candidate),
+            authority,
+          );
+        }
       }
     }
     if (apply && result.state === "rejected") {
@@ -930,9 +931,7 @@ export async function main(argv: string[]): Promise<number> {
     const apply = applyMode(flags);
     const root = path.resolve(required(flags, "root"));
     const target = path.resolve(required(flags, "path"));
-    const evidence = readJson<Parameters<typeof inspectFinalizeState>[2]>(
-      required(flags, "evidence"),
-    );
+    const evidence = readFinalizeEvidence(required(flags, "evidence"));
     const state = inspectFinalizeState(root, target, evidence);
     const report = buildFinalizeReport(state);
     if (!apply) {
@@ -963,9 +962,8 @@ export async function main(argv: string[]): Promise<number> {
   if (command === "pr" && subcommand === "create") {
     const { flags } = parse(rest);
     const apply = applyMode(flags);
-    const evidence = readJson<
-      Parameters<typeof createPullRequest>[0]["evidence"]
-    >(path.resolve(required(flags, "evidence")));
+    const evidenceFile = path.resolve(required(flags, "evidence"));
+    const evidence = readDeliveryEvidence(evidenceFile);
     const root = path.resolve(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );

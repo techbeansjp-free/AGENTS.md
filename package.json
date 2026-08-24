@@ -4,6 +4,7 @@
   "description": "人とAIエージェントが使う、安全側に倒す軽量開発ワークフロー。",
   "type": "module",
   "agentSkillChain": {
+    "qualityContractVersion": 1,
     "policySchemaVersion": "0.3.1",
     "compatiblePolicySchemaVersions": [
       "0.3.0"
@@ -38,8 +39,8 @@
     "cli:check": "node --import tsx scripts/check_cli_contract.ts",
     "project:quality": "node --import tsx scripts/check_project_quality.ts",
     "lint": "eslint .",
-    "format:check": "prettier --check \"{src,bin,scripts,test}/**/*.{ts,json}\" \".agent-skill-chain/**/*.json\" \"*.{json,mjs}\" \".github/**/*.yml\"",
-    "format:write": "prettier --write \"{src,bin,scripts,test}/**/*.{ts,json}\" \".agent-skill-chain/**/*.json\" \"*.{json,mjs}\" \".github/**/*.yml\"",
+    "format:check": "prettier --check \"{src,bin,scripts,test}/**/*.{ts,json}\" \".agent-skill-chain/**/*.json\" \"*.{json,mjs}\" \".github/**/*.{json,yml}\"",
+    "format:write": "prettier --write \"{src,bin,scripts,test}/**/*.{ts,json}\" \".agent-skill-chain/**/*.json\" \"*.{json,mjs}\" \".github/**/*.{json,yml}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "source:check": "node --import tsx scripts/check_source_quality.ts",
     "docs:format": "node --import tsx scripts/check_japanese_docs.ts",

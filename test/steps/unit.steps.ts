@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import assert from "node:assert/strict";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
@@ -223,7 +224,11 @@ interface UnitWorld extends WorkflowWorld {
   processSecret: "ghp_abcdefghijklmnopqrstuvwxyz1234567890";
   projectQualityResult: ReturnType<typeof checkProjectQualityContract>;
   projectQualityRoot: string;
+  projectQualityTrustedRoot: string;
   releaseVersion: string;
+  runtimeInputErrors: string[];
+  runtimeManifestFile: string;
+  runtimeStateFile: string;
   review: ReviewFixture;
   reviewTemplate: string;
   root: string;
@@ -552,6 +557,7 @@ Given(
     this.projectQualityRoot = this.temp("asc-quality-relaxation-");
     for (const relative of [
       ".agent-skill-chain/project/choices/development.json",
+      ".github/trusted-quality-proposals.json",
       ".github/workflows/ci.yml",
       ".github/workflows/trusted-quality.yml",
       ".prettierignore",
@@ -635,6 +641,219 @@ When("project品質bindingを検証する", function () {
     this.projectQualityRoot,
     process.cwd(),
   );
+});
+
+function copyQualityContractFixture(root: string): void {
+  for (const relative of [
+    ".agent-skill-chain/project/choices/development.json",
+    ".github/trusted-quality-proposals.json",
+    ".github/workflows/ci.yml",
+    ".github/workflows/trusted-quality.yml",
+    ".prettierignore",
+    "cucumber.mjs",
+    "eslint.config.mjs",
+    "package-lock.json",
+    "package.json",
+    "scripts/check_project_quality.ts",
+    "scripts/check_source_quality.ts",
+    "tsconfig.json",
+    "tsconfig.build.json",
+  ]) {
+    const destination = path.join(root, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(relative, destination);
+  }
+  const stepsRoot = path.join(root, "test/steps");
+  fs.mkdirSync(stepsRoot, { recursive: true });
+  fs.writeFileSync(
+    path.join(stepsRoot, "safe.steps.ts"),
+    "const typed = stepDefinitions<WorkflowWorld>();\nvoid typed;\n",
+  );
+}
+
+function fileSha256(file: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(file))
+    .digest("hex");
+}
+
+function valueSha256(value: unknown): string {
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(value))
+    .digest("hex");
+}
+
+Given(
+  "baseで事前登録したversioned staged品質proposalと完全一致するcandidateがある",
+  function () {
+    this.projectQualityTrustedRoot = this.temp("asc-quality-trusted-");
+    this.projectQualityRoot = this.temp("asc-quality-candidate-");
+    copyQualityContractFixture(this.projectQualityTrustedRoot);
+    copyQualityContractFixture(this.projectQualityRoot);
+    const relative = ".prettierignore";
+    const trustedFile = path.join(this.projectQualityTrustedRoot, relative);
+    const candidateFile = path.join(this.projectQualityRoot, relative);
+    fs.writeFileSync(
+      candidateFile,
+      fs
+        .readFileSync(candidateFile, "utf8")
+        .replace("docs/reviews/01_課題834実装レビュー.md\n", ""),
+    );
+    const candidatePackageFile = path.join(
+      this.projectQualityRoot,
+      "package.json",
+    );
+    const candidatePackage = JSON.parse(
+      fs.readFileSync(candidatePackageFile, "utf8"),
+    ) as unknown as {
+      agentSkillChain: { qualityContractVersion: number };
+    };
+    candidatePackage.agentSkillChain.qualityContractVersion = 2;
+    fs.writeFileSync(
+      candidatePackageFile,
+      `${JSON.stringify(candidatePackage, null, 2)}\n`,
+    );
+    const proposal = {
+      proposalId: "TQP-QUALITY-STRENGTHENING-001",
+      status: "staged",
+      fromVersion: 1,
+      toVersion: 2,
+      owner: "repository maintainer",
+      rationale: "review文書をformatter対象へ戻して形式品質を強化する",
+      rollback: "qualityContractVersion 1と従来ignore内容へ戻す",
+      targets: [
+        {
+          kind: "file",
+          name: relative,
+          beforeSha256: fileSha256(trustedFile),
+          afterSha256: fileSha256(candidateFile),
+        },
+        {
+          kind: "packageField",
+          name: "agentSkillChain.qualityContractVersion",
+          beforeSha256: valueSha256(1),
+          afterSha256: valueSha256(2),
+        },
+      ],
+    };
+    const registry = {
+      schemaVersion: "agent-skill-chain/trusted-quality-proposals/v1",
+      proposals: [proposal],
+    };
+    for (const root of [
+      this.projectQualityTrustedRoot,
+      this.projectQualityRoot,
+    ])
+      fs.writeFileSync(
+        path.join(root, ".github/trusted-quality-proposals.json"),
+        `${JSON.stringify(registry, null, 2)}\n`,
+      );
+  },
+);
+
+Given(
+  "candidate自身だけが登録した品質proposalで同じ変更を有効化しようとする",
+  function () {
+    const registryFile = path.join(
+      this.projectQualityTrustedRoot,
+      ".github/trusted-quality-proposals.json",
+    );
+    fs.writeFileSync(
+      registryFile,
+      `${JSON.stringify({ schemaVersion: "agent-skill-chain/trusted-quality-proposals/v1", proposals: [] }, null, 2)}\n`,
+    );
+  },
+);
+
+When("trusted品質契約migrationを検証する", function () {
+  this.projectQualityResult = checkProjectQualityContract(
+    this.projectQualityRoot,
+    this.projectQualityTrustedRoot,
+  );
+});
+
+Then("事前登録済みの品質強化だけを許可する", function () {
+  assert.equal(
+    this.projectQualityResult.valid,
+    true,
+    JSON.stringify(this.projectQualityResult),
+  );
+});
+
+Then("candidateによる同一PR内の自己承認を拒否する", function () {
+  assert.equal(this.projectQualityResult.valid, false);
+  assert.ok(
+    this.projectQualityResult.errors.some((error: string) =>
+      error.includes("baseで事前登録済み"),
+    ),
+  );
+});
+
+Given("型不正なmigration manifestとstateの外部JSONがある", function () {
+  const root = this.temp("asc-runtime-input-");
+  this.runtimeManifestFile = path.join(root, "manifest.json");
+  this.runtimeStateFile = path.join(root, "state.json");
+  fs.writeFileSync(
+    this.runtimeManifestFile,
+    `${JSON.stringify({ root, entries: [{ kind: "runtime", path: 42, after: true }], unknown: "ignored" }, null, 2)}\n`,
+  );
+  fs.writeFileSync(
+    this.runtimeStateFile,
+    `${JSON.stringify({ manifest: [], revision: "zero", unknown: "ignored" }, null, 2)}\n`,
+  );
+  this.runtimeInputErrors = [];
+});
+
+When("CLIの入力種別別runtime validatorを実行する", async function () {
+  const policy = path.resolve(".agent-skill-chain/policy/default.json");
+  for (const argv of [
+    [
+      "policy",
+      "migrate",
+      `--trusted=${policy}`,
+      `--candidate=${policy}`,
+      `--manifest=${this.runtimeManifestFile}`,
+      "--dry-run",
+    ],
+    [
+      "policy",
+      "migrate",
+      "--operation=rollback",
+      `--state=${this.runtimeStateFile}`,
+      "--dry-run",
+    ],
+  ]) {
+    try {
+      await main(argv);
+    } catch (error) {
+      this.runtimeInputErrors.push(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+});
+
+Then("型不正と未知fieldを副作用前に拒否する", function () {
+  assert.equal(this.runtimeInputErrors.length, 2);
+  assert.ok(
+    this.runtimeInputErrors.some((error) =>
+      error.includes("migration manifestの構造が不正"),
+    ),
+  );
+  assert.ok(
+    this.runtimeInputErrors.some((error) =>
+      error.includes("file migration stateの構造が不正"),
+    ),
+  );
+  const boundarySources = ["src/cli.ts", "src/adapters/json-input.ts"].map(
+    (file) => fs.readFileSync(file, "utf8"),
+  );
+  for (const source of boundarySources) {
+    assert.doesNotMatch(source, /readJson\s*</u);
+    assert.doesNotMatch(source, /parseJsonStrict\([^)]*\)\s+as\s+/u);
+  }
 });
 Then("project choice乖離と品質scriptの自己緩和を拒否する", function () {
   assert.equal(this.projectQualityResult.valid, false);

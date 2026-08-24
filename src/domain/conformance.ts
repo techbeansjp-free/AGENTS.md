@@ -347,14 +347,20 @@ export function validateRepositoryConformance(
   root: string,
   contract: unknown,
   binding: unknown,
-  evidence: { tool?: string; passedScenarioIds?: unknown[] } = {},
+  evidenceInput: unknown = {},
 ) {
   const contractResult = validateConformanceContract(contract);
   const bindingResult = validateProjectConformanceBinding(binding);
   const errors = [...contractResult.errors, ...bindingResult.errors];
   if (!isRecord(binding)) return { valid: false, errors };
   const bindings = Array.isArray(binding.bindings) ? binding.bindings : [];
-  const passedScenarioIds = Array.isArray(evidence?.passedScenarioIds)
+  const evidence = isRecord(evidenceInput) ? evidenceInput : {};
+  if (!isRecord(evidenceInput))
+    errors.push("成功証拠はobjectでなければなりません");
+  for (const field of Object.keys(evidence))
+    if (!["tool", "passedScenarioIds"].includes(field))
+      errors.push(`成功証拠.${field}は未知fieldです`);
+  const passedScenarioIds = Array.isArray(evidence.passedScenarioIds)
     ? evidence.passedScenarioIds
     : [];
   if (
@@ -365,7 +371,7 @@ export function validateRepositoryConformance(
   )
     errors.push("成功証拠passedScenarioIdsが不正です");
   const passed = new Set<unknown>(passedScenarioIds);
-  if (!text(evidence?.tool)) errors.push("成功証拠toolが必要です");
+  if (!text(evidence.tool)) errors.push("成功証拠toolが必要です");
   for (const item of bindings) {
     if (!isRecord(item)) {
       errors.push("binding itemはobjectでなければなりません");
@@ -413,6 +419,6 @@ export function validateRepositoryConformance(
     valid: errors.length === 0,
     errors,
     checked: IDS,
-    evidenceTool: evidence?.tool,
+    evidenceTool: evidence.tool,
   };
 }
