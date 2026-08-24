@@ -18,12 +18,7 @@ const { Given, When, Then } = stepDefinitions<ProviderCapabilityRoutingWorld>();
 Given("project固有のprovider capability mappingを読み込む", function () {
   this.capabilityMapping = readProviderCapabilityMapping(
     fs.readFileSync(
-      path.resolve(
-        "test",
-        "fixtures",
-        "routing",
-        "capability-mapping.json",
-      ),
+      path.resolve("test", "fixtures", "routing", "capability-mapping.json"),
       "utf8",
     ),
   );

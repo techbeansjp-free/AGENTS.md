@@ -35,12 +35,7 @@ Given("provider routingのconformance bindingを読み込む", function () {
   );
   this.mapping = readProviderCapabilityMapping(
     fs.readFileSync(
-      path.resolve(
-        "test",
-        "fixtures",
-        "routing",
-        "capability-mapping.json",
-      ),
+      path.resolve("test", "fixtures", "routing", "capability-mapping.json"),
       "utf8",
     ),
   );
