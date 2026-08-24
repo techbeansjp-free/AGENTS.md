@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-skill-chain.invalid/schemas/routing-evidence-v1.json",
+  "oneOf": [
+    { "$ref": "#/$defs/routingEvidence" },
+    { "$ref": "#/$defs/completionRecord" },
+    { "$ref": "#/$defs/evidenceStateRecord" },
+    { "$ref": "#/$defs/pruneAuditStart" },
+    { "$ref": "#/$defs/tombstone" },
+    { "$ref": "#/$defs/pruneOutcome" }
+  ],
+  "$defs": {
+    "safeIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "sha": { "type": "string", "pattern": "^[A-Fa-f0-9]{40}$" },
+    "routingEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "provider",
+        "model",
+        "mappingVersion",
+        "reasoningEffort",
+        "serviceTier",
+        "role",
+        "identity",
+        "issue",
+        "scope",
+        "baseSha",
+        "evaluatorRef",
+        "issuedAt",
+        "startState"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeIdentifier" },
+        "provider": { "$ref": "#/$defs/safeIdentifier" },
+        "model": { "$ref": "#/$defs/safeIdentifier" },
+        "mappingVersion": { "$ref": "#/$defs/safeIdentifier" },
+        "reasoningEffort": { "const": "high" },
+        "serviceTier": { "const": "default" },
+        "role": { "enum": ["coordinator", "implementer", "reviewer"] },
+        "identity": { "$ref": "#/$defs/safeIdentifier" },
+        "issue": { "type": "integer", "minimum": 1 },
+        "scope": { "$ref": "#/$defs/safeIdentifier" },
+        "baseSha": { "$ref": "#/$defs/sha" },
+        "evaluatorRef": { "$ref": "#/$defs/safeIdentifier" },
+        "issuedAt": { "type": "string", "format": "date-time" },
+        "startState": { "const": "issued" }
+      }
+    },
+    "completionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "routingEvidenceId",
+        "endState",
+        "implementationHead",
+        "recordedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeIdentifier" },
+        "routingEvidenceId": { "$ref": "#/$defs/safeIdentifier" },
+        "endState": { "enum": ["completed", "interrupted"] },
+        "implementationHead": { "$ref": "#/$defs/sha" },
+        "recordedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "evidenceStateRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "routingEvidenceId", "state", "reason", "recordedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeIdentifier" },
+        "routingEvidenceId": { "$ref": "#/$defs/safeIdentifier" },
+        "state": { "enum": ["superseded", "invalidated"] },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "recordedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "pruneAuditStart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "approvedDigest", "targetIds", "startedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeIdentifier" },
+        "approvedDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "targetIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeIdentifier" }
+        },
+        "startedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "tombstone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routingEvidenceId", "pruneAuditId", "deletedAt"],
+      "properties": {
+        "routingEvidenceId": { "$ref": "#/$defs/safeIdentifier" },
+        "pruneAuditId": { "$ref": "#/$defs/safeIdentifier" },
+        "deletedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "pruneOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routingEvidenceId", "outcome", "recordedAt"],
+      "properties": {
+        "routingEvidenceId": { "$ref": "#/$defs/safeIdentifier" },
+        "outcome": { "enum": ["succeeded", "failed"] },
+        "recordedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
