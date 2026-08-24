@@ -10,6 +10,11 @@ import {
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { createPullRequest, authorizeMerge } from "./domain/delivery.js";
 import { createWorktree, inspectFinalizeState } from "./domain/worktree.js";
+import {
+  applyWorkspaceHygiene,
+  previewWorkspaceHygiene,
+  type HygieneKind,
+} from "./domain/hygiene.js";
 import { buildFinalizeReport, applyFinalize } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
 import {
@@ -111,6 +116,26 @@ function requiredExpectedRevision(flags: Flags): number {
   if (!/^\d+$/.test(raw))
     throw new Error("--expected-revisionは0以上の整数でなければなりません");
   return Number(raw);
+}
+
+function hygieneOperations(flags: Flags): HygieneKind[] {
+  const raw = required(flags, "operations");
+  const operations: HygieneKind[] = [];
+  const seen = new Set<string>();
+  for (const item of raw.split(",")) {
+    let operation: HygieneKind;
+    if (item === "empty-directory") operation = item;
+    else if (item === "temporary-artifact") operation = item;
+    else if (item === "completed-worktree-container") operation = item;
+    else throw new Error(`未対応のworkspace hygiene operationです: ${item}`);
+    if (seen.has(operation))
+      throw new Error(
+        `workspace hygiene operationが重複しています: ${operation}`,
+      );
+    seen.add(operation);
+    operations.push(operation);
+  }
+  return operations;
 }
 
 function policyAuthorityFailure(
@@ -1137,6 +1162,55 @@ export async function main(argv: string[]): Promise<number> {
         trustedPolicy: trustedSet.policy,
       }),
     );
+    return 0;
+  }
+  if (command === "worktree" && subcommand === "hygiene") {
+    const { flags } = parse(rest);
+    const root = required(flags, "root");
+    if (flags.apply !== undefined && flags.apply !== true)
+      throw new Error("--applyは値を付けずに指定してください");
+    const report = previewWorkspaceHygiene({ root });
+    if (flags.apply !== true) {
+      print(report);
+      return 0;
+    }
+    const result = applyWorkspaceHygiene(
+      {
+        report,
+        approvedHash: required(flags, "approved-hash"),
+        root,
+        operations: hygieneOperations(flags),
+      },
+      (target) => {
+        const stat = fs.lstatSync(target.path);
+        if (stat.isSymbolicLink())
+          throw new Error(`削除直前にsymlinkを検出しました: ${target.path}`);
+        const real = fs.realpathSync(target.path);
+        const relative = path.relative(report.root, real);
+        if (
+          relative === "" ||
+          relative === ".." ||
+          relative.startsWith(`..${path.sep}`) ||
+          path.isAbsolute(relative)
+        ) {
+          throw new Error(
+            `削除直前のcontainment検証に失敗しました: ${target.path}`,
+          );
+        }
+        if (target.kind === "temporary-artifact") {
+          if (!stat.isFile())
+            throw new Error(
+              `一時生成物が通常fileではありません: ${target.path}`,
+            );
+          fs.rmSync(target.path);
+          return;
+        }
+        if (!stat.isDirectory())
+          throw new Error(`空directory候補の型が変化しました: ${target.path}`);
+        fs.rmdirSync(target.path);
+      },
+    );
+    print(result);
     return 0;
   }
   if (command === "worktree" && subcommand === "finalize") {
