@@ -1711,11 +1711,11 @@ Given("H_implの全変更pathと一致する個別監査artifactがある", func
     this.root,
     "docs",
     "reviews",
-    "02_課題834追加実装レビュー.md",
+    "08_課題836実装レビュー.md",
   );
   this.auditMarkdown = `# review\n\n| 項目 | 観測値 |\n|---|---|\n| 比較基点 | \`${this.auditBase}\` |\n| H_impl | \`${this.auditImplementation}\` |\n\n## 変更ファイル個別監査\n\n| path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |\n|---|---|---|---|---|---|---|---|---|\n| \`src/x.ts\` | A | package owner | package | 単一責務 | 非循環 | SCN-X-001 | 削除でrollback | pass |\n`;
   fs.writeFileSync(this.auditFile, this.auditMarkdown);
-  spawnSync("git", ["add", "docs/reviews/02_課題834追加実装レビュー.md"], {
+  spawnSync("git", ["add", "docs/reviews/08_課題836実装レビュー.md"], {
     cwd: this.root,
   });
   spawnSync("git", ["commit", "-q", "-m", "review evidence"], {

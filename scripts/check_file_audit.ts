@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { git } from "../src/lib/process.js";
 
 const AUDIT_DIRECTORY = "docs/reviews";
-const AUDIT_NAME_PATTERN = /^\d+_課題834.*レビュー\.md$/u;
+const AUDIT_NAME_PATTERN = /^\d+_課題\d+.*レビュー\.md$/u;
 
 function latestAuditPath(root: string): string | undefined {
   const directory = path.join(root, AUDIT_DIRECTORY);
@@ -55,7 +55,7 @@ export function checkFileAudit(root: string) {
   const errors: string[] = [];
   const auditPath = latestAuditPath(root);
   if (!auditPath)
-    return { valid: false, errors: ["課題834のreview artifactがありません"] };
+    return { valid: false, errors: ["課題のreview artifactがありません"] };
   const artifact = path.join(root, auditPath);
   if (!fs.existsSync(artifact))
     return { valid: false, errors: [`${auditPath}がありません`] };
