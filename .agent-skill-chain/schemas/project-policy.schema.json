@@ -87,6 +87,19 @@
     }
   ],
   "$defs": {
+    "roleModelChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "logicalTier", "reasoningEffort", "speed"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "logicalTier": {
+          "enum": ["project_default", "highest_available"]
+        },
+        "reasoningEffort": { "const": "high" },
+        "speed": { "const": "standard" }
+      }
+    },
     "projectChoices": {
       "type": "object",
       "additionalProperties": false,
@@ -100,7 +113,6 @@
         "packageManager",
         "runtime",
         "ci",
-        "modelMapping",
         "release",
         "projectKind",
         "capabilities",
@@ -125,7 +137,47 @@
         "packageManager": { "type": "string", "minLength": 1 },
         "runtime": { "type": "string", "minLength": 1 },
         "ci": { "type": "string", "minLength": 1 },
-        "modelMapping": { "type": "string", "minLength": 1 },
+        "modelMapping": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["roles", "evidenceStoreRoot", "retention"],
+          "properties": {
+            "roles": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["coordinator", "implementer", "reviewer"],
+              "properties": {
+                "coordinator": { "$ref": "#/$defs/roleModelChoice" },
+                "implementer": { "$ref": "#/$defs/roleModelChoice" },
+                "reviewer": { "$ref": "#/$defs/roleModelChoice" }
+              }
+            },
+            "evidenceStoreRoot": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 512,
+              "pattern": "^(?!/)(?!\\.\\./)(?!.*\\/\\.\\.\\/)(?!.*\\\\)(?:[A-Za-z0-9._-]+\\/)+$"
+            },
+            "retention": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "retentionDays",
+                "maxRecordsPerIssue",
+                "maxRecordBytes",
+                "rotationCondition",
+                "deletionMethod"
+              ],
+              "properties": {
+                "retentionDays": { "type": "integer", "minimum": 1 },
+                "maxRecordsPerIssue": { "type": "integer", "minimum": 1 },
+                "maxRecordBytes": { "type": "integer", "minimum": 1 },
+                "rotationCondition": { "type": "string", "minLength": 1 },
+                "deletionMethod": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
         "release": { "type": "string", "minLength": 1 },
         "projectKind": { "type": "string", "minLength": 1 },
         "capabilities": {

@@ -123,6 +123,7 @@ interface PolicyManifestFixture {
   choiceFiles: string[];
   ruleFiles: string[];
   conformanceFiles: string[];
+  providerFiles?: string[];
 }
 
 interface CliMigrationFixture {
@@ -3454,6 +3455,7 @@ Given("trustedとcandidateのfragmented project policy setがある", function (
     ...manifest.choiceFiles,
     ...manifest.ruleFiles,
     ...manifest.conformanceFiles,
+    ...(manifest.providerFiles ?? []),
   ].map((relative) => ({
     kind: "policy",
     path: `.agent-skill-chain/${relative}`,

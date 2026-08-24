@@ -8,6 +8,46 @@ export interface ApplicabilityDecision {
   evidence: string;
 }
 
+export type RoutingRole = "coordinator" | "implementer" | "reviewer";
+
+export interface RoleModelChoice {
+  provider: string;
+  logicalTier: "project_default" | "highest_available";
+  reasoningEffort: "high";
+  speed: "standard";
+}
+
+export interface RoutingEvidenceRetentionChoice {
+  retentionDays: number;
+  maxRecordsPerIssue: number;
+  maxRecordBytes: number;
+  rotationCondition: string;
+  deletionMethod: string;
+}
+
+export interface ModelMappingChoice {
+  roles: Record<RoutingRole, RoleModelChoice>;
+  evidenceStoreRoot: string;
+  retention: RoutingEvidenceRetentionChoice;
+}
+
+export interface ProviderModelCapability {
+  slug: string;
+  capabilities: string[];
+  rank: number;
+}
+
+export interface ProviderCapability {
+  provider: string;
+  models: ProviderModelCapability[];
+}
+
+export interface ProviderCapabilityMapping {
+  schemaVersion: "agent-skill-chain/provider-capability-mapping/v1";
+  mappingVersion: string;
+  providers: ProviderCapability[];
+}
+
 export interface Rule {
   ruleId: string;
   purpose: string;
@@ -33,7 +73,7 @@ export interface ProjectChoices {
   packageManager: string;
   runtime: string;
   ci: string;
-  modelMapping: string;
+  modelMapping?: ModelMappingChoice;
   release: string;
   projectKind: string;
   capabilities: {
