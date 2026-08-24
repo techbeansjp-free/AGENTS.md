@@ -17,12 +17,12 @@
 
 ```mermaid
 sequenceDiagram
-  participant Caller as 呼出元
-  participant API as 対象API
-  participant Dependency as 依存先
-  Caller->>API: 要求
-  API->>API: 入力・権限検証
-  API->>Dependency: 検証済み要求
-  Dependency-->>API: 結果
-  API-->>Caller: 応答
+  participant caller_node as {project-selected label: caller}
+  participant interface_node as {project-selected label: interface}
+  participant dependency_node as {project-selected label: dependency}
+  caller_node->>interface_node: {project-selected label: message}
+  interface_node->>interface_node: {project-selected label: validate}
+  interface_node->>dependency_node: {project-selected label: validated message}
+  dependency_node-->>interface_node: {project-selected label: result}
+  interface_node-->>caller_node: {project-selected label: observable result}
 ```

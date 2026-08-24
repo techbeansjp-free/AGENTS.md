@@ -23,7 +23,7 @@ Feature: Mode判定と入力境界をfail-closedにする
       | 未回答 |
 
   Scenario: SCN-UNIT-MODE-003 quick中に公開APIとdependency変更を検出したらfullへ単調昇格する
-    Given quickとして開始した変更fileが"src/public-api.js,package.json"である
+    Given quickとして開始した変更fileが"src/public-api.ts,package.json"である
     When quick不適格要因を検査する
     Then 不適格要因は"public-api,dependency"である
 

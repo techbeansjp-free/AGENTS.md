@@ -1,0 +1,210 @@
+{
+  "schemaVersion": "agent-skill-chain/project-conformance/v1",
+  "bindings": [
+    {
+      "id": "I1",
+      "sourcePaths": [".agent-skill-chain/policy/conformance.json"],
+      "enforcement": [
+        { "path": "src/domain/enforcement.ts", "export": "validateRule" }
+      ],
+      "counterexampleScenarios": ["SCN-UNIT-RISK-003"]
+    },
+    {
+      "id": "I2",
+      "sourcePaths": [".agent-skill-chain/project-policy.json"],
+      "enforcement": [
+        {
+          "path": "src/domain/enforcement.ts",
+          "export": "validateOwnershipBoundary"
+        },
+        { "path": "scripts/check_file_audit.ts", "export": "checkFileAudit" }
+      ],
+      "counterexampleScenarios": ["SCN-UNIT-RISK-016", "SCN-UNIT-PACKAGE-011"]
+    },
+    {
+      "id": "I3",
+      "sourcePaths": ["docs/specs/15_要件追跡/01_課題834追跡.md"],
+      "enforcement": [
+        { "path": "src/domain/trace.ts", "export": "validateScenarioTrace" },
+        { "path": "scripts/check_trace.ts", "export": "collectProjectTrace" }
+      ],
+      "counterexampleScenarios": ["SCN-UNIT-TRACE-001"]
+    },
+    {
+      "id": "I4",
+      "sourcePaths": [
+        ".agent-skill-chain/project-policy.json",
+        ".agent-skill-chain/templates/issue/04_レビュー.md"
+      ],
+      "enforcement": [
+        {
+          "path": "src/domain/enforcement.ts",
+          "export": "compareTrustedPolicy"
+        },
+        {
+          "path": "src/domain/enforcement.ts",
+          "export": "enforceTrustedBoundary"
+        },
+        { "path": "src/domain/review.ts", "export": "evaluateReview" },
+        { "path": "src/domain/delivery.ts", "export": "authorizeMerge" },
+        { "path": "src/domain/finalize.ts", "export": "applyFinalize" }
+      ],
+      "counterexampleScenarios": [
+        "SCN-UNIT-RISK-010",
+        "SCN-UNIT-RISK-021",
+        "SCN-UNIT-RISK-022",
+        "SCN-UNIT-RISK-026",
+        "SCN-UNIT-RISK-027",
+        "SCN-UNIT-RISK-028",
+        "SCN-UNIT-REVIEW-011",
+        "SCN-UNIT-REVIEW-012",
+        "SCN-UNIT-REVIEW-013",
+        "SCN-INT-DELIVERY-007",
+        "SCN-INT-GITHUB-009",
+        "SCN-INT-MERGE-008",
+        "SCN-INT-MERGE-009",
+        "SCN-INT-FINALIZE-005",
+        "SCN-INT-RISK-024"
+      ]
+    },
+    {
+      "id": "I5",
+      "sourcePaths": ["docs/specs/10_セキュリティ/00_信頼境界.md"],
+      "enforcement": [
+        { "path": "src/lib/security.ts", "export": "resolveContained" },
+        { "path": "src/domain/worktree.ts", "export": "createWorktree" }
+      ],
+      "counterexampleScenarios": [
+        "SCN-INT-WORKTREE-003",
+        "SCN-INT-WORKTREE-005"
+      ]
+    },
+    {
+      "id": "I6",
+      "sourcePaths": [
+        "docs/specs/11_非機能/00_品質要件.md",
+        ".agent-skill-chain/docs/02_品質基準.md",
+        ".agent-skill-chain/templates/issue/04_レビュー.md",
+        "scripts/check_project_quality.ts"
+      ],
+      "enforcement": [
+        { "path": "src/domain/enforcement.ts", "export": "planValidation" },
+        { "path": "src/domain/review.ts", "export": "evaluateReview" },
+        {
+          "path": "src/domain/conformance.ts",
+          "export": "validateDevelopmentConsiderations"
+        },
+        {
+          "path": "scripts/check_source_quality.ts",
+          "export": "checkSourceQuality"
+        },
+        {
+          "path": "scripts/check_project_quality.ts",
+          "export": "checkProjectQualityContract"
+        }
+      ],
+      "counterexampleScenarios": [
+        "SCN-UNIT-RISK-012",
+        "SCN-UNIT-RISK-023",
+        "SCN-UNIT-QUALITY-001",
+        "SCN-UNIT-QUALITY-002",
+        "SCN-UNIT-QUALITY-003",
+        "SCN-UNIT-QUALITY-004",
+        "SCN-UNIT-QUALITY-005",
+        "SCN-UNIT-QUALITY-006",
+        "SCN-UNIT-QUALITY-008",
+        "SCN-UNIT-QUALITY-009",
+        "SCN-UNIT-QUALITY-010",
+        "SCN-UNIT-REVIEW-011",
+        "SCN-UNIT-REVIEW-012",
+        "SCN-UNIT-REVIEW-014",
+        "SCN-INT-RISK-023",
+        "SCN-INT-RISK-024"
+      ]
+    },
+    {
+      "id": "I7",
+      "sourcePaths": [
+        "package.json",
+        "docs/specs/13_移行・廃止/00_移行方針.md"
+      ],
+      "enforcement": [
+        {
+          "path": "src/lib/version.ts",
+          "export": "CURRENT_POLICY_SCHEMA_VERSION"
+        },
+        { "path": "src/lib/version.ts", "export": "isPackageVersion" },
+        { "path": "src/domain/migration.ts", "export": "planFileMigration" },
+        { "path": "src/domain/migration.ts", "export": "applyFileMigration" }
+      ],
+      "counterexampleScenarios": [
+        "SCN-UNIT-PACKAGE-012",
+        "SCN-INT-RISK-005",
+        "SCN-INT-RISK-013",
+        "SCN-INT-RISK-025",
+        "SCN-INT-RISK-026"
+      ]
+    },
+    {
+      "id": "I8",
+      "sourcePaths": ["docs/specs/10_セキュリティ/00_信頼境界.md"],
+      "enforcement": [
+        {
+          "path": "src/domain/enforcement.ts",
+          "export": "validatePackageManifest"
+        }
+      ],
+      "counterexampleScenarios": ["SCN-INT-RISK-008"]
+    },
+    {
+      "id": "I9",
+      "sourcePaths": ["docs/specs/12_運用保守/00_運用設計.md"],
+      "enforcement": [
+        { "path": "src/domain/enforcement.ts", "export": "planOfflineGates" }
+      ],
+      "counterexampleScenarios": ["SCN-UNIT-RISK-006"]
+    },
+    {
+      "id": "I10",
+      "sourcePaths": [
+        "docs/specs/04_機能/00_ワークフローv0.3.md",
+        ".agent-skill-chain/docs/00_運用ポリシー.md"
+      ],
+      "enforcement": [
+        { "path": "src/domain/trace.ts", "export": "validateDependencyGraph" },
+        {
+          "path": "scripts/check_dependency_graph.ts",
+          "export": "collectTypeScriptDependencyGraph"
+        },
+        {
+          "path": "src/domain/enforcement.ts",
+          "export": "classifyPackageAssets"
+        }
+      ],
+      "counterexampleScenarios": [
+        "SCN-UNIT-TRACE-006",
+        "SCN-UNIT-TRACE-007",
+        "SCN-UNIT-PACKAGE-003"
+      ]
+    },
+    {
+      "id": "I11",
+      "sourcePaths": ["docs/specs/07_データ/00_管理データ.md"],
+      "enforcement": [
+        { "path": "src/domain/enforcement.ts", "export": "serializeDiagnostic" }
+      ],
+      "counterexampleScenarios": ["SCN-UNIT-RISK-011"]
+    },
+    {
+      "id": "I12",
+      "sourcePaths": [".agent-skill-chain/project-policy.json"],
+      "enforcement": [
+        {
+          "path": "src/domain/enforcement.ts",
+          "export": "resolveEffectivePolicy"
+        }
+      ],
+      "counterexampleScenarios": ["SCN-UNIT-RISK-014"]
+    }
+  ]
+}

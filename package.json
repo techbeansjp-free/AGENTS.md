@@ -1,17 +1,28 @@
 {
   "name": "agent-skill-chain",
-  "version": "0.3.0-beta.1",
+  "version": "0.3.1-beta.1",
   "description": "人とAIエージェントが使う、安全側に倒す軽量開発ワークフロー。",
   "type": "module",
+  "agentSkillChain": {
+    "qualityContractVersion": 1,
+    "policySchemaVersion": "0.3.1",
+    "compatiblePolicySchemaVersions": [
+      "0.3.0"
+    ],
+    "deprecatedPolicySchemaAliases": {
+      "0.3": "0.3.0"
+    }
+  },
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "agent-skill-chain": "./bin/agent-skill-chain.js"
+    "agent-skill-chain": "./dist/bin/agent-skill-chain.js"
   },
   "files": [
-    "bin/",
-    "src/",
+    "dist/bin/",
+    "dist/src/",
+    ".agent-skill-chain/00_利用案内.md",
     ".agent-skill-chain/skills/",
     ".agent-skill-chain/templates/",
     ".agent-skill-chain/schemas/",
@@ -20,21 +31,41 @@
     "AGENTS.md"
   ],
   "scripts": {
-    "build": "node scripts/build.js",
-    "typecheck": "tsc --noEmit",
-    "docs:format": "python3 scripts/check_japanese_docs.py",
-    "test:format": "python3 scripts/check_gherkin_format.py",
-    "package:check": "python3 scripts/check_package_contents.py",
-    "test": "cucumber-js --config cucumber.mjs",
-    "test:unit": "cucumber-js --config cucumber.mjs --tags @unit",
-    "test:integration": "cucumber-js --config cucumber.mjs --tags @integration",
-    "test:e2e": "cucumber-js --config cucumber.mjs --tags @e2e",
-    "prepack": "npm run build && npm run docs:format && npm run typecheck && npm run test:format && npm test"
+    "clean": "node --import tsx scripts/clean.ts",
+    "compile": "node --import tsx scripts/compile.ts",
+    "build": "npm run compile && node --import tsx scripts/build.ts",
+    "directories:check": "node --import tsx scripts/check_directory_guides.ts",
+    "skills:check": "node --import tsx scripts/check_skill_templates.ts",
+    "cli:check": "node --import tsx scripts/check_cli_contract.ts",
+    "project:quality": "node --import tsx scripts/check_project_quality.ts",
+    "lint": "eslint .",
+    "format:check": "prettier --check \"{src,bin,scripts,test}/**/*.{ts,json}\" \".agent-skill-chain/**/*.json\" \"*.{json,mjs}\" \".github/**/*.{json,yml}\"",
+    "format:write": "prettier --write \"{src,bin,scripts,test}/**/*.{ts,json}\" \".agent-skill-chain/**/*.json\" \"*.{json,mjs}\" \".github/**/*.{json,yml}\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "source:check": "node --import tsx scripts/check_source_quality.ts",
+    "docs:format": "node --import tsx scripts/check_japanese_docs.ts",
+    "test:format": "node --import tsx scripts/check_gherkin_format.ts",
+    "package:check": "node --import tsx scripts/check_package_contents.ts",
+    "test": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs",
+    "test:unit": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @unit",
+    "test:integration": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @integration",
+    "test:e2e": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @e2e",
+    "trace:check": "node --import tsx scripts/check_trace.ts",
+    "architecture:check": "node --import tsx scripts/check_dependency_graph.ts",
+    "audit:check": "node --import tsx scripts/check_file_audit.ts",
+    "conformance:check": "node --import tsx scripts/check_conformance.ts",
+    "quality": "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test",
+    "prepack": "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
-    "typescript": "^5.9.0"
+    "eslint": "^10.9.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.67.0"
   },
   "license": "MIT",
   "repository": {

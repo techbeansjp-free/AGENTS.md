@@ -6,6 +6,7 @@ on:
 # 検証だけを行い、リポジトリへの書き込み権限は与えない。
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   quality:
@@ -15,6 +16,9 @@ jobs:
     steps:
       - name: ソースコードを取得する
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Node.js実行環境を準備する
         uses: actions/setup-node@v4
         with:
@@ -22,19 +26,34 @@ jobs:
           cache: npm
       - name: 固定ファイルどおりに開発依存を導入する
         run: npm ci
+      - name: trusted project choiceと実品質設定のbindingを検証する
+        run: npm run project:quality
+      - name: lint・formatter検査・strict型検査・source契約・testを順に実行する
+        run: npm run quality
       - name: 人向け文書の日本語形式を検証する
         run: npm run docs:format
       - name: 日本語Gherkinの起票形式を検証する
         run: npm run test:format
-      - name: 型を検証する
-        run: npm run typecheck
+      - name: project選択に従うscenario追跡を検証する
+        run: npm run trace:check
+      - name: repositoryの依存循環を拒否する
+        run: npm run architecture:check
+      - name: repository固有policyをdogfood検証する
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASC_TRUSTED_COMMIT: ${{ github.event.pull_request.base.sha }}
+          ASC_EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ASC_CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASC_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          ASC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ASC_REPOSITORY: ${{ github.repository }}
+          ASC_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node dist/bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json "--trusted-commit=$ASC_TRUSTED_COMMIT" "--expected-base-sha=$ASC_EXPECTED_BASE_SHA" "--candidate-head-sha=$ASC_CANDIDATE_HEAD_SHA" "--base-ref=$ASC_BASE_REF" "--default-branch=$ASC_DEFAULT_BRANCH" "--repo=$ASC_REPOSITORY" "--pr=$ASC_PR_NUMBER"
       - name: 構築対象とパッケージ資産を検証する
         run: npm run build
       - name: npm配布物への開発用ファイル混入を拒否する
         run: npm run package:check
-      - name: 単体Gherkinを実行する
-        run: npm run test:unit
-      - name: 結合Gherkinを実行する
-        run: npm run test:integration
-      - name: E2E Gherkinを実行する
-        run: npm run test:e2e
+      - name: 全テストとrepository conformance証拠を検証する
+        run: npm run conformance:check
+      - name: 全変更fileの個別監査とGit差分path集合を照合する
+        run: npm run audit:check

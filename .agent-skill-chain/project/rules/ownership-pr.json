@@ -1,0 +1,14 @@
+{
+  "ruleId": "ASC-DOGFOOD-OWNERSHIP-PR-001",
+  "purpose": "PRでasset分類とowner根拠を要求する",
+  "riskClass": "quality",
+  "scope": ["ownership_pr", "pull_request"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "owner、targetLayer、classification evidence",
+  "remediation": "正当な汎用拡張はowner根拠を付けて続行する",
+  "overridePolicy": "bound",
+  "rollback": "分類不明のasset変更をPRから外す"
+}

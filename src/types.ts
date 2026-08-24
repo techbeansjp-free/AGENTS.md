@@ -1,0 +1,129 @@
+export type Enforcement = "deny" | "require" | "assist" | "warn" | "record";
+export type Activation = "active" | "staged" | "disabled";
+export type TargetLayer = "package" | "project" | "spec" | "evidence";
+
+export interface ApplicabilityDecision {
+  status: "applicable" | "not-applicable";
+  reason: string;
+  evidence: string;
+}
+
+export interface Rule {
+  ruleId: string;
+  purpose: string;
+  riskClass: string;
+  scope: string[];
+  enforcement: Enforcement;
+  activation: Activation;
+  owner: string;
+  targetLayer: TargetLayer;
+  evidence: string;
+  remediation: string;
+  overridePolicy: "never" | "bound";
+  rollback: string;
+}
+
+export interface ProjectChoices {
+  language: string;
+  testRunner: string;
+  gherkinDialect: string;
+  testLayers: string[];
+  forbiddenTestFileSuffixes: string[];
+  naming: string;
+  packageManager: string;
+  runtime: string;
+  ci: string;
+  modelMapping: string;
+  release: string;
+  projectKind: string;
+  capabilities: {
+    privacySecurity: ApplicabilityDecision;
+    observability: ApplicabilityDecision;
+    humanCenteredUi: ApplicabilityDecision;
+    designTokens: ApplicabilityDecision;
+  };
+  quality: {
+    implementationLanguage: string;
+    strictTypecheck: true;
+    forbiddenTypes: string[];
+    lintCommand: string;
+    formatCheckCommand: string;
+    formatWriteCommand: string;
+    typecheckCommand: string;
+    runtimeValidation: string;
+    auxiliaryLanguages: Record<string, ApplicabilityDecision>;
+  };
+}
+
+export interface Policy {
+  schemaVersion: string;
+  delivery: { stopAt: "pull_request" };
+  merge: {
+    mode: "disabled" | "assisted" | "automatic";
+    branches: string[];
+    methods: Array<"merge" | "squash" | "rebase">;
+    requiredChecks: string[];
+    requiredReviews: number;
+  };
+  budgets?: { localFeedbackMs?: number; prGateMs?: number };
+  rules: Rule[];
+  projectChoices?: ProjectChoices;
+}
+
+export interface AutoFix {
+  description: string;
+  dryRunDiff: string;
+}
+
+export interface Diagnostic {
+  ruleId: string;
+  purpose: string;
+  risk: string;
+  reasons: string[];
+  scope: string[];
+  checks: string[];
+  autoFixes: AutoFix[];
+  next: string;
+  requiredAuthority: string;
+  rollback: string;
+}
+
+export interface RuleObservation {
+  ruleId: string;
+  violated: boolean;
+  reasons?: string[];
+  checks?: string[];
+}
+
+export interface OverrideRecord {
+  ruleId?: string;
+  issue?: number;
+  scope?: string;
+  actor?: string;
+  reason?: string;
+  expiresAt?: string;
+  sha?: string;
+}
+
+export interface ValidationEvidence {
+  sha?: string;
+  policyHash?: string;
+  tool?: string;
+  scope?: string[];
+  passed?: boolean;
+}
+
+export interface ValidationInput {
+  kind: "targeted" | "final";
+  changedFiles: string[];
+  risk: string[];
+  evidence: ValidationEvidence;
+  successfulFingerprints?: string[];
+  successfulEvidence?: Array<
+    ValidationEvidence & { fingerprint: string; passed: boolean }
+  >;
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}

@@ -109,7 +109,12 @@ Feature: Issue stagingとsystem specificationを安全に統合する
 
     Examples:
       | 変更file |
-      | "src/cli.js" |
-      | "src/lib/security.js" |
+      | "src/cli.ts" |
+      | "src/lib/security.ts" |
       | ".agent-skill-chain/schemas/project-policy.schema.json" |
       | ".agent-skill-chain/skills/step-10-review/SKILL.md" |
+
+  Scenario: SCN-INT-SPEC-012 ドメイン用語台帳は現在有効な一意のコンテキスト語彙だけを受理する
+    Given 必須specを持つCLI projectがある
+    When 有効行と重複IDと同一context重複とcandidateと置換先なし廃止を検証する
+    Then 有効な用語行だけが合格し不正な用語台帳はすべて拒否される

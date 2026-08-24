@@ -1,0 +1,58 @@
+{
+  "language": "日本語",
+  "testRunner": "cucumber-js",
+  "gherkinDialect": "en",
+  "testLayers": ["unit", "integration", "e2e"],
+  "forbiddenTestFileSuffixes": [".test.js", ".test.ts"],
+  "naming": "連番付き日本語Markdownと一意なSCN ID",
+  "packageManager": "npm",
+  "runtime": "Node.js 20以上",
+  "ci": ".github/workflows/ci.yml",
+  "modelMapping": "roleごとにprojectが選択する",
+  "release": "明示authorityによる手動操作",
+  "projectKind": "cli",
+  "capabilities": {
+    "privacySecurity": {
+      "status": "applicable",
+      "reason": "policy、credential、GitHub証拠を扱うCLIでありPrivacy/Security by Designを常に適用する",
+      "evidence": "redaction・path・authority・artifact境界の反例BDD"
+    },
+    "observability": {
+      "status": "applicable",
+      "reason": "診断、migration journal、metrics、CI/review証拠を運用判断へ使用する",
+      "evidence": "運用保守設計とwait・falseBlock・override・rollback・missの反例BDD"
+    },
+    "humanCenteredUi": {
+      "status": "not-applicable",
+      "reason": "現行製品はNode CLIでありGUIまたはWeb UIを提供しない",
+      "evidence": "package.jsonのbinとCLI contract"
+    },
+    "designTokens": {
+      "status": "not-applicable",
+      "reason": "現行製品は画面レイアウトと視覚コンポーネントを所有しない",
+      "evidence": "projectKind=cli、UI sourceなし"
+    }
+  },
+  "quality": {
+    "implementationLanguage": "TypeScript",
+    "strictTypecheck": true,
+    "forbiddenTypes": ["any"],
+    "lintCommand": "npm run lint",
+    "formatCheckCommand": "npm run format:check",
+    "formatWriteCommand": "npm run format:write",
+    "typecheckCommand": "npm run typecheck",
+    "runtimeValidation": "外部JSONをunknownで読み、policy・manifest・state・evidenceの入力種別別type guardとdomain validatorで未知field・型不正を拒否する",
+    "auxiliaryLanguages": {
+      "python": {
+        "status": "not-applicable",
+        "reason": "検査3本をTypeScriptへ統合しPython実装を所有しない",
+        "evidence": "scripts配下に.pyがなくTypeScript検査へ移行済み"
+      },
+      "shell": {
+        "status": "not-applicable",
+        "reason": "shell sourceを所有せずnpm scriptとTypeScriptへ処理を集約する",
+        "evidence": "repositoryに.sh sourceがない"
+      }
+    }
+  }
+}

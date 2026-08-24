@@ -1,5 +1,98 @@
 {
-  "schemaVersion": "agent-skill-chain/project-policy/v0.3",
+  "schemaVersion": "agent-skill-chain/project-policy/v0.3.1",
   "delivery": { "stopAt": "pull_request" },
-  "merge": { "mode": "disabled", "branches": [], "methods": [], "requiredChecks": [], "requiredReviews": 0 }
+  "merge": {
+    "mode": "disabled",
+    "branches": [],
+    "methods": [],
+    "requiredChecks": [],
+    "requiredReviews": 0
+  },
+  "budgets": { "localFeedbackMs": 120000, "prGateMs": 900000 },
+  "rules": [
+    {
+      "ruleId": "ASC-TRUST-001",
+      "purpose": "候補変更による信頼済みpolicyの自己緩和を防止する",
+      "riskClass": "authority",
+      "scope": [".agent-skill-chain/project-policy.json", "pull_request"],
+      "enforcement": "deny",
+      "activation": "active",
+      "owner": "default branch policy owner",
+      "targetLayer": "package",
+      "evidence": "default branch policyとcandidate diff",
+      "remediation": "trusted条件を維持し独立review付きmigrationを提案する",
+      "overridePolicy": "never",
+      "rollback": "candidateの緩和差分を取り消す"
+    },
+    {
+      "ruleId": "ASC-OFFLINE-001",
+      "purpose": "外部障害時も安全なlocal作業を継続する",
+      "riskClass": "availability",
+      "scope": ["local_test", "external_gate"],
+      "enforcement": "assist",
+      "activation": "active",
+      "owner": "workflow maintainer",
+      "targetLayer": "package",
+      "evidence": "gateごとのexternal dependency",
+      "remediation": "external必須gateだけをpendingにしてlocal証拠を保持する",
+      "overridePolicy": "bound",
+      "rollback": "online時の通常gate planへ戻す"
+    },
+    {
+      "ruleId": "ASC-SECRET-001",
+      "purpose": "秘密情報の成果物混入を防止する",
+      "riskClass": "secret",
+      "scope": ["artifact", "log", "package"],
+      "enforcement": "deny",
+      "activation": "active",
+      "owner": "security owner",
+      "targetLayer": "package",
+      "evidence": "秘密情報検査と伏字化結果",
+      "remediation": "秘密を除去してcredentialを失効してから再検証する",
+      "overridePolicy": "never",
+      "rollback": "汚染前の成果物へ戻す"
+    },
+    {
+      "ruleId": "ASC-GIT-INTERNAL-001",
+      "purpose": "Git内部領域とworktree境界を保護する",
+      "riskClass": "path",
+      "scope": [".git", "worktree"],
+      "enforcement": "deny",
+      "activation": "active",
+      "owner": "repository owner",
+      "targetLayer": "package",
+      "evidence": "canonical pathとsymlink検査",
+      "remediation": "repository内の通常pathへ対象を限定する",
+      "overridePolicy": "never",
+      "rollback": "書き込みを行わず安全なpathで再計画する"
+    },
+    {
+      "ruleId": "ASC-IDENTITY-001",
+      "purpose": "repository、remote、worktreeの誤認を防止する",
+      "riskClass": "identity",
+      "scope": ["repository", "remote", "worktree"],
+      "enforcement": "deny",
+      "activation": "active",
+      "owner": "repository owner",
+      "targetLayer": "package",
+      "evidence": "完全なrepository ID、remote URL、HEAD SHA",
+      "remediation": "対象同一性を再確認し正確な識別子で再実行する",
+      "overridePolicy": "never",
+      "rollback": "外部書き込み前の状態を保持する"
+    },
+    {
+      "ruleId": "ASC-ARTIFACT-001",
+      "purpose": "project固有・開発用assetの配布混入を防止する",
+      "riskClass": "artifact",
+      "scope": ["artifact_distribution"],
+      "enforcement": "deny",
+      "activation": "active",
+      "owner": "package owner",
+      "targetLayer": "package",
+      "evidence": "配布manifest内容とallowlist",
+      "remediation": "project固有設定、証跡、fixture、秘密を配布対象から除外する",
+      "overridePolicy": "never",
+      "rollback": "汚染した成果物を公開せず再構築する"
+    }
+  ]
 }

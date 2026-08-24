@@ -1,0 +1,23 @@
+{
+  "ruleId": "ASC-DOGFOOD-PACKAGE-001",
+  "purpose": "npm配布物へrepository固有assetを混入させない",
+  "riskClass": "artifact",
+  "scope": [
+    "package",
+    ".agent-skill-chain/project-policy.json",
+    ".agent-skill-chain/project/",
+    ".agent-skill-chain/tmp/",
+    ".agent-skill-chain/role-log/",
+    ".agent-skill-chain/metrics/",
+    "test/",
+    "secret-fixtures/"
+  ],
+  "enforcement": "deny",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "npm pack manifestとcontent scan",
+  "remediation": "project固有設定、証跡、fixture、環境fileをnpm filesから除外する",
+  "overridePolicy": "never",
+  "rollback": "packageを公開せずmanifestを修正して再packする"
+}

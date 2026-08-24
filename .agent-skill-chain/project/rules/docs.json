@@ -1,0 +1,14 @@
+{
+  "ruleId": "ASC-DOGFOOD-DOCS-001",
+  "purpose": "人向け文書のproject選択表記を支援する",
+  "riskClass": "quality",
+  "scope": ["docs", ".agent-skill-chain/docs"],
+  "enforcement": "assist",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "docs format result",
+  "remediation": "dry-run差分を確認して安全な表記だけ修正する",
+  "overridePolicy": "bound",
+  "rollback": "文書差分を元へ戻す"
+}

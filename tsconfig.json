@@ -1,14 +1,16 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
+    "allowJs": false,
     "noEmit": true,
     "strict": true,
+    "noImplicitAny": true,
+    "noImplicitOverride": true,
+    "useUnknownInCatchVariables": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2022",
     "types": ["node"],
     "skipLibCheck": true
   },
-  "include": ["src/**/*.js", "bin/**/*.js", "scripts/**/*.js", "test/**/*.js"]
+  "include": ["src/**/*.ts", "bin/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"]
 }

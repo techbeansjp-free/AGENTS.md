@@ -1,0 +1,14 @@
+{
+  "ruleId": "ASC-DOGFOOD-SAFETY-001",
+  "purpose": "候補変更によるpolicy自己緩和を防止する",
+  "riskClass": "authority",
+  "scope": [".agent-skill-chain/project-policy.json"],
+  "enforcement": "deny",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "origin/mainのtrusted policy setとcandidate diff",
+  "remediation": "信頼済み条件を維持して独立reviewを受ける",
+  "overridePolicy": "never",
+  "rollback": "candidateの緩和差分を取り消す"
+}

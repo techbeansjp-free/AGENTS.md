@@ -60,6 +60,53 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When review gateを評価する
     Then reviewはrejectedである
 
+  Scenario: SCN-UNIT-REVIEW-011 Phase A reviewはH_implとevidence-only H_finalを分離して外部証拠を拘束する
+    Given H_implの後にreview artifactだけを追加したH_finalの完全なreviewがある
+    When review gateを評価する
+    Then reviewはapprovedである
+
+  Scenario Outline: SCN-UNIT-REVIEW-012 Phase A review metadataの改竄を拒否する
+    Given 有効なPhase A review evidenceの<属性>を改竄する
+    When review gateを評価する
+    Then reviewはrejectedであり<診断>を返す
+
+    Examples:
+      | 属性 | 診断 |
+      | same-head | H_implとH_final |
+      | ancestry | ancestor |
+      | changed-path | evidence-only |
+      | artifact-sha | sha256 |
+      | blob-oid | blob OID |
+      | source | trusted GitHub provider |
+      | repository | repository |
+      | implementation-sha | implementation commit SHA |
+      | implementation-author | implementation commit author |
+      | pr-id | PR number |
+      | run-id | run ID |
+      | review-id | review ID |
+      | pr-head | PR head |
+      | ci-head | CI head |
+      | ci-event | pull_request event |
+      | run-pr | Actions runのPR number |
+      | empty-run-pr | Actions runのPR number |
+      | ci-conclusion | CI conclusion |
+      | reviewer-commit | review metadata commit |
+      | reviewer-actor | stable actor |
+      | pr-author-review | PR authorと独立 |
+      | implementer-review | observed implementation commit authorと独立 |
+      | submitted-at | submittedAt |
+      | verdict | approved verdict |
+
+  Scenario: SCN-UNIT-REVIEW-013 tracked Phase A artifactはH_final後に更新しない
+    Given tracked Phase A review recordを読む
+    When Phase A artifactのimmutable契約を検査する
+    Then H_final後は更新せず外部attestationだけで完了すると明記されている
+
+  Scenario: SCN-UNIT-REVIEW-014 review成果物も4つの開発考慮事項を必須とする
+    Given 開発考慮事項を欠く完全なreviewがある
+    When review gateを評価する
+    Then reviewはrejectedである
+
   Scenario: SCN-UNIT-POLICY-001 package defaultはPR停止かつmerge disabledである
     Given package default policyを読み込む
     When policyを検証する
@@ -93,6 +140,11 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When policyを検証する
     Then policyはinvalidである
     And policy schema逸脱をすべて報告する
+
+  Scenario: SCN-UNIT-POLICY-005 feature commitをPR base SHAとして自己申告できない
+    Given remote default branchから分岐したfeature commitがある
+    When feature commitをtrusted commitとexpected base SHAの両方へ指定する
+    Then explicit trusted authorityはremote default branchへ拘束されて拒否される
 
   Scenario: SCN-UNIT-PACKAGE-001 Step 0〜11にそれぞれ1つのskill contractがある
     Given v0.3 package assetを走査する
@@ -129,3 +181,48 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given 英語だけの人向けMarkdownがある
     When 日本語文書形式検査を実行する
     Then 日本語文書形式検査は失敗する
+
+  Scenario: SCN-UNIT-PACKAGE-008 project選択の全test layerとnon-override安全境界をtemplate・運用仕様で保持する
+    Given v0.3 package assetを走査する
+    When project選択層とfalse block対応の文書契約を検査する
+    Then 全test layerは層ごとに追跡されnon-override denyは弱化されない
+
+  Scenario: SCN-UNIT-PACKAGE-009 汎用runtimeとtemplateへrepository固有rule ID・固定表示値を混入しない
+    Given package所有runtimeと変更済みtemplateを走査する
+    When repository固有IDと固定表示labelを検査する
+    Then 汎用packageの所有境界違反は0件である
+
+  Scenario: SCN-UNIT-PACKAGE-010 review templateは全変更fileの個別監査を要求する
+    Given review templateとPR事前確認を読む
+    When 全変更file監査契約を検査する
+    Then 1ファイル1行と差分path集合完全一致が必須である
+
+  Scenario: SCN-UNIT-PACKAGE-011 個別監査gateはGit差分と1ファイル1行を完全照合する
+    Given H_implの全変更pathと一致する個別監査artifactがある
+    When 個別監査gateを正規表と余分なpathで検証する
+    Then 正規表だけが合格し余分なpathと空差分基点は拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-012 製品versionはpackage.jsonを正本としpolicy patch移行と一致する
+    Given package metadataとpolicy version artifactがある
+    When version正本との一致を検証する
+    Then 製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する
+
+  Scenario: SCN-UNIT-PACKAGE-013 全Step skillは正確なtemplate・成果物・統制語彙・ドメイン用語台帳へ拘束される
+    Given packageのStep skillとtemplate契約がある
+    When 正規契約とリンク切れ・対応漏れ・経路欠落契約を検証する
+    Then 正規契約だけが合格しリンク切れ・対応漏れ・経路欠落は拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-014 全directoryはownerと使い方が分かる入口文書を持つ
+    Given packageのdirectory利用案内契約がある
+    When 正規契約と入口欠落・未知directory・リンク切れ契約を検証する
+    Then 正規契約だけが合格し入口欠落・未知directory・リンク切れは拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-015 frontmatter block scalarで日本語検査を迂回できない
+    Given 英語descriptionをblock scalarへ隠したMarkdownがある
+    When 日本語文書形式検査を実行する
+    Then block scalar回避として拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-016 npx lifecycle公開契約をpackage、help、利用案内、仕様で一致させる
+    Given npx lifecycleの公開契約がある
+    When 正規契約と旧aliasを公開した契約を検証する
+    Then 正規契約だけが合格し旧aliasの公開は拒否される
