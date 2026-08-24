@@ -6,6 +6,9 @@
 node_modules/
 .worktrees/
 
+# compileが毎回削除して再生成する配布用ビルド成果物。配布はpackage.jsonのfilesが行う
+dist/
+
 # 同期前staging、失効済みlocal issue、他案件を含み得るmemo
 .agent-skill-chain/tmp/
 /issues/
