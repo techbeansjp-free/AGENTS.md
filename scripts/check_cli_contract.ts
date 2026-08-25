@@ -8,6 +8,7 @@ import {
 } from "../src/cli-contract.js";
 
 const GUIDE = ".agent-skill-chain/00_利用案内.md";
+const README = "README.md";
 const SPEC_FILES = [
   "docs/specs/04_機能/00_ワークフローv0.3.md",
   "docs/specs/12_運用保守/00_運用設計.md",
@@ -18,10 +19,13 @@ export function checkCliContract(root = process.cwd()) {
   const errors = [];
   const metadataFile = path.resolve(root, "package.json");
   const guideFile = path.resolve(root, GUIDE);
+  const readmeFile = path.resolve(root, README);
   if (!fs.existsSync(metadataFile))
     return { valid: false, errors: ["package.jsonがありません"], commands: 0 };
   if (!fs.existsSync(guideFile))
     return { valid: false, errors: [`${GUIDE}がありません`], commands: 0 };
+  const readmeExists = fs.existsSync(readmeFile);
+  if (!readmeExists) errors.push(`${README}がありません`);
   const metadata = JSON.parse(
     fs.readFileSync(metadataFile, "utf8"),
   ) as unknown as { name?: string; bin?: Record<string, string> };
@@ -64,21 +68,33 @@ export function checkCliContract(root = process.cwd()) {
     errors.push("旧lifecycle aliasが公開commandへ正しく対応していません");
 
   const guide = fs.readFileSync(guideFile, "utf8");
-  for (const command of PUBLIC_LIFECYCLE_COMMANDS) {
-    const invocation = `npx ${packageName} ${command}`;
-    if (!guide.includes(invocation))
-      errors.push(`中央利用案内に公開commandがありません: ${invocation}`);
-  }
-  for (const alias of Object.keys(LEGACY_LIFECYCLE_ALIASES)) {
-    const publicAlias = new RegExp(
-      `npx\\s+${packageName}(?:@[^\\s]+)?\\s+${alias}(?:\\s|\x60)`,
-      "u",
-    );
-    if (publicAlias.test(guide))
-      errors.push(
-        `中央利用案内が旧aliasを公開commandとして案内しています: ${alias}`,
+  const readme = readmeExists ? fs.readFileSync(readmeFile, "utf8") : "";
+  for (const [label, document] of [
+    ["中央利用案内", guide],
+    ["README", readme],
+  ] as const) {
+    for (const command of PUBLIC_LIFECYCLE_COMMANDS) {
+      const invocation = `npx ${packageName} ${command}`;
+      if (!document.includes(invocation))
+        errors.push(`${label}に公開commandがありません: ${invocation}`);
+    }
+    for (const alias of [...Object.keys(LEGACY_LIFECYCLE_ALIASES), "setup"]) {
+      const publicAlias = new RegExp(
+        `npx\\s+${packageName}(?:@[^\\s]+)?\\s+${alias}(?=\\s|\x60|$)`,
+        "mu",
       );
+      if (publicAlias.test(document))
+        errors.push(
+          `${label}が旧aliasを公開commandとして案内しています: ${alias}`,
+        );
+    }
   }
+  if (!readme.includes("--root=."))
+    errors.push("READMEに対象directory指定の--root=.がありません");
+  if (!readme.includes("previewが既定"))
+    errors.push("READMEに変更系commandのpreview既定がありません");
+  if (!readme.includes("--apply"))
+    errors.push("READMEに変更系commandの--apply条件がありません");
 
   for (const relative of SPEC_FILES) {
     const file = path.resolve(root, relative);

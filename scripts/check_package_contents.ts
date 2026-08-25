@@ -111,6 +111,12 @@ export function checkPackageContents(): {
       root,
       { ...process.env, npm_config_cache: cache },
     );
+    if (packed.error)
+      return {
+        valid: false,
+        errors: [`npm packを実行できません: ${packed.error.message}`],
+        files: 0,
+      };
     if (packed.status !== 0)
       return { valid: false, errors: [packed.stderr], files: 0 };
     const report = JSON.parse(packed.stdout) as Array<{
@@ -151,6 +157,7 @@ export function checkPackageContents(): {
     const required = new Set([
       "package.json",
       "dist/bin/agent-skill-chain.js",
+      "README.md",
       "AGENTS.md",
       ".agent-skill-chain/00_利用案内.md",
       ".agent-skill-chain/docs/00_運用ポリシー.md",
