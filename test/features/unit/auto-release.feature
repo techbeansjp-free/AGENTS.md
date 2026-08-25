@@ -31,3 +31,8 @@ Feature: main mergeの自動release計画
     Given prereleaseと通常versionと解決不能versionの衝突入力がある
     When 衝突した自動release計画を作成する
     Then 解決可能なversionは0.3.x内でbumpし解決不能なversionは停止する
+
+  Scenario: SCN-UNIT-AUTORELEASE-007 bump経路のgateがaudit:checkを含まない
+    Given audit:checkを含むbump経路のworkflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はbump経路のaudit:checkを根拠に拒否する
