@@ -25,6 +25,14 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 
 適用後はroot HEAD、`git worktree list --porcelain`、対象path、他worktree snapshotを再読取する。対象削除後のrepository直下`.worktrees/`がsymlinkでない実在する空directoryの場合だけ、既存workspace hygieneの最新reportと明示path `.worktrees`を使って非再帰に除去する。非空、symlink、root外、不明は保持する。
 
+## Issue検証コマンド
+
+| コマンド | 入力 | 出力・終了code |
+|---|---|---|
+| `issue validate` | `--path=<directory>`と任意の`--stage=requirements\|design`、変更fileを検査する場合は`--changed` | mode、valid、全error、PoC禁止操作をJSONで返す。validは0、invalidは1 |
+
+`--stage=requirements`はfullの`00_要求定義.md`と`01_要件定義.md`だけを必要成果物とし、Step 4で使用する。`--stage=design`はfullの`00_要求定義.md`から`03_実装計画.md`までを必要成果物とし、Step 8で使用する。未指定は後方互換のため`design`相当の全件検証とする。quickとpocは成果物を00へ集約するためstageで必要成果物を変えない。全mode・全stageでP-01〜P-07、開発考慮事項、未解決placeholder、Gherkin scenario IDを検証し、`--stage=requirements`でもGherkinを省略できない。未知のstageは入力errorとして非0で拒否する。
+
 | Policy CLI | 入力 | 出力・終了code |
 |---|---|---|
 | `policy validate` | policy JSON。PR CIは`--trusted-commit / --expected-base-sha / --candidate-head-sha / --base-ref / --default-branch / --repo / --pr`を明示 | 有効性、全error、長命branchへ`merge`なしでsquashまたはrebaseだけが解決される場合の`warn`、project policy `v0.3.0`には`v0.3.1` staged migration案。警告だけなら終了codeは0。唯一のGitHub adapterがexact repo/PRのbase OID/ref、head OID、repository default branchとcurrent tip OIDを観測し、base refとdefault branch、base OIDと両base SHA、head OIDとcandidate head SHA、provider tip OIDとlocal remote default tipの一致を検証する。trusted SHAはそのtipのancestorでなければならず、feature-only commit、stale local ref、非default base、provider不明を拒否する |

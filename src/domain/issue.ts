@@ -39,6 +39,142 @@ const FULL_FILES = {
   "03_実装計画.md": "03_実装計画.md",
 };
 
+export type IssueValidationStage = "requirements" | "design";
+
+export function issueRequiredHeadings(mode: Mode): readonly string[] {
+  return mode === "quick"
+    ? [
+        "1. 目的、現在、期待状態（必須）",
+        "2. 対象範囲と権限（必須）",
+        "3. ドメイン影響（必須）",
+        "4. Q-01〜Q-08の回答と根拠（必須）",
+        "5. 要求、受け入れ条件、最小Gherkin（必須）",
+        "6. 最小設計",
+        "7. 実装とテストの計画",
+        "8. P-01〜P-07の証拠",
+        "9. 仕様、図表、識別子",
+        "10. リスク、レビュー、再開地点",
+      ]
+    : mode === "poc"
+      ? [
+          "1. 目的、現在、期待状態（必須）",
+          "2. 対象範囲と権限（必須）",
+          "3. ドメイン影響（必須）",
+          "4. PoC宣言（必須）",
+          "5. high risk確認（必須）",
+          "6. 要求、受け入れ条件、実行可能な受け入れ例（必須）",
+          "7. 最小設計",
+          "8. 実装とテストの計画",
+          "9. P-01〜P-07の証拠",
+          "10. 仕様、図表、識別子",
+          "11. リスク、昇格・廃止判断、再開地点",
+        ]
+      : [
+          "1. 目的と背景",
+          "2. 対象範囲",
+          "3. 利害関係者と利用場面",
+          "4. ドメイン影響",
+          "5. 要求の概要",
+          "6. 制約、前提、依存関係",
+          "7. 受け入れ条件と成功基準",
+          "8. リスクと安全側への縮小",
+          "9. モード判定Q-01〜Q-08",
+          "10. P-01〜P-07の適用計画",
+          "11. 図表と識別子の判断",
+          "12. 参考資料、未決事項、再開地点",
+        ];
+}
+
+const TEMPLATE_PLACEHOLDER_TERM =
+  /記載|記入|件名|名称|内容|役割|日時|ISO 8601形式|状態|結果|根拠|条件|パス|URL|SHA|値|対象/u;
+
+function templateParentheticalPlaceholders(): ReadonlySet<string> {
+  const placeholders = new Set<string>();
+  for (const name of fs.readdirSync(templateRoot)) {
+    if (!name.endsWith(".md")) continue;
+    const template = fs.readFileSync(path.join(templateRoot, name), "utf8");
+    for (const match of template.matchAll(/（[^）\n]+）/gu))
+      if (TEMPLATE_PLACEHOLDER_TERM.test(match[0])) placeholders.add(match[0]);
+  }
+  return placeholders;
+}
+
+const TEMPLATE_PARENTHETICAL_PLACEHOLDERS = templateParentheticalPlaceholders();
+
+function withoutInlineCode(line: string): string {
+  let visible = "";
+  let cursor = 0;
+  while (cursor < line.length) {
+    const opening = line.indexOf("`", cursor);
+    if (opening < 0) return visible + line.slice(cursor);
+    visible += line.slice(cursor, opening);
+    let length = 1;
+    while (line[opening + length] === "`") length += 1;
+    const delimiter = "`".repeat(length);
+    const closing = line.indexOf(delimiter, opening + length);
+    if (closing < 0) return visible + line.slice(opening);
+    cursor = closing + length;
+  }
+  return visible;
+}
+
+function withoutCode(text: string): string {
+  const visible: string[] = [];
+  let fence: { marker: "`" | "~"; length: number } | undefined;
+  for (const line of text.split("\n")) {
+    const opening = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
+    if (fence) {
+      if (
+        new RegExp(
+          `^\\s*${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
+          "u",
+        ).test(line)
+      )
+        fence = undefined;
+      visible.push("");
+      continue;
+    }
+    if (opening) {
+      fence = {
+        marker: opening[0] as "`" | "~",
+        length: opening.length,
+      };
+      visible.push("");
+      continue;
+    }
+    visible.push(withoutInlineCode(line));
+  }
+  return visible.join("\n");
+}
+
+function withoutGherkin(text: string): string {
+  let inGherkin = false;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (
+        /^\s*(?:@[\w@-]+|Feature:|Rule:|Background:|Scenario(?: Outline)?:|Examples:|Given\b|When\b|Then\b|And\b|But\b|\*)/u.test(
+          line,
+        )
+      ) {
+        inGherkin = true;
+        return "";
+      }
+      if (inGherkin && /^\s*(?:\||#|$)/u.test(line)) return "";
+      inGherkin = false;
+      return line;
+    })
+    .join("\n");
+}
+
+function hasUnresolvedPlaceholder(text: string): boolean {
+  const prose = withoutGherkin(withoutCode(text));
+  if (/<[^>\n]+>|\{[^}\n]+\}/u.test(prose)) return true;
+  return [...prose.matchAll(/（[^）\n]+）/gu)].some((match) =>
+    TEMPLATE_PARENTHETICAL_PLACEHOLDERS.has(match[0]),
+  );
+}
+
 function timestamp(date: Date): string {
   return date.toISOString().replace(/[-:]/g, "").replace("T", "_").slice(0, 15);
 }
@@ -326,6 +462,7 @@ export function validateIssue(
     requestedOperation?: string;
     operation?: string;
     delivery?: { stopAt?: string };
+    stage?: IssueValidationStage;
   } = {},
 ) {
   const errors: string[] = [];
@@ -345,63 +482,22 @@ export function validateIssue(
       ? declaredValue
       : "full";
   let mode: Mode = declared;
-  const requiredHeadings =
-    declared === "quick"
-      ? [
-          "1. 目的、現在、期待状態（必須）",
-          "2. 対象範囲と権限（必須）",
-          "3. ドメイン影響（必須）",
-          "4. Q-01〜Q-08の回答と根拠（必須）",
-          "5. 要求、受け入れ条件、最小Gherkin（必須）",
-          "6. 最小設計",
-          "7. 実装とテストの計画",
-          "8. P-01〜P-07の証拠",
-          "9. 仕様、図表、識別子",
-          "10. リスク、レビュー、再開地点",
-        ]
-      : declared === "poc"
-        ? [
-            "1. 目的、現在、期待状態（必須）",
-            "2. 対象範囲と権限（必須）",
-            "3. ドメイン影響（必須）",
-            "4. PoC宣言（必須）",
-            "5. high risk確認（必須）",
-            "6. 要求、受け入れ条件、実行可能な受け入れ例（必須）",
-            "7. 最小設計",
-            "8. 実装とテストの計画",
-            "9. P-01〜P-07の証拠",
-            "10. 仕様、図表、識別子",
-            "11. リスク、昇格・廃止判断、再開地点",
-          ]
-        : [
-            "1. 目的と背景",
-            "2. 対象範囲",
-            "3. 利害関係者と利用場面",
-            "4. ドメイン影響",
-            "5. 要求の概要",
-            "6. 制約、前提、依存関係",
-            "7. 受け入れ条件と成功基準",
-            "8. リスクと安全側への縮小",
-            "9. モード判定Q-01〜Q-08",
-            "10. P-01〜P-07の適用計画",
-            "11. 図表と識別子の判断",
-            "12. 参考資料、未決事項、再開地点",
-          ];
+  const requiredHeadings = issueRequiredHeadings(declared);
   for (const heading of requiredHeadings) {
     if (!text.includes(`## ${heading}`))
       errors.push(`必須項目がありません: ${heading}`);
   }
+  const validatedFullFiles =
+    declared === "full" && options.stage === "requirements"
+      ? ["01_要件定義.md"]
+      : Object.keys(FULL_FILES);
   const allText = [
     text,
-    ...Object.keys(FULL_FILES)
+    ...validatedFullFiles
       .filter((name) => fs.existsSync(path.join(issuePath, name)))
       .map((name) => fs.readFileSync(path.join(issuePath, name), "utf8")),
   ].join("\n");
-  if (
-    /<[^>\n]+>|\{[^}\n]+\}|（[^）\n]*(?:記載|記入|件名|名称|内容|役割|日時|ISO 8601形式|状態|結果|根拠|条件|パス|URL|SHA|値|対象)[^）\n]*）/.test(
-      allText,
-    )
-  )
+  if (hasUnresolvedPlaceholder(allText))
     errors.push("未解決のplaceholderが残っています");
   for (let index = 1; index <= 7; index += 1) {
     const id = `P-${String(index).padStart(2, "0")}`;
@@ -476,13 +572,22 @@ export function validateIssue(
       `PoCでは${requestedOperation}を要求できません。delivery.stopAt=${options.delivery?.stopAt ?? "pull_request"}で停止し、fullへ昇格してください`,
     );
   if (mode === "full") {
-    for (const name of Object.keys(FULL_FILES))
+    const requiredFiles =
+      options.stage === "requirements"
+        ? ["01_要件定義.md"]
+        : validatedFullFiles;
+    for (const name of requiredFiles)
       if (!fs.existsSync(path.join(issuePath, name)))
         errors.push(`fullモードには${name}が必要です`);
   }
   const considerationFiles =
     mode === "full"
-      ? ["00_要求定義.md", ...Object.keys(FULL_FILES)]
+      ? [
+          "00_要求定義.md",
+          ...(options.stage === "requirements"
+            ? ["01_要件定義.md"]
+            : validatedFullFiles),
+        ]
       : ["00_要求定義.md"];
   for (const name of considerationFiles) {
     const file = path.join(issuePath, name);
