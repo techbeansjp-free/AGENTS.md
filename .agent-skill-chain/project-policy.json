@@ -10,6 +10,23 @@
       "requiredChecks": [],
       "requiredReviews": 1
     },
+    "worktree": {
+      "root": ".worktrees",
+      "namePattern": "{timestamp}-{issueNumber}-{slug}",
+      "branchPattern": "{type}/{issueNumber}-{slug}",
+      "allowedBranchTypes": [
+        "feature",
+        "fix",
+        "bugfix",
+        "refactor",
+        "test",
+        "docs",
+        "chore",
+        "process"
+      ],
+      "base": "remote-default-branch",
+      "cleanup": "after-merge"
+    },
     "budgets": { "localFeedbackMs": 120000, "prGateMs": 900000 }
   },
   "choiceFiles": ["project/choices/development.json"],
