@@ -705,12 +705,22 @@ Given(
       this.projectQualityRoot,
       "package.json",
     );
+    const trustedPackage = JSON.parse(
+      fs.readFileSync(
+        path.join(this.projectQualityTrustedRoot, "package.json"),
+        "utf8",
+      ),
+    ) as unknown as {
+      agentSkillChain: { qualityContractVersion: number };
+    };
+    const fromVersion = trustedPackage.agentSkillChain.qualityContractVersion;
+    const toVersion = fromVersion + 1;
     const candidatePackage = JSON.parse(
       fs.readFileSync(candidatePackageFile, "utf8"),
     ) as unknown as {
       agentSkillChain: { qualityContractVersion: number };
     };
-    candidatePackage.agentSkillChain.qualityContractVersion = 2;
+    candidatePackage.agentSkillChain.qualityContractVersion = toVersion;
     fs.writeFileSync(
       candidatePackageFile,
       `${JSON.stringify(candidatePackage, null, 2)}\n`,
@@ -718,8 +728,8 @@ Given(
     const proposal = {
       proposalId: "TQP-QUALITY-STRENGTHENING-001",
       status: "staged",
-      fromVersion: 1,
-      toVersion: 2,
+      fromVersion,
+      toVersion,
       owner: "repository maintainer",
       rationale: "review文書をformatter対象へ戻して形式品質を強化する",
       rollback: "qualityContractVersion 1と従来ignore内容へ戻す",
@@ -733,8 +743,8 @@ Given(
         {
           kind: "packageField",
           name: "agentSkillChain.qualityContractVersion",
-          beforeSha256: valueSha256(1),
-          afterSha256: valueSha256(2),
+          beforeSha256: valueSha256(fromVersion),
+          afterSha256: valueSha256(toVersion),
         },
       ],
     };
