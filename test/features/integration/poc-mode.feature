@@ -8,7 +8,7 @@ Feature: PoCの最小成果物と停止点を統合する
     Given PoCの最小stagingを生成する条件が揃っている
     When pocのissue stagingを作成する
     Then stagingのモードはpocである
-    And stagingには00要求定義だけが存在する
+    And stagingには00要求定義とstaging記録が存在する
     And 00要求定義に目的と期間と成功中止条件と非対象と責任者が日本語で記録される
     And 00要求定義の管理情報はpocである
 

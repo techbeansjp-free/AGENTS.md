@@ -195,8 +195,11 @@ Then("stagingのモードはpocである", function () {
   assert.equal(this.issue.mode, "poc");
 });
 
-Then("stagingには00要求定義だけが存在する", function () {
-  assert.deepEqual(fs.readdirSync(this.issue.path), ["00_要求定義.md"]);
+Then("stagingには00要求定義とstaging記録が存在する", function () {
+  assert.deepEqual(fs.readdirSync(this.issue.path), [
+    "00_要求定義.md",
+    "staging-record.json",
+  ]);
 });
 
 Then(
@@ -313,12 +316,15 @@ function e2eOutput(world: PocModeWorld): {
   };
 }
 
-Then("quickとpocはどちらも00要求定義だけを生成する", function () {
+Then("quickとpocはどちらも00要求定義とstaging記録を生成する", function () {
   const output = e2eOutput(this);
   assert.equal(output.quick.mode, "quick");
   assert.equal(output.poc.mode, "poc");
-  assert.deepEqual(output.quick.files, ["00_要求定義.md"]);
-  assert.deepEqual(output.poc.files, ["00_要求定義.md"]);
+  assert.deepEqual(output.quick.files, [
+    "00_要求定義.md",
+    "staging-record.json",
+  ]);
+  assert.deepEqual(output.poc.files, ["00_要求定義.md", "staging-record.json"]);
 });
 
 Then("quickにはPoC宣言がなくpocにはPoC宣言と停止点がある", function () {

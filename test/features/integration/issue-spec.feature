@@ -11,6 +11,7 @@ Feature: Issue stagingとsystem specificationを安全に統合する
     And stagingは".agent-skill-chain/tmp/issues"配下にある
     And durabilityとsyncedはfalseである
     And 00_要求定義.mdが存在する
+    And staging記録がlocal-activeで存在する
 
   Scenario: SCN-INT-ISSUE-002 同時作成先のcollisionでも既存内容を保持する
     Given GitHub remoteを持たない一時repositoryがある

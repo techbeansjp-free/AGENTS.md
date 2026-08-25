@@ -56,8 +56,12 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 | `routing evidence complete` | store設定と`--evidence-id --implementation-head --end-state` | 無指定は追記preview、`--apply`はcompletedまたはinterruptedのcompletion recordを1件追記する |
 | `routing evidence state` | store設定と`--evidence-id --state --reason` | 無指定は追記preview、`--apply`はsupersededまたはinvalidatedのEvidenceStateRecordを追記する |
 | `routing evidence prune` | project choiceの保持方針。適用時は`--digest --target-ids` | 無指定は削除せず対象IDとdigestを返す。適用は`--apply --authorize=approved`とpreview一致を要求し、不一致またはauthority欠落は非0で拒否する |
+| `issue staging` | `--root [--now] [--retention-days]`。無指定はpreview | `.agent-skill-chain/tmp/issues/`直下の候補、除外理由、同期証拠、fingerprint、SHA-256 report hashをJSONで返しfileを変更しない |
+| `issue staging --apply` | preview入力と`--approved-hash=<64桁hex>` | 同じroot・保持条件の再plan hashが一致した候補だけを削除する。completedは0、rejectedまたはpartially-completedは日本語structured diagnosticまたはrecovery付きで非0 |
 
 外部authorityを要しないpolicy CLIはofflineで動作する。PR CIのexplicit authority検証などGitHub必須gateは接続障害・不完全な観測時に`pending`としてfail-closed（exit非zero）とし、local安全結果は保持して成功扱いしない。観測済みtupleと入力の不一致は`rejected`、検証中のtuple変更は`pending`として再実行を案内する。
+
+`issue sync`はquick・pocのStep 4またはfullのStep 8という最終同期で`--staging-path --checkpoint`を併記できる。GitHub adapterの本文書き込み後再読取が一致し、同期前後のlocal body digestも一致した場合だけ、tracker URL、同期時刻、checkpoint、期待・再読取digestをstaging記録へ保存して再読取する。fullのStep 4は最終checkpointではないため同期記録を更新しない。
 
 `pr create --dry-run`はtrusted Git policyとlocal review/test/spec/ownership evidenceの構造を判定するが、GitHub authorityをattestしない`unverified-preview`とし、GitHub/`gh`を呼ばない。`--apply`は明示authorizationを必須とし、唯一のGitHub adapterが作成直前にexact repositoryのwrite authority、remote head/base refのOIDを観測し、作成後のrepository/base/head/head OID/base OIDまで再読取する。local evidence JSONのprovenance自己申告をauthorityとして扱わない。
 
