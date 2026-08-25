@@ -164,6 +164,7 @@ export interface Policy {
     allowedBranchTypes: string[];
     base: string;
     cleanup: string;
+    finalizeIgnoredPathAllowlist?: string[];
   };
   rules: Rule[];
   projectChoices?: ProjectChoices;
