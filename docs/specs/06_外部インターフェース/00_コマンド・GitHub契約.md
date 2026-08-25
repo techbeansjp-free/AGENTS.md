@@ -13,6 +13,17 @@ CLIは引数を構造化入力として受け、適用を伴う操作は既定�
 
 GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報の伏字化と行動可能な根拠・次行動を保持する。表示言語はproject choiceを読むcaller adapterが選択する。
 
+## worktree merge完了コマンド
+
+| コマンド | 入力 | 出力・終了code |
+|---|---|---|
+| `worktree finalize --complete --dry-run` | `--root --path --evidence --merge-sha`。cleanup authorityと承認digestは任意 | 副作用なしで全phase、`state`、`requiredAuthority`、日本語`recovery`、最新`previewDigest`、対象pathをJSONで返す。未承認は`pending`かつ非0 |
+| `worktree finalize --complete --apply` | preview入力に`--authorize=approved`を加える。cleanup適用にはさらに`--cleanup-authority --approved-digest=<64桁hex>`が必要 | merge確認後にrootを更新する。cleanup authorityなしはroot更新済み・cleanup pendingで非0。全検証成功は`completed`で0、拒否または部分完了は非0 |
+
+`--authorize=approved`は既存finalizeとroot更新のauthorityであり、cleanup operationのauthorityとして流用しない。`--cleanup-authority`は実行ごとの明示authorityで、project policyへ保存しない。apply直前にfinalize reportを再生成し、そのSHA-256 hashを最新cleanup preview digestとして`--approved-digest`と完全一致させる。cleanupは既存`applyFinalize`が発行する対象1件の`worktree.remove`だけをGit公式commandへ渡し、branch削除、prune、他worktree探索を行わない。
+
+適用後はroot HEAD、`git worktree list --porcelain`、対象path、他worktree snapshotを再読取する。対象削除後のrepository直下`.worktrees/`がsymlinkでない実在する空directoryの場合だけ、既存workspace hygieneの最新reportと明示path `.worktrees`を使って非再帰に除去する。非空、symlink、root外、不明は保持する。
+
 | Policy CLI | 入力 | 出力・終了code |
 |---|---|---|
 | `policy validate` | policy JSON。PR CIは`--trusted-commit / --expected-base-sha / --candidate-head-sha / --base-ref / --default-branch / --repo / --pr`を明示 | 有効性、全error、project policy `v0.3.0`には`v0.3.1` staged migration案。唯一のGitHub adapterがexact repo/PRのbase OID/ref、head OID、repository default branchとcurrent tip OIDを観測し、base refとdefault branch、base OIDと両base SHA、head OIDとcandidate head SHA、provider tip OIDとlocal remote default tipの一致を検証する。trusted SHAはそのtipのancestorでなければならず、feature-only commit、stale local ref、非default base、provider不明を拒否する |

@@ -11,6 +11,7 @@ import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { createPullRequest, authorizeMerge } from "./domain/delivery.js";
 import {
   createWorktree,
+  canonicalWorktreePath,
   DEFAULT_WORKTREE_PLACEMENT,
   enforceTrustedWorktreeBoundary,
   inspectFinalizeState,
@@ -24,8 +25,11 @@ import {
 import {
   buildFinalizeReport,
   applyFinalize,
+  planCompletion,
   planRootUpdate,
   planWorktreeCleanup,
+  summarizeCompletion,
+  type CompletionPhaseResult,
   type RootUpdateObservation,
 } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
@@ -382,6 +386,449 @@ function rootUpdateDiagnostic(
       rollback: "root worktreeを変更せず対象worktreeを保持する",
     },
   };
+}
+
+function pathExists(target: string): boolean {
+  try {
+    fs.lstatSync(target);
+    return true;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ENOTDIR")
+    )
+      return false;
+    throw error;
+  }
+}
+
+function removeHygieneTarget(
+  reportRoot: string,
+  target: { path: string; kind: HygieneKind },
+): void {
+  const stat = fs.lstatSync(target.path);
+  if (stat.isSymbolicLink())
+    throw new Error(`削除直前にsymlinkを検出しました: ${target.path}`);
+  const real = fs.realpathSync(target.path);
+  const relative = path.relative(reportRoot, real);
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  )
+    throw new Error(`削除直前のcontainment検証に失敗しました: ${target.path}`);
+  if (target.kind === "temporary-artifact") {
+    if (!stat.isFile())
+      throw new Error(`一時生成物が通常fileではありません: ${target.path}`);
+    fs.rmSync(target.path);
+    return;
+  }
+  if (!stat.isDirectory())
+    throw new Error(`空directory候補の型が変化しました: ${target.path}`);
+  fs.rmdirSync(target.path);
+}
+
+function completionRecovery(phases: CompletionPhaseResult[]): string[] {
+  return [
+    ...new Set(
+      phases.flatMap((phase) => [
+        ...phase.recovery,
+        ...phase.reasons.filter((reason) => reason.trim() !== ""),
+      ]),
+    ),
+  ];
+}
+
+function worktreeIdentitySnapshot(root: string, excludedPath: string): string {
+  return JSON.stringify({
+    branches: git(
+      ["for-each-ref", "--format=%(refname)%00%(objectname)", "refs/heads"],
+      root,
+    ).stdout,
+    worktrees: registeredWorktrees(root)
+      .filter((worktree) => worktree.path !== excludedPath)
+      .sort(
+        (left, right) =>
+          left.path.localeCompare(right.path) ||
+          left.branch.localeCompare(right.branch),
+      ),
+  });
+}
+
+function applyVerifiedRootUpdate(
+  root: string,
+  mergeSha: string,
+): ReturnType<typeof planRootUpdate> {
+  const initial = observeRootUpdate(root, mergeSha);
+  const locallySafe =
+    initial.rootPath.trim() !== "" &&
+    initial.currentBranch === initial.defaultBranch &&
+    !initial.dirty &&
+    initial.untracked.length === 0 &&
+    initial.upstreamRef !== undefined &&
+    /^[a-f0-9]{40}$/iu.test(initial.mergeSha) &&
+    initial.remoteSha === initial.mergeSha;
+  if (locallySafe && initial.upstreamSha !== initial.remoteSha)
+    git(
+      [
+        "fetch",
+        "--no-tags",
+        "origin",
+        `refs/heads/${initial.defaultBranch}:refs/remotes/origin/${initial.defaultBranch}`,
+      ],
+      root,
+    );
+  const plan = planRootUpdate(observeRootUpdate(root, mergeSha));
+  if (plan.state === "ready" && plan.from !== plan.to)
+    git(["merge", "--ff-only", mergeSha], root);
+  return plan;
+}
+
+function completionPostVerify(input: {
+  phases: CompletionPhaseResult[];
+  root: string;
+  mergeSha: string;
+  target: string;
+  otherWorktreesBefore: string;
+  containerState: "removed" | "retained" | "absent";
+}) {
+  const rootSha = git(["rev-parse", "HEAD"], input.root).stdout.trim();
+  return summarizeCompletion({
+    phases: input.phases,
+    postVerify: {
+      rootSha,
+      expectedRootSha: input.mergeSha,
+      targetPathAbsent: !pathExists(input.target),
+      otherWorktreesUnchanged:
+        worktreeIdentitySnapshot(input.root, input.target) ===
+        input.otherWorktreesBefore,
+      containerState: input.containerState,
+    },
+  });
+}
+
+function cleanupEmptyWorktreeContainer(root: string): {
+  state: "removed" | "retained" | "absent";
+  failure?: string;
+} {
+  const container = path.join(root, ".worktrees");
+  if (!pathExists(container)) return { state: "absent" };
+  try {
+    const hygiene = previewWorkspaceHygiene({ root });
+    if (
+      !hygiene.candidates.some(
+        (candidate) =>
+          candidate.relative === ".worktrees" &&
+          candidate.kind === "completed-worktree-container",
+      )
+    )
+      return { state: "retained" };
+    applyWorkspaceHygiene(
+      {
+        report: hygiene,
+        approvedHash: hygiene.hash,
+        root,
+        operations: ["completed-worktree-container"],
+        paths: [".worktrees"],
+      },
+      (candidate) => removeHygieneTarget(hygiene.root, candidate),
+    );
+    return { state: pathExists(container) ? "retained" : "removed" };
+  } catch (error) {
+    return {
+      state: "retained",
+      failure: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function executeCompletionFlow(input: {
+  flags: Flags;
+  apply: boolean;
+  root: string;
+  target: string;
+  evidence: ReturnType<typeof readFinalizeEvidence>;
+}): number {
+  const { flags, apply, root, target, evidence } = input;
+  if (flags.complete !== true)
+    throw new Error("--completeは値を付けずに指定してください");
+  if (
+    flags["cleanup-authority"] !== undefined &&
+    flags["cleanup-authority"] !== true
+  )
+    throw new Error("--cleanup-authorityは値を付けずに指定してください");
+  const cleanupAuthorityGranted = flags["cleanup-authority"] === true;
+  const mergeSha = required(flags, "merge-sha");
+  const approvedDigest =
+    typeof flags["approved-digest"] === "string"
+      ? flags["approved-digest"]
+      : "";
+  const initialRootObservation = observeRootUpdate(root, mergeSha);
+  const initialRootPlan = planRootUpdate(initialRootObservation);
+  const targetPresent = pathExists(target);
+  const initialState = targetPresent
+    ? inspectFinalizeState(root, target, evidence)
+    : undefined;
+  const projectedState = initialState
+    ? {
+        ...initialState,
+        ...(evidence.base === initialRootObservation.defaultBranch ||
+        evidence.base === initialRootObservation.upstreamRef
+          ? { baseSha: mergeSha }
+          : {}),
+      }
+    : undefined;
+  const report = projectedState
+    ? buildFinalizeReport(projectedState)
+    : undefined;
+  const initialCleanup = planWorktreeCleanup({
+    repositoryRoot: root,
+    target: {
+      path: target,
+      branch: initialState?.branch ?? "",
+    },
+    registered: registeredWorktrees(root),
+    prMerged: evidence.prMerged === true,
+    clean: initialState
+      ? initialState.dirty === false && initialState.untracked.length === 0
+      : undefined,
+    pushed: initialState?.pushed,
+    recoveryReachable: initialState?.recoveryReachable,
+    consumerAssets: initialState
+      ? [
+          ...initialState.untracked,
+          ...initialState.temporaryArtifacts,
+          ...initialState.ignoredArtifacts,
+        ]
+      : [],
+    targetCanonicalPath: canonicalWorktreePath(target),
+    targetAbsent: !targetPresent,
+  });
+  const previewDigest = report?.hash ?? "";
+  const plannedInitialCleanup =
+    report && !report.safe && initialCleanup.state === "ready"
+      ? {
+          state: "rejected" as const,
+          target: initialCleanup.target,
+          reasons: [...report.reasons],
+        }
+      : initialCleanup;
+  const initialPlan = planCompletion({
+    mergeConfirmed: evidence.prMerged === true,
+    mergeSha,
+    rootUpdate: initialRootPlan,
+    cleanup: plannedInitialCleanup,
+    cleanupAuthorityGranted,
+    previewDigest,
+    approvedDigest,
+  });
+  if (!apply) {
+    print({
+      state: initialPlan.state,
+      phases: initialPlan.phases,
+      requiredAuthority: initialPlan.requiredAuthority,
+      recovery: completionRecovery(initialPlan.phases),
+      previewDigest: report?.hash,
+      target,
+    });
+    return initialPlan.state === "ready" ? 0 : 1;
+  }
+  if (flags.authorize !== "approved")
+    throw new Error(
+      "root更新を含む完了処理の適用には--authorize=approvedが必要です",
+    );
+  const mergePhase = initialPlan.phases.find(
+    (phase) => phase.phase === "merge-confirm",
+  );
+  if (mergePhase?.state !== "succeeded") {
+    print({
+      state: "rejected",
+      phases: initialPlan.phases,
+      requiredAuthority: initialPlan.requiredAuthority,
+      recovery: completionRecovery(initialPlan.phases),
+      target,
+    });
+    return 1;
+  }
+  const appliedRootPlan = applyVerifiedRootUpdate(root, mergeSha);
+  if (
+    appliedRootPlan.state === "rejected" ||
+    git(["rev-parse", "HEAD"], root).stdout.trim() !== mergeSha
+  ) {
+    const phases = [
+      completionPhaseResult("merge-confirm", "succeeded"),
+      completionPhaseResult(
+        "root-update",
+        "rejected",
+        appliedRootPlan.reasons.length
+          ? appliedRootPlan.reasons
+          : ["適用後のroot HEADが検証済みmerge SHAと一致しません"],
+        appliedRootPlan.recovery,
+      ),
+      completionPhaseResult("cleanup-preview", "skipped"),
+      completionPhaseResult("cleanup-apply", "skipped"),
+      completionPhaseResult("post-verify", "skipped"),
+    ];
+    print({
+      state: "rejected",
+      phases,
+      requiredAuthority: [],
+      recovery: completionRecovery(phases),
+      target,
+    });
+    return 1;
+  }
+  if (!pathExists(target)) {
+    const container = cleanupEmptyWorktreeContainer(root);
+    const phases = initialPlan.phases.map((phase) =>
+      phase.phase === "post-verify"
+        ? completionPhaseResult(
+            "post-verify",
+            container.failure ? "rejected" : "succeeded",
+            container.failure ? [container.failure] : [],
+            container.failure
+              ? ["空containerの状態を再確認してhygiene previewから再実行する"]
+              : [],
+          )
+        : phase,
+    );
+    const otherWorktreesBefore = worktreeIdentitySnapshot(root, target);
+    const summary = completionPostVerify({
+      phases,
+      root,
+      mergeSha,
+      target,
+      otherWorktreesBefore,
+      containerState: container.state,
+    });
+    print({
+      ...summary,
+      phases,
+      requiredAuthority: [],
+      target,
+    });
+    return summary.state === "completed" ? 0 : 1;
+  }
+  const currentState = inspectFinalizeState(root, target, evidence);
+  const currentReport = buildFinalizeReport(currentState);
+  const currentCleanup = planWorktreeCleanup({
+    repositoryRoot: root,
+    target: { path: target, branch: currentState.branch },
+    registered: registeredWorktrees(root),
+    prMerged: currentState.prMerged === true,
+    clean: currentState.dirty === false && currentState.untracked.length === 0,
+    pushed: currentState.pushed,
+    recoveryReachable: currentState.recoveryReachable,
+    consumerAssets: [
+      ...currentState.untracked,
+      ...currentState.temporaryArtifacts,
+      ...currentState.ignoredArtifacts,
+    ],
+    targetCanonicalPath: fs.realpathSync(target),
+  });
+  const plannedCurrentCleanup =
+    !currentReport.safe && currentCleanup.state === "ready"
+      ? {
+          state: "rejected" as const,
+          target: currentCleanup.target,
+          reasons: [...currentReport.reasons],
+        }
+      : currentCleanup;
+  const currentPlan = planCompletion({
+    mergeConfirmed: currentState.prMerged === true,
+    mergeSha,
+    rootUpdate: appliedRootPlan,
+    cleanup: plannedCurrentCleanup,
+    cleanupAuthorityGranted,
+    previewDigest: currentReport.hash,
+    approvedDigest,
+  });
+  if (currentPlan.state !== "ready" || !currentReport.safe) {
+    const state =
+      currentPlan.state === "pending" ? "pending" : "partially-completed";
+    print({
+      state,
+      phases: currentPlan.phases,
+      requiredAuthority: currentPlan.requiredAuthority,
+      recovery: completionRecovery(currentPlan.phases),
+      previewDigest: currentReport.hash,
+      target,
+    });
+    return 1;
+  }
+  const otherWorktreesBefore = worktreeIdentitySnapshot(root, target);
+  let phases = currentPlan.phases;
+  try {
+    const trustedPolicy = loadOperationPolicy(root).policy;
+    applyFinalize(
+      {
+        report: currentReport,
+        approvedHash: approvedDigest,
+        currentState,
+        trustedPolicy,
+      },
+      (operation, payload) => {
+        if (operation !== "worktree.remove")
+          throw new Error("未対応の完了処理です");
+        if (typeof payload.path !== "string")
+          throw new Error("worktree pathが不正です");
+        git(["worktree", "remove", payload.path], root);
+      },
+    );
+  } catch (error) {
+    phases = phases.map((phase) =>
+      phase.phase === "cleanup-apply"
+        ? completionPhaseResult(
+            "cleanup-apply",
+            "rejected",
+            [error instanceof Error ? error.message : String(error)],
+            ["対象を保持してcleanup previewから再実行する"],
+          )
+        : phase,
+    );
+  }
+  const container = !pathExists(target)
+    ? cleanupEmptyWorktreeContainer(root)
+    : { state: "retained" as const };
+  phases = phases.map((phase) =>
+    phase.phase === "post-verify"
+      ? completionPhaseResult(
+          "post-verify",
+          container.failure ? "rejected" : "succeeded",
+          container.failure ? [container.failure] : [],
+          container.failure
+            ? ["空containerの状態を再確認してhygiene previewから再実行する"]
+            : [],
+        )
+      : phase,
+  );
+  const summary = completionPostVerify({
+    phases,
+    root,
+    mergeSha,
+    target,
+    otherWorktreesBefore,
+    containerState: container.state,
+  });
+  print({
+    ...summary,
+    phases,
+    requiredAuthority: [],
+    target,
+    containerState: container.state,
+  });
+  return summary.state === "completed" ? 0 : 1;
+}
+
+function completionPhaseResult(
+  phase: CompletionPhaseResult["phase"],
+  state: CompletionPhaseResult["state"],
+  reasons: string[] = [],
+  recovery: string[] = [],
+): CompletionPhaseResult {
+  return { phase, state, reasons, recovery };
 }
 
 function routingProject(root: string) {
@@ -1610,34 +2057,7 @@ export async function main(argv: string[]): Promise<number> {
         root,
         operations: hygieneOperations(flags),
       },
-      (target) => {
-        const stat = fs.lstatSync(target.path);
-        if (stat.isSymbolicLink())
-          throw new Error(`削除直前にsymlinkを検出しました: ${target.path}`);
-        const real = fs.realpathSync(target.path);
-        const relative = path.relative(report.root, real);
-        if (
-          relative === "" ||
-          relative === ".." ||
-          relative.startsWith(`..${path.sep}`) ||
-          path.isAbsolute(relative)
-        ) {
-          throw new Error(
-            `削除直前のcontainment検証に失敗しました: ${target.path}`,
-          );
-        }
-        if (target.kind === "temporary-artifact") {
-          if (!stat.isFile())
-            throw new Error(
-              `一時生成物が通常fileではありません: ${target.path}`,
-            );
-          fs.rmSync(target.path);
-          return;
-        }
-        if (!stat.isDirectory())
-          throw new Error(`空directory候補の型が変化しました: ${target.path}`);
-        fs.rmdirSync(target.path);
-      },
+      (target) => removeHygieneTarget(report.root, target),
     );
     print(result);
     return 0;
@@ -1647,11 +2067,13 @@ export async function main(argv: string[]): Promise<number> {
     const apply = applyMode(flags);
     const root = path.resolve(required(flags, "root"));
     const target = path.resolve(required(flags, "path"));
+    const evidence = readFinalizeEvidence(required(flags, "evidence"));
+    if (flags.complete !== undefined)
+      return executeCompletionFlow({ flags, apply, root, target, evidence });
     if (flags["update-root"] !== undefined && flags["update-root"] !== true)
       throw new Error("--update-rootは値を付けずに指定してください");
     const updateRoot = flags["update-root"] === true;
     const mergeSha = updateRoot ? required(flags, "merge-sha") : undefined;
-    const evidence = readFinalizeEvidence(required(flags, "evidence"));
     const state = inspectFinalizeState(root, target, evidence);
     const initialRootObservation = mergeSha
       ? observeRootUpdate(root, mergeSha)

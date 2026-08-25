@@ -336,7 +336,6 @@ export function previewWorkspaceHygiene(input: {
   };
 
   const scanWorktreeContainers = (directory: string): void => {
-    exclude(".worktrees", "worktree container root自身は保持します");
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(directory, { withFileTypes: true });
@@ -347,6 +346,19 @@ export function previewWorkspaceHygiene(input: {
       );
       return;
     }
+    if (entries.length === 0) {
+      const stat = fs.lstatSync(directory);
+      addCandidate(
+        directory,
+        ".worktrees",
+        "completed-worktree-container",
+        "登録済みworktreeを含まない空のworktree container rootです",
+        "Git worktree owner",
+        stat,
+      );
+      return;
+    }
+    exclude(".worktrees", "空ではないworktree container rootは保持します");
     for (const entry of entries) {
       const relative = path.join(".worktrees", entry.name);
       const absolute = path.join(directory, entry.name);
@@ -416,6 +428,9 @@ export function previewWorkspaceHygiene(input: {
   };
 
   const rootEntries = fs.readdirSync(identity.root, { withFileTypes: true });
+  const worktreeContainersOnly =
+    selectedKinds.size === 1 &&
+    selectedKinds.has("completed-worktree-container");
   for (const entry of rootEntries) {
     if (entry.name === ".worktrees" && entry.isDirectory()) {
       scanWorktreeContainers(path.join(identity.root, entry.name));
@@ -431,6 +446,13 @@ export function previewWorkspaceHygiene(input: {
       exclude(
         entry.name,
         "Git common directory、object、ref、reflog、worktree metadataは常に対象外です",
+      );
+      continue;
+    }
+    if (worktreeContainersOnly) {
+      exclude(
+        entry.name,
+        "completed-worktree-container以外は今回の検査operationに含まれていません",
       );
       continue;
     }
@@ -587,6 +609,7 @@ export function applyWorkspaceHygiene(
     approvedHash: string;
     root: string;
     operations: HygieneKind[];
+    paths?: string[];
   },
   remove: (target: { path: string; kind: HygieneKind }) => void,
 ): {
@@ -614,6 +637,25 @@ export function applyWorkspaceHygiene(
   const operations = validateKinds(input.operations);
   if (operations.size === 0)
     throw new Error("applyには1件以上の明示operationが必要です");
+  const selectedPaths = input.paths
+    ? new Set(
+        input.paths.map((selected) => {
+          if (
+            typeof selected !== "string" ||
+            selected.trim() === "" ||
+            path.isAbsolute(selected) ||
+            hasParentReference(selected) ||
+            hasUnsafeMeta(selected)
+          )
+            throw new Error(
+              "apply対象pathは安全なrepository相対pathで指定してください",
+            );
+          return slash(selected);
+        }),
+      )
+    : undefined;
+  if (selectedPaths?.size === 0)
+    throw new Error("pathsを指定する場合は1件以上の明示pathが必要です");
   const current = previewWorkspaceHygiene({
     root: identity.root,
     kinds: selectedKindsFromReport(input.report),
@@ -621,17 +663,33 @@ export function applyWorkspaceHygiene(
   if (current.hash !== input.report.hash)
     throw new Error("stale previewまたはTOCTOUを検出したため削除しません");
   const targets = input.report.candidates.filter(
-    (candidate) => candidate.removable && operations.has(candidate.kind),
+    (candidate) =>
+      candidate.removable &&
+      operations.has(candidate.kind) &&
+      (!selectedPaths || selectedPaths.has(candidate.relative)),
   );
+  if (
+    selectedPaths &&
+    [...selectedPaths].some(
+      (selected) =>
+        !targets.some((candidate) => candidate.relative === selected),
+    )
+  )
+    throw new Error("明示したapply対象pathが最新preview候補にありません");
   const skipped = input.report.candidates
     .filter(
-      (candidate) => !candidate.removable || !operations.has(candidate.kind),
+      (candidate) =>
+        !candidate.removable ||
+        !operations.has(candidate.kind) ||
+        Boolean(selectedPaths && !selectedPaths.has(candidate.relative)),
     )
     .map((candidate) => ({
       relative: candidate.relative,
-      reason: candidate.removable
-        ? `${candidate.kind}は明示operationに含まれていません`
-        : "削除可能と判定されていません",
+      reason: !candidate.removable
+        ? "削除可能と判定されていません"
+        : !operations.has(candidate.kind)
+          ? `${candidate.kind}は明示operationに含まれていません`
+          : "明示apply対象pathに含まれていません",
     }));
   const before = snapshot(identity.root);
   const removed: string[] = [];

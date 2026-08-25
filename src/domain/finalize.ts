@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import { stableJson } from "../lib/security.js";
 import { enforceTrustedBoundary } from "./enforcement.js";
 import { isRecord, type Policy, type RuleObservation } from "../types.js";
@@ -103,40 +104,519 @@ export function planRootUpdate(input: unknown): {
   };
 }
 
-export function planWorktreeCleanup(input: {
+export interface WorktreeCleanupPlanInput {
+  repositoryRoot?: string;
   target: { path: string; branch: string };
   registered: Array<{ path: string; branch: string }>;
-  prMerged: boolean;
-  clean: boolean;
-  pushed: boolean;
-  recoveryReachable: boolean;
+  prMerged: boolean | undefined;
+  clean: boolean | undefined;
+  pushed: boolean | undefined;
+  recoveryReachable: boolean | undefined;
   consumerAssets: string[];
-}): {
-  state: "ready" | "rejected";
+  targetCanonicalPath?: string;
+  targetAbsent?: boolean;
+}
+
+export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
+  state: "ready" | "rejected" | "already-absent";
   target: string;
   reasons: string[];
 } {
   const reasons: string[] = [];
-  const exact = input.registered.filter(
+  const targetPath = input.target?.path;
+  const targetBranch = input.target?.branch;
+  const registered = Array.isArray(input.registered) ? input.registered : [];
+  const targetPathValid =
+    typeof targetPath === "string" && targetPath.trim() !== "";
+  const targetValid =
+    targetPathValid &&
+    typeof targetBranch === "string" &&
+    targetBranch.trim() !== "";
+  if (!targetValid && input.targetAbsent !== true)
+    reasons.push("対象PR専用worktreeのpathまたはbranchが不明です");
+  const exact = registered.filter(
     (worktree) =>
-      worktree.path === input.target.path &&
-      worktree.branch === input.target.branch,
+      worktree.path === targetPath && worktree.branch === targetBranch,
   );
+  if (typeof input.repositoryRoot === "string" && targetPathValid) {
+    const relative = path.relative(
+      path.resolve(input.repositoryRoot),
+      path.resolve(targetPath),
+    );
+    if (
+      relative === "" ||
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    )
+      reasons.push("対象worktreeがrepository root内の専用pathではありません");
+  }
+  if (
+    typeof input.targetCanonicalPath === "string" &&
+    targetPathValid &&
+    path.resolve(input.targetCanonicalPath) !== path.resolve(targetPath)
+  )
+    reasons.push("対象worktreeのpathにsymlink祖先または同一性の変化があります");
+  if (input.targetAbsent === true) {
+    if (!targetPathValid)
+      reasons.push("既削除として確認する対象worktree pathが不明です");
+    if (registered.some((worktree) => worktree.path === targetPath))
+      reasons.push(
+        "対象pathは別branchを含む登録済みworktreeとして残っています",
+      );
+    if (input.prMerged !== true)
+      reasons.push("対象PRがマージ済みではないか観測が不明です");
+    return {
+      state: reasons.length === 0 ? "already-absent" : "rejected",
+      target: typeof targetPath === "string" ? targetPath : "",
+      reasons,
+    };
+  }
   if (exact.length !== 1)
     reasons.push(
       "対象PR専用worktreeのpathとbranchに完全一致する登録が1件ではありません",
     );
-  if (!input.prMerged) reasons.push("対象PRがマージ済みではありません");
-  if (!input.clean) reasons.push("対象worktreeがcleanではありません");
-  if (!input.pushed) reasons.push("対象branchがpush済みではありません");
-  if (!input.recoveryReachable)
+  if (input.prMerged !== true)
+    reasons.push("対象PRがマージ済みではないか観測が不明です");
+  if (input.clean !== true)
+    reasons.push("対象worktreeがcleanではないか観測が不明です");
+  if (input.pushed !== true)
+    reasons.push("対象branchがpush済みではないか観測が不明です");
+  if (input.recoveryReachable !== true)
     reasons.push("対象worktreeの復旧参照を確認できません");
-  if (input.consumerAssets.length > 0)
+  if (
+    !Array.isArray(input.consumerAssets) ||
+    input.consumerAssets.some((asset) => typeof asset !== "string")
+  )
+    reasons.push("対象worktreeの利用者所有資産を確認できません");
+  else if (input.consumerAssets.length > 0)
     reasons.push("対象worktreeに利用者所有資産があります");
   return {
     state: reasons.length === 0 ? "ready" : "rejected",
-    target: input.target.path,
+    target: typeof targetPath === "string" ? targetPath : "",
     reasons,
+  };
+}
+
+export type CompletionPhase =
+  | "merge-confirm"
+  | "root-update"
+  | "cleanup-preview"
+  | "cleanup-apply"
+  | "post-verify";
+
+export interface CompletionPhaseResult {
+  phase: CompletionPhase;
+  state: "succeeded" | "rejected" | "pending" | "skipped";
+  reasons: string[];
+  recovery: string[];
+}
+
+export interface CompletionPlanInput {
+  mergeConfirmed: boolean;
+  mergeSha: string;
+  rootUpdate: ReturnType<typeof planRootUpdate>;
+  cleanup: ReturnType<typeof planWorktreeCleanup>;
+  cleanupAuthorityGranted: boolean;
+  previewDigest: string;
+  approvedDigest: string;
+}
+
+export interface CompletionOutcomeInput {
+  phases: CompletionPhaseResult[];
+  postVerify: {
+    rootSha: string;
+    expectedRootSha: string;
+    targetPathAbsent: boolean;
+    otherWorktreesUnchanged: boolean;
+    containerState: "removed" | "retained" | "absent";
+  };
+}
+
+const COMPLETION_PHASES: readonly CompletionPhase[] = [
+  "merge-confirm",
+  "root-update",
+  "cleanup-preview",
+  "cleanup-apply",
+  "post-verify",
+];
+
+function completionPhase(
+  phase: CompletionPhase,
+  state: CompletionPhaseResult["state"],
+  reasons: string[] = [],
+  recovery: string[] = [],
+): CompletionPhaseResult {
+  return { phase, state, reasons, recovery };
+}
+
+function skippedCompletionPhases(
+  phases: readonly CompletionPhase[],
+  reason: string,
+): CompletionPhaseResult[] {
+  return phases.map((phase) => completionPhase(phase, "skipped", [reason]));
+}
+
+function validRootUpdatePlan(
+  value: unknown,
+): value is ReturnType<typeof planRootUpdate> {
+  return (
+    isRecord(value) &&
+    (value.state === "ready" || value.state === "rejected") &&
+    typeof value.from === "string" &&
+    typeof value.to === "string" &&
+    Array.isArray(value.reasons) &&
+    value.reasons.every((reason) => typeof reason === "string") &&
+    Array.isArray(value.recovery) &&
+    value.recovery.every((recovery) => typeof recovery === "string") &&
+    (value.state === "ready"
+      ? value.reasons.length === 0
+      : value.reasons.length > 0)
+  );
+}
+
+function validCleanupPlan(
+  value: unknown,
+): value is ReturnType<typeof planWorktreeCleanup> {
+  return (
+    isRecord(value) &&
+    ["ready", "rejected", "already-absent"].includes(
+      typeof value.state === "string" ? value.state : "",
+    ) &&
+    typeof value.target === "string" &&
+    value.target.trim() !== "" &&
+    Array.isArray(value.reasons) &&
+    value.reasons.every((reason) => typeof reason === "string") &&
+    (value.state === "rejected"
+      ? value.reasons.length > 0
+      : value.reasons.length === 0)
+  );
+}
+
+export function planCompletion(input: unknown): {
+  state: "pending" | "rejected" | "ready";
+  phases: CompletionPhaseResult[];
+  requiredAuthority: string[];
+} {
+  const value = isRecord(input) ? input : {};
+  const rootUpdate = validRootUpdatePlan(value.rootUpdate)
+    ? value.rootUpdate
+    : undefined;
+  const cleanup = validCleanupPlan(value.cleanup) ? value.cleanup : undefined;
+  const mergeSha = typeof value.mergeSha === "string" ? value.mergeSha : "";
+  if (value.mergeConfirmed !== true || !/^[a-f0-9]{40}$/iu.test(mergeSha)) {
+    const reason =
+      value.mergeConfirmed !== true
+        ? "対象PRのmerge確認が成立していません"
+        : "検証済みmerge SHAが40桁Git SHAではありません";
+    return {
+      state: "rejected",
+      phases: [
+        completionPhase(
+          "merge-confirm",
+          "rejected",
+          [reason],
+          ["GitHubで対象PRのmerge状態と完全なmerge SHAを再確認する"],
+        ),
+        ...skippedCompletionPhases(
+          COMPLETION_PHASES.slice(1),
+          "merge確認が成立しないため実行しません",
+        ),
+      ],
+      requiredAuthority: [],
+    };
+  }
+  if (!rootUpdate) {
+    const reason = "root更新計画の観測形式が不正または不明です";
+    return {
+      state: "rejected",
+      phases: [
+        completionPhase("merge-confirm", "succeeded"),
+        completionPhase(
+          "root-update",
+          "rejected",
+          [reason],
+          ["root更新状態を再読取して完了previewを再実行する"],
+        ),
+        ...skippedCompletionPhases(
+          COMPLETION_PHASES.slice(2),
+          "root更新計画が成立しないためcleanupへ進みません",
+        ),
+      ],
+      requiredAuthority: [],
+    };
+  }
+  if (rootUpdate.state === "rejected") {
+    return {
+      state: "rejected",
+      phases: [
+        completionPhase("merge-confirm", "succeeded"),
+        completionPhase(
+          "root-update",
+          "rejected",
+          [...rootUpdate.reasons],
+          [...rootUpdate.recovery],
+        ),
+        ...skippedCompletionPhases(
+          COMPLETION_PHASES.slice(2),
+          "root更新が拒否されたためcleanupへ進みません",
+        ),
+      ],
+      requiredAuthority: [],
+    };
+  }
+  if (rootUpdate.to.toLowerCase() !== mergeSha.toLowerCase()) {
+    const reason = "root更新計画の到達SHAが検証済みmerge SHAと一致しません";
+    return {
+      state: "rejected",
+      phases: [
+        completionPhase("merge-confirm", "succeeded"),
+        completionPhase(
+          "root-update",
+          "rejected",
+          [reason],
+          ["root更新状態とmerge SHAを再読取して完了previewを再実行する"],
+        ),
+        ...skippedCompletionPhases(
+          COMPLETION_PHASES.slice(2),
+          "root更新の到達SHAが一致しないためcleanupへ進みません",
+        ),
+      ],
+      requiredAuthority: [],
+    };
+  }
+  if (!cleanup || cleanup.state === "rejected") {
+    const reasons = cleanup?.reasons ?? ["cleanup観測が不正または不明です"];
+    return {
+      state: "rejected",
+      phases: [
+        completionPhase("merge-confirm", "succeeded"),
+        completionPhase("root-update", "succeeded"),
+        completionPhase(
+          "cleanup-preview",
+          "rejected",
+          [...reasons],
+          ["対象worktreeの安全条件を再読取してcleanup previewを再実行する"],
+        ),
+        ...skippedCompletionPhases(
+          COMPLETION_PHASES.slice(3),
+          "cleanup previewが成立しないため適用しません",
+        ),
+      ],
+      requiredAuthority: [],
+    };
+  }
+  if (cleanup.state === "already-absent") {
+    return {
+      state: "ready",
+      phases: [
+        completionPhase("merge-confirm", "succeeded"),
+        completionPhase("root-update", "succeeded"),
+        completionPhase("cleanup-preview", "succeeded", [
+          "対象worktreeは既に削除済みです",
+        ]),
+        completionPhase("cleanup-apply", "skipped", [
+          "既削除のため再適用は不要です",
+        ]),
+        completionPhase("post-verify", "skipped"),
+      ],
+      requiredAuthority: [],
+    };
+  }
+  if (value.cleanupAuthorityGranted !== true) {
+    return {
+      state: "pending",
+      phases: [
+        completionPhase("merge-confirm", "succeeded"),
+        completionPhase("root-update", "succeeded"),
+        completionPhase("cleanup-preview", "succeeded"),
+        completionPhase(
+          "cleanup-apply",
+          "pending",
+          ["worktree cleanup operationの明示authorityがありません"],
+          [
+            "同じpreview digestを確認し、--cleanup-authorityを明示して再実行する",
+          ],
+        ),
+        completionPhase("post-verify", "skipped"),
+      ],
+      requiredAuthority: ["worktree.cleanup"],
+    };
+  }
+  const previewDigest =
+    typeof value.previewDigest === "string" ? value.previewDigest : "";
+  const approvedDigest =
+    typeof value.approvedDigest === "string" ? value.approvedDigest : "";
+  if (
+    !/^[a-f0-9]{64}$/u.test(previewDigest) ||
+    !/^[a-f0-9]{64}$/u.test(approvedDigest) ||
+    previewDigest !== approvedDigest
+  ) {
+    return {
+      state: "rejected",
+      phases: [
+        completionPhase("merge-confirm", "succeeded"),
+        completionPhase("root-update", "succeeded"),
+        completionPhase("cleanup-preview", "succeeded"),
+        completionPhase(
+          "cleanup-apply",
+          "rejected",
+          ["承認済みdigestが最新cleanup previewの64桁digestと一致しません"],
+          [
+            "worktree finalize --completeをpreviewで再実行し、新しいpreview digestを確認する",
+          ],
+        ),
+        completionPhase("post-verify", "skipped"),
+      ],
+      requiredAuthority: [],
+    };
+  }
+  return {
+    state: "ready",
+    phases: [
+      completionPhase("merge-confirm", "succeeded"),
+      completionPhase("root-update", "succeeded"),
+      completionPhase("cleanup-preview", "succeeded"),
+      completionPhase("cleanup-apply", "succeeded"),
+      completionPhase("post-verify", "skipped"),
+    ],
+    requiredAuthority: [],
+  };
+}
+
+function isCompletionPhase(value: unknown): value is CompletionPhase {
+  return (
+    typeof value === "string" &&
+    COMPLETION_PHASES.some((phase) => phase === value)
+  );
+}
+
+function isCompletionPhaseState(
+  value: unknown,
+): value is CompletionPhaseResult["state"] {
+  return (
+    value === "succeeded" ||
+    value === "rejected" ||
+    value === "pending" ||
+    value === "skipped"
+  );
+}
+
+function validCompletionPhase(value: unknown): value is CompletionPhaseResult {
+  return (
+    isRecord(value) &&
+    isCompletionPhase(value.phase) &&
+    isCompletionPhaseState(value.state) &&
+    Array.isArray(value.reasons) &&
+    value.reasons.every((reason) => typeof reason === "string") &&
+    Array.isArray(value.recovery) &&
+    value.recovery.every((recovery) => typeof recovery === "string")
+  );
+}
+
+export function summarizeCompletion(input: unknown): {
+  state: "completed" | "partially-completed" | "rejected";
+  completed: CompletionPhase[];
+  pending: CompletionPhase[];
+  recovery: string[];
+} {
+  const value = isRecord(input) ? input : {};
+  const phases = Array.isArray(value.phases)
+    ? value.phases.filter(validCompletionPhase)
+    : [];
+  const postVerify = isRecord(value.postVerify) ? value.postVerify : {};
+  if (
+    phases.length !== COMPLETION_PHASES.length ||
+    new Set(phases.map((phase) => phase.phase)).size !==
+      COMPLETION_PHASES.length ||
+    typeof postVerify.rootSha !== "string" ||
+    typeof postVerify.expectedRootSha !== "string" ||
+    typeof postVerify.targetPathAbsent !== "boolean" ||
+    typeof postVerify.otherWorktreesUnchanged !== "boolean" ||
+    !["removed", "retained", "absent"].includes(
+      typeof postVerify.containerState === "string"
+        ? postVerify.containerState
+        : "",
+    )
+  ) {
+    return {
+      state: "rejected",
+      completed: [],
+      pending: [...COMPLETION_PHASES],
+      recovery: [
+        "phase結果と事後確認を再読取し、worktree finalize --completeを再実行する",
+      ],
+    };
+  }
+  const recovery = phases.flatMap((phase) => phase.recovery);
+  if (postVerify.rootSha !== postVerify.expectedRootSha)
+    recovery.push("root HEADと検証済みmerge SHAを確認し、root更新を再検証する");
+  if (!postVerify.targetPathAbsent)
+    recovery.push(
+      "対象worktreeを保持したままcleanup previewとauthorityを確認して再実行する",
+    );
+  if (!postVerify.otherWorktreesUnchanged)
+    recovery.push(
+      "他worktree一覧を直前snapshotと照合し、差分を復旧してから再実行する",
+    );
+  const completed = phases
+    .filter(
+      (phase) => phase.state === "succeeded" && phase.phase !== "post-verify",
+    )
+    .map((phase) => phase.phase);
+  const verificationFailed =
+    postVerify.rootSha !== postVerify.expectedRootSha ||
+    !postVerify.targetPathAbsent ||
+    !postVerify.otherWorktreesUnchanged;
+  const postVerifySucceeded = phases.some(
+    (phase) => phase.phase === "post-verify" && phase.state === "succeeded",
+  );
+  if (!verificationFailed && postVerifySucceeded) completed.push("post-verify");
+  const pending = COMPLETION_PHASES.filter(
+    (phase) => !completed.includes(phase),
+  );
+  const rejectedPhase = phases.some((phase) => phase.state === "rejected");
+  const pendingPhase = phases.some((phase) => phase.state === "pending");
+  const rootSucceeded = phases.some(
+    (phase) => phase.phase === "root-update" && phase.state === "succeeded",
+  );
+  const requiredPlanningSucceeded = [
+    "merge-confirm",
+    "root-update",
+    "cleanup-preview",
+  ].every((required) =>
+    phases.some(
+      (phase) => phase.phase === required && phase.state === "succeeded",
+    ),
+  );
+  if (!requiredPlanningSucceeded)
+    recovery.push(
+      "merge確認、root更新、cleanup previewの順序を再確認して完了フローを再実行する",
+    );
+  const cleanupAppliedOrAbsent = phases.some(
+    (phase) =>
+      phase.phase === "cleanup-apply" &&
+      (phase.state === "succeeded" ||
+        (phase.state === "skipped" && postVerify.targetPathAbsent === true)),
+  );
+  const incompleteOutcome =
+    !requiredPlanningSucceeded ||
+    !cleanupAppliedOrAbsent ||
+    !postVerifySucceeded;
+  const state =
+    verificationFailed ||
+    pendingPhase ||
+    (rejectedPhase && rootSucceeded) ||
+    (incompleteOutcome && rootSucceeded)
+      ? "partially-completed"
+      : rejectedPhase || incompleteOutcome
+        ? "rejected"
+        : "completed";
+  return {
+    state,
+    completed,
+    pending,
+    recovery: [...new Set(recovery)],
   };
 }
 
