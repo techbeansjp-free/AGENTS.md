@@ -490,21 +490,7 @@ export function inspectFinalizeState(
   const stashes = git(["stash", "list"], worktreePath)
     .stdout.split("\n")
     .filter(Boolean);
-  const upstream = git(
-    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
-    worktreePath,
-    { allowFailure: true },
-  );
-  const remoteSha =
-    upstream.status === 0
-      ? git(["rev-parse", "@{upstream}"], worktreePath, { allowFailure: true })
-      : { status: 1, stdout: "" };
-  const recoveryRef =
-    upstream.status === 0 ? upstream.stdout.trim() : undefined;
-  const recoveryReachable =
-    Boolean(recoveryRef) &&
-    remoteSha.status === 0 &&
-    remoteSha.stdout.trim() === headSha;
+  const recovery = inspectRecoveryState(worktreePath, headSha);
   return {
     repository: evidence.repository,
     worktree: path.resolve(worktreePath),
@@ -517,14 +503,40 @@ export function inspectFinalizeState(
     stashes,
     temporaryArtifacts,
     ignoredArtifacts,
-    pushed: remoteSha.status === 0 && remoteSha.stdout.trim() === headSha,
-    remoteBranch: upstream.status === 0,
+    pushed: recovery.pushed,
+    remoteBranch: recovery.remoteBranch,
     prMerged: evidence.prMerged,
     specConsistent: evidence.specConsistent,
     testsPassed: evidence.testsPassed,
     reviewApproved: evidence.reviewApproved,
+    recoveryRef: recovery.recoveryRef,
+    recoveryReachable: recovery.recoveryReachable,
+  };
+}
+
+export function inspectRecoveryState(
+  worktreePath: string,
+  knownHeadSha?: string,
+) {
+  const headSha =
+    knownHeadSha ?? git(["rev-parse", "HEAD"], worktreePath).stdout.trim();
+  const upstream = git(
+    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+    worktreePath,
+    { allowFailure: true },
+  );
+  const remoteSha =
+    upstream.status === 0
+      ? git(["rev-parse", "@{upstream}"], worktreePath, { allowFailure: true })
+      : { status: 1, stdout: "" };
+  const recoveryRef =
+    upstream.status === 0 ? upstream.stdout.trim() : undefined;
+  const pushed = remoteSha.status === 0 && remoteSha.stdout.trim() === headSha;
+  return {
+    pushed,
+    remoteBranch: upstream.status === 0,
     recoveryRef,
-    recoveryReachable,
+    recoveryReachable: Boolean(recoveryRef) && pushed,
   };
 }
 

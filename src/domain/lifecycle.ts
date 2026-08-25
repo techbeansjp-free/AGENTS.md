@@ -11,6 +11,7 @@ import {
   DEPRECATED_POLICY_SCHEMA_ALIASES,
   SUPPORTED_POLICY_SCHEMA_VERSIONS,
 } from "../lib/version.js";
+import { surveyWorktrees, type WorktreeSurvey } from "./worktree-survey.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
 const ROOT_ASSETS = ["AGENTS.md"];
@@ -386,7 +387,22 @@ function validateAdapterFrontmatter(markdown: string): boolean {
   );
 }
 
-export function doctor(target: string) {
+function injectedWorktreeSurvey(value: unknown): WorktreeSurvey | undefined {
+  if (value === undefined) return undefined;
+  if (
+    isRecord(value) &&
+    Array.isArray(value.entries) &&
+    Array.isArray(value.cleanupReady) &&
+    Array.isArray(value.retained) &&
+    Array.isArray(value.inProgress) &&
+    Array.isArray(value.errors)
+  )
+    return value as unknown as WorktreeSurvey;
+  return surveyWorktrees(value);
+}
+
+export function doctor(target: string, worktreeObservations?: unknown) {
+  const worktreeSurvey = injectedWorktreeSurvey(worktreeObservations);
   const legacy = [
     ...(hasLegacyAgentsAssets(target) ? [".agents"] : []),
     ...(pathEntryExists(path.join(target, ".workflow")) ? [".workflow"] : []),
@@ -501,6 +517,22 @@ export function doctor(target: string) {
     legacyRuntimeEnabled: false,
     projectPolicyStatus,
     projectPolicyMessage,
+    worktrees: worktreeSurvey
+      ? {
+          cleanupReadyCount: worktreeSurvey.cleanupReady.length,
+          retainedCount: worktreeSurvey.retained.length,
+          inProgressCount: worktreeSurvey.inProgress.length,
+          diagnostics: [
+            ...worktreeSurvey.cleanupReady.map(
+              (worktreePath) =>
+                `既定branchへmerge済みで後片付け可能です: ${worktreePath}`,
+            ),
+            ...worktreeSurvey.errors.map(
+              (error) => `worktree走査を完了できませんでした: ${error}`,
+            ),
+          ],
+        }
+      : undefined,
     migration: legacy.length
       ? "診断のみ。旧資産は実行も変換もしません"
       : "なし",
