@@ -45,6 +45,7 @@ import {
   loadOperationPolicy,
   loadProjectPolicySet,
   loadProjectPolicySetAtCommit,
+  mergeMethodPolicyWarnings,
   validatePolicy,
 } from "./domain/policy.js";
 import {
@@ -1888,6 +1889,7 @@ export async function main(argv: string[]): Promise<number> {
         trustedProvenance: trustedSet.provenance,
         stagedAdditions: comparison.stagedAdditions,
         errors: [],
+        warnings: mergeMethodPolicyWarnings(candidateSet.policy),
       };
       print(
         result.valid
@@ -1938,6 +1940,9 @@ export async function main(argv: string[]): Promise<number> {
         trustedProvenance: trustedSet.provenance,
         stagedAdditions: comparison.stagedAdditions,
         errors: comparison.rejected.flatMap((item) => item.reasons),
+        warnings: comparison.allowed
+          ? mergeMethodPolicyWarnings(candidateSet.policy)
+          : [],
       };
       print(
         result.valid
@@ -2531,14 +2536,21 @@ export async function main(argv: string[]): Promise<number> {
       prAuthorActorId: inspected.author?.id,
       implementationAuthorActorId: implementation.authorActorId,
       branch: inspected.headRefName ?? "",
+      baseRef: inspected.baseRefName ?? "",
+      headRef: inspected.headRefName ?? "",
       repositoryVerified: true,
       shaVerified: Boolean(inspected.headRefOid && inspected.baseRefOid),
       protectionVerified: protection.known && protection.protected,
       mergeableVerified:
         inspected.isDraft === false && inspected.mergeStateStatus === "CLEAN",
     });
-    if (!authorization.allowed)
+    if (!authorization.allowed) {
+      if (authorization.diagnostic) {
+        print(serializeDiagnostic(authorization));
+        return 1;
+      }
       throw new Error(`マージを拒否しました: ${authorization.reason}`);
+    }
     if (!apply) {
       print({
         state: "preview",
@@ -2577,6 +2589,8 @@ export async function main(argv: string[]): Promise<number> {
       prAuthorActorId: rechecked.author?.id,
       implementationAuthorActorId: implementation.authorActorId,
       branch: rechecked.headRefName ?? "",
+      baseRef: rechecked.baseRefName ?? "",
+      headRef: rechecked.headRefName ?? "",
       repositoryVerified: true,
       shaVerified: true,
       protectionVerified:
@@ -2584,10 +2598,15 @@ export async function main(argv: string[]): Promise<number> {
       mergeableVerified:
         rechecked.isDraft === false && rechecked.mergeStateStatus === "CLEAN",
     });
-    if (!reauthorization.allowed)
+    if (!reauthorization.allowed) {
+      if (reauthorization.diagnostic) {
+        print(serializeDiagnostic(reauthorization));
+        return 1;
+      }
       throw new Error(
         `マージ直前の再認可を拒否しました: ${reauthorization.reason}`,
       );
+    }
     print(
       github(
         "pr.merge",
