@@ -314,6 +314,7 @@ Given(
         "utf8",
       ),
     );
+    trustedChoice.modelMapping = "roleごとにprojectが選択する";
     const candidateChoice = structuredClone(trustedChoice);
     candidateChoice.modelMapping = mapping();
     this.trustedPolicy = policy(trustedChoice);

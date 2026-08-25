@@ -30,6 +30,119 @@
         "independence": { "differentFrom": "implementer" }
       }
     },
+    "roleContracts": {
+      "coordinator": {
+        "allowedPaths": [
+          ".agent-skill-chain/tmp/",
+          ".agent-skill-chain/role-log/"
+        ],
+        "allowedOperations": [
+          "decompose_issue",
+          "assign_role",
+          "transition_state",
+          "aggregate_evidence"
+        ],
+        "forbiddenOperations": [
+          "implement_product",
+          "self_approve",
+          "merge_arbitration"
+        ],
+        "requiredEvidence": ["assignment_record", "state_record"]
+      },
+      "analyst": {
+        "allowedPaths": ["docs/specs/", ".agent-skill-chain/tmp/"],
+        "allowedOperations": [
+          "define_requirements",
+          "design",
+          "define_acceptance",
+          "author_gherkin"
+        ],
+        "forbiddenOperations": ["final_approval_of_own_scope"],
+        "requiredEvidence": ["requirements_trace"]
+      },
+      "implementer": {
+        "allowedPaths": ["src/", "test/", "docs/specs/", ".agent-skill-chain/"],
+        "allowedOperations": [
+          "confirm_failing_test",
+          "implement_product",
+          "refactor_local",
+          "run_test"
+        ],
+        "forbiddenOperations": ["final_review", "merge_arbitration"],
+        "requiredEvidence": ["failing_test", "test_result"]
+      },
+      "reviewer": {
+        "allowedPaths": [
+          ".agent-skill-chain/role-log/",
+          ".agent-skill-chain/tmp/"
+        ],
+        "allowedOperations": [
+          "affirmative_review",
+          "adversarial_review",
+          "classify_finding"
+        ],
+        "forbiddenOperations": ["modify_target_diff", "hide_finding"],
+        "requiredEvidence": [
+          "affirmative_review",
+          "adversarial_review",
+          "finding_classification",
+          "independence"
+        ]
+      },
+      "verifier": {
+        "allowedPaths": [
+          ".agent-skill-chain/role-log/",
+          ".agent-skill-chain/tmp/"
+        ],
+        "allowedOperations": [
+          "run_independent_test",
+          "verify_artifact",
+          "verify_spec",
+          "verify_remote_sha"
+        ],
+        "forbiddenOperations": ["implement_product", "approve_unverified"],
+        "requiredEvidence": [
+          "independent_test",
+          "artifact_verification",
+          "spec_consistency"
+        ]
+      },
+      "finalizer": {
+        "allowedPaths": [
+          ".agent-skill-chain/role-log/",
+          ".agent-skill-chain/tmp/"
+        ],
+        "allowedOperations": [
+          "open_pr",
+          "verify_merge",
+          "update_main",
+          "safe_cleanup",
+          "close_issue"
+        ],
+        "forbiddenOperations": [
+          "change_requirements",
+          "implement_product",
+          "alter_review_result"
+        ],
+        "requiredEvidence": [
+          "pr_evidence",
+          "merge_verification",
+          "cleanup_report"
+        ]
+      }
+    },
+    "tierMapping": {
+      "gpt-5.6-sol": "critical",
+      "claude-opus-5": "critical"
+    },
+    "minimumTierByRisk": {
+      "secret": "critical",
+      "path": "routine",
+      "authority": "critical",
+      "irreversible": "critical",
+      "identity": "critical",
+      "artifact": "critical"
+    },
     "fallback": {
       "when": "implementer_unavailable",
       "role": "coordinator",
