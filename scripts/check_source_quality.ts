@@ -22,7 +22,10 @@ const EXCLUDED_DIRECTORIES = new Set([
   ".git",
   ".agents",
   ".codex",
+  ".worktrees",
   "dist",
+  "issues",
+  "memo",
   "node_modules",
 ]);
 const FORBIDDEN_TYPE_PATTERNS = [
@@ -45,12 +48,17 @@ export function validateSourceTypeSyntax(source: string): string[] {
   return errors;
 }
 
-function walk(directory: string): string[] {
+function walk(directory: string, root = directory): string[] {
   if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const resolved = path.join(directory, entry.name);
-    if (entry.isDirectory())
-      return EXCLUDED_DIRECTORIES.has(entry.name) ? [] : walk(resolved);
+    if (entry.isDirectory()) {
+      const excluded =
+        EXCLUDED_DIRECTORIES.has(entry.name) &&
+        (entry.name !== "issues" ||
+          path.resolve(directory) === path.resolve(root));
+      return excluded ? [] : walk(resolved, root);
+    }
     return entry.isFile() ? [resolved] : [];
   });
 }
