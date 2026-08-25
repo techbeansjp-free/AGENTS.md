@@ -33,11 +33,21 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 | `review validate` | tracked review file | rubricと構造だけを検証する。file内のGitHub metadataをauthorityにせず、承認はtrusted provider観測待ちのpending |
 | `trace validate` | project adapterが作成した`--evidence` JSONとproject choices | runner・file形式・表示言語・Gherkin方言を所有せず、stable ID、canonical step role、選択層、禁止file証拠を検証 |
 
+## Workflowサブコマンド
+
+| コマンド | 入力 | 出力・終了code |
+|---|---|---|
+| `workflow steps` | 任意の`--mode=<quick｜full｜poc>` | Step定義、mode別列、省略対象、全mode共通の省略不能Stepを機械可読JSONで返す。不明modeは非0 |
+| `workflow record` | `--staging --step`、1件以上の`--artifact`、`--evidence`。`--recorded-at`は任意 | staging recordからmode、Step定義からskill IDを解決し、追記前検証後にJSONLへ1件追記する。順序・省略規則違反は書込前に非0。追記後の再読取digestを返す |
+| `workflow verify` | `--staging`、任意の`--up-to=<0..11>` | 欠落、対象外、順序違反、mode conflictをStep番号・skill ID・単一責務付きの日本語structured diagnosticで返す。有効時は0、違反時は非0 |
+
+`pr create`は`--staging`で対象を明示でき、省略時はtrackerがIssue番号と一致するstagingを一意に解決する。journal欠落、Step 10までの検証失敗、Step 4・10欠落、`sync-verified`未到達ではdry-runを含めてGitHub操作前に拒否する。`--workflow-override=<JSON file>`は欠落Stepだけを対象とし、`issue / scope=workflow.pr.create / instructedBy / instructedAt / expiresAt / reason`を完全検証する。AI・roleの自己発行、別Issue、失効、未知field、順序等の欠落以外の不整合は迂回できない。
+
 ## project導入・診断出力
 
 | コマンド | 追加出力 | 契約 |
 |---|---|---|
-| `doctor` | `projectPolicyStatus`、`projectPolicyMessage` | project policyを`missing / valid / invalid / unsupported-version`のいずれかで報告する。`healthy`は従来どおりinstall健全性だけを表し、policy欠落・不正によって意味や終了codeを変えない |
+| `doctor` | `projectPolicyStatus`、`projectPolicyMessage`、`workflow` | project policyを`missing / valid / invalid / unsupported-version`のいずれかで報告する。各Issue stagingのモード判定成果物、journal、実施済みStep、現在Step、次Step、妥当性を追加する。`healthy`は従来どおりinstall健全性だけを表す |
 | `project bootstrap` | `generatedScope`、`projectPolicyStatus`、`projectPolicyNotice`、`nextSafeOperation` | `docs/specs/`だけを生成し、project policyは生成も検証もしない。利用project ownerがmanifestと列挙資産を作成し、`policy validate`と`conformance validate`を行う次操作を日本語で返す |
 
 `doctor`の`unsupported-version`は入力を保持したstaged migrationを案内する。`missing`と`invalid`はinstall成功に隠さず明示するが、package資産の導入状態とconsumer所有policyの妥当性を同じhealth判定へ混在させない。

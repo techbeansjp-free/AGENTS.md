@@ -5,7 +5,7 @@ description: 承認済みexact-headを事前確認し、規定本文でPRを作�
 
 # ステップ11: PR作成と停止
 
-入力は承認済みステップ10、合格したテスト・仕様ゲート、正確なリポジトリ・基点・先頭、事前表示、承認。成果物はPR URLと`pr_opened / waiting_for_human_review`。明示ポリシーがない限り本文はトラッカーを自動終了せず関連付ける。`poc`はPoCであることと期限を本文に保持して必ずここで停止し、release、自動merge、本番cleanupを要求しない。全モードでマージ、ブランチ削除、Issue終了、リリース、完了処理、後片付けを連鎖しない。マージは別の信頼済みポリシーコマンドとするが、`poc`のまま認可しない。
+入力は承認済みステップ10、合格したテスト・仕様ゲート、正確なリポジトリ・基点・先頭、事前表示、承認。PR作成前にstaging journalがStep 10まで有効で、特にStep 4と10が存在し、staging recordが`sync-verified`であることを検証する。quickでもStep 4を省略せず、無条件bypassを持たない。成果物はPR URLと`pr_opened / waiting_for_human_review`であり、作成後にPR URLと停止状態をStep 11としてjournalへ追記する。明示ポリシーがない限り本文はトラッカーを自動終了せず関連付ける。`poc`はPoCであることと期限を本文に保持して必ずここで停止し、release、自動merge、本番cleanupを要求しない。全モードでマージ、ブランチ削除、Issue終了、リリース、完了処理、後片付けを連鎖しない。マージは別の信頼済みポリシーコマンドとするが、`poc`のまま認可しない。
 
 ## role・tier入力契約
 

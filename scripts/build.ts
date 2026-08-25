@@ -9,6 +9,7 @@ import {
 import { checkDirectoryGuides } from "./check_directory_guides.js";
 import { checkSkillTemplateContracts } from "./check_skill_templates.js";
 import { checkCliContract } from "./check_cli_contract.js";
+import { checkWorkflowSteps } from "./check_workflow_steps.js";
 
 const required = [
   "dist/bin/agent-skill-chain.js",
@@ -24,6 +25,8 @@ const required = [
   ".agent-skill-chain/schemas/project-rule.schema.json",
   ".agent-skill-chain/schemas/project-conformance-binding.schema.json",
   ".agent-skill-chain/schemas/conformance-contract.schema.json",
+  ".agent-skill-chain/schemas/workflow-mode-decision.schema.json",
+  ".agent-skill-chain/schemas/workflow-step-journal.schema.json",
   ".agent-skill-chain/policy/conformance.json",
 ];
 const missing = required.filter((file) => !fs.existsSync(path.resolve(file)));
@@ -42,6 +45,11 @@ if (!skillContracts.valid)
 const cliContract = checkCliContract();
 if (!cliContract.valid)
   throw new Error(`公開CLI契約が不正です: ${cliContract.errors.join("; ")}`);
+const workflowSteps = checkWorkflowSteps();
+if (!workflowSteps.valid)
+  throw new Error(
+    `workflow step契約が不正です: ${workflowSteps.errors.join("; ")}`,
+  );
 const packageMetadata = JSON.parse(
   fs.readFileSync("package.json", "utf8"),
 ) as unknown as { version?: unknown };

@@ -11,6 +11,13 @@ import {
   DEPRECATED_POLICY_SCHEMA_ALIASES,
   SUPPORTED_POLICY_SCHEMA_VERSIONS,
 } from "../lib/version.js";
+import { readStoredStagingRecord } from "./staging.js";
+import {
+  parseModeDecision,
+  parseStepJournal,
+  requiredSteps,
+  validateStepJournal,
+} from "./workflow.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
 const ROOT_ASSETS = ["AGENTS.md"];
@@ -23,6 +30,8 @@ const HOST_SKILL_TARGETS = [
   ".agents/skills/asc-step/SKILL.md",
 ] as const;
 const SHA256 = /^[a-f0-9]{64}$/u;
+const MODE_DECISION_FILE = "00_モード判定.json";
+const STEP_JOURNAL_FILE = path.join("journal", "steps.jsonl");
 
 interface ManagedAssetRecord {
   version: unknown;
@@ -386,6 +395,60 @@ function validateAdapterFrontmatter(markdown: string): boolean {
   );
 }
 
+function inspectDoctorWorkflowStaging(staging: string) {
+  const record = readStoredStagingRecord(staging);
+  const modeFile = path.join(staging, MODE_DECISION_FILE);
+  const journalFile = path.join(staging, STEP_JOURNAL_FILE);
+  const modeDecision = fs.existsSync(modeFile)
+    ? parseModeDecision(fs.readFileSync(modeFile, "utf8"))
+    : { errors: [`${MODE_DECISION_FILE}がありません`] };
+  const journal = fs.existsSync(journalFile)
+    ? parseStepJournal(fs.readFileSync(journalFile, "utf8"))
+    : { entries: [], errors: [`${STEP_JOURNAL_FILE}がありません`] };
+  const completedSteps = [...new Set(journal.entries.map(({ step }) => step))];
+  const currentStep = completedSteps.at(-1);
+  const validation = validateStepJournal({
+    mode: record.mode,
+    entries: journal.entries,
+    upToStep: currentStep ?? 0,
+  });
+  const nextStep = requiredSteps(record.mode).find(
+    (step) => !completedSteps.includes(step),
+  );
+  const errors = [
+    ...journal.errors,
+    ...modeDecision.errors,
+    ...(modeDecision.decision && modeDecision.decision.mode !== record.mode
+      ? [
+          `モード判定成果物のmode ${modeDecision.decision.mode}がstaging recordのmode ${record.mode}と一致しません`,
+        ]
+      : []),
+    ...validation.errors,
+  ];
+  return {
+    staging,
+    mode: record.mode,
+    state: record.state,
+    modeDecision: {
+      exists: fs.existsSync(modeFile),
+      valid: Boolean(modeDecision.decision) && modeDecision.errors.length === 0,
+      errors: modeDecision.errors,
+    },
+    journal: {
+      exists: fs.existsSync(journalFile),
+      valid: journal.errors.length === 0 && validation.valid,
+      errors: journal.errors,
+    },
+    completedSteps,
+    currentStep,
+    nextStep,
+    validation,
+    errors,
+    valid:
+      errors.length === 0 && Boolean(modeDecision.decision) && validation.valid,
+  };
+}
+
 export function doctor(target: string) {
   const legacy = [
     ...(hasLegacyAgentsAssets(target) ? [".agents"] : []),
@@ -489,6 +552,27 @@ export function doctor(target: string) {
         "project policyが不正です。入力を変更せずpolicy validateの診断を確認してください";
     }
   }
+  const issuesRoot = path.join(target, ".agent-skill-chain", "tmp", "issues");
+  const workflowStagings: Array<
+    | ReturnType<typeof inspectDoctorWorkflowStaging>
+    | { staging: string; valid: false; errors: string[] }
+  > = [];
+  if (pathEntryExists(issuesRoot) && fs.lstatSync(issuesRoot).isDirectory()) {
+    for (const entry of fs.readdirSync(issuesRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const staging = path.join(issuesRoot, entry.name);
+      try {
+        workflowStagings.push(inspectDoctorWorkflowStaging(staging));
+      } catch (error) {
+        workflowStagings.push({
+          staging,
+          valid: false,
+          errors: [error instanceof Error ? error.message : String(error)],
+        });
+      }
+    }
+  }
+  const workflowHealthy = workflowStagings.every((staging) => staging.valid);
   return {
     healthy: installed && diagnostics.length === 0,
     installed,
@@ -501,6 +585,10 @@ export function doctor(target: string) {
     legacyRuntimeEnabled: false,
     projectPolicyStatus,
     projectPolicyMessage,
+    workflow: {
+      healthy: workflowHealthy,
+      stagings: workflowStagings,
+    },
     migration: legacy.length
       ? "診断のみ。旧資産は実行も変換もしません"
       : "なし",

@@ -3,6 +3,13 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import {
+  createIssueStaging,
+  recordStagingSync,
+} from "../../src/domain/issue.js";
+import { QUESTIONS } from "../../src/domain/mode.js";
+import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
+import { WORKFLOW_STEPS } from "../../src/domain/workflow.js";
 
 interface E2eWorld extends WorkflowWorld {
   cliEnv: NodeJS.ProcessEnv;
@@ -124,6 +131,36 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
       },
     })}\n`,
   );
+  const staging = createIssueStaging(this.prCwd, {
+    title: "existing-pr-test",
+    answers: Object.fromEntries(
+      QUESTIONS.map((id) => [id, { answer: true, evidence: `${id}根拠` }]),
+    ),
+    requestedMode: "quick",
+    now: new Date("2026-08-25T12:00:00.000Z"),
+  }).path;
+  for (const stepNumber of [1, 4, 9, 10]) {
+    const step = WORKFLOW_STEPS.find((item) => item.step === stepNumber);
+    assert.ok(step);
+    appendWorkflowJournalEntry({
+      staging,
+      entry: {
+        step: stepNumber,
+        skillId: step.skillId,
+        mode: "quick",
+        recordedAt: "2026-08-25T12:00:00.000Z",
+        artifacts: [`artifact-${stepNumber}`],
+        evidence: `step ${stepNumber}証拠`,
+      },
+    });
+  }
+  recordStagingSync(staging, {
+    tracker: "#824",
+    checkpoint: 4,
+    syncedAt: "2026-08-25T13:00:00.000Z",
+    bodyDigest: "a".repeat(64),
+    readBackDigest: "a".repeat(64),
+  });
   this.prArgs = [
     "pr",
     "create",
@@ -134,6 +171,7 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
     `--head-sha=${headSha}`,
     `--evidence=${evidence}`,
     `--root=${this.prCwd}`,
+    `--staging=${staging}`,
   ];
   const stubDirectory = this.temp("asc-gh-stub-");
   this.ghMarker = path.join(stubDirectory, "called");
