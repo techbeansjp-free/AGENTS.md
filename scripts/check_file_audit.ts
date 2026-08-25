@@ -2,9 +2,211 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { git } from "../src/lib/process.js";
+import {
+  parseJsonStrict,
+  stableJson,
+  type JsonValue,
+} from "../src/lib/security.js";
+import { isPackageVersion } from "../src/lib/version.js";
 
 const AUDIT_DIRECTORY = "docs/reviews";
 const AUDIT_NAME_PATTERN = /^\d+_課題\d+.*レビュー\.md$/u;
+const RELEASE_BUMP_PREFIX = "chore(release): bump version to ";
+const RELEASE_BUMP_PATHS = new Set(["package.json", "package-lock.json"]);
+
+interface CommitTransition {
+  commit: string;
+  parent: string;
+}
+
+function lines(output: string): string[] {
+  return output.trim().split(/\r?\n/u).filter(Boolean);
+}
+
+function commitParents(root: string, commit: string): string[] {
+  return git(["show", "-s", "--format=%P", commit], root)
+    .stdout.trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+}
+
+function changedPaths(root: string, parent: string, commit: string): string[] {
+  return lines(
+    git(
+      [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        `${parent}..${commit}`,
+        "--",
+      ],
+      root,
+    ).stdout,
+  );
+}
+
+function releaseVersionFromSubject(subject: string): string | undefined {
+  if (!subject.startsWith(RELEASE_BUMP_PREFIX)) return undefined;
+  const [version] = subject.slice(RELEASE_BUMP_PREFIX.length).split(/\s+/u);
+  return isPackageVersion(version) ? version : undefined;
+}
+
+function objectWithoutVersion(value: JsonValue): JsonValue | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== "version"),
+  );
+}
+
+function packageJsonOnlyChangesVersion(
+  root: string,
+  parent: string,
+  commit: string,
+): boolean {
+  try {
+    const before = objectWithoutVersion(
+      parseJsonStrict(
+        git(["show", `${parent}:package.json`], root).stdout,
+        `${parent}:package.json`,
+      ),
+    );
+    const after = objectWithoutVersion(
+      parseJsonStrict(
+        git(["show", `${commit}:package.json`], root).stdout,
+        `${commit}:package.json`,
+      ),
+    );
+    return (
+      before !== undefined &&
+      after !== undefined &&
+      stableJson(before) === stableJson(after)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasReleaseBumpChanges(
+  root: string,
+  parent: string,
+  commit: string,
+): boolean {
+  const paths = changedPaths(root, parent, commit);
+  if (
+    paths.length === 0 ||
+    paths.some((changedPath) => !RELEASE_BUMP_PATHS.has(changedPath))
+  )
+    return false;
+  return (
+    !paths.includes("package.json") ||
+    packageJsonOnlyChangesVersion(root, parent, commit)
+  );
+}
+
+function isDirectReleaseBump(root: string, commit: string): boolean {
+  const parents = commitParents(root, commit);
+  if (parents.length !== 1) return false;
+  const subject = git(
+    ["show", "-s", "--format=%s", commit],
+    root,
+  ).stdout.trim();
+  return (
+    releaseVersionFromSubject(subject) !== undefined &&
+    hasReleaseBumpChanges(root, parents[0]!, commit)
+  );
+}
+
+function isReleaseBumpSide(
+  root: string,
+  selectedParent: string,
+  sideParent: string,
+): boolean {
+  const sideCommits = lines(
+    git(["rev-list", `${selectedParent}..${sideParent}`], root).stdout,
+  );
+  return (
+    sideCommits.length > 0 &&
+    sideCommits.every((commit) => isDirectReleaseBump(root, commit))
+  );
+}
+
+function isReleaseBumpTransition(
+  root: string,
+  transition: CommitTransition,
+): boolean {
+  const subject = git(
+    ["show", "-s", "--format=%s", transition.commit],
+    root,
+  ).stdout.trim();
+  if (
+    releaseVersionFromSubject(subject) !== undefined &&
+    hasReleaseBumpChanges(root, transition.parent, transition.commit)
+  )
+    return true;
+  const parents = commitParents(root, transition.commit);
+  return (
+    parents.length > 1 &&
+    hasReleaseBumpChanges(root, transition.parent, transition.commit) &&
+    parents.some(
+      (parent) =>
+        parent !== transition.parent &&
+        isReleaseBumpSide(root, transition.parent, parent),
+    )
+  );
+}
+
+function implementationPath(
+  root: string,
+  implementation: string,
+  current: string,
+): CommitTransition[] {
+  const reversed: CommitTransition[] = [];
+  let cursor = current;
+  while (cursor !== implementation) {
+    const parents = commitParents(root, cursor);
+    const parent = parents.find((candidate) => {
+      const ancestry = git(
+        ["merge-base", "--is-ancestor", implementation, candidate],
+        root,
+        { allowFailure: true },
+      );
+      return ancestry.status === 0;
+    });
+    if (!parent) return [];
+    reversed.push({ commit: cursor, parent });
+    cursor = parent;
+  }
+  return reversed.reverse();
+}
+
+function finalAuditPaths(
+  root: string,
+  implementation: string,
+  current: string,
+): string[] {
+  const finalPaths = changedPaths(root, implementation, current);
+  const transitions = implementationPath(root, implementation, current);
+  if (transitions.length === 0 && implementation !== current) return finalPaths;
+  const releasePaths = new Set<string>();
+  const regularPaths = new Set<string>();
+  for (const transition of transitions) {
+    const target = isReleaseBumpTransition(root, transition)
+      ? releasePaths
+      : regularPaths;
+    for (const changedPath of changedPaths(
+      root,
+      transition.parent,
+      transition.commit,
+    ))
+      target.add(changedPath);
+  }
+  return finalPaths.filter(
+    (changedPath) =>
+      !releasePaths.has(changedPath) || regularPaths.has(changedPath),
+  );
+}
 
 function latestAuditPath(root: string): string | undefined {
   const directory = path.join(root, AUDIT_DIRECTORY);
@@ -135,20 +337,10 @@ export function checkFileAudit(root: string) {
   );
   if (ancestry.status !== 0)
     errors.push("H_implがcurrent HEADのancestorではありません");
-  const finalPaths = git(
-    [
-      "-c",
-      "core.quotepath=false",
-      "diff",
-      "--name-only",
-      `${parsed.implementation}..${current}`,
-      "--",
-    ],
-    root,
-  )
-    .stdout.trim()
-    .split(/\r?\n/u)
-    .filter(Boolean);
+  const finalPaths =
+    ancestry.status === 0
+      ? finalAuditPaths(root, parsed.implementation, current)
+      : changedPaths(root, parsed.implementation, current);
   if (finalPaths.length !== 1 || finalPaths[0] !== auditPath)
     errors.push(
       `H_impl..currentはreview artifactだけでなければなりません: ${finalPaths.join(",")}`,
