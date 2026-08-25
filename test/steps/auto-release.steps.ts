@@ -7,7 +7,7 @@ import {
   type AutoReleaseInput,
   type AutoReleasePlan,
 } from "../../src/domain/release.js";
-import { isPackageVersion } from "../../src/lib/version.js";
+import { isPackageVersion, PACKAGE_VERSION } from "../../src/lib/version.js";
 import { planAutoReleaseFromEnvironment } from "../../scripts/plan_release.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
@@ -36,6 +36,7 @@ class AutoReleaseWorld extends WorkflowWorld {
   autoWorkflowValidation: WorkflowValidation | undefined = undefined;
   entrypointInputs: AutoReleaseInput[] = [];
   entrypointPlans: AutoReleasePlan[] = [];
+  fallbackEntrypointPlan: AutoReleasePlan | undefined = undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<AutoReleaseWorld>();
@@ -144,6 +145,7 @@ When("自動release entrypointを入力ごとに実行する", function () {
     fs.writeFileSync(pathsFile, `${input.changedPaths.join("\n")}\n`);
     return planAutoReleaseFromEnvironment({
       RELEASE_MODE: "auto",
+      RELEASE_CURRENT_VERSION: input.currentVersion,
       RELEASE_EXISTING_TAGS_FILE: tagsFile,
       RELEASE_CHANGED_PATHS_FILE: pathsFile,
       RELEASE_HEAD_COMMIT_MESSAGE: input.headCommitMessage,
@@ -161,6 +163,33 @@ Then("entrypointはreleaseと停止とbumpを外部更新なしで返す", funct
   assert.match(this.entrypointPlans[1]?.reasons.join(" ") ?? "", /対象path/u);
   assert.match(this.entrypointPlans[2]?.reasons.join(" ") ?? "", /再帰/u);
   assert.equal(this.entrypointPlans[3]?.version, "0.3.1-beta.2");
+});
+
+Given("現在versionを省略した自動release entrypoint入力がある", function () {
+  this.autoInput = autoReleaseInput({ currentVersion: PACKAGE_VERSION });
+});
+
+When("現在versionを省略して自動release entrypointを実行する", function () {
+  const input = this.autoInput as AutoReleaseInput;
+  const fixtureDirectory = this.temp("asc-auto-release-fallback-");
+  const tagsFile = path.join(fixtureDirectory, "tags.txt");
+  const pathsFile = path.join(fixtureDirectory, "paths.txt");
+  fs.writeFileSync(tagsFile, `${input.existingTags.join("\n")}\n`);
+  fs.writeFileSync(pathsFile, `${input.changedPaths.join("\n")}\n`);
+  this.fallbackEntrypointPlan = planAutoReleaseFromEnvironment({
+    RELEASE_MODE: "auto",
+    RELEASE_EXISTING_TAGS_FILE: tagsFile,
+    RELEASE_CHANGED_PATHS_FILE: pathsFile,
+    RELEASE_HEAD_COMMIT_MESSAGE: input.headCommitMessage,
+    RELEASE_REF: input.ref,
+    RELEASE_DEFAULT_BRANCH: input.defaultBranch,
+  });
+});
+
+Then("entrypointはpackage.jsonのversionを使用する", function () {
+  assert.equal(this.fallbackEntrypointPlan?.state, "release");
+  assert.equal(this.fallbackEntrypointPlan.version, PACKAGE_VERSION);
+  assert.equal(this.fallbackEntrypointPlan.tag, `v${PACKAGE_VERSION}`);
 });
 
 Then(
