@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-CI-TRIGGER-001",
+  "purpose": "品質CIをpull_requestだけで一度発火させ重複検証を防ぐ",
+  "riskClass": "authority",
+  "scope": [".github/workflows/ci.yml", "quality CI trigger"],
+  "enforcement": "deny",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "ci.ymlのtop-level triggerがpull_requestだけであること",
+  "remediation": "push、schedule、workflow_dispatch等の追加triggerを品質CIから除去する",
+  "overridePolicy": "never",
+  "rollback": "triggerを信頼済みpull_request単独設定へ戻す",
+  "packageDefault": "CI triggerは利用projectが選択する",
+  "projectOverride": "品質CIはpull_requestだけで発火する",
+  "changeAuthority": "既定branchのtrusted workflow変更authority"
+}

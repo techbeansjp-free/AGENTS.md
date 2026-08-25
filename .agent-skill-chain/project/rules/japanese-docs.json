@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-JAPANESE-DOCS-001",
+  "purpose": "人が読むMarkdownの見出しと本文を日本語で統一する",
+  "riskClass": "quality",
+  "scope": ["docs/specs", ".agent-skill-chain/docs", "AGENTS.md"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "spec",
+  "evidence": "npm run docs:formatの成功",
+  "remediation": "英語だけの人向け本文を日本語へ直しコードと固有名はinline codeへ分離する",
+  "overridePolicy": "bound",
+  "rollback": "意味を維持した日本語の直前文面へ戻す",
+  "packageDefault": "人向け文書の言語は利用projectが選択する",
+  "projectOverride": "このrepositoryの人向けMarkdownは日本語で記述する",
+  "changeAuthority": "repository maintainerと文書owner"
+}

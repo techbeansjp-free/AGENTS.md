@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-NAMING-EXCEPTION-001",
+  "purpose": "外部契約で固定されたMarkdown名称だけを連番命名の例外として許可する",
+  "riskClass": "quality",
+  "scope": ["AGENTS.md", "SKILL.md", "README.md"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "spec",
+  "evidence": "directory案内検査で明示allowlist外の例外が0件であること",
+  "remediation": "未知の例外名を連番付き日本語名へ変更するか契約根拠を別変更で審査する",
+  "overridePolicy": "bound",
+  "rollback": "例外allowlistをAGENTS.md、SKILL.md、README.mdだけへ戻す",
+  "packageDefault": "外部契約が固定する名称は互換性のため維持できる",
+  "projectOverride": "命名例外はAGENTS.md、SKILL.md、README.mdだけとする",
+  "changeAuthority": "外部契約根拠を確認したrepository maintainer"
+}

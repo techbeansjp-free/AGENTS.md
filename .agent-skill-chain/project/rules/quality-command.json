@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-QUALITY-COMMAND-001",
+  "purpose": "文書・Gherkin・型・build・package・unit・integration・E2Eの品質commandを固定する",
+  "riskClass": "quality",
+  "scope": ["package.json scripts", "project/choices/development.json", "CI"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "docs:format、test:format、typecheck、build、package:check、test:unit、test:integration、test:e2eの実在と成功",
+  "remediation": "project choiceのtest layerと既存npm scriptを一致させ全品質commandを再実行する",
+  "overridePolicy": "bound",
+  "rollback": "品質commandを削除せず直前の成功したscript定義へ戻す",
+  "packageDefault": "具体的な品質commandは利用projectのhookから選択する",
+  "projectOverride": "このrepositoryの既存npm script 8件を必須commandとする",
+  "changeAuthority": "versioned trusted品質proposalを既定branchへ事前登録した次PR"
+}

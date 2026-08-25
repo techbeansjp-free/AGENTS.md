@@ -1,0 +1,28 @@
+{
+  "ruleId": "ASC-DOGFOOD-DISTRIBUTION-BOUNDARY-001",
+  "purpose": "project所有資産・実行記録・秘密をnpm配布境界の外へ保つ",
+  "riskClass": "artifact",
+  "scope": [
+    "memo/",
+    "issues/",
+    ".worktrees/",
+    "test/",
+    ".github/",
+    "scripts/",
+    ".agent-skill-chain/project-policy.json",
+    ".agent-skill-chain/project/",
+    ".agent-skill-chain/role-log/",
+    ".agent-skill-chain/metrics/"
+  ],
+  "enforcement": "deny",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "package.json files境界検査とnpm pack manifest検査",
+  "remediation": "project policy、role log、metrics、開発資産、秘密を配布filesから除外する",
+  "overridePolicy": "never",
+  "rollback": "packageを公開せず安全なfiles allowlistへ戻して再packする",
+  "packageDefault": "利用project固有資産と秘密はpackage配布物へ含めない",
+  "projectOverride": "所有権表に列挙した開発・project・runtime資産をnpm配布から除外する",
+  "changeAuthority": "repository maintainerとpackage release authority"
+}
