@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DEVELOPMENT_CONSIDERATION_IDS } from "../src/domain/conformance.js";
+import { issueRequiredHeadings } from "../src/domain/issue.js";
 
 const DEVELOPMENT_CONSIDERATION_TEMPLATES = [
   "issue/00_要求定義_full.md",
@@ -223,8 +224,67 @@ const EXPECTED_OUTPUT_MARKERS = new Map<string, string>([
 const uniqueSorted = (values: string[]): string[] =>
   [...new Set(values)].sort();
 
-export function checkSkillTemplateContracts(root = process.cwd()) {
+type IssueTemplateMode = "full" | "quick" | "poc";
+
+const ISSUE_TEMPLATE_FILES: Readonly<Record<IssueTemplateMode, string>> = {
+  full: "00_要求定義_full.md",
+  quick: "00_要求定義_quick.md",
+  poc: "00_要求定義_poc.md",
+};
+
+export function checkIssueTemplateHeadings(
+  root = process.cwd(),
+  modes: readonly IssueTemplateMode[] = ["full", "quick", "poc"],
+) {
   const errors: string[] = [];
+  const templatesRoot = path.resolve(
+    root,
+    ".agent-skill-chain/templates/issue",
+  );
+  for (const mode of modes) {
+    const relative = ISSUE_TEMPLATE_FILES[mode];
+    const template = path.join(templatesRoot, relative);
+    if (!fs.existsSync(template)) {
+      errors.push(`${mode}モードのIssue templateがありません: ${relative}`);
+      continue;
+    }
+    const markdown = fs.readFileSync(template, "utf8");
+    for (const heading of issueRequiredHeadings(mode))
+      if (!markdown.includes(`## ${heading}`))
+        errors.push(
+          `${mode}モードのIssue templateに検証器の必須見出しがありません: ${heading}`,
+        );
+  }
+
+  if (modes.includes("quick")) {
+    const workflowFile = path.resolve(
+      root,
+      ".agent-skill-chain/docs/01_開発ワークフロー.md",
+    );
+    const quickTemplate = path.join(templatesRoot, ISSUE_TEMPLATE_FILES.quick);
+    const term = "最小Gherkin";
+    if (
+      !fs.existsSync(workflowFile) ||
+      !fs.readFileSync(workflowFile, "utf8").includes(term)
+    )
+      errors.push(`規範文書にIssue templateのkey term「${term}」がありません`);
+    if (
+      !issueRequiredHeadings("quick").some((heading) => heading.includes(term))
+    )
+      errors.push(`quickモードの検証器にkey term「${term}」がありません`);
+    if (
+      fs.existsSync(quickTemplate) &&
+      !fs.readFileSync(quickTemplate, "utf8").includes(term)
+    )
+      errors.push(
+        `quickモードのIssue templateにkey term「${term}」がありません`,
+      );
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+export function checkSkillTemplateContracts(root = process.cwd()) {
+  const errors: string[] = [...checkIssueTemplateHeadings(root).errors];
   const skillsRoot = path.resolve(root, ".agent-skill-chain/skills");
   const templatesRoot = path.resolve(root, ".agent-skill-chain/templates");
   const namespaceRoot = path.resolve(root, ".agent-skill-chain");

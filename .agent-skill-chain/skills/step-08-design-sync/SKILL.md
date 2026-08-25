@@ -7,6 +7,8 @@ description: 承認済み02設計・03実装計画を同じ耐久トラッカー
 
 入力は承認済み02/03、正確な既存トラッカー、事前表示、承認。成果物は追記済みの規範的な設計・計画と成功した書き込み後読み取り検証。full stagingのmode別成果物一覧とcontent digestを更新し、一致したbody digest、tracker、同期時刻、checkpoint 8をstaging記録へ原子的に保存して再読取した場合だけ`sync-verified`とする。後継Issueを作らず、一時ローカルパスを参照しない。検証成功までステップ9を停止する。
 
+同期前の構造検証には`agent-skill-chain issue validate --path=<directory> --stage=design`を使い、fullの`00_要求定義.md`、`01_要件定義.md`、`02_設計.md`、`03_実装計画.md`をすべて要求する。段階にかかわらずGherkin scenario IDを必須とする。
+
 ## テンプレート契約
 
 直接使用するテンプレートはない。このステップは、ステップ5〜7でテンプレートに従って承認済みとなった02/03を内容正本として追記し、別構成へ再生成しない。

@@ -5,6 +5,7 @@ import {
   createIssueStaging,
   recordStagingSync,
   validateIssue,
+  type IssueValidationStage,
 } from "./domain/issue.js";
 import {
   bootstrapProject,
@@ -1714,11 +1715,15 @@ export async function main(argv: string[]): Promise<number> {
   if (command === "issue" && subcommand === "validate") {
     const { flags, positionals } = parse(rest);
     const target = positionals[0] ?? required(flags, "path");
+    const stage = flags.stage;
+    if (stage !== undefined && stage !== "requirements" && stage !== "design")
+      throw new Error("--stageはrequirementsまたはdesignで指定してください");
     const result = validateIssue(path.resolve(target), {
       changedFiles:
         typeof flags.changed === "string"
           ? flags.changed.split(",").filter(Boolean)
           : [],
+      stage: stage as IssueValidationStage | undefined,
     });
     print(result);
     return result.valid ? 0 : 1;
