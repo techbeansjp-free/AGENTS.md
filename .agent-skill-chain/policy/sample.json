@@ -3,8 +3,18 @@
   "delivery": { "stopAt": "pull_request" },
   "merge": {
     "mode": "assisted",
-    "branches": ["feature/*", "fix/*", "refactor/*"],
-    "methods": ["squash"],
+    "branches": ["feature/*", "fix/*", "refactor/*", "develop", "master"],
+    "methods": ["merge", "squash"],
+    "branchMethods": [
+      {
+        "branches": ["develop"],
+        "methods": ["merge", "squash"]
+      },
+      {
+        "branches": ["master"],
+        "methods": ["merge"]
+      }
+    ],
     "requiredChecks": ["typecheck", "test"],
     "requiredReviews": 1
   },

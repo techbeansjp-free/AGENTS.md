@@ -149,6 +149,10 @@ export interface Policy {
     mode: "disabled" | "assisted" | "automatic";
     branches: string[];
     methods: Array<"merge" | "squash" | "rebase">;
+    branchMethods?: Array<{
+      branches: string[];
+      methods: Array<"merge" | "squash" | "rebase">;
+    }>;
     requiredChecks: string[];
     requiredReviews: number;
   };

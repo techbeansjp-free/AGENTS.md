@@ -3,7 +3,11 @@ import {
   enforceTrustedBoundary,
   resolveEffectivePolicy,
 } from "./enforcement.js";
-import { type Policy, type RuleObservation } from "../types.js";
+import {
+  type Diagnostic,
+  type Policy,
+  type RuleObservation,
+} from "../types.js";
 
 interface DeliveryEvidence {
   headSha?: string;
@@ -49,10 +53,20 @@ export interface MergeInput {
   prAuthorActorId?: string;
   implementationAuthorActorId?: string;
   branch: string;
+  baseRef?: string;
+  headRef?: string;
   repositoryVerified?: boolean;
   shaVerified?: boolean;
   protectionVerified?: boolean;
   mergeableVerified?: boolean;
+}
+
+export interface MergeMethodDecision {
+  allowed: boolean;
+  method: string;
+  resolvedMethods: string[];
+  reasons: string[];
+  diagnostic?: Diagnostic;
 }
 
 function branchMatches(pattern: string, value: string): boolean {
@@ -60,6 +74,103 @@ function branchMatches(pattern: string, value: string): boolean {
     .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
     .replaceAll("*", ".*");
   return new RegExp(`^${escaped}$`).test(value);
+}
+
+function mergeMethodDiagnostic(
+  input: { baseRef: string; headRef: string; method: string },
+  reasons: string[],
+): Diagnostic {
+  return {
+    ruleId: "ASC-MERGE-METHOD-001",
+    purpose: "長命branch間の履歴接続を維持して恒常的な全面衝突を防ぐ",
+    risk: "data-loss",
+    reasons,
+    scope: [
+      "pr merge",
+      `base:${input.baseRef || "不明"}`,
+      `head:${input.headRef || "不明"}`,
+      `method:${input.method}`,
+    ],
+    checks: [
+      "base branchに一致するbranchMethodsをすべて抽出してmethodsの積集合を確認した",
+      "baseRefとheadRefがmerge.branchesに列挙された長命branch同士か確認した",
+    ],
+    autoFixes: [],
+    next: "長命branch同士はmerge方式を指定してpr mergeを再実行してください",
+    requiredAuthority: "対象repositoryのmerge authority",
+    rollback: "危険なmergeを実行せず、branchと既存commitを変更しない",
+  };
+}
+
+export function resolveMergeMethod(input: {
+  baseRef: string;
+  headRef: string;
+  method: string;
+  policy: Policy;
+}): MergeMethodDecision {
+  const globalMethods = Array.isArray(input.policy.merge.methods)
+    ? input.policy.merge.methods.filter(
+        (method): method is "merge" | "squash" | "rebase" =>
+          method === "merge" || method === "squash" || method === "rebase",
+      )
+    : [];
+  const entries = Array.isArray(input.policy.merge.branchMethods)
+    ? input.policy.merge.branchMethods
+    : [];
+  const matches = entries.filter(
+    (entry) =>
+      Array.isArray(entry.branches) &&
+      entry.branches.some(
+        (branch) =>
+          typeof branch === "string" && branchMatches(branch, input.baseRef),
+      ),
+  );
+  const expanded = matches.flatMap((entry) =>
+    entry.methods.filter((method) => !globalMethods.includes(method)),
+  );
+  const resolvedMethods =
+    matches.length === 0
+      ? [...globalMethods]
+      : globalMethods.filter((method) =>
+          matches.every(
+            (entry) =>
+              Array.isArray(entry.methods) && entry.methods.includes(method),
+          ),
+        );
+  const reasons: string[] = [];
+  if (expanded.length > 0)
+    reasons.push(
+      `branch単位指定がglobalな許可を拡大しています: ${[...new Set(expanded)].join(", ")}`,
+    );
+  if (matches.length > 0 && resolvedMethods.length === 0)
+    reasons.push(
+      "base branchに複数のbranchMethods entryが一致しましたが、methodsの積集合が空です",
+    );
+  if (!resolvedMethods.some((method) => method === input.method))
+    reasons.push(
+      `${input.method}方式はbase branch ${input.baseRef}へ解決されたmethodsに含まれません`,
+    );
+  const longLivedPair =
+    input.policy.merge.branches.includes(input.baseRef) &&
+    input.policy.merge.branches.includes(input.headRef);
+  if (longLivedPair && (input.method === "squash" || input.method === "rebase"))
+    reasons.push(
+      `${input.method}は長命branch間の親子関係を切ってmerge-baseを進めないため、以後のmergeが恒常的に全面衝突し、誤った衝突解決で変更を巻き戻すriskがあります`,
+    );
+  if (reasons.length === 0)
+    return {
+      allowed: true,
+      method: input.method,
+      resolvedMethods,
+      reasons: [],
+    };
+  return {
+    allowed: false,
+    method: input.method,
+    resolvedMethods,
+    reasons,
+    diagnostic: mergeMethodDiagnostic(input, reasons),
+  };
 }
 
 export function validateIssueClosingReferences(
@@ -305,10 +416,11 @@ export function createPullRequest(
 
 export function authorizeMerge(input: MergeInput) {
   const policy = input.trustedPolicy?.merge;
-  const deny = (reason: string) => ({
+  const deny = (reason: string, diagnostic?: Diagnostic) => ({
     allowed: false,
     reason,
     operations: [] as string[],
+    diagnostic,
   });
   if (!policy || !["disabled", "assisted", "automatic"].includes(policy.mode))
     return deny("信頼済みポリシーがないか不正です");
@@ -328,8 +440,14 @@ export function authorizeMerge(input: MergeInput) {
     !policy.branches.some((pattern) => branchMatches(pattern, input.branch))
   )
     return deny("先頭ブランチが許可されていません");
-  if (!Array.isArray(policy.methods) || !policy.methods.includes(input.method))
-    return deny("マージ方式が許可されていません");
+  const methodDecision = resolveMergeMethod({
+    baseRef: input.baseRef ?? "",
+    headRef: input.headRef ?? input.branch,
+    method: input.method,
+    policy: input.trustedPolicy,
+  });
+  if (!methodDecision.allowed)
+    return deny(methodDecision.reasons.join("。"), methodDecision.diagnostic);
   if (!Array.isArray(input.checks)) return deny("検査状態が不明です");
   const observedChecks = input.checks;
   const missing = policy.requiredChecks.filter(
@@ -434,5 +552,7 @@ export function authorizeMerge(input: MergeInput) {
     allowed: true,
     reason: "既定ブランチ上の信頼済みポリシーがマージを許可しています",
     operations: ["pr.merge"],
+    diagnostic: undefined,
+    methodDecision,
   };
 }

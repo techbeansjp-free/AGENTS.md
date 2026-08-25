@@ -23,6 +23,7 @@ import {
   SUPPORTED_POLICY_SCHEMA_VERSIONS,
 } from "../lib/version.js";
 import {
+  type Diagnostic,
   type Policy,
   type ProviderCapabilityMapping,
   type ProjectChoices,
@@ -99,6 +100,104 @@ function validateStringArray(
     errors.push(`${name}に許可されていない値があります`);
   if (new Set(items).size !== items.length)
     errors.push(`${name}に重複があります`);
+}
+
+function validateBranchMethods(
+  value: unknown,
+  globalMethods: unknown,
+  name: string,
+  errors: string[],
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    errors.push(`${name}は配列でなければなりません`);
+    return;
+  }
+  if (value.length > 32) errors.push(`${name}は32件以内でなければなりません`);
+  const allowed = ["merge", "squash", "rebase"];
+  const global = Array.isArray(globalMethods)
+    ? globalMethods.filter((item): item is string => typeof item === "string")
+    : [];
+  value.forEach((entry, index) => {
+    const entryName = `${name}[${index}]`;
+    rejectUnknownKeys(entry, ["branches", "methods"], entryName, errors);
+    const record = isRecord(entry) ? entry : {};
+    validateStringArray(record.branches, `${entryName}.branches`, errors, {
+      min: 1,
+    });
+    validateStringArray(record.methods, `${entryName}.methods`, errors, {
+      allowed,
+      min: 1,
+    });
+    if (
+      Array.isArray(record.methods) &&
+      record.methods.some(
+        (method) => typeof method === "string" && !global.includes(method),
+      )
+    )
+      errors.push(
+        `${entryName}.methodsはglobalなmerge.methodsの許可を拡大できません`,
+      );
+  });
+}
+
+export interface MergeMethodPolicyWarning extends Diagnostic {
+  enforcement: "warn";
+}
+
+function branchMethodMatches(pattern: string, branch: string): boolean {
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replaceAll("*", ".*");
+  return new RegExp(`^${escaped}$`, "u").test(branch);
+}
+
+function resolvedPolicyMethodsForBase(
+  merge: Policy["merge"],
+  baseRef: string,
+): string[] {
+  const matches = (merge.branchMethods ?? []).filter((entry) =>
+    entry.branches.some((branch) => branchMethodMatches(branch, baseRef)),
+  );
+  if (matches.length === 0) return [...merge.methods];
+  return merge.methods.filter((method) =>
+    matches.every((entry) => entry.methods.includes(method)),
+  );
+}
+
+export function mergeMethodPolicyWarnings(
+  policy: Policy,
+): MergeMethodPolicyWarning[] {
+  if (policy.merge.branches.length < 2) return [];
+  const unsafeBases = policy.merge.branches.filter((baseRef) => {
+    const methods = resolvedPolicyMethodsForBase(policy.merge, baseRef);
+    return (
+      methods.length > 0 &&
+      !methods.includes("merge") &&
+      methods.every((method) => method === "squash" || method === "rebase")
+    );
+  });
+  if (unsafeBases.length === 0) return [];
+  return [
+    {
+      ruleId: "ASC-MERGE-METHOD-001",
+      purpose: "長命branch間の履歴接続を維持して恒常的な全面衝突を防ぐ",
+      risk: "data-loss",
+      reasons: [
+        `長命branchのbase候補 ${unsafeBases.join(", ")} へ解決される方式にmergeがなく、squashまたはrebaseだけが許可されています`,
+        "squashまたはrebaseは長命branch間の親子関係を保存せずmerge-baseを進めないため、以後のmergeが全面衝突する可能性があります",
+      ],
+      scope: ["policy validate", "merge.branches", ...unsafeBases],
+      checks: [
+        "merge.branchesとbase branchごとのbranchMethods積集合を確認した",
+      ],
+      autoFixes: [],
+      next: "長命branchをbaseにする設定へmerge方式を追加してください",
+      requiredAuthority: "project policy owner",
+      rollback: "policyを変更せず、長命branch間のmergeを実行しない",
+      enforcement: "warn",
+    },
+  ];
 }
 
 function validateWorktreePlacementPolicy(
@@ -558,7 +657,14 @@ export function validatePolicy(policy: unknown) {
   rejectUnknownKeys(candidate.delivery, ["stopAt"], "delivery", errors);
   rejectUnknownKeys(
     candidate.merge,
-    ["mode", "branches", "methods", "requiredChecks", "requiredReviews"],
+    [
+      "mode",
+      "branches",
+      "methods",
+      "branchMethods",
+      "requiredChecks",
+      "requiredReviews",
+    ],
     "merge",
     errors,
   );
@@ -589,10 +695,11 @@ export function validatePolicy(policy: unknown) {
     (candidate.rules !== undefined ||
       candidate.budgets !== undefined ||
       candidate.worktree !== undefined ||
-      candidate.projectChoices !== undefined)
+      candidate.projectChoices !== undefined ||
+      merge.branchMethods !== undefined)
   )
     errors.push(
-      `${compatiblePolicyVersionLabels}ではrules、budgets、worktree、projectChoicesを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`,
+      `${compatiblePolicyVersionLabels}ではrules、budgets、worktree、projectChoices、merge.branchMethodsを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`,
     );
   if (delivery.stopAt !== "pull_request")
     errors.push("delivery.stopAtはpull_requestでなければなりません");
@@ -604,6 +711,12 @@ export function validatePolicy(policy: unknown) {
   validateStringArray(merge.methods, "merge.methods", errors, {
     allowed: ["merge", "squash", "rebase"],
   });
+  validateBranchMethods(
+    merge.branchMethods,
+    merge.methods,
+    "merge.branchMethods",
+    errors,
+  );
   validateStringArray(merge.requiredChecks, "merge.requiredChecks", errors);
   if (
     typeof merge.requiredReviews !== "number" ||
@@ -660,9 +773,14 @@ export function validatePolicy(policy: unknown) {
           rollback: "入力policyを変更せずtrusted版を保持する",
         }
       : undefined;
+  const warnings =
+    errors.length === 0 && isRecord(policy)
+      ? mergeMethodPolicyWarnings(policy as unknown as Policy)
+      : [];
   return {
     valid: errors.length === 0,
     errors,
+    warnings,
     migration,
     diagnostics: errors.length
       ? [
@@ -821,7 +939,14 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     );
   rejectUnknownKeys(
     policy.merge,
-    ["mode", "branches", "methods", "requiredChecks", "requiredReviews"],
+    [
+      "mode",
+      "branches",
+      "methods",
+      "branchMethods",
+      "requiredChecks",
+      "requiredReviews",
+    ],
     "manifest.policy.merge",
     errors,
   );
@@ -848,6 +973,12 @@ export function validateProjectPolicyManifest(manifest: unknown) {
   validateStringArray(merge.methods, "manifest.policy.merge.methods", errors, {
     allowed: ["merge", "squash", "rebase"],
   });
+  validateBranchMethods(
+    merge.branchMethods,
+    merge.methods,
+    "manifest.policy.merge.branchMethods",
+    errors,
+  );
   validateStringArray(
     merge.requiredChecks,
     "manifest.policy.merge.requiredChecks",
