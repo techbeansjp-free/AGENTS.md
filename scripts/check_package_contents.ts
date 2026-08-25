@@ -159,6 +159,7 @@ export function checkPackageContents(): {
       ".agent-skill-chain/policy/00_利用案内.md",
       ".agent-skill-chain/schemas/00_利用案内.md",
       ".agent-skill-chain/skills/00_利用案内.md",
+      ".agent-skill-chain/skills/asc-step/SKILL.md",
       ".agent-skill-chain/templates/00_利用案内.md",
       ".agent-skill-chain/templates/common/02_利用案内.md",
       ".agent-skill-chain/templates/issue/12_利用案内.md",

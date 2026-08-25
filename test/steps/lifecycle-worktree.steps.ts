@@ -283,7 +283,7 @@ Given(
   function () {
     this.root = this.temp();
     init(this.root, { apply: true });
-    fs.mkdirSync(path.join(this.root, ".agents"));
+    fs.writeFileSync(path.join(this.root, ".agents", "legacy.md"), "legacy");
     fs.mkdirSync(path.join(this.root, ".workflow"));
   },
 );
