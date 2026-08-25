@@ -3,6 +3,10 @@ import path from "node:path";
 import { git } from "../lib/process.js";
 import { enforceTrustedBoundary } from "./enforcement.js";
 import { type Policy, type RuleObservation } from "../types.js";
+import {
+  isSafeFinalizeIgnoredPathPrefix,
+  resolveFinalizeIgnoredPathAllowlist,
+} from "./worktree-removal-safety.js";
 
 export interface WorktreePlacementPolicy {
   root: string;
@@ -11,6 +15,7 @@ export interface WorktreePlacementPolicy {
   allowedBranchTypes: string[];
   base: string;
   cleanup: string;
+  finalizeIgnoredPathAllowlist?: string[];
 }
 
 export const DEFAULT_WORKTREE_PLACEMENT: WorktreePlacementPolicy = {
@@ -20,6 +25,7 @@ export const DEFAULT_WORKTREE_PLACEMENT: WorktreePlacementPolicy = {
   allowedBranchTypes: ["feature", "fix", "refactor", "test", "docs", "chore"],
   base: "remote-default-branch",
   cleanup: "after-merge",
+  finalizeIgnoredPathAllowlist: [],
 };
 
 interface RegisteredWorktree {
@@ -33,7 +39,12 @@ const BRANCH_NAME = /^([a-z][a-z0-9-]{0,31})\/(\d+)-([a-z0-9][a-z0-9-]*)$/u;
 
 function placementPolicyErrors(policy: WorktreePlacementPolicy): string[] {
   const errors: string[] = [];
-  const constants: Array<[keyof WorktreePlacementPolicy, string]> = [
+  const constants: Array<
+    [
+      Exclude<keyof WorktreePlacementPolicy, "finalizeIgnoredPathAllowlist">,
+      string,
+    ]
+  > = [
     ["root", DEFAULT_WORKTREE_PLACEMENT.root],
     ["namePattern", DEFAULT_WORKTREE_PLACEMENT.namePattern],
     ["branchPattern", DEFAULT_WORKTREE_PLACEMENT.branchPattern],
@@ -53,6 +64,18 @@ function placementPolicyErrors(policy: WorktreePlacementPolicy): string[] {
     )
   )
     errors.push("worktree policyのallowedBranchTypesが不正です");
+  const finalizeIgnoredPathAllowlist =
+    policy.finalizeIgnoredPathAllowlist ?? [];
+  if (
+    !Array.isArray(finalizeIgnoredPathAllowlist) ||
+    finalizeIgnoredPathAllowlist.length > 64 ||
+    new Set(finalizeIgnoredPathAllowlist).size !==
+      finalizeIgnoredPathAllowlist.length ||
+    finalizeIgnoredPathAllowlist.some(
+      (prefix) => !isSafeFinalizeIgnoredPathPrefix(prefix),
+    )
+  )
+    errors.push("worktree policyのfinalizeIgnoredPathAllowlistが不正です");
   return errors;
 }
 
@@ -461,6 +484,7 @@ export function inspectFinalizeState(
     reviewApproved: boolean | "unknown";
     prMerged: boolean | "unknown";
   },
+  ignoredPathAllowlist: string[] = resolveFinalizeIgnoredPathAllowlist(),
 ) {
   const listed = git(["worktree", "list", "--porcelain"], repoRoot).stdout;
   const exact = `worktree ${path.resolve(worktreePath)}\n`;
@@ -492,6 +516,7 @@ export function inspectFinalizeState(
     .filter(Boolean);
   const recovery = inspectRecoveryState(worktreePath, headSha);
   return {
+    repositoryRoot: path.resolve(repoRoot),
     repository: evidence.repository,
     worktree: path.resolve(worktreePath),
     branch,
@@ -503,6 +528,7 @@ export function inspectFinalizeState(
     stashes,
     temporaryArtifacts,
     ignoredArtifacts,
+    ignoredPathAllowlist,
     pushed: recovery.pushed,
     remoteBranch: recovery.remoteBranch,
     prMerged: evidence.prMerged,

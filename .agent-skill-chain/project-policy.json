@@ -27,7 +27,8 @@
         "process"
       ],
       "base": "remote-default-branch",
-      "cleanup": "after-merge"
+      "cleanup": "after-merge",
+      "finalizeIgnoredPathAllowlist": []
     },
     "budgets": {
       "localFeedbackMs": 120000,
