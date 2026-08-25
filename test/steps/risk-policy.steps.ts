@@ -82,13 +82,14 @@ interface BindingFixture {
 }
 
 interface BindingSchemaFixture {
+  $defs: { safePath: { pattern: string } };
   properties: {
     bindings: {
       items: {
         properties: {
           enforcement: {
             uniqueItems: boolean;
-            items: { properties: { path: { pattern: string } } };
+            items: unknown;
           };
         };
       };
@@ -4044,7 +4045,7 @@ Then("runtimeとschemaは重複tupleを拒否する", function () {
     this.bindingSchema.properties.bindings.items.properties.enforcement;
   assert.equal(enforcementSchema.uniqueItems, true);
   const pathPattern = new RegExp(
-    enforcementSchema.items.properties.path.pattern,
+    this.bindingSchema.$defs.safePath.pattern,
     "u",
   );
   assert.equal(pathPattern.test("src/domain/conformance.ts"), true);
@@ -4067,11 +4068,7 @@ Then("validatorは例外終了せずenforcement不正を返す", function () {
 Then("runtimeとschemaは末尾slashを拒否する", function () {
   assert.equal(this.bindingResult.valid, false);
   assert.match(this.bindingResult.errors.join(" "), /path/u);
-  const pattern = new RegExp(
-    this.bindingSchema.properties.bindings.items.properties.enforcement.items
-      .properties.path.pattern,
-    "u",
-  );
+  const pattern = new RegExp(this.bindingSchema.$defs.safePath.pattern, "u");
   assert.equal(pattern.test("src/domain/"), false);
 });
 

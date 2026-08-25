@@ -15,6 +15,7 @@ import {
 } from "../lib/security.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { validateProjectConformanceBinding } from "./conformance.js";
+import type { ConformanceDeclaration } from "./conformance.js";
 import {
   COMPATIBLE_POLICY_SCHEMA_VERSIONS,
   CURRENT_POLICY_SCHEMA_VERSION,
@@ -169,6 +170,29 @@ function validateApplicabilityDecision(
   ] as const)
     if (!hasConcreteDecisionText(record[field], minimum))
       errors.push(`${name}.${field}を具体化してください`);
+}
+
+function validateNotApplicableDecision(
+  value: unknown,
+  name: string,
+  errors: string[],
+): void {
+  validateApplicabilityDecision(value, name, errors);
+  if (!isRecord(value) || value.status !== "not-applicable")
+    errors.push(`${name}.statusはnot-applicableでなければなりません`);
+}
+
+function validateQualityValue(
+  value: unknown,
+  name: string,
+  errors: string[],
+): void {
+  if (typeof value === "string") {
+    if (value.trim() === "")
+      errors.push(`${name}は空でない文字列でなければなりません`);
+    return;
+  }
+  validateNotApplicableDecision(value, name, errors);
 }
 
 function validatePositiveInteger(
@@ -448,27 +472,35 @@ export function validateProjectChoices(value: unknown) {
     "projectChoices.quality",
     errors,
   );
+  if (
+    typeof quality.implementationLanguage !== "string" ||
+    quality.implementationLanguage.trim() === ""
+  )
+    errors.push(
+      "projectChoices.quality.implementationLanguageは空でない文字列でなければなりません",
+    );
   for (const field of [
-    "implementationLanguage",
     "lintCommand",
     "formatCheckCommand",
     "formatWriteCommand",
     "typecheckCommand",
     "runtimeValidation",
   ])
-    if (typeof quality[field] !== "string" || quality[field].trim() === "")
-      errors.push(
-        `projectChoices.quality.${field}は空でない文字列でなければなりません`,
-      );
+    validateQualityValue(
+      quality[field],
+      `projectChoices.quality.${field}`,
+      errors,
+    );
   if (quality.strictTypecheck !== true)
-    errors.push(
-      "projectChoices.quality.strictTypecheckはtrueでなければなりません",
+    validateNotApplicableDecision(
+      quality.strictTypecheck,
+      "projectChoices.quality.strictTypecheck",
+      errors,
     );
   validateStringArray(
     quality.forbiddenTypes,
     "projectChoices.quality.forbiddenTypes",
     errors,
-    { min: 1 },
   );
   const auxiliaryLanguages = isRecord(quality.auxiliaryLanguages)
     ? quality.auxiliaryLanguages
@@ -665,6 +697,7 @@ export interface PolicyManifest {
   choiceFiles: string[];
   ruleFiles: string[];
   conformanceFiles: string[];
+  conformanceScope?: "repository-bound" | "package-attested";
   providerFiles?: string[];
   conformanceDirectory: "project/conformance";
 }
@@ -685,6 +718,29 @@ export interface PolicySet {
   choices: ProjectChoices[];
   providerMappings: ProviderCapabilityMapping[];
   rules: Rule[];
+  conformanceBindings: unknown[];
+}
+
+export function conformanceDeclarationFromPolicySet(
+  policySetInput: unknown,
+): ConformanceDeclaration | undefined {
+  if (!isRecord(policySetInput)) return undefined;
+  const policySet = policySetInput;
+  if (
+    !isRecord(policySet.manifest) ||
+    policySet.manifest.schemaVersion !== MANIFEST_VERSION
+  )
+    return undefined;
+  const scope = policySet.manifest.conformanceScope;
+  return {
+    scope:
+      scope === "repository-bound" || scope === "package-attested"
+        ? scope
+        : undefined,
+    bindingDocuments: Array.isArray(policySet.conformanceBindings)
+      ? policySet.conformanceBindings
+      : [],
+  };
 }
 
 interface ProviderObservation {
@@ -724,6 +780,7 @@ export function validateProjectPolicyManifest(manifest: unknown) {
       "choiceFiles",
       "ruleFiles",
       "conformanceFiles",
+      "conformanceScope",
       "providerFiles",
       "conformanceDirectory",
     ],
@@ -738,6 +795,12 @@ export function validateProjectPolicyManifest(manifest: unknown) {
   const worktree = policy.worktree;
   if (manifest.schemaVersion !== MANIFEST_VERSION)
     errors.push("manifest schemaVersionが不正です");
+  if (
+    manifest.conformanceScope !== undefined &&
+    manifest.conformanceScope !== "repository-bound" &&
+    manifest.conformanceScope !== "package-attested"
+  )
+    errors.push("conformanceScopeが不正です");
   rejectUnknownKeys(
     manifest.policy,
     ["schemaVersion", "delivery", "merge", "budgets", "worktree"],
@@ -828,11 +891,22 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     errors.push("choiceFilesは1件の配列でなければなりません");
   if (!Array.isArray(manifest?.ruleFiles) || manifest.ruleFiles.length === 0)
     errors.push("ruleFilesは1件以上の配列でなければなりません");
-  if (
-    !Array.isArray(manifest?.conformanceFiles) ||
+  if (!Array.isArray(manifest?.conformanceFiles))
+    errors.push("conformanceFilesは配列でなければなりません");
+  else if (
+    manifest.conformanceScope === "package-attested" &&
+    manifest.conformanceFiles.length !== 0
+  )
+    errors.push(
+      "package-attestedはpackage側の適合証拠を再利用しconsumer実装へのbindingをclaimしないためconformanceFilesを空配列にしてください",
+    );
+  else if (
+    manifest.conformanceScope !== "package-attested" &&
     manifest.conformanceFiles.length === 0
   )
-    errors.push("conformanceFilesは1件以上の配列でなければなりません");
+    errors.push(
+      "repository-boundではconformanceFilesは1件以上必要です。未指定scopeもrepository-boundとして扱います",
+    );
   if (ruleFiles.length > 126)
     errors.push("ruleFilesは126件以内でなければなりません");
   if (conformanceFiles.length > 126)
@@ -924,6 +998,9 @@ function assemblePolicySet(
   const providerMappings = (manifest.providerFiles ?? []).map(
     (relative) => entries[relative]!.value as ProviderCapabilityMapping,
   );
+  const conformanceBindings = manifest.conformanceFiles.map(
+    (relative) => entries[relative]!.value,
+  );
   for (const relative of manifest.providerFiles ?? []) {
     const mapping = entries[relative]!.value;
     const validation = validateProviderCapabilityMapping(mapping);
@@ -933,7 +1010,7 @@ function assemblePolicySet(
   }
   for (const relative of manifest.conformanceFiles) {
     const binding = entries[relative]!.value;
-    const validation = validateProjectConformanceBinding(binding);
+    const validation = validateProjectConformanceBinding(binding, rules);
     manifestValidation.errors.push(
       ...validation.errors.map((error) => `${relative}: ${error}`),
     );
@@ -992,6 +1069,7 @@ function assemblePolicySet(
     choices,
     providerMappings,
     rules,
+    conformanceBindings,
   };
 }
 
@@ -1028,6 +1106,7 @@ export function loadProjectPolicySet(root: string): PolicySet {
       choices: policy.projectChoices ? [policy.projectChoices] : [],
       providerMappings: [],
       rules: policy.rules,
+      conformanceBindings: [],
     };
   }
   const projectRoot = path.join(namespace, "project");
@@ -1151,6 +1230,7 @@ export function loadProjectPolicySetAtCommit(
       choices: policy.projectChoices ? [policy.projectChoices] : [],
       providerMappings: [],
       rules: policy.rules,
+      conformanceBindings: [],
     };
   }
   for (const line of treeLines)

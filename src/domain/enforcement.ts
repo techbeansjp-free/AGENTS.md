@@ -3,6 +3,10 @@ import { CURRENT_POLICY_SCHEMA_VERSION } from "../lib/version.js";
 import { redactSecrets, stableJson } from "../lib/security.js";
 import { classifyProjectChoiceDiff } from "./project-choice-diff.js";
 import {
+  classifyConformanceDeclarationDiff,
+  type ConformanceDeclaration,
+} from "./conformance.js";
+import {
   type Activation,
   type AutoFix,
   type Diagnostic,
@@ -374,7 +378,14 @@ export function validateEnforcementPolicy(policy: unknown) {
   return { valid: errors.length === 0, errors, diagnostics };
 }
 
-export function compareTrustedPolicy(trusted: Policy, candidate: Policy) {
+export function compareTrustedPolicy(
+  trusted: Policy,
+  candidate: Policy,
+  options: {
+    trustedConformance?: ConformanceDeclaration;
+    candidateConformance?: ConformanceDeclaration;
+  } = {},
+) {
   const trustedRules = new Map(
     (trusted.rules ?? []).map((rule) => [rule.ruleId, rule]),
   );
@@ -384,6 +395,7 @@ export function compareTrustedPolicy(trusted: Policy, candidate: Policy) {
   const rejected: Diagnostic[] = [];
   const stagedAdditions: string[] = [];
   const projectChoiceChanges: string[] = [];
+  const conformanceChanges: string[] = [];
   const authorityReasons: string[] = [];
   const mergeStrength: Record<Policy["merge"]["mode"], number> = {
     disabled: 3,
@@ -557,11 +569,34 @@ export function compareTrustedPolicy(trusted: Policy, candidate: Policy) {
         ),
       );
   }
+  if (options.trustedConformance && options.candidateConformance) {
+    const conformanceDiff = classifyConformanceDeclarationDiff(
+      options.trustedConformance,
+      options.candidateConformance,
+    );
+    conformanceChanges.push(...conformanceDiff.allowed);
+    if (conformanceDiff.weakened.length > 0)
+      rejected.push(
+        diagnostic(
+          "ASC-TRUST-001",
+          "conformance宣言による検証弱化を防止する",
+          "authority",
+          conformanceDiff.weakened,
+          ["conformanceScope", "conformanceBindings"],
+          ["scope、binding、status、enforcement、counterexampleを比較した"],
+          [],
+          "弱化を取り消すか、package evidenceの再利用とconsumer bindingの境界を独立reviewしてください",
+          "既定ブランチのproject policy owner",
+          "trusted conformance宣言を復元する",
+        ),
+      );
+  }
   return {
     allowed: rejected.length === 0,
     rejected,
     stagedAdditions,
     projectChoiceChanges,
+    conformanceChanges,
   };
 }
 

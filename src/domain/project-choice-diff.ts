@@ -39,8 +39,8 @@ const CAPABILITY_FIELDS = [
   "humanCenteredUi",
   "designTokens",
 ] as const;
-const QUALITY_STRING_FIELDS = [
-  "implementationLanguage",
+const QUALITY_STRING_FIELDS = ["implementationLanguage"] as const;
+const QUALITY_APPLICABILITY_FIELDS = [
   "lintCommand",
   "formatCheckCommand",
   "formatWriteCommand",
@@ -221,6 +221,50 @@ function classifyDecision(
   for (const field of ["reason", "evidence"] as const)
     if (trusted[field] !== candidate[field])
       pushUnique(diff.allowed, `${fieldPath}.${field}`);
+}
+
+function isNotApplicableDecision(value: unknown): value is Decision & {
+  status: "not-applicable";
+} {
+  return isDecision(value) && value.status === "not-applicable";
+}
+
+function classifyQualityValue(
+  trusted: unknown,
+  candidate: unknown,
+  fieldPath: string,
+  diff: ProjectChoiceDiff,
+): void {
+  const trustedString = isString(trusted);
+  const candidateString = isString(candidate);
+  const trustedDecision = isNotApplicableDecision(trusted);
+  const candidateDecision = isNotApplicableDecision(candidate);
+  if (!trustedString && !trustedDecision) {
+    weaken(diff, fieldPath, "trusted側のquality値が型契約を満たしていない");
+    return;
+  }
+  if (!candidateString && !candidateDecision) {
+    inspectDecisionUnknownFields(candidate, fieldPath, diff);
+    weaken(diff, fieldPath, "candidate側のquality値が型契約を満たしていない");
+    return;
+  }
+  if (trustedString && candidateDecision) {
+    weaken(
+      diff,
+      fieldPath,
+      "trusted側の具体値をnot-applicableへ格下げしている",
+    );
+    return;
+  }
+  if (trustedDecision && candidateString) {
+    pushUnique(diff.allowed, fieldPath);
+    return;
+  }
+  if (trustedDecision && candidateDecision) {
+    inspectDecisionUnknownFields(trusted, fieldPath, diff);
+    inspectDecisionUnknownFields(candidate, fieldPath, diff);
+  }
+  if (!sameValue(trusted, candidate)) pushUnique(diff.allowed, fieldPath);
 }
 
 function classifyMonotonicArray(
@@ -738,6 +782,7 @@ export function classifyProjectChoiceDiff(
     );
   const qualityFields = [
     ...QUALITY_STRING_FIELDS,
+    ...QUALITY_APPLICABILITY_FIELDS,
     "strictTypecheck",
     "forbiddenTypes",
     "auxiliaryLanguages",
@@ -769,11 +814,25 @@ export function classifyProjectChoiceDiff(
       pushUnique(diff.allowed, fieldPath);
   }
 
-  if (trustedQuality.strictTypecheck !== true)
+  for (const field of QUALITY_APPLICABILITY_FIELDS)
+    classifyQualityValue(
+      trustedQuality[field],
+      candidateQuality[field],
+      `projectChoices.quality.${field}`,
+      diff,
+    );
+
+  const trustedStrictDecision = isNotApplicableDecision(
+    trustedQuality.strictTypecheck,
+  );
+  const candidateStrictDecision = isNotApplicableDecision(
+    candidateQuality.strictTypecheck,
+  );
+  if (trustedQuality.strictTypecheck !== true && !trustedStrictDecision)
     weaken(
       diff,
       "projectChoices.quality.strictTypecheck",
-      "trusted側のstrictTypecheckがtrueではない",
+      "trusted側のstrictTypecheckが型契約を満たしていない",
     );
   if (
     trustedQuality.strictTypecheck === true &&
@@ -784,6 +843,20 @@ export function classifyProjectChoiceDiff(
       "projectChoices.quality.strictTypecheck",
       "trusted側のtrueをcandidate側で維持していない",
     );
+  else if (trustedStrictDecision && candidateQuality.strictTypecheck === true)
+    pushUnique(diff.allowed, "projectChoices.quality.strictTypecheck");
+  else if (trustedStrictDecision && !candidateStrictDecision)
+    weaken(
+      diff,
+      "projectChoices.quality.strictTypecheck",
+      "candidate側のstrictTypecheckが型契約を満たしていない",
+    );
+  else if (
+    trustedStrictDecision &&
+    candidateStrictDecision &&
+    !sameValue(trustedStrictDecision, candidateStrictDecision)
+  )
+    pushUnique(diff.allowed, "projectChoices.quality.strictTypecheck");
   classifyMonotonicArray(
     trustedQuality.forbiddenTypes,
     candidateQuality.forbiddenTypes,

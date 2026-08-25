@@ -2,10 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { writeFileAtomic } from "../lib/atomic.js";
-import { resolveContained } from "../lib/security.js";
+import { parseJsonStrict, resolveContained } from "../lib/security.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { PACKAGE_VERSION } from "../lib/version.js";
 import { isRecord } from "../types.js";
+import { loadProjectPolicySet } from "./policy.js";
+import {
+  DEPRECATED_POLICY_SCHEMA_ALIASES,
+  SUPPORTED_POLICY_SCHEMA_VERSIONS,
+} from "../lib/version.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
 const ROOT_ASSETS = ["AGENTS.md"];
@@ -444,6 +449,46 @@ export function doctor(target: string) {
     if (files[relative] !== actual)
       diagnostics.push(`${relative}: managed recordとhashが一致しません`);
   }
+  const policyFile = path.join(
+    target,
+    ".agent-skill-chain",
+    "project-policy.json",
+  );
+  let projectPolicyStatus:
+    "missing" | "valid" | "invalid" | "unsupported-version" = "missing";
+  let projectPolicyMessage =
+    "project policyは未作成です。install健全性とは別に利用project ownerが作成・検証してください";
+  if (fs.existsSync(policyFile)) {
+    try {
+      const parsed: unknown = parseJsonStrict(
+        fs.readFileSync(policyFile, "utf8"),
+        "project policy",
+      );
+      const schemaVersion = isRecord(parsed) ? parsed.schemaVersion : undefined;
+      const knownVersion =
+        schemaVersion === "agent-skill-chain/project-policy-manifest/v1" ||
+        (typeof schemaVersion === "string" &&
+          (SUPPORTED_POLICY_SCHEMA_VERSIONS.includes(schemaVersion) ||
+            Object.prototype.hasOwnProperty.call(
+              DEPRECATED_POLICY_SCHEMA_ALIASES,
+              schemaVersion,
+            )));
+      if (!knownVersion) {
+        projectPolicyStatus = "unsupported-version";
+        projectPolicyMessage =
+          "project policyのschemaVersionは未対応です。入力を保持してstaged migrationを計画してください";
+      } else {
+        loadProjectPolicySet(target);
+        projectPolicyStatus = "valid";
+        projectPolicyMessage =
+          "project policyはschemaとruntimeの現行契約に適合しています";
+      }
+    } catch {
+      projectPolicyStatus = "invalid";
+      projectPolicyMessage =
+        "project policyが不正です。入力を変更せずpolicy validateの診断を確認してください";
+    }
+  }
   return {
     healthy: installed && diagnostics.length === 0,
     installed,
@@ -454,6 +499,8 @@ export function doctor(target: string) {
     },
     legacyDetected: legacy,
     legacyRuntimeEnabled: false,
+    projectPolicyStatus,
+    projectPolicyMessage,
     migration: legacy.length
       ? "診断のみ。旧資産は実行も変換もしません"
       : "なし",

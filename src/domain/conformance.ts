@@ -15,10 +15,28 @@ const CONTRACT_FIELDS = [
 ];
 const BINDING_FIELDS = [
   "id",
+  "status",
+  "reason",
+  "evidence",
   "sourcePaths",
   "enforcement",
   "counterexampleScenarios",
 ];
+const SAFE_BINDING_PATH =
+  /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\/\/)(?!.*\\)(?!.*\/$)[^\u0000]+$/u;
+const CHECK_ID = /^[a-z][a-z0-9-]{0,63}$/u;
+
+export type ConformanceScope = "repository-bound" | "package-attested";
+
+export interface ConformanceDeclaration {
+  scope?: ConformanceScope;
+  bindingDocuments: unknown[];
+}
+
+export interface ConformanceDeclarationDiff {
+  weakened: string[];
+  allowed: string[];
+}
 export const DEVELOPMENT_CONSIDERATION_IDS = [
   "DC-PRIVACY",
   "DC-OBSERVABILITY",
@@ -301,6 +319,36 @@ function strings(value: unknown): value is string[] {
   );
 }
 
+function bindingStatus(
+  value: Record<string, unknown>,
+): "applicable" | "not-applicable" | undefined {
+  if (value.status === undefined || value.status === "applicable")
+    return "applicable";
+  return value.status === "not-applicable" ? value.status : undefined;
+}
+
+function enforcementPointKey(point: unknown): string {
+  if (!isRecord(point)) return "";
+  const kind = point.kind === undefined ? "module-export" : String(point.kind);
+  const relative =
+    typeof point.path === "string"
+      ? path.posix.normalize(point.path.normalize("NFC"))
+      : "";
+  const reference =
+    kind === "module-export"
+      ? String(point.export ?? "")
+      : kind === "file-entrypoint"
+        ? String(point.runner ?? "")
+        : String(point.checkId ?? "");
+  return `${kind}\u0000${relative}\u0000${reference}`;
+}
+
+export function checkIdForRuleId(ruleId: string): string | undefined {
+  if (!/^ASC-[A-Z0-9]+(?:-[A-Z0-9]+)*$/u.test(ruleId)) return undefined;
+  const checkId = ruleId.slice("ASC-".length).toLowerCase();
+  return CHECK_ID.test(checkId) ? checkId : undefined;
+}
+
 export function validateConformanceContract(contract: unknown) {
   const errors: string[] = [];
   if (!isRecord(contract))
@@ -359,7 +407,10 @@ export function validateConformanceContract(contract: unknown) {
 }
 
 /** Keep shape validation separate so candidate data cannot trigger filesystem reads before its paths are proven safe. */
-export function validateProjectConformanceBinding(binding: unknown) {
+export function validateProjectConformanceBinding(
+  binding: unknown,
+  rulesInput?: unknown,
+) {
   const errors: string[] = [];
   if (!isRecord(binding))
     return { valid: false, errors: ["bindingはobjectでなければなりません"] };
@@ -369,6 +420,18 @@ export function validateProjectConformanceBinding(binding: unknown) {
   if (binding.schemaVersion !== "agent-skill-chain/project-conformance/v1")
     errors.push("binding schemaVersionが不正です");
   const bindings = Array.isArray(binding.bindings) ? binding.bindings : [];
+  const registeredCheckIds =
+    rulesInput === undefined
+      ? undefined
+      : new Set(
+          (Array.isArray(rulesInput) ? rulesInput : []).flatMap((rule) => {
+            if (!isRecord(rule) || typeof rule.ruleId !== "string") return [];
+            const checkId = checkIdForRuleId(rule.ruleId);
+            return checkId ? [checkId] : [];
+          }),
+        );
+  if (rulesInput !== undefined && !Array.isArray(rulesInput))
+    errors.push("project rulesは配列でなければなりません");
   if (bindings.length !== 12)
     errors.push("bindingsはexact 12件でなければなりません");
   const ids = bindings.map((item) => (isRecord(item) ? item.id : undefined));
@@ -383,27 +446,44 @@ export function validateProjectConformanceBinding(binding: unknown) {
       errors.push("binding itemはobjectでなければなりません");
       continue;
     }
-    for (const field of BINDING_FIELDS)
-      if (item[field] === undefined)
-        errors.push(`${item.id ?? "unknown"}.${field}が必要です`);
+    if (item.id === undefined)
+      errors.push(`${item.id ?? "unknown"}.idが必要です`);
     for (const field of Object.keys(item))
       if (!BINDING_FIELDS.includes(field))
         errors.push(`${item.id ?? "unknown"}.${field}は未知fieldです`);
+    const status = bindingStatus(item);
+    if (!status) errors.push(`${String(item.id)}.statusが不正です`);
+    if (status === "not-applicable") {
+      if (!text(item.reason))
+        errors.push(`${String(item.id)}.reasonが必要です`);
+      if (!text(item.evidence))
+        errors.push(`${String(item.id)}.evidenceが必要です`);
+      for (const field of [
+        "sourcePaths",
+        "enforcement",
+        "counterexampleScenarios",
+      ] as const)
+        if (item[field] !== undefined)
+          errors.push(
+            `${String(item.id)}.${field}はnot-applicableでは指定できません`,
+          );
+      continue;
+    }
+    if (item.reason !== undefined || item.evidence !== undefined)
+      errors.push(
+        `${String(item.id)}のreason/evidenceはnot-applicableでだけ指定できます`,
+      );
     if (!strings(item.sourcePaths))
       errors.push(`${item.id}.sourcePathsが不正です`);
     if (
       !strings(item.counterexampleScenarios) ||
-      item.counterexampleScenarios.some((id) => !/^SCN-[A-Z0-9-]+$/.test(id))
+      item.counterexampleScenarios.some((id) => !/^SCN-[A-Z0-9-]+$/u.test(id))
     )
       errors.push(`${String(item.id)}.counterexampleScenariosが不正です`);
     const enforcement = Array.isArray(item.enforcement) ? item.enforcement : [];
     if (enforcement.length === 0)
       errors.push(`${item.id}.enforcementが必要です`);
-    const enforcementTuples = enforcement.map((point) =>
-      isRecord(point)
-        ? `${typeof point.path === "string" ? path.posix.normalize(point.path.normalize("NFC")) : ""}\u0000${String(point.export ?? "")}`
-        : "",
-    );
+    const enforcementTuples = enforcement.map(enforcementPointKey);
     if (new Set(enforcementTuples).size !== enforcementTuples.length)
       errors.push(`${item.id}.enforcementのpath/export tupleが重複しています`);
     for (const point of enforcement) {
@@ -411,17 +491,39 @@ export function validateProjectConformanceBinding(binding: unknown) {
         errors.push(`${String(item.id)}.enforcement itemが不正です`);
         continue;
       }
+      const kind = point.kind === undefined ? "module-export" : point.kind;
+      const allowed =
+        kind === "module-export"
+          ? ["kind", "path", "export"]
+          : kind === "file-entrypoint"
+            ? ["kind", "path", "runner"]
+            : kind === "check-ref"
+              ? ["kind", "checkId"]
+              : ["kind"];
       for (const key of Object.keys(point))
-        if (!["path", "export"].includes(key))
+        if (!allowed.includes(key))
           errors.push(`${item.id}.enforcement.${key}は未知fieldです`);
-      if (!text(point.path) || !text(point.export))
-        errors.push(`${item.id}.enforcementはpathとexportが必要です`);
-      else if (
-        !/^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\/\/)(?!.*\\)(?!.*\/$)[^\u0000]+$/u.test(
-          point.path,
+      if (kind === "module-export") {
+        if (!text(point.path) || !text(point.export))
+          errors.push(`${item.id}.module-exportはpathとexportが必要です`);
+        else if (!SAFE_BINDING_PATH.test(point.path))
+          errors.push(`${item.id}.enforcement.pathが不正です`);
+      } else if (kind === "file-entrypoint") {
+        if (!text(point.path) || !text(point.runner))
+          errors.push(`${item.id}.file-entrypointはpathとrunnerが必要です`);
+        else if (!SAFE_BINDING_PATH.test(point.path))
+          errors.push(`${item.id}.enforcement.pathが不正です`);
+      } else if (kind === "check-ref") {
+        if (!text(point.checkId) || !CHECK_ID.test(point.checkId))
+          errors.push(`${item.id}.check-ref.checkIdが不正です`);
+        else if (
+          registeredCheckIds !== undefined &&
+          !registeredCheckIds.has(point.checkId)
         )
-      )
-        errors.push(`${item.id}.enforcement.pathが不正です`);
+          errors.push(
+            `${item.id}.check-refがproject ruleへ登録されていません: ${point.checkId}`,
+          );
+      } else errors.push(`${item.id}.enforcement.kindが不正です`);
     }
   }
   return { valid: errors.length === 0, errors };
@@ -524,9 +626,10 @@ export function validateRepositoryConformance(
   contract: unknown,
   binding: unknown,
   evidenceInput: unknown = {},
+  rulesInput: unknown = [],
 ) {
   const contractResult = validateConformanceContract(contract);
-  const bindingResult = validateProjectConformanceBinding(binding);
+  const bindingResult = validateProjectConformanceBinding(binding, rulesInput);
   const errors = [...contractResult.errors, ...bindingResult.errors];
   if (!isRecord(binding)) return { valid: false, errors };
   const bindings = Array.isArray(binding.bindings) ? binding.bindings : [];
@@ -548,11 +651,21 @@ export function validateRepositoryConformance(
     errors.push("成功証拠passedScenarioIdsが不正です");
   const passed = new Set<unknown>(passedScenarioIds);
   if (!text(evidence.tool)) errors.push("成功証拠toolが必要です");
+  const registeredCheckIds = new Set(
+    (Array.isArray(rulesInput) ? rulesInput : []).flatMap((rule) => {
+      if (!isRecord(rule) || typeof rule.ruleId !== "string") return [];
+      const checkId = checkIdForRuleId(rule.ruleId);
+      return checkId ? [checkId] : [];
+    }),
+  );
+  if (!Array.isArray(rulesInput))
+    errors.push("project rulesは配列でなければなりません");
   for (const item of bindings) {
     if (!isRecord(item)) {
       errors.push("binding itemはobjectでなければなりません");
       continue;
     }
+    if (bindingStatus(item) === "not-applicable") continue;
     for (const relative of Array.isArray(item.sourcePaths)
       ? item.sourcePaths
       : []) {
@@ -570,10 +683,28 @@ export function validateRepositoryConformance(
     for (const point of Array.isArray(item.enforcement)
       ? item.enforcement
       : []) {
-      if (!isRecord(point) || typeof point.path !== "string") continue;
+      if (!isRecord(point)) continue;
+      const kind = point.kind === undefined ? "module-export" : point.kind;
+      if (kind === "check-ref") {
+        if (
+          typeof point.checkId === "string" &&
+          !registeredCheckIds.has(point.checkId)
+        )
+          errors.push(
+            `${String(item.id)}のcheck-refがproject ruleへ登録されていません: ${point.checkId}`,
+          );
+        continue;
+      }
+      if (typeof point.path !== "string") continue;
       try {
         const file = resolveContained(root, point.path);
-        if (!text(point.export) || !hasExport(file, point.export))
+        if (kind === "file-entrypoint") {
+          const stat = fs.lstatSync(file);
+          if (stat.isSymbolicLink() || !stat.isFile())
+            errors.push(
+              `${String(item.id)}のfile-entrypointはsymlinkでない通常fileでなければなりません: ${point.path}`,
+            );
+        } else if (!text(point.export) || !hasExport(file, point.export))
           errors.push(
             `${String(item.id)}のenforcement exportが実在しません: ${point.path}#${String(point.export)}`,
           );
@@ -597,4 +728,76 @@ export function validateRepositoryConformance(
     checked: IDS,
     evidenceTool: evidence.tool,
   };
+}
+
+function flattenedBindings(
+  declaration: ConformanceDeclaration,
+): Record<string, unknown>[] {
+  return declaration.bindingDocuments.flatMap((document) =>
+    isRecord(document) && Array.isArray(document.bindings)
+      ? document.bindings.filter(isRecord)
+      : [],
+  );
+}
+
+export function classifyConformanceDeclarationDiff(
+  trusted: ConformanceDeclaration,
+  candidate: ConformanceDeclaration,
+): ConformanceDeclarationDiff {
+  const diff: ConformanceDeclarationDiff = { weakened: [], allowed: [] };
+  const trustedScope = trusted.scope ?? "repository-bound";
+  const candidateScope = candidate.scope ?? "repository-bound";
+  if (
+    trustedScope === "repository-bound" &&
+    candidateScope === "package-attested"
+  )
+    diff.weakened.push(
+      "conformanceScope: repository-boundからpackage-attestedへ格下げしている",
+    );
+  else if (trustedScope !== candidateScope)
+    diff.allowed.push("conformanceScope");
+  const candidateById = new Map(
+    flattenedBindings(candidate).map((binding) => [
+      String(binding.id),
+      binding,
+    ]),
+  );
+  for (const trustedBinding of flattenedBindings(trusted)) {
+    const id = String(trustedBinding.id);
+    const candidateBinding = candidateById.get(id);
+    if (!candidateBinding) {
+      diff.weakened.push(`binding ${id}: trusted bindingを削除している`);
+      continue;
+    }
+    const trustedStatus = bindingStatus(trustedBinding);
+    const candidateStatus = bindingStatus(candidateBinding);
+    if (
+      trustedStatus === "applicable" &&
+      candidateStatus === "not-applicable"
+    ) {
+      diff.weakened.push(
+        `binding ${id}: applicableからnot-applicableへ格下げしている`,
+      );
+      continue;
+    }
+    if (trustedStatus === "not-applicable" && candidateStatus === "applicable")
+      diff.allowed.push(`binding ${id}.status`);
+    if (trustedStatus !== "applicable" || candidateStatus !== "applicable")
+      continue;
+    for (const field of ["enforcement", "counterexampleScenarios"] as const) {
+      const trustedCount = Array.isArray(trustedBinding[field])
+        ? trustedBinding[field].length
+        : 0;
+      const candidateCount = Array.isArray(candidateBinding[field])
+        ? candidateBinding[field].length
+        : 0;
+      if (candidateCount < trustedCount)
+        diff.weakened.push(
+          `binding ${id}.${field}: 要素数を${trustedCount}件から${candidateCount}件へ減らしている`,
+        );
+      else if (candidateCount > trustedCount)
+        diff.allowed.push(`binding ${id}.${field}`);
+    }
+  }
+  return diff;
 }

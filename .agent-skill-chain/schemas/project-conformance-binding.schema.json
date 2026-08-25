@@ -111,14 +111,12 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "sourcePaths",
-          "enforcement",
-          "counterexampleScenarios"
-        ],
+        "required": ["id"],
         "properties": {
           "id": { "type": "string", "pattern": "^I(?:[1-9]|1[0-2])$" },
+          "status": { "enum": ["applicable", "not-applicable"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "string", "minLength": 1 },
           "sourcePaths": {
             "type": "array",
             "minItems": 1,
@@ -130,17 +128,40 @@
             "minItems": 1,
             "uniqueItems": true,
             "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["path", "export"],
-              "properties": {
-                "path": {
-                  "type": "string",
-                  "minLength": 1,
-                  "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$)[^\\u0000]+$"
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["path", "export"],
+                  "properties": {
+                    "kind": { "const": "module-export" },
+                    "path": { "$ref": "#/$defs/safePath" },
+                    "export": { "type": "string", "minLength": 1 }
+                  }
                 },
-                "export": { "type": "string", "minLength": 1 }
-              }
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "path", "runner"],
+                  "properties": {
+                    "kind": { "const": "file-entrypoint" },
+                    "path": { "$ref": "#/$defs/safePath" },
+                    "runner": { "type": "string", "minLength": 1 }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "checkId"],
+                  "properties": {
+                    "kind": { "const": "check-ref" },
+                    "checkId": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                    }
+                  }
+                }
+              ]
             }
           },
           "counterexampleScenarios": {
@@ -149,8 +170,46 @@
             "uniqueItems": true,
             "items": { "type": "string", "pattern": "^SCN-[A-Z0-9-]+$" }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": ["status"],
+              "properties": { "status": { "const": "not-applicable" } }
+            },
+            "then": {
+              "required": ["reason", "evidence"],
+              "not": {
+                "anyOf": [
+                  { "required": ["sourcePaths"] },
+                  { "required": ["enforcement"] },
+                  { "required": ["counterexampleScenarios"] }
+                ]
+              }
+            },
+            "else": {
+              "required": [
+                "sourcePaths",
+                "enforcement",
+                "counterexampleScenarios"
+              ],
+              "not": {
+                "anyOf": [
+                  { "required": ["reason"] },
+                  { "required": ["evidence"] }
+                ]
+              }
+            }
+          }
+        ]
       }
+    }
+  },
+  "$defs": {
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$)[^\\u0000]+$"
     }
   }
 }
