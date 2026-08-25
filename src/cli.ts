@@ -19,6 +19,7 @@ import {
   DEFAULT_WORKTREE_PLACEMENT,
   enforceTrustedWorktreeBoundary,
   inspectFinalizeState,
+  inspectRecoveryState,
   validateWorktreePlacement,
 } from "./domain/worktree.js";
 import {
@@ -86,6 +87,11 @@ import {
 } from "./cli-contract.js";
 import { type Policy, isRecord } from "./types.js";
 import { type PolicySet } from "./domain/policy.js";
+import {
+  surveyWorktrees,
+  type WorktreeObservation,
+  type WorktreeSurvey,
+} from "./domain/worktree-survey.js";
 import { observeProvider } from "./adapters/provider.js";
 import { resolveRouting } from "./domain/routing.js";
 import { checkRoutingIndependence } from "./domain/routing-independence.js";
@@ -308,6 +314,99 @@ function registeredWorktrees(root: string): Array<{
         },
       ];
     });
+}
+
+function collectWorktreeSurvey(root: string): WorktreeSurvey {
+  const repositoryRoot = path.resolve(
+    git(["rev-parse", "--show-toplevel"], root).stdout.trim(),
+  );
+  const registered = registeredWorktrees(repositoryRoot);
+  const primaryRoot = registered[0]?.path;
+  const remoteDefaultRef = `origin/${defaultBranch(repositoryRoot)}`;
+  const observations: WorktreeObservation[] = [];
+  const errors: string[] = [];
+  const withoutUpstream = new Set<string>();
+  for (const [index, worktree] of registered.entries()) {
+    try {
+      const isPrimary = index === 0 || worktree.path === primaryRoot;
+      const status = git(
+        [
+          "--no-optional-locks",
+          "status",
+          "--porcelain=v1",
+          "--untracked-files=all",
+        ],
+        worktree.path,
+      )
+        .stdout.split(/\r?\n/u)
+        .filter(Boolean);
+      const upstream = git(
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        worktree.path,
+        { allowFailure: true },
+      );
+      let unpushedCommits = 0;
+      if (upstream.status === 0) {
+        const count = git(
+          [
+            "rev-list",
+            "--count",
+            `${upstream.stdout.trim()}..${worktree.branch}`,
+          ],
+          worktree.path,
+        ).stdout.trim();
+        unpushedCommits = Number(count);
+      } else withoutUpstream.add(worktree.path);
+      const recoveryReachable = isPrimary
+        ? true
+        : inspectRecoveryState(worktree.path).recoveryReachable;
+      const merged = git(
+        ["branch", "--merged", remoteDefaultRef, "--list", worktree.branch],
+        repositoryRoot,
+        { allowFailure: true },
+      );
+      if (merged.status !== 0)
+        throw new Error(
+          `既定branchへのmerge状態を確認できません: ${merged.stderr.trim()}`,
+        );
+      observations.push({
+        path: worktree.path,
+        branch: worktree.branch,
+        isPrimary,
+        mergedIntoDefault: merged.stdout.trim() !== "",
+        dirty: status.some((line) => !line.startsWith("?? ")),
+        untracked: status
+          .filter((line) => line.startsWith("?? "))
+          .map((line) => line.slice(3)),
+        unpushedCommits,
+        recoveryReachable,
+      });
+    } catch (error) {
+      errors.push(
+        `${worktree.path}: ${error instanceof Error ? error.message : "観測できません"}`,
+      );
+    }
+  }
+  const survey = surveyWorktrees(observations);
+  for (const entry of survey.entries)
+    if (entry.disposition === "retain" && withoutUpstream.has(entry.path))
+      entry.reasons.push("upstreamが設定されていません");
+  survey.errors.push(...errors);
+  return survey;
+}
+
+function printWorktreeSurveyText(survey: WorktreeSurvey): void {
+  const lines = [
+    "worktree後片付け走査",
+    "判定\tbranch\tpath\t理由",
+    ...survey.entries.map(
+      (entry) =>
+        `${entry.disposition}\t${entry.branch}\t${entry.path}\t${entry.reasons.join("、")}`,
+    ),
+    `要約: 後片付け可能 ${survey.cleanupReady.length}件 / 保持 ${survey.retained.length}件 / 進行中 ${survey.inProgress.length}件`,
+    ...survey.errors.map((error) => `走査error: ${error}`),
+  ];
+  process.stdout.write(`${lines.join("\n")}\n`);
 }
 
 function observeRootUpdate(
@@ -2263,6 +2362,21 @@ export async function main(argv: string[]): Promise<number> {
     );
     return 0;
   }
+  if (command === "worktree" && subcommand === "survey") {
+    const { flags } = parse(rest);
+    if (flags.apply !== undefined)
+      throw new Error(
+        "worktree surveyはread-onlyのため--applyを受け付けません",
+      );
+    const root = path.resolve(required(flags, "root"));
+    const format = flags.format ?? "json";
+    if (format !== "json" && format !== "text")
+      throw new Error("--formatはjsonまたはtextで指定してください");
+    const survey = collectWorktreeSurvey(root);
+    if (format === "text") printWorktreeSurveyText(survey);
+    else print(survey);
+    return survey.errors.length === 0 ? 0 : 1;
+  }
   if (command === "worktree" && subcommand === "hygiene") {
     const { flags } = parse(rest);
     const root = required(flags, "root");
@@ -2641,7 +2755,21 @@ export async function main(argv: string[]): Promise<number> {
       positionals[0] ??
         (typeof flags.root === "string" ? flags.root : process.cwd()),
     );
-    const result = doctor(root);
+    let worktreeSurvey: WorktreeSurvey;
+    try {
+      worktreeSurvey = collectWorktreeSurvey(root);
+    } catch (error) {
+      worktreeSurvey = {
+        entries: [],
+        cleanupReady: [],
+        retained: [],
+        inProgress: [],
+        errors: [
+          `worktree走査に失敗しました: ${error instanceof Error ? error.message : "観測できません"}`,
+        ],
+      };
+    }
+    const result = doctor(root, worktreeSurvey);
     print(result);
     return result.healthy ? 0 : 1;
   }
