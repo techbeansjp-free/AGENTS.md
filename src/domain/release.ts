@@ -36,6 +36,23 @@ export interface ReleaseOutcome {
   detail: string;
 }
 
+export interface AutoReleaseInput {
+  currentVersion: string;
+  existingTags: string[];
+  changedPaths: string[];
+  headCommitMessage: string;
+  ref: string;
+  defaultBranch: string;
+}
+
+export interface AutoReleasePlan {
+  state: "release" | "bump-then-release" | "skipped";
+  version: string;
+  tag: string;
+  needsVersionBump: boolean;
+  reasons: string[];
+}
+
 const RELEASE_STAGES: readonly ReleaseStage[] = [
   "validate",
   "tag",
@@ -61,6 +78,27 @@ const RELEASE_INPUT_KEYS = new Set([
   "existingTags",
   "gates",
 ]);
+const AUTO_RELEASE_INPUT_KEYS = new Set([
+  "currentVersion",
+  "existingTags",
+  "changedPaths",
+  "headCommitMessage",
+  "ref",
+  "defaultBranch",
+]);
+const RELEASE_PATH_PREFIXES = [
+  "src/",
+  "bin/",
+  "scripts/",
+  ".agent-skill-chain/",
+] as const;
+const RELEASE_PATHS = new Set([
+  "AGENTS.md",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+  "tsconfig.build.json",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -81,6 +119,144 @@ function isGate(value: unknown): value is { name: string; passed: boolean } {
     value.name.length > 0 &&
     typeof value.passed === "boolean"
   );
+}
+
+function skippedAutoRelease(
+  version: string,
+  reasons: string[],
+): AutoReleasePlan {
+  return {
+    state: "skipped",
+    version,
+    tag: version.length > 0 ? `v${version}` : "",
+    needsVersionBump: false,
+    reasons,
+  };
+}
+
+function validateAutoReleaseInput(value: unknown): {
+  input?: AutoReleaseInput;
+  version: string;
+  reasons: string[];
+} {
+  if (!isRecord(value))
+    return {
+      version: "",
+      reasons: ["自動release計画入力はobjectでなければなりません"],
+    };
+  const version =
+    typeof value.currentVersion === "string" ? value.currentVersion : "";
+  const reasons: string[] = [];
+  if (!hasOnlyKeys(value, AUTO_RELEASE_INPUT_KEYS))
+    reasons.push("自動release計画入力に未知fieldがあります");
+  for (const key of [
+    "currentVersion",
+    "headCommitMessage",
+    "ref",
+    "defaultBranch",
+  ] as const)
+    if (typeof value[key] !== "string")
+      reasons.push(`${key}は文字列でなければなりません`);
+  for (const key of ["existingTags", "changedPaths"] as const)
+    if (
+      !Array.isArray(value[key]) ||
+      value[key].some((item) => typeof item !== "string")
+    )
+      reasons.push(`${key}は文字列配列でなければなりません`);
+  if (reasons.length > 0) return { version, reasons };
+  return {
+    version,
+    reasons,
+    input: {
+      currentVersion: value.currentVersion as string,
+      existingTags: value.existingTags as string[],
+      changedPaths: value.changedPaths as string[],
+      headCommitMessage: value.headCommitMessage as string,
+      ref: value.ref as string,
+      defaultBranch: value.defaultBranch as string,
+    },
+  };
+}
+
+function isReleasePath(changedPath: string): boolean {
+  const normalized = changedPath.startsWith("./")
+    ? changedPath.slice(2)
+    : changedPath;
+  return (
+    RELEASE_PATHS.has(normalized) ||
+    RELEASE_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+  );
+}
+
+function nextAutoReleaseVersion(version: string): string | undefined {
+  const withoutBuild = version.split("+", 1)[0] ?? version;
+  const prereleaseSeparator = withoutBuild.indexOf("-");
+  if (prereleaseSeparator >= 0) {
+    const core = withoutBuild.slice(0, prereleaseSeparator);
+    const identifiers = withoutBuild.slice(prereleaseSeparator + 1).split(".");
+    const lastIdentifier = identifiers.at(-1);
+    if (!lastIdentifier || !/^\d+$/u.test(lastIdentifier)) return undefined;
+    identifiers[identifiers.length - 1] = (
+      BigInt(lastIdentifier) + 1n
+    ).toString();
+    const candidate = `${core}-${identifiers.join(".")}`;
+    return isPackageVersion(candidate) ? candidate : undefined;
+  }
+  const core = packageReleaseVersion(version).split(".");
+  const patch = core[2];
+  if (core.length !== 3 || !patch || !/^\d+$/u.test(patch)) return undefined;
+  const candidate = `${core[0]}.${core[1]}.${BigInt(patch) + 1n}`;
+  return isPackageVersion(candidate) ? candidate : undefined;
+}
+
+export function planAutoRelease(value: unknown): AutoReleasePlan {
+  const validated = validateAutoReleaseInput(value);
+  if (!validated.input)
+    return skippedAutoRelease(validated.version, validated.reasons);
+  const input = validated.input;
+  if (!isPackageVersion(input.currentVersion))
+    return skippedAutoRelease(input.currentVersion, [
+      `currentVersion「${input.currentVersion}」は0.3.xの正しいversion形式ではありません`,
+    ]);
+  if (input.ref !== input.defaultBranch)
+    return skippedAutoRelease(input.currentVersion, [
+      `release対象ref「${input.ref}」は既定branch「${input.defaultBranch}」と一致しないため停止します`,
+    ]);
+  if (input.headCommitMessage.includes("[skip ci]"))
+    return skippedAutoRelease(input.currentVersion, [
+      "head commit messageに[skip ci]があるため再帰releaseを停止します",
+    ]);
+  if (!input.changedPaths.some(isReleasePath))
+    return skippedAutoRelease(input.currentVersion, [
+      "release対象pathの変更がないため自動releaseを停止します",
+    ]);
+
+  const currentTag = `v${input.currentVersion}`;
+  if (!input.existingTags.includes(currentTag))
+    return {
+      state: "release",
+      version: input.currentVersion,
+      tag: currentTag,
+      needsVersionBump: false,
+      reasons: [
+        `package.jsonのversionに対応するtag「${currentTag}」が存在しないためreleaseします`,
+      ],
+    };
+
+  const nextVersion = nextAutoReleaseVersion(input.currentVersion);
+  if (!nextVersion)
+    return skippedAutoRelease(input.currentVersion, [
+      `version「${input.currentVersion}」を0.3.x内で安全にbumpできないため停止します`,
+    ]);
+  return {
+    state: "bump-then-release",
+    version: nextVersion,
+    tag: `v${nextVersion}`,
+    needsVersionBump: true,
+    reasons: [
+      `tag「${currentTag}」が既に存在するためversionを「${nextVersion}」へbumpしてからreleaseします`,
+    ],
+  };
 }
 
 function validatePlanInput(value: unknown): {
@@ -402,6 +578,22 @@ function inputHasDefault(
   });
 }
 
+function blockHasSafeNpmPublishCondition(block: string[]): boolean {
+  const text = block.join("\n");
+  return (
+    /github\.event_name\s*==\s*['"]workflow_dispatch['"]/u.test(text) &&
+    /inputs\.publish_npm\s*==\s*(?:true|['"]true['"])/u.test(text)
+  );
+}
+
+function jobBlockContaining(lines: string[], lineIndex: number): string[] {
+  for (let index = lineIndex; index >= 0; index -= 1) {
+    if (/^ {2}[A-Za-z0-9_-]+:\s*$/u.test(lines[index] ?? ""))
+      return yamlBlock(lines, index);
+  }
+  return [];
+}
+
 export function validateReleaseWorkflow(yaml: string): {
   valid: boolean;
   errors: string[];
@@ -426,9 +618,97 @@ export function validateReleaseWorkflow(yaml: string): {
   )
     errors.push("on:にはworkflow_dispatchを宣言してください");
   else checks.push("手動workflow_dispatch triggerを確認した");
-  if (onBlock.some((line) => /^\s*push:\s*(?:$|\[|\{)/u.test(line)))
-    errors.push("通常push triggerをrelease workflowへ含めないでください");
-  else checks.push("通常push triggerが無いことを確認した");
+  const pushIndex = onBlock.findIndex((line) => /^\s*push:\s*$/u.test(line));
+  const pushBlock = pushIndex < 0 ? [] : yamlBlock(onBlock, pushIndex);
+  if (pushIndex < 0) errors.push("on:にはpush triggerを宣言してください");
+  else checks.push("自動push triggerを確認した");
+  if (
+    !pushBlock.some((line) =>
+      /^\s*branches:\s*\[\s*['"]?main['"]?\s*\]\s*$/u.test(line),
+    )
+  )
+    errors.push("push.branchesは[main]に限定してください");
+  else checks.push("push branchがmainに限定されていることを確認した");
+  const expectedReleasePaths = [
+    "src/**",
+    "bin/**",
+    "scripts/**",
+    ".agent-skill-chain/**",
+    "AGENTS.md",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "tsconfig.build.json",
+  ];
+  const hasPaths = pushBlock.some((line) => /^\s*paths:\s*$/u.test(line));
+  const missingReleasePaths = expectedReleasePaths.filter(
+    (expectedPath) =>
+      !pushBlock.some((line) => {
+        const match = /^\s*-\s*['"]?([^'"]+)['"]?\s*$/u.exec(line);
+        return match?.[1] === expectedPath;
+      }),
+  );
+  if (!hasPaths || missingReleasePaths.length > 0)
+    errors.push(
+      `push.pathsへrelease対象をすべて宣言してください${
+        missingReleasePaths.length > 0
+          ? `: ${missingReleasePaths.join(", ")}`
+          : ""
+      }`,
+    );
+  else checks.push("push pathsがrelease対象に限定されていることを確認した");
+  const concurrencyIndex = lines.findIndex((line) =>
+    /^\s*concurrency:\s*$/u.test(line),
+  );
+  const concurrencyBlock =
+    concurrencyIndex < 0 ? [] : yamlBlock(lines, concurrencyIndex);
+  if (concurrencyIndex < 0)
+    errors.push("main更新の直列化にconcurrencyを宣言してください");
+  else if (
+    !concurrencyBlock.some((line) =>
+      /^\s*group:\s*main-mutator\s*$/u.test(line),
+    ) ||
+    !concurrencyBlock.some((line) =>
+      /^\s*cancel-in-progress:\s*false\s*$/u.test(line),
+    )
+  )
+    errors.push("concurrencyはmain-mutatorをcancelせず直列実行してください");
+  else checks.push("main-mutator concurrency宣言を確認した");
+  const validateJobIndex = lines.findIndex((line) =>
+    /^ {2}validate:\s*$/u.test(line),
+  );
+  const validateJobBlock =
+    validateJobIndex < 0 ? [] : yamlBlock(lines, validateJobIndex);
+  if (
+    !validateJobBlock.some((line) =>
+      /^\s*if:\s*.*!\s*contains\(github\.event\.head_commit\.message,\s*['"]\[skip ci\]['"]\)/u.test(
+        line,
+      ),
+    )
+  )
+    errors.push("validate jobに[skip ci]のhead commit message guardが必要です");
+  else checks.push("job-levelの[skip ci]再帰防止guardを確認した");
+  if (!/git\s+commit\b[^\n]*\[skip ci\]/u.test(yaml))
+    errors.push("version bump commit messageに[skip ci]が必要です");
+  else checks.push("version bump commitの[skip ci]を確認した");
+  if (
+    !/gh\s+pr\s+(?:create|edit)\b[^\n]*--title\s+[^\n]*\[skip ci\]/u.test(yaml)
+  )
+    errors.push(
+      "bump PR titleに[skip ci]を含めてmerge commitの再帰を防いでください",
+    );
+  else checks.push("bump PR titleの[skip ci]を確認した");
+  if (
+    !/secrets\.RELEASE_MAIN_PAT/u.test(yaml) ||
+    !/gh\s+pr\s+merge\b[^\n]*--admin/u.test(yaml)
+  )
+    errors.push(
+      "version bumpはRELEASE_MAIN_PATを使うPRのadmin mergeが必要です",
+    );
+  else checks.push("version bumpのPR経由admin mergeを確認した");
+  if (/git\s+push\s+origin\s+(?:main|HEAD:refs\/heads\/main)\b/u.test(yaml))
+    errors.push("version bumpをmainへ直接pushしないでください");
+  else checks.push("mainへの直接pushがないことを確認した");
   const permissionsDeclared = lines.some((line) =>
     /^\s*permissions:\s*$/u.test(line),
   );
@@ -443,11 +723,36 @@ export function validateReleaseWorkflow(yaml: string): {
   if (!inputHasDefault(lines, "publish_npm", "false"))
     errors.push("publish_npm入力を宣言しdefaultをfalseにしてください");
   else checks.push("publish_npm=falseの安全な既定値を確認した");
+  const npmPublishLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => /\bnpm\s+publish\b/u.test(line));
+  if (
+    npmPublishLines.some(
+      ({ index }) =>
+        !blockHasSafeNpmPublishCondition(jobBlockContaining(lines, index)),
+    )
+  )
+    errors.push(
+      "npm公開stepはworkflow_dispatchかつpublish_npmが真の場合だけ実行してください",
+    );
+  else
+    checks.push("npm公開が明示的な手動入力だけに限定されていることを確認した");
   if (!/npm\s+run\s+(?:prepack|quality)\b/u.test(yaml))
     errors.push(
       "release前の品質gateとしてnpm run prepackまたはnpm run qualityが必要です",
     );
   else checks.push("release前の品質gateを確認した");
+  if (!/git\s+ls-remote\s+--tags\b/u.test(yaml))
+    errors.push("tag作成前後にremote tagの存在確認が必要です");
+  else checks.push("Git tagの冪等な存在確認を確認した");
+  if (!/gh\s+release\s+view\b/u.test(yaml))
+    errors.push("GitHub Release作成前後に既存Releaseの確認が必要です");
+  else checks.push("GitHub Releaseの冪等な存在確認を確認した");
+  if (!/--title\s+["']\$RELEASE_TAG["']/u.test(yaml))
+    errors.push(
+      "GitHub Release名はpackage versionから導いたtag名と一致させてください",
+    );
+  else checks.push("GitHub Release名とtag名の一致を確認した");
   const secretOutput = lines.some(
     (line) =>
       /(?:^|\s)(?:echo|cat)(?:\s|$)/u.test(line) &&

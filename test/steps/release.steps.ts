@@ -252,9 +252,12 @@ Given("実release workflowのYAML本文を読み込む", function () {
   );
 });
 
-Given("通常push triggerと秘密値出力を含むworkflow本文がある", function () {
-  this.workflowYaml = `name: 危険なrelease\n\n"on":\n  workflow_dispatch:\n    inputs:\n      dry_run:\n        default: true\n      publish_npm:\n        default: false\n  push:\n\npermissions:\n  contents: write\n\njobs:\n  release:\n    steps:\n      - name: 日本語の危険な出力\n        run: echo "\${{ secrets.NPM_TOKEN }}"\n      - name: 品質検証\n        run: npm run prepack\n`;
-});
+Given(
+  "無条件pushと自動npm公開と秘密値出力を含むworkflow本文がある",
+  function () {
+    this.workflowYaml = `name: 危険なrelease\n\n"on":\n  workflow_dispatch:\n    inputs:\n      dry_run:\n        default: true\n      publish_npm:\n        default: false\n  push:\n\npermissions:\n  contents: write\n\njobs:\n  release:\n    steps:\n      - name: 日本語の危険な出力\n        run: echo "\${{ secrets.NPM_TOKEN }}"\n      - name: 品質検証\n        run: npm run prepack\n      - name: npmを自動公開する\n        run: npm publish\n`;
+  },
+);
 
 When("release workflow契約を検証する", function () {
   this.workflowValidation = validateReleaseWorkflow(this.workflowYaml);
@@ -266,8 +269,15 @@ Then("workflow検証は有効で必須checkをすべて記録する", function (
   assert.ok((this.workflowValidation?.checks.length ?? 0) >= 7);
 });
 
-Then("workflow検証はtriggerと秘密値出力を根拠に拒否する", function () {
-  assert.equal(this.workflowValidation?.valid, false);
-  assert.match(this.workflowValidation?.errors.join(" ") ?? "", /push/u);
-  assert.match(this.workflowValidation?.errors.join(" ") ?? "", /秘密/u);
-});
+Then(
+  "workflow検証はpush条件とnpm条件と秘密値出力を根拠に拒否する",
+  function () {
+    assert.equal(this.workflowValidation?.valid, false);
+    assert.match(this.workflowValidation?.errors.join(" ") ?? "", /push/u);
+    assert.match(
+      this.workflowValidation?.errors.join(" ") ?? "",
+      /npm.*workflow_dispatch/u,
+    );
+    assert.match(this.workflowValidation?.errors.join(" ") ?? "", /秘密/u);
+  },
+);
