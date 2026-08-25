@@ -185,6 +185,10 @@ function canonicalDestination(target: string): string {
   }
 }
 
+export function canonicalWorktreePath(target: string): string {
+  return canonicalDestination(target);
+}
+
 function pathEntryExists(target: string): boolean {
   try {
     fs.lstatSync(target);
