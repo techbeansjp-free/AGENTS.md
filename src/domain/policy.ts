@@ -33,6 +33,7 @@ import {
 import { validateProviderCapabilityMapping } from "./provider-capability.js";
 import { validateRoleConfigurationIndependence } from "./routing-independence.js";
 import { MODEL_TIERS, ROLES } from "./role.js";
+import { isSafeFinalizeIgnoredPathPrefix } from "./worktree-removal-safety.js";
 
 const PROJECT_CHOICE_FIELDS = [
   "language",
@@ -214,6 +215,7 @@ function validateWorktreePlacementPolicy(
       "allowedBranchTypes",
       "base",
       "cleanup",
+      "finalizeIgnoredPathAllowlist",
     ],
     name,
     errors,
@@ -243,6 +245,23 @@ function validateWorktreePlacementPolicy(
     )
   )
     errors.push(`${name}.allowedBranchTypesの値が不正です`);
+  if (worktree.finalizeIgnoredPathAllowlist !== undefined) {
+    validateStringArray(
+      worktree.finalizeIgnoredPathAllowlist,
+      `${name}.finalizeIgnoredPathAllowlist`,
+      errors,
+      { max: 64 },
+    );
+    if (
+      Array.isArray(worktree.finalizeIgnoredPathAllowlist) &&
+      worktree.finalizeIgnoredPathAllowlist.some(
+        (item) => !isSafeFinalizeIgnoredPathPrefix(item),
+      )
+    )
+      errors.push(
+        `${name}.finalizeIgnoredPathAllowlistは末尾/の安全な相対directory prefixだけを指定してください`,
+      );
+  }
 }
 
 function hasConcreteDecisionText(value: unknown, minimum: number): boolean {
