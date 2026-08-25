@@ -594,6 +594,17 @@ function jobBlockContaining(lines: string[], lineIndex: number): string[] {
   return [];
 }
 
+function blockHasNpmRun(block: string[], scriptName: string): boolean {
+  const escapedScriptName = scriptName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`\\bnpm\\s+run\\s+${escapedScriptName}(?=\\s|$)`, "u").test(
+    block.join("\n"),
+  );
+}
+
+function blockHasNpmTest(block: string[]): boolean {
+  return /\bnpm\s+(?:run\s+)?test(?=\s|$)/u.test(block.join("\n"));
+}
+
 export function validateReleaseWorkflow(yaml: string): {
   valid: boolean;
   errors: string[];
@@ -679,6 +690,9 @@ export function validateReleaseWorkflow(yaml: string): {
   );
   const validateJobBlock =
     validateJobIndex < 0 ? [] : yamlBlock(lines, validateJobIndex);
+  if (!blockHasNpmRun(validateJobBlock, "prepack"))
+    errors.push("validate jobは引き続きnpm run prepackを実行してください");
+  else checks.push("validate jobのnpm run prepackを確認した");
   if (
     !validateJobBlock.some((line) =>
       /^\s*if:\s*.*!\s*contains\(github\.event\.head_commit\.message,\s*['"]\[skip ci\]['"]\)/u.test(
@@ -688,6 +702,47 @@ export function validateReleaseWorkflow(yaml: string): {
   )
     errors.push("validate jobに[skip ci]のhead commit message guardが必要です");
   else checks.push("job-levelの[skip ci]再帰防止guardを確認した");
+  const bumpVersionJobIndex = lines.findIndex((line) =>
+    /^ {2}bump_version:\s*$/u.test(line),
+  );
+  const bumpVersionJobBlock =
+    bumpVersionJobIndex < 0 ? [] : yamlBlock(lines, bumpVersionJobIndex);
+  const requiredBumpGateScripts = [
+    "project:quality",
+    "build",
+    "docs:format",
+    "test:format",
+    "trace:check",
+    "architecture:check",
+    "conformance:check",
+    "package:check",
+  ];
+  const missingBumpGateScripts = requiredBumpGateScripts.filter(
+    (scriptName) => !blockHasNpmRun(bumpVersionJobBlock, scriptName),
+  );
+  if (missingBumpGateScripts.length > 0)
+    errors.push(
+      `bump_version jobに必要な品質gateがありません: ${missingBumpGateScripts
+        .map((scriptName) => `npm run ${scriptName}`)
+        .join(", ")}`,
+    );
+  else checks.push("bump_version jobの必須release gateを確認した");
+  if (
+    !blockHasNpmRun(bumpVersionJobBlock, "quality") &&
+    !blockHasNpmTest(bumpVersionJobBlock)
+  )
+    errors.push(
+      "bump_version jobはnpm run qualityまたは同等のtest実行stepを含めてください",
+    );
+  else checks.push("bump_version jobのtest実行gateを確認した");
+  if (
+    blockHasNpmRun(bumpVersionJobBlock, "prepack") ||
+    blockHasNpmRun(bumpVersionJobBlock, "audit:check")
+  )
+    errors.push(
+      "bump_version jobはnpm run prepackまたはaudit:checkを含めないでください",
+    );
+  else checks.push("bump_version jobがaudit:checkを含まないことを確認した");
   if (!/git\s+commit\b[^\n]*\[skip ci\]/u.test(yaml))
     errors.push("version bump commit messageに[skip ci]が必要です");
   else checks.push("version bump commitの[skip ci]を確認した");

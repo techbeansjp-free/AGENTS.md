@@ -276,7 +276,15 @@ jobs:
             exit 1
           fi
           npm ci
-          npm run prepack
+          npm run project:quality
+          npm run quality
+          npm run build
+          npm run docs:format
+          npm run test:format
+          npm run trace:check
+          npm run architecture:check
+          npm run conformance:check
+          npm run package:check
           if [ "$main_version" != "$RELEASE_VERSION" ]; then
             pr_url="$(gh pr list --head "$branch" --base main --state open --json url --jq '.[0].url')"
             if [ -z "$pr_url" ]; then

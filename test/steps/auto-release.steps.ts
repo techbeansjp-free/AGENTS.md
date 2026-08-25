@@ -215,6 +215,27 @@ Given("自動release用の実workflow本文を読み込む", function () {
   );
 });
 
+Given("audit:checkを含むbump経路のworkflow本文がある", function () {
+  const workflow = fs.readFileSync(
+    path.resolve(".github", "workflows", "release.yml"),
+    "utf8",
+  );
+  const bumpStart = workflow.indexOf("\n  bump_version:");
+  const bumpEnd = workflow.indexOf("\n  tag:", bumpStart);
+  assert.ok(bumpStart >= 0);
+  assert.ok(bumpEnd > bumpStart);
+  const bumpJob = workflow.slice(bumpStart, bumpEnd);
+  let unsafeBumpJob = bumpJob;
+  if (!bumpJob.includes("npm run prepack")) {
+    unsafeBumpJob = bumpJob.replace(
+      "npm run package:check",
+      "npm run audit:check\n          npm run package:check",
+    );
+    assert.notEqual(unsafeBumpJob, bumpJob);
+  }
+  this.autoWorkflowYaml = `${workflow.slice(0, bumpStart)}${unsafeBumpJob}${workflow.slice(bumpEnd)}`;
+});
+
 Given("無条件main pushと自動npm公開を含むworkflow本文がある", function () {
   this.autoWorkflowYaml = `name: 危険な自動release\n\n"on":\n  push:\n    branches: [main]\n  workflow_dispatch:\n    inputs:\n      dry_run:\n        default: true\n      publish_npm:\n        default: false\n\npermissions:\n  contents: read\n\njobs:\n  release:\n    steps:\n      - name: 品質検証\n        run: npm run prepack\n      - name: npmを自動公開する\n        run: npm publish\n`;
 });
@@ -226,6 +247,16 @@ When("自動release workflow契約を検証する", function () {
 Then("自動release workflow検証は有効になる", function () {
   assert.equal(this.autoWorkflowValidation?.valid, true);
   assert.deepEqual(this.autoWorkflowValidation?.errors, []);
+  assert.ok(
+    this.autoWorkflowValidation?.checks.includes(
+      "validate jobのnpm run prepackを確認した",
+    ),
+  );
+  assert.ok(
+    this.autoWorkflowValidation?.checks.includes(
+      "bump_version jobがaudit:checkを含まないことを確認した",
+    ),
+  );
 });
 
 Then("自動release workflow検証はpathsとnpm条件を根拠に拒否する", function () {
@@ -235,4 +266,46 @@ Then("自動release workflow検証はpathsとnpm条件を根拠に拒否する",
     this.autoWorkflowValidation?.errors.join(" ") ?? "",
     /npm.*workflow_dispatch/u,
   );
+});
+
+Then(
+  "自動release workflow検証はbump経路のaudit:checkを根拠に拒否する",
+  function () {
+    assert.equal(this.autoWorkflowValidation?.valid, false);
+    assert.match(
+      this.autoWorkflowValidation?.errors.join(" ") ?? "",
+      /bump_version.*audit:check/u,
+    );
+  },
+);
+
+Then("bump経路はaudit:check以外のrelease gateをすべて含む", function () {
+  assert.equal(this.autoWorkflowValidation?.valid, true);
+  const workflow = this.autoWorkflowYaml;
+  const bumpStart = workflow.indexOf("\n  bump_version:");
+  const bumpEnd = workflow.indexOf("\n  tag:", bumpStart);
+  assert.ok(bumpStart >= 0);
+  assert.ok(bumpEnd > bumpStart);
+  const bumpJob = workflow.slice(bumpStart, bumpEnd);
+  for (const command of [
+    "npm run project:quality",
+    "npm run quality",
+    "npm run build",
+    "npm run docs:format",
+    "npm run test:format",
+    "npm run trace:check",
+    "npm run architecture:check",
+    "npm run conformance:check",
+    "npm run package:check",
+  ]) {
+    assert.ok(bumpJob.includes(command));
+    const missingGateWorkflow = `${workflow.slice(0, bumpStart)}${bumpJob.replace(command, "npm run omitted:check")}${workflow.slice(bumpEnd)}`;
+    assert.equal(validateReleaseWorkflow(missingGateWorkflow).valid, false);
+  }
+  assert.doesNotMatch(bumpJob, /npm run (?:prepack|audit:check)\b/u);
+  const validateJob = workflow.slice(
+    workflow.indexOf("\n  validate:"),
+    workflow.indexOf("\n  bump_version:"),
+  );
+  assert.match(validateJob, /npm run prepack\b/u);
 });
