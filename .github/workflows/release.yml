@@ -1,6 +1,18 @@
-name: 手動release
+name: 自動・手動release
 
 "on":
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "bin/**"
+      - "scripts/**"
+      - ".agent-skill-chain/**"
+      - "AGENTS.md"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "tsconfig.build.json"
   workflow_dispatch:
     inputs:
       version:
@@ -18,13 +30,18 @@ name: 手動release
         type: boolean
         default: false
 
-# 既定は読取専用とし、書込jobだけがjob単位で上書きする。通常のmain pushからは起動しない。
+concurrency:
+  group: main-mutator
+  cancel-in-progress: false
+
+# 既定は読取専用とし、外部更新jobだけがjob単位で権限を追加する。
 permissions:
   contents: read
 
 jobs:
   validate:
-    name: release候補と配布内容を検証する
+    name: 自動・手動release候補を検証する
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -33,9 +50,11 @@ jobs:
       state: ${{ steps.plan_outputs.outputs.state }}
       version: ${{ steps.plan_outputs.outputs.version }}
       tag: ${{ steps.plan_outputs.outputs.tag }}
+      needs_version_bump: ${{ steps.plan_outputs.outputs.needs_version_bump }}
       npm_enabled: ${{ steps.plan_outputs.outputs.npm_enabled }}
+      release_sha: ${{ steps.plan_outputs.outputs.release_sha }}
     steps:
-      - name: 既定branchのrelease候補を取得する
+      - name: release候補のcommitを取得する
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -51,8 +70,32 @@ jobs:
         run: npm run prepack
       - name: 既存tagをrelease計画用に取得する
         run: git tag --list > existing-tags.txt
-      - name: 純関数でrelease計画を作成する
-        id: release_plan
+      - name: main pushの変更pathを取得する
+        if: ${{ github.event_name == 'push' }}
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            git show --pretty='' --name-only "$RELEASE_SHA" > changed-paths.txt
+          else
+            git diff --name-only "$BEFORE_SHA" "$RELEASE_SHA" > changed-paths.txt
+          fi
+      - name: 純関数で自動release計画を作成する
+        id: auto_release_plan
+        if: ${{ github.event_name == 'push' }}
+        continue-on-error: true
+        env:
+          RELEASE_MODE: auto
+          RELEASE_EXISTING_TAGS_FILE: existing-tags.txt
+          RELEASE_CHANGED_PATHS_FILE: changed-paths.txt
+          RELEASE_HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          RELEASE_REF: ${{ github.ref_name }}
+          RELEASE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node --import tsx scripts/plan_release.ts > release-plan.json
+      - name: 純関数で手動release計画を作成する
+        id: manual_release_plan
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         continue-on-error: true
         env:
           RELEASE_REQUESTED_VERSION: ${{ inputs.version }}
@@ -69,22 +112,24 @@ jobs:
       - name: release計画を後続jobへ渡す
         id: plan_outputs
         if: always()
+        env:
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           node --input-type=module <<'NODE'
           import fs from "node:fs";
           const output = process.env.GITHUB_OUTPUT;
-          if (!output || !fs.existsSync("release-plan.json")) {
-            process.exit(1);
-          }
+          if (!output || !fs.existsSync("release-plan.json")) process.exit(1);
           const plan = JSON.parse(fs.readFileSync("release-plan.json", "utf8"));
-          const npmStage = plan.stages.find(({ stage }) => stage === "npm_publish");
+          const npmStage = plan.stages?.find(({ stage }) => stage === "npm_publish");
           fs.appendFileSync(
             output,
             [
               `state=${plan.state}`,
               `version=${plan.version}`,
               `tag=${plan.tag}`,
+              `needs_version_bump=${plan.needsVersionBump === true}`,
               `npm_enabled=${npmStage?.enabled === true}`,
+              `release_sha=${process.env.RELEASE_SHA ?? ""}`,
               "",
             ].join("\n"),
           );
@@ -106,8 +151,11 @@ jobs:
       - name: npm pack対象をdry-runで取得する
         if: always()
         run: npm pack --dry-run --json --ignore-scripts > npm-pack.json
-      - name: version・tag・release note・npm pack対象を要約する
+      - name: 自動・手動release計画と未完了操作を記録する
         if: always()
+        env:
+          RELEASE_EVENT: ${{ github.event_name }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           node --input-type=module <<'NODE'
           import fs from "node:fs";
@@ -124,15 +172,18 @@ jobs:
             ? JSON.parse(fs.readFileSync("npm-pack.json", "utf8"))
             : [];
           const files = pack[0]?.files?.map(({ path }) => `- ${path}`).join("\n") ?? "- 取得失敗";
+          const stopped = plan.state === "dry-run" || plan.state === "skipped" || plan.state === "rejected";
           fs.appendFileSync(
             summary,
             [
               "# release候補の検証結果",
               "",
+              `- 契機: ${process.env.RELEASE_EVENT ?? "不明"}`,
               `- 状態: ${plan.state ?? "failed"}`,
               `- version: ${plan.version ?? "不明"}`,
               `- tag: ${plan.tag ?? "不明"}`,
-              `- dry-run: ${process.env.RELEASE_DRY_RUN ?? "不明"}`,
+              `- version bump: ${plan.needsVersionBump === true ? "必要" : "不要"}`,
+              `- npm公開: ${process.env.RELEASE_EVENT === "workflow_dispatch" && plan.stages?.some(({ stage, enabled }) => stage === "npm_publish" && enabled) ? "手動経路で要求済み" : "未実行"}`,
               "",
               "## release計画",
               "",
@@ -148,66 +199,203 @@ jobs:
               "",
               files,
               "",
-              plan.state === "dry-run"
-                ? "dry-runのためtag・GitHub Release・npm公開はすべて未実行です。"
-                : plan.state === "rejected"
-                  ? "計画拒否のため外部更新はすべて未実行です。"
-                  : "検証だけが完了し、外部更新は後続jobで個別に記録します。",
+              stopped
+                ? "外部更新は未実行です。理由を確認し、必要なら新しいrunで再計画してください。"
+                : "検証だけが完了し、version bump PR・Git tag・GitHub Releaseは後続jobで個別に記録します。",
               "",
             ].join("\n"),
           );
           NODE
-        env:
-          RELEASE_DRY_RUN: ${{ inputs.dry_run }}
-      - name: 拒否された計画で外部更新を停止する
+      - name: 不正なrelease計画で外部更新を停止する
         if: always()
         env:
+          RELEASE_EVENT: ${{ github.event_name }}
           RELEASE_STATE: ${{ steps.plan_outputs.outputs.state }}
         run: |
           node --input-type=module <<'NODE'
+          const event = process.env.RELEASE_EVENT;
           const state = process.env.RELEASE_STATE;
-          if (state !== "ready" && state !== "dry-run") process.exit(1);
+          if (event === "push" && !["release", "bump-then-release", "skipped"].includes(state ?? "")) process.exit(1);
+          if (event === "workflow_dispatch" && !["ready", "dry-run"].includes(state ?? "")) process.exit(1);
+          NODE
+
+  bump_version:
+    name: version bumpをPR経由でmainへ反映する
+    needs: validate
+    if: ${{ github.event_name == 'push' && needs.validate.outputs.state == 'bump-then-release' && needs.validate.outputs.needs_version_bump == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      state: ${{ steps.bump_status.outputs.state }}
+      release_sha: ${{ steps.bump_status.outputs.release_sha }}
+      pr_url: ${{ steps.bump_operation.outputs.pr_url }}
+    steps:
+      - name: PATでmainの最新状態を取得する
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ secrets.RELEASE_MAIN_PAT }}
+      - name: Node.js実行環境を準備する
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: bump branchとPRを作成してadmin mergeする
+        id: bump_operation
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          branch="release/bump-v$RELEASE_VERSION"
+          git fetch origin main
+          main_version="$(git show "origin/main:package.json" | node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync(0, "utf8")).version)')"
+          if [ "$main_version" = "$RELEASE_VERSION" ]; then
+            git switch --detach origin/main
+            pr_url="$(gh pr list --head "$branch" --base main --state all --json url --jq '.[0].url')"
+          else
+            if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+              git fetch origin "$branch"
+              git switch --detach FETCH_HEAD
+            else
+              git switch --create "$branch" origin/main
+              npm version "$RELEASE_VERSION" --no-git-tag-version
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git add package.json package-lock.json
+              git commit --message "chore(release): bump version to $RELEASE_VERSION [skip ci]"
+              git push origin "HEAD:refs/heads/$branch"
+            fi
+          fi
+          observed_version="$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync("package.json", "utf8")).version)')"
+          if [ "$observed_version" != "$RELEASE_VERSION" ]; then
+            exit 1
+          fi
+          npm ci
+          npm run prepack
+          if [ "$main_version" != "$RELEASE_VERSION" ]; then
+            pr_url="$(gh pr list --head "$branch" --base main --state open --json url --jq '.[0].url')"
+            if [ -z "$pr_url" ]; then
+              pr_url="$(gh pr create --base main --head "$branch" --title "chore(release): bump version to $RELEASE_VERSION [skip ci]" --body "自動releaseのため、package.jsonを正本としてversionを$RELEASE_VERSIONへ更新します。")"
+            fi
+            gh pr edit "$pr_url" --title "chore(release): bump version to $RELEASE_VERSION [skip ci]"
+            gh pr merge "$pr_url" --admin --merge
+          fi
+          printf 'pr_url=%s\n' "$pr_url" >> "$GITHUB_OUTPUT"
+      - name: merge後のmain SHAとversionを読み直す
+        id: bump_status
+        if: always()
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          BUMP_OPERATION_OUTCOME: ${{ steps.bump_operation.outcome }}
+        run: |
+          git fetch origin main
+          release_sha="$(git rev-parse origin/main)"
+          export RELEASE_SHA="$release_sha"
+          git show "$release_sha:package.json" > released-package.json
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const output = process.env.GITHUB_OUTPUT;
+          if (!output) process.exit(1);
+          const metadata = JSON.parse(fs.readFileSync("released-package.json", "utf8"));
+          const succeeded = process.env.BUMP_OPERATION_OUTCOME === "success" && metadata.version === process.env.RELEASE_VERSION;
+          fs.appendFileSync(output, `state=${succeeded ? "succeeded" : "failed"}\nrelease_sha=${succeeded ? process.env.RELEASE_SHA ?? "" : ""}\n`);
+          NODE
+      - name: version bump PRの結果と復旧方法を記録する
+        if: always()
+        env:
+          BUMP_STATE: ${{ steps.bump_status.outputs.state }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          PR_URL: ${{ steps.bump_operation.outputs.pr_url }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const summary = process.env.GITHUB_STEP_SUMMARY;
+          if (!summary) process.exit(1);
+          const succeeded = process.env.BUMP_STATE === "succeeded";
+          fs.appendFileSync(summary, [
+            "# version bump PRの結果",
+            "",
+            `- version: ${process.env.RELEASE_VERSION ?? "不明"}`,
+            `- PR: ${process.env.PR_URL || "作成または取得できず"}`,
+            `- 状態: ${succeeded ? "succeeded" : "failed"}`,
+            succeeded ? "- 完了: 品質gate、bump branch、PR、admin merge、main再読取" : "- 完了: workflow summaryに記録済みの操作まで",
+            succeeded ? "- 未完了: Git tag、GitHub Release" : "- 未完了: PR merge、Git tag、GitHub Release",
+            succeeded ? "- 復旧: mainのversionと後続tag・Releaseを確認する" : "- 復旧: branchとPRの実状態を確認し、同じrunを再実行する",
+            "",
+          ].join("\n"));
+          NODE
+      - name: bump PR未確認時に後続releaseを停止する
+        if: always()
+        env:
+          BUMP_STATE: ${{ steps.bump_status.outputs.state }}
+        run: |
+          node --input-type=module <<'NODE'
+          if (process.env.BUMP_STATE !== "succeeded") process.exit(1);
           NODE
 
   tag:
-    name: 検証済みcommitへGit tagを作成する
-    needs: validate
-    if: ${{ needs.validate.outputs.state == 'ready' }}
+    name: 検証済みcommitへGit tagを冪等に作成する
+    needs: [validate, bump_version]
+    if: >-
+      ${{ always() &&
+          (needs.validate.outputs.state == 'ready' ||
+           needs.validate.outputs.state == 'release' ||
+           needs.validate.outputs.state == 'bump-then-release') &&
+          (needs.validate.outputs.needs_version_bump != 'true' ||
+           needs.bump_version.outputs.state == 'succeeded') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     outputs:
       state: ${{ steps.tag_status.outputs.state }}
+      release_sha: ${{ steps.release_target.outputs.release_sha }}
     steps:
-      - name: 検証済みcommitを取得する
+      - name: release対象SHAをbump結果から解決する
+        id: release_target
+        env:
+          BUMP_REQUIRED: ${{ needs.validate.outputs.needs_version_bump }}
+          BUMP_SHA: ${{ needs.bump_version.outputs.release_sha }}
+          ORIGINAL_SHA: ${{ needs.validate.outputs.release_sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const output = process.env.GITHUB_OUTPUT;
+          if (!output) process.exit(1);
+          const releaseSha = process.env.BUMP_REQUIRED === "true" ? process.env.BUMP_SHA : process.env.ORIGINAL_SHA;
+          if (!releaseSha) process.exit(1);
+          fs.appendFileSync(output, `release_sha=${releaseSha}\n`);
+          NODE
+      - name: 検証済みrelease対象commitを取得する
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.sha }}
-      - name: remote再確認後に注釈付きtagを作成する
+          ref: ${{ steps.release_target.outputs.release_sha }}
+      - name: remote確認後に注釈付きtagを必要な場合だけ作成する
         id: tag_operation
         continue-on-error: true
         env:
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_SHA: ${{ steps.release_target.outputs.release_sha }}
         run: |
-          git ls-remote --tags origin "refs/tags/$RELEASE_TAG" > tag-before.txt
-          if [ -s tag-before.txt ]; then
-            printf '同名tagがremoteに存在するため停止します。\n' >&2
-            exit 1
+          git ls-remote --tags origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}" > tag-before.txt
+          if [ ! -s tag-before.txt ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag --annotate "$RELEASE_TAG" "$RELEASE_SHA" --message "Release $RELEASE_TAG"
+            git push origin "refs/tags/$RELEASE_TAG"
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag --annotate "$RELEASE_TAG" "$RELEASE_SHA" --message "Release $RELEASE_TAG"
-          git push origin "refs/tags/$RELEASE_TAG"
       - name: remote tagのSHAを読み直す
         id: tag_status
         if: always()
         env:
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-          RELEASE_SHA: ${{ github.sha }}
-          TAG_OPERATION_OUTCOME: ${{ steps.tag_operation.outcome }}
+          RELEASE_SHA: ${{ steps.release_target.outputs.release_sha }}
         run: |
           git ls-remote --tags origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}" > tag-after.txt || true
           node --input-type=module <<'NODE'
@@ -220,9 +408,7 @@ jobs:
           const peeled = lines.find((line) => line.endsWith(`refs/tags/${tag}^{}`));
           const direct = lines.find((line) => line.endsWith(`refs/tags/${tag}`));
           const observed = (peeled ?? direct ?? "").split(/\s+/)[0] ?? "";
-          const succeeded =
-            process.env.TAG_OPERATION_OUTCOME === "success" && observed === expected;
-          fs.appendFileSync(output, `state=${succeeded ? "succeeded" : "failed"}\n`);
+          fs.appendFileSync(output, `state=${observed === expected ? "succeeded" : "failed"}\n`);
           NODE
       - name: Git tag操作結果と復旧方法を記録する
         if: always()
@@ -235,25 +421,16 @@ jobs:
           const summary = process.env.GITHUB_STEP_SUMMARY;
           if (!summary) process.exit(1);
           const succeeded = process.env.TAG_STATE === "succeeded";
-          fs.appendFileSync(
-            summary,
-            [
-              "# Git tag操作結果",
-              "",
-              `- tag: ${process.env.RELEASE_TAG ?? "不明"}`,
-              `- 状態: ${succeeded ? "succeeded" : "failed"}`,
-              succeeded
-                ? "- 完了: validate、Git tag"
-                : "- 完了: validate",
-              succeeded
-                ? "- 未完了: GitHub Release、npm公開（明示入力がある場合）"
-                : "- 未完了: Git tag、GitHub Release、npm公開",
-              succeeded
-                ? "- 復旧: GitHub Release未作成を確認後、remoteとlocalのtagを削除する"
-                : "- 復旧: remote tagの有無とSHAを確認してから新しいrunで再計画する",
-              "",
-            ].join("\n"),
-          );
+          fs.appendFileSync(summary, [
+            "# Git tag操作結果",
+            "",
+            `- tag: ${process.env.RELEASE_TAG ?? "不明"}`,
+            `- 状態: ${succeeded ? "succeeded" : "failed"}`,
+            succeeded ? "- 完了: validate、必要なversion bump、Git tag" : "- 完了: validateとsummary記録済みの操作まで",
+            succeeded ? "- 未完了: GitHub Release" : "- 未完了: Git tag、GitHub Release",
+            succeeded ? "- 復旧: 同じSHAのtagは再作成せず後続へ進む" : "- 復旧: remote tagの有無とSHAを確認して新しいrunで再計画する",
+            "",
+          ].join("\n"));
           NODE
       - name: tag未確認時に成功報告を拒否する
         if: always()
@@ -265,9 +442,9 @@ jobs:
           NODE
 
   github_release:
-    name: GitHub Releaseを作成する
+    name: GitHub Releaseを冪等に作成する
     needs: [validate, tag]
-    if: ${{ always() && needs.validate.outputs.state == 'ready' }}
+    if: ${{ always() && needs.tag.outputs.state == 'succeeded' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -276,16 +453,14 @@ jobs:
       state: ${{ steps.release_status.outputs.state }}
     steps:
       - name: tag作成済みcommitを取得する
-        if: ${{ needs.tag.outputs.state == 'succeeded' }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.sha }}
+          ref: ${{ needs.tag.outputs.release_sha }}
           persist-credentials: false
-      - name: 公開用release noteを再生成する
-        if: ${{ needs.tag.outputs.state == 'succeeded' }}
+      - name: 公開用release noteを生成する
         env:
-          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_SHA: ${{ needs.tag.outputs.release_sha }}
         run: |
           previous_tag="$(git describe --tags --abbrev=0 "$RELEASE_SHA^" 2>/dev/null || true)"
           {
@@ -296,46 +471,40 @@ jobs:
               git log "$RELEASE_SHA" --pretty='- %s (%h)'
             fi
           } > release-notes.md
-      - name: 検証済みtagからGitHub Releaseを作成する
+      - name: GitHub Releaseを必要な場合だけ作成する
         id: release_operation
-        if: ${{ needs.tag.outputs.state == 'succeeded' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-        run: gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md
+        run: |
+          if ! gh release view "$RELEASE_TAG" --json tagName,name,url > release-before.json 2>/dev/null; then
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md
+          fi
       - name: GitHub Releaseを読み直す
         id: release_observation
-        if: ${{ needs.tag.outputs.state == 'succeeded' }}
+        if: always()
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-        run: gh release view "$RELEASE_TAG" --json tagName,url > release-after.json
+        run: gh release view "$RELEASE_TAG" --json tagName,name,url > release-after.json
       - name: GitHub Releaseの状態を確定する
         id: release_status
         if: always()
         env:
-          TAG_STATE: ${{ needs.tag.outputs.state }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-          RELEASE_OPERATION_OUTCOME: ${{ steps.release_operation.outcome }}
         run: |
           node --input-type=module <<'NODE'
           import fs from "node:fs";
           const output = process.env.GITHUB_OUTPUT;
           if (!output) process.exit(1);
-          let state = "skipped";
-          if (process.env.TAG_STATE === "succeeded") {
-            try {
-              const observed = JSON.parse(fs.readFileSync("release-after.json", "utf8"));
-              state =
-                process.env.RELEASE_OPERATION_OUTCOME === "success" &&
-                observed.tagName === process.env.RELEASE_TAG
-                  ? "succeeded"
-                  : "failed";
-            } catch {
-              state = "failed";
-            }
+          let state = "failed";
+          try {
+            const observed = JSON.parse(fs.readFileSync("release-after.json", "utf8"));
+            state = observed.tagName === process.env.RELEASE_TAG && observed.name === process.env.RELEASE_TAG ? "succeeded" : "failed";
+          } catch {
+            state = "failed";
           }
           fs.appendFileSync(output, `state=${state}\n`);
           NODE
@@ -344,34 +513,30 @@ jobs:
         env:
           RELEASE_STATE: ${{ steps.release_status.outputs.state }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_EVENT: ${{ github.event_name }}
           NPM_ENABLED: ${{ needs.validate.outputs.npm_enabled }}
         run: |
           node --input-type=module <<'NODE'
           import fs from "node:fs";
           const summary = process.env.GITHUB_STEP_SUMMARY;
           if (!summary) process.exit(1);
-          const state = process.env.RELEASE_STATE ?? "failed";
-          fs.appendFileSync(
-            summary,
-            [
-              "# GitHub Release操作結果",
-              "",
-              `- tag: ${process.env.RELEASE_TAG ?? "不明"}`,
-              `- 状態: ${state}`,
-              state === "succeeded"
-                ? "- 完了: validate、Git tag、GitHub Release"
-                : "- 完了: validate、Git tag",
-              state === "succeeded" && process.env.NPM_ENABLED === "true"
+          const succeeded = process.env.RELEASE_STATE === "succeeded";
+          fs.appendFileSync(summary, [
+            "# GitHub Release操作結果",
+            "",
+            `- tag・Release名: ${process.env.RELEASE_TAG ?? "不明"}`,
+            `- 状態: ${succeeded ? "succeeded" : "failed"}`,
+            succeeded ? "- 完了: validate、必要なversion bump、Git tag、GitHub Release" : "- 完了: validate、必要なversion bump、Git tag",
+            succeeded && process.env.RELEASE_EVENT === "push"
+              ? "- 未実行: npm公開（自動経路では常に無効）"
+              : succeeded && process.env.NPM_ENABLED === "true"
                 ? "- 未完了: npm公開（environment承認待ち）"
-                : state === "succeeded"
-                  ? "- 未実行: npm公開（明示入力なし）"
-                  : "- 未完了: GitHub Release、npm公開",
-              state === "succeeded"
-                ? "- 復旧: Releaseを削除し、npm未公開を確認後に必要ならtagを削除する"
-                : "- 復旧: Releaseの有無を確認し、存在する場合は削除してから新しいrunで再計画する",
-              "",
-            ].join("\n"),
-          );
+                : succeeded
+                  ? "- 未実行: npm公開（手動入力なし）"
+                  : "- 未完了: GitHub Release",
+            succeeded ? "- 復旧: 同名Releaseは再作成せず成功として扱う" : "- 復旧: Releaseの有無を確認し、存在しなければ新しいrunで再実行する",
+            "",
+          ].join("\n"));
           NODE
       - name: Release未確認時に成功報告を拒否する
         if: always()
@@ -383,10 +548,11 @@ jobs:
           NODE
 
   npm_publish:
-    name: 承認後にnpm packageを公開する
+    name: 手動承認後にnpm packageを公開する
     needs: [validate, tag, github_release]
     if: >-
-      ${{ always() &&
+      ${{ github.event_name == 'workflow_dispatch' &&
+          inputs.publish_npm == true &&
           needs.validate.outputs.state == 'ready' &&
           needs.validate.outputs.npm_enabled == 'true' &&
           needs.tag.outputs.state == 'succeeded' &&
@@ -440,11 +606,7 @@ jobs:
           let state = "failed";
           try {
             const observed = JSON.parse(fs.readFileSync("npm-after.json", "utf8"));
-            state =
-              process.env.NPM_OPERATION_OUTCOME === "success" &&
-              observed === process.env.RELEASE_VERSION
-                ? "succeeded"
-                : "failed";
+            state = process.env.NPM_OPERATION_OUTCOME === "success" && observed === process.env.RELEASE_VERSION ? "succeeded" : "failed";
           } catch {
             state = "failed";
           }
@@ -461,23 +623,16 @@ jobs:
           const summary = process.env.GITHUB_STEP_SUMMARY;
           if (!summary) process.exit(1);
           const succeeded = process.env.NPM_STATE === "succeeded";
-          fs.appendFileSync(
-            summary,
-            [
-              "# npm公開操作結果",
-              "",
-              `- version: ${process.env.RELEASE_VERSION ?? "不明"}`,
-              `- 状態: ${succeeded ? "succeeded" : "failed"}`,
-              succeeded
-                ? "- 完了: validate、Git tag、GitHub Release、npm公開"
-                : "- 完了: validate、Git tag、GitHub Release",
-              succeeded ? "- 未完了: なし" : "- 未完了: npm公開",
-              succeeded
-                ? "- 復旧: 公開済みversionは削除せずnpm deprecateで利用非推奨理由と代替versionを案内する"
-                : "- 復旧: registryでversionの有無を再確認し、未公開なら原因解消後に新しいrunで再計画する",
-              "",
-            ].join("\n"),
-          );
+          fs.appendFileSync(summary, [
+            "# npm公開操作結果",
+            "",
+            `- version: ${process.env.RELEASE_VERSION ?? "不明"}`,
+            `- 状態: ${succeeded ? "succeeded" : "failed"}`,
+            succeeded ? "- 完了: Git tag、GitHub Release、npm公開" : "- 完了: Git tag、GitHub Release",
+            succeeded ? "- 未完了: なし" : "- 未完了: npm公開",
+            succeeded ? "- 復旧: 公開済みversionは削除せずnpm deprecateで利用非推奨理由と代替versionを案内する" : "- 復旧: registryでversionの有無を再確認し、未公開なら原因解消後に新しいrunで再計画する",
+            "",
+          ].join("\n"));
           NODE
       - name: npm公開未確認時に成功報告を拒否する
         if: always()
