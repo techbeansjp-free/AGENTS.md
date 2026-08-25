@@ -9,7 +9,7 @@ description: 承認対象の設計を、失敗テストから最小実装・仕�
 
 ## routing入力契約
 
-実装taskごとにrole欄、provider欄、model設定欄、fallback欄、独立性証拠欄を計画する。providerとmodel設定はproject choiceから受け取る入力であり、汎用skillは固有のmodel slugを既定しない。要求能力を満たす解決が不能な場合はfallback欄へ安全な停止・再開条件を置き、implementerとreviewerが異なることを独立性証拠欄で検証できるようにする。
+実装taskごとに6 roleを記すrole欄、許可path・操作、必要証拠、能力tier、provider欄、model設定欄、fallback欄、独立性証拠欄を計画する。providerとmodel設定はproject choiceから受け取る入力であり、汎用skillは固有のmodel slugを既定しない。要求能力を満たす解決が不能な場合はfallback欄へ安全な停止・再開条件を置き、implementerとreviewerが異なるidentity・contextであることを独立性証拠欄で検証できるようにする。coordinatorへproduct実装taskを割り当てない。
 
 ## テンプレート契約
 

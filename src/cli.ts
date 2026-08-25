@@ -65,7 +65,7 @@ import {
 import { git } from "./lib/process.js";
 import { writeFileAtomic } from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
-import { resolveContained } from "./lib/security.js";
+import { parseJsonStrict, resolveContained } from "./lib/security.js";
 import {
   canonicalLifecycleCommand,
   CLI_USAGE,
@@ -85,6 +85,15 @@ import {
   issueRoutingEvidence,
   previewEvidencePrune,
 } from "./domain/routing-evidence.js";
+import {
+  MODEL_TIERS,
+  requiredTier,
+  validateProviderSelection,
+  validateRoleAssignment,
+  validateTierSelection,
+  type HumanOverride,
+  type ModelTier,
+} from "./domain/role.js";
 import {
   readDeliveryEvidence,
   readEnforcementInput,
@@ -421,6 +430,93 @@ function routingFailure(
   });
 }
 
+function roleTierFailure(
+  ruleId: string,
+  purpose: string,
+  risk: string,
+  reasons: string[],
+  scope: string,
+  next: string,
+  requiredAuthority: string,
+): unknown {
+  return serializeDiagnostic({
+    allowed: false,
+    valid: false,
+    errors: reasons,
+    diagnostic: {
+      ruleId,
+      purpose,
+      risk,
+      reasons,
+      scope: [scope],
+      checks: [
+        "role、identity、context、tier、mapping、override証拠を確認した",
+      ],
+      autoFixes: [],
+      next,
+      requiredAuthority,
+      rollback: "外部状態と対象差分を変更せず、検証前の状態を保持する",
+    },
+  });
+}
+
+function assignmentInput(source: string): Array<{
+  role: string;
+  identity: string;
+  context: string;
+}> {
+  const parsed = parseJsonStrict(source, "assignments");
+  if (!Array.isArray(parsed))
+    throw new Error("--assignmentsはJSON配列でなければなりません");
+  return parsed.map((item, index) => {
+    if (!isRecord(item))
+      throw new Error(`assignments[${index}]はobjectでなければなりません`);
+    for (const field of ["role", "identity", "context"] as const)
+      if (typeof item[field] !== "string")
+        throw new Error(
+          `assignments[${index}].${field}は文字列でなければなりません`,
+        );
+    return {
+      role: item.role as string,
+      identity: item.identity as string,
+      context: item.context as string,
+    };
+  });
+}
+
+function humanOverrideInput(source: string): HumanOverride {
+  const parsed = parseJsonStrict(source, "override");
+  if (!isRecord(parsed))
+    throw new Error("--overrideはobjectでなければなりません");
+  for (const field of [
+    "provider",
+    "selection",
+    "scope",
+    "instructedBy",
+    "instructedAt",
+    "expiresAt",
+  ] as const)
+    if (typeof parsed[field] !== "string")
+      throw new Error(`override.${field}は文字列でなければなりません`);
+  if (typeof parsed.issue !== "number" || !Number.isInteger(parsed.issue))
+    throw new Error("override.issueは整数でなければなりません");
+  return {
+    provider: parsed.provider as string,
+    selection: parsed.selection as string,
+    issue: parsed.issue,
+    scope: parsed.scope as string,
+    instructedBy: parsed.instructedBy as string,
+    instructedAt: parsed.instructedAt as string,
+    expiresAt: parsed.expiresAt as string,
+  };
+}
+
+function modelTier(value: string, flag: string): ModelTier {
+  const tier = MODEL_TIERS.find((candidate) => candidate === value);
+  if (!tier) throw new Error(`--${flag}のmodel tierが不正です`);
+  return tier;
+}
+
 export async function main(argv: string[]): Promise<number> {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
@@ -431,6 +527,108 @@ export async function main(argv: string[]): Promise<number> {
       ),
     });
     return 0;
+  }
+  if (command === "routing" && subcommand === "roles") {
+    const { flags } = parse(rest);
+    const scope = required(flags, "scope");
+    const result = validateRoleAssignment({
+      scope,
+      assignments: assignmentInput(required(flags, "assignments")),
+    });
+    print(
+      result.valid
+        ? result
+        : roleTierFailure(
+            "ASC-ROLE-ASSIGNMENT-001",
+            "同一scopeのrole分離と独立contextを保証する",
+            "identity",
+            result.errors,
+            scope,
+            "異なるidentityとcontextへ再割当し、coordinatorを含めて再検証してください",
+            "coordinatorによる担当割当",
+          ),
+    );
+    return result.valid ? 0 : 1;
+  }
+  if (command === "routing" && subcommand === "tier") {
+    const { flags } = parse(rest);
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    const risk = required(flags, "risk");
+    const mode = required(flags, "mode");
+    const scope = required(flags, "scope");
+    const model = required(flags, "model");
+    const selected = modelTier(required(flags, "selected"), "selected");
+    const choices = loadProjectPolicySet(root).choices[0];
+    const configured =
+      choices?.modelMapping && typeof choices.modelMapping !== "string"
+        ? choices.modelMapping
+        : undefined;
+    const computed = requiredTier({ risk, mode, scope });
+    const configuredMinimum = configured?.minimumTierByRisk?.[risk];
+    const requiredMinimum =
+      configuredMinimum &&
+      MODEL_TIERS.indexOf(configuredMinimum) > MODEL_TIERS.indexOf(computed)
+        ? configuredMinimum
+        : computed;
+    const result = validateTierSelection({
+      required: requiredMinimum,
+      selected,
+      mapping: configured?.tierMapping ?? {},
+      model,
+      justification:
+        typeof flags.justification === "string"
+          ? flags.justification
+          : undefined,
+    });
+    const output = { ...result, required: requiredMinimum, selected, model };
+    print(
+      result.valid
+        ? output
+        : roleTierFailure(
+            "ASC-MODEL-TIER-001",
+            "risk・mode・scopeに必要な能力tierを単調に保証する",
+            risk,
+            result.errors,
+            scope,
+            "trusted project choiceへmodel mappingを定義するか、必要tier以上を選択してください",
+            "model mapping owner",
+          ),
+    );
+    return result.valid ? 0 : 1;
+  }
+  if (command === "routing" && subcommand === "ceiling") {
+    const { flags } = parse(rest);
+    const issueRaw = required(flags, "issue");
+    if (!/^[1-9]\d*$/u.test(issueRaw))
+      throw new Error("--issueは正のIssue番号でなければなりません");
+    const scope = required(flags, "scope");
+    const result = validateProviderSelection({
+      provider: required(flags, "provider"),
+      selection: required(flags, "selection"),
+      issue: Number(issueRaw),
+      scope,
+      now: typeof flags.now === "string" ? flags.now : new Date().toISOString(),
+      override:
+        typeof flags.override === "string"
+          ? humanOverrideInput(flags.override)
+          : undefined,
+    });
+    print(
+      result.valid
+        ? result
+        : roleTierFailure(
+            "ASC-PROVIDER-CEILING-001",
+            "provider別の自律選択上限とscope拘束overrideを保証する",
+            "authority",
+            result.errors,
+            scope,
+            "上限内へ戻すか、対象Issueとscopeへ拘束された有効な人間overrideを提示してください",
+            "対象scopeの人間指示者",
+          ),
+    );
+    return result.valid ? 0 : 1;
   }
   if (command === "routing" && subcommand === "observe") {
     const { flags } = parse(rest);

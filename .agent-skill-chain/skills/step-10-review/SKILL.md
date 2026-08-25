@@ -9,7 +9,7 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 ## routing入力契約
 
-role欄、provider欄、model設定欄、fallback欄、独立性証拠欄を実装時のrouting evidenceと突合する。providerとmodel設定はproject choiceの入力契約として扱い、固有のmodel slugからreview authorityを推測しない。reviewerがimplementerと異なることを独立性証拠欄で確認できない場合はfallback欄の停止条件を適用し、承認しない。
+role欄の担当roleが`reviewer`であること、必要能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄、肯定・敵対review、finding分類、対象差分を変更していない証拠を実装時のrouting evidenceと突合する。providerとmodel設定はproject choiceの入力契約として扱い、固有のmodel slugからreview authorityを推測しない。reviewerがimplementerと異なるidentity・contextであることを独立性証拠欄で確認できない場合は停止条件を適用し、承認しない。reviewerはfindingを隠す修正を行わない。
 
 ## テンプレート契約
 

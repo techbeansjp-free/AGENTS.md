@@ -44,6 +44,15 @@ export interface RoutingEvidenceRetentionChoice {
   deletionMethod: "preview_then_explicit";
 }
 
+export type ModelTierChoice = "routine" | "standard" | "advanced" | "critical";
+
+export interface RoleContractChoice {
+  allowedPaths: string[];
+  allowedOperations: string[];
+  forbiddenOperations: string[];
+  requiredEvidence: string[];
+}
+
 export interface ModelMappingChoice {
   roles: {
     coordinator: RoleModelChoice;
@@ -57,6 +66,9 @@ export interface ModelMappingChoice {
   };
   evidenceStoreRoot: string;
   retention: RoutingEvidenceRetentionChoice;
+  roleContracts?: Record<string, RoleContractChoice>;
+  tierMapping?: Record<string, ModelTierChoice>;
+  minimumTierByRisk?: Record<string, ModelTierChoice>;
 }
 
 export interface ProviderCapability {
