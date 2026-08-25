@@ -36,6 +36,23 @@ function linesFromFile(file: string): string[] {
     .filter((tag) => tag.length > 0);
 }
 
+function digestFromFile(file: string | undefined): string {
+  if (!file) return "";
+  try {
+    const value = JSON.parse(fs.readFileSync(file, "utf8")) as unknown;
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      typeof (value as Record<string, unknown>).digest === "string"
+    )
+      return (value as Record<string, unknown>).digest as string;
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 function latestReleasedVersion(existingTags: string[]): string {
   let currentVersion = "0.3.0-0";
   for (const tag of existingTags) {
@@ -72,8 +89,11 @@ export function planAutoReleaseFromEnvironment(
     existingTags: linesFromFile(
       requiredEnvironment(environment, "RELEASE_EXISTING_TAGS_FILE"),
     ),
-    changedPaths: linesFromFile(
-      requiredEnvironment(environment, "RELEASE_CHANGED_PATHS_FILE"),
+    distributionDigest: digestFromFile(
+      environment.RELEASE_DISTRIBUTION_DIGEST_FILE,
+    ),
+    previousDistributionDigest: digestFromFile(
+      environment.RELEASE_PREVIOUS_DISTRIBUTION_DIGEST_FILE,
     ),
     headCommitMessage: requiredEnvironment(
       environment,

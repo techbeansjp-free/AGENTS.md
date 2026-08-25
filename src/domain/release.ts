@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { isPackageVersion, packageReleaseVersion } from "../lib/version.js";
 
 export type ReleaseStage =
@@ -39,10 +40,22 @@ export interface ReleaseOutcome {
 export interface AutoReleaseInput {
   currentVersion: string;
   existingTags: string[];
-  changedPaths: string[];
+  distributionDigest: string;
+  previousDistributionDigest: string;
   headCommitMessage: string;
   ref: string;
   defaultBranch: string;
+}
+
+export interface DistributionEntry {
+  path: string;
+  contentHash: string;
+}
+
+export interface DistributionDigest {
+  digest: string;
+  entryCount: number;
+  errors: string[];
 }
 
 export interface AutoReleasePlan {
@@ -81,24 +94,13 @@ const RELEASE_INPUT_KEYS = new Set([
 const AUTO_RELEASE_INPUT_KEYS = new Set([
   "currentVersion",
   "existingTags",
-  "changedPaths",
+  "distributionDigest",
+  "previousDistributionDigest",
   "headCommitMessage",
   "ref",
   "defaultBranch",
 ]);
-const RELEASE_PATH_PREFIXES = [
-  "src/",
-  "bin/",
-  "scripts/",
-  ".agent-skill-chain/",
-] as const;
-const RELEASE_PATHS = new Set([
-  "AGENTS.md",
-  "package.json",
-  "package-lock.json",
-  "tsconfig.json",
-  "tsconfig.build.json",
-]);
+const SHA256_HEX = /^[0-9a-f]{64}$/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -119,6 +121,122 @@ function isGate(value: unknown): value is { name: string; passed: boolean } {
     value.name.length > 0 &&
     typeof value.passed === "boolean"
   );
+}
+
+function compareUnicodeCodePoints(left: string, right: string): number {
+  const leftPoints = Array.from(left, (character) => character.codePointAt(0));
+  const rightPoints = Array.from(right, (character) =>
+    character.codePointAt(0),
+  );
+  const length = Math.max(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPoint = leftPoints[index];
+    const rightPoint = rightPoints[index];
+    if (leftPoint === undefined) return -1;
+    if (rightPoint === undefined) return 1;
+    if (leftPoint !== rightPoint) return leftPoint < rightPoint ? -1 : 1;
+  }
+  return 0;
+}
+
+function stableDistributionJson(value: unknown): string {
+  if (Array.isArray(value))
+    return `[${value.map(stableDistributionJson).join(",")}]`;
+  if (isRecord(value))
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => compareUnicodeCodePoints(left, right))
+      .map(
+        ([key, item]) =>
+          `${JSON.stringify(key)}:${stableDistributionJson(item)}`,
+      )
+      .join(",")}}`;
+  return JSON.stringify(value) ?? "null";
+}
+
+export function computeDistributionDigest(value: unknown): DistributionDigest {
+  if (!Array.isArray(value))
+    return {
+      digest: "",
+      entryCount: 0,
+      errors: ["配布entryは配列でなければなりません"],
+    };
+
+  const errors: string[] = [];
+  const entries: DistributionEntry[] = [];
+  const paths = new Set<string>();
+  if (value.length === 0) errors.push("配布entryが0件のため配布物は空です");
+  value.forEach((entry, index) => {
+    if (!isRecord(entry)) {
+      errors.push(`配布entry[${index}]はobjectでなければなりません`);
+      return;
+    }
+    const entryPath = entry.path;
+    const contentHash = entry.contentHash;
+    if (typeof entryPath !== "string" || entryPath.length === 0)
+      errors.push(
+        `配布entry[${index}].pathは空でない文字列でなければなりません`,
+      );
+    if (typeof contentHash !== "string" || !SHA256_HEX.test(contentHash))
+      errors.push(
+        `配布entry[${index}].contentHashは64桁の小文字hexでなければなりません`,
+      );
+    if (typeof entryPath === "string" && entryPath.length > 0) {
+      if (paths.has(entryPath))
+        errors.push(`配布entryのpath「${entryPath}」が重複しています`);
+      paths.add(entryPath);
+    }
+    if (
+      typeof entryPath === "string" &&
+      entryPath.length > 0 &&
+      typeof contentHash === "string" &&
+      SHA256_HEX.test(contentHash)
+    )
+      entries.push({ path: entryPath, contentHash });
+  });
+
+  if (errors.length > 0)
+    return { digest: "", entryCount: value.length, errors };
+  entries.sort((left, right) =>
+    compareUnicodeCodePoints(left.path, right.path),
+  );
+  const canonical = entries.map(({ path, contentHash }) => [path, contentHash]);
+  return {
+    digest: crypto
+      .createHash("sha256")
+      .update(stableDistributionJson(canonical))
+      .digest("hex"),
+    entryCount: entries.length,
+    errors: [],
+  };
+}
+
+export function normalizeDistributionContent(
+  filePath: string,
+  content: string,
+): string {
+  const normalizedPath = filePath.startsWith("./")
+    ? filePath.slice(2)
+    : filePath;
+  if (
+    normalizedPath !== "package.json" &&
+    normalizedPath !== "package-lock.json"
+  )
+    return content;
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (isRecord(parsed)) {
+      delete parsed.version;
+      if (
+        normalizedPath === "package-lock.json" &&
+        isRecord(parsed.packages) &&
+        isRecord(parsed.packages[""])
+      )
+        delete parsed.packages[""].version;
+    }
+    return stableDistributionJson(parsed);
+  } catch {
+    return content;
+  }
 }
 
 function skippedAutoRelease(
@@ -151,18 +269,19 @@ function validateAutoReleaseInput(value: unknown): {
     reasons.push("自動release計画入力に未知fieldがあります");
   for (const key of [
     "currentVersion",
+    "distributionDigest",
+    "previousDistributionDigest",
     "headCommitMessage",
     "ref",
     "defaultBranch",
   ] as const)
     if (typeof value[key] !== "string")
       reasons.push(`${key}は文字列でなければなりません`);
-  for (const key of ["existingTags", "changedPaths"] as const)
-    if (
-      !Array.isArray(value[key]) ||
-      value[key].some((item) => typeof item !== "string")
-    )
-      reasons.push(`${key}は文字列配列でなければなりません`);
+  if (
+    !Array.isArray(value.existingTags) ||
+    value.existingTags.some((item) => typeof item !== "string")
+  )
+    reasons.push("existingTagsは文字列配列でなければなりません");
   if (reasons.length > 0) return { version, reasons };
   return {
     version,
@@ -170,22 +289,13 @@ function validateAutoReleaseInput(value: unknown): {
     input: {
       currentVersion: value.currentVersion as string,
       existingTags: value.existingTags as string[],
-      changedPaths: value.changedPaths as string[],
+      distributionDigest: value.distributionDigest as string,
+      previousDistributionDigest: value.previousDistributionDigest as string,
       headCommitMessage: value.headCommitMessage as string,
       ref: value.ref as string,
       defaultBranch: value.defaultBranch as string,
     },
   };
-}
-
-function isReleasePath(changedPath: string): boolean {
-  const normalized = changedPath.startsWith("./")
-    ? changedPath.slice(2)
-    : changedPath;
-  return (
-    RELEASE_PATHS.has(normalized) ||
-    RELEASE_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix))
-  );
 }
 
 function nextAutoReleaseVersion(version: string): string | undefined {
@@ -226,10 +336,6 @@ export function planAutoRelease(value: unknown): AutoReleasePlan {
     return skippedAutoRelease(input.currentVersion, [
       "head commit messageに[skip ci]があるため再帰releaseを停止します",
     ]);
-  if (!input.changedPaths.some(isReleasePath))
-    return skippedAutoRelease(input.currentVersion, [
-      "release対象pathの変更がないため自動releaseを停止します",
-    ]);
 
   const currentTag = `v${input.currentVersion}`;
   if (!input.existingTags.includes(currentTag))
@@ -242,6 +348,18 @@ export function planAutoRelease(value: unknown): AutoReleasePlan {
         `package.jsonのversionに対応するtag「${currentTag}」が存在しないためreleaseします`,
       ],
     };
+
+  if (!SHA256_HEX.test(input.distributionDigest))
+    return skippedAutoRelease(input.currentVersion, [
+      "現在の配布digestを算出できなかったため自動releaseを停止します",
+    ]);
+  if (
+    input.previousDistributionDigest.length > 0 &&
+    input.distributionDigest === input.previousDistributionDigest
+  )
+    return skippedAutoRelease(input.currentVersion, [
+      `配布物が前回release「${currentTag}」と同一のため自動releaseを停止します`,
+    ]);
 
   const nextVersion = nextAutoReleaseVersion(input.currentVersion);
   if (!nextVersion)
@@ -640,34 +758,10 @@ export function validateReleaseWorkflow(yaml: string): {
   )
     errors.push("push.branchesは[main]に限定してください");
   else checks.push("push branchがmainに限定されていることを確認した");
-  const expectedReleasePaths = [
-    "src/**",
-    "bin/**",
-    "scripts/**",
-    ".agent-skill-chain/**",
-    "AGENTS.md",
-    "package.json",
-    "package-lock.json",
-    "tsconfig.json",
-    "tsconfig.build.json",
-  ];
-  const hasPaths = pushBlock.some((line) => /^\s*paths:\s*$/u.test(line));
-  const missingReleasePaths = expectedReleasePaths.filter(
-    (expectedPath) =>
-      !pushBlock.some((line) => {
-        const match = /^\s*-\s*['"]?([^'"]+)['"]?\s*$/u.exec(line);
-        return match?.[1] === expectedPath;
-      }),
-  );
-  if (!hasPaths || missingReleasePaths.length > 0)
-    errors.push(
-      `push.pathsへrelease対象をすべて宣言してください${
-        missingReleasePaths.length > 0
-          ? `: ${missingReleasePaths.join(", ")}`
-          : ""
-      }`,
-    );
-  else checks.push("push pathsがrelease対象に限定されていることを確認した");
+  const hasPaths = pushBlock.some((line) => /^\s*paths\s*:/u.test(line));
+  if (hasPaths)
+    errors.push("push.pathsで対象を限定せず、配布digestで判定してください");
+  else checks.push("push pathsによる限定が無いことを確認した");
   const concurrencyIndex = lines.findIndex((line) =>
     /^\s*concurrency:\s*$/u.test(line),
   );
@@ -693,6 +787,15 @@ export function validateReleaseWorkflow(yaml: string): {
   if (!blockHasNpmRun(validateJobBlock, "prepack"))
     errors.push("validate jobは引き続きnpm run prepackを実行してください");
   else checks.push("validate jobのnpm run prepackを確認した");
+  if (
+    !validateJobBlock.some((line) =>
+      /scripts\/compute_distribution_digest\.ts/u.test(line),
+    )
+  )
+    errors.push(
+      "validate jobはscripts/compute_distribution_digest.tsで配布digestを算出してください",
+    );
+  else checks.push("validate jobの配布digest算出を確認した");
   if (
     !validateJobBlock.some((line) =>
       /^\s*if:\s*.*!\s*contains\(github\.event\.head_commit\.message,\s*['"]\[skip ci\]['"]\)/u.test(
