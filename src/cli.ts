@@ -124,8 +124,167 @@ import {
   readPolicyJson,
   readSpecReview,
 } from "./adapters/json-input.js";
+import {
+  appendWorkflowJournalEntry,
+  inspectWorkflowStaging,
+  readWorkflowJournal,
+  resolvePullRequestStaging,
+  workflowStep,
+} from "./adapters/workflow-journal.js";
+import {
+  MODE_STEP_SEQUENCES,
+  NEVER_SKIPPABLE_STEPS,
+  requiredSteps,
+  skippableSteps,
+  validateJournalHumanOverride,
+  validateStepJournal,
+  WORKFLOW_STEPS,
+  type JournalHumanOverride,
+  type StepJournalEntry,
+} from "./domain/workflow.js";
+import type { Mode } from "./domain/mode.js";
 
 type Flags = Record<string, string | boolean>;
+
+function workflowArguments(args: string[]): {
+  flags: Record<string, string>;
+  artifacts: string[];
+} {
+  const flags: Record<string, string> = {};
+  const artifacts: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index] ?? "";
+    if (!argument.startsWith("--"))
+      throw new Error(
+        `workflow commandの位置引数は使用できません: ${argument}`,
+      );
+    const equal = argument.indexOf("=");
+    const key = argument.slice(2, equal === -1 ? undefined : equal);
+    let value = equal === -1 ? undefined : argument.slice(equal + 1);
+    if (value === undefined) {
+      const following = args[index + 1];
+      if (!following || following.startsWith("--"))
+        throw new Error(`--${key}には値が必要です`);
+      value = following;
+      index += 1;
+    }
+    if (value === "") throw new Error(`--${key}には空でない値が必要です`);
+    if (key === "artifact") artifacts.push(value);
+    else {
+      if (flags[key] !== undefined)
+        throw new Error(`オプションが重複しています: --${key}`);
+      flags[key] = value;
+    }
+  }
+  return { flags, artifacts };
+}
+
+function workflowMode(value: string): Mode {
+  if (value !== "quick" && value !== "full" && value !== "poc")
+    throw new Error("--modeはquick、full、pocのいずれかが必要です");
+  return value;
+}
+
+function workflowStepNumber(value: string, flag: string): number {
+  if (!/^\d+$/u.test(value))
+    throw new Error(`--${flag}は0..11の整数が必要です`);
+  const step = Number(value);
+  if (step < 0 || step > 11)
+    throw new Error(`--${flag}は0..11の整数が必要です`);
+  return step;
+}
+
+function workflowDiagnostic(
+  staging: string,
+  mode: Mode,
+  result: ReturnType<typeof validateStepJournal>,
+  extra: string[] = [],
+) {
+  const missing = result.missingSteps.map((step) => {
+    const definition = workflowStep(step);
+    return {
+      step,
+      skillId: definition?.skillId ?? "unknown",
+      responsibility: definition?.responsibility ?? "不明",
+    };
+  });
+  const reasons = [
+    ...extra,
+    ...missing.map(
+      ({ step, skillId, responsibility }) =>
+        `step ${step}（${skillId}）${responsibility} の記録がありません`,
+    ),
+    ...result.unexpectedSteps.map(
+      (step) => `mode=${mode}でstep ${step}は実施対象ではありません`,
+    ),
+    ...result.outOfOrder.map(
+      (step) => `step ${step}が規定順序に違反しています`,
+    ),
+    ...result.modeConflicts,
+    ...result.errors,
+  ];
+  if (mode === "quick" && result.missingSteps.includes(4))
+    reasons.push("quickでもstep 4は省略対象ではないため、Issue同期が必要です");
+  return {
+    valid: false,
+    staging,
+    mode,
+    missingSteps: missing,
+    unexpectedSteps: result.unexpectedSteps,
+    outOfOrder: result.outOfOrder,
+    modeConflicts: result.modeConflicts,
+    diagnostic: {
+      ruleId: "ASC-WORKFLOW-STEP-001",
+      purpose: "Step 0〜11の実施順序と省略可否を機械的に保証する",
+      risk: "workflow",
+      reasons,
+      scope: ["workflow", "pr create", staging],
+      checks: ["staging record、モード判定成果物、step journalを検証した"],
+      autoFixes: [],
+      next: "欠落したStepのskill contractを実行し、workflow record後に再検証してください",
+      requiredAuthority:
+        "通常は不要。欠落を受容する場合は対象Issueへ拘束したHumanOverride",
+      rollback: "PRを作成せずstagingとjournalを保持する",
+    },
+  };
+}
+
+function readJournalOverride(file: string): JournalHumanOverride {
+  const value = readJsonInput(path.resolve(file));
+  if (!isRecord(value)) throw new Error("workflow overrideはobjectが必要です");
+  const allowed = new Set([
+    "issue",
+    "scope",
+    "instructedBy",
+    "instructedAt",
+    "expiresAt",
+    "reason",
+  ]);
+  const unknown = Object.keys(value).filter((field) => !allowed.has(field));
+  if (unknown.length > 0)
+    throw new Error(
+      `workflow overrideの未知fieldを拒否しました: ${unknown.join(", ")}`,
+    );
+  if (typeof value.issue !== "number" || !Number.isInteger(value.issue))
+    throw new Error("workflow override.issueは整数が必要です");
+  for (const field of [
+    "scope",
+    "instructedBy",
+    "instructedAt",
+    "expiresAt",
+    "reason",
+  ] as const)
+    if (typeof value[field] !== "string")
+      throw new Error(`workflow override.${field}は文字列が必要です`);
+  return {
+    issue: value.issue,
+    scope: value.scope as "workflow.pr.create",
+    instructedBy: value.instructedBy as string,
+    instructedAt: value.instructedAt as string,
+    expiresAt: value.expiresAt as string,
+    reason: value.reason as string,
+  };
+}
 
 function parse(args: string[]): { flags: Flags; positionals: string[] } {
   const flags: Flags = {};
@@ -1428,6 +1587,115 @@ export async function main(argv: string[]): Promise<number> {
       "routing evidenceにはissue、complete、state、pruneのいずれかが必要です",
     );
   }
+  if (command === "workflow" && subcommand === "steps") {
+    const { flags, artifacts } = workflowArguments(rest);
+    if (artifacts.length > 0)
+      throw new Error("workflow stepsで--artifactは使用できません");
+    const unknown = Object.keys(flags).filter((flag) => flag !== "mode");
+    if (unknown.length > 0)
+      throw new Error(
+        `workflow stepsの未知optionです: --${unknown.join(", --")}`,
+      );
+    if (flags.mode) {
+      const mode = workflowMode(flags.mode);
+      print({
+        mode,
+        steps: WORKFLOW_STEPS.filter(({ step }) =>
+          requiredSteps(mode).includes(step),
+        ),
+        sequence: MODE_STEP_SEQUENCES[mode],
+        skippableSteps: skippableSteps(mode),
+        neverSkippableSteps: NEVER_SKIPPABLE_STEPS,
+      });
+      return 0;
+    }
+    print({
+      steps: WORKFLOW_STEPS,
+      modes: Object.fromEntries(
+        (["full", "quick", "poc"] as const).map((mode) => [
+          mode,
+          {
+            sequence: MODE_STEP_SEQUENCES[mode],
+            skippableSteps: skippableSteps(mode),
+          },
+        ]),
+      ),
+      neverSkippableSteps: NEVER_SKIPPABLE_STEPS,
+    });
+    return 0;
+  }
+  if (command === "workflow" && subcommand === "record") {
+    const { flags, artifacts } = workflowArguments(rest);
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["staging", "step", "evidence", "recorded-at"].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `workflow recordの未知optionです: --${unknown.join(", --")}`,
+      );
+    if (artifacts.length === 0)
+      throw new Error("workflow recordには--artifactが1件以上必要です");
+    const staging = flags.staging;
+    const stepNumber = flags.step;
+    const evidence = flags.evidence;
+    if (!staging) throw new Error("workflow recordには--stagingが必要です");
+    if (!stepNumber) throw new Error("workflow recordには--stepが必要です");
+    if (!evidence) throw new Error("workflow recordには--evidenceが必要です");
+    const journal = readWorkflowJournal(staging);
+    const step = workflowStep(workflowStepNumber(stepNumber, "step"));
+    if (!step) throw new Error("workflow step定義がありません");
+    const entry: StepJournalEntry = {
+      step: step.step,
+      skillId: step.skillId,
+      mode: journal.mode,
+      recordedAt: flags["recorded-at"] ?? new Date().toISOString(),
+      artifacts,
+      evidence,
+    };
+    print(appendWorkflowJournalEntry({ staging, entry }));
+    return 0;
+  }
+  if (command === "workflow" && subcommand === "verify") {
+    const { flags, artifacts } = workflowArguments(rest);
+    if (artifacts.length > 0)
+      throw new Error("workflow verifyで--artifactは使用できません");
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["staging", "up-to"].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `workflow verifyの未知optionです: --${unknown.join(", --")}`,
+      );
+    if (!flags.staging)
+      throw new Error("workflow verifyには--stagingが必要です");
+    const upTo = flags["up-to"]
+      ? workflowStepNumber(flags["up-to"], "up-to")
+      : 11;
+    const inspection = inspectWorkflowStaging(flags.staging, upTo);
+    if (!inspection.valid) {
+      print(
+        workflowDiagnostic(
+          inspection.staging,
+          inspection.mode,
+          inspection.validation,
+          inspection.errors,
+        ),
+      );
+      return 1;
+    }
+    print({
+      valid: true,
+      staging: inspection.staging,
+      mode: inspection.mode,
+      upToStep: upTo,
+      completedSteps: inspection.completedSteps,
+      nextStep: inspection.nextStep,
+      message: `step ${upTo}までの必須Step記録は有効です`,
+    });
+    return 0;
+  }
+  if (command === "workflow")
+    throw new Error("workflowにはsteps、record、verifyのいずれかが必要です");
   if (command === "issue" && subcommand === "create") {
     const { flags } = parse(rest);
     const root = path.resolve(
@@ -1438,6 +1706,7 @@ export async function main(argv: string[]): Promise<number> {
       createIssueStaging(root, {
         title: required(flags, "title"),
         answers: assessment,
+        now: new Date(),
       }),
     );
     return 0;
@@ -2552,18 +2821,105 @@ export async function main(argv: string[]): Promise<number> {
   if (command === "pr" && subcommand === "create") {
     const { flags } = parse(rest);
     const apply = applyMode(flags);
-    const evidenceFile = path.resolve(required(flags, "evidence"));
-    const evidence = readDeliveryEvidence(evidenceFile);
     const root = path.resolve(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
-    const headSha = required(flags, "head-sha");
-    if (!/^[a-f0-9]{40}$/iu.test(headSha))
-      throw new Error("--head-shaは完全な40桁Git SHAで指定してください");
     const issueRaw = required(flags, "issue");
     if (!/^[1-9]\d*$/u.test(issueRaw))
       throw new Error("--issueは正のIssue番号で指定してください");
     const issue = Number(issueRaw);
+    const staging = resolvePullRequestStaging({
+      root,
+      staging: typeof flags.staging === "string" ? flags.staging : undefined,
+      issue,
+    });
+    const inspection = inspectWorkflowStaging(staging, 10);
+    const journal = readWorkflowJournal(staging);
+    let workflowValidation = inspection.validation;
+    let effectiveEntries = journal.entries;
+    const overrideFile =
+      typeof flags["workflow-override"] === "string"
+        ? flags["workflow-override"]
+        : undefined;
+    const nonMissingFailure =
+      inspection.errors.length > 0 ||
+      workflowValidation.unexpectedSteps.length > 0 ||
+      workflowValidation.outOfOrder.length > 0 ||
+      workflowValidation.modeConflicts.length > 0 ||
+      workflowValidation.errors.length > 0;
+    if (overrideFile && workflowValidation.missingSteps.length > 0) {
+      if (nonMissingFailure) {
+        print(
+          workflowDiagnostic(staging, inspection.mode, workflowValidation, [
+            ...inspection.errors,
+            "HumanOverrideは欠落Step以外のjournal不整合を迂回できません",
+          ]),
+        );
+        return 1;
+      }
+      const override = readJournalOverride(overrideFile);
+      const now = new Date().toISOString();
+      const overrideValidation = validateJournalHumanOverride({
+        override,
+        issue,
+        now,
+      });
+      if (!overrideValidation.valid) {
+        print(
+          workflowDiagnostic(staging, inspection.mode, workflowValidation, [
+            ...overrideValidation.errors,
+          ]),
+        );
+        return 1;
+      }
+      const overrideEntries = workflowValidation.missingSteps.map((number) => {
+        const definition = workflowStep(number);
+        if (!definition) throw new Error(`step ${number}の定義がありません`);
+        return {
+          step: number,
+          skillId: definition.skillId,
+          mode: inspection.mode,
+          recordedAt: now,
+          artifacts: [`human-override:${override.instructedBy}`],
+          evidence: override.reason,
+          humanOverride: override,
+        } satisfies StepJournalEntry;
+      });
+      effectiveEntries = [...effectiveEntries, ...overrideEntries];
+      workflowValidation = validateStepJournal({
+        mode: inspection.mode,
+        entries: effectiveEntries,
+        upToStep: 10,
+      });
+      if (workflowValidation.valid && apply)
+        for (const entry of overrideEntries)
+          appendWorkflowJournalEntry({ staging, entry });
+    }
+    const mandatoryRecorded = [4, 10].every((step) =>
+      effectiveEntries.some((entry) => entry.step === step),
+    );
+    const stagingReady = inspection.state === "sync-verified";
+    if (!workflowValidation.valid || !mandatoryRecorded || !stagingReady) {
+      print(
+        workflowDiagnostic(staging, inspection.mode, workflowValidation, [
+          ...inspection.errors,
+          ...(mandatoryRecorded
+            ? []
+            : [
+                "step 4（Issue同期）とstep 10（実装レビュー）はPR作成前に必須です",
+              ]),
+          ...(stagingReady
+            ? []
+            : ["staging recordがsync-verifiedではありません"]),
+        ]),
+      );
+      return 1;
+    }
+    const evidenceFile = path.resolve(required(flags, "evidence"));
+    const evidence = readDeliveryEvidence(evidenceFile);
+    const headSha = required(flags, "head-sha");
+    if (!/^[a-f0-9]{40}$/iu.test(headSha))
+      throw new Error("--head-shaは完全な40桁Git SHAで指定してください");
     const canonicalRaw =
       typeof flags["canonical-issue"] === "string"
         ? flags["canonical-issue"]
@@ -2588,11 +2944,29 @@ export async function main(argv: string[]): Promise<number> {
       trustedPolicy: loadOperationPolicy(root).policy,
       candidatePolicy: loadConsumerPolicyAtCommit(root, headSha),
     };
-    print(
-      createPullRequest(input, (operation, payload) =>
-        github(operation, payload, root),
-      ),
+    const created = createPullRequest(input, (operation, payload) =>
+      github(operation, payload, root),
     );
+    if (apply && created.state === "waiting_for_human_review") {
+      const definition = workflowStep(11);
+      if (!definition) throw new Error("step 11の定義がありません");
+      if (typeof created.url !== "string" || created.url.trim() === "")
+        throw new Error("PR作成後のURLがありません");
+      const recorded = appendWorkflowJournalEntry({
+        staging,
+        entry: {
+          step: 11,
+          skillId: definition.skillId,
+          mode: inspection.mode,
+          recordedAt: new Date().toISOString(),
+          artifacts: [created.url],
+          evidence: "PR作成後のURLを確認しwaiting_for_human_reviewで停止した",
+        },
+      });
+      print({ ...created, workflow: recorded });
+      return 0;
+    }
+    print(created);
     return 0;
   }
   if (command === "pr" && subcommand === "merge") {

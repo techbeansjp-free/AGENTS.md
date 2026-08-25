@@ -20,6 +20,11 @@ import {
   STAGING_RECORD_FILE,
   type StoredStagingRecord,
 } from "./staging.js";
+import {
+  renderModeDecision,
+  WORKFLOW_STEPS,
+  type StepJournalEntry,
+} from "./workflow.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
 const templateRoot = path.join(
@@ -126,7 +131,7 @@ export function createIssueStaging(
   options: {
     title: string;
     answers: Record<string, ModeAnswer>;
-    now?: Date;
+    now: Date;
     requestedMode?: string;
     poc?: PocDeclaration;
     changedFiles?: string[];
@@ -143,9 +148,10 @@ export function createIssueStaging(
     ".agent-skill-chain",
     "tmp",
     "issues",
-    `${timestamp(options.now ?? new Date())}_${slug}`,
+    `${timestamp(options.now)}_${slug}`,
   );
   publishDirectoryAtomic(finalPath, (temporary) => {
+    const decidedAt = options.now.toISOString();
     fs.writeFileSync(
       path.join(temporary, "00_要求定義.md"),
       requirementDocument(
@@ -155,6 +161,39 @@ export function createIssueStaging(
         options.poc,
       ),
       { flag: "wx" },
+    );
+    const requestedMode: Mode =
+      options.requestedMode === "quick" ||
+      options.requestedMode === "full" ||
+      options.requestedMode === "poc"
+        ? options.requestedMode
+        : decision.mode;
+    fs.writeFileSync(
+      path.join(temporary, "00_モード判定.json"),
+      renderModeDecision({
+        requestedMode,
+        answers: options.answers,
+        decidedAt,
+        poc: options.poc,
+        changedFiles: options.changedFiles,
+      }),
+      { flag: "wx", mode: 0o600 },
+    );
+    const step = WORKFLOW_STEPS[0];
+    if (!step) throw new Error("Step 0定義がありません");
+    const initialEntry: StepJournalEntry = {
+      step: step.step,
+      skillId: step.skillId,
+      mode: decision.mode,
+      recordedAt: decidedAt,
+      artifacts: ["00_モード判定.json"],
+      evidence: "モード判定成果物と一時stagingを原子的に生成した",
+    };
+    fs.mkdirSync(path.join(temporary, "journal"), { mode: 0o700 });
+    fs.writeFileSync(
+      path.join(temporary, "journal", "steps.jsonl"),
+      `${JSON.stringify(initialEntry)}\n`,
+      { flag: "wx", mode: 0o600 },
     );
     if (decision.mode === "full") {
       for (const [name, template] of Object.entries(FULL_FILES))
@@ -171,7 +210,7 @@ export function createIssueStaging(
       artifacts,
       digest: calculateStagingDigest(temporary, artifacts),
       owner: "runtime・project owner",
-      createdAt: (options.now ?? new Date()).toISOString(),
+      createdAt: decidedAt,
       state: "local-active",
       tracker: null,
       checkpoint: null,

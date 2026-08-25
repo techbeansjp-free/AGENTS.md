@@ -38,6 +38,7 @@
     "directories:check": "node --import tsx scripts/check_directory_guides.ts",
     "skills:check": "node --import tsx scripts/check_skill_templates.ts",
     "cli:check": "node --import tsx scripts/check_cli_contract.ts",
+    "workflow:check": "node --import tsx scripts/check_workflow_steps.ts",
     "project:quality": "node --import tsx scripts/check_project_quality.ts",
     "lint": "eslint .",
     "format:check": "prettier --check \"{src,bin,scripts,test}/**/*.{ts,json}\" \".agent-skill-chain/**/*.json\" \"*.{json,mjs}\" \".github/**/*.{json,yml}\"",

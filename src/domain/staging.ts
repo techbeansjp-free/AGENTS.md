@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { git } from "../lib/process.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
+import { writeFileAtomic } from "../lib/atomic.js";
 import { isRecord } from "../types.js";
 
 export type StagingState =
@@ -453,6 +454,26 @@ export function readStoredStagingRecord(
   return parseStoredRecord(
     fs.readFileSync(path.join(directory, STAGING_RECORD_FILE), "utf8"),
   );
+}
+
+export function refreshStoredStagingDigest(
+  directory: string,
+): StoredStagingRecord {
+  const current = readStoredStagingRecord(directory);
+  const artifacts = listStagingArtifacts(directory);
+  const updated: StoredStagingRecord = {
+    ...current,
+    artifacts,
+    digest: calculateStagingDigest(directory, artifacts),
+  };
+  writeFileAtomic(
+    path.join(directory, STAGING_RECORD_FILE),
+    `${JSON.stringify(updated, null, 2)}\n`,
+  );
+  const reread = readStoredStagingRecord(directory);
+  if (JSON.stringify(reread) !== JSON.stringify(updated))
+    throw new Error("staging digestの書き込み後読み取り確認に失敗しました");
+  return reread;
 }
 
 function baseRecord(

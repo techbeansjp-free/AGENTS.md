@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/techbeansjp-free/AGENTS.md/blob/main/.agent-skill-chain/schemas/workflow-mode-decision.schema.json",
+  "title": "Workflow mode decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mode", "requestedMode", "answers", "reasons", "decidedAt"],
+  "properties": {
+    "mode": { "enum": ["quick", "full", "poc"] },
+    "requestedMode": { "enum": ["quick", "full", "poc"] },
+    "answers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Q-01",
+        "Q-02",
+        "Q-03",
+        "Q-04",
+        "Q-05",
+        "Q-06",
+        "Q-07",
+        "Q-08"
+      ],
+      "properties": {
+        "Q-01": { "$ref": "#/$defs/answer" },
+        "Q-02": { "$ref": "#/$defs/answer" },
+        "Q-03": { "$ref": "#/$defs/answer" },
+        "Q-04": { "$ref": "#/$defs/answer" },
+        "Q-05": { "$ref": "#/$defs/answer" },
+        "Q-06": { "$ref": "#/$defs/answer" },
+        "Q-07": { "$ref": "#/$defs/answer" },
+        "Q-08": { "$ref": "#/$defs/answer" }
+      }
+    },
+    "reasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "decidedAt": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "poc": { "$ref": "#/$defs/pocDeclaration" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "mode": { "const": "poc" } },
+        "required": ["mode"]
+      },
+      "then": { "required": ["poc"] }
+    }
+  ],
+  "$defs": {
+    "answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["answer", "evidence"],
+      "properties": {
+        "answer": { "enum": [true, false, "unknown"] },
+        "evidence": { "type": "string", "minLength": 1, "pattern": "\\S" }
+      }
+    },
+    "pocDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "period",
+        "outOfScope",
+        "successCriteria",
+        "abortCriteria",
+        "owner",
+        "highRisk"
+      ],
+      "properties": {
+        "purpose": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "period": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {
+            "from": { "type": "string", "minLength": 1, "pattern": "\\S" },
+            "to": { "type": "string", "minLength": 1, "pattern": "\\S" }
+          }
+        },
+        "outOfScope": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "successCriteria": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "abortCriteria": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "owner": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "highRisk": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "present", "evidence"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+              "present": { "type": "boolean" },
+              "evidence": { "type": "string", "minLength": 1, "pattern": "\\S" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

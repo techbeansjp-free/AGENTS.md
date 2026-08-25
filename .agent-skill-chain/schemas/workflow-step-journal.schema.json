@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/techbeansjp-free/AGENTS.md/blob/main/.agent-skill-chain/schemas/workflow-step-journal.schema.json",
+  "title": "Workflow step journal entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "step",
+    "skillId",
+    "mode",
+    "recordedAt",
+    "artifacts",
+    "evidence"
+  ],
+  "properties": {
+    "step": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 11
+    },
+    "skillId": {
+      "enum": [
+        "step-00-stage",
+        "step-01-request",
+        "step-02-requirements",
+        "step-03-requirements-review",
+        "step-04-issue-sync",
+        "step-05-design",
+        "step-06-plan",
+        "step-07-design-review",
+        "step-08-design-sync",
+        "step-09-implement",
+        "step-10-review",
+        "step-11-pr"
+      ]
+    },
+    "mode": {
+      "enum": ["quick", "full", "poc"]
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      }
+    },
+    "evidence": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "humanOverride": {
+      "$ref": "#/$defs/humanOverride"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "step": { "const": 0 } } },
+      "then": { "properties": { "skillId": { "const": "step-00-stage" } } }
+    },
+    {
+      "if": { "properties": { "step": { "const": 1 } } },
+      "then": { "properties": { "skillId": { "const": "step-01-request" } } }
+    },
+    {
+      "if": { "properties": { "step": { "const": 2 } } },
+      "then": {
+        "properties": { "skillId": { "const": "step-02-requirements" } }
+      }
+    },
+    {
+      "if": { "properties": { "step": { "const": 3 } } },
+      "then": {
+        "properties": { "skillId": { "const": "step-03-requirements-review" } }
+      }
+    },
+    {
+      "if": { "properties": { "step": { "const": 4 } } },
+      "then": { "properties": { "skillId": { "const": "step-04-issue-sync" } } }
+    },
+    {
+      "if": { "properties": { "step": { "const": 5 } } },
+      "then": { "properties": { "skillId": { "const": "step-05-design" } } }
+    },
+    {
+      "if": { "properties": { "step": { "const": 6 } } },
+      "then": { "properties": { "skillId": { "const": "step-06-plan" } } }
+    },
+    {
+      "if": { "properties": { "step": { "const": 7 } } },
+      "then": {
+        "properties": { "skillId": { "const": "step-07-design-review" } }
+      }
+    },
+    {
+      "if": { "properties": { "step": { "const": 8 } } },
+      "then": {
+        "properties": { "skillId": { "const": "step-08-design-sync" } }
+      }
+    },
+    {
+      "if": { "properties": { "step": { "const": 9 } } },
+      "then": { "properties": { "skillId": { "const": "step-09-implement" } } }
+    },
+    {
+      "if": { "properties": { "step": { "const": 10 } } },
+      "then": { "properties": { "skillId": { "const": "step-10-review" } } }
+    },
+    {
+      "if": { "properties": { "step": { "const": 11 } } },
+      "then": { "properties": { "skillId": { "const": "step-11-pr" } } }
+    }
+  ],
+  "$defs": {
+    "humanOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issue",
+        "scope",
+        "instructedBy",
+        "instructedAt",
+        "expiresAt",
+        "reason"
+      ],
+      "properties": {
+        "issue": { "type": "integer", "minimum": 1 },
+        "scope": { "const": "workflow.pr.create" },
+        "instructedBy": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "instructedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "reason": { "type": "string", "minLength": 1, "pattern": "\\S" }
+      }
+    }
+  }
+}
