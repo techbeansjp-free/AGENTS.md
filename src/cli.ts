@@ -31,6 +31,7 @@ import {
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
 import {
   loadConsumerPolicyAtCommit,
+  conformanceDeclarationFromPolicySet,
   loadEffectiveTrustedPolicySet,
   loadOperationPolicy,
   loadProjectPolicySet,
@@ -1030,11 +1031,20 @@ export async function main(argv: string[]): Promise<number> {
     const contract = readJsonInput(path.resolve(required(flags, "contract")));
     const binding = readJsonInput(path.resolve(required(flags, "binding")));
     const evidence = readJsonInput(path.resolve(required(flags, "evidence")));
+    const projectPolicyFile = path.join(
+      root,
+      ".agent-skill-chain",
+      "project-policy.json",
+    );
+    const rules = fs.existsSync(projectPolicyFile)
+      ? loadProjectPolicySet(root).rules
+      : [];
     const result = validateRepositoryConformance(
       root,
       contract,
       binding,
       evidence,
+      rules,
     );
     print(
       result.valid
@@ -1048,7 +1058,7 @@ export async function main(argv: string[]): Promise<number> {
               reasons: result.errors,
               scope: ["conformance"],
               checks: [
-                "exact invariant、source、export、SCN、成功証拠を検証した",
+                "exact invariant、source、enforcement point、project rule参照、SCN、成功証拠を検証した",
               ],
               autoFixes: [],
               next: "不足するproject bindingまたは成功証拠を追加してください",
@@ -1156,6 +1166,11 @@ export async function main(argv: string[]): Promise<number> {
       const comparison = compareTrustedPolicy(
         trustedSet.policy,
         effective.policy,
+        {
+          trustedConformance: conformanceDeclarationFromPolicySet(trustedSet),
+          candidateConformance:
+            conformanceDeclarationFromPolicySet(candidateSet),
+        },
       );
       if (!comparison.allowed) {
         const result = {
@@ -1244,6 +1259,11 @@ export async function main(argv: string[]): Promise<number> {
       const comparison = compareTrustedPolicy(
         trustedSet.policy,
         effective.policy,
+        {
+          trustedConformance: conformanceDeclarationFromPolicySet(trustedSet),
+          candidateConformance:
+            conformanceDeclarationFromPolicySet(candidateSet),
+        },
       );
       const result = {
         valid: comparison.allowed,

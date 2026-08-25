@@ -8,6 +8,12 @@ export interface ApplicabilityDecision {
   evidence: string;
 }
 
+export interface NotApplicableDecision extends ApplicabilityDecision {
+  status: "not-applicable";
+}
+
+export type QualityCommandChoice = string | NotApplicableDecision;
+
 export type RoutingRole = "coordinator" | "implementer" | "reviewer";
 export type RoutingRouteMode = "preferred" | "fallback";
 export type RoutingModelSelection =
@@ -125,13 +131,13 @@ export interface ProjectChoices {
   };
   quality: {
     implementationLanguage: string;
-    strictTypecheck: true;
+    strictTypecheck: true | NotApplicableDecision;
     forbiddenTypes: string[];
-    lintCommand: string;
-    formatCheckCommand: string;
-    formatWriteCommand: string;
-    typecheckCommand: string;
-    runtimeValidation: string;
+    lintCommand: QualityCommandChoice;
+    formatCheckCommand: QualityCommandChoice;
+    formatWriteCommand: QualityCommandChoice;
+    typecheckCommand: QualityCommandChoice;
+    runtimeValidation: QualityCommandChoice;
     auxiliaryLanguages: Record<string, ApplicabilityDecision>;
   };
 }

@@ -152,18 +152,19 @@
       ],
       "properties": {
         "implementationLanguage": { "type": "string", "minLength": 1 },
-        "strictTypecheck": { "const": true },
+        "strictTypecheck": {
+          "oneOf": [{ "const": true }, { "$ref": "#/$defs/notApplicable" }]
+        },
         "forbiddenTypes": {
           "type": "array",
-          "minItems": 1,
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }
         },
-        "lintCommand": { "type": "string", "minLength": 1 },
-        "formatCheckCommand": { "type": "string", "minLength": 1 },
-        "formatWriteCommand": { "type": "string", "minLength": 1 },
-        "typecheckCommand": { "type": "string", "minLength": 1 },
-        "runtimeValidation": { "type": "string", "minLength": 1 },
+        "lintCommand": { "$ref": "#/$defs/qualityValue" },
+        "formatCheckCommand": { "$ref": "#/$defs/qualityValue" },
+        "formatWriteCommand": { "$ref": "#/$defs/qualityValue" },
+        "typecheckCommand": { "$ref": "#/$defs/qualityValue" },
+        "runtimeValidation": { "$ref": "#/$defs/qualityValue" },
         "auxiliaryLanguages": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/applicability" }
@@ -256,6 +257,21 @@
         "reason": { "type": "string", "minLength": 8 },
         "evidence": { "type": "string", "minLength": 4 }
       }
+    },
+    "notApplicable": {
+      "allOf": [
+        { "$ref": "#/$defs/applicability" },
+        {
+          "type": "object",
+          "properties": { "status": { "const": "not-applicable" } }
+        }
+      ]
+    },
+    "qualityValue": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "$ref": "#/$defs/notApplicable" }
+      ]
     }
   }
 }

@@ -22,6 +22,15 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 | `review validate` | tracked review file | rubricと構造だけを検証する。file内のGitHub metadataをauthorityにせず、承認はtrusted provider観測待ちのpending |
 | `trace validate` | project adapterが作成した`--evidence` JSONとproject choices | runner・file形式・表示言語・Gherkin方言を所有せず、stable ID、canonical step role、選択層、禁止file証拠を検証 |
 
+## project導入・診断出力
+
+| コマンド | 追加出力 | 契約 |
+|---|---|---|
+| `doctor` | `projectPolicyStatus`、`projectPolicyMessage` | project policyを`missing / valid / invalid / unsupported-version`のいずれかで報告する。`healthy`は従来どおりinstall健全性だけを表し、policy欠落・不正によって意味や終了codeを変えない |
+| `project bootstrap` | `generatedScope`、`projectPolicyStatus`、`projectPolicyNotice`、`nextSafeOperation` | `docs/specs/`だけを生成し、project policyは生成も検証もしない。利用project ownerがmanifestと列挙資産を作成し、`policy validate`と`conformance validate`を行う次操作を日本語で返す |
+
+`doctor`の`unsupported-version`は入力を保持したstaged migrationを案内する。`missing`と`invalid`はinstall成功に隠さず明示するが、package資産の導入状態とconsumer所有policyの妥当性を同じhealth判定へ混在させない。
+
 ## Routingサブコマンド
 
 | コマンド | 入力 | 出力・終了code |

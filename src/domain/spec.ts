@@ -173,8 +173,21 @@ export function bootstrapProject(
   const specs = path.join(root, "docs", "specs");
   const planned = selectedTemplateFiles(options.projectKind);
   const withTokens = UI_PROJECT_KINDS.has(options.projectKind);
+  const policyNotice = {
+    generatedScope: options.apply ? ["docs/specs/"] : [],
+    projectPolicyStatus: "not-generated-not-validated" as const,
+    projectPolicyNotice:
+      "docs/specs/だけを生成対象とし、project policyは生成も検証もしていません",
+    nextSafeOperation:
+      ".agent-skill-chain/project-policy.jsonと列挙するproject資産をproject ownerが作成し、policy validateとconformance validateを実行してください",
+  };
   if (!options.apply)
-    return { applied: false, planned, tokenSpecs: withTokens };
+    return {
+      applied: false,
+      planned,
+      tokenSpecs: withTokens,
+      ...policyNotice,
+    };
   if (fs.existsSync(specs))
     throw new Error(
       "docs/specsは既に存在します。利用側所有資産を上書きしません",
@@ -191,7 +204,7 @@ export function bootstrapProject(
       );
     }
   });
-  return { applied: true, planned, tokenSpecs: withTokens };
+  return { applied: true, planned, tokenSpecs: withTokens, ...policyNotice };
 }
 
 export function validateSpecs(
