@@ -1454,7 +1454,7 @@ Given("runtime sourceを走査する", function () {
 When("skill contractを数える", function () {
   this.skills = fs
     .readdirSync(".agent-skill-chain/skills", { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("step-"))
     .map((entry) => entry.name)
     .sort();
 });

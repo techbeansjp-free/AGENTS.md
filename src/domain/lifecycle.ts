@@ -12,6 +12,11 @@ const ROOT_ASSETS = ["AGENTS.md"];
 const NAMESPACE_ROOT_ASSETS = ["00_利用案内.md"];
 const NAMESPACE_ASSETS = ["docs", "skills", "templates", "schemas", "policy"];
 const MANAGED_RECORD = ".agent-skill-chain/managed-assets.json";
+const HOST_SKILL_SOURCE = ".agent-skill-chain/skills/asc-step/SKILL.md";
+const HOST_SKILL_TARGETS = [
+  ".claude/skills/asc-step/SKILL.md",
+  ".agents/skills/asc-step/SKILL.md",
+] as const;
 const SHA256 = /^[a-f0-9]{64}$/u;
 
 interface ManagedAssetRecord {
@@ -39,6 +44,9 @@ function isPackageOwnedPath(relative: string): boolean {
   const normalized = relative.replaceAll("\\", "/");
   return (
     normalized === "AGENTS.md" ||
+    HOST_SKILL_TARGETS.includes(
+      normalized as (typeof HOST_SKILL_TARGETS)[number],
+    ) ||
     NAMESPACE_ROOT_ASSETS.some(
       (file) => normalized === `.agent-skill-chain/${file}`,
     ) ||
@@ -132,14 +140,16 @@ function walkFiles(directory: string): string[] {
 }
 
 function mappings(target: string): Array<{ src: string; dest: string }> {
+  const destination = (relative: string): string =>
+    resolveContained(target, relative, { allowMissingLeaf: true });
   const result = ROOT_ASSETS.map((name) => ({
     src: path.join(packageRoot, name),
-    dest: path.join(target, name),
+    dest: destination(name),
   }));
   for (const file of NAMESPACE_ROOT_ASSETS)
     result.push({
       src: path.join(packageRoot, ".agent-skill-chain", file),
-      dest: path.join(target, ".agent-skill-chain", file),
+      dest: destination(path.join(".agent-skill-chain", file)),
     });
   for (const directory of NAMESPACE_ASSETS) {
     const source = path.join(packageRoot, ".agent-skill-chain", directory);
@@ -148,10 +158,15 @@ function mappings(target: string): Array<{ src: string; dest: string }> {
       const relative = path.relative(source, file);
       result.push({
         src: path.join(source, relative),
-        dest: path.join(target, ".agent-skill-chain", directory, relative),
+        dest: destination(path.join(".agent-skill-chain", directory, relative)),
       });
     }
   }
+  for (const relative of HOST_SKILL_TARGETS)
+    result.push({
+      src: path.join(packageRoot, HOST_SKILL_SOURCE),
+      dest: destination(relative),
+    });
   return result;
 }
 
@@ -194,6 +209,7 @@ export function upgrade(target: string, options: { apply: boolean }) {
   const { record: old } = readManagedAssetRecord(target);
   const current = mappings(target);
   const retained: string[] = [];
+  const adoptable: string[] = [];
   const planned: Array<{
     src: string;
     dest: string;
@@ -203,40 +219,62 @@ export function upgrade(target: string, options: { apply: boolean }) {
   for (const item of current) {
     const key = relativeKey(target, item.dest);
     const expected = old.files[key];
-    if (
-      pathEntryExists(item.dest) &&
-      (!isRegularFile(item.dest) || !expected || digest(item.dest) !== expected)
-    )
+    if (!pathEntryExists(item.dest)) {
+      planned.push({ ...item, key, expected });
+      continue;
+    }
+    if (!isRegularFile(item.dest)) {
       retained.push(key);
-    else planned.push({ ...item, key, expected });
+      continue;
+    }
+    if (expected) {
+      if (digest(item.dest) === expected)
+        planned.push({ ...item, key, expected });
+      else retained.push(key);
+      continue;
+    }
+    if (digest(item.dest) === digest(item.src)) {
+      planned.push({ ...item, key, expected });
+      adoptable.push(key);
+    } else retained.push(key);
   }
   if (!options.apply)
     return {
       applied: false,
       planned: planned.map((item) => item.key),
+      adopted: adoptable,
       retained,
     };
   const next: { version: string; files: Record<string, string> } = {
     version: PACKAGE_VERSION,
     files: { ...old.files },
   };
+  const adopted: string[] = [];
   for (const item of planned) {
     fs.mkdirSync(path.dirname(item.dest), { recursive: true });
     if (pathEntryExists(item.dest)) {
-      if (
-        !item.expected ||
-        !isRegularFile(item.dest) ||
-        digest(item.dest) !== item.expected
-      ) {
+      if (!isRegularFile(item.dest)) {
         retained.push(item.key);
         continue;
       }
-      fs.copyFileSync(item.src, item.dest);
+      if (item.expected) {
+        if (digest(item.dest) !== item.expected) {
+          retained.push(item.key);
+          continue;
+        }
+        fs.copyFileSync(item.src, item.dest);
+      } else {
+        if (digest(item.dest) !== digest(item.src)) {
+          retained.push(item.key);
+          continue;
+        }
+        adopted.push(item.key);
+      }
     } else fs.copyFileSync(item.src, item.dest, fs.constants.COPYFILE_EXCL);
     next.files[item.key] = digest(item.dest);
   }
   writeFileAtomic(recordPath, `${JSON.stringify(next, null, 2)}\n`);
-  return { applied: true, retained };
+  return { applied: true, adopted, retained };
 }
 
 export function uninstall(
@@ -325,16 +363,95 @@ export function uninstall(
   };
 }
 
+function hasLegacyAgentsAssets(target: string): boolean {
+  const agents = path.join(target, ".agents");
+  if (!pathEntryExists(agents)) return false;
+  if (!fs.lstatSync(agents).isDirectory()) return true;
+  return walkFiles(agents).some(
+    (file) => relativeKey(target, file) !== HOST_SKILL_TARGETS[1],
+  );
+}
+
+function validateAdapterFrontmatter(markdown: string): boolean {
+  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/u.exec(markdown)?.[1];
+  return Boolean(
+    frontmatter &&
+    /^name:\s*asc-step\s*$/mu.test(frontmatter) &&
+    /^description:\s*\S.+$/mu.test(frontmatter),
+  );
+}
+
 export function doctor(target: string) {
-  const legacy = [".agents", ".workflow"].filter((name) =>
-    fs.existsSync(path.join(target, name)),
-  );
-  const installed = fs.existsSync(
-    path.join(target, ".agent-skill-chain", "managed-assets.json"),
-  );
+  const legacy = [
+    ...(hasLegacyAgentsAssets(target) ? [".agents"] : []),
+    ...(pathEntryExists(path.join(target, ".workflow")) ? [".workflow"] : []),
+  ];
+  const recordPath = path.join(target, MANAGED_RECORD);
+  const installed = pathEntryExists(recordPath);
+  const diagnostics: string[] = [];
+  let files: Record<string, string> = {};
+  let managedAssets: ManagedAsset[] = [];
+  if (!installed)
+    diagnostics.push(`${MANAGED_RECORD}: managed recordがありません`);
+  else {
+    try {
+      const managed = readManagedAssetRecord(target);
+      files = managed.record.files;
+      managedAssets = managed.assets;
+    } catch (error) {
+      diagnostics.push(
+        `${MANAGED_RECORD}: ${error instanceof Error ? error.message : "検証できません"}`,
+      );
+    }
+  }
+
+  for (const asset of managedAssets) {
+    if (!pathEntryExists(asset.file) || !isRegularFile(asset.file)) {
+      diagnostics.push(`${asset.relative}: managed通常fileがありません`);
+      continue;
+    }
+    if (digest(asset.file) !== asset.expected)
+      diagnostics.push(`${asset.relative}: managed hashが一致しません`);
+  }
+
+  const source = path.join(target, HOST_SKILL_SOURCE);
+  let sourceHash: string | undefined;
+  if (!pathEntryExists(source) || !isRegularFile(source))
+    diagnostics.push(`${HOST_SKILL_SOURCE}: 通常fileがありません`);
+  else {
+    const markdown = fs.readFileSync(source, "utf8");
+    sourceHash = digest(source);
+    if (!validateAdapterFrontmatter(markdown))
+      diagnostics.push(`${HOST_SKILL_SOURCE}: frontmatterが不正です`);
+    if (
+      !markdown.includes(
+        "../../../.agent-skill-chain/docs/01_開発ワークフロー.md",
+      ) ||
+      !markdown.includes(".agent-skill-chain/skills/step-NN-")
+    )
+      diagnostics.push(`${HOST_SKILL_SOURCE}: 正本linkが不正です`);
+  }
+
+  for (const relative of HOST_SKILL_TARGETS) {
+    const file = path.join(target, relative);
+    if (!pathEntryExists(file) || !isRegularFile(file)) {
+      diagnostics.push(`${relative}: 通常fileがありません`);
+      continue;
+    }
+    const actual = digest(file);
+    if (!sourceHash || actual !== sourceHash)
+      diagnostics.push(`${relative}: adapter正本とhashが一致しません`);
+    if (files[relative] !== actual)
+      diagnostics.push(`${relative}: managed recordとhashが一致しません`);
+  }
   return {
-    healthy: installed,
+    healthy: installed && diagnostics.length === 0,
     installed,
+    adapters: {
+      expected: [...HOST_SKILL_TARGETS],
+      healthy: diagnostics.length === 0,
+      diagnostics,
+    },
     legacyDetected: legacy,
     legacyRuntimeEnabled: false,
     migration: legacy.length

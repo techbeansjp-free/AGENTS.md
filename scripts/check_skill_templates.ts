@@ -119,6 +119,8 @@ const ROUTING_INPUT_CONTRACT_MARKERS = [
   "独立性証拠欄",
 ] as const;
 
+const HOST_ADAPTER_SKILL = "asc-step";
+
 const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
   ["step-00-stage", []],
   [
@@ -226,18 +228,46 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
   const skillsRoot = path.resolve(root, ".agent-skill-chain/skills");
   const templatesRoot = path.resolve(root, ".agent-skill-chain/templates");
   const namespaceRoot = path.resolve(root, ".agent-skill-chain");
-  const actualSkills = fs.existsSync(skillsRoot)
+  const actualSkillDirectories = fs.existsSync(skillsRoot)
     ? fs
         .readdirSync(skillsRoot, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)
         .sort()
     : [];
+  const actualSkills = actualSkillDirectories.filter((name) =>
+    name.startsWith("step-"),
+  );
   const expectedSkills = [...EXPECTED_TEMPLATE_LINKS.keys()].sort();
+  const expectedSkillDirectories = [
+    ...expectedSkills,
+    HOST_ADAPTER_SKILL,
+  ].sort();
+  if (
+    JSON.stringify(actualSkillDirectories) !==
+    JSON.stringify(expectedSkillDirectories)
+  )
+    errors.push(
+      `skill集合がStep 0〜11とhost adapterの正規集合に一致しません: ${actualSkillDirectories.join(",")}`,
+    );
   if (JSON.stringify(actualSkills) !== JSON.stringify(expectedSkills))
     errors.push(
       `Step skill集合が0〜11の正規集合と一致しません: ${actualSkills.join(",")}`,
     );
+  const hostAdapter = path.join(skillsRoot, HOST_ADAPTER_SKILL, "SKILL.md");
+  if (!fs.existsSync(hostAdapter))
+    errors.push(`${HOST_ADAPTER_SKILL}/SKILL.mdがありません`);
+  else {
+    const markdown = fs.readFileSync(hostAdapter, "utf8");
+    for (const marker of [
+      "name: asc-step",
+      "../../../.agent-skill-chain/docs/01_開発ワークフロー.md",
+      ".agent-skill-chain/skills/step-NN-",
+      "相対link",
+    ])
+      if (!markdown.includes(marker))
+        errors.push(`${HOST_ADAPTER_SKILL}/SKILL.mdに${marker}がありません`);
+  }
   for (const relative of ROUTING_INPUT_CONTRACT_ASSETS) {
     const file = path.join(namespaceRoot, relative);
     if (!fs.existsSync(file)) {

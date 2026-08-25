@@ -19,6 +19,10 @@ const ENTRY_DOCUMENTS = new Map([
   [".agent-skill-chain/schemas", ".agent-skill-chain/schemas/00_利用案内.md"],
   [".agent-skill-chain/skills", ".agent-skill-chain/skills/00_利用案内.md"],
   [
+    ".agent-skill-chain/skills/asc-step",
+    ".agent-skill-chain/skills/asc-step/SKILL.md",
+  ],
+  [
     ".agent-skill-chain/templates",
     ".agent-skill-chain/templates/00_利用案内.md",
   ],
