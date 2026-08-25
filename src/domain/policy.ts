@@ -97,6 +97,51 @@ function validateStringArray(
     errors.push(`${name}に重複があります`);
 }
 
+function validateWorktreePlacementPolicy(
+  value: unknown,
+  name: string,
+  errors: string[],
+): void {
+  rejectUnknownKeys(
+    value,
+    [
+      "root",
+      "namePattern",
+      "branchPattern",
+      "allowedBranchTypes",
+      "base",
+      "cleanup",
+    ],
+    name,
+    errors,
+  );
+  const worktree = isRecord(value) ? value : {};
+  const constants = {
+    root: ".worktrees",
+    namePattern: "{timestamp}-{issueNumber}-{slug}",
+    branchPattern: "{type}/{issueNumber}-{slug}",
+    base: "remote-default-branch",
+    cleanup: "after-merge",
+  } as const;
+  for (const [field, expected] of Object.entries(constants))
+    if (worktree[field] !== expected)
+      errors.push(`${name}.${field}は${expected}でなければなりません`);
+  validateStringArray(
+    worktree.allowedBranchTypes,
+    `${name}.allowedBranchTypes`,
+    errors,
+    { min: 1, max: 32 },
+  );
+  if (
+    Array.isArray(worktree.allowedBranchTypes) &&
+    worktree.allowedBranchTypes.some(
+      (item) =>
+        typeof item !== "string" || !/^[a-z][a-z0-9-]{0,31}$/u.test(item),
+    )
+  )
+    errors.push(`${name}.allowedBranchTypesの値が不正です`);
+}
+
 function hasConcreteDecisionText(value: unknown, minimum: number): boolean {
   return (
     typeof value === "string" &&
@@ -412,6 +457,7 @@ export function validatePolicy(policy: unknown) {
       "merge",
       "rules",
       "budgets",
+      "worktree",
       "projectChoices",
     ],
     "policy",
@@ -450,10 +496,11 @@ export function validatePolicy(policy: unknown) {
     compatibleInput &&
     (candidate.rules !== undefined ||
       candidate.budgets !== undefined ||
+      candidate.worktree !== undefined ||
       candidate.projectChoices !== undefined)
   )
     errors.push(
-      `${compatiblePolicyVersionLabels}ではrules、budgets、projectChoicesを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`,
+      `${compatiblePolicyVersionLabels}ではrules、budgets、worktree、projectChoicesを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`,
     );
   if (delivery.stopAt !== "pull_request")
     errors.push("delivery.stopAtはpull_requestでなければなりません");
@@ -499,6 +546,8 @@ export function validatePolicy(policy: unknown) {
         errors.push(`budgets.${key}は1以上の整数でなければなりません`);
     const enforcement = validateEnforcementPolicy(policy);
     errors.push(...enforcement.errors);
+    if (candidate.worktree !== undefined)
+      validateWorktreePlacementPolicy(candidate.worktree, "worktree", errors);
     if (projectChoices !== undefined)
       errors.push(...validateProjectChoices(projectChoices).errors);
   }
@@ -626,11 +675,12 @@ export function validateProjectPolicyManifest(manifest: unknown) {
   const delivery = isRecord(policy.delivery) ? policy.delivery : {};
   const merge = isRecord(policy.merge) ? policy.merge : {};
   const budgets = isRecord(policy.budgets) ? policy.budgets : {};
+  const worktree = policy.worktree;
   if (manifest.schemaVersion !== MANIFEST_VERSION)
     errors.push("manifest schemaVersionが不正です");
   rejectUnknownKeys(
     manifest.policy,
-    ["schemaVersion", "delivery", "merge", "budgets"],
+    ["schemaVersion", "delivery", "merge", "budgets", "worktree"],
     "manifest.policy",
     errors,
   );
@@ -640,6 +690,12 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     "manifest.policy.delivery",
     errors,
   );
+  if (worktree !== undefined)
+    validateWorktreePlacementPolicy(
+      worktree,
+      "manifest.policy.worktree",
+      errors,
+    );
   rejectUnknownKeys(
     policy.merge,
     ["mode", "branches", "methods", "requiredChecks", "requiredReviews"],
@@ -1162,6 +1218,10 @@ function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
     throw new Error(
       `effective policyを構成できません: ${effective.diagnostic?.reasons?.join("; ") ?? "不明な構成error"}`,
     );
+  const effectivePolicy: Policy = {
+    ...effective.policy,
+    worktree: project.worktree ?? floor.worktree,
+  };
   const setEntries = [
     ...baseEntries,
     ...projectSet.setEntries.map((entry): [string, string] => [
@@ -1180,13 +1240,13 @@ function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
     .digest("hex");
   return {
     ...projectSet,
-    policy: effective.policy,
+    policy: effectivePolicy,
     setHash,
     hash: setHash,
     setEntries,
     semanticPolicyHash: crypto
       .createHash("sha256")
-      .update(stableJson(effective.policy))
+      .update(stableJson(effectivePolicy))
       .digest("hex"),
     provenance: { ...projectSet.provenance, floorCommitSha: ref },
   };

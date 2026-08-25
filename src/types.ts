@@ -135,6 +135,14 @@ export interface Policy {
     requiredReviews: number;
   };
   budgets?: { localFeedbackMs?: number; prGateMs?: number };
+  worktree?: {
+    root: string;
+    namePattern: string;
+    branchPattern: string;
+    allowedBranchTypes: string[];
+    base: string;
+    cleanup: string;
+  };
   rules: Rule[];
   projectChoices?: ProjectChoices;
 }

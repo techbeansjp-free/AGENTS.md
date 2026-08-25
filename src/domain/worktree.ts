@@ -1,9 +1,158 @@
 import fs from "node:fs";
 import path from "node:path";
 import { git } from "../lib/process.js";
-import { safeSlug } from "../lib/security.js";
 import { enforceTrustedBoundary } from "./enforcement.js";
 import { type Policy, type RuleObservation } from "../types.js";
+
+export interface WorktreePlacementPolicy {
+  root: string;
+  namePattern: string;
+  branchPattern: string;
+  allowedBranchTypes: string[];
+  base: string;
+  cleanup: string;
+}
+
+export const DEFAULT_WORKTREE_PLACEMENT: WorktreePlacementPolicy = {
+  root: ".worktrees",
+  namePattern: "{timestamp}-{issueNumber}-{slug}",
+  branchPattern: "{type}/{issueNumber}-{slug}",
+  allowedBranchTypes: ["feature", "fix", "refactor", "test", "docs", "chore"],
+  base: "remote-default-branch",
+  cleanup: "after-merge",
+};
+
+interface RegisteredWorktree {
+  path: string;
+  branch: string;
+}
+
+const CONTROL = /\p{C}/u;
+const WORKTREE_NAME = /^(\d{8}_\d{6})-(\d+)-([a-z0-9][a-z0-9-]*)$/u;
+const BRANCH_NAME = /^([a-z][a-z0-9-]{0,31})\/(\d+)-([a-z0-9][a-z0-9-]*)$/u;
+
+function placementPolicyErrors(policy: WorktreePlacementPolicy): string[] {
+  const errors: string[] = [];
+  const constants: Array<[keyof WorktreePlacementPolicy, string]> = [
+    ["root", DEFAULT_WORKTREE_PLACEMENT.root],
+    ["namePattern", DEFAULT_WORKTREE_PLACEMENT.namePattern],
+    ["branchPattern", DEFAULT_WORKTREE_PLACEMENT.branchPattern],
+    ["base", DEFAULT_WORKTREE_PLACEMENT.base],
+    ["cleanup", DEFAULT_WORKTREE_PLACEMENT.cleanup],
+  ];
+  for (const [field, expected] of constants)
+    if (policy[field] !== expected)
+      errors.push(`worktree policyの${field}が不正です`);
+  if (
+    policy.allowedBranchTypes.length < 1 ||
+    policy.allowedBranchTypes.length > 32 ||
+    new Set(policy.allowedBranchTypes).size !==
+      policy.allowedBranchTypes.length ||
+    policy.allowedBranchTypes.some(
+      (item) => !/^[a-z][a-z0-9-]{0,31}$/u.test(item),
+    )
+  )
+    errors.push("worktree policyのallowedBranchTypesが不正です");
+  return errors;
+}
+
+function collisionKey(value: string): string {
+  return value.normalize("NFC").toLowerCase();
+}
+
+function issueFromRegistered(entry: RegisteredWorktree): number | undefined {
+  const branch = BRANCH_NAME.exec(entry.branch);
+  if (branch?.[2]) return Number(branch[2]);
+  const directory = WORKTREE_NAME.exec(path.basename(entry.path));
+  return directory?.[2] ? Number(directory[2]) : undefined;
+}
+
+export function validateWorktreePlacement(input: {
+  repoRoot: string;
+  worktreePath: string;
+  branch: string;
+  issueNumber: number;
+  slug: string;
+  policy?: WorktreePlacementPolicy;
+  existing: Array<{ path: string; branch: string }>;
+}): { valid: boolean; errors: string[] } {
+  const policy = input.policy ?? DEFAULT_WORKTREE_PLACEMENT;
+  const errors = placementPolicyErrors(policy);
+  const add = (message: string): void => {
+    if (!errors.includes(message)) errors.push(message);
+  };
+  if (!Number.isSafeInteger(input.issueNumber) || input.issueNumber < 1)
+    add("Issue番号は1以上の安全な整数でなければなりません");
+  if (!/^[a-z0-9][a-z0-9-]*$/u.test(input.slug))
+    add("slugは小文字英数字とhyphenで指定してください");
+  if (CONTROL.test(input.worktreePath))
+    add("worktree pathにUnicode制御文字を使用できません");
+  if (input.worktreePath !== input.worktreePath.normalize("NFC"))
+    add("worktree pathはNFC正規化済みでなければなりません");
+  if (path.isAbsolute(input.worktreePath))
+    add("worktree pathはrepository相対pathで指定してください");
+  const segments = input.worktreePath.split(/[\\/]/u);
+  if (segments.includes("..")) add("worktree pathに親参照を使用できません");
+
+  const worktreeRoot = path.resolve(input.repoRoot, policy.root);
+  const destination = path.resolve(input.repoRoot, input.worktreePath);
+  const relative = path.relative(worktreeRoot, destination);
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative) ||
+    relative.split(path.sep).length !== 1
+  )
+    add("worktreeは.worktreesの直接の子へ作成してください");
+
+  const directoryName = path.basename(destination);
+  const directory = WORKTREE_NAME.exec(directoryName);
+  if (!directory) add("worktree directory名が規定書式ではありません");
+  else {
+    if (Number(directory[2]) !== input.issueNumber)
+      add("worktree directory名のIssue番号が一致しません");
+    if (directory[3] !== input.slug)
+      add("worktree directory名のslugが一致しません");
+  }
+
+  const branch = BRANCH_NAME.exec(input.branch);
+  if (!branch) add("branch名が規定書式ではありません");
+  else {
+    if (!policy.allowedBranchTypes.includes(branch[1] ?? ""))
+      add("branch typeはproject policyのallowlistに含まれていません");
+    if (Number(branch[2]) !== input.issueNumber)
+      add("branch名のIssue番号が一致しません");
+    if (branch[3] !== input.slug) add("branch名のslugが一致しません");
+  }
+
+  const candidatePathKey = collisionKey(destination);
+  const candidateBranchKey = collisionKey(input.branch);
+  for (const existing of input.existing) {
+    const existingPath = path.isAbsolute(existing.path)
+      ? path.resolve(existing.path)
+      : path.resolve(input.repoRoot, existing.path);
+    if (collisionKey(existingPath) === candidatePathKey)
+      add("登録済みworktree pathと重複またはcase・Unicode衝突しています");
+    if (collisionKey(existing.branch) === candidateBranchKey)
+      add("登録済みbranchと重複またはcase・Unicode衝突しています");
+    if (issueFromRegistered(existing) === input.issueNumber)
+      add("同じIssue番号の登録済みworktreeが存在します");
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+export function matchesTargetWorktree(input: {
+  candidatePath: string;
+  candidateBranch: string;
+  targetPath: string;
+  targetBranch: string;
+}): boolean {
+  return (
+    input.candidatePath === input.targetPath &&
+    input.candidateBranch === input.targetBranch
+  );
+}
 
 function githubRepository(remote: string): string | undefined {
   const match =
@@ -52,29 +201,47 @@ function pathEntryExists(target: string): boolean {
   }
 }
 
-export function createWorktree(input: {
+function registeredWorktrees(repoRoot: string): RegisteredWorktree[] {
+  const records: RegisteredWorktree[] = [];
+  let current: Partial<RegisteredWorktree> = {};
+  const flush = (): void => {
+    if (current.path && current.branch)
+      records.push({ path: current.path, branch: current.branch });
+    current = {};
+  };
+  const output = git(["worktree", "list", "--porcelain"], repoRoot).stdout;
+  for (const line of output.split(/\r?\n/u)) {
+    if (line === "") {
+      flush();
+      continue;
+    }
+    if (line.startsWith("worktree ")) current.path = line.slice(9);
+    if (line.startsWith("branch refs/heads/")) current.branch = line.slice(18);
+  }
+  flush();
+  return records;
+}
+
+export function enforceTrustedWorktreeBoundary(input: {
   repoRoot: string;
   worktreePath: string;
-  branch: string;
-  base: string;
   expectedRepository?: string;
   trustedPolicy?: Policy;
-}) {
+}): {
+  repositoryRoot: string;
+  canonicalDestination: string;
+  rootMismatch: boolean;
+  gitInternal: boolean;
+  destinationConflict: boolean;
+  repositoryMismatch: boolean;
+} {
   const actualRoot = git(
     ["rev-parse", "--show-toplevel"],
     input.repoRoot,
   ).stdout.trim();
-  const rootMismatch =
-    fs.realpathSync(actualRoot) !== fs.realpathSync(input.repoRoot);
-  const branchParts = input.branch.split("/");
-  if (
-    branchParts.length < 2 ||
-    branchParts.some((part) => safeSlug(part) !== part)
-  )
-    throw new Error(
-      "ブランチは名前空間を持つ安全で長さ制限内の名前にしてください",
-    );
-  const destination = path.resolve(input.worktreePath);
+  const repositoryRoot = fs.realpathSync(input.repoRoot);
+  const rootMismatch = fs.realpathSync(actualRoot) !== repositoryRoot;
+  const destination = path.resolve(input.repoRoot, input.worktreePath);
   const canonical = canonicalDestination(destination);
   const gitCommonRaw = git(
     ["rev-parse", "--git-common-dir"],
@@ -88,15 +255,14 @@ export function createWorktree(input: {
       gitRelative !== ".." &&
       !path.isAbsolute(gitRelative));
   const destinationConflict =
-    canonical === fs.realpathSync(input.repoRoot) ||
-    pathEntryExists(destination);
-  let repositoryMismatch = false;
+    canonical === repositoryRoot || pathEntryExists(destination);
+  const remote = git(["remote", "get-url", "origin"], input.repoRoot, {
+    allowFailure: true,
+  });
+  let repositoryMismatch = remote.status !== 0;
   if (input.expectedRepository) {
-    const remote = git(["remote", "get-url", "origin"], input.repoRoot, {
-      allowFailure: true,
-    });
     repositoryMismatch =
-      remote.status !== 0 ||
+      repositoryMismatch ||
       githubRepository(remote.stdout) !== input.expectedRepository;
   }
   if (input.trustedPolicy) {
@@ -136,7 +302,96 @@ export function createWorktree(input: {
         `${enforcement.diagnostic?.ruleId ?? "ASC-WORKTREE"}: ${enforcement.diagnostic?.reasons.join("; ") ?? "boundary違反"}`,
       );
   }
+  return {
+    repositoryRoot,
+    canonicalDestination: canonical,
+    rootMismatch,
+    gitInternal,
+    destinationConflict,
+    repositoryMismatch,
+  };
+}
+
+function sourceStatusExcludingTarget(
+  repoRoot: string,
+  destination: string,
+): string {
+  const relative = path
+    .relative(repoRoot, destination)
+    .split(path.sep)
+    .join("/");
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith("../") ||
+    path.isAbsolute(relative)
+  )
+    throw new Error("worktree作成先をstatus比較の対象外にできません");
+  return git(
+    [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+      "--",
+      ".",
+      `:(exclude,top)${relative}`,
+    ],
+    repoRoot,
+  ).stdout;
+}
+
+export function createWorktree(input: {
+  repoRoot: string;
+  worktreePath: string;
+  branch: string;
+  base: string;
+  issueNumber: number;
+  slug: string;
+  worktreePolicy?: WorktreePlacementPolicy;
+  remoteDefaultBranch: string;
+  remoteDefaultSha: string;
+  expectedRepository?: string;
+  trustedPolicy?: Policy;
+}) {
+  const boundary = enforceTrustedWorktreeBoundary(input);
+  const {
+    repositoryRoot,
+    canonicalDestination: canonical,
+    rootMismatch,
+    gitInternal,
+    destinationConflict,
+    repositoryMismatch,
+  } = boundary;
+  const policy = input.worktreePolicy ?? DEFAULT_WORKTREE_PLACEMENT;
+  const placement = validateWorktreePlacement({
+    repoRoot: input.repoRoot,
+    worktreePath: input.worktreePath,
+    branch: input.branch,
+    issueNumber: input.issueNumber,
+    slug: input.slug,
+    policy,
+    existing: registeredWorktrees(input.repoRoot),
+  });
+  if (!placement.valid)
+    throw new Error(`worktree配置が不正です: ${placement.errors.join("; ")}`);
+  const destination = path.resolve(input.repoRoot, input.worktreePath);
+  const worktreeRoot = path.resolve(repositoryRoot, policy.root);
+  const canonicalWorktreeRoot = canonicalDestination(worktreeRoot);
+  const rootRelative = path.relative(repositoryRoot, canonicalWorktreeRoot);
+  const rootEscaped =
+    rootRelative !== policy.root ||
+    rootRelative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(rootRelative);
+  const placementRelative = path.relative(canonicalWorktreeRoot, canonical);
+  const placementEscaped =
+    placementRelative === "" ||
+    placementRelative === ".." ||
+    placementRelative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(placementRelative) ||
+    placementRelative.split(path.sep).length !== 1;
   if (rootMismatch) throw new Error("リポジトリ直下パスが一致しません");
+  if (rootEscaped || placementEscaped)
+    throw new Error("worktree作成先が規定rootからsymlink経由で脱出しています");
   if (gitInternal) throw new Error("Git内部領域へworktreeを作成できません");
   if (destinationConflict)
     throw new Error("worktree作成先は未作成の専用パスにしてください");
@@ -148,18 +403,37 @@ export function createWorktree(input: {
     { allowFailure: true },
   );
   if (baseCheck.status !== 0) throw new Error("基点コミットを検証できません");
-  const dirtyBefore = git(
-    ["status", "--porcelain=v1", "--untracked-files=all"],
+  if (!/^[0-9a-f]{40}$/iu.test(input.remoteDefaultSha))
+    throw new Error("remote default branch SHAは40桁hexで指定してください");
+  const remoteHead = git(
+    ["symbolic-ref", "refs/remotes/origin/HEAD"],
     input.repoRoot,
-  ).stdout;
+    { allowFailure: true },
+  );
+  const expectedRemoteRef = `refs/remotes/origin/${input.remoteDefaultBranch}`;
+  if (remoteHead.status !== 0 || remoteHead.stdout.trim() !== expectedRemoteRef)
+    throw new Error("remote default branchがorigin/HEADと一致しません");
+  const remoteDefault = git(
+    ["rev-parse", "--verify", `${expectedRemoteRef}^{commit}`],
+    input.repoRoot,
+    { allowFailure: true },
+  );
+  if (
+    remoteDefault.status !== 0 ||
+    remoteDefault.stdout.trim().toLowerCase() !==
+      input.remoteDefaultSha.toLowerCase() ||
+    baseCheck.stdout.trim().toLowerCase() !==
+      input.remoteDefaultSha.toLowerCase()
+  )
+    throw new Error(
+      "基点は取得済みremote default branch commitと一致しなければなりません",
+    );
+  const dirtyBefore = sourceStatusExcludingTarget(input.repoRoot, destination);
   git(
     ["worktree", "add", "-b", input.branch, destination, input.base],
     input.repoRoot,
   );
-  const dirtyAfter = git(
-    ["status", "--porcelain=v1", "--untracked-files=all"],
-    input.repoRoot,
-  ).stdout;
+  const dirtyAfter = sourceStatusExcludingTarget(input.repoRoot, destination);
   if (dirtyAfter !== dirtyBefore)
     throw new Error(
       "作業元worktreeの状態が予期せず変化しました。復旧のため両方のworktreeを保持してください",
