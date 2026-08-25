@@ -26,6 +26,182 @@ export const DEVELOPMENT_CONSIDERATION_IDS = [
   "DC-TOKENS",
 ] as const;
 
+export interface RuleCoverageRow {
+  ruleId: string;
+  normative: boolean;
+  schema: boolean;
+  runtime: boolean;
+  ci: boolean;
+}
+
+export interface RuleCoverageOrphan {
+  ruleId: string;
+  reason: string;
+}
+
+const PROJECT_RULE_PREFIX = ["ASC", "DOGFOOD"].join("-");
+export const PROJECT_RULE_ENFORCEMENT_POINTS: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    [
+      ["CI-PERMISSION-001", "checkQualityCiPermissions"],
+      ["CI-TRIGGER-001", "checkQualityCiTriggers"],
+      ["CODE-QUALITY-001", "checkQualityCommands"],
+      ["DISTRIBUTION-BOUNDARY-001", "checkPackageDistributionBoundary"],
+      ["DOCS-001", "checkJapaneseDocuments"],
+      ["DOGFOODING-001", "checkConformance"],
+      ["JAPANESE-DOCS-001", "checkJapaneseDocuments"],
+      ["LOCKFILE-001", "checkPackageManagerBoundary"],
+      ["NAMING-EXCEPTION-001", "checkFixedMarkdownNames"],
+      ["NUMBERED-MARKDOWN-001", "checkFixedMarkdownNames"],
+      ["OWNERSHIP-LOCAL-001", "validateOwnershipBoundary"],
+      ["OWNERSHIP-PR-001", "validateOwnershipBoundary"],
+      ["PACKAGE-001", "checkPackageDistributionBoundary"],
+      ["PACKAGE-MANAGER-001", "checkPackageManagerBoundary"],
+      ["QUALITY-COMMAND-001", "checkQualityCommands"],
+      ["RUNTIME-001", "checkNodeRuntimeAlignment"],
+      ["SAFETY-001", "checkTrustedPolicyBoundary"],
+    ].map(([suffix, point]) => [`${PROJECT_RULE_PREFIX}-${suffix}`, point]),
+  );
+
+const PROJECT_RULE_FIELDS = [
+  "ruleId",
+  "purpose",
+  "riskClass",
+  "scope",
+  "enforcement",
+  "activation",
+  "owner",
+  "targetLayer",
+  "evidence",
+  "remediation",
+  "overridePolicy",
+  "rollback",
+] as const;
+const PROJECT_RULE_METADATA_FIELDS = [
+  "packageDefault",
+  "projectOverride",
+  "changeAuthority",
+] as const;
+const PROJECT_RULE_ID = /\bASC-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/gu;
+
+function projectRuleIds(source: string): Set<string> {
+  return new Set(source.match(PROJECT_RULE_ID) ?? []);
+}
+
+export function validateProjectRuleLedgerEntry(value: unknown, label = "rule") {
+  const errors: string[] = [];
+  if (!isRecord(value))
+    return { valid: false, errors: [`${label}はobjectでなければなりません`] };
+  for (const field of PROJECT_RULE_FIELDS)
+    if (value[field] === undefined) errors.push(`${label}.${field}が必要です`);
+  for (const field of [
+    "ruleId",
+    "purpose",
+    "riskClass",
+    "owner",
+    "evidence",
+    "remediation",
+    "rollback",
+  ] as const)
+    if (!text(value[field]))
+      errors.push(`${label}.${field}は空でない文字列でなければなりません`);
+  if (
+    typeof value.ruleId !== "string" ||
+    !/^ASC-[A-Z0-9]+(?:-[A-Z0-9]+)*$/u.test(value.ruleId)
+  )
+    errors.push(`${label}.ruleIdはASC-で始まる安定IDでなければなりません`);
+  if (!strings(value.scope))
+    errors.push(`${label}.scopeは重複のない非空文字列配列でなければなりません`);
+  if (
+    !["deny", "require", "assist", "warn", "record"].includes(
+      String(value.enforcement),
+    )
+  )
+    errors.push(`${label}.enforcementが不正です`);
+  const metadataCount = PROJECT_RULE_METADATA_FIELDS.filter(
+    (field) => value[field] !== undefined,
+  ).length;
+  if (
+    metadataCount !== 0 &&
+    metadataCount !== PROJECT_RULE_METADATA_FIELDS.length
+  )
+    errors.push(
+      `${label}のpackageDefault、projectOverride、changeAuthorityは3fieldを同時に指定してください`,
+    );
+  for (const field of PROJECT_RULE_METADATA_FIELDS)
+    if (value[field] !== undefined && !text(value[field]))
+      errors.push(`${label}.${field}は空でない文字列でなければなりません`);
+  return { valid: errors.length === 0, errors };
+}
+
+export function buildRuleCoverage(input: {
+  rules: unknown[];
+  normativeText: string;
+  schemaText: string;
+  runtimeText: string;
+  ciText: string;
+}): { rows: RuleCoverageRow[]; orphans: RuleCoverageOrphan[] } {
+  const normativeIds = projectRuleIds(input.normativeText);
+  const schemaIds = projectRuleIds(input.schemaText);
+  const runtimeIds = projectRuleIds(input.runtimeText);
+  const ciIds = projectRuleIds(input.ciText);
+  const definedIds = new Set(
+    input.rules.flatMap((rule) =>
+      isRecord(rule) &&
+      typeof rule.ruleId === "string" &&
+      /^ASC-[A-Z0-9]+(?:-[A-Z0-9]+)*$/u.test(rule.ruleId)
+        ? [rule.ruleId]
+        : [],
+    ),
+  );
+  const rowIds = new Set([
+    ...definedIds,
+    ...normativeIds,
+    ...schemaIds,
+    ...ciIds,
+  ]);
+  const rows = [...rowIds]
+    .sort((left, right) => left.localeCompare(right, "en"))
+    .map((ruleId) => ({
+      ruleId,
+      normative: normativeIds.has(ruleId),
+      schema: schemaIds.has(ruleId),
+      runtime: runtimeIds.has(ruleId),
+      ci: ciIds.has(ruleId),
+    }));
+  const orphans: RuleCoverageOrphan[] = [];
+  for (const row of rows) {
+    if (definedIds.has(row.ruleId) && !row.runtime && !row.ci)
+      orphans.push({
+        ruleId: row.ruleId,
+        reason:
+          "rule fileに存在しますがruntimeにもCIにもenforcement pointがありません",
+      });
+    if (row.normative && !definedIds.has(row.ruleId))
+      orphans.push({
+        ruleId: row.ruleId,
+        reason: "規範文書に存在しますがproject policyに定義されていません",
+      });
+    if (row.schema && !row.runtime)
+      orphans.push({
+        ruleId: row.ruleId,
+        reason: "schemaに存在しますがruntimeで検証されていません",
+      });
+    if (
+      row.ci &&
+      !definedIds.has(row.ruleId) &&
+      !row.normative &&
+      !row.schema &&
+      !row.runtime
+    )
+      orphans.push({
+        ruleId: row.ruleId,
+        reason: "CIだけに存在する暗黙ruleです",
+      });
+  }
+  return { rows, orphans };
+}
+
 export function validateDevelopmentConsiderationRecords(
   value: unknown,
   label = "document",

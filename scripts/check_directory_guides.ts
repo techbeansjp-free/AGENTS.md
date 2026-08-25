@@ -53,6 +53,50 @@ const REQUIRED_GUIDE_HEADINGS = [
   "## 置かないもの",
   "## 正本",
 ];
+const FIXED_MARKDOWN_DIRECTORIES = [
+  "docs/specs",
+  ".agent-skill-chain/templates/specs",
+] as const;
+export const FIXED_MARKDOWN_NAME_EXCEPTIONS = new Set([
+  "AGENTS.md",
+  "SKILL.md",
+  "README.md",
+]);
+const JAPANESE_FILE_NAME = /[\u3040-\u30ff\u3400-\u9fff]/u;
+
+export function validateFixedMarkdownName(name: string): string[] {
+  if (FIXED_MARKDOWN_NAME_EXCEPTIONS.has(name)) return [];
+  const errors: string[] = [];
+  if (!/^\d{2}_/u.test(name)) errors.push("2桁の連番prefixがありません");
+  if (!JAPANESE_FILE_NAME.test(name)) errors.push("日本語名を含みません");
+  return errors;
+}
+
+export function checkFixedMarkdownNames(root = process.cwd()): string[] {
+  const errors: string[] = [];
+  const visit = (directory: string): void => {
+    if (!fs.existsSync(directory)) return;
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      const relative = path.relative(root, absolute).replaceAll(path.sep, "/");
+      if (entry.isSymbolicLink()) {
+        if (entry.name.endsWith(".md"))
+          errors.push(`固定Markdownはsymlinkにできません: ${relative}`);
+        continue;
+      }
+      if (entry.isDirectory()) {
+        visit(absolute);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+      for (const reason of validateFixedMarkdownName(entry.name))
+        errors.push(`固定Markdownの名称が不正です: ${relative} (${reason})`);
+    }
+  };
+  for (const relative of FIXED_MARKDOWN_DIRECTORIES)
+    visit(path.join(root, relative));
+  return errors;
+}
 
 function actualDirectories(root: string): string[] {
   const namespace = path.resolve(root, ".agent-skill-chain");
@@ -120,6 +164,7 @@ function localLinks(markdown: string): string[] {
 
 export function checkDirectoryGuides(root = process.cwd()) {
   const errors: string[] = [];
+  errors.push(...checkFixedMarkdownNames(root));
   const directories = actualDirectories(root);
   const entries = new Map<string, string>();
   for (const directory of directories) {

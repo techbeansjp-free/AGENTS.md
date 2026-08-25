@@ -35,7 +35,7 @@ export const METRIC_KINDS = [
   "miss",
 ];
 
-const RULE_FIELDS = [
+export const RULE_REQUIRED_FIELDS = [
   "ruleId",
   "purpose",
   "riskClass",
@@ -48,8 +48,19 @@ const RULE_FIELDS = [
   "remediation",
   "overridePolicy",
   "rollback",
+] as const;
+export const RULE_OPTIONAL_FIELDS = [
+  "packageDefault",
+  "projectOverride",
+  "changeAuthority",
+] as const;
+const RULE_FIELDS: readonly string[] = [
+  ...RULE_REQUIRED_FIELDS,
+  ...RULE_OPTIONAL_FIELDS,
 ];
-const RULE_MEANING_FIELDS = RULE_FIELDS.filter(
+// 台帳metadataは実行条件を変えず、既存ruleへの後方互換な追記を許すため
+// rule意味fingerprintへ含めない。実行上の意味は従来の必須fieldで比較する。
+const RULE_MEANING_FIELDS = RULE_REQUIRED_FIELDS.filter(
   (field) => field !== "activation",
 );
 const STRENGTH: Record<Enforcement, number> = {
@@ -176,10 +187,16 @@ export function validateRule(rule: unknown) {
   const candidate = isRecord(rule) ? rule : {};
   if (!isRecord(rule)) errors.push("ruleはobjectでなければなりません");
   else {
-    for (const field of RULE_FIELDS)
+    for (const field of RULE_REQUIRED_FIELDS)
       if (candidate[field] === undefined) errors.push(`${field}が必要です`);
     for (const field of Object.keys(candidate))
       if (!RULE_FIELDS.includes(field)) errors.push(`${field}は未知fieldです`);
+    for (const field of RULE_OPTIONAL_FIELDS)
+      if (
+        candidate[field] !== undefined &&
+        (typeof candidate[field] !== "string" || candidate[field].length === 0)
+      )
+        errors.push(`${field}は空でない文字列でなければなりません`);
     for (const field of [
       "ruleId",
       "purpose",
