@@ -63,6 +63,44 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/rule" }
     },
+    "worktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "namePattern",
+        "branchPattern",
+        "allowedBranchTypes",
+        "base",
+        "cleanup"
+      ],
+      "properties": {
+        "root": { "const": ".worktrees" },
+        "namePattern": { "const": "{timestamp}-{issueNumber}-{slug}" },
+        "branchPattern": { "const": "{type}/{issueNumber}-{slug}" },
+        "allowedBranchTypes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+          }
+        },
+        "base": { "const": "remote-default-branch" },
+        "cleanup": { "const": "after-merge" },
+        "finalizeIgnoredPathAllowlist": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.git(?:/|$))(?!.*[\\\\*?\\[\\]{}()|^$+])(?:[A-Za-z0-9._-]+/)+$"
+          }
+        }
+      }
+    },
     "projectChoices": { "$ref": "#/$defs/projectChoices" }
   },
   "allOf": [
@@ -80,6 +118,7 @@
           "anyOf": [
             { "required": ["budgets"] },
             { "required": ["rules"] },
+            { "required": ["worktree"] },
             { "required": ["projectChoices"] }
           ]
         }

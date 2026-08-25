@@ -184,7 +184,16 @@
               }
             },
             "base": { "const": "remote-default-branch" },
-            "cleanup": { "const": "after-merge" }
+            "cleanup": { "const": "after-merge" },
+            "finalizeIgnoredPathAllowlist": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.git(?:/|$))(?!.*[\\\\*?\\[\\]{}()|^$+])(?:[A-Za-z0-9._-]+/)+$"
+              }
+            }
           }
         }
       }
