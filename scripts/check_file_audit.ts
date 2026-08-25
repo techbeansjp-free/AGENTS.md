@@ -19,6 +19,11 @@ interface CommitTransition {
   parent: string;
 }
 
+interface ReviewBoundary {
+  implementation: string;
+  reviewHead: string;
+}
+
 function lines(output: string): string[] {
   return output.trim().split(/\r?\n/u).filter(Boolean);
 }
@@ -208,15 +213,49 @@ function finalAuditPaths(
   );
 }
 
-function latestAuditPath(root: string): string | undefined {
-  const directory = path.join(root, AUDIT_DIRECTORY);
-  if (!fs.existsSync(directory)) return undefined;
-  const name = fs
-    .readdirSync(directory)
-    .filter((entry) => AUDIT_NAME_PATTERN.test(entry))
-    .sort()
-    .at(-1);
-  return name ? `${AUDIT_DIRECTORY}/${name}` : undefined;
+function releaseBumpParent(root: string, commit: string): string | undefined {
+  return commitParents(root, commit).find((parent) =>
+    isReleaseBumpTransition(root, { commit, parent }),
+  );
+}
+
+function withoutFinalReleaseBumps(root: string, current: string): string {
+  let cursor = current;
+  const visited = new Set<string>();
+  while (!visited.has(cursor)) {
+    visited.add(cursor);
+    const parent = releaseBumpParent(root, cursor);
+    if (!parent) break;
+    cursor = parent;
+  }
+  return cursor;
+}
+
+function inferReviewBoundary(root: string, current: string): ReviewBoundary {
+  const boundary = withoutFinalReleaseBumps(root, current);
+  const boundaryParents = commitParents(root, boundary);
+  const reviewHead =
+    boundaryParents.length > 1
+      ? withoutFinalReleaseBumps(root, boundaryParents.at(-1)!)
+      : boundary;
+  const [implementation = reviewHead] = commitParents(root, reviewHead);
+  return { implementation, reviewHead };
+}
+
+function isAuditPath(auditPath: string): boolean {
+  return auditPath.startsWith(`${AUDIT_DIRECTORY}/`);
+}
+
+function invalidFinalPathsError(finalPaths: string[]): string {
+  const auditPaths = finalPaths.filter(isAuditPath);
+  const extraPaths =
+    auditPaths.length === 1
+      ? finalPaths.filter((changedPath) => changedPath !== auditPaths[0])
+      : finalPaths;
+  return [
+    "H_impl..currentはreview artifactだけでなければなりません。H_impl..currentにreview artifact以外のfileが含まれています。実装commitの後にはreview artifactだけをcommitしてください。余分なpath:",
+    ...extraPaths.map((changedPath) => `- ${changedPath}`),
+  ].join("\n");
 }
 
 export function parseFileAudit(markdown: string) {
@@ -255,18 +294,58 @@ export function parseFileAudit(markdown: string) {
 
 export function checkFileAudit(root: string) {
   const errors: string[] = [];
-  const auditPath = latestAuditPath(root);
-  if (!auditPath)
-    return { valid: false, errors: ["課題のreview artifactがありません"] };
+  const current = git(["rev-parse", "HEAD"], root).stdout.trim();
+  const inferred = inferReviewBoundary(root, current);
+  const finalPaths = finalAuditPaths(
+    root,
+    inferred.implementation,
+    inferred.reviewHead,
+  );
+  if (finalPaths.length === 0)
+    return {
+      valid: false,
+      errors: [
+        "review artifactのcommitがありません。実装commitの後にreview artifactだけをcommitしてください",
+      ],
+    };
+  if (finalPaths.length > 1)
+    return {
+      valid: false,
+      errors: [invalidFinalPathsError(finalPaths)],
+    };
+  const auditPath = finalPaths[0]!;
+  if (!isAuditPath(auditPath))
+    return {
+      valid: false,
+      errors: [
+        `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORY}/配下ではありません。実装commitの後にreview artifactだけをcommitしてください`,
+      ],
+    };
+  if (!AUDIT_NAME_PATTERN.test(path.posix.basename(auditPath)))
+    return {
+      valid: false,
+      errors: [
+        `${auditPath}はreview artifactのfile名書式に一致しません。連番_課題番号…レビュー.mdの書式へ直してください`,
+      ],
+    };
   const artifact = path.join(root, auditPath);
   if (!fs.existsSync(artifact))
-    return { valid: false, errors: [`${auditPath}がありません`] };
+    return {
+      valid: false,
+      errors: [
+        `${auditPath}がありません。review artifactを追加した状態でcommitしてください`,
+      ],
+    };
   const parsed = parseFileAudit(fs.readFileSync(artifact, "utf8"));
   if (!parsed.base || !parsed.implementation)
     return {
       valid: false,
       errors: ["比較基点またはH_implの完全SHAがありません"],
     };
+  if (parsed.implementation !== inferred.implementation)
+    errors.push(
+      `review artifact本文のH_impl ${parsed.implementation} が実際のcommit構造から導出したH_impl ${inferred.implementation} と一致しません。review artifactのH_implをreview headの親commitへ直してください`,
+    );
   for (const oid of [parsed.base, parsed.implementation]) {
     const resolved = git(["rev-parse", "--verify", `${oid}^{commit}`], root, {
       allowFailure: true,
@@ -329,7 +408,6 @@ export function checkFileAudit(root: string) {
     if (entry.decision !== "pass")
       errors.push(`${entry.path}の個別判定がpassではありません`);
   }
-  const current = git(["rev-parse", "HEAD"], root).stdout.trim();
   const ancestry = git(
     ["merge-base", "--is-ancestor", parsed.implementation, current],
     root,
@@ -337,14 +415,6 @@ export function checkFileAudit(root: string) {
   );
   if (ancestry.status !== 0)
     errors.push("H_implがcurrent HEADのancestorではありません");
-  const finalPaths =
-    ancestry.status === 0
-      ? finalAuditPaths(root, parsed.implementation, current)
-      : changedPaths(root, parsed.implementation, current);
-  if (finalPaths.length !== 1 || finalPaths[0] !== auditPath)
-    errors.push(
-      `H_impl..currentはreview artifactだけでなければなりません: ${finalPaths.join(",")}`,
-    );
   return {
     valid: errors.length === 0,
     errors,
