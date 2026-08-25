@@ -1,16 +1,16 @@
 @unit @auto-release
-Feature: main mergeの自動release計画
-  release対象変更、再帰防止、version衝突を外部処理なしで判定する。
+Feature: main mergeの自動release計画と配布digest
+  npm配布物の内容を正準化し、前回releaseとの差から安全な計画を作る。
 
-  Scenario: SCN-UNIT-AUTORELEASE-001 release対象pathの変更でreleaseへ進む
-    Given release対象pathを変更した自動release入力がある
+  Scenario: SCN-UNIT-AUTORELEASE-001 未releaseの現在versionはそのままreleaseする
+    Given release対象の現在tagが未存在な自動release入力がある
     When 自動release計画を作成する
     Then 自動release計画は現在versionのreleaseへ進む
 
-  Scenario: SCN-UNIT-AUTORELEASE-002 文書だけの変更ではreleaseしない
-    Given 文書とtestとworkflowだけを変更した自動release入力がある
+  Scenario: SCN-UNIT-AUTORELEASE-002 配布物が同一ならreleaseしない
+    Given 現在tagが存在して配布digestが一致する自動release入力がある
     When 自動release計画を作成する
-    Then 自動release計画は対象pathなしを理由に停止する
+    Then 自動release計画は配布物同一を理由に停止する
 
   Scenario: SCN-UNIT-AUTORELEASE-003 skip ciを含むcommitではreleaseしない
     Given skip ciを含む自動release入力がある
@@ -22,8 +22,8 @@ Feature: main mergeの自動release計画
     When 自動release計画を作成する
     Then 自動release計画はbranch不一致を理由に停止する
 
-  Scenario: SCN-UNIT-AUTORELEASE-005 既存tagと衝突するversionはbump後にreleaseする
-    Given 現在versionのtagが存在する自動release入力がある
+  Scenario: SCN-UNIT-AUTORELEASE-005 既存tagと配布差分があるversionはbump後にreleaseする
+    Given 現在tagが存在して配布digestが異なる自動release入力がある
     When 自動release計画を作成する
     Then 自動release計画は次のprereleaseへbumpしてからreleaseする
 
@@ -36,3 +36,108 @@ Feature: main mergeの自動release計画
     Given audit:checkを含むbump経路のworkflow本文がある
     When 自動release workflow契約を検証する
     Then 自動release workflow検証はbump経路のaudit:checkを根拠に拒否する
+
+  Scenario: SCN-UNIT-DIGEST-001 配布entryをpath昇順に正準化して同一digestを返す
+    Given 入力順だけが異なる同じ配布entry集合がある
+    When 配布digestをそれぞれ算出する
+    Then 配布digestとentry件数は同じになる
+
+  Scenario: SCN-UNIT-DIGEST-002 contentHashが1件でも変われば異なるdigestになる
+    Given contentHashが1件だけ異なる配布entry集合がある
+    When 配布digestをそれぞれ算出する
+    Then 配布digestは異なる
+
+  Scenario: SCN-UNIT-DIGEST-003 pathの重複をerrorとしdigestを空にする
+    Given pathが重複する配布entry集合がある
+    When 配布digestを算出する
+    Then 配布digestは空で重複errorを返す
+
+  Scenario: SCN-UNIT-DIGEST-004 entry 0件をerrorとする
+    Given 空の配布entry集合がある
+    When 配布digestを算出する
+    Then 配布digestは空で配布物空errorを返す
+
+  Scenario: SCN-UNIT-DIGEST-005 不正なcontentHash形式をerrorとする
+    Given 不正なcontentHashを持つ配布entry集合がある
+    When 配布digestを算出する
+    Then 配布digestは空でcontentHash errorを返す
+
+  Scenario: SCN-UNIT-DIGEST-006 package.jsonのversionだけを正規化から除外する
+    Given versionだけが異なる二つのpackage.json内容がある
+    When 二つの配布内容を正規化する
+    Then 二つの正規化結果は同じになる
+
+  Scenario: SCN-UNIT-DIGEST-007 package-lock.jsonのversionだけを正規化から除外する
+    Given 指定versionだけが異なる二つのpackage-lock.json内容がある
+    When 二つの配布内容を正規化する
+    Then 二つの正規化結果は同じになる
+
+  Scenario: SCN-UNIT-DIGEST-008 package.jsonのversion以外のfield変更は差として残る
+    Given version以外も異なる二つのpackage.json内容がある
+    When 二つの配布内容を正規化する
+    Then 二つの正規化結果は異なる
+
+  Scenario: SCN-UNIT-DIGEST-009 配布対象外のfileは内容をそのまま返す
+    Given 通常fileの配布内容がある
+    When 配布内容を正規化する
+    Then 配布内容は変更されない
+
+  Scenario: SCN-UNIT-DIGEST-010 JSON parseに失敗した内容をそのまま返す
+    Given 壊れたpackage.jsonの配布内容がある
+    When 配布内容を正規化する
+    Then 配布内容は変更されない
+
+  Scenario: SCN-UNIT-AUTOREL-D01 currentTag未存在ならdigestを比較せずreleaseする
+    Given currentTagが未存在で現在の配布digestが空の入力がある
+    When 自動release計画を作成する
+    Then 自動release計画は現在versionのreleaseへ進む
+
+  Scenario: SCN-UNIT-AUTOREL-D02 currentTag存在かつdigest一致で停止する
+    Given 現在tagが存在して配布digestが一致する自動release入力がある
+    When 自動release計画を作成する
+    Then 自動release計画は前回tagを含む配布物同一理由で停止する
+
+  Scenario: SCN-UNIT-AUTOREL-D03 currentTag存在かつdigest相違でbump後にreleaseする
+    Given 現在tagが存在して配布digestが異なる自動release入力がある
+    When 自動release計画を作成する
+    Then 自動release計画は次のprereleaseへbumpしてからreleaseする
+
+  Scenario: SCN-UNIT-AUTOREL-D04 前回digestが空ならfail-openする
+    Given 現在tagが存在して前回配布digestが空の入力がある
+    When 自動release計画を作成する
+    Then 自動release計画は次のprereleaseへbumpしてからreleaseする
+
+  Scenario: SCN-UNIT-AUTOREL-D05 現在digestが空なら停止する
+    Given 現在tagが存在して現在の配布digestが空の入力がある
+    When 自動release計画を作成する
+    Then 自動release計画は現在digest算出不能を理由に停止する
+
+  Scenario: SCN-UNIT-AUTOREL-D06 現在digestの形式不正なら停止する
+    Given 現在tagが存在して現在の配布digest形式が不正な入力がある
+    When 自動release計画を作成する
+    Then 自動release計画は現在digest算出不能を理由に停止する
+
+  Scenario: SCN-UNIT-AUTOREL-D07 skip ciはdigest比較より先に評価する
+    Given skip ciと不正な現在配布digestを含む自動release入力がある
+    When 自動release計画を作成する
+    Then 自動release計画は再帰防止を理由に停止する
+
+  Scenario: SCN-UNIT-AUTOREL-D08 未知fieldを拒否する
+    Given 未知fieldを含む自動release入力がある
+    When 自動release計画を作成する
+    Then 自動release計画は未知fieldを理由に停止する
+
+  Scenario: SCN-UNIT-RELWF-P01 push.pathsが存在するYAMLをinvalidとする
+    Given push pathsを追加したrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はpush pathsを理由に拒否する
+
+  Scenario: SCN-UNIT-RELWF-P02 push.paths不在かつdigest step有りをvalidとする
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はdigest契約を満たす
+
+  Scenario: SCN-UNIT-RELWF-P03 digest算出stepが無いYAMLをinvalidとする
+    Given digest算出stepを削除したrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はdigest step欠落を理由に拒否する

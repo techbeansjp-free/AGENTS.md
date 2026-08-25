@@ -3,16 +3,6 @@ name: 自動・手動release
 "on":
   push:
     branches: [main]
-    paths:
-      - "src/**"
-      - "bin/**"
-      - "scripts/**"
-      - ".agent-skill-chain/**"
-      - "AGENTS.md"
-      - "package.json"
-      - "package-lock.json"
-      - "tsconfig.json"
-      - "tsconfig.build.json"
   workflow_dispatch:
     inputs:
       version:
@@ -53,6 +43,8 @@ jobs:
       needs_version_bump: ${{ steps.plan_outputs.outputs.needs_version_bump }}
       npm_enabled: ${{ steps.plan_outputs.outputs.npm_enabled }}
       release_sha: ${{ steps.plan_outputs.outputs.release_sha }}
+      distribution_digest: ${{ steps.plan_outputs.outputs.distribution_digest }}
+      distribution_entry_count: ${{ steps.plan_outputs.outputs.distribution_entry_count }}
     steps:
       - name: release候補のcommitを取得する
         uses: actions/checkout@v4
@@ -70,16 +62,27 @@ jobs:
         run: npm run prepack
       - name: 既存tagをrelease計画用に取得する
         run: git tag --list > existing-tags.txt
-      - name: main pushの変更pathを取得する
+      - name: 現在の配布digestを算出する
         if: ${{ github.event_name == 'push' }}
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          RELEASE_SHA: ${{ github.sha }}
+        run: node --import tsx scripts/compute_distribution_digest.ts > distribution-digest.json
+      - name: 直前releaseの配布digestを算出する
+        if: ${{ github.event_name == 'push' }}
+        continue-on-error: true
         run: |
-          if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
-            git show --pretty='' --name-only "$RELEASE_SHA" > changed-paths.txt
-          else
-            git diff --name-only "$BEFORE_SHA" "$RELEASE_SHA" > changed-paths.txt
+          printf '{"digest":"","entryCount":0,"errors":[]}\n' > previous-distribution-digest.json
+          version="$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync("package.json", "utf8")).version)')"
+          previous_tag="v$version"
+          if ! git rev-parse --verify "refs/tags/$previous_tag" >/dev/null 2>&1; then
+            exit 0
+          fi
+          if ! git worktree add --detach ../previous-release "$previous_tag"; then
+            exit 0
+          fi
+          if ! (cd ../previous-release && npm ci --ignore-scripts && npm run build); then
+            exit 0
+          fi
+          if node --import tsx scripts/compute_distribution_digest.ts --cwd ../previous-release > previous-distribution-digest-candidate.json; then
+            cp previous-distribution-digest-candidate.json previous-distribution-digest.json
           fi
       - name: 純関数で自動release計画を作成する
         id: auto_release_plan
@@ -88,7 +91,8 @@ jobs:
         env:
           RELEASE_MODE: auto
           RELEASE_EXISTING_TAGS_FILE: existing-tags.txt
-          RELEASE_CHANGED_PATHS_FILE: changed-paths.txt
+          RELEASE_DISTRIBUTION_DIGEST_FILE: distribution-digest.json
+          RELEASE_PREVIOUS_DISTRIBUTION_DIGEST_FILE: previous-distribution-digest.json
           RELEASE_HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           RELEASE_REF: ${{ github.ref_name }}
           RELEASE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -121,6 +125,9 @@ jobs:
           if (!output || !fs.existsSync("release-plan.json")) process.exit(1);
           const plan = JSON.parse(fs.readFileSync("release-plan.json", "utf8"));
           const npmStage = plan.stages?.find(({ stage }) => stage === "npm_publish");
+          const distribution = fs.existsSync("distribution-digest.json")
+            ? JSON.parse(fs.readFileSync("distribution-digest.json", "utf8"))
+            : { digest: "", entryCount: 0 };
           fs.appendFileSync(
             output,
             [
@@ -130,6 +137,8 @@ jobs:
               `needs_version_bump=${plan.needsVersionBump === true}`,
               `npm_enabled=${npmStage?.enabled === true}`,
               `release_sha=${process.env.RELEASE_SHA ?? ""}`,
+              `distribution_digest=${distribution.digest ?? ""}`,
+              `distribution_entry_count=${distribution.entryCount ?? 0}`,
               "",
             ].join("\n"),
           );
@@ -172,6 +181,14 @@ jobs:
             ? JSON.parse(fs.readFileSync("npm-pack.json", "utf8"))
             : [];
           const files = pack[0]?.files?.map(({ path }) => `- ${path}`).join("\n") ?? "- 取得失敗";
+          const distribution = fs.existsSync("distribution-digest.json")
+            ? JSON.parse(fs.readFileSync("distribution-digest.json", "utf8"))
+            : { digest: "", entryCount: 0 };
+          const previousDistribution = fs.existsSync("previous-distribution-digest.json")
+            ? JSON.parse(fs.readFileSync("previous-distribution-digest.json", "utf8"))
+            : { digest: "" };
+          const packageMetadata = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const previousTag = `v${packageMetadata.version}`;
           const stopped = plan.state === "dry-run" || plan.state === "skipped" || plan.state === "rejected";
           fs.appendFileSync(
             summary,
@@ -184,6 +201,11 @@ jobs:
               `- tag: ${plan.tag ?? "不明"}`,
               `- version bump: ${plan.needsVersionBump === true ? "必要" : "不要"}`,
               `- npm公開: ${process.env.RELEASE_EVENT === "workflow_dispatch" && plan.stages?.some(({ stage, enabled }) => stage === "npm_publish" && enabled) ? "手動経路で要求済み" : "未実行"}`,
+              `- 現在の配布digest: ${distribution.digest || "算出なし"}`,
+              `- 直前release: ${previousDistribution.digest ? `${previousTag} / ${previousDistribution.digest}` : `${previousTag}の配布digestなし`}`,
+              `- 配布file件数: ${distribution.entryCount ?? 0}`,
+              `- release要否: ${plan.state === "release" || plan.state === "bump-then-release" || plan.state === "ready" ? "必要" : "不要"}`,
+              `- release判定理由: ${Array.isArray(plan.reasons) && plan.reasons.length > 0 ? plan.reasons.join(" / ") : "理由なし"}`,
               "",
               "## release計画",
               "",
@@ -469,6 +491,7 @@ jobs:
       - name: 公開用release noteを生成する
         env:
           RELEASE_SHA: ${{ needs.tag.outputs.release_sha }}
+          DISTRIBUTION_DIGEST: ${{ needs.validate.outputs.distribution_digest }}
         run: |
           previous_tag="$(git describe --tags --abbrev=0 "$RELEASE_SHA^" 2>/dev/null || true)"
           {
@@ -478,6 +501,9 @@ jobs:
             else
               git log "$RELEASE_SHA" --pretty='- %s (%h)'
             fi
+            printf '\n\n## 配布digest（参考情報）\n\n'
+            printf -- '- digest: %s\n' "${DISTRIBUTION_DIGEST:-算出なし}"
+            printf -- '- 判定の正本は対象tagの配布物から再計算したdigestであり、GitHub Release本文ではありません。\n'
           } > release-notes.md
       - name: GitHub Releaseを必要な場合だけ作成する
         id: release_operation
