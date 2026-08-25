@@ -1,4 +1,34 @@
 {
   "schemaVersion": "agent-skill-chain/trusted-quality-proposals/v1",
-  "proposals": []
+  "proposals": [
+    {
+      "proposalId": "TQP-QUALITY-SCAN-BOUNDARY-001",
+      "status": "staged",
+      "fromVersion": 1,
+      "toVersion": 2,
+      "owner": "repository maintainer",
+      "rationale": "Git管理外かつ配布境界外の作業用directoryを品質検査の走査対象から除外し、製品sourceへの検出強度を維持したままlocal artifactによる誤検出を防ぐ",
+      "rollback": "本proposalをregistryから取り消し、除外追加前の走査範囲へ戻して全品質検査を再実行する",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "eslint.config.mjs",
+          "beforeSha256": "0ad91d8fb37b054d68886c559bb0981c8ef5582e397320813bb875ae1ee68eea",
+          "afterSha256": "6466cbe9cc2b060e19842a2ed0ec1746e64185456bc0561a11a27b4e3ab7b77b"
+        },
+        {
+          "kind": "file",
+          "name": "scripts/check_source_quality.ts",
+          "beforeSha256": "415ba4f7f410a455033a5f3e15c416929710d22821e2caae6193968b0dbd7040",
+          "afterSha256": "726432a2de4b92c9101e05ca681b501c0d1431c8db581a6806525d5a2a266b3a"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+          "afterSha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+        }
+      ]
+    }
+  ]
 }
