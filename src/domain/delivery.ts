@@ -24,6 +24,8 @@ interface PullRequestInput {
   evidence: DeliveryEvidence;
   headSha: string;
   issue: number;
+  canonicalIssue?: number;
+  relatedIssues?: number[];
   head: string;
   base: string;
   repository: string;
@@ -58,6 +60,43 @@ function branchMatches(pattern: string, value: string): boolean {
     .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
     .replaceAll("*", ".*");
   return new RegExp(`^${escaped}$`).test(value);
+}
+
+export function validateIssueClosingReferences(
+  body: string,
+  input: { canonicalIssue: number; relatedIssues: number[] },
+): {
+  valid: boolean;
+  errors: string[];
+  closes: number[];
+  relates: number[];
+} {
+  const extract = (pattern: RegExp): number[] =>
+    [...body.matchAll(pattern)].map((match) => Number(match[1]));
+  const closes = extract(/\b(?:closes?|closed|fixes|resolves)\s+#(\d+)\b/giu);
+  const relates = extract(/\brelates\s+to\s+#(\d+)\b/giu);
+  const errors: string[] = [];
+  const canonicalCount = closes.filter(
+    (issue) => issue === input.canonicalIssue,
+  ).length;
+  if (canonicalCount !== 1)
+    errors.push(
+      `canonical Issue #${input.canonicalIssue}は終端keywordで1回だけ参照してください`,
+    );
+  const unexpectedCloses = [
+    ...new Set(closes.filter((issue) => issue !== input.canonicalIssue)),
+  ];
+  if (unexpectedCloses.length > 0)
+    errors.push(
+      `canonical Issue以外を自動closeできません: ${unexpectedCloses.map((issue) => `#${issue}`).join(", ")}`,
+    );
+  for (const issue of [...new Set(input.relatedIssues)]) {
+    if (!relates.includes(issue))
+      errors.push(`後続Issue #${issue}はRelates toで参照してください`);
+    if (closes.includes(issue))
+      errors.push(`後続Issue #${issue}に終端keywordを使用できません`);
+  }
+  return { valid: errors.length === 0, errors, closes, relates };
 }
 
 function requireStringArray(value: unknown, name: string): string[] {
@@ -218,6 +257,20 @@ export function createPullRequest(
         `${enforcement.diagnostic?.ruleId ?? "ASC-DELIVERY"}: ${enforcement.diagnostic?.reasons.join("; ") ?? "boundary違反"}`,
       );
   }
+  const canonicalIssue = input.canonicalIssue ?? input.issue;
+  const relatedIssues = input.relatedIssues ?? [];
+  const bodyLink = [
+    `Closes #${canonicalIssue}`,
+    ...relatedIssues.map((issue) => `Relates to #${issue}`),
+  ].join("\n\n");
+  const references = validateIssueClosingReferences(bodyLink, {
+    canonicalIssue,
+    relatedIssues,
+  });
+  if (!references.valid)
+    throw new Error(
+      `PR本文のIssue参照が不正です: ${references.errors.join("; ")}`,
+    );
   const preview = {
     operation: "pr.create" as const,
     authorityStatus: "unverified-preview",
@@ -226,7 +279,7 @@ export function createPullRequest(
     head: input.head,
     headSha: input.headSha,
     base: input.base,
-    bodyLink: `Relates to #${input.issue}`,
+    bodyLink,
   };
   if (!input.apply) return { state: "preview", preview };
   if (!input.trustedPolicy)

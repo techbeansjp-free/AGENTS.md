@@ -21,7 +21,13 @@ import {
   previewWorkspaceHygiene,
   type HygieneKind,
 } from "./domain/hygiene.js";
-import { buildFinalizeReport, applyFinalize } from "./domain/finalize.js";
+import {
+  buildFinalizeReport,
+  applyFinalize,
+  planRootUpdate,
+  planWorktreeCleanup,
+  type RootUpdateObservation,
+} from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
 import {
   loadConsumerPolicyAtCommit,
@@ -246,6 +252,126 @@ function cliRegisteredWorktrees(root: string): Array<{
   }
   flush();
   return entries;
+}
+
+function positiveIssueList(raw: string | boolean | undefined): number[] {
+  if (raw === undefined) return [];
+  if (typeof raw !== "string" || raw === "")
+    throw new Error("--relatesは正のIssue番号をカンマ区切りで指定してください");
+  const values = raw.split(",");
+  if (values.some((value) => !/^[1-9]\d*$/u.test(value)))
+    throw new Error("--relatesは正のIssue番号をカンマ区切りで指定してください");
+  const issues = values.map(Number);
+  if (new Set(issues).size !== issues.length)
+    throw new Error("--relatesに同じIssue番号を重複して指定できません");
+  return issues;
+}
+
+function registeredWorktrees(root: string): Array<{
+  path: string;
+  branch: string;
+}> {
+  const output = git(["worktree", "list", "--porcelain"], root).stdout;
+  return output
+    .trim()
+    .split(/\r?\n\r?\n/u)
+    .filter(Boolean)
+    .flatMap((entry) => {
+      const lines = entry.split(/\r?\n/u);
+      const worktreeLine = lines.find((line) => line.startsWith("worktree "));
+      const branchLine = lines.find((line) => line.startsWith("branch "));
+      if (!worktreeLine) return [];
+      return [
+        {
+          path: path.resolve(worktreeLine.slice("worktree ".length)),
+          branch: branchLine?.slice("branch refs/heads/".length) ?? "",
+        },
+      ];
+    });
+}
+
+function observeRootUpdate(
+  root: string,
+  mergeSha: string,
+): RootUpdateObservation {
+  const actualRoot = path.resolve(
+    git(["rev-parse", "--show-toplevel"], root).stdout.trim(),
+  );
+  const suppliedRoot = fs.realpathSync(root);
+  const primaryRoot = registeredWorktrees(actualRoot)[0]?.path;
+  const verifiedRootPath =
+    fs.realpathSync(actualRoot) === suppliedRoot && primaryRoot === actualRoot
+      ? suppliedRoot
+      : "";
+  const branch = git(["branch", "--show-current"], root).stdout.trim();
+  const expectedDefault = defaultBranch(root);
+  const status = git(
+    ["status", "--porcelain=v1", "--untracked-files=all"],
+    root,
+  )
+    .stdout.split(/\r?\n/u)
+    .filter(Boolean);
+  const upstream = git(
+    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+    root,
+    { allowFailure: true },
+  );
+  const upstreamSha =
+    upstream.status === 0
+      ? git(["rev-parse", "@{upstream}"], root, { allowFailure: true })
+      : { status: 1, stdout: "" };
+  const remote = git(
+    ["ls-remote", "--exit-code", "origin", `refs/heads/${expectedDefault}`],
+    root,
+    { allowFailure: true },
+  );
+  const remoteSha =
+    remote.status === 0 ? (remote.stdout.split(/\s/u)[0] ?? "") : "";
+  const localSha = git(["rev-parse", "HEAD"], root).stdout.trim();
+  const fastForward = git(
+    ["merge-base", "--is-ancestor", localSha, mergeSha],
+    root,
+    { allowFailure: true },
+  );
+  return {
+    rootPath: verifiedRootPath,
+    currentBranch: branch,
+    defaultBranch: expectedDefault,
+    dirty: status.some((line) => !line.startsWith("?? ")),
+    untracked: status
+      .filter((line) => line.startsWith("?? "))
+      .map((line) => line.slice(3)),
+    upstreamRef: upstream.status === 0 ? upstream.stdout.trim() : undefined,
+    localSha,
+    upstreamSha: upstreamSha.status === 0 ? upstreamSha.stdout.trim() : "",
+    remoteSha,
+    mergeSha,
+    fastForwardable: fastForward.status === 0,
+  };
+}
+
+function rootUpdateDiagnostic(
+  plan: ReturnType<typeof planRootUpdate>,
+): unknown {
+  return {
+    allowed: false,
+    operation: "root.fast-forward",
+    ...plan,
+    diagnostic: {
+      ruleId: "ASC-FINALIZE-ROOT-001",
+      purpose: "merge済みroot mainを検証済みmerge SHAへ安全にfast-forwardする",
+      risk: "worktree",
+      reasons: plan.reasons,
+      scope: ["worktree", "finalize", "root"],
+      checks: [
+        "root、branch、status、upstream、remote SHA、merge SHA、fast-forward可否を確認した",
+      ],
+      autoFixes: [],
+      next: plan.recovery.join("。"),
+      requiredAuthority: "repository maintainer",
+      rollback: "root worktreeを変更せず対象worktreeを保持する",
+    },
+  };
 }
 
 function routingProject(root: string) {
@@ -1303,22 +1429,137 @@ export async function main(argv: string[]): Promise<number> {
     const apply = applyMode(flags);
     const root = path.resolve(required(flags, "root"));
     const target = path.resolve(required(flags, "path"));
+    if (flags["update-root"] !== undefined && flags["update-root"] !== true)
+      throw new Error("--update-rootは値を付けずに指定してください");
+    const updateRoot = flags["update-root"] === true;
+    const mergeSha = updateRoot ? required(flags, "merge-sha") : undefined;
     const evidence = readFinalizeEvidence(required(flags, "evidence"));
     const state = inspectFinalizeState(root, target, evidence);
-    const report = buildFinalizeReport(state);
+    const initialRootObservation = mergeSha
+      ? observeRootUpdate(root, mergeSha)
+      : undefined;
+    const reportState =
+      initialRootObservation &&
+      (evidence.base === initialRootObservation.defaultBranch ||
+        evidence.base === initialRootObservation.upstreamRef)
+        ? { ...state, baseSha: mergeSha }
+        : state;
+    const report = buildFinalizeReport(reportState);
+    const cleanup = planWorktreeCleanup({
+      target: { path: target, branch: state.branch },
+      registered: registeredWorktrees(root),
+      prMerged: state.prMerged === true,
+      clean: state.dirty === false && state.untracked.length === 0,
+      pushed: state.pushed,
+      recoveryReachable: state.recoveryReachable,
+      consumerAssets: [
+        ...state.untracked,
+        ...state.temporaryArtifacts,
+        ...state.ignoredArtifacts,
+      ],
+    });
+    let rootPlan = initialRootObservation
+      ? planRootUpdate(initialRootObservation)
+      : undefined;
     if (!apply) {
-      print(report);
-      return report.safe ? 0 : 1;
+      print({
+        ...report,
+        cleanup,
+        ...(rootPlan ? { rootUpdate: rootPlan } : {}),
+      });
+      return report.safe &&
+        cleanup.state === "ready" &&
+        (!rootPlan || rootPlan.state === "ready")
+        ? 0
+        : 1;
     }
     const approvedHash = required(flags, "report-hash");
     if (flags.authorize !== "approved")
       throw new Error("完了処理の適用には--authorize=approvedが必要です");
+    if (!report.safe) {
+      print(report);
+      return 1;
+    }
+    if (!/^[a-f0-9]{64}$/u.test(approvedHash) || approvedHash !== report.hash)
+      throw new Error("明示承認が報告ハッシュと一致しません");
+    if (cleanup.state === "rejected") {
+      print({ allowed: false, operation: "worktree.remove", ...cleanup });
+      return 1;
+    }
+    const trustedPolicy = loadOperationPolicy(root).policy;
+    if (mergeSha) {
+      const initial = observeRootUpdate(root, mergeSha);
+      const locallySafe =
+        initial.rootPath.trim() !== "" &&
+        initial.currentBranch === initial.defaultBranch &&
+        !initial.dirty &&
+        initial.untracked.length === 0 &&
+        initial.upstreamRef !== undefined &&
+        /^[a-f0-9]{40}$/iu.test(initial.mergeSha) &&
+        initial.remoteSha === initial.mergeSha;
+      if (locallySafe && initial.upstreamSha !== initial.remoteSha) {
+        git(
+          [
+            "fetch",
+            "--no-tags",
+            "origin",
+            `refs/heads/${initial.defaultBranch}:refs/remotes/origin/${initial.defaultBranch}`,
+          ],
+          root,
+        );
+      }
+      rootPlan = planRootUpdate(observeRootUpdate(root, mergeSha));
+      if (rootPlan.state === "rejected") {
+        print(rootUpdateDiagnostic(rootPlan));
+        return 1;
+      }
+      if (rootPlan.from !== rootPlan.to)
+        git(["merge", "--ff-only", mergeSha], root);
+      const observedHead = git(["rev-parse", "HEAD"], root).stdout.trim();
+      if (observedHead !== mergeSha) {
+        print(
+          rootUpdateDiagnostic({
+            state: "rejected",
+            from: rootPlan.from,
+            to: mergeSha,
+            reasons: ["適用後のroot HEADが検証済みmerge SHAと一致しません"],
+            recovery: [
+              "root worktreeとorigin/mainの状態を確認し、変更を加えずに再検証する",
+            ],
+          }),
+        );
+        return 1;
+      }
+    }
+    const currentState = inspectFinalizeState(root, target, evidence);
+    const currentCleanup = planWorktreeCleanup({
+      target: { path: target, branch: currentState.branch },
+      registered: registeredWorktrees(root),
+      prMerged: currentState.prMerged === true,
+      clean:
+        currentState.dirty === false && currentState.untracked.length === 0,
+      pushed: currentState.pushed,
+      recoveryReachable: currentState.recoveryReachable,
+      consumerAssets: [
+        ...currentState.untracked,
+        ...currentState.temporaryArtifacts,
+        ...currentState.ignoredArtifacts,
+      ],
+    });
+    if (currentCleanup.state === "rejected") {
+      print({
+        allowed: false,
+        operation: "worktree.remove",
+        ...currentCleanup,
+      });
+      return 1;
+    }
     const result = applyFinalize(
       {
         report,
         approvedHash,
-        currentState: inspectFinalizeState(root, target, evidence),
-        trustedPolicy: loadOperationPolicy(root).policy,
+        currentState,
+        trustedPolicy,
       },
       (operation, payload) => {
         if (operation !== "worktree.remove")
@@ -1342,12 +1583,27 @@ export async function main(argv: string[]): Promise<number> {
     const headSha = required(flags, "head-sha");
     if (!/^[a-f0-9]{40}$/iu.test(headSha))
       throw new Error("--head-shaは完全な40桁Git SHAで指定してください");
+    const issueRaw = required(flags, "issue");
+    if (!/^[1-9]\d*$/u.test(issueRaw))
+      throw new Error("--issueは正のIssue番号で指定してください");
+    const issue = Number(issueRaw);
+    const canonicalRaw =
+      typeof flags["canonical-issue"] === "string"
+        ? flags["canonical-issue"]
+        : issueRaw;
+    if (!/^[1-9]\d*$/u.test(canonicalRaw))
+      throw new Error("--canonical-issueは正のIssue番号で指定してください");
+    const canonicalIssue = Number(canonicalRaw);
+    if (canonicalIssue !== issue)
+      throw new Error("--canonical-issueは--issueと一致させてください");
     const input = {
       apply,
       authorization:
         typeof flags.authorize === "string" ? flags.authorize : undefined,
       repository: required(flags, "repo"),
-      issue: Number(required(flags, "issue")),
+      issue,
+      canonicalIssue,
+      relatedIssues: positiveIssueList(flags.relates),
       head: required(flags, "head"),
       headSha,
       base: required(flags, "base"),

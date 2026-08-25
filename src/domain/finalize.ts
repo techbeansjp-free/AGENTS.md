@@ -1,7 +1,144 @@
 import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { enforceTrustedBoundary } from "./enforcement.js";
-import { type Policy, type RuleObservation } from "../types.js";
+import { isRecord, type Policy, type RuleObservation } from "../types.js";
+
+export interface RootUpdateObservation {
+  rootPath: string;
+  currentBranch: string;
+  defaultBranch: string;
+  dirty: boolean;
+  untracked: string[];
+  upstreamRef: string | undefined;
+  localSha: string;
+  upstreamSha: string;
+  remoteSha: string;
+  mergeSha: string;
+  fastForwardable: boolean;
+}
+
+export function planRootUpdate(input: unknown): {
+  state: "ready" | "rejected";
+  from: string;
+  to: string;
+  reasons: string[];
+  recovery: string[];
+} {
+  const value = isRecord(input) ? input : {};
+  const stringValue = (key: keyof RootUpdateObservation): string =>
+    typeof value[key] === "string" ? value[key] : "";
+  const rootPath = stringValue("rootPath");
+  const currentBranch = stringValue("currentBranch");
+  const defaultBranch = stringValue("defaultBranch");
+  const upstreamRef = stringValue("upstreamRef");
+  const localSha = stringValue("localSha");
+  const upstreamSha = stringValue("upstreamSha");
+  const remoteSha = stringValue("remoteSha");
+  const mergeSha = stringValue("mergeSha");
+  const reasons: string[] = [];
+  const recovery: string[] = [];
+  const reject = (reason: string, next: string): void => {
+    reasons.push(reason);
+    if (!recovery.includes(next)) recovery.push(next);
+  };
+
+  if (rootPath.trim() === "")
+    reject(
+      "root worktreeのパスが空です",
+      "対象repositoryのroot worktreeパスを指定して再実行する",
+    );
+  if (
+    currentBranch.trim() === "" ||
+    defaultBranch.trim() === "" ||
+    currentBranch !== defaultBranch
+  )
+    reject(
+      "root worktreeが検証済みの既定branchではありません",
+      "root worktreeを既定branchへ戻し、branch名を確認してから再実行する",
+    );
+  const untracked = value.untracked;
+  if (
+    value.dirty !== false ||
+    !Array.isArray(untracked) ||
+    untracked.some((item) => typeof item !== "string") ||
+    untracked.length > 0
+  )
+    reject(
+      "root worktreeに変更または未追跡ファイルがあります",
+      "変更をcommitまたはstashしてから再実行する",
+    );
+  if (upstreamRef.trim() === "")
+    reject(
+      "root worktreeのupstreamが不明です",
+      "既定branchのupstreamを確認して設定してから再実行する",
+    );
+  if (
+    upstreamSha.trim() === "" ||
+    remoteSha.trim() === "" ||
+    upstreamSha !== remoteSha
+  )
+    reject(
+      "upstream SHAとremote SHAが一致しません",
+      "originの既定branchをfetchし、remote同一性を再確認してから再実行する",
+    );
+  if (!/^[a-f0-9]{40}$/iu.test(mergeSha) || remoteSha !== mergeSha)
+    reject(
+      "検証済みmerge SHAが40桁Git SHAでないかremote SHAと一致しません",
+      "PRのmerge結果をread-after-writeで再確認し、完全なmerge SHAで再実行する",
+    );
+  const alreadyUpdated =
+    /^[a-f0-9]{40}$/iu.test(mergeSha) && localSha === mergeSha;
+  if (!alreadyUpdated && value.fastForwardable !== true)
+    reject(
+      "root worktreeをmerge SHAへfast-forwardできません",
+      "local mainの分岐を調査し、利用者の判断で復旧してから再実行する",
+    );
+
+  return {
+    state: reasons.length === 0 ? "ready" : "rejected",
+    from: localSha,
+    to: mergeSha,
+    reasons,
+    recovery,
+  };
+}
+
+export function planWorktreeCleanup(input: {
+  target: { path: string; branch: string };
+  registered: Array<{ path: string; branch: string }>;
+  prMerged: boolean;
+  clean: boolean;
+  pushed: boolean;
+  recoveryReachable: boolean;
+  consumerAssets: string[];
+}): {
+  state: "ready" | "rejected";
+  target: string;
+  reasons: string[];
+} {
+  const reasons: string[] = [];
+  const exact = input.registered.filter(
+    (worktree) =>
+      worktree.path === input.target.path &&
+      worktree.branch === input.target.branch,
+  );
+  if (exact.length !== 1)
+    reasons.push(
+      "対象PR専用worktreeのpathとbranchに完全一致する登録が1件ではありません",
+    );
+  if (!input.prMerged) reasons.push("対象PRがマージ済みではありません");
+  if (!input.clean) reasons.push("対象worktreeがcleanではありません");
+  if (!input.pushed) reasons.push("対象branchがpush済みではありません");
+  if (!input.recoveryReachable)
+    reasons.push("対象worktreeの復旧参照を確認できません");
+  if (input.consumerAssets.length > 0)
+    reasons.push("対象worktreeに利用者所有資産があります");
+  return {
+    state: reasons.length === 0 ? "ready" : "rejected",
+    target: input.target.path,
+    reasons,
+  };
+}
 
 interface FinalizeState {
   repository?: string;
