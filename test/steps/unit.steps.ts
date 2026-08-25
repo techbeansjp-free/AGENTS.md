@@ -2133,9 +2133,9 @@ Given("npx lifecycleの公開契約がある", function () {
   const files = [
     "package.json",
     ".agent-skill-chain/00_利用案内.md",
-    "docs/specs/04_機能/00_ワークフローv0.3.md",
+    "docs/specs/04_機能/01_ワークフローv0.3.md",
     "docs/specs/12_運用保守/00_運用設計.md",
-    "docs/specs/13_移行・廃止/00_移行方針.md",
+    "docs/specs/13_移行・廃止/01_移行方針.md",
   ];
   for (const relative of files) {
     const destination = path.join(this.legacyCliContractRoot, relative);

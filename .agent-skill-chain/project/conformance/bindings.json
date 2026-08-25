@@ -36,7 +36,7 @@
     },
     {
       "id": "I3",
-      "sourcePaths": ["docs/specs/15_要件追跡/01_課題834追跡.md"],
+      "sourcePaths": ["docs/specs/15_要件追跡/00_追跡表.md"],
       "enforcement": [
         { "path": "src/domain/trace.ts", "export": "validateScenarioTrace" },
         { "path": "scripts/check_trace.ts", "export": "collectProjectTrace" }
@@ -87,7 +87,7 @@
     },
     {
       "id": "I5",
-      "sourcePaths": ["docs/specs/10_セキュリティ/00_信頼境界.md"],
+      "sourcePaths": ["docs/specs/10_セキュリティ/01_信頼境界.md"],
       "enforcement": [
         { "path": "src/lib/security.ts", "export": "resolveContained" },
         { "path": "src/domain/worktree.ts", "export": "createWorktree" }
@@ -100,7 +100,7 @@
     {
       "id": "I6",
       "sourcePaths": [
-        "docs/specs/11_非機能/00_品質要件.md",
+        "docs/specs/11_非機能/01_品質要件.md",
         ".agent-skill-chain/docs/02_品質基準.md",
         ".agent-skill-chain/templates/issue/04_レビュー.md",
         "scripts/check_project_quality.ts"
@@ -144,7 +144,7 @@
       "id": "I7",
       "sourcePaths": [
         "package.json",
-        "docs/specs/13_移行・廃止/00_移行方針.md"
+        "docs/specs/13_移行・廃止/01_移行方針.md"
       ],
       "enforcement": [
         {
@@ -165,7 +165,7 @@
     },
     {
       "id": "I8",
-      "sourcePaths": ["docs/specs/10_セキュリティ/00_信頼境界.md"],
+      "sourcePaths": ["docs/specs/10_セキュリティ/01_信頼境界.md"],
       "enforcement": [
         {
           "path": "src/domain/enforcement.ts",
@@ -185,7 +185,7 @@
     {
       "id": "I10",
       "sourcePaths": [
-        "docs/specs/04_機能/00_ワークフローv0.3.md",
+        "docs/specs/04_機能/01_ワークフローv0.3.md",
         ".agent-skill-chain/docs/00_運用ポリシー.md"
       ],
       "enforcement": [
@@ -207,7 +207,7 @@
     },
     {
       "id": "I11",
-      "sourcePaths": ["docs/specs/07_データ/00_管理データ.md"],
+      "sourcePaths": ["docs/specs/07_データ/01_管理データ.md"],
       "enforcement": [
         { "path": "src/domain/enforcement.ts", "export": "serializeDiagnostic" }
       ],
