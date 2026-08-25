@@ -29,6 +29,29 @@
           "afterSha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-WORKFLOW-STEP-GATE-001",
+      "status": "staged",
+      "fromVersion": 2,
+      "toVersion": 3,
+      "owner": "repository maintainer",
+      "rationale": "ワークフローStep定義の正本をdomainへ移すにあたり、規範文書とコードの一致を検証するworkflow:checkを必須gateへ加える。検査の追加であり品質強度の緩和ではない",
+      "rollback": "本proposalをregistryから取り消し、prepack連鎖からworkflow:checkを除いた10 gate構成へ戻して全品質検査を再実行する",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "ce1f94b90a8ed03214f0c955abaa032df535ddeeb4897439a5eb110369d08d27",
+          "afterSha256": "89fc0ff5165719e6284050a5dac57676d166d60df0379b30dfb77285da09d865"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+          "afterSha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+        }
+      ]
     }
   ]
 }
