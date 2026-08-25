@@ -68,7 +68,7 @@ export function planAutoReleaseFromEnvironment(
   environment: NodeJS.ProcessEnv,
 ): AutoReleasePlan {
   return planAutoRelease({
-    currentVersion: PACKAGE_VERSION,
+    currentVersion: environment.RELEASE_CURRENT_VERSION ?? PACKAGE_VERSION,
     existingTags: linesFromFile(
       requiredEnvironment(environment, "RELEASE_EXISTING_TAGS_FILE"),
     ),
