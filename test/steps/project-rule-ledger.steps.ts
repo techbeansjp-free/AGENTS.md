@@ -1,0 +1,347 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import {
+  buildRuleCoverage,
+  validateProjectRuleLedgerEntry,
+  type RuleCoverageOrphan,
+} from "../../src/domain/conformance.js";
+import {
+  checkFixedMarkdownNames,
+  validateFixedMarkdownName,
+} from "../../scripts/check_directory_guides.js";
+import {
+  compareTrustedPolicy,
+  validateRule,
+} from "../../src/domain/enforcement.js";
+import {
+  checkPackageDistributionBoundary,
+  checkPackageManagerBoundary,
+  checkQualityCiTriggers,
+  checkRepositoryRuleLedger,
+  type RepositoryRuleLedgerResult,
+} from "../../scripts/check_conformance.js";
+import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+
+function ruleFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    ruleId: "ASC-DOGFOOD-FIXTURE-001",
+    purpose: "project rule構造を検証する",
+    riskClass: "quality",
+    scope: ["fixture"],
+    enforcement: "require",
+    activation: "active",
+    owner: "fixture owner",
+    targetLayer: "project",
+    evidence: "fixture test evidence",
+    remediation: "fixtureを修正する",
+    overridePolicy: "bound",
+    rollback: "fixtureを元へ戻す",
+    ...overrides,
+  };
+}
+
+type LedgerCoverage = ReturnType<typeof buildRuleCoverage>;
+
+class ProjectRuleLedgerWorld extends WorkflowWorld {
+  rules: unknown[] = [];
+  ruleValidations: Array<ReturnType<typeof validateProjectRuleLedgerEntry>> =
+    [];
+  coverageInput: Parameters<typeof buildRuleCoverage>[0] | undefined =
+    undefined;
+  coverage: LedgerCoverage | undefined = undefined;
+  markdownNames: string[] = [];
+  markdownResults: string[][] = [];
+  ledger: RepositoryRuleLedgerResult | undefined = undefined;
+  fixtureRoot = "";
+  boundaryErrors: string[] = [];
+  fixedMarkdownErrors: string[] = [];
+  runtimeRuleValidations: Array<ReturnType<typeof validateRule>> = [];
+  metadataComparison: ReturnType<typeof compareTrustedPolicy> | undefined =
+    undefined;
+}
+
+const { Given, When, Then } = stepDefinitions<ProjectRuleLedgerWorld>();
+
+Given(
+  "必須fieldだけのlegacy ruleと変更authorityを持つ拡張ruleがある",
+  function () {
+    this.rules = [
+      ruleFixture(),
+      ruleFixture({
+        ruleId: "ASC-DOGFOOD-FIXTURE-002",
+        packageDefault: "package側は値を固定しない",
+        projectOverride: "fixture projectの値を使う",
+        changeAuthority: "fixture project owner",
+      }),
+    ];
+  },
+);
+
+When("project ruleの構造を検証する", function () {
+  this.ruleValidations = this.rules.map((rule, index) =>
+    validateProjectRuleLedgerEntry(rule, `rule[${index}]`),
+  );
+});
+
+Then("後方互換を保ち拡張ruleの変更authorityも検証される", function () {
+  assert.equal(this.ruleValidations.length, 2);
+  assert.ok(this.ruleValidations.every((result) => result.valid));
+  const invalid = validateProjectRuleLedgerEntry(
+    ruleFixture({
+      packageDefault: "package既定値",
+      projectOverride: "project上書き値",
+      changeAuthority: "",
+    }),
+  );
+  assert.equal(invalid.valid, false);
+  assert.match(invalid.errors.join(" "), /changeAuthority/u);
+});
+
+Given("runtimeにもCIにもIDがないrule coverage入力がある", function () {
+  this.coverageInput = {
+    rules: [ruleFixture()],
+    normativeText: "ASC-DOGFOOD-FIXTURE-001",
+    schemaText: "",
+    runtimeText: "",
+    ciText: "",
+  };
+});
+
+Given("policy未定義のrule IDを持つ規範文書がある", function () {
+  this.coverageInput = {
+    rules: [],
+    normativeText: "ASC-DOGFOOD-NORMATIVE-ONLY-001",
+    schemaText: "",
+    runtimeText: "",
+    ciText: "",
+  };
+});
+
+Given("policy未定義のrule IDを持つCIがある", function () {
+  this.coverageInput = {
+    rules: [],
+    normativeText: "",
+    schemaText: "",
+    runtimeText: "",
+    ciText: "ASC-DOGFOOD-CI-ONLY-001",
+  };
+});
+
+When("rule coverage matrixを構築する", function () {
+  assert.ok(this.coverageInput);
+  this.coverage = buildRuleCoverage(this.coverageInput);
+});
+
+function orphanReasons(orphans: RuleCoverageOrphan[] | undefined): string {
+  return (orphans ?? []).map(({ reason }) => reason).join(" ");
+}
+
+Then("未検証ruleがorphanとして拒否される", function () {
+  assert.match(orphanReasons(this.coverage?.orphans), /runtimeにもCIにも/u);
+});
+
+Then("規範だけのruleがorphanとして拒否される", function () {
+  assert.match(orphanReasons(this.coverage?.orphans), /project policyに定義/u);
+});
+
+Then("CIだけの暗黙ruleがorphanとして拒否される", function () {
+  assert.match(orphanReasons(this.coverage?.orphans), /CIだけ/u);
+});
+
+Given("連番または日本語名を欠く固定Markdown名がある", function () {
+  this.markdownNames = ["仕様.md", "01_spec.md"];
+});
+
+Given("契約上の固定名称と未知の英語Markdown名がある", function () {
+  this.markdownNames = ["AGENTS.md", "SKILL.md", "README.md", "POLICY.md"];
+});
+
+When("固定Markdown名を検証する", function () {
+  this.markdownResults = this.markdownNames.map(validateFixedMarkdownName);
+});
+
+Then("すべての不正な固定Markdown名が拒否される", function () {
+  assert.equal(this.markdownResults.length, 2);
+  assert.ok(this.markdownResults.every((errors) => errors.length > 0));
+});
+
+Then("明示された固定名称だけが許可される", function () {
+  assert.deepEqual(
+    this.markdownResults.map((errors) => errors.length === 0),
+    [true, true, true, false],
+  );
+});
+
+Given(
+  "metadataを省略したruleと有効・空文字列・非文字列のmetadataを持つruleがある",
+  function () {
+    const metadataFields = [
+      "packageDefault",
+      "projectOverride",
+      "changeAuthority",
+    ];
+    this.rules = [
+      ruleFixture(),
+      ruleFixture({
+        packageDefault: "package既定値",
+        projectOverride: "project上書き値",
+        changeAuthority: "project policy owner",
+      }),
+      ...metadataFields.map((field) =>
+        ruleFixture({ [field]: `${field}の有効値` }),
+      ),
+      ...metadataFields.map((field) => ruleFixture({ [field]: "" })),
+      ...metadataFields.map((field) => ruleFixture({ [field]: 1 })),
+    ];
+  },
+);
+
+When("runtimeでrule metadataとtrusted policy比較を検証する", function () {
+  this.runtimeRuleValidations = this.rules.map(validateRule);
+  const trustedRule = ruleFixture();
+  const candidateRule = ruleFixture({
+    packageDefault: "package既定値",
+    projectOverride: "project上書き値",
+    changeAuthority: "project policy owner",
+  });
+  const policy = (rule: unknown) => ({
+    schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
+    delivery: { stopAt: "pull_request" as const },
+    merge: {
+      mode: "disabled" as const,
+      branches: [],
+      methods: [],
+      requiredChecks: [],
+      requiredReviews: 1,
+    },
+    budgets: { localFeedbackMs: 120000, prGateMs: 900000 },
+    rules: [rule],
+  });
+  this.metadataComparison = compareTrustedPolicy(
+    policy(trustedRule) as Parameters<typeof compareTrustedPolicy>[0],
+    policy(candidateRule) as Parameters<typeof compareTrustedPolicy>[1],
+  );
+});
+
+Then(
+  "metadata省略と有効値だけを許可しmetadata追加を意味変更として拒否しない",
+  function () {
+    assert.deepEqual(
+      this.runtimeRuleValidations.map(({ valid }) => valid),
+      [true, true, true, true, true, false, false, false, false, false, false],
+    );
+    const errors = this.runtimeRuleValidations
+      .slice(5)
+      .flatMap(({ errors: validationErrors }) => validationErrors)
+      .join(" ");
+    assert.doesNotMatch(errors, /未知field/u);
+    assert.match(errors, /packageDefault/u);
+    assert.match(errors, /projectOverride/u);
+    assert.match(errors, /changeAuthority/u);
+    assert.equal(
+      this.metadataComparison?.allowed,
+      true,
+      JSON.stringify(this.metadataComparison),
+    );
+  },
+);
+
+Given("実repositoryのproject rule台帳がある", function () {
+  this.fixtureRoot = process.cwd();
+});
+
+When("repository rule台帳conformanceを検証する", function () {
+  this.ledger = checkRepositoryRuleLedger(this.fixtureRoot);
+});
+
+Then("全ruleがcoverageを持ちorphanは0件になる", function () {
+  assert.ok(this.ledger);
+  assert.equal(this.ledger.valid, true, this.ledger.errors.join("; "));
+  assert.equal(this.ledger.coverage.orphans.length, 0);
+  assert.equal(this.ledger.coverage.rows.length, this.ledger.rules.length);
+  assert.ok(this.ledger.coverage.rows.every((row) => row.runtime || row.ci));
+});
+
+Given("pull requestとpushで重複発火する隔離品質CIがある", function () {
+  this.fixtureRoot = this.temp("asc-ledger-ci-");
+  const workflow = path.join(this.fixtureRoot, "ci.yml");
+  fs.writeFileSync(workflow, "on:\n  pull_request:\n  push:\n");
+});
+
+When("隔離品質CIのtriggerを検証する", function () {
+  this.boundaryErrors = checkQualityCiTriggers(
+    fs.readFileSync(path.join(this.fixtureRoot, "ci.yml"), "utf8"),
+  );
+});
+
+Then("pull request以外のtriggerが拒否される", function () {
+  assert.match(this.boundaryErrors.join(" "), /push/u);
+});
+
+Given(
+  "npmと別package managerのlockfileを持つ隔離repositoryがある",
+  function () {
+    this.fixtureRoot = this.temp("asc-ledger-package-manager-");
+    fs.writeFileSync(path.join(this.fixtureRoot, "package-lock.json"), "{}\n");
+    fs.writeFileSync(
+      path.join(this.fixtureRoot, "pnpm-lock.yaml"),
+      "lockfileVersion: 9\n",
+    );
+    const choices = path.join(
+      this.fixtureRoot,
+      ".agent-skill-chain/project/choices",
+    );
+    fs.mkdirSync(choices, { recursive: true });
+    fs.writeFileSync(
+      path.join(choices, "development.json"),
+      `${JSON.stringify({ packageManager: "npm" })}\n`,
+    );
+    const workflows = path.join(this.fixtureRoot, ".github/workflows");
+    fs.mkdirSync(workflows, { recursive: true });
+    for (const name of ["ci.yml", "trusted-quality.yml", "release.yml"])
+      fs.writeFileSync(path.join(workflows, name), "steps:\n  - run: npm ci\n");
+  },
+);
+
+When("隔離repositoryのpackage manager境界を検証する", function () {
+  this.boundaryErrors = checkPackageManagerBoundary(this.fixtureRoot);
+});
+
+Then("npm以外のlockfileが拒否される", function () {
+  assert.match(this.boundaryErrors.join(" "), /pnpm-lock\.yaml/u);
+});
+
+Given("配布外project資産をfilesへ含めた隔離packageがある", function () {
+  this.fixtureRoot = this.temp("asc-ledger-distribution-");
+  fs.writeFileSync(
+    path.join(this.fixtureRoot, "package.json"),
+    `${JSON.stringify({ files: ["dist/", ".agent-skill-chain/project/", ".agent-skill-chain/role-log/", ".agent-skill-chain/metrics/"] })}\n`,
+  );
+});
+
+When("隔離packageの配布境界を検証する", function () {
+  this.boundaryErrors = checkPackageDistributionBoundary(this.fixtureRoot);
+});
+
+Then("project policyと実行記録の配布が拒否される", function () {
+  const errors = this.boundaryErrors.join(" ");
+  assert.match(errors, /project/u);
+  assert.match(errors, /role-log/u);
+  assert.match(errors, /metrics/u);
+});
+
+Given("実repositoryのproject rule台帳と固定Markdownがある", function () {
+  this.fixtureRoot = process.cwd();
+});
+
+When("dogfooding境界を一括検証する", function () {
+  this.ledger = checkRepositoryRuleLedger(this.fixtureRoot);
+  this.fixedMarkdownErrors = checkFixedMarkdownNames(this.fixtureRoot);
+});
+
+Then("project ruleと固定Markdownの全境界が合格する", function () {
+  assert.ok(this.ledger);
+  assert.equal(this.ledger.valid, true, this.ledger.errors.join("; "));
+  assert.deepEqual(this.fixedMarkdownErrors, []);
+});

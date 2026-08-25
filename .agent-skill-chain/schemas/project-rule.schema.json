@@ -34,7 +34,10 @@
     "evidence": { "type": "string", "minLength": 1 },
     "remediation": { "type": "string", "minLength": 1 },
     "overridePolicy": { "enum": ["never", "bound"] },
-    "rollback": { "type": "string", "minLength": 1 }
+    "rollback": { "type": "string", "minLength": 1 },
+    "packageDefault": { "type": "string", "minLength": 1 },
+    "projectOverride": { "type": "string", "minLength": 1 },
+    "changeAuthority": { "type": "string", "minLength": 1 }
   },
   "allOf": [
     {

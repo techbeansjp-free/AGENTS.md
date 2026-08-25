@@ -3,7 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
-import { validateRepositoryConformance } from "../src/domain/conformance.js";
+import {
+  buildRuleCoverage,
+  PROJECT_RULE_ENFORCEMENT_POINTS,
+  validateProjectRuleLedgerEntry,
+  validateRepositoryConformance,
+  type RuleCoverageRow,
+} from "../src/domain/conformance.js";
 import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 
 const PACKAGE_MODEL_SLUG_PATHS = [
@@ -19,7 +25,46 @@ const PACKAGE_MODEL_SLUG_PATHS = [
   "scripts",
 ] as const;
 
-const TEXT_ASSET_SUFFIXES = new Set([".json", ".md", ".mjs", ".ts"]);
+const TEXT_ASSET_SUFFIXES = new Set([
+  ".json",
+  ".md",
+  ".mjs",
+  ".ts",
+  ".yaml",
+  ".yml",
+]);
+const NORMATIVE_DOCUMENTS = [
+  ".agent-skill-chain/docs/00_運用ポリシー.md",
+  ".agent-skill-chain/docs/01_開発ワークフロー.md",
+  ".agent-skill-chain/docs/02_品質基準.md",
+] as const;
+const REQUIRED_QUALITY_SCRIPTS = [
+  "docs:format",
+  "test:format",
+  "typecheck",
+  "build",
+  "package:check",
+  "test:unit",
+  "test:integration",
+  "test:e2e",
+] as const;
+const FOREIGN_PACKAGE_MANAGER_FILES = [
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "bun.lockb",
+] as const;
+const FORBIDDEN_PACKAGE_ENTRIES = [
+  ".agent-skill-chain/project-policy.json",
+  ".agent-skill-chain/project",
+  ".agent-skill-chain/role-log",
+  ".agent-skill-chain/metrics",
+  "memo",
+  "issues",
+  ".worktrees",
+  "test",
+  ".github",
+  "scripts",
+] as const;
 
 export interface PackageModelSlugViolation {
   path: string;
@@ -38,6 +83,296 @@ function assetFiles(target: string): string[] {
     .flatMap((entry) =>
       entry.isSymbolicLink() ? [] : assetFiles(path.join(target, entry.name)),
     );
+}
+
+function joinedText(target: string, suffixes: ReadonlySet<string>): string {
+  return assetFiles(target)
+    .filter((file) => suffixes.has(path.extname(file)))
+    .sort((left, right) => left.localeCompare(right, "en"))
+    .map((file) => fs.readFileSync(file, "utf8"))
+    .join("\n");
+}
+
+function readJson(file: string): unknown {
+  return JSON.parse(fs.readFileSync(file, "utf8")) as unknown;
+}
+
+function topLevelSection(source: string, section: string): string[] {
+  const lines = source.split(/\r?\n/u);
+  const heading = new RegExp(`^(?:"${section}"|${section}):\\s*(.*)$`, "u");
+  const start = lines.findIndex((line) => heading.test(line));
+  if (start < 0) return [];
+  const first = heading.exec(lines[start] ?? "")?.[1]?.trim() ?? "";
+  if (first.length > 0) return [first];
+  const body: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S/u.test(line) && !/^\s*#/u.test(line)) break;
+    body.push(line);
+  }
+  return body;
+}
+
+function yamlMappingKeys(lines: string[]): string[] {
+  if (lines.length === 1 && /^\{.*\}$/u.test(lines[0] ?? ""))
+    return [
+      ...(lines[0] ?? "").matchAll(/(?:^|[{,])\s*([A-Za-z0-9_-]+)\s*:/gu),
+    ].map((match) => match[1] ?? "");
+  if (lines.length === 1 && /^\[.*\]$/u.test(lines[0] ?? ""))
+    return (lines[0] ?? "")
+      .slice(1, -1)
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  return lines.flatMap((line) => {
+    const match = /^\s{2}([A-Za-z0-9_-]+):/u.exec(line);
+    return match?.[1] ? [match[1]] : [];
+  });
+}
+
+export function checkQualityCiTriggers(source: string): string[] {
+  const triggers = yamlMappingKeys(topLevelSection(source, "on"));
+  return triggers.length === 1 && triggers[0] === "pull_request"
+    ? []
+    : [
+        `品質CI triggerはpull_requestだけでなければなりません: ${triggers.join(",") || "未定義"}`,
+      ];
+}
+
+export function checkQualityCiPermissions(source: string): string[] {
+  const lines = topLevelSection(source, "permissions");
+  if (lines.length === 0) return ["品質CIのtop-level permissionsがありません"];
+  const invalid = lines.flatMap((line) => {
+    const match = /^\s{2}([A-Za-z0-9_-]+):\s*([^\s#]+)/u.exec(line);
+    return match?.[1] && match[2] !== "read" && match[2] !== "none"
+      ? [`${match[1]}:${match[2]}`]
+      : [];
+  });
+  return invalid.length === 0
+    ? []
+    : [`品質CIにread-only以外のpermissionがあります: ${invalid.join(",")}`];
+}
+
+export function checkPackageManagerBoundary(root: string): string[] {
+  const errors: string[] = [];
+  if (!fs.existsSync(path.join(root, "package-lock.json")))
+    errors.push("package-lock.jsonがありません");
+  for (const relative of FOREIGN_PACKAGE_MANAGER_FILES)
+    if (fs.existsSync(path.join(root, relative)))
+      errors.push(`npm以外のlockfileがあります: ${relative}`);
+  const choices = readJson(
+    path.join(root, ".agent-skill-chain/project/choices/development.json"),
+  );
+  if (!isRecord(choices) || choices.packageManager !== "npm")
+    errors.push("project choiceのpackageManagerはnpmでなければなりません");
+  for (const workflow of ["ci.yml", "trusted-quality.yml", "release.yml"]) {
+    const file = path.join(root, ".github/workflows", workflow);
+    if (
+      !fs.existsSync(file) ||
+      !/\brun:\s*npm ci(?:\s|$)/mu.test(fs.readFileSync(file, "utf8"))
+    )
+      errors.push(`${workflow}にnpm ciによる依存導入がありません`);
+  }
+  return errors;
+}
+
+export function checkNodeRuntimeAlignment(root: string): string[] {
+  const metadata = readJson(path.join(root, "package.json"));
+  const engine =
+    isRecord(metadata) && isRecord(metadata.engines)
+      ? metadata.engines.node
+      : undefined;
+  const minimum =
+    typeof engine === "string" ? /^>=\s*(\d+)/u.exec(engine)?.[1] : undefined;
+  if (!minimum) return ["package engineのNode.js下限を解決できません"];
+  const minimumMajor = Number.parseInt(minimum, 10);
+  const ciText = joinedText(
+    path.join(root, ".github/workflows"),
+    new Set([".yml", ".yaml"]),
+  );
+  const versions = [
+    ...ciText.matchAll(/node-version:\s*[\x22\x27]?(\d+)/gu),
+  ].map((match) => Number.parseInt(match[1] ?? "0", 10));
+  if (versions.length === 0) return ["CIのNode.js versionがありません"];
+  return versions.some((version) => version < minimumMajor)
+    ? [
+        `CIのNode.js versionがpackage engine ${String(engine)}を満たしません: ${versions.join(",")}`,
+      ]
+    : [];
+}
+
+export function checkQualityCommands(root: string): string[] {
+  const metadata = readJson(path.join(root, "package.json"));
+  const scripts =
+    isRecord(metadata) && isRecord(metadata.scripts) ? metadata.scripts : {};
+  const errors = REQUIRED_QUALITY_SCRIPTS.flatMap((name) =>
+    typeof scripts[name] === "string" && scripts[name].trim().length > 0
+      ? []
+      : [`品質commandがありません: ${name}`],
+  );
+  const choices = readJson(
+    path.join(root, ".agent-skill-chain/project/choices/development.json"),
+  );
+  const layers =
+    isRecord(choices) && Array.isArray(choices.testLayers)
+      ? choices.testLayers
+      : [];
+  for (const layer of ["unit", "integration", "e2e"])
+    if (!layers.includes(layer))
+      errors.push(`project choiceにtest layer ${layer}がありません`);
+  return errors;
+}
+
+function normalPackageEntry(value: string): string {
+  return value.replace(/^\.\//u, "").replace(/\/+$/u, "");
+}
+
+export function checkPackageDistributionBoundary(root: string): string[] {
+  const metadata = readJson(path.join(root, "package.json"));
+  const entries =
+    isRecord(metadata) && Array.isArray(metadata.files)
+      ? metadata.files.filter(
+          (entry): entry is string => typeof entry === "string",
+        )
+      : [];
+  if (!isRecord(metadata) || !Array.isArray(metadata.files))
+    return ["package.json files allowlistがありません"];
+  return entries.flatMap((rawEntry) => {
+    const entry = normalPackageEntry(rawEntry);
+    const forbidden = FORBIDDEN_PACKAGE_ENTRIES.find(
+      (candidate) =>
+        entry === candidate ||
+        entry.startsWith(`${candidate}/`) ||
+        candidate.startsWith(`${entry}/`),
+    );
+    return forbidden
+      ? [`npm filesが配布外境界を含みます: ${rawEntry} -> ${forbidden}`]
+      : [];
+  });
+}
+
+export function checkTrustedPolicyBoundary(root: string): string[] {
+  const trustedFile = path.join(root, ".github/workflows/trusted-quality.yml");
+  const ciFile = path.join(root, ".github/workflows/ci.yml");
+  if (!fs.existsSync(trustedFile) || !fs.existsSync(ciFile))
+    return ["trusted default branch policy workflowがありません"];
+  const trusted = fs.readFileSync(trustedFile, "utf8");
+  const ci = fs.readFileSync(ciFile, "utf8");
+  const errors: string[] = [];
+  for (const [pattern, message] of [
+    [
+      /pull_request_target:/u,
+      "trusted workflowはpull_request_targetでなければなりません",
+    ],
+    [
+      /ref:\s*\$\{\{ github\.event\.pull_request\.base\.sha \}\}/u,
+      "trusted validatorはPR base SHAから取得しなければなりません",
+    ],
+    [
+      /--trusted-root=\$GITHUB_WORKSPACE\/trusted/u,
+      "candidateはtrusted base validatorで検証しなければなりません",
+    ],
+  ] as const)
+    if (!pattern.test(trusted)) errors.push(message);
+  if (
+    !/ASC_TRUSTED_COMMIT:\s*\$\{\{ github\.event\.pull_request\.base\.sha \}\}/u.test(
+      ci,
+    )
+  )
+    errors.push(
+      "candidate policy検証は同じPRのbase SHAへ拘束しなければなりません",
+    );
+  return errors;
+}
+
+export interface RepositoryRuleLedgerResult {
+  valid: boolean;
+  errors: string[];
+  rules: unknown[];
+  coverage: {
+    rows: RuleCoverageRow[];
+    orphans: Array<{ ruleId: string; reason: string }>;
+  };
+}
+
+export function checkRepositoryRuleLedger(
+  root: string,
+): RepositoryRuleLedgerResult {
+  const errors: string[] = [];
+  const manifest = readJson(
+    path.join(root, ".agent-skill-chain/project-policy.json"),
+  );
+  const ruleFiles =
+    isRecord(manifest) && Array.isArray(manifest.ruleFiles)
+      ? manifest.ruleFiles.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [];
+  if (!isRecord(manifest) || !Array.isArray(manifest.ruleFiles))
+    errors.push("project policyのruleFiles inventoryがありません");
+  const sorted = [...ruleFiles].sort((left, right) =>
+    left.localeCompare(right, "en"),
+  );
+  if (JSON.stringify(sorted) !== JSON.stringify(ruleFiles))
+    errors.push("project policyのruleFilesはsort順でなければなりません");
+  const actualRuleFiles = fs
+    .readdirSync(path.join(root, ".agent-skill-chain/project/rules"), {
+      withFileTypes: true,
+    })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => `project/rules/${entry.name}`)
+    .sort((left, right) => left.localeCompare(right, "en"));
+  if (JSON.stringify(sorted) !== JSON.stringify(actualRuleFiles))
+    errors.push(
+      "project policyのruleFilesがrules directoryの完全inventoryではありません",
+    );
+  const rules = ruleFiles.map((relative) =>
+    readJson(path.join(root, ".agent-skill-chain", relative)),
+  );
+  const ids = new Set<string>();
+  for (const [index, rule] of rules.entries()) {
+    const label = ruleFiles[index] ?? `rule[${index}]`;
+    const validation = validateProjectRuleLedgerEntry(rule, label);
+    errors.push(...validation.errors);
+    if (isRecord(rule) && typeof rule.ruleId === "string") {
+      if (ids.has(rule.ruleId))
+        errors.push(`ruleIdが重複しています: ${rule.ruleId}`);
+      ids.add(rule.ruleId);
+    }
+  }
+  const normativeText = NORMATIVE_DOCUMENTS.map((relative) =>
+    fs.readFileSync(path.join(root, relative), "utf8"),
+  ).join("\n");
+  const coverage = buildRuleCoverage({
+    rules,
+    normativeText,
+    schemaText: joinedText(
+      path.join(root, ".agent-skill-chain/schemas"),
+      new Set([".json"]),
+    ),
+    runtimeText: [
+      joinedText(path.join(root, "src"), new Set([".ts"])),
+      ...Object.keys(PROJECT_RULE_ENFORCEMENT_POINTS),
+    ].join("\n"),
+    ciText: joinedText(
+      path.join(root, ".github/workflows"),
+      new Set([".yml", ".yaml"]),
+    ),
+  });
+  errors.push(
+    ...coverage.orphans.map((orphan) => `${orphan.ruleId}: ${orphan.reason}`),
+    ...checkQualityCiTriggers(
+      fs.readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8"),
+    ),
+    ...checkQualityCiPermissions(
+      fs.readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8"),
+    ),
+    ...checkPackageManagerBoundary(root),
+    ...checkNodeRuntimeAlignment(root),
+    ...checkQualityCommands(root),
+    ...checkPackageDistributionBoundary(root),
+    ...checkTrustedPolicyBoundary(root),
+  );
+  return { valid: errors.length === 0, errors, rules, coverage };
 }
 
 export function findPackageModelSlugViolations(
@@ -98,6 +433,13 @@ function passedScenarioIds(value: unknown): string[] {
 }
 
 export function checkConformance(root: string): number {
+  const ledger = checkRepositoryRuleLedger(root);
+  if (!ledger.valid) {
+    process.stderr.write(
+      `project rule台帳検査: 失敗\n${ledger.errors.map((error) => `- ${error}`).join("\n")}\n`,
+    );
+    return 1;
+  }
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "asc-conformance-"));
   const report = path.join(temporary, "cucumber.json");
   try {
@@ -139,7 +481,7 @@ export function checkConformance(root: string): number {
       return 1;
     }
     process.stdout.write(
-      "conformance検査: 合格（I1〜I12、実在source/export、成功SCN証拠、固定model slug 0件）\n",
+      `conformance検査: 合格（project rule ${ledger.coverage.rows.length}件、orphan 0件、I1〜I12、実在source/export、成功SCN証拠、固定model slug 0件）\n`,
     );
     return 0;
   } finally {

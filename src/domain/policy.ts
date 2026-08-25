@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { git } from "../lib/process.js";
 import {
+  RULE_OPTIONAL_FIELDS,
+  RULE_REQUIRED_FIELDS,
   resolveEffectivePolicy,
   validateEnforcementPolicy,
 } from "./enforcement.js";
@@ -847,6 +849,14 @@ function assemblePolicySet(
   for (const [relative, entry] of Object.entries(entries))
     if (entry.raw.length > 1024 * 1024)
       throw new Error(`project fragmentが1 MiBを超えています: ${relative}`);
+  const allowedRuleFields = [...RULE_REQUIRED_FIELDS, ...RULE_OPTIONAL_FIELDS];
+  for (const relative of manifest.ruleFiles)
+    rejectUnknownKeys(
+      entries[relative]!.value,
+      allowedRuleFields,
+      relative,
+      manifestValidation.errors,
+    );
   const choices = manifest.choiceFiles.map(
     (relative) => entries[relative]!.value as ProjectChoices,
   );
