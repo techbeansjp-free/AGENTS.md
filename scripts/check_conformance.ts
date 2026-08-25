@@ -11,6 +11,7 @@ import {
   type RuleCoverageRow,
 } from "../src/domain/conformance.js";
 import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
+import { checkWorkflowSteps } from "./check_workflow_steps.js";
 
 const PACKAGE_MODEL_SLUG_PATHS = [
   "AGENTS.md",
@@ -284,6 +285,14 @@ export function checkTrustedPolicyBoundary(root: string): string[] {
   return errors;
 }
 
+export function checkWorkflowStepDocument(
+  root: string,
+  document = path.join(root, ".agent-skill-chain/docs/01_開発ワークフロー.md"),
+): string[] {
+  const result = checkWorkflowSteps(root, document);
+  return result.errors.map((error) => `workflow step契約: ${error}`);
+}
+
 export interface RepositoryRuleLedgerResult {
   valid: boolean;
   errors: string[];
@@ -371,6 +380,7 @@ export function checkRepositoryRuleLedger(
     ...checkQualityCommands(root),
     ...checkPackageDistributionBoundary(root),
     ...checkTrustedPolicyBoundary(root),
+    ...checkWorkflowStepDocument(root),
   );
   return { valid: errors.length === 0, errors, rules, coverage };
 }

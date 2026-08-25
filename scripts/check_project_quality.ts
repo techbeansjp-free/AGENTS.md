@@ -62,7 +62,6 @@ const EXPECTED_SCRIPTS: Record<string, string> = {
   "directories:check": "node --import tsx scripts/check_directory_guides.ts",
   "skills:check": "node --import tsx scripts/check_skill_templates.ts",
   "cli:check": "node --import tsx scripts/check_cli_contract.ts",
-  "workflow:check": "node --import tsx scripts/check_workflow_steps.ts",
   "project:quality": "node --import tsx scripts/check_project_quality.ts",
   lint: "eslint .",
   "format:check":
@@ -88,7 +87,7 @@ const EXPECTED_SCRIPTS: Record<string, string> = {
   quality:
     "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test",
   prepack:
-    "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run workflow:check && npm run audit:check && npm run package:check",
+    "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
 };
 
 function readObject(file: string): Record<string, unknown> {

@@ -40,3 +40,8 @@ Feature: ワークフローStepの記録と正本一致を統合検証する
     Given ワークフローStep統合検査の隔離環境がある
     When "SCN-INT-WFSTEP-008"の統合検査を実行する
     Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-009 conformance gateが規範文書とStep正本の不一致を拒否する
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-009"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる

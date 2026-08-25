@@ -17,6 +17,7 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 
 | コマンド | 入力 | 出力・終了code |
 |---|---|---|
+| `worktree survey` | `--root=<repository root>`、任意の`--format=json\|text`。`--apply`は拒否 | 登録済みworktreeの`primary / in-progress / cleanup-ready / retain`、日本語理由、分類別path、走査errorをJSONまたは日本語要約表で返す。後片付け候補の存在だけでは終了codeを非0にせず、走査失敗だけを非0にする |
 | `worktree finalize --complete --dry-run` | `--root --path --evidence --merge-sha`。cleanup authorityと承認digestは任意 | 副作用なしで全phase、`state`、`requiredAuthority`、日本語`recovery`、最新`previewDigest`、対象pathをJSONで返す。未承認は`pending`かつ非0 |
 | `worktree finalize --complete --apply` | preview入力に`--authorize=approved`を加える。cleanup適用にはさらに`--cleanup-authority --approved-digest=<64桁hex>`が必要 | merge確認後にrootを更新する。cleanup authorityなしはroot更新済み・cleanup pendingで非0。全検証成功は`completed`で0、拒否または部分完了は非0 |
 
@@ -47,7 +48,7 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 
 | コマンド | 追加出力 | 契約 |
 |---|---|---|
-| `doctor` | `projectPolicyStatus`、`projectPolicyMessage`、`workflow` | project policyを`missing / valid / invalid / unsupported-version`のいずれかで報告する。各Issue stagingのモード判定成果物、journal、実施済みStep、現在Step、次Step、妥当性を追加する。`healthy`は従来どおりinstall健全性だけを表す |
+| `doctor` | `projectPolicyStatus`、`projectPolicyMessage`、`workflow`、`worktrees` | project policyを`missing / valid / invalid / unsupported-version`のいずれかで報告する。各Issue stagingのモード判定成果物、journal、実施済みStep、現在Step、次Step、妥当性を追加する。CLIが注入した走査結果のcleanup-ready、retain、in-progress件数とcleanup-ready pathの日本語diagnosticも報告し、走査失敗もdiagnosticへ保持する。`healthy`は従来どおりinstall健全性だけを表す |
 | `project bootstrap` | `generatedScope`、`projectPolicyStatus`、`projectPolicyNotice`、`nextSafeOperation` | `docs/specs/`だけを生成し、project policyは生成も検証もしない。利用project ownerがmanifestと列挙資産を作成し、`policy validate`と`conformance validate`を行う次操作を日本語で返す |
 
 `doctor`の`unsupported-version`は入力を保持したstaged migrationを案内する。`missing`と`invalid`はinstall成功に隠さず明示するが、package資産の導入状態とconsumer所有policyの妥当性を同じhealth判定へ混在させない。

@@ -1,10 +1,10 @@
 {
   "name": "agent-skill-chain",
-  "version": "0.3.1-beta.6",
+  "version": "0.3.1-beta.7",
   "description": "人とAIエージェントが使う、安全側に倒す軽量開発ワークフロー。",
   "type": "module",
   "agentSkillChain": {
-    "qualityContractVersion": 3,
+    "qualityContractVersion": 2,
     "policySchemaVersion": "0.3.1",
     "compatiblePolicySchemaVersions": [
       "0.3.0"
@@ -57,7 +57,7 @@
     "audit:check": "node --import tsx scripts/check_file_audit.ts",
     "conformance:check": "node --import tsx scripts/check_conformance.ts",
     "quality": "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test",
-    "prepack": "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run workflow:check && npm run audit:check && npm run package:check"
+    "prepack": "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

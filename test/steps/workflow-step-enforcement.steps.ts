@@ -32,6 +32,7 @@ import {
 } from "../../src/adapters/workflow-journal.js";
 import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
 import { doctor } from "../../src/domain/lifecycle.js";
+import { checkWorkflowStepDocument } from "../../scripts/check_conformance.js";
 import { checkWorkflowSteps } from "../../scripts/check_workflow_steps.js";
 import { main } from "../../src/cli.js";
 
@@ -450,6 +451,17 @@ When("{string}の統合検査を実行する", async function (scenarioId: strin
       const checked = checkWorkflowSteps(process.cwd(), document);
       assert.equal(checked.valid, false);
       assert.match(checked.errors.join("\n"), /一致しません/u);
+      break;
+    }
+    case "SCN-INT-WFSTEP-009": {
+      const document = path.join(root, "workflow.md");
+      const markdown = fs
+        .readFileSync(".agent-skill-chain/docs/01_開発ワークフロー.md", "utf8")
+        .replace("専用worktreeで実装", "通常directoryで実装");
+      fs.writeFileSync(document, markdown);
+      const errors = checkWorkflowStepDocument(process.cwd(), document);
+      assert.match(errors.join("\n"), /workflow step契約/u);
+      assert.match(errors.join("\n"), /一致しません/u);
       break;
     }
     default:
