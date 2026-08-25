@@ -10,9 +10,9 @@ import {
 const GUIDE = ".agent-skill-chain/00_利用案内.md";
 const README = "README.md";
 const SPEC_FILES = [
-  "docs/specs/04_機能/00_ワークフローv0.3.md",
+  "docs/specs/04_機能/01_ワークフローv0.3.md",
   "docs/specs/12_運用保守/00_運用設計.md",
-  "docs/specs/13_移行・廃止/00_移行方針.md",
+  "docs/specs/13_移行・廃止/01_移行方針.md",
 ];
 
 export function checkCliContract(root = process.cwd()) {
