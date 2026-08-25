@@ -55,6 +55,14 @@ Then("00_要求定義.mdが存在する", function () {
     true,
   );
 });
+Then("staging記録がlocal-activeで存在する", function () {
+  const value: unknown = JSON.parse(
+    fs.readFileSync(path.join(this.issue.path, "staging-record.json"), "utf8"),
+  );
+  assert.ok(value && typeof value === "object" && !Array.isArray(value));
+  assert.equal("state" in value ? value.state : undefined, "local-active");
+  assert.equal("tracker" in value ? value.tracker : undefined, null);
+});
 
 Given(
   "title {string}で同じ時刻のstagingを作成済みである",

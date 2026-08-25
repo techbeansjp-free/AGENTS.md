@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
+import { isStagingLifecyclePath } from "./staging.js";
 
 export type HygieneKind =
   "empty-directory" | "temporary-artifact" | "completed-worktree-container";
@@ -224,6 +225,14 @@ export function previewWorkspaceHygiene(input: {
         ? path.join(relative, entry.name)
         : entry.name;
       const childAbsolute = path.join(absolute, entry.name);
+      if (isStagingLifecyclePath(childRelative)) {
+        exclude(
+          childRelative,
+          "一時staging、role-log、metricsは専用lifecycle証拠なしにworkspace hygieneで削除しません",
+        );
+        containsOnlyRemovableEmptyDirectories = false;
+        continue;
+      }
       if (hasParentReference(childRelative) || hasUnsafeMeta(entry.name)) {
         exclude(childRelative, "安全でないpath表現を含むため保持します");
         containsOnlyRemovableEmptyDirectories = false;

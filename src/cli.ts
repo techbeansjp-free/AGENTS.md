@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { createIssueStaging, validateIssue } from "./domain/issue.js";
+import {
+  createIssueStaging,
+  recordStagingSync,
+  validateIssue,
+} from "./domain/issue.js";
 import {
   bootstrapProject,
   validateSpecs,
@@ -22,6 +26,7 @@ import {
   previewWorkspaceHygiene,
   type HygieneKind,
 } from "./domain/hygiene.js";
+import { applyStagingCleanup, planStagingCleanup } from "./domain/staging.js";
 import {
   buildFinalizeReport,
   applyFinalize,
@@ -428,6 +433,97 @@ function removeHygieneTarget(
   if (!stat.isDirectory())
     throw new Error(`空directory候補の型が変化しました: ${target.path}`);
   fs.rmdirSync(target.path);
+}
+
+function removeStagingTarget(
+  reportRoot: string,
+  target: { path: string; relative: string },
+): void {
+  if (
+    !/^\.agent-skill-chain\/tmp\/issues\/[^/]+$/u.test(target.relative) ||
+    target.relative.includes("..")
+  )
+    throw new Error(`staging対象scopeが不正です: ${target.relative}`);
+  const issuesRoot = path.join(
+    reportRoot,
+    ".agent-skill-chain",
+    "tmp",
+    "issues",
+  );
+  const expected = path.join(issuesRoot, path.basename(target.relative));
+  if (target.path !== expected || path.dirname(target.path) !== issuesRoot)
+    throw new Error(
+      `staging対象がissues直下に完全一致しません: ${target.path}`,
+    );
+  const issuesStat = fs.lstatSync(issuesRoot);
+  if (issuesStat.isSymbolicLink() || !issuesStat.isDirectory())
+    throw new Error("staging issues rootが安全な通常directoryではありません");
+  if (fs.realpathSync(issuesRoot) !== issuesRoot)
+    throw new Error("staging issues rootにsymlink祖先があります");
+  const targetStat = fs.lstatSync(target.path);
+  if (targetStat.isSymbolicLink() || !targetStat.isDirectory())
+    throw new Error(`staging対象が通常directoryではありません: ${target.path}`);
+  if (
+    fs.realpathSync(target.path) !== target.path ||
+    path.dirname(fs.realpathSync(target.path)) !== issuesRoot
+  )
+    throw new Error(
+      `staging対象のroot containmentに失敗しました: ${target.path}`,
+    );
+
+  const verifyTree = (directory: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      const stat = fs.lstatSync(absolute);
+      if (stat.isSymbolicLink())
+        throw new Error(`削除直前にsymlinkを検出しました: ${absolute}`);
+      if (entry.name === ".git")
+        throw new Error(`Git内部領域を検出しました: ${absolute}`);
+      const real = fs.realpathSync(absolute);
+      const relative = path.relative(target.path, real);
+      if (
+        relative === ".." ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative)
+      )
+        throw new Error(`staging外へ解決される内容を検出しました: ${absolute}`);
+      if (stat.isDirectory()) verifyTree(absolute);
+      else if (!stat.isFile())
+        throw new Error(`通常fileではない内容を検出しました: ${absolute}`);
+    }
+  };
+  const removeTree = (directory: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      const stat = fs.lstatSync(absolute);
+      if (stat.isSymbolicLink())
+        throw new Error(`削除直前にsymlinkへ変化しました: ${absolute}`);
+      if (stat.isDirectory()) removeTree(absolute);
+      else if (stat.isFile()) fs.rmSync(absolute);
+      else throw new Error(`削除直前にfile種別が変化しました: ${absolute}`);
+    }
+    fs.rmdirSync(directory);
+  };
+  verifyTree(target.path);
+  removeTree(target.path);
+}
+
+function stagingCleanupDiagnostic(reasons: string[]): unknown {
+  return {
+    ruleId: "ASC-STAGING-CLEANUP-001",
+    purpose: "同期確認済みの一時stagingだけを承認済みpreviewに基づいて削除する",
+    risk: "artifact",
+    reasons,
+    scope: [".agent-skill-chain/tmp/issues/", "issue staging"],
+    checks: [
+      "repository root、保持期間、同期証拠、成果物digest、fingerprint、report hashをapply直前に再確認した",
+    ],
+    autoFixes: [],
+    next: "対象を保持し、同期証拠と現在内容を確認して新しいpreview hashを取得してください",
+    requiredAuthority: "staging cleanup authorityと承認済みreport hash",
+    rollback:
+      "削除を開始せずstagingを保持する。部分失敗時はremovedとretainedを確認して新しいpreviewから再実行する",
+  };
 }
 
 function completionRecovery(phases: CompletionPhaseResult[]): string[] {
@@ -1273,8 +1369,130 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (flags.authorize !== "approved")
       throw new Error("Issue同期には--authorize=approvedが必要です");
-    print(github("issue.sync", input, process.cwd()));
+    const bodyBefore = fs
+      .readFileSync(input.bodyFile, "utf8")
+      .replace(/\r\n/g, "\n")
+      .trimEnd();
+    const result = github("issue.sync", input, process.cwd());
+    const stagingPath =
+      typeof flags["staging-path"] === "string"
+        ? path.resolve(flags["staging-path"])
+        : undefined;
+    const checkpointRaw = flags.checkpoint;
+    if ((stagingPath === undefined) !== (checkpointRaw === undefined))
+      throw new Error(
+        "同期記録を更新する場合は--staging-pathと--checkpointを両方指定してください",
+      );
+    if (stagingPath !== undefined) {
+      if (
+        typeof checkpointRaw !== "string" ||
+        !/^(?:4|8)$/u.test(checkpointRaw)
+      )
+        throw new Error("--checkpointは4または8で指定してください");
+      const bodyAfter = fs
+        .readFileSync(input.bodyFile, "utf8")
+        .replace(/\r\n/g, "\n")
+        .trimEnd();
+      const bodyDigest = crypto
+        .createHash("sha256")
+        .update(bodyBefore)
+        .digest("hex");
+      const readBackDigest = crypto
+        .createHash("sha256")
+        .update(bodyAfter)
+        .digest("hex");
+      const record = recordStagingSync(stagingPath, {
+        tracker: result.url,
+        checkpoint: Number(checkpointRaw),
+        syncedAt:
+          typeof flags["synced-at"] === "string"
+            ? flags["synced-at"]
+            : new Date().toISOString(),
+        bodyDigest,
+        readBackDigest,
+      });
+      print({ ...result, staging: record });
+      return 0;
+    }
+    print(result);
     return 0;
+  }
+  if (command === "issue" && subcommand === "staging") {
+    const { flags } = parse(rest);
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    if (flags.apply !== undefined && flags.apply !== true) {
+      const reasons = ["--applyは値を付けずに指定してください"];
+      print({
+        state: "rejected",
+        removed: [],
+        retained: [],
+        recovery: ["値を除いた--applyで新しいpreviewから再実行してください"],
+        diagnostic: stagingCleanupDiagnostic(reasons),
+      });
+      return 1;
+    }
+    const retentionRaw =
+      typeof flags["retention-days"] === "string"
+        ? flags["retention-days"]
+        : "0";
+    if (!/^\d+$/u.test(retentionRaw)) {
+      const reasons = ["--retention-daysは0以上の整数で指定してください"];
+      print({
+        state: "rejected",
+        removed: [],
+        retained: [],
+        recovery: ["利用projectが決めた保持日数で再previewしてください"],
+        diagnostic: stagingCleanupDiagnostic(reasons),
+      });
+      return 1;
+    }
+    const now =
+      typeof flags.now === "string" ? flags.now : new Date().toISOString();
+    const retentionDays = Number(retentionRaw);
+    let plan: ReturnType<typeof planStagingCleanup>;
+    try {
+      plan = planStagingCleanup({ root, now, retentionDays });
+    } catch (error) {
+      const reasons = [error instanceof Error ? error.message : String(error)];
+      print({
+        state: "rejected",
+        removed: [],
+        retained: [],
+        recovery: ["root、now、保持日数を確認して再previewしてください"],
+        diagnostic: stagingCleanupDiagnostic(reasons),
+      });
+      return 1;
+    }
+    if (flags.apply !== true) {
+      print(plan);
+      return 0;
+    }
+    const result = applyStagingCleanup(
+      {
+        plan,
+        approvedHash:
+          typeof flags["approved-hash"] === "string"
+            ? flags["approved-hash"]
+            : "",
+        root,
+        now,
+        retentionDays,
+      },
+      (target) => removeStagingTarget(plan.root, target),
+    );
+    print(
+      result.state === "rejected"
+        ? {
+            ...result,
+            diagnostic: stagingCleanupDiagnostic(
+              result.retained.map((item) => item.reason),
+            ),
+          }
+        : result,
+    );
+    return result.state === "completed" ? 0 : 1;
   }
   if (command === "project" && subcommand === "bootstrap") {
     const { flags } = parse(rest);

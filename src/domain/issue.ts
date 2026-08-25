@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { safeSlug } from "../lib/security.js";
-import { publishDirectoryAtomic } from "../lib/atomic.js";
+import { publishDirectoryAtomic, writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import {
   classifyMode,
@@ -13,6 +13,13 @@ import {
   type PocDeclaration,
 } from "./mode.js";
 import { validateDevelopmentConsiderations } from "./conformance.js";
+import {
+  calculateStagingDigest,
+  listStagingArtifacts,
+  readStoredStagingRecord,
+  STAGING_RECORD_FILE,
+  type StoredStagingRecord,
+} from "./staging.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
 const templateRoot = path.join(
@@ -157,6 +164,26 @@ export function createIssueStaging(
           fs.constants.COPYFILE_EXCL,
         );
     }
+    const artifacts = listStagingArtifacts(temporary);
+    const record: StoredStagingRecord = {
+      schemaVersion: "agent-skill-chain/staging-record/v1",
+      mode: decision.mode,
+      artifacts,
+      digest: calculateStagingDigest(temporary, artifacts),
+      owner: "runtime・project owner",
+      createdAt: (options.now ?? new Date()).toISOString(),
+      state: "local-active",
+      tracker: null,
+      checkpoint: null,
+      syncedAt: null,
+      syncDigest: null,
+      readBackDigest: null,
+    };
+    fs.writeFileSync(
+      path.join(temporary, STAGING_RECORD_FILE),
+      `${JSON.stringify(record, null, 2)}\n`,
+      { flag: "wx", mode: 0o600 },
+    );
   });
   return {
     path: finalPath,
@@ -165,6 +192,92 @@ export function createIssueStaging(
     durable: false,
     synced: false,
   };
+}
+
+export function recordStagingSync(
+  stagingPath: string,
+  input: {
+    tracker: string;
+    checkpoint: number;
+    syncedAt: string;
+    bodyDigest: string;
+    readBackDigest: string;
+  },
+): StoredStagingRecord {
+  const resolved = path.resolve(stagingPath);
+  const repositoryRoot = path.dirname(
+    path.dirname(path.dirname(path.dirname(resolved))),
+  );
+  const expected = path.join(
+    repositoryRoot,
+    ".agent-skill-chain",
+    "tmp",
+    "issues",
+    path.basename(resolved),
+  );
+  if (resolved !== expected || path.basename(resolved).includes(".."))
+    throw new Error(
+      "同期記録は.agent-skill-chain/tmp/issues/直下のstagingだけに書き込めます",
+    );
+  const stat = fs.lstatSync(resolved);
+  if (stat.isSymbolicLink() || !stat.isDirectory())
+    throw new Error("同期記録の対象はsymlinkでない通常directoryが必要です");
+  if (fs.realpathSync(resolved) !== resolved)
+    throw new Error("同期記録の対象にsymlink祖先を使用できません");
+  const current = readStoredStagingRecord(resolved);
+  const expectedCheckpoint = current.mode === "full" ? 8 : 4;
+  if (input.checkpoint !== expectedCheckpoint)
+    throw new Error(
+      `mode=${current.mode}の最終同期checkpointはStep ${expectedCheckpoint}です`,
+    );
+  if (!/^[a-f0-9]{64}$/u.test(input.bodyDigest))
+    throw new Error("bodyDigestは64桁SHA-256でなければなりません");
+  if (
+    !/^[a-f0-9]{64}$/u.test(input.readBackDigest) ||
+    input.bodyDigest !== input.readBackDigest
+  )
+    throw new Error("書き込み後読み取りbody digestが同期内容と一致しません");
+  if (
+    !/^(?:https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*|#?[1-9]\d*)$/u.test(
+      input.tracker,
+    )
+  )
+    throw new Error("trackerはGitHub Issue URLまたはIssue番号が必要です");
+  const syncedAt = Date.parse(input.syncedAt);
+  if (
+    !Number.isFinite(syncedAt) ||
+    new Date(syncedAt).toISOString() !== input.syncedAt
+  )
+    throw new Error("syncedAtはISO 8601 UTC日時でなければなりません");
+  const artifacts = listStagingArtifacts(resolved);
+  const required =
+    current.mode === "full"
+      ? ["00_要求定義.md", "01_要件定義.md", "02_設計.md", "03_実装計画.md"]
+      : ["00_要求定義.md"];
+  const missing = required.filter((artifact) => !artifacts.includes(artifact));
+  if (missing.length > 0)
+    throw new Error(
+      `mode別の必要成果物が不足しています: ${missing.join(", ")}`,
+    );
+  const updated: StoredStagingRecord = {
+    ...current,
+    artifacts,
+    digest: calculateStagingDigest(resolved, artifacts),
+    state: "sync-verified",
+    tracker: input.tracker,
+    checkpoint: expectedCheckpoint,
+    syncedAt: input.syncedAt,
+    syncDigest: input.bodyDigest,
+    readBackDigest: input.readBackDigest,
+  };
+  writeFileAtomic(
+    path.join(resolved, STAGING_RECORD_FILE),
+    `${JSON.stringify(updated, null, 2)}\n`,
+  );
+  const reread = readStoredStagingRecord(resolved);
+  if (JSON.stringify(reread) !== JSON.stringify(updated))
+    throw new Error("同期記録の書き込み後読み取り確認に失敗しました");
+  return reread;
 }
 
 export function validateIssue(
