@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-NUMBERED-MARKDOWN-001",
+  "purpose": "固定仕様とtemplateのMarkdownへ連番prefixと日本語名を付ける",
+  "riskClass": "quality",
+  "scope": ["docs/specs", ".agent-skill-chain/templates/specs"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "spec",
+  "evidence": "directory案内検査による全Markdown名の連番prefixと日本語文字確認",
+  "remediation": "固定Markdownを参照更新と同時に連番付き日本語名へ改名する",
+  "overridePolicy": "bound",
+  "rollback": "参照を壊さない直前の連番付き日本語名へ戻す",
+  "packageDefault": "文書命名は利用projectが選択する",
+  "projectOverride": "固定仕様と仕様templateは2桁連番prefixと日本語名を持つ",
+  "changeAuthority": "repository maintainerと仕様owner"
+}

@@ -2,7 +2,9 @@
   "schemaVersion": "agent-skill-chain/project-policy-manifest/v1",
   "policy": {
     "schemaVersion": "agent-skill-chain/project-policy/v0.3.1",
-    "delivery": { "stopAt": "pull_request" },
+    "delivery": {
+      "stopAt": "pull_request"
+    },
     "merge": {
       "mode": "disabled",
       "branches": [],
@@ -27,15 +29,29 @@
       "base": "remote-default-branch",
       "cleanup": "after-merge"
     },
-    "budgets": { "localFeedbackMs": 120000, "prGateMs": 900000 }
+    "budgets": {
+      "localFeedbackMs": 120000,
+      "prGateMs": 900000
+    }
   },
   "choiceFiles": ["project/choices/development.json"],
   "ruleFiles": [
+    "project/rules/ci-permission.json",
+    "project/rules/ci-trigger.json",
     "project/rules/code-quality.json",
+    "project/rules/distribution-boundary.json",
     "project/rules/docs.json",
+    "project/rules/dogfooding.json",
+    "project/rules/japanese-docs.json",
+    "project/rules/lockfile.json",
+    "project/rules/naming-exception.json",
+    "project/rules/numbered-markdown.json",
     "project/rules/ownership-local.json",
     "project/rules/ownership-pr.json",
+    "project/rules/package-manager.json",
     "project/rules/package.json",
+    "project/rules/quality-command.json",
+    "project/rules/runtime.json",
     "project/rules/safety.json"
   ],
   "conformanceFiles": ["project/conformance/bindings.json"],

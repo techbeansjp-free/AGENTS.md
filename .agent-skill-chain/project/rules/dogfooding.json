@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-DOGFOODING-001",
+  "purpose": "agent-skill-chain自身の開発でproject policyとconformance検査を使用する",
+  "riskClass": "quality",
+  "scope": ["repository development", "CI", "project policy"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "npm run conformance:checkと全test layerの成功",
+  "remediation": "project policy inventoryとenforcement pointと反例SCNを同一変更で復元する",
+  "overridePolicy": "bound",
+  "rollback": "未検証ruleを無効化せず直前の追跡可能なpolicy setへ戻す",
+  "packageDefault": "汎用packageは利用projectへdogfoodingを強制しない",
+  "projectOverride": "このrepositoryの変更は本systemのproject policyで検証する",
+  "changeAuthority": "repository maintainerと独立reviewer"
+}

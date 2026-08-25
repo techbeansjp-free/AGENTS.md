@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-LOCKFILE-001",
+  "purpose": "package-lock.jsonを唯一の依存固定fileとしてnpm ciで再現導入する",
+  "riskClass": "quality",
+  "scope": ["package-lock.json", "dependency install", "CI"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "rootのpackage-lock.json実在とCI内のnpm ci実行",
+  "remediation": "package-lock.jsonをnpmで更新しnpm ciが成功する状態へ戻す",
+  "overridePolicy": "bound",
+  "rollback": "信頼済みpackage.jsonとpackage-lock.jsonの組へ戻す",
+  "packageDefault": "依存導入方法は利用projectが選択する",
+  "projectOverride": "package-lock.jsonとnpm ciを使用する",
+  "changeAuthority": "repository maintainerとdependency review"
+}

@@ -1,0 +1,21 @@
+{
+  "ruleId": "ASC-DOGFOOD-RUNTIME-001",
+  "purpose": "package engineが許可するNode.js versionを品質CIでも使用する",
+  "riskClass": "quality",
+  "scope": [
+    "package.json engines.node",
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml"
+  ],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "package engine下限と全setup-node versionの互換性検査",
+  "remediation": "package engineとCI Node.js versionを同時に互換な値へ更新する",
+  "overridePolicy": "bound",
+  "rollback": "直前のengineとCI versionの互換な組へ戻す",
+  "packageDefault": "Node.js versionは利用projectが選択する",
+  "projectOverride": "Node.js 20以上を契約としCIでは互換なNode.js 24を使用する",
+  "changeAuthority": "repository maintainerによるruntime compatibility review"
+}

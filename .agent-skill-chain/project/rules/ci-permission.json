@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-CI-PERMISSION-001",
+  "purpose": "品質CIのGITHUB_TOKENをread-onlyへ制限する",
+  "riskClass": "authority",
+  "scope": [".github/workflows/ci.yml", "GITHUB_TOKEN permissions"],
+  "enforcement": "deny",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "ci.ymlの全permissions値がreadまたはnoneであること",
+  "remediation": "品質jobのwrite permissionを除去し外部更新を別authority境界へ分離する",
+  "overridePolicy": "never",
+  "rollback": "permissionsをcontents readとpull-requests readへ戻す",
+  "packageDefault": "CI permissionは最小権限を安全既定とする",
+  "projectOverride": "品質CIにはread-only permissionだけを与える",
+  "changeAuthority": "既定branchのtrusted workflow変更authority"
+}

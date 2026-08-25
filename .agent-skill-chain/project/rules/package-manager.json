@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-PACKAGE-MANAGER-001",
+  "purpose": "package managerをnpmへ統一し別形式の設定とlockfileの混在を防ぐ",
+  "riskClass": "artifact",
+  "scope": ["package.json", "package-lock.json", "repository root"],
+  "enforcement": "deny",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "package manager境界検査でnpm以外のlockfileが0件であること",
+  "remediation": "npm以外のpackage manager設定とlockfileを除去しnpm ciで再検証する",
+  "overridePolicy": "never",
+  "rollback": "依存変更を戻して信頼済みpackage-lock.jsonから再導入する",
+  "packageDefault": "汎用packageは利用側のpackage managerを固定しない",
+  "projectOverride": "このrepositoryではnpmだけを使用する",
+  "changeAuthority": "repository maintainerによる既定branchの事前変更"
+}
