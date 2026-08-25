@@ -28,6 +28,7 @@
     ".agent-skill-chain/schemas/",
     ".agent-skill-chain/policy/",
     ".agent-skill-chain/docs/",
+    "README.md",
     "AGENTS.md"
   ],
   "scripts": {
