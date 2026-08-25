@@ -6,8 +6,11 @@ import { findPackageRoot } from "../lib/package-root.js";
 import {
   classifyMode,
   detectQuickDisqualifiers,
+  POC_HIGH_RISK_IDS,
   QUESTIONS,
+  type Mode,
   type ModeAnswer,
+  type PocDeclaration,
 } from "./mode.js";
 import { validateDevelopmentConsiderations } from "./conformance.js";
 
@@ -29,17 +32,19 @@ function timestamp(date: Date): string {
 }
 
 function requirementDocument(
-  mode: "quick" | "full",
+  mode: Mode,
   title: string,
   answers: Record<string, ModeAnswer>,
+  poc?: PocDeclaration,
 ): string {
   const name =
-    mode === "quick" ? "00_要求定義_quick.md" : "00_要求定義_full.md";
+    mode === "poc"
+      ? "00_要求定義_poc.md"
+      : mode === "quick"
+        ? "00_要求定義_quick.md"
+        : "00_要求定義_full.md";
   let content = fs.readFileSync(path.join(templateRoot, name), "utf8");
-  content = content.replace(
-    "| 件名 | （人が識別できる件名） |",
-    `| 件名 | ${escapeCell(title)} |`,
-  );
+  content = replaceTwoColumnRow(content, "件名", escapeCell(title));
   for (const id of QUESTIONS) {
     const item = answers?.[id];
     const answer =
@@ -50,11 +55,56 @@ function requirementDocument(
           : "unknown";
     const evidence = escapeCell(item?.evidence || "根拠なし");
     content = content.replace(
-      new RegExp(`\\| ${id} \\| [^|]+ \\| [^|]+ \\|`),
+      new RegExp(
+        `^\\|[ \\t]*${id}[ \\t]*\\|[^\\n|]+\\|[^\\n|]+\\|[ \\t]*$`,
+        "m",
+      ),
       `| ${id} | ${answer} | ${evidence} |`,
     );
   }
+  if (mode === "poc" && poc) {
+    const replacements: Array<[string, string]> = [
+      ["PoC目的", escapeCell(poc.purpose)],
+      [
+        "対象期間",
+        `${escapeCell(poc.period.from)}〜${escapeCell(poc.period.to)}`,
+      ],
+      ["成功条件", escapeCell(poc.successCriteria)],
+      ["中止条件", escapeCell(poc.abortCriteria)],
+      ["非対象", escapeCell(poc.outOfScope)],
+      ["責任者", escapeCell(poc.owner)],
+    ];
+    for (const [label, value] of replacements)
+      content = replaceTwoColumnRow(content, label, value);
+    for (const risk of poc.highRisk) {
+      content = content.replace(
+        new RegExp(
+          `^\\|[ \\t]*${escapeRegExp(risk.id)}[ \\t]*\\|[^\\n|]+\\|[^\\n|]+\\|[ \\t]*$`,
+          "m",
+        ),
+        `| ${risk.id} | ${risk.present ? "あり" : "なし"} | ${escapeCell(risk.evidence)} |`,
+      );
+    }
+  }
   return content;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceTwoColumnRow(
+  content: string,
+  label: string,
+  value: string,
+): string {
+  return content.replace(
+    new RegExp(
+      `^\\|[ \\t]*${escapeRegExp(label)}[ \\t]*\\|[^\\n|]+\\|[ \\t]*$`,
+      "m",
+    ),
+    `| ${label} | ${value} |`,
+  );
 }
 
 function escapeCell(value: unknown): string {
@@ -66,10 +116,21 @@ function escapeCell(value: unknown): string {
 
 export function createIssueStaging(
   root: string,
-  options: { title: string; answers: Record<string, ModeAnswer>; now?: Date },
+  options: {
+    title: string;
+    answers: Record<string, ModeAnswer>;
+    now?: Date;
+    requestedMode?: string;
+    poc?: PocDeclaration;
+    changedFiles?: string[];
+  },
 ) {
   const slug = safeSlug(options.title);
-  const decision = classifyMode(options.answers);
+  const decision = classifyMode(options.answers, {
+    requestedMode: options.requestedMode,
+    poc: options.poc,
+    changedFiles: options.changedFiles,
+  });
   const finalPath = path.join(
     root,
     ".agent-skill-chain",
@@ -80,7 +141,12 @@ export function createIssueStaging(
   publishDirectoryAtomic(finalPath, (temporary) => {
     fs.writeFileSync(
       path.join(temporary, "00_要求定義.md"),
-      requirementDocument(decision.mode, options.title, options.answers),
+      requirementDocument(
+        decision.mode,
+        options.title,
+        options.answers,
+        options.poc,
+      ),
       { flag: "wx" },
     );
     if (decision.mode === "full") {
@@ -103,7 +169,12 @@ export function createIssueStaging(
 
 export function validateIssue(
   issuePath: string,
-  options: { changedFiles?: string[] } = {},
+  options: {
+    changedFiles?: string[];
+    requestedOperation?: string;
+    operation?: string;
+    delivery?: { stopAt?: string };
+  } = {},
 ) {
   const errors: string[] = [];
   const requirementPath = path.join(issuePath, "00_要求定義.md");
@@ -112,13 +183,16 @@ export function validateIssue(
       valid: false,
       mode: "full",
       errors: ["00_要求定義.mdがありません"],
+      blockedOperations: [],
     };
   const text = fs.readFileSync(requirementPath, "utf8");
-  const declared: "quick" | "full" =
-    /^\| モード \| `?(quick|full)`? \|$/m.exec(text)?.[1] === "quick"
-      ? "quick"
+  const declaredValue =
+    /^\|\s*モード\s*\|\s*`?(quick|full|poc)`?\s*\|\s*$/m.exec(text)?.[1];
+  const declared: Mode =
+    declaredValue === "quick" || declaredValue === "poc"
+      ? declaredValue
       : "full";
-  let mode: "quick" | "full" = declared;
+  let mode: Mode = declared;
   const requiredHeadings =
     declared === "quick"
       ? [
@@ -133,20 +207,34 @@ export function validateIssue(
           "9. 仕様、図表、識別子",
           "10. リスク、レビュー、再開地点",
         ]
-      : [
-          "1. 目的と背景",
-          "2. 対象範囲",
-          "3. 利害関係者と利用場面",
-          "4. ドメイン影響",
-          "5. 要求の概要",
-          "6. 制約、前提、依存関係",
-          "7. 受け入れ条件と成功基準",
-          "8. リスクと安全側への縮小",
-          "9. モード判定Q-01〜Q-08",
-          "10. P-01〜P-07の適用計画",
-          "11. 図表と識別子の判断",
-          "12. 参考資料、未決事項、再開地点",
-        ];
+      : declared === "poc"
+        ? [
+            "1. 目的、現在、期待状態（必須）",
+            "2. 対象範囲と権限（必須）",
+            "3. ドメイン影響（必須）",
+            "4. PoC宣言（必須）",
+            "5. high risk確認（必須）",
+            "6. 要求、受け入れ条件、実行可能な受け入れ例（必須）",
+            "7. 最小設計",
+            "8. 実装とテストの計画",
+            "9. P-01〜P-07の証拠",
+            "10. 仕様、図表、識別子",
+            "11. リスク、昇格・廃止判断、再開地点",
+          ]
+        : [
+            "1. 目的と背景",
+            "2. 対象範囲",
+            "3. 利害関係者と利用場面",
+            "4. ドメイン影響",
+            "5. 要求の概要",
+            "6. 制約、前提、依存関係",
+            "7. 受け入れ条件と成功基準",
+            "8. リスクと安全側への縮小",
+            "9. モード判定Q-01〜Q-08",
+            "10. P-01〜P-07の適用計画",
+            "11. 図表と識別子の判断",
+            "12. 参考資料、未決事項、再開地点",
+          ];
   for (const heading of requiredHeadings) {
     if (!text.includes(`## ${heading}`))
       errors.push(`必須項目がありません: ${heading}`);
@@ -170,10 +258,71 @@ export function validateIssue(
   if (!/Scenario:\s+SCN-[A-Z0-9-]+/.test(allText))
     errors.push("GherkinシナリオIDがありません");
   const disqualifiers = detectQuickDisqualifiers(options.changedFiles ?? []);
-  if (declared === "quick" && disqualifiers.length > 0) {
+  if (
+    (declared === "quick" || declared === "poc") &&
+    disqualifiers.length > 0
+  ) {
     mode = "full";
-    errors.push(`quickからfullへの単調昇格が必要: ${disqualifiers.join(", ")}`);
+    errors.push(
+      `${declared}からfullへの単調昇格が必要: ${disqualifiers.join(", ")}`,
+    );
   }
+  if (declared === "poc") {
+    for (const label of [
+      "PoC目的",
+      "対象期間",
+      "成功条件",
+      "中止条件",
+      "非対象",
+      "データ・security上の制約",
+      "責任者",
+      "full昇格条件",
+      "廃止条件",
+    ]) {
+      const value = readTwoColumnValue(text, label);
+      if (!value || /不明|未定|未確認|（/u.test(value)) {
+        mode = "full";
+        errors.push(
+          `PoC宣言の${label}が未記入または不明なためfullへの昇格が必要です`,
+        );
+      }
+    }
+    for (const id of POC_HIGH_RISK_IDS) {
+      const row = new RegExp(
+        `^\\|\\s*${id}\\s*\\|\\s*([^|]+?)\\s*\\|\\s*([^|]+?)\\s*\\|\\s*$`,
+        "m",
+      ).exec(text);
+      if (!row) {
+        mode = "full";
+        errors.push(
+          `PoC high risk条件 ${id} が未確認のためfullへの昇格が必要です`,
+        );
+      } else if (
+        row[1] !== "なし" ||
+        !row[2] ||
+        row[2].includes("不明") ||
+        row[2].includes("（")
+      ) {
+        mode = "full";
+        errors.push(
+          `PoC high risk条件 ${id} が不明または存在するためfullへの昇格が必要です`,
+        );
+      }
+    }
+  }
+  const requestedOperation = options.requestedOperation ?? options.operation;
+  const blockedOperations =
+    declared === "poc"
+      ? ["release", "automatic-merge", "production-cleanup"]
+      : [];
+  if (
+    declared === "poc" &&
+    requestedOperation &&
+    isPocBlockedOperation(requestedOperation)
+  )
+    errors.push(
+      `PoCでは${requestedOperation}を要求できません。delivery.stopAt=${options.delivery?.stopAt ?? "pull_request"}で停止し、fullへ昇格してください`,
+    );
   if (mode === "full") {
     for (const name of Object.keys(FULL_FILES))
       if (!fs.existsSync(path.join(issuePath, name)))
@@ -191,5 +340,61 @@ export function validateIssue(
         .errors,
     );
   }
-  return { valid: errors.length === 0, mode, errors };
+  return { valid: errors.length === 0, mode, errors, blockedOperations };
+}
+
+function readTwoColumnValue(text: string, label: string): string | undefined {
+  return new RegExp(
+    `^\\|\\s*${escapeRegExp(label)}\\s*\\|\\s*([^|]+?)\\s*\\|\\s*$`,
+    "m",
+  )
+    .exec(text)?.[1]
+    ?.trim();
+}
+
+function isPocBlockedOperation(operation: string): boolean {
+  const normalized = operation.toLowerCase().replaceAll("_", "-");
+  return (
+    normalized.includes("release") ||
+    (normalized.includes("merge") &&
+      (normalized.includes("automatic") ||
+        normalized.includes("auto") ||
+        normalized.includes("自動"))) ||
+    (normalized.includes("cleanup") &&
+      (normalized.includes("production") ||
+        normalized.includes("prod") ||
+        normalized.includes("本番") ||
+        normalized === "cleanup"))
+  );
+}
+
+export function planPocPromotion(issuePath: string): {
+  missing: string[];
+  reasons: string[];
+} {
+  const missing = Object.keys(FULL_FILES).filter(
+    (name) => !fs.existsSync(path.join(issuePath, name)),
+  );
+  const reasons = missing.map(
+    (name) =>
+      `${name}はPoCの最小成果物に含まれず、正式開発のfullモードで補完が必要です`,
+  );
+  const requirementPath = path.join(issuePath, "00_要求定義.md");
+  if (!fs.existsSync(requirementPath)) {
+    if (!missing.includes("00_要求定義.md")) missing.unshift("00_要求定義.md");
+    reasons.unshift(
+      "PoCから正式開発へ昇格する根拠となる00_要求定義.mdがありません",
+    );
+  } else {
+    const text = fs.readFileSync(requirementPath, "utf8");
+    if (!/^\|\s*モード\s*\|\s*`?poc`?\s*\|\s*$/m.test(text))
+      reasons.push(
+        "管理情報のモードがpocではないため、昇格元を確認してください",
+      );
+    else
+      reasons.unshift(
+        "PoC宣言の成功・中止条件とhigh risk確認を昇格根拠としてfull成果物へ追跡してください",
+      );
+  }
+  return { missing, reasons };
 }

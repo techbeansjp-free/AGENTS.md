@@ -6,6 +6,7 @@ import { DEVELOPMENT_CONSIDERATION_IDS } from "../src/domain/conformance.js";
 const DEVELOPMENT_CONSIDERATION_TEMPLATES = [
   "issue/00_要求定義_full.md",
   "issue/00_要求定義_quick.md",
+  "issue/00_要求定義_poc.md",
   "issue/01_要件定義.md",
   "issue/02_設計.md",
   "issue/03_実装計画.md",
@@ -59,6 +60,10 @@ const DOMAIN_GLOSSARY_TEMPLATE_MARKERS = new Map<string, string[]>([
   ],
   [
     "issue/00_要求定義_quick.md",
+    ["ドメイン用語台帳の候補差分", "business rule候補と関係する用語ID"],
+  ],
+  [
+    "issue/00_要求定義_poc.md",
     ["ドメイン用語台帳の候補差分", "business rule候補と関係する用語ID"],
   ],
   [
@@ -121,6 +126,7 @@ const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
     [
       "../../templates/issue/00_要求定義_full.md",
       "../../templates/issue/00_要求定義_quick.md",
+      "../../templates/issue/00_要求定義_poc.md",
       "../../templates/specs/10_セキュリティ/00_セキュリティ方針・資産.md",
       "../../templates/specs/11_非機能/00_非機能要件一覧.md",
       "../../templates/specs/12_運用保守/00_運用設計.md",
