@@ -93,8 +93,12 @@ function readyCleanup(): CleanupPlan {
     prMerged: true,
     clean: true,
     pushed: true,
+    remoteBranch: true,
     recoveryReachable: true,
     consumerAssets: [],
+    stashes: [],
+    temporaryArtifacts: [],
+    ignoredArtifacts: [],
   });
 }
 

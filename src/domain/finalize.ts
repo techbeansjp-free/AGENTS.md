@@ -136,7 +136,8 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
   const reasons: string[] = [];
   const targetPath = input.target?.path;
   const targetBranch = input.target?.branch;
-  const registered = Array.isArray(input.registered) ? input.registered : [];
+  const registeredValid = Array.isArray(input.registered);
+  const registered = registeredValid ? input.registered : [];
   const targetPathValid =
     typeof targetPath === "string" && targetPath.trim() !== "";
   const targetValid =
@@ -145,6 +146,24 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
     targetBranch.trim() !== "";
   if (!targetValid && input.targetAbsent !== true)
     reasons.push("対象PR専用worktreeのpathまたはbranchが不明です");
+  if (!registeredValid) reasons.push("登録済みworktree一覧が不明です");
+  if (
+    input.targetAbsent !== undefined &&
+    typeof input.targetAbsent !== "boolean"
+  )
+    reasons.push("対象worktreeの存在状態が不明です");
+  if (input.clean !== undefined && typeof input.clean !== "boolean")
+    reasons.push("未commitの追跡対象fileがあるか状態が不明です");
+  if (
+    input.consumerAssets !== undefined &&
+    !Array.isArray(input.consumerAssets)
+  )
+    reasons.push("未追跡fileの種別が不明です");
+  const temporaryArtifacts = Array.isArray(input.temporaryArtifacts)
+    ? input.temporaryArtifacts
+    : [];
+  if (!Array.isArray(input.temporaryArtifacts))
+    reasons.push("一時資産があるか状態が不明です");
   const exact = registered.filter(
     (worktree) =>
       worktree.path === targetPath && worktree.branch === targetBranch,
@@ -187,13 +206,13 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
     reasons.push(
       "対象PR専用worktreeのpathとbranchに完全一致する登録が1件ではありません",
     );
-  const ignoredArtifacts = input.ignoredArtifacts ?? [];
-  const temporaryArtifacts = Array.isArray(input.temporaryArtifacts)
-    ? input.temporaryArtifacts
-    : [];
+  const ignoredArtifacts = input.ignoredArtifacts;
   const untracked =
-    input.untracked ??
-    (Array.isArray(input.consumerAssets) ? input.consumerAssets : undefined);
+    input.untracked === undefined
+      ? Array.isArray(input.consumerAssets)
+        ? input.consumerAssets
+        : undefined
+      : input.untracked;
   const derivedUntracked =
     Array.isArray(untracked) && Array.isArray(ignoredArtifacts)
       ? (untracked as unknown[]).concat(
@@ -209,15 +228,20 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
         ? undefined
         : targetPath,
     trackedChanges:
-      input.trackedChanges ??
-      (input.clean === undefined ? undefined : !input.clean),
+      input.trackedChanges === undefined
+        ? typeof input.clean === "boolean"
+          ? !input.clean
+          : undefined
+        : input.trackedChanges,
     untracked: derivedUntracked,
     ignoredArtifacts,
     ignoredPathAllowlist:
-      input.ignoredPathAllowlist ?? resolveFinalizeIgnoredPathAllowlist(),
-    stashes: input.stashes ?? [],
+      input.ignoredPathAllowlist === undefined
+        ? resolveFinalizeIgnoredPathAllowlist()
+        : input.ignoredPathAllowlist,
+    stashes: input.stashes,
     pushed: input.pushed,
-    remoteBranch: input.remoteBranch ?? input.pushed,
+    remoteBranch: input.remoteBranch,
     merged: input.prMerged,
     recoveryReachable: input.recoveryReachable,
   });
@@ -700,7 +724,7 @@ export function buildFinalizeReport(state: FinalizeState) {
         ]
       : state.untracked;
   if (!Array.isArray(state.temporaryArtifacts))
-    reasons.push("一時資産の種別が不明です");
+    reasons.push("一時資産があるか状態が不明です");
   const safety = assessWorktreeRemovalSafety({
     repositoryRoot: state.repositoryRoot,
     worktreePath:
