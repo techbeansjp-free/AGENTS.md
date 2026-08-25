@@ -88,6 +88,31 @@
                 "rotationCondition": { "const": "oldest_first" },
                 "deletionMethod": { "const": "preview_then_explicit" }
               }
+            },
+            "roleContracts": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "enum": [
+                  "coordinator",
+                  "analyst",
+                  "implementer",
+                  "reviewer",
+                  "verifier",
+                  "finalizer"
+                ]
+              },
+              "additionalProperties": { "$ref": "#/$defs/roleContract" }
+            },
+            "tierMapping": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "$ref": "#/$defs/modelTier" }
+            },
+            "minimumTierByRisk": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "$ref": "#/$defs/modelTier" }
             }
           }
         }
@@ -147,6 +172,41 @@
     }
   },
   "$defs": {
+    "modelTier": {
+      "enum": ["routine", "standard", "advanced", "critical"]
+    },
+    "roleContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedPaths",
+        "allowedOperations",
+        "forbiddenOperations",
+        "requiredEvidence"
+      ],
+      "properties": {
+        "allowedPaths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allowedOperations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "forbiddenOperations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "requiredEvidence": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "roleModelChoice": {
       "type": "object",
       "additionalProperties": false,

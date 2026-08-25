@@ -30,6 +30,7 @@ import {
 } from "../types.js";
 import { validateProviderCapabilityMapping } from "./provider-capability.js";
 import { validateRoleConfigurationIndependence } from "./routing-independence.js";
+import { MODEL_TIERS, ROLES } from "./role.js";
 
 const PROJECT_CHOICE_FIELDS = [
   "language",
@@ -182,7 +183,15 @@ function validatePositiveInteger(
 function validateModelMapping(value: unknown, errors: string[]): void {
   rejectUnknownKeys(
     value,
-    ["roles", "fallback", "evidenceStoreRoot", "retention"],
+    [
+      "roles",
+      "fallback",
+      "evidenceStoreRoot",
+      "retention",
+      "roleContracts",
+      "tierMapping",
+      "minimumTierByRisk",
+    ],
     "modelMapping",
     errors,
   );
@@ -293,6 +302,55 @@ function validateModelMapping(value: unknown, errors: string[]): void {
     errors.push(`${retentionName}.rotationConditionが不正です`);
   if (retention.deletionMethod !== "preview_then_explicit")
     errors.push(`${retentionName}.deletionMethodが不正です`);
+
+  if (mapping.roleContracts !== undefined) {
+    if (!isRecord(mapping.roleContracts))
+      errors.push("modelMapping.roleContractsはobjectでなければなりません");
+    else {
+      if (Object.keys(mapping.roleContracts).length === 0)
+        errors.push("modelMapping.roleContractsは1件以上でなければなりません");
+      for (const [role, value] of Object.entries(mapping.roleContracts)) {
+        const name = `modelMapping.roleContracts.${role}`;
+        if (!ROLES.some((known) => known === role))
+          errors.push(`${name}は未知roleです`);
+        rejectUnknownKeys(
+          value,
+          [
+            "allowedPaths",
+            "allowedOperations",
+            "forbiddenOperations",
+            "requiredEvidence",
+          ],
+          name,
+          errors,
+        );
+        const roleContract = isRecord(value) ? value : {};
+        for (const field of [
+          "allowedPaths",
+          "allowedOperations",
+          "forbiddenOperations",
+          "requiredEvidence",
+        ] as const)
+          validateStringArray(roleContract[field], `${name}.${field}`, errors);
+      }
+    }
+  }
+  for (const field of ["tierMapping", "minimumTierByRisk"] as const) {
+    const value = mapping[field];
+    if (value === undefined) continue;
+    if (!isRecord(value)) {
+      errors.push(`modelMapping.${field}はobjectでなければなりません`);
+      continue;
+    }
+    if (Object.keys(value).length === 0)
+      errors.push(`modelMapping.${field}は1件以上でなければなりません`);
+    for (const [key, tier] of Object.entries(value)) {
+      if (key.trim() === "")
+        errors.push(`modelMapping.${field}のkeyは空にできません`);
+      if (!MODEL_TIERS.some((candidate) => candidate === tier))
+        errors.push(`modelMapping.${field}.${key}のtierが不正です`);
+    }
+  }
 }
 
 export function validateProjectChoices(value: unknown) {

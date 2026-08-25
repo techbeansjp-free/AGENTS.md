@@ -9,7 +9,7 @@ description: 検証済みトラッカーと03実装計画に従い、専用workt
 
 ## routing入力契約
 
-実装開始前にrole欄、provider欄、model設定欄、fallback欄、独立性証拠欄を検証する。providerとmodel設定はproject choiceの解決結果を入力とし、汎用skillは固有のmodel slugを要求しない。要求能力を満たす解決または独立性証拠が欠ける場合はfallback欄の停止点で実装を開始せず、再開条件を報告する。
+role欄の担当roleが`implementer`であること、許可path・操作、必要証拠、要求能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄を実装開始前に検証する。providerとmodel設定はproject choiceの解決結果を入力とし、汎用skillは固有のmodel slugを要求しない。要求能力を満たす解決、failing test証拠、または別identity・contextのreviewer割当が欠ける場合は実装を開始せず、停止点と再開条件を報告する。implementerは自分の差分を最終承認せず、mergeを裁定しない。
 
 ## テンプレート契約
 

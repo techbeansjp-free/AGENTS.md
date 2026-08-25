@@ -48,6 +48,29 @@ const QUALITY_STRING_FIELDS = [
   "runtimeValidation",
 ] as const;
 const DECISION_FIELDS = ["status", "reason", "evidence"] as const;
+const MODEL_TIERS = ["routine", "standard", "advanced", "critical"] as const;
+const MODEL_TIER_STRENGTH: Readonly<
+  Record<(typeof MODEL_TIERS)[number], number>
+> = {
+  routine: 1,
+  standard: 2,
+  advanced: 3,
+  critical: 4,
+};
+const ROLE_CONTRACT_FIELDS = [
+  "allowedPaths",
+  "allowedOperations",
+  "forbiddenOperations",
+  "requiredEvidence",
+] as const;
+const ROLE_NAMES = [
+  "coordinator",
+  "analyst",
+  "implementer",
+  "reviewer",
+  "verifier",
+  "finalizer",
+] as const;
 
 type ChoiceRecord = Record<string, unknown>;
 type Decision = {
@@ -235,7 +258,15 @@ function inspectModelMapping(
   }
   let valid = rejectUnknownFields(
     value,
-    ["roles", "fallback", "evidenceStoreRoot", "retention"],
+    [
+      "roles",
+      "fallback",
+      "evidenceStoreRoot",
+      "retention",
+      "roleContracts",
+      "tierMapping",
+      "minimumTierByRisk",
+    ],
     fieldPath,
     diff,
   );
@@ -383,7 +414,181 @@ function inspectModelMapping(
       valid = false;
     }
   }
+  if (value.roleContracts !== undefined) {
+    if (!isRecord(value.roleContracts)) {
+      weaken(
+        diff,
+        `${fieldPath}.roleContracts`,
+        "roleContractsはobjectでなければならない",
+      );
+      valid = false;
+    } else {
+      for (const [role, contract] of Object.entries(value.roleContracts)) {
+        const contractPath = `${fieldPath}.roleContracts.${role}`;
+        if (!ROLE_NAMES.some((candidate) => candidate === role)) {
+          weaken(diff, contractPath, "未知のrole contractを追加している");
+          valid = false;
+        }
+        if (!isRecord(contract)) {
+          weaken(diff, contractPath, "role contractはobjectでなければならない");
+          valid = false;
+          continue;
+        }
+        valid =
+          rejectUnknownFields(
+            contract,
+            ROLE_CONTRACT_FIELDS,
+            contractPath,
+            diff,
+          ) && valid;
+        for (const field of ROLE_CONTRACT_FIELDS)
+          if (!isStringArray(contract[field])) {
+            weaken(
+              diff,
+              `${contractPath}.${field}`,
+              "role contract fieldは文字列配列でなければならない",
+            );
+            valid = false;
+          }
+      }
+    }
+  }
+  for (const field of ["tierMapping", "minimumTierByRisk"] as const) {
+    const tierMap = value[field];
+    if (tierMap === undefined) continue;
+    if (!isRecord(tierMap)) {
+      weaken(
+        diff,
+        `${fieldPath}.${field}`,
+        `${field}はobjectでなければならない`,
+      );
+      valid = false;
+      continue;
+    }
+    for (const [key, tier] of Object.entries(tierMap))
+      if (!MODEL_TIERS.some((candidate) => candidate === tier)) {
+        weaken(
+          diff,
+          `${fieldPath}.${field}.${key}`,
+          "tierが型契約を満たしていない",
+        );
+        valid = false;
+      }
+  }
   return valid;
+}
+
+function classifyRoleContracts(
+  trusted: ChoiceRecord,
+  candidate: ChoiceRecord,
+  fieldPath: string,
+  diff: ProjectChoiceDiff,
+): void {
+  const trustedContracts = isRecord(trusted.roleContracts)
+    ? trusted.roleContracts
+    : {};
+  const candidateContracts = isRecord(candidate.roleContracts)
+    ? candidate.roleContracts
+    : {};
+  for (const [role, trustedValue] of Object.entries(trustedContracts)) {
+    const rolePath = `${fieldPath}.roleContracts.${role}`;
+    const candidateValue = candidateContracts[role];
+    if (!isRecord(trustedValue) || !isRecord(candidateValue)) {
+      if (!Object.hasOwn(candidateContracts, role))
+        weaken(diff, rolePath, "trusted側のrole contractを削除している");
+      continue;
+    }
+    for (const field of ["forbiddenOperations", "requiredEvidence"] as const) {
+      const trustedItems = trustedValue[field];
+      const candidateItems = candidateValue[field];
+      if (!isStringArray(trustedItems) || !isStringArray(candidateItems))
+        continue;
+      const removed = trustedItems.filter(
+        (item) => !candidateItems.includes(item),
+      );
+      if (removed.length > 0)
+        weaken(
+          diff,
+          `${rolePath}.${field}`,
+          `trusted側の制約を削除している: ${removed.join("、")}`,
+        );
+      else if (!sameValue(trustedItems, candidateItems))
+        pushUnique(diff.allowed, `${rolePath}.${field}`);
+    }
+    for (const field of ["allowedPaths", "allowedOperations"] as const) {
+      const trustedItems = trustedValue[field];
+      const candidateItems = candidateValue[field];
+      if (!isStringArray(trustedItems) || !isStringArray(candidateItems))
+        continue;
+      const added = candidateItems.filter(
+        (item) => !trustedItems.includes(item),
+      );
+      if (added.length > 0)
+        weaken(
+          diff,
+          `${rolePath}.${field}`,
+          `許可範囲を拡大している: ${added.join("、")}`,
+        );
+      else if (!sameValue(trustedItems, candidateItems))
+        pushUnique(diff.allowed, `${rolePath}.${field}`);
+    }
+  }
+  for (const role of Object.keys(candidateContracts))
+    if (!Object.hasOwn(trustedContracts, role))
+      pushUnique(diff.allowed, `${fieldPath}.roleContracts.${role}`);
+}
+
+function classifyTierMap(
+  trusted: ChoiceRecord,
+  candidate: ChoiceRecord,
+  field: "tierMapping" | "minimumTierByRisk",
+  fieldPath: string,
+  diff: ProjectChoiceDiff,
+): void {
+  const trustedMap = isRecord(trusted[field]) ? trusted[field] : {};
+  const candidateMap = isRecord(candidate[field]) ? candidate[field] : {};
+  for (const [key, trustedTier] of Object.entries(trustedMap)) {
+    const candidateTier = candidateMap[key];
+    if (field === "minimumTierByRisk" && candidateTier === undefined) {
+      weaken(
+        diff,
+        `${fieldPath}.${field}.${key}`,
+        "trusted側のrisk別最低tierを削除している",
+      );
+      continue;
+    }
+    if (
+      MODEL_TIERS.some((tier) => tier === trustedTier) &&
+      MODEL_TIERS.some((tier) => tier === candidateTier)
+    ) {
+      if (
+        MODEL_TIER_STRENGTH[candidateTier as (typeof MODEL_TIERS)[number]] <
+        MODEL_TIER_STRENGTH[trustedTier as (typeof MODEL_TIERS)[number]]
+      )
+        weaken(
+          diff,
+          `${fieldPath}.${field}.${key}`,
+          `tierを${String(trustedTier)}から${String(candidateTier)}へ引き下げている`,
+        );
+      else if (candidateTier !== trustedTier)
+        pushUnique(diff.allowed, `${fieldPath}.${field}.${key}`);
+    }
+  }
+  for (const key of Object.keys(candidateMap))
+    if (!Object.hasOwn(trustedMap, key))
+      pushUnique(diff.allowed, `${fieldPath}.${field}.${key}`);
+}
+
+function classifyModelMappingExtensions(
+  trusted: unknown,
+  candidate: unknown,
+  fieldPath: string,
+  diff: ProjectChoiceDiff,
+): void {
+  if (!isRecord(trusted) || !isRecord(candidate)) return;
+  classifyRoleContracts(trusted, candidate, fieldPath, diff);
+  classifyTierMap(trusted, candidate, "tierMapping", fieldPath, diff);
+  classifyTierMap(trusted, candidate, "minimumTierByRisk", fieldPath, diff);
 }
 
 export function classifyProjectChoiceDiff(
@@ -467,8 +672,17 @@ export function classifyProjectChoiceDiff(
     trustedMappingValid &&
     candidateMappingValid &&
     !sameValue(trusted.modelMapping, candidate.modelMapping)
-  )
-    pushUnique(diff.allowed, "projectChoices.modelMapping");
+  ) {
+    const classifiedBefore = diff.allowed.length + diff.weakened.length;
+    classifyModelMappingExtensions(
+      trusted.modelMapping,
+      candidate.modelMapping,
+      "projectChoices.modelMapping",
+      diff,
+    );
+    if (diff.allowed.length + diff.weakened.length === classifiedBefore)
+      pushUnique(diff.allowed, "projectChoices.modelMapping");
+  }
 
   const trustedCapabilities = isRecord(trusted.capabilities)
     ? trusted.capabilities
