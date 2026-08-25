@@ -9,7 +9,13 @@ import {
 } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { createPullRequest, authorizeMerge } from "./domain/delivery.js";
-import { createWorktree, inspectFinalizeState } from "./domain/worktree.js";
+import {
+  createWorktree,
+  DEFAULT_WORKTREE_PLACEMENT,
+  enforceTrustedWorktreeBoundary,
+  inspectFinalizeState,
+  validateWorktreePlacement,
+} from "./domain/worktree.js";
 import {
   applyWorkspaceHygiene,
   previewWorkspaceHygiene,
@@ -215,6 +221,31 @@ function defaultBranch(root: string): string {
   if (symbolic.status === 0)
     return symbolic.stdout.trim().replace(/^origin\//, "");
   throw new Error("既定ブランチが不明です。origin/HEADを設定してください");
+}
+
+function cliRegisteredWorktrees(root: string): Array<{
+  path: string;
+  branch: string;
+}> {
+  const entries: Array<{ path: string; branch: string }> = [];
+  let worktreePath: string | undefined;
+  let branch: string | undefined;
+  const flush = (): void => {
+    if (worktreePath && branch) entries.push({ path: worktreePath, branch });
+    worktreePath = undefined;
+    branch = undefined;
+  };
+  const listed = git(["worktree", "list", "--porcelain"], root).stdout;
+  for (const line of listed.split(/\r?\n/u)) {
+    if (line === "") {
+      flush();
+      continue;
+    }
+    if (line.startsWith("worktree ")) worktreePath = line.slice(9);
+    if (line.startsWith("branch refs/heads/")) branch = line.slice(18);
+  }
+  flush();
+  return entries;
 }
 
 function routingProject(root: string) {
@@ -1151,12 +1182,66 @@ export async function main(argv: string[]): Promise<number> {
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
     const trustedSet = loadOperationPolicy(root);
+    const worktreePath = required(flags, "path");
+    enforceTrustedWorktreeBoundary({
+      repoRoot: root,
+      worktreePath,
+      expectedRepository:
+        typeof flags.repo === "string" ? flags.repo : undefined,
+      trustedPolicy: trustedSet.policy,
+    });
+    const issueRaw = required(flags, "issue");
+    if (!/^[1-9]\d*$/u.test(issueRaw))
+      throw new Error("--issueは1以上の整数で指定してください");
+    const issueNumber = Number(issueRaw);
+    if (!Number.isSafeInteger(issueNumber))
+      throw new Error("--issueは安全な整数範囲で指定してください");
+    const branch = required(flags, "branch");
+    const slug = required(flags, "slug");
+    const policy = trustedSet.policy.worktree ?? DEFAULT_WORKTREE_PLACEMENT;
+    const placement = validateWorktreePlacement({
+      repoRoot: root,
+      worktreePath,
+      branch,
+      issueNumber,
+      slug,
+      policy,
+      existing: cliRegisteredWorktrees(root),
+    });
+    if (!placement.valid) {
+      print(
+        serializeDiagnostic({
+          allowed: false,
+          code: "ASC-WORKTREE-PLACEMENT-001",
+          diagnostic: {
+            ruleId: "ASC-WORKTREE-PLACEMENT-001",
+            purpose: "worktreeの配置・命名・重複境界を強制する",
+            risk: "path",
+            reasons: placement.errors,
+            scope: ["worktree", "create"],
+            checks: [
+              "project policy、path、Issue番号、slug、branch、登録済みworktreeを検証した",
+            ],
+            autoFixes: [],
+            next: "規定名の未登録pathと許可されたbranch typeを指定してください",
+            requiredAuthority: "不要",
+            rollback: "worktreeを作成せず既存状態を保持する",
+          },
+        }),
+      );
+      return 1;
+    }
     print(
       createWorktree({
         repoRoot: root,
-        worktreePath: required(flags, "path"),
-        branch: required(flags, "branch"),
+        worktreePath,
+        branch,
         base: required(flags, "base"),
+        issueNumber,
+        slug,
+        worktreePolicy: policy,
+        remoteDefaultBranch: required(flags, "remote-default-branch"),
+        remoteDefaultSha: required(flags, "remote-default-sha"),
         expectedRepository:
           typeof flags.repo === "string" ? flags.repo : undefined,
         trustedPolicy: trustedSet.policy,

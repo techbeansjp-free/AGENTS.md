@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
@@ -30,6 +30,35 @@ interface LifecycleWorld extends WorkflowWorld {
 }
 
 const { Given, When, Then } = stepDefinitions<LifecycleWorld>();
+
+function configureRemoteDefault(root: string): string {
+  fs.appendFileSync(
+    path.join(root, ".git", "info", "exclude"),
+    ".worktrees/\n",
+  );
+  const origin = spawnSync("git", ["remote", "get-url", "origin"], {
+    cwd: root,
+  });
+  if (origin.status !== 0)
+    execFileSync(
+      "git",
+      ["remote", "add", "origin", "https://github.com/example/fixture.git"],
+      { cwd: root },
+    );
+  const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+  execFileSync("git", ["update-ref", "refs/remotes/origin/main", sha], {
+    cwd: root,
+  });
+  execFileSync(
+    "git",
+    ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+    { cwd: root },
+  );
+  return sha;
+}
 
 function readJsonObject(file: string): Record<string, unknown> {
   const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -343,8 +372,12 @@ Then("consumerの同名利用案内は保持される", function () {
 
 Given("dirty fileを持つ一時Git repositoryがある", function () {
   this.root = this.initRepo();
-  this.worktree = `${this.root}-worktree`;
-  this.temporaryDirectories.push(this.worktree);
+  this.worktree = path.join(
+    this.root,
+    ".worktrees",
+    "20260825_090000-831-gherkin-worktree",
+  );
+  this.value = configureRemoteDefault(this.root);
   fs.writeFileSync(path.join(this.root, "dirty.txt"), "preserve");
   this.statusBefore = execFileSync(
     "git",
@@ -355,9 +388,13 @@ Given("dirty fileを持つ一時Git repositoryがある", function () {
 When("新しいbranchと専用pathでworktreeを作成する", function () {
   createWorktree({
     repoRoot: this.root,
-    worktreePath: this.worktree,
-    branch: "feature/gherkin-worktree",
-    base: "main",
+    worktreePath: path.relative(this.root, this.worktree),
+    branch: "feature/831-gherkin-worktree",
+    base: String(this.value),
+    issueNumber: 831,
+    slug: "gherkin-worktree",
+    remoteDefaultBranch: "main",
+    remoteDefaultSha: String(this.value),
   });
 });
 Then("source dirty statusは作成前後で同一である", function () {
@@ -373,25 +410,32 @@ Then("専用worktreeに指定branchがある", function () {
     cwd: this.worktree,
     encoding: "utf8",
   }).trim();
-  assert.equal(branch, "feature/gherkin-worktree");
+  assert.equal(branch, "feature/831-gherkin-worktree");
 });
 
 Given("異なるorigin URLを持つ一時Git repositoryがある", function () {
   this.root = this.initRepo();
-  this.worktree = `${this.root}-wrong-remote`;
-  this.temporaryDirectories.push(this.worktree);
+  this.worktree = path.join(
+    this.root,
+    ".worktrees",
+    "20260825_090001-832-wrong-remote",
+  );
   execFileSync(
     "git",
     ["remote", "add", "origin", "https://github.com/wrong/repository.git"],
     { cwd: this.root },
   );
+  this.value = configureRemoteDefault(this.root);
 });
 Given(
   "期待repository文字列を一部に含む別originの一時Git repositoryがある",
   function () {
     this.root = this.initRepo();
-    this.worktree = `${this.root}-substring-remote`;
-    this.temporaryDirectories.push(this.worktree);
+    this.worktree = path.join(
+      this.root,
+      ".worktrees",
+      "20260825_090002-833-substring-remote",
+    );
     execFileSync(
       "git",
       [
@@ -402,15 +446,20 @@ Given(
       ],
       { cwd: this.root },
     );
+    this.value = configureRemoteDefault(this.root);
   },
 );
 When("期待repositoryを指定してworktreeを作成する", function () {
   try {
     createWorktree({
       repoRoot: this.root,
-      worktreePath: this.worktree,
-      branch: "feature/must-not-exist",
-      base: "main",
+      worktreePath: path.relative(this.root, this.worktree),
+      branch: `feature/${path.basename(this.worktree).split("-")[1]}-${path.basename(this.worktree).split("-").slice(2).join("-")}`,
+      base: String(this.value),
+      issueNumber: Number(path.basename(this.worktree).split("-")[1]),
+      slug: path.basename(this.worktree).split("-").slice(2).join("-"),
+      remoteDefaultBranch: "main",
+      remoteDefaultSha: String(this.value),
       expectedRepository: "expected/repository",
     });
   } catch (error) {
@@ -426,18 +475,29 @@ Then("専用pathは存在しない", function () {
 
 Given("Git common dirを指すsymlink祖先のworktree pathがある", function () {
   this.root = this.initRepo();
-  const alias = `${this.root}-git-alias`;
-  this.temporaryDirectories.push(alias);
-  fs.symlinkSync(path.join(this.root, ".git"), alias, "dir");
-  this.worktree = path.join(alias, "nested-worktree");
+  fs.symlinkSync(
+    path.join(this.root, ".git"),
+    path.join(this.root, ".worktrees"),
+    "dir",
+  );
+  this.worktree = path.join(
+    this.root,
+    ".worktrees",
+    "20260825_090003-834-symlink-ancestor",
+  );
+  this.value = configureRemoteDefault(this.root);
 });
 When("symlink祖先配下へworktreeを作成する", function () {
   try {
     createWorktree({
       repoRoot: this.root,
-      worktreePath: this.worktree,
-      branch: "feature/symlink-ancestor",
-      base: "main",
+      worktreePath: path.relative(this.root, this.worktree),
+      branch: "feature/834-symlink-ancestor",
+      base: String(this.value),
+      issueNumber: 834,
+      slug: "symlink-ancestor",
+      remoteDefaultBranch: "main",
+      remoteDefaultSha: String(this.value),
     });
   } catch (error) {
     this.error = error;
@@ -450,20 +510,36 @@ Given("remoteへpush済みのcleanな専用worktreeがある", function () {
   execFileSync("git", ["init", "--bare", remote]);
   execFileSync("git", ["remote", "add", "origin", remote], { cwd: this.root });
   execFileSync("git", ["push", "-u", "origin", "main"], { cwd: this.root });
-  this.worktree = `${this.root}-pushed-worktree`;
-  this.temporaryDirectories.push(this.worktree);
+  execFileSync(
+    "git",
+    ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+    { cwd: this.root },
+  );
+  const remoteDefaultSha = execFileSync("git", ["rev-parse", "origin/main"], {
+    cwd: this.root,
+    encoding: "utf8",
+  }).trim();
+  this.worktree = path.join(
+    this.root,
+    ".worktrees",
+    "20260825_090004-835-recovery",
+  );
   createWorktree({
     repoRoot: this.root,
-    worktreePath: this.worktree,
-    branch: "feature/recovery",
-    base: "main",
+    worktreePath: path.relative(this.root, this.worktree),
+    branch: "feature/835-recovery",
+    base: remoteDefaultSha,
+    issueNumber: 835,
+    slug: "recovery",
+    remoteDefaultBranch: "main",
+    remoteDefaultSha,
   });
   fs.writeFileSync(path.join(this.worktree, "implemented.txt"), "実装済み\n");
   execFileSync("git", ["add", "implemented.txt"], { cwd: this.worktree });
   execFileSync("git", ["commit", "-m", "test: recovery fixture"], {
     cwd: this.worktree,
   });
-  execFileSync("git", ["push", "-u", "origin", "feature/recovery"], {
+  execFileSync("git", ["push", "-u", "origin", "feature/835-recovery"], {
     cwd: this.worktree,
   });
 });
@@ -478,6 +554,6 @@ When("finalize stateをread-onlyで検査する", function () {
   });
 });
 Then("recovery参照は上流branchで到達可能である", function () {
-  assert.equal(this.finalizeState.recoveryRef, "origin/feature/recovery");
+  assert.equal(this.finalizeState.recoveryRef, "origin/feature/835-recovery");
   assert.equal(this.finalizeState.recoveryReachable, true);
 });
