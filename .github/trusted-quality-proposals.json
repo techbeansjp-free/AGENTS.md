@@ -98,6 +98,29 @@
           "afterSha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-PROPOSAL-DESCRIPTION-FIELDS-001",
+      "status": "staged",
+      "fromVersion": 4,
+      "toVersion": 5,
+      "owner": "repository maintainer",
+      "rationale": "登録済みproposalの比較対象を契約fieldへ限定し、owner・rationale・rollbackの値の更新を許可する。記述fieldまで不変にすると、実行不可能なrollback手順が正本へ残ったまま訂正できない。削除、契約fieldの変更、空文字列化、12文字未満の拒否は維持する",
+      "rollback": "ci.ymlは変更しない。本変更を戻す場合は、比較対象を全fieldへ戻す新規proposalを次版として登録し2段階で適用する。登録済みproposalの削除では戻せない",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "a082f7bcd58909315f2c0c5c4e5bb0c8b738660ee4fdaa7866e24368ca140624",
+          "afterSha256": "249d8d3ff0356f3e2b82d549da20dbf83663a66f9b4abb039bfc31c0ba5102bf"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
+          "afterSha256": "ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
+        }
+      ]
     }
   ]
 }
