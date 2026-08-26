@@ -37,6 +37,7 @@
   },
   "choiceFiles": ["project/choices/development.json"],
   "ruleFiles": [
+    "project/rules/canonical-source.json",
     "project/rules/ci-permission.json",
     "project/rules/ci-trigger.json",
     "project/rules/code-quality.json",

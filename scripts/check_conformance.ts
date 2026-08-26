@@ -5,6 +5,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
   buildRuleCoverage,
+  collectCanonicalScanTargets,
+  detectCanonicalDuplication,
+  validateCanonicalContracts,
   PROJECT_RULE_ENFORCEMENT_POINTS,
   validateProjectRuleLedgerEntry,
   validateReviewExceptions,
@@ -15,6 +18,57 @@ import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 import { checkWorkflowSteps } from "./check_workflow_steps.js";
 import { checkWorktreeContract } from "./check_worktree_contract.js";
 import { checkRequirementIdScheme } from "./check_requirement_id_scheme.js";
+
+const CANONICAL_CONTRACTS_FILE = ".agent-skill-chain/canonical-contracts.json";
+
+function repositoryMarkdownPaths(root: string): string[] {
+  const walk = (directory: string): string[] => {
+    if (!fs.existsSync(directory)) return [];
+    return fs
+      .readdirSync(directory, { withFileTypes: true })
+      .flatMap((entry) => {
+        if (entry.name === "node_modules" || entry.name === ".git") return [];
+        const absolute = path.join(directory, entry.name);
+        if (entry.isDirectory()) return walk(absolute);
+        return [path.relative(root, absolute).replaceAll(path.sep, "/")];
+      });
+  };
+  return walk(root);
+}
+
+function checkCanonicalDuplication(root: string): string[] {
+  const registryFile = path.join(root, CANONICAL_CONTRACTS_FILE);
+  if (!fs.existsSync(registryFile)) return [];
+  let registry: unknown;
+  try {
+    registry = JSON.parse(fs.readFileSync(registryFile, "utf8")) as unknown;
+  } catch {
+    return [`${CANONICAL_CONTRACTS_FILE}を解析できません`];
+  }
+  const allPaths = repositoryMarkdownPaths(root);
+  const validation = validateCanonicalContracts(registry, new Set(allPaths));
+  if (validation.errors.length > 0) return validation.errors;
+  const files = collectCanonicalScanTargets(allPaths).map((relative) => {
+    try {
+      return {
+        path: relative,
+        text: fs.readFileSync(path.join(root, relative), "utf8"),
+      };
+    } catch {
+      return { path: relative, text: null };
+    }
+  });
+  const result = detectCanonicalDuplication({
+    contracts: validation.contracts,
+    files,
+  });
+  return [
+    ...result.errors,
+    ...result.violations.map(
+      (violation) => `${violation.path}: ${violation.remediation}`,
+    ),
+  ];
+}
 
 const PACKAGE_MODEL_SLUG_PATHS = [
   "AGENTS.md",
@@ -385,6 +439,7 @@ export function checkRepositoryRuleLedger(
     );
   errors.push(...checkWorktreeContract(root).errors);
   errors.push(...checkRequirementIdScheme(root).errors);
+  errors.push(...checkCanonicalDuplication(root));
   errors.push(
     ...coverage.orphans.map((orphan) => `${orphan.ruleId}: ${orphan.reason}`),
     ...checkQualityCiTriggers(

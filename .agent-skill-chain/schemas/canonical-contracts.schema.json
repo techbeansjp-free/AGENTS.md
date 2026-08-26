@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-skill-chain.invalid/schemas/canonical-contracts-v1.json",
+  "title": "契約正本registry",
+  "description": "契約IDごとに正本pathと検出tokenを宣言し、正本以外の規範宣言locationでの記述を正本参照へ置換させる。ASC-CANON-SINGLE-SOURCE-001が本registryを入力とする。検査は参照の存在だけを判定し、記述内容の一致を判定しない。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "contracts"],
+  "properties": {
+    "schemaVersion": {
+      "const": "agent-skill-chain/canonical-contracts/v1"
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["contractId", "canonical", "tokens", "reason"],
+        "properties": {
+          "contractId": {
+            "type": "string",
+            "pattern": "^CANON-CONTRACT-[A-Z0-9-]+$",
+            "description": "契約の安定識別子。project rule IDと区別するためASC-で始めない"
+          },
+          "canonical": {
+            "type": "string",
+            "minLength": 1,
+            "description": "契約を記述してよい唯一のfile。repository相対pathで規範宣言location内を指す"
+          },
+          "tokens": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "人が明示登録した検出語。規範性を推測せず、この語だけを見る"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "この契約を登録した理由"
+          }
+        }
+      }
+    }
+  }
+}
