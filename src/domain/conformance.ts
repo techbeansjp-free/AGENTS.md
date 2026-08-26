@@ -77,6 +77,7 @@ export const PROJECT_RULE_ENFORCEMENT_POINTS: Readonly<Record<string, string>> =
       ["PACKAGE-MANAGER-001", "checkPackageManagerBoundary"],
       ["DISTRIBUTION-IMPACT-001", "validateDistributionImpact"],
       ["QUALITY-COMMAND-001", "checkQualityCommands"],
+      ["REVIEW-EXCEPTION-001", "validateReviewExceptions"],
       ["RUNTIME-001", "checkNodeRuntimeAlignment"],
       ["SAFETY-001", "checkTrustedPolicyBoundary"],
     ].map(([suffix, point]) => [`${PROJECT_RULE_PREFIX}-${suffix}`, point]),
@@ -913,4 +914,139 @@ export function validateDistributionImpact(input: {
       errors.push("配布物影響の根拠にplaceholderが残っています");
   }
   return { valid: errors.length === 0, errors, distributed };
+}
+
+export const REVIEW_EXCEPTION_SCHEMA_VERSION =
+  "agent-skill-chain/project-review-exceptions/v1";
+
+export const REVIEW_EXCEPTION_KINDS = [
+  "independent-reviewer-absent",
+  "transient-failure",
+  "reported-success-without-review",
+] as const;
+
+const REVIEW_EXCEPTION_FIELDS = [
+  "exceptionId",
+  "kind",
+  "condition",
+  "detection",
+  "approvalSource",
+  "approver",
+  "scope",
+  "coversIrreversibleDistribution",
+  "reason",
+  "approvedAt",
+  "expiresAt",
+  "unsatisfiedRequirement",
+  "record",
+] as const;
+
+const REVIEW_EXCEPTION_TEXT_FIELDS = REVIEW_EXCEPTION_FIELDS.filter(
+  (field) =>
+    field !== "expiresAt" && field !== "coversIrreversibleDistribution",
+);
+
+function isInstant(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && new Date(parsed).toISOString() === value;
+}
+
+export function validateReviewExceptions(input: {
+  document: unknown;
+  now: string;
+}): { valid: boolean; errors: string[]; active: string[] } {
+  const errors: string[] = [];
+  const active: string[] = [];
+  if (!isInstant(input.now)) {
+    errors.push("現在時刻はISO8601の絶対時刻でなければなりません");
+    return { valid: false, errors, active };
+  }
+  const document = input.document;
+  if (
+    !isRecord(document) ||
+    document.schemaVersion !== REVIEW_EXCEPTION_SCHEMA_VERSION ||
+    !Array.isArray(document.exceptions)
+  ) {
+    errors.push("review例外正本の構造が不正です");
+    return { valid: false, errors, active };
+  }
+  const seen = new Set<string>();
+  for (const [index, raw] of document.exceptions.entries()) {
+    const label = `review例外[${index}]`;
+    if (!isRecord(raw)) {
+      errors.push(`${label}はobjectでなければなりません`);
+      continue;
+    }
+    for (const key of Object.keys(raw))
+      if (!REVIEW_EXCEPTION_FIELDS.includes(key as never))
+        errors.push(`${label}に未知fieldがあります: ${key}`);
+    for (const field of REVIEW_EXCEPTION_FIELDS)
+      if (!Object.hasOwn(raw, field))
+        errors.push(`${label}に${field}がありません`);
+    for (const field of REVIEW_EXCEPTION_TEXT_FIELDS) {
+      if (!Object.hasOwn(raw, field)) continue;
+      const value = raw[field];
+      if (typeof value !== "string" || value.trim() === "")
+        errors.push(`${label}の${field}は空でない文字列でなければなりません`);
+    }
+    const exceptionId = raw.exceptionId;
+    if (typeof exceptionId === "string") {
+      if (!/^RVX-[A-Z0-9][A-Z0-9-]*$/u.test(exceptionId))
+        errors.push(
+          `${label}のexceptionIdはRVX-で始まる識別子でなければなりません`,
+        );
+      if (seen.has(exceptionId))
+        errors.push(`${label}のexceptionIdが重複しています: ${exceptionId}`);
+      seen.add(exceptionId);
+    }
+    if (
+      Object.hasOwn(raw, "kind") &&
+      !REVIEW_EXCEPTION_KINDS.includes(raw.kind as never)
+    )
+      errors.push(
+        `${label}のkindは${REVIEW_EXCEPTION_KINDS.join("、")}のいずれかでなければなりません`,
+      );
+    if (raw.kind === "transient-failure")
+      errors.push(
+        `${label}のtransient-failureは例外にできません。再試行の上限を超えた場合はindependent-reviewer-absentまたはreported-success-without-reviewとして宣言してください`,
+      );
+    if (Object.hasOwn(raw, "approvedAt") && !isInstant(raw.approvedAt))
+      errors.push(
+        `${label}のapprovedAtはISO8601の絶対時刻でなければなりません`,
+      );
+    const covers = raw.coversIrreversibleDistribution;
+    if (
+      Object.hasOwn(raw, "coversIrreversibleDistribution") &&
+      typeof covers !== "boolean"
+    )
+      errors.push(
+        `${label}のcoversIrreversibleDistributionは真偽値でなければなりません`,
+      );
+    if (!Object.hasOwn(raw, "expiresAt")) continue;
+    const expiresAt = raw.expiresAt;
+    if (expiresAt === null && covers === true) {
+      errors.push(
+        `${label}は外部への不可逆な配布を対象に含めるため、失効日時を無期限にできません`,
+      );
+      continue;
+    }
+    if (expiresAt === null) {
+      // 無期限を明示するnull。keyの省略とは区別する。
+      if (typeof exceptionId === "string") active.push(exceptionId);
+      continue;
+    }
+    if (!isInstant(expiresAt)) {
+      errors.push(
+        `${label}のexpiresAtはISO8601の絶対時刻またはnullでなければなりません`,
+      );
+      continue;
+    }
+    if (Date.parse(expiresAt) <= Date.parse(input.now))
+      errors.push(
+        `${label}のreview例外は${expiresAt}に失効しています。削除するか承認元と失効日時を更新してください`,
+      );
+    else if (typeof exceptionId === "string") active.push(exceptionId);
+  }
+  return { valid: errors.length === 0, errors, active };
 }

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-skill-chain/project-review-exceptions/v1",
+  "title": "独立review不成立時の承認済み例外",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "exceptions"],
+  "properties": {
+    "schemaVersion": {
+      "const": "agent-skill-chain/project-review-exceptions/v1"
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exceptionId",
+          "kind",
+          "condition",
+          "detection",
+          "approvalSource",
+          "approver",
+          "scope",
+          "coversIrreversibleDistribution",
+          "reason",
+          "approvedAt",
+          "expiresAt",
+          "unsatisfiedRequirement",
+          "record"
+        ],
+        "properties": {
+          "exceptionId": {
+            "type": "string",
+            "pattern": "^RVX-[A-Z0-9][A-Z0-9-]*$"
+          },
+          "kind": {
+            "enum": [
+              "independent-reviewer-absent",
+              "transient-failure",
+              "reported-success-without-review"
+            ],
+            "description": "例外の種別。種別ごとに許される扱いが異なる"
+          },
+          "condition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "detection": {
+            "type": "string",
+            "minLength": 1,
+            "description": "条件を観測する方法。checkの結論だけを証拠にしないことを述べる"
+          },
+          "approvalSource": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approver": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "coversIrreversibleDistribution": {
+            "type": "boolean",
+            "description": "外部への不可逆な配布を対象に含めるか。trueの場合はexpiresAtへnullを置けない"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "失効日時。無期限を明示する場合はnullとし、keyの省略は認めない。coversIrreversibleDistributionがtrueの場合はnullを認めない"
+          },
+          "unsatisfiedRequirement": {
+            "type": "string",
+            "minLength": 1
+          },
+          "record": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}
