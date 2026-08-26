@@ -63,5 +63,12 @@ cucumberBefore<WorkflowWorld>(function () {
 });
 cucumberAfter<WorkflowWorld>(function () {
   for (const directory of this.temporaryDirectories.reverse())
-    fs.rmSync(directory, { recursive: true, force: true });
+    // 大きなfixture treeの削除中に別processがまだ書いている場合、
+    // 単発のrmSyncはENOTEMPTYで落ちる。再試行して後片付けを決定的にする。
+    fs.rmSync(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 50,
+    });
 });

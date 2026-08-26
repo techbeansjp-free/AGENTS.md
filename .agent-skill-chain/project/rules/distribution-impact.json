@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-DISTRIBUTION-IMPACT-001",
+  "purpose": "変更が配布境界へ与える影響を判断し記録することを、review証拠の必須要素にする",
+  "riskClass": "quality",
+  "scope": ["repository development", "review", "distribution boundary"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "review artifactの配布物影響の節に、配布境界へ入る変更pathの全件と、配布物を更新したか更新しない理由が記述されていること",
+  "remediation": "配布境界へ入る変更pathを列挙し、配布物を更新するか、更新しない理由を記述してartifactを再作成する",
+  "overridePolicy": "bound",
+  "rollback": "配布物影響の節の要求を外し、直前の追跡可能なreview証拠要件へ戻す",
+  "packageDefault": "汎用packageは利用projectへ配布物影響の記録を強制しない",
+  "projectOverride": "このrepositoryは自身がpackageであるため、全変更について配布境界への影響を判断し記録する",
+  "changeAuthority": "repository maintainerと独立reviewer"
+}
