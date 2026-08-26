@@ -36,7 +36,13 @@ function parseStepTable(markdown: string): WorkflowStep[] {
 function parseSequence(source: string): number[] {
   if (source === "0 → 1 → … → 11")
     return Array.from({ length: 12 }, (_, index) => index);
-  return source.split("→").map((value) => Number(value.trim()));
+  return source.split("→").map((value) => {
+    const step = value.trim();
+    if (step === "") throw new Error("モード節に空のStep番号があります");
+    if (!/^\d+$/u.test(step))
+      throw new Error(`モード節のStep番号が不正です: ${step}`);
+    return Number(step);
+  });
 }
 
 function parseModeSequences(markdown: string): Record<Mode, number[]> {

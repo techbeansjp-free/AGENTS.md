@@ -21,6 +21,9 @@ import {
   type StoredStagingRecord,
 } from "./staging.js";
 import {
+  MODE_DECISION_FILE,
+  STEP_JOURNAL_FILE,
+  WORKFLOW_JOURNAL_DIRECTORY,
   renderModeDecision,
   WORKFLOW_STEPS,
   type StepJournalEntry,
@@ -305,7 +308,7 @@ export function createIssueStaging(
         ? options.requestedMode
         : decision.mode;
     fs.writeFileSync(
-      path.join(temporary, "00_モード判定.json"),
+      path.join(temporary, MODE_DECISION_FILE),
       renderModeDecision({
         requestedMode,
         answers: options.answers,
@@ -322,12 +325,14 @@ export function createIssueStaging(
       skillId: step.skillId,
       mode: decision.mode,
       recordedAt: decidedAt,
-      artifacts: ["00_モード判定.json"],
+      artifacts: [MODE_DECISION_FILE],
       evidence: "モード判定成果物と一時stagingを原子的に生成した",
     };
-    fs.mkdirSync(path.join(temporary, "journal"), { mode: 0o700 });
+    fs.mkdirSync(path.join(temporary, WORKFLOW_JOURNAL_DIRECTORY), {
+      mode: 0o700,
+    });
     fs.writeFileSync(
-      path.join(temporary, "journal", "steps.jsonl"),
+      path.join(temporary, STEP_JOURNAL_FILE),
       `${JSON.stringify(initialEntry)}\n`,
       { flag: "wx", mode: 0o600 },
     );

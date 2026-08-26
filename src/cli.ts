@@ -137,6 +137,7 @@ import {
 import {
   MODE_STEP_SEQUENCES,
   NEVER_SKIPPABLE_STEPS,
+  completePullRequestWorkflow,
   requiredSteps,
   skippableSteps,
   validateJournalHumanOverride,
@@ -3028,23 +3029,26 @@ export async function main(
       github(operation, payload, root),
     );
     if (apply && created.state === "waiting_for_human_review") {
-      const definition = workflowStep(11);
-      if (!definition) throw new Error("step 11の定義がありません");
-      if (typeof created.url !== "string" || created.url.trim() === "")
-        throw new Error("PR作成後のURLがありません");
-      const recorded = appendWorkflowJournalEntry({
-        staging,
-        entry: {
-          step: 11,
-          skillId: definition.skillId,
-          mode: inspection.mode,
-          recordedAt: new Date().toISOString(),
-          artifacts: [created.url],
-          evidence: "PR作成後のURLを確認しwaiting_for_human_reviewで停止した",
-        },
+      const completion = completePullRequestWorkflow(created, staging, () => {
+        const definition = workflowStep(11);
+        if (!definition) throw new Error("step 11の定義がありません");
+        const createdUrl = created.url;
+        if (typeof createdUrl !== "string" || createdUrl.trim() === "")
+          throw new Error("PR作成後のURLがありません");
+        return appendWorkflowJournalEntry({
+          staging,
+          entry: {
+            step: 11,
+            skillId: definition.skillId,
+            mode: inspection.mode,
+            recordedAt: new Date().toISOString(),
+            artifacts: [createdUrl],
+            evidence: "PR作成後のURLを確認しwaiting_for_human_reviewで停止した",
+          },
+        });
       });
-      print({ ...created, workflow: recorded });
-      return 0;
+      print(completion.output);
+      return completion.exitCode;
     }
     print(created);
     return 0;

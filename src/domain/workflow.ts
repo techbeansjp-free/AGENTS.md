@@ -9,6 +9,11 @@ import {
 } from "./mode.js";
 import type { HumanOverride } from "./role.js";
 
+export const MODE_DECISION_FILE = "00_モード判定.json";
+export const WORKFLOW_JOURNAL_DIRECTORY = "journal";
+export const STEP_JOURNAL_BASENAME = "steps.jsonl";
+export const STEP_JOURNAL_FILE = `${WORKFLOW_JOURNAL_DIRECTORY}/${STEP_JOURNAL_BASENAME}`;
+
 export interface WorkflowStep {
   step: number;
   skillId: string;
@@ -182,6 +187,7 @@ export interface ModeDecision {
   mode: Mode;
   requestedMode: Mode;
   answers: Record<string, ModeAnswer>;
+  changedFiles: string[];
   reasons: string[];
   decidedAt: string;
   poc?: PocDeclaration;
@@ -208,6 +214,7 @@ const MODE_DECISION_FIELDS = new Set([
   "mode",
   "requestedMode",
   "answers",
+  "changedFiles",
   "reasons",
   "decidedAt",
   "poc",
@@ -577,6 +584,7 @@ export function renderModeDecision(input: {
     mode: result.mode,
     requestedMode: input.requestedMode,
     answers: input.answers,
+    changedFiles: [...(input.changedFiles ?? [])],
     reasons: result.reasons,
     decidedAt: input.decidedAt,
     ...(input.poc ? { poc: input.poc } : {}),
@@ -615,6 +623,12 @@ export function parseModeDecision(text: string): {
     errors.push("reasonsは文字列配列が必要です");
   const parsedAnswers = parseAnswers(value.answers);
   errors.push(...parsedAnswers.errors);
+  const changedFiles = value.changedFiles ?? [];
+  if (
+    !Array.isArray(changedFiles) ||
+    !changedFiles.every((file) => nonEmpty(file))
+  )
+    errors.push("changedFilesは空でない文字列の配列が必要です");
   const parsedPoc =
     value.poc === undefined ? { errors: [] as string[] } : parsePoc(value.poc);
   errors.push(...parsedPoc.errors);
@@ -624,6 +638,9 @@ export function parseModeDecision(text: string): {
     const classified = classifyMode(parsedAnswers.answers, {
       requestedMode: value.requestedMode,
       poc: parsedPoc.poc,
+      changedFiles: Array.isArray(changedFiles)
+        ? changedFiles.filter(nonEmpty)
+        : [],
     });
     if (value.mode !== classified.mode)
       errors.push(`modeが既存のモード判定結果${classified.mode}と一致しません`);
@@ -645,10 +662,100 @@ export function parseModeDecision(text: string): {
       mode: value.mode,
       requestedMode: value.requestedMode,
       answers: parsedAnswers.answers,
+      changedFiles: [...(changedFiles as string[])],
       reasons: [...(value.reasons as string[])],
       decidedAt: value.decidedAt as string,
       ...(parsedPoc.poc ? { poc: parsedPoc.poc } : {}),
     },
     errors,
   };
+}
+
+export function inspectWorkflowStagingArtifacts(input: {
+  staging: string;
+  mode: Mode;
+  state: string;
+  modeDecisionSource?: string;
+  journalSource?: string;
+  upToStep?: number;
+}) {
+  const modeDecision =
+    input.modeDecisionSource === undefined
+      ? { errors: [`${MODE_DECISION_FILE}がありません`] }
+      : parseModeDecision(input.modeDecisionSource);
+  const journal =
+    input.journalSource === undefined
+      ? { entries: [], errors: [`${STEP_JOURNAL_FILE}がありません`] }
+      : parseStepJournal(input.journalSource);
+  const completedSteps = [...new Set(journal.entries.map(({ step }) => step))];
+  const currentStep = completedSteps.at(-1);
+  const validation = validateStepJournal({
+    mode: input.mode,
+    entries: journal.entries,
+    upToStep: input.upToStep ?? currentStep ?? 0,
+  });
+  const completed = new Set(completedSteps);
+  const nextStep = requiredSteps(input.mode).find(
+    (step) => !completed.has(step),
+  );
+  const errors = [
+    ...journal.errors,
+    ...modeDecision.errors,
+    ...(modeDecision.decision && modeDecision.decision.mode !== input.mode
+      ? [
+          `モード判定成果物のmode ${modeDecision.decision.mode}がstaging recordのmode ${input.mode}と一致しません`,
+        ]
+      : []),
+    ...validation.errors,
+  ];
+  return {
+    staging: input.staging,
+    mode: input.mode,
+    state: input.state,
+    modeDecision: {
+      exists: input.modeDecisionSource !== undefined,
+      valid: Boolean(modeDecision.decision) && modeDecision.errors.length === 0,
+      errors: modeDecision.errors,
+    },
+    journal: {
+      exists: input.journalSource !== undefined,
+      valid: journal.errors.length === 0 && validation.valid,
+      errors: journal.errors,
+    },
+    completedSteps,
+    currentStep,
+    nextStep,
+    validation,
+    errors,
+    valid:
+      errors.length === 0 && Boolean(modeDecision.decision) && validation.valid,
+  };
+}
+
+export function completePullRequestWorkflow<
+  Created extends { url?: string },
+  Recorded,
+>(created: Created, staging: string, record: () => Recorded) {
+  try {
+    return {
+      exitCode: 0,
+      output: { ...created, workflow: record() },
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      exitCode: 1,
+      output: {
+        ...created,
+        workflow: {
+          recorded: false,
+          diagnostic: {
+            ruleId: "ASC-WORKFLOW-JOURNAL-001",
+            reasons: [`PR作成後のStep 11記録に失敗しました: ${reason}`],
+            next: `作成済みPR ${created.url ?? "（URL不明）"} を確認し、PR作成を再実行せず、workflow record --staging=${staging} --step=11 --artifact=<PR URL> --evidence=<PR作成確認>で記録だけを再実行した後、workflow verify --staging=${staging} --up-to=11で確認してください`,
+          },
+        },
+      },
+    };
+  }
 }
