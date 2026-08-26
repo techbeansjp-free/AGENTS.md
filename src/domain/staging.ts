@@ -920,14 +920,22 @@ export function isIssueStagingPath(relative: string): boolean {
   return prefix.every((segment, index) => segments[index] === segment);
 }
 
+/**
+ * 一時ライフサイクル領域のrepository相対prefix。**この一覧が分類の唯一の正本である。**
+ *
+ * `.gitignore`、配布物検査の除外一覧、領域判定はいずれもこの一覧から導出または照合する。
+ * 一覧を持たずに判定だけを書くと、宣言が箇所ごとに分岐して黙ってずれる。
+ * `readonly`は型検査だけの制約なので、runtimeでも変更できないよう凍結する。
+ */
+export const STAGING_LIFECYCLE_AREAS: readonly string[] = Object.freeze([
+  ".agent-skill-chain/tmp",
+  ".agent-skill-chain/role-log",
+  ".agent-skill-chain/metrics",
+]);
+
 export function isStagingLifecyclePath(relative: string): boolean {
   const normalized = slash(relative);
-  return (
-    normalized === ".agent-skill-chain/tmp" ||
-    normalized.startsWith(".agent-skill-chain/tmp/") ||
-    normalized === ".agent-skill-chain/role-log" ||
-    normalized.startsWith(".agent-skill-chain/role-log/") ||
-    normalized === ".agent-skill-chain/metrics" ||
-    normalized.startsWith(".agent-skill-chain/metrics/")
+  return STAGING_LIFECYCLE_AREAS.some(
+    (area) => normalized === area || normalized.startsWith(`${area}/`),
   );
 }

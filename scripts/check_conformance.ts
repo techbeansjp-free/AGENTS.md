@@ -15,6 +15,11 @@ import {
   validateRepositoryConformance,
   type RuleCoverageRow,
 } from "../src/domain/conformance.js";
+import {
+  isStagingLifecyclePath,
+  STAGING_LIFECYCLE_AREAS,
+} from "../src/domain/staging.js";
+import { FORBIDDEN_DISTRIBUTION_PREFIXES } from "./check_package_contents.js";
 import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 import { checkWorkflowSteps } from "./check_workflow_steps.js";
 import { checkWorktreeContract } from "./check_worktree_contract.js";
@@ -149,18 +154,18 @@ const FOREIGN_PACKAGE_MANAGER_FILES = [
   "pnpm-lock.yaml",
   "bun.lockb",
 ] as const;
-const FORBIDDEN_PACKAGE_ENTRIES = [
+// 一時ライフサイクル領域は分類正本から取り込む。ここへ書き写すと宣言が分岐する。
+export const LIFECYCLE_PACKAGE_ENTRIES: readonly string[] = [
   ".agent-skill-chain/project-policy.json",
   ".agent-skill-chain/project",
-  ".agent-skill-chain/role-log",
-  ".agent-skill-chain/metrics",
+  ...STAGING_LIFECYCLE_AREAS,
   "memo",
   "issues",
   ".worktrees",
   "test",
   ".github",
   "scripts",
-] as const;
+];
 
 export interface PackageModelSlugViolation {
   path: string;
@@ -334,7 +339,7 @@ export function checkPackageDistributionBoundary(root: string): string[] {
     return ["package.json files allowlistがありません"];
   return entries.flatMap((rawEntry) => {
     const entry = normalPackageEntry(rawEntry);
-    const forbidden = FORBIDDEN_PACKAGE_ENTRIES.find(
+    const forbidden = LIFECYCLE_PACKAGE_ENTRIES.find(
       (candidate) =>
         entry === candidate ||
         entry.startsWith(`${candidate}/`) ||
@@ -475,6 +480,7 @@ export function checkRepositoryRuleLedger(
         now: new Date().toISOString(),
       }).errors,
     );
+  errors.push(...checkLifecycleIgnore(root));
   errors.push(...checkWorktreeContract(root).errors);
   errors.push(...checkRequirementIdScheme(root).errors);
   errors.push(...checkCanonicalScopeAlignment(root));
@@ -609,6 +615,187 @@ export function checkConformance(root: string): number {
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
+}
+
+/**
+ * 一時ライフサイクル領域の宣言が3箇所で分岐していないことを検査する。
+ *
+ * 分類正本は`STAGING_LIFECYCLE_AREAS`であり、`.gitignore`と配布物検査の除外一覧は
+ * そこから照合する。この関数はprefixを1つも自前で書かない。
+ */
+
+/** repositoryとindexの選択へ影響する環境変数。除去しないと別repositoryを検査し得る。 */
+const GIT_REDIRECT_ENVIRONMENT = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CEILING_DIRECTORIES",
+  "GIT_CONFIG",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_SYSTEM",
+  "GIT_CONFIG_NOSYSTEM",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_PARAMETERS",
+];
+/**
+ * command scopeの設定注入。`GIT_CONFIG_KEY_0`等から`core.worktree`を注入できるため、
+ * 固定名だけでは足りずpatternでも除去する。
+ */
+const GIT_REDIRECT_ENVIRONMENT_PATTERN = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/u;
+
+function isolatedGit(
+  root: string,
+  args: string[],
+): { status: number; stdout: string } {
+  const environment = { ...process.env };
+  for (const name of GIT_REDIRECT_ENVIRONMENT) delete environment[name];
+  for (const name of Object.keys(environment))
+    if (GIT_REDIRECT_ENVIRONMENT_PATTERN.test(name)) delete environment[name];
+  const result = spawnSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    env: environment,
+  });
+  return { status: result.status ?? 128, stdout: result.stdout ?? "" };
+}
+
+/** `<source>:<line>:<pattern>\t<path>` を分解する。 */
+function parseIgnoreMatch(
+  output: string,
+): { source: string; pattern: string } | undefined {
+  const [descriptor] = output.split("\t");
+  const parts = (descriptor ?? "").split(":");
+  if (parts.length < 3) return undefined;
+  const [source, , ...rest] = parts;
+  return source === undefined || rest.length === 0
+    ? undefined
+    : { source, pattern: rest.join(":") };
+}
+
+function checkAreaIgnored(root: string, area: string): string[] {
+  const expected = `${area}/`;
+  const observed: Array<{ source: string; pattern: string }> = [];
+  for (const probe of [`${area}/probe`, `${area}/nested/deeper/probe`]) {
+    const result = isolatedGit(root, ["check-ignore", "-v", "--", probe]);
+    if (result.status === 1)
+      return [
+        `一時ライフサイクル領域が無視対象ではありません: ${area}。root .gitignoreへ ${expected} を追加してください`,
+      ];
+    if (result.status !== 0)
+      return [
+        `一時ライフサイクル領域の無視設定を問い合わせできません: ${area}（終了値${result.status}）。無視されているとみなさずに拒否します`,
+      ];
+    const matched = parseIgnoreMatch(result.stdout.trim());
+    if (!matched)
+      return [
+        `一時ライフサイクル領域の無視設定を解釈できません: ${area}（観測値: ${result.stdout.trim()}）`,
+      ];
+    observed.push(matched);
+  }
+  const [shallow, deep] = observed as [
+    { source: string; pattern: string },
+    { source: string; pattern: string },
+  ];
+  if (shallow.pattern !== expected || deep.pattern !== expected)
+    return [
+      `一時ライフサイクル領域の無視patternが領域全体を指していません: ${area}（観測したpattern: ${shallow.pattern}、${deep.pattern}）`,
+    ];
+  if (shallow.source !== ".gitignore" || deep.source !== ".gitignore")
+    return [
+      `一時ライフサイクル領域の無視設定がrepositoryで追跡される .gitignore にありません: ${area}（観測した一致元: ${shallow.source}、${deep.source}）`,
+    ];
+  return [];
+}
+
+/**
+ * 領域一覧が配布物検査の除外一覧に含まれることを照合する。
+ * 引数で受けるのはtest seamではなく、判定を観測から分離するための純関数境界である。
+ */
+export function checkLifecycleDistributionExclusion(
+  areas: readonly string[],
+  prefixes: readonly string[],
+): string[] {
+  return areas
+    .filter((area) => !prefixes.includes(`${area}/`))
+    .map(
+      (area) =>
+        `一時ライフサイクル領域が配布物検査の除外一覧にありません: ${area}`,
+    );
+}
+
+/** 領域一覧がpackage資産の禁止entry一覧に含まれることを照合する。 */
+export function checkLifecyclePackageEntries(
+  areas: readonly string[],
+  entries: readonly string[],
+): string[] {
+  return areas
+    .filter((area) => !entries.includes(area))
+    .map(
+      (area) =>
+        `一時ライフサイクル領域がpackage資産の禁止entry一覧にありません: ${area}`,
+    );
+}
+
+export function checkLifecycleIgnore(root: string): string[] {
+  const errors: string[] = [];
+  const toplevel = isolatedGit(root, ["rev-parse", "--show-toplevel"]);
+  if (toplevel.status !== 0)
+    return [
+      `検査対象のrepository rootを解決できません（終了値${toplevel.status}）。無視設定を検証できないため拒否します`,
+    ];
+  // realpathSyncは存在しないpathで例外を投げる。診断APIとして例外を漏らさない。
+  let resolved: string;
+  let expected: string;
+  try {
+    resolved = fs.realpathSync(toplevel.stdout.trim());
+    expected = fs.realpathSync(root);
+  } catch {
+    return [
+      `検査対象のrepository rootを解決できません: 観測値=${toplevel.stdout.trim()}。無視設定を検証できないため拒否します`,
+    ];
+  }
+  if (resolved !== expected)
+    return [
+      `検査対象と解決されたrepository rootが一致しません: 指定=${root}、解決=${resolved}。GIT_DIR等の環境変数を外して再実行してください`,
+    ];
+  const tracked = isolatedGit(root, ["ls-files", "-z"]);
+  if (tracked.status !== 0)
+    return [
+      `追跡fileを列挙できません（終了値${tracked.status}）。無視設定を検証できないため拒否します`,
+    ];
+  const ignoreTracked = isolatedGit(root, [
+    "ls-files",
+    "--error-unmatch",
+    "--",
+    ".gitignore",
+  ]);
+  if (ignoreTracked.status !== 0)
+    errors.push(
+      "無視設定を持つ .gitignore がrepositoryで追跡されていません。git add .gitignore を実行してください",
+    );
+  for (const area of STAGING_LIFECYCLE_AREAS)
+    errors.push(...checkAreaIgnored(root, area));
+  for (const relative of tracked.stdout.split("\0").filter(Boolean))
+    if (isStagingLifecyclePath(relative))
+      errors.push(
+        `一時ライフサイクル領域配下のfileが追跡されています: ${relative}。git rm --cached で追跡を外してください`,
+      );
+  errors.push(
+    ...checkLifecycleDistributionExclusion(
+      STAGING_LIFECYCLE_AREAS,
+      FORBIDDEN_DISTRIBUTION_PREFIXES,
+    ),
+  );
+  errors.push(
+    ...checkLifecyclePackageEntries(
+      STAGING_LIFECYCLE_AREAS,
+      LIFECYCLE_PACKAGE_ENTRIES,
+    ),
+  );
+  return errors;
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

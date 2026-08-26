@@ -2,21 +2,29 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "..");
-const forbiddenPrefixes = [
-  "test/",
-  ".github/",
-  "scripts/",
-  "docs/specs/",
-  "node_modules/",
-  "memo/",
-  ".agent-skill-chain/tmp/",
-  ".agent-skill-chain/role-log/",
-  ".agent-skill-chain/metrics/",
-  ".agent-skill-chain/project/",
-  "secret-fixtures/",
-];
+/**
+ * 配布対象から除外するrepository相対prefix。
+ * 一時ライフサイクル領域の整合検査が参照するため、複製せず参照させる目的でexportする。
+ */
+export const FORBIDDEN_DISTRIBUTION_PREFIXES: readonly string[] = Object.freeze(
+  [
+    "test/",
+    ".github/",
+    "scripts/",
+    "docs/specs/",
+    "node_modules/",
+    "memo/",
+    ".agent-skill-chain/tmp/",
+    ".agent-skill-chain/role-log/",
+    ".agent-skill-chain/metrics/",
+    ".agent-skill-chain/project/",
+    "secret-fixtures/",
+  ],
+);
+const forbiddenPrefixes = FORBIDDEN_DISTRIBUTION_PREFIXES;
 const forbiddenFiles = new Set([
   "cucumber.mjs",
   "tsconfig.json",
@@ -189,13 +197,19 @@ export function checkPackageContents(): {
   }
 }
 
-const result = checkPackageContents();
-if (!result.valid) {
-  process.stderr.write(
-    `パッケージ内容検査: 失敗\n${result.errors.map((error) => `- ${error}`).join("\n")}\n`,
-  );
-  process.exitCode = 1;
-} else
-  process.stdout.write(
-    `パッケージ内容検査: 合格（実行・配布ファイル${result.files}件、project policy・role log・開発計測・test fixture・秘密情報は除外）\n`,
-  );
+// importされただけで npm pack を起動しないよう、実行entryのときだけ検査する。
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
+  const result = checkPackageContents();
+  if (!result.valid) {
+    process.stderr.write(
+      `パッケージ内容検査: 失敗\n${result.errors.map((error) => `- ${error}`).join("\n")}\n`,
+    );
+    process.exitCode = 1;
+  } else
+    process.stdout.write(
+      `パッケージ内容検査: 合格（実行・配布ファイル${result.files}件、project policy・role log・開発計測・test fixture・秘密情報は除外）\n`,
+    );
+}
