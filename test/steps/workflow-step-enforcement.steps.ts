@@ -4,6 +4,10 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
+  fixtureInstant,
+  fixtureInstantMs,
+} from "../support/fixture-instant.js";
+import {
   MODE_STEP_SEQUENCES,
   MODE_DECISION_FILE,
   NEVER_SKIPPABLE_STEPS,
@@ -633,14 +637,9 @@ function preparePullRequest(
   world: WorkflowStepWorld,
   missingStep4: boolean,
 ): PreparedPullRequest {
-  const fixtureConstructedAt = Date.now();
-  const fixturePast = new Date(
-    fixtureConstructedAt - 60 * 60 * 1000,
-  ).toISOString();
-  const fixtureNow = new Date(fixtureConstructedAt).toISOString();
-  const fixtureFuture = new Date(
-    fixtureConstructedAt + 24 * 60 * 60 * 1000,
-  ).toISOString();
+  const fixturePast = fixtureInstant({ hoursAgo: 1 });
+  const fixtureNow = fixtureInstant();
+  const fixtureFuture = fixtureInstant({ daysAhead: 1 });
   const root = fs.realpathSync(world.initRepo());
   fs.mkdirSync(path.join(root, ".agent-skill-chain", "policy"), {
     recursive: true,
@@ -670,7 +669,7 @@ function preparePullRequest(
   const staging = createIssueStaging(root, {
     title: "workflow-test",
     answers: answers(),
-    now: new Date(fixtureConstructedAt),
+    now: new Date(fixtureInstantMs()),
     requestedMode: "quick",
   }).path;
   const journalFile = path.join(staging, STEP_JOURNAL_FILE);
