@@ -13,6 +13,7 @@ import {
 import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 import { checkWorkflowSteps } from "./check_workflow_steps.js";
 import { checkWorktreeContract } from "./check_worktree_contract.js";
+import { checkRequirementIdScheme } from "./check_requirement_id_scheme.js";
 
 const PACKAGE_MODEL_SLUG_PATHS = [
   "AGENTS.md",
@@ -369,6 +370,7 @@ export function checkRepositoryRuleLedger(
     ),
   });
   errors.push(...checkWorktreeContract(root).errors);
+  errors.push(...checkRequirementIdScheme(root).errors);
   errors.push(
     ...coverage.orphans.map((orphan) => `${orphan.ruleId}: ${orphan.reason}`),
     ...checkQualityCiTriggers(
