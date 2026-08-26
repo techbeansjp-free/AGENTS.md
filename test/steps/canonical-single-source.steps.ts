@@ -228,11 +228,14 @@ Given("証跡と一時ステージングと実装を含むpath一覧がある", 
   this.paths = [
     ".agent-skill-chain/docs/01_開発ワークフロー.md",
     ".agent-skill-chain/templates/issue/11_プルリクエスト本文.md",
+    ".agent-skill-chain/skills/step-11-pr/SKILL.md",
+    ".agent-skill-chain/policy/00_利用案内.md",
     "docs/specs/12_運用保守/00_運用設計.md",
     "docs/reviews/00_課題824実装レビュー.md",
     ".agent-skill-chain/tmp/issues/x/00_要求定義.md",
     "src/domain/delivery.ts",
     "docs/specs/12_運用保守/notes.txt",
+    "docs/specs-old/00_旧仕様.md",
   ];
 });
 
@@ -372,6 +375,8 @@ Then("集合は規範宣言locationのMarkdownだけを含む", function () {
   assert.deepEqual(this.targets, [
     ".agent-skill-chain/docs/01_開発ワークフロー.md",
     ".agent-skill-chain/templates/issue/11_プルリクエスト本文.md",
+    ".agent-skill-chain/skills/step-11-pr/SKILL.md",
+    ".agent-skill-chain/policy/00_利用案内.md",
     "docs/specs/12_運用保守/00_運用設計.md",
   ]);
 });

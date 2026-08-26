@@ -5,7 +5,7 @@
       "contractId": "CANON-CONTRACT-ISSUE-REFERENCE",
       "canonical": ".agent-skill-chain/docs/01_開発ワークフロー.md",
       "tokens": ["Closes #", "Relates to #"],
-      "reason": "canonical Issueの終端参照とmerge連動closeの規約。2026-08-26に正本1箇所と複製5箇所へ分岐し、docs/specs/12_運用保守/00_運用設計.mdが正本に無い規則を独自追加し、templates/issue/11_プルリクエスト事前確認.mdが正本の真逆を定めていた"
+      "reason": "canonical Issueの終端参照とmerge連動closeの規約。2026-08-26に正本1箇所と複製6箇所へ分岐し、docs/specs/12_運用保守/00_運用設計.mdが正本に無い規則を独自追加し、templates/issue/11_プルリクエスト事前確認.mdとskills/step-11-pr/SKILL.mdが正本の真逆を定めていた。うち2箇所は検出tokenを含まない言い換えであり機構では捉えられない"
     }
   ]
 }
