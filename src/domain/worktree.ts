@@ -37,6 +37,7 @@ const CONTROL = /\p{C}/u;
 const WORKTREE_NAME = /^(\d{8}_\d{6})-(\d+)-([a-z0-9][a-z0-9-]*)$/u;
 const BRANCH_NAME = /^([a-z][a-z0-9-]{0,31})\/(\d+)-([a-z0-9][a-z0-9-]*)$/u;
 const WORKTREE_TIMESTAMP = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/u;
+export const WORKTREE_NAME_FORMAT = "<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>";
 export const WORKTREE_TIMESTAMP_MAX_AGE_MINUTES = 10;
 const WORKTREE_TIMESTAMP_MAX_AGE_MS =
   WORKTREE_TIMESTAMP_MAX_AGE_MINUTES * 60 * 1000;
