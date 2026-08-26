@@ -75,6 +75,7 @@ export const PROJECT_RULE_ENFORCEMENT_POINTS: Readonly<Record<string, string>> =
       ["OWNERSHIP-PR-001", "validateOwnershipBoundary"],
       ["PACKAGE-001", "checkPackageDistributionBoundary"],
       ["PACKAGE-MANAGER-001", "checkPackageManagerBoundary"],
+      ["DISTRIBUTION-IMPACT-001", "validateDistributionImpact"],
       ["QUALITY-COMMAND-001", "checkQualityCommands"],
       ["RUNTIME-001", "checkNodeRuntimeAlignment"],
       ["SAFETY-001", "checkTrustedPolicyBoundary"],
@@ -800,4 +801,116 @@ export function classifyConformanceDeclarationDiff(
     }
   }
   return diff;
+}
+
+export const DISTRIBUTION_IMPACT_HEADING = "## 配布物影響";
+const DISTRIBUTION_IMPACT_HEADING_TEXT = "配布物影響";
+const DISTRIBUTION_DECISION_UPDATED = "配布物を更新した";
+const DISTRIBUTION_DECISION_NOT_UPDATED = "配布物を更新しない";
+
+function normalizeRelative(value: string): string {
+  return value.replaceAll("\\", "/").replace(/^\.\//u, "");
+}
+
+export function distributedPaths(input: {
+  changedPaths: readonly string[];
+  packageFiles: readonly string[];
+}): string[] {
+  const files = input.packageFiles.map(normalizeRelative);
+  const compiled = new Map<string, string>();
+  if (files.includes("dist/src/")) compiled.set("src/", "dist/src/");
+  if (files.includes("dist/bin/")) compiled.set("dist/bin/", "dist/bin/");
+  if (files.includes("dist/bin/")) compiled.set("bin/", "dist/bin/");
+  const direct = files;
+  const matched: string[] = [];
+  for (const raw of input.changedPaths) {
+    const relative = normalizeRelative(raw);
+    const isDirect = direct.some((entry) =>
+      entry.endsWith("/") ? relative.startsWith(entry) : relative === entry,
+    );
+    const isCompiled = [...compiled.keys()].some((prefix) =>
+      relative.startsWith(prefix),
+    );
+    if (isDirect || isCompiled) matched.push(relative);
+  }
+  return [...new Set(matched)].sort();
+}
+
+export function extractMarkdownSection(
+  markdown: string,
+  headingText: string,
+): string | undefined {
+  const pattern = new RegExp(
+    `^## (?:\\d+\\.\\s*)?${headingText.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s*$`,
+    "u",
+  );
+  const lines = markdown.split(/\r?\n/u);
+  const start = lines.findIndex((line) => pattern.test(line.trimEnd()));
+  if (start === -1) return undefined;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^## /u.test(line));
+  return (end === -1 ? rest : rest.slice(0, end)).join("\n");
+}
+
+export function validateDistributionImpact(input: {
+  markdown: string;
+  changedPaths: readonly string[];
+  packageFiles: readonly string[];
+}): { valid: boolean; errors: string[]; distributed: string[] } {
+  const errors: string[] = [];
+  const distributed = distributedPaths({
+    changedPaths: input.changedPaths,
+    packageFiles: input.packageFiles,
+  });
+  const section = extractMarkdownSection(
+    input.markdown,
+    DISTRIBUTION_IMPACT_HEADING_TEXT,
+  );
+  if (section === undefined) {
+    errors.push(
+      `review artifactへ「${DISTRIBUTION_IMPACT_HEADING}」の節が必要です。配布境界へ入る変更pathと、配布物を更新したか更新しない理由を記述してください`,
+    );
+    return { valid: false, errors, distributed };
+  }
+  for (const relative of distributed)
+    if (!section.includes(relative))
+      errors.push(
+        `配布物影響の節に配布境界へ入る変更pathがありません: ${relative}`,
+      );
+  const decisionLines = section
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("判断:"));
+  const decisions = decisionLines.map((line) =>
+    line.slice("判断:".length).trim(),
+  );
+  const allowed = [
+    DISTRIBUTION_DECISION_UPDATED,
+    DISTRIBUTION_DECISION_NOT_UPDATED,
+  ];
+  if (decisions.length !== 1)
+    errors.push(
+      `配布物影響の節へ「判断: ${DISTRIBUTION_DECISION_UPDATED}」または「判断: ${DISTRIBUTION_DECISION_NOT_UPDATED}」の行が1件だけ必要です`,
+    );
+  else if (!allowed.includes(decisions[0] ?? ""))
+    errors.push(
+      `配布物影響の判断は「${DISTRIBUTION_DECISION_UPDATED}」または「${DISTRIBUTION_DECISION_NOT_UPDATED}」のいずれかでなければなりません: ${decisions[0]}`,
+    );
+  const groundLines = section
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("根拠:"));
+  const grounds = groundLines.map((line) => line.slice("根拠:".length).trim());
+  if (grounds.length !== 1)
+    errors.push("配布物影響の節へ「根拠:」の行が1件だけ必要です");
+  else {
+    const ground = grounds[0] ?? "";
+    if (ground.length < 20)
+      errors.push(
+        "配布物影響の根拠が短すぎます。判断した理由を記述してください",
+      );
+    if (/^\{.*\}$/u.test(ground) || ground.includes("{"))
+      errors.push("配布物影響の根拠にplaceholderが残っています");
+  }
+  return { valid: errors.length === 0, errors, distributed };
 }

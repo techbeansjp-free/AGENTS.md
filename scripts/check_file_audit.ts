@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { validateDistributionImpact } from "../src/domain/conformance.js";
 import { pathToFileURL } from "node:url";
 import { git } from "../src/lib/process.js";
 import {
@@ -258,6 +259,20 @@ function invalidFinalPathsError(finalPaths: string[]): string {
   ].join("\n");
 }
 
+function packageDistributionFiles(root: string): string[] | undefined {
+  const metadata = path.join(root, "package.json");
+  if (!fs.existsSync(metadata)) return undefined;
+  const parsed = JSON.parse(fs.readFileSync(metadata, "utf8")) as {
+    files?: unknown;
+  };
+  if (parsed.files === undefined) return undefined;
+  if (!Array.isArray(parsed.files))
+    throw new Error("package.jsonのfilesが配列ではありません");
+  return parsed.files.filter(
+    (entry): entry is string => typeof entry === "string",
+  );
+}
+
 export function parseFileAudit(markdown: string) {
   const base = /\| 比較基点 \| `([a-f0-9]{40})` \|/iu.exec(markdown)?.[1];
   const implementation = /\| H_impl \| `([a-f0-9]{40})` \|/iu.exec(
@@ -415,6 +430,16 @@ export function checkFileAudit(root: string) {
   );
   if (ancestry.status !== 0)
     errors.push("H_implがcurrent HEADのancestorではありません");
+  const packageFiles = packageDistributionFiles(root);
+  const impact =
+    packageFiles === undefined
+      ? { errors: [], distributed: [] }
+      : validateDistributionImpact({
+          markdown: fs.readFileSync(artifact, "utf8"),
+          changedPaths: expected.map((entry) => entry.path),
+          packageFiles,
+        });
+  errors.push(...impact.errors);
   return {
     valid: errors.length === 0,
     errors,
@@ -423,6 +448,7 @@ export function checkFileAudit(root: string) {
     current,
     auditPath,
     auditedFiles: parsed.entries.length,
+    distributedPaths: impact.distributed,
   };
 }
 

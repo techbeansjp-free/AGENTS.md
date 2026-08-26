@@ -41,6 +41,7 @@
     "project/rules/ci-trigger.json",
     "project/rules/code-quality.json",
     "project/rules/distribution-boundary.json",
+    "project/rules/distribution-impact.json",
     "project/rules/docs.json",
     "project/rules/dogfooding.json",
     "project/rules/japanese-docs.json",
