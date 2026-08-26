@@ -5,7 +5,7 @@ CLIは引数を構造化入力として受け、適用を伴う操作は既定�
 | 境界 | 事前確認 | 適用 | 適用後確認 |
 |---|---|---|---|
 | Issue同期 | 認証、完全なrepository同一性、staging構造 | create/edit | Issue番号、repository、本文hashを再読取 |
-| PR作成 | 認証、base/head、HEAD SHA、同一SHAの証拠、Issue終了参照 | canonical Issueを`Closes #番号`、後続Issueを`Relates to #番号`で作成 | URL、base/head、headRefOidを再読取。作成後のStep 11記録失敗でもURLと記録だけを再実行する診断を返し非0終了 |
+| PR作成 | 認証、base/head、HEAD SHA、同一SHAの証拠、Issue終了参照 | Issue参照規約は[開発ワークフロー](../../../.agent-skill-chain/docs/01_開発ワークフロー.md)が所有し、本表はその規約に従って本文を作る | URL、base/head、headRefOidを再読取。作成後のStep 11記録失敗でもURLと記録だけを再実行する診断を返し非0終了 |
 | review証拠 | exact repositoryと明示したH_impl/PR/run/review ID | read-only | commit author、PR current head/author、Actions event/head/conclusion/関連PR、immutable review commit/user/submittedAt/stateを再読取 |
 | policy authority | exact repositoryと明示したPR ID、base SHA/ref、default branch | read-only | PR baseRefName/baseRefOid/headRefOidとrepository defaultBranchRefをtrusted providerから再読取 |
 | merge | 既定branch上policy、base branchに対する`branchMethods`の積集合、base/headの長命branch判定、branch保護、成功check、全pageから時刻順に決めた同じHEAD SHAの最新独立approval | 許可されたmethodで実行。長命branch同士は`merge`だけを許可 | 直前に同じtrusted観測とmethod判定で再認可し、merged SHAと状態を再読取 |

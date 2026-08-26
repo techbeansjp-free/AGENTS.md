@@ -83,6 +83,230 @@ export const PROJECT_RULE_ENFORCEMENT_POINTS: Readonly<Record<string, string>> =
     ].map(([suffix, point]) => [`${PROJECT_RULE_PREFIX}-${suffix}`, point]),
   );
 
+export const CANONICAL_SINGLE_SOURCE_RULE_ID = "ASC-CANON-SINGLE-SOURCE-001";
+
+export const CANONICAL_SCAN_LOCATIONS: readonly string[] = [
+  ".agent-skill-chain/docs/",
+  ".agent-skill-chain/templates/",
+  "docs/specs/",
+];
+
+const CANONICAL_REGISTRY_FIELDS = ["schemaVersion", "contracts"];
+
+const CANONICAL_CONTRACT_FIELDS = [
+  "contractId",
+  "canonical",
+  "tokens",
+  "reason",
+];
+const CANONICAL_CONTRACT_ID = /^CANON-CONTRACT-[A-Z0-9-]+$/u;
+const MARKDOWN_LINK = /\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+["'][^"']*["'])?\s*\)/gu;
+const MARKDOWN_LINK_DEFINITION = /^[^\S\n]*\[[^\]]+\]:[^\S\n]*(\S+)/gmu;
+
+export interface CanonicalContract {
+  contractId: string;
+  canonical: string;
+  tokens: string[];
+  reason: string;
+}
+
+export interface CanonicalViolation {
+  path: string;
+  contractId: string;
+  canonical: string;
+  ruleId: string;
+  remediation: string;
+}
+
+export interface CanonicalContractValidation {
+  contracts: CanonicalContract[];
+  errors: string[];
+}
+
+export interface CanonicalDuplicationResult {
+  violations: CanonicalViolation[];
+  errors: string[];
+}
+
+function inCanonicalScanLocation(relative: string): boolean {
+  return CANONICAL_SCAN_LOCATIONS.some((location) =>
+    relative.startsWith(location),
+  );
+}
+
+/**
+ * 規範を宣言するlocation配下のMarkdownだけを走査対象にする。
+ * 証跡、一時ステージング、実装は規範を宣言しないため除外する。
+ */
+export function collectCanonicalScanTargets(
+  relativePaths: readonly string[],
+): string[] {
+  return relativePaths.filter(
+    (relative) =>
+      relative.endsWith(".md") &&
+      !relative.includes("..") &&
+      inCanonicalScanLocation(relative),
+  );
+}
+
+export function validateCanonicalContracts(
+  value: unknown,
+  existingPaths: ReadonlySet<string>,
+): CanonicalContractValidation {
+  const errors: string[] = [];
+  if (!isRecord(value))
+    return {
+      contracts: [],
+      errors: ["契約正本registryはobjectでなければなりません"],
+    };
+  const unknownTopLevel = Object.keys(value).find(
+    (key) => !CANONICAL_REGISTRY_FIELDS.includes(key),
+  );
+  if (unknownTopLevel !== undefined)
+    errors.push(`契約正本registryに未知のfieldがあります: ${unknownTopLevel}`);
+  if (value.schemaVersion !== "agent-skill-chain/canonical-contracts/v1")
+    errors.push("契約正本registryのschemaVersionが未知です");
+  if (!Array.isArray(value.contracts))
+    return {
+      contracts: [],
+      errors: [...errors, "契約正本registryのcontractsは配列が必要です"],
+    };
+  const contracts: CanonicalContract[] = [];
+  const seen = new Set<string>();
+  for (const [index, entry] of value.contracts.entries()) {
+    const label = `contracts[${index}]`;
+    if (!isRecord(entry)) {
+      errors.push(`${label}はobjectでなければなりません`);
+      continue;
+    }
+    const unknownField = Object.keys(entry).find(
+      (key) => !CANONICAL_CONTRACT_FIELDS.includes(key),
+    );
+    if (unknownField !== undefined)
+      errors.push(`${label}に未知のfieldがあります: ${unknownField}`);
+    const { contractId, canonical, tokens, reason } = entry;
+    if (
+      typeof contractId !== "string" ||
+      !CANONICAL_CONTRACT_ID.test(contractId)
+    ) {
+      errors.push(
+        `${label}のcontractIdはCANON-CONTRACT-で始まる識別子が必要です`,
+      );
+      continue;
+    }
+    if (seen.has(contractId)) {
+      errors.push(`契約IDが重複しています: ${contractId}`);
+      continue;
+    }
+    seen.add(contractId);
+    if (typeof canonical !== "string" || canonical.length === 0) {
+      errors.push(`${contractId}のcanonicalはrepository相対pathが必要です`);
+      continue;
+    }
+    if (!inCanonicalScanLocation(canonical))
+      errors.push(
+        `${contractId}のcanonicalが規範宣言location外を指しています: ${canonical}`,
+      );
+    else if (!existingPaths.has(canonical))
+      errors.push(`${contractId}のcanonicalが実在しません: ${canonical}`);
+    if (
+      !Array.isArray(tokens) ||
+      tokens.length === 0 ||
+      tokens.some((token) => typeof token !== "string" || token.length === 0)
+    ) {
+      errors.push(`${contractId}のtokensは空でない文字列の配列が必要です`);
+      continue;
+    }
+    if (typeof reason !== "string" || reason.length === 0) {
+      errors.push(`${contractId}のreasonが必要です`);
+      continue;
+    }
+    contracts.push({
+      contractId,
+      canonical,
+      tokens: tokens as string[],
+      reason,
+    });
+  }
+  return { contracts: errors.length > 0 ? [] : contracts, errors };
+}
+
+/**
+ * Markdownのlink targetを比較可能な形へ揃える。
+ * anchor、title、山括弧、percent encodeはいずれも正当な記法であり、
+ * 正本pathが日本語のため「リンクをコピー」はpercent encode形を生む。
+ */
+function normalizeLinkTarget(raw: string): string | undefined {
+  let target = raw.trim();
+  if (target.startsWith("<") && target.endsWith(">"))
+    target = target.slice(1, -1).trim();
+  const anchor = target.indexOf("#");
+  if (anchor >= 0) target = target.slice(0, anchor);
+  if (target.length === 0) return undefined;
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
+function referencesCanonical(
+  sourcePath: string,
+  text: string,
+  canonical: string,
+): boolean {
+  const base = path.posix.dirname(sourcePath);
+  const targets = [
+    ...[...text.matchAll(MARKDOWN_LINK)].map((matched) => matched[1]),
+    ...[...text.matchAll(MARKDOWN_LINK_DEFINITION)].map(
+      (matched) => matched[1],
+    ),
+  ];
+  for (const raw of targets) {
+    if (raw === undefined) continue;
+    const target = normalizeLinkTarget(raw);
+    if (target === undefined) continue;
+    const resolved = target.startsWith("/")
+      ? path.posix.normalize(target.slice(1))
+      : path.posix.normalize(path.posix.join(base, target));
+    if (resolved === canonical) return true;
+  }
+  return false;
+}
+
+/**
+ * 参照の存在だけを判定し、記述内容の一致を判定しない。
+ * 内容一致検査は複製問題を機械化しただけになり同じ分岐を再生産するため採らない。
+ */
+export function detectCanonicalDuplication(input: {
+  contracts: readonly CanonicalContract[];
+  files: ReadonlyArray<{ path: string; text: string | null }>;
+}): CanonicalDuplicationResult {
+  const violations: CanonicalViolation[] = [];
+  const errors: string[] = [];
+  for (const file of input.files) {
+    if (file.text === null) {
+      errors.push(`走査対象を読み取れませんでした: ${file.path}`);
+      continue;
+    }
+    for (const contract of input.contracts) {
+      if (file.path === contract.canonical) continue;
+      if (!contract.tokens.some((token) => file.text?.includes(token)))
+        continue;
+      if (referencesCanonical(file.path, file.text, contract.canonical))
+        continue;
+      violations.push({
+        path: file.path,
+        contractId: contract.contractId,
+        canonical: contract.canonical,
+        ruleId: CANONICAL_SINGLE_SOURCE_RULE_ID,
+        remediation: `${CANONICAL_SINGLE_SOURCE_RULE_ID}: 複製した記述を削除し、${contract.canonical}へのMarkdown linkへ置き換えてください`,
+      });
+    }
+  }
+  return { violations, errors };
+}
+
 const PROJECT_RULE_FIELDS = [
   "ruleId",
   "purpose",

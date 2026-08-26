@@ -1,0 +1,18 @@
+{
+  "ruleId": "ASC-CANON-SINGLE-SOURCE-001",
+  "purpose": "契約の正本を1箇所に保ち複製による分岐を防ぐ",
+  "riskClass": "artifact",
+  "scope": [
+    ".agent-skill-chain/docs",
+    ".agent-skill-chain/templates",
+    "docs/specs"
+  ],
+  "enforcement": "deny",
+  "activation": "staged",
+  "owner": "project owner",
+  "targetLayer": "package",
+  "evidence": "canonical-contracts registryと規範宣言location走査の複製検出結果",
+  "remediation": "複製した記述を削除し正本へのMarkdown linkへ置き換える",
+  "overridePolicy": "never",
+  "rollback": "registryのcontract entryを削る"
+}
