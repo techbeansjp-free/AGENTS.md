@@ -1,16 +1,25 @@
 import { isRecord } from "../types.js";
+import {
+  assessWorktreeRemovalSafety,
+  resolveFinalizeIgnoredPathAllowlist,
+} from "./worktree-removal-safety.js";
 
 export type WorktreeDisposition =
   "in-progress" | "cleanup-ready" | "retain" | "primary";
 
 export interface WorktreeObservation {
+  repositoryRoot: string;
   path: string;
   branch: string;
   isPrimary: boolean;
   mergedIntoDefault: boolean;
   dirty: boolean;
   untracked: string[];
+  ignoredArtifacts: string[];
+  stashes: string[];
   unpushedCommits: number;
+  pushed: boolean;
+  remoteBranch: boolean;
   recoveryReachable: boolean;
 }
 
@@ -31,12 +40,17 @@ export interface WorktreeSurvey {
 
 const OBSERVATION_FIELDS = new Set([
   "path",
+  "repositoryRoot",
   "branch",
   "isPrimary",
   "mergedIntoDefault",
   "dirty",
   "untracked",
+  "ignoredArtifacts",
+  "stashes",
   "unpushedCommits",
+  "pushed",
+  "remoteBranch",
   "recoveryReachable",
 ]);
 
@@ -61,6 +75,11 @@ function validationErrors(value: unknown, index: number): string[] {
     errors.push(`${prefix}に未知fieldがあります: ${unknown.join(", ")}`);
   if (typeof value.path !== "string" || value.path.trim() === "")
     errors.push(`${prefix}.pathは空でない文字列でなければなりません`);
+  if (
+    typeof value.repositoryRoot !== "string" ||
+    value.repositoryRoot.trim() === ""
+  )
+    errors.push(`${prefix}.repositoryRootは空でない文字列でなければなりません`);
   if (typeof value.branch !== "string" || value.branch.trim() === "")
     errors.push(`${prefix}.branchは空でない文字列でなければなりません`);
   for (const field of [
@@ -68,6 +87,8 @@ function validationErrors(value: unknown, index: number): string[] {
     "mergedIntoDefault",
     "dirty",
     "recoveryReachable",
+    "pushed",
+    "remoteBranch",
   ])
     if (typeof value[field] !== "boolean")
       errors.push(`${prefix}.${field}はbooleanでなければなりません`);
@@ -76,6 +97,12 @@ function validationErrors(value: unknown, index: number): string[] {
     value.untracked.some((item) => typeof item !== "string")
   )
     errors.push(`${prefix}.untrackedは文字列配列でなければなりません`);
+  for (const field of ["ignoredArtifacts", "stashes"])
+    if (
+      !Array.isArray(value[field]) ||
+      value[field].some((item) => typeof item !== "string")
+    )
+      errors.push(`${prefix}.${field}は文字列配列でなければなりません`);
   if (
     !Number.isInteger(value.unpushedCommits) ||
     Number(value.unpushedCommits) < 0
@@ -84,7 +111,10 @@ function validationErrors(value: unknown, index: number): string[] {
   return errors;
 }
 
-function classify(observation: WorktreeObservation): WorktreeSurveyEntry {
+function classify(
+  observation: WorktreeObservation,
+  ignoredPathAllowlist: unknown,
+): WorktreeSurveyEntry {
   if (observation.isPrimary)
     return {
       path: observation.path,
@@ -92,21 +122,28 @@ function classify(observation: WorktreeObservation): WorktreeSurveyEntry {
       disposition: "primary",
       reasons: ["repository root自身は後片付け対象ではありません"],
     };
+  const assessment = assessWorktreeRemovalSafety({
+    repositoryRoot: observation.repositoryRoot,
+    worktreePath: observation.path,
+    trackedChanges: observation.dirty,
+    untracked: observation.untracked,
+    ignoredArtifacts: observation.ignoredArtifacts,
+    ignoredPathAllowlist,
+    stashes: observation.stashes,
+    pushed: observation.pushed,
+    remoteBranch: observation.remoteBranch,
+    merged: observation.mergedIntoDefault,
+    recoveryReachable: observation.recoveryReachable,
+    unpushedCommits: observation.unpushedCommits,
+  });
+  const reasons = assessment.reasons;
   if (!observation.mergedIntoDefault)
     return {
       path: observation.path,
       branch: observation.branch,
       disposition: "in-progress",
-      reasons: ["既定branchへmergeされていないため進行中と判定します"],
+      reasons,
     };
-  const reasons: string[] = [];
-  if (observation.dirty) reasons.push("未commitの変更があります");
-  if (observation.untracked.length > 0)
-    reasons.push(`未追跡fileが${observation.untracked.length}件あります`);
-  if (observation.unpushedCommits > 0)
-    reasons.push(`未pushのcommitが${observation.unpushedCommits}件あります`);
-  if (!observation.recoveryReachable)
-    reasons.push("commitが既定branchから到達できず、復旧手段がありません");
   return reasons.length > 0
     ? {
         path: observation.path,
@@ -119,12 +156,15 @@ function classify(observation: WorktreeObservation): WorktreeSurveyEntry {
         branch: observation.branch,
         disposition: "cleanup-ready",
         reasons: [
-          "既定branchへmerge済みで、未commit・未push・到達不能commitがありません",
+          "既定branchへmerge済みで、finalize共通の保持条件がありません",
         ],
       };
 }
 
-export function surveyWorktrees(value: unknown): WorktreeSurvey {
+export function surveyWorktrees(
+  value: unknown,
+  ignoredPathAllowlist: unknown = resolveFinalizeIgnoredPathAllowlist(),
+): WorktreeSurvey {
   if (!Array.isArray(value))
     return emptySurvey(["worktree観測は配列でなければなりません"]);
   const result = emptySurvey();
@@ -155,7 +195,7 @@ export function surveyWorktrees(value: unknown): WorktreeSurvey {
     result.errors.push(`worktree pathが重複しています: ${duplicatePath}`);
   for (const { observation } of candidates) {
     if (duplicatePaths.has(observation.path)) continue;
-    const entry = classify(observation);
+    const entry = classify(observation, ignoredPathAllowlist);
     result.entries.push(entry);
     if (entry.disposition === "cleanup-ready")
       result.cleanupReady.push(entry.path);

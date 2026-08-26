@@ -3,6 +3,10 @@ import path from "node:path";
 import { stableJson } from "../lib/security.js";
 import { enforceTrustedBoundary } from "./enforcement.js";
 import { isRecord, type Policy, type RuleObservation } from "../types.js";
+import {
+  assessWorktreeRemovalSafety,
+  resolveFinalizeIgnoredPathAllowlist,
+} from "./worktree-removal-safety.js";
 
 export interface RootUpdateObservation {
   rootPath: string;
@@ -110,9 +114,16 @@ export interface WorktreeCleanupPlanInput {
   registered: Array<{ path: string; branch: string }>;
   prMerged: boolean | undefined;
   clean: boolean | undefined;
+  trackedChanges?: boolean | undefined;
   pushed: boolean | undefined;
+  remoteBranch?: boolean | undefined;
   recoveryReachable: boolean | undefined;
-  consumerAssets: string[];
+  consumerAssets?: string[];
+  untracked?: unknown;
+  stashes?: unknown;
+  temporaryArtifacts?: unknown;
+  ignoredArtifacts?: unknown;
+  ignoredPathAllowlist?: unknown;
   targetCanonicalPath?: string;
   targetAbsent?: boolean;
 }
@@ -125,7 +136,8 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
   const reasons: string[] = [];
   const targetPath = input.target?.path;
   const targetBranch = input.target?.branch;
-  const registered = Array.isArray(input.registered) ? input.registered : [];
+  const registeredValid = Array.isArray(input.registered);
+  const registered = registeredValid ? input.registered : [];
   const targetPathValid =
     typeof targetPath === "string" && targetPath.trim() !== "";
   const targetValid =
@@ -134,6 +146,24 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
     targetBranch.trim() !== "";
   if (!targetValid && input.targetAbsent !== true)
     reasons.push("対象PR専用worktreeのpathまたはbranchが不明です");
+  if (!registeredValid) reasons.push("登録済みworktree一覧が不明です");
+  if (
+    input.targetAbsent !== undefined &&
+    typeof input.targetAbsent !== "boolean"
+  )
+    reasons.push("対象worktreeの存在状態が不明です");
+  if (input.clean !== undefined && typeof input.clean !== "boolean")
+    reasons.push("未commitの追跡対象fileがあるか状態が不明です");
+  if (
+    input.consumerAssets !== undefined &&
+    !Array.isArray(input.consumerAssets)
+  )
+    reasons.push("未追跡fileの種別が不明です");
+  const temporaryArtifacts = Array.isArray(input.temporaryArtifacts)
+    ? input.temporaryArtifacts
+    : [];
+  if (!Array.isArray(input.temporaryArtifacts))
+    reasons.push("一時資産があるか状態が不明です");
   const exact = registered.filter(
     (worktree) =>
       worktree.path === targetPath && worktree.branch === targetBranch,
@@ -176,21 +206,46 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
     reasons.push(
       "対象PR専用worktreeのpathとbranchに完全一致する登録が1件ではありません",
     );
-  if (input.prMerged !== true)
-    reasons.push("対象PRがマージ済みではないか観測が不明です");
-  if (input.clean !== true)
-    reasons.push("対象worktreeがcleanではないか観測が不明です");
-  if (input.pushed !== true)
-    reasons.push("対象branchがpush済みではないか観測が不明です");
-  if (input.recoveryReachable !== true)
-    reasons.push("対象worktreeの復旧参照を確認できません");
-  if (
-    !Array.isArray(input.consumerAssets) ||
-    input.consumerAssets.some((asset) => typeof asset !== "string")
-  )
-    reasons.push("対象worktreeの利用者所有資産を確認できません");
-  else if (input.consumerAssets.length > 0)
-    reasons.push("対象worktreeに利用者所有資産があります");
+  const ignoredArtifacts = input.ignoredArtifacts;
+  const untracked =
+    input.untracked === undefined
+      ? Array.isArray(input.consumerAssets)
+        ? input.consumerAssets
+        : undefined
+      : input.untracked;
+  const derivedUntracked =
+    Array.isArray(untracked) && Array.isArray(ignoredArtifacts)
+      ? (untracked as unknown[]).concat(
+          (temporaryArtifacts as unknown[]).filter(
+            (artifact) => !ignoredArtifacts.includes(artifact),
+          ),
+        )
+      : untracked;
+  const safety = assessWorktreeRemovalSafety({
+    repositoryRoot: input.repositoryRoot,
+    worktreePath:
+      input.repositoryRoot === undefined || !targetPathValid
+        ? undefined
+        : targetPath,
+    trackedChanges:
+      input.trackedChanges === undefined
+        ? typeof input.clean === "boolean"
+          ? !input.clean
+          : undefined
+        : input.trackedChanges,
+    untracked: derivedUntracked,
+    ignoredArtifacts,
+    ignoredPathAllowlist:
+      input.ignoredPathAllowlist === undefined
+        ? resolveFinalizeIgnoredPathAllowlist()
+        : input.ignoredPathAllowlist,
+    stashes: input.stashes,
+    pushed: input.pushed,
+    remoteBranch: input.remoteBranch,
+    merged: input.prMerged,
+    recoveryReachable: input.recoveryReachable,
+  });
+  reasons.push(...safety.reasons);
   return {
     state: reasons.length === 0 ? "ready" : "rejected",
     target: typeof targetPath === "string" ? targetPath : "",
@@ -621,6 +676,7 @@ export function summarizeCompletion(input: unknown): {
 }
 
 interface FinalizeState {
+  repositoryRoot?: string;
   repository?: string;
   worktree?: string;
   branch?: string;
@@ -632,6 +688,7 @@ interface FinalizeState {
   stashes?: string[];
   temporaryArtifacts?: string[];
   ignoredArtifacts?: string[];
+  ignoredPathAllowlist?: string[];
   pushed?: boolean;
   remoteBranch?: boolean;
   prMerged?: boolean | "unknown";
@@ -654,40 +711,64 @@ export function buildFinalizeReport(state: FinalizeState) {
     !state.baseSha
   )
     reasons.push("同一性が不明です");
-  if (state.dirty !== false)
-    reasons.push("worktreeに変更があるか状態が不明です");
-  if (!Array.isArray(state.untracked) || state.untracked.length > 0)
-    reasons.push("未追跡ファイルがあるか状態が不明です");
-  if (!Array.isArray(state.stashes) || state.stashes.length > 0)
-    reasons.push("stashがあるか状態が不明です");
-  if (
-    !Array.isArray(state.temporaryArtifacts) ||
-    state.temporaryArtifacts.length > 0
-  )
+  const ignoredArtifacts = state.ignoredArtifacts;
+  const derivedUntracked =
+    Array.isArray(state.untracked) &&
+    Array.isArray(state.temporaryArtifacts) &&
+    Array.isArray(ignoredArtifacts)
+      ? [
+          ...state.untracked,
+          ...state.temporaryArtifacts.filter(
+            (artifact) => !ignoredArtifacts.includes(artifact),
+          ),
+        ]
+      : state.untracked;
+  if (!Array.isArray(state.temporaryArtifacts))
     reasons.push("一時資産があるか状態が不明です");
-  if (
-    !Array.isArray(state.ignoredArtifacts) ||
-    state.ignoredArtifacts.length > 0
-  )
-    reasons.push("無視対象資産があるか状態が不明です");
+  const safety = assessWorktreeRemovalSafety({
+    repositoryRoot: state.repositoryRoot,
+    worktreePath:
+      state.repositoryRoot === undefined ? undefined : state.worktree,
+    trackedChanges:
+      state.dirty === undefined ? undefined : state.dirty === true,
+    untracked: derivedUntracked,
+    ignoredArtifacts,
+    ignoredPathAllowlist:
+      state.ignoredPathAllowlist === undefined
+        ? resolveFinalizeIgnoredPathAllowlist()
+        : state.ignoredPathAllowlist,
+    stashes: state.stashes,
+    pushed: state.pushed,
+    remoteBranch: state.remoteBranch,
+    merged: state.prMerged === "unknown" ? undefined : state.prMerged,
+    recoveryReachable: state.recoveryReachable,
+  });
+  reasons.push(...safety.reasons);
   const requiredTruth: Array<[keyof FinalizeState, string]> = [
-    ["pushed", "コミットがpushされていません"],
-    ["remoteBranch", "リモートブランチがありません"],
-    ["prMerged", "PRがマージされていません"],
     ["specConsistent", "仕様整合性が証明されていません"],
     ["testsPassed", "テスト合格が証明されていません"],
     ["reviewApproved", "レビューが承認されていません"],
-    ["recoveryReachable", "復旧参照を利用できません"],
   ];
   for (const [field, label] of requiredTruth)
     if (state[field] !== true) reasons.push(label);
   if (!state.recoveryRef) reasons.push("復旧参照がありません");
-  const snapshot = structuredClone(state);
+  const snapshot = structuredClone({
+    ...state,
+    ignoredPathAllowlist:
+      state.ignoredPathAllowlist ?? resolveFinalizeIgnoredPathAllowlist(),
+  });
   const hash = crypto
     .createHash("sha256")
     .update(stableJson(snapshot))
     .digest("hex");
-  return { version: 1, safe: reasons.length === 0, reasons, snapshot, hash };
+  const uniqueReasons = [...new Set(reasons)];
+  return {
+    version: 1,
+    safe: uniqueReasons.length === 0,
+    reasons: uniqueReasons,
+    snapshot,
+    hash,
+  };
 }
 
 export function applyFinalize(

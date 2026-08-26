@@ -201,8 +201,12 @@ Given(
       prMerged: true,
       clean: true,
       pushed: true,
+      remoteBranch: true,
       recoveryReachable: true,
       consumerAssets: [] as string[],
+      stashes: [] as string[],
+      temporaryArtifacts: [] as string[],
+      ignoredArtifacts: [] as string[],
     };
     this.cleanupPlans = [
       planWorktreeCleanup({
@@ -349,8 +353,12 @@ Given("対象・他作業・prunable metadataを持つ隔離repositoryがある"
     prMerged: true,
     clean: true,
     pushed: true,
+    remoteBranch: true,
     recoveryReachable: true,
     consumerAssets: [],
+    stashes: [],
+    temporaryArtifacts: [],
+    ignoredArtifacts: [],
   });
 });
 
