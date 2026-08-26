@@ -30,13 +30,18 @@ function observation(
   overrides: Partial<WorktreeObservation> = {},
 ): WorktreeObservation {
   return {
+    repositoryRoot: "/repo",
     path: "/repo/.worktrees/20260825_120000-883-survey",
     branch: "feature/883-survey",
     isPrimary: false,
     mergedIntoDefault: true,
     dirty: false,
     untracked: [],
+    ignoredArtifacts: [],
+    stashes: [],
     unpushedCommits: 0,
+    pushed: true,
+    remoteBranch: true,
     recoveryReachable: true,
     ...overrides,
   };
@@ -189,7 +194,9 @@ Then("判定はcleanup-readyである", function () {
 Then("判定はretainで未commit理由を含む", function () {
   assert.equal(this.survey.entries[0]?.disposition, "retain");
   assert.ok(
-    this.survey.entries[0]?.reasons.includes("未commitの変更があります"),
+    this.survey.entries[0]?.reasons.includes(
+      "未commitの追跡対象fileがあります",
+    ),
   );
 });
 Then("判定はretainで未追跡2件の理由を含む", function () {
@@ -313,7 +320,9 @@ Then("対象worktreeはretainで未commit理由を報告する", function () {
   const entries = parsed(this).entries as Array<Record<string, unknown>>;
   const target = entries.find((entry) => entry.path === this.worktree);
   assert.equal(target?.disposition, "retain");
-  assert.ok((target?.reasons as string[]).includes("未commitの変更があります"));
+  assert.ok(
+    (target?.reasons as string[]).includes("未commitの追跡対象fileがあります"),
+  );
 });
 Then("実行前後のdirectory内容は一致する", function () {
   assert.equal(this.after, this.before);

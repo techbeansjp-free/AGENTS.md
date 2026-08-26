@@ -19,6 +19,7 @@ import {
   type ValidationInput,
   isRecord,
 } from "../types.js";
+import { resolveFinalizeIgnoredPathAllowlist } from "./worktree-removal-safety.js";
 
 export const ENFORCEMENTS = ["deny", "require", "assist", "warn", "record"];
 export const ACTIVATIONS = ["active", "staged", "disabled"];
@@ -431,6 +432,19 @@ export function compareTrustedPolicy(
     (trusted?.merge?.requiredReviews ?? 0)
   )
     authorityReasons.push("required review数を減らしている");
+  const trustedIgnoredPathAllowlist = resolveFinalizeIgnoredPathAllowlist(
+    trusted.worktree?.finalizeIgnoredPathAllowlist,
+  );
+  const candidateIgnoredPathAllowlist = resolveFinalizeIgnoredPathAllowlist(
+    candidate.worktree?.finalizeIgnoredPathAllowlist,
+  );
+  const addedIgnoredPathPrefixes = candidateIgnoredPathAllowlist.filter(
+    (prefix) => !trustedIgnoredPathAllowlist.includes(prefix),
+  );
+  if (addedIgnoredPathPrefixes.length > 0)
+    authorityReasons.push(
+      `finalize時に削除可能なignore対象を拡大している: ${addedIgnoredPathPrefixes.join(", ")}`,
+    );
   if (authorityReasons.length)
     rejected.push(
       diagnostic(
@@ -438,8 +452,10 @@ export function compareTrustedPolicy(
         "候補変更によるauthority条件の自己緩和を防止する",
         "authority",
         authorityReasons,
-        ["delivery", "merge"],
-        ["stopAt、mode、branch、method、check、reviewを比較した"],
+        ["delivery", "merge", "worktree.finalizeIgnoredPathAllowlist"],
+        [
+          "stopAt、mode、branch、method、check、review、finalize ignore allowlistを比較した",
+        ],
         [],
         "trusted authority条件を維持して独立reviewを受けてください",
         "default branch policy owner",

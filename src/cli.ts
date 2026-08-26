@@ -94,6 +94,7 @@ import {
   type WorktreeObservation,
   type WorktreeSurvey,
 } from "./domain/worktree-survey.js";
+import { resolveFinalizeIgnoredPathAllowlist } from "./domain/worktree-removal-safety.js";
 import { observeProvider } from "./adapters/provider.js";
 import { resolveRouting } from "./domain/routing.js";
 import { checkRoutingIndependence } from "./domain/routing-independence.js";
@@ -477,6 +478,15 @@ function registeredWorktrees(root: string): Array<{
     });
 }
 
+function finalizeIgnoredPathAllowlist(root: string): string[] {
+  const manifest = path.join(root, ".agent-skill-chain", "project-policy.json");
+  if (!fs.existsSync(manifest)) return resolveFinalizeIgnoredPathAllowlist();
+  const policy = loadProjectPolicySet(root).policy;
+  return resolveFinalizeIgnoredPathAllowlist(
+    policy.worktree?.finalizeIgnoredPathAllowlist,
+  );
+}
+
 function collectWorktreeSurvey(root: string): WorktreeSurvey {
   const repositoryRoot = path.resolve(
     git(["rev-parse", "--show-toplevel"], root).stdout.trim(),
@@ -484,6 +494,7 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
   const registered = registeredWorktrees(repositoryRoot);
   const primaryRoot = registered[0]?.path;
   const remoteDefaultRef = `origin/${defaultBranch(repositoryRoot)}`;
+  const ignoredPathAllowlist = finalizeIgnoredPathAllowlist(repositoryRoot);
   const observations: WorktreeObservation[] = [];
   const errors: string[] = [];
   const withoutUpstream = new Set<string>();
@@ -518,9 +529,18 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
         ).stdout.trim();
         unpushedCommits = Number(count);
       } else withoutUpstream.add(worktree.path);
-      const recoveryReachable = isPrimary
-        ? true
-        : inspectRecoveryState(worktree.path).recoveryReachable;
+      const recovery = isPrimary
+        ? { recoveryReachable: true, pushed: true, remoteBranch: true }
+        : inspectRecoveryState(worktree.path);
+      const ignoredArtifacts = git(
+        ["ls-files", "--others", "--ignored", "--exclude-standard"],
+        worktree.path,
+      )
+        .stdout.split(/\r?\n/u)
+        .filter(Boolean);
+      const stashes = git(["stash", "list"], worktree.path)
+        .stdout.split(/\r?\n/u)
+        .filter(Boolean);
       const merged = git(
         ["branch", "--merged", remoteDefaultRef, "--list", worktree.branch],
         repositoryRoot,
@@ -531,6 +551,7 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
           `既定branchへのmerge状態を確認できません: ${merged.stderr.trim()}`,
         );
       observations.push({
+        repositoryRoot,
         path: worktree.path,
         branch: worktree.branch,
         isPrimary,
@@ -539,8 +560,12 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
         untracked: status
           .filter((line) => line.startsWith("?? "))
           .map((line) => line.slice(3)),
+        ignoredArtifacts,
+        stashes,
         unpushedCommits,
-        recoveryReachable,
+        pushed: recovery.pushed,
+        remoteBranch: recovery.remoteBranch,
+        recoveryReachable: recovery.recoveryReachable,
       });
     } catch (error) {
       errors.push(
@@ -548,7 +573,7 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
       );
     }
   }
-  const survey = surveyWorktrees(observations);
+  const survey = surveyWorktrees(observations, ignoredPathAllowlist);
   for (const entry of survey.entries)
     if (entry.disposition === "retain" && withoutUpstream.has(entry.path))
       entry.reasons.push("upstreamが設定されていません");
@@ -917,6 +942,7 @@ function executeCompletionFlow(input: {
   )
     throw new Error("--cleanup-authorityは値を付けずに指定してください");
   const cleanupAuthorityGranted = flags["cleanup-authority"] === true;
+  const ignoredPathAllowlist = finalizeIgnoredPathAllowlist(root);
   const mergeSha = required(flags, "merge-sha");
   const approvedDigest =
     typeof flags["approved-digest"] === "string"
@@ -926,7 +952,7 @@ function executeCompletionFlow(input: {
   const initialRootPlan = planRootUpdate(initialRootObservation);
   const targetPresent = pathExists(target);
   const initialState = targetPresent
-    ? inspectFinalizeState(root, target, evidence)
+    ? inspectFinalizeState(root, target, evidence, ignoredPathAllowlist)
     : undefined;
   const projectedState = initialState
     ? {
@@ -948,18 +974,16 @@ function executeCompletionFlow(input: {
     },
     registered: registeredWorktrees(root),
     prMerged: evidence.prMerged === true,
-    clean: initialState
-      ? initialState.dirty === false && initialState.untracked.length === 0
-      : undefined,
+    clean: initialState ? initialState.dirty === false : undefined,
+    trackedChanges: initialState?.dirty,
     pushed: initialState?.pushed,
+    remoteBranch: initialState?.remoteBranch,
     recoveryReachable: initialState?.recoveryReachable,
-    consumerAssets: initialState
-      ? [
-          ...initialState.untracked,
-          ...initialState.temporaryArtifacts,
-          ...initialState.ignoredArtifacts,
-        ]
-      : [],
+    untracked: initialState?.untracked ?? [],
+    stashes: initialState?.stashes ?? [],
+    temporaryArtifacts: initialState?.temporaryArtifacts ?? [],
+    ignoredArtifacts: initialState?.ignoredArtifacts ?? [],
+    ignoredPathAllowlist,
     targetCanonicalPath: canonicalWorktreePath(target),
     targetAbsent: !targetPresent,
   });
@@ -1068,21 +1092,29 @@ function executeCompletionFlow(input: {
     });
     return summary.state === "completed" ? 0 : 1;
   }
-  const currentState = inspectFinalizeState(root, target, evidence);
+  const currentIgnoredPathAllowlist = finalizeIgnoredPathAllowlist(root);
+  const currentState = inspectFinalizeState(
+    root,
+    target,
+    evidence,
+    currentIgnoredPathAllowlist,
+  );
   const currentReport = buildFinalizeReport(currentState);
   const currentCleanup = planWorktreeCleanup({
     repositoryRoot: root,
     target: { path: target, branch: currentState.branch },
     registered: registeredWorktrees(root),
     prMerged: currentState.prMerged === true,
-    clean: currentState.dirty === false && currentState.untracked.length === 0,
+    clean: currentState.dirty === false,
+    trackedChanges: currentState.dirty,
     pushed: currentState.pushed,
+    remoteBranch: currentState.remoteBranch,
     recoveryReachable: currentState.recoveryReachable,
-    consumerAssets: [
-      ...currentState.untracked,
-      ...currentState.temporaryArtifacts,
-      ...currentState.ignoredArtifacts,
-    ],
+    untracked: currentState.untracked,
+    stashes: currentState.stashes,
+    temporaryArtifacts: currentState.temporaryArtifacts,
+    ignoredArtifacts: currentState.ignoredArtifacts,
+    ignoredPathAllowlist: currentIgnoredPathAllowlist,
     targetCanonicalPath: fs.realpathSync(target),
   });
   const plannedCurrentCleanup =
@@ -2711,7 +2743,13 @@ export async function main(
       throw new Error("--update-rootは値を付けずに指定してください");
     const updateRoot = flags["update-root"] === true;
     const mergeSha = updateRoot ? required(flags, "merge-sha") : undefined;
-    const state = inspectFinalizeState(root, target, evidence);
+    const ignoredPathAllowlist = finalizeIgnoredPathAllowlist(root);
+    const state = inspectFinalizeState(
+      root,
+      target,
+      evidence,
+      ignoredPathAllowlist,
+    );
     const initialRootObservation = mergeSha
       ? observeRootUpdate(root, mergeSha)
       : undefined;
@@ -2723,17 +2761,20 @@ export async function main(
         : state;
     const report = buildFinalizeReport(reportState);
     const cleanup = planWorktreeCleanup({
+      repositoryRoot: root,
       target: { path: target, branch: state.branch },
       registered: registeredWorktrees(root),
       prMerged: state.prMerged === true,
-      clean: state.dirty === false && state.untracked.length === 0,
+      clean: state.dirty === false,
+      trackedChanges: state.dirty,
       pushed: state.pushed,
+      remoteBranch: state.remoteBranch,
       recoveryReachable: state.recoveryReachable,
-      consumerAssets: [
-        ...state.untracked,
-        ...state.temporaryArtifacts,
-        ...state.ignoredArtifacts,
-      ],
+      untracked: state.untracked,
+      stashes: state.stashes,
+      temporaryArtifacts: state.temporaryArtifacts,
+      ignoredArtifacts: state.ignoredArtifacts,
+      ignoredPathAllowlist,
     });
     let rootPlan = initialRootObservation
       ? planRootUpdate(initialRootObservation)
@@ -2808,20 +2849,28 @@ export async function main(
         return 1;
       }
     }
-    const currentState = inspectFinalizeState(root, target, evidence);
+    const currentIgnoredPathAllowlist = finalizeIgnoredPathAllowlist(root);
+    const currentState = inspectFinalizeState(
+      root,
+      target,
+      evidence,
+      currentIgnoredPathAllowlist,
+    );
     const currentCleanup = planWorktreeCleanup({
+      repositoryRoot: root,
       target: { path: target, branch: currentState.branch },
       registered: registeredWorktrees(root),
       prMerged: currentState.prMerged === true,
-      clean:
-        currentState.dirty === false && currentState.untracked.length === 0,
+      clean: currentState.dirty === false,
+      trackedChanges: currentState.dirty,
       pushed: currentState.pushed,
+      remoteBranch: currentState.remoteBranch,
       recoveryReachable: currentState.recoveryReachable,
-      consumerAssets: [
-        ...currentState.untracked,
-        ...currentState.temporaryArtifacts,
-        ...currentState.ignoredArtifacts,
-      ],
+      untracked: currentState.untracked,
+      stashes: currentState.stashes,
+      temporaryArtifacts: currentState.temporaryArtifacts,
+      ignoredArtifacts: currentState.ignoredArtifacts,
+      ignoredPathAllowlist: currentIgnoredPathAllowlist,
     });
     if (currentCleanup.state === "rejected") {
       print({
