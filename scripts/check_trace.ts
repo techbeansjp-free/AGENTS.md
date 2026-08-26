@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { validateScenarioTrace } from "../src/domain/trace.js";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
 import { validateSpecs } from "../src/domain/spec.js";
+import { isIssueStagingPath } from "../src/domain/staging.js";
 
 function walkFiles(
   directory: string,
@@ -569,10 +570,11 @@ export function checkSpecNormalization(
     (file) => file.endsWith(".md") || file.endsWith(".feature"),
   );
   for (const file of scenarioDefinitionFiles) {
-    if (
-      relativePath(root, file).startsWith("test/features/") &&
-      file.endsWith(".feature")
-    )
+    const relative = relativePath(root, file);
+    // Issue一時ステージングのGherkinは受け入れ例の下書きでありtest定義ではない。
+    // 除外はこの検査の内側だけに置き、共有walkerの列挙結果は変更しない。
+    if (isIssueStagingPath(relative)) continue;
+    if (relative.startsWith("test/features/") && file.endsWith(".feature"))
       continue;
     const lines = fs.readFileSync(file, "utf8").split(/\r?\n/u);
     for (let index = 0; index < lines.length; index += 1) {
@@ -582,7 +584,7 @@ export function checkSpecNormalization(
         )
       )
         errors.push(
-          `所定location外にSCN定義があります: ${relativePath(root, file)}:${index + 1}`,
+          `所定location外にSCN定義があります: ${relative}:${index + 1}`,
         );
     }
   }
