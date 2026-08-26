@@ -477,3 +477,26 @@ Then("整合検査は無視対象でないことを理由に失敗する", funct
     `外部の無視設定が観測に混入しています: ${JSON.stringify(this.errors)}`,
   );
 });
+
+Given("配布物検査moduleへのsymlinkを用意する", function () {
+  this.other = path.join(this.temp(), "linked-check.ts");
+  fs.symlinkSync(
+    path.join(repositoryRoot(), "scripts/check_package_contents.ts"),
+    this.other,
+  );
+});
+
+When("symlink経由で子processを実行する", function () {
+  this.output = execFileSync(
+    process.execPath,
+    ["--import", "tsx", this.other],
+    {
+      cwd: repositoryRoot(),
+      encoding: "utf8",
+    },
+  );
+});
+
+Then("出力にパッケージ内容検査の結果が現れる", function () {
+  assert.match(this.output, /パッケージ内容検査/u);
+});

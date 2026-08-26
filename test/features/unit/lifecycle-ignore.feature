@@ -46,3 +46,8 @@ Feature: 一時ライフサイクル領域の分類正本
     Given 実際の領域一覧とpackage禁止entry一覧がある
     When package禁止entryの照合を実行する
     Then 照合は成功する
+
+  Scenario: SCN-UNIT-LIFEIGNORE-012 symlink経由で起動しても配布物検査が走る
+    Given 配布物検査moduleへのsymlinkを用意する
+    When symlink経由で子processを実行する
+    Then 出力にパッケージ内容検査の結果が現れる
