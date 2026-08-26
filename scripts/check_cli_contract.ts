@@ -6,6 +6,7 @@ import {
   LEGACY_LIFECYCLE_ALIASES,
   PUBLIC_LIFECYCLE_COMMANDS,
 } from "../src/cli-contract.js";
+import { checkCliUsage } from "./check_cli_usage.js";
 
 const GUIDE = ".agent-skill-chain/00_利用案内.md";
 const README = "README.md";
@@ -108,10 +109,13 @@ export function checkCliContract(root = process.cwd()) {
       if (!specification.includes(`\`${command}\``))
         errors.push(`${relative}に公開commandがありません: ${command}`);
   }
+  const usage = checkCliUsage(root);
+  errors.push(...usage.errors);
   return {
     valid: errors.length === 0,
     errors,
     commands: PUBLIC_LIFECYCLE_COMMANDS.length,
+    usageCommands: usage.commands,
   };
 }
 
