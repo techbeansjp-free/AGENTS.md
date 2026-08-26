@@ -3,10 +3,12 @@ import { spawnSync, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  buildWorktreePath,
   createWorktree,
   matchesTargetWorktree,
   validateWorktreePlacement,
 } from "../../src/domain/worktree.js";
+import { main } from "../../src/cli.js";
 import { validateProjectPolicyManifest } from "../../src/domain/policy.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
@@ -29,6 +31,8 @@ interface WorktreePlacementWorld extends WorkflowWorld {
   worktreeDestination?: string;
   worktreeError?: unknown;
   root?: string;
+  currentTime?: Date;
+  constructedPath?: string;
 }
 
 const { Given, When, Then } = stepDefinitions<WorktreePlacementWorld>();
@@ -36,6 +40,8 @@ const VALID_NAME = "20260825_093000-831-worktree-placement";
 const VALID_PATH = `.worktrees/${VALID_NAME}`;
 const VALID_BRANCH = "feature/831-worktree-placement";
 const CLI_BRANCH = "fix/831-worktree-placement";
+const VALID_CURRENT_TIME = new Date(2026, 7, 25, 9, 30, 30, 500);
+const WTTS_CURRENT_TIME = new Date(2000, 0, 2, 12, 0, 0, 500);
 
 function requireRoot(world: WorktreePlacementWorld): string {
   assert.ok(world.root, "隔離repositoryが未設定です");
@@ -56,6 +62,7 @@ function basePlacement(
     branch: VALID_BRANCH,
     issueNumber: 831,
     slug: "worktree-placement",
+    currentTime: VALID_CURRENT_TIME,
     existing: [],
     ...overrides,
   };
@@ -97,6 +104,7 @@ function createValidWorktree(world: WorktreePlacementWorld): void {
     base: sha,
     issueNumber: 831,
     slug: "worktree-placement",
+    currentTime: VALID_CURRENT_TIME,
     remoteDefaultBranch: "main",
     remoteDefaultSha: sha,
   });
@@ -104,6 +112,223 @@ function createValidWorktree(world: WorktreePlacementWorld): void {
 
 Given("規定root直下の正しいworktree配置がある", function () {
   this.placementInput = basePlacement();
+});
+
+Given("基準時刻より未来のtimestampを持つworktree配置がある", function () {
+  this.placementInput = basePlacement({
+    worktreePath: ".worktrees/20000102_120001-831-worktree-placement",
+    currentTime: WTTS_CURRENT_TIME,
+  });
+});
+
+Given(
+  "基準時刻から許容範囲を超えて古いtimestampを持つworktree配置がある",
+  function () {
+    this.placementInput = basePlacement({
+      worktreePath: ".worktrees/20000102_114959-831-worktree-placement",
+      currentTime: WTTS_CURRENT_TIME,
+    });
+  },
+);
+
+Given("基準時刻から許容範囲内のtimestampを持つworktree配置がある", function () {
+  this.placementInput = basePlacement({
+    worktreePath: ".worktrees/20000102_115001-831-worktree-placement",
+    currentTime: WTTS_CURRENT_TIME,
+  });
+});
+
+Given("timestampの書式に違反するworktree配置がある", function () {
+  this.placementInput = basePlacement({
+    worktreePath: ".worktrees/20000102-120000-831-worktree-placement",
+    currentTime: WTTS_CURRENT_TIME,
+  });
+});
+
+Given("trusted policyを持つworktree作成用の隔離repositoryがある", function () {
+  this.root = this.initRepo();
+  fs.mkdirSync(path.join(this.root, ".agent-skill-chain/policy"), {
+    recursive: true,
+  });
+  fs.copyFileSync(
+    ".agent-skill-chain/policy/default.json",
+    path.join(this.root, ".agent-skill-chain/policy/default.json"),
+  );
+  execFileSync("git", ["add", ".agent-skill-chain/policy/default.json"], {
+    cwd: this.root,
+  });
+  execFileSync("git", ["commit", "-q", "-m", "trusted floor"], {
+    cwd: this.root,
+  });
+  execFileSync("git", ["update-ref", "refs/remotes/origin/main", "HEAD"], {
+    cwd: this.root,
+  });
+  execFileSync(
+    "git",
+    ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+    { cwd: this.root },
+  );
+});
+
+When(
+  "Git内部のtimestamp書式違反pathでworktree create CLIを実行する",
+  async function () {
+    const root = requireRoot(this);
+    await runWorktreeCliAt(
+      this,
+      [
+        "worktree",
+        "create",
+        `--root=${root}`,
+        `--path=${path.join(root, ".git", "not-a-timestamp")}`,
+        "--branch=feature/timestamp-priority",
+        "--base=main",
+      ],
+      WTTS_CURRENT_TIME,
+    );
+  },
+);
+
+Then("timestamp書式違反よりGit内部違反が報告される", function () {
+  assert.equal(this.cliResult?.status, 1);
+  assert.match(
+    `${this.cliResult?.stdout ?? ""}\n${this.cliResult?.stderr ?? ""}`,
+    /ASC-GIT-INTERNAL-001/u,
+  );
+});
+
+Given("repository外のtimestamp書式違反worktree配置がある", function () {
+  this.placementInput = basePlacement({
+    worktreePath: "/tmp/asc-outside/not-a-timestamp",
+    currentTime: WTTS_CURRENT_TIME,
+  });
+});
+
+When("timestamp付きworktree配置を純粋検証する", function () {
+  assert.ok(this.placementInput);
+  this.placementResult = validateWorktreePlacement(this.placementInput);
+});
+
+Then("未来のtimestampとして拒否される", function () {
+  assert.equal(this.placementResult?.valid, false);
+  assert.ok(
+    this.placementResult?.errors.some((error) => error.includes("未来")),
+  );
+});
+
+Then("古すぎるtimestampとして拒否される", function () {
+  assert.equal(this.placementResult?.valid, false);
+  assert.ok(
+    this.placementResult?.errors.some((error) => error.includes("10分以内")),
+  );
+});
+
+Then("timestamp付きworktree配置は有効である", function () {
+  assert.deepEqual(this.placementResult, { valid: true, errors: [] });
+});
+
+Then("拒否理由は日本語で10分以内を示す", function () {
+  assert.ok(
+    this.placementResult?.errors.includes(
+      "worktree directory名のtimestampは現在時刻以前かつ10分以内でなければなりません",
+    ),
+  );
+});
+
+Then("directory名の規定書式違反として拒否される", function () {
+  assert.ok(
+    this.placementResult?.errors.includes(
+      "worktree directory名が規定書式ではありません",
+    ),
+  );
+});
+
+Then(
+  "timestamp書式違反よりrepository外への脱出違反が先に報告される",
+  function () {
+    assert.equal(this.placementResult?.valid, false);
+    const errors = this.placementResult?.errors ?? [];
+    const escapeIndex = errors.findIndex((error) =>
+      error.includes("repository相対path"),
+    );
+    const timestampIndex = errors.findIndex((error) =>
+      error.includes("directory名が規定書式"),
+    );
+    assert.notEqual(escapeIndex, -1);
+    assert.notEqual(timestampIndex, -1);
+    assert.ok(escapeIndex < timestampIndex);
+  },
+);
+
+Given("呼び出し側の基準時刻だけで判定するworktree配置がある", function () {
+  this.placementInput = basePlacement({
+    worktreePath: ".worktrees/20000102_115001-831-worktree-placement",
+    currentTime: WTTS_CURRENT_TIME,
+  });
+});
+
+When("渡した時刻と未指定の時刻で純粋検証する", function () {
+  assert.ok(this.placementInput);
+  const { currentTime: _currentTime, ...withoutCurrentTime } =
+    this.placementInput;
+  this.placementResults = [
+    validateWorktreePlacement(this.placementInput),
+    validateWorktreePlacement(
+      withoutCurrentTime as Parameters<typeof validateWorktreePlacement>[0],
+    ),
+  ];
+});
+
+Then("渡した時刻だけを使い未指定は拒否される", function () {
+  assert.equal(this.placementResults?.[0]?.valid, true);
+  assert.equal(this.placementResults?.[1]?.valid, false);
+  assert.ok(
+    this.placementResults?.[1]?.errors.some((error) =>
+      error.includes("現在時刻"),
+    ),
+  );
+});
+
+Given("path構成用のIssue番号とslugと基準時刻がある", function () {
+  this.currentTime = new Date(2026, 7, 26, 12, 34, 56, 789);
+});
+
+When("worktree pathを純粋に構成する", function () {
+  assert.ok(this.currentTime);
+  this.constructedPath = buildWorktreePath({
+    issueNumber: 893,
+    slug: "worktree-timestamp",
+    currentTime: this.currentTime,
+  });
+});
+
+Then("local timeのtimestampを持つ規定pathになる", function () {
+  assert.equal(
+    this.constructedPath,
+    ".worktrees/20260826_123456-893-worktree-timestamp",
+  );
+});
+
+When("構成したworktree pathを純粋検証する", function () {
+  assert.ok(this.currentTime);
+  this.constructedPath = buildWorktreePath({
+    issueNumber: 893,
+    slug: "worktree-timestamp",
+    currentTime: this.currentTime,
+  });
+  this.placementResult = validateWorktreePlacement({
+    repoRoot: "/tmp/asc-placement-repository",
+    worktreePath: this.constructedPath,
+    branch: "fix/893-worktree-timestamp",
+    issueNumber: 893,
+    slug: "worktree-timestamp",
+    currentTime: this.currentTime,
+    existing: [],
+  });
+});
+
+Then("構成したpathのIssue番号とslugは有効である", function () {
+  assert.deepEqual(this.placementResult, { valid: true, errors: [] });
 });
 
 When("worktree配置の純粋検証を実行する", function () {
@@ -403,6 +628,7 @@ When("異なるremote default branch SHAでworktree作成を試みる", function
       base: requireSha(this),
       issueNumber: 831,
       slug: "worktree-placement",
+      currentTime: VALID_CURRENT_TIME,
       remoteDefaultBranch: "main",
       remoteDefaultSha: "0".repeat(40),
     });
@@ -478,6 +704,7 @@ When("symlink経由で規定名のworktree作成を試みる", function () {
         base: fixture.sha,
         issueNumber: Number(`83${index + 1}`),
         slug: `symlink-${index}`,
+        currentTime: new Date(2026, 7, 25, 9, 30, index, 500),
         remoteDefaultBranch: "main",
         remoteDefaultSha: fixture.sha,
       });
@@ -530,11 +757,10 @@ Given(
       cwd: this.root,
     });
     this.remoteDefaultSha = configureRemoteDefault(this.root);
-    this.worktreeDestination = path.join(this.root, VALID_PATH);
   },
 );
 
-When("worktree create CLIを必須入力付きで実行する", function () {
+When("pathを省略してworktree create CLIを実行する", function () {
   const root = requireRoot(this);
   const result = spawnSync(
     process.execPath,
@@ -543,7 +769,6 @@ When("worktree create CLIを必須入力付きで実行する", function () {
       "worktree",
       "create",
       `--root=${root}`,
-      `--path=${VALID_PATH}`,
       `--branch=${CLI_BRANCH}`,
       `--base=${requireSha(this)}`,
       "--issue=831",
@@ -562,8 +787,110 @@ When("worktree create CLIを必須入力付きで実行する", function () {
 
 Then("CLIは規定worktreeを作成して成功JSONを返す", function () {
   assert.equal(this.cliResult?.status, 0, this.cliResult?.stdout);
-  const parsed: unknown = JSON.parse(this.cliResult?.stdout ?? "");
-  assert.ok(parsed !== null && typeof parsed === "object");
+  const parsed = JSON.parse(this.cliResult?.stdout ?? "") as {
+    path?: string;
+  };
+  assert.equal(typeof parsed.path, "string");
+  this.worktreeDestination = parsed.path;
+  assert.match(
+    path.basename(parsed.path ?? ""),
+    /^\d{8}_\d{6}-831-worktree-placement$/u,
+  );
   assert.equal(fs.existsSync(this.worktreeDestination ?? ""), true);
   assert.match(this.cliResult?.stdout ?? "", /"sourceDirtyPreserved": true/u);
+});
+
+async function runWorktreeCliAt(
+  world: WorktreePlacementWorld,
+  args: string[],
+  currentTime: Date,
+): Promise<void> {
+  let stdout = "";
+  const originalWrite = process.stdout.write;
+  process.stdout.write = (chunk) => {
+    stdout += String(chunk);
+    return true;
+  };
+  try {
+    const status = await main(args, {
+      now: () => new Date(currentTime.getTime()),
+    });
+    world.cliResult = { status, stdout, stderr: "" };
+  } catch (error) {
+    world.cliResult = {
+      status: 1,
+      stdout,
+      stderr: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+}
+
+When(
+  "基準時刻より未来のpathを指定してworktree create CLIを実行する",
+  async function () {
+    const root = requireRoot(this);
+    const futurePath = ".worktrees/20000103_120000-831-worktree-placement";
+    this.worktreeDestination = path.join(root, futurePath);
+    await runWorktreeCliAt(
+      this,
+      [
+        "worktree",
+        "create",
+        `--root=${root}`,
+        `--path=${futurePath}`,
+        `--branch=${CLI_BRANCH}`,
+        `--base=${requireSha(this)}`,
+        "--issue=831",
+        "--slug=worktree-placement",
+        "--remote-default-branch=main",
+        `--remote-default-sha=${requireSha(this)}`,
+      ],
+      WTTS_CURRENT_TIME,
+    );
+  },
+);
+
+Then("CLIは未来日付を拒否してworktreeを作成しない", function () {
+  assert.equal(this.cliResult?.status, 1);
+  assert.match(this.cliResult?.stdout ?? "", /未来/u);
+  assert.equal(fs.existsSync(this.worktreeDestination ?? ""), false);
+});
+
+When(
+  "pathを省略して基準時刻でworktree create CLIを実行する",
+  async function () {
+    const root = requireRoot(this);
+    const expectedPath = ".worktrees/20000102_120000-831-worktree-placement";
+    this.worktreeDestination = path.join(root, expectedPath);
+    await runWorktreeCliAt(
+      this,
+      [
+        "worktree",
+        "create",
+        `--root=${root}`,
+        `--branch=${CLI_BRANCH}`,
+        `--base=${requireSha(this)}`,
+        "--issue=831",
+        "--slug=worktree-placement",
+        "--remote-default-branch=main",
+        `--remote-default-sha=${requireSha(this)}`,
+      ],
+      WTTS_CURRENT_TIME,
+    );
+  },
+);
+
+Then("CLI基準時刻から構成したpathへworktreeが作成される", function () {
+  assert.equal(
+    this.cliResult?.status,
+    0,
+    `${this.cliResult?.stdout}\n${this.cliResult?.stderr}`,
+  );
+  assert.equal(fs.existsSync(this.worktreeDestination ?? ""), true);
+  const output = JSON.parse(this.cliResult?.stdout ?? "") as {
+    path?: string;
+  };
+  assert.equal(output.path, this.worktreeDestination);
 });

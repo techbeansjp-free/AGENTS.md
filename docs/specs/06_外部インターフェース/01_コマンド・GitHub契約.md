@@ -13,16 +13,19 @@ CLIは引数を構造化入力として受け、適用を伴う操作は既定�
 
 GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報の伏字化と行動可能な根拠・次行動を保持する。表示言語はproject choiceを読むcaller adapterが選択する。
 
-## worktree merge完了コマンド
+## worktree作成・merge完了コマンド
 
 | コマンド | 入力 | 出力・終了code |
 |---|---|---|
-| `worktree survey` | `--root=<repository root>`、任意の`--format=json\|text`。`--apply`は拒否 | 登録済みworktreeの`primary / in-progress / cleanup-ready / retain`、日本語理由、分類別path、走査errorをJSONまたは日本語要約表で返す。追跡対象変更、未追跡file、stash、未push・remote branch、既定branchへのmerge、復旧到達性、配置、ignore対象をfinalizeと同じ判定で評価し、cleanup-readyはfinalizeの同じ安全事実を満たす。候補の存在だけでは終了codeを非0にせず、走査失敗だけを非0にする |
+| `worktree create` | `--issue --slug --branch --base --remote-default-branch --remote-default-sha`、任意の`--root --path --repo` | `--path`省略時はCLI層の現在local time、Issue番号、slugから`.worktrees/{YYYYMMDD_HHMMSS}-{issueNumber}-{slug}`を構成する。明示pathは未来または10分超の過去を拒否する。作成結果は絶対path、branch、base、作成元状態の保持を返す |
+| `worktree survey` | `--root=<repository root>`、任意の`--format=json\|text`。`--apply`は拒否 | 登録済みworktreeの`primary / in-progress / cleanup-ready / retain`、日本語理由、分類別path、走査errorをJSONまたは日本語要約表で返す。追跡対象変更、未追跡file、stash、未push・remote branch、既定branchへのmerge、復旧到達性、配置、ignore対象をfinalizeと同じ判定で評価し、cleanup-readyはfinalizeの同じ安全事実を満たす。directory名とbranch名のIssue番号・slug不一致は`reasons`へ加えるが分類を変えない。候補の存在だけでは終了codeを非0にせず、走査失敗だけを非0にする |
 | `worktree finalize --dry-run` | `--root --path --evidence` | 対象を削除せず、finalize report、保持理由、cleanup計画を返す。allowlist外のignore対象はpathごとに`allowlist外`と報告し、allowlist内のpathは理由へ含めない。reportとcleanupがともにsafe／readyなら0、それ以外は非0 |
 | `worktree finalize --complete --dry-run` | `--root --path --evidence --merge-sha`。cleanup authorityと承認digestは任意 | 副作用なしで全phase、`state`、`requiredAuthority`、日本語`recovery`、最新`previewDigest`、対象pathをJSONで返す。未承認は`pending`かつ非0 |
 | `worktree finalize --complete --apply` | preview入力に`--authorize=approved`を加える。cleanup適用にはさらに`--cleanup-authority --approved-digest=<64桁hex>`が必要 | merge確認後にrootを更新する。cleanup authorityなしはroot更新済み・cleanup pendingで非0。全検証成功は`completed`で0、拒否または部分完了は非0 |
 
 `--authorize=approved`は既存finalizeとroot更新のauthorityであり、cleanup operationのauthorityとして流用しない。`--cleanup-authority`は実行ごとの明示authorityで、project policyへ保存しない。apply直前にfinalize reportを再生成し、そのSHA-256 hashを最新cleanup preview digestとして`--approved-digest`と完全一致させる。cleanupは既存`applyFinalize`が発行する対象1件の`worktree.remove`だけをGit公式commandへ渡し、branch削除、prune、他worktree探索を行わない。
+
+`worktree create`は現在時刻を1回だけ取得し、path構成と明示path検証へ同じ値を渡す。明示`--path`はGit内部領域などのtrusted boundaryへ最初に通し、その後で配置、directory名、timestamp、Issue番号、slugを検証する。domainは現在時刻を取得しない。現在時刻が未指定または不正ならtimestamp検証をskipせずfail-closedで拒否する。`YYYYMMDD_HHMMSS`は実行環境のlocal timeとして暦上の実在性まで検証し、未来には猶予を設けない。
 
 finalize時に削除可能なignore対象は、package既定の`node_modules/`と`dist/`に、project policy manifestの`policy.worktree.finalizeIgnoredPathAllowlist`を加えて解決する。追加値は末尾`/`を持つrepository相対のdirectory名またはpath prefixだけとし、絶対path、親参照、`.`、`.git`、Unicode制御文字、非NFC、backslash、glob・正規表現meta文字、重複、64件超をruntimeとschemaで拒否する。`.gitignore`への記載だけでは削除可能にせず、`.agent-skill-chain/tmp/`、`issues/`、`memo/`、`.claude/`は既定allowlistへ含めない。
 

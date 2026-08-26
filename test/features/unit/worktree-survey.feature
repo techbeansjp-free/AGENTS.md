@@ -70,3 +70,18 @@ Feature: 登録済みworktreeを安全側に分類する
     Given worktree観測入力が空配列である
     When worktree走査を純粋判定する
     Then errorのない空の走査結果を返す
+
+  Scenario: SCN-UNIT-WTSURVEY-015 directory名とbranch名のslug不一致を報告する
+    Given directory名とbranch名のslugが異なるworktree観測がある
+    When worktree走査を純粋判定する
+    Then slug不一致を理由として報告する
+
+  Scenario: SCN-UNIT-WTSURVEY-016 directory名とbranch名のIssue番号不一致を報告する
+    Given directory名とbranch名のIssue番号が異なるworktree観測がある
+    When worktree走査を純粋判定する
+    Then Issue番号不一致を理由として報告する
+
+  Scenario: SCN-UNIT-WTSURVEY-017 不一致の報告がdispositionを変えない
+    Given cleanup-readyでslugだけが異なるworktree観測がある
+    When worktree走査を純粋判定する
+    Then slug不一致を報告しても判定はcleanup-readyである

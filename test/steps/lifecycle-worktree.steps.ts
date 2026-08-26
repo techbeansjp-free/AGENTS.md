@@ -393,6 +393,7 @@ When("新しいbranchと専用pathでworktreeを作成する", function () {
     base: String(this.value),
     issueNumber: 831,
     slug: "gherkin-worktree",
+    currentTime: new Date(2026, 7, 25, 9, 0, 30),
     remoteDefaultBranch: "main",
     remoteDefaultSha: String(this.value),
   });
@@ -458,6 +459,7 @@ When("期待repositoryを指定してworktreeを作成する", function () {
       base: String(this.value),
       issueNumber: Number(path.basename(this.worktree).split("-")[1]),
       slug: path.basename(this.worktree).split("-").slice(2).join("-"),
+      currentTime: new Date(2026, 7, 25, 9, 0, 30),
       remoteDefaultBranch: "main",
       remoteDefaultSha: String(this.value),
       expectedRepository: "expected/repository",
@@ -496,6 +498,7 @@ When("symlink祖先配下へworktreeを作成する", function () {
       base: String(this.value),
       issueNumber: 834,
       slug: "symlink-ancestor",
+      currentTime: new Date(2026, 7, 25, 9, 0, 30),
       remoteDefaultBranch: "main",
       remoteDefaultSha: String(this.value),
     });
@@ -531,6 +534,7 @@ Given("remoteへpush済みのcleanな専用worktreeがある", function () {
     base: remoteDefaultSha,
     issueNumber: 835,
     slug: "recovery",
+    currentTime: new Date(2026, 7, 25, 9, 0, 30),
     remoteDefaultBranch: "main",
     remoteDefaultSha,
   });

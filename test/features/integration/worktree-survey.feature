@@ -11,12 +11,12 @@ Feature: CLIで登録済みworktreeを事後走査する
     When worktree surveyをJSON形式で実行する
     Then 対象worktreeはcleanup-readyとして報告される
 
-  Scenario: SCN-INT-WTSURVEY-003 未commitの変更を持つmerge済みworktreeをretainとし理由を報告する
+  Scenario: SCN-INT-WTSURVEY-010 未commitの変更を持つmerge済みworktreeをretainとし理由を報告する
     Given 未commit変更を持つmerge済みの走査用worktreeがある
     When worktree surveyをJSON形式で実行する
     Then 対象worktreeはretainで未commit理由を報告する
 
-  Scenario: SCN-INT-WTSURVEY-004 走査はfile systemを一切変更しない
+  Scenario: SCN-INT-WTSURVEY-011 走査はfile systemを一切変更しない
     Given merge済みの走査用worktreeがある
     When directory内容を比較してworktree surveyを実行する
     Then 実行前後のdirectory内容は一致する
@@ -45,3 +45,13 @@ Feature: CLIで登録済みworktreeを事後走査する
     Given doctor可能でmerge済みworktreeを持つfixture repositoryがある
     When doctor CLIを実行する
     Then doctorはhealthyを維持する
+
+  Scenario: SCN-INT-WTSURVEY-003 worktree surveyがslug不一致を報告する
+    Given branch改名でslugがずれたmerge済みworktreeがある
+    When worktree surveyをJSON形式で実行する
+    Then 対象worktreeはslug不一致を報告する
+
+  Scenario: SCN-INT-WTSURVEY-004 不一致があっても削除判断が変わらない
+    Given branch改名でslugがずれたmerge済みworktreeがある
+    When worktree surveyをJSON形式で実行する
+    Then 対象worktreeはslug不一致でもcleanup-readyを維持する

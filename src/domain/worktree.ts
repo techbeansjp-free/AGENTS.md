@@ -36,6 +36,70 @@ interface RegisteredWorktree {
 const CONTROL = /\p{C}/u;
 const WORKTREE_NAME = /^(\d{8}_\d{6})-(\d+)-([a-z0-9][a-z0-9-]*)$/u;
 const BRANCH_NAME = /^([a-z][a-z0-9-]{0,31})\/(\d+)-([a-z0-9][a-z0-9-]*)$/u;
+const WORKTREE_TIMESTAMP = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/u;
+export const WORKTREE_TIMESTAMP_MAX_AGE_MINUTES = 10;
+const WORKTREE_TIMESTAMP_MAX_AGE_MS =
+  WORKTREE_TIMESTAMP_MAX_AGE_MINUTES * 60 * 1000;
+
+function validTime(value: unknown): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
+}
+
+function parseLocalTimestamp(value: string): Date | undefined {
+  const match = WORKTREE_TIMESTAMP.exec(value);
+  if (!match) return undefined;
+  const [year, month, day, hour, minute, second] = match.slice(1).map(Number);
+  if (
+    year === undefined ||
+    month === undefined ||
+    day === undefined ||
+    hour === undefined ||
+    minute === undefined ||
+    second === undefined
+  )
+    return undefined;
+  const parsed = new Date(0);
+  parsed.setFullYear(year, month - 1, day);
+  parsed.setHours(hour, minute, second, 0);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day ||
+    parsed.getHours() !== hour ||
+    parsed.getMinutes() !== minute ||
+    parsed.getSeconds() !== second
+  )
+    return undefined;
+  return parsed;
+}
+
+function localTimestamp(value: Date): string {
+  if (!validTime(value))
+    throw new Error("worktree pathの構成には有効な現在時刻が必要です");
+  const year = value.getFullYear();
+  if (year < 0 || year > 9999)
+    throw new Error("worktree pathの現在時刻は4桁年で指定してください");
+  const pad = (part: number, length = 2): string =>
+    String(part).padStart(length, "0");
+  return `${pad(year, 4)}${pad(value.getMonth() + 1)}${pad(value.getDate())}_${pad(value.getHours())}${pad(value.getMinutes())}${pad(value.getSeconds())}`;
+}
+
+export function buildWorktreePath(input: {
+  issueNumber: number;
+  slug: string;
+  currentTime: Date;
+  policy?: WorktreePlacementPolicy;
+}): string {
+  if (!Number.isSafeInteger(input.issueNumber) || input.issueNumber < 1)
+    throw new Error("Issue番号は1以上の安全な整数でなければなりません");
+  if (!/^[a-z0-9][a-z0-9-]*$/u.test(input.slug))
+    throw new Error("slugは小文字英数字とhyphenで指定してください");
+  const policy = input.policy ?? DEFAULT_WORKTREE_PLACEMENT;
+  const policyErrors = placementPolicyErrors(policy);
+  if (policyErrors.length > 0)
+    throw new Error(`worktree policyが不正です: ${policyErrors.join("; ")}`);
+  return `${policy.root}/${localTimestamp(input.currentTime)}-${input.issueNumber}-${input.slug}`;
+}
 
 function placementPolicyErrors(policy: WorktreePlacementPolicy): string[] {
   const errors: string[] = [];
@@ -96,6 +160,7 @@ export function validateWorktreePlacement(input: {
   branch: string;
   issueNumber: number;
   slug: string;
+  currentTime: Date;
   policy?: WorktreePlacementPolicy;
   existing: Array<{ path: string; branch: string }>;
 }): { valid: boolean; errors: string[] } {
@@ -133,6 +198,21 @@ export function validateWorktreePlacement(input: {
   const directory = WORKTREE_NAME.exec(directoryName);
   if (!directory) add("worktree directory名が規定書式ではありません");
   else {
+    if (!validTime(input.currentTime))
+      add("worktree timestampの検証には有効な現在時刻が必要です");
+    else {
+      const timestamp = parseLocalTimestamp(directory[1] ?? "");
+      if (!timestamp)
+        add("worktree directory名のtimestampがlocal timeとして不正です");
+      else {
+        const age = input.currentTime.getTime() - timestamp.getTime();
+        if (age < 0) add("worktree directory名のtimestampが未来です");
+        else if (age > WORKTREE_TIMESTAMP_MAX_AGE_MS)
+          add(
+            "worktree directory名のtimestampは現在時刻以前かつ10分以内でなければなりません",
+          );
+      }
+    }
     if (Number(directory[2]) !== input.issueNumber)
       add("worktree directory名のIssue番号が一致しません");
     if (directory[3] !== input.slug)
@@ -374,6 +454,7 @@ export function createWorktree(input: {
   base: string;
   issueNumber: number;
   slug: string;
+  currentTime: Date;
   worktreePolicy?: WorktreePlacementPolicy;
   remoteDefaultBranch: string;
   remoteDefaultSha: string;
@@ -396,6 +477,7 @@ export function createWorktree(input: {
     branch: input.branch,
     issueNumber: input.issueNumber,
     slug: input.slug,
+    currentTime: input.currentTime,
     policy,
     existing: registeredWorktrees(input.repoRoot),
   });

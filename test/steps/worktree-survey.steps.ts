@@ -31,7 +31,7 @@ function observation(
 ): WorktreeObservation {
   return {
     repositoryRoot: "/repo",
-    path: "/repo/.worktrees/feature",
+    path: "/repo/.worktrees/20260825_120000-883-survey",
     branch: "feature/883-survey",
     isPrimary: false,
     mergedIntoDefault: true,
@@ -62,7 +62,11 @@ function createSurveyRepository(world: SurveyWorld, merged: boolean): void {
     "refs/remotes/origin/HEAD",
     "refs/remotes/origin/main",
   ]);
-  world.worktree = path.join(world.root, ".worktrees", "883-survey");
+  world.worktree = path.join(
+    world.root,
+    ".worktrees",
+    "20260825_120000-883-survey",
+  );
   fs.mkdirSync(path.dirname(world.worktree), { recursive: true });
   runGit(world.root, [
     "worktree",
@@ -166,6 +170,18 @@ Given("worktree観測入力が配列でない", function () {
 Given("worktree観測入力が空配列である", function () {
   this.input = [];
 });
+Given("directory名とbranch名のslugが異なるworktree観測がある", function () {
+  this.input = [observation({ branch: "feature/883-renamed" })];
+});
+Given(
+  "directory名とbranch名のIssue番号が異なるworktree観測がある",
+  function () {
+    this.input = [observation({ branch: "feature/894-survey" })];
+  },
+);
+Given("cleanup-readyでslugだけが異なるworktree観測がある", function () {
+  this.input = [observation({ branch: "feature/883-renamed" })];
+});
 When("worktree走査を純粋判定する", function () {
   this.survey = surveyWorktrees(this.input);
 });
@@ -233,6 +249,28 @@ Then("errorのない空の走査結果を返す", function () {
     errors: [],
   });
 });
+Then("slug不一致を理由として報告する", function () {
+  assert.ok(
+    this.survey.entries[0]?.reasons.some((reason) =>
+      reason.includes("slugが一致しません"),
+    ),
+  );
+});
+Then("Issue番号不一致を理由として報告する", function () {
+  assert.ok(
+    this.survey.entries[0]?.reasons.some((reason) =>
+      reason.includes("Issue番号が一致しません"),
+    ),
+  );
+});
+Then("slug不一致を報告しても判定はcleanup-readyである", function () {
+  assert.equal(this.survey.entries[0]?.disposition, "cleanup-ready");
+  assert.ok(
+    this.survey.entries[0]?.reasons.some((reason) =>
+      reason.includes("slugが一致しません"),
+    ),
+  );
+});
 
 Given("走査用のfixture repositoryがある", function () {
   createSurveyRepository(this, false);
@@ -243,6 +281,10 @@ Given("merge済みの走査用worktreeがある", function () {
 Given("未commit変更を持つmerge済みの走査用worktreeがある", function () {
   createSurveyRepository(this, true);
   fs.writeFileSync(path.join(this.worktree, "survey.txt"), "dirty\n");
+});
+Given("branch改名でslugがずれたmerge済みworktreeがある", function () {
+  createSurveyRepository(this, true);
+  runGit(this.worktree, ["branch", "-m", "bugfix/883-renamed"]);
 });
 Given(
   "doctor可能でmerge済みworktreeを持つfixture repositoryがある",
@@ -308,4 +350,19 @@ Then("doctorはworktree要約を報告する", function () {
 });
 Then("doctorはhealthyを維持する", function () {
   assert.equal(parsed(this).healthy, true);
+});
+Then("対象worktreeはslug不一致を報告する", function () {
+  const entries = parsed(this).entries as Array<Record<string, unknown>>;
+  const target = entries.find((entry) => entry.path === this.worktree);
+  assert.ok(
+    (target?.reasons as string[]).some((reason) =>
+      reason.includes("slugが一致しません"),
+    ),
+  );
+});
+Then("対象worktreeはslug不一致でもcleanup-readyを維持する", function () {
+  const entries = parsed(this).entries as Array<Record<string, unknown>>;
+  const target = entries.find((entry) => entry.path === this.worktree);
+  assert.equal(target?.disposition, "cleanup-ready");
+  assert.ok((parsed(this).cleanupReady as string[]).includes(this.worktree));
 });

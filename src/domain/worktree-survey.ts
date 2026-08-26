@@ -4,6 +4,11 @@ import {
   resolveFinalizeIgnoredPathAllowlist,
 } from "./worktree-removal-safety.js";
 
+const WORKTREE_DIRECTORY_IDENTITY =
+  /(?:^|[\\/])\d{8}_\d{6}-(\d+)-([a-z0-9][a-z0-9-]*)$/u;
+const WORKTREE_BRANCH_IDENTITY =
+  /^[a-z][a-z0-9-]{0,31}\/(\d+)-([a-z0-9][a-z0-9-]*)$/u;
+
 export type WorktreeDisposition =
   "in-progress" | "cleanup-ready" | "retain" | "primary";
 
@@ -161,6 +166,22 @@ function classify(
       };
 }
 
+function namingMismatchReasons(observation: WorktreeObservation): string[] {
+  const directory = WORKTREE_DIRECTORY_IDENTITY.exec(observation.path);
+  const branch = WORKTREE_BRANCH_IDENTITY.exec(observation.branch);
+  if (!directory || !branch) return [];
+  const reasons: string[] = [];
+  if (directory[1] !== branch[1])
+    reasons.push(
+      `worktree directory名とbranch名のIssue番号が一致しません（directory: ${directory[1]}、branch: ${branch[1]}）`,
+    );
+  if (directory[2] !== branch[2])
+    reasons.push(
+      `worktree directory名とbranch名のslugが一致しません（directory: ${directory[2]}、branch: ${branch[2]}）`,
+    );
+  return reasons;
+}
+
 export function surveyWorktrees(
   value: unknown,
   ignoredPathAllowlist: unknown = resolveFinalizeIgnoredPathAllowlist(),
@@ -196,6 +217,7 @@ export function surveyWorktrees(
   for (const { observation } of candidates) {
     if (duplicatePaths.has(observation.path)) continue;
     const entry = classify(observation, ignoredPathAllowlist);
+    entry.reasons.push(...namingMismatchReasons(observation));
     result.entries.push(entry);
     if (entry.disposition === "cleanup-ready")
       result.cleanupReady.push(entry.path);
