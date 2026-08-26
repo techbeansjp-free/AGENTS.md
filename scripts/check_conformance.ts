@@ -481,6 +481,7 @@ export function checkRepositoryRuleLedger(
         now: new Date().toISOString(),
       }).errors,
     );
+  errors.push(...checkDistributionGateReachability(root));
   errors.push(...checkModeQuestionText(root));
   errors.push(...checkLifecycleIgnore(root));
   errors.push(...checkWorktreeContract(root).errors);
@@ -662,6 +663,167 @@ function parseModeQuestionRows(
  * 規範文書と機械可読な定義を`(id, 分類, 質問文)`の順序付き8行として比較する。
  * IDと質問文だけを比べると、機械可読側で分類を別の質問へ付け替えても通過する。
  */
+/**
+ * release workflowの`run` stepを構造として取り出す。
+ *
+ * **YAML全文の文字列検索では足りない。** コメント、`echo`の引数、`if: false`で無効化された
+ * step、無関係なjobの記述がすべて「実行する」と誤判定される。
+ */
+/** 配布準備工程を構築だけへ移した形。`scripts/check_project_quality.ts`と同じ値。 */
+const DISTRIBUTION_PREPARE_COMMAND = "npm run build";
+
+function releaseRunSteps(
+  yaml: string,
+): { command: string; enabled: boolean }[] {
+  const lines = yaml
+    .split("\n")
+    .map((line) => line.replace(/(^|\s)#.*$/u, "$1"));
+  const steps: { command: string; enabled: boolean }[] = [];
+  let current: string[] = [];
+  let indent = -1;
+  const flush = (): void => {
+    if (current.length === 0) return;
+    const text = current.join("\n");
+    const disabled =
+      /^\s*(?:-\s+)?if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mu.test(text);
+    const block = /^(\s*)(?:-\s+)?run:[ \t]*[|>][-+]?[ \t]*$/mu.exec(text);
+    const inline = /^\s*(?:-\s+)?run:[ \t]+(?![|>][-+]?[ \t]*$)(.+)$/mu.exec(
+      text,
+    );
+    let command = "";
+    if (block) {
+      const after = text.slice(block.index + block[0].length).split("\n");
+      const base = block[1]!.length;
+      const body: string[] = [];
+      for (const line of after) {
+        if (line.trim() === "") continue;
+        const width = line.length - line.trimStart().length;
+        if (width <= base) break;
+        body.push(line.trim());
+      }
+      command = body.join("\n");
+    } else if (inline) command = inline[1]!.trim();
+    if (command !== "") steps.push({ command, enabled: !disabled });
+    current = [];
+  };
+  for (const line of lines) {
+    const start = /^(\s*)-\s/u.exec(line);
+    if (start && (indent < 0 || start[1]!.length <= indent)) {
+      flush();
+      indent = start[1]!.length;
+    }
+    current.push(line);
+  }
+  flush();
+  return steps;
+}
+
+/**
+ * 配布準備工程の形と、release workflowが実際に呼ぶ入口の対応を検査する。
+ *
+ * **`prepack`は形によって意味が変わる。** 全gateを持つ現行の形では`npm run prepack`が
+ * 配布前品質検証そのものだが、構築だけへ移した新しい形では`npm run build`と等価になる。
+ * release workflowが`npm run prepack`を呼び続けたまま`prepack`の中身だけを軽くすると、
+ * **workflowもrelease契約検査も変わらないまま、不可逆なnpm公開の直前検証が消える。**
+ *
+ * そこで形と呼び出し先の一致を要求する。片方だけの変更を双方向で拒否する。
+ */
+export function checkDistributionGateReachability(root: string): string[] {
+  const errors: string[] = [];
+  const packageFile = path.join(root, "package.json");
+  const workflowFile = path.join(root, ".github/workflows/release.yml");
+  if (!fs.existsSync(packageFile) || !fs.existsSync(workflowFile)) {
+    errors.push(
+      "配布gate到達性を判定できません: package.jsonまたはrelease.ymlがありません",
+    );
+    return errors;
+  }
+  const parsed = readJson(packageFile);
+  const scripts =
+    isRecord(parsed) && isRecord(parsed.scripts) ? parsed.scripts : undefined;
+  if (!scripts) {
+    errors.push(
+      "配布gate到達性を判定できません: package.jsonのscriptsが不正です",
+    );
+    return errors;
+  }
+  const prepack = typeof scripts.prepack === "string" ? scripts.prepack : "";
+  if (prepack === "") {
+    errors.push("配布gate到達性を判定できません: prepack scriptがありません");
+    return errors;
+  }
+  /**
+   * 準備工程が既知の2形のいずれかであることを要求する。
+   *
+   * **未知の形を「全gateの形」として扱わない。** `prepack: "echo skip"` を全gate形と誤認すると、
+   * release.ymlが`npm run prepack`を呼ぶだけで到達済みと判定してしまう。
+   * 保護済みvalidatorも同じ組を拒否するが、本検査だけでも判定が閉じるようにする。
+   */
+  const lightweight = prepack === DISTRIBUTION_PREPARE_COMMAND;
+  const gateChain = prepack
+    .split("&&")
+    .map((entry) => entry.trim())
+    .every((entry) => /^npm run [A-Za-z0-9:._-]+$/u.test(entry));
+  if (!lightweight && !gateChain) {
+    errors.push(
+      "配布gate到達性を判定できません: prepackが既知の形ではありません",
+    );
+    return errors;
+  }
+  const steps = releaseRunSteps(fs.readFileSync(workflowFile, "utf8"));
+  /**
+   * commandを、失敗が伝播する単位へ分割する。
+   *
+   * `&&`・`;`・改行は前段の失敗を伝えるが、**`||`は伝えない。** `true || npm run x`は
+   * 左辺が成功するとxを実行せず、`npm run x || true`はxの失敗を握り潰す。
+   * どちらも「実行して成功を要求する」を満たさないため、`||`を含む区間は数えない。
+   */
+  const reliableSegments = (command: string): string[] =>
+    command
+      .split(/&&|;|\n/u)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== "" && !entry.includes("||"));
+  const invocationIndex = (kind: "prepack" | "verify"): number => {
+    const pattern =
+      kind === "prepack"
+        ? /^npm\s+run\s+prepack(?![A-Za-z0-9:._-])/u
+        : /^npm\s+run\s+verify:distribution(?![A-Za-z0-9:._-])/u;
+    return steps.findIndex(
+      (step) =>
+        step.enabled &&
+        reliableSegments(step.command).some((entry) => pattern.test(entry)),
+    );
+  };
+  const invokes = (kind: "prepack" | "verify"): boolean =>
+    invocationIndex(kind) >= 0;
+  const publishIndex = steps.findIndex(
+    (step) =>
+      step.enabled &&
+      reliableSegments(step.command).some((entry) =>
+        /^npm\s+publish(?![A-Za-z0-9:._-])/u.test(entry),
+      ),
+  );
+  const required = lightweight ? "verify:distribution" : "prepack";
+  if (!invokes(lightweight ? "verify" : "prepack"))
+    errors.push(
+      `prepackが${lightweight ? "構築だけの" : "全gateの"}形であるため、release.ymlは有効なstepでnpm run ${required}を実行しなければなりません`,
+    );
+  if (lightweight && invokes("prepack"))
+    errors.push(
+      "prepackを構築だけの形にした場合、release.ymlはnpm run prepackを配布前品質検証として実行できません",
+    );
+  const verificationIndex = invocationIndex(lightweight ? "verify" : "prepack");
+  if (
+    publishIndex >= 0 &&
+    verificationIndex >= 0 &&
+    verificationIndex > publishIndex
+  )
+    errors.push(
+      `npm publishより後でしか配布前品質検証を実行していません。npm run ${required}をnpm publishより前の有効なstepで実行してください`,
+    );
+  return errors;
+}
+
 export function checkModeQuestionText(root: string): string[] {
   const errors = [...validateModeQuestions(MODE_QUESTIONS)];
   const documentPath = path.join(root, MODE_QUESTION_DOCUMENT);
