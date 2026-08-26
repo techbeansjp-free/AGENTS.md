@@ -6,6 +6,13 @@ import {
   usageKey,
   type CommandUsage,
 } from "../src/cli-usage.js";
+import {
+  CLI_GUIDE_DOCUMENT,
+  CLI_README_DOCUMENT,
+  extractCliGuide,
+  renderCliReadmeGuide,
+  renderCliUsageGuide,
+} from "./generate_cli_usage_guide.js";
 
 const CLI_SOURCE = "src/cli.ts";
 const DISPATCH =
@@ -96,6 +103,35 @@ function declaredNames(usage: CommandUsage): {
   return { demandable, all };
 }
 
+const CLI_GUIDE_GENERATOR =
+  "node --import tsx scripts/generate_cli_usage_guide.ts";
+
+export function checkCliUsageDocuments(root: string): string[] {
+  const errors: string[] = [];
+  for (const [relative, render] of [
+    [CLI_GUIDE_DOCUMENT, renderCliUsageGuide],
+    [CLI_README_DOCUMENT, renderCliReadmeGuide],
+  ] as const) {
+    const file = path.resolve(root, relative);
+    if (!fs.existsSync(file)) {
+      errors.push(`${relative}がありません`);
+      continue;
+    }
+    const current = extractCliGuide(fs.readFileSync(file, "utf8"));
+    if (current === undefined) {
+      errors.push(
+        `${relative}に自動生成markerがありません。${CLI_GUIDE_GENERATOR}を実行してください`,
+      );
+      continue;
+    }
+    if (current !== render())
+      errors.push(
+        `${relative}の自動生成区画が正本と一致しません。${CLI_GUIDE_GENERATOR}を実行して差分をcommitしてください`,
+      );
+  }
+  return errors;
+}
+
 export function checkCliUsage(root = process.cwd()): {
   valid: boolean;
   errors: string[];
@@ -148,6 +184,7 @@ export function checkCliUsage(root = process.cwd()): {
     if (!usage.example.startsWith(`npx agent-skill-chain ${usage.command}`))
       errors.push(`${key}: usageのexampleが実行形式と一致しません`);
   }
+  errors.push(...checkCliUsageDocuments(root));
   return { valid: errors.length === 0, errors, commands: COMMAND_USAGE.length };
 }
 

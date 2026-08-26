@@ -15,12 +15,24 @@ agent-skill-chainは、人とAI agentが同じ手順で使える、安全側に�
 
 `install`、`update`、`delete`は何も書き換えないpreviewが既定です。表示された変更を確認し、同じcommandへ`--apply`を付けた場合だけ変更します。`doctor`は読み取り専用です。
 
-| 操作 | previewまたは診断 | 変更の適用 |
-|---|---|---|
+| 操作 | previewまたは診断                        | 変更の適用                                       |
+| ---- | ---------------------------------------- | ------------------------------------------------ |
 | 導入 | `npx agent-skill-chain install --root=.` | `npx agent-skill-chain install --root=. --apply` |
-| 更新 | `npx agent-skill-chain update --root=.` | `npx agent-skill-chain update --root=. --apply` |
-| 削除 | `npx agent-skill-chain delete --root=.` | `npx agent-skill-chain delete --root=. --apply` |
-| 診断 | `npx agent-skill-chain doctor --root=.` | 変更なし |
+| 更新 | `npx agent-skill-chain update --root=.`  | `npx agent-skill-chain update --root=. --apply`  |
+| 削除 | `npx agent-skill-chain delete --root=.`  | `npx agent-skill-chain delete --root=. --apply`  |
+| 診断 | `npx agent-skill-chain doctor --root=.`  | 変更なし                                         |
+
+<!-- 自動生成: CLI利用案内 -->
+
+各commandの必須flagは`--help`で確認できます。必須flag検証より先に評価され、要約、必須flag、条件付きflag、任意flagと既定値、実行例をJSONで返します。
+
+```
+npx agent-skill-chain worktree create --help
+```
+
+必須flagが不足したまま実行した場合も、不足を1回の実行ですべて列挙します。上の例では6件を一度に返します。値をとるflagは`--flag=値`の形式で指定してください。空白区切りは受理せず、専用の診断で拒否します。
+
+<!-- 自動生成ここまで -->
 
 詳しいowner境界、更新時に保持される資産、各Stepの使い方は[中央利用案内](.agent-skill-chain/00_利用案内.md)から確認できます。
 
