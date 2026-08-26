@@ -267,6 +267,16 @@ function readProposalRegistry(file: string): QualityContractProposalRegistry {
   };
 }
 
+const PROPOSAL_DESCRIPTION_FIELDS = ["owner", "rationale", "rollback"] as const;
+
+function proposalContract(
+  proposal: QualityContractProposal,
+): Record<string, unknown> {
+  const contract: Record<string, unknown> = { ...proposal };
+  for (const field of PROPOSAL_DESCRIPTION_FIELDS) delete contract[field];
+  return contract;
+}
+
 function targetMap(proposal: QualityContractProposal): Map<string, string> {
   return new Map(
     proposal.targets.map((target) => [
@@ -316,9 +326,18 @@ function validateTrustedQualityMigration(
     .map((proposal) => proposal.proposalId);
   for (const trustedProposal of trustedRegistry.proposals) {
     const candidateProposal = candidateById.get(trustedProposal.proposalId);
-    if (stableJson(candidateProposal) !== stableJson(trustedProposal))
+    if (candidateProposal === undefined) {
       errors.push(
-        `${trustedProposal.proposalId}のtrusted品質proposalは削除・変更できません`,
+        `${trustedProposal.proposalId}のtrusted品質proposalは削除できません`,
+      );
+      continue;
+    }
+    if (
+      stableJson(proposalContract(candidateProposal)) !==
+      stableJson(proposalContract(trustedProposal))
+    )
+      errors.push(
+        `${trustedProposal.proposalId}のtrusted品質proposalの契約fieldは変更できません`,
       );
   }
   const trustedVersion = qualityContractVersion(trustedMetadata);
