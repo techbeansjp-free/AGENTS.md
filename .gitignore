@@ -15,7 +15,11 @@ dist/
 /memo/
 **/memo/
 
-# ローカルツール設定と実行ログ
+# host skill adapterの展開先とその管理record。packageが生成しrepositoryは追跡しない
 .claude/
+.agents/
+.agent-skill-chain/managed-assets.json
+
+# ローカルツール設定と実行ログ
 test-execution.log
 *.log

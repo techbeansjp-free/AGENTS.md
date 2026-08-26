@@ -51,6 +51,17 @@ jobs:
         run: node dist/bin/agent-skill-chain.js policy validate .agent-skill-chain/project-policy.json "--trusted-commit=$ASC_TRUSTED_COMMIT" "--expected-base-sha=$ASC_EXPECTED_BASE_SHA" "--candidate-head-sha=$ASC_CANDIDATE_HEAD_SHA" "--base-ref=$ASC_BASE_REF" "--default-branch=$ASC_DEFAULT_BRANCH" "--repo=$ASC_REPOSITORY" "--pr=$ASC_PR_NUMBER"
       - name: 構築対象とパッケージ資産を検証する
         run: npm run build
+      - name: 製品自身へhost skill adapterを展開する
+        run: node dist/bin/agent-skill-chain.js install --root=. --apply
+      - name: 製品自身のlifecycle健全性をdoctorで検証する
+        run: node dist/bin/agent-skill-chain.js doctor --root=.
+      - name: 展開後もrepositoryがcleanであることを確認する
+        run: |
+          status="$(git status --porcelain)"
+          if [ -n "$status" ]; then
+            printf 'host skill展開でrepositoryが汚れました\n%s\n' "$status"
+            exit 1
+          fi
       - name: npm配布物への開発用ファイル混入を拒否する
         run: npm run package:check
       - name: 全テストとrepository conformance証拠を検証する
