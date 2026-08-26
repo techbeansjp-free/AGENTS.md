@@ -6,17 +6,15 @@ import {
   readStoredStagingRecord,
 } from "../domain/staging.js";
 import {
-  parseModeDecision,
+  MODE_DECISION_FILE,
   parseStepJournal,
-  requiredSteps,
+  STEP_JOURNAL_FILE,
+  inspectWorkflowStagingArtifacts,
   validateStepJournal,
   WORKFLOW_STEPS,
   type StepJournalEntry,
 } from "../domain/workflow.js";
 import type { Mode } from "../domain/mode.js";
-
-export const MODE_DECISION_FILE = "00_モード判定.json";
-export const STEP_JOURNAL_FILE = path.join("journal", "steps.jsonl");
 
 function sha256(value: string | Buffer): string {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -107,55 +105,20 @@ export function appendWorkflowJournalEntry(input: {
 export function inspectWorkflowStaging(staging: string, upToStep?: number) {
   const resolved = assertWorkflowStaging(staging);
   const record = readStoredStagingRecord(resolved);
-  const journal = readWorkflowJournal(resolved);
   const modeFile = path.join(resolved, MODE_DECISION_FILE);
-  const modeDecision = fs.existsSync(modeFile)
-    ? parseModeDecision(fs.readFileSync(modeFile, "utf8"))
-    : { errors: [`${MODE_DECISION_FILE}がありません`] };
-  const completedSteps = [...new Set(journal.entries.map(({ step }) => step))];
-  const currentStep = completedSteps.at(-1);
-  const maximum = upToStep ?? currentStep ?? 0;
-  const validation = validateStepJournal({
-    mode: record.mode,
-    entries: journal.entries,
-    upToStep: maximum,
-  });
-  const completed = new Set(completedSteps);
-  const nextStep = requiredSteps(record.mode).find(
-    (step) => !completed.has(step),
-  );
-  const errors = [
-    ...journal.errors,
-    ...modeDecision.errors,
-    ...(modeDecision.decision && modeDecision.decision.mode !== record.mode
-      ? [
-          `モード判定成果物のmode ${modeDecision.decision.mode}がstaging recordのmode ${record.mode}と一致しません`,
-        ]
-      : []),
-    ...validation.errors,
-  ];
-  return {
+  const journalFile = path.join(resolved, STEP_JOURNAL_FILE);
+  return inspectWorkflowStagingArtifacts({
     staging: resolved,
     mode: record.mode,
     state: record.state,
-    modeDecision: {
-      exists: fs.existsSync(modeFile),
-      valid: Boolean(modeDecision.decision) && modeDecision.errors.length === 0,
-      errors: modeDecision.errors,
-    },
-    journal: {
-      exists: fs.existsSync(path.join(resolved, STEP_JOURNAL_FILE)),
-      valid: journal.errors.length === 0 && validation.valid,
-      errors: journal.errors,
-    },
-    completedSteps,
-    currentStep,
-    nextStep,
-    validation,
-    errors,
-    valid:
-      errors.length === 0 && Boolean(modeDecision.decision) && validation.valid,
-  };
+    ...(fs.existsSync(modeFile)
+      ? { modeDecisionSource: fs.readFileSync(modeFile, "utf8") }
+      : {}),
+    ...(fs.existsSync(journalFile)
+      ? { journalSource: fs.readFileSync(journalFile, "utf8") }
+      : {}),
+    ...(upToStep === undefined ? {} : { upToStep }),
+  });
 }
 
 export function workflowStep(step: number) {

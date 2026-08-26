@@ -5,7 +5,13 @@ import { spawnSync } from "node:child_process";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
   MODE_STEP_SEQUENCES,
+  MODE_DECISION_FILE,
   NEVER_SKIPPABLE_STEPS,
+  STEP_JOURNAL_BASENAME,
+  STEP_JOURNAL_FILE,
+  WORKFLOW_JOURNAL_DIRECTORY,
+  completePullRequestWorkflow,
+  inspectWorkflowStagingArtifacts,
   parseModeDecision,
   parseStepJournal,
   renderModeDecision,
@@ -20,6 +26,7 @@ import {
   QUESTIONS,
   type Mode,
   type ModeAnswer,
+  type PocDeclaration,
 } from "../../src/domain/mode.js";
 import { stableJson } from "../../src/lib/security.js";
 import {
@@ -28,9 +35,12 @@ import {
 } from "../../src/domain/issue.js";
 import {
   appendWorkflowJournalEntry,
-  STEP_JOURNAL_FILE,
+  inspectWorkflowStaging,
 } from "../../src/adapters/workflow-journal.js";
-import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
+import {
+  readStoredStagingRecord,
+  refreshStoredStagingDigest,
+} from "../../src/domain/staging.js";
 import { doctor } from "../../src/domain/lifecycle.js";
 import { checkWorkflowStepDocument } from "../../scripts/check_conformance.js";
 import { checkWorkflowSteps } from "../../scripts/check_workflow_steps.js";
@@ -90,6 +100,38 @@ function result(mode: Mode, entries: StepJournalEntry[], upToStep: number) {
   return validateStepJournal({ mode, entries, upToStep });
 }
 
+function validPoc(): PocDeclaration {
+  return {
+    purpose: "依存変更を伴う仮説を検証する",
+    period: { from: "2026-08-25", to: "2026-08-26" },
+    outOfScope: "本番提供",
+    successCriteria: "分類結果を再現できる",
+    abortCriteria: "再現できない",
+    owner: "repository-owner",
+    highRisk: [
+      "public-api",
+      "personal-data",
+      "confidential-data",
+      "external-exposure",
+      "irreversible-operation",
+    ].map((id) => ({ id, present: false, evidence: `${id}は対象外` })),
+  };
+}
+
+function failedPullRequestWorkflow() {
+  return completePullRequestWorkflow(
+    {
+      state: "waiting_for_human_review",
+      url: "https://github.com/o/r/pull/906",
+      next: "独立したpr mergeコマンドを使う",
+    },
+    "/repo/.agent-skill-chain/tmp/issues/issue-906",
+    () => {
+      throw new Error("journal digest mismatch");
+    },
+  );
+}
+
 Given("ワークフローStep単体検査の準備がある", function () {
   this.workflowCheckPassed = false;
 });
@@ -121,6 +163,93 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
         assert.equal(skippableSteps(mode).includes(11), false);
       assert.ok(NEVER_SKIPPABLE_STEPS.includes(11));
       break;
+    case "SCN-UNIT-WFSTEP-007": {
+      const root = this.temp("asc-workflow-empty-step-");
+      const document = path.join(root, "workflow.md");
+      const markdown = fs
+        .readFileSync(".agent-skill-chain/docs/01_開発ワークフロー.md", "utf8")
+        .replace("0 → 1 → 4 → 9 → 10 → 11", "0 → 1 →  → 9 → 10 → 11");
+      fs.writeFileSync(document, markdown);
+      const checked = checkWorkflowSteps(process.cwd(), document);
+      assert.equal(checked.valid, false);
+      assert.match(checked.errors.join("\n"), /空のStep番号/u);
+      break;
+    }
+    case "SCN-UNIT-PRJRNL-001": {
+      const checked = failedPullRequestWorkflow();
+      assert.equal(
+        (checked.output as { url?: string }).url,
+        "https://github.com/o/r/pull/906",
+      );
+      break;
+    }
+    case "SCN-UNIT-PRJRNL-002": {
+      const checked = failedPullRequestWorkflow();
+      assert.match(JSON.stringify(checked.output), /記録に失敗/u);
+      assert.match(JSON.stringify(checked.output), /PR作成を再実行せず/u);
+      assert.match(JSON.stringify(checked.output), /workflow record/u);
+      break;
+    }
+    case "SCN-UNIT-PRJRNL-003":
+      assert.equal(failedPullRequestWorkflow().exitCode, 1);
+      break;
+    case "SCN-UNIT-PRJRNL-004": {
+      const created = {
+        state: "waiting_for_human_review" as const,
+        url: "https://github.com/o/r/pull/906",
+        next: "独立したpr mergeコマンドを使う",
+      };
+      const recorded = {
+        entry: entry(11),
+        journalDigest: "a".repeat(64),
+        stagingDigest: "b".repeat(64),
+      };
+      const checked = completePullRequestWorkflow(
+        created,
+        "/repo/.agent-skill-chain/tmp/issues/issue-906",
+        () => recorded,
+      );
+      assert.equal(checked.exitCode, 0);
+      assert.deepEqual(checked.output, { ...created, workflow: recorded });
+      break;
+    }
+    case "SCN-UNIT-WFPATH-001": {
+      assert.equal(MODE_DECISION_FILE, "00_モード判定.json");
+      assert.equal(WORKFLOW_JOURNAL_DIRECTORY, "journal");
+      assert.equal(STEP_JOURNAL_BASENAME, "steps.jsonl");
+      assert.equal(STEP_JOURNAL_FILE, "journal/steps.jsonl");
+      for (const file of [
+        "src/domain/lifecycle.ts",
+        "src/domain/issue.ts",
+        "src/adapters/workflow-journal.ts",
+      ]) {
+        const source = fs.readFileSync(file, "utf8");
+        assert.doesNotMatch(source, /["`]00_モード判定\.json["`]/u);
+        assert.doesNotMatch(source, /["`]journal["`]/u);
+        assert.doesNotMatch(source, /["`]steps\.jsonl["`]/u);
+      }
+      break;
+    }
+    case "SCN-UNIT-WFPATH-002": {
+      const root = this.temp("asc-workflow-inspection-");
+      const staging = createQuickStaging(root);
+      const record = readStoredStagingRecord(staging);
+      const direct = inspectWorkflowStagingArtifacts({
+        staging,
+        mode: record.mode,
+        state: record.state,
+        modeDecisionSource: fs.readFileSync(
+          path.join(staging, MODE_DECISION_FILE),
+          "utf8",
+        ),
+        journalSource: fs.readFileSync(
+          path.join(staging, STEP_JOURNAL_FILE),
+          "utf8",
+        ),
+      });
+      assert.deepEqual(inspectWorkflowStaging(staging), direct);
+      break;
+    }
     case "SCN-UNIT-WFJRNL-001":
       assert.equal(
         result(
@@ -280,6 +409,21 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
         parseModeDecision(JSON.stringify(rendered)).errors.join("\n"),
         /未知field/u,
       );
+      break;
+    }
+    case "SCN-UNIT-WFMODE-005": {
+      const parsed = parseModeDecision(
+        renderModeDecision({
+          requestedMode: "poc",
+          answers: answers(),
+          decidedAt: instant,
+          poc: validPoc(),
+          changedFiles: ["package.json"],
+        }),
+      );
+      assert.deepEqual(parsed.errors, []);
+      assert.equal(parsed.decision?.mode, "full");
+      assert.deepEqual(parsed.decision?.changedFiles, ["package.json"]);
       break;
     }
     case "SCN-UNIT-WFOVR-001": {
@@ -497,7 +641,7 @@ function preparePullRequest(
   const fixtureFuture = new Date(
     fixtureConstructedAt + 24 * 60 * 60 * 1000,
   ).toISOString();
-  const root = world.initRepo();
+  const root = fs.realpathSync(world.initRepo());
   fs.mkdirSync(path.join(root, ".agent-skill-chain", "policy"), {
     recursive: true,
   });
