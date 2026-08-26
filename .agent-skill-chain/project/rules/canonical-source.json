@@ -8,7 +8,7 @@
     "docs/specs"
   ],
   "enforcement": "deny",
-  "activation": "active",
+  "activation": "staged",
   "owner": "project owner",
   "targetLayer": "package",
   "evidence": "canonical-contracts registryと規範宣言location走査の複製検出結果",
