@@ -121,6 +121,29 @@
           "afterSha256": "ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-DISTRIBUTION-PREPARE-001",
+      "status": "staged",
+      "fromVersion": 5,
+      "toVersion": 6,
+      "owner": "repository maintainer",
+      "rationale": "git依存installの準備工程でpnpmがprepackを実行するため、品質gateを持つprepackでは配布経路が成立しない（Issue #965）。prepackをbuildだけにし、配布前品質gateはverify:distributionへ移す。本validatorは現行の形と新しい形の両方を受理する前方互換版であり、gate集合と順序は完全一致で保持する。",
+      "rollback": "登録済みproposalは削除できないため、有効化しないまま放置することがrollbackとなる。有効化後に戻す場合は、逆向きのproposalを新たに登録して品質契約versionを再度進める。",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "249d8d3ff0356f3e2b82d549da20dbf83663a66f9b4abb039bfc31c0ba5102bf",
+          "afterSha256": "300f2e1358c8a04b5f3af129d31faffb49fbe2ee346a5a377d345c011561dc91"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d",
+          "afterSha256": "e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"
+        }
+      ]
     }
   ]
 }
