@@ -83,31 +83,38 @@ When("薄い支援層の記述から参照を解決する", function () {
   );
 });
 
-Then(
-  "速さが開発速度を指し正しさと開発速度の双方が成立条件であると読める",
-  function () {
-    assert.ok(
-      this.section.includes(
-        "ここでいう速さは開発速度、すなわち要求から成果物を提出するまでに要する時間の短さを指し、成果物自体の実行性能を指さない",
-      ),
-    );
-    assert.ok(
-      this.section.includes(
-        "正しさと開発速度はトレードオフではなく、両方が成立条件である",
-      ),
-    );
-    assert.ok(
-      this.section.includes(
-        "正しさを満たしても開発速度を失った状態は、目的を達成していない",
-      ),
-    );
-    assert.ok(
-      this.section.includes(
-        "開発速度を満たしても正しさを失った状態も、目的を達成していない",
-      ),
-    );
-  },
-);
+Then("正しさと開発速度が定義され双方が成立条件であると読める", function () {
+  assert.ok(
+    this.section.includes(
+      "ここでいう正しさは、要求を満たし、品質、セキュリティ、再利用性、保守性を担保していることを指す",
+    ),
+  );
+  assert.ok(
+    this.section.includes(
+      "検査が緑であることは正しさの必要条件であって十分条件ではない",
+    ),
+  );
+  assert.ok(
+    this.section.includes(
+      "ここでいう速さは開発速度、すなわち要求から成果物を提出するまでに要する時間の短さを指し、成果物自体の実行性能を指さない",
+    ),
+  );
+  assert.ok(
+    this.section.includes(
+      "正しさと開発速度はトレードオフではなく、両方が成立条件である",
+    ),
+  );
+  assert.ok(
+    this.section.includes(
+      "正しさを満たしても開発速度を失った状態は、目的を達成していない",
+    ),
+  );
+  assert.ok(
+    this.section.includes(
+      "開発速度を満たしても正しさを失った状態も、目的を達成していない",
+    ),
+  );
+});
 
 Then(
   "支援層の所要時間が成果物構築の所要時間を上回らないことを含む",
