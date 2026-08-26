@@ -60,7 +60,7 @@ function repositoryRoot(): string {
 
 // ---------- unit ----------
 
-Given("適合性検査scriptがある", function () {
+Given("一時ライフサイクル検査を含む適合性検査scriptがある", function () {
   this.output = fs.readFileSync(
     path.join(repositoryRoot(), "scripts/check_conformance.ts"),
     "utf8",
@@ -212,7 +212,7 @@ Then("どちらも凍結されている", function () {
 
 // ---------- integration ----------
 
-Given("製品repositoryがある", function () {
+Given("一時ライフサイクル検査の対象として製品repositoryがある", function () {
   this.root = repositoryRoot();
 });
 
@@ -447,12 +447,15 @@ When("追跡fileの列挙だけが失敗する状態で整合を検査する", f
   );
 });
 
-Then("整合検査は追跡fileを列挙できないことを示して失敗する", function () {
-  assert.ok(
-    this.errors.some((message) => /追跡fileを列挙できません/u.test(message)),
-    JSON.stringify(this.errors),
-  );
-});
+Then(
+  "一時ライフサイクル整合検査は追跡fileを列挙できないことを示して失敗する",
+  function () {
+    assert.ok(
+      this.errors.some((message) => /追跡fileを列挙できません/u.test(message)),
+      JSON.stringify(this.errors),
+    );
+  },
+);
 
 When("設定注入で外部の無視設定を足して整合を検査する", function () {
   // GIT_CONFIG_PARAMETERSでcore.excludesFileを注入すると、除去しなければ

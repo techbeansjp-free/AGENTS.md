@@ -3,7 +3,7 @@ Feature: 一時ライフサイクル領域の3箇所整合
   分類正本、無視設定、配布物検査の除外一覧が分岐していないことを検証する。
 
   Scenario: SCN-INT-LIFEIGNORE-001 製品repositoryで全領域が領域全体として無視される
-    Given 製品repositoryがある
+    Given 一時ライフサイクル検査の対象として製品repositoryがある
     When 一時ライフサイクル領域の整合を検査する
     Then 整合検査は合格する
 
@@ -55,7 +55,7 @@ Feature: 一時ライフサイクル領域の3箇所整合
   Scenario: SCN-INT-LIFEIGNORE-016 追跡fileの列挙が失敗すると拒否する
     Given 全領域を無視した隔離repository
     When 追跡fileの列挙だけが失敗する状態で整合を検査する
-    Then 整合検査は追跡fileを列挙できないことを示して失敗する
+    Then 一時ライフサイクル整合検査は追跡fileを列挙できないことを示して失敗する
 
   Scenario: SCN-INT-LIFEIGNORE-017 設定注入で無視設定を足しても無視漏れとして扱う
     Given role-logだけを無視対象から外した隔離repository

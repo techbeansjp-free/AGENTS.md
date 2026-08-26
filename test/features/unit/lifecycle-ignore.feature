@@ -3,7 +3,7 @@ Feature: 一時ライフサイクル領域の分類正本
   領域一覧を唯一の正本とし、判定と各利用箇所の照合をそこから導出する。
 
   Scenario: SCN-UNIT-LIFEIGNORE-001 整合検査が領域も除外一覧も自前で書いていない
-    Given 適合性検査scriptがある
+    Given 一時ライフサイクル検査を含む適合性検査scriptがある
     When 適合性検査scriptのsourceを読む
     Then 領域prefixも除外一覧も自前で列挙していない
 
