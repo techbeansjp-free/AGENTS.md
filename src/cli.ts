@@ -87,6 +87,18 @@ import {
   routingDiagnostic,
   routingRecovery,
 } from "./cli-contract.js";
+import {
+  COMMAND_USAGE,
+  findCommandUsage,
+  missingFlagsError,
+  missingRequiredFlags,
+  renderUsage,
+  spaceSeparatedFlagError,
+  usageKey,
+  valueFlagNames,
+  CliValidationError,
+  type CommandUsage,
+} from "./cli-usage.js";
 import { type Policy, isRecord } from "./types.js";
 import { type PolicySet } from "./domain/policy.js";
 import {
@@ -1355,6 +1367,66 @@ function modelTier(value: string, flag: string): ModelTier {
   return tier;
 }
 
+function usageInputs(
+  usage: CommandUsage,
+  args: readonly string[],
+): { flags: Flags; positionals: string[] } {
+  if (usage.acceptsSpaceSeparatedFlags === true) {
+    const { flags, artifacts } = workflowArguments([...args]);
+    const merged: Flags = { ...flags };
+    if (artifacts.length > 0) merged.artifact = artifacts[0] ?? "";
+    return { flags: merged, positionals: [] };
+  }
+  const valueFlags = new Set(valueFlagNames(usage));
+  const flags: Flags = {};
+  const positionals: string[] = [];
+  for (const arg of args) {
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+    const [rawKey = "", ...rest] = arg.slice(2).split("=");
+    if (rest.length === 0 && valueFlags.has(rawKey))
+      throw spaceSeparatedFlagError(usage, rawKey);
+    flags[rawKey] = rest.length ? rest.join("=") : true;
+  }
+  return { flags, positionals };
+}
+
+function worktreeCreateBoundaryPreflight(flags: Flags): void {
+  if (
+    flags.path !== undefined &&
+    (typeof flags.path !== "string" || flags.path === "")
+  )
+    throw new Error("--pathを指定する場合は空でない値が必要です");
+  if (typeof flags.path !== "string") return;
+  const root = path.resolve(
+    typeof flags.root === "string" ? flags.root : process.cwd(),
+  );
+  enforceTrustedWorktreeBoundary({
+    repoRoot: root,
+    worktreePath: flags.path,
+    expectedRepository: typeof flags.repo === "string" ? flags.repo : undefined,
+    trustedPolicy: loadOperationPolicy(root).policy,
+  });
+}
+
+const USAGE_PREFLIGHT: Readonly<Record<string, (flags: Flags) => void>> =
+  Object.freeze({
+    "worktree create": worktreeCreateBoundaryPreflight,
+  });
+
+function enforceUsage(usage: CommandUsage, args: readonly string[]): void {
+  const { flags, positionals } = usageInputs(usage, args);
+  USAGE_PREFLIGHT[usageKey(usage.command, usage.subcommand)]?.(flags);
+  const missing = missingRequiredFlags(usage, flags, positionals);
+  if (missing.length > 0) throw missingFlagsError(usage, missing);
+}
+
+function isHelpToken(value: string | undefined): boolean {
+  return value === "--help" || value === "-h";
+}
+
 export async function main(
   argv: string[],
   dependencies: { now?: () => Date } = {},
@@ -1368,6 +1440,28 @@ export async function main(
       ),
     });
     return 0;
+  }
+  const usage = findCommandUsage(command, subcommand);
+  if (usage === undefined && isHelpToken(subcommand)) {
+    const subcommands = COMMAND_USAGE.filter(
+      (entry) => entry.command === command && entry.subcommand !== undefined,
+    ).map((entry) => entry.subcommand ?? "");
+    if (subcommands.length > 0)
+      throw new CliValidationError(
+        [`${command}にはsubcommandが必要です: ${subcommands.join("、")}`],
+        `npx agent-skill-chain ${command} <${subcommands.join("|")}> --help でusageを確認してください`,
+      );
+  }
+  if (usage !== undefined) {
+    const usageArgs =
+      usage.subcommand === undefined && subcommand !== undefined
+        ? [subcommand, ...rest]
+        : rest;
+    if (usageArgs.some((argument) => isHelpToken(argument))) {
+      print(renderUsage(usage));
+      return 0;
+    }
+    enforceUsage(usage, usageArgs);
   }
   if (command === "routing" && subcommand === "roles") {
     const { flags } = parse(rest);
@@ -2606,21 +2700,8 @@ export async function main(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
     const trustedSet = loadOperationPolicy(root);
-    if (
-      flags.path !== undefined &&
-      (typeof flags.path !== "string" || flags.path === "")
-    )
-      throw new Error("--pathを指定する場合は空でない値が必要です");
     const explicitWorktreePath =
       typeof flags.path === "string" ? flags.path : undefined;
-    if (explicitWorktreePath !== undefined)
-      enforceTrustedWorktreeBoundary({
-        repoRoot: root,
-        worktreePath: explicitWorktreePath,
-        expectedRepository:
-          typeof flags.repo === "string" ? flags.repo : undefined,
-        trustedPolicy: trustedSet.policy,
-      });
     const issueRaw = required(flags, "issue");
     if (!/^[1-9]\d*$/u.test(issueRaw))
       throw new Error("--issueは1以上の整数で指定してください");

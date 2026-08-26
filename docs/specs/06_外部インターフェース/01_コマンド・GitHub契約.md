@@ -13,6 +13,19 @@ CLIは引数を構造化入力として受け、適用を伴う操作は既定�
 
 GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報の伏字化と行動可能な根拠・次行動を保持する。表示言語はproject choiceを読むcaller adapterが選択する。
 
+## usageと必須入力の提示
+
+`src/cli-usage.ts`がsubcommandごとの要約、必須flag、条件付きflag、任意flagと既定値、位置引数、実行例を保持する単一正本である。CLIはcommandとsubcommandを解決した直後にこの定義を引き、次の順で評価する。
+
+1. `--help`または`-h`があればusageをJSONで返し終了code 0とする。必須flag検証より先に評価する。
+2. 値をとるflagが`--flag=値`形式でない場合、`--flagは空白区切りでは受理しません。--flag=値の形式で指定してください`を返す。無言で未指定として扱わない。
+3. subcommand固有のtrusted boundary評価を行う。`worktree create`の明示`--path`はここで評価し、必須flag検証より先に拒否する。
+4. 不足している必須flagを1回の実行で全件`reasons`へ列挙する。1件ずつ返さない。`next`は当該subcommandの`--help`を案内する。
+
+位置引数を持つsubcommandでは、位置引数が先頭の必須flagを代替する。`workflow`のsubcommandは既存互換のため空白区切りのflagを受理する。
+
+`scripts/check_cli_usage.ts`はTypeScript ASTで`src/cli.ts`のdispatchを走査し、実装が`required`で要求するflagがusageの必須・条件付きにあること、usageが必須・条件付きと宣言したflagを実装が読むこと、実装が読む全flagがusageに記載されていること、全dispatchにusage定義があることを双方向に検証する。この検査は`npm run build`が呼ぶ`checkCliContract`から実行し、prepackの連鎖に入る。
+
 ## worktree作成・merge完了コマンド
 
 | コマンド | 入力 | 出力・終了code |
