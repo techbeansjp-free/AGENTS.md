@@ -31,6 +31,7 @@ interface FinalizeIgnoredUnitWorld extends WorkflowWorld {
   schemaResults: boolean[];
   runtimeResult: boolean;
   cleanupPlan: ReturnType<typeof planWorktreeCleanup>;
+  cleanupPlans: Array<ReturnType<typeof planWorktreeCleanup>>;
   representativeResults: Array<{
     input: string;
     expected: boolean;
@@ -530,13 +531,101 @@ Given(
   },
 );
 
+Given("trackedChangesがfalseでcleanがfalseのcleanup入力がある", function () {
+  this.cleanupPlan = planWorktreeCleanup(
+    unsafeCleanupInput({ trackedChanges: false, clean: false }),
+  );
+});
+
+Given(
+  "trackedChangesとcleanが整合する安全側と拒否側のcleanup入力がある",
+  function () {
+    this.cleanupPlans = [
+      planWorktreeCleanup(
+        unsafeCleanupInput({ trackedChanges: false, clean: true }),
+      ),
+      planWorktreeCleanup(
+        unsafeCleanupInput({ trackedChanges: true, clean: false }),
+      ),
+    ];
+  },
+);
+
+Given(
+  "trackedChangesまたはcleanだけを持つ安全側と拒否側のcleanup入力がある",
+  function () {
+    this.cleanupPlans = [
+      planWorktreeCleanup(
+        unsafeCleanupInput({ trackedChanges: false, clean: undefined }),
+      ),
+      planWorktreeCleanup(
+        unsafeCleanupInput({ trackedChanges: true, clean: undefined }),
+      ),
+      planWorktreeCleanup(
+        unsafeCleanupInput({ trackedChanges: undefined, clean: true }),
+      ),
+      planWorktreeCleanup(
+        unsafeCleanupInput({ trackedChanges: undefined, clean: false }),
+      ),
+    ];
+  },
+);
+
+Given(
+  "untrackedが空でconsumerAssetsにmemoがあるcleanup入力がある",
+  function () {
+    this.cleanupPlan = planWorktreeCleanup(
+      unsafeCleanupInput({ untracked: [], consumerAssets: ["memo"] }),
+    );
+  },
+);
+
 When("worktree cleanupを計画する", function () {
   assert.ok(this.cleanupPlan);
+});
+
+When("整合するworktree cleanupをそれぞれ計画する", function () {
+  assert.equal(this.cleanupPlans.length, 2);
+});
+
+When("片方だけのworktree cleanupをそれぞれ計画する", function () {
+  assert.equal(this.cleanupPlans.length, 4);
 });
 
 Then("worktree cleanupは拒否される", function () {
   assert.equal(this.cleanupPlan.state, "rejected");
 });
+
+Then("拒否理由はtrackedChangesがfalseでcleanがfalseの矛盾を示す", function () {
+  assert.ok(
+    this.cleanupPlan.reasons.some(
+      (reason) =>
+        reason.includes("trackedChanges=false") &&
+        reason.includes("clean=false") &&
+        reason.includes("矛盾"),
+    ),
+  );
+});
+
+Then("整合する安全側は削除可能で拒否側は未commit理由で拒否される", function () {
+  assert.equal(this.cleanupPlans[0]?.state, "ready");
+  assert.equal(this.cleanupPlans[1]?.state, "rejected");
+  assert.ok(
+    this.cleanupPlans[1]?.reasons.includes("未commitの追跡対象fileがあります"),
+  );
+});
+
+Then(
+  "片方だけでも安全側は削除可能で拒否側は未commit理由で拒否される",
+  function () {
+    assert.deepEqual(
+      this.cleanupPlans.map((plan) => plan.state),
+      ["ready", "rejected", "ready", "rejected"],
+    );
+    for (const plan of [this.cleanupPlans[1], this.cleanupPlans[3]])
+      assert.ok(plan?.reasons.includes("未commitの追跡対象fileがあります"));
+  },
+);
 
 Then("拒否理由は一時資産があるか状態不明であることを示す", function () {
   assert.ok(
