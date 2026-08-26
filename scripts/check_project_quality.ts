@@ -123,6 +123,30 @@ function qualityContractVersion(metadata: Record<string, unknown>): number {
   return value;
 }
 
+export function normalizeLockfileForProtection(raw: string): string {
+  const parsed = parseJsonStrict(raw, "package-lock.json");
+  if (!isRecord(parsed)) return raw;
+  const normalized: Record<string, unknown> = { ...parsed };
+  delete normalized.version;
+  if (isRecord(normalized.packages)) {
+    const packages: Record<string, unknown> = { ...normalized.packages };
+    const own = packages[""];
+    if (isRecord(own)) {
+      const ownWithoutVersion: Record<string, unknown> = { ...own };
+      delete ownWithoutVersion.version;
+      packages[""] = ownWithoutVersion;
+    }
+    normalized.packages = packages;
+  }
+  return stableJson(normalized);
+}
+
+function protectedFileContent(root: string, relative: string): string | Buffer {
+  const absolute = path.join(root, relative);
+  if (relative !== "package-lock.json") return fs.readFileSync(absolute);
+  return normalizeLockfileForProtection(fs.readFileSync(absolute, "utf8"));
+}
+
 function protectedSnapshot(
   root: string,
   metadata: Record<string, unknown>,
@@ -131,7 +155,7 @@ function protectedSnapshot(
   for (const relative of PROTECTED_FILES)
     snapshot.set(
       `file:${relative}`,
-      sha256(fs.readFileSync(path.join(root, relative))),
+      sha256(protectedFileContent(root, relative)),
     );
   for (const field of PROTECTED_PACKAGE_FIELDS)
     snapshot.set(
