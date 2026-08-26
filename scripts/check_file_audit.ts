@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { validateDistributionImpact } from "../src/domain/conformance.js";
+import {
+  evaluateMergeIntegrity,
+  extractLossTokens,
+  type MergeObservation,
+  type MergePathObservation,
+  type RenameResolution,
+  type TokenObservation,
+} from "../src/domain/merge-integrity.js";
 import { pathToFileURL } from "node:url";
 import { git } from "../src/lib/process.js";
 import {
@@ -50,6 +58,202 @@ function changedPaths(root: string, parent: string, commit: string): string[] {
       root,
     ).stdout,
   );
+}
+
+/**
+ * rename検出を無効にした変更path。renameを検出すると移動元pathが列挙から落ち、
+ * 移動元が対象path集合から漏れる。損失検知では移動元と移動先の双方が必要である。
+ */
+function changedPathsWithoutRenames(
+  root: string,
+  parent: string,
+  commit: string,
+): string[] {
+  return lines(
+    git(
+      [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        "--no-renames",
+        `${parent}..${commit}`,
+        "--",
+      ],
+      root,
+    ).stdout,
+  );
+}
+
+/** `<mode> <type> <oid>\t<path>` 形式のtree entryをpath→oidの対応表にする。 */
+function treeEntries(
+  root: string,
+  commit: string,
+): Map<string, string> | undefined {
+  const listed = git(
+    ["-c", "core.quotepath=false", "ls-tree", "-r", "--full-name", commit],
+    root,
+    { allowFailure: true },
+  );
+  if (listed.status !== 0) return undefined;
+  const entries = new Map<string, string>();
+  for (const line of lines(listed.stdout)) {
+    const [meta, entryPath] = line.split("\t");
+    const [, type, oid] = (meta ?? "").split(/\s+/u);
+    // blob以外のentryはoidを空にして、内容を観測できないことを表す。
+    if (entryPath !== undefined)
+      entries.set(entryPath, type === "blob" ? (oid ?? "") : "");
+  }
+  return entries;
+}
+
+/** blob oidごとに損失検知tokenを一度だけ取り出して再利用する。 */
+function blobTokens(
+  root: string,
+  oid: string,
+  cache: Map<string, readonly string[] | undefined>,
+): readonly string[] | undefined {
+  if (!cache.has(oid)) {
+    const shown = git(["cat-file", "blob", oid], root, { allowFailure: true });
+    cache.set(
+      oid,
+      shown.status === 0 ? extractLossTokens(shown.stdout) : undefined,
+    );
+  }
+  return cache.get(oid);
+}
+
+function observeTokens(
+  root: string,
+  entries: Map<string, string> | undefined,
+  filePath: string,
+  cache: Map<string, readonly string[] | undefined>,
+): TokenObservation {
+  if (entries === undefined)
+    return { kind: "unreadable", reason: "treeを列挙できません" };
+  const oid = entries.get(filePath);
+  if (oid === undefined) return { kind: "absent" };
+  if (oid === "")
+    return { kind: "unreadable", reason: `${filePath}はblobではありません` };
+  const tokens = blobTokens(root, oid, cache);
+  return tokens === undefined
+    ? { kind: "unreadable", reason: `blob ${oid.slice(0, 8)}を読めません` }
+    : { kind: "present", tokens };
+}
+
+/** 親からmerge結果へのrename追跡で、指定pathの移動先を1件返す。 */
+function renamedPath(
+  root: string,
+  parent: string,
+  commit: string,
+  filePath: string,
+): string | undefined {
+  const diff = git(
+    [
+      "-c",
+      "core.quotepath=false",
+      "diff",
+      "-M",
+      "--name-status",
+      `${parent}..${commit}`,
+      "--",
+    ],
+    root,
+    { allowFailure: true },
+  );
+  if (diff.status !== 0) return undefined;
+  for (const line of lines(diff.stdout)) {
+    const cells = line.split("\t");
+    if (cells[0]?.startsWith("R") && cells[1] === filePath) return cells[2];
+  }
+  return undefined;
+}
+
+function observeMergePath(
+  root: string,
+  commit: string,
+  parents: readonly string[],
+  trees: {
+    base: Map<string, string> | undefined;
+    first: Map<string, string> | undefined;
+    second: Map<string, string> | undefined;
+    merged: Map<string, string> | undefined;
+  },
+  filePath: string,
+  cache: Map<string, readonly string[] | undefined>,
+): MergePathObservation {
+  const observation = {
+    path: filePath,
+    base: observeTokens(root, trees.base, filePath, cache),
+    firstParent: observeTokens(root, trees.first, filePath, cache),
+    secondParent: observeTokens(root, trees.second, filePath, cache),
+    merged: observeTokens(root, trees.merged, filePath, cache),
+  };
+  if (observation.merged.kind !== "absent") return observation;
+  const holders = [
+    { parent: parents[0]!, observed: observation.firstParent },
+    { parent: parents[1]!, observed: observation.secondParent },
+  ].filter((entry) => entry.observed.kind === "present");
+  // 解決できた親だけを積むと、片方だけ解決した場合に未解決を黙って捨てる。
+  const renameTargets: RenameResolution[] = holders.map((holder) => {
+    const moved = renamedPath(root, holder.parent, commit, filePath);
+    return moved === undefined
+      ? { kind: "unresolved", parent: holder.parent }
+      : {
+          kind: "resolved",
+          parent: holder.parent,
+          path: moved,
+          observation: observeTokens(root, trees.merged, moved, cache),
+        };
+  });
+  return { ...observation, renameTargets };
+}
+
+function observeMerge(root: string, commit: string): MergeObservation {
+  const parents = commitParents(root, commit);
+  if (parents.length !== 2)
+    return { commit, parents, mergeBases: [], paths: [] };
+  const [first, second] = parents as [string, string];
+  const resolved = git(["merge-base", "--all", first, second], root, {
+    allowFailure: true,
+  });
+  const mergeBases = resolved.status === 0 ? lines(resolved.stdout) : [];
+  if (mergeBases.length !== 1)
+    return { commit, parents, mergeBases, paths: [] };
+  const base = mergeBases[0]!;
+  const targets = new Set([
+    ...changedPathsWithoutRenames(root, base, first),
+    ...changedPathsWithoutRenames(root, base, second),
+    ...changedPathsWithoutRenames(root, first, commit),
+    ...changedPathsWithoutRenames(root, second, commit),
+  ]);
+  const trees = {
+    base: treeEntries(root, base),
+    first: treeEntries(root, first),
+    second: treeEntries(root, second),
+    merged: treeEntries(root, commit),
+  };
+  const cache = new Map<string, readonly string[] | undefined>();
+  const paths = [...targets]
+    .sort()
+    .map((filePath) =>
+      observeMergePath(root, commit, parents, trees, filePath, cache),
+    );
+  return { commit, parents, mergeBases, paths };
+}
+
+/**
+ * 監査範囲`比較基点..H_impl`に含まれるmerge commitを観測する。
+ * release bump除外は適用しない。除外はpath差分の判定にだけ働く責務である。
+ */
+export function collectMergeObservations(
+  root: string,
+  base: string,
+  implementation: string,
+): MergeObservation[] {
+  return lines(
+    git(["rev-list", "--merges", `${base}..${implementation}`], root).stdout,
+  ).map((commit) => observeMerge(root, commit));
 }
 
 function releaseVersionFromSubject(subject: string): string | undefined {
@@ -385,6 +589,12 @@ export function checkFileAudit(root: string) {
   );
   if (baseAncestry.status !== 0)
     errors.push("比較基点がH_implのancestorではありません");
+  else if (parsed.base !== parsed.implementation)
+    errors.push(
+      ...evaluateMergeIntegrity(
+        collectMergeObservations(root, parsed.base, parsed.implementation),
+      ).errors,
+    );
   const expected = git(
     [
       "-c",
