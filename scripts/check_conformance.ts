@@ -15,6 +15,7 @@ import {
   validateRepositoryConformance,
   type RuleCoverageRow,
 } from "../src/domain/conformance.js";
+import { MODE_QUESTIONS, validateModeQuestions } from "../src/domain/mode.js";
 import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 import { checkWorkflowSteps } from "./check_workflow_steps.js";
 import { checkWorktreeContract } from "./check_worktree_contract.js";
@@ -475,6 +476,7 @@ export function checkRepositoryRuleLedger(
         now: new Date().toISOString(),
       }).errors,
     );
+  errors.push(...checkModeQuestionText(root));
   errors.push(...checkWorktreeContract(root).errors);
   errors.push(...checkRequirementIdScheme(root).errors);
   errors.push(...checkCanonicalScopeAlignment(root));
@@ -609,6 +611,93 @@ export function checkConformance(root: string): number {
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
+}
+
+/** モード判定質問の文面を人が読む形で持つ規範文書。機械可読な定義との対を成す。 */
+const MODE_QUESTION_DOCUMENT = ".agent-skill-chain/docs/01_開発ワークフロー.md";
+/** 質問文の出現を許可するpath。この2箇所以外に現れたら複製として拒否する。 */
+const MODE_QUESTION_SOURCES = [MODE_QUESTION_DOCUMENT, "src/domain/mode.ts"];
+
+function modeQuestionGit(
+  root: string,
+  args: string[],
+): { status: number; stdout: string } {
+  const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  return { status: result.status ?? 128, stdout: result.stdout ?? "" };
+}
+
+/** `| Q-0N | <分類> | <質問文> |` を順序どおり抽出する。 */
+function parseModeQuestionRows(
+  markdown: string,
+): Array<{ id: string; disqualifier: string; question: string }> {
+  const rows: Array<{ id: string; disqualifier: string; question: string }> =
+    [];
+  for (const line of markdown.split(/\r?\n/u)) {
+    const cells = line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+    if (cells.length !== 3 || !/^Q-\d{2}$/u.test(cells[0] ?? "")) continue;
+    rows.push({
+      id: cells[0]!,
+      disqualifier: (cells[1] ?? "").replaceAll("`", ""),
+      question: cells[2] ?? "",
+    });
+  }
+  return rows;
+}
+
+/**
+ * モード判定質問の整合を検査する。
+ *
+ * 規範文書と機械可読な定義を`(id, 分類, 質問文)`の順序付き8行として比較する。
+ * IDと質問文だけを比べると、機械可読側で分類を別の質問へ付け替えても通過する。
+ */
+export function checkModeQuestionText(root: string): string[] {
+  const errors = [...validateModeQuestions(MODE_QUESTIONS)];
+  const documentPath = path.join(root, MODE_QUESTION_DOCUMENT);
+  if (!fs.existsSync(documentPath))
+    return [...errors, `${MODE_QUESTION_DOCUMENT}がありません`];
+  const rows = parseModeQuestionRows(fs.readFileSync(documentPath, "utf8"));
+  const expected = MODE_QUESTIONS.map(
+    (entry) => `${entry.id}\u0000${entry.disqualifier}\u0000${entry.question}`,
+  );
+  const actual = rows.map(
+    (row) => `${row.id}\u0000${row.disqualifier}\u0000${row.question}`,
+  );
+  if (actual.length !== expected.length)
+    errors.push(
+      `モード判定質問の行数が規範文書と一致しません: 文書=${actual.length}、定義=${expected.length}`,
+    );
+  for (const [index, value] of expected.entries())
+    if (actual[index] !== value)
+      errors.push(
+        `モード判定質問が規範文書と一致しません: ${MODE_QUESTIONS[index]!.id}（文書: ${(actual[index] ?? "（なし）").replaceAll("\u0000", " / ")}／定義: ${value.replaceAll("\u0000", " / ")}）`,
+      );
+  const tracked = modeQuestionGit(root, ["ls-files", "-z"]);
+  if (tracked.status !== 0)
+    return [
+      ...errors,
+      `追跡fileを列挙できません（終了値${tracked.status}）。質問文の複製を検証できないため拒否します`,
+    ];
+  for (const relative of tracked.stdout.split("\0").filter(Boolean)) {
+    if (MODE_QUESTION_SOURCES.includes(relative)) continue;
+    let contents: string;
+    try {
+      contents = fs.readFileSync(path.join(root, relative), "utf8");
+    } catch {
+      errors.push(
+        `追跡fileを読めません: ${relative}。質問文の複製を検証できないため拒否します`,
+      );
+      continue;
+    }
+    for (const entry of MODE_QUESTIONS)
+      if (contents.includes(entry.question))
+        errors.push(
+          `モード判定質問の文面が許可外のfileにあります: ${relative}（${entry.id}）`,
+        );
+  }
+  return errors;
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
