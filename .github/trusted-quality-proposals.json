@@ -75,6 +75,29 @@
           "afterSha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-DOGFOODING-DOCTOR-CI-001",
+      "status": "staged",
+      "fromVersion": 3,
+      "toVersion": 4,
+      "owner": "repository maintainer",
+      "rationale": "製品自身のrepositoryへCIでhost skill登録アダプターを展開しdoctorで健全性を検証する。展開後にrepositoryがcleanであることも同じCIで確認する。品質検査の追加であり緩和ではない",
+      "rollback": "登録済みproposalは削除・変更できず、qualityContractVersionの減少も受理されない。したがってrollbackは取り消しではなく前進で行う。ci.ymlを本proposal適用前の内容へ戻す新規proposalを次版（4から5）として登録し、2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
+      "targets": [
+        {
+          "kind": "file",
+          "name": ".github/workflows/ci.yml",
+          "beforeSha256": "a14e5cf14f357f1f3b07fbdbe030425b85bcc783dc82ff61dcd454d690553644",
+          "afterSha256": "73ab0558c7b59239acdd446db92a6477a03b34e40aac3074a8471c8d91b3eb6c"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+          "afterSha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+        }
+      ]
     }
   ]
 }
