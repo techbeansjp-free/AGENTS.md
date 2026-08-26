@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "agent-skill-chain/project-review-exceptions/v1",
+  "exceptions": [
+    {
+      "exceptionId": "RVX-REPORTED-SUCCESS-WITHOUT-REVIEW-001",
+      "kind": "reported-success-without-review",
+      "condition": "外部reviewerのcheckがpassと表示されるが、review commentもapprovalも存在せずreviewが実行されていない",
+      "detection": "checkの結論を証拠にしない。PRのreview commentとapprovalの実体を観測し、いずれも0件であることをもって未実行と判定する",
+      "approvalSource": "repository ownerの明示指示",
+      "approver": "repository owner",
+      "scope": "本repositoryのPR全般",
+      "coversIrreversibleDistribution": false,
+      "reason": "外部reviewerが実行されない状態では待機してもreviewが得られる保証がない。実測でPR #884、#891、#897、#898、#903、#904がいずれもreview comment 0件のまま推移した",
+      "approvedAt": "2026-08-26T00:00:00.000Z",
+      "expiresAt": null,
+      "unsatisfiedRequirement": "exact-head reviewを含む外部証拠の要件",
+      "record": "各PRのreview artifactへ本exceptionIdを参照し、適用したPR番号と観測したreview comment件数を記録する。承認元、承認者、承認日時、失効日時は正本を参照し複製しない"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "ruleId": "ASC-DOGFOOD-REVIEW-EXCEPTION-001",
+  "purpose": "独立reviewが成立しないままmergeする例外を、承認元と失効を持つ正本として管理する",
+  "riskClass": "authority",
+  "scope": ["repository development", "review", "merge"],
+  "enforcement": "require",
+  "activation": "staged",
+  "owner": "repository maintainer",
+  "targetLayer": "project",
+  "evidence": "review例外正本の全entryが必須fieldを持ち、失効していないこと",
+  "remediation": "失効したexceptionを削除するか、承認元と失効日時を更新して再登録する",
+  "overridePolicy": "bound",
+  "rollback": "登録済みexceptionを削除し、独立reviewの外部証拠を無条件必須へ戻す",
+  "packageDefault": "汎用packageは例外を認めない。独立reviewの外部証拠を無条件で要求する",
+  "projectOverride": "このrepositoryは外部reviewerが実行されない場合の例外を正本fileで管理し、review artifactは値を複製せずexceptionIdを参照する",
+  "changeAuthority": "repository ownerと独立reviewer"
+}

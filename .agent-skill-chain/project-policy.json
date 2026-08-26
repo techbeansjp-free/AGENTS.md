@@ -53,6 +53,7 @@
     "project/rules/package-manager.json",
     "project/rules/package.json",
     "project/rules/quality-command.json",
+    "project/rules/review-exception.json",
     "project/rules/runtime.json",
     "project/rules/safety.json"
   ],

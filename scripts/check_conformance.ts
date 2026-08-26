@@ -7,6 +7,7 @@ import {
   buildRuleCoverage,
   PROJECT_RULE_ENFORCEMENT_POINTS,
   validateProjectRuleLedgerEntry,
+  validateReviewExceptions,
   validateRepositoryConformance,
   type RuleCoverageRow,
 } from "../src/domain/conformance.js";
@@ -369,6 +370,19 @@ export function checkRepositoryRuleLedger(
       new Set([".yml", ".yaml"]),
     ),
   });
+  const reviewExceptionFile = path.join(
+    root,
+    ".agent-skill-chain/review-exceptions.json",
+  );
+  if (!fs.existsSync(reviewExceptionFile))
+    errors.push(".agent-skill-chain/review-exceptions.jsonがありません");
+  else
+    errors.push(
+      ...validateReviewExceptions({
+        document: JSON.parse(fs.readFileSync(reviewExceptionFile, "utf8")),
+        now: new Date().toISOString(),
+      }).errors,
+    );
   errors.push(...checkWorktreeContract(root).errors);
   errors.push(...checkRequirementIdScheme(root).errors);
   errors.push(
