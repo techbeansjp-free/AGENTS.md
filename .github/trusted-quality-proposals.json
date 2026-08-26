@@ -8,7 +8,7 @@
       "toVersion": 2,
       "owner": "repository maintainer",
       "rationale": "Git管理外かつ配布境界外の作業用directoryを品質検査の走査対象から除外し、製品sourceへの検出強度を維持したままlocal artifactによる誤検出を防ぐ",
-      "rollback": "本proposalをregistryから取り消し、除外追加前の走査範囲へ戻して全品質検査を再実行する",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。したがってrollbackは取り消しではなく前進で行う。除外追加前の走査範囲へ戻す新規proposalを次版として登録し2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
       "targets": [
         {
           "kind": "file",
@@ -37,7 +37,7 @@
       "toVersion": 3,
       "owner": "repository maintainer",
       "rationale": "ワークフローStep定義の正本をdomainへ移すにあたり、規範文書とコードの一致を検証するworkflow:checkを必須gateへ加える。検査の追加であり品質強度の緩和ではない",
-      "rollback": "本proposalをregistryから取り消し、prepack連鎖からworkflow:checkを除いた10 gate構成へ戻して全品質検査を再実行する",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。したがってrollbackは取り消しではなく前進で行う。prepack連鎖からworkflow:checkを除いた構成へ戻す新規proposalを次版として登録し2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
       "targets": [
         {
           "kind": "file",
@@ -60,7 +60,7 @@
       "toVersion": 3,
       "owner": "repository maintainer",
       "rationale": "trusted品質契約の保護snapshotから、package自身のversionだけを正規化して除く。保護の目的はdependency構成とintegrityの自己緩和防止であり、package自身のversionはその目的に含まれない。自動releaseがmainのversionをbumpするたびに、追随していない全open PRがversion文字列だけの差分で拒否される問題を解消する",
-      "rollback": "本proposalをregistryから取り消し、正規化前の全内容hashへ戻してqualityContractVersionを2へ復帰し、全品質検査を再実行する",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。したがってrollbackは取り消しではなく前進で行う。lockfileの正規化を戻す新規proposalを次版として登録し2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
       "targets": [
         {
           "kind": "file",
@@ -83,7 +83,7 @@
       "toVersion": 4,
       "owner": "repository maintainer",
       "rationale": "製品自身のrepositoryへCIでhost skill登録アダプターを展開しdoctorで健全性を検証する。展開後にrepositoryがcleanであることも同じCIで確認する。品質検査の追加であり緩和ではない",
-      "rollback": "登録済みproposalは削除・変更できず、qualityContractVersionの減少も受理されない。したがってrollbackは取り消しではなく前進で行う。ci.ymlを本proposal適用前の内容へ戻す新規proposalを次版（4から5）として登録し、2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。契約fieldも変更できない。したがってrollbackは取り消しではなく前進で行う。ci.ymlを本proposal適用前の内容へ戻す新規proposalを次版として登録し2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
       "targets": [
         {
           "kind": "file",
