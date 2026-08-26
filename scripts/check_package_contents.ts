@@ -2,21 +2,29 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "..");
-const forbiddenPrefixes = [
-  "test/",
-  ".github/",
-  "scripts/",
-  "docs/specs/",
-  "node_modules/",
-  "memo/",
-  ".agent-skill-chain/tmp/",
-  ".agent-skill-chain/role-log/",
-  ".agent-skill-chain/metrics/",
-  ".agent-skill-chain/project/",
-  "secret-fixtures/",
-];
+/**
+ * 配布対象から除外するrepository相対prefix。
+ * 一時ライフサイクル領域の整合検査が参照するため、複製せず参照させる目的でexportする。
+ */
+export const FORBIDDEN_DISTRIBUTION_PREFIXES: readonly string[] = Object.freeze(
+  [
+    "test/",
+    ".github/",
+    "scripts/",
+    "docs/specs/",
+    "node_modules/",
+    "memo/",
+    ".agent-skill-chain/tmp/",
+    ".agent-skill-chain/role-log/",
+    ".agent-skill-chain/metrics/",
+    ".agent-skill-chain/project/",
+    "secret-fixtures/",
+  ],
+);
+const forbiddenPrefixes = FORBIDDEN_DISTRIBUTION_PREFIXES;
 const forbiddenFiles = new Set([
   "cucumber.mjs",
   "tsconfig.json",
@@ -189,13 +197,36 @@ export function checkPackageContents(): {
   }
 }
 
-const result = checkPackageContents();
-if (!result.valid) {
-  process.stderr.write(
-    `パッケージ内容検査: 失敗\n${result.errors.map((error) => `- ${error}`).join("\n")}\n`,
-  );
-  process.exitCode = 1;
-} else
-  process.stdout.write(
-    `パッケージ内容検査: 合格（実行・配布ファイル${result.files}件、project policy・role log・開発計測・test fixture・秘密情報は除外）\n`,
-  );
+/**
+ * symlink経由の起動では`import.meta.url`が実体path、`process.argv[1]`がsymlink pathになり、
+ * 単純な完全一致では実行entryと判定できない。判定を誤ると検査が黙って走らないため、
+ * 双方をrealpathへ正規化してから比較する。解決できない場合は正規化前の値で比較する。
+ */
+function isExecutionEntry(): boolean {
+  const argv = process.argv[1];
+  if (!argv) return false;
+  const resolve = (target: string): string => {
+    try {
+      return fs.realpathSync(target);
+    } catch {
+      return target;
+    }
+  };
+  const entry = resolve(path.resolve(argv));
+  const self = resolve(fileURLToPath(import.meta.url));
+  return entry === self;
+}
+
+// importされただけで npm pack を起動しないよう、実行entryのときだけ検査する。
+if (isExecutionEntry()) {
+  const result = checkPackageContents();
+  if (!result.valid) {
+    process.stderr.write(
+      `パッケージ内容検査: 失敗\n${result.errors.map((error) => `- ${error}`).join("\n")}\n`,
+    );
+    process.exitCode = 1;
+  } else
+    process.stdout.write(
+      `パッケージ内容検査: 合格（実行・配布ファイル${result.files}件、project policy・role log・開発計測・test fixture・秘密情報は除外）\n`,
+    );
+}
