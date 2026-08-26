@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import { checkCanonicalDuplication } from "../../scripts/check_conformance.js";
 import {
+  CANONICAL_SCAN_LOCATIONS,
   CANONICAL_SINGLE_SOURCE_RULE_ID,
   buildRuleCoverage,
   collectCanonicalScanTargets,
@@ -16,6 +18,7 @@ import {
 
 const CANONICAL = ".agent-skill-chain/docs/01_開発ワークフロー.md";
 const TOKENS = ["Closes #", "Relates to #"];
+const RULE_FILE = ".agent-skill-chain/project/rules/canonical-source.json";
 
 interface CanonicalWorld extends WorkflowWorld {
   root: string;
@@ -28,6 +31,10 @@ interface CanonicalWorld extends WorkflowWorld {
   paths: string[];
   targets: string[];
   coverage: ReturnType<typeof buildRuleCoverage>;
+  diagnostics: string[];
+  locations: readonly string[];
+  ruleScope: string[];
+  mismatches: string[];
 }
 
 const { Given, When, Then } = stepDefinitions<CanonicalWorld>();
@@ -228,8 +235,6 @@ Given("証跡と一時ステージングと実装を含むpath一覧がある", 
   this.paths = [
     ".agent-skill-chain/docs/01_開発ワークフロー.md",
     ".agent-skill-chain/templates/issue/11_プルリクエスト本文.md",
-    ".agent-skill-chain/skills/step-11-pr/SKILL.md",
-    ".agent-skill-chain/policy/00_利用案内.md",
     "docs/specs/12_運用保守/00_運用設計.md",
     "docs/reviews/00_課題824実装レビュー.md",
     ".agent-skill-chain/tmp/issues/x/00_要求定義.md",
@@ -375,8 +380,6 @@ Then("集合は規範宣言locationのMarkdownだけを含む", function () {
   assert.deepEqual(this.targets, [
     ".agent-skill-chain/docs/01_開発ワークフロー.md",
     ".agent-skill-chain/templates/issue/11_プルリクエスト本文.md",
-    ".agent-skill-chain/skills/step-11-pr/SKILL.md",
-    ".agent-skill-chain/policy/00_利用案内.md",
     "docs/specs/12_運用保守/00_運用設計.md",
   ]);
 });
@@ -406,4 +409,89 @@ Then("集合は証跡と一時ステージングのfileを含まない", functio
       target.startsWith(".agent-skill-chain/tmp/"),
     ),
   );
+});
+
+Given("top-levelに未知fieldがあるregistryがある", function () {
+  this.registry = {
+    schemaVersion: "agent-skill-chain/canonical-contracts/v1",
+    contracts: [contract()],
+    unexpected: true,
+  };
+  this.existing = new Set([CANONICAL]);
+});
+
+Given("contractIdが規約外のregistryがある", function () {
+  this.registry = {
+    schemaVersion: "agent-skill-chain/canonical-contracts/v1",
+    contracts: [{ ...contract(), contractId: "WRONG-PREFIX-ISSUE" }],
+  };
+  this.existing = new Set([CANONICAL]);
+});
+
+Given("実装の走査location一覧がある", function () {
+  this.locations = CANONICAL_SCAN_LOCATIONS;
+});
+
+Given("契約正本registryを持たないdirectoryがある", function () {
+  this.root = path.resolve("src");
+});
+
+Given("正本単一化ruleの定義がある", function () {
+  this.root = path.resolve(".");
+  const rule = JSON.parse(
+    fs.readFileSync(path.join(this.root, RULE_FILE), "utf8"),
+  ) as { scope: string[] };
+  this.ruleScope = rule.scope;
+});
+
+When("走査locationを確認する", function () {
+  // Givenで取得済み
+});
+
+When("conformance検査で正本複製を検査する", function () {
+  this.diagnostics = checkCanonicalDuplication(this.root);
+});
+
+When("rule scopeと走査locationを突合する", function () {
+  const fromCode = [...CANONICAL_SCAN_LOCATIONS]
+    .map((location) => location.replace(/\/$/u, ""))
+    .sort();
+  const fromRule = [...this.ruleScope].sort();
+  this.mismatches = [
+    ...fromCode.filter((entry) => !fromRule.includes(entry)),
+    ...fromRule.filter((entry) => !fromCode.includes(entry)),
+  ];
+});
+
+Then("拒否理由は要求するcontractId prefixを示す", function () {
+  assert.ok(
+    this.validation.errors.some((error) => error.includes("CANON-CONTRACT-")),
+  );
+  assert.ok(
+    !this.validation.errors.some((error) => error.includes("ASC-CONTRACT-")),
+  );
+});
+
+Then("locationは規範宣言location3箇所に一致する", function () {
+  assert.deepEqual(
+    [...this.locations],
+    [
+      ".agent-skill-chain/docs/",
+      ".agent-skill-chain/templates/",
+      "docs/specs/",
+    ],
+  );
+});
+
+Then("検査はregistry不在を診断として報告する", function () {
+  assert.ok(this.diagnostics.length > 0);
+  assert.ok(
+    this.diagnostics.some((diagnostic) =>
+      diagnostic.includes("canonical-contracts.json"),
+    ),
+  );
+});
+
+Then("突合は差異0件で一致する", function () {
+  assert.deepEqual(this.mismatches, []);
 });

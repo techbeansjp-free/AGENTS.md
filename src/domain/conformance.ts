@@ -88,10 +88,10 @@ export const CANONICAL_SINGLE_SOURCE_RULE_ID = "ASC-CANON-SINGLE-SOURCE-001";
 export const CANONICAL_SCAN_LOCATIONS: readonly string[] = [
   ".agent-skill-chain/docs/",
   ".agent-skill-chain/templates/",
-  ".agent-skill-chain/skills/",
-  ".agent-skill-chain/policy/",
   "docs/specs/",
 ];
+
+const CANONICAL_REGISTRY_FIELDS = ["schemaVersion", "contracts"];
 
 const CANONICAL_CONTRACT_FIELDS = [
   "contractId",
@@ -159,6 +159,11 @@ export function validateCanonicalContracts(
       contracts: [],
       errors: ["契約正本registryはobjectでなければなりません"],
     };
+  const unknownTopLevel = Object.keys(value).find(
+    (key) => !CANONICAL_REGISTRY_FIELDS.includes(key),
+  );
+  if (unknownTopLevel !== undefined)
+    errors.push(`契約正本registryに未知のfieldがあります: ${unknownTopLevel}`);
   if (value.schemaVersion !== "agent-skill-chain/canonical-contracts/v1")
     errors.push("契約正本registryのschemaVersionが未知です");
   if (!Array.isArray(value.contracts))
@@ -185,7 +190,7 @@ export function validateCanonicalContracts(
       !CANONICAL_CONTRACT_ID.test(contractId)
     ) {
       errors.push(
-        `${label}のcontractIdはASC-CONTRACT-で始まる識別子が必要です`,
+        `${label}のcontractIdはCANON-CONTRACT-で始まる識別子が必要です`,
       );
       continue;
     }

@@ -75,3 +75,18 @@ Feature: 契約の正本複製を検出し参照へ置換させる
     Given 正本へのlinkをanchor付きとtitle付きと山括弧とpercent encodeと参照定義で書いたfileがある
     When 正本複製を検査する
     Then 検査は適合を報告する
+
+  Scenario: SCN-UNIT-CANON-016 registryのtop-levelに未知fieldがあれば拒否する
+    Given top-levelに未知fieldがあるregistryがある
+    When 契約正本registryを検証する
+    Then 検証は理由付きで拒否する
+
+  Scenario: SCN-UNIT-CANON-017 contractIdが規約外なら要求するprefixを示して拒否する
+    Given contractIdが規約外のregistryがある
+    When 契約正本registryを検証する
+    Then 拒否理由は要求するcontractId prefixを示す
+
+  Scenario: SCN-UNIT-CANON-018 走査対象locationは規範宣言location3箇所に限る
+    Given 実装の走査location一覧がある
+    When 走査locationを確認する
+    Then locationは規範宣言location3箇所に一致する

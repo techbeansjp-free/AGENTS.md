@@ -20,3 +20,13 @@ Feature: 実repositoryで正本複製が解消されている
     Given 実repositoryがある
     When 実repositoryの走査対象file集合を構築する
     Then 集合は証跡と一時ステージングのfileを含まない
+
+  Scenario: SCN-INT-CANON-005 契約正本registryが無い場合は適合ではなく拒否する
+    Given 契約正本registryを持たないdirectoryがある
+    When conformance検査で正本複製を検査する
+    Then 検査はregistry不在を診断として報告する
+
+  Scenario: SCN-INT-CANON-006 ruleのscopeは実装の走査locationと一致する
+    Given 正本単一化ruleの定義がある
+    When rule scopeと走査locationを突合する
+    Then 突合は差異0件で一致する

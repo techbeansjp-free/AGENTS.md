@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
   buildRuleCoverage,
+  CANONICAL_SCAN_LOCATIONS,
   collectCanonicalScanTargets,
   detectCanonicalDuplication,
   validateCanonicalContracts,
@@ -36,9 +37,46 @@ function repositoryMarkdownPaths(root: string): string[] {
   return walk(root);
 }
 
-function checkCanonicalDuplication(root: string): string[] {
+const CANONICAL_RULE_FILE =
+  ".agent-skill-chain/project/rules/canonical-source.json";
+
+export function checkCanonicalScopeAlignment(root: string): string[] {
+  const ruleFile = path.join(root, CANONICAL_RULE_FILE);
+  if (!fs.existsSync(ruleFile)) return [`${CANONICAL_RULE_FILE}がありません`];
+  let rule: unknown;
+  try {
+    rule = JSON.parse(fs.readFileSync(ruleFile, "utf8")) as unknown;
+  } catch {
+    return [`${CANONICAL_RULE_FILE}を解析できません`];
+  }
+  const scope =
+    typeof rule === "object" && rule !== null && "scope" in rule
+      ? (rule as { scope: unknown }).scope
+      : undefined;
+  if (!Array.isArray(scope) || scope.some((entry) => typeof entry !== "string"))
+    return [`${CANONICAL_RULE_FILE}のscopeは文字列配列が必要です`];
+  const declared = [...(scope as string[])].sort();
+  const scanned = CANONICAL_SCAN_LOCATIONS.map((location) =>
+    location.replace(/\/$/u, ""),
+  ).sort();
+  const missing = scanned.filter((entry) => !declared.includes(entry));
+  const extra = declared.filter((entry) => !scanned.includes(entry));
+  return [
+    ...missing.map(
+      (entry) =>
+        `${CANONICAL_RULE_FILE}: 走査locationがscopeに宣言されていません: ${entry}`,
+    ),
+    ...extra.map(
+      (entry) =>
+        `${CANONICAL_RULE_FILE}: scopeが走査対象外のlocationを宣言しています: ${entry}`,
+    ),
+  ];
+}
+
+export function checkCanonicalDuplication(root: string): string[] {
   const registryFile = path.join(root, CANONICAL_CONTRACTS_FILE);
-  if (!fs.existsSync(registryFile)) return [];
+  if (!fs.existsSync(registryFile))
+    return [`${CANONICAL_CONTRACTS_FILE}がありません`];
   let registry: unknown;
   try {
     registry = JSON.parse(fs.readFileSync(registryFile, "utf8")) as unknown;
@@ -439,6 +477,7 @@ export function checkRepositoryRuleLedger(
     );
   errors.push(...checkWorktreeContract(root).errors);
   errors.push(...checkRequirementIdScheme(root).errors);
+  errors.push(...checkCanonicalScopeAlignment(root));
   errors.push(...checkCanonicalDuplication(root));
   errors.push(
     ...coverage.orphans.map((orphan) => `${orphan.ruleId}: ${orphan.reason}`),
