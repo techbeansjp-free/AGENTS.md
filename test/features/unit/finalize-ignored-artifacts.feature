@@ -145,3 +145,28 @@ Feature: worktree finalizeのignore対象を安全に判定する
     Given consumerAssetsが配列でなくuntrackedが空のcleanup入力がある
     When worktree cleanupを計画する
     Then worktree cleanupは拒否される
+
+  Scenario: SCN-UNIT-FINALIGN-030 trackedChangesとcleanが矛盾するとき拒否する
+    Given trackedChangesがfalseでcleanがfalseのcleanup入力がある
+    When worktree cleanupを計画する
+    Then worktree cleanupは拒否される
+
+  Scenario: SCN-UNIT-FINALIGN-031 矛盾の拒否理由が両方の値を示す
+    Given trackedChangesがfalseでcleanがfalseのcleanup入力がある
+    When worktree cleanupを計画する
+    Then 拒否理由はtrackedChangesがfalseでcleanがfalseの矛盾を示す
+
+  Scenario: SCN-UNIT-FINALIGN-032 両方が整合しているとき従来どおり判定する
+    Given trackedChangesとcleanが整合する安全側と拒否側のcleanup入力がある
+    When 整合するworktree cleanupをそれぞれ計画する
+    Then 整合する安全側は削除可能で拒否側は未commit理由で拒否される
+
+  Scenario: SCN-UNIT-FINALIGN-033 片方だけのとき従来どおり判定する
+    Given trackedChangesまたはcleanだけを持つ安全側と拒否側のcleanup入力がある
+    When 片方だけのworktree cleanupをそれぞれ計画する
+    Then 片方だけでも安全側は削除可能で拒否側は未commit理由で拒否される
+
+  Scenario: SCN-UNIT-FINALIGN-034 untrackedとconsumerAssetsが矛盾するとき拒否する
+    Given untrackedが空でconsumerAssetsにmemoがあるcleanup入力がある
+    When worktree cleanupを計画する
+    Then worktree cleanupは拒否される

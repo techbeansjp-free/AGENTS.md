@@ -155,10 +155,29 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
   if (input.clean !== undefined && typeof input.clean !== "boolean")
     reasons.push("未commitの追跡対象fileがあるか状態が不明です");
   if (
+    typeof input.trackedChanges === "boolean" &&
+    typeof input.clean === "boolean" &&
+    input.trackedChanges !== !input.clean
+  )
+    reasons.push(
+      `追跡対象fileの観測が矛盾しています: trackedChanges=${String(input.trackedChanges)}、clean=${String(input.clean)}`,
+    );
+  if (
     input.consumerAssets !== undefined &&
     !Array.isArray(input.consumerAssets)
   )
     reasons.push("未追跡fileの種別が不明です");
+  if (
+    Array.isArray(input.untracked) &&
+    Array.isArray(input.consumerAssets) &&
+    (input.untracked.length !== input.consumerAssets.length ||
+      input.untracked.some(
+        (entry, index) => entry !== input.consumerAssets?.[index],
+      ))
+  )
+    reasons.push(
+      `未追跡fileの観測が矛盾しています: untracked=${JSON.stringify(input.untracked)}、consumerAssets=${JSON.stringify(input.consumerAssets)}`,
+    );
   const temporaryArtifacts = Array.isArray(input.temporaryArtifacts)
     ? input.temporaryArtifacts
     : [];
