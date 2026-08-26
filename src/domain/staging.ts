@@ -51,7 +51,7 @@ export interface StoredStagingRecord {
 }
 
 export const STAGING_RECORD_FILE = "staging-record.json";
-const STAGING_PREFIX = ".agent-skill-chain/tmp/issues";
+const ISSUE_STAGING_PREFIX = ".agent-skill-chain/tmp/issues";
 const STORED_FIELDS = new Set([
   "schemaVersion",
   "mode",
@@ -637,7 +637,7 @@ export function inspectStaging(input: {
       .sort((left, right) => left.name.localeCompare(right.name));
   } catch (error) {
     return [
-      baseRecord(boundary.path, STAGING_PREFIX, {
+      baseRecord(boundary.path, ISSUE_STAGING_PREFIX, {
         reasons: [
           `staging rootを読み取れないため保持します: ${error instanceof Error ? error.message : String(error)}`,
         ],
@@ -646,7 +646,7 @@ export function inspectStaging(input: {
   }
   return entries.map((entry) => {
     const absolute = path.join(boundary.path, entry.name);
-    const relative = `${STAGING_PREFIX}/${entry.name}`;
+    const relative = `${ISSUE_STAGING_PREFIX}/${entry.name}`;
     if (
       entry.name === "role-log" ||
       entry.name === "metrics" ||
@@ -756,7 +756,7 @@ function rejected(reason: string): ReturnType<typeof applyStagingCleanup> {
   return {
     state: "rejected",
     removed: [],
-    retained: [{ relative: STAGING_PREFIX, reason }],
+    retained: [{ relative: ISSUE_STAGING_PREFIX, reason }],
     recovery: [
       "対象を変更せず、root・保持期間・同期証拠を確認して新しいpreview hashを取得してください",
     ],
@@ -899,6 +899,25 @@ export function applyStagingCleanup(
     retained: current.excluded,
     recovery: [],
   };
+}
+
+/**
+ * Issue一時ステージング配下のrepository相対pathかを判定する。
+ * 区切りを正規化したうえで、空・`.`・`..`のsegmentを含むpathは判定不能として
+ * 偽を返す。除外側へ倒さないことでfail-closedにする。
+ */
+export function isIssueStagingPath(relative: string): boolean {
+  if (typeof relative !== "string" || relative === "") return false;
+  const segments = relative.replaceAll("\\", "/").split("/");
+  if (
+    segments.some(
+      (segment) => segment === "" || segment === "." || segment === "..",
+    )
+  )
+    return false;
+  const prefix = ISSUE_STAGING_PREFIX.split("/");
+  if (segments.length <= prefix.length) return false;
+  return prefix.every((segment, index) => segments[index] === segment);
 }
 
 export function isStagingLifecyclePath(relative: string): boolean {
