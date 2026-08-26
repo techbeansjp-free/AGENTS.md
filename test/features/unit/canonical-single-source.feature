@@ -70,3 +70,8 @@ Feature: 契約の正本複製を検出し参照へ置換させる
     Given 証跡と一時ステージングと実装を含むpath一覧がある
     When 走査対象file集合を構築する
     Then 集合は規範宣言locationのMarkdownだけを含む
+
+  Scenario: SCN-UNIT-CANON-015 anchor付きやpercent encodeなどのlink記法も参照として認める
+    Given 正本へのlinkをanchor付きとtitle付きと山括弧とpercent encodeと参照定義で書いたfileがある
+    When 正本複製を検査する
+    Then 検査は適合を報告する

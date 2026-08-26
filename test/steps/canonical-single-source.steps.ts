@@ -91,6 +91,38 @@ Given("検出tokenと正本へのMarkdown linkを持つfileがある", function 
   ];
 });
 
+Given(
+  "正本へのlinkをanchor付きとtitle付きと山括弧とpercent encodeと参照定義で書いたfileがある",
+  function () {
+    const encoded = CANONICAL.split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    this.contracts = [contract()];
+    this.files = [
+      {
+        path: "docs/specs/a/anchor.md",
+        text: "`Closes #`は[正本](../../../.agent-skill-chain/docs/01_開発ワークフロー.md#提出とライフサイクル)が所有する。",
+      },
+      {
+        path: "docs/specs/a/title.md",
+        text: '`Closes #`は[正本](../../../.agent-skill-chain/docs/01_開発ワークフロー.md "規約")が所有する。',
+      },
+      {
+        path: "docs/specs/a/angle.md",
+        text: "`Closes #`は[正本](<../../../.agent-skill-chain/docs/01_開発ワークフロー.md>)が所有する。",
+      },
+      {
+        path: "docs/specs/a/encoded.md",
+        text: `\`Closes #\`は[正本](/${encoded})が所有する。`,
+      },
+      {
+        path: "docs/specs/a/definition.md",
+        text: "`Closes #`は[正本][wf]が所有する。\n\n[wf]: ../../../.agent-skill-chain/docs/01_開発ワークフロー.md\n",
+      },
+    ];
+  },
+);
+
 Given("正本自身が検出tokenを含む", function () {
   this.contracts = [contract()];
   this.files = [

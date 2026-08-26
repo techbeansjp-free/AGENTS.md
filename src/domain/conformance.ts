@@ -88,6 +88,8 @@ export const CANONICAL_SINGLE_SOURCE_RULE_ID = "ASC-CANON-SINGLE-SOURCE-001";
 export const CANONICAL_SCAN_LOCATIONS: readonly string[] = [
   ".agent-skill-chain/docs/",
   ".agent-skill-chain/templates/",
+  ".agent-skill-chain/skills/",
+  ".agent-skill-chain/policy/",
   "docs/specs/",
 ];
 
@@ -98,7 +100,8 @@ const CANONICAL_CONTRACT_FIELDS = [
   "reason",
 ];
 const CANONICAL_CONTRACT_ID = /^CANON-CONTRACT-[A-Z0-9-]+$/u;
-const MARKDOWN_LINK = /\]\(([^)\s]+)\)/gu;
+const MARKDOWN_LINK = /\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+["'][^"']*["'])?\s*\)/gu;
+const MARKDOWN_LINK_DEFINITION = /^[^\S\n]*\[[^\]]+\]:[^\S\n]*(\S+)/gmu;
 
 export interface CanonicalContract {
   contractId: string;
@@ -223,14 +226,40 @@ export function validateCanonicalContracts(
   return { contracts: errors.length > 0 ? [] : contracts, errors };
 }
 
+/**
+ * Markdownのlink targetを比較可能な形へ揃える。
+ * anchor、title、山括弧、percent encodeはいずれも正当な記法であり、
+ * 正本pathが日本語のため「リンクをコピー」はpercent encode形を生む。
+ */
+function normalizeLinkTarget(raw: string): string | undefined {
+  let target = raw.trim();
+  if (target.startsWith("<") && target.endsWith(">"))
+    target = target.slice(1, -1).trim();
+  const anchor = target.indexOf("#");
+  if (anchor >= 0) target = target.slice(0, anchor);
+  if (target.length === 0) return undefined;
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
 function referencesCanonical(
   sourcePath: string,
   text: string,
   canonical: string,
 ): boolean {
   const base = path.posix.dirname(sourcePath);
-  for (const matched of text.matchAll(MARKDOWN_LINK)) {
-    const target = matched[1];
+  const targets = [
+    ...[...text.matchAll(MARKDOWN_LINK)].map((matched) => matched[1]),
+    ...[...text.matchAll(MARKDOWN_LINK_DEFINITION)].map(
+      (matched) => matched[1],
+    ),
+  ];
+  for (const raw of targets) {
+    if (raw === undefined) continue;
+    const target = normalizeLinkTarget(raw);
     if (target === undefined) continue;
     const resolved = target.startsWith("/")
       ? path.posix.normalize(target.slice(1))
