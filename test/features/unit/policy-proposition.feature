@@ -1,12 +1,12 @@
 @unit
-Feature: 正しさと速さの命題を規範的正本が保持する
+Feature: 正しさと開発速度の命題を規範的正本が保持する
 
-  Scenario: SCN-UNIT-PROP-001 目的と成立条件の節が両立を定める
+  Scenario: SCN-UNIT-PROP-001 速さを開発速度と定義し両立を定める
     Given 規範的正本の運用ポリシーがある
     When 目的と成立条件の節を読む
-    Then 正しさと速さの双方が成立条件であると読める
+    Then 速さが開発速度を指し正しさと開発速度の双方が成立条件であると読める
 
-  Scenario: SCN-UNIT-PROP-002 速さの観測基準を持つ
+  Scenario: SCN-UNIT-PROP-002 開発速度の観測基準を持つ
     Given 規範的正本の運用ポリシーがある
     When 目的と成立条件の節を読む
     Then 支援層の所要時間が成果物構築の所要時間を上回らないことを含む

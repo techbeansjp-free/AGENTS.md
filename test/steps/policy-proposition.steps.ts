@@ -75,27 +75,35 @@ When("薄い支援層の記述から参照を解決する", function () {
   assert.ok(this.document.includes(marker), "薄い支援層の記述がありません");
   this.linkTarget = resolveLink(
     this.document,
-    /「薄い」の判定基準は\[00_運用ポリシー\.md\]\(([^)]+)\)/u,
+    /「薄い」の判定基準と、開発速度を成立条件とする命題は\[00_運用ポリシー\.md\]\(([^)]+)\)/u,
   );
 });
 
-Then("正しさと速さの双方が成立条件であると読める", function () {
-  assert.ok(
-    this.section.includes(
-      "正しさと速さはトレードオフではなく、両方が成立条件である",
-    ),
-  );
-  assert.ok(
-    this.section.includes(
-      "正しさを満たしても速さを失った状態は、目的を達成していない",
-    ),
-  );
-  assert.ok(
-    this.section.includes(
-      "速さを満たしても正しさを失った状態も、目的を達成していない",
-    ),
-  );
-});
+Then(
+  "速さが開発速度を指し正しさと開発速度の双方が成立条件であると読める",
+  function () {
+    assert.ok(
+      this.section.includes(
+        "ここでいう速さは開発速度、すなわち要求から成果物を提出するまでに要する時間の短さを指し、成果物自体の実行性能を指さない",
+      ),
+    );
+    assert.ok(
+      this.section.includes(
+        "正しさと開発速度はトレードオフではなく、両方が成立条件である",
+      ),
+    );
+    assert.ok(
+      this.section.includes(
+        "正しさを満たしても開発速度を失った状態は、目的を達成していない",
+      ),
+    );
+    assert.ok(
+      this.section.includes(
+        "開発速度を満たしても正しさを失った状態も、目的を達成していない",
+      ),
+    );
+  },
+);
 
 Then(
   "支援層の所要時間が成果物構築の所要時間を上回らないことを含む",
@@ -113,7 +121,9 @@ Then("既存手段の縮小を先に評価すると読める", function () {
     this.section.includes("既存手段の縮小で目的を満たせないかを先に評価する"),
   );
   assert.ok(
-    this.section.includes("手段が速さを損なうとき、縮小するのは手段の側である"),
+    this.section.includes(
+      "手段が開発速度を損なうとき、縮小するのは手段の側である",
+    ),
   );
 });
 
