@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { checkTestDeterminism } from "./check_test_determinism.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 const featureRoot = path.join(root, "test", "features");
@@ -98,6 +99,7 @@ export function checkGherkinFormat(): string[] {
     errors.push(
       `${relative(file)}: Node test起票を残さずGherkin .featureへ移行してください`,
     );
+  errors.push(...checkTestDeterminism(root).errors);
   return errors;
 }
 
@@ -109,5 +111,5 @@ if (errors.length > 0) {
   process.exitCode = 1;
 } else
   process.stdout.write(
-    "Gherkin形式検査: 合格（英語keyword・日本語説明、一意のSCN ID、全テスト層）\n",
+    "Gherkin形式検査: 合格（英語keyword・日本語説明、一意のSCN ID、全テスト層、fixtureの決定性）\n",
   );
