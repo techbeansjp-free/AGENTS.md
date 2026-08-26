@@ -12,6 +12,6 @@
   "overridePolicy": "bound",
   "rollback": "未検証ruleを無効化せず直前の追跡可能なpolicy setへ戻す",
   "packageDefault": "汎用packageは利用projectへdogfoodingを強制しない",
-  "projectOverride": "このrepositoryの変更は本systemのproject policyで検証する",
+  "projectOverride": "このrepositoryの変更は本systemのproject policyで検証する。あわせてCIでinstallを適用しdoctorがhealthy trueとinstalled trueを返すこと、展開後にgit status --porcelainが空であることを必須にする",
   "changeAuthority": "repository maintainerと独立reviewer"
 }
