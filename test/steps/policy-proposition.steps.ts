@@ -64,6 +64,10 @@ When("既存の節構成を読む", function () {
 });
 
 When("索引の参照を解決する", function () {
+  assert.ok(
+    this.document.includes("目的と成立条件、権限と所有権は"),
+    "索引が目的と成立条件を名指ししていません",
+  );
   this.linkTarget = resolveLink(
     this.document,
     /\[00_運用ポリシー\.md\]\(([^)]+)\)/u,
@@ -144,5 +148,15 @@ Then(
       "## risk比例型rule",
     ])
       assert.ok(this.section.includes(heading), `${heading}がありません`);
+    for (const sentinel of [
+      "パッケージ既定値は`delivery.stopAt=pull_request`である",
+      "同一scopeの工程責務は",
+      "モードの根拠が不明なら`full`を選ぶ",
+      "強制強度は具体的なrisk",
+    ])
+      assert.ok(
+        this.section.includes(sentinel),
+        `${sentinel}が改変されています`,
+      );
   },
 );
