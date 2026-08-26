@@ -15,6 +15,7 @@ import {
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { createPullRequest, authorizeMerge } from "./domain/delivery.js";
 import {
+  buildWorktreePath,
   createWorktree,
   canonicalWorktreePath,
   DEFAULT_WORKTREE_PLACEMENT,
@@ -1321,7 +1322,10 @@ function modelTier(value: string, flag: string): ModelTier {
   return tier;
 }
 
-export async function main(argv: string[]): Promise<number> {
+export async function main(
+  argv: string[],
+  dependencies: { now?: () => Date } = {},
+): Promise<number> {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
     print({
@@ -2569,14 +2573,21 @@ export async function main(argv: string[]): Promise<number> {
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
     const trustedSet = loadOperationPolicy(root);
-    const worktreePath = required(flags, "path");
-    enforceTrustedWorktreeBoundary({
-      repoRoot: root,
-      worktreePath,
-      expectedRepository:
-        typeof flags.repo === "string" ? flags.repo : undefined,
-      trustedPolicy: trustedSet.policy,
-    });
+    if (
+      flags.path !== undefined &&
+      (typeof flags.path !== "string" || flags.path === "")
+    )
+      throw new Error("--pathを指定する場合は空でない値が必要です");
+    const explicitWorktreePath =
+      typeof flags.path === "string" ? flags.path : undefined;
+    if (explicitWorktreePath !== undefined)
+      enforceTrustedWorktreeBoundary({
+        repoRoot: root,
+        worktreePath: explicitWorktreePath,
+        expectedRepository:
+          typeof flags.repo === "string" ? flags.repo : undefined,
+        trustedPolicy: trustedSet.policy,
+      });
     const issueRaw = required(flags, "issue");
     if (!/^[1-9]\d*$/u.test(issueRaw))
       throw new Error("--issueは1以上の整数で指定してください");
@@ -2586,12 +2597,26 @@ export async function main(argv: string[]): Promise<number> {
     const branch = required(flags, "branch");
     const slug = required(flags, "slug");
     const policy = trustedSet.policy.worktree ?? DEFAULT_WORKTREE_PLACEMENT;
+    const currentTime = (dependencies.now ?? (() => new Date()))();
+    const worktreePath =
+      explicitWorktreePath !== undefined
+        ? explicitWorktreePath
+        : buildWorktreePath({ issueNumber, slug, currentTime, policy });
+    if (explicitWorktreePath === undefined)
+      enforceTrustedWorktreeBoundary({
+        repoRoot: root,
+        worktreePath,
+        expectedRepository:
+          typeof flags.repo === "string" ? flags.repo : undefined,
+        trustedPolicy: trustedSet.policy,
+      });
     const placement = validateWorktreePlacement({
       repoRoot: root,
       worktreePath,
       branch,
       issueNumber,
       slug,
+      currentTime,
       policy,
       existing: cliRegisteredWorktrees(root),
     });
@@ -2607,10 +2632,10 @@ export async function main(argv: string[]): Promise<number> {
             reasons: placement.errors,
             scope: ["worktree", "create"],
             checks: [
-              "project policy、path、Issue番号、slug、branch、登録済みworktreeを検証した",
+              "project policy、現在時刻、timestamp、path、Issue番号、slug、branch、登録済みworktreeを検証した",
             ],
             autoFixes: [],
-            next: "規定名の未登録pathと許可されたbranch typeを指定してください",
+            next: "--pathを省略するか、現在時刻から10分以内の規定名と許可されたbranch typeを指定してください",
             requiredAuthority: "不要",
             rollback: "worktreeを作成せず既存状態を保持する",
           },
@@ -2626,6 +2651,7 @@ export async function main(argv: string[]): Promise<number> {
         base: required(flags, "base"),
         issueNumber,
         slug,
+        currentTime,
         worktreePolicy: policy,
         remoteDefaultBranch: required(flags, "remote-default-branch"),
         remoteDefaultSha: required(flags, "remote-default-sha"),

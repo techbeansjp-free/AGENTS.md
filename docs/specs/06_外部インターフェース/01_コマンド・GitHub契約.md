@@ -13,15 +13,18 @@ CLIは引数を構造化入力として受け、適用を伴う操作は既定�
 
 GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報の伏字化と行動可能な根拠・次行動を保持する。表示言語はproject choiceを読むcaller adapterが選択する。
 
-## worktree merge完了コマンド
+## worktree作成・merge完了コマンド
 
 | コマンド | 入力 | 出力・終了code |
 |---|---|---|
-| `worktree survey` | `--root=<repository root>`、任意の`--format=json\|text`。`--apply`は拒否 | 登録済みworktreeの`primary / in-progress / cleanup-ready / retain`、日本語理由、分類別path、走査errorをJSONまたは日本語要約表で返す。後片付け候補の存在だけでは終了codeを非0にせず、走査失敗だけを非0にする |
+| `worktree create` | `--issue --slug --branch --base --remote-default-branch --remote-default-sha`、任意の`--root --path --repo` | `--path`省略時はCLI層の現在local time、Issue番号、slugから`.worktrees/{YYYYMMDD_HHMMSS}-{issueNumber}-{slug}`を構成する。明示pathは未来または10分超の過去を拒否する。作成結果は絶対path、branch、base、作成元状態の保持を返す |
+| `worktree survey` | `--root=<repository root>`、任意の`--format=json\|text`。`--apply`は拒否 | 登録済みworktreeの`primary / in-progress / cleanup-ready / retain`、日本語理由、分類別path、走査errorをJSONまたは日本語要約表で返す。directory名とbranch名のIssue番号・slug不一致は`reasons`へ加えるが分類を変えない。後片付け候補の存在だけでは終了codeを非0にせず、走査失敗だけを非0にする |
 | `worktree finalize --complete --dry-run` | `--root --path --evidence --merge-sha`。cleanup authorityと承認digestは任意 | 副作用なしで全phase、`state`、`requiredAuthority`、日本語`recovery`、最新`previewDigest`、対象pathをJSONで返す。未承認は`pending`かつ非0 |
 | `worktree finalize --complete --apply` | preview入力に`--authorize=approved`を加える。cleanup適用にはさらに`--cleanup-authority --approved-digest=<64桁hex>`が必要 | merge確認後にrootを更新する。cleanup authorityなしはroot更新済み・cleanup pendingで非0。全検証成功は`completed`で0、拒否または部分完了は非0 |
 
 `--authorize=approved`は既存finalizeとroot更新のauthorityであり、cleanup operationのauthorityとして流用しない。`--cleanup-authority`は実行ごとの明示authorityで、project policyへ保存しない。apply直前にfinalize reportを再生成し、そのSHA-256 hashを最新cleanup preview digestとして`--approved-digest`と完全一致させる。cleanupは既存`applyFinalize`が発行する対象1件の`worktree.remove`だけをGit公式commandへ渡し、branch削除、prune、他worktree探索を行わない。
+
+`worktree create`は現在時刻を1回だけ取得し、path構成と明示path検証へ同じ値を渡す。明示`--path`はGit内部領域などのtrusted boundaryへ最初に通し、その後で配置、directory名、timestamp、Issue番号、slugを検証する。domainは現在時刻を取得しない。現在時刻が未指定または不正ならtimestamp検証をskipせずfail-closedで拒否する。`YYYYMMDD_HHMMSS`は実行環境のlocal timeとして暦上の実在性まで検証し、未来には猶予を設けない。
 
 適用後はroot HEAD、`git worktree list --porcelain`、対象path、他worktree snapshotを再読取する。対象削除後のrepository直下`.worktrees/`がsymlinkでない実在する空directoryの場合だけ、既存workspace hygieneの最新reportと明示path `.worktrees`を使って非再帰に除去する。非空、symlink、root外、不明は保持する。
 
