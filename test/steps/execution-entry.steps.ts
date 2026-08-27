@@ -61,6 +61,17 @@ Given("実行entry判定を手書きするsourceがある", function () {
   this.relative = "scripts/example.ts";
 });
 
+Given("正本をcommentで参照しつつ手書きするsourceがある", function () {
+  /** commentへ`lib/entrypoint.js`と書くだけの回避。実呼び出しは無い。 */
+  this.source = [
+    "// lib/entrypoint.js のisExecutionEntryを使うべき箇所",
+    "const self = import.meta.url;",
+    "const entry = process.argv[1];",
+    "if (compare(self, entry)) run();",
+  ].join("\n");
+  this.relative = "scripts/example.ts";
+});
+
 Given("正本moduleのsourceがある", function () {
   this.source = fs.readFileSync(
     path.join(repositoryRoot(), "src/lib/entrypoint.ts"),

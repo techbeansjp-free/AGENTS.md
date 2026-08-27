@@ -715,9 +715,13 @@ export function validateExecutionEntry(
       `実行entry判定を直接比較しています。${EXECUTION_ENTRY_MODULE}のisExecutionEntryを使ってください: ${relative}`,
     );
   if (
+    /**
+     * **module specifierの包含では回避できる。** commentや未使用importへ
+     * `lib/entrypoint.js`と書くだけで判定を素通りする。実呼び出しを要求する。
+     */
     source.includes("process.argv[1]") &&
     source.includes("import.meta.url") &&
-    !source.includes("lib/entrypoint.js")
+    !/isExecutionEntry\s*\(\s*import\.meta\.url\s*\)/u.test(source)
   )
     errors.push(
       `実行entry判定を手書きしています。${EXECUTION_ENTRY_MODULE}のisExecutionEntryを使ってください: ${relative}`,

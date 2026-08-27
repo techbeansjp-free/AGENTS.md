@@ -38,3 +38,8 @@ Feature: 実行entry判定をsymlink経由の起動でも成立させる
     Given 実行entry判定を直接比較するsourceがある
     When test資産として実行entry判定の検査を実行する
     Then 実行entry判定の検査は合格する
+
+  Scenario: SCN-UNIT-ENTRY-007 正本への文字列参照だけの回避を拒否する
+    Given 正本をcommentで参照しつつ手書きするsourceがある
+    When 実行entry判定の検査を実行する
+    Then 実行entry判定の検査は手書きを報告する
