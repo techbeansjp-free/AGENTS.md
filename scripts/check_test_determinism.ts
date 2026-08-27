@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const STEP_DIRECTORY = "test/steps";
 const FIXTURE_INSTANT_MODULE = "test/support/fixture-instant.ts";
@@ -188,10 +189,7 @@ export function checkTestDeterminism(root = process.cwd()): {
   };
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === new URL(`file://${process.argv[1]}`).href
-) {
+if (process.argv[1] !== undefined && isExecutionEntry(import.meta.url)) {
   const result = checkTestDeterminism();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.exitCode = result.valid ? 0 : 1;

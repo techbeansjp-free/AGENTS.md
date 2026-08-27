@@ -1,6 +1,5 @@
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+
 import {
   planAutoRelease,
   planRelease,
@@ -8,6 +7,7 @@ import {
   type ReleasePlan,
 } from "../src/domain/release.js";
 import { isPackageVersion, PACKAGE_VERSION } from "../src/lib/version.js";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 function requiredEnvironment(
   environment: NodeJS.ProcessEnv,
@@ -152,11 +152,7 @@ function planManualReleaseFromEnvironment(
   return plan;
 }
 
-const entrypointPath = process.argv[1];
-if (
-  entrypointPath !== undefined &&
-  path.resolve(entrypointPath) === fileURLToPath(import.meta.url)
-) {
+if (isExecutionEntry(import.meta.url)) {
   const plan =
     process.env.RELEASE_MODE === "auto"
       ? planAutoReleaseFromEnvironment(process.env)

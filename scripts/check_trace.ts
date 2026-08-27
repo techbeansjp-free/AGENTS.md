@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+
 import { validateScenarioTrace } from "../src/domain/trace.js";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
 import { validateSpecs } from "../src/domain/spec.js";
 import { isIssueStagingPath } from "../src/domain/staging.js";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 function walkFiles(
   directory: string,
@@ -629,10 +630,7 @@ export function checkTraceGate(
   };
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-) {
+if (isExecutionEntry(import.meta.url)) {
   const result = checkTraceGate(process.cwd());
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (!result.valid) process.exitCode = 1;

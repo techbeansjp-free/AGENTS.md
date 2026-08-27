@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const japanese = /[\u3040-\u30ff\u3400-\u9fff]/u;
@@ -92,10 +93,7 @@ export function checkJapaneseDocuments(root = repositoryRoot): string[] {
   return errors;
 }
 
-if (
-  import.meta.url ===
-  new URL(`file://${path.resolve(process.argv[1] ?? "")}`).href
-) {
+if (isExecutionEntry(import.meta.url)) {
   const root = process.argv[2] ? path.resolve(process.argv[2]) : repositoryRoot;
   const errors = checkJapaneseDocuments(root);
   if (errors.length > 0) {

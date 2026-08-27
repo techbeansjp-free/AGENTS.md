@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 export const REQUIREMENT_ID_PREFIX = "REQ";
 export const ACCEPTANCE_ID_PREFIX = "AC";
@@ -82,10 +83,7 @@ export function checkRequirementIdScheme(root = process.cwd()): {
   };
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === new URL(`file://${process.argv[1]}`).href
-) {
+if (process.argv[1] !== undefined && isExecutionEntry(import.meta.url)) {
   const result = checkRequirementIdScheme();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.exitCode = result.valid ? 0 : 1;
