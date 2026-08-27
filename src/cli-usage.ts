@@ -303,7 +303,11 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     summary: "Issue本文の雛形を生成する",
     requiredFlags: [
       flag("title", "text", "Issueのtitle"),
-      flag("assessment", "path", "事前評価のJSON file"),
+      flag(
+        "assessment",
+        "path",
+        '質問IDをキーにした回答mapのJSON file。{"Q-01":{"answer":true|false|"unknown","evidence":"根拠"},…}の形式で、mode決定記録そのものは受理しない。回答か根拠が欠けたIDは不明として扱いfullへ倒す',
+      ),
     ],
     conditionalFlags: [],
     optionalFlags: [ROOT_FLAG],
