@@ -566,6 +566,8 @@ Given(
       "package-lock.json",
       "scripts/check_project_quality.ts",
       "scripts/check_source_quality.ts",
+      "src/lib/entrypoint.ts",
+      "src/lib/security.ts",
       "tsconfig.json",
       "tsconfig.build.json",
     ]) {
@@ -656,6 +658,8 @@ function copyQualityContractFixture(root: string): void {
     "package.json",
     "scripts/check_project_quality.ts",
     "scripts/check_source_quality.ts",
+    "src/lib/entrypoint.ts",
+    "src/lib/security.ts",
     "tsconfig.json",
     "tsconfig.build.json",
   ]) {

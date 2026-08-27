@@ -44,6 +44,8 @@ const PROTECTED_FILES = [
   "package-lock.json",
   "scripts/check_project_quality.ts",
   "scripts/check_source_quality.ts",
+  "src/lib/entrypoint.ts",
+  "src/lib/security.ts",
   "tsconfig.json",
   "tsconfig.build.json",
 ] as const;
@@ -202,6 +204,22 @@ function protectedFileContent(root: string, relative: string): string | Buffer {
   return normalizeLockfileForProtection(fs.readFileSync(absolute, "utf8"));
 }
 
+/**
+ * 候補側の`PROTECTED_FILES`をsourceから静的に取り出す。
+ *
+ * **候補のcodeを実行しない。** base validatorはcandidateのscriptもその依存も走らせない。
+ * 取り出せない場合は`undefined`を返し、呼び出し側がfail-closedで拒否する。
+ */
+function candidateProtectedFiles(root: string): readonly string[] | undefined {
+  const file = path.join(root, "scripts/check_project_quality.ts");
+  if (!fs.existsSync(file)) return undefined;
+  const block = /const PROTECTED_FILES = \[([^\]]*)\] as const;/u.exec(
+    fs.readFileSync(file, "utf8"),
+  );
+  if (!block?.[1]) return undefined;
+  return [...block[1].matchAll(/"([^"]+)"/gu)].map((match) => match[1]!);
+}
+
 function protectedSnapshot(
   root: string,
   metadata: Record<string, unknown>,
@@ -351,6 +369,49 @@ function sameMap(
   );
 }
 
+/**
+ * 新たに保護対象へ加えるfileを、同じPRで変更させない。
+ *
+ * **base validatorは自分の`PROTECTED_FILES`でsnapshotを取るため、候補が追加した対象は
+ * hash照合を受けない。** そのため保護対象へ加えるのと同時に、悪意ある版を初期値として
+ * 封印できてしまう。2026-08-27の実測では、backdoorを追記したfileを保護対象へ加える候補が
+ * `valid: true`で通った。
+ *
+ * 追加分はtrusted側と候補側で同一内容であることを要求する。読み取れない場合は拒否する。
+ * **この検査自体がbase側で走るため、効くのは次の版上げからである。**保護追加の初回には
+ * 必ず窓が開く。
+ */
+function validateProtectionBootstrap(
+  root: string,
+  trustedRoot: string,
+): string[] {
+  const candidateProtected = candidateProtectedFiles(root);
+  if (candidateProtected === undefined)
+    return [
+      "候補のPROTECTED_FILESを読み取れません。保護対象の追加を検証できないため拒否します",
+    ];
+  const errors: string[] = [];
+  for (const relative of candidateProtected) {
+    if (PROTECTED_FILES.some((item) => item === relative)) continue;
+    const trustedFile = path.join(trustedRoot, relative);
+    const candidateFile = path.join(root, relative);
+    if (!fs.existsSync(trustedFile) || !fs.existsSync(candidateFile)) {
+      errors.push(
+        `新たに保護対象へ加えるfileが双方に存在しません: ${relative}`,
+      );
+      continue;
+    }
+    if (
+      sha256(fs.readFileSync(trustedFile)) !==
+      sha256(fs.readFileSync(candidateFile))
+    )
+      errors.push(
+        `新たに保護対象へ加えるfileを同じPRで変更できません: ${relative}`,
+      );
+  }
+  return errors;
+}
+
 function validateTrustedQualityMigration(
   root: string,
   trustedRoot: string,
@@ -399,6 +460,7 @@ function validateTrustedQualityMigration(
   const candidateVersion = qualityContractVersion(metadata);
   const trustedSnapshot = protectedSnapshot(trustedRoot, trustedMetadata);
   const candidateSnapshot = protectedSnapshot(root, metadata);
+  errors.push(...validateProtectionBootstrap(root, trustedRoot));
   for (const proposal of candidateRegistry.proposals) {
     if (trustedById.has(proposal.proposalId)) continue;
     if (
