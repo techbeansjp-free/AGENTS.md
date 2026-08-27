@@ -10,3 +10,13 @@ Feature: 保護workflowが呼ぶscriptがtrusted validatorに固定されてい�
     Given script固定検査の準備がある
     When "SCN-INT-SCRIPTPIN-002"のscript固定検査を実行する
     Then script固定検査は期待結果になる
+
+  Scenario: SCN-INT-SCRIPTPIN-003 固定済みscriptの接頭辞である未固定scriptを見逃さない
+    Given script固定検査の準備がある
+    When "SCN-INT-SCRIPTPIN-003"のscript固定検査を実行する
+    Then script固定検査は期待結果になる
+
+  Scenario: SCN-INT-SCRIPTPIN-004 commentとechoの引数を参照と誤認しない
+    Given script固定検査の準備がある
+    When "SCN-INT-SCRIPTPIN-004"のscript固定検査を実行する
+    Then script固定検査は期待結果になる

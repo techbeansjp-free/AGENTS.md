@@ -59,6 +59,37 @@ const CHECKS: Readonly<Record<string, (world: WorkflowWorld) => void>> = {
       `未固定の参照を検出していません: ${errors.join(" | ")}`,
     );
   },
+  "SCN-INT-SCRIPTPIN-003": (world) => {
+    const root = replicate(world);
+    /**
+     * `project`は固定集合に無いが、固定済み`project:quality`の診断文に部分文字列として
+     * 現れる。**部分一致で帰属させると見逃す。**
+     */
+    fs.appendFileSync(
+      path.join(root, ".github/workflows/ci.yml"),
+      "      - name: 固定済みscriptの接頭辞を呼ぶ\n        run: npm run project\n",
+    );
+    execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+    const errors = checkTrustedScriptPinning(root);
+    assert.ok(
+      errors.some((entry) => entry.includes("呼ぶprojectが")),
+      `接頭辞が一致する未固定scriptを見逃しています: ${errors.join(" | ")}`,
+    );
+  },
+  "SCN-INT-SCRIPTPIN-004": (world) => {
+    const root = replicate(world);
+    /** commentと`echo`の引数を参照と誤認しないこと。 */
+    fs.appendFileSync(
+      path.join(root, ".github/workflows/ci.yml"),
+      [
+        "      # npm run nonexistent:gate",
+        '      - run: echo "npm run another:gate"',
+        "",
+      ].join("\n"),
+    );
+    execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+    assert.deepEqual(checkTrustedScriptPinning(root), []);
+  },
 };
 
 Given("script固定検査の準備がある", function (this: WorkflowWorld) {

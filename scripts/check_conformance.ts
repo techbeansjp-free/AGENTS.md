@@ -680,10 +680,16 @@ export function checkTrustedScriptPinning(root: string): string[] {
   for (const workflow of PROTECTED_WORKFLOWS) {
     const file = path.join(root, ".github/workflows", workflow);
     if (!fs.existsSync(file)) continue;
-    for (const match of fs
-      .readFileSync(file, "utf8")
-      .matchAll(/npm run ([A-Za-z0-9:._-]+)/gu))
-      names.add(match[1]!);
+    /** **全文検索ではなくstep構造を使う。** commentや`echo`の引数を参照と誤認しない。 */
+    for (const step of releaseRunSteps(fs.readFileSync(file, "utf8"))) {
+      if (!step.enabled) continue;
+      for (const segment of reliableSegments(step.command)) {
+        const invoked = /^npm\s+run(?:-script)?\s+"?([A-Za-z0-9:._-]+)"?/u.exec(
+          segment,
+        );
+        if (invoked) names.add(invoked[1]!);
+      }
+    }
   }
   if (names.size === 0)
     return ["保護workflowがnpm scriptを1件も参照していません"];
@@ -705,11 +711,22 @@ export function checkTrustedScriptPinning(root: string): string[] {
     };
     for (const name of names) parsed.scripts[name] = "true";
     fs.writeFileSync(metadata, `${JSON.stringify(parsed, null, 2)}\n`);
-    const reported = checkProjectQualityContract(candidate, root).errors.join(
-      "\n",
-    );
+    const reported = checkProjectQualityContract(candidate, root).errors;
+    /**
+     * **部分一致で帰属させない。** 未固定の`project`があるとき、固定済み`project:quality`の
+     * 診断文が`project`を含むため、単純な包含判定では見逃す。前後がscript名を構成しない
+     * ことを要求して、名前をtokenとして照合する。
+     */
+    const named = (name: string): boolean => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+      const pattern = new RegExp(
+        `(?<![A-Za-z0-9:._-])${escaped}(?![A-Za-z0-9:._-])`,
+        "u",
+      );
+      return reported.some((entry) => pattern.test(entry));
+    };
     return [...names]
-      .filter((name) => !reported.includes(name))
+      .filter((name) => !named(name))
       .sort()
       .map(
         (name) =>
@@ -728,6 +745,22 @@ export function checkTrustedScriptPinning(root: string): string[] {
  */
 /** 配布準備工程を構築だけへ移した形。`scripts/check_project_quality.ts`と同じ値。 */
 const DISTRIBUTION_PREPARE_COMMAND = "npm run build";
+
+/**
+ * commandを、失敗が伝播する単位へ分割する。
+ *
+ * `&&`・`;`・改行は前段の失敗を伝えるが、**`||`は伝えない。** `true || npm run x`は
+ * 左辺が成功するとxを実行せず、`npm run x || true`はxの失敗を握り潰す。
+ * どちらも「実行して成功を要求する」を満たさないため、`||`を含む区間は数えない。
+ *
+ * 区間の**先頭**だけをcommand位置とみなすため、`echo "npm run x"`は数えない。
+ */
+function reliableSegments(command: string): string[] {
+  return command
+    .split(/&&|;|\n/u)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "" && !entry.includes("||"));
+}
 
 function releaseRunSteps(
   yaml: string,
@@ -828,18 +861,6 @@ export function checkDistributionGateReachability(root: string): string[] {
     return errors;
   }
   const steps = releaseRunSteps(fs.readFileSync(workflowFile, "utf8"));
-  /**
-   * commandを、失敗が伝播する単位へ分割する。
-   *
-   * `&&`・`;`・改行は前段の失敗を伝えるが、**`||`は伝えない。** `true || npm run x`は
-   * 左辺が成功するとxを実行せず、`npm run x || true`はxの失敗を握り潰す。
-   * どちらも「実行して成功を要求する」を満たさないため、`||`を含む区間は数えない。
-   */
-  const reliableSegments = (command: string): string[] =>
-    command
-      .split(/&&|;|\n/u)
-      .map((entry) => entry.trim())
-      .filter((entry) => entry !== "" && !entry.includes("||"));
   const invocationIndex = (kind: "prepack" | "verify"): number => {
     const pattern =
       kind === "prepack"
