@@ -681,14 +681,16 @@ function parseModeQuestionRows(
 const EXECUTION_ENTRY_MODULE = "src/lib/entrypoint.ts";
 
 /**
- * 保護fileのため本Issueでは是正できず、品質契約proposalの二段階手順を要する対象。
+ * 実行entry判定の是正を保留する対象。**空が正しい状態である。**
  *
- * **黙って除外しない。** 除外の理由と、是正を引き継ぐIssueをここに残す。
+ * 保護fileは品質契約proposalの二段階手順を要するため一時的にここへ置いていた。Issue #1002で
+ * 品質契約6→7として適用し、保留は解消した。**黙って除外しない。** 再び要素を足すときは、
+ * 除外の理由と是正を引き継ぐIssueを併記する。
+ *
+ * **SCN-UNIT-ENTRY-008が固定するのは、保護2 fileがこのリストへ戻されないことだけである。**
+ * リストが常に空であることは固定しない。上記のとおり理由付きの追加は許されるためである。
  */
-const EXECUTION_ENTRY_PENDING: readonly string[] = [
-  "scripts/check_project_quality.ts",
-  "scripts/check_source_quality.ts",
-];
+const EXECUTION_ENTRY_PENDING: readonly string[] = [];
 
 /**
  * 実行entry判定を各fileで手書きさせない。

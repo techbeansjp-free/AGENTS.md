@@ -88,6 +88,10 @@ Given("共有helperを使うsourceがある", function () {
   this.relative = "scripts/example.ts";
 });
 
+Given("対象fileを{string}とする", function (relative: string) {
+  this.relative = relative;
+});
+
 When("test資産として実行entry判定の検査を実行する", function () {
   this.errors = validateExecutionEntry(
     this.source,
