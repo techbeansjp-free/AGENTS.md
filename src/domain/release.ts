@@ -712,11 +712,35 @@ function jobBlockContaining(lines: string[], lineIndex: number): string[] {
   return [];
 }
 
-function blockHasNpmRun(block: string[], scriptName: string): boolean {
-  const escapedScriptName = scriptName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp(`\\bnpm\\s+run\\s+${escapedScriptName}(?=\\s|$)`, "u").test(
-    block.join("\n"),
+/**
+ * 配布前品質検証の入口名。**`prepack`は形によって意味が変わる。**全gateを持つ形では
+ * `npm run prepack`が配布前品質検証そのものだが、構築だけへ移した形では入口が
+ * `verify:distribution`になる（REQ-SQ-020）。どちらの形かを決めるのは`package.json`であり、
+ * workflow本文だけを入力とするこの検査は双方を受理する。**形と入口の対応は
+ * `checkDistributionGateReachability`が両方向で突き合わせる。**
+ */
+const DISTRIBUTION_VERIFICATION_SCRIPTS = [
+  "prepack",
+  "verify:distribution",
+] as const;
+
+function blockHasDistributionVerification(block: string[]): boolean {
+  return DISTRIBUTION_VERIFICATION_SCRIPTS.some((script) =>
+    blockHasNpmRun(block, script),
   );
+}
+
+/**
+ * `npm run <script>`の実行を検出する。**script名の直後を境界で閉じる。**
+ * `\b`では`verify:distribution-extra`のような接尾辞つきの別scriptを同じgateと誤認する。
+ */
+function npmRunPattern(scriptName: string): RegExp {
+  const escapedScriptName = scriptName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`\\bnpm\\s+run\\s+${escapedScriptName}(?=\\s|$)`, "u");
+}
+
+function blockHasNpmRun(block: string[], scriptName: string): boolean {
+  return npmRunPattern(scriptName).test(block.join("\n"));
 }
 
 function blockHasNpmTest(block: string[]): boolean {
@@ -784,9 +808,11 @@ export function validateReleaseWorkflow(yaml: string): {
   );
   const validateJobBlock =
     validateJobIndex < 0 ? [] : yamlBlock(lines, validateJobIndex);
-  if (!blockHasNpmRun(validateJobBlock, "prepack"))
-    errors.push("validate jobは引き続きnpm run prepackを実行してください");
-  else checks.push("validate jobのnpm run prepackを確認した");
+  if (!blockHasDistributionVerification(validateJobBlock))
+    errors.push(
+      "validate jobは引き続きnpm run prepackまたはnpm run verify:distributionを実行してください",
+    );
+  else checks.push("validate jobの配布前品質検証の実行を確認した");
   if (
     !validateJobBlock.some((line) =>
       /scripts\/compute_distribution_digest\.ts/u.test(line),
@@ -839,13 +865,16 @@ export function validateReleaseWorkflow(yaml: string): {
     );
   else checks.push("bump_version jobのtest実行gateを確認した");
   if (
-    blockHasNpmRun(bumpVersionJobBlock, "prepack") ||
+    blockHasDistributionVerification(bumpVersionJobBlock) ||
     blockHasNpmRun(bumpVersionJobBlock, "audit:check")
   )
     errors.push(
-      "bump_version jobはnpm run prepackまたはaudit:checkを含めないでください",
+      "bump_version jobはnpm run prepack、npm run verify:distribution、audit:checkを含めないでください",
     );
-  else checks.push("bump_version jobがaudit:checkを含まないことを確認した");
+  else
+    checks.push(
+      "bump_version jobが配布前品質検証とaudit:checkを含まないことを確認した",
+    );
   if (!/git\s+commit\b[^\n]*\[skip ci\]/u.test(yaml))
     errors.push("version bump commit messageに[skip ci]が必要です");
   else checks.push("version bump commitの[skip ci]を確認した");
@@ -895,9 +924,13 @@ export function validateReleaseWorkflow(yaml: string): {
     );
   else
     checks.push("npm公開が明示的な手動入力だけに限定されていることを確認した");
-  if (!/npm\s+run\s+(?:prepack|quality)\b/u.test(yaml))
+  if (
+    ![...DISTRIBUTION_VERIFICATION_SCRIPTS, "quality"].some((script) =>
+      npmRunPattern(script).test(yaml),
+    )
+  )
     errors.push(
-      "release前の品質gateとしてnpm run prepackまたはnpm run qualityが必要です",
+      "release前の品質gateとしてnpm run prepack、npm run verify:distribution、npm run qualityのいずれかが必要です",
     );
   else checks.push("release前の品質gateを確認した");
   if (!/git\s+ls-remote\s+--tags\b/u.test(yaml))

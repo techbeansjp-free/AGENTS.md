@@ -57,7 +57,9 @@
     "audit:check": "node --import tsx scripts/check_file_audit.ts",
     "conformance:check": "node --import tsx scripts/check_conformance.ts",
     "quality": "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test",
-    "prepack": "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check"
+    "verify:distribution": "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
+    "prepare": "npm run build",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

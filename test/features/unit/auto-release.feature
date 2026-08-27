@@ -141,3 +141,8 @@ Feature: main mergeの自動release計画と配布digest
     Given digest算出stepを削除したrelease workflow本文がある
     When 自動release workflow契約を検証する
     Then 自動release workflow検証はdigest step欠落を理由に拒否する
+
+  Scenario: SCN-UNIT-RELWF-P04 接尾辞つきscript名を配布前品質検証と誤認しない
+    Given 配布前品質検証の入口へ接尾辞を付けたrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証は配布前品質検証の欠落を理由に拒否する
