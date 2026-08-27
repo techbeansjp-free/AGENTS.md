@@ -198,7 +198,8 @@ Then("role違反として拒否する", function () {
   assert.deepEqual(this.value[0], {
     allowed: false,
     ruleId: "BR-836-01",
-    reason: "coordinatorはpreferred routeのproduct実装を担当できません",
+    reason:
+      "coordinatorはproduct実装を担当できません。独立implementerへ再割当するまで実装を開始しないでください",
   });
   assert.deepEqual(this.value[1], {
     allowed: false,
@@ -328,21 +329,35 @@ Then("解決状態はfallbackである", function () {
   assert.equal(requireResolved(this.decision).routeMode, "fallback");
 });
 
-Then("Claude coordinatorをimplementerへ切り替える", function () {
-  const decision = requireResolved(this.decision);
-  assert.equal(decision.provider, "claude");
-  assert.equal(decision.modelSelection, "project_default");
-  assert.equal(decision.roles.implementer.identity, "claude-coordinator");
-  assert.equal(decision.roles.implementer.provider, "claude");
-  assert.deepEqual(
-    authorizeImplementation({
-      decision,
-      actorIdentity: "claude-coordinator",
-      changedPaths: ["src/domain/routing.ts"],
-    }),
-    { allowed: true },
-  );
-});
+/**
+ * 既存routing形式はfallbackでcoordinatorをimplementer候補へ解決する。
+ * **仕様はこれを許したうえで、role operation契約が実装を許可しないことを求める**
+ * （`docs/specs/04_機能/01_ワークフローv0.3.md`、`10_セキュリティ/01_信頼境界.md`）。
+ * modelはClaudeのproject defaultへ切り替わるが、実装は再割当まで開始しない。
+ */
+Then(
+  "Claude modelへ切り替え、coordinatorの実装は再割当まで停止する",
+  function () {
+    const decision = requireResolved(this.decision);
+    assert.equal(decision.provider, "claude");
+    assert.equal(decision.modelSelection, "project_default");
+    assert.equal(decision.roles.implementer.identity, "claude-coordinator");
+    assert.equal(decision.roles.implementer.provider, "claude");
+    assert.deepEqual(
+      authorizeImplementation({
+        decision,
+        actorIdentity: "claude-coordinator",
+        changedPaths: ["src/domain/routing.ts"],
+      }),
+      {
+        allowed: false,
+        ruleId: "BR-836-01",
+        reason:
+          "coordinatorはproduct実装を担当できません。独立implementerへ再割当するまで実装を開始しないでください",
+      },
+    );
+  },
+);
 
 Then("Codexの順位を推測しない", function () {
   const decision = requireResolved(this.decision);

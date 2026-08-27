@@ -291,14 +291,20 @@ export function authorizeImplementation(input: {
       reason: input.decision.reason,
     };
   if (input.changedPaths.some(isProductPath)) {
-    if (
-      input.decision.routeMode === "preferred" &&
-      input.actorIdentity === input.decision.roles.coordinator.identity
-    )
+    /**
+     * **route modeを問わずcoordinatorのproduct実装を拒否する。**
+     * 既存routing形式のfallbackはcoordinatorをimplementer候補へ解決するが、
+     * 仕様（`docs/specs/04_機能/01_ワークフローv0.3.md`、`10_セキュリティ/01_信頼境界.md`）は
+     * 「role operation契約はcoordinatorによるproduct実装を許可せず、独立implementerへ
+     * 再割当するまで停止する」と定める。**preferredに限ると、fallback時に
+     * roles.implementerがcoordinatorへ解決されるため素通りする**（Issue #992）。
+     */
+    if (input.actorIdentity === input.decision.roles.coordinator.identity)
       return {
         allowed: false,
         ruleId: "BR-836-01",
-        reason: "coordinatorはpreferred routeのproduct実装を担当できません",
+        reason:
+          "coordinatorはproduct実装を担当できません。独立implementerへ再割当するまで実装を開始しないでください",
       };
     if (input.actorIdentity !== input.decision.roles.implementer.identity)
       return {
