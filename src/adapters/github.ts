@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { run } from "../lib/process.js";
 import { isRecord } from "../types.js";
 
@@ -10,7 +12,7 @@ interface GitHubInput {
   headSha: string;
   head: string;
   base: string;
-  bodyLink: string;
+  body: string;
   pr: number;
   sha: string;
   implementationCommitSha: string;
@@ -310,8 +312,8 @@ export function github(
   operation: "pr.create",
   input: Pick<
     GitHubInput,
-    "repository" | "issue" | "headSha" | "head" | "base" | "bodyLink"
-  > & { title?: string },
+    "repository" | "issue" | "headSha" | "head" | "base" | "title" | "body"
+  >,
   cwd: string,
 ): PullRequestCreationResult;
 export function github(
@@ -412,24 +414,43 @@ export function github(
       throw new Error(
         "PR作成前にremote base branchを固定commitへ解決できません",
       );
-    const result = run(
-      "gh",
-      [
-        "pr",
-        "create",
-        "--repo",
-        input.repository,
-        "--head",
-        input.head,
-        "--base",
-        input.base,
-        "--title",
-        input.title ?? `Issue #${input.issue}`,
-        "--body",
-        input.bodyLink,
-      ],
-      cwd,
+    /**
+     * **本文はfile経由で渡す。** argvの上限は約131KBで、template構造を満たす本文は
+     * 改行と記号を多く含む。`--body`へ直接載せると上限と引用の扱いに依存する。
+     */
+    const bodyDirectory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "asc-pr-body-"),
     );
+    const composedBodyFile = path.join(bodyDirectory, "body.md");
+    fs.writeFileSync(composedBodyFile, `${input.body}\n`);
+    /**
+     * **成功時も例外時も一時fileを残さない。** `gh`はfileを同期的に読み切るため、
+     * 呼び出し直後に消してよい。残すと`pr create`のたびにtmpへ本文が蓄積する。
+     */
+    let created: ReturnType<typeof run>;
+    try {
+      created = run(
+        "gh",
+        [
+          "pr",
+          "create",
+          "--repo",
+          input.repository,
+          "--head",
+          input.head,
+          "--base",
+          input.base,
+          "--title",
+          input.title,
+          "--body-file",
+          composedBodyFile,
+        ],
+        cwd,
+      );
+    } finally {
+      fs.rmSync(bodyDirectory, { recursive: true, force: true });
+    }
+    const result = created;
     const url = result.stdout.trim();
     if (
       !new RegExp(

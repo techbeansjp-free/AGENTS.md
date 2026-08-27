@@ -672,10 +672,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       flag("head", "text", "head branch"),
       flag("head-sha", "sha", "headのSHA"),
       flag("evidence", "path", "PR証跡のJSON file"),
+      flag("body-file", "path", "template構造を満たすPR本文"),
     ],
     conditionalFlags: [],
     optionalFlags: [
       ROOT_FLAG,
+      optional("title", "text", "PRタイトル", "本文のH1見出し"),
       optional("authorize", "approved", "作成の承認", "承認なし"),
       optional("canonical-issue", "整数", "正本Issue番号", "--issueと同じ"),
       optional("relates", "整数,整数", "関連Issue番号", "関連なし"),
@@ -689,7 +691,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       ...APPLY_MODE,
     ],
     example:
-      "npx agent-skill-chain pr create --issue=886 --repo=owner/name --base=main --head=feature/886-cli-usage --head-sha=$(git rev-parse HEAD) --evidence=./evidence.json --dry-run",
+      "npx agent-skill-chain pr create --issue=886 --repo=owner/name --base=main --head=feature/886-cli-usage --head-sha=$(git rev-parse HEAD) --evidence=./evidence.json --body-file=./PR.md --dry-run",
   },
   {
     command: "pr",

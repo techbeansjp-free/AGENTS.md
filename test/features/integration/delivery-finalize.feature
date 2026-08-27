@@ -60,6 +60,79 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     Then PR createは失敗する
     And external operation callは0件である
 
+  Scenario: SCN-INT-PRBODY-001 template構造を満たす本文を受理しH1をタイトルにする
+    Given review、test、spec evidenceがすべてpassである
+    When PR createをdry-runする
+    Then PR previewのtitleは"bugfix: 824を是正する"である
+    And PR previewのbodyはH1見出しを含まない
+    And PR previewのbodyは必須見出しをすべて含む
+
+  Scenario Outline: SCN-INT-PRBODY-002 template構造を満たさない本文を拒否する
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文から"<heading>"の見出しを除く
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
+    Examples:
+      | heading |
+      | 概要 |
+      | テスト結果 |
+      | 停止点 |
+
+  Scenario: SCN-INT-PRBODY-003 未解決のplaceholderが残る本文を拒否する
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文へ未解決のplaceholderを残す
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
+  Scenario: SCN-INT-PRBODY-004 条件付き見出しの有無を問わない
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文へ条件付き見出しを加える
+    When PR createをdry-runする
+    Then delivery stateはpreviewである
+
+  Scenario: SCN-INT-PRBODY-005 canonical Issueを終端参照しない本文を拒否する
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文からIssue参照を除く
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
+  Scenario: SCN-INT-PRBODY-006 必須見出しの導出は条件付き見出しを除く
+    Given PR本文templateに条件付き見出しがある
+    When 必須見出しを導出する
+    Then 必須見出しに条件付き見出しは含まれない
+    And 必須見出しにtemplateの無条件見出しがすべて含まれる
+
+  Scenario Outline: SCN-INT-PRBODY-007 見出しに見える文字列を必須見出しの充足にしない
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文の"概要"見出しを"<substitute>"へ置き換える
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
+    Examples:
+      | substitute |
+      | ### 概要 |
+      | ## 概要（補足） |
+      | ## 概要 extra |
+
+  Scenario: SCN-INT-PRBODY-008 code block内の見出しを充足にしない
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文の"概要"見出しをcode block内へ移す
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
+  Scenario: SCN-INT-PRBODY-009 code内のIssue参照を終端参照にしない
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文のIssue参照をcode spanで囲む
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
   Scenario: SCN-INT-GITHUB-001 Issue syncはrepositoryを確認してread-after-write一致を要求する
     Given exact repositoryと同じbodyを返すgh stubがある
     When Issue sync adapterを実行する

@@ -3091,6 +3091,9 @@ export async function main(
     const canonicalIssue = Number(canonicalRaw);
     if (canonicalIssue !== issue)
       throw new Error("--canonical-issueは--issueと一致させてください");
+    const bodyFile = path.resolve(required(flags, "body-file"));
+    if (!fs.existsSync(bodyFile))
+      throw new Error(`--body-fileがありません: ${bodyFile}`);
     const input = {
       apply,
       authorization:
@@ -3102,6 +3105,8 @@ export async function main(
       head: required(flags, "head"),
       headSha,
       base: required(flags, "base"),
+      body: fs.readFileSync(bodyFile, "utf8"),
+      title: typeof flags.title === "string" ? flags.title : undefined,
       evidence,
       trustedPolicy: loadOperationPolicy(root).policy,
       candidatePolicy: loadConsumerPolicyAtCommit(root, headSha),

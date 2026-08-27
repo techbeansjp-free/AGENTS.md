@@ -2,7 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import {
+  WorkflowWorld,
+  conformingPullRequestBody,
+  stepDefinitions,
+} from "../support/world.js";
 import {
   createIssueStaging,
   recordStagingSync,
@@ -161,6 +165,14 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
     bodyDigest: "a".repeat(64),
     readBackDigest: "a".repeat(64),
   });
+  const prBodyFile = path.join(this.temp("asc-e2e-pr-body-"), "PR.md");
+  fs.writeFileSync(
+    prBodyFile,
+    conformingPullRequestBody({
+      title: "bugfix: 824を是正する",
+      canonicalIssue: 824,
+    }),
+  );
   this.prArgs = [
     "pr",
     "create",
@@ -172,6 +184,7 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
     `--evidence=${evidence}`,
     `--root=${this.prCwd}`,
     `--staging=${staging}`,
+    `--body-file=${prBodyFile}`,
   ];
   const stubDirectory = this.temp("asc-gh-stub-");
   this.ghMarker = path.join(stubDirectory, "called");

@@ -8,6 +8,7 @@ import {
   type Policy,
   type RuleObservation,
 } from "../types.js";
+import { validatePullRequestBody, withoutMarkdownCode } from "./issue.js";
 
 interface DeliveryEvidence {
   headSha?: string;
@@ -33,6 +34,10 @@ interface PullRequestInput {
   head: string;
   base: string;
   repository: string;
+  /** 配布templateの構造を満たすPR本文。**自由形式の本文で代替しない。** */
+  body: string;
+  /** 省略時はPR本文のH1から導出する。 */
+  title?: string;
   trustedPolicy?: Policy;
   candidatePolicy?: Policy;
 }
@@ -276,6 +281,30 @@ function validateDeliveryEvidence(
   }
 }
 
+/**
+ * PR文書をタイトルと本文へ分ける。
+ *
+ * 配布templateはH1をタイトル行として持つ。**H1を本文へ残すとPRのタイトルが本文の
+ * 先頭にも重複する**ため、タイトルとして取り出した行は本文から除く。
+ * `title`を明示した場合は本文のH1を除かない。本文の見た目を呼び出し側が決められる。
+ */
+export function splitPullRequestDocument(
+  document: string,
+  title?: string,
+): { title: string; body: string } {
+  const lines = document.split(/\r?\n/u);
+  const headingIndex = lines.findIndex((line) => /^#\s+\S/u.test(line));
+  if (title !== undefined)
+    return { title: title.trim(), body: document.trim() };
+  if (headingIndex === -1) return { title: "", body: document.trim() };
+  const derived = lines[headingIndex]!.replace(/^#\s+/u, "").trim();
+  const rest = [
+    ...lines.slice(0, headingIndex),
+    ...lines.slice(headingIndex + 1),
+  ];
+  return { title: derived, body: rest.join("\n").trim() };
+}
+
 export function createPullRequest(
   input: PullRequestInput,
   external: (
@@ -288,7 +317,8 @@ export function createPullRequest(
       head: string;
       headSha: string;
       base: string;
-      bodyLink: string;
+      title: string;
+      body: string;
     },
   ) =>
     | { url: string; state?: "created" }
@@ -370,11 +400,21 @@ export function createPullRequest(
   }
   const canonicalIssue = input.canonicalIssue ?? input.issue;
   const relatedIssues = input.relatedIssues ?? [];
-  const bodyLink = [
-    `Closes #${canonicalIssue}`,
-    ...relatedIssues.map((issue) => `Relates to #${issue}`),
-  ].join("\n\n");
-  const references = validateIssueClosingReferences(bodyLink, {
+  const { title, body } = splitPullRequestDocument(input.body, input.title);
+  if (title === "")
+    throw new Error(
+      "PRタイトルがありません。--titleを指定するか、PR本文の先頭へH1見出しを置いてください",
+    );
+  const structure = validatePullRequestBody(body);
+  if (!structure.valid)
+    throw new Error(
+      `PR本文がtemplate契約を満たしません: ${structure.errors.join("; ")}`,
+    );
+  /**
+   * **code内の記述を参照として数えない。** 本文へIssue参照の書き方を例示すると、
+   * 実際の参照が1件も無いままcanonical Issueを終端したと誤判定する。
+   */
+  const references = validateIssueClosingReferences(withoutMarkdownCode(body), {
     canonicalIssue,
     relatedIssues,
   });
@@ -390,7 +430,8 @@ export function createPullRequest(
     head: input.head,
     headSha: input.headSha,
     base: input.base,
-    bodyLink,
+    title,
+    body,
   };
   if (!input.apply) return { state: "preview", preview };
   if (!input.trustedPolicy)
