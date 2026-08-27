@@ -21,6 +21,7 @@ import {
   STAGING_LIFECYCLE_AREAS,
 } from "../src/domain/staging.js";
 import { FORBIDDEN_DISTRIBUTION_PREFIXES } from "./check_package_contents.js";
+import { checkProjectQualityContract } from "./check_project_quality.js";
 import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 import { checkWorkflowSteps } from "./check_workflow_steps.js";
 import { checkWorktreeContract } from "./check_worktree_contract.js";
@@ -266,7 +267,7 @@ export function checkPackageManagerBoundary(root: string): string[] {
   );
   if (!isRecord(choices) || choices.packageManager !== "npm")
     errors.push("project choiceのpackageManagerはnpmでなければなりません");
-  for (const workflow of ["ci.yml", "trusted-quality.yml", "release.yml"]) {
+  for (const workflow of PROTECTED_WORKFLOWS) {
     const file = path.join(root, ".github/workflows", workflow);
     if (
       !fs.existsSync(file) ||
@@ -481,6 +482,7 @@ export function checkRepositoryRuleLedger(
         now: new Date().toISOString(),
       }).errors,
     );
+  errors.push(...checkTrustedScriptPinning(root));
   errors.push(...checkDistributionGateReachability(root));
   errors.push(...checkModeQuestionText(root));
   errors.push(...checkLifecycleIgnore(root));
@@ -663,6 +665,61 @@ function parseModeQuestionRows(
  * 規範文書と機械可読な定義を`(id, 分類, 質問文)`の順序付き8行として比較する。
  * IDと質問文だけを比べると、機械可読側で分類を別の質問へ付け替えても通過する。
  */
+/**
+ * 保護workflowが呼ぶscriptが、既定branch側validatorに固定されていることを検査する。
+ *
+ * **`EXPECTED_SCRIPTS`が参照集合を包含することを、何も強制していない。** 現状は一致して
+ * いるが、`ci.yml`へ`npm run newgate`を足して固定側への追加を忘れると、その瞬間に候補が
+ * その検査を`true`へ差し替えられる。**追加漏れは何のエラーにもならない。**
+ *
+ * 構造の照合ではなく挙動で確かめる。参照scriptを全件`true`へ差し替えた候補treeを作り、
+ * trusted validatorが各scriptを名指しで拒否することを要求する。
+ */
+export function checkTrustedScriptPinning(root: string): string[] {
+  const names = new Set<string>();
+  for (const workflow of PROTECTED_WORKFLOWS) {
+    const file = path.join(root, ".github/workflows", workflow);
+    if (!fs.existsSync(file)) continue;
+    for (const match of fs
+      .readFileSync(file, "utf8")
+      .matchAll(/npm run ([A-Za-z0-9:._-]+)/gu))
+      names.add(match[1]!);
+  }
+  if (names.size === 0)
+    return ["保護workflowがnpm scriptを1件も参照していません"];
+  const candidate = fs.mkdtempSync(path.join(os.tmpdir(), "asc-pinning-"));
+  try {
+    const listed = isolatedGit(root, ["ls-files", "-z"]);
+    if (listed.status !== 0)
+      return ["script固定を判定できません: 追跡fileを列挙できません"];
+    for (const relative of listed.stdout
+      .split("\0")
+      .filter((entry) => entry !== "")) {
+      const destination = path.join(candidate, relative);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(path.join(root, relative), destination);
+    }
+    const metadata = path.join(candidate, "package.json");
+    const parsed = JSON.parse(fs.readFileSync(metadata, "utf8")) as {
+      scripts: Record<string, unknown>;
+    };
+    for (const name of names) parsed.scripts[name] = "true";
+    fs.writeFileSync(metadata, `${JSON.stringify(parsed, null, 2)}\n`);
+    const reported = checkProjectQualityContract(candidate, root).errors.join(
+      "\n",
+    );
+    return [...names]
+      .filter((name) => !reported.includes(name))
+      .sort()
+      .map(
+        (name) =>
+          `保護workflowが呼ぶ${name}がtrusted validatorに固定されていません`,
+      );
+  } finally {
+    fs.rmSync(candidate, { recursive: true, force: true });
+  }
+}
+
 /**
  * release workflowの`run` stepを構造として取り出す。
  *
@@ -899,6 +956,13 @@ const GIT_REDIRECT_ENVIRONMENT = [
  * 固定名だけでは足りずpatternでも除去する。
  */
 const GIT_REDIRECT_ENVIRONMENT_PATTERN = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/u;
+
+/** 既定branch側validatorが保護するworkflow。列挙をここへ一本化する。 */
+const PROTECTED_WORKFLOWS = [
+  "ci.yml",
+  "trusted-quality.yml",
+  "release.yml",
+] as const;
 
 function isolatedGit(
   root: string,
