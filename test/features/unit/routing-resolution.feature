@@ -25,11 +25,11 @@ Feature: coordinatorからimplementerへのrouting解決
     And 実行直前の再検証で解決結果が変化しても拒否する
     And 実装を開始しない
 
-  Scenario: SCN-UNIT-ROUTING-007 公式recommended defaultを観測できないときClaude実装へ切り替える
+  Scenario: SCN-UNIT-ROUTING-007 公式recommended defaultを観測できないときClaude modelへ切り替え実装は停止する
     Given 利用可能model一覧に公式recommended defaultがない
     When 最高位coding tierを解決する
     Then 解決状態はfallbackである
-    And Claude coordinatorをimplementerへ切り替える
+    And Claude modelへ切り替え、coordinatorの実装は再割当まで停止する
     And Codexの順位を推測しない
 
   Scenario: SCN-UNIT-ROUTING-011 recommended defaultが複数あるとき推測せずClaude実装へ切り替える
