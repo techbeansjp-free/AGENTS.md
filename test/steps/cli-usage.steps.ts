@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
@@ -165,6 +166,46 @@ const CHECKS: Readonly<
     );
     assert.equal(root?.fallback, "現在の作業directory");
     assert.ok(rendered.example.startsWith("npx agent-skill-chain worktree"));
+  },
+  /**
+   * 配布schema`workflow-mode-decision.schema.json`はmode決定の**記録**であって
+   * `--assessment`の入力ではない。記録を渡した利用者へ期待形式を名指しで返す（Issue #996）。
+   */
+  "SCN-UNIT-CLIUSAGE-013": async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "asc-assessment-"));
+    const file = path.join(directory, "record.json");
+    const answers = Object.fromEntries(
+      Array.from({ length: 8 }, (_unused, index) => [
+        `Q-0${index + 1}`,
+        { answer: true, evidence: "根拠" },
+      ]),
+    );
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        mode: "quick",
+        requestedMode: "quick",
+        answers,
+        reasons: [],
+        decidedAt: "2026-08-28T00:00:00Z",
+      }),
+    );
+    const result = await run([
+      "issue",
+      "create",
+      "--title=題",
+      `--assessment=${file}`,
+    ]);
+    fs.rmSync(directory, { recursive: true, force: true });
+    assert.notEqual(result.status, 0);
+    assert.ok(
+      [...result.reasons, result.message].some((text) =>
+        text.includes(
+          '質問IDをキーに{"answer":true|false|"unknown","evidence":"根拠"}を持つobjectを渡してください',
+        ),
+      ),
+      [...result.reasons, result.message].join(" / "),
+    );
   },
   "SCN-UNIT-CLIUSAGE-005": async () => {
     const result = await run(["worktree", "create", "--branch", "feature/x"]);

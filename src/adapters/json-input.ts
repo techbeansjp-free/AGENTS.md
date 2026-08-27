@@ -102,14 +102,27 @@ export function readPolicyFileInput(file: string): Policy | PolicySet {
   return loadProjectPolicySet(path.dirname(path.dirname(file)));
 }
 
+/**
+ * mode assessmentの期待形。**利用者が形式を知る正規経路は`--help`であり**（`docs/specs/`の
+ * CLI・GitHub契約「usageと必須入力の提示」）、拒否理由も同じ形を名指しする。
+ * 配布schemaの`workflow-mode-decision.schema.json`はmode決定の**記録**であって入力ではない。
+ * 記録をそのまま渡すと`mode`を尊重するのか無視するのかが曖昧になるため受理しない。
+ */
+const MODE_ASSESSMENT_SHAPE =
+  '質問IDをキーに{"answer":true|false|"unknown","evidence":"根拠"}を持つobjectを渡してください。回答か根拠が欠けたIDは不明として扱いfullへ倒します';
+
 export function readModeAssessment(file: string): Record<string, ModeAnswer> {
   const value = readJsonInput(file);
   if (!isRecord(value))
-    throw new Error(`${file}のmode assessmentはobjectでなければなりません`);
+    throw new Error(
+      `${file}のmode assessmentはobjectでなければなりません。${MODE_ASSESSMENT_SHAPE}`,
+    );
   const answers: Record<string, ModeAnswer> = {};
   for (const [id, answer] of Object.entries(value)) {
     if (!isRecord(answer) || !exactFields(answer, ["answer", "evidence"]))
-      throw new Error(`${file}のmode assessmentが不正です`);
+      throw new Error(
+        `${file}のmode assessmentが不正です。${MODE_ASSESSMENT_SHAPE}`,
+      );
     const answerValue = answer.answer;
     const evidence = answer.evidence;
     if (
@@ -120,7 +133,9 @@ export function readModeAssessment(file: string): Record<string, ModeAnswer> {
       ) ||
       !(evidence === undefined || typeof evidence === "string")
     )
-      throw new Error(`${file}のmode assessmentが不正です`);
+      throw new Error(
+        `${file}のmode assessmentが不正です。${MODE_ASSESSMENT_SHAPE}`,
+      );
     answers[id] = { answer: answerValue, evidence };
   }
   return answers;

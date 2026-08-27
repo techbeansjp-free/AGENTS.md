@@ -60,3 +60,8 @@ Feature: CLIの必須flagとusageを1回の実行で提示する
     Given CLI usage単体検査の準備がある
     When "SCN-UNIT-CLIUSAGE-012"のCLI usage単体検査を実行する
     Then CLI usage単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-CLIUSAGE-013 mode決定記録を渡すと期待形式を名指しして拒否する
+    Given CLI usage単体検査の準備がある
+    When "SCN-UNIT-CLIUSAGE-013"のCLI usage単体検査を実行する
+    Then CLI usage単体検査は期待結果になる
