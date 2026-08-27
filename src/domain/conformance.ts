@@ -755,13 +755,33 @@ export function validateProjectConformanceBinding(
   return { valid: errors.length === 0, errors };
 }
 
-/** Strip non-executable text so a hook name mentioned only in a comment or literal cannot satisfy conformance. */
-function executableSource(source: string): string {
+/**
+ * 実行されないtextを空白へ落とし、commentやliteralの中の名前だけでconformanceを満たせないようにする。
+ *
+ * **推測しない。** `/`が正規表現literalか除算かを確信できない位置では`undefined`を返し、呼び出し側が
+ * 検査不能として扱う。当てにいくと、外れた入力でliteralやcommentの中身がcodeとして漏れる。
+ * 2026-08-27の実測では、`1. / 2`の除算を正規表現と誤読した結果、直後のblock commentの中身が
+ * codeとして残り、**存在しないexportが実在と誤認された。**
+ *
+ * 正規表現literalは改行を含めない。走査が正規表現状態のまま改行へ達したら、それは`/`の判定が
+ * 誤りだったことの証明である。**その場で`undefined`を返す。**
+ *
+ * template literalの`${}`は深さを数える。内側templateの開始backtickを外側の終端と誤認すると、
+ * literalの中身がcodeとして漏れる。
+ *
+ * @returns 実行されるtextだけを残したsource。判定できない、または走査が脱線した場合は`undefined`
+ */
+function executableSource(source: string): string | undefined {
+  /** 直前の有意token。識別子は語全体を保持する。 */
+  let previous = "";
+  /** `${`で開いた区画の外側brace深さ。空でなければtemplateの内側にいる。 */
+  const templateDepths: number[] = [];
+  let braceDepth = 0;
   let result = "";
   let state = "code";
   let escaped = false;
   for (let index = 0; index < source.length; index += 1) {
-    const current = source[index];
+    const current = source[index] as string;
     const next = source[index + 1];
     if (state === "code") {
       if (current === "/" && next === "/") {
@@ -780,15 +800,46 @@ function executableSource(source: string): string {
         result += " ";
         state = current;
         escaped = false;
+        previous = "";
         continue;
       }
+      if (current === "/") {
+        const kind = slashKind(previous);
+        if (kind === "unknown") return undefined;
+        if (kind === "regex") {
+          result += " ";
+          state = "regex";
+          escaped = false;
+          previous = "";
+          continue;
+        }
+      }
+      if (current === "{") braceDepth += 1;
+      else if (current === "}") {
+        const opened = templateDepths.at(-1);
+        if (opened !== undefined && opened === braceDepth) {
+          templateDepths.pop();
+          result += " ";
+          state = "`";
+          escaped = false;
+          previous = "";
+          continue;
+        }
+        braceDepth -= 1;
+      }
       result += current;
+      if (!isSpace(current))
+        previous =
+          /[\w$]/u.test(current) && /[\w$]$/u.test(previous)
+            ? previous + current
+            : current;
       continue;
     }
     if (state === "line-comment") {
-      if (current === "\n") {
-        result += "\n";
+      if (isLineTerminator(current)) {
+        result += current;
         state = "code";
+        previous = "";
       } else result += " ";
       continue;
     }
@@ -797,11 +848,44 @@ function executableSource(source: string): string {
         result += "  ";
         index += 1;
         state = "code";
-      } else result += current === "\n" ? "\n" : " ";
+        previous = "";
+      } else result += isLineTerminator(current) ? current : " ";
+      continue;
+    }
+    if (state === "regex" || state === "regex-class") {
+      /** 正規表現literalは改行を含めない。到達したら`/`の判定が誤りだった証明である。 */
+      if (isLineTerminator(current)) return undefined;
+      if (escaped) {
+        result += " ";
+        escaped = false;
+        continue;
+      }
+      if (current === "\\") {
+        result += " ";
+        escaped = true;
+        continue;
+      }
+      if (state === "regex" && current === "[") {
+        result += " ";
+        state = "regex-class";
+        continue;
+      }
+      if (state === "regex-class" && current === "]") {
+        result += " ";
+        state = "regex";
+        continue;
+      }
+      if (state === "regex" && current === "/") {
+        result += " ";
+        state = "code";
+        previous = "/";
+        continue;
+      }
+      result += " ";
       continue;
     }
     if (escaped) {
-      result += current === "\n" ? "\n" : " ";
+      result += isLineTerminator(current) ? current : " ";
       escaped = false;
       continue;
     }
@@ -810,18 +894,80 @@ function executableSource(source: string): string {
       escaped = true;
       continue;
     }
+    if (state === "`" && current === "$" && next === "{") {
+      templateDepths.push(braceDepth);
+      result += "  ";
+      index += 1;
+      state = "code";
+      previous = "";
+      continue;
+    }
     if (current === state) {
       result += " ";
       state = "code";
+      previous = state === "`" ? "`" : "";
       continue;
     }
-    result += current === "\n" ? "\n" : " ";
+    result += isLineTerminator(current) ? current : " ";
   }
-  return result;
+  /**
+   * 走査の終わりに残ってよいのは`code`と、EOFで正常に終わる`line-comment`だけである。
+   * それ以外は未終端であり、推測で結果を返さない。
+   */
+  if (state !== "code" && state !== "line-comment") return undefined;
+  return templateDepths.length === 0 ? result : undefined;
 }
 
+/** JavaScriptの行終端子。LFだけを見るとCR区切りのsourceで走査が脱線する。 */
+function isLineTerminator(character: string): boolean {
+  return (
+    character === "\n" ||
+    character === "\r" ||
+    character === "\u2028" ||
+    character === "\u2029"
+  );
+}
+
+function isSpace(character: string): boolean {
+  return /\s/u.test(character);
+}
+
+/**
+ * `/`の直前tokenから、正規表現literalか除算かを判別する。
+ *
+ * **確信できない位置では`unknown`を返す。** `)`の直後は制御文の閉じ括弧なら正規表現、
+ * 式の呼び出しなら除算であり、tokenだけでは決まらない。`.`の直後も数値literalの小数点か
+ * property accessかで変わる。**当てにいかない。**
+ */
+function slashKind(previous: string): "divide" | "regex" | "unknown" {
+  if (previous === "") return "regex";
+  if (REGEX_ALLOWING_KEYWORDS.has(previous)) return "regex";
+  if (previous === ")" || previous === ".") return "unknown";
+  return /[\w$\]]$/u.test(previous) ? "divide" : "regex";
+}
+
+const REGEX_ALLOWING_KEYWORDS = new Set([
+  "await",
+  "case",
+  "delete",
+  "do",
+  "else",
+  "in",
+  "instanceof",
+  "new",
+  "of",
+  "return",
+  "throw",
+  "typeof",
+  "void",
+  "yield",
+]);
+
+/** `/`の直前がこの形なら除算である。 */
 function hasExport(file: string, name: string): boolean {
   const source = executableSource(fs.readFileSync(file, "utf8"));
+  /** 解析できないsourceをexport実在の根拠にしない。 */
+  if (source === undefined) return false;
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (
     new RegExp(
