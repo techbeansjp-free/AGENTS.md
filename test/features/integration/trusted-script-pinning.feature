@@ -20,3 +20,13 @@ Feature: 保護workflowが呼ぶscriptがtrusted validatorに固定されてい�
     Given script固定検査の準備がある
     When "SCN-INT-SCRIPTPIN-004"のscript固定検査を実行する
     Then script固定検査は期待結果になる
+
+  Scenario: SCN-INT-SCRIPTPIN-005 保護workflowがscriptを1件も参照しない場合を拒否する
+    Given script固定検査の準備がある
+    When "SCN-INT-SCRIPTPIN-005"のscript固定検査を実行する
+    Then script固定検査は期待結果になる
+
+  Scenario: SCN-INT-SCRIPTPIN-006 追跡fileを列挙できない場合を拒否する
+    Given script固定検査の準備がある
+    When "SCN-INT-SCRIPTPIN-006"のscript固定検査を実行する
+    Then script固定検査は期待結果になる

@@ -90,6 +90,39 @@ const CHECKS: Readonly<Record<string, (world: WorkflowWorld) => void>> = {
     execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
     assert.deepEqual(checkTrustedScriptPinning(root), []);
   },
+  "SCN-INT-SCRIPTPIN-005": (world) => {
+    const root = replicate(world);
+    /**
+     * **判定不能を合格へ倒さない。** 参照を1件も抽出できない状態は、固定漏れが無いことでは
+     * なく、抽出が働いていないことを意味する。
+     */
+    for (const workflow of fs.readdirSync(path.join(root, ".github/workflows")))
+      fs.writeFileSync(
+        path.join(root, ".github/workflows", workflow),
+        "on: push\njobs: {}\n",
+      );
+    execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+    assert.deepEqual(checkTrustedScriptPinning(root), [
+      "保護workflowがnpm scriptを1件も参照していません",
+    ]);
+  },
+  "SCN-INT-SCRIPTPIN-006": (world) => {
+    /**
+     * 保護workflowは残したまま、gitのmetadataだけを失わせる。**参照は抽出できるが候補tree
+     * を作れない状態**で、合格ではなく判定不能として拒否することを要求する。
+     */
+    const root = world.temp("asc-scriptpin-nogit-");
+    const source = path.join(process.cwd(), ".github/workflows");
+    fs.mkdirSync(path.join(root, ".github/workflows"), { recursive: true });
+    for (const workflow of fs.readdirSync(source))
+      fs.copyFileSync(
+        path.join(source, workflow),
+        path.join(root, ".github/workflows", workflow),
+      );
+    assert.deepEqual(checkTrustedScriptPinning(root), [
+      "script固定を判定できません: 追跡fileを列挙できません",
+    ]);
+  },
 };
 
 Given("script固定検査の準備がある", function (this: WorkflowWorld) {
