@@ -58,6 +58,9 @@ function createAuditedRepository(world: AuditBumpWorld): string {
 | H_impl | \`${implementation}\` |
 | ラウンド数 | 1 |
 | Step chain | 迂回: fixtureのため製品経路を通していない |
+| 仕様の所有箇所 | docs/specs/fixture.md:1「fixtureの仕様」 |
+| 成果物行数 | 製品 1行 / 支援層 2行 |
+| 縮小の先行評価 | 既存fixtureの流用では監査経路を通らないため |
 
 ## 変更ファイル個別監査
 

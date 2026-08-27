@@ -1723,7 +1723,7 @@ Given("H_implの全変更pathと一致する個別監査artifactがある", func
     "reviews",
     "08_課題836実装レビュー.md",
   );
-  this.auditMarkdown = `# review\n\n## 0. レビュー識別情報\n\n| 項目 | 観測値 |\n|---|---|\n| 比較基点 | \`${this.auditBase}\` |\n| H_impl | \`${this.auditImplementation}\` |\n| ラウンド数 | 1 |\n| Step chain | 迂回: fixtureのため製品経路を通していない |\n\n## 変更ファイル個別監査\n\n| path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |\n|---|---|---|---|---|---|---|---|---|\n| \`src/x.ts\` | A | package owner | package | 単一責務 | 非循環 | SCN-X-001 | 削除でrollback | pass |\n`;
+  this.auditMarkdown = `# review\n\n## 0. レビュー識別情報\n\n| 項目 | 観測値 |\n|---|---|\n| 比較基点 | \`${this.auditBase}\` |\n| H_impl | \`${this.auditImplementation}\` |\n| ラウンド数 | 1 |\n| Step chain | 迂回: fixtureのため製品経路を通していない |\n| 仕様の所有箇所 | docs/specs/fixture.md:1「fixtureの仕様」 |\n| 成果物行数 | 製品 1行 / 支援層 2行 |\n| 縮小の先行評価 | 既存fixtureの流用では監査経路を通らないため |\n\n## 変更ファイル個別監査\n\n| path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |\n|---|---|---|---|---|---|---|---|---|\n| \`src/x.ts\` | A | package owner | package | 単一責務 | 非循環 | SCN-X-001 | 削除でrollback | pass |\n`;
   fs.writeFileSync(this.auditFile, this.auditMarkdown);
   spawnSync("git", ["add", "docs/reviews/08_課題836実装レビュー.md"], {
     cwd: this.root,

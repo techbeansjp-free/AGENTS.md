@@ -75,3 +75,14 @@ Feature: Issue templateと段階別検証の契約
     Given validなquick Issueの本文にテンプレート由来のplaceholderがある
     When quick Issueのplaceholderを検証する
     Then placeholder errorを示してIssue検証が失敗する
+
+  Scenario Outline: SCN-UNIT-ISSUETPL-010 要求定義templateが仕様の所有箇所を宣言する
+    Given 出荷Issue templateと検証器の見出し契約がある
+    When "<mode>"の要求定義templateを読む
+    Then 要求定義templateは仕様の所有箇所の欄を持つ
+
+    Examples:
+      | mode |
+      | full |
+      | quick |
+      | poc |
