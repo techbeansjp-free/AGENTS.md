@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { validateDistributionImpact } from "../src/domain/conformance.js";
+import {
+  extractMarkdownSection,
+  validateDistributionImpact,
+} from "../src/domain/conformance.js";
+import { withoutMarkdownCode } from "../src/domain/issue.js";
 import {
   evaluateMergeIntegrity,
   extractLossTokens,
@@ -482,6 +486,20 @@ const MAX_REVIEW_ROUNDS = 3;
 const STEP_CHAIN_VIA = "経由";
 const STEP_CHAIN_BYPASS = "迂回";
 
+/** 申告欄を持つ節。**本文や例示を申告として数えないための境界。** */
+const IDENTITY_HEADING = "レビュー識別情報";
+
+/**
+ * 申告を読む対象を識別情報の節へ限定し、codeを取り除く。
+ *
+ * **全文検索では監査目的を迂回できる。** 識別情報の表に欄が無くても、本文・引用・code
+ * fenceへ`| ラウンド数 | 1 |`と書くだけで通ってしまう。節を限定し、さらにcodeを除く。
+ */
+function identitySection(markdown: string): string | undefined {
+  const section = extractMarkdownSection(markdown, IDENTITY_HEADING);
+  return section === undefined ? undefined : withoutMarkdownCode(section);
+}
+
 /**
  * `| ラウンド数 | 3（注記） |`から先頭の整数を読む。
  *
@@ -489,8 +507,8 @@ const STEP_CHAIN_BYPASS = "迂回";
  * 厳格な整数だけを要求すると既存の書き方を一律に壊す。数える対象はラウンド数であって
  * 記法ではない。
  */
-function parseReviewRounds(markdown: string): number | undefined {
-  const cell = /\| *ラウンド数 *\| *([^|]+?) *\|/u.exec(markdown)?.[1];
+function parseReviewRounds(section: string): number | undefined {
+  const cell = /\| *ラウンド数 *\| *([^|]+?) *\|/u.exec(section)?.[1];
   const leading = /^(\d+)/u.exec(cell ?? "")?.[1];
   return leading === undefined ? undefined : Number(leading);
 }
@@ -510,9 +528,9 @@ function parseReviewRounds(markdown: string): number | undefined {
  * **独立oracleを持たない申告を検証したふりをしない。**
  */
 function parseStepChain(
-  markdown: string,
+  section: string,
 ): { kind: "via" | "bypass"; detail: string } | undefined {
-  const cell = /\| *Step chain *\| *([^|]+?) *\|/u.exec(markdown)?.[1];
+  const cell = /\| *Step chain *\| *([^|]+?) *\|/u.exec(section)?.[1];
   if (cell === undefined) return undefined;
   const matched = /^(経由|迂回) *[:：] *(.+)$/u.exec(cell.trim());
   if (!matched) return undefined;
@@ -686,7 +704,12 @@ export function checkFileAudit(root: string) {
   if (ancestry.status !== 0)
     errors.push("H_implがcurrent HEADのancestorではありません");
   const artifactText = fs.readFileSync(artifact, "utf8");
-  const rounds = parseReviewRounds(artifactText);
+  const identity = identitySection(artifactText);
+  if (identity === undefined)
+    errors.push(
+      `review artifactに「## ${IDENTITY_HEADING}」の節がありません。申告はこの節の表だけを正本にします`,
+    );
+  const rounds = parseReviewRounds(identity ?? "");
   if (rounds === undefined)
     errors.push(
       "review artifactに「| ラウンド数 | N |」がありません。実施したラウンド数を記録してください",
@@ -697,7 +720,7 @@ export function checkFileAudit(root: string) {
     );
   else if (rounds < 1)
     errors.push(`reviewラウンドは1以上で記録してください: ${rounds}`);
-  if (parseStepChain(artifactText) === undefined)
+  if (parseStepChain(identity ?? "") === undefined)
     errors.push(
       `review artifactに「| Step chain | ${STEP_CHAIN_VIA}: <staging path> |」または「| Step chain | ${STEP_CHAIN_BYPASS}: <理由> |」がありません`,
     );

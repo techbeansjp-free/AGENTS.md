@@ -63,3 +63,9 @@ Feature: fixture repositoryでのreview artifact差分選択
     Given ラウンド数が"（自動review込み）2"のreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
     Then file監査はラウンド数の欠落を報告する
+
+  Scenario: SCN-INT-STEPCHAIN-009 識別情報の節の外にある申告行を数えない
+    Given 申告行を本文とcode fenceだけに置いたreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査はラウンド数の欠落を報告する
+    And file監査はStep chain申告の欠落を報告する

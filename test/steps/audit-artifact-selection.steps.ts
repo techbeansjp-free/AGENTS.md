@@ -41,6 +41,8 @@ function auditMarkdown(
 ): string {
   return `# fixture実装レビュー
 
+## 0. レビュー識別情報
+
 | 項目 | 値 |
 |---|---|
 | 比較基点 | \`${base}\` |
@@ -309,6 +311,52 @@ Given(
       this,
       "| ラウンド数 | 1 |\n| Step chain | 迂回: |",
     );
+  },
+);
+
+Given(
+  "申告行を本文とcode fenceだけに置いたreview artifactを持つ統合監査repository",
+  function () {
+    /**
+     * 識別情報の節には申告を置かず、**本文とcode fenceにだけ**申告の形をした行を置く。
+     * 全文検索する実装はこれを申告として受理してしまう。
+     */
+    const fixture = createImplementation(this, { historicalArtifacts: 1 });
+    const auditPath = "docs/reviews/02_課題986実装レビュー.md";
+    /**
+     * 識別情報の節の**中**にcode fenceを置き、節の**外**に平文の申告行を置く。
+     * 節の限定とcodeの除去の**どちらを外しても**受理されてしまう配置である。
+     */
+    const body = auditMarkdown(
+      fixture.base,
+      fixture.implementation,
+      fixture.changedPath,
+      "A",
+      [
+        "| reviewer | fixture |",
+        "",
+        "```markdown",
+        "| ラウンド数 | 1 |",
+        "| Step chain | 迂回: 節の中のcode fence |",
+        "```",
+      ].join("\n"),
+    );
+    writeFile(
+      fixture.root,
+      auditPath,
+      [
+        body,
+        "",
+        "## 9. 補足",
+        "",
+        "| ラウンド数 | 1 |",
+        "| Step chain | 迂回: 本文へ書いただけ |",
+        "",
+        "",
+      ].join("\n"),
+    );
+    commitPaths(fixture.root, "docs: review artifactを記録する", [auditPath]);
+    this.expectedAuditPath = auditPath;
   },
 );
 

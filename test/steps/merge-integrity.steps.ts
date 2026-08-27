@@ -129,6 +129,8 @@ function auditMarkdown(
     .join("\n");
   return `# fixture実装レビュー
 
+## 0. レビュー識別情報
+
 | 項目 | 値 |
 |---|---|
 | 比較基点 | \`${base}\` |
