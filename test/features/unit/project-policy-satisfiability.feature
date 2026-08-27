@@ -32,6 +32,28 @@ Feature: 一般利用projectが正直な適用可否でpolicyを充足する
     When repository conformanceを新しいenforcement pointで検証する
     Then 不正なenforcement pointをすべて拒否する
 
+  # executableSourceが正規表現literalを認識しないと、引用符の偶奇が反転してliteralの中身が
+  # codeとして漏れ出す。実在しないexportを実在と誤認し、enforcementの存在確認を迂回できる。
+  Scenario Outline: SCN-UNIT-SAT-014 enforcement exportの走査が正規表現literalに壊されない
+    Given "<fixture>"のenforcement exportを参照するbindingがある
+    When repository conformanceを新しいenforcement pointで検証する
+    Then enforcement exportの判定は"<verdict>"になる
+
+    Examples:
+      | fixture | verdict |
+      | odd-quote-regex | valid |
+      | ghost-in-comment | invalid |
+      | division | valid |
+      | unterminated-string | invalid |
+      | keyword-regex | invalid |
+      | division-assign | valid |
+      | decimal-divide | invalid |
+      | string-divide | invalid |
+      | postfix-divide | invalid |
+      | regex-divide | invalid |
+      | nested-template | invalid |
+      | eof-line-comment | valid |
+
   Scenario: SCN-UNIT-SAT-007 qualityの型検査系をnot-applicableとして宣言できる
     Given quality検査項目を理由と証拠付きnot-applicableにしたchoiceがある
     When project choiceを検証する

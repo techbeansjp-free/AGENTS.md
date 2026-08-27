@@ -459,6 +459,146 @@ Given(
   },
 );
 
+/**
+ * `executableSource`の走査を壊す形を集めたfixture。
+ *
+ * **`odd-quote-regex`が偽陰性、`ghost-in-comment`が偽陽性の再現である。** 前者は正規表現literal中の
+ * 引用符が奇数個で以降が文字列状態のまま進み、実在するexportを見落とす。後者はcommentの中身が
+ * codeとして漏れ出し、実在しないexportを実在と誤認する。
+ */
+const EXPORT_SCAN_FIXTURES: Readonly<Record<string, string>> = {
+  "odd-quote-regex": [
+    'const names = [..."abc".matchAll(/"([^"]+)"/gu)];',
+    "export function scanned(): void {}",
+    "",
+  ].join("\n"),
+  "ghost-in-comment": [
+    'const pattern = /"/;',
+    '/* "',
+    "export function scanned(): void {}",
+    "*/",
+    "const other = pattern;",
+    "",
+  ].join("\n"),
+  division: [
+    "const ratio = (a: number, b: number): number => a / b / 2;",
+    "export function scanned(): void {}",
+    "",
+  ].join("\n"),
+  "unterminated-string": [
+    'const broken = "終端していない',
+    "export function scanned(): void {}",
+    "",
+  ].join("\n"),
+  /** keywordの直後は値が来る位置であり、`/`は除算ではない。 */
+  "keyword-regex": [
+    "function pick(): RegExp {",
+    '  return /"/;',
+    "}",
+    '/* "',
+    "export function scanned(): void {}",
+    "*/",
+    "const used = pick;",
+    "",
+  ].join("\n"),
+  /** 除算代入の直後は正規表現ではない。 */
+  "division-assign": [
+    "let total = 10;",
+    "total /= 2;",
+    "export function scanned(): void {}",
+    "",
+  ].join("\n"),
+  /**
+   * 除算を正規表現と誤読すると、直後のblock comment開始`/*`を正規表現の終端と誤認し、
+   * **commentの中身がcodeとして漏れる。** 判別できない位置は解析不能として拒否する。
+   */
+  "decimal-divide": [
+    "const ratio = 1. / 2; /" + "*",
+    "export function scanned(): void {}",
+    "*" + "/",
+    "const tail = ratio;",
+    "",
+  ].join("\n"),
+  "string-divide": [
+    'const ratio = +"1" / 2; /' + "*",
+    "export function scanned(): void {}",
+    "*" + "/",
+    "const tail = ratio;",
+    "",
+  ].join("\n"),
+  "postfix-divide": [
+    "let n = 1;",
+    "n++ / 2; /" + "*",
+    "export function scanned(): void {}",
+    "*" + "/",
+    "const tail = n;",
+    "",
+  ].join("\n"),
+  "regex-divide": [
+    "const ratio = /x/ / 2; /" + "*",
+    "export function scanned(): void {}",
+    "*" + "/",
+    "const tail = ratio;",
+    "",
+  ].join("\n"),
+  /** 内側templateの開始backtickを外側の終端と誤認すると、literalの中身が漏れる。 */
+  "nested-template": [
+    "const a = `x${`y export function scanned(): void {}`}z`;",
+    "const b = a;",
+    "",
+  ].join("\n"),
+  /** EOFで終わるline commentは未終端ではない。実在するexportを拒否しない。 */
+  "eof-line-comment": [
+    "export function scanned(): void {}",
+    "// 末尾に改行が無いcomment",
+  ].join("\n"),
+};
+
+Given(
+  "{string}のenforcement exportを参照するbindingがある",
+  function (fixture: string) {
+    const source = EXPORT_SCAN_FIXTURES[fixture];
+    if (source === undefined)
+      throw new Error(`未定義のexport走査fixtureです: ${fixture}`);
+    this.root = this.temp("asc-export-scan-");
+    fs.mkdirSync(path.join(this.root, "checks"), { recursive: true });
+    fs.writeFileSync(path.join(this.root, "checks", "target.ts"), source);
+    this.contract = readJson(".agent-skill-chain/policy/conformance.json");
+    this.rules = [rule()];
+    const document = notApplicableBinding();
+    const bindings: unknown[] = document.bindings;
+    bindings[0] = {
+      id: "I1",
+      sourcePaths: ["checks/target.ts"],
+      enforcement: [{ path: "checks/target.ts", export: "scanned" }],
+      counterexampleScenarios: ["SCN-UNIT-SAT-014"],
+    };
+    this.binding = document;
+    this.bindingInputs = [];
+    this.evidence = {
+      tool: "cucumber-js",
+      passedScenarioIds: ["SCN-UNIT-SAT-014"],
+    };
+  },
+);
+
+Then("enforcement exportの判定は{string}になる", function (verdict: string) {
+  const errors = (this.repositoryResults ?? []).flatMap(
+    (result: { errors: string[] }) => result.errors,
+  );
+  const missing = errors.filter((error: string) =>
+    error.includes("enforcement exportが実在しません"),
+  );
+  if (verdict === "valid")
+    assert.deepEqual(missing, [], "実在するexportを見落としています");
+  else
+    assert.equal(
+      missing.length,
+      1,
+      `実在しないexportを実在と誤認しています: ${errors.join(" | ")}`,
+    );
+});
+
 Given("quality検査項目をapplicable objectにしたchoiceがある", function () {
   const value = choices() as unknown as { quality: Record<string, unknown> };
   value.quality.typecheckCommand = {
