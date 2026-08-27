@@ -5,14 +5,14 @@
 | 項目 | 値 |
 |---|---|
 | 対象Issue | #1002 |
-| 比較基点 | `918dc484e60357504cde27aa3bc6f6a1d7b6be82` |
-| H_impl | `7a9ee65ddd8a1925c21bda1bf386bd88477e90d9` |
+| 比較基点 | `4af936b7158b9531eac0c09f1cd4dfc9c70fa37e` |
+| H_impl | `6e54688d764f2c079729aad66cc26b303f249056` |
 | reviewer | claude（欠陥の再現と適用側の事前検証で独立に確認） |
 | 実施日 | 2026-08-27 |
 | ラウンド数 | 1 |
 | Step chain | 迂回: 手書き運用で進めており、workflow recordを経由していない |
 | 仕様の所有箇所 | `scripts/check_conformance.ts`の`EXECUTION_ENTRY_PENDING`が対象2 fileと保留理由を保持。`docs/specs/11_非機能/01_品質要件.md` QLT-ENTRY-001（#973で採番） |
-| 成果物行数 | 製品 +29行 / -0行（registryへのproposal 1件） |
+| 成果物行数 | 製品 +29行 / -0行（registryへのproposal 1件）。支援層は本レビュー文書のみ |
 | 縮小の先行評価 | `isExecutionEntry`は#973で確立済みで、新しい機構を作らない。登録手順も#978（`TQP-DISTRIBUTION-PREPARE-001`）と同じ経路をそのまま使う |
 
 ## 1. 入力証拠
@@ -45,6 +45,7 @@
 | path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
 | `.github/trusted-quality-proposals.json` | M | repository maintainer | 品質契約registry | `TQP-EXECUTION-ENTRY-PROTECTED-001`の登録 | 参照のみ | QLT-ENTRY-001、Issue #1002 | 本PRのrevertで戻る。**適用前なので実効はまだ無い** | pass |
+| `docs/reviews/77_課題1002実行entry判定proposal登録レビュー.md` | A | package owner | 監査証跡 | 本文書 | 参照のみ | Issue #1002 | fileの削除で戻る | pass |
 
 ## 2. 受け入れ条件の確認
 
@@ -71,7 +72,7 @@
 - **適用側を登録前に検証した。** PR-1をcommitしたstateをtrusted rootとして切り出し、そこへPR-2の内容を当てて`valid: true`を確認している。**登録済みproposalは削除できないため、hashを間違えると前進でしか直せない。** 先に確かめた。
 - **新しい機構を作っていない。** `isExecutionEntry`は#973、登録経路は#978の前例をそのまま使う。製品の変更はregistryへの29行だけである。
 - **Issue本文の対象外記述の誤りを実測で見つけた。** 「品質契約versionの変更ではない」は機構上成立せず、版はproposal登録に必ず伴う。**これはowner承認が要る事項であり、着手前に確認して承認を得た。**
-- 保護fileの内容には一切触れていない。本PRの差分は1 file・29行で、`--trusted-root`が`valid: true`を返す。
+- 保護fileの内容には一切触れていない。**製品の差分は1 file・29行**で、`--trusted-root`が`valid: true`を返す。本PRが変更するfileは、これに本レビュー文書を加えた2件である。
 
 ## 4. 敵対的評価
 
