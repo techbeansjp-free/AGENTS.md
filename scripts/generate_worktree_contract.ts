@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 import {
   WORKTREE_NAME_FORMAT,
   WORKTREE_TIMESTAMP_MAX_AGE_MINUTES,
@@ -54,10 +55,7 @@ export function applyWorktreeContract(root: string): {
   return { changed: true, errors: [] };
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === new URL(`file://${process.argv[1]}`).href
-) {
+if (process.argv[1] !== undefined && isExecutionEntry(import.meta.url)) {
   const result = applyWorktreeContract(process.cwd());
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.exitCode = result.errors.length === 0 ? 0 : 1;

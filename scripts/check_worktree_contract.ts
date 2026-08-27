@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 import {
   WORKFLOW_DOCUMENT,
   extractWorktreeContract,
@@ -63,10 +64,7 @@ export function checkWorktreeContract(root = process.cwd()): {
   return { valid: errors.length === 0, errors, document: WORKFLOW_DOCUMENT };
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === new URL(`file://${process.argv[1]}`).href
-) {
+if (process.argv[1] !== undefined && isExecutionEntry(import.meta.url)) {
   const result = checkWorktreeContract();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.exitCode = result.valid ? 0 : 1;

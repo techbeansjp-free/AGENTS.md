@@ -13,7 +13,7 @@ import {
   type RenameResolution,
   type TokenObservation,
 } from "../src/domain/merge-integrity.js";
-import { pathToFileURL } from "node:url";
+
 import { git } from "../src/lib/process.js";
 import {
   parseJsonStrict,
@@ -21,6 +21,7 @@ import {
   type JsonValue,
 } from "../src/lib/security.js";
 import { isPackageVersion } from "../src/lib/version.js";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const AUDIT_DIRECTORY = "docs/reviews";
 const AUDIT_NAME_PATTERN = /^\d+_課題\d+.*レビュー\.md$/u;
@@ -808,10 +809,7 @@ export function checkFileAudit(root: string) {
   };
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-) {
+if (isExecutionEntry(import.meta.url)) {
   const result = checkFileAudit(process.cwd());
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (!result.valid) process.exitCode = 1;

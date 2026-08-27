@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 /**
@@ -197,28 +198,8 @@ export function checkPackageContents(): {
   }
 }
 
-/**
- * symlink経由の起動では`import.meta.url`が実体path、`process.argv[1]`がsymlink pathになり、
- * 単純な完全一致では実行entryと判定できない。判定を誤ると検査が黙って走らないため、
- * 双方をrealpathへ正規化してから比較する。解決できない場合は正規化前の値で比較する。
- */
-function isExecutionEntry(): boolean {
-  const argv = process.argv[1];
-  if (!argv) return false;
-  const resolve = (target: string): string => {
-    try {
-      return fs.realpathSync(target);
-    } catch {
-      return target;
-    }
-  };
-  const entry = resolve(path.resolve(argv));
-  const self = resolve(fileURLToPath(import.meta.url));
-  return entry === self;
-}
-
 // importされただけで npm pack を起動しないよう、実行entryのときだけ検査する。
-if (isExecutionEntry()) {
+if (isExecutionEntry(import.meta.url)) {
   const result = checkPackageContents();
   if (!result.valid) {
     process.stderr.write(

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+
 import {
   computeDistributionDigest,
   normalizeDistributionContent,
@@ -10,6 +10,7 @@ import {
   type DistributionEntry,
 } from "../src/domain/release.js";
 import { resolveContained } from "../src/lib/security.js";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 function targetDirectory(arguments_: string[]): string {
   let target = process.cwd();
@@ -116,9 +117,4 @@ function main(): void {
   }
 }
 
-const entrypointPath = process.argv[1];
-if (
-  entrypointPath !== undefined &&
-  path.resolve(entrypointPath) === fileURLToPath(import.meta.url)
-)
-  main();
+if (isExecutionEntry(import.meta.url)) main();

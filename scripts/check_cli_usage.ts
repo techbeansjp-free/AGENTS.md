@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 import {
   COMMAND_USAGE,
   usageKey,
@@ -188,10 +189,7 @@ export function checkCliUsage(root = process.cwd()): {
   return { valid: errors.length === 0, errors, commands: COMMAND_USAGE.length };
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === new URL(`file://${process.argv[1]}`).href
-) {
+if (process.argv[1] !== undefined && isExecutionEntry(import.meta.url)) {
   const result = checkCliUsage();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.exitCode = result.valid ? 0 : 1;

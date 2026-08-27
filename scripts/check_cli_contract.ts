@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+
 import {
   CLI_USAGE,
   LEGACY_LIFECYCLE_ALIASES,
   PUBLIC_LIFECYCLE_COMMANDS,
 } from "../src/cli-contract.js";
 import { checkCliUsage } from "./check_cli_usage.js";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const GUIDE = ".agent-skill-chain/00_利用案内.md";
 const README = "README.md";
@@ -119,10 +120,7 @@ export function checkCliContract(root = process.cwd()) {
   };
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-) {
+if (isExecutionEntry(import.meta.url)) {
   const result = checkCliContract();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (!result.valid) process.exitCode = 1;

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const INDEX = ".agent-skill-chain/00_利用案内.md";
 const STEP_PREFIXES = Array.from(
@@ -285,10 +286,7 @@ export function checkDirectoryGuides(root = process.cwd()) {
   };
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-) {
+if (isExecutionEntry(import.meta.url)) {
   const result = checkDirectoryGuides();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (!result.valid) process.exitCode = 1;

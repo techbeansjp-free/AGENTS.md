@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
   buildRuleCoverage,
@@ -26,6 +26,7 @@ import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 import { checkWorkflowSteps } from "./check_workflow_steps.js";
 import { checkWorktreeContract } from "./check_worktree_contract.js";
 import { checkRequirementIdScheme } from "./check_requirement_id_scheme.js";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const CANONICAL_CONTRACTS_FILE = ".agent-skill-chain/canonical-contracts.json";
 
@@ -482,6 +483,7 @@ export function checkRepositoryRuleLedger(
         now: new Date().toISOString(),
       }).errors,
     );
+  errors.push(...checkExecutionEntry(root));
   errors.push(...checkTrustedScriptPinning(root));
   errors.push(...checkDistributionGateReachability(root));
   errors.push(...checkModeQuestionText(root));
@@ -675,6 +677,76 @@ function parseModeQuestionRows(
  * 構造の照合ではなく挙動で確かめる。参照scriptを全件`true`へ差し替えた候補treeを作り、
  * trusted validatorが各scriptを名指しで拒否することを要求する。
  */
+/** 実行entry判定の正本。ここだけがrealpath正規化を持ち、他はこれを呼ぶ。 */
+const EXECUTION_ENTRY_MODULE = "src/lib/entrypoint.ts";
+
+/**
+ * 保護fileのため本Issueでは是正できず、品質契約proposalの二段階手順を要する対象。
+ *
+ * **黙って除外しない。** 除外の理由と、是正を引き継ぐIssueをここに残す。
+ */
+const EXECUTION_ENTRY_PENDING: readonly string[] = [
+  "scripts/check_project_quality.ts",
+  "scripts/check_source_quality.ts",
+];
+
+/**
+ * 実行entry判定を各fileで手書きさせない。
+ *
+ * **`import.meta.url`と`process.argv[1]`を直接比較すると、symlink経由の起動で偽になり、
+ * 検査本体が実行されないまま終了値0で終わる。** 失敗ではなく無言の合格として現れるため、
+ * 検査が走らなかったことを示す出力も終了値も残らない。2026-08-27の実測では、同じ欠陥が
+ * 4種類の記法で18箇所へ独立に書かれていた。書き方を各所に委ねる限り正規化は抜け落ちる。
+ */
+export function validateExecutionEntry(
+  source: string,
+  relative: string,
+): string[] {
+  if (relative === EXECUTION_ENTRY_MODULE) return [];
+  /**
+   * **test資産は対象外。** 反例testはこの欠陥の形を文字列として持つ必要があり、
+   * かつtest fileが実行entryとしてgateを起動することはない。
+   */
+  if (relative.startsWith("test/")) return [];
+  if (EXECUTION_ENTRY_PENDING.includes(relative)) return [];
+  const errors: string[] = [];
+  if (/import\.meta\.url\s*===|===\s*[^;\n]*import\.meta\.url/u.test(source))
+    errors.push(
+      `実行entry判定を直接比較しています。${EXECUTION_ENTRY_MODULE}のisExecutionEntryを使ってください: ${relative}`,
+    );
+  if (
+    source.includes("process.argv[1]") &&
+    source.includes("import.meta.url") &&
+    !source.includes("lib/entrypoint.js")
+  )
+    errors.push(
+      `実行entry判定を手書きしています。${EXECUTION_ENTRY_MODULE}のisExecutionEntryを使ってください: ${relative}`,
+    );
+  return errors;
+}
+
+/** `scripts`・`src`・`bin`のTypeScript sourceを走査して実行entry判定を検査する。 */
+export function checkExecutionEntry(root: string): string[] {
+  const errors: string[] = [];
+  const walk = (directory: string): void => {
+    if (!fs.existsSync(directory)) return;
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const resolved = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(resolved);
+      else if (entry.isFile() && entry.name.endsWith(".ts"))
+        errors.push(
+          ...validateExecutionEntry(
+            fs.readFileSync(resolved, "utf8"),
+            path.relative(root, resolved).split(path.sep).join("/"),
+          ),
+        );
+    }
+  };
+  for (const directory of ["scripts", "src", "bin"])
+    walk(path.join(root, directory));
+  return errors;
+}
+
 export function checkTrustedScriptPinning(root: string): string[] {
   const names = new Set<string>();
   for (const workflow of PROTECTED_WORKFLOWS) {
@@ -1145,8 +1217,5 @@ export function checkLifecycleIgnore(root: string): string[] {
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-)
+if (isExecutionEntry(import.meta.url))
   process.exitCode = checkConformance(root);

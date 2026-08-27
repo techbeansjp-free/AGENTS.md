@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+
 import {
   MODE_STEP_SEQUENCES,
   WORKFLOW_STEPS,
   type WorkflowStep,
 } from "../src/domain/workflow.js";
 import type { Mode } from "../src/domain/mode.js";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const WORKFLOW_DOCUMENT = ".agent-skill-chain/docs/01_開発ワークフロー.md";
 
@@ -99,10 +100,7 @@ export function checkWorkflowSteps(
   };
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-) {
+if (isExecutionEntry(import.meta.url)) {
   const result = checkWorkflowSteps();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (!result.valid) process.exitCode = 1;
