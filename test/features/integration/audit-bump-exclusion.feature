@@ -11,3 +11,13 @@ Feature: merge後のrelease bump監査
     Given bump以外のpackage変更をmergeした隔離repository
     When 隔離repositoryのfile監査を実行する
     Then file監査はreview artifact以外のpathを理由に失敗する
+
+  Scenario: SCN-INT-AUDITBUMP-003 既定branch追随でrelease bump PRのmergeを取り込んだH_impl..currentが合格する
+    Given 既定branch追随の後にrelease bump PRのmergeだけを取り込んだ隔離repository
+    When 隔離repositoryのfile監査を実行する
+    Then file監査は合格する
+
+  Scenario: SCN-INT-AUDITBUMP-004 取り込んだmergeの別親側にbump以外のcommitがあれば除外しない
+    Given 既定branch追随で取り込んだmergeの別親側にbump以外のcommitがある隔離repository
+    When 隔離repositoryのfile監査を実行する
+    Then file監査はreview artifact以外のpathを理由に失敗する
