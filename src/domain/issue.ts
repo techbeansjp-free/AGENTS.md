@@ -436,15 +436,17 @@ export function createIssueStaging(
   };
 }
 
-export function recordStagingSync(
+/**
+ * 同期記録の書き込み可否を、**同期の副作用より前に**判定できる部分だけで確かめる。
+ *
+ * **不整合を後で拒否すると、Issueは同期済みなのにcommandが失敗する**（Issue #994）。
+ * 判定できるのは配置・symlink・modeとcheckpointの対応までで、body digestは
+ * 同期後にしか確かめられない。呼び出し側が事前検査に使い、`recordStagingSync`も
+ * 同じ関数を通るため、二重の規則を持たない。
+ */
+export function assertStagingSyncTarget(
   stagingPath: string,
-  input: {
-    tracker: string;
-    checkpoint: number;
-    syncedAt: string;
-    bodyDigest: string;
-    readBackDigest: string;
-  },
+  checkpoint: number,
 ): StoredStagingRecord {
   const resolved = path.resolve(stagingPath);
   const repositoryRoot = path.dirname(
@@ -468,10 +470,26 @@ export function recordStagingSync(
     throw new Error("同期記録の対象にsymlink祖先を使用できません");
   const current = readStoredStagingRecord(resolved);
   const expectedCheckpoint = current.mode === "full" ? 8 : 4;
-  if (input.checkpoint !== expectedCheckpoint)
+  if (checkpoint !== expectedCheckpoint)
     throw new Error(
       `mode=${current.mode}の最終同期checkpointはStep ${expectedCheckpoint}です`,
     );
+  return current;
+}
+
+export function recordStagingSync(
+  stagingPath: string,
+  input: {
+    tracker: string;
+    checkpoint: number;
+    syncedAt: string;
+    bodyDigest: string;
+    readBackDigest: string;
+  },
+): StoredStagingRecord {
+  const resolved = path.resolve(stagingPath);
+  const current = assertStagingSyncTarget(resolved, input.checkpoint);
+  const expectedCheckpoint = current.mode === "full" ? 8 : 4;
   if (!/^[a-f0-9]{64}$/u.test(input.bodyDigest))
     throw new Error("bodyDigestは64桁SHA-256でなければなりません");
   if (

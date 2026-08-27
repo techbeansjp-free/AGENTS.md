@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {
   createIssueStaging,
+  assertStagingSyncTarget,
   recordStagingSync,
   validateIssue,
   type IssueValidationStage,
@@ -1878,22 +1879,37 @@ export async function main(
       .readFileSync(input.bodyFile, "utf8")
       .replace(/\r\n/g, "\n")
       .trimEnd();
-    const result = github("issue.sync", input, process.cwd());
     const stagingPath =
       typeof flags["staging-path"] === "string"
         ? path.resolve(flags["staging-path"])
         : undefined;
     const checkpointRaw = flags.checkpoint;
+    /**
+     * **入力の不整合は同期の前に拒否する。** 後で拒否すると、Issueは同期済みなのに
+     * commandが失敗した状態になり、利用者は何が起きたか判別できない（Issue #994）。
+     *
+     * 最終同期checkpointはquickとpocがStep 4、fullがStep 8である
+     * （`.agent-skill-chain/skills/step-04-issue-sync/SKILL.md`）。
+     * **fullのStep 4は最終同期ではないため同期記録を更新しない。**
+     * 記録先はjournalであり、片方だけを渡した利用者へその手順まで返す。
+     */
     if ((stagingPath === undefined) !== (checkpointRaw === undefined))
       throw new Error(
-        "同期記録を更新する場合は--staging-pathと--checkpointを両方指定してください",
+        "同期記録を更新する場合は--staging-pathと--checkpointを両方指定してください。最終同期checkpointはquickとpocがStep 4、fullがStep 8です。fullのStep 4では同期記録を更新せず、workflow record --step=4でtrackerをartifact、digest一致をevidenceとしてjournalへ残してください",
       );
+    if (
+      stagingPath !== undefined &&
+      (typeof checkpointRaw !== "string" || !/^(?:4|8)$/u.test(checkpointRaw))
+    )
+      throw new Error("--checkpointは4または8で指定してください");
+    /**
+     * **staging記録の書き込み可否も同期の前に確かめる。**
+     * modeとcheckpointの不一致を同期後に拒否すると、Issueだけが更新された状態になる。
+     */
+    if (stagingPath !== undefined)
+      assertStagingSyncTarget(stagingPath, Number(checkpointRaw));
+    const result = github("issue.sync", input, process.cwd());
     if (stagingPath !== undefined) {
-      if (
-        typeof checkpointRaw !== "string" ||
-        !/^(?:4|8)$/u.test(checkpointRaw)
-      )
-        throw new Error("--checkpointは4または8で指定してください");
       const bodyAfter = fs
         .readFileSync(input.bodyFile, "utf8")
         .replace(/\r\n/g, "\n")
