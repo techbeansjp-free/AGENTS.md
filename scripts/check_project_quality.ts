@@ -86,9 +86,64 @@ const EXPECTED_SCRIPTS: Record<string, string> = {
   "conformance:check": "node --import tsx scripts/check_conformance.ts",
   quality:
     "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test",
-  prepack:
-    "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
 };
+
+/**
+ * 配布前品質検証のgate集合。**consumerの準備工程では実行しない。**
+ *
+ * `prepack`はgit依存installの準備でpnpmが実行する。品質gateをそこへ置くと、`.git`の無い
+ * 展開先で`git ls-files`依存の検査が必ず落ち、配布経路が成立しない（Issue #965）。
+ */
+const DISTRIBUTION_GATES = [
+  "project:quality",
+  "quality",
+  "build",
+  "docs:format",
+  "test:format",
+  "trace:check",
+  "architecture:check",
+  "conformance:check",
+  "audit:check",
+  "package:check",
+] as const;
+
+/** 新しい形。`prepack`はbuildだけを行い、品質gateは`verify:distribution`が持つ。 */
+const DISTRIBUTION_PREPARE_COMMAND = "npm run build";
+
+/**
+ * `prepack`と配布前品質検証の組が、現行の形か新しい形のいずれかであることを検査する。
+ *
+ * **両方を受理するのは前方互換のためである。** 新しい形へ移すには`prepack`の内容を変える
+ * 必要があり、この検査自体がprotected fileにあるため、proposal registryによる二段階の
+ * 承認を経る。基盤段階でこの検査が両方を受理していなければ、activation段階が提出できない。
+ */
+function validateDistributionScripts(
+  scripts: Record<string, unknown>,
+): string[] {
+  const prepack = typeof scripts.prepack === "string" ? scripts.prepack : "";
+  const gates = DISTRIBUTION_GATES.map((gate) => `npm run ${gate}`).join(
+    " && ",
+  );
+  if (prepack === DISTRIBUTION_PREPARE_COMMAND) {
+    const errors: string[] = [];
+    if (scripts.prepare !== DISTRIBUTION_PREPARE_COMMAND)
+      errors.push(
+        `prepackを${DISTRIBUTION_PREPARE_COMMAND}にする場合、prepareも同じ内容が必要です`,
+      );
+    if (scripts["verify:distribution"] !== gates)
+      errors.push(
+        "verify:distributionは配布前品質gateを順序どおり完全一致で宣言しなければなりません",
+      );
+    return errors;
+  }
+  if (prepack !== gates) return ["prepack scriptを自己緩和できません"];
+  if (
+    scripts.prepare !== undefined &&
+    scripts.prepare !== DISTRIBUTION_PREPARE_COMMAND
+  )
+    return [`prepareは${DISTRIBUTION_PREPARE_COMMAND}でなければなりません`];
+  return [];
+}
 
 function readObject(file: string): Record<string, unknown> {
   const value = parseJsonStrict(fs.readFileSync(file, "utf8"), file);
@@ -443,11 +498,7 @@ export function checkProjectQualityContract(
     errors.push(
       "quality scriptはlint→format→typecheck→source→testの順序が必要です",
     );
-  const prepack = typeof scripts.prepack === "string" ? scripts.prepack : "";
-  if (!prepack.startsWith("npm run project:quality && npm run quality && "))
-    errors.push(
-      "prepackはproject品質契約とqualityを先頭で実行しなければなりません",
-    );
+  errors.push(...validateDistributionScripts(scripts));
   checks.push("project choiceとpackage scriptの完全一致");
 
   const tsconfig = readObject(path.join(root, "tsconfig.json"));
