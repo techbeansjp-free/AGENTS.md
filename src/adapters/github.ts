@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { run } from "../lib/process.js";
 import { isRecord } from "../types.js";
 
@@ -10,7 +12,7 @@ interface GitHubInput {
   headSha: string;
   head: string;
   base: string;
-  bodyLink: string;
+  body: string;
   pr: number;
   sha: string;
   implementationCommitSha: string;
@@ -310,8 +312,8 @@ export function github(
   operation: "pr.create",
   input: Pick<
     GitHubInput,
-    "repository" | "issue" | "headSha" | "head" | "base" | "bodyLink"
-  > & { title?: string },
+    "repository" | "issue" | "headSha" | "head" | "base" | "title" | "body"
+  >,
   cwd: string,
 ): PullRequestCreationResult;
 export function github(
@@ -412,6 +414,15 @@ export function github(
       throw new Error(
         "PR作成前にremote base branchを固定commitへ解決できません",
       );
+    /**
+     * **本文はfile経由で渡す。** argvの上限は約131KBで、template構造を満たす本文は
+     * 改行と記号を多く含む。`--body`へ直接載せると上限と引用の扱いに依存する。
+     */
+    const composedBodyFile = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-pr-body-")),
+      "body.md",
+    );
+    fs.writeFileSync(composedBodyFile, `${input.body}\n`);
     const result = run(
       "gh",
       [
@@ -424,9 +435,9 @@ export function github(
         "--base",
         input.base,
         "--title",
-        input.title ?? `Issue #${input.issue}`,
-        "--body",
-        input.bodyLink,
+        input.title,
+        "--body-file",
+        composedBodyFile,
       ],
       cwd,
     );

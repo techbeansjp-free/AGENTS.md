@@ -44,6 +44,47 @@ const FULL_FILES = {
 
 export type IssueValidationStage = "requirements" | "design";
 
+/** 配布templateのPR本文。見出し構造の正本はこのfileだけが持つ。 */
+const PULL_REQUEST_BODY_TEMPLATE = "11_プルリクエスト本文.md";
+
+/**
+ * PR本文の必須見出しを配布templateから導出する。
+ *
+ * **一覧をここへ書き写さない。** 書き写すとtemplateと独立に古くなり、Issue #951が
+ * 指摘した「同じ規則が複数箇所に複製される」型を再生産する。
+ *
+ * 見出しに条件を書いた節（`（…だけ）`）は任意とする。条件節を必須にすると、条件を
+ * 満たさない変更でPRを作れなくなり、充足不能な受け入れ条件になる。
+ */
+export function pullRequestRequiredHeadings(): readonly string[] {
+  const template = fs.readFileSync(
+    path.join(templateRoot, PULL_REQUEST_BODY_TEMPLATE),
+    "utf8",
+  );
+  return [...template.matchAll(/^## (.+)$/gmu)]
+    .map((match) => match[1]!.trim())
+    .filter((heading) => !/（[^）]*だけ）/u.test(heading));
+}
+
+/**
+ * PR本文が配布templateの構造を満たすかを検証する。
+ *
+ * **構造の存在確認だけを行う。** 「2〜4文で記載する」のような内容品質は判定しない。
+ * 空欄も一律には禁止しない。未実施のラウンドは空で正しいためである。
+ */
+export function validatePullRequestBody(body: string): {
+  valid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  for (const heading of pullRequestRequiredHeadings())
+    if (!body.includes(`## ${heading}`))
+      errors.push(`PR本文に必須見出しがありません: ${heading}`);
+  if (hasUnresolvedPlaceholder(body))
+    errors.push("PR本文に未解決のplaceholderが残っています");
+  return { valid: errors.length === 0, errors };
+}
+
 export function issueRequiredHeadings(mode: Mode): readonly string[] {
   return mode === "quick"
     ? [

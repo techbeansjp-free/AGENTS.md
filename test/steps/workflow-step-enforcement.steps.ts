@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import {
+  WorkflowWorld,
+  conformingPullRequestBody,
+  stepDefinitions,
+} from "../support/world.js";
 import {
   fixtureInstant,
   fixtureInstantMs,
@@ -724,6 +728,14 @@ function preparePullRequest(
       },
     })}\n`,
   );
+  const bodyFile = path.join(world.temp("asc-workflow-body-"), "PR.md");
+  fs.writeFileSync(
+    bodyFile,
+    conformingPullRequestBody({
+      title: "bugfix: 877を是正する",
+      canonicalIssue: 877,
+    }),
+  );
   return {
     root,
     staging,
@@ -743,6 +755,7 @@ function preparePullRequest(
       `--evidence=${evidence}`,
       `--root=${root}`,
       `--staging=${staging}`,
+      `--body-file=${bodyFile}`,
     ],
   };
 }
@@ -843,10 +856,11 @@ if (exact(["auth", "status"])) {
     "--base",
     "main",
     "--title",
-    "Issue #877",
-    "--body",
-    "Closes #877",
-  ])
+    "bugfix: 877を是正する",
+    "--body-file",
+    args[args.length - 1],
+  ]) &&
+  require("node:fs").readFileSync(args[args.length - 1], "utf8").includes("Closes #877")
 ) {
   process.stdout.write(prUrl + "\\n");
 } else if (

@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import {
+  WorkflowWorld,
+  conformingPullRequestBody,
+  stepDefinitions,
+} from "../support/world.js";
+import { pullRequestRequiredHeadings } from "../../src/domain/issue.js";
 import {
   createPullRequest,
   authorizeMerge,
@@ -37,6 +42,7 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   prCreationResult: PullRequestCreationResult;
   prInspection: PullRequestInspection;
   prOverrides: Record<string, string>;
+  requiredHeadings: readonly string[];
   protectionObservation: BranchProtectionObservation;
   reviewObservations: ApprovalObservation[];
   stubPath: string;
@@ -170,6 +176,107 @@ Given("test evidenceのHEADだけが異なる", function () {
 Given("spec evidenceからscenario traceを除く", function () {
   this.evidence.spec.trace.scenarios = [];
 });
+const BASE_PR_BODY = (): string =>
+  conformingPullRequestBody({
+    title: "bugfix: 824を是正する",
+    canonicalIssue: 824,
+  });
+
+/** 見出し節を1件だけ取り除く。**節の本文ごと落とす。**見出し行だけ消すと本文が前節へ混ざる。 */
+function withoutHeading(body: string, heading: string): string {
+  const lines = body.split("\n");
+  const start = lines.findIndex((line) => line === `## ${heading}`);
+  if (start === -1) throw new Error(`見出しがありません: ${heading}`);
+  const rest = lines.slice(start + 1);
+  const offset = rest.findIndex((line) => line.startsWith("## "));
+  const end = offset === -1 ? lines.length : start + 1 + offset;
+  return [...lines.slice(0, start), ...lines.slice(end)].join("\n");
+}
+
+Given("PR本文から{string}の見出しを除く", function (heading: string) {
+  this.prOverrides = { body: withoutHeading(BASE_PR_BODY(), heading) };
+});
+
+Given("PR本文へ未解決のplaceholderを残す", function () {
+  this.prOverrides = {
+    body: BASE_PR_BODY().replace("## 変更内容\n", "## 変更内容\n\n（内容）\n"),
+  };
+});
+
+Given("PR本文へ条件付き見出しを加える", function () {
+  this.prOverrides = {
+    body: `${BASE_PR_BODY()}\n## 図表（理解を大きく助ける場合だけ）\n\nなし。\n`,
+  };
+});
+
+Given("PR本文からIssue参照を除く", function () {
+  this.prOverrides = {
+    body: BASE_PR_BODY().replace("Closes #824", "対象を是正した。"),
+  };
+});
+
+const CONDITIONAL_HEADING = /（[^）]*だけ）/u;
+
+/** 配布templateの`## `見出しを原文のまま読む。**導出関数を経由しない。** */
+function templateHeadings(): string[] {
+  const template = fs.readFileSync(
+    path.join(
+      process.cwd(),
+      ".agent-skill-chain/templates/issue/11_プルリクエスト本文.md",
+    ),
+    "utf8",
+  );
+  return [...template.matchAll(/^## (.+)$/gmu)].map((match) =>
+    match[1]!.trim(),
+  );
+}
+
+Given("PR本文templateに条件付き見出しがある", function () {
+  assert.ok(
+    templateHeadings().some((heading) => CONDITIONAL_HEADING.test(heading)),
+    "templateに条件付き見出しがありません。この検査は前提を失っています",
+  );
+});
+
+When("必須見出しを導出する", function () {
+  this.requiredHeadings = pullRequestRequiredHeadings();
+});
+
+Then("必須見出しに条件付き見出しは含まれない", function () {
+  const conditional = this.requiredHeadings.filter((heading) =>
+    CONDITIONAL_HEADING.test(heading),
+  );
+  assert.deepEqual(
+    conditional,
+    [],
+    `条件付き見出しを必須にしています: ${conditional.join(", ")}`,
+  );
+});
+
+Then("必須見出しにtemplateの無条件見出しがすべて含まれる", function () {
+  const required = this.requiredHeadings;
+  for (const heading of templateHeadings())
+    if (!CONDITIONAL_HEADING.test(heading))
+      assert.ok(
+        required.includes(heading),
+        `無条件見出しが必須から漏れています: ${heading}`,
+      );
+});
+
+Then("PR previewのtitleは{string}である", function (expected: string) {
+  assert.equal(this.deliveryResult.preview?.title, expected);
+});
+
+Then("PR previewのbodyはH1見出しを含まない", function () {
+  assert.ok(!/^#\s+\S/mu.test(this.deliveryResult.preview?.body ?? ""));
+});
+
+Then("PR previewのbodyは必須見出しをすべて含む", function () {
+  const body = this.deliveryResult.preview?.body ?? "";
+  for (const heading of pullRequestRequiredHeadings())
+    assert.ok(body.includes(`## ${heading}`), `見出しがありません: ${heading}`);
+});
+
 Given(
   "PR inputの{word}を{string}にする",
   function (field: string, value: string) {
@@ -186,6 +293,11 @@ When("PR createをdry-runする", function () {
       head: "feature",
       base: "main",
       repository: "o/r",
+      body: conformingPullRequestBody({
+        title: "bugfix: 824を是正する",
+        canonicalIssue: 824,
+      }),
+      ...this.prOverrides,
     },
     () => {
       this.calls.push("unexpected");
@@ -205,6 +317,10 @@ When("PR createをapplyする", function () {
         head: "feature",
         base: "main",
         repository: "o/r",
+        body: conformingPullRequestBody({
+          title: "bugfix: 824を是正する",
+          canonicalIssue: 824,
+        }),
         trustedPolicy: this.omitTrustedPolicy
           ? undefined
           : trustedDeliveryPolicy(),
@@ -229,6 +345,10 @@ When("PR createをdry-runして失敗を確認する", function () {
         head: "feature",
         base: "main",
         repository: "o/r",
+        body: conformingPullRequestBody({
+          title: "bugfix: 824を是正する",
+          canonicalIssue: 824,
+        }),
         ...this.prOverrides,
       },
       () => {
@@ -553,7 +673,8 @@ When("PR create adapterを実行する", function () {
         head: "feature/x",
         headSha: "a".repeat(40),
         base: "main",
-        bodyLink: "Relates to #824",
+        title: "bugfix: 対象を是正する",
+        body: "Relates to #824",
       },
       process.cwd(),
     );

@@ -12,6 +12,7 @@ import {
   World,
   type IWorldOptions,
 } from "@cucumber/cucumber";
+import { pullRequestRequiredHeadings } from "../../src/domain/issue.js";
 
 type WorkflowParameters = Readonly<Record<string, unknown>>;
 
@@ -72,3 +73,30 @@ cucumberAfter<WorkflowWorld>(function () {
       retryDelay: 50,
     });
 });
+
+/**
+ * 配布templateの構造を満たすPR本文を組み立てる。
+ *
+ * **必須見出しを書き写さず`pullRequestRequiredHeadings`から導出する。** 書き写すと
+ * templateと独立に古くなり、Issue #951が指摘した複製の型をtest側で再生産する。
+ */
+export function conformingPullRequestBody(input: {
+  title: string;
+  canonicalIssue: number;
+  relatedIssues?: readonly number[];
+}): string {
+  const references = [
+    `Closes #${input.canonicalIssue}`,
+    ...(input.relatedIssues ?? []).map((issue) => `Relates to #${issue}`),
+  ].join("\n\n");
+  return [
+    `# ${input.title}`,
+    "",
+    ...pullRequestRequiredHeadings().flatMap((heading) => [
+      `## ${heading}`,
+      "",
+      heading === "概要" ? references : "確認済み。",
+      "",
+    ]),
+  ].join("\n");
+}
