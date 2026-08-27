@@ -21,6 +21,7 @@ import {
   STAGING_LIFECYCLE_AREAS,
 } from "../src/domain/staging.js";
 import { FORBIDDEN_DISTRIBUTION_PREFIXES } from "./check_package_contents.js";
+import { checkProjectQualityContract } from "./check_project_quality.js";
 import { isRecord, type ProviderCapabilityMapping } from "../src/types.js";
 import { checkWorkflowSteps } from "./check_workflow_steps.js";
 import { checkWorktreeContract } from "./check_worktree_contract.js";
@@ -266,7 +267,7 @@ export function checkPackageManagerBoundary(root: string): string[] {
   );
   if (!isRecord(choices) || choices.packageManager !== "npm")
     errors.push("project choiceのpackageManagerはnpmでなければなりません");
-  for (const workflow of ["ci.yml", "trusted-quality.yml", "release.yml"]) {
+  for (const workflow of PROTECTED_WORKFLOWS) {
     const file = path.join(root, ".github/workflows", workflow);
     if (
       !fs.existsSync(file) ||
@@ -481,6 +482,7 @@ export function checkRepositoryRuleLedger(
         now: new Date().toISOString(),
       }).errors,
     );
+  errors.push(...checkTrustedScriptPinning(root));
   errors.push(...checkDistributionGateReachability(root));
   errors.push(...checkModeQuestionText(root));
   errors.push(...checkLifecycleIgnore(root));
@@ -664,6 +666,85 @@ function parseModeQuestionRows(
  * IDと質問文だけを比べると、機械可読側で分類を別の質問へ付け替えても通過する。
  */
 /**
+ * 保護workflowが呼ぶscriptが、既定branch側validatorに固定されていることを検査する。
+ *
+ * **`EXPECTED_SCRIPTS`が参照集合を包含することを、何も強制していない。** 現状は一致して
+ * いるが、`ci.yml`へ`npm run newgate`を足して固定側への追加を忘れると、その瞬間に候補が
+ * その検査を`true`へ差し替えられる。**追加漏れは何のエラーにもならない。**
+ *
+ * 構造の照合ではなく挙動で確かめる。参照scriptを全件`true`へ差し替えた候補treeを作り、
+ * trusted validatorが各scriptを名指しで拒否することを要求する。
+ */
+export function checkTrustedScriptPinning(root: string): string[] {
+  const names = new Set<string>();
+  for (const workflow of PROTECTED_WORKFLOWS) {
+    const file = path.join(root, ".github/workflows", workflow);
+    if (!fs.existsSync(file)) continue;
+    /** **全文検索ではなくstep構造を使う。** commentや`echo`の引数を参照と誤認しない。 */
+    for (const step of releaseRunSteps(fs.readFileSync(file, "utf8"))) {
+      if (!step.enabled) continue;
+      for (const segment of reliableSegments(step.command)) {
+        /**
+         * **引用符は対で照合する。** 片側だけを任意にすると`npm run "x`のような
+         * 不均衡な記法まで受理し、逆に単一引用符の`npm run \'x\'`は抽出できない。
+         * 抽出できない参照は候補treeで差し替えられず、**固定漏れが検出されないまま
+         * 合格になる。**
+         */
+        const invoked =
+          /^npm\s+run(?:-script)?\s+(["']?)([A-Za-z0-9:._-]+)\1(?:\s|$)/u.exec(
+            segment,
+          );
+        if (invoked) names.add(invoked[2]!);
+      }
+    }
+  }
+  if (names.size === 0)
+    return ["保護workflowがnpm scriptを1件も参照していません"];
+  const candidate = fs.mkdtempSync(path.join(os.tmpdir(), "asc-pinning-"));
+  try {
+    const listed = isolatedGit(root, ["ls-files", "-z"]);
+    if (listed.status !== 0)
+      return ["script固定を判定できません: 追跡fileを列挙できません"];
+    for (const relative of listed.stdout
+      .split("\0")
+      .filter((entry) => entry !== "")) {
+      const destination = path.join(candidate, relative);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(path.join(root, relative), destination);
+    }
+    const metadata = path.join(candidate, "package.json");
+    const parsed = JSON.parse(fs.readFileSync(metadata, "utf8")) as {
+      scripts: Record<string, unknown>;
+    };
+    for (const name of names) parsed.scripts[name] = "true";
+    fs.writeFileSync(metadata, `${JSON.stringify(parsed, null, 2)}\n`);
+    const reported = checkProjectQualityContract(candidate, root).errors;
+    /**
+     * **部分一致で帰属させない。** 未固定の`project`があるとき、固定済み`project:quality`の
+     * 診断文が`project`を含むため、単純な包含判定では見逃す。前後がscript名を構成しない
+     * ことを要求して、名前をtokenとして照合する。
+     */
+    const named = (name: string): boolean => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+      const pattern = new RegExp(
+        `(?<![A-Za-z0-9:._-])${escaped}(?![A-Za-z0-9:._-])`,
+        "u",
+      );
+      return reported.some((entry) => pattern.test(entry));
+    };
+    return [...names]
+      .filter((name) => !named(name))
+      .sort()
+      .map(
+        (name) =>
+          `保護workflowが呼ぶ${name}がtrusted validatorに固定されていません`,
+      );
+  } finally {
+    fs.rmSync(candidate, { recursive: true, force: true });
+  }
+}
+
+/**
  * release workflowの`run` stepを構造として取り出す。
  *
  * **YAML全文の文字列検索では足りない。** コメント、`echo`の引数、`if: false`で無効化された
@@ -671,6 +752,22 @@ function parseModeQuestionRows(
  */
 /** 配布準備工程を構築だけへ移した形。`scripts/check_project_quality.ts`と同じ値。 */
 const DISTRIBUTION_PREPARE_COMMAND = "npm run build";
+
+/**
+ * commandを、失敗が伝播する単位へ分割する。
+ *
+ * `&&`・`;`・改行は前段の失敗を伝えるが、**`||`は伝えない。** `true || npm run x`は
+ * 左辺が成功するとxを実行せず、`npm run x || true`はxの失敗を握り潰す。
+ * どちらも「実行して成功を要求する」を満たさないため、`||`を含む区間は数えない。
+ *
+ * 区間の**先頭**だけをcommand位置とみなすため、`echo "npm run x"`は数えない。
+ */
+function reliableSegments(command: string): string[] {
+  return command
+    .split(/&&|;|\n/u)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "" && !entry.includes("||"));
+}
 
 function releaseRunSteps(
   yaml: string,
@@ -771,18 +868,6 @@ export function checkDistributionGateReachability(root: string): string[] {
     return errors;
   }
   const steps = releaseRunSteps(fs.readFileSync(workflowFile, "utf8"));
-  /**
-   * commandを、失敗が伝播する単位へ分割する。
-   *
-   * `&&`・`;`・改行は前段の失敗を伝えるが、**`||`は伝えない。** `true || npm run x`は
-   * 左辺が成功するとxを実行せず、`npm run x || true`はxの失敗を握り潰す。
-   * どちらも「実行して成功を要求する」を満たさないため、`||`を含む区間は数えない。
-   */
-  const reliableSegments = (command: string): string[] =>
-    command
-      .split(/&&|;|\n/u)
-      .map((entry) => entry.trim())
-      .filter((entry) => entry !== "" && !entry.includes("||"));
   const invocationIndex = (kind: "prepack" | "verify"): number => {
     const pattern =
       kind === "prepack"
@@ -899,6 +984,13 @@ const GIT_REDIRECT_ENVIRONMENT = [
  * 固定名だけでは足りずpatternでも除去する。
  */
 const GIT_REDIRECT_ENVIRONMENT_PATTERN = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/u;
+
+/** 既定branch側validatorが保護するworkflow。列挙をここへ一本化する。 */
+const PROTECTED_WORKFLOWS = [
+  "ci.yml",
+  "trusted-quality.yml",
+  "release.yml",
+] as const;
 
 function isolatedGit(
   root: string,
