@@ -65,3 +65,8 @@ Feature: CLIの必須flagとusageを1回の実行で提示する
     Given CLI usage単体検査の準備がある
     When "SCN-UNIT-CLIUSAGE-013"のCLI usage単体検査を実行する
     Then CLI usage単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-CLIUSAGE-014 staging記録の書き込み可否を副作用の前に判定し記録先を案内する
+    Given CLI usage単体検査の準備がある
+    When "SCN-UNIT-CLIUSAGE-014"のCLI usage単体検査を実行する
+    Then CLI usage単体検査は期待結果になる

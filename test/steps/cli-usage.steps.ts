@@ -207,6 +207,60 @@ const CHECKS: Readonly<
       [...result.reasons, result.message].join(" / "),
     );
   },
+  /**
+   * `--staging-path`だけを渡した場合、**同期の前に**拒否する。後で拒否すると
+   * Issueは同期済みなのにcommandが失敗した状態になる（Issue #994）。
+   * ここではGitHubへ到達しないことを、拒否理由が案内文であることで確かめる。
+   */
+  "SCN-UNIT-CLIUSAGE-014": async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "asc-sync-"));
+    const bodyFile = path.join(directory, "ISSUE_BODY.md");
+    fs.writeFileSync(bodyFile, "# 本文\n");
+    const result = await run([
+      "issue",
+      "sync",
+      "--repo=example/absent-repository",
+      "--issue=1",
+      `--body-file=${bodyFile}`,
+      "--apply",
+      "--authorize=approved",
+      `--staging-path=${directory}`,
+    ]);
+    assert.notEqual(result.status, 0);
+    assert.ok(
+      [...result.reasons, result.message].some((text) =>
+        text.includes(
+          "fullのStep 4では同期記録を更新せず、workflow record --step=4",
+        ),
+      ),
+      [...result.reasons, result.message].join(" / "),
+    );
+    /**
+     * modeとcheckpointの整合も同期の前に判定する。**配置違反のstaging pathを渡すと、
+     * 事前検査が動いていれば配置のerrorになり、動いていなければGitHub側のerrorになる。**
+     */
+    const misplaced = await run([
+      "issue",
+      "sync",
+      "--repo=example/absent-repository",
+      "--issue=1",
+      `--body-file=${bodyFile}`,
+      "--apply",
+      "--authorize=approved",
+      `--staging-path=${directory}`,
+      "--checkpoint=4",
+    ]);
+    fs.rmSync(directory, { recursive: true, force: true });
+    assert.notEqual(misplaced.status, 0);
+    assert.ok(
+      [...misplaced.reasons, misplaced.message].some((text) =>
+        text.includes(
+          "同期記録は.agent-skill-chain/tmp/issues/直下のstagingだけに書き込めます",
+        ),
+      ),
+      [...misplaced.reasons, misplaced.message].join(" / "),
+    );
+  },
   "SCN-UNIT-CLIUSAGE-005": async () => {
     const result = await run(["worktree", "create", "--branch", "feature/x"]);
     assert.deepEqual(result.reasons, [
