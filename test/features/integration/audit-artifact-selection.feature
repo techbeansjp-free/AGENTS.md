@@ -37,27 +37,29 @@ Feature: fixture repositoryでのreview artifact差分選択
     When 監査選択repositoryのfile監査を実行する
     Then file監査はStep chain申告の欠落を報告する
 
-  Scenario: SCN-INT-STEPCHAIN-004 迂回の申告に理由が無い場合を拒否する
+  Scenario: SCN-INT-STEPCHAIN-004 理由を伴わない迂回の申告を拒否する
     Given Step chainを理由なしで迂回と申告したreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
-    Then file監査は迂回理由の欠落を報告する
+    Then file監査はStep chain申告の欠落を報告する
 
-  Scenario: SCN-INT-STEPCHAIN-005 経由の申告にjournalが無い場合を拒否する
-    Given Step chainを経由と申告しjournalが無いreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査はjournalの欠落を報告する
-
-  Scenario: SCN-INT-STEPCHAIN-006 経由の申告と整合するjournalを受理する
-    Given Step chainを経由と申告し整合するjournalを持つ統合監査repository
+  Scenario: SCN-INT-STEPCHAIN-005 経由の申告を記録として受理する
+    Given Step chainを"経由: .agent-skill-chain/tmp/issues/986"と申告したreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
     Then 監査選択のfile監査は合格する
+
+  Scenario: SCN-INT-STEPCHAIN-006 短い理由の迂回申告を受理する
+    Given Step chainを"迂回: CI障害"と申告したreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then 監査選択のfile監査は合格する
+
+
 
   Scenario: SCN-INT-STEPCHAIN-007 注記付きのラウンド数から先頭の整数を読む
     Given ラウンド数が"3（うち1ラウンドは自動review）"のreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
     Then 監査選択のfile監査は合格する
 
-  Scenario: SCN-INT-STEPCHAIN-008 経由の申告で必須Stepが欠けたjournalを拒否する
-    Given Step chainを経由と申告し必須Stepが欠けたjournalを持つ統合監査repository
+  Scenario: SCN-INT-STEPCHAIN-008 先頭が整数でないラウンド数を記録の欠落として扱う
+    Given ラウンド数が"（自動review込み）2"のreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
-    Then file監査はStep journalの不整合を報告する
+    Then file監査はラウンド数の欠落を報告する

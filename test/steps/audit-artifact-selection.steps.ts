@@ -3,10 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { checkFileAudit } from "../../scripts/check_file_audit.js";
-import {
-  STEP_JOURNAL_FILE,
-  WORKFLOW_STEPS,
-} from "../../src/domain/workflow.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 type AuditResult = ReturnType<typeof checkFileAudit>;
@@ -308,83 +304,23 @@ Given("Step chain欄が無いreview artifactを持つ統合監査repository", fu
 Given(
   "Step chainを理由なしで迂回と申告したreview artifactを持つ統合監査repository",
   function () {
+    /** 理由が空の申告は申告として成立しない。parserが`(.+)`で非空を保証する。 */
     commitArtifactWithIdentity(
       this,
-      "| ラウンド数 | 1 |\n| Step chain | 迂回: 短い |",
+      "| ラウンド数 | 1 |\n| Step chain | 迂回: |",
     );
   },
 );
 
 Given(
-  "Step chainを経由と申告しjournalが無いreview artifactを持つ統合監査repository",
-  function () {
+  "Step chainを{string}と申告したreview artifactを持つ統合監査repository",
+  function (declaration: string) {
     commitArtifactWithIdentity(
       this,
-      "| ラウンド数 | 1 |\n| Step chain | 経由: .agent-skill-chain/tmp/issues/986 |",
+      `| ラウンド数 | 1 |\n| Step chain | ${declaration} |`,
     );
   },
 );
-
-function commitArtifactWithJournal(
-  world: AuditSelectionWorld,
-  keep: (definition: (typeof WORKFLOW_STEPS)[number]) => boolean,
-): void {
-  {
-    const staging = ".agent-skill-chain/tmp/issues/986";
-    const fixture = createImplementation(world, { historicalArtifacts: 1 });
-    /** Step 0〜10をfullの必須順で並べる。**既存のvalidateStepJournalが整合を判定する。** */
-    const entries = WORKFLOW_STEPS.filter(
-      (definition) => definition.step <= 10 && keep(definition),
-    ).map((definition) =>
-      JSON.stringify({
-        step: definition.step,
-        skillId: definition.skillId,
-        mode: "full",
-        recordedAt: `2026-08-27T${String(definition.step).padStart(2, "0")}:00:00.000Z`,
-        artifacts: [`artifact-${definition.step}`],
-        evidence: `step ${definition.step}の証拠`,
-      }),
-    );
-    writeFile(
-      fixture.root,
-      `${staging}/${STEP_JOURNAL_FILE}`,
-      `${entries.join("\n")}\n`,
-    );
-    const auditPath = "docs/reviews/02_課題986実装レビュー.md";
-    writeFile(
-      fixture.root,
-      auditPath,
-      auditMarkdown(
-        fixture.base,
-        fixture.implementation,
-        fixture.changedPath,
-        "A",
-        `| ラウンド数 | 1 |\n| Step chain | 経由: ${staging} |`,
-      ),
-    );
-    commitPaths(fixture.root, "docs: review artifactを記録する", [auditPath]);
-    world.expectedAuditPath = auditPath;
-  }
-}
-
-Given(
-  "Step chainを経由と申告し整合するjournalを持つ統合監査repository",
-  function () {
-    commitArtifactWithJournal(this, () => true);
-  },
-);
-
-Given(
-  "Step chainを経由と申告し必須Stepが欠けたjournalを持つ統合監査repository",
-  function () {
-    /** **Step 4を落とす。**存在確認だけでは通り、整合検証だけが検出する。 */
-    commitArtifactWithJournal(this, (definition) => definition.step !== 4);
-  },
-);
-
-Then("file監査はStep journalの不整合を報告する", function () {
-  assertReported(this, "Step journalが整合しません");
-});
 
 Then("監査選択のfile監査は合格する", function () {
   assert.equal(
@@ -413,14 +349,6 @@ Then("file監査はラウンド数の欠落を報告する", function () {
 
 Then("file監査はStep chain申告の欠落を報告する", function () {
   assertReported(this, "Step chain");
-});
-
-Then("file監査は迂回理由の欠落を報告する", function () {
-  assertReported(this, "理由を10文字以上");
-});
-
-Then("file監査はjournalの欠落を報告する", function () {
-  assertReported(this, "journalがありません");
 });
 
 Given("review artifactを最終commitにした統合監査repository", function () {

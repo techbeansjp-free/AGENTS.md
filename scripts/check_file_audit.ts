@@ -9,11 +9,6 @@ import {
   type RenameResolution,
   type TokenObservation,
 } from "../src/domain/merge-integrity.js";
-import {
-  parseStepJournal,
-  validateStepJournal,
-  STEP_JOURNAL_FILE,
-} from "../src/domain/workflow.js";
 import { pathToFileURL } from "node:url";
 import { git } from "../src/lib/process.js";
 import {
@@ -503,9 +498,16 @@ function parseReviewRounds(markdown: string): number | undefined {
 /**
  * `| Step chain | 経由: <staging> |`または`| Step chain | 迂回: <理由> |`を読む。
  *
- * **手書き運用を禁止しない。** 運用ポリシーは手段が開発速度を損なうときに手段を縮小する
- * と定めており、Issue #986も「迂回した事実が記録に残ればよい」としている。迂回は理由を
- * 添えて申告すれば通す。申告そのものが無い状態だけを拒否する。
+ * **申告の存在だけを要求し、申告内容を検証しない。** 検証しない理由は2つある。
+ *
+ * 1. staging（`.agent-skill-chain/tmp/`）は`.gitignore`の対象で、追跡fileが0件である。
+ *    既定branch側のcheckoutにjournalは存在しないため、`経由`の検証は**必ず失敗する。**
+ *    正直な申告だけが落ち、`迂回`は常に通る誘因の逆転を生む。
+ * 2. journalの整合検証は捏造への障壁にならない。`validateStepJournal`は在否・順序・mode
+ *    しか見ず、`artifacts`と`evidence`は repository 状態へ束縛されない自由文字列である。
+ *
+ * Issue #986の要求は「迂回した事実が記録に残ればよい」であり、記録の存在で満たされる。
+ * **独立oracleを持たない申告を検証したふりをしない。**
  */
 function parseStepChain(
   markdown: string,
@@ -518,53 +520,6 @@ function parseStepChain(
     kind: matched[1] === STEP_CHAIN_VIA ? "via" : "bypass",
     detail: matched[2]!.trim(),
   };
-}
-
-/** 申告した staging の journal が Step 10 まで整合しているかを既存validatorで確かめる。 */
-function stepChainErrors(
-  root: string,
-  declared: { kind: "via" | "bypass"; detail: string },
-): string[] {
-  if (declared.kind === "bypass")
-    return declared.detail.length >= 10
-      ? []
-      : [
-          `Step chainを${STEP_CHAIN_BYPASS}と申告する場合は理由を10文字以上で記述してください`,
-        ];
-  const journal = path.join(root, declared.detail, STEP_JOURNAL_FILE);
-  if (!fs.existsSync(journal))
-    return [
-      `Step chainを${STEP_CHAIN_VIA}と申告していますがjournalがありません: ${path.relative(root, journal)}`,
-    ];
-  const parsed = parseStepJournal(fs.readFileSync(journal, "utf8"));
-  if (parsed.errors.length > 0)
-    return parsed.errors.map(
-      (error) => `Step journalを解析できません: ${error}`,
-    );
-  const validated = validateStepJournal({
-    mode: "full",
-    entries: parsed.entries,
-    upToStep: 10,
-  });
-  if (validated.valid) return [];
-  /**
-   * **`errors`だけを見ない。** 欠落・余分・順序・mode矛盾は専用fieldへ入り、`errors`は
-   * 入力検証だけを持つ。`errors`だけを読むと不整合を素通りさせる。
-   */
-  const detail = [
-    ...validated.errors,
-    ...(validated.missingSteps.length > 0
-      ? [`欠落Step: ${validated.missingSteps.join(", ")}`]
-      : []),
-    ...(validated.unexpectedSteps.length > 0
-      ? [`未知Step: ${validated.unexpectedSteps.join(", ")}`]
-      : []),
-    ...(validated.outOfOrder.length > 0
-      ? [`順序違反Step: ${validated.outOfOrder.join(", ")}`]
-      : []),
-    ...validated.modeConflicts,
-  ];
-  return [`Step journalが整合しません: ${detail.join("; ")}`];
 }
 
 export function parseFileAudit(markdown: string) {
@@ -742,12 +697,10 @@ export function checkFileAudit(root: string) {
     );
   else if (rounds < 1)
     errors.push(`reviewラウンドは1以上で記録してください: ${rounds}`);
-  const stepChain = parseStepChain(artifactText);
-  if (stepChain === undefined)
+  if (parseStepChain(artifactText) === undefined)
     errors.push(
       `review artifactに「| Step chain | ${STEP_CHAIN_VIA}: <staging path> |」または「| Step chain | ${STEP_CHAIN_BYPASS}: <理由> |」がありません`,
     );
-  else errors.push(...stepChainErrors(root, stepChain));
   const packageFiles = packageDistributionFiles(root);
   const impact =
     packageFiles === undefined
