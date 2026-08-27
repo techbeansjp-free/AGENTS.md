@@ -566,7 +566,10 @@ Given("audit:checkを含むbump経路のworkflow本文がある", function () {
   assert.ok(bumpEnd > bumpStart);
   const bumpJob = workflow.slice(bumpStart, bumpEnd);
   let unsafeBumpJob = bumpJob;
-  if (!bumpJob.includes("npm run prepack")) {
+  if (
+    !bumpJob.includes("npm run prepack") &&
+    !bumpJob.includes("npm run verify:distribution")
+  ) {
     unsafeBumpJob = bumpJob.replace(
       "npm run package:check",
       "npm run audit:check\n          npm run package:check",
@@ -589,6 +592,20 @@ Given("push pathsを追加したrelease workflow本文がある", function () {
     );
 });
 
+Given(
+  "配布前品質検証の入口へ接尾辞を付けたrelease workflow本文がある",
+  function () {
+    this.autoWorkflowYaml = fs
+      .readFileSync(path.resolve(".github", "workflows", "release.yml"), "utf8")
+      .replaceAll(
+        "npm run verify:distribution",
+        "npm run verify:distribution-extra",
+      )
+      .replaceAll("npm run prepack", "npm run prepack-extra")
+      .replaceAll("npm run quality", "npm run quality-extra");
+  },
+);
+
 Given("digest算出stepを削除したrelease workflow本文がある", function () {
   this.autoWorkflowYaml = fs
     .readFileSync(path.resolve(".github", "workflows", "release.yml"), "utf8")
@@ -607,12 +624,12 @@ Then("自動release workflow検証は有効になる", function () {
   assert.deepEqual(this.autoWorkflowValidation?.errors, []);
   assert.ok(
     this.autoWorkflowValidation?.checks.includes(
-      "validate jobのnpm run prepackを確認した",
+      "validate jobの配布前品質検証の実行を確認した",
     ),
   );
   assert.ok(
     this.autoWorkflowValidation?.checks.includes(
-      "bump_version jobがaudit:checkを含まないことを確認した",
+      "bump_version jobが配布前品質検証とaudit:checkを含まないことを確認した",
     ),
   );
 });
@@ -693,12 +710,15 @@ Then("bump経路はaudit:check以外のrelease gateをすべて含む", function
     const missingGateWorkflow = `${workflow.slice(0, bumpStart)}${bumpJob.replace(command, "npm run omitted:check")}${workflow.slice(bumpEnd)}`;
     assert.equal(validateReleaseWorkflow(missingGateWorkflow).valid, false);
   }
-  assert.doesNotMatch(bumpJob, /npm run (?:prepack|audit:check)\b/u);
+  assert.doesNotMatch(
+    bumpJob,
+    /npm run (?:prepack|verify:distribution|audit:check)\b/u,
+  );
   const validateJob = workflow.slice(
     workflow.indexOf("\n  validate:"),
     workflow.indexOf("\n  bump_version:"),
   );
-  assert.match(validateJob, /npm run prepack\b/u);
+  assert.match(validateJob, /npm run (?:prepack|verify:distribution)\b/u);
 });
 
 Given("distと配布fileを持つfixture packageがある", function () {
@@ -810,3 +830,15 @@ Then("追加fileが配布entryへ増えてdigestは異なる", function () {
   );
   assert.notEqual(this.beforeDigest?.digest, this.afterDigest?.digest);
 });
+
+Then(
+  "自動release workflow検証は配布前品質検証の欠落を理由に拒否する",
+  function () {
+    assert.equal(this.autoWorkflowValidation?.valid, false);
+    assert.ok(
+      this.autoWorkflowValidation?.errors.includes(
+        "release前の品質gateとしてnpm run prepack、npm run verify:distribution、npm run qualityのいずれかが必要です",
+      ),
+    );
+  },
+);

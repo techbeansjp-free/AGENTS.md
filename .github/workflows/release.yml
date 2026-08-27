@@ -59,7 +59,7 @@ jobs:
       - name: 固定ファイルどおりに依存を導入する
         run: npm ci
       - name: 全Gherkin・型・build・package contentsを必須gateで検証する
-        run: npm run prepack
+        run: npm run verify:distribution
       - name: 既存tagをrelease計画用に取得する
         run: git tag --list > existing-tags.txt
       - name: 現在の配布digestを算出する
@@ -613,7 +613,7 @@ jobs:
       - name: 固定ファイルどおりに公開用依存を導入する
         run: npm ci
       - name: tag内容で全release gateを再検証する
-        run: npm run prepack
+        run: npm run verify:distribution
       - name: 明示承認されたpackageをprovenance付きで公開する
         id: npm_operation
         continue-on-error: true
