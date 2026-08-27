@@ -173,6 +173,29 @@
           "afterSha256": "7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-PROTECTED-CLOSURE-001",
+      "status": "staged",
+      "fromVersion": 7,
+      "toVersion": 8,
+      "owner": "repository maintainer",
+      "rationale": "trusted validatorのimport閉包が保護境界の外にある。とりわけsrc/lib/security.tsのstableJsonは保護snapshotのhash計算、proposal契約の照合、版targetの算出に使われており、保護機構自身がこれに依存している。src/lib/entrypoint.tsは実行entry判定の正本で、validateExecutionEntryが無条件除外するため保護2 fileを触らず欠陥を再導入できる。両fileをPROTECTED_FILESへ加える。あわせて、新たに保護対象へ加えるfileを同じPRで変更できないことをbase validatorへ要求する拘束を入れる。base validatorは自分のPROTECTED_FILESでsnapshotを取るため、候補が追加した対象はhash照合を受けず、悪意ある版を初期値として封印できてしまうためである。実測でbackdoorを追記したfileを保護対象へ加える候補がvalid: trueで通ることを確認した。この拘束が効くのは次の版上げからであり、本版の適用には窓が残る。保護境界の拡大であり緩和ではない（Issue #1009）",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。したがってrollbackは取り消しではなく前進で行う。PROTECTED_FILESから2件を除く新規proposalを次版として登録し2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "6fb0d9f9b4f3b86cd2c2cae9b51fa297eb83058d9783ad74dd88705da10bfd3e",
+          "afterSha256": "3f910b022f50052651b3684b7b95e99a4d8acbdb2fc696fabe8cfb4898d1c292"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451",
+          "afterSha256": "2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3"
+        }
+      ]
     }
   ]
 }
