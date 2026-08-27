@@ -4,6 +4,7 @@ import { redactSecrets } from "./security.js";
 export interface ProcessOptions {
   allowFailure?: boolean;
   timeoutMs?: number;
+  maxBufferBytes?: number;
 }
 
 export interface ProcessResult {
@@ -12,13 +13,22 @@ export interface ProcessResult {
   stderr: string;
 }
 
-export interface JsonlSessionOptions extends ProcessOptions {
+export interface JsonlSessionOptions extends Omit<
+  ProcessOptions,
+  "maxBufferBytes"
+> {
   input: string;
   timeoutMs: number;
   isComplete: (stdout: string) => boolean;
 }
 
 const MAX_STREAM_BYTES = 1024 * 1024;
+/**
+ * `spawnSync`の既定`maxBuffer`は1MiBで、`git ls-files --others --ignored`のように
+ * repository規模へ比例する出力で必ず超過する。超過時は`status`がnullになり`stderr`も
+ * 空のため、既定値のままでは原因を判別できない失敗になる。
+ */
+const MAX_PROCESS_OUTPUT_BYTES = 64 * 1024 * 1024;
 
 export function run(
   file: string,
@@ -30,17 +40,30 @@ export function run(
     cwd,
     encoding: "utf8",
     env: process.env,
+    maxBuffer: options.maxBufferBytes ?? MAX_PROCESS_OUTPUT_BYTES,
     ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
   });
+  const command = redactSecrets(`${file} ${args.join(" ")}`);
+  /**
+   * `result.error`はprocessが正常に完了しなかったこと（ENOBUFS、ENOENT、timeout）を表す。
+   * 停止させられたprocessの`status`は通常nullだが、上限超過が最終chunkで起きて子processが
+   * 先に終了していた場合は0のまま残る（`git ls-files`で実測）。**`status`だけでは判別できない。**
+   * `status ?? 1`は前者を終了値1へ写し`stderr`も空にするため、原因をstderrへ載せて
+   * allowFailure側の呼び出しにも判別可能な失敗として渡す。
+   */
+  const failure =
+    result.error === undefined
+      ? undefined
+      : `${command}を実行できませんでした（${(result.error as NodeJS.ErrnoException).code ?? result.error.name}）: ${redactSecrets(result.error.message).trim()}`;
   const output = {
-    status: result.status ?? 1,
-    stdout: result.stdout ?? "",
-    stderr: redactSecrets(result.stderr ?? ""),
+    status: failure === undefined ? (result.status ?? 1) : 1,
+    stdout: failure === undefined ? (result.stdout ?? "") : "",
+    stderr: failure ?? redactSecrets(result.stderr ?? ""),
   };
   if (!options.allowFailure && output.status !== 0) {
-    const command = redactSecrets(`${file} ${args.join(" ")}`);
     throw new Error(
-      `${command}が失敗しました（終了値${output.status}）: ${output.stderr.trim()}`,
+      failure ??
+        `${command}が失敗しました（終了値${output.status}）: ${output.stderr.trim()}`,
     );
   }
   return output;
