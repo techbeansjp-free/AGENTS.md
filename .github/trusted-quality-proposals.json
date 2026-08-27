@@ -144,6 +144,35 @@
           "afterSha256": "e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-EXECUTION-ENTRY-PROTECTED-001",
+      "status": "staged",
+      "fromVersion": 6,
+      "toVersion": 7,
+      "owner": "repository maintainer",
+      "rationale": "保護file 2件の実行entry判定がimport.meta.urlとprocess.argv[1]の直接比較のままで、symlink経由の起動では検査本体が実行されず終了値0で終わる。失敗ではなく無言の合格として現れる。判定を#973で確立したsrc/lib/entrypoint.tsのisExecutionEntryへ委譲し、conformance側の保留リストを空にする。検査の到達性の回復であり品質強度の緩和ではない（Issue #1002）",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。したがってrollbackは取り消しではなく前進で行う。実行entry判定を直接比較へ戻す新規proposalを次版として登録し2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "300f2e1358c8a04b5f3af129d31faffb49fbe2ee346a5a377d345c011561dc91",
+          "afterSha256": "6fb0d9f9b4f3b86cd2c2cae9b51fa297eb83058d9783ad74dd88705da10bfd3e"
+        },
+        {
+          "kind": "file",
+          "name": "scripts/check_source_quality.ts",
+          "beforeSha256": "726432a2de4b92c9101e05ca681b501c0d1431c8db581a6806525d5a2a266b3a",
+          "afterSha256": "3b790dc97116c4457cd94f1443b31275d701edf103a1b77626031434d6ad3c8a"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683",
+          "afterSha256": "7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"
+        }
+      ]
     }
   ]
 }
