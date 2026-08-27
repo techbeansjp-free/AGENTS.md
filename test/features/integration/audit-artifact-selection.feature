@@ -100,3 +100,13 @@ Feature: fixture repositoryでのreview artifact差分選択
     Given 成果物行数が"製品 8行 / 支援層 172行"のreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
     Then 監査選択のfile監査は合格する
+
+  Scenario: SCN-INT-AUDITSEL-005 第1親が既定branch tipのmerge commitから比較基点を導出して合格する
+    Given 第1親が既定branch tipのmerge commitをHEADにした監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then 監査選択のfile監査は合格する
+
+  Scenario: SCN-INT-AUDITSEL-006 浅いcloneでfork点を観測できないときを判定不能として拒否する
+    Given fork点を取得範囲の外に置いた浅いcloneの監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は比較基点の導出不能を報告する

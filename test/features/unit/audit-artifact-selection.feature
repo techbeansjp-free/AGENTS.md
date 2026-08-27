@@ -41,3 +41,23 @@ Feature: review artifactの差分選択
     Given 9番の既存成果物より後に10番の成果物を追加した監査選択repository
     When 監査選択repositoryのfile監査を実行する
     Then 10番のreview artifactが選ばれてfile監査は合格する
+
+  Scenario: SCN-UNIT-AUDITSEL-009 比較基点を候補branch内へ前進させた申告を拒否する
+    Given 比較基点を候補branch内へ前進させmerge commitをHEADにした監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は比較基点の不一致を報告する
+
+  Scenario: SCN-UNIT-AUDITSEL-010 境界commitが親1個のときは比較基点を導出しない
+    Given 比較基点を候補branch内へ前進させartifact commitをHEADにした監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は比較基点を検証せず合格する
+
+  Scenario: SCN-UNIT-AUDITSEL-011 merge-baseが一意でないときを判定不能として拒否する
+    Given merge-baseが一意でない履歴でmerge commitをHEADにした監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は比較基点の導出不能を報告する
+
+  Scenario: SCN-UNIT-AUDITSEL-012 境界commitの親が3個のときを判定不能として拒否する
+    Given 親が3個の境界commitをHEADにした監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は比較基点の導出不能を報告する
