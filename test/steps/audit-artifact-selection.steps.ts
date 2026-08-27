@@ -37,13 +37,17 @@ function auditMarkdown(
   implementation: string,
   auditedPath: string,
   status = "A",
+  identity = "| ラウンド数 | 1 |\n| Step chain | 迂回: fixtureのため製品経路を通していない |",
 ): string {
   return `# fixture実装レビュー
+
+## 0. レビュー識別情報
 
 | 項目 | 値 |
 |---|---|
 | 比較基点 | \`${base}\` |
 | H_impl | \`${implementation}\` |
+${identity}
 
 ## 変更ファイル個別監査
 
@@ -255,6 +259,145 @@ Given(
     );
   },
 );
+
+/** identity欄だけを差し替えたartifactを最終commitにする。他の条件は既存fixtureと同じ。 */
+function commitArtifactWithIdentity(
+  world: AuditSelectionWorld,
+  identity: string,
+): void {
+  const fixture = createImplementation(world, { historicalArtifacts: 1 });
+  const auditPath = "docs/reviews/02_課題986実装レビュー.md";
+  writeFile(
+    fixture.root,
+    auditPath,
+    auditMarkdown(
+      fixture.base,
+      fixture.implementation,
+      fixture.changedPath,
+      "A",
+      identity,
+    ),
+  );
+  commitPaths(fixture.root, "docs: review artifactを記録する", [auditPath]);
+  world.expectedAuditPath = auditPath;
+}
+
+const BYPASS_IDENTITY =
+  "| Step chain | 迂回: fixtureのため製品経路を通していない |";
+
+Given(
+  "ラウンド数が{string}のreview artifactを持つ統合監査repository",
+  function (rounds: string) {
+    commitArtifactWithIdentity(
+      this,
+      `| ラウンド数 | ${rounds} |\n${BYPASS_IDENTITY}`,
+    );
+  },
+);
+
+Given("ラウンド数欄が無いreview artifactを持つ統合監査repository", function () {
+  commitArtifactWithIdentity(this, BYPASS_IDENTITY);
+});
+
+Given("Step chain欄が無いreview artifactを持つ統合監査repository", function () {
+  commitArtifactWithIdentity(this, "| ラウンド数 | 1 |");
+});
+
+Given(
+  "Step chainを理由なしで迂回と申告したreview artifactを持つ統合監査repository",
+  function () {
+    /** 理由が空の申告は申告として成立しない。parserが`(.+)`で非空を保証する。 */
+    commitArtifactWithIdentity(
+      this,
+      "| ラウンド数 | 1 |\n| Step chain | 迂回: |",
+    );
+  },
+);
+
+Given(
+  "申告行を本文とcode fenceだけに置いたreview artifactを持つ統合監査repository",
+  function () {
+    /**
+     * 識別情報の節には申告を置かず、**本文とcode fenceにだけ**申告の形をした行を置く。
+     * 全文検索する実装はこれを申告として受理してしまう。
+     */
+    const fixture = createImplementation(this, { historicalArtifacts: 1 });
+    const auditPath = "docs/reviews/02_課題986実装レビュー.md";
+    /**
+     * 識別情報の節の**中**にcode fenceを置き、節の**外**に平文の申告行を置く。
+     * 節の限定とcodeの除去の**どちらを外しても**受理されてしまう配置である。
+     */
+    const body = auditMarkdown(
+      fixture.base,
+      fixture.implementation,
+      fixture.changedPath,
+      "A",
+      [
+        "| reviewer | fixture |",
+        "",
+        "```markdown",
+        "| ラウンド数 | 1 |",
+        "| Step chain | 迂回: 節の中のcode fence |",
+        "```",
+      ].join("\n"),
+    );
+    writeFile(
+      fixture.root,
+      auditPath,
+      [
+        body,
+        "",
+        "## 9. 補足",
+        "",
+        "| ラウンド数 | 1 |",
+        "| Step chain | 迂回: 本文へ書いただけ |",
+        "",
+        "",
+      ].join("\n"),
+    );
+    commitPaths(fixture.root, "docs: review artifactを記録する", [auditPath]);
+    this.expectedAuditPath = auditPath;
+  },
+);
+
+Given(
+  "Step chainを{string}と申告したreview artifactを持つ統合監査repository",
+  function (declaration: string) {
+    commitArtifactWithIdentity(
+      this,
+      `| ラウンド数 | 1 |\n| Step chain | ${declaration} |`,
+    );
+  },
+);
+
+Then("監査選択のfile監査は合格する", function () {
+  assert.equal(
+    this.auditResult?.valid,
+    true,
+    `file監査が失敗しました: ${this.auditResult?.errors.join(" | ")}`,
+  );
+});
+
+/** 診断文の一部で照合する。**errorsが空でないことだけを見ない。** */
+function assertReported(world: AuditSelectionWorld, fragment: string): void {
+  const errors = world.auditResult?.errors ?? [];
+  assert.ok(
+    errors.some((error) => error.includes(fragment)),
+    `期待した診断がありません（${fragment}）: ${errors.join(" | ")}`,
+  );
+}
+
+Then("file監査はラウンド上限超過を報告する", function () {
+  assertReported(this, "reviewラウンドが上限を超えています");
+});
+
+Then("file監査はラウンド数の欠落を報告する", function () {
+  assertReported(this, "ラウンド数");
+});
+
+Then("file監査はStep chain申告の欠落を報告する", function () {
+  assertReported(this, "Step chain");
+});
 
 Given("review artifactを最終commitにした統合監査repository", function () {
   const fixture = createImplementation(this, { historicalArtifacts: 3 });

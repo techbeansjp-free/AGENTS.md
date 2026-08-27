@@ -129,10 +129,14 @@ function auditMarkdown(
     .join("\n");
   return `# fixture実装レビュー
 
+## 0. レビュー識別情報
+
 | 項目 | 値 |
 |---|---|
 | 比較基点 | \`${base}\` |
 | H_impl | \`${implementation}\` |
+| ラウンド数 | 1 |
+| Step chain | 迂回: fixtureのため製品経路を通していない |
 
 ## 変更ファイル個別監査
 

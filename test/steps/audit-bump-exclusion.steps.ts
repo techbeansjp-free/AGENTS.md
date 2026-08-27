@@ -50,10 +50,14 @@ function createAuditedRepository(world: AuditBumpWorld): string {
   const auditPath = "docs/reviews/01_課題873実装レビュー.md";
   const artifact = `# 課題873 実装レビュー
 
+## 0. レビュー識別情報
+
 | 項目 | 値 |
 |---|---|
 | 比較基点 | \`${base}\` |
 | H_impl | \`${implementation}\` |
+| ラウンド数 | 1 |
+| Step chain | 迂回: fixtureのため製品経路を通していない |
 
 ## 変更ファイル個別監査
 
