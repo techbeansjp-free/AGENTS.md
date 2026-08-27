@@ -8,7 +8,7 @@ import {
   type Policy,
   type RuleObservation,
 } from "../types.js";
-import { validatePullRequestBody } from "./issue.js";
+import { validatePullRequestBody, withoutMarkdownCode } from "./issue.js";
 
 interface DeliveryEvidence {
   headSha?: string;
@@ -410,7 +410,11 @@ export function createPullRequest(
     throw new Error(
       `PR本文がtemplate契約を満たしません: ${structure.errors.join("; ")}`,
     );
-  const references = validateIssueClosingReferences(body, {
+  /**
+   * **code内の記述を参照として数えない。** 本文へIssue参照の書き方を例示すると、
+   * 実際の参照が1件も無いままcanonical Issueを終端したと誤判定する。
+   */
+  const references = validateIssueClosingReferences(withoutMarkdownCode(body), {
     canonicalIssue,
     relatedIssues,
   });

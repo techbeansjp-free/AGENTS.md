@@ -44,6 +44,17 @@ const FULL_FILES = {
 
 export type IssueValidationStage = "requirements" | "design";
 
+/**
+ * fenced blockとinline codeを取り除く。**行構造は保つ。**見出しの行全体一致に使うため、
+ * 行番号と行の境界がずれてはならない。
+ */
+export function withoutMarkdownCode(text: string): string {
+  return withoutCode(text)
+    .split("\n")
+    .map((line) => withoutInlineCode(line))
+    .join("\n");
+}
+
 /** 配布templateのPR本文。見出し構造の正本はこのfileだけが持つ。 */
 const PULL_REQUEST_BODY_TEMPLATE = "11_プルリクエスト本文.md";
 
@@ -77,8 +88,18 @@ export function validatePullRequestBody(body: string): {
   errors: string[];
 } {
   const errors: string[] = [];
+  /**
+   * **包含判定では緩すぎる。** `### 概要`も`## 概要（補足）`もcode block内の`## 概要`も
+   * 通ってしまう。codeを除いた本文の行全体と一致することを要求する。
+   */
+  const headings = new Set(
+    withoutMarkdownCode(body)
+      .split("\n")
+      .map((line) => /^##\s+(.+?)\s*$/u.exec(line)?.[1])
+      .filter((heading): heading is string => heading !== undefined),
+  );
   for (const heading of pullRequestRequiredHeadings())
-    if (!body.includes(`## ${heading}`))
+    if (!headings.has(heading))
       errors.push(`PR本文に必須見出しがありません: ${heading}`);
   if (hasUnresolvedPlaceholder(body))
     errors.push("PR本文に未解決のplaceholderが残っています");

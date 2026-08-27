@@ -197,6 +197,30 @@ Given("PR本文から{string}の見出しを除く", function (heading: string) 
   this.prOverrides = { body: withoutHeading(BASE_PR_BODY(), heading) };
 });
 
+Given(
+  "PR本文の{string}見出しを{string}へ置き換える",
+  function (heading: string, substitute: string) {
+    this.prOverrides = {
+      body: BASE_PR_BODY().replace(`## ${heading}`, substitute),
+    };
+  },
+);
+
+Given("PR本文の{string}見出しをcode block内へ移す", function (heading: string) {
+  this.prOverrides = {
+    body: BASE_PR_BODY().replace(
+      `## ${heading}`,
+      ["```markdown", `## ${heading}`, "```"].join("\n"),
+    ),
+  };
+});
+
+Given("PR本文のIssue参照をcode spanで囲む", function () {
+  this.prOverrides = {
+    body: BASE_PR_BODY().replace("Closes #824", "`Closes #824`"),
+  };
+});
+
 Given("PR本文へ未解決のplaceholderを残す", function () {
   this.prOverrides = {
     body: BASE_PR_BODY().replace("## 変更内容\n", "## 変更内容\n\n（内容）\n"),

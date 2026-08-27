@@ -418,29 +418,39 @@ export function github(
      * **本文はfile経由で渡す。** argvの上限は約131KBで、template構造を満たす本文は
      * 改行と記号を多く含む。`--body`へ直接載せると上限と引用の扱いに依存する。
      */
-    const composedBodyFile = path.join(
-      fs.mkdtempSync(path.join(os.tmpdir(), "asc-pr-body-")),
-      "body.md",
+    const bodyDirectory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "asc-pr-body-"),
     );
+    const composedBodyFile = path.join(bodyDirectory, "body.md");
     fs.writeFileSync(composedBodyFile, `${input.body}\n`);
-    const result = run(
-      "gh",
-      [
-        "pr",
-        "create",
-        "--repo",
-        input.repository,
-        "--head",
-        input.head,
-        "--base",
-        input.base,
-        "--title",
-        input.title,
-        "--body-file",
-        composedBodyFile,
-      ],
-      cwd,
-    );
+    /**
+     * **成功時も例外時も一時fileを残さない。** `gh`はfileを同期的に読み切るため、
+     * 呼び出し直後に消してよい。残すと`pr create`のたびにtmpへ本文が蓄積する。
+     */
+    let created: ReturnType<typeof run>;
+    try {
+      created = run(
+        "gh",
+        [
+          "pr",
+          "create",
+          "--repo",
+          input.repository,
+          "--head",
+          input.head,
+          "--base",
+          input.base,
+          "--title",
+          input.title,
+          "--body-file",
+          composedBodyFile,
+        ],
+        cwd,
+      );
+    } finally {
+      fs.rmSync(bodyDirectory, { recursive: true, force: true });
+    }
+    const result = created;
     const url = result.stdout.trim();
     if (
       !new RegExp(

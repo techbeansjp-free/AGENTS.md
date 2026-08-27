@@ -106,6 +106,33 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     Then 必須見出しに条件付き見出しは含まれない
     And 必須見出しにtemplateの無条件見出しがすべて含まれる
 
+  Scenario Outline: SCN-INT-PRBODY-007 見出しに見える文字列を必須見出しの充足にしない
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文の"概要"見出しを"<substitute>"へ置き換える
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
+    Examples:
+      | substitute |
+      | ### 概要 |
+      | ## 概要（補足） |
+      | ## 概要 extra |
+
+  Scenario: SCN-INT-PRBODY-008 code block内の見出しを充足にしない
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文の"概要"見出しをcode block内へ移す
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
+  Scenario: SCN-INT-PRBODY-009 code内のIssue参照を終端参照にしない
+    Given review、test、spec evidenceがすべてpassである
+    And PR本文のIssue参照をcode spanで囲む
+    When PR createをdry-runして失敗を確認する
+    Then PR createは失敗する
+    And external operation callは0件である
+
   Scenario: SCN-INT-GITHUB-001 Issue syncはrepositoryを確認してread-after-write一致を要求する
     Given exact repositoryと同じbodyを返すgh stubがある
     When Issue sync adapterを実行する
