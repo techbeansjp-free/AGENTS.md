@@ -36,6 +36,27 @@ interface CommitTransition {
 interface ReviewBoundary {
   implementation: string;
   reviewHead: string;
+  /**
+   * 比較基点の導出を試みたか。**境界commitが親を2個以上持つときだけ真。**
+   *
+   * 親2個の境界は、取り込み先branch上のPR mergeと、CIが`pull_request`でcheckoutする
+   * `refs/pull/<N>/merge`の双方に当たる。いずれも第1親が取り込み先branchのtipである。
+   * 候補branch上でreview artifact commitをHEADにした場合は親1個で、取り込み先が
+   * 構造から決まらないため導出を試みない。
+   */
+  baseDerivable: boolean;
+  /** 境界commitの親の個数。診断で親がちょうど2個でないことを示すために持つ。 */
+  boundaryParentCount: number;
+  /** 境界commitの第1親。取り込み先branchのtipであり、診断で取得すべき履歴を指す。 */
+  boundaryFirstParent: string | undefined;
+  /**
+   * 導出した比較基点。`H_impl`が含む最新の取り込み先branch commitである。
+   *
+   * **`baseDerivable`が真で`undefined`なら判定不能であり、対象外と混同してはならない。**
+   * 浅いcloneでfork点が取得範囲の外にある場合と、merge-baseが複数ある場合に起きる。
+   * どちらも「検証すべき場所で検証できなかった」状態であり、合格へ倒さない。
+   */
+  base: string | undefined;
 }
 
 function lines(output: string): string[] {
@@ -456,6 +477,28 @@ function withoutFinalReleaseBumps(root: string, current: string): string {
   return cursor;
 }
 
+/**
+ * 2 commitの**一意な**merge-base。解決できない場合と複数解の場合はundefinedを返す。
+ *
+ * `--all`を使うのは、複数解を任意の1解で代表させないためである。`observeMerge`と
+ * `.agent-skill-chain/docs/02_品質基準.md`は「merge-baseが一意でないmergeは判定不能として
+ * 拒否する」と定めており、境界の導出だけが一意性を暗黙に仮定してはならない。
+ */
+function uniqueMergeBase(
+  root: string,
+  left: string,
+  right: string,
+): string | undefined {
+  const result = git(["merge-base", "--all", left, right], root, {
+    allowFailure: true,
+  });
+  if (result.status !== 0) return undefined;
+  const candidates = lines(result.stdout).filter((oid) =>
+    /^[a-f0-9]{40}$/u.test(oid),
+  );
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 function inferReviewBoundary(root: string, current: string): ReviewBoundary {
   const boundary = withoutFinalReleaseBumps(root, current);
   const boundaryParents = commitParents(root, boundary);
@@ -464,7 +507,32 @@ function inferReviewBoundary(root: string, current: string): ReviewBoundary {
       ? withoutFinalReleaseBumps(root, boundaryParents.at(-1)!)
       : boundary;
   const [implementation = reviewHead] = commitParents(root, reviewHead);
-  return { implementation, reviewHead };
+  /**
+   * `H_impl`と同じく、比較基点もcommit構造から独立に導出する（Issue #966）。
+   *
+   * 第1親は取り込み先branchのtipであり、`H_impl`との`merge-base`が
+   * 「`H_impl`が含む最新の取り込み先branch commit」になる。直接取り込んだ場合も、
+   * 別branch経由で間接的に取り込んだ場合も、この値へ収束する。第1親にrelease bumpが
+   * 積まれていてもそれらは`H_impl`の祖先ではないため`merge-base`は動かない。
+   */
+  const baseDerivable = boundaryParents.length > 1;
+  /**
+   * **親がちょうど2個の境界だけを導出対象にする。** 親3個以上のoctopus mergeでは、
+   * どの親が候補branchかを構造から決められない。`QLT-MERGEINT-003`が損失検知で
+   * 「親が2個でないmergeを判定不能として拒否する」と定めており、境界の導出も揃える。
+   */
+  const base =
+    boundaryParents.length === 2
+      ? uniqueMergeBase(root, implementation, boundaryParents[0]!)
+      : undefined;
+  return {
+    implementation,
+    reviewHead,
+    baseDerivable,
+    boundaryParentCount: boundaryParents.length,
+    boundaryFirstParent: boundaryParents[0],
+    base,
+  };
 }
 
 function isAuditPath(auditPath: string): boolean {
@@ -704,6 +772,25 @@ export function checkFileAudit(root: string) {
   if (parsed.implementation !== inferred.implementation)
     errors.push(
       `review artifact本文のH_impl ${parsed.implementation} が実際のcommit構造から導出したH_impl ${inferred.implementation} と一致しません。review artifactのH_implをreview headの親commitへ直してください`,
+    );
+  /**
+   * **比較基点を前へ進めると監査範囲が縮む。** 個別監査表は`比較基点..H_impl`との完全一致
+   * だけを要求されるため、縮めた範囲に合わせた表を書けば、除外したcommitは表からも
+   * 損失検知の走査範囲からも消える（Issue #966）。`H_impl`と同じ二重確認を課す。
+   *
+   * **導出を試みて決まらなかった場合は合格へ倒さない。** 浅いcloneでは境界commitの親は
+   * 2個に見えるがfork点を観測できず、`undefined`を対象外と同じに扱うと、検証すべき
+   * 場所で黙って検証を飛ばす。`fetch-depth`の変更だけで判定を無効化できてしまう。
+   */
+  if (inferred.baseDerivable && inferred.base === undefined)
+    errors.push(
+      inferred.boundaryParentCount === 2
+        ? `比較基点を導出できません。境界commitの第1親 ${inferred.boundaryFirstParent} とH_impl ${inferred.implementation} の一意なmerge-baseを解決できません。浅いcloneではfetch-depthを0にして全履歴を取得してください。merge-baseが複数ある履歴では、判定できる形へmergeを整理してください`
+        : `比較基点を導出できません。境界commitの親が${inferred.boundaryParentCount}個です。導出は親がちょうど2個の境界commitでのみ成立します。どの親が候補branchかを構造から決められないため、判定不能として拒否します`,
+    );
+  else if (inferred.base !== undefined && parsed.base !== inferred.base)
+    errors.push(
+      `review artifact本文の比較基点 ${parsed.base} が実際のcommit構造から導出した比較基点 ${inferred.base} と一致しません。比較基点をH_implが含む最新の取り込み先branch commit ${inferred.base} へ直し、個別監査表を比較基点..H_implから再生成してください`,
     );
   for (const oid of [parsed.base, parsed.implementation]) {
     const resolved = git(["rev-parse", "--verify", `${oid}^{commit}`], root, {

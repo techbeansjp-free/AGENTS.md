@@ -231,6 +231,275 @@ Given(
   },
 );
 
+/**
+ * 比較基点の導出を確かめるfixture。
+ *
+ * `mergeRef`はCIが`pull_request`でcheckoutする`refs/pull/<N>/merge`と同じ形、つまり
+ * **第1親が取り込み先の既定branch tip、第2親が候補head**のmerge commitをHEADにする。
+ * 既定branch上のPR mergeも同じ形である。`narrowed`は比較基点を候補branch内のcommitへ
+ * 前進させ、個別監査表もその範囲へ揃える。**表と範囲は整合したままなので、比較基点の
+ * 導出だけが縮小を検出できる**（Issue #966）。
+ */
+function createBaseDerivationFixture(
+  world: AuditSelectionWorld,
+  options: { narrowed: boolean; mergeRef: boolean },
+): void {
+  const root = world.initRepo();
+  world.auditRoot = root;
+  writeFile(root, "keep.txt", "base\n");
+  const mainTip = commitPaths(root, "test: 既定branchの基点を作る", [
+    "keep.txt",
+  ]);
+  git(root, ["checkout", "-q", "-b", "feature/966-base"]);
+  let declaredBase = mainTip;
+  if (options.narrowed) {
+    writeFile(root, "hidden.txt", "監査から隠したい変更\n");
+    declaredBase = commitPaths(root, "feat: 監査から隠したい変更", [
+      "hidden.txt",
+    ]);
+  }
+  writeFile(root, "keep.txt", "changed\n");
+  const implementation = commitPaths(root, "feat: 申告する変更", ["keep.txt"]);
+  const auditPath = "docs/reviews/42_課題966実装レビュー.md";
+  writeFile(
+    root,
+    auditPath,
+    auditMarkdown(declaredBase, implementation, "keep.txt", "M"),
+  );
+  const head = commitPaths(root, "docs: review artifactを記録する", [
+    auditPath,
+  ]);
+  world.expectedAuditPath = auditPath;
+  if (!options.mergeRef) return;
+  const tree = git(root, ["merge-tree", "--write-tree", mainTip, head]);
+  const mergeRef = git(root, [
+    "commit-tree",
+    tree,
+    "-p",
+    mainTip,
+    "-p",
+    head,
+    "-m",
+    "Merge pull request #966 from example/feature/966-base",
+  ]);
+  git(root, [
+    "-c",
+    "advice.detachedHead=false",
+    "checkout",
+    "-q",
+    "--detach",
+    mergeRef,
+  ]);
+}
+
+function world_expect(world: AuditSelectionWorld, auditPath: string): void {
+  world.expectedAuditPath = auditPath;
+}
+
+/** 候補branchのhead上にmerge refを作り、detachしてHEADにする。 */
+function checkoutMergeRef(
+  root: string,
+  firstParent: string,
+  head: string,
+): void {
+  const tree = git(root, ["merge-tree", "--write-tree", firstParent, head]);
+  const mergeRef = git(root, [
+    "commit-tree",
+    tree,
+    "-p",
+    firstParent,
+    "-p",
+    head,
+    "-m",
+    "Merge pull request #966 from example/feature/966-base",
+  ]);
+  git(root, [
+    "-c",
+    "advice.detachedHead=false",
+    "checkout",
+    "-q",
+    "--detach",
+    mergeRef,
+  ]);
+}
+
+Given("親が3個の境界commitをHEADにした監査選択repository", function () {
+  const root = this.initRepo();
+  this.auditRoot = root;
+  writeFile(root, "keep.txt", "base\n");
+  const start = commitPaths(root, "test: 基点を作る", ["keep.txt"]);
+  git(root, ["checkout", "-q", "-b", "extra", start]);
+  writeFile(root, "extra.txt", "extra\n");
+  const extra = commitPaths(root, "feat: 第3の親を作る", ["extra.txt"]);
+  git(root, ["checkout", "-q", "-b", "target", start]);
+  writeFile(root, "target.txt", "target\n");
+  const targetTip = commitPaths(root, "feat: 取り込み先を進める", [
+    "target.txt",
+  ]);
+  git(root, ["checkout", "-q", "-b", "candidate", start]);
+  writeFile(root, "keep.txt", "changed\n");
+  const implementation = commitPaths(root, "feat: 申告する変更", ["keep.txt"]);
+  const auditPath = "docs/reviews/42_課題966実装レビュー.md";
+  writeFile(
+    root,
+    auditPath,
+    auditMarkdown(start, implementation, "keep.txt", "M"),
+  );
+  const head = commitPaths(root, "docs: review artifactを記録する", [
+    auditPath,
+  ]);
+  world_expect(this, auditPath);
+  // octopus merge: 取り込み先・第3の親・候補headの3親
+  const tree = git(root, ["merge-tree", "--write-tree", targetTip, head]);
+  const mergeRef = git(root, [
+    "commit-tree",
+    tree,
+    "-p",
+    targetTip,
+    "-p",
+    extra,
+    "-p",
+    head,
+    "-m",
+    "Merge pull request #966 (octopus)",
+  ]);
+  git(root, [
+    "-c",
+    "advice.detachedHead=false",
+    "checkout",
+    "-q",
+    "--detach",
+    mergeRef,
+  ]);
+});
+
+Given(
+  "merge-baseが一意でない履歴でmerge commitをHEADにした監査選択repository",
+  function () {
+    const root = this.initRepo();
+    this.auditRoot = root;
+    writeFile(root, "keep.txt", "base\n");
+    const start = commitPaths(root, "test: 基点を作る", ["keep.txt"]);
+    git(root, ["checkout", "-q", "-b", "left", start]);
+    writeFile(root, "left.txt", "left\n");
+    const left = commitPaths(root, "feat: 片側を変更する", ["left.txt"]);
+    git(root, ["checkout", "-q", "-b", "right", start]);
+    writeFile(root, "right.txt", "right\n");
+    const right = commitPaths(root, "feat: もう片側を変更する", ["right.txt"]);
+    // criss-cross: 互いに相手を取り込み、merge-baseを2解にする
+    git(root, ["checkout", "-q", "-b", "target", right]);
+    git(root, [
+      "merge",
+      "-q",
+      "--no-ff",
+      left,
+      "-m",
+      "chore: 取り込み先で取り込む",
+    ]);
+    const targetTip = git(root, ["rev-parse", "HEAD"]);
+    git(root, ["checkout", "-q", "-b", "candidate", left]);
+    git(root, ["merge", "-q", "--no-ff", right, "-m", "chore: 候補で取り込む"]);
+    writeFile(root, "keep.txt", "changed\n");
+    const implementation = commitPaths(root, "feat: 申告する変更", [
+      "keep.txt",
+    ]);
+    const auditPath = "docs/reviews/42_課題966実装レビュー.md";
+    writeFile(
+      root,
+      auditPath,
+      auditMarkdown(targetTip, implementation, "keep.txt", "M"),
+    );
+    const head = commitPaths(root, "docs: review artifactを記録する", [
+      auditPath,
+    ]);
+    world_expect(this, auditPath);
+    checkoutMergeRef(root, targetTip, head);
+  },
+);
+
+Given("fork点を取得範囲の外に置いた浅いcloneの監査選択repository", function () {
+  const origin = this.initRepo();
+  writeFile(origin, "keep.txt", "base\n");
+  const forkPoint = commitPaths(origin, "test: 分岐点を作る", ["keep.txt"]);
+  // 取り込み先を深くして、fork点を浅いcloneの取得範囲の外へ出す
+  for (let index = 1; index <= 8; index += 1) {
+    writeFile(origin, `target${index}.txt`, `target ${index}\n`);
+    commitPaths(origin, `feat: 取り込み先を進める ${index}`, [
+      `target${index}.txt`,
+    ]);
+  }
+  const targetTip = git(origin, ["rev-parse", "HEAD"]);
+  git(origin, ["checkout", "-q", "-b", "candidate", forkPoint]);
+  writeFile(origin, "hidden.txt", "監査から隠したい変更\n");
+  const hidden = commitPaths(origin, "feat: 監査から隠したい変更", [
+    "hidden.txt",
+  ]);
+  writeFile(origin, "keep.txt", "changed\n");
+  const implementation = commitPaths(origin, "feat: 申告する変更", [
+    "keep.txt",
+  ]);
+  const auditPath = "docs/reviews/42_課題966実装レビュー.md";
+  // 比較基点を候補branch内へ前進させた申告。浅いcloneで導出を飛ばすと通ってしまう
+  writeFile(
+    origin,
+    auditPath,
+    auditMarkdown(hidden, implementation, "keep.txt", "M"),
+  );
+  const head = commitPaths(origin, "docs: review artifactを記録する", [
+    auditPath,
+  ]);
+  checkoutMergeRef(origin, targetTip, head);
+  const mergeRef = git(origin, ["rev-parse", "HEAD"]);
+  const shallow = path.join(this.temp(), "shallow");
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "advice.detachedHead=false",
+      "clone",
+      "-q",
+      "--depth",
+      "3",
+      "--no-single-branch",
+      `file://${origin}`,
+      shallow,
+    ],
+    { encoding: "utf8" },
+  );
+  git(shallow, ["fetch", "-q", "--depth", "3", "origin", mergeRef]);
+  git(shallow, [
+    "-c",
+    "advice.detachedHead=false",
+    "checkout",
+    "-q",
+    "--detach",
+    "FETCH_HEAD",
+  ]);
+  this.auditRoot = shallow;
+  world_expect(this, auditPath);
+});
+
+Given(
+  "第1親が既定branch tipのmerge commitをHEADにした監査選択repository",
+  function () {
+    createBaseDerivationFixture(this, { narrowed: false, mergeRef: true });
+  },
+);
+
+Given(
+  "比較基点を候補branch内へ前進させmerge commitをHEADにした監査選択repository",
+  function () {
+    createBaseDerivationFixture(this, { narrowed: true, mergeRef: true });
+  },
+);
+
+Given(
+  "比較基点を候補branch内へ前進させartifact commitをHEADにした監査選択repository",
+  function () {
+    createBaseDerivationFixture(this, { narrowed: true, mergeRef: false });
+  },
+);
+
 Given(
   "artifact本文のH_implがreview headの親と異なる監査選択repository",
   function () {
@@ -465,6 +734,35 @@ Given(
     );
   },
 );
+
+Then("file監査は比較基点の導出不能を報告する", function () {
+  assert.equal(this.auditResult?.valid, false);
+  assert.match(
+    this.auditResult?.errors.join("\n") ?? "",
+    /比較基点を導出できません。/u,
+  );
+});
+
+Then("file監査は比較基点の不一致を報告する", function () {
+  assert.equal(this.auditResult?.valid, false);
+  assert.match(
+    this.auditResult?.errors.join("\n") ?? "",
+    /review artifact本文の比較基点 [a-f0-9]{40} が実際のcommit構造から導出した比較基点 [a-f0-9]{40} と一致しません/u,
+  );
+});
+
+Then("file監査は比較基点を検証せず合格する", function () {
+  // **合格まで確認する。** 不一致errorの不在だけでは、別の理由で落ちた場合も通ってしまう。
+  assert.equal(
+    this.auditResult?.valid,
+    true,
+    this.auditResult?.errors.join("\n"),
+  );
+  assert.doesNotMatch(
+    this.auditResult?.errors.join("\n") ?? "",
+    /比較基点 [a-f0-9]{40} が実際のcommit構造から導出した/u,
+  );
+});
 
 Then("監査選択のfile監査は合格する", function () {
   assert.equal(
