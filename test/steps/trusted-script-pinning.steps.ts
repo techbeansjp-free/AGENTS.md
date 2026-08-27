@@ -123,6 +123,29 @@ const CHECKS: Readonly<Record<string, (world: WorkflowWorld) => void>> = {
       "script固定を判定できません: 追跡fileを列挙できません",
     ]);
   },
+  "SCN-INT-SCRIPTPIN-007": (world) => {
+    /**
+     * **引用符付きの参照を抽出できないと、固定漏れが検出されないまま合格になる。**
+     * 単一引用符と二重引用符のそれぞれについて、未固定のscript名を名指しで拒否する
+     * ことを要求する。`workflow:check`は固定集合に無い。
+     */
+    for (const invocation of [
+      "npm run 'workflow:check'",
+      'npm run-script "workflow:check"',
+    ]) {
+      const root = replicate(world);
+      fs.appendFileSync(
+        path.join(root, ".github/workflows/ci.yml"),
+        `      - name: 引用符で未固定scriptを呼ぶ\n        run: ${invocation}\n`,
+      );
+      execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+      const errors = checkTrustedScriptPinning(root);
+      assert.ok(
+        errors.some((entry) => entry.includes("workflow:check")),
+        `引用符付きの参照を抽出できていません: ${invocation} / ${errors.join(" | ")}`,
+      );
+    }
+  },
 };
 
 Given("script固定検査の準備がある", function (this: WorkflowWorld) {

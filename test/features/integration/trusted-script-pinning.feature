@@ -30,3 +30,8 @@ Feature: 保護workflowが呼ぶscriptがtrusted validatorに固定されてい�
     Given script固定検査の準備がある
     When "SCN-INT-SCRIPTPIN-006"のscript固定検査を実行する
     Then script固定検査は期待結果になる
+
+  Scenario: SCN-INT-SCRIPTPIN-007 引用符で囲んだ参照を抽出する
+    Given script固定検査の準備がある
+    When "SCN-INT-SCRIPTPIN-007"のscript固定検査を実行する
+    Then script固定検査は期待結果になる

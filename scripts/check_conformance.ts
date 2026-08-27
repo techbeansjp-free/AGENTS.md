@@ -684,10 +684,17 @@ export function checkTrustedScriptPinning(root: string): string[] {
     for (const step of releaseRunSteps(fs.readFileSync(file, "utf8"))) {
       if (!step.enabled) continue;
       for (const segment of reliableSegments(step.command)) {
-        const invoked = /^npm\s+run(?:-script)?\s+"?([A-Za-z0-9:._-]+)"?/u.exec(
-          segment,
-        );
-        if (invoked) names.add(invoked[1]!);
+        /**
+         * **引用符は対で照合する。** 片側だけを任意にすると`npm run "x`のような
+         * 不均衡な記法まで受理し、逆に単一引用符の`npm run \'x\'`は抽出できない。
+         * 抽出できない参照は候補treeで差し替えられず、**固定漏れが検出されないまま
+         * 合格になる。**
+         */
+        const invoked =
+          /^npm\s+run(?:-script)?\s+(["']?)([A-Za-z0-9:._-]+)\1(?:\s|$)/u.exec(
+            segment,
+          );
+        if (invoked) names.add(invoked[2]!);
       }
     }
   }
