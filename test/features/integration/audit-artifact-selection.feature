@@ -21,3 +21,43 @@ Feature: fixture repositoryでのreview artifact差分選択
     Given 既存41件のreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
     Then 41件目のreview artifactが選ばれてfile監査は合格する
+
+  Scenario: SCN-INT-STEPCHAIN-001 上限を超えたreviewラウンドを拒否する
+    Given ラウンド数が"4"のreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査はラウンド上限超過を報告する
+
+  Scenario: SCN-INT-STEPCHAIN-002 ラウンド数の記録が無いartifactを拒否する
+    Given ラウンド数欄が無いreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査はラウンド数の欠落を報告する
+
+  Scenario: SCN-INT-STEPCHAIN-003 Step chainの申告が無いartifactを拒否する
+    Given Step chain欄が無いreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査はStep chain申告の欠落を報告する
+
+  Scenario: SCN-INT-STEPCHAIN-004 迂回の申告に理由が無い場合を拒否する
+    Given Step chainを理由なしで迂回と申告したreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は迂回理由の欠落を報告する
+
+  Scenario: SCN-INT-STEPCHAIN-005 経由の申告にjournalが無い場合を拒否する
+    Given Step chainを経由と申告しjournalが無いreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査はjournalの欠落を報告する
+
+  Scenario: SCN-INT-STEPCHAIN-006 経由の申告と整合するjournalを受理する
+    Given Step chainを経由と申告し整合するjournalを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then 監査選択のfile監査は合格する
+
+  Scenario: SCN-INT-STEPCHAIN-007 注記付きのラウンド数から先頭の整数を読む
+    Given ラウンド数が"3（うち1ラウンドは自動review）"のreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then 監査選択のfile監査は合格する
+
+  Scenario: SCN-INT-STEPCHAIN-008 経由の申告で必須Stepが欠けたjournalを拒否する
+    Given Step chainを経由と申告し必須Stepが欠けたjournalを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査はStep journalの不整合を報告する

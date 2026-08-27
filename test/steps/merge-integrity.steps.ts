@@ -133,6 +133,8 @@ function auditMarkdown(
 |---|---|
 | 比較基点 | \`${base}\` |
 | H_impl | \`${implementation}\` |
+| ラウンド数 | 1 |
+| Step chain | 迂回: fixtureのため製品経路を通していない |
 
 ## 変更ファイル個別監査
 

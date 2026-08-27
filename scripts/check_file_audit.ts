@@ -9,6 +9,11 @@ import {
   type RenameResolution,
   type TokenObservation,
 } from "../src/domain/merge-integrity.js";
+import {
+  parseStepJournal,
+  validateStepJournal,
+  STEP_JOURNAL_FILE,
+} from "../src/domain/workflow.js";
 import { pathToFileURL } from "node:url";
 import { git } from "../src/lib/process.js";
 import {
@@ -477,6 +482,91 @@ function packageDistributionFiles(root: string): string[] | undefined {
   );
 }
 
+/** 上限は`.agent-skill-chain/docs/02_品質基準.md`が所有する。ここは同じ値を強制するだけ。 */
+const MAX_REVIEW_ROUNDS = 3;
+const STEP_CHAIN_VIA = "経由";
+const STEP_CHAIN_BYPASS = "迂回";
+
+/**
+ * `| ラウンド数 | 3（注記） |`から先頭の整数を読む。
+ *
+ * **注記を許す。** 既存artifactは`4（うち1ラウンドは自動review）`のように書いており、
+ * 厳格な整数だけを要求すると既存の書き方を一律に壊す。数える対象はラウンド数であって
+ * 記法ではない。
+ */
+function parseReviewRounds(markdown: string): number | undefined {
+  const cell = /\| *ラウンド数 *\| *([^|]+?) *\|/u.exec(markdown)?.[1];
+  const leading = /^(\d+)/u.exec(cell ?? "")?.[1];
+  return leading === undefined ? undefined : Number(leading);
+}
+
+/**
+ * `| Step chain | 経由: <staging> |`または`| Step chain | 迂回: <理由> |`を読む。
+ *
+ * **手書き運用を禁止しない。** 運用ポリシーは手段が開発速度を損なうときに手段を縮小する
+ * と定めており、Issue #986も「迂回した事実が記録に残ればよい」としている。迂回は理由を
+ * 添えて申告すれば通す。申告そのものが無い状態だけを拒否する。
+ */
+function parseStepChain(
+  markdown: string,
+): { kind: "via" | "bypass"; detail: string } | undefined {
+  const cell = /\| *Step chain *\| *([^|]+?) *\|/u.exec(markdown)?.[1];
+  if (cell === undefined) return undefined;
+  const matched = /^(経由|迂回) *[:：] *(.+)$/u.exec(cell.trim());
+  if (!matched) return undefined;
+  return {
+    kind: matched[1] === STEP_CHAIN_VIA ? "via" : "bypass",
+    detail: matched[2]!.trim(),
+  };
+}
+
+/** 申告した staging の journal が Step 10 まで整合しているかを既存validatorで確かめる。 */
+function stepChainErrors(
+  root: string,
+  declared: { kind: "via" | "bypass"; detail: string },
+): string[] {
+  if (declared.kind === "bypass")
+    return declared.detail.length >= 10
+      ? []
+      : [
+          `Step chainを${STEP_CHAIN_BYPASS}と申告する場合は理由を10文字以上で記述してください`,
+        ];
+  const journal = path.join(root, declared.detail, STEP_JOURNAL_FILE);
+  if (!fs.existsSync(journal))
+    return [
+      `Step chainを${STEP_CHAIN_VIA}と申告していますがjournalがありません: ${path.relative(root, journal)}`,
+    ];
+  const parsed = parseStepJournal(fs.readFileSync(journal, "utf8"));
+  if (parsed.errors.length > 0)
+    return parsed.errors.map(
+      (error) => `Step journalを解析できません: ${error}`,
+    );
+  const validated = validateStepJournal({
+    mode: "full",
+    entries: parsed.entries,
+    upToStep: 10,
+  });
+  if (validated.valid) return [];
+  /**
+   * **`errors`だけを見ない。** 欠落・余分・順序・mode矛盾は専用fieldへ入り、`errors`は
+   * 入力検証だけを持つ。`errors`だけを読むと不整合を素通りさせる。
+   */
+  const detail = [
+    ...validated.errors,
+    ...(validated.missingSteps.length > 0
+      ? [`欠落Step: ${validated.missingSteps.join(", ")}`]
+      : []),
+    ...(validated.unexpectedSteps.length > 0
+      ? [`未知Step: ${validated.unexpectedSteps.join(", ")}`]
+      : []),
+    ...(validated.outOfOrder.length > 0
+      ? [`順序違反Step: ${validated.outOfOrder.join(", ")}`]
+      : []),
+    ...validated.modeConflicts,
+  ];
+  return [`Step journalが整合しません: ${detail.join("; ")}`];
+}
+
 export function parseFileAudit(markdown: string) {
   const base = /\| 比較基点 \| `([a-f0-9]{40})` \|/iu.exec(markdown)?.[1];
   const implementation = /\| H_impl \| `([a-f0-9]{40})` \|/iu.exec(
@@ -640,12 +730,30 @@ export function checkFileAudit(root: string) {
   );
   if (ancestry.status !== 0)
     errors.push("H_implがcurrent HEADのancestorではありません");
+  const artifactText = fs.readFileSync(artifact, "utf8");
+  const rounds = parseReviewRounds(artifactText);
+  if (rounds === undefined)
+    errors.push(
+      "review artifactに「| ラウンド数 | N |」がありません。実施したラウンド数を記録してください",
+    );
+  else if (rounds > MAX_REVIEW_ROUNDS)
+    errors.push(
+      `reviewラウンドが上限を超えています: ${rounds}（上限${MAX_REVIEW_ROUNDS}）。同じ範囲の予算は自動更新しません`,
+    );
+  else if (rounds < 1)
+    errors.push(`reviewラウンドは1以上で記録してください: ${rounds}`);
+  const stepChain = parseStepChain(artifactText);
+  if (stepChain === undefined)
+    errors.push(
+      `review artifactに「| Step chain | ${STEP_CHAIN_VIA}: <staging path> |」または「| Step chain | ${STEP_CHAIN_BYPASS}: <理由> |」がありません`,
+    );
+  else errors.push(...stepChainErrors(root, stepChain));
   const packageFiles = packageDistributionFiles(root);
   const impact =
     packageFiles === undefined
       ? { errors: [], distributed: [] }
       : validateDistributionImpact({
-          markdown: fs.readFileSync(artifact, "utf8"),
+          markdown: artifactText,
           changedPaths: expected.map((entry) => entry.path),
           packageFiles,
         });
