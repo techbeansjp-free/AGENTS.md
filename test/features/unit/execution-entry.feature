@@ -13,6 +13,7 @@ Feature: 実行entry判定をsymlink経由の起動でも成立させる
       | script |
       | check_japanese_docs.ts |
       | check_directory_guides.ts |
+      | check_source_quality.ts |
 
   Scenario: SCN-UNIT-ENTRY-002 実行entry判定の直接比較を拒否する
     Given 実行entry判定を直接比較するsourceがある
@@ -43,3 +44,16 @@ Feature: 実行entry判定をsymlink経由の起動でも成立させる
     Given 正本をcommentで参照しつつ手書きするsourceがある
     When 実行entry判定の検査を実行する
     Then 実行entry判定の検査は手書きを報告する
+
+  # 保護2 fileは契約6→7として是正済み。保留リストへ再び足されると検査が黙って飛ぶため、
+  # 対象であり続けることを固定する。
+  Scenario Outline: SCN-UNIT-ENTRY-008 保護fileを検査の対象外にしない
+    Given 実行entry判定を直接比較するsourceがある
+    And 対象fileを"<file>"とする
+    When 実行entry判定の検査を実行する
+    Then 実行entry判定の検査は直接比較を報告する
+
+    Examples:
+      | file |
+      | scripts/check_project_quality.ts |
+      | scripts/check_source_quality.ts |

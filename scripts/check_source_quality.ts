@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
+import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".mjs"]);
 const SOURCE_FILE_EXTENSIONS = new Set([
@@ -122,10 +122,7 @@ export function checkSourceQuality(root = process.cwd()) {
   return { valid: errors.length === 0, errors, files: files.length };
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-) {
+if (isExecutionEntry(import.meta.url)) {
   const rootArgument = process.argv.find((argument) =>
     argument.startsWith("--root="),
   );
