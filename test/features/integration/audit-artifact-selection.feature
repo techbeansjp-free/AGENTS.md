@@ -69,3 +69,34 @@ Feature: fixture repositoryでのreview artifact差分選択
     When 監査選択repositoryのfile監査を実行する
     Then file監査はラウンド数の欠落を報告する
     And file監査はStep chain申告の欠落を報告する
+
+  Scenario Outline: SCN-INT-SPEEDOBS-001 観測基準の欄が無いartifactを拒否する
+    Given "<label>"の欄が無いreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は"<label>"の欠落を報告する
+
+    Examples:
+      | label |
+      | 仕様の所有箇所 |
+      | 成果物行数 |
+      | 縮小の先行評価 |
+
+  Scenario: SCN-INT-SPEEDOBS-002 空欄の観測基準を未記入として扱う
+    Given "縮小の先行評価"が空欄のreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は"縮小の先行評価"の欠落を報告する
+
+  Scenario: SCN-INT-SPEEDOBS-003 該当なしの仕様所有箇所に起票先を要求する
+    Given 仕様の所有箇所が"該当なし"のreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は仕様側の起票先の欠落を報告する
+
+  Scenario: SCN-INT-SPEEDOBS-004 該当なしでも起票先があれば受理する
+    Given 仕様の所有箇所が"該当なし: #1234"のreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then 監査選択のfile監査は合格する
+
+  Scenario: SCN-INT-SPEEDOBS-005 支援層が成果物を上回る記録でも停止しない
+    Given 成果物行数が"製品 8行 / 支援層 172行"のreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then 監査選択のfile監査は合格する

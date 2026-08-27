@@ -501,6 +501,66 @@ function identitySection(markdown: string): string | undefined {
 }
 
 /**
+ * 運用ポリシーが宣言する開発速度の観測基準を、artifactへ残させる欄。
+ *
+ * `.agent-skill-chain/docs/00_運用ポリシー.md`は「支援層の所要時間が成果物構築の所要時間を
+ * 上回らないこと」と「手段の追加を提案する前に、既存手段の縮小で目的を満たせないかを先に
+ * 評価すること」を観測基準として宣言しているが、**観測する場所がどこにも無かった。**
+ *
+ * **閾値で自動停止させない。** 比率は文脈依存で、ドメイン関数のtestが成果物の4倍になるのは
+ * 正常である。記録を残させ、人が読んで判断する。
+ */
+const OBSERVATION_FIELDS = [
+  {
+    label: "仕様の所有箇所",
+    hint: "着手時に読んだ仕様の正本と引用。`該当なし: #<Issue番号>`で仕様側の欠落を起票したことを示す",
+  },
+  { label: "成果物行数", hint: "製品の変更行数と支援層の行数" },
+  {
+    label: "縮小の先行評価",
+    hint: "既存手段の流用・縮小で足りない理由。評価していない状態を残さない",
+  },
+] as const;
+
+/** 識別情報の節から`| <label> | <値> |`の値を読む。空欄は未記入として扱う。 */
+function identityCell(section: string, label: string): string | undefined {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const cell = new RegExp(`\\| *${escaped} *\\| *([^|]*?) *\\|`, "u").exec(
+    section,
+  )?.[1];
+  return cell === undefined || cell.trim() === "" ? undefined : cell.trim();
+}
+
+/**
+ * 観測基準の欄が記入されているかを確かめる。
+ *
+ * `仕様の所有箇所`が`該当なし`のときだけ追加を要求する。仕様に所有箇所が無いなら、
+ * **実装を進める前に仕様側の欠落として起票する**のが運用ポリシーの求める順序であり、
+ * その起票先をここで指させる。
+ */
+function observationErrors(section: string): string[] {
+  const errors: string[] = [];
+  for (const field of OBSERVATION_FIELDS) {
+    const value = identityCell(section, field.label);
+    if (value === undefined) {
+      errors.push(
+        `review artifactに「| ${field.label} | … |」がありません。${field.hint}を記録してください`,
+      );
+      continue;
+    }
+    if (
+      field.label === "仕様の所有箇所" &&
+      value.startsWith("該当なし") &&
+      !/#\d+/u.test(value)
+    )
+      errors.push(
+        "仕様の所有箇所が該当なしの場合は、仕様側の欠落を起票したIssue番号を`#<番号>`で示してください",
+      );
+  }
+  return errors;
+}
+
+/**
  * `| ラウンド数 | 3（注記） |`から先頭の整数を読む。
  *
  * **注記を許す。** 既存artifactは`4（うち1ラウンドは自動review）`のように書いており、
@@ -508,8 +568,9 @@ function identitySection(markdown: string): string | undefined {
  * 記法ではない。
  */
 function parseReviewRounds(section: string): number | undefined {
-  const cell = /\| *ラウンド数 *\| *([^|]+?) *\|/u.exec(section)?.[1];
-  const leading = /^(\d+)/u.exec(cell ?? "")?.[1];
+  const leading = /^(\d+)/u.exec(
+    identityCell(section, "ラウンド数") ?? "",
+  )?.[1];
   return leading === undefined ? undefined : Number(leading);
 }
 
@@ -530,9 +591,9 @@ function parseReviewRounds(section: string): number | undefined {
 function parseStepChain(
   section: string,
 ): { kind: "via" | "bypass"; detail: string } | undefined {
-  const cell = /\| *Step chain *\| *([^|]+?) *\|/u.exec(section)?.[1];
+  const cell = identityCell(section, "Step chain");
   if (cell === undefined) return undefined;
-  const matched = /^(経由|迂回) *[:：] *(.+)$/u.exec(cell.trim());
+  const matched = /^(経由|迂回) *[:：] *(.+)$/u.exec(cell);
   if (!matched) return undefined;
   return {
     kind: matched[1] === STEP_CHAIN_VIA ? "via" : "bypass",
@@ -724,6 +785,7 @@ export function checkFileAudit(root: string) {
     errors.push(
       `review artifactに「| Step chain | ${STEP_CHAIN_VIA}: <staging path> |」または「| Step chain | ${STEP_CHAIN_BYPASS}: <理由> |」がありません`,
     );
+  errors.push(...observationErrors(identity ?? ""));
   const packageFiles = packageDistributionFiles(root);
   const impact =
     packageFiles === undefined

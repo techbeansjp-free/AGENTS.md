@@ -37,7 +37,13 @@ function auditMarkdown(
   implementation: string,
   auditedPath: string,
   status = "A",
-  identity = "| ラウンド数 | 1 |\n| Step chain | 迂回: fixtureのため製品経路を通していない |",
+  identity = [
+    "| ラウンド数 | 1 |",
+    "| Step chain | 迂回: fixtureのため製品経路を通していない |",
+    "| 仕様の所有箇所 | `docs/specs/fixture.md:1`「fixtureの仕様」 |",
+    "| 成果物行数 | 製品 1行 / 支援層 2行 |",
+    "| 縮小の先行評価 | 既存fixtureの流用では監査経路を通らないため |",
+  ].join("\n"),
 ): string {
   return `# fixture実装レビュー
 
@@ -282,8 +288,94 @@ function commitArtifactWithIdentity(
   world.expectedAuditPath = auditPath;
 }
 
-const BYPASS_IDENTITY =
-  "| Step chain | 迂回: fixtureのため製品経路を通していない |";
+const OBSERVATION_ROWS: Readonly<Record<string, string>> = {
+  仕様の所有箇所: "`docs/specs/fixture.md:1`「fixtureの仕様」",
+  成果物行数: "製品 1行 / 支援層 2行",
+  縮小の先行評価: "既存fixtureの流用では監査経路を通らないため",
+};
+
+/** 観測基準の欄を組み立てる。`overrides`で1欄だけ差し替え、`undefined`で欄ごと落とす。 */
+function observationRows(
+  overrides: Readonly<Record<string, string | undefined>> = {},
+): string {
+  return Object.entries(OBSERVATION_ROWS)
+    .map(([label, value]) => [
+      label,
+      label in overrides ? overrides[label] : value,
+    ])
+    .filter(([, value]) => value !== undefined)
+    .map(([label, value]) => `| ${label} | ${value} |`)
+    .join("\n");
+}
+
+const BYPASS_IDENTITY = [
+  "| Step chain | 迂回: fixtureのため製品経路を通していない |",
+  observationRows(),
+].join("\n");
+
+Given(
+  "{string}の欄が無いreview artifactを持つ統合監査repository",
+  function (label: string) {
+    commitArtifactWithIdentity(
+      this,
+      [
+        "| ラウンド数 | 1 |",
+        "| Step chain | 迂回: fixtureのため製品経路を通していない |",
+        observationRows({ [label]: undefined }),
+      ].join("\n"),
+    );
+  },
+);
+
+Given(
+  "{string}が空欄のreview artifactを持つ統合監査repository",
+  function (label: string) {
+    commitArtifactWithIdentity(
+      this,
+      [
+        "| ラウンド数 | 1 |",
+        "| Step chain | 迂回: fixtureのため製品経路を通していない |",
+        observationRows({ [label]: "" }),
+      ].join("\n"),
+    );
+  },
+);
+
+Given(
+  "仕様の所有箇所が{string}のreview artifactを持つ統合監査repository",
+  function (value: string) {
+    commitArtifactWithIdentity(
+      this,
+      [
+        "| ラウンド数 | 1 |",
+        "| Step chain | 迂回: fixtureのため製品経路を通していない |",
+        observationRows({ 仕様の所有箇所: value }),
+      ].join("\n"),
+    );
+  },
+);
+
+Given(
+  "成果物行数が{string}のreview artifactを持つ統合監査repository",
+  function (value: string) {
+    commitArtifactWithIdentity(
+      this,
+      [
+        "| ラウンド数 | 1 |",
+        "| Step chain | 迂回: fixtureのため製品経路を通していない |",
+        observationRows({ 成果物行数: value }),
+      ].join("\n"),
+    );
+  },
+);
+
+Then("file監査は{string}の欠落を報告する", function (label: string) {
+  assertReported(this, `| ${label} | … |」がありません`);
+});
+
+Then("file監査は仕様側の起票先の欠落を報告する", function () {
+  assertReported(this, "仕様側の欠落を起票したIssue番号");
+});
 
 Given(
   "ラウンド数が{string}のreview artifactを持つ統合監査repository",
@@ -365,7 +457,11 @@ Given(
   function (declaration: string) {
     commitArtifactWithIdentity(
       this,
-      `| ラウンド数 | 1 |\n| Step chain | ${declaration} |`,
+      [
+        "| ラウンド数 | 1 |",
+        `| Step chain | ${declaration} |`,
+        observationRows(),
+      ].join("\n"),
     );
   },
 );

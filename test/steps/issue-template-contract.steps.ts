@@ -21,6 +21,7 @@ interface IssueTemplateContractWorld extends WorkflowWorld {
   issuePath: string;
   mode: "full" | "quick" | "poc";
   packageRoot: string;
+  requirementTemplate: string;
   results: Validation[];
   validation: Validation;
   cliOutput: string;
@@ -130,6 +131,25 @@ async function runCli(
 
 Given("出荷Issue templateと検証器の見出し契約がある", function () {
   this.packageRoot = repositoryRoot;
+});
+
+When("{string}の要求定義templateを読む", function (mode: string) {
+  this.requirementTemplate = fs.readFileSync(
+    path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue",
+      `00_要求定義_${mode}.md`,
+    ),
+    "utf8",
+  );
+});
+
+/**
+ * 運用ポリシーが求める「着手前に仕様の該当箇所を特定する」を、配布templateの欄として
+ * 固定する。**欄が消えると利用側は症状から着手する経路へ戻る。**
+ */
+Then("要求定義templateは仕様の所有箇所の欄を持つ", function () {
+  assert.match(this.requirementTemplate, /^\| *仕様の所有箇所 *\|/mu);
 });
 
 When(
