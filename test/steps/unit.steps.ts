@@ -144,8 +144,10 @@ interface UnitWorld extends WorkflowWorld {
         auditPath: string;
         auditedFiles: number;
       };
+  largeOutputArgs: string[];
   legacyCliContract: { valid: boolean; errors: string[]; commands: number };
   legacyCliContractRoot: string;
+  missingCommand: string;
   missingDirectoryGuideRoot: string;
   missingDirectoryGuides: {
     valid: boolean;
@@ -221,6 +223,8 @@ interface UnitWorld extends WorkflowWorld {
   policySchema: PolicySchemaFixture;
   policyValidation: ReturnType<typeof validatePolicy>;
   prChecklist: string;
+  processError: unknown;
+  processResult: ReturnType<typeof run>;
   processSecret: "ghp_abcdefghijklmnopqrstuvwxyz1234567890";
   projectQualityResult: ReturnType<typeof checkProjectQualityContract>;
   projectQualityRoot: string;
@@ -2405,4 +2409,53 @@ Then("source graphは非循環で循環反例だけを拒否する", function ()
     this.sourceResult.errors.join("; "),
   );
   assert.equal(this.cyclicResult.valid, false);
+});
+
+/**
+ * `spawnSync`の既定`maxBuffer`は1MiBで、`git ls-files --others --ignored`のように
+ * repository規模へ比例する出力で超過する。超過時は`status`がnullかつ`stderr`が空になり、
+ * `status ?? 1`だけでは終了値1と区別できない失敗になる（Issue #993）。
+ */
+const LARGE_OUTPUT_BYTES = 2 * 1024 * 1024;
+Given("1MiBを超える出力を返すcommandがある", function () {
+  this.largeOutputArgs = [
+    "-e",
+    `process.stdout.write("x".repeat(${LARGE_OUTPUT_BYTES}))`,
+  ];
+});
+Given("実在しないcommandがある", function () {
+  this.missingCommand = "agent-skill-chain-absent-command";
+});
+When("process境界でその出力を取得する", function () {
+  this.processResult = run(
+    process.execPath,
+    this.largeOutputArgs,
+    process.cwd(),
+  );
+});
+When("出力上限を絞ってprocess境界で実行する", function () {
+  try {
+    run(process.execPath, this.largeOutputArgs, process.cwd(), {
+      maxBufferBytes: 1024 * 1024,
+    });
+  } catch (error) {
+    this.processError = error;
+  }
+});
+When("allowFailureでprocess境界で実行する", function () {
+  this.processResult = run(this.missingCommand, [], process.cwd(), {
+    allowFailure: true,
+  });
+});
+Then("出力は切り詰められず全量が返る", function () {
+  assert.equal(this.processResult.status, 0);
+  assert.equal(this.processResult.stdout.length, LARGE_OUTPUT_BYTES);
+});
+Then("失敗理由にENOBUFSが残る", function () {
+  assert.ok(this.processError instanceof Error);
+  assert.match(this.processError.message, /ENOBUFS/u);
+});
+Then("終了値は1でstderrに実行できなかった原因が残る", function () {
+  assert.equal(this.processResult.status, 1);
+  assert.match(this.processResult.stderr, /ENOENT/u);
 });

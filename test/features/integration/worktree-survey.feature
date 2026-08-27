@@ -55,3 +55,8 @@ Feature: CLIで登録済みworktreeを事後走査する
     Given branch改名でslugがずれたmerge済みworktreeがある
     When worktree surveyをJSON形式で実行する
     Then 対象worktreeはslug不一致でもcleanup-readyを維持する
+
+  Scenario: SCN-INT-WTSURVEY-012 ignored出力が1MiBを超えるrepositoryでも走査が分類を返す
+    Given ignored出力が1MiBを超える走査用worktreeがある
+    When worktree surveyをJSON形式で実行する
+    Then 走査はerrorなしで登録済みworktreeを分類する

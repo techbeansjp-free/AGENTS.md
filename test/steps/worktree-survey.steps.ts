@@ -15,6 +15,7 @@ import {
 import { init } from "../../src/domain/lifecycle.js";
 
 interface SurveyWorld extends WorkflowWorld {
+  ignoredOutputBytes: number;
   input: unknown;
   survey: WorktreeSurvey;
   root: string;
@@ -51,8 +52,17 @@ function runGit(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
 
-function createSurveyRepository(world: SurveyWorld, merged: boolean): void {
+function createSurveyRepository(
+  world: SurveyWorld,
+  merged: boolean,
+  ignoreRules?: string,
+): void {
   world.root = world.initRepo();
+  if (ignoreRules !== undefined) {
+    fs.writeFileSync(path.join(world.root, ".gitignore"), ignoreRules);
+    runGit(world.root, ["add", ".gitignore"]);
+    runGit(world.root, ["commit", "-q", "-m", "ignore"]);
+  }
   const remote = world.temp("asc-survey-remote-");
   runGit(remote, ["init", "--bare"]);
   runGit(world.root, ["remote", "add", "origin", remote]);
@@ -90,6 +100,37 @@ function createSurveyRepository(world: SurveyWorld, merged: boolean): void {
     ]);
     runGit(world.root, ["push", "origin", "main"]);
   }
+}
+
+/**
+ * `git ls-files --others --ignored --exclude-standard`の出力が`spawnSync`の既定maxBuffer
+ * 1MiBを超えると子processが停止させられ、走査はworktreeを1件も分類できなくなる（Issue #993）。
+ * 1MiBの直上では全量が届いてから停止するため`status`が0のまま残り欠陥が現れない。
+ * 利用者報告と同じ3MiB規模にして`status`がnullになる領域を再現する。
+ * 発火点はignored file約4,218件（平均path長249byte）だが、fixtureはdirectory名で
+ * path長を稼ぎ、少ないfile数で同じ出力量へ到達する。
+ */
+const IGNORED_OUTPUT_BYTES = 3 * 1024 * 1024;
+
+function fillIgnoredArtifacts(worktree: string): number {
+  const directory = path.join(
+    worktree,
+    "node_modules",
+    "d".repeat(120),
+    "e".repeat(120),
+    "g".repeat(120),
+  );
+  fs.mkdirSync(directory, { recursive: true });
+  let bytes = 0;
+  for (let index = 0; bytes < IGNORED_OUTPUT_BYTES; index += 1) {
+    const file = path.join(
+      directory,
+      `${String(index).padStart(6, "0")}${"f".repeat(240)}`,
+    );
+    fs.writeFileSync(file, "");
+    bytes += Buffer.byteLength(path.relative(worktree, file)) + 1;
+  }
+  return bytes;
 }
 
 function runCli(world: SurveyWorld, args: string[]): void {
@@ -293,6 +334,10 @@ Given(
     init(this.root, { apply: true });
   },
 );
+Given("ignored出力が1MiBを超える走査用worktreeがある", function () {
+  createSurveyRepository(this, true, "node_modules/\n");
+  this.ignoredOutputBytes = fillIgnoredArtifacts(this.worktree);
+});
 When("worktree surveyをJSON形式で実行する", function () {
   runCli(this, ["worktree", "survey", `--root=${this.root}`]);
 });
@@ -365,4 +410,13 @@ Then("対象worktreeはslug不一致でもcleanup-readyを維持する", functio
   const target = entries.find((entry) => entry.path === this.worktree);
   assert.equal(target?.disposition, "cleanup-ready");
   assert.ok((parsed(this).cleanupReady as string[]).includes(this.worktree));
+});
+
+Then("走査はerrorなしで登録済みworktreeを分類する", function () {
+  assert.ok(this.ignoredOutputBytes > IGNORED_OUTPUT_BYTES);
+  const survey = parsed(this);
+  assert.deepEqual(survey.errors, []);
+  const entries = survey.entries as Array<Record<string, unknown>>;
+  assert.equal(entries.length, 2);
+  assert.ok(entries.some((entry) => entry.path === this.worktree));
 });
