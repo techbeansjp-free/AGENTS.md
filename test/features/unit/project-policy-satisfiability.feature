@@ -73,3 +73,8 @@ Feature: 一般利用projectが正直な適用可否でpolicyを充足する
     Given quality具体値の格下げとnot-applicableからの強化candidateがある
     When project choiceのquality差分を比較する
     Then quality格下げは拒否され強化は許可される
+
+  Scenario: SCN-UNIT-SAT-015 project choice縮小の拒否理由が適用経路の不在を示す
+    Given testLayersを縮小したcandidate policyがある
+    When trusted policyから縮小差分を比較する
+    Then 縮小の拒否理由は候補側に適用経路が無いことを示す
