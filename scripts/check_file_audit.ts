@@ -320,9 +320,24 @@ function hasReleaseBumpChanges(
   );
 }
 
-function isDirectReleaseBump(root: string, commit: string): boolean {
+/**
+ * 側のcommit 1件がrelease bumpかを判定する。
+ *
+ * **自動releaseは`release/bump-*` branchのPR mergeとして着地する。** 既定branch追随で
+ * bumpだけを取り込むと、別親側の範囲には必ず親2個のmerge commitが入る。親1個のcommitだけを
+ * 受け付けると、その追随では除外が成立しない（Issue #975）。
+ *
+ * merge commitは`isReleaseBumpTransition`へ委譲し、subject接頭辞の要求を緩めない。
+ * merge自身のsubjectは`Merge pull request …`だが、その別親側を再帰的にたどった葉が
+ * 接頭辞つきの直接bump commitであることを要求する。
+ */
+function isReleaseBumpCommit(root: string, commit: string): boolean {
   const parents = commitParents(root, commit);
-  if (parents.length !== 1) return false;
+  if (parents.length === 0) return false;
+  if (parents.length > 1)
+    return parents.some((parent) =>
+      isReleaseBumpTransition(root, { commit, parent }),
+    );
   const subject = git(
     ["show", "-s", "--format=%s", commit],
     root,
@@ -343,7 +358,7 @@ function isReleaseBumpSide(
   );
   return (
     sideCommits.length > 0 &&
-    sideCommits.every((commit) => isDirectReleaseBump(root, commit))
+    sideCommits.every((commit) => isReleaseBumpCommit(root, commit))
   );
 }
 

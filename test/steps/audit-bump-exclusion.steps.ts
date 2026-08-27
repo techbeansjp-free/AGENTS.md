@@ -30,23 +30,11 @@ function commitAll(root: string, message: string): string {
   return git(root, ["rev-parse", "HEAD"]);
 }
 
-function createAuditedRepository(world: AuditBumpWorld): string {
-  const root = world.initRepo();
-  writeJson(root, "package.json", {
-    name: "audit-fixture",
-    version: "0.3.1-beta.1",
-    description: "fixture",
-  });
-  writeJson(root, "package-lock.json", {
-    name: "audit-fixture",
-    version: "0.3.1-beta.1",
-    lockfileVersion: 3,
-    packages: { "": { name: "audit-fixture", version: "0.3.1-beta.1" } },
-  });
-  fs.writeFileSync(path.join(root, "implementation.txt"), "base\n");
-  const base = commitAll(root, "test: 監査fixtureの基点を作る");
-  fs.writeFileSync(path.join(root, "implementation.txt"), "implemented\n");
-  const implementation = commitAll(root, "feat: 監査対象を実装する");
+function writeAuditArtifact(
+  root: string,
+  base: string,
+  implementation: string,
+): void {
   const auditPath = "docs/reviews/01_課題873実装レビュー.md";
   const artifact = `# 課題873 実装レビュー
 
@@ -71,6 +59,26 @@ function createAuditedRepository(world: AuditBumpWorld): string {
   const artifactFile = path.join(root, auditPath);
   fs.mkdirSync(path.dirname(artifactFile), { recursive: true });
   fs.writeFileSync(artifactFile, artifact);
+}
+
+function createAuditedRepository(world: AuditBumpWorld): string {
+  const root = world.initRepo();
+  writeJson(root, "package.json", {
+    name: "audit-fixture",
+    version: "0.3.1-beta.1",
+    description: "fixture",
+  });
+  writeJson(root, "package-lock.json", {
+    name: "audit-fixture",
+    version: "0.3.1-beta.1",
+    lockfileVersion: 3,
+    packages: { "": { name: "audit-fixture", version: "0.3.1-beta.1" } },
+  });
+  fs.writeFileSync(path.join(root, "implementation.txt"), "base\n");
+  const base = commitAll(root, "test: 監査fixtureの基点を作る");
+  fs.writeFileSync(path.join(root, "implementation.txt"), "implemented\n");
+  const implementation = commitAll(root, "feat: 監査対象を実装する");
+  writeAuditArtifact(root, base, implementation);
   commitAll(root, "docs: 課題873実装レビューを記録する");
   world.auditRoot = root;
   return root;
@@ -156,6 +164,94 @@ Given("正規のrelease bumpをmergeした隔離repository", function () {
     "chore(release): bump version to 0.3.1-beta.2 [skip ci]",
   );
 });
+
+/**
+ * 既定branch追随の後にrelease bump PRのmergeを取り込んだ実際の着地形を作る。
+ *
+ * 自動releaseは`release/bump-*` branchのPR mergeとして着地するため、追随merge commitの
+ * 別親側には親2個のmerge commitが必ず入る（Issue #975）。`sideNoise`はそのmergeの
+ * 別親側へbumpでないcommitを混ぜ、除外がmerge commitを無条件に受け付けていないことを示す。
+ */
+function createFollowUpBumpRepository(
+  world: AuditBumpWorld,
+  sideNoise: boolean,
+): void {
+  const root = world.initRepo();
+  writeJson(root, "package.json", {
+    name: "audit-fixture",
+    version: "0.3.1-beta.1",
+    description: "fixture",
+  });
+  writeJson(root, "package-lock.json", {
+    name: "audit-fixture",
+    version: "0.3.1-beta.1",
+    lockfileVersion: 3,
+    packages: { "": { name: "audit-fixture", version: "0.3.1-beta.1" } },
+  });
+  fs.writeFileSync(path.join(root, "implementation.txt"), "base\n");
+  commitAll(root, "test: 監査fixtureの基点を作る");
+  git(root, ["checkout", "-q", "-b", "bugfix/975-follow"]);
+  fs.writeFileSync(path.join(root, "implementation.txt"), "implemented\n");
+  commitAll(root, "feat: 監査対象を実装する");
+  git(root, ["checkout", "-q", "main"]);
+  fs.writeFileSync(path.join(root, "mainline.txt"), "mainline\n");
+  const mainline = commitAll(root, "feat: 既定branch側を変更する");
+  git(root, ["checkout", "-q", "bugfix/975-follow"]);
+  git(root, [
+    "merge",
+    "--no-ff",
+    "-q",
+    "main",
+    "-m",
+    "chore: 既定branchを取り込む",
+  ]);
+  writeAuditArtifact(root, mainline, git(root, ["rev-parse", "HEAD"]));
+  commitAll(root, "docs: 課題873実装レビューを記録する");
+  git(root, ["checkout", "-q", "main"]);
+  git(root, ["checkout", "-q", "-b", "release/bump-v0.3.1-beta.2"]);
+  if (sideNoise) {
+    // 混入fileは次のbump commitで消す。**mergeの導入差分をbumpだけに保つため**であり、
+    // 残すと`hasReleaseBumpChanges`が先に弾いて側の判定へ到達しない。
+    fs.writeFileSync(path.join(root, "sneaky.txt"), "sneaky\n");
+    commitAll(root, "chore: 別親側へbump以外の変更を混ぜる");
+    fs.rmSync(path.join(root, "sneaky.txt"));
+  }
+  bumpPackage(root);
+  commitAll(root, "chore(release): bump version to 0.3.1-beta.2 [skip ci]");
+  git(root, ["checkout", "-q", "main"]);
+  git(root, [
+    "merge",
+    "--no-ff",
+    "-q",
+    "release/bump-v0.3.1-beta.2",
+    "-m",
+    "Merge pull request #874 from example/release/bump-v0.3.1-beta.2",
+  ]);
+  git(root, ["checkout", "-q", "bugfix/975-follow"]);
+  git(root, [
+    "merge",
+    "--no-ff",
+    "-q",
+    "main",
+    "-m",
+    "chore: 既定branchを取り込む",
+  ]);
+  world.auditRoot = root;
+}
+
+Given(
+  "既定branch追随の後にrelease bump PRのmergeだけを取り込んだ隔離repository",
+  function () {
+    createFollowUpBumpRepository(this, false);
+  },
+);
+
+Given(
+  "既定branch追随で取り込んだmergeの別親側にbump以外のcommitがある隔離repository",
+  function () {
+    createFollowUpBumpRepository(this, true);
+  },
+);
 
 Given("bump以外のpackage変更をmergeした隔離repository", function () {
   const root = createAuditedRepository(this);
