@@ -45,6 +45,8 @@ class SatisfiabilityWorld extends WorkflowWorld {
   choice: unknown = undefined;
   choiceResult: ValidationResult | undefined = undefined;
   conformanceComparisons: ReturnType<typeof compareTrustedPolicy>[] = [];
+  narrowComparison: ReturnType<typeof compareTrustedPolicy> | undefined =
+    undefined;
   choiceDiffs: ReturnType<typeof classifyProjectChoiceDiff>[] = [];
   policySetValid = false;
   honestAssets = false;
@@ -955,3 +957,38 @@ Then(
     );
   },
 );
+
+/**
+ * 縮小（弱化）の拒否理由は、**候補側から適用する経路が製品CLIに無いこと**まで返す。
+ * 「trusted側を先に更新せよ」とだけ返すと、`policy migrate`も同じ比較で拒否するため
+ * 利用者が循環する（Issue #982、#998）。
+ */
+Given("testLayersを縮小したcandidate policyがある", function () {
+  const trustedChoices = choices();
+  trustedChoices.testLayers = ["unit", "integration"];
+  const candidateChoices = structuredClone(trustedChoices);
+  candidateChoices.testLayers = ["unit"];
+  this.narrowComparison = compareTrustedPolicy(
+    policy(trustedChoices),
+    policy(candidateChoices),
+  );
+});
+
+When("trusted policyから縮小差分を比較する", function () {});
+
+Then("縮小の拒否理由は候補側に適用経路が無いことを示す", function () {
+  assert.equal(this.narrowComparison?.allowed, false);
+  const rejected = this.narrowComparison?.rejected.find(
+    (entry) => entry.ruleId === "ASC-TRUST-001",
+  );
+  assert.ok(rejected, "ASC-TRUST-001の拒否がありません");
+  assert.match(
+    rejected.next,
+    /既定branchのproject policyを先に更新してください/u,
+  );
+  assert.match(rejected.next, /候補側から適用する経路は製品CLIにありません/u);
+  assert.equal(
+    rejected.requiredAuthority,
+    "既定ブランチのproject policy owner",
+  );
+});

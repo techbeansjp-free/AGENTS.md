@@ -579,7 +579,13 @@ export function compareTrustedPolicy(
           ["projectChoices"],
           ["projectChoicesの単調性契約と未知fieldを検証した"],
           [],
-          "弱化を取り消すか、検証を強化する方向へ変更してください",
+          /**
+           * **候補側から縮小を適用する経路は製品CLIに無い。**`policy migrate`も
+           * `compareTrustedPolicy`を互換性判定に使うため同じ理由で拒否する。
+           * 「trusted側を先に更新せよ」とだけ返すと、その更新手段が製品内に無いため
+           * 利用者を循環させる。**owner authorityの操作であることまで返す**（Issue #982、#998）。
+           */
+          "弱化を取り消すか、既定branchのproject policyを先に更新してください。縮小は既定branchのproject policy ownerのauthority操作であり、候補側から適用する経路は製品CLIにありません",
           "既定ブランチのproject policy owner",
           "candidateのprojectChoices弱化差分を取り消す",
         ),
