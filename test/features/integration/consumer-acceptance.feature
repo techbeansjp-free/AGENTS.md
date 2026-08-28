@@ -7,7 +7,7 @@ Feature: packed artifactを隔離環境で利用者と同じ入口から観測�
     Then packed-binのconsumer acceptanceで不合格になる
 
   Scenario: SCN-INT-CONSUMER-002 保護契約とsource repositoryを変更しない
-    Given 保護fileと配布scriptがorigin/mainとのmerge-baseに一致する
+    Given 保護fileと配布scriptがHEADに一致する
     When 最小fixture tarballのconsumer acceptanceを1回観測する
     Then 観測前後で保護契約のdigestが一致する
 
@@ -45,3 +45,8 @@ Feature: packed artifactを隔離環境で利用者と同じ入口から観測�
     Given release workflowの公開artifact経路がある
     When pack artifactからconsumer acceptanceとpublishへの参照を検査する
     Then 1度だけ作った同じtarballに3機構の検査と公開が結び付く
+
+  Scenario: SCN-INT-CONSUMER-010 前提はHEADとの一致だけを要求する
+    Given 保護fileがmerge-baseと異なりHEADと一致する候補treeがある
+    When 保護fileの前提判定を実行する
+    Then 前提は成立し、未commit変更とHEAD読取失敗では不成立になる

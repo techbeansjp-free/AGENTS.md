@@ -99,6 +99,10 @@ class ConsumerAcceptanceWorld extends WorkflowWorld {
   protectedContractDigestBefore = "";
   protectedContractDigestAfter = "";
   protectedFiles: string[] = [];
+  protectedPremiseResults: boolean[] = [];
+  gitShowFailureRejected = false;
+  defaultGitShowFailureRejected = false;
+  injectedGitShowReaderCalls = 0;
   parentAuthenticationEnvironment: Record<string, string> = {};
   isolatedProcessEnvironments: NodeJS.ProcessEnv[] = [];
   evidenceValidationErrors: string[][] = [];
@@ -202,8 +206,12 @@ const SHA256_HEX = /^[a-f0-9]{64}$/u;
 // package.jsonはmainの自動releaseでversionが変わるため、振る舞いを変えない
 // release差分から証跡の束縛を分離する。
 
-function commandOutput(file: string, args: string[]): string {
-  const result = run(file, args, process.cwd(), { allowFailure: true });
+function commandOutput(
+  file: string,
+  args: string[],
+  cwd = process.cwd(),
+): string {
+  const result = run(file, args, cwd, { allowFailure: true });
   assert.equal(
     result.status,
     0,
@@ -238,6 +246,35 @@ function protectedContractDigest(files: readonly string[]): string {
   for (const name of PROTECTED_SCRIPT_NAMES)
     hash.update(`script:${name}:${JSON.stringify(scripts[name])}\n`);
   return hash.digest("hex");
+}
+
+type GitFileReader = (ref: string, file: string) => string | Promise<string>;
+
+async function assertProtectedContractMatchesHead(
+  root: string,
+  protectedFiles: readonly string[],
+  readGitFile: GitFileReader = (ref, file) =>
+    commandOutput("git", ["show", `${ref}:${file}`], root),
+): Promise<void> {
+  for (const file of protectedFiles) {
+    const headContent = await readGitFile("HEAD", file);
+    assert.equal(
+      fs.readFileSync(path.join(root, file), "utf8"),
+      headContent,
+      `${file}がHEADから変わっています`,
+    );
+  }
+  const headPackage = await readGitFile("HEAD", "package.json");
+  const headScripts = readPackageScripts(headPackage);
+  const candidateScripts = readPackageScripts(
+    fs.readFileSync(path.join(root, "package.json"), "utf8"),
+  );
+  for (const name of PROTECTED_SCRIPT_NAMES)
+    assert.deepEqual(
+      candidateScripts[name],
+      headScripts[name],
+      `package.json.scripts.${name}がHEADから変わっています`,
+    );
 }
 
 function createMinimalFixtureTarball(world: ConsumerAcceptanceWorld): string {
@@ -967,47 +1004,179 @@ Then("実processは明示envの値を受け取る", function () {
   assert.match(this.processResult?.stdout ?? "", /^v\d+/u);
 });
 
+Given(/^保護fileと配布scriptがHEADに一致する$/u, async function () {
+  this.protectedFiles = staticallyReadProtectedFiles();
+  await assertProtectedContractMatchesHead(process.cwd(), this.protectedFiles);
+  this.protectedContractDigestBefore = protectedContractDigest(
+    this.protectedFiles,
+  );
+  this.fixtureTarball = createMinimalFixtureTarball(this);
+});
+
 Given(
-  /^保護fileと配布scriptがorigin\/mainとのmerge-baseに一致する$/u,
-  function () {
-    this.protectedFiles = staticallyReadProtectedFiles();
-    const mergeBase = commandOutput("git", [
-      "merge-base",
-      "HEAD",
-      "origin/main",
-    ]).trim();
-    assert.match(mergeBase, /^[a-f0-9]{40,64}$/u);
-    for (const file of this.protectedFiles) {
-      const baseContent = commandOutput("git", [
-        "show",
-        `${mergeBase}:${file}`,
-      ]);
-      assert.equal(
-        fs.readFileSync(file, "utf8"),
-        baseContent,
-        `${file}がorigin/mainとのmerge-baseから変わっています`,
-      );
-    }
-    const basePackage = commandOutput("git", [
-      "show",
-      `${mergeBase}:package.json`,
-    ]);
-    const baseScripts = readPackageScripts(basePackage);
-    const candidateScripts = readPackageScripts(
-      fs.readFileSync("package.json", "utf8"),
+  "保護fileがmerge-baseと異なりHEADと一致する候補treeがある",
+  async function () {
+    this.candidateRoot = this.temp("asc-protected-head-");
+    this.protectedFiles = ["package-lock.json"];
+    this.protectedPremiseResults = [];
+    this.gitShowFailureRejected = false;
+    this.defaultGitShowFailureRejected = false;
+    this.injectedGitShowReaderCalls = 0;
+    fs.writeFileSync(
+      path.join(this.candidateRoot, "package.json"),
+      `${JSON.stringify(
+        {
+          name: "protected-head-fixture",
+          scripts: { prepare: "merge-base-prepare" },
+        },
+        null,
+        2,
+      )}\n`,
     );
-    for (const name of PROTECTED_SCRIPT_NAMES)
-      assert.deepEqual(
-        candidateScripts[name],
-        baseScripts[name],
-        `package.json.scripts.${name}がorigin/mainとのmerge-baseから変わっています`,
-      );
-    this.protectedContractDigestBefore = protectedContractDigest(
-      this.protectedFiles,
+    fs.writeFileSync(
+      path.join(this.candidateRoot, "package-lock.json"),
+      "merge-base-version\n",
     );
-    this.fixtureTarball = createMinimalFixtureTarball(this);
+    await commandOutput("git", ["init", "-q"], this.candidateRoot);
+    await commandOutput(
+      "git",
+      ["config", "user.name", "consumer-acceptance"],
+      this.candidateRoot,
+    );
+    await commandOutput(
+      "git",
+      ["config", "user.email", "consumer-acceptance@example.invalid"],
+      this.candidateRoot,
+    );
+    await commandOutput("git", ["add", "."], this.candidateRoot);
+    await commandOutput(
+      "git",
+      ["commit", "-q", "-m", "merge base"],
+      this.candidateRoot,
+    );
+    const mergeBase = (
+      await commandOutput("git", ["rev-parse", "HEAD"], this.candidateRoot)
+    ).trim();
+    await commandOutput(
+      "git",
+      ["update-ref", "refs/remotes/origin/main", mergeBase],
+      this.candidateRoot,
+    );
+    fs.writeFileSync(
+      path.join(this.candidateRoot, "package-lock.json"),
+      "head-version\n",
+    );
+    fs.writeFileSync(
+      path.join(this.candidateRoot, "package.json"),
+      `${JSON.stringify(
+        {
+          name: "protected-head-fixture",
+          scripts: { prepare: "head-prepare" },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    await commandOutput(
+      "git",
+      ["add", "package.json", "package-lock.json"],
+      this.candidateRoot,
+    );
+    await commandOutput(
+      "git",
+      ["commit", "-q", "-m", "head version"],
+      this.candidateRoot,
+    );
+    assert.equal(
+      fs.readFileSync(
+        path.join(this.candidateRoot, "package-lock.json"),
+        "utf8",
+      ),
+      await commandOutput(
+        "git",
+        ["show", "HEAD:package-lock.json"],
+        this.candidateRoot,
+      ),
+    );
+    assert.notEqual(
+      await commandOutput(
+        "git",
+        ["show", `${mergeBase}:package-lock.json`],
+        this.candidateRoot,
+      ),
+      await commandOutput(
+        "git",
+        ["show", "HEAD:package-lock.json"],
+        this.candidateRoot,
+      ),
+    );
   },
 );
+
+When("保護fileの前提判定を実行する", async function () {
+  const accepted = async (): Promise<boolean> => {
+    try {
+      await assertProtectedContractMatchesHead(
+        this.candidateRoot,
+        this.protectedFiles,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  this.protectedPremiseResults.push(await accepted());
+  const protectedFile = path.join(this.candidateRoot, "package-lock.json");
+  const backup = path.join(this.candidateRoot, "package-lock.head-copy.json");
+  fs.copyFileSync(protectedFile, backup);
+  fs.appendFileSync(protectedFile, "uncommitted-change\n");
+  this.protectedPremiseResults.push(await accepted());
+  fs.copyFileSync(backup, protectedFile);
+  const worktreeOnlyProtectedFile = "worktree-only-protected.txt";
+  fs.writeFileSync(
+    path.join(this.candidateRoot, worktreeOnlyProtectedFile),
+    "worktree-only\n",
+  );
+  this.protectedFiles.push(worktreeOnlyProtectedFile);
+  this.defaultGitShowFailureRejected = !(await accepted());
+  assert.equal(this.protectedFiles.pop(), worktreeOnlyProtectedFile);
+  fs.unlinkSync(path.join(this.candidateRoot, worktreeOnlyProtectedFile));
+  await assertProtectedContractMatchesHead(
+    this.candidateRoot,
+    this.protectedFiles,
+  );
+  try {
+    await assertProtectedContractMatchesHead(
+      this.candidateRoot,
+      this.protectedFiles,
+      async () => {
+        this.injectedGitShowReaderCalls += 1;
+        throw new Error("git show failed");
+      },
+    );
+  } catch {
+    this.gitShowFailureRejected = true;
+  }
+});
+
+Then("前提は成立し、未commit変更とHEAD読取失敗では不成立になる", function () {
+  assert.equal(
+    this.defaultGitShowFailureRejected,
+    true,
+    "default readerのgit show失敗を前提成立へ倒してはいけません",
+  );
+  assert.deepEqual(this.protectedPremiseResults, [true, false]);
+  assert.equal(
+    this.injectedGitShowReaderCalls,
+    1,
+    "注入reader callbackを実行して失敗を観測しなければなりません",
+  );
+  assert.equal(
+    this.gitShowFailureRejected,
+    true,
+    "注入readerのgit show失敗を前提成立へ倒してはいけません",
+  );
+});
 
 When("最小fixture tarballのconsumer acceptanceを1回観測する", function () {
   this.packedObservation = observePackedArtifact({
