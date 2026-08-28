@@ -614,12 +614,70 @@ jobs:
         run: npm ci
       - name: tag内容で全release gateを再検証する
         run: npm run verify:distribution
+      - name: 検査対象のnpm artifactを一度だけ作成する
+        id: pack_artifact
+        run: |
+          mkdir -p ./release-artifact
+          npm pack --json --pack-destination=./release-artifact > "$RUNNER_TEMP/pack-result.json"
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+          const output = process.env.GITHUB_OUTPUT;
+          if (!output) process.exit(1);
+          const packed = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/pack-result.json`, "utf8"));
+          const filename = Array.isArray(packed) && packed.length === 1
+            ? packed[0]?.filename
+            : undefined;
+          if (typeof filename !== "string" || !filename.endsWith(".tgz") || /[\r\n]/u.test(filename) || path.basename(filename) !== filename) process.exit(1);
+          const tarballPath = path.join("release-artifact", filename);
+          if (!fs.statSync(tarballPath).isFile()) process.exit(1);
+          fs.appendFileSync(output, `tarball_path=${tarballPath}\n`);
+          NODE
+      - name: 配布artifactのconsumer acceptanceを検証する
+        id: consumer_acceptance
+        env:
+          TARBALL_PATH: ${{ steps.pack_artifact.outputs.tarball_path }}
+        run: |
+          if [ -z "$TARBALL_PATH" ]; then exit 1; fi
+          node --import tsx scripts/check_consumer_acceptance.ts --tarball="$TARBALL_PATH" --mechanisms=git-dependency,packed-bin,scale-output
+          node --import tsx scripts/compute_distribution_digest.ts > "$RUNNER_TEMP/distribution-digest.json"
+          node --input-type=module <<'NODE'
+          import crypto from "node:crypto";
+          import fs from "node:fs";
+          const output = process.env.GITHUB_OUTPUT;
+          const tarballPath = process.env.TARBALL_PATH;
+          if (!output || !tarballPath) process.exit(1);
+          const artifactSha256 = crypto.createHash("sha256").update(fs.readFileSync(tarballPath)).digest("hex");
+          const distribution = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/distribution-digest.json`, "utf8"));
+          if (!distribution || typeof distribution.digest !== "string" || !/^[a-f0-9]{64}$/u.test(distribution.digest)) process.exit(1);
+          fs.appendFileSync(output, [
+            `artifact_sha256=${artifactSha256}`,
+            `distribution_digest=${distribution.digest}`,
+            "",
+          ].join("\n"));
+          NODE
+      - name: 検査済みartifactの同一性を公開直前に再検証する
+        id: verify_identity
+        env:
+          TARBALL_PATH: ${{ steps.pack_artifact.outputs.tarball_path }}
+          ACCEPTED_ARTIFACT_SHA256: ${{ steps.consumer_acceptance.outputs.artifact_sha256 }}
+        run: |
+          node --input-type=module <<'NODE'
+          import crypto from "node:crypto";
+          import fs from "node:fs";
+          const tarballPath = process.env.TARBALL_PATH;
+          const accepted = process.env.ACCEPTED_ARTIFACT_SHA256;
+          if (!tarballPath || !accepted || !/^[a-f0-9]{64}$/u.test(accepted)) process.exit(1);
+          const publication = crypto.createHash("sha256").update(fs.readFileSync(tarballPath)).digest("hex");
+          if (publication !== accepted) process.exit(1);
+          NODE
       - name: 明示承認されたpackageをprovenance付きで公開する
         id: npm_operation
         continue-on-error: true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance --access public
+          TARBALL_PATH: ${{ steps.pack_artifact.outputs.tarball_path }}
+        run: npm publish --provenance --access public "$TARBALL_PATH"
       - name: npm registryの公開versionを読み直す
         id: npm_observation
         continue-on-error: true

@@ -67,6 +67,12 @@ export const REPOSITORY_READ_EXCEPTIONS: readonly RepositoryReadException[] =
       reason: "製品自身のproject choiceを単体検証する",
     },
     {
+      file: "test/steps/consumer-acceptance.steps.ts",
+      target: "package.json",
+      reason:
+        "SCN-INT-CONSUMER-002が配布scriptのmerge-base不変条件とconsumer acceptance観測前後のdigest不変条件を製品自身へdogfoodingする",
+    },
+    {
       file: "test/steps/worktree-placement.steps.ts",
       target: ".agent-skill-chain/project",
       reason:
