@@ -15,3 +15,8 @@ Feature: 外部command実行の境界で失敗原因を保存する
     Given 実在しないcommandがある
     When allowFailureでprocess境界で実行する
     Then 終了値は1でstderrに実行できなかった原因が残る
+
+  Scenario: SCN-UNIT-PROC-004 明示したenvだけを実processへ渡す
+    Given process境界へ渡す明示envがある
+    When 明示envでprocess境界を実行する
+    Then 実processは明示envの値を受け取る

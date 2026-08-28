@@ -5,6 +5,7 @@ export interface ProcessOptions {
   allowFailure?: boolean;
   timeoutMs?: number;
   maxBufferBytes?: number;
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface ProcessResult {
@@ -39,7 +40,7 @@ export function run(
   const result = spawnSync(file, args, {
     cwd,
     encoding: "utf8",
-    env: process.env,
+    env: options.env ?? process.env,
     maxBuffer: options.maxBufferBytes ?? MAX_PROCESS_OUTPUT_BYTES,
     ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
   });
@@ -78,7 +79,7 @@ export function runJsonlSession(
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       cwd,
-      env: process.env,
+      env: options.env ?? process.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";

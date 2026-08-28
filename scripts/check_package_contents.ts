@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
+import { checkConsumerAcceptance } from "./check_consumer_acceptance.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 /**
@@ -142,6 +143,23 @@ export function checkPackageContents(): {
         errors: ["artifactを一意に取得できません"],
         files: files.length,
       };
+    // 必須fileの名前だけでは壊れたbinや大規模時の停止を見逃すため、
+    // この検査が作った同一tarballを利用者と同じ公開入口から観測する。
+    const consumerAcceptance = checkConsumerAcceptance({
+      tarballPath: archive,
+      sourceRepositoryRoot: root,
+      temporaryStagingRoot: path.join(root, ".agent-skill-chain", "tmp"),
+      mechanisms: ["packed-bin", "scale-output"],
+    });
+    if (!consumerAcceptance.accepted) {
+      for (const reason of consumerAcceptance.reasons)
+        errors.push(`consumer acceptance: ${reason}`);
+      for (const mechanism of consumerAcceptance.mechanisms)
+        if (mechanism.status !== "accepted")
+          errors.push(
+            `consumer acceptance (${mechanism.mechanism}): ${mechanism.reasons.join(" / ")}`,
+          );
+    }
     const unpacked = run("tar", ["-xzf", archive, "-C", extracted]);
     if (unpacked.status !== 0)
       return { valid: false, errors: [unpacked.stderr], files: files.length };
