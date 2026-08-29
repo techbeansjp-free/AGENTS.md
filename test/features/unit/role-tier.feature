@@ -22,6 +22,11 @@ Feature: role分離とmodel tierを安全側に検証する
     When role操作契約を検証する
     Then role操作はpathと証拠の違反として拒否される
 
+  Scenario: SCN-UNIT-ROLE-005 非スラッシュ終端の許可pathは完全一致だけを許可する
+    Given file単位の許可pathを持つimplementer契約と候補path一覧がある
+    When role操作契約を候補pathごとに検証する
+    Then 完全一致だけが許可され配下pathと同名接頭辞のfileは拒否される
+
   Scenario: SCN-UNIT-TIER-001 risk・mode・scopeから最低tierが単調に決まる
     Given 強度が増加するriskとscopeがある
     When 最低model tierを順に決定する
