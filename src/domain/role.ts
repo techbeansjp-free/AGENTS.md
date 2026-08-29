@@ -158,12 +158,16 @@ function pathAllowed(candidate: string, prefixes: string[]): boolean {
     return false;
   return prefixes.some((prefix) => {
     const normalizedPrefix = prefix.replaceAll("\\", "/").replace(/^\.\//u, "");
-    const directoryPrefix = normalizedPrefix.endsWith("/")
-      ? normalizedPrefix
-      : `${normalizedPrefix}/`;
+    /**
+     * **非`/`終端の要素は完全一致だけを許す。**`${prefix}/`のdirectory照合を
+     * 全要素へ適用すると、file単位で宣言した許可がその配下pathまで広がる
+     * （`scripts/prepare_release_bump.ts/child`が許可される。Issue #1054）。
+     * `/`終端の要素は従来どおりdirectory自身と配下を許す。
+     */
+    if (!normalizedPrefix.endsWith("/")) return normalized === normalizedPrefix;
     return (
       normalized === normalizedPrefix.replace(/\/$/u, "") ||
-      normalized.startsWith(directoryPrefix)
+      normalized.startsWith(normalizedPrefix)
     );
   });
 }

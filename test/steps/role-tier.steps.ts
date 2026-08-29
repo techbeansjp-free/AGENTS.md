@@ -13,6 +13,7 @@ import {
   validateTierSelection,
   type HumanOverride,
   type ModelTier,
+  type RoleContract,
 } from "../../src/domain/role.js";
 import { isRecord } from "../../src/types.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
@@ -36,6 +37,8 @@ class RoleTierWorld extends WorkflowWorld {
   trustedChoice: unknown = undefined;
   candidateChoice: unknown = undefined;
   cliResult: SpawnSyncReturns<string> | undefined;
+  pathCases: Array<{ path: string; allowed: boolean }> = [];
+  pathContracts: Record<string, RoleContract> | undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<RoleTierWorld>();
@@ -128,6 +131,61 @@ Then("role操作はpathと証拠の違反として拒否される", function () 
   assert.match(result.errors.join(" "), /許可path外/u);
   assert.match(result.errors.join(" "), /必要証拠/u);
 });
+
+Given(
+  "file単位の許可pathを持つimplementer契約と候補path一覧がある",
+  function () {
+    /**
+     * **契約を引数で注入し、project choiceのfileを読まない。**設定値ではなく
+     * 「非`/`終端の要素は完全一致だけを許す」という照合契約を固定するためである。
+     * 実際の`allowedPaths`が将来調整されてもこのScenarioは落ちない。
+     */
+    this.pathContracts = {
+      implementer: {
+        ...DEFAULT_ROLE_CONTRACTS.implementer,
+        allowedPaths: ["src/", "example/exact-file.ts"],
+      },
+    };
+    this.pathCases = [
+      { path: "example/exact-file.ts", allowed: true },
+      { path: "example/exact-file.ts.bak", allowed: false },
+      { path: "example/exact-file.tsx", allowed: false },
+      { path: "example/exact-file.ts/child", allowed: false },
+      { path: "example/exact-file.ts/nested/deep.ts", allowed: false },
+      { path: "example/other-file.ts", allowed: false },
+      { path: "src/domain/role.ts", allowed: true },
+      { path: "src", allowed: true },
+    ];
+  },
+);
+
+When("role操作契約を候補pathごとに検証する", function () {
+  this.validations = this.pathCases.map((testCase) =>
+    validateRoleOperation({
+      role: "implementer",
+      operation: "implement_product",
+      paths: [testCase.path],
+      evidence: ["failing_test", "test_result"],
+      contracts: this.pathContracts,
+    }),
+  );
+});
+
+Then(
+  "完全一致だけが許可され配下pathと同名接頭辞のfileは拒否される",
+  function () {
+    assert.deepEqual(
+      this.validations.map((result, index) => ({
+        path: this.pathCases[index]?.path,
+        allowed: result.valid,
+      })),
+      this.pathCases.map((testCase) => ({
+        path: testCase.path,
+        allowed: testCase.allowed,
+      })),
+    );
+  },
+);
 
 Given("強度が増加するriskとscopeがある", function () {
   this.tierInputs = [
