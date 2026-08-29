@@ -12,7 +12,8 @@ Feature: project policyへrole契約とtierを統合する
     When 終端role操作を検証する
     Then すべての終端role操作はfail closedで拒否される
 
-  Scenario: SCN-INT-ROLE-003 project choiceのrole契約弱化とtier引き下げを拒否する
-    Given role禁止操作を削除しtierを引き下げたproject choice差分がある
+  Scenario: SCN-INT-ROLE-003 roleの対象2分類を許可しtier引下げを拒否する
+    Given roleの許可範囲を追加し禁止操作と必要証拠を削除してtierを引き下げたproject choice差分がある
     When role tierのproject choice差分を分類する
-    Then role契約弱化とtier引き下げが記録される
+    Then roleの4 fieldはallowedに記録されweakenedには記録されない
+    And tier引下げだけがweakenedに記録される
