@@ -465,7 +465,7 @@ Then("すべての終端role操作はfail closedで拒否される", function ()
 });
 
 Given(
-  "role禁止操作を削除しtierを引き下げたproject choice差分がある",
+  "roleの許可範囲を追加し禁止操作と必要証拠を削除してtierを引き下げたproject choice差分がある",
   function () {
     const base = JSON.parse(
       fs.readFileSync(
@@ -479,7 +479,7 @@ Given(
         allowedPaths: [],
         allowedOperations: [],
         forbiddenOperations: ["implement_product", "self_approve"],
-        requiredEvidence: ["assignment_record"],
+        requiredEvidence: ["assignment_record", "state_record"],
       },
     };
     base.modelMapping.tierMapping = { "fixture-model": "advanced" };
@@ -489,7 +489,10 @@ Given(
     assert.ok(isRecord(candidate) && isRecord(candidate.modelMapping));
     const contracts = candidate.modelMapping.roleContracts;
     assert.ok(isRecord(contracts) && isRecord(contracts.coordinator));
+    contracts.coordinator.allowedPaths = ["src/"];
+    contracts.coordinator.allowedOperations = ["implement_product"];
     contracts.coordinator.forbiddenOperations = ["self_approve"];
+    contracts.coordinator.requiredEvidence = ["assignment_record"];
     candidate.modelMapping.tierMapping = { "fixture-model": "standard" };
     candidate.modelMapping.minimumTierByRisk = { security: "routine" };
     this.candidateChoice = candidate;
@@ -503,12 +506,44 @@ When("role tierのproject choice差分を分類する", function () {
   );
 });
 
-Then("role契約弱化とtier引き下げが記録される", function () {
-  assert.ok(isRecord(this.value) && Array.isArray(this.value.weakened));
-  const weakened = this.value.weakened.join(" ");
-  assert.match(weakened, /forbiddenOperations/u);
-  assert.match(weakened, /tierMapping/u);
-  assert.match(weakened, /minimumTierByRisk/u);
+Then("roleの4 fieldはallowedに記録されweakenedには記録されない", function () {
+  assert.ok(isRecord(this.value));
+  const { allowed, weakened } = this.value;
+  assert.ok(
+    Array.isArray(allowed) &&
+      allowed.every((item: unknown) => typeof item === "string"),
+  );
+  assert.ok(
+    Array.isArray(weakened) &&
+      weakened.every((item: unknown) => typeof item === "string"),
+  );
+  const rolePath = "projectChoices.modelMapping.roleContracts.coordinator";
+  assert.deepEqual(
+    allowed.filter((item) => item.startsWith(rolePath)).sort(),
+    [
+      `${rolePath}.forbiddenOperations`,
+      `${rolePath}.requiredEvidence`,
+      `${rolePath}.allowedPaths`,
+      `${rolePath}.allowedOperations`,
+    ].sort(),
+  );
+  assert.ok(weakened.every((item) => !item.startsWith(rolePath)));
+});
+
+Then("tier引下げだけがweakenedに記録される", function () {
+  assert.ok(isRecord(this.value));
+  const { weakened } = this.value;
+  assert.ok(
+    Array.isArray(weakened) &&
+      weakened.every((item: unknown) => typeof item === "string"),
+  );
+  assert.deepEqual(
+    weakened.map((item) => item.split(": ")[0]).sort(),
+    [
+      "projectChoices.modelMapping.tierMapping.fixture-model",
+      "projectChoices.modelMapping.minimumTierByRisk.security",
+    ].sort(),
+  );
 });
 
 Given("build済みCLIへ同一identityとcontextのrole割当を渡す", function () {

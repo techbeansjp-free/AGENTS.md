@@ -542,38 +542,12 @@ function classifyRoleContracts(
         weaken(diff, rolePath, "trusted側のrole contractを削除している");
       continue;
     }
-    for (const field of ["forbiddenOperations", "requiredEvidence"] as const) {
+    for (const field of ROLE_CONTRACT_FIELDS) {
       const trustedItems = trustedValue[field];
       const candidateItems = candidateValue[field];
       if (!isStringArray(trustedItems) || !isStringArray(candidateItems))
         continue;
-      const removed = trustedItems.filter(
-        (item) => !candidateItems.includes(item),
-      );
-      if (removed.length > 0)
-        weaken(
-          diff,
-          `${rolePath}.${field}`,
-          `trusted側の制約を削除している: ${removed.join("、")}`,
-        );
-      else if (!sameValue(trustedItems, candidateItems))
-        pushUnique(diff.allowed, `${rolePath}.${field}`);
-    }
-    for (const field of ["allowedPaths", "allowedOperations"] as const) {
-      const trustedItems = trustedValue[field];
-      const candidateItems = candidateValue[field];
-      if (!isStringArray(trustedItems) || !isStringArray(candidateItems))
-        continue;
-      const added = candidateItems.filter(
-        (item) => !trustedItems.includes(item),
-      );
-      if (added.length > 0)
-        weaken(
-          diff,
-          `${rolePath}.${field}`,
-          `許可範囲を拡大している: ${added.join("、")}`,
-        );
-      else if (!sameValue(trustedItems, candidateItems))
+      if (!sameValue(trustedItems, candidateItems))
         pushUnique(diff.allowed, `${rolePath}.${field}`);
     }
   }
