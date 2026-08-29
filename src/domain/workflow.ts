@@ -43,13 +43,13 @@ export const WORKFLOW_STEPS: readonly WorkflowStep[] = Object.freeze([
   {
     step: 3,
     skillId: "step-03-requirements-review",
-    responsibility: "要求・要件の肯定・敵対レビュー",
-    artifact: "修正文書と`04_レビュー.md`",
+    responsibility: "要求・要件の開始可能性確認",
+    artifact: "開始可能性の記録と修正文書",
   },
   {
     step: 4,
     skillId: "step-04-issue-sync",
-    responsibility: "レビュー済み計画を1つの耐久トラッカーへ同期",
+    responsibility: "開始可能性を確認した計画を1つの耐久トラッカーへ同期",
     artifact: "書き込み後読み取り確認済みトラッカー",
   },
   {
@@ -61,14 +61,14 @@ export const WORKFLOW_STEPS: readonly WorkflowStep[] = Object.freeze([
   {
     step: 6,
     skillId: "step-06-plan",
-    responsibility: "失敗テストと最小実装の計画",
+    responsibility: "risk比例検証と最小実装の計画",
     artifact: "`03_実装計画.md`",
   },
   {
     step: 7,
     skillId: "step-07-design-review",
-    responsibility: "設計・計画の肯定・敵対レビュー",
-    artifact: "修正文書と`04_レビュー.md`",
+    responsibility: "実装開始可能性の確認",
+    artifact: "開始可能性の記録と修正文書",
   },
   {
     step: 8,
@@ -85,14 +85,14 @@ export const WORKFLOW_STEPS: readonly WorkflowStep[] = Object.freeze([
   {
     step: 10,
     skillId: "step-10-review",
-    responsibility: "実装レビュー、テスト、仕様整合性",
-    artifact: "有限レビューの承認証拠",
+    responsibility: "exact-head最終レビュー、検証、仕様整合性",
+    artifact: "実装中発見を含む有限レビューの承認証拠",
   },
   {
     step: 11,
     skillId: "step-11-pr",
-    responsibility: "PRを作成して停止",
-    artifact: "`pr_opened / waiting_for_human_review`",
+    responsibility: "PRを作成しdelivery policyの終端まで進行",
+    artifact: "PR URLと`waiting / merge-queued / merged`の観測証拠",
   },
 ]);
 

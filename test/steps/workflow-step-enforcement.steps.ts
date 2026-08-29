@@ -640,6 +640,7 @@ interface PreparedPullRequest {
 function preparePullRequest(
   world: WorkflowStepWorld,
   missingStep4: boolean,
+  mergeMode: "disabled" | "automatic" = "disabled",
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -652,6 +653,26 @@ function preparePullRequest(
     path.resolve(".agent-skill-chain/policy/default.json"),
     path.join(root, ".agent-skill-chain", "policy", "default.json"),
   );
+  if (mergeMode === "automatic") {
+    const policyFile = path.join(
+      root,
+      ".agent-skill-chain",
+      "policy",
+      "default.json",
+    );
+    const policy = JSON.parse(fs.readFileSync(policyFile, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    policy.merge = {
+      mode: "automatic",
+      branches: ["main"],
+      methods: ["merge"],
+      requiredChecks: [],
+      requiredReviews: 0,
+    };
+    fs.writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
+  }
   spawnSync("git", ["add", ".agent-skill-chain/policy/default.json"], {
     cwd: root,
   });
@@ -802,7 +823,7 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
       break;
     }
     case "SCN-E2E-WFSTEP-004": {
-      const prepared = preparePullRequest(this, true);
+      const prepared = preparePullRequest(this, true, "automatic");
       const denied = executeCli([...prepared.args, "--dry-run"], prepared.root);
       assert.notEqual(denied.status, 0);
       const overrideFile = path.join(
@@ -904,6 +925,7 @@ if (exact(["auth", "status"])) {
         },
       );
       assert.equal(allowed.status, 0, allowed.stdout + allowed.stderr);
+      assert.match(allowed.stdout, /merge_pending/u);
       const parsed = parseStepJournal(
         fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
       );
@@ -913,6 +935,48 @@ if (exact(["auth", "status"])) {
         "repository-owner",
       );
       assert.match(overrideEntry?.humanOverride?.reason ?? "", /緊急修復/u);
+      assert.equal(
+        parsed.entries.some((item) => item.step === 11),
+        false,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-005": {
+      const root = this.temp("asc-poc-merge-");
+      const staging = createIssueStaging(root, {
+        title: "poc-merge-test",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "poc",
+        poc: validPoc(),
+      }).path;
+      for (const step of [1, 4, 9, 10])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "poc", fixtureInstant({ hoursAgo: 1 })),
+        });
+      recordStagingSync(staging, {
+        tracker: "#877",
+        checkpoint: 4,
+        syncedAt: fixtureInstant(),
+        bodyDigest: "a".repeat(64),
+        readBackDigest: "a".repeat(64),
+      });
+      const relativeStaging = path.relative(root, staging);
+      await assert.rejects(
+        () =>
+          main([
+            "pr",
+            "merge",
+            "--repo=o/r",
+            "--pr=1",
+            "--method=merge",
+            `--root=${root}`,
+            `--staging=${relativeStaging}`,
+            "--dry-run",
+          ]),
+        /PoC.*PR.*停止点/u,
+      );
       break;
     }
     default:

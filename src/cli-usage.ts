@@ -272,6 +272,33 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "workflow",
+    subcommand: "verification-set",
+    summary:
+      "Requirement・受入条件・影響分析からrisk比例のVerification Setを選ぶ",
+    requiredFlags: [
+      flag("input", "path", "repository root内のVerification Set入力JSON file"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example:
+      "npx agent-skill-chain workflow verification-set --input=.asc/verification-input.json --root=.",
+    acceptsSpaceSeparatedFlags: true,
+  },
+  {
+    command: "workflow",
+    subcommand: "assess-discovery",
+    summary: "実装中の発見をmode別に評価し、前向きな処理先を決める",
+    requiredFlags: [
+      flag("input", "path", "repository root内の実装中発見入力JSON file"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example:
+      "npx agent-skill-chain workflow assess-discovery --input=.asc/discovery.json --root=.",
+    acceptsSpaceSeparatedFlags: true,
+  },
+  {
+    command: "workflow",
     subcommand: "record",
     summary: "Step実施をstep journalへ追記する",
     requiredFlags: [
@@ -705,11 +732,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       flag("repo", "owner/name", "対象repository"),
       flag("pr", "整数", "PR番号"),
       flag("method", "merge|squash|rebase", "merge方式"),
+      flag("staging", "path", "Step 10までを検証するstaging directory"),
     ],
     conditionalFlags: [],
     optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
     example:
-      "npx agent-skill-chain pr merge --repo=owner/name --pr=909 --method=merge --dry-run",
+      "npx agent-skill-chain pr merge --repo=owner/name --pr=909 --method=merge --staging=.agent-skill-chain/tmp/issues/20260830_120000_909-example --dry-run",
   },
   {
     command: "install",

@@ -44,6 +44,7 @@ interface PullRequestObservation {
   headRefOid?: string;
   baseRefOid?: string;
   author?: { id?: string };
+  closingIssuesReferences?: Array<{ number?: number; url?: string }>;
 }
 interface ReviewObservation {
   state?: string;
@@ -501,7 +502,7 @@ export function github(
         "--repo",
         input.repository,
         "--json",
-        "number,url,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,mergeStateStatus,reviewDecision,statusCheckRollup",
+        "number,url,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,mergeStateStatus,reviewDecision,statusCheckRollup,closingIssuesReferences",
       ],
       cwd,
     );

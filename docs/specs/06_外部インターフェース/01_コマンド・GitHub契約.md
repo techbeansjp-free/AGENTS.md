@@ -5,10 +5,10 @@ CLIは引数を構造化入力として受け、適用を伴う操作は既定�
 | 境界 | 事前確認 | 適用 | 適用後確認 |
 |---|---|---|---|
 | Issue同期 | 認証、完全なrepository同一性、staging構造 | create/edit | Issue番号、repository、本文hashを再読取 |
-| PR作成 | 認証、base/head、HEAD SHA、同一SHAの証拠、Issue終了参照 | Issue参照規約は[開発ワークフロー](../../../.agent-skill-chain/docs/01_開発ワークフロー.md)が所有し、本表はその規約に従って本文を作る | URL、base/head、headRefOidを再読取。作成後のStep 11記録失敗でもURLと記録だけを再実行する診断を返し非0終了 |
+| PR作成 | 認証、base/head、HEAD SHA、同一SHAの証拠、Issue終了参照、Step 0〜10のjournalと`sync-verified` | Issue参照規約は[開発ワークフロー](../../../.agent-skill-chain/docs/01_開発ワークフロー.md)が所有し、本表はその規約に従って本文を作る | URL、base/head、headRefOidを再読取。PRが正式な停止点の場合だけStep 11へ`waiting`を記録し、automaticは`merge_pending`としてStep 11を未記録にする |
 | review証拠 | exact repositoryと明示したH_impl/PR/run/review ID | read-only | commit author、PR current head/author、Actions event/head/conclusion/関連PR、immutable review commit/user/submittedAt/stateを再読取 |
 | policy authority | exact repositoryと明示したPR ID、base SHA/ref、default branch | read-only | PR baseRefName/baseRefOid/headRefOidとrepository defaultBranchRefをtrusted providerから再読取 |
-| merge | 既定branch上policy、base branchに対する`branchMethods`の積集合、base/headの長命branch判定、branch保護、成功check、全pageから時刻順に決めた同じHEAD SHAの最新独立approval | 許可されたmethodで実行。長命branch同士は`merge`だけを許可 | 直前に同じtrusted観測とmethod判定で再認可し、merged SHAと状態を再読取 |
+| merge | PR作成時と同じstagingのStep 0〜10・`sync-verified`・PoCでないこと、既定branch上policy、base branchに対する`branchMethods`の積集合、base/headの長命branch判定、branch保護、成功check、全pageから時刻順に決めた同じHEAD SHAの最新独立approval | 許可されたmethodで実行。長命branch同士は`merge`だけを許可 | 直前に同じtrusted観測とmethod判定で再認可し、merge要求またはqueue登録後にPR URLと`merge-queued / merged`をStep 11へ記録 |
 | provider availability | provider名の許可文字と実行入口 | Codexは`codex app-server --stdio`をinitializeして`model/list`、その他はprovider固有の`models list --json`をread-only実行 | stdoutだけを厳密に解析し、available、unavailable、unknown、model一覧、recommended default、対応reasoning effort、観測時刻、確認済み入口を返す。10秒以内に完了しない、起動失敗、非0終了、解釈不能、未取得pageありはunknownとし、stderr本文を転記しない |
 
 GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報の伏字化と行動可能な根拠・次行動を保持する。表示言語はproject choiceを読むcaller adapterが選択する。
@@ -68,8 +68,12 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 | `workflow steps` | 任意の`--mode=<quick｜full｜poc>` | Step定義、mode別列、省略対象、全mode共通の省略不能Stepを機械可読JSONで返す。不明modeは非0 |
 | `workflow record` | `--staging --step`、1件以上の`--artifact`、`--evidence`。`--recorded-at`は任意 | staging recordからmode、Step定義からskill IDを解決し、追記前検証後にJSONLへ1件追記する。順序・省略規則違反は書込前に非0。追記後の再読取digestを返す |
 | `workflow verify` | `--staging`、任意の`--up-to=<0..11>` | 欠落、対象外、順序違反、mode conflictをStep番号・skill ID・単一責務付きの日本語structured diagnosticで返す。有効時は0、違反時は非0 |
+| `workflow verification-set` | `--input=<JSON>`。Requirement ID、Acceptance Criteria ID、変更種別、risk、影響境界、security・data loss・不可逆・外部契約・並行振る舞のImpact Analysis | 入力を保持したrisk比例Verification SetをJSONで返す。Requirement、AC、影響境界の空配列、型不正、未知fieldは非0 |
+| `workflow assess-discovery` | `--input=<JSON>`。`workflowMode`、目的・scope・AC変更、security境界拡大、不可逆操作、`modeDisqualifiers: { id, evidence }[]` | `continue / rebaseline-affected-contracts / promote-to-full / stop-or-promote-full`、影響成果物、6項目の必須記録fieldをJSONで返す。quick/pocの根拠付き失格条件はそれぞれfull昇格／停止またはfull昇格にし、空ID・空Evidence・重複・未知fieldは非0 |
 
-`pr create`は`--staging`で対象を明示でき、省略時はtrackerがIssue番号と一致するstagingを一意に解決する。journal欠落、Step 10までの検証失敗、Step 4・10欠落、`sync-verified`未到達ではdry-runを含めてGitHub操作前に拒否する。`--workflow-override=<JSON file>`は欠落Stepだけを対象とし、`issue / scope=workflow.pr.create / instructedBy / instructedAt / expiresAt / reason`を完全検証する。AI・roleの自己発行、別Issue、失効、未知field、順序等の欠落以外の不整合は迂回できない。
+`pr create`は`--staging`で対象を明示でき、省略時はtrackerがIssue番号と一致するstagingを一意に解決する。journal欠落、Step 10までの検証失敗、Step 4・10欠落、`sync-verified`未到達ではdry-runを含めてGitHub操作前に拒否する。`--workflow-override=<JSON file>`は欠落Stepだけを対象とし、`issue / scope=workflow.pr.create / instructedBy / instructedAt / expiresAt / reason`を完全検証する。AI・roleの自己発行、別Issue、失効、未知field、順序等の欠落以外の不整合は迂回できない。full/quickの`automatic`では適用後を`merge_pending`とし、Step 11を未記録のまま同じstagingによる別操作の`pr merge`へ繋ぐ。
+
+`pr merge`は`--repo --pr --method --staging`を必須とする。指定stagingのStep 0〜10と`sync-verified`を再検証し、PoCはGitHub観測より前に拒否する。GitHubから観測したPR番号を`--pr`と一致させ、`closingIssuesReferences`にstaging trackerと同じrepository URL・Issue番号が存在する場合だけ、そのstagingが対象PRのものだと扱う。別repository、別Issue、close参照欠落は有効なstagingでも拒否する。この同一性は初回観測とmerge直前のTOCTOU再観測の双方で検証する。適用ではtrusted状態を直前に再認可し、merge要求後にStep 11を記録する。dry-runはStep 11を書き込まない。
 
 ## project導入・診断出力
 

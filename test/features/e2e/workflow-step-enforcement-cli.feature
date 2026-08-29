@@ -16,7 +16,12 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-003"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
-  Scenario: SCN-E2E-WFSTEP-004 HumanOverrideを伴う場合だけ欠落stepでのPR作成を許可し承認者と理由を残す
+  Scenario: SCN-E2E-WFSTEP-004 HumanOverrideでPRを作成してもautomaticはmerge待ちとしStep 11を完了しない
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-004"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-005 PoC stagingからのpr mergeをGitHub操作前に拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-005"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる

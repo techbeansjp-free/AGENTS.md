@@ -8,6 +8,7 @@ import {
 } from "../support/world.js";
 import { pullRequestRequiredHeadings } from "../../src/domain/issue.js";
 import {
+  assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
   type MergeInput,
@@ -490,6 +491,9 @@ function prepareGhReadStub(
           headRefOid: "a".repeat(40),
           baseRefOid: "b".repeat(40),
           statusCheckRollup: [],
+          closingIssuesReferences: [
+            { number: 877, url: "https://github.com/o/r/issues/877" },
+          ],
         })
       : operation === "reviews"
         ? JSON.stringify([
@@ -607,6 +611,9 @@ When("PR reviews adapterを実行する", function () {
 });
 Then("PR状態を取得できる", function () {
   assert.equal(this.prInspection.headRefName, "feature/x");
+  assert.deepEqual(this.prInspection.closingIssuesReferences, [
+    { number: 877, url: "https://github.com/o/r/issues/877" },
+  ]);
 });
 Then("branch protection状態を取得できる", function () {
   assert.equal(this.protectionObservation.known, true);
@@ -1022,6 +1029,58 @@ Then("許可operationは{string}だけである", function (operation: string) {
 Then("approvalなしは拒否され、approvalありだけ許可される", function () {
   assert.equal(this.withoutApproval.allowed, false);
   assert.equal(this.withApproval.allowed, true);
+});
+
+Given(
+  "staging trackerと同じcanonical IssueをcloseするPR観測がある",
+  function () {
+    this.value = {
+      repository: "owner/repository",
+      tracker: "https://github.com/owner/repository/issues/877",
+      closingIssueReferences: [
+        {
+          number: 877,
+          url: "https://github.com/owner/repository/issues/877",
+        },
+      ],
+    };
+  },
+);
+
+Given("staging trackerと異なるIssueをcloseするPR観測がある", function () {
+  this.value = {
+    repository: "owner/repository",
+    tracker: "#877",
+    closingIssueReferences: [
+      {
+        number: 878,
+        url: "https://github.com/owner/repository/issues/878",
+      },
+    ],
+  };
+});
+
+When("PRとstagingの同一性を検証する", function () {
+  try {
+    this.value = assertPullRequestTrackerBinding(
+      this.value as Parameters<typeof assertPullRequestTrackerBinding>[0],
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Then("PRとstagingの同一性検証は成功する", function () {
+  assert.equal(this.error, undefined);
+  assert.deepEqual(this.value, {
+    issue: 877,
+    issueUrl: "https://github.com/owner/repository/issues/877",
+  });
+});
+
+Then("PRとstagingの同一性検証は失敗する", function () {
+  assert.ok(this.error instanceof Error);
+  assert.match(this.error.message, /canonical Issue #877/u);
 });
 
 Given("merged、clean、pushed、recoveryありのworktree stateがある", function () {

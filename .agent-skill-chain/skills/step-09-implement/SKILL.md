@@ -1,15 +1,19 @@
 ---
 name: step-09-implement
-description: 検証済みトラッカーと03実装計画に従い、専用worktreeでBDD/TDD実装と必要な仕様更新を行う。
+description: 検証済みトラッカーと03実装計画に従い、専用worktreeでBDDとEvidence-driven Verificationを用いて実装し、仕様を正本化する。
 ---
 
 # ステップ9: 専用worktreeでの実装
 
-入力は検証済みトラッカーと明示した基点。成果物は専用ブランチ・worktree、失敗するGherkinの証拠、最小コード、合格したプロジェクトテスト一式、必要な`docs/specs/`変更。作業元の変更状態を検査して同一に保持し、暗黙のstash・reset・checkout・clean・deleteをしない。テストは一時リポジトリ・模擬処理だけを使い、実リモート・他のworktreeを変更しない。
+入力は検証済みトラッカーと明示した基点。成果物は専用ブランチ・worktree、BDD例とACを立証するrisk比例Evidence、最小コード、合格したプロジェクト検証一式、merge前に成立状態を反映した`docs/specs/`。作業元の変更状態を検査して同一に保持し、暗黙のstash・reset・checkout・clean・deleteをしない。テストは一時リポジトリ・模擬処理だけを使い、実リモート・他のworktreeを変更しない。
 
 ## routing入力契約
 
-role欄の担当roleが`implementer`であること、許可path・操作、必要証拠、要求能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄を実装開始前に検証する。providerとmodel設定はproject choiceの解決結果を入力とし、汎用skillは固有のmodel slugを要求しない。要求能力を満たす解決、failing test証拠、または別identity・contextのreviewer割当が欠ける場合は実装を開始せず、停止点と再開条件を報告する。implementerは自分の差分を最終承認せず、mergeを裁定しない。
+role欄の担当roleが`implementer`であること、許可path・操作、必要証拠、要求能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄を実装開始前に検証する。providerとmodel設定はproject choiceの解決結果を入力とし、汎用skillは固有のmodel slugを要求しない。要求能力を満たす解決、ACに対応するVerification Set、または別identity・contextのreviewer割当が欠ける場合は実装を開始せず、停止点と再開条件を報告する。implementerは自分の差分を最終承認せず、mergeを裁定しない。
+
+実装中に発見した問題は、03へ事実・影響・判断・対処・検証・仕様更新を追記する。現在モード、目的・scope・ACの変更有無、security境界拡大、不可逆操作、発見したモード失格条件の`{ id, evidence }`配列をJSON化し、`workflow assess-discovery --input=<JSON>`の出力で影響成果物を確定する。失格条件のID・Evidence空値、重複、未知fieldは拒否する。
+
+`continue`は記録して実装を継続する。`rebaseline-affected-contracts`は出力された影響成果物だけを再確定する。`promote-to-full`はquickをfullへ単調昇格して00〜03を補完する。`stop-or-promote-full`はPoCをそのまま続行せず、停止またはfull昇格のどちらかを記録する。Issueや変更のない成果物を作り直さない。
 
 ## テンプレート契約
 

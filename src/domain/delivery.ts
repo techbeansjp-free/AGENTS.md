@@ -4,6 +4,7 @@ import {
   resolveEffectivePolicy,
 } from "./enforcement.js";
 import {
+  isRecord,
   type Diagnostic,
   type Policy,
   type RuleObservation,
@@ -213,6 +214,55 @@ export function validateIssueClosingReferences(
       errors.push(`後続Issue #${issue}に終端keywordを使用できません`);
   }
   return { valid: errors.length === 0, errors, closes, relates };
+}
+
+/**
+ * Merge対象PRを、PR作成時に同期したIssue stagingへ拘束する。
+ *
+ * stagingの配置やjournalが正しくても、別Issueの有効なstagingを流用できればStep 10を
+ * 迂回できる。GitHubが解決したclosing issueの番号とrepository URLを双方照合し、本文の
+ * 推測や番号だけの一致をEvidenceにしない。
+ */
+export function assertPullRequestTrackerBinding(input: {
+  repository: string;
+  tracker: string | null;
+  closingIssueReferences: readonly unknown[] | undefined;
+}): { issue: number; issueUrl: string } {
+  const repository = input.repository.trim();
+  if (!/^[^/\s]+\/[^/\s]+$/u.test(repository))
+    throw new Error("repositoryはowner/name形式が必要です");
+  if (typeof input.tracker !== "string")
+    throw new Error("staging recordに同期済みIssue trackerがありません");
+
+  const short = /^#?([1-9]\d*)$/u.exec(input.tracker);
+  const absolute =
+    /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/([1-9]\d*)$/iu.exec(
+      input.tracker,
+    );
+  if (!short && !absolute)
+    throw new Error("staging recordのIssue trackerが不正です");
+  if (
+    absolute &&
+    `${absolute[1]}/${absolute[2]}`.toLowerCase() !== repository.toLowerCase()
+  )
+    throw new Error("staging recordのIssue repositoryが対象PRと一致しません");
+
+  const issue = Number(short?.[1] ?? absolute?.[3]);
+  const issueUrl = `https://github.com/${repository}/issues/${issue}`;
+  if (!Array.isArray(input.closingIssueReferences))
+    throw new Error("PRのclosing Issueをtrusted providerから観測できません");
+  const matches = input.closingIssueReferences.filter(
+    (reference) =>
+      isRecord(reference) &&
+      reference.number === issue &&
+      typeof reference.url === "string" &&
+      reference.url.toLowerCase() === issueUrl.toLowerCase(),
+  );
+  if (matches.length !== 1)
+    throw new Error(
+      `PRがstagingのcanonical Issue #${issue}を一意にcloseしていません`,
+    );
+  return { issue, issueUrl };
 }
 
 function requireStringArray(value: unknown, name: string): string[] {

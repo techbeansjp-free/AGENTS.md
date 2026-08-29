@@ -14,7 +14,19 @@ import {
   type ProjectKind,
 } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
-import { createPullRequest, authorizeMerge } from "./domain/delivery.js";
+import {
+  assertPullRequestTrackerBinding,
+  createPullRequest,
+  authorizeMerge,
+} from "./domain/delivery.js";
+import {
+  assessImplementationDiscovery,
+  assertWorkflowMergeAllowed,
+  decideDeliveryContinuation,
+  parseImplementationDiscoveryInput,
+  parseVerificationSelectionInput,
+  selectVerificationSet,
+} from "./domain/agile-verification.js";
 import {
   buildWorktreePath,
   createWorktree,
@@ -30,7 +42,11 @@ import {
   previewWorkspaceHygiene,
   type HygieneKind,
 } from "./domain/hygiene.js";
-import { applyStagingCleanup, planStagingCleanup } from "./domain/staging.js";
+import {
+  applyStagingCleanup,
+  planStagingCleanup,
+  readStoredStagingRecord,
+} from "./domain/staging.js";
 import {
   buildFinalizeReport,
   applyFinalize,
@@ -1720,6 +1736,40 @@ export async function main(
       "routing evidenceにはissue、complete、state、pruneのいずれかが必要です",
     );
   }
+  if (command === "workflow" && subcommand === "verification-set") {
+    const { flags, artifacts } = workflowArguments(rest);
+    if (artifacts.length > 0)
+      throw new Error("workflow verification-setで--artifactは使用できません");
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["input", "root"].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `workflow verification-setの未知optionです: --${unknown.join(", --")}`,
+      );
+    const root = path.resolve(flags.root ?? process.cwd());
+    const input = readJsonInput(resolveContained(root, flags.input ?? ""));
+    print(selectVerificationSet(parseVerificationSelectionInput(input)));
+    return 0;
+  }
+  if (command === "workflow" && subcommand === "assess-discovery") {
+    const { flags, artifacts } = workflowArguments(rest);
+    if (artifacts.length > 0)
+      throw new Error("workflow assess-discoveryで--artifactは使用できません");
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["input", "root"].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `workflow assess-discoveryの未知optionです: --${unknown.join(", --")}`,
+      );
+    const root = path.resolve(flags.root ?? process.cwd());
+    const input = readJsonInput(resolveContained(root, flags.input ?? ""));
+    print(
+      assessImplementationDiscovery(parseImplementationDiscoveryInput(input)),
+    );
+    return 0;
+  }
   if (command === "workflow" && subcommand === "steps") {
     const { flags, artifacts } = workflowArguments(rest);
     if (artifacts.length > 0)
@@ -1828,7 +1878,9 @@ export async function main(
     return 0;
   }
   if (command === "workflow")
-    throw new Error("workflowにはsteps、record、verifyのいずれかが必要です");
+    throw new Error(
+      "workflowにはsteps、verification-set、assess-discovery、record、verifyのいずれかが必要です",
+    );
   if (command === "issue" && subcommand === "create") {
     const { flags } = parse(rest);
     const root = path.resolve(
@@ -3131,6 +3183,21 @@ export async function main(
       github(operation, payload, root),
     );
     if (apply && created.state === "waiting_for_human_review") {
+      const continuation = decideDeliveryContinuation({
+        workflowMode: inspection.mode,
+        trustedMergeMode: input.trustedPolicy.merge.mode,
+        assistedAuthorityVerified: false,
+        mergeReadyVerified: false,
+      });
+      if (continuation === "wait-merge-ready") {
+        print({
+          ...created,
+          state: "merge_pending",
+          continuation,
+          next: `PR ${created.url ?? "（URL不明）"} のrequired checks、review、HEAD、ruleset、mergeable状態を観測し、同じstagingを指定して独立したpr merge操作へ進んでください。Step 11はまだ完了していません`,
+        });
+        return 0;
+      }
       const completion = completePullRequestWorkflow(created, staging, () => {
         const definition = workflowStep(11);
         if (!definition) throw new Error("step 11の定義がありません");
@@ -3145,7 +3212,7 @@ export async function main(
             mode: inspection.mode,
             recordedAt: new Date().toISOString(),
             artifacts: [createdUrl],
-            evidence: "PR作成後のURLを確認しwaiting_for_human_reviewで停止した",
+            evidence: `PR作成後のURLを確認し${continuation}をdelivery終端として観測した`,
           },
         });
       });
@@ -3161,6 +3228,36 @@ export async function main(
     const root = path.resolve(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
+    const staging = resolveContained(root, required(flags, "staging"));
+    const workflowInspection = inspectWorkflowStaging(staging);
+    const workflowJournal = readWorkflowJournal(staging);
+    const stagingRecord = readStoredStagingRecord(staging);
+    const prerequisiteValidation = validateStepJournal({
+      mode: workflowInspection.mode,
+      entries: workflowJournal.entries.filter((entry) => entry.step <= 10),
+      upToStep: 10,
+    });
+    if (
+      !workflowInspection.modeDecision.valid ||
+      workflowJournal.errors.length > 0 ||
+      !prerequisiteValidation.valid ||
+      workflowInspection.state !== "sync-verified"
+    )
+      throw new Error(
+        `pr mergeのworkflow前提が未成立です: ${[
+          ...workflowInspection.modeDecision.errors,
+          ...workflowJournal.errors,
+          ...prerequisiteValidation.errors,
+          ...prerequisiteValidation.modeConflicts,
+          ...(prerequisiteValidation.missingSteps.length > 0
+            ? [`missingSteps=${prerequisiteValidation.missingSteps.join(",")}`]
+            : []),
+          ...(workflowInspection.state === "sync-verified"
+            ? []
+            : ["staging recordがsync-verifiedではありません"]),
+        ].join("; ")}`,
+      );
+    assertWorkflowMergeAllowed(workflowInspection.mode);
     const repository = required(flags, "repo");
     const prRaw = required(flags, "pr");
     if (!/^[1-9]\d*$/u.test(prRaw))
@@ -3173,6 +3270,13 @@ export async function main(
     const trustedSet = loadEffectiveTrustedPolicySet(root, base);
     const trustedPolicy = trustedSet.policy;
     const inspected = github("pr.inspect", { repository, pr }, root);
+    if (inspected.number !== pr)
+      throw new Error("PR観測の番号が指定したPRと一致しません");
+    assertPullRequestTrackerBinding({
+      repository,
+      tracker: stagingRecord.tracker,
+      closingIssueReferences: inspected.closingIssuesReferences,
+    });
     if (inspected.baseRefName !== base)
       throw new Error("PRの基点が検証済み既定ブランチではありません");
     if (
@@ -3244,6 +3348,13 @@ export async function main(
       rechecked.author?.id !== inspected.author?.id
     )
       throw new Error("マージ直前にPR状態が変化しました（TOCTOU）");
+    if (rechecked.number !== pr)
+      throw new Error("マージ直前のPR番号が指定したPRと一致しません");
+    assertPullRequestTrackerBinding({
+      repository,
+      tracker: stagingRecord.tracker,
+      closingIssueReferences: rechecked.closingIssuesReferences,
+    });
     const recheckedProtection = github(
       "branch.protection",
       { repository, branch: base },
@@ -3281,13 +3392,32 @@ export async function main(
         `マージ直前の再認可を拒否しました: ${reauthorization.reason}`,
       );
     }
-    print(
-      github(
-        "pr.merge",
-        { repository, pr, method: method as "merge" | "squash" | "rebase" },
-        root,
-      ),
+    const merged = github(
+      "pr.merge",
+      { repository, pr, method: method as "merge" | "squash" | "rebase" },
+      root,
     );
+    if (typeof rechecked.url !== "string" || rechecked.url.trim() === "")
+      throw new Error("merge要求後に記録するPR URLがありません");
+    const definition = workflowStep(11);
+    if (!definition) throw new Error("step 11の定義がありません");
+    const workflow = appendWorkflowJournalEntry({
+      staging,
+      entry: {
+        step: 11,
+        skillId: definition.skillId,
+        mode: workflowInspection.mode,
+        recordedAt: new Date().toISOString(),
+        artifacts: [rechecked.url],
+        evidence: `trusted再認可後にpr mergeを適用し${String(merged.state ?? "merge-requested")}を観測した`,
+      },
+    });
+    print({
+      ...merged,
+      state: "merge-queued",
+      pr: rechecked.url,
+      workflow,
+    });
     return 0;
   }
   const lifecycleCommand = canonicalLifecycleCommand(command);

@@ -239,6 +239,16 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When merge authorizationを評価する
     Then mergeは許可されない
 
+  Scenario: SCN-INT-MERGE-010 staging trackerと同じrepository・IssueをcloseするPRだけを受理する
+    Given staging trackerと同じcanonical IssueをcloseするPR観測がある
+    When PRとstagingの同一性を検証する
+    Then PRとstagingの同一性検証は成功する
+
+  Scenario: SCN-INT-MERGE-011 別Issueの有効なstagingをpr mergeへ流用できない
+    Given staging trackerと異なるIssueをcloseするPR観測がある
+    When PRとstagingの同一性を検証する
+    Then PRとstagingの同一性検証は失敗する
+
   Scenario: SCN-INT-FINALIZE-001 safeなdry-run reportはhashを返して何も削除しない
     Given merged、clean、pushed、recoveryありのworktree stateがある
     When finalize reportを作成する
