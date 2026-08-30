@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  MAX_SEMANTIC_GRAPH_EDGES,
+  MAX_SEMANTIC_GRAPH_NODES,
   SEMANTIC_GRAPH_BUILDER_VERSION,
   SEMANTIC_GRAPH_SCHEMA_VERSION,
   canonicalSemanticGraph,
@@ -21,8 +23,6 @@ import { stableJson } from "../lib/security.js";
 const MAX_SOURCE_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_SOURCE_SET_BYTES = 128 * 1024 * 1024;
 const MAX_SOURCE_FILES = 200_000;
-const MAX_PROJECTED_NODES = 200_000;
-const MAX_PROJECTED_EDGES = 1_000_000;
 const MAX_TRACE_IDS_PER_CELL = 1_000;
 const SOURCE_EXTENSIONS = new Set([
   ".c",
@@ -122,6 +122,50 @@ const ECMASCRIPT_EXTENSIONS = new Set([
   ".ts",
   ".tsx",
 ]);
+
+/**
+ * The schema vocabulary is intentionally broader than this projector. This
+ * capability is the exact, machine-observable subset materialized from local
+ * repository files by this builder version.
+ */
+export const REPOSITORY_GRAPH_PROJECTOR_CAPABILITY = Object.freeze({
+  capabilityVersion:
+    "agent-skill-chain/repository-graph-projector-capability/v1" as const,
+  materializedNodeKinds: Object.freeze([
+    "repository",
+    "commit",
+    "requirement",
+    "acceptance-criteria",
+    "design",
+    "file",
+    "scenario",
+    "review",
+    "worktree",
+  ] satisfies readonly SemanticNodeKind[]),
+  materializedEdgeKinds: Object.freeze([
+    "contains",
+    "imports",
+    "references",
+    "has-acceptance-criteria",
+    "verified-by",
+    "satisfied-by",
+    "supported-by",
+  ] satisfies readonly SemanticEdgeKind[]),
+});
+
+/** Graph evidence is descriptive and never grants workflow authority. */
+export const REPOSITORY_GRAPH_EVIDENCE_AUTHORITY = Object.freeze({
+  authority: "none" as const,
+  mergeAuthorization: false as const,
+  modeAuthorization: false as const,
+});
+
+const MATERIALIZED_NODE_KINDS = new Set<SemanticNodeKind>(
+  REPOSITORY_GRAPH_PROJECTOR_CAPABILITY.materializedNodeKinds,
+);
+const MATERIALIZED_EDGE_KINDS = new Set<SemanticEdgeKind>(
+  REPOSITORY_GRAPH_PROJECTOR_CAPABILITY.materializedEdgeKinds,
+);
 
 interface SourceFile {
   readonly path: string;
@@ -364,6 +408,17 @@ function resolveImport(
   return candidates.find((candidate) => knownFiles.has(candidate));
 }
 
+function projectionDiagnostic(
+  code: "edge-endpoint-missing" | "trace-endpoint-missing",
+  sourcePath: string,
+  sourceLine: number,
+  detail: string,
+): Error {
+  return new Error(
+    `semantic graph projection診断 ${code}: ${sourcePath}:${sourceLine}: ${detail}`,
+  );
+}
+
 export function buildRepositorySemanticGraph(
   root: string,
 ): SemanticGraphSnapshot {
@@ -371,6 +426,9 @@ export function buildRepositorySemanticGraph(
   const files = observeSourceFiles(resolvedRoot);
   const source = repositoryIdentity(resolvedRoot, files);
   const knownFiles = new Set(files.map(({ path: file }) => file));
+  const existingRegularFiles = new Set(
+    files.filter(({ state }) => state === "file").map(({ path: file }) => file),
+  );
   const nodes = new Map<string, SemanticGraphNode>();
   const edges = new Map<string, SemanticGraphEdge>();
   const occurrences = new Map<
@@ -388,8 +446,12 @@ export function buildRepositorySemanticGraph(
     sourceLine: number | undefined,
     properties: Readonly<Record<string, GraphScalar>>,
   ): void => {
+    if (!MATERIALIZED_NODE_KINDS.has(kind))
+      throw new Error(
+        `repository projector capability外のnode kindです: ${kind}`,
+      );
     if (nodes.has(id)) return;
-    if (nodes.size >= MAX_PROJECTED_NODES)
+    if (nodes.size >= MAX_SEMANTIC_GRAPH_NODES)
       throw new Error("semantic graphのnode上限を超えました");
     nodes.set(id, {
       id,
@@ -408,9 +470,19 @@ export function buildRepositorySemanticGraph(
     sourceLine: number | undefined,
     properties: Readonly<Record<string, GraphScalar>> = {},
   ): void => {
-    if (!nodes.has(from) || !nodes.has(to)) return;
+    if (!MATERIALIZED_EDGE_KINDS.has(kind))
+      throw new Error(
+        `repository projector capability外のedge kindです: ${kind}`,
+      );
+    if (!nodes.has(from) || !nodes.has(to))
+      throw projectionDiagnostic(
+        "edge-endpoint-missing",
+        sourcePath,
+        sourceLine ?? 1,
+        `kind=${kind} from=${from}(${nodes.has(from) ? "present" : "missing"}) to=${to}(${nodes.has(to) ? "present" : "missing"})`,
+      );
     const id = `edge:${sha256(stableJson({ from, kind, sourceLine, sourcePath, to })).slice(0, 40)}`;
-    if (!edges.has(id) && edges.size >= MAX_PROJECTED_EDGES)
+    if (!edges.has(id) && edges.size >= MAX_SEMANTIC_GRAPH_EDGES)
       throw new Error("semantic graphのedge上限を超えました");
     edges.set(id, {
       id,
@@ -423,20 +495,20 @@ export function buildRepositorySemanticGraph(
       properties,
     });
   };
-  const repositoryNode = nodeId(
-    "repository",
-    sha256(source.repositoryId).slice(0, 32),
-  );
-  const worktreeNode = nodeId("worktree", source.worktreeId);
-  const commitNode = nodeId("commit", source.headSha);
+  // Source identity belongs to snapshot.source/manifest. Content nodes use
+  // logical identities so an identical projection hashes identically in a
+  // different worktree while freshness can still reject the wrong worktree.
+  const repositoryNode = nodeId("repository", "current");
+  const worktreeNode = nodeId("worktree", "current");
+  const commitNode = nodeId("commit", "current");
   addNode(repositoryNode, "repository", "package.json", undefined, {
-    repositoryId: source.repositoryId,
+    identityAuthority: "manifest",
   });
   addNode(worktreeNode, "worktree", "package.json", undefined, {
-    worktreeId: source.worktreeId,
+    identityAuthority: "manifest",
   });
   addNode(commitNode, "commit", "package.json", undefined, {
-    sha: source.headSha,
+    identityAuthority: "manifest",
   });
   for (const file of files) {
     const fileNode = nodeId("file", file.path);
@@ -554,15 +626,23 @@ export function buildRepositorySemanticGraph(
         throw new Error(`trace rowのID件数上限を超えました: ${index + 1}`);
       const featureCell = cells.length >= 9 ? cells[5] : cells[4];
       const implementationCell = cells.length >= 9 ? cells[6] : cells[5];
-      const paths = [
+      const referencedPaths = [
         ...`${featureCell} ${implementationCell}`.matchAll(/`([^`]+)`/gu),
-      ]
-        .map((match) => match[1]!)
-        .filter((candidate) => knownFiles.has(candidate));
-      const featurePaths = paths.filter((candidate) =>
+      ].map((match) => match[1]!);
+      const missingPaths = referencedPaths.filter(
+        (candidate) => !existingRegularFiles.has(candidate),
+      );
+      if (missingPaths.length > 0)
+        throw projectionDiagnostic(
+          "trace-endpoint-missing",
+          trace.path,
+          index + 1,
+          `存在しないrepository path=${[...new Set(missingPaths)].sort(compareText).join(",")}`,
+        );
+      const featurePaths = referencedPaths.filter((candidate) =>
         candidate.endsWith(".feature"),
       );
-      const implementationPaths = paths.filter(
+      const implementationPaths = referencedPaths.filter(
         (candidate) =>
           !candidate.endsWith(".feature") &&
           (candidate.startsWith("src/") ||

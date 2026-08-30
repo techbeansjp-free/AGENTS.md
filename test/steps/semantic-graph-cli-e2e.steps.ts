@@ -123,6 +123,7 @@ function fixtureAdapterSource(): string {
   return `import fs from "node:fs";
 import path from "node:path";
 import {
+  GraphFreshnessError,
   SEMANTIC_GRAPH_BUILDER_VERSION,
   SEMANTIC_GRAPH_SCHEMA_VERSION,
   semanticGraphContentHash,
@@ -174,10 +175,10 @@ export class GraphQlLiteStore {
   constructor(root) {
     this.root = fs.realpathSync(root);
     if (!fs.existsSync(absolute(this.root, EXTENSION)))
-      throw new Error("fixture GraphQLite extension is missing");
+      throw new GraphFreshnessError(["missing"], "fixture GraphQLite extension is missing");
   }
 
-  async replace(snapshot, builtAt) {
+  async replace(snapshot, builtAt, observeCurrentSource) {
     const projectionFile = absolute(this.root, PROJECTION);
     let generation = 1;
     if (fs.existsSync(projectionFile)) {
@@ -198,6 +199,9 @@ export class GraphQlLiteStore {
       status: "complete",
       builtAt,
     };
+    const currentSource = await observeCurrentSource();
+    if (JSON.stringify(currentSource) !== JSON.stringify(snapshot.source))
+      throw new GraphFreshnessError(["source-ahead"]);
     writeJsonAtomic(projectionFile, { manifest, snapshot });
     writeJsonAtomic(absolute(this.root, POINTER), {
       schemaVersion: "agent-skill-chain/graphqlite-fixture-current/v1",
@@ -208,26 +212,26 @@ export class GraphQlLiteStore {
 
   async read() {
     const pointerFile = absolute(this.root, POINTER);
-    if (!fs.existsSync(pointerFile)) throw new Error("fixture graph projection is missing");
+    if (!fs.existsSync(pointerFile)) throw new GraphFreshnessError(["missing"]);
     let pointer;
     try {
       pointer = JSON.parse(fs.readFileSync(pointerFile, "utf8"));
     } catch {
-      throw new Error("fixture graph current pointer is corrupt");
+      throw new GraphFreshnessError(["corrupt"]);
     }
     if (
       pointer?.schemaVersion !== "agent-skill-chain/graphqlite-fixture-current/v1" ||
       pointer?.projectionFile !== PROJECTION ||
       Object.keys(pointer).length !== 2
-    ) throw new Error("fixture graph current pointer is corrupt");
+    ) throw new GraphFreshnessError(["corrupt"]);
     let stored;
     try {
       stored = JSON.parse(fs.readFileSync(absolute(this.root, pointer.projectionFile), "utf8"));
     } catch {
-      throw new Error("fixture graph projection is corrupt");
+      throw new GraphFreshnessError(["corrupt"]);
     }
     if (!stored?.manifest || !stored?.snapshot || Object.keys(stored).length !== 2)
-      throw new Error("fixture graph projection is corrupt");
+      throw new GraphFreshnessError(["corrupt"]);
     return stored;
   }
 
@@ -339,6 +343,14 @@ function requireRun(world: SemanticGraphCliE2eWorld, label: string): CliRun {
   return run;
 }
 
+function assertGraphCannotAuthorize(
+  output: Record<string, unknown> | undefined,
+): void {
+  assert.equal(output?.authority, "none");
+  assert.equal(output?.mergeAuthorization, false);
+  assert.equal(output?.modeAuthorization, false);
+}
+
 function runtimeFiles(root: string): readonly string[] {
   const runtime = path.join(root, ...GRAPH_RUNTIME.split("/"));
   if (!fs.existsSync(runtime)) return [];
@@ -423,6 +435,7 @@ Then("install previewは成功しruntimeを変更しない", function () {
   const run = requireRun(this, "install-preview");
   assert.equal(run.result.status, 0, run.result.stderr);
   assert.equal(run.output?.status, "preview");
+  assertGraphCannotAuthorize(run.output);
   assert.equal(run.output?.backend, "fixture-seam");
   assert.deepEqual(this.runtimeAfter, this.runtimeBefore);
   assert.deepEqual(this.runtimeAfter, []);
@@ -443,6 +456,7 @@ Then("install applyだけが固定extension markerを作る", function () {
   const run = requireRun(this, "install-apply");
   assert.equal(run.result.status, 0, run.result.stderr);
   assert.equal(run.output?.status, "installed");
+  assertGraphCannotAuthorize(run.output);
   assert.equal(run.output?.backend, "fixture-seam");
   assert.deepEqual(this.runtimeBefore, []);
   assert.equal(this.runtimeAfter?.length, 1);
@@ -471,6 +485,7 @@ Then("rebuild previewは投影を書き込まない", function () {
   const run = requireRun(this, "rebuild-preview");
   assert.equal(run.result.status, 0, run.result.stderr);
   assert.equal(run.output?.status, "preview");
+  assertGraphCannotAuthorize(run.output);
   assert.ok(Number(run.output?.nodeCount) > 0);
   assert.ok(Number(run.output?.edgeCount) > 0);
   assert.match(String(run.output?.graphContentHash), /^[a-f0-9]{64}$/u);
@@ -505,6 +520,7 @@ Then("rebuild applyはfreshな投影を公開する", function () {
     `${run.result.stdout}\n${run.result.stderr}`,
   );
   assert.equal(run.output?.status, "rebuilt");
+  assertGraphCannotAuthorize(run.output);
   const manifest = run.output?.manifest as Record<string, unknown> | undefined;
   assert.equal(manifest?.status, "complete");
   assert.equal(manifest?.builtAt, FIXED_BUILT_AT);
@@ -534,6 +550,7 @@ Then("statusはfreshかつexact Evidence可能である", function () {
     `${run.result.stdout}\n${run.result.stderr}`,
   );
   assert.equal(run.output?.status, "fresh");
+  assertGraphCannotAuthorize(run.output);
   assert.equal(run.output?.exactEvidenceAllowed, true);
 });
 
@@ -574,6 +591,7 @@ Then(
     const impact = requireRun(this, "impact");
     assert.equal(impact.result.status, 0, impact.result.stderr);
     assert.equal(impact.output?.status, "complete");
+    assertGraphCannotAuthorize(impact.output);
     assert.equal(impact.output?.exactEvidence, true);
     assert.deepEqual(impact.output?.nodes, [
       "file:src/root.ts",
@@ -585,6 +603,7 @@ Then(
     const pathRun = requireRun(this, "path");
     assert.equal(pathRun.result.status, 0, pathRun.result.stderr);
     assert.equal(pathRun.output?.status, "complete");
+    assertGraphCannotAuthorize(pathRun.output);
     assert.equal(pathRun.output?.algorithm, "bfs");
     assert.equal(pathRun.output?.exactEvidence, true);
     assert.deepEqual(pathRun.output?.path, [
@@ -596,6 +615,7 @@ Then(
     const order = requireRun(this, "order");
     assert.equal(order.result.status, 0, order.result.stderr);
     assert.equal(order.output?.status, "complete");
+    assertGraphCannotAuthorize(order.output);
     assert.equal(order.output?.gateConformant, true);
     assert.equal(order.output?.exactEvidence, true);
     assert.equal(order.output?.gatePass, true);
@@ -626,8 +646,37 @@ Then("statusはmissingを非0で返しruntimeを作らない", function () {
     `${run.result.stdout}\n${run.result.stderr}`,
   );
   assert.equal(run.output?.status, "unavailable-or-stale");
+  assertGraphCannotAuthorize(run.output);
   assert.equal(run.output?.exactEvidenceAllowed, false);
   assert.match(JSON.stringify(run.output?.reasons), /missing/u);
+  assert.deepEqual(runtimeFiles(this.fixtureRoot), []);
+});
+
+When(
+  "extension未installのままgraph rebuildを実processでapplyする",
+  function () {
+    assert.ok(this.fixtureRoot);
+    runCli(
+      this,
+      "rebuild-missing-extension",
+      graphArgs(
+        this.fixtureRoot,
+        "rebuild",
+        "--apply",
+        `--built-at=${FIXED_BUILT_AT}`,
+      ),
+    );
+  },
+);
+
+Then("rebuildもmissingを型付きで返し権限を付与しない", function () {
+  assert.ok(this.fixtureRoot);
+  const run = requireRun(this, "rebuild-missing-extension");
+  assert.equal(run.result.status, 1, run.result.stderr);
+  assert.equal(run.output?.status, "unavailable-or-stale");
+  assert.deepEqual(run.output?.reasons, ["missing"]);
+  assert.equal(run.output?.recovery, "rebuild");
+  assertGraphCannotAuthorize(run.output);
   assert.deepEqual(runtimeFiles(this.fixtureRoot), []);
 });
 
@@ -653,6 +702,7 @@ Then("statusはcorruptを非0で返しexact Evidenceを拒否する", function (
     `${run.result.stdout}\n${run.result.stderr}`,
   );
   assert.equal(run.output?.status, "unavailable-or-stale");
+  assertGraphCannotAuthorize(run.output);
   assert.equal(run.output?.exactEvidenceAllowed, false);
   assert.match(JSON.stringify(run.output?.reasons), /corrupt/u);
 });
@@ -675,8 +725,13 @@ Then("statusはstaleを非0で返しrebuildを要求する", function () {
     `${run.result.stdout}\n${run.result.stderr}`,
   );
   assert.equal(run.output?.status, "unavailable-or-stale");
+  assertGraphCannotAuthorize(run.output);
   assert.equal(run.output?.exactEvidenceAllowed, false);
-  assert.match(JSON.stringify(run.output?.reasons), /一致しません|再構築/u);
+  assert.match(
+    JSON.stringify(run.output?.reasons),
+    /source-ahead|projection-drift/u,
+  );
+  assert.equal(run.output?.recovery, "rebuild");
   assert.match(String(run.output?.next), /graph install.*graph rebuild/u);
 });
 
@@ -775,4 +830,108 @@ Then("impact、path、orderはすべて非0でexact Evidenceにならない", fu
     `${order.result.stdout}\n${order.result.stderr}`,
     /未知のsemantic edge kind/u,
   );
+});
+
+When(
+  "保存manifestのextension identityを改竄してgraph statusを実process実行する",
+  function () {
+    assert.ok(this.fixtureRoot);
+    const projection = path.join(
+      this.fixtureRoot,
+      ...FIXTURE_PROJECTION.split("/"),
+    );
+    const stored = JSON.parse(fs.readFileSync(projection, "utf8")) as {
+      manifest: Record<string, unknown>;
+    };
+    stored.manifest.extensionVersion = "tampered-extension";
+    fs.writeFileSync(projection, `${JSON.stringify(stored)}\n`, "utf8");
+    runCli(
+      this,
+      "status-extension-mismatch",
+      graphArgs(this.fixtureRoot, "status"),
+    );
+  },
+);
+
+Then("statusはextension-mismatchだけを安定したreasonで返す", function () {
+  const run = requireRun(this, "status-extension-mismatch");
+  assert.equal(run.result.status, 1, run.result.stderr);
+  assert.equal(run.output?.status, "unavailable-or-stale");
+  assert.deepEqual(run.output?.reasons, ["extension-mismatch"]);
+  assert.equal(run.output?.recovery, "rebuild");
+  assert.equal(run.output?.authority, "none");
+  assert.equal(run.output?.mergeAuthorization, false);
+  assert.equal(run.output?.modeAuthorization, false);
+});
+
+When("include-inferred付きimpactを実processで実行する", function () {
+  assert.ok(this.fixtureRoot);
+  runCli(
+    this,
+    "impact-inferred",
+    graphArgs(
+      this.fixtureRoot,
+      "impact",
+      "--start=file:src/root.ts",
+      "--direction=outgoing",
+      "--edge-kinds=imports",
+      "--include-inferred",
+    ),
+  );
+});
+
+Then(
+  "completeでもcandidateでありexact Evidenceとmerge authorityを持たない",
+  function () {
+    const run = requireRun(this, "impact-inferred");
+    assert.equal(run.result.status, 0, run.result.stderr);
+    assert.equal(run.output?.status, "complete");
+    assert.equal(run.output?.candidate, true);
+    assert.equal(run.output?.exactEvidence, false);
+    assert.equal(run.output?.authority, "none");
+    assert.equal(run.output?.mergeAuthorization, false);
+    assert.equal(run.output?.modeAuthorization, false);
+    const evidence = run.output?.evidence as
+      Record<string, unknown> | undefined;
+    assert.equal(evidence?.candidate, true);
+    assert.equal(evidence?.deterministicOnly, false);
+    assert.equal(evidence?.exactEvidence, false);
+    assert.equal(evidence?.authority, "none");
+    assert.equal(evidence?.mergeAuthorization, false);
+    assert.equal(evidence?.modeAuthorization, false);
+    assert.deepEqual(
+      (evidence?.query as Record<string, unknown> | undefined)?.certaintyPolicy,
+      "include-inferred",
+    );
+  },
+);
+
+When(
+  "current pointer破損後に値付きinclude-inferredを実processで実行する",
+  function () {
+    assert.ok(this.fixtureRoot);
+    fs.writeFileSync(
+      path.join(this.fixtureRoot, ...FIXTURE_POINTER.split("/")),
+      "{broken\n",
+      "utf8",
+    );
+    runCli(
+      this,
+      "impact-inferred-invalid",
+      graphArgs(
+        this.fixtureRoot,
+        "impact",
+        "--start=file:src/root.ts",
+        "--include-inferred=false",
+      ),
+    );
+  },
+);
+
+Then("値付きflagはGraph読取前に入力違反として拒否される", function () {
+  const run = requireRun(this, "impact-inferred-invalid");
+  assert.equal(run.result.status, 1, run.result.stderr);
+  const observed = `${run.result.stdout}\n${run.result.stderr}`;
+  assert.match(observed, /--include-inferredは値を取らないflag/u);
+  assert.doesNotMatch(observed, /corrupt|missing|extension-mismatch/u);
 });

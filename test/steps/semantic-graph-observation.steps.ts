@@ -8,12 +8,24 @@ import {
   graphQlLiteAsset,
   type GraphQlLiteAsset,
 } from "../../src/adapters/graphqlite.js";
-import { buildRepositorySemanticGraph } from "../../src/adapters/repository-graph.js";
+import {
+  REPOSITORY_GRAPH_EVIDENCE_AUTHORITY,
+  REPOSITORY_GRAPH_PROJECTOR_CAPABILITY,
+  buildRepositorySemanticGraph,
+} from "../../src/adapters/repository-graph.js";
 import { main } from "../../src/cli.js";
+import {
+  assessImplementationDiscovery,
+  decideDeliveryContinuation,
+  type DeliveryContinuation,
+  type DiscoveryAssessment,
+} from "../../src/domain/agile-verification.js";
 import {
   DEFAULT_GRAPH_BUDGET,
   SEMANTIC_GRAPH_BUILDER_VERSION,
   SEMANTIC_GRAPH_SCHEMA_VERSION,
+  SEMANTIC_EDGE_KINDS,
+  SEMANTIC_NODE_KINDS,
   assessGraphFreshness,
   semanticGraphContentHash,
   shortestSemanticPath,
@@ -44,18 +56,28 @@ interface AlgorithmObservations {
   readonly shortest: readonly ShortestPathResult[];
 }
 
+interface PromotionObservations {
+  readonly assessment: DiscoveryAssessment;
+  readonly poc: SemanticGraphSnapshot;
+  readonly full: SemanticGraphSnapshot;
+  readonly oldProjectionFreshness: GraphFreshnessResult;
+  readonly fullProjectionFreshness: GraphFreshnessResult;
+}
+
 interface SemanticGraphObservationWorld extends WorkflowWorld {
   algorithmObservations?: AlgorithmObservations;
   asset?: GraphQlLiteAsset;
   cliOutput?: Record<string, unknown>;
   cliStatus?: number;
   cliError?: string;
+  deliveryContinuation?: DeliveryContinuation;
   freshness?: GraphFreshnessResult;
   fixtureRoot?: string;
   mode?: ObservationMode;
   mutationObservations?: MutationObservations;
   scc?: StronglyConnectedComponentsResult;
   snapshots?: SemanticGraphSnapshot[];
+  promotionObservations?: PromotionObservations;
   topological?: TopologicalResult;
   traversal?: GraphTraversalResult;
 }
@@ -127,10 +149,16 @@ function createModeFixture(
   const requirement = `REQ-OBS-${token}-001`;
   const acceptance = `AC-OBS-${token}-001`;
   const scenario = `SCN-OBS-${token}-001`;
+  const contractPath =
+    mode === "Full"
+      ? "docs/specs/02_要件/00_観測要件.md"
+      : mode === "Quick"
+        ? "docs/quick/00_要求定義.md"
+        : "docs/poc/00_要求定義.md";
   gitFixture(root, ["remote", "add", "origin", FIXED_REMOTE]);
   writeFixture(
     root,
-    "docs/specs/02_要件/00_観測要件.md",
+    contractPath,
     [
       `# ${mode} mode observation`,
       "",
@@ -190,6 +218,60 @@ function createModeFixture(
   world.fixtureRoot = root;
   world.mode = mode;
   return root;
+}
+
+function replacePocFixtureWithFullContract(root: string): void {
+  fs.rmSync(path.join(root, "docs/poc/00_要求定義.md"));
+  fs.rmSync(path.join(root, "docs/poc/hypothesis.md"));
+  fs.rmSync(path.join(root, "test/features/poc.feature"));
+  fs.rmSync(path.join(root, "src/poc.ts"));
+  writeFixture(
+    root,
+    "docs/specs/02_要件/00_観測要件.md",
+    [
+      "# Full promotion observation",
+      "",
+      "REQ-OBS-FULL-001 は補完した正本からFull契約を再構築する。",
+      "AC-OBS-FULL-001 は旧PoC投影を正式成果物へ昇格しない。",
+      "",
+    ].join("\n"),
+  );
+  writeFixture(
+    root,
+    "docs/specs/03_アーキテクチャ/00_詳細設計.md",
+    "# Full mode detailed design\n",
+  );
+  writeFixture(
+    root,
+    "docs/specs/14_開発・品質/00_実装計画.md",
+    "# Full mode implementation plan\n",
+  );
+  writeFixture(
+    root,
+    "test/features/full.feature",
+    [
+      "Feature: Full promotion observation",
+      "",
+      "  Scenario: SCN-OBS-FULL-001 Full mode behavior",
+      "    Given a supplemented canonical contract",
+      "    Then the behavior is observable",
+      "",
+    ].join("\n"),
+  );
+  writeFixture(root, "src/full.ts", 'export const observationMode = "Full";\n');
+  writeFixture(
+    root,
+    "docs/specs/15_要件追跡/00_追跡表.md",
+    [
+      "# Full promotion trace",
+      "",
+      "| Requirement | Acceptance | Scenario | Feature | Implementation |",
+      "| --- | --- | --- | --- | --- |",
+      "| REQ-OBS-FULL-001 | AC-OBS-FULL-001 | SCN-OBS-FULL-001 | `test/features/full.feature` | `src/full.ts` |",
+      "",
+    ].join("\n"),
+  );
+  commitFixture(root, "promote supplemented canonical contract to Full");
 }
 
 function assertDirectModeTrace(
@@ -332,8 +414,28 @@ When(
     );
     const dirty = buildRepositorySemanticGraph(root);
     gitFixture(root, ["mv", "src/full.ts", "src/full-renamed.ts"]);
+    writeFixture(
+      root,
+      "docs/specs/15_要件追跡/00_追跡表.md",
+      fs
+        .readFileSync(
+          path.join(root, "docs/specs/15_要件追跡/00_追跡表.md"),
+          "utf8",
+        )
+        .replace("`src/full.ts`", "`src/full-renamed.ts`"),
+    );
     const renamed = buildRepositorySemanticGraph(root);
     fs.rmSync(path.join(root, "test/features/full.feature"));
+    writeFixture(
+      root,
+      "docs/specs/15_要件追跡/00_追跡表.md",
+      fs
+        .readFileSync(
+          path.join(root, "docs/specs/15_要件追跡/00_追跡表.md"),
+          "utf8",
+        )
+        .replace("`test/features/full.feature`", "deleted-feature"),
+    );
     const deleted = buildRepositorySemanticGraph(root);
     this.mutationObservations = { baseline, dirty, renamed, deleted };
   },
@@ -408,6 +510,10 @@ Then("source内容は一致するがworktree identityは分離される", functi
   assert.equal(primary.source.treeSha, secondary.source.treeSha);
   assert.equal(primary.source.contentDigest, secondary.source.contentDigest);
   assert.notEqual(primary.source.worktreeId, secondary.source.worktreeId);
+  assert.equal(
+    semanticGraphContentHash(primary),
+    semanticGraphContentHash(secondary),
+  );
 });
 
 Given("同順位の2経路を持つDAG疑似projectがある", function () {
@@ -863,6 +969,320 @@ When("Node 22.12 runtime seamでgraph installを実行する", async function ()
 
 Then("Node下限の理由を返しGraph runtimeを作らない", function () {
   assert.match(this.cliError ?? "", /Node\.js 22\.13\.0以上/u);
+  assert.ok(this.fixtureRoot);
+  assert.equal(graphRuntimeExists(this.fixtureRoot), false);
+});
+
+Then(
+  "固定projector capabilityはsnapshotで実際に生成可能なkindだけを宣言する",
+  function () {
+    const snapshot = this.snapshots?.[0];
+    assert.ok(snapshot);
+    assert.deepEqual(REPOSITORY_GRAPH_PROJECTOR_CAPABILITY, {
+      capabilityVersion:
+        "agent-skill-chain/repository-graph-projector-capability/v1",
+      materializedNodeKinds: [
+        "repository",
+        "commit",
+        "requirement",
+        "acceptance-criteria",
+        "design",
+        "file",
+        "scenario",
+        "review",
+        "worktree",
+      ],
+      materializedEdgeKinds: [
+        "contains",
+        "imports",
+        "references",
+        "has-acceptance-criteria",
+        "verified-by",
+        "satisfied-by",
+        "supported-by",
+      ],
+    });
+    const capableNodes = new Set<string>(
+      REPOSITORY_GRAPH_PROJECTOR_CAPABILITY.materializedNodeKinds,
+    );
+    const capableEdges = new Set<string>(
+      REPOSITORY_GRAPH_PROJECTOR_CAPABILITY.materializedEdgeKinds,
+    );
+    assert.ok(
+      SEMANTIC_NODE_KINDS.some((kind) => !capableNodes.has(kind)),
+      "schema vocabularyとprojector capabilityが同一集合になっています",
+    );
+    assert.ok(
+      SEMANTIC_EDGE_KINDS.some((kind) => !capableEdges.has(kind)),
+      "schema edge vocabularyとprojector capabilityが同一集合になっています",
+    );
+    assert.ok(snapshot.nodes.every(({ kind }) => capableNodes.has(kind)));
+    assert.ok(snapshot.edges.every(({ kind }) => capableEdges.has(kind)));
+  },
+);
+
+When("Full要件からtrace edge限定のbounded traversalを実行する", function () {
+  assert.ok(this.fixtureRoot);
+  const snapshot = buildRepositorySemanticGraph(this.fixtureRoot);
+  this.snapshots = [snapshot];
+  this.traversal = traverseSemanticGraph(
+    snapshot,
+    ["requirement:REQ-OBS-FULL-001"],
+    {
+      direction: "outgoing",
+      edgeKinds: ["has-acceptance-criteria", "verified-by", "satisfied-by"],
+      budget: {
+        maxDepth: 3,
+        maxVisitedNodes: 100,
+        maxVisitedEdges: 100,
+        maxResults: 100,
+        maxOperations: 300,
+      },
+    },
+  );
+});
+
+Then(
+  "Requirement AC Scenario feature implementationへ上限内で到達する",
+  function () {
+    assert.equal(this.traversal?.status, "complete");
+    const reached = new Set(this.traversal?.nodes);
+    for (const id of [
+      "requirement:REQ-OBS-FULL-001",
+      "acceptance-criteria:AC-OBS-FULL-001",
+      "scenario:SCN-OBS-FULL-001",
+      "file:test/features/full.feature",
+      "file:src/full.ts",
+    ])
+      assert.equal(reached.has(id), true, `${id}へ到達できません`);
+    assert.ok((this.traversal?.maxDepthReached ?? 4) <= 3);
+    assert.ok((this.traversal?.visitedNodes ?? 101) <= 100);
+    assert.ok((this.traversal?.visitedEdges ?? 101) <= 100);
+    assert.ok((this.traversal?.operations ?? 301) <= 300);
+  },
+);
+
+Given("存在しない実装pathを含むtrace rowがある", function () {
+  const root = createModeFixture(this, "Full");
+  writeFixture(
+    root,
+    "docs/specs/15_要件追跡/00_追跡表.md",
+    [
+      "# Missing endpoint trace",
+      "",
+      "| Requirement | Acceptance | Scenario | Feature | Implementation |",
+      "| --- | --- | --- | --- | --- |",
+      "| REQ-OBS-FULL-001 | AC-OBS-FULL-001 | SCN-OBS-FULL-001 | `test/features/full.feature` | `src/missing.ts` |",
+      "",
+    ].join("\n"),
+  );
+  commitFixture(root, "add missing trace endpoint");
+});
+
+When("endpoint不足のsemantic graphを構築する", function () {
+  assert.ok(this.fixtureRoot);
+  try {
+    buildRepositorySemanticGraph(this.fixtureRoot);
+  } catch (error) {
+    this.cliError = error instanceof Error ? error.message : String(error);
+  }
+});
+
+Then("stableなtrace endpoint診断でfail closedになる", function () {
+  assert.match(
+    this.cliError ?? "",
+    /semantic graph projection診断 trace-endpoint-missing: docs\/specs\/15_要件追跡\/00_追跡表\.md:5: 存在しないrepository path=src\/missing\.ts/u,
+  );
+});
+
+Given(
+  "trackedなFeatureとImplementationをworking treeから削除したtrace rowがある",
+  function () {
+    const root = createModeFixture(this, "Full");
+    fs.rmSync(path.join(root, "test/features/full.feature"));
+    fs.rmSync(path.join(root, "src/full.ts"));
+  },
+);
+
+Then("削除済みtrace endpointのstableな診断でfail closedになる", function () {
+  assert.match(
+    this.cliError ?? "",
+    /semantic graph projection診断 trace-endpoint-missing: docs\/specs\/15_要件追跡\/00_追跡表\.md:5: 存在しないrepository path=src\/full\.ts,test\/features\/full\.feature/u,
+  );
+});
+
+Given("ignored stagingにFull modeを持つQuick疑似projectがある", function () {
+  const root = createModeFixture(this, "Quick");
+  writeFixture(root, ".gitignore", ".agent-skill-chain/tmp/\n");
+  commitFixture(root, "ignore transient staging");
+  writeFixture(
+    root,
+    ".agent-skill-chain/tmp/issues/ignored/staging-record.json",
+    '{"mode":"full","state":"local-active"}\n',
+  );
+});
+
+Then(
+  "Graph Evidenceのauthorityはnoneでmergeとmodeの許可を持たない",
+  function () {
+    assert.deepEqual(REPOSITORY_GRAPH_EVIDENCE_AUTHORITY, {
+      authority: "none",
+      mergeAuthorization: false,
+      modeAuthorization: false,
+    });
+  },
+);
+
+Then("ignored stagingのmodeはsnapshotへ投影されない", function () {
+  const snapshot = this.snapshots?.[0];
+  assert.ok(snapshot);
+  assert.equal(
+    snapshot.nodes.some(({ sourcePath }) =>
+      sourcePath.startsWith(".agent-skill-chain/tmp/issues/ignored/"),
+    ),
+    false,
+  );
+  assert.equal(
+    snapshot.edges.some(({ sourcePath }) =>
+      sourcePath.startsWith(".agent-skill-chain/tmp/issues/ignored/"),
+    ),
+    false,
+  );
+});
+
+Then("Quick traceは成立しFull専用成果物nodeは存在しない", function () {
+  const snapshot = this.snapshots?.[0];
+  assert.ok(snapshot);
+  assertDirectModeTrace(snapshot, "Quick");
+  assert.equal(
+    snapshot.nodes.some(({ kind }) => kind === "design"),
+    false,
+  );
+  assert.equal(
+    snapshot.nodes.some(({ sourcePath }) =>
+      /(?:^|\/)(?:01_要件定義|02_設計|03_実装計画)\.md$/u.test(sourcePath),
+    ),
+    false,
+  );
+});
+
+Given("fresh Graphを持つPoC疑似projectがある", function () {
+  const root = createModeFixture(this, "PoC");
+  const snapshot = buildRepositorySemanticGraph(root);
+  const asset = graphQlLiteAsset("linux", "x64");
+  const manifest = graphManifest(snapshot, asset);
+  this.snapshots = [snapshot];
+  this.freshness = assessGraphFreshness({
+    expectedSource: snapshot.source,
+    expectedExtensionVersion: GRAPHQLITE_VERSION,
+    expectedExtensionSha256: asset.sha256,
+    manifest,
+    observedGraphContentHash: manifest.graphContentHash,
+    observedNodeCount: manifest.nodeCount,
+    observedEdgeCount: manifest.edgeCount,
+  });
+});
+
+When(
+  "automatic merge条件とGraph Evidenceを既存delivery gateへ合成する",
+  function () {
+    assert.equal(this.freshness?.fresh, true);
+    assert.equal(this.freshness?.exactEvidenceAllowed, true);
+    assert.equal(REPOSITORY_GRAPH_EVIDENCE_AUTHORITY.mergeAuthorization, false);
+    this.deliveryContinuation = decideDeliveryContinuation({
+      workflowMode: "poc",
+      trustedMergeMode: "automatic",
+      assistedAuthorityVerified: true,
+      mergeReadyVerified: true,
+    });
+  },
+);
+
+Then("PoCはGraph freshnessに関係なくstop-at-prになる", function () {
+  assert.equal(this.deliveryContinuation, "stop-at-pr");
+});
+
+Given("PoCでFull昇格が必要な実装中発見がある", function () {
+  const root = createModeFixture(this, "PoC");
+  const poc = buildRepositorySemanticGraph(root);
+  const assessment = assessImplementationDiscovery({
+    discoveryId: "DISC-OBS-GR-PROMOTION-001",
+    workflowMode: "poc",
+    modeDisqualifiers: [
+      { id: "external-exposure", evidence: "外部公開境界を確認した" },
+    ],
+    changedContractKinds: ["non-functional"],
+    changesGoal: false,
+    changesScope: true,
+    changesAcceptanceCriteria: true,
+    expandsSecurityBoundary: true,
+    introducesIrreversibleOperation: false,
+  });
+  this.snapshots = [poc];
+  this.value = assessment;
+});
+
+When("Full成果物を補完してrepository graphを完全再構築する", function () {
+  assert.ok(this.fixtureRoot);
+  const poc = this.snapshots?.[0];
+  assert.ok(poc);
+  const assessment = this.value as DiscoveryAssessment;
+  replacePocFixtureWithFullContract(this.fixtureRoot);
+  const full = buildRepositorySemanticGraph(this.fixtureRoot);
+  const asset = graphQlLiteAsset("linux", "x64");
+  const pocManifest = graphManifest(poc, asset);
+  const fullManifest = graphManifest(full, asset);
+  this.promotionObservations = {
+    assessment,
+    poc,
+    full,
+    oldProjectionFreshness: assessGraphFreshness({
+      expectedSource: full.source,
+      expectedExtensionVersion: GRAPHQLITE_VERSION,
+      expectedExtensionSha256: asset.sha256,
+      manifest: pocManifest,
+      observedGraphContentHash: pocManifest.graphContentHash,
+      observedNodeCount: pocManifest.nodeCount,
+      observedEdgeCount: pocManifest.edgeCount,
+    }),
+    fullProjectionFreshness: assessGraphFreshness({
+      expectedSource: full.source,
+      expectedExtensionVersion: GRAPHQLITE_VERSION,
+      expectedExtensionSha256: asset.sha256,
+      manifest: fullManifest,
+      observedGraphContentHash: fullManifest.graphContentHash,
+      observedNodeCount: fullManifest.nodeCount,
+      observedEdgeCount: fullManifest.edgeCount,
+    }),
+  };
+});
+
+Then("旧PoC投影はstaleであり新Full投影として再利用されない", function () {
+  const observations = this.promotionObservations;
+  assert.ok(observations);
+  assert.equal(observations.assessment.disposition, "stop-or-promote-full");
+  assert.deepEqual(observations.assessment.promotionArtifacts, [
+    "00_要求定義.md",
+    "01_要件定義.md",
+    "02_設計.md",
+    "03_実装計画.md",
+  ]);
+  assert.equal(observations.oldProjectionFreshness.fresh, false);
+  assert.equal(observations.oldProjectionFreshness.exactEvidenceAllowed, false);
+  assert.ok(
+    observations.oldProjectionFreshness.reasons.includes("source-ahead"),
+  );
+  assert.equal(observations.fullProjectionFreshness.fresh, true);
+  assert.equal(observations.fullProjectionFreshness.exactEvidenceAllowed, true);
+  assert.notEqual(
+    semanticGraphContentHash(observations.poc),
+    semanticGraphContentHash(observations.full),
+  );
+  assert.equal(
+    observations.full.nodes.some(({ id }) => id === "scenario:SCN-OBS-POC-001"),
+    false,
+  );
+  assertDirectModeTrace(observations.full, "Full");
   assert.ok(this.fixtureRoot);
   assert.equal(graphRuntimeExists(this.fixtureRoot), false);
 });

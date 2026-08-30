@@ -115,6 +115,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "対象edge kind",
         "全deterministic edge",
       ),
+      optional(
+        "include-inferred",
+        "",
+        "inferred edgeを候補探索へ含める",
+        "未指定時はdeterministic edgeだけをexact Evidence候補にする",
+      ),
     ],
     example:
       "npx agent-skill-chain graph impact --root=. --start=file:src/cli.ts --direction=incoming",

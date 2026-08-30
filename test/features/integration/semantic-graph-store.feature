@@ -57,3 +57,62 @@ Feature: 固定GraphQLite assetと派生投影を隔離環境で検証する
     Given 固定digestのGraphQLite native assetが明示注入されている
     When injection文字列を含むsnapshotをactual storeでreplaceしてreadする
     Then injection文字列はdataのまま保持されGraph構造を変更しない
+
+  Scenario: SCN-INT-SEMSTORE-011 repository内のsubdirectoryをruntime rootとして受理しない
+    Given GraphQLite installにrepository内のsubdirectoryを指定した隔離projectがある
+    When subdirectory rootからGraphQLite install previewを実行する
+    Then canonical worktree root違反を副作用前に拒否する
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-012 readback後にsource driftしたcandidateを公開しない
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When actual storeのreadback後observerで正本sourceを変更する
+    Then source driftを型付きで拒否しpointer bytesとgeneration集合を維持する
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-013 privateなmalformed current pointerから正本を完全再構築できる
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When privateなcurrent pointerをmalformed JSONにして完全再構築する
+    Then generation directoryの最大値から次世代を公開してreadbackできる
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-014 corrupt current databaseから正本を完全再構築できる
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When current databaseを破損させて正本から完全再構築する
+    Then corrupt databaseを参照せず次世代を公開してreadbackできる
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-015 current pointer symlinkをrebuildでもfail closedにする
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When current pointerをsymlinkへ置換して完全再構築する
+    Then unsafe current pointerを拒否しgeneration candidateを作らない
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-016 group writableなcurrent pointerをrebuildでもfail closedにする
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When current pointerをgroup writableにして完全再構築する
+    Then unsafe permissionを拒否しgeneration candidateを作らない
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-017 pointer公開前のfaultは旧pointerを維持してcandidateを清掃する
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When actual storeのcandidate readback直後にfaultを注入する
+    Then fault後もpointer bytesとgeneration集合は旧状態に戻る
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-018 manifestのextension自己申告を固定catalogの代わりに信頼しない
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When current pointerのextension versionを未知versionへ改変して読む
+    Then extension mismatchを型付きdrift reasonとして返す
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-019 missing current pointerを未知I/Oと混同しない
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When extensionだけinstallしたstoreからcurrent generationを読む
+    Then missingを型付きdrift reasonとして返す
+
+  @actual-graphqlite
+  Scenario: SCN-INT-SEMSTORE-020 storeもrepository内subdirectoryをruntime rootとして受理しない
+    Given 固定digestのGraphQLite native assetが明示注入されている
+    When install後にsubdirectory rootからactual storeを構築する
+    Then storeはcanonical worktree root違反を副作用前に拒否する

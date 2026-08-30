@@ -51,7 +51,7 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 | `graph install` | 任意の`--root`と`--dry-run\|--apply` | 固定したGraphQLite v0.6.1 assetのplatform、size、SHA-256、適用先をpreviewし、`--apply`だけがworktree内runtimeへ原子的に配置する |
 | `graph rebuild` | 任意の`--root --built-at`と`--dry-run\|--apply` | Git・text・provider耐久stateから完全snapshotを作り、実Graphのread-back後だけ新generationをcurrentにする |
 | `graph status` | 任意の`--root` | source、schema、builder、extension、manifest、実Graphをread-onlyで照合し、freshnessとdrift理由をstable順で返す |
-| `graph impact` | `--start`、任意の`--root --direction --edge-kinds` | 決定論的bounded BFSで影響候補、counter、budget状態を返す |
+| `graph impact` | `--start`、任意の`--root --direction --edge-kinds --include-inferred` | 既定は決定論的bounded BFSで影響範囲、counter、budget状態を返す。`--include-inferred`はconfidence・source付き候補を含めるが、結果がcompleteでもexact Evidenceやmerge authorityにしない |
 | `graph path` | `--from --to`、任意の`--root --edge-kinds` | 無重みはbounded BFS、非負重みはbounded Dijkstra法でcanonical経路を返す |
 | `graph order` | `--edge-kinds`、任意の`--root` | bounded Kahn法にるcanonical順序またはiterative Tarjan法にるcanonical cycleを返す |
 

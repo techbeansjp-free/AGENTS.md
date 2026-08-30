@@ -30,6 +30,8 @@ Feature: build済みCLIからsemantic graphを実processで操作する
     Given fixture Graph runtimeは未作成である
     When missing状態でgraph statusを実processで実行する
     Then statusはmissingを非0で返しruntimeを作らない
+    When extension未installのままgraph rebuildを実processでapplyする
+    Then rebuildもmissingを型付きで返し権限を付与しない
 
   Scenario: SCN-E2E-SEMGRAPH-004 corrupt投影はexact Evidenceにならない
     Given fixture graph投影を実processで構築済みである
@@ -51,3 +53,15 @@ Feature: build済みCLIからsemantic graphを実processで操作する
     Given fixture graph投影を実processで構築済みである
     When 未知nodeと未知edge kindでgraph探索を実process実行する
     Then impact、path、orderはすべて非0でexact Evidenceにならない
+
+  Scenario: SCN-E2E-SEMGRAPH-008 固定catalogと異なるextension manifestをtyped driftにする
+    Given fixture graph投影を実processで構築済みである
+    When 保存manifestのextension identityを改竄してgraph statusを実process実行する
+    Then statusはextension-mismatchだけを安定したreasonで返す
+
+  Scenario: SCN-E2E-SEMGRAPH-009 inferred指定は候補Evidenceに限定し不正形式を読取前拒否する
+    Given fixture graph投影を実processで構築済みである
+    When include-inferred付きimpactを実processで実行する
+    Then completeでもcandidateでありexact Evidenceとmerge authorityを持たない
+    When current pointer破損後に値付きinclude-inferredを実processで実行する
+    Then 値付きflagはGraph読取前に入力違反として拒否される

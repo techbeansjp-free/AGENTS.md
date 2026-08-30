@@ -102,3 +102,44 @@ Feature: 隔離疑似projectでsemantic graphを即時観測する
     Given Graph CLI観測用の隔離疑似projectがある
     When Node 22.12 runtime seamでgraph installを実行する
     Then Node下限の理由を返しGraph runtimeを作らない
+
+  Scenario: SCN-INT-SEMGRAPH-021 schema語彙とprojectorの実投影能力を混同しない
+    Given Full modeの隔離疑似projectがある
+    When mode別semantic graphを構築する
+    Then 固定projector capabilityはsnapshotで実際に生成可能なkindだけを宣言する
+
+  Scenario: SCN-INT-SEMGRAPH-022 要求から実装とfeatureへのtraceをbounded traversalで立証する
+    Given Full modeの隔離疑似projectがある
+    When Full要件からtrace edge限定のbounded traversalを実行する
+    Then Requirement AC Scenario feature implementationへ上限内で到達する
+
+  Scenario: SCN-INT-SEMGRAPH-023 trace endpoint不足を黙って捨てない
+    Given 存在しない実装pathを含むtrace rowがある
+    When endpoint不足のsemantic graphを構築する
+    Then stableなtrace endpoint診断でfail closedになる
+
+  Scenario: SCN-INT-SEMGRAPH-024 Graph Evidenceとignored stagingはmode authorityにならない
+    Given ignored stagingにFull modeを持つQuick疑似projectがある
+    When mode別semantic graphを構築する
+    Then Graph Evidenceのauthorityはnoneでmergeとmodeの許可を持たない
+    And ignored stagingのmodeはsnapshotへ投影されない
+
+  Scenario: SCN-INT-SEMGRAPH-025 Quickは存在しないFull成果物を捏造しない
+    Given Quick modeの隔離疑似projectがある
+    When mode別semantic graphを構築する
+    Then Quick traceは成立しFull専用成果物nodeは存在しない
+
+  Scenario: SCN-INT-SEMGRAPH-026 freshなPoC Graphでもmergeを許可しない
+    Given fresh Graphを持つPoC疑似projectがある
+    When automatic merge条件とGraph Evidenceを既存delivery gateへ合成する
+    Then PoCはGraph freshnessに関係なくstop-at-prになる
+
+  Scenario: SCN-INT-SEMGRAPH-027 PoC昇格は補完正本から完全再構築する
+    Given PoCでFull昇格が必要な実装中発見がある
+    When Full成果物を補完してrepository graphを完全再構築する
+    Then 旧PoC投影はstaleであり新Full投影として再利用されない
+
+  Scenario: SCN-INT-SEMGRAPH-028 trackedでも削除済みのtrace endpointを実在扱いしない
+    Given trackedなFeatureとImplementationをworking treeから削除したtrace rowがある
+    When endpoint不足のsemantic graphを構築する
+    Then 削除済みtrace endpointのstableな診断でfail closedになる

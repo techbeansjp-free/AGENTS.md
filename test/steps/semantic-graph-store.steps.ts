@@ -13,13 +13,18 @@ import {
   type GraphQlLiteAsset,
   type GraphQlLiteInstallResult,
 } from "../../src/adapters/graphqlite.js";
-import { buildRepositorySemanticGraph } from "../../src/adapters/repository-graph.js";
+import {
+  buildRepositorySemanticGraph,
+  observeRepositoryGraphSource,
+} from "../../src/adapters/repository-graph.js";
 import { main } from "../../src/cli.js";
 import {
+  GraphFreshnessError,
   SEMANTIC_GRAPH_BUILDER_VERSION,
   SEMANTIC_GRAPH_SCHEMA_VERSION,
   canonicalSemanticGraph,
   semanticGraphContentHash,
+  type GraphDriftReason,
   type GraphProjectionManifest,
   type GraphStoreReadResult,
   type SemanticGraphSnapshot,
@@ -42,6 +47,7 @@ interface SemanticGraphStoreWorld extends WorkflowWorld {
   cliStatus?: number;
   extensionTarget?: string;
   fixtureRoot?: string;
+  nestedRoot?: string;
   installResult?: GraphQlLiteInstallResult;
   manifest?: GraphProjectionManifest;
   pointerBefore?: string;
@@ -50,6 +56,8 @@ interface SemanticGraphStoreWorld extends WorkflowWorld {
   snapshot?: SemanticGraphSnapshot;
   sourceBefore?: string;
   transportRequests?: TransportRequest[];
+  expectedGeneration?: number;
+  generationBefore?: readonly string[];
 }
 
 const { Given, When, Then } = stepDefinitions<SemanticGraphStoreWorld>();
@@ -189,6 +197,23 @@ function runtimeInventory(root: string): string[] {
   });
 }
 
+function generationInventory(root: string): string[] {
+  return filesBelow(path.join(root, GRAPH_RUNTIME, "generations")).map((file) =>
+    path.basename(file),
+  );
+}
+
+function assertFreshnessError(
+  error: unknown,
+  expectedReason: GraphDriftReason,
+): asserts error is GraphFreshnessError {
+  assert.ok(error instanceof GraphFreshnessError);
+  assert.equal(error.code, "GRAPH_FRESHNESS_ERROR");
+  assert.equal(error.exactEvidenceAllowed, false);
+  assert.equal(error.recovery, "rebuild");
+  assert.ok(error.reasons.includes(expectedReason));
+}
+
 async function installActualAsset(
   world: SemanticGraphStoreWorld,
 ): Promise<GraphQlLiteInstallResult> {
@@ -212,7 +237,9 @@ async function prepareActualProjection(
   const snapshot = buildRepositorySemanticGraph(root);
   const store = new GraphQlLiteStore(root);
   try {
-    world.manifest = await store.replace(snapshot, FIXED_BUILT_AT);
+    world.manifest = await store.replace(snapshot, FIXED_BUILT_AT, async () =>
+      observeRepositoryGraphSource(root),
+    );
     world.readBack = await store.read();
   } finally {
     await store.close();
@@ -605,7 +632,10 @@ Then("stale statusはexact Evidenceを拒否しruntimeを変更しない", funct
   assert.equal(this.cliStatus, 1);
   assert.equal(this.cliOutput?.status, "unavailable-or-stale");
   assert.equal(this.cliOutput?.exactEvidenceAllowed, false);
-  assert.match(JSON.stringify(this.cliOutput?.reasons), /一致|再構築|source/iu);
+  assert.match(
+    JSON.stringify(this.cliOutput?.reasons),
+    /一致|再構築|source|projection-drift/iu,
+  );
   assert.deepEqual(runtimeInventory(fixtureRoot(this)), this.runtimeBefore);
 });
 
@@ -617,7 +647,11 @@ When(
     const snapshot = canonicalSemanticGraph(injectionSnapshot());
     const store = new GraphQlLiteStore(root);
     try {
-      this.manifest = await store.replace(snapshot, FIXED_BUILT_AT);
+      this.manifest = await store.replace(
+        snapshot,
+        FIXED_BUILT_AT,
+        async () => snapshot.source,
+      );
       this.readBack = await store.read();
     } finally {
       await store.close();
@@ -646,4 +680,338 @@ Then("injection文字列はdataのまま保持されGraph構造を変更しな�
   );
   assert.equal(this.manifest?.nodeCount, 2);
   assert.equal(this.manifest?.edgeCount, 1);
+});
+
+Given(
+  "GraphQLite installにrepository内のsubdirectoryを指定した隔離projectがある",
+  function () {
+    const root = createProject(this);
+    this.nestedRoot = path.join(root, "nested");
+    fs.mkdirSync(this.nestedRoot, { mode: 0o700 });
+  },
+);
+
+When(
+  "subdirectory rootからGraphQLite install previewを実行する",
+  async function () {
+    assert.ok(this.nestedRoot);
+    const unusedTransport = (async () => {
+      this.transportRequests ??= [];
+      this.transportRequests.push({
+        url: "unexpected://transport-call",
+        redirect: undefined,
+      });
+      throw new Error("root検証前にtransportが呼ばれました");
+    }) as typeof fetch;
+    this.error = await captureFailure(() =>
+      installGraphQlLiteExtension(this.nestedRoot!, {
+        apply: false,
+        fetchAsset: unusedTransport,
+      }),
+    );
+  },
+);
+
+Then("canonical worktree root違反を副作用前に拒否する", function () {
+  assert.match(String(this.error), /canonical Git worktree top-level/u);
+  assert.equal(this.transportRequests?.length, 0);
+  assert.equal(
+    fs.existsSync(
+      path.join(fixtureRoot(this), ".agent-skill-chain", "runtime"),
+    ),
+    false,
+  );
+});
+
+When(
+  "actual storeのreadback後observerで正本sourceを変更する",
+  async function () {
+    await prepareActualProjection(this);
+    const root = fixtureRoot(this);
+    const pointerFile = path.join(root, GRAPH_RUNTIME, "current.json");
+    this.pointerBefore = fs.readFileSync(pointerFile, "utf8");
+    this.generationBefore = generationInventory(root);
+    const snapshot = buildRepositorySemanticGraph(root);
+    const store = new GraphQlLiteStore(root);
+    try {
+      this.error = await captureFailure(() =>
+        store.replace(snapshot, "2026-08-30T00:00:01.000Z", async () => {
+          fs.appendFileSync(
+            path.join(root, "README.md"),
+            "source drift during publication\n",
+            "utf8",
+          );
+          return observeRepositoryGraphSource(root);
+        }),
+      );
+    } finally {
+      await store.close();
+    }
+  },
+);
+
+Then(
+  "source driftを型付きで拒否しpointer bytesとgeneration集合を維持する",
+  function () {
+    assertFreshnessError(this.error, "source-ahead");
+    const root = fixtureRoot(this);
+    assert.equal(
+      fs.readFileSync(path.join(root, GRAPH_RUNTIME, "current.json"), "utf8"),
+      this.pointerBefore,
+    );
+    assert.deepEqual(generationInventory(root), this.generationBefore);
+    assert.deepEqual(pendingFiles(root), []);
+  },
+);
+
+When(
+  "privateなcurrent pointerをmalformed JSONにして完全再構築する",
+  async function () {
+    await prepareActualProjection(this);
+    const root = fixtureRoot(this);
+    assert.ok(this.manifest);
+    this.expectedGeneration = this.manifest.generation + 1;
+    fs.writeFileSync(
+      path.join(root, GRAPH_RUNTIME, "current.json"),
+      "{malformed-private-pointer\n",
+      { mode: 0o600 },
+    );
+    const snapshot = buildRepositorySemanticGraph(root);
+    const store = new GraphQlLiteStore(root);
+    try {
+      this.manifest = await store.replace(
+        snapshot,
+        "2026-08-30T00:00:01.000Z",
+        async () => observeRepositoryGraphSource(root),
+      );
+      this.readBack = await store.read();
+    } finally {
+      await store.close();
+    }
+  },
+);
+
+Then(
+  "generation directoryの最大値から次世代を公開してreadbackできる",
+  function () {
+    assert.equal(this.manifest?.generation, this.expectedGeneration);
+    assert.equal(this.readBack?.manifest.generation, this.expectedGeneration);
+    assert.ok(this.readBack);
+    assert.equal(
+      semanticGraphContentHash(this.readBack.snapshot),
+      this.manifest?.graphContentHash,
+    );
+    assert.deepEqual(pendingFiles(fixtureRoot(this)), []);
+  },
+);
+
+When("current databaseを破損させて正本から完全再構築する", async function () {
+  await prepareActualProjection(this);
+  const root = fixtureRoot(this);
+  assert.ok(this.manifest);
+  this.expectedGeneration = this.manifest.generation + 1;
+  const current = currentPointer(root);
+  fs.writeFileSync(path.resolve(root, current.databaseFile), "corrupt", {
+    mode: 0o600,
+  });
+  const snapshot = buildRepositorySemanticGraph(root);
+  const store = new GraphQlLiteStore(root);
+  try {
+    this.manifest = await store.replace(
+      snapshot,
+      "2026-08-30T00:00:01.000Z",
+      async () => observeRepositoryGraphSource(root),
+    );
+    this.readBack = await store.read();
+  } finally {
+    await store.close();
+  }
+});
+
+Then("corrupt databaseを参照せず次世代を公開してreadbackできる", function () {
+  assert.equal(this.manifest?.generation, this.expectedGeneration);
+  assert.equal(this.readBack?.manifest.generation, this.expectedGeneration);
+  assert.ok(this.readBack);
+  assert.equal(
+    semanticGraphContentHash(this.readBack.snapshot),
+    this.manifest?.graphContentHash,
+  );
+});
+
+When("current pointerをsymlinkへ置換して完全再構築する", async function () {
+  if (process.platform === "win32") return "skipped";
+  await prepareActualProjection(this);
+  const root = fixtureRoot(this);
+  const pointerFile = path.join(root, GRAPH_RUNTIME, "current.json");
+  const outside = path.join(this.temp("asc-pointer-outside-"), "current.json");
+  fs.writeFileSync(outside, fs.readFileSync(pointerFile), { mode: 0o600 });
+  fs.unlinkSync(pointerFile);
+  fs.symlinkSync(outside, pointerFile);
+  this.generationBefore = generationInventory(root);
+  const snapshot = buildRepositorySemanticGraph(root);
+  const store = new GraphQlLiteStore(root);
+  try {
+    this.error = await captureFailure(() =>
+      store.replace(snapshot, "2026-08-30T00:00:01.000Z", async () =>
+        observeRepositoryGraphSource(root),
+      ),
+    );
+  } finally {
+    await store.close();
+  }
+});
+
+Then(
+  "unsafe current pointerを拒否しgeneration candidateを作らない",
+  function () {
+    assert.match(
+      String(this.error),
+      /symlinkでない通常file|シンボリックリンクによる境界外移動/u,
+    );
+    const root = fixtureRoot(this);
+    assert.equal(
+      fs
+        .lstatSync(path.join(root, GRAPH_RUNTIME, "current.json"))
+        .isSymbolicLink(),
+      true,
+    );
+    assert.deepEqual(generationInventory(root), this.generationBefore);
+    assert.deepEqual(pendingFiles(root), []);
+  },
+);
+
+When("current pointerをgroup writableにして完全再構築する", async function () {
+  if (process.platform === "win32" || process.getuid === undefined)
+    return "skipped";
+  await prepareActualProjection(this);
+  const root = fixtureRoot(this);
+  const pointerFile = path.join(root, GRAPH_RUNTIME, "current.json");
+  fs.chmodSync(pointerFile, 0o660);
+  this.generationBefore = generationInventory(root);
+  const snapshot = buildRepositorySemanticGraph(root);
+  const store = new GraphQlLiteStore(root);
+  try {
+    this.error = await captureFailure(() =>
+      store.replace(snapshot, "2026-08-30T00:00:01.000Z", async () =>
+        observeRepositoryGraphSource(root),
+      ),
+    );
+  } finally {
+    await store.close();
+  }
+});
+
+Then("unsafe permissionを拒否しgeneration candidateを作らない", function () {
+  assert.match(String(this.error), /group\/world writable/u);
+  const root = fixtureRoot(this);
+  assert.notEqual(
+    fs.lstatSync(path.join(root, GRAPH_RUNTIME, "current.json")).mode & 0o020,
+    0,
+  );
+  assert.deepEqual(generationInventory(root), this.generationBefore);
+  assert.deepEqual(pendingFiles(root), []);
+});
+
+When(
+  "actual storeのcandidate readback直後にfaultを注入する",
+  async function () {
+    await prepareActualProjection(this);
+    const root = fixtureRoot(this);
+    this.pointerBefore = fs.readFileSync(
+      path.join(root, GRAPH_RUNTIME, "current.json"),
+      "utf8",
+    );
+    this.generationBefore = generationInventory(root);
+    const snapshot = buildRepositorySemanticGraph(root);
+    const store = new GraphQlLiteStore(root, {
+      faultCheckpoint: (checkpoint) => {
+        this.calls.push(checkpoint);
+        throw new Error("injected crash before current pointer publication");
+      },
+    });
+    try {
+      this.error = await captureFailure(() =>
+        store.replace(snapshot, "2026-08-30T00:00:01.000Z", async () =>
+          observeRepositoryGraphSource(root),
+        ),
+      );
+    } finally {
+      await store.close();
+    }
+  },
+);
+
+Then("fault後もpointer bytesとgeneration集合は旧状態に戻る", function () {
+  assert.match(String(this.error), /injected crash/u);
+  assert.deepEqual(this.calls, ["after-candidate-readback"]);
+  const root = fixtureRoot(this);
+  assert.equal(
+    fs.readFileSync(path.join(root, GRAPH_RUNTIME, "current.json"), "utf8"),
+    this.pointerBefore,
+  );
+  assert.deepEqual(generationInventory(root), this.generationBefore);
+  assert.deepEqual(pendingFiles(root), []);
+});
+
+When(
+  "current pointerのextension versionを未知versionへ改変して読む",
+  async function () {
+    await prepareActualProjection(this);
+    const root = fixtureRoot(this);
+    const pointerFile = path.join(root, GRAPH_RUNTIME, "current.json");
+    const pointer = JSON.parse(fs.readFileSync(pointerFile, "utf8")) as {
+      manifest: { extensionVersion: string };
+    };
+    pointer.manifest.extensionVersion = "99.0.0-untrusted";
+    fs.writeFileSync(pointerFile, `${JSON.stringify(pointer)}\n`, {
+      mode: 0o600,
+    });
+    const store = new GraphQlLiteStore(root);
+    try {
+      this.error = await captureFailure(() => store.read());
+    } finally {
+      await store.close();
+    }
+  },
+);
+
+Then("extension mismatchを型付きdrift reasonとして返す", function () {
+  assertFreshnessError(this.error, "extension-mismatch");
+});
+
+When(
+  "extensionだけinstallしたstoreからcurrent generationを読む",
+  async function () {
+    await installActualAsset(this);
+    const store = new GraphQlLiteStore(fixtureRoot(this));
+    try {
+      this.error = await captureFailure(() => store.read());
+    } finally {
+      await store.close();
+    }
+  },
+);
+
+Then("missingを型付きdrift reasonとして返す", function () {
+  assertFreshnessError(this.error, "missing");
+});
+
+When(
+  "install後にsubdirectory rootからactual storeを構築する",
+  async function () {
+    await installActualAsset(this);
+    const root = fixtureRoot(this);
+    this.runtimeBefore = runtimeInventory(root);
+    this.nestedRoot = path.join(root, "nested");
+    fs.mkdirSync(this.nestedRoot, { mode: 0o700 });
+    this.error = await captureFailure(async () => {
+      const store = new GraphQlLiteStore(this.nestedRoot!);
+      await store.close();
+    });
+  },
+);
+
+Then("storeはcanonical worktree root違反を副作用前に拒否する", function () {
+  assert.match(String(this.error), /canonical Git worktree top-level/u);
+  assert.deepEqual(runtimeInventory(fixtureRoot(this)), this.runtimeBefore);
 });

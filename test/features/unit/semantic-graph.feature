@@ -21,6 +21,16 @@ Feature: 意味グラフを決定論的かつ有界に探索し投影の鮮度�
     When BFSの各hard budgetを個別に最小化して探索する
     Then 各BFSはbudget exceededになり観測値と部分結果が指定上限以内である
 
+  Scenario: SCN-UNIT-SEMGRAPH-032 局所探索は高次数adjacencyを残budget確認前にsortしない
+    Given edge budget 1を超える高次数の無重みGraphと重み付きGraphがある
+    When budget超過listのsortを禁止してBFSとDijkstraを実行する
+    Then 両局所探索はsortせずbudget exceededを上限内で返す
+
+  Scenario: SCN-UNIT-SEMGRAPH-033 input envelopeは上限超過を反復前に拒否し境界値を許可する
+    Given nodeまたはedgeが共通上限と上限プラス1のProxy snapshotがある
+    When 全公開Domain入口とcardinality判定へProxy snapshotを渡す
+    Then 上限超過はiteratorへ触れず拒否され上限ちょうどはcardinality判定を通過する
+
   Scenario: SCN-UNIT-SEMGRAPH-015 max depthで未探索edgeが残る場合は完全探索と報告しない
     Given 3 nodeの線形な意味グラフがある
     When max depth 1でoutgoing BFSを実行する
@@ -40,6 +50,11 @@ Feature: 意味グラフを決定論的かつ有界に探索し投影の鮮度�
     Given SCC budgetごとの反例となる意味グラフがある
     When 各hard budget付きでSCCを計算する
     Then 各SCC探索はbudget exceededとなり部分結果を上限内に保つ
+
+  Scenario: SCN-UNIT-SEMGRAPH-031 全体探索はindex前処理をoperationへ算入し全件sort前に停止する
+    Given operation budget 1に対して孤立した2 nodeがある
+    When 同じoperation budgetでTarjanとKahnを実行する
+    Then 両探索はoperation 1で停止し完全Evidenceを返さない
 
   Scenario: SCN-UNIT-SEMGRAPH-005 Kahnは複数のready nodeを辞書順で決定論的に処理する
     Given 複数のready nodeと合流点を持つDAGがある
@@ -66,6 +81,11 @@ Feature: 意味グラフを決定論的かつ有界に探索し投影の鮮度�
     When 各意味グラフでshortest pathを計算する
     Then 無重みはBFSで重み付きはDijkstraとなり辞書順の同一路を返す
 
+  Scenario: SCN-UNIT-SEMGRAPH-026 explicit weightがすべて1でもDijkstraを選択する
+    Given explicit weight 1だけを持つ意味グラフがある
+    When explicit weight graphでshortest pathを計算する
+    Then explicit weightの存在によりDijkstraで距離2の経路を返す
+
   Scenario: SCN-UNIT-SEMGRAPH-009 shortest pathは全hard budgetを超過しない
     Given 3 nodeの最短経路を持つ意味グラフがある
     When shortest pathの各hard budgetを個別に最小化して探索する
@@ -85,6 +105,16 @@ Feature: 意味グラフを決定論的かつ有界に探索し投影の鮮度�
     Given 重複nodeと未解決endpointと負のweightを持つmalformed snapshotがある
     When malformed snapshotを検証してBFSへ渡す
     Then validatorとBFSは決定論的なinvalid理由を返す
+
+  Scenario: SCN-UNIT-SEMGRAPH-027 query budgetはfilter後に実際に訪問する対象だけへ適用する
+    Given budget外のedge kindと除外対象inferred edgeを多数持つ意味グラフがある
+    When deterministic depends-onだけを最小budgetで探索する
+    Then raw snapshotの対象外要素では拒否せず訪問対象だけを数えて完了する
+
+  Scenario: SCN-UNIT-SEMGRAPH-028 inferred包含結果はcandidate provenanceを失わずauthorityから分離する
+    Given inferred edgeの後にdeterministic edgeが続く意味グラフがある
+    When inferred edgeを明示的に含めて探索する
+    Then inferred到達結果はconfidenceとsourceを持つcandidateとなり単独authorityを持たない
 
   Scenario: SCN-UNIT-SEMGRAPH-023 provenance pathはcanonicalなrepository relative pathだけを許可する
     Given redundant segmentを含むnon-canonical provenance pathがある
@@ -121,6 +151,11 @@ Feature: 意味グラフを決定論的かつ有界に探索し投影の鮮度�
     When graph freshnessを評価する
     Then 全drift理由が安定順で返りrebuildが要求される
 
+  Scenario: SCN-UNIT-SEMGRAPH-029 freshness errorはdrift理由を型付きの安定順で保持する
+    Given 逆順かつ重複したdrift理由がある
+    When typed GraphFreshnessErrorを構築する
+    Then errorはcanonical reasonsとfail closed recoveryを保持する
+
   Scenario Outline: SCN-UNIT-SEMGRAPH-014 missingまたはcorruptな投影をexact Evidenceに使わない
     Given graph storeのread結果が<状態>である
     When graph freshnessを評価する
@@ -130,3 +165,8 @@ Feature: 意味グラフを決定論的かつ有界に探索し投影の鮮度�
       | 状態    | 理由    |
       | missing | missing |
       | corrupt | corrupt |
+
+  Scenario: SCN-UNIT-SEMGRAPH-030 固定seedの小規模Graphを独立oracleとdifferential比較する
+    Given 固定seedから生成した小規模な有向Graph集合がある
+    When production探索と独立oracleを各Graphで実行する
+    Then BFSとSCCとtopological orderとweighted distanceがoracleに一致する

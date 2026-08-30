@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 
 import {
   DEFAULT_GRAPH_BUDGET,
+  GraphFreshnessError,
+  MAX_SEMANTIC_GRAPH_EDGES,
+  MAX_SEMANTIC_GRAPH_NODES,
   SEMANTIC_GRAPH_BUILDER_VERSION,
   SEMANTIC_GRAPH_SCHEMA_VERSION,
   assessGraphFreshness,
   canonicalSemanticGraph,
+  semanticGraphCardinalityErrors,
   semanticGraphContentHash,
   shortestSemanticPath,
   stronglyConnectedComponents,
@@ -19,6 +23,7 @@ import {
   type GraphSourceIdentity,
   type GraphTraversalResult,
   type SemanticGraphEdge,
+  type SemanticEdgeKind,
   type SemanticGraphNode,
   type SemanticGraphSnapshot,
   type ShortestPathResult,
@@ -34,10 +39,15 @@ interface BudgetObservation {
 }
 
 interface SemanticGraphWorld extends WorkflowWorld {
+  cardinalityExactErrors?: string[][];
+  cardinalityProbe?: { touched: boolean };
+  cardinalityThrowMessages?: string[];
+  cardinalityValidation?: string[][];
   canonicalBefore?: string[];
   canonicalHashes?: string[];
   freshnessInput?: Parameters<typeof assessGraphFreshness>[0];
   freshnessResult?: GraphFreshnessResult;
+  freshnessError?: GraphFreshnessError;
   graphBudget?: GraphBudget;
   graphSnapshots?: SemanticGraphSnapshot[];
   malformedErrors?: string[];
@@ -46,8 +56,11 @@ interface SemanticGraphWorld extends WorkflowWorld {
   shortestResults?: ShortestPathResult[];
   sccResults?: ReturnType<typeof stronglyConnectedComponents>[];
   topologicalResult?: TopologicalResult;
+  topologicalResults?: TopologicalResult[];
   traversalObservations?: BudgetObservation[];
   traversalResults?: GraphTraversalResult[];
+  oracleGraphs?: SemanticGraphSnapshot[];
+  oracleMismatches?: string[];
 }
 
 const { Given, When, Then } = stepDefinitions<SemanticGraphWorld>();
@@ -84,7 +97,10 @@ function graphEdge(
   options: {
     readonly certainty?: "deterministic" | "inferred";
     readonly confidence?: number;
+    readonly kind?: SemanticEdgeKind;
     readonly weight?: number;
+    readonly sourceLine?: number;
+    readonly sourcePath?: string;
   } = {},
 ): SemanticGraphEdge {
   const certainty = options.certainty ?? "deterministic";
@@ -92,13 +108,16 @@ function graphEdge(
     id,
     from,
     to,
-    kind: "depends-on",
+    kind: options.kind ?? "depends-on",
     certainty,
     ...(certainty === "inferred"
       ? { confidence: options.confidence ?? 0.8 }
       : {}),
     ...(options.weight === undefined ? {} : { weight: options.weight }),
-    sourcePath: "fixtures/semantic-graph.feature",
+    sourcePath: options.sourcePath ?? "fixtures/semantic-graph.feature",
+    ...(options.sourceLine === undefined
+      ? {}
+      : { sourceLine: options.sourceLine }),
     properties: {},
   };
 }
@@ -115,6 +134,25 @@ function graphSnapshot(
     nodes: nodeIds.map((id) => graphNode(id)),
     edges,
   };
+}
+
+function guardedSparseArray<T>(
+  length: number,
+  probe: { touched: boolean },
+): readonly T[] {
+  const target: T[] = [];
+  target.length = length;
+  return new Proxy(target, {
+    get(value, property, receiver) {
+      if (property !== "length") {
+        probe.touched = true;
+        throw new Error(
+          `cardinality判定前に${String(property)}へアクセスしました`,
+        );
+      }
+      return Reflect.get(value, property, receiver);
+    },
+  });
 }
 
 function reverseSnapshot(
@@ -164,6 +202,165 @@ function observedValue(
     case "maxOperations":
       return result.operations;
   }
+}
+
+function binaryOrder(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function oracleOutgoing(
+  snapshot: SemanticGraphSnapshot,
+): ReadonlyMap<string, readonly SemanticGraphEdge[]> {
+  const outgoing = new Map<string, SemanticGraphEdge[]>(
+    snapshot.nodes.map(({ id }) => [id, []]),
+  );
+  for (const edge of snapshot.edges) outgoing.get(edge.from)?.push(edge);
+  for (const edges of outgoing.values())
+    edges.sort(
+      (left, right) =>
+        binaryOrder(left.to, right.to) || binaryOrder(left.id, right.id),
+    );
+  return outgoing;
+}
+
+/** Production BFSを呼ばない、小規模Graph専用のreference queue実装。 */
+function oracleBfs(
+  snapshot: SemanticGraphSnapshot,
+  start: string,
+): readonly string[] {
+  const outgoing = oracleOutgoing(snapshot);
+  const result = [start];
+  const visited = new Set(result);
+  for (let cursor = 0; cursor < result.length; cursor += 1) {
+    const current = result[cursor]!;
+    for (const edge of outgoing.get(current) ?? []) {
+      if (visited.has(edge.to)) continue;
+      visited.add(edge.to);
+      result.push(edge.to);
+    }
+  }
+  return result;
+}
+
+/** Floyd-Warshallの到達可能性から相互到達集合を作る独立SCC oracle。 */
+function oracleScc(
+  snapshot: SemanticGraphSnapshot,
+): readonly (readonly string[])[] {
+  const nodes = snapshot.nodes.map(({ id }) => id).sort(binaryOrder);
+  const position = new Map(nodes.map((node, index) => [node, index]));
+  const reachable = nodes.map((_, row) =>
+    nodes.map((__, column) => row === column),
+  );
+  for (const edge of snapshot.edges)
+    reachable[position.get(edge.from)!]![position.get(edge.to)!] = true;
+  for (let through = 0; through < nodes.length; through += 1)
+    for (let from = 0; from < nodes.length; from += 1)
+      for (let to = 0; to < nodes.length; to += 1)
+        reachable[from]![to] =
+          reachable[from]![to]! ||
+          (reachable[from]![through]! && reachable[through]![to]!);
+  const assigned = new Set<string>();
+  const components: string[][] = [];
+  for (const node of nodes) {
+    if (assigned.has(node)) continue;
+    const from = position.get(node)!;
+    const component = nodes.filter((candidate) => {
+      const to = position.get(candidate)!;
+      return reachable[from]![to]! && reachable[to]![from]!;
+    });
+    for (const member of component) assigned.add(member);
+    components.push(component);
+  }
+  return components;
+}
+
+function oracleTopological(snapshot: SemanticGraphSnapshot): {
+  readonly order: readonly string[];
+  readonly cycles: readonly (readonly string[])[];
+} {
+  const nodes = snapshot.nodes.map(({ id }) => id).sort(binaryOrder);
+  const outgoing = oracleOutgoing(snapshot);
+  const indegree = new Map(nodes.map((node) => [node, 0]));
+  for (const edge of snapshot.edges)
+    indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
+  const ready = nodes.filter((node) => indegree.get(node) === 0);
+  const order: string[] = [];
+  while (ready.length > 0) {
+    ready.sort(binaryOrder);
+    const node = ready.shift()!;
+    order.push(node);
+    for (const edge of outgoing.get(node) ?? []) {
+      const next = (indegree.get(edge.to) ?? 0) - 1;
+      indegree.set(edge.to, next);
+      if (next === 0) ready.push(edge.to);
+    }
+  }
+  const selfLoops = new Set(
+    snapshot.edges
+      .filter((edge) => edge.from === edge.to)
+      .map((edge) => edge.from),
+  );
+  const cycles = oracleScc(snapshot).filter(
+    (component) =>
+      component.length > 1 || component.some((node) => selfLoops.has(node)),
+  );
+  return { order, cycles };
+}
+
+/** Non-negative weight向けBellman-Ford。production heap/stateを再利用しない。 */
+function oracleShortestDistance(
+  snapshot: SemanticGraphSnapshot,
+  from: string,
+  to: string,
+): number | undefined {
+  const distance = new Map(
+    snapshot.nodes.map(({ id }) => [id, Number.POSITIVE_INFINITY]),
+  );
+  distance.set(from, 0);
+  for (let pass = 1; pass < snapshot.nodes.length; pass += 1) {
+    let changed = false;
+    for (const edge of snapshot.edges) {
+      const candidate = distance.get(edge.from)! + (edge.weight ?? 1);
+      if (candidate >= distance.get(edge.to)!) continue;
+      distance.set(edge.to, candidate);
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  const result = distance.get(to);
+  return result === undefined || !Number.isFinite(result) ? undefined : result;
+}
+
+function fixedSeedSnapshots(
+  seed: number,
+  count: number,
+): SemanticGraphSnapshot[] {
+  let state = seed >>> 0;
+  const next = (): number => {
+    state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+    return state;
+  };
+  return Array.from({ length: count }, (_, graphIndex) => {
+    const nodeCount = 2 + (next() % 5);
+    const nodeIds = Array.from(
+      { length: nodeCount },
+      (__, nodeIndex) => `node:${String(graphIndex)}:${String(nodeIndex)}`,
+    );
+    const edges: SemanticGraphEdge[] = [];
+    for (let from = 0; from < nodeCount; from += 1)
+      for (let to = 0; to < nodeCount; to += 1) {
+        if (next() % 5 !== 0) continue;
+        edges.push(
+          graphEdge(
+            `edge:${String(graphIndex)}:${String(from)}:${String(to)}`,
+            nodeIds[from]!,
+            nodeIds[to]!,
+            { weight: next() % 4 },
+          ),
+        );
+      }
+    return graphSnapshot(nodeIds, edges);
+  });
 }
 
 Given(
@@ -348,6 +545,187 @@ Then(
   },
 );
 
+Given(
+  "edge budget 1を超える高次数の無重みGraphと重み付きGraphがある",
+  function () {
+    const nodeIds = ["node:a", "node:b", "node:c", "node:d"];
+    const unweighted = graphSnapshot(nodeIds, [
+      graphEdge("edge:a-b", "node:a", "node:b"),
+      graphEdge("edge:a-c", "node:a", "node:c"),
+      graphEdge("edge:a-d", "node:a", "node:d"),
+    ]);
+    const weighted = graphSnapshot(
+      nodeIds,
+      unweighted.edges.map((edge) => ({ ...edge, weight: 1 })),
+    );
+    this.graphSnapshots = [unweighted, weighted];
+    this.graphBudget = budget({ maxVisitedEdges: 1 });
+  },
+);
+
+When("budget超過listのsortを禁止してBFSとDijkstraを実行する", function () {
+  const unweighted = this.graphSnapshots?.[0];
+  const weighted = this.graphSnapshots?.[1];
+  assert.ok(unweighted);
+  assert.ok(weighted);
+  assert.ok(this.graphBudget);
+  const originalSort = Array.prototype.sort;
+  Array.prototype.sort = function <T>(
+    this: T[],
+    compareFunction?: (left: T, right: T) => number,
+  ): T[] {
+    if (this.length > 1)
+      throw new Error("budget超過listをsortしようとしました");
+    return originalSort.call(this, compareFunction);
+  };
+  try {
+    this.traversalResults = [
+      traverseSemanticGraph(unweighted, ["node:a"], {
+        direction: "outgoing",
+        budget: this.graphBudget,
+      }),
+    ];
+    this.shortestResults = [
+      shortestSemanticPath(weighted, "node:a", "node:d", {
+        budget: this.graphBudget,
+      }),
+    ];
+  } finally {
+    Array.prototype.sort = originalSort;
+  }
+});
+
+Then("両局所探索はsortせずbudget exceededを上限内で返す", function () {
+  const traversal = this.traversalResults?.[0];
+  const shortest = this.shortestResults?.[0];
+  assert.ok(traversal);
+  assert.ok(shortest);
+  assert.equal(traversal.status, "budget-exceeded");
+  assert.equal(shortest.status, "budget-exceeded");
+  assert.ok(traversal.visitedEdges <= 1);
+  assert.ok(shortest.visitedEdges <= 1);
+  assert.equal(shortest.algorithm, "dijkstra");
+});
+
+Given(
+  "nodeまたはedgeが共通上限と上限プラス1のProxy snapshotがある",
+  function () {
+    const base = graphSnapshot([], []);
+    const probe = { touched: false };
+    this.cardinalityProbe = probe;
+    this.graphSnapshots = [
+      {
+        ...base,
+        nodes: guardedSparseArray<SemanticGraphNode>(
+          MAX_SEMANTIC_GRAPH_NODES + 1,
+          probe,
+        ),
+      },
+      {
+        ...base,
+        edges: guardedSparseArray<SemanticGraphEdge>(
+          MAX_SEMANTIC_GRAPH_EDGES + 1,
+          probe,
+        ),
+      },
+      {
+        ...base,
+        nodes: guardedSparseArray<SemanticGraphNode>(
+          MAX_SEMANTIC_GRAPH_NODES,
+          probe,
+        ),
+      },
+      {
+        ...base,
+        edges: guardedSparseArray<SemanticGraphEdge>(
+          MAX_SEMANTIC_GRAPH_EDGES,
+          probe,
+        ),
+      },
+    ];
+  },
+);
+
+When("全公開Domain入口とcardinality判定へProxy snapshotを渡す", function () {
+  const nodeOver = this.graphSnapshots?.[0];
+  const edgeOver = this.graphSnapshots?.[1];
+  const nodeAtLimit = this.graphSnapshots?.[2];
+  const edgeAtLimit = this.graphSnapshots?.[3];
+  assert.ok(nodeOver);
+  assert.ok(edgeOver);
+  assert.ok(nodeAtLimit);
+  assert.ok(edgeAtLimit);
+  const overLimit = [nodeOver, edgeOver];
+  this.cardinalityValidation = overLimit.map((snapshot) =>
+    validateSemanticGraphSnapshot(snapshot),
+  );
+  this.traversalResults = overLimit.map((snapshot) =>
+    traverseSemanticGraph(snapshot, [], { direction: "outgoing" }),
+  );
+  this.sccResults = overLimit.map((snapshot) =>
+    stronglyConnectedComponents(snapshot),
+  );
+  this.topologicalResults = overLimit.map((snapshot) =>
+    topologicalSemanticOrder(snapshot),
+  );
+  this.shortestResults = overLimit.map((snapshot) =>
+    shortestSemanticPath(snapshot, "node:a", "node:b"),
+  );
+  const thrown: string[] = [];
+  for (const snapshot of overLimit)
+    for (const operation of [
+      () => canonicalSemanticGraph(snapshot),
+      () => semanticGraphContentHash(snapshot),
+    ]) {
+      try {
+        operation();
+        assert.fail("上限超過snapshotが拒否されませんでした");
+      } catch (error) {
+        thrown.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+  this.cardinalityThrowMessages = thrown;
+  this.cardinalityExactErrors = [nodeAtLimit, edgeAtLimit].map((snapshot) =>
+    semanticGraphCardinalityErrors(snapshot),
+  );
+});
+
+Then(
+  "上限超過はiteratorへ触れず拒否され上限ちょうどはcardinality判定を通過する",
+  function () {
+    assert.deepEqual(this.cardinalityValidation, [
+      [
+        `semantic graph node数が上限${String(MAX_SEMANTIC_GRAPH_NODES)}を超えています`,
+      ],
+      [
+        `semantic graph edge数が上限${String(MAX_SEMANTIC_GRAPH_EDGES)}を超えています`,
+      ],
+    ]);
+    for (const result of this.traversalResults ?? []) {
+      assert.equal(result.status, "invalid");
+      assert.equal(result.operations, 0);
+    }
+    for (const result of this.sccResults ?? []) {
+      assert.equal(result.status, "invalid");
+      assert.equal(result.operations, 0);
+    }
+    for (const result of this.topologicalResults ?? []) {
+      assert.equal(result.status, "invalid");
+      assert.equal(result.operations, 0);
+      assert.equal(result.evidenceComplete, false);
+    }
+    for (const result of this.shortestResults ?? []) {
+      assert.equal(result.status, "invalid");
+      assert.equal(result.operations, 0);
+    }
+    assert.equal(this.cardinalityThrowMessages?.length, 4);
+    for (const message of this.cardinalityThrowMessages ?? [])
+      assert.match(message, /semantic graph (?:node|edge)数が上限/u);
+    assert.deepEqual(this.cardinalityExactErrors, [[], []]);
+    assert.equal(this.cardinalityProbe?.touched, false);
+  },
+);
+
 Given("3 nodeの線形な意味グラフがある", function () {
   this.graphSnapshots = [
     graphSnapshot(
@@ -481,6 +859,38 @@ Then("各SCC探索はbudget exceededとなり部分結果を上限内に保つ",
     (this.sccBudgetResults?.[3]?.components.length ??
       Number.POSITIVE_INFINITY) <= 1,
   );
+});
+
+Given("operation budget 1に対して孤立した2 nodeがある", function () {
+  this.graphSnapshots = [graphSnapshot(["node:b", "node:a"], [])];
+  this.graphBudget = budget({ maxOperations: 1 });
+});
+
+When("同じoperation budgetでTarjanとKahnを実行する", function () {
+  const snapshot = this.graphSnapshots?.[0];
+  assert.ok(snapshot);
+  assert.ok(this.graphBudget);
+  this.sccResults = [
+    stronglyConnectedComponents(snapshot, undefined, this.graphBudget),
+  ];
+  this.topologicalResult = topologicalSemanticOrder(
+    snapshot,
+    undefined,
+    this.graphBudget,
+  );
+});
+
+Then("両探索はoperation 1で停止し完全Evidenceを返さない", function () {
+  const scc = this.sccResults?.[0];
+  assert.ok(scc);
+  assert.equal(scc.status, "budget-exceeded");
+  assert.equal(scc.operations, 1);
+  assert.deepEqual(scc.components, []);
+  assert.equal(this.topologicalResult?.status, "budget-exceeded");
+  assert.equal(this.topologicalResult?.operations, 1);
+  assert.equal(this.topologicalResult?.evidenceComplete, false);
+  assert.equal(this.topologicalResult?.gateConformant, null);
+  assert.deepEqual(this.topologicalResult?.order, []);
 });
 
 Given("複数のready nodeと合流点を持つDAGがある", function () {
@@ -647,6 +1057,37 @@ Then("無重みはBFSで重み付きはDijkstraとなり辞書順の同一路を
   assert.equal(this.shortestResults?.[3]?.algorithm, "dijkstra");
   assert.deepEqual(this.shortestResults?.[0], this.shortestResults?.[1]);
   assert.deepEqual(this.shortestResults?.[2], this.shortestResults?.[3]);
+});
+
+Given("explicit weight 1だけを持つ意味グラフがある", function () {
+  this.graphSnapshots = [
+    graphSnapshot(
+      ["node:a", "node:b", "node:c"],
+      [
+        graphEdge("edge:a-b", "node:a", "node:b", { weight: 1 }),
+        graphEdge("edge:b-c", "node:b", "node:c", { weight: 1 }),
+      ],
+    ),
+  ];
+});
+
+When("explicit weight graphでshortest pathを計算する", function () {
+  const snapshot = this.graphSnapshots?.[0];
+  assert.ok(snapshot);
+  this.shortestResults = [shortestSemanticPath(snapshot, "node:a", "node:c")];
+});
+
+Then("explicit weightの存在によりDijkstraで距離2の経路を返す", function () {
+  assert.deepEqual(this.shortestResults?.[0], {
+    status: "complete",
+    algorithm: "dijkstra",
+    path: ["node:a", "node:b", "node:c"],
+    distance: 2,
+    visitedNodes: 3,
+    visitedEdges: 2,
+    operations: 6,
+    reasons: [],
+  });
 });
 
 Given("3 nodeの最短経路を持つ意味グラフがある", function () {
@@ -829,6 +1270,156 @@ Then("validatorとBFSは決定論的なinvalid理由を返す", function () {
   assert.equal(this.traversalResults?.[0]?.status, "invalid");
   assert.deepEqual(this.traversalResults?.[0]?.reasons, this.malformedErrors);
 });
+
+Given(
+  "budget外のedge kindと除外対象inferred edgeを多数持つ意味グラフがある",
+  function () {
+    const extraNodes = Array.from(
+      { length: 8 },
+      (_, index) => `node:raw-${String(index)}`,
+    );
+    this.graphSnapshots = [
+      graphSnapshot(
+        ["node:a", "node:b", ...extraNodes],
+        [
+          graphEdge("edge:a-b", "node:a", "node:b"),
+          ...extraNodes.map((node, index) =>
+            graphEdge(`edge:reference-${String(index)}`, "node:a", node, {
+              kind: "references",
+            }),
+          ),
+          ...extraNodes.map((node, index) =>
+            graphEdge(`edge:inferred-${String(index)}`, "node:a", node, {
+              certainty: "inferred",
+            }),
+          ),
+        ],
+      ),
+    ];
+  },
+);
+
+When("deterministic depends-onだけを最小budgetで探索する", function () {
+  const snapshot = this.graphSnapshots?.[0];
+  assert.ok(snapshot);
+  const filteredBudget: GraphBudget = {
+    maxDepth: 2,
+    maxVisitedNodes: 2,
+    maxVisitedEdges: 1,
+    maxResults: 2,
+    maxOperations: 2,
+  };
+  this.traversalResults = [
+    traverseSemanticGraph(snapshot, ["node:a"], {
+      direction: "outgoing",
+      edgeKinds: ["depends-on"],
+      includeInferred: false,
+      budget: filteredBudget,
+    }),
+  ];
+  this.shortestResults = [
+    shortestSemanticPath(snapshot, "node:a", "node:b", {
+      edgeKinds: ["depends-on"],
+      budget: filteredBudget,
+    }),
+  ];
+});
+
+Then(
+  "raw snapshotの対象外要素では拒否せず訪問対象だけを数えて完了する",
+  function () {
+    const result = this.traversalResults?.[0];
+    assert.ok(result);
+    assert.equal(result.status, "complete");
+    assert.deepEqual(result.nodes, ["node:a", "node:b"]);
+    assert.equal(result.visitedNodes, 2);
+    assert.equal(result.visitedEdges, 1);
+    assert.equal(result.operations, 2);
+    const shortest = this.shortestResults?.[0];
+    assert.ok(shortest);
+    assert.equal(shortest.status, "complete");
+    assert.deepEqual(shortest.path, ["node:a", "node:b"]);
+    assert.equal(shortest.visitedNodes, 2);
+    assert.equal(shortest.visitedEdges, 1);
+    assert.equal(shortest.operations, 2);
+  },
+);
+
+Given(
+  "inferred edgeの後にdeterministic edgeが続く意味グラフがある",
+  function () {
+    const snapshot = graphSnapshot(
+      ["node:a", "node:b", "node:c", "node:d"],
+      [
+        graphEdge("edge:a-b", "node:a", "node:b", {
+          certainty: "inferred",
+          confidence: 0.42,
+          sourcePath: "evidence/inference.json",
+          sourceLine: 17,
+        }),
+        graphEdge("edge:b-c", "node:b", "node:c"),
+        graphEdge("edge:a-d", "node:a", "node:d"),
+      ],
+    );
+    this.graphSnapshots = [snapshot, reverseSnapshot(snapshot)];
+  },
+);
+
+When("inferred edgeを明示的に含めて探索する", function () {
+  assert.ok(this.graphSnapshots);
+  this.traversalResults = this.graphSnapshots.map((snapshot) =>
+    traverseSemanticGraph(snapshot, ["node:a"], {
+      direction: "outgoing",
+      includeInferred: true,
+    }),
+  );
+});
+
+Then(
+  "inferred到達結果はconfidenceとsourceを持つcandidateとなり単独authorityを持たない",
+  function () {
+    const result = this.traversalResults?.[0];
+    assert.ok(result);
+    assert.deepEqual(result, this.traversalResults?.[1]);
+    assert.equal(result.status, "complete");
+    assert.deepEqual(result.nodes, ["node:a", "node:b", "node:d", "node:c"]);
+    const candidateEdge = {
+      id: "edge:a-b",
+      from: "node:a",
+      to: "node:b",
+      kind: "depends-on",
+      confidence: 0.42,
+      sourcePath: "evidence/inference.json",
+      sourceLine: 17,
+    } as const;
+    assert.deepEqual(result.evidence, [
+      {
+        nodeId: "node:a",
+        classification: "exact",
+        gateAuthority: "freshness-required",
+        candidateEdges: [],
+      },
+      {
+        nodeId: "node:b",
+        classification: "candidate",
+        gateAuthority: "never",
+        candidateEdges: [candidateEdge],
+      },
+      {
+        nodeId: "node:d",
+        classification: "exact",
+        gateAuthority: "freshness-required",
+        candidateEdges: [],
+      },
+      {
+        nodeId: "node:c",
+        classification: "candidate",
+        gateAuthority: "never",
+        candidateEdges: [candidateEdge],
+      },
+    ]);
+  },
+);
 
 Given(
   "redundant segmentを含むnon-canonical provenance pathがある",
@@ -1018,6 +1609,39 @@ Then("全drift理由が安定順で返りrebuildが要求される", function ()
   });
 });
 
+Given("逆順かつ重複したdrift理由がある", function () {
+  this.malformedErrors = [
+    "projection-drift",
+    "missing",
+    "wrong-worktree",
+    "missing",
+  ];
+});
+
+When("typed GraphFreshnessErrorを構築する", function () {
+  assert.ok(this.malformedErrors);
+  this.freshnessError = new GraphFreshnessError(
+    this.malformedErrors as GraphDriftReason[],
+  );
+});
+
+Then("errorはcanonical reasonsとfail closed recoveryを保持する", function () {
+  const error = this.freshnessError;
+  assert.ok(error instanceof GraphFreshnessError);
+  assert.equal(error.name, "GraphFreshnessError");
+  assert.equal(error.code, "GRAPH_FRESHNESS_ERROR");
+  assert.equal(error.fresh, false);
+  assert.equal(error.exactEvidenceAllowed, false);
+  assert.equal(error.recovery, "rebuild");
+  assert.deepEqual(error.reasons, [
+    "missing",
+    "wrong-worktree",
+    "projection-drift",
+  ]);
+  assert.match(error.message, /missing, wrong-worktree, projection-drift/u);
+  assert.throws(() => new GraphFreshnessError([]), /drift reasonが必要/u);
+});
+
 Given(
   "graph storeのread結果が{word}である",
   function (state: "missing" | "corrupt") {
@@ -1039,5 +1663,69 @@ Then(
       reasons: [reason],
       recovery: "rebuild",
     });
+  },
+);
+
+Given("固定seedから生成した小規模な有向Graph集合がある", function () {
+  this.oracleGraphs = fixedSeedSnapshots(0x5eed_2026, 48);
+});
+
+When("production探索と独立oracleを各Graphで実行する", function () {
+  assert.ok(this.oracleGraphs);
+  const mismatches: string[] = [];
+  for (const [index, snapshot] of this.oracleGraphs.entries()) {
+    const start = snapshot.nodes[0]!.id;
+    const destination = snapshot.nodes[snapshot.nodes.length - 1]!.id;
+    for (const candidate of [snapshot, reverseSnapshot(snapshot)]) {
+      const bfs = traverseSemanticGraph(candidate, [start], {
+        direction: "outgoing",
+      });
+      const expectedBfs = oracleBfs(snapshot, start);
+      if (
+        bfs.status !== "complete" ||
+        JSON.stringify(bfs.nodes) !== JSON.stringify(expectedBfs)
+      )
+        mismatches.push(`graph ${String(index)} BFS`);
+
+      const scc = stronglyConnectedComponents(candidate);
+      const expectedScc = oracleScc(snapshot);
+      if (
+        scc.status !== "complete" ||
+        JSON.stringify(scc.components) !== JSON.stringify(expectedScc)
+      )
+        mismatches.push(`graph ${String(index)} SCC`);
+
+      const order = topologicalSemanticOrder(candidate);
+      const expectedOrder = oracleTopological(snapshot);
+      if (
+        JSON.stringify(order.order) !== JSON.stringify(expectedOrder.order) ||
+        JSON.stringify(order.stronglyConnectedComponents) !==
+          JSON.stringify(expectedOrder.cycles) ||
+        order.gateConformant !== (expectedOrder.cycles.length === 0)
+      )
+        mismatches.push(`graph ${String(index)} topological`);
+
+      const shortest = shortestSemanticPath(candidate, start, destination);
+      const expectedDistance = oracleShortestDistance(
+        snapshot,
+        start,
+        destination,
+      );
+      if (
+        shortest.status !== "complete" ||
+        shortest.distance !== expectedDistance
+      )
+        mismatches.push(
+          `graph ${String(index)} shortest expected=${String(expectedDistance)} actual=${shortest.status}/${String(shortest.distance)} edges=${JSON.stringify(snapshot.edges.map(({ from, to, weight }) => ({ from, to, weight })))}`,
+        );
+    }
+  }
+  this.oracleMismatches = mismatches;
+});
+
+Then(
+  "BFSとSCCとtopological orderとweighted distanceがoracleに一致する",
+  function () {
+    assert.deepEqual(this.oracleMismatches, []);
   },
 );

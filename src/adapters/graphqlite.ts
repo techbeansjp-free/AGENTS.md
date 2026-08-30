@@ -4,14 +4,20 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import {
+  GraphFreshnessError,
+  MAX_SEMANTIC_GRAPH_EDGES,
+  MAX_SEMANTIC_GRAPH_NODES,
   SEMANTIC_GRAPH_BUILDER_VERSION,
   SEMANTIC_GRAPH_SCHEMA_VERSION,
   assessGraphFreshness,
   canonicalSemanticGraph,
+  semanticGraphCardinalityErrors,
   semanticGraphContentHash,
   validateSemanticGraphSnapshot,
+  type GraphDriftReason,
   type GraphProjectionManifest,
   type GraphScalar,
+  type GraphSourceObserver,
   type GraphStorePort,
   type GraphStoreReadResult,
   type SemanticGraphEdge,
@@ -19,6 +25,7 @@ import {
   type SemanticGraphSnapshot,
 } from "../domain/semantic-graph.js";
 import { writeFileAtomic } from "../lib/atomic.js";
+import { git } from "../lib/process.js";
 import {
   parseJsonStrict,
   resolveContained,
@@ -34,10 +41,11 @@ const GRAPHQLITE_ENTRYPOINT = "sqlite3_graphqlite_init";
 const GRAPH_RUNTIME_DIRECTORY = ".agent-skill-chain/runtime/graph/v1";
 const CURRENT_POINTER = `${GRAPH_RUNTIME_DIRECTORY}/current.json`;
 const REBUILD_LOCK = `${GRAPH_RUNTIME_DIRECTORY}/rebuild.lock`;
-const MAX_GRAPH_NODES = 200_000;
-const MAX_GRAPH_EDGES = 1_000_000;
 const MAX_GRAPH_DATABASE_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_GRAPH_QUERY_RESULT_BYTES = 512 * 1024 * 1024;
+const MAX_CURRENT_POINTER_BYTES = 1024 * 1024;
+const GENERATION_DATABASE_PATTERN =
+  /^generation-([1-9]\d*)-[a-f0-9]{16}-[a-f0-9]{16}\.db$/u;
 
 export interface GraphQlLiteAsset {
   readonly platform: NodeJS.Platform;
@@ -157,6 +165,42 @@ function supportedNodeRuntime(): boolean {
     .split(".")
     .map((part) => Number(part));
   return major > 22 || (major === 22 && minor >= 13);
+}
+
+function canonicalGitWorktreeRoot(root: string): string {
+  const resolvedRoot = fs.realpathSync(root);
+  const topLevel = fs.realpathSync(
+    git(["rev-parse", "--show-toplevel"], resolvedRoot).stdout.trim(),
+  );
+  if (topLevel !== resolvedRoot)
+    throw new Error(
+      "GraphQLite runtimeはcanonical Git worktree top-levelからのみ操作できます",
+    );
+  return resolvedRoot;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return isRecord(error) && typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return errorCode(error) === "ENOENT";
+}
+
+function isCorruptSqliteError(error: unknown): boolean {
+  const code = errorCode(error);
+  if (
+    code === "SQLITE_CORRUPT" ||
+    code === "SQLITE_NOTADB" ||
+    code === "SQLITE_SCHEMA"
+  )
+    return true;
+  const message = error instanceof Error ? error.message : "";
+  return /database disk image is malformed|file is not a database|malformed database schema/iu.test(
+    message,
+  );
 }
 
 export function graphQlLiteAsset(
@@ -300,7 +344,7 @@ export async function installGraphQlLiteExtension(
 ): Promise<GraphQlLiteInstallResult> {
   if (!supportedNodeRuntime())
     throw new Error("GraphQLite adapterにはNode.js 22.13以上が必要です");
-  const resolvedRoot = fs.realpathSync(root);
+  const resolvedRoot = canonicalGitWorktreeRoot(root);
   const asset = graphQlLiteAsset(options.platform, options.arch);
   const relative = extensionRelativePath(asset);
   const target = resolveContained(resolvedRoot, relative, {
@@ -520,7 +564,10 @@ function parseEdgeRow(value: unknown): SemanticGraphEdge {
   };
 }
 
-function parseManifest(value: unknown): GraphProjectionManifest {
+function parseManifest(
+  value: unknown,
+  asset: GraphQlLiteAsset,
+): GraphProjectionManifest {
   const manifestKeys = [
     "manifestVersion",
     "graphSchemaVersion",
@@ -549,7 +596,10 @@ function parseManifest(value: unknown): GraphProjectionManifest {
     !isRecord(value.source) ||
     !exactKeys(value.source, sourceKeys)
   )
-    throw new Error("graph manifestのfield集合が不正です");
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph manifestのfield集合が不正です",
+    );
   const source = value.source;
   if (
     !boundedIdentity(source.repositoryId) ||
@@ -559,7 +609,10 @@ function parseManifest(value: unknown): GraphProjectionManifest {
     !sha256Digest(source.contentDigest) ||
     typeof source.dirty !== "boolean"
   )
-    throw new Error("graph manifestのsource identityが不正です");
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph manifestのsource identityが不正です",
+    );
   if (
     value.manifestVersion !==
       "agent-skill-chain/graph-projection-manifest/v1" ||
@@ -577,29 +630,65 @@ function parseManifest(value: unknown): GraphProjectionManifest {
     (value.status !== "building" && value.status !== "complete") ||
     !canonicalUtcInstant(value.builtAt)
   )
-    throw new Error("graph manifestの値または型が不正です");
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph manifestの値または型が不正です",
+    );
   const manifest = value as unknown as GraphProjectionManifest;
-  const freshness = assessGraphFreshness({
-    expectedSource: manifest.source,
-    expectedExtensionVersion: manifest.extensionVersion,
-    expectedExtensionSha256: manifest.extensionSha256,
-    manifest,
-    observedGraphContentHash: manifest.graphContentHash,
-    observedNodeCount: manifest.nodeCount,
-    observedEdgeCount: manifest.edgeCount,
-  });
-  if (freshness.reasons.includes("corrupt"))
-    throw new Error("graph manifestのdigestまたはsource identityが不正です");
+  const reasons: GraphDriftReason[] = [];
+  if (manifest.status !== "complete") reasons.push("incomplete");
+  if (manifest.graphSchemaVersion !== SEMANTIC_GRAPH_SCHEMA_VERSION)
+    reasons.push("schema-mismatch");
+  if (manifest.graphBuilderVersion !== SEMANTIC_GRAPH_BUILDER_VERSION)
+    reasons.push("builder-mismatch");
+  if (
+    manifest.extensionVersion !== GRAPHQLITE_VERSION ||
+    manifest.extensionSha256 !== asset.sha256
+  )
+    reasons.push("extension-mismatch");
+  if (reasons.length > 0)
+    throw new GraphFreshnessError(
+      reasons,
+      `graph manifestが固定catalogまたは現行schemaと一致しません: ${reasons.join(", ")}`,
+    );
   return manifest;
 }
 
-function readManifest(database: DatabaseSync): GraphProjectionManifest {
-  const row = database
-    .prepare("SELECT json FROM asc_graph_manifest WHERE id=1")
-    .get();
+function readManifest(
+  database: DatabaseSync,
+  asset: GraphQlLiteAsset,
+): GraphProjectionManifest {
+  let row: unknown;
+  try {
+    row = database
+      .prepare("SELECT json FROM asc_graph_manifest WHERE id=1")
+      .get();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /no such table: asc_graph_manifest/iu.test(error.message)
+    )
+      throw new GraphFreshnessError(
+        ["incomplete"],
+        "graph databaseのmanifest tableがありません",
+      );
+    throw error;
+  }
   if (!isRecord(row) || typeof row.json !== "string")
-    throw new Error("graph databaseにmanifestがありません");
-  return parseManifest(parseJsonStrict(row.json, "graph database manifest"));
+    throw new GraphFreshnessError(
+      ["incomplete"],
+      "graph databaseにmanifestがありません",
+    );
+  let value: unknown;
+  try {
+    value = parseJsonStrict(row.json, "graph database manifest");
+  } catch {
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph database manifestが妥当なJSONではありません",
+    );
+  }
+  return parseManifest(value, asset);
 }
 
 function readSnapshot(
@@ -608,19 +697,31 @@ function readSnapshot(
   asset: GraphQlLiteAsset,
 ): SemanticGraphSnapshot {
   if (
-    manifest.nodeCount > MAX_GRAPH_NODES ||
-    manifest.edgeCount > MAX_GRAPH_EDGES
+    manifest.nodeCount > MAX_SEMANTIC_GRAPH_NODES ||
+    manifest.edgeCount > MAX_SEMANTIC_GRAPH_EDGES
   )
-    throw new Error("graph projectionが読取上限を超えています");
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph projectionが読取上限を超えています",
+    );
   const storedNodeCount = countGraphRows(database, COUNT_NODES, "node");
   const storedEdgeCount = countGraphRows(database, COUNT_EDGES, "edge");
-  if (storedNodeCount > MAX_GRAPH_NODES || storedEdgeCount > MAX_GRAPH_EDGES)
-    throw new Error("graph databaseの実件数が読取上限を超えています");
+  if (
+    storedNodeCount > MAX_SEMANTIC_GRAPH_NODES ||
+    storedEdgeCount > MAX_SEMANTIC_GRAPH_EDGES
+  )
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph databaseの実件数が読取上限を超えています",
+    );
   if (
     storedNodeCount !== manifest.nodeCount ||
     storedEdgeCount !== manifest.edgeCount
   )
-    throw new Error("graph databaseの実件数とmanifestが一致しません");
+    throw new GraphFreshnessError(
+      ["projection-drift"],
+      "graph databaseの実件数とmanifestが一致しません",
+    );
   const nodes = cypher(database, READ_NODES).map(parseNodeRow);
   const edges = cypher(database, READ_EDGES).map(parseEdgeRow);
   const snapshot = canonicalSemanticGraph({
@@ -632,7 +733,10 @@ function readSnapshot(
   });
   const errors = validateSemanticGraphSnapshot(snapshot);
   if (errors.length > 0)
-    throw new Error(`GraphQLite projectionが不正です: ${errors.join("; ")}`);
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      `GraphQLite projectionが不正です: ${errors.join("; ")}`,
+    );
   const contentHash = semanticGraphContentHash(snapshot);
   const freshness = assessGraphFreshness({
     expectedSource: manifest.source,
@@ -644,23 +748,67 @@ function readSnapshot(
     observedEdgeCount: edges.length,
   });
   if (!freshness.fresh || !freshness.exactEvidenceAllowed)
-    throw new Error(
+    throw new GraphFreshnessError(
+      freshness.reasons,
       `GraphQLite projection driftを検出しました: ${freshness.reasons.join(", ")}`,
     );
   return snapshot;
 }
 
-function parsePointer(root: string): CurrentPointer {
-  const pointerFile = resolveContained(root, CURRENT_POINTER);
+function readSafeCurrentPointerBytes(root: string): Buffer | undefined {
+  const pointerFile = resolveContained(root, CURRENT_POINTER, {
+    allowMissingLeaf: true,
+  });
   assertPrivateParentChain(root, pointerFile);
-  const stat = fs.lstatSync(pointerFile);
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(pointerFile);
+  } catch (error) {
+    if (isMissingFileError(error)) return undefined;
+    throw error;
+  }
   if (stat.isSymbolicLink() || !stat.isFile())
-    throw new Error("graph current pointerはsymlinkでない通常fileが必要です");
-  assertPrivateRuntimeEntry(pointerFile, stat);
-  const value = parseJsonStrict(
-    fs.readFileSync(pointerFile, "utf8"),
-    pointerFile,
-  );
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph current pointerはsymlinkでない通常fileが必要です",
+    );
+  try {
+    assertPrivateRuntimeEntry(pointerFile, stat);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /現在user所有|group\/world writable/u.test(error.message)
+    )
+      throw new GraphFreshnessError(["corrupt"], error.message);
+    throw error;
+  }
+  if (stat.size > MAX_CURRENT_POINTER_BYTES)
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph current pointerのbyte上限を超えています",
+    );
+  return fs.readFileSync(pointerFile);
+}
+
+function parsePointer(root: string, asset: GraphQlLiteAsset): CurrentPointer {
+  const pointerFile = resolveContained(root, CURRENT_POINTER, {
+    allowMissingLeaf: true,
+  });
+  const contents = readSafeCurrentPointerBytes(root);
+  if (contents === undefined)
+    throw new GraphFreshnessError(
+      ["missing"],
+      "graph current pointerがありません",
+    );
+  let value: unknown;
+  try {
+    value = parseJsonStrict(contents.toString("utf8"), pointerFile);
+  } catch {
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph current pointerが妥当なJSONではありません",
+    );
+  }
   if (
     !isRecord(value) ||
     value.schemaVersion !== "agent-skill-chain/graphqlite-current/v1" ||
@@ -668,17 +816,23 @@ function parsePointer(root: string): CurrentPointer {
     !isRecord(value.manifest) ||
     Object.keys(value).length !== 3
   )
-    throw new Error("graph current pointerが不正です");
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph current pointerが不正です",
+    );
   if (
     !/^\.agent-skill-chain\/runtime\/graph\/v1\/generations\/generation-[1-9]\d*-[a-f0-9]{16}-[a-f0-9]{16}\.db$/u.test(
       value.databaseFile,
     )
   )
-    throw new Error("graph current pointerのdatabase pathが不正です");
+    throw new GraphFreshnessError(
+      ["corrupt"],
+      "graph current pointerのdatabase pathが不正です",
+    );
   return {
     schemaVersion: value.schemaVersion,
     databaseFile: value.databaseFile,
-    manifest: parseManifest(value.manifest),
+    manifest: parseManifest(value.manifest, asset),
   };
 }
 
@@ -793,8 +947,57 @@ function cleanupPendingGenerations(root: string): void {
     const stat = fs.lstatSync(candidate);
     if (stat.isSymbolicLink() || !stat.isFile())
       throw new Error("stale graph pending artifactが通常fileではありません");
+    assertPrivateRuntimeEntry(candidate, stat);
     fs.unlinkSync(candidate);
   }
+}
+
+function nextGenerationNumber(root: string): number {
+  const directory = ensureDirectory(
+    root,
+    `${GRAPH_RUNTIME_DIRECTORY}/generations`,
+  );
+  const directoryStat = fs.lstatSync(directory);
+  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory())
+    throw new Error("graph generationsはsymlinkでないdirectoryが必要です");
+  assertPrivateRuntimeEntry(directory, directoryStat);
+  let maximum = 0;
+  for (const entry of fs.readdirSync(directory).sort()) {
+    const candidate = path.join(directory, entry);
+    const stat = fs.lstatSync(candidate);
+    if (stat.isSymbolicLink() || !stat.isFile())
+      throw new Error("graph generation artifactは通常fileが必要です");
+    assertPrivateRuntimeEntry(candidate, stat);
+    const match = GENERATION_DATABASE_PATTERN.exec(entry);
+    if (match === null)
+      throw new Error(
+        `未知のgraph generation artifactを拒否しました: ${entry}`,
+      );
+    const generation = Number(match[1]);
+    if (!Number.isSafeInteger(generation) || generation < 1)
+      throw new Error("graph projection generationが安全な整数ではありません");
+    maximum = Math.max(maximum, generation);
+  }
+  if (maximum >= Number.MAX_SAFE_INTEGER)
+    throw new Error("graph projection generationが安全な整数範囲を超えました");
+  return maximum + 1;
+}
+
+function assertCurrentPointerUnchanged(
+  root: string,
+  expected: Buffer | undefined,
+): void {
+  const observed = readSafeCurrentPointerBytes(root);
+  if (
+    (expected === undefined) !== (observed === undefined) ||
+    (expected !== undefined &&
+      observed !== undefined &&
+      !expected.equals(observed))
+  )
+    throw new GraphFreshnessError(
+      ["projection-drift"],
+      "graph current pointerが再構築中に変化しました",
+    );
 }
 
 function databaseManifestJson(manifest: GraphProjectionManifest): string {
@@ -863,10 +1066,15 @@ function buildDatabase(
   }
 }
 
+type GraphQlLiteFaultCheckpoint = "after-candidate-readback";
+
 export class GraphQlLiteStore implements GraphStorePort {
   readonly #root: string;
   readonly #asset: GraphQlLiteAsset;
   readonly #extensionFile: string;
+  readonly #faultCheckpoint:
+    | ((checkpoint: GraphQlLiteFaultCheckpoint) => void | Promise<void>)
+    | undefined;
   #closed = false;
 
   constructor(
@@ -874,16 +1082,27 @@ export class GraphQlLiteStore implements GraphStorePort {
     options: {
       readonly platform?: NodeJS.Platform;
       readonly arch?: string;
+      /** @internal Deterministic crash-boundary verification only. */
+      readonly faultCheckpoint?: (
+        checkpoint: GraphQlLiteFaultCheckpoint,
+      ) => void | Promise<void>;
     } = {},
   ) {
     if (!supportedNodeRuntime())
       throw new Error("GraphQLite adapterにはNode.js 22.13以上が必要です");
-    this.#root = fs.realpathSync(root);
+    this.#root = canonicalGitWorktreeRoot(root);
     this.#asset = graphQlLiteAsset(options.platform, options.arch);
+    this.#faultCheckpoint = options.faultCheckpoint;
     this.#extensionFile = resolveContained(
       this.#root,
       extensionRelativePath(this.#asset),
+      { allowMissingLeaf: true },
     );
+    if (!fs.existsSync(this.#extensionFile))
+      throw new GraphFreshnessError(
+        ["missing"],
+        "固定catalogのGraphQLite extensionがinstallされていません",
+      );
     assertPrivateParentChain(this.#root, this.#extensionFile);
     assertPinnedExtension(this.#extensionFile, this.#asset);
   }
@@ -891,34 +1110,27 @@ export class GraphQlLiteStore implements GraphStorePort {
   async replace(
     input: SemanticGraphSnapshot,
     builtAt: string,
+    observeSourceBeforePublish: GraphSourceObserver,
   ): Promise<GraphProjectionManifest> {
     if (this.#closed) throw new Error("GraphQlLiteStoreはclose済みです");
-    const snapshot = canonicalSemanticGraph(input);
-    const errors = validateSemanticGraphSnapshot(snapshot);
+    const cardinalityErrors = semanticGraphCardinalityErrors(input);
+    if (cardinalityErrors.length > 0)
+      throw new Error(
+        `semantic graphがprojection上限を超えています: ${cardinalityErrors.join("; ")}`,
+      );
+    const errors = validateSemanticGraphSnapshot(input);
     if (errors.length > 0)
       throw new Error(
         `semantic graph snapshotが不正です: ${errors.join("; ")}`,
       );
+    const snapshot = canonicalSemanticGraph(input);
     if (!canonicalUtcInstant(builtAt))
       throw new Error("builtAtはcanonical UTC RFC3339が必要です");
-    if (
-      snapshot.nodes.length > MAX_GRAPH_NODES ||
-      snapshot.edges.length > MAX_GRAPH_EDGES
-    )
-      throw new Error("semantic graphがprojection上限を超えています");
     const releaseRebuildLock = acquireRebuildLock(this.#root);
     try {
+      const pointerBefore = readSafeCurrentPointerBytes(this.#root);
       cleanupPendingGenerations(this.#root);
-      const pointerFile = resolveContained(this.#root, CURRENT_POINTER, {
-        allowMissingLeaf: true,
-      });
-      const generation = fs.existsSync(pointerFile)
-        ? parsePointer(this.#root).manifest.generation + 1
-        : 1;
-      if (!Number.isSafeInteger(generation))
-        throw new Error(
-          "graph projection generationが安全な整数範囲を超えました",
-        );
+      const generation = nextGenerationNumber(this.#root);
       const graphContentHash = semanticGraphContentHash(snapshot);
       const manifest: GraphProjectionManifest = {
         manifestVersion: "agent-skill-chain/graph-projection-manifest/v1",
@@ -963,7 +1175,7 @@ export class GraphQlLiteStore implements GraphStorePort {
           true,
         );
         try {
-          const storedManifest = readManifest(verification);
+          const storedManifest = readManifest(verification, this.#asset);
           if (stableJson(storedManifest) !== stableJson(manifest))
             throw new Error(
               "GraphQLite database manifestのread-backが一致しません",
@@ -973,6 +1185,23 @@ export class GraphQlLiteStore implements GraphStorePort {
           verification.close();
         }
         fs.renameSync(temporary, finalDatabase);
+        await this.#faultCheckpoint?.("after-candidate-readback");
+        const observedSource = await observeSourceBeforePublish();
+        const sourceFreshness = assessGraphFreshness({
+          expectedSource: observedSource,
+          expectedExtensionVersion: GRAPHQLITE_VERSION,
+          expectedExtensionSha256: this.#asset.sha256,
+          manifest,
+          observedGraphContentHash: graphContentHash,
+          observedNodeCount: snapshot.nodes.length,
+          observedEdgeCount: snapshot.edges.length,
+        });
+        if (!sourceFreshness.fresh || !sourceFreshness.exactEvidenceAllowed)
+          throw new GraphFreshnessError(
+            sourceFreshness.reasons,
+            `semantic graph構築中のsource driftを検出しました: ${sourceFreshness.reasons.join(", ")}`,
+          );
+        assertCurrentPointerUnchanged(this.#root, pointerBefore);
         const pointer: CurrentPointer = {
           schemaVersion: "agent-skill-chain/graphqlite-current/v1",
           databaseFile: relativeDatabase,
@@ -998,26 +1227,48 @@ export class GraphQlLiteStore implements GraphStorePort {
 
   async read(): Promise<GraphStoreReadResult> {
     if (this.#closed) throw new Error("GraphQlLiteStoreはclose済みです");
-    const pointer = parsePointer(this.#root);
-    const databaseFile = resolveContained(this.#root, pointer.databaseFile);
-    assertBoundedDatabaseFile(databaseFile);
-    const database = openDatabase(
-      this.#root,
-      databaseFile,
-      this.#extensionFile,
-      this.#asset,
-      true,
-    );
+    const pointer = parsePointer(this.#root, this.#asset);
     try {
-      const manifest = readManifest(database);
-      if (stableJson(manifest) !== stableJson(pointer.manifest))
-        throw new Error("graph pointerとdatabase manifestが一致しません");
-      return {
-        manifest,
-        snapshot: readSnapshot(database, manifest, this.#asset),
-      };
-    } finally {
-      database.close();
+      const databaseFile = resolveContained(this.#root, pointer.databaseFile, {
+        allowMissingLeaf: true,
+      });
+      assertBoundedDatabaseFile(databaseFile);
+      const database = openDatabase(
+        this.#root,
+        databaseFile,
+        this.#extensionFile,
+        this.#asset,
+        true,
+      );
+      try {
+        const manifest = readManifest(database, this.#asset);
+        if (stableJson(manifest) !== stableJson(pointer.manifest))
+          throw new GraphFreshnessError(
+            ["projection-drift"],
+            "graph pointerとdatabase manifestが一致しません",
+          );
+        return {
+          manifest,
+          snapshot: readSnapshot(database, manifest, this.#asset),
+        };
+      } finally {
+        database.close();
+      }
+    } catch (error) {
+      if (error instanceof GraphFreshnessError) throw error;
+      if (isMissingFileError(error))
+        throw new GraphFreshnessError(
+          ["missing"],
+          "graph current generationがありません",
+        );
+      if (isCorruptSqliteError(error) || errorCode(error) === undefined)
+        throw new GraphFreshnessError(
+          ["corrupt"],
+          error instanceof Error
+            ? `graph current generationが破損しています: ${error.message}`
+            : "graph current generationが破損しています",
+        );
+      throw error;
     }
   }
 
