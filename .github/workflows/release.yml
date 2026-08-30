@@ -56,10 +56,21 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: PoC隔離実行に必要なbubblewrapを導入する
+      - name: PoC隔離実行に必要なbubblewrapを準備する
         run: |
           sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+          sudo apt-get install --yes --no-install-recommends \
+            apparmor-profiles \
+            bubblewrap
+          test -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          sudo apparmor_parser -r \
+            /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          /usr/bin/bwrap \
+            --unshare-all \
+            --die-with-parent \
+            --new-session \
+            --ro-bind / / \
+            -- /bin/true
       - name: 固定ファイルどおりに依存を導入する
         run: npm ci
       - name: 全Gherkin・型・build・package contentsを必須gateで検証する
@@ -270,10 +281,21 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: PoC隔離実行に必要なbubblewrapを導入する
+      - name: PoC隔離実行に必要なbubblewrapを準備する
         run: |
           sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+          sudo apt-get install --yes --no-install-recommends \
+            apparmor-profiles \
+            bubblewrap
+          test -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          sudo apparmor_parser -r \
+            /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          /usr/bin/bwrap \
+            --unshare-all \
+            --die-with-parent \
+            --new-session \
+            --ro-bind / / \
+            -- /bin/true
       - name: bump branchとPRを作成してadmin mergeする
         id: bump_operation
         continue-on-error: true
@@ -618,10 +640,21 @@ jobs:
           node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
-      - name: PoC隔離実行に必要なbubblewrapを導入する
+      - name: PoC隔離実行に必要なbubblewrapを準備する
         run: |
           sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+          sudo apt-get install --yes --no-install-recommends \
+            apparmor-profiles \
+            bubblewrap
+          test -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          sudo apparmor_parser -r \
+            /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          /usr/bin/bwrap \
+            --unshare-all \
+            --die-with-parent \
+            --new-session \
+            --ro-bind / / \
+            -- /bin/true
       - name: 固定ファイルどおりに公開用依存を導入する
         run: npm ci
       - name: tag内容で全release gateを再検証する
