@@ -879,7 +879,7 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
             .update(fs.readFileSync(journal))
             .digest("hex"),
           journalAfterDigest: "f".repeat(64),
-          stagingDigestBefore: stored.digest,
+          stagingDigestBefore: currentDigest,
           artifacts,
           otherArtifactsDigest: calculateStagingDigest(
             staging,
@@ -889,6 +889,10 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
         { mode: 0o600 },
       );
 
+      // markerのstagingDigestBeforeは現在の実内容と一致し、staging recordだけが
+      // 旧値のまま残る。before-publishの3条件のうち
+      // `stored.digest === stagingDigestBefore`だけが偽になる入力である。
+      assert.notEqual(readStoredStagingRecord(staging).digest, currentDigest);
       assert.throws(
         () => inspectPendingJournalTransaction(staging),
         /workflow journalがtransactionの旧版・新版いずれとも一致しません/u,
