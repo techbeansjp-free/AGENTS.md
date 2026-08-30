@@ -12,6 +12,7 @@ import {
   parseDeliveryState,
   prepareMergeIntent,
   preparePullRequestCreation,
+  pullRequestContentDigest,
   pullRequestTerminalEvidenceId,
   recordStep11,
   renderDeliveryState,
@@ -48,6 +49,10 @@ function createIntent(): DeliveryCreateIntentInput {
     headSha: HEAD_SHA,
     baseRef: "main",
     baseSha: BASE_SHA,
+    pullRequestDigest: pullRequestContentDigest({
+      title: "課題1061を修正する",
+      body: `Closes #${ISSUE}`,
+    }),
     bodyClosingDigest: closingContractDigest({
       canonicalIssue: ISSUE,
       canonicalIssueUrl: issueUrl,

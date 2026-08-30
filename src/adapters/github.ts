@@ -61,6 +61,7 @@ interface RepositoryObservation {
 interface PullRequestObservation {
   number?: number;
   url?: string;
+  title?: string;
   body?: string;
   state?: string;
   mergedAt?: string;
@@ -70,6 +71,8 @@ interface PullRequestObservation {
   baseRefName?: string;
   headRefOid?: string;
   baseRefOid?: string;
+  headRepository?: { nameWithOwner?: string };
+  isCrossRepository?: boolean;
   author?: { id?: string };
   closingIssuesReferences?: Array<{ number?: number; url?: string }>;
 }
@@ -360,7 +363,7 @@ const EXACT_PULL_REQUEST_QUEUE_QUERY = `query ExactPullRequestQueue($owner:Strin
  * PR may exist after the client-side limit. Keep the cursor and pageInfo in this
  * query so `gh api --paginate --slurp` exhausts the provider connection.
  */
-const EXACT_PULL_REQUESTS_QUERY = `query ExactPullRequests($owner:String!,$repo:String!,$head:String!,$base:String!,$endCursor:String){repository(owner:$owner,name:$repo){nameWithOwner pullRequests(first:100,after:$endCursor,headRefName:$head,baseRefName:$base,states:[OPEN,CLOSED,MERGED]){nodes{number url body state mergedAt headRefName baseRefName headRefOid baseRefOid closingIssuesReferences(first:100){nodes{number url}}}pageInfo{hasNextPage endCursor}}}}`;
+const EXACT_PULL_REQUESTS_QUERY = `query ExactPullRequests($owner:String!,$repo:String!,$head:String!,$base:String!,$endCursor:String){repository(owner:$owner,name:$repo){nameWithOwner pullRequests(first:100,after:$endCursor,headRefName:$head,baseRefName:$base,states:[OPEN,CLOSED,MERGED]){nodes{number url title body state mergedAt headRefName baseRefName headRefOid baseRefOid headRepository{nameWithOwner} isCrossRepository closingIssuesReferences(first:100){nodes{number url}}}pageInfo{hasNextPage endCursor}}}}`;
 
 function observePullRequestQueue(
   repository: string,
@@ -769,7 +772,7 @@ export function github(
             "--repo",
             input.repository,
             "--json",
-            "number,url,body,headRefName,baseRefName,headRefOid,baseRefOid,closingIssuesReferences",
+            "number,url,title,body,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,closingIssuesReferences",
           ],
           cwd,
         ).stdout,
@@ -787,11 +790,15 @@ export function github(
     if (
       observed.number !== Number(urlMatch[1]) ||
       observed.url !== url ||
+      observed.title !== input.title ||
       observedBody !== expectedBody ||
       observed.headRefName !== input.head ||
       observed.baseRefName !== input.base ||
       observed.headRefOid !== input.headSha ||
-      observed.baseRefOid !== remoteBase
+      observed.baseRefOid !== remoteBase ||
+      observed.headRepository?.nameWithOwner?.toLowerCase() !==
+        input.repository.toLowerCase() ||
+      observed.isCrossRepository !== false
     ) {
       return {
         state: "rollback_required",
@@ -814,7 +821,7 @@ export function github(
         "--repo",
         input.repository,
         "--json",
-        "number,url,body,state,mergedAt,mergeCommit,autoMergeRequest,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,mergeStateStatus,reviewDecision,statusCheckRollup,closingIssuesReferences",
+        "number,url,title,body,state,mergedAt,mergeCommit,autoMergeRequest,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,mergeStateStatus,reviewDecision,statusCheckRollup,closingIssuesReferences",
       ],
       cwd,
     );
@@ -858,7 +865,7 @@ export function github(
         cwd,
       ).stdout,
     );
-    if (!Array.isArray(parsed))
+    if (!Array.isArray(parsed) || parsed.length === 0)
       throw new Error("PR検索結果がpage配列ではありません");
     const observations: PullRequestInspection[] = [];
     for (const [pageIndex, rawPage] of parsed.entries()) {
@@ -874,14 +881,62 @@ export function github(
         throw new Error(
           `PR検索結果page ${pageIndex + 1}のrepositoryが不正です`,
         );
+      const pageInfo = repository.pullRequests.pageInfo;
+      const finalPage = pageIndex === parsed.length - 1;
+      if (
+        !isRecord(pageInfo) ||
+        typeof pageInfo.hasNextPage !== "boolean" ||
+        (pageInfo.endCursor !== null &&
+          (typeof pageInfo.endCursor !== "string" ||
+            pageInfo.endCursor === "")) ||
+        pageInfo.hasNextPage === finalPage ||
+        (pageInfo.hasNextPage && typeof pageInfo.endCursor !== "string")
+      )
+        throw new Error(
+          `PR検索結果page ${pageIndex + 1}のpaginationが完結していません`,
+        );
       for (const rawNode of repository.pullRequests.nodes) {
         if (!isRecord(rawNode))
           throw new Error("PR検索結果nodeがobjectではありません");
+        if (
+          !Number.isSafeInteger(rawNode.number) ||
+          Number(rawNode.number) < 1 ||
+          typeof rawNode.url !== "string" ||
+          typeof rawNode.title !== "string" ||
+          typeof rawNode.body !== "string" ||
+          (rawNode.state !== "OPEN" &&
+            rawNode.state !== "CLOSED" &&
+            rawNode.state !== "MERGED") ||
+          (rawNode.mergedAt !== null && typeof rawNode.mergedAt !== "string") ||
+          typeof rawNode.headRefName !== "string" ||
+          rawNode.headRefName === "" ||
+          typeof rawNode.baseRefName !== "string" ||
+          rawNode.baseRefName === "" ||
+          !isRecord(rawNode.headRepository) ||
+          typeof rawNode.headRepository.nameWithOwner !== "string" ||
+          rawNode.headRepository.nameWithOwner === "" ||
+          typeof rawNode.isCrossRepository !== "boolean"
+        )
+          throw new Error("PR検索結果nodeの必須fieldが不正です");
+        requireFullOid(rawNode.headRefOid, "PR検索結果nodeのhead OID");
+        requireFullOid(rawNode.baseRefOid, "PR検索結果nodeのbase OID");
+        if (typeof rawNode.mergedAt === "string")
+          canonicalProviderInstant(
+            rawNode.mergedAt,
+            "PR検索結果nodeのmergedAt",
+          );
         const closingConnection = rawNode.closingIssuesReferences;
         if (
           !isRecord(closingConnection) ||
           !Array.isArray(closingConnection.nodes) ||
-          closingConnection.nodes.some((item) => !isRecord(item))
+          closingConnection.nodes.some(
+            (item) =>
+              !isRecord(item) ||
+              !Number.isSafeInteger(item.number) ||
+              Number(item.number) < 1 ||
+              typeof item.url !== "string" ||
+              item.url === "",
+          )
         )
           throw new Error("PR検索結果のclosing Issue接続が不正です");
         observations.push({

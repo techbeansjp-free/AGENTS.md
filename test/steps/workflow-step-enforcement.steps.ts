@@ -60,8 +60,10 @@ import {
   canonicalDigest,
   closingContractDigest,
   parseDeliveryState,
+  pullRequestContentDigest,
   renderDeliveryState,
 } from "../../src/domain/delivery-state.js";
+import { splitPullRequestDocument } from "../../src/domain/delivery.js";
 import {
   claimStoredMergeDispatch,
   claimStoredPullRequestCreationDispatch,
@@ -1254,6 +1256,10 @@ When("{string}の統合検査を実行する", async function (scenarioId: strin
         headSha: "a".repeat(40),
         baseRef: "main",
         baseSha: "b".repeat(40),
+        pullRequestDigest: pullRequestContentDigest({
+          title: "workflow promotion",
+          body: "Closes #877",
+        }),
         bodyClosingDigest: closingContractDigest({
           canonicalIssue: 877,
           canonicalIssueUrl: issueUrl,
@@ -1351,18 +1357,39 @@ interface DeliveryProviderControl {
   autoMergeMethod: "MERGE" | "SQUASH" | "REBASE";
   providerDefaultBranch: "main" | "develop";
   requestedAt: string;
-  existingPr: "none" | "open" | "closed" | "paged-closed" | "open-and-closed";
+  existingPr:
+    | "none"
+    | "open"
+    | "closed"
+    | "paged-closed"
+    | "open-and-closed"
+    | "empty-pages"
+    | "unterminated-page"
+    | "malformed-node";
   prAuthorId: string | null;
   implementationAuthorId: string | null;
   reviewDisposition: "approved" | "changes-requested";
   mergeTreeTampered: boolean;
   mergeOnDefaultBranch: boolean;
+  mergeImmediately: boolean;
+  retainAutoMergeRequestWhenMerged: boolean;
+  headRepository: string;
+  isCrossRepository: boolean;
+  contentChanged: boolean;
+  titleChanged: boolean;
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
   controlFile: string;
   logFile: string;
   env: NodeJS.ProcessEnv;
+}
+
+function preparedPullRequestDigest(prepared: PreparedPullRequest): string {
+  const content = splitPullRequestDocument(
+    fs.readFileSync(prepared.bodyFile, "utf8"),
+  );
+  return pullRequestContentDigest(content);
 }
 
 function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
@@ -1396,6 +1423,7 @@ function preparePullRequest(
   world: WorkflowStepWorld,
   missingStep4: boolean,
   mergeMode: "disabled" | "automatic" = "disabled",
+  mergeMethod: "merge" | "squash" | "rebase" = "merge",
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -1422,7 +1450,7 @@ function preparePullRequest(
     policy.merge = {
       mode: "automatic",
       branches: ["feature/x"],
-      methods: ["merge"],
+      methods: [mergeMethod],
       requiredChecks: [],
       requiredReviews: 0,
     };
@@ -1609,8 +1637,9 @@ function prepareDeliveryCli(
   world: WorkflowStepWorld,
   initial: Partial<DeliveryProviderControl> = {},
   mergeMode: "disabled" | "automatic" = "automatic",
+  mergeMethod: "merge" | "squash" | "rebase" = "merge",
 ): PreparedDeliveryCli {
-  const prepared = preparePullRequest(world, false, mergeMode);
+  const prepared = preparePullRequest(world, false, mergeMode, mergeMethod);
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
   const controlFile = path.join(stubDirectory, "control.json");
@@ -1631,8 +1660,17 @@ function prepareDeliveryCli(
     reviewDisposition: "approved",
     mergeTreeTampered: false,
     mergeOnDefaultBranch: true,
+    mergeImmediately: false,
+    retainAutoMergeRequestWhenMerged: false,
+    headRepository: "o/r",
+    isCrossRepository: false,
+    contentChanged: false,
+    titleChanged: false,
     ...initial,
   };
+  const canonicalDocument = splitPullRequestDocument(
+    fs.readFileSync(prepared.bodyFile, "utf8"),
+  );
   const mergeTree = spawnSync(
     "git",
     ["merge-tree", "--write-tree", prepared.baseSha, prepared.headSha],
@@ -1656,7 +1694,8 @@ const issueUrl = "https://github.com/o/r/issues/877";
 const controlFile = ${JSON.stringify(controlFile)};
 const logFile = ${JSON.stringify(logFile)};
 const observedBody = ${JSON.stringify(observedBody)};
-const canonicalBody = ${JSON.stringify(fs.readFileSync(prepared.bodyFile, "utf8").trimEnd())};
+const canonicalTitle = ${JSON.stringify(canonicalDocument.title)};
+const canonicalBody = ${JSON.stringify(canonicalDocument.body)};
 fs.appendFileSync(logFile, JSON.stringify(args) + "\\n");
 const control = JSON.parse(fs.readFileSync(controlFile, "utf8"));
 const baseSha = control.remoteBaseSha;
@@ -1667,11 +1706,13 @@ const body = () => {
   const canonical = fs.existsSync(observedBody)
     ? fs.readFileSync(observedBody, "utf8").trimEnd()
     : canonicalBody;
-  return control.closingChanged ? canonical + "\\n\\nCloses #878" : canonical;
+  if (control.closingChanged) return canonical + "\\n\\nCloses #878";
+  return control.contentChanged ? canonical + "\\n\\nprovider content changed" : canonical;
 };
 const observation = () => ({
   number: 1,
   url: prUrl,
+  title: control.titleChanged ? canonicalTitle + " changed" : canonicalTitle,
   body: body(),
   state:
     control.phase === "merged"
@@ -1682,7 +1723,8 @@ const observation = () => ({
   mergedAt: control.phase === "merged" ? control.mergedAt : null,
   mergeCommit: control.phase === "merged" ? { oid: mergeSha } : null,
   autoMergeRequest:
-    control.phase === "merge-requested"
+    control.phase === "merge-requested" ||
+    (control.phase === "merged" && control.retainAutoMergeRequestWhenMerged)
       ? {
           enabledAt: control.requestedAt,
           mergeMethod: control.autoMergeMethod,
@@ -1694,6 +1736,8 @@ const observation = () => ({
   baseRefName: "main",
   headRefOid: sha,
   baseRefOid: baseSha,
+  headRepository: { nameWithOwner: control.headRepository },
+  isCrossRepository: control.isCrossRepository,
   mergeStateStatus: "CLEAN",
   reviewDecision: "APPROVED",
   statusCheckRollup: [],
@@ -1759,7 +1803,9 @@ if (exact(["auth", "status"])) {
       closingIssuesReferences: { nodes: value.closingIssuesReferences },
     });
     let pages;
-    if (control.existingPr === "none") pages = [[]];
+    if (control.existingPr === "empty-pages") pages = [];
+    else if (control.existingPr === "none" || control.existingPr === "unterminated-page") pages = [[]];
+    else if (control.existingPr === "malformed-node") pages = [[{ number: 1 }]];
     else if (control.existingPr === "paged-closed") {
       const unrelated = Array.from({ length: 100 }, (_, index) =>
         graphNode({
@@ -1801,13 +1847,22 @@ if (exact(["auth", "status"])) {
     } else pages = [[graphNode(observation())]];
     process.stdout.write(
       JSON.stringify(
-        pages.map((nodes) => ({
+        pages.map((nodes, pageIndex) => ({
           data: {
             repository: {
               nameWithOwner: "o/r",
               pullRequests: {
                 nodes,
-                pageInfo: { hasNextPage: false, endCursor: null },
+                pageInfo: {
+                  hasNextPage:
+                    control.existingPr === "unterminated-page" ||
+                    pageIndex < pages.length - 1,
+                  endCursor:
+                    control.existingPr === "unterminated-page" ||
+                    pageIndex < pages.length - 1
+                      ? "cursor-" + (pageIndex + 1)
+                      : null,
+                },
               },
             },
           },
@@ -1897,6 +1952,9 @@ if (exact(["auth", "status"])) {
     }),
   );
 } else if (exact(["api", "repos/o/r/commits/" + mergeSha])) {
+  const parents = control.autoMergeMethod === "MERGE"
+    ? [{ sha: baseSha }, { sha }]
+    : [{ sha: baseSha }];
   process.stdout.write(
     JSON.stringify({
       sha: mergeSha,
@@ -1905,7 +1963,7 @@ if (exact(["auth", "status"])) {
           sha: control.mergeTreeTampered ? "c".repeat(40) : mergeTreeSha,
         },
       },
-      parents: [{ sha: baseSha }, { sha }],
+      parents,
     }),
   );
 } else if (
@@ -1924,9 +1982,18 @@ if (exact(["auth", "status"])) {
     }),
   );
 } else if (args[0] === "pr" && args[1] === "merge" && args[2] === "1") {
+  const requestedAt = new Date().toISOString();
   fs.writeFileSync(
     controlFile,
-    JSON.stringify({ ...control, phase: "merge-requested", failMerge: false, requestedAt: new Date().toISOString() }) +
+    JSON.stringify({
+      ...control,
+      phase: control.mergeImmediately ? "merged" : "merge-requested",
+      failMerge: false,
+      requestedAt,
+      mergedAt: control.mergeImmediately
+        ? new Date(Date.parse(requestedAt) + 1000).toISOString()
+        : control.mergedAt,
+    }) +
       "\\n",
   );
   if (control.failMerge) {
@@ -1963,7 +2030,12 @@ function createDeliveryPullRequest(prepared: PreparedDeliveryCli) {
 
 function deliveryMergeArgs(
   prepared: PreparedDeliveryCli,
-  overrides: { pr?: number; root?: string; staging?: string } = {},
+  overrides: {
+    pr?: number;
+    root?: string;
+    staging?: string;
+    method?: "merge" | "squash" | "rebase";
+  } = {},
 ): string[] {
   const root = overrides.root ?? prepared.root;
   const staging = overrides.staging ?? prepared.staging;
@@ -1975,7 +2047,7 @@ function deliveryMergeArgs(
     "merge",
     "--repo=o/r",
     `--pr=${overrides.pr ?? 1}`,
-    "--method=merge",
+    `--method=${overrides.method ?? "merge"}`,
     `--root=${root}`,
     `--staging=${stagingArgument}`,
     "--apply",
@@ -1984,7 +2056,12 @@ function deliveryMergeArgs(
 
 function executeDeliveryMerge(
   prepared: PreparedDeliveryCli,
-  overrides: { pr?: number; root?: string; staging?: string } = {},
+  overrides: {
+    pr?: number;
+    root?: string;
+    staging?: string;
+    method?: "merge" | "squash" | "rebase";
+  } = {},
 ) {
   return executeCli(
     deliveryMergeArgs(prepared, overrides),
@@ -2153,18 +2230,21 @@ if (exact(["auth", "status"])) {
     "--repo",
     "o/r",
     "--json",
-    "number,url,body,headRefName,baseRefName,headRefOid,baseRefOid,closingIssuesReferences",
+    "number,url,title,body,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,closingIssuesReferences",
   ])
 ) {
   process.stdout.write(
     JSON.stringify({
       number: 1,
       url: prUrl,
+      title: "bugfix: 877を是正する",
       body: require("node:fs").readFileSync(observedBody, "utf8").trimEnd(),
       headRefName: "feature/x",
       baseRefName: "main",
       headRefOid: sha,
       baseRefOid: baseSha,
+      headRepository: { nameWithOwner: "o/r" },
+      isCrossRepository: false,
       closingIssuesReferences: [
         { number: 877, url: "https://github.com/o/r/issues/877" },
       ],
@@ -2425,7 +2505,7 @@ if (exact(["auth", "status"])) {
       assert.notEqual(changedClosing.status, 0);
       assert.match(
         changedClosing.stdout + changedClosing.stderr,
-        /canonical Issue|closing|close/u,
+        /canonical Issue|closing|close|固定content/u,
       );
       const afterClosingRejection = deliveryProviderCalls(prepared);
       assert.equal(afterClosingRejection.some(isMergeReadBack), true);
@@ -2464,6 +2544,7 @@ if (exact(["auth", "status"])) {
         headSha: prepared.headSha,
         baseRef: "main",
         baseSha: prepared.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(prepared),
         bodyClosingDigest: closingContractDigest({
           canonicalIssue: 877,
           canonicalIssueUrl: issueUrl,
@@ -2849,6 +2930,7 @@ if (exact(["auth", "status"])) {
         headSha: prepared.headSha,
         baseRef: "main",
         baseSha: prepared.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(prepared),
         bodyClosingDigest: closingContractDigest({
           canonicalIssue: 877,
           canonicalIssueUrl: issueUrl,
@@ -2936,6 +3018,7 @@ if (exact(["auth", "status"])) {
         headSha: prepared.headSha,
         baseRef: "main",
         baseSha: prepared.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(prepared),
         bodyClosingDigest: closingContractDigest({
           canonicalIssue: 877,
           canonicalIssueUrl: issueUrl,
@@ -2970,6 +3053,7 @@ if (exact(["auth", "status"])) {
         headSha: prepared.headSha,
         baseRef: "main",
         baseSha: prepared.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(prepared),
         bodyClosingDigest: closingContractDigest({
           canonicalIssue: 877,
           canonicalIssueUrl: issueUrl,
@@ -3109,6 +3193,7 @@ if (exact(["auth", "status"])) {
         headSha: prepared.headSha,
         baseRef: "main",
         baseSha: prepared.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(prepared),
         bodyClosingDigest: closingContractDigest({
           canonicalIssue: 877,
           canonicalIssueUrl: issueUrl,
@@ -3143,6 +3228,7 @@ if (exact(["auth", "status"])) {
         headSha: prepared.headSha,
         baseRef: "main",
         baseSha: prepared.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(prepared),
         bodyClosingDigest: closingContractDigest({
           canonicalIssue: 877,
           canonicalIssueUrl: issueUrl,
@@ -3234,6 +3320,143 @@ if (exact(["auth", "status"])) {
           ),
         );
         assert.notEqual(state.state, "step11-recorded");
+      }
+      break;
+    }
+    case "SCN-E2E-WFSTEP-034": {
+      for (const invalid of [
+        "empty-pages",
+        "unterminated-page",
+        "malformed-node",
+      ] as const) {
+        const prepared = prepareDeliveryCli(this);
+        const issueUrl = "https://github.com/o/r/issues/877";
+        prepareStoredPullRequestCreation(prepared.staging, {
+          repository: "o/r",
+          issue: 877,
+          issueUrl,
+          headRef: "feature/x",
+          headSha: prepared.headSha,
+          baseRef: "main",
+          baseSha: prepared.baseSha,
+          pullRequestDigest: preparedPullRequestDigest(prepared),
+          bodyClosingDigest: closingContractDigest({
+            canonicalIssue: 877,
+            canonicalIssueUrl: issueUrl,
+            closingIssueNumbers: [877],
+          }),
+          preparedAt: fixtureInstant({ secondsAgo: 1 }),
+        });
+        writeDeliveryProviderControl(prepared, { existingPr: invalid });
+        const rejected = executeCli(
+          [...prepared.args, "--apply", "--authorize=approved"],
+          prepared.root,
+          prepared.env,
+        );
+        assert.notEqual(rejected.status, 0);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /照合に失敗|page|pagination|node|reconciliation/u,
+        );
+        const calls = deliveryProviderCalls(prepared);
+        assert.equal(calls.filter(isPullRequestFindCall).length, 1);
+        assert.equal(calls.filter(isCreateCall).length, 0);
+      }
+      break;
+    }
+    case "SCN-E2E-WFSTEP-035": {
+      const prepared = prepareDeliveryCli(
+        this,
+        {
+          autoMergeMethod: "SQUASH",
+          mergeImmediately: true,
+          retainAutoMergeRequestWhenMerged: true,
+        },
+        "automatic",
+        "squash",
+      );
+      createDeliveryPullRequest(prepared);
+      const completed = executeDeliveryMerge(prepared, { method: "squash" });
+      assert.equal(completed.status, 0, completed.stdout + completed.stderr);
+      assert.equal(
+        (JSON.parse(completed.stdout) as { state?: string }).state,
+        "merged",
+      );
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.equal(state.state, "step11-recorded");
+      assert.equal(state.merge?.method, "squash");
+      assert.equal(
+        state.merge?.observation?.providerRequest?.kind,
+        "auto-merge",
+      );
+      assert.equal(state.merge?.observation?.providerRequest?.method, "squash");
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        1,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-036": {
+      for (const invalid of ["fork", "body", "title"] as const) {
+        const prepared = prepareDeliveryCli(this);
+        const issueUrl = "https://github.com/o/r/issues/877";
+        prepareStoredPullRequestCreation(prepared.staging, {
+          repository: "o/r",
+          issue: 877,
+          issueUrl,
+          headRef: "feature/x",
+          headSha: prepared.headSha,
+          baseRef: "main",
+          baseSha: prepared.baseSha,
+          pullRequestDigest: preparedPullRequestDigest(prepared),
+          bodyClosingDigest: closingContractDigest({
+            canonicalIssue: 877,
+            canonicalIssueUrl: issueUrl,
+            closingIssueNumbers: [877],
+          }),
+          preparedAt: fixtureInstant({ secondsAgo: 1 }),
+        });
+        claimStoredPullRequestCreationDispatch(
+          prepared.staging,
+          fixtureInstant(),
+        );
+        writeDeliveryProviderControl(prepared, {
+          existingPr: "open",
+          ...(invalid === "fork"
+            ? {
+                headRepository: "attacker/fork",
+                isCrossRepository: true,
+              }
+            : invalid === "body"
+              ? { contentChanged: true }
+              : { titleChanged: true }),
+        });
+        const rejected = executeCli(
+          [...prepared.args, "--apply", "--authorize=approved"],
+          prepared.root,
+          prepared.env,
+        );
+        assert.notEqual(rejected.status, 0);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /head repository|タイトル|本文|content|reconciliation|dispatch claim/u,
+        );
+        const state = parseDeliveryState(
+          fs.readFileSync(
+            path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+            "utf8",
+          ),
+        );
+        assert.notEqual(state.state, "pr-bound");
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isCreateCall).length,
+          0,
+        );
       }
       break;
     }

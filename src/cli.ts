@@ -197,6 +197,7 @@ import {
   assertImmutablePullRequestBinding,
   canonicalDigest,
   closingContractDigest,
+  pullRequestContentDigest,
   pullRequestTerminalEvidenceId,
   type DeliveryState,
   type MergeProviderRequest,
@@ -376,6 +377,26 @@ function assertObservedClosingContract(input: {
   observed: PullRequestInspection;
   tracker: string | null;
 }): { issue: number; issueUrl: string; bodyClosingDigest: string } {
+  if (
+    input.observed.headRepository?.nameWithOwner?.toLowerCase() !==
+      input.state.create.repository.toLowerCase() ||
+    input.observed.isCrossRepository !== false
+  )
+    throw new Error(
+      "PRのhead repositoryが準備済みsame-repository identityと一致しません",
+    );
+  if (
+    typeof input.observed.title !== "string" ||
+    typeof input.observed.body !== "string"
+  )
+    throw new Error("PRタイトル・本文をtrusted providerから再観測できません");
+  if (
+    pullRequestContentDigest({
+      title: input.observed.title,
+      body: input.observed.body,
+    }) !== input.state.create.pullRequestDigest
+  )
+    throw new Error("PRタイトル・本文がPR作成時の固定contentから変化しました");
   const binding = assertPullRequestTrackerBinding({
     repository: input.state.create.repository,
     tracker: input.tracker,
@@ -388,8 +409,6 @@ function assertObservedClosingContract(input: {
     throw new Error(
       "PRのclosing Issueが準備済みdelivery identityと一致しません",
     );
-  if (typeof input.observed.body !== "string")
-    throw new Error("PR本文をtrusted providerから再観測できません");
   const closes = [
     ...withoutMarkdownCode(input.observed.body).matchAll(
       /\b(?:closes?|closed|fixes|resolves)\s+#(\d+)\b/giu,
@@ -501,6 +520,26 @@ function mergeObservationFromProvider(input: {
       throw new Error(`${label}を再現可能に観測できません`);
     return new Date(parsed).toISOString();
   };
+  const currentAutoMergeRequest = (): MergeProviderRequest | null => {
+    if (!autoMergeRequest) return null;
+    if (!input.state.merge)
+      throw new Error("auto-merge要求の観測には固定済みmerge intentが必要です");
+    const expectedMethod = input.state.merge.method.toUpperCase();
+    if (autoMergeRequest.mergeMethod !== expectedMethod)
+      throw new Error(
+        "providerのauto-merge methodが固定済みmerge intentと一致しません",
+      );
+    return {
+      kind: "auto-merge",
+      requestedAt: canonicalProviderTime(
+        autoMergeRequest.enabledAt,
+        "auto-merge enabledAt",
+      ),
+      method: input.state.merge.method,
+      headSha: input.state.create.headSha,
+      baseSha: input.state.merge.authorizedBaseSha,
+    };
+  };
   if (merged) {
     const mergedAt = input.observed.mergedAt;
     providerMergedAt = canonicalProviderTime(mergedAt, "merged PRのmergedAt");
@@ -508,26 +547,15 @@ function mergeObservationFromProvider(input: {
     if (typeof oid !== "string" || !/^[a-f0-9]{40}$/u.test(oid))
       throw new Error("merged PRのmerge commit OIDを観測できません");
     mergeCommitSha = oid;
-    providerRequest = input.state.merge?.observation?.providerRequest ?? null;
+    providerRequest =
+      currentAutoMergeRequest() ??
+      input.state.merge?.observation?.providerRequest ??
+      null;
   } else {
     if (!input.state.merge)
       throw new Error("merge要求の観測には固定済みmerge intentが必要です");
     if (autoMergeRequested) {
-      const expectedMethod = input.state.merge.method.toUpperCase();
-      if (autoMergeRequest?.mergeMethod !== expectedMethod)
-        throw new Error(
-          "providerのauto-merge methodが固定済みmerge intentと一致しません",
-        );
-      providerRequest = {
-        kind: "auto-merge",
-        requestedAt: canonicalProviderTime(
-          autoMergeRequest?.enabledAt,
-          "auto-merge enabledAt",
-        ),
-        method: input.state.merge.method,
-        headSha: input.state.create.headSha,
-        baseSha: input.state.merge.authorizedBaseSha,
-      };
+      providerRequest = currentAutoMergeRequest();
     }
     if (queueEntry) {
       providerRequest = {
@@ -5021,8 +5049,17 @@ export async function main(
         "外部書き込みには明示的な承認--authorize=approvedが必要です",
       );
     /** 外部副作用より前に、同じ入力をpreview経路で完全検証する。 */
-    createPullRequest({ ...commonInput, apply: false }, () => {
+    const validatedPullRequest = createPullRequest(
+      { ...commonInput, apply: false },
+      () => {
+        throw new Error("PR作成の事前検証でGitHub操作を呼び出してはなりません");
+      },
+    );
+    if (validatedPullRequest.state !== "preview")
       throw new Error("PR作成の事前検証でGitHub操作を呼び出してはなりません");
+    const pullRequestDigest = pullRequestContentDigest({
+      title: validatedPullRequest.preview.title,
+      body: validatedPullRequest.preview.body,
     });
     github("repository.assert-write", { repository }, root);
     const repositoryAuthority = github(
@@ -5077,6 +5114,7 @@ export async function main(
         headSha,
         baseRef: base,
         baseSha,
+        pullRequestDigest,
         bodyClosingDigest: closingContractDigest({
           canonicalIssue,
           canonicalIssueUrl: issueUrl,

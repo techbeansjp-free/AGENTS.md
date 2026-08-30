@@ -76,6 +76,7 @@
         "headSha",
         "baseRef",
         "baseSha",
+        "pullRequestDigest",
         "bodyClosingDigest",
         "preparedAt",
         "dispatchClaimedAt"
@@ -95,6 +96,7 @@
         "headSha": { "$ref": "#/$defs/oid" },
         "baseRef": { "type": "string", "minLength": 1 },
         "baseSha": { "$ref": "#/$defs/oid" },
+        "pullRequestDigest": { "$ref": "#/$defs/digest" },
         "bodyClosingDigest": { "$ref": "#/$defs/digest" },
         "preparedAt": { "$ref": "#/$defs/instant" },
         "dispatchClaimedAt": {

@@ -22,6 +22,7 @@ export interface DeliveryCreateIntent {
   headSha: string;
   baseRef: string;
   baseSha: string;
+  pullRequestDigest: string;
   bodyClosingDigest: string;
   preparedAt: string;
   /**
@@ -142,6 +143,7 @@ const CREATE_FIELDS = new Set([
   "headSha",
   "baseRef",
   "baseSha",
+  "pullRequestDigest",
   "bodyClosingDigest",
   "preparedAt",
   "dispatchClaimedAt",
@@ -330,6 +332,10 @@ function parseCreate(value: unknown): DeliveryCreateIntent {
     headSha: oid(value.headSha, "create.headSha"),
     baseRef: ref(value.baseRef, "create.baseRef"),
     baseSha: oid(value.baseSha, "create.baseSha"),
+    pullRequestDigest: digest(
+      value.pullRequestDigest,
+      "create.pullRequestDigest",
+    ),
     bodyClosingDigest: digest(
       value.bodyClosingDigest,
       "create.bodyClosingDigest",
@@ -450,6 +456,20 @@ export function canonicalDigest(value: unknown): string {
   return crypto.createHash("sha256").update(stableJson(value)).digest("hex");
 }
 
+export function pullRequestContentDigest(input: {
+  title: string;
+  body: string;
+}): string {
+  const title = nonEmpty(input.title, "PR title");
+  if (typeof input.body !== "string")
+    throw new Error("PR bodyは文字列でなければなりません");
+  return canonicalDigest({
+    domain: "agent-skill-chain/pull-request-content/v1",
+    title,
+    body: input.body.replace(/\r\n/gu, "\n").trimEnd(),
+  });
+}
+
 export function pullRequestTerminalEvidenceId(
   create: DeliveryCreateIntent,
   pr: PullRequestBinding,
@@ -463,6 +483,7 @@ export function pullRequestTerminalEvidenceId(
     headSha: create.headSha,
     baseRef: create.baseRef,
     baseSha: create.baseSha,
+    pullRequestDigest: create.pullRequestDigest,
     bodyClosingDigest: create.bodyClosingDigest,
     prNumber: pr.number,
     prUrl: pr.url,

@@ -165,3 +165,18 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-033"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-034 不完全なPR検索pageまたはnodeをexact absenceとして扱わない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-034"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-035 即時squash mergeの現在request証拠を保持して終端化する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-035"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-036 fork由来またはcontent不一致のPRへ復旧bindingしない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-036"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
