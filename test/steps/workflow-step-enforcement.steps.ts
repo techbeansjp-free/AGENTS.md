@@ -250,8 +250,9 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
     case "SCN-UNIT-PRJRNL-002": {
       const checked = failedPullRequestWorkflow();
       assert.match(JSON.stringify(checked.output), /記録に失敗/u);
-      assert.match(JSON.stringify(checked.output), /PR作成を再実行せず/u);
-      assert.match(JSON.stringify(checked.output), /workflow record/u);
+      assert.match(JSON.stringify(checked.output), /外部のPR作成は再送せず/u);
+      assert.match(JSON.stringify(checked.output), /delivery専用コマンド/u);
+      assert.doesNotMatch(JSON.stringify(checked.output), /workflow record/u);
       break;
     }
     case "SCN-UNIT-PRJRNL-003":
@@ -281,8 +282,9 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       const checked = failedMergeWorkflow();
       assert.equal(checked.exitCode, 1);
       assert.match(JSON.stringify(checked.output), /merge要求後/u);
-      assert.match(JSON.stringify(checked.output), /pr mergeを再実行せず/u);
-      assert.match(JSON.stringify(checked.output), /workflow record/u);
+      assert.match(JSON.stringify(checked.output), /外部のpr mergeは再送せず/u);
+      assert.match(JSON.stringify(checked.output), /delivery専用コマンド/u);
+      assert.doesNotMatch(JSON.stringify(checked.output), /workflow record/u);
       assert.match(
         JSON.stringify(checked.output),
         /https:\/\/github\.com\/o\/r\/pull\/906/u,
@@ -1200,25 +1202,33 @@ When("{string}の統合検査を実行する", async function (scenarioId: strin
       });
       for (const step of [9, 10])
         appendWorkflowJournalEntry({ staging, entry: entry(step) });
-      assert.throws(
-        () =>
-          appendWorkflowJournalEntry({
-            staging,
-            entry: entry(11),
-          }),
-        /Step 11.*delivery終端専用/u,
-      );
-      await assert.rejects(
-        () =>
-          executeMain([
-            "workflow",
-            "record",
-            `--staging=${staging}`,
-            "--step=11",
-            "--artifact=https://github.com/o/r/pull/1",
-            "--evidence=forged terminal",
-          ]),
-        /Step 11.*delivery終端専用/u,
+      for (const forbidden of [0, 11]) {
+        assert.throws(
+          () =>
+            appendWorkflowJournalEntry({
+              staging,
+              entry: entry(forbidden),
+            }),
+          /初期化専用|delivery終端専用/u,
+        );
+        await assert.rejects(
+          () =>
+            executeMain([
+              "workflow",
+              "record",
+              `--staging=${staging}`,
+              `--step=${forbidden}`,
+              "--artifact=https://github.com/o/r/pull/1",
+              "--evidence=forged terminal",
+            ]),
+          /初期化専用|delivery終端専用/u,
+        );
+      }
+      assert.equal(
+        parseStepJournal(
+          fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+        ).entries.filter((item) => item.step === 0).length,
+        1,
       );
       assert.equal(
         parseStepJournal(
@@ -1291,6 +1301,23 @@ When("{string}の統合検査を実行する", async function (scenarioId: strin
       );
       break;
     }
+    case "SCN-INT-WFSTEP-018": {
+      const source = createQuickStaging(root);
+      const target = createQuickStaging(
+        this.temp("asc-workflow-symlink-target-"),
+      );
+      const sourceJournal = path.join(source, STEP_JOURNAL_FILE);
+      const targetJournal = path.join(target, STEP_JOURNAL_FILE);
+      const before = fs.readFileSync(targetJournal, "utf8");
+      fs.unlinkSync(sourceJournal);
+      fs.symlinkSync(targetJournal, sourceJournal);
+      assert.throws(
+        () => appendWorkflowJournalEntry({ staging: source, entry: entry(1) }),
+        /symlink|通常file/u,
+      );
+      assert.equal(fs.readFileSync(targetJournal, "utf8"), before);
+      break;
+    }
     default:
       throw new Error(`未対応のintegration scenarioです: ${scenarioId}`);
   }
@@ -1324,7 +1351,12 @@ interface DeliveryProviderControl {
   autoMergeMethod: "MERGE" | "SQUASH" | "REBASE";
   providerDefaultBranch: "main" | "develop";
   requestedAt: string;
-  existingPr: "none" | "open" | "closed";
+  existingPr: "none" | "open" | "closed" | "paged-closed" | "open-and-closed";
+  prAuthorId: string | null;
+  implementationAuthorId: string | null;
+  reviewDisposition: "approved" | "changes-requested";
+  mergeTreeTampered: boolean;
+  mergeOnDefaultBranch: boolean;
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
@@ -1550,7 +1582,11 @@ function isCreateCall(args: readonly string[]): boolean {
 }
 
 function isPullRequestFindCall(args: readonly string[]): boolean {
-  return args[0] === "pr" && args[1] === "list";
+  return (
+    args[0] === "api" &&
+    args[1] === "graphql" &&
+    args.some((argument) => argument.includes("query ExactPullRequests"))
+  );
 }
 
 function isMergeReadBack(args: readonly string[]): boolean {
@@ -1590,8 +1626,21 @@ function prepareDeliveryCli(
     providerDefaultBranch: "main",
     requestedAt: fixtureInstant(),
     existingPr: "none",
+    prAuthorId: "pr-author",
+    implementationAuthorId: "implementation-author",
+    reviewDisposition: "approved",
+    mergeTreeTampered: false,
+    mergeOnDefaultBranch: true,
     ...initial,
   };
+  const mergeTree = spawnSync(
+    "git",
+    ["merge-tree", "--write-tree", prepared.baseSha, prepared.headSha],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(mergeTree.status, 0, mergeTree.stderr);
+  const mergeTreeSha = mergeTree.stdout.trim();
+  assert.match(mergeTreeSha, /^[a-f0-9]{40}$/u);
   fs.writeFileSync(controlFile, `${JSON.stringify(control)}\n`);
   fs.writeFileSync(
     stub,
@@ -1601,6 +1650,7 @@ const args = process.argv.slice(2);
 const sha = ${JSON.stringify(prepared.headSha)};
 const implementationSha = ${JSON.stringify(prepared.implementationCommitSha)};
 const mergeSha = ${JSON.stringify("b".repeat(40))};
+const mergeTreeSha = ${JSON.stringify(mergeTreeSha)};
 const prUrl = "https://github.com/o/r/pull/1";
 const issueUrl = "https://github.com/o/r/issues/877";
 const controlFile = ${JSON.stringify(controlFile)};
@@ -1638,7 +1688,7 @@ const observation = () => ({
           mergeMethod: control.autoMergeMethod,
         }
       : null,
-  author: { id: "pr-author" },
+  author: control.prAuthorId === null ? {} : { id: control.prAuthorId },
   isDraft: false,
   headRefName: "feature/x",
   baseRefName: "main",
@@ -1677,7 +1727,11 @@ if (exact(["auth", "status"])) {
 ) {
   process.stdout.write(sha + "\\n");
 } else if (exact(["api", "repos/o/r/commits/main", "--jq", ".sha"])) {
-  process.stdout.write(baseSha + "\\n");
+  process.stdout.write(
+    (control.phase === "merged"
+      ? (control.mergeOnDefaultBranch ? mergeSha : "d".repeat(40))
+      : baseSha) + "\\n",
+  );
 } else if (exact(["api", "repos/o/r/commits/develop", "--jq", ".sha"])) {
   process.stdout.write(baseSha + "\\n");
 } else if (args[0] === "pr" && args[1] === "create") {
@@ -1698,32 +1752,91 @@ if (exact(["auth", "status"])) {
   (args[2] === prUrl || args[2] === "1")
 ) {
   process.stdout.write(JSON.stringify(observation()));
-} else if (args[0] === "pr" && args[1] === "list") {
-  process.stdout.write(
-    JSON.stringify(control.existingPr === "none" ? [] : [observation()]),
-  );
 } else if (args[0] === "api" && args[1] === "graphql") {
-  const entry =
-    control.phase === "queue-requested"
-      ? {
-          id: "MQE_kwDO_test",
-          state: "QUEUED",
-          enqueuedAt: control.requestedAt,
-          headCommit: { oid: sha },
-          baseCommit: { oid: baseSha },
-          pullRequest: { number: 1 },
-        }
-      : null;
-  process.stdout.write(
-    JSON.stringify({
-      data: {
-        repository: {
-          nameWithOwner: "o/r",
-          pullRequest: { number: 1, headRefOid: sha, mergeQueueEntry: entry },
+  if (args.some((argument) => argument.includes("query ExactPullRequests"))) {
+    const graphNode = (value) => ({
+      ...value,
+      closingIssuesReferences: { nodes: value.closingIssuesReferences },
+    });
+    let pages;
+    if (control.existingPr === "none") pages = [[]];
+    else if (control.existingPr === "paged-closed") {
+      const unrelated = Array.from({ length: 100 }, (_, index) =>
+        graphNode({
+          ...observation(),
+          number: index + 1,
+          url: "https://github.com/o/r/pull/" + (index + 1),
+          body: "# unrelated " + (index + 1),
+          state: "CLOSED",
+        }),
+      );
+      pages = [
+        unrelated,
+        [
+          graphNode({
+            ...observation(),
+            number: 101,
+            url: "https://github.com/o/r/pull/101",
+            state: "CLOSED",
+          }),
+        ],
+      ];
+    } else if (control.existingPr === "open-and-closed") {
+      pages = [
+        [
+          graphNode({
+            ...observation(),
+            number: 1,
+            url: "https://github.com/o/r/pull/1",
+            state: "OPEN",
+          }),
+          graphNode({
+            ...observation(),
+            number: 2,
+            url: "https://github.com/o/r/pull/2",
+            state: "CLOSED",
+          }),
+        ],
+      ];
+    } else pages = [[graphNode(observation())]];
+    process.stdout.write(
+      JSON.stringify(
+        pages.map((nodes) => ({
+          data: {
+            repository: {
+              nameWithOwner: "o/r",
+              pullRequests: {
+                nodes,
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          },
+        })),
+      ),
+    );
+  } else {
+    const entry =
+      control.phase === "queue-requested"
+        ? {
+            id: "MQE_kwDO_test",
+            state: "QUEUED",
+            enqueuedAt: control.requestedAt,
+            headCommit: { oid: sha },
+            baseCommit: { oid: baseSha },
+            pullRequest: { number: 1 },
+          }
+        : null;
+    process.stdout.write(
+      JSON.stringify({
+        data: {
+          repository: {
+            nameWithOwner: "o/r",
+            pullRequest: { number: 1, headRefOid: sha, mergeQueueEntry: entry },
+          },
         },
-      },
-    }),
-  );
+      }),
+    );
+  }
 } else if (
   exact(["api", "repos/o/r/branches/main/protection"])
 ) {
@@ -1737,13 +1850,24 @@ if (exact(["auth", "status"])) {
   ])
 ) {
   process.stdout.write(
-    JSON.stringify([[{
-      id: 7,
-      state: "APPROVED",
-      commit_id: sha,
-      user: { node_id: "independent-reviewer" },
-      submitted_at: control.requestedAt,
-    }]]),
+    JSON.stringify([[
+      {
+        id: 7,
+        state: "APPROVED",
+        commit_id: sha,
+        user: { node_id: "independent-reviewer" },
+        submitted_at: control.requestedAt,
+      },
+      ...(control.reviewDisposition === "changes-requested"
+        ? [{
+            id: 8,
+            state: "CHANGES_REQUESTED",
+            commit_id: sha,
+            user: { node_id: "independent-reviewer" },
+            submitted_at: new Date(Date.parse(control.requestedAt) + 1000).toISOString(),
+          }]
+        : []),
+    ]]),
   );
 } else if (
   args[0] === "api" &&
@@ -1765,14 +1889,38 @@ if (exact(["auth", "status"])) {
   );
 } else if (exact(["api", "repos/o/r/commits/" + implementationSha])) {
   process.stdout.write(
-    JSON.stringify({ sha: implementationSha, author: { node_id: "implementation-author" } }),
+    JSON.stringify({
+      sha: implementationSha,
+      author: control.implementationAuthorId === null
+        ? {}
+        : { node_id: control.implementationAuthorId },
+    }),
   );
 } else if (exact(["api", "repos/o/r/commits/" + mergeSha])) {
   process.stdout.write(
     JSON.stringify({
       sha: mergeSha,
-      commit: { tree: { sha: ${JSON.stringify("c".repeat(40))} } },
+      commit: {
+        tree: {
+          sha: control.mergeTreeTampered ? "c".repeat(40) : mergeTreeSha,
+        },
+      },
       parents: [{ sha: baseSha }, { sha }],
+    }),
+  );
+} else if (
+  args[0] === "api" &&
+  String(args[1] || "").startsWith("repos/o/r/compare/" + mergeSha + "...")
+) {
+  const descendant = control.mergeOnDefaultBranch ? mergeSha : "d".repeat(40);
+  process.stdout.write(
+    JSON.stringify({
+      status: control.mergeOnDefaultBranch ? "identical" : "diverged",
+      base_commit: { sha: mergeSha },
+      merge_base_commit: {
+        sha: control.mergeOnDefaultBranch ? mergeSha : baseSha,
+      },
+      descendant,
     }),
   );
 } else if (args[0] === "pr" && args[1] === "merge" && args[2] === "1") {
@@ -2745,7 +2893,7 @@ if (exact(["auth", "status"])) {
         ...DELIVERY_STATE_FILE.split("/"),
       );
       const bound = parseDeliveryState(fs.readFileSync(stateFile, "utf8"));
-      prepareStoredMergeIntent(prepared.staging, {
+      const mergePrepared = prepareStoredMergeIntent(prepared.staging, {
         method: "merge",
         authorizedHeadSha: prepared.headSha,
         authorizedBaseRef: "main",
@@ -2755,9 +2903,10 @@ if (exact(["auth", "status"])) {
         intentId: "6".repeat(32),
         preparedAt: bound.pr?.boundAt ?? fixtureInstant(),
       });
+      assert.ok(mergePrepared.state.merge);
       const claimed = claimStoredMergeDispatch(
         prepared.staging,
-        fixtureInstant({ minutesAhead: 1 }),
+        mergePrepared.state.merge.preparedAt,
       );
       assert.equal(claimed.dispatchAllowed, true);
       const before = deliveryProviderCalls(prepared);
@@ -2947,6 +3096,145 @@ if (exact(["auth", "status"])) {
         parseDeliveryState(fs.readFileSync(stateFile, "utf8")).state,
         "merge-observed",
       );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-029": {
+      const prepared = prepareDeliveryCli(this);
+      const issueUrl = "https://github.com/o/r/issues/877";
+      prepareStoredPullRequestCreation(prepared.staging, {
+        repository: "o/r",
+        issue: 877,
+        issueUrl,
+        headRef: "feature/x",
+        headSha: prepared.headSha,
+        baseRef: "main",
+        baseSha: prepared.baseSha,
+        bodyClosingDigest: closingContractDigest({
+          canonicalIssue: 877,
+          canonicalIssueUrl: issueUrl,
+          closingIssueNumbers: [877],
+        }),
+        preparedAt: fixtureInstant({ secondsAgo: 1 }),
+      });
+      writeDeliveryProviderControl(prepared, { existingPr: "paged-closed" });
+      const rejected = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /closed PR|reconciliation/u,
+      );
+      const calls = deliveryProviderCalls(prepared);
+      assert.equal(calls.filter(isPullRequestFindCall).length, 1);
+      assert.equal(calls.filter(isCreateCall).length, 0);
+      break;
+    }
+    case "SCN-E2E-WFSTEP-030": {
+      const prepared = prepareDeliveryCli(this);
+      const issueUrl = "https://github.com/o/r/issues/877";
+      prepareStoredPullRequestCreation(prepared.staging, {
+        repository: "o/r",
+        issue: 877,
+        issueUrl,
+        headRef: "feature/x",
+        headSha: prepared.headSha,
+        baseRef: "main",
+        baseSha: prepared.baseSha,
+        bodyClosingDigest: closingContractDigest({
+          canonicalIssue: 877,
+          canonicalIssueUrl: issueUrl,
+          closingIssueNumbers: [877],
+        }),
+        preparedAt: fixtureInstant({ secondsAgo: 1 }),
+      });
+      writeDeliveryProviderControl(prepared, {
+        existingPr: "open-and-closed",
+      });
+      const rejected = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /一意ではありません|reconciliation/u,
+      );
+      const calls = deliveryProviderCalls(prepared);
+      assert.equal(calls.filter(isPullRequestFindCall).length, 1);
+      assert.equal(calls.filter(isCreateCall).length, 0);
+      break;
+    }
+    case "SCN-E2E-WFSTEP-031": {
+      for (const missing of ["pr", "implementation"] as const) {
+        const prepared = prepareDeliveryCli(this);
+        createDeliveryPullRequest(prepared);
+        writeDeliveryProviderControl(
+          prepared,
+          missing === "pr"
+            ? { prAuthorId: null }
+            : { implementationAuthorId: null },
+        );
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /stable ID|author|review/u,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+        );
+      }
+      break;
+    }
+    case "SCN-E2E-WFSTEP-032": {
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      writeDeliveryProviderControl(prepared, {
+        reviewDisposition: "changes-requested",
+      });
+      const rejected = executeDeliveryMerge(prepared);
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /独立review|review|承認/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        0,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-033": {
+      for (const invalid of ["tree", "ancestry"] as const) {
+        const prepared = prepareDeliveryCli(this);
+        createDeliveryPullRequest(prepared);
+        const requested = executeDeliveryMerge(prepared);
+        assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+        writeDeliveryProviderControl(
+          prepared,
+          invalid === "tree"
+            ? { phase: "merged", mergeTreeTampered: true }
+            : { phase: "merged", mergeOnDefaultBranch: false },
+        );
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /tree|ancestor|既定branch|reconciliation/u,
+        );
+        const state = parseDeliveryState(
+          fs.readFileSync(
+            path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+            "utf8",
+          ),
+        );
+        assert.notEqual(state.state, "step11-recorded");
+      }
       break;
     }
     default:

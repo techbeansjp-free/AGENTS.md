@@ -15,6 +15,7 @@ interface GitHubInput {
   body: string;
   pr: number;
   sha: string;
+  descendantSha: string;
   baseSha: string;
   implementationCommitSha: string;
   runId: string;
@@ -120,6 +121,13 @@ export interface CommitTopologyObservation {
   sha: string;
   treeSha: string;
   parentShas: string[];
+}
+export interface CommitAncestryObservation {
+  repository: string;
+  ancestorSha: string;
+  descendantSha: string;
+  status: string;
+  isAncestor: boolean;
 }
 export interface RefInspection {
   branch: string;
@@ -346,6 +354,14 @@ function observeRepositoryAuthority(
 
 const EXACT_PULL_REQUEST_QUEUE_QUERY = `query ExactPullRequestQueue($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){nameWithOwner pullRequest(number:$number){number headRefOid mergeQueueEntry{id state enqueuedAt headCommit{oid} baseCommit{oid} pullRequest{number}}}}}`;
 
+/**
+ * PR creation recovery must prove exact absence before it may consume a dispatch
+ * claim. `gh pr list --limit N` cannot prove absence because a matching historic
+ * PR may exist after the client-side limit. Keep the cursor and pageInfo in this
+ * query so `gh api --paginate --slurp` exhausts the provider connection.
+ */
+const EXACT_PULL_REQUESTS_QUERY = `query ExactPullRequests($owner:String!,$repo:String!,$head:String!,$base:String!,$endCursor:String){repository(owner:$owner,name:$repo){nameWithOwner pullRequests(first:100,after:$endCursor,headRefName:$head,baseRefName:$base,states:[OPEN,CLOSED,MERGED]){nodes{number url body state mergedAt headRefName baseRefName headRefOid baseRefOid closingIssuesReferences(first:100){nodes{number url}}}pageInfo{hasNextPage endCursor}}}}`;
+
 function observePullRequestQueue(
   repository: string,
   prNumber: number,
@@ -532,6 +548,11 @@ export function github(
   input: Pick<GitHubInput, "repository" | "sha">,
   cwd: string,
 ): CommitTopologyObservation;
+export function github(
+  operation: "commit.ancestry",
+  input: Pick<GitHubInput, "repository" | "sha" | "descendantSha">,
+  cwd: string,
+): CommitAncestryObservation;
 export function github(
   operation: "pr.reviews",
   input: Pick<GitHubInput, "repository" | "pr">,
@@ -812,31 +833,67 @@ export function github(
       input.base.includes("..")
     )
       throw new Error("pr.findのheadまたはbase branch名が不正です");
+    const [owner, name, ...rest] = input.repository.split("/");
+    if (!owner || !name || rest.length > 0)
+      throw new Error("pr.findのrepositoryが不正です");
     const parsed: unknown = JSON.parse(
       run(
         "gh",
         [
-          "pr",
-          "list",
-          "--repo",
-          input.repository,
-          "--head",
-          input.head,
-          "--base",
-          input.base,
-          "--state",
-          "all",
-          "--limit",
-          "100",
-          "--json",
-          "number,url,body,state,headRefName,baseRefName,headRefOid,baseRefOid,closingIssuesReferences",
+          "api",
+          "graphql",
+          "--paginate",
+          "--slurp",
+          "-f",
+          `query=${EXACT_PULL_REQUESTS_QUERY}`,
+          "-F",
+          `owner=${owner}`,
+          "-F",
+          `repo=${name}`,
+          "-F",
+          `head=${input.head}`,
+          "-F",
+          `base=${input.base}`,
         ],
         cwd,
       ).stdout,
     );
-    if (!Array.isArray(parsed) || parsed.some((item) => !isRecord(item)))
-      throw new Error("PR検索結果がobject配列ではありません");
-    return parsed as PullRequestInspection[];
+    if (!Array.isArray(parsed))
+      throw new Error("PR検索結果がpage配列ではありません");
+    const observations: PullRequestInspection[] = [];
+    for (const [pageIndex, rawPage] of parsed.entries()) {
+      if (!isRecord(rawPage) || !isRecord(rawPage.data))
+        throw new Error(`PR検索結果page ${pageIndex + 1}が不正です`);
+      const repository = rawPage.data.repository;
+      if (
+        !isRecord(repository) ||
+        repository.nameWithOwner !== input.repository ||
+        !isRecord(repository.pullRequests) ||
+        !Array.isArray(repository.pullRequests.nodes)
+      )
+        throw new Error(
+          `PR検索結果page ${pageIndex + 1}のrepositoryが不正です`,
+        );
+      for (const rawNode of repository.pullRequests.nodes) {
+        if (!isRecord(rawNode))
+          throw new Error("PR検索結果nodeがobjectではありません");
+        const closingConnection = rawNode.closingIssuesReferences;
+        if (
+          !isRecord(closingConnection) ||
+          !Array.isArray(closingConnection.nodes) ||
+          closingConnection.nodes.some((item) => !isRecord(item))
+        )
+          throw new Error("PR検索結果のclosing Issue接続が不正です");
+        observations.push({
+          ...(rawNode as PullRequestInspection),
+          closingIssuesReferences: closingConnection.nodes as Array<{
+            number?: number;
+            url?: string;
+          }>,
+        });
+      }
+    }
+    return observations;
   }
   if (operation === "pr.queue") {
     return observePullRequestQueue(input.repository, input.pr, cwd);
@@ -955,6 +1012,48 @@ export function github(
       sha,
       treeSha: observed.commit.tree.sha,
       parentShas: observed.parents.map((parent) => parent.sha!),
+    };
+  }
+  if (operation === "commit.ancestry") {
+    verifyRepository(input.repository, cwd, "read");
+    const ancestorSha = requireFullOid(input.sha, "commit.ancestryのancestor");
+    const descendantSha = requireFullOid(
+      input.descendantSha,
+      "commit.ancestryのdescendant",
+    );
+    const observed = parseObject<{
+      status?: string;
+      base_commit?: { sha?: string };
+      merge_base_commit?: { sha?: string };
+    }>(
+      run(
+        "gh",
+        [
+          "api",
+          `repos/${input.repository}/compare/${ancestorSha}...${descendantSha}`,
+        ],
+        cwd,
+      ).stdout,
+      "commit ancestry観測",
+    );
+    if (
+      observed.base_commit?.sha !== ancestorSha ||
+      observed.merge_base_commit?.sha !== ancestorSha ||
+      (observed.status !== "ahead" && observed.status !== "identical")
+    )
+      return {
+        repository: input.repository,
+        ancestorSha,
+        descendantSha,
+        status: String(observed.status ?? "unknown"),
+        isAncestor: false,
+      };
+    return {
+      repository: input.repository,
+      ancestorSha,
+      descendantSha,
+      status: observed.status,
+      isAncestor: true,
     };
   }
   if (operation === "ref.inspect") {

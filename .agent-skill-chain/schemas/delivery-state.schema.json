@@ -503,14 +503,7 @@
       "then": {
         "properties": {
           "pr": { "$ref": "#/$defs/pr" },
-          "merge": {
-            "allOf": [
-              { "$ref": "#/$defs/merge" },
-              {
-                "properties": { "observation": { "type": "null" } }
-              }
-            ]
-          }
+          "merge": { "$ref": "#/$defs/merge" }
         }
       }
     }

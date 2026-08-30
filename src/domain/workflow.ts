@@ -799,7 +799,7 @@ export function completePullRequestWorkflow<
             reasons: [
               `${recovery.operation}後のStep 11記録に失敗しました: ${reason}`,
             ],
-            next: `${recovery.operation}済みPR ${created.url ?? "（URL不明）"} を確認し、${recovery.repeatAction}を再実行せず、workflow record --staging=${staging} --step=11 --artifact=<PR URL> --evidence=<${recovery.recoveryEvidence}>で記録だけを再実行した後、workflow verify --staging=${staging} --up-to=11で確認してください`,
+            next: `${recovery.operation}済みPR ${created.url ?? "（URL不明）"} と固定delivery stateを確認し、同じstagingを指定したdelivery専用コマンドでprovider read-backとStep 11記録を復旧してください。外部の${recovery.repeatAction}は再送せず、復旧後にworkflow verify --staging=${staging} --up-to=11で${recovery.recoveryEvidence}を確認してください`,
           },
         },
       },

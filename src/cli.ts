@@ -97,6 +97,7 @@ import {
   GitHubProviderUnavailableError,
   samePolicyAuthorityObservation,
   type ApprovalObservation,
+  type CommitAncestryObservation,
   type CommitTopologyObservation,
   type PolicyAuthorityObservation,
   type PullRequestInspection,
@@ -780,6 +781,85 @@ interface MergeReviewEvidence extends MergeCandidateEvidence {
   reviewEvidenceId: string;
 }
 
+/**
+ * GitHub review履歴は現在状態の一覧ではなくevent列である。古いAPPROVEDを後続の
+ * CHANGES_REQUESTED/DISMISSEDより先に拾うと失効reviewを固定できるため、全eventを
+ * 検証したうえでactorごとの最新eventだけを候補にする。
+ */
+function currentIndependentApprovals(input: {
+  approvals: readonly ApprovalObservation[];
+  headSha: string;
+  prAuthorActorId: string | undefined;
+  implementationAuthorActorId: string | undefined;
+}): ApprovalObservation[] {
+  if (
+    typeof input.prAuthorActorId !== "string" ||
+    input.prAuthorActorId === "" ||
+    typeof input.implementationAuthorActorId !== "string" ||
+    input.implementationAuthorActorId === ""
+  )
+    throw new Error(
+      "PR authorとimplementation authorのstable ID観測がありません",
+    );
+  const latestByActor = new Map<string, ApprovalObservation>();
+  const byReviewId = new Map<string, ApprovalObservation>();
+  for (const approval of input.approvals) {
+    const submittedAt = approval.submittedAt;
+    const timestamp =
+      typeof submittedAt === "string" ? Date.parse(submittedAt) : Number.NaN;
+    if (
+      typeof approval.actorId !== "string" ||
+      approval.actorId === "" ||
+      typeof approval.state !== "string" ||
+      approval.state === "" ||
+      !/^[a-f0-9]{40}$/iu.test(approval.commitSha ?? "") ||
+      typeof submittedAt !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u.test(
+        submittedAt,
+      ) ||
+      !Number.isFinite(timestamp) ||
+      typeof approval.reviewId !== "string" ||
+      !/^[1-9]\d*$/u.test(approval.reviewId)
+    )
+      throw new Error("provider review履歴のidentityまたは時系列が不正です");
+    const sameId = byReviewId.get(approval.reviewId);
+    if (
+      sameId &&
+      (sameId.actorId !== approval.actorId ||
+        sameId.state !== approval.state ||
+        sameId.commitSha !== approval.commitSha ||
+        sameId.submittedAt !== approval.submittedAt)
+    )
+      throw new Error("provider review履歴で同じreview IDが矛盾しています");
+    if (!sameId) byReviewId.set(approval.reviewId, approval);
+    const current = latestByActor.get(approval.actorId);
+    if (!current) {
+      latestByActor.set(approval.actorId, approval);
+      continue;
+    }
+    const currentTimestamp = Date.parse(current.submittedAt ?? "");
+    if (
+      timestamp > currentTimestamp ||
+      (timestamp === currentTimestamp &&
+        approval.reviewId.localeCompare(current.reviewId ?? "", "en", {
+          numeric: true,
+        }) > 0)
+    )
+      latestByActor.set(approval.actorId, approval);
+  }
+  return [...latestByActor.values()]
+    .filter(
+      (approval) =>
+        approval.state === "APPROVED" &&
+        approval.commitSha === input.headSha &&
+        approval.actorId !== input.prAuthorActorId &&
+        approval.actorId !== input.implementationAuthorActorId,
+    )
+    .sort((left, right) =>
+      left.reviewId!.localeCompare(right.reviewId!, "en", { numeric: true }),
+    );
+}
+
 function resolveImplementationCommitForMerge(
   root: string,
   finalHeadSha: string,
@@ -895,21 +975,12 @@ function observeMergeReviewEvidence(input: {
     throw new Error(
       "current H_finalと対象PRへ直接関連するsuccessful pull_request CI runがありません",
     );
-  const independentReview = approvals
-    .filter(
-      (approval) =>
-        approval.state === "APPROVED" &&
-        approval.commitSha === input.observed.headRefOid &&
-        typeof approval.actorId === "string" &&
-        approval.actorId !== "" &&
-        approval.actorId !== input.observed.author?.id &&
-        approval.actorId !== implementation.authorActorId &&
-        typeof approval.reviewId === "string" &&
-        /^[1-9]\d*$/u.test(approval.reviewId),
-    )
-    .sort((left, right) =>
-      left.reviewId!.localeCompare(right.reviewId!, "en", { numeric: true }),
-    )[0];
+  const independentReview = currentIndependentApprovals({
+    approvals,
+    headSha: input.observed.headRefOid,
+    prAuthorActorId: input.observed.author?.id,
+    implementationAuthorActorId: implementation.authorActorId,
+  })[0];
   if (!independentReview?.reviewId)
     throw new Error(
       "current H_finalに対するPR author・H_impl authorと独立したreviewがありません",
@@ -1056,6 +1127,9 @@ function assertTerminalMergeProof(input: {
   state: DeliveryState;
   observation: Omit<MergeObservation, "observationId">;
   topology: CommitTopologyObservation;
+  expectedTreeSha: string;
+  defaultBranchTip: string;
+  ancestry: CommitAncestryObservation;
 }): void {
   const intent = input.state.merge;
   const claim = intent?.dispatchClaimedAt;
@@ -1076,6 +1150,20 @@ function assertTerminalMergeProof(input: {
   )
     throw new Error(
       "merge commit topologyが固定repository・merge SHAと不一致です",
+    );
+  if (input.topology.treeSha !== input.expectedTreeSha)
+    throw new Error(
+      "merge commit treeが固定済みbase/headから決定した期待treeと一致しません",
+    );
+  if (
+    input.ancestry.repository.toLowerCase() !==
+      input.state.create.repository.toLowerCase() ||
+    input.ancestry.ancestorSha !== input.topology.sha ||
+    input.ancestry.descendantSha !== input.defaultBranchTip ||
+    !input.ancestry.isAncestor
+  )
+    throw new Error(
+      "merge commitがprovider既定branch tipのancestorであることを確認できません",
     );
 
   const request = input.observation.providerRequest;
@@ -1115,6 +1203,25 @@ function assertTerminalMergeProof(input: {
   }
   if (parents.length !== 1)
     throw new Error("rebase終端のcommit topologyが単一親ではありません");
+}
+
+function expectedMergeResultTree(root: string, state: DeliveryState): string {
+  const intent = state.merge;
+  if (!intent) throw new Error("期待merge treeの固定intentがありません");
+  const source = git(
+    [
+      "merge-tree",
+      "--write-tree",
+      intent.authorizedBaseSha,
+      intent.authorizedHeadSha,
+    ],
+    root,
+  ).stdout.trim();
+  if (!/^[a-f0-9]{40}$/u.test(source))
+    throw new Error(
+      "固定済みbase/headから期待merge treeを一意に計算できません",
+    );
+  return source;
 }
 
 function readBackPreparedPullRequestMerge(input: {
@@ -1197,10 +1304,31 @@ function readBackPreparedPullRequestMerge(input: {
         { repository: input.repository, sha: merge.mergeCommitSha! },
         input.root,
       );
+      const repositoryAuthority = github(
+        "repository.authority",
+        { repository: input.repository },
+        input.root,
+      );
+      if (repositoryAuthority.defaultBranch !== input.state.create.baseRef)
+        throw new Error(
+          "merged終端のprovider既定branchが固定base refと一致しません",
+        );
+      const ancestry = github(
+        "commit.ancestry",
+        {
+          repository: input.repository,
+          sha: merge.mergeCommitSha!,
+          descendantSha: repositoryAuthority.defaultBranchTipOid,
+        },
+        input.root,
+      );
       assertTerminalMergeProof({
         state: input.state,
         observation: merge,
         topology,
+        expectedTreeSha: expectedMergeResultTree(input.root, input.state),
+        defaultBranchTip: repositoryAuthority.defaultBranchTipOid,
+        ancestry,
       });
     }
     if (merge.providerState === "merge-requested") {
@@ -3405,9 +3533,9 @@ export async function main(
     const journal = readWorkflowJournal(staging);
     const step = workflowStep(workflowStepNumber(stepNumber, "step"));
     if (!step) throw new Error("workflow step定義がありません");
-    if (step.step === 11)
+    if (step.step === 0 || step.step === 11)
       throw new Error(
-        "Step 11はdelivery終端専用です。workflow recordでは記録できません",
+        "Step 0はstaging初期化専用、Step 11はdelivery終端専用です。workflow recordでは記録できません",
       );
     const entry: StepJournalEntry = {
       step: step.step,
@@ -4964,6 +5092,7 @@ export async function main(
         let recoveryReason =
           "PR作成要求がproviderへ到達したか断定できないため、自動再作成を禁止した";
         try {
+          let exactMatches = 0;
           let mergedMatches = 0;
           let closedMatches = 0;
           const matching = github(
@@ -4984,6 +5113,7 @@ export async function main(
                 tracker: stagingRecord.tracker,
                 boundAt: deliveryEventTime(prepared.create.preparedAt),
               });
+              exactMatches += 1;
               if (observed.state === "MERGED") {
                 mergedMatches += 1;
                 return [];
@@ -4997,8 +5127,10 @@ export async function main(
               return [];
             }
           });
-          if (matching.length === 1) {
+          if (exactMatches === 1 && matching.length === 1) {
             effectivePrepared = bindStoredPullRequest(staging, matching[0]!);
+          } else if (exactMatches > 1) {
+            recoveryReason = `固定済みidentityに一致する既存PRが一意ではありません: matches=${exactMatches}, open=${matching.length}, closed=${closedMatches}, merged=${mergedMatches}`;
           } else if (mergedMatches > 0) {
             recoveryReason = `固定済みidentityに一致するmerged PRを${mergedMatches}件観測したが、ASC merge authorization provenanceがないため自動完了できません`;
           } else if (closedMatches > 0) {

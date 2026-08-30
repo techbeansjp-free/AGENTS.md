@@ -76,7 +76,7 @@ Feature: ワークフローStepの記録と正本一致を統合検証する
     When "SCN-INT-WFSTEP-015"の統合検査を実行する
     Then ワークフローStep統合検査は期待結果になる
 
-  Scenario: SCN-INT-WFSTEP-016 generic workflow recordはdelivery専用のStep 11を記録できない
+  Scenario: SCN-INT-WFSTEP-016 generic workflow recordは初期化専用Step 0とdelivery専用Step 11を記録できない
     Given ワークフローStep統合検査の隔離環境がある
     When "SCN-INT-WFSTEP-016"の統合検査を実行する
     Then ワークフローStep統合検査は期待結果になる
@@ -84,4 +84,9 @@ Feature: ワークフローStepの記録と正本一致を統合検証する
   Scenario: SCN-INT-WFSTEP-017 delivery開始後のstagingをfull昇格しない
     Given ワークフローStep統合検査の隔離環境がある
     When "SCN-INT-WFSTEP-017"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-018 journal symlinkはリンク先へ追記する前に拒否する
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-018"の統合検査を実行する
     Then ワークフローStep統合検査は期待結果になる

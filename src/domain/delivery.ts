@@ -609,14 +609,11 @@ export function authorizeMerge(input: MergeInput) {
     return deny("merge対象HEADの固定SHAがありません");
   if (!Array.isArray(input.approvals))
     return deny("reviewのtrusted観測がありません");
-  const needsApproval =
-    (policy.requiredReviews ?? 0) > 0 || policy.mode === "assisted";
   if (
-    needsApproval &&
-    (typeof input.prAuthorActorId !== "string" ||
-      input.prAuthorActorId === "" ||
-      typeof input.implementationAuthorActorId !== "string" ||
-      input.implementationAuthorActorId === "")
+    typeof input.prAuthorActorId !== "string" ||
+    input.prAuthorActorId === "" ||
+    typeof input.implementationAuthorActorId !== "string" ||
+    input.implementationAuthorActorId === ""
   )
     return deny("PR authorとimplementation authorのstable ID観測がありません");
   const latestByActor = new Map<string, Approval>();
@@ -692,7 +689,8 @@ export function authorizeMerge(input: MergeInput) {
       )
       .map((approval) => approval.actorId as string),
   );
-  if (independentApprovals.size < (policy.requiredReviews ?? 0))
+  const requiredIndependentReviews = Math.max(1, policy.requiredReviews ?? 0);
+  if (independentApprovals.size < requiredIndependentReviews)
     return deny("同じHEAD SHAに対する独立reviewが不足しています");
   if (policy.mode === "assisted" && independentApprovals.size < 1)
     return deny(

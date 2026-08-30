@@ -82,6 +82,36 @@ export function assertWorkflowStaging(staging: string): string {
   return resolved;
 }
 
+function assertRegularJournalPath(journal: string): fs.Stats {
+  const directory = path.dirname(journal);
+  const directoryStat = fs.lstatSync(directory);
+  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory())
+    throw new Error(
+      "workflow journal directoryはsymlinkでない通常directoryが必要です",
+    );
+  if (fs.realpathSync(directory) !== directory)
+    throw new Error("workflow journal directoryにsymlink祖先を使用できません");
+  const stat = fs.lstatSync(journal);
+  if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1)
+    throw new Error(
+      "workflow journalはsymlink・hardlinkでない通常fileが必要です",
+    );
+  if (fs.realpathSync(journal) !== journal)
+    throw new Error("workflow journalにsymlink祖先を使用できません");
+  return stat;
+}
+
+function readDescriptor(descriptor: number, size: number): Buffer {
+  const buffer = Buffer.alloc(size);
+  let offset = 0;
+  while (offset < size) {
+    const read = fs.readSync(descriptor, buffer, offset, size - offset, offset);
+    if (read === 0) throw new Error("workflow journalを完全に再読取できません");
+    offset += read;
+  }
+  return buffer;
+}
+
 export function readWorkflowJournal(staging: string): {
   mode: Mode;
   entries: StepJournalEntry[];
@@ -98,6 +128,7 @@ export function readWorkflowJournal(staging: string): {
       errors: [`${STEP_JOURNAL_FILE}がありません`],
       source: "",
     };
+  assertRegularJournalPath(journal);
   const source = fs.readFileSync(journal, "utf8");
   const parsed = parseStepJournal(source);
   return { mode: record.mode, ...parsed, source };
@@ -107,9 +138,9 @@ export function appendWorkflowJournalEntry(input: {
   staging: string;
   entry: StepJournalEntry;
 }): { entry: StepJournalEntry; journalDigest: string; stagingDigest: string } {
-  if (input.entry.step === 11)
+  if (input.entry.step === 0 || input.entry.step === 11)
     throw new Error(
-      "Step 11はdelivery終端専用です。汎用journal追記では記録できません",
+      "Step 0はstaging初期化専用、Step 11はdelivery終端専用です。汎用journal追記では記録できません",
     );
   const staging = assertWorkflowStaging(input.staging);
   return withStagingMutationLock(staging, () =>
@@ -142,34 +173,52 @@ function appendWorkflowJournalEntryLocked(
     throw new Error(
       `entry mode ${entry.mode}がstaging mode ${current.mode}と一致しません`,
     );
-  const line = `${JSON.stringify(entry)}\n`;
-  const parsedProposed = parseStepJournal(`${current.source}${line}`);
-  if (parsedProposed.errors.length > 0)
-    throw new Error(
-      `journal entryの構造検査に失敗しました: ${parsedProposed.errors.join("; ")}`,
-    );
-  const validation = validateStepJournal({
-    mode: current.mode,
-    entries: parsedProposed.entries,
-    upToStep: entry.step,
-  });
-  if (!validation.valid)
-    throw new Error(
-      `journalの追記を拒否しました: missingSteps=${validation.missingSteps.join(",")}; unexpectedSteps=${validation.unexpectedSteps.join(",")}; outOfOrder=${validation.outOfOrder.join(",")}; modeConflicts=${validation.modeConflicts.join("; ")}; errors=${validation.errors.join("; ")}`,
-    );
-  const expectedDigest = sha256(`${current.source}${line}`);
   const journal = path.join(staging, STEP_JOURNAL_FILE);
-  fs.appendFileSync(journal, line, { encoding: "utf8", mode: 0o600 });
-  const journalDescriptor = fs.openSync(journal, "r");
+  const before = assertRegularJournalPath(journal);
+  const descriptor = fs.openSync(
+    journal,
+    fs.constants.O_RDWR | fs.constants.O_APPEND | fs.constants.O_NOFOLLOW,
+  );
+  let journalDigest: string;
   try {
-    fs.fsyncSync(journalDescriptor);
+    const opened = fs.fstatSync(descriptor);
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1 ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino
+    )
+      throw new Error("workflow journalが検査後に差し替えられました");
+    const pinnedSource = readDescriptor(descriptor, opened.size).toString(
+      "utf8",
+    );
+    if (pinnedSource !== current.source)
+      throw new Error("workflow journalが追記前検査後に変更されました");
+    const line = `${JSON.stringify(entry)}\n`;
+    const parsedProposed = parseStepJournal(`${pinnedSource}${line}`);
+    if (parsedProposed.errors.length > 0)
+      throw new Error(
+        `journal entryの構造検査に失敗しました: ${parsedProposed.errors.join("; ")}`,
+      );
+    const validation = validateStepJournal({
+      mode: current.mode,
+      entries: parsedProposed.entries,
+      upToStep: entry.step,
+    });
+    if (!validation.valid)
+      throw new Error(
+        `journalの追記を拒否しました: missingSteps=${validation.missingSteps.join(",")}; unexpectedSteps=${validation.unexpectedSteps.join(",")}; outOfOrder=${validation.outOfOrder.join(",")}; modeConflicts=${validation.modeConflicts.join("; ")}; errors=${validation.errors.join("; ")}`,
+      );
+    const expectedDigest = sha256(`${pinnedSource}${line}`);
+    fs.writeSync(descriptor, line, undefined, "utf8");
+    fs.fsyncSync(descriptor);
+    const written = fs.fstatSync(descriptor);
+    journalDigest = sha256(readDescriptor(descriptor, written.size));
+    if (journalDigest !== expectedDigest)
+      throw new Error("journalの書き込み後読み取りdigestが一致しません");
   } finally {
-    fs.closeSync(journalDescriptor);
+    fs.closeSync(descriptor);
   }
-  const reread = fs.readFileSync(journal);
-  const journalDigest = sha256(reread);
-  if (journalDigest !== expectedDigest)
-    throw new Error("journalの書き込み後読み取りdigestが一致しません");
   const stored = refreshStoredStagingDigest(staging);
   return { entry, journalDigest, stagingDigest: stored.digest };
 }
