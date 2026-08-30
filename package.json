@@ -22,6 +22,7 @@
   "files": [
     "dist/bin/",
     "dist/src/",
+    "dist/vendor/",
     ".agent-skill-chain/00_利用案内.md",
     ".agent-skill-chain/skills/",
     ".agent-skill-chain/templates/",

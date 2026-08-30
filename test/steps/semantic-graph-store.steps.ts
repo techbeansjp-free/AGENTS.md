@@ -58,6 +58,20 @@ interface SemanticGraphStoreWorld extends WorkflowWorld {
   transportRequests?: TransportRequest[];
   expectedGeneration?: number;
   generationBefore?: readonly string[];
+  generationAfterRenameFault?: readonly string[];
+  generationAfterPrePublicationFault?: readonly string[];
+  generationAfterPublishedFault?: readonly string[];
+  generationAfterDurableFault?: readonly string[];
+  pointerAfterPrePublicationFault?: string;
+  pointerAfterRenameFault?: string;
+  pointerAfterPublishedFault?: string;
+  pointerAfterDurableFault?: string;
+  prePublicationError?: Error;
+  renamePublicationError?: Error;
+  publishedPointerError?: Error;
+  durablePointerError?: Error;
+  publishedReadBack?: GraphStoreReadResult;
+  orphanGenerationFile?: string;
 }
 
 const { Given, When, Then } = stepDefinitions<SemanticGraphStoreWorld>();
@@ -355,6 +369,10 @@ Then(
       /^https:\/\/github\.com\/colliery-io\/graphqlite\/releases\/download\/v0\.6\.1\//u,
     );
     assert.match(String(this.installResult?.asset.sha256), /^[a-f0-9]{64}$/u);
+    assert.throws(
+      () => graphQlLiteAsset("win32", "x64"),
+      /win32\/x64を未対応/u,
+    );
     assert.equal(this.transportRequests?.length, 0);
     assert.equal(
       fs.existsSync(
@@ -913,7 +931,7 @@ Then("unsafe permissionを拒否しgeneration candidateを作らない", functio
 });
 
 When(
-  "actual storeのcandidate readback直後にfaultを注入する",
+  "actual storeのgeneration公開直後・耐久化後とcurrent pointer公開直後・耐久化後にfaultを注入する",
   async function () {
     await prepareActualProjection(this);
     const root = fixtureRoot(this);
@@ -922,36 +940,223 @@ When(
       "utf8",
     );
     this.generationBefore = generationInventory(root);
-    const snapshot = buildRepositorySemanticGraph(root);
-    const store = new GraphQlLiteStore(root, {
+
+    const renameSnapshot = buildRepositorySemanticGraph(root);
+    const renameStore = new GraphQlLiteStore(root, {
       faultCheckpoint: (checkpoint) => {
         this.calls.push(checkpoint);
-        throw new Error("injected crash before current pointer publication");
+        if (checkpoint === "after-generation-published")
+          throw new Error(
+            "injected crash after generation publication before directory sync",
+          );
       },
     });
     try {
-      this.error = await captureFailure(() =>
-        store.replace(snapshot, "2026-08-30T00:00:01.000Z", async () =>
-          observeRepositoryGraphSource(root),
+      this.renamePublicationError = await captureFailure(() =>
+        renameStore.replace(
+          renameSnapshot,
+          "2026-08-30T00:00:01.000Z",
+          async () => observeRepositoryGraphSource(root),
         ),
       );
     } finally {
-      await store.close();
+      await renameStore.close();
     }
+    this.pointerAfterRenameFault = fs.readFileSync(
+      path.join(root, GRAPH_RUNTIME, "current.json"),
+      "utf8",
+    );
+    this.generationAfterRenameFault = generationInventory(root);
+
+    const current = currentPointer(root);
+    const currentGeneration = Number(
+      /^generation-(\d+)-/u.exec(path.basename(current.databaseFile))?.[1],
+    );
+    assert.equal(Number.isSafeInteger(currentGeneration), true);
+    this.orphanGenerationFile = `generation-${currentGeneration + 1}-${"a".repeat(16)}-${"b".repeat(16)}.db`;
+    const orphanGenerationPath = path.join(
+      root,
+      GRAPH_RUNTIME,
+      "generations",
+      this.orphanGenerationFile,
+    );
+    fs.copyFileSync(
+      path.resolve(root, current.databaseFile),
+      orphanGenerationPath,
+    );
+    fs.chmodSync(orphanGenerationPath, 0o600);
+
+    const prePublicationSnapshot = buildRepositorySemanticGraph(root);
+    const prePublicationStore = new GraphQlLiteStore(root, {
+      faultCheckpoint: (checkpoint) => {
+        this.calls.push(checkpoint);
+        if (checkpoint === "after-generation-directory-sync")
+          throw new Error("injected crash before current pointer publication");
+      },
+    });
+    try {
+      this.prePublicationError = await captureFailure(() =>
+        prePublicationStore.replace(
+          prePublicationSnapshot,
+          "2026-08-30T00:00:01.000Z",
+          async () => observeRepositoryGraphSource(root),
+        ),
+      );
+    } finally {
+      await prePublicationStore.close();
+    }
+    this.pointerAfterPrePublicationFault = fs.readFileSync(
+      path.join(root, GRAPH_RUNTIME, "current.json"),
+      "utf8",
+    );
+    this.generationAfterPrePublicationFault = generationInventory(root);
+
+    const publishedSnapshot = buildRepositorySemanticGraph(root);
+    const publishedStore = new GraphQlLiteStore(root, {
+      faultCheckpoint: (checkpoint) => {
+        this.calls.push(checkpoint);
+        if (checkpoint === "after-current-pointer-published")
+          throw new Error(
+            "injected crash after current pointer publication before directory sync",
+          );
+      },
+    });
+    try {
+      this.publishedPointerError = await captureFailure(() =>
+        publishedStore.replace(
+          publishedSnapshot,
+          "2026-08-30T00:00:01.000Z",
+          async () => observeRepositoryGraphSource(root),
+        ),
+      );
+      this.publishedReadBack = await publishedStore.read();
+    } finally {
+      await publishedStore.close();
+    }
+    this.pointerAfterPublishedFault = fs.readFileSync(
+      path.join(root, GRAPH_RUNTIME, "current.json"),
+      "utf8",
+    );
+    this.generationAfterPublishedFault = generationInventory(root);
+
+    const durableSnapshot = buildRepositorySemanticGraph(root);
+    const durableStore = new GraphQlLiteStore(root, {
+      faultCheckpoint: (checkpoint) => {
+        this.calls.push(checkpoint);
+        if (checkpoint === "after-current-pointer-durable")
+          throw new Error(
+            "injected crash after current pointer durable commit",
+          );
+      },
+    });
+    try {
+      this.durablePointerError = await captureFailure(() =>
+        durableStore.replace(
+          durableSnapshot,
+          "2026-08-30T00:00:02.000Z",
+          async () => observeRepositoryGraphSource(root),
+        ),
+      );
+      this.readBack = await durableStore.read();
+    } finally {
+      await durableStore.close();
+    }
+    this.pointerAfterDurableFault = fs.readFileSync(
+      path.join(root, GRAPH_RUNTIME, "current.json"),
+      "utf8",
+    );
+    this.generationAfterDurableFault = generationInventory(root);
   },
 );
 
-Then("fault後もpointer bytesとgeneration集合は旧状態に戻る", function () {
-  assert.match(String(this.error), /injected crash/u);
-  assert.deepEqual(this.calls, ["after-candidate-readback"]);
-  const root = fixtureRoot(this);
-  assert.equal(
-    fs.readFileSync(path.join(root, GRAPH_RUNTIME, "current.json"), "utf8"),
-    this.pointerBefore,
-  );
-  assert.deepEqual(generationInventory(root), this.generationBefore);
-  assert.deepEqual(pendingFiles(root), []);
-});
+Then(
+  "通常faultは公開前状態へ戻りhard crash残存世代をcurrentにせずpointer公開後も有効な参照を維持する",
+  function () {
+    assert.match(
+      String(this.renamePublicationError),
+      /injected crash after generation publication before directory sync/u,
+    );
+    assert.match(String(this.prePublicationError), /injected crash/u);
+    assert.match(
+      String(this.publishedPointerError),
+      /injected crash after current pointer publication before directory sync/u,
+    );
+    assert.match(
+      String(this.durablePointerError),
+      /injected crash after current pointer durable commit/u,
+    );
+    assert.deepEqual(this.calls, [
+      "after-generation-published",
+      "after-generation-published",
+      "after-generation-directory-sync",
+      "after-generation-published",
+      "after-generation-directory-sync",
+      "after-current-pointer-published",
+      "after-generation-published",
+      "after-generation-directory-sync",
+      "after-current-pointer-published",
+      "after-current-pointer-durable",
+    ]);
+    assert.equal(this.pointerAfterRenameFault, this.pointerBefore);
+    assert.deepEqual(this.generationAfterRenameFault, this.generationBefore);
+    assert.equal(this.pointerAfterPrePublicationFault, this.pointerBefore);
+    assert.equal(
+      this.generationAfterPrePublicationFault?.length,
+      (this.generationBefore?.length ?? 0) + 1,
+    );
+    assert.ok(this.orphanGenerationFile);
+    assert.ok(
+      this.generationAfterPrePublicationFault?.includes(
+        this.orphanGenerationFile,
+      ),
+    );
+    assert.notEqual(this.pointerAfterPublishedFault, this.pointerBefore);
+    assert.equal(
+      this.generationAfterPublishedFault?.length,
+      (this.generationBefore?.length ?? 0) + 2,
+    );
+    assert.ok(this.publishedReadBack);
+    assert.ok(this.pointerAfterPublishedFault);
+    const root = fixtureRoot(this);
+    const publishedPointer = JSON.parse(this.pointerAfterPublishedFault) as {
+      databaseFile: string;
+    };
+    assert.notEqual(
+      path.basename(publishedPointer.databaseFile),
+      this.orphanGenerationFile,
+    );
+    assert.equal(
+      fs.existsSync(path.resolve(root, publishedPointer.databaseFile)),
+      true,
+    );
+    assert.equal(
+      this.publishedReadBack.manifest.generation,
+      Number(
+        /^generation-(\d+)-/u.exec(
+          path.basename(publishedPointer.databaseFile),
+        )?.[1],
+      ),
+    );
+    assert.notEqual(
+      this.pointerAfterDurableFault,
+      this.pointerAfterPublishedFault,
+    );
+    assert.equal(
+      this.generationAfterDurableFault?.length,
+      (this.generationBefore?.length ?? 0) + 3,
+    );
+    assert.ok(this.readBack);
+    const current = currentPointer(root);
+    assert.equal(fs.existsSync(path.resolve(root, current.databaseFile)), true);
+    assert.equal(
+      this.readBack.manifest.generation,
+      Number(
+        /^generation-(\d+)-/u.exec(path.basename(current.databaseFile))?.[1],
+      ),
+    );
+    assert.deepEqual(pendingFiles(root), []);
+  },
+);
 
 When(
   "current pointerのextension versionを未知versionへ改変して読む",

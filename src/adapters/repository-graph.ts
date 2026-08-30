@@ -19,11 +19,16 @@ import {
 } from "../domain/semantic-graph.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
+import {
+  loadTypeScriptCompiler,
+  type TypeScriptApi,
+} from "../lib/typescript-vendor.js";
 
 const MAX_SOURCE_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_SOURCE_SET_BYTES = 128 * 1024 * 1024;
 const MAX_SOURCE_FILES = 200_000;
 const MAX_TRACE_IDS_PER_CELL = 1_000;
+const MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS = 250_000;
 const SOURCE_EXTENSIONS = new Set([
   ".c",
   ".cc",
@@ -110,8 +115,6 @@ const SOURCE_BASENAMES = new Set([
 const REQUIREMENT_ID = /\bREQ-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/gu;
 const ACCEPTANCE_ID = /\bAC-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/gu;
 const SCENARIO_ID = /\bSCN-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/gu;
-const IMPORT_SPECIFIER =
-  /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?(?:[^"'\n]*?\s+from\s+)?["']([^"']+)["']|\b(?:import|require)\(\s*["']([^"']+)["']\s*\)/gu;
 const ECMASCRIPT_EXTENSIONS = new Set([
   ".cjs",
   ".cts",
@@ -122,6 +125,513 @@ const ECMASCRIPT_EXTENSIONS = new Set([
   ".ts",
   ".tsx",
 ]);
+type TypeScriptNode = import("typescript").Node;
+type TypeScriptSourceFile = import("typescript").SourceFile;
+
+interface ParsedSourceFile extends TypeScriptSourceFile {
+  readonly parseDiagnostics?: readonly import("typescript").Diagnostic[];
+}
+
+interface LocatedSpecifier {
+  readonly position: number;
+  readonly value: string;
+}
+
+interface EcmaScriptScope {
+  readonly parent: EcmaScriptScope | undefined;
+  varScope: EcmaScriptScope;
+  shadowsRequire: boolean;
+  effectiveRequireShadow: boolean;
+  ambiguousRequireResolution: boolean;
+  effectiveRequireAmbiguity: boolean;
+}
+
+function scriptKindFor(
+  compiler: TypeScriptApi,
+  sourcePath: string,
+): import("typescript").ScriptKind {
+  const extension = path.posix.extname(sourcePath).toLowerCase();
+  if (extension === ".tsx") return compiler.ScriptKind.TSX;
+  if (extension === ".jsx") return compiler.ScriptKind.JSX;
+  if (extension === ".ts" || extension === ".mts" || extension === ".cts")
+    return compiler.ScriptKind.TS;
+  return compiler.ScriptKind.JS;
+}
+
+function assertBoundedEcmaScriptTokens(
+  compiler: TypeScriptApi,
+  source: string,
+  sourcePath: string,
+  scriptKind: import("typescript").ScriptKind,
+): void {
+  const languageVariant =
+    scriptKind === compiler.ScriptKind.JSX ||
+    scriptKind === compiler.ScriptKind.TSX
+      ? compiler.LanguageVariant.JSX
+      : compiler.LanguageVariant.Standard;
+  const scanner = compiler.createScanner(
+    compiler.ScriptTarget.Latest,
+    true,
+    languageVariant,
+    source,
+  );
+  let tokenCount = 0;
+  while (scanner.scan() !== compiler.SyntaxKind.EndOfFileToken) {
+    tokenCount += 1;
+    if (tokenCount > MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS)
+      throw new Error(
+        `ECMAScript import scanのtoken件数上限を超えました: ${sourcePath}`,
+      );
+  }
+}
+
+function parseEcmaScriptSource(
+  compiler: TypeScriptApi,
+  source: string,
+  sourcePath: string,
+): TypeScriptSourceFile {
+  const scriptKind = scriptKindFor(compiler, sourcePath);
+  try {
+    assertBoundedEcmaScriptTokens(compiler, source, sourcePath, scriptKind);
+    const sourceFile = compiler.createSourceFile(
+      sourcePath,
+      source,
+      compiler.ScriptTarget.Latest,
+      true,
+      scriptKind,
+    ) as ParsedSourceFile;
+    const diagnostic = sourceFile.parseDiagnostics?.[0];
+    if (diagnostic !== undefined) {
+      const position = sourceFile.getLineAndCharacterOfPosition(
+        diagnostic.start ?? 0,
+      );
+      throw new Error(
+        `ECMAScript sourceの構文解析に失敗しました: ${sourcePath}:${position.line + 1}:${position.character + 1} (TS${diagnostic.code})`,
+      );
+    }
+    return sourceFile;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith("ECMAScript import scanのtoken件数上限") ||
+        error.message.startsWith("ECMAScript sourceの構文解析に失敗"))
+    )
+      throw error;
+    throw new Error(
+      `ECMAScript sourceの解析resource境界を超えました: ${sourcePath}`,
+      { cause: error },
+    );
+  }
+}
+
+function literalImportSpecifier(
+  compiler: TypeScriptApi,
+  node: TypeScriptNode,
+  requireIsShadowed: boolean,
+): string | undefined {
+  if (compiler.isImportDeclaration(node))
+    return compiler.isStringLiteralLike(node.moduleSpecifier)
+      ? node.moduleSpecifier.text
+      : undefined;
+  if (compiler.isExportDeclaration(node))
+    return node.moduleSpecifier !== undefined &&
+      compiler.isStringLiteralLike(node.moduleSpecifier)
+      ? node.moduleSpecifier.text
+      : undefined;
+  if (compiler.isExternalModuleReference(node))
+    return node.expression !== undefined &&
+      compiler.isStringLiteralLike(node.expression)
+      ? node.expression.text
+      : undefined;
+  if (compiler.isImportTypeNode(node))
+    return compiler.isLiteralTypeNode(node.argument) &&
+      compiler.isStringLiteralLike(node.argument.literal)
+      ? node.argument.literal.text
+      : undefined;
+  if (!compiler.isCallExpression(node)) return undefined;
+  if (
+    node.expression.kind === compiler.SyntaxKind.ImportKeyword &&
+    (node.arguments.length === 1 || node.arguments.length === 2) &&
+    compiler.isStringLiteralLike(node.arguments[0]!)
+  )
+    return node.arguments[0]!.text;
+  if (node.arguments.length !== 1 || requireIsShadowed) return undefined;
+  if (!compiler.isStringLiteralLike(node.arguments[0]!)) return undefined;
+  if (
+    node.questionDotToken === undefined &&
+    compiler.isIdentifier(node.expression) &&
+    node.expression.text === "require"
+  )
+    return node.arguments[0]!.text;
+  return undefined;
+}
+
+function opensEcmaScriptScope(
+  compiler: TypeScriptApi,
+  node: TypeScriptNode,
+): boolean {
+  return (
+    compiler.isFunctionLike(node) ||
+    compiler.isClassLike(node) ||
+    compiler.isClassStaticBlockDeclaration(node) ||
+    compiler.isBlock(node) ||
+    compiler.isModuleBlock(node) ||
+    compiler.isCatchClause(node) ||
+    compiler.isForStatement(node) ||
+    compiler.isForInStatement(node) ||
+    compiler.isForOfStatement(node) ||
+    compiler.isCaseBlock(node)
+  );
+}
+
+function bindingShadowsRequire(
+  compiler: TypeScriptApi,
+  name: import("typescript").BindingName,
+): boolean {
+  const stack: import("typescript").BindingName[] = [name];
+  while (stack.length > 0) {
+    const binding = stack.pop()!;
+    if (compiler.isIdentifier(binding)) {
+      if (binding.text === "require") return true;
+      continue;
+    }
+    for (const element of binding.elements)
+      if (!compiler.isOmittedExpression(element)) stack.push(element.name);
+  }
+  return false;
+}
+
+function addRequireBinding(
+  compiler: TypeScriptApi,
+  node: TypeScriptNode,
+  current: EcmaScriptScope,
+  nested: EcmaScriptScope,
+  ambient: boolean,
+): void {
+  if (ambient) return;
+  if (compiler.isVariableDeclaration(node)) {
+    if (!bindingShadowsRequire(compiler, node.name)) return;
+    const declarationList = compiler.isVariableDeclarationList(node.parent)
+      ? node.parent
+      : undefined;
+    const blockScoped =
+      declarationList === undefined ||
+      (declarationList.flags & compiler.NodeFlags.BlockScoped) !== 0;
+    (blockScoped ? current : current.varScope).shadowsRequire = true;
+    return;
+  }
+  if (compiler.isParameter(node)) {
+    if (bindingShadowsRequire(compiler, node.name))
+      current.shadowsRequire = true;
+    return;
+  }
+  if (compiler.isFunctionDeclaration(node)) {
+    if (node.name?.text === "require") current.shadowsRequire = true;
+    return;
+  }
+  if (compiler.isFunctionExpression(node)) {
+    if (node.name?.text === "require") nested.shadowsRequire = true;
+    return;
+  }
+  if (compiler.isClassDeclaration(node)) {
+    if (node.name?.text === "require") {
+      current.shadowsRequire = true;
+      nested.shadowsRequire = true;
+    }
+    return;
+  }
+  if (compiler.isClassExpression(node)) {
+    if (node.name?.text === "require") nested.shadowsRequire = true;
+    return;
+  }
+  if (
+    (compiler.isEnumDeclaration(node) ||
+      compiler.isImportEqualsDeclaration(node)) &&
+    node.name?.text === "require" &&
+    (!compiler.isImportEqualsDeclaration(node) || !node.isTypeOnly)
+  ) {
+    current.shadowsRequire = true;
+    return;
+  }
+  if (
+    compiler.isModuleDeclaration(node) &&
+    compiler.isIdentifier(node.name) &&
+    node.name.text === "require"
+  ) {
+    current.shadowsRequire = true;
+    return;
+  }
+  if (
+    (compiler.isImportClause(node) ||
+      compiler.isImportSpecifier(node) ||
+      compiler.isNamespaceImport(node)) &&
+    node.name?.text === "require" &&
+    !isTypeOnlyImportBinding(compiler, node)
+  )
+    current.shadowsRequire = true;
+}
+
+function isTypeOnlyImportBinding(
+  compiler: TypeScriptApi,
+  node:
+    | import("typescript").ImportClause
+    | import("typescript").ImportSpecifier
+    | import("typescript").NamespaceImport,
+): boolean {
+  if (compiler.isImportClause(node)) return node.isTypeOnly;
+  if (compiler.isImportSpecifier(node))
+    return node.isTypeOnly || node.parent.parent.isTypeOnly;
+  return node.parent.isTypeOnly;
+}
+
+function startsAmbientContext(
+  compiler: TypeScriptApi,
+  node: TypeScriptNode,
+): boolean {
+  return (
+    compiler.canHaveModifiers(node) &&
+    (compiler
+      .getModifiers(node)
+      ?.some(
+        (modifier) => modifier.kind === compiler.SyntaxKind.DeclareKeyword,
+      ) ??
+      false)
+  );
+}
+
+function writesRequireBinding(
+  compiler: TypeScriptApi,
+  node: TypeScriptNode,
+): boolean {
+  if (
+    compiler.isBinaryExpression(node) &&
+    node.operatorToken.kind >= compiler.SyntaxKind.FirstAssignment &&
+    node.operatorToken.kind <= compiler.SyntaxKind.LastAssignment
+  )
+    return assignmentTargetContainsRequire(compiler, node.left);
+  if (
+    (compiler.isPrefixUnaryExpression(node) ||
+      compiler.isPostfixUnaryExpression(node)) &&
+    (node.operator === compiler.SyntaxKind.PlusPlusToken ||
+      node.operator === compiler.SyntaxKind.MinusMinusToken)
+  )
+    return (
+      compiler.isIdentifier(node.operand) && node.operand.text === "require"
+    );
+  if (
+    (compiler.isForInStatement(node) || compiler.isForOfStatement(node)) &&
+    !compiler.isVariableDeclarationList(node.initializer)
+  )
+    return assignmentTargetContainsRequire(compiler, node.initializer);
+  return false;
+}
+
+function assignmentTargetContainsRequire(
+  compiler: TypeScriptApi,
+  target: TypeScriptNode,
+): boolean {
+  const stack: TypeScriptNode[] = [target];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (compiler.isIdentifier(current)) {
+      if (current.text === "require") return true;
+      continue;
+    }
+    if (
+      compiler.isParenthesizedExpression(current) ||
+      compiler.isAsExpression(current) ||
+      compiler.isTypeAssertionExpression(current) ||
+      compiler.isNonNullExpression(current) ||
+      compiler.isSatisfiesExpression(current) ||
+      compiler.isSpreadElement(current) ||
+      compiler.isSpreadAssignment(current)
+    ) {
+      stack.push(current.expression);
+      continue;
+    }
+    if (compiler.isArrayLiteralExpression(current)) {
+      for (const element of current.elements)
+        if (!compiler.isOmittedExpression(element)) stack.push(element);
+      continue;
+    }
+    if (compiler.isObjectLiteralExpression(current)) {
+      for (const property of current.properties) {
+        if (compiler.isPropertyAssignment(property))
+          stack.push(property.initializer);
+        else if (compiler.isShorthandPropertyAssignment(property))
+          stack.push(property.name);
+        else if (compiler.isSpreadAssignment(property))
+          stack.push(property.expression);
+      }
+      continue;
+    }
+    if (
+      compiler.isBinaryExpression(current) &&
+      current.operatorToken.kind === compiler.SyntaxKind.EqualsToken
+    )
+      stack.push(current.left);
+  }
+  return false;
+}
+
+function containsDirectEval(
+  compiler: TypeScriptApi,
+  node: TypeScriptNode,
+): boolean {
+  return (
+    compiler.isCallExpression(node) &&
+    node.questionDotToken === undefined &&
+    compiler.isIdentifier(node.expression) &&
+    node.expression.text === "eval"
+  );
+}
+
+function collectEcmaScriptScopes(
+  compiler: TypeScriptApi,
+  sourceFile: TypeScriptSourceFile,
+  sourcePath: string,
+): ReadonlyMap<TypeScriptNode, EcmaScriptScope> {
+  const root: EcmaScriptScope = {
+    parent: undefined,
+    varScope: undefined as unknown as EcmaScriptScope,
+    shadowsRequire: false,
+    effectiveRequireShadow: false,
+    ambiguousRequireResolution: false,
+    effectiveRequireAmbiguity: false,
+  };
+  root.varScope = root;
+  const scopes = new Map<TypeScriptNode, EcmaScriptScope>([[sourceFile, root]]);
+  const allScopes: EcmaScriptScope[] = [root];
+  const stack: Array<{
+    readonly ambient: boolean;
+    readonly node: TypeScriptNode;
+    readonly scope: EcmaScriptScope;
+  }> = [
+    { ambient: sourceFile.isDeclarationFile, node: sourceFile, scope: root },
+  ];
+  const assignmentScopes: EcmaScriptScope[] = [];
+  let nodeCount = 0;
+  while (stack.length > 0) {
+    const { ambient: inheritedAmbient, node, scope: inherited } = stack.pop()!;
+    nodeCount += 1;
+    if (nodeCount > MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS)
+      throw new Error(
+        `ECMAScript import scanのAST node件数上限を超えました: ${sourcePath}`,
+      );
+    let current = inherited;
+    if (node !== sourceFile && opensEcmaScriptScope(compiler, node)) {
+      current = {
+        parent: inherited,
+        varScope: inherited.varScope,
+        shadowsRequire: false,
+        effectiveRequireShadow: false,
+        ambiguousRequireResolution: false,
+        effectiveRequireAmbiguity: false,
+      };
+      if (
+        compiler.isFunctionLike(node) ||
+        compiler.isModuleBlock(node) ||
+        compiler.isClassStaticBlockDeclaration(node)
+      )
+        current.varScope = current;
+      scopes.set(node, current);
+      allScopes.push(current);
+    }
+    const ambient = inheritedAmbient || startsAmbientContext(compiler, node);
+    addRequireBinding(compiler, node, inherited, current, ambient);
+    if (containsDirectEval(compiler, node))
+      current.varScope.ambiguousRequireResolution = true;
+    if (writesRequireBinding(compiler, node)) assignmentScopes.push(current);
+    if (compiler.isWithStatement(node)) {
+      const dynamicScope: EcmaScriptScope = {
+        parent: current,
+        varScope: current.varScope,
+        shadowsRequire: false,
+        effectiveRequireShadow: false,
+        ambiguousRequireResolution: true,
+        effectiveRequireAmbiguity: false,
+      };
+      allScopes.push(dynamicScope);
+      scopes.set(node.statement, dynamicScope);
+      stack.push({ ambient, node: node.statement, scope: dynamicScope });
+      stack.push({ ambient, node: node.expression, scope: current });
+      continue;
+    }
+    const children: TypeScriptNode[] = [];
+    compiler.forEachChild(node, (child) => {
+      children.push(child);
+    });
+    for (let index = children.length - 1; index >= 0; index -= 1)
+      stack.push({ ambient, node: children[index]!, scope: current });
+  }
+  let resolutionSteps = 0;
+  for (const assignmentScope of assignmentScopes) {
+    let target: EcmaScriptScope | undefined = assignmentScope;
+    while (target !== undefined && !target.shadowsRequire) {
+      resolutionSteps += 1;
+      if (resolutionSteps > MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS)
+        throw new Error(
+          `ECMAScript require binding解決上限を超えました: ${sourcePath}`,
+        );
+      target = target.parent;
+    }
+    (target ?? root).ambiguousRequireResolution = true;
+  }
+  for (const scope of allScopes) {
+    scope.effectiveRequireShadow =
+      scope.shadowsRequire || (scope.parent?.effectiveRequireShadow ?? false);
+    scope.effectiveRequireAmbiguity =
+      scope.ambiguousRequireResolution ||
+      (scope.parent?.effectiveRequireAmbiguity ?? false);
+  }
+  return scopes;
+}
+
+function requireIsShadowed(scope: EcmaScriptScope): boolean {
+  return scope.effectiveRequireShadow || scope.effectiveRequireAmbiguity;
+}
+
+function ecmaScriptImportSpecifiers(
+  source: string,
+  sourcePath: string,
+): string[] {
+  const compiler = loadTypeScriptCompiler();
+  const sourceFile = parseEcmaScriptSource(compiler, source, sourcePath);
+  const scopes = collectEcmaScriptScopes(compiler, sourceFile, sourcePath);
+  const located: LocatedSpecifier[] = [];
+  const stack: Array<{
+    readonly node: TypeScriptNode;
+    readonly scope: EcmaScriptScope;
+  }> = [{ node: sourceFile, scope: scopes.get(sourceFile)! }];
+  let nodeCount = 0;
+  while (stack.length > 0) {
+    const { node, scope: inherited } = stack.pop()!;
+    nodeCount += 1;
+    if (nodeCount > MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS)
+      throw new Error(
+        `ECMAScript import scanのAST node件数上限を超えました: ${sourcePath}`,
+      );
+    const current = scopes.get(node) ?? inherited;
+    const value = literalImportSpecifier(
+      compiler,
+      node,
+      requireIsShadowed(current),
+    );
+    if (value !== undefined) located.push({ position: node.pos, value });
+    const children: TypeScriptNode[] = [];
+    compiler.forEachChild(node, (child) => {
+      children.push(child);
+    });
+    for (let index = children.length - 1; index >= 0; index -= 1)
+      stack.push({ node: children[index]!, scope: current });
+  }
+  return located
+    .sort(
+      (left, right) =>
+        left.position - right.position || left.value.localeCompare(right.value),
+    )
+    .map(({ value }) => value);
+}
 
 /**
  * The schema vocabulary is intentionally broader than this projector. This
@@ -567,10 +1077,10 @@ export function buildRepositorySemanticGraph(
     if (
       ECMASCRIPT_EXTENSIONS.has(path.posix.extname(file.path).toLowerCase())
     ) {
-      IMPORT_SPECIFIER.lastIndex = 0;
-      for (const match of file.text.matchAll(IMPORT_SPECIFIER)) {
-        const specifier = match[1] ?? match[2];
-        if (specifier === undefined) continue;
+      for (const specifier of ecmaScriptImportSpecifiers(
+        file.text,
+        file.path,
+      )) {
         const target = resolveImport(file.path, specifier, knownFiles);
         if (target !== undefined)
           addEdge(

@@ -8,6 +8,16 @@ interface AtomicWriteOptions {
    * directory. The directory must be on the same filesystem as destination.
    */
   temporaryDirectory?: string;
+  /**
+   * Runs immediately after the destination entry is atomically renamed.
+   * Throwing reports failure but cannot roll back the published entry.
+   */
+  onPublished?: () => void;
+  /**
+   * Runs after the destination rename and required directory syncs. Throwing
+   * reports a post-commit failure and cannot roll back the published entry.
+   */
+  onDurableCommit?: () => void;
 }
 
 interface PinnedDirectory {
@@ -162,9 +172,11 @@ export function writeFileAtomic(
     assertPinnedDirectory(source);
     assertPinnedDirectory(target);
     fs.renameSync(temporary, publishTarget);
+    options.onPublished?.();
     fsyncDirectory(target);
     if (source.dev !== target.dev || source.ino !== target.ino)
       fsyncDirectory(source);
+    options.onDurableCommit?.();
     assertPinnedDirectory(source);
     assertPinnedDirectory(target);
     const reread = fs.readFileSync(publishTarget);

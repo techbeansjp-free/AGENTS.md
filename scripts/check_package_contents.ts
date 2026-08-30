@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 
 import { STAGING_LIFECYCLE_AREAS } from "../src/domain/staging.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
+import { sha256File, TYPESCRIPT_VENDOR } from "../src/lib/typescript-vendor.js";
 import { checkConsumerAcceptance } from "./check_consumer_acceptance.js";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -95,6 +96,17 @@ function contentSensitive(contents: Buffer): boolean {
   }
 }
 
+function verifiedTypeScriptVendorAsset(
+  file: string,
+  packageRoot: string,
+): boolean {
+  const relative = path.relative(packageRoot, file).split(path.sep).join("/");
+  const asset = TYPESCRIPT_VENDOR.assets.find(
+    ({ destination }) => destination === relative,
+  );
+  return asset !== undefined && sha256File(file) === asset.sha256;
+}
+
 export function checkPackageContents(): {
   valid: boolean;
   errors: string[];
@@ -175,14 +187,19 @@ export function checkPackageContents(): {
       )
         errors.push(`開発専用ファイルが配布物へ混入しています: ${file}`);
     }
-    for (const file of walk(path.join(extracted, "package")))
-      if (contentSensitive(fs.readFileSync(file)))
+    const extractedPackage = path.join(extracted, "package");
+    for (const file of walk(extractedPackage))
+      if (
+        !verifiedTypeScriptVendorAsset(file, extractedPackage) &&
+        contentSensitive(fs.readFileSync(file))
+      )
         errors.push(
           `配布fileの実contentに秘密patternがあります: ${path.relative(path.join(extracted, "package"), file).replaceAll(path.sep, "/")}`,
         );
     const required = new Set([
       "package.json",
       "dist/bin/agent-skill-chain.js",
+      ...TYPESCRIPT_VENDOR.assets.map(({ destination }) => destination),
       "README.md",
       "AGENTS.md",
       ".agent-skill-chain/00_利用案内.md",
@@ -212,6 +229,13 @@ export function checkPackageContents(): {
     for (const file of required)
       if (!files.includes(file))
         errors.push(`必須実行資産が不足しています: ${file}`);
+    for (const asset of TYPESCRIPT_VENDOR.assets) {
+      const file = path.join(extracted, "package", asset.destination);
+      if (fs.existsSync(file) && sha256File(file) !== asset.sha256)
+        errors.push(
+          `固定TypeScript compiler資産のSHA-256が一致しません: ${asset.destination}`,
+        );
+    }
     return { valid: errors.length === 0, errors, files: files.length };
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });

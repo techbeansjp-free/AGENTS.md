@@ -94,10 +94,10 @@ Feature: 固定GraphQLite assetと派生投影を隔離環境で検証する
     Then unsafe permissionを拒否しgeneration candidateを作らない
 
   @actual-graphqlite
-  Scenario: SCN-INT-SEMSTORE-017 pointer公開前のfaultは旧pointerを維持してcandidateを清掃する
+  Scenario: SCN-INT-SEMSTORE-017 pointer公開前後のfaultはcurrent generationの参照整合性を壊さない
     Given 固定digestのGraphQLite native assetが明示注入されている
-    When actual storeのcandidate readback直後にfaultを注入する
-    Then fault後もpointer bytesとgeneration集合は旧状態に戻る
+    When actual storeのgeneration公開直後・耐久化後とcurrent pointer公開直後・耐久化後にfaultを注入する
+    Then 通常faultは公開前状態へ戻りhard crash残存世代をcurrentにせずpointer公開後も有効な参照を維持する
 
   @actual-graphqlite
   Scenario: SCN-INT-SEMSTORE-018 manifestのextension自己申告を固定catalogの代わりに信頼しない

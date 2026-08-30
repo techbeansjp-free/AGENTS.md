@@ -83,10 +83,10 @@ Feature: 隔離疑似projectでsemantic graphを即時観測する
     When trace rowをsemantic graphへ投影する
     Then IDが一致する要件と受け入れ条件だけを結び曖昧なscenario辺を作らない
 
-  Scenario: SCN-INT-SEMGRAPH-017 ECMAScriptのsource variantを同じimport契約で解決する
-    Given TSX JSX CJS CTSのrelative importを持つ疑似projectがある
+  Scenario: SCN-INT-SEMGRAPH-017 ECMAScript依存をcompiler AST境界内で投影する
+    Given relative importと複数行宣言とbinding shadowと字句decoyを持つ疑似projectがある
     When source variantをsemantic graphへ投影する
-    Then 各relative importは実在fileへの決定論的edgeになる
+    Then 各relative importとexportは決定論的edgeになり構文と資源境界を越えない
 
   Scenario: SCN-INT-SEMGRAPH-018 credential付きremoteをsource identityへ保存しない
     Given credential付きoriginを持つ隔離疑似projectがある

@@ -883,37 +883,443 @@ Then(
   },
 );
 
-Given("TSX JSX CJS CTSのrelative importを持つ疑似projectがある", function () {
-  const root = createModeFixture(this, "Full");
-  writeFixture(root, "src/a.tsx", 'import "./b.js";\nexport const a = true;\n');
-  writeFixture(root, "src/b.jsx", "export const b = true;\n");
-  writeFixture(root, "src/c.cjs", 'require("./d");\nmodule.exports = true;\n');
-  writeFixture(root, "src/d.cts", "export const d = true;\n");
-  commitFixture(root, "add ECMAScript source variants");
-});
+Given(
+  "relative importと複数行宣言とbinding shadowと字句decoyを持つ疑似projectがある",
+  function () {
+    const root = createModeFixture(this, "Full");
+    writeFixture(
+      root,
+      "src/a.tsx",
+      [
+        "import {",
+        '  /* from "./decoy.js" */',
+        "  b,",
+        '} from "./b.js";',
+        "export const a = b;",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(root, "src/b.jsx", "export const b = true;\n");
+    writeFixture(
+      root,
+      "src/c.cjs",
+      'require("./d");\nmodule.exports = true;\n',
+    );
+    writeFixture(root, "src/d.cts", "export const d = true;\n");
+    writeFixture(
+      root,
+      "src/division-context.ts",
+      [
+        "const of = 4;",
+        "const quotient = of / 2;",
+        'void import("./b.js");',
+        "export { quotient };",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(root, "src/dynamic.mjs", 'import("./b.js");\n');
+    writeFixture(
+      root,
+      "src/dynamic-options.mjs",
+      'import("./b.js", { with: { type: "json" } });\n',
+    );
+    writeFixture(
+      root,
+      "src/escaped-import.ts",
+      'import \\u0062 from "./\\u0062.js";\nexport { \\u0062 };\n',
+    );
+    writeFixture(root, "src/export-all.mts", 'export * from "./b.js";\n');
+    writeFixture(
+      root,
+      "src/export-type.mts",
+      'export type { b } from "./b.js";\n',
+    );
+    writeFixture(
+      root,
+      "src/hashbang.mjs",
+      '#!/usr/bin/env import("./decoy.js")\nexport const valid = true;\n',
+    );
+    writeFixture(root, "src/bom.mjs", "\uFEFFexport const valid = true;\n");
+    writeFixture(
+      root,
+      "src/jsx-context.tsx",
+      [
+        "export const view = (",
+        "  <div data-fake='import(\"./decoy.js\")'>",
+        '    import fake from "./decoy.js"',
+        '    <span>require("./decoy.js")</span>',
+        '    {import("./b.js")}',
+        "  </div>",
+        ");",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(
+      root,
+      "src/tsx-generic.tsx",
+      [
+        "const identity = <T,>(value: T): T => value;",
+        "const constrained = <T extends object>(value: T): T => value;",
+        'void import("./b.js");',
+        "export { constrained, identity };",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(root, "src/side-effect.js", 'import "./b.js";\n');
+    writeFixture(
+      root,
+      "src/template-expression.mts",
+      'export const lazy = `${import("./b.js")}`;\n',
+    );
+    writeFixture(
+      root,
+      "src/e.mts",
+      ["export {", "  b,", '} from "./b.js";', ""].join("\n"),
+    );
+    writeFixture(
+      root,
+      "src/interrupted.ts",
+      ["export const value = true", '// from "./decoy.js"', ""].join("\n"),
+    );
+    writeFixture(
+      root,
+      "src/lexical-decoys.ts",
+      [
+        "/*",
+        'import "./decoy.js";',
+        'export { decoy } from "./decoy.js";',
+        'require("./decoy.js");',
+        "*/",
+        '// import("./decoy.js")',
+        `const quoted = 'require("./decoy.js")';`,
+        'const doubleQuoted = "import(\\"./decoy.js\\")";',
+        'const template = `import("./decoy.js") ${`require("./decoy.js")`}`;',
+        'const pattern = /require\\("\\.\\/decoy\\.js"\\)/;',
+        "const division = 8 / 2;",
+        'if (division) /import\\("\\.\\/decoy\\.js"\\)/.test(quoted);',
+        'if (division) {} /import\\("\\.\\/decoy\\.js"\\)/.test(quoted);',
+        'export default /import\\("\\.\\/decoy\\.js"\\)/;',
+        'async function consume(xs: AsyncIterable<string>) { for await (const x of xs) /import\\("\\.\\/decoy\\.js"\\)/.test(x); }',
+        'loader.require("./decoy.js");',
+        'loader.import("./decoy.js");',
+        "export { division, doubleQuoted, pattern, quoted, template };",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(
+      root,
+      "src/contextual.cjs",
+      [
+        "let await = 4;",
+        "const first = await / 2;",
+        "function divide() {",
+        "  let yield = 4;",
+        "  const second = yield / 2;",
+        '  return import("./b.js");',
+        "}",
+        "module.exports = { divide, first };",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(
+      root,
+      "src/non-null.ts",
+      [
+        "declare const value: number;",
+        "const quotient = value! / 2;",
+        'void import("./b.js");',
+        "export { quotient };",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(
+      root,
+      "src/nonliteral.ts",
+      [
+        'const target = "./decoy.js" as string;',
+        "declare const require: (value: string) => unknown;",
+        "void import(target);",
+        "require(target);",
+        "export { target };",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(root, "src/loader.js", "export default value => value;\n");
+    writeFixture(
+      root,
+      "src/ambient-module.ts",
+      'declare module "require" { export const value: boolean; } require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/ambient-const.ts",
+      'declare const require: (value: string) => unknown; require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/ambient-function.ts",
+      'declare function require(value: string): unknown; require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-arrow.cjs",
+      '(require => require("./decoy.js"))(value => value);\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-block.cjs",
+      '{ const require = value => value; require("./decoy.js"); }\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-catch.cjs",
+      'try { throw value => value; } catch (require) { require("./decoy.js"); }\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-destructure.cjs",
+      'const { loader: require } = { loader: value => value }; require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-function.cjs",
+      'function load(require) { return require("./decoy.js"); } module.exports = load;\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-function-expression.cjs",
+      'const load = function require() { return require("./decoy.js"); }; module.exports = load;\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-function-declaration.cjs",
+      'function require(value) { return value; } require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-class-declaration.cjs",
+      'class require {} require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-import.mts",
+      'import require from "./loader.js"; require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-import-equals.ts",
+      'import require = require("./loader.js"); require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-local.cjs",
+      'const require = value => value; require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/dynamic-eval.cjs",
+      'function load(source) { eval(source); require("./decoy.js"); } module.exports = load;\n',
+    );
+    writeFixture(
+      root,
+      "src/dynamic-reassignment.cjs",
+      'require = value => value; require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/dynamic-array-reassignment.cjs",
+      '[require] = [value => value]; require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/dynamic-object-reassignment.cjs",
+      '({ loader: require } = { loader: value => value }); require("./decoy.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/dynamic-with.cjs",
+      'function load(value) { return value; } with (load(require("./b.js"))) { require("./decoy.js"); }\n',
+    );
+    writeFixture(
+      root,
+      "src/shadow-var-hoist.cjs",
+      'function load() { require("./decoy.js"); { var require = value => value; } } module.exports = load;\n',
+    );
+    writeFixture(
+      root,
+      "src/scoped-function-declaration.cjs",
+      'function load() { function require(value) { return value; } require("./decoy.js"); } require("./b.js"); module.exports = load;\n',
+    );
+    writeFixture(
+      root,
+      "src/scoped-module.ts",
+      'namespace Scope { var require = (value: string) => value; require("./decoy.js"); } require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/scoped-static-block.cjs",
+      'class Scope { static { var require = value => value; require("./decoy.js"); } } require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/type-only-shadow.ts",
+      'type require = string; interface requireShape { value: string } require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/type-import.ts",
+      'import type { b } from "./b.js";\ntype B = import("./b.js").b;\nexport type { B, b };\n',
+    );
+    writeFixture(root, "src/decoy.ts", "export const decoy = true;\n");
+    writeFixture(root, "src/types.ts", "export type loader = string;\n");
+    writeFixture(
+      root,
+      "src/type-only-default.mts",
+      'import type require from "./types.js"; require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/type-only-named.mts",
+      'import { type loader as require } from "./types.js"; require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/type-only-namespace.mts",
+      'import type * as require from "./types.js"; require("./b.js");\n',
+    );
+    writeFixture(
+      root,
+      "src/type-only-import-equals.ts",
+      'import type require = require("./types.js"); require("./b.js");\n',
+    );
+    commitFixture(root, "add ECMAScript source variants");
+  },
+);
 
 When("source variantをsemantic graphへ投影する", function () {
   assert.ok(this.fixtureRoot);
   this.snapshots = [buildRepositorySemanticGraph(this.fixtureRoot)];
 });
 
-Then("各relative importは実在fileへの決定論的edgeになる", function () {
-  const snapshot = this.snapshots?.[0];
-  assert.ok(snapshot);
-  for (const [from, to] of [
-    ["file:src/a.tsx", "file:src/b.jsx"],
-    ["file:src/c.cjs", "file:src/d.cts"],
-  ])
-    assert.ok(
-      snapshot.edges.some(
-        (edge) =>
-          edge.from === from &&
-          edge.to === to &&
-          edge.kind === "imports" &&
-          edge.certainty === "deterministic",
-      ),
+Then(
+  "各relative importとexportは決定論的edgeになり構文と資源境界を越えない",
+  function () {
+    const snapshot = this.snapshots?.[0];
+    assert.ok(snapshot);
+    for (const [from, to] of [
+      ["file:src/ambient-const.ts", "file:src/b.jsx"],
+      ["file:src/ambient-function.ts", "file:src/b.jsx"],
+      ["file:src/ambient-module.ts", "file:src/b.jsx"],
+      ["file:src/a.tsx", "file:src/b.jsx"],
+      ["file:src/c.cjs", "file:src/d.cts"],
+      ["file:src/contextual.cjs", "file:src/b.jsx"],
+      ["file:src/division-context.ts", "file:src/b.jsx"],
+      ["file:src/dynamic.mjs", "file:src/b.jsx"],
+      ["file:src/dynamic-options.mjs", "file:src/b.jsx"],
+      ["file:src/dynamic-with.cjs", "file:src/b.jsx"],
+      ["file:src/escaped-import.ts", "file:src/b.jsx"],
+      ["file:src/e.mts", "file:src/b.jsx"],
+      ["file:src/export-all.mts", "file:src/b.jsx"],
+      ["file:src/export-type.mts", "file:src/b.jsx"],
+      ["file:src/jsx-context.tsx", "file:src/b.jsx"],
+      ["file:src/side-effect.js", "file:src/b.jsx"],
+      ["file:src/template-expression.mts", "file:src/b.jsx"],
+      ["file:src/tsx-generic.tsx", "file:src/b.jsx"],
+      ["file:src/type-import.ts", "file:src/b.jsx"],
+      ["file:src/type-only-default.mts", "file:src/b.jsx"],
+      ["file:src/type-only-import-equals.ts", "file:src/b.jsx"],
+      ["file:src/type-only-named.mts", "file:src/b.jsx"],
+      ["file:src/type-only-namespace.mts", "file:src/b.jsx"],
+      ["file:src/type-only-shadow.ts", "file:src/b.jsx"],
+      ["file:src/non-null.ts", "file:src/b.jsx"],
+      ["file:src/scoped-function-declaration.cjs", "file:src/b.jsx"],
+      ["file:src/scoped-module.ts", "file:src/b.jsx"],
+      ["file:src/scoped-static-block.cjs", "file:src/b.jsx"],
+    ])
+      assert.ok(
+        snapshot.edges.some(
+          (edge) =>
+            edge.from === from &&
+            edge.to === to &&
+            edge.kind === "imports" &&
+            edge.certainty === "deterministic",
+        ),
+        `missing deterministic imports edge: ${from} -> ${to}`,
+      );
+    for (const source of [
+      "file:src/a.tsx",
+      "file:src/dynamic-eval.cjs",
+      "file:src/dynamic-array-reassignment.cjs",
+      "file:src/dynamic-object-reassignment.cjs",
+      "file:src/dynamic-reassignment.cjs",
+      "file:src/dynamic-with.cjs",
+      "file:src/hashbang.mjs",
+      "file:src/interrupted.ts",
+      "file:src/jsx-context.tsx",
+      "file:src/lexical-decoys.ts",
+      "file:src/nonliteral.ts",
+      "file:src/shadow-arrow.cjs",
+      "file:src/shadow-block.cjs",
+      "file:src/shadow-catch.cjs",
+      "file:src/shadow-destructure.cjs",
+      "file:src/shadow-function.cjs",
+      "file:src/shadow-function-declaration.cjs",
+      "file:src/shadow-function-expression.cjs",
+      "file:src/shadow-class-declaration.cjs",
+      "file:src/shadow-import.mts",
+      "file:src/shadow-import-equals.ts",
+      "file:src/shadow-local.cjs",
+      "file:src/shadow-var-hoist.cjs",
+      "file:src/scoped-function-declaration.cjs",
+      "file:src/scoped-module.ts",
+      "file:src/scoped-static-block.cjs",
+    ])
+      assert.equal(
+        snapshot.edges.some(
+          (edge) =>
+            edge.from === source &&
+            edge.to === "file:src/decoy.ts" &&
+            edge.kind === "imports",
+        ),
+        false,
+      );
+    assert.ok(this.fixtureRoot);
+    for (const [file, content] of [
+      [
+        "src/annex-b.cjs",
+        '<!-- import("./decoy.js")\nmodule.exports = true;\n',
+      ],
+      ["src/malformed-call.ts", 'import("./decoy.js",\n'],
+      [
+        "src/malformed-clause.ts",
+        'import { function nested() {} } from "./decoy.js";\n',
+      ],
+      ["src/invalid-unicode.ts", 'import 😀 from "./decoy.js";\n'],
+      [
+        "src/terminated.ts",
+        'import { missing, };\nconst decoy = "./decoy.js";\n',
+      ],
+    ]) {
+      writeFixture(this.fixtureRoot, file, content);
+      assert.throws(
+        () => buildRepositorySemanticGraph(this.fixtureRoot!),
+        new RegExp(`構文解析に失敗.*${file.replace(".", "\\.")}`, "u"),
+      );
+      fs.rmSync(path.join(this.fixtureRoot, file));
+    }
+    writeFixture(this.fixtureRoot, "src/token-flood.ts", ";".repeat(250_001));
+    assert.throws(
+      () => buildRepositorySemanticGraph(this.fixtureRoot!),
+      /token件数上限.*src\/token-flood\.ts/u,
     );
-});
+    fs.rmSync(path.join(this.fixtureRoot, "src/token-flood.ts"));
+    writeFixture(this.fixtureRoot, "src/deep-source.ts", "(".repeat(50_000));
+    assert.throws(
+      () => buildRepositorySemanticGraph(this.fixtureRoot!),
+      /解析resource境界.*src\/deep-source\.ts/u,
+    );
+  },
+);
 
 Given("credential付きoriginを持つ隔離疑似projectがある", function () {
   const root = createModeFixture(this, "Full");

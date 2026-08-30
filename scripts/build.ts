@@ -6,6 +6,7 @@ import {
   SUPPORTED_POLICY_SCHEMA_VERSIONS,
   packageReleaseVersion,
 } from "../src/lib/version.js";
+import { sha256File, TYPESCRIPT_VENDOR } from "../src/lib/typescript-vendor.js";
 import { checkDirectoryGuides } from "./check_directory_guides.js";
 import { checkSkillTemplateContracts } from "./check_skill_templates.js";
 import { checkCliContract } from "./check_cli_contract.js";
@@ -13,6 +14,7 @@ import { checkWorkflowSteps } from "./check_workflow_steps.js";
 
 const required = [
   "dist/bin/agent-skill-chain.js",
+  ...TYPESCRIPT_VENDOR.assets.map(({ destination }) => destination),
   "AGENTS.md",
   ".agent-skill-chain/00_利用案内.md",
   ".agent-skill-chain/docs/00_運用ポリシー.md",
@@ -30,6 +32,14 @@ const required = [
   ".agent-skill-chain/schemas/workflow-step-journal.schema.json",
   ".agent-skill-chain/policy/conformance.json",
 ];
+
+for (const asset of TYPESCRIPT_VENDOR.assets) {
+  const destination = path.resolve(asset.destination);
+  if (!fs.existsSync(destination) || sha256File(destination) !== asset.sha256)
+    throw new Error(
+      `固定TypeScript compiler配布資産のSHA-256が一致しません: ${asset.destination}`,
+    );
+}
 const missing = required.filter((file) => !fs.existsSync(path.resolve(file)));
 if (missing.length)
   throw new Error(`パッケージ資産が不足しています: ${missing.join(", ")}`);

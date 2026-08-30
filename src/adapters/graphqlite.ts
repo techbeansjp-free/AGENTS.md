@@ -85,13 +85,6 @@ const ASSETS = Object.freeze([
     sha256: "ca7b44adc2debe1a919cd0cb5e6c75e9c162b60f7f5045fa83e1e9953af88541",
     size: 659_136,
   },
-  {
-    platform: "win32",
-    arch: "x64",
-    name: "graphqlite-windows-x86_64.dll",
-    sha256: "418bc867cb936e8b24c3c0c812bd89cbba216c566a82e8dc56f0461e9c407cbb",
-    size: 2_657_513,
-  },
 ] as const).map((asset): GraphQlLiteAsset => ({
   ...asset,
   url: `https://github.com/colliery-io/graphqlite/releases/download/v${GRAPHQLITE_VERSION}/${asset.name}`,
@@ -929,6 +922,19 @@ function removeDatabaseFamily(databaseFile: string): void {
     fs.rmSync(`${databaseFile}${suffix}`, { force: true });
 }
 
+function syncDirectory(directory: string): void {
+  if (process.platform === "win32") return;
+  const descriptor = fs.openSync(
+    directory,
+    fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
+  );
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 function cleanupPendingGenerations(root: string): void {
   const relative = `${GRAPH_RUNTIME_DIRECTORY}/generations`;
   const directory = resolveContained(root, relative, {
@@ -1066,15 +1072,18 @@ function buildDatabase(
   }
 }
 
-type GraphQlLiteFaultCheckpoint = "after-candidate-readback";
+type GraphQlLiteFaultCheckpoint =
+  | "after-generation-published"
+  | "after-generation-directory-sync"
+  | "after-current-pointer-published"
+  | "after-current-pointer-durable";
 
 export class GraphQlLiteStore implements GraphStorePort {
   readonly #root: string;
   readonly #asset: GraphQlLiteAsset;
   readonly #extensionFile: string;
   readonly #faultCheckpoint:
-    | ((checkpoint: GraphQlLiteFaultCheckpoint) => void | Promise<void>)
-    | undefined;
+    ((checkpoint: GraphQlLiteFaultCheckpoint) => void) | undefined;
   #closed = false;
 
   constructor(
@@ -1085,7 +1094,7 @@ export class GraphQlLiteStore implements GraphStorePort {
       /** @internal Deterministic crash-boundary verification only. */
       readonly faultCheckpoint?: (
         checkpoint: GraphQlLiteFaultCheckpoint,
-      ) => void | Promise<void>;
+      ) => void;
     } = {},
   ) {
     if (!supportedNodeRuntime())
@@ -1157,7 +1166,7 @@ export class GraphQlLiteStore implements GraphStorePort {
         allowMissingLeaf: true,
       });
       const temporary = path.join(generations, `.pending-${databaseName}`);
-      let published = false;
+      let pointerPublished = false;
       try {
         buildDatabase(
           this.#root,
@@ -1185,7 +1194,9 @@ export class GraphQlLiteStore implements GraphStorePort {
           verification.close();
         }
         fs.renameSync(temporary, finalDatabase);
-        await this.#faultCheckpoint?.("after-candidate-readback");
+        await this.#faultCheckpoint?.("after-generation-published");
+        syncDirectory(generations);
+        await this.#faultCheckpoint?.("after-generation-directory-sync");
         const observedSource = await observeSourceBeforePublish();
         const sourceFreshness = assessGraphFreshness({
           expectedSource: observedSource,
@@ -1212,12 +1223,21 @@ export class GraphQlLiteStore implements GraphStorePort {
             allowMissingLeaf: true,
           }),
           `${stableJson(pointer)}\n`,
+          {
+            onPublished: () => {
+              pointerPublished = true;
+              this.#faultCheckpoint?.("after-current-pointer-published");
+            },
+            onDurableCommit: () => {
+              this.#faultCheckpoint?.("after-current-pointer-durable");
+            },
+          },
         );
-        published = true;
         return manifest;
       } catch (error) {
         removeDatabaseFamily(temporary);
-        if (!published) removeDatabaseFamily(finalDatabase);
+        if (!pointerPublished) removeDatabaseFamily(finalDatabase);
+        syncDirectory(generations);
         throw error;
       }
     } finally {

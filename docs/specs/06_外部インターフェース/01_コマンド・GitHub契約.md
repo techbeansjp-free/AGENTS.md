@@ -53,7 +53,7 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 | `graph status` | 任意の`--root` | source、schema、builder、extension、manifest、実Graphをread-onlyで照合し、freshnessとdrift理由をstable順で返す |
 | `graph impact` | `--start`、任意の`--root --direction --edge-kinds --include-inferred` | 既定は決定論的bounded BFSで影響範囲、counter、budget状態を返す。`--include-inferred`はconfidence・source付き候補を含めるが、結果がcompleteでもexact Evidenceやmerge authorityにしない |
 | `graph path` | `--from --to`、任意の`--root --edge-kinds` | 無重みはbounded BFS、非負重みはbounded Dijkstra法でcanonical経路を返す |
-| `graph order` | `--edge-kinds`、任意の`--root` | bounded Kahn法にるcanonical順序またはiterative Tarjan法にるcanonical cycleを返す |
+| `graph order` | `--edge-kinds`、任意の`--root` | bounded Kahn法によるcanonical順序またはiterative Tarjan法によるcanonical cycleを返す |
 
 `status / impact / path / order`はfilesystem・networkに書かない。探索結果はworktree固有投影のfreshnessを先に検証し、drift、inferred edge、budget超過、不完全結果をexact Gate PASSに使用しない。GraphQLite adapterは固定queryとbound parameterだけを使い、利用者指定のSQL・Cypher・汎用CRUDを受理しない。
 

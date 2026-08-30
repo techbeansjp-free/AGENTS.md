@@ -5,7 +5,7 @@
 | path | SHA-256 |
 |---|---|
 | `scripts/check_consumer_acceptance.ts` | `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc` |
-| `scripts/check_package_contents.ts` | `b54aaf0d2ea52231b7e174e182e553f4389498736b69eb562e8d15d31d0f6e16` |
+| `scripts/check_package_contents.ts` | `6a290077da33b65c4ce4b053f5f39385e548d085469639da8c1a47556619bbfb` |
 | `src/lib/process.ts` | `654dc62cad93de1e73e47a545bc46f38740cb759586d4f8d0f67434ae59f561d` |
 
 この3件を記録するのは、consumer acceptanceの判定、package検査への接続、process出力上限という、この証跡が主張する振る舞いの実体だからである。`package.json`はmainの自動releaseでversionが変わり、主張する振る舞いが同じでもhashが変わるため対象に含めない。
