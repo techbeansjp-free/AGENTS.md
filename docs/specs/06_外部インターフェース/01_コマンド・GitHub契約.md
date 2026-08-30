@@ -44,6 +44,19 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 
 適用後はroot HEAD、`git worktree list --porcelain`、対象path、他worktree snapshotを再読取する。対象削除後のrepository直下`.worktrees/`がsymlinkでない実在する空directoryの場合だけ、既存workspace hygieneの最新reportと明示path `.worktrees`を使って非再帰に除去する。非空、symlink、root外、不明は保持する。
 
+## Graphサブコマンド
+
+| コマンド | 入力 | 出力・終了code |
+|---|---|---|
+| `graph install` | 任意の`--root`と`--dry-run\|--apply` | 固定したGraphQLite v0.6.1 assetのplatform、size、SHA-256、適用先をpreviewし、`--apply`だけがworktree内runtimeへ原子的に配置する |
+| `graph rebuild` | 任意の`--root --built-at`と`--dry-run\|--apply` | Git・text・provider耐久stateから完全snapshotを作り、実Graphのread-back後だけ新generationをcurrentにする |
+| `graph status` | 任意の`--root` | source、schema、builder、extension、manifest、実Graphをread-onlyで照合し、freshnessとdrift理由をstable順で返す |
+| `graph impact` | `--start`、任意の`--root --direction --edge-kinds --include-inferred` | 既定は決定論的bounded BFSで影響範囲、counter、budget状態を返す。`--include-inferred`はconfidence・source付き候補を含めるが、結果がcompleteでもexact Evidenceやmerge authorityにしない |
+| `graph path` | `--from --to`、任意の`--root --edge-kinds` | 無重みはbounded BFS、非負重みはbounded Dijkstra法でcanonical経路を返す |
+| `graph order` | `--edge-kinds`、任意の`--root` | bounded Kahn法によるcanonical順序またはiterative Tarjan法によるcanonical cycleを返す |
+
+`status / impact / path / order`はfilesystem・networkに書かない。探索結果はworktree固有投影のfreshnessを先に検証し、drift、inferred edge、budget超過、不完全結果をexact Gate PASSに使用しない。GraphQLite adapterは固定queryとbound parameterだけを使い、利用者指定のSQL・Cypher・汎用CRUDを受理しない。
+
 ## Issue検証コマンド
 
 | コマンド | 入力 | 出力・終了code |

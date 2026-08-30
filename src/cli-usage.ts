@@ -70,6 +70,93 @@ const ROOT_FLAG = optional(
 
 export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   {
+    command: "graph",
+    subcommand: "install",
+    summary: "固定digestのGraphQLite extensionをpreviewまたは導入する",
+    requiredFlags: [],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
+    example: "npx agent-skill-chain graph install --root=. --dry-run",
+  },
+  {
+    command: "graph",
+    subcommand: "rebuild",
+    summary: "正本からworktree固有のGraphQLite派生投影を完全再構築する",
+    requiredFlags: [],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional("built-at", "ISO8601", "投影構築時刻", "実行時刻"),
+      ...APPLY_MODE,
+    ],
+    example: "npx agent-skill-chain graph rebuild --root=. --apply",
+  },
+  {
+    command: "graph",
+    subcommand: "status",
+    summary: "正本とGraphQLite派生投影のdriftをread-onlyで検証する",
+    requiredFlags: [],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example: "npx agent-skill-chain graph status --root=.",
+  },
+  {
+    command: "graph",
+    subcommand: "impact",
+    summary: "固定budgetの決定論的BFSで変更nodeの影響範囲を探索する",
+    requiredFlags: [flag("start", "id,id", "探索開始node ID")],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional("direction", "incoming|outgoing", "探索方向", "incoming"),
+      optional(
+        "edge-kinds",
+        "kind,kind",
+        "対象edge kind",
+        "全deterministic edge",
+      ),
+      optional(
+        "include-inferred",
+        "",
+        "inferred edgeを候補探索へ含める",
+        "未指定時はdeterministic edgeだけをexact Evidence候補にする",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain graph impact --root=. --start=file:src/cli.ts --direction=incoming",
+  },
+  {
+    command: "graph",
+    subcommand: "path",
+    summary: "BFSまたはDijkstraで決定論的な説明経路を取得する",
+    requiredFlags: [
+      flag("from", "id", "開始node ID"),
+      flag("to", "id", "終了node ID"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional(
+        "edge-kinds",
+        "kind,kind",
+        "対象edge kind",
+        "全deterministic edge",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain graph path --root=. --from=requirement:REQ-WF-001 --to=file:src/cli.ts",
+  },
+  {
+    command: "graph",
+    subcommand: "order",
+    summary: "Kahn法とiterative Tarjanで決定論的な実装順序またはcycleを返す",
+    requiredFlags: [flag("edge-kinds", "kind,kind", "順序制約に使うedge kind")],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example:
+      "npx agent-skill-chain graph order --root=. --edge-kinds=depends-on,imports",
+  },
+  {
     command: "routing",
     subcommand: "roles",
     summary: "同一scopeのrole割当が独立identityであることを検証する",

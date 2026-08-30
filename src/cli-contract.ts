@@ -19,7 +19,7 @@ export function canonicalLifecycleCommand(command: string): string {
 }
 
 export const CLI_USAGE =
-  "npx agent-skill-chain <issue|project|spec|review|trace|conformance|policy|routing|workflow|worktree|pr|install|update|delete|doctor> ...";
+  "npx agent-skill-chain <issue|project|spec|review|trace|graph|conformance|policy|routing|workflow|worktree|pr|install|update|delete|doctor> ...";
 
 export interface RoutingRecovery {
   authority: string;

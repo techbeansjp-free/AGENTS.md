@@ -11,6 +11,8 @@ agent-skill-chainは、人とAI agentが同じ手順で使える、安全側に�
 - Git 2.38.0以上
 - GitHub CLI（`gh`）2.13.0以上
 
+Semantic Graphの`graph` subcommandだけは、組み込み`node:sqlite`でGraphQLite extensionを読み込むためNode.js 22.13.0以上を必要とします。それ以外のCLIはNode.js 20以上で利用できます。
+
 ## 導入と利用
 
 対象directoryを省略した場合は現在directoryを使います。対象を明示するときは`--root=.`を指定します。

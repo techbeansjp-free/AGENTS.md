@@ -228,7 +228,7 @@ export function previewWorkspaceHygiene(input: {
       if (isStagingLifecyclePath(childRelative)) {
         exclude(
           childRelative,
-          "一時staging、role-log、metricsは専用lifecycle証拠なしにworkspace hygieneで削除しません",
+          "一時・派生lifecycle領域は専用lifecycle証拠なしにworkspace hygieneで削除しません",
         );
         containsOnlyRemovableEmptyDirectories = false;
         continue;
