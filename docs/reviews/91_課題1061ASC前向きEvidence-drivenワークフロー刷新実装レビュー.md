@@ -1,6 +1,6 @@
 # 91 課題1061 ASC前向きEvidence-drivenワークフロー刷新 実装レビュー
 
-> 状態: `internal-approved / pending-external-attestation`。H_implは102 pathの実装差分として固定し、最終全回帰は1192 scenarios・6310 stepsが全件成功した。追加限定reviewのHigh 2件はstateful review sessionの連番roundと全modeのexact-head永続・再照合でresolved。中間commitのNode・グラフ用proposalは自己activation不可能と確定しH_impl前に撤回済みである。既存PR #1062は直前headでOPENであり、GitHub runnerのbubblewrap欠落をCI・release環境の明示provisioningで局所是正したH_finalをpush後、exact-head CIとimmutable GitHub approvalをtrusted providerから取得する。
+> 状態: `internal-approved / pending-external-attestation`。H_implは103 pathの実装差分として固定し、最終全回帰は1192 scenarios・6310 stepsが全件成功した。追加限定reviewのHigh 2件はstateful review sessionの連番roundと全modeのexact-head永続・再照合でresolved。中間commitのNode・グラフ用proposalは自己activation不可能と確定し撤回済みである。GitHub runnerのbubblewrap欠落はproposal PR #1063をmainへ先行mergeし、登録済みhashと完全一致するCI・release provisioningとquality contract version 9で局所是正した。既存PR #1062へH_finalをpush後、exact-head CIとimmutable GitHub approvalをtrusted providerから取得する。
 
 ## 0. レビュー識別情報
 
@@ -8,18 +8,18 @@
 |---|---|
 | 対象 | Issue #1061の要求、仕様、template、Step契約、domain、CLI、provider adapter、test |
 | ラウンド | 3 |
-| 比較基点 | `ec4078336ec8d810e1b865adc1dfa030f04789a4` |
-| H_impl | `33596cf378baa543fe9837d578690ac4ac9941c6` |
-| 対象SHA・文書ダイジェスト | H_impl `33596cf378baa543fe9837d578690ac4ac9941c6`、tree `6eb61d0e055eb1afc872ad4ba429d6a4326dcd22` |
-| 対象差分 | 比較基点からH_implまでの102 path、+20985/-515 |
+| 比較基点 | `9e2c1675951d3394eff7c2c7c33d393e9fb7d458` |
+| H_impl | `f447f51568c930bb92ff6fd891b0946963f8d42a` |
+| 対象SHA・文書ダイジェスト | H_impl `f447f51568c930bb92ff6fd891b0946963f8d42a`、tree `6ebad81135e596683f737515ae6820a850c963ac` |
+| 対象差分 | 比較基点からH_implまでの103 path、+20990/-516 |
 | 対象外 | H_final push、GitHub exact-head CI、immutable approval、merge、release、cleanup。既存PR #1062の更新後は外部authorityとexact-head観測が所有する |
 | 残り予算 | 同一scopeの3ラウンドを使い切り。Medium・Lowは記録に留め、同一範囲を再起動しない |
 | ラウンド数 | 3（実装差分の固定レビュー3回） |
 | Step chain | 迂回: ユーザーがASCスキル利用を明示禁止し、Issue #1061と専用worktreeで同等の要求・実装・Evidenceを直接管理したため |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-012・013、`docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-029、Issue #1061 |
-| 成果物行数 | 総差分+20985/-515。内訳はGitの102 path差分を正本とし、分類別集計は重複分類による誤差を避けるため記載しない |
+| 成果物行数 | 総差分+20990/-516。内訳はGitの103 path差分を正本とし、分類別集計は重複分類による誤差を避けるため記載しない |
 | 縮小の先行評価 | 既存のworkflow journal、staging、CLI、GitHub adapter、BDD runner、追跡表を再利用した。新frameworkは導入せず、既存の全面差し戻しを局所再baselineとdurable delivery stateへ縮小した |
-| 実施者・日時 | implementer: Codex current task、H_impl固定: 2026-08-30T16:48:10+09:00。最終同期: H_implのGit差分と実行Evidenceに限定 |
+| 実施者・日時 | implementer: Codex current task、H_impl固定: 2026-08-30T16:59:33+09:00。最終同期: H_implのGit差分と実行Evidenceに限定 |
 
 ### 0.1 routing入力契約
 
@@ -32,25 +32,25 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | GitHub Issue #1061 | forward-only、Full・Quick・PoC分離、BDD、Evidence-driven Verification、automatic mergeまでを明示 | 一次資料 |
-| 差分 | `ec4078336ec8d810e1b865adc1dfa030f04789a4..33596cf378baa543fe9837d578690ac4ac9941c6` | 102 path、+20985/-515、tree固定 | Git観測 |
+| 差分 | `9e2c1675951d3394eff7c2c7c33d393e9fb7d458..f447f51568c930bb92ff6fd891b0946963f8d42a` | 103 path、+20990/-516、tree固定 | Git観測 |
 | 対象・隣接test | PoC observation、delivery transaction、atomic write、executable version | 45 scenarios / 263 steps全件成功 | test出力 |
 | review convergence | `SCN-UNIT-REVIEWCONV-001〜005`、`SCN-INT-REVIEWCONV-001〜002` | 7 scenarios / 48 steps全件成功 | test出力 |
 | review隣接 | 110 scenariosの隣接実行 | 古いPoC fixture 1件だけを検出し、stateful sessionへ移行後に1 scenario / 6 steps全件成功 | test出力 |
 | 既知6回帰 | `SCN-INT-CONSUMER-005`、`SCN-INT-DOGFOOD-002`、`SCN-INT-SPECNORM-001`、`SCN-INT-WFSTEP-010`、`SCN-UNIT-CLIUSAGE-013`、`SCN-UNIT-CLIUSAGE-014` | 6 scenarios / 30 steps全件成功 | test出力 |
 | 全回帰test | `npm test` | 1192 scenarios / 6310 steps全件成功 | test出力 |
-| GitHub runner差 | PR #1062 run 33299842775と`.github/workflows/ci.yml`・`release.yml` | 直前headのCIは`/usr/bin/bwrap`欠落だけを原因に9 scenariosが失敗。隔離を弱めず、全test実行jobへbubblewrapを明示導入し、Prettier・`project:quality`を成功させた | 外部CI・機械検証 |
+| GitHub runner差 | PR #1062 run 33299842775、33300141033、proposal PR #1063 | 最初のCIは`/usr/bin/bwrap`欠落だけを原因に9 scenariosが失敗。直接CI変更はtrusted validatorが拒否したため、#1063を全CI成功後にmainへmergeし、登録済みhashとversion 9のtrusted比較を`valid: true`にした | 外部CI・Git・機械検証 |
 | 静的・構造gate | format、lint、typecheck、source、docs、Gherkin、trace、architecture、workflow、CLI、skills、project quality | 全件成功、trace operation 26298、orphan requirement・scenario・implementationはすべて0 | 実行観測 |
 | 配布物 | `npm run package:check` | 実行・配布file 303件、project policy・role log・開発計測・test fixture・秘密情報の除外を確認 | 実行観測 |
 | 固定内部review | 先行の独立read-only監査とstateful review convergence | 追加限定reviewはCritical 0、High 2。収束後HEAD変更の再review不能とFull・Quick Step 10 exact-head binding非永続を修正し、いずれもresolved | 独立contextと機械Evidence |
 | proposal撤回 | Git差分とtrusted quality validator | `TQP-NODE-SQLITE-GRAPH-001`は中間commitから撤回。base..H_implに`.github/trusted-quality-proposals.json`の差分はなく、Node 22.13+は別graph実装のfeature-level gateが所有する | Git・機械検証 |
-| commit前candidate | H_impl tree | `6eb61d0e055eb1afc872ad4ba429d6a4326dcd22` | Git観測 |
+| commit前candidate | H_impl tree | `6ebad81135e596683f737515ae6820a850c963ac` | Git観測 |
 | Phase A artifact | 本file | H_implからH_finalへ本artifact 1 pathだけを更新する。SHA-256、blob OID、H_finalはcommit後に外部報告し、本fileに自己記載しない | Git観測 |
 | commit後external | GitHub PR・Actions・approval | PR #1062は旧headでOPEN。H_final push後に完全一致のCI・approval証跡をStep 11で取得する | 外部immutable証拠 |
 
 - dependency・authority・evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: pass。
 - H_implがH_finalのancestorで、その差分がartifactだけである: Phase A commit後に機械検証する。
 - reviewer stable IDがPR authorとprovider観測済みH_impl author stable IDと異なる: PR #1062は旧headのためpending。内部agent reviewをH_finalのimmutable approvalと誤認しない。
-- 既定branch追随: not-applicable。比較基点は作業開始時の`origin/main`で固定し、H_implまで取り込みmergeなし。
+- 既定branch追随: applicable。PoC sandbox CI proposalを登録したmain merge `9e2c1675`を候補branchへ通常mergeし、比較基点を同commitへ進めた。要求・設計の再作成は行わず、CI環境差だけを前向きに記録した。
 
 ## 変更ファイル個別監査
 
@@ -103,6 +103,7 @@
 | `docs/specs/14_開発・品質/02_テスト標準.md` | M | spec owner | spec | 変更種別とriskによるVerification選択 | pass。ACからtest evidenceへ片方向 | REQ-SQ-029 | すべてのtestを一律強制しない | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | spec owner | spec | REQ・AC・SCN・実装pathを結合 | pass。requirementからexecutable evidenceへ片方向 | SCN-UNIT-AGILE、DELSTATE、SCN-E2E-WFSTEP | `trace:check`で欠落を拒否 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | spec owner | spec | Issue #1061の仕様更新履歴 | pass。履歴から差分へ参照 | Issue #1061 | revert履歴も追記で戻す | pass |
+| `package.json` | M | repository maintainer | package metadata・品質契約 | main登録済みproposalに従いquality contractを8から9へ一段階適用 | pass。trusted validatorのpackageField hashへ完全一致 | REQ-WF-012・013、TQP-POC-SANDBOX-CI-001 | 版減少は禁止し、rollbackは逆向きproposalで前進する | pass |
 | `scripts/build.ts` | M | package maintainer | package | PoC observation schemaと新runtime moduleの配布buildを同期 | pass。source・assetからdistへ片方向 | REQ-WF-012・013、SCN-INT-DOGFOOD-002 | 未配布assetをpackage checkで拒否 | pass |
 | `scripts/check_cli_usage.ts` | M | package maintainer | package | 新CLI利用法の配布文書整合検査 | pass。usage sourceからcheckerへ片方向 | REQ-WF-012・013 | usage不整合をCI前拒否 | pass |
 | `scripts/check_package_contents.ts` | M | package maintainer | package | PoC schemaと新moduleの配布包含・禁止物除外を検査 | pass。package manifestからpacked artifactへ片方向 | SCN-INT-CONSUMER-005、SCN-INT-DOGFOOD-002 | 303 fileの配布境界不一致を拒否 | pass |
@@ -159,7 +160,7 @@
 | `test/steps/staging-lifecycle.steps.ts` | M | package maintainer | package | promotion transactionと同一Issueのfixture | pass。stepからstaging・CLIへ片方向 | SCN-INT-STAGING-004〜008 | crash cut・別Issueを反証 | pass |
 | `test/steps/workflow-step-enforcement.steps.ts` | M | package maintainer | package | forward-only・recovery・provider attack・merge parent chainのE2E driver | pass。stepからCLI・stubへ片方向 | SCN-E2E-WFSTEP-004〜038 | call回数・state・journal・identity・topologyをassert | pass |
 
-- 基準SHAとH_implの差分path集合と表のpath集合が完全一致する: 102件で一致。
+- 基準SHAとH_implの差分path集合と表のpath集合が完全一致する: 103件で一致。
 - package・project・spec・evidence層の責務混入: pass。domainはI/Oを所有せず、adapterとCLIが副作用境界を所有する。
 - 個別finding修正後の再監査: ラウンド2で触れた15 pathと隣接identity・pagination・terminalizationだけをラウンド3で再監査した。
 
@@ -175,10 +176,11 @@
 | DISC-1061-004 | 新identity field追加で既存stub 2件が古いprovider応答のままだった | 全回帰初回の2失敗 | なし | stubと既存拒否理由を成立中契約へ同期 | 対象2 scenarios / 10 steps、最終全回帰1192 / 6310 | no-spec-impact | pass |
 | DISC-1061-005 | 旧H_finalに対する外部CodeRabbit reviewで、legacy tracker移行、template state、GraphQL変数型、tool version、review集約、merge終端など19件の成立する指摘が得られた | recovery、契約整合、provider境界、可用性 | 既存要件の実装精密化 | 23 pathの局所修正に集約し、修正対象10 scenarios / 53 stepsと隣接5 scenarios / 25 stepsを再検証 | CodeRabbit review、独立read-only成立性監査、対象・隣接test | updated / no-spec-impactを各pathで判定 | pass |
 | DISC-1061-006 | tool version検査を既存`src/lib/process.ts`へ追加すると、隔離consumer検証が固定する配布物hashと不一致になった | fault-injection Evidenceの再現性 | Evidence対象の不変条件を維持 | version parserを`src/lib/executable-version.ts`へ分離し、`process.ts`を既知hashへ復元 | full回帰で単一failureを観測後、SCN-INT-CONSUMER-005を再実行して1 scenario / 5 steps成功 | no-spec-impact | pass |
-| DISC-1061-007 | 中間commitのNode・グラフ用proposalはtrusted-base validator自身を同時更新できずactivation不可能だった | 後続graph実装の導入可能性 | runtime gate所有の明確化 | proposalをH_impl前に撤回し、Node 22.13+は別graph実装のfeature-level gateへ分離 | base..H_implの`.github/trusted-quality-proposals.json`差分0、102 path監査 | no-spec-impact | pass |
+| DISC-1061-007 | 中間commitのNode・グラフ用proposalはtrusted-base validator自身を同時更新できずactivation不可能だった | 後続graph実装の導入可能性 | runtime gate所有の明確化 | proposalを撤回し、Node 22.13+は別graph実装のfeature-level gateへ分離 | base..H_implの`.github/trusted-quality-proposals.json`差分0、103 path監査 | no-spec-impact | pass |
 | DISC-1061-008 | 収束後のHEAD変更を同一sessionで再reviewできず、Full・QuickのStep 10にreview exact-head bindingが永続されていなかった | 修正HEAD未監査のままPR副作用へ進む可能性 | Step 10とreview sessionの精密化 | 同session連番round 2・3を許可し、全modeで`reviewSession { sessionId, roundDigest, headSha }`を永続。HumanOverrideを禁止し、PR副作用前・lock内・dispatch直前に再照合 | REVIEWCONV 7 scenarios / 48 steps、最終全回帰 | updated | pass |
 | DISC-1061-009 | review convergenceの隣接110 scenariosで旧PoC fixture 1件だけがHumanOverride前提のままだった | PoC E2Eの新Step 10契約不整合 | なし | fixtureをstateful review sessionへ移行 | 対象1 scenario / 6 steps、最終全回帰1192 / 6310 | no-spec-impact | pass |
 | DISC-1061-010 | GitHub hosted runnerにはPoCが必須とする`/usr/bin/bwrap`が既定導入されていなかった | ローカル全件成功でもCIのPoC 9 scenariosが同一環境原因で失敗 | 実行環境の既存前提を明示化 | 安全境界をfallbackせず、PR CI・release validate・version bump・npm公開の各test前にbubblewrapを導入 | run 33299842775の9件同一stack、workflow Prettier、`project:quality` | no-spec-impact | pass |
+| DISC-1061-011 | CI workflowはprotected品質契約であり、同一PRの新規proposalでは自己適用できなかった | 未登録変更を続けるとbase validatorが恒常失敗 | 既存二段階契約を適用 | proposalだけのPR #1063を全CI成功後にmainへmergeし、mainを#1062へ取り込んでversion 9と登録済みCI hashを適用 | #1063 merge `9e2c1675`、trusted比較`valid: true` | no-spec-impact | pass |
 
 | AC ID | SCN ID | 実装 | テスト結果 | 判定 | 証拠 |
 |---|---|---|---|---|---|
@@ -220,7 +222,7 @@
 | 安全性 | exact-head、reviewer独立性、merge protectionを弱めないか | pass | actor ID、CI head、approval commit、rulesetをprovider再観測 |
 | データ損失 | journal・state・promotionが部分書込みで破壊しないか | pass | temp・rename・fsync、transaction marker、digest |
 | ロールバック | 誤実行時に復旧地点が一意か | pass | preview、reason、next、rollback、reconciliation state |
-| 範囲漏れ | 配布asset、spec、test、CLI guideが同期するか | pass | 102 path個別監査、trace orphan 0、skills、package check |
+| 範囲漏れ | 配布asset、spec、test、CLI guideが同期するか | pass | 103 path個別監査、trace orphan 0、skills、package check |
 
 ## 5. 指摘
 
@@ -312,6 +314,7 @@ runnerは`cucumber-js`、Gherkin dialectは`en`。全件のfeature説明は日�
 | `.agent-skill-chain/templates/issue/11_プルリクエスト事前確認.md` | 入る | exact-head delivery preflight |
 | `.agent-skill-chain/templates/issue/12_利用案内.md` | 入る | mode別利用導線 |
 | `README.md` | 入る | Full・Quick・PoCとEvidence-driven workflowの利用入口 |
+| `package.json` | 入る | trusted品質契約version 9 |
 | `src/adapters/delivery-state.ts` | 入る | compile後の耐久state adapter |
 | `src/adapters/github.ts` | 入る | compile後のGitHub exact observation |
 | `src/adapters/poc-execution.ts` | 入る | compile後の隔離PoC実行・観測adapter |
@@ -334,7 +337,7 @@ runnerは`cucumber-js`、Gherkin dialectは`en`。全件のfeature説明は日�
 
 判断: 配布物を更新した
 
-根拠: `package.json`の`files`に含まれる`.agent-skill-chain/docs/`、`schemas/`、`skills/`、`templates/`と、`dist/src/`へcompileされる`src/`の外部観測可能な契約を更新した。`npm run package:check`は303 fileで成功した
+根拠: `package.json`の品質契約versionと、`files`に含まれる`.agent-skill-chain/docs/`、`schemas/`、`skills/`、`templates/`、`dist/src/`へcompileされる`src/`の外部観測可能な契約を更新した。`npm run package:check`は303 fileで成功した
 
 ## 9. 独立reviewの成立
 
@@ -347,7 +350,7 @@ runnerは`cucumber-js`、Gherkin dialectは`en`。全件のfeature説明は日�
 | 項目 | 内容 |
 |---|---|
 | 適用する例外の識別子 | 該当なし。PR作成後に通常のexternal exact-head reviewを取得する |
-| 観測値 | 中核実装の固定内部review 2件、PR #1062は直前headでOPEN、CI run 33299842775はrunnerのbubblewrap欠落で失敗し局所是正済み、是正後H_final CI pending、immutable review 0件 |
+| 観測値 | 中核実装の固定内部review 2件、PR #1062は直前headでOPEN、runner欠落と未登録CI変更の2 runは原因確定済み、proposal PR #1063は全CI成功・merge済み、適用後H_final CI pending、immutable review 0件 |
 
 ## 10. 仕様整合性
 
