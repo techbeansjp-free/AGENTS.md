@@ -56,11 +56,55 @@
       "minLength": 1,
       "pattern": "\\S"
     },
+    "pocObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headSha", "evidenceDigest"],
+      "properties": {
+        "headSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "evidenceDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "reviewSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sessionId", "roundDigest", "headSha"],
+      "properties": {
+        "sessionId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "roundDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "headSha": {
+          "type": "string",
+          "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+        }
+      }
+    },
     "humanOverride": {
       "$ref": "#/$defs/humanOverride"
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": { "const": "poc" },
+          "step": { "minimum": 9 }
+        },
+        "required": ["mode", "step"]
+      },
+      "then": { "required": ["pocObservation"] },
+      "else": { "not": { "required": ["pocObservation"] } }
+    },
+    {
+      "if": {
+        "properties": { "step": { "const": 10 } },
+        "required": ["step"]
+      },
+      "then": { "required": ["reviewSession"] },
+      "else": { "not": { "required": ["reviewSession"] } }
+    },
     {
       "if": { "properties": { "step": { "const": 0 } } },
       "then": { "properties": { "skillId": { "const": "step-00-stage" } } }

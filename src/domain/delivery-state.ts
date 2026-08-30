@@ -708,17 +708,17 @@ function parseMerge(
       throw new Error(
         "merge providerRequestのhead/baseが固定済み認可tupleと一致しません",
       );
-    if (parsed.dispatchClaimedAt && parsed.observation.providerMergedAt)
-      notBefore(
-        parsed.observation.providerMergedAt,
-        parsed.dispatchClaimedAt,
-        "merge.observation.providerMergedAt",
-      );
-    if (parsed.dispatchClaimedAt && request)
-      notBefore(
-        request.requestedAt,
-        parsed.dispatchClaimedAt,
-        "merge.observation.providerRequest.requestedAt",
+    // dispatchClaimedAt is produced by the local clock while requestedAt and
+    // providerMergedAt are produced by GitHub. Cross-clock ordering is not
+    // causal Evidence; only timestamps from the same provider clock may be
+    // ordered here. The state transition itself proves observation-after-claim.
+    if (
+      request &&
+      parsed.observation.providerMergedAt &&
+      request.requestedAt > parsed.observation.providerMergedAt
+    )
+      throw new Error(
+        "merge providerRequestがprovider mergedAtより後になっています",
       );
   }
   return parsed;
@@ -925,6 +925,32 @@ export function claimPullRequestCreationDispatch(
     create: { ...current.create, dispatchClaimedAt: claimedAt },
   };
   return parseDeliveryState(stableJson(candidate));
+}
+
+export function resumePullRequestCreationAfterConfirmedAbsence(
+  current: DeliveryState,
+): DeliveryState {
+  if (
+    current.state !== "reconciliation-required" ||
+    current.reconciliation?.phase !== "create"
+  )
+    throw new Error(
+      `${current.state}はPR createのabsence確認から再開できません`,
+    );
+  if (current.create.dispatchClaimedAt !== null)
+    throw new Error(
+      "消費済みPR create dispatch claimはabsence確認で再開できません",
+    );
+  if (current.pr || current.merge || current.step11)
+    throw new Error("PR create再開前のdelivery state形状が不正です");
+  return parseDeliveryState(
+    stableJson({
+      ...current,
+      revision: current.revision + 1,
+      state: "create-prepared",
+      reconciliation: null,
+    }),
+  );
 }
 
 export function assertImmutablePullRequestBinding(

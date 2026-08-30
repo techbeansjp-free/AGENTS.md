@@ -16,20 +16,24 @@ interface DoctorResult {
   worktrees?: { cleanupReadyCount: number; diagnostics: string[] };
 }
 
-function trackedFiles(source: string): string[] {
-  return execFileSync("git", ["ls-files", "-z"], {
-    cwd: source,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  })
+function candidateFiles(source: string): string[] {
+  return execFileSync(
+    "git",
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+    {
+      cwd: source,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  )
     .split("\0")
-    .filter((entry) => entry !== "");
+    .filter((entry) => entry !== "" && fs.existsSync(path.join(source, entry)));
 }
 
 function replicateRepository(world: WorkflowWorld): string {
   const source = process.cwd();
   const target = world.temp("asc-dogfood-");
-  for (const relative of trackedFiles(source)) {
+  for (const relative of candidateFiles(source)) {
     const destination = path.join(target, relative);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.copyFileSync(path.join(source, relative), destination);

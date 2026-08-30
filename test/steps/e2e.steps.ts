@@ -14,6 +14,11 @@ import {
 import { QUESTIONS } from "../../src/domain/mode.js";
 import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
 import { WORKFLOW_STEPS } from "../../src/domain/workflow.js";
+import {
+  observeReviewDiff,
+  recordReviewRound,
+} from "../../src/adapters/review-session.js";
+import { parseReviewRoundInput } from "../../src/domain/review-convergence.js";
 
 interface E2eWorld extends WorkflowWorld {
   cliEnv: NodeJS.ProcessEnv;
@@ -143,6 +148,25 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
     requestedMode: "quick",
     now: new Date("2026-08-25T12:00:00.000Z"),
   }).path;
+  const observedReviewDiff = observeReviewDiff(this.prCwd, headSha, headSha);
+  const reviewSession = recordReviewRound({
+    staging,
+    round: parseReviewRoundInput({
+      round: 1,
+      previousRoundDigest: null,
+      anchor: {
+        scopeIds: ["SCOPE-E2E"],
+        acceptanceCriteriaIds: ["AC-E2E-002"],
+        invariantIds: ["INV-E2E"],
+        diffBaseSha: headSha,
+        initialHeadSha: headSha,
+        initialDiffDigest: observedReviewDiff.digest,
+      },
+      candidateHeadSha: headSha,
+      focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+      findings: [],
+    }),
+  });
   for (const stepNumber of [1, 4, 9, 10]) {
     const step = WORKFLOW_STEPS.find((item) => item.step === stepNumber);
     assert.ok(step);
@@ -155,6 +179,15 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
         recordedAt: "2026-08-25T12:00:00.000Z",
         artifacts: [`artifact-${stepNumber}`],
         evidence: `step ${stepNumber}証拠`,
+        ...(stepNumber === 10
+          ? {
+              reviewSession: {
+                sessionId: reviewSession.sessionId,
+                roundDigest: reviewSession.latestRoundDigest,
+                headSha: reviewSession.latestCandidateHeadSha,
+              },
+            }
+          : {}),
       },
     });
   }

@@ -1,6 +1,6 @@
 # 00 要求定義（PoC集約版）
 
-> `poc`は仮説検証に期間を限定し、quick相当の最小成果物と最小gateをこの1文書へ集約する明示モードである。[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を正本とし、正式開発、release、自動merge、本番cleanupとして扱わない。宣言またはhigh risk確認が不完全な場合と、high risk条件を検出した場合は`full`へ単調昇格するか停止する。
+> `poc`は仮説を最速で検証するため、隔離した疑似project、事前定義したuse case・BDD scenario・機械observableをこの1文書へ固定する明示モードである。観測期間の経過を完了条件にせず、定義済みrunnerの実行直後にexact HEADへ結び付くEvidenceで判定する。[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を正本とし、正式開発、release、自動merge、本番cleanupとして扱わない。宣言またはhigh risk確認が不完全な場合と、high risk条件を検出した場合は`full`へ単調昇格するか停止する。
 
 ## 0. 管理情報
 
@@ -46,14 +46,39 @@
 | 項目                     | 宣言                                                                                 |
 | ------------------------ | ------------------------------------------------------------------------------------ |
 | PoC目的                  | （検証する仮説と目的）                                                               |
-| 対象期間                 | （開始日）〜（終了日）                                                               |
+| 隔離fixture ID           | （`FIX-...`の安定ID）                                                                |
+| fixture root             | （repository相対の隔離疑似project path）                                             |
+| 隔離境界Evidence         | （実環境・実data・外部副作用から隔離される機械的根拠）                               |
+| 初期化Evidence           | （同じ初期状態へ戻せる機械的根拠）                                                   |
+| runner ID                | （`RUN-...`の安定ID）                                                                |
+| runner path              | （fixture内でprojectが所有する定義済みrunnerの相対path）                             |
 | 成功条件                 | （観測可能な判断条件）                                                               |
 | 中止条件                 | （停止する判断条件）                                                                 |
 | 非対象                   | （今回扱わない範囲）                                                                 |
 | データ・security上の制約 | 個人情報・機密情報を扱わず、検証用データだけを使用する。例外を発見した場合は停止する |
 | 責任者                   | （判断責任者）                                                                       |
 | full昇格条件             | 成功条件を満たして正式開発へ移す場合、またはhigh risk・不足成果物を検出した場合      |
-| 廃止条件                 | 中止条件を満たした場合、期限到来時、または継続責任者が不在になった場合               |
+| 廃止条件                 | 中止条件を満たした場合、仮説の採否を決定した場合、または継続責任者が不在になった場合 |
+
+### 4.1 定義済みuse case（1件以上）
+
+| use case ID | 利用主体 | 目的 |
+| ----------- | ----- | ---- |
+| UC-... | （利用者・system） | （達成したいこと） |
+
+### 4.2 BDD scenario（各use caseに1件以上）
+
+| scenario ID | use case ID | Given | When | Then | 固定argv |
+| ----------- | ----------- | ----- | ---- | ---- | -------- |
+| SCN-... | UC-... | （隔離fixtureの前提） | （runnerが行う操作） | （観測可能な結果） | （JSON文字列配列。任意commandではない） |
+
+### 4.3 機械observable（各scenarioに1件以上）
+
+| observable ID | scenario ID | 種別 | 対象 | 期待値 |
+| ------------- | ----------- | ---- | ------ | -------- |
+| OBS-... | SCN-... | exit-code / stdout-digest / stderr-digest / file-digest | （file-digestだけfixture相対path。その他は`-`） | （exit-codeは0、その他はSHA-256） |
+
+ASCは検証対象HEADに追跡済みでlive bytesとも一致するfixtureだけをHEAD blobから一時copyへ復元し、実測digestで固定したNode runnerを宣言argvで実行する。任意shell・任意command・外部作成Evidenceは受け付けない。Linuxではbubblewrapのmount/PID/network等のnamespaceとread-only system mount、prlimit、timeout、出力上限を主隔離境界とし、Node Permission Modelは補助防御とする。実行ごとの`exitCode=0`・`signal=null`、ASCが計測したstdout/stderr/file digest、`declarationDigest`、fixture/runner digest、result/execution/global digest、exact `headSha`がすべて一致した場合だけ`poc-observations/<headSha>.json`をappend-onlyで固定してStep 9以降へ進める。
 
 ## 5. high risk確認（必須）
 

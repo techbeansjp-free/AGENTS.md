@@ -166,7 +166,7 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-033"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
-  Scenario: SCN-E2E-WFSTEP-034 不完全なPR検索pageまたはnodeをexact absenceとして扱わない
+  Scenario: SCN-E2E-WFSTEP-034 不完全なPR検索または同じhead/baseの不一致PRをexact absenceとして扱わない
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-034"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
@@ -179,4 +179,14 @@ Feature: 公開CLIでワークフローStepを強制する
   Scenario: SCN-E2E-WFSTEP-036 fork由来またはcontent不一致のPRへ復旧bindingしない
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-036"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-037 queue requestが初回read-back前に消えても即時squashとrebaseを終端化する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-037"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-038 request消失rebaseの親chainが固定sourceと違えば終端化しない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-038"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる

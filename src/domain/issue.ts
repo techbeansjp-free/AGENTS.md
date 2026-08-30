@@ -3,6 +3,7 @@ import path from "node:path";
 import { safeSlug } from "../lib/security.js";
 import { publishDirectoryAtomic, writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
+import { git } from "../lib/process.js";
 import {
   classifyMode,
   detectQuickDisqualifiers,
@@ -23,6 +24,7 @@ import {
 } from "./staging.js";
 import {
   MODE_DECISION_FILE,
+  parseModeDecision,
   STEP_JOURNAL_FILE,
   WORKFLOW_JOURNAL_DIRECTORY,
   renderModeDecision,
@@ -283,10 +285,12 @@ function requirementDocument(
   if (mode === "poc" && poc) {
     const replacements: Array<[string, string]> = [
       ["PoC目的", escapeCell(poc.purpose)],
-      [
-        "対象期間",
-        `${escapeCell(poc.period.from)}〜${escapeCell(poc.period.to)}`,
-      ],
+      ["隔離fixture ID", escapeCell(poc.fixture.id)],
+      ["fixture root", escapeCell(poc.fixture.root)],
+      ["隔離境界Evidence", escapeCell(poc.fixture.isolationEvidence)],
+      ["初期化Evidence", escapeCell(poc.fixture.resetEvidence)],
+      ["runner ID", escapeCell(poc.fixture.runner.id)],
+      ["runner path", escapeCell(poc.fixture.runner.path)],
       ["成功条件", escapeCell(poc.successCriteria)],
       ["中止条件", escapeCell(poc.abortCriteria)],
       ["非対象", escapeCell(poc.outOfScope)],
@@ -294,6 +298,33 @@ function requirementDocument(
     ];
     for (const [label, value] of replacements)
       content = replaceTwoColumnRow(content, label, value);
+    content = content.replace(
+      /^\|[ \t]*UC-\.\.\.[ \t]*\|[^\n]*$/mu,
+      poc.useCases
+        .map(
+          (item) =>
+            `| ${escapeCell(item.id)} | ${escapeCell(item.actor)} | ${escapeCell(item.goal)} |`,
+        )
+        .join("\n"),
+    );
+    content = content.replace(
+      /^\|[ \t]*SCN-\.\.\.[ \t]*\|[^\n]*$/mu,
+      poc.scenarios
+        .map(
+          (item) =>
+            `| ${escapeCell(item.id)} | ${escapeCell(item.useCaseId)} | ${escapeCell(item.given)} | ${escapeCell(item.when)} | ${escapeCell(item.then)} | ${escapeCell(JSON.stringify(item.argv))} |`,
+        )
+        .join("\n"),
+    );
+    content = content.replace(
+      /^\|[ \t]*OBS-\.\.\.[ \t]*\|[^\n]*$/mu,
+      poc.observables
+        .map(
+          (item) =>
+            `| ${escapeCell(item.id)} | ${escapeCell(item.scenarioId)} | ${escapeCell(item.kind)} | ${escapeCell(item.target ?? "-")} | ${escapeCell(String(item.expected))} |`,
+        )
+        .join("\n"),
+    );
     for (const risk of poc.highRisk) {
       content = content.replace(
         new RegExp(
@@ -380,6 +411,14 @@ export function createIssueStaging(
         requestedMode,
         answers: options.answers,
         decidedAt,
+        ...(decision.mode === "poc"
+          ? {
+              baselineHeadSha: git(
+                ["rev-parse", "--verify", "HEAD^{commit}"],
+                root,
+              ).stdout.trim(),
+            }
+          : {}),
         poc: options.poc,
         changedFiles: options.changedFiles,
       }),
@@ -585,6 +624,7 @@ function recordStagingSyncLocked(
   writeFileAtomic(
     path.join(resolved, STAGING_RECORD_FILE),
     `${JSON.stringify(updated, null, 2)}\n`,
+    { temporaryDirectory: path.dirname(resolved) },
   );
   const reread = readStoredStagingRecord(resolved);
   if (JSON.stringify(reread) !== JSON.stringify(updated))
@@ -655,7 +695,12 @@ export function validateIssue(
   if (declared === "poc") {
     for (const label of [
       "PoC目的",
-      "対象期間",
+      "隔離fixture ID",
+      "fixture root",
+      "隔離境界Evidence",
+      "初期化Evidence",
+      "runner ID",
+      "runner path",
       "成功条件",
       "中止条件",
       "非対象",
@@ -670,6 +715,44 @@ export function validateIssue(
         errors.push(
           `PoC宣言の${label}が未記入または不明なためfullへの昇格が必要です`,
         );
+      }
+    }
+    const modeDecisionPath = path.join(issuePath, MODE_DECISION_FILE);
+    if (!fs.existsSync(modeDecisionPath)) {
+      mode = "full";
+      errors.push("PoC宣言を保持する00_モード判定.jsonがありません");
+    } else {
+      const parsed = parseModeDecision(
+        fs.readFileSync(modeDecisionPath, "utf8"),
+      );
+      if (
+        !parsed.decision ||
+        parsed.decision.mode !== "poc" ||
+        !parsed.decision.poc
+      ) {
+        mode = "full";
+        errors.push(
+          `PoC即時隔離観測宣言が不正です: ${parsed.errors.join("; ") || "poc宣言なし"}`,
+        );
+      } else {
+        const title = readTwoColumnValue(text, "件名") ?? "";
+        const expected = requirementDocument(
+          "poc",
+          title,
+          parsed.decision.answers,
+          parsed.decision.poc,
+        );
+        const contractSections = (source: string): string =>
+          source.slice(
+            source.indexOf("## 4. PoC宣言（必須）"),
+            source.indexOf("## 6. 要求、受け入れ条件"),
+          );
+        if (contractSections(text) !== contractSections(expected)) {
+          mode = "full";
+          errors.push(
+            "00_要求定義.mdのPoC宣言・high risk確認が00_モード判定.jsonと一致しません",
+          );
+        }
       }
     }
     for (const id of POC_HIGH_RISK_IDS) {

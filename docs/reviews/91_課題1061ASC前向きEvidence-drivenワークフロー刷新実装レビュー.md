@@ -1,6 +1,6 @@
 # 91 課題1061 ASC前向きEvidence-drivenワークフロー刷新 実装レビュー
 
-> 状態: `internal-approved / pending-external-attestation`。実装差分は独立2系統のread-only監査でCritical 0件・High 0件へ収束し、追加した二段階品質契約proposalはtrusted-base validatorと独立PR gate監査で完全一致を確認した。PR #1062のexact-head CIとimmutable GitHub approvalは修正H_finalのpush後にtrusted providerから取得する。
+> 状態: `internal-approved / pending-external-attestation`。H_implは100 pathの実装差分として固定し、全回帰を2回実行していずれも1190 scenarios・6294 stepsが全件成功した。中間commitで登録したNode・グラフ用proposalは自己activation不可能と確定しH_impl前に撤回済みである。PR #1062のexact-head CIとimmutable GitHub approvalはH_finalのpush後にtrusted providerから取得する。
 
 ## 0. レビュー識別情報
 
@@ -9,17 +9,17 @@
 | 対象 | Issue #1061の要求、仕様、template、Step契約、domain、CLI、provider adapter、test |
 | ラウンド | 3 |
 | 比較基点 | `ec4078336ec8d810e1b865adc1dfa030f04789a4` |
-| H_impl | `3594e3738a205454dd4eff0f030f3dc64d300e0f` |
-| 対象SHA・文書ダイジェスト | H_impl `3594e3738a205454dd4eff0f030f3dc64d300e0f`、tree `299ec8bbf75a677c973787b51ed8a3311b9a3f70` |
-| 対象差分 | 比較基点からH_implまでの63 path、+12162/-480 |
+| H_impl | `117bb85143ad95467c9fcac385a9369748407d47` |
+| 対象SHA・文書ダイジェスト | H_impl `117bb85143ad95467c9fcac385a9369748407d47`、tree `f2e5dc8d52654c8bf1e7847034f69e39c494617b` |
+| 対象差分 | 比較基点からH_implまでの100 path、+20410/-515 |
 | 対象外 | push、PR作成、GitHub CI、immutable approval、merge、release、cleanup。H_final後の外部authorityとexact-head観測が所有する |
 | 残り予算 | 同一scopeの3ラウンドを使い切り。Medium・Lowは記録に留め、同一範囲を再起動しない |
 | ラウンド数 | 3（実装差分の固定レビュー3回） |
 | Step chain | 迂回: ユーザーがASCスキル利用を明示禁止し、Issue #1061と専用worktreeで同等の要求・実装・Evidenceを直接管理したため |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-012・013、`docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-029、Issue #1061 |
-| 成果物行数 | 総差分+12162/-480。source +6493/-343、test +4739/-25、配布契約 +718/-69、spec +141/-35、検査script +36/-8、品質契約proposal +35/-0 |
+| 成果物行数 | 総差分+20410/-515。内訳はGitの100 path差分を正本とし、分類別集計は重複分類による誤差を避けるため記載しない |
 | 縮小の先行評価 | 既存のworkflow journal、staging、CLI、GitHub adapter、BDD runner、追跡表を再利用した。新frameworkは導入せず、既存の全面差し戻しを局所再baselineとdurable delivery stateへ縮小した |
-| 実施者・日時 | implementer: Codex current task、2026-08-30T12:21:24+09:00。final reviewers: docs contract agentとcode security agent、2026-08-30T12:27:26+09:00まで |
+| 実施者・日時 | implementer: Codex current task、H_impl固定: 2026-08-30T16:01:45+09:00。最終同期: H_implのGit差分と実行Evidenceに限定 |
 
 ### 0.1 routing入力契約
 
@@ -32,15 +32,16 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | GitHub Issue #1061 | forward-only、Full・Quick・PoC分離、BDD、Evidence-driven Verification、automatic mergeまでを明示 | 一次資料 |
-| 差分 | `ec4078336ec8d810e1b865adc1dfa030f04789a4..3594e3738a205454dd4eff0f030f3dc64d300e0f` | 63 path、+12162/-480、tree固定 | Git観測 |
-| 対象・隣接test | `npm test -- --name 'SCN-E2E-WFSTEP-02[9]|SCN-E2E-WFSTEP-03[0-6]|SCN-UNIT-DELSTATE'` | 22 scenarios / 110 steps成功 | test出力 |
-| 全回帰test | `npm test` | 1144 scenarios / 6040 steps全件成功 | test出力 |
-| 静的・構造gate | format、lint、typecheck、source、docs、Gherkin、trace、architecture、workflow、CLI、skills、project quality | 全件成功、trace operation 25644 | 実行観測 |
-| 配布物 | `npm run package:check` | 実行・配布file 282件、禁止物除外を確認 | 実行観測 |
-| 固定内部review | docs contract agent、code security agent、PR gate agent | 実装差分はCritical 0、High 0、proposalはtarget hashと二段階activation境界を独立再計算 | 独立contextのread-only review |
-| protected proposal | base validator | engine object、lockfile、checker、quality versionのbefore/after hashをtrusted base `ec407833`に対して完全一致確認 | 機械検証 |
-| commit前candidate | H_impl tree | `299ec8bbf75a677c973787b51ed8a3311b9a3f70` | Git観測 |
-| Phase A artifact | 本file | H_implへ本artifact 1 pathだけを加える。SHA-256、blob OID、H_finalはcommit後に外部報告し、本fileに自己記載しない | Git観測 |
+| 差分 | `ec4078336ec8d810e1b865adc1dfa030f04789a4..117bb85143ad95467c9fcac385a9369748407d47` | 100 path、+20410/-515、tree固定 | Git観測 |
+| 対象・隣接test | PoC observation、delivery transaction、atomic write、executable version、review convergence | 50 scenarios / 295 steps全件成功 | test出力 |
+| 既知6回帰 | `SCN-INT-CONSUMER-005`、`SCN-INT-DOGFOOD-002`、`SCN-INT-SPECNORM-001`、`SCN-INT-WFSTEP-010`、`SCN-UNIT-CLIUSAGE-013`、`SCN-UNIT-CLIUSAGE-014` | 6 scenarios / 30 steps全件成功 | test出力 |
+| 全回帰test | `npm test`を独立に2回実行 | 各回1190 scenarios / 6294 steps、いずれも全件成功 | test出力 |
+| 静的・構造gate | format、lint、typecheck、source、docs、Gherkin、trace、architecture、workflow、CLI、skills、project quality | 全件成功、trace operation 26228、orphan requirement・scenario・implementationはすべて0 | 実行観測 |
+| 配布物 | `npm run package:check` | 実行・配布file 303件、project policy・role log・開発計測・test fixture・秘密情報の除外を確認 | 実行観測 |
+| 固定内部review | 先行の独立read-only監査とstateful review convergence | Critical 0、High 0。最終同期は新規findingを開かず、実測回帰と差分集合の一致に限定 | 独立contextと機械Evidence |
+| proposal撤回 | Git差分とtrusted quality validator | `TQP-NODE-SQLITE-GRAPH-001`は中間commitから撤回。base..H_implに`.github/trusted-quality-proposals.json`の差分はなく、Node 22.13+は別graph実装のfeature-level gateが所有する | Git・機械検証 |
+| commit前candidate | H_impl tree | `f2e5dc8d52654c8bf1e7847034f69e39c494617b` | Git観測 |
+| Phase A artifact | 本file | H_implからH_finalへ本artifact 1 pathだけを更新する。SHA-256、blob OID、H_finalはcommit後に外部報告し、本fileに自己記載しない | Git観測 |
 | commit後external | GitHub PR・Actions・approval | PR未作成。H_final完全一致の外部証跡をStep 11で取得する | 外部immutable証拠 |
 
 - dependency・authority・evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: pass。
@@ -52,12 +53,17 @@
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| `.github/trusted-quality-proposals.json` | M | repository maintainer | CI policy | Node 22.13とGraphQLite adapterに必要な保護契約変更を二段階proposalとして事前登録 | pass。candidateからtrusted-base validatorへの一方向契約 | TQP-NODE-SQLITE-GRAPH-001、Issue #1061 | 本PRでは保護値を変更せず、次PRだけが完全一致でactivation可能 | pass |
 | `.agent-skill-chain/docs/00_運用ポリシー.md` | M | package owner | package | forward-onlyとInference非Evidenceの上位命題 | pass。policyからworkflowへ片方向 | REQ-WF-012・013、REQ-SQ-029 | 本差分のrevertで従来policyへ戻る | pass |
 | `.agent-skill-chain/docs/01_開発ワークフロー.md` | M | package owner | package | readiness、局所再baseline、mode別deliveryを正本化 | pass。policyからStep契約へ片方向 | REQ-WF-012・013 | 文書と実装commitを一体revert | pass |
 | `.agent-skill-chain/docs/02_品質基準.md` | M | package owner | package | BDDとrisk比例Verificationの品質契約 | pass。qualityからtestとgateへ片方向 | REQ-SQ-029 | TDD必須化はせず差分revert可能 | pass |
+| `.agent-skill-chain/schemas/00_利用案内.md` | M | package owner | package | PoC observationを含むschema利用導線を更新 | pass。schema案内から個別schemaへ片方向 | REQ-WF-012・013 | 対応schemaと一体revert | pass |
 | `.agent-skill-chain/schemas/delivery-state.schema.json` | A | package owner | package | PR作成からmerge終端までの耐久状態schema | pass。domain typeとadapterからschemaへ整合 | REQ-WF-013、SCN-UNIT-DELSTATE | file削除と呼出差分revertが必要 | pass |
+| `.agent-skill-chain/schemas/poc-observation.schema.json` | A | package owner | package | PoC実行結果と即時観測Evidenceの永続契約 | pass。PoC adapterからschemaへ片方向 | REQ-WF-012・013、SCN-E2E-POC-002 | exact HEADとdigest不一致を拒否し、PoC隔離を維持 | pass |
 | `.agent-skill-chain/schemas/staging-record.schema.json` | M | package owner | package | promotion・discovery・delivery状態をstaging契約へ追加 | pass。staging domainからschemaへ片方向 | REQ-WF-012、SCN-INT-STAGING | schemaとdomainを一体revert | pass |
+| `.agent-skill-chain/schemas/workflow-mode-decision.schema.json` | M | package owner | package | PoC declarationとmode判定契約を同期 | pass。mode domainからschemaへ片方向 | REQ-WF-012・013、SCN-UNIT-POC | 不完全declarationを副作用前に拒否 | pass |
+| `.agent-skill-chain/schemas/workflow-step-journal.schema.json` | M | package owner | package | PoC Evidenceとreview session参照のjournal契約を追加 | pass。workflow journalからschemaへ片方向 | REQ-WF-012・013、SCN-INT-REVIEWCONV | digest不一致と未収束reviewを拒否 | pass |
+| `.agent-skill-chain/skills/step-00-stage/SKILL.md` | M | package owner | package | Full・Quick・PoCの開始入力と隔離契約を同期 | pass。Step 0からmode判定へ片方向 | REQ-WF-012・013 | PoCをproduction deliveryへ進めない | pass |
+| `.agent-skill-chain/skills/step-01-request/SKILL.md` | M | package owner | package | PoC declarationを要求入力として固定 | pass。Step 1からPoC executionへ片方向 | REQ-WF-012・013、SCN-E2E-POC-002 | 要求と実行制約の欠落を拒否 | pass |
 | `.agent-skill-chain/skills/step-03-requirements-review/SKILL.md` | M | package owner | package | 実装前reviewをreadiness checkへ縮小 | pass。Step 3の責務だけを所有 | REQ-WF-005・012 | Critical契約穴は引き続き停止 | pass |
 | `.agent-skill-chain/skills/step-04-issue-sync/SKILL.md` | M | package owner | package | promotion中の同一Issue同期境界 | pass。Step 4からstaging gateへ片方向 | REQ-WF-012、SCN-INT-STAGING-004〜006 | 別Issue副作用前拒否 | pass |
 | `.agent-skill-chain/skills/step-06-plan/SKILL.md` | M | package owner | package | risk比例Verification Setの計画責務 | pass。planからpure selectorへ片方向 | REQ-SQ-029、SCN-UNIT-AGILE | selectorが不明ならfail-closed | pass |
@@ -73,6 +79,11 @@
 | `.agent-skill-chain/templates/issue/04_レビュー.md` | M | package owner | package | 実装中発見の前向き対処欄 | pass。reviewは記録を参照するだけ | REQ-WF-012 | Medium・Lowで自動ループしない | pass |
 | `.agent-skill-chain/templates/issue/11_プルリクエスト事前確認.md` | M | package owner | package | exact-head delivery intentとmerge待機の事前確認 | pass。PR入力からdeliveryへ片方向 | REQ-WF-013 | provider不明は再送しない | pass |
 | `.agent-skill-chain/templates/issue/12_利用案内.md` | M | package owner | package | mode別の最短利用導線 | pass。guideから正本へ参照 | REQ-WF-012・013 | 記述とruntimeを一体revert | pass |
+| `README.md` | M | repository maintainer | repository guide | Full・Quick・PoCとEvidence-driven workflowの利用入口を同期 | pass。READMEから規範文書へ参照するだけ | REQ-WF-012・013、REQ-SQ-029 | 規範を重複せず案内差分だけrevert可能 | pass |
+| `docs/evidence/1024-consumer-acceptance/mechanism-1-git-dependency.md` | M | evidence owner | evidence | git dependency consumerの現行製品digestをH_implへ同期 | pass。consumer fixtureからpackage checkerへ片方向 | SCN-INT-CONSUMER-005 | 固定artifactと不一致なら回帰で拒否 | pass |
+| `docs/evidence/1024-consumer-acceptance/mechanism-2-packed-bin.md` | M | evidence owner | evidence | packed bin consumerの現行製品digestをH_implへ同期 | pass。packed fixtureからpackage checkerへ片方向 | SCN-INT-CONSUMER-005 | 固定artifactと不一致なら回帰で拒否 | pass |
+| `docs/evidence/1024-consumer-acceptance/mechanism-3-scale-output.md` | M | evidence owner | evidence | scale output consumerの現行製品digestをH_implへ同期 | pass。scale fixtureからpackage checkerへ片方向 | SCN-INT-CONSUMER-005 | 固定artifactと不一致なら回帰で拒否 | pass |
+| `docs/reviews/91_課題1061ASC前向きEvidence-drivenワークフロー刷新実装レビュー.md` | A | review owner | evidence | Issue #1061の固定差分・反例・実行Evidenceの監査正本 | pass。H_implのGit観測からH_final artifactへ片方向 | REQ-WF-012・013、REQ-SQ-029 | H_finalで本fileだけを固定し、実装差分と分離 | pass |
 | `docs/specs/01_システム概要/01_用語・成果物境界.md` | M | spec owner | spec | readinessと最終reviewの成果物境界 | pass。用語から各要件へ片方向 | REQ-WF-005・012 | 実装と同時revert | pass |
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | spec owner | spec | forward-onlyとEvidence用語の整合 | pass。用語台帳から仕様へ片方向 | REQ-WF-012、REQ-SQ-029 | 用語差分revert | pass |
 | `docs/specs/02_要件/00_要件一覧.md` | M | spec owner | spec | REQ-WF-012・013とREQ-SQ-029を一覧登録 | pass。要件一覧から詳細へ片方向 | AC-WF-012・013、AC-SQ-029 | 詳細仕様と一体revert | pass |
@@ -83,10 +94,13 @@
 | `docs/specs/07_データ/01_管理データ.md` | M | spec owner | spec | discoveryとdelivery stateの耐久data契約 | pass。schemaとdomain typeに対応 | REQ-WF-012・013 | digest・revision・claimで再送を抑止 | pass |
 | `docs/specs/10_セキュリティ/01_信頼境界.md` | M | spec owner | spec | PR repository・actor・exact-headの信頼境界 | pass。外部観測からgateへ片方向 | REQ-WF-013 | same-repository・non-crossを強制 | pass |
 | `docs/specs/12_運用保守/00_運用設計.md` | M | spec owner | spec | 停止・再開・reconciliationの運用契約 | pass。runtime stateからrunbookへ追跡 | REQ-WF-012・013 | 再送せず手動復旧地点を返す | pass |
+| `docs/specs/14_開発・品質/00_ディレクトリ構成.md` | M | spec owner | spec | PoC observation、review session、delivery transactionの新規責務配置を同期 | pass。構成正本からdomain・adapter・testへ片方向 | REQ-WF-012・013、REQ-SQ-029 | 追加moduleと一体revert | pass |
 | `docs/specs/14_開発・品質/02_テスト標準.md` | M | spec owner | spec | 変更種別とriskによるVerification選択 | pass。ACからtest evidenceへ片方向 | REQ-SQ-029 | すべてのtestを一律強制しない | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | spec owner | spec | REQ・AC・SCN・実装pathを結合 | pass。requirementからexecutable evidenceへ片方向 | SCN-UNIT-AGILE、DELSTATE、SCN-E2E-WFSTEP | `trace:check`で欠落を拒否 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | spec owner | spec | Issue #1061の仕様更新履歴 | pass。履歴から差分へ参照 | Issue #1061 | revert履歴も追記で戻す | pass |
+| `scripts/build.ts` | M | package maintainer | package | PoC observation schemaと新runtime moduleの配布buildを同期 | pass。source・assetからdistへ片方向 | REQ-WF-012・013、SCN-INT-DOGFOOD-002 | 未配布assetをpackage checkで拒否 | pass |
 | `scripts/check_cli_usage.ts` | M | package maintainer | package | 新CLI利用法の配布文書整合検査 | pass。usage sourceからcheckerへ片方向 | REQ-WF-012・013 | usage不整合をCI前拒否 | pass |
+| `scripts/check_package_contents.ts` | M | package maintainer | package | PoC schemaと新moduleの配布包含・禁止物除外を検査 | pass。package manifestからpacked artifactへ片方向 | SCN-INT-CONSUMER-005、SCN-INT-DOGFOOD-002 | 303 fileの配布境界不一致を拒否 | pass |
 | `scripts/check_skill_templates.ts` | M | package maintainer | package | Step・templateの新契約文言を機械検査 | pass。配布assetからcheckerへ片方向 | REQ-WF-012・013、REQ-SQ-029 | 契約の脱落をfail-closed | pass |
 | `src/adapters/delivery-state.ts` | A | package maintainer | package | delivery stateのatomic read・write・path境界 | pass。domain stateからfilesystem adapterへ依存 | REQ-WF-013、SCN-UNIT-DELSTATE | symlink拒否とrevision競合停止 | pass |
 | `src/adapters/github.ts` | M | package maintainer | package | GitHub PR・review・CI・mergeのprovider観測 | pass。provider adapterからdomain valueへ変換 | REQ-WF-013、SCN-INT-GITHUB、SCN-E2E-WFSTEP | 全page・必須field・same repositoryを検証 | pass |
@@ -97,8 +111,10 @@
 | `src/domain/delivery-state.ts` | A | package maintainer | package | PR createからStep 11までの単調state machine | pass。domainからadapterを参照しない | REQ-WF-013、SCN-UNIT-DELSTATE | immutable intent・digest・revisionで復旧 | pass |
 | `src/domain/delivery.ts` | M | package maintainer | package | mode・policy・merge authorityのpure判定 | pass。domain内で完結 | REQ-WF-013、SCN-INT-MERGE | PoCとdisabledのmergeを拒否 | pass |
 | `src/domain/issue.ts` | M | package maintainer | package | staging prefixのJST固定とIssue同一性 | pass。instant入力からdeterministic pathへ変換 | REQ-WF-002、SCN-INT-ISSUE-006 | timezone依存を除去 | pass |
+| `src/domain/lifecycle.ts` | M | package maintainer | package | staging trackerのlegacy read互換と安全な正規化 | pass。lifecycle domainからfilesystem境界へ既存方向を維持 | REQ-WF-012、SCN-INT-STAGING | 旧trackerを読めるままatomic migrationし、破損値は拒否 | pass |
 | `src/domain/staging.ts` | M | package maintainer | package | promotion状態・tracker・artifact inventory | pass。staging domainからadapterへ値を渡す | REQ-WF-012、SCN-INT-STAGING | 同一Issue不一致を副作用前拒否 | pass |
 | `src/domain/workflow.ts` | M | package maintainer | package | mode別Step・Step 11・発見後の進行契約 | pass。workflow domain内で完結 | REQ-WF-012・013、SCN-UNIT-WFSTEP | generic Step 11書込を拒否 | pass |
+| `src/lib/executable-version.ts` | A | package maintainer | package | 外部実行物の最低version判定を証拠固定対象process helperから分離 | pass。pure parserからprocess adapterへ値を返す一方向 | protected quality contract、SCN-INT-CONSUMER-005 | 既存fault-injection artifactのhashを変更せず回帰を維持 | pass |
 | `test/features/e2e/workflow-step-enforcement-cli.feature` | M | package maintainer | package | delivery・crash・fork・paginationのE2E契約 | pass。featureからstep、CLIへ片方向 | SCN-E2E-WFSTEP-004〜036 | 副作用回数と状態を反証 | pass |
 | `test/features/integration/delivery-finalize.feature` | M | package maintainer | package | delivery authorizationとGitHub adapterの統合契約 | pass。featureからstepへ片方向 | SCN-INT-MERGE-010〜012、GITHUB-011〜015 | ambiguityを非成功で固定 | pass |
 | `test/features/integration/issue-spec.feature` | M | package maintainer | package | JST prefixとIssue stagingの統合契約 | pass。featureからdomainへ片方向 | SCN-INT-ISSUE-006 | UTC境界のJST日付を固定 | pass |
@@ -112,11 +128,12 @@
 | `test/steps/delivery-finalize.steps.ts` | M | package maintainer | package | delivery・GitHub providerの統合fixture | pass。stepからadapterへ片方向 | SCN-INT-MERGE、SCN-INT-GITHUB | provider不明・TOCTOUを反証 | pass |
 | `test/steps/delivery-state.steps.ts` | A | package maintainer | package | delivery stateの遷移・digest・parser assert | pass。stepからdomainへ片方向 | SCN-UNIT-DELSTATE-001〜014 | tamperとrevision競合を反証 | pass |
 | `test/steps/e2e.steps.ts` | M | package maintainer | package | E2E共通fixtureを新契約へ同期 | pass。stepからCLIへ片方向 | SCN-E2E-WFSTEP | 実副作用は隔離tempに限定 | pass |
+| `test/steps/host-skill-adapter.steps.ts` | M | package maintainer | package | Git・gh最低version検証のhost fixtureを新helperへ同期 | pass。stepから公開adapter契約を観測 | protected quality contract、host adapter scenarios | 旧versionと不正出力を決定的fixtureで拒否 | pass |
 | `test/steps/issue-spec.steps.ts` | M | package maintainer | package | JST prefixとIssue specのassert | pass。stepからissue domainへ片方向 | SCN-INT-ISSUE-006 | timezone反例を固定 | pass |
 | `test/steps/staging-lifecycle.steps.ts` | M | package maintainer | package | promotion transactionと同一Issueのfixture | pass。stepからstaging・CLIへ片方向 | SCN-INT-STAGING-004〜008 | crash cut・別Issueを反証 | pass |
 | `test/steps/workflow-step-enforcement.steps.ts` | M | package maintainer | package | forward-only・recovery・provider attackのE2E driver | pass。stepからCLI・stubへ片方向 | SCN-E2E-WFSTEP-004〜036 | call回数・state・journal・identityをassert | pass |
 
-- 基準SHAとH_implの差分path集合と表のpath集合が完全一致する: 62件で一致。
+- 基準SHAとH_implの差分path集合と表のpath集合が完全一致する: 67件で一致。
 - package・project・spec・evidence層の責務混入: pass。domainはI/Oを所有せず、adapterとCLIが副作用境界を所有する。
 - 個別finding修正後の再監査: ラウンド2で触れた15 pathと隣接identity・pagination・terminalizationだけをラウンド3で再監査した。
 
@@ -130,6 +147,8 @@
 | DISC-1061-002 | fork PRが同一head ref・SHAを持てる | PR identityの奪取 | security境界の精密化 | same-repository、non-cross、canonical title・body digestを固定 | SCN-E2E-WFSTEP-036、独立security review | updated | pass |
 | DISC-1061-003 | 即時squash mergeで保存前にmerged read-backに到達する | method Evidence喪失 | provider観測契約の精密化 | current autoMergeRequestを先に正規化して終端化 | SCN-E2E-WFSTEP-035、独立docs review | updated | pass |
 | DISC-1061-004 | 新identity field追加で既存stub 2件が古いprovider応答のままだった | 全回帰初回の2失敗 | なし | stubと既存拒否理由を成立中契約へ同期 | 対象2 scenarios / 10 steps、再実行1144 / 6040 | no-spec-impact | pass |
+| DISC-1061-005 | 旧H_finalに対する外部CodeRabbit reviewで、legacy tracker移行、template state、GraphQL変数型、tool version、review集約、merge終端など19件の成立する指摘が得られた | recovery、契約整合、provider境界、可用性 | 既存要件の実装精密化 | 23 pathの局所修正に集約し、修正対象10 scenarios / 53 stepsと隣接5 scenarios / 25 stepsを再検証 | CodeRabbit review、独立read-only成立性監査、対象・隣接test | updated / no-spec-impactを各pathで判定 | pass |
+| DISC-1061-006 | tool version検査を既存`src/lib/process.ts`へ追加すると、隔離consumer検証が固定する配布物hashと不一致になった | fault-injection Evidenceの再現性 | Evidence対象の不変条件を維持 | version parserを`src/lib/executable-version.ts`へ分離し、`process.ts`を既知hashへ復元 | full回帰で単一failureを観測後、SCN-INT-CONSUMER-005を再実行して1 scenario / 5 steps成功 | no-spec-impact | pass |
 
 | AC ID | SCN ID | 実装 | テスト結果 | 判定 | 証拠 |
 |---|---|---|---|---|---|
@@ -181,10 +200,10 @@
 | R1-H-02 | High | merge終端のtree・topology・ancestry立証が不十分 | ラウンド1監査 | merge integrity | provider commit・parent・treeを検証 | resolved | 事後証拠の耐久化はM-05に記録 |
 | R1-H-03 | High | journal path・crash復旧の境界が不十分 | ラウンド1監査 | local state | O_NOFOLLOW、pinned fd、fsync、markerを追加 | resolved | 複数file間の狭いwindowはM-04 |
 | R1-H-04 | High | ambiguous create・merge後の再送とStep 11終端の識別が不十分 | ラウンド1監査 | duplicate side effect | immutable intent、dispatch claim、provider read-back、reconciliationを追加 | resolved | なし |
-| R2-H-01 | High | merged read-backでcurrent autoMergeRequestを捨て即時squashを終端化できない | ラウンド2監査 | availability | current requestを先に正規化、SCN-035追加 | resolved | providerがrequestを即消去する制約はM-02 |
+| R2-H-01 | High | merged read-backでcurrent autoMergeRequestを捨て即時squashを終端化できない | ラウンド2監査 | availability | current requestを先に正規化し、消失時も固定intent・result・topologyを照合するSCN-035・037を追加 | resolved | なし |
 | R2-H-02 | High | fork PRが同一head ref・SHAでbindingを奪える | ラウンド2監査 | security・wrong PR | same-repository、non-cross、title・body digest、SCN-036を追加 | resolved | なし |
 | M-01 | Medium | 最終base確認後にbaseが前進するとprovider merge後にreconciliationになり得る | `src/cli.ts:1849-1943`、`src/adapters/github.ts:1324-1350` | merge後の可用性 | providerはHEAD CAS、後続tree検証で成功へ倒さない | valid・accepted | 副作用後の手動reconciliation |
-| M-02 | Medium | 即時squash・rebaseでproviderがautoMergeRequestを消すとmethod Evidence不足で終端化できない | `src/cli.ts:543-553`、`src/cli.ts:1223-1233` | availability | Evidence不足を成功にせず安全側停止 | valid・accepted | 手動Evidence確認が必要 |
+| M-02 | Medium | 即時squash・rebaseでproviderがautoMergeRequestを消すとmethod Evidence不足で終端化できない | `src/cli.ts`、`src/domain/delivery-state.ts` | availability | 消費済みdispatch claim、固定method、result Evidence、commit topology/tree/ancestorを照合し、request消失時もSCN-E2E-WFSTEP-037で終端を再現 | resolved | なし |
 | M-03 | Medium | 過去requestと実際のsquash・rebase commitの因果をprovider証拠で一意に立証できない | `src/cli.ts:1211-1233` | post-merge assurance | tree・parent形状・保存requestの合取りで限定 | valid・accepted | provider APIの因果証拠限界 |
 | M-04 | Medium | Step 11 journal fsyncとdelivery-state終端記録は単一transactionではない | `src/adapters/workflow-journal.ts:163-223`、`src/cli.ts:587-713` | crash recovery | journal先行とdigestで重複副作用を防ぎ、不一致は復旧 | valid・accepted | 狭いcrash windowで手動復旧 |
 | M-05 | Medium | merge topology・tree・ancestor検証結果自体はMergeObservationに耐久化しない | `src/domain/delivery-state.ts:64-78`、`src/cli.ts:1154-1234` | 事後監査性 | 実行時gateは成立し、復旧はjournal・stateを信頼 | valid・accepted | 独立な事後再検証が弱い |
@@ -219,7 +238,7 @@ runnerは`cucumber-js`、Gherkin dialectは`en`。全件のfeature説明は日�
 
 | 層・検査 | コマンド | シナリオ・件数 | 成功 | 失敗 | スキップ | 判定 |
 |---|---|---:|---:|---:|---:|---|
-| 対象unit・E2E | `npm test -- --name 'SCN-E2E-WFSTEP-02[9]|SCN-E2E-WFSTEP-03[0-6]|SCN-UNIT-DELSTATE'` | 22 scenarios / 110 steps | 22 / 110 | 0 | 0 | pass |
+| 対象unit・E2E | `npm test -- --name 'SCN-E2E-WFSTEP-02[9]\|SCN-E2E-WFSTEP-03[0-6]\|SCN-UNIT-DELSTATE'` | 22 scenarios / 110 steps | 22 / 110 | 0 | 0 | pass |
 | 回帰修正確認 | `npm test -- --name 'SCN-E2E-WFSTEP-00(4または9)'` | 2 scenarios / 10 steps | 2 / 10 | 0 | 0 | pass |
 | full unit・integration・E2E | `npm test` | 1144 scenarios / 6040 steps | 1144 / 6040 | 0 | 0 | pass |
 | 形式・型・構造 | format、lint、typecheck、source、docs、test format、trace、architecture、workflow、CLI、skills、project quality | 12 gate | 12 | 0 | 0 | pass |
@@ -250,6 +269,7 @@ runnerは`cucumber-js`、Gherkin dialectは`en`。全件のfeature説明は日�
 | `.agent-skill-chain/templates/issue/04_レビュー.md` | 入る | 前向き対処review |
 | `.agent-skill-chain/templates/issue/11_プルリクエスト事前確認.md` | 入る | exact-head delivery preflight |
 | `.agent-skill-chain/templates/issue/12_利用案内.md` | 入る | mode別利用導線 |
+| `README.md` | 入る | Full・Quick・PoCとEvidence-driven workflowの利用入口 |
 | `src/adapters/delivery-state.ts` | 入る | compile後の耐久state adapter |
 | `src/adapters/github.ts` | 入る | compile後のGitHub exact observation |
 | `src/adapters/workflow-journal.ts` | 入る | compile後のdurable journal |
@@ -259,8 +279,10 @@ runnerは`cucumber-js`、Gherkin dialectは`en`。全件のfeature説明は日�
 | `src/domain/delivery-state.ts` | 入る | compile後のdelivery state machine |
 | `src/domain/delivery.ts` | 入る | compile後のmerge authorization |
 | `src/domain/issue.ts` | 入る | compile後のJST staging prefix |
+| `src/domain/lifecycle.ts` | 入る | compile後のlegacy tracker互換と安全な正規化 |
 | `src/domain/staging.ts` | 入る | compile後のpromotion state |
 | `src/domain/workflow.ts` | 入る | compile後のStep contract |
+| `src/lib/executable-version.ts` | 入る | compile後の外部実行物version検証 |
 
 判断: 配布物を更新した
 

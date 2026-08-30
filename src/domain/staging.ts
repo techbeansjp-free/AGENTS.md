@@ -625,35 +625,57 @@ export function migrateLegacyStagingTracker(
   directory: string,
   input: Readonly<{ repository: string; issue: number }>,
 ): StoredStagingRecord {
+  const resolved = path.resolve(directory);
+  return withStagingMutationLock(resolved, () =>
+    migrateLegacyStagingTrackerLocked(resolved, input),
+  );
+}
+
+/**
+ * Migrate while the caller holds the staging mutation lock. Delivery uses this
+ * form so validation, compatibility migration and the first durable intent are
+ * one serialized operation instead of two separately locked mutations.
+ */
+export function migrateLegacyStagingTrackerLocked(
+  directory: string,
+  input: Readonly<{ repository: string; issue: number }>,
+): StoredStagingRecord {
+  const [owner, repository, ...extra] = input.repository.split("/");
   if (
-    !/^[^/\s]+\/[^/\s]+$/u.test(input.repository) ||
+    !owner ||
+    !repository ||
+    extra.length > 0 ||
+    !/^[A-Za-z0-9_.-]+$/u.test(owner) ||
+    !/^[A-Za-z0-9_.-]+$/u.test(repository) ||
+    owner === "." ||
+    owner === ".." ||
+    repository === "." ||
+    repository === ".." ||
     !Number.isSafeInteger(input.issue) ||
     input.issue <= 0
   )
     throw new Error("legacy tracker移行対象のrepositoryまたはIssueが不正です");
   const resolved = path.resolve(directory);
-  return withStagingMutationLock(resolved, () => {
-    const current = readStoredStagingRecord(resolved);
-    const expected = `https://github.com/${input.repository}/issues/${input.issue}`;
-    if (current.tracker?.toLowerCase() === expected.toLowerCase())
-      return current;
-    const legacy =
-      typeof current.tracker === "string"
-        ? LEGACY_TRACKER.exec(current.tracker)
-        : null;
-    if (!legacy || Number(legacy[1]) !== input.issue)
-      throw new Error(
-        "legacy trackerが移行対象のrepository・Issueと一致しません",
-      );
-    writeFileAtomic(
-      path.join(resolved, STAGING_RECORD_FILE),
-      `${stableJson({ ...current, tracker: expected })}\n`,
+  const current = readStoredStagingRecord(resolved);
+  const expected = `https://github.com/${input.repository}/issues/${input.issue}`;
+  if (current.tracker?.toLowerCase() === expected.toLowerCase()) return current;
+  const legacy =
+    typeof current.tracker === "string"
+      ? LEGACY_TRACKER.exec(current.tracker)
+      : null;
+  if (!legacy || Number(legacy[1]) !== input.issue)
+    throw new Error(
+      "legacy trackerが移行対象のrepository・Issueと一致しません",
     );
-    const reread = readStoredStagingRecord(resolved);
-    if (reread.tracker !== expected)
-      throw new Error("legacy trackerの移行後read-backが一致しません");
-    return reread;
-  });
+  writeFileAtomic(
+    path.join(resolved, STAGING_RECORD_FILE),
+    `${stableJson({ ...current, tracker: expected })}\n`,
+    { temporaryDirectory: path.dirname(resolved) },
+  );
+  const reread = readStoredStagingRecord(resolved);
+  if (reread.tracker !== expected)
+    throw new Error("legacy trackerの移行後read-backが一致しません");
+  return reread;
 }
 
 export function refreshStoredStagingDigest(
@@ -670,6 +692,7 @@ export function refreshStoredStagingDigest(
     writeFileAtomic(
       path.join(directory, STAGING_RECORD_FILE),
       `${JSON.stringify(updated, null, 2)}\n`,
+      { temporaryDirectory: path.dirname(path.resolve(directory)) },
     );
     const reread = readStoredStagingRecord(directory);
     if (JSON.stringify(reread) !== JSON.stringify(updated))
@@ -708,6 +731,7 @@ export function promoteStoredStagingModeToFull(
     writeFileAtomic(
       path.join(directory, STAGING_RECORD_FILE),
       `${JSON.stringify(updated, null, 2)}\n`,
+      { temporaryDirectory: path.dirname(path.resolve(directory)) },
     );
     const reread = readStoredStagingRecord(directory);
     if (JSON.stringify(reread) !== JSON.stringify(updated))
@@ -741,6 +765,7 @@ export function finalizeStoredStagingPromotion(
     writeFileAtomic(
       path.join(directory, STAGING_RECORD_FILE),
       `${JSON.stringify(updated, null, 2)}\n`,
+      { temporaryDirectory: path.dirname(path.resolve(directory)) },
     );
     const reread = readStoredStagingRecord(directory);
     if (JSON.stringify(reread) !== JSON.stringify(updated))

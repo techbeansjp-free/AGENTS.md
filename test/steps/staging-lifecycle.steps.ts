@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   applyStagingCleanup,
   inspectStaging,
+  migrateLegacyStagingTracker,
   planStagingCleanup,
   readStoredStagingRecord,
   type StagingCleanupPlan,
@@ -486,7 +487,7 @@ Then("absolute GitHub Issue URLでないtrackerは拒否される", function () 
   );
 });
 
-When("保存済みstaging recordのtrackerをlegacy短縮番号にする", function () {
+When("保存済みlegacy trackerを認可済みwriteとして移行する", function () {
   const recordFile = path.join(this.target ?? "", "staging-record.json");
   const record = JSON.parse(fs.readFileSync(recordFile, "utf8")) as Record<
     string,
@@ -496,19 +497,61 @@ When("保存済みstaging recordのtrackerをlegacy短縮番号にする", funct
     recordFile,
     `${JSON.stringify({ ...record, tracker: "#860" }, null, 2)}\n`,
   );
+  this.before = fs.readFileSync(recordFile, "utf8");
   this.other = resolvePullRequestStaging({
     root: this.root ?? "",
     staging: this.target,
     issue: 860,
     repository: "example/repository",
   });
+  assert.equal(fs.readFileSync(recordFile, "utf8"), this.before);
+  migrateLegacyStagingTracker(this.target ?? "", {
+    repository: "example/repository",
+    issue: 860,
+  });
 });
 
-Then("legacy trackerはPR対象解決時にabsolute URLへ移行される", function () {
+Then(
+  "read-only解決は変更せずlegacy trackerはabsolute URLへ移行される",
+  function () {
+    assert.equal(this.other, this.target);
+    assert.equal(
+      readStoredStagingRecord(this.target ?? "").tracker,
+      "https://github.com/example/repository/issues/860",
+    );
+  },
+);
+
+When(
+  "保存済みlegacy trackerを誤ったrepositoryでread-only解決する",
+  function () {
+    const recordFile = path.join(this.target ?? "", "staging-record.json");
+    const record = JSON.parse(fs.readFileSync(recordFile, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    fs.writeFileSync(
+      recordFile,
+      `${JSON.stringify({ ...record, tracker: "#860" }, null, 2)}\n`,
+    );
+    this.before = fs.readFileSync(recordFile, "utf8");
+    this.other = resolvePullRequestStaging({
+      root: this.root ?? "",
+      staging: this.target,
+      issue: 860,
+      repository: "attacker/repository",
+    });
+  },
+);
+
+Then("staging recordはbyte単位で変更されない", function () {
   assert.equal(this.other, this.target);
   assert.equal(
-    readStoredStagingRecord(this.target ?? "").tracker,
-    "https://github.com/example/repository/issues/860",
+    fs.readFileSync(
+      path.join(this.target ?? "", "staging-record.json"),
+      "utf8",
+    ),
+    this.before,
   );
 });
 

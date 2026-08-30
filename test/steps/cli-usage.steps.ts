@@ -194,6 +194,7 @@ const CHECKS: Readonly<
       "issue",
       "create",
       "--title=題",
+      "--mode=quick",
       `--assessment=${file}`,
     ]);
     fs.rmSync(directory, { recursive: true, force: true });
@@ -255,7 +256,7 @@ const CHECKS: Readonly<
     assert.ok(
       [...misplaced.reasons, misplaced.message].some((text) =>
         text.includes(
-          "同期記録は.agent-skill-chain/tmp/issues/直下のstagingだけに書き込めます",
+          "--stagingは.agent-skill-chain/tmp/issues/直下のdirectoryが必要です",
         ),
       ),
       [...misplaced.reasons, misplaced.message].join(" / "),

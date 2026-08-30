@@ -12,7 +12,10 @@ export const MINIMUM_GIT_VERSION = "2.38.0";
 export const MINIMUM_GH_VERSION = "2.13.0";
 
 function versionTuple(value: string): [number, number, number] | null {
-  const match = /(?:^|\s)v?(\d+)\.(\d+)(?:\.(\d+))?(?=$|[\s-])/u.exec(value);
+  const match =
+    /(?:^|\s)v?(\d+)\.(\d+)(?:\.(\d+))?(?!\.\d)(?=$|[^\p{L}\p{N}])/u.exec(
+      value,
+    );
   if (!match) return null;
   return [Number(match[1]), Number(match[2]), Number(match[3] ?? "0")];
 }
@@ -45,7 +48,21 @@ export function inspectExecutableVersion(
       supported: false,
       diagnostic: `${command} ${minimumVersion}以上を確認できません: ${result.stderr.trim() || `終了値${result.status}`}`,
     };
-  const actual = versionTuple(`${result.stdout}\n${result.stderr}`);
+  return inspectExecutableVersionOutput(
+    command,
+    `${result.stdout}\n${result.stderr}`,
+    minimumVersion,
+  );
+}
+
+export function inspectExecutableVersionOutput(
+  command: string,
+  output: string,
+  minimumVersion: string,
+): ExecutableVersionObservation {
+  const minimum = versionTuple(minimumVersion);
+  if (!minimum) throw new Error(`最低version ${minimumVersion}が不正です`);
+  const actual = versionTuple(output);
   if (!actual)
     return {
       command,

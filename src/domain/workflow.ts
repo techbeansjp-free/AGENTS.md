@@ -2,6 +2,8 @@ import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
   classifyMode,
+  POC_LIMITS,
+  POC_OBSERVABLE_KINDS,
   QUESTIONS,
   type Mode,
   type ModeAnswer,
@@ -181,6 +183,12 @@ export interface StepJournalEntry {
   recordedAt: string;
   artifacts: string[];
   evidence: string;
+  pocObservation?: { headSha: string; evidenceDigest: string };
+  reviewSession?: {
+    sessionId: string;
+    roundDigest: string;
+    headSha: string;
+  };
   humanOverride?: JournalHumanOverride;
 }
 
@@ -191,6 +199,7 @@ export interface ModeDecision {
   changedFiles: string[];
   reasons: string[];
   decidedAt: string;
+  baselineHeadSha?: string;
   poc?: PocDeclaration;
 }
 
@@ -201,7 +210,15 @@ const JOURNAL_FIELDS = new Set([
   "recordedAt",
   "artifacts",
   "evidence",
+  "pocObservation",
+  "reviewSession",
   "humanOverride",
+]);
+const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
+const REVIEW_SESSION_BINDING_FIELDS = new Set([
+  "sessionId",
+  "roundDigest",
+  "headSha",
 ]);
 const OVERRIDE_FIELDS = new Set([
   "issue",
@@ -218,18 +235,45 @@ const MODE_DECISION_FIELDS = new Set([
   "changedFiles",
   "reasons",
   "decidedAt",
+  "baselineHeadSha",
   "poc",
 ]);
 const POC_FIELDS = new Set([
   "purpose",
-  "period",
+  "fixture",
+  "useCases",
+  "scenarios",
+  "observables",
   "outOfScope",
   "successCriteria",
   "abortCriteria",
   "owner",
   "highRisk",
 ]);
-const PERIOD_FIELDS = new Set(["from", "to"]);
+const FIXTURE_FIELDS = new Set([
+  "id",
+  "root",
+  "isolationEvidence",
+  "resetEvidence",
+  "runner",
+]);
+const RUNNER_FIELDS = new Set(["id", "path"]);
+const USE_CASE_FIELDS = new Set(["id", "actor", "goal"]);
+const SCENARIO_FIELDS = new Set([
+  "id",
+  "useCaseId",
+  "given",
+  "when",
+  "then",
+  "argv",
+]);
+const OBSERVABLE_FIELDS = new Set([
+  "id",
+  "scenarioId",
+  "kind",
+  "expected",
+  "target",
+]);
 const RISK_FIELDS = new Set(["id", "present", "evidence"]);
 
 function isMode(value: unknown): value is Mode {
@@ -333,6 +377,50 @@ function parseJournalEntry(
       ? { errors: [] as string[] }
       : parseHumanOverride(value.humanOverride, `${label}.humanOverride`);
   errors.push(...parsedOverride.errors);
+  let pocObservation: StepJournalEntry["pocObservation"];
+  if (value.pocObservation !== undefined) {
+    if (
+      !isRecord(value.pocObservation) ||
+      unknownFields(value.pocObservation, POC_OBSERVATION_BINDING_FIELDS)
+        .length > 0 ||
+      !/^[a-f0-9]{40}$/u.test(String(value.pocObservation.headSha ?? "")) ||
+      !/^[a-f0-9]{64}$/u.test(String(value.pocObservation.evidenceDigest ?? ""))
+    )
+      errors.push(`${label}.pocObservationが不正です`);
+    else
+      pocObservation = {
+        headSha: value.pocObservation.headSha as string,
+        evidenceDigest: value.pocObservation.evidenceDigest as string,
+      };
+  }
+  if (value.mode === "poc" && Number(value.step) >= 9 && !pocObservation)
+    errors.push(`${label}のPoC Step 9以降にはpocObservation bindingが必要です`);
+  if ((value.mode !== "poc" || Number(value.step) < 9) && pocObservation)
+    errors.push(`${label}ではpocObservation bindingを使用できません`);
+  let reviewSession: StepJournalEntry["reviewSession"];
+  if (value.reviewSession !== undefined) {
+    if (
+      !isRecord(value.reviewSession) ||
+      unknownFields(value.reviewSession, REVIEW_SESSION_BINDING_FIELDS).length >
+        0 ||
+      !/^[a-f0-9]{64}$/u.test(String(value.reviewSession.sessionId ?? "")) ||
+      !/^[a-f0-9]{64}$/u.test(String(value.reviewSession.roundDigest ?? "")) ||
+      !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(
+        String(value.reviewSession.headSha ?? ""),
+      )
+    )
+      errors.push(`${label}.reviewSessionが不正です`);
+    else
+      reviewSession = {
+        sessionId: value.reviewSession.sessionId as string,
+        roundDigest: value.reviewSession.roundDigest as string,
+        headSha: value.reviewSession.headSha as string,
+      };
+  }
+  if (Number(value.step) === 10 && !reviewSession)
+    errors.push(`${label}のStep 10にreviewSession bindingが必要です`);
+  if (Number(value.step) !== 10 && reviewSession)
+    errors.push(`${label}ではreviewSession bindingを使用できません`);
   if (errors.length > 0) return { errors };
   return {
     entry: {
@@ -342,6 +430,8 @@ function parseJournalEntry(
       recordedAt: value.recordedAt as string,
       artifacts: [...(value.artifacts as string[])],
       evidence: value.evidence as string,
+      ...(pocObservation ? { pocObservation } : {}),
+      ...(reviewSession ? { reviewSession } : {}),
       ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),
     },
     errors,
@@ -439,6 +529,7 @@ export function validateStepJournal(input: {
   );
   let previousIndex = -1;
   for (const step of expected) {
+    if (input.mode === "poc" && step > maximum) continue;
     const record = lastByStep.get(step);
     if (!record) continue;
     // fullへの単調昇格前にquick/pocで完了したStep 4/9は履歴として
@@ -528,15 +619,162 @@ function parsePoc(value: unknown): { poc?: PocDeclaration; errors: string[] } {
   ] as const)
     if (!nonEmpty(value[field]))
       errors.push(`poc.${field}は空でない文字列が必要です`);
+
+  let fixture: PocDeclaration["fixture"] | undefined;
   if (
-    !isRecord(value.period) ||
-    unknownFields(value.period, PERIOD_FIELDS).length > 0
+    !isRecord(value.fixture) ||
+    unknownFields(value.fixture, FIXTURE_FIELDS).length > 0
   )
-    errors.push("poc.periodはfromとtoだけを持つobjectが必要です");
+    errors.push(
+      "poc.fixtureはid、root、isolationEvidence、resetEvidence、runnerだけを持つobjectが必要です",
+    );
+  else {
+    const rawFixture = value.fixture;
+    const rawRunner = isRecord(rawFixture.runner)
+      ? rawFixture.runner
+      : undefined;
+    for (const field of [
+      "id",
+      "root",
+      "isolationEvidence",
+      "resetEvidence",
+    ] as const)
+      if (!nonEmpty(rawFixture[field]))
+        errors.push(`poc.fixture.${field}は空でない文字列が必要です`);
+    if (!rawRunner || unknownFields(rawRunner, RUNNER_FIELDS).length > 0)
+      errors.push("poc.fixture.runnerはid、pathだけを持つobjectが必要です");
+    else {
+      for (const field of ["id", "path"] as const)
+        if (!nonEmpty(rawRunner[field]))
+          errors.push(`poc.fixture.runner.${field}は空でない文字列が必要です`);
+      if (
+        ["id", "root", "isolationEvidence", "resetEvidence"].every(
+          (field) => typeof rawFixture[field] === "string",
+        ) &&
+        ["id", "path"].every((field) => typeof rawRunner[field] === "string")
+      )
+        fixture = {
+          id: rawFixture.id as string,
+          root: rawFixture.root as string,
+          isolationEvidence: rawFixture.isolationEvidence as string,
+          resetEvidence: rawFixture.resetEvidence as string,
+          runner: {
+            id: rawRunner.id as string,
+            path: rawRunner.path as string,
+          },
+        };
+    }
+  }
+
+  const parseObjectArray = <Item>(
+    raw: unknown,
+    label: string,
+    allowed: ReadonlySet<string>,
+    fields: readonly string[],
+    build: (item: Record<string, unknown>) => Item,
+  ): Item[] => {
+    if (!Array.isArray(raw) || raw.length === 0) {
+      errors.push(`poc.${label}は1件以上の配列が必要です`);
+      return [];
+    }
+    const result: Item[] = [];
+    raw.forEach((item, index) => {
+      if (!isRecord(item) || unknownFields(item, allowed).length > 0) {
+        errors.push(`poc.${label}[${index}]の構造が不正です`);
+        return;
+      }
+      if (!fields.every((field) => nonEmpty(item[field]))) {
+        errors.push(`poc.${label}[${index}]の必須fieldが不正です`);
+        return;
+      }
+      result.push(build(item));
+    });
+    return result;
+  };
+
+  const useCases = parseObjectArray(
+    value.useCases,
+    "useCases",
+    USE_CASE_FIELDS,
+    ["id", "actor", "goal"],
+    (item) => ({
+      id: item.id as string,
+      actor: item.actor as string,
+      goal: item.goal as string,
+    }),
+  );
+  if (
+    Array.isArray(value.useCases) &&
+    value.useCases.length > POC_LIMITS.useCases
+  )
+    errors.push(`poc.useCasesは${POC_LIMITS.useCases}件以下が必要です`);
+  const scenarios: PocDeclaration["scenarios"] = [];
+  if (!Array.isArray(value.scenarios) || value.scenarios.length === 0)
+    errors.push("poc.scenariosは1件以上の配列が必要です");
   else
-    for (const field of ["from", "to"] as const)
-      if (!nonEmpty(value.period[field]))
-        errors.push(`poc.period.${field}は空でない文字列が必要です`);
+    value.scenarios.forEach((item, index) => {
+      if (!isRecord(item) || unknownFields(item, SCENARIO_FIELDS).length > 0) {
+        errors.push(`poc.scenarios[${index}]の構造が不正です`);
+        return;
+      }
+      if (
+        !["id", "useCaseId", "given", "when", "then"].every((field) =>
+          nonEmpty(item[field]),
+        ) ||
+        !Array.isArray(item.argv) ||
+        !item.argv.every((argument) => typeof argument === "string")
+      ) {
+        errors.push(`poc.scenarios[${index}]の必須fieldが不正です`);
+        return;
+      }
+      scenarios.push({
+        id: item.id as string,
+        useCaseId: item.useCaseId as string,
+        given: item.given as string,
+        when: item.when as string,
+        then: item.then as string,
+        argv: [...(item.argv as string[])],
+      });
+    });
+  if (
+    Array.isArray(value.scenarios) &&
+    value.scenarios.length > POC_LIMITS.scenarios
+  )
+    errors.push(`poc.scenariosは${POC_LIMITS.scenarios}件以下が必要です`);
+  const observables: PocDeclaration["observables"] = [];
+  if (!Array.isArray(value.observables) || value.observables.length === 0)
+    errors.push("poc.observablesは1件以上の配列が必要です");
+  else
+    value.observables.forEach((item, index) => {
+      if (
+        !isRecord(item) ||
+        unknownFields(item, OBSERVABLE_FIELDS).length > 0 ||
+        !["id", "scenarioId", "kind"].every((field) => nonEmpty(item[field])) ||
+        (typeof item.expected !== "string" &&
+          typeof item.expected !== "number") ||
+        (item.target !== undefined && !nonEmpty(item.target))
+      ) {
+        errors.push(`poc.observables[${index}]の構造が不正です`);
+        return;
+      }
+      observables.push({
+        id: item.id as string,
+        scenarioId: item.scenarioId as string,
+        kind: item.kind as PocDeclaration["observables"][number]["kind"],
+        expected: item.expected,
+        ...(typeof item.target === "string" ? { target: item.target } : {}),
+      });
+    });
+  if (
+    Array.isArray(value.observables) &&
+    value.observables.length > POC_LIMITS.observables
+  )
+    errors.push(`poc.observablesは${POC_LIMITS.observables}件以下が必要です`);
+  const knownKinds = new Set<string>(POC_OBSERVABLE_KINDS);
+  observables.forEach((item, index) => {
+    if (!knownKinds.has(item.kind))
+      errors.push(`poc.observables[${index}].kindが不正です`);
+  });
   if (!Array.isArray(value.highRisk))
     errors.push("poc.highRiskは配列が必要です");
   const highRisk: PocDeclaration["highRisk"] = [];
@@ -564,10 +802,10 @@ function parsePoc(value: unknown): { poc?: PocDeclaration; errors: string[] } {
   return {
     poc: {
       purpose: value.purpose as string,
-      period: {
-        from: (value.period as Record<string, unknown>).from as string,
-        to: (value.period as Record<string, unknown>).to as string,
-      },
+      fixture: fixture as PocDeclaration["fixture"],
+      useCases,
+      scenarios,
+      observables,
       outOfScope: value.outOfScope as string,
       successCriteria: value.successCriteria as string,
       abortCriteria: value.abortCriteria as string,
@@ -578,10 +816,33 @@ function parsePoc(value: unknown): { poc?: PocDeclaration; errors: string[] } {
   };
 }
 
+export function parsePocDeclaration(text: string): {
+  declaration?: PocDeclaration;
+  errors: string[];
+} {
+  if (Buffer.byteLength(text, "utf8") > 128 * 1024)
+    return { errors: ["PoC宣言が128KiB上限を超えています"] };
+  let value: unknown;
+  try {
+    value = parseJsonStrict(text, "PoC宣言");
+  } catch (error) {
+    return { errors: [error instanceof Error ? error.message : String(error)] };
+  }
+  const parsed = parsePoc(value);
+  if (!parsed.poc) return { errors: parsed.errors };
+  const classified = classifyMode(
+    {},
+    { requestedMode: "poc", poc: parsed.poc },
+  );
+  if (classified.mode !== "poc") return { errors: classified.reasons };
+  return { declaration: parsed.poc, errors: [] };
+}
+
 export function renderModeDecision(input: {
   requestedMode: Mode;
   answers: Record<string, ModeAnswer>;
   decidedAt: string;
+  baselineHeadSha?: string;
   poc?: PocDeclaration;
   changedFiles?: string[];
   currentMode?: Mode;
@@ -601,6 +862,9 @@ export function renderModeDecision(input: {
     changedFiles: [...(input.changedFiles ?? [])],
     reasons: result.reasons,
     decidedAt: input.decidedAt,
+    ...(input.baselineHeadSha
+      ? { baselineHeadSha: input.baselineHeadSha }
+      : {}),
     ...(input.poc ? { poc: input.poc } : {}),
   };
   const parsed = parseModeDecision(stableJson(decision));
@@ -612,6 +876,8 @@ export function parseModeDecision(text: string): {
   decision?: ModeDecision;
   errors: string[];
 } {
+  if (Buffer.byteLength(text, "utf8") > 128 * 1024)
+    return { errors: ["モード判定成果物が128KiB上限を超えています"] };
   const errors: string[] = [];
   let value: unknown;
   try {
@@ -631,6 +897,13 @@ export function parseModeDecision(text: string): {
   if (!isUtcInstant(value.decidedAt))
     errors.push("decidedAtはISO 8601 UTC日時が必要です");
   if (
+    value.mode === "poc" &&
+    !/^[a-f0-9]{40}$/u.test(String(value.baselineHeadSha ?? ""))
+  )
+    errors.push("pocモードにはbaselineHeadShaが必要です");
+  if (value.mode !== "poc" && value.baselineHeadSha !== undefined)
+    errors.push("baselineHeadShaはpocモードだけで使用できます");
+  if (
     !Array.isArray(value.reasons) ||
     !value.reasons.every((item) => typeof item === "string")
   )
@@ -640,9 +913,12 @@ export function parseModeDecision(text: string): {
   const changedFiles = value.changedFiles ?? [];
   if (
     !Array.isArray(changedFiles) ||
-    !changedFiles.every((file) => nonEmpty(file))
+    changedFiles.length > 256 ||
+    !changedFiles.every((file) => nonEmpty(file) && file.length <= 1_024)
   )
-    errors.push("changedFilesは空でない文字列の配列が必要です");
+    errors.push(
+      "changedFilesは1024文字以下を256件以下含む文字列配列が必要です",
+    );
   const parsedPoc =
     value.poc === undefined ? { errors: [] as string[] } : parsePoc(value.poc);
   errors.push(...parsedPoc.errors);
@@ -679,6 +955,9 @@ export function parseModeDecision(text: string): {
       changedFiles: [...(changedFiles as string[])],
       reasons: [...(value.reasons as string[])],
       decidedAt: value.decidedAt as string,
+      ...(typeof value.baselineHeadSha === "string"
+        ? { baselineHeadSha: value.baselineHeadSha }
+        : {}),
       ...(parsedPoc.poc ? { poc: parsedPoc.poc } : {}),
     },
     errors,

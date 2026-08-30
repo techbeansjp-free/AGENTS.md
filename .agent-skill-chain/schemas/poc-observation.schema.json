@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/techbeansjp-free/AGENTS.md/blob/main/.agent-skill-chain/schemas/poc-observation.schema.json",
+  "title": "PoC observation evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "declarationDigest",
+    "headSha",
+    "observedAt",
+    "fixture",
+    "runner",
+    "executions",
+    "results",
+    "evidenceDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "agent-skill-chain/poc-observation/v1"
+    },
+    "declarationDigest": { "$ref": "#/$defs/sha256" },
+    "headSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "observedAt": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "root", "digest"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^FIX-[A-Z0-9][A-Z0-9-]*$" },
+        "root": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "digest"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^RUN-[A-Z0-9][A-Z0-9-]*$" },
+        "path": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "executions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenarioId", "exitCode", "signal", "executionDigest"],
+        "properties": {
+          "scenarioId": {
+            "type": "string",
+            "pattern": "^SCN-[A-Z0-9][A-Z0-9-]*$"
+          },
+          "exitCode": { "const": 0 },
+          "signal": { "type": "null" },
+          "executionDigest": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observableId",
+          "scenarioId",
+          "kind",
+          "target",
+          "expected",
+          "actual",
+          "status",
+          "resultDigest"
+        ],
+        "properties": {
+          "observableId": {
+            "type": "string",
+            "pattern": "^OBS-[A-Z0-9][A-Z0-9-]*$"
+          },
+          "scenarioId": {
+            "type": "string",
+            "pattern": "^SCN-[A-Z0-9][A-Z0-9-]*$"
+          },
+          "kind": {
+            "enum": [
+              "exit-code",
+              "stdout-digest",
+              "stderr-digest",
+              "file-digest"
+            ]
+          },
+          "target": {
+            "oneOf": [
+              { "type": "null" },
+              { "type": "string", "minLength": 1, "pattern": "\\S" }
+            ]
+          },
+          "expected": {
+            "oneOf": [{ "type": "integer" }, { "$ref": "#/$defs/sha256" }]
+          },
+          "actual": {
+            "oneOf": [{ "type": "integer" }, { "$ref": "#/$defs/sha256" }]
+          },
+          "status": { "enum": ["passed", "failed"] },
+          "resultDigest": { "$ref": "#/$defs/sha256" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "exit-code" } } },
+            "then": {
+              "properties": {
+                "target": { "type": "null" },
+                "expected": { "type": "integer" },
+                "actual": { "type": "integer" }
+              }
+            },
+            "else": {
+              "properties": {
+                "expected": { "$ref": "#/$defs/sha256" },
+                "actual": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "file-digest" } } },
+            "then": { "properties": { "target": { "type": "string" } } },
+            "else": { "properties": { "target": { "type": "null" } } }
+          }
+        ]
+      }
+    },
+    "evidenceDigest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

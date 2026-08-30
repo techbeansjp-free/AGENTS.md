@@ -5,7 +5,6 @@ import {
   calculateStagingDigest,
   finalizeStoredStagingPromotion,
   listStagingArtifacts,
-  migrateLegacyStagingTracker,
   promoteStoredStagingModeToFull,
   refreshStoredStagingDigest,
   readStoredStagingRecord,
@@ -43,6 +42,18 @@ import {
   DELIVERY_STATE_FILE,
   parseDeliveryState,
 } from "../domain/delivery-state.js";
+import {
+  POC_OBSERVATION_DIRECTORY,
+  pocObservationArtifact,
+  validatePocObservationEvidence,
+  type PocObservationEvidence,
+} from "../domain/poc-observation.js";
+import {
+  assertPocHeadChangeScope,
+  executePocSandboxObservation,
+} from "./poc-execution.js";
+
+export { calculatePocFixtureDigest } from "./poc-execution.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
 const issueTemplateRoot = path.join(
@@ -57,9 +68,193 @@ const FULL_PLAN_ARTIFACTS = Object.freeze([
   "03_実装計画.md",
 ]);
 const PROMOTION_DISCOVERY_FILE = "09_実装中発見_full昇格.json";
+const JOURNAL_TRANSACTION_SCHEMA =
+  "agent-skill-chain/workflow-journal-transaction/v1";
+const POC_OBSERVATION_TRANSACTION_SCHEMA =
+  "agent-skill-chain/poc-observation-transaction/v1";
+
+interface JournalTransaction {
+  schemaVersion: typeof JOURNAL_TRANSACTION_SCHEMA;
+  journalBeforeDigest: string;
+  journalAfterDigest: string;
+  stagingDigestBefore: string;
+  artifacts: string[];
+  otherArtifactsDigest: string;
+}
+
+interface PocObservationTransaction {
+  schemaVersion: typeof POC_OBSERVATION_TRANSACTION_SCHEMA;
+  headSha: string;
+  artifact: string;
+  evidenceDigest: string;
+  temporary: string;
+  artifactsBefore: string[];
+  stagingDigestBefore: string;
+}
+
+export interface PendingJournalTransaction extends JournalTransaction {
+  state: "before-publish" | "published";
+}
 
 function sha256(value: string | Buffer): string {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function journalTransactionPath(staging: string): string {
+  return path.join(
+    path.dirname(staging),
+    `.${path.basename(staging)}.workflow-journal-transaction.json`,
+  );
+}
+
+function parseJournalTransaction(source: string): JournalTransaction {
+  const value = parseJsonStrict(source, "workflow journal transaction");
+  if (!isRecord(value))
+    throw new Error("workflow journal transactionはobjectが必要です");
+  const fields = new Set([
+    "schemaVersion",
+    "journalBeforeDigest",
+    "journalAfterDigest",
+    "stagingDigestBefore",
+    "artifacts",
+    "otherArtifactsDigest",
+  ]);
+  if (
+    Object.keys(value).some((field) => !fields.has(field)) ||
+    [...fields].some((field) => !(field in value)) ||
+    value.schemaVersion !== JOURNAL_TRANSACTION_SCHEMA ||
+    !/^[a-f0-9]{64}$/u.test(String(value.journalBeforeDigest ?? "")) ||
+    !/^[a-f0-9]{64}$/u.test(String(value.journalAfterDigest ?? "")) ||
+    !/^[a-f0-9]{64}$/u.test(String(value.stagingDigestBefore ?? "")) ||
+    !/^[a-f0-9]{64}$/u.test(String(value.otherArtifactsDigest ?? "")) ||
+    !Array.isArray(value.artifacts) ||
+    value.artifacts.length > 256 ||
+    value.artifacts.some(
+      (artifact) =>
+        typeof artifact !== "string" ||
+        Buffer.byteLength(artifact, "utf8") > 1024 ||
+        artifact.normalize("NFC") !== artifact,
+    )
+  )
+    throw new Error("workflow journal transactionの構造が不正です");
+  const artifacts = value.artifacts as string[];
+  if (
+    new Set(artifacts).size !== artifacts.length ||
+    stableJson(artifacts) !==
+      stableJson(
+        [...artifacts].sort((left, right) => left.localeCompare(right)),
+      ) ||
+    artifacts.some(
+      (artifact) =>
+        artifact === "" ||
+        path.isAbsolute(artifact) ||
+        artifact.includes("\\") ||
+        artifact.split("/").some((part) => part === ".." || part === ".git"),
+    )
+  )
+    throw new Error("workflow journal transactionのartifact一覧が不正です");
+  return {
+    schemaVersion: JOURNAL_TRANSACTION_SCHEMA,
+    journalBeforeDigest: String(value.journalBeforeDigest),
+    journalAfterDigest: String(value.journalAfterDigest),
+    stagingDigestBefore: String(value.stagingDigestBefore),
+    artifacts: [...artifacts],
+    otherArtifactsDigest: String(value.otherArtifactsDigest),
+  };
+}
+
+function assertRegularTransactionPath(transaction: string): void {
+  const stat = fs.lstatSync(transaction);
+  if (
+    stat.isSymbolicLink() ||
+    !stat.isFile() ||
+    stat.nlink !== 1 ||
+    stat.size > 64 * 1024
+  )
+    throw new Error(
+      "workflow journal transactionはsymlink・hardlinkでない通常fileが必要です",
+    );
+  if (fs.realpathSync(transaction) !== transaction)
+    throw new Error(
+      "workflow journal transactionにsymlink祖先を使用できません",
+    );
+}
+
+export function inspectPendingJournalTransaction(
+  stagingInput: string,
+): PendingJournalTransaction | null {
+  const staging = assertWorkflowStaging(stagingInput);
+  const transaction = journalTransactionPath(staging);
+  if (!fs.existsSync(transaction)) return null;
+  assertRegularTransactionPath(transaction);
+  const parsed = parseJournalTransaction(fs.readFileSync(transaction, "utf8"));
+  const stored = readStoredStagingRecord(staging);
+  const artifacts = listStagingArtifacts(staging);
+  const otherArtifacts = artifacts.filter(
+    (artifact) => artifact !== STEP_JOURNAL_FILE,
+  );
+  if (
+    stableJson(stored.artifacts) !== stableJson(parsed.artifacts) ||
+    stableJson(artifacts) !== stableJson(parsed.artifacts) ||
+    calculateStagingDigest(staging, otherArtifacts) !==
+      parsed.otherArtifactsDigest
+  )
+    throw new Error(
+      "workflow journal transaction以外のstaging成果物が変更されています",
+    );
+  const journalDigest = sha256(
+    fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
+  );
+  const currentStagingDigest = calculateStagingDigest(staging, artifacts);
+  if (
+    journalDigest === parsed.journalBeforeDigest &&
+    stored.digest === parsed.stagingDigestBefore &&
+    currentStagingDigest === parsed.stagingDigestBefore
+  )
+    return { ...parsed, state: "before-publish" };
+  if (
+    journalDigest === parsed.journalAfterDigest &&
+    (stored.digest === parsed.stagingDigestBefore ||
+      stored.digest === currentStagingDigest)
+  )
+    return { ...parsed, state: "published" };
+  throw new Error(
+    "workflow journalがtransactionの旧版・新版いずれとも一致しません",
+  );
+}
+
+function clearJournalTransaction(staging: string): void {
+  const transaction = journalTransactionPath(staging);
+  if (!fs.existsSync(transaction)) return;
+  assertRegularTransactionPath(transaction);
+  fs.unlinkSync(transaction);
+  fsyncDirectory(path.dirname(staging));
+}
+
+function recoverPendingJournalTransactionLocked(staging: string): boolean {
+  const pending = inspectPendingJournalTransaction(staging);
+  if (!pending) return false;
+  if (pending.state === "published") {
+    const journal = readWorkflowJournal(staging);
+    if (journal.errors.length > 0)
+      throw new Error(
+        `published journal transactionのJSONLが不正です: ${journal.errors.join("; ")}`,
+      );
+    refreshStoredStagingDigest(staging);
+    fsyncFile(path.join(staging, STAGING_RECORD_FILE));
+    fsyncDirectory(staging);
+  }
+  clearJournalTransaction(staging);
+  return pending.state === "published";
+}
+
+export function recoverPendingJournalTransaction(
+  stagingInput: string,
+): boolean {
+  const staging = assertWorkflowStaging(stagingInput);
+  return withStagingMutationLock(staging, () =>
+    recoverPendingJournalTransactionLocked(staging),
+  );
 }
 
 export function assertWorkflowStaging(staging: string): string {
@@ -113,6 +308,58 @@ function readDescriptor(descriptor: number, size: number): Buffer {
   return buffer;
 }
 
+function writeDescriptorFully(descriptor: number, source: Buffer): void {
+  let offset = 0;
+  while (offset < source.length) {
+    const written = fs.writeSync(
+      descriptor,
+      source,
+      offset,
+      source.length - offset,
+      null,
+    );
+    if (written <= 0)
+      throw new Error("workflow journalを完全に一時fileへ書き込めません");
+    offset += written;
+  }
+}
+
+function writeJournalTransaction(
+  staging: string,
+  journalBeforeDigest: string,
+  journalAfterDigest: string,
+): void {
+  if (inspectPendingJournalTransaction(staging))
+    throw new Error("未復旧のworkflow journal transactionがあります");
+  const stored = readStoredStagingRecord(staging);
+  const artifacts = listStagingArtifacts(staging);
+  if (
+    stableJson(stored.artifacts) !== stableJson(artifacts) ||
+    stored.digest !== calculateStagingDigest(staging, artifacts)
+  )
+    throw new Error(
+      "workflow journal transaction開始前のstaging digestが一致しません",
+    );
+  const marker: JournalTransaction = {
+    schemaVersion: JOURNAL_TRANSACTION_SCHEMA,
+    journalBeforeDigest,
+    journalAfterDigest,
+    stagingDigestBefore: stored.digest,
+    artifacts,
+    otherArtifactsDigest: calculateStagingDigest(
+      staging,
+      artifacts.filter((artifact) => artifact !== STEP_JOURNAL_FILE),
+    ),
+  };
+  const transaction = journalTransactionPath(staging);
+  writeFileAtomic(transaction, `${stableJson(marker)}\n`);
+  fsyncFile(transaction);
+  fsyncDirectory(path.dirname(staging));
+  const inspected = inspectPendingJournalTransaction(staging);
+  if (!inspected || inspected.state !== "before-publish")
+    throw new Error("workflow journal transactionの開始確認に失敗しました");
+}
+
 export function readWorkflowJournal(staging: string): {
   mode: Mode;
   entries: StepJournalEntry[];
@@ -138,6 +385,7 @@ export function readWorkflowJournal(staging: string): {
 export function appendWorkflowJournalEntry(input: {
   staging: string;
   entry: StepJournalEntry;
+  headSha?: string;
 }): { entry: StepJournalEntry; journalDigest: string; stagingDigest: string } {
   if (input.entry.step === 0 || input.entry.step === 11)
     throw new Error(
@@ -145,42 +393,96 @@ export function appendWorkflowJournalEntry(input: {
     );
   const staging = assertWorkflowStaging(input.staging);
   return withStagingMutationLock(staging, () =>
-    appendWorkflowJournalEntryLocked(staging, input.entry),
+    appendWorkflowJournalEntryLocked(staging, input.entry, input.headSha),
   );
 }
 
 export function appendDeliveryTerminalJournalEntry(input: {
   staging: string;
   entry: StepJournalEntry;
+  headSha?: string;
 }): { entry: StepJournalEntry; journalDigest: string; stagingDigest: string } {
   if (input.entry.step !== 11)
     throw new Error("delivery終端journal追記はStep 11だけを記録できます");
   const staging = assertWorkflowStaging(input.staging);
   return withStagingMutationLock(staging, () =>
-    appendWorkflowJournalEntryLocked(staging, input.entry),
+    appendWorkflowJournalEntryLocked(staging, input.entry, input.headSha),
   );
 }
 
 function appendWorkflowJournalEntryLocked(
   staging: string,
   entry: StepJournalEntry,
+  headSha?: string,
 ): { entry: StepJournalEntry; journalDigest: string; stagingDigest: string } {
+  recoverPendingJournalTransactionLocked(staging);
+  recoverPocObservationTransactionLocked(staging);
   const current = readWorkflowJournal(staging);
   if (current.errors.length > 0)
     throw new Error(
       `journalの追記前検査に失敗しました: ${current.errors.join("; ")}`,
     );
+  if (current.entries.some(({ step }) => step === 11))
+    throw new Error("Step 11記録後はworkflow journalへ追記できません");
+  if (entry.step < 11) {
+    const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
+    if (fs.existsSync(deliveryFile)) {
+      const delivery = parseDeliveryState(
+        fs.readFileSync(deliveryFile, "utf8"),
+      );
+      if (
+        delivery.state === "merge-observed" ||
+        delivery.state === "step11-recorded"
+      )
+        throw new Error(
+          "terminal delivery state後はStep 0〜10を追記できません",
+        );
+    }
+  }
   if (entry.mode !== current.mode)
     throw new Error(
       `entry mode ${entry.mode}がstaging mode ${current.mode}と一致しません`,
     );
+  let entryToWrite = entry;
+  if (current.mode === "poc" && entry.step >= 9) {
+    if (!headSha)
+      throw new Error(
+        "PoCのStep 9以降には検証対象HEAD SHAとpoc-observation Evidenceが必要です",
+      );
+    const context = pocContextAtStaging(staging);
+    assertPocHeadChangeScope({
+      repositoryRoot: path.resolve(staging, "../../../.."),
+      baselineHeadSha: context.baselineHeadSha,
+      headSha,
+      fixtureRoot: context.declaration.fixture.root,
+    });
+    const observation = inspectStoredPocObservationEvidence(staging, headSha);
+    if (!observation.valid)
+      throw new Error(
+        `PoCのStep 9以降を拒否しました: ${observation.errors.join("; ")}`,
+      );
+    if (!observation.evidence)
+      throw new Error("PoC観測Evidenceのbindingを取得できません");
+    const binding = {
+      headSha,
+      evidenceDigest: observation.evidence.evidenceDigest,
+    };
+    if (
+      entry.pocObservation &&
+      stableJson(entry.pocObservation) !== stableJson(binding)
+    )
+      throw new Error(
+        "PoC journal entryの観測bindingがcurrent HEADと一致しません",
+      );
+    entryToWrite = { ...entry, pocObservation: binding };
+  }
   const journal = path.join(staging, STEP_JOURNAL_FILE);
   const before = assertRegularJournalPath(journal);
   const descriptor = fs.openSync(
     journal,
-    fs.constants.O_RDWR | fs.constants.O_APPEND | fs.constants.O_NOFOLLOW,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
   );
-  let journalDigest: string;
+  let pinnedSource: string;
   try {
     const opened = fs.fstatSync(descriptor);
     if (
@@ -190,38 +492,726 @@ function appendWorkflowJournalEntryLocked(
       opened.ino !== before.ino
     )
       throw new Error("workflow journalが検査後に差し替えられました");
-    const pinnedSource = readDescriptor(descriptor, opened.size).toString(
-      "utf8",
-    );
+    pinnedSource = readDescriptor(descriptor, opened.size).toString("utf8");
     if (pinnedSource !== current.source)
       throw new Error("workflow journalが追記前検査後に変更されました");
-    const line = `${JSON.stringify(entry)}\n`;
-    const parsedProposed = parseStepJournal(`${pinnedSource}${line}`);
-    if (parsedProposed.errors.length > 0)
-      throw new Error(
-        `journal entryの構造検査に失敗しました: ${parsedProposed.errors.join("; ")}`,
-      );
-    const validation = validateStepJournal({
-      mode: current.mode,
-      entries: parsedProposed.entries,
-      upToStep: entry.step,
-    });
-    if (!validation.valid)
-      throw new Error(
-        `journalの追記を拒否しました: missingSteps=${validation.missingSteps.join(",")}; unexpectedSteps=${validation.unexpectedSteps.join(",")}; outOfOrder=${validation.outOfOrder.join(",")}; modeConflicts=${validation.modeConflicts.join("; ")}; errors=${validation.errors.join("; ")}`,
-      );
-    const expectedDigest = sha256(`${pinnedSource}${line}`);
-    fs.writeSync(descriptor, line, undefined, "utf8");
-    fs.fsyncSync(descriptor);
-    const written = fs.fstatSync(descriptor);
-    journalDigest = sha256(readDescriptor(descriptor, written.size));
-    if (journalDigest !== expectedDigest)
-      throw new Error("journalの書き込み後読み取りdigestが一致しません");
   } finally {
     fs.closeSync(descriptor);
   }
+
+  const line = `${JSON.stringify(entryToWrite)}\n`;
+  const proposedSource = `${pinnedSource}${line}`;
+  const parsedProposed = parseStepJournal(proposedSource);
+  if (parsedProposed.errors.length > 0)
+    throw new Error(
+      `journal entryの構造検査に失敗しました: ${parsedProposed.errors.join("; ")}`,
+    );
+  const validation = validateStepJournal({
+    mode: current.mode,
+    entries: parsedProposed.entries,
+    upToStep: entryToWrite.step,
+  });
+  if (!validation.valid)
+    throw new Error(
+      `journalの追記を拒否しました: missingSteps=${validation.missingSteps.join(",")}; unexpectedSteps=${validation.unexpectedSteps.join(",")}; outOfOrder=${validation.outOfOrder.join(",")}; modeConflicts=${validation.modeConflicts.join("; ")}; errors=${validation.errors.join("; ")}`,
+    );
+
+  const expectedDigest = sha256(proposedSource);
+  writeJournalTransaction(staging, sha256(pinnedSource), expectedDigest);
+  const temporary = path.join(
+    path.dirname(staging),
+    `.workflow-journal-${path.basename(staging)}-${process.pid}-${crypto.randomBytes(8).toString("hex")}.tmp`,
+  );
+  let temporaryDescriptor: number | undefined;
+  try {
+    temporaryDescriptor = fs.openSync(
+      temporary,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600,
+    );
+    writeDescriptorFully(temporaryDescriptor, Buffer.from(proposedSource));
+    fs.fsyncSync(temporaryDescriptor);
+    fs.closeSync(temporaryDescriptor);
+    temporaryDescriptor = undefined;
+
+    const currentPath = assertRegularJournalPath(journal);
+    if (
+      currentPath.dev !== before.dev ||
+      currentPath.ino !== before.ino ||
+      currentPath.size !== before.size ||
+      currentPath.mtimeMs !== before.mtimeMs ||
+      fs.readFileSync(journal, "utf8") !== pinnedSource
+    )
+      throw new Error("workflow journalがatomic publish前に変更されました");
+
+    fs.renameSync(temporary, journal);
+    fsyncDirectory(path.dirname(journal));
+    fsyncDirectory(path.dirname(staging));
+  } finally {
+    if (temporaryDescriptor !== undefined) fs.closeSync(temporaryDescriptor);
+    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+  }
+  assertRegularJournalPath(journal);
+  const journalDigest = sha256(fs.readFileSync(journal));
+  if (journalDigest !== expectedDigest)
+    throw new Error("journalのatomic publish後読み取りdigestが一致しません");
   const stored = refreshStoredStagingDigest(staging);
-  return { entry, journalDigest, stagingDigest: stored.digest };
+  fsyncFile(path.join(staging, STAGING_RECORD_FILE));
+  fsyncDirectory(staging);
+  clearJournalTransaction(staging);
+  return { entry: entryToWrite, journalDigest, stagingDigest: stored.digest };
+}
+
+function pocContextAtStaging(staging: string): {
+  declaration: PocDeclaration;
+  baselineHeadSha: string;
+} {
+  const modeFile = path.join(staging, MODE_DECISION_FILE);
+  assertRegularContainedFile(staging, MODE_DECISION_FILE);
+  if (fs.lstatSync(modeFile).size > 128 * 1024)
+    throw new Error("PoC観測用モード判定成果物が128KiB上限を超えています");
+  const parsed = parseModeDecision(fs.readFileSync(modeFile, "utf8"));
+  if (!parsed.decision || parsed.errors.length > 0)
+    throw new Error(
+      `PoC観測用のモード判定成果物が不正です: ${parsed.errors.join("; ")}`,
+    );
+  if (parsed.decision.mode !== "poc" || !parsed.decision.poc)
+    throw new Error("poc-observation Evidenceはpoc stagingだけへ記録できます");
+  if (!parsed.decision.baselineHeadSha)
+    throw new Error("poc stagingにbaselineHeadShaがありません");
+  return {
+    declaration: parsed.decision.poc,
+    baselineHeadSha: parsed.decision.baselineHeadSha,
+  };
+}
+
+function pocDeclarationAtStaging(staging: string): PocDeclaration {
+  return pocContextAtStaging(staging).declaration;
+}
+
+function readPinnedRegularFile(
+  file: string,
+  label: string,
+  maximumBytes: number,
+): Buffer {
+  const before = fs.lstatSync(file);
+  if (
+    before.isSymbolicLink() ||
+    !before.isFile() ||
+    before.nlink !== 1 ||
+    before.size > maximumBytes ||
+    fs.realpathSync(file) !== file
+  )
+    throw new Error(`${label}の通常file境界またはbyte上限が不正です`);
+  const descriptor = fs.openSync(
+    file,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+  );
+  try {
+    const opened = fs.fstatSync(descriptor);
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1 ||
+      opened.size > maximumBytes ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino
+    )
+      throw new Error(`${label}が検査後に差し替えられました`);
+    const source = readDescriptor(descriptor, opened.size);
+    const after = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(file);
+    if (
+      after.dev !== opened.dev ||
+      after.ino !== opened.ino ||
+      after.size !== opened.size ||
+      after.nlink !== 1 ||
+      named.isSymbolicLink() ||
+      !named.isFile() ||
+      named.dev !== opened.dev ||
+      named.ino !== opened.ino
+    )
+      throw new Error(`${label}が読取中に変更されました`);
+    return source;
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+interface PinnedPocDirectory {
+  descriptor: number;
+  directory: string;
+  dev: number;
+  ino: number;
+}
+
+function pinPocDirectory(directory: string): PinnedPocDirectory {
+  if (process.platform !== "linux")
+    throw new Error("PoC Evidenceの原子的publishにはLinuxが必要です");
+  const resolved = path.resolve(directory);
+  const descriptor = fs.openSync(
+    resolved,
+    fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
+  );
+  try {
+    const opened = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(resolved);
+    if (
+      !opened.isDirectory() ||
+      named.isSymbolicLink() ||
+      !named.isDirectory() ||
+      opened.dev !== named.dev ||
+      opened.ino !== named.ino ||
+      fs.realpathSync(resolved) !== resolved
+    )
+      throw new Error(`PoC Evidence publish directoryが不正です: ${resolved}`);
+    return {
+      descriptor,
+      directory: resolved,
+      dev: opened.dev,
+      ino: opened.ino,
+    };
+  } catch (error) {
+    fs.closeSync(descriptor);
+    throw error;
+  }
+}
+
+function assertPinnedPocDirectory(pinned: PinnedPocDirectory): void {
+  const opened = fs.fstatSync(pinned.descriptor);
+  const named = fs.lstatSync(pinned.directory);
+  if (
+    !opened.isDirectory() ||
+    named.isSymbolicLink() ||
+    !named.isDirectory() ||
+    opened.dev !== pinned.dev ||
+    opened.ino !== pinned.ino ||
+    named.dev !== pinned.dev ||
+    named.ino !== pinned.ino ||
+    fs.realpathSync(pinned.directory) !== pinned.directory
+  )
+    throw new Error(
+      "PoC Evidence publish directoryが実行中に差し替えられました",
+    );
+}
+
+function pinnedPocEntry(pinned: PinnedPocDirectory, leaf: string): string {
+  if (leaf === "" || leaf.includes("/") || leaf.includes("\\"))
+    throw new Error("PoC Evidence publish leafが不正です");
+  return `/proc/self/fd/${pinned.descriptor}/${leaf}`;
+}
+
+export function inspectStoredPocObservationEvidence(
+  stagingInput: string,
+  headSha: string,
+): {
+  valid: boolean;
+  exists: boolean;
+  evidence?: PocObservationEvidence;
+  errors: string[];
+} {
+  const staging = assertWorkflowStaging(stagingInput);
+  const declaration = pocDeclarationAtStaging(staging);
+  const artifact = pocObservationArtifact(headSha);
+  const file = path.join(staging, artifact);
+  if (!fs.existsSync(file))
+    return {
+      valid: false,
+      exists: false,
+      errors: [`${artifact}がありません`],
+    };
+  const checked = validatePocObservationEvidence({
+    source: readPinnedRegularFile(
+      file,
+      "poc-observation Evidence",
+      256 * 1024,
+    ).toString("utf8"),
+    declaration,
+    headSha,
+  });
+  return { ...checked, exists: true };
+}
+
+export function inspectCurrentPocJournalBinding(
+  stagingInput: string,
+  headSha: string,
+  upToStep: number,
+): { valid: boolean; errors: string[] } {
+  const staging = assertWorkflowStaging(stagingInput);
+  const observation = inspectStoredPocObservationEvidence(staging, headSha);
+  if (!observation.valid || !observation.evidence)
+    return { valid: false, errors: observation.errors };
+  const journal = readWorkflowJournal(staging);
+  const errors = [...journal.errors];
+  try {
+    const context = pocContextAtStaging(staging);
+    assertPocHeadChangeScope({
+      repositoryRoot: path.resolve(staging, "../../../.."),
+      baselineHeadSha: context.baselineHeadSha,
+      headSha,
+      fixtureRoot: context.declaration.fixture.root,
+    });
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+  const binding = {
+    headSha,
+    evidenceDigest: observation.evidence.evidenceDigest,
+  };
+  for (const step of [9, 10, 11].filter((value) => value <= upToStep)) {
+    const entry = [...journal.entries]
+      .reverse()
+      .find((item) => item.step === step);
+    if (!entry || stableJson(entry.pocObservation) !== stableJson(binding))
+      errors.push(
+        `current HEADのPoC observation bindingが最新Step ${step}にありません`,
+      );
+  }
+  return { valid: errors.length === 0, errors: [...new Set(errors)] };
+}
+
+export function assertPocDeliveryChangeScope(
+  stagingInput: string,
+  baseSha: string,
+  headSha: string,
+): string[] {
+  const staging = assertWorkflowStaging(stagingInput);
+  const context = pocContextAtStaging(staging);
+  return assertPocHeadChangeScope({
+    repositoryRoot: path.resolve(staging, "../../../.."),
+    baselineHeadSha: baseSha,
+    headSha,
+    fixtureRoot: context.declaration.fixture.root,
+  });
+}
+
+export function validatePocObservationForStaging(input: {
+  staging: string;
+  source: string;
+  headSha: string;
+}): ReturnType<typeof validatePocObservationEvidence> {
+  const staging = assertWorkflowStaging(input.staging);
+  return validatePocObservationEvidence({
+    source: input.source,
+    declaration: pocDeclarationAtStaging(staging),
+    headSha: input.headSha,
+  });
+}
+
+interface PocStagingSnapshot {
+  recordSource: string;
+  recordDigest: string;
+  artifacts: string[];
+  artifactDigests: ReadonlyMap<string, string>;
+}
+
+function pinPocStaging(staging: string): PocStagingSnapshot {
+  const recordFile = path.join(staging, STAGING_RECORD_FILE);
+  const recordSource = fs.readFileSync(recordFile, "utf8");
+  const record = readStoredStagingRecord(staging);
+  const artifacts = listStagingArtifacts(staging);
+  if (
+    stableJson(artifacts) !== stableJson(record.artifacts) ||
+    calculateStagingDigest(staging, artifacts) !== record.digest
+  )
+    throw new Error(
+      "PoC観測前のstaging artifact集合またはdigestが保存recordと一致しません",
+    );
+  const artifactDigests = new Map(
+    artifacts.map((relative) => [
+      relative,
+      sha256(fs.readFileSync(path.join(staging, relative))),
+    ]),
+  );
+  return {
+    recordSource,
+    recordDigest: record.digest,
+    artifacts,
+    artifactDigests,
+  };
+}
+
+function assertPinnedPocStaging(
+  staging: string,
+  snapshot: PocStagingSnapshot,
+  publishedArtifact?: string,
+): void {
+  if (
+    fs.readFileSync(path.join(staging, STAGING_RECORD_FILE), "utf8") !==
+    snapshot.recordSource
+  )
+    throw new Error("PoC観測中にstaging recordが変更されました");
+  const expectedArtifacts = publishedArtifact
+    ? [...new Set([...snapshot.artifacts, publishedArtifact])].sort(
+        (left, right) => (left < right ? -1 : left > right ? 1 : 0),
+      )
+    : snapshot.artifacts;
+  if (
+    stableJson(listStagingArtifacts(staging)) !== stableJson(expectedArtifacts)
+  )
+    throw new Error("PoC観測中にstaging artifact集合が変更されました");
+  for (const relative of snapshot.artifacts) {
+    if (relative === publishedArtifact) continue;
+    const current = sha256(fs.readFileSync(path.join(staging, relative)));
+    if (current !== snapshot.artifactDigests.get(relative))
+      throw new Error(
+        `PoC観測中にstaging artifactが変更されました: ${relative}`,
+      );
+  }
+}
+
+function pocObservationTransactionPath(staging: string): string {
+  return path.join(
+    path.dirname(staging),
+    `.${path.basename(staging)}.poc-observation.transaction.json`,
+  );
+}
+
+function clearPocObservationTransaction(staging: string): void {
+  const marker = pocObservationTransactionPath(staging);
+  if (fs.existsSync(marker)) fs.unlinkSync(marker);
+  fsyncDirectory(path.dirname(staging));
+}
+
+function writePocObservationTransaction(
+  staging: string,
+  snapshot: PocStagingSnapshot,
+  evidence: PocObservationEvidence,
+): string {
+  if (
+    snapshot.artifacts.length > 256 ||
+    snapshot.artifacts.some(
+      (artifact) => Buffer.byteLength(artifact, "utf8") > 1024,
+    )
+  )
+    throw new Error("PoC observation世代またはartifact数が上限を超えています");
+  const temporary = `.${path.basename(staging)}.poc-observation.${evidence.headSha}.tmp`;
+  const marker: PocObservationTransaction = {
+    schemaVersion: POC_OBSERVATION_TRANSACTION_SCHEMA,
+    headSha: evidence.headSha,
+    artifact: pocObservationArtifact(evidence.headSha),
+    evidenceDigest: evidence.evidenceDigest,
+    temporary,
+    artifactsBefore: snapshot.artifacts,
+    stagingDigestBefore: snapshot.recordDigest,
+  };
+  const file = pocObservationTransactionPath(staging);
+  if (fs.existsSync(file))
+    throw new Error("未完了のPoC observation transactionがあります");
+  const markerSource = `${stableJson(marker)}\n`;
+  if (Buffer.byteLength(markerSource, "utf8") > 64 * 1024)
+    throw new Error("PoC observation transaction markerが64KiB上限を超えます");
+  writeFileAtomic(file, markerSource);
+  fsyncFile(file);
+  fsyncDirectory(path.dirname(staging));
+  return path.join(path.dirname(staging), temporary);
+}
+
+function recoverPocObservationTransactionLocked(staging: string): void {
+  const markerFile = pocObservationTransactionPath(staging);
+  if (!fs.existsSync(markerFile)) return;
+  const marker = parseJsonStrict(
+    readPinnedRegularFile(
+      markerFile,
+      "PoC observation transaction marker",
+      64 * 1024,
+    ).toString("utf8"),
+    "PoC observation transaction",
+  );
+  if (
+    !isRecord(marker) ||
+    marker.schemaVersion !== POC_OBSERVATION_TRANSACTION_SCHEMA ||
+    !/^[a-f0-9]{40}$/u.test(String(marker.headSha ?? "")) ||
+    marker.artifact !== pocObservationArtifact(String(marker.headSha)) ||
+    !/^[a-f0-9]{64}$/u.test(String(marker.evidenceDigest ?? "")) ||
+    marker.temporary !==
+      `.${path.basename(staging)}.poc-observation.${String(marker.headSha)}.tmp` ||
+    !/^[a-f0-9]{64}$/u.test(String(marker.stagingDigestBefore ?? "")) ||
+    !Array.isArray(marker.artifactsBefore) ||
+    !marker.artifactsBefore.every((item) => typeof item === "string")
+  )
+    throw new Error("PoC observation transaction markerが不正です");
+  const artifact = marker.artifact as string;
+  const before = [...(marker.artifactsBefore as string[])];
+  if (
+    new Set(before).size !== before.length ||
+    stableJson(before) !==
+      stableJson(
+        [...before].sort((left, right) => left.localeCompare(right)),
+      ) ||
+    before.some(
+      (item) =>
+        item === "" ||
+        path.isAbsolute(item) ||
+        item.includes("\\") ||
+        item.split("/").some((part) => part === ".." || part === ".git"),
+    )
+  )
+    throw new Error("PoC observation transactionのartifactsBeforeが不正です");
+  const temporary = path.join(
+    path.dirname(staging),
+    marker.temporary as string,
+  );
+  const artifactFile = path.join(staging, artifact);
+  if (fs.existsSync(temporary) && fs.existsSync(artifactFile)) {
+    const temporaryStat = fs.lstatSync(temporary);
+    const artifactStat = fs.lstatSync(artifactFile);
+    if (
+      temporaryStat.isSymbolicLink() ||
+      artifactStat.isSymbolicLink() ||
+      !temporaryStat.isFile() ||
+      !artifactStat.isFile() ||
+      temporaryStat.dev !== artifactStat.dev ||
+      temporaryStat.ino !== artifactStat.ino ||
+      temporaryStat.nlink !== 2 ||
+      artifactStat.nlink !== 2
+    )
+      throw new Error(
+        "PoC observation transactionのtempとEvidenceが同一inodeではありません",
+      );
+    fs.unlinkSync(temporary);
+    fsyncDirectory(path.dirname(staging));
+  }
+  const removeTemporary = (): void => {
+    if (!fs.existsSync(temporary)) return;
+    const stat = fs.lstatSync(temporary);
+    if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1)
+      throw new Error("PoC observation transaction tempが不正です");
+    fs.unlinkSync(temporary);
+    fsyncDirectory(path.dirname(staging));
+  };
+  const expectedAfter = [...new Set([...before, artifact])].sort(
+    (left, right) => left.localeCompare(right),
+  );
+  const record = readStoredStagingRecord(staging);
+  const inventory = listStagingArtifacts(staging);
+  if (
+    stableJson(record.artifacts) === stableJson(expectedAfter) &&
+    stableJson(inventory) === stableJson(expectedAfter) &&
+    calculateStagingDigest(staging, inventory) === record.digest
+  ) {
+    const checked = inspectStoredPocObservationEvidence(
+      staging,
+      marker.headSha as string,
+    );
+    if (
+      !checked.valid ||
+      checked.evidence?.evidenceDigest !== marker.evidenceDigest
+    )
+      throw new Error(
+        "完了済みPoC observation transactionのEvidenceが不正です",
+      );
+    removeTemporary();
+    clearPocObservationTransaction(staging);
+    return;
+  }
+  if (
+    stableJson(record.artifacts) !== stableJson(before) ||
+    record.digest !== marker.stagingDigestBefore ||
+    calculateStagingDigest(staging, before) !== record.digest
+  )
+    throw new Error("PoC observation transactionの開始前stagingが一致しません");
+  if (stableJson(inventory) === stableJson(before)) {
+    removeTemporary();
+    clearPocObservationTransaction(staging);
+    return;
+  }
+  if (stableJson(inventory) !== stableJson(expectedAfter))
+    throw new Error("PoC observation transaction中のartifact集合が不正です");
+  const checked = inspectStoredPocObservationEvidence(
+    staging,
+    marker.headSha as string,
+  );
+  if (
+    !checked.valid ||
+    checked.evidence?.evidenceDigest !== marker.evidenceDigest
+  )
+    throw new Error("PoC observation transactionのEvidenceが不正です");
+  refreshStoredStagingDigest(staging);
+  fsyncFile(path.join(staging, STAGING_RECORD_FILE));
+  fsyncDirectory(staging);
+  removeTemporary();
+  clearPocObservationTransaction(staging);
+}
+
+function storeGeneratedPocObservationEvidence(input: {
+  staging: string;
+  source: string;
+  headSha: string;
+  snapshot: PocStagingSnapshot;
+}): {
+  evidence: PocObservationEvidence;
+  evidenceDigest: string;
+  stagingDigest: string;
+} {
+  const staging = assertWorkflowStaging(input.staging);
+  return withStagingMutationLock(staging, () => {
+    assertPinnedPocStaging(staging, input.snapshot);
+    const declaration = pocDeclarationAtStaging(staging);
+    const checked = validatePocObservationEvidence({
+      source: input.source,
+      declaration,
+      headSha: input.headSha,
+    });
+    if (!checked.valid || !checked.evidence)
+      throw new Error(
+        `poc-observation Evidenceを拒否しました: ${checked.errors.join("; ")}`,
+      );
+    const artifact = pocObservationArtifact(input.headSha);
+    const directory = path.join(staging, POC_OBSERVATION_DIRECTORY);
+    if (!fs.existsSync(directory)) {
+      fs.mkdirSync(directory, { mode: 0o700 });
+      fsyncDirectory(staging);
+    }
+    const directoryStat = fs.lstatSync(directory);
+    if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory())
+      throw new Error("poc-observationsはsymlinkでない通常directoryが必要です");
+    const file = path.join(staging, artifact);
+    const canonical = `${stableJson(checked.evidence)}\n`;
+    if (fs.existsSync(file)) {
+      const current = readPinnedRegularFile(
+        file,
+        "poc-observation Evidence",
+        256 * 1024,
+      ).toString("utf8");
+      if (current !== canonical)
+        throw new Error("同一HEADのpoc-observation Evidenceは置換できません");
+      throw new Error(
+        "同一HEADのpoc-observation Evidenceは新規publishできません",
+      );
+    }
+    const temporary = writePocObservationTransaction(
+      staging,
+      input.snapshot,
+      checked.evidence,
+    );
+    const sourceDirectory = pinPocDirectory(path.dirname(staging));
+    const targetDirectory = pinPocDirectory(directory);
+    let descriptor: number | undefined;
+    try {
+      descriptor = fs.openSync(
+        pinnedPocEntry(sourceDirectory, path.basename(temporary)),
+        fs.constants.O_WRONLY |
+          fs.constants.O_CREAT |
+          fs.constants.O_EXCL |
+          fs.constants.O_NOFOLLOW,
+        0o600,
+      );
+      writeDescriptorFully(descriptor, Buffer.from(canonical));
+      fs.fsyncSync(descriptor);
+      fs.closeSync(descriptor);
+      descriptor = undefined;
+      assertPinnedPocDirectory(sourceDirectory);
+      assertPinnedPocDirectory(targetDirectory);
+      fs.renameSync(
+        pinnedPocEntry(sourceDirectory, path.basename(temporary)),
+        pinnedPocEntry(targetDirectory, path.basename(file)),
+      );
+      fs.fsyncSync(targetDirectory.descriptor);
+      fs.fsyncSync(sourceDirectory.descriptor);
+      fsyncDirectory(staging);
+      assertPinnedPocDirectory(sourceDirectory);
+      assertPinnedPocDirectory(targetDirectory);
+    } finally {
+      if (descriptor !== undefined) fs.closeSync(descriptor);
+      fs.closeSync(targetDirectory.descriptor);
+      fs.closeSync(sourceDirectory.descriptor);
+    }
+    assertPinnedPocStaging(staging, input.snapshot, artifact);
+    const reread = inspectStoredPocObservationEvidence(staging, input.headSha);
+    if (
+      !reread.valid ||
+      reread.evidence?.evidenceDigest !== checked.evidence.evidenceDigest
+    )
+      throw new Error(
+        `poc-observation Evidenceの書き込み後検証に失敗しました: ${reread.errors.join("; ")}`,
+      );
+    const stored = refreshStoredStagingDigest(staging);
+    fsyncFile(path.join(staging, STAGING_RECORD_FILE));
+    fsyncDirectory(staging);
+    clearPocObservationTransaction(staging);
+    return {
+      evidence: checked.evidence,
+      evidenceDigest: checked.evidence.evidenceDigest,
+      stagingDigest: stored.digest,
+    };
+  });
+}
+
+export function executePocObservation(input: {
+  staging: string;
+  headSha: string;
+  observedAt: string;
+}): {
+  passed: boolean;
+  evidence: PocObservationEvidence;
+  evidenceDigest: string;
+  stagingDigest: string;
+} {
+  const staging = assertWorkflowStaging(input.staging);
+  return withStagingMutationLock(staging, () => {
+    recoverPendingJournalTransactionLocked(staging);
+    recoverPocObservationTransactionLocked(staging);
+    const stagingSnapshot = pinPocStaging(staging);
+    const journal = readWorkflowJournal(staging);
+    if (
+      journal.errors.length > 0 ||
+      journal.entries.some(({ step }) => step === 11)
+    )
+      throw new Error("Step 11記録後は新しいPoC observationを生成できません");
+    const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
+    if (fs.existsSync(deliveryFile)) {
+      const delivery = parseDeliveryState(
+        fs.readFileSync(deliveryFile, "utf8"),
+      );
+      if (
+        delivery.state === "merge-observed" ||
+        delivery.state === "step11-recorded"
+      )
+        throw new Error(
+          "terminal delivery state後はPoC observationを生成できません",
+        );
+    }
+    const existingArtifact = path.join(
+      staging,
+      pocObservationArtifact(input.headSha),
+    );
+    if (fs.existsSync(existingArtifact)) {
+      const existing = inspectStoredPocObservationEvidence(
+        staging,
+        input.headSha,
+      );
+      if (!existing.valid || !existing.evidence)
+        throw new Error(
+          `既存PoC observation Evidenceが不正です: ${existing.errors.join("; ")}`,
+        );
+      const record = readStoredStagingRecord(staging);
+      return {
+        passed: true,
+        evidence: existing.evidence,
+        evidenceDigest: existing.evidence.evidenceDigest,
+        stagingDigest: record.digest,
+      };
+    }
+    const context = pocContextAtStaging(staging);
+    const evidence = executePocSandboxObservation({
+      repositoryRoot: path.resolve(staging, "../../../.."),
+      declaration: context.declaration,
+      baselineHeadSha: context.baselineHeadSha,
+      headSha: input.headSha,
+      observedAt: input.observedAt,
+    });
+    assertPinnedPocStaging(staging, stagingSnapshot);
+    const stored = storeGeneratedPocObservationEvidence({
+      staging,
+      source: `${stableJson(evidence)}\n`,
+      headSha: input.headSha,
+      snapshot: stagingSnapshot,
+    });
+    return { passed: true, ...stored };
+  });
 }
 
 export function inspectWorkflowStaging(staging: string, upToStep?: number) {
@@ -289,7 +1279,15 @@ function promotedModeDecision(input: {
   const poc: PocDeclaration | undefined = input.decision.poc
     ? {
         ...input.decision.poc,
-        period: { ...input.decision.poc.period },
+        fixture: {
+          ...input.decision.poc.fixture,
+          runner: { ...input.decision.poc.fixture.runner },
+        },
+        useCases: input.decision.poc.useCases.map((item) => ({ ...item })),
+        scenarios: input.decision.poc.scenarios.map((item) => ({ ...item })),
+        observables: input.decision.poc.observables.map((item) => ({
+          ...item,
+        })),
         highRisk: input.decision.poc.highRisk.map((risk) => ({ ...risk })),
       }
     : undefined;
@@ -622,6 +1620,7 @@ function recoverPromotionTransaction(staging: string): void {
   writeFileAtomic(
     path.join(staging, STAGING_RECORD_FILE),
     transaction.originalRecordSource,
+    { temporaryDirectory: path.dirname(staging) },
   );
   for (const artifact of transaction.absentArtifacts) {
     const target = path.join(staging, artifact);
@@ -773,6 +1772,8 @@ function promoteWorkflowStagingToFullLocked(input: {
   promotedAt: string;
 }): WorkflowStagingPromotion {
   const staging = assertWorkflowStaging(input.staging);
+  recoverPendingJournalTransactionLocked(staging);
+  recoverPocObservationTransactionLocked(staging);
   const deliveryStatePath = path.join(staging, DELIVERY_STATE_FILE);
   if (fs.existsSync(deliveryStatePath)) {
     assertRegularContainedFile(staging, DELIVERY_STATE_FILE);
@@ -1038,13 +2039,6 @@ export function resolvePullRequestStaging(input: {
       typeof tracker === "string" ? legacyTracker.exec(tracker) : null;
     return Boolean(legacy && Number(legacy[1]) === input.issue);
   };
-  const canonicalizeTracker = (staging: string): string => {
-    migrateLegacyStagingTracker(staging, {
-      repository: input.repository,
-      issue: input.issue,
-    });
-    return staging;
-  };
   const issuesRoot = path.join(
     path.resolve(input.root),
     ".agent-skill-chain",
@@ -1062,7 +2056,7 @@ export function resolvePullRequestStaging(input: {
       throw new Error(
         "明示stagingのtrackerが対象repository・Issueと一致しません",
       );
-    return canonicalizeTracker(staging);
+    return staging;
   }
   if (!fs.existsSync(issuesRoot))
     throw new Error("PR作成に必要なIssue staging directoryがありません");
@@ -1081,5 +2075,5 @@ export function resolvePullRequestStaging(input: {
     throw new Error(
       "PR作成対象のIssue stagingを一意に解決できません。--stagingで明示してください",
     );
-  return canonicalizeTracker(assertWorkflowStaging(candidates[0] as string));
+  return assertWorkflowStaging(candidates[0] as string);
 }

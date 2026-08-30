@@ -44,9 +44,12 @@ import {
 } from "../../src/domain/issue.js";
 import {
   appendWorkflowJournalEntry,
+  inspectPendingJournalTransaction,
   inspectWorkflowStaging,
   promoteWorkflowStagingToFull,
   resolvePullRequestStaging,
+  recoverPendingJournalTransaction,
+  executePocObservation,
 } from "../../src/adapters/workflow-journal.js";
 import {
   calculateStagingDigest,
@@ -74,6 +77,11 @@ import { doctor } from "../../src/domain/lifecycle.js";
 import { checkWorkflowStepDocument } from "../../scripts/check_conformance.js";
 import { checkWorkflowSteps } from "../../scripts/check_workflow_steps.js";
 import { main } from "../../src/cli.js";
+import {
+  observeReviewDiff,
+  recordReviewRound,
+} from "../../src/adapters/review-session.js";
+import { parseReviewRoundInput } from "../../src/domain/review-convergence.js";
 
 interface WorkflowStepWorld extends WorkflowWorld {
   workflowCheckPassed: boolean;
@@ -122,6 +130,15 @@ function entry(
     recordedAt,
     artifacts: [`artifact-${step}`],
     evidence: `step ${step}の証拠`,
+    ...(step === 10
+      ? {
+          reviewSession: {
+            sessionId: "a".repeat(64),
+            roundDigest: "b".repeat(64),
+            headSha: "c".repeat(40),
+          },
+        }
+      : {}),
   };
 }
 
@@ -132,7 +149,46 @@ function result(mode: Mode, entries: StepJournalEntry[], upToStep: number) {
 function validPoc(): PocDeclaration {
   return {
     purpose: "依存変更を伴う仮説を検証する",
-    period: { from: "2026-08-25", to: "2026-08-26" },
+    fixture: {
+      id: "FIX-DEPENDENCY",
+      root: "test/fixtures/poc/dependency",
+      isolationEvidence: "一時directoryと模擬dataだけを使用する",
+      resetEvidence: "fixture snapshotのdigestを再確認する",
+      runner: {
+        id: "RUN-DEPENDENCY",
+        path: "runner.mjs",
+      },
+    },
+    useCases: [
+      { id: "UC-DEPENDENCY", actor: "maintainer", goal: "分類を再現する" },
+    ],
+    scenarios: [
+      {
+        id: "SCN-DEPENDENCY",
+        useCaseId: "UC-DEPENDENCY",
+        given: "隔離fixtureが初期化済み",
+        when: "定義済みrunnerを実行する",
+        then: "分類結果を構造化出力する",
+        argv: [],
+      },
+    ],
+    observables: [
+      {
+        id: "OBS-DEPENDENCY-EXIT",
+        scenarioId: "SCN-DEPENDENCY",
+        kind: "exit-code",
+        expected: 0,
+      },
+      {
+        id: "OBS-DEPENDENCY-STDOUT",
+        scenarioId: "SCN-DEPENDENCY",
+        kind: "stdout-digest",
+        expected: crypto
+          .createHash("sha256")
+          .update('{"classification":"full"}\n')
+          .digest("hex"),
+      },
+    ],
     outOfScope: "本番提供",
     successCriteria: "分類結果を再現できる",
     abortCriteria: "再現できない",
@@ -145,6 +201,20 @@ function validPoc(): PocDeclaration {
       "irreversible-operation",
     ].map((id) => ({ id, present: false, evidence: `${id}は対象外` })),
   };
+}
+
+function materializeValidPocFixture(
+  root: string,
+  declaration: PocDeclaration,
+): void {
+  const fixture = path.join(root, declaration.fixture.root);
+  fs.mkdirSync(fixture, { recursive: true });
+  const runner = path.join(fixture, declaration.fixture.runner.path);
+  fs.writeFileSync(
+    runner,
+    'process.stdout.write(\'{"classification":"full"}\\n\');\n',
+    { mode: 0o600 },
+  );
 }
 
 function quickPromotionDiscovery(): ImplementationDiscovery {
@@ -612,6 +682,109 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       assert.equal(throughStepEight.validation.valid, true);
       break;
     }
+    case "SCN-UNIT-WFJRNL-017": {
+      const root = this.temp("asc-journal-atomic-");
+      const staging = createIssueStaging(root, {
+        title: "journal-atomic",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "quick",
+      }).path;
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const before = fs.readFileSync(journal);
+      const interruptedTemporary = path.join(
+        path.dirname(staging),
+        `.workflow-journal-${path.basename(staging)}-999-interrupted.tmp`,
+      );
+      fs.writeFileSync(interruptedTemporary, '{"partial":');
+
+      appendWorkflowJournalEntry({ staging, entry: entry(1) });
+
+      const after = fs.readFileSync(journal);
+      assert.deepEqual(after.subarray(0, before.length), before);
+      const parsed = parseStepJournal(after.toString("utf8"));
+      assert.deepEqual(parsed.errors, []);
+      assert.deepEqual(
+        parsed.entries.map((item) => item.step),
+        [0, 1],
+      );
+      assert.equal(
+        listStagingArtifacts(staging).includes(interruptedTemporary),
+        false,
+      );
+      assert.equal(
+        fs.readFileSync(interruptedTemporary, "utf8"),
+        '{"partial":',
+      );
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-018": {
+      for (const digestAlreadyRefreshed of [false, true]) {
+        const root = this.temp("asc-journal-recovery-");
+        const staging = createIssueStaging(root, {
+          title: `journal-recovery-${String(digestAlreadyRefreshed)}`,
+          answers: answers(),
+          now: new Date(fixtureInstantMs()),
+          requestedMode: "quick",
+        }).path;
+        const journal = path.join(staging, STEP_JOURNAL_FILE);
+        const beforeSource = fs.readFileSync(journal, "utf8");
+        const proposedSource = `${beforeSource}${JSON.stringify(entry(1))}\n`;
+        const stored = readStoredStagingRecord(staging);
+        const otherArtifacts = stored.artifacts.filter(
+          (artifact) => artifact !== STEP_JOURNAL_FILE,
+        );
+        const transaction = path.join(
+          path.dirname(staging),
+          `.${path.basename(staging)}.workflow-journal-transaction.json`,
+        );
+        fs.writeFileSync(
+          transaction,
+          `${stableJson({
+            schemaVersion: "agent-skill-chain/workflow-journal-transaction/v1",
+            journalBeforeDigest: crypto
+              .createHash("sha256")
+              .update(beforeSource)
+              .digest("hex"),
+            journalAfterDigest: crypto
+              .createHash("sha256")
+              .update(proposedSource)
+              .digest("hex"),
+            stagingDigestBefore: stored.digest,
+            artifacts: stored.artifacts,
+            otherArtifactsDigest: calculateStagingDigest(
+              staging,
+              otherArtifacts,
+            ),
+          })}\n`,
+          { mode: 0o600 },
+        );
+        fs.writeFileSync(journal, proposedSource);
+        if (digestAlreadyRefreshed) refreshStoredStagingDigest(staging);
+
+        assert.equal(
+          inspectPendingJournalTransaction(staging)?.state,
+          "published",
+        );
+        assert.equal(
+          readStoredStagingRecord(staging).digest ===
+            calculateStagingDigest(staging, listStagingArtifacts(staging)),
+          digestAlreadyRefreshed,
+        );
+        assert.equal(recoverPendingJournalTransaction(staging), true);
+        assert.equal(fs.existsSync(transaction), false);
+        assert.equal(recoverPendingJournalTransaction(staging), false);
+        assert.equal(
+          readStoredStagingRecord(staging).digest,
+          calculateStagingDigest(staging, listStagingArtifacts(staging)),
+        );
+        assert.deepEqual(
+          parseStepJournal(fs.readFileSync(journal, "utf8")).errors,
+          [],
+        );
+      }
+      break;
+    }
     case "SCN-UNIT-WFMODE-001": {
       const rendered = renderModeDecision({
         requestedMode: "quick",
@@ -953,6 +1126,28 @@ When("{string}の統合検査を実行する", async function (scenarioId: strin
       break;
     }
     case "SCN-INT-WFSTEP-011": {
+      for (const args of [
+        ["init", "-q", "-b", "main"],
+        ["config", "user.name", "poc-test"],
+        ["config", "user.email", "poc-test@example.invalid"],
+      ]) {
+        const initialized = spawnSync("git", args, {
+          cwd: root,
+          encoding: "utf8",
+        });
+        assert.equal(initialized.status, 0, initialized.stderr);
+      }
+      fs.writeFileSync(path.join(root, "README.md"), "# baseline\n");
+      for (const args of [
+        ["add", "README.md"],
+        ["commit", "-q", "-m", "baseline"],
+      ]) {
+        const committed = spawnSync("git", args, {
+          cwd: root,
+          encoding: "utf8",
+        });
+        assert.equal(committed.status, 0, committed.stderr);
+      }
       const staging = createIssueStaging(root, {
         title: "poc-promotion",
         answers: answers(),
@@ -1372,6 +1567,7 @@ interface DeliveryProviderControl {
   reviewDisposition:
     "approved" | "changes-requested" | "commented-after-approval";
   mergeTreeTampered: boolean;
+  terminalParentTampered: boolean;
   mergeOnDefaultBranch: boolean;
   mergeImmediately: boolean;
   queueOnMerge: boolean;
@@ -1419,6 +1615,38 @@ function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
     ciRunId: "42",
     reviewId: "7",
     reviewEvidenceId: canonicalDigest(identity),
+  };
+}
+
+function convergedReviewBinding(
+  root: string,
+  staging: string,
+  baseSha: string,
+  headSha: string,
+): NonNullable<StepJournalEntry["reviewSession"]> {
+  const observed = observeReviewDiff(root, baseSha, headSha);
+  const session = recordReviewRound({
+    staging,
+    round: parseReviewRoundInput({
+      round: 1,
+      previousRoundDigest: null,
+      anchor: {
+        scopeIds: ["SCOPE-WORKFLOW"],
+        acceptanceCriteriaIds: ["AC-WF-005"],
+        invariantIds: ["INV-WORKFLOW"],
+        diffBaseSha: baseSha,
+        initialHeadSha: headSha,
+        initialDiffDigest: observed.digest,
+      },
+      candidateHeadSha: headSha,
+      focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+      findings: [],
+    }),
+  });
+  return {
+    sessionId: session.sessionId,
+    roundDigest: session.latestRoundDigest,
+    headSha: session.latestCandidateHeadSha,
   };
 }
 
@@ -1497,11 +1725,13 @@ function preparePullRequest(
     now: new Date(fixtureInstantMs()),
     requestedMode: "quick",
   }).path;
+  const reviewSession = convergedReviewBinding(root, staging, baseSha, headSha);
   const journalFile = path.join(staging, STEP_JOURNAL_FILE);
   if (missingStep4) {
-    const entries = [0, 1, 9, 10].map((step) =>
-      entry(step, "quick", fixturePast),
-    );
+    const entries = [0, 1, 9, 10].map((step) => ({
+      ...entry(step, "quick", fixturePast),
+      ...(step === 10 ? { reviewSession } : {}),
+    }));
     fs.writeFileSync(
       journalFile,
       `${entries.map((item) => JSON.stringify(item)).join("\n")}\n`,
@@ -1511,7 +1741,10 @@ function preparePullRequest(
     for (const step of [1, 4, 9, 10])
       appendWorkflowJournalEntry({
         staging,
-        entry: entry(step, "quick", fixturePast),
+        entry: {
+          ...entry(step, "quick", fixturePast),
+          ...(step === 10 ? { reviewSession } : {}),
+        },
       });
   }
   recordStagingSync(staging, {
@@ -1663,6 +1896,7 @@ function prepareDeliveryCli(
     implementationAuthorId: "implementation-author",
     reviewDisposition: "approved",
     mergeTreeTampered: false,
+    terminalParentTampered: false,
     mergeOnDefaultBranch: true,
     mergeImmediately: false,
     queueOnMerge: false,
@@ -1914,6 +2148,13 @@ if (exact(["--version"])) {
   process.stdout.write(
     JSON.stringify([[
       {
+        id: 6,
+        state: "PENDING",
+        commit_id: null,
+        user: { node_id: "draft-reviewer" },
+        submitted_at: null,
+      },
+      {
         id: 7,
         state: "APPROVED",
         commit_id: sha,
@@ -1963,7 +2204,7 @@ if (exact(["--version"])) {
 } else if (exact(["api", "repos/o/r/commits/" + mergeSha])) {
   const parents = control.autoMergeMethod === "MERGE"
     ? [{ sha: baseSha }, { sha }]
-    : [{ sha: baseSha }];
+    : [{ sha: control.terminalParentTampered ? "e".repeat(40) : baseSha }];
   process.stdout.write(
     JSON.stringify({
       sha: mergeSha,
@@ -1973,6 +2214,18 @@ if (exact(["--version"])) {
         },
       },
       parents,
+    }),
+  );
+} else if (
+  args[0] === "api" &&
+  String(args[1] || "") ===
+    "repos/o/r/compare/" + baseSha + "..." + mergeSha
+) {
+  process.stdout.write(
+    JSON.stringify({
+      status: "ahead",
+      base_commit: { sha: baseSha },
+      merge_base_commit: { sha: baseSha },
     }),
   );
 } else if (
@@ -1996,10 +2249,10 @@ if (exact(["--version"])) {
     controlFile,
     JSON.stringify({
       ...control,
-      phase: control.queueOnMerge
-        ? "queue-requested"
-        : control.mergeImmediately
-          ? "merged"
+      phase: control.mergeImmediately
+        ? "merged"
+        : control.queueOnMerge
+          ? "queue-requested"
           : "merge-requested",
       failMerge: false,
       requestedAt,
@@ -2302,17 +2555,47 @@ if (exact(["auth", "status"])) {
     }
     case "SCN-E2E-WFSTEP-005": {
       const root = this.temp("asc-poc-merge-");
+      const declaration = validPoc();
+      for (const args of [
+        ["init", "-q", "-b", "main"],
+        ["config", "user.name", "poc-test"],
+        ["config", "user.email", "poc-test@example.invalid"],
+      ]) {
+        const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+      }
+      fs.writeFileSync(path.join(root, "README.md"), "# baseline\n");
+      spawnSync("git", ["add", "README.md"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "baseline"], { cwd: root });
       const staging = createIssueStaging(root, {
         title: "poc-merge-test",
         answers: answers(),
         now: new Date(fixtureInstantMs()),
         requestedMode: "poc",
-        poc: validPoc(),
+        poc: declaration,
       }).path;
-      for (const step of [1, 4, 9, 10])
+      materializeValidPocFixture(root, declaration);
+      spawnSync("git", ["add", declaration.fixture.root], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "poc fixture"], { cwd: root });
+      const headSha = spawnSync("git", ["rev-parse", "HEAD"], {
+        cwd: root,
+        encoding: "utf8",
+      }).stdout.trim();
+      for (const step of [1, 4])
         appendWorkflowJournalEntry({
           staging,
           entry: entry(step, "poc", fixtureInstant({ hoursAgo: 1 })),
+        });
+      executePocObservation({
+        staging,
+        headSha,
+        observedAt: instant,
+      });
+      for (const step of [9, 10])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "poc", fixtureInstant({ hoursAgo: 1 })),
+          headSha,
         });
       recordStagingSync(staging, {
         tracker: "https://github.com/o/r/issues/877",
@@ -2653,6 +2936,46 @@ if (exact(["auth", "status"])) {
         parseDeliveryState(
           fs.readFileSync(
             path.join(unsupported.staging, ...DELIVERY_STATE_FILE.split("/")),
+            "utf8",
+          ),
+        ).state,
+        "pr-bound",
+      );
+
+      const unsupportedGit = prepareDeliveryCli(this);
+      createDeliveryPullRequest(unsupportedGit);
+      const gitStubDirectory = this.temp("asc-delivery-old-git-");
+      const gitStub = path.join(gitStubDirectory, "git");
+      const realGit = spawnSync("which", ["git"], {
+        encoding: "utf8",
+      }).stdout.trim();
+      fs.writeFileSync(
+        gitStub,
+        `#!/usr/bin/env node\nconst {spawnSync}=require("node:child_process");const args=process.argv.slice(2);if(args.length===1&&args[0]==="--version"){process.stdout.write("git version 2.37.9\\n");}else{const result=spawnSync(${JSON.stringify(realGit)},args);process.stdout.write(result.stdout);process.stderr.write(result.stderr);process.exitCode=result.status??1;}\n`,
+      );
+      fs.chmodSync(gitStub, 0o755);
+      unsupportedGit.env = {
+        ...unsupportedGit.env,
+        PATH: `${gitStubDirectory}${path.delimiter}${unsupportedGit.env.PATH ?? ""}`,
+      };
+      const unsupportedGitResult = executeDeliveryMerge(unsupportedGit);
+      assert.notEqual(unsupportedGitResult.status, 0);
+      assert.match(
+        unsupportedGitResult.stdout + unsupportedGitResult.stderr,
+        /git 2\.38\.0以上/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(unsupportedGit).filter(isMergeCall).length,
+        0,
+        "未対応Gitではdispatch claim取得前にmergeを拒否する",
+      );
+      assert.equal(
+        parseDeliveryState(
+          fs.readFileSync(
+            path.join(
+              unsupportedGit.staging,
+              ...DELIVERY_STATE_FILE.split("/"),
+            ),
             "utf8",
           ),
         ).state,
@@ -3452,7 +3775,64 @@ if (exact(["auth", "status"])) {
         const calls = deliveryProviderCalls(prepared);
         assert.equal(calls.filter(isPullRequestFindCall).length, 1);
         assert.equal(calls.filter(isCreateCall).length, 0);
+
+        writeDeliveryProviderControl(prepared, { existingPr: "none" });
+        const recovered = executeCli(
+          [...prepared.args, "--apply", "--authorize=approved"],
+          prepared.root,
+          prepared.env,
+        );
+        assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+        const recoveredState = parseDeliveryState(
+          fs.readFileSync(
+            path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+            "utf8",
+          ),
+        );
+        assert.equal(recoveredState.state, "pr-bound");
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isCreateCall).length,
+          1,
+        );
       }
+
+      const conflicting = prepareDeliveryCli(this);
+      const issueUrl = "https://github.com/o/r/issues/877";
+      prepareStoredPullRequestCreation(conflicting.staging, {
+        repository: "o/r",
+        issue: 877,
+        issueUrl,
+        headRef: "feature/x",
+        headSha: conflicting.headSha,
+        baseRef: "main",
+        baseSha: conflicting.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(conflicting),
+        bodyClosingDigest: closingContractDigest({
+          canonicalIssue: 877,
+          canonicalIssueUrl: issueUrl,
+          closingIssueNumbers: [877],
+        }),
+        preparedAt: fixtureInstant({ secondsAgo: 1 }),
+      });
+      writeDeliveryProviderControl(conflicting, {
+        existingPr: "open",
+        contentChanged: true,
+      });
+      const conflict = executeCli(
+        [...conflicting.args, "--apply", "--authorize=approved"],
+        conflicting.root,
+        conflicting.env,
+      );
+      assert.notEqual(conflict.status, 0);
+      assert.match(
+        conflict.stdout + conflict.stderr,
+        /同じhead\/base|固定済みidentity|既存PR/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(conflicting).filter(isCreateCall).length,
+        0,
+        "同じhead/baseの不一致PRをexact absenceとして新規createしてはならない",
+      );
       break;
     }
     case "SCN-E2E-WFSTEP-035": {
@@ -3489,6 +3869,83 @@ if (exact(["auth", "status"])) {
       assert.equal(
         deliveryProviderCalls(prepared).filter(isMergeCall).length,
         1,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-037": {
+      for (const method of ["squash", "rebase"] as const) {
+        const prepared = prepareDeliveryCli(
+          this,
+          {
+            autoMergeMethod: method === "squash" ? "SQUASH" : "REBASE",
+            mergeImmediately: true,
+            queueOnMerge: true,
+            retainAutoMergeRequestWhenMerged: false,
+          },
+          "automatic",
+          method,
+        );
+        createDeliveryPullRequest(prepared);
+        const completed = executeDeliveryMerge(prepared, { method });
+        assert.equal(completed.status, 0, completed.stdout + completed.stderr);
+        const state = parseDeliveryState(
+          fs.readFileSync(
+            path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+            "utf8",
+          ),
+        );
+        assert.equal(state.state, "step11-recorded");
+        assert.equal(state.merge?.method, method);
+        assert.equal(state.merge?.observation?.providerRequest, null);
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          1,
+        );
+
+        const repeated = executeDeliveryMerge(prepared, { method });
+        assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          1,
+        );
+      }
+      break;
+    }
+    case "SCN-E2E-WFSTEP-038": {
+      const prepared = prepareDeliveryCli(
+        this,
+        {
+          autoMergeMethod: "REBASE",
+          mergeImmediately: true,
+          queueOnMerge: true,
+          retainAutoMergeRequestWhenMerged: false,
+          terminalParentTampered: true,
+        },
+        "automatic",
+        "rebase",
+      );
+      createDeliveryPullRequest(prepared);
+      const rejected = executeDeliveryMerge(prepared, { method: "rebase" });
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /rebase終端|first parent|chain/u,
+      );
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.notEqual(state.state, "step11-recorded");
+      const mergeCalls =
+        deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      assert.equal(mergeCalls, 1);
+      const repeated = executeDeliveryMerge(prepared, { method: "rebase" });
+      assert.notEqual(repeated.status, 0);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        mergeCalls,
       );
       break;
     }

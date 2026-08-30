@@ -36,7 +36,12 @@ Feature: 一時ステージングのpreviewと適用を分離する
     When 短縮Issue番号で同期記録を試みる
     Then absolute GitHub Issue URLでないtrackerは拒否される
 
-  Scenario: SCN-INT-STAGING-008 保存済みlegacy trackerをPR対象解決時にabsolute URLへ移行する
+  Scenario: SCN-INT-STAGING-008 保存済みlegacy trackerを認可済みwrite時だけabsolute URLへ移行する
     Given absolute trackerで同期済みのquick stagingがある
-    When 保存済みstaging recordのtrackerをlegacy短縮番号にする
-    Then legacy trackerはPR対象解決時にabsolute URLへ移行される
+    When 保存済みlegacy trackerを認可済みwriteとして移行する
+    Then read-only解決は変更せずlegacy trackerはabsolute URLへ移行される
+
+  Scenario: SCN-INT-STAGING-009 legacy trackerのread-only対象解決は誤ったrepositoryでも永続状態を変更しない
+    Given absolute trackerで同期済みのquick stagingがある
+    When 保存済みlegacy trackerを誤ったrepositoryでread-only解決する
+    Then staging recordはbyte単位で変更されない

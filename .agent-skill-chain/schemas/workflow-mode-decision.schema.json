@@ -32,11 +32,20 @@
         "Q-08": { "$ref": "#/$defs/answer" }
       }
     },
+    "changedFiles": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
     "reasons": {
       "type": "array",
       "items": { "type": "string" }
     },
     "decidedAt": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "baselineHeadSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
     "poc": { "$ref": "#/$defs/pocDeclaration" }
   },
   "allOf": [
@@ -46,6 +55,14 @@
         "required": ["mode"]
       },
       "then": { "required": ["poc"] }
+    },
+    {
+      "if": {
+        "properties": { "mode": { "const": "poc" } },
+        "required": ["mode"]
+      },
+      "then": { "required": ["baselineHeadSha"] },
+      "else": { "not": { "required": ["baselineHeadSha"] } }
     }
   ],
   "$defs": {
@@ -63,7 +80,10 @@
       "additionalProperties": false,
       "required": [
         "purpose",
-        "period",
+        "fixture",
+        "useCases",
+        "scenarios",
+        "observables",
         "outOfScope",
         "successCriteria",
         "abortCriteria",
@@ -72,13 +92,148 @@
       ],
       "properties": {
         "purpose": { "type": "string", "minLength": 1, "pattern": "\\S" },
-        "period": {
+        "fixture": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["from", "to"],
+          "required": [
+            "id",
+            "root",
+            "isolationEvidence",
+            "resetEvidence",
+            "runner"
+          ],
           "properties": {
-            "from": { "type": "string", "minLength": 1, "pattern": "\\S" },
-            "to": { "type": "string", "minLength": 1, "pattern": "\\S" }
+            "id": { "type": "string", "pattern": "^FIX-[A-Z0-9][A-Z0-9-]*$" },
+            "root": { "type": "string", "minLength": 1, "pattern": "\\S" },
+            "isolationEvidence": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "resetEvidence": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "runner": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "path"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^RUN-[A-Z0-9][A-Z0-9-]*$"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        },
+        "useCases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "actor", "goal"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^UC-[A-Z0-9][A-Z0-9-]*$"
+              },
+              "actor": { "type": "string", "minLength": 1, "pattern": "\\S" },
+              "goal": { "type": "string", "minLength": 1, "pattern": "\\S" }
+            }
+          }
+        },
+        "scenarios": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "useCaseId", "given", "when", "then", "argv"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^SCN-[A-Z0-9][A-Z0-9-]*$"
+              },
+              "useCaseId": {
+                "type": "string",
+                "pattern": "^UC-[A-Z0-9][A-Z0-9-]*$"
+              },
+              "given": { "type": "string", "minLength": 1, "pattern": "\\S" },
+              "when": { "type": "string", "minLength": 1, "pattern": "\\S" },
+              "then": { "type": "string", "minLength": 1, "pattern": "\\S" },
+              "argv": {
+                "type": "array",
+                "maxItems": 32,
+                "items": { "type": "string", "maxLength": 1024 }
+              }
+            }
+          }
+        },
+        "observables": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "scenarioId", "kind", "expected"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^OBS-[A-Z0-9][A-Z0-9-]*$"
+              },
+              "scenarioId": {
+                "type": "string",
+                "pattern": "^SCN-[A-Z0-9][A-Z0-9-]*$"
+              },
+              "kind": {
+                "enum": [
+                  "exit-code",
+                  "stdout-digest",
+                  "stderr-digest",
+                  "file-digest"
+                ]
+              },
+              "expected": {
+                "oneOf": [
+                  { "type": "integer" },
+                  { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+                ]
+              },
+              "target": { "type": "string", "minLength": 1, "pattern": "\\S" }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "kind": { "const": "exit-code" } } },
+                "then": {
+                  "properties": { "expected": { "const": 0 } },
+                  "not": { "required": ["target"] }
+                },
+                "else": {
+                  "properties": {
+                    "expected": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  }
+                }
+              },
+              {
+                "if": { "properties": { "kind": { "const": "file-digest" } } },
+                "then": { "required": ["target"] },
+                "else": { "not": { "required": ["target"] } }
+              }
+            ]
           }
         },
         "outOfScope": { "type": "string", "minLength": 1, "pattern": "\\S" },

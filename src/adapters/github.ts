@@ -90,6 +90,7 @@ export interface PullRequestInspection extends PullRequestObservation {
   statusCheckRollup?: Array<{
     conclusion?: string;
     status?: string;
+    state?: string;
     name?: string;
     context?: string;
   }>;
@@ -972,19 +973,24 @@ export function github(
     );
     if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page)))
       throw new Error("GitHub review観測がpage配列ではありません");
-    return pages
-      .flat()
-      .filter(isRecord)
-      .map((review) => {
-        const typed = review as ReviewObservation;
-        return {
+    const reviews: unknown[] = pages.flat();
+    if (reviews.some((review) => !isRecord(review)))
+      throw new Error("GitHub review観測にobjectでないeventがあります");
+    return reviews.flatMap((review) => {
+      const typed = review as ReviewObservation;
+      // REST exposes draft reviews as PENDING with submitted_at=null. They
+      // are not review-state events and cannot grant or revoke approval.
+      if (typed.state === "PENDING") return [];
+      return [
+        {
           state: typed.state,
           commitSha: typed.commit_id,
           actorId: typed.user?.node_id,
           submittedAt: typed.submitted_at,
           reviewId: String(typed.id ?? ""),
-        };
-      });
+        },
+      ];
+    });
   }
   if (operation === "pr.ci-runs") {
     verifyRepository(input.repository, cwd, "read");
@@ -1006,26 +1012,41 @@ export function github(
     const pageRecords = pages.filter(isRecord);
     if (pageRecords.length !== pages.length)
       throw new Error("GitHub Actions run観測がpage object配列ではありません");
-    return pageRecords
-      .flatMap((page): unknown[] => {
-        const runs: unknown = page.workflow_runs;
-        return Array.isArray(runs) ? (runs as unknown[]) : [];
-      })
-      .filter(isRecord)
-      .map((run) => ({
-        repository: isRecord(run.repository)
-          ? String(run.repository.full_name ?? "")
-          : "",
+    const runs = pageRecords.flatMap((page): unknown[] => {
+      const observed: unknown = page.workflow_runs;
+      if (!Array.isArray(observed))
+        throw new Error(
+          "GitHub Actions run観測のworkflow_runsが配列ではありません",
+        );
+      return observed;
+    });
+    if (runs.some((run) => !isRecord(run)))
+      throw new Error("GitHub Actions run観測にobjectでないrunがあります");
+    return runs.map((rawRun) => {
+      const run = rawRun as Record<string, unknown>;
+      if (
+        !isRecord(run.repository) ||
+        typeof run.repository.full_name !== "string" ||
+        !Array.isArray(run.pull_requests) ||
+        run.pull_requests.some(
+          (pullRequest) =>
+            !isRecord(pullRequest) ||
+            !Number.isSafeInteger(pullRequest.number) ||
+            Number(pullRequest.number) < 1,
+        )
+      )
+        throw new Error("GitHub Actions run観測のidentityが不正です");
+      return {
+        repository: run.repository.full_name,
         runId: String(run.id ?? ""),
         event: String(run.event ?? ""),
         headSha: String(run.head_sha ?? ""),
         conclusion: String(run.conclusion ?? "").toLowerCase(),
-        pullRequestNumbers: Array.isArray(run.pull_requests)
-          ? run.pull_requests
-              .filter(isRecord)
-              .map((pullRequest) => Number(pullRequest.number))
-          : [],
-      }));
+        pullRequestNumbers: run.pull_requests.map((pullRequest) =>
+          Number((pullRequest as Record<string, unknown>).number),
+        ),
+      };
+    });
   }
   if (operation === "commit.inspect") {
     verifyRepository(input.repository, cwd, "read");

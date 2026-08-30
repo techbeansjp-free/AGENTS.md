@@ -9,12 +9,14 @@ import {
   withoutMarkdownCode,
   type IssueValidationStage,
 } from "./domain/issue.js";
+import { parsePocDeclaration } from "./domain/workflow.js";
 import {
   bootstrapProject,
   validateSpecs,
   type ProjectKind,
 } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
+import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import {
   assertPullRequestTrackerBinding,
   createPullRequest,
@@ -48,6 +50,7 @@ import {
   applyStagingCleanup,
   calculateStagingDigest,
   listStagingArtifacts,
+  migrateLegacyStagingTrackerLocked,
   planStagingCleanup,
   readStoredStagingRecord,
   withStagingMutationLock,
@@ -180,14 +183,25 @@ import {
 import {
   appendDeliveryTerminalJournalEntry,
   appendWorkflowJournalEntry,
+  assertPocDeliveryChangeScope,
   assertWorkflowStaging,
+  executePocObservation,
+  inspectCurrentPocJournalBinding,
   inspectWorkflowStaging,
+  inspectPendingJournalTransaction,
+  inspectStoredPocObservationEvidence,
   previewWorkflowStagingPromotion,
   promoteWorkflowStagingToFull,
   readWorkflowJournal,
+  recoverPendingJournalTransaction,
   resolvePullRequestStaging,
   workflowStep,
 } from "./adapters/workflow-journal.js";
+import {
+  assertConvergedReviewSession,
+  previewReviewRound,
+  recordReviewRound,
+} from "./adapters/review-session.js";
 import {
   bindStoredPullRequest,
   claimStoredMergeDispatch,
@@ -198,6 +212,7 @@ import {
   readStoredDeliveryState,
   recordStoredStep11,
   requireStoredDeliveryReconciliation,
+  resumeStoredPullRequestCreationAfterConfirmedAbsence,
 } from "./adapters/delivery-state.js";
 import {
   DELIVERY_STATE_FILE,
@@ -377,6 +392,40 @@ function assertWorkflowReadyForDelivery(
       ].join("; ")}`,
     );
   return inspection;
+}
+
+function assertCurrentReviewJournalBinding(
+  staging: string,
+  headSha: string,
+): void {
+  const journal = readWorkflowJournal(staging);
+  if (journal.errors.length > 0)
+    throw new Error(
+      `PR作成前のreview journalが不正です: ${journal.errors.join("; ")}`,
+    );
+  const step10 = [...journal.entries]
+    .reverse()
+    .find((entry) => entry.step === 10);
+  if (!step10?.reviewSession)
+    throw new Error("PR作成には最新Step 10のreviewSession bindingが必要です");
+  const binding = step10.reviewSession;
+  if (binding.headSha !== headSha)
+    throw new Error(
+      "Step 10のreviewSession binding HEADがPR作成対象HEADと一致しません",
+    );
+  const session = assertConvergedReviewSession({
+    staging,
+    expectedDigest: binding.roundDigest,
+    currentHeadSha: headSha,
+  });
+  if (
+    session.sessionId !== binding.sessionId ||
+    session.latestRoundDigest !== binding.roundDigest ||
+    session.latestCandidateHeadSha !== binding.headSha
+  )
+    throw new Error(
+      "Step 10のreviewSession bindingが保存済み収束sessionと一致しません",
+    );
 }
 
 function assertObservedClosingContract(input: {
@@ -626,6 +675,7 @@ function finishObservedMerge(
     if (!definition) throw new Error("step 11の定義がありません");
     workflow = appendDeliveryTerminalJournalEntry({
       staging,
+      headSha: current.create.headSha,
       entry: {
         step: 11,
         skillId: definition.skillId,
@@ -696,6 +746,7 @@ function finishBoundPullRequest(
     if (!definition) throw new Error("step 11の定義がありません");
     workflow = appendDeliveryTerminalJournalEntry({
       staging,
+      headSha: current.create.headSha,
       entry: {
         step: 11,
         skillId: definition.skillId,
@@ -733,10 +784,13 @@ function assertStoredStagingContentDigest(
   if (
     stableJson(stored.artifacts) !== stableJson(artifacts) ||
     stored.digest !== calculateStagingDigest(staging, artifacts)
-  )
+  ) {
+    const pending = inspectPendingJournalTransaction(staging);
+    if (pending?.state === "published") return;
     throw new Error(
       `${context}のstaging成果物一覧またはcontent digestが保存値と一致しません`,
     );
+  }
 }
 
 function assertRecordedStep11Evidence(
@@ -812,8 +866,8 @@ interface MergeReviewEvidence extends MergeCandidateEvidence {
 /**
  * GitHub review履歴は現在状態の一覧ではなくevent列である。古いAPPROVEDを後続の
  * CHANGES_REQUESTED/DISMISSEDより先に拾うと失効reviewを固定できるため、全eventを
- * 検証したうえでactorごとの最新の承認状態変更eventだけを候補にする。COMMENTEDは
- * approval状態を変更しないため、後続コメントだけで有効なAPPROVEDを失効させない。
+ * 検証したうえでactorごとの最新の承認状態変更eventだけを候補にする。COMMENTEDと
+ * 未提出draftのPENDINGはapproval状態を変更しない。
  */
 function currentIndependentApprovals(input: {
   approvals: readonly ApprovalObservation[];
@@ -833,6 +887,7 @@ function currentIndependentApprovals(input: {
   const latestByActor = new Map<string, ApprovalObservation>();
   const byReviewId = new Map<string, ApprovalObservation>();
   for (const approval of input.approvals) {
+    if (approval.state === "PENDING") continue;
     const submittedAt = approval.submittedAt;
     const timestamp =
       typeof submittedAt === "string" ? Date.parse(submittedAt) : Number.NaN;
@@ -1116,7 +1171,9 @@ function inspectAuthorizedPullRequestMerge(input: {
     input.root,
   );
   const checks = (observed.statusCheckRollup ?? [])
-    .filter((item) => (item.conclusion ?? item.status) === "SUCCESS")
+    .filter(
+      (item) => (item.conclusion ?? item.state ?? item.status) === "SUCCESS",
+    )
     .map((item) => item.name ?? item.context)
     .filter((item): item is string => typeof item === "string");
   const reviewed = observeMergeReviewEvidence({
@@ -1158,8 +1215,11 @@ function assertTerminalMergeProof(input: {
   observation: Omit<MergeObservation, "observationId">;
   topology: CommitTopologyObservation;
   expectedTreeSha: string;
+  sourceCommitCount: number;
+  rebaseTopologies?: readonly CommitTopologyObservation[];
   defaultBranchTip: string;
   ancestry: CommitAncestryObservation;
+  authorizedBaseAncestry?: CommitAncestryObservation;
 }): void {
   const intent = input.state.merge;
   const claim = intent?.dispatchClaimedAt;
@@ -1171,8 +1231,6 @@ function assertTerminalMergeProof(input: {
     !input.observation.mergeCommitSha
   )
     throw new Error("merged終端のprovider observationが不完全です");
-  if (input.observation.providerMergedAt < claim)
-    throw new Error("provider mergedAtがASC dispatch claimより前です");
   if (
     input.topology.repository.toLowerCase() !==
       input.state.create.repository.toLowerCase() ||
@@ -1203,7 +1261,6 @@ function assertTerminalMergeProof(input: {
       : intent.authorizedBaseSha;
   if (request) {
     if (
-      request.requestedAt < claim ||
       request.headSha !== intent.authorizedHeadSha ||
       request.baseSha !== intent.authorizedBaseSha
     )
@@ -1226,17 +1283,102 @@ function assertTerminalMergeProof(input: {
       );
     return;
   }
-  if (!request)
-    throw new Error(
-      `${intent.method}終端はauto-mergeまたはmerge-queue request Evidenceなしでは確定できません`,
-    );
+  // GitHub may remove auto-merge/queue request objects before the first
+  // read-back when the PR merges immediately. In that terminal state the
+  // durable ASC dispatch claim, provider mergedAt/mergeCommit, exact expected
+  // tree, commit topology and default-branch ancestry form the reproducible
+  // proof. A request object strengthens the proof when it remains observable,
+  // but must not make an already completed merge permanently unrecoverable.
   if (intent.method === "squash") {
     if (parents.length !== 1 || parents[0] !== terminalBaseSha)
       throw new Error("squash commitの親が終端検証base SHAと一致しません");
     return;
   }
-  if (parents.length !== 1)
-    throw new Error("rebase終端のcommit topologyが単一親ではありません");
+  const rebaseTopologies = input.rebaseTopologies ?? [];
+  if (rebaseTopologies.length !== input.sourceCommitCount)
+    throw new Error("rebase終端のcommit数が固定source historyと一致しません");
+  let expectedCommit = input.topology.sha;
+  for (const observed of rebaseTopologies) {
+    if (
+      observed.repository.toLowerCase() !==
+        input.state.create.repository.toLowerCase() ||
+      observed.sha !== expectedCommit ||
+      observed.parentShas.length !== 1
+    )
+      throw new Error("rebase終端が固定件数の1-parent線形chainではありません");
+    expectedCommit = observed.parentShas[0]!;
+  }
+  if (expectedCommit !== terminalBaseSha)
+    throw new Error(
+      "rebase終端chainのfirst parentが終端検証baseと一致しません",
+    );
+  const baseAncestry = input.authorizedBaseAncestry;
+  if (
+    !baseAncestry ||
+    baseAncestry.repository.toLowerCase() !==
+      input.state.create.repository.toLowerCase() ||
+    baseAncestry.ancestorSha !== intent.authorizedBaseSha ||
+    baseAncestry.descendantSha !== input.topology.sha ||
+    !baseAncestry.isAncestor
+  )
+    throw new Error(
+      "rebase終端で固定済み認可baseからmerge commitへのancestryを確認できません",
+    );
+}
+
+/**
+ * The immutable authorized base/head tuple fixes the source history. For
+ * squash/rebase, reject merge commits before the provider side effect so a
+ * one-parent result has an unambiguous source commit count. When N=1, squash
+ * and rebase intentionally share the same result invariant; commit metadata
+ * is not part of the terminal contract for this short-lived-branch case.
+ */
+function fixedMergeSourceCommitCount(input: {
+  root: string;
+  method: PullRequestMergeMethod;
+  baseSha: string;
+  headSha: string;
+}): number {
+  const source = git(
+    [
+      "rev-list",
+      "--reverse",
+      "--parents",
+      "--no-abbrev-commit",
+      `${input.baseSha}..${input.headSha}`,
+    ],
+    input.root,
+    {
+      env: {
+        PATH: process.env.PATH ?? "/usr/bin:/bin",
+        LANG: "C",
+        LC_ALL: "C",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_NO_REPLACE_OBJECTS: "1",
+        GIT_OPTIONAL_LOCKS: "0",
+      },
+    },
+  ).stdout.trim();
+  const lines = source === "" ? [] : source.split("\n");
+  if (lines.length === 0 || lines.length > 256)
+    throw new Error("merge対象source commit数は1〜256件でなければなりません");
+  let expectedParent = input.baseSha;
+  for (const line of lines) {
+    const [commit, ...parents] = line.trim().split(/\s+/u);
+    if (!commit || !/^[a-f0-9]{40}$/u.test(commit))
+      throw new Error("merge対象source historyのcommit SHAが不正です");
+    if (input.method !== "merge") {
+      if (parents.length !== 1 || parents[0] !== expectedParent)
+        throw new Error(
+          "squash/rebase対象source historyは固定baseからの線形chainが必要です",
+        );
+      expectedParent = commit;
+    }
+  }
+  if (input.method !== "merge" && expectedParent !== input.headSha)
+    throw new Error("merge対象source historyの終端が固定HEADと一致しません");
+  return lines.length;
 }
 
 function expectedMergeResultTree(
@@ -1365,6 +1507,41 @@ function readBackPreparedPullRequestMerge(input: {
         },
         input.root,
       );
+      const authorizedBaseAncestry =
+        input.state.merge.method === "rebase"
+          ? github(
+              "commit.ancestry",
+              {
+                repository: input.repository,
+                sha: input.state.merge.authorizedBaseSha,
+                descendantSha: merge.mergeCommitSha!,
+              },
+              input.root,
+            )
+          : undefined;
+      const sourceCommitCount = fixedMergeSourceCommitCount({
+        root: input.root,
+        method: input.state.merge.method,
+        baseSha: input.state.merge.authorizedBaseSha,
+        headSha: input.state.merge.authorizedHeadSha,
+      });
+      const rebaseTopologies: CommitTopologyObservation[] = [];
+      if (input.state.merge.method === "rebase") {
+        let current = topology;
+        for (let index = 0; index < sourceCommitCount; index += 1) {
+          rebaseTopologies.push(current);
+          if (current.parentShas.length !== 1) break;
+          if (index + 1 < sourceCommitCount)
+            current = github(
+              "commit.topology",
+              {
+                repository: input.repository,
+                sha: current.parentShas[0]!,
+              },
+              input.root,
+            );
+        }
+      }
       assertTerminalMergeProof({
         state: input.state,
         observation: merge,
@@ -1374,8 +1551,11 @@ function readBackPreparedPullRequestMerge(input: {
           input.state,
           merge,
         ),
+        sourceCommitCount,
+        rebaseTopologies,
         defaultBranchTip: repositoryAuthority.defaultBranchTipOid,
         ancestry,
+        authorizedBaseAncestry,
       });
     }
     if (merge.providerState === "merge-requested") {
@@ -1577,6 +1757,12 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
       input.root,
     );
     assertMinimumExecutableVersion(
+      "git",
+      ["--version"],
+      input.root,
+      MINIMUM_GIT_VERSION,
+    );
+    assertMinimumExecutableVersion(
       "gh",
       ["--version"],
       input.root,
@@ -1714,6 +1900,7 @@ function handlePullRequestMerge(flags: Flags): number {
       return 0;
     }
     const recovered = withStagingMutationLock(staging, () => {
+      recoverPendingJournalTransaction(staging);
       assertStoredStagingContentDigest(
         staging,
         "merged終端journalからの復旧直前",
@@ -1729,9 +1916,10 @@ function handlePullRequestMerge(flags: Flags): number {
   }
 
   const result = withStagingMutationLock(staging, () => {
+    if (apply) recoverPendingJournalTransaction(staging);
     const workflowInspection = assertWorkflowReadyForDelivery(staging);
     assertWorkflowMergeAllowed(workflowInspection.mode);
-    const stagingRecord = readStoredStagingRecord(staging);
+    let stagingRecord = readStoredStagingRecord(staging);
     const current = readStoredDeliveryState(staging);
     if (!current?.pr)
       throw new Error("writer lock取得後に固定済みPR bindingを確認できません");
@@ -1743,6 +1931,30 @@ function handlePullRequestMerge(flags: Flags): number {
       prUrl: `https://github.com/${repository}/pull/${pr}`,
       headSha: current.create.headSha,
     });
+    const storedTracker = stagingRecord.tracker;
+    const legacyTracker =
+      typeof storedTracker === "string"
+        ? /^#?([1-9]\d*)$/u.exec(storedTracker)
+        : null;
+    if (
+      !(
+        typeof storedTracker === "string" &&
+        storedTracker.toLowerCase() === current.create.issueUrl.toLowerCase()
+      ) &&
+      Number(legacyTracker?.[1]) !== current.create.issue
+    )
+      throw new Error(
+        "writer lock取得後のstaging trackerが固定済みdelivery Issueと一致しません",
+      );
+    // A dry-run must not rewrite a legacy tracker. Use the canonical Issue URL
+    // already fixed in the delivery state as the read-only virtual migration.
+    const deliveryTracker = current.create.issueUrl;
+    if (apply) {
+      stagingRecord = migrateLegacyStagingTrackerLocked(staging, {
+        repository,
+        issue: current.create.issue,
+      });
+    }
     if (current.merge && current.merge.method !== method)
       throw new Error("固定済みmerge intentのmethodを変更できません");
 
@@ -1775,7 +1987,7 @@ function handlePullRequestMerge(flags: Flags): number {
         repository,
         pr,
         state: current,
-        tracker: stagingRecord.tracker,
+        tracker: deliveryTracker,
         mode: workflowInspection.mode,
         apply,
       });
@@ -1788,7 +2000,7 @@ function handlePullRequestMerge(flags: Flags): number {
         pr,
         method,
         state: current,
-        tracker: stagingRecord.tracker,
+        tracker: deliveryTracker,
         mode: workflowInspection.mode,
         apply,
       });
@@ -1802,7 +2014,7 @@ function handlePullRequestMerge(flags: Flags): number {
         repository,
         pr,
         state: current,
-        tracker: stagingRecord.tracker,
+        tracker: deliveryTracker,
         mode: workflowInspection.mode,
         apply,
       });
@@ -1820,7 +2032,7 @@ function handlePullRequestMerge(flags: Flags): number {
       method,
       base,
       state: current,
-      tracker: stagingRecord.tracker,
+      tracker: deliveryTracker,
       trustedSet,
     });
     if (!inspected.authorization.allowed) {
@@ -1857,7 +2069,7 @@ function handlePullRequestMerge(flags: Flags): number {
       method,
       base,
       state: current,
-      tracker: stagingRecord.tracker,
+      tracker: deliveryTracker,
       trustedSet,
     });
     if (
@@ -1903,11 +2115,23 @@ function handlePullRequestMerge(flags: Flags): number {
 
     github("repository.assert-write", { repository }, root);
     assertMinimumExecutableVersion(
+      "git",
+      ["--version"],
+      root,
+      MINIMUM_GIT_VERSION,
+    );
+    assertMinimumExecutableVersion(
       "gh",
       ["--version"],
       root,
       MINIMUM_GH_VERSION,
     );
+    fixedMergeSourceCommitCount({
+      root,
+      method,
+      baseSha: rechecked.authority.baseRefOid,
+      headSha: rechecked.observed.headRefOid,
+    });
 
     const prepared = prepareStoredMergeIntent(staging, {
       method,
@@ -1931,7 +2155,7 @@ function handlePullRequestMerge(flags: Flags): number {
         repository,
         pr,
         state: prepared.state,
-        tracker: stagingRecord.tracker,
+        tracker: deliveryTracker,
         mode: workflowInspection.mode,
         apply,
       });
@@ -1946,7 +2170,7 @@ function handlePullRequestMerge(flags: Flags): number {
         repository,
         pr,
         state: claimed.state,
-        tracker: stagingRecord.tracker,
+        tracker: deliveryTracker,
         mode: workflowInspection.mode,
         apply,
       });
@@ -3487,8 +3711,8 @@ export async function main(
     const unknown = Object.keys(flags).filter(
       (flag) =>
         ![
-          "staging",
           "input",
+          "staging",
           "root",
           "promoted-at",
           "apply",
@@ -3520,6 +3744,51 @@ export async function main(
         staging,
         discovery,
         promotedAt: flags["promoted-at"] ?? new Date().toISOString(),
+      }),
+    );
+    return 0;
+  }
+  if (command === "workflow" && subcommand === "poc-observation") {
+    const { flags, artifacts } = workflowArguments(rest);
+    if (artifacts.length > 0)
+      throw new Error("workflow poc-observationで--artifactは使用できません");
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["staging", "root", "apply", "dry-run"].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `workflow poc-observationの未知optionです: --${unknown.join(", --")}`,
+      );
+    const root = path.resolve(flags.root ?? process.cwd());
+    const stagingInput = flags.staging;
+    if (!stagingInput)
+      throw new Error("workflow poc-observationには--stagingが必要です");
+    const staging = resolveContained(
+      root,
+      path.relative(root, path.resolve(root, stagingInput)),
+    );
+    const headSha = git(
+      ["rev-parse", "--verify", "HEAD^{commit}"],
+      root,
+    ).stdout.trim();
+    const apply = workflowLifecycleApplyMode(flags);
+    if (!apply) {
+      print({
+        state: "preview",
+        operation: "execute-poc-observation",
+        staging,
+        headSha,
+        sandbox: "/usr/bin/bwrap",
+        executor: process.execPath,
+        next: "--applyで隔離fixtureの定義済みNode runnerを実行し、ASC計測Evidenceを固定します",
+      });
+      return 0;
+    }
+    print(
+      executePocObservation({
+        staging,
+        headSha,
+        observedAt: (dependencies.now?.() ?? new Date()).toISOString(),
       }),
     );
     return 0;
@@ -3564,7 +3833,14 @@ export async function main(
   if (command === "workflow" && subcommand === "record") {
     const { flags, artifacts } = workflowArguments(rest);
     const unknown = Object.keys(flags).filter(
-      (flag) => !["staging", "step", "evidence", "recorded-at"].includes(flag),
+      (flag) =>
+        ![
+          "staging",
+          "step",
+          "evidence",
+          "recorded-at",
+          "review-session-digest",
+        ].includes(flag),
     );
     if (unknown.length > 0)
       throw new Error(
@@ -3585,7 +3861,7 @@ export async function main(
       throw new Error(
         "Step 0はstaging初期化専用、Step 11はdelivery終端専用です。workflow recordでは記録できません",
       );
-    const entry: StepJournalEntry = {
+    let entry: StepJournalEntry = {
       step: step.step,
       skillId: step.skillId,
       mode: journal.mode,
@@ -3593,7 +3869,35 @@ export async function main(
       artifacts,
       evidence,
     };
-    print(appendWorkflowJournalEntry({ staging, entry }));
+    const repositoryRoot = path.resolve(staging, "../../../..");
+    const needsHeadSha =
+      step.step === 10 || (journal.mode === "poc" && step.step >= 9);
+    const headSha = needsHeadSha
+      ? git(
+          ["rev-parse", "--verify", "HEAD^{commit}"],
+          repositoryRoot,
+        ).stdout.trim()
+      : undefined;
+    if (step.step === 10) {
+      const session = assertConvergedReviewSession({
+        staging,
+        expectedDigest: required(flags, "review-session-digest"),
+        currentHeadSha: headSha!,
+      });
+      entry = {
+        ...entry,
+        reviewSession: {
+          sessionId: session.sessionId,
+          roundDigest: session.latestRoundDigest,
+          headSha: session.latestCandidateHeadSha,
+        },
+      };
+    } else if (flags["review-session-digest"] !== undefined) {
+      throw new Error(
+        "--review-session-digestはworkflow record --step=10だけに指定できます",
+      );
+    }
+    print(appendWorkflowJournalEntry({ staging, entry, headSha }));
     return 0;
   }
   if (command === "workflow" && subcommand === "verify") {
@@ -3613,6 +3917,43 @@ export async function main(
       ? workflowStepNumber(flags["up-to"], "up-to")
       : 11;
     const inspection = inspectWorkflowStaging(flags.staging, upTo);
+    if (inspection.mode === "poc" && upTo >= 9) {
+      const headSha = git(
+        ["rev-parse", "--verify", "HEAD^{commit}"],
+        path.resolve(inspection.staging, "../../../.."),
+      ).stdout.trim();
+      const observation = inspectStoredPocObservationEvidence(
+        inspection.staging,
+        headSha,
+      );
+      if (!observation.valid) {
+        print(
+          workflowDiagnostic(
+            inspection.staging,
+            inspection.mode,
+            inspection.validation,
+            [...inspection.errors, ...observation.errors],
+          ),
+        );
+        return 1;
+      }
+      const binding = inspectCurrentPocJournalBinding(
+        inspection.staging,
+        headSha,
+        upTo,
+      );
+      if (!binding.valid) {
+        print(
+          workflowDiagnostic(
+            inspection.staging,
+            inspection.mode,
+            inspection.validation,
+            binding.errors,
+          ),
+        );
+        return 1;
+      }
+    }
     if (!inspection.valid) {
       print(
         workflowDiagnostic(
@@ -3645,10 +3986,32 @@ export async function main(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
     const assessment = readModeAssessment(required(flags, "assessment"));
+    const requestedMode = required(flags, "mode");
+    if (!["quick", "full", "poc"].includes(requestedMode))
+      throw new Error("--modeはquick、full、pocのいずれかが必要です");
+    const declarationFile = flags["poc-declaration"];
+    if (requestedMode === "poc" && typeof declarationFile !== "string")
+      throw new Error("--mode=pocには--poc-declarationが必要です");
+    if (requestedMode !== "poc" && declarationFile !== undefined)
+      throw new Error("--poc-declarationは--mode=pocだけで使用できます");
+    const parsedPoc =
+      typeof declarationFile === "string"
+        ? parsePocDeclaration(
+            fs.readFileSync(path.resolve(declarationFile), "utf8"),
+          )
+        : { errors: [] as string[] };
+    if (parsedPoc.errors.length > 0)
+      throw new Error(`PoC宣言が不正です: ${parsedPoc.errors.join("; ")}`);
     print(
       createIssueStaging(root, {
         title: required(flags, "title"),
         answers: assessment,
+        requestedMode,
+        ...(parsedPoc.declaration ? { poc: parsedPoc.declaration } : {}),
+        changedFiles:
+          typeof flags.changed === "string"
+            ? flags.changed.split(",").filter(Boolean)
+            : [],
         now: new Date(),
       }),
     );
@@ -3713,6 +4076,8 @@ export async function main(
     )
       throw new Error("--checkpointは4または8で指定してください");
     const syncAndRecord = () => {
+      if (stagingPath !== undefined)
+        recoverPendingJournalTransaction(stagingPath);
       /**
        * **staging記録の書き込み可否も同期の前に確かめる。**
        * writer lockを副作用と記録の両方へ保持し、途中で昇格やjournal追記を割り込ませない。
@@ -3918,6 +4283,29 @@ export async function main(
     }
     print(result);
     return 1;
+  }
+  if (command === "review" && subcommand === "round") {
+    const { flags, positionals } = parse(rest);
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["staging", "file", "apply"].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `review roundの未知optionです: --${unknown.join(", --")}`,
+      );
+    if (positionals.length > 0)
+      throw new Error("review roundに位置引数は使用できません");
+    const staging = required(flags, "staging");
+    const file = path.resolve(required(flags, "file"));
+    const round = parseReviewRoundInput(readJsonInput(file));
+    const apply = flags.apply === true;
+    if (flags.apply !== undefined && !apply)
+      throw new Error("review round --applyに値は指定できません");
+    const state = apply
+      ? recordReviewRound({ staging, round })
+      : previewReviewRound({ staging, round });
+    print({ applied: apply, ...state });
+    return 0;
   }
   if (command === "review" && subcommand === "evidence") {
     const { flags } = parse(rest);
@@ -4913,6 +5301,7 @@ export async function main(
           return 0;
         }
         const recovered = withStagingMutationLock(staging, () => {
+          recoverPendingJournalTransaction(staging);
           assertStoredStagingContentDigest(
             staging,
             "PR停止終端journalからの復旧直前",
@@ -4946,6 +5335,18 @@ export async function main(
       workflowValidation.modeConflicts.length > 0 ||
       workflowValidation.errors.length > 0;
     if (overrideFile && workflowValidation.missingSteps.length > 0) {
+      if (
+        workflowValidation.missingSteps.includes(10) ||
+        (inspection.mode === "poc" &&
+          workflowValidation.missingSteps.includes(9))
+      ) {
+        print(
+          workflowDiagnostic(staging, inspection.mode, workflowValidation, [
+            "Step 10のreview session bindingとPoCのStep 9機械観測EvidenceはHumanOverrideできません",
+          ]),
+        );
+        return 1;
+      }
       if (nonMissingFailure) {
         print(
           workflowDiagnostic(staging, inspection.mode, workflowValidation, [
@@ -5020,6 +5421,19 @@ export async function main(
       throw new Error(
         "--head-shaは小文字の完全な40桁Git SHAで指定してください",
       );
+    assertCurrentReviewJournalBinding(staging, headSha);
+    if (inspection.mode === "poc") {
+      const observation = inspectStoredPocObservationEvidence(staging, headSha);
+      if (!observation.valid)
+        throw new Error(
+          `PoCのPR作成前poc-observation Evidenceが不正です: ${observation.errors.join("; ")}`,
+        );
+      const binding = inspectCurrentPocJournalBinding(staging, headSha, 10);
+      if (!binding.valid)
+        throw new Error(
+          `PoCのPR作成前journal bindingが不正です: ${binding.errors.join("; ")}`,
+        );
+    }
     const canonicalRaw =
       typeof flags["canonical-issue"] === "string"
         ? flags["canonical-issue"]
@@ -5112,9 +5526,16 @@ export async function main(
       );
     const observedBaseSha =
       existingBefore?.create.baseSha ?? repositoryAuthority.defaultBranchTipOid;
+    if (inspection.mode === "poc")
+      assertPocDeliveryChangeScope(staging, observedBaseSha, headSha);
     const result = withStagingMutationLock(staging, () => {
+      recoverPendingJournalTransaction(staging);
       const lockedInspection = assertWorkflowReadyForDelivery(staging);
-      const stagingRecord = readStoredStagingRecord(staging);
+      assertCurrentReviewJournalBinding(staging, headSha);
+      const stagingRecord = migrateLegacyStagingTrackerLocked(staging, {
+        repository,
+        issue,
+      });
       const issueUrl = stagingRecord.tracker;
       if (
         typeof issueUrl !== "string" ||
@@ -5153,11 +5574,12 @@ export async function main(
           let exactMatches = 0;
           let mergedMatches = 0;
           let closedMatches = 0;
-          const matching = github(
+          const observedCandidates = github(
             "pr.find",
             { repository, head, base },
             root,
-          ).flatMap((observed) => {
+          );
+          const matching = observedCandidates.flatMap((observed) => {
             try {
               if (
                 observed.state !== "OPEN" &&
@@ -5194,7 +5616,19 @@ export async function main(
           } else if (closedMatches > 0) {
             recoveryReason = `固定済みidentityに一致するclosed PRを${closedMatches}件観測したため、重複PRの自動作成を禁止した`;
           } else if (
-            matching.length === 0 &&
+            observedCandidates.length === 0 &&
+            prepared.state === "reconciliation-required" &&
+            prepared.reconciliation?.phase === "create" &&
+            prepared.create.dispatchClaimedAt === null &&
+            prepared.create.baseSha === repositoryAuthority.defaultBranchTipOid
+          ) {
+            effectivePrepared =
+              resumeStoredPullRequestCreationAfterConfirmedAbsence(staging);
+            providerConfirmedAbsent = true;
+            recoveryReason =
+              "未消費claimのread-only照合失敗からexact absenceとbase不変を再確認したため、同一intentを一度だけ再開する";
+          } else if (
+            observedCandidates.length === 0 &&
             prepared.state === "create-prepared" &&
             prepared.create.dispatchClaimedAt === null &&
             prepared.create.baseSha === repositoryAuthority.defaultBranchTipOid
@@ -5203,20 +5637,20 @@ export async function main(
             recoveryReason =
               "固定済みidentityのPRがproviderに存在しないことを確認したため、同一intentを一度だけ再試行する";
           } else if (
-            matching.length === 0 &&
+            observedCandidates.length === 0 &&
             prepared.state === "create-prepared" &&
             prepared.create.dispatchClaimedAt !== null
           ) {
             recoveryReason =
               "PR create dispatch claimは消費済みだがprovider反映を確認できないため、自動再送を禁止した";
           } else if (
-            matching.length === 0 &&
+            observedCandidates.length === 0 &&
             prepared.state === "create-prepared"
           ) {
             recoveryReason =
               "PR create intent固定後にprovider baseが前進し、固定baseへの新規PR作成を再認可できないため自動再送を禁止した";
           } else {
-            recoveryReason = `固定済みidentityに一致する既存PRが一意ではありません: matches=${matching.length}`;
+            recoveryReason = `同じhead/baseのprovider PRを${observedCandidates.length}件観測しましたが、固定済みidentityとの一致は${exactMatches}件です。既存PRを確認するまで新規作成しません`;
           }
         } catch (error) {
           recoveryReason = `既存PRのread-only照合に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
@@ -5271,6 +5705,7 @@ export async function main(
           throw new Error(
             "provider create再試行には現在の既定branch tipと一致するtrusted policy provenanceが必要です",
           );
+        assertCurrentReviewJournalBinding(staging, headSha);
         const claimed = claimStoredPullRequestCreationDispatch(
           staging,
           deliveryEventTime(effectivePrepared.create.preparedAt),

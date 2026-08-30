@@ -35,3 +35,30 @@ Feature: PoCモードをfail-closedで判定する
     Given 従来判定用のQ-01〜Q-08回答がある
     When 第2引数なしで従来の完全回答と不明回答を判定する
     Then 従来判定はquickとfullである
+
+  Scenario: SCN-UNIT-POC-006 隔離fixtureとBDD観測契約が不完全ならfullへ倒す
+    Given PoC宣言のfixtureとscenarioとobservableが不完全である
+    When pocを明示してモード判定する
+    Then PoC判定結果はfullである
+    And PoC判定理由に隔離fixtureとBDD scenarioとobservableが含まれる
+
+  Scenario: SCN-UNIT-POC-007 宣言とexact HEADに完全一致する即時観測Evidenceを受理する
+    Given 完全なPoC即時観測Evidenceがある
+    When PoC即時観測Evidenceを宣言とHEADへ完全照合する
+    Then PoC即時観測Evidenceは有効である
+
+  Scenario: SCN-UNIT-POC-008 fixtureやHEADやfieldを改変した観測Evidenceを拒否する
+    Given 完全なPoC即時観測Evidenceがある
+    When PoC即時観測Evidenceのfixture digestとHEADとfieldを改変する
+    Then PoC即時観測Evidenceはstrictに拒否される
+
+  Scenario: SCN-UNIT-POC-009 fixtureのsymlink・hardlink・FIFO・巨大fileを拒否する
+    Given fixture file境界を検査する隔離directoryがある
+    When 不正なfixture file種別とbyte上限を検査する
+    Then PoC fixture境界はすべてfail-closedになる
+
+  Scenario: SCN-UNIT-POC-010 exit-codeだけで振る舞いを判定しない
+    Given PoC宣言にexit-code observableしかない
+    When pocを明示してモード判定する
+    Then PoC判定結果はfullである
+    And PoC判定理由にbehavior observableが含まれる

@@ -337,10 +337,29 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       flag("evidence", "text", "Stepの証跡"),
       flag("artifact", "path", "成果物。1件以上を繰り返し指定する"),
     ],
-    conditionalFlags: [],
+    conditionalFlags: [
+      conditional(
+        "review-session-digest",
+        "sha256",
+        "収束済みreview sessionのlatest round digest",
+        "step=10のとき",
+      ),
+    ],
     optionalFlags: [optional("recorded-at", "ISO8601", "記録時刻", "実行時刻")],
     example:
       "npx agent-skill-chain workflow record --staging=.asc/886 --step=4 --evidence=実装完了 --artifact=src/cli-usage.ts",
+    acceptsSpaceSeparatedFlags: true,
+  },
+  {
+    command: "workflow",
+    subcommand: "poc-observation",
+    summary:
+      "bubblewrap内で隔離fixtureの固定Node runnerを実行してPoC観測Evidenceを生成する",
+    requiredFlags: [flag("staging", "path", "poc staging directory")],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
+    example:
+      "npx agent-skill-chain workflow poc-observation --staging=.agent-skill-chain/tmp/issues/20260830_120000-poc --root=. --apply",
     acceptsSpaceSeparatedFlags: true,
   },
   {
@@ -360,16 +379,27 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     summary: "Issue本文の雛形を生成する",
     requiredFlags: [
       flag("title", "text", "Issueのtitle"),
+      flag("mode", "quick|full|poc", "要求するworkflow mode"),
       flag(
         "assessment",
         "path",
         '質問IDをキーにした回答mapのJSON file。{"Q-01":{"answer":true|false|"unknown","evidence":"根拠"},…}の形式で、mode決定記録そのものは受理しない。回答か根拠が欠けたIDは不明として扱いfullへ倒す',
       ),
     ],
-    conditionalFlags: [],
-    optionalFlags: [ROOT_FLAG],
+    conditionalFlags: [
+      conditional(
+        "poc-declaration",
+        "path",
+        "strict PocDeclaration JSON file",
+        "--mode=pocのとき",
+      ),
+    ],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional("changed", "path,path", "既知の変更path", "なし"),
+    ],
     example:
-      "npx agent-skill-chain issue create --title=不具合 --assessment=./assessment.json",
+      "npx agent-skill-chain issue create --title=不具合 --mode=full --assessment=./assessment.json",
   },
   {
     command: "issue",
@@ -452,6 +482,21 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       optional("review", "path", "review成果物", "review指定なし"),
     ],
     example: "npx agent-skill-chain spec validate --root=.",
+  },
+  {
+    command: "review",
+    subcommand: "round",
+    summary: "固定anchorのreview roundをpreviewまたは永続化する",
+    requiredFlags: [
+      flag("staging", "path", "対象Issue staging"),
+      flag("file", "path", "review round入力JSON"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
+      optional("apply", "", "roundをreview sessionへ永続化する", "preview"),
+    ],
+    example:
+      "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
   },
   {
     command: "review",

@@ -628,6 +628,7 @@ export function authorizeMerge(input: MergeInput) {
   const latestByActor = new Map<string, Approval>();
   const byReviewId = new Map<string, Approval>();
   for (const approval of input.approvals) {
+    if (approval?.state === "PENDING") continue;
     const timestamp =
       typeof approval?.submittedAt === "string"
         ? Date.parse(approval.submittedAt)
