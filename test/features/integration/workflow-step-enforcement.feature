@@ -90,3 +90,13 @@ Feature: ワークフローStepの記録と正本一致を統合検証する
     Given ワークフローStep統合検査の隔離環境がある
     When "SCN-INT-WFSTEP-018"の統合検査を実行する
     Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-019 成果物へ内容を書いた後のworkflow recordを受理する
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-019"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-020 pending transaction中の非journal成果物変更を復旧成功にしない
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-020"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる

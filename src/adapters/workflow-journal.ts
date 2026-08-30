@@ -331,24 +331,16 @@ function writeJournalTransaction(
 ): void {
   if (inspectPendingJournalTransaction(staging))
     throw new Error("未復旧のworkflow journal transactionがあります");
-  const stored = readStoredStagingRecord(staging);
-  const artifacts = listStagingArtifacts(staging);
-  if (
-    stableJson(stored.artifacts) !== stableJson(artifacts) ||
-    stored.digest !== calculateStagingDigest(staging, artifacts)
-  )
-    throw new Error(
-      "workflow journal transaction開始前のstaging digestが一致しません",
-    );
+  const stored = refreshStoredStagingDigest(staging);
   const marker: JournalTransaction = {
     schemaVersion: JOURNAL_TRANSACTION_SCHEMA,
     journalBeforeDigest,
     journalAfterDigest,
     stagingDigestBefore: stored.digest,
-    artifacts,
+    artifacts: stored.artifacts,
     otherArtifactsDigest: calculateStagingDigest(
       staging,
-      artifacts.filter((artifact) => artifact !== STEP_JOURNAL_FILE),
+      stored.artifacts.filter((artifact) => artifact !== STEP_JOURNAL_FILE),
     ),
   };
   const transaction = journalTransactionPath(staging);

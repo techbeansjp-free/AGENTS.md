@@ -180,3 +180,18 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-WFOVR-004"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-019 transaction開始時点のstaging観測をmarkerとstaging recordへ同じ値で固定する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-019"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-020 未復旧transactionが残る状態で追記を開始しない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-020"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-021 stagingDigestBeforeとstaging recordが食い違うmarkerをbefore-publishにしない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-021"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
