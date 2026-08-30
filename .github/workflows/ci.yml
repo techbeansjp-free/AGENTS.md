@@ -24,6 +24,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: PoC隔離実行に必要なbubblewrapを導入する
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
       - name: 固定ファイルどおりに開発依存を導入する
         run: npm ci
       - name: trusted project choiceと実品質設定のbindingを検証する
