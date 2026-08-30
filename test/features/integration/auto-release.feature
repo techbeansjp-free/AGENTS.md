@@ -17,6 +17,36 @@ Feature: 自動release workflowと配布digest CLI
     When 自動release workflow契約を検証する
     Then bump経路はaudit:check以外のrelease gateをすべて含む
 
+  Scenario: SCN-INT-AUTORELEASE-004 乖離した既存bump branchをB基準で作り直す
+    Given Bより古い基準のbump branchを持つ隔離repositoryと、bump branchを持たない同条件の隔離repositoryを用意する
+    When 双方でbump準備手順を実行する
+    Then HのtreeはBのtreeと正規bump差分の合成に一致し、二つのgate対象treeのtree hashも一致する
+
+  Scenario: SCN-INT-AUTORELEASE-005 既にB基準で正規なbump branchを作り直さない
+    Given B基準で正規なbump branchを持つ隔離repositoryを用意する
+    When bump準備手順を実行する
+    Then remote headは実行前後で変化せず、そのbump commitのsubjectはchore(release): bump version toで始まり、変更pathはpackage.jsonとpackage-lock.jsonだけになる
+
+  Scenario: SCN-INT-AUTORELEASE-006 正規bump差分を超える混入を拒否し最後の1回のpush以外でremoteへ書き込まない
+    Given package-lock.jsonのintegrityを変えた混入、package.jsonに__proto__ keyを持つ基準、versionのlifecycleがremoteへ書き込む基準の3つの隔離repositoryを用意する
+    When 3つでbump準備手順を実行する
+    Then 混入は作り直しで除かれるか非0で停止し、__proto__を持つ基準は非0で停止し、lifecycleが書いた内容はremoteのbump branchに残らない
+
+  Scenario: SCN-INT-AUTORELEASE-007 基準SHAを確定できない場合と競合を検出した場合にgateを実行せず停止する
+    Given 基準SHAを取得できない隔離repositoryと、観測後に別主体がbump branchを作成する隔離repositoryを用意する
+    When 双方でbump準備手順を実行する
+    Then いずれもgateを実行せず非0で終了し、成立しなかった条件を出力へ残す
+
+  Scenario: SCN-INT-AUTORELEASE-008 mainのversionが目標versionと一致する場合は書き込まない
+    Given mainのversionが目標versionと一致する隔離repositoryを用意する
+    When bump準備手順を実行する
+    Then bump branchとPRのremote状態は変化しない
+
+  Scenario: SCN-INT-AUTORELEASE-011 bump_version jobがscriptを実際の経路として実行する
+    Given release.ymlのbump_version jobをYAMLのstep構造として読み込む
+    When C-1からC-6の条件を判定する
+    Then scriptを呼ぶstepはrun scalarが完全一致で1件だけ存在し、ifとcontinue-on-errorとshellを持たず、npm ciが先行し、HEADを動かすコマンドがjob内に無く、jobとworkflowのdefaults.run.shellも無い
+
   Scenario: SCN-INT-DIGEST-001 fixture repositoryで配布file一覧からdigestを算出する
     Given distと配布fileを持つfixture packageがある
     When fixture packageの配布digest CLIを実行する
