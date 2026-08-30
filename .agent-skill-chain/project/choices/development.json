@@ -61,7 +61,14 @@
         "requiredEvidence": ["requirements_trace"]
       },
       "implementer": {
-        "allowedPaths": ["src/", "test/", "docs/specs/", ".agent-skill-chain/"],
+        "allowedPaths": [
+          "src/",
+          "test/",
+          "docs/specs/",
+          ".agent-skill-chain/",
+          "scripts/prepare_release_bump.ts",
+          ".github/workflows/release.yml"
+        ],
         "allowedOperations": [
           "confirm_failing_test",
           "implement_product",
