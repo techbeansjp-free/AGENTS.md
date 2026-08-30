@@ -4,6 +4,7 @@ import {
   resolveEffectivePolicy,
 } from "./enforcement.js";
 import {
+  isRecord,
   type Diagnostic,
   type Policy,
   type RuleObservation,
@@ -33,6 +34,7 @@ interface PullRequestInput {
   relatedIssues?: number[];
   head: string;
   base: string;
+  baseSha?: string;
   repository: string;
   /** 配布templateの構造を満たすPR本文。**自由形式の本文で代替しない。** */
   body: string;
@@ -41,6 +43,48 @@ interface PullRequestInput {
   trustedPolicy?: Policy;
   candidatePolicy?: Policy;
 }
+export interface PullRequestReadBack {
+  number?: number;
+  url?: string;
+  body?: string;
+  headRefName?: string;
+  baseRefName?: string;
+  headRefOid?: string;
+  baseRefOid?: string;
+  closingIssuesReferences?: Array<{ number?: number; url?: string }>;
+}
+export type CreatePullRequestResult =
+  | {
+      state: "preview";
+      preview: {
+        operation: "pr.create";
+        authorityStatus: string;
+        repository: string;
+        issue: number;
+        head: string;
+        headSha: string;
+        base: string;
+        baseSha: string;
+        title: string;
+        body: string;
+      };
+      url: undefined;
+    }
+  | {
+      state: "rollback_required";
+      url: string;
+      reason: string;
+      observation?: PullRequestReadBack;
+      preview?: undefined;
+      next: string;
+    }
+  | {
+      state: "waiting_for_human_review";
+      url: string;
+      observation?: PullRequestReadBack;
+      preview?: undefined;
+      next: string;
+    };
 interface Approval {
   state?: string;
   commitSha?: string;
@@ -189,7 +233,7 @@ export function validateIssueClosingReferences(
 } {
   const extract = (pattern: RegExp): number[] =>
     [...body.matchAll(pattern)].map((match) => Number(match[1]));
-  const closes = extract(/\b(?:closes?|closed|fixes|resolves)\s+#(\d+)\b/giu);
+  const closes = extractIssueClosingNumbers(body);
   const relates = extract(/\brelates\s+to\s+#(\d+)\b/giu);
   const errors: string[] = [];
   const canonicalCount = closes.filter(
@@ -213,6 +257,65 @@ export function validateIssueClosingReferences(
       errors.push(`後続Issue #${issue}に終端keywordを使用できません`);
   }
   return { valid: errors.length === 0, errors, closes, relates };
+}
+
+const ISSUE_CLOSING_REFERENCE =
+  /\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)(?:\s+|\s*:\s*)#(\d+)\b/giu;
+
+export function extractIssueClosingNumbers(body: string): number[] {
+  return [...body.matchAll(ISSUE_CLOSING_REFERENCE)].map((match) =>
+    Number(match[1]),
+  );
+}
+
+/**
+ * Merge対象PRを、PR作成時に同期したIssue stagingへ拘束する。
+ *
+ * stagingの配置やjournalが正しくても、別Issueの有効なstagingを流用できればStep 10を
+ * 迂回できる。GitHubが解決したclosing issueの番号とrepository URLを双方照合し、本文の
+ * 推測や番号だけの一致をEvidenceにしない。
+ */
+export function assertPullRequestTrackerBinding(input: {
+  repository: string;
+  tracker: string | null;
+  closingIssueReferences: readonly unknown[] | undefined;
+}): { issue: number; issueUrl: string } {
+  const repository = input.repository.trim();
+  if (!/^[^/\s]+\/[^/\s]+$/u.test(repository))
+    throw new Error("repositoryはowner/name形式が必要です");
+  if (typeof input.tracker !== "string")
+    throw new Error("staging recordに同期済みIssue trackerがありません");
+
+  const absolute =
+    /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/([1-9]\d*)$/iu.exec(
+      input.tracker,
+    );
+  if (!absolute)
+    throw new Error(
+      "staging recordのIssue trackerはrepositoryを拘束する完全なGitHub Issue URLが必要です",
+    );
+  if (
+    absolute &&
+    `${absolute[1]}/${absolute[2]}`.toLowerCase() !== repository.toLowerCase()
+  )
+    throw new Error("staging recordのIssue repositoryが対象PRと一致しません");
+
+  const issue = Number(absolute[3]);
+  const issueUrl = `https://github.com/${repository}/issues/${issue}`;
+  if (!Array.isArray(input.closingIssueReferences))
+    throw new Error("PRのclosing Issueをtrusted providerから観測できません");
+  const matches = input.closingIssueReferences.filter(
+    (reference) =>
+      isRecord(reference) &&
+      reference.number === issue &&
+      typeof reference.url === "string" &&
+      reference.url.toLowerCase() === issueUrl.toLowerCase(),
+  );
+  if (matches.length !== 1 || input.closingIssueReferences.length !== 1)
+    throw new Error(
+      `PRはstagingのcanonical Issue #${issue}だけを一意にcloseしなければなりません`,
+    );
+  return { issue, issueUrl };
 }
 
 function requireStringArray(value: unknown, name: string): string[] {
@@ -317,13 +420,23 @@ export function createPullRequest(
       head: string;
       headSha: string;
       base: string;
+      baseSha: string;
       title: string;
       body: string;
     },
   ) =>
-    | { url: string; state?: "created" }
-    | { url: string; state: "rollback_required"; reason: string },
-) {
+    | {
+        url: string;
+        state?: "created";
+        observation?: PullRequestReadBack;
+      }
+    | {
+        url: string;
+        state: "rollback_required";
+        reason: string;
+        observation?: PullRequestReadBack;
+      },
+): CreatePullRequestResult {
   const [owner, repositoryName, extra] = input.repository.split("/");
   if (
     extra ||
@@ -430,27 +543,32 @@ export function createPullRequest(
     head: input.head,
     headSha: input.headSha,
     base: input.base,
+    baseSha: input.baseSha ?? "",
     title,
     body,
   };
-  if (!input.apply) return { state: "preview", preview };
+  if (!input.apply) return { state: "preview", preview, url: undefined };
   if (!input.trustedPolicy)
     throw new Error(
       "外部PR作成には既定ブランチから取得したtrusted policyが必要です",
     );
   if (input.authorization !== "approved")
     throw new Error("外部書き込みには明示的な承認が必要です");
+  if (!/^[a-f0-9]{40}$/u.test(input.baseSha ?? ""))
+    throw new Error("外部PR作成には事前観測したbase SHAが必要です");
   const result = external("pr.create", preview);
   if (result.state === "rollback_required")
     return {
       state: "rollback_required",
       url: result.url,
       reason: result.reason,
+      ...(result.observation ? { observation: result.observation } : {}),
       next: "作成済みPRを確認し、明示authorityでcloseまたは正しいHEAD/baseへ修正する",
     };
   return {
     state: "waiting_for_human_review",
     url: result.url,
+    ...(result.observation ? { observation: result.observation } : {}),
     next: "独立したpr mergeコマンドを使う。暗黙のマージ・完了処理・後片付けは行わない",
   };
 }
@@ -500,19 +618,17 @@ export function authorizeMerge(input: MergeInput) {
     return deny("merge対象HEADの固定SHAがありません");
   if (!Array.isArray(input.approvals))
     return deny("reviewのtrusted観測がありません");
-  const needsApproval =
-    (policy.requiredReviews ?? 0) > 0 || policy.mode === "assisted";
   if (
-    needsApproval &&
-    (typeof input.prAuthorActorId !== "string" ||
-      input.prAuthorActorId === "" ||
-      typeof input.implementationAuthorActorId !== "string" ||
-      input.implementationAuthorActorId === "")
+    typeof input.prAuthorActorId !== "string" ||
+    input.prAuthorActorId === "" ||
+    typeof input.implementationAuthorActorId !== "string" ||
+    input.implementationAuthorActorId === ""
   )
     return deny("PR authorとimplementation authorのstable ID観測がありません");
   const latestByActor = new Map<string, Approval>();
   const byReviewId = new Map<string, Approval>();
   for (const approval of input.approvals) {
+    if (approval?.state === "PENDING") continue;
     const timestamp =
       typeof approval?.submittedAt === "string"
         ? Date.parse(approval.submittedAt)
@@ -549,6 +665,7 @@ export function authorizeMerge(input: MergeInput) {
     )
       return deny("同一review IDの観測内容が矛盾しています");
     if (!sameId) byReviewId.set(approval.reviewId, approval);
+    if (approval.state === "COMMENTED") continue;
     const current = latestByActor.get(approval.actorId);
     if (!current) {
       latestByActor.set(approval.actorId, approval);
@@ -583,7 +700,8 @@ export function authorizeMerge(input: MergeInput) {
       )
       .map((approval) => approval.actorId as string),
   );
-  if (independentApprovals.size < (policy.requiredReviews ?? 0))
+  const requiredIndependentReviews = Math.max(1, policy.requiredReviews ?? 0);
+  if (independentApprovals.size < requiredIndependentReviews)
     return deny("同じHEAD SHAに対する独立reviewが不足しています");
   if (policy.mode === "assisted" && independentApprovals.size < 1)
     return deny(

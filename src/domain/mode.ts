@@ -139,9 +139,48 @@ export type Mode = "quick" | "full" | "poc";
 
 export type ModeAnswer = { answer?: boolean | "unknown"; evidence?: string };
 
+export const POC_OBSERVABLE_KINDS = [
+  "exit-code",
+  "stdout-digest",
+  "stderr-digest",
+  "file-digest",
+] as const;
+
+export type PocObservableKind = (typeof POC_OBSERVABLE_KINDS)[number];
+
+export const POC_LIMITS = {
+  useCases: 16,
+  scenarios: 16,
+  observables: 64,
+  argvPerScenario: 32,
+  argvCharacters: 8_192,
+} as const;
+
 export interface PocDeclaration {
   purpose: string;
-  period: { from: string; to: string };
+  fixture: {
+    id: string;
+    root: string;
+    isolationEvidence: string;
+    resetEvidence: string;
+    runner: { id: string; path: string };
+  };
+  useCases: Array<{ id: string; actor: string; goal: string }>;
+  scenarios: Array<{
+    id: string;
+    useCaseId: string;
+    given: string;
+    when: string;
+    then: string;
+    argv: string[];
+  }>;
+  observables: Array<{
+    id: string;
+    scenarioId: string;
+    kind: PocObservableKind;
+    expected: string | number;
+    target?: string;
+  }>;
   outOfScope: string;
   successCriteria: string;
   abortCriteria: string;
@@ -160,6 +199,31 @@ const knownHighRiskIds = new Set<string>(POC_HIGH_RISK_IDS);
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
+}
+
+const POC_ID = /^(?:FIX|RUN|UC|SCN|OBS)-[A-Z0-9][A-Z0-9-]*$/u;
+const SHA256 = /^[a-f0-9]{64}$/u;
+const CONTROL = /[\p{Cc}\p{Cf}]/u;
+
+function safeRelativePath(value: unknown): value is string {
+  if (!nonEmpty(value) || CONTROL.test(value) || value.includes("\\"))
+    return false;
+  if (value.normalize("NFC") !== value) return false;
+  if (value.startsWith("/") || value.endsWith("/")) return false;
+  const parts = value.split("/");
+  return parts.every(
+    (part) => part !== "" && part !== "." && part !== ".." && part !== ".git",
+  );
+}
+
+function duplicateIds(values: readonly { id: string }[]): string[] {
+  return [
+    ...new Set(
+      values
+        .map(({ id }) => id)
+        .filter((id, index, ids) => ids.indexOf(id) !== index),
+    ),
+  ];
 }
 
 function quickReasons(answers: Record<string, ModeAnswer>): string[] {
@@ -182,8 +246,6 @@ function pocReasons(declaration: PocDeclaration | undefined): string[] {
   const reasons: string[] = [];
   const requiredFields: Array<[string, unknown]> = [
     ["目的", declaration.purpose],
-    ["対象期間の開始", declaration.period?.from],
-    ["対象期間の終了", declaration.period?.to],
     ["非対象", declaration.outOfScope],
     ["成功条件", declaration.successCriteria],
     ["中止条件", declaration.abortCriteria],
@@ -192,6 +254,159 @@ function pocReasons(declaration: PocDeclaration | undefined): string[] {
   for (const [label, value] of requiredFields)
     if (!nonEmpty(value))
       reasons.push(`PoC宣言の${label}が未記入または不明です`);
+
+  const fixture = declaration.fixture;
+  if (
+    !fixture ||
+    !POC_ID.test(fixture.id ?? "") ||
+    !fixture.id.startsWith("FIX-")
+  )
+    reasons.push("PoC宣言の隔離fixture IDが不正です");
+  if (!fixture || !safeRelativePath(fixture.root))
+    reasons.push("PoC宣言の隔離fixture rootが安全な相対pathではありません");
+  else if (!fixture.root.startsWith("test/fixtures/poc/"))
+    reasons.push("PoC宣言の隔離fixture rootはtest/fixtures/poc/配下が必要です");
+  if (!fixture || !nonEmpty(fixture.isolationEvidence))
+    reasons.push("PoC宣言の隔離境界Evidenceがありません");
+  if (!fixture || !nonEmpty(fixture.resetEvidence))
+    reasons.push("PoC宣言のfixture初期化Evidenceがありません");
+  if (
+    !fixture?.runner ||
+    !POC_ID.test(fixture.runner.id ?? "") ||
+    !fixture.runner.id.startsWith("RUN-")
+  )
+    reasons.push("PoC宣言のrunner IDが不正です");
+  if (!fixture?.runner || !safeRelativePath(fixture.runner.path))
+    reasons.push("PoC宣言のrunner pathが安全な相対pathではありません");
+
+  const useCases = Array.isArray(declaration.useCases)
+    ? declaration.useCases
+    : [];
+  if (useCases.length === 0) reasons.push("PoC宣言のuse caseがありません");
+  if (useCases.length > POC_LIMITS.useCases)
+    reasons.push(`PoC宣言のuse caseは${POC_LIMITS.useCases}件以下が必要です`);
+  for (const item of useCases) {
+    if (!item || !POC_ID.test(item.id ?? "") || !item.id.startsWith("UC-"))
+      reasons.push("PoC宣言のuse case IDが不正です");
+    if (!item || !nonEmpty(item.actor) || !nonEmpty(item.goal))
+      reasons.push(`PoC use case ${item?.id || "（IDなし）"} が不完全です`);
+  }
+  for (const id of duplicateIds(useCases))
+    reasons.push(`PoC use case ID ${id} が重複しています`);
+
+  const useCaseIds = new Set(useCases.map(({ id }) => id));
+  const scenarios = Array.isArray(declaration.scenarios)
+    ? declaration.scenarios
+    : [];
+  if (scenarios.length === 0) reasons.push("PoC宣言のBDD scenarioがありません");
+  if (scenarios.length > POC_LIMITS.scenarios)
+    reasons.push(
+      `PoC宣言のBDD scenarioは${POC_LIMITS.scenarios}件以下が必要です`,
+    );
+  let argvCharacters = 0;
+  for (const item of scenarios) {
+    if (!item || !POC_ID.test(item.id ?? "") || !item.id.startsWith("SCN-"))
+      reasons.push("PoC宣言のBDD scenario IDが不正です");
+    if (!item || !useCaseIds.has(item.useCaseId))
+      reasons.push(
+        `PoC scenario ${item?.id || "（IDなし）"} のuse case参照が不正です`,
+      );
+    if (
+      !item ||
+      !nonEmpty(item.given) ||
+      !nonEmpty(item.when) ||
+      !nonEmpty(item.then) ||
+      !Array.isArray(item.argv) ||
+      item.argv.length > POC_LIMITS.argvPerScenario ||
+      !item.argv.every(
+        (value) =>
+          typeof value === "string" &&
+          value.length <= 1_024 &&
+          !CONTROL.test(value),
+      )
+    )
+      reasons.push(`PoC scenario ${item?.id || "（IDなし）"} が不完全です`);
+    if (item && Array.isArray(item.argv))
+      argvCharacters += item.argv.reduce(
+        (total, value) =>
+          total + (typeof value === "string" ? value.length : 0),
+        0,
+      );
+  }
+  if (argvCharacters > POC_LIMITS.argvCharacters)
+    reasons.push(
+      `PoC宣言のargv総文字数は${POC_LIMITS.argvCharacters}以下が必要です`,
+    );
+  for (const id of duplicateIds(scenarios))
+    reasons.push(`PoC scenario ID ${id} が重複しています`);
+  const scenarioIds = new Set(scenarios.map(({ id }) => id));
+  for (const id of useCaseIds)
+    if (!scenarios.some(({ useCaseId }) => useCaseId === id))
+      reasons.push(`PoC use case ${id} にBDD scenarioがありません`);
+
+  const observables = Array.isArray(declaration.observables)
+    ? declaration.observables
+    : [];
+  if (observables.length === 0)
+    reasons.push("PoC宣言の機械observableがありません");
+  if (observables.length > POC_LIMITS.observables)
+    reasons.push(
+      `PoC宣言の機械observableは${POC_LIMITS.observables}件以下が必要です`,
+    );
+  const knownKinds = new Set<string>(POC_OBSERVABLE_KINDS);
+  for (const item of observables) {
+    if (!item || !POC_ID.test(item.id ?? "") || !item.id.startsWith("OBS-"))
+      reasons.push("PoC宣言のobservable IDが不正です");
+    if (!item || !scenarioIds.has(item.scenarioId))
+      reasons.push(
+        `PoC observable ${item?.id || "（IDなし）"} のscenario参照が不正です`,
+      );
+    const expectedValid =
+      item?.kind === "exit-code"
+        ? item.expected === 0
+        : nonEmpty(item?.expected) && SHA256.test(String(item.expected));
+    const targetValid =
+      item?.kind === "file-digest"
+        ? safeRelativePath(item.target) && SHA256.test(String(item.expected))
+        : item?.target === undefined;
+    if (!item || !knownKinds.has(item.kind) || !expectedValid || !targetValid)
+      reasons.push(`PoC observable ${item?.id || "（IDなし）"} が不完全です`);
+  }
+  for (const id of duplicateIds(observables))
+    reasons.push(`PoC observable ID ${id} が重複しています`);
+  const fileTargets = observables
+    .filter(({ kind }) => kind === "file-digest")
+    .map(({ target }) => target)
+    .filter((target): target is string => typeof target === "string");
+  for (const target of fileTargets) {
+    if (target === fixture?.runner?.path)
+      reasons.push(`PoC file-digest target ${target} はrunnerと重複できません`);
+    const overlaps = fileTargets.filter(
+      (other) =>
+        other === target ||
+        other.startsWith(`${target}/`) ||
+        target.startsWith(`${other}/`),
+    );
+    if (overlaps.length > 1)
+      reasons.push(
+        `PoC file-digest target ${target} が重複または親子重複しています`,
+      );
+  }
+  for (const id of scenarioIds)
+    if (!observables.some(({ scenarioId }) => scenarioId === id))
+      reasons.push(`PoC scenario ${id} に機械observableがありません`);
+    else if (
+      !observables.some(
+        ({ scenarioId, kind }) => scenarioId === id && kind === "exit-code",
+      )
+    )
+      reasons.push(`PoC scenario ${id} にexit-code observableがありません`);
+    else if (
+      !observables.some(
+        ({ scenarioId, kind }) => scenarioId === id && kind !== "exit-code",
+      )
+    )
+      reasons.push(`PoC scenario ${id} にbehavior observableがありません`);
 
   const riskEntries = Array.isArray(declaration.highRisk)
     ? declaration.highRisk

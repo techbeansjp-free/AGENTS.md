@@ -8,12 +8,14 @@ agent-skill-chainは、人とAI agentが同じ手順で使える、安全側に�
 
 - Node.js 20以上
 - npm
+- Git 2.38.0以上
+- GitHub CLI（`gh`）2.13.0以上
 
 ## 導入と利用
 
 対象directoryを省略した場合は現在directoryを使います。対象を明示するときは`--root=.`を指定します。
 
-`install`、`update`、`delete`は何も書き換えないpreviewが既定です。表示された変更を確認し、同じcommandへ`--apply`を付けた場合だけ変更します。`doctor`は読み取り専用です。
+`install`、`update`、`delete`は何も書き換えないpreviewが既定です。表示された変更を確認し、同じcommandへ`--apply`を付けた場合だけ変更します。`doctor`は読み取り専用で、GitとGitHub CLIのversionも診断します。
 
 | 操作 | previewまたは診断                        | 変更の適用                                       |
 | ---- | ---------------------------------------- | ------------------------------------------------ |

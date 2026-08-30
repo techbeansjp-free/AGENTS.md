@@ -111,6 +111,31 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     When "SCN-UNIT-WFJRNL-013"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
 
+  Scenario: SCN-UNIT-WFJRNL-014 昇格前の後続Step履歴がfull補完開始を順序違反にしない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-014"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-015 通常fullの後続Step履歴は過去Stepの後付けを順序違反にする
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-015"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-016 full昇格後は旧modeのStep 4と9を再実施対象とする
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-016"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-017 中断された一時journalは正本を壊さず次のatomic追記を妨げない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-017"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-018 journal publish後の停止はtransactionからstaging digestを前向き復旧する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-018"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
   Scenario: SCN-UNIT-WFMODE-001 モード判定成果物を正準JSONで生成する
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-WFMODE-001"の単体検査を実行する

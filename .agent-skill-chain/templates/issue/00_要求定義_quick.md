@@ -89,11 +89,19 @@ Q-01〜Q-08の内容は[モード判定質問](../../docs/01_開発ワークフ�
 
 ## 7. 実装とテストの計画
 
-| 順序 | 最小変更 | 先に確認する失敗 | 合格条件 |
+| 順序 | 最小変更 | 必要Evidence | 合格条件 |
 |---:|---|---|---|
-| 1 | （変更） | （SCN IDと失敗内容） | （観測結果） |
+| 1 | （変更） | （変更種別・risk・ACに応じた再現可能な証拠） | （観測結果） |
 
-- cycle/self-loop/unknown nodeを先に失敗させるSCN:
+- cycle/self-loop/unknown nodeを拒否するSCNと観測結果:
+
+- 実装中発見は目的・scope・AC変更、security境界拡大、不可逆操作、`changedContractKinds`、根拠付きcanonicalモード失格条件`{ id, evidence }[]`を`workflow assess-discovery --input=<JSON>`で判定する。通常の契約変更はこの集約成果物00だけを再確定し、`promote-to-full`は同じ入力とstagingを`workflow promote-full`へ渡して同じIssueのまま00〜03を補完する。
+
+### 実装中発見の前向き記録
+
+| 発見ID | 事実 | 影響 | 判断 | 対処 | 検証 | 仕様更新 | CLI disposition |
+|---|---|---|---|---|---|---|---|
+| DISC-001 | （観測事実） | （境界・AC） | （継続 / 契約再確定 / full昇格） | （実施内容） | （再現可能なEvidence） | （更新先 / no-spec-impact根拠） | continue / rebaseline-affected-contracts / promote-to-full |
 
 - project policyが選択したtest layerごとの検証:
 - 型検査・既存テスト一式:
@@ -109,7 +117,7 @@ Q-01〜Q-08の内容は[モード判定質問](../../docs/01_開発ワークフ�
 | P-03 UNIX | （単一責務と入出力） |
 | P-04 DDD | （コンテキストと不変条件） |
 | P-05 BDD | （ACとSCNの対応） |
-| P-06 TDD | （失敗→最小実装→合格） |
+| P-06 Evidence-driven Verification | （最小のrisk比例検証と再現可能なEvidence） |
 | P-07 Zero Trust | （入力・状態・権限検証） |
 
 ## 9. 仕様、図表、識別子
@@ -122,6 +130,6 @@ Q-01〜Q-08の内容は[モード判定質問](../../docs/01_開発ワークフ�
 
 - 主な失敗・悪用経路:
 - 安全側への縮小:
-- 肯定・敵対レビューの証拠:
+- Step 10最終reviewの計画（reviewer割当・確認観点）:
 - 次に実行するステップ:
 - 再開に必要な状態:

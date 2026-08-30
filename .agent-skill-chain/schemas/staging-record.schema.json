@@ -47,11 +47,11 @@
       "format": "date-time"
     },
     "state": {
-      "enum": ["local-active", "sync-verified"]
+      "enum": ["local-active", "promotion-active", "sync-verified"]
     },
     "tracker": {
       "type": ["string", "null"],
-      "pattern": "^(?:https://github\\.com/[^/\\s]+/[^/\\s]+/issues/[1-9][0-9]*|#?[1-9][0-9]*)$"
+      "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/issues/[1-9][0-9]*$"
     },
     "checkpoint": {
       "enum": [4, 8, null]
@@ -83,6 +83,19 @@
       }
     },
     {
+      "if": { "properties": { "state": { "const": "promotion-active" } } },
+      "then": {
+        "properties": {
+          "mode": { "const": "full" },
+          "tracker": { "type": "string" },
+          "checkpoint": { "const": 4 },
+          "syncedAt": { "type": "string" },
+          "syncDigest": { "type": "string" },
+          "readBackDigest": { "type": "string" }
+        }
+      }
+    },
+    {
       "if": { "properties": { "state": { "const": "sync-verified" } } },
       "then": {
         "properties": {
@@ -100,7 +113,17 @@
     },
     {
       "if": { "properties": { "mode": { "const": "full" } } },
-      "then": { "properties": { "checkpoint": { "enum": [8, null] } } }
+      "then": { "properties": { "checkpoint": { "enum": [4, 8, null] } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": { "const": "full" },
+          "checkpoint": { "const": 4 }
+        },
+        "required": ["mode", "checkpoint"]
+      },
+      "then": { "properties": { "state": { "const": "promotion-active" } } }
     }
   ]
 }

@@ -15,11 +15,19 @@ interface GitHubInput {
   body: string;
   pr: number;
   sha: string;
+  descendantSha: string;
+  baseSha: string;
   implementationCommitSha: string;
   runId: string;
   reviewId: string;
   branch: string;
   method: "merge" | "squash" | "rebase";
+}
+export interface RepositoryAuthorityObservation {
+  repository: string;
+  defaultBranch: string;
+  defaultBranchTipOid: string;
+  provenance: { source: string; repository: string };
 }
 export interface PolicyAuthorityObservation {
   repository: string;
@@ -31,6 +39,20 @@ export interface PolicyAuthorityObservation {
   headRefOid: string;
   provenance: { source: string; repository: string; prNumber: number };
 }
+export type MergeQueueEntryState =
+  "AWAITING_CHECKS" | "LOCKED" | "MERGEABLE" | "QUEUED" | "UNMERGEABLE";
+export interface PullRequestQueueObservation {
+  repository: string;
+  prNumber: number;
+  headRefOid: string;
+  entry: {
+    id: string;
+    state: MergeQueueEntryState;
+    enqueuedAt: string;
+    headCommitOid: string;
+    baseCommitOid: string;
+  } | null;
+}
 interface RepositoryObservation {
   nameWithOwner?: string;
   defaultBranchRef?: { name?: string };
@@ -39,11 +61,20 @@ interface RepositoryObservation {
 interface PullRequestObservation {
   number?: number;
   url?: string;
+  title?: string;
+  body?: string;
+  state?: string;
+  mergedAt?: string;
+  mergeCommit?: { oid?: string };
+  autoMergeRequest?: unknown;
   headRefName?: string;
   baseRefName?: string;
   headRefOid?: string;
   baseRefOid?: string;
+  headRepository?: { nameWithOwner?: string };
+  isCrossRepository?: boolean;
   author?: { id?: string };
+  closingIssuesReferences?: Array<{ number?: number; url?: string }>;
 }
 interface ReviewObservation {
   state?: string;
@@ -59,6 +90,7 @@ export interface PullRequestInspection extends PullRequestObservation {
   statusCheckRollup?: Array<{
     conclusion?: string;
     status?: string;
+    state?: string;
     name?: string;
     context?: string;
   }>;
@@ -70,6 +102,14 @@ export interface ApprovalObservation {
   submittedAt?: string;
   reviewId?: string;
 }
+export interface PullRequestCiObservation {
+  repository: string;
+  runId: string;
+  event: string;
+  headSha: string;
+  conclusion: string;
+  pullRequestNumbers: number[];
+}
 export interface BranchProtectionObservation {
   known: boolean;
   protected: boolean;
@@ -80,9 +120,31 @@ export interface CommitInspection {
   sha?: string;
   authorActorId?: string;
 }
+export interface CommitTopologyObservation {
+  repository: string;
+  sha: string;
+  treeSha: string;
+  parentShas: string[];
+}
+export interface CommitAncestryObservation {
+  repository: string;
+  ancestorSha: string;
+  descendantSha: string;
+  status: string;
+  isAncestor: boolean;
+}
+export interface RefInspection {
+  branch: string;
+  sha: string;
+}
 export type PullRequestCreationResult =
-  | { url: string; state: "created" }
-  | { url: string; state: "rollback_required"; reason: string };
+  | { url: string; state: "created"; observation: PullRequestInspection }
+  | {
+      url: string;
+      state: "rollback_required";
+      reason: string;
+      observation?: PullRequestInspection;
+    };
 
 function requireFullOid(value: unknown, label: string): string {
   if (typeof value !== "string" || !/^[a-f0-9]{40}$/iu.test(value))
@@ -94,6 +156,22 @@ function parseObject<T extends object>(source: string, label: string): T {
   const parsed: unknown = JSON.parse(source);
   if (!isRecord(parsed)) throw new Error(`${label}がobjectではありません`);
   return parsed as T;
+}
+
+export function canonicalProviderInstant(
+  value: unknown,
+  label: string,
+): string {
+  if (typeof value !== "string") throw new Error(`${label}が不正です`);
+  const parsed = Date.parse(value);
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(
+      value,
+    ) ||
+    !Number.isFinite(parsed)
+  )
+    throw new Error(`${label}が不正です`);
+  return new Date(parsed).toISOString();
 }
 
 export class GitHubProviderUnavailableError extends Error {
@@ -223,6 +301,175 @@ function observePolicyAuthority(
   };
 }
 
+function observeRepositoryAuthority(
+  repository: string,
+  cwd: string,
+): RepositoryAuthorityObservation {
+  try {
+    run("gh", ["auth", "status"], cwd);
+  } catch {
+    throw new GitHubProviderUnavailableError(
+      "GitHub providerの認証状態を観測できません",
+    );
+  }
+  try {
+    const observed = parseObject<RepositoryObservation>(
+      run(
+        "gh",
+        [
+          "repo",
+          "view",
+          repository,
+          "--json",
+          "nameWithOwner,defaultBranchRef",
+        ],
+        cwd,
+      ).stdout,
+      "repository authority観測",
+    );
+    if (
+      observed.nameWithOwner !== repository ||
+      typeof observed.defaultBranchRef?.name !== "string"
+    )
+      throw new Error("repository authorityのidentityが不完全です");
+    const defaultBranchTipOid = requireFullOid(
+      run(
+        "gh",
+        [
+          "api",
+          `repos/${repository}/commits/${encodeURIComponent(observed.defaultBranchRef.name)}`,
+          "--jq",
+          ".sha",
+        ],
+        cwd,
+      ).stdout.trim(),
+      "provider default branch tip",
+    );
+    return {
+      provenance: { source: "github", repository },
+      repository: observed.nameWithOwner,
+      defaultBranch: observed.defaultBranchRef.name,
+      defaultBranchTipOid,
+    };
+  } catch (error) {
+    if (error instanceof GitHubProviderUnavailableError) throw error;
+    throw new GitHubProviderUnavailableError(
+      `GitHub providerのrepository authorityを観測できません: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+const EXACT_PULL_REQUEST_QUEUE_QUERY = `query ExactPullRequestQueue($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){nameWithOwner pullRequest(number:$number){number headRefOid mergeQueueEntry{id state enqueuedAt headCommit{oid} baseCommit{oid} pullRequest{number}}}}}`;
+
+/**
+ * PR creation recovery must prove exact absence before it may consume a dispatch
+ * claim. `gh pr list --limit N` cannot prove absence because a matching historic
+ * PR may exist after the client-side limit. Keep the cursor and pageInfo in this
+ * query so `gh api --paginate --slurp` exhausts the provider connection.
+ */
+const EXACT_PULL_REQUESTS_QUERY = `query ExactPullRequests($owner:String!,$repo:String!,$head:String!,$base:String!,$endCursor:String){repository(owner:$owner,name:$repo){nameWithOwner pullRequests(first:100,after:$endCursor,headRefName:$head,baseRefName:$base,states:[OPEN,CLOSED,MERGED]){nodes{number url title body state mergedAt headRefName baseRefName headRefOid baseRefOid headRepository{nameWithOwner} isCrossRepository closingIssuesReferences(first:100){nodes{number url}}}pageInfo{hasNextPage endCursor}}}}`;
+
+function observePullRequestQueue(
+  repository: string,
+  prNumber: number,
+  cwd: string,
+): PullRequestQueueObservation {
+  verifyRepository(repository, cwd, "read");
+  const [owner, name, ...rest] = repository.split("/");
+  if (!owner || !name || rest.length > 0)
+    throw new Error("merge queue観測のrepositoryが不正です");
+  const response = parseObject<{
+    data?: {
+      repository?: {
+        nameWithOwner?: string;
+        pullRequest?: {
+          number?: number;
+          headRefOid?: string;
+          mergeQueueEntry?: null | {
+            id?: string;
+            state?: string;
+            enqueuedAt?: string;
+            headCommit?: { oid?: string };
+            baseCommit?: { oid?: string };
+            pullRequest?: { number?: number };
+          };
+        };
+      };
+    };
+  }>(
+    run(
+      "gh",
+      [
+        "api",
+        "graphql",
+        "-f",
+        `query=${EXACT_PULL_REQUEST_QUEUE_QUERY}`,
+        "-f",
+        `owner=${owner}`,
+        "-f",
+        `repo=${name}`,
+        "-F",
+        `number=${prNumber}`,
+      ],
+      cwd,
+    ).stdout,
+    "merge queue観測",
+  );
+  const observedRepository = response.data?.repository;
+  const observedPr = observedRepository?.pullRequest;
+  if (
+    observedRepository?.nameWithOwner !== repository ||
+    observedPr?.number !== prNumber
+  )
+    throw new Error("merge queue観測のrepositoryまたはPRが一致しません");
+  const headRefOid = requireFullOid(
+    observedPr.headRefOid,
+    "merge queue観測のPR HEAD",
+  );
+  const entry = observedPr.mergeQueueEntry;
+  if (entry === null) return { repository, prNumber, headRefOid, entry: null };
+  if (!isRecord(entry))
+    throw new Error("merge queue entryを決定的に観測できません");
+  const states = new Set<MergeQueueEntryState>([
+    "AWAITING_CHECKS",
+    "LOCKED",
+    "MERGEABLE",
+    "QUEUED",
+    "UNMERGEABLE",
+  ]);
+  if (
+    typeof entry.id !== "string" ||
+    entry.id.trim() === "" ||
+    !states.has(entry.state as MergeQueueEntryState) ||
+    entry.pullRequest?.number !== prNumber
+  )
+    throw new Error("merge queue entryのidentityが不完全です");
+  const headCommitOid = requireFullOid(
+    entry.headCommit?.oid,
+    "merge queue entryのHEAD",
+  );
+  if (headCommitOid !== headRefOid)
+    throw new Error("merge queue entryのHEADがPR HEADと一致しません");
+  return {
+    repository,
+    prNumber,
+    headRefOid,
+    entry: {
+      id: entry.id,
+      state: entry.state as MergeQueueEntryState,
+      enqueuedAt: canonicalProviderInstant(
+        entry.enqueuedAt,
+        "merge queue entryのenqueuedAt",
+      ),
+      headCommitOid,
+      baseCommitOid: requireFullOid(
+        entry.baseCommit?.oid,
+        "merge queue entryのbase commit",
+      ),
+    },
+  };
+}
+
 function verifyRepository(
   repository: string,
   cwd: string,
@@ -284,35 +531,82 @@ export function github(
   cwd: string,
 ): PolicyAuthorityObservation;
 export function github(
+  operation: "repository.authority",
+  input: Pick<GitHubInput, "repository">,
+  cwd: string,
+): RepositoryAuthorityObservation;
+export function github(
   operation: "pr.inspect",
   input: Pick<GitHubInput, "repository" | "pr">,
   cwd: string,
 ): PullRequestInspection;
+export function github(
+  operation: "pr.find",
+  input: Pick<GitHubInput, "repository" | "head" | "base">,
+  cwd: string,
+): PullRequestInspection[];
+export function github(
+  operation: "pr.queue",
+  input: Pick<GitHubInput, "repository" | "pr">,
+  cwd: string,
+): PullRequestQueueObservation;
+export function github(
+  operation: "commit.topology",
+  input: Pick<GitHubInput, "repository" | "sha">,
+  cwd: string,
+): CommitTopologyObservation;
+export function github(
+  operation: "commit.ancestry",
+  input: Pick<GitHubInput, "repository" | "sha" | "descendantSha">,
+  cwd: string,
+): CommitAncestryObservation;
 export function github(
   operation: "pr.reviews",
   input: Pick<GitHubInput, "repository" | "pr">,
   cwd: string,
 ): ApprovalObservation[];
 export function github(
+  operation: "pr.ci-runs",
+  input: Pick<GitHubInput, "repository" | "pr" | "headSha">,
+  cwd: string,
+): PullRequestCiObservation[];
+export function github(
   operation: "commit.inspect",
   input: Pick<GitHubInput, "repository" | "sha">,
   cwd: string,
 ): CommitInspection;
+export function github(
+  operation: "ref.inspect",
+  input: Pick<GitHubInput, "repository" | "branch">,
+  cwd: string,
+): RefInspection;
 export function github(
   operation: "branch.protection",
   input: Pick<GitHubInput, "repository" | "branch">,
   cwd: string,
 ): BranchProtectionObservation;
 export function github(
+  operation: "repository.assert-write",
+  input: Pick<GitHubInput, "repository">,
+  cwd: string,
+): { repository: string; writable: true };
+export function github(
   operation: "pr.merge",
-  input: Pick<GitHubInput, "repository" | "pr" | "method">,
+  input: Pick<GitHubInput, "repository" | "pr" | "method" | "headSha">,
   cwd: string,
 ): { state: string };
 export function github(
   operation: "pr.create",
   input: Pick<
     GitHubInput,
-    "repository" | "issue" | "headSha" | "head" | "base" | "title" | "body"
+    | "repository"
+    | "issue"
+    | "headSha"
+    | "head"
+    | "base"
+    | "baseSha"
+    | "title"
+    | "body"
   >,
   cwd: string,
 ): PullRequestCreationResult;
@@ -366,6 +660,13 @@ export function github(
       url: `https://github.com/${input.repository}/issues/${input.issue}`,
     };
   }
+  if (operation === "repository.assert-write") {
+    verifyRepository(input.repository, cwd, "write");
+    return { repository: input.repository, writable: true };
+  }
+  if (operation === "repository.authority") {
+    return observeRepositoryAuthority(input.repository, cwd);
+  }
   if (operation === "issue.create") {
     verifyRepository(input.repository, cwd, "write");
     const result = run(
@@ -388,6 +689,7 @@ export function github(
     verifyRepository(input.repository, cwd, "write");
     if (!/^[a-f0-9]{40}$/i.test(input.headSha ?? ""))
       throw new Error("PR対象HEAD SHAが不正です");
+    const expectedBaseSha = requireFullOid(input.baseSha, "PR対象base SHA");
     const remoteHead = run(
       "gh",
       [
@@ -413,6 +715,10 @@ export function github(
     if (!/^[a-f0-9]{40}$/iu.test(remoteBase))
       throw new Error(
         "PR作成前にremote base branchを固定commitへ解決できません",
+      );
+    if (remoteBase !== expectedBaseSha)
+      throw new Error(
+        "PR作成前にremote base branchのHEAD SHAが準備済み証拠と一致しません",
       );
     /**
      * **本文はfile経由で渡す。** argvの上限は約131KBで、template構造を満たす本文は
@@ -452,43 +758,61 @@ export function github(
     }
     const result = created;
     const url = result.stdout.trim();
-    if (
-      !new RegExp(
-        `^https://github\\.com/${input.repository.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/pull/\\d+$`,
-      ).test(url)
-    )
+    const urlMatch = new RegExp(
+      `^https://github\\.com/${input.repository.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/pull/([1-9]\\d*)$`,
+      "iu",
+    ).exec(url);
+    if (!urlMatch)
       throw new Error("PR作成結果のURLが対象リポジトリと一致しません");
-    const observed = parseObject<PullRequestObservation>(
-      run(
-        "gh",
-        [
-          "pr",
-          "view",
-          url,
-          "--repo",
-          input.repository,
-          "--json",
-          "url,headRefName,baseRefName,headRefOid,baseRefOid",
-        ],
-        cwd,
-      ).stdout,
-      "PR観測",
-    );
+    let observed: PullRequestInspection;
+    try {
+      observed = parseObject<PullRequestInspection>(
+        run(
+          "gh",
+          [
+            "pr",
+            "view",
+            url,
+            "--repo",
+            input.repository,
+            "--json",
+            "number,url,title,body,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,closingIssuesReferences",
+          ],
+          cwd,
+        ).stdout,
+        "PR観測",
+      );
+    } catch (error) {
+      return {
+        state: "rollback_required",
+        url,
+        reason: `PR作成後の読み取り検証に失敗しました。作成済みPRを確認してcloseまたは修正してください: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+    const expectedBody = input.body.replace(/\r\n/g, "\n").trimEnd();
+    const observedBody = observed.body?.replace(/\r\n/g, "\n").trimEnd();
     if (
+      observed.number !== Number(urlMatch[1]) ||
       observed.url !== url ||
+      observed.title !== input.title ||
+      observedBody !== expectedBody ||
       observed.headRefName !== input.head ||
       observed.baseRefName !== input.base ||
       observed.headRefOid !== input.headSha ||
-      observed.baseRefOid !== remoteBase
+      observed.baseRefOid !== remoteBase ||
+      observed.headRepository?.nameWithOwner?.toLowerCase() !==
+        input.repository.toLowerCase() ||
+      observed.isCrossRepository !== false
     ) {
       return {
         state: "rollback_required",
         url,
         reason:
           "PR作成後の読み取り検証に失敗しました。作成済みPRを確認してcloseまたは修正してください",
+        observation: observed,
       };
     }
-    return { state: "created", url };
+    return { state: "created", url, observation: observed };
   }
   if (operation === "pr.inspect") {
     verifyRepository(input.repository, cwd, "read");
@@ -501,11 +825,137 @@ export function github(
         "--repo",
         input.repository,
         "--json",
-        "number,url,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,mergeStateStatus,reviewDecision,statusCheckRollup",
+        "number,url,title,body,state,mergedAt,mergeCommit,autoMergeRequest,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,mergeStateStatus,reviewDecision,statusCheckRollup,closingIssuesReferences",
       ],
       cwd,
     );
     return parseObject<Record<string, unknown>>(result.stdout, "PR観測");
+  }
+  if (operation === "pr.find") {
+    verifyRepository(input.repository, cwd, "read");
+    if (
+      typeof input.head !== "string" ||
+      typeof input.base !== "string" ||
+      input.head.trim() === "" ||
+      input.base.trim() === "" ||
+      input.head.startsWith("-") ||
+      input.base.startsWith("-") ||
+      input.head.includes("..") ||
+      input.base.includes("..")
+    )
+      throw new Error("pr.findのheadまたはbase branch名が不正です");
+    const [owner, name, ...rest] = input.repository.split("/");
+    if (!owner || !name || rest.length > 0)
+      throw new Error("pr.findのrepositoryが不正です");
+    const parsed: unknown = JSON.parse(
+      run(
+        "gh",
+        [
+          "api",
+          "graphql",
+          "--paginate",
+          "--slurp",
+          "-f",
+          `query=${EXACT_PULL_REQUESTS_QUERY}`,
+          "-f",
+          `owner=${owner}`,
+          "-f",
+          `repo=${name}`,
+          "-f",
+          `head=${input.head}`,
+          "-f",
+          `base=${input.base}`,
+        ],
+        cwd,
+      ).stdout,
+    );
+    if (!Array.isArray(parsed) || parsed.length === 0)
+      throw new Error("PR検索結果がpage配列ではありません");
+    const observations: PullRequestInspection[] = [];
+    for (const [pageIndex, rawPage] of parsed.entries()) {
+      if (!isRecord(rawPage) || !isRecord(rawPage.data))
+        throw new Error(`PR検索結果page ${pageIndex + 1}が不正です`);
+      const repository = rawPage.data.repository;
+      if (
+        !isRecord(repository) ||
+        repository.nameWithOwner !== input.repository ||
+        !isRecord(repository.pullRequests) ||
+        !Array.isArray(repository.pullRequests.nodes)
+      )
+        throw new Error(
+          `PR検索結果page ${pageIndex + 1}のrepositoryが不正です`,
+        );
+      const pageInfo = repository.pullRequests.pageInfo;
+      const finalPage = pageIndex === parsed.length - 1;
+      if (
+        !isRecord(pageInfo) ||
+        typeof pageInfo.hasNextPage !== "boolean" ||
+        (pageInfo.endCursor !== null &&
+          (typeof pageInfo.endCursor !== "string" ||
+            pageInfo.endCursor === "")) ||
+        pageInfo.hasNextPage === finalPage ||
+        (pageInfo.hasNextPage && typeof pageInfo.endCursor !== "string")
+      )
+        throw new Error(
+          `PR検索結果page ${pageIndex + 1}のpaginationが完結していません`,
+        );
+      for (const rawNode of repository.pullRequests.nodes) {
+        if (!isRecord(rawNode))
+          throw new Error("PR検索結果nodeがobjectではありません");
+        if (
+          !Number.isSafeInteger(rawNode.number) ||
+          Number(rawNode.number) < 1 ||
+          typeof rawNode.url !== "string" ||
+          typeof rawNode.title !== "string" ||
+          typeof rawNode.body !== "string" ||
+          (rawNode.state !== "OPEN" &&
+            rawNode.state !== "CLOSED" &&
+            rawNode.state !== "MERGED") ||
+          (rawNode.mergedAt !== null && typeof rawNode.mergedAt !== "string") ||
+          typeof rawNode.headRefName !== "string" ||
+          rawNode.headRefName === "" ||
+          typeof rawNode.baseRefName !== "string" ||
+          rawNode.baseRefName === "" ||
+          !isRecord(rawNode.headRepository) ||
+          typeof rawNode.headRepository.nameWithOwner !== "string" ||
+          rawNode.headRepository.nameWithOwner === "" ||
+          typeof rawNode.isCrossRepository !== "boolean"
+        )
+          throw new Error("PR検索結果nodeの必須fieldが不正です");
+        requireFullOid(rawNode.headRefOid, "PR検索結果nodeのhead OID");
+        requireFullOid(rawNode.baseRefOid, "PR検索結果nodeのbase OID");
+        if (typeof rawNode.mergedAt === "string")
+          canonicalProviderInstant(
+            rawNode.mergedAt,
+            "PR検索結果nodeのmergedAt",
+          );
+        const closingConnection = rawNode.closingIssuesReferences;
+        if (
+          !isRecord(closingConnection) ||
+          !Array.isArray(closingConnection.nodes) ||
+          closingConnection.nodes.some(
+            (item) =>
+              !isRecord(item) ||
+              !Number.isSafeInteger(item.number) ||
+              Number(item.number) < 1 ||
+              typeof item.url !== "string" ||
+              item.url === "",
+          )
+        )
+          throw new Error("PR検索結果のclosing Issue接続が不正です");
+        observations.push({
+          ...(rawNode as PullRequestInspection),
+          closingIssuesReferences: closingConnection.nodes as Array<{
+            number?: number;
+            url?: string;
+          }>,
+        });
+      }
+    }
+    return observations;
+  }
+  if (operation === "pr.queue") {
+    return observePullRequestQueue(input.repository, input.pr, cwd);
   }
   if (operation === "pr.reviews") {
     verifyRepository(input.repository, cwd, "read");
@@ -523,19 +973,80 @@ export function github(
     );
     if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page)))
       throw new Error("GitHub review観測がpage配列ではありません");
-    return pages
-      .flat()
-      .filter(isRecord)
-      .map((review) => {
-        const typed = review as ReviewObservation;
-        return {
+    const reviews: unknown[] = pages.flat();
+    if (reviews.some((review) => !isRecord(review)))
+      throw new Error("GitHub review観測にobjectでないeventがあります");
+    return reviews.flatMap((review) => {
+      const typed = review as ReviewObservation;
+      // REST exposes draft reviews as PENDING with submitted_at=null. They
+      // are not review-state events and cannot grant or revoke approval.
+      if (typed.state === "PENDING") return [];
+      return [
+        {
           state: typed.state,
           commitSha: typed.commit_id,
           actorId: typed.user?.node_id,
           submittedAt: typed.submitted_at,
           reviewId: String(typed.id ?? ""),
-        };
-      });
+        },
+      ];
+    });
+  }
+  if (operation === "pr.ci-runs") {
+    verifyRepository(input.repository, cwd, "read");
+    const headSha = requireFullOid(input.headSha, "pr.ci-runsのHEAD SHA");
+    const pages: unknown = JSON.parse(
+      run(
+        "gh",
+        [
+          "api",
+          "--paginate",
+          "--slurp",
+          `repos/${input.repository}/actions/runs?event=pull_request&head_sha=${headSha}&status=success&per_page=100`,
+        ],
+        cwd,
+      ).stdout,
+    );
+    if (!Array.isArray(pages))
+      throw new Error("GitHub Actions run観測がpage object配列ではありません");
+    const pageRecords = pages.filter(isRecord);
+    if (pageRecords.length !== pages.length)
+      throw new Error("GitHub Actions run観測がpage object配列ではありません");
+    const runs = pageRecords.flatMap((page): unknown[] => {
+      const observed: unknown = page.workflow_runs;
+      if (!Array.isArray(observed))
+        throw new Error(
+          "GitHub Actions run観測のworkflow_runsが配列ではありません",
+        );
+      return observed;
+    });
+    if (runs.some((run) => !isRecord(run)))
+      throw new Error("GitHub Actions run観測にobjectでないrunがあります");
+    return runs.map((rawRun) => {
+      const run = rawRun as Record<string, unknown>;
+      if (
+        !isRecord(run.repository) ||
+        typeof run.repository.full_name !== "string" ||
+        !Array.isArray(run.pull_requests) ||
+        run.pull_requests.some(
+          (pullRequest) =>
+            !isRecord(pullRequest) ||
+            !Number.isSafeInteger(pullRequest.number) ||
+            Number(pullRequest.number) < 1,
+        )
+      )
+        throw new Error("GitHub Actions run観測のidentityが不正です");
+      return {
+        repository: run.repository.full_name,
+        runId: String(run.id ?? ""),
+        event: String(run.event ?? ""),
+        headSha: String(run.head_sha ?? ""),
+        conclusion: String(run.conclusion ?? "").toLowerCase(),
+        pullRequestNumbers: run.pull_requests.map((pullRequest) =>
+          Number((pullRequest as Record<string, unknown>).number),
+        ),
+      };
+    });
   }
   if (operation === "commit.inspect") {
     verifyRepository(input.repository, cwd, "read");
@@ -551,6 +1062,102 @@ export function github(
     if (commit.sha !== requestedSha)
       throw new Error("commit.inspectの応答OIDが要求OIDと一致しません");
     return { sha: commit.sha, authorActorId: commit.author?.node_id };
+  }
+  if (operation === "commit.topology") {
+    verifyRepository(input.repository, cwd, "read");
+    const sha = requireFullOid(input.sha, "commit.topologyのSHA");
+    const observed = parseObject<{
+      sha?: string;
+      commit?: { tree?: { sha?: string } };
+      parents?: Array<{ sha?: string }>;
+    }>(
+      run("gh", ["api", `repos/${input.repository}/commits/${sha}`], cwd)
+        .stdout,
+      "merge commit topology観測",
+    );
+    if (
+      observed.sha !== sha ||
+      typeof observed.commit?.tree?.sha !== "string" ||
+      !/^[a-f0-9]{40}$/u.test(observed.commit.tree.sha) ||
+      !Array.isArray(observed.parents) ||
+      observed.parents.some(
+        (parent) =>
+          typeof parent.sha !== "string" || !/^[a-f0-9]{40}$/u.test(parent.sha),
+      )
+    )
+      throw new Error("merge commit topologyのOID観測が不完全です");
+    return {
+      repository: input.repository,
+      sha,
+      treeSha: observed.commit.tree.sha,
+      parentShas: observed.parents.map((parent) => parent.sha!),
+    };
+  }
+  if (operation === "commit.ancestry") {
+    verifyRepository(input.repository, cwd, "read");
+    const ancestorSha = requireFullOid(input.sha, "commit.ancestryのancestor");
+    const descendantSha = requireFullOid(
+      input.descendantSha,
+      "commit.ancestryのdescendant",
+    );
+    const observed = parseObject<{
+      status?: string;
+      base_commit?: { sha?: string };
+      merge_base_commit?: { sha?: string };
+    }>(
+      run(
+        "gh",
+        [
+          "api",
+          `repos/${input.repository}/compare/${ancestorSha}...${descendantSha}`,
+        ],
+        cwd,
+      ).stdout,
+      "commit ancestry観測",
+    );
+    if (
+      observed.base_commit?.sha !== ancestorSha ||
+      observed.merge_base_commit?.sha !== ancestorSha ||
+      (observed.status !== "ahead" && observed.status !== "identical")
+    )
+      return {
+        repository: input.repository,
+        ancestorSha,
+        descendantSha,
+        status: String(observed.status ?? "unknown"),
+        isAncestor: false,
+      };
+    return {
+      repository: input.repository,
+      ancestorSha,
+      descendantSha,
+      status: observed.status,
+      isAncestor: true,
+    };
+  }
+  if (operation === "ref.inspect") {
+    verifyRepository(input.repository, cwd, "read");
+    if (
+      typeof input.branch !== "string" ||
+      input.branch.trim() === "" ||
+      input.branch.startsWith("-") ||
+      input.branch.includes("..")
+    )
+      throw new Error("ref.inspectのbranch名が不正です");
+    const sha = requireFullOid(
+      run(
+        "gh",
+        [
+          "api",
+          `repos/${input.repository}/commits/${encodeURIComponent(input.branch)}`,
+          "--jq",
+          ".sha",
+        ],
+        cwd,
+      ).stdout.trim(),
+      "ref.inspectのSHA",
+    );
+    return { branch: input.branch, sha };
   }
   if (operation === "policy.authority") {
     return observePolicyAuthority(input.repository, input.pr, cwd);
@@ -673,12 +1280,77 @@ export function github(
         protected: true,
         value: JSON.parse(result.stdout) as unknown,
       };
-    if (result.status === 1 && /404|Branch not protected/i.test(result.stderr))
-      return { known: true, protected: false };
+    if (
+      result.status === 1 &&
+      /404|Branch not protected/i.test(result.stderr)
+    ) {
+      const rulesResult = run(
+        "gh",
+        [
+          "api",
+          "--paginate",
+          "--slurp",
+          `repos/${input.repository}/rules/branches/${encodeURIComponent(input.branch)}?per_page=100`,
+        ],
+        cwd,
+        { allowFailure: true },
+      );
+      if (rulesResult.status !== 0)
+        return {
+          known: false,
+          protected: false,
+          error: rulesResult.stderr,
+        };
+      try {
+        const pages: unknown = JSON.parse(rulesResult.stdout);
+        if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page)))
+          throw new Error("ruleset応答がpage配列ではありません");
+        const rules = pages.flat();
+        if (rules.some((rule) => !isRecord(rule)))
+          throw new Error("ruleset応答にobject以外が含まれます");
+        const protectingRuleTypes = new Set([
+          "pull_request",
+          "required_status_checks",
+          "required_signatures",
+          "non_fast_forward",
+          "required_linear_history",
+        ]);
+        const protectingRules = rules.filter(
+          (rule) =>
+            isRecord(rule) &&
+            typeof rule.type === "string" &&
+            protectingRuleTypes.has(rule.type),
+        );
+        return protectingRules.length > 0
+          ? {
+              known: true,
+              protected: true,
+              value: { source: "ruleset", rules: protectingRules },
+            }
+          : {
+              known: true,
+              protected: false,
+              value:
+                rules.length > 0
+                  ? { source: "ruleset", rules }
+                  : { source: "ruleset" },
+            };
+      } catch (error) {
+        return {
+          known: false,
+          protected: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
     return { known: false, protected: false, error: result.stderr };
   }
   if (operation === "pr.merge") {
     verifyRepository(input.repository, cwd, "write");
+    const expectedHeadSha = requireFullOid(
+      input.headSha,
+      "merge対象の再認可済みHEAD SHA",
+    );
     const methodFlag =
       input.method === "rebase"
         ? "--rebase"
@@ -695,6 +1367,8 @@ export function github(
         input.repository,
         methodFlag,
         "--auto",
+        "--match-head-commit",
+        expectedHeadSha,
       ],
       cwd,
     );

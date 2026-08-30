@@ -26,6 +26,7 @@ const required = [
   ".agent-skill-chain/schemas/project-conformance-binding.schema.json",
   ".agent-skill-chain/schemas/conformance-contract.schema.json",
   ".agent-skill-chain/schemas/workflow-mode-decision.schema.json",
+  ".agent-skill-chain/schemas/poc-observation.schema.json",
   ".agent-skill-chain/schemas/workflow-step-journal.schema.json",
   ".agent-skill-chain/policy/conformance.json",
 ];

@@ -17,7 +17,7 @@ import {
 
 const CLI_SOURCE = "src/cli.ts";
 const DISPATCH =
-  /command === "([a-z]+)"(?:\s*&&\s*subcommand === "([a-z]+)")?/u;
+  /command === "([a-z][a-z-]*)"(?:\s*&&\s*subcommand === "([a-z][a-z-]*)")?/u;
 
 interface DispatchBlock {
   readonly command: string;

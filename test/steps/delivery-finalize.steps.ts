@@ -8,8 +8,11 @@ import {
 } from "../support/world.js";
 import { pullRequestRequiredHeadings } from "../../src/domain/issue.js";
 import {
+  assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
+  extractIssueClosingNumbers,
+  validateIssueClosingReferences,
   type MergeInput,
 } from "../../src/domain/delivery.js";
 import {
@@ -38,6 +41,7 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   issueSyncResult: { url: string };
   mergeInput: MergeInput;
   mergeResult: ReturnType<typeof authorizeMerge>;
+  mergeOperationResult: { state: string };
   omitTrustedPolicy: boolean;
   prCreationResult: PullRequestCreationResult;
   prInspection: PullRequestInspection;
@@ -299,6 +303,26 @@ Then("PR previewのbodyは必須見出しをすべて含む", function () {
   const body = this.deliveryResult.preview?.body ?? "";
   for (const heading of pullRequestRequiredHeadings())
     assert.ok(body.includes(`## ${heading}`), `見出しがありません: ${heading}`);
+  for (const keyword of [
+    "close",
+    "closes",
+    "closed",
+    "fix",
+    "fixes",
+    "fixed",
+    "resolve",
+    "resolves",
+    "resolved",
+  ])
+    assert.deepEqual(extractIssueClosingNumbers(`${keyword}: #824`), [824]);
+  assert.deepEqual(extractIssueClosingNumbers("FIXES #824"), [824]);
+  assert.equal(
+    validateIssueClosingReferences("Fixes #824\nResolved: #824", {
+      canonicalIssue: 824,
+      relatedIssues: [],
+    }).valid,
+    false,
+  );
 });
 
 Given(
@@ -340,6 +364,7 @@ When("PR createをapplyする", function () {
         issue: 824,
         head: "feature",
         base: "main",
+        baseSha: "b".repeat(40),
         repository: "o/r",
         body: conformingPullRequestBody({
           title: "bugfix: 824を是正する",
@@ -490,6 +515,9 @@ function prepareGhReadStub(
           headRefOid: "a".repeat(40),
           baseRefOid: "b".repeat(40),
           statusCheckRollup: [],
+          closingIssuesReferences: [
+            { number: 877, url: "https://github.com/o/r/issues/877" },
+          ],
         })
       : operation === "reviews"
         ? JSON.stringify([
@@ -525,6 +553,43 @@ Given("PR状態を返すexact repositoryのgh stubがある", function () {
 Given("branch protectionを返すexact repositoryのgh stubがある", function () {
   prepareGhReadStub(this, "protection");
 });
+
+function prepareGhProtectionFallbackStub(
+  world: GhReadStubWorld,
+  outcome: "protected" | "unprotected" | "deletion-only" | "unknown",
+) {
+  const directory = world.temp("asc-gh-protection-fallback-");
+  world.ghLog = path.join(directory, "operations.log");
+  const stub = path.join(directory, "gh");
+  const rulesPayload =
+    outcome === "protected"
+      ? [[{ type: "pull_request", source_type: "Repository" }]]
+      : outcome === "deletion-only"
+        ? [[{ type: "deletion", source_type: "Repository" }]]
+        : [[]];
+  fs.writeFileSync(
+    stub,
+    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');const endpoint=args.find((arg)=>arg.startsWith('repos/'));if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'READ'}));if(endpoint==='repos/o/r/branches/main/protection'){process.stderr.write('gh: Branch not protected (HTTP 404)\\n');process.exitCode=1;}if(endpoint==='repos/o/r/rules/branches/main?per_page=100'){${outcome === "unknown" ? "process.stderr.write('gh: rules API unavailable (HTTP 503)\\n');process.exitCode=1;" : `process.stdout.write(${JSON.stringify(JSON.stringify(rulesPayload))});`}}\n`,
+  );
+  fs.chmodSync(stub, 0o755);
+  world.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ""}`;
+}
+
+Given("classic protectionが404で有効なrulesetを返すgh stubがある", function () {
+  prepareGhProtectionFallbackStub(this, "protected");
+});
+Given("classic protectionが404で空なrulesetを返すgh stubがある", function () {
+  prepareGhProtectionFallbackStub(this, "unprotected");
+});
+Given("classic protectionが404でrules APIが失敗するgh stubがある", function () {
+  prepareGhProtectionFallbackStub(this, "unknown");
+});
+Given(
+  "classic protectionが404でdeletionだけのrulesetを返すgh stubがある",
+  function () {
+    prepareGhProtectionFallbackStub(this, "deletion-only");
+  },
+);
 Given("複数pageのreviewを返すexact repositoryのgh stubがある", function () {
   prepareGhReadStub(this, "reviews");
 });
@@ -565,6 +630,50 @@ Then("完全一致だけがcommit観測に成功する", function () {
     sha: "c".repeat(40),
     authorActorId: "actor",
   });
+});
+Given("merge操作を記録するwrite権限のgh stubがある", function () {
+  const directory = this.temp("asc-gh-merge-");
+  this.ghLog = path.join(directory, "operations.log");
+  const stub = path.join(directory, "gh");
+  fs.writeFileSync(
+    stub,
+    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(this.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'WRITE'}));\n`,
+  );
+  fs.chmodSync(stub, 0o755);
+  this.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ""}`;
+});
+When("再認可済みHEADを指定してPR merge adapterを実行する", function () {
+  const original = process.env.PATH;
+  process.env.PATH = this.stubPath;
+  try {
+    this.mergeOperationResult = github(
+      "pr.merge",
+      {
+        repository: "o/r",
+        pr: 9,
+        method: "squash",
+        headSha: "a".repeat(40),
+      },
+      process.cwd(),
+    );
+  } finally {
+    process.env.PATH = original;
+  }
+});
+Then("merge操作はmatch-head-commitで同じHEADへ拘束される", function () {
+  assert.equal(
+    this.mergeOperationResult.state,
+    "merge_or_native_auto_merge_requested",
+  );
+  const operations = fs.readFileSync(this.ghLog, "utf8").trim().split("\n");
+  assert.equal(
+    operations.some(
+      (line) =>
+        line ===
+        `pr merge 9 --repo o/r --squash --auto --match-head-commit ${"a".repeat(40)}`,
+    ),
+    true,
+  );
 });
 When("PR inspect adapterを実行する", function () {
   const original = process.env.PATH;
@@ -607,10 +716,60 @@ When("PR reviews adapterを実行する", function () {
 });
 Then("PR状態を取得できる", function () {
   assert.equal(this.prInspection.headRefName, "feature/x");
+  assert.deepEqual(this.prInspection.closingIssuesReferences, [
+    { number: 877, url: "https://github.com/o/r/issues/877" },
+  ]);
 });
 Then("branch protection状態を取得できる", function () {
   assert.equal(this.protectionObservation.known, true);
   assert.equal(this.protectionObservation.protected, true);
+});
+Then("branch protectionはrulesetによりprotectedと判定される", function () {
+  assert.deepEqual(this.protectionObservation, {
+    known: true,
+    protected: true,
+    value: {
+      source: "ruleset",
+      rules: [{ type: "pull_request", source_type: "Repository" }],
+    },
+  });
+});
+Then("branch protectionはknownかつunprotectedである", function () {
+  assert.deepEqual(this.protectionObservation, {
+    known: true,
+    protected: false,
+    value: { source: "ruleset" },
+  });
+});
+Then("deletionだけのrulesetはknownかつunprotectedである", function () {
+  assert.deepEqual(this.protectionObservation, {
+    known: true,
+    protected: false,
+    value: {
+      source: "ruleset",
+      rules: [{ type: "deletion", source_type: "Repository" }],
+    },
+  });
+});
+Then("branch protectionはrules API失敗をunknownにする", function () {
+  assert.equal(this.protectionObservation.known, false);
+  assert.equal(this.protectionObservation.protected, false);
+  assert.match(
+    this.protectionObservation.error ?? "",
+    /rules API unavailable/u,
+  );
+});
+Then("classic protection後にrulesetを確認する", function () {
+  const operations = fs.readFileSync(this.ghLog, "utf8").trim().split("\n");
+  const classic = operations.indexOf("api repos/o/r/branches/main/protection");
+  const ruleset = operations.indexOf(
+    "api --paginate --slurp repos/o/r/rules/branches/main?per_page=100",
+  );
+  assert.ok(classic >= 0, "classic protection観測がありません");
+  assert.ok(
+    ruleset > classic,
+    "ruleset観測がclassic protection後ではありません",
+  );
 });
 Then("全pageのreviewと順序根拠を取得できる", function () {
   assert.equal(this.reviewObservations.length, 32);
@@ -662,11 +821,14 @@ function prepareGhCreateStub(
   const base = "c".repeat(40);
   const observedBase = matchingBase ? base : "d".repeat(40);
   const pr = JSON.stringify({
+    number: 9,
     url: "https://github.com/o/r/pull/9",
+    body: "Relates to #824",
     headRefName: "feature/x",
     baseRefName: "main",
     headRefOid: expected,
     baseRefOid: observedBase,
+    closingIssuesReferences: [],
   });
   fs.writeFileSync(
     stub,
@@ -697,6 +859,7 @@ When("PR create adapterを実行する", function () {
         head: "feature/x",
         headSha: "a".repeat(40),
         base: "main",
+        baseSha: "c".repeat(40),
         title: "bugfix: 対象を是正する",
         body: "Relates to #824",
       },
@@ -1022,6 +1185,75 @@ Then("許可operationは{string}だけである", function (operation: string) {
 Then("approvalなしは拒否され、approvalありだけ許可される", function () {
   assert.equal(this.withoutApproval.allowed, false);
   assert.equal(this.withApproval.allowed, true);
+});
+
+Given(
+  "staging trackerと同じcanonical IssueをcloseするPR観測がある",
+  function () {
+    this.value = {
+      repository: "owner/repository",
+      tracker: "https://github.com/owner/repository/issues/877",
+      closingIssueReferences: [
+        {
+          number: 877,
+          url: "https://github.com/owner/repository/issues/877",
+        },
+      ],
+    };
+  },
+);
+
+Given("staging trackerと異なるIssueをcloseするPR観測がある", function () {
+  this.value = {
+    repository: "owner/repository",
+    tracker: "https://github.com/owner/repository/issues/877",
+    closingIssueReferences: [
+      {
+        number: 878,
+        url: "https://github.com/owner/repository/issues/878",
+      },
+    ],
+  };
+});
+
+Given("staging trackerとcanonical以外もcloseするPR観測がある", function () {
+  this.value = {
+    repository: "owner/repository",
+    tracker: "https://github.com/owner/repository/issues/877",
+    closingIssueReferences: [
+      {
+        number: 877,
+        url: "https://github.com/owner/repository/issues/877",
+      },
+      {
+        number: 878,
+        url: "https://github.com/owner/repository/issues/878",
+      },
+    ],
+  };
+});
+
+When("PRとstagingの同一性を検証する", function () {
+  try {
+    this.value = assertPullRequestTrackerBinding(
+      this.value as Parameters<typeof assertPullRequestTrackerBinding>[0],
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Then("PRとstagingの同一性検証は成功する", function () {
+  assert.equal(this.error, undefined);
+  assert.deepEqual(this.value, {
+    issue: 877,
+    issueUrl: "https://github.com/owner/repository/issues/877",
+  });
+});
+
+Then("PRとstagingの同一性検証は失敗する", function () {
+  assert.ok(this.error instanceof Error);
+  assert.match(this.error.message, /canonical Issue #877/u);
 });
 
 Given("merged、clean、pushed、recoveryありのworktree stateがある", function () {

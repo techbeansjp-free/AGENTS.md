@@ -16,3 +16,32 @@ Feature: 一時ステージングのpreviewと適用を分離する
     When 不一致と一致の読み取りdigestで同期記録を順に試みる
     Then 一致した同期記録だけがsync-verifiedになる
 
+  Scenario: SCN-INT-STAGING-004 promotion-activeの再同期先を別Issueに変更しない
+    Given promotion-activeの元Issue同期stagingがある
+    When 別Issueへの再同期を適用する
+    Then 外部副作用前と直接記録の両方で拒否される
+
+  Scenario: SCN-INT-STAGING-005 promotion-activeは元Issueにだけ再同期できる
+    Given promotion-activeの元Issue同期stagingがある
+    When 元Issueへの再同期を適用する
+    Then 元Issueだけが同期されsync-verifiedになる
+
+  Scenario: SCN-INT-STAGING-006 promotion-activeのfull Step 4は元Issueだけを更新して同期記録を変えない
+    Given promotion-activeの元Issue同期stagingがある
+    When full補完中のStep 4を元Issueへ同期する
+    Then 元Issueだけを更新しstaging記録はpromotion-activeを維持する
+
+  Scenario: SCN-INT-STAGING-007 通常writeとschemaは短縮Issue番号をtrackerとして受理しない
+    Given 未同期のquick stagingがある
+    When 短縮Issue番号で同期記録を試みる
+    Then 通常writeとschemaはabsolute GitHub Issue URLでないtrackerを拒否する
+
+  Scenario: SCN-INT-STAGING-008 保存済みlegacy trackerを認可済みwrite時だけabsolute URLへ移行する
+    Given absolute trackerで同期済みのquick stagingがある
+    When 保存済みlegacy trackerを認可済みwriteとして移行する
+    Then 専用migration経路でlegacy trackerはabsolute URLへ移行される
+
+  Scenario: SCN-INT-STAGING-009 legacy trackerを通常のread-only対象解決では受理しない
+    Given absolute trackerで同期済みのquick stagingがある
+    When 保存済みlegacy trackerを通常のread-only経路で解決する
+    Then read-only解決は拒否されstaging recordをbyte単位で変更しない

@@ -35,3 +35,35 @@ Feature: PoCモードをfail-closedで判定する
     Given 従来判定用のQ-01〜Q-08回答がある
     When 第2引数なしで従来の完全回答と不明回答を判定する
     Then 従来判定はquickとfullである
+
+  Scenario: SCN-UNIT-POC-006 隔離fixtureとBDD観測契約が不完全ならfullへ倒す
+    Given PoC宣言のfixtureとscenarioとobservableが不完全である
+    When pocを明示してモード判定する
+    Then PoC判定結果はfullである
+    And PoC判定理由に隔離fixtureとBDD scenarioとobservableが含まれる
+
+  Scenario: SCN-UNIT-POC-007 宣言とexact HEADに完全一致する即時観測Evidenceを受理する
+    Given 完全なPoC即時観測Evidenceがある
+    When PoC即時観測Evidenceを宣言とHEADへ完全照合する
+    Then PoC即時観測Evidenceは有効である
+
+  Scenario: SCN-UNIT-POC-008 fixtureやHEADやfieldを改変した観測Evidenceを拒否する
+    Given 完全なPoC即時観測Evidenceがある
+    When PoC即時観測Evidenceのfixture digestとHEADとfieldを改変する
+    Then PoC即時観測Evidenceはstrictに拒否される
+
+  Scenario: SCN-UNIT-POC-009 fixtureのsymlink・hardlink・FIFO・巨大fileを拒否する
+    Given fixture file境界を検査する隔離directoryがある
+    When 不正なfixture file種別とbyte上限を検査する
+    Then PoC fixture境界はすべてfail-closedになる
+
+  Scenario: SCN-UNIT-POC-010 exit-codeだけで振る舞いを判定しない
+    Given PoC宣言にexit-code observableしかない
+    When pocを明示してモード判定する
+    Then PoC判定結果はfullである
+    And PoC判定理由にbehavior observableが含まれる
+
+  Scenario: SCN-UNIT-POC-011 固定実行物の通常fileを受理し欠落を固定診断へ正規化する
+    Given 固定実行物を検査する一時directoryがある
+    When 通常fileと欠落pathを固定実行物として検査する
+    Then 通常fileは受理され欠落pathは日本語の固定実行物診断で拒否される

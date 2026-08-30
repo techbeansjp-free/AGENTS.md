@@ -15,6 +15,12 @@ const DEVELOPMENT_CONSIDERATION_TEMPLATES = [
   "issue/04_レビュー.md",
 ];
 
+const IMPLEMENTATION_DISCOVERY_TEMPLATES = [
+  "issue/00_要求定義_quick.md",
+  "issue/00_要求定義_poc.md",
+  "issue/03_実装計画.md",
+] as const;
+
 const ARTIFACT_VOCABULARY_TERMS = [
   "要求",
   "要件",
@@ -149,7 +155,7 @@ const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
       "../../templates/specs/18_レイアウト/00_レイアウトトークン.md",
     ],
   ],
-  ["step-03-requirements-review", ["../../templates/issue/04_レビュー.md"]],
+  ["step-03-requirements-review", []],
   ["step-04-issue-sync", []],
   [
     "step-05-design",
@@ -176,7 +182,7 @@ const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
       "../../templates/specs/18_レイアウト/00_レイアウトトークン.md",
     ],
   ],
-  ["step-07-design-review", ["../../templates/issue/04_レビュー.md"]],
+  ["step-07-design-review", []],
   ["step-08-design-sync", []],
   [
     "step-09-implement",
@@ -211,15 +217,15 @@ const EXPECTED_OUTPUT_MARKERS = new Map<string, string>([
   ["step-00-stage", ".agent-skill-chain/tmp/issues/"],
   ["step-01-request", "00_要求定義.md"],
   ["step-02-requirements", "01_要件定義.md"],
-  ["step-03-requirements-review", "04_レビュー.md"],
+  ["step-03-requirements-review", "開始可能性"],
   ["step-04-issue-sync", "書き込み後読み取り検証"],
   ["step-05-design", "02_設計.md"],
   ["step-06-plan", "03_実装計画.md"],
-  ["step-07-design-review", "04_レビュー.md"],
+  ["step-07-design-review", "開始可能性"],
   ["step-08-design-sync", "書き込み後読み取り検証"],
   ["step-09-implement", "docs/specs/"],
   ["step-10-review", "04_レビュー.md"],
-  ["step-11-pr", "waiting_for_human_review"],
+  ["step-11-pr", "merge-observed"],
 ]);
 
 const uniqueSorted = (values: string[]): string[] =>
@@ -370,6 +376,26 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       }
     }
   }
+  for (const relative of IMPLEMENTATION_DISCOVERY_TEMPLATES) {
+    const template = path.join(templatesRoot, relative);
+    if (!fs.existsSync(template)) {
+      errors.push(`実装中発見の記録templateがありません: ${relative}`);
+      continue;
+    }
+    const markdown = fs.readFileSync(template, "utf8");
+    for (const marker of [
+      "実装中発見の前向き記録",
+      "発見ID",
+      "事実",
+      "影響",
+      "判断",
+      "対処",
+      "検証",
+      "仕様更新",
+    ])
+      if (!markdown.includes(marker))
+        errors.push(`${relative}: 実装中発見の${marker}欄がありません`);
+  }
   const workflowFile = path.resolve(
     root,
     ".agent-skill-chain/docs/01_開発ワークフロー.md",
@@ -401,9 +427,11 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       !workflow.includes(
         "要求 → 要件・受け入れ条件 → 設計・設計判断 → 実装計画 → 実装・検証証拠 → レビュー",
       ) ||
-      !workflow.includes("所有する上流成果物へ戻って版と追跡を更新する")
+      !workflow.includes(
+        "契約が変わる場合だけ所有する成果物の影響部分と追跡を再確定する",
+      )
     )
-      errors.push("成果物の正方向と上流へ戻る契約がありません");
+      errors.push("成果物の正方向と影響範囲だけを再確定する契約がありません");
     if (!workflow.includes("## ドメイン用語台帳"))
       errors.push("開発ワークフローにドメイン用語台帳契約がありません");
     for (const marker of [

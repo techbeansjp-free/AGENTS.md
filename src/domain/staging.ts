@@ -8,7 +8,12 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { isRecord } from "../types.js";
 
 export type StagingState =
-  "local-active" | "sync-verified" | "deletion-ready" | "retained" | "deleted";
+  | "local-active"
+  | "promotion-active"
+  | "sync-verified"
+  | "deletion-ready"
+  | "retained"
+  | "deleted";
 
 export interface StagingRecord {
   path: string;
@@ -42,7 +47,7 @@ export interface StoredStagingRecord {
   digest: string;
   owner: "runtime・project owner";
   createdAt: string;
-  state: "local-active" | "sync-verified";
+  state: "local-active" | "promotion-active" | "sync-verified";
   tracker: string | null;
   checkpoint: 4 | 8 | null;
   syncedAt: string | null;
@@ -51,6 +56,8 @@ export interface StoredStagingRecord {
 }
 
 export const STAGING_RECORD_FILE = "staging-record.json";
+export const STAGING_PROMOTION_TRANSACTION_FILE =
+  ".full-promotion-transaction.json";
 const ISSUE_STAGING_PREFIX = ".agent-skill-chain/tmp/issues";
 const STORED_FIELDS = new Set([
   "schemaVersion",
@@ -68,8 +75,141 @@ const STORED_FIELDS = new Set([
 ]);
 const SHA256 = /^[a-f0-9]{64}$/u;
 const ROOT_META = /[\0\p{Cc}\p{Cf}%$*?{}~]/u;
-const TRACKER =
-  /^(?:https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*|#?[1-9]\d*)$/u;
+const CURRENT_TRACKER =
+  /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u;
+const LEGACY_TRACKER = /^#?([1-9]\d*)$/u;
+const heldMutationLocks = new Set<string>();
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !(
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "ESRCH"
+    );
+  }
+}
+
+/**
+ * staging単位のwriter lock。lock自体は成果物digestへ混ぜないようissues直下へ置く。
+ * 同一process内は再入可能とし、process停止で残ったlockだけをPID確認後に回収する。
+ */
+export function withStagingMutationLock<Result>(
+  directory: string,
+  mutate: () => Result,
+): Result {
+  const staging = path.resolve(directory);
+  const stat = fs.lstatSync(staging);
+  if (stat.isSymbolicLink() || !stat.isDirectory())
+    throw new Error("staging writer lockには通常directoryが必要です");
+  if (fs.realpathSync(staging) !== staging)
+    throw new Error("staging writer lockにsymlink祖先を使用できません");
+  const lockPath = path.join(
+    path.dirname(staging),
+    `.${path.basename(staging)}.mutation.lock`,
+  );
+  if (heldMutationLocks.has(lockPath)) return mutate();
+
+  const nonce = crypto.randomBytes(16).toString("hex");
+  const source = `${stableJson({
+    schemaVersion: "agent-skill-chain/staging-mutation-lock/v1",
+    pid: process.pid,
+    nonce,
+  })}\n`;
+  let acquired = false;
+  for (let attempt = 0; attempt < 2 && !acquired; attempt += 1) {
+    const temporary = path.join(
+      path.dirname(staging),
+      `.${path.basename(staging)}.mutation-${process.pid}-${nonce}.tmp`,
+    );
+    fs.writeFileSync(temporary, source, { flag: "wx", mode: 0o600 });
+    try {
+      const descriptor = fs.openSync(temporary, "r");
+      try {
+        fs.fsyncSync(descriptor);
+      } finally {
+        fs.closeSync(descriptor);
+      }
+      try {
+        fs.linkSync(temporary, lockPath);
+        acquired = true;
+      } catch (error) {
+        if (!(
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EEXIST"
+        ))
+          throw error;
+      }
+    } finally {
+      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    }
+    if (acquired) break;
+    const lockStat = fs.lstatSync(lockPath);
+    if (lockStat.isSymbolicLink() || !lockStat.isFile())
+      throw new Error("staging writer lockが通常fileではありません");
+    const value = parseJsonStrict(
+      fs.readFileSync(lockPath, "utf8"),
+      "staging writer lock",
+    );
+    if (
+      !isRecord(value) ||
+      value.schemaVersion !== "agent-skill-chain/staging-mutation-lock/v1" ||
+      !Number.isInteger(value.pid) ||
+      (value.pid as number) <= 0 ||
+      typeof value.nonce !== "string" ||
+      !/^[a-f0-9]{32}$/u.test(value.nonce)
+    )
+      throw new Error("staging writer lockの内容が不正です");
+    if (processIsAlive(value.pid as number))
+      throw new Error(
+        `別process（pid=${String(value.pid)}）がstagingを更新中です`,
+      );
+    try {
+      fs.unlinkSync(lockPath);
+    } catch (error) {
+      if (!(
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ))
+        throw error;
+    }
+  }
+  if (!acquired) throw new Error("staging writer lockを取得できませんでした");
+
+  heldMutationLocks.add(lockPath);
+  let result: Result | undefined;
+  let mutationError: unknown;
+  let mutationFailed = false;
+  try {
+    result = mutate();
+  } catch (error) {
+    mutationFailed = true;
+    mutationError = error;
+  }
+  heldMutationLocks.delete(lockPath);
+  if (fs.existsSync(lockPath)) {
+    const current = fs.readFileSync(lockPath, "utf8");
+    if (current !== source)
+      throw new Error("staging writer lockの所有権が実行中に変化しました", {
+        ...(!mutationFailed
+          ? {}
+          : {
+              cause:
+                mutationError instanceof Error
+                  ? mutationError
+                  : new Error(String(mutationError)),
+            }),
+      });
+    fs.unlinkSync(lockPath);
+  }
+  if (mutationFailed) throw mutationError;
+  return result as Result;
+}
 
 interface InventoryEntry {
   relative: string;
@@ -350,7 +490,12 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
-function parseStoredRecord(source: string): StoredStagingRecord {
+type StoredTrackerContract = "current" | "legacy-migration";
+
+function parseStoredRecordWithTrackerContract(
+  source: string,
+  trackerContract: StoredTrackerContract,
+): StoredStagingRecord {
   const parsed = parseJsonStrict(source, STAGING_RECORD_FILE);
   if (!isRecord(parsed)) throw new Error("記録はobjectでなければなりません");
   const unknown = Object.keys(parsed).filter(
@@ -390,7 +535,11 @@ function parseStoredRecord(source: string): StoredStagingRecord {
   if (typeof parsed.createdAt !== "string")
     throw new Error("createdAtが不正です");
   parseInstant(parsed.createdAt, "createdAt");
-  if (parsed.state !== "local-active" && parsed.state !== "sync-verified")
+  if (
+    parsed.state !== "local-active" &&
+    parsed.state !== "promotion-active" &&
+    parsed.state !== "sync-verified"
+  )
     throw new Error("stateが不正です");
   if (!isNullableString(parsed.tracker) || !isNullableString(parsed.syncedAt))
     throw new Error("trackerまたはsyncedAtが不正です");
@@ -405,8 +554,19 @@ function parseStoredRecord(source: string): StoredStagingRecord {
     parsed.checkpoint !== 8
   )
     throw new Error("checkpointが不正です");
-  if (parsed.tracker !== null && !TRACKER.test(parsed.tracker))
-    throw new Error("trackerはGitHub Issue URLまたはIssue番号が必要です");
+  if (
+    parsed.tracker !== null &&
+    !CURRENT_TRACKER.test(parsed.tracker) &&
+    !(
+      trackerContract === "legacy-migration" &&
+      LEGACY_TRACKER.test(parsed.tracker)
+    )
+  )
+    throw new Error(
+      trackerContract === "legacy-migration"
+        ? "trackerはabsolute GitHub Issue URLまたはlegacy Issue番号が必要です"
+        : "trackerはabsolute GitHub Issue URLが必要です",
+    );
   if (parsed.syncedAt !== null) parseInstant(parsed.syncedAt, "syncedAt");
   for (const digest of [parsed.syncDigest, parsed.readBackDigest])
     if (digest !== null && !SHA256.test(digest))
@@ -432,6 +592,16 @@ function parseStoredRecord(source: string): StoredStagingRecord {
     throw new Error(
       "sync-verifiedにはmode別最終checkpointと一致する完全な再読取証拠が必要です",
     );
+  if (
+    parsed.state === "promotion-active" &&
+    (parsed.mode !== "full" ||
+      syncValues.some((value) => value === null) ||
+      parsed.checkpoint !== 4 ||
+      parsed.syncDigest !== parsed.readBackDigest)
+  )
+    throw new Error(
+      "promotion-activeには昇格前Step 4の完全な再読取証拠とmode=fullが必要です",
+    );
   return {
     schemaVersion: parsed.schemaVersion,
     mode: parsed.mode,
@@ -448,6 +618,16 @@ function parseStoredRecord(source: string): StoredStagingRecord {
   };
 }
 
+function parseStoredRecord(source: string): StoredStagingRecord {
+  return parseStoredRecordWithTrackerContract(source, "current");
+}
+
+function parseLegacyStoredRecordForMigration(
+  source: string,
+): StoredStagingRecord {
+  return parseStoredRecordWithTrackerContract(source, "legacy-migration");
+}
+
 export function readStoredStagingRecord(
   directory: string,
 ): StoredStagingRecord {
@@ -456,24 +636,164 @@ export function readStoredStagingRecord(
   );
 }
 
+/**
+ * v0.3.1以前に保存された`#123`/`123` trackerを、trustedなrepository・Issue入力へ
+ * 一致する場合だけ現行のabsolute URLへ一度だけ移行する。新規writeの入力契約は
+ * `recordStagingSync`が引き続きabsolute URLだけに制限する。
+ */
+export function migrateLegacyStagingTracker(
+  directory: string,
+  input: Readonly<{ repository: string; issue: number }>,
+): StoredStagingRecord {
+  const resolved = path.resolve(directory);
+  return withStagingMutationLock(resolved, () =>
+    migrateLegacyStagingTrackerLocked(resolved, input),
+  );
+}
+
+/**
+ * Migrate while the caller holds the staging mutation lock. Delivery uses this
+ * form so validation, compatibility migration and the first durable intent are
+ * one serialized operation instead of two separately locked mutations.
+ */
+export function migrateLegacyStagingTrackerLocked(
+  directory: string,
+  input: Readonly<{ repository: string; issue: number }>,
+): StoredStagingRecord {
+  const [owner, repository, ...extra] = input.repository.split("/");
+  if (
+    !owner ||
+    !repository ||
+    extra.length > 0 ||
+    !/^[A-Za-z0-9_.-]+$/u.test(owner) ||
+    !/^[A-Za-z0-9_.-]+$/u.test(repository) ||
+    owner === "." ||
+    owner === ".." ||
+    repository === "." ||
+    repository === ".." ||
+    !Number.isSafeInteger(input.issue) ||
+    input.issue <= 0
+  )
+    throw new Error("legacy tracker移行対象のrepositoryまたはIssueが不正です");
+  const resolved = path.resolve(directory);
+  const current = parseLegacyStoredRecordForMigration(
+    fs.readFileSync(path.join(resolved, STAGING_RECORD_FILE), "utf8"),
+  );
+  const expected = `https://github.com/${input.repository}/issues/${input.issue}`;
+  if (current.tracker?.toLowerCase() === expected.toLowerCase()) return current;
+  const legacy =
+    typeof current.tracker === "string"
+      ? LEGACY_TRACKER.exec(current.tracker)
+      : null;
+  if (!legacy || Number(legacy[1]) !== input.issue)
+    throw new Error(
+      "legacy trackerが移行対象のrepository・Issueと一致しません",
+    );
+  writeFileAtomic(
+    path.join(resolved, STAGING_RECORD_FILE),
+    `${stableJson({ ...current, tracker: expected })}\n`,
+    { temporaryDirectory: path.dirname(resolved) },
+  );
+  const reread = readStoredStagingRecord(resolved);
+  if (reread.tracker !== expected)
+    throw new Error("legacy trackerの移行後read-backが一致しません");
+  return reread;
+}
+
 export function refreshStoredStagingDigest(
   directory: string,
 ): StoredStagingRecord {
-  const current = readStoredStagingRecord(directory);
-  const artifacts = listStagingArtifacts(directory);
-  const updated: StoredStagingRecord = {
-    ...current,
-    artifacts,
-    digest: calculateStagingDigest(directory, artifacts),
-  };
-  writeFileAtomic(
-    path.join(directory, STAGING_RECORD_FILE),
-    `${JSON.stringify(updated, null, 2)}\n`,
-  );
-  const reread = readStoredStagingRecord(directory);
-  if (JSON.stringify(reread) !== JSON.stringify(updated))
-    throw new Error("staging digestの書き込み後読み取り確認に失敗しました");
-  return reread;
+  return withStagingMutationLock(directory, () => {
+    const current = readStoredStagingRecord(directory);
+    const artifacts = listStagingArtifacts(directory);
+    const updated: StoredStagingRecord = {
+      ...current,
+      artifacts,
+      digest: calculateStagingDigest(directory, artifacts),
+    };
+    writeFileAtomic(
+      path.join(directory, STAGING_RECORD_FILE),
+      `${JSON.stringify(updated, null, 2)}\n`,
+      { temporaryDirectory: path.dirname(path.resolve(directory)) },
+    );
+    const reread = readStoredStagingRecord(directory);
+    if (JSON.stringify(reread) !== JSON.stringify(updated))
+      throw new Error("staging digestの書き込み後読み取り確認に失敗しました");
+    return reread;
+  });
+}
+
+/**
+ * quick / poc stagingを、同じIssueと同期証拠を維持したままfullへ単調昇格する。
+ *
+ * 既にStep 4まで同期済みの場合、その証拠は過去の観測として保持する。ただしfullの
+ * 最終同期Step 8をまだ満たさないため、PR-readyな`sync-verified`ではなく
+ * `promotion-active`へ遷移する。未同期なら`local-active`のまま進める。
+ */
+export function promoteStoredStagingModeToFull(
+  directory: string,
+): StoredStagingRecord {
+  return withStagingMutationLock(directory, () => {
+    if (
+      !fs.existsSync(path.join(directory, STAGING_PROMOTION_TRANSACTION_FILE))
+    )
+      throw new Error("full昇格には永続transaction markerが必要です");
+    const current = readStoredStagingRecord(directory);
+    if (current.mode === "full")
+      throw new Error("stagingは既にfullであり、再昇格できません");
+    const artifacts = listStagingArtifacts(directory);
+    const updated: StoredStagingRecord = {
+      ...current,
+      mode: "full",
+      artifacts,
+      digest: calculateStagingDigest(directory, artifacts),
+      state:
+        current.state === "sync-verified" ? "promotion-active" : "local-active",
+    };
+    writeFileAtomic(
+      path.join(directory, STAGING_RECORD_FILE),
+      `${JSON.stringify(updated, null, 2)}\n`,
+      { temporaryDirectory: path.dirname(path.resolve(directory)) },
+    );
+    const reread = readStoredStagingRecord(directory);
+    if (JSON.stringify(reread) !== JSON.stringify(updated))
+      throw new Error("full昇格記録の書き込み後読み取り確認に失敗しました");
+    return reread;
+  });
+}
+
+/**
+ * transaction markerを残したまま、markerを除く最終成果物集合とdigestをrecordへ固定する。
+ * 呼び出し側はこのrecordと全成果物をfsyncした後にだけmarkerを削除する。
+ */
+export function finalizeStoredStagingPromotion(
+  directory: string,
+): StoredStagingRecord {
+  return withStagingMutationLock(directory, () => {
+    const marker = path.join(directory, STAGING_PROMOTION_TRANSACTION_FILE);
+    if (!fs.existsSync(marker))
+      throw new Error("full昇格の最終確定にはtransaction markerが必要です");
+    const current = readStoredStagingRecord(directory);
+    if (current.mode !== "full")
+      throw new Error("full昇格の最終確定にはmode=fullが必要です");
+    const artifacts = listStagingArtifacts(directory).filter(
+      (artifact) => artifact !== STAGING_PROMOTION_TRANSACTION_FILE,
+    );
+    const updated: StoredStagingRecord = {
+      ...current,
+      artifacts,
+      digest: calculateStagingDigest(directory, artifacts),
+    };
+    writeFileAtomic(
+      path.join(directory, STAGING_RECORD_FILE),
+      `${JSON.stringify(updated, null, 2)}\n`,
+      { temporaryDirectory: path.dirname(path.resolve(directory)) },
+    );
+    const reread = readStoredStagingRecord(directory);
+    if (JSON.stringify(reread) !== JSON.stringify(updated))
+      throw new Error("full昇格最終記録の書き込み後読み取り確認に失敗しました");
+    return reread;
+  });
 }
 
 function baseRecord(
