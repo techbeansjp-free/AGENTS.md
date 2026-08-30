@@ -92,8 +92,14 @@ Given("領域判定の代表入力がある", function () {
     { path: ".agent-skill-chain/role-log/a/b", expected: true },
     { path: ".agent-skill-chain/metrics", expected: true },
     { path: ".agent-skill-chain/metrics/report.json", expected: true },
+    { path: ".agent-skill-chain/runtime", expected: true },
+    {
+      path: ".agent-skill-chain/runtime/graph/v1/current.json",
+      expected: true,
+    },
     { path: ".agent-skill-chain/tmpx/y", expected: false },
     { path: ".agent-skill-chain/role-logs", expected: false },
+    { path: ".agent-skill-chain/runtime-old/graph.db", expected: false },
     { path: ".agent-skill-chain/docs/00_運用ポリシー.md", expected: false },
     { path: "src/domain/staging.ts", expected: false },
   ];

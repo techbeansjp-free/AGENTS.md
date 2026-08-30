@@ -46,6 +46,7 @@ export function checkCliContract(root = process.cwd()) {
     "spec",
     "review",
     "trace",
+    "graph",
     "conformance",
     "policy",
     "workflow",

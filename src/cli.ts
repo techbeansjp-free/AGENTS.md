@@ -97,6 +97,20 @@ import {
 } from "./domain/migration.js";
 import { validateScenarioTrace } from "./domain/trace.js";
 import {
+  DEFAULT_GRAPH_BUDGET,
+  SEMANTIC_EDGE_KINDS,
+  assessGraphFreshness,
+  semanticGraphContentHash,
+  shortestSemanticPath,
+  topologicalSemanticOrder,
+  traverseSemanticGraph,
+  type SemanticEdgeKind,
+} from "./domain/semantic-graph.js";
+import {
+  buildRepositorySemanticGraph,
+  observeRepositoryGraphSource,
+} from "./adapters/repository-graph.js";
+import {
   canonicalProviderInstant,
   github,
   GitHubProviderUnavailableError,
@@ -3318,6 +3332,143 @@ function modelTier(value: string, flag: string): ModelTier {
   return tier;
 }
 
+function graphRoot(flags: Flags): string {
+  return path.resolve(
+    typeof flags.root === "string" ? flags.root : process.cwd(),
+  );
+}
+
+export const MIN_GRAPH_NODE_VERSION = "22.13.0" as const;
+
+export function supportsGraphRuntime(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u.exec(version);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major > 22 || (major === 22 && minor >= 13);
+}
+
+function assertGraphRuntime(version: string): void {
+  if (!supportsGraphRuntime(version))
+    throw new Error(
+      `graph subcommandにはNode.js ${MIN_GRAPH_NODE_VERSION}以上が必要です（現在: ${version}）`,
+    );
+}
+
+function assertCommandRuntime(command: string, version: string): void {
+  if (command === "graph") assertGraphRuntime(version);
+}
+
+function graphEdgeKinds(
+  value: string | boolean | undefined,
+): SemanticEdgeKind[] | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "")
+    throw new Error("--edge-kindsには空でないcomma区切り値が必要です");
+  const values = [...new Set(value.split(","))];
+  if (
+    values.some(
+      (candidate): candidate is string =>
+        !SEMANTIC_EDGE_KINDS.includes(candidate as SemanticEdgeKind),
+    )
+  )
+    throw new Error("--edge-kindsに未知のsemantic edge kindがあります");
+  return values.sort() as SemanticEdgeKind[];
+}
+
+async function readFreshSemanticGraph(root: string) {
+  const { GraphQlLiteStore } = await import("./adapters/graphqlite.js");
+  const expectedSnapshot = buildRepositorySemanticGraph(root);
+  const expectedGraphContentHash = semanticGraphContentHash(expectedSnapshot);
+  const store = new GraphQlLiteStore(root);
+  try {
+    const stored = await store.read();
+    const sourceAfterRead = observeRepositoryGraphSource(root);
+    if (stableJson(sourceAfterRead) !== stableJson(expectedSnapshot.source))
+      throw new Error(
+        "semantic graphの検証中にsourceが変化しました。再実行してください",
+      );
+    const observedGraphContentHash = semanticGraphContentHash(stored.snapshot);
+    if (observedGraphContentHash !== expectedGraphContentHash)
+      throw new Error(
+        "semantic graphの保存投影が現在projectorの期待snapshotと一致しません。再構築してください",
+      );
+    const freshness = assessGraphFreshness({
+      expectedSource: sourceAfterRead,
+      expectedExtensionVersion: stored.manifest.extensionVersion,
+      expectedExtensionSha256: stored.manifest.extensionSha256,
+      manifest: stored.manifest,
+      observedGraphContentHash,
+      observedNodeCount: stored.snapshot.nodes.length,
+      observedEdgeCount: stored.snapshot.edges.length,
+    });
+    if (!freshness.fresh || !freshness.exactEvidenceAllowed)
+      throw new Error(
+        `semantic graphは再構築が必要です: ${freshness.reasons.join(", ")}`,
+      );
+    return {
+      ...stored,
+      freshness,
+      observedSource: sourceAfterRead,
+      expectedGraphContentHash,
+      observedGraphContentHash,
+    };
+  } finally {
+    await store.close();
+  }
+}
+
+function graphQueryEvidence(
+  stored: Awaited<ReturnType<typeof readFreshSemanticGraph>>,
+  query: Readonly<Record<string, unknown>>,
+  result: unknown,
+  exactResult: boolean,
+) {
+  const exactEvidence =
+    stored.freshness.exactEvidenceAllowed &&
+    stored.expectedGraphContentHash === stored.observedGraphContentHash &&
+    exactResult;
+  return {
+    evidenceVersion: "agent-skill-chain/graph-query-evidence/v1",
+    exactEvidence,
+    deterministicOnly: true,
+    graph: {
+      schemaVersion: stored.manifest.graphSchemaVersion,
+      builderVersion: stored.manifest.graphBuilderVersion,
+      extensionVersion: stored.manifest.extensionVersion,
+      extensionSha256: stored.manifest.extensionSha256,
+      graphContentHash: stored.manifest.graphContentHash,
+      expectedGraphContentHash: stored.expectedGraphContentHash,
+      nodeCount: stored.manifest.nodeCount,
+      edgeCount: stored.manifest.edgeCount,
+      generation: stored.manifest.generation,
+      builtAt: stored.manifest.builtAt,
+    },
+    source: stored.manifest.source,
+    query: {
+      ...query,
+      budget: DEFAULT_GRAPH_BUDGET,
+      certaintyPolicy: "deterministic-only",
+    },
+    resultDigest: crypto
+      .createHash("sha256")
+      .update(stableJson(result))
+      .digest("hex"),
+    freshness: stored.freshness,
+  };
+}
+
+function assertGraphSourceUnchanged(
+  root: string,
+  expected: ReturnType<typeof observeRepositoryGraphSource>,
+): void {
+  const observed = observeRepositoryGraphSource(root);
+  if (stableJson(observed) !== stableJson(expected))
+    throw new Error(
+      "semantic graphの探索中にsourceが変化しました。結果をEvidenceにせず再実行してください",
+    );
+}
+
 function usageInputs(
   usage: CommandUsage,
   args: readonly string[],
@@ -3380,7 +3531,7 @@ function isHelpToken(value: string | undefined): boolean {
 
 export async function main(
   argv: string[],
-  dependencies: { now?: () => Date } = {},
+  dependencies: { now?: () => Date; nodeVersion?: string } = {},
 ): Promise<number> {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
@@ -3414,6 +3565,10 @@ export async function main(
     }
     enforceUsage(usage, usageArgs);
   }
+  assertCommandRuntime(
+    command,
+    dependencies.nodeVersion ?? process.versions.node,
+  );
   if (command === "routing" && subcommand === "roles") {
     const { flags } = parse(rest);
     const scope = required(flags, "scope");
@@ -3980,6 +4135,167 @@ export async function main(
     throw new Error(
       "workflowにはsteps、verification-set、assess-discovery、promote-full、record、verifyのいずれかが必要です",
     );
+  if (command === "graph" && subcommand === "install") {
+    const { flags } = parse(rest);
+    const root = graphRoot(flags);
+    const apply = applyMode(flags);
+    const { GRAPHQLITE_COMMIT, installGraphQlLiteExtension } =
+      await import("./adapters/graphqlite.js");
+    const result = await installGraphQlLiteExtension(root, { apply });
+    print({
+      ...result,
+      commit: GRAPHQLITE_COMMIT,
+      evidence: "version、asset名、size、SHA-256を固定して検証した",
+    });
+    return 0;
+  }
+  if (command === "graph" && subcommand === "rebuild") {
+    const { flags } = parse(rest);
+    const root = graphRoot(flags);
+    const apply = applyMode(flags);
+    const snapshot = buildRepositorySemanticGraph(root);
+    const graphContentHash = semanticGraphContentHash(snapshot);
+    if (!apply) {
+      print({
+        status: "preview",
+        source: snapshot.source,
+        graphContentHash,
+        nodeCount: snapshot.nodes.length,
+        edgeCount: snapshot.edges.length,
+        writes: ["worktree固有のruntime projection", "atomic current pointer"],
+      });
+      return 0;
+    }
+    const builtAt =
+      typeof flags["built-at"] === "string"
+        ? flags["built-at"]
+        : (dependencies.now?.() ?? new Date()).toISOString();
+    const { GraphQlLiteStore } = await import("./adapters/graphqlite.js");
+    const store = new GraphQlLiteStore(root);
+    try {
+      const manifest = await store.replace(snapshot, builtAt);
+      const readBack = await store.read();
+      const currentSource = observeRepositoryGraphSource(root);
+      const freshness = assessGraphFreshness({
+        expectedSource: currentSource,
+        expectedExtensionVersion: manifest.extensionVersion,
+        expectedExtensionSha256: manifest.extensionSha256,
+        manifest,
+        observedGraphContentHash: semanticGraphContentHash(readBack.snapshot),
+        observedNodeCount: readBack.snapshot.nodes.length,
+        observedEdgeCount: readBack.snapshot.edges.length,
+      });
+      if (!freshness.fresh || !freshness.exactEvidenceAllowed)
+        throw new Error(
+          `semantic graph構築中のsource driftを検出しました: ${freshness.reasons.join(", ")}`,
+        );
+      print({
+        status: "rebuilt",
+        manifest,
+        readBackGraphContentHash: semanticGraphContentHash(readBack.snapshot),
+      });
+    } finally {
+      await store.close();
+    }
+    return 0;
+  }
+  if (command === "graph" && subcommand === "status") {
+    const { flags } = parse(rest);
+    const root = graphRoot(flags);
+    try {
+      const result = await readFreshSemanticGraph(root);
+      print({
+        status: "fresh",
+        exactEvidenceAllowed: result.freshness.exactEvidenceAllowed,
+        manifest: result.manifest,
+      });
+      return 0;
+    } catch (error) {
+      print({
+        status: "unavailable-or-stale",
+        exactEvidenceAllowed: false,
+        reasons: [
+          error instanceof Error ? error.message : "graphを観測できません",
+        ],
+        next: "graph installとgraph rebuildを明示的に実行してください",
+      });
+      return 1;
+    }
+  }
+  if (command === "graph" && subcommand === "impact") {
+    const { flags } = parse(rest);
+    const root = graphRoot(flags);
+    const direction =
+      typeof flags.direction === "string" ? flags.direction : "incoming";
+    if (direction !== "incoming" && direction !== "outgoing")
+      throw new Error("--directionはincomingまたはoutgoingが必要です");
+    const starts = [...new Set(required(flags, "start").split(","))].sort();
+    if (starts.some((start) => start === ""))
+      throw new Error("--startに空のnode IDを指定できません");
+    const edgeKinds = graphEdgeKinds(flags["edge-kinds"]);
+    const stored = await readFreshSemanticGraph(root);
+    const result = traverseSemanticGraph(stored.snapshot, starts, {
+      direction,
+      edgeKinds,
+    });
+    assertGraphSourceUnchanged(root, stored.observedSource);
+    const evidence = graphQueryEvidence(
+      stored,
+      {
+        command: "graph impact",
+        starts,
+        direction,
+        edgeKinds: edgeKinds ?? [],
+      },
+      result,
+      result.status === "complete",
+    );
+    print({ ...result, exactEvidence: evidence.exactEvidence, evidence });
+    return result.status === "complete" ? 0 : 1;
+  }
+  if (command === "graph" && subcommand === "path") {
+    const { flags } = parse(rest);
+    const root = graphRoot(flags);
+    const from = required(flags, "from");
+    const to = required(flags, "to");
+    const edgeKinds = graphEdgeKinds(flags["edge-kinds"]);
+    const stored = await readFreshSemanticGraph(root);
+    const result = shortestSemanticPath(stored.snapshot, from, to, {
+      edgeKinds,
+    });
+    assertGraphSourceUnchanged(root, stored.observedSource);
+    const evidence = graphQueryEvidence(
+      stored,
+      { command: "graph path", from, to, edgeKinds: edgeKinds ?? [] },
+      result,
+      result.status === "complete",
+    );
+    print({ ...result, exactEvidence: evidence.exactEvidence, evidence });
+    return result.status === "complete" ? 0 : 1;
+  }
+  if (command === "graph" && subcommand === "order") {
+    const { flags } = parse(rest);
+    const root = graphRoot(flags);
+    const edgeKinds = graphEdgeKinds(required(flags, "edge-kinds"));
+    const stored = await readFreshSemanticGraph(root);
+    const result = topologicalSemanticOrder(stored.snapshot, edgeKinds);
+    assertGraphSourceUnchanged(root, stored.observedSource);
+    const evidence = graphQueryEvidence(
+      stored,
+      { command: "graph order", edgeKinds: edgeKinds ?? [] },
+      result,
+      result.evidenceComplete,
+    );
+    print({
+      ...result,
+      exactEvidence: evidence.exactEvidence,
+      gatePass: evidence.exactEvidence && result.gateConformant,
+      evidence,
+    });
+    return result.gateConformant ? 0 : 1;
+  }
+  if (command === "graph")
+    throw new Error(`不明なgraph subcommandです: ${subcommand ?? ""}`);
   if (command === "issue" && subcommand === "create") {
     const { flags } = parse(rest);
     const root = path.resolve(

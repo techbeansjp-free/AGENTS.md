@@ -7,7 +7,7 @@ Feature: 一時ライフサイクル領域の分類正本
     When 適合性検査scriptのsourceを読む
     Then 領域prefixも除外一覧も自前で列挙していない
 
-  Scenario: SCN-UNIT-LIFEIGNORE-002 領域判定の真偽値が変更前と一致する
+  Scenario: SCN-UNIT-LIFEIGNORE-002 正本に列挙した領域だけをsegment境界で判定する
     Given 領域判定の代表入力がある
     When 領域判定を実行する
     Then 領域そのものと配下は真、境界の違うpathと無関係なpathは偽になる

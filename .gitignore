@@ -15,6 +15,7 @@ dist/
 # 実行ログと開発計測の生成物。src/domain/staging.tsのSTAGING_LIFECYCLE_AREASが正本
 .agent-skill-chain/role-log/
 .agent-skill-chain/metrics/
+.agent-skill-chain/runtime/
 /issues/
 /memo/
 **/memo/

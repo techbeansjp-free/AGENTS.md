@@ -1251,6 +1251,7 @@ export const STAGING_LIFECYCLE_AREAS: readonly string[] = Object.freeze([
   ".agent-skill-chain/tmp",
   ".agent-skill-chain/role-log",
   ".agent-skill-chain/metrics",
+  ".agent-skill-chain/runtime",
 ]);
 
 export function isStagingLifecyclePath(relative: string): boolean {

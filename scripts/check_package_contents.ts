@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { STAGING_LIFECYCLE_AREAS } from "../src/domain/staging.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 import { checkConsumerAcceptance } from "./check_consumer_acceptance.js";
 
@@ -19,9 +20,7 @@ export const FORBIDDEN_DISTRIBUTION_PREFIXES: readonly string[] = Object.freeze(
     "docs/specs/",
     "node_modules/",
     "memo/",
-    ".agent-skill-chain/tmp/",
-    ".agent-skill-chain/role-log/",
-    ".agent-skill-chain/metrics/",
+    ...STAGING_LIFECYCLE_AREAS.map((area) => `${area}/`),
     ".agent-skill-chain/project/",
     "secret-fixtures/",
   ],

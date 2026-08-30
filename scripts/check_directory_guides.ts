@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { STAGING_LIFECYCLE_AREAS } from "../src/domain/staging.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const INDEX = ".agent-skill-chain/00_利用案内.md";
@@ -108,14 +109,7 @@ function actualDirectories(root: string): string[] {
   if (!fs.existsSync(namespace)) return [];
   const visit = (directory: string): string[] => {
     const relative = path.relative(root, directory).replaceAll(path.sep, "/");
-    if (
-      [
-        ".agent-skill-chain/tmp",
-        ".agent-skill-chain/role-log",
-        ".agent-skill-chain/metrics",
-      ].includes(relative)
-    )
-      return [directory];
+    if (STAGING_LIFECYCLE_AREAS.includes(relative)) return [directory];
     return [
       directory,
       ...fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -134,11 +128,7 @@ function actualDirectories(root: string): string[] {
 function entryFor(directory: string, root: string): string | undefined {
   if (ENTRY_DOCUMENTS.has(directory)) return ENTRY_DOCUMENTS.get(directory);
   if (
-    [
-      ".agent-skill-chain/tmp",
-      ".agent-skill-chain/role-log",
-      ".agent-skill-chain/metrics",
-    ].some(
+    STAGING_LIFECYCLE_AREAS.some(
       (prefix) => directory === prefix || directory.startsWith(`${prefix}/`),
     )
   )
